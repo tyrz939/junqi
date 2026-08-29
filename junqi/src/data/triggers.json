@@ -1,0 +1,128 @@
+{
+  "see_the_kitchen": {
+    "id": "see_the_kitchen",
+    "when": "enter",
+    "once": true,
+    "actions": ["location:house", "beat:house_opened", "handin:see_the_kitchen"]
+  },
+  "into_the_mine": {
+    "id": "into_the_mine",
+    "when": "enter",
+    "once": true,
+    "actions": ["location:mine", "beat:underworld_1", "handin:into_the_mine", "quest:headmasters_office", "quest:rats_below"]
+  },
+  "under_the_house": {
+    "id": "under_the_house",
+    "when": "enter",
+    "once": true,
+    "actions": ["beat:underworld_1", "location:dungeon", "handin:into_the_cellar"]
+  },
+  "into_the_burial": {
+    "id": "into_the_burial",
+    "when": "enter",
+    "once": true,
+    "actions": [
+      "beat:burial",
+      "location:burial",
+      "handin:into_the_burial",
+      "quest:the_snake_below",
+      "quest:garden_left_burning"
+    ]
+  },
+  "burial_lock_in": {
+    "id": "burial_lock_in",
+    "when": "enter",
+    "once": true,
+    "actions": ["lock:boss_gate", "set:burial_locked"]
+  },
+  "arrive_stoop": {
+    "id": "arrive_stoop",
+    "when": "enter",
+    "once": true,
+    "actions": ["location:stoop", "handin:the_letter"]
+  },
+  "into_the_farm": {
+    "id": "into_the_farm",
+    "when": "enter",
+    "once": true,
+    "actions": ["location:farm"]
+  },
+  "into_the_museum": {
+    "id": "into_the_museum",
+    "when": "enter",
+    "once": true,
+    "actions": ["location:museum"]
+  },
+  "into_abandoned": {
+    "id": "into_abandoned",
+    "when": "enter",
+    "once": true,
+    "actions": ["location:abandoned", "handin:the_house_in_the_trees"]
+  },
+  "into_graveyard": {
+    "id": "into_graveyard",
+    "when": "enter",
+    "once": true,
+    "actions": ["location:graveyard", "handin:warnings_in_stone"]
+  },
+  "mouth_factory": {
+    "id": "mouth_factory",
+    "when": "enter",
+    "once": true,
+    "actions": ["location:factory_mouth"]
+  },
+  "mouth_school": {
+    "id": "mouth_school",
+    "when": "enter",
+    "once": true,
+    "actions": ["location:school_mouth"]
+  },
+  "mouth_forest": {
+    "id": "mouth_forest",
+    "when": "enter",
+    "once": true,
+    "actions": ["location:forest_mouth"]
+  },
+  "into_factory": {
+    "id": "into_factory",
+    "when": "enter",
+    "once": true,
+    "actions": ["location:factory", "beat:other_doors"]
+  },
+  "into_school": {
+    "id": "into_school",
+    "when": "enter",
+    "once": true,
+    "actions": ["location:school", "beat:other_doors"]
+  },
+  "into_butterfly": {
+    "id": "into_butterfly",
+    "when": "enter",
+    "once": true,
+    "actions": ["location:butterfly", "beat:other_doors"]
+  },
+  "into_pipes": {
+    "id": "into_pipes",
+    "when": "enter",
+    "once": true,
+    "actions": ["location:pipes"]
+  },
+  "see_the_garden": {
+    "id": "see_the_garden",
+    "when": "enter",
+    "once": true,
+    "actions": ["location:garden", "handin:garden_left_burning"]
+  },
+  "snake_room": {
+    "id": "snake_room",
+    "when": "enter",
+    "once": true,
+    "actions": ["location:snake_room"]
+  },
+  "see_mine_mouth": {
+    "id": "see_mine_mouth",
+    "when": "enter",
+    "once": true,
+    "actions": ["location:mine_mouth"]
+  }
+}

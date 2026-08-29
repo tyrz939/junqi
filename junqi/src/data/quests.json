@@ -1,0 +1,233 @@
+{
+  "the_letter": {
+    "name": "A Letter from Julie",
+    "description": "The envelope was older than the train. Auntie Julie — a woman you were told you had, and never met — asked you to Castle for your birthday. There is no signal. The map in the letter ends at a stoop and a dog.\n\nFind the house. Ask what happened to her.",
+    "completion": "The stoop is real. Julie is not on it. The dog has been waiting.",
+    "requirements": [{ "type": "location", "target": "stoop", "qty": 1, "text": "Find Auntie Julie's stoop" }],
+    "rewards": []
+  },
+  "defeat_skeleton": {
+    "name": "The Thing in the Yard",
+    "description": "The dog does not bark like a city dog. It wants the walking bones off the road between town and Julie's fence.\n\nIt will not say why a key is waiting until the bones stay down.",
+    "completion": "The skeleton will not get up again. The dog has decided you are allowed a key.",
+    "requirements": [{ "type": "kill", "target": "skeleton", "qty": 1, "text": "Put the yard skeleton down" }],
+    "rewards": [{ "id": "key_auntie_house", "qty": 1 }]
+  },
+  "stock_the_bench": {
+    "name": "Dust, Water, Pansy",
+    "description": "Julie's bench is still set for work. Gold dust, a vial, and a pansy make the small manashield she used to leave in the cupboard.\n\nYou do not know why you know the smell of the pansy.",
+    "completion": "The recipe took. Your hands did a witch's job without asking you first.",
+    "requirements": [{ "type": "acquire", "target": "pansy", "qty": 1, "text": "Find a pansy" }],
+    "rewards": []
+  },
+  "see_the_kitchen": {
+    "name": "The Empty Kitchen",
+    "description": "Open the house. Stand where she stood. Fruit in a bowl, two hatches in one wall, no auntie, no note that says when she will be back.\n\nThe kettle is cold.",
+    "completion": "The house still smells like her. That is not the same as her being in it.",
+    "requirements": [{ "type": "location", "target": "house", "qty": 1, "text": "Stand in Julie's kitchen" }],
+    "rewards": []
+  },
+  "into_the_cellar": {
+    "name": "Not the Underworld",
+    "description": "Two hatches. Same cellar. Roses she should not have been able to grow in the dark, a door that wants her basement key, shelves of jars with no labels you can read.\n\nThis is a house undercroft. The snake is not down here.",
+    "completion": "You have been under the floorboards. Julie kept a garden where no sun comes.",
+    "requirements": [{ "type": "location", "target": "dungeon", "qty": 1, "text": "Go down the kitchen hatch" }],
+    "rewards": []
+  },
+  "roses_for_julie": {
+    "name": "Roses in the Dark",
+    "description": "White water roses in a cellar should not be a sentence that makes sense. Bring one up anyway. The bench will know what to do with it.",
+    "completion": "The rose kept its wet even in your bag. Julie was not only hiding.",
+    "requirements": [{ "type": "acquire", "target": "white_water_rose", "qty": 1, "text": "Take a white water rose" }],
+    "rewards": []
+  },
+  "into_the_mine": {
+    "name": "The Hole That Takes Gold",
+    "description": "Castle's last honest work is a mouth in the yard. Headmaster's key, vault, boss door. Barrels. Torches. The town still talks about it as if someone might reopen the shift.\n\nGo in. Come out with more than dust.",
+    "completion": "You stood in the dark under the yard. The mine still thinks it has a Headmaster.",
+    "requirements": [{ "type": "location", "target": "mine", "qty": 1, "text": "Enter the gold mine" }],
+    "rewards": []
+  },
+  "headmasters_office": {
+    "name": "H.M.",
+    "description": "The initials on the rusty key were always a joke in town: Headmaster of a mine that taught nothing but how to leave.\n\nFind the office. Take what he locked from the people who still live here.",
+    "completion": "The Headmaster is a title on a door. The gold was never the lesson.",
+    "requirements": [{ "type": "acquire", "target": "key_mine_headmaster", "qty": 1, "text": "Hold the Headmaster's key" }],
+    "rewards": []
+  },
+  "museum_after_hours": {
+    "name": "Four Rooms, One Key",
+    "description": "Castle Museum is Science, History, Art, Magic. The MAGIC wing has been 'closed for inventory' since before you were born.\n\nThe key is not at the front desk. The mine used to sponsor the glass cases.",
+    "completion": "The MAGIC wing smells like the burial. Someone catalogued a wizard and then locked the drawer.",
+    "requirements": [
+      { "type": "location", "target": "museum", "qty": 1, "text": "Enter the museum" },
+      { "type": "acquire", "target": "key_museum", "qty": 1, "text": "Find the museum key" }
+    ],
+    "rewards": []
+  },
+  "weeds_on_the_acre": {
+    "name": "The Acre Will Not Stay Down",
+    "description": "The farm is still fenced. The farmer is not. Roots walk the furrows like they paid rent.\n\nClear the walking weeds. The scarecrow will notice, which is a sentence you are going to have to live with.",
+    "completion": "The acre is quieter. The straw man has opinions about your work.",
+    "requirements": [{ "type": "kill", "target": "plant", "qty": 3, "text": "Put down walking roots" }],
+    "rewards": [{ "id": "honeylace_lily", "qty": 2 }]
+  },
+  "talk_to_the_straw": {
+    "name": "Talk to the Straw",
+    "description": "There is a scarecrow on the farm that faces the road, not the crows. People in town used to leave it bread.\n\nStand in front of it. If it has a quest, Castle is worse than the letter said.",
+    "completion": "It did have a quest. You are not going to write home about this.",
+    "requirements": [{ "type": "location", "target": "farm", "qty": 1, "text": "Visit the farm" }],
+    "rewards": [{ "id": "small_water", "qty": 2 }]
+  },
+  "the_house_in_the_trees": {
+    "name": "The House in the Trees",
+    "description": "West of the farm, the forest kept a house after the people did not. The shutters are not a style. They are a decision.\n\nGo in. If Julie hid anything besides roses, it may be where nobody was meant to look.",
+    "completion": "Someone left in a hurry and took the name off the door. The forest did not mind.",
+    "requirements": [{ "type": "location", "target": "abandoned", "qty": 1, "text": "Enter the abandoned house" }],
+    "rewards": [{ "id": "wood", "qty": 3 }]
+  },
+  "rust_and_rubber": {
+    "name": "The Car That Stopped",
+    "description": "An abandoned car on the west road, older than the letter, newer than the mine. No plates you can read. The seats still hold the shape of a person who meant to keep going.",
+    "completion": "You looked. There is no Julie in the back seat. There is a map of a town that is this town, drawn twice.",
+    "requirements": [{ "type": "location", "target": "car", "qty": 1, "text": "Search the abandoned car" }],
+    "rewards": [{ "id": "iron", "qty": 2 }]
+  },
+  "picnic_by_water": {
+    "name": "Picnic for One",
+    "description": "Julie's pond is still wet. Someone laid a cloth on the grass years ago and never picked it up.\n\nSit. Castle will not get more polite if you skip this.",
+    "completion": "The water does not explain the tunnel on the train. It only holds the sky.",
+    "requirements": [{ "type": "location", "target": "pond", "qty": 1, "text": "Stand by Auntie's pond" }],
+    "rewards": [{ "id": "grape", "qty": 3 }]
+  },
+  "road_tax": {
+    "name": "Road Tax",
+    "description": "Bandits on the stone between town and the yard. They take apples and dust from anyone who still uses the road like it belongs to Castle.\n\nFour of them. The shopkeep will not open for less.",
+    "completion": "The road is a little more honest. The shopkeep still might not open.",
+    "requirements": [{ "type": "kill", "target": "bandit", "qty": 4, "text": "Clear bandits off the road" }],
+    "rewards": [{ "id": "gold_dust", "qty": 2 }]
+  },
+  "rats_below": {
+    "name": "Rats Below",
+    "description": "The mine and the cellar share a rumor: the rats learned the tunnels better than the men. Rat meat is ugly. Poisoned rat meat is a recipe Julie wrote like a joke and meant.",
+    "completion": "You have the meat. The recipe is still a joke. It will still work.",
+    "requirements": [{ "type": "kill", "target": "rat", "qty": 5, "text": "Hunt rats" }],
+    "rewards": []
+  },
+  "warnings_in_stone": {
+    "name": "Warnings in Stone",
+    "description": "The graveyard does not wait for a tour. Names you do not know, and a few you will. Walk the rows. Read what Castle wanted strangers to believe about the burial.",
+    "completion": "The stones agree: do not take the ball. The garden still has it.",
+    "requirements": [{ "type": "location", "target": "graveyard", "qty": 1, "text": "Walk the graveyard" }],
+    "rewards": []
+  },
+  "into_the_burial": {
+    "name": "Down Among the Named",
+    "description": "Yard door. Bone mouth. Four wings that trade places when the county is rolled again: snake, garden, spider, coffin.\n\nJulie went here. The dog will not say if she came back.",
+    "completion": "You are in the burial. The air is the same temperature as a held breath.",
+    "requirements": [{ "type": "location", "target": "burial", "qty": 1, "text": "Enter the burial chamber" }],
+    "rewards": []
+  },
+  "garden_left_burning": {
+    "name": "What She Left in the Lilies",
+    "description": "There is a heat in the burial garden that does not belong to torches. A ball of it, sitting where a wizard tried to keep death out with flowers.\n\nTake it. You will not be able to pretend your hands are only a city's hands after that.",
+    "completion": "Fireball. The name is a child's. The work is not.",
+    "requirements": [{ "type": "location", "target": "garden", "qty": 1, "text": "Find the burial garden" }],
+    "rewards": []
+  },
+  "the_snake_below": {
+    "name": "The Snake Below",
+    "description": "Four wings. A lock. A body that is too long for the room it was given. Castle used to say a wizard made a bargain and the bargain learned to crawl.\n\nThis is not the end of Julie's map. It is the first time the map bleeds.",
+    "completion": "The snake is still. Julie was not inside it. The other doors in town have been waiting for someone who has done this.",
+    "requirements": [{ "type": "kill", "target": "snake", "qty": 1, "text": "End the snake" }],
+    "rewards": [{ "id": "gold_bar", "qty": 1 }]
+  },
+  "julies_other_map": {
+    "name": "Julie's Other Map",
+    "description": "Under the snake there is no auntie. Factory, school, the forest that does not use green honestly.\n\nGo in. Each one teaches a different trick. Julie went on. Sunday's train is still a week away.",
+    "completion": "You walked her second map. The county still turns. The pipes are under the factory if the line runs.",
+    "requirements": [
+      { "type": "location", "target": "factory", "qty": 1, "text": "Enter the factory" },
+      { "type": "location", "target": "school", "qty": 1, "text": "Enter the school" },
+      { "type": "location", "target": "butterfly", "qty": 1, "text": "Enter the butterfly forest" }
+    ],
+    "rewards": []
+  },
+  "night_glass": {
+    "name": "Night View",
+    "description": "Julie kept a glass that was supposed to make the dark behave. It is not on the kitchen shelf.\n\nLook in the places she treated as drawers: mine chests, the abandoned house, the museum wing.",
+    "completion": "The glass is heavier than it looks. Night does not get brighter. You get ruder about it.",
+    "requirements": [{ "type": "acquire", "target": "night_view_glass", "qty": 1, "text": "Find the night view glass" }],
+    "rewards": []
+  },
+  "mend_the_wreck": {
+    "name": "Mend the Wreck",
+    "description": "The broken cart at the mine mouth is a dare with a spell attached. Repair is the one trick you packed without noticing it was a trick.\n\nStand close. Cast it. Pretend it is ordinary.",
+    "completion": "Wood from a wreck. You did not use a toolkit.",
+    "requirements": [{ "type": "location", "target": "mine_mouth", "qty": 1, "text": "Stand at the mine mouth" }],
+    "rewards": []
+  },
+  "poisoned_supper": {
+    "name": "Poisoned Supper",
+    "description": "Julie's joke recipe: stranglethorn potion and rat meat. The bench will do it if you can stand the smell.\n\nThis is not dinner. This is a tool that looks like dinner.",
+    "completion": "You made poisoned rat meat. Do not eat it. The recipe did not have to tell you twice.",
+    "requirements": [{ "type": "acquire", "target": "poisoned_rat_meat", "qty": 1, "text": "Craft poisoned rat meat" }],
+    "rewards": []
+  },
+  "bone_harvest": {
+    "name": "Bone Harvest",
+    "description": "The road and the yard both keep walking bones. Bone chips are what Castle uses when it does not want to say grave-dirt.\n\nBring three. The shopkeep pretends they are for glue.",
+    "completion": "Three chips. Nobody is going to make glue.",
+    "requirements": [{ "type": "acquire", "target": "bone_chip", "qty": 3, "text": "Collect bone chips" }],
+    "rewards": [{ "id": "rock", "qty": 2 }]
+  },
+  "fish_story": {
+    "name": "A Fish Story",
+    "description": "Someone nailed a board by the river: FISH HERE FOR A REWARD. The handwriting is hopeful and a little drunk.\n\nStand in the shallows they meant. Castle owes you a joke at least.",
+    "completion": "No fish. A bottle with a pansy seed and a note: Julie was here first.",
+    "requirements": [{ "type": "location", "target": "river", "qty": 1, "text": "Stand by the river board" }],
+    "rewards": [{ "id": "pansy", "qty": 1 }]
+  },
+  "julies_marks": {
+    "name": "Marks on the County",
+    "description": "Stone rings. A lever, a crate, a wet chest, a fight, a path that wants Grow.\n\nJulie left scraps of map-paper in them. Eight is enough to prove you walked further than the stoop.",
+    "completion": "Eight marks. She was teaching you the county the way a witch teaches a kitchen: by leaving work out.",
+    "requirements": [{ "type": "acquire", "target": "julies_mark", "qty": 8, "text": "Collect Julie's marks" }],
+    "rewards": [
+      { "id": "apple", "qty": 5 },
+      { "id": "fire_stone", "qty": 1 }
+    ]
+  },
+  "wolf_at_the_trees": {
+    "name": "Wolves in the Trees",
+    "description": "The forest west of the farm has wolves now. Leather for the bench. Meat for the week.",
+    "completion": "The trees are quieter. The leather still smells like the run.",
+    "requirements": [{ "type": "kill", "target": "wolf", "qty": 2, "text": "Hunt wolves" }],
+    "rewards": [{ "id": "jerky", "qty": 2 }]
+  },
+  "crows_on_the_acre": {
+    "name": "Crows on the Acre",
+    "description": "The scarecrow was built for this. The crows did not read the contract.",
+    "completion": "Feathers. The straw man does not say thank you.",
+    "requirements": [{ "type": "kill", "target": "crow", "qty": 2, "text": "Put down crows" }],
+    "rewards": [{ "id": "feather", "qty": 3 }]
+  },
+  "a_full_table": {
+    "name": "A Full Table",
+    "description": "The bench wants more than potions. Bread, stew, tea. Eat like you mean to stay the week.",
+    "completion": "You cooked. The county is less sharp when you have a bowl.",
+    "requirements": [
+      { "type": "acquire", "target": "bread", "qty": 1, "text": "Bake bread" },
+      { "type": "acquire", "target": "stew", "qty": 1, "text": "Make stew" },
+      { "type": "acquire", "target": "tea", "qty": 1, "text": "Steep tea" }
+    ],
+    "rewards": [{ "id": "cake", "qty": 1 }]
+  },
+  "cave_that_waits": {
+    "name": "The Cave That Waits",
+    "description": "East of Julie's, the mountain keeps a mouth. It is locked with a patience that feels personal.\n\nLook at it. Remember it. Do not expect it to open because you asked nicely.",
+    "completion": "You saw the cave. It saw you back. Later, then.",
+    "requirements": [{ "type": "location", "target": "cave", "qty": 1, "text": "Find the mountain cave" }],
+    "rewards": []
+  }
+}

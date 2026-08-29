@@ -1,0 +1,240 @@
+{
+  "skeleton": {
+    "name": "Skeleton",
+    "faction": "undead",
+    "class": "warrior",
+    "strength": 20,
+    "spirit": 8,
+    "walkSpd": 40,
+    "runSpd": 70,
+    "aggroRange": 10,
+    "leashRange": 24,
+    "spells": ["melee"],
+    "questUnit": true,
+    "loot": [{ "id": "bone_chip", "qty": 1, "chance": 0.6 }]
+  },
+  "snake": {
+    "name": "Snake",
+    "faction": "undead",
+    "class": "mage",
+    "strength": 80,
+    "spirit": 80,
+    "walkSpd": 20,
+    "runSpd": 28,
+    "aggroRange": 18,
+    "leashRange": 40,
+    "spells": ["poison_snake_boss"],
+    "questUnit": true,
+    "scale": 1.5,
+    "onDeath": [
+      "unlock:boss_gate",
+      "set:burial_unlocked",
+      "set:snake_down",
+      "beat:snake_down",
+      "quest:julies_other_map",
+      "note:The snake is still. Julie was never in its mouth. Walk the other doors. They are not rooms yet."
+    ],
+    "loot": []
+  },
+  "rat": {
+    "name": "Rat",
+    "faction": "beast",
+    "class": "warrior",
+    "strength": 8,
+    "spirit": 4,
+    "walkSpd": 50,
+    "runSpd": 80,
+    "aggroRange": 6,
+    "leashRange": 16,
+    "spells": ["melee_fast"],
+    "respawn": 45,
+    "loot": [{ "id": "rat_meat", "qty": 1, "chance": 0.85 }]
+  },
+  "bandit": {
+    "name": "Bandit",
+    "faction": "bandit",
+    "class": "warrior",
+    "strength": 28,
+    "spirit": 10,
+    "walkSpd": 46,
+    "runSpd": 78,
+    "aggroRange": 9,
+    "leashRange": 20,
+    "spells": ["melee"],
+    "respawn": 50,
+    "resist": { "physical": 0.1 },
+    "loot": [
+      { "id": "apple", "qty": 1, "chance": 0.35 },
+      { "id": "cheese", "qty": 1, "chance": 0.2 },
+      { "id": "bread", "qty": 1, "chance": 0.15 },
+      { "id": "gold_dust", "qty": 1, "chance": 0.25 }
+    ]
+  },
+  "plant": {
+    "name": "Root",
+    "faction": "undead",
+    "class": "mage",
+    "strength": 16,
+    "spirit": 24,
+    "walkSpd": 12,
+    "runSpd": 16,
+    "aggroRange": 12,
+    "leashRange": 18,
+    "spells": ["root", "poisonbolt_0"],
+    "respawn": 40,
+    "loot": [{ "id": "hemshade_root", "qty": 1, "chance": 0.5 }]
+  },
+  "spider": {
+    "name": "Spider",
+    "faction": "beast",
+    "class": "warrior",
+    "strength": 14,
+    "spirit": 12,
+    "walkSpd": 44,
+    "runSpd": 70,
+    "aggroRange": 8,
+    "leashRange": 18,
+    "spells": ["spider_melee", "webshot_ai"],
+    "respawn": 40,
+    "loot": [{ "id": "savage_snakeroot", "qty": 1, "chance": 0.3 }]
+  },
+  "bat": {
+    "name": "Bat",
+    "faction": "beast",
+    "class": "warrior",
+    "strength": 10,
+    "spirit": 6,
+    "walkSpd": 70,
+    "runSpd": 100,
+    "aggroRange": 9,
+    "leashRange": 16,
+    "spells": ["melee_fast"],
+    "respawn": 35,
+    "sprite": "bat",
+    "loot": [
+      { "id": "feather", "qty": 1, "chance": 0.4 },
+      { "id": "berry", "qty": 1, "chance": 0.2 }
+    ]
+  },
+  "wolf": {
+    "name": "Wolf",
+    "faction": "beast",
+    "class": "warrior",
+    "strength": 32,
+    "spirit": 8,
+    "walkSpd": 52,
+    "runSpd": 90,
+    "aggroRange": 11,
+    "leashRange": 22,
+    "spells": ["melee"],
+    "respawn": 55,
+    "sprite": "wolf",
+    "loot": [
+      { "id": "leather", "qty": 1, "chance": 0.55 },
+      { "id": "bird_meat", "qty": 1, "chance": 0.35 }
+    ]
+  },
+  "crow": {
+    "name": "Crow",
+    "faction": "beast",
+    "class": "warrior",
+    "strength": 9,
+    "spirit": 12,
+    "walkSpd": 64,
+    "runSpd": 96,
+    "aggroRange": 8,
+    "leashRange": 18,
+    "spells": ["melee_fast"],
+    "respawn": 40,
+    "sprite": "crow",
+    "loot": [
+      { "id": "feather", "qty": 1, "chance": 0.7 },
+      { "id": "bird_meat", "qty": 1, "chance": 0.4 }
+    ]
+  },
+  "slime": {
+    "name": "Slime",
+    "faction": "beast",
+    "class": "mage",
+    "strength": 12,
+    "spirit": 18,
+    "walkSpd": 24,
+    "runSpd": 32,
+    "aggroRange": 7,
+    "leashRange": 14,
+    "spells": ["sparkbolt"],
+    "respawn": 40,
+    "sprite": "slime",
+    "loot": [
+      { "id": "small_water", "qty": 1, "chance": 0.5 },
+      { "id": "honey", "qty": 1, "chance": 0.15 }
+    ]
+  },
+  "pumpkin": {
+    "name": "Pumpkin",
+    "faction": "undead",
+    "class": "mage",
+    "strength": 22,
+    "spirit": 20,
+    "walkSpd": 18,
+    "runSpd": 24,
+    "aggroRange": 10,
+    "leashRange": 16,
+    "spells": ["ember", "melee"],
+    "respawn": 48,
+    "sprite": "plant",
+    "loot": [{ "id": "pumpkin_flesh", "qty": 1, "chance": 0.8 }]
+  },
+  "soldier": {
+    "name": "Undead Soldier",
+    "faction": "undead",
+    "class": "warrior",
+    "strength": 36,
+    "spirit": 10,
+    "walkSpd": 36,
+    "runSpd": 60,
+    "aggroRange": 10,
+    "leashRange": 22,
+    "spells": ["melee", "melee_stun"],
+    "respawn": 60,
+    "sprite": "skeleton",
+    "resist": { "physical": 0.15 },
+    "loot": [
+      { "id": "iron", "qty": 1, "chance": 0.3 },
+      { "id": "bone_chip", "qty": 1, "chance": 0.5 }
+    ]
+  },
+  "flower": {
+    "name": "Grave Flower",
+    "faction": "undead",
+    "class": "mage",
+    "strength": 14,
+    "spirit": 28,
+    "walkSpd": 10,
+    "runSpd": 14,
+    "aggroRange": 13,
+    "leashRange": 16,
+    "spells": ["poisonbolt_0", "root"],
+    "respawn": 42,
+    "sprite": "plant",
+    "loot": [
+      { "id": "white_water_rose", "qty": 1, "chance": 0.35 },
+      { "id": "honeylace_lily", "qty": 1, "chance": 0.25 }
+    ]
+  },
+  "cactus": {
+    "name": "Undead Cactus",
+    "faction": "undead",
+    "class": "mage",
+    "strength": 18,
+    "spirit": 16,
+    "walkSpd": 14,
+    "runSpd": 18,
+    "aggroRange": 11,
+    "leashRange": 18,
+    "spells": ["poison_cactus"],
+    "respawn": 50,
+    "sprite": "plant",
+    "loot": [{ "id": "savage_snakeroot", "qty": 1, "chance": 0.45 }]
+  }
+}

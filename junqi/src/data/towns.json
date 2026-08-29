@@ -1,0 +1,8 @@
+{
+  "castle_cross": { "name": "Castle Cross", "cx": 180, "cy": 160, "empty": 8, "radius": 70 },
+  "rivermill": { "name": "Rivermill", "cx": 760, "cy": 360, "empty": 7, "radius": 55 },
+  "acreton": { "name": "Acreton", "cx": 560, "cy": 700, "empty": 6, "radius": 50 },
+  "kiln_end": { "name": "Kiln End", "cx": 1160, "cy": 640, "empty": 7, "radius": 55 },
+  "boneford": { "name": "Boneford", "cx": 1460, "cy": 860, "empty": 6, "radius": 50 },
+  "ridgegate": { "name": "Ridgegate", "cx": 1720, "cy": 380, "empty": 6, "radius": 48 }
+}

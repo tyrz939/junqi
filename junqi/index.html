@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Junqi · Jane</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet" />
+  </head>
+  <body>
+    <div id="app"></div>
+    <div id="console" aria-hidden="true">
+      <div id="console-head">
+        <span>JUNQI  ·  console</span>
+        <span class="console-hint">` toggle   ESC close   TAB complete   ↑↓ history</span>
+      </div>
+      <div id="console-log"></div>
+      <div id="console-row">
+        <label id="console-prompt" for="term">\</label>
+        <input id="term" autocomplete="off" spellcheck="false" />
+      </div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

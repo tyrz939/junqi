@@ -1,0 +1,12 @@
+# 2020 GameMaker source — local reference only
+Junqi-Legacy-GM/
+
+node_modules/
+dist/
+*.local
+.DS_Store
+Thumbs.db
+
+.env
+.env.*
+!.env.example

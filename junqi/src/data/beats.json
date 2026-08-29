@@ -1,0 +1,58 @@
+{
+  "spine": [
+    {
+      "id": "town_hook",
+      "title": "Castle, Sunday",
+      "mustPlace": ["house_door", "dog"],
+      "unlock": "The letter said next week. The train only comes on Sunday."
+    },
+    {
+      "id": "has_house_key",
+      "title": "The house key",
+      "mustPlace": ["skeleton"],
+      "unlock": "The dog knows more than a dog should."
+    },
+    {
+      "id": "house_opened",
+      "title": "Julie's kitchen",
+      "mustPlace": ["bench", "hatch_a"],
+      "unlock": "Auntie is not home. The house still is."
+    },
+    {
+      "id": "underworld_1",
+      "title": "Under the county",
+      "mustPlace": ["cellar_gate", "mine_up"],
+      "unlock": "Hatches go to the cellar. Yard doors go to the mine."
+    },
+    {
+      "id": "burial",
+      "title": "The burial",
+      "mustPlace": ["lock_in", "shrine", "boss_gate"],
+      "unlock": "The stones on the road already told you not to."
+    },
+    {
+      "id": "relic",
+      "title": "Snake key",
+      "mustPlace": ["story_relic"],
+      "unlock": "Julie left a key where a wizard failed."
+    },
+    {
+      "id": "snake_down",
+      "title": "The snake",
+      "mustPlace": ["snake"],
+      "unlock": "This is not the last door in Castle."
+    },
+    {
+      "id": "other_doors",
+      "title": "The other doors",
+      "mustPlace": ["factory_door", "school_door", "butterfly_mouth"],
+      "unlock": "Factory, school, forest. They were always on the map."
+    },
+    {
+      "id": "still_turning",
+      "title": "The county still turns",
+      "mustPlace": [],
+      "unlock": "Sunday's train is a week away. Walk."
+    }
+  ]
+}

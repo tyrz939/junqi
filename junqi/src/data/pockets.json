@@ -1,0 +1,404 @@
+{
+  "stoop": {
+    "id": "stoop",
+    "zone": "county",
+    "w": 14,
+    "h": 14,
+    "tiles": [
+      { "dx": 2, "dy": 0, "w": 10, "h": 8, "tile": "house" },
+      { "dx": 6, "dy": 7, "w": 2, "h": 1, "tile": "door" }
+    ],
+    "props": [
+      { "id": "dog", "kind": "dog", "dx": 7, "dy": 11, "texture": "dog", "talk": "dog" },
+      {
+        "id": "house_door",
+        "kind": "door",
+        "dx": 7,
+        "dy": 8,
+        "texture": "doorway",
+        "locked": true,
+        "opens": "auntie_house",
+        "toZone": "house"
+      },
+      { "id": "stoop_barrel_a", "kind": "push", "dx": 3, "dy": 10, "texture": "crate" },
+      { "id": "stoop_barrel_b", "kind": "push", "dx": 11, "dy": 10, "texture": "crate" },
+      { "id": "stoop_fire", "kind": "campfire", "dx": 2, "dy": 12, "texture": "campfire" }
+    ]
+  },
+  "mine_mouth": {
+    "id": "mine_mouth",
+    "zone": "county",
+    "w": 8,
+    "h": 8,
+    "tiles": [{ "dx": 2, "dy": 1, "w": 4, "h": 3, "tile": "stone" }],
+    "props": [
+      { "id": "mine_mouth", "kind": "door", "dx": 4, "dy": 3, "texture": "doorway", "toZone": "mine" },
+      { "id": "mine_lamp", "kind": "torch", "dx": 2, "dy": 2, "texture": "torch" },
+      { "id": "mine_wreck", "kind": "broken", "dx": 6, "dy": 5, "texture": "broken" }
+    ]
+  },
+  "burial_mouth": {
+    "id": "burial_mouth",
+    "zone": "county",
+    "w": 8,
+    "h": 8,
+    "tiles": [{ "dx": 2, "dy": 1, "w": 4, "h": 3, "tile": "bone" }],
+    "props": [
+      { "id": "burial_mouth", "kind": "door", "dx": 4, "dy": 3, "texture": "doorway", "toZone": "burial" }
+    ]
+  },
+  "train_station": {
+    "id": "train_station",
+    "zone": "county",
+    "w": 12,
+    "h": 8,
+    "tiles": [
+      { "dx": 0, "dy": 3, "w": 12, "h": 2, "tile": "stone" },
+      { "dx": 2, "dy": 0, "w": 8, "h": 4, "tile": "house" }
+    ],
+    "props": [
+      { "id": "train_sign", "kind": "sign", "dx": 6, "dy": 5, "texture": "sign", "talk": "train_sign" },
+      {
+        "id": "train_door",
+        "kind": "door",
+        "dx": 6,
+        "dy": 3,
+        "texture": "doorway",
+        "locked": true,
+        "lockHint": "Next train is Sunday. You already got off."
+      }
+    ]
+  },
+  "shop_front": {
+    "id": "shop_front",
+    "zone": "county",
+    "w": 10,
+    "h": 10,
+    "tiles": [{ "dx": 1, "dy": 0, "w": 8, "h": 6, "tile": "house" }],
+    "props": [
+      { "id": "shopkeep", "kind": "npc", "dx": 5, "dy": 7, "texture": "npc", "talk": "shopkeep" },
+      {
+        "id": "shop_door",
+        "kind": "door",
+        "dx": 5,
+        "dy": 5,
+        "texture": "doorway",
+        "locked": true,
+        "lockHint": "Closed. The shopkeep is standing in front of it anyway."
+      }
+    ]
+  },
+  "school_front": {
+    "id": "school_front",
+    "zone": "county",
+    "w": 12,
+    "h": 10,
+    "tiles": [{ "dx": 1, "dy": 0, "w": 10, "h": 7, "tile": "house" }],
+    "props": [
+      { "id": "school_gate_sign", "kind": "sign", "dx": 3, "dy": 8, "texture": "sign", "talk": "school_gate" },
+      {
+        "id": "school_door",
+        "kind": "door",
+        "dx": 6,
+        "dy": 6,
+        "texture": "doorway",
+        "requires": "snake_down",
+        "lockHint": "Term suspended until the long animal is still.",
+        "toZone": "school"
+      }
+    ]
+  },
+  "gym_front": {
+    "id": "gym_front",
+    "zone": "county",
+    "w": 8,
+    "h": 8,
+    "tiles": [{ "dx": 1, "dy": 0, "w": 6, "h": 5, "tile": "house" }],
+    "props": [
+      { "id": "gym_sign", "kind": "sign", "dx": 4, "dy": 6, "texture": "sign", "talk": "gym_sign" },
+      {
+        "id": "gym_door",
+        "kind": "door",
+        "dx": 4,
+        "dy": 4,
+        "texture": "doorway",
+        "locked": true,
+        "lockHint": "Closed for damp. The map just wanted a gym."
+      }
+    ]
+  },
+  "library_front": {
+    "id": "library_front",
+    "zone": "county",
+    "w": 8,
+    "h": 8,
+    "tiles": [{ "dx": 1, "dy": 0, "w": 6, "h": 5, "tile": "house" }],
+    "props": [
+      { "id": "library_sign", "kind": "sign", "dx": 4, "dy": 6, "texture": "sign", "talk": "library_sign" },
+      {
+        "id": "library_door",
+        "kind": "door",
+        "dx": 4,
+        "dy": 4,
+        "texture": "doorway",
+        "locked": true,
+        "lockHint": "No one remembers the key. The witch books are in kitchens."
+      }
+    ]
+  },
+  "museum_front": {
+    "id": "museum_front",
+    "zone": "county",
+    "w": 14,
+    "h": 10,
+    "tiles": [{ "dx": 1, "dy": 0, "w": 12, "h": 7, "tile": "stone" }],
+    "props": [
+      { "id": "museum_plaque", "kind": "sign", "dx": 4, "dy": 8, "texture": "sign", "talk": "museum_plaque" },
+      { "id": "museum_door", "kind": "door", "dx": 7, "dy": 6, "texture": "doorway", "toZone": "museum" }
+    ]
+  },
+  "farm_front": {
+    "id": "farm_front",
+    "zone": "county",
+    "w": 14,
+    "h": 12,
+    "tiles": [{ "dx": 3, "dy": 1, "w": 8, "h": 6, "tile": "wood" }],
+    "props": [
+      { "id": "scarecrow", "kind": "npc", "dx": 11, "dy": 8, "texture": "npc", "talk": "scarecrow" },
+      {
+        "id": "farm_door",
+        "kind": "door",
+        "dx": 7,
+        "dy": 6,
+        "texture": "doorway",
+        "locked": true,
+        "lockHint": "The farmer is not in. The acre is the farm."
+      }
+    ],
+    "enemies": [
+      { "id": "farm_root_a", "kind": "plant", "dx": 2, "dy": 9 },
+      { "id": "farm_root_b", "kind": "plant", "dx": 12, "dy": 4 },
+      { "id": "farm_root_c", "kind": "plant", "dx": 4, "dy": 3 }
+    ]
+  },
+  "abandoned_front": {
+    "id": "abandoned_front",
+    "zone": "county",
+    "w": 10,
+    "h": 10,
+    "tiles": [{ "dx": 2, "dy": 1, "w": 6, "h": 6, "tile": "house" }],
+    "props": [
+      { "id": "abandoned_door", "kind": "door", "dx": 5, "dy": 6, "texture": "doorway", "toZone": "abandoned" }
+    ]
+  },
+  "factory_front": {
+    "id": "factory_front",
+    "zone": "county",
+    "w": 14,
+    "h": 10,
+    "tiles": [{ "dx": 1, "dy": 0, "w": 12, "h": 7, "tile": "stone" }],
+    "props": [
+      { "id": "factory_gate_sign", "kind": "sign", "dx": 3, "dy": 8, "texture": "sign", "talk": "factory_gate" },
+      {
+        "id": "factory_door",
+        "kind": "door",
+        "dx": 7,
+        "dy": 6,
+        "texture": "doorway",
+        "requires": "snake_down",
+        "lockHint": "No shifts until the long animal is still.",
+        "toZone": "factory"
+      }
+    ]
+  },
+  "pipes_grate": {
+    "id": "pipes_grate",
+    "zone": "county",
+    "w": 8,
+    "h": 8,
+    "tiles": [{ "dx": 2, "dy": 2, "w": 4, "h": 4, "tile": "stone" }],
+    "props": [
+      { "id": "pipes_sign", "kind": "sign", "dx": 2, "dy": 6, "texture": "sign", "talk": "pipes_sign" },
+      {
+        "id": "pipes_door",
+        "kind": "hatch",
+        "dx": 4,
+        "dy": 4,
+        "texture": "hatch",
+        "requires": "snake_down",
+        "lockHint": "Grate sealed. Go through the factory, or come back with a working line.",
+        "toZone": "pipes"
+      }
+    ]
+  },
+  "graveyard_front": {
+    "id": "graveyard_front",
+    "zone": "county",
+    "w": 12,
+    "h": 10,
+    "tiles": [{ "dx": 1, "dy": 1, "w": 10, "h": 6, "tile": "bone" }],
+    "props": [
+      { "id": "grave_warn", "kind": "sign", "dx": 3, "dy": 8, "texture": "sign", "talk": "grave_warn" },
+      { "id": "graveyard_door", "kind": "door", "dx": 6, "dy": 5, "texture": "doorway", "toZone": "graveyard" }
+    ]
+  },
+  "butterfly_front": {
+    "id": "butterfly_front",
+    "zone": "county",
+    "w": 10,
+    "h": 8,
+    "tiles": [{ "dx": 2, "dy": 1, "w": 6, "h": 4, "tile": "bush" }],
+    "props": [
+      { "id": "butterfly_sign", "kind": "sign", "dx": 2, "dy": 6, "texture": "sign", "talk": "butterfly_sign" },
+      {
+        "id": "butterfly_mouth",
+        "kind": "door",
+        "dx": 5,
+        "dy": 4,
+        "texture": "doorway",
+        "requires": "snake_down",
+        "lockHint": "Closed until the snake is a story.",
+        "toZone": "butterfly"
+      }
+    ]
+  },
+  "car_wreck": {
+    "id": "car_wreck",
+    "zone": "county",
+    "w": 8,
+    "h": 6,
+    "tiles": [{ "dx": 1, "dy": 1, "w": 6, "h": 3, "tile": "stone" }],
+    "props": [
+      { "id": "abandoned_car", "kind": "broken", "dx": 4, "dy": 2, "texture": "broken" },
+      { "id": "car_note", "kind": "sign", "dx": 6, "dy": 4, "texture": "sign", "talk": "car_note" }
+    ]
+  },
+  "cave_mouth": {
+    "id": "cave_mouth",
+    "zone": "county",
+    "w": 8,
+    "h": 8,
+    "tiles": [{ "dx": 2, "dy": 1, "w": 4, "h": 4, "tile": "stone" }],
+    "props": [
+      { "id": "cave_sign", "kind": "sign", "dx": 2, "dy": 6, "texture": "sign", "talk": "cave_sign" },
+      {
+        "id": "cave_door",
+        "kind": "door",
+        "dx": 4,
+        "dy": 4,
+        "texture": "doorway",
+        "locked": true,
+        "lockHint": "Later. Julie circled it and did not explain the circle."
+      }
+    ]
+  },
+  "picnic_spot": {
+    "id": "picnic_spot",
+    "zone": "county",
+    "w": 6,
+    "h": 6,
+    "props": [{ "id": "picnic_cloth", "kind": "sign", "dx": 3, "dy": 3, "texture": "sign", "talk": "picnic_cloth" }]
+  },
+  "hedge_notice": {
+    "id": "hedge_notice",
+    "zone": "county",
+    "w": 4,
+    "h": 4,
+    "props": [{ "id": "hedge_notice", "kind": "sign", "dx": 2, "dy": 2, "texture": "sign", "talk": "hedge_notice" }]
+  },
+  "river_board": {
+    "id": "river_board",
+    "zone": "county",
+    "w": 4,
+    "h": 4,
+    "props": [
+      { "id": "river_board", "kind": "sign", "dx": 2, "dy": 2, "texture": "sign", "talk": "river_board" },
+      { "id": "river_fish", "kind": "drop", "dx": 3, "dy": 3, "texture": "drop", "loot": [{ "id": "fish", "qty": 2 }] }
+    ]
+  },
+  "kitchen": {
+    "id": "kitchen",
+    "zone": "house",
+    "w": 16,
+    "h": 14,
+    "props": [
+      { "id": "front_door", "kind": "door", "dx": 8, "dy": 13, "texture": "doorway", "toZone": "county" },
+      { "id": "bench", "kind": "bench", "dx": 3, "dy": 4, "texture": "bench" },
+      { "id": "fruit_bowl", "kind": "chest", "dx": 5, "dy": 4, "texture": "chest", "loot": [{ "id": "grape", "qty": 3 }] },
+      { "id": "hatch_a", "kind": "hatch", "dx": 6, "dy": 2, "texture": "hatch", "toZone": "dungeon" },
+      { "id": "hatch_b", "kind": "hatch", "dx": 10, "dy": 2, "texture": "hatch", "toZone": "dungeon" },
+      {
+        "id": "ice_orb",
+        "kind": "orb",
+        "dx": 13,
+        "dy": 4,
+        "texture": "orb_ice",
+        "learn": "frostbolt_0",
+        "actions": ["set:knows_ice"]
+      },
+      { "id": "auntie_note", "kind": "sign", "dx": 12, "dy": 7, "texture": "sign", "talk": "auntie_note" },
+      { "id": "ward_orb", "kind": "orb", "dx": 14, "dy": 8, "texture": "orb_ice", "learn": "ward" }
+    ]
+  },
+  "cellar_key": {
+    "id": "cellar_key",
+    "zone": "dungeon",
+    "w": 10,
+    "h": 8,
+    "props": [
+      {
+        "id": "cellar_gate",
+        "kind": "door",
+        "dx": 1,
+        "dy": 4,
+        "texture": "doorway",
+        "locked": true,
+        "opens": "auntie_basement"
+      },
+      {
+        "id": "cellar_chest",
+        "kind": "chest",
+        "dx": 6,
+        "dy": 3,
+        "texture": "chest",
+        "loot": [
+          { "id": "key_basement_auntie", "qty": 2 },
+          { "id": "white_water_rose", "qty": 1 }
+        ]
+      },
+      { "id": "cellar_roses", "kind": "sign", "dx": 8, "dy": 6, "texture": "sign", "talk": "cellar_roses" },
+      { "id": "heal_orb", "kind": "orb", "dx": 4, "dy": 2, "texture": "orb", "learn": "lesser_heal" }
+    ]
+  },
+  "burial_garden": {
+    "id": "burial_garden",
+    "zone": "burial",
+    "w": 12,
+    "h": 10,
+    "props": [
+      { "id": "fire_orb", "kind": "orb", "dx": 6, "dy": 5, "texture": "orb", "learn": "fireball_0" },
+      { "id": "wizard_card", "kind": "sign", "dx": 3, "dy": 3, "texture": "sign", "talk": "wizard_card" }
+    ],
+    "enemies": [{ "id": "garden_plant", "kind": "plant", "dx": 8, "dy": 7 }]
+  },
+  "snake_gate": {
+    "id": "snake_gate",
+    "zone": "burial",
+    "w": 12,
+    "h": 12,
+    "props": [
+      {
+        "id": "snake_key_door",
+        "kind": "door",
+        "dx": 6,
+        "dy": 10,
+        "texture": "doorway",
+        "locked": true,
+        "opens": "burial_snake"
+      },
+      { "id": "boss_gate", "kind": "door", "dx": 6, "dy": 3, "texture": "doorway" },
+      { "id": "lock_in", "kind": "trigger", "dx": 3, "dy": 9, "texture": "shrine" }
+    ],
+    "enemies": [{ "id": "snake", "kind": "snake", "dx": 6, "dy": 1 }]
+  }
+}
