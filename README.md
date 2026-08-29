@@ -1,5 +1,7 @@
 # Junqi
 
+This is a buggy mess. The verbs work. The first five minutes do not. New Game starts at 19:00 on a mountain tile, the dog is a 16px blob, and the county is 2000 by 1200 cells. You spawn on the stoop. Talk to the dog first. Do not treat this as a finished game.
+
 A Phaser remake of a 2020 GameMaker ARPG. You play Jane. She arrives in Castle on a Sunday train. She does not start a witch.
 
 The 2020 GameMaker tree is not in this repo. If you still have it, keep it local as `Junqi-Legacy-GM/`. Git ignores that folder.
