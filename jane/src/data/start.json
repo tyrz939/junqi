@@ -1,0 +1,18 @@
+{
+  "items": [
+    { "item": "apple", "qty": 3 },
+    { "item": "julies_letter", "qty": 1 },
+    { "item": "birthday_present", "qty": 1 }
+  ],
+  "bar": [
+    { "source": "spell", "id": "melee_player" },
+    null,
+    null,
+    null,
+    null,
+    null,
+    { "source": "item", "id": "apple" },
+    { "source": "item", "id": "julies_letter" }
+  ],
+  "quests": ["the_letter"]
+}

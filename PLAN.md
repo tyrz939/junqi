@@ -1,0 +1,284 @@
+# Jane — Plan
+
+Where the game goes from the engine in `ENGINE.md` to a finished thing. Written September 2026 from John's direction. Pair with `STORY.md` (what is true in Castle), `VOICE.md` (how Castle talks), `SYSTEMS.md` (the bar), `WORLDGEN.md` (zones today).
+
+This file is the agreement. If work drifts from it, either the work or this file is wrong, and one of them gets fixed before anything else is added.
+
+---
+
+## 1. Direction
+
+**A large, harsh, seeded county that is different every run and the same where it counts.**
+
+| Decided | |
+| --- | --- |
+| Scale | At least a ten-minute walk side to side. Two to three WoW zones of content at about that density. Long quiet stretches are allowed and wanted |
+| Travel | **No fast travel.** Distance is a cost. Keep it harsh |
+| World | Random generation with **required set chunks** at **required distances** so the story holds |
+| Dungeons | The **challenges and their order are fixed**; the layout differs every seed; room contents may vary if the variation is cohesive and cannot introduce bugs |
+| Text | Proper English. Uneasy and uncertain. The mine sign is the model. **Some of the uncertainties come true**, and which ones is decided per seed |
+| Story | Not the key point. World feel and play area are. The story may be generated, and lives in `STORY.md` for review |
+| Art | Direction is right; coverage is incomplete |
+| UI | Keep. Show which key does what in dialogue boxes (done) |
+| Cohesion | Every element is considered within the whole: *how does this belong?* |
+
+### The cohesion test
+
+Nothing is added unless it passes all four:
+
+1. **It uses a verb that exists** (`SYSTEMS.md`), or it is a new verb the whole game will use, not one room.
+2. **It belongs to its region**: its materials, enemies and colours are that region's.
+3. **It makes a claim or pays one off.** A sign, a rumour, a locked thing seen early, a sound at night. Castle is a place that tells you things and is right about a third of the time (§5).
+4. **It survives the fiction**: the county is *undecided* (`STORY.md` §1). Things may be strange. They may not be arbitrary.
+
+### The one idea that ties it together
+
+The 2020 story doc has Jane hear singing "about Day and night" in the tunnel and never explains it. The 2020 code's clock drove exactly one thing: lamp posts. Make that the spine.
+
+**Castle by day is the town that was. Castle by night is what it became.** Roads with working lamps are nearly safe after dark; everything else is not. Omens come true at night. The map Julie drew "was right when I drew it", and the county is different every time because in the fiction it really is: that is what is wrong with it. Random generation stops being a production convenience and becomes the premise.
+
+---
+
+## 2. The world
+
+### 2.1 Size
+
+Walk speed is 60 px/s. A ten-minute crossing by road is 36,000 px of road; roads wander about 1.25×, so:
+
+**The county is 3,600 × 2,000 cells = 28,800 × 16,000 px.** About 29× today's area. Eight minutes as the crow flies, ten or more by road, longer at night. Sprint does not change this much: it lasts three seconds and takes three to come back.
+
+It is **one seamless overworld**, not three loading zones. Interiors and dungeons stay separate zones as now.
+
+### 2.2 Three regions, and the School over all of them
+
+Regions are a design idea (theme, enemy families, music later), not a technical seam, and **not a difficulty dial**: §2.6 is how danger works.
+
+| Region | Feel | Required sites |
+| --- | --- | --- |
+| **The Lowfields** (south-west) | Farmland, hedges, the town, the last place that still looks normal | Station, Castle town, Julie's house, the farm, the wood with the abandoned car, **the Gold Mine** in the foothills |
+| **The Waters** (east and south-east) | The river, mist, reed beds, drowned lanes, things that used to be gardens | The bridges, **the Museum**, the ruined library (the last page: Grow), **Butterfly Forest**, the lake and the statue |
+| **The Works** (north) | Slag, pipes, rails, the hill. Nobody lives here any more | The pipe network and **the Factory**, the graveyard and **the Burial Chamber**, **the School** on the crown of the hill |
+
+**The School looms.** It stands on the highest ground, north of the town, and is visible from the station platform on the first evening: a lit window at the top of the map that is never not there. Its bell is the county's clock (it already rings at nine in the live build). The whole game is a walk toward something you could see from the start. The renderer needs a far-landmark layer for this (a silhouette and a light drawn against the sky edge when the School is north of the view); that is part of M2.
+
+This moves the Burial Chamber from Julie's yard (where 2020's room put it, and where the live build has it) to the east, fifth, where 2020's design put it. Its current content is kept and re-tuned to phase 5; the other three corners and the wizard are added then.
+
+**New Game starts at the station**, 17:00, as `Story.docx` has it. Julie's house is a two to three minute walk by a lamp-lit road: long enough to see the sun go down and read the first sign, short enough that nobody quits. (The previous README said "do not start a map trek". With this direction the trek *is* the game; the first one is just short.)
+
+### 2.3 The skeleton generator
+
+A seed produces the world in layers, coarse to fine. Each layer is a pure function of the seed and the layers above it.
+
+1. **Skeleton** (instant, on a 16-cell macro grid): region bands with wobbly borders; the river; the hill. Then the **required sites** placed by solving constraints, for example:
+
+   ```
+   station      on the west edge road
+   julie_house  600–900 m from station by road, never in sight of the town square
+   gold_mine    in foothills, >= 1500 m from julie_house, in the Lowfields
+   museum       across the river from the town, within 200 m of a bridge
+   school       highest ground in the Works, >= 2500 m from the station
+   burial       within 300 m of the graveyard, not visible from any road
+   ```
+
+   Constraints are rows (`sites.json`), checked, and a skeleton that cannot satisfy them is re-rolled. **This is what "consistent where it counts" means, as data.**
+2. **Roads**: routed between sites over a cost field (avoid water, prefer valleys), so every seed's road network is different and always connects the story. Lamp-post runs are a road attribute: lit near the town, failing eastwards.
+3. **Set chunks**: each required site is an **authored chunk** (the stoop, the mine mouth, the museum forecourt) stamped at its solved position, rotated or mirrored to face its road. Chunks are data in a text-grid format like the art. They carry the story keys (`dog`, `house_door`).
+4. **Points of interest**: a budgeted scatter of minor chunks from a library (camps, wrecks, shrines, wells, ruined cottages, standing stones), each with its own small constraint ("near a road", "deep in woods", "never within 150 m of another"). Side quests and omens attach here.
+5. **Fill**: biomes, fields, hedges, woods, reeds, slag; wildlife and undead by region table and by distance from lamps.
+6. **Validate**: today's lock-and-key solver, plus: every constraint met, every required site reachable by road, road travel time between story sites inside its band, density budget met (§2.4), nothing lethal between the station and Julie's house.
+
+**The seed viewer** is part of this milestone, not an extra: a page that renders 24 seeds side by side as maps with sites, roads and distances labelled. It is how the generator gets reviewed without playing 24 games.
+
+### 2.4 Density budget
+
+WoW-zone density, stated so it can be tested:
+
+| Per region | Target |
+| --- | --- |
+| Hubs (quest givers, bench, bed) | 1 town or equivalent + 2 outposts |
+| Side quests | 15–20, all kill / acquire / location, in short chains of 2–4 |
+| Enemy families | 6–8, each with a home terrain |
+| Points of interest | 25–35 |
+| Something **visible** from the road | every 20–30 s of walking |
+| Something **interactive** | every 60–90 s |
+| Deliberate empty stretch | up to ~2 minutes, used on purpose before something big |
+
+Whole game: three regions, six dungeons, 50–60 quests, roughly 15–25 hours. The Phaser build had 102 quests and 61 could not be handed in. The catalog test that prevents that already exists; the budget above is the other half.
+
+### 2.5 Harshness
+
+- No fast travel. No map markers beyond what Jane has seen or been told.
+- **Beds and fires** *(decided, built)*: the game saves only within reach of a bed or a fire, resting at one is the save, and dying wakes you at the last one you used, however far that is. A bed can also sleep the clock to morning. Before the first rest you wake at the door you came in by. Placing fires is therefore level design: the distance between two fires is the length of a run.
+- Bags are 24 slots and stay 24.
+
+### 2.6 Danger: how difficulty is laid out
+
+"East is harder" is not a design. WoW and Zelda both do something richer, and they do different halves of it. Take both.
+
+**What WoW does: danger is a map, not a gradient.** A zone has a level band, but inside it are pockets well above the band (the elite camp, the cave, the graveyard you are told not to cut through), safe corridors along the roads, and a hub you return to. You can *see* the dangerous pocket long before you can survive it, and the road bends around it.
+
+**What Zelda does: gates are verbs, not numbers.** Places are closed by what you cannot do yet (a broken bridge, a rock, water), not by what would kill you. A new verb re-opens the old map: shortcuts, caves you walked past, a chest on a ledge in the first field.
+
+**How Jane does it.** Every cell of the county has a **threat** from 1 to 6, the six phases of the 2020 balance sheet (`DESIGN-2020.md` §3.1: player 150→1000 HP, enemies 100→800, hits 10–30 → 160–240). Threat is a field built by the generator from rows, not from longitude:
+
+| Layer | Effect |
+| --- | --- |
+| **Region base** | Lowfields 1, Waters 2–3, Works 4–5 |
+| **Sub-areas** (`areas.json`, placed by the skeleton like sites) | Named patches with their own band, *in every region*: the Lowfields have the **Top Field** (3) and the **Wood behind the car** (2–3); the Waters have the **Drowned Lane** (4); the Works have a **safe works canteen** (2, with a fire). Roughly 5–7 per region |
+| **Dungeon rings** | Threat rises by one in a ring around each dungeon mouth; the approach is part of the dungeon |
+| **Roads and lamps** | −1 on a road; by night, a *lit* road holds that −1 and an unlit one loses it |
+| **Hubs** | Threat 0 inside a hub's fence: nothing spawns, nothing follows you in |
+| **Night** | +1 everywhere outside lamplight, +2 in the Works. Day and night is the spine (§1) |
+| **True omens** | A true omen can raise or move a pocket ("the scarecrow is closer") |
+
+Enemies are **rows × threat**: one `skeleton` row, scaled by the phase table at spawn, instead of `skeleton_2`, `skeleton_3`. Families still differ by region (what a thing *does*); threat sets what it *costs*. Spawn tables are per area.
+
+**Growth comes from finding things** *(decided)*. There is no XP bar, no level number, and nothing is earned by grinding kills. 2020 had no levels either, and its mine map has unlabelled heart and gem outlines in side rooms. Jane grows by what she **finds**:
+
+| Growth | Source | Roughly |
+| --- | --- | --- |
+| **Strength** (health) | Julie's preserves: jars in cellars, side rooms, the end of side quests, a big one per dungeon boss | 150 HP → 1000 over the game, about half from bosses, half found |
+| **Spirit** (mana, spell power) | Gold-leaf pages in the same kinds of places | likewise |
+| **Verbs** | One per dungeon: Icebolt, Repair, Explosion, Grow, Electric, Fire | Each opens sealed things in *earlier* areas (§ below) |
+| **Potions** | Craft | Temporary edges; the eight 2020 potions are already rows |
+
+That makes exploring the dangerous pocket the *way you get strong enough for the next region*, which is the loop a big harsh map needs. It also means difficulty is set by where upgrades are placed, which the generator controls and the solver can check: **by the time the critical path reaches threat N, at least the upgrades for phase N−1 are reachable without crossing threat N.**
+
+**Verb gates re-open the old map.** Each region is seeded with things that need a later verb: a collapsed bridge (Repair) that is a shortcut home, a rock over a cave mouth (Explosion), a dry bed that Grow fills with a path, a dead lamp run on the east road that Electric relights (and which then *stays* lit, making that road safe at night for good). Returning to the Lowfields with three new verbs should feel like a different place.
+
+**The world tells you; the interface does not** *(decided: threat is felt only)*. No level numbers, no skulls, no name colours. **An enemy's health is never a number**: a bar over its head and in the target frame, nothing more (built: the target frame's figures are gone; Jane's own vitals keep theirs). Threat is signs and rumours (omens), what the dog says, carrion, the colour of the mist, enemies visible from the road, and lamps. A player who walks into the Top Field on the first night was warned, and the warning might even have been false.
+
+**Doors at night are a creative choice, door by door** *(decided)*. There is no curfew rule. A prop row may carry `nightLock`, and then it is locked from nine to six: the shop, yes; the church, never; the pub, only on some seeds (that one is an omen). Each locked door should mean something about who is behind it.
+
+**Testable, so it stays true:** threat is a field the seed viewer can paint; the solver checks the upgrade rule above; a test checks that the walk from the station to Julie's house never crosses threat above 1 by day, and that every region has at least one fire inside threat ≤ its base.
+
+---
+
+## 3. Dungeons
+
+**Authored mission, generated space.** This is what the 2020 "Dungeon Graph Making Tools" folder was for.
+
+- A dungeon is a **mission graph** in data: challenge nodes in a fixed order with their locks and keys (`plate → plain key → clerk → HM key → Headmaster → vault key → Repair(2 wood) → boss key → boss`).
+- Each node names a **room template**; each template has **variants** (the plate room with one barrel and a rat; with two barrels and one is a mimic of nothing, just heavier; with the plate behind a push-maze). Variants differ in contents, never in what they require or grant.
+- The generator embeds the graph in space: rooms on a coarse lattice grown outward from the entrance, corridors three cells wide, loops added where the graph allows, dead ends dressed from the region's table.
+- **Bug safety is structural**: every variant is validated **alone** by the solver (enter with the template's declared inputs, must be able to leave with its declared outputs) and gets a bot test; the assembled dungeon is validated as now. A variant that cannot prove itself cannot ship.
+
+The cellar stays mostly authored (it is a house). The mine is rebuilt through the generator first, as the proof.
+
+---
+
+## 4. Engine work the scale needs
+
+Measured against 7.2 M cells, ~3,000 units, ~8,000 props.
+
+| Today | Problem at scale | Change |
+| --- | --- | --- |
+| A\* scratch is four arrays the size of the grid | 115 MB | **Windowed A\***: a fixed 256 × 256 window centred on the start, indices remapped. The node budget already stops searches long before the window edge |
+| `occ` is an `Int32Array` over the grid | 29 MB for a few hundred occupied cells | Sparse map keyed by cell (lookups only; iteration order never decides anything) |
+| Every prop is scanned for focus, plates, school touch, drawing | 8,000 per query | Props bucketed by 16-cell block; queries read the blocks near the player |
+| County generates on the main thread in ~30 ms | ~1–2 s | Generate in a **Web Worker** behind a loading screen; the skeleton is instant, so the title can show the map forming |
+| Saves are JSON in `localStorage` | ~4 MB per slot, over quota | Gzip via `CompressionStream` into **IndexedDB**; same state tree, same versioning |
+| Minimap is 1 px per cell | 54 MB of ImageData | 1 px per 4 cells for the county, drawn from the skeleton + fog |
+| Validator floods the whole zone | 7 M cells per candidate | Validate the skeleton on the macro grid; flood only inside chunks and dungeons |
+| Tests run 25 county seeds | minutes | Skeleton tests on 200 seeds (instant); full rasterisation on 3 |
+
+Tiles and flags stay flat typed arrays (14 MB together). Nothing else scales with world size: that was the point of the ring, the seed-derived terrain and the state tree.
+
+A per-tick budget test is added: **the sim stays under 2 ms a tick** with the full county loaded and the player standing in the town.
+
+---
+
+## 5. Text, and things that come true
+
+`VOICE.md` has the rules. The system:
+
+- An **omen** is a row: where it appears (sign, note, rumour, carved stone), what it claims, and what happens if it is true.
+
+  ```
+  id: mine_no_exit
+  text: "GOLDSKIN MINING Co. CLOSED. No entry. No exit either, some nights."
+  if_true: between 21:00 and 05:00 the mine's front door is barred from outside
+  fair: the mine must have a second way out (the solver checks)
+  ```
+
+- **Per seed, about a third of omens are true**, chosen by a seeded roll with constraints: at least a few per region, never two lethal ones stacked, none true between the station and Julie's house.
+- A true omen is never a cheat. The solver proves there is a way through. It costs you time, a detour, a fight, a night outside.
+- Nothing in the UI says which are true. The quest log never confirms one. The dog will not say.
+- Omens are the main place side content hangs: a rumour in the town is a quest hook *and* a claim.
+
+Every existing line gets rewritten against `VOICE.md` in one pass after the first region exists, not piecemeal.
+
+---
+
+## 6. Art
+
+Known gaps, in the order they hurt:
+
+1. **Terrain**: no transitions (shore, road edge, field edge); trees are blobs; house walls are flat. Needs edge/corner autotiling and real tree and building pieces.
+2. **Region palettes**: the Lowfields, the Waters and the Works must be recognisable from one screenshot.
+3. **Animation**: attack, cast and hurt are offsets and flashes on walk frames.
+4. **Weak sprites flagged by their own authors**: `gate_v`, `broken_track`, the barrel top, the burial lintel, `root_wall`, the dog from the front, the bat from the side, the bandit's contrast on grass; icons `item_coal`, `fx_stranglethorn`, `spell_nature`, `item_herb_lily`.
+5. Particles are squares. No portraits. No weather.
+
+Process: an **art sheet page** (every sprite, every frame, at 1× and 6×, on its real background) so art is redlined like text.
+
+---
+
+## 7. How we work
+
+One zone or system at a time:
+
+```
+brief (what it is for, which claims it makes)  →  John agrees
+→ rows + generator + tests                     →  npm test green, solver green on 200 seeds
+→ seed viewer / art sheet / build              →  John plays or looks
+→ redlines                                     →  fixes; lessons go into VOICE.md / this file
+```
+
+Rules:
+
+- **Nothing new starts until the last thing has been played.** This is the rule that would have saved the Phaser build.
+- `SYSTEMS.md` Rule 0 stands: IN means a test names it.
+- I generate; John directs. Anything about feel, difficulty or tone that I cannot test is a question, not a decision.
+- `STORY.md` and `VOICE.md` are reviewed before the text pass, not after.
+
+## 8. Milestones
+
+| | What | Gate |
+| --- | --- | --- |
+| **M0** | Key hints in dialogue; the letter in proper English; this plan, `STORY.md`, `VOICE.md`; beds and fires; the name step; the dog reworked and absent after dark; the bell; mist and longer light | *Done.* |
+| **M1** | Engine at scale (§4), with the 2 ms budget test. *Started: windowed A\*, sparse occupancy* | Tests |
+| **M1b** | **Co-op-ready sim** (`PLATFORM.md` §2): `players[]`, per-player input and commands, every zone with a player in it ticks, party-shared quests and flags, nothing pauses when there is more than one player, join / leave as commands, the server-wide party penalty. No networking yet | *Done.* `test/coop.test.ts`, 20 tests: four seats, a split across two zones, the shared fire, shared learning, keys handed on, a heal aimed at a friend, a two-seat replay that hashes the same |
+| **M2** | Skeleton generator, `sites.json` constraints, roads, regions, chunk format, **seed viewer** | John looks at 24 maps |
+| **M3** | The Lowfields to density: station start, town hub, farm, wood, side quests, wildlife, lamp-light rule, first omens; Julie's loop re-sited | John plays an hour |
+| **M4** | Dungeon generator; the mine rebuilt through it with room variants | John runs the mine on three seeds |
+| **M5** | Omen system complete; full text pass against `VOICE.md` | John reads and plays |
+| **M6** | The Waters: Museum, ruined library, Butterfly Forest; Explosion, Grow | Play |
+| **M7** | The Works: pipes, Factory (Electric), Burial (all four corners, the wizard), School | Play |
+| **M8** | Terrain art, region palettes, animation; audio; polish | — |
+| **MP** | Off the main line, whenever wanted after M1b: cross-engine determinism proof (Playwright, three browsers) → host relay + lockstep client, Host / Join on the title → co-op rules pass → PWA → Electron shell. `PLATFORM.md` §4 | Two machines on one LAN |
+
+Art items from §6 are pulled forward whenever a milestone makes them visible.
+
+## 9. Decided
+
+| | |
+| --- | --- |
+| Death and saving | Beds and fires only. Built and tested |
+| The dog | It is what is left of Julie. Never stated. `STORY.md` §3 |
+| Regions | The Works sit north; the School looms over the town from the first evening |
+| Difficulty | By zone **and** by areas within zones, WoW and Zelda both: §2.6 |
+| Working title | **Project Jane**. The player names the heroine at New Game (default Jane); text rows say `{name}`. The folder, package, save keys and console global are `jane` (renamed from junqi; older saves still open). The GitHub repository itself is still called Junqi, which only John can rename |
+| Tone | A slight Silent Hill lean, welcomed: mist, light that reaches further than it protects, a bell at nine, a county that is two places. `VOICE.md` §Tone |
+| Growth | From finding things. No XP bar, no levels. §2.6 |
+| Threat | Felt only. Enemy health is never a number |
+| Night doors | Door by door, a creative choice (`nightLock` on the prop row) |
+| How people play | Browser always; installable PWA; LAN co-op by deterministic lockstep, host runs the app or a script, guests open a URL; Electron later. `PLATFORM.md` |
+| Co-op | Up to four. The party may split across zones. **The world is never rebalanced: everyone is weaker for every player connected, wherever they stand** (2: deal 62%, take 115% · 3: 46% / 130% · 4: 38% / 145%). Together is slightly better than alone; apart is very hard until you regroup, by design. The sim is built for it now. `PLATFORM.md` §2 |
+| Co-op, the rules | One heroine, one name (the host's), told apart by coat colour per seat. Quests, flags, growth and the rest point belong to the world; bags belong to the person. Everyone wakes, and everyone joins, at the party's last fire; nobody can be called back. A guest resting saves. Keys and quest items never leave with a guest. You see only your own damage and healing numbers. Heals are mouse-over: the friend under the cursor, else yourself. Chest loot is first come. Any world can be opened to co-op and closes back to plain single-player. `PLATFORM.md` §2, §7 |
+
+**What the penalty asks of content** (the cohesion test, applied): anything written from here on must survive a player at 38% walking into it alone. That is acceptable, since the answer is "go and find your friends", but no quest may *require* the party to split, and no lock-in room may trap one player away from the others without a way for them to follow.
+
+## 10. Open questions
+
+From `PLATFORM.md` §8, none urgent before the network step: where Host / Join sit in the UI; what happens to a guest who clears her browser storage.

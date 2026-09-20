@@ -1,14 +1,14 @@
-# Junqi — Missing engine systems
+# Jane — Missing engine systems
 
-Pair with `SYSTEMS.md` (the bar), `WORLDGEN.md` (how the county grows), `LEARNING-SYSTEMS.md` (2020 paths).
+Pair with `SYSTEMS.md` (the bar), `ENGINE.md` (the live engine), `WORLDGEN.md` (zones), `LEARNING-SYSTEMS.md` (2020 paths).
 
-This file is the **engine** still sitting in jun7 and not in the remake: verbs you can drop on any zone, any seed, a larger game. A new cart, lever, fog rect, or ground hazard is a **row**. It is not a new class and not a per-unit special case.
+This file is the **engine** that 2020's jun7 had, or wanted, and the live build does not carry yet: verbs you can drop on any zone, any seed, a larger game. A new cart, lever, fog rect or ground hazard is a **row**. It is not a new class and not a per-unit special case.
 
-**This file is not:** one-off bosses, one puzzle in the burial, one rose in the cellar, Auntie’s lines, Fireball’s room, or a wider enemy roster. Those use the engine. They are listed in the appendix so we do not confuse them with work to do twice.
+**This file is not** one-off bosses, one puzzle in the burial, Auntie's lines, or a wider enemy roster. Those *use* the engine; they are in the appendix so nobody does them twice.
 
-**Rule (same as `SYSTEMS.md`):** add a JSON row. Do not add a TypeScript class for a new machine, trigger, tile flag, or spell kind.
+**Rule (same as `SYSTEMS.md`):** add a row. **Rule 0 applies here too:** nothing below is **IN** unless a test names it.
 
-**Status** matches `SYSTEMS.md`: **IN** / **SHAPE** / **LATER** / **NEVER**. Tile flags, triggers, snapshot save, load ring, pull, energy, toggle, drain, drag, and interior fog are **IN**. Cart, floors, pad, subtract, particles, and audio are still open.
+Rewritten September 2026 after two audits. The first found that several things this file said 2020 "proved" were never wired up in 2020 at all; those are marked *(corrected)*. The second found that several things the previous version marked IN in the Phaser remake were partial or inert (`archive/phaser-remake-2026/POSTMORTEM.md`).
 
 ---
 
@@ -17,286 +17,115 @@ This file is the **engine** still sitting in jun7 and not in the remake: verbs y
 | Engine | One-off (appendix) |
 | --- | --- |
 | A non-unit mover on a track flag | The two gold-mine carts |
-| A toggle that targets an id | `obj_leaver1` as a unique object |
-| A floor index the grid/path/map read | Button that hard-sets floor 0 |
-| Tile flags `solid` / `blockLos` | `obj_water` as its own class |
-| On-enter action list | `obj_trigger_rat_path_to_snake` |
-| Push and pull on one tag | A second “pullable” parent |
-| Live ring + chunked tiles | — |
-| Per-zone instance snapshot | — |
-| Reveal rects (optional floor) | Named burial fog pieces |
-| Camera follow / lock / zoom / shake | Lock used only for the snake |
-| One input action layer | Touch TODO copies in every GUI |
-| Animation table `kind → frames` | Importing 364 GM strips |
-| Spell *kind* `ground` | `obj_spellWebOnGround` as a class |
-| Energy as one field (sprint, carry, melee restore) | Melee-only special case |
+| A plate / lever that runs an action list | `obj_leaver1` calling `instance_nearest(obj_track_corners)` |
+| Tile flags `solid` / `blockLos` / `water` | `obj_water` as its own class |
+| On-enter / while action list with a death reset | `obj_trigger_rat_path_to_snake` |
+| Push, pull, carry on capability flags | A second "pullable" parent |
+| A school that switches a prop on | Wall torches that happen to read frost damage |
+| A `bait` field | `obj_snake_1`'s hand-written idle branch |
+| Load ring over a whole-zone state | — |
+| Camera follow / lock-to-rect / shake | A lock that 2020 declared and never set |
+| One input action layer | Touch `TODO` copies in every GUI function |
+| Animation table `kind → frames` | Importing 364 purchased sprites |
+| Spell kinds `bolt` (fan, ring, splash) and `ground` | `obj_spellWebOnGround`, `obj_spellCactus`, `obj_spellSnakeBoss` as classes |
 
-If you cannot reuse it on a second floor of a second dungeon without opening `PlayScene.ts`, it is not the main list.
+If you cannot reuse it on a second floor of a second dungeon without opening `sim/`, it is not the main list.
 
 ---
 
 ## Snapshot
 
-The remake already has the MMO-lite core: one unit, one cast pipeline, 24+8+3/1 bags, craft by id, three quest types, dialogue runner, AI leash, keys as tags, carry, repair, learn, room lock, clock → wash, one slot, KBM, dual camera.
-
-What 2020 still has that a **larger** game needs:
-
-| Engine | 2020 proved it with | Remake | Bar |
+| Engine | What 2020 actually had | Live | Bar |
 | --- | --- | --- | --- |
-| Non-unit mover | Minecart + track | — | LATER (row: `machine.kind = cart`) |
-| Toggle | Lever / button | `kind: toggle` + action list | **IN** |
-| Drain flood | Lily / wet rooms | `drain:` action on a named rect | **IN** |
-| Zone floors | `current_floor` 0/1 | Flat grid | SHAPE |
-| Tile flags | Water `solid` + `block_los` | `TILE_FLAGS` table | **IN** |
-| Trigger list | A dozen `obj_trigger_*` | `triggers.json` + `runActions` | **IN** |
-| Push **and** pull | One `"pushable"` tag | Same `push` tag | **IN** |
-| Distance unload | 768 px ring | Sleep + chunked tiles | **IN** |
-| Snapshot save | `save_room` instance list | `zones[id]` in `junqi.slot0` (actors, props, optional `fog`) | **IN** |
-| Fog / reveal | `obj_reveal_regeon` | Interior bitmap in `fog.ts`, saved on the zone snap. County is live radar | **IN** interiors / SHAPE county |
-| Camera states | FOLLOW / LOCK / zoom / shake | Follow + small shake | LATER / SHAPE |
-| Action-layer input | Pad + (unfinished) touch | KBM | LATER |
-| Multi-slot | `slotN.jsav` | Slot 0 | LATER |
-| Animation table | SpriteSet | Facing pose | SHAPE |
-| Lighting surface | `bm_subtract` | Wash + ADD | SHAPE |
-| Particles | One `part_system` | 3 textures | LATER |
-| Audio bus | Zone → track | Silent | LATER |
-| Drag ghost | `obj_itemMove` | Bag / bar / book in `drag.ts` | **IN** |
-| Ground spell kind | Web on ground | Bolt + status | SHAPE |
-| Energy contract | Sprint / carry / melee restore | Sprint / idle / melee restore / carry drain | **IN** |
-| Hunger / warmth | — | `survive.ts` + item `food` / `warm` | **IN** |
+| Fixed-step deterministic sim, replay | 60 fps frames; no determinism | `sim/`, `test/replay` | **IN** |
+| One state tree = the save | `save_room` copied fields (and got `hp` wrong) | `GameState` | **IN** |
+| Tile flags | *(Corrected)* `obj_water.block_los = true` was **never read**: `CheckLOS` and projectiles only test `obj_static_solid_parent`. Water blocked feet only | `TILE_FLAGS`; water is solid, not sight-blocking | **IN** |
+| Trigger action list | A dozen `obj_trigger_*` | `triggers.json`: `enter` / `while`, conditions, `reset` | **IN** |
+| Pressure plate | `obj_button_1`: any in-world object holds it; release re-locks | `plate` prop flag, `use` / `release` lists | **IN** |
+| Lever / toggle | *(Corrected)* no target id: nearest track corner, or closures overridden in room creation code | prop `use` list + `on` state | **SHAPE** — nothing placed |
+| Keys | door `key` string tag (good); one object per key (bad); named keys open the nearest door at **any range** | `opens` / `keyTag`; you must be at the door | **IN** |
+| Repair with materials | `obj_repairable_parent.mats` | `world` spell kind, `answers`, `needs` | **IN** |
+| School switches a prop | frost lights wall torches | `answers: <school>` + `lightWhenOn` | **IN** |
+| Bait | `obj_snake_1` + Poisoned Rat Meat | unit `bait` field, item `throw` action | **IN** |
+| Push / pull / carry | hold USE 30 frames, 20 energy, spacer cell; `"pickup"` tag | `push` / `carry` flags; carry refuses zone travel | **SHAPE** |
+| Distance unload | 768 px ring | `sim/ring.ts`; sleepers' clocks tick | **IN** |
+| Fog / reveal | reveal rects fill the minimap buffer | one bit per 16 px block in zone state | **SHAPE** |
+| Tile edits that save | — | `tileDeltas` + `fill` action | **SHAPE** — unused until Grow / drain |
+| Spell kinds | one object per spell | `melee bolt self world ground`; bolt `count` / `fan` / `splash` | **IN** (bolt, melee, world) / **SHAPE** (ground, self) |
+| Statuses | *(Corrected)* none: `speed_multiplier`, player only. `damage[]` and `resistances[]` never read | effect rows read by every unit | **IN** |
+| Camera | *(Corrected)* follow tween only. `CAM_STATE.LOCK` is an empty case; `cam_grab` is never set; zoom unclamped | eased follow, lock to named rect, shake | **SHAPE** |
+| Input action layer | `interaction.*`, pad partly wired, touch `TODO` | KBM + the 2020 pad layout, one path | **SHAPE** |
+| Multi-slot save | `slotN.jsav`; title Load was `TODO` | 3 slots, versioned, title + pause menus | **SHAPE** |
+| Lighting | two `bm_subtract` passes on a surface allocated every frame; fixed colour | cached lightmap, add, multiply; clock-driven ambient | **SHAPE** |
+| Particles | one `part_system`, 7 types | pooled squares by school | **SHAPE** |
+| Animation table | `SpriteSet` switch (with the cactus fall-through) | frame names per sprite: `down up side` + `2` + `dead` | **SHAPE** |
+| Non-unit mover (cart) | `obj_minecart` + tracks + levers | — | **LATER** |
+| Zone floors | *(Corrected)* **did not exist.** `current_floor` is written in five places and read nowhere | — | **NEVER**, until a zone truly overlaps itself |
+| Lily-pad raft | bolt damage slides a pad over water; it becomes walkable (never west: a bug) | — | **LATER** |
+| Zone travel fade | 30 frames out, 30 in | instant | **LATER** |
+| Audio bus | *(Corrected)* **2020 is silent**: two `.ogg` files, the only play call commented out | silent | **LATER** |
+| Touch layout | `TODO` | Pointer Events reach the UI; no on-screen sticks | **LATER** |
+| Hunger / warmth | never in jun7 (it is JaneCraft, the March 2020 pitch) | — | **NEVER** |
 
 ---
 
-## 1. World as data
+## 1. Still missing: world as data
 
-These scale because the **county** grows, not because a unit is special.
-
-### 1.1 Machines (mover / toggle)
-
-One table. Two kinds 2020 actually ran. More kinds later are more rows.
+### 1.1 Machines (mover)
 
 ```
-id, kind: cart | toggle, cells[] | target, onUse[]
+id, kind: cart, cells[] (tiles flagged Track), speed, onArrive[]
 ```
 
-**Cart (non-unit mover).** 2020: `obj_minecart` + track pieces + stop trigger. Occupies cell 8. Player rides; `reach_end()` returns control. The cart can hit the same triggers as the player (lily, lock, light, spawn). The engine is: a mover that is not a `Unit`, on tiles flagged `track`.
+**2020:** `obj_minecart` follows a GameMaker path; the rider is teleported with the cart each step, so it is the *player* who touches triggers on the way. *(Corrected)* the cart itself only has one registered collision (`obj_minecart_stop_trigger`, which crashes every cart); the other `Collision_obj_minecart.gml` files are orphans missing from the event list. The cart is not in the path grid. A crash respawns it on a fixed path.
 
-**Toggle.** 2020: `obj_leaver1`, `obj_button_1`. One use path: run `onUse` against a target id (door, block, light, floor).
+**Engine:** a mover that is not a `Unit`, on cells flagged `Track`, carrying the player, stopping at a marked cell and running an action list. Levers switch a junction. The 2020 design map adds a "Minecart Ramp Jump" and track sections that want Repair (4 iron). **Do not:** `class Minecart`.
 
-**Remake:** `kind: toggle` runs an action list. Factory, school, pipes, and county trials prove the lever. Pipes drain is a `drain:` action on a named flood rect, not a floor index. Cart is still LATER.
+The live mine paints `Track` tiles and parks a dead cart on them. That is set-dressing. **Bar: LATER.**
 
-**Bar:** toggle **IN**. Cart LATER.
+### 1.2 Toggle
 
-**Do not:** `class Minecart`, `class Lever`, a third parent for buttons. The 2020 mine carts and three levers are *content rows* that prove the table.
+The row exists (any prop with a `use` list flips `on` and runs it). What is missing is a placed lever and a test. 2020's levers had no target id and cannot be copied; the live contract is "`use` names the prop keys it acts on", which the solver already understands. **Bar: SHAPE** until the first lever earns a test.
 
-### 1.2 Zone floors
+### 1.3 Tile edits: Grow, drain, Explosion
 
-**2020:** `obj_player.current_floor` (0 or 1). Floor triggers and reveal rects set it. Path, occupy, and minimap change with it so the mine can overlap.
+`fill` writes a named rect to a tile and records it in `tileDeltas`, so it saves and replays, and the renderer rebuilds only the chunks the rect touches. Grow (2020 map: "Walk up to another level by making a vine grow", "Make purple flowers grow") is `answers: "grow"` + `fill` with `GrownPath`. Explosion ("destroy some rock") is the same with `Rubble → floor`. The 2026 build wrote the grid directly and lost the edit on reload. **Bar: SHAPE** until a zone uses it.
 
-**Engine:** a zone may have `floors: N`. Path, LOS, occupy, reveal, and machines read `session.floor`. A trigger or toggle sets the index. Do not fake a second zone to stack geometry.
+### 1.4 Raft
 
-**Remake:** one grid per zone.
-
-**Bar:** SHAPE when a dungeon is large enough to overlap.
-
-### 1.3 Tile flags — IN
-
-**2020:** `obj_water` is solid and `block_los = true`. `CheckLOS()` and projectiles read `block_los` on the line. Statics default `block_los = false`.
-
-**Engine:** every tile (and solid prop) has `solid` and `blockLos`. Water is a row that sets both. Walls set both. Grass sets neither. Bushes may be solid only. Projectiles and path already exist — they must read the flags.
-
-**Remake:** `TILE_FLAGS` on `Grid`. `grass` neither; `bush` solid only; `water` / `wall` / `house` both. `solid()`, `blocksLos()`, `blockedProjectile()` read the table. Extra-solid props (gates, crates) also block LOS.
-
-**Bar:** **IN**. A pond in Auntie's yard proves bolts stop on water.
-
-### 1.4 Trigger action list — IN
-
-**2020** implemented this as many objects (`obj_trigger_room_lock_player_in`, `obj_boss_room_trigger`, rat spawn, rat path, kill-root, snake-light, snake-aggro, `obj_block_here`, quest location). The *engine* is one thing: **on enter, run an action list**.
-
-Dialogue already has `quest:`, `beat:`, `set:`, `handin:`. Reuse that runner.
-
-```
-id, rect | cell, when: enter | use, actions[], once?, floor?
-```
-
-Actions the larger game will keep using: `lock`, `unlock`, `solid`, `spawn`, `despawn`, `path`, `light`, `aggro`, `floor`, `learn` (already a prop), `location` (already a quest type).
-
-**Remake:** `triggers.json` + shared `runActions` (`actions.ts`). World verbs: `lock`, `unlock`, `solid`, `spawn`, `light`, `aggro`, `location`, `learn`. One enter-rect check in `PlayScene`. Kitchen / mine / burial lock-in are rows.
-
-**Bar:** **IN**. Do not add `talkRatSpawn()`. Rat-path-to-snake is a **row** that uses `path` + `spawn`.
-
-### 1.5 Push and pull — IN
-
-**2020:** one tag `"pushable"`. Walk into it → push one cell. Face 180° → pull with a spacer cell. Same occupy update (`obj_player/Other_16.gml`).
-
-**Engine:** occupy + one tag. Direction relative to facing. Not a second object family.
-
-**Remake:** same `push` tag. Hold E: crate in front pushes; crate behind with a spacer cell pulls (move one cell along facing).
-
-**Bar:** **IN**.
+2020's lily pad: any bolt damage within 25 px slides it 8 px away from the player, only onto water and not onto another pad; it then clears its path rect, so you can stand on it. In the live engine that is a `push`-like prop that is non-solid over `WATER` cells and answers to any school. **Bar: LATER.**
 
 ---
 
-## 2. Session, sleep, camera, input
-
-These scale because the **map** grows.
-
-### 2.1 Distance unload + chunked tiles — IN
-
-Full contract: `WORLDGEN.md` §6.
-
-**2020:** `distance_unload` ticks before units. On block change (16 px): sleep dynamics / statics / usables / **idle** AI; wake a 768 px square; combat stays up. Activate-all before save, load, zone change.
-
-**Engine:** generate the whole zone, tick a ring. Chunk tiles to the same ring. Specs stay in the blueprint while sprites are down. Never persist only the ring.
-
-**Remake:** on player block change (16 px), sleep idle AI and far props (skip tick, hide, drop occupy). Combat, locked gates, carried crates, bolts, and the speaker stay awake. Tiles draw in 16-cell chunks; far chunk textures are destroyed. F5 / zone leave wake-all, snapshot, then dirty the last block.
-
-**Bar:** **IN**. Required before the two-camp size jump. Town must sleep in Auntie's yard once camps exist.
-
-### 2.2 Per-zone snapshot save — IN
-
-**2020 `save_room()`:** player map + a list of instances (units, usables, reveal rects, doors) with live xy. Load recreated from that list.
-
-**Bugs to keep dead:** HP written as `maxhp`; load at `xstart`/`ystart`.
-
-**Engine:** one slot schema. Per zone: actors `{id, hp, mp, x, y, …}`, props `{id, used, locked}`, reveals, floor. Wake-all, write all, sleep again.
-
-**Remake:** same `junqi.slot0`. `zones[zoneId] = { actors: {id, hp, x, y, …}[], props: {id, used, locked, x, y}[] }`. On zone leave / F5 write the current zone from live actors (wake-all first). On enter, apply by id over the generated blueprint. Do not store `maxhp`. `dead` still keeps quest units from returning.
-
-**Bar:** **IN**. A larger game cannot treat “left the camera” as “never existed.”
-
-### 2.3 Fog / reveal — IN interiors
-
-**2020:** `obj_reveal_regeon` rectangles stamp the minimap and may set floor. Dozens in mine and burial.
-
-**Engine:** walk a cell, mark it seen, persist the bitmap with the zone snap. Floor-aware when §1.2 exists. County can stay a live radar — 2000×1200 does not need a saved fog.
-
-**Remake:** `fog.ts` stamps an 8-cell radius on interiors and packs it onto `zones[id].fog`. County skips the bitmap. `session.visited` still names the zones you have entered.
-
-**Bar:** **IN** for interiors. County radar is the intended leftover, not a hole.
-
-### 2.4 Camera states — SHAPE / LATER
-
-**2020:** `CAM_STATE.FOLLOW | LOCK`, `camera_zoom`, region clamp, `camera_shake`. One camera object.
-
-**Engine:** `{mode: follow | lock, zoom, bounds, shake}`. Boss rooms and interiors lock; zoom is a setting; shake is a call from incoming damage. Do not grow a camera class per room.
-
-**Remake:** follow, zoom 4, small shake.
-
-**Bar:** lock is SHAPE (any boss pocket). Zoom / pad-driven zoom is LATER.
-
-### 2.5 Zone travel chrome — LATER
-
-**2020:** `obj_change_zone_box` fade, then `save_room` + `room_goto`. Pairing is `door_id` + `place_x/y`.
-
-**Engine:** travel is already IN. Fade is polish on that verb. Keep door marks from `WORLDGEN.md`.
-
-**Remake:** instant `PlayScene` restart.
-
-### 2.6 Input action layer — LATER
-
-**2020:** `input_check(interaction.USE)` walks keyboard then gamepads. GUI events 6/7/8 by device. Touch empty.
-
-**Engine:** one action layer. Device is a source, not a second inventory or a second HUD.
-
-**Remake:** KBM + RMB stick.
-
-### 2.7 Slots — LATER
-
-**2020:** `slotN.jsav`. Title Options TODO.
-
-**Engine:** the save shape in §2.2, N slots. Slot 0 ships the county.
-
----
-
-## 3. Presentation engines
-
-These scale because **every** unit, spell, and zone uses them. They are not art one-offs.
-
-### 3.1 Animation table — SHAPE
-
-**2020 SpriteSet:** `kind → { s_front/back/left/right, f_idle/walk/cast/attack/shoot/hurt/dead/loot: [start, end] }`.
-
-**Engine:** that table. New enemy = a row (or generated frames with the same keys). Walk/cast/hurt/dead are states you already have on `Unit`.
-
-**Remake:** one generated pose per facing.
-
-**Not the engine:** importing the 364 GM sprites. That is LATER art. The cactus `break` bug stays dead.
-
-### 3.2 Lighting surface — SHAPE
-
-**2020:** view-sized surface, `bm_subtract` light sprites, free each frame. Clock did **not** drive color.
-
-**Engine:** one lighting pass. Lights are data on props/spells (`radius`, `sprite`/`color`). Clock already drives wash in the remake — keep that. Subtract (or a modern equivalent) is the missing renderer, not a per-torch object.
-
-**Remake:** wash + ADD circles.
-
-### 3.3 Particle system — LATER
-
-**2020:** one `part_system`, types in `ParticleList`, projectiles emit by school.
-
-**Engine:** `school | override → emitter`. New spell does not need a new renderer (`vfx.ts` already says this for bolts).
-
-**Remake:** bolt / slash / spark textures.
-
-### 3.4 Audio bus — LATER
-
-**2020:** two tracks. The *engine* is `zone | combat | title → track`, not those two files.
-
-**Remake:** silent.
-
-### 3.5 Drag ghost — IN
-
-**2020:** `obj_itemMove` with a from-enum (bar / bag / book / craft).
-
-**Engine:** one ghost for bag / bar / book. Keys and Julie's letter refuse destroy.
-
-**Remake:** `drag.ts` + press-and-move in `Gui` / `ActionBar`. Click-bind still works.
-
-**Bar:** **IN**. Craft-grid drag is leftover polish, not a missing engine.
-
----
-
-## 4. Combat engines (shared, not per-unit)
-
-### 4.1 Spell kind `ground`
-
-**2020:** lingering web on the floor, group web, wrap. Same pipeline as a bolt: validate, pay, spawn a *kind*.
-
-**Engine:** add `ground` next to melee / bolt / self / world. Duration, school, status. JSON row. The spider kit is content that uses it.
-
-**Remake:** `webshot_ai` is bolt + `onHit: root`.
-
-### 4.2 Energy as one field — IN
-
-**2020:** sprint 0.5/frame, carry 0.25, idle 0.5, empty lockout until full, melee `RestoreENERGY`. Formula and crit are already IN.
-
-**Engine:** every cost and restore writes `unit.energy`. Carry and melee are not special objects; they are callers.
-
-**Remake:** sprint 30/s, idle regen 30/s, carry drain 15/s, melee hit restores 16. Empty lockout until full still on the same field.
-
-**Bar:** **IN**.
+## 2. Still missing: session, camera, input
+
+- **Browser smoke test.** Presentation cannot earn IN without one. First on `SYSTEMS.md` §12.
+- **Travel fade.** Polish on a verb that is IN.
+- **Touch.** The UI is pointer-driven already. What is missing is a virtual stick and buttons that feed the same `InputFrame`. No second HUD.
+- **Options** (rebinding, cursor, volume). 2020's was `TODO`.
+- **Death.** 2020's production board wanted "Die → graveyard respawn + res sickness". Live: you stand back up at the mark you came in by, lock-ins reset. Res sickness would be one `effects.json` row applied in `revivePlayer`.
+- **Zoom.** 2020's wheel zoom had its clamp commented out. The live view is a fixed ~216 px tall at an integer scale. A zoom setting would be a second integer.
+
+## 3. Still missing: presentation
+
+- **Audio bus:** `zone | combat | title → track`, `event → sfx`. The sim already emits `sfx`, `cast`, `impact`, `swing`, `death`. Nothing listens.
+- **Animation:** attack, cast and hurt are offsets and flashes on the walk frames. A real table would add frame names, not code.
+- **Particles:** squares. An emitter table keyed by school is the 2020 shape (`ParticleList`, 7 types; every poison bolt reused the frost particles).
+- **Square room lights** (production board): a light row with a rect instead of a radius.
+
+## 4. Still missing: combat
+
+- **`ground` and `self` kinds under test.** Webshot (`ground`) and a self-buff spell exist as rows; no test casts them.
+- **AoE placed by aim** ("AOE from where?", production board): a `ground` row cast at the aim point within range rather than at a target. One field.
+- **Boss-width health bar, first-time loot description, stats in the inventory window** (production board): UI rows.
 
 ---
 
 ## 5. Already IN — do not rebuild
 
-- Session, pause, terminal, F2/F3/F5
-- Unit vitals, GCD, occupy, incoming by school, resist, `effects.json`
-- Cast validate → pay → melee/bolt/self/world; AI `tryCast`
-- 24 / 8 / 3+1, recipes by **id**, ground drops
-- Quests kill / acquire / location, beats, dialogue runner
-- AI idle / combat / leash, A* cell 8
-- Keys as `opens`, chest once, push + pull, carry, repair, learn, room lock, location
-- Tile flags, trigger action list, per-zone snapshot, load ring, energy callers
-- Toggle, drain, Grow, interior fog, bag/bar/book drag
-- Hunger / warmth, six towns, post-snake Zelda rooms
-- Dual cam, HUD, four windows, RMB stick, mouseOnGui
-- Clock → night wash + warmth
+Fixed-step deterministic sim, replay, one-tree saves with versions and migrations. One unit, one cast pipeline with 2020's validation order, incoming queue, effect rows, aim-based casting, fan / ring / splash bolts. 24 / 8 / 3+1, recipes by id, drops in zone state, rewards that never vanish. Kill / acquire / location with live `acquire` and persistent `location`. Dialogue trees. AI idle / combat / leash on a budgeted typed-array A\*. Keys as tags, gates, chests, plates, Repair with materials, frost torches, bait, triggers with reset, the segmented snake. Load ring. Five validated zones. Art as source.
 
-Bugs that stay dead: cactus SpriteSet fallthrough; CastSpell `alive` before exists; PathTo `div 32`; save HP as maxhp; `moveToX/Y` swap; recipes by display name; clock with no output.
-
----
+Bugs that stay dead: `SpriteSet` cactus fall-through; `CastSpell` reading a missing target; `PathTo` `div 32`; save writing `maxhp` and loading at `xstart`; `moveToX/Y` swap; recipes by display name; player melee that hits nothing; the aggro counter that skips zero; paths that cannot reach an occupied goal; cooldown checked before range; rewards lost to a full bag; once-triggers that lose progress; saves that forget cooldowns and tile edits.
 
 ## 6. Do not port
 
@@ -304,77 +133,36 @@ Bugs that stay dead: cactus SpriteSet fallthrough; CastSpell `alive` before exis
 | --- | --- |
 | TweenGMS | Third party |
 | `Resolution_List` | Dead |
-| `obj_onUseKey_*`, `obj_bench1`–`9` | One tag / one sprite. The *anti*-pattern this file exists to avoid |
-| Recipes keyed by display name | Fragile |
-| WoW quest paste | Content leftover |
-| Title skip, `global.debug = true` | Off |
+| `obj_onUseKey_*`, `obj_bench1`–`10` | One tag / one sprite. The anti-pattern this file exists to avoid |
+| `current_floor` | It never did anything |
+| `obj_trigger_room_lock_player_in` | A timed lock nobody can release. Use `enter` + `while` + `reset` |
+| `obj_rose_growing_zone`, `obj_boss_room_trigger`, `plant_trigger` | Inert in 2020 |
+| Named keys that open the nearest door at any range | You should be standing at the door |
 | A class per 2020 trigger object | That is what `triggers.json` replaces |
+| Anything in `Junqi-Legacy-GM/Assets/` | Purchased packs and ripped reference art (`DESIGN-2020.md` §6) |
+| JaneCraft survival | A different game |
 
 ---
 
-## 7. What to add when (engine only)
-
-| First (done) | Still open on the county | When a room needs the verb |
-| --- | --- | --- |
-| Snapshot save (live HP/xy + interior fog) **IN** | Cart on a track | Ground spell kind |
-| Trigger action list **IN** | Zone floors when a mine overlaps | Particles, audio bus |
-| Tile flags `solid` / `blockLos` **IN** | Camera lock as a state | Pad, extra slots |
-| Toggle + drain **IN** | Lighting surface | Zone fade |
-| Pull / energy / load ring **IN** | Animation table | — |
-| Drag ghost **IN** | County fog bitmap (optional) | — |
-
-Do not invent a seventh dungeon to exercise a row. Factory / school / butterfly / pipes already prove toggle, clear, Grow, drain, and Repair. Reuse those rows on the county trials.
-
----
-
-## 8. File map (engine hole)
-
-| 2020 | Engine it was | Remake hole |
-| --- | --- | --- |
-| `distance_unload` | Live ring | `loadRing.ts` **IN** |
-| `save_room` / `load_room` | Instance snapshot | `session.zones` **IN** |
-| `obj_minecart` + tracks | Machine `cart` | — |
-| `obj_leaver1` / `obj_button_1` | Machine `toggle` | `kind: toggle` **IN** |
-| Wet rooms / lily | Drain flood | `drain:` **IN** |
-| `current_floor` | Zone floors | — |
-| `obj_water` + `block_los` | Tile flags | `TILE_FLAGS` **IN** |
-| `obj_trigger_*` family | Action list | `triggers.json` **IN** |
-| Push + pull | One occupy tag | Same `push` tag **IN** |
-| `obj_reveal_regeon` | Fog / reveal | `fog.ts` interiors **IN**; county radar |
-| `CAM_STATE` + zoom | Camera states | Follow |
-| `input` pad / touch | Action layer | KBM |
-| `SpriteSet` | Animation table | Facing |
-| Draw_73 subtract | Lighting pass | Wash + ADD |
-| `ParticleList` | Emitter table | 3 textures |
-| Two `.ogg` | Audio bus | — |
-| `obj_itemMove` | Drag ghost | `drag.ts` **IN** |
-| `obj_spellWebOnGround` | Spell kind `ground` | Bolt + status |
-| Melee `RestoreENERGY` | Energy callers | Sprint / carry / melee **IN** |
-
----
-
-## Appendix — 2020 one-offs (not the job)
-
-These are **uses** of the engine, or the one permitted special-case. Do not promote them to a second AI, a pad class, or a grow class. When you need them, add a row or the single boss mover.
+## Appendix — 2020 one-offs (uses of the engine, not the engine)
 
 | 2020 thing | Uses | Notes |
 | --- | --- | --- |
-| Two mine carts, three levers | Machines | Content density in `WORLDGEN.md` |
-| Lily pads + snake torches | Triggers + water flags + optional cart | One burial puzzle. `SYSTEMS.md` LATER |
-| `obj_rose_growing_zone` | Trigger + clock | One cellar patch |
-| `obj_snake_boss` / `move_snake()` | The one custom mover (`SYSTEMS.md` SHAPE) | Until then, generic AI + lock |
-| Bat / pumpkin / cactus / soldiers / flowers / spider boss | Enemy **rows** | Table is as wide as 2020; do not author a wing |
-| Fireball at (560, 1352) | `prop.learn` | Wrong pocket today — `WORLDGEN.md`, not a new system |
-| County topology | Zone travel (IN) | Hatch = cellar; yard doors = mine / burial |
-| Auntie as a speaker | Dialogue runner (IN) | A `dialogue.json` node |
-| `music_dungeon1` / `bgm_butterfly1` | Audio bus | Two files, not two systems |
-| Butterfly forest | Grow + authored graph | On the spine after the snake. Grow is the verb. NEVER as a spider wing |
+| Two mine carts, three levers | Machines | Content density. `WORLDGEN.md` §1.4 has the route |
+| Lily pads round the key-chest island | Raft | One burial puzzle. Solution unverified even in 2020 |
+| 12 `obj_trigger_snake_light_on` | Trigger + `switch` | Torches that light as you walk the west corridor |
+| `obj_snake_boss` / `move_snake()` | The one custom mover | **IN** (`sim/snake.ts`) |
+| Spider boss (eggs hatch every 20 s, web wrap at 6 s), undead boss, boss flower (seeds that crawl and bloom) | Unit rows + `ground` / `spawn` | The other three burial corners |
+| Bat / pumpkin / cactus / soldiers / flowers / statues | Enemy rows | **IN** as rows; placed where the zones have holes |
+| Fireball at (560, 1352) | A dialogue tree with `learn` | **IN**, in the garden |
+| Auntie as a speaker | Dialogue | She is absent. That is the story |
+| `music_dungeon1` / `bgm_butterfly1` | Audio bus | Two unlicensed files, never played |
 
 ---
 
 ## Source
 
-- `LEARNING.md`, `LEARNING-SYSTEMS.md`, `SYSTEMS.md`, `WORLDGEN.md`
-- `Junqi-Legacy-GM/jun7/objects/distance_unload`, `obj_minecart`, `obj_player/Other_16.gml`, `obj_water`, `obj_reveal_regeon`
-- `Junqi-Legacy-GM/jun7/scripts/save_room`, `SpriteSet`, `ParticleList`, `Camera_functions`
-- Remake: `junqi/src/game/systems/*`, `world/generate*.ts`
+- `LEARNING.md`, `LEARNING-SYSTEMS.md`, `WORLDGEN.md`, `DESIGN-2020.md`, `ENGINE.md`
+- `Junqi-Legacy-GM/jun7/objects/`: `distance_unload`, `obj_minecart`, `obj_player/Other_16.gml`, `obj_water`, `obj_reveal_regeon`, `obj_button_1`, `obj_leaver1`, `obj_camera`, `obj_light_wall_torch_parent`, `obj_snake_1`, `obj_undead_lily_pad`
+- `Junqi-Legacy-GM/jun7/scripts/`: `save_room`, `SpriteSet`, `ParticleList`, `Camera_functions`, `Unit_Functions`
+- Live: `jane/src/sim/*`, `jane/src/world/*`, `jane/test/*`

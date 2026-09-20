@@ -1,0 +1,51 @@
+/* Page shell only. Everything the UI draws lives in src/ui/ui.css. */
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #0b0a10;
+  color: #f4f0e6;
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+  overscroll-behavior: none;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+#stage {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+}
+
+/* The framebuffer is sized in whole multiples by the renderer; it may overhang by
+   less than one world pixel on the right and bottom, which #stage clips. */
+#world {
+  position: absolute;
+  left: 0;
+  top: 0;
+  image-rendering: pixelated;
+  image-rendering: crisp-edges;
+  cursor: none;
+}
+
+#ui {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.boot-error {
+  position: fixed;
+  inset: 24px;
+  padding: 16px;
+  margin: 0;
+  overflow: auto;
+  background: #2a1018;
+  border: 2px solid #c8403c;
+  color: #f4f0e6;
+  white-space: pre-wrap;
+  user-select: text;
+  z-index: 100;
+}

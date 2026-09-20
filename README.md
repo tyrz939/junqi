@@ -1,93 +1,80 @@
-# Junqi
+# Project Jane
 
-This is a buggy mess. The verbs work. The first five minutes do not. New Game starts at 19:00 on a mountain tile, the dog is a 16px blob, and the county is 2000 by 1200 cells. You spawn on the stoop. Talk to the dog first. Do not treat this as a finished game.
+*Working title; the game gets its real name later. The folder and package are `jane`.*
 
-A Phaser remake of a 2020 GameMaker ARPG. You play Jane. She arrives in Castle on a Sunday train. She does not start a witch.
+A web remake of a 2020 GameMaker ARPG. You play Jane. On her twentieth birthday a letter a hundred years old asks her to a town called Castle, twelve hours away on the Sunday train, to meet an aunt she has never met. She arrives at five, at sunset, with no signal. Julie is not home. The dog is.
 
-The 2020 GameMaker tree is not in this repo. If you still have it, keep it local as `Junqi-Legacy-GM/`. Git ignores that folder.
+She does not start a witch.
+
+This is the second rebuild. The first (Phaser, 2026) is archived in `archive/phaser-remake-2026/` with a post-mortem; its README began "This is a buggy mess" and was right. This one was written from the ground up around an engine that can prove what it does: the simulation is headless and deterministic, and **the test suite plays the game**.
 
 ## Run it
 
-You need Node 18 or newer.
+Node 18 or newer.
 
 ```bash
-cd junqi
+cd jane
 npm install
-npm run dev
+npm run dev      # open the URL Vite prints, click New Game
+npm test         # 97 tests, a few seconds, no browser
+npm run build    # type-check + production bundle (~280 kB, no runtime dependencies)
 ```
 
-Open the URL Vite prints. Click **New game**.
+Art is source code (palette-character grids rasterised at boot). The repo ships no image, font or audio file.
 
-The canvas is 1280 by 720. Art is drawn in code. There is no imported GameMaker sprite sheet.
+## The first hour
 
-## First hour
+New Game puts Jane just inside Julie's gate at 17:00. The lamp posts come on at 18:30, three real minutes later.
 
-New Game puts Jane on Auntie Julie's stoop at 19:00. The dog is next to you. The letter quest completes while you stand there.
+1. Walk up to the house. Reaching the stoop completes the letter.
+2. **E** on the dog. Take the quest. **Space** (or left click) swings. Put the yard skeleton down. A kill before you accept does not count; that is 2020's rule.
+3. Back to the dog for the house key. **E** on the door twice: unlock, enter.
+4. In the kitchen: read Julie's note, open the pantry chest, stand at the bench, open your bags (**I**), drag dust + water + pansy into the craft row, take the potion. Touch the orb by the stove. You learn Icebolt. Aim with the mouse.
+5. The two hatches are the cellar. It has two iron doors and one kind of iron key, rats, roses, and a locked storage room with the wood and iron the mine will want.
+6. The dog sends you for rat meat, then to the mine (and teaches Repair), then to the burial.
 
-1. Press **E** on the dog. Choose **I'll do it**.
-2. Kill a skeleton in the yard. **Space** is melee. A kill before you accept the quest does not count.
-3. Talk to the dog again. Choose **I'll take it**. That hand-in gives the house key. **Not now** leaves you without it.
-4. Press **E** on the house door.
-5. Press **E** on the ice orb in the kitchen. You learn Icebolt.
-
-Kitchen hatches go to the cellar. Yard mouths go to the mine and the burial. Stand in the kitchen before you walk into both underworlds. Those enter triggers fire once.
-
-**F5** writes slot 0 to `localStorage` as `junqi.slot0`.
+Things worth knowing: Repair costs what the thing is made of. A pressure plate stays down under a barrel. The blue torches only wake for cold. The small snakes in the burial cannot be fought; they can be fed. If the big snake loses sight of you it starts again. If you die you wake at the last bed or fire you rested at, however far away that is, and any door that locked behind you is open again. The dog is not on the step after nine. A bell tells you when that is.
 
 ## Controls
 
-These match the title card and `PlayScene`.
+| | Keyboard + mouse | Gamepad (the 2020 layout) |
+| --- | --- | --- |
+| Move | WASD / arrows, or hold right mouse | Left stick / D-pad |
+| Aim | Mouse | Right stick |
+| Sprint (spends energy) | Shift | RT |
+| Use / talk; hold to push, hold and back away to pull | E or F | B |
+| Bar slot 1 | Space, left click, 1 | A |
+| Bar slots 2–5 / 6–8 | 2–5 / 6–8 | X, Y, LB, RB |
+| Bags / spellbook / quests / map | I or Tab / K / J / M | View |
+| Pause, back | Esc | Menu |
+| Save / load | F5 / F9, **only within reach of a bed or a fire**. Resting at one (E) saves by itself | |
+| Console | `` ` `` — type `help` | |
+| Debug overlay / path grid | F2 / F3 | |
 
-| Input | Action |
-| --- | --- |
-| WASD or arrows | move |
-| Right mouse | walk toward the cursor |
-| Left mouse | target |
-| Shift | sprint. Sprint spends energy |
-| E | use, talk, or hold to push a crate |
-| Space | melee |
-| 1 through 8 | action bar |
-| I or Tab | open bags. Arrows cycle inventory, spellbook, quest, and map |
-| Q, K, M | quest, spellbook, map while bags are open |
-| Esc | close bags, or pause |
-| F5 | save slot 0 |
-| F3 | path grid |
-| F2 | debug overlay |
-| ` | console |
-
-You start with melee, Repair, three apples, Julie's letter, and a birthday present.
-
-Icebolt is the kitchen orb. Fireball is the burial garden orb. Grow is the east garden in the butterfly forest.
-
-## After the snake
-
-The county still turns. Factory, school, butterfly forest, and pipes are authored rooms. Each one shows a lock, then teaches one verb.
-
-| Place | You see first | You learn | You come back for |
-| --- | --- | --- | --- |
-| Factory | A locked line | Lever in the crates, then a lock-in on the floor | Repair the shop wreck. That opens the pipes hatch |
-| School | A glass case in the hall | Push desks for the office key. East class is a fight | The office bell opens the case you walked past |
-| Butterfly forest | A chest in the water | Grow in the east garden makes a floor | North fight, then the amulet |
-| Pipes | A chest in a lake | Drain lever in the dry west | Walk |
-
-Other doors on the map include the house in the trees, the museum, and the graveyard.
-
-Towns are Castle Cross, Rivermill, Acreton, Kiln End, Boneford, and Ridgegate. The county is 2000 by 1200 cells. You spawn at the house. You do not start a map trek.
-
-## Console
-
-Press `` ` ``. Type `help`.
-
-Useful commands include `give apple 5`, `god`, `tp factory`, `time 14`, `save`, `mp`, and `hp`.
+Console rows worth knowing: `give apple 5`, `god`, `tp burial entry`, `time 22`, `kill`, `speed 4`, `hash`, `replay verify`. For co-op before there is a network: `open`, `join`, `party`, `leave 2`.
 
 ## This repo
 
-`junqi/` is the Vite + TypeScript game. Phaser is 3.88.2.
+| | |
+| --- | --- |
+| `jane/` | The game. Vite + TypeScript, zero runtime dependencies |
+| `PLAN.md` | Where it is going: a ten-minute seeded county, three regions, generated dungeons with fixed challenges, signs that are true a third of the time |
+| `PLATFORM.md` | How people will play: browser, installable app, LAN co-op by deterministic lockstep, and what the sim must change first |
+| `STORY.md`, `VOICE.md` | What is true in Castle, and how Castle talks. Drafts for review |
+| `ENGINE.md` | How it works, and why: fixed step, determinism, the state tree, the scheduler, A\*, the cast pipeline, the solver, the lightmap |
+| `SYSTEMS.md` | The production bar. A row is **IN** only when a test names it |
+| `WORLDGEN.md` | What 2020 placed, the zone contract, the lock-and-key solver |
+| `MISSING-SYSTEMS.md` | 2020 engine not yet carried: carts, rafts, tile-edit spells, audio |
+| `LEARNING.md`, `LEARNING-SYSTEMS.md` | What the 2020 GameMaker code actually did, audited against its source |
+| `DESIGN-2020.md` | What 2020 *designed*: the story doc, the balance sheet, six dungeon maps, the pad layout, licensing |
+| `OLD-NOTES.md` | The 2020–21 Trello boards |
+| `archive/phaser-remake-2026/` | The previous attempt and its `POSTMORTEM.md` |
+| `.cursor/skills/verify-jane/` | How an agent drives the running game in a browser and leaves proof |
 
-`SYSTEMS.md` is the production bar for the remake.
+The 2020 GameMaker project and its design folder are not in this repo and never will be: most of its art is purchased packs. If you have it, keep it beside this file as `Junqi-Legacy-GM/`. Git ignores that folder.
 
-`WORLDGEN.md` is how the county and the rooms are built.
+## Where it stands
 
-`LEARNING.md` is 2020 history. That file still uses JoJo. The remake player is Jane.
+Built and tested: the engine, and the spine 2020 built (county, house, cellar, gold mine, burial chamber) at the opening numbers from 2020's own balance sheet. Presentation (renderer, UI, input) is written and hand-checked but has no automated browser test yet, so `SYSTEMS.md` marks it SHAPE, not IN.
 
-`MISSING-SYSTEMS.md` lists 2020 contracts that are not in the remake.
+Not built: everything 2020 drew after the mine. The order is on paper (`DESIGN-2020.md` §4.1): **Museum**, Butterfly Forest, the pipes and the Factory, the rest of the Burial Chamber, the School. The Museum key is already in the mine vault.

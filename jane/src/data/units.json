@@ -1,0 +1,107 @@
+{
+  "jane": {
+    "name": "Jane", "faction": "friendly", "controller": "player", "strength": 30, "spirit": 30,
+    "walk": 1, "run": 2, "aggro": 0, "leash": 0, "bounds": 1, "book": ["melee_player"],
+    "respawn": 0, "autoRegen": false, "loot": [], "sprite": "jane"
+  },
+  "dog": {
+    "name": "Julie's Dog", "faction": "friendly", "controller": "npc", "strength": 40, "spirit": 3,
+    "walk": 1, "run": 2, "aggro": 0, "leash": 0, "bounds": 1, "book": [],
+    "respawn": 0, "autoRegen": true, "loot": [], "sprite": "dog", "talk": "dog", "dayOnly": true
+  },
+  "skeleton": {
+    "name": "Skeleton", "faction": "undead", "controller": "ai", "strength": 12, "spirit": 1,
+    "walk": 0.5, "run": 1, "aggro": 10, "leash": 40, "bounds": 1, "book": ["melee"],
+    "respawn": 600, "autoRegen": true, "loot": [], "sprite": "skeleton"
+  },
+  "skeleton_clerk": {
+    "name": "Headmaster's Clerk", "faction": "undead", "controller": "ai", "strength": 18, "spirit": 1,
+    "walk": 0.5, "run": 1, "aggro": 10, "leash": 40, "bounds": 1, "book": ["melee"],
+    "respawn": 0, "autoRegen": true, "loot": [{ "item": "key_mine_headmaster", "qty": 1, "chance": 1 }], "sprite": "skeleton"
+  },
+  "skeleton_guard": {
+    "name": "Tomb Guard", "faction": "undead", "controller": "ai", "strength": 16, "spirit": 1,
+    "walk": 0.5, "run": 1, "aggro": 12, "leash": 40, "bounds": 1, "book": ["melee"],
+    "respawn": 0, "autoRegen": true, "loot": [], "sprite": "skeleton"
+  },
+  "bat": {
+    "name": "Undead Bat", "faction": "undead", "controller": "ai", "strength": 8, "spirit": 1,
+    "walk": 0.75, "run": 1.4, "aggro": 10, "leash": 40, "bounds": 0.75, "book": ["melee_fast"],
+    "respawn": 600, "autoRegen": true, "loot": [], "sprite": "bat", "glow": { "radius": 24, "color": "#ff2020" }
+  },
+  "rat": {
+    "name": "Rat", "faction": "beast", "controller": "ai", "strength": 10, "spirit": 1,
+    "walk": 0.4, "run": 0.9, "aggro": 5, "leash": 20, "bounds": 0.75, "book": ["melee"],
+    "respawn": 600, "autoRegen": true, "loot": [{ "item": "rat_meat", "qty": 1, "chance": 1 }], "sprite": "rat"
+  },
+  "bandit": {
+    "name": "Bandit", "faction": "bandit", "controller": "ai", "strength": 16, "spirit": 10,
+    "walk": 0.5, "run": 1, "aggro": 10, "leash": 40, "bounds": 1, "book": ["icebolt_ai", "melee"],
+    "respawn": 600, "autoRegen": true, "loot": [{ "item": "small_water", "qty": 1, "chance": 0.5 }, { "item": "apple", "qty": 1, "chance": 0.5 }], "sprite": "bandit"
+  },
+  "soldier": {
+    "name": "Undead Soldier", "faction": "undead", "controller": "ai", "strength": 20, "spirit": 1,
+    "walk": 0.25, "run": 0.5, "aggro": 10, "leash": 40, "bounds": 1, "book": ["melee"],
+    "respawn": 600, "autoRegen": true, "loot": [], "sprite": "soldier"
+  },
+  "pumpkin": {
+    "name": "Undead Pumpkin", "faction": "undead", "controller": "ai", "strength": 14, "spirit": 1,
+    "walk": 0.5, "run": 1, "aggro": 10, "leash": 40, "bounds": 1, "book": ["melee"],
+    "respawn": 600, "autoRegen": true, "loot": [], "sprite": "pumpkin"
+  },
+  "cactus": {
+    "name": "Undead Cactus", "faction": "undead", "controller": "ai", "strength": 12, "spirit": 5,
+    "walk": 0, "run": 0, "aggro": 10, "leash": 80, "bounds": 1, "book": ["cactus_spray"],
+    "respawn": 600, "autoRegen": true, "loot": [], "sprite": "cactus"
+  },
+  "flower": {
+    "name": "Undead Flower", "faction": "undead", "controller": "ai", "strength": 10, "spirit": 1,
+    "walk": 0, "run": 0, "aggro": 6, "leash": 80, "bounds": 1, "book": ["melee"],
+    "respawn": 0, "autoRegen": true, "loot": [{ "item": "savage_snakeroot", "qty": 1, "chance": 1 }], "sprite": "flower"
+  },
+  "lurker": {
+    "name": "Burial Snake", "faction": "undead", "controller": "ai", "strength": 200, "spirit": 60,
+    "walk": 0.5, "run": 0, "aggro": 12, "leash": 40, "bounds": 1, "book": ["poisonbolt_far"],
+    "respawn": 0, "autoRegen": true, "loot": [], "sprite": "lurker", "bait": "poisoned_rat_meat"
+  },
+  "statue": {
+    "name": "Snake Statue", "faction": "undead", "controller": "ai", "strength": 8, "spirit": 6,
+    "walk": 0, "run": 0, "aggro": 10, "leash": 80, "bounds": 1, "book": ["poisonbolt"],
+    "respawn": 600, "autoRegen": true, "loot": [], "sprite": "statue", "resist": { "nature": 1 }
+  },
+  "spider": {
+    "name": "Tomb Spider", "faction": "undead", "controller": "ai", "strength": 6, "spirit": 1,
+    "walk": 0.5, "run": 1, "aggro": 12, "leash": 40, "bounds": 0.75, "book": ["spider_bite"],
+    "respawn": 600, "autoRegen": true, "loot": [], "sprite": "spider"
+  },
+  "wall_spider": {
+    "name": "Web Spinner", "faction": "undead", "controller": "ai", "strength": 8, "spirit": 2,
+    "walk": 0, "run": 0, "aggro": 12, "leash": 80, "bounds": 0.75, "book": ["webshot"],
+    "respawn": 600, "autoRegen": true, "loot": [], "sprite": "spider"
+  },
+  "headmaster": {
+    "name": "The Headmaster", "faction": "undead", "controller": "ai", "strength": 60, "spirit": 1,
+    "walk": 0.4, "run": 0.8, "aggro": 10, "leash": 30, "bounds": 1, "book": ["melee_stun", "melee_fast"],
+    "respawn": 0, "autoRegen": true, "loot": [{ "item": "key_mine_vault", "qty": 1, "chance": 1 }], "sprite": "miniboss", "boss": true
+  },
+  "iron_knuckles": {
+    "name": "Iron Knuckles", "faction": "undead", "controller": "ai", "strength": 160, "spirit": 1,
+    "walk": 0.2, "run": 0.45, "aggro": 12, "leash": 30, "bounds": 1.25, "book": ["melee_fast"],
+    "respawn": 0, "autoRegen": true, "loot": [{ "item": "gold_bar", "qty": 3, "chance": 1 }], "sprite": "boss", "boss": true,
+    "onDeath": [{ "do": "flag", "flag": "mine_cleared" }, { "do": "toast", "text": "Iron Knuckles is rust. The mine is quiet." }]
+  },
+  "burial_snake": {
+    "name": "The Snake", "faction": "undead", "controller": "snake", "strength": 160, "spirit": 160,
+    "walk": 0.25, "run": 0.75, "aggro": 18, "leash": 80, "bounds": 1, "book": ["melee"],
+    "phases": [{ "hpBelow": 1, "book": ["melee"] }, { "hpBelow": 1, "book": ["snake_ring"] }],
+    "body": { "segments": 64, "spacing": 3 },
+    "respawn": 0, "autoRegen": true, "loot": [], "sprite": "snake", "boss": true,
+    "onDeath": [
+      { "do": "flag", "flag": "snake_down" },
+      { "do": "unlock", "prop": "snake_gate_south" },
+      { "do": "unlock", "prop": "snake_gate_east" },
+      { "do": "shake", "amount": 4 },
+      { "do": "toast", "text": "The snake is still. Julie was never in its mouth." }
+    ]
+  }
+}

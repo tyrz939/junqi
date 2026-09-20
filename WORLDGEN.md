@@ -1,20 +1,24 @@
-# Junqi — Hybrid Worldgen Plan
+# Jane — Hybrid Worldgen
 
-Pair with `SYSTEMS.md` (bar), `MISSING-SYSTEMS.md` (what is still out), `LEARNING-SYSTEMS.md` (2020 paths). This file is how we grow the county without copying GameMaker rooms.
+Pair with `SYSTEMS.md` (bar), `ENGINE.md` §8 (how the builders and the solver work), `DESIGN-2020.md` §4 (what 2020 *drew*), `LEARNING-SYSTEMS.md` (2020 paths). This file is how zones are grown without copying GameMaker rooms: what 2020 *placed*, the grammar taken from it, and the contract each live zone keeps.
 
-**Rule:** read the 2020 rooms for *placement language*. Do not stamp instance x/y from the `.yy` files. Same story every seed. Geometry and clutter roll. Story beats stamp as small pockets.
+**Rule:** read the 2020 rooms for *placement language*. Do not stamp instance x/y from the `.yy` files. Same story every seed. Geometry and clutter roll. Story objects are fixed **names** at jittered positions.
 
-**Rule:** generate the whole zone, tick only a load ring. Gen and sleep are one system. The county is 2000×1200 cells (16000×9600 px). Do not go back to a 72×48 pocket.
+**Rule:** the whole zone exists in state; only a load ring thinks. Today's county is 640 × 384 cells (5120 × 3072 px), the size of 2020's `room_zone1`.
 
-**Rule:** kitchen hatch is the cellar. Yard doors are the mine and the burial. The basement is not the underworld.
+**Direction (September 2026, `PLAN.md`):** the county grows to about 3,600 × 2,000 cells, a ten-minute walk across, generated from a skeleton of required sites at required distances. An earlier version of this file said "do not grow the county". That was aimed at the 2026 Phaser build, which made a 2000 × 1200 map and then invented content to fill it, with no structure and no checks. **Size was never the fault. Filling space without a plan was.** The plan is `PLAN.md` §2: constraints as rows, a density budget that is tested, a seed viewer. §4 below describes the zones as they stand until milestone M2 replaces the county builder.
 
-**Rule:** Jane, same story every seed. Factory / school / butterfly / pipes are **authored graphs** (show the lock, teach a verb, tell a wall-story). Motifs fill. Do not `carve()` a paragraph.
+**Rule:** kitchen hatches are the cellar. Yard doors are the mine and the burial. The basement is not the underworld.
+
+**Rule:** every candidate goes through the lock-and-key solver (`jane/src/world/validate.ts`). A failure is re-rolled, never shown to the player, never thrown.
+
+§1 was audited against the room files in September 2026; corrections are marked *(corrected)*.
 
 ---
 
 ## 1. What 2020 actually placed
 
-Parsed from `Junqi-Legacy-GM/jun7/rooms/*.yy` and instance creation code. Counts are instance families, not “unique designs.”
+Parsed from `Junqi-Legacy-GM/jun7/rooms/*.yy` and instance creation code. Counts are instance families, not unique designs.
 
 ### 1.1 Rooms as size
 
@@ -25,82 +29,72 @@ Parsed from `Junqi-Legacy-GM/jun7/rooms/*.yy` and instance creation code. Counts
 | `room_basement_auntie` | 1024 × 1024 | Domestic cellar under the house |
 | `room_dungeon_goldmine` | 2048 × 2048 | Gold mine |
 | `room_dungeon_burial_chamber` | 2048 × 2048 | Burial temple (densest room) |
-| `room_dungeon_butterfly_forest` | 3072 × 2048 | Exists. Not on the story spine. Do not remake to “use” spiders |
-| `room_building1` | 1024 × 1024 | Empty test interior. Ignore |
-
-The remake county is 2000 × 1200 cells (16000 × 9600 px at cell 8). That is larger than 2020 zone1 on each axis. Town sits northwest. Auntie sits southeast. An early remake mashed both camps into 72 × 48 — that pocket is gone.
+| `room_dungeon_butterfly_forest` | 3072 × 2048 | *(Corrected)* **An empty shell**: a fully filled floor layer, an empty wall layer, four empty instance layers, `obj_room_init` and one exit back to zone1 (`door_id` 10) |
+| `room_building1` | 1024 × 1024 | *(Corrected)* not empty: 10 walls, a door, an empty chest, an exit with `door_id` 3. No zone1 box has id 3, so the room is orphaned |
 
 ### 1.2 How each room was built
 
 **zone1 (661 instances, 44 object types)**
 
-- Tile layers: `Tiles_Ground`, `Tiles_town_paths`, `Tiles_AboveGround`, `Tiles_over_top`, plus a background.
-- Instance layers: `Instances`, `Instances_lighting`, `Instances_map`.
-- ~420 fence pieces (`obj_fence1`–`8`). These are lot rings, not unique art.
-- House stamps: `obj_tile_house1_7x9` (5), `obj_tile_house4_11x6` (5), `obj_tile_house3_10x12` (2), `obj_tile_house2_10x12_p1/p2`. Each stamp draws from `maps/map1L1.csv` / `map1L2.csv` via `obj_tile_parent` (16×16 tile grid on a surface).
-- Minimap icons: `obj_map_road` (23), `obj_map_building` (10), `obj_map_trees` (7).
-- Lamp posts (10), trees (~44), plants (~34), walls (65).
+- Tile layers `Tiles_Ground`, `Tiles_town_paths`, `Tiles_AboveGround`, `Tiles_over_top`, plus a background. Instance layers `Instances`, `Instances_lighting` (holds nothing), `Instances_map`.
+- 420 fence pieces (`obj_fence1`–`8`). Lot rings, not unique art.
+- House stamps: `obj_tile_house1_7x9` ×5, `house4_11x6` ×5, `house3_10x12` ×2, `house2_10x12_p1/p2`, and *(missed before)* **`house5_p1/p2/p3`** at (544–704, 992–1040): that is the Auntie house the (672, 984) zone box sits on. Stamps draw from `datafiles/maps/map1L1.csv` / `map1L2.csv` via `obj_tile_parent`.
+- Minimap icons `obj_map_road` ×23, `obj_map_building` ×10, `obj_map_trees` ×7. Lamp posts ×10, trees 44, plants 34, walls 65.
 - Zone exits are **thin** `obj_change_zone_box` on doors, with `goto_room` + `door_id` + `place_x/y` in creation code.
+- *(Corrected)* **Nothing in the overworld is gated.** Every dungeon mouth and the town house are open. The house door is unlocked; `Key_auntie_house`, found in `obj_abandoned_car1`, is consumed with no effect.
 
-Do not place 400 fences one by one. Draw a fence ring around a lot.
+**Auntie house (39 instances)** — twenty bench objects as furniture (`obj_bench2`–`10`) on the right wall, `obj_fruit_bowl1`, front door → zone1 (`door_id` 4), **two** basement stairs (`door_id` 5 and 6). No NPC. No orb.
 
-**Auntie house (39 instances)**
+**Auntie basement (102 instances)** — wall maze, 8 doors, two keyed `BASEMENT`. Chest at (232, 696) with `Key_basement_auntie` ×2. 11 reveal rects. Two stairs back up. *(Corrected)* `obj_rose_growing_zone` **does nothing**: no events, no parent, no references; it is an inert 40 × 32 rect. No enemies.
 
-- Twenty bench objects used as furniture (`obj_bench2`–`10`), clustered on the right wall (~328–392, 160–304).
-- `obj_fruit_bowl1`.
-- Front door → `room_zone1` (`door_id` 4).
-- **Two** basement stairs → `room_basement_auntie` (`door_id` 5 and 6).
-- No Auntie NPC. No Fireball orb.
+**Gold mine (598 instances)** — 216 wall, 134 lights (84 large, 50 small), 95 barrels, 41 reveal rects, 20 doors, 20 undead (13 skeletons, 7 bats), 12 chests. 2 minecarts + tracks + 3 levers + floor triggers + `obj_block_here`. Exit south (1264, 1932), `door_id` 2.
 
-**Auntie basement (102 instances)**
+- *(Corrected)* Door key strings: `HM`, `M_VAULT`, `MINE_BOSS`, and **two doors with `key = ""` and `locked = true`, which means "opened by the generic key"**, not "unlocked". The unlocked default is the string `"NOT LOCKED"`. The burial has three such doors.
+- *(Corrected)* "Floors" are cosmetic. `current_floor` is written in five places and **read nowhere**; the only effect of "floor 2" is the reveal colour. The mine does not overlap itself.
+- The town dump chest at (912, 1936) in the mine is outside the walls and unreachable.
+- The `MINE_BOSS` arena is empty: **no boss was ever placed**.
 
-- Wall maze, 8 doors, some keyed `BASEMENT`.
-- Chest at (232, 696) with `Key_basement_auntie` ×2.
-- `obj_rose_growing_zone`.
-- Benches as furniture again.
-- 11 `obj_reveal_regeon` rects (map fog).
-- Stairs back up (two zone boxes).
+**Burial chamber (925 instances, 66 types)** — four corner `obj_trigger_room_lock_player_in`, snake boss at (160, 160) on `path_snake_boss` (a nine-point loop round four `block_here` pillars), Snake Key door (432, 496), Snake Boss Key door (240, 96), lily pads ~(520–600, 1184–1200), Fireball learn at **(560, 1352)**, spider wing east, 16+ chests, rats with spawn and path triggers, exit (1392, 1776) `door_id` 14. 107 `obj_undead_root`. 19 reveal rects *(corrected from "dozens")*.
 
-This is a house undercroft, not the path to the snake.
-
-**Gold mine (598 instances)**
-
-- 216 wall, **134 lights**, **95 barrels**, 41 reveal, 20 doors, 20 undead, 12 chests.
-- Keys on doors: `HM`, `M_VAULT`, `MINE_BOSS` (empty string = unlocked).
-- Chests scatter Iron / Wood / `Key_generic`. One dump chest: 10 generic keys, 20 wood, 20 iron. Vault key in a chest. Boss key in `obj_boss_chest2`.
-- 2 minecarts + tracks / corners / ramp / broken steps + 3 levers + floor triggers (`obj_trigger_floor_0` / `_1`) + `obj_block_here`.
-- Exit south (1264, 1932) back to zone1 (`door_id` 2).
-
-Language: carve rooms, then drown them in barrels and torches. Lock three doors.
-
-**Burial chamber (925 instances, 66 types)**
-
-- Four corner `obj_trigger_room_lock_player_in`.
-- Snake boss at (160, 160) with `patrol_path = path_snake_boss`.
-- Snake Key door (432, 496). Snake Boss Key door (240, 96).
-- Lily pads ~ (520–600, 1184–1200). Fireball learn at **(560, 1352)** — in the garden, not the kitchen.
-- Pumpkin / cactus patrols (`path_burial_chamber_1/2/3`).
-- Spider wing east (~1100–1500): wall spiders, eggs, guards.
-- Coffins, snake statues, 16+ chests (apples, stranglethorn, keys).
-- Rats + `obj_trigger_rat_path_to_snake` + `obj_trigger_rat_spawn_trigger`.
-- Exit back to zone1 (1392, 1776), `door_id` 14.
-
-Language: a cross with four wings. Each wing has a motif. Boss and garden are pockets.
+- *(Corrected)* Only three **pumpkins** patrol (`path_burial_chamber_1/2/3`). Cacti are static. "Coffins" is two objects. The "snake statues" are four stationary poison-bolt units.
+- *(Corrected)* The corner lock triggers are timed (a 900-frame alarm reset while you stand inside) and never released by a boss dying. `obj_boss_room_trigger` has only a Create event.
 
 ### 1.3 The overworld is two camps
 
-2020 did not make one yard. Town sits northwest. Auntie’s yard sits far southeast. Grass and a road sit between.
-
 | Camp | 2020 anchors (px) | What lives there |
 | --- | --- | --- |
-| **Town** | Bandits (816, 208) and (880, 208); extra bandit (584, 400); patrol skeleton (992, 576) on `path0`; Auntie house door (672, 984); dump chest (328, 528); abandoned car (200, 1432) | Fenced lots, house stamps, lamps, roads, apple/grape drops, push barrels |
-| **Auntie yard** | Dog (4616, 2864); mine door (4656, 2720) / zone box (4656, 2707); burial zone (4504, 2888); butterfly zone (4720, 2864); skeletons (4896, 2984) and (5048, 3032); quest locations (4704, 2752) and (4720, 2848) | Stoop, dungeon mouths, 1–2 undead, barrels |
+| **Town** (north-west) | "Bandits" (816, 208), (880, 208), (584, 400); patrol skeleton (992, 576) on `path0`; house door (672, 984); dump chest (328, 528); abandoned car (200, 1432) | Fenced lots, house stamps, lamps, roads, apple/grape drops, push barrels |
+| **Auntie yard** (south-east) | Player start (4528, 2888) beside the dog (4616, 2864); mine door (4656, 2720); burial box (4504, 2888); butterfly box (4720, 2864); skeletons (4896, 2984), (5048, 3032); quest locations (4704, 2752), (4720, 2848) | Stoop, dungeon mouths, 1–2 undead, barrels |
 
-A second dog instance at (7200, 4224) is **outside** the 5120×3072 room. Leftover. Do not remake it.
+A second dog at (7200, 4224), scale 0.2, is outside the room. Leftover.
 
-An early remake mashed both camps into one 72×48 box with the house in the middle. That is why it read as a combat sandbox. The live county is two camps plus six towns, a river, and the later mouths.
+The dump chest (`Gold Bar` ×4, `Rock` ×4, `Small Water` ×16, every herb ×4) is a designer give-all. It is a console command now (`give`), not loot.
 
-The town dump chest (`Gold Bar` ×4, `Rock` ×4, `Small Water` ×16, every herb ×4) is a designer give-all. Keep that as a terminal command, not a generated loot table.
+The 2020 **town map** (`Sunshine.PNG`) puts Auntie's house in the west near the entrance and the mine far south-east; the room did not follow it. The live county follows the room. `DESIGN-2020.md` §4.8.
+
+### 1.4 Critical paths, reconstructed
+
+What a player actually had to do in 2020, from door keys, chest contents, plates and triggers. These are the placement language for the live zones.
+
+**Basement** — stair 5 → SW room: chest (2 BASEMENT keys), 3 barrels → BASEMENT door (192, 544) → corridor with four open cells north (one furnished), the rose rect, an east leg → BASEMENT door (672, 624) → SE corridor → stair 6. A loop. Either iron door closes it.
+
+**Mine**
+1. South door, entry hall.
+2. West room: chest (1096, 1760) with a generic key, **unlocked only while the plate at (1072, 1808) is held**. Push a barrel onto it.
+3. North room chest: generic key + 4 Iron.
+4. Generic door east → SE room: the skeleton at (1656, 1880) carries the **HM key**.
+5. Generic door north → the core → cart room → the HM door (1680, 528): chest with the **vault key**.
+6. **Repair** the steps (1048, 1736) with 2 Wood → cart station; a lever switches the track toward `boss_chest2` (488, 1848): the **boss key**. (The corridor is also walkable.)
+7. Cart 2, levers, **Repair** the broken track with 4 Iron, ride west.
+8. West: a generic-key chest, the `M_VAULT` door (the vault holds 1 Iron), the `MINE_BOSS` door onto an empty arena. No return route was found.
+
+**Burial**
+1. Arrival is *in the miniboss room*: a 1500 HP miniboss and three soldiers, all doors open.
+2. Rat room → `block_here` maze → chest (568, 848): the **Snake Key**.
+3. Snake Key door → `obj_trigger_lock_in_room1` locks the chest and the door and spawns four undead; kill them and `boss_chest2` gives the **Snake Boss Key**.
+4. The boss room (NW) two ways: the keyed door from the north corridor, **or** with no key at all through the south door, reached by a generic door a plate also opens.
+5. Fireball nook: south of a generic door, **or** shoot the flower at (568, 1416) from the south garden and its root wall dies.
+6. The other corners (spider boss NE, undead boss SE, boss flower SW) are ungated.
 
 ---
 
@@ -108,226 +102,128 @@ The town dump chest (`Gold Bar` ×4, `Rock` ×4, `Small Water` ×16, every herb 
 
 | Piece | Job | Seed may | Seed may not |
 | --- | --- | --- | --- |
-| **Motif** | A painter, not a room. Fence ring, barrel pile, torch every N cells, door grid, lily pool, coffin row, house stamp from a size table | Count, jitter, which variant | Story prop ids |
-| **Pocket** | 8–16 cells. Authored recipe or a tight suggestion. Fixed ids (`dog`, `house_door`, `mine_vault`) | Rotate, offset ±2 cells | Omit the pocket or rename the id |
-| **Connector** | The ~95%. Road wiggle, lot shapes, extra dungeon rooms, tunnels | Shape, length, extra rooms | Drop a pocket if the connector fails — retry the seed |
+| **Motif** | A painter, not a room. Fence ring, barrel pile, torch run, house stamp, pillar maze, tree blob | Count, jitter, which variant | Touch a story key |
+| **Pocket** | Authored ground with fixed keys (`dog`, `house_door`, `gate_boss`) | Offset a few cells, mirror a doorway | Omit the pocket or rename a key |
+| **Connector** | Roads, corridors, clutter, wildlife | Shape, length | Cut a pocket off. The solver re-rolls if it does |
 
-`beats.json` already invalidates a seed if a required beat object is missing. Pockets are how those objects get into the world.
-
----
-
-## 3. Story pockets
-
-Handmade, or a tight suggestion the generator must satisfy. 8–16 cells.
-
-| Pocket | Must contain | May jitter | Do not randomize |
-| --- | --- | --- | --- |
-| **Auntie stoop** | `dog`, locked house door (`opens: auntie_house`), 2 barrels | Facing, offset ±2 | Dog id, door tag |
-| **Kitchen** | Fruit, craft bench, **two** hatches on one wall | Which wall, leftover furniture | Hatch destinations (cellar, not burial) |
-| **Cellar key room** | 1 keyed door (`auntie_basement`), 1 chest (basement keys), rose patch | Room size 8–12 | Key tag |
-| **Mine mouth** | Exit to county, lamp, wreck | Left/right of door | `toZone: county` |
-| **Mine locks** | HM door, vault door, boss door, vault chest | Order along the spine | Which key opens which |
-| **Burial garden** | 2 lily pads, Fireball orb (`learn: fireball_0`), 1 plant | Pool shape | The learn id |
-| **Snake gate** | Snake-key door, lock trigger, empty arena 10–14 cells | Arena size | Boss id + lock-in |
-
-2020 Fireball is in the burial garden. The kitchen orb is Icebolt (Jane's first crack). Do not put Fireball in the kitchen.
-
-Butterfly forest is on the spine after the snake. Grow is the verb. Do not remake it as a spider wing.
+In code: `Kit` (`world/kit.ts`) is the painter. `k.claim()` marks authored ground so scatter never lands on it (no tree on the stoop). `k.spot()` finds open unclaimed footprints. One RNG stream per `(seed, zone, attempt)`.
 
 ---
 
-## 4. Per-zone fill
+## 3. The contract
 
-### County
+Every builder returns a `Blueprint`: tiles, unit and prop spawn rows, and **named** `marks` (arrival points) and `rects` (trigger areas, camera locks). Nothing outside the builder uses a coordinate.
 
-**2020 language:** fenced lots, house stamps, two camps, door-thin exits.
+`world/index.ts` lists, per zone, the names every seed must contain (`CONTRACTS`) and the keys the story hands over from outside (`GIVEN_KEYS`: the dog's house key).
 
-**Generate (`generateTownYard.ts`)**
+| Zone | Size (cells) | Required units | Required props | Marks | Rects |
+| --- | --- | --- | --- | --- | --- |
+| `county` "Castle" | 640 × 384 | `dog` `yard_skeleton` | `house_door` `mine_door` `burial_door` | `start` `house_front` `mine_mouth` `burial_mouth` | `stoop` |
+| `house` | 48 × 36 | — | `front_door` `hatch_a` `hatch_b` `bench` `ice_orb` `julies_note` `pantry_chest` | `front` `hatch_a` `hatch_b` | `kitchen` |
+| `cellar` | 100 × 76 | — | `stair_a` `stair_b` `cellar_chest` `iron_door_a` `iron_door_b` `storage_gate` `storage_chest` `potion_bench` | `stair_a` `stair_b` | `cellar` |
+| `mine` | 160 × 130 | `clerk` `headmaster` `iron_knuckles` | `exit_door` `plate_a` `plate_chest` `store_chest` `gate_generic_a/b` `gate_hm` `broken_steps` `boss_key_chest` `gate_vault` `vault_chest` `gate_boss` | `entry` | `mine_entry` `boss_arena` |
+| `burial` | 176 × 150 | `burial_snake` `garden_flower` | `exit_door` `torch_a/b` `torch_chest` `snake_key_chest` `gate_snake` `giant_key_chest` `snake_gate_east/south` `root_a/b/c` `fire_scroll` | `entry` `lockin_a–d` | `burial_entry` `garden` `lockin_room` `snake_arena` `everywhere` |
 
-1. Town NW `(180, 160)`. Auntie SE `(1780, 1040)`. Roads wiggle between them and the six towns.
-2. River stroke. Biomes from `biomes.ts` (cold at night / mountain / burial).
-3. Around Cross: lots, fence rings, house stamps from the size table (`7×9`, `11×6`, `10×12`).
-4. `stampTowns` — Cross, Rivermill, Acreton, Kiln End, Boneford, Ridgegate (`towns.json`).
-5. `stampTrials` / `stampCamps` / `stampWaysides` — stone rings, restock fires, road clutter.
-6. Bandits in pairs on the road. Yard undead. Rim wildlife from `enemies-more.json`.
-7. Herb scatter from a kitchen table. Not the dump chest.
+**The solver** floods from the entrance with locked gates shut, then repeats until nothing changes: loot reachable chests (keys by `opens` tag, materials by item), open gates a held key fits, fire reachable plates / levers / cold torches, fire repairables whose `needs` are in hand, kill reachable hostiles (guaranteed drops and `onDeath` unlocks), fire `while` triggers whose rect is reached. It fails a candidate for: a missing name, a duplicate key, an unknown row, a trigger whose rect does not exist, anything spawning in a wall, an unreachable mark / required unit / required prop, or a gate that never opens. `test/world.test.ts`: five zones × 25 seeds, plus a deliberately sealed gate the solver must reject.
 
-**Keep authored (required pockets):** stoop, mine mouth, burial mouth, factory / school / butterfly fronts.
-
-**Soft pockets (may skip):** train, shop, pipes grate, graveyard, farm, abandoned, picnic, car wreck. A skip is silent — do not treat a missing grate as a failed seed.
-
-### House
-
-**2020 language:** furniture-dense, fruit, two stairs down.
-
-**Generate:** one box 16–22 cells. Stamp leftover benches as wall furniture. One fruit bowl.
-
-**Keep authored:** craft bench, two hatches to cellar, front door to county. No Fireball.
-
-### Cellar (`generateCellar`, `ZoneId` `dungeon`)
-
-**2020 language:** domestic, keyed inners, roses.
-
-**Generate:** 2–3 rooms off a hall. Scatter barrels. One rose patch.
-
-**Keep authored:** stairs up, basement-key door + chest.
-
-**Drop from this zone:** snake key, burial door, “relic.” Those belong in the yard / burial.
-
-Generator is `generateCellar`. `ZoneId` stays `dungeon` so slot 0 does not break.
-
-### Mine
-
-**2020 language:** lights + barrels + locked doors + carts.
-
-**Generate:** 5–8 carved rooms. Torch motif on walls. Barrel piles in corners. 4–6 iron/wood chests from a table. Optional one cart on a 6-cell track (machine row — see `MISSING-SYSTEMS.md`).
-
-**Keep authored:** three keyed doors + vault/boss chests + exit to county.
-
-### Burial
-
-**2020 language:** four wings, keys, garden, snake, spiders.
-
-**Generate:** cross hallway. Assign wings from a table: snake / garden / spider / coffin. Fill each from a motif + one patrol path.
-
-**Keep authored:** garden pocket, snake-key door, boss-key door, lock-ins, snake boss.
+Pushables and carriables count as passable (they move). Fights count as won. `enter` lock-ins are ignored (they release on a kill the solver assumes).
 
 ---
 
-## 5. Topology (do this before more random rooms)
+## 4. The live zones
+
+### County — `world/county.ts`
+
+2020 language: fenced lots, house stamps, two camps, door-thin exits.
+
+1. Grass, tall-grass blobs. A **river** north to south; the road paints over it, which is the bridge. Bolts cross water; feet do not.
+2. **Auntie's yard** (south-east): a fenced lot, the house stamp, `house_door` (locked, `auntie_house`), a dirt path from the west gate to the stoop, `dog`, two barrels, an apple tree, `yard_skeleton` in the far corner in sight of the stoop. **`start` is just inside the gate**, not on the stoop: 2020 started beside the dog, the 2026 build started *inside* the letter's trigger and completed it on frame one. A short walk is the right amount.
+3. **Mine mouth**: a cliff face north-east of the yard, a lamp, a sign, a dead minecart, a path from an east gap in the fence.
+4. **Burial stair**: a walled graveyard south-west, coffins, two skeletons, a standing stone that says DO NOT.
+5. **Town** (north-west): a main street, two cross streets, six fenced lots with a house from the 2020 size table (7×9, 11×6, 10×12 tiles of 16 px), apple trees, barrels, lamp posts, the station where the Sunday train stops, rails to the west edge.
+6. **The road** between the camps, lamp posts along it, a bandit pair by the bridge, a patrolling skeleton near town.
+7. **Forest** (south-west) with the abandoned car from the town map (wood, water, a fire stone). A soft pocket: it may fail to place and nothing minds.
+8. Claim all authored ground, then scatter trees, 40 herbs (one loot each, gone when picked: no farm), rocks to carry. A tree line round the edge.
+
+### House — `world/interiors.ts`
+
+Kitchen and living room, a doorway that moves. Two hatches on one wall, both to the cellar. Stove, the ice orb beside it ("cold on purpose"), Julie's note by the table, the bench, the pantry chest (exactly one Manashield's worth: dust, water, pansy), a fruit bowl. Leftover furniture down the living-room wall, as 2020 stacked its benches. No Fireball here; it was never in the kitchen.
+
+### Cellar — `world/interiors.ts`
+
+2020's loop plus the rooms from its basement sketch. Room A under hatch A: the chest with two iron keys, barrels. **Iron door A** north to a long corridor. Four rooms off it: rats and a chest with a plain key; the **potion room** (bench, water, herbs); the **storage room** behind a plain-key gate (4 wood, 4 iron: what the mine's broken things want); the study (empty; 2020's sketch put the electricity orb here). A rose alcove (White Water Rose → Stone Skin). **Iron door B**, room B, hatch B.
+
+### Mine — `world/mine.ts`
+
+§1.4's path as a graph, with ragged rooms, barrels and torches everywhere ("carve rooms, then drown them in barrels and torches; lock three doors"). Entry → plate room (barrel + plate + chest) / store (plain key, iron) / guard room behind plain gate A (the clerk carries the HM key; a chest of wood). Plain gate B → core → HM gate → the Headmaster's office (he drops the vault key); broken steps (Repair, 2 wood) → gallery, the ornate chest (boss key); vault spur → vault (5 gold bars, the Museum key); boss gate → arena, **Iron Knuckles**, four pillars, the gate drops behind you and lifts when he falls or you do. The track and cart are set-dressing until the cart row exists.
+
+### Burial — `world/burial.ts`
+
+START in the centre, as the 2020 map drew it (the room put you in the miniboss's lap). West: a corridor of cold torches; an alcove with two of them and a chest that unlocks when both burn; the rat room with a pillar maze and the Snake Key. North: the Snake Key gate, the lock-in (four guards stand up at the named marks), the ornate chest with the Giant Snake Key. North-west: the snake's room, four pillars, its eight-point patrol, an east gate that takes the giant key and a south gate with no keyhole that only opens from the inside of a dead snake. East: two statues that spit and two snakes you feed, a wall stub to throw bait from, a chest. South: the garden, a pond, a cactus, a patrolling pumpkin, the flower that holds three roots shut over the last page of a book.
+
+Unlike 2020 the boss room cannot be entered without its key. 2020's keyless south door made the whole Snake Key chain optional.
+
+---
+
+## 5. Topology
 
 ```
-county
-  Cross --roads-- Rivermill / Acreton / Kiln End / Boneford / Ridgegate
-  auntie yard
-    ├── house door → kitchen
-    │                 └── hatch ×2 → cellar (domestic)
-    ├── mine door → mine (HM / vault / boss)
-    ├── burial door → burial (garden, wings, snake)
-    ├── factory door → factory (lever, lock-in, Repair → pipes)
-    ├── school door → school (desks, detention, bell)
-    └── butterfly mouth → forest (Grow, north fight)
+county "Castle"
+  town (NW) --road, bridge-- Auntie's yard (SE)
+    ├── house_door  (locked: auntie_house, from the dog)  → house:front
+    │     └── hatch_a / hatch_b                           → cellar:stair_a / stair_b
+    ├── mine_door                                         → mine:entry
+    └── burial_door                                       → burial:entry
 ```
 
-Neighbour interiors (abandoned / museum / graveyard) sit on soft pockets. Kitchen hatch = cellar. Yard doors = mine and burial. Factory / school / forest are the second map after the snake, not a second spine.
-
-Zone boxes stay **thin** and sit on the door, with a paired `door_id` / entry mark so you come out in front of the door, not in a wall.
+Travel is by **named mark**, both ways. You arrive in front of the door you used, because the door's `to.mark` and the far side's mark are a named pair, which is all 2020's `door_id` + `place_x/y` was.
 
 ---
 
-## 6. Distance unload (load ring)
+## 6. Load ring
 
-2020: `objects/distance_unload/`. Spawned by `obj_room_init`. Ticks in `game` Step **before** units (`event_user(0)`).
-
-### 6.1 What shipped
+2020: `objects/distance_unload/`, ticked by `game` Step **before** units.
 
 ```
 block_size            = path_cell * 2        // 16 px
-dynamic_load_distance = 24 * block_size      // 384 px ≈ 24 m
+dynamic_load_distance = 24 * block_size      // 384 px
 dynamic_load_size     = distance * 2         // 768 px square
 ```
 
-When the player’s `x div block_size` or `y div block_size` changes:
+On a block change: deactivate dynamics, statics, usables and **idle** AI; activate the square. AI in combat stays awake. `instance_activate_all` before save, load, zone change and F5. A 256 px chunk index was written and commented out. *(Corrected)* the debug rectangle draws unconditionally, not only in debug.
 
-1. `instance_deactivate` dynamics, statics, usables.
-2. Deactivate **idle** AI only (`controller == ai && combat_state == idle`).
-3. `instance_activate_region` the square around the player.
-4. Store the new block.
-
-Combat AI stays awake even if far. That is the MMO rule: a fight does not freeze because you stepped one cell.
-
-Save, load, and zone change call `instance_activate_all` first. `save_room` dirties `player_block_prev_x = -1` so the ring rebuilds next tick. F5 also activates all.
-
-A **256 px chunk index** was written in Create and commented out. The live ring is what actually ran. Steal the ring, not `instance_deactivate`.
-
-Debug Draw End draws the rectangle.
-
-### 6.2 Remake contract
-
-| Rule | Do this |
-| --- | --- |
-| When | Player block changes. Do not test every actor every frame |
-| Sleep | Skip AI tick, hide sprite, drop occupy. Keep the spec in the zone blueprint |
-| Stay awake | Player, locked target, anyone in combat, carried prop, live bolts, current speaker, the pocket you are standing in |
-| Tiles | Chunk to the same ring. One Phaser render-texture will not survive a 5120×3072 county |
-| Save | Wake all, write live HP/xy for the **whole** zone, then sleep again. Never persist only the ring |
-| Pockets | Ids stay in data while sprites are down. `beats.json` still sees them |
-
-Ring size: ~24 metres. Camps on the 2000×1200 county are far enough that town sleeps in Auntie’s yard.
-
-Status in `SYSTEMS.md`: **IN**.
+Live (`sim/ring.ts`): same constants, same rule, re-evaluated on block change only. Sleeping means no think, no occupancy, no draw. Three differences, all deliberate: sleepers' cooldown and respawn clocks keep ticking; nothing is "activated" before a save, because a sleeping unit is an ordinary row in the state tree; and tile chunks are the renderer's business (`render/tiles.ts`, 16-cell chunks, LRU), not the sim's.
 
 ---
 
-## 7. What the remake does today
-
-| File | Now |
-| --- | --- |
-| `generateTownYard.ts` | 2000×1200 county. Town NW, Auntie SE, river, biomes, required + soft pockets |
-| `generateTowns.ts` | Six towns from `towns.json`. Boards and doorstep NPCs from `npcs.json` |
-| `generateTrials.ts` | Stone rings: push, lever, clear, drain, Grow |
-| `generateWaysides.ts` | Road clutter on the wiggle strokes |
-| `generateHouse.ts` | Kitchen pocket, two hatches to cellar, Icebolt orb, Julie's note. No Fireball |
-| `generateCellar.ts` | Domestic 2–3 rooms, basement key, no snake key / burial door (`ZoneId` still `dungeon`) |
-| `generateMine.ts` | 5–8 rooms, torch/barrel fill, HM / vault / boss locks, rats, patrol |
-| `generateBurial.ts` | Cross + four wings, garden Fireball, snake gate, exit to county |
-| `generatePlaces.ts` | Abandoned house, museum (keyed MAGIC wing), graveyard |
-| `generateDungeons.ts` | Factory / school / butterfly / pipes. Authored graphs. Toggle, clear, Grow, drain, Repair |
-| Survival | `survive.ts`. Hunger / warmth on food and stones. Night, mountain, burial run cold. Campfires |
-| Fog | Interiors stamp a saved bitmap. County is live radar |
-| Tiles / sleep | Chunked to the load ring. Idle/far sleep on block change |
-
----
-
-## 8. Data shape (do not invent a class per pocket)
-
-Suggested, still rows:
-
-```
-pockets.json   id, zone, size, tiles[], props[], enemies[], facing
-motifs.ts      fenceRing, barrelPile, torchGrid, houseStamp, lilyPool, coffinRow
-triggers.json  onEnter → action list   (spawn, lock, light, aggro)  — see MISSING-SYSTEMS.md
-```
-
-A designer adds a pocket row. `PlayScene` does not grow a `if (orb)` branch.
-
-House stamp sizes from 2020, as a table: `7×9`, `11×6`, `10×12`. Paint from a small tile atlas or generated brick/plank, not from the CSV port.
-
----
-
-## 9. Build order
-
-| Step | Ship | Proof |
-| --- | --- | --- |
-| 1 | Pocket stamper + motif painters | **Done.** Same pocket ids survive two seeds |
-| 1b | Load ring (~24 m) | **Done.** Town sleeps in Auntie yard |
-| 2 | County: two camps + road + stoop / mine / burial | **Done.** Then grown to 2000×1200 + six towns |
-| 3 | Kitchen + cellar split | **Done.** Icebolt in the kitchen. Hatch ≠ burial |
-| 4 | Mine fill + three keyed doors | **Done** |
-| 5 | Burial cross + garden + snake gate | **Done.** Fireball at the lilies |
-| 6 | Factory / school / butterfly / pipes | **Done.** One verb each. `still_turning` is the dog hand-in after all three mouths, not the first door |
-| 7 | Towns, trials, camps, hunger / warmth | **Done.** Thin coat, not JaneCraft |
-
-Still open: cart, zone floors, subtract lighting, audio, snake sine-body. Do not invent a seventh dungeon to exercise a leftover.
-
----
-
-## 10. Do not
+## 7. Do not
 
 - Copy `.yy` instance lists into TypeScript.
-- Port butterfly forest to “use” spiders. Grow is the verb. The north fight is a lock-in, not a wing.
-- Generate the town dump chest as normal loot.
-- Route burial through the kitchen hatch.
-- Keep one render-texture as the county grows.
-- Persist only the awake ring.
-- Add a `class Kitchen extends Zone`.
+- Grow the county without a skeleton, constraints and a density budget (`PLAN.md` §2). Space with nothing decided about it is how the Phaser build died.
+- "Port" Butterfly Forest from the 2020 room: there is nothing in it. Build it from the 2020 *map* (`DESIGN-2020.md` §4.5): no keys, no doors, eight butterflies.
+- Route the burial through the kitchen hatch.
+- Generate the dump chest as loot.
+- Refer to a coordinate from outside a builder.
+- Throw on a bad seed.
+- Add `class Kitchen extends Zone`.
+
+---
+
+## 8. Adding a zone
+
+1. Add the id to `ZoneId` / `ZONE_IDS` (`sim/state.ts`). The compiler lists what else needs it.
+2. Write `world/<zone>.ts`: a `Kit`, rooms, corridors three cells wide where a gate sits, props with keys for anything the story names, marks for every way in.
+3. Add its `CONTRACTS` and `GIVEN_KEYS` rows and its builder in `world/index.ts`.
+4. Add rows: doors on the far side (`to: { zone, mark }`), triggers, quests, dialogue.
+5. `npm test`. The solver runs it on 25 seeds; the catalog test checks every quest it adds can be given and handed in.
+
+The 2026 generators for the museum, factory, school, pipes and forest are in `archive/phaser-remake-2026/src/game/world/`. They are inventions, not ports, but the room graphs are a head start. Order: `SYSTEMS.md` §12.
 
 ---
 
 ## Source
 
-- Rooms: `Junqi-Legacy-GM/jun7/rooms/room_zone1`, `room_building2_auntie`, `room_basement_auntie`, `room_dungeon_goldmine`, `room_dungeon_burial_chamber`.
+- Rooms: `Junqi-Legacy-GM/jun7/rooms/*` (parsed; per-room instance dumps were produced by the 2026 audit).
 - Unload: `objects/distance_unload/Create_0.gml`, `Other_10.gml`; `game/Step_0.gml`; `save_room.gml`; `obj_change_zone_box`.
-- House stamps: `objects/obj_tile_parent/Draw_0.gml`, `maps/map1L1.csv`, `map1L2.csv`.
-- Zone pairing: instance creation `goto_room` / `door_id` on change-zone boxes.
-- Remake today: `junqi/src/game/world/generate*.ts`.
+- House stamps: `objects/obj_tile_parent/Draw_0.gml`, `datafiles/maps/map1L1.csv`, `map1L2.csv`.
+- Live: `jane/src/world/*.ts`, `jane/test/world.test.ts`, `jane/test/dungeons.test.ts`.

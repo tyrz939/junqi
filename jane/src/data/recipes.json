@@ -1,0 +1,13 @@
+[
+  { "inputs": ["gold_dust", "small_water", "pansy"], "output": "potion_manashield", "qty": 1 },
+  { "inputs": ["gold_dust", "small_water", "nasturtium"], "output": "potion_lifesteal", "qty": 1 },
+  { "inputs": ["gold_dust", "small_water", "honeylace_lily"], "output": "potion_critical", "qty": 1 },
+  { "inputs": ["stone", "small_water", "white_water_rose"], "output": "potion_stoneskin", "qty": 1 },
+  { "inputs": ["small_water", "hemshade_root"], "output": "potion_firelash", "qty": 1 },
+  { "inputs": ["small_water", "white_water_cap"], "output": "potion_sparktongue", "qty": 1 },
+  { "inputs": ["small_water", "night_lich_moss"], "output": "potion_winterbite", "qty": 1 },
+  { "inputs": ["small_water", "savage_snakeroot"], "output": "potion_stranglethorn", "qty": 1 },
+  { "inputs": ["gold_bar"], "output": "gold_dust", "qty": 4 },
+  { "inputs": ["rock"], "output": "stone", "qty": 1 },
+  { "inputs": ["potion_stranglethorn", "rat_meat"], "output": "poisoned_rat_meat", "qty": 1 }
+]

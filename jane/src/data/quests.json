@@ -1,0 +1,59 @@
+{
+  "the_letter": {
+    "name": "A Letter from Julie",
+    "description": "The letter looked a hundred years old. Auntie Julie - a woman you were told you had, and never met - asked you to Castle for your birthday. Twelve hours on the Sunday train. No signal since the tunnel.\n\nThe map in the letter ends at a house and a dog.",
+    "completion": "The stoop is real. Julie is not on it. The dog has been waiting.",
+    "requirements": [{ "type": "location", "target": "stoop", "qty": 1, "text": "Find Auntie Julie's house" }],
+    "rewards": []
+  },
+  "defeat_skeleton": {
+    "name": "The Thing in the Yard",
+    "description": "The dog wants the walking bones off Julie's fence line. It will not say why a key is waiting until they stay down.",
+    "completion": "The skeleton will not get up again today. The dog has decided you are allowed a key.",
+    "requirements": [{ "type": "kill", "target": "skeleton", "qty": 1, "text": "Skeleton put down" }],
+    "rewards": [{ "do": "give", "item": "key_auntie_house" }, { "do": "quest", "quest": "see_the_kitchen" }]
+  },
+  "see_the_kitchen": {
+    "name": "Julie's Kitchen",
+    "description": "The house key was always for you. Go in. Look at what she left out.",
+    "completion": "Auntie is not home. The house still is.",
+    "requirements": [{ "type": "location", "target": "kitchen", "qty": 1, "text": "Stand in Julie's kitchen" }],
+    "rewards": []
+  },
+  "stock_the_bench": {
+    "name": "Dust, Water, Pansy",
+    "description": "Julie's note says the bench is set for one potion and that you should make it before you go down any stairs. Gold dust, a vial of water, a pansy. Stand at the bench and open your bags.",
+    "completion": "It fizzes blue. You made that. The dog is not surprised.",
+    "requirements": [{ "type": "acquire", "target": "potion_manashield", "qty": 1, "text": "Small Manashield Potion" }],
+    "rewards": [{ "do": "give", "item": "small_water", "qty": 4 }, { "do": "give", "item": "gold_dust", "qty": 2 }]
+  },
+  "rats_below": {
+    "name": "What Snakes Eat",
+    "description": "There are rats under the house and in the mine. The dog wants three pieces of meat and will not say what for.",
+    "completion": "Soak it in Stranglethorn - water and snakeroot - at the bench. Throw it where a burial snake can smell it. Do not stand near.",
+    "requirements": [{ "type": "acquire", "target": "rat_meat", "qty": 3, "text": "Rat Meat" }],
+    "rewards": [{ "do": "give", "item": "savage_snakeroot", "qty": 2 }, { "do": "give", "item": "small_water", "qty": 2 }]
+  },
+  "the_mine": {
+    "name": "Gnox Goldskin's Mine",
+    "description": "The mine mouth in the yard is open. The Headmaster keeps the vault key. Something called Iron Knuckles keeps everything else. Broken things down there want Repair, and Repair wants wood and iron.",
+    "completion": "The mine is quiet. Whatever Julie dug there, she stopped digging.",
+    "requirements": [
+      { "type": "location", "target": "mine", "qty": 1, "text": "Enter the gold mine" },
+      { "type": "kill", "target": "headmaster", "qty": 1, "text": "The Headmaster" },
+      { "type": "kill", "target": "iron_knuckles", "qty": 1, "text": "Iron Knuckles" }
+    ],
+    "rewards": [{ "do": "give", "item": "apple", "qty": 5 }, { "do": "give", "item": "potion_stoneskin", "qty": 2 }]
+  },
+  "the_burial": {
+    "name": "The Snake Below",
+    "description": "Cold, dark, foggy. Lots of death in there. The stones on the road already told you not to. Light the blue torches. Find what burns in the garden. Do not fight the small snakes; feed them.",
+    "completion": "The snake is still. Julie was never in its mouth. The county still turns.",
+    "requirements": [
+      { "type": "location", "target": "burial", "qty": 1, "text": "Enter the burial chamber" },
+      { "type": "location", "target": "burial_garden", "qty": 1, "text": "Find the garden" },
+      { "type": "kill", "target": "burial_snake", "qty": 1, "text": "The Snake" }
+    ],
+    "rewards": [{ "do": "give", "item": "light_stone", "qty": 1 }, { "do": "flag", "flag": "spine_done" }]
+  }
+}

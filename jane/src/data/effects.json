@@ -1,0 +1,17 @@
+{
+  "chilled":       { "name": "Chilled", "icon": "fx_chilled", "duration": 3, "harmful": true, "speed": 0.6 },
+  "burning":       { "name": "Burning", "icon": "fx_burning", "duration": 4, "harmful": true, "pulse": { "amount": 4, "every": 1, "school": "fire" } },
+  "poisoned":      { "name": "Poisoned", "icon": "fx_poisoned", "duration": 6, "harmful": true, "pulse": { "amount": 6, "every": 1, "school": "nature" } },
+  "spider_venom":  { "name": "Spider Venom", "icon": "fx_poisoned", "duration": 3, "harmful": true, "pulse": { "amount": 4, "every": 1, "school": "physical" } },
+  "stunned":       { "name": "Stunned", "icon": "fx_stunned", "duration": 2, "harmful": true, "speed": 0 },
+  "webbed":        { "name": "Webbed", "icon": "fx_webbed", "duration": 1.1, "harmful": true, "speed": 0.25 },
+  "manashield":    { "name": "Manashield", "icon": "fx_manashield", "duration": 20, "harmful": false, "manaShield": 1 },
+  "lifesteal":     { "name": "Life Steal", "icon": "fx_lifesteal", "duration": 20, "harmful": false, "lifesteal": 0.3 },
+  "critical":      { "name": "Critical", "icon": "fx_critical", "duration": 20, "harmful": false, "critOneIn": 3 },
+  "stoneskin":     { "name": "Stone Skin", "icon": "fx_stoneskin", "duration": 20, "harmful": false, "resist": { "physical": 0.5 } },
+  "firelash":      { "name": "Firelash", "icon": "fx_firelash", "duration": 30, "harmful": false, "onMelee": { "school": "fire", "amount": 8, "effect": "burning" } },
+  "sparktongue":   { "name": "Sparktongue", "icon": "fx_sparktongue", "duration": 30, "harmful": false, "manaOnHit": 6 },
+  "winterbite":    { "name": "Winterbite", "icon": "fx_winterbite", "duration": 30, "harmful": false, "onMelee": { "school": "frost", "amount": 6, "effect": "chilled" } },
+  "stranglethorn": { "name": "Stranglethorn", "icon": "fx_stranglethorn", "duration": 30, "harmful": false, "onMelee": { "school": "nature", "amount": 4, "effect": "poisoned" } },
+  "mana_25":       { "name": "Mana", "icon": "fx_manashield", "duration": 0, "harmful": false, "mana": 25 }
+}

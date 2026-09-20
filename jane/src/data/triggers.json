@@ -1,0 +1,95 @@
+{
+  "arrive_stoop": {
+    "zone": "county", "rect": "stoop", "once": true,
+    "actions": [{ "do": "location", "name": "stoop" }, { "do": "handin", "quest": "the_letter" }]
+  },
+  "see_kitchen": {
+    "zone": "house", "rect": "kitchen", "once": true,
+    "actions": [{ "do": "location", "name": "kitchen" }, { "do": "handin", "quest": "see_the_kitchen" }]
+  },
+  "into_cellar": {
+    "zone": "cellar", "rect": "cellar", "once": true,
+    "actions": [{ "do": "location", "name": "cellar" }, { "do": "toast", "text": "A cellar, not a dungeon. It smells of roses and rats." }]
+  },
+  "into_mine": {
+    "zone": "mine", "rect": "mine_entry", "once": true,
+    "actions": [{ "do": "location", "name": "mine" }]
+  },
+  "mine_arena_lock": {
+    "zone": "mine", "rect": "boss_arena", "once": true,
+    "when": [{ "if": "dead", "unit": "iron_knuckles", "not": true }],
+    "actions": [
+      { "do": "lock", "prop": "gate_boss" },
+      { "do": "aggro", "unit": "iron_knuckles" },
+      { "do": "camera", "mode": "lock", "rect": "boss_arena" },
+      { "do": "toast", "text": "The gate drops behind you." }
+    ],
+    "reset": [{ "do": "unlock", "prop": "gate_boss" }, { "do": "camera", "mode": "follow" }]
+  },
+  "mine_arena_clear": {
+    "zone": "mine", "rect": "boss_arena", "mode": "while", "once": true,
+    "when": [{ "if": "dead", "unit": "iron_knuckles" }],
+    "actions": [{ "do": "unlock", "prop": "gate_boss" }, { "do": "camera", "mode": "follow" }]
+  },
+  "into_burial": {
+    "zone": "burial", "rect": "burial_entry", "once": true,
+    "actions": [{ "do": "location", "name": "burial" }]
+  },
+  "burial_garden": {
+    "zone": "burial", "rect": "garden", "once": true,
+    "actions": [{ "do": "location", "name": "burial_garden" }]
+  },
+  "burial_roots": {
+    "zone": "burial", "rect": "everywhere", "mode": "while", "once": true,
+    "when": [{ "if": "dead", "unit": "garden_flower" }],
+    "actions": [
+      { "do": "hide", "prop": "root_a" }, { "do": "hide", "prop": "root_b" }, { "do": "hide", "prop": "root_c" },
+      { "do": "toast", "text": "The flower dies and the roots let go." }
+    ]
+  },
+  "burial_torches": {
+    "zone": "burial", "rect": "everywhere", "mode": "while", "once": true,
+    "when": [{ "if": "flag", "flag": "torch_a" }, { "if": "flag", "flag": "torch_b" }],
+    "actions": [{ "do": "unlock", "prop": "torch_chest" }, { "do": "toast", "text": "Both torches burn blue. A lock gives somewhere close." }]
+  },
+  "burial_lockin": {
+    "zone": "burial", "rect": "lockin_room", "once": true,
+    "actions": [
+      { "do": "lock", "prop": "gate_snake" },
+      { "do": "spawn", "unit": "guard_a", "def": "skeleton_guard", "at": "lockin_a" },
+      { "do": "spawn", "unit": "guard_b", "def": "skeleton_guard", "at": "lockin_b" },
+      { "do": "spawn", "unit": "guard_c", "def": "skeleton_guard", "at": "lockin_c" },
+      { "do": "spawn", "unit": "guard_d", "def": "skeleton_guard", "at": "lockin_d" },
+      { "do": "toast", "text": "The door drops. The floor stands up." }
+    ],
+    "reset": [
+      { "do": "unlock", "prop": "gate_snake" },
+      { "do": "despawn", "unit": "guard_a" }, { "do": "despawn", "unit": "guard_b" },
+      { "do": "despawn", "unit": "guard_c" }, { "do": "despawn", "unit": "guard_d" }
+    ]
+  },
+  "burial_lockin_clear": {
+    "zone": "burial", "rect": "lockin_room", "mode": "while", "once": true,
+    "when": [
+      { "if": "dead", "unit": "guard_a" }, { "if": "dead", "unit": "guard_b" },
+      { "if": "dead", "unit": "guard_c" }, { "if": "dead", "unit": "guard_d" }
+    ],
+    "actions": [{ "do": "unlock", "prop": "gate_snake" }, { "do": "unlock", "prop": "giant_key_chest" }, { "do": "toast", "text": "Quiet. The ornate chest clicks." }]
+  },
+  "snake_arena": {
+    "zone": "burial", "rect": "snake_arena", "once": true,
+    "when": [{ "if": "flag", "flag": "snake_down", "not": true }],
+    "actions": [
+      { "do": "lock", "prop": "snake_gate_south" },
+      { "do": "lock", "prop": "snake_gate_east" },
+      { "do": "aggro", "unit": "burial_snake" },
+      { "do": "camera", "mode": "lock", "rect": "snake_arena" }
+    ],
+    "reset": [{ "do": "unlock", "prop": "snake_gate_south" }, { "do": "unlock", "prop": "snake_gate_east" }, { "do": "camera", "mode": "follow" }]
+  },
+  "snake_arena_clear": {
+    "zone": "burial", "rect": "snake_arena", "mode": "while", "once": true,
+    "when": [{ "if": "flag", "flag": "snake_down" }],
+    "actions": [{ "do": "camera", "mode": "follow" }]
+  }
+}

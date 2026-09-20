@@ -1,0 +1,94 @@
+{
+  "melee_player": {
+    "name": "Melee", "description": "Swing at whatever is in front of you. A hit hands back a little energy.", "icon": "spell_melee",
+    "kind": "melee", "school": "physical", "mp": 0, "energy": 0, "range": 0.5, "cooldown": 1.2,
+    "gcdImmune": true, "needsTarget": false, "needsEnemy": true, "needsLos": true, "anim": "attack",
+    "power": { "stat": "strength", "div": 8, "varDiv": 32, "flat": 7 }, "restoreEnergy": 3, "stop": 12
+  },
+  "melee": {
+    "name": "Melee", "description": "Basic melee attack.", "icon": "spell_melee",
+    "kind": "melee", "school": "physical", "mp": 0, "energy": 0, "range": 0.25, "cooldown": 2,
+    "gcdImmune": true, "needsTarget": true, "needsEnemy": true, "needsLos": true, "anim": "attack",
+    "power": { "stat": "strength", "div": 8, "varDiv": 32, "flat": 6 }, "restoreEnergy": 3, "stop": 20
+  },
+  "melee_fast": {
+    "name": "Flurry", "description": "A fast melee attack.", "icon": "spell_melee",
+    "kind": "melee", "school": "physical", "mp": 0, "energy": 0, "range": 0.25, "cooldown": 0.5,
+    "gcdImmune": true, "needsTarget": true, "needsEnemy": true, "needsLos": true, "anim": "attack",
+    "power": { "stat": "strength", "div": 16, "varDiv": 64, "flat": 2 }, "stop": 10
+  },
+  "melee_stun": {
+    "name": "Stunning Blow", "description": "A heavy blow that roots the victim for two seconds.", "icon": "spell_melee",
+    "kind": "melee", "school": "physical", "mp": 0, "energy": 0, "range": 0.25, "cooldown": 5,
+    "gcdImmune": true, "needsTarget": true, "needsEnemy": true, "needsLos": true, "anim": "attack",
+    "power": { "stat": "strength", "div": 8, "varDiv": 32, "flat": 6 }, "effect": "stunned", "stop": 24
+  },
+  "root_lash": {
+    "name": "Root", "description": "The root wall lashes anything that touches it.", "icon": "spell_nature",
+    "kind": "melee", "school": "nature", "mp": 0, "energy": 0, "range": 0.25, "cooldown": 1,
+    "gcdImmune": true, "needsTarget": true, "needsEnemy": true, "needsLos": false, "anim": "attack",
+    "power": { "stat": "strength", "div": 1, "varDiv": 1 }, "stop": 0
+  },
+  "spider_bite": {
+    "name": "Venomous Bite", "description": "A bite that keeps hurting for three seconds.", "icon": "spell_nature",
+    "kind": "melee", "school": "physical", "mp": 0, "energy": 0, "range": 0.25, "cooldown": 2,
+    "gcdImmune": true, "needsTarget": true, "needsEnemy": true, "needsLos": true, "anim": "attack",
+    "power": { "stat": "strength", "div": 1, "varDiv": 3 }, "effect": "spider_venom", "stop": 16
+  },
+  "icebolt": {
+    "name": "Icebolt", "description": "A bolt of frost. Chills what it hits. Cold enough to wake the blue torches.", "icon": "spell_frost",
+    "kind": "bolt", "school": "frost", "mp": 14, "energy": 0, "range": 15, "cooldown": 2,
+    "gcdImmune": false, "needsTarget": false, "needsEnemy": true, "needsLos": true, "anim": "cast",
+    "power": { "stat": "spirit", "div": 1.25, "varDiv": 8 }, "speed": 5, "effect": "chilled",
+    "splash": { "radius": 25, "div": 5 }, "stop": 30, "glow": 28
+  },
+  "icebolt_ai": {
+    "name": "Icebolt", "description": "A bolt of frost.", "icon": "spell_frost",
+    "kind": "bolt", "school": "frost", "mp": 4, "energy": 0, "range": 15, "cooldown": 2,
+    "gcdImmune": false, "needsTarget": true, "needsEnemy": true, "needsLos": true, "anim": "cast",
+    "power": { "stat": "spirit", "div": 1.25, "varDiv": 8 }, "speed": 3, "effect": "chilled", "stop": 30, "glow": 28
+  },
+  "fireball": {
+    "name": "Fireball", "description": "A ball of fire that splashes. Leaves the target burning.", "icon": "spell_fire",
+    "kind": "bolt", "school": "fire", "mp": 22, "energy": 0, "range": 15, "cooldown": 2,
+    "gcdImmune": false, "needsTarget": false, "needsEnemy": true, "needsLos": true, "anim": "cast",
+    "power": { "stat": "spirit", "div": 1, "varDiv": 2 }, "speed": 5, "effect": "burning",
+    "splash": { "radius": 25, "div": 5 }, "stop": 30, "glow": 40
+  },
+  "repair": {
+    "name": "Repair", "description": "Mend the broken thing in front of you. Costs what it is made of: wood, iron, gold.", "icon": "spell_repair",
+    "kind": "world", "school": "physical", "mp": 0, "energy": 0, "range": 0, "cooldown": 10,
+    "gcdImmune": false, "needsTarget": false, "needsEnemy": false, "needsLos": false, "anim": "cast",
+    "world": "repair", "stop": 30
+  },
+  "poisonbolt": {
+    "name": "Poison Bolt", "description": "A slow glob of poison. Slow enough to walk around.", "icon": "spell_nature",
+    "kind": "bolt", "school": "nature", "mp": 1, "energy": 0, "range": 15, "cooldown": 1,
+    "gcdImmune": false, "needsTarget": true, "needsEnemy": true, "needsLos": true, "anim": "cast",
+    "power": { "stat": "spirit", "div": 1, "varDiv": 2 }, "speed": 2, "stop": 20, "glow": 20
+  },
+  "poisonbolt_far": {
+    "name": "Venom Spit", "description": "Spat from a very long way off. It will kill you. Do not fight this.", "icon": "spell_nature",
+    "kind": "bolt", "school": "nature", "mp": 0, "energy": 0, "range": 40, "cooldown": 2,
+    "gcdImmune": false, "needsTarget": true, "needsEnemy": true, "needsLos": true, "anim": "cast",
+    "power": { "stat": "spirit", "div": 1, "varDiv": 2 }, "speed": 2, "effect": "poisoned", "stop": 20, "glow": 20
+  },
+  "cactus_spray": {
+    "name": "Needle Spray", "description": "Ten needles in a cone.", "icon": "spell_nature",
+    "kind": "bolt", "school": "nature", "mp": 0, "energy": 0, "range": 15, "cooldown": 5,
+    "gcdImmune": false, "needsTarget": true, "needsEnemy": true, "needsLos": true, "anim": "cast",
+    "power": { "stat": "spirit", "div": 1, "varDiv": 2 }, "speed": 4, "count": 10, "fan": 45, "stop": 20
+  },
+  "snake_ring": {
+    "name": "Poison Ring", "description": "Fifteen bolts in a ring from the coiled snake.", "icon": "spell_nature",
+    "kind": "bolt", "school": "nature", "mp": 0, "energy": 0, "range": 40, "cooldown": 1,
+    "gcdImmune": false, "needsTarget": true, "needsEnemy": true, "needsLos": false, "anim": "cast",
+    "power": { "stat": "spirit", "div": 8, "varDiv": 32 }, "speed": 2, "count": 15, "fan": 360, "stop": 0, "glow": 16
+  },
+  "webshot": {
+    "name": "Webshot", "description": "Leaves a web where it lands. Webs slow you to a quarter speed.", "icon": "spell_web",
+    "kind": "ground", "school": "physical", "mp": 1, "energy": 0, "range": 15, "cooldown": 3,
+    "gcdImmune": false, "needsTarget": true, "needsEnemy": true, "needsLos": true, "anim": "cast",
+    "power": { "stat": "spirit", "div": 1, "varDiv": 1, "flat": 4 }, "radius": 1.5, "duration": 10, "pulse": 1, "effect": "webbed", "stop": 20
+  }
+}

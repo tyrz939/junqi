@@ -1,0 +1,227 @@
+{
+  "dog": {
+    "speaker": "Julie's Dog",
+    "start": [
+      { "when": [{ "if": "questReady", "quest": "the_burial" }], "node": "burial_done" },
+      { "when": [{ "if": "questReady", "quest": "the_mine" }], "node": "mine_done" },
+      { "when": [{ "if": "questReady", "quest": "rats_below" }], "node": "rats_done" },
+      { "when": [{ "if": "questReady", "quest": "stock_the_bench" }], "node": "bench_done" },
+      { "when": [{ "if": "questReady", "quest": "defeat_skeleton" }], "node": "reward" },
+      { "when": [{ "if": "questActive", "quest": "defeat_skeleton" }], "node": "waiting" },
+      { "when": [{ "if": "questDone", "quest": "defeat_skeleton", "not": true }], "node": "intro" },
+      { "when": [{ "if": "questDone", "quest": "the_burial" }], "node": "epilogue" },
+      { "when": [{ "if": "questDone", "quest": "the_mine" }, { "if": "flag", "flag": "offered_burial", "not": true }], "node": "offer_burial" },
+      { "when": [{ "if": "questDone", "quest": "rats_below" }, { "if": "flag", "flag": "offered_mine", "not": true }], "node": "offer_mine" },
+      { "when": [{ "if": "questDone", "quest": "see_the_kitchen" }, { "if": "flag", "flag": "offered_rats", "not": true }], "node": "offer_rats" },
+      { "when": [{ "if": "flag", "flag": "dog_pokes", "min": 9 }], "node": "poke_loop" },
+      { "when": [{ "if": "flag", "flag": "dog_pokes", "eq": 8 }], "node": "poke_8" },
+      { "when": [{ "if": "flag", "flag": "dog_pokes", "eq": 7 }], "node": "poke_7" },
+      { "when": [{ "if": "flag", "flag": "dog_pokes", "eq": 6 }], "node": "poke_6" },
+      { "when": [{ "if": "flag", "flag": "dog_pokes", "eq": 5 }], "node": "poke_5" },
+      { "when": [{ "if": "flag", "flag": "dog_pokes", "eq": 4 }], "node": "poke_4" },
+      { "when": [{ "if": "flag", "flag": "dog_pokes", "eq": 3 }], "node": "poke_3" },
+      { "when": [{ "if": "flag", "flag": "dog_pokes", "eq": 2 }], "node": "poke_2" },
+      { "when": [{ "if": "flag", "flag": "dog_pokes", "eq": 1 }], "node": "poke_1" },
+      { "node": "idle" }
+    ],
+    "nodes": {
+      "intro": {
+        "lines": [
+          "{name}.",
+          "You came on the Sunday train. She said you would. Then she stopped saying anything.",
+          "There are bones walking her fence line. Put them down and I will give you her key. Space swings. I would do it myself, but look at me."
+        ],
+        "options": [
+          { "label": "I'll do it", "actions": [{ "do": "quest", "quest": "defeat_skeleton" }] },
+          { "label": "A talking dog", "goto": "talking_dog" }
+        ]
+      },
+      "talking_dog": {
+        "lines": ["You heard singing in the tunnel and your telephone died in your hand. I am the ordinary part of today."],
+        "options": [
+          { "label": "I'll do it", "actions": [{ "do": "quest", "quest": "defeat_skeleton" }] },
+          { "label": "Not yet" }
+        ]
+      },
+      "waiting": {
+        "lines": ["The bones are still walking the fence. She would have done it herself, once.", "It is in your log. Check it. Things that are not written down here do not always stay true."],
+        "options": [{ "label": "I have it", "goto": "waiting_ok" }, { "label": "Where is Julie?", "goto": "where_julie" }]
+      },
+      "waiting_ok": {
+        "lines": ["Good. Before nine, if you can. The bell is at nine."]
+      },
+      "where_julie": {
+        "lines": ["Not in the house. Not in the cellar. I can smell the rest of the county from this step, and she is not in that either.", "Closer than that. Bones first."]
+      },
+      "poke_1": { "lines": ["You can stop checking on me. I am a dog on a step."], "actions": [{ "do": "flag", "flag": "dog_pokes", "add": 1 }] },
+      "poke_2": { "lines": ["Still a dog. Still a step."], "actions": [{ "do": "flag", "flag": "dog_pokes", "add": 1 }] },
+      "poke_3": { "lines": ["You keep coming back to look. That is a city habit. Making sure the thing is where you left it."], "actions": [{ "do": "flag", "flag": "dog_pokes", "add": 1 }] },
+      "poke_4": {
+        "lines": ["I am not a city dog, {name}. A city dog would have run the first night the lamps went out.", "I stayed and counted them going."],
+        "actions": [{ "do": "flag", "flag": "dog_pokes", "add": 1 }]
+      },
+      "poke_5": { "lines": ["Fourteen. Do not count them yourself. It is a different number if you count."], "actions": [{ "do": "flag", "flag": "dog_pokes", "add": 1 }] },
+      "poke_6": {
+        "lines": ["If you must stand there, stand on the left. The right-hand board knows when someone is on it."],
+        "actions": [{ "do": "flag", "flag": "dog_pokes", "add": 1 }]
+      },
+      "poke_7": { "lines": ["It is not looking at you. It is looking at the road behind you, and it has been for some time."], "actions": [{ "do": "flag", "flag": "dog_pokes", "add": 1 }] },
+      "poke_8": {
+        "lines": ["...", "Nothing. There is nothing on the road. I checked, and now you do not have to."],
+        "actions": [{ "do": "flag", "flag": "dog_pokes", "add": 1 }]
+      },
+      "poke_loop": { "lines": ["Go inside, {name}. It is later than it looks."] },
+      "reward": {
+        "lines": [
+          "Down. Good.",
+          "The house key was always for you. She left fruit. She left a bench. She left a note that tells some of the truth.",
+          "There is a bed. Sleep in it. If you die out there you wake in the last place you rested, and it is a long walk back. Do not ask how I know."
+        ],
+        "options": [
+          { "label": "I'll take it", "actions": [{ "do": "handin", "quest": "defeat_skeleton" }] },
+          { "label": "Not now" }
+        ]
+      },
+      "bench_done": {
+        "lines": ["Pansy on your fingers. You made one.", "She was a witch, {name}. A kind, gentle one. So are you. I would rather you heard it from me than from a mirror."],
+        "options": [{ "label": "Here", "actions": [{ "do": "handin", "quest": "stock_the_bench" }] }]
+      },
+      "offer_rats": {
+        "lines": ["There are rats under the house. Bring me three pieces of meat.", "It is not for me. I have standards."],
+        "options": [
+          { "label": "Three. Fine.", "actions": [{ "do": "quest", "quest": "rats_below" }, { "do": "flag", "flag": "offered_rats" }] },
+          { "label": "Later" }
+        ]
+      },
+      "rats_done": {
+        "lines": ["Three. Keep them.", "Water and snakeroot makes Stranglethorn. Stranglethorn and meat makes a last meal. The small snakes in the burial cannot be fought. They can be fed."],
+        "options": [{ "label": "Understood", "actions": [{ "do": "handin", "quest": "rats_below" }] }]
+      },
+      "offer_mine": {
+        "lines": ["The mine mouth is the one with the lamp. A man called Gnox Goldskin dug it and then the dead kept digging.", "Broken stairs want Repair. Repair wants wood. Julie kept wood in the cellar storage, behind a plain lock."],
+        "options": [
+          { "label": "I'll go down", "actions": [{ "do": "quest", "quest": "the_mine" }, { "do": "learn", "spell": "repair" }, { "do": "flag", "flag": "offered_mine" }] },
+          { "label": "Not yet" }
+        ]
+      },
+      "mine_done": {
+        "lines": ["You smell like rust and old gold. Good.", "Eat something."],
+        "options": [{ "label": "Here", "actions": [{ "do": "handin", "quest": "the_mine" }] }]
+      },
+      "offer_burial": {
+        "lines": ["The other stair is the burial. Cold, dark, foggy. Lots of death in there.", "The torches down there are blue and they only wake for cold. What burns is in the garden. The big snake keeps its own room and never stops moving. Hit the tail if you cannot reach the head."],
+        "options": [
+          { "label": "I'll go", "actions": [{ "do": "quest", "quest": "the_burial" }, { "do": "flag", "flag": "offered_burial" }] },
+          { "label": "Not yet" }
+        ]
+      },
+      "burial_done": {
+        "lines": ["It is quiet under the yard for the first time since she left.", "She is not dead, {name}. I would know. There is a museum across the river with a wing marked MAGIC, and you are holding the key to it."],
+        "options": [{ "label": "Then I keep walking", "actions": [{ "do": "handin", "quest": "the_burial" }] }]
+      },
+      "epilogue": {
+        "lines": ["Sunday's train is a week away. The county still turns. Walk."]
+      },
+      "idle": {
+        "lines": ["I am listening for her. It is a full-time job."],
+        "actions": [{ "do": "flag", "flag": "dog_pokes", "add": 1 }]
+      }
+    }
+  },
+  "julies_letter": {
+    "speaker": "Julie's Letter",
+    "start": [{ "node": "read" }],
+    "nodes": {
+      "read": {
+        "lines": [
+          "Dear {name}. Happy birthday. I am your aunt Julie. Please come and visit me next week.",
+          "I have drawn you a map. It was right when I drew it. Enjoy your birthday. - Julie",
+          "The paper is a hundred years old. The ink is not. The map ends at a house and a dog, and the road it shows is not quite the road you walked."
+        ]
+      }
+    }
+  },
+  "julies_note": {
+    "speaker": "Note on the Table",
+    "start": [
+      { "when": [{ "if": "questDone", "quest": "stock_the_bench" }], "node": "again" },
+      { "when": [{ "if": "questActive", "quest": "stock_the_bench" }], "node": "again" },
+      { "node": "first" }
+    ],
+    "nodes": {
+      "first": {
+        "lines": [
+          "{name} - if you are reading this I am late, not lost.",
+          "The bench is set. Gold dust, a vial of water, a pansy from the pantry chest. Make it before you go down any stairs.",
+          "The hatches are only the cellar. The orb by the stove is cold on purpose. Touch it. You will not be surprised for long. - J"
+        ],
+        "actions": [{ "do": "quest", "quest": "stock_the_bench" }]
+      },
+      "again": {
+        "lines": ["Gold dust, water, pansy. Stand at the bench, open your bags. The orb by the stove is cold on purpose. - J"]
+      }
+    }
+  },
+  "orb_ice": {
+    "speaker": "Ice Orb",
+    "start": [{ "when": [{ "if": "knows", "spell": "icebolt" }], "node": "spent" }, { "node": "touch" }],
+    "nodes": {
+      "touch": {
+        "lines": ["It is colder than the room. Then it is colder than you.", "Something you always had puts its hand up."],
+        "actions": [{ "do": "learn", "spell": "icebolt" }, { "do": "flag", "flag": "knows_ice" }]
+      },
+      "spent": { "lines": ["Just glass now."] }
+    }
+  },
+  "scroll_fire": {
+    "speaker": "Burnt Scroll",
+    "start": [{ "when": [{ "if": "knows", "spell": "fireball" }], "node": "spent" }, { "node": "read" }],
+    "nodes": {
+      "read": {
+        "lines": ["The only page left in the book. The person buried here loved nature and was a gardener, and the garden burned anyway.", "The words are still warm."],
+        "actions": [{ "do": "learn", "spell": "fireball" }]
+      },
+      "spent": { "lines": ["Ash."] }
+    }
+  },
+  "sign_mine": {
+    "speaker": "Sign",
+    "start": [{ "node": "read" }],
+    "nodes": { "read": { "lines": ["GOLDSKIN MINING Co. - CLOSED. No entry. No exit either, some nights."] } }
+  },
+  "sign_burial": {
+    "speaker": "Standing Stone",
+    "start": [{ "node": "read" }],
+    "nodes": { "read": { "lines": ["DO NOT. Underneath, smaller, scratched later: the snake keeps the ball. leave it."] } }
+  },
+  "sign_town": {
+    "speaker": "Sign",
+    "start": [{ "node": "read" }],
+    "nodes": { "read": { "lines": ["CASTLE. Train: Sunday. Museum, factory and school across the river. Bridge out."] } }
+  },
+  "bed": {
+    "speaker": "Bed",
+    "start": [{ "node": "bed" }],
+    "nodes": {
+      "bed": {
+        "lines": ["The bed has been made, recently and badly, by someone without the hands for it."],
+        "options": [
+          { "label": "Sleep until morning", "actions": [{ "do": "rest", "until": 6 }], "goto": "slept" },
+          { "label": "Rest a moment", "actions": [{ "do": "rest" }], "goto": "rested" }
+        ]
+      },
+      "slept": { "lines": ["You sleep. Nothing wakes you. When you open your eyes the blanket has been pulled up."] },
+      "rested": { "lines": ["You sit on the edge until your hands are steady. If it goes badly out there, this is where you will wake."] }
+    }
+  },
+  "fire": {
+    "speaker": "Fire",
+    "start": [{ "node": "fire" }],
+    "nodes": {
+      "fire": {
+        "lines": ["A fire somebody laid and nobody lit. It catches for you at once.", "Nothing comes near while it burns. If it goes badly out there, this is where you will wake."],
+        "actions": [{ "do": "rest" }]
+      }
+    }
+  }
+}

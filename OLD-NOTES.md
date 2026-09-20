@@ -1,8 +1,10 @@
-# Junqi — Old notes (Trello)
+# Jane — Old notes (Trello)
 
 Trello / Kanban screenshots recovered 2026. Broad overview, not a second spec.
 
-Pair with `LEARNING.md` (what 2020 actually ran), `LEARNING-SYSTEMS.md` (paths), `SYSTEMS.md` (the remake bar), `WORLDGEN.md` (county), `MISSING-SYSTEMS.md` (engine still out).
+Pair with `LEARNING.md` (what 2020 actually ran), `LEARNING-SYSTEMS.md` (paths), `DESIGN-2020.md` (the design *folder*: story doc, balance sheet, dungeon maps, pad layout), `SYSTEMS.md` (the bar), `WORLDGEN.md` (zones), `MISSING-SYSTEMS.md` (engine still out).
+
+This file is the Trello boards only. It was written before anyone read the design folder or audited the code, and two of its conclusions were wrong; they are corrected below and marked.
 
 **These cards are not a backlog.** Most of this never shipped. The boards are how 2020-you *thought* before and during jun7. Steal taste. Do not grow a sixth dungeon because a due date said March 2021.
 
@@ -18,7 +20,9 @@ Three boards, two minds.
 | **Old notes** | green, tiny | same era | Story spine in four cards. Music and two overworld quests. |
 | **Production** | orange-brown | ~Jan–Mar 2021 | The jun7 build board. Technical todos, UI, controls, the two dungeons that actually got rooms. |
 
-The dream board wanted Breath of the Wild. The orange board was already an MMO-lite in a county. The remake follows the orange board's *product* (Jane / Julie's house / dog / mine / burial / snake) and keeps the green board as **county dressing and locked mouths**, not extra dungeons.
+The dream board wanted Breath of the Wild. The orange board was already an MMO-lite in a county. The live build follows the orange board's *product* (Jane / Julie's house / dog / mine / burial / snake). The other places on the green board are not "dressing": they are the rest of the game, in an order 2020 wrote down (`DESIGN-2020.md` §4.1). They are simply not built yet.
+
+The working title says **Jojo**, and 2020's test quests say "Good Job JoJo", but `Story.docx` (June 2020) says **Jane** throughout. Jane is the original name.
 
 Dates on dungeon cards (production board): Gold Mine ~13–15 Jan 2021, Burial Chamber ~16–26 Jan, Museum 3 Feb, Factory 14 Feb, Underground Pipes ~20–23 Feb, Butterfly Valley 3 Mar, School ~12–17 Mar. Targeting-aim card due **4 Mar 2021**. Treat dates as "we hoped," not "we shipped."
 
@@ -52,11 +56,13 @@ Dream board and production board name the same places. Only two got a 2020 room 
 | Gold mine | Gold Mining Cave | `room_dungeon_goldmine` | **IN** — yard door |
 | Burial | Burial Chamber at grave yard | `room_dungeon_burial_chamber` | **IN** — yard door |
 | Auntie basement | underground basement / basement in aunties house | `room_basement_auntie` | **IN** — kitchen hatch (cellar, not the underworld) |
-| Butterfly | Butterfly Forest / Valley | `room_dungeon_butterfly_forest` exists | Post-snake dungeon. Verb: Grow a path over water. Not a spider wing |
-| Museum | Museum | — | Neighbour interior. Keyed MAGIC wing (key from the mine) |
-| Factory | Factory | — | Post-snake dungeon. Verb: lever, clear-room, Repair the grate |
-| School | School | — | Post-snake dungeon. Verb: push desks, key, hall you walk twice |
-| Pipes | Underground pipe system | — | Attached to factory. Verb: drain the east, walk to the chest |
+| Butterfly | Butterfly Forest / Valley | `room_dungeon_butterfly_forest` exists but is an **empty shell** | Dungeon 3. 2020 drew it: no keys, no doors, eight butterflies, Grow, a net, an amulet |
+| Museum | Museum | — | **Dungeon 2, and next.** 2020 drew it: a key shuffle across four wings; its key is in the mine, and the forest's key is in its Magic wing |
+| Factory | Factory | — | Dungeon 4. 2020 drew it: break in by vent or sewer, an Electric spell that runs robots, a worker's diary |
+| School | School | — | **The finale.** Never drawn |
+| Pipes | Underground pipe system | — | The connector to the factory, entered with Repair |
+
+*(Corrected.)* The previous version of this table described "verbs" for these places (drain the east, push desks, hall you walk twice). Those were inventions of the 2026 Phaser build, not 2020 ideas. What 2020 drew is in `DESIGN-2020.md` §4.
 | Theme-park record | Record in music player's house | — | not the county |
 
 Production **Overworld** column was empty. Zone1 still got built. The empty list means they did not plan the town on Trello; they placed it in the room.
@@ -123,7 +129,7 @@ Useful because it is closer to the engine you actually wrote.
 - Solid colour smoke puffs on damage — particles LATER
 - Point-in-rectangle for mouse-on-GUI — remake has `mouseOnGui`
 - Draw a shield around town
-- Die → graveyard respawn + res sickness — not in the remake; player toast is "F5 was save"
+- Die → graveyard respawn + res sickness — live: you stand back up at the mark you came in by and lock-ins reset. Res sickness would be one effect row
 - Inventory window shows stats
 - Options: choose cursor type
 - Boss-width health bar
@@ -134,11 +140,19 @@ Keyboard (tagged), controller, touch (empty), button list. Matches `LEARNING-SYS
 
 Quest system, dialogue, main / options / load / start menus. Title New / Load slot 0 is IN. Options menu was TODO in 2020 and stays LATER.
 
-### Gameplay fork (do not silently flip)
+### Gameplay fork (flipped, and not silently)
 
 **URGENT (4 Mar 2021): remove targeting, make direction-based spell aim.**
 
-2020 and the remake kept **locked target + melee cone + bolt at target**. That is the MMO-lite. Direction-aim is a Zelda fork from the dream board. Record it. Do not swap the combat model to "finish an old card."
+*(Corrected.)* The previous version of this section said "2020 and the remake kept locked target + melee cone + bolt at target… Do not swap the combat model to finish an old card." **That was wrong about 2020.** The card was done:
+
+- In the final jun7 source every assignment to the player's `current_target` is commented out (`obj_player/Other_16.gml:219-273`).
+- Player projectiles fly along `spell_direction`, the direction to the mouse. They never home.
+- No player spell has `requires_target`.
+- The pad layout dated **November 2020** already says "Right stick: Aim" (`xbox controller layout.jpg`).
+- Only AI units use `current_target`.
+
+So click-targeting was the 2026 Phaser build's departure, not 2020's model. The live build is **aim-based**: bolts fly at the cursor or along the right stick, melee takes the nearest enemy in the facing half-plane, AI casts at its target. It is still the MMO-lite (GCD, cooldowns, a spellbook, an action bar, leash AI); what changed is who does the aiming. The HUD still shows a target frame, for whoever you last hit.
 
 **AOE from where?** — still the right question. Ground kind is the engine answer, not a new class.
 
@@ -152,14 +166,14 @@ Quest system, dialogue, main / options / load / start menus. Title New / Load sl
 
 **Wind Waker (personal):** more characters → more talk; story and conversation; world setting; *simple* elements; goal is very clear; buildings not special but good enough.
 
-The remake already took the useful half: a clear first goal (the dog), simple elements as item rows, buildings that are stamps, a small world that feels like a place. "Set much more possibility" is how BotW ate calendars. Junqi stays a county.
+The remake already took the useful half: a clear first goal (the dog), simple elements as item rows, buildings that are stamps, a small world that feels like a place. "Set much more possibility" is how BotW ate calendars. Jane stays a county.
 
 ---
 
 ## Also on the dream board (not engine)
 
 - Music / marketing lists. 2020 shipped two `.ogg`. Audio bus is LATER. Marketing is not this repo.
-- Junqi to-do: Drawing 3/4.
+- Jane to-do: Drawing 3/4.
 - Handwritten notebook photo — unread here; the story-line cards cover the same beat.
 
 ---
@@ -175,6 +189,6 @@ The remake already took the useful half: a clear first goal (the dog), simple el
 | Toggle as a row; cart / floor later | `class Lever` |
 | "Buildings not special but good enough" | A spider wing bolted on to “use” spiders |
 
-If a card is already an **IN** row in `SYSTEMS.md`, it is done. If it is in `MISSING-SYSTEMS.md`, it waits on the engine table. If it is only in this file, it is flavour.
+If a card is already an **IN** row in `SYSTEMS.md`, it is done and a test holds it. If it is in `MISSING-SYSTEMS.md`, it waits on the engine table. If it is a place, check `DESIGN-2020.md` §4 before calling it flavour: 2020 may have drawn it.
 
 Source: Trello screenshots (Jojo Witch, old notes, 2021 production). Card bodies behind attachments were not transcribed.
