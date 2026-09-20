@@ -40,7 +40,7 @@ This file was rewritten in September 2026 when the Phaser remake was archived. T
 | **LATER** | A real 2020 idea, not needed to ship the county. A row or a module when it lands |
 | **NEVER** | Do not port |
 
-Test names are from `jane/test/`: **E** `engine`, **S** `sim`, **D** `dungeons`, **W** `world`, **R** `replay`, **A** `art`, **T** `rest`, **C** `coop`.
+Test names are from `jane/test/`: **E** `engine`, **S** `sim`, **D** `dungeons`, **W** `world`, **R** `replay`, **A** `art`, **T** `rest`, **C** `coop`, **G** `storage`, **B** `budget`, **K** `skeleton`.
 
 ---
 
@@ -51,7 +51,7 @@ Test names are from `jane/test/`: **E** `engine`, **S** `sim`, **D** `dungeons`,
 | Persistent session | `game` object | one `GameState` tree (`sim/state.ts`) | **IN** — S: save → load → continue equals never having saved |
 | Fixed step | 60 fps frames | integer ticks at 1/60 s; accumulator + interpolation (`app/loop.ts`) | **IN** — E: seconds → ticks; S, R |
 | Determinism | — | seeded sfc32 in state, no runtime trig, quantised input | **IN** — S: hash per 120 ticks; R |
-| Slot save | compressed `slotN.jsav` | `localStorage`, 3 slots, versioned `SaveFile` + migrations | **IN** — S: garbage and newer saves decode to errors |
+| Slot save | compressed `slotN.jsav` | 3 slots, versioned `SaveFile` + migrations, gzipped (`app/gzip.ts`) into IndexedDB; slot rules in `app/slots.ts` (sync summary cache, per-slot write queue, `localStorage` fallback and one-time migration) | **IN** — S: garbage and newer saves decode to errors; G: gzip round trip on a real save, write order, fallbacks, migration, corrupt slot reads empty / **SHAPE** the IndexedDB wrapper itself (`app/storage.ts`): no test can reach it |
 | Replay | — | input runs + tick-stamped commands, re-simulated | **IN** — R |
 | Day clock | `time += 1/7200`, lit lamp posts only | same rate; starts **17:00** (`Story.docx`); drives ambient light and lamp posts | **IN** (rate, start: S) / **SHAPE** (light is presentation) |
 | Pause | broadcast user events | the scheduler is not called; dialogue freezes from inside | **IN** — R covers frozen ticks |
@@ -59,6 +59,8 @@ Test names are from `jane/test/`: **E** `engine`, **S** `sim`, **D** `dungeons`,
 | Title / load / controls | TODO | title, 3 slots, controls table | **SHAPE** |
 | Debug | F2 / F3 / F5 / F6 | F2 overlay (fps, sim ms, draw ms, awake, chunks, paths, hash), F3 grid, F5 / F9 | **SHAPE** |
 | Distance unload | `distance_unload`, 768 px | `sim/ring.ts`; sleepers still tick clocks | **IN** — D: bait test needs the lurker inside the ring |
+| Prop buckets | `instance_place` / collision lists | `sim/runtime.ts`: props bucketed by 16 x 16-cell block, queries answer in id order (`propsNear`, `propsInCells`); `moveProp` is the only way a prop changes cell; USE, push, plates, the ring, prop flags and the renderer ask the buckets, never the zone | **IN** — B: every prop a whole-zone pass finds is found, in id order, moved props included; local re-stamp equals a full one |
+| Tick budget | — | 3,000 units and 8,000 props asleep across the county, median tick under 2 ms (measured: 0.16 ms) | **IN** — B: sleepers stay asleep, still respawn on schedule, the yard skeleton still aggroes |
 | Resolutions list | dead | integer-scaled low-res framebuffer | **NEVER** |
 
 ### 1b. Party (co-op-ready; no network yet)
@@ -188,6 +190,7 @@ idle (regen, patrol, bait, aggro+LOS every 10 ticks)
 | Verb | Bar |
 | --- | --- |
 | Zone travel by named mark; refuses while carrying | **IN** — S, D |
+| Doors that are not answered after dark: `nightLock` on the placed prop, a line said instead of opening, outside doors only so nobody is shut in | **IN** — T. No door in the county carries it yet; it is a choice made door by door |
 | Locked door + key tag; gates (solid while locked) | **IN** — D |
 | Chest loot once; keeps what did not fit | **IN** — D |
 | Push / pull: hold USE 30 ticks, 20 energy, one cell | **SHAPE** — code; the tests place the barrel rather than push it |
@@ -290,6 +293,21 @@ A change is off-bar if:
 | Tests | `jane/test/` |
 
 2020 GML is **read-only** and stays out of the repo. Steal contracts. Do not port line-for-line.
+
+## 11b. The county skeleton (built; the game is not made from it yet)
+
+| Contract | Live | Bar |
+| --- | --- | --- |
+| Story places are rows with rules (`sites.json`): region, terrain, distances by road or by line, across the river, off the road | solved site by site with its road, re-tried locally, re-rolled if it cannot hold | **IN** — K, 64 seeds (1,000 as a soak) |
+| Roads join the story and merge into one network; one to three bridges | A\* over roughness and slope | **IN** — K |
+| Ten minutes across by road | the far shore is ≥ 3.6 km from the platform | **IN** — K |
+| The School stands over the town | crown site, town capped in height | **IN** — K |
+| Danger is a map: region base, named patches (`areas.json`), dungeon rings, roads, havens | `threat` 0..6 per macro cell | **IN** — K |
+| Night and lamps change the map | `threatAt(s, x, y, night)` | **IN** — K |
+| The first walk is safe and lit | checked on every seed | **IN** — K |
+| Density: 22 to 30 small places per region, nothing-to-see stretches ≤ 900 m | roadside beat, then banks and deep country | **IN** — K |
+| Seed viewer | `viewer.html` | **SHAPE** — hand-checked |
+| The playable county built from a skeleton | — | **LATER** — after the maps are approved: chunk format, rasteriser, worker, downsampled map |
 
 ## 12. Intentionally later, in order
 

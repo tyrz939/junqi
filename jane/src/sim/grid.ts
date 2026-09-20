@@ -147,6 +147,18 @@ export class Grid {
     for (let i = 0; i < flags.length; i++) flags[i] &= keep;
   }
 
+  /** The same, for an inclusive rect of cells. One moved crate must not cost a pass over a county of millions. */
+  clearPropFlagsIn(cx0: number, cy0: number, cx1: number, cy1: number): void {
+    const { flags } = this;
+    const keep = ~(F_PROP_SOLID | F_PROP_LOS) & 0xff;
+    const x0 = Math.max(0, cx0);
+    const x1 = Math.min(this.w - 1, cx1);
+    const y1 = Math.min(this.h - 1, cy1);
+    for (let y = Math.max(0, cy0); y <= y1; y++) {
+      for (let i = y * this.w + x0, end = y * this.w + x1; i <= end; i++) flags[i] &= keep;
+    }
+  }
+
   stampProp(cx: number, cy: number, cw: number, ch: number, blockLos: boolean): void {
     const bits = F_PROP_SOLID | (blockLos ? F_PROP_LOS : 0);
     for (let y = cy; y < cy + ch; y++) {

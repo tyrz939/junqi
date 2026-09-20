@@ -42,8 +42,9 @@ import {
   addUnit,
   asPlayer,
   buildRuntime,
+  flushPropFlags,
+  moveProp,
   occupy,
-  refreshPropFlags,
   removeUnit,
   vacate,
   type Party,
@@ -465,7 +466,7 @@ export class Sim implements World {
       stepTriggers(w);
       // 10 housekeeping
       stepDrops(w);
-      if (w.rt.propFlagsDirty) refreshPropFlags(this.catalog, w.rt, w.zone);
+      flushPropFlags(this.catalog, w.rt, w.zone);
       if (s.tick % 10 === 0) stampFog(w);
     }
 
@@ -533,10 +534,8 @@ export class Sim implements World {
     if (carried) {
       const def = this.catalog.props[carried.def];
       const spot = w.rt.grid.nearestFree(Math.floor(u.x / 8), Math.floor(u.y / 8), 6) ?? { cx: carried.cx, cy: carried.cy };
-      carried.cx = spot.cx;
-      carried.cy = spot.cy;
+      moveProp(w, carried, spot.cx, spot.cy);
       carried.solid = def.solid;
-      w.rt.propFlagsDirty = true;
     }
     u.carrying = 0;
     u.alive = true;

@@ -21,7 +21,7 @@ The user-facing app is `jane/`: a low-resolution world `<canvas id="world">` wit
 | World | `#world` canvas, integer-scaled | Keys, mouse, screenshots |
 | Title, HUD, windows, dialogue, menus, toasts | DOM under `#ui`, classes `jq-*` | Real clicks and ARIA/DOM reads. `.jq-title`, `.jq-tab`, `.jq-toast`, `.jq-zone-name`, `.jq-speaker` |
 | Console | DOM: `.jq-term-input`, `.jq-term-log` | `` ` `` opens it. Type, Enter, read the log |
-| Save slots | `localStorage` keys `jane.save.0` … `jane.save.2` on **this origin** | Read after F5 or a Save menu click. `format: "jane-save"`, `version`, `summary`, `state` |
+| Save slots | IndexedDB database `jane`, store `saves`, keys `0` … `2` on **this origin**: `{ meta, data }`, `data` = gzipped save JSON. (`localStorage` `jane.save.N` only as the fallback when IndexedDB is blocked, and as old saves waiting to be migrated) | Read after the "Saved to slot N" toast (the write is asynchronous). `meta` is the summary; the unzipped JSON has `format: "jane-save"`, `version`, `summary`, `state`. Snippet in `features/save-slot.md` |
 | Inspection handle | `window.jane` (the `App`) | `jane.sim()` is the live sim: `jane.sim().state`, `.player`, `.zone`, `.rt.unitsByKey`. `jane.debugText()` is the F2 text. **Read with it. Do not play with it** |
 
 Keys (world, when no window is open): WASD / arrows move, Shift sprint, E or F use (hold to push), Space / left click / 1 bar slot 1, 2–8 bar, I or Tab bags, K book, J quests, M map, Esc pause, F5 / F9 quick save / load slot 1, F2 overlay, F3 path grid, `` ` `` console.
@@ -49,7 +49,7 @@ Exit 0 means: HTTP 200, `<title>Project Jane</title>`, `id="world"` and `id="ui"
 ## Drive
 
 1. Navigate to `http://127.0.0.1:5188/`. The title shows **PROJECT JANE**, "Castle, Sunday.", and a menu: New Game, Continue, Load, Controls.
-2. For a clean run wipe this origin first: `for (let i = 0; i < 3; i++) localStorage.removeItem("jane.save." + i); location.reload();`
+2. For a clean run wipe this origin first: `indexedDB.deleteDatabase("jane"); for (let i = 0; i < 3; i++) localStorage.removeItem("jane.save." + i); location.reload();`
 3. Click **New Game**, type a name (or keep Jane), press Enter. For a reproducible world use the console afterwards: `seed 20260920` starts a new run on that seed.
 4. Expect: HUD name **Jane**, 150/150 HP and MP, zone **Castle**, clock **17:00 Day 1**, tracker "A Letter from Julie", bar slot 1 melee, slot 7 apples ×3, slot 8 the letter.
 
@@ -67,7 +67,7 @@ Directory: `.cursor/skills/verify-jane/evidence/<feature-id>/`
 
 - `before.png` / `after.png`
 - `console.txt` — `.jq-term-log` innerText
-- `slot.json` — the parsed `localStorage` slot, when the feature writes one
+- `slot.json` — the slot's unzipped, parsed save (IndexedDB `jane` / `saves`), when the feature writes one
 - `state.json` — the few fields of `jane.sim().state` the claim is about
 - `notes.md` — feature id, entry point, URL, seed, timestamp
 

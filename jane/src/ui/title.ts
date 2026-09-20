@@ -105,7 +105,9 @@ export class TitleScreen {
           disabled: latest < 0,
           pick: () => {
             const before = this.ctx.toastCount();
-            if (!host.load(latest) && this.ctx.toastCount() === before) this.ctx.toast("That save could not be loaded");
+            void host.load(latest).then((ok) => {
+              if (!ok && this.ctx.toastCount() === before) this.ctx.toast("That save could not be loaded");
+            });
           },
         },
         { label: "Load", disabled: latest < 0, pick: () => this.menu.push(loadPage(this.ctx, this.menu, () => {})) },

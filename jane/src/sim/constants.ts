@@ -90,4 +90,4 @@ export const PARTY_DEALT = [1, 0.62, 0.46, 0.38];
 export const PARTY_TAKEN = [1, 1.15, 1.3, 1.45];
 
 /** 2: playerName, rest point, Unit.hidden, Unit.pathGoal. 3: players[] (co-op-ready). */
-export const SAVE_VERSION = 4;
+export const SAVE_VERSION = 5;

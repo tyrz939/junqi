@@ -162,6 +162,26 @@ describe("the dog", () => {
     expect(focusOf(sim, sim.player)?.kind).toBe("unit");
   });
 
+  it("a door marked for it is not answered after dark, and is an ordinary door by day", () => {
+    const sim = Sim.newGame(catalog, 45);
+    const door = sim.rt.propsByKey.get("house_door")!;
+    door.locked = false;
+    door.nightLock = "Nobody comes to the door. Somebody is standing behind it.";
+    expect(walkToProp(sim, "house_door")).toBe(true);
+    sim.command({ t: "dev", dev: { op: "time", hour: 22 } });
+    expect(focusOf(sim, sim.player)?.prompt).toBe("Try the door");
+    sim.drainEvents();
+    sim.command({ t: "use" });
+    idle(sim, 5);
+    expect(sim.me.zone).toBe("county");
+    expect(sim.drainEvents().some((e) => e.e === "toast" && /standing behind it/.test(e.text))).toBe(true);
+
+    sim.command({ t: "dev", dev: { op: "time", hour: 9 } });
+    sim.command({ t: "use" });
+    idle(sim, 5);
+    expect(sim.me.zone).toBe("house");
+  });
+
   it("the county rings a bell at nine", () => {
     const sim = Sim.newGame(catalog, 44);
     sim.command({ t: "dev", dev: { op: "time", hour: 20.999 } });

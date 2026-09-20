@@ -11,7 +11,7 @@ import { ZONE_IDS, type ZoneId } from "@/sim/state";
 import { maxHp, maxMp } from "@/sim/units";
 import type { App } from "@/app/app";
 
-type Row = { usage: string; help: string; run: (app: App, args: string[]) => string[] };
+type Row = { usage: string; help: string; run: (app: App, args: string[]) => string[] | Promise<string[]> };
 
 const need = (app: App): NonNullable<ReturnType<App["sim"]>> | null => app.sim();
 const NO_GAME = ["No game running."];
@@ -104,8 +104,9 @@ const ROWS: Record<string, Row> = {
       return dev(app, { op: "spawn", def }, `spawned ${def}`);
     },
   },
-  save: { usage: "save [slot 1-3]", help: "Write a save slot", run: (app, [s]) => [app.save(slotArg(s)) ? "saved" : "save failed"] },
-  load: { usage: "load [slot 1-3]", help: "Read a save slot", run: (app, [s]) => [app.load(slotArg(s)) ? "loaded" : "nothing to load"] },
+  // Storage is asynchronous: these two answer when the slot has really been written or read.
+  save: { usage: "save [slot 1-3]", help: "Write a save slot", run: async (app, [s]) => [(await app.save(slotArg(s))) ? "saved" : "save failed"] },
+  load: { usage: "load [slot 1-3]", help: "Read a save slot", run: async (app, [s]) => [(await app.load(slotArg(s))) ? "loaded" : "nothing to load"] },
   seed: {
     usage: "seed [n]",
     help: "Show the run seed, or start a new run on seed n",
@@ -224,7 +225,7 @@ function slotArg(s: string | undefined): number {
   return Number.isInteger(n) && n >= 1 && n <= 3 ? n - 1 : 0;
 }
 
-export function runTerminal(app: App, line: string): string[] {
+export function runTerminal(app: App, line: string): string[] | Promise<string[]> {
   const parts = line.trim().split(/\s+/).filter(Boolean);
   if (parts.length === 0) return [];
   const row = ROWS[parts[0].toLowerCase()];

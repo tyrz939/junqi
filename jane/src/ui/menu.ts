@@ -148,8 +148,11 @@ export function loadPage(ctx: Ctx, menu: MenuStack, onLoaded: () => void): PageF
         disabled: !info,
         pick: () => {
           const before = ctx.toastCount();
-          if (ctx.host.load(i)) onLoaded();
-          else if (ctx.toastCount() === before) ctx.toast(`Could not load slot ${i + 1}`);
+          // Reading a slot is asynchronous. The host holds the world still until it answers.
+          void ctx.host.load(i).then((ok) => {
+            if (ok) onLoaded();
+            else if (ctx.toastCount() === before) ctx.toast(`Could not load slot ${i + 1}`);
+          });
         },
       })),
       { label: "Back", pick: () => menu.pop() },
@@ -166,11 +169,13 @@ export function savePage(ctx: Ctx, menu: MenuStack): PageFactory {
         detail: slotSummary(info),
         pick: () => {
           const before = ctx.toastCount();
-          const ok = ctx.host.save(i);
-          // The host may already have said so; identical live toasts merge, so this never doubles up.
-          if (ok) ctx.toast(`Saved to slot ${i + 1}`);
-          else if (ctx.toastCount() === before) ctx.toast("Could not save");
-          menu.refresh();
+          // Resolves when the write has committed, so "Saved" is true and the refreshed row shows it.
+          void ctx.host.save(i).then((ok) => {
+            // The host may already have said so; identical live toasts merge, so this never doubles up.
+            if (ok) ctx.toast(`Saved to slot ${i + 1}`);
+            else if (ctx.toastCount() === before) ctx.toast("Could not save");
+            menu.refresh();
+          });
         },
       })),
       { label: "Back", pick: () => menu.pop() },

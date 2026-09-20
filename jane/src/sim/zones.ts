@@ -60,6 +60,7 @@ export function createZoneState(state: GameState, catalog: Catalog, bp: Blueprin
       needs: s.needs ?? null,
       talk: s.talk ?? "",
       label: s.label ?? "",
+      nightLock: s.nightLock ?? "",
       awake: true,
     };
   });

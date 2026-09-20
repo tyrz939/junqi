@@ -15,7 +15,8 @@ import type { SpriteSheet } from "@/art/types";
 import { SEAT_COATS, seatSprite } from "@/art/units";
 import { CELL, RING_RADIUS } from "@/sim/constants";
 import type { SimEvent } from "@/sim/events";
-import { BLOCK_MOVE } from "@/sim/grid";
+import { BLOCK_MOVE, cellOf } from "@/sim/grid";
+import { propsInCells } from "@/sim/runtime";
 // The renderer draws ONE SEAT's view: her zone, her camera. Four clients, four cameras.
 import type { PlayerView as Sim } from "@/sim/sim";
 import { FACING_DX, FACING_DY, type Prop, type School, type Unit } from "@/sim/state";
@@ -26,6 +27,13 @@ import { ambientForHour, isNight, Lighting, type Light } from "@/render/lighting
 import { TileCache } from "@/render/tiles";
 
 const TARGET_VIEW_H = 216;
+
+/**
+ * How far outside the view a prop is still visited, in px from its origin cell: the
+ * widest light in props.json (the lamp post, 96) and a little more, so a pool of light
+ * reaches the screen before its post does. The tallest sprite is well inside that.
+ */
+const PROP_VIEW_MARGIN = 104;
 
 const SCHOOL_COLOR: Record<School, string> = {
   heal: "#78e860",
@@ -56,6 +64,8 @@ export class Renderer {
   private zoneKey = "";
   private readonly prev = new Map<number, { x: number; y: number }>();
   private readonly propShown = new Map<number, { x: number; y: number }>();
+  /** Reused every frame: the props in the blocks under the view. */
+  private readonly propsInView: Prop[] = [];
   private readonly texts: FloatText[] = [];
   private readonly particles: Particle[] = [];
   private frameNo = 0;
@@ -235,14 +245,14 @@ export class Renderer {
     const flick = (seed: number, amount: number): number => 1 - amount * (0.5 + 0.5 * Math.sin(this.frameNo * 0.23 + seed * 1.7));
 
     // --- props: ease display position toward the cell so pushes slide --------
+    // Only the blocks under the view are visited, never the zone's whole prop list.
     const sorted: Drawable[] = [];
-    let carried: Prop | null = null;
-    for (const p of sim.zone.props) {
-      if (p.hidden || !p.awake) continue;
-      if (player.carrying === p.id) {
-        carried = p;
-        continue;
-      }
+    // What she carries still has the cell it was lifted from, which may be off screen by now.
+    const held = player.carrying ? sim.rt.props.get(player.carrying) : undefined;
+    const carried: Prop | null = held && !held.hidden ? held : null;
+    const m = PROP_VIEW_MARGIN;
+    for (const p of propsInCells(sim.rt, cellOf(vx - m), cellOf(vy - m), cellOf(vx + this.viewW + m), cellOf(vy + this.viewH + m), this.propsInView)) {
+      if (p.hidden || !p.awake || p === carried) continue;
       const def = sim.catalog.props[p.def];
       const gx = p.cx * CELL;
       const gy = p.cy * CELL;
@@ -255,7 +265,7 @@ export class Renderer {
       shown.y += (gy - shown.y) * 0.25;
       if (Math.abs(gx - shown.x) < 0.3) shown.x = gx;
       if (Math.abs(gy - shown.y) < 0.3) shown.y = gy;
-      if (!inView(gx, gy, 80)) continue;
+      if (!inView(gx, gy, m)) continue;
       const sprite = this.atlas[def.sprite];
       const lit = def.light && (!def.lightWhenOn || p.on) && (!def.nightOnly || night);
       if (def.light && lit) {

@@ -105,7 +105,7 @@ It also pays off at once without any network: a test with **two bots in one sim*
 | **Desktop app (Electron)** | A thin shell around the same `dist/`. ~100 MB, bundles Chromium and Node | **Later, and this is what hosts LAN games** (§4). Also the normal route to Steam. Identical engine on every machine, which retires the float risk in §1 |
 | Desktop app (Tauri) | Smaller (~10 MB), but uses the OS webview: WebView2 on Windows, **WebKit on macOS and Linux** | Not for this game. Three different JS engines is exactly what lockstep does not want, and the LAN server would have to be written in Rust |
 
-Saves move from `localStorage` to IndexedDB in M1 (`PLAN.md` §4) for size reasons; that works identically in all three.
+Saves are gzip in IndexedDB (done, `ENGINE.md` §3), with `localStorage` as the fallback; that works identically in all three.
 
 ---
 

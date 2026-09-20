@@ -105,13 +105,16 @@ export class Terminal {
     if (this.history.length > MAX_HISTORY) this.history.shift();
     this.historyAt = this.history.length;
     this.print(`> ${line}`, "echo");
-    let out: string[];
+    const show = (out: string[]): void => out.forEach((l) => this.print(l, ""));
+    const fail = (err: unknown): void => this.print(`error: ${err instanceof Error ? err.message : String(err)}`, "");
     try {
-      out = this.ctx.host.terminal(line);
+      const out = this.ctx.host.terminal(line);
+      // `save` and `load` wait on storage; their line arrives when the slot has been written or read.
+      if (out instanceof Promise) out.then(show, fail);
+      else show(out);
     } catch (err) {
-      out = [`error: ${err instanceof Error ? err.message : String(err)}`];
+      fail(err);
     }
-    for (const l of out) this.print(l, "");
   }
 
   private recall(dir: 1 | -1): void {

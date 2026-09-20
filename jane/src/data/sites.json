@@ -1,0 +1,18 @@
+[
+  {"id": "station", "name": "Castle Halt", "region": "lowfields", "onRoad": true, "rest": true, "hub": 50, "where": {"edge": "west", "terrain": "flat"}},
+  {"id": "julie_house", "name": "Julie's house", "region": "lowfields", "onRoad": true, "rest": true, "where": {"terrain": "flat"}, "dist": [{"to": "station", "min": 800, "max": 1400, "by": "road"}], "roadFrom": "station"},
+  {"id": "town", "name": "Castle", "region": "lowfields", "onRoad": true, "rest": true, "hub": 130, "where": {"terrain": "flat", "riverWithin": 700, "maxHeight": 135}, "dist": [{"to": "station", "min": 1400, "max": 2500, "by": "road"},{"to": "julie_house", "min": 320, "max": 1100, "by": "road"}], "roadFrom": "julie_house"},
+  {"id": "farm", "name": "Lowfield Farm", "region": "lowfields", "onRoad": true, "rest": true, "hub": 50, "where": {"terrain": "flat"}, "dist": [{"to": "town", "min": 500, "max": 1300, "by": "road"},{"to": "julie_house", "min": 400, "by": "line"}], "roadFrom": "town"},
+  {"id": "gold_mine", "name": "The Gold Mine", "region": "lowfields", "onRoad": true, "dungeon": true, "where": {"terrain": "foothill"}, "dist": [{"to": "julie_house", "min": 1200, "by": "line"}], "roadFrom": "town"},
+  {"id": "museum", "name": "The Museum", "region": "waters", "onRoad": true, "dungeon": true, "where": {"terrain": "flat", "acrossRiverFrom": "town"}, "dist": [{"to": "town", "min": 450, "max": 1300, "by": "road"}], "roadFrom": "town"},
+  {"id": "reed_camp", "name": "The Reedcutters' fire", "region": "waters", "onRoad": true, "rest": true, "hub": 40, "where": {"terrain": "bank"}, "dist": [{"to": "museum", "min": 600, "max": 1500, "by": "road"}], "roadFrom": "museum"},
+  {"id": "library", "name": "The ruined library", "region": "waters", "onRoad": true, "where": {"terrain": "flat"}, "dist": [{"to": "museum", "min": 600, "max": 1600, "by": "road"}], "roadFrom": "museum"},
+  {"id": "butterfly_forest", "name": "Butterfly Forest", "region": "waters", "onRoad": true, "dungeon": true, "where": {"terrain": "wood"}, "dist": [{"to": "museum", "min": 1100, "by": "line"},{"to": "library", "min": 400, "max": 1500, "by": "road"}], "roadFrom": "library"},
+  {"id": "lake_statue", "name": "The statue in the lake", "region": "waters", "onRoad": true, "where": {"terrain": "bank", "lakeWithin": 120}, "dist": [{"to": "station", "min": 3600, "by": "road"}], "roadFrom": "reed_camp"},
+  {"id": "graveyard", "name": "The graveyard", "region": "works", "onRoad": true, "where": {"terrain": "flat"}, "dist": [{"to": "town", "min": 500, "max": 1500, "by": "road"}], "roadFrom": "town"},
+  {"id": "factory", "name": "The Factory", "region": "works", "onRoad": true, "dungeon": true, "where": {"terrain": "flat"}, "dist": [{"to": "town", "min": 1300, "by": "line"},{"to": "graveyard", "min": 600, "max": 1900, "by": "road"}], "roadFrom": "graveyard"},
+  {"id": "canteen", "name": "The works canteen", "region": "works", "onRoad": true, "rest": true, "hub": 50, "where": {"terrain": "flat"}, "dist": [{"to": "factory", "min": 200, "max": 600, "by": "road"}], "roadFrom": "factory"},
+  {"id": "school", "name": "The School", "region": "works", "onRoad": true, "dungeon": true, "where": {"terrain": "crown"}, "dist": [{"to": "station", "min": 2300, "by": "road"},{"to": "town", "max": 1700, "by": "line"}], "roadFrom": "factory"},
+  {"id": "car_wood", "name": "The wood with the car in it", "region": "lowfields", "onRoad": false, "where": {"terrain": "wood", "offRoad": 60}, "dist": [{"to": "julie_house", "min": 350, "max": 1300, "by": "line"}]},
+  {"id": "burial", "name": "The Burial Chamber", "region": "works", "onRoad": false, "dungeon": true, "where": {"offRoad": 80}, "dist": [{"to": "graveyard", "min": 140, "max": 300, "by": "line"}]}
+]

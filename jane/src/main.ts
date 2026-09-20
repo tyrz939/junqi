@@ -1,8 +1,14 @@
 import "./style.css";
 import { App } from "@/app/app";
+import { initStorage } from "@/app/storage";
 
 const canvas = document.getElementById("world") as HTMLCanvasElement;
 const ui = document.getElementById("ui") as HTMLElement;
+
+// The title lists the save slots the moment it is drawn, and it reads them from memory.
+// So the slot summaries are fetched first: three small IndexedDB reads, bounded by a
+// timeout, and it never rejects (no storage just means three empty slots).
+await initStorage();
 
 try {
   const app = new App(canvas, ui);

@@ -91,6 +91,7 @@ export class App implements UiHost {
   }
 
   newGame(seed?: number, name?: string): void {
+    this.dropLoad();
     const s = seed ?? (Math.floor(Math.random() * 0xffffffff) ^ Date.now()) >>> 0;
     this.current = Sim.newGame(this.catalog, s, name);
     this.recorder = new Recorder(s, name);
@@ -109,23 +110,45 @@ export class App implements UiHost {
     return view !== null && view.player.alive && nearRest(view);
   }
 
-  /** Saving is a place, not a menu: a bed or a fire. No fast travel, no save-scumming a bad night. */
-  save(slot: number): boolean {
-    if (!this.current) return false;
+  /**
+   * Saving is a place, not a menu: a bed or a fire. No fast travel, no save-scumming a bad night.
+   * The state is taken on this call, on this tick; compressing and writing it happen behind the
+   * loop's back. "Saved" is only said once the slot is really stored.
+   */
+  async save(slot: number): Promise<boolean> {
+    if (!this.current || this.loading) return false;
     if (!this.canSave()) {
       this.ui.toast("You can only save at a bed or a fire");
       return false;
     }
     this.slot = slot;
-    const ok = writeSlot(slot, this.current);
+    let ok = false;
+    try {
+      ok = await writeSlot(slot, this.current);
+    } catch (err) {
+      console.error(err);
+    }
     this.ui.toast(ok ? `Saved to slot ${slot + 1}` : "Could not save: storage is unavailable");
     return ok;
   }
 
-  load(slot: number): boolean {
-    const file = readSlot(slot);
+  /**
+   * Reading a slot takes a moment (IndexedDB, then gunzip). The world holds still for it, and
+   * the new sim is swapped in whole, between frames: nothing ever ticks a half-loaded state.
+   */
+  load(slot: number): Promise<boolean> {
+    // A second request while one is being read (a double click on the row) is the same request.
+    return (this.loading ??= this.loadInto(slot, ++this.loadTicket));
+  }
+
+  private async loadInto(slot: number, ticket: number): Promise<boolean> {
+    const listed = slotInfos()[slot] != null;
+    const file = await readSlot(slot);
+    // New Game or Quit to Title happened while this was being read. That wins.
+    if (ticket !== this.loadTicket) return false;
+    this.loading = null;
     if (!file) {
-      this.ui.toast("Nothing in that slot");
+      this.ui.toast(listed ? "That save could not be loaded" : "Nothing in that slot");
       return false;
     }
     try {
@@ -141,7 +164,17 @@ export class App implements UiHost {
     }
   }
 
+  /** Set from the moment a load is asked for until its sim is in place. */
+  private loading: Promise<boolean> | null = null;
+  private loadTicket = 0;
+
+  private dropLoad(): void {
+    this.loadTicket++;
+    this.loading = null;
+  }
+
   toTitle(): void {
+    this.dropLoad();
     this.current = null;
     this.recorder = null;
   }
@@ -154,7 +187,7 @@ export class App implements UiHost {
     return TILE_COLORS;
   }
 
-  terminal(line: string): string[] {
+  terminal(line: string): string[] | Promise<string[]> {
     return runTerminal(this, line);
   }
 
@@ -216,10 +249,10 @@ export class App implements UiHost {
   }
 
   // --- loop ------------------------------------------------------------------------
-  /** Alone, a window or menu pauses the world. With company nothing can: others are still playing. */
+  /** Alone, a window or menu pauses the world. With company nothing can: others are still playing. A load in flight always does. */
   private paused(): boolean {
     const sim = this.current;
-    return !sim || sim.frozen || (this.ui.blocksWorld() && sim.party.size() <= 1);
+    return !sim || sim.frozen || this.loading !== null || (this.ui.blocksWorld() && sim.party.size() <= 1);
   }
 
   private begin(): void {
@@ -239,8 +272,8 @@ export class App implements UiHost {
       }
       const g = edge.game;
       if (g.t === "grid") this.renderer.showGrid = !this.renderer.showGrid;
-      else if (g.t === "quicksave") this.save(this.slot);
-      else if (g.t === "quickload") this.load(this.slot);
+      else if (g.t === "quicksave") void this.save(this.slot);
+      else if (g.t === "quickload") void this.load(this.slot);
       else if (!blocked) this.command(g);
     }
   }
@@ -269,7 +302,7 @@ export class App implements UiHost {
     // Only what this seat should see and hear: her own, her zone's, the party's.
     const events = this.current && view ? Sim.eventsFor(this.current.drainEvents(), view.me) : [];
     // Resting at a bed or a fire is the save.
-    if (view && events.some((e) => e.e === "rest")) this.save(this.slot);
+    if (view && events.some((e) => e.e === "rest")) void this.save(this.slot);
     if (view) {
       this.renderer.handle(events, view.me.unitId);
       this.renderer.draw(view, this.paused() ? 1 : alpha);

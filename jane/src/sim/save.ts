@@ -74,6 +74,11 @@ const MIGRATIONS: Record<number, Migration> = {
     }
     state.growth = { spells };
   },
+  // v4 -> v5: doors may refuse after dark.
+  4: (state) => {
+    const zones = (state.zones ?? {}) as Record<string, { props?: Record<string, unknown>[] }>;
+    for (const zone of Object.values(zones)) for (const p of zone.props ?? []) p.nightLock ??= "";
+  },
 };
 
 export function encodeSave(state: GameState, summary: SaveFile["summary"], now: Date): string {

@@ -12,7 +12,11 @@
 // Saves write every unit, awake or not. The ring is never what gets persisted.
 
 import { CELL, RING_BLOCK, RING_RADIUS } from "@/sim/constants";
-import { occupy, playersHere, vacate, type World } from "@/sim/runtime";
+import { cellOf } from "@/sim/grid";
+import { occupy, playersHere, propsInCells, vacate, type World } from "@/sim/runtime";
+
+/** Props stay up 64 px beyond the ring, measured from their origin cell. */
+const PROP_SLACK = 64;
 
 export function stepRing(w: World, force = false): void {
   const centres: number[] = [];
@@ -33,8 +37,13 @@ export function stepRing(w: World, force = false): void {
     return false;
   };
 
+  // A connected player's body never sleeps. Asked of the party once, not once per unit:
+  // this pass is over every unit in the zone, thousands of them in the county.
+  const bodies: number[] = [];
+  for (const p of w.state.players) if (p.connected) bodies.push(p.unitId);
+
   for (const u of w.zone.units) {
-    if (w.party.ofUnit(u.id)) continue;
+    if (bodies.includes(u.id)) continue;
     const awake = near(u.x, u.y, 0) || u.combat === "combat";
     if (awake === u.awake) continue;
     u.awake = awake;
@@ -45,5 +54,20 @@ export function stepRing(w: World, force = false): void {
       u.path = null;
     }
   }
-  for (const p of w.zone.props) p.awake = near(p.cx * CELL, p.cy * CELL, 64);
+
+  // Props: put the old set to sleep, then wake what the buckets hold around each
+  // player. The same flags a pass over the whole zone would set, without the pass.
+  const awakeProps = w.rt.awakeProps;
+  for (const p of awakeProps) p.awake = false;
+  awakeProps.length = 0;
+  const reach = RING_RADIUS + PROP_SLACK;
+  for (let i = 0; i < centres.length; i += 2) {
+    const x = centres[i];
+    const y = centres[i + 1];
+    for (const p of propsInCells(w.rt, cellOf(x - reach), cellOf(y - reach), cellOf(x + reach), cellOf(y + reach))) {
+      if (p.awake || !near(p.cx * CELL, p.cy * CELL, PROP_SLACK)) continue;
+      p.awake = true;
+      awakeProps.push(p);
+    }
+  }
 }

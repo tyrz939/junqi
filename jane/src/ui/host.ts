@@ -51,17 +51,19 @@ export interface UiHost {
   newGame(seed?: number, name?: string): void;
   /** True when a bed or a fire is in reach. The game can only be saved there. */
   canSave(): boolean;
-  /** Always length 3; null = empty slot. */
+  /** Always length 3; null = empty slot. Synchronous: the host keeps the summaries in memory. */
   slots(): (SlotInfo | null)[];
-  save(slot: number): boolean;
-  load(slot: number): boolean;
+  /** Resolves true once the slot is really stored. The state saved is the one at the call. Never rejects. */
+  save(slot: number): Promise<boolean>;
+  /** Resolves true once the loaded game is the live one. The world holds still meanwhile. Never rejects. */
+  load(slot: number): Promise<boolean>;
   toTitle(): void;
   /** data: URL of a 16x16 icon drawn at 2x, for <img> / background-image. */
   iconUrl(icon: string): string;
   /** CSS colour per tile id, for the minimap. */
   tileColors(): readonly string[];
-  /** Run one terminal line; returns output lines. */
-  terminal(line: string): string[];
+  /** Run one terminal line; returns output lines, later for the few rows that wait on storage. */
+  terminal(line: string): string[] | Promise<string[]>;
   /**
    * Button labels for whichever device was touched last ("E" / "Esc" / "W S" on a
    * keyboard, "A" / "B" / "D-pad" on a pad), for on-screen hints.

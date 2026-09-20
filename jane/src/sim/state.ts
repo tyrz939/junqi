@@ -127,6 +127,8 @@ export type Prop = {
   needs: Stack[] | null;
   talk: string;
   label: string;
+  /** Said instead of opening, between nine and six. "" = an ordinary door. */
+  nightLock: string;
   awake: boolean;
 };
 

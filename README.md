@@ -16,7 +16,7 @@ Node 18 or newer.
 cd jane
 npm install
 npm run dev      # open the URL Vite prints, click New Game
-npm test         # 97 tests, a few seconds, no browser
+npm test         # 116 tests, about ten seconds, no browser
 npm run build    # type-check + production bundle (~280 kB, no runtime dependencies)
 ```
 
@@ -72,6 +72,12 @@ Console rows worth knowing: `give apple 5`, `god`, `tp burial entry`, `time 22`,
 | `.cursor/skills/verify-jane/` | How an agent drives the running game in a browser and leaves proof |
 
 The 2020 GameMaker project and its design folder are not in this repo and never will be: most of its art is purchased packs. If you have it, keep it beside this file as `Junqi-Legacy-GM/`. Git ignores that folder.
+
+## The seed viewer
+
+`npm run dev`, then open `/viewer.html`. It draws 24 generated counties at a time from the same code the game will be built from: land, regions or threat, by day or by night, with the walking time from the station to Julie's house and to the far shore under each. Click one for every place in the order you reach it, every rule with its measured value, every road and named patch. `Next 24` until something looks wrong.
+
+The rows it is solving are `jane/src/data/sites.json` (story places and their distance rules), `areas.json` (named patches of danger) and `pois.json` (small places). Change a row, reload, look again.
 
 ## Where it stands
 

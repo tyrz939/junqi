@@ -1,0 +1,20 @@
+[
+  { "kind": "well", "name": "A well", "regions": ["lowfields", "waters"], "weight": 3, "where": "roadside" },
+  { "kind": "shrine", "name": "A wayside shrine", "regions": ["lowfields", "waters", "works"], "weight": 3, "where": "roadside" },
+  { "kind": "signpost", "name": "A signpost", "regions": ["lowfields", "waters", "works"], "weight": 4, "where": "roadside" },
+  { "kind": "cottage", "name": "A ruined cottage", "regions": ["lowfields", "waters"], "weight": 3, "where": "roadside" },
+  { "kind": "cart", "name": "An overturned cart", "regions": ["lowfields", "works"], "weight": 2, "where": "roadside" },
+  { "kind": "scarecrow", "name": "A scarecrow", "regions": ["lowfields"], "weight": 3, "where": "any" },
+  { "kind": "stones", "name": "Standing stones", "regions": ["lowfields", "waters"], "weight": 2, "where": "deep" },
+  { "kind": "camp", "name": "A cold camp", "regions": ["lowfields", "waters", "works"], "weight": 3, "where": "deep" },
+  { "kind": "hollow_tree", "name": "A hollow tree", "regions": ["lowfields", "waters"], "weight": 2, "where": "deep" },
+  { "kind": "jetty", "name": "A jetty", "regions": ["waters", "lowfields"], "weight": 3, "where": "bank" },
+  { "kind": "boat", "name": "A sunk boat", "regions": ["waters"], "weight": 3, "where": "bank" },
+  { "kind": "greenhouse", "name": "A broken greenhouse", "regions": ["waters"], "weight": 3, "where": "any" },
+  { "kind": "statue", "name": "A garden statue", "regions": ["waters"], "weight": 2, "where": "any" },
+  { "kind": "pump", "name": "A pump house", "regions": ["works", "waters"], "weight": 3, "where": "bank" },
+  { "kind": "pipe_end", "name": "A pipe mouth", "regions": ["works"], "weight": 4, "where": "any" },
+  { "kind": "signal", "name": "A dead signal", "regions": ["works"], "weight": 3, "where": "roadside" },
+  { "kind": "wagon", "name": "A slag wagon", "regions": ["works"], "weight": 3, "where": "any" },
+  { "kind": "hut", "name": "A watchman's hut", "regions": ["works"], "weight": 2, "where": "roadside" }
+]

@@ -180,7 +180,7 @@ Measured against 7.2 M cells, ~3,000 units, ~8,000 props.
 | Saves are JSON in `localStorage` | ~4 MB per slot, over quota | Gzip via `CompressionStream` into **IndexedDB**; same state tree, same versioning |
 | Minimap is 1 px per cell | 54 MB of ImageData | 1 px per 4 cells for the county, drawn from the skeleton + fog |
 | Validator floods the whole zone | 7 M cells per candidate | Validate the skeleton on the macro grid; flood only inside chunks and dungeons |
-| Tests run 25 county seeds | minutes | Skeleton tests on 200 seeds (instant); full rasterisation on 3 |
+| Tests run 25 county seeds | minutes | Skeleton tests on 64 seeds in the suite (a county is a fraction of a second) and 1,000 as a soak (`SKELETON_SEEDS=1000`); full rasterisation on 3 |
 
 Tiles and flags stay flat typed arrays (14 MB together). Nothing else scales with world size: that was the point of the ring, the seed-derived terrain and the state tree.
 
@@ -247,9 +247,9 @@ Rules:
 | | What | Gate |
 | --- | --- | --- |
 | **M0** | Key hints in dialogue; the letter in proper English; this plan, `STORY.md`, `VOICE.md`; beds and fires; the name step; the dog reworked and absent after dark; the bell; mist and longer light | *Done.* |
-| **M1** | Engine at scale (§4), with the 2 ms budget test. *Started: windowed A\*, sparse occupancy* | Tests |
+| **M1** | Engine at scale (§4), with the 2 ms budget test. *Done: windowed A\*, sparse occupancy, props bucketed by block, gzip saves in IndexedDB, the budget test (0.16 ms median with 3,000 units and 8,000 props). Left, because they only mean something once the big county is rasterised: generation in a Web Worker behind a loading screen, the downsampled map, chunk-level validation* | Tests |
 | **M1b** | **Co-op-ready sim** (`PLATFORM.md` §2): `players[]`, per-player input and commands, every zone with a player in it ticks, party-shared quests and flags, nothing pauses when there is more than one player, join / leave as commands, the server-wide party penalty. No networking yet | *Done.* `test/coop.test.ts`, 20 tests: four seats, a split across two zones, the shared fire, shared learning, keys handed on, a heal aimed at a friend, a two-seat replay that hashes the same |
-| **M2** | Skeleton generator, `sites.json` constraints, roads, regions, chunk format, **seed viewer** | John looks at 24 maps |
+| **M2** | Skeleton generator, `sites.json` / `areas.json` / `pois.json`, roads, lamps, regions, the threat field, **seed viewer**. *Built: `jane/src/world/skeleton/`, `viewer.html`. Every row holds on 1,000 seeds. **Waiting at its gate.*** Then: the chunk format and rasterising the skeleton into the playable 3600 × 2000 county, with today's yard, mine mouth and town re-sited as set chunks | **John looks at 24 maps** (`npm run dev`, open `/viewer.html`) |
 | **M3** | The Lowfields to density: station start, town hub, farm, wood, side quests, wildlife, lamp-light rule, first omens; Julie's loop re-sited | John plays an hour |
 | **M4** | Dungeon generator; the mine rebuilt through it with room variants | John runs the mine on three seeds |
 | **M5** | Omen system complete; full text pass against `VOICE.md` | John reads and plays |

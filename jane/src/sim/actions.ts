@@ -5,7 +5,7 @@
 
 import { cellOf, centre } from "@/sim/grid";
 import { lineOfSight } from "@/sim/los";
-import { addUnit, playerOf, playersHere, removeUnit, type World } from "@/sim/runtime";
+import { addUnit, playerOf, playersHere, removeUnit, touchProp, type World } from "@/sim/runtime";
 import { FACING_DX, FACING_DY, type Action, type ActionList, type Condition, type PlayerState, type Prop } from "@/sim/state";
 import { bagAdd, bagCount, bagRemove } from "@/sim/inventory";
 import { giveQuest, handIn, onLocation, questActive, questDone, questReady } from "@/sim/quests";
@@ -96,7 +96,7 @@ export function runAction(w: World, a: Action, subject: number): void {
       p.locked = a.do === "lock";
       if (w.catalog.props[p.def].gate) {
         p.solid = p.locked;
-        w.rt.propFlagsDirty = true;
+        touchProp(w, p);
       }
       w.emit({ e: "prop", prop: p.id, change: a.do });
       return;
@@ -106,7 +106,7 @@ export function runAction(w: World, a: Action, subject: number): void {
       const p = findProp(w, a.prop);
       if (!p) return;
       p.hidden = a.do === "hide";
-      w.rt.propFlagsDirty = true;
+      touchProp(w, p);
       w.emit({ e: "prop", prop: p.id, change: a.do });
       return;
     }

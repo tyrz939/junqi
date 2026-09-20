@@ -39,6 +39,12 @@ export type PropSpawn = {
   needs?: Stack[];
   talk?: string;
   label?: string;
+  /**
+   * This door does not open after dark, and this is what it says instead. A creative
+   * choice door by door, never a rule for a whole town. Put it on the OUTSIDE door only:
+   * nobody is ever shut in.
+   */
+  nightLock?: string;
 };
 
 export type Blueprint = {

@@ -9,7 +9,8 @@
 
 import { CELL, PX_PER_METRE, USE_REACH } from "@/sim/constants";
 import { cellOf } from "@/sim/grid";
-import { playerOf, propCentre, refreshPropFlags, type World } from "@/sim/runtime";
+import { flushPropFlags, moveProp, playerOf, propCentre, propsInCells, propsNear, restampCells, touchProp, type World } from "@/sim/runtime";
+import { isNight } from "@/sim/text";
 import { FACING_DX, FACING_DY, type Prop, type School, type Unit } from "@/sim/state";
 import { runActions } from "@/sim/actions";
 import { startDialogue } from "@/sim/dialogue";
@@ -22,6 +23,8 @@ import { distance, isEnemy, moveUnit, spendEnergy } from "@/sim/units";
 export const PUSH_HOLD_TICKS = 30;
 export const PUSH_ENERGY = 20;
 const TALK_REACH = 20;
+/** How close to a prop's centre a bolt must end to switch it on, in px. */
+const SCHOOL_TOUCH = 14;
 
 export type Focus =
   | { kind: "drop"; id: number; prompt: string }
@@ -55,7 +58,7 @@ function interactable(w: World, p: Prop): boolean {
 function promptFor(w: World, p: Prop): string {
   const def = w.catalog.props[p.def];
   if (p.locked) return "Unlock";
-  if (p.to) return def.prompt ?? "Enter";
+  if (p.to) return p.nightLock && isNight(w.state) ? "Try the door" : (def.prompt ?? "Enter");
   if (p.loot && !p.used) return "Open";
   if (def.carry) return "Pick up";
   if (def.bench) return "Craft";
@@ -83,7 +86,7 @@ export function focusOf(w: World, u: Unit): Focus {
       best = { kind: "unit", id: other.id, prompt: "Talk" };
     }
   }
-  for (const p of w.zone.props) {
+  for (const p of propsNear(w.rt, u.x, u.y, USE_REACH)) {
     if (!p.awake || !interactable(w, p)) continue;
     const d = propDistance(w, u, p);
     if (d > USE_REACH) continue;
@@ -134,13 +137,19 @@ function useProp(w: World, u: Unit, p: Prop): void {
     p.locked = false;
     if (def.gate) {
       p.solid = false;
-      w.rt.propFlagsDirty = true;
+      touchProp(w, p);
     }
     w.emit({ e: "prop", prop: p.id, change: "unlock" });
     w.emit({ e: "toast", text: `Unlocked with ${w.catalog.items[key].name}` });
     return;
   }
   if (p.to) {
+    // Some doors are not answered after dark. The key turns; the door does not.
+    if (p.nightLock && isNight(w.state)) {
+      w.emit({ e: "toast", text: p.nightLock });
+      w.emit({ e: "sfx", name: "locked", x: u.x, y: u.y });
+      return;
+    }
     requestTravel(w, p.to.zone, p.to.mark);
     return;
   }
@@ -159,7 +168,7 @@ function useProp(w: World, u: Unit, p: Prop): void {
       p.used = true;
       if (def.hideWhenUsed) {
         p.hidden = true;
-        w.rt.propFlagsDirty = true;
+        touchProp(w, p);
       }
       if (p.use) runActions(w, p.use, u.id);
     }
@@ -173,7 +182,7 @@ function useProp(w: World, u: Unit, p: Prop): void {
     }
     u.carrying = p.id;
     p.solid = false;
-    w.rt.propFlagsDirty = true;
+    touchProp(w, p);
     w.emit({ e: "prop", prop: p.id, change: "use" });
     return;
   }
@@ -200,7 +209,7 @@ function findKey(w: World, u: Unit, tag: string): string | null {
 /** A bed or a fire within reach? The game can only be saved there. */
 export function nearRest(w: World): boolean {
   const u = playerOf(w);
-  for (const p of w.zone.props) {
+  for (const p of propsNear(w.rt, u.x, u.y, USE_REACH * 2)) {
     if (!p.hidden && w.catalog.props[p.def].rest && propDistance(w, u, p) <= USE_REACH * 2) return true;
   }
   return false;
@@ -209,7 +218,7 @@ export function nearRest(w: World): boolean {
 /** Any bench within reach? The bag window shows the craft grid only then. */
 export function nearBench(w: World): boolean {
   const u = playerOf(w);
-  for (const p of w.zone.props) {
+  for (const p of propsNear(w.rt, u.x, u.y, USE_REACH * 2)) {
     if (w.catalog.props[p.def].bench && propDistance(w, u, p) <= USE_REACH * 2) return true;
   }
   return false;
@@ -219,15 +228,20 @@ export function nearBench(w: World): boolean {
 
 function footprintFree(w: World, p: Prop, cx: number, cy: number, self: number): boolean {
   const def = w.catalog.props[p.def];
+  // Everything pending first, then lift this one prop off the grid, look, and put it
+  // back. Only its own footprint is re-stamped: this runs on every push.
+  flushPropFlags(w.catalog, w.rt, w.zone);
+  const x1 = p.cx + def.w - 1;
+  const y1 = p.cy + def.h - 1;
   const wasSolid = p.solid;
   p.solid = false;
-  refreshPropFlags(w.catalog, w.rt, w.zone);
+  restampCells(w.catalog, w.rt, p.cx, p.cy, x1, y1);
   let ok = true;
   for (let y = cy; y < cy + def.h && ok; y++) {
     for (let x = cx; x < cx + def.w && ok; x++) ok = w.rt.grid.free(x, y, self);
   }
   p.solid = wasSolid;
-  refreshPropFlags(w.catalog, w.rt, w.zone);
+  restampCells(w.catalog, w.rt, p.cx, p.cy, x1, y1);
   return ok;
 }
 
@@ -249,11 +263,9 @@ function putDown(w: World, u: Unit): void {
     w.emit({ e: "toast", text: "No room to put it down" });
     return;
   }
-  p.cx = cx;
-  p.cy = cy;
+  moveProp(w, p, cx, cy);
   p.solid = def.solid;
   u.carrying = 0;
-  w.rt.propFlagsDirty = true;
   w.emit({ e: "prop", prop: p.id, change: "push" });
 }
 
@@ -305,9 +317,7 @@ export function holdUse(w: World, u: Unit, mx: number, my: number): boolean {
     if (dir < 0) moveUnit(w, u, fx * CELL, fy * CELL);
     return true;
   }
-  p.cx = nx;
-  p.cy = ny;
-  w.rt.propFlagsDirty = true;
+  moveProp(w, p, nx, ny);
   spendEnergy(u, PUSH_ENERGY);
   if (dir > 0) moveUnit(w, u, fx * CELL, fy * CELL);
   w.emit({ e: "prop", prop: p.id, change: "push" });
@@ -322,7 +332,7 @@ function pushableAhead(w: World, u: Unit): Prop | null {
   const py = u.y + fy * (CELL - 1);
   const cx = cellOf(px);
   const cy = cellOf(py);
-  for (const p of w.zone.props) {
+  for (const p of propsInCells(w.rt, cx, cy, cx, cy)) {
     if (p.hidden || !p.awake || !p.solid) continue;
     const def = w.catalog.props[p.def];
     if (!def.push) continue;
@@ -337,7 +347,7 @@ function pushableAhead(w: World, u: Unit): Prop | null {
 export function worldVerb(w: World, caster: Unit, verb: "repair" | "grow"): boolean {
   let best: Prop | null = null;
   let bestD = 2 * PX_PER_METRE;
-  for (const p of w.zone.props) {
+  for (const p of propsNear(w.rt, caster.x, caster.y, bestD)) {
     if (p.hidden || p.used || w.catalog.props[p.def].answers !== verb) continue;
     const d = propDistance(w, caster, p);
     if (d <= bestD) {
@@ -365,12 +375,12 @@ export function worldVerb(w: World, caster: Unit, verb: "repair" | "grow"): bool
 
 /** A bolt of `school` ended at (x,y): props that answer to that school switch on. */
 export function schoolTouch(w: World, school: School, x: number, y: number, from: number): void {
-  for (const p of w.zone.props) {
+  for (const p of propsNear(w.rt, x, y, SCHOOL_TOUCH)) {
     if (p.hidden || p.on) continue;
     const def = w.catalog.props[p.def];
     if (def.answers !== school) continue;
     const c = propCentre(w.catalog, p);
-    if (distance(x, y, c.x, c.y) > 14) continue;
+    if (distance(x, y, c.x, c.y) > SCHOOL_TOUCH) continue;
     p.on = true;
     p.used = true;
     if (p.use) runActions(w, p.use, from);

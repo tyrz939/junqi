@@ -15,7 +15,7 @@
 // barrels work"), runs `use` on press and `release` when it clears.
 
 import { cellOf } from "@/sim/grid";
-import { asPlayer, playersHere, type World } from "@/sim/runtime";
+import { asPlayer, playersHere, propsInCells, type World } from "@/sim/runtime";
 import type { PlayerState, Prop } from "@/sim/state";
 import { conditionsMet, runActions } from "@/sim/actions";
 import type { Rect } from "@/world/blueprint";
@@ -57,9 +57,12 @@ export function stepTriggers(w: World): void {
 }
 
 function stepPlates(w: World): void {
-  for (const p of w.zone.props) {
+  // The runtime keeps the plates apart (a handful per zone, in id order), so a zone
+  // without any pays nothing. Plates far from everyone still answer: a barrel left on
+  // one holds its gate open from the other side of the map.
+  for (const p of w.rt.plates) {
     const def = w.catalog.props[p.def];
-    if (!def.plate || p.hidden) continue;
+    if (p.hidden) continue;
     const pressed = plateCovered(w, p, def.w, def.h);
     if (pressed === p.on) continue;
     p.on = pressed;
@@ -78,14 +81,16 @@ function plateCovered(w: World, plate: Prop, pw: number, ph: number): boolean {
     const cy = cellOf(u.y);
     if (cx >= plate.cx && cy >= plate.cy && cx < plate.cx + pw && cy < plate.cy + ph) return true;
   }
-  for (const other of w.zone.props) {
+  for (const other of propsInCells(w.rt, plate.cx, plate.cy, plate.cx + pw - 1, plate.cy + ph - 1)) {
     if (other === plate || other.hidden) continue;
     const def = w.catalog.props[other.def];
     if (!def.push && !def.carry) continue;
-    if (w.zone.units.some((u) => u.carrying === other.id)) continue;
     const overlapX = other.cx < plate.cx + pw && other.cx + def.w > plate.cx;
     const overlapY = other.cy < plate.cy + ph && other.cy + def.h > plate.cy;
-    if (overlapX && overlapY) return true;
+    if (!overlapX || !overlapY) continue;
+    // In someone's arms it still has its old cell, and presses nothing.
+    if (w.zone.units.some((u) => u.carrying === other.id)) continue;
+    return true;
   }
   return false;
 }
