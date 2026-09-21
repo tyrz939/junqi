@@ -253,7 +253,9 @@ describe("doors into the dungeons", () => {
 
 describe("what Electric gives back to the county", () => {
   it("the longest dark roads get a relay box and a run of dead lamps, and sparking the box lights them for good", () => {
-    for (const seed of SEEDS) {
+    // On every seed, not most: this is the Factory's largest reward, and a county without it is a
+    // county where finding Electric changes nothing out of doors.
+    for (const seed of [...SEEDS, 11, 77, 404]) {
       const bp = county(seed);
       const boxes = bp.props.filter((p) => p.def === "relay_box");
       const lamps = bp.props.filter((p) => p.def === "lamp_run");

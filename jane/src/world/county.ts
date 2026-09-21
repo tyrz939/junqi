@@ -687,12 +687,17 @@ function relayRuns(k: Kit, lines: readonly (readonly [number, number])[][], lit:
   });
   runs.sort((a, b) => b.to - b.from - (a.to - a.from) || a.line - b.line || a.from - b.from);
 
-  runs.slice(0, RUNS).forEach((run, n) => {
+  // The box goes down FIRST, and it is tried at several points along the head of the run: the lit end
+  // of a dark stretch is usually the edge of a town or a yard, where the ground is already spoken for.
+  // Only once a box stands does its run get its lamps, so a county never carries a promise nothing keeps.
+  let placed = 0;
+  for (const run of runs) {
+    if (placed >= RUNS) break;
     const line = lines[run.line];
-    const lamps: string[] = [];
     const beside = (i: number, def: string, key: string): boolean => {
+      if (i < 0 || i >= line.length) return false;
       const [x, y] = line[i];
-      for (const dy of [-4, 4, -5, 5]) {
+      for (const dy of [-4, 4, -5, 5, -6, 6]) {
         if (k.solid(x, y + dy) || k.isClaimed(x, y + dy)) continue;
         const t = k.get(x, y + dy);
         if (t === Tile.Water || t === Tile.Road) continue;
@@ -701,26 +706,31 @@ function relayRuns(k: Kit, lines: readonly (readonly [number, number])[][], lit:
       }
       return false;
     };
-    for (let i = run.from + SPACING; i < run.to - 2; i += SPACING) {
-      const key = `lamp_run_${n}_${lamps.length}`;
+    const boxKey = `relay_${placed}`;
+    let at = -1;
+    for (let i = run.from; i <= Math.min(run.to - SPACING, run.from + SPACING) && at < 0; i += 4) {
+      if (beside(i, "relay_box", boxKey)) at = i;
+    }
+    if (at < 0) continue;
+    const lamps: string[] = [];
+    for (let i = at + SPACING; i < run.to - 2; i += SPACING) {
+      const key = `lamp_run_${placed}_${lamps.length}`;
       if (beside(i, "lamp_run", key)) lamps.push(key);
     }
-    if (lamps.length < 3) return;
-    // The box stands at the lit end of the run, where the working lamps stop.
-    const use: ActionList = lamps.map((key) => ({ do: "switch", prop: key, on: true }));
-    use.push({ do: "flag", flag: `lamps_${n}`, value: 1 });
-    use.push({ do: "toast", text: "It takes, and the next one takes, and it goes away down the road ahead of you." });
-    beside(Math.max(0, run.from - 2), "relay_box", `relay_${n}`);
-    const box = k.props.find((p) => p.key === `relay_${n}`);
-    if (box) {
-      box.use = use;
-      box.label = "A relay box";
-    } else {
-      // No room for the box: the lamps would be a promise nothing can keep, so take them out again.
-      for (const key of lamps) {
-        const at = k.props.findIndex((p) => p.key === key);
-        if (at >= 0) k.props.splice(at, 1);
+    const box = k.props.find((p) => p.key === boxKey)!;
+    if (lamps.length < 3) {
+      // Not a run, just a gap. Take the box back out rather than leave a switch for three lamps.
+      for (const key of [boxKey, ...lamps]) {
+        const idx = k.props.findIndex((p) => p.key === key);
+        if (idx >= 0) k.props.splice(idx, 1);
       }
+      continue;
     }
-  });
+    const use: ActionList = lamps.map((key) => ({ do: "switch", prop: key, on: true }));
+    use.push({ do: "flag", flag: `lamps_${placed}`, value: 1 });
+    use.push({ do: "toast", text: "It takes, and the next one takes, and it goes away down the road ahead of you." });
+    box.use = use;
+    box.label = "A relay box";
+    placed++;
+  }
 }
