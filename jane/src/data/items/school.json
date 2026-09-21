@@ -1,0 +1,6 @@
+{
+  "key_tower": {
+    "name": "Tower Key", "icon": "item_key_iron", "maxStack": 1, "usable": false, "cooldown": 1, "opens": "school_tower",
+    "description": "One key off a ring of forty. The fob says TOWER, and under it, in the same hand, DO NOT LEND."
+  }
+}

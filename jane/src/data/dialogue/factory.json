@@ -1,0 +1,104 @@
+{
+  "notice_factory": {
+    "speaker": "Works Plan",
+    "start": [{ "node": "read" }],
+    "nodes": {
+      "read": {
+        "lines": [
+          "GOLDSKIN MINING Co. WORKS. Loading bay, lockers and No. 1 line off this door. Time office off the line. Press hall and assembly beyond it.",
+          "The lamp runs are marked in red. All but one of them has been crossed out, and the crossings out are in the same hand as the plan."
+        ]
+      }
+    }
+  },
+  "notice_light": {
+    "speaker": "Notice",
+    "start": [{ "node": "read" }],
+    "nodes": {
+      "read": {
+        "lines": [
+          "SAFETY. No man is to work on the line except in good light.",
+          "Under it, in pencil, by somebody who had a rule of his own: they only mind what they can see. Do not work in good light."
+        ]
+      }
+    }
+  },
+  "notice_cards": {
+    "speaker": "Card Rack",
+    "start": [{ "node": "read" }],
+    "nodes": {
+      "read": {
+        "lines": [
+          "CLOCK IN. CLOCK OUT. Cards are to be left in the rack at all times.",
+          "Every card in the rack is stamped in for today and not one of them is stamped out. The date is right."
+        ]
+      }
+    }
+  },
+  "notice_press": {
+    "speaker": "Notice",
+    "start": [{ "node": "read" }],
+    "nodes": {
+      "read": {
+        "lines": [
+          "CALL BOXES. Press for a hauler. Do not press twice.",
+          "A hauler walks the shortest way it knows to the box that called it. It does not know which of these walls are new."
+        ]
+      }
+    }
+  },
+  "factory_stove": {
+    "speaker": "Time Office",
+    "start": [{ "node": "office" }],
+    "nodes": {
+      "office": {
+        "lines": [
+          "TIME OFFICE. The stove is in and there is a kettle on the hob. The window onto the yard has been boarded from this side.",
+          "The door has no handle on the outside. If it goes badly out there, this is where you will wake."
+        ],
+        "actions": [{ "do": "rest" }]
+      }
+    }
+  },
+  "orb_spark": {
+    "speaker": "Glass Orb",
+    "start": [{ "when": [{ "if": "knows", "spell": "spark" }], "node": "spent" }, { "node": "read" }],
+    "nodes": {
+      "read": {
+        "lines": [
+          "A glass orb on a kitchen stand, wired into the generator with two lengths of bell wire. The stand is the one from the study at home.",
+          "Holding it is like a door handle in winter, and it goes on doing it for a while after you let go."
+        ],
+        "actions": [{ "do": "learn", "spell": "spark" }]
+      },
+      "spent": {
+        "lines": ["The orb is clear and the wire is warm. The stand has not moved."]
+      }
+    }
+  },
+  "foremans_diary": {
+    "speaker": "The Foreman's Diary",
+    "start": [
+      { "when": [{ "if": "flag", "flag": "factory_cleared" }], "node": "sums" },
+      { "when": [{ "if": "flag", "flag": "factory_power" }], "node": "tuesday_late" },
+      { "node": "monday" }
+    ],
+    "nodes": {
+      "monday": {
+        "lines": [
+          "Monday. Had the lamps taken out of No. 1 line, run by run. The men say it is dark and I say it is quieter, and we are both right.",
+          "Tuesday. Had the lamps out of the press hall as well. The night man will not walk past the loading bay now, so I have taken his card out of the rack."
+        ]
+      },
+      "tuesday_late": {
+        "lines": [
+          "Tuesday, later. The generator is warm and I have not started it. There is a glass thing wired into it that nobody ordered and that is on no list I hold.",
+          "I have written to the office twice about it. The second letter came back with my own handwriting corrected."
+        ]
+      },
+      "sums": {
+        "lines": ["The rest of the diary is sums. Nine, fourteen, nine, fourteen, and then a column that does not add up to anything."]
+      }
+    }
+  }
+}

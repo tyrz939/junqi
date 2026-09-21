@@ -1,0 +1,511 @@
+{
+  "id": "school",
+  "name": "Castle School",
+  "phase": 6,
+  "tiles": { "floor": "SchoolFloor", "wall": "SchoolWall", "alt": [] },
+  "indoor": true,
+  "ambient": 0.3,
+  "lattice": { "cols": 6, "rows": 5 },
+  "givenVerbs": ["icebolt", "repair", "explosion", "grow", "spark", "fireball"],
+  "givenKeys": [],
+  "states": [{ "id": "period", "values": ["lessons", "break"], "initial": "lessons", "flag": "school_break" }],
+  "nodes": [
+    {
+      "id": "boiler", "kind": "entrance", "order": 0, "critical": true, "pool": "school.boiler", "heat": 0.3,
+      "holds": [
+        { "socket": "exit:main", "prop": "door", "to": { "zone": "county", "mark": "school_mouth" }, "label": "The yard door" },
+        { "socket": "notice:sign", "prop": "sign", "talk": "school_boiler", "label": "A notice" },
+        { "socket": "chest:main", "loot": [{ "item": "wood", "qty": 2 }, { "item": "coal", "qty": 2 }], "label": "The caretaker's bin" }
+      ],
+      "binds": [
+        { "from": "exit:main", "as": "school_exit_door", "what": "prop" },
+        { "from": "notice:sign", "as": "school_boiler_notice", "what": "prop" },
+        { "from": "chest:main", "as": "school_boiler_chest", "what": "prop" },
+        { "from": "entry", "as": "entry", "what": "mark" },
+        { "from": "boiler", "as": "boiler", "what": "mark" },
+        { "from": "room", "as": "school_boiler", "what": "rect" }
+      ],
+      "demands": [], "grants": []
+    },
+    {
+      "id": "hall", "kind": "hub", "order": 1, "critical": true, "pool": "school.hall", "heat": 0,
+      "holds": [
+        {
+          "socket": "lever:bell", "prop": "bell_rope", "label": "The bell rope", "controls": "period",
+          "use": [
+            {
+              "do": "if",
+              "when": [
+                { "if": "flag", "flag": "school_lesson_woodwork" },
+                { "if": "flag", "flag": "school_lesson_chemistry" },
+                { "if": "flag", "flag": "school_lesson_botany" },
+                { "if": "flag", "flag": "school_lesson_physics" },
+                { "if": "flag", "flag": "school_lesson_domestic" },
+                { "if": "flag", "flag": "school_lesson_ice" },
+                { "if": "hasItem", "item": "key_tower" }
+              ],
+              "then": [
+                { "do": "flag", "flag": "school_tower_open" },
+                { "do": "shake", "amount": 3 },
+                { "do": "toast", "text": "Nine. It goes on ringing after she has let go of the rope, and the tower stair is open." }
+              ],
+              "else": [
+                { "do": "toast", "text": "It rings the period and nothing else. The tower is locked and there are clocks in this building still going." }
+              ]
+            }
+          ],
+          "becomes": {
+            "break": [
+              { "do": "despawn", "unit": "school_corridor_master_a" },
+              { "do": "despawn", "unit": "school_corridor_master_b" },
+              { "do": "despawn", "unit": "school_top_master_a" },
+              { "do": "despawn", "unit": "school_top_master_b" },
+              { "do": "hide", "prop": "school_corridor_lamp_a" },
+              { "do": "hide", "prop": "school_corridor_lamp_b" },
+              { "do": "hide", "prop": "school_top_lamp_a" },
+              { "do": "hide", "prop": "school_top_lamp_b" },
+              { "do": "toast", "text": "Break. The classroom doors go over on their springs and the corridor lamps go out behind them." }
+            ],
+            "lessons": [
+              { "do": "spawn", "unit": "school_corridor_master_a", "def": "master", "at": "school_corridor_post_a" },
+              { "do": "spawn", "unit": "school_corridor_master_b", "def": "master", "at": "school_corridor_post_b" },
+              { "do": "spawn", "unit": "school_top_master_a", "def": "master", "at": "school_top_post_a" },
+              { "do": "spawn", "unit": "school_top_master_b", "def": "master", "at": "school_top_post_b" },
+              { "do": "show", "prop": "school_corridor_lamp_a" },
+              { "do": "show", "prop": "school_corridor_lamp_b" },
+              { "do": "show", "prop": "school_top_lamp_a" },
+              { "do": "show", "prop": "school_top_lamp_b" },
+              { "do": "toast", "text": "Lessons. The corridor lamps come up, and there is somebody walking in both corridors." }
+            ]
+          }
+        },
+        { "socket": "notice:main", "prop": "notice", "talk": "notice_school", "label": "The timetable" },
+        { "socket": "prop:pegs", "prop": "school_pegs", "talk": "school_pegs", "label": "The pegs" },
+        { "socket": "jar:main", "prop": "jar" }
+      ],
+      "binds": [
+        { "from": "lever:bell", "as": "school_bell_rope", "what": "prop" },
+        { "from": "notice:main", "as": "school_timetable", "what": "prop" },
+        { "from": "prop:pegs", "as": "school_hall_pegs", "what": "prop" },
+        { "from": "jar:main", "as": "school_hall_jar", "what": "prop" },
+        { "from": "room", "as": "school_hall", "what": "rect" }
+      ],
+      "demands": [], "grants": [{ "state": "period" }, { "flag": "school_tower_open" }]
+    },
+    {
+      "id": "sick_bay", "kind": "rest", "order": 2, "critical": true, "pool": "school.sick_bay", "heat": 0,
+      "holds": [
+        { "socket": "rest:day", "prop": "bed", "talk": "school_bed_day", "label": "The near bed" },
+        { "socket": "rest:bell", "prop": "sickbay_bed_bell", "talk": "school_bed_bell", "label": "The far bed" },
+        { "socket": "prop:hearth", "prop": "campfire", "label": "The grate" },
+        { "socket": "chest:main", "loot": [{ "item": "wood", "qty": 2 }, { "item": "small_water", "qty": 3 }, { "item": "apple", "qty": 2 }], "label": "The medicine cupboard" },
+        { "socket": "page:main", "prop": "leaf_page" }
+      ],
+      "binds": [
+        { "from": "rest:day", "as": "school_bed", "what": "prop" },
+        { "from": "rest:bell", "as": "school_bell_bed", "what": "prop" },
+        { "from": "prop:hearth", "as": "school_grate", "what": "prop" },
+        { "from": "chest:main", "as": "school_sickbay_chest", "what": "prop" },
+        { "from": "page:main", "as": "school_sickbay_page", "what": "prop" },
+        { "from": "room", "as": "school_sick_bay", "what": "rect" }
+      ],
+      "demands": [], "grants": []
+    },
+    {
+      "id": "corridor", "kind": "miniboss", "order": 3, "critical": true, "pool": "school.corridor", "heat": 0.5,
+      "holds": [
+        {
+          "socket": "boss:main", "unit": "caretaker",
+          "patrol": [
+            { "mark": "loop1", "dwell": 180 }, { "mark": "loop2" }, { "mark": "loop3", "dwell": 240 },
+            { "mark": "loop4" }, { "mark": "loop5", "dwell": 180 }, { "mark": "loop6" }
+          ]
+        },
+        { "socket": "unit:master_a", "unit": "master" },
+        { "socket": "unit:master_b", "unit": "master" },
+        { "socket": "prop:lamp_a", "prop": "torch" },
+        { "socket": "prop:lamp_b", "prop": "torch" },
+        { "socket": "prop:pegs", "prop": "school_pegs", "talk": "school_pegs", "label": "The pegs" }
+      ],
+      "binds": [
+        { "from": "boss:main", "as": "caretaker", "what": "unit" },
+        { "from": "unit:master_a", "as": "school_corridor_master_a", "what": "unit" },
+        { "from": "unit:master_b", "as": "school_corridor_master_b", "what": "unit" },
+        { "from": "prop:lamp_a", "as": "school_corridor_lamp_a", "what": "prop" },
+        { "from": "prop:lamp_b", "as": "school_corridor_lamp_b", "what": "prop" },
+        { "from": "prop:pegs", "as": "school_corridor_pegs", "what": "prop" },
+        { "from": "post_a", "as": "school_corridor_post_a", "what": "mark" },
+        { "from": "post_b", "as": "school_corridor_post_b", "what": "mark" },
+        { "from": "dark", "as": "school_caretaker_dark", "what": "mark" },
+        { "from": "room", "as": "school_corridor", "what": "rect" }
+      ],
+      "demands": [], "grants": [{ "key": "school_tower" }]
+    },
+    {
+      "id": "top_corridor", "kind": "fight", "order": 3, "critical": true, "pool": "school.top_corridor", "heat": 0.4,
+      "holds": [
+        { "socket": "unit:master_a", "unit": "master" },
+        { "socket": "unit:master_b", "unit": "master" },
+        { "socket": "prop:lamp_a", "prop": "torch" },
+        { "socket": "prop:lamp_b", "prop": "torch" },
+        { "socket": "jar:main", "prop": "jar" }
+      ],
+      "binds": [
+        { "from": "unit:master_a", "as": "school_top_master_a", "what": "unit" },
+        { "from": "unit:master_b", "as": "school_top_master_b", "what": "unit" },
+        { "from": "prop:lamp_a", "as": "school_top_lamp_a", "what": "prop" },
+        { "from": "prop:lamp_b", "as": "school_top_lamp_b", "what": "prop" },
+        { "from": "jar:main", "as": "school_top_jar", "what": "prop" },
+        { "from": "post_a", "as": "school_top_post_a", "what": "mark" },
+        { "from": "post_b", "as": "school_top_post_b", "what": "mark" },
+        { "from": "room", "as": "school_top_corridor", "what": "rect" }
+      ],
+      "demands": [], "grants": []
+    },
+    {
+      "id": "woodwork", "kind": "puzzle", "order": 4, "critical": true, "pool": "school.woodwork", "heat": 0.8,
+      "holds": [
+        {
+          "socket": "verbprop:steps", "prop": "broken_steps", "needs": [{ "item": "wood", "qty": 2 }], "label": "A run of broken benches",
+          "use": [
+            { "do": "show", "prop": "@prop:clock" },
+            { "do": "toast", "text": "The benches take her weight in a row, and the far end of the room is out of the water." }
+          ]
+        },
+        { "socket": "prop:clock", "prop": "clock_stopped", "talk": "school_clock", "hidden": true, "label": "The woodwork clock", "use": [{ "do": "flag", "flag": "school_lesson_woodwork" }, { "do": "toast", "text": "The hands stop where they are. One." }] },
+        { "socket": "chest:main", "loot": [{ "item": "wood", "qty": 2 }, { "item": "iron", "qty": 2 }], "label": "The timber rack" },
+        { "socket": "jar:main", "prop": "jar" }
+      ],
+      "binds": [
+        { "from": "verbprop:steps", "as": "school_woodwork_steps", "what": "prop" },
+        { "from": "prop:clock", "as": "school_clock_woodwork", "what": "prop" },
+        { "from": "chest:main", "as": "school_woodwork_chest", "what": "prop" },
+        { "from": "jar:main", "as": "school_woodwork_jar", "what": "prop" },
+        { "from": "room", "as": "school_woodwork", "what": "rect" }
+      ],
+      "demands": ["repair"], "grants": [{ "flag": "school_lesson_woodwork" }]
+    },
+    {
+      "id": "chemistry", "kind": "puzzle", "order": 4, "critical": true, "pool": "school.chemistry", "heat": 0.8,
+      "holds": [
+        {
+          "socket": "verbprop:case", "prop": "cracked_case", "label": "A sealed fume cupboard",
+          "use": [
+            { "do": "hide", "prop": "@self" },
+            { "do": "show", "prop": "@chest:main" },
+            { "do": "show", "prop": "@prop:clock" },
+            { "do": "toast", "text": "The cupboard goes out in one piece. Nothing on the shelf behind it is labelled." }
+          ]
+        },
+        { "socket": "chest:main", "hidden": true, "loot": [{ "item": "gold_dust", "qty": 3 }, { "item": "small_water", "qty": 2 }], "label": "The back of the cupboard" },
+        { "socket": "prop:clock", "prop": "clock_stopped", "talk": "school_clock", "hidden": true, "label": "The chemistry clock", "use": [{ "do": "flag", "flag": "school_lesson_chemistry" }, { "do": "toast", "text": "The hands stop where they are. Two." }] },
+        { "socket": "page:main", "prop": "leaf_page" }
+      ],
+      "binds": [
+        { "from": "verbprop:case", "as": "school_chemistry_case", "what": "prop" },
+        { "from": "prop:clock", "as": "school_clock_chemistry", "what": "prop" },
+        { "from": "chest:main", "as": "school_chemistry_chest", "what": "prop" },
+        { "from": "page:main", "as": "school_chemistry_page", "what": "prop" },
+        { "from": "room", "as": "school_chemistry", "what": "rect" }
+      ],
+      "demands": ["explosion"], "grants": [{ "flag": "school_lesson_chemistry" }]
+    },
+    {
+      "id": "botany", "kind": "puzzle", "order": 4, "critical": true, "pool": "school.botany", "heat": 0.7,
+      "holds": [
+        {
+          "socket": "verbprop:vine", "prop": "vine_root", "label": "A vine at the gap",
+          "use": [
+            { "do": "fill", "rect": "@gap", "tile": 25 },
+            { "do": "show", "prop": "@prop:clock" },
+            { "do": "toast", "text": "It crosses the gap in one go and holds. The glasshouse smells of a hot afternoon." }
+          ]
+        },
+        { "socket": "prop:bud_a", "prop": "bud" },
+        { "socket": "prop:bud_b", "prop": "bud" },
+        { "socket": "prop:sun", "prop": "forest_sunbeam" },
+        { "socket": "prop:clock", "prop": "clock_stopped", "talk": "school_clock", "hidden": true, "label": "The glasshouse clock", "use": [{ "do": "flag", "flag": "school_lesson_botany" }, { "do": "toast", "text": "The hands stop where they are. Three." }] },
+        { "socket": "jar:main", "prop": "jar" }
+      ],
+      "binds": [
+        { "from": "verbprop:vine", "as": "school_botany_vine", "what": "prop" },
+        { "from": "prop:bud_a", "as": "school_botany_bud_a", "what": "prop" },
+        { "from": "prop:bud_b", "as": "school_botany_bud_b", "what": "prop" },
+        { "from": "prop:sun", "as": "school_botany_sun", "what": "prop" },
+        { "from": "prop:clock", "as": "school_clock_botany", "what": "prop" },
+        { "from": "jar:main", "as": "school_botany_jar", "what": "prop" },
+        { "from": "gap", "as": "school_botany_gap", "what": "rect" },
+        { "from": "room", "as": "school_botany", "what": "rect" }
+      ],
+      "demands": ["grow"], "grants": [{ "flag": "school_lesson_botany" }]
+    },
+    {
+      "id": "physics", "kind": "puzzle", "order": 4, "critical": true, "pool": "school.physics", "heat": 0.9,
+      "holds": [
+        {
+          "socket": "verbprop:fuse", "prop": "school_fuse", "label": "A board of dead sockets",
+          "use": [
+            { "do": "show", "prop": "@prop:lamp_a" },
+            { "do": "show", "prop": "@prop:lamp_b" },
+            { "do": "show", "prop": "@prop:clock" },
+            { "do": "toast", "text": "The board takes it. Two lamps come up at the far end and stay up." }
+          ]
+        },
+        { "socket": "prop:lamp_a", "prop": "torch", "hidden": true },
+        { "socket": "prop:lamp_b", "prop": "torch", "hidden": true },
+        { "socket": "prop:clock", "prop": "clock_stopped", "talk": "school_clock", "hidden": true, "label": "The physics clock", "use": [{ "do": "flag", "flag": "school_lesson_physics" }, { "do": "toast", "text": "The hands stop where they are. Four." }] },
+        { "socket": "page:main", "prop": "leaf_page" }
+      ],
+      "binds": [
+        { "from": "verbprop:fuse", "as": "school_physics_fuse", "what": "prop" },
+        { "from": "prop:lamp_a", "as": "school_physics_lamp_a", "what": "prop" },
+        { "from": "prop:lamp_b", "as": "school_physics_lamp_b", "what": "prop" },
+        { "from": "prop:clock", "as": "school_clock_physics", "what": "prop" },
+        { "from": "page:main", "as": "school_physics_page", "what": "prop" },
+        { "from": "room", "as": "school_physics", "what": "rect" }
+      ],
+      "demands": ["spark"], "grants": [{ "flag": "school_lesson_physics" }]
+    },
+    {
+      "id": "domestic", "kind": "puzzle", "order": 4, "critical": true, "pool": "school.domestic", "heat": 0.9,
+      "holds": [
+        {
+          "socket": "verbprop:range", "prop": "cold_hearth", "label": "A cold range",
+          "use": [
+            { "do": "show", "prop": "@prop:clock" },
+            { "do": "toast", "text": "The range takes. The plate on top is warm inside a minute, which is not how long it should take." }
+          ]
+        },
+        { "socket": "prop:brazier_a", "prop": "brazier", "label": "A cold range" },
+        { "socket": "prop:brazier_b", "prop": "brazier", "label": "A cold range" },
+        { "socket": "prop:clock", "prop": "clock_stopped", "talk": "school_clock", "hidden": true, "label": "The kitchen clock", "use": [{ "do": "flag", "flag": "school_lesson_domestic" }, { "do": "toast", "text": "The hands stop where they are. Five." }] },
+        { "socket": "jar:main", "prop": "jar" }
+      ],
+      "binds": [
+        { "from": "verbprop:range", "as": "school_domestic_range", "what": "prop" },
+        { "from": "prop:brazier_a", "as": "school_domestic_brazier_a", "what": "prop" },
+        { "from": "prop:brazier_b", "as": "school_domestic_brazier_b", "what": "prop" },
+        { "from": "prop:clock", "as": "school_clock_domestic", "what": "prop" },
+        { "from": "jar:main", "as": "school_domestic_jar", "what": "prop" },
+        { "from": "room", "as": "school_domestic", "what": "rect" }
+      ],
+      "demands": ["fireball"], "grants": [{ "flag": "school_lesson_domestic" }]
+    },
+    {
+      "id": "ice_house", "kind": "puzzle", "order": 4, "critical": true, "pool": "school.ice_house", "heat": 0.7,
+      "holds": [
+        { "socket": "prop:torch_a", "prop": "torch_blue", "label": "A cold torch", "use": [{ "do": "flag", "flag": "school_ice_a" }] },
+        { "socket": "prop:torch_b", "prop": "torch_blue", "label": "A cold torch", "use": [{ "do": "flag", "flag": "school_ice_b" }] },
+        { "socket": "prop:clock", "prop": "clock_stopped", "talk": "school_clock", "locked": true, "label": "The ice house clock", "use": [{ "do": "flag", "flag": "school_lesson_ice" }, { "do": "toast", "text": "The hands stop where they are. Six." }] },
+        { "socket": "chest:main", "loot": [{ "item": "potion_winterbite", "qty": 1 }, { "item": "gold_bar", "qty": 2 }], "label": "The ice house locker" }
+      ],
+      "binds": [
+        { "from": "prop:torch_a", "as": "school_ice_torch_a", "what": "prop" },
+        { "from": "prop:torch_b", "as": "school_ice_torch_b", "what": "prop" },
+        { "from": "prop:clock", "as": "school_clock_ice", "what": "prop" },
+        { "from": "chest:main", "as": "school_ice_chest", "what": "prop" },
+        { "from": "floor", "as": "school_ice_floor", "what": "rect" },
+        { "from": "room", "as": "school_ice_house", "what": "rect" }
+      ],
+      "demands": ["icebolt"], "grants": [{ "flag": "school_lesson_ice" }],
+      "triggers": [
+        {
+          "id": "both_cold", "mode": "while", "once": true,
+          "when": [{ "if": "flag", "flag": "school_ice_a" }, { "if": "flag", "flag": "school_ice_b" }],
+          "actions": [
+            { "do": "fill", "rect": "@floor", "tile": 32 },
+            { "do": "unlock", "prop": "@prop:clock" },
+            { "do": "toast", "text": "Both torches are burning cold. There is a floor under the water, and it has been swept." }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "tower", "kind": "boss", "order": 5, "critical": true, "pool": "school.tower", "heat": 0,
+      "holds": [
+        { "socket": "boss:main", "unit": "ringer" },
+        { "socket": "prop:bell", "prop": "school_bell", "label": "The bell" },
+        { "socket": "prop:brazier_a", "prop": "brazier", "on": true, "label": "A belfry lamp" },
+        { "socket": "prop:brazier_b", "prop": "brazier", "on": true, "label": "A belfry lamp" },
+        { "socket": "prop:cold_a", "prop": "torch_blue", "label": "A cold torch" },
+        { "socket": "prop:cold_b", "prop": "torch_blue", "label": "A cold torch" },
+        { "socket": "prop:moon_a", "prop": "forest_moonbeam", "label": "Moonlight" },
+        { "socket": "prop:moon_b", "prop": "forest_moonbeam", "label": "Moonlight" },
+        {
+          "socket": "prop:bud_a", "prop": "bud", "hidden": true, "label": "A bud in the window",
+          "use": [
+            { "do": "fill", "rect": "@cover_a", "tile": 31 },
+            { "do": "toast", "text": "It opens across the window and stands there like a hedge." }
+          ]
+        },
+        {
+          "socket": "prop:bud_b", "prop": "bud", "hidden": true, "label": "A bud in the window",
+          "use": [
+            { "do": "fill", "rect": "@cover_b", "tile": 31 },
+            { "do": "toast", "text": "The second one opens and the floor under the window is out of the moonlight." }
+          ]
+        },
+        {
+          "socket": "verbprop:gear", "prop": "broken_hoist", "needs": [{ "item": "wood", "qty": 2 }], "label": "The winding gear",
+          "use": [{ "do": "strike", "rect": "@inner", "amount": 220, "school": "blast", "effect": "staggered", "hitsFriends": false }]
+        },
+        {
+          "socket": "verbprop:fuse", "prop": "school_fuse", "label": "A board of dead sockets",
+          "use": [
+            { "do": "switch", "prop": "@prop:brazier_a", "on": true },
+            { "do": "switch", "prop": "@prop:brazier_b", "on": true },
+            { "do": "toast", "text": "The lamps come back on their own circuit." }
+          ]
+        },
+        {
+          "socket": "verbprop:case", "prop": "cracked_case", "label": "The ringers' cupboard",
+          "use": [
+            { "do": "hide", "prop": "@self" },
+            { "do": "show", "prop": "@chest:ropes" },
+            { "do": "toast", "text": "Ropes, chalk and a tin of boiled sweets. The tin is the only thing in the room that has been opened lately." }
+          ]
+        },
+        { "socket": "chest:ropes", "hidden": true, "loot": [{ "item": "potion_lifesteal", "qty": 3 }, { "item": "small_water", "qty": 3 }], "label": "A box under the frame" }
+      ],
+      "binds": [
+        { "from": "boss:main", "as": "ringer", "what": "unit" },
+        { "from": "prop:bell", "as": "school_belfry_bell", "what": "prop" },
+        { "from": "prop:brazier_a", "as": "school_belfry_brazier_a", "what": "prop" },
+        { "from": "prop:brazier_b", "as": "school_belfry_brazier_b", "what": "prop" },
+        { "from": "prop:cold_a", "as": "school_belfry_cold_a", "what": "prop" },
+        { "from": "prop:cold_b", "as": "school_belfry_cold_b", "what": "prop" },
+        { "from": "prop:moon_a", "as": "school_belfry_moon_a", "what": "prop" },
+        { "from": "prop:moon_b", "as": "school_belfry_moon_b", "what": "prop" },
+        { "from": "prop:bud_a", "as": "school_belfry_bud_a", "what": "prop" },
+        { "from": "prop:bud_b", "as": "school_belfry_bud_b", "what": "prop" },
+        { "from": "verbprop:gear", "as": "school_belfry_gear", "what": "prop" },
+        { "from": "verbprop:fuse", "as": "school_belfry_fuse", "what": "prop" },
+        { "from": "verbprop:case", "as": "school_belfry_case", "what": "prop" },
+        { "from": "chest:ropes", "as": "school_belfry_chest", "what": "prop" },
+        { "from": "shade_a", "as": "school_belfry_shade_a", "what": "mark" },
+        { "from": "shade_b", "as": "school_belfry_shade_b", "what": "mark" },
+        { "from": "shade_c", "as": "school_belfry_shade_c", "what": "mark" },
+        { "from": "inner", "as": "school_belfry", "what": "rect" },
+        { "from": "cover_a", "as": "school_belfry_cover_a", "what": "rect" },
+        { "from": "cover_b", "as": "school_belfry_cover_b", "what": "rect" },
+        { "from": "room", "as": "school_tower", "what": "rect" }
+      ],
+      "demands": [], "grants": [{ "flag": "school_cleared" }]
+    },
+    {
+      "id": "top_room", "kind": "reward", "order": 6, "critical": true, "pool": "school.top_room", "heat": 0,
+      "holds": [
+        { "socket": "prop:register", "prop": "school_register", "talk": "school_register", "label": "The register" },
+        { "socket": "jar:big", "prop": "jar_big" },
+        { "socket": "chest:main", "prop": "boss_chest", "loot": [{ "item": "gold_bar", "qty": 6 }, { "item": "potion_lifesteal", "qty": 3 }], "label": "The headmaster's desk" }
+      ],
+      "binds": [
+        { "from": "prop:register", "as": "school_register_book", "what": "prop" },
+        { "from": "jar:big", "as": "school_big_jar", "what": "prop" },
+        { "from": "chest:main", "as": "school_reward_chest", "what": "prop" },
+        { "from": "room", "as": "school_top_room", "what": "rect" }
+      ],
+      "demands": [], "grants": []
+    },
+    {
+      "id": "staff_room", "kind": "side", "order": 3, "critical": false, "pool": "school.staff_room", "heat": 0.4,
+      "holds": [
+        { "socket": "page:main", "prop": "leaf_page" },
+        { "socket": "chest:main", "loot": [{ "item": "apple", "qty": 3 }, { "item": "gold_dust", "qty": 2 }], "label": "A tin on the mantel" },
+        { "socket": "prop:pegs", "prop": "school_pegs", "talk": "school_pegs", "label": "The pegs" }
+      ],
+      "binds": [
+        { "from": "page:main", "as": "school_staff_page", "what": "prop" },
+        { "from": "room", "as": "school_staff_room", "what": "rect" }
+      ],
+      "demands": [], "grants": []
+    },
+    {
+      "id": "lost_property", "kind": "side", "order": 3, "critical": false, "pool": "school.lost_property", "heat": 0.2,
+      "holds": [
+        { "socket": "jar:a", "prop": "jar" },
+        { "socket": "jar:b", "prop": "jar" },
+        { "socket": "prop:pegs", "prop": "school_pegs", "talk": "school_pegs", "label": "The pegs" }
+      ],
+      "binds": [{ "from": "room", "as": "school_lost_property", "what": "rect" }],
+      "demands": [], "grants": []
+    }
+  ],
+  "edges": [
+    { "from": "boiler", "to": "hall", "kind": { "t": "open" } },
+    { "from": "hall", "to": "sick_bay", "kind": { "t": "open" } },
+    { "from": "hall", "to": "corridor", "kind": { "t": "open" } },
+    { "from": "hall", "to": "top_corridor", "kind": { "t": "open" } },
+    {
+      "from": "corridor", "to": "woodwork",
+      "kind": { "t": "state", "var": "period", "is": "lessons", "gateAs": "school_door_woodwork", "label": "WOODWORK" }
+    },
+    {
+      "from": "corridor", "to": "chemistry",
+      "kind": { "t": "state", "var": "period", "is": "lessons", "gateAs": "school_door_chemistry", "label": "CHEMISTRY" }
+    },
+    {
+      "from": "corridor", "to": "physics",
+      "kind": { "t": "state", "var": "period", "is": "break", "gateAs": "school_door_physics", "label": "PHYSICS" }
+    },
+    {
+      "from": "corridor", "to": "lost_property",
+      "kind": { "t": "state", "var": "period", "is": "break", "gateAs": "school_door_lost", "label": "LOST PROPERTY" }
+    },
+    {
+      "from": "top_corridor", "to": "botany",
+      "kind": { "t": "state", "var": "period", "is": "lessons", "gateAs": "school_door_botany", "label": "BOTANY" }
+    },
+    {
+      "from": "top_corridor", "to": "domestic",
+      "kind": { "t": "state", "var": "period", "is": "break", "gateAs": "school_door_domestic", "label": "DOMESTIC SCIENCE" }
+    },
+    {
+      "from": "top_corridor", "to": "ice_house",
+      "kind": { "t": "state", "var": "period", "is": "break", "gateAs": "school_door_ice", "label": "THE ICE HOUSE" }
+    },
+    { "from": "top_corridor", "to": "staff_room", "kind": { "t": "open" } },
+    {
+      "from": "hall", "to": "tower",
+      "kind": { "t": "oneway", "how": "opens_on", "flag": "school_tower_open", "gateAs": "school_tower_door" },
+      "also": [{ "t": "lockin", "toast": "The stair door goes to behind her. Above, something takes up the slack in the rope." }]
+    },
+    { "from": "tower", "to": "top_room", "kind": { "t": "oneway", "how": "opens_on", "flag": "school_cleared", "gateAs": "school_top_door" } },
+    {
+      "from": "top_room", "to": "sick_bay", "shortcut": true,
+      "kind": { "t": "oneway", "how": "opens_on", "flag": "school_cleared", "gateAs": "school_back_stair" }
+    }
+  ],
+  "budget": {
+    "sideRooms": [0, 2],
+    "critPathCells": [1150, 2800],
+    "restAt": [0.02, 0.22],
+    "restToBossCells": 420,
+    "baseHeat": 12,
+    "enemies": { "bat": 1, "wall_spider": 2, "skeleton_guard": 3, "soldier": 3, "shade": 3, "master": 4 }
+  },
+  "dress": {
+    "torch": { "props": ["torch"], "chance": 0.8 },
+    "desk": { "props": ["table"], "chance": 1 },
+    "pile": { "props": ["crate", "barrel"], "chance": 0.5 },
+    "pillar": { "props": ["pillar"], "chance": 1 },
+    "shelf": { "props": ["shelf"], "chance": 1 }
+  },
+  "fallback": [
+    { "node": "boiler", "template": "school.boiler.a", "bay": [0, 0], "turn": 180, "mirror": true },
+    { "node": "hall", "template": "school.hall.a", "bay": [1, 1], "turn": 180, "mirror": true },
+    { "node": "corridor", "template": "school.corridor.a", "bay": [3, 1], "turn": 180, "mirror": false },
+    { "node": "top_corridor", "template": "school.top_corridor.a", "bay": [0, 2], "turn": 180, "mirror": true },
+    { "node": "tower", "template": "school.tower.a", "bay": [2, 2], "turn": 180, "mirror": false },
+    { "node": "sick_bay", "template": "school.sick_bay.a", "bay": [2, 0], "turn": 0, "mirror": false },
+    { "node": "woodwork", "template": "school.woodwork.a", "bay": [5, 1], "turn": 180, "mirror": false },
+    { "node": "chemistry", "template": "school.chemistry.a", "bay": [4, 2], "turn": 180, "mirror": false },
+    { "node": "botany", "template": "school.botany.a", "bay": [0, 1], "turn": 0, "mirror": false },
+    { "node": "physics", "template": "school.physics.a", "bay": [3, 0], "turn": 0, "mirror": false },
+    { "node": "domestic", "template": "school.domestic.a", "bay": [2, 3], "turn": 180, "mirror": false },
+    { "node": "ice_house", "template": "school.ice_house.a", "bay": [0, 4], "turn": 0, "mirror": false },
+    { "node": "top_room", "template": "school.top_room.a", "bay": [5, 0], "turn": 180, "mirror": false },
+    { "node": "staff_room", "template": "school.staff_room.a", "bay": [1, 0], "turn": 0, "mirror": false },
+    { "node": "lost_property", "template": "school.lost_property.a", "bay": [4, 0], "turn": 180, "mirror": false }
+  ]
+}

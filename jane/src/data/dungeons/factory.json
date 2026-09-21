@@ -1,0 +1,383 @@
+{
+  "id": "factory",
+  "name": "Goldskin Works",
+  "phase": 4,
+  "tiles": { "floor": "WorksFloor", "wall": "WorksWall", "alt": [] },
+  "indoor": true,
+  "ambient": 0.18,
+  "lattice": { "cols": 6, "rows": 4 },
+  "givenVerbs": ["icebolt", "repair", "explosion", "grow"],
+  "givenKeys": [],
+  "states": [{ "id": "factory_lit", "values": ["dark", "lit"], "initial": "dark", "flag": "factory_power" }],
+  "nodes": [
+    {
+      "id": "yard", "kind": "entrance", "order": 0, "critical": true, "pool": "factory.yard", "heat": 0.2,
+      "holds": [
+        { "socket": "exit:main", "prop": "door", "to": { "zone": "county", "mark": "factory_mouth" }, "label": "The wicket door" },
+        { "socket": "notice:main", "prop": "notice", "talk": "notice_factory", "label": "The works plan" }
+      ],
+      "binds": [
+        { "from": "exit:main", "as": "factory_exit_door", "what": "prop" },
+        { "from": "notice:main", "as": "factory_plan", "what": "prop" },
+        { "from": "entry", "as": "entry", "what": "mark" },
+        { "from": "room", "as": "factory_entry", "what": "rect" }
+      ],
+      "demands": [], "grants": []
+    },
+    {
+      "id": "loading", "kind": "teach", "order": 1, "critical": true, "pool": "factory.loading", "heat": 0.3,
+      "holds": [
+        { "socket": "prop:lamp", "prop": "works_lamp", "on": true, "label": "The one lamp still burning" },
+        { "socket": "unit:sentry", "unit": "sentry" },
+        { "socket": "prop:sign", "prop": "sign", "talk": "notice_light", "label": "A safety notice" },
+        { "socket": "chest:main", "loot": [{ "item": "wood", "qty": 2 }, { "item": "apple", "qty": 2 }], "label": "A bay locker" }
+      ],
+      "binds": [
+        { "from": "prop:lamp", "as": "factory_loading_lamp", "what": "prop" },
+        { "from": "unit:sentry", "as": "factory_loading_sentry", "what": "unit" },
+        { "from": "prop:sign", "as": "factory_light_notice", "what": "prop" },
+        { "from": "chest:main", "as": "factory_loading_chest", "what": "prop" }
+      ],
+      "demands": [], "grants": []
+    },
+    {
+      "id": "lockers", "kind": "key", "order": 2, "critical": true, "pool": "factory.lockers", "heat": 0.3,
+      "holds": [
+        { "socket": "chest:main", "loot": [{ "item": "key_generic", "qty": 2 }, { "item": "iron", "qty": 4 }], "label": "A row of lockers" },
+        { "socket": "jar:main", "prop": "jar", "label": "A jar on the top shelf" }
+      ],
+      "binds": [
+        { "from": "chest:main", "as": "factory_lockers_chest", "what": "prop" },
+        { "from": "jar:main", "as": "factory_lockers_jar", "what": "prop" }
+      ],
+      "demands": [], "grants": [{ "key": "generic" }, { "item": "iron", "qty": 4 }]
+    },
+    {
+      "id": "line_a", "kind": "hub", "order": 3, "critical": true, "pool": "factory.line", "heat": 0.7,
+      "holds": [
+        { "socket": "unit:hauler", "unit": "hauler", "patrol": [{ "mark": "walk1", "dwell": 120 }, { "mark": "walk2" }] },
+        { "socket": "prop:lamp_a", "prop": "works_lamp", "label": "A lamp on the line" },
+        { "socket": "prop:lamp_b", "prop": "works_lamp", "label": "A lamp on the line" },
+        {
+          "socket": "prop:fuse", "prop": "fuse_box", "label": "The fuse box for No. 1 line",
+          "use": [
+            { "do": "switch", "prop": "factory_line_lamp_a", "on": false },
+            { "do": "switch", "prop": "factory_line_lamp_b", "on": false },
+            { "do": "lock", "prop": "factory_stores_shutter" },
+            { "do": "flag", "flag": "factory_fuse_line", "value": 1 },
+            { "do": "toast", "text": "The line goes dark from this end to the far one. The stores shutter comes down with it and stays down." }
+          ]
+        }
+      ],
+      "binds": [
+        { "from": "unit:hauler", "as": "factory_line_hauler", "what": "unit" },
+        { "from": "prop:lamp_a", "as": "factory_line_lamp_a", "what": "prop" },
+        { "from": "prop:lamp_b", "as": "factory_line_lamp_b", "what": "prop" },
+        { "from": "prop:fuse", "as": "factory_line_fuse", "what": "prop" },
+        { "from": "room", "as": "factory_line", "what": "rect" }
+      ],
+      "demands": [], "grants": []
+    },
+    {
+      "id": "time_office", "kind": "rest", "order": 4, "critical": true, "pool": "factory.time_office", "heat": 0,
+      "holds": [
+        { "socket": "rest:main", "prop": "factory_stove", "talk": "factory_stove" },
+        { "socket": "prop:rack", "prop": "factory_rack", "talk": "notice_cards", "label": "The card rack" },
+        { "socket": "chest:main", "loot": [{ "item": "wood", "qty": 2 }, { "item": "apple", "qty": 2 }], "label": "The clerk's cupboard" }
+      ],
+      "binds": [
+        { "from": "rest:main", "as": "factory_stove", "what": "prop" },
+        { "from": "prop:rack", "as": "factory_rack", "what": "prop" },
+        { "from": "chest:main", "as": "factory_time_chest", "what": "prop" }
+      ],
+      "demands": [], "grants": []
+    },
+    {
+      "id": "vent", "kind": "puzzle", "order": 5, "critical": true, "pool": "factory.vent", "heat": 0,
+      "holds": [
+        { "socket": "prop:vent", "prop": "way_in", "to": { "zone": "factory", "mark": "factory_gen_in" }, "label": "The extract vent" },
+        { "socket": "jar:main", "prop": "jar", "label": "A jar left on the duct" }
+      ],
+      "binds": [
+        { "from": "prop:vent", "as": "factory_vent", "what": "prop" },
+        { "from": "jar:main", "as": "factory_vent_jar", "what": "prop" }
+      ],
+      "demands": [], "grants": []
+    },
+    {
+      "id": "generator", "kind": "miniboss", "order": 6, "critical": true, "pool": "factory.generator", "heat": 0,
+      "holds": [
+        { "socket": "boss:main", "unit": "charge_hand" },
+        { "socket": "unit:sentry", "unit": "sentry" },
+        { "socket": "prop:lamp", "prop": "works_lamp", "on": true, "label": "The bench lamp" },
+        {
+          "socket": "prop:orb", "prop": "orb_spark", "talk": "orb_spark", "label": "A glass orb on a stand",
+          "guardedBy": ["@boss:main", "@unit:sentry"]
+        },
+        {
+          "socket": "verbprop:gen", "prop": "broken_generator", "needs": [{ "item": "iron", "qty": 4 }], "label": "The generator, seized",
+          "use": [
+            { "do": "switch", "prop": "@self", "on": true },
+            { "do": "show", "prop": "@prop:cold" },
+            { "do": "toast", "text": "The bearing turns by hand again. The board beside it wakes up and does nothing else." }
+          ]
+        },
+        {
+          "socket": "prop:cold", "prop": "generator_cold", "hidden": true, "label": "The starting board", "controls": "factory_lit",
+          "becomes": {
+            "lit": [
+              { "do": "switch", "prop": "factory_line_lamp_a", "on": true },
+              { "do": "switch", "prop": "factory_line_lamp_b", "on": true },
+              { "do": "switch", "prop": "factory_gen_lamp", "on": true },
+              { "do": "switch", "prop": "factory_press_lamp", "on": true },
+              { "do": "switch", "prop": "factory_assembly_lamp_a", "on": true },
+              { "do": "switch", "prop": "factory_assembly_lamp_b", "on": true },
+              { "do": "shake", "amount": 4 },
+              { "do": "toast", "text": "A sound goes up through the floor first. Then the lamps come on in a wave, one hall at a time, all the way to the far end." }
+            ],
+            "dark": [
+              { "do": "switch", "prop": "factory_line_lamp_a", "on": false },
+              { "do": "switch", "prop": "factory_line_lamp_b", "on": false },
+              { "do": "switch", "prop": "factory_gen_lamp", "on": false },
+              { "do": "switch", "prop": "factory_press_lamp", "on": false },
+              { "do": "switch", "prop": "factory_assembly_lamp_a", "on": false },
+              { "do": "switch", "prop": "factory_assembly_lamp_b", "on": false },
+              { "do": "shake", "amount": 2 },
+              { "do": "toast", "text": "The board goes over and the building goes out behind it. Whatever is in the halls does not need the light." }
+            ]
+          }
+        },
+        { "socket": "chest:main", "loot": [{ "item": "iron", "qty": 4 }], "label": "A fitter's box" }
+      ],
+      "binds": [
+        { "from": "boss:main", "as": "charge_hand", "what": "unit" },
+        { "from": "unit:sentry", "as": "factory_gen_sentry", "what": "unit" },
+        { "from": "prop:lamp", "as": "factory_bench_lamp", "what": "prop" },
+        { "from": "prop:orb", "as": "factory_orb", "what": "prop" },
+        { "from": "verbprop:gen", "as": "factory_generator", "what": "prop" },
+        { "from": "prop:cold", "as": "factory_board", "what": "prop" },
+        { "from": "chest:main", "as": "factory_gen_chest", "what": "prop" },
+        { "from": "gen_in", "as": "factory_gen_in", "what": "mark" },
+        { "from": "room", "as": "factory_gen_hall", "what": "rect" }
+      ],
+      "demands": ["repair"], "grants": [{ "verb": "spark" }, { "state": "factory_lit" }]
+    },
+    {
+      "id": "gen_shutter", "kind": "teach", "order": 7, "critical": true, "pool": "factory.gen_shutter", "heat": 0,
+      "holds": [
+        {
+          "socket": "verbprop:socket", "prop": "socket_dead", "label": "A dead socket beside the shutter",
+          "use": [
+            { "do": "flag", "flag": "factory_gen_open", "value": 1 },
+            { "do": "shake", "amount": 2 },
+            { "do": "toast", "text": "The socket takes it and holds it. The shutter goes up on its own and stays up." }
+          ]
+        },
+        { "socket": "prop:lamp", "prop": "works_lamp", "label": "A lamp over the shutter" },
+        {
+          "socket": "page:main", "prop": "leaf_page", "label": "A page pinned to the board",
+          "use": [{ "do": "grow", "stat": "spirit", "amount": 6, "id": "@self" }, { "do": "hide", "prop": "@self" }]
+        }
+      ],
+      "binds": [
+        { "from": "verbprop:socket", "as": "factory_gen_socket", "what": "prop" },
+        { "from": "prop:lamp", "as": "factory_gen_lamp", "what": "prop" },
+        { "from": "page:main", "as": "factory_gen_page", "what": "prop" }
+      ],
+      "demands": ["spark"], "grants": [{ "flag": "factory_gen_open" }]
+    },
+    {
+      "id": "press_hall", "kind": "puzzle", "order": 8, "critical": true, "pool": "factory.press", "heat": 0.8,
+      "holds": [
+        { "socket": "unit:hauler", "unit": "hauler", "patrol": [{ "mark": "walk1", "dwell": 90 }, { "mark": "walk2" }] },
+        {
+          "socket": "prop:call", "prop": "call_box", "label": "A call box",
+          "use": [
+            {
+              "do": "send", "unit": "@unit:hauler", "to": "@behind",
+              "then": [
+                { "do": "hide", "prop": "@prop:wall" },
+                { "do": "shake", "amount": 4 },
+                { "do": "flag", "flag": "factory_wall_down", "value": 1 },
+                { "do": "toast", "text": "It does not stop at the wall. The brick was two courses thick and new, and now it is on the floor." }
+              ]
+            },
+            { "do": "toast", "text": "The box rings once at the far end. Something heavy turns round and starts walking." }
+          ]
+        },
+        { "socket": "prop:wall", "prop": "weak_wall", "label": "A patched wall" },
+        { "socket": "prop:lamp", "prop": "works_lamp", "label": "A lamp over the press" },
+        { "socket": "prop:sign", "prop": "sign", "talk": "notice_press", "label": "A notice by the boxes" },
+        { "socket": "chest:main", "loot": [{ "item": "iron", "qty": 2 }, { "item": "potion_stoneskin", "qty": 1 }], "label": "A press tool box" }
+      ],
+      "binds": [
+        { "from": "unit:hauler", "as": "factory_press_hauler", "what": "unit" },
+        { "from": "prop:call", "as": "factory_call_box", "what": "prop" },
+        { "from": "prop:wall", "as": "factory_weak_wall", "what": "prop" },
+        { "from": "prop:lamp", "as": "factory_press_lamp", "what": "prop" },
+        { "from": "chest:main", "as": "factory_press_chest", "what": "prop" },
+        { "from": "behind", "as": "factory_press_behind", "what": "mark" }
+      ],
+      "demands": ["spark"], "grants": [{ "flag": "factory_wall_down" }]
+    },
+    {
+      "id": "office", "kind": "bosskey", "order": 9, "critical": true, "pool": "factory.office", "heat": 0,
+      "holds": [
+        { "socket": "chest:main", "prop": "boss_chest", "loot": [{ "item": "key_foreman", "qty": 1 }, { "item": "foremans_diary", "qty": 1 }], "label": "The foreman's desk" },
+        {
+          "socket": "page:main", "prop": "leaf_page", "label": "A page under the blotter",
+          "use": [{ "do": "grow", "stat": "spirit", "amount": 6, "id": "@self" }, { "do": "hide", "prop": "@self" }]
+        },
+        { "socket": "jar:main", "prop": "jar", "label": "A jar on the filing cabinet" }
+      ],
+      "binds": [
+        { "from": "chest:main", "as": "factory_foreman_key_chest", "what": "prop" },
+        { "from": "page:main", "as": "factory_office_page", "what": "prop" },
+        { "from": "jar:main", "as": "factory_office_jar", "what": "prop" }
+      ],
+      "demands": [], "grants": [{ "key": "factory_foreman" }]
+    },
+    {
+      "id": "assembly", "kind": "boss", "order": 10, "critical": true, "pool": "factory.assembly", "heat": 0,
+      "holds": [
+        { "socket": "boss:main", "unit": "foreman" },
+        { "socket": "unit:sentry_a", "unit": "sentry" },
+        { "socket": "unit:sentry_b", "unit": "sentry" },
+        { "socket": "prop:lamp_a", "prop": "works_lamp", "label": "A gantry lamp" },
+        { "socket": "prop:lamp_b", "prop": "works_lamp", "label": "A gantry lamp" },
+        {
+          "socket": "prop:fuse_a", "prop": "fuse_box", "label": "A fuse box",
+          "use": [
+            { "do": "switch", "prop": "factory_assembly_lamp_a", "on": false },
+            { "do": "flag", "flag": "factory_fuse_a", "value": 1 },
+            { "do": "switch", "prop": "@self", "on": false },
+            { "do": "toast", "text": "That quarter of the hall goes out. The gantry above it stops turning." }
+          ]
+        },
+        {
+          "socket": "prop:fuse_b", "prop": "fuse_box", "label": "A fuse box",
+          "use": [
+            { "do": "switch", "prop": "factory_assembly_lamp_b", "on": false },
+            { "do": "flag", "flag": "factory_fuse_b", "value": 1 },
+            { "do": "switch", "prop": "@self", "on": false },
+            { "do": "toast", "text": "The other quarter goes out. He stops where he is and turns his head." }
+          ]
+        },
+        {
+          "socket": "prop:grid_a", "prop": "grid_socket", "label": "A floor grid",
+          "use": [{ "do": "strike", "rect": "@drop:a", "amount": 220, "school": "shock", "effect": "jolted", "hitsFriends": false }, { "do": "shake", "amount": 2 }, { "do": "switch", "prop": "@self", "on": false }]
+        },
+        {
+          "socket": "prop:grid_b", "prop": "grid_socket", "label": "A floor grid",
+          "use": [{ "do": "strike", "rect": "@drop:b", "amount": 220, "school": "shock", "effect": "jolted", "hitsFriends": false }, { "do": "shake", "amount": 2 }, { "do": "switch", "prop": "@self", "on": false }]
+        },
+        {
+          "socket": "prop:grid_c", "prop": "grid_socket", "label": "A floor grid",
+          "use": [{ "do": "strike", "rect": "@drop:c", "amount": 220, "school": "shock", "effect": "jolted", "hitsFriends": false }, { "do": "shake", "amount": 2 }, { "do": "switch", "prop": "@self", "on": false }]
+        },
+        {
+          "socket": "prop:grid_d", "prop": "grid_socket", "label": "A floor grid",
+          "use": [{ "do": "strike", "rect": "@drop:d", "amount": 220, "school": "shock", "effect": "jolted", "hitsFriends": false }, { "do": "shake", "amount": 2 }, { "do": "switch", "prop": "@self", "on": false }]
+        },
+        { "socket": "chest:arena", "loot": [{ "item": "potion_stoneskin", "qty": 2 }], "label": "A rack of samples" }
+      ],
+      "binds": [
+        { "from": "boss:main", "as": "foreman", "what": "unit" },
+        { "from": "inner", "as": "factory_assembly", "what": "rect" },
+        { "from": "prop:lamp_a", "as": "factory_assembly_lamp_a", "what": "prop" },
+        { "from": "prop:lamp_b", "as": "factory_assembly_lamp_b", "what": "prop" },
+        { "from": "prop:fuse_a", "as": "factory_assembly_fuse_a", "what": "prop" },
+        { "from": "prop:fuse_b", "as": "factory_assembly_fuse_b", "what": "prop" },
+        { "from": "prop:grid_a", "as": "factory_grid_a", "what": "prop" },
+        { "from": "chest:arena", "as": "factory_assembly_chest", "what": "prop" }
+      ],
+      "demands": [], "grants": [{ "flag": "factory_cleared" }]
+    },
+    {
+      "id": "roller_door", "kind": "reward", "order": 11, "critical": true, "pool": "factory.roller_door", "heat": 0,
+      "holds": [
+        { "socket": "jar:big", "prop": "jar_big" },
+        { "socket": "chest:main", "prop": "boss_chest", "loot": [{ "item": "key_burial", "qty": 1 }, { "item": "gold_bar", "qty": 4 }], "label": "The foreman's own locker" },
+        {
+          "socket": "verbprop:socket", "prop": "socket_dead", "label": "The roller door socket",
+          "use": [
+            { "do": "flag", "flag": "factory_roller_open", "value": 1 },
+            { "do": "shake", "amount": 3 },
+            { "do": "toast", "text": "The roller door goes up the whole way and stops. It will not be coming down again." }
+          ]
+        }
+      ],
+      "binds": [
+        { "from": "jar:big", "as": "factory_big_jar", "what": "prop" },
+        { "from": "chest:main", "as": "factory_reward_chest", "what": "prop" },
+        { "from": "verbprop:socket", "as": "factory_roller_socket", "what": "prop" }
+      ],
+      "demands": ["spark"], "grants": [{ "key": "burial" }, { "flag": "factory_roller_open" }]
+    },
+    {
+      "id": "stores", "kind": "side", "order": 3, "critical": false, "pool": "factory.stores", "heat": 0.4,
+      "holds": [
+        { "socket": "jar:main", "prop": "jar", "label": "A jar behind the stores counter" },
+        { "socket": "chest:main", "loot": [{ "item": "iron", "qty": 2 }, { "item": "coal", "qty": 2 }], "label": "The stores counter" }
+      ],
+      "binds": [{ "from": "jar:main", "as": "factory_stores_jar", "what": "prop" }],
+      "demands": ["spark"], "grants": []
+    }
+  ],
+  "edges": [
+    { "from": "yard", "to": "loading", "kind": { "t": "open" } },
+    { "from": "loading", "to": "lockers", "kind": { "t": "open" } },
+    { "from": "loading", "to": "line_a", "kind": { "t": "key", "tag": "generic", "gateAs": "factory_gate_line", "label": "No. 1 LINE" } },
+    { "from": "line_a", "to": "time_office", "kind": { "t": "open" } },
+    { "from": "line_a", "to": "vent", "kind": { "t": "open" } },
+    { "from": "vent", "to": "generator", "kind": { "t": "open" } },
+    { "from": "generator", "to": "gen_shutter", "kind": { "t": "open" } },
+    {
+      "from": "gen_shutter", "to": "line_a", "shortcut": true,
+      "kind": { "t": "oneway", "how": "opens_on", "flag": "factory_gen_open", "gateAs": "factory_gen_shutter" }
+    },
+    { "from": "line_a", "to": "press_hall", "kind": { "t": "key", "tag": "generic", "gateAs": "factory_gate_press", "label": "PRESS HALL" } },
+    {
+      "from": "press_hall", "to": "stores",
+      "kind": { "t": "state", "var": "factory_lit", "is": "lit", "gateAs": "factory_stores_shutter", "gate": ["factory_shutter_h", "factory_shutter_v"], "label": "STORES" }
+    },
+    { "from": "press_hall", "to": "office", "kind": { "t": "oneway", "how": "opens_on", "flag": "factory_wall_down", "gateAs": "factory_press_gate" } },
+    {
+      "from": "office", "to": "assembly",
+      "kind": { "t": "key", "tag": "factory_foreman", "gateAs": "factory_gate_assembly", "label": "ASSEMBLY" },
+      "also": [{ "t": "lockin", "toast": "The shutter comes down behind you and the gantries start. Somebody has been keeping the shift on." }]
+    },
+    { "from": "assembly", "to": "roller_door", "kind": { "t": "oneway", "how": "opens_on", "flag": "factory_cleared", "gateAs": "factory_gate_reward" } },
+    { "from": "roller_door", "to": "yard", "shortcut": true, "kind": { "t": "oneway", "how": "opens_on", "flag": "factory_roller_open", "gateAs": "factory_roller_door" } }
+  ],
+  "budget": {
+    "sideRooms": [1, 1],
+    "critPathCells": [500, 1500],
+    "restAt": [0.1, 0.6],
+    "restToBossCells": 900,
+    "baseHeat": 9,
+    "enemies": { "rat": 1, "bat": 1, "sentry": 3 }
+  },
+  "dress": {
+    "torch": { "props": ["torch"], "chance": 0.8 },
+    "pile": { "props": ["crate", "barrel"], "chance": 0.5 },
+    "pillar": { "props": ["pillar"], "chance": 1 },
+    "bench": { "props": ["table"], "chance": 1 },
+    "shelf": { "props": ["shelf"], "chance": 1 }
+  },
+  "fallback": [
+    { "node": "yard", "template": "factory.yard.a", "bay": [0, 0], "turn": 0, "mirror": false },
+    { "node": "loading", "template": "factory.loading.a", "bay": [1, 0], "turn": 0, "mirror": false },
+    { "node": "lockers", "template": "factory.lockers.a", "bay": [2, 0], "turn": 0, "mirror": false },
+    { "node": "time_office", "template": "factory.time_office.a", "bay": [0, 1], "turn": 0, "mirror": false },
+    { "node": "line_a", "template": "factory.line.a", "bay": [1, 1], "turn": 0, "mirror": false },
+    { "node": "press_hall", "template": "factory.press.a", "bay": [3, 1], "turn": 0, "mirror": false },
+    { "node": "office", "template": "factory.office.a", "bay": [5, 1], "turn": 0, "mirror": false },
+    { "node": "vent", "template": "factory.vent.a", "bay": [1, 2], "turn": 0, "mirror": false },
+    { "node": "gen_shutter", "template": "factory.gen_shutter.a", "bay": [2, 2], "turn": 0, "mirror": false },
+    { "node": "stores", "template": "factory.stores.a", "bay": [3, 2], "turn": 0, "mirror": false },
+    { "node": "assembly", "template": "factory.assembly.a", "bay": [4, 2], "turn": 0, "mirror": false },
+    { "node": "generator", "template": "factory.generator.a", "bay": [1, 3], "turn": 0, "mirror": false },
+    { "node": "roller_door", "template": "factory.roller_door.a", "bay": [5, 3], "turn": 0, "mirror": false }
+  ]
+}

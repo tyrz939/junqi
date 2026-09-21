@@ -102,6 +102,17 @@ export function lintDef(def: DungeonDef, catalog: Catalog): string[] {
   for (const n of def.nodes) {
     if (ids.has(n.id)) errors.push(`node "${n.id}" is defined twice`);
     ids.add(n.id);
+    // A thing that answers a verb and holds loot must be locked with no key. Opening a thing for its
+    // loot runs its `use` (that is what `useProp` does), so otherwise the verb's own payload comes out
+    // without the verb and the lock only reads as one. Locked with nothing that fits, the spell is the
+    // only way in, which is the sound shape: the museum's cracked case is written that way.
+    for (const h of n.holds) {
+      if (!("loot" in h) || !("prop" in h) || h.prop === undefined) continue;
+      const answers = catalog.props[h.prop]?.answers;
+      if (answers && !(h.locked && !("keyTag" in h))) {
+        errors.push(`node "${n.id}": ${h.socket} holds "${h.prop}", which answers ${answers}, and loot she could reach without it. Lock it with no key, or hide a chest behind it`);
+      }
+    }
     const g = gainsOf(n, catalog);
     for (const want of n.grants) {
       const ok =

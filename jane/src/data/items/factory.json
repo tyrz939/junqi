@@ -1,0 +1,11 @@
+{
+  "key_foreman": {
+    "name": "The Foreman's Key", "icon": "item_key_blue", "maxStack": 1, "usable": false, "cooldown": 1, "opens": "factory_foreman",
+    "description": "Opens the assembly hall. The fob is a clocking-in card with the corner cut off, which is what they did when a man left."
+  },
+  "foremans_diary": {
+    "name": "The Foreman's Diary", "icon": "item_letter", "maxStack": 1, "usable": true, "cooldown": 2, "keep": true, "bound": true,
+    "use": [{ "do": "talk", "tree": "foremans_diary" }],
+    "description": "A works diary, kept daily in pencil. It stops on a Tuesday and the following pages have been used for sums."
+  }
+}

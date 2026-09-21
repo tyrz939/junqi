@@ -1,0 +1,12 @@
+{
+  "bell_rope": { "name": "Bell Rope", "sprite": "bell_rope", "w": 1, "h": 1, "solid": true, "blockLos": false, "prompt": "Pull" },
+  "clock_stopped": { "name": "School Clock", "sprite": "clock_stopped", "w": 1, "h": 1, "solid": true, "blockLos": false, "once": true, "prompt": "Stop it" },
+  "sickbay_bed_bell": { "name": "The Far Bed", "sprite": "sickbay_bed_bell", "w": 2, "h": 3, "solid": true, "blockLos": false, "rest": true, "prompt": "Rest" },
+  "school_fuse": {
+    "name": "Fuse Board", "sprite": "school_fuse", "w": 1, "h": 1, "solid": true, "blockLos": true,
+    "answers": "shock", "lightWhenOn": true, "light": { "radius": 60, "color": "#cfe0ff", "flicker": 0.08 }
+  },
+  "school_register": { "name": "The Register", "sprite": "school_register", "w": 2, "h": 1, "solid": true, "blockLos": false, "prompt": "Read" },
+  "school_bell": { "name": "The Bell", "sprite": "school_bell", "w": 2, "h": 2, "solid": true, "blockLos": false },
+  "school_pegs": { "name": "Pegs", "sprite": "school_pegs", "w": 2, "h": 1, "solid": true, "blockLos": false, "prompt": "Look" }
+}

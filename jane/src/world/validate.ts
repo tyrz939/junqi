@@ -543,7 +543,10 @@ export function validateBlueprint(
             if (blocksFeet(p) && def.gate) opened = true;
             progress = true;
           }
-          continue;
+          // A lock is no answer to a spell. `schoolTouch` in the sim does not look at it, so a locked
+          // case really can be blown open; the proof must know that, or a locked thing that answers a
+          // verb would be a lock nothing in the game can open and every candidate would be refused.
+          if (!def.answers) continue;
         }
         if (p.to && p.to.zone === bp.zone && !hops.some((x) => x.mark === p.to?.mark && x.s === at)) {
           hops.push({ mark: p.to.mark, s: at });

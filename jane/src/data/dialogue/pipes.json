@@ -1,0 +1,51 @@
+{
+  "notice_pipes": {
+    "speaker": "Run Plan",
+    "start": [{ "node": "read" }],
+    "nodes": {
+      "read": {
+        "lines": [
+          "GOLDSKIN MINING Co. SURFACE WATER. North run to the town. East run to the Works. West run to the outfall, when the valve allows it.",
+          "Covers are not to be lifted from the street. They lift from below, and that is the way they were meant to lift."
+        ]
+      }
+    }
+  },
+  "notice_junction": {
+    "speaker": "Stencil",
+    "start": [{ "node": "read" }],
+    "nodes": {
+      "read": {
+        "lines": [
+          "JUNCTION 3. DEPTH FOUR METRES. Do not stand in the east run while the valve is being turned.",
+          "Under it, in chalk: we stand in it. The water is slow for the first nine seconds and then it is not."
+        ]
+      }
+    }
+  },
+  "notice_valve": {
+    "speaker": "Works Notice",
+    "start": [{ "node": "read" }],
+    "nodes": {
+      "read": {
+        "lines": [
+          "EAST VALVE. One side runs and one side is dry. There is no setting in which both are dry.",
+          "Turned by the ganger on shift, at six and at six. The log has been kept up every day since the shift stopped."
+        ]
+      }
+    }
+  },
+  "pipes_stove": {
+    "speaker": "Gangers' Chamber",
+    "start": [{ "node": "chamber" }],
+    "nodes": {
+      "chamber": {
+        "lines": [
+          "A dry chamber off the junction. The brazier is banked and there is a kettle beside it that is still warm.",
+          "Nothing walks in here. The door was wedged from this side, and whoever wedged it did it neatly."
+        ],
+        "actions": [{ "do": "rest" }]
+      }
+    }
+  }
+}

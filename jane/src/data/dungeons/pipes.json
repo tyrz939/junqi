@@ -1,0 +1,255 @@
+{
+  "id": "pipes",
+  "name": "The Castle Pipes",
+  "phase": 3,
+  "tiles": { "floor": "PipeFloor", "wall": "PipeWall", "alt": ["DryBed"] },
+  "indoor": true,
+  "ambient": 0.32,
+  "lattice": { "cols": 5, "rows": 4 },
+  "givenVerbs": ["icebolt", "repair", "explosion", "grow"],
+  "givenKeys": [],
+  "states": [{ "id": "east_valve", "values": ["dry", "flooded"], "initial": "dry", "flag": "pipes_flooded" }],
+  "nodes": [
+    {
+      "id": "sump", "kind": "entrance", "order": 0, "critical": true, "pool": "pipes.sump", "heat": 0.2,
+      "holds": [
+        { "socket": "exit:main", "prop": "door", "to": { "zone": "county", "mark": "pipes_mouth" }, "label": "The grate" },
+        { "socket": "notice:main", "prop": "notice", "talk": "notice_pipes", "label": "The run plan" }
+      ],
+      "binds": [
+        { "from": "exit:main", "as": "pipes_exit_door", "what": "prop" },
+        { "from": "notice:main", "as": "pipes_plan", "what": "prop" },
+        { "from": "entry", "as": "entry", "what": "mark" },
+        { "from": "room", "as": "pipes_entry", "what": "rect" }
+      ],
+      "demands": [], "grants": []
+    },
+    {
+      "id": "north_run", "kind": "teach", "order": 1, "critical": true, "pool": "pipes.run", "heat": 0.4,
+      "holds": [
+        { "socket": "chest:main", "loot": [{ "item": "iron", "qty": 2 }, { "item": "apple", "qty": 1 }], "label": "A ganger's box" },
+        {
+          "socket": "verbprop:ladder", "prop": "ladder_broken", "needs": [{ "item": "iron", "qty": 1 }], "label": "A ladder with no rungs",
+          "use": [
+            { "do": "show", "prop": "@prop:manhole" },
+            { "do": "toast", "text": "The rungs go back in. The cover above lifts from below and stays lifted." }
+          ]
+        },
+        { "socket": "prop:manhole", "prop": "manhole", "hidden": true, "to": { "zone": "county", "mark": "manhole_1" }, "label": "A manhole" }
+      ],
+      "binds": [
+        { "from": "chest:main", "as": "pipes_north_chest", "what": "prop" },
+        { "from": "verbprop:ladder", "as": "pipes_north_ladder", "what": "prop" },
+        { "from": "prop:manhole", "as": "pipes_manhole_1", "what": "prop" }
+      ],
+      "demands": ["repair"], "grants": [{ "item": "iron", "qty": 2 }]
+    },
+    {
+      "id": "junction", "kind": "hub", "order": 2, "critical": true, "pool": "pipes.junction", "heat": 0.5,
+      "holds": [
+        { "socket": "prop:sign", "prop": "sign", "talk": "notice_junction", "label": "A stencil on the brick" },
+        {
+          "socket": "plate:main", "prop": "plate",
+          "use": [{ "do": "unlock", "prop": "@jar:main" }, { "do": "toast", "text": "The counterweight goes down and the grille over the niche goes up." }],
+          "release": [{ "do": "lock", "prop": "@jar:main" }]
+        },
+        { "socket": "push:main", "prop": "barrel" },
+        { "socket": "jar:main", "prop": "jar", "locked": true, "label": "A jar in a niche" }
+      ],
+      "binds": [
+        { "from": "prop:sign", "as": "pipes_junction_sign", "what": "prop" },
+        { "from": "plate:main", "as": "pipes_junction_plate", "what": "prop" },
+        { "from": "push:main", "as": "pipes_junction_barrel", "what": "prop" },
+        { "from": "jar:main", "as": "pipes_junction_jar", "what": "prop" },
+        { "from": "room", "as": "pipes_junction", "what": "rect" }
+      ],
+      "demands": [], "grants": []
+    },
+    {
+      "id": "chamber", "kind": "rest", "order": 3, "critical": true, "pool": "pipes.chamber", "heat": 0,
+      "holds": [
+        { "socket": "rest:main", "prop": "pipes_stove", "talk": "pipes_stove" },
+        { "socket": "chest:main", "loot": [{ "item": "wood", "qty": 2 }, { "item": "apple", "qty": 2 }], "label": "A ganger's locker" }
+      ],
+      "binds": [
+        { "from": "rest:main", "as": "pipes_stove", "what": "prop" },
+        { "from": "chest:main", "as": "pipes_chamber_chest", "what": "prop" }
+      ],
+      "demands": [], "grants": []
+    },
+    {
+      "id": "valve_house", "kind": "puzzle", "order": 4, "critical": true, "pool": "pipes.valve_house", "heat": 0.3,
+      "holds": [
+        { "socket": "prop:sign", "prop": "sign", "talk": "notice_valve", "label": "A works notice" },
+        { "socket": "chest:main", "loot": [{ "item": "iron", "qty": 2 }], "label": "A stop-tap box" },
+        {
+          "socket": "lever:main", "prop": "valve", "label": "The east valve", "controls": "east_valve",
+          "becomes": {
+            "flooded": [
+              { "do": "fill", "rect": "pipes_east_pool", "tile": 5 },
+              { "do": "fill", "rect": "pipes_west_pool", "tile": 21 },
+              { "do": "shake", "amount": 2 },
+              { "do": "toast", "text": "Water goes over to the east side. Somewhere behind you a run empties and keeps running for a while after." }
+            ],
+            "dry": [
+              { "do": "fill", "rect": "pipes_east_pool", "tile": 21 },
+              { "do": "fill", "rect": "pipes_west_pool", "tile": 5 },
+              { "do": "shake", "amount": 2 },
+              { "do": "toast", "text": "The east side drains. The west fills. It takes about as long either way." }
+            ]
+          }
+        }
+      ],
+      "binds": [
+        { "from": "lever:main", "as": "pipes_valve", "what": "prop" },
+        { "from": "chest:main", "as": "pipes_valve_chest", "what": "prop" },
+        { "from": "prop:sign", "as": "pipes_valve_sign", "what": "prop" }
+      ],
+      "demands": [], "grants": [{ "state": "east_valve" }]
+    },
+    {
+      "id": "east_run", "kind": "fight", "order": 5, "critical": true, "pool": "pipes.east_run", "heat": 0.8,
+      "holds": [
+        { "socket": "chest:main", "loot": [{ "item": "iron", "qty": 2 }, { "item": "potion_stoneskin", "qty": 1 }], "label": "A tool box on a shelf" },
+        {
+          "socket": "verbprop:ladder", "prop": "ladder_broken", "needs": [{ "item": "iron", "qty": 1 }], "label": "A ladder with no rungs",
+          "use": [
+            { "do": "show", "prop": "@prop:manhole" },
+            { "do": "toast", "text": "The rungs go back in. The cover above lifts from below and stays lifted." }
+          ]
+        },
+        { "socket": "prop:manhole", "prop": "manhole", "hidden": true, "to": { "zone": "county", "mark": "manhole_2" }, "label": "A manhole" },
+        { "socket": "jar:main", "prop": "jar", "label": "A jar on the silt shelf" }
+      ],
+      "binds": [
+        { "from": "chest:main", "as": "pipes_east_chest", "what": "prop" },
+        { "from": "verbprop:ladder", "as": "pipes_east_ladder", "what": "prop" },
+        { "from": "prop:manhole", "as": "pipes_manhole_2", "what": "prop" },
+        { "from": "jar:main", "as": "pipes_east_jar", "what": "prop" },
+        { "from": "pool", "as": "pipes_east_pool", "what": "rect" }
+      ],
+      "demands": ["repair"], "grants": [{ "item": "iron", "qty": 2 }]
+    },
+    {
+      "id": "west_run", "kind": "key", "order": 6, "critical": true, "pool": "pipes.west_run", "heat": 0.7,
+      "holds": [
+        { "socket": "chest:main", "loot": [{ "item": "key_outfall", "qty": 1 }, { "item": "iron", "qty": 2 }], "label": "A drowned ganger's box" },
+        {
+          "socket": "verbprop:ladder", "prop": "ladder_broken", "needs": [{ "item": "iron", "qty": 1 }], "label": "A ladder with no rungs",
+          "use": [
+            { "do": "show", "prop": "@prop:manhole" },
+            { "do": "toast", "text": "The rungs go back in. The cover above lifts from below and stays lifted." }
+          ]
+        },
+        { "socket": "prop:manhole", "prop": "manhole", "hidden": true, "to": { "zone": "county", "mark": "manhole_3" }, "label": "A manhole" }
+      ],
+      "binds": [
+        { "from": "chest:main", "as": "pipes_west_chest", "what": "prop" },
+        { "from": "verbprop:ladder", "as": "pipes_west_ladder", "what": "prop" },
+        { "from": "prop:manhole", "as": "pipes_manhole_3", "what": "prop" },
+        { "from": "pool", "as": "pipes_west_pool", "what": "rect" }
+      ],
+      "demands": ["repair"], "grants": [{ "key": "pipes_outfall" }, { "item": "iron", "qty": 2 }]
+    },
+    {
+      "id": "outfall", "kind": "reward", "order": 7, "critical": true, "pool": "pipes.outfall", "heat": 0.4,
+      "holds": [
+        {
+          "socket": "lever:main", "prop": "hoist_lever", "label": "The outfall gear",
+          "use": [
+            { "do": "flag", "flag": "pipes_outfall_open", "value": 1 },
+            { "do": "shake", "amount": 3 },
+            { "do": "toast", "text": "The screw turns twice and the grating behind you lifts. It is a short walk back to the fire now." }
+          ]
+        },
+        {
+          "socket": "page:main", "prop": "leaf_page", "label": "A page in a ledger",
+          "use": [{ "do": "grow", "stat": "spirit", "amount": 6, "id": "@self" }, { "do": "hide", "prop": "@self" }]
+        },
+        { "socket": "chest:main", "prop": "boss_chest", "loot": [{ "item": "iron", "qty": 2 }, { "item": "gold_bar", "qty": 2 }], "label": "The outfall store" },
+        {
+          "socket": "verbprop:ladder", "prop": "ladder_broken", "needs": [{ "item": "iron", "qty": 1 }], "label": "A ladder with no rungs",
+          "use": [
+            { "do": "show", "prop": "@prop:manhole" },
+            { "do": "toast", "text": "The rungs go back in. The cover above lifts into the Works yard and stays lifted." }
+          ]
+        },
+        { "socket": "prop:manhole", "prop": "manhole", "hidden": true, "to": { "zone": "county", "mark": "manhole_4" }, "label": "A manhole" }
+      ],
+      "binds": [
+        { "from": "lever:main", "as": "pipes_outfall_gear", "what": "prop" },
+        { "from": "page:main", "as": "pipes_outfall_page", "what": "prop" },
+        { "from": "chest:main", "as": "pipes_outfall_chest", "what": "prop" },
+        { "from": "verbprop:ladder", "as": "pipes_outfall_ladder", "what": "prop" },
+        { "from": "prop:manhole", "as": "pipes_manhole_4", "what": "prop" }
+      ],
+      "demands": ["repair"], "grants": [{ "flag": "pipes_outfall_open" }, { "item": "iron", "qty": 2 }]
+    },
+    {
+      "id": "silt", "kind": "side", "order": 5, "critical": false, "pool": "pipes.silt", "heat": 0.3,
+      "holds": [
+        { "socket": "jar:main", "prop": "jar", "label": "A jar in the silt" },
+        { "socket": "chest:main", "loot": [{ "item": "iron", "qty": 1 }, { "item": "coal", "qty": 2 }], "label": "A silt trap box" }
+      ],
+      "binds": [{ "from": "jar:main", "as": "pipes_silt_jar", "what": "prop" }],
+      "demands": [], "grants": []
+    },
+    {
+      "id": "screen", "kind": "side", "order": 1, "critical": false, "pool": "pipes.screen", "heat": 0.3,
+      "holds": [
+        {
+          "socket": "page:main", "prop": "leaf_page", "label": "A page caught on the screen",
+          "use": [{ "do": "grow", "stat": "spirit", "amount": 6, "id": "@self" }, { "do": "hide", "prop": "@self" }]
+        },
+        { "socket": "chest:main", "loot": [{ "item": "iron", "qty": 1 }, { "item": "wood", "qty": 2 }], "label": "What the screen caught" }
+      ],
+      "binds": [{ "from": "page:main", "as": "pipes_screen_page", "what": "prop" }],
+      "demands": [], "grants": []
+    }
+  ],
+  "edges": [
+    { "from": "sump", "to": "north_run", "kind": { "t": "open" } },
+    { "from": "sump", "to": "junction", "kind": { "t": "open" } },
+    { "from": "north_run", "to": "junction", "kind": { "t": "open" } },
+    { "from": "north_run", "to": "screen", "kind": { "t": "open" } },
+    { "from": "junction", "to": "chamber", "kind": { "t": "open" } },
+    { "from": "junction", "to": "valve_house", "kind": { "t": "open" } },
+    {
+      "from": "junction", "to": "east_run",
+      "kind": { "t": "state", "var": "east_valve", "is": "dry", "gateAs": "pipes_east_penstock", "gate": ["pipes_penstock_h", "pipes_penstock_v"], "label": "EAST RUN" }
+    },
+    {
+      "from": "junction", "to": "west_run",
+      "kind": { "t": "state", "var": "east_valve", "is": "flooded", "gateAs": "pipes_west_penstock", "gate": ["pipes_penstock_h", "pipes_penstock_v"], "label": "WEST RUN" }
+    },
+    { "from": "east_run", "to": "silt", "kind": { "t": "open" } },
+    { "from": "west_run", "to": "outfall", "kind": { "t": "key", "tag": "pipes_outfall", "gateAs": "pipes_gate_outfall", "label": "OUTFALL. Company men only" } },
+    { "from": "outfall", "to": "chamber", "shortcut": true, "kind": { "t": "oneway", "how": "opens_on", "flag": "pipes_outfall_open", "gateAs": "pipes_grating" } }
+  ],
+  "budget": {
+    "sideRooms": [1, 2],
+    "critPathCells": [420, 1450],
+    "restAt": [0.1, 0.6],
+    "restToBossCells": 600,
+    "baseHeat": 6,
+    "enemies": { "rat": 1, "bat": 1, "spider": 1, "wall_spider": 2 }
+  },
+  "dress": {
+    "torch": { "props": ["torch"], "chance": 0.8 },
+    "pile": { "props": ["crate", "barrel"], "chance": 0.5 },
+    "pillar": { "props": ["pillar"], "chance": 1 },
+    "shelf": { "props": ["shelf"], "chance": 1 }
+  },
+  "fallback": [
+    { "node": "screen", "template": "pipes.screen.a", "bay": [0, 0], "turn": 0, "mirror": false },
+    { "node": "north_run", "template": "pipes.run.a", "bay": [1, 0], "turn": 0, "mirror": false },
+    { "node": "sump", "template": "pipes.sump.a", "bay": [2, 0], "turn": 0, "mirror": false },
+    { "node": "west_run", "template": "pipes.west_run.a", "bay": [0, 1], "turn": 0, "mirror": false },
+    { "node": "junction", "template": "pipes.junction.a", "bay": [1, 1], "turn": 0, "mirror": false },
+    { "node": "valve_house", "template": "pipes.valve_house.a", "bay": [3, 1], "turn": 0, "mirror": false },
+    { "node": "outfall", "template": "pipes.outfall.a", "bay": [0, 2], "turn": 0, "mirror": false },
+    { "node": "chamber", "template": "pipes.chamber.a", "bay": [1, 2], "turn": 0, "mirror": false },
+    { "node": "east_run", "template": "pipes.east_run.a", "bay": [2, 2], "turn": 0, "mirror": false },
+    { "node": "silt", "template": "pipes.silt.a", "bay": [2, 3], "turn": 0, "mirror": false }
+  ]
+}

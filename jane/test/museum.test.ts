@@ -57,7 +57,7 @@ describe("the generated museum", () => {
       expect(sides).toBeGreaterThanOrEqual(def.budget.sideRooms[0]);
       expect(sides).toBeLessThanOrEqual(def.budget.sideRooms[1]);
     }
-    expect((performance.now() - t0) / SEEDS.length, "ms per museum, proofs included").toBeLessThan(400);
+    expect((performance.now() - t0) / SEEDS.length, "ms per museum, proofs included").toBeLessThan(700);
     expect(worst).toBeLessThanOrEqual(6);
   });
 

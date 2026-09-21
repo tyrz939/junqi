@@ -1,0 +1,16 @@
+{
+  "spark_ai": {
+    "name": "Bolt", "description": "A works sentry's bolt. It fires at what it can see, and it can only see what stands in light.",
+    "icon": "spell_shock", "kind": "bolt", "school": "shock",
+    "mp": 0, "energy": 0, "range": 10, "cooldown": 2.5,
+    "gcdImmune": false, "needsTarget": true, "needsEnemy": true, "needsLos": true, "anim": "cast",
+    "power": { "stat": "spirit", "div": 2, "varDiv": 6 }, "speed": 6, "stop": 20, "glow": 20
+  },
+  "melee_shock": {
+    "name": "Live Hand", "description": "A shift supervisor's grip, with the current still in it.",
+    "icon": "spell_shock", "kind": "melee", "school": "shock",
+    "mp": 0, "energy": 0, "range": 0.25, "cooldown": 1.5,
+    "gcdImmune": false, "needsTarget": true, "needsEnemy": true, "needsLos": true, "anim": "attack",
+    "power": { "stat": "strength", "div": 1.4, "varDiv": 5 }
+  }
+}

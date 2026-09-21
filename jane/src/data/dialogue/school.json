@@ -1,0 +1,90 @@
+{
+  "notice_school": {
+    "speaker": "Timetable",
+    "start": [{ "node": "read" }],
+    "nodes": {
+      "read": {
+        "lines": [
+          "CASTLE SCHOOL: TIMETABLE. Woodwork, Chemistry and Botany are taught in lesson time. Physics, Domestic Science and the sixth period at break.",
+          "The sixth period has no subject against it. Someone has drawn a snowflake there, in the same hand, in ink.",
+          "Periods are rung from the hall. The rope is by the stair and it is kept up to date."
+        ]
+      }
+    }
+  },
+  "school_boiler": {
+    "speaker": "Notice",
+    "start": [{ "node": "read" }],
+    "nodes": {
+      "read": {
+        "lines": [
+          "BOILER ROOM. Caretaker only. The boiler is checked at six and again at six.",
+          "The stair behind it is marked on the plan as going down. It is warm, and there is grit on the steps that is not from this floor."
+        ]
+      }
+    }
+  },
+  "school_pegs": {
+    "speaker": "Pegs",
+    "start": [{ "node": "look" }],
+    "nodes": {
+      "look": {
+        "lines": [
+          "Sixty pegs, numbered to sixty. Forty-one coats on them, and the floor underneath is dry.",
+          "Every one of them is buttoned to the collar."
+        ]
+      }
+    }
+  },
+  "school_clock": {
+    "speaker": "School Clock",
+    "start": [{ "node": "clock" }],
+    "nodes": {
+      "clock": {
+        "lines": [
+          "A school clock in a wooden case. The card inside says it has run a minute fast since 1954 and is not to be adjusted.",
+          "It is still a minute fast. The case is already open."
+        ]
+      }
+    }
+  },
+  "school_bed_day": {
+    "speaker": "Sick Bay",
+    "start": [{ "node": "bed" }],
+    "nodes": {
+      "bed": {
+        "lines": [
+          "SICK BAY. The near bed is turned down and the card at the head of it says six o'clock, as it does for everybody.",
+          "There is a glass of water on the locker. It is full."
+        ],
+        "actions": [{ "do": "rest", "until": 6 }]
+      }
+    }
+  },
+  "school_bed_bell": {
+    "speaker": "The Far Bed",
+    "start": [{ "node": "bed" }],
+    "nodes": {
+      "bed": {
+        "lines": [
+          "A card is pinned over this one: YOU WILL BE WOKEN AT THE BELL. The bell is at nine in the evening.",
+          "Underneath, in pencil and a different hand: the night does not pass unless everybody is lying down."
+        ],
+        "actions": [{ "do": "rest", "until": 21 }]
+      }
+    }
+  },
+  "school_register": {
+    "speaker": "The Register",
+    "start": [{ "node": "open" }],
+    "nodes": {
+      "open": {
+        "lines": [
+          "THE REGISTER. Every name in the county is in it, in one hand, going back further than the school does.",
+          "It is marked up to this morning. Nobody is absent.",
+          "The last line is {name}, and the ink is not dry."
+        ]
+      }
+    }
+  }
+}
