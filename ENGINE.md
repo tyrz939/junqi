@@ -253,6 +253,9 @@ The last attempt (`ZONE_ATTEMPTS - 1`) stamps the mission's hand-placed `fallbac
 | **Museum** | 2 | Explosion (found) | One breaker, two buildings. It drives a gate that opens only in the dark and one that opens only in the light; the stores open in neither, and blowing up an exhibit that is frozen in the light is the way through. The Attendant throws the breaker at 75, 50 and 25 per cent |
 | **The ruined library** | 3 | Grow (found) | The smallest dungeon there is: four rooms, nothing alive in any of them, the last page in the book, and a dry planter under the hole in the roof to try it on where she stands |
 | **Butterfly Forest** | 3 | Grow (given) | The first outdoor dungeon. No doors and not one key: light is the lock and a living thing is the key. Grow blooms a bud (whose `use` `send`s a butterfly to it), bridges a stream, and **closes** a hedge gap |
+| **The pipes** | 3 | none | The approach to the Works. One valve, two runs, and exactly one of them open at a time. What lasts is four manholes, each dead until its ladder is mended from below and then a way into the county for good |
+| **The Factory** | 4 | Electric (found) | Light is how the machines see you. Crossed once in the dark to the vent drop, the Charge Hand and Julie's orb wired into the generator; then again with every lamp awake |
+| **Castle School** | 6 | none: it examines all six | The building follows its timetable. The bell rope toggles lessons and break and six classroom doors follow it; each wing ends at a clock she stops, and six clocks and the Caretaker's key open the tower |
 | **Burial Chamber** | 5 | Fire (found) | Cold light shows what is there; warm light keeps it off. Four corners in the player's own order, shades that will not step into a brazier's light, a great torch pushed one cell at a time like a moving safe room, and Goldskin, gilded until fire softens him |
 
 Three things the later ones taught the engine, each written down because the next author would hit it too:
@@ -308,6 +311,25 @@ Then `test/templates.test.ts` holds its rooms to the lint and the harness with n
 A mission or a room that is only for a test lives in the test (`test/verbs2.test.ts` has a three-room building with a breaker): `addTemplates` (`pools.ts`) hands the generator rooms that are in nobody's folder, and a `DungeonDef` that is not in `data/dungeons` is not a zone. Only registered zones tick, so to PLAY such a blueprint a test primes it under an existing zone's name (`primeBlueprint`).
 
 Not built yet: the powder store (the spell is in; it wants the Museum's `rubble` row), the template bot harness, and the dungeon page of the seed viewer.
+
+**The pipes and the Works** are the last two, and the first that hand something back to the county. The pipes are a phase-3 approach with no verb and no boss: one state (`east_valve`), one control (`valve`), two `state` edges, so exactly one run is open at a time. Their lasting value is four `manhole` props, each dead until a `ladder_broken` is Repaired from below and then a way into the county for good. The Works are phase 4 and the first building where **light is a rule the sim reads**: `sentry` and `hauler` have `sight: "lit"`, so they notice only what stands in a prop's light. It is dark as it is found, with one lamp left burning as the lesson; `factory_lit` is controlled by a board that is hidden until the generator is Repaired, and throwing it switches six lamps on at once. A fuse box kills a circuit for good and takes its shutter with it: dark is safe and shut, lit is open and watched.
+
+Two rules for content fall out of how a bolt works, and both were learned the hard way:
+
+- **A bolt dies on the first sight-blocking cell**, and `schoolTouch` fires where it dies. Anything meant to be shot must block sight, or stand with a wall behind it. A solid, see-through thing is flown straight past.
+- **A prop that answers a school is left `on`, and anything `on` is skipped**, so it fires once ever. Anything meant to be shot twice ends its own list with `{ "do": "switch", "prop": "@self", "on": false }`.
+
+### 8.4 What the dungeons give back to the county
+
+A verb is worth having because the old map changes. `world/county.ts` grows these as each dungeon lands, so none of it is an edit to the county when a dungeon is added:
+
+| | |
+| --- | --- |
+| **Doors** (`data/doors.json`) | A way in is set into a landmark's face (`chunk`) or stood on open ground beside a place (`near`), and only for a zone that registered itself. It may carry a key tag, a night line, and `mark`: where that dungeon's own way out arrives. `fromBelow` makes it a mark and a cover rather than a door down, because a manhole lifts from the pipes and not from the street |
+| **The mine's adit** | A second way out, behind Repair, barred on the county side until the gallery has been stood in |
+| **Dead lamp runs** | The longest unlit stretches of road carry a `relay_box` at the head and a run of `lamp_run` lamps along them at the usual spacing. Sparking the box switches its whole run on and sets `lamps_<n>`. She walks past every one of them for hours before she can do anything about them, which is the point |
+| **Rows for the old map** | `rubble` and the cracked walls (blast), `cold_hearth` and `brazier` (fire), `bud`, `vine_root` and `hedge_seed` (grow), `relay_box` (shock). Placing them in the county is content, not engine |
+
 
 ## 9. Rendering
 

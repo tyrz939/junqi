@@ -40,7 +40,7 @@ This file was rewritten in September 2026 when the Phaser remake was archived. T
 | **LATER** | A real 2020 idea, not needed to ship the county. A row or a module when it lands |
 | **NEVER** | Do not port |
 
-Test names are from `jane/test/`: **E** `engine`, **S** `sim`, **D** `dungeons`, **W** `world`, **R** `replay`, **A** `art`, **T** `rest`, **C** `coop`, **G** `storage`, **B** `budget`, **K** `skeleton`, **Y** `county`, **Q** `quests`, **L** `templates`, **N** `dungeon-gen`, **V** `dungeon-verbs`, **X** `verbs2`, **M** `museum`, **U** `burial`, **I** `library`, **F** `forest`.
+Test names are from `jane/test/`: **E** `engine`, **S** `sim`, **D** `dungeons`, **W** `world`, **R** `replay`, **A** `art`, **T** `rest`, **C** `coop`, **G** `storage`, **B** `budget`, **K** `skeleton`, **Y** `county`, **Q** `quests`, **L** `templates`, **N** `dungeon-gen`, **V** `dungeon-verbs`, **X** `verbs2`, **M** `museum`, **U** `burial`, **I** `library`, **F** `forest`, **P** `pipes`, **FA** `factory`, **SC** `school`.
 
 ---
 
@@ -370,6 +370,9 @@ A change is off-bar if:
 | The Museum, generated | `data/dungeons/museum.json`: one breaker driving a dark-only gate and a light-only one, the stores behind an exhibit that answers blast, 2020's key shuffle kept whole, the Shot-Firer, the Attendant throwing the breaker at 75/50/25% | **IN** — M: 64 seeds (1,000 as a soak), zero fallbacks; the solver refusing the same layout with the breaker withheld; a solo bot to the big jar; two seats at the breaker |
 | The library and Butterfly Forest, generated | `data/dungeons/library.json` (four rooms, nothing alive, Grow taught and tried in one room) and `forest.json` (outdoors, `indoor: false`, not one key, light as the lock; Grow blooms buds, bridges a stream and closes hedge gaps) | **IN** — I, F: 64 seeds each, zero fallbacks; **every closable hedge gap shut and the dungeon still finishes**; a solo bot nets six butterflies and beats the Emperor |
 | The Burial Chamber, generated | `data/dungeons/burial.json` at phase 5: the built content re-hosted and bound to the same names, four corners in the player's order, shades, the great torch, Goldskin | **IN** — U: 64 seeds, zero fallbacks; the old snake chain still played by the bot (D); a shade refusing warm light; Goldskin softened by fire and beatable without it |
+| The pipes, the Factory and the School, generated | `data/dungeons/{pipes,factory,school}.json`: one valve and two runs; light as the rule the machines see by; a timetable on a bell rope | **IN** — P, FA, SC: 64 seeds each (256 as a soak), zero fallbacks, the solver refusing each layout with its control withheld, a solo bot through each |
+| What a verb gives back to the county | doors that appear with their zone, the mine's adit, and relay boxes on the longest dark roads that light a whole run for good | **IN** — Y |
+| A builder's loot is checked | an item that does not exist throws when she opens the chest, so the validator names it instead | **IN** — W |
 | The Gold Mine, generated | mission in `data/dungeons/mine.json`: Repair in the Headmaster's drawer (shut while he stands) with a safe first use in the same room, First Aid off the hub, the track shortcut on the store's iron, four hoists, the nook and its gates, the cage side room; two variants per pool, one arena | **IN** — D: the old chain, now reading the drawer. N: a solo bot does all of it on three seeds |
 | Save v7 | a mine saved from the hand-built layout is dropped; whoever saved in it is put at the mine mouth | **IN** — V |
 | Save v8 | `Unit.order`, `patrolDwell`, `dwell`; `ZoneState.pendingFill` | **IN** — X: a v7 file loads, gains them, and plays on to the same hash |
