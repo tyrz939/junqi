@@ -258,18 +258,18 @@ export function buildCounty(seed: number, attempt: number, rows: readonly Placem
       for (let oy = -3; oy <= 3; oy++) for (let ox = -3; ox <= 3; ox++) if (cx + ox >= 0 && cy + oy >= 0 && cx + ox < SKEL_W && cy + oy < SKEL_H) safe[at(cx + ox, cy + oy)] = 1;
     }
   }
-  // How thick the ground is, per 16 m macro cell. The curve is threat SQUARED on purpose: the
-  // old straight line (0.016 + threat * threat * 0.0038) put one creature in every fifty macro cells at
-  // threat 1 and one in every eighteen at threat 6, which is a county you can walk across without
-  // meeting anything, and the difference between the Lowfields and the Works was under three to
-  // one. Now the Lowfields stay quiet enough to walk and think in and the Works is eight times
-  // thicker than they are. A road still carries the same third of it: a road is the safer way.
+  // How thick the ground is, per 16 m macro cell. The curve is threat SQUARED on purpose. The old
+  // straight line put one creature in every fifty macro cells at threat 1 and one in every eighteen
+  // at threat 6: a county you can walk across without meeting anything, in which the Lowfields and
+  // the Works were under three to one apart. Now the Lowfields stay quiet enough to walk and think
+  // in, and the Works is eleven times thicker than they are. A road still carries a third of
+  // whatever its ground carries, and its ground is a threat lower: a road is the safer way.
   for (let my = 1; my < SKEL_H - 1; my++) {
     for (let mx = 1; mx < SKEL_W - 1; mx++) {
       const i = at(mx, my);
       const threat = sk.threat[i];
       if (threat === 0 || safe[i] || sk.water[i]) continue;
-      if (!k.chance((0.014 + threat * 0.007) * (sk.road[i] ? 0.35 : 1))) continue;
+      if (!k.chance((0.016 + threat * threat * 0.0038) * (sk.road[i] ? 0.35 : 1))) continue;
       const table = WILDLIFE[sk.region[i] as Region].filter((w) => !w.biomes || w.biomes.includes(sk.biome[i] as Biome));
       if (table.length === 0) continue;
       // Company, where the ground is bad. One creature is an obstacle and you walk round it;
