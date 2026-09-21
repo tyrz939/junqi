@@ -57,9 +57,22 @@ export enum Tile {
   Rail = 27,
   Cliff = 28,
   Sill = 29,
+  // The later dungeons' ground and walls (DUNGEONS.md 4.1). Added together, once, so that a dungeon is
+  // rows and rooms and never an edit to this table.
+  Glass = 30, // museum cases: stops feet, not eyes
+  Hedge = 31, // Butterfly Forest's walls, and what Grow closes a gap with
+  Ice = 32, // still water, frozen for good
+  MuseumFloor = 33,
+  MuseumWall = 34,
+  PipeFloor = 35,
+  PipeWall = 36,
+  WorksFloor = 37,
+  WorksWall = 38,
+  SchoolFloor = 39,
+  SchoolWall = 40,
 }
 
-export const TILE_COUNT = 30;
+export const TILE_COUNT = 41;
 
 /**
  * Flags per tile id. Water blocks feet, not sight: 2020 set `block_los` on obj_water
@@ -94,6 +107,11 @@ export const TILE_FLAGS: Uint8Array = (() => {
   // The floor just inside a generated room's mouth. Barrels never leave their room, so they
   // can never jam a corridor or be lost to the plate that needs them (DUNGEONS.md 2.1).
   t[Tile.Sill] = F_INDOOR | F_NOPUSH;
+  t[Tile.Glass] = F_SOLID | F_INDOOR;
+  t[Tile.Hedge] = F_SOLID | F_BLOCK_LOS;
+  t[Tile.Ice] = 0;
+  for (const floor of [Tile.MuseumFloor, Tile.PipeFloor, Tile.WorksFloor, Tile.SchoolFloor]) t[floor] = F_INDOOR;
+  for (const wall of [Tile.MuseumWall, Tile.PipeWall, Tile.WorksWall, Tile.SchoolWall]) t[wall] = F_SOLID | F_BLOCK_LOS | F_INDOOR;
   return t;
 })();
 

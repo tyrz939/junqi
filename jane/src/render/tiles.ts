@@ -43,6 +43,17 @@ const SW: Partial<Record<Tile, Swatch>> = {
   [Tile.Rail]: { base: "#9a7a52", a: "#8a8f98", b: "#4a3626" },
   [Tile.Cliff]: { base: "#6a5c50", a: "#8a7a68", b: "#4a3e36" },
   [Tile.Sill]: { base: "#5e5040", a: "#8a7a68", b: "#3e3428" },
+  [Tile.Glass]: { base: "#6f8f96", a: "#c8e4e8", b: "#4a666e" },
+  [Tile.Hedge]: { base: "#2a5a3c", a: "#3f7a4c", b: "#1c3e2a" },
+  [Tile.Ice]: { base: "#b4dcea", a: "#e4f6fa", b: "#8cbcd0" },
+  [Tile.MuseumFloor]: { base: "#9a8e7c", a: "#ab9f8c", b: "#7e7464" },
+  [Tile.MuseumWall]: { base: "#4a3e44", a: "#6a5a60", b: "#30282e" },
+  [Tile.PipeFloor]: { base: "#565e5c", a: "#687270", b: "#3e4644" },
+  [Tile.PipeWall]: { base: "#2c3436", a: "#48565a", b: "#1c2224" },
+  [Tile.WorksFloor]: { base: "#6c6660", a: "#7e7870", b: "#524c48" },
+  [Tile.WorksWall]: { base: "#3a3230", a: "#5a4c46", b: "#261f1e" },
+  [Tile.SchoolFloor]: { base: "#8a6a4a", a: "#9c7c58", b: "#6a4e34" },
+  [Tile.SchoolWall]: { base: "#3e4a44", a: "#5a6a60", b: "#28322e" },
 };
 
 /** One flat colour per tile id, for the minimap. */
@@ -120,6 +131,7 @@ function paintCell(ctx: CanvasRenderingContext2D, grid: Grid, cx: number, cy: nu
       if ((TILE_FLAGS[grid.tileAt(cx, cy - 1)] & 4) === 0) dot(0, 0, "#9cc8f0", CELL, 1);
       break;
     }
+    case Tile.Hedge:
     case Tile.Bush:
       dot(1, 1, sw.a, 6, 5);
       dot(2, 2, sw.base, 3, 2);
@@ -159,12 +171,16 @@ function paintCell(ctx: CanvasRenderingContext2D, grid: Grid, cx: number, cy: nu
       break;
     case Tile.Floor:
     case Tile.TempleFloor:
+    case Tile.MuseumFloor:
+    case Tile.PipeFloor:
+    case Tile.WorksFloor:
       dot(0, 0, sw.b, CELL, 1);
       dot(0, 0, sw.b, 1, CELL);
       if ((h & 15) === 1) dot(3, 3, sw.a, 2, 2);
       if ((h & 31) === 7) dot(2, 5, sw.b, 4, 1);
       break;
     case Tile.FloorWood:
+    case Tile.SchoolFloor:
       dot(0, 7, sw.b, CELL, 1);
       dot((h % 6) + 1, 2, sw.a, 2, 1);
       if ((cx & 3) === 0) dot(0, 0, sw.b, 1, CELL);
@@ -193,6 +209,19 @@ function paintCell(ctx: CanvasRenderingContext2D, grid: Grid, cx: number, cy: nu
     case Tile.GrownPath:
       dot(1, 1, sw.a, 6, 6);
       dot(3, 3, sw.b, 2, 2);
+      break;
+    case Tile.Glass:
+      // A pane: a bright edge top and left, one long glint.
+      dot(0, 0, sw.a, CELL, 1);
+      dot(0, 0, sw.a, 1, CELL);
+      dot(2, 5, sw.a, 1, 1);
+      dot(3, 4, sw.a, 1, 1);
+      dot(4, 3, sw.a, 1, 1);
+      dot(0, 7, sw.b, CELL, 1);
+      break;
+    case Tile.Ice:
+      if ((h & 3) === 0) dot(h % 5, 2, sw.a, 3, 1);
+      if ((h & 7) === 5) dot((h >> 2) % 5, 5, sw.b, 2, 1);
       break;
     case Tile.Sill: {
       // A worn threshold: a lip along the side that faces the doorway, studs along the other.
