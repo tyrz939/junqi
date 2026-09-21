@@ -25,6 +25,12 @@ const KEEP_ON_TILE_CHANGE = F_PROP_SOLID | F_PROP_LOS | F_OCC;
 
 export const BLOCK_MOVE = F_SOLID | F_PROP_SOLID;
 export const BLOCK_SIGHT = F_BLOCK_LOS | F_PROP_LOS;
+/**
+ * What stops a bolt. Sight, plus any SOLID prop: a barrel is cover, and a thing a spell is meant to
+ * switch on can be a floor grid or a low box instead of having to block sight to be hittable at all.
+ * Tiles keep the sight rule, so a bolt still crosses a fence and a pond as it always has.
+ */
+export const BLOCK_SHOT = F_BLOCK_LOS | F_PROP_LOS | F_PROP_SOLID;
 
 export enum Tile {
   Void = 0,

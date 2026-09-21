@@ -12,6 +12,7 @@
 
 import type { Power, SpellDef } from "@/sim/catalog";
 import { CELL, CRIT_ONE_IN, GCD_TICKS, PARTY_DEALT, PARTY_TAKEN, PX_PER_METRE } from "@/sim/constants";
+import { BLOCK_SHOT } from "@/sim/grid";
 import { firstBlocked, lineOfSight } from "@/sim/los";
 import { irandom } from "@/sim/rng";
 import { asPlayer, vacate, type World } from "@/sim/runtime";
@@ -335,7 +336,7 @@ export function stepProjectiles(w: World): void {
     const speed = Math.sqrt(p.vx * p.vx + p.vy * p.vy);
     const nx = p.x + p.vx;
     const ny = p.y + p.vy;
-    let dead = firstBlocked(w.rt.grid, p.x, p.y, nx, ny) !== -1;
+    let dead = firstBlocked(w.rt.grid, p.x, p.y, nx, ny, BLOCK_SHOT) !== -1;
     p.x = nx;
     p.y = ny;
     p.left -= speed;
