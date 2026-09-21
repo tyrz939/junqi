@@ -22,7 +22,7 @@
   "note": { "name": "Note", "sprite": "note", "w": 1, "h": 1, "solid": false, "blockLos": false, "flat": true, "prompt": "Read" },
   "sign": { "name": "Sign", "sprite": "sign", "w": 2, "h": 1, "solid": true, "blockLos": false, "prompt": "Read" },
   "torch": { "name": "Torch", "sprite": "torch", "w": 1, "h": 1, "solid": false, "blockLos": false, "light": {"radius": 64, "color": "#e1c080", "flicker": 0.2} },
-  "torch_blue": { "name": "Cold Torch", "sprite": "torch_blue", "w": 1, "h": 1, "solid": false, "blockLos": false, "answers": "frost", "lightWhenOn": true, "light": {"radius": 76, "color": "#6aa8ff", "flicker": 0.2} },
+  "torch_blue": { "name": "Cold Torch", "sprite": "torch_blue", "w": 1, "h": 1, "solid": false, "blockLos": false, "answers": "frost", "lightWhenOn": true, "light": {"radius": 76, "color": "#6aa8ff", "flicker": 0.2, "cold": true} },
   "lamp_post": { "name": "Lamp Post", "sprite": "lamp_post", "w": 1, "h": 1, "solid": true, "blockLos": false, "nightOnly": true, "light": {"radius": 96, "color": "#f6cd40", "flicker": 0.05} },
   "campfire": { "name": "Campfire", "sprite": "campfire", "w": 2, "h": 2, "solid": true, "blockLos": false, "light": {"radius": 84, "color": "#ff9040", "flicker": 0.3}, "rest": true, "prompt": "Rest" },
   "lever": { "name": "Lever", "sprite": "lever", "w": 1, "h": 1, "solid": true, "blockLos": false, "prompt": "Pull" },

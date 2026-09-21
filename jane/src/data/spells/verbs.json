@@ -1,0 +1,21 @@
+{
+  "explosion": {
+    "name": "Explosion", "description": "A slow charge that bursts where it lands. Everything near the burst takes all of it. It cracks what is already cracked.", "icon": "spell_blast",
+    "kind": "bolt", "school": "blast", "mp": 30, "energy": 0, "range": 8, "cooldown": 6,
+    "gcdImmune": false, "needsTarget": false, "needsEnemy": true, "needsLos": true, "anim": "cast",
+    "power": { "stat": "spirit", "div": 0.8, "varDiv": 2 }, "speed": 2.5,
+    "splash": { "radius": 28, "div": 1 }, "touch": 28, "stop": 30, "glow": 36
+  },
+  "grow": {
+    "name": "Grow", "description": "Bring on the growing thing in front of you. Nothing grows without light.", "icon": "spell_grow",
+    "kind": "world", "school": "nature", "mp": 20, "energy": 0, "range": 0, "cooldown": 10,
+    "gcdImmune": false, "needsTarget": false, "needsEnemy": false, "needsLos": false, "anim": "cast",
+    "world": "grow", "stop": 30
+  },
+  "spark": {
+    "name": "Spark", "description": "A quick spark. It wakes dead sockets and stops a machine for half a second. It does not stop anything else.", "icon": "spell_shock",
+    "kind": "bolt", "school": "shock", "mp": 12, "energy": 0, "range": 12, "cooldown": 1.5,
+    "gcdImmune": false, "needsTarget": false, "needsEnemy": true, "needsLos": true, "anim": "cast",
+    "power": { "stat": "spirit", "div": 1.5, "varDiv": 4 }, "speed": 7, "effect": "jolted", "stop": 20, "glow": 24
+  }
+}

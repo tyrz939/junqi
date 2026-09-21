@@ -17,16 +17,18 @@
 //   C11 plates can be held
 //   C12 nothing solid appears on a person
 //
-// Not here yet: the stateful flood for two-state buildings. The Museum brings it.
+// A building with states (a breaker, a valve) is solved with the stateful flood (validate.ts):
+// every solve here passes the mission's `states`, and a `state` edge's lock is proven like any
+// other, by taking its controls away and finding the far room unreached.
 
-import type { Catalog } from "@/sim/catalog";
+import { eachAction, type Catalog } from "@/sim/catalog";
 import { F_BLOCK_LOS, F_NOPUSH, F_SOLID, TILE_FLAGS } from "@/sim/grid";
 import type { ActionList } from "@/sim/state";
 import type { Blueprint, PropSpawn, Rect, ZoneContract } from "@/world/blueprint";
 import { infoOf, type BuildInfo, type RoomInfo } from "@/world/dungeon/generate";
 import { pushPath } from "@/world/dungeon/room";
 import type { DungeonDef, EdgeKind, MissionEdge, MissionNode } from "@/world/dungeon/types";
-import { validateBlueprint, type SolveTrace } from "@/world/validate";
+import { validateBlueprint, type SolveOptions, type SolveTrace } from "@/world/validate";
 
 /** Every name the mission binds for a node that is always there. The story may lean on these and no others. */
 export function contractOf(def: DungeonDef): ZoneContract {
@@ -39,7 +41,7 @@ export function contractOf(def: DungeonDef): ZoneContract {
   for (const e of def.edges) {
     if (!critical(e.from) || !critical(e.to)) continue;
     for (const kind of [e.kind, ...(e.also ?? [])]) {
-      if ((kind.t === "key" || kind.t === "lockin" || kind.t === "oneway") && kind.gateAs && !c.props.includes(kind.gateAs)) c.props.push(kind.gateAs);
+      if ((kind.t === "key" || kind.t === "lockin" || kind.t === "oneway" || kind.t === "state") && kind.gateAs && !c.props.includes(kind.gateAs)) c.props.push(kind.gateAs);
       if (kind.t === "verb" && kind.propAs) c.props.push(kind.propAs);
     }
   }
@@ -48,21 +50,26 @@ export function contractOf(def: DungeonDef): ZoneContract {
 
 // --- what a node gives, read off its holdings ----------------------------------------------
 
-type Gains = { keys: Record<string, number>; items: Record<string, number>; verbs: string[]; flags: string[] };
+type Gains = { keys: Record<string, number>; items: Record<string, number>; verbs: string[]; flags: string[]; states: string[] };
+
+/** What the solver is told about a mission before it floods: the spells at the door, and the states. */
+export function solveOptionsOf(def: DungeonDef): SolveOptions {
+  return { verbs: def.givenVerbs, states: (def.states ?? []).map((s) => ({ id: s.id, flag: s.flag })) };
+}
 
 function gainsOf(node: MissionNode, catalog: Catalog): Gains {
-  const g: Gains = { keys: {}, items: {}, verbs: [], flags: [] };
+  const g: Gains = { keys: {}, items: {}, verbs: [], flags: [], states: [] };
   const item = (id: string, qty: number): void => {
     const tag = catalog.items[id]?.opens;
     if (tag) g.keys[tag] = (g.keys[tag] ?? 0) + qty;
     else g.items[id] = (g.items[id] ?? 0) + qty;
   };
   const actions = (list: ActionList | undefined): void => {
-    for (const a of list ?? []) {
+    eachAction(list, (a) => {
       if (a.do === "give") item(a.item, a.qty ?? 1);
       else if (a.do === "learn") g.verbs.push(a.spell);
       else if (a.do === "flag") g.flags.push(a.flag);
-    }
+    });
   };
   for (const h of node.holds) {
     if ("unit" in h) {
@@ -73,6 +80,10 @@ function gainsOf(node: MissionNode, catalog: Catalog): Gains {
     }
     if ("loot" in h) for (const s of h.loot ?? []) item(s.item, s.qty);
     if ("use" in h) actions(h.use);
+    if ("controls" in h && h.controls) {
+      g.states.push(h.controls);
+      for (const list of Object.values(h.becomes ?? {})) actions(list);
+    }
     if ("talk" in h && h.talk) {
       const tree = catalog.dialogue[h.talk];
       for (const n of Object.values(tree?.nodes ?? {})) {
@@ -94,7 +105,15 @@ export function lintDef(def: DungeonDef, catalog: Catalog): string[] {
     const g = gainsOf(n, catalog);
     for (const want of n.grants) {
       const ok =
-        "key" in want ? (g.keys[want.key] ?? 0) > 0 : "verb" in want ? g.verbs.includes(want.verb) : "flag" in want ? g.flags.includes(want.flag) : (g.items[want.item] ?? 0) >= want.qty;
+        "key" in want
+          ? (g.keys[want.key] ?? 0) > 0
+          : "verb" in want
+            ? g.verbs.includes(want.verb)
+            : "flag" in want
+              ? g.flags.includes(want.flag)
+              : "state" in want
+                ? g.states.includes(want.state)
+                : (g.items[want.item] ?? 0) >= want.qty;
       if (!ok) errors.push(`node "${n.id}" says it grants ${JSON.stringify(want)} and nothing it holds gives that`);
     }
   }
@@ -102,6 +121,20 @@ export function lintDef(def: DungeonDef, catalog: Catalog): string[] {
     if (!ids.has(e.from) || !ids.has(e.to)) errors.push(`edge ${e.from} -> ${e.to} names a node that does not exist`);
     if (e.kind.t === "sight" && !def.edges.some((f) => f !== e && f.kind.t !== "sight" && ((f.from === e.from && f.to === e.to) || (f.from === e.to && f.to === e.from)))) {
       errors.push(`edge ${e.from} -> ${e.to} is a sight line with no corridor to look along`);
+    }
+  }
+  const stateIds = (def.states ?? []).map((s) => s.id);
+  if (stateIds.length > 3) errors.push("a dungeon may have three states at most");
+  for (const s of def.states ?? []) {
+    if (!s.values.includes(s.initial)) errors.push(`state "${s.id}" starts as "${s.initial}", which is not one of its values`);
+    if (!def.nodes.some((n) => n.holds.some((h) => "controls" in h && h.controls === s.id))) errors.push(`state "${s.id}" has no control: nothing in the mission can change it`);
+  }
+  for (const e of def.edges) {
+    for (const kind of [e.kind, ...(e.also ?? [])]) {
+      if (kind.t !== "state") continue;
+      const s = (def.states ?? []).find((x) => x.id === kind.var);
+      if (!s) errors.push(`edge ${e.from} -> ${e.to} waits on a state called "${kind.var}", and the mission has none`);
+      else if (!s.values.includes(kind.is)) errors.push(`edge ${e.from} -> ${e.to}: state "${kind.var}" has no value "${kind.is}"`);
     }
   }
   if (def.nodes.filter((n) => n.kind === "entrance").length !== 1) errors.push("a dungeon has exactly one entrance");
@@ -158,18 +191,24 @@ function spendingOrders(def: DungeonDef, catalog: Catalog, dropped: readonly str
       }
       const verbs = [...def.givenVerbs];
       const flags: string[] = [];
+      const controlled: string[] = [];
       const keys: Record<string, number> = {};
       for (const tag of def.givenKeys) keys[tag] = 99;
       nodes.forEach((n, i) => {
         if (!reached.includes(n.id)) return;
         verbs.push(...gains[i].verbs);
         flags.push(...gains[i].flags);
+        controlled.push(...gains[i].states);
         for (const tag in gains[i].keys) keys[tag] = (keys[tag] ?? 0) + gains[i].keys[tag];
       });
       let moved = false;
       for (const l of locks) {
         if (open.includes(l.edge) || plain(l) || (!reached.includes(l.a) && !reached.includes(l.b))) continue;
-        const can = l.kinds.every((kind) => (kind.t === "key" ? (keys[kind.tag] ?? 0) > 0 : kind.t === "verb" ? verbs.includes(kind.verb) : kind.t === "oneway" ? flags.includes(kind.flag) : true));
+        // A state edge that is open as the building starts needs nothing; otherwise she needs a hand on its control.
+        const stateOpen = (id: string, is: string): boolean => (def.states ?? []).some((s) => s.id === id && s.initial === is) || controlled.includes(id);
+        const can = l.kinds.every((kind) =>
+          kind.t === "key" ? (keys[kind.tag] ?? 0) > 0 : kind.t === "verb" ? verbs.includes(kind.verb) : kind.t === "oneway" ? flags.includes(kind.flag) : kind.t === "state" ? stateOpen(kind.var, kind.is) : true,
+        );
         if (can) {
           open.push(l.edge);
           moved = true;
@@ -205,7 +244,8 @@ export function checkDungeon(bp: Blueprint, catalog: Catalog): string[] {
   if (info.errors.length > 0 || !info.layout) return info.errors;
   const def = info.def;
   const contract = contractOf(def);
-  const base = validateBlueprint(bp, catalog, contract, def.givenKeys, { verbs: def.givenVerbs, trace: true });
+  const solveWith = solveOptionsOf(def);
+  const base = validateBlueprint(bp, catalog, contract, def.givenKeys, { ...solveWith, trace: true });
   if (!base.ok || !base.trace) return base.errors.map((e) => `solver: ${e}`);
   const errors: string[] = [];
   const trace = base.trace;
@@ -246,9 +286,21 @@ export function checkDungeon(bp: Blueprint, catalog: Catalog): string[] {
     if (!a || !b) continue;
     const far = passOf(trace, b.rect) >= passOf(trace, a.rect) ? b : a;
     const kind = lock.kind;
-    const withhold = kind.t === "key" ? { keys: [kind.tag] } : kind.t === "verb" ? { verbs: [kind.verb] } : kind.t === "oneway" ? { flags: [kind.flag] } : null;
+    // A state edge is held by its controls: take every one of them away. (One that stands open
+    // as the building starts is not a lock on the way in, and proves nothing by this.)
+    const initial = kind.t === "state" && (def.states ?? []).some((s) => s.id === kind.var && s.initial === kind.is);
+    const withhold =
+      kind.t === "key"
+        ? { keys: [kind.tag] }
+        : kind.t === "verb"
+          ? { verbs: [kind.verb] }
+          : kind.t === "oneway"
+            ? { flags: [kind.flag] }
+            : kind.t === "state" && !initial
+              ? { props: info.controls.filter((c) => c.state === kind.var).map((c) => c.prop) }
+              : null;
     if (!withhold) continue;
-    const t = validateBlueprint(bp, catalog, contract, def.givenKeys, { verbs: def.givenVerbs, trace: true, withhold }).trace;
+    const t = validateBlueprint(bp, catalog, contract, def.givenKeys, { ...solveWith, trace: true, withhold }).trace;
     if (t && passOf(t, far.rect) >= 0) errors.push(`C1: ${far.node.id} can be reached without ${JSON.stringify(withhold)}: the lock on ${edge.from} -> ${edge.to} does not hold`);
   }
 
@@ -259,7 +311,9 @@ export function checkDungeon(bp: Blueprint, catalog: Catalog): string[] {
   const supply: Record<string, number> = {};
   const sinks: Record<string, number> = {};
   const gives = (list: ActionList | undefined): void => {
-    for (const a of list ?? []) if (a.do === "give") supply[a.item] = (supply[a.item] ?? 0) + (a.qty ?? 1);
+    eachAction(list, (a) => {
+      if (a.do === "give") supply[a.item] = (supply[a.item] ?? 0) + (a.qty ?? 1);
+    });
   };
   for (const p of bp.props) {
     for (const s of p.loot ?? []) supply[s.item] = (supply[s.item] ?? 0) + s.qty;
@@ -320,7 +374,7 @@ export function checkDungeon(bp: Blueprint, catalog: Catalog): string[] {
     const shows = lockRow.actions.some((a) => a.do === "show" && a.prop === l.wayIn) && lockRow.actions.some((a) => a.do === "lock" && a.prop === l.gate);
     const hides = clearRow.actions.some((a) => a.do === "hide" && a.prop === l.wayIn) && (lockRow.reset ?? []).some((a) => a.do === "hide" && a.prop === l.wayIn);
     if (!shows || !hides) errors.push(`C6: ${l.lock} must show ${l.wayIn} when it locks ${l.gate}, and the clear and the reset must hide it`);
-    const shutOut = validateBlueprint(bp, catalog, contract, def.givenKeys, { verbs: def.givenVerbs, trace: true, shut: [l.gate] }).trace;
+    const shutOut = validateBlueprint(bp, catalog, contract, def.givenKeys, { ...solveWith, trace: true, shut: [l.gate] }).trace;
     if (shutOut && shutOut.firstSeen[wayIn.cy * w + wayIn.cx] < 0) errors.push(`C6: ${l.wayIn} cannot be reached with ${l.gate} down`);
   }
 
@@ -399,29 +453,35 @@ export function checkDungeon(bp: Blueprint, catalog: Catalog): string[] {
     if (!ok) errors.push(`C11: nothing can be pushed onto ${plate.key}`);
   }
 
-  // C12. Nothing solid appears on whoever caused it.
+  // C12. Nothing solid appears on whoever caused it. (The engine would stand her aside if it
+  // did, sim/clear.ts; a dungeon should still never ask it to.)
   for (const [id, t] of Object.entries(bp.triggers ?? {})) {
     const rect = bp.rects[t.rect];
-    for (const a of t.actions) {
-      if (a.do !== "show" && a.do !== "lock") continue;
+    eachAction(t.actions, (a) => {
+      if (a.do !== "show" && a.do !== "lock") return;
       const p = bp.props.find((x) => x.key === a.prop);
-      if (!p) continue;
+      if (!p) return;
       const d = catalog.props[p.def];
-      if (!(d.gate || d.solid)) continue;
+      if (!(d.gate || d.solid)) return;
       if (p.cx < rect.cx + rect.w && p.cx + d.w > rect.cx && p.cy < rect.cy + rect.h && p.cy + d.h > rect.cy) errors.push(`C12: trigger ${id} would put ${p.key} on top of whoever tripped it`);
-    }
+    });
   }
   return errors;
 }
 
 function teaches(p: PropSpawn, verb: string, catalog: Catalog): boolean {
-  if ((p.use ?? []).some((a) => a.do === "learn" && a.spell === verb)) return true;
+  let found = false;
+  const look = (list: ActionList | undefined): void =>
+    eachAction(list, (a) => {
+      if (a.do === "learn" && a.spell === verb) found = true;
+    });
+  look(p.use);
   const tree = p.talk ? catalog.dialogue[p.talk] : undefined;
   for (const n of Object.values(tree?.nodes ?? {})) {
-    if ((n.actions ?? []).some((a) => a.do === "learn" && a.spell === verb)) return true;
-    for (const o of n.options ?? []) if ((o.actions ?? []).some((a) => a.do === "learn" && a.spell === verb)) return true;
+    look(n.actions);
+    for (const o of n.options ?? []) look(o.actions);
   }
-  return false;
+  return found;
 }
 
 /** Walking distance in cells from one cell to everywhere, with the named props out of the way. -1 where it cannot get. */
@@ -500,6 +560,7 @@ export function firstCompletion(bp: Blueprint, catalog: Catalog, info: BuildInfo
   const items: Record<string, number> = {};
   const verbs = [...def.givenVerbs];
   const flags: string[] = [];
+  const controlled: string[] = [];
   const opened = new Set<string>();
   const openEdges: number[] = [];
   const collect = (node: MissionNode): void => {
@@ -508,8 +569,10 @@ export function firstCompletion(bp: Blueprint, catalog: Catalog, info: BuildInfo
     for (const t in g.items) items[t] = (items[t] ?? 0) + g.items[t];
     verbs.push(...g.verbs);
     flags.push(...g.flags);
+    controlled.push(...g.states);
   };
   const canOpen = (kind: EdgeKind): boolean => {
+    if (kind.t === "state") return controlled.includes(kind.var) || (def.states ?? []).some((s) => s.id === kind.var && s.initial === kind.is);
     if (kind.t === "key") return (keys[kind.tag] ?? 0) > 0;
     if (kind.t === "verb") return verbs.includes(kind.verb) && (kind.needs ?? []).every((n) => (items[n.item] ?? 0) >= n.qty);
     if (kind.t === "oneway") return flags.includes(kind.flag);

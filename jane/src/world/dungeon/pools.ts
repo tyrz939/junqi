@@ -7,16 +7,29 @@ import type { RoomTemplate } from "@/world/dungeon/types";
 
 const FILES = import.meta.glob("./rooms/*/*.room", { query: "?raw", import: "default", eager: true }) as Record<string, string>;
 
-/** In file path order, which is what makes "the first template of the pool" mean something. */
-export const TEMPLATES: readonly RoomTemplate[] = Object.keys(FILES)
+const LOADED: RoomTemplate[] = Object.keys(FILES)
   .sort()
   .map((path) => parseRoom(FILES[path], path));
+
+/** In file path order, which is what makes "the first template of the pool" mean something. */
+export const TEMPLATES: readonly RoomTemplate[] = LOADED;
 
 {
   const seen = new Set<string>();
   for (const t of TEMPLATES) {
     if (seen.has(t.id)) throw new Error(`Room template "${t.id}" is defined twice`);
     seen.add(t.id);
+  }
+}
+
+/**
+ * Rooms that are not the game's: a test dungeon keeps its templates beside the test and hands
+ * them over here, so they are in nobody's pools but its own. Nothing in src/ calls this.
+ */
+export function addTemplates(list: readonly RoomTemplate[]): void {
+  for (const t of list) {
+    if (LOADED.some((x) => x.id === t.id)) throw new Error(`Room template "${t.id}" is defined twice`);
+    LOADED.push(t);
   }
 }
 

@@ -16,6 +16,7 @@ import { SEAT_COATS, seatSprite } from "@/art/units";
 import { CELL, RING_RADIUS } from "@/sim/constants";
 import type { SimEvent } from "@/sim/events";
 import { BLOCK_MOVE, cellOf } from "@/sim/grid";
+import { lampsLit, propLightShowing } from "@/sim/light";
 import { propsInCells } from "@/sim/runtime";
 // The renderer draws ONE SEAT's view: her zone, her camera. Four clients, four cameras.
 import type { PlayerView as Sim } from "@/sim/sim";
@@ -23,7 +24,7 @@ import { FACING_DX, FACING_DY, type Prop, type School, type Unit } from "@/sim/s
 import { maxHp } from "@/sim/units";
 import { fogSeen } from "@/sim/zones";
 import { buildAtlas, drawSprite, iconDataUrl, type Atlas } from "@/render/atlas";
-import { ambientForHour, isNight, Lighting, type Light } from "@/render/lighting";
+import { ambientForHour, Lighting, type Light } from "@/render/lighting";
 import { TileCache } from "@/render/tiles";
 
 const TARGET_VIEW_H = 216;
@@ -41,6 +42,8 @@ const SCHOOL_COLOR: Record<School, string> = {
   frost: "#a8e0f8",
   fire: "#ff9040",
   nature: "#98d848",
+  blast: "#f6cd40",
+  shock: "#c8b8ff",
 };
 
 type FloatText = { x: number; y: number; text: string; color: string; age: number; big: boolean };
@@ -239,7 +242,8 @@ export class Renderer {
     const inView = (x: number, y: number, m: number): boolean =>
       x > vx - m && y > vy - m && x < vx + this.viewW + m && y < vy + this.viewH + m;
     const lights: Light[] = [];
-    const night = isNight(sim.hour);
+    // Whether a prop's light is on is the sim's rule (sim/light.ts): what she sees lit is what a sentry sees lit.
+    const night = lampsLit(sim.state);
     const amb = bp.indoor ? bp.ambient * 255 : Math.min(...ambientForHour(sim.hour));
     const darkness = 1 - amb / 255;
     const flick = (seed: number, amount: number): number => 1 - amount * (0.5 + 0.5 * Math.sin(this.frameNo * 0.23 + seed * 1.7));
@@ -267,8 +271,7 @@ export class Renderer {
       if (Math.abs(gy - shown.y) < 0.3) shown.y = gy;
       if (!inView(gx, gy, m)) continue;
       const sprite = this.atlas[def.sprite];
-      const lit = def.light && (!def.lightWhenOn || p.on) && (!def.nightOnly || night);
-      if (def.light && lit) {
+      if (def.light && propLightShowing(def, p, night)) {
         lights.push({
           x: shown.x + (def.w * CELL) / 2 - vx,
           y: shown.y + (def.h * CELL) / 2 - 6 - vy,

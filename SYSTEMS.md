@@ -40,7 +40,7 @@ This file was rewritten in September 2026 when the Phaser remake was archived. T
 | **LATER** | A real 2020 idea, not needed to ship the county. A row or a module when it lands |
 | **NEVER** | Do not port |
 
-Test names are from `jane/test/`: **E** `engine`, **S** `sim`, **D** `dungeons`, **W** `world`, **R** `replay`, **A** `art`, **T** `rest`, **C** `coop`, **G** `storage`, **B** `budget`, **K** `skeleton`, **Y** `county`, **Q** `quests`, **L** `templates`, **N** `dungeon-gen`, **V** `dungeon-verbs`.
+Test names are from `jane/test/`: **E** `engine`, **S** `sim`, **D** `dungeons`, **W** `world`, **R** `replay`, **A** `art`, **T** `rest`, **C** `coop`, **G** `storage`, **B** `budget`, **K** `skeleton`, **Y** `county`, **Q** `quests`, **L** `templates`, **N** `dungeon-gen`, **V** `dungeon-verbs`, **X** `verbs2`.
 
 ---
 
@@ -106,13 +106,14 @@ One `Unit` shape. `controller: player | ai | npc | snake`. Do not split Player /
 | GCD 90 ticks, per-spell cooldown, `stop` on cast | **IN** — S |
 | 24-slot bag, spellbook, 4-way facing, aim vector | **IN** — S |
 | Incoming damage queue; hp changes only at the flush | **IN** — S: "queues damage and only changes hp at the flush" |
-| Resist per school (unit row × status rows) | **SHAPE** |
+| Resist per school (unit row × status rows); schools are `heal physical frost fire nature blast shock`; an effect may strip the row's resists (`noResist`: `softened`) or land only on what is weak to a school (`onlyIfWeak`: `jolted`) | **IN** — X: a plated machine takes a fifth of a blow, all of it when softened, and one and a half times a spark either way; the spark jolts it and not a skeleton |
 | Status list as `effects.json` rows read by every unit | **IN** — D (chilled, poisoned via play); catalog E |
 | First-hit aggro; aggro scan every 10 ticks, staggered without 2020's dead-counter bug | **IN** — S: "enemies chase a player who is standing still" |
 | Respawn timer (ticks while asleep too); `respawn: 0` stays dead | **SHAPE** |
 | Player death: stand back up at the last arrival mark after 4 s; lock-ins reset | **IN** — D: "dying inside a lock-in re-opens the gate and re-arms the trap" |
 | Dialogue hook: unit row `talk` | **IN** — S golden path |
-| Patrol waypoints; home follows the patrol | **SHAPE** |
+| Patrol waypoints; home follows the patrol; a waypoint may carry a **dwell** in ticks (third number in `UnitSpawn.patrol`, `Unit.patrolDwell`); `npc` units keep a patrol too | **IN** — X: a rat and a friendly `npc` stand 120 ticks at the point that has a dwell and walk on from the one that has none; a generated holding's `patrol` becomes cells and dwells |
+| Boss phases by health: `phases[n].hpBelow`, the phase's `book` and `run`, and `onEnter` run once with the boss as subject, for whoever struck; whole again, it starts over | **IN** — X: two thresholds, one blow through both, the reset |
 | Occupy path cell (every awake living unit, not only in combat) | **IN** — E: "paths around other units' cells" |
 | Range between bounds (`bounds` row field) | **IN** — S |
 
@@ -129,7 +130,9 @@ The pipeline is the product: validate → spawn a kind → pay only if valid →
 | Failed cast costs nothing | **IN** — S |
 | Kinds: `melee`, `bolt`, `self`, `world`, `ground` | **IN** (melee, bolt, world: S, D) / **SHAPE** (self, ground) |
 | Aim-based player casting; AI casts at target; bolts do not home | **IN** — D: torches lit by an aimed Icebolt |
-| Bolt fan / ring (`count`, `fan`), splash, carried light | **IN** — D: snake ring ≥ 15 bolts |
+| Bolt fan / ring (`count`, `fan`), splash, carried light | **IN** — D: snake ring ≥ 15 bolts; X: Explosion's splash is the whole blow (`div` 1) |
+| Spell `touch` (px): how near a prop's middle a bolt must end to switch on what answers its school; 14 when left out | **IN** — X: a blast finds the middle of a 5 x 3 pile from its corner, and with the old fixed 14 it does not |
+| Player verbs as rows: `explosion` (bolt, blast, splash, touch 28), `grow` (world), `spark` (bolt, shock, `jolted`); effects `dazzled`, `jolted`, `dusted`, `softened` | **IN** — X (the rows and what they do), A (their icons) |
 | Bolts die on the first sight-blocking cell or enemy body; water does not block them | **IN** — E: LOS |
 | Crit 1-in-20 ×2; melee `str/8 + irandom(str/32)`; Icebolt `spi*0.8 + irandom(spi/8)`; Fireball `spi + irandom(spi/2)` | **IN** as rows |
 | AI uses the same `tryCast`; first affordable spell in the book | **IN** — S, D |
@@ -188,6 +191,10 @@ idle (regen, patrol, bait, aggro+LOS every 10 ticks)
 | ≤ 4 searches per tick; re-plan every 20 ticks or when the goal moves | **SHAPE** |
 | LOS: integer DDA supercover | **IN** — E |
 | `bait` row field (the unfightable burial snake) | **IN** — D |
+| `litAt(w, x, y)`: is this point inside two thirds of a showing prop light's radius. Prop lights only (never her glow, a bolt or a unit's), read off the prop buckets, no cache; one rule (`propLightShowing`) shared with the renderer: `lightWhenOn`, `nightOnly` (18:30 to 06:30), `dayOnly` (the rest), hidden | **IN** — X; B still holds the tick budget |
+| `sight: "lit"` (unit row): notices and keeps only a target standing in light | **IN** — X: blind in the dark beside a skeleton that is not, sees her under a lamp, loses her when it goes out, takes the lit one of two players |
+| `shunsLight` (unit row): paths round warm light (`light.cold` does not count), stops at the nearest dark cell and waits, leaves if caught in it | **IN** — X: 600 ticks at the edge without once standing in the light or touching her, at a re-plan every 20 ticks; comes in when the lamp goes out |
+| `send` orders (`Unit.order`): walk to a mark minding nothing, run a list on arrival as the sender, give up on a tick budget; kept awake outside the ring; saved | **IN** — X: past a player inside its aggro; a walk with no way is given up; a save mid-walk loads into the same walk; the sender of two players is paid |
 | Snake boss: the one custom mover. Turn clamp, 900 / 300 tick phases, reset on broken LOS, trail nodes, forwarding tail hitboxes | **IN** — D |
 
 ## 7. World verbs
@@ -203,17 +210,24 @@ idle (regen, patrol, bait, aggro+LOS every 10 ticks)
 | Carry / put down in front, never on your own cell | **SHAPE** |
 | Pressure plate held by a unit **or a pushable**; `release` re-locks | **IN** — D: mine |
 | Repair: world-kind spell, prop `answers: "repair"`, consumes `needs`, refuses without | **IN** — D: mine |
+| Grow: world-kind spell, prop `answers: "grow"`, and only in light (`litAt`); in the dark it costs nothing and says so | **IN** — X |
 | School touch: frost wakes `torch_blue` | **IN** — D: burial |
 | Learn-spell prop (a dialogue tree with a `learn` action) | **IN** — S golden path |
 | Lever / toggle (`use` list, `on` state) | **IN** — N: the hoist lever, hidden until its hoist is mended, pulled once |
+| `if` (conditions, `then`, `else`): a list that depends on the world, asked as whoever is acting; checked at boot all the way down | **IN** — X: both branches, `hasItem` differing between two players, a bad row inside a branch |
+| `send` (a unit by key, to a mark, `then`) | **IN** — X (see AI) |
+| `reveal` (named rects into the fog, the party's); a prop that is read may also run its `use` (the wall notice) | **IN** — X: the mine's notice shows every room this seed placed and no corridor |
+| `show`, `lock` and a solid `fill` never land on a unit: shown and locked things stand her aside (a walk outward over open floor, never through a wall); a solid fill waits, saved, until its whole rect is clear | **IN** — X: an exhibit against a wall, the big door on two units, a hedge that does not grow through her or round her and lands after a save and a step away |
+| A prop row's own `prompt` wins over "Open" for something holding loot | **IN** — X: Gather, Pick up, Open |
+| Console `kill`: what she can see within 25 m, never the hidden, never through a wall | **IN** — X |
 | `strike`: everything hostile in a named rect is hit once, optional effect, friends spared unless `hitsFriends`; the blow (kill, quest count, party penalty) is the puller's | **IN** — V; N: a mended hoist dropped on Iron Knuckles, 200 and `staggered` |
 | A prop's `to` may name the zone she is in: moved to the mark, nothing reloaded (way in, vent, drop) | **IN** — V: same runtime, same zone state, no travel pending |
 | Growth props: `jar`, `jar_big`, `leaf_page`; `use` is `grow` with the prop's own key as the id | **IN** — N: the cabinet jar gives once and only once; the vault page hides itself |
 | Trigger rects: `enter` / `while`, conditions, actions, `reset` on player death | **IN** — D: lock-in, arena, torches |
 | `Blueprint.triggers`: rows a builder writes, merged with the catalog's for the zone in the sim and in the validator; checked like catalog rows; an id in both is an error | **IN** — V: the mine's arena rows ride on the blueprint and re-arm on death; the validator refuses a clash, a missing prop, a bad row |
 | Location | **IN** — S, D |
-| Fog: one bit per 16 px block, interiors, in zone state | **SHAPE** |
-| Tile edits as `tileDeltas` (`fill` action) | **SHAPE** — nothing uses it yet; it is what Grow and drain will be |
+| Fog: one bit per 16 px block, interiors, in zone state | **IN** (the bits: X, through `reveal`) / **SHAPE** (the draw) |
+| Tile edits as `tileDeltas` (`fill` action) | **IN** — X: solid and walkable fills, across a save. No placed content uses it yet; it is what Grow and drain will be |
 | Lily-pad rafts, cart on a track | **LATER** |
 
 ## 8. GUI / camera / input
@@ -243,8 +257,9 @@ Jane + letter (Sunday train, 17:00, sunset)
   → kitchen (location): note (quest), pantry, bench (craft Manashield), ice orb (learn Icebolt)
   → cellar: iron key ×2, two iron doors, rats (meat), plain key, storage (wood, iron), roses, potion room
   → dog: rats → snakeroot → Stranglethorn → Poisoned Rat Meat
-  → mine (dog teaches Repair): plate + barrel, plain keys, clerk (HM key), Headmaster (vault key),
-       broken steps (Repair, 2 wood), ornate chest (boss key), vault (gold, Museum key), Iron Knuckles
+  → mine (the dog points; Repair is in the Headmaster's drawer): plate + barrel, plain keys, clerk (HM key),
+       Headmaster (vault key), broken steps (Repair, 2 wood), ornate chest (boss key), the adit,
+       vault (gold, Museum key), Iron Knuckles
   → burial: cold torches (Icebolt), rat maze (Snake Key), lock-in (Giant Snake Key),
        garden (flower holds the roots; the last page: Fireball), snakes you feed, the Snake
   → dog: "There is a museum across the river with a wing marked MAGIC, and you are holding the key to it."
@@ -288,7 +303,9 @@ A change is off-bar if:
 | Status | `sim/status.ts` |
 | AI / path / LOS / angles | `sim/ai.ts` `path.ts` `los.ts` `angles.ts` |
 | Snake | `sim/snake.ts` |
-| USE, push / pull / carry, Repair, school touch | `sim/interact.ts` |
+| USE, push / pull / carry, Repair, Grow, school touch | `sim/interact.ts` |
+| Light the sim can see (`litAt`, the one rule for a showing prop light) | `sim/light.ts` |
+| Nothing solid lands on a unit (nudge, pending fills) | `sim/clear.ts` |
 | Verbs and conditions | `sim/actions.ts` |
 | Bags, craft | `sim/inventory.ts` |
 | Quests / dialogue / triggers + plates | `sim/quests.ts` `dialogue.ts` `triggers.ts` |
@@ -344,12 +361,18 @@ A change is off-bar if:
 | Heat | `round(heat x baseHeat)` capped by the template, spent on the mission's bestiary, two to a socket, every unit at the mission's phase; rest rooms empty | **IN** — N |
 | Lock-in macro | one function: lock, show the way in, wake or spawn, toast; reset; clear. The way in is hidden until the room seals | **IN** — V: hidden, shown, climbed, hidden again; a death re-arms it. N: C6 |
 | Solver: verbs, `when`, hops, ablation | `validateBlueprint` options `verbs`, `withhold`, `shut`, `entry`, `trace` | **IN** — V: no Repair, no gallery; no flag, no nook; Headmaster shut away, no drawer; the arena reached over a shut gate only when the way in shows |
+| Solver: `if` | `then` once its conditions can hold, `else` if they did not when the list first ran; a `then` that cannot run yet is kept for anything that can be worked again, and not for a lever that works once | **IN** — X |
+| Solver: floods only when feet can go somewhere new | a gate opening or a blocking prop shown or hidden floods again; a chest unlocking, loot, a kill, a flag go round the settle loop. County validation, seed 3: 723 ms to 118 ms | **IN** — X: a chain of locked chests is one flood, a gate is two |
+| The stateful flood | `validateBlueprint` option `states` (at most three two-valued flags; unset = how the zone starts). Nodes are (cell, state); a control (a prop whose `use` sets a state flag) reached in one state is an edge to the state its list leads to, entered at the control; what controls lock, unlock, show and hide is how the states differ; everything else stays monotone. A state that looks different by two routes is an error | **IN** — X: accepted with the breaker, refused without it, and refused when the breaker is behind a door only the other state opens |
+| `state` edges and controls | mission `states`, edge `{ t: "state", var, is }` (a keyless gate, shut in the starting state unless `is` is it), holding `controls` (+ `becomes`): the generator writes the one `if` list that flips the flag and drives every such gate both ways; grant `{ state }`; C1, C3 and C8 know the kind | **IN** — X, on a test dungeon that is in nobody's data folder |
+| The adit | a door in the gallery (behind Repair) to the county mark `mine_adit`, round the hill from the mouth; the county's side is barred until the gallery has been stood in, then a way back in | **IN** — X; W: both doors lead to marks that exist |
 | Checks C1 to C12 | `world/dungeon/checks.ts`, run by `buildZone` through the zone's `check` hook; a failing candidate is re-rolled and the error names the check | **IN** — N: every seed passes, and each of C1 and C3 to C12 rejects by name a blueprint or a mission broken for it (C2 falls out of C1) |
 | The Gold Mine, generated | mission in `data/dungeons/mine.json`: Repair in the Headmaster's drawer (shut while he stands) with a safe first use in the same room, First Aid off the hub, the track shortcut on the store's iron, four hoists, the nook and its gates, the cage side room; two variants per pool, one arena | **IN** — D: the old chain, now reading the drawer. N: a solo bot does all of it on three seeds |
 | Save v7 | a mine saved from the hand-built layout is dropped; whoever saved in it is put at the mine mouth | **IN** — V |
+| Save v8 | `Unit.order`, `patrolDwell`, `dwell`; `ZoneState.pendingFill` | **IN** — X: a v7 file loads, gains them, and plays on to the same hash |
 | Co-op tags on templates (`plate_or_friend`, `twin_hold`, `lure_and_lever`) | parsed and kept; nothing reads them | **SHAPE** — the two-bot tests of `DUNGEONS.md` 2.8 are not written |
 | Template bot harness (a bot plays each room in each transform) | — | **LATER** |
-| Stateful flood (two-state buildings), `reveal`, the adit, the powder store, the dungeon viewer page | — | **LATER** — the Museum brings the first; the adit needs a county chunk; the powder store needs Explosion |
+| The powder store, the dungeon viewer page | — | **LATER** — the powder store wants a `rubble` row that answers `blast` (the Museum's); the spell is in |
 
 ## 12. Intentionally later, in order
 
@@ -358,9 +381,9 @@ A change is off-bar if:
 1. **A browser smoke test** (boot, new game, walk, open bags) so presentation rows can start earning **IN**.
 2. **Push / pull / carry under test**, then a lever placed somewhere real.
 3. **Museum** — the next 2020 zone; key shuffle, light switches, a door Repair mends. Its key is already in the mine vault.
-4. **Explosion** (mine reward in the 2020 map) and **Grow** (`fill` action + `answers: "grow"`), then **Butterfly Forest** as 2020 drew it: eight butterflies, no doors.
+4. **Explosion** and **Grow** are spell rows now, with the engine under them (X); what is left is the things that answer them, then **Butterfly Forest** as 2020 drew it: eight butterflies, no doors.
 5. **Cart on a track** (`machine.kind = cart`), lily-pad rafts.
-6. **Pipes → Factory** with the Electric spell; the orb waits in the cellar study.
+6. **Pipes → Factory** with the Electric spell (`spark` is a row; `sight: "lit"` is in); the orb waits in the cellar study.
 7. The other three burial corners and the wizard; **School**.
 8. Audio bus; touch layout; options; res sickness on death.
 

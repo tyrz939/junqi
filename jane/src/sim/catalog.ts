@@ -68,6 +68,12 @@ export type SpellDef = {
   stop: number;
   /** Light carried by the projectile, px. */
   glow?: number;
+  /**
+   * How close to a prop's middle the bolt must end to switch on a prop that answers its school,
+   * px. 14 when left out: an icebolt has to find the torch. A blast is wider (28), because it
+   * must reach the middle of a 3 x 2 pile of rubble from whichever side it lands on.
+   */
+  touch?: number;
 };
 
 export type EffectDef = {
@@ -97,6 +103,13 @@ export type EffectDef = {
   onMelee?: { school: School; amount: number; effect?: string };
   /** Taking a hit restores this much MP (2020 production board: "taking hits restores mana"). */
   manaOnHit?: number;
+  /**
+   * Lands only on a unit whose own row is weak to this school (resist below 0). `jolted` is
+   * this: a spark stops a machine for half a second and does nothing to a rat.
+   */
+  onlyIfWeak?: School;
+  /** While it lasts, the unit row's own resists count for nothing (weaknesses stay). Fire opens Goldskin. */
+  noResist?: boolean;
 };
 
 export type LootRoll = { item: string; qty: number; chance: number };
@@ -135,8 +148,19 @@ export type UnitDef = {
   bait?: string;
   /** Snake controller only: body segment count and spacing in px. */
   body?: { segments: number; spacing: number };
-  /** Spell lists by phase for bosses; phase n starts at hpBelow[n] fraction. */
-  phases?: { hpBelow: number; book: string[]; run?: number }[];
+  /**
+   * Spell lists by phase for bosses, in falling order of `hpBelow` (a fraction of full health).
+   * A row is entered when health falls to it: the unit takes its book (and `run`), and `onEnter`
+   * runs once, with the boss as the subject, on behalf of whoever landed the blow: the Attendant
+   * throws the breaker at 75%. Until the first row is entered the unit is its own row. A boss
+   * that gets all its health back (a leash, a respawn) starts again, and its lists will run again.
+   * (The snake reads this table by its own clock: sim/snake.ts.)
+   */
+  phases?: { hpBelow: number; book: string[]; run?: number; onEnter?: ActionList }[];
+  /** `lit`: it only notices, and only keeps, a target standing in a prop's light. The Factory's sentries. */
+  sight?: "lit";
+  /** It will not step into warm light: it walks to the edge of it and waits there. The Burial's shades. */
+  shunsLight?: boolean;
 };
 
 export type ItemDef = {
@@ -193,11 +217,17 @@ export type PropDef = {
   lightWhenOn?: boolean;
   /** Light shows only between 18:30 and 06:30, like the 2020 lamp posts. */
   nightOnly?: boolean;
+  /** Light shows only between 06:30 and 18:30: a glade the sun comes down into. The other half of `nightOnly`. */
+  dayOnly?: boolean;
   /** A bed or a fire. The game can only be saved within reach of one, and dying wakes you at the last one used. */
   rest?: boolean;
   /** Gathered things vanish once looted. */
   hideWhenUsed?: boolean;
-  light?: { radius: number; color: string; flicker: number };
+  /**
+   * `cold`: light that shows what is there and keeps nothing off (the Burial's blue torches).
+   * Something that `shunsLight` walks straight through it. Everything else about it is light.
+   */
+  light?: { radius: number; color: string; flicker: number; cold?: boolean };
   /** Draw order bias: floor decals draw under units. */
   flat?: boolean;
   prompt?: string;
@@ -352,6 +382,21 @@ export function buildCatalog(): Catalog {
 type Need = (ok: boolean, msg: string) => void;
 const isSchool = (s: unknown): boolean => SCHOOLS.includes(s as School);
 
+/**
+ * Every action in a list, and in the lists inside it (`if`'s branches, what a sent unit does
+ * on arrival), in written order. Anything that reads lists for what they COULD do (the solver,
+ * the dungeon checks, the quest tests) walks them with this, so a `learn` under an `if` is still found.
+ */
+export function eachAction(list: ActionList | undefined | null, fn: (a: Action) => void): void {
+  for (const a of list ?? []) {
+    fn(a);
+    if (a.do === "if") {
+      eachAction(a.then, fn);
+      eachAction(a.else, fn);
+    } else if (a.do === "send") eachAction(a.then, fn);
+  }
+}
+
 function checkAction(c: Catalog, need: Need, where: string, a: Action): void {
   switch (a.do) {
     case "quest":
@@ -383,6 +428,21 @@ function checkAction(c: Catalog, need: Need, where: string, a: Action): void {
       break;
     case "grow":
       need((a.stat === "strength" || a.stat === "spirit") && a.amount > 0 && typeof a.id === "string" && a.id !== "", `${where}: grow needs a stat, an amount and the id of the thing found`);
+      break;
+    case "if":
+      need(Array.isArray(a.when) && a.when.length > 0 && Array.isArray(a.then), `${where}: if needs a "when" and a "then"`);
+      need(a.else === undefined || Array.isArray(a.else), `${where}: if: "else" must be a list`);
+      checkConditionRows(c, need, where, Array.isArray(a.when) ? a.when : []);
+      for (const b of Array.isArray(a.then) ? a.then : []) checkAction(c, need, `${where} (then)`, b);
+      for (const b of Array.isArray(a.else) ? a.else : []) checkAction(c, need, `${where} (else)`, b);
+      break;
+    case "send":
+      need(typeof a.unit === "string" && a.unit !== "" && typeof a.to === "string" && a.to !== "", `${where}: send needs a unit and a mark to send it to`);
+      need(a.then === undefined || Array.isArray(a.then), `${where}: send: "then" must be a list`);
+      for (const b of Array.isArray(a.then) ? a.then : []) checkAction(c, need, `${where} (then)`, b);
+      break;
+    case "reveal":
+      need(Array.isArray(a.rects) && a.rects.length > 0 && a.rects.every((r) => typeof r === "string" && r !== ""), `${where}: reveal needs a list of rects`);
       break;
     default:
       break;
@@ -436,6 +496,7 @@ export function validateCatalog(c: Catalog): string[] {
     if (s.kind === "bolt") need((s.speed ?? 0) > 0, `${at}: bolt needs speed`);
     if (s.kind === "ground") need((s.radius ?? 0) > 0 && (s.duration ?? 0) > 0, `${at}: ground needs radius and duration`);
     if (s.kind === "world") need(s.world === "repair" || s.world === "grow", `${at}: world spell needs a verb`);
+    if (s.touch !== undefined) need(s.kind === "bolt" && s.touch > 0, `${at}: touch is a bolt's, in px`);
     if (s.kind === "melee" || s.kind === "bolt") need(!!s.power, `${at}: needs power`);
     if (s.power) need(s.power.div > 0 && s.power.varDiv > 0, `${at}: power divisors must be > 0`);
   }
@@ -447,6 +508,7 @@ export function validateCatalog(c: Catalog): string[] {
       if (e.onMelee.effect) need(e.onMelee.effect in c.effects, `${at}: unknown onMelee effect`);
     }
     for (const k of Object.keys(e.resist ?? {})) need(isSchool(k), `${at}: bad resist school "${k}"`);
+    if (e.onlyIfWeak !== undefined) need(isSchool(e.onlyIfWeak) && e.onlyIfWeak !== "heal", `${at}: bad onlyIfWeak school "${e.onlyIfWeak}"`);
   }
   for (const [id, i] of Object.entries(c.items)) {
     const at = `items.${id}`;
@@ -459,6 +521,11 @@ export function validateCatalog(c: Catalog): string[] {
     need(u.strength > 0, `${at}: strength must be > 0`);
     for (const s of u.book) need(s in c.spells, `${at}: unknown spell "${s}"`);
     for (const p of u.phases ?? []) for (const s of p.book) need(s in c.spells, `${at}: unknown phase spell "${s}"`);
+    (u.phases ?? []).forEach((p, n) => {
+      need(p.hpBelow > 0 && p.hpBelow <= 1, `${at}: phase ${n}: hpBelow is a fraction of full health`);
+      checkActions(`${at}.phases[${n}].onEnter`, p.onEnter);
+    });
+    need(u.sight === undefined || u.sight === "lit", `${at}: sight is "lit" or nothing`);
     for (const l of u.loot) need(l.item in c.items, `${at}: unknown loot "${l.item}"`);
     for (const k of Object.keys(u.resist ?? {})) need(isSchool(k), `${at}: bad resist school "${k}"`);
     if (u.talk) need(u.talk in c.dialogue, `${at}: unknown dialogue "${u.talk}"`);
@@ -512,7 +579,9 @@ export function validateCatalog(c: Catalog): string[] {
   }
   for (const [id, p] of Object.entries(c.props)) {
     need(p.w >= 1 && p.h >= 1, `props.${id}: footprint < 1`);
-    if (p.lightWhenOn || p.nightOnly) need(!!p.light, `props.${id}: light flag without a light`);
+    if (p.answers !== undefined) need(p.answers === "repair" || p.answers === "grow" || (isSchool(p.answers) && p.answers !== "heal"), `props.${id}: answers "${p.answers}" is not a world verb or a damage school`);
+    if (p.lightWhenOn || p.nightOnly || p.dayOnly) need(!!p.light, `props.${id}: light flag without a light`);
+    need(!(p.nightOnly && p.dayOnly), `props.${id}: a light cannot be both nightOnly and dayOnly`);
   }
   c.clock.forEach((row, n) => {
     need(row.hour >= 0 && row.hour < 24, `clock[${n}]: hour out of range`);

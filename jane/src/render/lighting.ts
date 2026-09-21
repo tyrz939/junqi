@@ -46,10 +46,8 @@ export function ambientForHour(hour: number): Rgb {
   return NIGHT;
 }
 
-/** Lamp posts burn from 18:30 to 06:30, the one thing 2020's clock did drive. */
-export function isNight(hour: number): boolean {
-  return hour > 18.5 || hour < 6.5;
-}
+// When the lamp posts burn (18:30 to 06:30, the one thing 2020's clock did drive) is the sim's
+// to say now, because light means something to it: `lampsLit` and `propLightShowing` in sim/light.ts.
 
 export class Lighting {
   private readonly map = document.createElement("canvas");

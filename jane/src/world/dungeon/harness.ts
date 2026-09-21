@@ -10,6 +10,7 @@
 
 import type { Catalog } from "@/sim/catalog";
 import { ZONE_ATTEMPTS, type Blueprint } from "@/world/blueprint";
+import { solveOptionsOf } from "@/world/dungeon/checks";
 import { buildDungeon, localName } from "@/world/dungeon/generate";
 import { shapesOf, type Shape } from "@/world/dungeon/room";
 import type { DungeonDef, MissionNode, RoomTemplate } from "@/world/dungeon/types";
@@ -51,13 +52,15 @@ function reached(bp: Blueprint, catalog: Catalog, trace: SolveTrace, key: string
 export function proveTemplate(def: DungeonDef, node: MissionNode, template: RoomTemplate, catalog: Catalog): string[] {
   const errors: string[] = [];
   const contract = { units: [], props: [], marks: [], rects: [] };
+  // A room of a building with a breaker is solved as that building is: in every state its own controls can make.
+  const states = solveOptionsOf(def).states;
   for (const shape of shapesOf(template)) {
     if (!shape.fits) continue;
     const at = `${template.id} turn ${shape.turn}${shape.mirror ? " mirrored" : ""}`;
     const { bp, def: alone } = buildRoomAlone(def, node, shape);
     const doorMark = (id: string): string => `${alone.id}_${node.id}_door_${id}`;
     for (const door of shape.doors) {
-      const solve = validateBlueprint(bp, catalog, contract, def.givenKeys, { entry: doorMark(door.id), trace: true });
+      const solve = validateBlueprint(bp, catalog, contract, def.givenKeys, { entry: doorMark(door.id), trace: true, states });
       if (!solve.trace) {
         errors.push(`${at}: ${solve.errors.join("; ")}`);
         break;
@@ -73,7 +76,7 @@ export function proveTemplate(def: DungeonDef, node: MissionNode, template: Room
       for (const b of template.blocks) {
         const what = localName(alone, node, b.what);
         const until = localName(alone, node, b.until);
-        const without = validateBlueprint(bp, catalog, contract, def.givenKeys, { entry: doorMark(door.id), trace: true, withhold: { props: [until] } });
+        const without = validateBlueprint(bp, catalog, contract, def.givenKeys, { entry: doorMark(door.id), trace: true, states, withhold: { props: [until] } });
         if (without.trace && reached(bp, catalog, without.trace, what)) errors.push(`${at}: ${b.what} opens without ${b.until}`);
       }
     }

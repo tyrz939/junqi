@@ -28,6 +28,8 @@ export type ZoneRuntime = {
   /** Largest prop footprint in the catalog, minus one, in cells: how far back a query must reach. */
   propReachW: number;
   propReachH: number;
+  /** Largest light radius in the catalog, px: how far a "is this point lit" query must look (sim/light.ts). */
+  lightReach: number;
   /** Every prop whose `awake` flag is set. The ring clears these and sets the new ones; it never scans the zone. */
   awakeProps: Prop[];
   /** Pressure plates, in id order. A plate is a def field, so the list only changes when a prop is added. */
@@ -104,9 +106,11 @@ export function buildRuntime(catalog: Catalog, bp: Blueprint, zone: ZoneState): 
   const grid = new Grid(bp.w, bp.h, tiles);
   let reachW = 0;
   let reachH = 0;
+  let lightReach = 0;
   for (const id in catalog.props) {
     reachW = Math.max(reachW, catalog.props[id].w - 1);
     reachH = Math.max(reachH, catalog.props[id].h - 1);
+    lightReach = Math.max(lightReach, catalog.props[id].light?.radius ?? 0);
   }
   const rt: ZoneRuntime = {
     bp,
@@ -121,6 +125,7 @@ export function buildRuntime(catalog: Catalog, bp: Blueprint, zone: ZoneState): 
     propBlocksH: Math.max(1, Math.ceil(bp.h / PROP_BLOCK)),
     propReachW: reachW,
     propReachH: reachH,
+    lightReach,
     awakeProps: [],
     plates: [],
     triggers: zoneTriggers(catalog, bp),

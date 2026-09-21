@@ -10,7 +10,7 @@ import { buildCounty } from "@/world/county";
 import { buildCellar, buildHouse } from "@/world/interiors";
 import { MINE } from "@/world/mine";
 import { placementContract } from "@/world/placements";
-import { validateBlueprint } from "@/world/validate";
+import { validateBlueprint, type SolveState } from "@/world/validate";
 
 export type Builder = (seed: number, attempt: number) => Blueprint;
 
@@ -27,6 +27,8 @@ export type ZoneDef = {
   givenKeys?: string[];
   /** Spells she is known to have at the door. Given, the solver gates every answering prop on them; left out, it gates nothing. */
   givenVerbs?: string[];
+  /** Reversible mechanisms of the whole zone (a breaker, a valve), at most three. Given, the solver's flood is stateful. */
+  states?: SolveState[];
   /** More to prove than the solver does (a generated dungeon's C1 to C12). Any error re-rolls the candidate. */
   check?: (bp: Blueprint, catalog: Catalog) => string[];
 };
@@ -47,9 +49,9 @@ export const BUILDERS: Record<ZoneId, Builder> = {
 export const CONTRACTS: Record<ZoneId, ZoneContract> = {
   county: {
     units: ["dog", "yard_skeleton"],
-    props: ["house_door", "mine_door", "burial_door"],
-    marks: ["start", "house_front", "mine_mouth", "burial_mouth"],
-    rects: ["stoop"],
+    props: ["house_door", "mine_door", "adit_door", "burial_door"],
+    marks: ["start", "house_front", "mine_mouth", "mine_adit", "burial_mouth"],
+    rects: ["stoop", "mine_yard"],
   },
   house: {
     units: [],
@@ -75,11 +77,12 @@ export const CONTRACTS: Record<ZoneId, ZoneContract> = {
       "gate_hm",
       "broken_steps",
       "boss_key_chest",
+      "adit_door",
       "gate_vault",
       "vault_chest",
       "gate_boss",
     ],
-    marks: ["entry"],
+    marks: ["entry", "adit"],
     rects: ["mine_entry", "boss_arena"],
   },
   burial: {
@@ -116,6 +119,9 @@ export const GIVEN_KEYS: Record<ZoneId, string[]> = {
 /** Spells known at the door, for the zones that are proven against them. */
 export const GIVEN_VERBS: Record<ZoneId, string[] | undefined> = { mine: MINE.givenVerbs };
 
+/** Reversible mechanisms, by zone, for the stateful flood. None of the original five has any. */
+export const STATES: Record<ZoneId, SolveState[] | undefined> = {};
+
 /** Checks beyond the solver's, by zone. The mine is generated, and must be the mine that was designed. */
 export const CHECKS: Record<ZoneId, ZoneDef["check"]> = { mine: MINE.check };
 
@@ -136,6 +142,7 @@ for (const z of REGISTERED) {
   CONTRACTS[z.id] = z.contract;
   GIVEN_KEYS[z.id] = z.givenKeys ?? [];
   GIVEN_VERBS[z.id] = z.givenVerbs;
+  STATES[z.id] = z.states;
   CHECKS[z.id] = z.check;
 }
 
@@ -151,7 +158,7 @@ export function buildZone(zone: ZoneId, seed: number): Blueprint {
   let lastErrors: string[] = [];
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     const bp = BUILDERS[zone](seed, attempt);
-    const v = validateBlueprint(bp, catalogForValidation, CONTRACTS[zone], GIVEN_KEYS[zone], { verbs: GIVEN_VERBS[zone] });
+    const v = validateBlueprint(bp, catalogForValidation, CONTRACTS[zone], GIVEN_KEYS[zone], { verbs: GIVEN_VERBS[zone], states: STATES[zone] });
     const errors = v.ok ? (CHECKS[zone]?.(bp, catalogForValidation) ?? []) : v.errors;
     if (errors.length === 0) return bp;
     lastErrors = errors;

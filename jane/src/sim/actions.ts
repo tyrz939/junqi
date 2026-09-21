@@ -3,19 +3,23 @@
 // exhaustive: adding a verb to the Action union without handling it here is a
 // compile error, not a silently ignored string.
 
+import { clearFootprint, fillRect } from "@/sim/clear";
 import { cellOf, centre } from "@/sim/grid";
 import { lineOfSight } from "@/sim/los";
-import { addUnit, playerOf, playersHere, removeUnit, touchProp, type World } from "@/sim/runtime";
+import { addUnit, occupy, playerOf, playersHere, removeUnit, touchProp, type World } from "@/sim/runtime";
 import { FACING_DX, FACING_DY, type Action, type ActionList, type Condition, type PlayerState, type Prop } from "@/sim/state";
 import { bagAdd, bagCount, bagRemove } from "@/sim/inventory";
 import { giveQuest, handIn, onLocation, questActive, questDone, questReady } from "@/sim/quests";
 import { applyEffect } from "@/sim/status";
-import { createUnit, maxHp, maxMp } from "@/sim/units";
+import { createUnit, distance, maxHp, maxMp } from "@/sim/units";
 import { ENERGY_MAX, TICKS_PER_HOUR } from "@/sim/constants";
 import { isNight } from "@/sim/text";
 import { startDialogue } from "@/sim/dialogue";
 import { spawnDrop } from "@/sim/loot";
-import { requestTravel } from "@/sim/zones";
+import { requestTravel, revealRect } from "@/sim/zones";
+
+/** A sent unit gives up after this long plus three times what the straight walk would take. */
+const ORDER_BASE_TICKS = 600;
 
 export function runActions(w: World, list: ActionList, actor: number): void {
   for (const a of list) runAction(w, a, actor);
@@ -100,6 +104,8 @@ export function runAction(w: World, a: Action, subject: number): void {
       if (w.catalog.props[p.def].gate) {
         p.solid = p.locked;
         touchProp(w, p);
+        // A gate that drops never drops on anyone: whoever is under it is stood to one side.
+        if (p.solid) clearFootprint(w, p);
       }
       w.emit({ e: "prop", prop: p.id, change: a.do });
       return;
@@ -110,6 +116,7 @@ export function runAction(w: World, a: Action, subject: number): void {
       if (!p) return;
       p.hidden = a.do === "hide";
       touchProp(w, p);
+      if (!p.hidden) clearFootprint(w, p);
       w.emit({ e: "prop", prop: p.id, change: a.do });
       return;
     }
@@ -148,15 +155,8 @@ export function runAction(w: World, a: Action, subject: number): void {
       return;
     case "fill": {
       const r = w.rt.bp.rects[a.rect];
-      if (!r) return;
-      for (let y = r.cy; y < r.cy + r.h; y++) {
-        for (let x = r.cx; x < r.cx + r.w; x++) {
-          if (!w.rt.grid.inside(x, y) || w.rt.grid.tileAt(x, y) === a.tile) continue;
-          w.rt.grid.setTile(x, y, a.tile);
-          w.zone.tileDeltas.push(w.rt.grid.index(x, y), a.tile);
-        }
-      }
-      w.emit({ e: "tiles", cx: r.cx, cy: r.cy, w: r.w, h: r.h });
+      // A solid tile waits for anyone standing in the rect to step out of it (sim/clear.ts).
+      if (r) fillRect(w, r.cx, r.cy, r.w, r.h, a.tile);
       return;
     }
     case "strike": {
@@ -212,6 +212,40 @@ export function runAction(w: World, a: Action, subject: number): void {
       return;
     case "camera":
       w.emit({ e: "camera", mode: a.mode, rect: a.rect ?? "" });
+      return;
+    case "if":
+      // Asked of whoever is acting, like any condition: `hasItem` is hers, flags are the world's.
+      if (conditionsMet(w, a.when)) runActions(w, a.then, subject);
+      else if (a.else) runActions(w, a.else, subject);
+      return;
+    case "send": {
+      const u = w.rt.unitsByKey.get(a.unit);
+      const mark = w.rt.bp.marks[a.to];
+      // Not one of the party, and not the snake: that one has a mover of its own.
+      if (!u || !u.alive || !mark || u.controller === "player" || u.controller === "snake" || w.party.ofUnit(u.id)) return;
+      const def = w.catalog.units[u.def];
+      const speed = Math.max(def.run, def.walk);
+      if (speed <= 0) return;
+      const x = centre(mark.cx);
+      const y = centre(mark.cy);
+      const left = ORDER_BASE_TICKS + Math.ceil((distance(u.x, u.y, x, y) * 3) / speed);
+      u.order = { x, y, left, then: a.then ?? null, seat: me ? me.index : -1 };
+      u.target = 0;
+      u.combat = "idle";
+      u.path = null;
+      u.dwell = 0;
+      // It walks however far away she is: a thing under orders does not sleep (sim/ring.ts).
+      if (!u.awake) {
+        u.awake = true;
+        if (!u.hidden) occupy(w.rt, u);
+      }
+      return;
+    }
+    case "reveal":
+      for (const name of a.rects) {
+        const r = w.rt.bp.rects[name];
+        if (r) revealRect(w, r);
+      }
       return;
     default: {
       const never: never = a;

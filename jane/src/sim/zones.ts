@@ -49,6 +49,8 @@ export function createZoneState(state: GameState, catalog: Catalog, bp: Blueprin
     if (s.patrol && s.patrol.length > 1) {
       u.patrol = [];
       for (const [cx, cy] of s.patrol) u.patrol.push(centre(cx), centre(cy));
+      // A third number on a waypoint is how long it stands there, in ticks. Most routes have none.
+      if (s.patrol.some((p) => (p[2] ?? 0) > 0)) u.patrolDwell = s.patrol.map((p) => Math.max(0, Math.floor(p[2] ?? 0)));
     }
     units.push(u);
   }
@@ -81,7 +83,7 @@ export function createZoneState(state: GameState, catalog: Catalog, bp: Blueprin
     };
   });
   const triggers = Object.keys(zoneTriggers(catalog, bp)).map((id) => ({ id, fired: false, inside: false }));
-  return { id: bp.zone, units, props, drops: [], projectiles: [], grounds: [], triggers, tileDeltas: [], fog: [] };
+  return { id: bp.zone, units, props, drops: [], projectiles: [], grounds: [], triggers, tileDeltas: [], fog: [], pendingFill: [] };
 }
 
 /** The saved state of a zone, created from its blueprint on the first visit. */
@@ -161,6 +163,28 @@ export function stampFog(w: World): void {
         while (fog.length <= word) fog.push(0);
         fog[word] |= 1 << (bit & 31);
       }
+    }
+  }
+}
+
+/**
+ * The wall notice as the map (`reveal`): mark a rect, and the wall round it, as seen. The fog
+ * is the party's, so what one of them reads off the wall all of them have on their map.
+ */
+export function revealRect(w: World, r: { cx: number; cy: number; w: number; h: number }): void {
+  if (!w.rt.bp.indoor) return;
+  const fog = w.zone.fog;
+  const fw = w.rt.fogW;
+  const bx0 = Math.max(0, (r.cx - 1) >> 1);
+  const by0 = Math.max(0, (r.cy - 1) >> 1);
+  const bx1 = Math.min(fw - 1, (r.cx + r.w) >> 1);
+  const by1 = Math.min(w.rt.fogH - 1, (r.cy + r.h) >> 1);
+  for (let y = by0; y <= by1; y++) {
+    for (let x = bx0; x <= bx1; x++) {
+      const bit = y * fw + x;
+      const word = bit >> 5;
+      while (fog.length <= word) fog.push(0);
+      fog[word] |= 1 << (bit & 31);
     }
   }
 }

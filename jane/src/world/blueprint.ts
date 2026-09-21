@@ -18,8 +18,11 @@ export type UnitSpawn = {
   cx: number;
   cy: number;
   facing?: Facing;
-  /** Patrol waypoints in cells. */
-  patrol?: [number, number][];
+  /**
+   * Patrol waypoints in cells. A third number is a dwell: ticks to stand at that point before
+   * walking on (a butterfly on a flower, the Caretaker at each door). Left out, it never stops.
+   */
+  patrol?: ([number, number] | [number, number, number])[];
   /**
    * The threat (1..6) of the ground it stands on: the phase of 2020's balance sheet it
    * plays at. One `skeleton` row, scaled where it is spawned, instead of skeleton_2, skeleton_3.

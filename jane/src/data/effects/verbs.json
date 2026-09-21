@@ -1,0 +1,6 @@
+{
+  "dazzled": { "name": "Dazzled", "icon": "fx_stunned", "duration": 5, "harmful": true, "speed": 0 },
+  "jolted": { "name": "Jolted", "icon": "fx_sparktongue", "duration": 0.5, "harmful": true, "speed": 0, "stun": true, "onlyIfWeak": "shock" },
+  "dusted": { "name": "Dusted", "icon": "fx_webbed", "duration": 4, "harmful": true, "speed": 0.5 },
+  "softened": { "name": "Softened", "icon": "fx_burning", "duration": 6, "harmful": true, "noResist": true }
+}

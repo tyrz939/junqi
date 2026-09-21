@@ -3,7 +3,7 @@
 // crosses a 16 px block, never per unit per tick.
 //
 //   sleeps      idle AI and props outside every ring: no think, no occupancy, no draw
-//   stays awake anyone in combat, anything carried, every player
+//   stays awake anyone in combat, anything under orders, anything carried, every player
 //   still ticks cooldown and respawn clocks of sleepers (the Phaser build froze
 //               them, so nothing respawned unless you stood on the corpse)
 //
@@ -44,7 +44,8 @@ export function stepRing(w: World, force = false): void {
 
   for (const u of w.zone.units) {
     if (bodies.includes(u.id)) continue;
-    const awake = near(u.x, u.y, 0) || u.combat === "combat";
+    // Something sent somewhere (`send`) walks there however far from her it is.
+    const awake = near(u.x, u.y, 0) || u.combat === "combat" || u.order !== null;
     if (awake === u.awake) continue;
     u.awake = awake;
     if (awake) {

@@ -19,8 +19,9 @@ import type { RngState } from "@/sim/rng";
 export type ZoneId = string;
 
 export type Faction = "undead" | "beast" | "bandit" | "friendly";
-export type School = "heal" | "physical" | "frost" | "fire" | "nature";
-export const SCHOOLS: readonly School[] = ["heal", "physical", "frost", "fire", "nature"];
+/** `blast` is Explosion's school and `shock` is Electric's: each is also what a prop may `answers` to. */
+export type School = "heal" | "physical" | "frost" | "fire" | "nature" | "blast" | "shock";
+export const SCHOOLS: readonly School[] = ["heal", "physical", "frost", "fire", "nature", "blast", "shock"];
 
 /** Who drives the unit. One Unit shape; the controller is a field, as in 2020. */
 export type Controller = "player" | "ai" | "npc" | "snake";
@@ -81,6 +82,12 @@ export type Unit = {
   homeY: number;
   patrol: number[] | null; // flat [x0,y0,x1,y1,...] in px
   patrolAt: number;
+  /** Ticks to stand at each patrol point before walking on, one per point. Null = never waits. */
+  patrolDwell: number[] | null;
+  /** Ticks left to stand at the point it has just reached. */
+  dwell: number;
+  /** Somewhere it has been sent (`send`). While it has one it walks there and minds nothing else. */
+  order: UnitOrder | null;
   path: number[] | null; // cell indices
   /** Cell the current path was planned toward. A partial path does not end on it. */
   pathGoal: number;
@@ -106,6 +113,13 @@ export type Unit = {
 };
 
 export type PropLight = { radius: number; color: string; flicker: number };
+
+/**
+ * A unit told to walk somewhere by the `send` verb. It lives on the unit, so a save taken
+ * mid-walk loads into the same walk. `seat` is whoever caused it (-1 for nobody: a clock
+ * row, a plate), and `then` runs on her behalf, with the unit as its subject, on arrival.
+ */
+export type UnitOrder = { x: number; y: number; left: number; then: ActionList | null; seat: number };
 
 /**
  * Props are capability rows, not classes. A door is `solid + locked + to`.
@@ -179,6 +193,12 @@ export type ZoneState = {
   tileDeltas: number[];
   /** Seen-bits, one per 16 px block, packed 32 to a number. Interiors only; the county is live radar. */
   fog: number[];
+  /**
+   * Solid `fill`s that could not land because somebody was standing in the rect:
+   * [cx, cy, w, h, tile, ...]. Tried again every tick until the rect is clear, so a hedge never
+   * grows through a person, or round one.
+   */
+  pendingFill: number[];
 };
 
 export type QuestProgress = { quest: string; counts: number[] };
@@ -305,7 +325,16 @@ export type Action =
   | { do: "talk"; tree: string }
   | { do: "throw"; item: string }
   | { do: "shake"; amount: number }
-  | { do: "camera"; mode: "follow" | "lock"; rect?: string };
+  | { do: "camera"; mode: "follow" | "lock"; rect?: string }
+  /** A list that depends on the world: the breaker that goes dark if it is lit and lit if it is dark. */
+  | { do: "if"; when: Condition[]; then: ActionList; else?: ActionList }
+  /**
+   * Walk a unit (by key) to a mark, minding nothing on the way, then run `then` with that unit as
+   * the subject. It gives up after a tick budget and then does nothing.
+   */
+  | { do: "send"; unit: string; to: string; then?: ActionList }
+  /** The wall notice as the map: set the fog's seen-bits over these named rects of the actor's zone. */
+  | { do: "reveal"; rects: string[] };
 
 export type ActionList = Action[];
 

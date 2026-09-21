@@ -36,7 +36,8 @@ import {
   TICKS_PER_HOUR,
 } from "@/sim/constants";
 import type { SimEvent } from "@/sim/events";
-import { centre } from "@/sim/grid";
+import { cellOf, centre } from "@/sim/grid";
+import { lineOfSight } from "@/sim/los";
 import { rngSeed } from "@/sim/rng";
 import {
   addUnit,
@@ -54,9 +55,10 @@ import {
 import { cleanName, expandText, isNight } from "@/sim/text";
 import { MAX_PLAYERS, type Facing, type GameState, type PlayerState, type RestPoint, type Unit, type ZoneId, type ZoneState } from "@/sim/state";
 import { bindLearned, runActions, teach } from "@/sim/actions";
-import { tickAi } from "@/sim/ai";
+import { tickAi, tickNpc } from "@/sim/ai";
+import { nudgeOut, stepPendingFill } from "@/sim/clear";
 import { normalize } from "@/sim/angles";
-import { flushIncoming, SPELL_ERROR_TEXT, stepGrounds, stepProjectiles, tryCast, type Aim } from "@/sim/combat";
+import { flushIncoming, resetPhases, SPELL_ERROR_TEXT, stepGrounds, stepProjectiles, tryCast, type Aim } from "@/sim/combat";
 import { advanceDialogue, chooseOption, closeDialogue } from "@/sim/dialogue";
 import { holdUse, nearRest, use } from "@/sim/interact";
 import { bagAdd, bagDestroy, bagMove, craftClear, craftClearAll, craftPut, craftTake, useItem } from "@/sim/inventory";
@@ -454,6 +456,8 @@ export class Sim implements World {
         if (!u.alive || !u.awake || u.hidden || isStunned(w, u)) continue;
         if (u.controller === "ai") tickAi(w, u);
         else if (u.controller === "snake") tickSnake(w, u);
+        // Nobody fights these, but they may be sent somewhere, and a butterfly keeps its round of flowers.
+        else if (u.controller === "npc" && (u.order !== null || u.patrol !== null)) tickNpc(w, u);
       }
       // 6 projectiles, grounds
       stepProjectiles(w);
@@ -468,6 +472,7 @@ export class Sim implements World {
       // 10 housekeeping
       stepDrops(w);
       flushPropFlags(this.catalog, w.rt, w.zone);
+      stepPendingFill(w);
       if (s.tick % 10 === 0) stampFog(w);
     }
 
@@ -493,7 +498,11 @@ export class Sim implements World {
       if (watchers.some((p) => w.rt.units.has(p.id) && Math.abs(u.x - p.x) < 120 && Math.abs(u.y - p.y) < 80)) continue;
       u.hidden = away;
       if (away) vacate(w.rt, u);
-      else if (u.alive && u.awake) occupy(w.rt, u);
+      else {
+        // The world went on without it: if something solid stands where it stood, it comes back beside it.
+        if (u.alive && w.rt.grid.solid(cellOf(u.x), cellOf(u.y))) nudgeOut(w, u, cellOf(u.x), cellOf(u.y), 1, 1);
+        if (u.alive && u.awake) occupy(w.rt, u);
+      }
     }
   }
 
@@ -524,6 +533,7 @@ export class Sim implements World {
     u.deadFor = 0;
     u.combat = "idle";
     u.target = 0;
+    resetPhases(w, u);
     setAnim(u, "idle");
     const free = w.rt.grid.nearestFree(Math.floor(u.homeX / 8), Math.floor(u.homeY / 8), 6, u.id);
     placeUnit(w, u, free ? centre(free.cx) : u.homeX, free ? centre(free.cy) : u.homeY);
@@ -953,12 +963,13 @@ export class Sim implements World {
         this.state.flags[d.flag] = d.value;
         return;
       case "kill":
-        // Everything hostile within 25 m, roughly the screen. Not the whole ring.
+        // Everything hostile within 25 m that she can see: roughly the screen, never the next room
+        // through a wall, and never something that is not there (the hidden are not in the world).
         for (const other of w.zone.units) {
           const near = Math.abs(other.x - u.x) <= 200 && Math.abs(other.y - u.y) <= 200;
-          if (near && other.alive && other.awake && other.faction !== u.faction) {
-            other.incoming.push({ amount: 1e6, school: "physical", from: u.id, crit: false });
-          }
+          if (!near || !other.alive || !other.awake || other.hidden || other.faction === u.faction) continue;
+          if (!lineOfSight(w.rt.grid, u.x, u.y, other.x, other.y)) continue;
+          other.incoming.push({ amount: 1e6, school: "physical", from: u.id, crit: false });
         }
         return;
       case "spawn": {

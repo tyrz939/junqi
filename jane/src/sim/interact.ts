@@ -10,6 +10,7 @@
 import { CELL, PX_PER_METRE, USE_REACH } from "@/sim/constants";
 import { cellOf, centre } from "@/sim/grid";
 import { flushPropFlags, moveProp, playerOf, propCentre, propsInCells, propsNear, restampCells, touchProp, type World } from "@/sim/runtime";
+import { litAt } from "@/sim/light";
 import { isNight } from "@/sim/text";
 import { FACING_DX, FACING_DY, type Prop, type School, type Unit } from "@/sim/state";
 import { runActions } from "@/sim/actions";
@@ -23,7 +24,7 @@ import { distance, isEnemy, moveUnit, placeUnit, spendEnergy } from "@/sim/units
 export const PUSH_HOLD_TICKS = 30;
 export const PUSH_ENERGY = 20;
 const TALK_REACH = 20;
-/** How close to a prop's centre a bolt must end to switch it on, in px. */
+/** How close to a prop's centre a bolt must end to switch it on, in px, unless its spell row says (`touch`). */
 const SCHOOL_TOUCH = 14;
 
 export type Focus =
@@ -59,7 +60,8 @@ function promptFor(w: World, p: Prop): string {
   const def = w.catalog.props[p.def];
   if (p.locked) return "Unlock";
   if (p.to) return p.nightLock && isNight(w.state) ? "Try the door" : (def.prompt ?? "Enter");
-  if (p.loot && !p.used) return "Open";
+  // The row knows best what it is: a herb is gathered and a dropped glove is picked up. A chest has no word of its own.
+  if (p.loot && !p.used) return def.prompt ?? "Open";
   if (def.carry) return "Pick up";
   if (def.bench) return "Craft";
   if (p.talk) return def.prompt ?? "Read";
@@ -191,7 +193,12 @@ function useProp(w: World, u: Unit, p: Prop): void {
     return;
   }
   if (p.talk) {
-    startDialogue(w, p.talk, -p.id);
+    // Something that is read may also do something: the wall notice is the map (`reveal`).
+    const opened = startDialogue(w, p.talk, -p.id);
+    if (opened && p.use && !def.answers && !(def.once && p.used)) {
+      p.used = true;
+      runActions(w, p.use, u.id);
+    }
     return;
   }
   if (p.use && !(def.once && p.used)) {
@@ -371,20 +378,31 @@ function pushableAhead(w: World, u: Unit): Prop | null {
 
 // --- world verbs -------------------------------------------------------------
 
-/** Repair / Grow: nearest answering prop within 2 m. Invalid casts cost nothing, as in 2020. */
+/**
+ * Repair / Grow: nearest answering prop within 2 m. Invalid casts cost nothing, as in 2020.
+ * Things grow where the light comes down: Grow passes over anything standing in the dark, so
+ * a bud in shade is a reason to come back by day, or with a lamp lit beside it.
+ */
 export function worldVerb(w: World, caster: Unit, verb: "repair" | "grow"): boolean {
   let best: Prop | null = null;
   let bestD = 2 * PX_PER_METRE;
+  let shaded = false;
   for (const p of propsNear(w.rt, caster.x, caster.y, bestD)) {
     if (p.hidden || p.used || w.catalog.props[p.def].answers !== verb) continue;
     const d = propDistance(w, caster, p);
-    if (d <= bestD) {
-      bestD = d;
-      best = p;
+    if (d > bestD) continue;
+    if (verb === "grow") {
+      const c = propCentre(w.catalog, p);
+      if (!litAt(w, c.x, c.y)) {
+        shaded = true;
+        continue;
+      }
     }
+    bestD = d;
+    best = p;
   }
   if (!best) {
-    w.emit({ e: "toast", text: verb === "repair" ? "Nothing here to repair" : "Nothing here will grow" });
+    w.emit({ e: "toast", text: verb === "repair" ? "Nothing here to repair" : shaded ? "Nothing grows without light" : "Nothing here will grow" });
     return false;
   }
   for (const need of best.needs ?? []) {
@@ -401,14 +419,17 @@ export function worldVerb(w: World, caster: Unit, verb: "repair" | "grow"): bool
   return true;
 }
 
-/** A bolt of `school` ended at (x,y): props that answer to that school switch on. */
-export function schoolTouch(w: World, school: School, x: number, y: number, from: number): void {
-  for (const p of propsNear(w.rt, x, y, SCHOOL_TOUCH)) {
+/**
+ * A bolt of `school` ended at (x,y): props that answer to that school switch on. `touch` is
+ * the spell row's reach in px: a blast finds the middle of a rubble pile an icebolt would miss.
+ */
+export function schoolTouch(w: World, school: School, x: number, y: number, from: number, touch: number = SCHOOL_TOUCH): void {
+  for (const p of propsNear(w.rt, x, y, touch)) {
     if (p.hidden || p.on) continue;
     const def = w.catalog.props[p.def];
     if (def.answers !== school) continue;
     const c = propCentre(w.catalog, p);
-    if (distance(x, y, c.x, c.y) > SCHOOL_TOUCH) continue;
+    if (distance(x, y, c.x, c.y) > touch) continue;
     p.on = true;
     p.used = true;
     if (p.use) runActions(w, p.use, from);

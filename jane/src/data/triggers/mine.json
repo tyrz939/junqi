@@ -1,0 +1,7 @@
+{
+  "adit_unbarred": {
+    "zone": "county", "rect": "mine_yard", "mode": "while", "once": true,
+    "when": [{ "if": "flag", "flag": "mine_adit_open" }],
+    "actions": [{ "do": "unlock", "prop": "adit_door" }, { "do": "toast", "text": "The adit is unbarred. It opens from this side now." }]
+  }
+}

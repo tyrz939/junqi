@@ -166,7 +166,7 @@ export class Kit {
     this.claim(full.cx, full.cy, w, h);
     return full;
   }
-  unit(key: string | null, def: string, cx: number, cy: number, patrol?: [number, number][]): UnitSpawn {
+  unit(key: string | null, def: string, cx: number, cy: number, patrol?: UnitSpawn["patrol"]): UnitSpawn {
     const u: UnitSpawn = { key: key ?? `${this.zone}_${def}_${this.anon++}`, def, cx, cy, patrol };
     this.units.push(u);
     this.claim(cx, cy, 1, 1);

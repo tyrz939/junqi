@@ -105,6 +105,7 @@ function reach(c: Catalog, world: Built): Reach {
       if (!u) continue;
       if (u.talk) addTree(u.talk);
       if (u.onDeath) lists.push(u.onDeath);
+      for (const phase of u.phases ?? []) if (phase.onEnter) lists.push(phase.onEnter);
       for (const l of u.loot) if (l.chance >= 1) items.add(l.item);
     }
     for (const a of lists[n] ?? []) {
@@ -112,6 +113,9 @@ function reach(c: Catalog, world: Built): Reach {
       if (a.do === "spawn") spawned.add(a.def);
       if (a.do === "give") items.add(a.item);
       if (a.do === "quest") given.add(a.quest);
+      // Lists inside lists are lists too: an `if`'s branches, what a sent unit does when it arrives.
+      if (a.do === "if") lists.push(a.then, a.else ?? []);
+      if (a.do === "send" && a.then) lists.push(a.then);
     }
     // A quest that can be given and handed in pays out, and its pay is a list like any other.
     const handins = new Set(lists.flatMap((l) => l.filter((a): a is Extract<Action, { do: "handin" }> => a.do === "handin").map((a) => a.quest)));

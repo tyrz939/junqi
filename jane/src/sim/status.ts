@@ -19,6 +19,8 @@ export function hasStatus(u: Unit, effect: string): boolean {
 export function applyEffect(w: World, u: Unit, effectId: string, from: number): void {
   const def: EffectDef = w.catalog.effects[effectId];
   if (!u.alive) return;
+  // Some effects only take on what is weak to them: a spark jolts a machine, not a rat.
+  if (def.onlyIfWeak !== undefined && (w.catalog.units[u.def].resist?.[def.onlyIfWeak] ?? 0) >= 0) return;
   if (def.heal) u.incoming.push({ amount: def.heal, school: "heal", from, crit: false });
   if (def.mana) u.mp = Math.min(maxMp(u), u.mp + def.mana);
   if (def.duration <= 0) return;
@@ -80,12 +82,16 @@ export function isStunned(w: World, u: Unit): boolean {
 
 /** Incoming damage multiplier for a school: unit row resist, then each status resist. */
 export function resistFactor(w: World, u: Unit, school: School): number {
-  let f = 1 - (w.catalog.units[u.def].resist?.[school] ?? 0);
+  let own = w.catalog.units[u.def].resist?.[school] ?? 0;
+  let f = 1;
   for (const s of u.statuses) {
-    const r = w.catalog.effects[s.effect].resist?.[school];
+    const e = w.catalog.effects[s.effect];
+    const r = e.resist?.[school];
     if (r !== undefined) f *= r;
+    // Softened: what it was proof against, it is not. What it was weak to, it still is.
+    if (e.noResist && own > 0) own = 0;
   }
-  return Math.max(0, f);
+  return Math.max(0, f * (1 - own));
 }
 
 export type OffenceMods = { lifesteal: number; critOneIn: number; onMelee: EffectDef["onMelee"][] };

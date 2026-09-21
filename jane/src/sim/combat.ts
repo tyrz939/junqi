@@ -366,7 +366,7 @@ export function stepProjectiles(w: World): void {
           if (amount > 0) u.incoming.push({ amount, school: p.hit.school, from: p.from, crit: false });
         }
       }
-      schoolTouch(w, spell.school, p.x, p.y, p.from);
+      schoolTouch(w, spell.school, p.x, p.y, p.from, spell.touch);
       w.emit({ e: "impact", spell: p.spell, school: spell.school, x: p.x, y: p.y });
       list.splice(i, 1);
     }
@@ -456,6 +456,7 @@ export function flushIncoming(w: World, u: Unit): void {
     }
     if (hit.status && u.hp > 0) applyEffect(w, u, hit.status, hit.from);
     if (u.hp > 0 && amount > 0 && u.anim === "idle") setAnim(u, "hurt");
+    if (u.hp > 0 && amount > 0 && u.controller === "ai") enterPhases(w, u, source ?? null);
     if (u.hp <= 0) {
       killUnit(w, u, source ?? null);
       break;
@@ -463,8 +464,49 @@ export function flushIncoming(w: World, u: Unit): void {
   }
 }
 
+/**
+ * A boss crosses into its next phase when its health falls to that row's `hpBelow` of full
+ * (a row with `hpBelow: 1` is entered by the first blow that hurts): it takes that
+ * phase's book and speed, and the phase's `onEnter` list runs once, with the boss as the
+ * subject, on behalf of whoever landed the blow (nobody, if poison did). Health thresholds
+ * only, and only for the ordinary AI: the snake's phases are its own clock (sim/snake.ts).
+ * One blow may cross two thresholds; both lists run, in order.
+ */
+function enterPhases(w: World, u: Unit, source: Unit | null): void {
+  const phases = w.catalog.units[u.def].phases;
+  if (!phases) return;
+  const fraction = u.hp / maxHp(u);
+  // `phase` counts the rows entered so far: 0 is the unit as its own row describes it.
+  while (u.phase < phases.length && fraction <= phases[u.phase].hpBelow) {
+    const row = phases[u.phase];
+    u.phase++;
+    u.phaseTick = 0;
+    u.book = [...row.book];
+    if (row.onEnter && row.onEnter.length > 0) {
+      const list = row.onEnter;
+      const by = source ? (w.party.ofUnit(source.id) ?? null) : null;
+      asPlayer(w, by, () => runActions(w, list, u.id));
+    }
+  }
+}
+
+/**
+ * All its health back (it leashed and mended, or it respawned): the fight starts again from
+ * the top, and the phase lists will run again when it is brought down again.
+ */
+export function resetPhases(w: World, u: Unit): void {
+  if (u.phase === 0) return;
+  const def = w.catalog.units[u.def];
+  if (!def.phases || u.controller !== "ai") return;
+  u.phase = 0;
+  u.phaseTick = 0;
+  u.book = [...def.book];
+}
+
 export function killUnit(w: World, u: Unit, killer: Unit | null): void {
   u.alive = false;
+  u.order = null;
+  u.dwell = 0;
   u.hp = 0;
   u.mp = 0;
   u.energy = 0;

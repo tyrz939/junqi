@@ -94,7 +94,7 @@ const ROWS: Record<string, Row> = {
       return dev(app, { op: "flag", flag: name, value: value === undefined ? 1 : Number(value) }, `${name} set`);
     },
   },
-  kill: { usage: "kill", help: "Kill every hostile within 25 m", run: (app) => dev(app, { op: "kill" }, "done") },
+  kill: { usage: "kill", help: "Kill every hostile she can see within 25 m", run: (app) => dev(app, { op: "kill" }, "done") },
   spawn: {
     usage: "spawn <unit>",
     help: "Spawn a unit row next to you",

@@ -105,6 +105,24 @@ const MIGRATIONS: Record<number, Migration> = {
     if (rest && rest.zone === "mine") state.rest = null;
     delete zones.mine;
   },
+  // v7 -> v8: a unit may be under orders (`send`) and may wait at a patrol point; a zone keeps
+  // the cells a solid fill is still owed. Nobody was, none did, nothing is.
+  7: (state) => {
+    type SavedUnit = Record<string, unknown>;
+    const fix = (u: SavedUnit | null | undefined): void => {
+      if (!u) return;
+      u.order ??= null;
+      u.patrolDwell ??= null;
+      u.dwell ??= 0;
+    };
+    const zones = (state.zones ?? {}) as Record<string, { units?: SavedUnit[]; pendingFill?: number[] } | undefined>;
+    for (const zone of Object.values(zones)) {
+      if (!zone) continue;
+      zone.pendingFill ??= [];
+      for (const u of zone.units ?? []) fix(u);
+    }
+    for (const p of (state.players ?? []) as { parked?: SavedUnit | null }[]) fix(p.parked);
+  },
   // v4 -> v5: doors may refuse after dark.
   4: (state) => {
     const zones = (state.zones ?? {}) as Record<string, { props?: Record<string, unknown>[] }>;

@@ -225,8 +225,9 @@ type StateVar = {
   id: string;                         // "lights"
   values: [string, string];           // ["lit", "dark"]
   initial: string;
-  flag: string;                       // world flag that holds it: "museum_lights" (1 = values[0])
-};
+  flag: string;                       // world flag that holds it. AS BUILT: unset or 0 = `initial`, 1 = the other
+};                                    // value, so nothing has to set it when the zone is made. Name it for the
+                                      // other value ("museum_dark" when the Museum starts lit).
 
 type NodeKind =
   | "entrance" | "teach" | "fight" | "puzzle" | "key" | "hub" | "rest"
@@ -623,7 +624,7 @@ The Headmaster brought the school down here when the nights got longer, because 
 
 | Change | Why |
 | --- | --- |
-| Repair is **found in the mine**, in the Headmaster's confiscated drawer, not taught by the dog at the door | K2, K3: the verb is inside, guarded. The dog's line becomes a pointer: "Broken stairs want mending. She left the way of it down there. He will have taken it off somebody." |
+| Repair is **found in the mine**, in the Headmaster's confiscated drawer, not taught by the dog at the door | K2, K3: the verb is inside, guarded. The dog's line becomes a pointer. As built (for John's redline): "There is a page missing from this house. The Headmaster confiscates things, and he has never once given anything back at the end of term." / "Broken stairs want wood. There is some in the cellar storage, behind a plain lock." (The draft here said "She left the way of it down there", which has the dog saying "she" about something it could only know by having been her: `STORY.md` section 3.) |
 | A **First Aid Room** with a fire, off the hub | K22. Today the nearest rest is outside |
 | The **broken track** (`broken_track` and the store's four iron already exist and do nothing) becomes the shortcut from the gallery back to the plate room | K7, C9 |
 | An **adit** off the gallery | The mine sign's omen needs a second way out to be fair (`PLAN.md` section 5). With the adit behind Repair, a true omen costs a night or a fight, never the run |
@@ -1133,19 +1134,19 @@ Short, and each one is used by more than one dungeon unless it says otherwise.
 
 | | Capability | Why it is worth it |
 | --- | --- | --- |
-| E1 | Action `{ do: "if"; when: Condition[]; then: ActionList; else?: ActionList }` | Two-state buildings (breaker, valve, bell rope) need a list that depends on a flag. Without it they are per-tick `while` triggers, which is a hack. The solver reads both branches inside the stateful flood |
+| E1 **built** | Action `{ do: "if"; when: Condition[]; then: ActionList; else?: ActionList }` | Two-state buildings (breaker, valve, bell rope) need a list that depends on a flag. Without it they are per-tick `while` triggers, which is a hack. The solver reads both branches inside the stateful flood |
 | E2 | `Blueprint.triggers`: trigger rows carried by the blueprint, merged with `triggers.json` for the zone | Generated lock-ins and state gates. The solver already reads triggers by zone |
 | E3 | A prop's `to` may name the current zone: move the unit to the mark, no reload | Way-ins (the co-op follow rule), the vent |
 | E4 | Tile flag `F_NOPUSH`, checked in `footprintFree` on push | One line. Removes a class of soft-lock |
 | E5 | Growth by finding. **Already in the working tree** as `{ do: "grow"; stat; amount; id }` with `state.growth.found` (uncommitted, seen 21 September). This design uses it as built and asks one thing of the generator: a jar's `id` is its prop key, and a generated prop key comes from node and socket (`mine_office_jar_0`), never from coordinates or attempt, so a re-rolled layout cannot hand the same jar out twice or lose one | Jars and pages |
 | E6 | Action `{ do: "strike"; rect: string; amount: number; school: School; effect?: string; hitsFriends?: boolean }` | Hoists, floor grids, any trap. The first hazard verb |
-| E7 | Schools `blast` and `shock`. SpellDef `touch?: number` (px) replacing the fixed 14 in `schoolTouch` | Two verbs. A blast must reach the middle of a 3x2 prop |
-| E8 | `litAt(x, y)` in the sim, from prop lights only. Light rows may be a rect and may be day-only. UnitDef `sight?: "lit"` and `shunsLight?: boolean`. `worldVerb("grow")` requires `litAt` | The Factory, the Burial, the Forest, and the game's spine: lamps that mean something to the sim |
-| E9 | Action `{ do: "send"; unit: string; to: string; then?: ActionList }`: walk a unit to a mark, ignoring aggro, then run a list on it. Gives up after a path budget | Haulers, the Emperor, the mine's nine o'clock omen, the six o'clock shift |
-| E10 | UnitDef `phases[n].onEnter?: ActionList` | Every boss that changes the room |
-| E11 | Patrol points with a `dwell` in ticks | Butterflies, the Caretaker |
-| E12 | `show`, `lock` and solid `fill` never land on a unit: nudge to the nearest free cell, or skip the cell and retry | Exhibits, shutters, hedges. Bug safety |
-| E13 | Action `{ do: "reveal"; rects: string[] }`: set fog bits | The wall notice as the dungeon map. 2020 had reveal rects |
+| E7 **built** | Schools `blast` and `shock`. SpellDef `touch?: number` (px) replacing the fixed 14 in `schoolTouch` | Two verbs. A blast must reach the middle of a 3x2 prop |
+| E8 **built** (day-only lights are props with `dayOnly`, not rects; `light.cold` added so `shunsLight` minds warm light only) | `litAt(x, y)` in the sim, from prop lights only. Light rows may be a rect and may be day-only. UnitDef `sight?: "lit"` and `shunsLight?: boolean`. `worldVerb("grow")` requires `litAt` | The Factory, the Burial, the Forest, and the game's spine: lamps that mean something to the sim |
+| E9 **built** | Action `{ do: "send"; unit: string; to: string; then?: ActionList }`: walk a unit to a mark, ignoring aggro, then run a list on it. Gives up after a path budget | Haulers, the Emperor, the mine's nine o'clock omen, the six o'clock shift |
+| E10 **built** | UnitDef `phases[n].onEnter?: ActionList` | Every boss that changes the room |
+| E11 **built** (a third number on a `UnitSpawn.patrol` point; `patrol: [{ mark, dwell }]` on a unit holding) | Patrol points with a `dwell` in ticks | Butterflies, the Caretaker |
+| E12 **built** (a solid `fill` waits for its WHOLE rect to be clear, not cell by cell: a hedge that grew round the one cell she stood on would box her in) | `show`, `lock` and solid `fill` never land on a unit: nudge to the nearest free cell, or skip the cell and retry | Exhibits, shutters, hedges. Bug safety |
+| E13 **built** (a held `notice` with no `use` reveals every placed room) | Action `{ do: "reveal"; rects: string[] }`: set fog bits | The wall notice as the dungeon map. 2020 had reveal rects |
 | E14 | `ZoneId` widened: `museum`, `library`, `forest`, `pipes`, `factory`, `school`, `line`, `icehouse` | Bookkeeping |
 | E15 | A zone's build seed may take a salt from a flag; that zone's state is dropped on exit; the salt is saved | The Closed Line only. Skip if that dungeon is cut |
 | E16 | The generator and the solver extensions of section 2 | Not sim code: `src/world/` only |
@@ -1159,10 +1160,12 @@ Short, and each one is used by more than one dungeon unless it says otherwise.
 2. **Templates:** the `.room` parser, the lint, the solver and ablation harness, the bot harness. Twelve mine pools at one variant each, cut from today's `mine.ts`.
    **Built** (`test/templates.test.ts`), **except the bot harness**: a bot plays the whole mine on three seeds instead; per-room bots are still to write. Twelve pools, two variants each, one arena (a set piece, K14). One legend entry per line, not several; rects are header lines (`rect inner 1 1 65 21`). How it works: `ENGINE.md` 8.3.
 3. **Generator:** choose, embed, route, lock, fill, name, emit; the lock-in macro (E2); the fallback. Solver changes: verb gating, `when` on `while`, same-zone `to`. Checks C1 to C12. The dungeon viewer. Gate: `dungeons.test.ts` green on the generated mine, 64 seeds with zero fallbacks, John runs it on three seeds (`PLAN.md` M4).
-   **Built** (`test/dungeon-gen.test.ts`), **except the viewer page and the stateful flood** (step 6 brings the flood). 1,000 seeds, zero fallbacks, three attempts at worst. John's three seeds are still John's.
+   **Built** (`test/dungeon-gen.test.ts`), **except the viewer page**. 1,000 seeds, zero fallbacks, three attempts at worst. John's three seeds are still John's. The stateful flood, the `state` edge and the generated control list came afterwards, ahead of the Museum (`test/verbs2.test.ts`, on a test building; `ENGINE.md` 8.3).
 4. **Mine content:** the drawer, First Aid, the track shortcut, the adit (county chunk change), the side rooms, variants up to three per pool.
-   **Built, except the adit** (it needs the county chunk) **and the powder store** (it needs `blast`, step 6); the cage is in. Two variants per pool, not three. The dog still teaches Repair until its tree is edited; the drawer then says so and teaches nothing twice. The office has heat 0 in the data: the Headmaster is its heat, and the drawer is `guardedBy` him, which is what C5 checks.
+   **Built, except the powder store** (the spell is in; it wants the Museum's `rubble` row); the cage is in. Two variants per pool, not three. The adit is in: a door in the gallery to the county mark `mine_adit`, and the county's side is barred until the gallery has been stood in, then a way back in. The dog no longer teaches Repair: its line points at the drawer. The office has heat 0 in the data: the Headmaster is its heat, and the drawer is `guardedBy` him, which is what C5 checks.
 5. **Cellar touches.** E13 and the notices.
+   **E13 built**, and the mine's notice reveals the mine. The cellar's touches are not.
+   **Built ahead of steps 6 to 9, so that five dungeons can be written side by side** (`test/verbs2.test.ts`): E1, E7 (both schools, `touch`, the rows `explosion`, `grow`, `spark`, the effects `dazzled`, `jolted`, `dusted`, `softened`, three icons), E8, E9, E10, E11, E12, E13 and the stateful flood. What is left in those steps is content.
 6. **Museum:** E1, E7 (`blast`), E10, E12, the stateful flood. This is the proof that a two-state building can be generated and proven. Then Explosion's places on the surface.
 7. **Library and Butterfly Forest:** E8 (`litAt`, day-only rect lights, the Grow rule), E9, E11.
 8. **Pipes and Factory:** E7 (`shock`), `sight: "lit"`, the county's relay boxes and dead lamp runs.

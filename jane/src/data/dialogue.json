@@ -101,9 +101,13 @@
         "options": [{ "label": "Understood", "actions": [{ "do": "handin", "quest": "rats_below" }] }]
       },
       "offer_mine": {
-        "lines": ["The mine mouth is the one with the lamp. A man called Gnox Goldskin dug it and then the dead kept digging.", "Broken stairs want Repair. Repair wants wood. Julie kept wood in the cellar storage, behind a plain lock."],
+        "lines": [
+          "The mine mouth is the one with the lamp. A man called Gnox Goldskin dug it and then the dead kept digging.",
+          "There is a page missing from this house. The Headmaster confiscates things, and he has never once given anything back at the end of term.",
+          "Broken stairs want wood. There is some in the cellar storage, behind a plain lock."
+        ],
         "options": [
-          { "label": "I'll go down", "actions": [{ "do": "quest", "quest": "the_mine" }, { "do": "learn", "spell": "repair" }, { "do": "flag", "flag": "offered_mine" }] },
+          { "label": "I'll go down", "actions": [{ "do": "quest", "quest": "the_mine" }, { "do": "flag", "flag": "offered_mine" }] },
           { "label": "Not yet" }
         ]
       },

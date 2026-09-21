@@ -5,7 +5,8 @@
 //   1 choose   a template for each node from its pool, no template twice      (layout.ts)
 //   2 embed    rooms onto the bay lattice, critical nodes first                (layout.ts)
 //   3 route    a corridor for every edge, along the lines between bays         (layout.ts)
-//   4 lock     gates, verb props, lock-ins and their way in, flag gates
+//   4 lock     gates, verb props, lock-ins and their way in, flag gates, state gates (and, in 5, the
+//              one list per control that drives them both ways)
 //   5 fill     holdings into sockets, the enemy mix by heat, dressing
 //   6 name     bound things get their contract name, the rest `${zone}_${node}_${socket}`
 //   7 emit     the Blueprint and the trigger rows it carries
@@ -21,7 +22,7 @@ import { Kit } from "@/world/kit";
 import { embed, embedFallback, Lanes } from "@/world/dungeon/layout";
 import { templateById } from "@/world/dungeon/pools";
 import { BAY_H, BAY_W, BORDER, shapeOf, type Shape } from "@/world/dungeon/room";
-import type { Corridor, Door, DungeonDef, EdgeKind, Holding, Layout, LockinSpec, MissionNode, Placement, Side, Socket } from "@/world/dungeon/types";
+import type { Corridor, Door, DungeonDef, EdgeKind, Holding, Layout, LockinSpec, MissionNode, Placement, Side, Socket, StateVar } from "@/world/dungeon/types";
 
 /** The last attempt stamps the hand-placed fallback: never throw at the player. */
 export const DUNGEON_ATTEMPTS = ZONE_ATTEMPTS;
@@ -56,6 +57,9 @@ export type EdgeLock = {
 
 export type LockinInfo = { node: string; gate: string; wayIn: string; mark: string; rect: string; lock: string; clear: string };
 
+/** A prop that flips a state, and the state it flips. */
+export type ControlInfo = { state: string; prop: string };
+
 /** Everything the checks and the viewer want to know about how a blueprint was made. */
 export type BuildInfo = {
   def: DungeonDef;
@@ -63,6 +67,7 @@ export type BuildInfo = {
   rooms: RoomInfo[];
   locks: EdgeLock[];
   lockins: LockinInfo[];
+  controls: ControlInfo[];
   /** Why there is no dungeon here, when there is not. */
   errors: string[];
 };
@@ -107,7 +112,7 @@ export function buildDungeon(def: DungeonDef, seed: number, attempt: number, opt
   const FLOOR = tileOf(def.tiles.floor, zone);
   const SILL = Tile.Sill;
   const k = new Kit(zone, W, H, seed, attempt, WALL);
-  const info: BuildInfo = { def, layout: null, rooms: [], locks: [], lockins: [], errors: [] };
+  const info: BuildInfo = { def, layout: null, rooms: [], locks: [], lockins: [], controls: [], errors: [] };
   const finish = (): Blueprint => {
     const bp = k.done(def.name, def.indoor, def.ambient, attempt);
     bp.triggers = triggers;
@@ -181,7 +186,11 @@ export function buildDungeon(def: DungeonDef, seed: number, attempt: number, opt
     const name = (v: string): string => (v === "@self" ? self : v.startsWith("@") ? nameOf(node, v.slice(1)) : v);
     return list.map((a): Action => {
       const b = { ...a } as Record<string, unknown>;
-      for (const f of ["prop", "unit", "at", "rect", "id"]) if (typeof b[f] === "string") b[f] = name(b[f] as string);
+      for (const f of ["prop", "unit", "at", "rect", "id", "to"]) if (typeof b[f] === "string") b[f] = name(b[f] as string);
+      if (Array.isArray(b.rects)) b.rects = (b.rects as string[]).map(name);
+      // Lists inside lists: an `if`'s branches, what a sent unit does when it arrives.
+      for (const f of ["then", "else"]) if (Array.isArray(b[f])) b[f] = resolve(node, self, b[f] as ActionList);
+      if (a.do === "if") b.when = resolveWhen(node, a.when);
       return b as Action;
     });
   };
@@ -233,14 +242,24 @@ export function buildDungeon(def: DungeonDef, seed: number, attempt: number, opt
 
   // --- locks -------------------------------------------------------------------------------
   /** A gate in the one corridor cell that is always there: just outside the far room's door. */
-  const placeGate = (c: Corridor, key: string, extra: { locked: boolean; keyTag?: string; label?: string }): void => {
+  const placeGate = (c: Corridor, key: string, extra: { locked: boolean; keyTag?: string; label?: string }, rows: [string, string] = ["gate_h", "gate_v"]): void => {
     const { d, x, y } = doorAt(roomOf(c.b.node), c.b.door);
     const [ox, oy] = OUT[d.side];
     const gx = x + ox;
     const gy = y + oy;
-    if (d.side === "n" || d.side === "s") k.prop({ key, def: "gate_h", cx: gx - 1, cy: gy, ...extra }, 3, 1);
-    else k.prop({ key, def: "gate_v", cx: gx, cy: gy - 1, ...extra }, 1, 3);
+    for (const row of rows) if (!foot[row]) throw new Error(`Dungeon "${zone}": gate row "${row}" is not a prop row`);
+    if (foot[rows[0]].w !== 3 || foot[rows[0]].h !== 1 || foot[rows[1]].w !== 1 || foot[rows[1]].h !== 3) throw new Error(`Dungeon "${zone}": gate rows ${rows.join(", ")} must be 3x1 and 1x3`);
+    if (d.side === "n" || d.side === "s") k.prop({ key, def: rows[0], cx: gx - 1, cy: gy, ...extra }, 3, 1);
+    else k.prop({ key, def: rows[1], cx: gx, cy: gy - 1, ...extra }, 1, 3);
   };
+  const stateOf = (id: string): StateVar => {
+    const sv = (def.states ?? []).find((x) => x.id === id);
+    if (!sv) throw new Error(`Dungeon "${zone}": no state called "${id}"`);
+    if (!sv.values.includes(sv.initial)) throw new Error(`Dungeon "${zone}": state "${id}" starts as "${sv.initial}", which is not one of its values`);
+    return sv;
+  };
+  /** Gates that stand or fall with a state: what each control's list must drive, both ways. */
+  const stateGates: { state: string; is: string; gate: string }[] = [];
   /** A prop that fills the corridor: in the middle of a straight stub, or of the last lane before the far room. */
   const placeBlock = (c: Corridor, key: string, propDef: string, spawn: { needs?: Stack[]; use?: ActionList; label?: string }): void => {
     const f = foot[propDef];
@@ -278,7 +297,7 @@ export function buildDungeon(def: DungeonDef, seed: number, attempt: number, opt
     let gateKey: string | null = null;
     const kinds: EdgeKind[] = [edge.kind, ...(edge.also ?? [])];
     const gateName = (): string => {
-      for (const kind of kinds) if ((kind.t === "key" || kind.t === "lockin" || kind.t === "oneway") && kind.gateAs) return kind.gateAs;
+      for (const kind of kinds) if ((kind.t === "key" || kind.t === "lockin" || kind.t === "oneway" || kind.t === "state") && kind.gateAs) return kind.gateAs;
       return `${zone}_gate_${from.node.id}_${to.node.id}`;
     };
     for (const kind of kinds) {
@@ -303,6 +322,15 @@ export function buildDungeon(def: DungeonDef, seed: number, attempt: number, opt
           when: [{ if: "flag", flag: kind.flag }],
           actions: [{ do: "unlock", prop: gateKey }],
         };
+        info.locks.push({ edge: c.edge, kind, prop: gateKey });
+      } else if (kind.t === "state") {
+        // Passable only while the state has this value. No key fits it: the state's controls
+        // drive it, and the list that does so is written below, once, for every such gate.
+        const sv = stateOf(kind.var);
+        if (!sv.values.includes(kind.is)) throw new Error(`Dungeon "${zone}": state "${kind.var}" has no value "${kind.is}"`);
+        gateKey = gateName();
+        placeGate(c, gateKey, { locked: kind.is !== sv.initial, label: kind.label }, kind.gate);
+        stateGates.push({ state: kind.var, is: kind.is, gate: gateKey });
         info.locks.push({ edge: c.edge, kind, prop: gateKey });
       }
     }
@@ -396,7 +424,12 @@ export function buildDungeon(def: DungeonDef, seed: number, attempt: number, opt
       held.add(s.id);
       const key = nameOf(node, s.id);
       if ("unit" in hd) {
-        k.unit(key, hd.unit, room.x + s.cx + (s.w >> 1), room.y + s.cy + (s.h >> 1)).phase = def.phase;
+        const patrol = (hd.patrol ?? []).map((pt): [number, number, number] => {
+          const m = shape.marks.find((x) => x.id === pt.mark);
+          if (!m) throw new Error(`Dungeon "${zone}": "${node.id}" patrols by mark "${pt.mark}", which template ${shape.template.id} does not have`);
+          return [room.x + m.cx, room.y + m.cy, pt.dwell ?? 0];
+        });
+        k.unit(key, hd.unit, room.x + s.cx + (s.w >> 1), room.y + s.cy + (s.h >> 1), patrol.length > 1 ? patrol : undefined).phase = def.phase;
         continue;
       }
       const propDef = hd.prop ?? "chest";
@@ -408,6 +441,21 @@ export function buildDungeon(def: DungeonDef, seed: number, attempt: number, opt
       if (found && !use) {
         use = [{ do: "grow", stat: found.stat, amount: found.amount, id: key }];
         if (found.hide) use.push({ do: "hide", prop: key });
+      }
+      // The wall notice is the map: reading it shows every room this seed placed. The generator
+      // knows them all, so no mission has to list them (and none can list one that was dropped).
+      if (propDef === "notice" && !use) use = [{ do: "reveal", rects: info.rooms.map((r) => nameOf(r.node, "room")) }];
+      if ("controls" in hd && hd.controls) {
+        // One generated list per control, never hand-written, or a gate is forgotten in one direction.
+        const sv = stateOf(hd.controls);
+        const other = sv.values[0] === sv.initial ? sv.values[1] : sv.values[0];
+        const drive = (value: string): ActionList => [
+          { do: "flag", flag: sv.flag, value: value === sv.initial ? 0 : 1 },
+          ...stateGates.filter((g) => g.state === sv.id).map((g): Action => ({ do: g.is === value ? "unlock" : "lock", prop: g.gate })),
+          ...(resolve(node, key, hd.becomes?.[value]) ?? []),
+        ];
+        use = [{ do: "if", when: [{ if: "flag", flag: sv.flag }], then: drive(sv.initial), else: drive(other) }, ...(use ?? [])];
+        info.controls.push({ state: sv.id, prop: key });
       }
       k.prop(
         {

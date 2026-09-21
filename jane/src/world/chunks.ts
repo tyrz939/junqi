@@ -182,6 +182,13 @@ export const mineMouth: Build = (k, ox, oy) => {
   k.prop({ key: "sign_mine", def: "sign", cx: mx + 12, cy: my + 9, talk: "sign_mine" }, 2, 1);
   k.prop({ def: "minecart", cx: mx + 2, cy: my + 11 }, 2, 2);
   k.prop({ key: "mine_fire", def: "campfire", cx: mx + 16, cy: my + 14, talk: "fire" }, 2, 2);
+  // The adit: a second way out, round the east side of the hill, let into the cliff's flank. It is
+  // barred from the inside. Once somebody has stood in the gallery it leads from (which is behind
+  // Repair), a row in data/triggers unbars it, and it is a way back in for good. A sign that says
+  // there is no exit some nights needs a second exit to be fair (PLAN.md 5).
+  k.prop({ key: "adit_door", def: "door", cx: mx + 16, cy: my + 3, locked: true, to: { zone: "mine", mark: "adit" }, label: "The adit" }, 2, 2);
+  k.mark("mine_adit", mx + 19, my + 4, 0);
+  k.rect("mine_yard", box);
   // The Company's pay hatch: a stub of wall with a gap in it, and nobody behind the gap.
   k.fill(box.cx + 1, my + 12, 1, 2, Tile.Wall);
   k.fill(box.cx + 3, my + 12, 1, 2, Tile.Wall);

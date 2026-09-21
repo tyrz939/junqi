@@ -7,9 +7,10 @@
 
 import type { Catalog } from "@/sim/catalog";
 import type { Blueprint, ZoneContract } from "@/world/blueprint";
-import { checkDungeon, contractOf } from "@/world/dungeon/checks";
+import { checkDungeon, contractOf, solveOptionsOf } from "@/world/dungeon/checks";
 import { buildDungeon } from "@/world/dungeon/generate";
 import type { DungeonDef } from "@/world/dungeon/types";
+import type { SolveState } from "@/world/validate";
 
 const FILES = import.meta.glob("../../data/dungeons/*.json", { eager: true, import: "default" }) as Record<string, DungeonDef>;
 
@@ -28,6 +29,8 @@ export type DungeonZone = {
   givenKeys: string[];
   /** Spells the player is known to have at the door. The solver holds the dungeon to it. */
   givenVerbs: string[];
+  /** The mission's reversible mechanisms, as the solver wants them. Empty for most. */
+  states: SolveState[];
   /** Checks C1 to C12. Empty means the blueprint is the dungeon that was designed. */
   check: (bp: Blueprint, catalog: Catalog) => string[];
 };
@@ -41,6 +44,7 @@ export function dungeonZone(id: string): DungeonZone {
     contract: contractOf(def),
     givenKeys: def.givenKeys,
     givenVerbs: def.givenVerbs,
+    states: [...(solveOptionsOf(def).states ?? [])],
     check: checkDungeon,
   };
 }

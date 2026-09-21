@@ -26,6 +26,12 @@ const DIRS = [1, 0, -1, 0, 0, 1, 0, -1, 1, 1, 1, -1, -1, 1, -1, -1];
 
 export type PathStats = { searches: number; expanded: number; failed: number; partial: number };
 
+/**
+ * Cells a walker will not step on, beyond what is solid: light, for something that shuns it
+ * (sim/light.ts). Asked at most once per cell per search.
+ */
+export type Shunned = { cellLit(cx: number, cy: number): boolean };
+
 export class PathFinder {
   private readonly grid: Grid;
   private readonly ww: number;
@@ -36,6 +42,9 @@ export class PathFinder {
   private readonly closed: Uint32Array; // generation when the node was expanded
   private readonly heap: Int32Array;
   private readonly heapF: Int32Array;
+  // Only something that shuns light pays for these: made on its first search.
+  private shunStamp: Uint32Array | null = null;
+  private shunVal: Uint8Array | null = null;
   private heapSize = 0;
   private generation = 0;
   // Window origin of the current search, in cells.
@@ -70,6 +79,9 @@ export class PathFinder {
    * callers stop short using range checks.
    * Returns null when blocked, over `maxCost` (tenths of a cell), or over budget.
    * A goal outside the search window returns the best partial path toward it.
+   * With `shun`, cells it names are never entered (the goal included), and a goal that cannot
+   * be reached returns the path to the nearest cell that can: whatever shuns the light walks to
+   * the edge of it and waits there. That path may be empty.
    */
   find(
     sx: number,
@@ -79,6 +91,7 @@ export class PathFinder {
     self: number,
     maxCost: number,
     budget = 6000,
+    shun: Shunned | null = null,
   ): number[] | null {
     const grid = this.grid;
     const gw = grid.w;
@@ -97,6 +110,12 @@ export class PathFinder {
 
     const gen = ++this.generation;
     const { g, from, stamp, closed } = this;
+    if (shun && !this.shunStamp) {
+      this.shunStamp = new Uint32Array(ww * wh);
+      this.shunVal = new Uint8Array(ww * wh);
+    }
+    const shunStamp = this.shunStamp as Uint32Array;
+    const shunVal = this.shunVal as Uint8Array;
     const flags = grid.flags;
     this.heapSize = 0;
     g[start] = 0;
@@ -122,7 +141,7 @@ export class PathFinder {
       const nx = lx + ox;
       const ny = ly + oy;
       const base = g[node];
-      if (!goalInside) {
+      if (!goalInside || shun) {
         const h = heuristic(nx, ny, tx, ty);
         if (h < bestH) {
           bestH = h;
@@ -144,6 +163,13 @@ export class PathFinder {
           // The occupancy bit is in the same byte; the Map is only consulted when it is set.
           if ((f & F_OCC) !== 0 && grid.occupant(gi) !== self) continue;
         }
+        if (shun) {
+          if (shunStamp[next] !== gen) {
+            shunStamp[next] = gen;
+            shunVal[next] = shun.cellLit(cx, cy) ? 1 : 0;
+          }
+          if (shunVal[next] === 1) continue;
+        }
         let step = STRAIGHT;
         if (dx !== 0 && dy !== 0) {
           // No corner cutting: both orthogonal neighbours must be open terrain.
@@ -161,10 +187,12 @@ export class PathFinder {
       }
     }
     this.stats.expanded += expanded;
-    if (!goalInside && bestNode !== start) {
+    if ((!goalInside || shun) && bestNode !== start) {
       this.stats.partial++;
       return this.unwind(bestNode, start);
     }
+    // Already as near as it can get without stepping into the light: stand here.
+    if (shun) return [];
     return this.fail();
   }
 

@@ -89,8 +89,12 @@ export const NIGHT_END_HOUR = 6;
 export const PARTY_DEALT = [1, 0.62, 0.46, 0.38];
 export const PARTY_TAKEN = [1, 1.15, 1.3, 1.45];
 
-/** 2: playerName, rest point, Unit.hidden, Unit.pathGoal. 3: players[] (co-op-ready). 7: the mine is generated; a saved hand-built one is dropped. */
-export const SAVE_VERSION = 7;
+/**
+ * 2: playerName, rest point, Unit.hidden, Unit.pathGoal. 3: players[] (co-op-ready). 7: the mine is
+ * generated; a saved hand-built one is dropped. 8: units may be sent somewhere and may wait at a
+ * patrol point (Unit.order, patrolDwell, dwell); a zone remembers the cells a fill is still owed.
+ */
+export const SAVE_VERSION = 8;
 
 /**
  * What a creature costs at each threat, as a multiple of its row. 2020's balance sheet

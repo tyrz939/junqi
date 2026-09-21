@@ -90,9 +90,19 @@
     },
     {
       "id": "gallery", "kind": "bosskey", "order": 6, "critical": true, "pool": "mine.gallery", "heat": 0.5,
-      "holds": [{ "socket": "chest:bosskey", "prop": "boss_chest", "loot": [{ "item": "key_mine_boss", "qty": 1 }] }],
-      "binds": [{ "from": "chest:bosskey", "as": "boss_key_chest", "what": "prop" }],
-      "demands": ["repair"], "grants": [{ "key": "mine_boss" }]
+      "holds": [
+        { "socket": "chest:bosskey", "prop": "boss_chest", "loot": [{ "item": "key_mine_boss", "qty": 1 }] },
+        { "socket": "exit:adit", "prop": "door", "to": { "zone": "county", "mark": "mine_adit" }, "label": "The adit" }
+      ],
+      "binds": [
+        { "from": "chest:bosskey", "as": "boss_key_chest", "what": "prop" },
+        { "from": "exit:adit", "as": "adit_door", "what": "prop" },
+        { "from": "adit", "as": "adit", "what": "mark" }
+      ],
+      "demands": ["repair"], "grants": [{ "key": "mine_boss" }],
+      "triggers": [
+        { "id": "adit_found", "mode": "enter", "once": true, "actions": [{ "do": "flag", "flag": "mine_adit_open" }] }
+      ]
     },
     {
       "id": "vault", "kind": "reward", "order": 6, "critical": true, "pool": "mine.vault", "heat": 0.6,

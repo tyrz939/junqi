@@ -23,7 +23,8 @@ export type NodeKind =
  */
 export type Holding =
   | { socket: string; loot: Stack[]; prop?: string; locked?: boolean; label?: string; guardedBy?: string[] }
-  | { socket: string; unit: string }
+  /** `patrol`: marks of the same template, in order, each with an optional dwell in ticks (a butterfly's flowers). */
+  | { socket: string; unit: string; patrol?: { mark: string; dwell?: number }[] }
   | {
       socket: string;
       prop: string;
@@ -37,6 +38,14 @@ export type Holding =
       to?: { zone: ZoneId; mark: string };
       /** Locked until these units of the same node are dead (`@socket` or a contract name). The generator writes the trigger. */
       guardedBy?: string[];
+      /**
+       * This prop is a CONTROL of a state (the breaker): the generator writes the list that
+       * flips the state and drives every `state` edge's gate, so none can be forgotten in one
+       * direction. `use` here is what else happens on every pull, either way.
+       */
+      controls?: string;
+      /** For a control: what else happens on the way to each value of its state, by value name. */
+      becomes?: Record<string, ActionList>;
     };
 
 export type Bind = { from: string; as: string; what: "prop" | "unit" | "mark" | "rect" };
@@ -45,7 +54,16 @@ export type Grant =
   | { key: string } // an `opens` tag
   | { verb: Verb }
   | { item: string; qty: number }
-  | { flag: string };
+  | { flag: string }
+  | { state: string }; // control of a StateVar: the room with the breaker in it
+
+/**
+ * A reversible, building-wide mechanism: the Museum's lights, the pipes' valve. At most three
+ * to a dungeon. It lives in a world flag: UNSET OR 0 IS `initial`, 1 is the other value, so
+ * nothing has to set it when the zone is made. (DUNGEONS.md 2.2 wrote "1 = values[0]"; this
+ * way round needs no row to run before the first room is drawn.)
+ */
+export type StateVar = { id: string; values: [string, string]; initial: string; flag: string };
 
 /** A trigger a node carries with it. `rect` is a template rect id ("room" by default); names resolve as in holdings. */
 export type NodeTrigger = {
@@ -93,6 +111,8 @@ export type EdgeKind =
   | { t: "verb"; verb: Verb; prop: string; needs?: Stack[]; propAs?: string; label?: string; toast?: string }
   | LockinSpec
   | { t: "oneway"; how: "opens_on"; flag: string; gateAs?: string }
+  /** Passable only while the state has this value: a gate the state's controls drive. `gate` names other prop rows for it ([across a north-south corridor, across an east-west one]). */
+  | { t: "state"; var: string; is: string; gateAs?: string; gate?: [string, string]; label?: string }
   | { t: "sight" };
 
 export type MissionEdge = { from: string; to: string; kind: EdgeKind; shortcut?: boolean; also?: EdgeKind[] };
@@ -114,6 +134,8 @@ export type DungeonDef = {
   givenVerbs: Verb[];
   /** `opens` tags handed over outside. */
   givenKeys: string[];
+  /** Reversible building-wide mechanisms. At most 3. Left out: none. */
+  states?: StateVar[];
   nodes: MissionNode[];
   edges: MissionEdge[];
   budget: {
