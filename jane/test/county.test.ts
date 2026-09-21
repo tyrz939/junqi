@@ -10,6 +10,10 @@ import { F_SOLID, TILE_FLAGS, Tile } from "@/sim/grid";
 import { hashString } from "@/sim/rng";
 import type { Blueprint } from "@/world/blueprint";
 import { buildZone } from "@/world";
+import doorsJson from "@/data/doors.json";
+import { hasZone } from "@/world/registry";
+
+const DOORS = doorsJson as { zone: string; key: string }[];
 import { buildCounty, COUNTY_H, COUNTY_W, countySkeleton } from "@/world/county";
 import { placementContract, type PlacementRow } from "@/world/placements";
 import { at, MACRO, SKELETON_ROWS } from "@/world/skeleton";
@@ -227,6 +231,20 @@ describe("the places the story needs", () => {
       let lit = 0;
       for (let oy = -2; oy <= 2; oy++) for (let ox = -2; ox <= 2; ox++) lit += sk.road[at(lamp.mx + ox, lamp.my + oy)] & 2 ? 1 : 0;
       expect(lit, `${seed}: lamp_13 stands on a dark stretch (another road may pass close by)`).toBeLessThanOrEqual(3);
+    }
+  });
+});
+
+describe("doors into the dungeons", () => {
+  it("a landmark grows its door the day its dungeon lands, and shows a blank face until then", () => {
+    const bp = county(SEEDS[0]);
+    for (const d of DOORS) {
+      const door = bp.props.find((p) => p.key === d.key);
+      expect(Boolean(door), `${d.key} exists iff zone ${d.zone} does`).toBe(hasZone(d.zone));
+      if (!door) continue;
+      expect(door.to).toEqual({ zone: d.zone, mark: "entry" });
+      // Set into the face, with open ground in front of it to walk up to.
+      expect(TILE_FLAGS[bp.tiles[(door.cy + 3) * bp.w + door.cx]] & F_SOLID).toBe(0);
     }
   });
 });

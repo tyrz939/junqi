@@ -305,9 +305,14 @@ function landmark(id: string, w: number, h: number, ground: Tile, wall: Tile, ma
     const [bw, bh] = mass;
     const bx = box.cx + Math.floor((w - bw) / 2);
     k.fill(bx, box.cy + 1, bw, bh, wall);
+    const doorX = box.cx + Math.floor(w / 2) - 1;
     k.mark(`${id}_mouth`, box.cx + Math.floor(w / 2), box.cy + bh + 4, 1);
+    // A way up to the face, so whatever door is set into it can be walked to.
+    k.fill(doorX, box.cy + bh + 1, 2, 4, Tile.Dirt);
     const g = sideGates(box);
-    return { id, box, gates: [g.s, g.w, g.e] };
+    // The slot in its face. A door is set here once the place behind it exists (data/doors.json);
+    // until then the face is blank, because a locked door with nothing behind it would be a lie.
+    return { id, box, gates: [g.s, g.w, g.e], slots: { [`${id}_door`]: [doorX, box.cy + bh - 1] } };
   };
 }
 

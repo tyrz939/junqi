@@ -10,32 +10,11 @@ import { buildCounty } from "@/world/county";
 import { buildCellar, buildHouse } from "@/world/interiors";
 import { MINE } from "@/world/mine";
 import { placementContract } from "@/world/placements";
+import { REGISTERED } from "@/world/registry";
 import { validateBlueprint, type SolveState } from "@/world/validate";
 
-export type Builder = (seed: number, attempt: number) => Blueprint;
-
-/**
- * A zone that registers itself: a file in world/zones/ that `export const zone: ZoneDef`.
- * The five original zones are listed by hand below; everything newer arrives this way, so
- * adding a dungeon never means editing this file.
- */
-export type ZoneDef = {
-  id: ZoneId;
-  build: Builder;
-  contract: ZoneContract;
-  /** Keys the story hands over from outside the zone (quest rewards), by `opens` tag. */
-  givenKeys?: string[];
-  /** Spells she is known to have at the door. Given, the solver gates every answering prop on them; left out, it gates nothing. */
-  givenVerbs?: string[];
-  /** Reversible mechanisms of the whole zone (a breaker, a valve), at most three. Given, the solver's flood is stateful. */
-  states?: SolveState[];
-  /** More to prove than the solver does (a generated dungeon's C1 to C12). Any error re-rolls the candidate. */
-  check?: (bp: Blueprint, catalog: Catalog) => string[];
-};
-
-const REGISTERED: ZoneDef[] = Object.entries(import.meta.glob("./zones/*.ts", { eager: true }) as Record<string, { zone?: ZoneDef }>)
-  .sort(([a], [b]) => (a < b ? -1 : 1))
-  .flatMap(([, m]) => (m.zone ? [m.zone] : []));
+export type { Builder, ZoneDef } from "@/world/registry";
+import type { Builder, ZoneDef } from "@/world/registry";
 
 export const BUILDERS: Record<ZoneId, Builder> = {
   county: buildCounty,

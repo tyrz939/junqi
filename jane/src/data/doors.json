@@ -1,0 +1,15 @@
+[
+  {
+    "zone": "museum",
+    "chunk": "museum",
+    "key": "museum_door",
+    "label": "The Museum",
+    "keyTag": "museum",
+    "nightLock": "The Museum does not answer after dark. Something inside is walking about, and it is not being quiet."
+  },
+  { "zone": "library", "chunk": "library", "key": "library_door", "label": "The library" },
+  { "zone": "forest", "chunk": "butterfly_forest", "key": "forest_door", "label": "Butterfly Forest" },
+  { "zone": "factory", "chunk": "factory", "key": "factory_door", "label": "The Factory" },
+  { "zone": "school", "chunk": "school", "key": "school_door", "label": "The School", "keyTag": "school" },
+  { "zone": "icehouse", "chunk": "lake_statue", "key": "icehouse_door", "label": "The ice house" }
+]

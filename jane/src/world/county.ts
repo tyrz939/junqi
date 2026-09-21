@@ -19,11 +19,13 @@ import { F_SOLID, Tile, TILE_FLAGS } from "@/sim/grid";
 import { hashString } from "@/sim/rng";
 import type { Blueprint, Rect } from "@/world/blueprint";
 import { CHUNKS, type Chunk, type Gate } from "@/world/chunks";
+import doorsJson from "@/data/doors.json";
 import pathsJson from "@/data/paths.json";
 import { AREA_DRESS } from "@/world/areas";
 import { Kit } from "@/world/kit";
 import { applyPlacements, claimPois, PLACEMENTS, type PlaceCtx, type PlacementRow, type PoiSpot } from "@/world/placements";
 import { propFootprints } from "@/sim/catalog";
+import { hasZone } from "@/world/registry";
 import { at, Biome, buildSkeleton, COUNTY_H, COUNTY_W, MACRO, Region, ROAD_LIT, SKEL_H, SKEL_W, type Skeleton } from "@/world/skeleton";
 
 export { COUNTY_H, COUNTY_W };
@@ -31,6 +33,10 @@ export { COUNTY_H, COUNTY_W };
 /** A footpath: from one site to another by way of a named small place or patch. `marks` name its two ends. */
 type PathRow = { id: string; from: string; via: string; to: string; width: number; marks: [string, string] };
 const PATHS = pathsJson as unknown as PathRow[];
+
+/** The county-side door into a dungeon: which landmark it is set into, and what it says. */
+type DoorRow = { zone: string; chunk: string; key: string; label: string; keyTag?: string; nightLock?: string };
+const DOORS = doorsJson as unknown as DoorRow[];
 
 const ROAD_WIDTH = 4;
 const FIELD_HERBS = ["pansy", "nasturtium", "honeylace_lily", "hemshade_root"];
@@ -163,6 +169,30 @@ export function buildCounty(seed: number, attempt: number, rows: readonly Placem
     sizes: (footprints ??= propFootprints()),
     threatAt: (cx, cy) => sk.threat[at(Math.min(SKEL_W - 1, cx >> 4), Math.min(SKEL_H - 1, cy >> 4))],
   };
+  // Doors into the dungeons: one per landmark, set into its face, but ONLY for a zone that
+  // exists (world/registry.ts). The county grows a door the day its dungeon lands; until then
+  // the face is blank. Nothing else has to change when a dungeon is added.
+  for (const d of DOORS) {
+    const chunk = chunks.find((c) => c.id === d.chunk);
+    const cell = chunk?.slots?.[`${d.chunk}_door`];
+    if (!cell || !hasZone(d.zone)) continue;
+    k.prop(
+      {
+        key: d.key,
+        def: "door",
+        cx: cell[0],
+        cy: cell[1],
+        locked: d.keyTag !== undefined,
+        keyTag: d.keyTag,
+        to: { zone: d.zone, mark: "entry" },
+        label: d.label,
+        nightLock: d.nightLock,
+      },
+      2,
+      2,
+    );
+  }
+
   applyPlacements(place, "chunks", rows);
   for (const c of chunks) k.claim(c.box.cx - 6, c.box.cy - 6, c.box.w + 12, c.box.h + 12);
   for (const line of lines) for (const [x, y] of line) k.claim(x - 3, y - 3, 7, 7);
