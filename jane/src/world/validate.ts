@@ -41,7 +41,12 @@ export function validateBlueprint(
   if (errors.length > 0) return { ok: false, errors, reachedCells: 0 };
 
   const { w, h } = bp;
-  const tileSolid = (i: number): boolean => (TILE_FLAGS[bp.tiles[i]] & F_SOLID) !== 0;
+  // Locals: the flood below asks this of every cell, and the county has seven million. An imported
+  // name is a module lookup each time (and a getter under the test runner); a local is free.
+  const tileFlags = TILE_FLAGS;
+  const solidBit = F_SOLID;
+  const tileArray = bp.tiles;
+  const tileSolid = (i: number): boolean => (tileFlags[tileArray[i]] & solidBit) !== 0;
 
   for (const [name, m] of Object.entries(bp.marks)) {
     if (m.cx < 0 || m.cy < 0 || m.cx >= w || m.cy >= h || tileSolid(m.cy * w + m.cx)) errors.push(`mark "${name}" is inside a wall`);
@@ -84,10 +89,20 @@ export function validateBlueprint(
   const applyActions = (list: ActionList | undefined | null): void => {
     for (const a of list ?? []) applyAction(a);
   };
+  // A flood is the whole zone, and the county is seven million cells: flood again only when
+  // something that blocks has changed, not every time a herb is picked or a rat dies.
+  let opened = false;
   const applyAction = (a: Action): void => {
-    if (a.do === "unlock") open.add(a.prop);
-    else if (a.do === "hide") hidden.add(a.prop);
-    else if (a.do === "show") hidden.delete(a.prop);
+    if (a.do === "unlock") {
+      open.add(a.prop);
+      opened = true;
+    } else if (a.do === "hide") {
+      hidden.add(a.prop);
+      opened = true;
+    } else if (a.do === "show") {
+      hidden.delete(a.prop);
+      opened = true;
+    }
     else if (a.do === "give") keys.set(itemTag(a.item), (keys.get(itemTag(a.item)) ?? 0) + (a.qty ?? 1));
   };
   const itemTag = (item: string): string => catalog.items[item]?.opens ?? `item:${item}`;
@@ -126,7 +141,11 @@ export function validateBlueprint(
       return false;
     };
 
-    let progress = false;
+    opened = false;
+    let progress = true;
+    // Settle: keep collecting and spending keys on what this flood reached until nothing new happens.
+    while (progress && !opened) {
+    progress = false;
     for (const p of bp.props) {
       if (hidden.has(p.key) || !touches(p)) continue;
       const def = catalog.props[p.def];
@@ -136,6 +155,7 @@ export function validateBlueprint(
         if (have > 0) {
           keys.set(p.keyTag as string, have - 1);
           open.add(p.key);
+          opened = true;
           progress = true;
         }
         continue;
@@ -179,7 +199,8 @@ export function validateBlueprint(
         progress = true;
       }
     }
-    if (!progress) break;
+    }
+    if (!opened) break;
   }
 
   for (const [name, m] of Object.entries(bp.marks)) if (!seen[m.cy * w + m.cx]) errors.push(`mark "${name}" is unreachable`);

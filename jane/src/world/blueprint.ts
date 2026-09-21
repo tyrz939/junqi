@@ -19,6 +19,11 @@ export type UnitSpawn = {
   facing?: Facing;
   /** Patrol waypoints in cells. */
   patrol?: [number, number][];
+  /**
+   * The threat (1..6) of the ground it stands on: the phase of 2020's balance sheet it
+   * plays at. One `skeleton` row, scaled where it is spawned, instead of skeleton_2, skeleton_3.
+   */
+  phase?: number;
 };
 
 export type PropSpawn = {

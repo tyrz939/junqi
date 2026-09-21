@@ -1,10 +1,10 @@
+import { yardCatalog } from "./bot";
 import { describe, expect, it } from "vitest";
-import { buildCatalog } from "@/sim/catalog";
 import { playReplay, Recorder } from "@/sim/replay";
 import { hashState } from "@/sim/save";
 import { Sim, type Command, type InputFrame } from "@/sim/sim";
 
-const catalog = buildCatalog();
+const catalog = yardCatalog();
 const q = (v: number): number => Math.round(v * 127) / 127;
 
 describe("replay", () => {

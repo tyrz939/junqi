@@ -2,6 +2,7 @@
 // press USE, press a bar slot, aim. It finds its way with the sim's own
 // pathfinder, so "the bot got there" also proves the map is walkable.
 
+import { buildCatalog, type Catalog } from "@/sim/catalog";
 import { CELL } from "@/sim/constants";
 import { cellOf, centre } from "@/sim/grid";
 import { costOfCells } from "@/sim/path";
@@ -120,4 +121,15 @@ export function fight(sim: Sim, target: Unit, slot = 0, maxTicks = 60 * 90): boo
     sim.tick({ mx: (dx / d) * move, my: (dy / d) * move, sprint: false, useHeld: false, ax: dx / d, ay: dy / d });
   }
   return !target.alive;
+}
+
+/**
+ * The catalog the older tests play on. New Game stands her on the station platform now, two
+ * minutes' walk from anything; these tests are about the yard, the house and what is under
+ * them, so they begin where the small county used to: just inside Julie's gate.
+ */
+export function yardCatalog(): Catalog {
+  const catalog = buildCatalog();
+  catalog.start.mark = "yard_gate";
+  return catalog;
 }

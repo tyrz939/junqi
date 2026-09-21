@@ -1,14 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { buildCatalog } from "@/sim/catalog";
 import { bagAdd, bagCount } from "@/sim/inventory";
 import { questReady } from "@/sim/quests";
 import { moveProp, propCentre } from "@/sim/runtime";
 import { NO_INPUT, Sim } from "@/sim/sim";
 import { SNAKE_FOLLOW_TICKS } from "@/sim/snake";
 import { maxHp } from "@/sim/units";
-import { face, idle, walkTo, walkToProp } from "./bot";
+import { face, idle, walkTo, walkToProp , yardCatalog } from "./bot";
 
-const catalog = buildCatalog();
+const catalog = yardCatalog();
 
 function godSim(seed: number, zone: "mine" | "burial" | "cellar"): Sim {
   const sim = Sim.newGame(catalog, seed);

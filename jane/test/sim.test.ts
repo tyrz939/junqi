@@ -1,5 +1,4 @@
 import { describe, expect, it } from "vitest";
-import { buildCatalog } from "@/sim/catalog";
 import { GCD_TICKS } from "@/sim/constants";
 import { tryCast } from "@/sim/combat";
 import { centre } from "@/sim/grid";
@@ -9,9 +8,9 @@ import { addUnit } from "@/sim/runtime";
 import { cloneState, decodeSave, encodeSave, hashState } from "@/sim/save";
 import { NO_INPUT, Sim, type InputFrame } from "@/sim/sim";
 import { createUnit, maxHp } from "@/sim/units";
-import { fight, idle, talkThrough, walkTo, walkToProp, walkToUnit } from "./bot";
+import { fight, idle, talkThrough, walkTo, walkToProp, walkToUnit , yardCatalog } from "./bot";
 
-const catalog = buildCatalog();
+const catalog = yardCatalog();
 
 /** A scripted, seed-independent input tape: wander, sprint, mash the bar. */
 function tape(t: number): InputFrame {

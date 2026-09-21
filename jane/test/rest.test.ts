@@ -1,14 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { buildCatalog } from "@/sim/catalog";
 import { SAVE_VERSION } from "@/sim/constants";
 import { focusOf, nearRest } from "@/sim/interact";
 import { cloneState, decodeSave, encodeSave } from "@/sim/save";
 import { Sim } from "@/sim/sim";
 import { cleanName, expandText, isNight } from "@/sim/text";
 import { maxHp } from "@/sim/units";
-import { idle, talkThrough, walkToProp, walkToUnit } from "./bot";
+import { idle, talkThrough, walkToProp, walkToUnit , yardCatalog } from "./bot";
 
-const catalog = buildCatalog();
+const catalog = yardCatalog();
 
 describe("the player's name", () => {
   it("is chosen at New Game, cleaned, and defaults to Jane", () => {

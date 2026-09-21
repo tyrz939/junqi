@@ -11,7 +11,9 @@ const SEEDS = Array.from({ length: 25 }, (_, i) => 1000 + i * 7919);
 describe("worldgen", () => {
   for (const zone of ZONE_IDS) {
     it(`${zone}: every seed passes the lock-and-key solver`, () => {
-      for (const seed of SEEDS) {
+      // A county is seven million cells and about a second; the skeleton it is built from is
+      // proven on many seeds in skeleton.test.ts, so the full thing is proven on a few.
+      for (const seed of zone === "county" ? SEEDS.slice(0, 4) : SEEDS) {
         const bp = buildZone(zone, seed);
         const v = validateBlueprint(bp, catalog, CONTRACTS[zone], GIVEN_KEYS[zone]);
         expect(v.errors, `seed ${seed}`).toEqual([]);
@@ -40,16 +42,21 @@ describe("worldgen", () => {
     }
   });
 
-  it("Jane arrives on open ground, in sight of the house, not already on the stoop", () => {
-    for (const seed of SEEDS) {
+  it("Jane arrives on the platform at the county's edge, a real walk from the house; the yard gate is in sight of the dog", () => {
+    for (const seed of SEEDS.slice(0, 4)) {
       const bp = buildZone("county", seed);
       const s = bp.marks.start;
       expect(TILE_FLAGS[bp.tiles[s.cy * bp.w + s.cx]] & F_SOLID).toBe(0);
-      const stoop = bp.rects.stoop;
-      const inside = s.cx >= stoop.cx && s.cy >= stoop.cy && s.cx < stoop.cx + stoop.w && s.cy < stoop.cy + stoop.h;
-      expect(inside).toBe(false);
+      expect(s.cx).toBeLessThan(40);
       const dog = bp.units.find((u) => u.key === "dog")!;
-      expect(Math.hypot(dog.cx - s.cx, dog.cy - s.cy)).toBeLessThan(80);
+      // Story.docx: she arrives at five and walks. Two to three minutes by road is 900 to 1350 m;
+      // the crow's distance is shorter, and never trivial.
+      expect(Math.hypot(dog.cx - s.cx, dog.cy - s.cy)).toBeGreaterThan(450);
+      const gate = bp.marks.yard_gate;
+      const stoop = bp.rects.stoop;
+      const inside = gate.cx >= stoop.cx && gate.cy >= stoop.cy && gate.cx < stoop.cx + stoop.w && gate.cy < stoop.cy + stoop.h;
+      expect(inside).toBe(false);
+      expect(Math.hypot(dog.cx - gate.cx, dog.cy - gate.cy)).toBeLessThan(80);
     }
   });
 

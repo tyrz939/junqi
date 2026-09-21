@@ -40,7 +40,7 @@ This file was rewritten in September 2026 when the Phaser remake was archived. T
 | **LATER** | A real 2020 idea, not needed to ship the county. A row or a module when it lands |
 | **NEVER** | Do not port |
 
-Test names are from `jane/test/`: **E** `engine`, **S** `sim`, **D** `dungeons`, **W** `world`, **R** `replay`, **A** `art`, **T** `rest`, **C** `coop`, **G** `storage`, **B** `budget`, **K** `skeleton`.
+Test names are from `jane/test/`: **E** `engine`, **S** `sim`, **D** `dungeons`, **W** `world`, **R** `replay`, **A** `art`, **T** `rest`, **C** `coop`, **G** `storage`, **B** `budget`, **K** `skeleton`, **Y** `county`.
 
 ---
 
@@ -294,7 +294,7 @@ A change is off-bar if:
 
 2020 GML is **read-only** and stays out of the repo. Steal contracts. Do not port line-for-line.
 
-## 11b. The county skeleton (built; the game is not made from it yet)
+## 11b. The county skeleton, and the county built from it
 
 | Contract | Live | Bar |
 | --- | --- | --- |
@@ -307,7 +307,13 @@ A change is off-bar if:
 | The first walk is safe and lit | checked on every seed | **IN** — K |
 | Density: 22 to 30 small places per region, nothing-to-see stretches ≤ 900 m | roadside beat, then banks and deep country | **IN** — K |
 | Seed viewer | `viewer.html` | **SHAPE** — hand-checked |
-| The playable county built from a skeleton | — | **LATER** — after the maps are approved: chunk format, rasteriser, worker, downsampled map |
+| The playable county is built from the skeleton: 3600 × 2000, roads, bridges, set chunks joined by their gates | `world/county.ts`, `world/chunks.ts` | **IN** — Y: every mark reachable from the platform on two seeds; W: the lock-and-key solver on four |
+| New Game starts on the platform; Julie's gate is two to four minutes by the lit road | a bot walks it | **IN** — Y |
+| Wildlife by region, biome and threat; a spawn's `phase` scales its row | `PHASE_SCALE` | **IN** — Y |
+| Nothing spawns in a haven, on the first walk, or in a wall | | **IN** — Y |
+| Later dungeons stand as shapes with a mark and no door | | **IN** — Y (marks) |
+| Map window: one pixel per block of cells past 900 across; roads and water win the block | `ui/map.ts` | **SHAPE** |
+| Set chunks as data, not code; the School as a far landmark in the renderer | — | **LATER** |
 
 ## 12. Intentionally later, in order
 

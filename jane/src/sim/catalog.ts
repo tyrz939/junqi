@@ -228,7 +228,8 @@ export type TriggerDef = {
 /** Something the whole county does at an hour of the day: the bell at nine. */
 export type ClockDef = { hour: number; actions: ActionList };
 
-export type StartDef = { items: Stack[]; bar: BarSlot[]; quests: string[] };
+/** `mark`: where in the county New Game stands her. The station; tests move it to Julie's gate. */
+export type StartDef = { items: Stack[]; bar: BarSlot[]; quests: string[]; mark: string };
 
 export type Catalog = {
   spells: Record<string, SpellDef>;

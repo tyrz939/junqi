@@ -5,11 +5,11 @@
 // through iterating a unit list when the list changes.
 
 import type { Catalog } from "@/sim/catalog";
-import { CELL } from "@/sim/constants";
+import { CELL, PHASE_SCALE } from "@/sim/constants";
 import { centre } from "@/sim/grid";
 import { playerOf, playersHere, type World } from "@/sim/runtime";
 import type { GameState, PlayerState, Prop, TravelRequest, Unit, ZoneId, ZoneState } from "@/sim/state";
-import { createUnit, setAnim } from "@/sim/units";
+import { createUnit, maxHp, maxMp, setAnim } from "@/sim/units";
 import type { Blueprint } from "@/world/blueprint";
 import { buildZone } from "@/world/index";
 
@@ -30,6 +30,14 @@ export function createZoneState(state: GameState, catalog: Catalog, bp: Blueprin
   const units: Unit[] = [];
   for (const s of bp.units) {
     const u = createUnit(state, catalog, s.def, s.key, centre(s.cx), centre(s.cy), s.facing ?? 1);
+    if (s.phase !== undefined && s.phase > 1) {
+      // Strength is health (x5) and melee; spirit is mana and spell power. Both follow the phase.
+      const m = PHASE_SCALE[Math.min(PHASE_SCALE.length - 1, s.phase)];
+      u.strength = Math.round(u.strength * m);
+      u.spirit = Math.round(u.spirit * m);
+      u.hp = maxHp(u);
+      u.mp = maxMp(u);
+    }
     if (s.patrol && s.patrol.length > 1) {
       u.patrol = [];
       for (const [cx, cy] of s.patrol) u.patrol.push(centre(cx), centre(cy));

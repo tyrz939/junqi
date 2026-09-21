@@ -50,9 +50,10 @@ const DUNGEON_RING = 170;
 const LONGEST_EMPTY = 900;
 const SEEN_FROM_ROAD = 120;
 
-export function buildSkeleton(seed: number, rows: SkeletonRows = SKELETON_ROWS): Skeleton {
+/** `from`: the first attempt to try. The county builder uses it to ask for the NEXT valid skeleton of a seed when it has to re-roll. */
+export function buildSkeleton(seed: number, rows: SkeletonRows = SKELETON_ROWS, from = 0): Skeleton {
   let last: Skeleton | null = null;
-  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+  for (let attempt = from; attempt < from + MAX_ATTEMPTS; attempt++) {
     const s = tryBuild(seed >>> 0, attempt, rows);
     if (s) {
       if (s.ok) return s;

@@ -16,7 +16,7 @@ Node 18 or newer.
 cd jane
 npm install
 npm run dev      # open the URL Vite prints, click New Game
-npm test         # 116 tests, about ten seconds, no browser
+npm test         # 122 tests, about half a minute, no browser
 npm run build    # type-check + production bundle (~280 kB, no runtime dependencies)
 ```
 
@@ -24,9 +24,9 @@ Art is source code (palette-character grids rasterised at boot). The repo ships 
 
 ## The first hour
 
-New Game puts Jane just inside Julie's gate at 17:00. The lamp posts come on at 18:30, three real minutes later.
+New Game puts Jane on the platform at Castle Halt at 17:00, with a fire, a sign and one road. The county is 3.6 km by 2 km and different every seed; the story's places are always there, at distances the story needs. The lamp posts come on at 18:30, three real minutes later, which is about when she reaches Julie's gate if she keeps to the road.
 
-1. Walk up to the house. Reaching the stoop completes the letter.
+1. Follow the lit road east to Julie's house (two to four minutes). Reaching the stoop completes the letter.
 2. **E** on the dog. Take the quest. **Space** (or left click) swings. Put the yard skeleton down. A kill before you accept does not count; that is 2020's rule.
 3. Back to the dog for the house key. **E** on the door twice: unlock, enter.
 4. In the kitchen: read Julie's note, open the pantry chest, stand at the bench, open your bags (**I**), drag dust + water + pansy into the craft row, take the potion. Touch the orb by the stove. You learn Icebolt. Aim with the mouse.
@@ -51,7 +51,7 @@ Things worth knowing: Repair costs what the thing is made of. A pressure plate s
 | Console | `` ` `` — type `help` | |
 | Debug overlay / path grid | F2 / F3 | |
 
-Console rows worth knowing: `give apple 5`, `god`, `tp burial entry`, `time 22`, `kill`, `speed 4`, `hash`, `replay verify`. For co-op before there is a network: `open`, `join`, `party`, `leave 2`.
+Console rows worth knowing: `give apple 5`, `god`, `tp county yard_gate` (skip the walk), `tp county town_square`, `tp burial entry`, `time 22`, `kill`, `speed 4`, `hash`, `replay verify`. For co-op before there is a network: `open`, `join`, `party`, `leave 2`.
 
 ## This repo
 

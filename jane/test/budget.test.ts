@@ -3,7 +3,6 @@
 // with sleepers and holds the scheduler to a budget while Jane walks about at home.
 
 import { describe, expect, it } from "vitest";
-import { buildCatalog } from "@/sim/catalog";
 import { CELL, RING_RADIUS } from "@/sim/constants";
 import { centre, F_PROP_LOS, F_PROP_SOLID } from "@/sim/grid";
 import { focusOf } from "@/sim/interact";
@@ -11,9 +10,9 @@ import { addProp, addUnit, moveProp, propsInCells, propsNear } from "@/sim/runti
 import { Sim, type InputFrame } from "@/sim/sim";
 import type { Prop, Unit } from "@/sim/state";
 import { createUnit } from "@/sim/units";
-import { walkTo } from "./bot";
+import { walkTo , yardCatalog } from "./bot";
 
-const catalog = buildCatalog();
+const catalog = yardCatalog();
 
 /** Nothing extra within this many px of her, on either axis. The ring is 384. */
 const KEEP_CLEAR = 1200;

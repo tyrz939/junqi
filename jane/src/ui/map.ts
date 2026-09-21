@@ -4,6 +4,7 @@
 // a CSS blink, so nothing is redrawn while you look at it.
 
 import { CELL } from "@/sim/constants";
+import { Tile } from "@/sim/grid";
 import type { PlayerView as Sim } from "@/sim/sim";
 import { fogSeen } from "@/sim/zones";
 import type { Ctx } from "@/ui/ctx";
@@ -13,6 +14,8 @@ import { packRgb, parseCssColor } from "@/ui/format";
 /** Room for the image inside the pane, in design pixels. */
 const FIT_W = 304;
 const FIT_H = 150;
+/** The map image is never wider or taller than this many pixels. */
+const MAX_MAP_PX = 900;
 
 const UNKNOWN = packRgb(60, 50, 80);
 
@@ -63,37 +66,60 @@ export class MapPane {
     const scale = Math.min(FIT_W / w, FIT_H / hh);
     this.wrap.style.width = u(w * scale);
     this.wrap.style.height = u(hh * scale);
-    if (this.canvas.width !== w) this.canvas.width = w;
-    if (this.canvas.height !== hh) this.canvas.height = hh;
+    // One pixel a cell is right for a cellar and 29 MB of image for the county. Past 900 cells
+    // across, one pixel stands for a block of cells, and says the most useful thing in it.
+    const step = Math.max(1, Math.ceil(Math.max(w, hh) / MAX_MAP_PX));
+    const mw = Math.ceil(w / step);
+    const mh = Math.ceil(hh / step);
+    if (this.canvas.width !== mw) this.canvas.width = mw;
+    if (this.canvas.height !== mh) this.canvas.height = mh;
     const c2 = this.canvas.getContext("2d");
     if (!c2) return;
 
     const pal = this.paletteFor(this.ctx.host.tileColors());
-    const img = c2.createImageData(w, hh);
+    const img = c2.createImageData(mw, mh);
     const px = new Uint32Array(img.data.buffer);
     const tiles = g.tiles;
     const indoor = sim.rt.bp.indoor;
     const fog = sim.zone.fog;
     const fogW = sim.rt.fogW;
-    for (let cy = 0, i = 0; cy < hh; cy++) {
-      const by = cy >> 1;
-      for (let cx = 0; cx < w; cx++, i++) {
-        if (indoor && !fogSeen(fog, fogW, cx >> 1, by)) continue; // stays transparent: unexplored
-        const t = tiles[i];
+    for (let my = 0, i = 0; my < mh; my++) {
+      for (let mx = 0; mx < mw; mx++, i++) {
+        const cx = mx * step;
+        const cy = my * step;
+        if (indoor && !fogSeen(fog, fogW, cx >> 1, cy >> 1)) continue; // stays transparent: unexplored
+        let t = tiles[cy * w + cx];
+        if (step > 1) {
+          // A road four cells wide must not vanish between samples, nor a river bank flicker:
+          // paved ground wins the block, then water, then whatever the corner was.
+          let best = 0;
+          for (let oy = 0; oy < step && cy + oy < hh; oy++) {
+            for (let ox = 0; ox < step && cx + ox < w; ox++) {
+              const here = tiles[(cy + oy) * w + cx + ox];
+              const rank = here === Tile.Road || here === Tile.Cobble || here === Tile.Rail ? 3 : here === Tile.Water ? 2 : 0;
+              if (rank > best) {
+                best = rank;
+                t = here;
+              }
+            }
+          }
+        }
         px[i] = t < pal.length ? pal[t] : UNKNOWN;
       }
     }
     c2.putImageData(img, 0, 0);
 
     // Ways out. Sized in cells so they stay readable on the county and do not swamp a cellar.
-    const m = Math.max(0, Math.round(w / 160));
+    const m = Math.max(0, Math.round(mw / 160));
     for (const p of sim.zone.props) {
       if (!p.to || p.hidden) continue;
       if (indoor && !fogSeen(fog, fogW, p.cx >> 1, p.cy >> 1)) continue;
+      const x = Math.floor(p.cx / step);
+      const y = Math.floor(p.cy / step);
       c2.fillStyle = "#120e18";
-      c2.fillRect(p.cx - m - 1, p.cy - m - 1, 2 * m + 3, 2 * m + 3);
+      c2.fillRect(x - m - 1, y - m - 1, 2 * m + 3, 2 * m + 3);
       c2.fillStyle = "#e6b450";
-      c2.fillRect(p.cx - m, p.cy - m, 2 * m + 1, 2 * m + 1);
+      c2.fillRect(x - m, y - m, 2 * m + 1, 2 * m + 1);
     }
   }
 

@@ -221,6 +221,10 @@ The 2026 generators for the museum, factory, school, pipes and forest are in `ar
 
 ---
 
+## 9. The county as built (September 2026)
+
+The direction note at the top of this file is now code. `jane/src/world/skeleton/` decides a 3600 × 2000 m county from rows (`sites.json`, `areas.json`, `pois.json`); `jane/src/world/county.ts` turns it into cells and `chunks.ts` holds the authored places it stamps. `ENGINE.md` §8.1 and §8.2 describe both; the seed viewer (`/viewer.html`) shows 24 at a time. The zone contract above is unchanged: the county still promises `dog`, `yard_skeleton`, `house_door`, `mine_door`, `burial_door`, `start`, `house_front`, `mine_mouth`, `burial_mouth` and the `stoop` rect on every seed, and the same solver still proves it.
+
 ## Source
 
 - Rooms: `Junqi-Legacy-GM/jun7/rooms/*` (parsed; per-room instance dumps were produced by the 2026 audit).

@@ -841,7 +841,8 @@ export class Sim implements World {
   /** Where anyone who sits down appears: the party's last bed or fire, else where the story starts. */
   private arrival(): RestPoint & { facing: Facing } {
     if (this.state.rest) return { ...this.state.rest, facing: 1 };
-    const start = this.ctxOf("county").rt.bp.marks.start;
+    const marks = this.ctxOf("county").rt.bp.marks;
+    const start = marks[this.catalog.start.mark] ?? marks.start;
     return { zone: "county", x: centre(start.cx), y: centre(start.cy), facing: (start.facing ?? 1) as Facing };
   }
 

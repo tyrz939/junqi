@@ -2,16 +2,16 @@
 // does not exist here, so the slot rules are proven over an in-memory stand-in: what
 // is left unproven is only the thin IndexedDB wrapper in app/storage.ts.
 
+import { yardCatalog } from "./bot";
 import { describe, expect, it } from "vitest";
 import { gunzipText, gzipText } from "@/app/gzip";
 import { SlotStore, type SlotDb, type SlotRecord, type TextStore } from "@/app/slots";
-import { buildCatalog } from "@/sim/catalog";
 import { SAVE_VERSION } from "@/sim/constants";
 import { cloneState, decodeSave, encodeSave, hashState } from "@/sim/save";
 import { Sim } from "@/sim/sim";
 import type { SlotInfo } from "@/ui/host";
 
-const catalog = buildCatalog();
+const catalog = yardCatalog();
 const SUMMARY = { zone: "County", day: 0, hour: 17, hp: 1, maxhp: 1 };
 
 function saveText(seed: number, at = new Date(0)): string {

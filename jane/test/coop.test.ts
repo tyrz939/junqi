@@ -4,7 +4,7 @@
 import { describe, expect, it } from "vitest";
 import { seatSheets, SEAT_COATS, UNIT_SPRITES } from "@/art/units";
 import { normalize } from "@/sim/angles";
-import { buildCatalog, type SpellDef } from "@/sim/catalog";
+import type { SpellDef } from "@/sim/catalog";
 import { PARTY_DEALT, PARTY_TAKEN } from "@/sim/constants";
 import { cellOf, centre } from "@/sim/grid";
 import { bagCount } from "@/sim/inventory";
@@ -17,9 +17,9 @@ import { NO_INPUT, Sim, type Command, type InputFrame } from "@/sim/sim";
 import { expandText } from "@/sim/text";
 import type { Unit } from "@/sim/state";
 import { createUnit, maxHp, placeUnit } from "@/sim/units";
-import { talkThrough as talkSolo, walkToProp } from "./bot";
+import { talkThrough as talkSolo, walkToProp , yardCatalog } from "./bot";
 
-const catalog = buildCatalog();
+const catalog = yardCatalog();
 
 /** `who` are client tokens, not names: everyone plays the one heroine. The host opens the world first. */
 function party(seed: number, who: string[], cat = catalog): Sim {
@@ -462,7 +462,7 @@ describe("growth is the world's, items are hers", () => {
 
 describe("healing a friend", () => {
   // No heal spell has been placed in the county yet; the verb is proven on a row made here.
-  const cat = buildCatalog();
+  const cat = yardCatalog();
   const mend: SpellDef = {
     name: "Mend", description: "", icon: "apple", kind: "ally", school: "heal", mp: 0, energy: 0, range: 15,
     cooldown: 0, gcdImmune: true, needsTarget: false, needsEnemy: false, needsLos: true, anim: "cast",
