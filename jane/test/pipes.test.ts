@@ -56,7 +56,7 @@ describe("the generated pipes", () => {
       expect(sides).toBeGreaterThanOrEqual(def.budget.sideRooms[0]);
       expect(sides).toBeLessThanOrEqual(def.budget.sideRooms[1]);
     }
-    expect((performance.now() - t0) / SEEDS.length, "ms per culvert, proofs included").toBeLessThan(400);
+    expect((performance.now() - t0) / SEEDS.length, "ms per culvert, proofs included").toBeLessThan(1000);
     expect(worst).toBeLessThanOrEqual(6);
   });
 

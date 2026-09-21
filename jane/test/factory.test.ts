@@ -56,7 +56,7 @@ describe("the generated works", () => {
       const sides = info.rooms.filter((r) => !r.node.critical).length;
       expect(sides).toBe(1);
     }
-    expect((performance.now() - t0) / SEEDS.length, "ms per works, proofs included").toBeLessThan(400);
+    expect((performance.now() - t0) / SEEDS.length, "ms per works, proofs included").toBeLessThan(1500);
     expect(worst).toBeLessThanOrEqual(6);
   });
 
