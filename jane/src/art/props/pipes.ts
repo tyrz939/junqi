@@ -25,22 +25,24 @@ function prop(w: number, h: number, footH: number, frames: Record<string, string
 }
 
 const sheet: SpriteSheet = {
-  // --- a manhole, seen from below: the shaft, and the cover lifted off it ------------------
+  // --- a manhole: the rim, the shaft, and the first two rungs of the ladder down -----------
+  // Two white pixels used to sit in the dark of the shaft as a highlight, and at this size
+  // two dots in a black oval is a face. They are rungs now, which say "down" instead.
   manhole: prop(16, 16, 2, {
     base: [
       "................",
       "....kkkkkkkk....",
       "..kkzzzzzzzzkk..",
-      ".kzZZZZZZZZZZzk.",
-      ".kzZkkkkkkkkZzk.",
-      "kzZkxxxxxxxxkZzk",
-      "kzZkxwxxxxwxkZzk",
-      "kzZkxxxxxxxxkZzk",
-      "kzZkxxxxxxxxkZzk",
-      "kzZkxxxxxxxxkZzk",
-      "kzZkkkkkkkkkkZzk",
-      ".kzZZZZZZZZZZzk.",
-      "..kzzzzzzzzzzk..",
+      ".kzzzzzzzzzZZZk.",
+      ".kzZkkkkkkkkZZk.",
+      "kzzkxxxxxxxxkZZk",
+      "kzZkxxddddxxkZZk",
+      "kzZkxxDDDDxxkZZk",
+      "kzZkxxxxxxxxkZZk",
+      "kzZkxxddddxxkZZk",
+      "kZZkkkkkkkkkkZZk",
+      ".kZZZZZZZZZZZZk.",
+      "..kZZZZZZZZZZk..",
       "...kkkkkkkkkk...",
       "................",
       "................",

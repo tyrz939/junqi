@@ -163,9 +163,12 @@ export function placeAreas(ctx: PlaceCtx, rows: readonly AreaRow[], rng: RngStat
 }
 
 /** Per region. PLAN.md 2.4: 25 to 35 points of interest. */
-export const POI_BUDGET = 30;
-const POI_SPACING = 150;
+export const POI_BUDGET = 38;
+// Near enough that a road is never bare for long, far enough that two places never read as one.
+const POI_SPACING = 90;
 /** "Something visible from the road every 20 to 30 seconds of walking": 150 to 225 m at 7.5 m/s. */
+/** The three sites the first walk joins. Its roads get twice the beat. */
+const FIRST_WALK = new Set(["station", "julie_house", "town"]);
 const ROADSIDE_EVERY_MIN = 170;
 const ROADSIDE_EVERY_MAX = 250;
 
@@ -174,7 +177,7 @@ const ROADSIDE_EVERY_MAX = 250;
  * steady beat, because the density rule is about what you SEE from the road; then
  * the rest of each region's budget goes deep and along the banks, for whoever leaves it.
  */
-export function placePois(ctx: PlaceCtx, roads: readonly { cells: number[] }[], rows: readonly PoiRow[], rng: RngState): PlacedPoi[] {
+export function placePois(ctx: PlaceCtx, roads: readonly { cells: number[]; from?: string; to?: string }[], rows: readonly PoiRow[], rng: RngState): PlacedPoi[] {
   const out: PlacedPoi[] = [];
   const count = [0, 0, 0];
   const free = (x: number, y: number): boolean => {
@@ -203,8 +206,14 @@ export function placePois(ctx: PlaceCtx, roads: readonly { cells: number[] }[], 
   };
 
   for (const road of roads) {
+    // The first walk is the establishing shot: the station to Julie's to the town, two or three
+    // minutes on a lit road with nothing dangerous on it. If THAT stretch is empty, the county reads
+    // as empty however full the rest of it is, so it gets something to look at about twice as often.
+    const first = FIRST_WALK.has(road.from ?? "") && FIRST_WALK.has(road.to ?? "");
+    const min = first ? ROADSIDE_EVERY_MIN * 0.5 : ROADSIDE_EVERY_MIN;
+    const max = first ? ROADSIDE_EVERY_MAX * 0.5 : ROADSIDE_EVERY_MAX;
     let since = 0;
-    let next = ROADSIDE_EVERY_MIN + rngFloat(rng) * (ROADSIDE_EVERY_MAX - ROADSIDE_EVERY_MIN);
+    let next = min + rngFloat(rng) * (max - min);
     for (let k = 1; k < road.cells.length; k++) {
       since += MACRO * 1.2;
       if (since < next) continue;
@@ -218,7 +227,7 @@ export function placePois(ctx: PlaceCtx, roads: readonly { cells: number[] }[], 
       const [x, y] = pick(rng, spots);
       if (add(x, y, "roadside")) {
         since = 0;
-        next = ROADSIDE_EVERY_MIN + rngFloat(rng) * (ROADSIDE_EVERY_MAX - ROADSIDE_EVERY_MIN);
+        next = min + rngFloat(rng) * (max - min);
       }
     }
   }

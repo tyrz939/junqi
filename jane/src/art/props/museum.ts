@@ -72,20 +72,23 @@ const sheet: SpriteSheet = {
 
   museum_exhibit_waxwork: prop(16, 20, 2, {
     base: [
+      // It was a lump with a head on it. A waxwork is a person standing very still, so it
+      // needs the things that say person at this size: a neck, shoulders wider than the
+      // head, arms held away from the body, and hands. No colour anywhere: it is wax.
       "................",
-      "......kkkk......",
-      ".....kqqqqk.....",
-      ".....kqQkqk.....",
-      ".....kqqqqk.....",
-      "......kqqk......",
-      "....kkqqqqkk....",
-      "...kqqqQQqqqk...",
-      "...kqqQQQQqqk...",
-      "...kqqqQQqqqk...",
-      "...kqqqqqqqqk...",
-      "....kqqqqqqk....",
-      "....kqk..kqk....",
-      "....kqk..kqk....",
+      "......kkk.......",
+      ".....kqqqk......",
+      ".....kqQqk......",
+      ".....kqqqk......",
+      "......kqk.......",
+      "...kkkqqqkkk....",
+      "..kqqqqqqqqQqk..",
+      "..kqkqqqqqQkQk..",
+      "..kqkqqqqqQkQk..",
+      "..kqkqqqqqQkQk..",
+      "..kQkkqqqQkkQk..",
+      "...kkkqqqQkkk...",
+      "....kqqkkQqk....",
       "....kQk..kQk....",
       ...PLINTH_16,
     ],
@@ -93,16 +96,18 @@ const sheet: SpriteSheet = {
 
   museum_exhibit_fox: prop(16, 16, 2, {
     base: [
+      // It was an orange sausage on four sticks. A fox is its head and its brush, so both
+      // now have shape: pricked ears, a white cheek, and a tail that tapers up and away.
       "................",
-      "...........kk...",
-      "..........kffk..",
-      "..kkkkkkkkkffk..",
-      ".kffffffffffwk..",
-      ".kfffffffffFFk..",
-      ".kFffffffffffk..",
-      ".kFkkFkkFkkFk...",
-      "..k...k...k.....",
-      "................",
+      ".kk.......kkk...",
+      "kFFk.....kfkfk..",
+      "kFfFk...kkfffk..",
+      ".kFffkkkkffwfk..",
+      "..kffffffffwfk..",
+      "..kFfffffffFFk..",
+      "...kFffffffFk...",
+      "...kFkkFkkFkk...",
+      "....k..k..k.....",
       "................",
       ...PLINTH_16,
     ],

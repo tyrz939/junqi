@@ -329,10 +329,22 @@
     }
   },
   {
+    "key": "halt_well_head",
+    "at": {
+      "anchor": "halt_well",
+      "within": 8
+    },
+    "prop": {
+      "def": "well_head",
+      "talk": "halt_well",
+      "label": "The well on the station road"
+    }
+  },
+  {
     "key": "lost_glove_drop",
     "at": {
       "anchor": "halt_well",
-      "within": 12
+      "within": 8
     },
     "prop": {
       "def": "lost_thing",
@@ -345,10 +357,22 @@
     }
   },
   {
+    "key": "halt_signpost_post",
+    "at": {
+      "anchor": "halt_signpost",
+      "within": 8
+    },
+    "prop": {
+      "def": "signpost",
+      "talk": "halt_signpost",
+      "label": "The signpost on the station road"
+    }
+  },
+  {
     "key": "lost_hat_drop",
     "at": {
       "anchor": "halt_signpost",
-      "within": 12
+      "within": 8
     },
     "prop": {
       "def": "lost_thing",
@@ -361,10 +385,22 @@
     }
   },
   {
+    "key": "halt_cart_body",
+    "at": {
+      "anchor": "halt_cart",
+      "within": 8
+    },
+    "prop": {
+      "def": "road_cart",
+      "talk": "halt_cart",
+      "label": "The cart on the Castle road"
+    }
+  },
+  {
     "key": "lost_tin_drop",
     "at": {
       "anchor": "halt_cart",
-      "within": 12
+      "within": 8
     },
     "prop": {
       "def": "lost_thing",
@@ -377,10 +413,22 @@
     }
   },
   {
+    "key": "carters_cart_body",
+    "at": {
+      "anchor": "carters_cart",
+      "within": 8
+    },
+    "prop": {
+      "def": "road_cart",
+      "talk": "carters_cart",
+      "label": "The carter's cart"
+    }
+  },
+  {
     "key": "carters_key_drop",
     "at": {
       "anchor": "carters_cart",
-      "within": 12
+      "within": 8
     },
     "prop": {
       "def": "lost_thing",
@@ -514,7 +562,7 @@
     "key": "nurses_coat_drop",
     "at": {
       "anchor": "nurses_coat",
-      "within": 12
+      "within": 8
     },
     "prop": {
       "def": "lost_thing",
@@ -540,7 +588,7 @@
     "key": "haversack_drop",
     "at": {
       "anchor": "hedge_tree",
-      "within": 12
+      "within": 8
     },
     "prop": {
       "def": "lost_thing",
@@ -707,5 +755,16 @@
       "def": "quarryman"
     },
     "spread": true
+  },
+  {
+    "key": "nurses_lay_by_post",
+    "at": {
+      "anchor": "nurses_lay_by",
+      "within": 8
+    },
+    "prop": {
+      "def": "signpost",
+      "talk": "nurses_lay_by"
+    }
   }
 ]

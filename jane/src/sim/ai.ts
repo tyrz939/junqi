@@ -11,17 +11,21 @@
 //   order        (the `send` verb) it walks to a point and minds nothing else until it arrives
 //   sight: lit   it only notices, and only keeps, a target that stands in a prop's light
 //   shunsLight   it will not step into warm light: it walks to the edge of it and waits there
+//
+// And one thing that is not a row at all: the night (`nightReach` below).
 
-import { AGGRO_PERIOD, CELL, PATHS_PER_TICK, PATH_BUDGET, PX_PER_METRE, REGEN_DIVISOR, REPATH_TICKS } from "@/sim/constants";
+import { AGGRO_PERIOD, CELL, NIGHT_AGGRO, NIGHT_LEASH, PATHS_PER_TICK, PATH_BUDGET, PHASE_SCALE, PX_PER_METRE, REGEN_DIVISOR, REPATH_TICKS } from "@/sim/constants";
 import { cellOf, centre } from "@/sim/grid";
 import { lineOfSight } from "@/sim/los";
 import { costOfCells, PATH_WINDOW } from "@/sim/path";
 import { asPlayer, type World } from "@/sim/runtime";
+import type { UnitDef } from "@/sim/catalog";
 import type { Unit } from "@/sim/state";
 import { runActions } from "@/sim/actions";
 import { metresBetween, resetPhases, tryCast } from "@/sim/combat";
 import { LitField, litAt } from "@/sim/light";
 import { speedFactor } from "@/sim/status";
+import { isNight } from "@/sim/text";
 import { distance, facePoint, faceVector, isEnemy, maxHp, maxMp, moveUnit, setAnim } from "@/sim/units";
 
 /** Scratch for a search by something that shuns light. Filled just before each search; never state. */
@@ -29,6 +33,26 @@ const shunField = new LitField();
 
 /** How far a sent unit will plan in one go, in metres. Further than that it walks in stages. */
 const ORDER_PATH_METRES = 400;
+
+/** Threat 4 is where the Works begins, and a creature carries its threat in its scaled strength. */
+const WORKS_SCALE = PHASE_SCALE[4];
+
+/**
+ * How much further this thing notices, and follows, because it is dark where it stands.
+ * PLAN.md 2.6 makes night "+1 everywhere outside lamplight, +2 in the Works"; the threat field
+ * that sentence is written about is a build-time thing the running game cannot read, so the night
+ * is paid here instead, in attention. Standing in warm light it is its daytime self, which is what
+ * makes a lit road a road you can walk after dark and an unlit one a road you cannot.
+ *
+ * The Works half is read off the creature and not off the map: a spawn's strength was multiplied
+ * by the phase table where it was put down, so anything at four times its row is deep county.
+ * Returns 0 by day, and by day nothing here is asked about the light at all.
+ */
+function nightReach(w: World, u: Unit, def: UnitDef): number {
+  if (!isNight(w.state)) return 0;
+  if (litAt(w, u.x, u.y, true)) return 0;
+  return u.strength >= def.strength * WORKS_SCALE ? 2 : 1;
+}
 
 /**
  * Units nobody fights (the dog, a butterfly) have no AI loop, but they can be sent somewhere
@@ -54,7 +78,9 @@ export function tickAi(w: World, u: Unit): void {
   if (u.combat === "idle") {
     regen(w, u, def.autoRegen);
     if ((w.state.tick + u.thinkOffset) % AGGRO_PERIOD === 0) {
-      const found = nearestEnemy(w, u, def.aggro, def.sight === "lit");
+      // The only place a sleeping county asks about the dark, and it asks once every ten ticks.
+      const dark = def.aggro > 0 ? nightReach(w, u, def) : 0;
+      const found = nearestEnemy(w, u, def.aggro * (1 + NIGHT_AGGRO * dark), def.sight === "lit");
       if (found) {
         u.target = found.id;
         u.combat = "combat";
@@ -97,7 +123,10 @@ export function tickAi(w: World, u: Unit): void {
     u.combat = "leash";
     return;
   }
-  if (distance(u.x, u.y, u.homeX, u.homeY) / PX_PER_METRE > def.leash) {
+  // How far it will follow her from its post. In the dark it is much further, and it shortens
+  // again the moment the chase reaches a lamp: a thing runs you to the light and turns back.
+  const leash = def.leash * (1 + NIGHT_LEASH * nightReach(w, u, def));
+  if (distance(u.x, u.y, u.homeX, u.homeY) / PX_PER_METRE > leash) {
     u.combat = "leash";
     u.path = null;
     return;
@@ -119,7 +148,7 @@ export function tickAi(w: World, u: Unit): void {
   if (u.stop > 0) return;
   const spell = pickSpell(w, u);
   if (!spell) {
-    approach(w, u, target, run, def.leash, shy);
+    approach(w, u, target, run, leash, shy);
     return;
   }
   const result = tryCast(w, u, spell);
@@ -129,7 +158,7 @@ export function tickAi(w: World, u: Unit): void {
     return;
   }
   if (result === "tooFar" || result === "notInLOS") {
-    approach(w, u, target, run, def.leash, shy);
+    approach(w, u, target, run, leash, shy);
     return;
   }
   // onCooldown / onGCD / no mana: hold position, keep facing the fight.

@@ -18,6 +18,14 @@ const PX: Palette = {
   c: "#6fa8a0", // sun-faded teal car paint
   C: "#47756f", // teal shade
   v: "#2c2018", // darkest root
+  // PAL jumps straight from l to n, which is too big a step to round a canopy off with.
+  f: "#5aa84e", // leaf, lit body
+  F: "#2a6838", // leaf, shade
+  j: "#e0685c", // wool, lit: PAL has no red above r, and a blanket needs one
+  // Contact shadow. Translucent, so a plant sits on grass, dirt or cobble without
+  // carrying a black bar around with it.
+  "-": "#00000030",
+  "=": "#00000050",
 };
 
 /** footH is the footprint height in 8 px cells. */
@@ -53,35 +61,38 @@ const ORB_ICE = [
   "..kkkkkkkkkkkk..",
 ];
 
+// A lumpy canopy, not a lollipop: the silhouette steps in and out, the light runs from
+// the top-left corner down to the bottom-right, and the three apples are spread unevenly
+// so the eye finds them one at a time. The trunk flares into a root and casts a shadow.
 const APPLE_TREE = [
-  ".....kkkkkk.....",
-  "...kkllllnnkk...",
-  "..kllllnnnnnnk..",
-  ".kllrlnnnnrnnNk.",
-  ".klllnnnnnnnnNk.",
-  "klllnnnnrnnnnnNk",
-  "kllnnnnnnnnnnNNk",
-  "klnnrnnnnnnrnNNk",
-  "klnnnlnnnnnnnNNk",
-  "knnnlnnnnNnnnNNk",
-  "knnnnnnrnnnnNNNk",
-  "knnrnnnnnnnnNNNk",
-  "knnnnlnnnnnNNNNk",
-  "kNnnnnnnnnNnrNNk",
-  "kNnnrnnnnNNNNNNk",
-  ".kNnnnnnnNNNNNk.",
-  ".kNNnnnNNNNNNNk.",
-  "..kkNNNNNNNNkk..",
-  "....kkktTkkk....",
+  "......kkkk......",
+  "....kkllllkk....",
+  "..kkllllllffk...",
+  ".kllllllfflffk..",
+  "klllllfflrrffnk.",
+  "kllllffflRRfnnk.",
+  "klllfffffffnnnNk",
+  "kllffffffnnnnFNk",
+  "kffffnnnnnnnFNk.",
+  "kfffnnrrnnnFFNk.",
+  "kkfnnnRRnnFFFNkk",
+  ".knnnnnnnnFFFFNk",
+  ".knnnnnnFFFFFFNk",
+  "kknnnnFFFFFFFNk.",
+  "kNnnnFFrrFFFNk..",
+  ".kNNnFFRRFFNk...",
+  "..kkNNFFFNkk....",
+  "....kkNNNk......",
   "......ktTk......",
   "......ktTk......",
-  "......ktTk......",
-  "......ktTk......",
-  "......ktTk......",
-  "......ktTk......",
-  ".....kttTTk.....",
-  "....kkttTTkk....",
-  "....kkkkkkkk....",
+  ".....kmtTk......",
+  ".....kmtTk......",
+  ".....kmttTk.....",
+  "....kmmttTTk....",
+  "...kmmtttTTTk...",
+  "..kmttttttTTTk..",
+  "..kkeeeeeeeekk..",
+  "...===========..",
 ];
 
 const CAR_WRECK = [
@@ -375,25 +386,28 @@ export const PROP_SPRITES: SpriteSheet = {
     ],
   }),
 
+  // It was one flat tan square with a brace drawn on it. Now the lid catches the light,
+  // the left plank is the lit side, and the brace is cut into the wood rather than
+  // painted over it.
   crate: prop(16, 18, 2, {
     base: [
       "kkkkkkkkkkkkkkkk",
-      "kmmmmmmmmmmmmmmk",
-      "kmttttttttttttmk",
-      "kmtmmmmmmmmmmtmk",
-      "kmttttttttttttmk",
-      "kmmmmmmmmmmmmmmk",
-      "kkkkkkkkkkkkkkkk",
       "kmmmmmmmmmmmmmtk",
-      "kmeeeeeeeeeeeetk",
-      "kmemmeeeeeemmetk",
-      "kmeemmeeeemmeetk",
-      "kmeeeemmmmeeeetk",
-      "kmeeeemmmmeeeetk",
-      "kmeemmeeeemmeetk",
-      "kmemmeeeeeemmetk",
-      "kmeeeeeeeeeeeetk",
-      "kttttttttttttttk",
+      "kmttttttttttttTk",
+      "kmtmmmmmmmmmttTk",
+      "kmttttttttttttTk",
+      "kTTTTTTTTTTTTTTk",
+      "kkkkkkkkkkkkkkkk",
+      "kmttttttttttttTk",
+      "kmtTTttttttTTtTk",
+      "kmttTTttttTTttTk",
+      "kmtttTTttTTtttTk",
+      "kmttttTTTTttttTk",
+      "kmttttTTTTttttTk",
+      "kmtttTTttTTtttTk",
+      "kmttTTttttTTttTk",
+      "kmtTTttttttTTtTk",
+      "kTTTTTTTTTTTTTTk",
       "kkkkkkkkkkkkkkkk",
     ],
   }),
@@ -505,30 +519,33 @@ export const PROP_SPRITES: SpriteSheet = {
     ],
   }),
 
+  // A bed to rest in, not a picnic blanket. The quilt was a red and blue chequerboard
+  // that read as bunting; it is now banded wool, lit at the pillow end and in shadow at
+  // the foot, with the top sheet turned down over it.
   bed: prop(16, 26, 3, {
     base: [
       ".kkkkkkkkkkkkkk.",
       "kmmmmmmmmmmmmmmk",
-      "kttttttttttttttk",
+      "kmttttttttttttTk",
       "kTTTTTTTTTTTTTTk",
       "kkkkkkkkkkkkkkkk",
-      "kWWkkkkkkkkkkWWk",
-      "kWkwwwwwwwwwWkWk",
-      "kWkwwwwwwwwWWkWk",
-      "kWWkkkkkkkkkkWWk",
-      "kWWWWWWWWWWWWWWk",
-      "krrrBBBBrrrrBBBk",
-      "krrrBBBBrrrrBBBk",
-      "krrrBBBBrrrrBBBk",
-      "kBBBrrrrBBBBrrrk",
-      "kBBBrrrrBBBBrrrk",
-      "kBBBrrrrBBBBrrrk",
-      "krrrBBBBrrrrBBBk",
-      "krrrBBBBrrrrBBBk",
-      "krrrBBBBrrrrBBBk",
-      "kBBBrrrrBBBBrrrk",
-      "kBBBrrrrBBBBrrrk",
-      "kBBBrrrrBBBBrrrk",
+      "kTkwwwwwwwwwwkTk",
+      "ktkwwwwwwwwWWkTk",
+      "ktkwwwwwwwWWWkTk",
+      "ktkWWWWWWWWWWkTk",
+      "ktkkkkkkkkkkkkTk",
+      "ktwwwwwwwwwwwwTk",
+      "ktWWWWWWWWWWWWTk",
+      "ktkkkkkkkkkkkkTk",
+      "ktjjjjjjjjjjrRTk",
+      "ktjjjjjrrrrrrRTk",
+      "ktWWWWWWWWWWWRTk",
+      "ktrjjrrrrrrrrRTk",
+      "ktrrrrrrrrrrrRTk",
+      "ktWWWWWWWWWWWRTk",
+      "ktrrrrrrrrrrRRTk",
+      "ktRrrrrrrrrRRRTk",
+      "ktRRRRRRRRRRRRTk",
       "kkkkkkkkkkkkkkkk",
       "kmmmmmmmmmmmmmmk",
       "kTTTTTTTTTTTTTTk",
@@ -1053,32 +1070,75 @@ export const PROP_SPRITES: SpriteSheet = {
 
   apple_tree: prop(16, 28, 2, {
     base: APPLE_TREE,
-    open: swap(APPLE_TREE, { r: "n" }),
+    // Picked: the apples become leaves, and the hole they leave keeps the canopy lumpy.
+    open: swap(APPLE_TREE, { r: "f", R: "F" }),
   }),
 
+  // Scattered by the hundred, so it has to survive being seen a hundred times: three
+  // blades of different lengths leaning different ways, two seed heads at different
+  // heights, and a shadow at the root. Nothing centred, nothing repeated.
+  //
+  // base2 and base3 are the same plant at other ages, not the same drawing flipped: one
+  // gone up to a single tall head, one grown out sideways with its heads wide apart. The
+  // renderer picks among the three by the prop's own id, so a hillside is a meadow rather
+  // than a print run, and any one herb stays the herb it was.
   herb: prop(8, 8, 1, {
     base: [
-      "...p....",
-      "..pyp.p.",
-      "...p.pyp",
-      ".l.n..p.",
-      ".nlnln..",
-      "..nnnl..",
-      ".lnNnn..",
-      "..NNN...",
+      "...y....",
+      "..llY.y.",
+      "l.flF.lY",
+      "lf.lF.lF",
+      ".lFflfF.",
+      "..lfnFf.",
+      ".=nFNN=.",
+      "..-==-..",
+    ],
+    base2: [
+      "....y...",
+      "...lY...",
+      "...lF...",
+      "l..lF...",
+      "lf.lF.l.",
+      ".lfnFflF",
+      ".=nFNNF=",
+      "..-==-..",
+    ],
+    base3: [
+      "......y.",
+      "..y..lY.",
+      ".lY.lF..",
+      "l.lflF..",
+      "lfflfF.l",
+      ".lfnFFlF",
+      "=nFFNNF=",
+      ".-==-=..",
     ],
   }),
 
+  // The white water rose: one head, off centre and leaning away from its leaves, so it
+  // reads as a flower on a plant rather than a white dot on the grass. base2 leans the
+  // other way, which is enough variety for something this rare; a third drawn in bud was
+  // cut, because a closed one reads as a rose you are not meant to pick.
   rose: prop(8, 8, 1, {
     base: [
-      "..kkkk..",
-      ".kwwWwk.",
-      ".kwWwwk.",
-      ".kWwwWk.",
-      "..kkkk..",
-      "..lNnl..",
-      "...Nn...",
-      "...N....",
+      "........",
+      "..ww....",
+      ".wwWw.l.",
+      "wwWyWwlF",
+      ".wWWWfF.",
+      "l.fnf.F.",
+      ".lFnFF..",
+      "..=nN=..",
+    ],
+    base2: [
+      "........",
+      "....ww..",
+      ".l..wwWw",
+      "lF.wwyWw",
+      ".Ff.wWW.",
+      "l.fnf...",
+      ".lFnFF..",
+      "..=nN=..",
     ],
   }),
 

@@ -281,7 +281,16 @@ export class Renderer {
         });
       }
       if (def.gate && !p.solid) continue; // an open gate is a doorway
-      const frame = p.used && p.loot === null && sprite?.frames.open ? "open" : (p.on || (def.nightOnly && night)) && sprite?.frames.on ? "on" : "base";
+      // "base" is one drawing, and a hillside carries hundreds of herbs, so drawing it every time is
+      // what makes a meadow look printed. Where the art offers "base2"/"base3" the prop picks one by its
+      // own id, so the same plant is the same plant every frame and its neighbour is a different one.
+      let rest = "base";
+      if (sprite && sprite.frames.base2) {
+        const n = sprite.frames.base3 ? 3 : 2;
+        const pick = (p.id * 2654435761) >>> 0;
+        rest = ["base", "base2", "base3"][pick % n];
+      }
+      const frame = p.used && p.loot === null && sprite?.frames.open ? "open" : (p.on || (def.nightOnly && night)) && sprite?.frames.on ? "on" : rest;
       const sxp = shown.x;
       const syp = shown.y;
       const paint = (): void => {
@@ -490,8 +499,17 @@ export class Renderer {
       ctx.globalAlpha = 1;
       return;
     }
-    ctx.fillStyle = "#00000048";
-    ctx.fillRect(Math.round(x) - 5, Math.round(y) - 1, 10, 3);
+    // The contact shadow. It was one hard 10x3 rectangle, the same under a rat and under a boss, and
+    // against the drawn ground cover a square of flat black under everything alive is what makes units
+    // read as stickers laid on the field. Three rows, sized to the sprite, give a round soft-ended blot
+    // for the cost of two more fillRects and no path and no allocation.
+    const sw = Math.max(4, Math.min(13, (sprite.w >> 1) - 1));
+    const sx = Math.round(x);
+    const sy = Math.round(y);
+    ctx.fillStyle = "#0000004a";
+    ctx.fillRect(sx - sw + 1, sy - 2, sw * 2 - 2, 1);
+    ctx.fillRect(sx - sw, sy - 1, sw * 2, 2);
+    ctx.fillRect(sx - sw + 1, sy + 1, sw * 2 - 2, 1);
     const dir = u.facing === 1 ? "down" : u.facing === 3 ? "up" : "side";
     const step = u.anim === "walk" && Math.floor(u.animTick / 9) % 2 === 1;
     let ox = 0;

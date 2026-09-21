@@ -7,6 +7,7 @@
   { "id": "scarecrow_hedge", "kind": "scarecrow", "name": "The scarecrow in the Long Hedge", "where": { "area": "long_hedge" } },
   { "id": "scarecrow_top", "kind": "scarecrow", "name": "The scarecrow on the Top Field", "where": { "rim": { "area": "top_field", "toward": "farm" } } },
   { "id": "scarecrow_top_near", "kind": "none", "name": "Nearer the farm", "where": { "nearAnchor": { "anchor": "scarecrow_top", "min": 32, "max": 70 }, "nearest": "farm" } },
+  { "id": "nurses_lay_by", "kind": "signpost", "name": "The lay-by on the wood road", "where": { "nearArea": "behind_the_car" } },
   { "id": "cottage_allen", "kind": "cottage", "name": "Mrs Allen's cottage", "where": { "nearArea": "sallow_bottom" } },
   { "id": "cottage_pike", "kind": "cottage", "name": "Pike's cottage", "where": { "nearArea": "long_hedge" } },
   { "id": "cottage_crane", "kind": "cottage", "name": "Crane's cottage", "where": { "nearArea": "quarry_steps" } },

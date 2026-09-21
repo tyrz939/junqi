@@ -56,8 +56,30 @@ const SW: Partial<Record<Tile, Swatch>> = {
   [Tile.SchoolWall]: { base: "#3e4a44", a: "#5a6a60", b: "#28322e" },
 };
 
-/** One flat colour per tile id, for the minimap. */
+/** One flat colour per tile id, for the minimap and for feathering one tile into another. */
 export const TILE_COLORS: string[] = Array.from({ length: TILE_COUNT }, (_, t) => SW[t as Tile]?.base ?? "#000");
+
+/**
+ * Ground materials that feather into each other where they meet. Anything not on this
+ * list keeps a hard edge: a wall, a floor indoors and a pane of glass all want one.
+ */
+const SOFT_TILES: Tile[] = [
+  Tile.Grass,
+  Tile.GrassTall,
+  Tile.Dirt,
+  Tile.Road,
+  Tile.Sand,
+  Tile.Water,
+  Tile.Moss,
+  Tile.DryBed,
+  Tile.Garden,
+  Tile.Rubble,
+  Tile.Track,
+  Tile.GrownPath,
+  Tile.Cobble,
+  Tile.Rail,
+];
+const SOFT = Uint8Array.from({ length: TILE_COUNT }, (_, t) => (SOFT_TILES.includes(t as Tile) ? 1 : 0));
 
 /** Stable per-cell hash, 0..255. Drawing must not depend on draw order or time. */
 function cellHash(x: number, y: number): number {
@@ -68,6 +90,136 @@ function cellHash(x: number, y: number): number {
 
 const isWallLike = (t: number): boolean =>
   t === Tile.Wall || t === Tile.CaveWall || t === Tile.TempleWall || t === Tile.Cliff || t === Tile.WallTop || t === Tile.Void;
+
+/** A shadow that works on any ground, because it is a darkening rather than a colour. */
+const SHADE = "#00000026";
+const SCUFF = "#00000018";
+
+/**
+ * Small char grids for the things that grow. "a" is the swatch's light tone, "b" its
+ * dark, "c" its base and "s" a soft shadow; "." leaves the ground showing. A hash picks
+ * one per cell, which is the whole point: one shape repeated is what makes a field look
+ * cheap. Drawn as horizontal runs, so a full cell is a handful of fillRects, not 64.
+ */
+function stamp(
+  ctx: CanvasRenderingContext2D,
+  px: number,
+  py: number,
+  sw: Swatch,
+  rows: readonly string[],
+  ox: number,
+  oy: number,
+): void {
+  for (let y = 0; y < rows.length; y++) {
+    const row = rows[y];
+    let x = 0;
+    while (x < row.length) {
+      const ch = row.charCodeAt(x);
+      let n = 1;
+      while (x + n < row.length && row.charCodeAt(x + n) === ch) n++;
+      if (ch !== 46) {
+        ctx.fillStyle = ch === 97 ? sw.a : ch === 98 ? sw.b : ch === 115 ? SHADE : sw.base;
+        ctx.fillRect(px + ox + x, py + oy + y, n, 1);
+      }
+      x += n;
+    }
+  }
+}
+
+/** Tall grass: a clump of blades, none of them the same length, none of them centred. */
+const GRASS_TUFT: readonly string[][] = [
+  ["..a...", ".aa.a.", "a.a.a.", "a.cab.", ".bcab.", "..ss.."],
+  ["a.....", "a..a..", "a..a.b", ".a.ab.", ".ca.b.", "..ss.."],
+  ["......", ".a.a..", "aa.aab", "ac.cab", ".cccb.", "..ss.."],
+  ["....a.", "...a..", "b..a..", "b.a.a.", ".ba.ab", "..sss."],
+];
+
+/** A stray blade or two, dropped somewhere else in the cell to break the grid up. */
+const GRASS_BLADE: readonly string[][] = [
+  ["a..", "a..", "a.b", ".ab", ".s."],
+  ["..a", ".a.", ".a.", "ba.", ".s."],
+  [".a.", ".a.", "ba.", "b.a", "ss."],
+];
+
+/**
+ * A clump of leaves lit from the top-left. Bush, hedge and the tree canopy all use these:
+ * the highlight sits in a different place in each one, so a mass of them has no grain.
+ */
+const LEAF: readonly string[][] = [
+  ["..aaa...", ".aaaac..", "aaaccccb", "aaccccbb", ".cccccbb", "..cccbb.", "...bbb..", "....b..."],
+  ["...aaa..", "..aaaac.", ".aaacccc", ".acccccc", "bccccccc", "bbcccbb.", ".bbbbb..", "..bb...."],
+  [".....aa.", "...aaaa.", "..caaac.", ".ccccccb", "bcccccbb", "bbcccbb.", ".bbbb...", "..bb...."],
+  ["........", "..aaa...", ".aaaac..", ".acccbb.", "..cccb..", "...bb...", "........", "........"],
+  ["..aa..a.", ".aaa.aac", "aaccccc.", "acccccbb", ".ccccbb.", "b.cccb..", "bb.bbb..", ".b......"],
+  ["........", ".aaaaa..", "aaaacccb", "acccccbb", ".ccccbb.", "..cbbb..", "...b....", "........"],
+];
+
+/** Moss grows in patches with nothing between them, not in a checkerboard. */
+const MOSS_PATCH: readonly string[][] = [
+  [".aa.....", "aaa..bb.", ".a..bbbb", "....bb..", "..aa....", ".aaa..b.", "..a..bbb", "......b."],
+  ["....aa..", "..b.aaa.", ".bbb.a..", ".bb.....", "aa...bb.", "aaa.bbb.", ".a...b..", "....aa.."],
+  ["..bb....", ".bbb.aa.", ".b..aaa.", ".....a..", "..aa..bb", ".aaa.bbb", "..a...b.", "bb......"],
+  [".....a..", "bb..aaa.", "bbb..a..", ".b......", ".aa..bb.", "aaa.bbbb", ".a...bb.", "...aa..."],
+];
+
+/**
+ * Feather a cell into its neighbours. Every material bleeds a few pixels of itself over
+ * the seam, so grass meeting a road is a ragged line rather than an 8 px step. Neighbour
+ * ids are read straight into locals and the tone comes from TILE_COLORS, an array, so the
+ * hot path does no object lookups and allocates nothing (ENGINE.md 8.2).
+ */
+function feather(ctx: CanvasRenderingContext2D, grid: Grid, t: number, cx: number, cy: number, px: number, py: number, h: number): void {
+  const e = CELL - 1;
+  let n = grid.tileAt(cx, cy - 1);
+  if (n !== t && SOFT[n] === 1) {
+    ctx.fillStyle = TILE_COLORS[n];
+    ctx.fillRect(px + (h & 3), py, 4, 1);
+    ctx.fillRect(px + 2 + ((h >> 2) & 3), py + 1, 2, 1);
+    if ((h & 64) === 0) ctx.fillRect(px + ((h >> 4) & 7), py + 2, 1, 1);
+  }
+  n = grid.tileAt(cx, cy + 1);
+  if (n !== t && SOFT[n] === 1) {
+    ctx.fillStyle = TILE_COLORS[n];
+    ctx.fillRect(px + ((h >> 1) & 3), py + e, 4, 1);
+    ctx.fillRect(px + 2 + ((h >> 3) & 3), py + e - 1, 2, 1);
+    if ((h & 32) === 0) ctx.fillRect(px + ((h >> 5) & 7), py + e - 2, 1, 1);
+  }
+  n = grid.tileAt(cx - 1, cy);
+  if (n !== t && SOFT[n] === 1) {
+    ctx.fillStyle = TILE_COLORS[n];
+    ctx.fillRect(px, py + (h & 3), 1, 4);
+    ctx.fillRect(px + 1, py + 2 + ((h >> 4) & 3), 1, 2);
+    if ((h & 16) === 0) ctx.fillRect(px + 2, py + ((h >> 2) & 7), 1, 1);
+  }
+  n = grid.tileAt(cx + 1, cy);
+  if (n !== t && SOFT[n] === 1) {
+    ctx.fillStyle = TILE_COLORS[n];
+    ctx.fillRect(px + e, py + ((h >> 2) & 3), 1, 4);
+    ctx.fillRect(px + e - 1, py + 2 + ((h >> 5) & 3), 1, 2);
+    if ((h & 8) === 0) ctx.fillRect(px + e - 2, py + ((h >> 3) & 7), 1, 1);
+  }
+  // Corners, where three materials meet and the step would otherwise be a staircase.
+  n = grid.tileAt(cx - 1, cy - 1);
+  if (n !== t && SOFT[n] === 1) {
+    ctx.fillStyle = TILE_COLORS[n];
+    ctx.fillRect(px, py, 1 + (h & 1), 1);
+  }
+  n = grid.tileAt(cx + 1, cy - 1);
+  if (n !== t && SOFT[n] === 1) {
+    ctx.fillStyle = TILE_COLORS[n];
+    ctx.fillRect(px + e - ((h >> 1) & 1), py, 1 + ((h >> 1) & 1), 1);
+  }
+  n = grid.tileAt(cx - 1, cy + 1);
+  if (n !== t && SOFT[n] === 1) {
+    ctx.fillStyle = TILE_COLORS[n];
+    ctx.fillRect(px, py + e, 1 + ((h >> 2) & 1), 1);
+  }
+  n = grid.tileAt(cx + 1, cy + 1);
+  if (n !== t && SOFT[n] === 1) {
+    ctx.fillStyle = TILE_COLORS[n];
+    ctx.fillRect(px + e - ((h >> 3) & 1), py + e, 1 + ((h >> 3) & 1), 1);
+  }
+}
 
 function paintCell(ctx: CanvasRenderingContext2D, grid: Grid, cx: number, cy: number, px: number, py: number): void {
   const t = grid.tileAt(cx, cy) as Tile;
@@ -100,30 +252,114 @@ function paintCell(ctx: CanvasRenderingContext2D, grid: Grid, cx: number, cy: nu
 
   switch (t) {
     case Tile.Grass:
-      if ((h & 3) === 0) dot(h % 7, (h >> 3) % 7, sw.a);
-      if ((h & 7) === 5) dot((h >> 2) % 7, (h >> 4) % 7, sw.b);
-      if ((h & 63) === 9) dot(3, 3, "#f0d048");
+      // A short blade rather than a stray dot: grass wants grain, not dust.
+      dot(h % 6, (h >> 3) % 6, sw.a, 1, 2);
+      dot((h % 6) + 1, ((h >> 3) % 6) + 1, sw.a, 1, 1);
+      if ((h & 3) === 0) dot((h >> 2) % 6, ((h >> 5) % 6) + 1, sw.b, 2, 1);
+      if ((h & 7) === 5) dot((h >> 1) % 7, (h >> 4) % 7, sw.b);
+      if ((h & 63) === 9) {
+        dot(3, 3, "#f0d048");
+        dot(4, 3, "#b08828");
+      }
       break;
     case Tile.GrassTall:
-      dot(1 + (h % 2), 2, sw.a, 1, 3);
-      dot(4 + ((h >> 2) % 2), 1, sw.a, 1, 4);
-      dot(6, 4, sw.b, 1, 3);
-      dot(2, 6, sw.b, 1, 2);
+      stamp(ctx, px, py, sw, GRASS_TUFT[h & 3], h % 3, (h >> 2) % 3);
+      // Not every cell gets the second blade, so the field thins and thickens.
+      if ((h & 3) !== 0) stamp(ctx, px, py, sw, GRASS_BLADE[(h >> 5) % 3], h % 6, (h >> 4) % 4);
       break;
-    case Tile.Dirt:
+    case Tile.Dirt: {
+      // The road's verge. Scuffed: patches of bare and trodden earth, the odd stone.
+      dot(h % 6, (h >> 3) % 6, sw.a, 2 + (h & 1), 1);
+      dot((h >> 2) % 6, (h >> 5) % 6, sw.b, 2, 1);
+      dot((h >> 1) % 7, (h >> 4) % 7, sw.b);
+      if ((h & 7) === 0) dot((h >> 3) % 6, (h >> 1) % 6, SCUFF, 3, 2);
+      if ((h & 15) === 5) {
+        dot(2, 4, "#c8b898", 2, 1);
+        dot(2, 5, sw.b, 2, 1);
+      }
+      break;
+    }
     case Tile.CaveFloor:
     case Tile.DryBed:
     case Tile.Sand:
       if ((h & 3) === 1) dot(h % 7, (h >> 3) % 7, sw.b);
       if ((h & 7) === 2) dot((h >> 2) % 6, (h >> 5) % 6, sw.a, 2, 1);
       break;
-    case Tile.Road:
-    case Tile.Cobble:
-      dot(0, (h & 1) * 4, sw.b, CELL, 1);
-      dot((h >> 1) % 6 + 1, 0, sw.b, 1, 4);
-      dot((h >> 3) % 6 + 1, 4, sw.b, 1, 4);
-      if ((h & 7) === 0) dot(2, 2, sw.a, 2, 1);
+    case Tile.Road: {
+      // Which way the road runs. The carriageway is four cells across, so only the axis
+      // it travels along has road two cells out, which makes this one cheap question.
+      const alongX = grid.tileAt(cx - 2, cy) === Tile.Road && grid.tileAt(cx + 2, cy) === Tile.Road;
+      // How far in from the near verge. The ruts go on the second and third cell across,
+      // so they run the length of the road; a rut drawn in every cell is corduroy.
+      let inset = 0;
+      if (alongX) while (inset < 4 && grid.tileAt(cx, cy - 1 - inset) === Tile.Road) inset++;
+      else while (inset < 4 && grid.tileAt(cx - 1 - inset, cy) === Tile.Road) inset++;
+      // Metalling: loose stone, a pit or two, and now and then a set stone showing through.
+      dot(h % 6, (h >> 3) % 6, sw.a, 2, 1);
+      dot((h >> 2) % 7, (h >> 5) % 7, sw.b);
+      dot((h >> 1) % 7, (h >> 4) % 7, sw.b);
+      dot((h >> 4) % 6, (h >> 2) % 6, sw.b, 2, 1);
+      if ((h & 3) === 1) dot((h >> 1) % 6, (h >> 5) % 6, sw.a, 1, 2);
+      if ((h & 7) === 3) {
+        dot((h >> 2) % 6, (h >> 4) % 6, "#d8ccb0", 2, 1);
+        dot((h >> 2) % 6, ((h >> 4) % 6) + 1, sw.b, 2, 1);
+      }
+      if (inset === 1 || inset === 2) {
+        // The rut wanders a pixel from cell to cell, the way a rut does.
+        if (alongX) {
+          const ry = 3 + (h & 1);
+          dot(0, ry, sw.b, CELL, 1);
+          dot(0, ry, SHADE, CELL, 1);
+          dot((h >> 2) % 5, ry - 1, sw.b, 3, 1);
+        } else {
+          const rx = 3 + (h & 1);
+          dot(rx, 0, sw.b, 1, CELL);
+          dot(rx, 0, SHADE, 1, CELL);
+          dot(rx - 1, (h >> 2) % 5, sw.b, 1, 3);
+        }
+      }
+      // The made edge, where the metalling stops and the verge begins. Broken by a gap,
+      // so a road that wanders by a cell does not show its staircase.
+      if (grid.tileAt(cx, cy - 1) !== Tile.Road) {
+        dot(0, 0, sw.b, CELL, 1);
+        dot(2 + (h & 3), 0, sw.a, 2, 1);
+      }
+      if (grid.tileAt(cx, cy + 1) !== Tile.Road) {
+        dot(0, CELL - 1, sw.b, CELL, 1);
+        dot(2 + ((h >> 2) & 3), CELL - 1, sw.a, 2, 1);
+      }
+      if (grid.tileAt(cx - 1, cy) !== Tile.Road) {
+        dot(0, 0, sw.b, 1, CELL);
+        dot(0, 2 + ((h >> 4) & 3), sw.a, 1, 2);
+      }
+      if (grid.tileAt(cx + 1, cy) !== Tile.Road) {
+        dot(CELL - 1, 0, sw.b, 1, CELL);
+        dot(CELL - 1, 2 + ((h >> 3) & 3), sw.a, 1, 2);
+      }
       break;
+    }
+    case Tile.Cobble: {
+      // Setts in two courses, the lower one offset half a stone. The whole pattern shifts
+      // by two pixels on alternate cells as well, or the joints line up into a grid.
+      const j = ((cx + cy) & 1) === 0 ? 0 : 2;
+      dot(0, 3, sw.b, CELL, 1);
+      dot(0, CELL - 1, sw.b, CELL, 1);
+      dot(1 + j, 0, sw.b, 1, 3);
+      dot(5 + j, 0, sw.b, 1, 3);
+      dot(3 - j, 4, sw.b, 1, 3);
+      dot(7 - j, 4, sw.b, 1, 3);
+      // Every sett catches the light along its top edge.
+      dot(0, 0, sw.a, 1 + j, 1);
+      dot(2 + j, 0, sw.a, 3, 1);
+      dot(6 + j, 0, sw.a, 2 - j, 1);
+      dot(0, 4, sw.a, 3 - j, 1);
+      dot(4 - j, 4, sw.a, 3, 1);
+      dot(8 - j, 4, sw.a, j, 1);
+      // One sett a cell is a different stone.
+      if ((h & 3) === 0) dot((h & 4) === 0 ? j : 4 + j, 1, sw.b, 3, 2);
+      if ((h & 7) === 5) dot(4 - j, 5, sw.a, 3, 2);
+      break;
+    }
     case Tile.Water: {
       dot((h % 5) + 1, 2, sw.a, 2, 1);
       dot(((h >> 3) % 5) + 1, 6, sw.b, 2, 1);
@@ -133,18 +369,21 @@ function paintCell(ctx: CanvasRenderingContext2D, grid: Grid, cx: number, cy: nu
     }
     case Tile.Hedge:
     case Tile.Bush:
-      dot(1, 1, sw.a, 6, 5);
-      dot(2, 2, sw.base, 3, 2);
-      dot(1, 6, sw.b, 6, 1);
+      stamp(ctx, px, py, sw, LEAF[h % 6], 0, 0);
       break;
     case Tile.Tree: {
-      const southTree = grid.tileAt(cx, cy + 1) === Tile.Tree;
-      dot(0, 0, sw.base, CELL, CELL);
-      dot((h % 4) + 1, (h >> 2) % 4, sw.a, 3, 2);
-      dot((h >> 4) % 5, ((h >> 1) % 3) + 4, sw.b, 3, 2);
-      if (!southTree) {
-        dot(0, 6, sw.b, CELL, 2);
-        dot(3, 5, "#6e4a2c", 2, 3);
+      stamp(ctx, px, py, sw, LEAF[h % 6], 0, 0);
+      // A wood is a mass, so it is lit along the top of its canopy and dark at the foot.
+      if (grid.tileAt(cx, cy - 1) !== Tile.Tree) dot(0, 0, sw.a, CELL, 1);
+      if (grid.tileAt(cx, cy + 1) !== Tile.Tree) {
+        dot(0, 5, sw.b, CELL, 3);
+        dot(0, 5, SHADE, CELL, 3);
+        // Only about half the cells show a trunk, or the tree line is a picket fence.
+        if ((h & 1) === 0) {
+          const tx = 2 + (h % 3);
+          dot(tx, 4, "#6e4a2c", 2, 4);
+          dot(tx, 4, "#a87848", 1, 3);
+        }
       }
       break;
     }
@@ -186,21 +425,46 @@ function paintCell(ctx: CanvasRenderingContext2D, grid: Grid, cx: number, cy: nu
       if ((cx & 3) === 0) dot(0, 0, sw.b, 1, CELL);
       break;
     case Tile.Moss:
-      dot(1, 1, sw.a, 3, 2);
-      dot(4, 4, sw.b, 3, 3);
+      stamp(ctx, px, py, sw, MOSS_PATCH[h & 3], 0, 0);
       break;
     case Tile.Garden:
-      dot(0, 3, sw.b, CELL, 1);
-      if ((h & 3) === 0) dot(h % 6, 5, sw.a, 2, 2);
-      if ((h & 7) === 3) dot((h >> 3) % 6, 1, sw.a, 1, 2);
+      // Turned earth in furrows, with a seedling standing in every other one.
+      dot(0, 0, sw.b, CELL, 1);
+      dot(0, 4, sw.b, CELL, 1);
+      dot((h >> 1) % 7, 2, SCUFF, 2, 1);
+      dot((h >> 4) % 7, 6, SCUFF, 2, 1);
+      if (((cx + cy) & 1) === 0) {
+        const gx = 2 + (h % 3);
+        dot(gx, 1, sw.a, 1, 3);
+        dot(gx - 1, 2, sw.a, 1, 1);
+        dot(gx + 1, 1, sw.a, 1, 1);
+      } else {
+        const gx = 3 + (h % 3);
+        dot(gx, 5, sw.a, 1, 3);
+        dot(gx + 1, 6, sw.a, 1, 1);
+        dot(gx - 1, 5, sw.a, 1, 1);
+      }
       break;
     case Tile.Track:
-    case Tile.Rail:
-      dot(0, 2, sw.a, CELL, 1);
-      dot(0, 5, sw.a, CELL, 1);
-      dot(1, 1, sw.b, 1, 6);
-      dot(5, 1, sw.b, 1, 6);
+    case Tile.Rail: {
+      // Rails run the way the track runs, sleepers lie across it, ballast under both.
+      const alongX = grid.tileAt(cx - 1, cy) === t || grid.tileAt(cx + 1, cy) === t;
+      if (alongX) {
+        dot((h % 3) + 1, 0, sw.b, 2, CELL);
+        dot(0, 2, sw.a, CELL, 1);
+        dot(0, 3, SHADE, CELL, 1);
+        dot(0, 5, sw.a, CELL, 1);
+        dot(0, 6, SHADE, CELL, 1);
+      } else {
+        dot(0, (h % 3) + 1, sw.b, CELL, 2);
+        dot(2, 0, sw.a, 1, CELL);
+        dot(3, 0, SHADE, 1, CELL);
+        dot(5, 0, sw.a, 1, CELL);
+        dot(6, 0, SHADE, 1, CELL);
+      }
+      dot((h >> 3) % 7, (h >> 5) % 7, sw.base);
       break;
+    }
     case Tile.Rubble:
       dot(1, 2, sw.a, 3, 3);
       dot(4, 4, sw.a, 3, 2);
@@ -241,6 +505,8 @@ function paintCell(ctx: CanvasRenderingContext2D, grid: Grid, cx: number, cy: nu
     default:
       break;
   }
+
+  if (SOFT[t] === 1) feather(ctx, grid, t, cx, cy, px, py, h);
 }
 
 export class TileCache {

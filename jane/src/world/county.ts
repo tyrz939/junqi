@@ -51,9 +51,13 @@ const WORKS_HERBS = ["night_lich_moss", "savage_snakeroot", "hemshade_root"];
 
 /** What lives where. One row per creature; `phase` (the threat of the ground it stands on) sets what it costs. */
 const WILDLIFE: Record<Region, { def: string; biomes?: Biome[] }[]> = {
+  // Two of the six Lowfields rows used to be `rat`, and most Lowfields ground is open field,
+  // where the biome-bound rows do not apply: half of everything she met in the first region was
+  // a rat with a five-metre eye. One of them is a skeleton now, so open ground has something in
+  // it that looks up.
   [Region.Lowfields]: [
     { def: "rat" },
-    { def: "rat" },
+    { def: "skeleton" },
     { def: "bat" },
     { def: "pumpkin", biomes: [Biome.Field, Biome.Hedge] },
     { def: "spider", biomes: [Biome.Wood] },
@@ -108,6 +112,10 @@ export function buildCounty(seed: number, attempt: number, rows: readonly Placem
   const lit: boolean[][] = [];
   for (const r of sk.roads) {
     const pts = r.cells.map((c): [number, number] => [centre(c % SKEL_W), centre(Math.floor(c / SKEL_W))]);
+    // A verge under every road, two cells wider than the metal. Grass does not meet a made road
+    // edge on: there is always a band of trodden dirt, and drawing it is what stops the road reading
+    // as a stripe laid over a field.
+    k.stroke(pts, ROAD_WIDTH + 3, Tile.Dirt, 1);
     const line = k.stroke(pts, ROAD_WIDTH, Tile.Road, 1);
     lines.push(line);
     lit.push(line.map(([x, y]) => (sk.road[at(Math.min(SKEL_W - 1, x >> 4), Math.min(SKEL_H - 1, y >> 4))] & ROAD_LIT) !== 0));
@@ -250,6 +258,12 @@ export function buildCounty(seed: number, attempt: number, rows: readonly Placem
       for (let oy = -3; oy <= 3; oy++) for (let ox = -3; ox <= 3; ox++) if (cx + ox >= 0 && cy + oy >= 0 && cx + ox < SKEL_W && cy + oy < SKEL_H) safe[at(cx + ox, cy + oy)] = 1;
     }
   }
+  // How thick the ground is, per 16 m macro cell. The curve is threat SQUARED on purpose: the
+  // old straight line (0.016 + threat * threat * 0.0038) put one creature in every fifty macro cells at
+  // threat 1 and one in every eighteen at threat 6, which is a county you can walk across without
+  // meeting anything, and the difference between the Lowfields and the Works was under three to
+  // one. Now the Lowfields stay quiet enough to walk and think in and the Works is eight times
+  // thicker than they are. A road still carries the same third of it: a road is the safer way.
   for (let my = 1; my < SKEL_H - 1; my++) {
     for (let mx = 1; mx < SKEL_W - 1; mx++) {
       const i = at(mx, my);
@@ -258,9 +272,15 @@ export function buildCounty(seed: number, attempt: number, rows: readonly Placem
       if (!k.chance((0.014 + threat * 0.007) * (sk.road[i] ? 0.35 : 1))) continue;
       const table = WILDLIFE[sk.region[i] as Region].filter((w) => !w.biomes || w.biomes.includes(sk.biome[i] as Biome));
       if (table.length === 0) continue;
-      const spot = k.spot({ cx: mx * MACRO, cy: my * MACRO, w: MACRO, h: MACRO }, 1, 1, 1, 8);
-      if (!spot) continue;
-      k.unit(null, k.pick(table).def, spot.cx, spot.cy).phase = threat;
+      // Company, where the ground is bad. One creature is an obstacle and you walk round it;
+      // a pair of them is a reason to go another way, and that is what makes a patch read as a
+      // patch rather than as scenery. Both come from the same table, so a camp belongs to its biome.
+      const company = threat >= 3 && k.chance(threat * 0.05) ? 2 : 1;
+      for (let n = 0; n < company; n++) {
+        const spot = k.spot({ cx: mx * MACRO, cy: my * MACRO, w: MACRO, h: MACRO }, 1, 1, 1, 8);
+        if (!spot) break;
+        k.unit(null, k.pick(table).def, spot.cx, spot.cy).phase = threat;
+      }
     }
   }
 
@@ -549,8 +569,45 @@ function smallPlace(k: Kit, kind: string, x: number, y: number, name: string): v
     if (name.startsWith("poi_")) return;
     kind = "none";
   }
+  /**
+   * The ground a small place stands on. Not a square: a square of cobble in a field reads as a tile,
+   * not as somewhere people have been. This is a blob with a ragged edge and a scuffed apron of dirt
+   * around it, which is what a hundred years of feet leave, and it is most of what makes the thing
+   * look like a place at all from the road.
+   */
   const pad = (w: number, h: number, t: Tile): void => {
-    k.fill(x - Math.floor(w / 2), y - Math.floor(h / 2), w, h, t);
+    const rx = w / 2;
+    const ry = h / 2;
+    // Integer bounds. An odd width gives a half-integer radius, and a loop from -4.5 hands `set` a
+    // fractional index, which a typed array drops on the floor without a word: every pad painted
+    // nothing at all and every test still passed, because no test looks at the ground.
+    const jn = Math.ceil(ry) + 2;
+    const in_ = Math.ceil(rx) + 2;
+    for (let j = -jn; j <= jn; j++) {
+      for (let i = -in_; i <= in_; i++) {
+        const d = (i * i) / (rx * rx) + (j * j) / (ry * ry);
+        const worn = k.get(x + i, y + j);
+        if (worn === Tile.Water || worn === Tile.Road) continue;
+        // The middle is the surface, the rim is broken, and outside it the grass is worn to dirt.
+        if (d <= 0.7) k.set(x + i, y + j, t);
+        else if (d <= 1 && k.chance(0.7)) k.set(x + i, y + j, t);
+        else if (d <= 1.9 && k.chance(0.45) && worn !== t) k.set(x + i, y + j, Tile.Dirt);
+      }
+    }
+  };
+  /**
+   * Structure: walls, fences, furrows. Never over a road, over water, or over ground a set chunk owns,
+   * because these footprints are now big enough to reach all three, and a fence across the lane is worse
+   * than no fence at all.
+   */
+  const lay = (lx: number, ly: number, w: number, h: number, t: Tile): void => {
+    for (let j = ly; j < ly + h; j++) {
+      for (let i = lx; i < lx + w; i++) {
+        const was = k.get(i, j);
+        if (was === Tile.Road || was === Tile.Water || k.isClaimed(i, j)) continue;
+        k.set(i, j, t);
+      }
+    }
   };
   // A place the story needs gets its GROUND here and its THINGS from data/placements, where they can carry
   // a key, a dialogue tree and loot. Only the seed's own rolled places are furnished by this function.
@@ -558,68 +615,174 @@ function smallPlace(k: Kit, kind: string, x: number, y: number, name: string): v
   const put = (def: string, ox: number, oy: number, w = 1, h = 1): void => {
     if (rolled && k.fits(x + ox, y + oy, w, h)) k.prop({ def, cx: x + ox, cy: y + oy }, w, h);
   };
+  /**
+   * The outskirt. A place is not only the thing in the middle of it: it is the thing, and then the
+   * ring of stuff that gathered around the thing because people kept coming back. Without this a
+   * roadside place is a prop on a mat, and you walk past it without reading it as anywhere at all.
+   */
+  const outskirt = (r: number, t: Tile, n: number): void => {
+    // Only a rolled place gets an outskirt. An anchor is ground the story has already claimed: the quests
+    // set five parcels round the crane cottage and a haversack in the hedge tree, and they need the room.
+    if (!rolled) return;
+    const blocks = (TILE_FLAGS[t] & F_SOLID) !== 0;
+    for (let a = 0; a < n; a++) {
+      const ox = k.roll(2 * r + 1) - r;
+      const oy = k.roll(2 * r + 1) - r;
+      if (Math.abs(ox) + Math.abs(oy) < r - 1) continue;
+      const cx = x + ox;
+      const cy = y + oy;
+      const was = k.get(cx, cy);
+      if (was !== Tile.Grass && was !== Tile.Dirt) continue;
+      // A bush is solid. Scattered singly it is something to walk round; in a line it is a wall, and a
+      // wall drawn by accident out here can shut a story place off the map and force the county to re-roll.
+      // So a blocker only ever goes down with clear ground on all four sides: a hedge cannot grow itself.
+      if (blocks && (k.solid(cx - 1, cy) || k.solid(cx + 1, cy) || k.solid(cx, cy - 1) || k.solid(cx, cy + 1))) continue;
+      k.set(cx, cy, t);
+    }
+  };
   switch (kind) {
     case "none":
       // A bare spot the story needs (a lamp post will stand here, not a shrine): a mark and nothing else.
       break;
     case "well":
-      pad(5, 5, Tile.Cobble);
+      // A well is where the village that is not here any more used to come. Cobble worn by buckets,
+      // a trough, and a low wall on the windward side that somebody built and nobody finished.
+      pad(9, 9, Tile.Cobble);
       k.set(x, y, Tile.Water);
+      lay(x - 4, y - 1, 1, 4, Tile.Wall);
+      put("well_head", 0, -1);
+      put("barrel", 2, 2, 2, 2);
+      outskirt(6, Tile.Bush, 14);
       break;
     case "shrine":
     case "statue":
-    case "scarecrow":
-    case "signal":
-      pad(5, 5, kind === "scarecrow" ? Tile.Dirt : Tile.Cobble);
+      pad(9, 7, Tile.Cobble);
       put("pillar", 0, 0);
+      put("pillar", -3, 1);
+      put("pillar", 3, 1);
+      lay(x - 1, y + 2, 3, 1, Tile.Rubble);
+      outskirt(6, Tile.Bush, 12);
+      break;
+    case "scarecrow":
+      // Not a post in a field: a field, with the post in it. The furrows are what you see first.
+      pad(13, 9, Tile.Dirt);
+      for (let r = -3; r <= 3; r += 2) lay(x - 6, y + r, 13, 1, Tile.Garden);
+      put("scarecrow", 0, 0);
+      outskirt(8, Tile.GrassTall, 18);
+      break;
+    case "signpost":
+      // The commonest thing on any road in the county, and until now the one that drew nothing at all.
+      // A fingerpost, the passing place worn into the verge beside it, and a bench of sorts.
+      pad(9, 7, Tile.Dirt);
+      // Two courses, not one. A single cell of setts is seen edge on and reads as a row of rungs.
+      lay(x - 3, y + 2, 7, 2, Tile.Cobble);
+      put("signpost", 0, 0);
+      put("crate", -3, 1, 2, 2);
+      outskirt(6, Tile.Bush, 12);
+      break;
+    case "signal":
+      pad(7, 7, Tile.Cobble);
+      lay(x - 3, y + 3, 7, 1, Tile.Rail);
+      put("pillar", 0, 0);
+      put("signpost", 2, 1);
+      outskirt(6, Tile.Bush, 10);
       break;
     case "stones":
-      pad(9, 9, Tile.Dirt);
-      for (const [ox, oy] of [[-3, -3], [3, -3], [-4, 1], [4, 1], [0, 4]]) put("pillar", ox, oy);
+      pad(13, 13, Tile.Dirt);
+      for (const [ox, oy] of [[-4, -4], [4, -4], [-5, 1], [5, 1], [0, 5], [-2, -5], [3, 4]]) put("pillar", ox, oy);
+      outskirt(9, Tile.GrassTall, 22);
       break;
     case "cottage":
     case "hut":
-      pad(12, 10, Tile.Dirt);
-      k.fill(x + 1, y - 1, 3, 2, Tile.Rubble);
-      k.fill(x - 4, y - 4, 8, 1, Tile.HouseWall);
-      k.fill(x - 4, y - 4, 1, 5, Tile.HouseWall);
-      k.fill(x + 3, y - 4, 1, 3, Tile.HouseWall);
+      // A roofless house still has its garden wall, its yard, and the black ring where the fire was.
+      pad(16, 13, Tile.Dirt);
+      lay(x + 1, y - 1, 3, 2, Tile.Rubble);
+      lay(x - 4, y - 4, 8, 1, Tile.HouseWall);
+      lay(x - 4, y - 4, 1, 5, Tile.HouseWall);
+      lay(x + 3, y - 4, 1, 3, Tile.HouseWall);
+      if (rolled) {
+        lay(x - 7, y + 4, 14, 1, Tile.Fence);
+        lay(x - 7, y - 2, 1, 7, Tile.Fence);
+        // The gate. A garden wall with no way through is a pen, and the mark stands on the far side of it.
+        lay(x - 1, y + 4, 3, 1, Tile.Dirt);
+      }
+      lay(x - 6, y + 1, 5, 2, Tile.Garden);
+      put("campfire_cold", 5, 1);
+      put("crate", -2, 3, 2, 2);
+      outskirt(9, Tile.Bush, 16);
       break;
     case "greenhouse":
-      pad(11, 9, Tile.Garden);
-      k.fill(x - 5, y - 4, 11, 1, Tile.Wall);
-      k.fill(x - 5, y - 4, 1, 6, Tile.Wall);
+      pad(15, 11, Tile.Garden);
+      lay(x - 5, y - 4, 11, 1, Tile.Wall);
+      lay(x - 5, y - 4, 1, 6, Tile.Wall);
+      lay(x + 5, y - 4, 1, 4, Tile.Glass);
+      for (let r = -2; r <= 3; r += 2) lay(x - 6, y + r, 12, 1, Tile.Dirt);
+      put("barrel", -4, 4, 2, 2);
+      outskirt(8, Tile.Bush, 14);
       break;
     case "pump":
     case "pipe_end":
-      pad(7, 7, Tile.Dirt);
+      pad(11, 9, Tile.Dirt);
       k.set(x + 2, y - 2, Tile.Rubble);
-      k.fill(x - 1, y - 2, 3, 2, Tile.Wall);
+      lay(x - 1, y - 2, 3, 2, Tile.Wall);
+      lay(x - 5, y + 2, 11, 2, Tile.Cobble);
+      put("barrel", 4, -1, 2, 2);
+      put("crate", -4, -1, 2, 2);
+      outskirt(7, Tile.Rubble, 12);
       break;
     case "jetty":
     case "boat":
-      pad(3, 9, Tile.Cobble);
+      pad(5, 13, Tile.Cobble);
+      lay(x - 1, y - 6, 3, 4, Tile.FloorWood);
       put("crate", 1, 2, 2, 2);
+      put("barrel", -2, 4, 2, 2);
+      outskirt(7, Tile.GrassTall, 14);
       break;
     case "wagon":
-      k.fill(x - 5, y, 11, 1, Tile.Track);
+      lay(x - 8, y, 17, 1, Tile.Track);
+      if (rolled) lay(x - 8, y - 1, 17, 1, Tile.Rail);
+      pad(9, 5, Tile.Dirt);
       put("minecart", -1, -2, 2, 2);
+      put("crate", 4, 2, 2, 2);
+      outskirt(7, Tile.Bush, 12);
       break;
     case "cart":
     case "camp":
-      pad(7, 6, Tile.Dirt);
-      put("crate", -2, -1, 2, 2);
-      put("barrel", 1, 0, 2, 2);
+      // Somebody stopped here for a night. The ring of stones is cold and the cart never went on.
+      pad(11, 9, Tile.Dirt);
+      put("road_cart", 3, -2, 2, 2);
+      put("campfire_cold", 0, 0);
+      put("crate", -3, -1, 2, 2);
+      put("barrel", -1, 3, 2, 2);
+      outskirt(7, Tile.Bush, 14);
       break;
     case "hollow_tree":
-      k.fill(x - 2, y - 2, 5, 4, Tile.Tree);
-      k.fill(x - 1, y + 1, 3, 1, Tile.Dirt);
+      // Thicket first, then the one tree you can get inside. The wood has to be thick to be worth a gap.
+      outskirt(8, Tile.Tree, 26);
+      // An anchor keeps the old small tree: the hedge tree has a haversack hung in it, and a thicket
+      // seven deep leaves nowhere to hang it.
+      if (rolled) lay(x - 3, y - 3, 7, 6, Tile.Tree);
+      else lay(x - 2, y - 2, 5, 4, Tile.Tree);
+      lay(x - 1, y - 1, 3, 3, Tile.Dirt);
+      lay(x - 1, y + 1, 3, 3, Tile.Dirt);
       break;
     default:
-      pad(5, 5, Tile.Dirt);
+      pad(7, 7, Tile.Dirt);
+      outskirt(6, Tile.Bush, 10);
   }
   // Whatever was drawn, the place can be stood at: the mark's own cell and its neighbours are open ground.
-  for (let oy = 2; oy <= 4; oy++) for (let ox = -1; ox <= 1; ox++) if (k.solid(x + ox, y + oy)) k.set(x + ox, y + oy, Tile.Dirt);
+  // The path out matters as much as the standing room. These footprints are wide enough to close a ring
+  // round their own mark -- a thicket, a fence and a wall meeting by chance -- and a mark nobody can walk
+  // to fails the solver and throws the whole county away. So a three-wide way is opened south from the
+  // mark, past the last of the dressing, every time. It costs a few cells of the shape and it means the
+  // shape can never be a trap.
+  for (let oy = 2; oy <= 14; oy++) {
+    for (let ox = -1; ox <= 1; ox++) {
+      const cy = y + oy;
+      if (k.get(x + ox, cy) === Tile.Water || k.isClaimed(x + ox, cy)) continue;
+      if (k.solid(x + ox, cy)) k.set(x + ox, cy, Tile.Dirt);
+    }
+  }
   // A place the story needs also gets room: a note, a lamp post, a scarecrow will be set down beside the mark,
   // and the text says "at the well", not "somewhere in the thicket near the well".
   if (!rolled) clearing(k, x, y + 3);

@@ -14,64 +14,69 @@ function icon(rows: string[]): SpriteSrc {
 }
 
 const sheet: SpriteSheet = {
-  // A child's mitten, red, with a knitted cuff.
+  // A child's mitten, red, with a knitted cuff. The old one was a rectangle with a
+  // right-angled thumb; this one is a rounded mitt with the thumb set low, a lit edge
+  // down the left and a ribbed cuff you can read as knitting.
   item_glove: icon([
     "................",
-    "................",
     "......kkkk......",
-    ".....krrrrk.....",
-    "....karrrrrk....",
-    "....karrrrRk....",
-    "....karrrrRk.kk.",
-    "....karrrrRkkrRk",
-    "....karrrrrrrrRk",
-    "....krrrrrrrrRk.",
-    "....krrrrrrRRk..",
-    ".....krrrrRRk...",
-    ".....kkkkkkkk...",
-    ".....kWWwWWgk...",
-    ".....kWgWgWgk...",
-    ".....kkkkkkkk...",
+    ".....karrk......",
+    "....karrrrk.....",
+    "...karrrrrRk....",
+    "...karrrrrRk....",
+    "...karrrrrRk....",
+    "...karrrrrRkkk..",
+    "...karrrrrrrarRk",
+    "...karrrrrrrrrRk",
+    "...karrrrrrrrRk.",
+    "...krrrrrrrRRk..",
+    "...kkkkkkkkkkk..",
+    "...kWwWwWwWWgk..",
+    "...kwWwWwWwWgk..",
+    "...kkkkkkkkkkk..",
   ]),
 
-  // A man's grey trilby, from the side.
+  // A man's grey trilby, from the side. It was a flat grey dome with a black stripe; it
+  // now turns from light to shade across the crown and the band is felt-brown, not black.
+  // A crown crease was tried and cut: six pixels of crown is not enough to put one in.
   item_hat: icon([
     "................",
     "................",
-    "................",
     ".....kkkkkk.....",
-    "....kggggggk....",
-    "...kgWgggggGk...",
-    "...kgWggggGGk...",
-    "...kgggggGGGk...",
-    "...kggggGGGGk...",
-    "...kKKKKKKKKk...",
-    ".kkkKKKKKKKKkkk.",
-    "kgggggggggggGGGk",
-    "kWggggggggGGGGk.",
-    ".kkGGGGGGGGkkk..",
-    "...kkkkkkkk.....",
+    "....kwgggggk....",
+    "...kwgggggGGk...",
+    "...kwgggggGGk...",
+    "...kwggggGGGk...",
+    "...kwgggGGGGk...",
+    "...kTTTTTTTTk...",
+    ".kkkTTTTTTTTkkk.",
+    "kwggggggggggggGk",
+    "kwgggggggggGGGGk",
+    ".kGGGGGGGGGGGGk.",
+    "..kkkkkkkkkkkk..",
+    "................",
     "................",
   ]),
 
-  // A carter's dinner tin: oval, lidded, with a wire handle.
+  // A carter's dinner tin: oval, lidded, with a wire handle that is fixed to the tin
+  // rather than hovering above it, and ends that turn away from the light.
   item_tin: icon([
     "................",
     "................",
     ".....kkkkkk.....",
     "....k......k....",
     "...k........k...",
-    "...k........k...",
-    "..kkkkkkkkkkkk..",
-    ".kwwWWWWWWWWggk.",
+    "..kk........kk..",
+    ".kkkkkkkkkkkkkk.",
+    "kwwWWWWWWWWWggGk",
     "kwWWWWWWWWWWgggk",
     "kkkkkkkkkkkkkkkk",
-    "kWWggggggggggGGk",
+    "kwWggggggggggGGk",
+    "kwgggggggggggGGk",
+    "kwgggggggggggGGk",
     "kWgggggggggggGGk",
-    "kWgggggggggggGGk",
-    ".kggggggggggGGk.",
+    ".kGGGGGGGGGGGGk.",
     "..kkkkkkkkkkkk..",
-    "................",
   ]),
 
   // A walker's canvas haversack with its one strap.

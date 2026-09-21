@@ -120,6 +120,32 @@ describe("the county", () => {
     expect(phases.has(1) && phases.has(4)).toBe(true);
   });
 
+  // The bug this exists for: `pad()` computed its bounds from a half-width, so an odd-sized place
+  // looped from -4.5 and handed `set` a fractional index, which a typed array discards in silence.
+  // Every small place in the county was drawing no ground at all, the well the lost-property book
+  // names was a prop standing in open grass, and the whole suite stayed green because nothing here
+  // had ever looked at the ground under a place. It does now.
+  it("a small place has made ground under it, not just a prop standing in a field", () => {
+    const made = new Set([Tile.Cobble, Tile.Dirt, Tile.Garden, Tile.Track, Tile.FloorWood, Tile.Rubble]);
+    for (const seed of SEEDS) {
+      const bp = county(seed);
+      // The anchors the side quests name by name, and what the player is told is there.
+      for (const id of ["halt_well", "halt_signpost", "halt_cart", "carters_cart"]) {
+        const m = bp.marks[id];
+        expect(m, `${id} on seed ${seed}`).toBeTruthy();
+        // The place is drawn round the mark; the mark itself stands three cells south of its middle.
+        let ground = 0;
+        for (let j = -7; j <= 4; j++) {
+          for (let i = -6; i <= 6; i++) {
+            const t = bp.tiles[(m.cy + j) * bp.w + (m.cx + i)] as Tile;
+            if (made.has(t)) ground++;
+          }
+        }
+        expect(ground, `${id} on seed ${seed} stands on ${ground} cells of made ground`).toBeGreaterThan(24);
+      }
+    }
+  });
+
   it("is the same county for the same seed", () => {
     const a = county(SEEDS[1]);
     const b = buildZone("county", SEEDS[1]);

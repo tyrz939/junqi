@@ -23,6 +23,10 @@ import type { PropSpawn, UnitSpawn } from "@/world/blueprint";
 import lowfieldsDialogue from "@/data/dialogue/lowfields.json";
 import lowfieldsItems from "@/data/items/lowfields.json";
 import lowfieldsQuests from "@/data/quests/lowfields.json";
+import anchorsJson from "@/data/anchors.json";
+import areasJson from "@/data/areas.json";
+import sitesJson from "@/data/sites.json";
+import { BLOCK_MOVE } from "@/sim/grid";
 import { idle, talkThrough, walkToProp, walkToUnit, yardCatalog } from "./bot";
 
 const catalog = yardCatalog();
@@ -221,6 +225,54 @@ describe("every quest in the game", () => {
     expect(/[–—]/.test(text), "an en or em dash").toBe(false);
     expect(text.includes("Jane")).toBe(false);
   });
+
+  // The log line is the whole map: the HUD tracker shows `requirements[].text` and nothing else
+  // (ui/hud.ts updateTracker), and there are no markers and no pins (PLAN.md 2.5). So a line that
+  // does not name somewhere a player can walk to is a quest that cannot be started. The list of
+  // names is read out of the data, never typed here, so a renamed patch fails this test instead of
+  // quietly making a direction wrong (QUESTS.md K4: omens may lie, directions may not).
+  it("every requirement text names somewhere or something a player can find, and is never a bare noun", () => {
+    // Function words only. Everything else in a name is a thing on the map.
+    const FILLER = new Set([
+      "the", "and", "for", "with", "from", "that", "this", "there", "here", "into", "onto", "its", "his", "her",
+      "are", "was", "were", "has", "have", "not", "but", "you", "your", "one", "two", "three", "four", "five", "six",
+    ]);
+    const words = (s: string): string[] => s.toLowerCase().split(/[^a-z]+/).filter((w) => w.length >= 3);
+    const vocab = (rows: string[]): Set<string> => new Set(rows.flatMap(words).filter((w) => !FILLER.has(w)));
+
+    const world = build(SEEDS[0]);
+    // Places: every site, patch, anchor and named mark or rect the generator promises.
+    const places = vocab([
+      ...sitesJson.flatMap((s) => [s.id, s.name]),
+      ...areasJson.flatMap((a) => [a.id, a.name]),
+      ...anchorsJson.flatMap((a) => [a.id, a.name ?? ""]),
+      ...Object.keys(world.rects).flatMap((zone) => [...world.rects[zone]]),
+      ...Object.keys(blueprintFor("county", SEEDS[0]).marks).filter((m) => !m.startsWith("poi_")),
+    ]);
+    // Creatures: only the ones a seed actually stands somewhere.
+    const creatures = vocab(world.units.flatMap((u) => [u.def, catalog.units[u.def]?.name ?? ""]));
+
+    // Rows in data/quests.json are the spine, and are not this audit's to edit. They are listed by
+    // name so that the rule still runs over them and the exception stays visible.
+    const SPINE_BARE = new Set(["Small Manashield Potion"]);
+
+    for (const [id, q] of Object.entries(catalog.quests)) {
+      const side = LOWFIELDS.includes(id);
+      q.requirements.forEach((r, i) => {
+        const where = `${id} requirement ${i}: "${r.text}"`;
+        expect(r.text.trim().length, `${where} is empty`).toBeGreaterThan(0);
+        expect(r.text.length, `${where} is too long for the tracker`).toBeLessThanOrEqual(70);
+        const w = words(r.text);
+        if (SPINE_BARE.has(r.text)) return;
+        expect(r.text.trim().split(/\s+/).length, `${where} is a bare noun`).toBeGreaterThanOrEqual(side ? 5 : 2);
+        const named = w.filter((x) => places.has(x));
+        const alive = w.filter((x) => creatures.has(x));
+        expect(named.length + alive.length, `${where} names nothing on the map and nothing alive`).toBeGreaterThan(0);
+        // A side quest is a walking instruction, so it must name somewhere, not only something to kill.
+        if (side) expect(named.length, `${where} names no place`).toBeGreaterThan(0);
+      });
+    }
+  }, LONG);
 });
 
 // --- 2. the Lowfields, played ------------------------------------------------------------
@@ -296,6 +348,128 @@ function expectDone(sim: Sim, quest: string): void {
 
 const has = (sim: Sim, item: string): number => bagCount(sim.player, item);
 
+// --- the walk ----------------------------------------------------------------------------
+//
+// State is not enough. A quest is only playable if a person who has read the text once can WALK
+// from the thing that asked to the thing it asked for. This floods the county on foot from each
+// giver and measures the shortest walk to every target of every Lowfields quest: no target may be
+// cut off, and none may be further than its chain is allowed to be. `left_luggage` is the one
+// cross-map quest (QUESTS.md K6) and is the only one given the width of the county.
+
+/** Where a quest's giver stands, and the things it sends her to. Keys are props, units or marks. */
+const WALKS: Record<string, { from: string; to: string[]; band: number }> = {
+  lost_property: { from: "lost_property_book", to: ["lost_glove_drop", "lost_hat_drop", "lost_tin_drop"], band: 3000 },
+  left_luggage: { from: "lost_property_book", to: ["carters_key_drop", "left_luggage_trunk"], band: 4200 },
+  to_be_collected: { from: "lost_property_book", to: ["mark:start"], band: 200 },
+  rats_in_the_sheds: { from: "parish_board", to: ["mark:allotment_shed", "unit:rat_shed_1", "unit:rat_allotment_1"], band: 1400 },
+  plot_nine: { from: "parish_board", to: ["mark:plot_nine", "unit:plot_tenant"], band: 1400 },
+  three_scarecrows: { from: "farm_door", to: ["scarecrow_gate", "scarecrow_hedge", "scarecrow_top"], band: 2600 },
+  after_the_bell: { from: "farm_door", to: ["scarecrow_gate", "scarecrow_hedge", "scarecrow_top"], band: 2600 },
+  not_turnips: { from: "farm_door", to: ["mark:top_field", "unit:pumpkin_top_1", "unit:pumpkin_top_6"], band: 1800 },
+  the_nurses_round: { from: "car_wreck", to: ["note_allen", "note_pike", "note_crane"], band: 3600 },
+  her_coat: { from: "car_wreck", to: ["nurses_coat_drop", "nurses_case"], band: 900 },
+  mrs_allens_dressing: { from: "nurses_case", to: ["door_allen"], band: 3600 },
+  number_fourteen: { from: "pell_stone", to: ["lamp_12", "lamp_13", "lamp_15"], band: 600 },
+  the_lampmans_brazier: { from: "pell_stone", to: ["pell_brazier_cold", "car_wreck"], band: 3600 },
+  before_the_bell: { from: "garden_book", to: ["sallow_rose_1", "sallow_rose_3"], band: 3600 },
+  rose_and_stone: { from: "garden_book", to: ["unit:dog"], band: 200 },
+  stood_down: { from: "company_notice", to: ["unit:quarryman_a_1", "unit:quarryman_b_3"], band: 2600 },
+  down_at_five: { from: "tally_slate", to: ["mark:quarry_top", "quarry_adit"], band: 600 },
+  footpath_three: { from: "parish_board", to: ["mark:hedge_stile_town", "mark:hedge_stile_farm"], band: 2600 },
+  if_found: { from: "haversack_drop", to: ["lost_property_book"], band: 4200 },
+};
+
+/** Where a key stands, in cells. */
+function cellOfKey(sim: Sim, key: string): [number, number] {
+  if (key.startsWith("mark:")) {
+    const m = sim.rt.bp.marks[key.slice(5)];
+    expect(m, `mark ${key}`).toBeDefined();
+    return [m.cx, m.cy];
+  }
+  if (key.startsWith("unit:")) {
+    const u = sim.rt.unitsByKey.get(key.slice(5));
+    expect(u, `unit ${key}`).toBeDefined();
+    return [Math.floor(u!.x / 8), Math.floor(u!.y / 8)];
+  }
+  const p = sim.rt.propsByKey.get(key);
+  expect(p, `prop ${key}`).toBeDefined();
+  return [p!.cx, p!.cy];
+}
+
+/** Steps on foot from one cell to every cell of the county. Solid ground and solid props both stop her. */
+function walkField(sim: Sim, from: [number, number]): Uint32Array {
+  const g = sim.rt.grid;
+  const dist = new Uint32Array(g.w * g.h).fill(0xffffffff);
+  const queue = new Int32Array(g.w * g.h);
+  let head = 0;
+  let tail = 0;
+  // A giver stands ON a solid prop, so start from whatever open ground touches it.
+  for (let oy = -2; oy <= 3; oy++) {
+    for (let ox = -2; ox <= 3; ox++) {
+      const x = from[0] + ox;
+      const y = from[1] + oy;
+      if (!g.inside(x, y) || (g.flags[y * g.w + x] & BLOCK_MOVE) !== 0) continue;
+      dist[y * g.w + x] = 0;
+      queue[tail++] = y * g.w + x;
+    }
+  }
+  while (head < tail) {
+    const i = queue[head++];
+    const d = dist[i] + 1;
+    const x = i % g.w;
+    const step = (j: number): void => {
+      if (dist[j] !== 0xffffffff || (g.flags[j] & BLOCK_MOVE) !== 0) return;
+      dist[j] = d;
+      queue[tail++] = j;
+    };
+    if (x + 1 < g.w) step(i + 1);
+    if (x > 0) step(i - 1);
+    if (i + g.w < dist.length) step(i + g.w);
+    if (i >= g.w) step(i - g.w);
+  }
+  return dist;
+}
+
+/** The shortest walk that gets within arm's reach of a cell, or null if nothing does. */
+function walkTo(sim: Sim, dist: Uint32Array, at: [number, number]): number | null {
+  const g = sim.rt.grid;
+  let best = 0xffffffff;
+  for (let oy = -3; oy <= 4; oy++) {
+    for (let ox = -3; ox <= 4; ox++) {
+      const x = at[0] + ox;
+      const y = at[1] + oy;
+      if (!g.inside(x, y)) continue;
+      best = Math.min(best, dist[y * g.w + x]);
+    }
+  }
+  return best === 0xffffffff ? null : best;
+}
+
+describe("the Lowfields side quests, walked", () => {
+  it("from the giver, on foot, every target of all nineteen is reachable and inside its band", () => {
+    const sim = newSim(SEEDS[0]);
+    const fields = new Map<string, Uint32Array>();
+    const report: string[] = [];
+    for (const [quest, walk] of Object.entries(WALKS)) {
+      let field = fields.get(walk.from);
+      if (!field) {
+        field = walkField(sim, cellOfKey(sim, walk.from));
+        fields.set(walk.from, field);
+      }
+      let furthest = 0;
+      for (const target of walk.to) {
+        const steps = walkTo(sim, field, cellOfKey(sim, target));
+        expect(steps, `${quest}: nothing walks from ${walk.from} to ${target}`).not.toBeNull();
+        furthest = Math.max(furthest, steps!);
+      }
+      report.push(`${quest}: ${furthest} steps`);
+      expect(furthest, `${quest}: the walk from ${walk.from} is longer than its chain allows`).toBeLessThanOrEqual(walk.band);
+    }
+    expect(Object.keys(WALKS).sort()).toEqual([...LOWFIELDS].sort());
+    if (process.env.WALKS) console.log(report.join("\n"));
+  }, LONG);
+});
+
 describe("the Lowfields side quests, played", () => {
   it("A. Lost Property: three things by reading, the carter's key across the map, the trunk, and the parcel after the bell", () => {
     const sim = newSim(SEEDS[0]);
@@ -305,10 +479,17 @@ describe("the Lowfields side quests, played", () => {
     read(sim, "lost_property_book", "lp_offer", [0], "start");
     expect(questActive(sim, "lost_property")).toBeDefined();
     read(sim, "lost_property_book", "lp_wait");
-    press(sim, "lost_glove_drop", "halt_well");
-    press(sim, "lost_hat_drop", "halt_signpost");
+    // Each of the three places says what it is and what is lying at it. Without that the county
+    // has a cobbled patch, a bare post and a tipped cart on it, and the book's directions point at
+    // nothing a player can see (QUESTS.md K4).
+    read(sim, "halt_well_head", "glove", [], "halt_well");
+    press(sim, "lost_glove_drop");
+    read(sim, "halt_well_head", "drawn");
+    read(sim, "halt_signpost_post", "hat", [], "halt_signpost");
+    press(sim, "lost_hat_drop");
     expect(questReady(sim, "lost_property")).toBe(false);
-    press(sim, "lost_tin_drop", "halt_cart");
+    read(sim, "halt_cart_body", "tin", [], "halt_cart");
+    press(sim, "lost_tin_drop");
     expect([has(sim, "lost_glove"), has(sim, "lost_hat"), has(sim, "lost_tin")]).toEqual([1, 1, 1]);
     expect(sim.rt.propsByKey.get("lost_tin_drop")!.hidden).toBe(true);
     const apples = has(sim, "apple");
@@ -328,7 +509,9 @@ describe("the Lowfields side quests, played", () => {
     press(sim, "left_luggage_trunk");
     expect(sim.rt.propsByKey.get("left_luggage_trunk")!.locked).toBe(true);
     read(sim, "lost_property_book", "ll_wait");
-    press(sim, "carters_key_drop", "carters_cart");
+    read(sim, "carters_cart_body", "key", [], "carters_cart");
+    press(sim, "carters_key_drop");
+    read(sim, "carters_cart_body", "stood");
     read(sim, "carters_note", "read");
     expect(has(sim, "key_left_luggage")).toBe(1);
     expect(sim.state.flags["been:carters_cart"]).toBe(1);

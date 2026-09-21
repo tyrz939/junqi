@@ -97,8 +97,23 @@ export const PARTY_TAKEN = [1, 1.15, 1.3, 1.45];
 export const SAVE_VERSION = 8;
 
 /**
- * What a creature costs at each threat, as a multiple of its row. 2020's balance sheet
- * (DESIGN-2020.md 3.1) takes enemies from about 100 HP in phase 1 to 800 in phase 6, and
- * their hits from 10-30 to 160-240; index 0 is unused (nothing spawns in a haven).
+ * What a creature costs at each threat, as a multiple of its row. This IS 2020's balance
+ * sheet (DESIGN-2020.md 3.1) read as a curve: enemy health 100, 200, 300, 400, 600, 800
+ * across the six phases is 1, 2, 3, 4, 6, 8 times the phase-1 row, and the rows are written
+ * at phase 1. Index 0 is unused (nothing spawns in a haven).
+ *
+ * The old table (1, 1.7, 2.8, 4.2, 6, 8) rounded the sheet's middle DOWN, which made the
+ * near county and the middle county feel like the same place. Nothing is invented here: the
+ * numbers are the column.
  */
-export const PHASE_SCALE: readonly number[] = [1, 1, 1.7, 2.8, 4.2, 6, 8];
+export const PHASE_SCALE: readonly number[] = [1, 1, 2, 3, 4, 6, 8];
+
+/**
+ * Night, for a creature standing outside lamplight (PLAN.md 2.6: "+1 everywhere outside
+ * lamplight, +2 in the Works"). Spawns carry their threat in their strength, not in a field
+ * the sim can read, so the night is paid in ATTENTION rather than in a phase: a thing notices
+ * further off and follows much further before it gives up. In the deep county it is worth
+ * double, which is the "+2 in the Works" of the same rule.
+ */
+export const NIGHT_AGGRO = 0.4;
+export const NIGHT_LEASH = 0.6;

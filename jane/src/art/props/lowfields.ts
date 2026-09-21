@@ -8,6 +8,9 @@ import { PAL } from "@/art/types";
 const PX: Palette = {
   ...PAL,
   d: "#3a3e4a", // darkest stone / cold iron
+  // Contact shadow, translucent so a thing sits on whatever ground it is standing on.
+  "-": "#00000030",
+  "=": "#00000050",
 };
 
 /** footH is the footprint height in 8 px cells. */
@@ -42,38 +45,41 @@ const sheet: SpriteSheet = {
     ],
   }),
 
-  // A coat on a cross of sticks, a sack for a head. The head sits a little to one side of the
-  // pole, the way a head does when it is listening. One eye. The top button is done up.
-  scarecrow: prop(8, 28, 1, {
+  // A coat on a cross of sticks, a sack for a head, straw out of the top of the sack and
+  // out of both cuffs. At one cell wide it was a dark post with a head on it: the whole
+  // shape of a scarecrow is the arms, so the row is now two cells wide (data/props/
+  // lowfields.json) and the crossbar goes from edge to edge. One eye. Buttons down the
+  // front, the top one done up. The post carries on down through the coat to the field.
+  scarecrow: prop(16, 28, 1, {
     base: [
-      "...kkkk.",
-      "..kmmmtk",
-      "..kmkmtk",
-      "..kmmttk",
-      "..kmtttk",
-      "..ktttTk",
-      "...kTTk.",
-      "kkkkkkkk",
-      "kTGGGKTk",
-      "kkGGGKkk",
-      ".kGkGKk.",
-      ".kGGGKk.",
-      ".kGkGKk.",
-      ".kGGGKk.",
-      ".kGkGKk.",
-      ".kGGKKk.",
-      ".kGGKKk.",
-      ".kGKGKk.",
-      ".kkGkKk.",
-      "..kkkk..",
-      "..ktTk..",
-      "..ktTk..",
-      "..ktTk..",
-      "..ktTk..",
-      "..ktTk..",
-      "..ktTk..",
-      ".kkeekk.",
-      ".kkkkkk.",
+      "......y.y.......",
+      ".....kkkkkk.....",
+      ".....kmmttk.....",
+      ".....kmkttk.....",
+      ".....kmmttk.....",
+      ".....kmtttk.....",
+      ".....kttTTk.....",
+      "......ktTk......",
+      ".kkkkkkkkkkkkkk.",
+      "kyGGGGGGGGGKKKyk",
+      "kyGGGGGGGGGKKKyk",
+      ".kkkkkGGGGkkkkk.",
+      ".ky..kGGGGk..yk.",
+      "....kGGGGGKk....",
+      "....kGkGGGKk....",
+      "....kGGGGGKk....",
+      "....kGyGGGKk....",
+      "....kGGGGGKk....",
+      "....kGkGGKKk....",
+      "....kGGGKKKk....",
+      "....kkyGKkkk....",
+      "......ktTk......",
+      "......ktTk......",
+      "......ktTk......",
+      "......ktTk......",
+      "......ktTk......",
+      ".....kkeekk.....",
+      "....--====--....",
     ],
   }),
 

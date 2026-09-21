@@ -96,13 +96,28 @@ export function placeAnchors(ctx: AnchorCtx, rows: readonly AnchorRow[], rng: Rn
     }
   }
   const open = (x: number, y: number): boolean => inside(x, y) && openMask[at(x, y)] === 1;
-  /** Open cells one or two macro cells off a road cell. */
-  const beside = (cell: number): number[] => {
+  /**
+   * Open cells off a road cell, the nearest ring first.
+   *
+   * The camera shows 48 by 27 cells, so half a screen is 24 across and 13 down, and a macro cell is 16.
+   * Two macro cells off the road is 32 cells or more: the place is not on the screen of somebody walking
+   * past it, and "the glove is at the well" is a fair direction to a well she never sees. The near ring
+   * is always offered first and the far ring only backs it up, so a roadside anchor is on screen from the
+   * road unless this seed leaves it nowhere else to stand.
+   */
+  const beside = (cell: number, rings = 2): number[] => {
     const cx = cell % SKEL_W;
     const cy = Math.floor(cell / SKEL_W);
-    const found: number[] = [];
-    for (let oy = -2; oy <= 2; oy++) for (let ox = -2; ox <= 2; ox++) if ((ox !== 0 || oy !== 0) && open(cx + ox, cy + oy)) found.push(at(cx + ox, cy + oy));
-    return found;
+    const near: number[] = [];
+    const far: number[] = [];
+    for (let oy = -rings; oy <= rings; oy++) {
+      for (let ox = -rings; ox <= rings; ox++) {
+        if (ox === 0 && oy === 0) continue;
+        if (!open(cx + ox, cy + oy)) continue;
+        (Math.max(Math.abs(ox), Math.abs(oy)) <= 1 ? near : far).push(at(cx + ox, cy + oy));
+      }
+    }
+    return [...near, ...far];
   };
 
   for (const row of rows) {
@@ -114,7 +129,7 @@ export function placeAnchors(ctx: AnchorCtx, rows: readonly AnchorRow[], rng: Rn
       const from = along.get(w.after.anchor);
       if (!from) return null;
       const index = Math.min(from.road.cells.length - 2, from.index + w.after.steps);
-      candidates = beside(from.road.cells[index]).slice(0, 8);
+      candidates = (beside(from.road.cells[index], 1).length >= 3 ? beside(from.road.cells[index], 1) : beside(from.road.cells[index])).slice(0, 8);
       along.set(row.id, { road: from.road, index });
     } else if (w.lastLamp) {
       // The longest Lowfields road that is not the first walk. Roads run parent to child, which is away from the town.
@@ -150,7 +165,15 @@ export function placeAnchors(ctx: AnchorCtx, rows: readonly AnchorRow[], rng: Rn
       const nearA = w.nearAnchor ? out.find((a) => a.id === w.nearAnchor!.anchor) : undefined;
       if (w.nearAnchor && !nearA) return null;
 
-      const pool = road ? [...new Set(road.cells.flatMap(beside))].sort((a, b) => a - b) : null;
+      // Sorted by cell index, so the seed's pick is stable; but the near ring is kept on its own and the
+      // far one is only fallen back on, or the sort would undo `beside`'s whole point and put the place
+      // off the screen of anyone walking the road it is named after.
+      let pool: number[] | null = null;
+      if (road) {
+        const nearOnly = [...new Set(road.cells.flatMap((c) => beside(c, 1)))];
+        const all = [...new Set(road.cells.flatMap(beside))];
+        pool = (nearOnly.length >= 8 ? nearOnly : all).sort((a, b) => a - b);
+      }
       const cells: number[] = [];
       const scan = (i: number): void => {
         const x = i % SKEL_W;

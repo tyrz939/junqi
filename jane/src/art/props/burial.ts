@@ -15,6 +15,9 @@ const PX: Palette = {
   v: "#cfe0ff", // web
   V: "#8fa4c0", // web, shaded
   z: "#3a3344", // dead ash
+  // Contact shadow, translucent so a thing sits on the floor it is standing on.
+  "-": "#00000030",
+  "=": "#00000050",
 };
 
 /** footH is the footprint height in 8 px cells. */
@@ -23,42 +26,45 @@ function prop(w: number, h: number, footH: number, frames: Record<string, string
 }
 
 const sheet: SpriteSheet = {
+  // A fire basket, not a cup on a stick. The bowl is wide enough to hold a fire and has a
+  // rim you can see over, the stem is thin, and the three feet splay, which is what tells
+  // you at a glance that the thing is standing on the floor rather than drawn on it.
   brazier: prop(8, 16, 1, {
     base: [
       "........",
       "........",
       "........",
-      "...kk...",
-      "..kzzk..",
-      "..kzzk..",
-      "...kk...",
-      "...kk...",
-      "..kDDk..",
-      ".kdDDdk.",
-      ".kdDDdk.",
-      "kdDddDdk",
-      "kdddddDk",
-      "kkDDDDkk",
-      ".kkkkkk.",
       "........",
+      ".kzzzzk.",
+      "kdddddDk",
+      "kdDdddDk",
+      "kkdDDDkk",
+      "..kdDk..",
+      "..kdDk..",
+      "..kdDk..",
+      ".kkdDkk.",
+      "kdDkkDdk",
+      "kdk..kDk",
+      "kk....kk",
+      "..-==-..",
     ],
     on: [
-      "...ff...",
-      "..fFFf..",
-      ".fFFFFf.",
-      ".fFffFf.",
-      "..fFFf..",
-      "..kfFk..",
-      "...kk...",
-      "...kk...",
-      "..kDDk..",
-      ".kdDDdk.",
-      ".kdDDdk.",
-      "kdDddDdk",
+      "...fF...",
+      "..ffFf..",
+      ".fFFffF.",
+      ".ffFFff.",
+      ".kfFFfk.",
       "kdddddDk",
-      "kkDDDDkk",
-      ".kkkkkk.",
-      "........",
+      "kdDdddDk",
+      "kkdDDDkk",
+      "..kdDk..",
+      "..kdDk..",
+      "..kdDk..",
+      ".kkdDkk.",
+      "kdDkkDdk",
+      "kdk..kDk",
+      "kk....kk",
+      "..-==-..",
     ],
   }),
 
