@@ -2,7 +2,7 @@
 // every system function takes. Rebuilt from (blueprint, ZoneState) on zone entry
 // and on load; throwing it away and rebuilding must never change behaviour.
 
-import type { Catalog } from "@/sim/catalog";
+import type { Catalog, TriggerDef } from "@/sim/catalog";
 import { CELL } from "@/sim/constants";
 import type { SimEvent } from "@/sim/events";
 import { cellOf, Grid } from "@/sim/grid";
@@ -32,6 +32,8 @@ export type ZoneRuntime = {
   awakeProps: Prop[];
   /** Pressure plates, in id order. A plate is a def field, so the list only changes when a prop is added. */
   plates: Prop[];
+  /** This zone's trigger rows by id: the catalog's, plus whatever the blueprint carries. Looked up, never iterated. */
+  triggers: Record<string, TriggerDef>;
   /** Everything changed: re-stamp every solid prop at the end of the tick. */
   propFlagsDirty: boolean;
   /** Something small changed: inclusive cell rects (cx0, cy0, cx1, cy1, ...) to re-stamp at the end of the tick. */
@@ -84,6 +86,18 @@ export type Party = {
   each(fn: (w: World, player: PlayerState) => void): void;
 };
 
+/**
+ * Every trigger row of a zone: the catalog's rows for it, then the rows its blueprint wrote
+ * (a generated lock-in, a gate that opens on a flag). The catalog wins an id clash here;
+ * the validator has already refused a blueprint that has one.
+ */
+export function zoneTriggers(catalog: Catalog, bp: Blueprint): Record<string, TriggerDef> {
+  const out: Record<string, TriggerDef> = {};
+  for (const id in catalog.triggers) if (catalog.triggers[id].zone === bp.zone) out[id] = catalog.triggers[id];
+  for (const id in bp.triggers ?? {}) if (!(id in out)) out[id] = (bp.triggers as Record<string, TriggerDef>)[id];
+  return out;
+}
+
 export function buildRuntime(catalog: Catalog, bp: Blueprint, zone: ZoneState): ZoneRuntime {
   const tiles = bp.tiles.slice();
   for (let i = 0; i + 1 < zone.tileDeltas.length; i += 2) tiles[zone.tileDeltas[i]] = zone.tileDeltas[i + 1];
@@ -109,6 +123,7 @@ export function buildRuntime(catalog: Catalog, bp: Blueprint, zone: ZoneState): 
     propReachH: reachH,
     awakeProps: [],
     plates: [],
+    triggers: zoneTriggers(catalog, bp),
     propFlagsDirty: true,
     propDirty: [],
     ringKey: "",

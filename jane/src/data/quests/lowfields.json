@@ -1,0 +1,167 @@
+{
+  "lost_property": {
+    "name": "Lost Property",
+    "description": "The lost-property book at Castle Halt lists three things lost on the road to Castle and never found: a red glove by the well, a hat left on a signpost, a dinner tin under an overturned cart. There is nobody to hand them to. The book asks anyway.",
+    "completion": "You enter all three. Beside each line a date of return was already pencilled in. All three dates are next Sunday.",
+    "requirements": [
+      { "type": "acquire", "target": "lost_glove", "qty": 1, "text": "A red glove, by the well" },
+      { "type": "acquire", "target": "lost_hat", "qty": 1, "text": "A hat, on a signpost" },
+      { "type": "acquire", "target": "lost_tin", "qty": 1, "text": "A dinner tin, under a cart" }
+    ],
+    "rewards": [{ "do": "give", "item": "apple", "qty": 2 }, { "do": "give", "item": "key_generic", "qty": 1 }]
+  },
+  "left_luggage": {
+    "name": "Left Luggage",
+    "description": "A tin-lined trunk from the Goldskin Mining Co. has stood on the platform since it missed its train. The key went with the carter, last seen on the mine road walking beside a full cart. The book does not say why he was not riding.",
+    "completion": "Straw, and under it a gilder's book: tissue leaves with gold between them. Every leaf has been used but one. The consignment note gives the trunk's weight full, and it is the weight of the trunk empty.",
+    "requirements": [
+      { "type": "location", "target": "carters_cart", "qty": 1, "text": "Find the carter's cart on the mine road" },
+      { "type": "location", "target": "trunk_open", "qty": 1, "text": "Open the trunk at Castle Halt" }
+    ],
+    "rewards": [{ "do": "grow", "stat": "spirit", "amount": 3, "id": "page_left_luggage" }, { "do": "give", "item": "gold_dust", "qty": 2 }]
+  },
+  "to_be_collected": {
+    "name": "To Be Collected",
+    "description": "A pencilled entry says a parcel is left on the platform crate each evening after the bell, and that it is not lost property and is always collected. It does not say who leaves it. It asks that someone check it is still being collected.",
+    "completion": "There is a parcel on the crate. Brown paper, string, no label. It is warm. You were watching the platform and you did not see it put there.",
+    "requirements": [{ "type": "location", "target": "platform_after_nine", "qty": 1, "text": "Stand on the platform after the nine o'clock bell" }],
+    "rewards": [{ "do": "give", "item": "light_stone", "qty": 1 }]
+  },
+  "rats_in_the_sheds": {
+    "name": "Rats in the Sheds",
+    "description": "The Castle Allotment Society has rats in its sheds and asks members to deal with any they see. Six would be a start. The notice adds that they did not use to be this size, and does not say since when.",
+    "completion": "Six. The sheds are quiet. Nothing in them had been eaten; the seed drawers were all open and all full.",
+    "requirements": [{ "type": "kill", "target": "rat", "qty": 6, "text": "Rats in the allotments" }],
+    "rewards": [{ "do": "give", "item": "key_generic", "qty": 1 }, { "do": "give", "item": "pansy", "qty": 2 }]
+  },
+  "plot_nine": {
+    "name": "Plot 9",
+    "description": "Plot 9 of the Castle allotments is not let, and is freshly dug every morning. The Society would like someone to have a word with whoever it is. After nine, presumably. It asks that the word be a quiet one.",
+    "completion": "He had a good coat and his own spade. He was not digging anything up. A hand's depth down in Plot 9 there is a jar with Julie's label, buried lid upward, carefully.",
+    "requirements": [{ "type": "location", "target": "plot_tenant_down", "qty": 1, "text": "Whoever digs Plot 9" }],
+    "rewards": [{ "do": "grow", "stat": "strength", "amount": 3, "id": "jar_plot_nine" }]
+  },
+  "three_scarecrows": {
+    "name": "Three Scarecrows",
+    "description": "The farmer wants his three scarecrows counted while it is light: by the gate, on the Long Hedge, and at the rim of the Top Field. He would not open the door, and he would not say what number he is hoping for.",
+    "completion": "Three, by daylight. He thanked you through the door. There was a bag of apples on the step that had not been there when you knocked.",
+    "requirements": [
+      { "type": "location", "target": "scarecrow_gate_day", "qty": 1, "text": "The scarecrow by the gate" },
+      { "type": "location", "target": "scarecrow_hedge_day", "qty": 1, "text": "The scarecrow on the Long Hedge" },
+      { "type": "location", "target": "scarecrow_top_day", "qty": 1, "text": "The scarecrow at the Top Field" }
+    ],
+    "rewards": [{ "do": "give", "item": "apple", "qty": 4 }]
+  },
+  "after_the_bell": {
+    "name": "After the Bell",
+    "description": "The farmer wants the same three scarecrows counted again after nine. He says to touch the rim of the Top Field and come straight back, and that he would understand if you would rather not. He said he would rather not.",
+    "completion": "Three, after dark as well. He was quiet for a while behind the door. Then he said you would have told him if it were four.",
+    "requirements": [
+      { "type": "location", "target": "scarecrow_gate_night", "qty": 1, "text": "By the gate, after the bell" },
+      { "type": "location", "target": "scarecrow_hedge_night", "qty": 1, "text": "On the Long Hedge, after the bell" },
+      { "type": "location", "target": "scarecrow_top_night", "qty": 1, "text": "At the Top Field, after the bell" }
+    ],
+    "rewards": [{ "do": "give", "item": "potion_stoneskin", "qty": 1 }, { "do": "give", "item": "nasturtium", "qty": 2 }]
+  },
+  "not_turnips": {
+    "name": "Not Turnips",
+    "description": "The farmer planted turnips in the Top Field. He counts six of something else from the upstairs window, nearer the yard than they were on Sunday. He says it is past anything he would ask of a stranger, and that there is nobody else to ask.",
+    "completion": "Six. Cut, they are only pumpkins, hollow, with nothing in them. There is no seed in any of the six.",
+    "requirements": [{ "type": "kill", "target": "pumpkin_top", "qty": 6, "text": "The things in the Top Field" }],
+    "rewards": [{ "do": "grow", "stat": "strength", "amount": 3, "id": "jar_farm" }, { "do": "give", "item": "apple", "qty": 3 }]
+  },
+  "the_nurses_round": {
+    "name": "The Nurse's Round",
+    "description": "A district nurse left her car in the wood with three visits still unticked: Mrs Allen at Sallow Bottom, Mr Pike by the Long Hedge, the Misses Crane under Quarry Steps. The list says Tuesday. It does not say which.",
+    "completion": "Three calls and nobody seen. One gone to town, one who will not answer after nine, one step with eleven parcels on it. You tick all three. It seems the thing to do.",
+    "requirements": [
+      { "type": "location", "target": "cottage_allen", "qty": 1, "text": "Mrs Allen, Sallow Bottom" },
+      { "type": "location", "target": "cottage_pike", "qty": 1, "text": "Mr Pike, by the Long Hedge" },
+      { "type": "location", "target": "cottage_crane", "qty": 1, "text": "The Misses Crane, under Quarry Steps" }
+    ],
+    "rewards": [{ "do": "give", "item": "potion_manashield", "qty": 1 }]
+  },
+  "her_coat": {
+    "name": "Her Coat",
+    "description": "The nurse's case is on the back seat of the car, locked. Her coat is not in the car. A woman's prints lead off behind it into the wood, and they are not hurried. Her second note says not to come and look, and that she means it kindly.",
+    "completion": "The case opens. Dressings, a thermometer, a parcel made up for Mrs Allen. Everything is in its place. Nothing in it has been used.",
+    "requirements": [
+      { "type": "location", "target": "nurses_coat", "qty": 1, "text": "Find her coat, behind the car" },
+      { "type": "location", "target": "nurses_case", "qty": 1, "text": "Open her case" }
+    ],
+    "rewards": [{ "do": "give", "item": "potion_lifesteal", "qty": 1 }]
+  },
+  "mrs_allens_dressing": {
+    "name": "Mrs Allen's Dressing",
+    "description": "There is a parcel in the nurse's case made up for Mrs Allen, who has gone to her sister's in Castle till it passes. Her note said the door facing the fire in the square. It did not say what it is that will pass.",
+    "completion": "She would not open the door. The parcel went in through the flap and a jar came out the same way, with Julie's writing on the lid.",
+    "requirements": [{ "type": "acquire", "target": "nurses_parcel", "qty": 1, "text": "The parcel for Mrs Allen" }],
+    "rewards": [{ "do": "grow", "stat": "strength", "amount": 3, "id": "jar_mrs_allen" }]
+  },
+  "number_fourteen": {
+    "name": "No. 14",
+    "description": "A stone by the last lit lamp remembers A. Pell, lampman, who went out from it to see to No. 14. The dead lamps beyond have numbers on them. By day there is no telling a dead lamp from a live one, so it will have to be after the bell.",
+    "completion": "You walked the dead run and came back to the light. Whatever you told the stone, it has been told before.",
+    "requirements": [
+      { "type": "location", "target": "lamp_12", "qty": 1, "text": "The first dead lamp" },
+      { "type": "location", "target": "lamp_13", "qty": 1, "text": "The second dead lamp" },
+      { "type": "location", "target": "lamp_15", "qty": 1, "text": "The third dead lamp" }
+    ],
+    "rewards": [{ "do": "give", "item": "light_stone", "qty": 2 }]
+  },
+  "the_lampmans_brazier": {
+    "name": "The Lampman's Brazier",
+    "description": "A parish notice under Pell's stone says the lampman's brazier stands past No. 15 and is to be kept laid: two planks and a fire stone. Any passer-by may light it and the parish will be obliged. Nobody has been obliged in some time.",
+    "completion": "It catches at once, as if it had been waiting. From here you can see the last lit lamp behind you and nothing ahead. That is more than you could see before.",
+    "requirements": [
+      { "type": "acquire", "target": "wood", "qty": 2, "text": "Wood" },
+      { "type": "acquire", "target": "fire_stone", "qty": 1, "text": "A fire stone" }
+    ],
+    "rewards": [{ "do": "hide", "prop": "pell_brazier_cold" }, { "do": "show", "prop": "pell_brazier" }]
+  },
+  "before_the_bell": {
+    "name": "Before the Bell",
+    "description": "Julie's garden book says white water roses do better wild than in the cellar: at Sallow Bottom, below the jetty. Three is plenty. It says to pick them before the bell, and that she never learned what happens after.",
+    "completion": "Three, picked in daylight. They are cold in the hand, like something from a cellar, though they grew in the sun.",
+    "requirements": [{ "type": "acquire", "target": "white_water_rose", "qty": 3, "text": "White water roses from Sallow Bottom" }],
+    "rewards": [{ "do": "give", "item": "rock", "qty": 2 }, { "do": "give", "item": "small_water", "qty": 2 }]
+  },
+  "rose_and_stone": {
+    "name": "Rose and Stone",
+    "description": "The turned-down page: rock breaks to stone at the bench. Stone, a vial of water and a white water rose make Stone Skin. Julie writes that one should be kept by the door, and that the dog will want to see it. She does not say why a dog would.",
+    "completion": "The dog looked at it for some time. Then it told you where the next two things on the shelf used to be.",
+    "requirements": [{ "type": "acquire", "target": "potion_stoneskin", "qty": 1, "text": "Small Stone Skin Potion" }],
+    "rewards": [{ "do": "give", "item": "honeylace_lily", "qty": 2 }, { "do": "give", "item": "gold_dust", "qty": 1 }]
+  },
+  "stood_down": {
+    "name": "Stood Down",
+    "description": "The Goldskin Mining Co. stood its quarry gang down: five men. The notice says any man found working Quarry Steps will be paid off. The gang is still working. The pay hatch is open and there is nobody behind it.",
+    "completion": "Five pay packets in the pigeonholes, never drawn. In each, in place of wages, a bar of iron or a plank, and a slip that says IN LIEU.",
+    "requirements": [{ "type": "kill", "target": "quarryman", "qty": 5, "text": "Men found working Quarry Steps" }],
+    "rewards": [{ "do": "give", "item": "iron", "qty": 4 }, { "do": "give", "item": "wood", "qty": 2 }]
+  },
+  "down_at_five": {
+    "name": "Down at Five: 4",
+    "description": "A cold camp under Quarry Steps: five dinner tins laid out, a kettle, a tally slate. The slate says five men went up at seven and four came down at five, and that the foreman would see about it. There is no later entry.",
+    "completion": "At the top, a rock the size of a shed lies across the mouth of an adit. It was placed, not fallen. In the foreman's tin beside it: a gilder's book with one leaf left. Behind the rock someone is working, steadily, with a hand pick.",
+    "requirements": [{ "type": "location", "target": "quarry_top", "qty": 1, "text": "The top of Quarry Steps" }],
+    "rewards": [{ "do": "grow", "stat": "spirit", "amount": 3, "id": "page_quarry" }]
+  },
+  "footpath_three": {
+    "name": "Footpath No. 3",
+    "description": "The parish council must walk each right of way once a year or it lapses, and nobody has been free. Footpath No. 3 runs from Castle to Lowfield Farm by the Long Hedge. The notice gives it twelve minutes, and longer in the evening.",
+    "completion": "Stile to stile. It is a good deal shorter than the road, and nothing on it is lit. You enter the date on the fingerpost card. The last date on it is in the same month, and not in this century.",
+    "requirements": [
+      { "type": "location", "target": "hedge_stile_town", "qty": 1, "text": "The stile outside Castle" },
+      { "type": "location", "target": "hedge_stile_farm", "qty": 1, "text": "The stile by Lowfield Farm" }
+    ],
+    "rewards": [{ "do": "give", "item": "apple", "qty": 3 }, { "do": "flag", "flag": "footpath_walked" }]
+  },
+  "if_found": {
+    "name": "If Found",
+    "description": "A walker's haversack, pushed into a hollow tree on Footpath No. 3 to keep it dry. The label says: if found, return to Lost Property, Castle Halt. Finder's due. It was pushed in from the inside of the tree.",
+    "completion": "You enter it in the book. The finder's due is the contents, less the notebook, which stays. Hemshade root, water, and a line in the notebook: root and water, rub it on the blade and not the hand.",
+    "requirements": [{ "type": "acquire", "target": "haversack", "qty": 1, "text": "A walker's haversack" }],
+    "rewards": [{ "do": "give", "item": "hemshade_root", "qty": 3 }, { "do": "give", "item": "small_water", "qty": 2 }]
+  }
+}

@@ -86,6 +86,9 @@ export function runAction(w: World, a: Action, subject: number): void {
     case "learn":
       if (me) teach(w, a.spell);
       return;
+    case "grow":
+      grow(w, a.stat, a.amount, a.id);
+      return;
     case "toast":
       w.emit({ e: "toast", text: a.text });
       return;
@@ -156,6 +159,25 @@ export function runAction(w: World, a: Action, subject: number): void {
       w.emit({ e: "tiles", cx: r.cx, cy: r.cy, w: r.w, h: r.h });
       return;
     }
+    case "strike": {
+      const r = w.rt.bp.rects[a.rect];
+      if (!r) return;
+      // Whoever pulled the lever struck the blow: the kill is hers, and so is the party's penalty.
+      // A trap nobody set (a trigger, the clock) strikes as the world, from nobody.
+      const puller = w.rt.units.get(actor);
+      const from = puller && puller.alive ? puller.id : 0;
+      for (const u of w.zone.units) {
+        if (!u.alive || u.hidden) continue;
+        if (u.faction === "friendly" && !a.hitsFriends) continue;
+        const cx = cellOf(u.x);
+        const cy = cellOf(u.y);
+        if (cx < r.cx || cy < r.cy || cx >= r.cx + r.w || cy >= r.cy + r.h) continue;
+        u.incoming.push({ amount: a.amount, school: a.school, from, crit: false, status: a.effect });
+      }
+      w.emit({ e: "sfx", name: "strike", x: centre(r.cx + (r.w >> 1)), y: centre(r.cy + (r.h >> 1)) });
+      w.emit({ e: "shake", amount: 3 });
+      return;
+    }
     case "status": {
       const u = w.rt.units.get(actor) ?? player;
       if (u) applyEffect(w, u, a.effect, actor);
@@ -210,6 +232,30 @@ export function teach(w: World, spell: string): boolean {
   for (const p of w.state.players) bindLearned(p, spell);
   w.emit({ e: "learn", spell }, true);
   w.emit({ e: "toast", text: `Learned ${w.catalog.spells[spell].name}` }, true);
+  return true;
+}
+
+/**
+ * Growth by finding. There is no XP: she is stronger because she found one of Julie's jars,
+ * and so is everyone at the table, the away and the late included (as with `teach`). The id
+ * is the jar itself. Quest rewards run once per player, so without it a party of four would
+ * eat one jar four times; with it, the second, third and fourth asks are no-ops, and every
+ * upgrade in the county can be counted.
+ */
+export function grow(w: World, stat: "strength" | "spirit", amount: number, id: string): boolean {
+  const g = w.state.growth;
+  if (g.found.includes(id)) return false;
+  g.found.push(id);
+  g[stat] += amount;
+  for (const body of w.party.bodies()) {
+    body[stat] += amount;
+    // The new health is hers at once: finding a jar at 10 HP should feel like finding a jar.
+    if (body.alive) {
+      if (stat === "strength") body.hp = Math.min(maxHp(body), body.hp + amount * 5);
+      else body.mp = Math.min(maxMp(body), body.mp + amount * 5);
+    }
+  }
+  w.emit({ e: "toast", text: stat === "strength" ? "You are a little stronger than you were" : "The words stay with you" }, true);
   return true;
 }
 

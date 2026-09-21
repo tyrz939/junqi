@@ -84,6 +84,8 @@ export type AreaRow = {
   /** Metres. */
   radius: number;
   rest?: boolean;
+  /** A quest is written against this patch: a county without it is re-rolled. Most patches are texture and may be skipped. */
+  required?: boolean;
   where?: { near?: string; nearMax?: number; nearMin?: number; terrain?: "wood" | "bank" | "flat" | "foothill" | "crown"; offRoad?: number; onRoad?: boolean };
 };
 
@@ -98,7 +100,8 @@ export type PoiRow = {
 export type Placed = { id: string; name: string; mx: number; my: number };
 export type PlacedSite = Placed & { row: SiteRow };
 export type PlacedArea = Placed & { row: AreaRow };
-export type PlacedPoi = { kind: string; name: string; mx: number; my: number; region: Region };
+/** `anchor`: this small place is one the story needs (skeleton/anchors.ts), and this is its name. */
+export type PlacedPoi = { kind: string; name: string; mx: number; my: number; region: Region; anchor?: string };
 
 export type Road = { from: string; to: string; cells: number[]; metres: number };
 
@@ -120,12 +123,14 @@ export type Skeleton = {
   sites: PlacedSite[];
   areas: PlacedArea[];
   pois: PlacedPoi[];
+  /** Small places the story needs, by name. Each is also in `pois`. */
+  anchors: { id: string; kind: string; mx: number; my: number }[];
   roads: Road[];
   checks: Check[];
   ok: boolean;
 };
 
-export type SkeletonRows = { sites: SiteRow[]; areas: AreaRow[]; pois: PoiRow[] };
+export type SkeletonRows = { sites: SiteRow[]; areas: AreaRow[]; pois: PoiRow[]; anchors?: import("@/world/skeleton/anchors").AnchorRow[] };
 
 export const at = (mx: number, my: number): number => my * SKEL_W + mx;
 export const inside = (mx: number, my: number): boolean => mx >= 0 && my >= 0 && mx < SKEL_W && my < SKEL_H;

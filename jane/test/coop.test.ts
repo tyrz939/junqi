@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import { seatSheets, SEAT_COATS, UNIT_SPRITES } from "@/art/units";
 import { normalize } from "@/sim/angles";
 import type { SpellDef } from "@/sim/catalog";
+import { runAction } from "@/sim/actions";
 import { PARTY_DEALT, PARTY_TAKEN } from "@/sim/constants";
 import { cellOf, centre } from "@/sim/grid";
 import { bagCount } from "@/sim/inventory";
@@ -541,5 +542,26 @@ describe("healing a friend", () => {
     idle(sim, 2);
     expect(sim.view(1).player.hp).toBe(40);
     expect(me.hp).toBeGreaterThan(40);
+  });
+});
+
+describe("growth by finding", () => {
+  it("a jar found by one makes all of them stronger, once, including the away and the late", () => {
+    const sim = party(40, ["host", "b", "c"]);
+    sim.command(2, { t: "leave" });
+    const before = sim.view(0).player.strength;
+    const hp = maxHp(sim.view(0).player);
+    sim.view(1).player.hp = 20;
+    runAction(sim, { do: "grow", stat: "strength", amount: 3, id: "jar_test" }, sim.player.id);
+    // Quest rewards run once per player: the second, third and fourth asks must do nothing.
+    runAction(sim, { do: "grow", stat: "strength", amount: 3, id: "jar_test" }, sim.player.id);
+    expect(sim.state.growth).toMatchObject({ strength: 3, found: ["jar_test"] });
+    for (const seat of [0, 1]) expect(sim.view(seat).player.strength).toBe(before + 3);
+    expect(sim.state.players[2].parked!.strength).toBe(before + 3);
+    expect(maxHp(sim.view(0).player)).toBe(hp + 15);
+    expect(sim.view(1).player.hp).toBe(35); // the new health is hers at once
+    expect(sim.command(-1, { t: "join", who: "d" })).toBe(3);
+    expect(sim.view(3).player.strength).toBe(before + 3);
+    expect(sim.view(3).player.hp).toBe(maxHp(sim.view(3).player));
   });
 });

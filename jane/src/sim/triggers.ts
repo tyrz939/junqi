@@ -37,7 +37,9 @@ export function playerInRect(w: World, rect: Rect, except: PlayerState | null = 
 
 export function stepTriggers(w: World): void {
   for (const t of w.zone.triggers) {
-    const def = w.catalog.triggers[t.id];
+    // A row the save remembers and the build no longer has is simply not a trigger any more.
+    const def = w.rt.triggers[t.id];
+    if (!def) continue;
     const rect = w.rt.bp.rects[def.rect];
     if (!rect) continue;
     const who = playerInRect(w, rect);

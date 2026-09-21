@@ -6,7 +6,8 @@ import { buildCatalog, type Catalog } from "@/sim/catalog";
 import { CELL } from "@/sim/constants";
 import { cellOf, centre } from "@/sim/grid";
 import { costOfCells } from "@/sim/path";
-import { NO_INPUT, type InputFrame, type Sim } from "@/sim/sim";
+import { HOST, newGameState, NO_INPUT, Sim, type InputFrame } from "@/sim/sim";
+import { blueprintFor } from "@/sim/zones";
 import type { Unit } from "@/sim/state";
 import { propCentre } from "@/sim/runtime";
 
@@ -121,6 +122,22 @@ export function fight(sim: Sim, target: Unit, slot = 0, maxTicks = 60 * 90): boo
     sim.tick({ mx: (dx / d) * move, my: (dy / d) * move, sprint: false, useHeld: false, ax: dx / d, ay: dy / d });
   }
   return !target.alive;
+}
+
+/**
+ * A game that begins inside a zone, standing on one of its marks. Everyone who sits down
+ * arrives at the party's last fire, so the fire is put there first: no county is built, which
+ * is a second saved per test and keeps a dungeon's tests about the dungeon.
+ */
+export function simIn(catalog: Catalog, zone: string, seed: number, mark = "entry"): Sim {
+  const state = newGameState(seed);
+  const at = blueprintFor(zone, state.seed).marks[mark];
+  if (!at) throw new Error(`zone ${zone} has no mark ${mark}`);
+  state.rest = { zone, x: centre(at.cx), y: centre(at.cy) };
+  const sim = Sim.fromState(catalog, state);
+  sim.command(-1, { t: "join", who: HOST });
+  sim.me.lastMark = mark;
+  return sim;
 }
 
 /**

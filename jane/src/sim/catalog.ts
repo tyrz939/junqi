@@ -129,6 +129,8 @@ export type UnitDef = {
   glow?: { radius: number; color: string };
   /** Present only between 06:00 and 21:00. The dog is never seen after dark. */
   dayOnly?: boolean;
+  /** The mirror: not there between 06:00 and 21:00. Never seen arriving or leaving. */
+  nightOnly?: boolean;
   /** Item id this unit cannot resist: while idle it walks to a drop of it and dies there. */
   bait?: string;
   /** Snake controller only: body segment count and spacing in px. */
@@ -347,58 +349,83 @@ export function buildCatalog(): Catalog {
   return catalog;
 }
 
+type Need = (ok: boolean, msg: string) => void;
+const isSchool = (s: unknown): boolean => SCHOOLS.includes(s as School);
+
+function checkAction(c: Catalog, need: Need, where: string, a: Action): void {
+  switch (a.do) {
+    case "quest":
+    case "handin":
+      need(a.quest in c.quests, `${where}: unknown quest "${a.quest}"`);
+      break;
+    case "give":
+    case "take":
+      need(a.item in c.items, `${where}: unknown item "${a.item}"`);
+      break;
+    case "learn":
+      need(a.spell in c.spells, `${where}: unknown spell "${a.spell}"`);
+      break;
+    case "status":
+      need(a.effect in c.effects, `${where}: unknown effect "${a.effect}"`);
+      break;
+    case "spawn":
+      need(a.def in c.units, `${where}: unknown unit def "${a.def}"`);
+      break;
+    case "talk":
+      need(a.tree in c.dialogue, `${where}: unknown dialogue "${a.tree}"`);
+      break;
+    case "throw":
+      need(a.item in c.items, `${where}: unknown item "${a.item}"`);
+      break;
+    case "strike":
+      need(isSchool(a.school) && a.school !== "heal" && a.amount > 0 && typeof a.rect === "string" && a.rect !== "", `${where}: strike needs a rect, an amount and a damage school`);
+      if (a.effect) need(a.effect in c.effects, `${where}: unknown effect "${a.effect}"`);
+      break;
+    case "grow":
+      need((a.stat === "strength" || a.stat === "spirit") && a.amount > 0 && typeof a.id === "string" && a.id !== "", `${where}: grow needs a stat, an amount and the id of the thing found`);
+      break;
+    default:
+      break;
+  }
+}
+
+function checkConditionRows(c: Catalog, need: Need, where: string, list: Condition[] | undefined): void {
+  for (const k of list ?? []) {
+    if (k.if === "questActive" || k.if === "questReady" || k.if === "questDone") {
+      need(k.quest in c.quests, `${where}: unknown quest "${k.quest}"`);
+    } else if (k.if === "hasItem") {
+      need(k.item in c.items, `${where}: unknown item "${k.item}"`);
+    } else if (k.if === "knows") {
+      need(k.spell in c.spells, `${where}: unknown spell "${k.spell}"`);
+    }
+  }
+}
+
+/**
+ * The same row checks for lists that do not live in the catalog: the triggers a blueprint
+ * carries and the `use` lists of generated props (world/validate.ts asks). Empty means clean.
+ */
+export function actionRowErrors(c: Catalog, where: string, list: ActionList | undefined, when?: Condition[]): string[] {
+  const errors: string[] = [];
+  const need: Need = (ok, msg) => {
+    if (!ok) errors.push(msg);
+  };
+  for (const a of list ?? []) checkAction(c, need, where, a);
+  checkConditionRows(c, need, where, when);
+  return errors;
+}
+
 /** Every dangling id, wrong type and duplicate recipe, as readable strings. Empty means clean. */
 export function validateCatalog(c: Catalog): string[] {
   const errors: string[] = [];
-  const need = (ok: boolean, msg: string): void => {
+  const need: Need = (ok, msg) => {
     if (!ok) errors.push(msg);
   };
-  const isSchool = (s: unknown): boolean => SCHOOLS.includes(s as School);
 
   const checkActions = (where: string, list: ActionList | undefined): void => {
-    if (!list) return;
-    for (const a of list) checkAction(where, a);
+    for (const a of list ?? []) checkAction(c, need, where, a);
   };
-  const checkAction = (where: string, a: Action): void => {
-    switch (a.do) {
-      case "quest":
-      case "handin":
-        need(a.quest in c.quests, `${where}: unknown quest "${a.quest}"`);
-        break;
-      case "give":
-      case "take":
-        need(a.item in c.items, `${where}: unknown item "${a.item}"`);
-        break;
-      case "learn":
-        need(a.spell in c.spells, `${where}: unknown spell "${a.spell}"`);
-        break;
-      case "status":
-        need(a.effect in c.effects, `${where}: unknown effect "${a.effect}"`);
-        break;
-      case "spawn":
-        need(a.def in c.units, `${where}: unknown unit def "${a.def}"`);
-        break;
-      case "talk":
-        need(a.tree in c.dialogue, `${where}: unknown dialogue "${a.tree}"`);
-        break;
-      case "throw":
-        need(a.item in c.items, `${where}: unknown item "${a.item}"`);
-        break;
-      default:
-        break;
-    }
-  };
-  const checkConditions = (where: string, list: Condition[] | undefined): void => {
-    for (const k of list ?? []) {
-      if (k.if === "questActive" || k.if === "questReady" || k.if === "questDone") {
-        need(k.quest in c.quests, `${where}: unknown quest "${k.quest}"`);
-      } else if (k.if === "hasItem") {
-        need(k.item in c.items, `${where}: unknown item "${k.item}"`);
-      } else if (k.if === "knows") {
-        need(k.spell in c.spells, `${where}: unknown spell "${k.spell}"`);
-      }
-    }
-  };
+  const checkConditions = (where: string, list: Condition[] | undefined): void => checkConditionRows(c, need, where, list);
 
   for (const [id, s] of Object.entries(c.spells)) {
     const at = `spells.${id}`;

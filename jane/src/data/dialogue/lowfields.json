@@ -1,0 +1,624 @@
+{
+  "lost_property_book": {
+    "speaker": "Lost Property",
+    "start": [
+      { "when": [{ "if": "questReady", "quest": "if_found" }], "node": "haversack_in" },
+      { "when": [{ "if": "questReady", "quest": "lost_property" }], "node": "lp_in" },
+      { "when": [{ "if": "questReady", "quest": "left_luggage" }], "node": "ll_in" },
+      { "when": [{ "if": "questReady", "quest": "to_be_collected" }], "node": "tbc_in" },
+      { "when": [{ "if": "questActive", "quest": "lost_property" }], "node": "lp_wait" },
+      { "when": [{ "if": "questDone", "quest": "lost_property", "not": true }], "node": "lp_offer" },
+      { "when": [{ "if": "questActive", "quest": "left_luggage" }], "node": "ll_wait" },
+      { "when": [{ "if": "questDone", "quest": "left_luggage", "not": true }], "node": "ll_offer" },
+      { "when": [{ "if": "questActive", "quest": "to_be_collected" }], "node": "tbc_wait" },
+      { "when": [{ "if": "questDone", "quest": "to_be_collected", "not": true }], "node": "tbc_offer" },
+      { "when": [{ "if": "flag", "flag": "took_parcel" }], "node": "closed_taken" },
+      { "node": "closed" }
+    ],
+    "nodes": {
+      "lp_offer": {
+        "lines": [
+          "CASTLE HALT. LOST PROPERTY. The office is not staffed. It is still open.",
+          "Reported lost on the road to Castle, not yet found: one child's glove, red, by the well. One man's hat, left on a signpost 'for a moment'. One carter's dinner tin, under the seat of a cart that did not arrive.",
+          "Finders please enter items below. A pencil is provided."
+        ],
+        "options": [
+          { "label": "I'll look", "actions": [{ "do": "quest", "quest": "lost_property" }] },
+          { "label": "Not now" }
+        ]
+      },
+      "lp_wait": { "lines": ["Glove, well. Hat, signpost. Tin, cart. The pencil is on its string."] },
+      "lp_in": {
+        "lines": ["Three lines to fill in. The column headed CLAIMED BY is wider than the others."],
+        "options": [
+          {
+            "label": "Write them in",
+            "goto": "lp_done",
+            "actions": [
+              { "do": "handin", "quest": "lost_property" },
+              { "do": "take", "item": "lost_glove" },
+              { "do": "take", "item": "lost_hat" },
+              { "do": "take", "item": "lost_tin" }
+            ]
+          },
+          { "label": "Not yet" }
+        ]
+      },
+      "lp_done": { "lines": ["Printed at the foot of the page: Finders may take one article from the unclaimed shelf. One."] },
+      "ll_offer": {
+        "lines": [
+          "LEFT LUGGAGE. One trunk, tin-lined, heavy. Consignor: Goldskin Mining Co. To go by the Sunday train.",
+          "Held for want of the key, which the carter has. The carter was last seen on the mine road with a full cart, walking beside it."
+        ],
+        "options": [
+          { "label": "I'll find him", "actions": [{ "do": "quest", "quest": "left_luggage" }] },
+          { "label": "Not now" }
+        ]
+      },
+      "ll_wait": { "lines": ["The trunk has not moved. There is a ring of clean platform round it where nobody has stood."] },
+      "ll_in": {
+        "lines": ["The trunk is open. Somebody ought to write that down."],
+        "options": [
+          { "label": "Write it down", "actions": [{ "do": "handin", "quest": "left_luggage" }] },
+          { "label": "Not yet" }
+        ]
+      },
+      "tbc_offer": {
+        "lines": [
+          "In pencil, a different hand: Parcel, brown paper, string. Left on the platform crate each evening after the bell. NOT lost property. Do not hand in. It is collected.",
+          "Underneath: would somebody check that it still is."
+        ],
+        "options": [
+          { "label": "I'll check", "actions": [{ "do": "quest", "quest": "to_be_collected" }] },
+          { "label": "Not now" }
+        ]
+      },
+      "tbc_wait": { "lines": ["After the bell, the entry says. The crate is at the north end of the platform."] },
+      "tbc_in": {
+        "lines": ["There is a column for the checker's initials. Yours would be the first in it."],
+        "options": [
+          { "label": "Initial it", "actions": [{ "do": "handin", "quest": "to_be_collected" }] },
+          { "label": "Not yet" }
+        ]
+      },
+      "haversack_in": {
+        "lines": ["There is a line for it already: one haversack, canvas, walker's. Reported lost by the owner, in person, on a date that has not happened yet."],
+        "options": [
+          { "label": "Hand it in", "actions": [{ "do": "handin", "quest": "if_found" }, { "do": "take", "item": "haversack" }] },
+          { "label": "Not yet" }
+        ]
+      },
+      "closed": { "lines": ["Parcel: collected. Parcel: collected. Parcel: collected. The entries go back further than the book does."] },
+      "closed_taken": { "lines": ["Parcel: NOT collected. Enquiries are being made."] }
+    }
+  },
+
+  "parish_board": {
+    "speaker": "Parish Board",
+    "start": [
+      { "when": [{ "if": "questReady", "quest": "rats_in_the_sheds" }], "node": "rats_in" },
+      { "when": [{ "if": "questReady", "quest": "plot_nine" }], "node": "plot_in" },
+      { "when": [{ "if": "questActive", "quest": "footpath_three" }, { "if": "flag", "flag": "board_path_told", "not": true }], "node": "path_wait" },
+      {
+        "when": [
+          { "if": "questDone", "quest": "footpath_three", "not": true },
+          { "if": "questActive", "quest": "footpath_three", "not": true },
+          { "if": "flag", "flag": "seen_path", "not": true }
+        ],
+        "node": "path_offer"
+      },
+      { "when": [{ "if": "questActive", "quest": "rats_in_the_sheds" }], "node": "rats_wait" },
+      { "when": [{ "if": "questDone", "quest": "rats_in_the_sheds", "not": true }, { "if": "flag", "flag": "seen_rats", "not": true }], "node": "rats_offer" },
+      { "when": [{ "if": "questActive", "quest": "plot_nine" }], "node": "plot_wait" },
+      {
+        "when": [
+          { "if": "questDone", "quest": "rats_in_the_sheds" },
+          { "if": "questDone", "quest": "plot_nine", "not": true },
+          { "if": "flag", "flag": "seen_plot", "not": true }
+        ],
+        "node": "plot_offer"
+      },
+      { "node": "board_idle" }
+    ],
+    "nodes": {
+      "path_offer": {
+        "lines": [
+          "CASTLE PARISH COUNCIL. PUBLIC FOOTPATH No. 3, Castle to Lowfield Farm by the Long Hedge. A right of way lapses if nobody walks it within the year. Nobody has been free.",
+          "12 minutes. Longer in the evening."
+        ],
+        "options": [
+          { "label": "Take it down", "actions": [{ "do": "quest", "quest": "footpath_three" }] },
+          { "label": "Leave it", "actions": [{ "do": "flag", "flag": "seen_path" }] }
+        ]
+      },
+      "path_wait": {
+        "lines": ["Footpath No. 3. The stile is past the last house on the farm side."],
+        "actions": [{ "do": "flag", "flag": "board_path_told" }]
+      },
+      "rats_offer": {
+        "lines": [
+          "CASTLE ALLOTMENT SOCIETY. Rats in the sheds again. Members are asked to deal with any they see. Six would be a start.",
+          "The Society notes that they did not use to be this size."
+        ],
+        "options": [
+          { "label": "Take it down", "actions": [{ "do": "quest", "quest": "rats_in_the_sheds" }] },
+          { "label": "Leave it", "actions": [{ "do": "flag", "flag": "seen_rats" }] }
+        ]
+      },
+      "rats_wait": { "lines": ["Six would be a start, it says. The allotments are out past the last house."] },
+      "rats_in": {
+        "lines": ["A second sheet behind the first: the shed key is on the nail behind this board. Members only. Anyone who has dealt with six is a member."],
+        "options": [
+          { "label": "Take the key", "actions": [{ "do": "handin", "quest": "rats_in_the_sheds" }] },
+          { "label": "Not yet" }
+        ]
+      },
+      "plot_offer": {
+        "lines": [
+          "CASTLE ALLOTMENT SOCIETY. Plot 9 is not let. Members are reminded not to dig it.",
+          "Would whoever digs it each night please stop, or else apply for it in the usual way."
+        ],
+        "options": [
+          { "label": "Take it down", "actions": [{ "do": "quest", "quest": "plot_nine" }] },
+          { "label": "Leave it", "actions": [{ "do": "flag", "flag": "seen_plot" }] }
+        ]
+      },
+      "plot_wait": { "lines": ["Plot 9 is the one with no name on the stake. By day there is nobody there. The earth is soft."] },
+      "plot_in": {
+        "lines": ["Someone has written under the notice, small: thank you. he was secretary for eleven years."],
+        "options": [
+          { "label": "Leave it up", "actions": [{ "do": "handin", "quest": "plot_nine" }] },
+          { "label": "Not yet" }
+        ]
+      },
+      "board_idle": {
+        "lines": ["CASTLE PARISH COUNCIL. No further notices. The drawing pins have been left in rows."],
+        "actions": [
+          { "do": "flag", "flag": "seen_path", "value": 0 },
+          { "do": "flag", "flag": "seen_rats", "value": 0 },
+          { "do": "flag", "flag": "seen_plot", "value": 0 }
+        ]
+      }
+    }
+  },
+
+  "plot_nine_stake": {
+    "speaker": "Stake",
+    "start": [{ "when": [{ "if": "night" }], "node": "night" }, { "node": "day" }],
+    "nodes": {
+      "night": { "lines": ["PLOT 9. Somebody is working it."] },
+      "day": { "lines": ["PLOT 9. No name on the stake. The soil has been turned today, a spade's depth, in rows."] }
+    }
+  },
+
+  "farmer": {
+    "speaker": "The Farmer",
+    "start": [
+      { "when": [{ "if": "questReady", "quest": "three_scarecrows" }], "node": "farmer_in_1" },
+      { "when": [{ "if": "questReady", "quest": "after_the_bell" }], "node": "farmer_in_2" },
+      { "when": [{ "if": "questReady", "quest": "not_turnips" }], "node": "farmer_in_3" },
+      { "when": [{ "if": "questActive", "quest": "three_scarecrows" }], "node": "farmer_wait_1" },
+      { "when": [{ "if": "questActive", "quest": "after_the_bell" }], "node": "farmer_wait_2" },
+      { "when": [{ "if": "questActive", "quest": "not_turnips" }], "node": "farmer_wait_3" },
+      { "when": [{ "if": "questDone", "quest": "three_scarecrows", "not": true }], "node": "farmer_first" },
+      { "when": [{ "if": "questDone", "quest": "after_the_bell", "not": true }], "node": "farmer_second" },
+      { "when": [{ "if": "questDone", "quest": "not_turnips", "not": true }], "node": "farmer_third" },
+      { "node": "farmer_idle" }
+    ],
+    "nodes": {
+      "farmer_first": {
+        "lines": [
+          "Who is that. No, I can hear you are not from here. You will be Julie's girl.",
+          "I would come out, only I am in the middle of something.",
+          "There are three scarecrows on this farm. Gate, Long Hedge, top field. Walk round and count them for me while it is light. I know it is three. I would like to hear it from someone else."
+        ],
+        "options": [
+          { "label": "I'll count them", "actions": [{ "do": "quest", "quest": "three_scarecrows" }] },
+          { "label": "Not today" }
+        ]
+      },
+      "farmer_wait_1": { "lines": ["Gate, hedge, top field. Stay on the rim of the top field, mind. You can see it from the fence."] },
+      "farmer_in_1": {
+        "lines": ["Three. Good. That is the right number for the daytime."],
+        "options": [
+          { "label": "Three", "actions": [{ "do": "handin", "quest": "three_scarecrows" }] },
+          { "label": "Not yet" }
+        ]
+      },
+      "farmer_second": {
+        "lines": [
+          "Now I need them counted after the bell. Same three.",
+          "Touch the rim of the top field and come straight back. Do not go in among the rows. What is growing in there is not what I planted, and it is worse at night.",
+          "If you would rather not, I understand. I would rather not."
+        ],
+        "options": [
+          { "label": "After the bell, then", "actions": [{ "do": "quest", "quest": "after_the_bell" }] },
+          { "label": "No" }
+        ]
+      },
+      "farmer_wait_2": { "lines": ["After the bell. I will be up. I am always up."] },
+      "farmer_in_2": {
+        "lines": ["Three after dark as well. Thank you.", "You would tell me if it were four."],
+        "options": [
+          { "label": "It was three", "actions": [{ "do": "handin", "quest": "after_the_bell" }] },
+          { "label": "Not yet" }
+        ]
+      },
+      "farmer_third": {
+        "lines": [
+          "Those things in the top field. I count six from the upstairs window, and they are nearer the yard than they were on Sunday.",
+          "It is past anything I would ask of a stranger. I am asking because there is nobody else, and I will not pretend that is the same as it being safe.",
+          "By day. Not after the bell. If it goes badly, the fire in my yard is yours."
+        ],
+        "options": [
+          { "label": "I'll go up", "actions": [{ "do": "quest", "quest": "not_turnips" }] },
+          { "label": "Not yet" }
+        ]
+      },
+      "farmer_wait_3": { "lines": ["I can still see them from the window. They do not move while I watch. I cannot watch all the time."] },
+      "farmer_in_3": {
+        "lines": [
+          "I counted none this morning. First time since the spring.",
+          "There is a jar on the step. The last of what my wife put up, the year Julie showed her how. Eat it all. It does not keep once it is open."
+        ],
+        "options": [
+          { "label": "Thank you", "actions": [{ "do": "handin", "quest": "not_turnips" }] },
+          { "label": "Not yet" }
+        ]
+      },
+      "farmer_idle": { "lines": ["Still in the middle of something. You know where the fire is."] }
+    }
+  },
+
+  "scarecrow_gate": {
+    "speaker": "Scarecrow",
+    "start": [{ "when": [{ "if": "night" }], "node": "night" }, { "node": "day" }],
+    "nodes": {
+      "night": { "lines": ["One. Somebody has done up the top button of its coat."], "actions": [{ "do": "location", "name": "scarecrow_gate_night" }] },
+      "day": { "lines": ["A scarecrow. One. Straw, a sack, a coat somebody wore for years. It faces the road."], "actions": [{ "do": "location", "name": "scarecrow_gate_day" }] }
+    }
+  },
+  "scarecrow_hedge": {
+    "speaker": "Scarecrow",
+    "start": [{ "when": [{ "if": "night" }], "node": "night" }, { "node": "day" }],
+    "nodes": {
+      "night": { "lines": ["Two. It faces the farm."], "actions": [{ "do": "location", "name": "scarecrow_hedge_night" }] },
+      "day": { "lines": ["Two. The same straw, a better hat. It faces the farm."], "actions": [{ "do": "location", "name": "scarecrow_hedge_day" }] }
+    }
+  },
+  "scarecrow_top": {
+    "speaker": "Scarecrow",
+    "start": [{ "when": [{ "if": "night" }], "node": "night" }, { "node": "day" }],
+    "nodes": {
+      "night": { "lines": ["Three. Straw, an old coat, a turnip for a head. The rows behind it are not still."], "actions": [{ "do": "location", "name": "scarecrow_top_night" }] },
+      "day": {
+        "lines": ["Three. It stands where the field ends. Behind it the rows are full of something round and orange, and the farmer said turnips."],
+        "actions": [{ "do": "location", "name": "scarecrow_top_day" }]
+      }
+    }
+  },
+
+  "car_glovebox": {
+    "speaker": "Glovebox",
+    "start": [
+      { "when": [{ "if": "questReady", "quest": "the_nurses_round" }], "node": "glovebox_in_1" },
+      { "when": [{ "if": "questReady", "quest": "her_coat" }], "node": "glovebox_in_2" },
+      { "when": [{ "if": "questActive", "quest": "the_nurses_round" }], "node": "glovebox_wait_1" },
+      { "when": [{ "if": "questActive", "quest": "her_coat" }], "node": "glovebox_wait_2" },
+      { "when": [{ "if": "questDone", "quest": "the_nurses_round", "not": true }], "node": "glovebox_first" },
+      { "when": [{ "if": "questDone", "quest": "her_coat", "not": true }], "node": "glovebox_second" },
+      { "node": "glovebox_empty" }
+    ],
+    "nodes": {
+      "glovebox_first": {
+        "lines": [
+          "A road atlas of somewhere else. A district nurse's visiting list on a clipboard. The car keys are not here.",
+          "Tues. Mrs Allen, Sallow Bottom: dressing. Mr Pike, by the Long Hedge: chest. The Misses Crane, under Quarry Steps: leave it on the step, do not go in.",
+          "None of the three is ticked."
+        ],
+        "options": [
+          { "label": "Take the list", "actions": [{ "do": "quest", "quest": "the_nurses_round" }] },
+          { "label": "Leave it" }
+        ]
+      },
+      "glovebox_wait_1": { "lines": ["Allen, Pike, Crane. Her pencil is still clipped to the board."] },
+      "glovebox_in_1": {
+        "lines": ["Three ticks. Under the clipboard there was a second sheet all along, folded small."],
+        "options": [
+          { "label": "Unfold it", "goto": "glovebox_second", "actions": [{ "do": "handin", "quest": "the_nurses_round" }] },
+          { "label": "Not yet" }
+        ]
+      },
+      "glovebox_second": {
+        "lines": [
+          "In her hand: If I am not back by dark, do not come and look. I mean it kindly. The wood behind the car is not the wood in front of it.",
+          "Her case is on the back seat, locked. Her coat is gone. There are prints behind the car, a woman's shoe, going in. They are not hurried. None come back."
+        ],
+        "options": [
+          { "label": "Follow them", "actions": [{ "do": "quest", "quest": "her_coat" }] },
+          { "label": "Do as she says" }
+        ]
+      },
+      "glovebox_wait_2": { "lines": ["Behind the car, she wrote. Not in front."] },
+      "glovebox_in_2": {
+        "lines": ["The case is open on the seat."],
+        "options": [
+          { "label": "Note it on the list", "actions": [{ "do": "handin", "quest": "her_coat" }] },
+          { "label": "Not yet" }
+        ]
+      },
+      "glovebox_empty": { "lines": ["A road atlas of somewhere else. The clipboard has gone back under the seat where you found it, though you do not remember putting it there."] }
+    }
+  },
+
+  "note_allen": {
+    "speaker": "Note on the Step",
+    "start": [{ "node": "read" }],
+    "nodes": {
+      "read": {
+        "lines": ["Nurse: gone to my sister's in Castle till it passes. Hers is the door facing the fire in the square. Thank you for coming out all this way. E. Allen."],
+        "actions": [{ "do": "location", "name": "cottage_allen" }]
+      }
+    }
+  },
+  "note_pike": {
+    "speaker": "Note on the Step",
+    "start": [{ "node": "read" }],
+    "nodes": {
+      "read": {
+        "lines": ["NURSE. Knock twice and wait. If it is after nine do not knock. I will not know it is you. PIKE."],
+        "actions": [{ "do": "location", "name": "cottage_pike" }]
+      }
+    }
+  },
+  "note_crane": {
+    "speaker": "Note on the Step",
+    "start": [{ "node": "read" }],
+    "nodes": {
+      "read": {
+        "lines": ["Eleven parcels on the step in the nurse's wrapping, none opened. The oldest has moss on it. A card has been pushed out under the door: NEXT TIME PLEASE BRING YOUR BAG."],
+        "actions": [{ "do": "location", "name": "cottage_crane" }]
+      }
+    }
+  },
+
+  "mrs_allen": {
+    "speaker": "Mrs Allen",
+    "start": [
+      { "when": [{ "if": "questReady", "quest": "mrs_allens_dressing" }], "node": "allen_in" },
+      { "when": [{ "if": "questDone", "quest": "mrs_allens_dressing" }], "node": "allen_after" },
+      { "node": "allen_before" }
+    ],
+    "nodes": {
+      "allen_in": {
+        "lines": [
+          "Is that the nurse? No. You do not walk like the nurse.",
+          "Put it through the flap, would you. I am not opening this door until it passes, and my sister agrees with me. Or she did.",
+          "Here. Julie brought me these the last winter she was about. I have not the stomach for it now. You look as if you have been walking."
+        ],
+        "options": [
+          { "label": "Pass it through", "actions": [{ "do": "handin", "quest": "mrs_allens_dressing" }, { "do": "take", "item": "nurses_parcel" }] },
+          { "label": "Not yet" }
+        ]
+      },
+      "allen_before": { "lines": ["We are not seeing anyone, thank you. Lovely evening. You will want to be in before the lamps."] },
+      "allen_after": { "lines": ["The dressing is a great comfort. Nurse will be along on Tuesday, I expect. She always is."] }
+    }
+  },
+
+  "pell_stone": {
+    "speaker": "Stone",
+    "start": [
+      { "when": [{ "if": "questReady", "quest": "number_fourteen" }], "node": "pell_in" },
+      { "when": [{ "if": "questActive", "quest": "number_fourteen" }], "node": "pell_wait" },
+      { "when": [{ "if": "questDone", "quest": "number_fourteen", "not": true }], "node": "pell_first" },
+      { "when": [{ "if": "questDone", "quest": "the_lampmans_brazier", "not": true }, { "if": "questActive", "quest": "the_lampmans_brazier", "not": true }], "node": "pell_second" },
+      { "node": "pell_after" }
+    ],
+    "nodes": {
+      "pell_first": {
+        "lines": [
+          "A. PELL. LAMPMAN TO THIS PARISH 31 YEARS. WENT OUT FROM THIS LAMP TO SEE TO No. 14.",
+          "Underneath, scratched later: they are numbered from the square. count them if you like."
+        ],
+        "options": [
+          { "label": "Count them", "actions": [{ "do": "quest", "quest": "number_fourteen" }] },
+          { "label": "Walk on" }
+        ]
+      },
+      "pell_wait": { "lines": ["WENT OUT FROM THIS LAMP TO SEE TO No. 14. The road beyond it has posts and no light."] },
+      "pell_in": {
+        "lines": ["Twelve, thirteen, fifteen. The stone says he went to see to No. 14."],
+        "options": [
+          { "label": "There is no No. 14", "actions": [{ "do": "handin", "quest": "number_fourteen" }] },
+          { "label": "Fourteen, then", "actions": [{ "do": "handin", "quest": "number_fourteen" }, { "do": "flag", "flag": "said_fourteen" }] }
+        ]
+      },
+      "pell_second": {
+        "lines": ["A parish notice under the stone, newer: THE LAMPMAN'S BRAZIER stands past No. 15 and is to be kept laid. Two planks and a fire stone. Any passer-by may light it, and the parish will be obliged."],
+        "options": [
+          { "label": "I'll see to it", "actions": [{ "do": "quest", "quest": "the_lampmans_brazier" }] },
+          { "label": "Walk on" }
+        ]
+      },
+      "pell_after": { "lines": ["A. PELL. LAMPMAN TO THIS PARISH 31 YEARS. Somebody has put a fire stone chip on top of the stone, the way you would a pebble."] }
+    }
+  },
+
+  "lamp_12": {
+    "speaker": "Lamp Post",
+    "start": [{ "when": [{ "if": "night" }], "node": "night" }, { "node": "day" }],
+    "nodes": {
+      "night": { "lines": ["No. 12. Dark. The glass is whole and the mantle is new."], "actions": [{ "do": "location", "name": "lamp_12" }] },
+      "day": { "lines": ["A lamp post. No. 12 on the plate. By day there is no telling whether it works."] }
+    }
+  },
+  "lamp_13": {
+    "speaker": "Lamp Post",
+    "start": [{ "when": [{ "if": "night" }], "node": "night" }, { "node": "day" }],
+    "nodes": {
+      "night": { "lines": ["No. 13. Dark. There are fresh ladder marks on the post."], "actions": [{ "do": "location", "name": "lamp_13" }] },
+      "day": { "lines": ["A lamp post. No. 13 on the plate. By day there is no telling whether it works."] }
+    }
+  },
+  "lamp_15": {
+    "speaker": "Lamp Post",
+    "start": [{ "when": [{ "if": "night" }], "node": "night" }, { "node": "day" }],
+    "nodes": {
+      "night": { "lines": ["No. 15. Dark. It stands one lamp's distance from No. 13. There is no gap where a lamp could have been."], "actions": [{ "do": "location", "name": "lamp_15" }] },
+      "day": { "lines": ["A lamp post. No. 15 on the plate. By day there is no telling whether it works."] }
+    }
+  },
+
+  "brazier_cold": {
+    "speaker": "Brazier",
+    "start": [{ "when": [{ "if": "questReady", "quest": "the_lampmans_brazier" }], "node": "brazier_ready" }, { "node": "brazier_empty" }],
+    "nodes": {
+      "brazier_ready": {
+        "lines": ["Two planks, one fire stone."],
+        "options": [
+          {
+            "label": "Lay it and light it",
+            "actions": [{ "do": "handin", "quest": "the_lampmans_brazier" }, { "do": "take", "item": "wood", "qty": 2 }, { "do": "take", "item": "fire_stone", "qty": 1 }]
+          },
+          { "label": "Not yet" }
+        ]
+      },
+      "brazier_empty": { "lines": ["An iron basket on legs, swept out, with a dry place under it for planks. It has been kept ready by someone with nothing to put in it."] }
+    }
+  },
+
+  "garden_book": {
+    "speaker": "Julie's Garden Book",
+    "start": [
+      { "when": [{ "if": "questReady", "quest": "before_the_bell" }], "node": "book_in_1" },
+      { "when": [{ "if": "questActive", "quest": "before_the_bell" }], "node": "book_wait_1" },
+      { "when": [{ "if": "questDone", "quest": "before_the_bell", "not": true }], "node": "book_first" },
+      { "when": [{ "if": "questReady", "quest": "rose_and_stone" }, { "if": "night" }], "node": "book_in_2" },
+      { "when": [{ "if": "questActive", "quest": "rose_and_stone" }], "node": "book_wait_2" },
+      { "when": [{ "if": "questDone", "quest": "rose_and_stone", "not": true }], "node": "book_second" },
+      { "node": "book_after" }
+    ],
+    "nodes": {
+      "book_first": {
+        "lines": [
+          "{name}: the cellar bed is for winter. In summer the white water roses are better wild. Sallow Bottom, below the jetty, where the bank is soft.",
+          "Three is plenty. Pick them before the bell. I never learned what happens after, and I never needed to. J."
+        ],
+        "options": [
+          { "label": "Three, before the bell", "actions": [{ "do": "quest", "quest": "before_the_bell" }] },
+          { "label": "Close the book" }
+        ]
+      },
+      "book_wait_1": { "lines": ["Sallow Bottom, below the jetty. Three. Before the bell. J."] },
+      "book_in_1": {
+        "lines": ["The next page has been turned down for you. There are two rocks and two vials of water on the barrel that you would swear were not there this morning."],
+        "options": [
+          { "label": "Turn the page", "actions": [{ "do": "handin", "quest": "before_the_bell" }] },
+          { "label": "Not yet" }
+        ]
+      },
+      "book_second": {
+        "lines": [
+          "Rock breaks to stone at the bench. Stone, water, white rose: Stone Skin. For when running is no longer an option.",
+          "Keep one by the door. Show the dog. The dog will want to see it. J."
+        ],
+        "options": [
+          { "label": "I'll make one", "actions": [{ "do": "quest", "quest": "rose_and_stone" }] },
+          { "label": "Close the book" }
+        ]
+      },
+      "book_wait_2": { "lines": ["Stone, water, white rose. Show the dog. J."] },
+      "book_in_2": { "lines": ["Show the dog, it says. The step is empty until six."] },
+      "book_after": { "lines": ["The rest of the book is planting dates. The last entry is for a Sunday and says only: bulbs in. she will be here before they are up."] }
+    }
+  },
+
+  "company_notice": {
+    "speaker": "Company Notice",
+    "start": [
+      { "when": [{ "if": "questReady", "quest": "stood_down" }], "node": "company_in" },
+      { "when": [{ "if": "questActive", "quest": "stood_down" }], "node": "company_wait" },
+      { "when": [{ "if": "questDone", "quest": "stood_down", "not": true }], "node": "company_offer" },
+      { "node": "company_after" }
+    ],
+    "nodes": {
+      "company_offer": {
+        "lines": [
+          "GOLDSKIN MINING Co. QUARRY GANG (5 MEN) STOOD DOWN UNTIL FURTHER NOTICE. Any man found working Quarry Steps will be paid off at this hatch.",
+          "The gang has been told. The gang is still working."
+        ],
+        "options": [
+          { "label": "Go up and tell them", "actions": [{ "do": "quest", "quest": "stood_down" }] },
+          { "label": "Leave it" }
+        ]
+      },
+      "company_wait": { "lines": ["5 MEN. You can hear picks from here when the wind is right. They keep very good time."] },
+      "company_in": {
+        "lines": ["The hatch is open. Five pigeonholes, five packets, five names. Nobody is behind the counter to stop you."],
+        "options": [
+          { "label": "Draw their pay", "actions": [{ "do": "handin", "quest": "stood_down" }] },
+          { "label": "Not yet" }
+        ]
+      },
+      "company_after": { "lines": ["GOLDSKIN MINING Co. QUARRY GANG (5 MEN) STOOD DOWN. Someone has added in pencil: and stayed down. thank you."] }
+    }
+  },
+
+  "tally_slate": {
+    "speaker": "Tally Slate",
+    "start": [
+      { "when": [{ "if": "questReady", "quest": "down_at_five" }], "node": "slate_in" },
+      { "when": [{ "if": "questActive", "quest": "down_at_five" }], "node": "slate_wait" },
+      { "when": [{ "if": "questDone", "quest": "stood_down" }, { "if": "questDone", "quest": "down_at_five", "not": true }], "node": "slate_offer" },
+      { "when": [{ "if": "questDone", "quest": "down_at_five" }], "node": "slate_after" },
+      { "node": "slate_plain" }
+    ],
+    "nodes": {
+      "slate_offer": {
+        "lines": ["GANG OF 5. Dinners: 5. Up at seven: 5. Down at five: 4.", "Foreman to see about it.", "Five tins are laid out by the kettle. Four have been eaten from."],
+        "options": [
+          { "label": "Go up and see", "actions": [{ "do": "quest", "quest": "down_at_five" }] },
+          { "label": "Leave it" }
+        ]
+      },
+      "slate_wait": { "lines": ["Up at seven: 5. Down at five: 4. The steps start behind the camp."] },
+      "slate_in": {
+        "lines": ["There is room on the slate under the last line, and a stub of chalk."],
+        "options": [
+          { "label": "Write: found", "actions": [{ "do": "handin", "quest": "down_at_five" }] },
+          { "label": "Not yet" }
+        ]
+      },
+      "slate_after": { "lines": ["Down at five: 4. Under it, in your writing: found. Under that, not in your writing, a tick."] },
+      "slate_plain": { "lines": ["GANG OF 5. Dinners: 5. Up at seven: 5. Down at five: 4. You can hear them working above."] }
+    }
+  },
+
+  "adit_rock": {
+    "speaker": "Rock",
+    "start": [{ "node": "look" }],
+    "nodes": { "look": { "lines": ["A rock across the adit mouth. Too big to shift and too neat to have fallen. It would take something sudden."] } }
+  },
+
+  "fingerpost": {
+    "speaker": "Fingerpost",
+    "start": [{ "when": [{ "if": "questReady", "quest": "footpath_three" }], "node": "fingerpost_in" }, { "node": "fingerpost_plain" }],
+    "nodes": {
+      "fingerpost_in": {
+        "lines": ["A card in a tin frame, and a pencil on a string."],
+        "options": [
+          { "label": "Date it", "actions": [{ "do": "handin", "quest": "footpath_three" }] },
+          { "label": "Not yet" }
+        ]
+      },
+      "fingerpost_plain": { "lines": ["PUBLIC FOOTPATH No. 3. A card in a tin frame for walkers to date. It has been a long time between walkers."] }
+    }
+  },
+
+  "carters_note": {
+    "speaker": "Note",
+    "start": [{ "node": "read" }],
+    "nodes": { "read": { "lines": ["Horse would not go past the quarry turning. Gone up on foot to see what it is looking at. Back directly."] } }
+  }
+}

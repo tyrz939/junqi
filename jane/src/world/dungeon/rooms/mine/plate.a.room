@@ -1,0 +1,43 @@
+id      mine.plate.a
+pool    mine.plate
+bays    1x1
+turn    0 180 mirror
+doors   n1 optional, s1 optional, w1 optional, e1 optional
+needs   -
+grants  chest:reward
+blocks  chest:reward until plate:main
+coop    plate_or_friend
+heat    3
+grid
+############nnn############
+###.t....t..___...t....t..#
+##........................#
+#....................CC...#
+#....................CC...#
+#....PP...................#
+#....PP.............??....#
+#...................??....#
+#.........................#
+w_......................._e
+w_......................._e
+w_......................._e
+#.........................#
+#..??.....................#
+#..??....BB...............#
+#.....r..BB........r......#
+#.........................#
+#.........................#
+#........................##
+#...........___.........###
+############sss############
+legend
+n door n1
+s door s1
+w door w1
+e door e1
+P plate:main 2x2
+C chest:reward 2x2
+B push:main 2x2 barrel | crate
+r spawn
+t dress:torch
+? dress:pile 2x2

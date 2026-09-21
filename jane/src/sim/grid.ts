@@ -18,6 +18,7 @@ export const F_PROP_SOLID = 8; // a solid prop covers the cell
 export const F_PROP_LOS = 16; // that prop also blocks sight
 export const F_INDOOR = 32; // no sky: ambient light ignores the clock
 export const F_OCC = 64; // a unit stands here; ask `occupant()` who
+export const F_NOPUSH = 128; // feet may cross, a pushed prop may not: the sill of a generated room
 
 /** Bits that survive a tile change: they describe what is ON the cell, not the cell. */
 const KEEP_ON_TILE_CHANGE = F_PROP_SOLID | F_PROP_LOS | F_OCC;
@@ -55,9 +56,10 @@ export enum Tile {
   Cobble = 26,
   Rail = 27,
   Cliff = 28,
+  Sill = 29,
 }
 
-export const TILE_COUNT = 29;
+export const TILE_COUNT = 30;
 
 /**
  * Flags per tile id. Water blocks feet, not sight: 2020 set `block_los` on obj_water
@@ -89,6 +91,9 @@ export const TILE_FLAGS: Uint8Array = (() => {
   t[Tile.GrownPath] = 0;
   t[Tile.Rail] = F_SOLID;
   t[Tile.Cliff] = F_SOLID | F_BLOCK_LOS;
+  // The floor just inside a generated room's mouth. Barrels never leave their room, so they
+  // can never jam a corridor or be lost to the plate that needs them (DUNGEONS.md 2.1).
+  t[Tile.Sill] = F_INDOOR | F_NOPUSH;
   return t;
 })();
 
@@ -175,6 +180,11 @@ export class Grid {
   /** Terrain or prop in the way. Ignores units. */
   solid(cx: number, cy: number): boolean {
     return (this.flagsAt(cx, cy) & BLOCK_MOVE) !== 0;
+  }
+
+  /** A pushed prop may not be shoved onto this cell. Feet ignore it. */
+  noPush(cx: number, cy: number): boolean {
+    return (this.flagsAt(cx, cy) & F_NOPUSH) !== 0;
   }
 
   blocksSight(cx: number, cy: number): boolean {

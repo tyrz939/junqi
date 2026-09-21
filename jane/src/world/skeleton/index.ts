@@ -4,10 +4,12 @@
 // against what was built, and a skeleton that fails is thrown away and the next
 // attempt tried. The player never sees a county that breaks the story.
 
+import anchorsJson from "@/data/anchors.json";
 import areasJson from "@/data/areas.json";
 import poisJson from "@/data/pois.json";
 import sitesJson from "@/data/sites.json";
 import { rngFloat, rngSeed } from "@/sim/rng";
+import { placeAnchors, type AnchorRow } from "@/world/skeleton/anchors";
 import { pickCell, placeAreas, placePois, POI_BUDGET, siteCandidates } from "@/world/skeleton/place";
 import { distanceToRoad, layRoad, roadDistances, route, type Land } from "@/world/skeleton/roads";
 import { buildTerrain, type Terrain } from "@/world/skeleton/terrain";
@@ -38,6 +40,7 @@ export const SKELETON_ROWS: SkeletonRows = {
   sites: sitesJson as unknown as SiteRow[],
   areas: areasJson as unknown as AreaRow[],
   pois: poisJson as unknown as PoiRow[],
+  anchors: anchorsJson as unknown as AnchorRow[],
 };
 
 export const MAX_ATTEMPTS = 40;
@@ -132,7 +135,7 @@ function tryBuild(seed: number, attempt: number, rows: SkeletonRows): Skeleton |
   // Check them now, so a bad attempt costs a few milliseconds instead of the whole build.
   const early: Skeleton = {
     seed, attempt, w: SKEL_W, h: SKEL_H, height: t.height, water: t.water, region: t.region, biome: t.biome,
-    road, threat: new Uint8Array(SKEL_W * SKEL_H), sites, areas: [], pois: [], roads, checks: [], ok: false,
+    road, threat: new Uint8Array(SKEL_W * SKEL_H), sites, areas: [], pois: [], anchors: [], roads, checks: [], ok: false,
   };
   early.checks = roadChecks(early);
   if (!early.checks.every((c) => c.ok)) return early;
@@ -141,6 +144,10 @@ function tryBuild(seed: number, attempt: number, rows: SkeletonRows): Skeleton |
   const areas = placeAreas(ctx, rows.areas, rng);
   lightLamps(seed, road, roads, site("town"), safe, t);
   const pois = placePois(ctx, roads, rows.pois, rng);
+  // The patches and small places the story needs are not optional: without them this attempt is over.
+  for (const row of rows.areas) if (row.required && !areas.some((a) => a.id === row.id)) return null;
+  const anchors = placeAnchors({ t, road, roads, sites, areas, pois, safe }, rows.anchors ?? [], rng);
+  if (!anchors) return null;
   const threat = buildThreat(t, sites, areas, road);
 
   const skeleton: Skeleton = {
@@ -157,6 +164,7 @@ function tryBuild(seed: number, attempt: number, rows: SkeletonRows): Skeleton |
     sites,
     areas,
     pois,
+    anchors,
     roads,
     checks: [],
     ok: false,
@@ -282,8 +290,10 @@ function validate(s: Skeleton, safe: Uint8Array): Check[] {
 
   // Density: the budget, and the longest stretch of road with nothing to look at.
   for (const r of [Region.Lowfields, Region.Waters, Region.Works]) {
+    // The places the story needs (anchors) sit on top of the rolled budget: they are not the seed's to spend.
     const n = s.pois.filter((p) => p.region === r).length;
-    check(`region ${r} has 22 to ${POI_BUDGET} points of interest`, n >= 22 && n <= POI_BUDGET, `${n}`);
+    const rolled = s.pois.filter((p) => p.region === r && !p.anchor).length;
+    check(`region ${r} has at least 22 small places, at most ${POI_BUDGET} of them rolled`, n >= 22 && rolled <= POI_BUDGET, `${n} (${rolled} rolled)`);
   }
   let longest = 0;
   for (const r of s.roads) {

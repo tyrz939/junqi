@@ -1,0 +1,711 @@
+[
+  {
+    "key": "lost_property_book",
+    "at": {
+      "mark": "lost_property",
+      "within": 8
+    },
+    "prop": {
+      "def": "table",
+      "talk": "lost_property_book",
+      "label": "Lost Property"
+    }
+  },
+  {
+    "key": "unclaimed_shelf",
+    "at": {
+      "mark": "lost_property",
+      "within": 12
+    },
+    "prop": {
+      "def": "chest",
+      "locked": true,
+      "keyTag": "generic",
+      "label": "The unclaimed shelf",
+      "loot": [
+        {
+          "item": "light_stone",
+          "qty": 1
+        },
+        {
+          "item": "small_water",
+          "qty": 2
+        },
+        {
+          "item": "grape",
+          "qty": 4
+        }
+      ]
+    }
+  },
+  {
+    "key": "left_luggage_trunk",
+    "at": {
+      "mark": "lost_property",
+      "within": 12
+    },
+    "prop": {
+      "def": "boss_chest",
+      "locked": true,
+      "keyTag": "left_luggage",
+      "label": "The trunk",
+      "loot": [
+        {
+          "item": "small_water",
+          "qty": 1
+        }
+      ],
+      "use": [
+        {
+          "do": "location",
+          "name": "trunk_open"
+        },
+        {
+          "do": "handin",
+          "quest": "left_luggage"
+        }
+      ]
+    }
+  },
+  {
+    "key": "night_parcel",
+    "at": {
+      "slot": "night_parcel"
+    },
+    "prop": {
+      "def": "lost_thing",
+      "hidden": true,
+      "use": [
+        {
+          "do": "grow",
+          "stat": "spirit",
+          "amount": 3,
+          "id": "page_night_parcel"
+        },
+        {
+          "do": "flag",
+          "flag": "took_parcel"
+        },
+        {
+          "do": "hide",
+          "prop": "night_parcel"
+        },
+        {
+          "do": "hide",
+          "prop": "station_lamp"
+        },
+        {
+          "do": "show",
+          "prop": "station_lamp_dead"
+        },
+        {
+          "do": "toast",
+          "text": "You take it. Nobody stops you. Behind you the platform lamp goes out."
+        }
+      ]
+    }
+  },
+  {
+    "key": "station_lamp_dead",
+    "at": {
+      "slot": "station_lamp_dead"
+    },
+    "prop": {
+      "def": "lamp_dead",
+      "hidden": true
+    }
+  },
+  {
+    "key": "parish_board",
+    "at": {
+      "mark": "town_square",
+      "within": 8
+    },
+    "prop": {
+      "def": "notice_board",
+      "talk": "parish_board"
+    }
+  },
+  {
+    "key": "door_allen",
+    "at": {
+      "slot": "allen_door"
+    },
+    "prop": {
+      "def": "door_talk",
+      "talk": "mrs_allen",
+      "label": "Mrs Allen's sister's door"
+    }
+  },
+  {
+    "key": "farm_door",
+    "at": {
+      "slot": "farm_door"
+    },
+    "prop": {
+      "def": "door_talk",
+      "talk": "farmer",
+      "label": "The farmhouse door"
+    }
+  },
+  {
+    "key": "garden_book",
+    "at": {
+      "mark": "garden_book",
+      "within": 6
+    },
+    "prop": {
+      "def": "note",
+      "talk": "garden_book"
+    }
+  },
+  {
+    "key": "car_wreck",
+    "at": {
+      "site": "car_wood"
+    },
+    "edit": {
+      "talk": "car_glovebox"
+    }
+  },
+  {
+    "key": "nurses_case",
+    "at": {
+      "site": "car_wood",
+      "within": 8
+    },
+    "mark": "nurses_case",
+    "prop": {
+      "def": "chest",
+      "locked": true,
+      "keyTag": "nurses_case",
+      "label": "The nurse's case",
+      "loot": [
+        {
+          "item": "nurses_parcel",
+          "qty": 1
+        }
+      ],
+      "use": [
+        {
+          "do": "location",
+          "name": "nurses_case"
+        },
+        {
+          "do": "handin",
+          "quest": "her_coat"
+        },
+        {
+          "do": "quest",
+          "quest": "mrs_allens_dressing"
+        }
+      ]
+    }
+  },
+  {
+    "key": "company_notice",
+    "at": {
+      "mark": "company_notice",
+      "within": 8
+    },
+    "prop": {
+      "def": "sign",
+      "talk": "company_notice"
+    }
+  },
+  {
+    "key": "fingerpost_town",
+    "at": {
+      "mark": "hedge_stile_town",
+      "within": 12
+    },
+    "prop": {
+      "def": "sign",
+      "talk": "fingerpost"
+    },
+    "rect": {
+      "name": "hedge_stile_town",
+      "w": 27,
+      "h": 27
+    }
+  },
+  {
+    "key": "fingerpost_farm",
+    "at": {
+      "mark": "hedge_stile_farm",
+      "within": 12
+    },
+    "prop": {
+      "def": "sign",
+      "talk": "fingerpost"
+    },
+    "rect": {
+      "name": "hedge_stile_farm",
+      "w": 27,
+      "h": 27
+    }
+  },
+  {
+    "key": "plot_nine_stake",
+    "at": {
+      "mark": "plot_nine_stake",
+      "within": 8
+    },
+    "prop": {
+      "def": "sign",
+      "talk": "plot_nine_stake"
+    }
+  },
+  {
+    "key": "plot_tenant",
+    "at": {
+      "mark": "plot_nine",
+      "within": 8
+    },
+    "unit": {
+      "def": "plot_tenant"
+    }
+  },
+  {
+    "key": "allotment_shed",
+    "at": {
+      "mark": "allotment_shed",
+      "within": 12
+    },
+    "prop": {
+      "def": "chest",
+      "locked": true,
+      "keyTag": "generic",
+      "label": "The Society's shed",
+      "loot": [
+        {
+          "item": "small_water",
+          "qty": 3
+        },
+        {
+          "item": "nasturtium",
+          "qty": 2
+        },
+        {
+          "item": "honeylace_lily",
+          "qty": 2
+        },
+        {
+          "item": "small_empty_vial",
+          "qty": 2
+        }
+      ]
+    }
+  },
+  {
+    "key": "rat_shed",
+    "count": 4,
+    "at": {
+      "mark": "allotment_shed",
+      "within": 20
+    },
+    "unit": {
+      "def": "rat"
+    }
+  },
+  {
+    "key": "quarry_adit",
+    "at": {
+      "slot": "quarry_adit"
+    },
+    "prop": {
+      "def": "adit_rock",
+      "talk": "adit_rock"
+    }
+  },
+  {
+    "key": "foremans_tin",
+    "at": {
+      "mark": "quarry_top",
+      "within": 12
+    },
+    "prop": {
+      "def": "crate"
+    }
+  },
+  {
+    "key": "lost_glove_drop",
+    "at": {
+      "anchor": "halt_well",
+      "within": 12
+    },
+    "prop": {
+      "def": "lost_thing",
+      "loot": [
+        {
+          "item": "lost_glove",
+          "qty": 1
+        }
+      ]
+    }
+  },
+  {
+    "key": "lost_hat_drop",
+    "at": {
+      "anchor": "halt_signpost",
+      "within": 12
+    },
+    "prop": {
+      "def": "lost_thing",
+      "loot": [
+        {
+          "item": "lost_hat",
+          "qty": 1
+        }
+      ]
+    }
+  },
+  {
+    "key": "lost_tin_drop",
+    "at": {
+      "anchor": "halt_cart",
+      "within": 12
+    },
+    "prop": {
+      "def": "lost_thing",
+      "loot": [
+        {
+          "item": "lost_tin",
+          "qty": 1
+        }
+      ]
+    }
+  },
+  {
+    "key": "carters_key_drop",
+    "at": {
+      "anchor": "carters_cart",
+      "within": 12
+    },
+    "prop": {
+      "def": "lost_thing",
+      "loot": [
+        {
+          "item": "key_left_luggage",
+          "qty": 1
+        }
+      ],
+      "use": [
+        {
+          "do": "location",
+          "name": "carters_cart"
+        }
+      ]
+    }
+  },
+  {
+    "key": "carters_note",
+    "at": {
+      "anchor": "carters_cart",
+      "within": 12
+    },
+    "prop": {
+      "def": "note",
+      "talk": "carters_note"
+    }
+  },
+  {
+    "key": "scarecrow_gate",
+    "at": {
+      "anchor": "scarecrow_gate",
+      "within": 12
+    },
+    "prop": {
+      "def": "scarecrow",
+      "talk": "scarecrow_gate"
+    }
+  },
+  {
+    "key": "scarecrow_hedge",
+    "at": {
+      "anchor": "scarecrow_hedge",
+      "within": 12
+    },
+    "prop": {
+      "def": "scarecrow",
+      "talk": "scarecrow_hedge"
+    }
+  },
+  {
+    "key": "scarecrow_top",
+    "at": {
+      "anchor": "scarecrow_top",
+      "within": 12
+    },
+    "prop": {
+      "def": "scarecrow",
+      "talk": "scarecrow_top"
+    }
+  },
+  {
+    "key": "scarecrow_top_near",
+    "at": {
+      "anchor": "scarecrow_top_near",
+      "within": 12
+    },
+    "prop": {
+      "def": "scarecrow",
+      "talk": "scarecrow_top",
+      "hidden": true
+    }
+  },
+  {
+    "key": "scarecrow_top_wide",
+    "at": {
+      "anchor": "scarecrow_top",
+      "within": 12
+    },
+    "rect": {
+      "name": "scarecrow_top_wide",
+      "w": 240,
+      "h": 220
+    }
+  },
+  {
+    "key": "note_allen",
+    "at": {
+      "anchor": "cottage_allen",
+      "within": 12
+    },
+    "prop": {
+      "def": "note",
+      "talk": "note_allen"
+    }
+  },
+  {
+    "key": "note_pike",
+    "at": {
+      "anchor": "cottage_pike",
+      "within": 12
+    },
+    "prop": {
+      "def": "note",
+      "talk": "note_pike"
+    }
+  },
+  {
+    "key": "note_crane",
+    "at": {
+      "anchor": "cottage_crane",
+      "within": 12
+    },
+    "prop": {
+      "def": "note",
+      "talk": "note_crane"
+    }
+  },
+  {
+    "key": "crane_parcel",
+    "count": 5,
+    "at": {
+      "anchor": "cottage_crane",
+      "within": 20
+    },
+    "prop": {
+      "def": "crate"
+    }
+  },
+  {
+    "key": "nurses_coat_drop",
+    "at": {
+      "anchor": "nurses_coat",
+      "within": 12
+    },
+    "prop": {
+      "def": "lost_thing",
+      "loot": [
+        {
+          "item": "key_nurses_case",
+          "qty": 1
+        }
+      ],
+      "use": [
+        {
+          "do": "location",
+          "name": "nurses_coat"
+        },
+        {
+          "do": "toast",
+          "text": "A nurse's coat on a branch at head height, buttoned to the neck. The key is in the pocket. The lining is dry."
+        }
+      ]
+    }
+  },
+  {
+    "key": "haversack_drop",
+    "at": {
+      "anchor": "hedge_tree",
+      "within": 12
+    },
+    "prop": {
+      "def": "lost_thing",
+      "loot": [
+        {
+          "item": "haversack",
+          "qty": 1
+        }
+      ],
+      "use": [
+        {
+          "do": "quest",
+          "quest": "if_found"
+        }
+      ]
+    }
+  },
+  {
+    "key": "pell_stone",
+    "at": {
+      "anchor": "pell_shrine",
+      "within": 12
+    },
+    "prop": {
+      "def": "pillar",
+      "talk": "pell_stone"
+    }
+  },
+  {
+    "key": "lamp_12",
+    "at": {
+      "anchor": "lamp_12",
+      "within": 12
+    },
+    "prop": {
+      "def": "lamp_dead",
+      "talk": "lamp_12"
+    }
+  },
+  {
+    "key": "lamp_13",
+    "at": {
+      "anchor": "lamp_13",
+      "within": 12
+    },
+    "prop": {
+      "def": "lamp_dead",
+      "talk": "lamp_13"
+    }
+  },
+  {
+    "key": "lamp_15",
+    "at": {
+      "anchor": "lamp_15",
+      "within": 12
+    },
+    "prop": {
+      "def": "lamp_dead",
+      "talk": "lamp_15"
+    }
+  },
+  {
+    "key": "pell_brazier_cold",
+    "at": {
+      "anchor": "pell_brazier",
+      "within": 12
+    },
+    "prop": {
+      "def": "campfire_cold",
+      "talk": "brazier_cold"
+    }
+  },
+  {
+    "key": "pell_brazier",
+    "at": {
+      "anchor": "pell_brazier",
+      "within": 12
+    },
+    "prop": {
+      "def": "campfire",
+      "talk": "fire",
+      "hidden": true
+    }
+  },
+  {
+    "key": "sallow_rose",
+    "count": 5,
+    "at": {
+      "anchor": "sallow_jetty",
+      "within": 32
+    },
+    "prop": {
+      "def": "rose",
+      "loot": [
+        {
+          "item": "white_water_rose",
+          "qty": 1
+        }
+      ]
+    }
+  },
+  {
+    "key": "tally_slate",
+    "at": {
+      "anchor": "quarry_camp",
+      "within": 12
+    },
+    "prop": {
+      "def": "sign",
+      "talk": "tally_slate"
+    }
+  },
+  {
+    "key": "gang_tin",
+    "count": 5,
+    "at": {
+      "anchor": "quarry_camp",
+      "within": 20
+    },
+    "prop": {
+      "def": "rock"
+    }
+  },
+  {
+    "key": "rat_allotment",
+    "count": 4,
+    "at": {
+      "area": "allotments"
+    },
+    "unit": {
+      "def": "rat"
+    },
+    "spread": true
+  },
+  {
+    "key": "pumpkin_top",
+    "count": 7,
+    "at": {
+      "area": "top_field"
+    },
+    "unit": {
+      "def": "pumpkin_top"
+    },
+    "spread": true
+  },
+  {
+    "key": "quarryman_a",
+    "count": 3,
+    "at": {
+      "area": "quarry_steps"
+    },
+    "unit": {
+      "def": "quarryman"
+    },
+    "spread": true
+  },
+  {
+    "key": "quarryman_b",
+    "count": 3,
+    "at": {
+      "area": "quarry_steps"
+    },
+    "unit": {
+      "def": "quarryman"
+    },
+    "spread": true
+  }
+]

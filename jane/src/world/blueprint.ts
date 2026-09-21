@@ -6,6 +6,7 @@
 // dialogue and travel refer to `key`s, `marks` and `rects` by name. That is the
 // contract that lets geometry roll per seed while the story stays fixed.
 
+import type { TriggerDef } from "@/sim/catalog";
 import type { ActionList, Facing, Stack, ZoneId } from "@/sim/state";
 
 export type Rect = { cx: number; cy: number; w: number; h: number };
@@ -68,7 +69,19 @@ export type Blueprint = {
   ambient: number;
   /** Generation attempts used; >1 means a candidate failed validation and was re-rolled. */
   attempts: number;
+  /**
+   * Trigger rows the builder wrote itself: a generated lock-in, a gate that opens on a flag.
+   * Merged with the catalog's rows for this zone (`zoneTriggers` in sim/runtime.ts), in the
+   * sim and in the validator alike. An id the catalog already has is a validation error.
+   */
+  triggers?: Record<string, TriggerDef>;
 };
+
+/**
+ * Candidates buildZone rolls for one zone and one seed before it gives up. A generated
+ * dungeon spends the last of them on its hand-placed fallback, so it never does give up.
+ */
+export const ZONE_ATTEMPTS = 12;
 
 /** Keys, marks and rects every seed of a zone must contain. Checked by world/validate.ts. */
 export type ZoneContract = {

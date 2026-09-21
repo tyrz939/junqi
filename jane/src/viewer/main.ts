@@ -95,7 +95,8 @@ function paint(canvas: HTMLCanvasElement, s: Skeleton, scale: number, detail: bo
     for (const p of s.pois) {
       ctx.fillStyle = "#1a1420";
       ctx.fillRect(px(p.mx) - 2, px(p.my) - 2, 4, 4);
-      ctx.fillStyle = "#e8e2d6";
+      // A place the story needs (an anchor) is gold; one the seed merely rolled is bone.
+      ctx.fillStyle = p.anchor ? "#f0d048" : "#e8e2d6";
       ctx.fillRect(px(p.mx) - 1, px(p.my) - 1, 2, 2);
     }
   }
@@ -195,6 +196,8 @@ function open(seed: number): void {
     rows(s.checks.map((c) => [`<span class="${c.ok ? "ok" : "no"}">${c.ok ? "✓" : "✗"}</span> ${c.rule}`, c.detail])) +
     `<h2>Named patches</h2>` +
     rows(s.areas.map((a) => [a.name, REGION_NAMES[s.region[at(a.mx, a.my)]], `threat ${a.row.threat}`, `${a.row.radius} m`])) +
+    `<h2>Places the story needs (gold dots)</h2>` +
+    rows(s.pois.filter((p) => p.anchor).map((p) => [p.name, p.anchor ?? "", p.kind === "none" ? "" : p.kind])) +
     `<h2>Roads</h2>` +
     rows(s.roads.map((r) => [`${r.from} → ${r.to}`, `${r.metres} m`, clock(r.metres)])) +
     `<h2>Small places</h2>` +

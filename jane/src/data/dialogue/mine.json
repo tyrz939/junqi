@@ -1,0 +1,40 @@
+{
+  "page_repair": {
+    "speaker": "Confiscated Drawer",
+    "start": [{ "when": [{ "if": "knows", "spell": "repair" }], "node": "spent" }, { "node": "read" }],
+    "nodes": {
+      "read": {
+        "lines": [
+          "CONFISCATED. To be returned at the end of term.",
+          "A catapult. A tin of humbugs. One page, in handwriting you know from a letter: \"Mending. It costs what the thing is made of. Wood for wood, iron for iron. It will not mend people. I have tried.\""
+        ],
+        "actions": [{ "do": "learn", "spell": "repair" }]
+      },
+      "spent": {
+        "lines": ["A catapult. A tin of humbugs. The page is yours now. Nobody has come back for the rest."]
+      }
+    }
+  },
+  "notice_mine": {
+    "speaker": "Notice",
+    "start": [{ "node": "read" }],
+    "nodes": {
+      "read": {
+        "lines": ["GOLDSKIN MINING Co. IN CASE OF FIRE assemble in the SHAFT HALL. Do not use the cage. The cage is not in use."]
+      }
+    }
+  },
+  "firstaid_stove": {
+    "speaker": "Stove",
+    "start": [{ "node": "stove" }],
+    "nodes": {
+      "stove": {
+        "lines": [
+          "FIRST AID. The stove is laid and the kettle is full. The accident book is open at a clean page.",
+          "Nothing comes in here. If it goes badly out there, this is where you will wake."
+        ],
+        "actions": [{ "do": "rest" }]
+      }
+    }
+  }
+}

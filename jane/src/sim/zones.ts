@@ -7,7 +7,7 @@
 import type { Catalog } from "@/sim/catalog";
 import { CELL, PHASE_SCALE } from "@/sim/constants";
 import { centre } from "@/sim/grid";
-import { playerOf, playersHere, type World } from "@/sim/runtime";
+import { playerOf, playersHere, zoneTriggers, type World } from "@/sim/runtime";
 import type { GameState, PlayerState, Prop, TravelRequest, Unit, ZoneId, ZoneState } from "@/sim/state";
 import { createUnit, maxHp, maxMp, setAnim } from "@/sim/units";
 import type { Blueprint } from "@/world/blueprint";
@@ -24,6 +24,14 @@ export function blueprintFor(zone: ZoneId, seed: number): Blueprint {
     if (blueprintCache.size > 12) blueprintCache.delete(blueprintCache.keys().next().value as string);
   }
   return bp;
+}
+
+/**
+ * Hand the cache a blueprint instead of building one. The template harness plays a single
+ * room this way, as if it were the whole zone. Nothing in the game calls it.
+ */
+export function primeBlueprint(zone: ZoneId, seed: number, bp: Blueprint): void {
+  blueprintCache.set(`${seed}:${zone}`, bp);
 }
 
 export function createZoneState(state: GameState, catalog: Catalog, bp: Blueprint): ZoneState {
@@ -72,9 +80,7 @@ export function createZoneState(state: GameState, catalog: Catalog, bp: Blueprin
       awake: true,
     };
   });
-  const triggers = Object.entries(catalog.triggers)
-    .filter(([, t]) => t.zone === bp.zone)
-    .map(([id]) => ({ id, fired: false, inside: false }));
+  const triggers = Object.keys(zoneTriggers(catalog, bp)).map((id) => ({ id, fired: false, inside: false }));
   return { id: bp.zone, units, props, drops: [], projectiles: [], grounds: [], triggers, tileDeltas: [], fog: [] };
 }
 
@@ -88,8 +94,8 @@ export function ensureZoneState(state: GameState, catalog: Catalog, zone: ZoneId
     state.zones[zone] = zs;
   }
   // New trigger rows added since the save was written still get a state entry.
-  for (const [id, t] of Object.entries(catalog.triggers)) {
-    if (t.zone === zone && !zs.triggers.some((x) => x.id === id)) zs.triggers.push({ id, fired: false, inside: false });
+  for (const id of Object.keys(zoneTriggers(catalog, bp))) {
+    if (!zs.triggers.some((x) => x.id === id)) zs.triggers.push({ id, fired: false, inside: false });
   }
   return { zs, bp, first };
 }

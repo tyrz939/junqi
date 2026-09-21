@@ -234,7 +234,7 @@ function castMelee(w: World, caster: Unit, spellId: string, spell: SpellDef, loc
     const fx = FACING_DX[caster.facing];
     const fy = FACING_DY[caster.facing];
     for (const u of w.zone.units) {
-      if (!u.alive || !u.awake || u === caster || !isEnemy(caster, u) || u.controller === "npc") continue;
+      if (!u.alive || !u.awake || u.hidden || u === caster || !isEnemy(caster, u) || u.controller === "npc") continue;
       const d = metresBetween(w, caster, u);
       if (d > spell.range) continue;
       const behind = (u.x - caster.x) * fx + (u.y - caster.y) * fy < -CELL / 2;
@@ -344,7 +344,7 @@ export function stepProjectiles(w: World): void {
     let victim: Unit | null = null;
     if (!dead) {
       for (const u of w.zone.units) {
-        if (!u.alive || !u.awake || u.id === p.from || u.controller === "npc") continue;
+        if (!u.alive || !u.awake || u.hidden || u.id === p.from || u.controller === "npc") continue;
         if (caster ? !isEnemy(caster, u) : false) continue;
         if (bodyDistance(u, p.x, p.y) > w.catalog.units[u.def].bounds * PX_PER_METRE) continue;
         victim = u;
@@ -360,7 +360,7 @@ export function stepProjectiles(w: World): void {
       if (spell.splash && p.hit.amount > 0) {
         const amount = Math.round(p.hit.amount / spell.splash.div);
         for (const u of w.zone.units) {
-          if (u === victim || !u.alive || !u.awake || u.id === p.from || u.controller === "npc") continue;
+          if (u === victim || !u.alive || !u.awake || u.hidden || u.id === p.from || u.controller === "npc") continue;
           if (caster ? !isEnemy(caster, u) : false) continue;
           if (bodyDistance(u, p.x, p.y) > spell.splash.radius) continue;
           if (amount > 0) u.incoming.push({ amount, school: p.hit.school, from: p.from, crit: false });
@@ -383,7 +383,7 @@ export function stepGrounds(w: World): void {
       g.nextTick = spell.pulse ?? 30;
       const caster = w.rt.units.get(g.from);
       for (const u of w.zone.units) {
-        if (!u.alive || !u.awake || u.faction === g.faction || u.controller === "npc") continue;
+        if (!u.alive || !u.awake || u.hidden || u.faction === g.faction || u.controller === "npc") continue;
         if (distance(g.x, g.y, u.x, u.y) > g.radius) continue;
         const amount = spell.power && caster ? Math.round(rollPower(w, caster, spell.power)) : 0;
         if (amount > 0 || spell.effect) {

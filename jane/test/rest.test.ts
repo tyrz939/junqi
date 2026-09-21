@@ -4,7 +4,8 @@ import { focusOf, nearRest } from "@/sim/interact";
 import { cloneState, decodeSave, encodeSave } from "@/sim/save";
 import { Sim } from "@/sim/sim";
 import { cleanName, expandText, isNight } from "@/sim/text";
-import { maxHp } from "@/sim/units";
+import { addUnit } from "@/sim/runtime";
+import { createUnit, maxHp } from "@/sim/units";
 import { idle, talkThrough, walkToProp, walkToUnit , yardCatalog } from "./bot";
 
 const catalog = yardCatalog();
@@ -188,5 +189,27 @@ describe("the dog", () => {
     idle(sim, 20);
     const toasts = sim.drainEvents().filter((e) => e.e === "toast").map((e) => (e.e === "toast" ? e.text : ""));
     expect(toasts.some((t) => /bell/.test(t))).toBe(true);
+  });
+});
+
+describe("things that are only there at night", () => {
+  it("a nightOnly creature is absent by day, present after nine, and cannot be struck while it is away", () => {
+    const cat = yardCatalog();
+    cat.units.night_tenant = { ...cat.units.skeleton, nightOnly: true };
+    const sim = Sim.newGame(cat, 46);
+    const p = sim.player;
+    const free = sim.rt.grid.nearestFree(Math.floor(p.x / 8) + 40, Math.floor(p.y / 8), 8)!;
+    const tenant = createUnit(sim.state, cat, "night_tenant", "tenant", free.cx * 8 + 4, free.cy * 8 + 4);
+    addUnit(sim, tenant);
+    sim.command({ t: "dev", dev: { op: "time", hour: 12 } });
+    idle(sim, 30);
+    expect(tenant.hidden).toBe(true);
+    tenant.incoming.length = 0;
+    sim.command({ t: "dev", dev: { op: "time", hour: 22 } });
+    idle(sim, 30);
+    expect(tenant.hidden).toBe(false);
+    sim.command({ t: "dev", dev: { op: "time", hour: 7 } });
+    idle(sim, 30);
+    expect(tenant.hidden).toBe(true);
   });
 });

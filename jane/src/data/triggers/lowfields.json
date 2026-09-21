@@ -1,0 +1,39 @@
+{
+  "platform_night": {
+    "zone": "county", "rect": "platform", "mode": "while", "once": true,
+    "when": [{ "if": "night" }],
+    "actions": [{ "do": "location", "name": "platform_after_nine" }]
+  },
+  "halt_night": {
+    "zone": "county", "rect": "halt_approach", "mode": "enter", "once": false,
+    "when": [{ "if": "night" }, { "if": "flag", "flag": "took_parcel", "not": true }],
+    "actions": [{ "do": "show", "prop": "night_parcel" }]
+  },
+  "halt_day": {
+    "zone": "county", "rect": "halt_approach", "mode": "enter", "once": false,
+    "when": [{ "if": "night", "not": true }],
+    "actions": [{ "do": "hide", "prop": "night_parcel" }]
+  },
+  "stile_town": {
+    "zone": "county", "rect": "hedge_stile_town", "mode": "enter", "once": true,
+    "actions": [{ "do": "location", "name": "hedge_stile_town" }]
+  },
+  "stile_farm": {
+    "zone": "county", "rect": "hedge_stile_farm", "mode": "enter", "once": true,
+    "actions": [{ "do": "location", "name": "hedge_stile_farm" }]
+  },
+  "quarry_top": {
+    "zone": "county", "rect": "quarry_top", "mode": "enter", "once": true,
+    "actions": [{ "do": "location", "name": "quarry_top" }]
+  },
+  "scarecrow_night": {
+    "zone": "county", "rect": "scarecrow_top_wide", "mode": "enter", "once": false,
+    "when": [{ "if": "night" }, { "if": "flag", "flag": "omen:scarecrow_closer" }],
+    "actions": [{ "do": "hide", "prop": "scarecrow_top" }, { "do": "show", "prop": "scarecrow_top_near" }]
+  },
+  "scarecrow_day": {
+    "zone": "county", "rect": "scarecrow_top_wide", "mode": "enter", "once": false,
+    "when": [{ "if": "night", "not": true }],
+    "actions": [{ "do": "show", "prop": "scarecrow_top" }, { "do": "hide", "prop": "scarecrow_top_near" }]
+  }
+}

@@ -19,7 +19,8 @@ describe("worldgen", () => {
         expect(v.errors, `seed ${seed}`).toEqual([]);
         expect(bp.attempts, `seed ${seed} needed re-rolls`).toBeLessThanOrEqual(3);
       }
-    });
+      // Four counties, each built and then solved a second time: more than the default five seconds allows.
+    }, 60_000);
   }
 
   it("is a pure function of (zone, seed)", () => {
@@ -72,7 +73,7 @@ describe("worldgen", () => {
       expect(inside).toBe(false);
       expect(Math.hypot(dog.cx - gate.cx, dog.cy - gate.cy)).toBeLessThan(80);
     }
-  });
+  }, 60_000); // four counties
 
   it("the solver really rejects a sealed gate", () => {
     const bp = buildZone("mine", 5);

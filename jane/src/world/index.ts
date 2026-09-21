@@ -4,11 +4,11 @@
 
 import { buildCatalog, type Catalog } from "@/sim/catalog";
 import type { ZoneId } from "@/sim/state";
-import type { Blueprint, ZoneContract } from "@/world/blueprint";
+import { ZONE_ATTEMPTS, type Blueprint, type ZoneContract } from "@/world/blueprint";
 import { buildBurial } from "@/world/burial";
 import { buildCounty } from "@/world/county";
 import { buildCellar, buildHouse } from "@/world/interiors";
-import { buildMine } from "@/world/mine";
+import { MINE } from "@/world/mine";
 import { placementContract } from "@/world/placements";
 import { validateBlueprint } from "@/world/validate";
 
@@ -25,6 +25,10 @@ export type ZoneDef = {
   contract: ZoneContract;
   /** Keys the story hands over from outside the zone (quest rewards), by `opens` tag. */
   givenKeys?: string[];
+  /** Spells she is known to have at the door. Given, the solver gates every answering prop on them; left out, it gates nothing. */
+  givenVerbs?: string[];
+  /** More to prove than the solver does (a generated dungeon's C1 to C12). Any error re-rolls the candidate. */
+  check?: (bp: Blueprint, catalog: Catalog) => string[];
 };
 
 const REGISTERED: ZoneDef[] = Object.entries(import.meta.glob("./zones/*.ts", { eager: true }) as Record<string, { zone?: ZoneDef }>)
@@ -35,7 +39,7 @@ export const BUILDERS: Record<ZoneId, Builder> = {
   county: buildCounty,
   house: buildHouse,
   cellar: buildCellar,
-  mine: buildMine,
+  mine: MINE.build,
   burial: buildBurial,
 };
 
@@ -109,6 +113,12 @@ export const GIVEN_KEYS: Record<ZoneId, string[]> = {
   burial: [],
 };
 
+/** Spells known at the door, for the zones that are proven against them. */
+export const GIVEN_VERBS: Record<ZoneId, string[] | undefined> = { mine: MINE.givenVerbs };
+
+/** Checks beyond the solver's, by zone. The mine is generated, and must be the mine that was designed. */
+export const CHECKS: Record<ZoneId, ZoneDef["check"]> = { mine: MINE.check };
+
 // What data/placements promises is part of the county's contract: a seed that cannot place a
 // quest's scarecrow is a broken county and is re-rolled, exactly like one with no stoop.
 {
@@ -125,12 +135,14 @@ for (const z of REGISTERED) {
   BUILDERS[z.id] = z.build;
   CONTRACTS[z.id] = z.contract;
   GIVEN_KEYS[z.id] = z.givenKeys ?? [];
+  GIVEN_VERBS[z.id] = z.givenVerbs;
+  CHECKS[z.id] = z.check;
 }
 
 /** Every zone, in the order the scheduler ticks them: the original five, then the rest by file name. Fixed, so it can never decide an outcome. */
 export const ZONE_IDS: readonly ZoneId[] = Object.keys(BUILDERS);
 
-const MAX_ATTEMPTS = 12;
+const MAX_ATTEMPTS = ZONE_ATTEMPTS;
 let catalogForValidation: Catalog | null = null;
 
 export function buildZone(zone: ZoneId, seed: number): Blueprint {
@@ -139,9 +151,10 @@ export function buildZone(zone: ZoneId, seed: number): Blueprint {
   let lastErrors: string[] = [];
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     const bp = BUILDERS[zone](seed, attempt);
-    const v = validateBlueprint(bp, catalogForValidation, CONTRACTS[zone], GIVEN_KEYS[zone]);
-    if (v.ok) return bp;
-    lastErrors = v.errors;
+    const v = validateBlueprint(bp, catalogForValidation, CONTRACTS[zone], GIVEN_KEYS[zone], { verbs: GIVEN_VERBS[zone] });
+    const errors = v.ok ? (CHECKS[zone]?.(bp, catalogForValidation) ?? []) : v.errors;
+    if (errors.length === 0) return bp;
+    lastErrors = errors;
   }
   throw new Error(`Zone "${zone}" failed validation ${MAX_ATTEMPTS} times for seed ${seed}:\n  ${lastErrors.join("\n  ")}`);
 }

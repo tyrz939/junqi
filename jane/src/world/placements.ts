@@ -14,8 +14,12 @@
 //             poi    a KIND of small place from pois.json, with `near` (a site id): the
 //                    nearest one of that kind. If this seed has none, the nearest small
 //                    place of any kind BECOMES one, so the quest exists on every seed.
-//           `within`: how far from the anchor it may land, in cells.
+//             anchor a small place the skeleton guarantees BY NAME (data/anchors.json)
+//             slot   an exact cell a set chunk offers (a door's place in a wall). The
+//                    thing goes exactly there, solid ground or not.
+//           `within`: how far from the spot it may land, in cells.
 //   unit / prop / rect / mark   what to put there (any combination; they share the spot)
+//   edit    instead of placing: change a prop a chunk already placed (give the car a glovebox)
 //
 // Everything a row names is added to the county's contract, so a seed that cannot place
 // it fails validation and is re-rolled like any other broken county. Nothing is skipped
@@ -31,7 +35,11 @@ import { MACRO, type Skeleton } from "@/world/skeleton";
 export type PlacementRow = {
   key: string;
   count?: number;
-  at: { mark?: string; site?: string; area?: string; poi?: string; near?: string; within?: number };
+  /** With `count` in an area: stand them about the patch, each somewhere of its own, not shoulder to shoulder at its centre. */
+  spread?: boolean;
+  at: { mark?: string; site?: string; area?: string; poi?: string; near?: string; anchor?: string; slot?: string; within?: number };
+  /** The key of a prop a chunk placed, and the fields to set on it. Nothing new is placed. */
+  edit?: Partial<Omit<PropSpawn, "key" | "cx" | "cy" | "def">>;
   unit?: { def: string; phase?: number; facing?: Facing };
   prop?: Omit<PropSpawn, "key" | "cx" | "cy">;
   rect?: { name: string; w: number; h: number };
@@ -49,6 +57,7 @@ export const PLACEMENTS: PlacementRow[] = Object.keys(FILES)
 export function placementContract(rows: readonly PlacementRow[] = PLACEMENTS): { units: string[]; props: string[]; marks: string[]; rects: string[] } {
   const out = { units: [] as string[], props: [] as string[], marks: [] as string[], rects: [] as string[] };
   for (const row of rows) {
+    if (row.edit) continue; // the chunk already promised that prop
     for (const key of keysOf(row)) {
       if (row.unit) out.units.push(key);
       if (row.prop) out.props.push(key);
@@ -64,7 +73,7 @@ function keysOf(row: PlacementRow): string[] {
   return n === 1 ? [row.key] : Array.from({ length: n }, (_, i) => `${row.key}_${i + 1}`);
 }
 
-export type PoiSpot = { x: number; y: number; kind: string };
+export type PoiSpot = { x: number; y: number; kind: string; anchor?: string };
 
 /**
  * Step one, before the small places are dressed: decide which small place each `poi`
@@ -108,6 +117,8 @@ export function claimPois(sk: Skeleton, pois: PoiSpot[], rows: readonly Placemen
 
 export type PlaceCtx = {
   k: Kit;
+  /** Exact cells offered by dressed areas (world/areas.ts), beside the chunks' own. */
+  areaSlots: Readonly<Record<string, [number, number]>>;
   sk: Skeleton;
   chunks: readonly Chunk[];
   pois: readonly PoiSpot[];
@@ -128,13 +139,43 @@ export type Stage = "chunks" | "pois" | "areas";
 export function applyPlacements(ctx: PlaceCtx, stage: Stage, rows: readonly PlacementRow[] = PLACEMENTS): void {
   for (const row of rows) {
     const at = row.at;
-    const rowStage: Stage = at.poi ? "pois" : at.area ? "areas" : "chunks";
+    const rowStage: Stage = at.poi || at.anchor ? "pois" : at.area ? "areas" : "chunks";
     if (rowStage !== stage) continue;
+    if (row.edit) {
+      const target = ctx.k.props.find((p) => p.key === row.key);
+      if (target) Object.assign(target, row.edit);
+      continue;
+    }
+    if (at.slot) {
+      // Exactly there. A door belongs IN the wall, which no search for open ground would ever choose.
+      const cell = ctx.chunks.map((c) => c.slots?.[at.slot!]).find((s) => s !== undefined) ?? ctx.areaSlots[at.slot];
+      if (cell && row.prop) {
+        const size = ctx.sizes[row.prop.def] ?? { w: 1, h: 1 };
+        ctx.k.prop({ ...row.prop, key: row.key, cx: cell[0], cy: cell[1] }, size.w, size.h);
+      }
+      continue;
+    }
     const anchor = anchorOf(ctx, row);
     if (!anchor) continue;
     const size = row.prop ? (ctx.sizes[row.prop.def] ?? { w: 1, h: 1 }) : { w: 1, h: 1 };
     for (const key of keysOf(row)) {
-      const spot = openSpot(ctx.k, anchor, size.w, size.h);
+      // Spread: a point of its own somewhere in the patch, then the nearest open ground to THAT.
+      let from: Anchor = anchor;
+      if (row.spread) {
+        // Inside the patch's circle, not its square: the corners of the square are somebody else's ground
+        // (and somebody else's threat). Small search radius, so it stays where it was thrown.
+        const reach = Math.floor(anchor.within * 0.8);
+        let ox = 0;
+        let oy = 0;
+        for (let tries = 0; tries < 8; tries++) {
+          ox = ctx.k.int(-reach, reach);
+          oy = ctx.k.int(-reach, reach);
+          if (ox * ox + oy * oy <= reach * reach) break;
+          ox = oy = 0;
+        }
+        from = { cx: anchor.cx + ox, cy: anchor.cy + oy, within: 6 };
+      }
+      const spot = openSpot(ctx.k, from, size.w, size.h) ?? (row.spread ? openSpot(ctx.k, anchor, size.w, size.h) : null);
       if (!spot) break;
       if (row.prop) ctx.k.prop({ ...row.prop, key, cx: spot.cx, cy: spot.cy }, size.w, size.h);
       if (row.unit) {
@@ -146,7 +187,8 @@ export function applyPlacements(ctx: PlaceCtx, stage: Stage, rows: readonly Plac
         if (phase > 1) u.phase = phase;
       }
       if (row.rect && key === keysOf(row)[0]) {
-        const r: Rect = { cx: spot.cx - Math.floor(row.rect.w / 2), cy: spot.cy - Math.floor(row.rect.h / 2), w: row.rect.w, h: row.rect.h };
+        // Centred on the NAMED place, not on wherever the thing found room: the text says "at the scarecrow".
+        const r: Rect = { cx: anchor.cx - Math.floor(row.rect.w / 2), cy: anchor.cy - Math.floor(row.rect.h / 2), w: row.rect.w, h: row.rect.h };
         ctx.k.rect(row.rect.name, r);
       }
       if (row.mark && key === keysOf(row)[0]) ctx.k.mark(row.mark, spot.cx, spot.cy + size.h, 1);
@@ -171,6 +213,10 @@ function anchorOf(ctx: PlaceCtx, row: PlacementRow): Anchor | null {
     const a = ctx.sk.areas.find((x) => x.id === at.area);
     if (!a) return null;
     return { cx: a.mx * MACRO + MACRO / 2, cy: a.my * MACRO + MACRO / 2, within: at.within ?? Math.floor(a.row.radius * 0.8) };
+  }
+  if (at.anchor) {
+    const p = ctx.pois.find((x) => x.anchor === at.anchor);
+    return p ? { cx: p.x, cy: p.y + 3, within: at.within ?? 6 } : null;
   }
   if (at.poi) {
     const n = ctx.claimed.get(row.key);

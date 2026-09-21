@@ -5,6 +5,7 @@ import { lineOfSight } from "@/sim/los";
 import { costOfCells, PathFinder } from "@/sim/path";
 import { irandom, rngSeed } from "@/sim/rng";
 import { rotate, turnToward } from "@/sim/angles";
+import { PLACEMENTS } from "@/world/placements";
 
 describe("catalog", () => {
   it("has no dangling ids, bad rows or duplicate recipes", () => {
@@ -27,7 +28,9 @@ describe("catalog", () => {
 
   it("every quest can be given and handed in by some row", () => {
     const c = buildCatalog();
-    const text = JSON.stringify([c.dialogue, c.triggers, c.quests, c.start, c.units, c.items]);
+    // Things placed by name carry action lists too (a haversack that gives its quest when picked up).
+    // This is the quick look at the rows; quests.test.ts builds a county and proves each one can be reached.
+    const text = JSON.stringify([c.dialogue, c.triggers, c.quests, c.start, c.units, c.items, PLACEMENTS]);
     for (const id of Object.keys(c.quests)) {
       expect(text.includes(`"do":"quest","quest":"${id}"`) || c.start.quests.includes(id), `${id} is never offered`).toBe(true);
       expect(text.includes(`"do":"handin","quest":"${id}"`), `${id} can never be handed in`).toBe(true);

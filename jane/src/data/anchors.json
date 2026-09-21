@@ -1,0 +1,22 @@
+[
+  { "id": "halt_well", "kind": "well", "name": "The well on the station road", "where": { "road": ["station", "julie_house"] } },
+  { "id": "halt_signpost", "kind": "signpost", "name": "The signpost on the station road", "where": { "road": ["station", "julie_house"], "apart": { "from": "halt_well", "min": 150 } } },
+  { "id": "halt_cart", "kind": "cart", "name": "The cart on the town road", "where": { "road": ["julie_house", "town"] } },
+  { "id": "carters_cart", "kind": "cart", "name": "The carter's cart", "where": { "road": ["town", "gold_mine"], "dist": { "to": "gold_mine", "min": 150, "max": 380 } } },
+  { "id": "scarecrow_gate", "kind": "scarecrow", "name": "The scarecrow at the farm gate", "where": { "road": ["town", "farm"], "dist": { "to": "farm", "min": 60, "max": 150 } } },
+  { "id": "scarecrow_hedge", "kind": "scarecrow", "name": "The scarecrow in the Long Hedge", "where": { "area": "long_hedge" } },
+  { "id": "scarecrow_top", "kind": "scarecrow", "name": "The scarecrow on the Top Field", "where": { "rim": { "area": "top_field", "toward": "farm" } } },
+  { "id": "scarecrow_top_near", "kind": "none", "name": "Nearer the farm", "where": { "nearAnchor": { "anchor": "scarecrow_top", "min": 32, "max": 70 }, "nearest": "farm" } },
+  { "id": "cottage_allen", "kind": "cottage", "name": "Mrs Allen's cottage", "where": { "nearArea": "sallow_bottom" } },
+  { "id": "cottage_pike", "kind": "cottage", "name": "Pike's cottage", "where": { "nearArea": "long_hedge" } },
+  { "id": "cottage_crane", "kind": "cottage", "name": "Crane's cottage", "where": { "nearArea": "quarry_steps" } },
+  { "id": "nurses_coat", "kind": "hollow_tree", "name": "The tree with the coat in it", "where": { "area": "behind_the_car", "dist": { "to": "car_wood", "min": 80 } } },
+  { "id": "hedge_tree", "kind": "hollow_tree", "name": "The hollow tree on the footpath", "where": { "area": "long_hedge" } },
+  { "id": "pell_shrine", "kind": "shrine", "name": "A. Pell's stone", "where": { "lastLamp": true } },
+  { "id": "lamp_12", "kind": "none", "where": { "after": { "anchor": "pell_shrine", "steps": 2 } } },
+  { "id": "lamp_13", "kind": "none", "where": { "after": { "anchor": "pell_shrine", "steps": 4 } } },
+  { "id": "lamp_15", "kind": "none", "where": { "after": { "anchor": "pell_shrine", "steps": 6 } } },
+  { "id": "pell_brazier", "kind": "none", "where": { "after": { "anchor": "pell_shrine", "steps": 8 } } },
+  { "id": "sallow_jetty", "kind": "jetty", "name": "The jetty at Sallow Bottom", "where": { "area": "sallow_bottom" } },
+  { "id": "quarry_camp", "kind": "camp", "name": "The gang's camp", "where": { "rim": { "area": "quarry_steps", "toward": "gold_mine" } } }
+]

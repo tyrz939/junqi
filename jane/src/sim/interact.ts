@@ -8,7 +8,7 @@
 //   Icebolt    any frost bolt lights props that `answers: "frost"` (2020's blue torches)
 
 import { CELL, PX_PER_METRE, USE_REACH } from "@/sim/constants";
-import { cellOf } from "@/sim/grid";
+import { cellOf, centre } from "@/sim/grid";
 import { flushPropFlags, moveProp, playerOf, propCentre, propsInCells, propsNear, restampCells, touchProp, type World } from "@/sim/runtime";
 import { isNight } from "@/sim/text";
 import { FACING_DX, FACING_DY, type Prop, type School, type Unit } from "@/sim/state";
@@ -17,7 +17,7 @@ import { startDialogue } from "@/sim/dialogue";
 import { bagAdd, bagCount, bagRemove } from "@/sim/inventory";
 import { nearestDrop, pickUp } from "@/sim/loot";
 import { requestTravel } from "@/sim/zones";
-import { distance, isEnemy, moveUnit, spendEnergy } from "@/sim/units";
+import { distance, isEnemy, moveUnit, placeUnit, spendEnergy } from "@/sim/units";
 
 /** 2020: hold USE for 30 frames with 20 energy in the tank; the push costs those 20. */
 export const PUSH_HOLD_TICKS = 30;
@@ -150,6 +150,10 @@ function useProp(w: World, u: Unit, p: Prop): void {
       w.emit({ e: "sfx", name: "locked", x: u.x, y: u.y });
       return;
     }
+    if (p.to.zone === w.zone.id) {
+      hop(w, u, p.to.mark);
+      return;
+    }
     requestTravel(w, p.to.zone, p.to.mark);
     return;
   }
@@ -200,6 +204,25 @@ function useProp(w: World, u: Unit, p: Prop): void {
   if (def.bench) w.emit({ e: "prop", prop: p.id, change: "use" });
 }
 
+/**
+ * A `to` that names the zone she is already in: a way in over a dropped gate, a vent, a
+ * drop. She is moved to the mark and nothing is reloaded. One way by nature: the far end is
+ * a mark, not a prop. Refused with full arms, like any other door.
+ */
+function hop(w: World, u: Unit, markName: string): void {
+  const mark = w.rt.bp.marks[markName];
+  if (!mark) return;
+  if (u.carrying) {
+    w.emit({ e: "toast", text: "I should put this down first" });
+    return;
+  }
+  const free = w.rt.grid.nearestFree(mark.cx, mark.cy, 8, u.id) ?? mark;
+  placeUnit(w, u, centre(free.cx), centre(free.cy));
+  if (mark.facing !== undefined) u.facing = mark.facing;
+  u.hold = 0;
+  w.emit({ e: "sfx", name: "push", x: u.x, y: u.y });
+}
+
 function findKey(w: World, u: Unit, tag: string): string | null {
   if (!u.bag) return null;
   for (const s of u.bag) if (s && w.catalog.items[s.item].opens === tag) return s.item;
@@ -226,8 +249,13 @@ export function nearBench(w: World): boolean {
 
 // --- carry -----------------------------------------------------------------
 
-function footprintFree(w: World, p: Prop, cx: number, cy: number, self: number): boolean {
+function footprintFree(w: World, p: Prop, cx: number, cy: number, self: number, pushed = false): boolean {
   const def = w.catalog.props[p.def];
+  // A sill takes feet and refuses freight: a pushed barrel stops at the mouth of its room.
+  // Carried things are put down wherever there is room, sills included.
+  if (pushed) {
+    for (let y = cy; y < cy + def.h; y++) for (let x = cx; x < cx + def.w; x++) if (w.rt.grid.noPush(x, y)) return false;
+  }
   // Everything pending first, then lift this one prop off the grid, look, and put it
   // back. Only its own footprint is re-stamped: this runs on every push.
   flushPropFlags(w.catalog, w.rt, w.zone);
@@ -313,7 +341,7 @@ export function holdUse(w: World, u: Unit, mx: number, my: number): boolean {
   }
   const nx = p.cx + fx * dir;
   const ny = p.cy + fy * dir;
-  if (!footprintFree(w, p, nx, ny, 0)) {
+  if (!footprintFree(w, p, nx, ny, 0, true)) {
     if (dir < 0) moveUnit(w, u, fx * CELL, fy * CELL);
     return true;
   }

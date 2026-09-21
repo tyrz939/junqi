@@ -1,10 +1,10 @@
 [
-  { "id": "allotments", "name": "The Allotments", "region": "lowfields", "threat": 2, "radius": 90, "where": { "near": "town", "nearMin": 260, "nearMax": 560, "terrain": "flat" } },
-  { "id": "top_field", "name": "The Top Field", "region": "lowfields", "threat": 3, "radius": 140, "where": { "near": "farm", "nearMin": 300, "nearMax": 800, "terrain": "flat", "offRoad": 80 } },
-  { "id": "behind_the_car", "name": "The wood behind the car", "region": "lowfields", "threat": 3, "radius": 120, "where": { "near": "car_wood", "nearMin": 100, "nearMax": 260 } },
-  { "id": "sallow_bottom", "name": "Sallow Bottom", "region": "lowfields", "threat": 2, "radius": 120, "where": { "terrain": "bank" } },
-  { "id": "long_hedge", "name": "The Long Hedge", "region": "lowfields", "threat": 2, "radius": 100, "where": { "terrain": "flat", "offRoad": 120 } },
-  { "id": "quarry_steps", "name": "Quarry Steps", "region": "lowfields", "threat": 3, "radius": 110, "where": { "terrain": "foothill", "offRoad": 60 } },
+  { "id": "allotments", "required": true, "name": "The Allotments", "region": "lowfields", "threat": 2, "radius": 90, "where": { "near": "town", "nearMin": 260, "nearMax": 560, "terrain": "flat" } },
+  { "id": "top_field", "required": true, "name": "The Top Field", "region": "lowfields", "threat": 3, "radius": 140, "where": { "near": "farm", "nearMin": 300, "nearMax": 800, "terrain": "flat", "offRoad": 80 } },
+  { "id": "behind_the_car", "required": true, "name": "The wood behind the car", "region": "lowfields", "threat": 3, "radius": 120, "where": { "near": "car_wood", "nearMin": 100, "nearMax": 260 } },
+  { "id": "sallow_bottom", "required": true, "name": "Sallow Bottom", "region": "lowfields", "threat": 2, "radius": 120, "where": { "terrain": "bank" } },
+  { "id": "long_hedge", "required": true, "name": "The Long Hedge", "region": "lowfields", "threat": 2, "radius": 100, "where": { "terrain": "flat", "offRoad": 120 } },
+  { "id": "quarry_steps", "required": true, "name": "Quarry Steps", "region": "lowfields", "threat": 3, "radius": 110, "where": { "terrain": "foothill", "offRoad": 60 } },
 
   { "id": "drowned_lane", "name": "The Drowned Lane", "region": "waters", "threat": 4, "radius": 130, "where": { "near": "museum", "nearMin": 400, "nearMax": 1000, "onRoad": true } },
   { "id": "eel_beds", "name": "The Eel Beds", "region": "waters", "threat": 3, "radius": 120, "where": { "terrain": "bank" } },

@@ -74,6 +74,37 @@ const MIGRATIONS: Record<number, Migration> = {
     }
     state.growth = { spells };
   },
+  // v5 -> v6: growth by finding. What has been found so far is nothing.
+  5: (state) => {
+    const g = (state.growth ??= { spells: [] }) as Record<string, unknown>;
+    g.strength ??= 0;
+    g.spirit ??= 0;
+    g.found ??= [];
+  },
+  // v6 -> v7: the mine is generated now (world/dungeon/). No saved shape changed, but a mine
+  // saved from the hand-built layout has its chests and gates where the walls now are. It is
+  // dropped and built again on the next visit; anyone who saved inside it walks back in from
+  // the mine mouth. Keys in bags, flags and quests are untouched.
+  6: (state) => {
+    const zones = (state.zones ?? {}) as Record<string, { units?: { id: number }[] } | undefined>;
+    const mine = zones.mine;
+    const county = zones.county;
+    if (!mine || !county) return;
+    type SavedPlayer = { unitId: number; zone: string; lastMark: string; travel: unknown; dialogue: unknown };
+    for (const p of (state.players ?? []) as SavedPlayer[]) {
+      if (p.zone !== "mine") continue;
+      const at = (mine.units ?? []).findIndex((u) => u.id === p.unitId);
+      if (at >= 0) (county.units ??= []).push((mine.units ?? []).splice(at, 1)[0]);
+      p.zone = "county";
+      p.lastMark = "mine_mouth";
+      p.dialogue = null;
+      // Travel is performed at the end of the first tick, which is what puts her on the mark.
+      p.travel = { zone: "county", mark: "mine_mouth" };
+    }
+    const rest = state.rest as { zone?: string } | null | undefined;
+    if (rest && rest.zone === "mine") state.rest = null;
+    delete zones.mine;
+  },
   // v4 -> v5: doors may refuse after dark.
   4: (state) => {
     const zones = (state.zones ?? {}) as Record<string, { props?: Record<string, unknown>[] }>;

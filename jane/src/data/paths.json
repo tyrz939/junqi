@@ -1,0 +1,3 @@
+[
+  { "id": "footpath_three", "from": "town", "via": "hedge_tree", "to": "farm", "width": 2, "marks": ["hedge_stile_town", "hedge_stile_farm"] }
+]

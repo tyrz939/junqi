@@ -1,0 +1,30 @@
+{
+  "lost_glove": {
+    "name": "Red Glove", "icon": "item_glove", "maxStack": 1, "usable": false, "cooldown": 1,
+    "description": "A child's glove, left hand. Hand it in at Castle Halt. The name tape inside says SCHOOL and nothing else."
+  },
+  "lost_hat": {
+    "name": "Felt Hat", "icon": "item_hat", "maxStack": 1, "usable": false, "cooldown": 1,
+    "description": "A man's hat. Hand it in at Castle Halt. He said he would only be a moment."
+  },
+  "lost_tin": {
+    "name": "Dinner Tin", "icon": "item_tin", "maxStack": 1, "usable": false, "cooldown": 1,
+    "description": "A carter's dinner tin. Hand it in at Castle Halt. The sandwiches inside are fresh."
+  },
+  "key_left_luggage": {
+    "name": "Trunk Key", "icon": "item_key_gold", "maxStack": 1, "usable": false, "cooldown": 1, "opens": "left_luggage",
+    "description": "Stamped G.M.Co. Opens the trunk on the platform at Castle Halt. It is heavier than the lock needs."
+  },
+  "key_nurses_case": {
+    "name": "Case Key", "icon": "item_key_iron", "maxStack": 1, "usable": false, "cooldown": 1, "opens": "nurses_case",
+    "description": "A small key on a hospital tag. Opens the nurse's case. The tag gives a ward number and no hospital."
+  },
+  "nurses_parcel": {
+    "name": "Parcel for Mrs Allen", "icon": "item_present", "maxStack": 1, "usable": false, "cooldown": 1,
+    "description": "Dressings, made up and labelled in a neat hand. For the door facing the fire in Castle square."
+  },
+  "haversack": {
+    "name": "Walker's Haversack", "icon": "item_haversack", "maxStack": 1, "usable": false, "cooldown": 1,
+    "description": "Canvas, dry inside. The label says: if found, return to Lost Property, Castle Halt."
+  }
+}

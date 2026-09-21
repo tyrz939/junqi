@@ -12,7 +12,7 @@ import type { Blueprint } from "@/world/blueprint";
 import { buildZone } from "@/world";
 import { buildCounty, COUNTY_H, COUNTY_W, countySkeleton } from "@/world/county";
 import { placementContract, type PlacementRow } from "@/world/placements";
-import { at, MACRO } from "@/world/skeleton";
+import { at, MACRO, SKELETON_ROWS } from "@/world/skeleton";
 
 const SEEDS = [3, 2026];
 const built = new Map<number, { bp: Blueprint; ms: number }>();
@@ -200,6 +200,33 @@ describe("placements: content says where by name", () => {
       expect(bp.marks.t_scarecrow).toBeDefined();
       // Nothing placed is inside a wall.
       for (const key of ["t_board", "t_pocket", "t_pocket_again"]) expect((TILE_FLAGS[bp.tiles[prop(key).cy * bp.w + prop(key).cx]] & F_SOLID) === 0, key).toBe(true);
+    }
+  });
+});
+
+describe("the places the story needs", () => {
+  it("every anchor, dressed area, footpath end and chunk slot exists on every seed, by name", () => {
+    for (const seed of SEEDS) {
+      const bp = county(seed);
+      const sk = countySkeleton(seed, bp.attempts - 1);
+      expect(sk.anchors.map((a) => a.id)).toEqual(SKELETON_ROWS.anchors!.map((r) => r.id));
+      for (const a of sk.anchors) {
+        expect(bp.marks[a.id], `${seed}: mark ${a.id}`).toBeDefined();
+        expect(bp.rects[a.id], `${seed}: rect ${a.id}`).toBeDefined();
+      }
+      for (const m of ["plot_nine", "plot_nine_stake", "allotment_shed", "top_field", "quarry_top", "quarry_adit", "hedge_stile_town", "hedge_stile_farm", "lost_property", "garden_book", "farm_door", "allen_door", "company_notice"]) {
+        expect(bp.marks[m], `${seed}: mark ${m}`).toBeDefined();
+      }
+      for (const r of ["platform", "halt_approach", "plot_nine", "quarry_top", "stoop"]) expect(bp.rects[r], `${seed}: rect ${r}`).toBeDefined();
+      // The first walk's anchors really are on the first walk: within a short step of its road.
+      const first = sk.roads.find((r) => r.from === "station")!;
+      const well = sk.anchors.find((a) => a.id === "halt_well")!;
+      expect(Math.min(...first.cells.map((c) => Math.hypot((c % sk.w) - well.mx, Math.floor(c / sk.w) - well.my)))).toBeLessThan(3.5);
+      // The lamps Pell counted stand in the dark.
+      const lamp = sk.anchors.find((a) => a.id === "lamp_13")!;
+      let lit = 0;
+      for (let oy = -2; oy <= 2; oy++) for (let ox = -2; ox <= 2; ox++) lit += sk.road[at(lamp.mx + ox, lamp.my + oy)] & 2 ? 1 : 0;
+      expect(lit, `${seed}: lamp_13 stands on a dark stretch (another road may pass close by)`).toBeLessThanOrEqual(3);
     }
   });
 });

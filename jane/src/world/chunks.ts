@@ -16,7 +16,8 @@ import type { Rect } from "@/world/blueprint";
 import type { Kit } from "@/world/kit";
 
 export type Gate = [number, number];
-export type Chunk = { id: string; box: Rect; gates: Gate[] };
+/** `slots`: exact cells the chunk offers to content placed by name: where a door goes in a wall it built. */
+export type Chunk = { id: string; box: Rect; gates: Gate[]; slots?: Record<string, [number, number]> };
 type Build = (k: Kit, ox: number, oy: number) => Chunk;
 
 const HOUSE_SIZES: [number, number][] = [
@@ -54,9 +55,13 @@ export const station: Build = (k, _ox, oy) => {
   k.mark("start", 16, my, 0);
   k.prop({ key: "sign_town", def: "sign", cx: 28, cy: my + 3, talk: "sign_town" }, 2, 1);
   k.prop({ key: "station_fire", def: "campfire", cx: 12, cy: my + 5, talk: "fire" }, 2, 2);
-  k.prop({ def: "lamp_post", cx: 25, cy: my - 4 }, 1, 1);
-  k.prop({ def: "crate", cx: 10, cy: my - 7 }, 2, 2);
-  return { id: "station", box, gates: [[box.cx + box.w, my]] };
+  k.prop({ key: "station_lamp", def: "lamp_post", cx: 25, cy: my - 4 }, 1, 1);
+  k.prop({ key: "station_crate", def: "crate", cx: 10, cy: my - 7 }, 2, 2);
+  k.rect("platform", { cx: 8, cy: my - 9, w: 18, h: 19 });
+  // Wide on purpose: whatever changes on the platform changes while she is too far away to see it.
+  k.rect("halt_approach", { cx: 0, cy: box.cy - 30, w: box.w + 34, h: box.h + 60 });
+  k.mark("lost_property", 20, my - 6, 1);
+  return { id: "station", box, gates: [[box.cx + box.w, my]], slots: { station_lamp_dead: [25, my - 4], night_parcel: [12, my - 5] } };
 };
 
 /** Auntie Julie's yard: the fence, the house, the stoop, the dog, the thing in the far corner. */
@@ -98,6 +103,7 @@ export const julieYard: Build = (k, ox, oy) => {
   k.prop({ def: "apple_tree", cx: hx - 8, cy: hy + 10, loot: [{ item: "apple", qty: 3 }] }, 2, 2);
   // The quest skeleton stands in the yard's far corner, in sight of the stoop.
   k.unit("yard_skeleton", "skeleton", box.cx + box.w - 14, box.cy + box.h - 12);
+  k.mark("garden_book", doorX + 11, hy + hh + 2, 1);
   return {
     id: "julie_house",
     box,
@@ -119,12 +125,21 @@ export const town: Build = (k, ox, oy) => {
   k.fill(box.cx, mainY - 2, box.w, 5, Tile.Road);
   k.fill(streetA - 2, box.cy, 5, box.h, Tile.Road);
   k.fill(streetB - 2, box.cy, 5, box.h, Tile.Road);
+  let allenDoor: [number, number] = [box.cx, box.cy];
   for (let row = 0; row < 2; row++) {
     for (let col = 0; col < 3; col++) {
       const lot: Rect = { cx: box.cx + col * 68 + 6, cy: row === 0 ? box.cy + 4 : mainY + 6, w: 54, h: 52 };
       k.fenceRing(lot, row === 0 ? "s" : "n", 5);
       const [w, h] = k.pick(HOUSE_SIZES);
-      k.house(lot.cx + k.int(6, lot.w - w - 6), lot.cy + k.int(6, lot.h - h - 8), w, h);
+      const hx = lot.cx + k.int(6, lot.w - w - 6);
+      const hy = lot.cy + k.int(6, lot.h - h - 8);
+      k.house(hx, hy, w, h);
+      // The house north of the square, whose wall faces the fire: somebody still lives behind that door.
+      if (row === 0 && col === 1) {
+        allenDoor = [hx + Math.floor(w / 2) - 1, hy + h - 2];
+        k.fill(allenDoor[0], hy + h, 2, lot.cy + lot.h - (hy + h), Tile.Dirt);
+        k.mark("allen_door", allenDoor[0], hy + h + 1, 3);
+      }
       if (k.chance(0.6)) {
         const s = k.spot(lot, 2, 2, 1);
         if (s) k.prop({ def: "apple_tree", cx: s.cx, cy: s.cy, loot: [{ item: "apple", qty: 2 }] }, 2, 2);
@@ -151,6 +166,7 @@ export const town: Build = (k, ox, oy) => {
       [streetB, box.cy - 1],
       [streetB, box.cy + box.h],
     ],
+    slots: { allen_door: allenDoor },
   };
 };
 
@@ -166,6 +182,10 @@ export const mineMouth: Build = (k, ox, oy) => {
   k.prop({ key: "sign_mine", def: "sign", cx: mx + 12, cy: my + 9, talk: "sign_mine" }, 2, 1);
   k.prop({ def: "minecart", cx: mx + 2, cy: my + 11 }, 2, 2);
   k.prop({ key: "mine_fire", def: "campfire", cx: mx + 16, cy: my + 14, talk: "fire" }, 2, 2);
+  // The Company's pay hatch: a stub of wall with a gap in it, and nobody behind the gap.
+  k.fill(box.cx + 1, my + 12, 1, 2, Tile.Wall);
+  k.fill(box.cx + 3, my + 12, 1, 2, Tile.Wall);
+  k.mark("company_notice", box.cx + 2, my + 15, 3);
   const g = sideGates(box);
   return { id: "gold_mine", box, gates: [g.s, g.w, g.e] };
 };
@@ -218,8 +238,11 @@ export const farm: Build = (k, ox, oy) => {
   k.pile({ cx: box.cx + 30, cy: my + 4, w: 24, h: 12 }, "barrel", 2);
   k.prop({ def: "lamp_post", cx: box.cx + 30, cy: my - 3 }, 1, 1);
   k.mark("farm_gate", box.cx + 3, my, 0);
+  k.fill(box.cx + 15, box.cy + 15, 4, my - 1 - (box.cy + 15), Tile.Dirt);
+  k.mark("farm_door", box.cx + 16, box.cy + 16, 3);
   const g = sideGates(box);
-  return { id: "farm", box, gates: [g.w, g.e] };
+  // The farmhouse is 22 x 12 at (+6, +3): its wall strip is the bottom three rows, and the door sits in it.
+  return { id: "farm", box, gates: [g.w, g.e], slots: { farm_door: [box.cx + 16, box.cy + 13] } };
 };
 
 /** The wood with the car in it. No road comes here. */
@@ -241,6 +264,7 @@ export const carWood: Build = (k, ox, oy) => {
     5,
     3,
   );
+  k.mark("car_wood", box.cx + 7, box.cy + 8, 3);
   const g = sideGates(box);
   return { id: "car_wood", box, gates: [g.n, g.s, g.w, g.e] };
 };

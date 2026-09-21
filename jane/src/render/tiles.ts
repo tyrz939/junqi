@@ -42,6 +42,7 @@ const SW: Partial<Record<Tile, Swatch>> = {
   [Tile.Cobble]: { base: "#7c7c84", a: "#8e8e96", b: "#64646c" },
   [Tile.Rail]: { base: "#9a7a52", a: "#8a8f98", b: "#4a3626" },
   [Tile.Cliff]: { base: "#6a5c50", a: "#8a7a68", b: "#4a3e36" },
+  [Tile.Sill]: { base: "#5e5040", a: "#8a7a68", b: "#3e3428" },
 };
 
 /** One flat colour per tile id, for the minimap. */
@@ -193,6 +194,21 @@ function paintCell(ctx: CanvasRenderingContext2D, grid: Grid, cx: number, cy: nu
       dot(1, 1, sw.a, 6, 6);
       dot(3, 3, sw.b, 2, 2);
       break;
+    case Tile.Sill: {
+      // A worn threshold: a lip along the side that faces the doorway, studs along the other.
+      // It runs across the mouth, so it is drawn along whichever way its neighbours continue it.
+      const across = grid.tileAt(cx - 1, cy) === Tile.Sill || grid.tileAt(cx + 1, cy) === Tile.Sill;
+      if (across) {
+        dot(0, 1, sw.b, CELL, 1);
+        dot(0, 6, sw.b, CELL, 1);
+        dot((h & 1) === 0 ? 2 : 5, 3, sw.a, 2, 1);
+      } else {
+        dot(1, 0, sw.b, 1, CELL);
+        dot(6, 0, sw.b, 1, CELL);
+        dot(3, (h & 1) === 0 ? 2 : 5, sw.a, 1, 2);
+      }
+      break;
+    }
     default:
       break;
   }

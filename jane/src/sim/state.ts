@@ -256,7 +256,14 @@ export type GameState = {
    * Growth belongs to the world, so everyone at the table is as far along as everyone
    * else. Found upgrades go here as they are built. Items stay personal.
    */
-  growth: { spells: string[] };
+  growth: {
+    spells: string[];
+    /** Strength and spirit found so far, on top of the heroine's row. Julie's jars; gold-leaf pages. */
+    strength: number;
+    spirit: number;
+    /** Ids of the upgrades already taken. An upgrade is a thing in the world, found once, by whoever gets there. */
+    found: string[];
+  };
 };
 
 export type RestPoint = { zone: ZoneId; x: number; y: number };
@@ -271,6 +278,8 @@ export type Action =
   | { do: "handin"; quest: string }
   | { do: "flag"; flag: string; value?: number; add?: number }
   | { do: "rest"; until?: number }
+  /** Growth by finding (PLAN.md 2.6). `id` names the jar or the page: taking it twice does nothing, whoever asks. */
+  | { do: "grow"; stat: "strength" | "spirit"; amount: number; id: string }
   | { do: "give"; item: string; qty?: number }
   | { do: "take"; item: string; qty?: number }
   | { do: "learn"; spell: string }
@@ -285,6 +294,11 @@ export type Action =
   | { do: "aggro"; unit: string }
   | { do: "location"; name: string }
   | { do: "fill"; rect: string; tile: number }
+  /**
+   * The first hazard verb: everything hostile standing in a named rect is hit, once. A hoist
+   * dropped on a boss, a floor grid, any trap. Her friends are spared unless the row says otherwise.
+   */
+  | { do: "strike"; rect: string; amount: number; school: School; effect?: string; hitsFriends?: boolean }
   | { do: "status"; effect: string }
   | { do: "heal"; amount: number }
   | { do: "travel"; zone: ZoneId; mark: string }

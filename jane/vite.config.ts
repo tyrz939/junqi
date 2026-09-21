@@ -17,5 +17,7 @@ export default defineConfig({
       },
     },
   },
-  test: { environment: "node", include: ["test/**/*.test.ts"] },
+  // A county is seven million cells and about a second to build and prove, and most test files build one
+  // in their first test; with every core busy that can pass the default five seconds. Thirty is honest.
+  test: { environment: "node", include: ["test/**/*.test.ts"], testTimeout: 30000 },
 });

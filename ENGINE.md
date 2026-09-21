@@ -107,7 +107,7 @@ Discrete actions are `Command`s (`use`, `bar`, `bagMove`, `craftTake`, `choose`,
 
 - **Cell = 8 px, everywhere.** Path, collision, occupancy, props, triggers, fog blocks (2 cells), ring blocks (2 cells). 2020's `PathTo` fallback used 32.
 - **Metre = 8 px.** Combat speaks metres, movement speaks pixels. Range is measured **between bounds** (`GetDistanceBetweenBounds`): centre distance minus both bodies, so range 0 means touching, which is how every 2020 melee row is written. `bounds` is a unit row field.
-- **`Grid`** (`sim/grid.ts`): two typed arrays and a sparse map. `tiles` u8; `flags` u8 = tile flags | prop flags | an occupied bit; occupancy itself is a `Map` of a few hundred entries, read only when the bit is set, so a seven-million-cell county pays nothing for it (an `Int32Array` would be 29 MB). Flags: `SOLID`, `BLOCK_LOS`, `WATER`, `PROP_SOLID`, `PROP_LOS`, `INDOOR`, `OCC`. **Water blocks feet, not sight**: 2020 set `block_los` on `obj_water`, but `CheckLOS` and projectiles only ever tested `obj_static_solid_parent`, so bolts crossed ponds. The shipped behaviour wins over the dead field.
+- **`Grid`** (`sim/grid.ts`): two typed arrays and a sparse map. `tiles` u8; `flags` u8 = tile flags | prop flags | an occupied bit; occupancy itself is a `Map` of a few hundred entries, read only when the bit is set, so a seven-million-cell county pays nothing for it (an `Int32Array` would be 29 MB). Flags: `SOLID`, `BLOCK_LOS`, `WATER`, `PROP_SOLID`, `PROP_LOS`, `INDOOR`, `OCC`, `NOPUSH` (a sill: feet cross it, a pushed prop does not; §8.3). **Water blocks feet, not sight**: 2020 set `block_los` on `obj_water`, but `CheckLOS` and projectiles only ever tested `obj_static_solid_parent`, so bolts crossed ponds. The shipped behaviour wins over the dead field.
 - **Movement:** a 6×6 px box on the feet, axis-separated sliding against solid cells, flush to the border when blocked. Units never hard-block each other; they shape *paths* through occupancy instead, so nothing wedges in a corridor. Every awake living unit occupies its cell (2020 only marked units in combat).
 - **A\*** (`sim/path.ts`): 8-way, no corner cutting, integer costs 10/14, octile heuristic. Allocation-free after construction: `g`, `from`, `stamp`, `closed` and a binary heap are typed arrays, "cleared" by bumping a generation counter. **Windowed**: the scratch covers a fixed 256 × 256 cells centred on the start, so it is ~3 MB whether the zone is a kitchen or the ten-minute county in `PLAN.md` (grid-sized scratch would be 115 MB there). A goal inside the window that cannot be reached is `null`; a goal beyond the window returns the best partial path toward it and the walker re-plans on arrival. Every search has a **node budget** (6000) and a max cost; failure means leash, as 2020's "path longer than max ⇒ fail" did. The **goal cell is always enterable** for the search, because it is normally someone's feet. At most 4 searches run per tick; the rest wait a tick.
   The 2026 build returned `null` when the goal was occupied (so nothing could chase a standing player), sorted an array on every pop, keyed nodes by string, and had no bound: an unreachable goal on a 40k-cell map cost 1.1 s.
@@ -194,6 +194,75 @@ The validator re-floods only when something that blocks has changed (a gate open
 
 **The seed viewer** (`viewer.html`, a second Vite page, in the build) draws 24 counties at a time straight off the same `Skeleton`: land, regions or threat, day or night, walking times from the platform, and for one county every place in the order you reach it, every rule with its measured value, every road and patch. It exists because a generator is reviewed by looking at two dozen maps, not by playing two dozen games.
 
+### 8.3 Dungeons (`world/dungeon/`)
+
+**Authored mission, generated space, proven result.** `DUNGEONS.md` is the design; this is what is built. The Gold Mine is the first dungeon made this way: `world/mine.ts` is three lines, and `buildZone("mine", seed)` still returns an ordinary `Blueprint`, so the sim, the save format and the renderer do not know a dungeon was generated.
+
+| Thing | Where | |
+| --- | --- | --- |
+| The mission | `data/dungeons/<id>.json` (`DungeonDef`, `world/dungeon/types.ts`) | Nodes in a fixed `order` (entrance, teach, key, fight, hub, rest, miniboss, bosskey, reward, boss, side), each naming a template **pool**, what its sockets **hold**, the contract names it **binds**, its `heat`, and any trigger rows of its own. Edges are `open`, `key` (a gate), `verb` (a prop that fills the corridor: the broken steps), `oneway opens_on <flag>` (a gate a flag unlocks), `sight`, and `lockin` as an `also` on another kind. Not a catalog table: the sim never reads a mission |
+| Room templates | `world/dungeon/rooms/<dungeon>/*.room`, loaded raw with `import.meta.glob` (`pools.ts`) | A text grid like the art, a header above, a legend below (`room.ts` has the format). `#` wall, `.` floor, `_` sill; doors are rim characters (`n1`, `e1`; `n2` on a room of two bays); sockets are runs of a legend character (`plate:main 2x2`, `spawn`, `dress:torch`); marks; named rects. A template declares `grants` and `blocks` and is held to them |
+| The lattice | `layout.ts` | Bays of 36 x 28 cells. A room fills 1 x 1 or 2 x 1 bays and its rim stays 3 cells inside them; a door is 3 cells on the middle of a bay side. **Corridors run on the lines between bays**, 3 wide, so none can break into a room. The lines are a small graph of corners and side-middles (`Lanes`); two facing doors share a middle (a straight stub), anything else is routed middle to corner to corner to middle. **A lane node belongs to one corridor**, so corridors never merge or cross, which is what keeps a lock a lock |
+
+**The steps** (`generate.ts`, `layout.ts`), every choice from the Kit's stream for `(seed, zone, attempt)`, lists in a fixed order before any pick:
+
+1. **choose** a template for each node from its pool, seeded, no template twice in one dungeon. One with nowhere to go at all is re-picked, up to three times.
+2. **embed**, depth first. The entrance goes on an edge of the lattice. Then critical nodes in mission order, each once a neighbour of it stands (a room of more than one bay goes down as soon as it can: the big rooms are the hard ones to fit). Candidates are every free bay times every transform that offers different doors; each is joined to every placed neighbour at once, and scored: straight stubs over routed lanes, room left for the doors still owed, the boss far from the entrance, the rest room near the hub, a cycle's open end near its other end. The best three are tried in a seeded order, then the next three; a node with nowhere to go sends the search back. Four embeddings of 160 placements each are tried per attempt; they cost no cells. Side rooms go last, up to the budget, and one that does not fit is left out.
+3. **route**: done during embedding, so a layout that exists is a layout whose corridors exist.
+4. **lock**: a `key` or flag gate is `gate_h` / `gate_v` in the one corridor cell just outside the far room's door. A `verb` prop stands in the middle of the corridor; a 3 x 2 prop in a corridor that runs east to west gets a neck of wall exactly as long as it is. `lockin` is the macro below.
+5. **fill**: holdings into sockets (a holding's prop must have its socket's footprint), bound units, then the **enemy mix**: `round(heat x baseHeat)` capped by the template's `heat`, spent on the mission's bestiary, two to a spawn socket at most, every unit at the mission's `phase`. Then dressing by the mission's table (`dress:torch` is a torch eight times in ten).
+6. **name**: a bound thing gets its contract name, everything else `${zone}_${node}_${socket}` (`mine_vault_page_main`). **Never a coordinate, never the attempt**: a jar's `grow` id is its own key, so a re-rolled layout cannot hand the same jar out twice or lose one. Inside authored lists, `@socket` and `@self` are resolved to those names.
+7. **emit** the Blueprint and the trigger rows it carries (`Blueprint.triggers`, below).
+
+The last attempt (`ZONE_ATTEMPTS - 1`) stamps the mission's hand-placed `fallback` through the same steps: never throw at the player. On 1,000 seeds the mine has not needed it; the worst seed took three attempts (965 of the 1,000 took one), at about 55 ms a mine with every proof.
+
+**The lock-in macro** (`writeLockin`): one function writes every lock-in, so none can forget its reset. For a room entered by gate G: an `enter` row on the room's rect locks G, **shows a way in**, wakes the boss (or spawns the listed units) and says so; its `reset` undoes all of it; a `while` row, when they are dead, unlocks G, hides the way in and sets `${zone}_${node}_clear`. The way in is a hidden `way_in` prop in the corridor beside G whose `to` names this zone and a mark inside the rect. Hidden until the room seals, so it is never a way round a keyed gate; it is how a friend who was late, or who died and walked back, follows. The rect is the whole floor on purpose: the clear only fires while someone stands in it, and a death only re-opens the gate when nobody alive is left in it, so a rect that stops short of the walls forgets whoever is at a lever. The gate stands outside the room, so it cannot land on anyone.
+
+**What the engine gained for it**, each a row or a verb:
+
+- `Blueprint.triggers`: trigger rows a builder writes itself. `zoneTriggers(catalog, bp)` (`sim/runtime.ts`) merges them with the catalog's rows for the zone; the sim looks rows up in `rt.triggers`, the validator reads the same merge and checks the blueprint's rows as the catalog checks its own (`actionRowErrors`), plus that every prop, mark and rect they name exists. An id in both is a validation error.
+- A prop's `to` may name the zone she is in: she is moved to the mark, nothing reloads (`hop` in `interact.ts`).
+- Tile `Sill` with flag `F_NOPUSH`: feet cross it, a pushed prop does not (`footprintFree`). It is the floor just inside every door in use, so barrels never leave their room: none can jam a corridor or be lost to the plate that needs it.
+- Action `strike`: everything hostile in a named rect is hit once, with an effect if the row names one; her friends are spared unless `hitsFriends`. The blow is the puller's, so the kill and the party's penalty are hers. Effect `staggered` is a row: speed 0 and every school taken double.
+- Rows: `jar`, `jar_big`, `leaf_page` (their `use` is `grow` with their own key), `way_in`, `notice`, `hoist_lever`, and the mine's `page_repair`, `broken_hoist`, `broken_cabinet`, `firstaid_stove`. A holding may be `guardedBy` units of its room: it is locked until they are dead, and the generator writes the row that unlocks it.
+
+**The solver, extended** (`validate.ts`). `validateBlueprint` takes options and can return a trace (which flood first reached each cell, which flood opened each prop).
+
+| | |
+| --- | --- |
+| `verbs` | Spells known at the door. Given, a prop that `answers` Repair, Grow or a school fires only once a spell of that kind is known, and spells are learned from `learn` rows in a reached prop's `use` list or `talk` tree. Left out, nothing is gated, which is how the older zones are still judged. The mine is solved knowing only Icebolt, so "Repair is in the drawer, behind the Headmaster" is proven, not assumed |
+| `when` | A `while` row fires only when its conditions can hold: a flag some fired list set, a unit that was reached, or one a reached `enter` row would spawn onto a reached mark. A negated condition never blocks |
+| hops | A `to` into the same zone is a one-way edge: its mark becomes another place the flood starts from |
+| `withhold`, `shut` | Ablation. Take one thing away (a key tag, a spell, a flag, a prop's lists) or hold a gate shut, and see what is still reached |
+
+**The checks** (`checks.ts`, run by `buildZone` through a zone's `check` hook; any error re-rolls the candidate, and the error names the check):
+
+| | |
+| --- | --- |
+| C1 | Every critical node is reached, first-reached floods never decrease along `order`, and **every lock holds**: solve again without the key tag, the spell or the flag, and the far room must be unreached. C2 (no key behind its own lock) falls out |
+| C3 | On the room graph, every order of spending plain keys (a tag that fits more than one lock) reaches every critical node. `lintDef` runs it on the mission alone |
+| C4 | For each material, everything every sink can eat is no more than chests and certain drops supply |
+| C5 | The room that teaches a verb has something to try it on, holds what that costs, and the teacher is `guardedBy` every hostile in the room |
+| C6 | Each lock-in: the way in is hidden, shown by the row that locks, hidden by the clear and the reset, lands inside the rect, and is reached with the gate held shut |
+| C7, C8 | The first completion is walked (critical nodes in order, real cell distances with the locks opened so far out of the way). Its length is in the mission's band, and the rest room (no heat, no spawn sockets, off the hub, something to rest at) is first reached in its band |
+| C9 | The room graph has a loop; the boss, and the end of some `shortcut` edge, are within `restToBossCells` of the rest room with everything open |
+| C10 | The verb's first lock and the boss gate: some cell reached in a strictly earlier flood sees the prop, on screen, walls only |
+| C11 | A plate whose release re-locks something has a pushable in its room with a push path onto it, dressing included, sills respected |
+| C12 | No generated row shows or locks something solid inside the rect that trips it |
+
+Templates are proven separately (`harness.ts`): each is stamped **alone**, holding what its mission node holds, a dead-end stub on every door, in every transform it claims, and solved from each door in turn: every `grants` socket reached, every other door walked out of, and every `blocks` held with the `until` socket's lists suppressed. `lintRoom` holds the grid rules (rim, sills, nothing solid on a sill or between facing doors, spawns four cells from a door, two cells of width between doors, a push path to every plate, no lever under its own hoist, every claimed transform fits its bays).
+
+**Adding a dungeon** is four files and no engine code, unless it needs a new verb:
+
+1. `data/dungeons/<id>.json`: the mission (`DungeonDef`). Copy `mine.json`. `id` is the zone id. Every name the story, a quest or a test will use goes in a node's `binds` (`{ "from": "chest:vault", "as": "vault_chest", "what": "prop" }`; `from` is a socket, mark or rect id of the template) or on an edge (`gateAs`, `propAs`). Everything else is named for you.
+2. `world/dungeon/rooms/<id>/*.room`: at least one template per pool the mission names, every variant of a pool with the same sockets, marks and rects the mission uses. Give every room four optional doors unless it must not have them (the entrance keeps a wall for its way out): the layout needs the freedom, and a door nobody uses is wall again.
+3. `world/zones/<id>.ts`: `const d = dungeonZone("<id>"); export const zone: ZoneDef = { id: d.id, build: d.build, contract: d.contract, givenKeys: d.givenKeys, givenVerbs: d.givenVerbs, check: d.check };` The contract is derived from the binds.
+4. Rows for anything new it places (`data/props/<id>.json`, `data/units/<id>.json`, `data/dialogue/<id>.json`, art in `art/props/<id>.ts`), and a door somewhere that leads to its entrance mark.
+
+Then `test/templates.test.ts` holds its rooms to the lint and the harness with no change (it walks every mission there is), and a copy of `test/dungeon-gen.test.ts`'s first test holds its seeds. Tune `budget.critPathCells`, `restAt` and `restToBossCells` to what the first hundred seeds measure, not the other way round: a band nothing fits is twelve attempts and a fallback.
+
+Not built yet: the stateful flood for two-state buildings (the Museum brings it), `reveal` for the wall notice, the adit (it needs a county chunk), the powder store (it needs Explosion), the template bot harness, and the dungeon page of the seed viewer.
+
 ## 9. Rendering
 
 Canvas2D into a **low-resolution framebuffer**, upscaled by an integer factor with `image-rendering: pixelated`. The view is ~216 px tall (2020's camera was 256) and as wide as the window's aspect makes it, as 2020's was. At 1080p that is 5×. The UI is DOM at native resolution, so "zoomed world, crisp UI" needs no second camera.
@@ -233,6 +302,7 @@ DOM, behind one interface (`ui/host.ts`). It reads state, sends commands, asks t
 - save storage (`test/storage.test.ts`): the gzip round trip on a real save and its size, then the slot rules over an in-memory database and text store: writes to one slot land in order, a read waits its turn, the `localStorage` and no-gzip fallbacks, the one-time migration (old key included, junk left alone), a corrupt slot reading as empty. The IndexedDB wrapper itself is out of a headless test's reach
 - **the county** (`test/county.test.ts`): two full counties. Every mark can be walked to from the platform; the first walk is road and lit; nothing spawns in a haven, on the first walk or in a wall, and threat sets the phase; same seed, same county; and **a bot steps off the train and walks the lit road to Julie's gate in two to four minutes**
 - **the county skeleton** (`test/skeleton.test.ts`): 64 seeds in the suite, 1,000 as a soak. Every row of `sites.json` holds, same seed same county, ten minutes across by road, the School above the town, patches in every region, night and lamps, bridges, speed
+- **generated dungeons** (`test/templates.test.ts`, `test/dungeon-gen.test.ts`, `test/dungeon-verbs.test.ts`): every `.room` file lints clean and proves its grants and blocks alone, from every door, in every transform; 64 seeds of the mine (1,000 as a soak behind `DUNGEON_SEEDS`) pass the solver and C1 to C12 with no fallback; same seed, same mine; names survive re-rolls; the checks reject what they should; a solo bot finishes the whole mine on three seeds, drawer, cabinet, first aid, track, hoist and nook included; the sill, the way in, `strike`, blueprint triggers, the solver's verbs, `when` and hops; save v6 to v7
 - determinism, save → load → continue, replay, A\* bounds, LOS, catalog integrity ("every quest can be given and handed in by some row"), art integrity, five zones × 25 seeds through the solver
 
 The 2026 audit caught its two worst bugs in seconds with a 150-line headless harness the project never had. This is that harness, kept.

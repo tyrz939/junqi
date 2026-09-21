@@ -7,8 +7,11 @@
       { "when": [{ "if": "questReady", "quest": "rats_below" }], "node": "rats_done" },
       { "when": [{ "if": "questReady", "quest": "stock_the_bench" }], "node": "bench_done" },
       { "when": [{ "if": "questReady", "quest": "defeat_skeleton" }], "node": "reward" },
+      { "when": [{ "if": "questReady", "quest": "rose_and_stone" }], "node": "stoneskin_done" },
       { "when": [{ "if": "questActive", "quest": "defeat_skeleton" }], "node": "waiting" },
       { "when": [{ "if": "questDone", "quest": "defeat_skeleton", "not": true }], "node": "intro" },
+      { "when": [{ "if": "questDone", "quest": "number_fourteen" }, { "if": "flag", "flag": "said_fourteen" }, { "if": "flag", "flag": "dog_heard_lamps", "not": true }], "node": "lamps_counted_f" },
+      { "when": [{ "if": "questDone", "quest": "number_fourteen" }, { "if": "flag", "flag": "dog_heard_lamps", "not": true }], "node": "lamps_counted" },
       { "when": [{ "if": "questDone", "quest": "the_burial" }], "node": "epilogue" },
       { "when": [{ "if": "questDone", "quest": "the_mine" }, { "if": "flag", "flag": "offered_burial", "not": true }], "node": "offer_burial" },
       { "when": [{ "if": "questDone", "quest": "rats_below" }, { "if": "flag", "flag": "offered_mine", "not": true }], "node": "offer_mine" },
@@ -121,6 +124,32 @@
       },
       "epilogue": {
         "lines": ["Sunday's train is a week away. The county still turns. Walk."]
+      },
+      "stoneskin_done": {
+        "lines": [
+          "Rose and stone. Grey, and it does not settle. That is right.",
+          "There were six on the shelf by the door. Then there were none, and then there was only the door.",
+          "Lily and gold dust make the next one. There were lilies on that shelf as well."
+        ],
+        "options": [{ "label": "Here", "actions": [{ "do": "handin", "quest": "rose_and_stone" }] }, { "label": "Not yet" }]
+      },
+      "lamps_counted": {
+        "lines": [
+          "You went and counted. I did ask.",
+          "Twelve, thirteen, fifteen. Yes. Fourteen was there the night Pell went up the road to it with his ladder. I watched him go. I did not watch him come back."
+        ],
+        "actions": [{ "do": "flag", "flag": "dog_heard_lamps" }]
+      },
+      "lamps_counted_f": {
+        "lines": [
+          "You went and counted. I did ask.",
+          "Twelve, thirteen, fifteen. Yes. Fourteen was there the night Pell went up the road to it with his ladder. I watched him go. I did not watch him come back."
+        ],
+        "goto": "lamps_fourteen"
+      },
+      "lamps_fourteen": {
+        "lines": ["You told the stone fourteen. That was kind or it was careless. Out here they come to the same thing, {name}."],
+        "actions": [{ "do": "flag", "flag": "dog_heard_lamps" }]
       },
       "idle": {
         "lines": ["I am listening for her. It is a full-time job."],

@@ -3,9 +3,10 @@ import { bagAdd, bagCount } from "@/sim/inventory";
 import { questReady } from "@/sim/quests";
 import { moveProp, propCentre } from "@/sim/runtime";
 import { NO_INPUT, Sim } from "@/sim/sim";
+import type { Unit } from "@/sim/state";
 import { SNAKE_FOLLOW_TICKS } from "@/sim/snake";
 import { maxHp } from "@/sim/units";
-import { face, idle, walkTo, walkToProp , yardCatalog } from "./bot";
+import { idle, talkThrough, walkTo, walkToProp , yardCatalog } from "./bot";
 
 const catalog = yardCatalog();
 
@@ -30,6 +31,15 @@ function lootAllDrops(sim: Sim): void {
     walkTo(sim, d.x, d.y, 5);
     sim.command({ t: "use" });
   }
+}
+
+/**
+ * One unit, by hand. `dev kill` reaches 25 m through walls, and in a generated mine the next
+ * room over may be the boss's: the chain must kill who it means to and nobody else.
+ */
+function slay(sim: Sim, u: Unit): void {
+  u.incoming.push({ amount: 1e6, school: "physical", from: sim.player.id, crit: false });
+  idle(sim, 3);
 }
 
 function killAwake(sim: Sim): void {
@@ -64,7 +74,6 @@ describe("mine", () => {
     const sim = godSim(12, "mine");
     const p = sim.player;
     sim.command({ t: "dev", dev: { op: "quest", quest: "the_mine" } });
-    sim.command({ t: "dev", dev: { op: "learn", spell: "repair" } });
 
     // The chest only opens while something sits on the plate.
     useProp(sim, "plate_chest");
@@ -83,7 +92,7 @@ describe("mine", () => {
     useProp(sim, "guard_chest");
     const clerk = sim.rt.unitsByKey.get("clerk")!;
     walkTo(sim, clerk.x, clerk.y, 30);
-    killAwake(sim);
+    slay(sim, clerk);
     lootAllDrops(sim);
     expect(bagCount(p, "key_mine_headmaster")).toBe(1);
 
@@ -91,15 +100,19 @@ describe("mine", () => {
     useProp(sim, "gate_hm");
     const hm = sim.rt.unitsByKey.get("headmaster")!;
     walkTo(sim, hm.x, hm.y, 30);
-    killAwake(sim);
+    slay(sim, hm);
     lootAllDrops(sim);
     expect(bagCount(p, "key_mine_vault")).toBe(1);
 
-    // Repair costs wood, and refuses without it.
+    // Repair is found down here now: in his confiscated drawer, which stayed shut while he stood.
+    expect(p.book).not.toContain("repair");
+    useProp(sim, "hm_drawer");
+    talkThrough(sim);
+    expect(p.book).toContain("repair");
+
+    // Repair costs wood, and refuses without it. The mine is generated, so the steps may face any way.
     const steps = sim.rt.propsByKey.get("broken_steps")!;
-    const c = propCentre(sim.catalog, steps);
-    walkTo(sim, c.x + 20, c.y, 4);
-    face(sim, c.x, c.y);
+    expect(walkToProp(sim, "broken_steps"), "walk to broken_steps").toBe(true);
     const wood = bagCount(p, "wood");
     expect(wood).toBe(2);
     sim.command({ t: "cast", spell: "repair" });
@@ -119,7 +132,7 @@ describe("mine", () => {
     const gate = sim.rt.propsByKey.get("gate_boss")!;
     expect(gate.locked).toBe(true); // the gate dropped behind us
     expect(boss.combat).toBe("combat");
-    killAwake(sim);
+    slay(sim, boss);
     idle(sim, 5);
     expect(gate.locked).toBe(false);
     expect(questReady(sim, "the_mine")).toBe(true);

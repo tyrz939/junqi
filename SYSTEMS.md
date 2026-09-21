@@ -40,7 +40,7 @@ This file was rewritten in September 2026 when the Phaser remake was archived. T
 | **LATER** | A real 2020 idea, not needed to ship the county. A row or a module when it lands |
 | **NEVER** | Do not port |
 
-Test names are from `jane/test/`: **E** `engine`, **S** `sim`, **D** `dungeons`, **W** `world`, **R** `replay`, **A** `art`, **T** `rest`, **C** `coop`, **G** `storage`, **B** `budget`, **K** `skeleton`, **Y** `county`.
+Test names are from `jane/test/`: **E** `engine`, **S** `sim`, **D** `dungeons`, **W** `world`, **R** `replay`, **A** `art`, **T** `rest`, **C** `coop`, **G** `storage`, **B** `budget`, **K** `skeleton`, **Y** `county`, **Q** `quests`, **L** `templates`, **N** `dungeon-gen`, **V** `dungeon-verbs`.
 
 ---
 
@@ -162,9 +162,14 @@ Three quest types only: `kill`, `acquire`, `location`.
 | --- | --- |
 | Quest row + progress; rewards are an action list | **IN** — S |
 | `acquire` reads the bag live; `location` reads a persistent flag, so early visits count | **IN** — S golden path (the letter completes on arrival) |
-| Every quest can be given and handed in by some row | **IN** — E |
+| Every quest can be given and handed in by some row | **IN** — E (the rows, placements included), Q (a built county: dialogue, triggers, item use, unit deaths and the action lists on placed props, followed to a fixed point, on two seeds) |
+| Every `location` a quest names is produced by something reachable; every `kill` target is spawned; every `acquire` target can be had (loot on a placed prop, a guaranteed drop, a recipe, a `give`) | **IN** — Q |
 | Dialogue tree: first-match `start` rules, lines, ≤ 2 options, actions, goto | **IN** — S golden path |
-| Hand-in rules sit **above** state rules in every tree (2026's dog hid two hand-ins behind a flag) | **SHAPE** — convention; the E quest test catches the worst case |
+| Hand-in rules sit **above** state rules in every tree (2026's dog hid two hand-ins behind a flag), and every `questReady` row leads to its hand-in. One documented exception: `garden_book`'s night line for `rose_and_stone`, whose hand-in home is the dog | **IN** — Q |
+| The Lowfields side quests (`QUESTS.md` Part 3): 19 quests in 8 chains, all rows in `data/*/lowfields.json` fragments, placed by name on every seed (`data/placements/lowfields.json`), things as givers (a book, a board, a door, a stone, a glovebox, a slate) | **IN** — Q plays all 19 end to end: offered, accepted, done, handed in, paid, and not payable twice |
+| Quest growth: jars and pages arrive through `grow` with an id, once per world however many are paid | **IN** — Q (three jars, three pages), C (the verb) |
+| After the bell: `night` rows in trees, a `nightOnly` creature, and show/hide behind wide rects so nothing is seen to change (the parcel, the scarecrow omen) | **IN** — Q |
+| A quest survives being done out of order (place first, item first, giver last; the Tenant put down before the notice is read) | **IN** — Q |
 | Story beats as a separate system | **NEVER** — flags and quests already say it. The 2026 `beats.json` failed silently out of order |
 | WoW paste / "Good Job JoJo" | **NEVER** |
 
@@ -193,14 +198,19 @@ idle (regen, patrol, bait, aggro+LOS every 10 ticks)
 | Doors that are not answered after dark: `nightLock` on the placed prop, a line said instead of opening, outside doors only so nobody is shut in | **IN** — T. No door in the county carries it yet; it is a choice made door by door |
 | Locked door + key tag; gates (solid while locked) | **IN** — D |
 | Chest loot once; keeps what did not fit | **IN** — D |
-| Push / pull: hold USE 30 ticks, 20 energy, one cell | **SHAPE** — code; the tests place the barrel rather than push it |
+| Push / pull: hold USE 30 ticks, 20 energy, one cell | **IN** (push) — V: a bot holds USE against a barrel and it moves one cell / **SHAPE** (pull) |
+| Sill: tile flag `F_NOPUSH`. Feet cross it, a pushed prop does not; the floor just inside every generated door, so barrels never leave their room | **IN** — V: the second push, onto the sill, is refused; she walks out over it |
 | Carry / put down in front, never on your own cell | **SHAPE** |
 | Pressure plate held by a unit **or a pushable**; `release` re-locks | **IN** — D: mine |
 | Repair: world-kind spell, prop `answers: "repair"`, consumes `needs`, refuses without | **IN** — D: mine |
 | School touch: frost wakes `torch_blue` | **IN** — D: burial |
 | Learn-spell prop (a dialogue tree with a `learn` action) | **IN** — S golden path |
-| Lever / toggle (`use` list, `on` state) | **SHAPE** — no lever is placed yet |
+| Lever / toggle (`use` list, `on` state) | **IN** — N: the hoist lever, hidden until its hoist is mended, pulled once |
+| `strike`: everything hostile in a named rect is hit once, optional effect, friends spared unless `hitsFriends`; the blow (kill, quest count, party penalty) is the puller's | **IN** — V; N: a mended hoist dropped on Iron Knuckles, 200 and `staggered` |
+| A prop's `to` may name the zone she is in: moved to the mark, nothing reloaded (way in, vent, drop) | **IN** — V: same runtime, same zone state, no travel pending |
+| Growth props: `jar`, `jar_big`, `leaf_page`; `use` is `grow` with the prop's own key as the id | **IN** — N: the cabinet jar gives once and only once; the vault page hides itself |
 | Trigger rects: `enter` / `while`, conditions, actions, `reset` on player death | **IN** — D: lock-in, arena, torches |
+| `Blueprint.triggers`: rows a builder writes, merged with the catalog's for the zone in the sim and in the validator; checked like catalog rows; an id in both is an error | **IN** — V: the mine's arena rows ride on the blueprint and re-arm on death; the validator refuses a clash, a missing prop, a bad row |
 | Location | **IN** — S, D |
 | Fog: one bit per 16 px block, interiors, in zone state | **SHAPE** |
 | Tile edits as `tileDeltas` (`fill` action) | **SHAPE** — nothing uses it yet; it is what Grow and drain will be |
@@ -285,6 +295,7 @@ A change is off-bar if:
 | Load ring / zones, travel, fog | `sim/ring.ts` `zones.ts` |
 | Save codec, hash / replay | `sim/save.ts` `replay.ts` |
 | Zones + solver | `world/county.ts` `interiors.ts` `mine.ts` `burial.ts` `kit.ts` `validate.ts` `index.ts` |
+| Generated dungeons | `world/dungeon/` (`types.ts` `room.ts` `pools.ts` `layout.ts` `generate.ts` `checks.ts` `harness.ts` `index.ts`), missions in `data/dungeons/*.json`, rooms in `world/dungeon/rooms/<dungeon>/*.room` |
 | Art | `art/units.ts` `props.ts` `icons.ts` |
 | Renderer | `render/renderer.ts` `tiles.ts` `lighting.ts` `atlas.ts` |
 | Input | `input/input.ts` |
@@ -314,6 +325,28 @@ A change is off-bar if:
 | Later dungeons stand as shapes with a mark and no door | | **IN** — Y (marks) |
 | Map window: one pixel per block of cells past 900 across; roads and water win the block | `ui/map.ts` | **SHAPE** |
 | Set chunks as data, not code; the School as a far landmark in the renderer | — | **LATER** |
+
+## 11c. Generated dungeons (`DUNGEONS.md`, `ENGINE.md` §8.3)
+
+| Contract | Live | Bar |
+| --- | --- | --- |
+| Room templates | `.room` text grids in pools (`world/dungeon/rooms/<dungeon>/`), parsed, turned and mirrored by `room.ts` | **IN** — L: every file parses; doors stay on the rim and sockets on the floor in every transform |
+| Template lint | rim, sills, nothing solid on a sill or between facing doors, spawns 4 cells from a door, 2 cells of width between doors, a push path to every plate, no lever under its own hoist, every claimed transform fits its bays | **IN** — L: clean on every file; each rule shown to catch a room broken for it |
+| Pool contract | variants differ in grid, never in required doors, needs, grants or blocks; every socket, mark and rect a mission names exists in every variant | **IN** — L |
+| Template harness | the room alone, holding what its node holds, a stub on every door: grants reached and every door left from every door; blocks hold by ablation | **IN** — L: all 23 mine templates; a careless mission that unlocks the plate chest is caught |
+| Mission lint | grants follow from holdings; a sight edge has a corridor; C3 on the mission alone | **IN** — L |
+| The generator | choose, embed on the bay lattice (depth first, scored), route on the lines between bays, lock, fill, name, emit | **IN** — N: 64 seeds (1,000 as a soak), zero fallbacks, at most 3 attempts on the 1,000; same seed same mine; hub and boss room in many different bays |
+| Fallback embedding | the last attempt stamps the mission's hand-placed layout through the same steps | **IN** — N: it is a whole mine and passes every check |
+| Names | bound names from the mission; the rest `${zone}_${node}_${socket}`, never a coordinate or the attempt | **IN** — N: every `grow` id is its prop's key, and the set is the same across attempts, seeds and the fallback; the derived contract contains the hand-written one |
+| Heat | `round(heat x baseHeat)` capped by the template, spent on the mission's bestiary, two to a socket, every unit at the mission's phase; rest rooms empty | **IN** — N |
+| Lock-in macro | one function: lock, show the way in, wake or spawn, toast; reset; clear. The way in is hidden until the room seals | **IN** — V: hidden, shown, climbed, hidden again; a death re-arms it. N: C6 |
+| Solver: verbs, `when`, hops, ablation | `validateBlueprint` options `verbs`, `withhold`, `shut`, `entry`, `trace` | **IN** — V: no Repair, no gallery; no flag, no nook; Headmaster shut away, no drawer; the arena reached over a shut gate only when the way in shows |
+| Checks C1 to C12 | `world/dungeon/checks.ts`, run by `buildZone` through the zone's `check` hook; a failing candidate is re-rolled and the error names the check | **IN** — N: every seed passes, and each of C1 and C3 to C12 rejects by name a blueprint or a mission broken for it (C2 falls out of C1) |
+| The Gold Mine, generated | mission in `data/dungeons/mine.json`: Repair in the Headmaster's drawer (shut while he stands) with a safe first use in the same room, First Aid off the hub, the track shortcut on the store's iron, four hoists, the nook and its gates, the cage side room; two variants per pool, one arena | **IN** — D: the old chain, now reading the drawer. N: a solo bot does all of it on three seeds |
+| Save v7 | a mine saved from the hand-built layout is dropped; whoever saved in it is put at the mine mouth | **IN** — V |
+| Co-op tags on templates (`plate_or_friend`, `twin_hold`, `lure_and_lever`) | parsed and kept; nothing reads them | **SHAPE** — the two-bot tests of `DUNGEONS.md` 2.8 are not written |
+| Template bot harness (a bot plays each room in each transform) | — | **LATER** |
+| Stateful flood (two-state buildings), `reveal`, the adit, the powder store, the dungeon viewer page | — | **LATER** — the Museum brings the first; the adit needs a county chunk; the powder store needs Explosion |
 
 ## 12. Intentionally later, in order
 

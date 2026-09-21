@@ -19,12 +19,18 @@ import { F_SOLID, Tile, TILE_FLAGS } from "@/sim/grid";
 import { hashString } from "@/sim/rng";
 import type { Blueprint, Rect } from "@/world/blueprint";
 import { CHUNKS, type Chunk, type Gate } from "@/world/chunks";
+import pathsJson from "@/data/paths.json";
+import { AREA_DRESS } from "@/world/areas";
 import { Kit } from "@/world/kit";
 import { applyPlacements, claimPois, PLACEMENTS, type PlaceCtx, type PlacementRow, type PoiSpot } from "@/world/placements";
 import { propFootprints } from "@/sim/catalog";
 import { at, Biome, buildSkeleton, COUNTY_H, COUNTY_W, MACRO, Region, ROAD_LIT, SKEL_H, SKEL_W, type Skeleton } from "@/world/skeleton";
 
 export { COUNTY_H, COUNTY_W };
+
+/** A footpath: from one site to another by way of a named small place or patch. `marks` name its two ends. */
+type PathRow = { id: string; from: string; via: string; to: string; width: number; marks: [string, string] };
+const PATHS = pathsJson as unknown as PathRow[];
 
 const ROAD_WIDTH = 4;
 const FIELD_HERBS = ["pansy", "nasturtium", "honeylace_lily", "hemshade_root"];
@@ -73,6 +79,10 @@ export function buildCounty(seed: number, attempt: number, rows: readonly Placem
   const sk = countySkeleton(seed, attempt);
   const k = new Kit("county", COUNTY_W, COUNTY_H, seed, attempt, Tile.Grass);
   paintLand(k, sk, seed);
+  // Patches that are places, not only a threat number (the allotments, the planted field, the quarry face).
+  // Before the roads and chunks, so a road that crosses one simply crosses it.
+  const areaSlots: Record<string, [number, number]> = {};
+  for (const a of sk.areas) Object.assign(areaSlots, AREA_DRESS[a.id]?.(k, a.mx * MACRO + MACRO / 2, a.my * MACRO + MACRO / 2, a.row.radius) ?? {});
 
   // Tree line round the edge: the county is a bowl, not a plane.
   k.fill(0, 0, COUNTY_W, 4, Tile.Tree);
@@ -97,6 +107,28 @@ export function buildCounty(seed: number, attempt: number, rows: readonly Placem
     lines.push(k.stroke([[centre(grave.mx), centre(grave.my)], [centre(burial.mx), centre(burial.my)]], 2, Tile.Dirt, 2));
     lit.push([]);
   }
+  // Footpaths (data/paths.json): site to site by way of a named small place. Laid like roads, centre to
+  // centre, so the chunks overwrite their ends and the links below bring them round to a gate.
+  const footpaths: { row: PathRow; line: [number, number][] }[] = [];
+  for (const row of PATHS) {
+    const from = sk.sites.find((s) => s.id === row.from);
+    const to = sk.sites.find((s) => s.id === row.to);
+    const via = sk.anchors.find((a) => a.id === row.via) ?? sk.areas.find((a) => a.id === row.via);
+    if (!from || !to || !via) continue;
+    const line = k.stroke(
+      [
+        [centre(from.mx), centre(from.my)],
+        [centre(via.mx), centre(via.my) + 5],
+        [centre(to.mx), centre(to.my)],
+      ],
+      row.width,
+      Tile.Dirt,
+      2,
+    );
+    lines.push(line);
+    lit.push([]);
+    footpaths.push({ row, line });
+  }
 
   // --- 3 set chunks, 4 links ------------------------------------------------------
   const chunks: Chunk[] = [];
@@ -105,11 +137,25 @@ export function buildCounty(seed: number, attempt: number, rows: readonly Placem
     if (build) chunks.push(build(k, centre(s.mx), centre(s.my)));
   }
   for (const line of lines) for (const c of chunks) linkRoad(k, line, c);
+  // A footpath's two ends get a mark each, a little way out from the chunk it leaves: where the fingerpost stands.
+  for (const { row, line } of footpaths) {
+    const outside = (p: readonly [number, number]): boolean => chunks.every((c) => p[0] < c.box.cx - 8 || p[1] < c.box.cy - 8 || p[0] >= c.box.cx + c.box.w + 8 || p[1] >= c.box.cy + c.box.h + 8);
+    const a = line.findIndex(outside);
+    const b = line.length - 1 - [...line].reverse().findIndex(outside);
+    if (a < 0 || b <= a) continue;
+    const pa = line[Math.min(b, a + 24)];
+    const pb = line[Math.max(a, b - 24)];
+    for (const [name, p] of [[row.marks[0], pa], [row.marks[1], pb]] as const) {
+      clearing(k, p[0], p[1]);
+      k.mark(name, p[0], p[1], 1);
+    }
+  }
 
   // Content placed by name (data/placements): what goes inside a chunk goes in now, while its open ground is still open.
-  const pois: PoiSpot[] = sk.pois.map((p) => ({ x: centre(p.mx), y: centre(p.my), kind: p.kind }));
+  const pois: PoiSpot[] = sk.pois.map((p) => ({ x: centre(p.mx), y: centre(p.my), kind: p.kind, anchor: p.anchor }));
   const place: PlaceCtx = {
     k,
+    areaSlots,
     sk,
     chunks,
     pois,
@@ -131,7 +177,9 @@ export function buildCounty(seed: number, attempt: number, rows: readonly Placem
     }
   });
   // Small places: dressed as the kind the seed rolled, or the kind a placement row needed them to be.
-  pois.forEach((p, n) => smallPlace(k, p.kind, p.x, p.y, n));
+  pois.forEach((p, n) => smallPlace(k, p.kind, p.x, p.y, p.anchor ?? `poi_${n}`));
+  // A place the story needs is known by its name: a mark (made above) and a rect of the same name round it.
+  for (const p of pois) if (p.anchor && k.marks[p.anchor]) k.rect(p.anchor, { cx: p.x - 6, cy: p.y - 4, w: 13, h: 11 });
   applyPlacements(place, "pois", rows);
   for (const p of pois) k.claim(p.x - 7, p.y - 6, 15, 13);
   scatter(k, sk);
@@ -439,15 +487,26 @@ function straight(a: readonly [number, number], b: readonly [number, number], la
  * walk past, and named marks (`poi_<n>`) for the side quests and omens that will be written
  * onto them; nothing here talks yet.
  */
-function smallPlace(k: Kit, kind: string, x: number, y: number, n: number): void {
-  if (k.isClaimed(x, y) || k.get(x, y) === Tile.Water) return;
+function smallPlace(k: Kit, kind: string, x: number, y: number, name: string): void {
+  // A rolled place that landed on a road or in water is simply dropped. A place the story NEEDS is not:
+  // it keeps its mark (on ground made open for it) and goes undressed, because a path runs through it.
+  if (k.isClaimed(x, y) || k.get(x, y) === Tile.Water) {
+    if (name.startsWith("poi_")) return;
+    kind = "none";
+  }
   const pad = (w: number, h: number, t: Tile): void => {
     k.fill(x - Math.floor(w / 2), y - Math.floor(h / 2), w, h, t);
   };
+  // A place the story needs gets its GROUND here and its THINGS from data/placements, where they can carry
+  // a key, a dialogue tree and loot. Only the seed's own rolled places are furnished by this function.
+  const rolled = name.startsWith("poi_");
   const put = (def: string, ox: number, oy: number, w = 1, h = 1): void => {
-    if (k.fits(x + ox, y + oy, w, h)) k.prop({ def, cx: x + ox, cy: y + oy }, w, h);
+    if (rolled && k.fits(x + ox, y + oy, w, h)) k.prop({ def, cx: x + ox, cy: y + oy }, w, h);
   };
   switch (kind) {
+    case "none":
+      // A bare spot the story needs (a lamp post will stand here, not a shrine): a mark and nothing else.
+      break;
     case "well":
       pad(5, 5, Tile.Cobble);
       k.set(x, y, Tile.Water);
@@ -506,7 +565,20 @@ function smallPlace(k: Kit, kind: string, x: number, y: number, n: number): void
   }
   // Whatever was drawn, the place can be stood at: the mark's own cell and its neighbours are open ground.
   for (let oy = 2; oy <= 4; oy++) for (let ox = -1; ox <= 1; ox++) if (k.solid(x + ox, y + oy)) k.set(x + ox, y + oy, Tile.Dirt);
-  k.mark(`poi_${n}`, x, y + 3, 1);
+  // A place the story needs also gets room: a note, a lamp post, a scarecrow will be set down beside the mark,
+  // and the text says "at the well", not "somewhere in the thicket near the well".
+  if (!rolled) clearing(k, x, y + 3);
+  k.mark(name, x, y + 3, 1);
+}
+
+/** Open ground round a named spot: trees, bushes, outcrops and rubble give way; water and buildings do not. */
+function clearing(k: Kit, x: number, y: number): void {
+  for (let oy = -5; oy <= 5; oy++) {
+    for (let ox = -7; ox <= 7; ox++) {
+      const t = k.get(x + ox, y + oy);
+      if (t === Tile.Tree || t === Tile.Bush || t === Tile.Cliff || t === Tile.Rubble) k.set(x + ox, y + oy, Tile.Grass);
+    }
+  }
 }
 
 function scatter(k: Kit, sk: Skeleton): void {

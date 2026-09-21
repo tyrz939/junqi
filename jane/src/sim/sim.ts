@@ -151,7 +151,7 @@ export function newGameState(seed: number, name?: string): GameState {
     flags: {},
     quests: { active: [], done: [] },
     rest: null,
-    growth: { spells: [] },
+    growth: { spells: [], strength: 0, spirit: 0, found: [] },
   };
 }
 
@@ -477,16 +477,22 @@ export class Sim implements World {
     if (t0) this.lastTickMs = performance.now() - t0;
   }
 
-  /** `dayOnly` units are simply not there between 21:00 and 06:00. Nobody sees them go. */
+  /**
+   * `dayOnly` units are simply not there between 21:00 and 06:00; `nightOnly` ones are not
+   * there the rest of the time. Nobody sees either go, or come.
+   */
   private stepDayOnly(w: ZoneCtx, force = false): void {
     const night = isNight(this.state);
     const watchers = force ? [] : this.party.units();
     for (const u of w.zone.units) {
-      if (!this.catalog.units[u.def].dayOnly || u.hidden === night) continue;
+      const def = this.catalog.units[u.def];
+      if (!def.dayOnly && !def.nightOnly) continue;
+      const away = def.dayOnly ? night : !night;
+      if (u.hidden === away) continue;
       // Never vanish or appear while any of them is looking straight at it.
       if (watchers.some((p) => w.rt.units.has(p.id) && Math.abs(u.x - p.x) < 120 && Math.abs(u.y - p.y) < 80)) continue;
-      u.hidden = night;
-      if (night) vacate(w.rt, u);
+      u.hidden = away;
+      if (away) vacate(w.rt, u);
       else if (u.alive && u.awake) occupy(w.rt, u);
     }
   }
@@ -549,9 +555,9 @@ export class Sim implements World {
     // Lock-ins undo themselves and re-arm, so a death never leaves a gate shut in your face.
     // With company they hold for as long as someone is still alive inside.
     for (const t of w.zone.triggers) {
-      const def = this.catalog.triggers[t.id];
-      const rect = w.rt.bp.rects[def.rect];
-      if (!t.fired || !def.reset || !rect) continue;
+      const def = w.rt.triggers[t.id];
+      const rect = def ? w.rt.bp.rects[def.rect] : undefined;
+      if (!def || !t.fired || !def.reset || !rect) continue;
       if (rect.w < w.rt.grid.w && playerInRect(w, rect, player)) continue;
       runActions(w, def.reset, u.id);
       t.fired = false;
@@ -828,6 +834,12 @@ export class Sim implements World {
         for (const q of this.catalog.start.quests) giveQuest(w, q);
       }
       // Catch up: whatever the table learned while she was away, or before she ever came.
+      if (fresh) {
+        body.strength += s.growth.strength;
+        body.spirit += s.growth.spirit;
+        body.hp = maxHp(body);
+        body.mp = maxMp(body);
+      }
       for (const spell of s.growth.spells) {
         if (!body.book.includes(spell)) body.book.push(spell);
         bindLearned(player, spell);

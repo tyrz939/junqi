@@ -1,0 +1,202 @@
+{
+  "id": "mine",
+  "name": "Goldskin Mine",
+  "phase": 1,
+  "tiles": { "floor": "CaveFloor", "wall": "CaveWall", "alt": [] },
+  "indoor": true,
+  "ambient": 0.16,
+  "lattice": { "cols": 4, "rows": 4 },
+  "givenVerbs": ["icebolt"],
+  "givenKeys": [],
+  "nodes": [
+    {
+      "id": "entry", "kind": "entrance", "order": 0, "critical": true, "pool": "mine.entry", "heat": 0.2,
+      "holds": [
+        { "socket": "exit:main", "prop": "door", "to": { "zone": "county", "mark": "mine_mouth" } },
+        { "socket": "notice:main", "prop": "notice", "talk": "notice_mine" }
+      ],
+      "binds": [
+        { "from": "exit:main", "as": "exit_door", "what": "prop" },
+        { "from": "entry", "as": "entry", "what": "mark" },
+        { "from": "room", "as": "mine_entry", "what": "rect" }
+      ],
+      "demands": [], "grants": []
+    },
+    {
+      "id": "plate", "kind": "teach", "order": 1, "critical": true, "pool": "mine.plate", "heat": 0.4,
+      "holds": [
+        { "socket": "plate:main", "prop": "plate", "use": [{ "do": "unlock", "prop": "@chest:reward" }], "release": [{ "do": "lock", "prop": "@chest:reward" }] },
+        { "socket": "chest:reward", "loot": [{ "item": "key_generic", "qty": 1 }], "locked": true, "label": "The chest" },
+        { "socket": "push:main", "prop": "barrel" }
+      ],
+      "binds": [
+        { "from": "plate:main", "as": "plate_a", "what": "prop" },
+        { "from": "chest:reward", "as": "plate_chest", "what": "prop" },
+        { "from": "push:main", "as": "plate_barrel", "what": "prop" }
+      ],
+      "demands": [], "grants": [{ "key": "generic" }]
+    },
+    {
+      "id": "store", "kind": "key", "order": 1, "critical": true, "pool": "mine.store", "heat": 0.4,
+      "holds": [{ "socket": "chest:main", "loot": [{ "item": "key_generic", "qty": 1 }, { "item": "iron", "qty": 4 }] }],
+      "binds": [{ "from": "chest:main", "as": "store_chest", "what": "prop" }],
+      "demands": [], "grants": [{ "key": "generic" }, { "item": "iron", "qty": 4 }]
+    },
+    {
+      "id": "guard", "kind": "fight", "order": 2, "critical": true, "pool": "mine.guard", "heat": 0.8,
+      "holds": [
+        { "socket": "unit:clerk", "unit": "skeleton_clerk" },
+        { "socket": "chest:main", "loot": [{ "item": "wood", "qty": 2 }] }
+      ],
+      "binds": [
+        { "from": "unit:clerk", "as": "clerk", "what": "unit" },
+        { "from": "chest:main", "as": "guard_chest", "what": "prop" }
+      ],
+      "demands": [], "grants": [{ "key": "mine_headmaster" }, { "item": "wood", "qty": 2 }]
+    },
+    {
+      "id": "core", "kind": "hub", "order": 3, "critical": true, "pool": "mine.core", "heat": 0.6,
+      "holds": [{ "socket": "prop:cart", "prop": "minecart" }],
+      "binds": [],
+      "demands": [], "grants": []
+    },
+    {
+      "id": "firstaid", "kind": "rest", "order": 4, "critical": true, "pool": "mine.firstaid", "heat": 0,
+      "holds": [{ "socket": "rest:main", "prop": "firstaid_stove", "talk": "firstaid_stove" }],
+      "binds": [{ "from": "rest:main", "as": "firstaid_stove", "what": "prop" }],
+      "demands": [], "grants": []
+    },
+    {
+      "id": "office", "kind": "miniboss", "order": 5, "critical": true, "pool": "mine.office", "heat": 0,
+      "holds": [
+        { "socket": "unit:headmaster", "unit": "headmaster" },
+        { "socket": "prop:drawer", "prop": "page_repair", "talk": "page_repair", "label": "The drawer", "guardedBy": ["@unit:headmaster"] },
+        {
+          "socket": "verbprop:cabinet", "prop": "broken_cabinet", "needs": [{ "item": "wood", "qty": 1 }], "label": "Broken cabinet",
+          "use": [{ "do": "show", "prop": "@jar:cabinet" }, { "do": "toast", "text": "The door hangs straight. There is a jar at the back." }]
+        },
+        { "socket": "jar:cabinet", "prop": "jar", "hidden": true },
+        { "socket": "chest:wood", "loot": [{ "item": "wood", "qty": 1 }] },
+        { "socket": "chest:office", "loot": [{ "item": "apple", "qty": 2 }, { "item": "coal", "qty": 2 }] }
+      ],
+      "binds": [
+        { "from": "unit:headmaster", "as": "headmaster", "what": "unit" },
+        { "from": "prop:drawer", "as": "hm_drawer", "what": "prop" },
+        { "from": "verbprop:cabinet", "as": "hm_cabinet", "what": "prop" },
+        { "from": "jar:cabinet", "as": "cabinet_jar", "what": "prop" },
+        { "from": "chest:office", "as": "office_chest", "what": "prop" }
+      ],
+      "demands": [], "grants": [{ "verb": "repair" }, { "key": "mine_vault" }, { "item": "wood", "qty": 1 }]
+    },
+    {
+      "id": "gallery", "kind": "bosskey", "order": 6, "critical": true, "pool": "mine.gallery", "heat": 0.5,
+      "holds": [{ "socket": "chest:bosskey", "prop": "boss_chest", "loot": [{ "item": "key_mine_boss", "qty": 1 }] }],
+      "binds": [{ "from": "chest:bosskey", "as": "boss_key_chest", "what": "prop" }],
+      "demands": ["repair"], "grants": [{ "key": "mine_boss" }]
+    },
+    {
+      "id": "vault", "kind": "reward", "order": 6, "critical": true, "pool": "mine.vault", "heat": 0.6,
+      "holds": [
+        { "socket": "chest:vault", "prop": "boss_chest", "loot": [{ "item": "gold_bar", "qty": 5 }, { "item": "key_museum", "qty": 1 }] },
+        { "socket": "page:main", "prop": "leaf_page", "use": [{ "do": "grow", "stat": "spirit", "amount": 6, "id": "@self" }, { "do": "hide", "prop": "@self" }] }
+      ],
+      "binds": [{ "from": "chest:vault", "as": "vault_chest", "what": "prop" }],
+      "demands": [], "grants": [{ "key": "museum" }]
+    },
+    {
+      "id": "arena", "kind": "boss", "order": 7, "critical": true, "pool": "mine.arena", "heat": 0,
+      "holds": [
+        { "socket": "boss:main", "unit": "iron_knuckles" },
+        { "socket": "chest:arena", "loot": [{ "item": "iron", "qty": 4 }] },
+        { "socket": "verbprop:hoist1", "prop": "broken_hoist", "needs": [{ "item": "iron", "qty": 1 }], "label": "Broken hoist", "use": [{ "do": "show", "prop": "@lever:hoist1" }, { "do": "toast", "text": "The hoist takes the weight. There is a lever." }] },
+        { "socket": "verbprop:hoist2", "prop": "broken_hoist", "needs": [{ "item": "iron", "qty": 1 }], "label": "Broken hoist", "use": [{ "do": "show", "prop": "@lever:hoist2" }, { "do": "toast", "text": "The hoist takes the weight. There is a lever." }] },
+        { "socket": "verbprop:hoist3", "prop": "broken_hoist", "needs": [{ "item": "iron", "qty": 1 }], "label": "Broken hoist", "use": [{ "do": "show", "prop": "@lever:hoist3" }, { "do": "toast", "text": "The hoist takes the weight. There is a lever." }] },
+        { "socket": "verbprop:hoist4", "prop": "broken_hoist", "needs": [{ "item": "iron", "qty": 1 }], "label": "Broken hoist", "use": [{ "do": "show", "prop": "@lever:hoist4" }, { "do": "toast", "text": "The hoist takes the weight. There is a lever." }] },
+        { "socket": "lever:hoist1", "prop": "hoist_lever", "hidden": true, "use": [{ "do": "strike", "rect": "@drop:1", "amount": 200, "school": "physical", "effect": "staggered" }] },
+        { "socket": "lever:hoist2", "prop": "hoist_lever", "hidden": true, "use": [{ "do": "strike", "rect": "@drop:2", "amount": 200, "school": "physical", "effect": "staggered" }] },
+        { "socket": "lever:hoist3", "prop": "hoist_lever", "hidden": true, "use": [{ "do": "strike", "rect": "@drop:3", "amount": 200, "school": "physical", "effect": "staggered" }] },
+        { "socket": "lever:hoist4", "prop": "hoist_lever", "hidden": true, "use": [{ "do": "strike", "rect": "@drop:4", "amount": 200, "school": "physical", "effect": "staggered" }] }
+      ],
+      "binds": [
+        { "from": "boss:main", "as": "iron_knuckles", "what": "unit" },
+        { "from": "inner", "as": "boss_arena", "what": "rect" },
+        { "from": "chest:arena", "as": "arena_chest", "what": "prop" }
+      ],
+      "demands": [], "grants": [{ "flag": "mine_cleared" }, { "item": "iron", "qty": 4 }]
+    },
+    {
+      "id": "nook", "kind": "reward", "order": 8, "critical": true, "pool": "mine.nook", "heat": 0,
+      "holds": [{ "socket": "jar:big", "prop": "jar_big" }],
+      "binds": [{ "from": "jar:big", "as": "mine_big_jar", "what": "prop" }],
+      "demands": [], "grants": []
+    },
+    {
+      "id": "cage", "kind": "side", "order": 6, "critical": false, "pool": "mine.cage", "heat": 0.3,
+      "holds": [
+        { "socket": "plate:a", "prop": "plate", "use": [{ "do": "flag", "flag": "mine_cage_a", "value": 1 }], "release": [{ "do": "flag", "flag": "mine_cage_a", "value": 0 }] },
+        { "socket": "plate:b", "prop": "plate", "use": [{ "do": "flag", "flag": "mine_cage_b", "value": 1 }], "release": [{ "do": "flag", "flag": "mine_cage_b", "value": 0 }] },
+        { "socket": "page:main", "prop": "leaf_page", "locked": true, "label": "The page" }
+      ],
+      "binds": [],
+      "demands": [], "grants": [],
+      "triggers": [
+        {
+          "id": "both_down", "mode": "while", "once": true,
+          "when": [{ "if": "flag", "flag": "mine_cage_a" }, { "if": "flag", "flag": "mine_cage_b" }],
+          "actions": [{ "do": "unlock", "prop": "@page:main" }, { "do": "toast", "text": "Both plates are down. Something lets go of the page." }]
+        }
+      ]
+    }
+  ],
+  "edges": [
+    { "from": "entry", "to": "plate", "kind": { "t": "open" } },
+    { "from": "entry", "to": "store", "kind": { "t": "open" } },
+    { "from": "entry", "to": "guard", "kind": { "t": "key", "tag": "generic", "gateAs": "gate_generic_a" } },
+    { "from": "store", "to": "core", "kind": { "t": "key", "tag": "generic", "gateAs": "gate_generic_b" } },
+    { "from": "core", "to": "firstaid", "kind": { "t": "open" } },
+    { "from": "core", "to": "office", "kind": { "t": "key", "tag": "mine_headmaster", "gateAs": "gate_hm", "label": "The Headmaster's door" } },
+    {
+      "from": "core", "to": "gallery",
+      "kind": { "t": "verb", "verb": "repair", "prop": "broken_steps", "needs": [{ "item": "wood", "qty": 2 }], "propAs": "broken_steps", "label": "Broken steps", "toast": "The steps hold." }
+    },
+    { "from": "core", "to": "arena", "kind": { "t": "sight" } },
+    { "from": "office", "to": "vault", "kind": { "t": "key", "tag": "mine_vault", "gateAs": "gate_vault", "label": "The vault" } },
+    { "from": "core", "to": "arena", "kind": { "t": "key", "tag": "mine_boss", "gateAs": "gate_boss", "label": "The big door" }, "also": [{ "t": "lockin" }] },
+    { "from": "arena", "to": "nook", "kind": { "t": "oneway", "how": "opens_on", "flag": "mine_cleared" } },
+    { "from": "nook", "to": "gallery", "kind": { "t": "oneway", "how": "opens_on", "flag": "mine_cleared" }, "shortcut": true },
+    {
+      "from": "gallery", "to": "plate", "shortcut": true,
+      "kind": { "t": "verb", "verb": "repair", "prop": "broken_track", "needs": [{ "item": "iron", "qty": 4 }], "propAs": "broken_track", "label": "Broken track", "toast": "The rails meet. The cart could run again, if there were anywhere for it to go." }
+    },
+    { "from": "gallery", "to": "cage", "kind": { "t": "open" } }
+  ],
+  "budget": {
+    "sideRooms": [0, 1],
+    "critPathCells": [750, 1700],
+    "restAt": [0.2, 0.65],
+    "restToBossCells": 220,
+    "baseHeat": 6,
+    "enemies": { "rat": 1, "bat": 1, "skeleton": 2 }
+  },
+  "dress": {
+    "torch": { "props": ["torch"], "chance": 0.8 },
+    "pile": { "props": ["barrel", "crate"], "chance": 0.5 },
+    "pillar": { "props": ["pillar"], "chance": 1 },
+    "shelf": { "props": ["shelf"], "chance": 1 },
+    "desk": { "props": ["table"], "chance": 1 },
+    "cot": { "props": ["table"], "chance": 1 }
+  },
+  "fallback": [
+    { "node": "entry", "template": "mine.entry.a", "bay": [1, 3], "turn": 0, "mirror": false },
+    { "node": "plate", "template": "mine.plate.a", "bay": [0, 3], "turn": 0, "mirror": false },
+    { "node": "store", "template": "mine.store.a", "bay": [1, 2], "turn": 0, "mirror": false },
+    { "node": "guard", "template": "mine.guard.a", "bay": [2, 3], "turn": 0, "mirror": false },
+    { "node": "core", "template": "mine.core.a", "bay": [1, 1], "turn": 0, "mirror": false },
+    { "node": "firstaid", "template": "mine.firstaid.a", "bay": [2, 2], "turn": 0, "mirror": false },
+    { "node": "office", "template": "mine.office.a", "bay": [3, 1], "turn": 0, "mirror": false },
+    { "node": "gallery", "template": "mine.gallery.a", "bay": [0, 1], "turn": 0, "mirror": false },
+    { "node": "vault", "template": "mine.vault.a", "bay": [3, 0], "turn": 0, "mirror": false },
+    { "node": "arena", "template": "mine.arena.a", "bay": [1, 0], "turn": 0, "mirror": false },
+    { "node": "nook", "template": "mine.nook.a", "bay": [0, 0], "turn": 0, "mirror": false }
+  ]
+}
