@@ -324,7 +324,10 @@ A change is off-bar if:
 | Nothing spawns in a haven, on the first walk, or in a wall | | **IN** — Y |
 | Later dungeons stand as shapes with a mark and no door | | **IN** — Y (marks) |
 | Map window: one pixel per block of cells past 900 across; roads and water win the block | `ui/map.ts` | **SHAPE** |
-| Set chunks as data, not code; the School as a far landmark in the renderer | — | **LATER** |
+| Places the story needs, guaranteed by name: anchors with marks and rects, required patches, footpath ends, chunk and area slots | `skeleton/anchors.ts`, `areas.ts`, `data/anchors.json`, `data/paths.json` | **IN** — Y, K |
+| Content placed by name: mark, site, patch (optionally spread), kind of small place, anchor, slot, edit | `world/placements.ts` | **IN** — Y, Q |
+| The School as a far landmark along the top of the screen | `render/renderer.ts` `drawSchool` | **SHAPE** — hand-checked from the platform and the town |
+| Set chunks as data, not code | — | **LATER** |
 
 ## 11c. Generated dungeons (`DUNGEONS.md`, `ENGINE.md` §8.3)
 
