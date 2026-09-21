@@ -38,5 +38,49 @@
     "chunk": "lake_statue",
     "key": "icehouse_door",
     "label": "The ice house"
+  },
+  {
+    "zone": "pipes",
+    "near": "town",
+    "def": "manhole",
+    "key": "pipes_grate",
+    "label": "A grate in the road",
+    "mark": "pipes_mouth"
+  },
+  {
+    "zone": "pipes",
+    "near": "town",
+    "def": "manhole",
+    "key": "manhole_cover_1",
+    "label": "A manhole cover",
+    "mark": "manhole_1",
+    "fromBelow": true
+  },
+  {
+    "zone": "pipes",
+    "near": "graveyard",
+    "def": "manhole",
+    "key": "manhole_cover_2",
+    "label": "A manhole cover",
+    "mark": "manhole_2",
+    "fromBelow": true
+  },
+  {
+    "zone": "pipes",
+    "near": "museum",
+    "def": "manhole",
+    "key": "manhole_cover_3",
+    "label": "A manhole cover",
+    "mark": "manhole_3",
+    "fromBelow": true
+  },
+  {
+    "zone": "pipes",
+    "near": "factory",
+    "def": "manhole",
+    "key": "manhole_cover_4",
+    "label": "A manhole cover",
+    "mark": "manhole_4",
+    "fromBelow": true
   }
 ]

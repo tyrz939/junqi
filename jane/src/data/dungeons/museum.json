@@ -226,7 +226,7 @@
       "id": "magic", "kind": "boss", "order": 8, "critical": true, "pool": "museum.magic", "heat": 0,
       "holds": [
         { "socket": "boss:main", "unit": "attendant" },
-        { "socket": "chest:arena", "loot": [{ "item": "potion_red", "qty": 2 }], "label": "A case of samples" },
+        { "socket": "chest:arena", "loot": [{ "item": "potion_lifesteal", "qty": 2 }], "label": "A case of samples" },
         { "socket": "prop:lamp_a", "prop": "museum_gallery_lamp" },
         { "socket": "prop:lamp_b", "prop": "museum_gallery_lamp" },
         {

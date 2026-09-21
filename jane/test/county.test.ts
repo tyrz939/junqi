@@ -13,7 +13,7 @@ import { buildZone } from "@/world";
 import doorsJson from "@/data/doors.json";
 import { hasZone } from "@/world/registry";
 
-const DOORS = doorsJson as { zone: string; key: string }[];
+const DOORS = doorsJson as { zone: string; key: string; mark?: string; fromBelow?: boolean }[];
 import { buildCounty, COUNTY_H, COUNTY_W, countySkeleton } from "@/world/county";
 import { placementContract, type PlacementRow } from "@/world/placements";
 import { at, MACRO, SKELETON_ROWS } from "@/world/skeleton";
@@ -242,9 +242,32 @@ describe("doors into the dungeons", () => {
       const door = bp.props.find((p) => p.key === d.key);
       expect(Boolean(door), `${d.key} exists iff zone ${d.zone} does`).toBe(hasZone(d.zone));
       if (!door) continue;
-      expect(door.to).toEqual({ zone: d.zone, mark: "entry" });
+      // A way that opens from below (a manhole) is a mark and a cover, not a door down.
+      expect(door.to).toEqual(d.fromBelow ? undefined : { zone: d.zone, mark: "entry" });
+      if (d.mark) expect(bp.marks[d.mark], d.mark).toBeDefined();
       // Set into the face, with open ground in front of it to walk up to.
       expect(TILE_FLAGS[bp.tiles[(door.cy + 3) * bp.w + door.cx]] & F_SOLID).toBe(0);
+    }
+  });
+});
+
+describe("what Electric gives back to the county", () => {
+  it("the longest dark roads get a relay box and a run of dead lamps, and sparking the box lights them for good", () => {
+    for (const seed of SEEDS) {
+      const bp = county(seed);
+      const boxes = bp.props.filter((p) => p.def === "relay_box");
+      const lamps = bp.props.filter((p) => p.def === "lamp_run");
+      expect(boxes.length, `${seed}: relay boxes`).toBeGreaterThanOrEqual(1);
+      expect(lamps.length, `${seed}: dead lamps`).toBeGreaterThanOrEqual(3 * boxes.length);
+      for (const box of boxes) {
+        // Every lamp the box promises is really out there, and it says so once it is done.
+        const switched = (box.use ?? []).filter((a) => a.do === "switch").map((a) => (a.do === "switch" ? a.prop : ""));
+        expect(switched.length).toBeGreaterThanOrEqual(3);
+        for (const key of switched) expect(bp.props.some((p) => p.key === key), `${seed}: ${key}`).toBe(true);
+        expect((box.use ?? []).some((a) => a.do === "flag" && a.flag.startsWith("lamps_"))).toBe(true);
+      }
+      // They stand dark: a lamp only lights once its box is sparked.
+      for (const l of lamps) expect(l.on ?? false).toBe(false);
     }
   });
 });

@@ -16,6 +16,7 @@
 // are the contract; every coordinate is the seed's.
 
 import { F_SOLID, Tile, TILE_FLAGS } from "@/sim/grid";
+import type { ActionList } from "@/sim/state";
 import { hashString } from "@/sim/rng";
 import type { Blueprint, Rect } from "@/world/blueprint";
 import { CHUNKS, type Chunk, type Gate } from "@/world/chunks";
@@ -34,8 +35,13 @@ export { COUNTY_H, COUNTY_W };
 type PathRow = { id: string; from: string; via: string; to: string; width: number; marks: [string, string] };
 const PATHS = pathsJson as unknown as PathRow[];
 
-/** The county-side door into a dungeon: which landmark it is set into, and what it says. */
-type DoorRow = { zone: string; chunk: string; key: string; label: string; keyTag?: string; nightLock?: string };
+/**
+ * A way into a dungeon. Either `chunk` (set into that landmark's face) or `near` (stood on open
+ * ground beside that site). `mark` also leaves a county mark here, which is
+ * where the dungeon's own way out arrives; `fromBelow` makes it a mark only, for a way that opens
+ * from the other side: a manhole lifts from the pipes, never from the street.
+ */
+type DoorRow = { zone: string; chunk?: string; near?: string; def?: string; key: string; label: string; keyTag?: string; nightLock?: string; mark?: string; fromBelow?: boolean };
 const DOORS = doorsJson as unknown as DoorRow[];
 
 const ROAD_WIDTH = 4;
@@ -172,25 +178,38 @@ export function buildCounty(seed: number, attempt: number, rows: readonly Placem
   // Doors into the dungeons: one per landmark, set into its face, but ONLY for a zone that
   // exists (world/registry.ts). The county grows a door the day its dungeon lands; until then
   // the face is blank. Nothing else has to change when a dungeon is added.
+  footprints ??= propFootprints();
   for (const d of DOORS) {
-    const chunk = chunks.find((c) => c.id === d.chunk);
-    const cell = chunk?.slots?.[`${d.chunk}_door`];
-    if (!cell || !hasZone(d.zone)) continue;
+    if (!hasZone(d.zone)) continue;
+    const chunk = chunks.find((c) => c.id === (d.chunk ?? d.near));
+    // Either set into a landmark's face, or stood on open ground beside a place (a grate in the
+    // town, a manhole cover on the road): the pipes have no building of their own.
+    let cell = d.chunk ? chunk?.slots?.[`${d.chunk}_door`] : undefined;
+    let size = { w: 2, h: 2 };
+    if (!d.chunk && chunk) {
+      size = footprints![d.def ?? "door"] ?? size;
+      const spot = k.spot({ cx: chunk.box.cx - 14, cy: chunk.box.cy - 14, w: chunk.box.w + 28, h: chunk.box.h + 28 }, size.w, size.h, 1, 200);
+      cell = spot ? [spot.cx, spot.cy] : undefined;
+    }
+    if (!cell) continue;
     k.prop(
       {
         key: d.key,
-        def: "door",
+        def: d.def ?? "door",
         cx: cell[0],
         cy: cell[1],
         locked: d.keyTag !== undefined,
         keyTag: d.keyTag,
-        to: { zone: d.zone, mark: "entry" },
+        to: d.fromBelow ? undefined : { zone: d.zone, mark: "entry" },
         label: d.label,
         nightLock: d.nightLock,
       },
-      2,
-      2,
+      size.w,
+      size.h,
     );
+    // A mark the dungeon's own door comes back out at. The way down opens from below (a manhole
+    // lifts from the pipes side), so this end is a mark first and a door only when the row says so.
+    if (d.mark) k.mark(d.mark, cell[0], cell[1] + size.h, 1);
   }
 
   applyPlacements(place, "chunks", rows);
@@ -207,6 +226,12 @@ export function buildCounty(seed: number, attempt: number, rows: readonly Placem
     }
   });
   // Small places: dressed as the kind the seed rolled, or the kind a placement row needed them to be.
+  // The Factory's reward, out here where it counts: the longest dark stretches of road get a relay
+  // box at the head and a run of dead lamps along them. Spark the box and that road is lit for good,
+  // which is the difference between a road at night and a road at night you can see along. She walks
+  // past every one of them long before she can do anything about them.
+  if (hasZone("factory")) relayRuns(k, lines, lit);
+
   pois.forEach((p, n) => smallPlace(k, p.kind, p.x, p.y, p.anchor ?? `poi_${n}`));
   // A place the story needs is known by its name: a mark (made above) and a rect of the same name round it.
   for (const p of pois) if (p.anchor && k.marks[p.anchor]) k.rect(p.anchor, { cx: p.x - 6, cy: p.y - 4, w: 13, h: 11 });
@@ -629,4 +654,73 @@ function scatter(k: Kit, sk: Skeleton): void {
     const y = k.int(10, COUNTY_H - 11);
     if (open(x, y)) k.prop({ def: "rock", cx: x, cy: y }, 1, 1);
   }
+}
+
+/**
+ * Dead lamp runs, and the relay box at the head of each. The skeleton decides which stretches of
+ * road still work (lamps fail with distance from the town, and almost entirely in the Works); this
+ * finds the longest stretches that do NOT, and furnishes them: a box she will walk past many times
+ * and can do nothing with, and the lamps it feeds, standing dark at the usual spacing.
+ *
+ * Sparking a box switches its own run on and sets `lamps_<n>`, which is a flag the threat field can
+ * read later: a lit road keeps its discount after dark. This is the largest single thing any verb
+ * gives back to the county, and it is the verb that gives it, not loot.
+ */
+function relayRuns(k: Kit, lines: readonly (readonly [number, number])[][], lit: readonly boolean[][]): void {
+  const SPACING = 26;
+  const LEAST = SPACING * 4;
+  const RUNS = 3;
+  // Every unlit stretch of every road, longest first; ties on where it starts, so the seed decides nothing here.
+  const runs: { line: number; from: number; to: number }[] = [];
+  lines.forEach((line, n) => {
+    const on = lit[n];
+    if (on.length !== line.length) return;
+    let from = -1;
+    for (let i = 0; i <= line.length; i++) {
+      const dark = i < line.length && !on[i];
+      if (dark && from < 0) from = i;
+      if (!dark && from >= 0) {
+        if (i - from >= LEAST) runs.push({ line: n, from, to: i - 1 });
+        from = -1;
+      }
+    }
+  });
+  runs.sort((a, b) => b.to - b.from - (a.to - a.from) || a.line - b.line || a.from - b.from);
+
+  runs.slice(0, RUNS).forEach((run, n) => {
+    const line = lines[run.line];
+    const lamps: string[] = [];
+    const beside = (i: number, def: string, key: string): boolean => {
+      const [x, y] = line[i];
+      for (const dy of [-4, 4, -5, 5]) {
+        if (k.solid(x, y + dy) || k.isClaimed(x, y + dy)) continue;
+        const t = k.get(x, y + dy);
+        if (t === Tile.Water || t === Tile.Road) continue;
+        k.prop({ key, def, cx: x, cy: y + dy }, 1, 1);
+        return true;
+      }
+      return false;
+    };
+    for (let i = run.from + SPACING; i < run.to - 2; i += SPACING) {
+      const key = `lamp_run_${n}_${lamps.length}`;
+      if (beside(i, "lamp_run", key)) lamps.push(key);
+    }
+    if (lamps.length < 3) return;
+    // The box stands at the lit end of the run, where the working lamps stop.
+    const use: ActionList = lamps.map((key) => ({ do: "switch", prop: key, on: true }));
+    use.push({ do: "flag", flag: `lamps_${n}`, value: 1 });
+    use.push({ do: "toast", text: "It takes, and the next one takes, and it goes away down the road ahead of you." });
+    beside(Math.max(0, run.from - 2), "relay_box", `relay_${n}`);
+    const box = k.props.find((p) => p.key === `relay_${n}`);
+    if (box) {
+      box.use = use;
+      box.label = "A relay box";
+    } else {
+      // No room for the box: the lamps would be a promise nothing can keep, so take them out again.
+      for (const key of lamps) {
+        const at = k.props.findIndex((p) => p.key === key);
+        if (at >= 0) k.props.splice(at, 1);
+      }
+    }
+  });
 }

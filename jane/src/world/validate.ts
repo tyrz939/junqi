@@ -112,6 +112,11 @@ export function validateBlueprint(
   if (bp.props.length !== propKeys.size) errors.push("duplicate prop keys");
   if (bp.units.length !== unitKeys.size) errors.push("duplicate unit keys");
   for (const p of bp.props) if (!catalog.props[p.def]) errors.push(`prop "${p.key}": unknown def "${p.def}"`);
+  // Loot a builder wrote is a row like any other. Nothing else checks it, and an item that does not
+  // exist is not a quiet mistake: `bagAdd` throws on it the moment she opens the chest.
+  for (const p of bp.props) {
+    for (const s of p.loot ?? []) if (!catalog.items[s.item]) errors.push(`prop "${p.key}": unknown item "${s.item}" in its loot`);
+  }
   for (const u of bp.units) if (!catalog.units[u.def]) errors.push(`unit "${u.key}": unknown def "${u.def}"`);
   const triggers = triggersOf(bp, catalog, errors);
   for (const [id, t] of triggers) if (!bp.rects[t.rect]) errors.push(`trigger "${id}": zone has no rect "${t.rect}"`);
