@@ -309,6 +309,7 @@ export function buildDungeon(def: DungeonDef, seed: number, attempt: number, opt
         const key = kind.propAs ?? `${zone}_${kind.prop}_${from.node.id}_${to.node.id}`;
         const use: ActionList = [{ do: "hide", prop: key }];
         if (kind.toast) use.push({ do: "toast", text: kind.toast });
+        if (kind.use) use.push(...resolve(from.node, key, kind.use)!);
         placeBlock(c, key, kind.prop, { needs: kind.needs, use, label: kind.label });
         info.locks.push({ edge: c.edge, kind, prop: key });
       } else if (kind.t === "oneway") {
@@ -465,6 +466,7 @@ export function buildDungeon(def: DungeonDef, seed: number, attempt: number, opt
           cy: room.y + s.cy,
           locked: hd.locked || guarded || undefined,
           hidden: "hidden" in hd ? hd.hidden : undefined,
+          on: "on" in hd ? hd.on : undefined,
           loot: "loot" in hd ? hd.loot : undefined,
           talk: "talk" in hd ? hd.talk : undefined,
           needs: "needs" in hd ? hd.needs : undefined,

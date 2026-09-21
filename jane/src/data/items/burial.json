@@ -1,0 +1,11 @@
+{
+  "key_burial": {
+    "name": "Glasshouse Key", "icon": "item_key_green", "maxStack": 1, "usable": false, "cooldown": 1,
+    "opens": "burial",
+    "description": "Kept on a hook by the beds. The gardener locked up every night and nobody could say who for."
+  },
+  "the_ball": {
+    "name": "The Ball", "icon": "item_ball", "maxStack": 1, "usable": false, "cooldown": 1, "bound": true,
+    "description": "A rubber ball, chewed at one side. It was in his hands and it is not old."
+  }
+}

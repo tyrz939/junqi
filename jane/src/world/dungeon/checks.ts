@@ -284,7 +284,12 @@ export function checkDungeon(bp: Blueprint, catalog: Catalog): string[] {
     const a = roomOf(edge.from);
     const b = roomOf(edge.to);
     if (!a || !b) continue;
-    const far = passOf(trace, b.rect) >= passOf(trace, a.rect) ? b : a;
+    // The far side is the one the lock keeps her out of. Normally that is whichever room the flood
+    // reached later; but if one end was never reached at all (it is behind a verb this dungeon does
+    // not give her: the glade that waits for Fire), THAT is the far side, however its pass compares.
+    const pa = passOf(trace, a.rect);
+    const pb = passOf(trace, b.rect);
+    const far = pb < 0 ? b : pa < 0 ? a : pb >= pa ? b : a;
     const kind = lock.kind;
     // A state edge is held by its controls: take every one of them away. (One that stands open
     // as the building starts is not a lock on the way in, and proves nothing by this.)
@@ -416,7 +421,11 @@ export function checkDungeon(bp: Blueprint, catalog: Catalog): string[] {
 
   // C10. The tease: the verb's first lock and the boss gate are seen before they open.
   const teases: string[] = [];
-  const firstVerb = info.locks.find((l) => l.kind.t === "verb" && !def.edges[l.edge].shortcut);
+  // Only a verb she finds INSIDE can be teased: the lock is meant to be seen, wondered at, and
+  // opened later. A verb she already had at the door is opened in the same flood that reaches it,
+  // so there is nothing to tease and nothing to prove (every lock in a return visit is of that kind).
+  const given = new Set(def.givenVerbs ?? []);
+  const firstVerb = info.locks.find((l) => l.kind.t === "verb" && !def.edges[l.edge].shortcut && !given.has(l.kind.verb));
   if (firstVerb) teases.push(firstVerb.prop);
   const bossGate = boss ? info.locks.find((l) => def.edges[l.edge].to === boss.node.id && l.kind.t !== "verb") : undefined;
   if (bossGate) teases.push(bossGate.prop);

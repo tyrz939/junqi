@@ -7,9 +7,29 @@ import type { RoomTemplate } from "@/world/dungeon/types";
 
 const FILES = import.meta.glob("./rooms/*/*.room", { query: "?raw", import: "default", eager: true }) as Record<string, string>;
 
+/**
+ * A room that will not parse is kept as its error, not thrown. `pools.ts` loads EVERY room in
+ * the game, so one half-written file would otherwise stop every test in the project, including
+ * the ones about the county. This way the damage stays inside the dungeon that owns the file:
+ * its own tests fail by name, and everyone else carries on.
+ */
+const BROKEN: { path: string; why: string }[] = [];
+
 const LOADED: RoomTemplate[] = Object.keys(FILES)
   .sort()
-  .map((path) => parseRoom(FILES[path], path));
+  .flatMap((path) => {
+    try {
+      return [parseRoom(FILES[path], path)];
+    } catch (err) {
+      BROKEN.push({ path, why: err instanceof Error ? err.message : String(err) });
+      return [];
+    }
+  });
+
+/** Rooms that would not parse, by folder: "mine", "museum". Empty when all is well. */
+export function brokenRooms(dungeon?: string): { path: string; why: string }[] {
+  return BROKEN.filter((b) => dungeon === undefined || b.path.includes(`/rooms/${dungeon}/`));
+}
 
 /** In file path order, which is what makes "the first template of the pool" mean something. */
 export const TEMPLATES: readonly RoomTemplate[] = LOADED;

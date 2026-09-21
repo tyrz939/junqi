@@ -34,6 +34,8 @@ export type Holding =
       release?: ActionList;
       locked?: boolean;
       hidden?: boolean;
+      /** Built already switched on: a gallery lamp that is lit until the breaker is thrown. */
+      on?: boolean;
       label?: string;
       to?: { zone: ZoneId; mark: string };
       /** Locked until these units of the same node are dead (`@socket` or a contract name). The generator writes the trigger. */
@@ -108,7 +110,17 @@ export type LockinSpec = {
 export type EdgeKind =
   | { t: "open" }
   | { t: "key"; tag: string; gateAs?: string; label?: string }
-  | { t: "verb"; verb: Verb; prop: string; needs?: Stack[]; propAs?: string; label?: string; toast?: string }
+  | {
+      t: "verb";
+      verb: Verb;
+      prop: string;
+      needs?: Stack[];
+      propAs?: string;
+      label?: string;
+      toast?: string;
+      /** Run after it opens, on top of the generated hide and toast: let a blown-up exhibit say so with a flag. */
+      use?: ActionList;
+    }
   | LockinSpec
   | { t: "oneway"; how: "opens_on"; flag: string; gateAs?: string }
   /** Passable only while the state has this value: a gate the state's controls drive. `gate` names other prop rows for it ([across a north-south corridor, across an east-west one]). */

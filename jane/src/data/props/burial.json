@@ -1,0 +1,13 @@
+{
+  "brazier": {
+    "name": "Brazier", "sprite": "brazier", "w": 1, "h": 1, "solid": true, "blockLos": false,
+    "answers": "fire", "lightWhenOn": true, "light": { "radius": 80, "color": "#ffa048", "flicker": 0.25 }
+  },
+  "great_torch": {
+    "name": "Great Torch", "sprite": "great_torch", "w": 2, "h": 2, "solid": true, "blockLos": false,
+    "push": true, "light": { "radius": 84, "color": "#ffb060", "flicker": 0.25 }
+  },
+  "web_wall_h": { "name": "Web", "sprite": "web_wall_h", "w": 3, "h": 2, "solid": true, "blockLos": true, "answers": "fire" },
+  "web_wall_v": { "name": "Web", "sprite": "web_wall_v", "w": 1, "h": 3, "solid": true, "blockLos": true, "answers": "fire" },
+  "cold_hearth": { "name": "Cold Hearth", "sprite": "cold_hearth", "w": 2, "h": 2, "solid": true, "blockLos": false, "answers": "fire" }
+}

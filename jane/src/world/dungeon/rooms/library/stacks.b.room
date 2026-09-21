@@ -1,0 +1,43 @@
+id      library.stacks.b
+pool    library.stacks
+bays    1x1
+turn    0 180 mirror
+doors   n1 optional, s1 optional, w1 optional, e1 optional
+needs   -
+grants  page:reward
+blocks  page:reward until plate:main
+coop    plate_or_friend
+heat    0
+grid
+############nnn############
+#...........___...........#
+#.t.....................t.#
+#..hhh....................#
+#.................PP......#
+#.................PP......#
+#.........................#
+#.........................#
+#.........................#
+w_......................._e
+w_......................._e
+w_......................._e
+#.........................#
+#.........................#
+#.................BB......#
+#...ddd...........BB......#
+#...ddd...................#
+#....p....................#
+#.t.....................t.#
+#...........___...........#
+############sss############
+legend
+n door n1
+s door s1
+w door w1
+e door e1
+P plate:main 2x2
+B push:main 2x2 crate | barrel
+p page:reward
+h dress:shelf 3x1
+d dress:desk 3x2
+t dress:torch

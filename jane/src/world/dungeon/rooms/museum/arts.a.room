@@ -1,0 +1,46 @@
+id      museum.arts.a
+pool    museum.arts
+bays    1x1
+turn    0 180 mirror
+doors   n1 optional, s1 optional, w1 optional, e1 optional
+needs   -
+grants  chest:key
+blocks  -
+coop    -
+heat    6
+grid
+############nnn############
+#...........___...........#
+#.t...................oo..#
+#.....................oo..#
+#....FF..........EEE......#
+#....FF..........EEE......#
+#.........................#
+#.....j...........m.......#
+#.........................#
+w_......................._e
+w_......................._e
+w_......................._e
+#.........................#
+#......................=..#
+#......................=..#
+#...CC..............r..=..#
+#...CC...r.............=..#
+#.........................#
+#............t............#
+#...........___...........#
+############sss############
+legend
+n door n1
+s door s1
+w door w1
+e door e1
+C chest:key 2x2
+E prop:exhibit_a 3x2
+m mark stand_a
+F prop:exhibit_b 2x2
+j mark stand_b
+= tile Glass
+r spawn
+o dress:pillar 2x2
+t dress:torch

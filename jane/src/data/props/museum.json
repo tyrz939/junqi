@@ -1,0 +1,22 @@
+{
+  "museum_exhibit_armour": { "name": "Suit of Armour", "sprite": "museum_exhibit_armour", "w": 3, "h": 2, "solid": true, "blockLos": true, "answers": "blast" },
+  "museum_exhibit_waxwork": { "name": "Waxwork", "sprite": "museum_exhibit_waxwork", "w": 2, "h": 2, "solid": true, "blockLos": true, "answers": "blast" },
+  "museum_exhibit_fox": { "name": "Fox, Mounted", "sprite": "museum_exhibit_fox", "w": 2, "h": 2, "solid": true, "blockLos": true, "answers": "blast" },
+  "museum_arch": { "name": "Bricked Arch", "sprite": "museum_arch", "w": 3, "h": 2, "solid": true, "blockLos": true, "answers": "blast" },
+  "museum_plinth": { "name": "Plinth", "sprite": "museum_plinth", "w": 2, "h": 2, "solid": false, "blockLos": false, "flat": true, "plate": true },
+  "museum_breaker": { "name": "Breaker", "sprite": "museum_breaker", "w": 1, "h": 1, "solid": true, "blockLos": false, "prompt": "Throw" },
+  "museum_gallery_lamp": { "name": "Gallery Lamp", "sprite": "museum_gallery_lamp", "w": 1, "h": 1, "solid": false, "blockLos": false, "flat": true, "light": { "radius": 76, "color": "#f2dcac", "flicker": 0.04 } },
+  "museum_shutter_h": { "name": "Power Shutter", "sprite": "museum_shutter_h", "w": 3, "h": 1, "solid": true, "blockLos": true, "gate": true },
+  "museum_shutter_v": { "name": "Power Shutter", "sprite": "museum_shutter_v", "w": 1, "h": 3, "solid": true, "blockLos": true, "gate": true },
+  "museum_armour_door_h": { "name": "Armour on its Rail", "sprite": "museum_armour_door_h", "w": 3, "h": 1, "solid": true, "blockLos": false, "gate": true },
+  "museum_armour_door_v": { "name": "Armour on its Rail", "sprite": "museum_armour_door_v", "w": 1, "h": 3, "solid": true, "blockLos": false, "gate": true },
+  "museum_case": { "name": "Display Case", "sprite": "museum_case", "w": 2, "h": 2, "solid": true, "blockLos": false },
+  "museum_stove": { "name": "Cloakroom Stove", "sprite": "museum_stove", "w": 2, "h": 2, "solid": true, "blockLos": false, "rest": true, "prompt": "Rest", "light": { "radius": 56, "color": "#ff9040", "flicker": 0.25 } },
+  "museum_portrait": { "name": "Portrait", "sprite": "museum_portrait", "w": 2, "h": 2, "solid": true, "blockLos": false, "prompt": "Look" },
+  "museum_cubicle_door": { "name": "Damaged Door", "sprite": "museum_cubicle_door", "w": 2, "h": 2, "solid": true, "blockLos": false, "answers": "repair" },
+  "rubble": { "name": "Fallen Stone", "sprite": "rubble", "w": 3, "h": 2, "solid": true, "blockLos": true, "answers": "blast" },
+  "cracked_wall_h": { "name": "Cracked Wall", "sprite": "cracked_wall_h", "w": 3, "h": 1, "solid": true, "blockLos": true, "answers": "blast" },
+  "cracked_wall_v": { "name": "Cracked Wall", "sprite": "cracked_wall_v", "w": 1, "h": 3, "solid": true, "blockLos": true, "answers": "blast" },
+  "cracked_case": { "name": "Cracked Case", "sprite": "cracked_case", "w": 2, "h": 2, "solid": true, "blockLos": true, "answers": "blast" },
+  "page_explosion": { "name": "The Shot-Firer's Glove", "sprite": "page_explosion", "w": 2, "h": 2, "solid": true, "blockLos": false, "once": true, "prompt": "Open" }
+}

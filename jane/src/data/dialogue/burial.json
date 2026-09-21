@@ -1,0 +1,26 @@
+{
+  "notice_burial": {
+    "speaker": "Notice",
+    "start": [{ "node": "board" }],
+    "nodes": {
+      "board": {
+        "lines": [
+          "CASTLE BURIAL GROUND. LOWER CHAMBERS. Four corners off the hall, in the order they were dug.",
+          "Interments by arrangement with the parish. The four corners were all arranged on the same morning."
+        ]
+      }
+    }
+  },
+  "burial_stone": {
+    "speaker": "Cut Stone",
+    "start": [{ "node": "stone" }],
+    "nodes": {
+      "stone": {
+        "lines": [
+          "GNOX GOLDSKIN. HE BOUGHT THIS GROUND AND EVERY ROW IN IT.",
+          "Cut smaller underneath, and later: somebody is still bringing the soldier flowers."
+        ]
+      }
+    }
+  }
+}

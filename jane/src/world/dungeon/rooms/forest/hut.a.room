@@ -1,0 +1,44 @@
+id      forest.hut.a
+pool    forest.hut
+bays    1x1
+turn    0 180 mirror
+doors   n1 optional, s1 optional, w1 optional, e1 optional
+needs   -
+grants  prop:cases, chest:tools
+blocks  -
+coop    -
+heat    4
+grid
+############nnn############
+#...........___...........#
+#.WWWWWWWWW...............#
+#.W...CC..W...............#
+#.W...CC..W.........HH....#
+#.W.......W.........HH....#
+#.WWW...WWW...............#
+#.........................#
+#.........................#
+w_......................._e
+w_......................._e
+w_......................._e
+#.........................#
+#..........U..............#
+#.....r...............r...#
+#.........................#
+#.........................#
+#....k...............k....#
+#,,.....................,,#
+#...........___...........#
+############sss############
+legend
+n door n1
+s door s1
+w door w1
+e door e1
+C prop:cases 2x2
+H chest:tools 2x2
+U unit:collector
+r spawn
+k dress:rock
+W tile Wall
+, tile GrassTall

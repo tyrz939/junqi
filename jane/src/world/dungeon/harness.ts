@@ -60,7 +60,7 @@ export function proveTemplate(def: DungeonDef, node: MissionNode, template: Room
     const { bp, def: alone } = buildRoomAlone(def, node, shape);
     const doorMark = (id: string): string => `${alone.id}_${node.id}_door_${id}`;
     for (const door of shape.doors) {
-      const solve = validateBlueprint(bp, catalog, contract, def.givenKeys, { entry: doorMark(door.id), trace: true, states });
+      const solve = validateBlueprint(bp, catalog, contract, def.givenKeys, { entry: doorMark(door.id), trace: true, states, fragment: true });
       if (!solve.trace) {
         errors.push(`${at}: ${solve.errors.join("; ")}`);
         break;

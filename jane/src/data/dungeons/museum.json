@@ -1,0 +1,387 @@
+{
+  "id": "museum",
+  "name": "Castle Museum",
+  "phase": 2,
+  "tiles": { "floor": "MuseumFloor", "wall": "MuseumWall", "alt": [] },
+  "indoor": true,
+  "ambient": 0.45,
+  "lattice": { "cols": 5, "rows": 4 },
+  "givenVerbs": ["icebolt", "repair"],
+  "givenKeys": [],
+  "states": [{ "id": "lights", "values": ["lit", "dark"], "initial": "lit", "flag": "museum_dark" }],
+  "nodes": [
+    {
+      "id": "entry", "kind": "entrance", "order": 0, "critical": true, "pool": "museum.entry", "heat": 0,
+      "holds": [
+        { "socket": "exit:main", "prop": "door", "to": { "zone": "county", "mark": "museum_mouth" }, "label": "The front door" },
+        { "socket": "notice:main", "prop": "notice", "talk": "notice_museum", "label": "The floor plan" }
+      ],
+      "binds": [
+        { "from": "exit:main", "as": "museum_exit_door", "what": "prop" },
+        { "from": "notice:main", "as": "museum_plan", "what": "prop" },
+        { "from": "entry", "as": "entry", "what": "mark" },
+        { "from": "room", "as": "museum_entry", "what": "rect" }
+      ],
+      "demands": [], "grants": []
+    },
+    {
+      "id": "atrium", "kind": "hub", "order": 1, "critical": true, "pool": "museum.atrium", "heat": 0.5,
+      "holds": [
+        {
+          "socket": "prop:exhibit", "prop": "museum_exhibit_armour", "label": "A suit of armour",
+          "use": [
+            { "do": "hide", "prop": "@self" },
+            { "do": "flag", "flag": "museum_gone_atrium", "value": 1 },
+            { "do": "despawn", "unit": "museum_atrium_walker" },
+            { "do": "toast", "text": "Plate and horsehair, and a smell of old glue. That one will not be standing up again." }
+          ]
+        },
+        { "socket": "prop:lamp_a", "prop": "museum_gallery_lamp" },
+        { "socket": "prop:lamp_b", "prop": "museum_gallery_lamp" },
+        { "socket": "prop:sign", "prop": "sign", "talk": "notice_touch", "label": "A notice" }
+      ],
+      "binds": [
+        { "from": "prop:exhibit", "as": "museum_atrium_exhibit", "what": "prop" },
+        { "from": "stand", "as": "museum_atrium_stand", "what": "mark" },
+        { "from": "prop:lamp_a", "as": "museum_atrium_lamp_a", "what": "prop" },
+        { "from": "prop:lamp_b", "as": "museum_atrium_lamp_b", "what": "prop" },
+        { "from": "room", "as": "museum_atrium", "what": "rect" }
+      ],
+      "demands": [], "grants": []
+    },
+    {
+      "id": "history", "kind": "puzzle", "order": 2, "critical": true, "pool": "museum.history", "heat": 0.3,
+      "holds": [
+        { "socket": "chest:boat", "loot": [{ "item": "key_toilets", "qty": 1 }], "label": "The boat" },
+        {
+          "socket": "page:main", "prop": "leaf_page", "label": "A page under glass",
+          "use": [{ "do": "grow", "stat": "spirit", "amount": 6, "id": "@self" }, { "do": "hide", "prop": "@self" }]
+        },
+        {
+          "socket": "prop:exhibit", "prop": "museum_exhibit_waxwork", "label": "A waxwork",
+          "use": [
+            { "do": "hide", "prop": "@self" },
+            { "do": "flag", "flag": "museum_gone_history", "value": 1 },
+            { "do": "despawn", "unit": "museum_history_walker" },
+            { "do": "toast", "text": "Wax and wire, and the smell of a candle put out. That one will not be standing up again." }
+          ]
+        }
+      ],
+      "binds": [
+        { "from": "chest:boat", "as": "museum_boat", "what": "prop" },
+        { "from": "page:main", "as": "museum_history_page", "what": "prop" },
+        { "from": "prop:exhibit", "as": "museum_history_exhibit", "what": "prop" },
+        { "from": "stand", "as": "museum_history_stand", "what": "mark" }
+      ],
+      "demands": [], "grants": [{ "key": "museum_toilets" }]
+    },
+    {
+      "id": "toilets", "kind": "key", "order": 3, "critical": true, "pool": "museum.toilets", "heat": 0,
+      "holds": [
+        { "socket": "chest:main", "loot": [{ "item": "key_maintenance", "qty": 1 }], "label": "The attendant's cupboard" },
+        {
+          "socket": "verbprop:door", "prop": "museum_cubicle_door", "needs": [{ "item": "wood", "qty": 2 }], "label": "A damaged door",
+          "use": [
+            { "do": "show", "prop": "@jar:main" },
+            { "do": "toast", "text": "The door hangs straight again. There is a jar behind it." }
+          ]
+        },
+        { "socket": "jar:main", "prop": "jar", "hidden": true }
+      ],
+      "binds": [
+        { "from": "chest:main", "as": "museum_toilets_chest", "what": "prop" },
+        { "from": "verbprop:door", "as": "museum_cubicle_door", "what": "prop" },
+        { "from": "jar:main", "as": "museum_toilets_jar", "what": "prop" }
+      ],
+      "demands": [], "grants": [{ "key": "museum_maintenance" }]
+    },
+    {
+      "id": "cloakroom", "kind": "rest", "order": 2, "critical": true, "pool": "museum.cloakroom", "heat": 0,
+      "holds": [
+        { "socket": "rest:main", "prop": "museum_stove", "talk": "museum_stove" },
+        { "socket": "chest:coats", "loot": [{ "item": "wood", "qty": 2 }, { "item": "apple", "qty": 2 }], "label": "A coat locker" }
+      ],
+      "binds": [
+        { "from": "rest:main", "as": "museum_stove", "what": "prop" },
+        { "from": "chest:coats", "as": "museum_coat_locker", "what": "prop" }
+      ],
+      "demands": [], "grants": [{ "item": "wood", "qty": 2 }]
+    },
+    {
+      "id": "maintenance", "kind": "puzzle", "order": 4, "critical": true, "pool": "museum.maintenance", "heat": 0,
+      "holds": [
+        { "socket": "prop:sign", "prop": "sign", "talk": "notice_power", "label": "A notice" },
+        { "socket": "chest:main", "loot": [{ "item": "coal", "qty": 2 }, { "item": "apple", "qty": 1 }], "label": "A tool chest" },
+        {
+          "socket": "lever:main", "prop": "museum_breaker", "label": "The breaker", "controls": "lights",
+          "becomes": {
+            "dark": [
+              { "do": "hide", "prop": "museum_atrium_lamp_a" },
+              { "do": "hide", "prop": "museum_atrium_lamp_b" },
+              { "do": "hide", "prop": "museum_science_lamp" },
+              { "do": "lock", "prop": "museum_history_page" },
+              { "do": "if", "when": [{ "if": "flag", "flag": "museum_gone_atrium", "not": true }], "then": [{ "do": "hide", "prop": "museum_atrium_exhibit" }, { "do": "spawn", "unit": "museum_atrium_walker", "def": "armour", "at": "museum_atrium_stand" }] },
+              { "do": "if", "when": [{ "if": "flag", "flag": "museum_gone_history", "not": true }], "then": [{ "do": "hide", "prop": "museum_history_exhibit" }, { "do": "spawn", "unit": "museum_history_walker", "def": "waxwork", "at": "museum_history_stand" }] },
+              { "do": "if", "when": [{ "if": "flag", "flag": "museum_gone_arts_a", "not": true }], "then": [{ "do": "hide", "prop": "museum_arts_exhibit_a" }, { "do": "spawn", "unit": "museum_arts_walker_a", "def": "armour", "at": "museum_arts_stand_a" }] },
+              { "do": "if", "when": [{ "if": "flag", "flag": "museum_gone_arts_b", "not": true }], "then": [{ "do": "hide", "prop": "museum_arts_exhibit_b" }, { "do": "spawn", "unit": "museum_arts_walker_b", "def": "stuffed_fox", "at": "museum_arts_stand_b" }] },
+              { "do": "spawn", "unit": "museum_prowler", "def": "stuffed_fox", "at": "@prowler" },
+              { "do": "shake", "amount": 2 },
+              { "do": "toast", "text": "The lights go out one wing at a time. Somewhere a shutter comes down." }
+            ],
+            "lit": [
+              { "do": "show", "prop": "museum_atrium_lamp_a" },
+              { "do": "show", "prop": "museum_atrium_lamp_b" },
+              { "do": "show", "prop": "museum_science_lamp" },
+              { "do": "unlock", "prop": "museum_history_page" },
+              { "do": "despawn", "unit": "museum_prowler" },
+              { "do": "if", "when": [{ "if": "flag", "flag": "museum_gone_atrium", "not": true }], "then": [{ "do": "despawn", "unit": "museum_atrium_walker" }, { "do": "show", "prop": "museum_atrium_exhibit" }] },
+              { "do": "if", "when": [{ "if": "flag", "flag": "museum_gone_history", "not": true }], "then": [{ "do": "despawn", "unit": "museum_history_walker" }, { "do": "show", "prop": "museum_history_exhibit" }] },
+              { "do": "if", "when": [{ "if": "flag", "flag": "museum_gone_arts_a", "not": true }], "then": [{ "do": "despawn", "unit": "museum_arts_walker_a" }, { "do": "show", "prop": "museum_arts_exhibit_a" }] },
+              { "do": "if", "when": [{ "if": "flag", "flag": "museum_gone_arts_b", "not": true }], "then": [{ "do": "despawn", "unit": "museum_arts_walker_b" }, { "do": "show", "prop": "museum_arts_exhibit_b" }] },
+              { "do": "toast", "text": "The lights come back and everything is where it was. The dents stay." }
+            ]
+          }
+        }
+      ],
+      "binds": [
+        { "from": "lever:main", "as": "museum_breaker", "what": "prop" },
+        { "from": "prowler", "as": "museum_prowler_stand", "what": "mark" }
+      ],
+      "demands": [], "grants": [{ "state": "lights" }]
+    },
+    {
+      "id": "arts", "kind": "fight", "order": 5, "critical": true, "pool": "museum.arts", "heat": 0.9,
+      "holds": [
+        { "socket": "chest:key", "loot": [{ "item": "key_floor", "qty": 1 }], "label": "An empty plinth" },
+        {
+          "socket": "prop:exhibit_a", "prop": "museum_exhibit_armour", "label": "A suit of armour",
+          "use": [
+            { "do": "hide", "prop": "@self" },
+            { "do": "flag", "flag": "museum_gone_arts_a", "value": 1 },
+            { "do": "despawn", "unit": "museum_arts_walker_a" },
+            { "do": "toast", "text": "Plate and horsehair. That one will not be standing up again." }
+          ]
+        },
+        {
+          "socket": "prop:exhibit_b", "prop": "museum_exhibit_fox", "label": "A mounted fox",
+          "use": [
+            { "do": "hide", "prop": "@self" },
+            { "do": "flag", "flag": "museum_gone_arts_b", "value": 1 },
+            { "do": "despawn", "unit": "museum_arts_walker_b" },
+            { "do": "toast", "text": "Sawdust and glass. That one will not be standing up again." }
+          ]
+        }
+      ],
+      "binds": [
+        { "from": "chest:key", "as": "museum_floor_key_chest", "what": "prop" },
+        { "from": "prop:exhibit_a", "as": "museum_arts_exhibit_a", "what": "prop" },
+        { "from": "stand_a", "as": "museum_arts_stand_a", "what": "mark" },
+        { "from": "prop:exhibit_b", "as": "museum_arts_exhibit_b", "what": "prop" },
+        { "from": "stand_b", "as": "museum_arts_stand_b", "what": "mark" }
+      ],
+      "demands": [], "grants": [{ "key": "museum_floor" }]
+    },
+    {
+      "id": "science", "kind": "miniboss", "order": 6, "critical": true, "pool": "museum.science", "heat": 0,
+      "holds": [
+        { "socket": "unit:firer", "unit": "shot_firer" },
+        { "socket": "prop:page", "prop": "page_explosion", "talk": "page_explosion", "label": "The shot-firer's glove", "guardedBy": ["@unit:firer"] },
+        {
+          "socket": "verbprop:case", "prop": "cracked_case", "locked": true, "label": "A cracked case",
+          "loot": [{ "item": "gold_bar", "qty": 2 }],
+          "use": [
+            { "do": "unlock", "prop": "@self" },
+            { "do": "show", "prop": "@page:main" },
+            { "do": "toast", "text": "The glass goes. The page is loose in the bottom of the case." }
+          ]
+        },
+        {
+          "socket": "page:main", "prop": "leaf_page", "hidden": true,
+          "use": [{ "do": "grow", "stat": "spirit", "amount": 6, "id": "@self" }, { "do": "hide", "prop": "@self" }]
+        },
+        { "socket": "prop:lamp", "prop": "museum_gallery_lamp" }
+      ],
+      "binds": [
+        { "from": "unit:firer", "as": "shot_firer", "what": "unit" },
+        { "from": "prop:page", "as": "museum_page", "what": "prop" },
+        { "from": "verbprop:case", "as": "museum_cracked_case", "what": "prop" },
+        { "from": "page:main", "as": "museum_science_page", "what": "prop" },
+        { "from": "prop:lamp", "as": "museum_science_lamp", "what": "prop" }
+      ],
+      "demands": [], "grants": [{ "verb": "explosion" }]
+    },
+    {
+      "id": "stores", "kind": "bosskey", "order": 7, "critical": true, "pool": "museum.stores", "heat": 0.4,
+      "holds": [
+        { "socket": "chest:key", "prop": "boss_chest", "loot": [{ "item": "key_attendant", "qty": 1 }], "label": "The attendant's locker" },
+        { "socket": "jar:main", "prop": "jar" }
+      ],
+      "binds": [
+        { "from": "chest:key", "as": "museum_attendant_key_chest", "what": "prop" },
+        { "from": "jar:main", "as": "museum_stores_jar", "what": "prop" }
+      ],
+      "demands": ["explosion"], "grants": [{ "key": "museum_attendant" }]
+    },
+    {
+      "id": "magic", "kind": "boss", "order": 8, "critical": true, "pool": "museum.magic", "heat": 0,
+      "holds": [
+        { "socket": "boss:main", "unit": "attendant" },
+        { "socket": "chest:arena", "loot": [{ "item": "potion_red", "qty": 2 }], "label": "A case of samples" },
+        { "socket": "prop:lamp_a", "prop": "museum_gallery_lamp" },
+        { "socket": "prop:lamp_b", "prop": "museum_gallery_lamp" },
+        {
+          "socket": "prop:armour_a", "prop": "museum_exhibit_armour", "label": "A suit of armour",
+          "use": [{ "do": "hide", "prop": "@self" }, { "do": "flag", "flag": "museum_gone_rotunda_a", "value": 1 }, { "do": "despawn", "unit": "museum_rotunda_walker_a" }, { "do": "toast", "text": "One plinth is rubble. It stays that way." }]
+        },
+        {
+          "socket": "prop:armour_b", "prop": "museum_exhibit_armour", "label": "A suit of armour",
+          "use": [{ "do": "hide", "prop": "@self" }, { "do": "flag", "flag": "museum_gone_rotunda_b", "value": 1 }, { "do": "despawn", "unit": "museum_rotunda_walker_b" }, { "do": "toast", "text": "One plinth is rubble. It stays that way." }]
+        },
+        {
+          "socket": "prop:armour_c", "prop": "museum_exhibit_armour", "label": "A suit of armour",
+          "use": [{ "do": "hide", "prop": "@self" }, { "do": "flag", "flag": "museum_gone_rotunda_c", "value": 1 }, { "do": "despawn", "unit": "museum_rotunda_walker_c" }, { "do": "toast", "text": "One plinth is rubble. It stays that way." }]
+        },
+        {
+          "socket": "prop:armour_d", "prop": "museum_exhibit_armour", "label": "A suit of armour",
+          "use": [{ "do": "hide", "prop": "@self" }, { "do": "flag", "flag": "museum_gone_rotunda_d", "value": 1 }, { "do": "despawn", "unit": "museum_rotunda_walker_d" }, { "do": "toast", "text": "One plinth is rubble. It stays that way." }]
+        },
+        {
+          "socket": "lever:breaker", "prop": "museum_breaker", "label": "The rotunda breaker",
+          "use": [
+            {
+              "do": "if", "when": [{ "if": "flag", "flag": "museum_rotunda_dark" }],
+              "then": [
+                { "do": "flag", "flag": "museum_rotunda_dark", "value": 0 },
+                { "do": "show", "prop": "museum_rotunda_lamp_a" },
+                { "do": "show", "prop": "museum_rotunda_lamp_b" },
+                { "do": "despawn", "unit": "museum_rotunda_walker_a" },
+                { "do": "despawn", "unit": "museum_rotunda_walker_b" },
+                { "do": "despawn", "unit": "museum_rotunda_walker_c" },
+                { "do": "despawn", "unit": "museum_rotunda_walker_d" },
+                { "do": "if", "when": [{ "if": "flag", "flag": "museum_gone_rotunda_a", "not": true }], "then": [{ "do": "show", "prop": "museum_rotunda_armour_a" }] },
+                { "do": "if", "when": [{ "if": "flag", "flag": "museum_gone_rotunda_b", "not": true }], "then": [{ "do": "show", "prop": "museum_rotunda_armour_b" }] },
+                { "do": "if", "when": [{ "if": "flag", "flag": "museum_gone_rotunda_c", "not": true }], "then": [{ "do": "show", "prop": "museum_rotunda_armour_c" }] },
+                { "do": "if", "when": [{ "if": "flag", "flag": "museum_gone_rotunda_d", "not": true }], "then": [{ "do": "show", "prop": "museum_rotunda_armour_d" }] },
+                { "do": "strike", "rect": "@inner", "amount": 1, "school": "blast", "effect": "dazzled", "hitsFriends": false },
+                { "do": "toast", "text": "The lights come up. He puts a hand over his eyes and stands where he is." }
+              ]
+            }
+          ]
+        }
+      ],
+      "binds": [
+        { "from": "boss:main", "as": "attendant", "what": "unit" },
+        { "from": "inner", "as": "museum_rotunda", "what": "rect" },
+        { "from": "chest:arena", "as": "museum_rotunda_chest", "what": "prop" },
+        { "from": "lever:breaker", "as": "museum_rotunda_breaker", "what": "prop" },
+        { "from": "prop:lamp_a", "as": "museum_rotunda_lamp_a", "what": "prop" },
+        { "from": "prop:lamp_b", "as": "museum_rotunda_lamp_b", "what": "prop" },
+        { "from": "prop:armour_a", "as": "museum_rotunda_armour_a", "what": "prop" },
+        { "from": "prop:armour_b", "as": "museum_rotunda_armour_b", "what": "prop" },
+        { "from": "prop:armour_c", "as": "museum_rotunda_armour_c", "what": "prop" },
+        { "from": "prop:armour_d", "as": "museum_rotunda_armour_d", "what": "prop" },
+        { "from": "stand_a", "as": "museum_rotunda_stand_a", "what": "mark" },
+        { "from": "stand_b", "as": "museum_rotunda_stand_b", "what": "mark" },
+        { "from": "stand_c", "as": "museum_rotunda_stand_c", "what": "mark" },
+        { "from": "stand_d", "as": "museum_rotunda_stand_d", "what": "mark" }
+      ],
+      "demands": [], "grants": [{ "flag": "museum_cleared" }]
+    },
+    {
+      "id": "magic_case", "kind": "reward", "order": 9, "critical": true, "pool": "museum.magic_case", "heat": 0,
+      "holds": [
+        { "socket": "jar:big", "prop": "jar_big" },
+        { "socket": "chest:main", "prop": "boss_chest", "loot": [{ "item": "key_forest", "qty": 1 }, { "item": "gold_bar", "qty": 4 }], "label": "The case that is not on the plan" },
+        { "socket": "prop:portrait", "prop": "museum_portrait", "talk": "museum_portrait", "label": "A portrait" }
+      ],
+      "binds": [
+        { "from": "jar:big", "as": "museum_big_jar", "what": "prop" },
+        { "from": "chest:main", "as": "museum_reward_chest", "what": "prop" },
+        { "from": "prop:portrait", "as": "museum_portrait", "what": "prop" }
+      ],
+      "demands": [], "grants": [{ "key": "forest" }]
+    },
+    {
+      "id": "natural", "kind": "side", "order": 2, "critical": false, "pool": "museum.natural", "heat": 0.4,
+      "holds": [
+        { "socket": "plate:a", "prop": "museum_plinth", "use": [{ "do": "flag", "flag": "museum_plinth_a", "value": 1 }], "release": [{ "do": "flag", "flag": "museum_plinth_a", "value": 0 }] },
+        { "socket": "plate:b", "prop": "museum_plinth", "use": [{ "do": "flag", "flag": "museum_plinth_b", "value": 1 }], "release": [{ "do": "flag", "flag": "museum_plinth_b", "value": 0 }] },
+        { "socket": "push:a", "prop": "crate" },
+        { "socket": "push:b", "prop": "crate" },
+        { "socket": "unit:fox", "unit": "stuffed_fox" },
+        { "socket": "jar:main", "prop": "jar", "locked": true, "label": "A jar on a shelf" }
+      ],
+      "binds": [{ "from": "jar:main", "as": "museum_natural_jar", "what": "prop" }],
+      "demands": [], "grants": [],
+      "triggers": [
+        {
+          "id": "both_down", "mode": "while", "once": true,
+          "when": [{ "if": "flag", "flag": "museum_plinth_a" }, { "if": "flag", "flag": "museum_plinth_b" }],
+          "actions": [
+            { "do": "unlock", "prop": "@jar:main" },
+            { "do": "toast", "text": "Both plinths take their weight. Something lets go of the shelf." }
+          ]
+        }
+      ]
+    }
+  ],
+  "edges": [
+    { "from": "entry", "to": "atrium", "kind": { "t": "open" } },
+    { "from": "entry", "to": "history", "kind": { "t": "open" } },
+    { "from": "atrium", "to": "cloakroom", "kind": { "t": "open" } },
+    { "from": "history", "to": "toilets", "kind": { "t": "key", "tag": "museum_toilets", "gateAs": "museum_gate_toilets", "label": "CONVENIENCES" } },
+    { "from": "history", "to": "natural", "kind": { "t": "open" } },
+    { "from": "cloakroom", "to": "maintenance", "kind": { "t": "key", "tag": "museum_maintenance", "gateAs": "museum_gate_maintenance", "label": "MAINTENANCE. No admittance" } },
+    {
+      "from": "atrium", "to": "arts",
+      "kind": { "t": "state", "var": "lights", "is": "dark", "gateAs": "museum_arts_door", "gate": ["museum_armour_door_h", "museum_armour_door_v"], "label": "ARTS" }
+    },
+    { "from": "atrium", "to": "science", "kind": { "t": "key", "tag": "museum_floor", "gateAs": "museum_gate_science", "label": "SCIENCE" } },
+    {
+      "from": "science", "to": "stores",
+      "kind": { "t": "state", "var": "lights", "is": "lit", "gateAs": "museum_stores_shutter", "gate": ["museum_shutter_h", "museum_shutter_v"], "label": "The shutter" },
+      "also": [
+        { "t": "verb", "verb": "explosion", "prop": "museum_exhibit_armour", "propAs": "museum_stores_armour", "label": "An armour in the doorway", "toast": "The armour comes apart in the doorway. Nothing else in the corridor moves." }
+      ]
+    },
+    {
+      "from": "atrium", "to": "magic",
+      "kind": { "t": "verb", "verb": "explosion", "prop": "museum_arch", "propAs": "museum_arch", "label": "The painted-over arch", "toast": "The plaster goes. The doorway is exactly where the plan did not show it." },
+      "also": [
+        { "t": "key", "tag": "museum_attendant", "gateAs": "museum_gate_rotunda", "label": "The rotunda" },
+        { "t": "lockin", "toast": "The door shuts behind you. Somebody has been waiting for closing time." }
+      ]
+    },
+    { "from": "magic", "to": "magic_case", "kind": { "t": "oneway", "how": "opens_on", "flag": "museum_cleared", "gateAs": "museum_gate_case" } },
+    { "from": "magic", "to": "cloakroom", "shortcut": true, "kind": { "t": "oneway", "how": "opens_on", "flag": "museum_cleared", "gateAs": "museum_fire_door" } }
+  ],
+  "budget": {
+    "sideRooms": [0, 1],
+    "critPathCells": [950, 2250],
+    "restAt": [0.12, 0.38],
+    "restToBossCells": 360,
+    "baseHeat": 7,
+    "enemies": { "bat": 1, "stuffed_fox": 2, "waxwork": 2, "armour": 3 }
+  },
+  "dress": {
+    "torch": { "props": ["torch"], "chance": 0.8 },
+    "pile": { "props": ["crate", "barrel"], "chance": 0.5 },
+    "pillar": { "props": ["pillar"], "chance": 1 },
+    "case": { "props": ["museum_case"], "chance": 1 },
+    "shelf": { "props": ["shelf"], "chance": 1 },
+    "bench": { "props": ["table"], "chance": 1 }
+  },
+  "fallback": [
+    { "node": "entry", "template": "museum.entry.a", "bay": [0, 0], "turn": 180, "mirror": true },
+    { "node": "atrium", "template": "museum.atrium.a", "bay": [1, 1], "turn": 0, "mirror": false },
+    { "node": "magic", "template": "museum.magic.a", "bay": [1, 2], "turn": 0, "mirror": false },
+    { "node": "history", "template": "museum.history.a", "bay": [0, 1], "turn": 0, "mirror": false },
+    { "node": "cloakroom", "template": "museum.cloakroom.a", "bay": [3, 2], "turn": 0, "mirror": false },
+    { "node": "toilets", "template": "museum.toilets.a", "bay": [0, 2], "turn": 0, "mirror": true },
+    { "node": "maintenance", "template": "museum.maintenance.a", "bay": [4, 2], "turn": 180, "mirror": false },
+    { "node": "arts", "template": "museum.arts.a", "bay": [1, 0], "turn": 180, "mirror": true },
+    { "node": "science", "template": "museum.science.a", "bay": [1, 3], "turn": 0, "mirror": false },
+    { "node": "stores", "template": "museum.stores.a", "bay": [2, 3], "turn": 0, "mirror": true },
+    { "node": "magic_case", "template": "museum.magic_case.a", "bay": [3, 3], "turn": 0, "mirror": false }
+  ]
+}

@@ -1,0 +1,33 @@
+{
+  "forest_butterfly_1": { "name": "Butterfly", "faction": "friendly", "controller": "npc", "strength": 4, "spirit": 1, "walk": 0.8, "run": 1.6, "aggro": 0, "leash": 0, "bounds": 0.5, "book": [], "respawn": 0, "autoRegen": true, "loot": [], "sprite": "butterfly", "talk": "forest_catch_1", "dayOnly": true, "glow": { "radius": 18, "color": "#ffd070" } },
+  "forest_butterfly_2": { "name": "Butterfly", "faction": "friendly", "controller": "npc", "strength": 4, "spirit": 1, "walk": 0.8, "run": 1.6, "aggro": 0, "leash": 0, "bounds": 0.5, "book": [], "respawn": 0, "autoRegen": true, "loot": [], "sprite": "butterfly", "talk": "forest_catch_2", "dayOnly": true, "glow": { "radius": 18, "color": "#ffd070" } },
+  "forest_butterfly_3": { "name": "Butterfly", "faction": "friendly", "controller": "npc", "strength": 4, "spirit": 1, "walk": 0.8, "run": 1.6, "aggro": 0, "leash": 0, "bounds": 0.5, "book": [], "respawn": 0, "autoRegen": true, "loot": [], "sprite": "butterfly", "talk": "forest_catch_3", "dayOnly": true, "glow": { "radius": 18, "color": "#ffd070" } },
+  "forest_butterfly_4": { "name": "Butterfly", "faction": "friendly", "controller": "npc", "strength": 4, "spirit": 1, "walk": 0.8, "run": 1.6, "aggro": 0, "leash": 0, "bounds": 0.5, "book": [], "respawn": 0, "autoRegen": true, "loot": [], "sprite": "butterfly", "talk": "forest_catch_4", "dayOnly": true, "glow": { "radius": 18, "color": "#ffd070" } },
+  "forest_butterfly_5": { "name": "Butterfly", "faction": "friendly", "controller": "npc", "strength": 4, "spirit": 1, "walk": 0.8, "run": 1.6, "aggro": 0, "leash": 0, "bounds": 0.5, "book": [], "respawn": 0, "autoRegen": true, "loot": [], "sprite": "butterfly", "talk": "forest_catch_5", "dayOnly": true, "glow": { "radius": 18, "color": "#ffd070" } },
+  "forest_butterfly_6": { "name": "Butterfly", "faction": "friendly", "controller": "npc", "strength": 4, "spirit": 1, "walk": 0.8, "run": 1.6, "aggro": 0, "leash": 0, "bounds": 0.5, "book": [], "respawn": 0, "autoRegen": true, "loot": [], "sprite": "butterfly", "talk": "forest_catch_6", "dayOnly": true, "glow": { "radius": 18, "color": "#ffd070" } },
+  "forest_butterfly_7": { "name": "Butterfly", "faction": "friendly", "controller": "npc", "strength": 4, "spirit": 1, "walk": 0.8, "run": 1.6, "aggro": 0, "leash": 0, "bounds": 0.5, "book": [], "respawn": 0, "autoRegen": true, "loot": [], "sprite": "butterfly", "talk": "forest_catch_7", "dayOnly": true, "glow": { "radius": 18, "color": "#ffd070" } },
+  "forest_moth_8": { "name": "Moth", "faction": "friendly", "controller": "npc", "strength": 4, "spirit": 1, "walk": 0.8, "run": 1.4, "aggro": 0, "leash": 0, "bounds": 0.5, "book": [], "respawn": 0, "autoRegen": true, "loot": [], "sprite": "moth", "talk": "forest_catch_8", "nightOnly": true, "glow": { "radius": 18, "color": "#cfd8ff" } },
+  "forest_night_spider": { "name": "Garden Spider", "faction": "undead", "controller": "ai", "strength": 9, "spirit": 1, "walk": 0.5, "run": 1.1, "aggro": 12, "leash": 40, "bounds": 0.75, "book": ["spider_bite"], "respawn": 600, "autoRegen": true, "loot": [], "sprite": "spider", "nightOnly": true },
+  "collector": {
+    "name": "The Collector", "faction": "bandit", "controller": "ai",
+    "strength": 52, "spirit": 16, "walk": 0.5, "run": 1.1, "aggro": 11, "leash": 40, "bounds": 1,
+    "book": ["net_throw", "melee"], "respawn": 0, "autoRegen": true,
+    "loot": [{ "item": "net", "qty": 1, "chance": 1 }],
+    "sprite": "collector", "boss": true
+  },
+  "emperor": {
+    "name": "The Emperor", "faction": "undead", "controller": "ai",
+    "strength": 120, "spirit": 30, "walk": 0.9, "run": 1.8, "aggro": 14, "leash": 60, "bounds": 1.25,
+    "book": ["melee_fast", "scale_dust"], "respawn": 0, "autoRegen": true,
+    "loot": [], "sprite": "emperor", "boss": true,
+    "resist": { "nature": 0.4 },
+    "glow": { "radius": 30, "color": "#e8e0ff" },
+    "phases": [
+      { "hpBelow": 0.5, "book": ["melee_fast", "scale_dust"], "run": 2, "onEnter": [{ "do": "toast", "text": "It goes up into the dark and comes back down lower than it went." }] }
+    ],
+    "onDeath": [
+      { "do": "flag", "flag": "forest_cleared" },
+      { "do": "toast", "text": "The Emperor comes down on the grass and does not fold its wings." }
+    ]
+  }
+}

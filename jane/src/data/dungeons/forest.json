@@ -1,0 +1,1441 @@
+{
+  "id": "forest",
+  "name": "Butterfly Forest",
+  "phase": 3,
+  "tiles": {
+    "floor": "Grass",
+    "wall": "Hedge",
+    "alt": []
+  },
+  "indoor": false,
+  "ambient": 0.7,
+  "lattice": {
+    "cols": 6,
+    "rows": 4
+  },
+  "givenVerbs": [
+    "icebolt",
+    "repair",
+    "explosion",
+    "grow"
+  ],
+  "givenKeys": [],
+  "nodes": [
+    {
+      "id": "gate",
+      "kind": "entrance",
+      "order": 0,
+      "critical": true,
+      "pool": "forest.gate",
+      "heat": 0,
+      "holds": [
+        {
+          "socket": "exit:main",
+          "prop": "door",
+          "to": {
+            "zone": "county",
+            "mark": "butterfly_forest_mouth"
+          },
+          "label": "The gate"
+        },
+        {
+          "socket": "notice:main",
+          "prop": "notice",
+          "talk": "notice_forest"
+        }
+      ],
+      "binds": [
+        {
+          "from": "exit:main",
+          "as": "forest_gate_out",
+          "what": "prop"
+        },
+        {
+          "from": "entry",
+          "as": "entry",
+          "what": "mark"
+        },
+        {
+          "from": "room",
+          "as": "forest_gate",
+          "what": "rect"
+        }
+      ],
+      "demands": [],
+      "grants": []
+    },
+    {
+      "id": "first_glade",
+      "kind": "teach",
+      "order": 1,
+      "critical": true,
+      "pool": "forest.first_glade",
+      "heat": 0,
+      "holds": [
+        {
+          "socket": "prop:beam",
+          "prop": "forest_sunbeam"
+        },
+        {
+          "socket": "verbprop:bud",
+          "prop": "bud",
+          "label": "A bud",
+          "use": [
+            {
+              "do": "switch",
+              "prop": "@self",
+              "on": true
+            },
+            {
+              "do": "send",
+              "unit": "@unit:fly",
+              "to": "@perch",
+              "then": [
+                {
+                  "do": "toast",
+                  "text": "It comes down out of the hedge and settles on the new flower."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "socket": "unit:fly",
+          "unit": "forest_butterfly_1",
+          "patrol": [
+            {
+              "mark": "flower_a",
+              "dwell": 180
+            },
+            {
+              "mark": "flower_b",
+              "dwell": 180
+            }
+          ]
+        }
+      ],
+      "binds": [
+        {
+          "from": "unit:fly",
+          "as": "butterfly_1",
+          "what": "unit"
+        },
+        {
+          "from": "verbprop:bud",
+          "as": "forest_first_bud",
+          "what": "prop"
+        },
+        {
+          "from": "prop:beam",
+          "as": "forest_first_beam",
+          "what": "prop"
+        }
+      ],
+      "demands": [],
+      "grants": []
+    },
+    {
+      "id": "hut",
+      "kind": "miniboss",
+      "order": 2,
+      "critical": true,
+      "pool": "forest.hut",
+      "heat": 0.5,
+      "holds": [
+        {
+          "socket": "unit:collector",
+          "unit": "collector"
+        },
+        {
+          "socket": "prop:cases",
+          "prop": "forest_cases",
+          "talk": "forest_cases"
+        },
+        {
+          "socket": "chest:tools",
+          "loot": [
+            {
+              "item": "wood",
+              "qty": 2
+            }
+          ]
+        }
+      ],
+      "binds": [
+        {
+          "from": "unit:collector",
+          "as": "collector",
+          "what": "unit"
+        },
+        {
+          "from": "prop:cases",
+          "as": "forest_cases",
+          "what": "prop"
+        },
+        {
+          "from": "chest:tools",
+          "as": "forest_hut_chest",
+          "what": "prop"
+        }
+      ],
+      "demands": [],
+      "grants": [
+        {
+          "item": "net",
+          "qty": 1
+        },
+        {
+          "item": "wood",
+          "qty": 2
+        }
+      ]
+    },
+    {
+      "id": "ring",
+      "kind": "hub",
+      "order": 3,
+      "critical": true,
+      "pool": "forest.ring",
+      "heat": 0.5,
+      "holds": [
+        {
+          "socket": "prop:beam_a",
+          "prop": "forest_sunbeam"
+        },
+        {
+          "socket": "prop:beam_b",
+          "prop": "forest_sunbeam"
+        },
+        {
+          "socket": "verbprop:seed_a",
+          "prop": "hedge_seed",
+          "label": "A seed in the gap",
+          "use": [
+            {
+              "do": "fill",
+              "rect": "@gap_a",
+              "tile": 31
+            },
+            {
+              "do": "toast",
+              "text": "It closes across the gap in a few seconds and is as old as the rest of it."
+            }
+          ]
+        },
+        {
+          "socket": "verbprop:seed_b",
+          "prop": "hedge_seed",
+          "label": "A seed in the gap",
+          "use": [
+            {
+              "do": "fill",
+              "rect": "@gap_b",
+              "tile": 31
+            },
+            {
+              "do": "toast",
+              "text": "The second gap goes. The ride is a corridor now, and only one thing can come along it at a time."
+            }
+          ]
+        },
+        {
+          "socket": "unit:spider_a",
+          "unit": "forest_night_spider"
+        },
+        {
+          "socket": "unit:spider_b",
+          "unit": "forest_night_spider"
+        }
+      ],
+      "binds": [
+        {
+          "from": "verbprop:seed_a",
+          "as": "forest_seed_ring_a",
+          "what": "prop"
+        },
+        {
+          "from": "verbprop:seed_b",
+          "as": "forest_seed_ring_b",
+          "what": "prop"
+        },
+        {
+          "from": "room",
+          "as": "forest_ring",
+          "what": "rect"
+        }
+      ],
+      "demands": [],
+      "grants": []
+    },
+    {
+      "id": "hearth",
+      "kind": "rest",
+      "order": 4,
+      "critical": true,
+      "pool": "forest.hearth",
+      "heat": 0,
+      "holds": [
+        {
+          "socket": "rest:main",
+          "prop": "campfire",
+          "talk": "forest_hearth"
+        },
+        {
+          "socket": "page:main",
+          "prop": "leaf_page"
+        }
+      ],
+      "binds": [
+        {
+          "from": "rest:main",
+          "as": "forest_hearth",
+          "what": "prop"
+        },
+        {
+          "from": "page:main",
+          "as": "forest_hearth_page",
+          "what": "prop"
+        }
+      ],
+      "demands": [],
+      "grants": []
+    },
+    {
+      "id": "rock",
+      "kind": "puzzle",
+      "order": 5,
+      "critical": true,
+      "pool": "forest.rock",
+      "heat": 0.4,
+      "holds": [
+        {
+          "socket": "prop:beam",
+          "prop": "forest_sunbeam"
+        },
+        {
+          "socket": "verbprop:bud",
+          "prop": "bud",
+          "label": "A bud",
+          "use": [
+            {
+              "do": "switch",
+              "prop": "@self",
+              "on": true
+            },
+            {
+              "do": "send",
+              "unit": "@unit:fly",
+              "to": "@perch",
+              "then": [
+                {
+                  "do": "toast",
+                  "text": "It settles, and stays settled."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "socket": "unit:fly",
+          "unit": "forest_butterfly_2",
+          "patrol": [
+            {
+              "mark": "flower_a",
+              "dwell": 180
+            },
+            {
+              "mark": "flower_b",
+              "dwell": 180
+            }
+          ]
+        },
+        {
+          "socket": "jar:main",
+          "prop": "jar"
+        }
+      ],
+      "binds": [
+        {
+          "from": "unit:fly",
+          "as": "butterfly_2",
+          "what": "unit"
+        },
+        {
+          "from": "verbprop:bud",
+          "as": "forest_rock_bud",
+          "what": "prop"
+        }
+      ],
+      "demands": [
+        "explosion"
+      ],
+      "grants": []
+    },
+    {
+      "id": "runner",
+      "kind": "puzzle",
+      "order": 5,
+      "critical": true,
+      "pool": "forest.runner",
+      "heat": 0.4,
+      "holds": [
+        {
+          "socket": "prop:beam_a",
+          "prop": "forest_sunbeam"
+        },
+        {
+          "socket": "prop:beam_b",
+          "prop": "forest_sunbeam"
+        },
+        {
+          "socket": "prop:beam_c",
+          "prop": "forest_sunbeam"
+        },
+        {
+          "socket": "prop:beam_d",
+          "prop": "forest_sunbeam"
+        },
+        {
+          "socket": "verbprop:seed_a",
+          "prop": "hedge_seed",
+          "label": "A seed in the gap",
+          "use": [
+            {
+              "do": "fill",
+              "rect": "@gap_a",
+              "tile": 31
+            },
+            {
+              "do": "toast",
+              "text": "One gap closed. Three ways round became two."
+            }
+          ]
+        },
+        {
+          "socket": "verbprop:seed_b",
+          "prop": "hedge_seed",
+          "label": "A seed in the gap",
+          "use": [
+            {
+              "do": "fill",
+              "rect": "@gap_b",
+              "tile": 31
+            },
+            {
+              "do": "toast",
+              "text": "Two."
+            }
+          ]
+        },
+        {
+          "socket": "verbprop:seed_c",
+          "prop": "hedge_seed",
+          "label": "A seed in the gap",
+          "use": [
+            {
+              "do": "fill",
+              "rect": "@gap_c",
+              "tile": 31
+            },
+            {
+              "do": "toast",
+              "text": "Three. There is one way in and out of the middle now, and you are standing in it."
+            }
+          ]
+        },
+        {
+          "socket": "verbprop:bud",
+          "prop": "bud",
+          "label": "A bud",
+          "use": [
+            {
+              "do": "switch",
+              "prop": "@self",
+              "on": true
+            },
+            {
+              "do": "send",
+              "unit": "@unit:fly",
+              "to": "@perch",
+              "then": [
+                {
+                  "do": "toast",
+                  "text": "It stops going round and comes to the flower."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "socket": "unit:fly",
+          "unit": "forest_butterfly_3",
+          "patrol": [
+            {
+              "mark": "flower_a",
+              "dwell": 60
+            },
+            {
+              "mark": "flower_b",
+              "dwell": 60
+            },
+            {
+              "mark": "flower_c",
+              "dwell": 60
+            }
+          ]
+        }
+      ],
+      "binds": [
+        {
+          "from": "unit:fly",
+          "as": "butterfly_3",
+          "what": "unit"
+        },
+        {
+          "from": "verbprop:bud",
+          "as": "forest_runner_bud",
+          "what": "prop"
+        },
+        {
+          "from": "verbprop:seed_a",
+          "as": "forest_seed_run_a",
+          "what": "prop"
+        },
+        {
+          "from": "verbprop:seed_b",
+          "as": "forest_seed_run_b",
+          "what": "prop"
+        },
+        {
+          "from": "verbprop:seed_c",
+          "as": "forest_seed_run_c",
+          "what": "prop"
+        }
+      ],
+      "demands": [],
+      "grants": []
+    },
+    {
+      "id": "island",
+      "kind": "puzzle",
+      "order": 5,
+      "critical": true,
+      "pool": "forest.island",
+      "heat": 0.5,
+      "holds": [
+        {
+          "socket": "verbprop:bridge",
+          "prop": "forest_footbridge",
+          "needs": [
+            {
+              "item": "wood",
+              "qty": 2
+            }
+          ],
+          "label": "Broken footbridge",
+          "use": [
+            {
+              "do": "hide",
+              "prop": "@self"
+            },
+            {
+              "do": "toast",
+              "text": "The handrail is still wrong and the deck will hold."
+            }
+          ]
+        },
+        {
+          "socket": "verbprop:vine",
+          "prop": "vine_root",
+          "label": "Vine root",
+          "use": [
+            {
+              "do": "fill",
+              "rect": "@crossing",
+              "tile": 25
+            },
+            {
+              "do": "hide",
+              "prop": "@verbprop:bridge"
+            },
+            {
+              "do": "toast",
+              "text": "It runs out over the rail, knits, and takes your weight before you ask it to."
+            }
+          ]
+        },
+        {
+          "socket": "prop:beam",
+          "prop": "forest_sunbeam"
+        },
+        {
+          "socket": "prop:beam_far",
+          "prop": "forest_sunbeam"
+        },
+        {
+          "socket": "verbprop:bud",
+          "prop": "bud",
+          "label": "A bud",
+          "use": [
+            {
+              "do": "switch",
+              "prop": "@self",
+              "on": true
+            },
+            {
+              "do": "send",
+              "unit": "@unit:fly",
+              "to": "@perch",
+              "then": [
+                {
+                  "do": "toast",
+                  "text": "It crosses the water without touching it."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "socket": "unit:fly",
+          "unit": "forest_butterfly_4",
+          "patrol": [
+            {
+              "mark": "flower_a",
+              "dwell": 180
+            },
+            {
+              "mark": "flower_b",
+              "dwell": 180
+            }
+          ]
+        },
+        {
+          "socket": "jar:main",
+          "prop": "jar"
+        }
+      ],
+      "binds": [
+        {
+          "from": "unit:fly",
+          "as": "butterfly_4",
+          "what": "unit"
+        },
+        {
+          "from": "verbprop:bridge",
+          "as": "forest_bridge",
+          "what": "prop"
+        },
+        {
+          "from": "verbprop:vine",
+          "as": "forest_vine",
+          "what": "prop"
+        },
+        {
+          "from": "verbprop:bud",
+          "as": "forest_island_bud",
+          "what": "prop"
+        },
+        {
+          "from": "crossing",
+          "as": "forest_crossing",
+          "what": "rect"
+        }
+      ],
+      "demands": [],
+      "grants": []
+    },
+    {
+      "id": "guarded",
+      "kind": "fight",
+      "order": 5,
+      "critical": true,
+      "pool": "forest.guarded",
+      "heat": 1,
+      "holds": [
+        {
+          "socket": "prop:beam",
+          "prop": "forest_sunbeam"
+        },
+        {
+          "socket": "verbprop:bud",
+          "prop": "bud",
+          "label": "A bud",
+          "use": [
+            {
+              "do": "switch",
+              "prop": "@self",
+              "on": true
+            },
+            {
+              "do": "send",
+              "unit": "@unit:fly",
+              "to": "@perch",
+              "then": [
+                {
+                  "do": "toast",
+                  "text": "It comes down the middle of the glade and nothing turns to watch it."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "socket": "unit:fly",
+          "unit": "forest_butterfly_5",
+          "patrol": [
+            {
+              "mark": "flower_a",
+              "dwell": 180
+            },
+            {
+              "mark": "flower_b",
+              "dwell": 180
+            }
+          ]
+        }
+      ],
+      "binds": [
+        {
+          "from": "unit:fly",
+          "as": "butterfly_5",
+          "what": "unit"
+        },
+        {
+          "from": "verbprop:bud",
+          "as": "forest_guarded_bud",
+          "what": "prop"
+        }
+      ],
+      "demands": [],
+      "grants": []
+    },
+    {
+      "id": "hollow",
+      "kind": "puzzle",
+      "order": 5,
+      "critical": true,
+      "pool": "forest.hollow",
+      "heat": 0.6,
+      "holds": [
+        {
+          "socket": "prop:beam",
+          "prop": "forest_sunbeam"
+        },
+        {
+          "socket": "verbprop:bud",
+          "prop": "bud",
+          "label": "A bud",
+          "use": [
+            {
+              "do": "switch",
+              "prop": "@self",
+              "on": true
+            },
+            {
+              "do": "send",
+              "unit": "@unit:fly",
+              "to": "@perch",
+              "then": [
+                {
+                  "do": "toast",
+                  "text": "It is the only thing in here that is not grey."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "socket": "unit:fly",
+          "unit": "forest_butterfly_6",
+          "patrol": [
+            {
+              "mark": "flower_a",
+              "dwell": 180
+            },
+            {
+              "mark": "flower_b",
+              "dwell": 180
+            }
+          ]
+        },
+        {
+          "socket": "unit:spinner",
+          "unit": "wall_spider"
+        },
+        {
+          "socket": "jar:main",
+          "prop": "jar"
+        }
+      ],
+      "binds": [
+        {
+          "from": "unit:fly",
+          "as": "butterfly_6",
+          "what": "unit"
+        },
+        {
+          "from": "verbprop:bud",
+          "as": "forest_hollow_bud",
+          "what": "prop"
+        }
+      ],
+      "demands": [
+        "explosion"
+      ],
+      "grants": []
+    },
+    {
+      "id": "stone",
+      "kind": "boss",
+      "order": 6,
+      "critical": true,
+      "pool": "forest.stone",
+      "heat": 0,
+      "holds": [
+        {
+          "socket": "boss:main",
+          "unit": "emperor"
+        },
+        {
+          "socket": "prop:stone",
+          "prop": "summon_stone",
+          "label": "The summoning stone",
+          "use": [
+            {
+              "do": "if",
+              "when": [
+                {
+                  "if": "flag",
+                  "flag": "forest_butterflies",
+                  "min": 5
+                }
+              ],
+              "then": [
+                {
+                  "do": "flag",
+                  "flag": "forest_summoned"
+                },
+                {
+                  "do": "show",
+                  "prop": "@verbprop:bud1"
+                },
+                {
+                  "do": "show",
+                  "prop": "@verbprop:bud2"
+                },
+                {
+                  "do": "show",
+                  "prop": "@verbprop:bud3"
+                },
+                {
+                  "do": "show",
+                  "prop": "@verbprop:bud4"
+                },
+                {
+                  "do": "show",
+                  "prop": "@verbprop:bud5"
+                },
+                {
+                  "do": "toast",
+                  "text": "They go up off your hands all at once and the whole glade comes into bud under them."
+                }
+              ],
+              "else": [
+                {
+                  "do": "toast",
+                  "text": "Five, the stone says, and it says it in trades. You are short."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "socket": "verbprop:bud1",
+          "prop": "bud",
+          "hidden": true,
+          "use": [
+            {
+              "do": "switch",
+              "prop": "@self",
+              "on": true
+            },
+            {
+              "do": "send",
+              "unit": "@boss:main",
+              "to": "@bud1",
+              "then": [
+                {
+                  "do": "status",
+                  "effect": "staggered"
+                },
+                {
+                  "do": "toast",
+                  "text": "It comes down to feed. It is not watching you."
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "socket": "verbprop:bud2",
+          "prop": "bud",
+          "hidden": true,
+          "use": [
+            {
+              "do": "switch",
+              "prop": "@self",
+              "on": true
+            },
+            {
+              "do": "send",
+              "unit": "@boss:main",
+              "to": "@bud2",
+              "then": [
+                {
+                  "do": "status",
+                  "effect": "staggered"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "socket": "verbprop:bud3",
+          "prop": "bud",
+          "hidden": true,
+          "use": [
+            {
+              "do": "switch",
+              "prop": "@self",
+              "on": true
+            },
+            {
+              "do": "send",
+              "unit": "@boss:main",
+              "to": "@bud3",
+              "then": [
+                {
+                  "do": "status",
+                  "effect": "staggered"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "socket": "verbprop:bud4",
+          "prop": "bud",
+          "hidden": true,
+          "use": [
+            {
+              "do": "switch",
+              "prop": "@self",
+              "on": true
+            },
+            {
+              "do": "send",
+              "unit": "@boss:main",
+              "to": "@bud4",
+              "then": [
+                {
+                  "do": "status",
+                  "effect": "staggered"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "socket": "verbprop:bud5",
+          "prop": "bud",
+          "hidden": true,
+          "use": [
+            {
+              "do": "switch",
+              "prop": "@self",
+              "on": true
+            },
+            {
+              "do": "send",
+              "unit": "@boss:main",
+              "to": "@bud5",
+              "then": [
+                {
+                  "do": "status",
+                  "effect": "staggered"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "socket": "prop:beam_a",
+          "prop": "forest_sunbeam"
+        },
+        {
+          "socket": "prop:beam_b",
+          "prop": "forest_sunbeam"
+        },
+        {
+          "socket": "prop:beam_c",
+          "prop": "forest_sunbeam"
+        },
+        {
+          "socket": "prop:moon_a",
+          "prop": "forest_moonbeam"
+        },
+        {
+          "socket": "prop:moon_b",
+          "prop": "forest_moonbeam"
+        }
+      ],
+      "binds": [
+        {
+          "from": "boss:main",
+          "as": "emperor",
+          "what": "unit"
+        },
+        {
+          "from": "prop:stone",
+          "as": "forest_stone",
+          "what": "prop"
+        },
+        {
+          "from": "inner",
+          "as": "forest_arena",
+          "what": "rect"
+        }
+      ],
+      "demands": [],
+      "grants": [
+        {
+          "flag": "forest_cleared"
+        }
+      ]
+    },
+    {
+      "id": "reward",
+      "kind": "reward",
+      "order": 7,
+      "critical": true,
+      "pool": "forest.reward",
+      "heat": 0,
+      "holds": [
+        {
+          "socket": "jar:big",
+          "prop": "jar_big"
+        },
+        {
+          "socket": "page:main",
+          "prop": "leaf_page",
+          "use": [
+            {
+              "do": "grow",
+              "stat": "spirit",
+              "amount": 6,
+              "id": "@self"
+            },
+            {
+              "do": "hide",
+              "prop": "@self"
+            }
+          ]
+        }
+      ],
+      "binds": [
+        {
+          "from": "jar:big",
+          "as": "forest_big_jar",
+          "what": "prop"
+        },
+        {
+          "from": "page:main",
+          "as": "forest_reward_page",
+          "what": "prop"
+        }
+      ],
+      "demands": [],
+      "grants": []
+    },
+    {
+      "id": "seed_tree",
+      "kind": "side",
+      "order": 5,
+      "critical": false,
+      "pool": "forest.seed_tree",
+      "heat": 0.3,
+      "holds": [
+        {
+          "socket": "unit:fly",
+          "unit": "forest_butterfly_7"
+        },
+        {
+          "socket": "jar:main",
+          "prop": "jar"
+        }
+      ],
+      "binds": [
+        {
+          "from": "unit:fly",
+          "as": "butterfly_7",
+          "what": "unit"
+        }
+      ],
+      "demands": [
+        "fireball"
+      ],
+      "grants": []
+    },
+    {
+      "id": "lamp_glade",
+      "kind": "side",
+      "order": 5,
+      "critical": false,
+      "pool": "forest.lamp_glade",
+      "heat": 0.3,
+      "holds": [
+        {
+          "socket": "unit:fly",
+          "unit": "forest_moth_8"
+        },
+        {
+          "socket": "jar:main",
+          "prop": "jar"
+        }
+      ],
+      "binds": [
+        {
+          "from": "unit:fly",
+          "as": "moth_8",
+          "what": "unit"
+        }
+      ],
+      "demands": [
+        "spark"
+      ],
+      "grants": []
+    }
+  ],
+  "edges": [
+    {
+      "from": "gate",
+      "to": "first_glade",
+      "kind": {
+        "t": "open"
+      }
+    },
+    {
+      "from": "first_glade",
+      "to": "hut",
+      "kind": {
+        "t": "open"
+      }
+    },
+    {
+      "from": "hut",
+      "to": "gate",
+      "shortcut": true,
+      "kind": {
+        "t": "verb",
+        "verb": "grow",
+        "prop": "forest_dry_bank",
+        "propAs": "forest_dry_bank",
+        "label": "A dry bank",
+        "toast": "The bank comes up green in a breath and there is a way down it to the gate."
+      }
+    },
+    {
+      "from": "hut",
+      "to": "ring",
+      "kind": {
+        "t": "open"
+      }
+    },
+    {
+      "from": "ring",
+      "to": "hearth",
+      "kind": {
+        "t": "open"
+      }
+    },
+    {
+      "from": "ring",
+      "to": "rock",
+      "kind": {
+        "t": "verb",
+        "verb": "explosion",
+        "prop": "forest_rockfall",
+        "propAs": "forest_rock",
+        "label": "A fallen rock",
+        "toast": "The rock comes apart. There is a glade behind it with the sun still in it."
+      }
+    },
+    {
+      "from": "ring",
+      "to": "runner",
+      "kind": {
+        "t": "open"
+      }
+    },
+    {
+      "from": "ring",
+      "to": "island",
+      "kind": {
+        "t": "open"
+      }
+    },
+    {
+      "from": "island",
+      "to": "guarded",
+      "kind": {
+        "t": "open"
+      }
+    },
+    {
+      "from": "runner",
+      "to": "hollow",
+      "kind": {
+        "t": "verb",
+        "verb": "explosion",
+        "prop": "forest_rockfall",
+        "propAs": "forest_hollow_rock",
+        "label": "A fallen rock",
+        "toast": "Cold air out of it, and something lit at the back."
+      }
+    },
+    {
+      "from": "ring",
+      "to": "stone",
+      "kind": {
+        "t": "verb",
+        "verb": "grow",
+        "prop": "forest_vine_bank",
+        "propAs": "forest_stone_bank",
+        "label": "A bare bank",
+        "toast": "It knits up the bank in a breath. The stone is standing in the middle of the glade beyond."
+      },
+      "also": [
+        {
+          "t": "lockin",
+          "gateAs": "forest_hedge_gate",
+          "toast": "The hedge closes the way you came. It takes about as long as a gate."
+        }
+      ]
+    },
+    {
+      "from": "stone",
+      "to": "reward",
+      "kind": {
+        "t": "open"
+      }
+    },
+    {
+      "from": "guarded",
+      "to": "seed_tree",
+      "kind": {
+        "t": "verb",
+        "verb": "fireball",
+        "prop": "dry_tree",
+        "propAs": "forest_dry_tree",
+        "label": "A dead tree",
+        "toast": "It burns down to the fork and drops what it was holding."
+      }
+    },
+    {
+      "from": "hollow",
+      "to": "lamp_glade",
+      "kind": {
+        "t": "verb",
+        "verb": "spark",
+        "prop": "forest_lamp_dead",
+        "propAs": "forest_dead_lamp",
+        "label": "A dead lamp",
+        "toast": "The lamp takes, and the glade behind it is full of something that was waiting for it."
+      }
+    }
+  ],
+  "budget": {
+    "sideRooms": [
+      0,
+      2
+    ],
+    "critPathCells": [
+      560,
+      2500
+    ],
+    "restAt": [
+      0.06,
+      0.4
+    ],
+    "restToBossCells": 360,
+    "baseHeat": 8,
+    "enemies": {
+      "flower": 1,
+      "cactus": 2,
+      "pumpkin": 2,
+      "bat": 1
+    }
+  },
+  "dress": {
+    "tree": {
+      "props": [
+        "apple_tree"
+      ],
+      "chance": 0.5
+    },
+    "rock": {
+      "props": [
+        "rock"
+      ],
+      "chance": 0.6
+    },
+    "herb": {
+      "props": [
+        "herb",
+        "rose"
+      ],
+      "chance": 0.7
+    },
+    "post": {
+      "props": [
+        "lamp_post"
+      ],
+      "chance": 0.8
+    },
+    "bench": {
+      "props": [
+        "bench"
+      ],
+      "chance": 0.5
+    },
+    "pile": {
+      "props": [
+        "crate",
+        "barrel"
+      ],
+      "chance": 0.4
+    }
+  },
+  "fallback": [
+    {
+      "node": "gate",
+      "template": "forest.gate.a",
+      "bay": [
+        0,
+        3
+      ],
+      "turn": 0,
+      "mirror": false
+    },
+    {
+      "node": "first_glade",
+      "template": "forest.first_glade.a",
+      "bay": [
+        1,
+        3
+      ],
+      "turn": 0,
+      "mirror": false
+    },
+    {
+      "node": "hut",
+      "template": "forest.hut.a",
+      "bay": [
+        1,
+        2
+      ],
+      "turn": 0,
+      "mirror": false
+    },
+    {
+      "node": "ring",
+      "template": "forest.ring.a",
+      "bay": [
+        2,
+        2
+      ],
+      "turn": 0,
+      "mirror": false
+    },
+    {
+      "node": "hearth",
+      "template": "forest.hearth.a",
+      "bay": [
+        2,
+        3
+      ],
+      "turn": 0,
+      "mirror": false
+    },
+    {
+      "node": "rock",
+      "template": "forest.rock.a",
+      "bay": [
+        2,
+        1
+      ],
+      "turn": 0,
+      "mirror": false
+    },
+    {
+      "node": "runner",
+      "template": "forest.runner.a",
+      "bay": [
+        3,
+        1
+      ],
+      "turn": 0,
+      "mirror": false
+    },
+    {
+      "node": "island",
+      "template": "forest.island.a",
+      "bay": [
+        4,
+        2
+      ],
+      "turn": 0,
+      "mirror": false
+    },
+    {
+      "node": "guarded",
+      "template": "forest.guarded.a",
+      "bay": [
+        5,
+        2
+      ],
+      "turn": 0,
+      "mirror": false
+    },
+    {
+      "node": "hollow",
+      "template": "forest.hollow.a",
+      "bay": [
+        3,
+        0
+      ],
+      "turn": 0,
+      "mirror": false
+    },
+    {
+      "node": "stone",
+      "template": "forest.stone.a",
+      "bay": [
+        3,
+        3
+      ],
+      "turn": 0,
+      "mirror": false
+    },
+    {
+      "node": "reward",
+      "template": "forest.reward.a",
+      "bay": [
+        5,
+        3
+      ],
+      "turn": 0,
+      "mirror": false
+    }
+  ]
+}

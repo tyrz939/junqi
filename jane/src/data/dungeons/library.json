@@ -1,0 +1,102 @@
+{
+  "id": "library",
+  "name": "The Ruined Library",
+  "phase": 3,
+  "tiles": { "floor": "FloorWood", "wall": "Wall", "alt": [] },
+  "indoor": true,
+  "ambient": 0.22,
+  "lattice": { "cols": 3, "rows": 3 },
+  "givenVerbs": ["icebolt", "repair", "explosion"],
+  "givenKeys": [],
+  "nodes": [
+    {
+      "id": "entry", "kind": "entrance", "order": 0, "critical": true, "pool": "library.entry", "heat": 0,
+      "holds": [
+        { "socket": "exit:main", "prop": "door", "to": { "zone": "county", "mark": "library_mouth" }, "label": "The way out" },
+        { "socket": "notice:main", "prop": "notice", "talk": "notice_library" }
+      ],
+      "binds": [
+        { "from": "exit:main", "as": "library_door_out", "what": "prop" },
+        { "from": "entry", "as": "entry", "what": "mark" },
+        { "from": "room", "as": "library_entry", "what": "rect" }
+      ],
+      "demands": [], "grants": []
+    },
+    {
+      "id": "stacks", "kind": "hub", "order": 1, "critical": true, "pool": "library.stacks", "heat": 0,
+      "holds": [
+        { "socket": "plate:main", "prop": "plate", "use": [{ "do": "unlock", "prop": "@page:reward" }], "release": [{ "do": "lock", "prop": "@page:reward" }] },
+        { "socket": "page:reward", "prop": "leaf_page", "locked": true, "label": "The pressed page" },
+        { "socket": "push:main", "prop": "crate", "label": "Library steps" }
+      ],
+      "binds": [
+        { "from": "plate:main", "as": "library_plate", "what": "prop" },
+        { "from": "page:reward", "as": "library_page", "what": "prop" },
+        { "from": "push:main", "as": "library_steps", "what": "prop" }
+      ],
+      "demands": [], "grants": []
+    },
+    {
+      "id": "nook", "kind": "rest", "order": 2, "critical": true, "pool": "library.nook", "heat": 0,
+      "holds": [
+        { "socket": "rest:main", "prop": "campfire", "talk": "library_fire" },
+        { "socket": "jar:main", "prop": "jar" }
+      ],
+      "binds": [
+        { "from": "rest:main", "as": "library_fire", "what": "prop" },
+        { "from": "jar:main", "as": "library_nook_jar", "what": "prop" }
+      ],
+      "demands": [], "grants": []
+    },
+    {
+      "id": "shelf", "kind": "teach", "order": 3, "critical": true, "pool": "library.shelf", "heat": 0,
+      "holds": [
+        { "socket": "prop:book", "prop": "page_grow", "talk": "page_grow", "label": "The last book" },
+        { "socket": "prop:beam", "prop": "library_beam" },
+        {
+          "socket": "verbprop:planter", "prop": "library_planter", "label": "Dry planter",
+          "use": [
+            { "do": "fill", "rect": "@vine", "tile": 25 },
+            { "do": "show", "prop": "@jar:vine" },
+            { "do": "toast", "text": "It comes up along the channel and does not stop at the end of it. There is a jar in the dark behind." }
+          ]
+        },
+        { "socket": "jar:vine", "prop": "jar", "hidden": true }
+      ],
+      "binds": [
+        { "from": "prop:book", "as": "library_book", "what": "prop" },
+        { "from": "verbprop:planter", "as": "library_planter", "what": "prop" },
+        { "from": "prop:beam", "as": "library_light", "what": "prop" },
+        { "from": "jar:vine", "as": "library_vine_jar", "what": "prop" },
+        { "from": "vine", "as": "library_vine", "what": "rect" }
+      ],
+      "demands": [], "grants": [{ "verb": "grow" }]
+    }
+  ],
+  "edges": [
+    { "from": "entry", "to": "stacks", "kind": { "t": "open" } },
+    { "from": "stacks", "to": "nook", "kind": { "t": "open" } },
+    { "from": "stacks", "to": "shelf", "kind": { "t": "open" } },
+    { "from": "shelf", "to": "entry", "kind": { "t": "open" }, "shortcut": true }
+  ],
+  "budget": {
+    "sideRooms": [0, 0],
+    "critPathCells": [100, 420],
+    "restAt": [0.22, 0.72],
+    "restToBossCells": 400,
+    "baseHeat": 0,
+    "enemies": {}
+  },
+  "dress": {
+    "torch": { "props": ["torch"], "chance": 0.8 },
+    "pile": { "props": ["crate", "barrel"], "chance": 0.5 },
+    "shelf": { "props": ["shelf"], "chance": 0.9 },
+    "desk": { "props": ["table"], "chance": 0.8 }
+  },
+  "fallback": [
+    { "node": "entry", "template": "library.entry.a", "bay": [1, 2], "turn": 0, "mirror": false },
+    { "node": "stacks", "template": "library.stacks.a", "bay": [1, 1], "turn": 0, "mirror": false },
+    { "node": "nook", "template": "library.nook.a", "bay": [0, 1], "turn": 0, "mirror": false },
+    { "node": "shelf", "template": "library.shelf.a", "bay": [2, 1], "turn": 0, "mirror": false }
+  ]
+}

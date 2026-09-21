@@ -53,6 +53,11 @@ export type SolveOptions = {
   shut?: readonly string[];
   /** Flood from this mark instead of the zone's entrance. */
   entry?: string;
+  /**
+   * This blueprint is a PIECE of a zone (one room, stamped alone by the template harness), so a
+   * list naming something in another room is expected, not a broken row.
+   */
+  fragment?: boolean;
   /** Keep the order things happened in. Costs two bytes a cell, so the county does not ask for it. */
   trace?: boolean;
   /** Reversible mechanisms (a breaker, a valve). At most three. Given, the flood is stateful. */
@@ -113,7 +118,13 @@ export function validateBlueprint(
 
   // Lists the blueprint wrote are rows like any other: the catalog checked its own at boot,
   // these are checked here. Names they lean on must exist in this blueprint.
+  //
+  // Unless this IS only a piece of one (`fragment`). The template harness stamps one room by
+  // itself to prove it, and a control's list names things in other rooms by definition: that
+  // is what a building-wide state is. In a fragment those names are simply absent, and an
+  // action that cannot find its prop does nothing, so the room is still honestly judged.
   const checkNames = (where: string, list: ActionList | undefined): void => {
+    if (opts.fragment) return;
     eachAction(list, (a) => {
       if ((a.do === "lock" || a.do === "unlock" || a.do === "show" || a.do === "hide" || a.do === "switch") && !propKeys.has(a.prop)) {
         errors.push(`${where}: no prop "${a.prop}" in this zone`);

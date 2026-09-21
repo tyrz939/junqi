@@ -1,0 +1,22 @@
+{
+  "key_toilets": {
+    "name": "Conveniences Key", "icon": "item_key_brass", "maxStack": 1, "usable": false, "cooldown": 1, "opens": "museum_toilets",
+    "description": "Castle Museum. A brass tag reads CONVENIENCES. The tag is worn smooth on one side and new on the other."
+  },
+  "key_maintenance": {
+    "name": "Maintenance Key", "icon": "item_key_iron", "maxStack": 1, "usable": false, "cooldown": 1, "opens": "museum_maintenance",
+    "description": "Opens the maintenance room off the cloakroom. The wooden fob lists the hours the power is checked: nine, one and four."
+  },
+  "key_floor": {
+    "name": "Floor Key No. 3", "icon": "item_key_green", "maxStack": 1, "usable": false, "cooldown": 1, "opens": "museum_floor",
+    "description": "Opens the SCIENCE wing. Stamped FLOOR KEY No. 3. Nobody at the desk could say what one and two open."
+  },
+  "key_attendant": {
+    "name": "The Attendant's Key", "icon": "item_key_purple", "maxStack": 1, "usable": false, "cooldown": 1, "opens": "museum_attendant",
+    "description": "One key on a ring that held eleven. It opens the wing that is not on the plan."
+  },
+  "key_forest": {
+    "name": "Forest Gate Key", "icon": "item_key_gold", "maxStack": 1, "usable": false, "cooldown": 1, "opens": "forest",
+    "description": "A council key on a green tag: BUTTERFLY FOREST, GATE. Visitors are counted in and counted out."
+  }
+}

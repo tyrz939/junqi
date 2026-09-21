@@ -1,0 +1,45 @@
+id      library.shelf.a
+pool    library.shelf
+bays    1x1
+turn    0 180 mirror
+doors   n1 optional, s1 optional, w1 optional, e1 optional
+needs   -
+grants  prop:book, verbprop:planter
+blocks  -
+coop    -
+heat    0
+rect    vine 16 17 7 2
+grid
+############nnn############
+#...........___...........#
+#.t.....................t.#
+#...BB....................#
+#...BB....................#
+#.........................#
+#..hhh.............hhh....#
+#.........................#
+#.........................#
+w_......................._e
+w_......................._e
+w_......................._e
+#.....................xxx.#
+#.....................xxx.#
+#.........................#
+#...............PP.LL.....#
+#...............PP.LL.....#
+#.........................#
+#......................j..#
+#.t.........___.........t.#
+############sss############
+legend
+n door n1
+s door s1
+w door w1
+e door e1
+B prop:book 2x2
+P verbprop:planter 2x2
+L prop:beam 2x2
+j jar:vine
+h dress:shelf 3x1
+x tile Rubble
+t dress:torch

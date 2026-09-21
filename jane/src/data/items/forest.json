@@ -1,0 +1,17 @@
+{
+  "net": {
+    "name": "Butterfly Net",
+    "description": "Cane, wire and muslin, mended twice. There is a name inked on the handle and it has been scratched out with the same pen.",
+    "icon": "item_net", "maxStack": 1, "usable": false, "cooldown": 1, "bound": true
+  },
+  "butterfly": {
+    "name": "Butterfly",
+    "description": "In the net, then in your hand, and quite still. It is warmer than it ought to be.",
+    "icon": "item_butterfly", "maxStack": 8, "usable": false, "cooldown": 1
+  },
+  "butterfly_amulet": {
+    "name": "Butterfly Amulet",
+    "description": "Eight wings set in glass, in the order the cases were labelled. The last case had no label on it and now it does.",
+    "icon": "item_amulet", "maxStack": 1, "usable": false, "cooldown": 1, "bound": true
+  }
+}

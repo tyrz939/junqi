@@ -1,0 +1,18 @@
+{
+  "net_throw": {
+    "name": "Thrown Net",
+    "description": "He throws it underarm, the way you would to a child.",
+    "icon": "spell_web", "kind": "ground", "school": "physical", "mp": 2, "energy": 0, "range": 12, "cooldown": 6,
+    "gcdImmune": false, "needsTarget": true, "needsEnemy": true, "needsLos": true, "anim": "cast",
+    "power": { "stat": "spirit", "div": 1, "varDiv": 2, "flat": 2 },
+    "radius": 1.5, "duration": 2, "pulse": 1, "effect": "webbed", "stop": 24
+  },
+  "scale_dust": {
+    "name": "Scale Dust",
+    "description": "It comes off the wings and hangs there. Everything under it is slower.",
+    "icon": "spell_nature", "kind": "ground", "school": "nature", "mp": 4, "energy": 0, "range": 10, "cooldown": 8,
+    "gcdImmune": false, "needsTarget": true, "needsEnemy": true, "needsLos": true, "anim": "cast",
+    "power": { "stat": "spirit", "div": 2, "varDiv": 4 },
+    "radius": 2.5, "duration": 6, "pulse": 1, "effect": "dusted", "stop": 20
+  }
+}

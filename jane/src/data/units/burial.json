@@ -1,0 +1,141 @@
+{
+  "shade": {
+    "name": "Shade", "faction": "undead", "controller": "ai",
+    "strength": 24, "spirit": 1, "walk": 0.3, "run": 0.7, "aggro": 12, "leash": 60, "bounds": 1,
+    "book": ["melee"], "respawn": 0, "autoRegen": true, "loot": [], "sprite": "shade",
+    "resist": { "frost": 0.5 }, "shunsLight": true
+  },
+  "great_flower": {
+    "name": "The Flower", "faction": "undead", "controller": "ai",
+    "strength": 110, "spirit": 60, "walk": 0, "run": 0, "aggro": 16, "leash": 90, "bounds": 1.5,
+    "book": ["cactus_spray", "root_lash"], "respawn": 0, "autoRegen": true, "loot": [],
+    "sprite": "great_flower", "boss": true, "resist": { "nature": 0.8, "frost": 0.3 },
+    "phases": [
+      {
+        "hpBelow": 0.75, "book": ["cactus_spray", "root_lash"],
+        "onEnter": [
+          { "do": "spawn", "unit": "burial_seedling_a", "def": "flower", "at": "flower_seed_a" },
+          { "do": "spawn", "unit": "burial_seedling_b", "def": "flower", "at": "flower_seed_b" },
+          { "do": "toast", "text": "Seeds crawl out of the bed and stop. Two of them open." }
+        ]
+      },
+      {
+        "hpBelow": 0.4, "book": ["cactus_spray", "root_lash"],
+        "onEnter": [
+          { "do": "spawn", "unit": "burial_seedling_c", "def": "flower", "at": "flower_seed_c" },
+          { "do": "spawn", "unit": "burial_seedling_d", "def": "flower", "at": "flower_seed_d" },
+          { "do": "toast", "text": "Two more, at the cold end of the bed." }
+        ]
+      }
+    ],
+    "onDeath": [
+      { "do": "flag", "flag": "flower_down" },
+      { "do": "toast", "text": "The gardener's flower comes apart. The glass is still warm where it stood." }
+    ]
+  },
+  "spider_queen": {
+    "name": "The Spider", "faction": "undead", "controller": "ai",
+    "strength": 100, "spirit": 50, "walk": 0.35, "run": 0.9, "aggro": 14, "leash": 60, "bounds": 1.25,
+    "book": ["spider_bite", "webshot"], "respawn": 0, "autoRegen": true, "loot": [],
+    "sprite": "spider_queen", "boss": true, "resist": { "physical": 0.3 },
+    "phases": [
+      {
+        "hpBelow": 0.7, "book": ["spider_bite", "webshot"], "run": 1.1,
+        "onEnter": [
+          { "do": "spawn", "unit": "burial_hatchling_a", "def": "spider", "at": "spider_egg_a" },
+          { "do": "spawn", "unit": "burial_hatchling_b", "def": "spider", "at": "spider_egg_b" },
+          { "do": "toast", "text": "Two of the eggs are open. They were not open a moment ago." }
+        ]
+      },
+      {
+        "hpBelow": 0.35, "book": ["spider_bite", "webshot"], "run": 1.3,
+        "onEnter": [
+          { "do": "spawn", "unit": "burial_hatchling_c", "def": "spider", "at": "spider_egg_c" },
+          { "do": "spawn", "unit": "burial_hatchling_d", "def": "spider", "at": "spider_egg_d" },
+          { "do": "toast", "text": "The rest of the eggs go at once." }
+        ]
+      }
+    ],
+    "onDeath": [
+      { "do": "flag", "flag": "spider_down" },
+      { "do": "toast", "text": "The webs go slack. Nothing else in the room moves." }
+    ]
+  },
+  "the_soldier": {
+    "name": "The Soldier", "faction": "undead", "controller": "ai",
+    "strength": 150, "spirit": 20, "walk": 0.2, "run": 0.45, "aggro": 12, "leash": 40, "bounds": 1.25,
+    "book": ["melee_stun", "melee_fast"], "respawn": 0, "autoRegen": true, "loot": [],
+    "sprite": "the_soldier", "boss": true, "resist": { "physical": 0.6, "frost": 0.4, "nature": 0.4 },
+    "phases": [
+      {
+        "hpBelow": 0.66, "book": ["melee_stun", "melee_fast"], "run": 0.55,
+        "onEnter": [
+          { "do": "spawn", "unit": "burial_parade_a", "def": "shade", "at": "soldier_shade_a" },
+          { "do": "spawn", "unit": "burial_parade_b", "def": "shade", "at": "soldier_shade_b" },
+          { "do": "toast", "text": "Two come in from the dark end and fall in behind him." }
+        ]
+      },
+      {
+        "hpBelow": 0.33, "book": ["melee_stun", "melee_fast"], "run": 0.7,
+        "onEnter": [
+          { "do": "spawn", "unit": "burial_parade_c", "def": "shade", "at": "soldier_shade_c" },
+          { "do": "spawn", "unit": "burial_parade_d", "def": "shade", "at": "soldier_shade_d" },
+          { "do": "toast", "text": "Two more. Somebody is still bringing him flowers." }
+        ]
+      }
+    ],
+    "onDeath": [
+      { "do": "flag", "flag": "soldier_down" },
+      { "do": "toast", "text": "He stands a moment after he is finished, and then he does not." }
+    ]
+  },
+  "goldskin": {
+    "name": "Gnox Goldskin", "faction": "undead", "controller": "ai",
+    "strength": 134, "spirit": 150, "walk": 0.3, "run": 0.65, "aggro": 16, "leash": 50, "bounds": 1.25,
+    "book": ["melee_stun", "poisonbolt_far", "snake_ring", "icebolt_ai"],
+    "respawn": 0, "autoRegen": true, "loot": [], "sprite": "goldskin", "boss": true,
+    "resist": { "physical": 0.8, "frost": 0.8, "fire": 0.8, "nature": 0.8, "blast": 0.8, "shock": 0.8 },
+    "phases": [
+      {
+        "hpBelow": 0.75, "book": ["melee_stun", "poisonbolt_far", "icebolt_ai"],
+        "onEnter": [
+          { "do": "switch", "prop": "vault_brazier_a", "on": false },
+          { "do": "switch", "prop": "vault_brazier_b", "on": false },
+          { "do": "switch", "prop": "vault_brazier_c", "on": false },
+          { "do": "switch", "prop": "vault_brazier_d", "on": false },
+          { "do": "spawn", "unit": "burial_gold_a", "def": "shade", "at": "goldskin_shade_a" },
+          { "do": "toast", "text": "Every flame in the hall goes out together." }
+        ]
+      },
+      {
+        "hpBelow": 0.5, "book": ["melee_stun", "snake_ring", "poisonbolt_far"],
+        "onEnter": [
+          { "do": "switch", "prop": "vault_brazier_a", "on": false },
+          { "do": "switch", "prop": "vault_brazier_b", "on": false },
+          { "do": "switch", "prop": "vault_brazier_c", "on": false },
+          { "do": "switch", "prop": "vault_brazier_d", "on": false },
+          { "do": "spawn", "unit": "burial_gold_b", "def": "shade", "at": "goldskin_shade_b" },
+          { "do": "spawn", "unit": "burial_gold_c", "def": "shade", "at": "goldskin_shade_c" },
+          { "do": "toast", "text": "Out again. Something stands up at the cold end of the hall." }
+        ]
+      },
+      {
+        "hpBelow": 0.25, "book": ["melee_stun", "snake_ring", "icebolt_ai", "poisonbolt_far"],
+        "onEnter": [
+          { "do": "switch", "prop": "vault_brazier_a", "on": false },
+          { "do": "switch", "prop": "vault_brazier_b", "on": false },
+          { "do": "switch", "prop": "vault_brazier_c", "on": false },
+          { "do": "switch", "prop": "vault_brazier_d", "on": false },
+          { "do": "spawn", "unit": "burial_gold_d", "def": "shade", "at": "goldskin_shade_d" },
+          { "do": "shake", "amount": 3 },
+          { "do": "toast", "text": "He puts the last one out with his hand." }
+        ]
+      }
+    ],
+    "onDeath": [
+      { "do": "flag", "flag": "burial_cleared" },
+      { "do": "shake", "amount": 4 },
+      { "do": "toast", "text": "The gold comes off him in sheets. Underneath he is the size of a man." }
+    ]
+  }
+}

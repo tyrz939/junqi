@@ -1,0 +1,79 @@
+{
+  "notice_museum": {
+    "speaker": "Floor Plan",
+    "start": [{ "node": "read" }],
+    "nodes": {
+      "read": {
+        "lines": [
+          "CASTLE MUSEUM, GROUND FLOOR. HISTORY off the entrance hall. ARTS west. SCIENCE east. Cloakroom and conveniences as signed.",
+          "Open ten to four. The west end of the plan has been painted over in council cream. The rest of it is still right."
+        ]
+      }
+    }
+  },
+  "notice_touch": {
+    "speaker": "Notice",
+    "start": [{ "node": "read" }],
+    "nodes": {
+      "read": {
+        "lines": [
+          "VISITORS ARE ASKED NOT TO TOUCH THE EXHIBITS.",
+          "The exhibits have been asked the same. Signed, the Attendant."
+        ]
+      }
+    }
+  },
+  "notice_power": {
+    "speaker": "Notice",
+    "start": [{ "node": "read" }],
+    "nodes": {
+      "read": {
+        "lines": [
+          "MAINTENANCE. The gallery lighting and the power shutters are on this breaker.",
+          "It is not to be thrown during opening hours. It has been twice, and the dents stay."
+        ]
+      }
+    }
+  },
+  "page_explosion": {
+    "speaker": "The Shot-Firer's Glove",
+    "start": [{ "when": [{ "if": "knows", "spell": "explosion" }], "node": "spent" }, { "node": "read" }],
+    "nodes": {
+      "read": {
+        "lines": [
+          "THE MODERN METHOD. Presented by the Company. The figure holds a charge in its right hand, and the hand is closed.",
+          "Folded into the glove, one page in handwriting you know from a letter: \"Shot-firing. Set it, count to five, and be behind something on three. It will not mend what it opens.\""
+        ],
+        "actions": [{ "do": "learn", "spell": "explosion" }]
+      },
+      "spent": {
+        "lines": ["The glove is open and empty. The label is still screwed to the plinth."]
+      }
+    }
+  },
+  "museum_stove": {
+    "speaker": "Cloakroom Stove",
+    "start": [{ "node": "stove" }],
+    "nodes": {
+      "stove": {
+        "lines": [
+          "CLOAKROOM. The stove is lit and the hooks are numbered to sixty. Fourteen of them still have coats.",
+          "Nothing comes in here. If it goes badly out there, this is where you will wake."
+        ],
+        "actions": [{ "do": "rest" }]
+      }
+    }
+  },
+  "museum_portrait": {
+    "speaker": "Portrait",
+    "start": [{ "node": "look" }],
+    "nodes": {
+      "look": {
+        "lines": [
+          "A portrait in oils, three quarters, a man in a good coat. The brass label reads GNOX GOLDSKIN, BENEFACTOR.",
+          "The face has been scratched out. It was done from the front, with something blunt, and not in a hurry."
+        ]
+      }
+    }
+  }
+}

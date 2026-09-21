@@ -1,0 +1,465 @@
+{
+  "id": "burial",
+  "name": "Burial Chamber",
+  "phase": 5,
+  "tiles": { "floor": "TempleFloor", "wall": "TempleWall", "alt": [] },
+  "indoor": true,
+  "ambient": 0.1,
+  "lattice": { "cols": 6, "rows": 6 },
+  "givenVerbs": ["icebolt"],
+  "givenKeys": [],
+  "nodes": [
+    {
+      "id": "entry", "kind": "entrance", "order": 0, "critical": true, "pool": "burial.entry", "heat": 0.2,
+      "holds": [
+        { "socket": "exit:main", "prop": "door", "to": { "zone": "county", "mark": "burial_mouth" } },
+        { "socket": "notice:main", "prop": "notice", "talk": "notice_burial" }
+      ],
+      "binds": [
+        { "from": "exit:main", "as": "exit_door", "what": "prop" },
+        { "from": "entry", "as": "entry", "what": "mark" },
+        { "from": "room", "as": "burial_entry", "what": "rect" }
+      ],
+      "demands": [], "grants": []
+    },
+    {
+      "id": "hall", "kind": "hub", "order": 1, "critical": true, "pool": "burial.hall", "heat": 0.3,
+      "holds": [
+        {
+          "socket": "lever:seal", "prop": "lever", "label": "The seal",
+          "use": [
+            {
+              "do": "if",
+              "when": [
+                { "if": "flag", "flag": "snake_down" },
+                { "if": "flag", "flag": "flower_down" },
+                { "if": "flag", "flag": "spider_down" },
+                { "if": "flag", "flag": "soldier_down" }
+              ],
+              "then": [
+                { "do": "flag", "flag": "burial_four" },
+                { "do": "shake", "amount": 3 },
+                { "do": "toast", "text": "The seal turns. Something in the back wall of the hall lets go of it." }
+              ],
+              "else": [{ "do": "toast", "text": "Four names are cut into it. It will not turn yet." }]
+            }
+          ]
+        },
+        { "socket": "prop:flame1", "prop": "brazier" },
+        { "socket": "prop:flame2", "prop": "brazier" },
+        { "socket": "prop:flame3", "prop": "brazier" },
+        { "socket": "prop:flame4", "prop": "brazier" },
+        {
+          "socket": "prop:door_brazier", "prop": "brazier", "label": "Brazier",
+          "use": [
+            { "do": "flag", "flag": "burial_south" },
+            { "do": "toast", "text": "Warm light, for the first time down here. The south passage is open behind it." }
+          ]
+        }
+      ],
+      "binds": [
+        { "from": "lever:seal", "as": "wizard_seal", "what": "prop" },
+        { "from": "prop:flame1", "as": "hall_flame_a", "what": "prop" },
+        { "from": "prop:flame2", "as": "hall_flame_b", "what": "prop" },
+        { "from": "prop:flame3", "as": "hall_flame_c", "what": "prop" },
+        { "from": "prop:flame4", "as": "hall_flame_d", "what": "prop" },
+        { "from": "prop:door_brazier", "as": "hall_brazier", "what": "prop" },
+        { "from": "room", "as": "burial_hall", "what": "rect" }
+      ],
+      "demands": [], "grants": [{ "flag": "burial_four" }, { "flag": "burial_south" }],
+      "triggers": [
+        {
+          "id": "four_flames", "mode": "while", "once": true,
+          "when": [
+            { "if": "flag", "flag": "snake_down" },
+            { "if": "flag", "flag": "flower_down" },
+            { "if": "flag", "flag": "spider_down" },
+            { "if": "flag", "flag": "soldier_down" }
+          ],
+          "actions": [
+            { "do": "switch", "prop": "@prop:flame1", "on": true },
+            { "do": "switch", "prop": "@prop:flame2", "on": true },
+            { "do": "switch", "prop": "@prop:flame3", "on": true },
+            { "do": "switch", "prop": "@prop:flame4", "on": true },
+            { "do": "toast", "text": "A flame stands up in each corner of the hall. Nobody lit them." }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "alcove", "kind": "puzzle", "order": 2, "critical": true, "pool": "burial.alcove", "heat": 0,
+      "holds": [
+        { "socket": "prop:torch_a", "prop": "torch_blue", "use": [{ "do": "flag", "flag": "torch_a" }] },
+        { "socket": "prop:torch_b", "prop": "torch_blue", "use": [{ "do": "flag", "flag": "torch_b" }] },
+        {
+          "socket": "chest:cold", "locked": true, "label": "The cold chest",
+          "loot": [
+            { "item": "potion_winterbite", "qty": 1 },
+            { "item": "savage_snakeroot", "qty": 2 },
+            { "item": "small_water", "qty": 2 }
+          ]
+        },
+        { "socket": "page:main", "prop": "leaf_page" }
+      ],
+      "binds": [
+        { "from": "prop:torch_a", "as": "torch_a", "what": "prop" },
+        { "from": "prop:torch_b", "as": "torch_b", "what": "prop" },
+        { "from": "chest:cold", "as": "torch_chest", "what": "prop" },
+        { "from": "room", "as": "burial_alcove", "what": "rect" }
+      ],
+      "demands": [], "grants": []
+    },
+    {
+      "id": "rat", "kind": "key", "order": 3, "critical": true, "pool": "burial.rat", "heat": 0.5,
+      "holds": [
+        { "socket": "chest:snake", "loot": [{ "item": "key_snake", "qty": 1 }, { "item": "small_water", "qty": 2 }] },
+        { "socket": "unit:rat1", "unit": "rat" },
+        { "socket": "unit:rat2", "unit": "rat" }
+      ],
+      "binds": [
+        { "from": "chest:snake", "as": "snake_key_chest", "what": "prop" },
+        { "from": "room", "as": "burial_rat", "what": "rect" }
+      ],
+      "demands": [], "grants": [{ "key": "snake" }]
+    },
+    {
+      "id": "lockin", "kind": "fight", "order": 6, "critical": true, "pool": "burial.lockin", "heat": 0.4,
+      "holds": [
+        { "socket": "chest:giant", "prop": "boss_chest", "locked": true, "label": "The ornate chest", "loot": [{ "item": "key_snake_boss", "qty": 1 }] },
+        { "socket": "prop:coffin_a", "prop": "coffin" },
+        { "socket": "prop:coffin_b", "prop": "coffin" }
+      ],
+      "binds": [
+        { "from": "chest:giant", "as": "giant_key_chest", "what": "prop" },
+        { "from": "room", "as": "lockin_room", "what": "rect" },
+        { "from": "lockin_a", "as": "lockin_a", "what": "mark" },
+        { "from": "lockin_b", "as": "lockin_b", "what": "mark" },
+        { "from": "lockin_c", "as": "lockin_c", "what": "mark" },
+        { "from": "lockin_d", "as": "lockin_d", "what": "mark" }
+      ],
+      "demands": [], "grants": [{ "key": "snake_boss" }]
+    },
+    {
+      "id": "snake", "kind": "miniboss", "order": 7, "critical": true, "pool": "burial.snake", "heat": 0,
+      "holds": [
+        {
+          "socket": "boss:main", "unit": "burial_snake",
+          "patrol": [
+            { "mark": "loop1" }, { "mark": "loop2" }, { "mark": "loop3" }, { "mark": "loop4" },
+            { "mark": "loop5" }, { "mark": "loop6" }, { "mark": "loop7" }, { "mark": "loop8" }
+          ]
+        }
+      ],
+      "binds": [
+        { "from": "boss:main", "as": "burial_snake", "what": "unit" },
+        { "from": "inner", "as": "snake_arena", "what": "rect" },
+        { "from": "room", "as": "burial_snake_room", "what": "rect" }
+      ],
+      "demands": [], "grants": [{ "flag": "snake_down" }]
+    },
+    {
+      "id": "east", "kind": "puzzle", "order": 2, "critical": true, "pool": "burial.east", "heat": 0.6,
+      "holds": [
+        { "socket": "unit:lurker_a", "unit": "lurker" },
+        { "socket": "unit:lurker_b", "unit": "lurker" },
+        { "socket": "unit:statue_a", "unit": "statue" },
+        { "socket": "unit:statue_b", "unit": "statue" },
+        {
+          "socket": "chest:lurker",
+          "loot": [
+            { "item": "key_burial", "qty": 1 },
+            { "item": "gold_dust", "qty": 3 },
+            { "item": "potion_lifesteal", "qty": 1 }
+          ]
+        }
+      ],
+      "binds": [
+        { "from": "unit:lurker_a", "as": "lurker_a", "what": "unit" },
+        { "from": "unit:lurker_b", "as": "lurker_b", "what": "unit" },
+        { "from": "chest:lurker", "as": "lurker_chest", "what": "prop" },
+        { "from": "room", "as": "burial_east", "what": "rect" }
+      ],
+      "demands": [], "grants": [{ "key": "burial" }]
+    },
+    {
+      "id": "garden", "kind": "miniboss", "order": 3, "critical": true, "pool": "burial.garden", "heat": 0,
+      "holds": [
+        { "socket": "unit:flower", "unit": "flower" },
+        { "socket": "push:root_a", "prop": "root_wall" },
+        { "socket": "push:root_b", "prop": "root_wall" },
+        { "socket": "push:root_c", "prop": "root_wall" },
+        { "socket": "prop:scroll", "prop": "scroll_fire", "talk": "scroll_fire", "label": "The burnt scroll", "guardedBy": ["@unit:flower"] },
+        { "socket": "page:main", "prop": "leaf_page" },
+        { "socket": "prop:brazier", "prop": "brazier", "label": "Brazier" }
+      ],
+      "binds": [
+        { "from": "unit:flower", "as": "garden_flower", "what": "unit" },
+        { "from": "push:root_a", "as": "root_a", "what": "prop" },
+        { "from": "push:root_b", "as": "root_b", "what": "prop" },
+        { "from": "push:root_c", "as": "root_c", "what": "prop" },
+        { "from": "prop:scroll", "as": "fire_scroll", "what": "prop" },
+        { "from": "prop:brazier", "as": "garden_brazier", "what": "prop" },
+        { "from": "room", "as": "garden", "what": "rect" }
+      ],
+      "demands": [], "grants": [{ "verb": "fireball" }]
+    },
+    {
+      "id": "vigil", "kind": "rest", "order": 5, "critical": true, "pool": "burial.vigil", "heat": 0,
+      "holds": [
+        { "socket": "rest:fire", "prop": "campfire" },
+        { "socket": "jar:main", "prop": "jar" }
+      ],
+      "binds": [
+        { "from": "rest:fire", "as": "vigil_fire", "what": "prop" },
+        { "from": "room", "as": "burial_vigil", "what": "rect" }
+      ],
+      "demands": [], "grants": []
+    },
+    {
+      "id": "orchard", "kind": "teach", "order": 4, "critical": true, "pool": "burial.orchard", "heat": 0,
+      "holds": [
+        {
+          "socket": "verbprop:hearth", "prop": "cold_hearth", "label": "Cold hearth",
+          "use": [
+            { "do": "hide", "prop": "@self" },
+            { "do": "show", "prop": "@rest:fire" },
+            { "do": "toast", "text": "It takes at once, as though it had been laid this morning." }
+          ]
+        },
+        { "socket": "rest:fire", "prop": "campfire", "hidden": true },
+        { "socket": "jar:main", "prop": "jar" },
+        { "socket": "page:main", "prop": "leaf_page" }
+      ],
+      "binds": [
+        { "from": "verbprop:hearth", "as": "cold_hearth", "what": "prop" },
+        { "from": "rest:fire", "as": "orchard_fire", "what": "prop" },
+        { "from": "room", "as": "burial_orchard", "what": "rect" }
+      ],
+      "demands": ["fireball"], "grants": []
+    },
+    {
+      "id": "glasshouse", "kind": "miniboss", "order": 6, "critical": true, "pool": "burial.glasshouse", "heat": 0,
+      "holds": [
+        { "socket": "boss:main", "unit": "great_flower" },
+        { "socket": "prop:brazier", "prop": "brazier", "label": "Brazier" },
+        { "socket": "jar:half", "prop": "jar", "use": [{ "do": "grow", "stat": "strength", "amount": 7, "id": "@self" }] }
+      ],
+      "binds": [
+        { "from": "boss:main", "as": "great_flower", "what": "unit" },
+        { "from": "jar:half", "as": "glasshouse_jar", "what": "prop" },
+        { "from": "seed_a", "as": "flower_seed_a", "what": "mark" },
+        { "from": "seed_b", "as": "flower_seed_b", "what": "mark" },
+        { "from": "seed_c", "as": "flower_seed_c", "what": "mark" },
+        { "from": "seed_d", "as": "flower_seed_d", "what": "mark" },
+        { "from": "room", "as": "burial_glasshouse", "what": "rect" }
+      ],
+      "demands": [], "grants": [{ "flag": "flower_down" }]
+    },
+    {
+      "id": "web", "kind": "puzzle", "order": 7, "critical": true, "pool": "burial.web", "heat": 0.9,
+      "holds": [
+        {
+          "socket": "push:web_v", "prop": "web_wall_v", "label": "Web",
+          "use": [{ "do": "hide", "prop": "@self" }, { "do": "toast", "text": "It goes like paper. There is a shelf behind it." }]
+        },
+        { "socket": "page:main", "prop": "leaf_page" }
+      ],
+      "binds": [
+        { "from": "push:web_v", "as": "web_alcove", "what": "prop" },
+        { "from": "room", "as": "burial_web", "what": "rect" }
+      ],
+      "demands": ["fireball"], "grants": []
+    },
+    {
+      "id": "nursery", "kind": "miniboss", "order": 7, "critical": true, "pool": "burial.nursery", "heat": 0,
+      "holds": [
+        { "socket": "boss:main", "unit": "spider_queen" },
+        { "socket": "jar:half", "prop": "jar", "use": [{ "do": "grow", "stat": "strength", "amount": 7, "id": "@self" }] }
+      ],
+      "binds": [
+        { "from": "boss:main", "as": "spider_queen", "what": "unit" },
+        { "from": "jar:half", "as": "nursery_jar", "what": "prop" },
+        { "from": "egg_a", "as": "spider_egg_a", "what": "mark" },
+        { "from": "egg_b", "as": "spider_egg_b", "what": "mark" },
+        { "from": "egg_c", "as": "spider_egg_c", "what": "mark" },
+        { "from": "egg_d", "as": "spider_egg_d", "what": "mark" },
+        { "from": "room", "as": "burial_nursery", "what": "rect" }
+      ],
+      "demands": [], "grants": [{ "flag": "spider_down" }]
+    },
+    {
+      "id": "dark", "kind": "puzzle", "order": 7, "critical": true, "pool": "burial.dark", "heat": 0.5,
+      "holds": [
+        { "socket": "push:torch", "prop": "great_torch", "label": "The great torch" },
+        { "socket": "prop:brazier_a", "prop": "brazier", "label": "Brazier" },
+        { "socket": "prop:brazier_b", "prop": "brazier", "label": "Brazier" },
+        { "socket": "prop:brazier_c", "prop": "brazier", "label": "Brazier" },
+        { "socket": "unit:shade1", "unit": "shade" },
+        { "socket": "unit:shade2", "unit": "shade" },
+        { "socket": "unit:shade3", "unit": "shade" },
+        { "socket": "unit:shade4", "unit": "shade" }
+      ],
+      "binds": [
+        { "from": "push:torch", "as": "great_torch", "what": "prop" },
+        { "from": "prop:brazier_a", "as": "dark_brazier_a", "what": "prop" },
+        { "from": "prop:brazier_b", "as": "dark_brazier_b", "what": "prop" },
+        { "from": "prop:brazier_c", "as": "dark_brazier_c", "what": "prop" },
+        { "from": "unit:shade1", "as": "dark_shade_a", "what": "unit" },
+        { "from": "unit:shade2", "as": "dark_shade_b", "what": "unit" },
+        { "from": "unit:shade3", "as": "dark_shade_c", "what": "unit" },
+        { "from": "unit:shade4", "as": "dark_shade_d", "what": "unit" },
+        { "from": "room", "as": "burial_dark", "what": "rect" }
+      ],
+      "demands": [], "grants": []
+    },
+    {
+      "id": "parade", "kind": "miniboss", "order": 7, "critical": true, "pool": "burial.parade", "heat": 0,
+      "holds": [
+        { "socket": "boss:main", "unit": "the_soldier" },
+        { "socket": "prop:brazier_a", "prop": "brazier", "label": "Brazier" },
+        { "socket": "prop:brazier_b", "prop": "brazier", "label": "Brazier" },
+        { "socket": "prop:brazier_c", "prop": "brazier", "label": "Brazier" },
+        { "socket": "prop:brazier_d", "prop": "brazier", "label": "Brazier" },
+        { "socket": "jar:half", "prop": "jar", "use": [{ "do": "grow", "stat": "strength", "amount": 7, "id": "@self" }] }
+      ],
+      "binds": [
+        { "from": "boss:main", "as": "the_soldier", "what": "unit" },
+        { "from": "jar:half", "as": "parade_jar", "what": "prop" },
+        { "from": "prop:brazier_a", "as": "parade_brazier_a", "what": "prop" },
+        { "from": "prop:brazier_b", "as": "parade_brazier_b", "what": "prop" },
+        { "from": "prop:brazier_c", "as": "parade_brazier_c", "what": "prop" },
+        { "from": "prop:brazier_d", "as": "parade_brazier_d", "what": "prop" },
+        { "from": "shade_a", "as": "soldier_shade_a", "what": "mark" },
+        { "from": "shade_b", "as": "soldier_shade_b", "what": "mark" },
+        { "from": "shade_c", "as": "soldier_shade_c", "what": "mark" },
+        { "from": "shade_d", "as": "soldier_shade_d", "what": "mark" },
+        { "from": "room", "as": "burial_parade", "what": "rect" }
+      ],
+      "demands": [], "grants": [{ "flag": "soldier_down" }]
+    },
+    {
+      "id": "vault", "kind": "boss", "order": 8, "critical": true, "pool": "burial.vault", "heat": 0,
+      "holds": [
+        { "socket": "boss:main", "unit": "goldskin" },
+        {
+          "socket": "verbprop:brazier1", "prop": "brazier", "label": "Brazier",
+          "use": [{ "do": "strike", "rect": "@inner", "amount": 60, "school": "fire", "effect": "softened", "hitsFriends": false }]
+        },
+        {
+          "socket": "verbprop:brazier2", "prop": "brazier", "label": "Brazier",
+          "use": [{ "do": "strike", "rect": "@inner", "amount": 60, "school": "fire", "effect": "softened", "hitsFriends": false }]
+        },
+        {
+          "socket": "verbprop:brazier3", "prop": "brazier", "label": "Brazier",
+          "use": [{ "do": "strike", "rect": "@inner", "amount": 60, "school": "fire", "effect": "softened", "hitsFriends": false }]
+        },
+        {
+          "socket": "verbprop:brazier4", "prop": "brazier", "label": "Brazier",
+          "use": [{ "do": "strike", "rect": "@inner", "amount": 60, "school": "fire", "effect": "softened", "hitsFriends": false }]
+        },
+        { "socket": "prop:stone", "prop": "sign", "talk": "burial_stone", "label": "Cut stone" }
+      ],
+      "binds": [
+        { "from": "boss:main", "as": "goldskin", "what": "unit" },
+        { "from": "verbprop:brazier1", "as": "vault_brazier_a", "what": "prop" },
+        { "from": "verbprop:brazier2", "as": "vault_brazier_b", "what": "prop" },
+        { "from": "verbprop:brazier3", "as": "vault_brazier_c", "what": "prop" },
+        { "from": "verbprop:brazier4", "as": "vault_brazier_d", "what": "prop" },
+        { "from": "prop:stone", "as": "goldskin_stone", "what": "prop" },
+        { "from": "shade_a", "as": "goldskin_shade_a", "what": "mark" },
+        { "from": "shade_b", "as": "goldskin_shade_b", "what": "mark" },
+        { "from": "shade_c", "as": "goldskin_shade_c", "what": "mark" },
+        { "from": "shade_d", "as": "goldskin_shade_d", "what": "mark" },
+        { "from": "inner", "as": "goldskin_arena", "what": "rect" },
+        { "from": "room", "as": "burial_vault", "what": "rect" }
+      ],
+      "demands": [], "grants": [{ "flag": "burial_cleared" }]
+    },
+    {
+      "id": "stair", "kind": "exit", "order": 9, "critical": true, "pool": "burial.stair", "heat": 0,
+      "holds": [
+        { "socket": "exit:stair", "prop": "door", "to": { "zone": "school", "mark": "boiler" }, "locked": true, "label": "The stair up" },
+        { "socket": "jar:big", "prop": "jar_big" },
+        { "socket": "chest:ball", "prop": "boss_chest", "label": "His box", "loot": [{ "item": "the_ball", "qty": 1 }, { "item": "gold_bar", "qty": 4 }] }
+      ],
+      "binds": [
+        { "from": "exit:stair", "as": "stair_up", "what": "prop" },
+        { "from": "jar:big", "as": "burial_big_jar", "what": "prop" },
+        { "from": "chest:ball", "as": "ball_chest", "what": "prop" },
+        { "from": "room", "as": "burial_stair", "what": "rect" }
+      ],
+      "demands": [], "grants": []
+    }
+  ],
+  "edges": [
+    { "from": "entry", "to": "hall", "kind": { "t": "open" } },
+    { "from": "hall", "to": "alcove", "kind": { "t": "open" } },
+    { "from": "alcove", "to": "rat", "kind": { "t": "open" } },
+    { "from": "rat", "to": "lockin", "kind": { "t": "key", "tag": "snake", "gateAs": "gate_snake", "label": "The scaled door" } },
+    { "from": "lockin", "to": "snake", "kind": { "t": "key", "tag": "snake_boss", "gateAs": "snake_gate_east", "label": "The giant door" } },
+    {
+      "from": "snake", "to": "rat", "shortcut": true,
+      "kind": { "t": "oneway", "how": "opens_on", "flag": "snake_down", "gateAs": "snake_gate_south", "label": "A door with no keyhole" }
+    },
+    { "from": "hall", "to": "east", "kind": { "t": "open" } },
+    { "from": "east", "to": "garden", "kind": { "t": "open" } },
+    { "from": "garden", "to": "orchard", "kind": { "t": "open" } },
+    {
+      "from": "orchard", "to": "glasshouse",
+      "kind": { "t": "key", "tag": "burial", "gateAs": "gate_glasshouse", "label": "The glasshouse" },
+      "also": [{ "t": "lockin", "toast": "The glass door swings to behind you. The bed at the far end turns over." }]
+    },
+    { "from": "hall", "to": "vigil", "kind": { "t": "open" } },
+    {
+      "from": "hall", "to": "web",
+      "kind": {
+        "t": "verb", "verb": "fireball", "prop": "web_wall_h", "propAs": "web_wall", "label": "A web across the passage",
+        "toast": "The web goes all at once and is not there."
+      }
+    },
+    { "from": "web", "to": "nursery", "kind": { "t": "open" }, "also": [{ "t": "lockin", "gateAs": "gate_nursery", "toast": "The way out fills with web behind you." }] },
+    { "from": "hall", "to": "dark", "kind": { "t": "oneway", "how": "opens_on", "flag": "burial_south", "gateAs": "gate_dark", "label": "The south passage" } },
+    { "from": "dark", "to": "parade", "kind": { "t": "open" }, "also": [{ "t": "lockin", "gateAs": "gate_parade", "toast": "The gate drops behind you. Somebody has swept this floor." }] },
+    {
+      "from": "hall", "to": "vault",
+      "kind": { "t": "oneway", "how": "opens_on", "flag": "burial_four", "gateAs": "gate_wizard", "label": "The wizard's door" },
+      "also": [{ "t": "lockin", "toast": "The door goes back the way it came. He was already standing." }]
+    },
+    { "from": "vault", "to": "stair", "kind": { "t": "oneway", "how": "opens_on", "flag": "burial_cleared", "gateAs": "gate_stair" } },
+    { "from": "stair", "to": "vigil", "shortcut": true, "kind": { "t": "oneway", "how": "opens_on", "flag": "burial_cleared", "gateAs": "gate_back" } }
+  ],
+  "budget": {
+    "sideRooms": [0, 0],
+    "critPathCells": [1800, 4800],
+    "restAt": [0.15, 0.5],
+    "restToBossCells": 420,
+    "baseHeat": 10,
+    "enemies": { "bat": 1, "rat": 1, "spider": 1, "skeleton": 2, "statue": 2, "pumpkin": 2, "cactus": 2, "wall_spider": 2, "skeleton_guard": 3, "soldier": 3 }
+  },
+  "dress": {
+    "torch": { "props": ["torch"], "chance": 0.8 },
+    "coldtorch": { "props": ["torch_blue"], "chance": 1 },
+    "pile": { "props": ["barrel", "crate"], "chance": 0.5 },
+    "pillar": { "props": ["pillar"], "chance": 1 },
+    "cot": { "props": ["bed"], "chance": 1 }
+  },
+  "fallback": [
+    { "node": "entry", "template": "burial.entry.a", "bay": [0, 0], "turn": 180, "mirror": true },
+    { "node": "hall", "template": "burial.hall.a", "bay": [0, 1], "turn": 0, "mirror": false },
+    { "node": "dark", "template": "burial.dark.a", "bay": [2, 2], "turn": 180, "mirror": true },
+    { "node": "parade", "template": "burial.parade.a", "bay": [2, 3], "turn": 0, "mirror": true },
+    { "node": "vault", "template": "burial.vault.a", "bay": [1, 0], "turn": 0, "mirror": false },
+    { "node": "alcove", "template": "burial.alcove.a", "bay": [2, 1], "turn": 180, "mirror": false },
+    { "node": "east", "template": "burial.east.a", "bay": [0, 3], "turn": 180, "mirror": false },
+    { "node": "rat", "template": "burial.rat.a", "bay": [3, 1], "turn": 0, "mirror": true },
+    { "node": "snake", "template": "burial.snake.a", "bay": [4, 1], "turn": 0, "mirror": false },
+    { "node": "garden", "template": "burial.garden.a", "bay": [1, 4], "turn": 180, "mirror": true },
+    { "node": "orchard", "template": "burial.orchard.a", "bay": [0, 4], "turn": 0, "mirror": false },
+    { "node": "vigil", "template": "burial.vigil.a", "bay": [2, 4], "turn": 0, "mirror": true },
+    { "node": "lockin", "template": "burial.lockin.a", "bay": [4, 2], "turn": 0, "mirror": false },
+    { "node": "glasshouse", "template": "burial.glasshouse.a", "bay": [0, 5], "turn": 0, "mirror": true },
+    { "node": "web", "template": "burial.web.a", "bay": [4, 0], "turn": 0, "mirror": false },
+    { "node": "nursery", "template": "burial.nursery.a", "bay": [5, 0], "turn": 0, "mirror": false },
+    { "node": "stair", "template": "burial.stair.a", "bay": [3, 0], "turn": 0, "mirror": false }
+  ]
+}

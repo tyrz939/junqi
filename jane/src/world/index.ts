@@ -5,7 +5,7 @@
 import { buildCatalog, type Catalog } from "@/sim/catalog";
 import type { ZoneId } from "@/sim/state";
 import { ZONE_ATTEMPTS, type Blueprint, type ZoneContract } from "@/world/blueprint";
-import { buildBurial } from "@/world/burial";
+import { BURIAL, buildBurial } from "@/world/burial";
 import { buildCounty } from "@/world/county";
 import { buildCellar, buildHouse } from "@/world/interiors";
 import { MINE } from "@/world/mine";
@@ -96,13 +96,13 @@ export const GIVEN_KEYS: Record<ZoneId, string[]> = {
 };
 
 /** Spells known at the door, for the zones that are proven against them. */
-export const GIVEN_VERBS: Record<ZoneId, string[] | undefined> = { mine: MINE.givenVerbs };
+export const GIVEN_VERBS: Record<ZoneId, string[] | undefined> = { mine: MINE.givenVerbs, burial: BURIAL.givenVerbs };
 
 /** Reversible mechanisms, by zone, for the stateful flood. None of the original five has any. */
 export const STATES: Record<ZoneId, SolveState[] | undefined> = {};
 
 /** Checks beyond the solver's, by zone. The mine is generated, and must be the mine that was designed. */
-export const CHECKS: Record<ZoneId, ZoneDef["check"]> = { mine: MINE.check };
+export const CHECKS: Record<ZoneId, ZoneDef["check"]> = { mine: MINE.check, burial: BURIAL.check };
 
 // What data/placements promises is part of the county's contract: a seed that cannot place a
 // quest's scarecrow is a broken county and is re-rolled, exactly like one with no stoop.

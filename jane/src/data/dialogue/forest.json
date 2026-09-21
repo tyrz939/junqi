@@ -1,0 +1,166 @@
+{
+  "notice_forest": {
+    "speaker": "Council Sign",
+    "start": [{ "node": "read" }],
+    "nodes": {
+      "read": {
+        "lines": [
+          "BUTTERFLY FOREST. A public garden of the county council. Open from sunrise to sunset.",
+          "Do not pick the flowers. Visitors are counted in at the gate and counted out again.",
+          "Below, on a newer board in a different hand: the paths have grown over. Keep to the light."
+        ]
+      }
+    }
+  },
+  "forest_cases": {
+    "speaker": "Glass Cases",
+    "start": [
+      { "when": [{ "if": "flag", "flag": "forest_butterflies", "min": 8 }, { "if": "flag", "flag": "forest_amulet", "not": true }], "node": "full" },
+      { "when": [{ "if": "dead", "unit": "collector" }], "node": "after" },
+      { "node": "before" }
+    ],
+    "nodes": {
+      "before": {
+        "lines": [
+          "Eleven cases on the wall, each with a label in the same careful hand. The labels are trades and not species. CARTER. NURSE. SIGNALMAN.",
+          "Ten of them have something in them."
+        ]
+      },
+      "after": {
+        "lines": ["The eleventh label is blank. The case is open, and there is a pin in it with nothing on the pin."]
+      },
+      "full": {
+        "lines": ["Eight of yours, set in the order the labels were written. The blank one is the one that fits them."],
+        "actions": [
+          { "do": "give", "item": "butterfly_amulet" },
+          { "do": "flag", "flag": "forest_amulet" }
+        ]
+      }
+    }
+  },
+  "forest_hearth": {
+    "speaker": "Charcoal Hearth",
+    "start": [{ "node": "fire" }],
+    "nodes": {
+      "fire": {
+        "lines": [
+          "A charcoal burner's hearth, swept out, with the kettle still hung over it and next week's wood stacked.",
+          "The hedge is thick on three sides and there is one way in. You can sleep here."
+        ],
+        "actions": [{ "do": "rest" }]
+      }
+    }
+  },
+  "forest_catch_1": {
+    "speaker": "Butterfly",
+    "start": [{ "when": [{ "if": "hasItem", "item": "net" }], "node": "net" }, { "node": "bare" }],
+    "nodes": {
+      "bare": { "lines": ["It sits on your sleeve. You have nothing to keep it in, and it seems to know."] },
+      "net": {
+        "lines": ["It lets the net come right down over it. The wings are the colour of the inside of a book."],
+        "options": [
+          { "label": "Take it", "actions": [{ "do": "despawn", "unit": "butterfly_1" }, { "do": "give", "item": "butterfly" }, { "do": "flag", "flag": "forest_butterflies", "add": 1 }] },
+          { "label": "Leave it" }
+        ]
+      }
+    }
+  },
+  "forest_catch_2": {
+    "speaker": "Butterfly",
+    "start": [{ "when": [{ "if": "hasItem", "item": "net" }], "node": "net" }, { "node": "bare" }],
+    "nodes": {
+      "bare": { "lines": ["It sits on your sleeve. You have nothing to keep it in, and it seems to know."] },
+      "net": {
+        "lines": ["It has been on the same flower since you came in, and the flower is dead."],
+        "options": [
+          { "label": "Take it", "actions": [{ "do": "despawn", "unit": "butterfly_2" }, { "do": "give", "item": "butterfly" }, { "do": "flag", "flag": "forest_butterflies", "add": 1 }] },
+          { "label": "Leave it" }
+        ]
+      }
+    }
+  },
+  "forest_catch_3": {
+    "speaker": "Butterfly",
+    "start": [{ "when": [{ "if": "hasItem", "item": "net" }], "node": "net" }, { "node": "bare" }],
+    "nodes": {
+      "bare": { "lines": ["It sits on your sleeve. You have nothing to keep it in, and it seems to know."] },
+      "net": {
+        "lines": ["It will not be still. You have to put the net where it is going to be, not where it is."],
+        "options": [
+          { "label": "Take it", "actions": [{ "do": "despawn", "unit": "butterfly_3" }, { "do": "give", "item": "butterfly" }, { "do": "flag", "flag": "forest_butterflies", "add": 1 }] },
+          { "label": "Leave it" }
+        ]
+      }
+    }
+  },
+  "forest_catch_4": {
+    "speaker": "Butterfly",
+    "start": [{ "when": [{ "if": "hasItem", "item": "net" }], "node": "net" }, { "node": "bare" }],
+    "nodes": {
+      "bare": { "lines": ["It sits on your sleeve. You have nothing to keep it in, and it seems to know."] },
+      "net": {
+        "lines": ["Wet to the wing tips. It has not rained since Tuesday."],
+        "options": [
+          { "label": "Take it", "actions": [{ "do": "despawn", "unit": "butterfly_4" }, { "do": "give", "item": "butterfly" }, { "do": "flag", "flag": "forest_butterflies", "add": 1 }] },
+          { "label": "Leave it" }
+        ]
+      }
+    }
+  },
+  "forest_catch_5": {
+    "speaker": "Butterfly",
+    "start": [{ "when": [{ "if": "hasItem", "item": "net" }], "node": "net" }, { "node": "bare" }],
+    "nodes": {
+      "bare": { "lines": ["It sits on your sleeve. You have nothing to keep it in, and it seems to know."] },
+      "net": {
+        "lines": ["The flowers in this glade lean when it goes over them. They are not leaning at you."],
+        "options": [
+          { "label": "Take it", "actions": [{ "do": "despawn", "unit": "butterfly_5" }, { "do": "give", "item": "butterfly" }, { "do": "flag", "flag": "forest_butterflies", "add": 1 }] },
+          { "label": "Leave it" }
+        ]
+      }
+    }
+  },
+  "forest_catch_6": {
+    "speaker": "Butterfly",
+    "start": [{ "when": [{ "if": "hasItem", "item": "net" }], "node": "net" }, { "node": "bare" }],
+    "nodes": {
+      "bare": { "lines": ["It sits on your sleeve. You have nothing to keep it in, and it seems to know."] },
+      "net": {
+        "lines": ["In the hollow it is the only light. It goes out while the net is closing and comes back after."],
+        "options": [
+          { "label": "Take it", "actions": [{ "do": "despawn", "unit": "butterfly_6" }, { "do": "give", "item": "butterfly" }, { "do": "flag", "flag": "forest_butterflies", "add": 1 }] },
+          { "label": "Leave it" }
+        ]
+      }
+    }
+  },
+  "forest_catch_7": {
+    "speaker": "Butterfly",
+    "start": [{ "when": [{ "if": "hasItem", "item": "net" }], "node": "net" }, { "node": "bare" }],
+    "nodes": {
+      "bare": { "lines": ["It sits on your sleeve. You have nothing to keep it in, and it seems to know."] },
+      "net": {
+        "lines": ["It came out of the burnt tree. There is no smoke on it anywhere."],
+        "options": [
+          { "label": "Take it", "actions": [{ "do": "despawn", "unit": "butterfly_7" }, { "do": "give", "item": "butterfly" }, { "do": "flag", "flag": "forest_butterflies", "add": 1 }] },
+          { "label": "Leave it" }
+        ]
+      }
+    }
+  },
+  "forest_catch_8": {
+    "speaker": "Moth",
+    "start": [{ "when": [{ "if": "hasItem", "item": "net" }], "node": "net" }, { "node": "bare" }],
+    "nodes": {
+      "bare": { "lines": ["It sits on your sleeve. You have nothing to keep it in, and it seems to know."] },
+      "net": {
+        "lines": ["Bigger than your hand, and it does not mind the lamp. Nothing out here minds the lamp."],
+        "options": [
+          { "label": "Take it", "actions": [{ "do": "despawn", "unit": "moth_8" }, { "do": "give", "item": "butterfly" }, { "do": "flag", "flag": "forest_butterflies", "add": 1 }] },
+          { "label": "Leave it" }
+        ]
+      }
+    }
+  }
+}

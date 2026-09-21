@@ -213,6 +213,9 @@ describe("burial", () => {
     expect(snake.hp).toBeLessThan(maxHp(snake));
 
     // After an anti-cheese reset it must pick the fight back up by itself; pillars never cause one.
+    // The arena is a generated room now and is wider than the hand-built square was, so she
+    // first walks back inside its aggro ring, which is what anyone who had backed off would do.
+    walkTo(sim, snake.homeX + 30, snake.homeY, 12);
     snake.combat = "idle";
     snake.target = 0;
     sim.me.god = false;

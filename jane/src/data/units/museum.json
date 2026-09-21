@@ -1,0 +1,79 @@
+{
+  "armour": {
+    "name": "Suit of Armour", "faction": "undead", "controller": "ai",
+    "strength": 26, "spirit": 1, "walk": 0.2, "run": 0.45, "aggro": 9, "leash": 40, "bounds": 1.1,
+    "book": ["melee_stun"], "respawn": 600, "autoRegen": true, "loot": [],
+    "resist": { "physical": 0.7, "frost": 0.8, "blast": 1.3 }, "sprite": "museum_armour"
+  },
+  "stuffed_fox": {
+    "name": "Fox", "faction": "undead", "controller": "ai",
+    "strength": 9, "spirit": 1, "walk": 0.5, "run": 1.3, "aggro": 7, "leash": 30, "bounds": 0.75,
+    "book": ["melee_fast"], "respawn": 600, "autoRegen": true, "loot": [], "sprite": "museum_fox"
+  },
+  "waxwork": {
+    "name": "Waxwork", "faction": "undead", "controller": "ai",
+    "strength": 14, "spirit": 1, "walk": 0.45, "run": 0.9, "aggro": 10, "leash": 40, "bounds": 1,
+    "book": ["melee"], "respawn": 600, "autoRegen": true, "loot": [],
+    "resist": { "fire": 1.4 }, "sprite": "museum_waxwork"
+  },
+  "shot_firer": {
+    "name": "The Shot-Firer", "faction": "undead", "controller": "ai",
+    "strength": 50, "spirit": 30, "walk": 0.3, "run": 0.3, "aggro": 11, "leash": 60, "bounds": 1.1,
+    "book": ["charge_lob", "melee"], "respawn": 0, "autoRegen": true, "loot": [],
+    "resist": { "blast": 0.4, "fire": 1.4 }, "sprite": "museum_shot_firer", "boss": true, "shunsLight": true
+  },
+  "attendant": {
+    "name": "The Attendant", "faction": "undead", "controller": "ai",
+    "strength": 176, "spirit": 20, "walk": 0.4, "run": 0.75, "aggro": 12, "leash": 30, "bounds": 1.15,
+    "book": ["melee_stun", "melee_fast"], "respawn": 0, "autoRegen": true, "loot": [],
+    "sprite": "museum_attendant", "boss": true,
+    "onDeath": [
+      { "do": "flag", "flag": "museum_cleared" },
+      { "do": "toast", "text": "The keys go down on the tiles. The hall lights come up on their own." }
+    ],
+    "phases": [
+      {
+        "hpBelow": 0.75, "book": ["melee_stun", "melee_fast"],
+        "onEnter": [
+          { "do": "flag", "flag": "museum_rotunda_dark", "value": 1 },
+          { "do": "hide", "prop": "museum_rotunda_lamp_a" },
+          { "do": "hide", "prop": "museum_rotunda_lamp_b" },
+          { "do": "if", "when": [{ "if": "flag", "flag": "museum_gone_rotunda_a", "not": true }], "then": [{ "do": "hide", "prop": "museum_rotunda_armour_a" }, { "do": "spawn", "unit": "museum_rotunda_walker_a", "def": "armour", "at": "museum_rotunda_stand_a" }] },
+          { "do": "if", "when": [{ "if": "flag", "flag": "museum_gone_rotunda_b", "not": true }], "then": [{ "do": "hide", "prop": "museum_rotunda_armour_b" }, { "do": "spawn", "unit": "museum_rotunda_walker_b", "def": "armour", "at": "museum_rotunda_stand_b" }] },
+          { "do": "if", "when": [{ "if": "flag", "flag": "museum_gone_rotunda_c", "not": true }], "then": [{ "do": "hide", "prop": "museum_rotunda_armour_c" }, { "do": "spawn", "unit": "museum_rotunda_walker_c", "def": "armour", "at": "museum_rotunda_stand_c" }] },
+          { "do": "if", "when": [{ "if": "flag", "flag": "museum_gone_rotunda_d", "not": true }], "then": [{ "do": "hide", "prop": "museum_rotunda_armour_d" }, { "do": "spawn", "unit": "museum_rotunda_walker_d", "def": "armour", "at": "museum_rotunda_stand_d" }] },
+          { "do": "shake", "amount": 3 },
+          { "do": "toast", "text": "He reaches past you and throws the breaker. Four plinths are empty." }
+        ]
+      },
+      {
+        "hpBelow": 0.5, "book": ["melee_fast"], "run": 0.85,
+        "onEnter": [
+          { "do": "flag", "flag": "museum_rotunda_dark", "value": 1 },
+          { "do": "hide", "prop": "museum_rotunda_lamp_a" },
+          { "do": "hide", "prop": "museum_rotunda_lamp_b" },
+          { "do": "if", "when": [{ "if": "flag", "flag": "museum_gone_rotunda_a", "not": true }], "then": [{ "do": "hide", "prop": "museum_rotunda_armour_a" }, { "do": "spawn", "unit": "museum_rotunda_walker_a", "def": "armour", "at": "museum_rotunda_stand_a" }] },
+          { "do": "if", "when": [{ "if": "flag", "flag": "museum_gone_rotunda_b", "not": true }], "then": [{ "do": "hide", "prop": "museum_rotunda_armour_b" }, { "do": "spawn", "unit": "museum_rotunda_walker_b", "def": "armour", "at": "museum_rotunda_stand_b" }] },
+          { "do": "if", "when": [{ "if": "flag", "flag": "museum_gone_rotunda_c", "not": true }], "then": [{ "do": "hide", "prop": "museum_rotunda_armour_c" }, { "do": "spawn", "unit": "museum_rotunda_walker_c", "def": "armour", "at": "museum_rotunda_stand_c" }] },
+          { "do": "if", "when": [{ "if": "flag", "flag": "museum_gone_rotunda_d", "not": true }], "then": [{ "do": "hide", "prop": "museum_rotunda_armour_d" }, { "do": "spawn", "unit": "museum_rotunda_walker_d", "def": "armour", "at": "museum_rotunda_stand_d" }] },
+          { "do": "shake", "amount": 3 },
+          { "do": "toast", "text": "He throws it again without looking at it." }
+        ]
+      },
+      {
+        "hpBelow": 0.25, "book": ["melee_stun", "melee_fast"], "run": 0.95,
+        "onEnter": [
+          { "do": "flag", "flag": "museum_rotunda_dark", "value": 1 },
+          { "do": "hide", "prop": "museum_rotunda_lamp_a" },
+          { "do": "hide", "prop": "museum_rotunda_lamp_b" },
+          { "do": "if", "when": [{ "if": "flag", "flag": "museum_gone_rotunda_a", "not": true }], "then": [{ "do": "hide", "prop": "museum_rotunda_armour_a" }, { "do": "spawn", "unit": "museum_rotunda_walker_a", "def": "armour", "at": "museum_rotunda_stand_a" }] },
+          { "do": "if", "when": [{ "if": "flag", "flag": "museum_gone_rotunda_b", "not": true }], "then": [{ "do": "hide", "prop": "museum_rotunda_armour_b" }, { "do": "spawn", "unit": "museum_rotunda_walker_b", "def": "armour", "at": "museum_rotunda_stand_b" }] },
+          { "do": "if", "when": [{ "if": "flag", "flag": "museum_gone_rotunda_c", "not": true }], "then": [{ "do": "hide", "prop": "museum_rotunda_armour_c" }, { "do": "spawn", "unit": "museum_rotunda_walker_c", "def": "armour", "at": "museum_rotunda_stand_c" }] },
+          { "do": "if", "when": [{ "if": "flag", "flag": "museum_gone_rotunda_d", "not": true }], "then": [{ "do": "hide", "prop": "museum_rotunda_armour_d" }, { "do": "spawn", "unit": "museum_rotunda_walker_d", "def": "armour", "at": "museum_rotunda_stand_d" }] },
+          { "do": "shake", "amount": 4 },
+          { "do": "toast", "text": "The last of the light goes. He is somewhere in the room." }
+        ]
+      }
+    ]
+  }
+}

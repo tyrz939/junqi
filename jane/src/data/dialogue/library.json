@@ -1,0 +1,44 @@
+{
+  "notice_library": {
+    "speaker": "Notice",
+    "start": [{ "node": "read" }],
+    "nodes": {
+      "read": {
+        "lines": [
+          "CASTLE LENDING LIBRARY. Tuesday to Saturday, nine until six. Reading room through the stacks.",
+          "Books are not to leave the building. Neither is anyone, after six.",
+          "Underneath, in pencil: the roof came in on the fourteenth. Nobody has been up to look."
+        ]
+      }
+    }
+  },
+  "page_grow": {
+    "speaker": "The Last Book",
+    "start": [{ "when": [{ "if": "knows", "spell": "grow" }], "node": "spent" }, { "node": "read" }],
+    "nodes": {
+      "read": {
+        "lines": [
+          "Every page has been cut out close to the spine, neatly, by somebody with time. One is left.",
+          "It is about seeds, and it is written for a reader who has never seen one. The last line is: it will not come up in the dark, and that is not a rule of this book."
+        ],
+        "actions": [{ "do": "learn", "spell": "grow" }]
+      },
+      "spent": {
+        "lines": ["The page says the same thing. The cut edges are all the same length."]
+      }
+    }
+  },
+  "library_fire": {
+    "speaker": "Fire",
+    "start": [{ "node": "fire" }],
+    "nodes": {
+      "fire": {
+        "lines": [
+          "Somebody has had a fire going on the reading room floor, and swept the ash into the grate afterwards.",
+          "They burned the chairs and not one book. You can sleep here."
+        ],
+        "actions": [{ "do": "rest" }]
+      }
+    }
+  }
+}

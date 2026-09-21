@@ -1,0 +1,49 @@
+id      forest.hollow.a
+pool    forest.hollow
+bays    1x1
+turn    0 180 mirror
+doors   n1 optional, s1 optional, w1 optional, e1 optional
+needs   -
+grants  verbprop:bud, jar:main
+blocks  -
+coop    -
+heat    5
+grid
+############nnn############
+#...........___...........#
+#CCCCCC...........CCCCCCCC#
+#CCC%%%%%%%%%%%%%%%%%%CCCC#
+#CC%%%%%%%%%%%%%%%%%%%%%CC#
+#%%%%%LL%%%%%%%%b%%%%%%%%%#
+#%%%%%LL%%%%%%%%%%%%%%%%%%#
+#%%%%%%B%p%%%%%%%%%%%%%%%%#
+#%%%%%%%%%%%%%%%%%%%%%%%%%#
+w_......................._e
+w_......................._e
+w_......................._e
+#.........U...............#
+#.......S.................#
+#.....r...............r...#
+#...............a.........#
+#.........................#
+#...j................r....#
+#,,.....................,,#
+#...........___...........#
+############sss############
+legend
+n door n1
+s door s1
+w door w1
+e door e1
+L prop:beam 2x2
+B verbprop:bud
+U unit:fly
+S unit:spinner
+j jar:main
+p mark perch
+a mark flower_a
+b mark flower_b
+r spawn
+C tile Cliff
+% tile Moss
+, tile GrassTall

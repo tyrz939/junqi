@@ -1,0 +1,56 @@
+id      forest.runner.a
+pool    forest.runner
+bays    1x1
+turn    0 180 mirror
+doors   n1 optional, s1 optional, w1 optional, e1 optional
+needs   -
+grants  verbprop:bud
+blocks  -
+coop    plate_or_friend
+heat    3
+rect    gap_a 13 6 3 1
+rect    gap_b 13 13 3 1
+rect    gap_c 20 9 1 3
+grid
+############nnn############
+#...........___...........#
+#.........................#
+#................LL.......#
+#...r............LL.......#
+#................A........#
+#.......HHHHH...HHHHH.MM..#
+#.......HDD..c......H.MM..#
+#.......HDDBp.......H.C...#
+w_......................._e
+w_......................._e
+w_......................._e
+#.......H.b.....U.a.H.....#
+#.......HHHHH...HHHHH.....#
+#................E........#
+#................NN....r..#
+#................NN.......#
+#.........................#
+#,,.....................,,#
+#...........___...........#
+############sss############
+legend
+n door n1
+s door s1
+w door w1
+e door e1
+L prop:beam_a 2x2
+N prop:beam_b 2x2
+M prop:beam_c 2x2
+D prop:beam_d 2x2
+A verbprop:seed_a
+E verbprop:seed_b
+C verbprop:seed_c
+B verbprop:bud
+U unit:fly
+p mark perch
+a mark flower_a
+b mark flower_b
+c mark flower_c
+r spawn
+H tile Hedge
+, tile GrassTall
