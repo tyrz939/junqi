@@ -245,6 +245,24 @@ The last attempt (`ZONE_ATTEMPTS - 1`) stamps the mission's hand-placed `fallbac
 - Rows: `jar`, `jar_big`, `leaf_page` (their `use` is `grow` with their own key), `way_in`, `notice`, `hoist_lever`, and the mine's `page_repair`, `broken_hoist`, `broken_cabinet`, `firstaid_stove`. A holding may be `guardedBy` units of its room: it is locked until they are dead, and the generator writes the row that unlocks it. A held `notice` with no `use` of its own gets `reveal` of every room this seed placed (the generator knows them all, so no mission lists them and none can list one that was dropped). A unit holding may carry a `patrol` of the template's marks, each with a `dwell`. `@name` is resolved inside `if` and `send` lists too, and in `to` and `rects`.
 - **The adit** (the mine's second way out): a door in the gallery, so behind Repair, to the county mark `mine_adit` round the east side of the hill from the mouth (`chunks.ts`). The county's side is a barred door (`adit_door`, locked, no key fits it). Standing in the gallery sets `mine_adit_open`, and a county row (`data/triggers/mine.json`) unbars it for good when she next stands in the mine yard: out first, then a way back in.
 
+**The dungeons on it.** Five, each with one idea, and each proven on 64 seeds in the suite (the soak is `DUNGEON_SEEDS=1000`) with no fallback layout used.
+
+| | Phase | Verb | The idea |
+| --- | --- | --- | --- |
+| **Gold Mine** | 1 | Repair (found) | You are shown the broken thing first. Repair is in the Headmaster's confiscated drawer, shut while he stands, with a cabinet in the same room to try it on |
+| **Museum** | 2 | Explosion (found) | One breaker, two buildings. It drives a gate that opens only in the dark and one that opens only in the light; the stores open in neither, and blowing up an exhibit that is frozen in the light is the way through. The Attendant throws the breaker at 75, 50 and 25 per cent |
+| **The ruined library** | 3 | Grow (found) | The smallest dungeon there is: four rooms, nothing alive in any of them, the last page in the book, and a dry planter under the hole in the roof to try it on where she stands |
+| **Butterfly Forest** | 3 | Grow (given) | The first outdoor dungeon. No doors and not one key: light is the lock and a living thing is the key. Grow blooms a bud (whose `use` `send`s a butterfly to it), bridges a stream, and **closes** a hedge gap |
+| **Burial Chamber** | 5 | Fire (found) | Cold light shows what is there; warm light keeps it off. Four corners in the player's own order, shades that will not step into a brazier's light, a great torch pushed one cell at a time like a moving safe room, and Goldskin, gilded until fire softens him |
+
+Three things the later ones taught the engine, each written down because the next author would hit it too:
+
+- **A bolt dies on the first sight-blocking cell**, so anything that `answers` a school stands against a wall, or blocks sight itself. The burial's web walls do; so do the museum's cases. A solid, see-through thing is flown straight past.
+- **A room holding a control cannot be proven alone** unless the solver is told the blueprint is a piece of one: a control's list names things in other rooms by definition. That is `SolveOptions.fragment`, which the template harness passes.
+- **A dungeon whose verbs were all given at the door has nothing to tease**: its props are opened in the flood that first reaches them. C10 skips a lock whose verb is in `givenVerbs`, and C1 takes the end a lock leaves unreached as its far side, so a glade waiting on Fire is not reported as a lock that does not hold. Without those two, an author is pushed into marking honest locks as shortcuts, and then the data lies.
+
+Butterfly Forest asks one thing the solver cannot answer: Grow's `fill` can lay a hedge across a way through, and the solver does not read `fill`. So `test/forest.test.ts` lays every hedge seed's fill into the blueprint's tiles and runs the solver and C1 to C12 again, with every closable gap in the zone shut. It still finishes.
+
 **The solver, extended** (`validate.ts`). `validateBlueprint` takes options and can return a trace (which flood first reached each cell, which flood opened each prop).
 
 | | |
