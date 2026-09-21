@@ -1013,3 +1013,14 @@ export const ICONS: SpriteSheet = {
 
   spell_web: icon(WEB),
 };
+
+// --- fragments -------------------------------------------------------------------------
+// A dungeon's creatures, a region's props: each set may live in a file of its own under
+// ./icons/ and `export default` a SpriteSheet. Merged here in path order; an id drawn twice is an error.
+const ICONS_FRAGMENTS = import.meta.glob("./icons/*.ts", { eager: true, import: "default" }) as Record<string, SpriteSheet>;
+for (const path of Object.keys(ICONS_FRAGMENTS).sort()) {
+  for (const [id, sprite] of Object.entries(ICONS_FRAGMENTS[path])) {
+    if (id in ICONS) throw new Error(`art: "${id}" is drawn twice (again in ${path})`);
+    ICONS[id] = sprite;
+  }
+}

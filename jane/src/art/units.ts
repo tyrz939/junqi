@@ -2432,3 +2432,14 @@ export function seatSheets(sprite = "jane"): SpriteSheet {
   }
   return out;
 }
+
+// --- fragments -------------------------------------------------------------------------
+// A dungeon's creatures, a region's props: each set may live in a file of its own under
+// ./units/ and `export default` a SpriteSheet. Merged here in path order; an id drawn twice is an error.
+const UNIT_SPRITES_FRAGMENTS = import.meta.glob("./units/*.ts", { eager: true, import: "default" }) as Record<string, SpriteSheet>;
+for (const path of Object.keys(UNIT_SPRITES_FRAGMENTS).sort()) {
+  for (const [id, sprite] of Object.entries(UNIT_SPRITES_FRAGMENTS[path])) {
+    if (id in UNIT_SPRITES) throw new Error(`art: "${id}" is drawn twice (again in ${path})`);
+    UNIT_SPRITES[id] = sprite;
+  }
+}

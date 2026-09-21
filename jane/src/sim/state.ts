@@ -10,8 +10,13 @@
 
 import type { RngState } from "@/sim/rng";
 
-export type ZoneId = "county" | "house" | "cellar" | "mine" | "burial";
-export const ZONE_IDS: readonly ZoneId[] = ["county", "house", "cellar", "mine", "burial"];
+/**
+ * A zone's name. It was a closed union of five; it is a string now, because a dungeon is
+ * a file dropped into world/zones/ and the list of zones is whatever world/index.ts finds
+ * (ZONE_IDS lives there). Misspelt ids are caught where they are used: travel to an
+ * unknown zone is a boot error in the catalog's checks and in the blueprint validator.
+ */
+export type ZoneId = string;
 
 export type Faction = "undead" | "beast" | "bandit" | "friendly";
 export type School = "heal" | "physical" | "frost" | "fire" | "nature";

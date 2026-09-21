@@ -1103,3 +1103,14 @@ export const PROP_SPRITES: SpriteSheet = {
     ],
   }),
 };
+
+// --- fragments -------------------------------------------------------------------------
+// A dungeon's creatures, a region's props: each set may live in a file of its own under
+// ./props/ and `export default` a SpriteSheet. Merged here in path order; an id drawn twice is an error.
+const PROP_SPRITES_FRAGMENTS = import.meta.glob("./props/*.ts", { eager: true, import: "default" }) as Record<string, SpriteSheet>;
+for (const path of Object.keys(PROP_SPRITES_FRAGMENTS).sort()) {
+  for (const [id, sprite] of Object.entries(PROP_SPRITES_FRAGMENTS[path])) {
+    if (id in PROP_SPRITES) throw new Error(`art: "${id}" is drawn twice (again in ${path})`);
+    PROP_SPRITES[id] = sprite;
+  }
+}

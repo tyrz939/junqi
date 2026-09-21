@@ -52,7 +52,7 @@ import {
   type ZoneRuntime,
 } from "@/sim/runtime";
 import { cleanName, expandText, isNight } from "@/sim/text";
-import { MAX_PLAYERS, ZONE_IDS, type Facing, type GameState, type PlayerState, type RestPoint, type Unit, type ZoneId, type ZoneState } from "@/sim/state";
+import { MAX_PLAYERS, type Facing, type GameState, type PlayerState, type RestPoint, type Unit, type ZoneId, type ZoneState } from "@/sim/state";
 import { bindLearned, runActions, teach } from "@/sim/actions";
 import { tickAi } from "@/sim/ai";
 import { normalize } from "@/sim/angles";
@@ -67,6 +67,7 @@ import { tickSnake } from "@/sim/snake";
 import { isStunned, speedFactor, tickStatuses } from "@/sim/status";
 import { playerInRect, stepTriggers } from "@/sim/triggers";
 import { createUnit, faceVector, maxHp, maxMp, moveUnit, placeUnit, restoreEnergy, setAnim, spendEnergy } from "@/sim/units";
+import { ZONE_IDS } from "@/world";
 import { ensureZoneState, placeArrival, requestTravel, stampFog } from "@/sim/zones";
 
 /** Held inputs, sampled once per tick. Vectors are quantised to 1/127 so a recording is exact. */

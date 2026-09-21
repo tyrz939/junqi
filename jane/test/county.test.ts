@@ -10,7 +10,8 @@ import { F_SOLID, TILE_FLAGS, Tile } from "@/sim/grid";
 import { hashString } from "@/sim/rng";
 import type { Blueprint } from "@/world/blueprint";
 import { buildZone } from "@/world";
-import { COUNTY_H, COUNTY_W, countySkeleton } from "@/world/county";
+import { buildCounty, COUNTY_H, COUNTY_W, countySkeleton } from "@/world/county";
+import { placementContract, type PlacementRow } from "@/world/placements";
 import { at, MACRO } from "@/world/skeleton";
 
 const SEEDS = [3, 2026];
@@ -152,5 +153,53 @@ describe("the first evening", () => {
     // And the dog is where it always is.
     const dog = sim.rt.unitsByKey.get("dog")!;
     expect(Math.hypot(dog.x - sim.player.x, dog.y - sim.player.y)).toBeLessThan(80 * 8);
+  });
+});
+
+describe("placements: content says where by name", () => {
+  const rows: PlacementRow[] = [
+    { key: "t_board", at: { mark: "town_square" }, prop: { def: "sign", talk: "sign_town" } },
+    { key: "t_keeper", at: { site: "farm" }, unit: { def: "dog" } },
+    { key: "t_pumpkin", count: 5, at: { area: "top_field" }, unit: { def: "pumpkin" } },
+    { key: "t_pocket", at: { poi: "scarecrow", near: "farm" }, prop: { def: "chest", loot: [{ item: "apple", qty: 1 }] }, rect: { name: "t_scarecrow_field", w: 24, h: 24 }, mark: "t_scarecrow" },
+    { key: "t_pocket_again", at: { poi: "scarecrow", near: "farm" }, prop: { def: "sign", talk: "sign_town" } },
+  ];
+
+  it("resolves marks, sites, areas and kinds of small place on every seed, and promises them in the contract", () => {
+    expect(placementContract(rows)).toEqual({
+      units: ["t_keeper", "t_pumpkin_1", "t_pumpkin_2", "t_pumpkin_3", "t_pumpkin_4", "t_pumpkin_5"],
+      props: ["t_board", "t_pocket", "t_pocket_again"],
+      marks: ["t_scarecrow"],
+      rects: ["t_scarecrow_field"],
+    });
+    for (const seed of [3, 11]) {
+      const bp = buildCounty(seed, 0, rows);
+      const sk = countySkeleton(seed, 0);
+      const prop = (key: string) => bp.props.find((p) => p.key === key)!;
+      const unit = (key: string) => bp.units.find((u) => u.key === key)!;
+      const near = (a: { cx: number; cy: number }, b: { cx: number; cy: number }, d: number): boolean => Math.hypot(a.cx - b.cx, a.cy - b.cy) <= d;
+
+      expect(near(prop("t_board"), bp.marks.town_square, 14), `${seed}: board by the square`).toBe(true);
+      const farm = sk.sites.find((s) => s.id === "farm")!;
+      expect(near(unit("t_keeper"), { cx: farm.mx * MACRO + 8, cy: farm.my * MACRO + 8 }, 50), `${seed}: keeper at the farm`).toBe(true);
+
+      const field = sk.areas.find((a) => a.id === "top_field");
+      if (field) {
+        for (let n = 1; n <= 5; n++) {
+          const u = unit(`t_pumpkin_${n}`);
+          expect(near(u, { cx: field.mx * MACRO + 8, cy: field.my * MACRO + 8 }, field.row.radius), `${seed}: pumpkin ${n} in the Top Field`).toBe(true);
+          expect(u.phase, "a creature plays at the threat of its ground").toBe(3);
+        }
+      }
+
+      // Both rows share one scarecrow; it is the nearest small place to the farm that is (or was made) one.
+      expect(near(prop("t_pocket"), prop("t_pocket_again"), 14), `${seed}: one scarecrow, two things at it`).toBe(true);
+      const r = bp.rects.t_scarecrow_field;
+      expect(prop("t_pocket").cx).toBeGreaterThanOrEqual(r.cx);
+      expect(prop("t_pocket").cx).toBeLessThan(r.cx + r.w);
+      expect(bp.marks.t_scarecrow).toBeDefined();
+      // Nothing placed is inside a wall.
+      for (const key of ["t_board", "t_pocket", "t_pocket_again"]) expect((TILE_FLAGS[bp.tiles[prop(key).cy * bp.w + prop(key).cx]] & F_SOLID) === 0, key).toBe(true);
+    }
   });
 });

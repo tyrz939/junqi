@@ -9,9 +9,27 @@ import { buildBurial } from "@/world/burial";
 import { buildCounty } from "@/world/county";
 import { buildCellar, buildHouse } from "@/world/interiors";
 import { buildMine } from "@/world/mine";
+import { placementContract } from "@/world/placements";
 import { validateBlueprint } from "@/world/validate";
 
-type Builder = (seed: number, attempt: number) => Blueprint;
+export type Builder = (seed: number, attempt: number) => Blueprint;
+
+/**
+ * A zone that registers itself: a file in world/zones/ that `export const zone: ZoneDef`.
+ * The five original zones are listed by hand below; everything newer arrives this way, so
+ * adding a dungeon never means editing this file.
+ */
+export type ZoneDef = {
+  id: ZoneId;
+  build: Builder;
+  contract: ZoneContract;
+  /** Keys the story hands over from outside the zone (quest rewards), by `opens` tag. */
+  givenKeys?: string[];
+};
+
+const REGISTERED: ZoneDef[] = Object.entries(import.meta.glob("./zones/*.ts", { eager: true }) as Record<string, { zone?: ZoneDef }>)
+  .sort(([a], [b]) => (a < b ? -1 : 1))
+  .flatMap(([, m]) => (m.zone ? [m.zone] : []));
 
 export const BUILDERS: Record<ZoneId, Builder> = {
   county: buildCounty,
@@ -91,10 +109,32 @@ export const GIVEN_KEYS: Record<ZoneId, string[]> = {
   burial: [],
 };
 
+// What data/placements promises is part of the county's contract: a seed that cannot place a
+// quest's scarecrow is a broken county and is re-rolled, exactly like one with no stoop.
+{
+  const promised = placementContract();
+  const c = CONTRACTS.county;
+  c.units = [...c.units, ...promised.units];
+  c.props = [...c.props, ...promised.props];
+  c.marks = [...c.marks, ...promised.marks];
+  c.rects = [...c.rects, ...promised.rects];
+}
+
+for (const z of REGISTERED) {
+  if (BUILDERS[z.id]) throw new Error(`Zone "${z.id}" is registered twice`);
+  BUILDERS[z.id] = z.build;
+  CONTRACTS[z.id] = z.contract;
+  GIVEN_KEYS[z.id] = z.givenKeys ?? [];
+}
+
+/** Every zone, in the order the scheduler ticks them: the original five, then the rest by file name. Fixed, so it can never decide an outcome. */
+export const ZONE_IDS: readonly ZoneId[] = Object.keys(BUILDERS);
+
 const MAX_ATTEMPTS = 12;
 let catalogForValidation: Catalog | null = null;
 
 export function buildZone(zone: ZoneId, seed: number): Blueprint {
+  if (!BUILDERS[zone]) throw new Error(`Unknown zone "${zone}". Zones: ${ZONE_IDS.join(" ")}`);
   catalogForValidation ??= buildCatalog();
   let lastErrors: string[] = [];
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {

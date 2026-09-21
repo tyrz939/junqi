@@ -7,7 +7,8 @@
 import { PARTY_DEALT, PARTY_TAKEN } from "@/sim/constants";
 import { hashState } from "@/sim/save";
 import type { DevOp } from "@/sim/sim";
-import { ZONE_IDS, type ZoneId } from "@/sim/state";
+import type { ZoneId } from "@/sim/state";
+import { ZONE_IDS } from "@/world";
 import { maxHp, maxMp } from "@/sim/units";
 import type { App } from "@/app/app";
 

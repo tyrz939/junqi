@@ -259,27 +259,67 @@ export function recipeKey(inputs: readonly string[]): string {
   return [...inputs].sort().join("+");
 }
 
+/**
+ * Content comes in one base file per table (data/quests.json) plus any number of
+ * FRAGMENTS beside it (data/quests/lowfields.json, data/units/museum.json...). A
+ * fragment is the same shape as its base and is merged in, in path order, so a region's
+ * quests or a dungeon's creatures live in a file of their own and two people can add
+ * content without touching the same file. An id defined twice is a boot error.
+ */
+const FRAGMENTS = import.meta.glob("../data/*/*.json", { eager: true, import: "default" }) as Record<string, unknown>;
+
+function fragmentsOf(table: string): { path: string; rows: unknown }[] {
+  return Object.keys(FRAGMENTS)
+    .filter((p) => p.split("/").at(-2) === table)
+    .sort()
+    .map((path) => ({ path, rows: FRAGMENTS[path] }));
+}
+
+function mergedTable<T>(table: string, base: unknown): Record<string, T> {
+  const out = structuredClone(base) as Record<string, T>;
+  for (const { path, rows } of fragmentsOf(table)) {
+    for (const [id, row] of Object.entries(structuredClone(rows) as Record<string, T>)) {
+      if (id in out) throw new Error(`${table}: "${id}" is defined twice (again in ${path})`);
+      out[id] = row;
+    }
+  }
+  return out;
+}
+
+function mergedList<T>(table: string, base: unknown): T[] {
+  const out = structuredClone(base) as T[];
+  for (const { rows } of fragmentsOf(table)) out.push(...(structuredClone(rows) as T[]));
+  return out;
+}
+
+/** Footprint of every prop def, in cells. The county builder needs it to place props by name without building a whole catalog. */
+export function propFootprints(): Record<string, { w: number; h: number }> {
+  const out: Record<string, { w: number; h: number }> = {};
+  for (const [id, p] of Object.entries(mergedTable<PropDef>("props", propsJson))) out[id] = { w: p.w, h: p.h };
+  return out;
+}
+
 export function buildCatalog(): Catalog {
-  const spells = structuredClone(spellsJson) as unknown as Record<string, SpellDef>;
+  const spells = mergedTable<SpellDef>("spells", spellsJson);
   for (const s of Object.values(spells)) {
     s.cooldown = seconds(s.cooldown);
     if (s.duration !== undefined) s.duration = seconds(s.duration);
     if (s.pulse !== undefined) s.pulse = seconds(s.pulse);
     s.stop = s.stop ?? 0;
   }
-  const effects = structuredClone(effectsJson) as unknown as Record<string, EffectDef>;
+  const effects = mergedTable<EffectDef>("effects", effectsJson);
   for (const e of Object.values(effects)) {
     e.duration = seconds(e.duration);
     if (e.pulse) e.pulse.every = Math.max(1, seconds(e.pulse.every));
   }
-  const items = structuredClone(itemsJson) as unknown as Record<string, ItemDef>;
+  const items = mergedTable<ItemDef>("items", itemsJson);
   for (const i of Object.values(items)) i.cooldown = seconds(i.cooldown);
-  const units = structuredClone(unitsJson) as unknown as Record<string, UnitDef>;
+  const units = mergedTable<UnitDef>("units", unitsJson);
   for (const u of Object.values(units)) {
     u.respawn = seconds(u.respawn);
     u.bounds = u.bounds ?? 1;
   }
-  const recipes = structuredClone(recipesJson) as unknown as RecipeDef[];
+  const recipes = mergedList<RecipeDef>("recipes", recipesJson);
   const recipeIndex: Record<string, RecipeDef> = {};
   for (const r of recipes) recipeIndex[recipeKey(r.inputs)] = r;
 
@@ -290,12 +330,12 @@ export function buildCatalog(): Catalog {
     units,
     recipes,
     recipeIndex,
-    quests: questsJson as unknown as Record<string, QuestDef>,
-    props: propsJson as unknown as Record<string, PropDef>,
-    dialogue: dialogueJson as unknown as Record<string, DialogueTree>,
-    triggers: triggersJson as unknown as Record<string, TriggerDef>,
-    clock: clockJson as unknown as ClockDef[],
-    start: startJson as unknown as StartDef,
+    quests: mergedTable<QuestDef>("quests", questsJson),
+    props: mergedTable<PropDef>("props", propsJson),
+    dialogue: mergedTable<DialogueTree>("dialogue", dialogueJson),
+    triggers: mergedTable<TriggerDef>("triggers", triggersJson),
+    clock: mergedList<ClockDef>("clock", clockJson),
+    start: structuredClone(startJson) as unknown as StartDef,
     storyItems: new Set<string>(),
   };
   for (const [id, item] of Object.entries(items)) if (item.opens) catalog.storyItems.add(id);

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { buildCatalog } from "@/sim/catalog";
 import { F_SOLID, TILE_FLAGS } from "@/sim/grid";
-import { ZONE_IDS } from "@/sim/state";
+import { ZONE_IDS } from "@/world";
 import { BUILDERS, buildZone, CONTRACTS, GIVEN_KEYS } from "@/world/index";
 import { validateBlueprint } from "@/world/validate";
 
@@ -29,6 +29,20 @@ describe("worldgen", () => {
       expect(Buffer.from(a.tiles).equals(Buffer.from(b.tiles))).toBe(true);
       expect(a.props).toEqual(b.props);
       expect(a.units).toEqual(b.units);
+    }
+  });
+
+  it("every door leads to a zone that exists, and to a mark that zone has", () => {
+    // Zone ids are open strings now (a dungeon is a file dropped into world/zones/), so the
+    // compiler no longer catches a misspelt destination. This does, for every zone there is.
+    const built = new Map(ZONE_IDS.map((z) => [z, buildZone(z, 1000)]));
+    for (const [zone, bp] of built) {
+      for (const p of bp.props) {
+        if (!p.to) continue;
+        const dest = built.get(p.to.zone);
+        expect(dest, `${zone}: prop ${p.key} leads to unknown zone "${p.to.zone}"`).toBeDefined();
+        expect(dest!.marks[p.to.mark], `${zone}: prop ${p.key} leads to ${p.to.zone}, which has no mark "${p.to.mark}"`).toBeDefined();
+      }
     }
   });
 

@@ -20,6 +20,8 @@ import { hashString } from "@/sim/rng";
 import type { Blueprint, Rect } from "@/world/blueprint";
 import { CHUNKS, type Chunk, type Gate } from "@/world/chunks";
 import { Kit } from "@/world/kit";
+import { applyPlacements, claimPois, PLACEMENTS, type PlaceCtx, type PlacementRow, type PoiSpot } from "@/world/placements";
+import { propFootprints } from "@/sim/catalog";
 import { at, Biome, buildSkeleton, COUNTY_H, COUNTY_W, MACRO, Region, ROAD_LIT, SKEL_H, SKEL_W, type Skeleton } from "@/world/skeleton";
 
 export { COUNTY_H, COUNTY_W };
@@ -50,6 +52,8 @@ const WILDLIFE: Record<Region, { def: string; biomes?: Biome[] }[]> = {
   [Region.Works]: [{ def: "soldier" }, { def: "skeleton_guard" }, { def: "skeleton_clerk", biomes: [Biome.Yard] }, { def: "wall_spider", biomes: [Biome.Hill, Biome.Slag] }, { def: "cactus", biomes: [Biome.Slag] }],
 };
 
+let footprints: Record<string, { w: number; h: number }> | null = null;
+
 // One skeleton per seed is plenty to remember: a county is asked for once a game, and again only when validation re-rolls it.
 let lastSkeleton: { key: string; list: Skeleton[] } | null = null;
 
@@ -65,7 +69,7 @@ export function countySkeleton(seed: number, attempt: number): Skeleton {
   return list[attempt];
 }
 
-export function buildCounty(seed: number, attempt: number): Blueprint {
+export function buildCounty(seed: number, attempt: number, rows: readonly PlacementRow[] = PLACEMENTS): Blueprint {
   const sk = countySkeleton(seed, attempt);
   const k = new Kit("county", COUNTY_W, COUNTY_H, seed, attempt, Tile.Grass);
   paintLand(k, sk, seed);
@@ -101,6 +105,19 @@ export function buildCounty(seed: number, attempt: number): Blueprint {
     if (build) chunks.push(build(k, centre(s.mx), centre(s.my)));
   }
   for (const line of lines) for (const c of chunks) linkRoad(k, line, c);
+
+  // Content placed by name (data/placements): what goes inside a chunk goes in now, while its open ground is still open.
+  const pois: PoiSpot[] = sk.pois.map((p) => ({ x: centre(p.mx), y: centre(p.my), kind: p.kind }));
+  const place: PlaceCtx = {
+    k,
+    sk,
+    chunks,
+    pois,
+    claimed: claimPois(sk, pois, rows),
+    sizes: (footprints ??= propFootprints()),
+    threatAt: (cx, cy) => sk.threat[at(Math.min(SKEL_W - 1, cx >> 4), Math.min(SKEL_H - 1, cy >> 4))],
+  };
+  applyPlacements(place, "chunks", rows);
   for (const c of chunks) k.claim(c.box.cx - 6, c.box.cy - 6, c.box.w + 12, c.box.h + 12);
   for (const line of lines) for (const [x, y] of line) k.claim(x - 3, y - 3, 7, 7);
 
@@ -113,8 +130,12 @@ export function buildCounty(seed: number, attempt: number): Blueprint {
       if (!k.solid(x, y + side) && k.get(x, y + side) !== Tile.Water && k.get(x, y + side) !== Tile.Road) k.prop({ def: "lamp_post", cx: x, cy: y + side }, 1, 1);
     }
   });
-  sk.pois.forEach((p, n) => smallPlace(k, p.kind, centre(p.mx), centre(p.my), n));
+  // Small places: dressed as the kind the seed rolled, or the kind a placement row needed them to be.
+  pois.forEach((p, n) => smallPlace(k, p.kind, p.x, p.y, n));
+  applyPlacements(place, "pois", rows);
+  for (const p of pois) k.claim(p.x - 7, p.y - 6, 15, 13);
   scatter(k, sk);
+  applyPlacements(place, "areas", rows);
 
   // --- 6 wildlife ---------------------------------------------------------------------
   const safe = new Uint8Array(SKEL_W * SKEL_H);
@@ -486,7 +507,6 @@ function smallPlace(k: Kit, kind: string, x: number, y: number, n: number): void
   // Whatever was drawn, the place can be stood at: the mark's own cell and its neighbours are open ground.
   for (let oy = 2; oy <= 4; oy++) for (let ox = -1; ox <= 1; ox++) if (k.solid(x + ox, y + oy)) k.set(x + ox, y + oy, Tile.Dirt);
   k.mark(`poi_${n}`, x, y + 3, 1);
-  k.claim(x - 7, y - 6, 15, 13);
 }
 
 function scatter(k: Kit, sk: Skeleton): void {
