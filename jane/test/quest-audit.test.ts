@@ -149,6 +149,15 @@ const LANDMARKS: Landmark[] = [
   { phrase: /parish board/i, ref: { prop: "parish_board" }, says: /parish/i },
   { phrase: /allotments?/i, ref: { area: "allotments" }, says: /allotment/i },
   { phrase: /plot 9/i, ref: { mark: "plot_nine" }, says: /plot 9/i },
+  // Castle's own streets (world/chunks.ts): every door carries its number and its lane, and the lanes have name signs.
+  { phrase: /churchyard|behind the church/i, ref: { mark: "churchyard" }, says: /st anne|churchyard/i },
+  { phrase: /by the church|church door/i, ref: { mark: "church_door" }, says: /st anne/i },
+  { phrase: /fountain/i, ref: { mark: "fountain" }, says: /fountain/i },
+  { phrase: /the forge|cross lane/i, ref: { mark: "forge" }, says: /forge|cross lane/i },
+  { phrase: /back lane/i, ref: { mark: "back_lane" }, says: /back lane/i },
+  { phrase: /the doctor'?s|pound lane/i, ref: { mark: "doctor" }, says: /doctor|pound lane/i },
+  { phrase: /arms yard|castle arms/i, ref: { mark: "arms_yard" }, says: /castle arms/i },
+  { phrase: /post office/i, ref: { mark: "post_office" }, says: /post office/i },
   // The farm and the fields
   { phrase: /lowfield farm|farm gate|the farm\b|farmhouse|farmer/i, ref: { site: "farm" }, says: /lowfield farm|farm/i },
   { phrase: /top field/i, ref: { area: "top_field" }, says: /top field/i },
@@ -411,6 +420,17 @@ function world(seed: number): World {
   const road = Tile.Road;
   for (let i = 0; i < tiles.length; i++) if (tiles[i] === road) roadCells[i] = 1;
   for (const line of paths.values()) for (const [x, y] of line) if (x >= 0 && y >= 0 && x < bp.w && y < bp.h) roadCells[y * bp.w + x] = 1;
+  // Castle's lanes are dirt and its square is cobble, not Road, but in a town every street is a street: the
+  // town chunk is ~100 x 70 round its square (world/chunks.ts), so its dirt and cobble count as road.
+  const sq = bp.marks.town_square;
+  if (sq) {
+    for (let y = Math.max(0, sq.cy - 40); y < Math.min(bp.h, sq.cy + 40); y++) {
+      for (let x = Math.max(0, sq.cx - 55); x < Math.min(bp.w, sq.cx + 55); x++) {
+        const t = tiles[y * bp.w + x];
+        if (t === Tile.Dirt || t === Tile.Cobble) roadCells[y * bp.w + x] = 1;
+      }
+    }
+  }
 
   const items = new Set([...sources.keys()].filter((k) => k.startsWith("item:")).map((k) => k.slice(5)));
   const w: World = { seed, bps, sim, sources, readable, shown, doorTo, sites, areas, roads, paths, roadCells, items };
@@ -796,7 +816,7 @@ describe("quest audit: a person can read it, find it, do it and take it back", (
       // The tracker says "Back to <returnTo>" once every step is done (ui/hud.ts), so it reads as a phrase.
       const back = (q as { returnTo?: string }).returnTo ?? "";
       expect(back.length, `${id}: returnTo`).toBeGreaterThan(0);
-      expect(back, `${id}: returnTo starts lower case, it follows "Back to"`).toMatch(/^(the |[A-Z][a-z]+'s |Pell's |Julie's |Mrs )/);
+      expect(back, `${id}: returnTo starts lower case, it follows "Back to"`).toMatch(/^(the |[A-Z][a-z]+'s |[A-Z][a-z]+, |Pell's |Julie's |Mrs |Miss )/);
       expect(back.length, `${id}: returnTo`).toBeLessThanOrEqual(70);
     }
   });

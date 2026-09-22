@@ -154,7 +154,7 @@
     "key": "garden_book",
     "at": {
       "mark": "garden_book",
-      "within": 6
+      "within": 2
     },
     "prop": {
       "def": "note",

@@ -3,25 +3,75 @@
     "name": "Sixpence",
     "description": "Tilly, by the fountain in Castle square, has lost her black cat. He has not come in since Sunday. She thinks he is in the churchyard behind the church, where she is not allowed to go.",
     "completion": "He was on the newest stone, and let himself be carried. Tilly says he is always cold now. She does not seem to mind.",
-    "requirements": [{ "type": "location", "target": "sixpence_found", "qty": 1, "text": "Sixpence, in the churchyard behind the church" }],
-    "rewards": [{ "do": "give", "item": "apple", "qty": 2 }]
+    "requirements": [
+      {
+        "type": "location",
+        "target": "sixpence_found",
+        "qty": 1,
+        "text": "Sixpence, in the churchyard behind the church"
+      }
+    ],
+    "rewards": [
+      {
+        "do": "give",
+        "item": "apple",
+        "qty": 2
+      }
+    ],
+    "returnTo": "Tilly, by the fountain in Castle square"
   },
   "second_post": {
     "name": "Second Post",
     "description": "Miss Dray, outside the Post Office on Castle square, has three letters with the wrong numbers on them. They go through three doors in town: the Forge, No. 4 Back Lane, and the Doctor's. Nobody will answer.",
     "completion": "Three letters, three doors, and a mat behind each that sounded thick with others. Miss Dray gave you a key that came to her office with no name on it.",
     "requirements": [
-      { "type": "location", "target": "post_forge", "qty": 1, "text": "A letter to the Forge, on Cross Lane" },
-      { "type": "location", "target": "post_back_lane", "qty": 1, "text": "A letter to No. 4, Back Lane" },
-      { "type": "location", "target": "post_doctor", "qty": 1, "text": "A letter to the Doctor's, on Pound Lane" }
+      {
+        "type": "location",
+        "target": "post_forge",
+        "qty": 1,
+        "text": "A letter to the Forge, on Cross Lane"
+      },
+      {
+        "type": "location",
+        "target": "post_back_lane",
+        "qty": 1,
+        "text": "A letter to No. 4, Back Lane"
+      },
+      {
+        "type": "location",
+        "target": "post_doctor",
+        "qty": 1,
+        "text": "A letter to the Doctor's, on Pound Lane"
+      }
     ],
-    "rewards": [{ "do": "give", "item": "key_generic", "qty": 1 }]
+    "rewards": [
+      {
+        "do": "give",
+        "item": "key_generic",
+        "qty": 1
+      }
+    ],
+    "returnTo": "Miss Dray, outside the Post Office on Castle square"
   },
   "washing_day": {
     "name": "Washing Day",
     "description": "Mrs Marsh, at her line in front of No. 5 High Street, lost three things to a wind that was not blowing: one by the church door, one by the fountain, and one in the yard of the Castle Arms.",
     "completion": "A pillowcase, a shirt and a sheet, all bone dry. They went wet. Mrs Marsh gave you two vials of pump water and did not ask where they had been.",
-    "requirements": [{ "type": "acquire", "target": "town_washing", "qty": 3, "text": "Washing, by the church, the fountain and the Arms yard" }],
-    "rewards": [{ "do": "give", "item": "small_water", "qty": 2 }]
+    "requirements": [
+      {
+        "type": "acquire",
+        "target": "town_washing",
+        "qty": 3,
+        "text": "Washing, by the church, the fountain and the Arms yard"
+      }
+    ],
+    "rewards": [
+      {
+        "do": "give",
+        "item": "small_water",
+        "qty": 2
+      }
+    ],
+    "returnTo": "Mrs Marsh, at her washing line on the High Street"
   }
 }

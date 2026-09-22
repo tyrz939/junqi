@@ -143,7 +143,8 @@ export const julieYard: Build = (k, ox, oy) => {
   L.p("town_flower_bed", hx + hw - 3, hy + hh);
   // A fire in the yard: the first place to rest, before the house key and its bed.
   L.p("campfire", 47, 18, { key: "yard_fire", talk: "fire" });
-  L.mark("garden_book", 43, 18, 1);
+  // Beside the water butt, as the quest says ("by the barrel in her yard"), and well clear of the dog on the step.
+  L.mark("garden_book", 43, 17, 1);
   // Against the house: the water butt and the wood.
   L.p("barrel", hx + hw + 1, hy + hh - 2);
   L.p("town_woodpile", hx + hw + 1, hy + 6);
