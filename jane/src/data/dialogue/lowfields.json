@@ -239,7 +239,7 @@
       },
       "tbc_wait": {
         "lines": [
-          "After the bell, the entry says. The crate is at the north end of the platform."
+          "After the bell, the entry says. Be on the platform when it goes; the parcel is left on the crate there."
         ]
       },
       "tbc_in": {
@@ -474,7 +474,7 @@
       },
       "rats_wait": {
         "lines": [
-          "Six would be a start, it says. The allotments are out past the last house: plots either side of a cinder path, and the shed at the end of it."
+          "Six would be a start, it says. The allotments are out past the last house: a fingerpost says ALLOTMENTS where the path leaves Castle. Plots either side of a cinder path, and the shed at the end of it."
         ]
       },
       "rats_in": {
@@ -548,7 +548,8 @@
       },
       "board_idle": {
         "lines": [
-          "CASTLE PARISH COUNCIL. No further notices. The drawing pins have been left in rows."
+          "CASTLE PARISH COUNCIL. No further notices. The drawing pins have been left in rows.",
+          "One notice has been taken down in a hurry. The corner still pinned to the board says SCHOOL."
         ],
         "actions": [
           {
@@ -714,7 +715,7 @@
       "farmer_wait_1": {
         "lines": [
           "Gate, hedge, top field. The gate one is on the road. The hedge one is in the Long Hedge, off the footpath.",
-          "The top field is up off the road, and the drills are turned in it. You will see the rows a long way before you see the scarecrow. Stay on the rim, mind."
+          "The top field is up the farm track, off the road. There is a post at the bottom of it that says TOP FIELD. You will see the rows before you see the scarecrow. Stay on the rim, mind."
         ]
       },
       "farmer_in_1": {
@@ -759,7 +760,8 @@
       },
       "farmer_wait_2": {
         "lines": [
-          "After the bell. I will be up. I am always up."
+          "After the bell. I will be up. I am always up.",
+          "I sit in the back kitchen, the side away from the School. You can see it from the front. I do not need to see it."
         ]
       },
       "farmer_in_2": {
@@ -1087,7 +1089,7 @@
       },
       "glovebox_wait_2": {
         "lines": [
-          "Behind the car, she wrote. Not in front. The prints go in among the trees and do not come back. The coat is at a hollow tree, a hundred paces and more from here."
+          "Behind the car, she wrote. Not in front. The prints go in among the trees and do not come back. Follow them: the coat is at a hollow tree at the end of them, a hundred paces and more from here."
         ]
       },
       "glovebox_in_2": {
@@ -1168,7 +1170,7 @@
     "nodes": {
       "read": {
         "lines": [
-          "Eleven parcels on the step in the nurse's wrapping, none opened. The oldest has moss on it. A card has been pushed out under the door: NEXT TIME PLEASE BRING YOUR BAG."
+          "Eleven parcels on the step in the nurse's wrapping, none opened. The oldest has moss on it. A card has been pushed out under the door: NEXT TIME PLEASE BRING YOUR BAG. M. AND E. CRANE."
         ],
         "actions": [
           {
@@ -1237,7 +1239,8 @@
       },
       "allen_after": {
         "lines": [
-          "The dressing is a great comfort. Nurse will be along on Tuesday, I expect. She always is."
+          "The dressing is a great comfort. Nurse will be along on Tuesday, I expect. She always is.",
+          "Is there a light on up at the School tonight? No, do not tell me. My sister says I am not to ask."
         ]
       }
     }
@@ -1460,7 +1463,7 @@
     "nodes": {
       "night": {
         "lines": [
-          "No. 15. Dark. It stands one lamp's distance from No. 13. There is no gap where a lamp could have been."
+          "No. 15. Dark. It stands one lamp's distance from No. 13. There is no gap where a lamp could have been. The only light you can see from here is one window of the School, a long way north on its hill."
         ],
         "actions": [
           {
@@ -1716,7 +1719,7 @@
       "company_offer": {
         "lines": [
           "GOLDSKIN MINING Co. QUARRY GANG (5 MEN) STOOD DOWN UNTIL FURTHER NOTICE. Any man found working Quarry Steps will be paid off at this hatch.",
-          "QUARRY STEPS: THE CUT FACE IN THE FOOTHILLS. THE GANG'S CAMP IS AT THE FOOT OF IT, ON THE SIDE FACING THIS ROAD.",
+          "QUARRY STEPS: THE CUT FACE IN THE FOOTHILLS. THE QUARRY TRACK RUNS FROM THIS YARD TO THE GANG'S CAMP AT THE FOOT OF IT.",
           "The gang has been told. The gang is still working."
         ],
         "options": [
@@ -1736,7 +1739,7 @@
       },
       "company_wait": {
         "lines": [
-          "5 MEN. Quarry Steps is the cut face up in the foothills. Their camp is at the foot of it, on the side that faces this road.",
+          "5 MEN. Quarry Steps is the cut face up in the foothills. The quarry track goes from this yard to their camp at the foot of it.",
           "You can hear picks when the wind is right. They keep very good time."
         ]
       },
@@ -1817,7 +1820,7 @@
     "nodes": {
       "slate_offer": {
         "lines": [
-          "GANG OF 5. Dinners: 5. Up at seven: 5. Down at five: 4.",
+          "QUARRY STEPS. GANG OF 5. Dinners: 5. Up at seven: 5. Down at five: 4.",
           "Foreman to see about it.",
           "Five tins are laid out by the kettle. Four have been eaten from."
         ],
@@ -1867,7 +1870,7 @@
       },
       "slate_plain": {
         "lines": [
-          "GANG OF 5. Dinners: 5. Up at seven: 5. Down at five: 4. You can hear them working above."
+          "QUARRY STEPS. GANG OF 5. Dinners: 5. Up at seven: 5. Down at five: 4. You can hear them working above."
         ]
       }
     }
@@ -1974,7 +1977,8 @@
       "glove": {
         "lines": [
           "CASTLE PARISH. THE WELL ON THE STATION ROAD. Drawn at your own risk since the mains came.",
-          "A child's red glove is laid out on the wall to dry. It has been dry for a long time."
+          "A child's red glove is laid out on the wall to dry. It has been dry for a long time.",
+          "Away north over the fields there is a big building on a hill, with one window lit. It is the only light in that direction."
         ]
       },
       "drawn": {
@@ -2104,6 +2108,94 @@
         "lines": [
           "CASTLE one way. LOWFIELD FARM the other. A third arm has been taken off and the bolt left in.",
           "There are tyre ruts turning off the road here, into the wood, and they do not come out again. A district nurse parked here and walked in."
+        ]
+      }
+    }
+  },
+  "sallow_sign": {
+    "speaker": "Sign",
+    "start": [{ "node": "read" }],
+    "nodes": {
+      "read": {
+        "lines": [
+          "SALLOW BOTTOM. PARISH JETTY. Boats to be drawn up by dark. Please do not pick the white roses after dark."
+        ]
+      }
+    }
+  },
+  "top_field_sign": {
+    "speaker": "Sign",
+    "start": [{ "node": "read" }],
+    "nodes": {
+      "read": {
+        "lines": [
+          "LOWFIELD FARM. TOP FIELD. Turnips. Walkers keep to the headland."
+        ]
+      }
+    }
+  },
+  "top_track_post": {
+    "speaker": "Fingerpost",
+    "start": [{ "node": "read" }],
+    "nodes": {
+      "read": {
+        "lines": [
+          "TOP FIELD, by the farm track. Private. Please keep to the track."
+        ]
+      }
+    }
+  },
+  "hedge_waymark": {
+    "speaker": "Waymark",
+    "start": [{ "node": "read" }],
+    "nodes": {
+      "read": {
+        "lines": [
+          "PUBLIC FOOTPATH No. 3. THE LONG HEDGE. Castle one way, Lowfield Farm the other. Walkers are asked to keep to the path after dark."
+        ]
+      }
+    }
+  },
+  "allotment_sign": {
+    "speaker": "Sign",
+    "start": [{ "node": "read" }],
+    "nodes": {
+      "read": {
+        "lines": [
+          "CASTLE ALLOTMENT SOCIETY. MEMBERS ONLY. Plots 1 to 12. Plot 9 is not let."
+        ]
+      }
+    }
+  },
+  "allotment_fingerpost": {
+    "speaker": "Fingerpost",
+    "start": [{ "node": "read" }],
+    "nodes": {
+      "read": {
+        "lines": [
+          "ALLOTMENTS. Castle Allotment Society. Members and their guests. Gates shut at dusk."
+        ]
+      }
+    }
+  },
+  "graveyard_sign": {
+    "speaker": "Sign",
+    "start": [{ "node": "read" }],
+    "nodes": {
+      "read": {
+        "lines": [
+          "CASTLE PARISH GRAVEYARD. Closed for burials. The footpath behind the graveyard is not a right of way and is not maintained, and it is used."
+        ]
+      }
+    }
+  },
+  "quarry_track_post": {
+    "speaker": "Fingerpost",
+    "start": [{ "node": "read" }],
+    "nodes": {
+      "read": {
+        "lines": [
+          "GOLDSKIN MINING Co. QUARRY STEPS, by the quarry track. Quarry gang only. Gang stood down."
         ]
       }
     }

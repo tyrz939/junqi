@@ -698,6 +698,9 @@ export class GameWindow {
       h("div", `jq-qd-req${n >= r.qty ? " done" : ""}`, reqs, `${n >= r.qty ? "[x]" : "[ ]"} ${r.text} ${n}/${r.qty}`);
     });
     if (!prog) h("div", "jq-qd-done", this.questDetail, def.completion);
-    else if (counts.every((n, i) => n >= def.requirements[i].qty)) h("div", "jq-qd-ready", this.questDetail, "Ready to hand in.");
+    else if (counts.every((n, i) => n >= def.requirements[i].qty)) {
+      const back = (def as { returnTo?: string }).returnTo;
+      h("div", "jq-qd-ready", this.questDetail, back ? `Ready to hand in: ${back}.` : "Ready to hand in.");
+    }
   }
 }

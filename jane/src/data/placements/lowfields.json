@@ -102,7 +102,8 @@
           "do": "toast",
           "text": "You take it. Nobody stops you. Behind you the platform lamp goes out."
         }
-      ]
+      ],
+      "label": "A parcel"
     }
   },
   {
@@ -123,7 +124,8 @@
     },
     "prop": {
       "def": "notice_board",
-      "talk": "parish_board"
+      "talk": "parish_board",
+      "label": "The parish board"
     }
   },
   {
@@ -156,7 +158,8 @@
     },
     "prop": {
       "def": "note",
-      "talk": "garden_book"
+      "talk": "garden_book",
+      "label": "Julie's garden book"
     }
   },
   {
@@ -210,7 +213,8 @@
     },
     "prop": {
       "def": "sign",
-      "talk": "company_notice"
+      "talk": "company_notice",
+      "label": "The Company notice"
     }
   },
   {
@@ -221,7 +225,8 @@
     },
     "prop": {
       "def": "sign",
-      "talk": "fingerpost"
+      "talk": "fingerpost",
+      "label": "Footpath No. 3"
     },
     "rect": {
       "name": "hedge_stile_town",
@@ -237,7 +242,8 @@
     },
     "prop": {
       "def": "sign",
-      "talk": "fingerpost"
+      "talk": "fingerpost",
+      "label": "Footpath No. 3"
     },
     "rect": {
       "name": "hedge_stile_farm",
@@ -253,7 +259,8 @@
     },
     "prop": {
       "def": "sign",
-      "talk": "plot_nine_stake"
+      "talk": "plot_nine_stake",
+      "label": "The stake of Plot 9"
     }
   },
   {
@@ -315,7 +322,8 @@
     },
     "prop": {
       "def": "adit_rock",
-      "talk": "adit_rock"
+      "talk": "adit_rock",
+      "label": "A rock across the adit"
     }
   },
   {
@@ -353,7 +361,8 @@
           "item": "lost_glove",
           "qty": 1
         }
-      ]
+      ],
+      "label": "A red glove"
     }
   },
   {
@@ -381,7 +390,8 @@
           "item": "lost_hat",
           "qty": 1
         }
-      ]
+      ],
+      "label": "A felt hat"
     }
   },
   {
@@ -409,7 +419,8 @@
           "item": "lost_tin",
           "qty": 1
         }
-      ]
+      ],
+      "label": "A dinner tin"
     }
   },
   {
@@ -443,7 +454,8 @@
           "do": "location",
           "name": "carters_cart"
         }
-      ]
+      ],
+      "label": "The carter's key"
     }
   },
   {
@@ -465,7 +477,8 @@
     },
     "prop": {
       "def": "scarecrow",
-      "talk": "scarecrow_gate"
+      "talk": "scarecrow_gate",
+      "label": "A scarecrow"
     }
   },
   {
@@ -476,7 +489,8 @@
     },
     "prop": {
       "def": "scarecrow",
-      "talk": "scarecrow_hedge"
+      "talk": "scarecrow_hedge",
+      "label": "A scarecrow"
     }
   },
   {
@@ -487,7 +501,8 @@
     },
     "prop": {
       "def": "scarecrow",
-      "talk": "scarecrow_top"
+      "talk": "scarecrow_top",
+      "label": "A scarecrow"
     }
   },
   {
@@ -499,7 +514,8 @@
     "prop": {
       "def": "scarecrow",
       "talk": "scarecrow_top",
-      "hidden": true
+      "hidden": true,
+      "label": "A scarecrow"
     }
   },
   {
@@ -522,7 +538,8 @@
     },
     "prop": {
       "def": "note",
-      "talk": "note_allen"
+      "talk": "note_allen",
+      "label": "A note on Mrs Allen's step"
     }
   },
   {
@@ -533,7 +550,8 @@
     },
     "prop": {
       "def": "note",
-      "talk": "note_pike"
+      "talk": "note_pike",
+      "label": "A note on Mr Pike's step"
     }
   },
   {
@@ -544,7 +562,8 @@
     },
     "prop": {
       "def": "note",
-      "talk": "note_crane"
+      "talk": "note_crane",
+      "label": "Parcels on the Misses Crane's step"
     }
   },
   {
@@ -581,7 +600,8 @@
           "do": "toast",
           "text": "A nurse's coat on a branch at head height, buttoned to the neck. The key is in the pocket. The lining is dry."
         }
-      ]
+      ],
+      "label": "The nurse's coat, on a hollow tree"
     }
   },
   {
@@ -603,7 +623,8 @@
           "do": "quest",
           "quest": "if_found"
         }
-      ]
+      ],
+      "label": "A walker's haversack, in a hollow tree"
     }
   },
   {
@@ -614,7 +635,8 @@
     },
     "prop": {
       "def": "pillar",
-      "talk": "pell_stone"
+      "talk": "pell_stone",
+      "label": "A. Pell's stone"
     }
   },
   {
@@ -625,7 +647,8 @@
     },
     "prop": {
       "def": "lamp_dead",
-      "talk": "lamp_12"
+      "talk": "lamp_12",
+      "label": "Lamp No. 12"
     }
   },
   {
@@ -636,7 +659,8 @@
     },
     "prop": {
       "def": "lamp_dead",
-      "talk": "lamp_13"
+      "talk": "lamp_13",
+      "label": "Lamp No. 13"
     }
   },
   {
@@ -647,7 +671,8 @@
     },
     "prop": {
       "def": "lamp_dead",
-      "talk": "lamp_15"
+      "talk": "lamp_15",
+      "label": "Lamp No. 15"
     }
   },
   {
@@ -658,7 +683,8 @@
     },
     "prop": {
       "def": "campfire_cold",
-      "talk": "brazier_cold"
+      "talk": "brazier_cold",
+      "label": "The lampman's brazier"
     }
   },
   {
@@ -687,7 +713,8 @@
           "item": "white_water_rose",
           "qty": 1
         }
-      ]
+      ],
+      "label": "A white water rose"
     }
   },
   {
@@ -698,7 +725,8 @@
     },
     "prop": {
       "def": "sign",
-      "talk": "tally_slate"
+      "talk": "tally_slate",
+      "label": "The tally slate"
     }
   },
   {
@@ -765,6 +793,102 @@
     "prop": {
       "def": "signpost",
       "talk": "nurses_lay_by"
+    }
+  },
+  {
+    "key": "sallow_sign",
+    "at": {
+      "anchor": "sallow_jetty",
+      "within": 20
+    },
+    "prop": {
+      "def": "sign",
+      "talk": "sallow_sign",
+      "label": "Sallow Bottom"
+    }
+  },
+  {
+    "key": "top_field_sign",
+    "at": {
+      "anchor": "scarecrow_top",
+      "within": 20
+    },
+    "prop": {
+      "def": "sign",
+      "talk": "top_field_sign",
+      "label": "The Top Field"
+    }
+  },
+  {
+    "key": "top_track_post",
+    "at": {
+      "mark": "top_track_farm",
+      "within": 12
+    },
+    "prop": {
+      "def": "sign",
+      "talk": "top_track_post",
+      "label": "To the Top Field"
+    }
+  },
+  {
+    "key": "hedge_waymark",
+    "at": {
+      "anchor": "hedge_tree",
+      "within": 20
+    },
+    "prop": {
+      "def": "sign",
+      "talk": "hedge_waymark",
+      "label": "The Long Hedge"
+    }
+  },
+  {
+    "key": "allotment_sign",
+    "at": {
+      "mark": "allotment_shed",
+      "within": 20
+    },
+    "prop": {
+      "def": "sign",
+      "talk": "allotment_sign",
+      "label": "The Allotments"
+    }
+  },
+  {
+    "key": "allotment_fingerpost",
+    "at": {
+      "mark": "allotment_path_town",
+      "within": 12
+    },
+    "prop": {
+      "def": "sign",
+      "talk": "allotment_fingerpost",
+      "label": "To the allotments"
+    }
+  },
+  {
+    "key": "quarry_track_post",
+    "at": {
+      "mark": "quarry_track_mine",
+      "within": 12
+    },
+    "prop": {
+      "def": "sign",
+      "talk": "quarry_track_post",
+      "label": "To Quarry Steps"
+    }
+  },
+  {
+    "key": "graveyard_sign",
+    "at": {
+      "mark": "graveyard_gate",
+      "within": 12
+    },
+    "prop": {
+      "def": "sign",
+      "talk": "graveyard_sign",
+      "label": "The graveyard"
     }
   }
 ]

@@ -1,3 +1,7 @@
 [
-  { "id": "footpath_three", "from": "town", "via": "hedge_tree", "to": "farm", "width": 2, "marks": ["hedge_stile_town", "hedge_stile_farm"] }
+  { "id": "footpath_three", "from": "town", "via": "hedge_tree", "to": "farm", "width": 2, "marks": ["hedge_stile_town", "hedge_stile_farm"] },
+  { "id": "top_field_track", "from": "farm", "via": "scarecrow_top", "to": "farm", "width": 2, "marks": ["top_track_farm", "top_track_back"] },
+  { "id": "quarry_track", "from": "gold_mine", "via": "quarry_camp", "to": "gold_mine", "width": 2, "marks": ["quarry_track_mine", "quarry_track_back"] },
+  { "id": "allotment_path", "from": "town", "via": "allotments", "to": "town", "width": 2, "marks": ["allotment_path_town", "allotment_path_back"] },
+  { "id": "nurses_prints", "from": "car_wood", "via": "nurses_coat", "to": "car_wood", "width": 1, "marks": ["nurses_prints_car", "nurses_prints_back"] }
 ]

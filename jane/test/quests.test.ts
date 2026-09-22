@@ -252,10 +252,6 @@ describe("every quest in the game", () => {
     // Creatures: only the ones a seed actually stands somewhere.
     const creatures = vocab(world.units.flatMap((u) => [u.def, catalog.units[u.def]?.name ?? ""]));
 
-    // Rows in data/quests.json are the spine, and are not this audit's to edit. They are listed by
-    // name so that the rule still runs over them and the exception stays visible.
-    const SPINE_BARE = new Set(["Small Manashield Potion"]);
-
     for (const [id, q] of Object.entries(catalog.quests)) {
       const side = LOWFIELDS.includes(id);
       q.requirements.forEach((r, i) => {
@@ -263,7 +259,6 @@ describe("every quest in the game", () => {
         expect(r.text.trim().length, `${where} is empty`).toBeGreaterThan(0);
         expect(r.text.length, `${where} is too long for the tracker`).toBeLessThanOrEqual(70);
         const w = words(r.text);
-        if (SPINE_BARE.has(r.text)) return;
         expect(r.text.trim().split(/\s+/).length, `${where} is a bare noun`).toBeGreaterThanOrEqual(side ? 5 : 2);
         const named = w.filter((x) => places.has(x));
         const alive = w.filter((x) => creatures.has(x));

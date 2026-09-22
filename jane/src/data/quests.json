@@ -1,58 +1,65 @@
 {
   "the_letter": {
     "name": "A Letter from Julie",
-    "description": "The letter looked a hundred years old. Auntie Julie - a woman you were told you had, and never met - asked you to Castle for your birthday. Twelve hours on the Sunday train. No signal since the tunnel.\n\nThe map in the letter ends at a house and a dog.",
+    "description": "The letter looked a hundred years old. Auntie Julie - a woman you were told you had, and never met - asked you to Castle for your birthday. Twelve hours on the Sunday train. No signal since the tunnel.\n\nThe map in the letter is one road from Castle Halt. It ends at a house and a dog.",
     "completion": "The stoop is real. Julie is not on it. The dog has been waiting.",
-    "requirements": [{ "type": "location", "target": "stoop", "qty": 1, "text": "Find Auntie Julie's house" }],
+    "returnTo": "the step of Julie's house",
+    "requirements": [{ "type": "location", "target": "stoop", "qty": 1, "text": "Auntie Julie's house, at the end of the station road" }],
     "rewards": []
   },
   "defeat_skeleton": {
     "name": "The Thing in the Yard",
     "description": "The dog wants the walking bones off Julie's fence line. It will not say why a key is waiting until they stay down.",
     "completion": "The skeleton will not get up again today. The dog has decided you are allowed a key.",
-    "requirements": [{ "type": "kill", "target": "skeleton", "qty": 1, "text": "Skeleton put down" }],
+    "returnTo": "the dog, on Julie's step",
+    "requirements": [{ "type": "kill", "target": "skeleton", "qty": 1, "text": "The bones walking Julie's fence line" }],
     "rewards": [{ "do": "give", "item": "key_auntie_house" }, { "do": "quest", "quest": "see_the_kitchen" }]
   },
   "see_the_kitchen": {
     "name": "Julie's Kitchen",
     "description": "The house key was always for you. Go in. Look at what she left out.",
     "completion": "Auntie is not home. The house still is.",
+    "returnTo": "Julie's kitchen",
     "requirements": [{ "type": "location", "target": "kitchen", "qty": 1, "text": "Stand in Julie's kitchen" }],
     "rewards": []
   },
   "stock_the_bench": {
     "name": "Dust, Water, Pansy",
-    "description": "Julie's note says the bench is set for one potion and that you should make it before you go down any stairs. Gold dust, a vial of water, a pansy. Stand at the bench and open your bags.",
+    "description": "Julie's note says the bench is set for one potion and that you should make it before you go down any stairs. Gold dust, a vial of water, a pansy from the pantry chest. Stand at the bench and open your bags. The dog will want to know.",
     "completion": "It fizzes blue. You made that. The dog is not surprised.",
-    "requirements": [{ "type": "acquire", "target": "potion_manashield", "qty": 1, "text": "Small Manashield Potion" }],
+    "returnTo": "the dog, on Julie's step",
+    "requirements": [{ "type": "acquire", "target": "potion_manashield", "qty": 1, "text": "A Manashield potion, made at the bench in Julie's kitchen" }],
     "rewards": [{ "do": "give", "item": "small_water", "qty": 4 }, { "do": "give", "item": "gold_dust", "qty": 2 }]
   },
   "rats_below": {
     "name": "What Snakes Eat",
-    "description": "There are rats under the house and in the mine. The dog wants three pieces of meat and will not say what for.",
+    "description": "There are rats in the cellar under Julie's kitchen, down either hatch. The dog wants three pieces of meat and will not say what for.",
     "completion": "Soak it in Stranglethorn - water and snakeroot - at the bench. Throw it where a burial snake can smell it. Do not stand near.",
-    "requirements": [{ "type": "acquire", "target": "rat_meat", "qty": 3, "text": "Rat Meat" }],
+    "returnTo": "the dog, on Julie's step",
+    "requirements": [{ "type": "acquire", "target": "rat_meat", "qty": 3, "text": "Rat meat, from the rats in Julie's cellar" }],
     "rewards": [{ "do": "give", "item": "savage_snakeroot", "qty": 2 }, { "do": "give", "item": "small_water", "qty": 2 }]
   },
   "the_mine": {
     "name": "Gnox Goldskin's Mine",
-    "description": "The mine mouth in the yard is open. The Headmaster keeps the vault key. Something called Iron Knuckles keeps everything else. Broken things down there want Repair, and Repair wants wood and iron.",
+    "description": "The Gold Mine is at the end of the mine road out of Castle; its mouth is the one with the lamp. The Headmaster keeps the vault key. Something called Iron Knuckles keeps everything else. Broken things down there want Repair, and Repair wants wood and iron.",
     "completion": "The mine is quiet. Whatever Julie dug there, she stopped digging.",
+    "returnTo": "the dog, on Julie's step",
     "requirements": [
-      { "type": "location", "target": "mine", "qty": 1, "text": "Enter the gold mine" },
-      { "type": "kill", "target": "headmaster", "qty": 1, "text": "The Headmaster" },
-      { "type": "kill", "target": "iron_knuckles", "qty": 1, "text": "Iron Knuckles" }
+      { "type": "location", "target": "mine", "qty": 1, "text": "The Gold Mine, at the end of the mine road" },
+      { "type": "kill", "target": "headmaster", "qty": 1, "text": "The Headmaster, down the gold mine" },
+      { "type": "kill", "target": "iron_knuckles", "qty": 1, "text": "Iron Knuckles, down the gold mine" }
     ],
     "rewards": [{ "do": "give", "item": "apple", "qty": 5 }, { "do": "give", "item": "potion_stoneskin", "qty": 2 }]
   },
   "the_burial": {
     "name": "The Snake Below",
-    "description": "Cold, dark, foggy. Lots of death in there. The stones on the road already told you not to. Light the blue torches. Find what burns in the garden. Do not fight the small snakes; feed them.",
+    "description": "The burial chamber is past Castle, off the graveyard road: a footpath from the graveyard ends at a standing stone that says DO NOT. Cold, dark, foggy. Light the blue torches. Find what burns in the garden. Do not fight the small snakes; feed them.",
     "completion": "The snake is still. Julie was never in its mouth. The county still turns.",
+    "returnTo": "the dog, on Julie's step",
     "requirements": [
-      { "type": "location", "target": "burial", "qty": 1, "text": "Enter the burial chamber" },
-      { "type": "location", "target": "burial_garden", "qty": 1, "text": "Find the garden" },
-      { "type": "kill", "target": "burial_snake", "qty": 1, "text": "The Snake" }
+      { "type": "location", "target": "burial", "qty": 1, "text": "The standing stone, on the footpath from the graveyard" },
+      { "type": "location", "target": "burial_garden", "qty": 1, "text": "The garden, inside the burial chamber" },
+      { "type": "kill", "target": "burial_snake", "qty": 1, "text": "The big snake, in its own room in the burial chamber" }
     ],
     "rewards": [{ "do": "give", "item": "light_stone", "qty": 1 }, { "do": "flag", "flag": "spine_done" }]
   }

@@ -405,6 +405,8 @@ Type: K kill, A acquire, L location. Threat is by day; add 1 at night outside la
 
 # Part 3. The Lowfields in full
 
+> **Audited, 23 September 2026.** `QUEST-TREE.md` walks every quest step by step as the player meets it, and `jane/test/quest-audit.test.ts` holds every step to five rules on three seeds (descriptive, doable, findable, easy hand-in, no secrets). Changes since the text below: every quest has a `returnTo` line the tracker and log show once it is ready; step texts name a landmark ("up the farm track", "at the end of her prints"); four tracks were added in `paths.json` (the farm track to the Top Field, the quarry track, the cinder path to the allotments, the nurse's prints) with fingerposts and signs that say each place's name where it is; the dog's mine and burial directions were corrected (the mine is at the end of the mine road, not in the yard; the burial is off the graveyard road, not "the other stair").
+>
 > **Built, 21 September 2026.** All nineteen quests below are rows, and `jane/test/quests.test.ts` plays every one of them end to end on a generated county (offered, accepted, done, handed in, paid, not payable twice), and checks for every quest in the game that something reachable gives it and hands it in, that every place it names is produced, every creature spawned and every item to be had.
 >
 > Where the rows are: `jane/src/data/{quests,dialogue,items,units,props,triggers}/lowfields.json`, the placements in `jane/src/data/placements/lowfields.json`, the dog's three rows in `jane/src/data/dialogue.json`, the art in `jane/src/art/props/lowfields.ts` and `jane/src/art/icons/lowfields.ts`.

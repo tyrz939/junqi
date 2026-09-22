@@ -373,7 +373,13 @@ export class Hud {
 
     const quiet = blocked || !p.alive || sim.me.dialogue !== null;
     if (quiet) this.promptText = "";
-    else if (frameNo % 3 === 0) this.promptText = focusOf(sim, p)?.prompt ?? "";
+    else if (frameNo % 3 === 0) {
+      // A thing with a name says it: "Read: The parish board", "Pick up: A red glove". Quest text sends her
+      // to things by name, and this is where she finds out she is standing at the one it meant.
+      const f = focusOf(sim, p);
+      const label = f?.kind === "prop" ? sim.rt.props.get(f.id)?.label : "";
+      this.promptText = f ? (label ? `${f.prompt}: ${label}` : f.prompt) : "";
+    }
     this.setPromptVis(this.promptText !== "");
     if (this.promptText !== "") {
       // Follows the device touched last: [E] on a keyboard, [B] on a pad.
@@ -451,7 +457,7 @@ export class Hud {
 
   private updateTracker(sim: Sim): void {
     const cat = sim.catalog;
-    type Row = { name: string; ready: boolean; reqs: { text: string; done: boolean }[] };
+    type Row = { name: string; ready: boolean; back: string; reqs: { text: string; done: boolean }[] };
     const rows: Row[] = [];
     let sig = "";
     const active = sim.state.quests.active;
@@ -466,8 +472,10 @@ export class Hud {
         if (!done) ready = false;
         return { text: `${r.text} ${n}/${r.qty}`, done };
       });
-      rows.push({ name: def.name, ready, reqs });
-      sig += `${prog.quest}:${reqs.map((r) => r.text).join(",")};`;
+      // Who takes it back (data/quests: `returnTo`). Shown once every step is done, in place of the steps.
+      const back = (def as { returnTo?: string }).returnTo ?? "";
+      rows.push({ name: def.name, ready, back, reqs });
+      sig += `${prog.quest}:${ready}:${reqs.map((r) => r.text).join(",")};`;
     }
     const more = active.length - rows.length;
     sig += more;
@@ -478,6 +486,7 @@ export class Hud {
       const q = h("div", `jq-tq${row.ready ? " ready" : ""}`, this.tracker);
       h("div", "jq-tq-name", q, row.ready ? `${row.name} - ready` : row.name);
       if (!row.ready) for (const r of row.reqs) h("div", `jq-tq-req${r.done ? " done" : ""}`, q, r.text);
+      else if (row.back) h("div", "jq-tq-req", q, `Back to ${row.back}`);
     }
     if (more > 0) h("div", "jq-tq-more", this.tracker, `+${more} more`);
   }
