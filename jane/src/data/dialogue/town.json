@@ -2,36 +2,10 @@
   "tilly": {
     "speaker": "Tilly",
     "start": [
-      {
-        "when": [
-          {
-            "if": "questReady",
-            "quest": "sixpence"
-          }
-        ],
-        "node": "in"
-      },
-      {
-        "when": [
-          {
-            "if": "questDone",
-            "quest": "sixpence"
-          }
-        ],
-        "node": "after"
-      },
-      {
-        "when": [
-          {
-            "if": "questActive",
-            "quest": "sixpence"
-          }
-        ],
-        "node": "wait"
-      },
-      {
-        "node": "offer"
-      }
+      { "when": [{ "if": "questReady", "quest": "sixpence" }], "node": "in" },
+      { "when": [{ "if": "questDone", "quest": "sixpence" }], "node": "after" },
+      { "when": [{ "if": "questActive", "quest": "sixpence" }], "node": "wait" },
+      { "node": "offer" }
     ],
     "nodes": {
       "offer": {
@@ -40,25 +14,11 @@
           "I think he's in the churchyard, behind the church. I'm not allowed in there."
         ],
         "options": [
-          {
-            "label": "I'll look for him",
-            "actions": [
-              {
-                "do": "quest",
-                "quest": "sixpence"
-              }
-            ]
-          },
-          {
-            "label": "Not now"
-          }
+          { "label": "I'll look for him", "actions": [{ "do": "quest", "quest": "sixpence" }] },
+          { "label": "Not now" }
         ]
       },
-      "wait": {
-        "lines": [
-          "The churchyard is behind the church. Go up the lane by the church door. He likes the new stone best."
-        ]
-      },
+      "wait": { "lines": ["The churchyard is behind the church. Go up the lane by the church door. He likes the new stone best. I don't know why. It's the coldest one."] },
       "in": {
         "lines": [
           "Sixpence! Where were you?",
@@ -68,379 +28,126 @@
           {
             "label": "Give him back",
             "actions": [
-              {
-                "do": "handin",
-                "quest": "sixpence"
-              },
-              {
-                "do": "spawn",
-                "unit": "sixpence_home",
-                "def": "town_cat_sixpence_home",
-                "at": "fountain"
-              }
+              { "do": "handin", "quest": "sixpence" },
+              { "do": "spawn", "unit": "sixpence_home", "def": "town_cat_sixpence_home", "at": "fountain" }
             ]
           }
         ]
       },
-      "after": {
-        "lines": [
-          "He sleeps on my bed now. He didn't use to. When the lamps come on he gets up and sits in the window."
-        ]
-      }
+      "after": { "lines": ["He sleeps on my bed now. He never used to. When the lamps come on he gets up and sits in the window, facing the hill."] }
     }
   },
   "sixpence": {
     "speaker": "Sixpence",
     "start": [
-      {
-        "when": [
-          {
-            "if": "questActive",
-            "quest": "sixpence"
-          },
-          {
-            "if": "flag",
-            "flag": "sixpence_found",
-            "not": true
-          }
-        ],
-        "node": "take"
-      },
-      {
-        "node": "idle"
-      }
+      { "when": [{ "if": "questActive", "quest": "sixpence" }, { "if": "flag", "flag": "sixpence_found", "not": true }], "node": "take" },
+      { "node": "idle" }
     ],
     "nodes": {
       "take": {
-        "lines": [
-          "A thin black cat on the newest stone. It lets you pick it up. It is heavier than it looks, and cold all the way through."
-        ],
+        "lines": ["A thin black cat on the newest stone. It lets you pick it up. It is heavier than it looks, and cold all the way through."],
         "actions": [
-          {
-            "do": "flag",
-            "flag": "sixpence_found"
-          },
-          {
-            "do": "location",
-            "name": "sixpence_found"
-          },
-          {
-            "do": "despawn",
-            "unit": "sixpence"
-          },
-          {
-            "do": "toast",
-            "text": "You carry Sixpence under your arm. He does not struggle."
-          }
+          { "do": "flag", "flag": "sixpence_found" },
+          { "do": "location", "name": "sixpence_found" },
+          { "do": "despawn", "unit": "sixpence" },
+          { "do": "toast", "text": "You carry Sixpence under your arm. He does not struggle." }
         ]
       },
-      "idle": {
-        "lines": [
-          "A thin black cat on a headstone. It watches the church door, not you."
-        ]
-      }
+      "idle": { "lines": ["A thin black cat on a headstone. It watches the church door, not you."] }
     }
   },
   "sixpence_home": {
     "speaker": "Sixpence",
-    "start": [
-      {
-        "node": "a"
-      }
-    ],
-    "nodes": {
-      "a": {
-        "lines": [
-          "Sixpence, home. He sits by the fountain with his back to the hill."
-        ]
-      }
-    }
+    "start": [{ "node": "a" }],
+    "nodes": { "a": { "lines": ["Sixpence, home. He sits by the fountain with his back to the hill."] } }
   },
   "miss_dray": {
     "speaker": "Miss Dray",
     "start": [
-      {
-        "when": [
-          {
-            "if": "questReady",
-            "quest": "second_post"
-          }
-        ],
-        "node": "in"
-      },
-      {
-        "when": [
-          {
-            "if": "questDone",
-            "quest": "second_post"
-          }
-        ],
-        "node": "after"
-      },
-      {
-        "when": [
-          {
-            "if": "questActive",
-            "quest": "second_post"
-          }
-        ],
-        "node": "wait"
-      },
-      {
-        "node": "offer"
-      }
+      { "when": [{ "if": "questReady", "quest": "second_post" }], "node": "in" },
+      { "when": [{ "if": "questDone", "quest": "second_post" }], "node": "after" },
+      { "when": [{ "if": "questActive", "quest": "second_post" }], "node": "wait" },
+      { "node": "offer" }
     ],
     "nodes": {
       "offer": {
         "lines": [
-          "Three letters came in the second post with the wrong numbers on them, and the boy has not come in.",
+          "Three letters came in the second post with the wrong numbers on them, and the boy hasn't come in to take them round.",
           "One for the Forge on Cross Lane. One for No. 4, Back Lane, behind this office. One for the Doctor's on Pound Lane.",
           "Put them through the doors. Nobody will answer. Nobody ever does, for letters."
         ],
         "options": [
-          {
-            "label": "I'll take them",
-            "actions": [
-              {
-                "do": "quest",
-                "quest": "second_post"
-              },
-              {
-                "do": "give",
-                "item": "town_letter",
-                "qty": 3
-              }
-            ]
-          },
-          {
-            "label": "Not now"
-          }
+          { "label": "I'll take them", "actions": [{ "do": "quest", "quest": "second_post" }, { "do": "give", "item": "town_letter", "qty": 3 }] },
+          { "label": "Not now" }
         ]
       },
-      "wait": {
-        "lines": [
-          "The Forge is on Cross Lane, over the street. No. 4 is on Back Lane, behind me. The Doctor's is at the bottom of the town, on Pound Lane."
-        ]
-      },
+      "wait": { "lines": ["The Forge is on Cross Lane, over the street. No. 4 is on Back Lane, behind me. The Doctor's is at the bottom of the town, on Pound Lane."] },
       "in": {
         "lines": [
           "All three? Thank you. The second post is at four. It has always been at four.",
           "Here. This came to the office years ago with no name on it. A key wants using."
         ],
-        "options": [
-          {
-            "label": "Thank you",
-            "actions": [
-              {
-                "do": "handin",
-                "quest": "second_post"
-              }
-            ]
-          }
-        ]
+        "options": [{ "label": "Thank you", "actions": [{ "do": "handin", "quest": "second_post" }] }]
       },
-      "after": {
-        "lines": [
-          "There is always post on Sunday, when the train comes in. The sacks are never for anyone here."
-        ]
-      }
+      "after": { "lines": ["There's always post on Sunday, when the train comes in. The sacks are never for anyone here. I sort them all the same. Somebody ought to."] }
     }
   },
   "forge_door": {
     "speaker": "The Forge",
     "start": [
-      {
-        "when": [
-          {
-            "if": "questActive",
-            "quest": "second_post"
-          },
-          {
-            "if": "flag",
-            "flag": "posted_forge",
-            "not": true
-          },
-          {
-            "if": "hasItem",
-            "item": "town_letter",
-            "qty": 1
-          }
-        ],
-        "node": "post"
-      },
-      {
-        "node": "plain"
-      }
+      { "when": [{ "if": "questActive", "quest": "second_post" }, { "if": "flag", "flag": "posted_forge", "not": true }, { "if": "hasItem", "item": "town_letter", "qty": 1 }], "node": "post" },
+      { "when": [{ "if": "questActive", "quest": "roberts_cap" }, { "if": "flag", "flag": "got_roberts_cap", "not": true }], "node": "cap" },
+      { "when": [{ "if": "questDone", "quest": "the_new_stone" }], "node": "warm" },
+      { "node": "plain" }
     ],
     "nodes": {
       "post": {
-        "lines": [
-          "You put the letter through. It lands on others, a good many, by the sound of it."
-        ],
-        "actions": [
-          {
-            "do": "take",
-            "item": "town_letter",
-            "qty": 1
-          },
-          {
-            "do": "flag",
-            "flag": "posted_forge"
-          },
-          {
-            "do": "location",
-            "name": "post_forge"
-          }
-        ]
+        "lines": ["You put the letter through. It lands on others, a good many, by the sound of it."],
+        "actions": [{ "do": "take", "item": "town_letter", "qty": 1 }, { "do": "flag", "flag": "posted_forge" }, { "do": "location", "name": "post_forge" }]
       },
-      "plain": {
-        "lines": [
-          "Mr Hale lives over the forge. The door is open a crack, and the room behind it is cold."
-        ]
-      }
+      "cap": {
+        "lines": ["You knock, and push. The door sticks, then gives. Nobody on the stairs. On the peg at the bottom, a boy's cap, hung as if he had just come in."],
+        "actions": [{ "do": "give", "item": "town_cap", "qty": 1 }, { "do": "flag", "flag": "got_roberts_cap" }]
+      },
+      "warm": { "lines": ["The door is open a crack. The room behind it is warm now, and smells of the forge."] },
+      "plain": { "lines": ["Mr Hale lives over the Forge. The door is open a crack, and the room behind it is cold."] }
     }
   },
   "door_back_4": {
     "speaker": "No. 4, Back Lane",
     "start": [
-      {
-        "when": [
-          {
-            "if": "questActive",
-            "quest": "second_post"
-          },
-          {
-            "if": "flag",
-            "flag": "posted_back_lane",
-            "not": true
-          },
-          {
-            "if": "hasItem",
-            "item": "town_letter",
-            "qty": 1
-          }
-        ],
-        "node": "post"
-      },
-      {
-        "node": "plain"
-      }
+      { "when": [{ "if": "questActive", "quest": "second_post" }, { "if": "flag", "flag": "posted_back_lane", "not": true }, { "if": "hasItem", "item": "town_letter", "qty": 1 }], "node": "post" },
+      { "node": "plain" }
     ],
     "nodes": {
       "post": {
-        "lines": [
-          "You put the letter through. It lands on others, a good many, by the sound of it."
-        ],
-        "actions": [
-          {
-            "do": "take",
-            "item": "town_letter",
-            "qty": 1
-          },
-          {
-            "do": "flag",
-            "flag": "posted_back_lane"
-          },
-          {
-            "do": "location",
-            "name": "post_back_lane"
-          }
-        ]
+        "lines": ["You put the letter through. It lands on others, a good many, by the sound of it."],
+        "actions": [{ "do": "take", "item": "town_letter", "qty": 1 }, { "do": "flag", "flag": "posted_back_lane" }, { "do": "location", "name": "post_back_lane" }]
       },
-      "plain": {
-        "lines": [
-          "No answer. There is a mat behind the door; you hear it when the wind lifts the flap."
-        ]
-      }
+      "plain": { "lines": ["No answer. There is a mat behind the door; you hear it when the wind lifts the flap."] }
     }
   },
   "doctors_door": {
     "speaker": "The Doctor's",
     "start": [
-      {
-        "when": [
-          {
-            "if": "questActive",
-            "quest": "second_post"
-          },
-          {
-            "if": "flag",
-            "flag": "posted_doctor",
-            "not": true
-          },
-          {
-            "if": "hasItem",
-            "item": "town_letter",
-            "qty": 1
-          }
-        ],
-        "node": "post"
-      },
-      {
-        "node": "plain"
-      }
+      { "when": [{ "if": "questActive", "quest": "second_post" }, { "if": "flag", "flag": "posted_doctor", "not": true }, { "if": "hasItem", "item": "town_letter", "qty": 1 }], "node": "post" },
+      { "node": "plain" }
     ],
     "nodes": {
       "post": {
-        "lines": [
-          "You put the letter through. It lands on others, a good many, by the sound of it."
-        ],
-        "actions": [
-          {
-            "do": "take",
-            "item": "town_letter",
-            "qty": 1
-          },
-          {
-            "do": "flag",
-            "flag": "posted_doctor"
-          },
-          {
-            "do": "location",
-            "name": "post_doctor"
-          }
-        ]
+        "lines": ["You put the letter through. It lands on others, a good many, by the sound of it."],
+        "actions": [{ "do": "take", "item": "town_letter", "qty": 1 }, { "do": "flag", "flag": "posted_doctor" }, { "do": "location", "name": "post_doctor" }]
       },
-      "plain": {
-        "lines": [
-          "SURGERY CLOSED. Dr Vane is in the lane most afternoons. Please do not ring the night bell. There is no night bell."
-        ]
-      }
+      "plain": { "lines": ["SURGERY CLOSED. Dr Vane is in the lane most afternoons. Please do not ring the night bell. There is no night bell."] }
     }
   },
   "mrs_marsh": {
     "speaker": "Mrs Marsh",
     "start": [
-      {
-        "when": [
-          {
-            "if": "questReady",
-            "quest": "washing_day"
-          }
-        ],
-        "node": "in"
-      },
-      {
-        "when": [
-          {
-            "if": "questDone",
-            "quest": "washing_day"
-          }
-        ],
-        "node": "after"
-      },
-      {
-        "when": [
-          {
-            "if": "questActive",
-            "quest": "washing_day"
-          }
-        ],
-        "node": "wait"
-      },
-      {
-        "node": "offer"
-      }
+      { "when": [{ "if": "questReady", "quest": "washing_day" }], "node": "in" },
+      { "when": [{ "if": "questDone", "quest": "washing_day" }], "node": "after" },
+      { "when": [{ "if": "questActive", "quest": "washing_day" }], "node": "wait" },
+      { "node": "offer" }
     ],
     "nodes": {
       "offer": {
@@ -449,313 +156,141 @@
           "A pillowcase went over by the church. A shirt is by the fountain. A sheet is in the yard of the Arms, and I am not going in there."
         ],
         "options": [
-          {
-            "label": "I'll fetch them",
-            "actions": [
-              {
-                "do": "quest",
-                "quest": "washing_day"
-              }
-            ]
-          },
-          {
-            "label": "Not now"
-          }
+          { "label": "I'll fetch them", "actions": [{ "do": "quest", "quest": "washing_day" }] },
+          { "label": "Not now" }
         ]
       },
-      "wait": {
-        "lines": [
-          "By the church door, by the fountain, and in the Arms yard. Three things."
-        ]
-      },
+      "wait": { "lines": ["By the church door, by the fountain, and in the Arms yard. Three things. You can see the sheet from the street, over the rails."] },
       "in": {
         "lines": [
           "That's all of it. Dry, too. It was wet when it went.",
           "Take these two. It's pump water; I bottle it every morning, and I have more than I use."
         ],
         "options": [
-          {
-            "label": "Give it back",
-            "actions": [
-              {
-                "do": "handin",
-                "quest": "washing_day"
-              },
-              {
-                "do": "take",
-                "item": "town_washing",
-                "qty": 3
-              }
-            ]
-          }
+          { "label": "Give it back", "actions": [{ "do": "handin", "quest": "washing_day" }, { "do": "take", "item": "town_washing", "qty": 3 }] }
         ]
       },
-      "after": {
-        "lines": [
-          "I bring it in before the lamps now. Mother always did, and I used to think she was being silly."
-        ]
-      }
+      "after": { "lines": ["I bring it in before the lamps now. Mother always did, and I used to think she was being silly."] }
     }
   },
   "robin": {
     "speaker": "Robin",
-    "start": [
-      {
-        "when": [
-          {
-            "if": "flag",
-            "flag": "talked_robin"
-          }
-        ],
-        "node": "again"
-      },
-      {
-        "node": "first"
-      }
-    ],
+    "start": [{ "when": [{ "if": "flag", "flag": "talked_robin" }], "node": "again" }, { "node": "first" }],
     "nodes": {
-      "first": {
-        "lines": [
-          "We're playing lamps. You have to be home before the lamps come on or you're out."
-        ],
-        "actions": [
-          {
-            "do": "flag",
-            "flag": "talked_robin"
-          }
-        ]
-      },
-      "again": {
-        "lines": [
-          "Mum says we're in when the window up at the School comes on. It comes on before the lamps."
-        ]
-      }
+      "first": { "lines": ["We're playing lamps. You have to be home before the lamps come on or you're out."], "actions": [{ "do": "flag", "flag": "talked_robin" }] },
+      "again": { "lines": ["Mum says we're in when the window up at the School comes on. It comes on before the lamps. You can see it from the top of Church Lane."] }
     }
   },
   "nell": {
     "speaker": "Nell",
-    "start": [
-      {
-        "when": [
-          {
-            "if": "flag",
-            "flag": "talked_nell"
-          }
-        ],
-        "node": "again"
-      },
-      {
-        "node": "first"
-      }
-    ],
+    "start": [{ "when": [{ "if": "flag", "flag": "talked_nell" }], "node": "again" }, { "node": "first" }],
     "nodes": {
-      "first": {
-        "lines": [
-          "I don't mind being out. It's quiet when you're out."
-        ],
-        "actions": [
-          {
-            "do": "flag",
-            "flag": "talked_nell"
-          }
-        ]
-      },
-      "again": {
-        "lines": [
-          "You can't play lamps with a grown-up. You'd never get home in time."
-        ]
-      }
+      "first": { "lines": ["I don't mind being out. It's quiet when you're out."], "actions": [{ "do": "flag", "flag": "talked_nell" }] },
+      "again": { "lines": ["You can't play lamps with a grown-up. You'd never get home in time."] }
     }
   },
   "mr_tolly": {
     "speaker": "Mr Tolly",
     "start": [
-      {
-        "when": [
-          {
-            "if": "flag",
-            "flag": "talked_mr_tolly"
-          }
-        ],
-        "node": "again"
-      },
-      {
-        "node": "first"
-      }
+      { "when": [{ "if": "questReady", "quest": "too_red" }], "node": "apples" },
+      { "when": [{ "if": "questDone", "quest": "too_red" }], "node": "after" },
+      { "when": [{ "if": "flag", "flag": "talked_mr_tolly", "min": 1 }], "node": "again" },
+      { "node": "first" }
     ],
     "nodes": {
-      "first": {
-        "lines": [
-          "Sit down if you like. I've sat on this bench since the memorial went up, near enough."
-        ],
-        "actions": [
-          {
-            "do": "flag",
-            "flag": "talked_mr_tolly"
-          }
-        ]
+      "first": { "lines": ["Sit down if you like. I've sat on this bench since the memorial went up, near enough."], "actions": [{ "do": "flag", "flag": "talked_mr_tolly" }] },
+      "again": { "lines": ["There's a name on it newer than the rest. HALE, R. That'll be the smith's boy, from the Forge on Cross Lane. I never heard he'd gone."] },
+      "apples": {
+        "lines": ["From Mrs Hobb? She knows I won't pick them.", "Redder than last year. They're redder every year. I'll eat one, mind. Here, I've no use for this."],
+        "options": [{ "label": "Give him the apples", "actions": [{ "do": "handin", "quest": "too_red" }, { "do": "take", "item": "apple", "qty": 2 }] }]
       },
-      "again": {
-        "lines": [
-          "There's a name on it newer than the rest. I don't know him. They must have cut it while I was at my dinner."
-        ]
-      }
+      "after": { "lines": ["It tasted like an apple. I don't know what I was expecting. You sit on a bench long enough, you start expecting things."] }
     }
   },
   "mrs_fenn": {
     "speaker": "Mrs Fenn",
     "start": [
-      {
-        "when": [
-          {
-            "if": "flag",
-            "flag": "talked_mrs_fenn"
-          }
-        ],
-        "node": "again"
-      },
-      {
-        "node": "first"
-      }
+      { "when": [{ "if": "flag", "flag": "talked_mrs_fenn", "min": 2 }], "node": "third" },
+      { "when": [{ "if": "flag", "flag": "talked_mrs_fenn", "min": 1 }], "node": "again" },
+      { "node": "first" }
     ],
     "nodes": {
-      "first": {
-        "lines": [
-          "Lovely afternoon. You'll want to be in before the lamps, mind. Not that anything happens."
-        ],
-        "actions": [
-          {
-            "do": "flag",
-            "flag": "talked_mrs_fenn"
-          }
-        ]
-      },
-      "again": {
-        "lines": [
-          "We don't look up the hill, dear. There's a light in the School some nights, and it isn't ours to explain."
-        ]
-      }
+      "first": { "lines": ["Lovely afternoon. You'll want to be in before the lamps, mind. Not that anything happens."], "actions": [{ "do": "flag", "flag": "talked_mrs_fenn", "value": 1 }] },
+      "again": { "lines": ["Has the bell been going early for you? It went before nine on Tuesday. I checked it against my kitchen clock, and then I checked the clock."], "actions": [{ "do": "flag", "flag": "talked_mrs_fenn", "value": 2 }] },
+      "third": { "lines": ["We don't look up the hill, dear. There's a light in the School most nights, and it isn't ours to explain."] }
     }
   },
   "mrs_wick": {
     "speaker": "Mrs Wick",
-    "start": [
-      {
-        "node": "a"
-      }
-    ],
+    "start": [{ "when": [{ "if": "flag", "flag": "talked_mrs_wick" }], "node": "again" }, { "node": "a" }],
     "nodes": {
-      "a": {
-        "lines": [
-          "Very settled. Every day the same, near enough. You can't complain."
-        ]
-      }
+      "a": { "lines": ["Very settled. Every day the same, near enough. You can't complain."], "actions": [{ "do": "flag", "flag": "talked_mrs_wick" }] },
+      "again": { "lines": ["Mrs Fenn worries. I tell her: the lamps come on, we go in, and in the morning the milk's on the step. What else is there to know?"] }
     }
   },
   "mr_pound": {
     "speaker": "Mr Pound",
-    "start": [
-      {
-        "node": "a"
-      }
-    ],
+    "start": [{ "node": "a" }],
     "nodes": {
       "a": {
-        "lines": [
-          "Apples and grapes, love. And if you've rat meat, I'll have it for the cats. Two for an apple, and no questions."
-        ],
+        "lines": ["Apples and grapes, love. And if you've rat meat, I'll have it for the cats. Two for an apple, and no questions."],
         "options": [
           {
             "label": "Two rat meat for an apple",
             "actions": [
               {
                 "do": "if",
-                "when": [
-                  {
-                    "if": "hasItem",
-                    "item": "rat_meat",
-                    "qty": 2
-                  }
-                ],
+                "when": [{ "if": "hasItem", "item": "rat_meat", "qty": 2 }],
                 "then": [
-                  {
-                    "do": "take",
-                    "item": "rat_meat",
-                    "qty": 2
-                  },
-                  {
-                    "do": "give",
-                    "item": "apple",
-                    "qty": 1
-                  },
-                  {
-                    "do": "toast",
-                    "text": "Mr Pound wraps the meat in newspaper without looking at it."
-                  }
+                  { "do": "take", "item": "rat_meat", "qty": 2 },
+                  { "do": "give", "item": "apple", "qty": 1 },
+                  { "do": "toast", "text": "Mr Pound wraps the meat in newspaper without looking at it." }
                 ],
-                "else": [
-                  {
-                    "do": "toast",
-                    "text": "You have not got two."
-                  }
-                ]
+                "else": [{ "do": "toast", "text": "You have not got two." }]
               }
             ]
           },
-          {
-            "label": "Not today"
-          }
+          { "label": "How's trade?", "goto": "b" }
         ]
-      }
+      },
+      "b": { "lines": ["Quiet. People buy for one day at a time now, as if they don't want anything left over. I couldn't tell you why. I do it myself."] }
     }
   },
   "mrs_oddie": {
     "speaker": "Mrs Oddie",
     "start": [
-      {
-        "when": [
-          {
-            "if": "flag",
-            "flag": "talked_mrs_oddie"
-          }
-        ],
-        "node": "again"
-      },
-      {
-        "node": "first"
-      }
+      { "when": [{ "if": "questReady", "quest": "two_loaves" }], "node": "in" },
+      { "when": [{ "if": "questDone", "quest": "two_loaves" }], "node": "after" },
+      { "when": [{ "if": "questActive", "quest": "two_loaves" }], "node": "wait" },
+      { "node": "offer" }
     ],
     "nodes": {
-      "first": {
+      "offer": {
         "lines": [
-          "Bread's gone. It goes by ten. Come earlier."
+          "Bread's gone by ten, mostly. I bake for forty. I've always baked for forty, and I sell about nine.",
+          "No. 7 on Pound Lane had two loaves every morning, and nobody's been up for them in a fortnight. Would you take one down? Leave it on the step if nobody comes."
         ],
-        "actions": [
-          {
-            "do": "flag",
-            "flag": "talked_mrs_oddie"
-          }
+        "options": [
+          { "label": "I'll take it", "actions": [{ "do": "quest", "quest": "two_loaves" }, { "do": "give", "item": "town_loaf", "qty": 1 }] },
+          { "label": "Not now" }
         ]
       },
-      "again": {
-        "lines": [
-          "I bake for forty. I've always baked for forty. I sell about nine."
-        ]
-      }
+      "wait": { "lines": ["No. 7, Pound Lane. Down past the Doctor's. It's the one with the milk on the step."] },
+      "in": {
+        "lines": ["Did they take it in? No. They never do while there's anyone to see.", "Here, have a couple of apples off Mr Pound's stall. He owes me."],
+        "options": [{ "label": "Thank you", "actions": [{ "do": "handin", "quest": "two_loaves" }] }]
+      },
+      "after": { "lines": ["I've put No. 7's by again for the morning. It's no trouble. It's only bread."] }
     }
   },
   "mrs_crewe": {
     "speaker": "Mrs Crewe",
-    "start": [
-      {
-        "node": "a"
-      }
-    ],
+    "start": [{ "node": "a" }],
     "nodes": {
       "a": {
         "lines": [
           "Seeds and cuttings. I'll swap: two pansies for a nasturtium, two nasturtiums for a honeylace lily.",
-          "Julie up the lane used to have the lot off me. She never said what for."
+          "Julie, out on the Castle road, used to have the lot off me. She never said what for, and I never asked. You didn't, with Julie."
         ],
         "options": [
           {
@@ -763,89 +298,38 @@
             "actions": [
               {
                 "do": "if",
-                "when": [
-                  {
-                    "if": "hasItem",
-                    "item": "pansy",
-                    "qty": 2
-                  }
-                ],
+                "when": [{ "if": "hasItem", "item": "pansy", "qty": 2 }],
                 "then": [
-                  {
-                    "do": "take",
-                    "item": "pansy",
-                    "qty": 2
-                  },
-                  {
-                    "do": "give",
-                    "item": "nasturtium",
-                    "qty": 1
-                  },
-                  {
-                    "do": "toast",
-                    "text": "Mrs Crewe wraps a nasturtium in a twist of paper."
-                  }
+                  { "do": "take", "item": "pansy", "qty": 2 },
+                  { "do": "give", "item": "nasturtium", "qty": 1 },
+                  { "do": "toast", "text": "Mrs Crewe wraps a nasturtium in a twist of paper." }
                 ],
-                "else": [
-                  {
-                    "do": "toast",
-                    "text": "You have not got two pansies."
-                  }
-                ]
+                "else": [{ "do": "toast", "text": "You have not got two pansies." }]
               }
             ]
           },
-          {
-            "label": "What else?",
-            "goto": "b"
-          }
+          { "label": "What else?", "goto": "b" }
         ]
       },
       "b": {
-        "lines": [
-          "A honeylace lily, for two nasturtiums. I don't grow them. A man brings them on the Sunday train, and he has never once missed it."
-        ],
+        "lines": ["A honeylace lily, for two nasturtiums. I don't grow them. A man brings them on the Sunday train, and he has never once missed it."],
         "options": [
           {
             "label": "Two nasturtiums for a lily",
             "actions": [
               {
                 "do": "if",
-                "when": [
-                  {
-                    "if": "hasItem",
-                    "item": "nasturtium",
-                    "qty": 2
-                  }
-                ],
+                "when": [{ "if": "hasItem", "item": "nasturtium", "qty": 2 }],
                 "then": [
-                  {
-                    "do": "take",
-                    "item": "nasturtium",
-                    "qty": 2
-                  },
-                  {
-                    "do": "give",
-                    "item": "honeylace_lily",
-                    "qty": 1
-                  },
-                  {
-                    "do": "toast",
-                    "text": "A honeylace lily, its roots in damp newspaper."
-                  }
+                  { "do": "take", "item": "nasturtium", "qty": 2 },
+                  { "do": "give", "item": "honeylace_lily", "qty": 1 },
+                  { "do": "toast", "text": "A honeylace lily, its roots in damp newspaper." }
                 ],
-                "else": [
-                  {
-                    "do": "toast",
-                    "text": "You have not got two nasturtiums."
-                  }
-                ]
+                "else": [{ "do": "toast", "text": "You have not got two nasturtiums." }]
               }
             ]
           },
-          {
-            "label": "Nothing, thank you"
-          }
+          { "label": "Nothing, thank you" }
         ]
       }
     }
@@ -853,349 +337,342 @@
   "mrs_bex": {
     "speaker": "Mrs Bex",
     "start": [
-      {
-        "node": "a"
-      }
+      { "when": [{ "if": "questReady", "quest": "never_any_eggs" }], "node": "in" },
+      { "when": [{ "if": "questDone", "quest": "never_any_eggs" }], "node": "after" },
+      { "when": [{ "if": "questActive", "quest": "never_any_eggs" }], "node": "wait" },
+      { "node": "offer" }
     ],
     "nodes": {
-      "a": {
+      "offer": {
         "lines": [
-          "I come for eggs. There are never any eggs. I come anyway. It's somewhere to go."
+          "I come for eggs. There are never any eggs. I come anyway. It's somewhere to go.",
+          "There's a hen house behind Pound Lane, past the green. Would you look for me? I'd go myself, but I'd only find none."
+        ],
+        "options": [
+          { "label": "I'll look", "actions": [{ "do": "quest", "quest": "never_any_eggs" }] },
+          { "label": "Not now" }
         ]
-      }
+      },
+      "wait": { "lines": ["Behind Pound Lane, past the benches on the green. Just look. You needn't bring anything back."] },
+      "in": {
+        "lines": ["Three? And a card with my name on it?", "That's my writing. I don't remember writing it. Have these grapes. I've bought too many again."],
+        "options": [{ "label": "Thank you", "actions": [{ "do": "handin", "quest": "never_any_eggs" }] }]
+      },
+      "after": { "lines": ["I'll go down for them tomorrow. They'll keep till tomorrow. Everything here keeps."] }
+    }
+  },
+  "pound_hen_coop": {
+    "speaker": "Hen House",
+    "start": [{ "when": [{ "if": "questActive", "quest": "never_any_eggs" }], "node": "eggs" }, { "node": "a" }],
+    "nodes": {
+      "eggs": {
+        "lines": ["Straw, still warm. Three eggs in a row, and a card propped behind them: MRS BEX. The writing is small and neat."],
+        "actions": [{ "do": "location", "name": "eggs_seen" }]
+      },
+      "a": { "lines": ["Straw and a few feathers. The hens keep to the far side of the run, the side away from the hill."] }
     }
   },
   "mr_dunn": {
     "speaker": "Mr Dunn",
     "start": [
-      {
-        "when": [
-          {
-            "if": "flag",
-            "flag": "talked_mr_dunn"
-          }
-        ],
-        "node": "again"
-      },
-      {
-        "node": "first"
-      }
+      { "when": [{ "if": "questReady", "quest": "the_back_room" }], "node": "room_in" },
+      { "when": [{ "if": "questReady", "quest": "on_the_hour" }], "node": "hour_in" },
+      { "when": [{ "if": "questDone", "quest": "the_back_room" }], "node": "after" },
+      { "when": [{ "if": "questActive", "quest": "the_back_room" }], "node": "room_wait" },
+      { "when": [{ "if": "questDone", "quest": "on_the_hour" }], "node": "room_offer" },
+      { "when": [{ "if": "questActive", "quest": "on_the_hour" }], "node": "hour_wait" },
+      { "node": "offer" }
     ],
     "nodes": {
-      "first": {
+      "offer": {
         "lines": [
-          "I'm waiting for a call. My brother said he'd ring on the hour."
+          "I'm waiting for a call. My brother said he'd ring on the hour.",
+          "It rang once, last week, and I couldn't make him out. My ears aren't what they were. Would you listen for me? Just lift it and hear what's there."
         ],
-        "actions": [
-          {
-            "do": "flag",
-            "flag": "talked_mr_dunn"
-          }
+        "options": [
+          { "label": "I'll listen", "actions": [{ "do": "quest", "quest": "on_the_hour" }] },
+          { "label": "Not now" }
         ]
       },
-      "again": {
-        "lines": [
-          "It rang once, last week. When I picked it up somebody was breathing on the line, very slowly, like they were asleep."
+      "hour_wait": { "lines": ["The box is just here. Lift it and listen. It may take a moment. It took a moment last time."] },
+      "hour_in": {
+        "lines": ["The Arms? Ernest? He's chapel, same as me. He's never set foot in a public house in his life."],
+        "options": [{ "label": "That's what he said", "actions": [{ "do": "handin", "quest": "on_the_hour" }] }]
+      },
+      "room_offer": {
+        "lines": ["Would you look in at the Arms and ask Mrs Garland if he's been in? I don't go in there. It isn't the drink. It's that they stay in till it's light."],
+        "options": [
+          { "label": "I'll ask her", "actions": [{ "do": "quest", "quest": "the_back_room" }] },
+          { "label": "Not now" }
         ]
-      }
+      },
+      "room_wait": { "lines": ["The Castle Arms, on the square. Mrs Garland keeps the bar. Ask her about Ernest Dunn."] },
+      "room_in": {
+        "lines": ["The spring. The night of the bell. And he's been ringing me from across the square.", "Take this. It was his. He always said a light was worth more than money."],
+        "options": [{ "label": "Thank you", "actions": [{ "do": "handin", "quest": "the_back_room" }] }]
+      },
+      "after": { "lines": ["I don't wait on the hour now. I stand here, where I can see the door of the Arms. In case he comes down."] }
     }
   },
   "sweeper": {
     "speaker": "The Sweeper",
-    "start": [
-      {
-        "node": "a"
-      }
-    ],
+    "start": [{ "when": [{ "if": "flag", "flag": "talked_sweeper" }], "node": "again" }, { "node": "a" }],
     "nodes": {
-      "a": {
-        "lines": [
-          "Mind the pile. I sweep the square twice a day. Leaves in the morning. In the evening it's mostly salt."
-        ]
-      }
+      "a": { "lines": ["Mind the pile. I sweep the square twice a day. Leaves in the morning. In the evening it's mostly salt."], "actions": [{ "do": "flag", "flag": "talked_sweeper" }] },
+      "again": { "lines": ["If you're about after the lamps, keep to the cobbles. I've never seen anything on the cobbles. I've never looked, mind."] }
     }
   },
   "constable": {
     "speaker": "The Constable",
     "start": [
-      {
-        "when": [
-          {
-            "if": "flag",
-            "flag": "talked_constable"
-          }
-        ],
-        "node": "again"
-      },
-      {
-        "node": "first"
-      }
+      { "when": [{ "if": "questReady", "quest": "the_constables_paces" }], "node": "in" },
+      { "when": [{ "if": "questDone", "quest": "the_constables_paces" }], "node": "after" },
+      { "when": [{ "if": "questActive", "quest": "the_constables_paces" }], "node": "wait" },
+      { "when": [{ "if": "flag", "flag": "talked_constable" }], "node": "offer" },
+      { "node": "first" }
     ],
     "nodes": {
-      "first": {
+      "first": { "lines": ["Good day. Nothing to report. Keep to the lamps after dark and there never will be."], "actions": [{ "do": "flag", "flag": "talked_constable" }] },
+      "offer": {
         "lines": [
-          "Good day. Nothing to report. Keep to the lamps after dark and there never will be."
+          "I walk the street end to end. A hundred and twelve paces. It was a hundred and ten when I started.",
+          "Would you walk it for me? From the lamps at the west end to the lamps at the east. I'd like somebody else's legs on it."
         ],
-        "actions": [
-          {
-            "do": "flag",
-            "flag": "talked_constable"
-          }
+        "options": [
+          { "label": "I'll walk it", "actions": [{ "do": "quest", "quest": "the_constables_paces" }] },
+          { "label": "Not now" }
         ]
       },
-      "again": {
-        "lines": [
-          "I walk the street end to end. A hundred and twelve paces. It was a hundred and ten when I started."
-        ]
-      }
+      "wait": { "lines": ["West end lamps, east end lamps. Don't hurry it. Walk it the way you'd walk it anyway."] },
+      "in": {
+        "lines": ["And? How many?", "A hundred and fourteen. People count without meaning to. I'll put it in the book. Take these for your trouble."],
+        "options": [{ "label": "Thank you", "actions": [{ "do": "handin", "quest": "the_constables_paces" }] }]
+      },
+      "after": { "lines": ["I've stopped walking it after four. I stand at the square and look both ways. It's the same street. It just takes longer."] }
     }
   },
   "mr_cobb": {
     "speaker": "Mr Cobb",
     "start": [
-      {
-        "when": [
-          {
-            "if": "flag",
-            "flag": "talked_mr_cobb"
-          }
-        ],
-        "node": "again"
-      },
-      {
-        "node": "first"
-      }
+      { "when": [{ "if": "flag", "flag": "talked_mr_cobb", "min": 2 }], "node": "third" },
+      { "when": [{ "if": "flag", "flag": "talked_mr_cobb", "min": 1 }], "node": "again" },
+      { "node": "first" }
     ],
     "nodes": {
-      "first": {
-        "lines": [
-          "Too early for inside. Mrs Garland opens the door at six."
-        ],
-        "actions": [
-          {
-            "do": "flag",
-            "flag": "talked_mr_cobb"
-          }
-        ]
-      },
-      "again": {
-        "lines": [
-          "After nine she'll let you in, but she likes you to stay till it's light. Most do."
-        ]
-      }
+      "first": { "lines": ["I sit out here till six. Mrs Garland likes the yard kept, and I like to see who comes up the street."], "actions": [{ "do": "flag", "flag": "talked_mr_cobb", "value": 1 }] },
+      "again": { "lines": ["After nine she'll let you in, but she likes you to stay till it's light. Most do. I've never walked home in the dark, and I don't mean to start."], "actions": [{ "do": "flag", "flag": "talked_mr_cobb", "value": 2 }] },
+      "third": { "lines": ["A sheet came over the rails into this yard this morning, off somebody's line. There wasn't a breath of wind. I left it where it lay."] }
     }
   },
   "mr_sallis": {
     "speaker": "Mr Sallis",
     "start": [
-      {
-        "node": "a"
-      }
+      { "when": [{ "if": "questReady", "quest": "white_roses" }], "node": "in" },
+      { "when": [{ "if": "questDone", "quest": "white_roses" }], "node": "after" },
+      { "when": [{ "if": "questActive", "quest": "white_roses" }], "node": "wait" },
+      { "node": "offer" }
     ],
     "nodes": {
-      "a": {
+      "offer": {
         "lines": [
-          "Dry spring. The roses have done well anyway. They do better every year, and nobody has fed them since Mrs Sallis."
+          "Dry spring. The roses have done well anyway. They do better every year, and nobody has fed them since Mrs Sallis.",
+          "Would you take one to her? She's in the churchyard behind the church, the first stone inside the gate off the lane. I don't go in. I'd only stay."
+        ],
+        "options": [
+          { "label": "I'll take it", "actions": [{ "do": "quest", "quest": "white_roses" }] },
+          { "label": "Not now" }
         ]
-      }
+      },
+      "wait": { "lines": ["Up the lane by the church door and in at the gate. She's the first stone you come to. Somebody keeps the grass short round her. It isn't me."] },
+      "in": {
+        "lines": ["Others? Dried? I haven't been in since the funeral.", "Well. Take some pansies off the bed by the gate. They want thinning."],
+        "options": [{ "label": "Thank you", "actions": [{ "do": "handin", "quest": "white_roses" }] }]
+      },
+      "after": { "lines": ["Somebody takes her one every week, it seems. I'd like to know who. I'd like it to have been me."] }
+    }
+  },
+  "headstone_sallis": {
+    "speaker": "Headstone",
+    "start": [{ "when": [{ "if": "questActive", "quest": "white_roses" }], "node": "rose" }, { "node": "a" }],
+    "nodes": {
+      "rose": {
+        "lines": ["EDITH SALLIS. You lay Mr Sallis's rose on the stone. Under it there are others, dried brown, one for every week."],
+        "actions": [{ "do": "location", "name": "rose_left" }]
+      },
+      "a": { "lines": ["EDITH SALLIS. The grass round this one is cut shorter than the rest, and there are roses on it, dried brown."] }
     }
   },
   "mr_hale": {
     "speaker": "Mr Hale",
     "start": [
-      {
-        "when": [
-          {
-            "if": "flag",
-            "flag": "talked_mr_hale"
-          }
-        ],
-        "node": "again"
-      },
-      {
-        "node": "first"
-      }
+      { "when": [{ "if": "questReady", "quest": "the_new_stone" }], "node": "stone_in" },
+      { "when": [{ "if": "questReady", "quest": "roberts_cap" }], "node": "cap_in" },
+      { "when": [{ "if": "questReady", "quest": "the_last_name" }], "node": "name_in" },
+      { "when": [{ "if": "questDone", "quest": "the_new_stone" }], "node": "after" },
+      { "when": [{ "if": "questActive", "quest": "the_new_stone" }], "node": "stone_wait" },
+      { "when": [{ "if": "questDone", "quest": "roberts_cap" }], "node": "stone_offer" },
+      { "when": [{ "if": "questActive", "quest": "roberts_cap" }], "node": "cap_wait" },
+      { "when": [{ "if": "questDone", "quest": "the_last_name" }], "node": "cap_offer" },
+      { "when": [{ "if": "questActive", "quest": "the_last_name" }], "node": "name_wait" },
+      { "node": "offer" }
     ],
     "nodes": {
-      "first": {
+      "offer": {
         "lines": [
-          "No work on. Nobody's kept a horse since the Company took the carts."
+          "No work on. Nobody's kept a horse since the Company took the carts. The last thing brought in to be shod was a shoe, on its own.",
+          "Would you do something for me? Read me the last name on the memorial, in the square. My eyes are good. I'd just rather not be the one who reads it."
         ],
-        "actions": [
-          {
-            "do": "flag",
-            "flag": "talked_mr_hale"
-          }
+        "options": [
+          { "label": "I'll read it", "actions": [{ "do": "quest", "quest": "the_last_name" }] },
+          { "label": "Not now" }
         ]
       },
-      "again": {
-        "lines": [
-          "The last thing brought in to be shod was a shoe, on its own."
+      "name_wait": { "lines": ["The memorial in the square, by Mr Tolly's bench. The last name. It's cut sharper than the rest. You can't miss it."] },
+      "name_in": {
+        "lines": ["HALE, R. Yes. That's Robert. That's my boy.", "He's upstairs. He's been up in his room since the bell went, that's all. Here, for your trouble."],
+        "options": [{ "label": "Thank you", "actions": [{ "do": "handin", "quest": "the_last_name" }] }]
+      },
+      "cap_offer": {
+        "lines": ["Would you knock at the Forge door and tell Robert his tea's on? He won't come down for me. He might for somebody he doesn't know."],
+        "options": [
+          { "label": "I'll knock", "actions": [{ "do": "quest", "quest": "roberts_cap" }] },
+          { "label": "Not now" }
         ]
-      }
+      },
+      "cap_wait": { "lines": ["The Forge door, just there behind me. Push it if he doesn't answer. It sticks."] },
+      "cap_in": {
+        "lines": ["His cap. On the peg? He never goes anywhere without it.", "Then he went out without it, that night. Hold on to it a minute. I can't."],
+        "options": [{ "label": "I'll keep it", "actions": [{ "do": "handin", "quest": "roberts_cap" }] }]
+      },
+      "stone_offer": {
+        "lines": [
+          "There's a new stone in the churchyard, behind the church. It has a date and no name. I thought it was for me.",
+          "Would you put his cap on it? I'll cut the name myself, when my hands are ready."
+        ],
+        "options": [
+          { "label": "I'll take it up", "actions": [{ "do": "quest", "quest": "the_new_stone" }] },
+          { "label": "Not now" }
+        ]
+      },
+      "stone_wait": { "lines": ["The new stone. Up the lane by the church door, in at the gate. It's the clean one."] },
+      "stone_in": {
+        "lines": ["Thank you. I'll take the chisel up on Sunday. That's the date on it, you'll have seen.", "Here. It's off the forge. It keeps its heat a long while."],
+        "options": [{ "label": "Thank you", "actions": [{ "do": "handin", "quest": "the_new_stone" }] }]
+      },
+      "after": { "lines": ["I've lit the forge again. There's nothing on. The house is only warmer with it going."] }
     }
   },
   "mrs_tace": {
     "speaker": "Mrs Tace",
-    "start": [
-      {
-        "when": [
-          {
-            "if": "flag",
-            "flag": "talked_mrs_tace"
-          }
-        ],
-        "node": "again"
-      },
-      {
-        "node": "first"
-      }
-    ],
+    "start": [{ "when": [{ "if": "flag", "flag": "talked_mrs_tace" }], "node": "again" }, { "node": "first" }],
     "nodes": {
-      "first": {
-        "lines": [
-          "My husband's gone to fetch our Peter. They'll be back before the lamps."
-        ],
-        "actions": [
-          {
-            "do": "flag",
-            "flag": "talked_mrs_tace"
-          }
-        ]
-      },
-      "again": {
-        "lines": [
-          "He went up to the School the evening of the bell. You can see the window from my step. It's always the same one lit."
-        ]
-      }
+      "first": { "lines": ["My husband's gone to fetch our Peter. They'll be back before the lamps. I've left the door on the latch."], "actions": [{ "do": "flag", "flag": "talked_mrs_tace" }] },
+      "again": { "lines": ["He went up to the School the evening of the bell, to bring Peter home. You can see its window from the top of Church Lane. It's always the same one lit."] }
     }
   },
   "dot": {
     "speaker": "Dot",
     "start": [
-      {
-        "when": [
-          {
-            "if": "flag",
-            "flag": "talked_dot"
-          }
-        ],
-        "node": "again"
-      },
-      {
-        "node": "first"
-      }
+      { "when": [{ "if": "questReady", "quest": "school_lane" }], "node": "lane_in" },
+      { "when": [{ "if": "questReady", "quest": "the_fourth_lane" }], "node": "count_in" },
+      { "when": [{ "if": "questDone", "quest": "school_lane" }], "node": "after" },
+      { "when": [{ "if": "questActive", "quest": "school_lane" }], "node": "lane_wait" },
+      { "when": [{ "if": "questDone", "quest": "the_fourth_lane" }], "node": "lane_offer" },
+      { "when": [{ "if": "questActive", "quest": "the_fourth_lane" }], "node": "count_wait" },
+      { "node": "offer" }
     ],
     "nodes": {
-      "first": {
+      "offer": {
         "lines": [
-          "I'm counting the lanes. There's Back Lane, Cross Lane and Pound Lane."
+          "I'm counting the lanes. There's Back Lane, Cross Lane and Pound Lane.",
+          "There used to be four. I can't remember the other one, and neither can Mum. Would you read the signs for me? They're at the west end. I'm not allowed that far."
         ],
-        "actions": [
-          {
-            "do": "flag",
-            "flag": "talked_dot"
-          }
+        "options": [
+          { "label": "I'll read them", "actions": [{ "do": "quest", "quest": "the_fourth_lane" }] },
+          { "label": "Not now" }
         ]
       },
-      "again": {
+      "count_wait": { "lines": ["The signs are at the west end of each lane, where the town stops. Back Lane, Cross Lane, Pound Lane. Tell me if there's another."] },
+      "count_in": {
+        "lines": ["Three. It's only three.", "Here. I took it off Mrs Crewe's stall when she wasn't looking. Don't tell."],
+        "options": [{ "label": "Thank you", "actions": [{ "do": "handin", "quest": "the_fourth_lane" }] }]
+      },
+      "lane_offer": {
         "lines": [
-          "There used to be four. I can't remember the name of the other one, and neither can Mum."
+          "The one past the church hasn't got a name. It goes up to the gate at the top of the town, and nobody walks up it.",
+          "There's a sign at the top. Mum won't take me. Would you read it?"
+        ],
+        "options": [
+          { "label": "I'll read it", "actions": [{ "do": "quest", "quest": "school_lane" }] },
+          { "label": "Not now" }
         ]
-      }
+      },
+      "lane_wait": { "lines": ["Up past the church door, right to the top, by the gate. Read me the sign. All of it, even the bit under the paint."] },
+      "lane_in": {
+        "lines": ["School Lane. That's the one. That's the fourth.", "Mum says it goes up to the School and we don't need it any more. I found this in the gutter. It's a key. You have it."],
+        "options": [{ "label": "Thank you", "actions": [{ "do": "handin", "quest": "school_lane" }] }]
+      },
+      "after": { "lines": ["Four lanes. I don't count that one out loud. You can, if you like. You're not from here."] }
     }
   },
   "mr_ince": {
     "speaker": "Mr Ince",
     "start": [
-      {
-        "when": [
-          {
-            "if": "flag",
-            "flag": "talked_mr_ince"
-          }
-        ],
-        "node": "again"
-      },
-      {
-        "node": "first"
-      }
+      { "when": [{ "if": "flag", "flag": "talked_mr_ince", "min": 2 }], "node": "third" },
+      { "when": [{ "if": "flag", "flag": "talked_mr_ince", "min": 1 }], "node": "again" },
+      { "node": "first" }
     ],
     "nodes": {
-      "first": {
-        "lines": [
-          "The paper's Sunday's. It comes in on the train."
-        ],
-        "actions": [
-          {
-            "do": "flag",
-            "flag": "talked_mr_ince"
-          }
-        ]
-      },
-      "again": {
-        "lines": [
-          "It is always Sunday's. I read it again on Wednesday, and there is always something I missed."
-        ]
-      }
+      "first": { "lines": ["The paper's Sunday's. It comes in on the train."], "actions": [{ "do": "flag", "flag": "talked_mr_ince", "value": 1 }] },
+      "again": { "lines": ["It's always Sunday's. I read it again on Wednesday, and there's always something I missed."], "actions": [{ "do": "flag", "flag": "talked_mr_ince", "value": 2 }] },
+      "third": { "lines": ["There's a piece on page four about the lamps on the east road going off at ten, to save the county money. I've cut it out. Somebody should keep it."] }
     }
   },
   "mrs_hobb": {
     "speaker": "Mrs Hobb",
     "start": [
-      {
-        "node": "a"
-      }
+      { "when": [{ "if": "questDone", "quest": "too_red" }], "node": "after" },
+      { "when": [{ "if": "questActive", "quest": "too_red" }], "node": "wait" },
+      { "node": "offer" }
     ],
     "nodes": {
-      "a": {
+      "offer": {
         "lines": [
-          "I water them morning and evening. They don't need it. It's something to do with my hands."
+          "I water them morning and evening. They don't need it. It's something to do with my hands.",
+          "Would you take two apples from the orchard behind the house to Mr Tolly, on the bench by the memorial? He won't pick them. He says they're too red this year."
+        ],
+        "options": [
+          { "label": "I'll take them", "actions": [{ "do": "quest", "quest": "too_red" }] },
+          { "label": "Not now" }
         ]
-      }
+      },
+      "wait": { "lines": ["The orchard's over Back Lane, behind the house. Two off the trees, for Mr Tolly in the square. He'll say they're too red. Let him."] },
+      "after": { "lines": ["Did he eat one? Good. He used to pick for the whole street. He stopped the week the window came on up at the School."] }
     }
   },
   "mr_lyle": {
     "speaker": "Mr Lyle",
-    "start": [
-      {
-        "node": "a"
-      }
-    ],
+    "start": [{ "when": [{ "if": "flag", "flag": "talked_mr_lyle" }], "node": "again" }, { "node": "a" }],
     "nodes": {
-      "a": {
-        "lines": [
-          "We're not courting. We're sitting."
-        ]
-      }
+      "a": { "lines": ["We're not courting. We're sitting."], "actions": [{ "do": "flag", "flag": "talked_mr_lyle" }] },
+      "again": { "lines": ["We sit facing the Doctor's. Miss Orme likes to be near a doctor after her dinner. He never opens, but it's a comfort to be near one."] }
     }
   },
   "miss_orme": {
     "speaker": "Miss Orme",
-    "start": [
-      {
-        "node": "a"
-      }
-    ],
+    "start": [{ "when": [{ "if": "flag", "flag": "talked_miss_orme" }], "node": "again" }, { "node": "a" }],
     "nodes": {
-      "a": {
-        "lines": [
-          "We've been sitting since lunch. When it gets to the lamps he'll walk me home. It's next door."
-        ]
-      }
+      "a": { "lines": ["We've been sitting since lunch. When it gets to the lamps he'll walk me home. It's next door."], "actions": [{ "do": "flag", "flag": "talked_miss_orme" }] },
+      "again": { "lines": ["Mr Lyle says the bell at nine is the church. The church rings at six, for evensong. I've heard both, and they aren't the same bell."] }
     }
   },
   "dr_vane": {
     "speaker": "Dr Vane",
-    "start": [
-      {
-        "node": "a"
-      }
-    ],
+    "start": [{ "node": "a" }],
     "nodes": {
       "a": {
         "lines": [
-          "The surgery's shut. I've nothing to give anyone that works.",
+          "The surgery's shut. I've nothing left that works, and I'd rather say so than pretend.",
           "I can fill a vial for you, if you have an empty one. The tap water here is very clean. Cleaner than it was."
         ],
         "options": [
@@ -1204,1035 +681,430 @@
             "actions": [
               {
                 "do": "if",
-                "when": [
-                  {
-                    "if": "hasItem",
-                    "item": "small_empty_vial",
-                    "qty": 1
-                  }
-                ],
+                "when": [{ "if": "hasItem", "item": "small_empty_vial", "qty": 1 }],
                 "then": [
-                  {
-                    "do": "take",
-                    "item": "small_empty_vial",
-                    "qty": 1
-                  },
-                  {
-                    "do": "give",
-                    "item": "small_water",
-                    "qty": 1
-                  },
-                  {
-                    "do": "toast",
-                    "text": "Dr Vane fills it at the tap by the door and holds it to the light."
-                  }
+                  { "do": "take", "item": "small_empty_vial", "qty": 1 },
+                  { "do": "give", "item": "small_water", "qty": 1 },
+                  { "do": "toast", "text": "Dr Vane fills it at the tap by the door and holds it to the light." }
                 ],
-                "else": [
-                  {
-                    "do": "toast",
-                    "text": "You have no empty vial."
-                  }
-                ]
+                "else": [{ "do": "toast", "text": "You have no empty vial." }]
               }
             ]
           },
-          {
-            "label": "No, thank you"
-          }
+          { "label": "Is anyone ill?", "goto": "b" }
         ]
-      }
+      },
+      "b": { "lines": ["Nobody's ill. Nobody has been ill since the spring. I sit out here in case somebody is, and I'm ashamed how much I want them to be."] }
     }
   },
   "milkman": {
     "speaker": "The Milkman",
     "start": [
-      {
-        "when": [
-          {
-            "if": "flag",
-            "flag": "talked_milkman"
-          }
-        ],
-        "node": "again"
-      },
-      {
-        "node": "first"
-      }
+      { "when": [{ "if": "questReady", "quest": "paid_to_sunday" }], "node": "in" },
+      { "when": [{ "if": "questDone", "quest": "paid_to_sunday" }], "node": "after" },
+      { "when": [{ "if": "questActive", "quest": "paid_to_sunday" }], "node": "wait" },
+      { "when": [{ "if": "questDone", "quest": "two_loaves" }], "node": "offer" },
+      { "when": [{ "if": "flag", "flag": "talked_milkman" }], "node": "again" },
+      { "node": "first" }
     ],
     "nodes": {
-      "first": {
+      "first": { "lines": ["Milk's on the step by six. I don't knock. Some houses take it in and some don't, and I leave it anyway."], "actions": [{ "do": "flag", "flag": "talked_milkman" }] },
+      "again": { "lines": ["No. 7 hasn't taken theirs in all week. Three bottles on the step. You don't stop for one house, though. Not on a round."] },
+      "offer": {
         "lines": [
-          "Milk's on the step by six. I don't knock. Some houses take it in and some don't, and I leave it anyway."
+          "You took Mrs Oddie's loaf down to No. 7? Then you've seen the bottles.",
+          "Would you lift them inside the door for me? It's on the latch. There was always money on the mat, and I don't like to go in."
         ],
-        "actions": [
-          {
-            "do": "flag",
-            "flag": "talked_milkman"
-          }
+        "options": [
+          { "label": "I'll do it", "actions": [{ "do": "quest", "quest": "paid_to_sunday" }] },
+          { "label": "Not now" }
         ]
       },
-      "again": {
-        "lines": [
-          "If you're walking out, keep the School at your back and you'll come to the Halt road. I don't look round till I'm on it."
-        ]
-      }
+      "wait": { "lines": ["No. 7, Pound Lane. Lift them in and look at the mat. Don't go past the mat."] },
+      "in": {
+        "lines": ["Paid to Sunday. It always is.", "Well. I'll keep leaving it, then. Have a couple of these. It's only water, but it's cold."],
+        "options": [{ "label": "Thank you", "actions": [{ "do": "handin", "quest": "paid_to_sunday" }] }]
+      },
+      "after": { "lines": ["I leave No. 7 theirs first now, before anyone's about. The empty is always out, rinsed."] }
     }
   },
   "ginger_cat": {
     "speaker": "A Ginger Cat",
-    "start": [
-      {
-        "node": "a"
-      }
-    ],
-    "nodes": {
-      "a": {
-        "lines": [
-          "A ginger cat. It follows the sweeper round the square at a distance of exactly one broom."
-        ]
-      }
-    }
+    "start": [{ "node": "a" }],
+    "nodes": { "a": { "lines": ["A ginger cat. It follows the sweeper round the square at a distance of exactly one broom."] } }
   },
   "hen": {
     "speaker": "Hen",
-    "start": [
-      {
-        "node": "a"
-      }
-    ],
-    "nodes": {
-      "a": {
-        "lines": [
-          "A hen. It looks at you with one eye, and then, to be sure, with the other."
-        ]
-      }
-    }
+    "start": [{ "node": "a" }],
+    "nodes": { "a": { "lines": ["A hen. It looks at you with one eye, and then, to be sure, with the other."] } }
   },
   "sheep": {
     "speaker": "Sheep",
-    "start": [
-      {
-        "node": "a"
-      }
-    ],
-    "nodes": {
-      "a": {
-        "lines": [
-          "A sheep. It goes on chewing, and does not stop to look at you."
-        ]
-      }
-    }
+    "start": [{ "node": "a" }],
+    "nodes": { "a": { "lines": ["A sheep. It goes on chewing, and does not stop to look at you."] } }
   },
   "door_back_1": {
     "speaker": "No. 1, Back Lane",
-    "start": [
-      {
-        "node": "a"
-      }
-    ],
-    "nodes": {
-      "a": {
-        "lines": [
-          "Nobody answers. A clock inside strikes the quarter, and then strikes it again."
-        ]
-      }
-    }
+    "start": [{ "node": "a" }],
+    "nodes": { "a": { "lines": ["Nobody answers. A clock inside strikes the quarter, and then strikes it again."] } }
   },
   "door_back_2": {
     "speaker": "No. 2, Back Lane",
-    "start": [
-      {
-        "node": "a"
-      }
-    ],
-    "nodes": {
-      "a": {
-        "lines": [
-          "\"Not today, thank you,\" a woman says, pleasantly. \"We have everything we need.\""
-        ]
-      }
-    }
+    "start": [{ "node": "a" }],
+    "nodes": { "a": { "lines": ["\"Not today, thank you,\" a woman says. Then, nearer the door: \"Is it getting dark out there yet? I can't tell from the back.\""] } }
   },
   "door_back_3": {
     "speaker": "No. 3, Back Lane",
-    "start": [
-      {
-        "node": "a"
-      }
-    ],
-    "nodes": {
-      "a": {
-        "lines": [
-          "A card in the window: NO HAWKERS. NO CIRCULARS. NO CALLERS AFTER NINE."
-        ]
-      }
-    }
+    "start": [{ "node": "a" }],
+    "nodes": { "a": { "lines": ["A card in the window: NO HAWKERS. NO CIRCULARS. NO CALLERS AFTER NINE."] } }
   },
   "door_back_5": {
     "speaker": "No. 5, Back Lane",
-    "start": [
-      {
-        "node": "a"
-      }
-    ],
-    "nodes": {
-      "a": {
-        "lines": [
-          "\"Who is it?\" You tell them. A long pause. \"No, I don't think so.\""
-        ]
-      }
-    }
+    "start": [{ "node": "a" }],
+    "nodes": { "a": { "lines": ["\"Who is it?\" You tell them. A long pause. \"No, I don't think so.\""] } }
   },
   "door_back_6": {
     "speaker": "No. 6, Back Lane",
-    "start": [
-      {
-        "node": "a"
-      }
-    ],
-    "nodes": {
-      "a": {
-        "lines": [
-          "The door is warm under your knuckles, as if somebody has been leaning on it from the other side."
-        ]
-      }
-    }
+    "start": [{ "node": "a" }],
+    "nodes": { "a": { "lines": ["The door is warm under your knuckles, as if somebody has been leaning on it from the other side."] } }
   },
   "door_high_1": {
     "speaker": "No. 1, High Street",
-    "start": [
-      {
-        "node": "a"
-      }
-    ],
-    "nodes": {
-      "a": {
-        "lines": [
-          "A card on the door: IN THE GARDEN."
-        ]
-      }
-    }
+    "start": [{ "node": "a" }],
+    "nodes": { "a": { "lines": ["A card on the door: IN THE GARDEN."] } }
   },
   "door_high_3": {
     "speaker": "No. 3, High Street",
-    "start": [
-      {
-        "node": "a"
-      }
-    ],
-    "nodes": {
-      "a": {
-        "lines": [
-          "Nobody answers. Through the letterbox, a kettle coming to the boil. It does not stop coming to the boil."
-        ]
-      }
-    }
+    "start": [{ "node": "a" }],
+    "nodes": { "a": { "lines": ["Nobody answers. Through the letterbox, a kettle coming to the boil. It does not stop coming to the boil."] } }
   },
   "door_high_5": {
     "speaker": "No. 5, High Street",
-    "start": [
-      {
-        "node": "a"
-      }
-    ],
-    "nodes": {
-      "a": {
-        "lines": [
-          "A card on the door: ROUND AT THE LINE. BACK IN FIVE MINUTES."
-        ]
-      }
-    }
+    "start": [{ "node": "a" }],
+    "nodes": { "a": { "lines": ["A card on the door: ROUND AT THE LINE. BACK IN FIVE MINUTES."] } }
   },
   "door_high_7": {
     "speaker": "No. 7, High Street",
-    "start": [
-      {
-        "node": "a"
-      }
-    ],
-    "nodes": {
-      "a": {
-        "lines": [
-          "\"The apples are for anyone,\" somebody says from inside. \"Take the ones on the ground first.\""
-        ]
-      }
-    }
+    "start": [{ "node": "a" }],
+    "nodes": { "a": { "lines": ["\"The orchard's for anyone,\" somebody calls from inside. \"Over Back Lane, behind the house. Take the ones on the ground first.\""] } }
   },
   "door_cross_2": {
     "speaker": "No. 2, Cross Lane",
-    "start": [
-      {
-        "node": "a"
-      }
-    ],
-    "nodes": {
-      "a": {
-        "lines": [
-          "Nobody answers. Someone has chalked 14 on the door, rubbed it out, and chalked it again."
-        ]
-      }
-    }
+    "start": [{ "node": "a" }],
+    "nodes": { "a": { "lines": ["Nobody answers. Someone has chalked 14 on the door, rubbed it out, and chalked it again."] } }
   },
   "door_cross_6": {
     "speaker": "No. 6, Cross Lane",
-    "start": [
-      {
-        "node": "a"
-      }
-    ],
-    "nodes": {
-      "a": {
-        "lines": [
-          "The door is on the latch. You do not go in. It is on the latch for somebody else."
-        ]
-      }
-    }
+    "start": [{ "node": "a" }],
+    "nodes": { "a": { "lines": ["The door is on the latch. You do not go in. It is on the latch for somebody else."] } }
   },
   "door_cross_9": {
     "speaker": "No. 9, Cross Lane",
-    "start": [
-      {
-        "node": "a"
-      }
-    ],
-    "nodes": {
-      "a": {
-        "lines": [
-          "A small voice: \"Mum says not to open it.\" A bigger one: \"Mum says come away from the door.\""
-        ]
-      }
-    }
+    "start": [{ "node": "a" }],
+    "nodes": { "a": { "lines": ["A small voice: \"Mum says not to open it.\" A bigger one: \"Mum says come away from the door.\""] } }
   },
   "stores_door": {
     "speaker": "Castle Stores",
-    "start": [
-      {
-        "node": "a"
-      }
-    ],
-    "nodes": {
-      "a": {
-        "lines": [
-          "CLOSED FOR STOCKTAKING. OPEN MONDAY. The card has been turned round so often its corners have gone soft."
-        ]
-      }
-    }
+    "start": [{ "node": "a" }],
+    "nodes": { "a": { "lines": ["CLOSED FOR STOCKTAKING. OPEN MONDAY. The card has been turned round so often its corners have gone soft."] } }
   },
   "door_pound_1": {
     "speaker": "No. 1, Pound Lane",
-    "start": [
-      {
-        "node": "a"
-      }
-    ],
-    "nodes": {
-      "a": {
-        "lines": [
-          "Nobody answers. A canary is singing inside: the same six notes, over and over."
-        ]
-      }
-    }
+    "start": [{ "node": "a" }],
+    "nodes": { "a": { "lines": ["Nobody answers. A canary is singing inside: the same six notes, over and over."] } }
   },
   "door_pound_3": {
     "speaker": "No. 3, Pound Lane",
-    "start": [
-      {
-        "node": "a"
-      }
-    ],
-    "nodes": {
-      "a": {
-        "lines": [
-          "\"We're not in,\" someone says. Then, more quietly: \"Not to you.\""
-        ]
-      }
-    }
+    "start": [{ "node": "a" }],
+    "nodes": { "a": { "lines": ["\"We don't open after the bell, and not much before it,\" a man says. \"No offence meant. Try the Arms, on the square.\""] } }
   },
   "door_pound_7": {
     "speaker": "No. 7, Pound Lane",
     "start": [
-      {
-        "node": "a"
-      }
+      { "when": [{ "if": "questActive", "quest": "two_loaves" }, { "if": "hasItem", "item": "town_loaf", "qty": 1 }], "node": "loaf" },
+      { "when": [{ "if": "questActive", "quest": "paid_to_sunday" }], "node": "milk" },
+      { "when": [{ "if": "questDone", "quest": "paid_to_sunday" }], "node": "rinsed" },
+      { "node": "a" }
     ],
     "nodes": {
-      "a": {
-        "lines": [
-          "The curtains are drawn. Three bottles of milk on the step, one for each morning. The oldest has not turned."
-        ]
-      }
+      "loaf": {
+        "lines": ["You set the loaf down beside the milk. The curtain in the front window moves to the edge, and stops there."],
+        "actions": [{ "do": "take", "item": "town_loaf", "qty": 1 }, { "do": "location", "name": "loaf_left" }]
+      },
+      "milk": {
+        "lines": ["You lift the latch and set the three bottles inside. The hall is swept. Mrs Oddie's loaf is on the table, not touched. On the mat, the milk money, counted out."],
+        "actions": [{ "do": "location", "name": "milk_in" }]
+      },
+      "rinsed": { "lines": ["The curtains are drawn. On the step, one empty bottle, rinsed and put out for the Milkman."] },
+      "a": { "lines": ["The curtains are drawn. Three bottles of milk on the step, one for each morning. The oldest has not turned."] }
     }
   },
   "door_pound_9": {
     "speaker": "No. 9, Pound Lane",
-    "start": [
-      {
-        "node": "a"
-      }
-    ],
-    "nodes": {
-      "a": {
-        "lines": [
-          "Nobody answers. Somebody inside is counting under their breath, and does not lose their place."
-        ]
-      }
-    }
+    "start": [{ "node": "a" }],
+    "nodes": { "a": { "lines": ["Nobody answers. Somebody inside is counting under their breath, and does not lose their place."] } }
   },
   "door_pound_11": {
     "speaker": "No. 11, Pound Lane",
-    "start": [
-      {
-        "node": "a"
-      }
-    ],
-    "nodes": {
-      "a": {
-        "lines": [
-          "A note under the knocker: GONE TO THE HALT FOR THE TRAIN. BACK SUNDAY."
-        ]
-      }
-    }
+    "start": [{ "node": "a" }],
+    "nodes": { "a": { "lines": ["A note under the knocker: GONE TO THE HALT FOR THE TRAIN. BACK SUNDAY."] } }
   },
   "door_pound_13": {
     "speaker": "No. 13, Pound Lane",
-    "start": [
-      {
-        "node": "a"
-      }
-    ],
-    "nodes": {
-      "a": {
-        "lines": [
-          "\"Leave it on the step,\" a man calls. You have not brought anything. \"Leave it anyway.\""
-        ]
-      }
-    }
+    "start": [{ "node": "a" }],
+    "nodes": { "a": { "lines": ["\"Leave it on the step,\" a man calls. You have not brought anything. \"Leave it anyway.\""] } }
   },
   "post_office_door": {
     "speaker": "The Post Office",
-    "start": [
-      {
-        "when": [
-          {
-            "if": "night"
-          }
-        ],
-        "node": "night"
-      },
-      {
-        "node": "day"
-      }
-    ],
+    "start": [{ "when": [{ "if": "night" }], "node": "night" }, { "node": "day" }],
     "nodes": {
-      "day": {
-        "lines": [
-          "CASTLE POST OFFICE. The counter light is on. Miss Dray is outside, waiting for the second post."
-        ]
-      },
-      "night": {
-        "lines": [
-          "CLOSED. LAST POSTING 5.30. LETTERS POSTED AFTER THIS GO ON SUNDAY'S TRAIN."
-        ]
-      }
+      "day": { "lines": ["CASTLE POST OFFICE. The counter light is on. Miss Dray is outside, waiting for the second post."] },
+      "night": { "lines": ["CLOSED. LAST POSTING 5.30. LETTERS POSTED AFTER THIS GO ON SUNDAY'S TRAIN."] }
     }
   },
   "sign_back_lane": {
     "speaker": "Sign",
-    "start": [
-      {
-        "node": "a"
-      }
-    ],
+    "start": [{ "when": [{ "if": "questActive", "quest": "the_fourth_lane" }], "node": "count" }, { "node": "a" }],
     "nodes": {
-      "a": {
-        "lines": [
-          "BACK LANE. Nos. 1 to 6. No through road for carts."
-        ]
-      }
+      "count": { "lines": ["BACK LANE. Nos. 1 to 6. No through road for carts."], "actions": [{ "do": "location", "name": "lane_back" }] },
+      "a": { "lines": ["BACK LANE. Nos. 1 to 6. No through road for carts."] }
     }
   },
   "sign_cross_lane": {
     "speaker": "Sign",
-    "start": [
-      {
-        "node": "a"
-      }
-    ],
+    "start": [{ "when": [{ "if": "questActive", "quest": "the_fourth_lane" }], "node": "count" }, { "node": "a" }],
     "nodes": {
-      "a": {
-        "lines": [
-          "CROSS LANE. The Forge. Castle Stores."
-        ]
-      }
+      "count": { "lines": ["CROSS LANE. The Forge. Castle Stores."], "actions": [{ "do": "location", "name": "lane_cross" }] },
+      "a": { "lines": ["CROSS LANE. The Forge. Castle Stores."] }
     }
   },
   "sign_pound_lane": {
     "speaker": "Sign",
-    "start": [
-      {
-        "node": "a"
-      }
-    ],
+    "start": [{ "when": [{ "if": "questActive", "quest": "the_fourth_lane" }], "node": "count" }, { "node": "a" }],
     "nodes": {
-      "a": {
-        "lines": [
-          "POUND LANE. The Doctor's surgery. Milk to the south gate, please."
-        ]
-      }
+      "count": { "lines": ["POUND LANE. The Doctor's surgery. Milk to the south gate, please."], "actions": [{ "do": "location", "name": "lane_pound" }] },
+      "a": { "lines": ["POUND LANE. The Doctor's surgery. Milk to the south gate, please."] }
+    }
+  },
+  "sign_church_lane": {
+    "speaker": "Sign",
+    "start": [{ "when": [{ "if": "questActive", "quest": "school_lane" }], "node": "read" }, { "node": "a" }],
+    "nodes": {
+      "read": {
+        "lines": ["CHURCH LANE. To the north gate. Where the paint has flaked, older letters show through underneath: SCHOOL LANE."],
+        "actions": [{ "do": "location", "name": "lane_church" }]
+      },
+      "a": { "lines": ["CHURCH LANE. To the north gate. Where the paint has flaked, older letters show through underneath: SCHOOL LANE."] }
     }
   },
   "sign_post_office": {
     "speaker": "Sign",
-    "start": [
-      {
-        "node": "a"
-      }
-    ],
-    "nodes": {
-      "a": {
-        "lines": [
-          "POST OFFICE. Letters, parcels, postal orders. Second post at four o'clock."
-        ]
-      }
-    }
+    "start": [{ "node": "a" }],
+    "nodes": { "a": { "lines": ["POST OFFICE. Letters, parcels, postal orders. Second post at four o'clock."] } }
   },
   "sign_arms": {
     "speaker": "Sign",
-    "start": [
-      {
-        "node": "a"
-      }
-    ],
-    "nodes": {
-      "a": {
-        "lines": [
-          "THE CASTLE ARMS. Rooms. Open at six. Please close the door behind you, whichever side of it you are on."
-        ]
-      }
-    }
+    "start": [{ "node": "a" }],
+    "nodes": { "a": { "lines": ["THE CASTLE ARMS. Rooms. Open at six. Please close the door behind you, whichever side of it you are on."] } }
   },
   "sign_forge": {
     "speaker": "Sign",
-    "start": [
-      {
-        "node": "a"
-      }
-    ],
-    "nodes": {
-      "a": {
-        "lines": [
-          "HALE. Smith and farrier. Horses shod."
-        ]
-      }
-    }
+    "start": [{ "node": "a" }],
+    "nodes": { "a": { "lines": ["HALE. Smith and farrier. Horses shod."] } }
   },
   "sign_stores": {
     "speaker": "Sign",
-    "start": [
-      {
-        "node": "a"
-      }
-    ],
-    "nodes": {
-      "a": {
-        "lines": [
-          "CASTLE STORES. Groceries, hardware, paraffin. Cash only."
-        ]
-      }
-    }
+    "start": [{ "node": "a" }],
+    "nodes": { "a": { "lines": ["CASTLE STORES. Groceries, hardware, paraffin. Cash only."] } }
   },
   "sign_doctor": {
     "speaker": "Sign",
-    "start": [
-      {
-        "node": "a"
-      }
-    ],
-    "nodes": {
-      "a": {
-        "lines": [
-          "DR R. VANE. Surgery ten till twelve."
-        ]
-      }
-    }
+    "start": [{ "node": "a" }],
+    "nodes": { "a": { "lines": ["DR R. VANE. Surgery ten till twelve."] } }
   },
   "fountain": {
     "speaker": "Fountain",
-    "start": [
-      {
-        "node": "a"
-      }
-    ],
-    "nodes": {
-      "a": {
-        "lines": [
-          "Clear water, very cold. There are coins on the bottom, and every one of them has landed face down."
-        ]
-      }
-    }
+    "start": [{ "node": "a" }],
+    "nodes": { "a": { "lines": ["Clear water, very cold. There are coins on the bottom, and every one of them has landed face down."] } }
   },
   "memorial": {
     "speaker": "Memorial",
     "start": [
-      {
-        "when": [
-          {
-            "if": "flag",
-            "flag": "talked_memorial"
-          }
-        ],
-        "node": "again"
-      },
-      {
-        "node": "first"
-      }
+      { "when": [{ "if": "questActive", "quest": "the_last_name" }], "node": "hale" },
+      { "when": [{ "if": "flag", "flag": "talked_memorial" }], "node": "again" },
+      { "node": "first" }
     ],
     "nodes": {
-      "first": {
-        "lines": [
-          "CASTLE REMEMBERS. Forty-one names in two columns. The last one is cut more sharply than the others, and the stone round it is clean."
-        ],
-        "actions": [
-          {
-            "do": "flag",
-            "flag": "talked_memorial"
-          }
-        ]
+      "hale": {
+        "lines": ["CASTLE REMEMBERS. Forty-one names in two columns. The last is cut more sharply than the others, and the stone round it is clean: HALE, R."],
+        "actions": [{ "do": "location", "name": "memorial_read" }, { "do": "flag", "flag": "talked_memorial" }]
       },
-      "again": {
-        "lines": [
-          "The last name is HALE, R."
-        ]
-      }
+      "first": {
+        "lines": ["CASTLE REMEMBERS. Forty-one names in two columns. The last one is cut more sharply than the others, and the stone round it is clean."],
+        "actions": [{ "do": "flag", "flag": "talked_memorial" }]
+      },
+      "again": { "lines": ["The last name is HALE, R."] }
     }
   },
   "headstone": {
     "speaker": "Headstone",
-    "start": [
-      {
-        "node": "a"
-      }
-    ],
-    "nodes": {
-      "a": {
-        "lines": [
-          "The name has worn away. Somebody has kept the grass short round it all the same."
-        ]
-      }
-    }
+    "start": [{ "node": "a" }],
+    "nodes": { "a": { "lines": ["The name has worn away. Somebody has kept the grass short round it all the same."] } }
   },
   "headstone_new": {
     "speaker": "Headstone",
     "start": [
-      {
-        "node": "a"
-      }
+      { "when": [{ "if": "questActive", "quest": "the_new_stone" }, { "if": "hasItem", "item": "town_cap", "qty": 1 }], "node": "cap" },
+      { "when": [{ "if": "questDone", "quest": "the_new_stone" }], "node": "named" },
+      { "node": "a" }
     ],
     "nodes": {
-      "a": {
-        "lines": [
-          "A new stone. No name on it yet, only a date. The date is next Sunday."
-        ]
-      }
+      "cap": {
+        "lines": ["The new stone, with its date and no name. You set Robert's cap on top of it. It sits there as if it had been left, not put."],
+        "actions": [{ "do": "take", "item": "town_cap", "qty": 1 }, { "do": "location", "name": "cap_on_stone" }]
+      },
+      "named": { "lines": ["The new stone. A boy's cap on it, and a name marked out in chalk, ready for the chisel: R. HALE. The date is next Sunday."] },
+      "a": { "lines": ["A new stone. No name on it yet, only a date. The date is next Sunday."] }
     }
   },
   "pillar_box": {
     "speaker": "Post Box",
-    "start": [
-      {
-        "node": "a"
-      }
-    ],
-    "nodes": {
-      "a": {
-        "lines": [
-          "LAST COLLECTION 5.30 PM, WEEKDAYS. A second plate, screwed on later: AND SUNDAYS, BY THE TRAIN."
-        ]
-      }
-    }
+    "start": [{ "node": "a" }],
+    "nodes": { "a": { "lines": ["LAST COLLECTION 5.30 PM, WEEKDAYS. A second plate, screwed on later: AND SUNDAYS, BY THE TRAIN."] } }
   },
   "phone_box": {
     "speaker": "Telephone Box",
-    "start": [
-      {
-        "node": "a"
-      }
-    ],
+    "start": [{ "when": [{ "if": "questActive", "quest": "on_the_hour" }], "node": "ring" }, { "node": "a" }],
     "nodes": {
-      "a": {
-        "lines": [
-          "No dialling tone. The card by the telephone lists one number for Castle, and it is the number of this box."
-        ]
-      }
+      "ring": {
+        "lines": ["You lift the receiver. No dialling tone. Then, a long way off, a man: \"Tell our Walter I'm at the Arms. Tell him to come before the lamps.\" The line goes."],
+        "actions": [{ "do": "location", "name": "phone_answered" }]
+      },
+      "a": { "lines": ["No dialling tone. The card by the telephone lists one number for Castle, and it is the number of this box."] }
     }
   },
   "stall_greens": {
     "speaker": "Stall",
-    "start": [
-      {
-        "node": "a"
-      }
-    ],
-    "nodes": {
-      "a": {
-        "lines": [
-          "Apples, grapes, a few onions. A card: SERVED BY MR POUND."
-        ]
-      }
-    }
+    "start": [{ "node": "a" }],
+    "nodes": { "a": { "lines": ["Apples, grapes, a few onions. A card: SERVED BY MR POUND."] } }
   },
   "stall_bread": {
     "speaker": "Stall",
-    "start": [
-      {
-        "node": "a"
-      }
-    ],
-    "nodes": {
-      "a": {
-        "lines": [
-          "Empty trays, and a bell to ring for service. The bell has no clapper."
-        ]
-      }
-    }
+    "start": [{ "node": "a" }],
+    "nodes": { "a": { "lines": ["Empty trays, and a bell to ring for service. The bell has no clapper."] } }
   },
   "stall_seeds": {
     "speaker": "Stall",
-    "start": [
-      {
-        "node": "a"
-      }
-    ],
-    "nodes": {
-      "a": {
-        "lines": [
-          "Seed packets in rows, all dated this year. A few at the back are dated next year."
-        ]
-      }
-    }
+    "start": [{ "node": "a" }],
+    "nodes": { "a": { "lines": ["Seed packets in rows, all dated this year. A few at the back are dated next year."] } }
   },
   "mrs_garland": {
     "speaker": "Mrs Garland",
     "start": [
-      {
-        "node": "a"
-      }
+      { "when": [{ "if": "questActive", "quest": "the_back_room" }], "node": "ernest" },
+      { "node": "a" }
     ],
     "nodes": {
       "a": {
-        "lines": [
-          "You'll be Julie's. You've her way of standing in a doorway."
-        ],
-        "options": [
-          {
-            "label": "Is there a room?",
-            "goto": "room"
-          },
-          {
-            "label": "Just looking in"
-          }
-        ]
+        "lines": ["You'll be Julie's. You've her way of standing in a doorway."],
+        "options": [{ "label": "Is there a room?", "goto": "room" }, { "label": "Just looking in" }]
       },
-      "room": {
+      "room": { "lines": ["Through the back. Sleep if you want to. Nobody comes in, and the door locks from your side."] },
+      "ernest": {
         "lines": [
-          "Through the back. Sleep if you want to. Nobody comes in, and the door locks from your side."
-        ]
+          "Ernest Dunn? He took the back room in the spring, the night of the bell. He hasn't come down since.",
+          "I leave his tray at the door, and it comes back empty. Tell Walter he's all right. That's what I tell myself."
+        ],
+        "actions": [{ "do": "location", "name": "asked_garland" }]
       }
     }
   },
   "mr_quill": {
     "speaker": "Mr Quill",
-    "start": [
-      {
-        "when": [
-          {
-            "if": "flag",
-            "flag": "talked_mr_quill"
-          }
-        ],
-        "node": "again"
-      },
-      {
-        "node": "first"
-      }
-    ],
+    "start": [{ "when": [{ "if": "flag", "flag": "talked_mr_quill" }], "node": "again" }, { "node": "first" }],
     "nodes": {
-      "first": {
-        "lines": [
-          "Evening. Or is it? In here it's always evening. Mrs Garland keeps the curtains."
-        ],
-        "actions": [
-          {
-            "do": "flag",
-            "flag": "talked_mr_quill"
-          }
-        ]
-      },
-      "again": {
-        "lines": [
-          "I'd go home, but it's dark out. It's been dark out a good while."
-        ]
-      }
+      "first": { "lines": ["Evening. Or is it? In here it's always evening. Mrs Garland keeps the curtains."], "actions": [{ "do": "flag", "flag": "talked_mr_quill" }] },
+      "again": { "lines": ["I'd go home, but it's dark out. It's been dark out a good while."] }
     }
   },
   "mr_ennis": {
     "speaker": "Mr Ennis",
-    "start": [
-      {
-        "node": "a"
-      }
-    ],
-    "nodes": {
-      "a": {
-        "lines": [
-          "I missed the Sunday train. That was a while ago now. There'll be another."
-        ]
-      }
-    }
+    "start": [{ "node": "a" }],
+    "nodes": { "a": { "lines": ["I missed the Sunday train. That was a while ago now. There'll be another."] } }
   },
   "vicar": {
     "speaker": "The Vicar",
-    "start": [
-      {
-        "when": [
-          {
-            "if": "flag",
-            "flag": "talked_vicar"
-          }
-        ],
-        "node": "again"
-      },
-      {
-        "node": "first"
-      }
-    ],
+    "start": [{ "when": [{ "if": "flag", "flag": "talked_vicar" }], "node": "again" }, { "node": "first" }],
     "nodes": {
-      "first": {
-        "lines": [
-          "The church is open. It is always open. Nobody has come in since the bell, so you are very welcome."
-        ],
-        "actions": [
-          {
-            "do": "flag",
-            "flag": "talked_vicar"
-          }
-        ]
-      },
-      "again": {
-        "lines": [
-          "I ring for evensong at six. Something else rings at nine. I've stopped answering it."
-        ]
-      }
+      "first": { "lines": ["The church is open. It is always open. Nobody has come in since the bell, so you are very welcome."], "actions": [{ "do": "flag", "flag": "talked_vicar" }] },
+      "again": { "lines": ["I ring for evensong at six. Something else rings at nine. I've stopped answering it."] }
     }
   },
   "visitors_book": {
     "speaker": "Visitors' Book",
-    "start": [
-      {
-        "node": "a"
-      }
-    ],
-    "nodes": {
-      "a": {
-        "lines": [
-          "VISITORS, PLEASE SIGN. The last entry is in the hand from the letter: \"Candles, as usual. Back on Sunday.\" It is six years old."
-        ]
-      }
-    }
+    "start": [{ "node": "a" }],
+    "nodes": { "a": { "lines": ["VISITORS, PLEASE SIGN. The last entry is in the hand from the letter: \"Candles, as usual. Back on Sunday.\" It is six years old."] } }
   },
   "altar": {
     "speaker": "Altar",
-    "start": [
-      {
-        "node": "a"
-      }
-    ],
-    "nodes": {
-      "a": {
-        "lines": [
-          "A white cloth, pressed. Two candles, lit, and not burning down."
-        ]
-      }
-    }
+    "start": [{ "node": "a" }],
+    "nodes": { "a": { "lines": ["A white cloth, pressed. Two candles, lit, and not burning down."] } }
   },
   "arms_bed": {
     "speaker": "Bed",
-    "start": [
-      {
-        "node": "bed"
-      }
-    ],
+    "start": [{ "node": "bed" }],
     "nodes": {
       "bed": {
-        "lines": [
-          "A narrow bed under a sloping ceiling. The sheets smell of the same soap as Mrs Marsh's washing."
-        ],
+        "lines": ["A narrow bed under a sloping ceiling. The sheets smell of the same soap as Mrs Marsh's washing."],
         "options": [
-          {
-            "label": "Sleep until morning",
-            "actions": [
-              {
-                "do": "rest",
-                "until": 6
-              }
-            ],
-            "goto": "slept"
-          },
-          {
-            "label": "Rest a moment",
-            "actions": [
-              {
-                "do": "rest"
-              }
-            ]
-          }
+          { "label": "Sleep until morning", "actions": [{ "do": "rest", "until": 6 }], "goto": "slept" },
+          { "label": "Rest a moment", "actions": [{ "do": "rest" }] }
         ]
       },
-      "slept": {
-        "lines": [
-          "You sleep without dreaming. In the morning the curtains are still drawn, and somebody has put a cup of tea by the bed. It is cold."
-        ]
-      }
+      "slept": { "lines": ["You sleep without dreaming. In the morning the curtains are still drawn, and somebody has put a cup of tea by the bed. It is cold."] }
     }
   },
   "arms_notice": {
     "speaker": "Notice",
-    "start": [
-      {
-        "node": "a"
-      }
-    ],
-    "nodes": {
-      "a": {
-        "lines": [
-          "NO CREDIT. NO SINGING. RESIDENTS ARE ASKED NOT TO OPEN THE CURTAINS AFTER NINE."
-        ]
-      }
-    }
+    "start": [{ "node": "a" }],
+    "nodes": { "a": { "lines": ["NO CREDIT. NO SINGING. RESIDENTS ARE ASKED NOT TO OPEN THE CURTAINS AFTER NINE."] } }
   },
   "traveller": {
     "speaker": "A Woman with a Case",
-    "start": [
-      {
-        "when": [
-          {
-            "if": "flag",
-            "flag": "talked_traveller"
-          }
-        ],
-        "node": "again"
-      },
-      {
-        "node": "first"
-      }
-    ],
+    "start": [{ "when": [{ "if": "flag", "flag": "talked_traveller" }], "node": "again" }, { "node": "first" }],
     "nodes": {
-      "first": {
-        "lines": [
-          "Is it Sunday? I was told the train comes on Sunday."
-        ],
-        "actions": [
-          {
-            "do": "flag",
-            "flag": "talked_traveller"
-          }
-        ]
-      },
-      "again": {
-        "lines": [
-          "I have been here since Sunday. It has not been Sunday since."
-        ]
-      }
+      "first": { "lines": ["Is it Sunday? I was told the train comes on Sunday."], "actions": [{ "do": "flag", "flag": "talked_traveller" }] },
+      "again": { "lines": ["I have been here since Sunday. It has not been Sunday since."] }
     }
   },
   "station_board": {
     "speaker": "Name Board",
-    "start": [
-      {
-        "node": "a"
-      }
-    ],
-    "nodes": {
-      "a": {
-        "lines": [
-          "CASTLE HALT. Trains stop by request. Passengers wishing to leave should signal to the driver."
-        ]
-      }
-    }
+    "start": [{ "node": "a" }],
+    "nodes": { "a": { "lines": ["CASTLE HALT. Trains stop by request. Passengers wishing to leave should signal to the driver."] } }
   },
   "ticket_window": {
     "speaker": "Ticket Window",
-    "start": [
-      {
-        "node": "a"
-      }
-    ],
-    "nodes": {
-      "a": {
-        "lines": [
-          "A blind is down behind the glass. A card in the corner: TICKETS ON THE TRAIN. SINGLES ONLY."
-        ]
-      }
-    }
+    "start": [{ "node": "a" }],
+    "nodes": { "a": { "lines": ["A blind is down behind the glass. A card in the corner: TICKETS ON THE TRAIN. SINGLES ONLY."] } }
   },
   "timetable": {
     "speaker": "Timetable",
-    "start": [
-      {
-        "node": "a"
-      }
-    ],
-    "nodes": {
-      "a": {
-        "lines": [
-          "SUNDAY: arr. 17.00, dep. 17.02. MONDAY TO SATURDAY: no service. The Sunday line has been underlined twice in pencil."
-        ]
-      }
-    }
+    "start": [{ "node": "a" }],
+    "nodes": { "a": { "lines": ["SUNDAY: arr. 17.00, dep. 17.02. MONDAY TO SATURDAY: no service. The Sunday line has been underlined twice in pencil."] } }
   },
   "barn_door": {
     "speaker": "The Barn",
-    "start": [
-      {
-        "node": "a"
-      }
-    ],
-    "nodes": {
-      "a": {
-        "lines": [
-          "Barred from the outside, and chained as well. A card on the chain: PLEASE DON'T LOOK IN THE BARN. THANK YOU."
-        ]
-      }
-    }
+    "start": [{ "node": "a" }],
+    "nodes": { "a": { "lines": ["Barred from the outside, and chained as well. A card on the chain: PLEASE DON'T LOOK IN THE BARN. THANK YOU."] } }
   },
   "sign_farm": {
     "speaker": "Sign",
-    "start": [
-      {
-        "node": "a"
-      }
-    ],
-    "nodes": {
-      "a": {
-        "lines": [
-          "LOWFIELD FARM. Eggs, when there are eggs. Honesty box by the door."
-        ]
-      }
-    }
+    "start": [{ "node": "a" }],
+    "nodes": { "a": { "lines": ["LOWFIELD FARM. Eggs, when there are eggs. Honesty box by the door."] } }
   },
   "hen_coop": {
     "speaker": "Hen House",
-    "start": [
-      {
-        "node": "a"
-      }
-    ],
-    "nodes": {
-      "a": {
-        "lines": [
-          "Straw and warm feathers. Nobody has collected the eggs; there are no eggs to collect."
-        ]
-      }
-    }
+    "start": [{ "node": "a" }],
+    "nodes": { "a": { "lines": ["Straw and warm feathers. Nobody has collected the eggs; there are no eggs to collect."] } }
   }
 }

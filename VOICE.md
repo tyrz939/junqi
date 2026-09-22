@@ -75,6 +75,42 @@ What to leave: jump scares, body horror, cruelty shown on screen, radio static a
 | "Something terrible happened here long ago." | Vague. What? When? Say the checkable part or say nothing |
 | "I have already draw a map for you" | Broken English is not eerie. It is only broken |
 
+## People: ordinary voices, the same unease
+
+*Added 23 September 2026, after John's second play (Redlines, same date). This is the rule for every line a person says, in Castle and in the open country, and for the knock lines behind doors.*
+
+> "i feel many would be better feeling uneasy with the situation like the player may feel and pointing out something they've noticed (that is probably real in game) on occasion, or just sharing their uneasy feeling, mostly in more normal talk tone/voice but some can be a little off."
+
+1. **Most people talk like people.** Plain, warm, tired, busy; proper English; contractions are fine ("I'm", "don't", "you'll"). The oddness is in *what* they say, never in the grammar or the rhythm. A line a real neighbour could say over a fence is the default.
+2. **Many of them feel what she feels, and say so plainly.** They have noticed the same things and do not like them either: "Has the bell been going early for you?" "I don't let the children past the garden after tea. I couldn't tell you why." Unease is shared, not performed: no "beware", no "something is wrong".
+3. **What they point at is there.** When someone says "the lamp", "the new stone", "the School's window", "the three bottles on the step", that thing is placed near them in the built world and she can walk over and look. Never name an object nobody placed. Before writing, open the chunk (`world/chunks.ts`) or the generator (`world/country.ts`) and look at what stands within a screen of the speaker.
+4. **Out in the country, only what is guaranteed.** Country folk are generated; one tree serves every farmer on the map. A line may name only what that kind of place always has (below), or what is true everywhere: the bell at nine, the School on its hill (north, in the Lowfields), the lamps at dusk, the creatures off the road after dark, the Sunday train.
+
+   | Speaker | Stands at | Always there |
+   | --- | --- | --- |
+   | The Farmer | a farmstead, sometimes an orchard (Lowfields) | fences, the field or trees; at a farmstead a chained barn with a card, a pump, a hen house, a sheep pen |
+   | A Woman in an Apron | a farmstead, a hamlet or a cottage | a house, a garden or field, the road |
+   | An Old Man, A Woman in a Brown Coat | a hamlet or a cottage | a house, a garden plot, the road |
+   | A Man in a Grey Coat | a hamlet, a cottage or an inn | the road |
+   | The Innkeeper | an inn | THE HALFWAY HOUSE sign, the lamp by the door, a trough, a cart, barrels |
+   | The Woodcutter | a clearing (Lowfields) | stumps, logs, woodpiles, a shed or a tent |
+   | A Reedcutter | a reed hut (the Waters) | the hut, the cut reed stacked, a plank landing, wet ground |
+
+5. **Some, not most, are a little off.** One or two per street: the woman who has been waiting since Sunday, the man who likes to be early for a Tuesday that is not coming. They are never cute-random, never broken English (Rule 1), never the first thing a stranger says (Rule 0).
+6. **Say different things.** Two neighbours never share a line. A person with more than one thing to say says it over several visits (a counter flag: `talked_x` 1, 2, ...). Country trees turn over their lines the same way (`said:farmer` 0 to 4), so the next farmer she stops says the next thing a farmer would.
+7. **The heroine is `{name}`.** No "Jane" in any row, and no en or em dashes (tests enforce both in Castle's files).
+
+**Before and after, from the game's own lines:**
+
+| Before | After | Why |
+| --- | --- | --- |
+| Mr Cobb: "Too early for inside. Mrs Garland opens the door at six." | "I sit out here till six. Mrs Garland likes the yard kept, and I like to see who comes up the street." | The Arms door opens all day. A townsperson's small claim must be true, or the player learns to stop listening |
+| The Milkman: "If you're walking out, keep the School at your back and you'll come to the Halt road." | "No. 7 hasn't taken theirs in all week. Three bottles on the step. You don't stop for one house, though." | The first was only true on some seeds. The second is true on all of them, and No. 7 is a few steps up his round with the bottles on its step |
+| Mrs Tace: "You can see the window from my step." | "You can see its window from the top of Church Lane. It's always the same one lit." | Her step faces south, away from the School. The top of Church Lane is the north edge of town |
+| No. 3, Pound Lane: "\"We're not in,\" someone says. Then, more quietly: \"Not to you.\"" | "\"We don't open after the bell, and not much before it,\" a man says. \"No offence meant. Try the Arms, on the square.\"" | The same closed door, but frightened instead of sinister, polite, and it sends her somewhere real |
+| Mrs Fenn (one line, repeated) | "Lovely afternoon. You'll want to be in before the lamps." Then: "Has the bell been going early for you? It went before nine on Tuesday. I checked it against my kitchen clock, and then I checked the clock." | Small talk first; the unease second, shared, in her own ordinary words |
+| The Farmer (the same two lines from every farmer in the county) | Five lines, turned over farmer to farmer: the weather, the bell, the barn card ("I put one on mine myself, and I couldn't tell you why"), the creatures at the road's edge, and last the crows | One voice across fifteen hundred people reads as a machine. Different people, one worry |
+
 ## Writing an omen
 
 An omen is a text plus a consequence (`PLAN.md` §5). Template:
@@ -100,3 +136,4 @@ John's corrections, dated, as rules.
 - **2026-09-21** "I am not a city dog" is random where it was. Rework it, or make it something found by clicking a few times. → Rule 0; the poke chain in `dialogue.json` (`dog.poke_1` … `poke_loop`).
 - **2026-09-21** "We're almost getting a slight Silent Hill vibe, and I love it. Lean into that a little." → §Tone.
 - **2026-09-21** Every `{name}`: no row may have "Jane" baked in (a test enforces it).
+- **2026-09-23** "Many would be better feeling uneasy with the situation like the player may feel and pointing out something they've noticed (that is probably real in game) ... mostly in more normal talk tone/voice but some can be a little off." → §People: ordinary voices, the same unease.

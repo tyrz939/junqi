@@ -1,65 +1,124 @@
 {
   "country_farmer": {
     "speaker": "The Farmer",
-    "start": [{ "when": [{ "if": "night" }], "node": "late" }, { "node": "day" }],
+    "start": [
+      { "when": [{ "if": "flag", "flag": "said:farmer", "eq": 1 }], "node": "b" },
+      { "when": [{ "if": "flag", "flag": "said:farmer", "eq": 2 }], "node": "c" },
+      { "when": [{ "if": "flag", "flag": "said:farmer", "eq": 3 }], "node": "d" },
+      { "when": [{ "if": "flag", "flag": "said:farmer", "eq": 4 }], "node": "e" },
+      { "node": "a" }
+    ],
     "nodes": {
-      "day": { "lines": ["Fine weather for it. The crows have taken to following people instead of the plough.", "They stop at the gate. I have not asked them why."] },
-      "late": { "lines": ["You'll want to be off the fields before the last lamp. Not that anything happens. It's just what we do."] }
+      "a": { "lines": ["Afternoon. Fine weather for it, if it holds. It usually holds till about nine."], "actions": [{ "do": "flag", "flag": "said:farmer", "value": 1 }] },
+      "b": { "lines": ["You'll hear the bell at nine, from the School up north. I'm always indoors by then. I couldn't tell you what happens if you're not, and I don't mean to find out."], "actions": [{ "do": "flag", "flag": "said:farmer", "value": 2 }] },
+      "c": { "lines": ["If you pass a barn with a card on its doors, leave it be. Most have one now. I put one on mine myself, and I couldn't tell you why."], "actions": [{ "do": "flag", "flag": "said:farmer", "value": 3 }] },
+      "d": { "lines": ["Keep to the road once the lamps are lit. Things come out of the rough ground after dark. They don't come onto the road, mostly. They stand at the edge of it."], "actions": [{ "do": "flag", "flag": "said:farmer", "value": 4 }] },
+      "e": { "lines": ["The crows have taken to following people instead of the plough. They stop at the fence. I haven't asked them why."], "actions": [{ "do": "flag", "flag": "said:farmer", "value": 0 }] }
     }
   },
   "country_wife": {
     "speaker": "A Woman in an Apron",
-    "start": [{ "when": [{ "if": "night" }], "node": "late" }, { "node": "day" }],
+    "start": [
+      { "when": [{ "if": "flag", "flag": "said:wife", "eq": 1 }], "node": "b" },
+      { "when": [{ "if": "flag", "flag": "said:wife", "eq": 2 }], "node": "c" },
+      { "when": [{ "if": "flag", "flag": "said:wife", "eq": 3 }], "node": "d" },
+      { "node": "a" }
+    ],
     "nodes": {
-      "day": { "lines": ["There's water in the pump if you want it. Don't drink from the well. It has tasted of pennies since March."] },
-      "late": { "lines": ["We lock the door at nine. You would be welcome, but we lock it at nine."] }
+      "a": { "lines": ["Hello, love. You're not from round here. Nobody walks the roads now unless they have to."], "actions": [{ "do": "flag", "flag": "said:wife", "value": 1 }] },
+      "b": { "lines": ["We lock the door at nine. You'd be welcome, but we lock it at nine. Everybody along here does."], "actions": [{ "do": "flag", "flag": "said:wife", "value": 2 }] },
+      "c": { "lines": ["The children aren't allowed out on the road after tea. I couldn't tell you why. My mother was the same with me."], "actions": [{ "do": "flag", "flag": "said:wife", "value": 3 }] },
+      "d": { "lines": ["Have you noticed the lamps come on earlier than they did? I have. I put the kettle on by them, and it's been earlier every week since March."], "actions": [{ "do": "flag", "flag": "said:wife", "value": 0 }] }
     }
   },
   "country_old": {
     "speaker": "An Old Man",
-    "start": [{ "when": [{ "if": "night" }], "node": "late" }, { "node": "day" }],
+    "start": [
+      { "when": [{ "if": "flag", "flag": "said:old", "eq": 1 }], "node": "b" },
+      { "when": [{ "if": "flag", "flag": "said:old", "eq": 2 }], "node": "c" },
+      { "when": [{ "if": "flag", "flag": "said:old", "eq": 3 }], "node": "d" },
+      { "node": "a" }
+    ],
     "nodes": {
-      "day": { "lines": ["I've stood at this gate most days for forty years. The road used to go somewhere else."] },
-      "late": { "lines": ["The lamps are lit at dusk and counted at ten. Somebody has to count them."] }
+      "a": { "lines": ["Making for Castle? Keep to the road and you'll be there before the lamps. Don't cut across. The fields are bigger than they look."], "actions": [{ "do": "flag", "flag": "said:old", "value": 1 }] },
+      "b": { "lines": ["You'll hear the School's bell at nine. It's rung every night I can remember, and nobody's taught up there since I was a boy."], "actions": [{ "do": "flag", "flag": "said:old", "value": 2 }] },
+      "c": { "lines": ["The lamps are lit at dusk and counted at ten. I counted them for years. It never came to the same number twice, and I'm careful."], "actions": [{ "do": "flag", "flag": "said:old", "value": 3 }] },
+      "d": { "lines": ["I've stood about here most days for forty years. The road used to go somewhere else."], "actions": [{ "do": "flag", "flag": "said:old", "value": 0 }] }
     }
   },
   "country_woman": {
     "speaker": "A Woman in a Brown Coat",
-    "start": [{ "when": [{ "if": "night" }], "node": "late" }, { "node": "day" }],
+    "start": [
+      { "when": [{ "if": "flag", "flag": "said:woman", "eq": 1 }], "node": "b" },
+      { "when": [{ "if": "flag", "flag": "said:woman", "eq": 2 }], "node": "c" },
+      { "when": [{ "if": "flag", "flag": "said:woman", "eq": 3 }], "node": "d" },
+      { "node": "a" }
+    ],
     "nodes": {
-      "day": { "lines": ["Walking to Castle? Keep to the road. The fields are fine. It's what is in them."] },
-      "late": { "lines": ["Go on, get indoors somewhere. I'm only waiting for my husband. He is usually back by now."] }
+      "a": { "lines": ["Has the bell been going early for you? I thought it was me. My sister says it's gone before nine twice this week."], "actions": [{ "do": "flag", "flag": "said:woman", "value": 1 }] },
+      "b": { "lines": ["I don't let the children past the garden after tea. I couldn't tell you why. It just feels like the right thing to do."], "actions": [{ "do": "flag", "flag": "said:woman", "value": 2 }] },
+      "c": { "lines": ["I'm only waiting for my husband. He went to see about a cart this morning. He's usually back by now."], "actions": [{ "do": "flag", "flag": "said:woman", "value": 3 }] },
+      "d": { "lines": ["Walking to Castle? Keep to the road. The fields are fine. It's what's in them."], "actions": [{ "do": "flag", "flag": "said:woman", "value": 0 }] }
     }
   },
   "country_woodcutter": {
     "speaker": "The Woodcutter",
-    "start": [{ "when": [{ "if": "night" }], "node": "late" }, { "node": "day" }],
+    "start": [
+      { "when": [{ "if": "flag", "flag": "said:woodcutter", "eq": 1 }], "node": "b" },
+      { "when": [{ "if": "flag", "flag": "said:woodcutter", "eq": 2 }], "node": "c" },
+      { "when": [{ "if": "flag", "flag": "said:woodcutter", "eq": 3 }], "node": "d" },
+      { "node": "a" }
+    ],
     "nodes": {
-      "day": { "lines": ["I cut on this side of the wood. Nobody cuts the other side, and it doesn't grow."] },
-      "late": { "lines": ["I leave the axe in the stump overnight. In the morning it is never quite where I left it."] }
+      "a": { "lines": ["Mind the stumps. I've not had them out yet. I cut on this side of the wood. Nobody cuts the other side, and it doesn't grow."], "actions": [{ "do": "flag", "flag": "said:woodcutter", "value": 1 }] },
+      "b": { "lines": ["I'm off home well before the bell. You hear it clearer in a wood, somehow. As if it's nearer than it is."], "actions": [{ "do": "flag", "flag": "said:woodcutter", "value": 2 }] },
+      "c": { "lines": ["There's something in the trees after dark, bigger than a fox. I've never seen it. I've seen where it's lain down, and it lies down facing the road."], "actions": [{ "do": "flag", "flag": "said:woodcutter", "value": 3 }] },
+      "d": { "lines": ["I leave the axe in a stump overnight. In the morning it's never quite where I left it. I've stopped marking the place."], "actions": [{ "do": "flag", "flag": "said:woodcutter", "value": 0 }] }
     }
   },
   "country_reedcutter": {
     "speaker": "A Reedcutter",
-    "start": [{ "when": [{ "if": "night" }], "node": "late" }, { "node": "day" }],
+    "start": [
+      { "when": [{ "if": "flag", "flag": "said:reedcutter", "eq": 1 }], "node": "b" },
+      { "when": [{ "if": "flag", "flag": "said:reedcutter", "eq": 2 }], "node": "c" },
+      { "when": [{ "if": "flag", "flag": "said:reedcutter", "eq": 3 }], "node": "d" },
+      { "node": "a" }
+    ],
     "nodes": {
-      "day": { "lines": ["The water is higher than it was. It doesn't rain any more than it used to. It just is higher."] },
-      "late": { "lines": ["If you hear somebody calling from the water, it's the herons. Mostly."] }
+      "a": { "lines": ["Keep to the planks and the road. The ground round here looks firm right up until it isn't."], "actions": [{ "do": "flag", "flag": "said:reedcutter", "value": 1 }] },
+      "b": { "lines": ["The water's higher than it was. It doesn't rain any more than it used to. It's just higher."], "actions": [{ "do": "flag", "flag": "said:reedcutter", "value": 2 }] },
+      "c": { "lines": ["I cut and stack by the hut. By morning the stack's always a little lower. Nothing takes reeds, as far as I know. Something does."], "actions": [{ "do": "flag", "flag": "said:reedcutter", "value": 3 }] },
+      "d": { "lines": ["If you hear somebody calling from the water, it's the herons. Mostly."], "actions": [{ "do": "flag", "flag": "said:reedcutter", "value": 0 }] }
     }
   },
   "country_keeper": {
     "speaker": "The Innkeeper",
-    "start": [{ "when": [{ "if": "night" }], "node": "late" }, { "node": "day" }],
+    "start": [
+      { "when": [{ "if": "flag", "flag": "said:keeper", "eq": 1 }], "node": "b" },
+      { "when": [{ "if": "flag", "flag": "said:keeper", "eq": 2 }], "node": "c" },
+      { "when": [{ "if": "flag", "flag": "said:keeper", "eq": 3 }], "node": "d" },
+      { "node": "a" }
+    ],
     "nodes": {
-      "day": { "lines": ["Rooms by the week. Nobody has taken one since the spring, but the beds are made every morning."] },
-      "late": { "lines": ["Doors shut at nine. If anyone knocks after that, it isn't us they want."] }
+      "a": { "lines": ["Afternoon. Rooms by the week, teas all day. Nobody's taken a room since the spring, but I keep them aired."], "actions": [{ "do": "flag", "flag": "said:keeper", "value": 1 }] },
+      "b": { "lines": ["The lamp by the door is lit at dusk and I don't put it out. People on the road like to see a light. Things off the road don't, as far as I can tell."], "actions": [{ "do": "flag", "flag": "said:keeper", "value": 2 }] },
+      "c": { "lines": ["Doors shut at nine. If anyone knocks after that, it isn't us they want. I don't open to find out."], "actions": [{ "do": "flag", "flag": "said:keeper", "value": 3 }] },
+      "d": { "lines": ["Halfway between what, people ask, and point at the sign. I tell them it was halfway when it was painted."], "actions": [{ "do": "flag", "flag": "said:keeper", "value": 0 }] }
     }
   },
   "country_man": {
     "speaker": "A Man in a Grey Coat",
-    "start": [{ "node": "day" }],
+    "start": [
+      { "when": [{ "if": "flag", "flag": "said:man", "eq": 1 }], "node": "b" },
+      { "when": [{ "if": "flag", "flag": "said:man", "eq": 2 }], "node": "c" },
+      { "when": [{ "if": "flag", "flag": "said:man", "eq": 3 }], "node": "d" },
+      { "node": "a" }
+    ],
     "nodes": {
-      "day": { "lines": ["I'm waiting for the carrier. He comes on Tuesdays.", "It isn't Tuesday. I know it isn't. I like to be early."] }
+      "a": { "lines": ["If you're out after the lamps, keep to where it's lit. I'm not saying anything's out there. I'm saying I keep to where it's lit."], "actions": [{ "do": "flag", "flag": "said:man", "value": 1 }] },
+      "b": { "lines": ["You'll have come in on the Sunday train. I remember when it ran every day. Or I remember people saying it did."], "actions": [{ "do": "flag", "flag": "said:man", "value": 2 }] },
+      "c": { "lines": ["Did you hear the bell last night, at nine? It was louder than usual. Everybody I've asked says it wasn't."], "actions": [{ "do": "flag", "flag": "said:man", "value": 3 }] },
+      "d": { "lines": ["I'm waiting for the carrier. He comes on Tuesdays.", "It isn't Tuesday. I know it isn't. I like to be early."], "actions": [{ "do": "flag", "flag": "said:man", "value": 0 }] }
     }
   },
 
@@ -82,7 +141,7 @@
     "speaker": "Door",
     "start": [{ "when": [{ "if": "night" }], "node": "late" }, { "node": "knock" }],
     "nodes": {
-      "knock": { "lines": ["A voice says, not unkindly, that they don't open to people off the road."] },
+      "knock": { "lines": ["A voice says, not unkindly, that they don't open to people off the road. \"Is it still light out? Then you've time to get on.\""] },
       "late": { "lines": ["The light inside goes out while you are still knocking."] }
     }
   },
