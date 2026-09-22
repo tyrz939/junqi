@@ -25,7 +25,7 @@ import { maxHp } from "@/sim/units";
 import { fogSeen } from "@/sim/zones";
 import { buildAtlas, drawSprite, iconDataUrl, type Atlas } from "@/render/atlas";
 import { ambientForHour, Lighting, type Light } from "@/render/lighting";
-import { TileCache } from "@/render/tiles";
+import { STRIP_H as STRIP_ROW_H, TileCache, underCanopy, type StripRef } from "@/render/tiles";
 
 const TARGET_VIEW_H = 216;
 
@@ -69,6 +69,8 @@ export class Renderer {
   private readonly propShown = new Map<number, { x: number; y: number }>();
   /** Reused every frame: the props in the blocks under the view. */
   private readonly propsInView: Prop[] = [];
+  /** Reused every frame: the rows of trees, bushes and fences reaching into the view. */
+  private readonly stripsInView: StripRef[] = [];
   private readonly texts: FloatText[] = [];
   private readonly particles: Particle[] = [];
   private frameNo = 0;
@@ -344,8 +346,19 @@ export class Renderer {
       if (u.segments && u.alive) sorted.push({ y: pos.y - 1, draw: () => this.drawSnakeBody(u, vx, vy) });
     }
 
+    // --- trees, bushes, stones, fences: one strip per cell row, sorted with everything else ---
+    for (const s of this.tiles.strips(vx, vy, this.viewW, this.viewH, this.stripsInView)) {
+      sorted.push({ y: s.y, draw: () => ctx.drawImage(s.canvas, 0, s.sy, s.canvas.width, STRIP_ROW_H, s.dx, s.dy, s.canvas.width, STRIP_ROW_H) });
+    }
+
     sorted.sort((a, b) => a.y - b.y);
     for (const d of sorted) d.draw();
+    // Behind a wood's crowns she would be lost: a faint ghost of her shows through, as in Minish Cap.
+    if (player.alive && !player.hidden && underCanopy(sim.rt.grid, pp.x, pp.y)) {
+      ctx.globalAlpha = 0.4;
+      this.drawUnit(sim, player, pp.x - vx, pp.y - vy);
+      ctx.globalAlpha = 1;
+    }
     if (carried) {
       const sprite = this.atlas[sim.catalog.props[carried.def].sprite];
       if (sprite) drawSprite(ctx, sprite, "base", pp.x - vx - sprite.w / 2, pp.y - vy - 26);
