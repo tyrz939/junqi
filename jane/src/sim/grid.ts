@@ -76,9 +76,20 @@ export enum Tile {
   WorksWall = 38,
   SchoolFloor = 39,
   SchoolWall = 40,
+  // Zelda-scale dressing for towns and farms (2026-09 density push). Appended, so no saved id moves.
+  FlowerBed = 41, // walkable: a bed of flowers in the grass
+  Stepping = 42, // walkable: flagstones set in the grass, the path between two doors
+  Crops = 43, // walkable: planted rows on tilled earth
+  StoneWall = 44, // a low dry-stone wall: stops feet, not eyes or bolts (a fence in stone)
+  RoofSlate = 45, // house roof variants; the renderer draws each as its own roof
+  RoofThatch = 46,
+  BrickWall = 47, // a house wall in brick rather than plaster
+  Boardwalk = 48, // walkable planks: a jetty, a duckboard over the marsh, a bridge deck
+  Pine = 49, // a conifer: a Tree in every rule but its drawing
+  DeadTree = 50, // a bare trunk: stops feet, not eyes
 }
 
-export const TILE_COUNT = 41;
+export const TILE_COUNT = 51;
 
 /**
  * Flags per tile id. Water blocks feet, not sight: 2020 set `block_los` on obj_water
@@ -118,6 +129,12 @@ export const TILE_FLAGS: Uint8Array = (() => {
   t[Tile.Ice] = 0;
   for (const floor of [Tile.MuseumFloor, Tile.PipeFloor, Tile.WorksFloor, Tile.SchoolFloor]) t[floor] = F_INDOOR;
   for (const wall of [Tile.MuseumWall, Tile.PipeWall, Tile.WorksWall, Tile.SchoolWall]) t[wall] = F_SOLID | F_BLOCK_LOS | F_INDOOR;
+  t[Tile.StoneWall] = F_SOLID;
+  t[Tile.RoofSlate] = F_SOLID | F_BLOCK_LOS;
+  t[Tile.RoofThatch] = F_SOLID | F_BLOCK_LOS;
+  t[Tile.BrickWall] = F_SOLID | F_BLOCK_LOS;
+  t[Tile.Pine] = F_SOLID | F_BLOCK_LOS;
+  t[Tile.DeadTree] = F_SOLID;
   return t;
 })();
 
