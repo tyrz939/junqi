@@ -146,6 +146,9 @@ describe("the dog", () => {
   it("is not there after dark, and never vanishes while she is looking", () => {
     const sim = Sim.newGame(catalog, 44);
     const dog = sim.rt.unitsByKey.get("dog")!;
+    // Julie's hours start once the dog has given her the key (units.json `dayOnlyAfter`); the first night
+    // she waits on the step whatever the hour (sim.test.ts "the dog keeps Julie's hours").
+    sim.state.quests.done.push("defeat_skeleton");
     sim.command({ t: "dev", dev: { op: "time", hour: 22 } });
     expect(isNight(sim.state)).toBe(true);
     idle(sim, 40); // Jane is at the gate, far from the step
