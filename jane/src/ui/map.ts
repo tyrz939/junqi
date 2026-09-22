@@ -121,6 +121,32 @@ export class MapPane {
       c2.fillStyle = "#e6b450";
       c2.fillRect(x - m, y - m, 2 * m + 1, 2 * m + 1);
     }
+
+    const school = sim.rt.bp.marks.school_mouth;
+    if (school && !indoor) this.drawSchool(c2, school.cx / step, school.cy / step, Math.max(1, mw / 300));
+  }
+
+  /**
+   * The School has its own mark and nothing else on the map looks like it: a black building with a
+   * bell tower and one lit window, edged in bone so it shows on any ground. It is there from the
+   * first time the map is opened, so she always knows which way it lies.
+   */
+  private drawSchool(c2: CanvasRenderingContext2D, x: number, y: number, k: number): void {
+    const r = (ox: number, oy: number, w: number, hh: number, color: string): void => {
+      c2.fillStyle = color;
+      c2.fillRect(Math.round(x + ox * k), Math.round(y + oy * k), Math.max(1, Math.round(w * k)), Math.max(1, Math.round(hh * k)));
+    };
+    // Bone edge first, a pixel proud of the body all round, then the body over it.
+    const parts: [number, number, number, number][] = [
+      [-7, -4, 14, 6], // the body
+      [-5, -6, 4, 2], // a taller wing
+      [2, -9, 3, 5], // the bell tower
+      [-6, -7, 1, 1], // chimneys
+      [0, -6, 1, 1],
+    ];
+    for (const [ox, oy, w, hh] of parts) r(ox - 1, oy - 1, w + 2, hh + 2, "#cfc8b8");
+    for (const [ox, oy, w, hh] of parts) r(ox, oy, w, hh, "#0c0912");
+    r(3, -7, 1, 1.4, "#f0d048");
   }
 
   private paletteFor(colors: readonly string[]): Uint32Array {
