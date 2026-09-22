@@ -28,6 +28,7 @@ import { applyPlacements, claimPois, PLACEMENTS, type PlaceCtx, type PlacementRo
 import { propFootprints } from "@/sim/catalog";
 import { hasZone } from "@/world/registry";
 import { at, Biome, buildSkeleton, COUNTY_H, COUNTY_W, MACRO, Region, ROAD_LIT, SKEL_H, SKEL_W, type Skeleton } from "@/world/skeleton";
+import { furnishCountry, type Country } from "@/world/country";
 
 export { COUNTY_H, COUNTY_W };
 
@@ -44,35 +45,13 @@ const PATHS = pathsJson as unknown as PathRow[];
 type DoorRow = { zone: string; chunk?: string; near?: string; def?: string; key: string; label: string; keyTag?: string; nightLock?: string; mark?: string; fromBelow?: boolean };
 const DOORS = doorsJson as unknown as DoorRow[];
 
-const ROAD_WIDTH = 4;
+/** The metal, in cells. A lane, not a trunk road: two people pass, a cart takes all of it. */
+const ROAD_WIDTH = 3;
+/** Trodden verge each side of it. */
+const VERGE = 1;
 const FIELD_HERBS = ["pansy", "nasturtium", "honeylace_lily", "hemshade_root"];
 const WATER_HERBS = ["white_water_cap", "white_water_rose", "honeylace_lily", "night_lich_moss"];
 const WORKS_HERBS = ["night_lich_moss", "savage_snakeroot", "hemshade_root"];
-
-/** What lives where. One row per creature; `phase` (the threat of the ground it stands on) sets what it costs. */
-const WILDLIFE: Record<Region, { def: string; biomes?: Biome[] }[]> = {
-  // Two of the six Lowfields rows used to be `rat`, and most Lowfields ground is open field,
-  // where the biome-bound rows do not apply: half of everything she met in the first region was
-  // a rat with a five-metre eye. One of them is a skeleton now, so open ground has something in
-  // it that looks up.
-  [Region.Lowfields]: [
-    { def: "rat" },
-    { def: "skeleton" },
-    { def: "bat" },
-    { def: "pumpkin", biomes: [Biome.Field, Biome.Hedge] },
-    { def: "spider", biomes: [Biome.Wood] },
-    { def: "skeleton", biomes: [Biome.Foothill, Biome.Wood] },
-  ],
-  [Region.Waters]: [
-    { def: "flower", biomes: [Biome.Garden, Biome.Marsh] },
-    { def: "statue", biomes: [Biome.Garden] },
-    { def: "spider", biomes: [Biome.WetWood] },
-    { def: "rat", biomes: [Biome.Reed, Biome.Marsh] },
-    { def: "bat" },
-    { def: "skeleton" },
-  ],
-  [Region.Works]: [{ def: "soldier" }, { def: "skeleton_guard" }, { def: "skeleton_clerk", biomes: [Biome.Yard] }, { def: "wall_spider", biomes: [Biome.Hill, Biome.Slag] }, { def: "cactus", biomes: [Biome.Slag] }],
-};
 
 let footprints: Record<string, { w: number; h: number }> | null = null;
 
@@ -110,15 +89,45 @@ export function buildCounty(seed: number, attempt: number, rows: readonly Placem
   const centre = (m: number): number => m * MACRO + MACRO / 2;
   const lines: [number, number][][] = [];
   const lit: boolean[][] = [];
+  // The ground as it was before any road: where a road crosses water, it is a bridge.
+  const before = k.tiles.slice();
+  const half = (ROAD_WIDTH >> 1) + VERGE;
   for (const r of sk.roads) {
     const pts = r.cells.map((c): [number, number] => [centre(c % SKEL_W), centre(Math.floor(c / SKEL_W))]);
-    // A verge under every road, two cells wider than the metal. Grass does not meet a made road
-    // edge on: there is always a band of trodden dirt, and drawing it is what stops the road reading
-    // as a stripe laid over a field.
-    k.stroke(pts, ROAD_WIDTH + 3, Tile.Dirt, 1);
-    const line = k.stroke(pts, ROAD_WIDTH, Tile.Road, 1);
+    // The centre line first, then the metal and the verge painted round it with a ROUND brush: a
+    // square brush drawn along a diagonal makes a road half as wide again as the same road running
+    // straight, and a lane that swells at every bend reads as a mistake.
+    const line = k.stroke(pts, 1, Tile.Road, 1);
+    const metal = ((ROAD_WIDTH >> 1) + 0.25) ** 2;
+    const verge = (half + 0.25) ** 2;
+    // A verge along every road, a cell each side of the metal, laid along the road's OWN line so it
+    // never wanders off it. Grass does not meet a made road edge on: there is always a band of
+    // trodden dirt, and drawing it is what stops the road reading as a stripe laid over a field.
+    // Not over water: a bridge is the road and nothing else.
+    for (const [x, y] of line) {
+      for (let oy = -half; oy <= half; oy++) {
+        for (let ox = -half; ox <= half; ox++) {
+          const d = ox * ox + oy * oy;
+          if (d > verge) continue;
+          const t = k.get(x + ox, y + oy);
+          if (d <= metal) k.set(x + ox, y + oy, Tile.Road);
+          else if (t !== Tile.Road && t !== Tile.Water) k.set(x + ox, y + oy, Tile.Dirt);
+        }
+      }
+    }
     lines.push(line);
     lit.push(line.map(([x, y]) => (sk.road[at(Math.min(SKEL_W - 1, x >> 4), Math.min(SKEL_H - 1, y >> 4))] & ROAD_LIT) !== 0));
+  }
+  // Where a road crosses water it is a bridge, and a bridge is a deck of planks, not a stripe of road on the river.
+  for (const line of lines) {
+    for (const [x, y] of line) {
+      for (let oy = -1; oy <= 1; oy++) {
+        for (let ox = -1; ox <= 1; ox++) {
+          const i = (y + oy) * COUNTY_W + x + ox;
+          if (before[i] === Tile.Water && k.tiles[i] === Tile.Road) k.tiles[i] = Tile.Boardwalk;
+        }
+      }
+    }
   }
   // The Burial Chamber is off the road on purpose. A footpath from the graveyard finds it, and only that.
   const grave = sk.sites.find((s) => s.id === "graveyard");
@@ -156,6 +165,8 @@ export function buildCounty(seed: number, attempt: number, rows: readonly Placem
     const build = CHUNKS[s.id];
     if (build) chunks.push(build(k, centre(s.mx), centre(s.my)));
   }
+  // Each set place's ground, by name, so a measure of the open country can tell it from a town.
+  for (const c of chunks) if (!k.rects[`site_${c.id}`]) k.rect(`site_${c.id}`, c.box);
   for (const line of lines) for (const c of chunks) linkRoad(k, line, c);
   // A footpath's two ends get a mark each, a little way out from the chunk it leaves: where the fingerpost stands.
   for (const { row, line } of footpaths) {
@@ -165,9 +176,21 @@ export function buildCounty(seed: number, attempt: number, rows: readonly Placem
     if (a < 0 || b <= a) continue;
     const pa = line[Math.min(b, a + 24)];
     const pb = line[Math.max(a, b - 24)];
-    for (const [name, p] of [[row.marks[0], pa], [row.marks[1], pb]] as const) {
+    const ends = [
+      [row.marks[0], pa, row.to],
+      [row.marks[1], pb, row.from],
+    ] as const;
+    for (const [name, p, toward] of ends) {
       clearing(k, p[0], p[1]);
       k.mark(name, p[0], p[1], 1);
+      // A fingerpost where the footpath leaves the road, saying where it goes. Beside the stile, not on it.
+      const there = sk.sites.find((s) => s.id === toward);
+      const metres = Math.round((Math.abs(b - a) * 1.1) / 50) * 50;
+      for (const [ox, oy] of [[2, -1], [-3, -1], [2, 1], [-3, 1]] as const) {
+        if (!there || !k.fits(p[0] + ox, p[1] + oy, 2, 1)) continue;
+        k.prop({ def: "fingerpost", cx: p[0] + ox, cy: p[1] + oy, label: "A fingerpost", use: [{ do: "toast", text: `FOOTPATH. ${there.name.toUpperCase()}, ${metres < 1000 ? `${metres} m` : `${(metres / 1000).toFixed(1)} km`}.` }] }, 2, 1);
+        break;
+      }
     }
   }
 
@@ -196,13 +219,8 @@ export function buildCounty(seed: number, attempt: number, rows: readonly Placem
     let size = { w: 2, h: 2 };
     if (!d.chunk && chunk) {
       size = footprints![d.def ?? "door"] ?? size;
-      // With open ground in front of it (the row below its margin), kept open: a cover you cannot stand at is not a way in.
-      let spot: { cx: number; cy: number } | null = null;
-      for (let n = 0; n < 8 && !spot; n++) {
-        const s = k.spot({ cx: chunk.box.cx - 14, cy: chunk.box.cy - 14, w: chunk.box.w + 28, h: chunk.box.h + 28 }, size.w, size.h, 1, 200);
-        if (s && !k.solid(s.cx, s.cy + size.h + 1)) spot = s;
-      }
-      if (spot) k.claim(spot.cx, spot.cy + size.h, size.w, 2);
+      // Room for the cover and for somebody to stand in front of it: open ground three deep below it.
+      const spot = k.spot({ cx: chunk.box.cx - 14, cy: chunk.box.cy - 14, w: chunk.box.w + 28, h: chunk.box.h + 28 }, size.w, size.h + 3, 1, 200);
       cell = spot ? [spot.cx, spot.cy] : undefined;
     }
     if (!cell) continue;
@@ -224,21 +242,19 @@ export function buildCounty(seed: number, attempt: number, rows: readonly Placem
     // A mark the dungeon's own door comes back out at. The way down opens from below (a manhole
     // lifts from the pipes side), so this end is a mark first and a door only when the row says so.
     if (d.mark) k.mark(d.mark, cell[0], cell[1] + size.h, 1);
+    // The ground in front of a way in is the way in: nothing of the country's is built across it.
+    k.claim(cell[0] - 1, cell[1] + size.h, size.w + 2, 4);
   }
 
   applyPlacements(place, "chunks", rows);
   for (const c of chunks) k.claim(c.box.cx - 6, c.box.cy - 6, c.box.w + 12, c.box.h + 12);
-  for (const line of lines) for (const [x, y] of line) k.claim(x - 3, y - 3, 7, 7);
 
   // --- 5 dressing -------------------------------------------------------------------
-  lines.forEach((line, n) => {
-    for (let i = 20; i < line.length - 10; i += 26) {
-      if (!lit[n][i]) continue;
-      const [x, y] = line[i];
-      const side = i % 52 === 20 ? -4 : 4;
-      if (!k.solid(x, y + side) && k.get(x, y + side) !== Tile.Water && k.get(x, y + side) !== Tile.Road) k.prop({ def: "lamp_post", cx: x, cy: y + side }, 1, 1);
-    }
-  });
+  // The roads' furniture first, while their margins are open: lamps on one side at an even step,
+  // a lamp at each end of a bridge, a fingerpost at every fork, milestones (world/country.ts).
+  const country: Country = { k, sk, chunks, lines, lit, before, sizes: (footprints ??= propFootprints()) };
+  furnishCountry(country, "roads");
+  for (const line of lines) for (const [x, y] of line) k.claim(x - 3, y - 3, 7, 7);
   // Small places: dressed as the kind the seed rolled, or the kind a placement row needed them to be.
   // The Factory's reward, out here where it counts: the longest dark stretches of road get a relay
   // box at the head and a run of dead lamps along them. Spark the box and that road is lit for good,
@@ -251,44 +267,15 @@ export function buildCounty(seed: number, attempt: number, rows: readonly Placem
   for (const p of pois) if (p.anchor && k.marks[p.anchor]) k.rect(p.anchor, { cx: p.x - 6, cy: p.y - 4, w: 13, h: 11 });
   applyPlacements(place, "pois", rows);
   for (const p of pois) k.claim(p.x - 7, p.y - 6, 15, 13);
-  scatter(k, sk);
+  // What the quests put in the named patches goes down before the country fills up round it.
   applyPlacements(place, "areas", rows);
+  // Everything else a county has in it: field edges, hamlets, farms, camps, dens, ruins, ponds.
+  furnishCountry(country, "places");
+  scatter(k, sk);
 
   // --- 6 wildlife ---------------------------------------------------------------------
-  const safe = new Uint8Array(SKEL_W * SKEL_H);
-  for (const r of sk.roads) {
-    if (!((r.from === "station" && r.to === "julie_house") || (r.from === "julie_house" && r.to === "town"))) continue;
-    for (const c of r.cells) {
-      const cx = c % SKEL_W;
-      const cy = Math.floor(c / SKEL_W);
-      for (let oy = -3; oy <= 3; oy++) for (let ox = -3; ox <= 3; ox++) if (cx + ox >= 0 && cy + oy >= 0 && cx + ox < SKEL_W && cy + oy < SKEL_H) safe[at(cx + ox, cy + oy)] = 1;
-    }
-  }
-  // How thick the ground is, per 16 m macro cell. The curve is threat SQUARED on purpose. The old
-  // straight line put one creature in every fifty macro cells at threat 1 and one in every eighteen
-  // at threat 6: a county you can walk across without meeting anything, in which the Lowfields and
-  // the Works were under three to one apart. Now the Lowfields stay quiet enough to walk and think
-  // in, and the Works is eleven times thicker than they are. A road still carries a third of
-  // whatever its ground carries, and its ground is a threat lower: a road is the safer way.
-  for (let my = 1; my < SKEL_H - 1; my++) {
-    for (let mx = 1; mx < SKEL_W - 1; mx++) {
-      const i = at(mx, my);
-      const threat = sk.threat[i];
-      if (threat === 0 || safe[i] || sk.water[i]) continue;
-      if (!k.chance((0.016 + threat * threat * 0.0038) * (sk.road[i] ? 0.35 : 1))) continue;
-      const table = WILDLIFE[sk.region[i] as Region].filter((w) => !w.biomes || w.biomes.includes(sk.biome[i] as Biome));
-      if (table.length === 0) continue;
-      // Company, where the ground is bad. One creature is an obstacle and you walk round it;
-      // a pair of them is a reason to go another way, and that is what makes a patch read as a
-      // patch rather than as scenery. Both come from the same table, so a camp belongs to its biome.
-      const company = threat >= 3 && k.chance(threat * 0.05) ? 2 : 1;
-      for (let n = 0; n < company; n++) {
-        const spot = k.spot({ cx: mx * MACRO, cy: my * MACRO, w: MACRO, h: MACRO }, 1, 1, 1, 8);
-        if (!spot) break;
-        k.unit(null, k.pick(table).def, spot.cx, spot.cy).phase = threat;
-      }
-    }
-  }
+  // By region, biome and threat, kept back from the roads; then anything left empty gets something.
+  furnishCountry(country, "life");
 
   dropUnreachable(k);
   return k.done("Castle", false, 1, attempt);
@@ -462,17 +449,18 @@ function ground(biome: Biome, clump: number, r: number, x: number, y: number, s:
       return r < 0.006 ? T.Tree : r < 0.16 ? T.GrassTall : T.Grass;
     }
     case B.Wood:
-      return clump > 0.66 || r < 0.05 ? T.Tree : r < 0.4 ? T.GrassTall : T.Grass;
+      return clump > 0.8 ? T.Pine : clump > 0.66 || r < 0.05 ? T.Tree : r < 0.4 ? T.GrassTall : T.Grass;
     case B.Foothill:
-      return clump > 0.74 ? T.Cliff : r < 0.02 ? T.Tree : clump < 0.3 ? T.Dirt : r < 0.2 ? T.GrassTall : T.Grass;
+      return clump > 0.74 ? T.Cliff : r < 0.02 ? T.Pine : clump < 0.3 ? T.Dirt : r < 0.2 ? T.GrassTall : T.Grass;
     case B.Reed:
-      return clump > 0.78 ? T.Water : r < 0.55 ? T.GrassTall : T.Moss;
+      // Patches of reed and of moss, not a salt-and-pepper of both: the smooth field decides.
+      return clump > 0.78 ? T.Water : clump > 0.47 ? T.GrassTall : T.Moss;
     case B.Marsh:
       return clump > 0.76 ? T.Water : clump < 0.22 ? T.DryBed : r < 0.3 ? T.GrassTall : r < 0.34 ? T.Bush : T.Moss;
     case B.WetWood:
       return clump > 0.68 || r < 0.05 ? T.Tree : r < 0.5 ? T.Moss : T.GrassTall;
     case B.Garden:
-      return clump > 0.7 ? T.Bush : r < 0.03 ? T.Rubble : r < 0.4 ? T.Garden : T.Grass;
+      return clump > 0.7 ? T.Bush : r < 0.03 ? T.Rubble : clump > 0.44 ? T.Garden : T.Grass;
     case B.Slag:
       // Rubble is solid: a scatter of it is cover, a carpet of it is a maze.
       return clump > 0.78 ? T.Cliff : r < 0.05 ? T.Rubble : clump < 0.3 ? T.DryBed : T.Dirt;
@@ -800,7 +788,7 @@ function clearing(k: Kit, x: number, y: number): void {
   for (let oy = -5; oy <= 5; oy++) {
     for (let ox = -7; ox <= 7; ox++) {
       const t = k.get(x + ox, y + oy);
-      if (t === Tile.Tree || t === Tile.Bush || t === Tile.Cliff || t === Tile.Rubble) k.set(x + ox, y + oy, Tile.Grass);
+      if (t === Tile.Tree || t === Tile.Pine || t === Tile.DeadTree || t === Tile.Bush || t === Tile.Cliff || t === Tile.Rubble) k.set(x + ox, y + oy, Tile.Grass);
     }
   }
 }

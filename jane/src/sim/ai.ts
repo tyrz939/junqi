@@ -225,10 +225,27 @@ function followOrder(w: World, u: Unit): void {
   followTo(w, u, o.x, o.y, speed, ORDER_PATH_METRES, def.shunsLight === true);
 }
 
+/** Scratch list of the bodies a hostile thing may look for. Filled per call, never state. */
+const lookFor: Unit[] = [];
+
 export function nearestEnemy(w: World, u: Unit, metres: number, litOnly = false): Unit | null {
   let best: Unit | null = null;
   let bestD = metres;
-  for (const other of w.zone.units) {
+  // Something that bites has only the friendly side for enemies (isEnemy), and of that side only
+  // the ones it fights: never a villager or the dog (controller npc). That leaves the party's own
+  // bodies, so it asks for those instead of walking every unit in a county of several thousand.
+  let pool: readonly Unit[] = w.zone.units;
+  // (No row makes a friendly unit that fights except the heroine: a friendly row is `npc` or `player`.)
+  if (u.faction !== "friendly") {
+    lookFor.length = 0;
+    for (const p of w.state.players) {
+      if (p.zone !== w.zone.id) continue;
+      const body = w.rt.units.get(p.unitId);
+      if (body && body.faction === "friendly" && body.controller !== "npc") lookFor.push(body);
+    }
+    pool = lookFor;
+  }
+  for (const other of pool) {
     if (other === u || !other.alive || !other.awake || !isEnemy(u, other)) continue;
     if (other.controller === "npc") continue;
     if (other.hidden || w.party.ofUnit(other.id)?.god) continue;

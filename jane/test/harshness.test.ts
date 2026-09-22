@@ -173,6 +173,9 @@ type Walk = {
   lost: number;
   noticed: number;
   seen: number;
+  /** Ticks walked, and ticks on which something that bites was after her. */
+  ticks: number;
+  chased: number;
   /** Metres from the start at which the damage had come to 150: where a phase-1 Jane falls. -1 for never. */
   deadAt: number;
 };
@@ -237,12 +240,21 @@ function walk(sim: Sim, route: Route): Walk {
   placeUnit(sim, p, centre(first.cx), centre(first.cy));
   p.hp = maxHp(p);
   p.target = 0;
+  // Whatever was after her on the last walk lost her when she was lifted out of it: each walk is its own.
+  for (const u of sim.zone.units) {
+    if (u.target !== p.id) continue;
+    u.target = 0;
+    u.combat = "leash";
+    u.path = null;
+  }
   stepRing(sim, true);
   sim.drainEvents();
   const noticed = new Set<number>();
   const seen = new Set<number>();
   let lost = 0;
   let metres = 0;
+  let ticks = 0;
+  let chased = 0;
   let deadAt = -1;
   let legX = p.x;
   let legY = p.y;
@@ -256,13 +268,19 @@ function walk(sim: Sim, route: Route): Walk {
     // that nothing ever leashes off it, and past this point the number says more about the
     // instrument than about the ground.
     if (lost >= maxHp(me) * 3) return true;
+    ticks++;
+    let after = false;
     for (const u of s.zone.units) {
       if (!u.alive || !u.awake || u.controller === "npc" || u.faction === "friendly") continue;
       const dx = u.x - me.x;
       const dy = u.y - me.y;
       if (dx * dx + dy * dy <= 320 * 320) seen.add(u.id);
-      if (u.combat === "combat" && u.target === me.id) noticed.add(u.id);
+      if (u.combat === "combat" && u.target === me.id) {
+        noticed.add(u.id);
+        after = true;
+      }
     }
+    if (after) chased++;
     return false;
   };
   for (let i = 1; i < route.length; i++) {
@@ -273,7 +291,7 @@ function walk(sim: Sim, route: Route): Walk {
     metres += Math.sqrt((p.x - legX) ** 2 + (p.y - legY) ** 2) / PX_PER_METRE;
     if (!ok) break;
   }
-  return { metres: Math.max(1, metres), seconds: (sim.state.tick - t0) / 60, lost, noticed: noticed.size, seen: seen.size, deadAt };
+  return { metres: Math.max(1, metres), seconds: (sim.state.tick - t0) / 60, lost, noticed: noticed.size, seen: seen.size, deadAt, ticks, chased };
 }
 
 /**
@@ -363,6 +381,8 @@ function walkSome(sim: Sim, routes: readonly Route[], want = 1): Walk | null {
           lost: out.lost + w.lost,
           noticed: out.noticed + w.noticed,
           seen: out.seen + w.seen,
+          ticks: out.ticks + w.ticks,
+          chased: out.chased + w.chased,
           deadAt: out.deadAt >= 0 ? out.deadAt : w.deadAt,
         }
       : w;
@@ -428,7 +448,7 @@ describe("harshness", () => {
   // that holds the thread for a minute makes the runner think it has hung.
   it("prints the county table: what a crossing costs, by threat, by day and by night", { timeout: 180000 }, async () => {
     const lines: string[] = [];
-    lines.push(row(["threat", "when", "where", "m", "s", "HP lost", "lost/100m", "noticed", "in sight", "dead at m"]));
+    lines.push(row(["threat", "when", "where", "m", "s", "HP lost", "lost/100m", "noticed", "in sight", "chased %", "dead at m"]));
     // Keyed "when:threat:where", so the checks below can ask for one walk by name.
     const table = new Map<string, Walk>();
     for (const [when, hour] of [["day", 11], ["night", 23]] as const) {
@@ -448,7 +468,7 @@ describe("harshness", () => {
           if (!w) continue;
           table.set(`${when}:${threat}:${name}`, w);
           lines.push(
-            row([threat, when, name, Math.round(w.metres), Math.round(w.seconds), Math.round(w.lost), n1(per100(w, w.lost)), n1(per100(w, w.noticed)), n1(per100(w, w.seen)), w.deadAt < 0 ? "-" : Math.round(w.deadAt)]),
+            row([threat, when, name, Math.round(w.metres), Math.round(w.seconds), Math.round(w.lost), n1(per100(w, w.lost)), n1(per100(w, w.noticed)), n1(per100(w, w.seen)), Math.round((100 * w.chased) / Math.max(1, w.ticks)), w.deadAt < 0 ? "-" : Math.round(w.deadAt)]),
           );
         }
       }
@@ -523,6 +543,37 @@ describe("harshness", () => {
     expect(both).toBeGreaterThan(4);
     console.log(`away from the lamps: night ${n1(nightLost / both)} vs day ${n1(dayLost / both)} health per 100 m`);
     expect(nightLost).toBeGreaterThan(dayLost * 1.25);
+  });
+
+  // The density brief (2026-09-23): "one should be able to walk around, but cautiously, and probably
+  // have things chasing them half the time if they're off the path. Paths kind of safe." A walker who
+  // never swings crosses the county by day, off the road and on it, several routes per threat band,
+  // and the harness counts the share of her walking time something that bites was after her.
+  it("off the road something is after her about half the time; on the road, seldom", { timeout: 240000 }, async () => {
+    const sim = countySim(TABLE_SEED, 11);
+    const attempt = sim.rt.bp.attempts - 1;
+    const lines = [row(["threat", "where", "walks m", "chased %", "noticed/100m", "HP/100m"])];
+    const sum = { off: { ticks: 0, chased: 0 }, road: { ticks: 0, chased: 0 } };
+    for (let threat = 1; threat <= 5; threat++) {
+      for (const [name, routes] of [
+        ["open country", offRoadRoutes(TABLE_SEED, attempt, threat)],
+        ["road", roadRoutes(TABLE_SEED, attempt, threat)],
+      ] as const) {
+        const w = walkSome(sim, routes, 3);
+        await new Promise((done) => setTimeout(done, 0));
+        if (!w) continue;
+        const s = name === "road" ? sum.road : sum.off;
+        s.ticks += w.ticks;
+        s.chased += w.chased;
+        lines.push(row([threat, name, Math.round(w.metres), Math.round((100 * w.chased) / Math.max(1, w.ticks)), n1(per100(w, w.noticed)), n1(per100(w, w.lost))]));
+      }
+    }
+    const off = sum.off.chased / Math.max(1, sum.off.ticks);
+    const road = sum.road.chased / Math.max(1, sum.road.ticks);
+    console.log(`\nchased, by day, seed ${TABLE_SEED}\n${lines.join("\n")}\noff the road ${Math.round(off * 100)}% of the time, on it ${Math.round(road * 100)}%`);
+    expect(off, "off the road nothing much comes").toBeGreaterThan(0.3);
+    expect(off, "off the road is a running fight, not a walk").toBeLessThan(0.9);
+    expect(road, "the road is not the safe way").toBeLessThan(0.2);
   });
 
   it("the county is populated: creatures stand in the threatened patches, on every seed", () => {

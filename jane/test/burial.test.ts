@@ -223,12 +223,19 @@ describe("cold light shows what is there, warm light keeps it off", () => {
     burn(sim, "dark_brazier_a");
     expect(brazier.on).toBe(true);
 
-    // Her, in the light. It, in the dark, forty cells off and coming.
-    placeUnit(sim, sim.player, bc.x + 10, bc.y + 10);
+    // Her, in the light. It, in the dark, twenty cells off, and set on her.
+    // Beside the brazier, on open floor: stood on its footprint she would be a goal nothing can path to.
+    const floor = sim.rt.grid.nearestFree(cellOf(bc.x) + 1, cellOf(bc.y) + 2, 4, sim.player.id)!;
+    placeUnit(sim, sim.player, centre(floor.cx), centre(floor.cy));
     const shade = sim.rt.unitsByKey.get("dark_shade_a")!;
     placeUnit(sim, shade, bc.x + 170, bc.y);
     shade.homeX = shade.x;
     shade.homeY = shade.y;
+    // Nothing notices a god, and the county's creatures no longer hunt each other (sim/units.ts
+    // isEnemy), so she comes out of god mode and it is set on her: the question is the light.
+    sim.command({ t: "dev", dev: { op: "god", on: false } });
+    shade.target = sim.player.id;
+    shade.combat = "combat";
     const startedAt = Math.hypot(shade.x - sim.player.x, shade.y - sim.player.y);
     expect(lit(sim, sim.player.x, sim.player.y, true), "she is standing in it").toBe(true);
     let everInLight = false;
@@ -236,8 +243,7 @@ describe("cold light shows what is there, warm light keeps it off", () => {
       sim.tick(NO_INPUT);
       if (lit(sim, shade.x, shade.y, true)) everInLight = true;
     }
-    expect(everInLight, "a shade never stands in warm light").toBe(false);
-    expect(Math.hypot(shade.x - sim.player.x, shade.y - sim.player.y)).toBeLessThan(startedAt);
+    expect(everInLight, "a shade never stands in warm light").toBe(false);    expect(Math.hypot(shade.x - sim.player.x, shade.y - sim.player.y)).toBeLessThan(startedAt);
     expect(shade.alive).toBe(true);
   });
 

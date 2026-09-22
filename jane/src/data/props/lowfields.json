@@ -7,7 +7,7 @@
   "campfire_cold": { "name": "Brazier", "sprite": "campfire_cold", "w": 2, "h": 2, "solid": true, "blockLos": false, "prompt": "Look" },
   "adit_rock": { "name": "Rock", "sprite": "adit_rock", "w": 3, "h": 2, "solid": true, "blockLos": true, "prompt": "Look" },
 
-  "well_head": { "name": "The Well", "sprite": "pillar", "w": 2, "h": 2, "solid": true, "blockLos": false, "prompt": "Look" },
+  "well_head": { "name": "The Well", "sprite": "well", "w": 2, "h": 2, "solid": true, "blockLos": false, "prompt": "Look" },
   "signpost": { "name": "Signpost", "sprite": "sign", "w": 2, "h": 1, "solid": true, "blockLos": false, "prompt": "Read" },
-  "road_cart": { "name": "Cart", "sprite": "minecart", "w": 2, "h": 2, "solid": true, "blockLos": false, "prompt": "Look" }
+  "road_cart": { "name": "Cart", "sprite": "cart", "w": 2, "h": 2, "solid": true, "blockLos": false, "prompt": "Look" }
 }
