@@ -1,0 +1,164 @@
+{
+  "country_farmer": {
+    "speaker": "The Farmer",
+    "start": [{ "when": [{ "if": "night" }], "node": "late" }, { "node": "day" }],
+    "nodes": {
+      "day": { "lines": ["Fine weather for it. The crows have taken to following people instead of the plough.", "They stop at the gate. I have not asked them why."] },
+      "late": { "lines": ["You'll want to be off the fields before the last lamp. Not that anything happens. It's just what we do."] }
+    }
+  },
+  "country_wife": {
+    "speaker": "A Woman in an Apron",
+    "start": [{ "when": [{ "if": "night" }], "node": "late" }, { "node": "day" }],
+    "nodes": {
+      "day": { "lines": ["There's water in the pump if you want it. Don't drink from the well. It has tasted of pennies since March."] },
+      "late": { "lines": ["We lock the door at nine. You would be welcome, but we lock it at nine."] }
+    }
+  },
+  "country_old": {
+    "speaker": "An Old Man",
+    "start": [{ "when": [{ "if": "night" }], "node": "late" }, { "node": "day" }],
+    "nodes": {
+      "day": { "lines": ["I've stood at this gate most days for forty years. The road used to go somewhere else."] },
+      "late": { "lines": ["The lamps are lit at dusk and counted at ten. Somebody has to count them."] }
+    }
+  },
+  "country_woman": {
+    "speaker": "A Woman in a Brown Coat",
+    "start": [{ "when": [{ "if": "night" }], "node": "late" }, { "node": "day" }],
+    "nodes": {
+      "day": { "lines": ["Walking to Castle? Keep to the road. The fields are fine. It's what is in them."] },
+      "late": { "lines": ["Go on, get indoors somewhere. I'm only waiting for my husband. He is usually back by now."] }
+    }
+  },
+  "country_woodcutter": {
+    "speaker": "The Woodcutter",
+    "start": [{ "when": [{ "if": "night" }], "node": "late" }, { "node": "day" }],
+    "nodes": {
+      "day": { "lines": ["I cut on this side of the wood. Nobody cuts the other side, and it doesn't grow."] },
+      "late": { "lines": ["I leave the axe in the stump overnight. In the morning it is never quite where I left it."] }
+    }
+  },
+  "country_reedcutter": {
+    "speaker": "A Reedcutter",
+    "start": [{ "when": [{ "if": "night" }], "node": "late" }, { "node": "day" }],
+    "nodes": {
+      "day": { "lines": ["The water is higher than it was. It doesn't rain any more than it used to. It just is higher."] },
+      "late": { "lines": ["If you hear somebody calling from the water, it's the herons. Mostly."] }
+    }
+  },
+  "country_keeper": {
+    "speaker": "The Innkeeper",
+    "start": [{ "when": [{ "if": "night" }], "node": "late" }, { "node": "day" }],
+    "nodes": {
+      "day": { "lines": ["Rooms by the week. Nobody has taken one since the spring, but the beds are made every morning."] },
+      "late": { "lines": ["Doors shut at nine. If anyone knocks after that, it isn't us they want."] }
+    }
+  },
+  "country_man": {
+    "speaker": "A Man in a Grey Coat",
+    "start": [{ "node": "day" }],
+    "nodes": {
+      "day": { "lines": ["I'm waiting for the carrier. He comes on Tuesdays.", "It isn't Tuesday. I know it isn't. I like to be early."] }
+    }
+  },
+
+  "country_door_1": {
+    "speaker": "Door",
+    "start": [{ "node": "knock" }],
+    "nodes": { "knock": { "lines": ["You knock. Somebody inside stops what they were doing, and waits for you to go."] } }
+  },
+  "country_door_2": {
+    "speaker": "Door",
+    "start": [{ "node": "knock" }],
+    "nodes": { "knock": { "lines": ["Nobody answers. There is a clean cup on the step, upside down, the way you leave one for somebody."] } }
+  },
+  "country_door_3": {
+    "speaker": "Door",
+    "start": [{ "node": "knock" }],
+    "nodes": { "knock": { "lines": ["The door is locked. Through the window: a table laid for four, and three chairs."] } }
+  },
+  "country_door_4": {
+    "speaker": "Door",
+    "start": [{ "when": [{ "if": "night" }], "node": "late" }, { "node": "knock" }],
+    "nodes": {
+      "knock": { "lines": ["A voice says, not unkindly, that they don't open to people off the road."] },
+      "late": { "lines": ["The light inside goes out while you are still knocking."] }
+    }
+  },
+  "country_door_empty": {
+    "speaker": "Door",
+    "start": [{ "node": "knock" }],
+    "nodes": { "knock": { "lines": ["The door gives an inch and stops. Something heavy has been pushed against it from the inside."] } }
+  },
+  "country_barn": {
+    "speaker": "Barn",
+    "start": [{ "node": "look" }],
+    "nodes": { "look": { "lines": ["The doors are barred on the outside. A card is pinned to them: PLEASE DON'T LOOK IN THE BARN. THANK YOU."] } }
+  },
+  "country_shed": {
+    "speaker": "Shed",
+    "start": [{ "node": "look" }],
+    "nodes": { "look": { "lines": ["Padlocked. The padlock is new and the shed is not."] } }
+  },
+  "country_inn": {
+    "speaker": "Inn",
+    "start": [{ "node": "look" }],
+    "nodes": { "look": { "lines": ["THE HALFWAY HOUSE. ROOMS. TEAS. Halfway between what, the sign does not say."] } }
+  },
+  "country_well": {
+    "speaker": "Well",
+    "start": [{ "node": "look" }],
+    "nodes": { "look": { "lines": ["A bucket on a chain. The water at the bottom is further down than the chain is long."] } }
+  },
+  "country_shrine": {
+    "speaker": "Wayside Shrine",
+    "start": [{ "node": "look" }],
+    "nodes": { "look": { "lines": ["A candle in a box on a post. It was lit today, and nobody has passed you on this road."] } }
+  },
+  "country_coop": {
+    "speaker": "Hen House",
+    "start": [{ "node": "look" }],
+    "nodes": { "look": { "lines": ["EGGS. HONESTY BOX. The box is full of buttons."] } }
+  },
+  "country_tent": {
+    "speaker": "Tent",
+    "start": [{ "node": "look" }],
+    "nodes": { "look": { "lines": ["Blankets, a tin plate, and a pair of good boots with nobody's feet in them."] } }
+  },
+  "country_den": {
+    "speaker": "Den",
+    "start": [{ "node": "look" }],
+    "nodes": { "look": { "lines": ["The earth at the mouth is worn smooth. Whatever lives here has been coming and going for years."] } }
+  },
+  "country_hive": {
+    "speaker": "Beehive",
+    "start": [{ "node": "look" }],
+    "nodes": { "look": { "lines": ["The hive is quiet. You are meant to tell the bees when somebody dies. Nobody has told these anything for a while."] } }
+  },
+  "country_pump": {
+    "speaker": "Pump",
+    "start": [{ "node": "look" }],
+    "nodes": { "look": { "lines": ["The handle is warm, as if somebody put it down a moment ago."] } }
+  },
+  "country_grave": {
+    "speaker": "Gravestone",
+    "start": [{ "node": "look" }],
+    "nodes": { "look": { "lines": ["The name has worn away. The flowers on it are fresh."] } }
+  },
+  "country_hen": {
+    "speaker": "Hen",
+    "start": [{ "node": "look" }],
+    "nodes": { "look": { "lines": ["The hen watches the road the whole time you stand there. Not you: the road."] } }
+  },
+  "country_sheep": {
+    "speaker": "Sheep",
+    "start": [{ "node": "look" }],
+    "nodes": { "look": { "lines": ["The sheep all face the same way. It is not the way the wind is blowing."] } }
+  },
+  "country_rabbit": {
+    "speaker": "Rabbit",
+    "start": [{ "node": "look" }],
+    "nodes": { "look": { "lines": ["It does not run until you are two steps away. Then it runs, and stops, and waits for you again."] } }
+  }
+}
