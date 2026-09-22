@@ -73,5 +73,121 @@
       }
     ],
     "returnTo": "Mrs Marsh, at her washing line on the High Street"
+  },
+
+  "the_last_name": {
+    "name": "The Last Name",
+    "description": "Mr Hale, the smith, outside the Forge on Cross Lane, wants the last name on the memorial in Castle square read out to him. His eyes are good. He would rather not be the one who reads it.",
+    "completion": "HALE, R. He said it back to you the way a man checks a delivery, and gave you two bars of iron from under his bench.",
+    "requirements": [{ "type": "location", "target": "memorial_read", "qty": 1, "text": "The last name on the memorial, in Castle square" }],
+    "rewards": [{ "do": "give", "item": "iron", "qty": 2 }],
+    "returnTo": "the smith, Mr Hale, outside the Forge on Cross Lane"
+  },
+  "roberts_cap": {
+    "name": "Robert's Cap",
+    "description": "Mr Hale says his boy Robert has been up in his room over the Forge since the bell. He wants somebody to knock and tell him his tea is on. He will not go up himself.",
+    "completion": "Nobody on the stairs, and his cap on the peg. Mr Hale turned it over in his hands, and gave it back to you to hold.",
+    "requirements": [{ "type": "acquire", "target": "town_cap", "qty": 1, "text": "Robert's cap, on the peg inside the Forge door" }],
+    "rewards": [{ "do": "give", "item": "apple", "qty": 2 }],
+    "returnTo": "the smith, Mr Hale, outside the Forge on Cross Lane"
+  },
+  "the_new_stone": {
+    "name": "The New Stone",
+    "description": "There is a new stone in the churchyard behind the church, with a date on it and no name. Mr Hale wants Robert's cap left on it. He will cut the name himself, when his hands are ready.",
+    "completion": "The cap is on the new stone. Mr Hale says he thought the date was for him. He has lit the forge again, and gave you a stone from it that keeps its heat.",
+    "requirements": [{ "type": "location", "target": "cap_on_stone", "qty": 1, "text": "The new stone in the churchyard, behind the church" }],
+    "rewards": [{ "do": "give", "item": "fire_stone", "qty": 1 }, { "do": "give", "item": "iron", "qty": 2 }],
+    "returnTo": "the smith, Mr Hale, outside the Forge on Cross Lane"
+  },
+
+  "on_the_hour": {
+    "name": "On the Hour",
+    "description": "Mr Dunn, by the telephone box in Castle square, is waiting for his brother to ring. It rang once last week and he could not make it out. He wants somebody younger to lift the receiver and listen.",
+    "completion": "A man's voice, a long way off: tell Walter he is at the Arms, and to come before the lamps. Mr Dunn says his brother has never been in a public house in his life.",
+    "requirements": [{ "type": "location", "target": "phone_answered", "qty": 1, "text": "The telephone box in Castle square" }],
+    "rewards": [{ "do": "give", "item": "small_water", "qty": 1 }],
+    "returnTo": "the telephone box in Castle square, and Mr Dunn"
+  },
+  "the_back_room": {
+    "name": "The Back Room",
+    "description": "Mr Dunn is chapel and does not go into the Castle Arms. He wants somebody to ask Mrs Garland, who keeps the bar, whether his brother Ernest has been in.",
+    "completion": "Ernest took the back room in the spring, the night of the bell, and has not come down since. Mr Dunn has stopped waiting by the telephone. He watches the door of the Arms instead.",
+    "requirements": [{ "type": "location", "target": "asked_garland", "qty": 1, "text": "Mrs Garland, inside the Castle Arms" }],
+    "rewards": [{ "do": "give", "item": "light_stone", "qty": 1 }],
+    "returnTo": "the telephone box in Castle square, and Mr Dunn"
+  },
+
+  "the_fourth_lane": {
+    "name": "The Fourth Lane",
+    "description": "Dot, on Cross Lane, is counting the lanes of Castle. She has three and is sure there used to be four. She wants the name signs read to her. They all stand at the west end of the town, where she is not allowed.",
+    "completion": "Back Lane, Cross Lane, Pound Lane. Three. Dot gave you a nasturtium she took off Mrs Crewe's stall when nobody was looking.",
+    "requirements": [
+      { "type": "location", "target": "lane_back", "qty": 1, "text": "The Back Lane sign, at the west end of Back Lane" },
+      { "type": "location", "target": "lane_cross", "qty": 1, "text": "The Cross Lane sign, at the west end of Cross Lane" },
+      { "type": "location", "target": "lane_pound", "qty": 1, "text": "The Pound Lane sign, at the west end of Pound Lane" }
+    ],
+    "rewards": [{ "do": "give", "item": "nasturtium", "qty": 1 }],
+    "returnTo": "Dot, on Cross Lane"
+  },
+  "school_lane": {
+    "name": "School Lane",
+    "description": "Dot says the lane that runs up past the church to the north gate has no name anywhere in town, and nobody walks up it. There is a sign at the top. Her mum will not take her.",
+    "completion": "CHURCH LANE, and under the paint, SCHOOL LANE. Dot says that is the fourth, and that they do not say it any more. She gave you a key she found in the gutter.",
+    "requirements": [{ "type": "location", "target": "lane_church", "qty": 1, "text": "The sign at the top of Church Lane, by the north gate" }],
+    "rewards": [{ "do": "give", "item": "key_generic", "qty": 1 }],
+    "returnTo": "Dot, on Cross Lane"
+  },
+
+  "two_loaves": {
+    "name": "Two Loaves",
+    "description": "Mrs Oddie, at the bread stall in Castle square, bakes for forty. No. 7 Pound Lane had two loaves every morning, and nobody has been up for them in a fortnight. She wants one left on their step.",
+    "completion": "The curtain at No. 7 moved to the edge and stopped. Mrs Oddie says they never take it in while there is anyone to see.",
+    "requirements": [{ "type": "location", "target": "loaf_left", "qty": 1, "text": "A loaf for No. 7, Pound Lane" }],
+    "rewards": [{ "do": "give", "item": "apple", "qty": 2 }],
+    "returnTo": "Mrs Oddie, at the bread stall in Castle square"
+  },
+  "paid_to_sunday": {
+    "name": "Paid to Sunday",
+    "description": "The Milkman, behind Pound Lane, leaves No. 7 its milk every morning and nobody takes it in. He wants the bottles lifted inside the door. There was always money on the mat, he says.",
+    "completion": "The hall swept, Mrs Oddie's loaf on the table untouched, and the milk money counted out on the mat. The Milkman says it is paid to Sunday. It always is.",
+    "requirements": [{ "type": "location", "target": "milk_in", "qty": 1, "text": "The milk on the step of No. 7, Pound Lane" }],
+    "rewards": [{ "do": "give", "item": "small_water", "qty": 2 }],
+    "returnTo": "the Milkman, behind Pound Lane"
+  },
+
+  "never_any_eggs": {
+    "name": "Never Any Eggs",
+    "description": "Mrs Bex comes to the market in Castle square for eggs, and there are never any. She wants somebody to look in the hen house behind Pound Lane, past the green. She would go herself, but she would only find none.",
+    "completion": "Three eggs, and a card with her name on it in her own hand. Mrs Bex does not remember writing it. She gave you grapes, because she had bought too many again.",
+    "requirements": [{ "type": "location", "target": "eggs_seen", "qty": 1, "text": "The hen house behind Pound Lane" }],
+    "rewards": [{ "do": "give", "item": "grape", "qty": 2 }],
+    "returnTo": "Mrs Bex, at the market in Castle square"
+  },
+  "white_roses": {
+    "name": "White Roses",
+    "description": "Mr Sallis, in the garden of No. 1 High Street, wants one of his roses taken to his wife Edith. She is in the churchyard behind the church, the first stone inside the gate off the lane. He does not go in.",
+    "completion": "Under the rose you left there were others, dried brown, one for every week. Mr Sallis has not been in since the funeral. He gave you pansies off the bed by his gate.",
+    "requirements": [{ "type": "location", "target": "rose_left", "qty": 1, "text": "Edith Sallis's stone, in the churchyard behind the church" }],
+    "rewards": [{ "do": "give", "item": "pansy", "qty": 2 }],
+    "returnTo": "the garden of No. 1, High Street, and Mr Sallis"
+  },
+  "the_constables_paces": {
+    "name": "A Hundred and Twelve",
+    "description": "The Constable walks the High Street end to end and says it is two paces longer than when he started. He wants somebody else to walk it: from the lamps at the west end to the lamps at the east.",
+    "completion": "You had counted without meaning to: a hundred and fourteen. The Constable wrote it in his book and did not say anything about it.",
+    "requirements": [
+      { "type": "location", "target": "street_west", "qty": 1, "text": "The lamps at the west end of the High Street" },
+      { "type": "location", "target": "street_east", "qty": 1, "text": "The lamps at the east end of the High Street" }
+    ],
+    "rewards": [{ "do": "give", "item": "apple", "qty": 1 }, { "do": "give", "item": "small_water", "qty": 1 }],
+    "returnTo": "the Constable, walking the High Street"
+  },
+  "too_red": {
+    "name": "Too Red",
+    "description": "Mrs Hobb, in the garden of No. 7 High Street, wants two apples from the orchard behind the house taken to Mr Tolly, on the bench by the memorial in Castle square. He will not pick them. He says they are too red this year.",
+    "completion": "Mr Tolly held one up to the light, said it was redder than last year, and ate it anyway.",
+    "requirements": [{ "type": "acquire", "target": "apple", "qty": 2, "text": "Two apples, from the orchard behind No. 7, High Street" }],
+    "rewards": [{ "do": "give", "item": "nasturtium", "qty": 1 }],
+    "returnTo": "the bench by the memorial in Castle square, and Mr Tolly"
   }
 }

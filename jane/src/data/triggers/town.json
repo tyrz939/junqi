@@ -1,0 +1,12 @@
+{
+  "street_west": {
+    "zone": "county", "rect": "street_west", "mode": "enter", "once": false,
+    "when": [{ "if": "questActive", "quest": "the_constables_paces" }],
+    "actions": [{ "do": "location", "name": "street_west" }]
+  },
+  "street_east": {
+    "zone": "county", "rect": "street_east", "mode": "enter", "once": false,
+    "when": [{ "if": "questActive", "quest": "the_constables_paces" }],
+    "actions": [{ "do": "location", "name": "street_east" }]
+  }
+}

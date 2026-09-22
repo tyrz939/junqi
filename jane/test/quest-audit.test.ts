@@ -158,6 +158,12 @@ const LANDMARKS: Landmark[] = [
   { phrase: /the doctor'?s|pound lane/i, ref: { mark: "doctor" }, says: /doctor|pound lane/i },
   { phrase: /arms yard|castle arms/i, ref: { mark: "arms_yard" }, says: /castle arms/i },
   { phrase: /post office/i, ref: { mark: "post_office" }, says: /post office/i },
+  { phrase: /memorial/i, ref: { mark: "memorial" }, says: /memorial/i },
+  { phrase: /telephone box|phone box/i, ref: { mark: "phone_box" }, says: /telephone/i },
+  { phrase: /church lane|north gate/i, ref: { mark: "church_lane_top" }, says: /church lane/i },
+  { phrase: /west end of the high street/i, ref: { mark: "street_west" }, says: /high street/i },
+  { phrase: /east end of the high street/i, ref: { mark: "street_east" }, says: /high street/i },
+  { phrase: /orchard/i, ref: { mark: "orchard" }, says: /orchard/i },
   // The farm and the fields
   { phrase: /lowfield farm|farm gate|the farm\b|farmhouse|farmer/i, ref: { site: "farm" }, says: /lowfield farm|farm/i },
   { phrase: /top field/i, ref: { area: "top_field" }, says: /top field/i },

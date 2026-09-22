@@ -89,6 +89,31 @@ describe("Castle is a town at Zelda scale", () => {
   });
 });
 
+describe("the open country's people say different things (VOICE.md, People)", () => {
+  it("every country folk tree turns over at least four lines, farmer to farmer, and comes back round", () => {
+    const folk = Object.values(catalog.units).filter((u) => u.sprite.startsWith("folk_") && u.talk);
+    expect(folk.length).toBeGreaterThanOrEqual(8);
+    for (const u of folk) {
+      const tree = catalog.dialogue[u.talk!];
+      const flags: Record<string, number> = {};
+      const heard: string[] = [];
+      // Talk to twice as many of them as there are lines, applying each node's flag rows as the sim does.
+      for (let n = 0; n < Object.keys(tree.nodes).length * 2; n++) {
+        const row = tree.start.find((s) => (s.when ?? []).every((c) => c.if === "flag" && (flags[c.flag] ?? 0) === (c.eq ?? 1)))!;
+        heard.push(row.node);
+        for (const a of tree.nodes[row.node].actions ?? []) if (a.do === "flag") flags[a.flag] = a.value ?? 1;
+      }
+      const distinct = new Set(heard);
+      expect(distinct.size, `${u.talk}: ${heard.join(" ")}`).toBeGreaterThanOrEqual(4);
+      expect(distinct.size, `${u.talk} says every line it has`).toBe(Object.keys(tree.nodes).length);
+      expect(heard[distinct.size], `${u.talk} comes back round`).toBe(heard[0]);
+    }
+    const text = JSON.stringify(Object.fromEntries(folk.map((u) => [u.talk, catalog.dialogue[u.talk!]])));
+    expect(/[–—]/.test(text)).toBe(false);
+    expect(text.includes("Jane")).toBe(false);
+  });
+});
+
 // --- the errands, played ------------------------------------------------------------------
 
 function newSim(seed: number): Sim {
@@ -106,7 +131,11 @@ function tp(sim: Sim, mark: string): void {
 
 /** Walk up to somebody, press USE, check who answers with what, and click through. */
 function ask(sim: Sim, unit: string, node: string, choices: number[] = []): void {
-  walkToUnit(sim, unit, 12);
+  // Some of them are walking (Dot along Cross Lane, the Constable the length of the street): keep after them.
+  for (let tries = 0; tries < 8; tries++) {
+    const u = walkToUnit(sim, unit, 12);
+    if (Math.hypot(u.x - sim.player.x, u.y - sim.player.y) <= 16) break;
+  }
   sim.command({ t: "use" });
   idle(sim, 2);
   expect(sim.me.dialogue?.node, `${unit} answers with`).toBe(node);
@@ -240,4 +269,150 @@ describe("Castle's errands, walked", () => {
     expect(sim.me.zone).toBe("arms");
     expect(sim.rt.unitsByKey.get("mrs_garland")?.hidden).toBe(false);
   }, LONG);
+});
+
+// --- the town's small stories (stories push, September 2026) ---------------------------------
+//
+// Short errands between Castle's own people and houses, and three chains with an ending that
+// changes something she can go back and see: the new stone gets its chalked name, the Forge is
+// warm, No. 7 puts its empty out, Mr Dunn stops waiting by the telephone.
+
+describe("Castle's small stories, walked", () => {
+  it("Hale, three deep: the last name on the memorial, Robert's cap on the Forge peg, the cap on the new stone", () => {
+    const sim = newSim(SEEDS[0]);
+    tp(sim, "forge");
+    ask(sim, "mr_hale", "offer", [0]);
+    expect(questActive(sim, "the_last_name")).toBeDefined();
+    tp(sim, "memorial");
+    press(sim, "memorial", "hale");
+    tp(sim, "forge");
+    ask(sim, "mr_hale", "name_in", [0]);
+    expect(questDone(sim, "the_last_name")).toBe(true);
+    ask(sim, "mr_hale", "cap_offer", [0]);
+    press(sim, "forge_door", "cap");
+    expect(bagCount(sim.player, "town_cap")).toBe(1);
+    ask(sim, "mr_hale", "cap_in", [0]);
+    expect(questDone(sim, "roberts_cap")).toBe(true);
+    expect(bagCount(sim.player, "town_cap"), "he gives it back to hold").toBe(1);
+    ask(sim, "mr_hale", "stone_offer", [0]);
+    tp(sim, "churchyard");
+    press(sim, "headstone_4", "cap");
+    expect(bagCount(sim.player, "town_cap")).toBe(0);
+    tp(sim, "forge");
+    const fire = bagCount(sim.player, "fire_stone");
+    ask(sim, "mr_hale", "stone_in", [0]);
+    expect(questDone(sim, "the_new_stone")).toBe(true);
+    expect(bagCount(sim.player, "fire_stone")).toBe(fire + 1);
+    ask(sim, "mr_hale", "after");
+    // The ending shows: the Forge is warm, and the stone has a name chalked on it.
+    press(sim, "forge_door", "warm");
+    tp(sim, "churchyard");
+    press(sim, "headstone_4", "named");
+  }, LONG);
+
+  it("Dunn, two deep: the telephone box rings for her, and Mrs Garland in the Arms knows where Ernest is", () => {
+    const sim = newSim(SEEDS[1]);
+    tp(sim, "phone_box");
+    ask(sim, "mr_dunn", "offer", [0]);
+    press(sim, "phone_box", "ring");
+    ask(sim, "mr_dunn", "hour_in", [0]);
+    expect(questDone(sim, "on_the_hour")).toBe(true);
+    ask(sim, "mr_dunn", "room_offer", [0]);
+    tp(sim, "arms_front");
+    press(sim, "arms_door");
+    idle(sim, 5);
+    expect(sim.me.zone).toBe("arms");
+    ask(sim, "mrs_garland", "ernest");
+    press(sim, "exit_door");
+    idle(sim, 5);
+    expect(sim.me.zone).toBe("county");
+    tp(sim, "phone_box");
+    ask(sim, "mr_dunn", "room_in", [0]);
+    expect(questDone(sim, "the_back_room")).toBe(true);
+    ask(sim, "mr_dunn", "after");
+  }, LONG);
+
+  it("Dot, two deep: three lane signs at the west end, then the painted-out one at the top of Church Lane", () => {
+    const sim = newSim(SEEDS[0]);
+    tp(sim, "cross_lane");
+    ask(sim, "dot", "offer", [0]);
+    for (const key of ["sign_back_lane", "sign_cross_lane", "sign_pound_lane"]) press(sim, key, "count");
+    ask(sim, "dot", "count_in", [0]);
+    expect(questDone(sim, "the_fourth_lane")).toBe(true);
+    ask(sim, "dot", "lane_offer", [0]);
+    tp(sim, "church_lane_top");
+    press(sim, "sign_church_lane", "read");
+    const keys = bagCount(sim.player, "key_generic");
+    ask(sim, "dot", "lane_in", [0]);
+    expect(questDone(sim, "school_lane")).toBe(true);
+    expect(bagCount(sim.player, "key_generic")).toBe(keys + 1);
+    ask(sim, "dot", "after");
+  }, LONG);
+
+  it("No. 7, Pound Lane, two deep: Mrs Oddie's loaf on the step, then the Milkman's bottles inside the door", () => {
+    const sim = newSim(SEEDS[1]);
+    tp(sim, "town_square");
+    ask(sim, "mrs_oddie", "offer", [0]);
+    expect(bagCount(sim.player, "town_loaf")).toBe(1);
+    tp(sim, "doctor");
+    press(sim, "door_pound_7", "loaf");
+    expect(bagCount(sim.player, "town_loaf")).toBe(0);
+    tp(sim, "town_square");
+    ask(sim, "mrs_oddie", "in", [0]);
+    expect(questDone(sim, "two_loaves")).toBe(true);
+    tp(sim, "doctor");
+    ask(sim, "milkman", "offer", [0]);
+    press(sim, "door_pound_7", "milk");
+    ask(sim, "milkman", "in", [0]);
+    expect(questDone(sim, "paid_to_sunday")).toBe(true);
+    press(sim, "door_pound_7", "rinsed");
+  }, LONG);
+
+  it("the short errands: Mrs Bex's eggs, Mr Sallis's rose, the Constable's paces, Mrs Hobb's apples for Mr Tolly", () => {
+    const sim = newSim(SEEDS[0]);
+    // Never Any Eggs: the hen house behind Pound Lane.
+    tp(sim, "town_square");
+    ask(sim, "mrs_bex", "offer", [0]);
+    tp(sim, "pound_hens");
+    press(sim, "pound_hens", "eggs");
+    ask(sim, "mrs_bex", "in", [0]);
+    expect(questDone(sim, "never_any_eggs")).toBe(true);
+    // White Roses: the first stone inside the churchyard gate.
+    tp(sim, "street_west");
+    ask(sim, "mr_sallis", "offer", [0]);
+    tp(sim, "churchyard");
+    press(sim, "headstone_5", "rose");
+    ask(sim, "mr_sallis", "in", [0]);
+    expect(questDone(sim, "white_roses")).toBe(true);
+    // A Hundred and Twelve: the street end to end, lamps to lamps. Walking it before she is asked counts for nothing.
+    tp(sim, "town_square");
+    ask(sim, "constable", "first");
+    tp(sim, "street_west");
+    expect(sim.state.flags["been:street_west"]).toBeUndefined();
+    tp(sim, "town_square");
+    ask(sim, "constable", "offer", [0]);
+    tp(sim, "street_west");
+    expect(sim.state.flags["been:street_west"]).toBe(1);
+    tp(sim, "street_east");
+    expect(sim.state.flags["been:street_east"]).toBe(1);
+    ask(sim, "constable", "in", [0]);
+    expect(questDone(sim, "the_constables_paces")).toBe(true);
+    // Too Red: two apples off the orchard behind No. 7 High Street, to Mr Tolly on the memorial bench.
+    tp(sim, "street_east");
+    ask(sim, "mrs_hobb", "offer", [0]);
+    tp(sim, "orchard");
+    const orchard = sim.rt.bp.marks.orchard;
+    const tree = sim.rt.bp.props.filter((p) => p.def === "apple_tree" && Math.abs(p.cx - orchard.cx) < 8 && p.cy < orchard.cy).sort((a, b) => Math.abs(a.cx - orchard.cx) - Math.abs(b.cx - orchard.cx))[0];
+    const apples = bagCount(sim.player, "apple");
+    press(sim, tree.key!);
+    expect(bagCount(sim.player, "apple")).toBeGreaterThanOrEqual(Math.max(2, apples));
+    // From the square side, so she faces him and not the memorial behind him.
+    tp(sim, "town_square");
+    const before = bagCount(sim.player, "apple");
+    ask(sim, "mr_tolly", "apples", [0]);
+    expect(questDone(sim, "too_red")).toBe(true);
+    expect(bagCount(sim.player, "apple")).toBe(before - 2);
+    ask(sim, "mr_tolly", "after");
+  }, LONG);
+
 });

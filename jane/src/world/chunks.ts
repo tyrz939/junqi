@@ -356,6 +356,9 @@ export const town: Build = (k, ox, oy) => {
   backLane.forEach(([x, w, label], n) => L.house(x, 2, w, 8, { key: `door_back_${n + 1}`, talk: backTalk[n], label }));
   L.mark("back_lane", 30, 10, 0);
   L.p("sign", 1, 12, { key: "sign_back_lane", talk: "sign_back_lane" });
+  // The top of Church Lane, by the north gate: the one lane in town whose name is painted out.
+  L.p("sign", 50, 3, { key: "sign_church_lane", talk: "sign_church_lane" });
+  L.mark("church_lane_top", 48, 4, 0);
   // An orchard where No. 7 would have been.
   for (const [x, y] of [
     [87, 1],
@@ -366,6 +369,7 @@ export const town: Build = (k, ox, oy) => {
   ] as const) {
     L.p("apple_tree", x, y, { loot: [{ item: "apple", qty: 2 }] });
   }
+  L.mark("orchard", 91, 8, 1);
 
   // The church, its yard behind it, and the cat that is not allowed in there either.
   L.house(34, 8, 12, 14, { key: "church_door", label: "St Anne's", to: { zone: "church", mark: "entry" } }, 5, "door");
@@ -379,7 +383,7 @@ export const town: Build = (k, ox, oy) => {
     [46, 4],
   ]);
   L.f(35, 1, 11, 5, Tile.Grass);
-  [36, 38, 40, 42, 44].forEach((x, n) => L.p("town_headstone", x, 1, { key: `headstone_${n + 1}`, talk: n === 3 ? "headstone_new" : "headstone" }));
+  [36, 38, 40, 42, 44].forEach((x, n) => L.p("town_headstone", x, 1, { key: `headstone_${n + 1}`, talk: n === 3 ? "headstone_new" : n === 4 ? "headstone_sallis" : "headstone" }));
   [36, 38, 40].forEach((x) => L.p("town_headstone", x, 4, { talk: "headstone" }));
   L.mark("churchyard", 42, 4, 1);
   L.u("sixpence", "town_cat_sixpence", 44, 4, 2);
@@ -499,6 +503,7 @@ export const town: Build = (k, ox, oy) => {
   L.p("campfire", fireX, 26, { key: "town_fire", talk: "fire" });
   L.mark("town_square", 52, 30, 1);
   L.p("town_memorial", 63, 26, { key: "memorial", talk: "memorial" });
+  L.mark("memorial", 63, 24, 1);
   L.p("town_park_bench", 60, 30);
   L.u("mr_tolly", "town_old_man", 64, 30, 2);
   L.u("mrs_fenn", "town_gossip_a", 66, 36, 0);
@@ -535,6 +540,7 @@ export const town: Build = (k, ox, oy) => {
   ]);
   L.p("town_phone_box", 64, 39, { key: "phone_box", talk: "phone_box" });
   L.u("mr_dunn", "town_caller", 63, 42, 0);
+  L.mark("phone_box", 67, 40, 2);
   L.p("town_flower_bed", 35, 45);
   L.p("town_flower_bed", 59, 45);
   L.u("sweeper", "town_sweeper", 36, 37, 1, [
@@ -543,6 +549,11 @@ export const town: Build = (k, ox, oy) => {
     [67, 45, 300],
     [36, 45, 0],
   ]);
+  // Each end of the High Street, between its pair of lamps: the Constable's walk.
+  L.rect("street_west", 0, MAIN - 4, 5, 9);
+  L.mark("street_west", 3, MAIN, 0);
+  L.rect("street_east", W - 5, MAIN - 4, 5, 9);
+  L.mark("street_east", W - 4, MAIN, 2);
   L.u("constable", "town_constable", 20, MAIN + 1, 0, [
     [4, MAIN + 1, 600],
     [95, MAIN + 1, 600],
@@ -599,7 +610,8 @@ export const town: Build = (k, ox, oy) => {
   ]);
   L.f(3, 64, 17, 4, Tile.Garden);
   L.f(10, 64, 2, 4, Tile.Dirt);
-  L.p("town_hen_coop", 24, 63);
+  L.p("town_hen_coop", 24, 63, { key: "pound_hens", talk: "pound_hen_coop" });
+  L.mark("pound_hens", 25, 61, 1);
   L.u(null, "town_hen", 28, 65, 1, [
     [28, 65, 120],
     [33, 66, 200],
