@@ -210,6 +210,8 @@ export type DialogueState = {
   node: string;
   line: number;
   speaker: number; // unit id or -prop id
+  /** A thing read once, whose words are its own (a milestone, a fingerpost): shown as one line, no tree. */
+  text?: string;
 } | null;
 
 /** Up to four people play one world (PLATFORM.md). */
@@ -304,6 +306,8 @@ export type Action =
   | { do: "take"; item: string; qty?: number }
   | { do: "learn"; spell: string }
   | { do: "toast"; text: string }
+  /** Words on a thing, shown in the reading box rather than a toast, so they can be read and not missed. */
+  | { do: "read"; text: string }
   | { do: "lock"; prop: string }
   | { do: "unlock"; prop: string }
   | { do: "show"; prop: string }

@@ -1,13 +1,13 @@
 {
   "lost_property": {
     "name": "Lost Property",
-    "description": "The lost-property book at Castle Halt lists three things lost between the Halt and Castle: a red glove at the well on the station road, a felt hat on the signpost on the same road, a dinner tin under a cart on the Castle road past Julie's gate. All three are beside the road.",
+    "description": "The lost-property book at Castle Halt lists three things lost between the Halt and Julie's gate: a red glove at the well on the station road, a felt hat on the signpost on the same road, a dinner tin under a cart further along it, before Julie's gate. All three are beside the road she walks to Julie's.",
     "completion": "You enter all three. Beside each line a date of return was already pencilled in. All three dates are next Sunday.",
     "returnTo": "the lost-property book, on the platform at Castle Halt",
     "requirements": [
       { "type": "acquire", "target": "lost_glove", "qty": 1, "text": "A red glove, at the well on the station road" },
       { "type": "acquire", "target": "lost_hat", "qty": 1, "text": "A felt hat, on the signpost on the station road" },
-      { "type": "acquire", "target": "lost_tin", "qty": 1, "text": "A dinner tin, under the cart on the Castle road" }
+      { "type": "acquire", "target": "lost_tin", "qty": 1, "text": "A dinner tin, under the cart on the station road" }
     ],
     "rewards": [{ "do": "give", "item": "apple", "qty": 2 }, { "do": "give", "item": "key_generic", "qty": 1 }]
   },

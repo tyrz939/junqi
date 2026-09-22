@@ -142,6 +142,12 @@ export type UnitDef = {
   glow?: { radius: number; color: string };
   /** Present only between 06:00 and 21:00. The dog is never seen after dark. */
   dayOnly?: boolean;
+  /**
+   * `dayOnly` holds only once this quest is done. The dog keeps Julie's hours, but not on the night
+   * {name} first arrives: a player who dawdles at the Halt and reaches the step after nine must still
+   * find someone on it, or the story has nobody to start it.
+   */
+  dayOnlyAfter?: string;
   /** The mirror: not there between 06:00 and 21:00. Never seen arriving or leaving. */
   nightOnly?: boolean;
   /** Item id this unit cannot resist: while idle it walks to a drop of it and dies there. */

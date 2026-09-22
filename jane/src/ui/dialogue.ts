@@ -63,7 +63,7 @@ export class DialogueBox {
       return;
     }
     const node = currentNode(sim);
-    const sig = `${d.tree}|${d.node}|${d.line}`;
+    const sig = `${d.tree}|${d.node}|${d.line}|${d.text ?? ""}`;
     if (sig !== this.sig) {
       this.sig = sig;
       this.full = expandText(sim.state, node?.lines[d.line] ?? "");

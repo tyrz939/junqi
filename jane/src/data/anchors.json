@@ -1,7 +1,7 @@
 [
-  { "id": "halt_well", "kind": "well", "name": "The well on the station road", "where": { "road": ["station", "julie_house"] } },
-  { "id": "halt_signpost", "kind": "signpost", "name": "The signpost on the station road", "where": { "road": ["station", "julie_house"], "apart": { "from": "halt_well", "min": 150 } } },
-  { "id": "halt_cart", "kind": "cart", "name": "The cart on the town road", "where": { "road": ["julie_house", "town"] } },
+  { "id": "halt_well", "kind": "well", "name": "The well on the station road", "where": { "road": ["station", "julie_house"], "dist": { "to": "station", "min": 120, "max": 380 } } },
+  { "id": "halt_signpost", "kind": "signpost", "name": "The signpost on the station road", "where": { "road": ["station", "julie_house"], "dist": { "to": "station", "min": 260, "max": 560 }, "apart": { "from": "halt_well", "min": 140 } } },
+  { "id": "halt_cart", "kind": "cart", "name": "The cart on the station road", "where": { "road": ["station", "julie_house"], "dist": { "to": "station", "min": 400, "max": 720 }, "apart": { "from": "halt_signpost", "min": 110 } } },
   { "id": "carters_cart", "kind": "cart", "name": "The carter's cart", "where": { "road": ["town", "gold_mine"], "dist": { "to": "gold_mine", "min": 150, "max": 380 } } },
   { "id": "scarecrow_gate", "kind": "scarecrow", "name": "The scarecrow at the farm gate", "where": { "road": ["town", "farm"], "dist": { "to": "farm", "min": 60, "max": 150 } } },
   { "id": "scarecrow_hedge", "kind": "scarecrow", "name": "The scarecrow in the Long Hedge", "where": { "area": "long_hedge" } },

@@ -496,6 +496,31 @@ export const PROP_SPRITES: SpriteSheet = {
     ],
   }),
 
+  // The lost-property desk at the Halt: the table, with the book open on it, a pen, and a bell nobody answers.
+  // Before this the quest's giver was a bare table with a label, and read as furniture, not as a thing to read.
+  lost_property_desk: prop(24, 18, 2, {
+    base: [
+      ".kkkkkkkkkkkkkkkkkkkkkk.",
+      "kmmmkkkkkkkkkkkkmmmmmmmk",
+      "kmmkwwwwwkwwwwwwkmmkkkmk",
+      "kttkwGGGwkwGGGGwktkyYYkk",
+      "kmmkwwwwwkwwwwwwkmkyyyYk",
+      "kmmkwGGwwkwGGGwwkmmkkkmk",
+      "kttkwwwwwkwwwwwwkttttttk",
+      "kmmkwGGGwkwGGwwwkmmmdmmk",
+      "kmmmkkkkkkkkkkkkmmmdmmmk",
+      "kttttttttttttttttttttttk",
+      "kkkkkkkkkkkkkkkkkkkkkkkk",
+      "kttttttttttttttttttttttk",
+      "kTTTTTTTTTTTTTTTTTTTTTTk",
+      "kkkkkkkkkkkkkkkkkkkkkkkk",
+      "ktTkKKKKKKKKKKKKKKKKktTk",
+      "ktTk................ktTk",
+      "ktTk................ktTk",
+      "kkkk................kkkk",
+    ],
+  }),
+
   shelf: prop(24, 18, 1, {
     base: [
       "kkkkkkkkkkkkkkkkkkkkkkkk",

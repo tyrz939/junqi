@@ -113,7 +113,7 @@
         "lines": [
           "CASTLE HALT. LOST PROPERTY. The office is not staffed. It is still open.",
           "Reported lost and not yet found. On the station road, between here and Julie's gate: one child's glove, red, at the well. One man's felt hat, on the signpost on the same road.",
-          "On the Castle road, past Julie's gate: one carter's dinner tin, under the seat of a cart that did not arrive.",
+          "Further along the station road, before Julie's gate: one carter's dinner tin, under the seat of a cart that did not arrive.",
           "All three are beside the road. Finders please enter items below. A pencil is provided."
         ],
         "options": [
@@ -133,7 +133,7 @@
       },
       "lp_wait": {
         "lines": [
-          "Glove: the well on the station road. Hat: the signpost on the same road. Tin: the cart on the Castle road, past Julie's gate. The pencil is on its string."
+          "Glove: the well on the station road. Hat: the signpost on the same road. Tin: the cart further along the station road, before Julie's gate. The pencil is on its string."
         ]
       },
       "lp_in": {
@@ -2055,13 +2055,13 @@
     "nodes": {
       "tin": {
         "lines": [
-          "A carter's cart on the Castle road, tipped over with one shaft in the ditch. The load is gone and the straps are still done up.",
+          "A carter's cart on the station road, tipped over with one shaft in the ditch. The load is gone and the straps are still done up.",
           "There is a dinner tin under the seat."
         ]
       },
       "empty": {
         "lines": [
-          "A carter's cart on the Castle road, tipped over with one shaft in the ditch. The load is gone and the straps are still done up."
+          "A carter's cart on the station road, tipped over with one shaft in the ditch. The load is gone and the straps are still done up."
         ]
       }
     }

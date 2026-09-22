@@ -28,7 +28,7 @@ import { applyPlacements, claimPois, PLACEMENTS, type PlaceCtx, type PlacementRo
 import { propFootprints } from "@/sim/catalog";
 import { hasZone } from "@/world/registry";
 import { at, Biome, buildSkeleton, COUNTY_H, COUNTY_W, MACRO, Region, ROAD_LIT, SKEL_H, SKEL_W, type Skeleton } from "@/world/skeleton";
-import { furnishCountry, type Country } from "@/world/country";
+import { compass, distanceWords, furnishCountry, type Country } from "@/world/country";
 
 export { COUNTY_H, COUNTY_W };
 
@@ -191,7 +191,7 @@ export function buildCounty(seed: number, attempt: number, rows: readonly Placem
       const metres = Math.round((Math.abs(b - a) * 1.1) / 50) * 50;
       for (const [ox, oy] of [[2, -1], [-3, -1], [2, 1], [-3, 1]] as const) {
         if (!there || !k.fits(p[0] + ox, p[1] + oy, 2, 1)) continue;
-        k.prop({ def: "fingerpost", cx: p[0] + ox, cy: p[1] + oy, label: "A fingerpost", use: [{ do: "toast", text: `FOOTPATH. ${there.name.toUpperCase()}, ${metres < 1000 ? `${metres} m` : `${(metres / 1000).toFixed(1)} km`}.` }] }, 2, 1);
+        k.prop({ def: "fingerpost", cx: p[0] + ox, cy: p[1] + oy, label: "A fingerpost", use: [{ do: "read", text: `FOOTPATH. ${there.name.toUpperCase()}, ${metres < 1000 ? `${metres} m` : `${(metres / 1000).toFixed(1)} km`}.` }] }, 2, 1);
         break;
       }
     }
@@ -266,6 +266,19 @@ export function buildCounty(seed: number, attempt: number, rows: readonly Placem
   if (hasZone("factory")) relayRuns(k, lines, lit);
 
   pois.forEach((p, n) => smallPlace(k, p.kind, p.x, p.y, p.anchor ?? `poi_${n}`));
+  // A signpost says something. The seed's own roadside posts were drawn with nothing on them, and a sign
+  // you cannot read is worse than no sign: it names the two nearest places, which way, and how far.
+  for (const p of k.props) {
+    if (p.def !== "signpost" || p.talk || p.use) continue;
+    const near = sk.sites
+      .map((s) => ({ s, dx: centre(s.mx) - p.cx, dy: centre(s.my) - p.cy }))
+      .map((o) => ({ ...o, m: Math.hypot(o.dx, o.dy) }))
+      .sort((a, b) => a.m - b.m)
+      .slice(0, 2);
+    if (near.length === 0) continue;
+    p.label ??= "A signpost";
+    p.use = [{ do: "read", text: `${near.map((o) => `${o.s.name.toUpperCase()}, ${compass(o.dx, o.dy)}, ${distanceWords(o.m)}`).join(". ")}.` }];
+  }
   // A place the story needs is known by its name: a mark (made above) and a rect of the same name round it.
   for (const p of pois) if (p.anchor && k.marks[p.anchor]) k.rect(p.anchor, { cx: p.x - 6, cy: p.y - 4, w: 13, h: 11 });
   applyPlacements(place, "pois", rows);

@@ -29,7 +29,8 @@ export function startDialogue(w: World, treeId: string, speaker: number): boolea
 export function currentNode(w: World): DialogueNode | null {
   const d = w.actor?.dialogue;
   if (!d) return null;
-  return w.catalog.dialogue[d.tree].nodes[d.node] ?? null;
+  if (d.text !== undefined) return { lines: [d.text] } as DialogueNode;
+  return w.catalog.dialogue[d.tree]?.nodes[d.node] ?? null;
 }
 
 /** True when the current line is the node's last and it offers a choice. */

@@ -484,7 +484,7 @@ function forks(c: Ctx): void {
   void k;
 }
 
-function compass(dx: number, dy: number): string {
+export function compass(dx: number, dy: number): string {
   const ax = Math.abs(dx);
   const ay = Math.abs(dy);
   const ns = dy < 0 ? "NORTH" : "SOUTH";
@@ -494,7 +494,7 @@ function compass(dx: number, dy: number): string {
   return `${ns}-${ew}`;
 }
 
-function distanceWords(m: number): string {
+export function distanceWords(m: number): string {
   if (m < 1000) return `${Math.max(50, Math.round(m / 50) * 50)} m`;
   return `${(Math.round(m / 100) / 10).toFixed(1)} km`;
 }
@@ -581,7 +581,7 @@ function signFork(c: Ctx, fork: number, named: readonly Skeleton["sites"][number
       const x = Math.round(line[near][0] + nx * off * side);
       const y = Math.round(line[near][1] + ny * off * side);
       if (nearChunk(c, x, y, 4) || !placeable(c, x, y, 2, 1)) continue;
-      k.prop({ def: "fingerpost", cx: x, cy: y, label: "A fingerpost", use: [{ do: "toast", text }] }, 2, 1);
+      k.prop({ def: "fingerpost", cx: x, cy: y, label: "A fingerpost", use: [{ do: "read", text }] }, 2, 1);
       // And a lamp on the other corner, so a fork can be found after dark.
       lampBeside(c, line, near, -side, 8);
       return;
@@ -641,7 +641,7 @@ function milestones(c: Ctx): void {
       const x = Math.round(line[i][0] - nx * LAMP_OFF);
       const y = Math.round(line[i][1] - ny * LAMP_OFF);
       if (nearChunk(c, x, y, 4) || !placeable(c, x, y, 1, 1)) continue;
-      c.k.prop({ def: "milestone", cx: x, cy: y, label: "A milestone", use: [{ do: "toast", text: `CASTLE ${distanceWords(m)}` }] }, 1, 1);
+      c.k.prop({ def: "milestone", cx: x, cy: y, label: "A milestone", use: [{ do: "read", text: `CASTLE ${distanceWords(m)}` }] }, 1, 1);
       next = walked + MILE_STEP;
     }
   }

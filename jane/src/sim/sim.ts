@@ -492,7 +492,7 @@ export class Sim implements World {
     for (const u of w.zone.units) {
       const def = this.catalog.units[u.def];
       if (!def.dayOnly && !def.nightOnly) continue;
-      const away = def.dayOnly ? night : !night;
+      const away = def.dayOnly ? night && (!def.dayOnlyAfter || this.state.quests.done.includes(def.dayOnlyAfter)) : !night;
       if (u.hidden === away) continue;
       // Never vanish or appear while any of them is looking straight at it.
       if (watchers.some((p) => w.rt.units.has(p.id) && Math.abs(u.x - p.x) < 120 && Math.abs(u.y - p.y) < 80)) continue;

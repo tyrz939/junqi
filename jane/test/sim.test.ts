@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { GCD_TICKS } from "@/sim/constants";
+import { GCD_TICKS, TICKS_PER_HOUR } from "@/sim/constants";
 import { tryCast } from "@/sim/combat";
 import { centre } from "@/sim/grid";
 import { bagAdd, bagCount, craftOutput } from "@/sim/inventory";
@@ -242,5 +242,22 @@ describe("the first five minutes, played headless", () => {
     idle(sim, 2);
     expect(sim.me.zone).toBe("county");
     expect(p.hp).toBeLessThanOrEqual(maxHp(p));
+  });
+});
+
+describe("the dog keeps Julie's hours, but not on the first night", () => {
+  it("is on the step after nine until she has given the key, and gone after nine once she has", () => {
+    const sim = Sim.newGame(catalog, 20260920);
+    const dog = sim.rt.unitsByKey.get("dog")!;
+    // She dawdled at the Halt: it is ten at night when she reaches the gate.
+    sim.state.clock = 22 * TICKS_PER_HOUR;
+    idle(sim, 30);
+    expect(dog.hidden).toBe(false);
+    // Once the key is hers, the dog is Julie's again, and Julie was never seen after dark.
+    sim.state.quests.done.push("defeat_skeleton");
+    sim.player.x = 16;
+    sim.player.y = 16;
+    idle(sim, 30);
+    expect(dog.hidden).toBe(true);
   });
 });

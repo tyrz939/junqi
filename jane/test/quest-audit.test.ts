@@ -94,7 +94,7 @@ type Tier = keyof typeof WALK_BUDGET;
  */
 const TIER: Record<string, { tier: Tier; why?: string }> = {
   the_letter: { tier: "far", why: "the first walk, station to Julie's: the road is the tutorial" },
-  lost_property: { tier: "far", why: "the first walk and one road on: two of the three lie on the road she came in by" },
+  lost_property: { tier: "near", why: "the first two minutes: all three lie on the station road, before Julie's gate (user, 2026-09-23)" },
   left_luggage: { tier: "cross", why: "the one cross-map chain: the platform, the mine road, the platform" },
   the_nurses_round: { tier: "far", why: "three corners of the Lowfields; each note is on a road" },
   mrs_allens_dressing: { tier: "far", why: "the case in the wood back to the door in Castle square" },
@@ -134,7 +134,7 @@ const LANDMARKS: Landmark[] = [
   { phrase: /\bwell\b/i, ref: { mark: "halt_well" }, says: /\bwell\b/i },
   { phrase: /\bsignpost\b/i, ref: { mark: "halt_signpost" }, says: /signpost/i },
   { phrase: /castle road/i, ref: { road: ["julie_house", "town"] }, says: /castle road/i },
-  { phrase: /the cart on the castle road|under the cart/i, ref: { mark: "halt_cart" }, says: /\bcart\b/i },
+  { phrase: /the cart on the station road|under the cart/i, ref: { mark: "halt_cart" }, says: /\bcart\b/i },
   { phrase: /\btrunk\b/i, ref: { prop: "left_luggage_trunk" }, says: /trunk/i },
   { phrase: /lost[- ]property/i, ref: { prop: "lost_property_book" }, says: /lost property/i },
   // Julie's

@@ -7,7 +7,7 @@
   "dog": {
     "name": "Julie's Dog", "faction": "friendly", "controller": "npc", "strength": 40, "spirit": 3,
     "walk": 1, "run": 2, "aggro": 0, "leash": 0, "bounds": 1, "book": [],
-    "respawn": 0, "autoRegen": true, "loot": [], "sprite": "dog", "talk": "dog", "dayOnly": true
+    "respawn": 0, "autoRegen": true, "loot": [], "sprite": "dog", "talk": "dog", "dayOnly": true, "dayOnlyAfter": "defeat_skeleton"
   },
   "skeleton": {
     "name": "Skeleton", "faction": "undead", "controller": "ai", "strength": 20, "spirit": 1,

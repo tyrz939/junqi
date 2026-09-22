@@ -96,6 +96,14 @@ export function runAction(w: World, a: Action, subject: number): void {
     case "toast":
       w.emit({ e: "toast", text: a.text });
       return;
+    case "read":
+      // Alone in the world there is always an actor; a read with nobody to read it is a toast.
+      if (!w.actor) w.emit({ e: "toast", text: a.text });
+      else {
+        w.actor.dialogue = { tree: "", node: "", line: 0, speaker: 0, text: a.text };
+        w.emit({ e: "dialogue" });
+      }
+      return;
     case "lock":
     case "unlock": {
       const p = findProp(w, a.prop);

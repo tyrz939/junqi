@@ -13,6 +13,7 @@
   "rock": { "name": "Rock", "sprite": "rock", "w": 1, "h": 1, "solid": true, "blockLos": false, "carry": true },
   "bench": { "name": "Craft Bench", "sprite": "bench", "w": 3, "h": 2, "solid": true, "blockLos": false, "bench": true },
   "table": { "name": "Table", "sprite": "table", "w": 3, "h": 2, "solid": true, "blockLos": false },
+  "lost_property_desk": { "name": "Lost property desk", "sprite": "lost_property_desk", "w": 3, "h": 2, "solid": true, "blockLos": false, "prompt": "Read" },
   "shelf": { "name": "Shelf", "sprite": "shelf", "w": 3, "h": 1, "solid": true, "blockLos": false },
   "bed": { "name": "Bed", "sprite": "bed", "w": 2, "h": 3, "solid": true, "blockLos": false, "rest": true, "prompt": "Rest" },
   "stove": { "name": "Stove", "sprite": "stove", "w": 2, "h": 2, "solid": true, "blockLos": false, "light": {"radius": 40, "color": "#ff9040", "flicker": 0.25} },

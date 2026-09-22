@@ -6,7 +6,7 @@
       "within": 8
     },
     "prop": {
-      "def": "table",
+      "def": "lost_property_desk",
       "talk": "lost_property_book",
       "label": "Lost Property"
     }
@@ -403,7 +403,7 @@
     "prop": {
       "def": "road_cart",
       "talk": "halt_cart",
-      "label": "The cart on the Castle road"
+      "label": "The cart on the station road"
     }
   },
   {
