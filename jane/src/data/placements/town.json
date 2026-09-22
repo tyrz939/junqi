@@ -1,0 +1,17 @@
+[
+  {
+    "key": "washing_church",
+    "at": { "slot": "washing_church" },
+    "prop": { "def": "town_washing", "loot": [{ "item": "town_washing", "qty": 1 }] }
+  },
+  {
+    "key": "washing_fountain",
+    "at": { "slot": "washing_fountain" },
+    "prop": { "def": "town_washing", "loot": [{ "item": "town_washing", "qty": 1 }] }
+  },
+  {
+    "key": "washing_arms",
+    "at": { "slot": "washing_arms" },
+    "prop": { "def": "town_washing", "loot": [{ "item": "town_washing", "qty": 1 }] }
+  }
+]

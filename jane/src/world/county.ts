@@ -196,7 +196,13 @@ export function buildCounty(seed: number, attempt: number, rows: readonly Placem
     let size = { w: 2, h: 2 };
     if (!d.chunk && chunk) {
       size = footprints![d.def ?? "door"] ?? size;
-      const spot = k.spot({ cx: chunk.box.cx - 14, cy: chunk.box.cy - 14, w: chunk.box.w + 28, h: chunk.box.h + 28 }, size.w, size.h, 1, 200);
+      // With open ground in front of it (the row below its margin), kept open: a cover you cannot stand at is not a way in.
+      let spot: { cx: number; cy: number } | null = null;
+      for (let n = 0; n < 8 && !spot; n++) {
+        const s = k.spot({ cx: chunk.box.cx - 14, cy: chunk.box.cy - 14, w: chunk.box.w + 28, h: chunk.box.h + 28 }, size.w, size.h, 1, 200);
+        if (s && !k.solid(s.cx, s.cy + size.h + 1)) spot = s;
+      }
+      if (spot) k.claim(spot.cx, spot.cy + size.h, size.w, 2);
       cell = spot ? [spot.cx, spot.cy] : undefined;
     }
     if (!cell) continue;

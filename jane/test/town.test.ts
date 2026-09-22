@@ -1,0 +1,243 @@
+// Castle, Castle Halt and the farmstead at Zelda scale (density brief, September 2026): a town the
+// size of Minish Cap's, with as much in it; a halt, not a parade ground; and the three errands the
+// town gives, played on foot by the headless player from the person who asks to the person who
+// thanks you. "Every screen has something to press A on" is checked by counting, not by eye.
+
+import { describe, expect, it } from "vitest";
+import { focusOf } from "@/sim/interact";
+import { bagCount } from "@/sim/inventory";
+import { questActive, questDone } from "@/sim/quests";
+import { Sim } from "@/sim/sim";
+import { buildZone } from "@/world";
+import type { Blueprint } from "@/world/blueprint";
+import townQuests from "@/data/quests/town.json";
+import townDialogue from "@/data/dialogue/town.json";
+import townItems from "@/data/items/town.json";
+import { idle, talkThrough, walkToProp, walkToUnit, yardCatalog } from "./bot";
+
+const catalog = yardCatalog();
+const SEEDS = [3, 2026];
+const LONG = 120_000;
+
+/** Everything within `r` cells of a mark. */
+function near(bp: Blueprint, mark: string, rx: number, ry: number) {
+  const m = bp.marks[mark];
+  const inside = (x: number, y: number): boolean => Math.abs(x - m.cx) <= rx && Math.abs(y - m.cy) <= ry;
+  return { props: bp.props.filter((p) => inside(p.cx, p.cy)), units: bp.units.filter((u) => inside(u.cx, u.cy)) };
+}
+
+describe("Castle is a town at Zelda scale", () => {
+  it("fits in 100 x 70 cells and holds twenty-five buildings, twenty-five townsfolk, and something to read or knock on at every turn", () => {
+    for (const seed of SEEDS) {
+      const bp = buildZone("county", seed);
+      // The square sits in the middle of the town: the whole town is within 60 x 40 of it.
+      const town = near(bp, "town_square", 60, 40);
+      const doors = town.props.filter((p) => p.def === "door" || p.def === "door_talk");
+      expect(doors.length, `${seed}: doors in Castle`).toBeGreaterThanOrEqual(25);
+      const folk = town.units.filter((u) => catalog.units[u.def]?.faction === "friendly" && catalog.units[u.def].sprite.startsWith("town_") && !/cat|hen|sheep/.test(u.def));
+      expect(folk.length, `${seed}: townsfolk`).toBeGreaterThanOrEqual(25);
+      // Every one of them has something to say, and so does every door.
+      for (const u of folk) expect(catalog.dialogue[catalog.units[u.def].talk ?? ""], u.key).toBeDefined();
+      for (const d of doors) expect(d.to ?? d.talk ?? d.key === "door_allen", `${d.key} opens or answers`).toBeTruthy();
+      const readable = town.props.filter((p) => p.talk && catalog.props[p.def]?.prompt);
+      expect(readable.length, `${seed}: things to read, knock on or look at`).toBeGreaterThanOrEqual(45);
+      // Seventy-odd things to press USE on in a hundred by seventy: one every hundred square metres.
+      expect(readable.length + folk.length, `${seed}: things and people`).toBeGreaterThanOrEqual(70);
+      // The text says "in the yard of the Arms": the sheet is inside the yard's rails, not out on the street.
+      const sheet = bp.props.find((p) => p.key === "washing_arms")!;
+      const yard = bp.marks.arms_yard;
+      expect(Math.abs(sheet.cx - yard.cx) <= 7 && sheet.cy - yard.cy <= 3, `${seed}: the sheet is in the Arms yard`).toBe(true);
+      // Compact: the doors of the town span no more than a hundred cells by seventy.
+      const xs = doors.map((d) => d.cx);
+      const ys = doors.map((d) => d.cy);
+      expect(Math.max(...xs) - Math.min(...xs)).toBeLessThanOrEqual(100);
+      expect(Math.max(...ys) - Math.min(...ys)).toBeLessThanOrEqual(70);
+    }
+  }, LONG);
+
+  it("the Halt is a halt: platform, shelter, name board, ticket window, lamps and a traveller, in a box a screen and a half across", () => {
+    for (const seed of SEEDS) {
+      const bp = buildZone("county", seed);
+      const halt = near(bp, "start", 36, 20);
+      for (const def of ["town_shelter", "town_station_sign", "town_ticket_window", "town_park_bench", "campfire", "sign"]) {
+        expect(halt.props.some((p) => p.def === def), `${seed}: ${def} at the Halt`).toBe(true);
+      }
+      expect(halt.props.filter((p) => p.def === "lamp_post").length).toBeGreaterThanOrEqual(3);
+      expect(halt.units.some((u) => u.key === "traveller")).toBe(true);
+      const plat = bp.rects.platform;
+      expect(plat.w * plat.h, "the platform is a platform, not a parade ground").toBeLessThanOrEqual(260);
+    }
+  }, LONG);
+
+  it("the farm is a farmstead: house, barn, hens, sheep in a pen, a field, hay and a cart", () => {
+    const bp = buildZone("county", SEEDS[0]);
+    const farm = near(bp, "farm_gate", 60, 25);
+    for (const def of ["town_barn_doors", "town_hen_coop", "town_trough", "town_hay_bale", "town_farm_cart"]) expect(farm.props.some((p) => p.def === def), def).toBe(true);
+    expect(farm.units.filter((u) => u.def === "town_sheep").length).toBeGreaterThanOrEqual(4);
+    expect(farm.units.filter((u) => u.def.startsWith("town_hen")).length).toBeGreaterThanOrEqual(2);
+  }, LONG);
+
+  it("the text keeps to VOICE.md: no dashes, nobody's name baked in, short enough to read on a sign", () => {
+    const text = JSON.stringify([townQuests, townDialogue, townItems]);
+    expect(/[–—]/.test(text), "an en or em dash").toBe(false);
+    expect(text.includes("Jane")).toBe(false);
+    for (const [id, q] of Object.entries(townQuests)) expect(q.description.length, id).toBeLessThanOrEqual(320);
+    for (const [id, tree] of Object.entries(catalog.dialogue)) {
+      if (!(id in townDialogue)) continue;
+      for (const node of Object.values(tree.nodes)) for (const line of node.lines) expect(line.length, `${id}: ${line}`).toBeLessThanOrEqual(200);
+    }
+  });
+});
+
+// --- the errands, played ------------------------------------------------------------------
+
+function newSim(seed: number): Sim {
+  const sim = Sim.newGame(catalog, seed);
+  sim.command({ t: "dev", dev: { op: "god", on: true } });
+  sim.command({ t: "dev", dev: { op: "time", hour: 11 } });
+  return sim;
+}
+
+function tp(sim: Sim, mark: string): void {
+  expect(sim.rt.bp.marks[mark], `mark ${mark}`).toBeDefined();
+  sim.command({ t: "dev", dev: { op: "tp", zone: "county", mark } });
+  idle(sim, 3);
+}
+
+/** Walk up to somebody, press USE, check who answers with what, and click through. */
+function ask(sim: Sim, unit: string, node: string, choices: number[] = []): void {
+  walkToUnit(sim, unit, 12);
+  sim.command({ t: "use" });
+  idle(sim, 2);
+  expect(sim.me.dialogue?.node, `${unit} answers with`).toBe(node);
+  talkThrough(sim, choices);
+  idle(sim, 1);
+}
+
+/** Walk up to a prop and USE it, and it, not anything else. */
+function press(sim: Sim, key: string, node?: string, choices: number[] = []): void {
+  expect(walkToProp(sim, key), `walk to ${key}`).toBe(true);
+  const f = focusOf(sim, sim.player);
+  expect(f?.kind === "prop" && f.id === sim.rt.propsByKey.get(key)!.id, `USE acts on ${key}`).toBe(true);
+  sim.command({ t: "use" });
+  idle(sim, 2);
+  if (node) expect(sim.me.dialogue?.node, `${key} answers with`).toBe(node);
+  talkThrough(sim, choices);
+  idle(sim, 1);
+}
+
+describe("Castle's errands, walked", () => {
+  it("Sixpence: Tilly by the fountain, the cat on the newest stone behind the church, and the cat home", () => {
+    const sim = newSim(SEEDS[0]);
+    tp(sim, "fountain");
+    ask(sim, "tilly", "offer", [0]);
+    expect(questActive(sim, "sixpence")).toBeDefined();
+    ask(sim, "tilly", "wait");
+    tp(sim, "churchyard");
+    ask(sim, "sixpence", "take");
+    expect(sim.rt.unitsByKey.get("sixpence")).toBeUndefined();
+    tp(sim, "fountain");
+    ask(sim, "tilly", "in", [0]);
+    expect(questDone(sim, "sixpence")).toBe(true);
+    expect(sim.rt.unitsByKey.get("sixpence_home"), "Sixpence is home, by the fountain").toBeDefined();
+    ask(sim, "tilly", "after");
+  }, LONG);
+
+  it("Second Post: three letters through three doors, the Forge, No. 4 Back Lane and the Doctor's, and a key for it", () => {
+    const sim = newSim(SEEDS[1]);
+    tp(sim, "post_office");
+    ask(sim, "miss_dray", "offer", [0]);
+    expect(bagCount(sim.player, "town_letter")).toBe(3);
+    tp(sim, "forge");
+    press(sim, "forge_door", "post");
+    press(sim, "forge_door", "plain");
+    tp(sim, "back_lane");
+    press(sim, "door_back_4", "post");
+    tp(sim, "doctor");
+    press(sim, "doctors_door", "post");
+    expect(bagCount(sim.player, "town_letter")).toBe(0);
+    const keys = bagCount(sim.player, "key_generic");
+    tp(sim, "post_office");
+    ask(sim, "miss_dray", "in", [0]);
+    expect(questDone(sim, "second_post")).toBe(true);
+    expect(bagCount(sim.player, "key_generic")).toBe(keys + 1);
+  }, LONG);
+
+  it("Washing Day: a pillowcase by the church, a shirt by the fountain, a sheet in the Arms yard", () => {
+    const sim = newSim(SEEDS[0]);
+    tp(sim, "washing_line");
+    ask(sim, "mrs_marsh", "offer", [0]);
+    for (const [mark, key] of [
+      ["church_door", "washing_church"],
+      ["fountain", "washing_fountain"],
+      ["arms_yard", "washing_arms"],
+    ] as const) {
+      tp(sim, mark);
+      press(sim, key);
+    }
+    expect(bagCount(sim.player, "town_washing")).toBe(3);
+    tp(sim, "washing_line");
+    const water = bagCount(sim.player, "small_water");
+    ask(sim, "mrs_marsh", "in", [0]);
+    expect(questDone(sim, "washing_day")).toBe(true);
+    expect(bagCount(sim.player, "town_washing")).toBe(0);
+    expect(bagCount(sim.player, "small_water")).toBe(water + 2);
+  }, LONG);
+
+  it("the stalls trade: Dr Vane fills an empty vial, Mrs Crewe swaps two pansies for a nasturtium, and says so when you have none", () => {
+    const sim = newSim(SEEDS[0]);
+    sim.command({ t: "dev", dev: { op: "give", item: "small_empty_vial", qty: 1 } });
+    sim.command({ t: "dev", dev: { op: "give", item: "pansy", qty: 2 } });
+    idle(sim, 1);
+    const water = bagCount(sim.player, "small_water");
+    tp(sim, "doctor");
+    ask(sim, "dr_vane", "a", [0]);
+    expect(bagCount(sim.player, "small_empty_vial")).toBe(0);
+    expect(bagCount(sim.player, "small_water")).toBe(water + 1);
+    tp(sim, "cross_lane");
+    tp(sim, "town_square");
+    ask(sim, "mrs_crewe", "a", [0]);
+    expect(bagCount(sim.player, "nasturtium")).toBeGreaterThanOrEqual(1);
+    expect(bagCount(sim.player, "pansy")).toBe(0);
+    ask(sim, "mrs_crewe", "a", [0]);
+    expect(bagCount(sim.player, "pansy")).toBe(0);
+  }, LONG);
+
+  it("two doors on the square open: the Castle Arms (a bed at the back) and St Anne's, and both lead back out", () => {
+    const sim = newSim(SEEDS[0]);
+    tp(sim, "arms_front");
+    press(sim, "arms_door");
+    idle(sim, 5);
+    expect(sim.me.zone).toBe("arms");
+    ask(sim, "mrs_garland", "a", [0]);
+    expect(walkToProp(sim, "arms_bed")).toBe(true);
+    press(sim, "exit_door");
+    idle(sim, 5);
+    expect(sim.me.zone).toBe("county");
+    tp(sim, "church_door");
+    press(sim, "church_door");
+    idle(sim, 5);
+    expect(sim.me.zone).toBe("church");
+    press(sim, "visitors_book", "a");
+    press(sim, "exit_door");
+    idle(sim, 5);
+    expect(sim.me.zone).toBe("county");
+  }, LONG);
+
+  it("after the lamps the street is empty, and the Arms is not", () => {
+    const sim = newSim(SEEDS[0]);
+    tp(sim, "town_square");
+    sim.command({ t: "dev", dev: { op: "time", hour: 22 } });
+    // Nobody vanishes in front of her: she walks away, and when she comes back they have gone in.
+    tp(sim, "start");
+    idle(sim, 5);
+    tp(sim, "town_square");
+    idle(sim, 5);
+    for (const key of ["tilly", "miss_dray", "mrs_marsh", "constable"]) expect(sim.rt.unitsByKey.get(key)?.hidden, key).toBe(true);
+    tp(sim, "arms_front");
+    press(sim, "arms_door");
+    idle(sim, 5);
+    expect(sim.me.zone).toBe("arms");
+    expect(sim.rt.unitsByKey.get("mrs_garland")?.hidden).toBe(false);
+  }, LONG);
+});
