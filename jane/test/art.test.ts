@@ -3,7 +3,9 @@ import { ICONS } from "@/art/icons";
 import { PROP_SPRITES } from "@/art/props";
 import type { SpriteSheet } from "@/art/types";
 import { UNIT_SPRITES } from "@/art/units";
+import { TILE_COLORS } from "@/render/tiles";
 import { buildCatalog } from "@/sim/catalog";
+import { F_BLOCK_LOS, F_SOLID, Tile, TILE_COUNT, TILE_FLAGS } from "@/sim/grid";
 
 const catalog = buildCatalog();
 
@@ -48,5 +50,21 @@ describe("art", () => {
     for (const [id, i] of Object.entries(catalog.items)) expect(ICONS[i.icon], `items.${id} -> icon "${i.icon}"`).toBeDefined();
     for (const [id, s] of Object.entries(catalog.spells)) expect(ICONS[s.icon], `spells.${id} -> icon "${s.icon}"`).toBeDefined();
     for (const [id, e] of Object.entries(catalog.effects)) expect(ICONS[e.icon], `effects.${id} -> icon "${e.icon}"`).toBeDefined();
+  });
+
+  it("every tile id has a minimap colour, and the dressing tiles stop what they should", () => {
+    expect(TILE_COLORS.length).toBe(TILE_COUNT);
+    for (let t = 0; t < TILE_COUNT; t++) expect(TILE_COLORS[t], `tile ${t} colour`).toMatch(/^#[0-9a-f]{3,8}$/i);
+    const solid = (t: Tile): boolean => (TILE_FLAGS[t] & F_SOLID) !== 0;
+    const blind = (t: Tile): boolean => (TILE_FLAGS[t] & F_BLOCK_LOS) !== 0;
+    for (const t of [Tile.FlowerBed, Tile.Stepping, Tile.Crops, Tile.Boardwalk]) expect(solid(t), `${Tile[t]} is walkable`).toBe(false);
+    expect([solid(Tile.StoneWall), blind(Tile.StoneWall)]).toEqual([true, false]);
+    for (const t of [Tile.RoofSlate, Tile.RoofThatch, Tile.BrickWall]) expect([solid(t), blind(t)]).toEqual([true, true]);
+    expect(TILE_FLAGS[Tile.Pine]).toBe(TILE_FLAGS[Tile.Tree]);
+    expect([solid(Tile.DeadTree), blind(Tile.DeadTree)]).toEqual([true, false]);
+  });
+
+  it("the well and the cart have drawings of their own, two cells wide", () => {
+    for (const id of ["well", "cart"]) expect(PROP_SPRITES[id]?.w, id).toBe(16);
   });
 });

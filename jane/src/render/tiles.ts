@@ -293,6 +293,9 @@ function sprites(): Bank {
 
 // --- chunk painting --------------------------------------------------------------------------------------
 
+/** Set per zone by the cache: out of doors, a block of wall is drawn as a building's roof. */
+let outdoor = false;
+
 /** Per-chunk scratch, reused: ground tile and group per cell with a 2-cell margin, and a pixel material map with a 1-cell margin. */
 const GO = 3; // ground map margin, cells
 const GM = CHUNK_CELLS + GO * 2; // ground map side, cells [-3, 19)
@@ -695,7 +698,17 @@ function paintGround(ctx: CanvasRenderingContext2D, t: number, g: number, cx: nu
         dot(x + 2, y, tone.b, 1, 2);
         dot(x + 2, y, tone.a);
       } else if ((h & 15) === 4) dot((h >> 4) % 6 + 1, (h >> 2) % 6 + 1, tone.a, 1, 1);
-      if ((h & 127) === 17) {
+      // Here and there a meadow patch where the flowers are thick, the way Koholint has them.
+      if (t === Tile.Grass && (h & 7) === 2 && areaHash(cx, cy, 3) < 22) {
+        const x = 1 + (h >> 3) % 5;
+        const y = 1 + (h >> 5) % 5;
+        const c = FLOWER[areaHash(cx, cy, 3) % 5];
+        dot(x, y + 1, "#3a7a3a", 1, 1);
+        dot(x - 1, y, c, 1, 1);
+        dot(x + 1, y, c, 1, 1);
+        dot(x, y - 1, c, 1, 1);
+        dot(x, y, "#f0d048", 1, 1);
+      } else if ((h & 127) === 17) {
         const x = 2 + (h >> 3) % 4;
         dot(x, 3, FLOWER[(h >> 1) % 5]);
         dot(x - 1, 4, "#3a7a3a", 3, 1);
@@ -938,6 +951,15 @@ function paintHard(ctx: CanvasRenderingContext2D, grid: Grid, t: number, cx: num
     if (t === Tile.Void) return;
     // A wall whose south neighbour is open shows its front face; otherwise only its top.
     const southOpen = WALL_LIKE[at(0, 1)] === 0;
+    // Out of doors a wide block of wall is a building, and a building seen from above is its roof.
+    // A wall one cell thick (a ruin, a yard wall) keeps its stone cap.
+    const thin = (WALL_LIKE[at(-1, 0)] === 0 && WALL_LIKE[at(1, 0)] === 0) || (WALL_LIKE[at(0, -1)] === 0 && WALL_LIKE[at(0, 1)] === 0);
+    if (outdoor && !southOpen && !thin) {
+      ctx.fillStyle = WORKS_ROOF.base;
+      ctx.fillRect(px, py, CELL, CELL);
+      paintRoof(ctx, Tile.RoofSlate, WORKS_ROOF, at, cx, cy, px, py, h, (n) => WALL_LIKE[n] === 1);
+      return;
+    }
     if (southOpen) {
       ctx.fillStyle = sw.a;
       ctx.fillRect(px, py, CELL, CELL);
@@ -966,9 +988,24 @@ function paintHard(ctx: CanvasRenderingContext2D, grid: Grid, t: number, cx: num
   }
 
   switch (t) {
-    case Tile.Hedge:
+    case Tile.Hedge: {
       stamp(ctx, px, py, sw, HEDGE_LEAF[h % 3], 0, 0);
+      // A clipped hedge is a block: lit along its top, a shaded face where it drops south, dark sides.
+      if (at(0, -1) !== Tile.Hedge) {
+        dot(0, 0, "#10241a", CELL, 1);
+        dot(0, 1, "#5a9a5c", CELL, 1);
+        dot(1 + (h & 3), 2, "#5a9a5c", 2, 1);
+      }
+      if (at(0, 1) !== Tile.Hedge) {
+        dot(0, CELL - 4, "#1c3e2a", CELL, 3);
+        dot((h & 3) + 1, CELL - 4, "#2a5a3c", 1, 2);
+        dot(((h >> 2) & 3) + 4, CELL - 3, "#2a5a3c", 1, 2);
+        dot(0, CELL - 1, "#0c1a12", CELL, 1);
+      }
+      if (at(-1, 0) !== Tile.Hedge) dot(0, 0, "#10241a", 1, CELL);
+      if (at(1, 0) !== Tile.Hedge) dot(CELL - 1, 0, "#10241a", 1, CELL);
       break;
+    }
     case Tile.Floor:
     case Tile.TempleFloor:
     case Tile.MuseumFloor:
@@ -1057,6 +1094,9 @@ function paintHard(ctx: CanvasRenderingContext2D, grid: Grid, t: number, cx: num
   if (RAISED[t] === 0 && RAISED[at(0, -1)] === 1) dot(0, 0, "#00000030", CELL, 2);
 }
 
+/** The roof of a works, a library, a school: slate gone dark with soot. */
+const WORKS_ROOF: Swatch = { base: "#50525e", a: "#6a6e80", b: "#2e3038" };
+
 const CLIFF = { top: "#7e6c56", topL: "#957f66", topD: "#65553f", tuft: "#5e7a44", rimL: "#b09878", face: "#6e5848", ridgeL: "#8c7258", ridgeD: "#4c3c30", o: "#2a2018" };
 
 /**
@@ -1122,12 +1162,22 @@ function paintCliff(ctx: CanvasRenderingContext2D, grid: Grid, cx: number, cy: n
 }
 
 /** Roofs: shingle courses (tile, slate or thatch), a ridge along the top, a dark eave along the bottom. */
-function paintRoof(ctx: CanvasRenderingContext2D, t: number, sw: Swatch, at: (dx: number, dy: number) => number, cx: number, cy: number, px: number, py: number, h: number): void {
+function paintRoof(
+  ctx: CanvasRenderingContext2D,
+  t: number,
+  sw: Swatch,
+  at: (dx: number, dy: number) => number,
+  cx: number,
+  cy: number,
+  px: number,
+  py: number,
+  h: number,
+  same: (n: number) => boolean = isRoof,
+): void {
   const dot = (x: number, y: number, c: string, w = 1, hh = 1): void => {
     ctx.fillStyle = c;
     ctx.fillRect(px + x, py + y, w, hh);
   };
-  const same = (n: number): boolean => isRoof(n);
   for (let y = 0; y < CELL; y++) {
     const wy = cy * CELL + y;
     if (t === Tile.RoofThatch) {
@@ -1190,14 +1240,21 @@ function paintHouseWall(ctx: CanvasRenderingContext2D, t: number, sw: Swatch, at
   const wallS = isHouseWall(s);
   // Windows sit in the middle course of a three-course wall, every fifth cell, never at a corner.
   if (wallN && wallS && cx % 5 === 2 && isHouseWall(at(-1, 0)) && isHouseWall(at(1, 0))) {
-    dot(1, -2, "#3a2a1e", 6, 1);
-    dot(1, -1, "#3a2a1e", 1, 8);
-    dot(6, -1, "#3a2a1e", 1, 8);
-    dot(2, -1, "#2a3a58", 4, 7);
-    dot(2, -1, "#5a7aa8", 2, 3);
-    dot(4, 2, "#5a7aa8", 2, 3);
-    dot(2, -1, "#9cc0e8", 1, 1);
-    dot(1, 7, "#e8dcc0", 6, 1);
+    // A cottage window: a frame, four panes, one catching the sky, a sill, and a lintel in shadow.
+    dot(0, -2, "#2a1c14", CELL, 1);
+    dot(0, -1, "#3a2a1e", 1, 8);
+    dot(CELL - 1, -1, "#3a2a1e", 1, 8);
+    dot(1, -1, "#243450", 6, 7);
+    dot(1, -1, "#4a6c9c", 3, 3);
+    dot(4, -1, "#3a5a88", 2, 3);
+    dot(1, 3, "#3a5a88", 3, 3);
+    dot(4, 3, "#4a6c9c", 2, 3);
+    dot(1, -1, "#a8c8f0", 1, 1);
+    dot(2, 0, "#a8c8f0", 1, 1);
+    dot(3, -1, "#6e4a2c", 1, 7);
+    dot(1, 2, "#6e4a2c", 6, 1);
+    dot(0, 6, "#e8dcc0", CELL, 1);
+    dot(0, 7, "#00000030", CELL, 1);
   }
   if (isRoof(n)) dot(0, 0, "#00000040", CELL, 2);
   if (!wallS) {
@@ -1224,8 +1281,11 @@ export class TileCache {
   built = 0;
   buildMs = 0;
 
-  setGrid(grid: Grid): void {
+  private outdoor = false;
+
+  setGrid(grid: Grid, outdoorZone = false): void {
     this.grid = grid;
+    this.outdoor = outdoorZone;
     this.chunks.clear();
   }
 
@@ -1247,6 +1307,7 @@ export class TileCache {
     let chunk = this.chunks.get(key);
     if (!chunk) {
       const t0 = performance.now();
+      outdoor = this.outdoor;
       chunk = buildChunk(grid, x, y);
       this.buildMs = performance.now() - t0;
       this.chunks.set(key, chunk);

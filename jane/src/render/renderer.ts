@@ -187,7 +187,7 @@ export class Renderer {
     const key = `${sim.state.seed}:${sim.me.zone}`;
     if (key !== this.zoneKey) {
       this.zoneKey = key;
-      this.tiles.setGrid(sim.rt.grid);
+      this.tiles.setGrid(sim.rt.grid, !bp.indoor);
       this.prev.clear();
       this.propShown.clear();
       this.camReady = false;
