@@ -175,3 +175,81 @@ export function buildCellar(seed: number, attempt: number): Blueprint {
   k.rect("cellar", { cx: 0, cy: 0, w: CELLAR_W, h: CELLAR_H });
   return k.done("Julie's Cellar", true, 0.3, attempt);
 }
+
+// --- Castle: the two doors on the square that open ------------------------------------------
+//
+// The Castle Arms and St Anne's. Small rooms, full: a Zelda house is a counter, a fire, a
+// table and somebody to talk to. Both are the same on every seed. They register themselves
+// from world/zones/arms.ts and world/zones/church.ts.
+
+/** The Castle Arms: the tap room, the bar, a fire, the regulars, and a room at the back with a bed. */
+export function buildArms(seed: number, attempt: number): Blueprint {
+  const k = new Kit("arms", 34, 25, seed, attempt, Tile.Wall);
+  k.fill(2, 2, 30, 20, Tile.FloorWood);
+  // The back room: a partition with a doorway in it.
+  k.fill(23, 2, 1, 8, Tile.Wall);
+  k.fill(23, 10, 9, 1, Tile.Wall);
+  k.fill(27, 10, 2, 1, Tile.FloorWood);
+  k.rect("tap_room", { cx: 2, cy: 2, w: 21, h: 20 });
+
+  k.prop({ key: "exit_door", def: "door", cx: 15, cy: 22, to: { zone: "county", mark: "arms_front" }, label: "The street" }, 2, 2);
+  k.mark("entry", 15, 20, 3);
+
+  // The bar along the north wall, the shelves behind it, the landlady in front of it.
+  k.prop({ def: "shelf", cx: 4, cy: 2 }, 3, 1);
+  k.prop({ def: "shelf", cx: 8, cy: 2 }, 3, 1);
+  k.prop({ key: "arms_bar", def: "town_bar", cx: 4, cy: 4 }, 3, 2);
+  k.prop({ def: "town_bar", cx: 7, cy: 4 }, 3, 2);
+  k.prop({ def: "town_bar", cx: 10, cy: 4 }, 3, 2);
+  k.unit("mrs_garland", "town_landlady", 8, 8).facing = 1;
+  k.prop({ key: "arms_notice", def: "sign", cx: 14, cy: 2, talk: "arms_notice" }, 2, 1);
+  k.prop({ def: "barrel", cx: 18, cy: 2 }, 2, 2);
+  k.prop({ def: "barrel", cx: 20, cy: 2 }, 2, 2);
+  k.prop({ def: "barrel", cx: 19, cy: 5, loot: [{ item: "small_water", qty: 1 }] }, 2, 2);
+
+  // The fire, and four tables, two of them taken.
+  k.prop({ key: "arms_stove", def: "stove", cx: 2, cy: 11 }, 2, 2);
+  k.prop({ def: "table", cx: 7, cy: 12 }, 3, 2);
+  k.prop({ def: "table", cx: 14, cy: 12 }, 3, 2);
+  k.prop({ def: "table", cx: 7, cy: 17 }, 3, 2);
+  k.prop({ def: "table", cx: 14, cy: 17 }, 3, 2);
+  k.unit("mr_quill", "town_regular", 10, 13).facing = 2;
+  k.unit("mr_ennis", "town_regular_b", 17, 18).facing = 2;
+  k.prop({ def: "torch", cx: 2, cy: 3 }, 1, 1);
+  k.prop({ def: "torch", cx: 22, cy: 15 }, 1, 1);
+  k.prop({ def: "torch", cx: 2, cy: 20 }, 1, 1);
+
+  // The room at the back. The door locks from her side; nobody comes in.
+  k.prop({ key: "arms_bed", def: "bed", cx: 29, cy: 3, talk: "arms_bed" }, 2, 3);
+  k.prop({ def: "shelf", cx: 25, cy: 2 }, 3, 1);
+  k.prop({ def: "torch", cx: 24, cy: 8 }, 1, 1);
+  // Beyond the partition, the rest of the house: kegs and the landing.
+  k.prop({ def: "crate", cx: 25, cy: 14 }, 2, 2);
+  k.prop({ def: "barrel", cx: 28, cy: 14 }, 2, 2);
+  k.prop({ def: "barrel", cx: 28, cy: 18 }, 2, 2);
+  return k.done("The Castle Arms", true, 0.7, attempt);
+}
+
+/** St Anne's: pews either side of an aisle, the altar and its candles, the book by the door, and the vicar. */
+export function buildChurch(seed: number, attempt: number): Blueprint {
+  const k = new Kit("church", 22, 36, seed, attempt, Tile.TempleWall);
+  k.fill(2, 2, 18, 30, Tile.TempleFloor);
+  k.rect("nave", { cx: 2, cy: 2, w: 18, h: 30 });
+  k.prop({ key: "exit_door", def: "door", cx: 10, cy: 32, to: { zone: "county", mark: "church_door" }, label: "The square" }, 2, 2);
+  k.mark("entry", 10, 30, 3);
+
+  k.prop({ key: "altar", def: "town_altar", cx: 9, cy: 3, talk: "altar" }, 4, 2);
+  k.prop({ def: "torch", cx: 5, cy: 3 }, 1, 1);
+  k.prop({ def: "torch", cx: 16, cy: 3 }, 1, 1);
+  k.unit("vicar", "town_vicar", 10, 7).facing = 1;
+  for (let y = 10; y <= 25; y += 3) {
+    k.prop({ def: "town_pew", cx: 3, cy: y }, 4, 1);
+    k.prop({ def: "town_pew", cx: 15, cy: y }, 4, 1);
+  }
+  k.prop({ def: "torch", cx: 2, cy: 17 }, 1, 1);
+  k.prop({ def: "torch", cx: 19, cy: 17 }, 1, 1);
+  k.prop({ def: "table", cx: 15, cy: 28 }, 3, 2);
+  k.prop({ key: "visitors_book", def: "note", cx: 14, cy: 29, talk: "visitors_book" }, 1, 1);
+  k.prop({ def: "shelf", cx: 3, cy: 30 }, 3, 1);
+  return k.done("St Anne's", true, 0.55, attempt);
+}

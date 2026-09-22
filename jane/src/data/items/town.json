@@ -1,0 +1,18 @@
+{
+  "town_letter": {
+    "name": "Misdirected Letter",
+    "icon": "item_letter",
+    "maxStack": 3,
+    "usable": false,
+    "cooldown": 1,
+    "description": "Second post, Castle. Miss Dray has written the right address across the front in pencil. The postmark is next Sunday's."
+  },
+  "town_washing": {
+    "name": "Washing",
+    "icon": "item_washing",
+    "maxStack": 3,
+    "usable": false,
+    "cooldown": 1,
+    "description": "Off Mrs Marsh's line at No. 5, High Street. It is bone dry, and it went wet."
+  }
+}
