@@ -10,6 +10,8 @@ import { addProp, addUnit, moveProp, propsInCells, propsNear } from "@/sim/runti
 import { Sim, type InputFrame } from "@/sim/sim";
 import type { Prop, Unit } from "@/sim/state";
 import { createUnit } from "@/sim/units";
+import { buildCatalog } from "@/sim/catalog";
+import { cloneState, decodeSave, encodeSave, hashState } from "@/sim/save";
 import { walkTo , yardCatalog } from "./bot";
 
 const catalog = yardCatalog();
@@ -143,6 +145,28 @@ describe("tick budget", () => {
     walkTo(sim, skeleton.x, skeleton.y, 20);
     expect(skeleton.combat).toBe("combat");
     expect(skeleton.target).toBe(sim.player.id);
+  });
+
+  // The ring is re-run only when she crosses a block, and a load re-runs it wherever she stands.
+  // It used to measure from her exact position, so a hen at the edge of it could be awake on one
+  // side of a save and asleep on the other. The county is full of things at that edge now.
+  it("save -> load -> continue is the same game in the busy county, wherever in a block she saved", { timeout: 120000 }, () => {
+    const real = buildCatalog();
+    for (const seed of [2026]) {
+      const straight = Sim.newGame(real, seed);
+      for (let t = 0; t < 520; t++) straight.tick(stroll(t));
+      for (const at of [131, 257]) {
+        const first = Sim.newGame(real, seed);
+        for (let t = 0; t < at; t++) first.tick(stroll(t));
+        const text = encodeSave(cloneState(first.state), { zone: "county", day: 0, hour: 17, hp: 1, maxhp: 1 }, new Date(0));
+        const decoded = decodeSave(text);
+        expect(decoded.ok).toBe(true);
+        if (!decoded.ok) return;
+        const resumed = Sim.fromState(real, decoded.file.state);
+        for (let t = at; t < 520; t++) resumed.tick(stroll(t));
+        expect(hashState(resumed.state), `seed ${seed}, saved at tick ${at}`).toBe(hashState(straight.state));
+      }
+    }
   });
 
   it("the buckets find what a pass over the whole zone finds, in id order", () => {

@@ -25,8 +25,14 @@ export function maxMp(u: Unit): number {
 }
 
 /** `is_enemy` was simply `faction !=`. It still is. */
+/**
+ * Everything that bites is her enemy and none of it is anyone else's. The county is thick with
+ * camps of different families now, a ruffian's fire forty metres from a nest of rats; if every
+ * faction fought every other the fields would empty themselves and the fighting would follow her
+ * round. The county does not take sides against itself: only the friendly side has enemies.
+ */
 export function isEnemy(a: Unit, b: Unit): boolean {
-  return a.faction !== b.faction;
+  return a.faction !== b.faction && (a.faction === "friendly" || b.faction === "friendly");
 }
 
 export function createUnit(

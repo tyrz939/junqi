@@ -107,8 +107,9 @@ describe("the county", () => {
     const bp = county(SEEDS[0]);
     const sk = countySkeleton(SEEDS[0], bp.attempts - 1);
     const wild = bp.units.filter((u) => u.phase !== undefined);
-    expect(wild.length).toBeGreaterThan(300);
-    expect(wild.length).toBeLessThan(1500);
+    // The density brief (2026-09-23): thousands, not hundreds. Mobs everywhere off the road, like a WoW zone.
+    expect(wild.length).toBeGreaterThan(2500);
+    expect(wild.length).toBeLessThan(9000);
     for (const u of wild) {
       const threat = sk.threat[at(u.cx >> 4, u.cy >> 4)];
       expect(threat).toBeGreaterThan(0);

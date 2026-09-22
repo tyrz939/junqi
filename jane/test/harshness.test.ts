@@ -545,6 +545,37 @@ describe("harshness", () => {
     expect(nightLost).toBeGreaterThan(dayLost * 1.25);
   });
 
+  // The density brief (2026-09-23): "one should be able to walk around, but cautiously, and probably
+  // have things chasing them half the time if they're off the path. Paths kind of safe." A walker who
+  // never swings crosses the county by day, off the road and on it, several routes per threat band,
+  // and the harness counts the share of her walking time something that bites was after her.
+  it("off the road something is after her about half the time; on the road, seldom", { timeout: 240000 }, async () => {
+    const sim = countySim(TABLE_SEED, 11);
+    const attempt = sim.rt.bp.attempts - 1;
+    const lines = [row(["threat", "where", "walks m", "chased %", "noticed/100m", "HP/100m"])];
+    const sum = { off: { ticks: 0, chased: 0 }, road: { ticks: 0, chased: 0 } };
+    for (let threat = 1; threat <= 5; threat++) {
+      for (const [name, routes] of [
+        ["open country", offRoadRoutes(TABLE_SEED, attempt, threat)],
+        ["road", roadRoutes(TABLE_SEED, attempt, threat)],
+      ] as const) {
+        const w = walkSome(sim, routes, 3);
+        await new Promise((done) => setTimeout(done, 0));
+        if (!w) continue;
+        const s = name === "road" ? sum.road : sum.off;
+        s.ticks += w.ticks;
+        s.chased += w.chased;
+        lines.push(row([threat, name, Math.round(w.metres), Math.round((100 * w.chased) / Math.max(1, w.ticks)), n1(per100(w, w.noticed)), n1(per100(w, w.lost))]));
+      }
+    }
+    const off = sum.off.chased / Math.max(1, sum.off.ticks);
+    const road = sum.road.chased / Math.max(1, sum.road.ticks);
+    console.log(`\nchased, by day, seed ${TABLE_SEED}\n${lines.join("\n")}\noff the road ${Math.round(off * 100)}% of the time, on it ${Math.round(road * 100)}%`);
+    expect(off, "off the road nothing much comes").toBeGreaterThan(0.3);
+    expect(off, "off the road is a running fight, not a walk").toBeLessThan(0.9);
+    expect(road, "the road is not the safe way").toBeLessThan(0.2);
+  });
+
   it("the county is populated: creatures stand in the threatened patches, on every seed", () => {
     const lines: string[] = [];
     lines.push(row(["seed", "threat", "macros", "creatures", "per km2"]));

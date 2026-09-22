@@ -57,7 +57,7 @@ const CAMP_BACK = 26;
 /** Nothing that bites within this of the first walk (station, Julie's, the town). */
 const FIRST_CLEAR = 44;
 /** Wildlife: the chance a macro cell away from the road has something in it, by threat. */
-const WILD = [0, 0.022, 0.032, 0.05, 0.08, 0.1, 0.12];
+const WILD = [0, 0.018, 0.026, 0.04, 0.09, 0.11, 0.13];
 /** A screen, for the last pass: the camera's view in cells. */
 const SCREEN_W = 48;
 const SCREEN_H = 27;
@@ -69,10 +69,10 @@ const DH = Math.ceil(2000 / DB);
 
 /** What the builder may build over: open ground and growth, never water, a road or anything made. */
 const BUILDABLE = new Uint8Array(64);
-for (const t of [Tile.Grass, Tile.GrassTall, Tile.Dirt, Tile.Bush, Tile.Tree, Tile.Moss, Tile.Garden, Tile.DryBed, Tile.Sand, Tile.Rubble, Tile.Cobble, Tile.Track, Tile.Rail]) BUILDABLE[t] = 1;
+for (const t of [Tile.Grass, Tile.GrassTall, Tile.Dirt, Tile.Bush, Tile.Tree, Tile.Pine, Tile.DeadTree, Tile.Moss, Tile.Garden, Tile.Crops, Tile.FlowerBed, Tile.DryBed, Tile.Sand, Tile.Rubble, Tile.Cobble, Tile.Track, Tile.Rail]) BUILDABLE[t] = 1;
 /** Ground a lane may be laid over. */
 const SOFT = new Uint8Array(64);
-for (const t of [Tile.Grass, Tile.GrassTall, Tile.Bush, Tile.Tree, Tile.Moss, Tile.DryBed, Tile.Sand]) SOFT[t] = 1;
+for (const t of [Tile.Grass, Tile.GrassTall, Tile.Bush, Tile.Tree, Tile.Pine, Tile.DeadTree, Tile.Moss, Tile.DryBed, Tile.Sand]) SOFT[t] = 1;
 
 const WILDLIFE: Record<Region, { def: string; biomes?: Biome[] }[]> = {
   [Region.Lowfields]: [
@@ -236,7 +236,7 @@ function clear(c: Ctx, x0: number, y0: number, w: number, h: number, t: Tile = T
   for (let y = y0; y < y0 + h; y++) {
     for (let x = x0; x < x0 + w; x++) {
       const was = k.get(x, y);
-      if (was === Tile.Tree || was === Tile.Bush || was === Tile.Rubble) k.set(x, y, t);
+      if (was === Tile.Tree || was === Tile.Pine || was === Tile.DeadTree || was === Tile.Bush || was === Tile.Rubble) k.set(x, y, t);
     }
   }
 }
@@ -356,7 +356,7 @@ function run(c: Ctx, x0: number, y0: number, len: number, horizontal: boolean, t
     const y = horizontal ? y0 : y0 + i;
     if (gateEvery > 0 && i % gateEvery >= gateEvery - 3) continue;
     const was = k.get(x, y);
-    if (!(was === Tile.Grass || was === Tile.GrassTall || was === Tile.Moss || was === Tile.Bush || was === Tile.Tree) || k.isClaimed(x, y)) continue;
+    if (!(was === Tile.Grass || was === Tile.GrassTall || was === Tile.Moss || was === Tile.Bush || was === Tile.Tree || was === Tile.Pine) || k.isClaimed(x, y)) continue;
     k.set(x, y, t);
   }
 }
@@ -666,8 +666,8 @@ function fences(c: Ctx): void {
       const biome = sk.biome[m] as Biome;
       let t: Tile | null = null;
       if (region === Region.Lowfields && (biome === Biome.Field || biome === Biome.Hedge)) t = biome === Biome.Hedge ? Tile.Bush : Tile.Fence;
-      else if (region === Region.Lowfields && biome === Biome.Foothill) t = Tile.Wall;
-      else if (region === Region.Waters && (biome === Biome.Garden || biome === Biome.Reed)) t = biome === Biome.Garden ? Tile.Wall : Tile.Fence;
+      else if (region === Region.Lowfields && biome === Biome.Foothill) t = Tile.StoneWall;
+      else if (region === Region.Waters && (biome === Biome.Garden || biome === Biome.Reed)) t = biome === Biome.Garden ? Tile.StoneWall : Tile.Fence;
       if (t === null || !k.chance(0.7)) continue;
       const horizontal = Math.abs(b[0] - a[0]) >= Math.abs(b[1] - a[1]) * 3;
       const vertical = Math.abs(b[1] - a[1]) >= Math.abs(b[0] - a[0]) * 3;
@@ -814,7 +814,8 @@ function alongRoads(c: Ctx): void {
           if (placed) break;
         }
       }
-      next = i + (placed ? 64 + k.roll(40) : 10);
+      // The first walk is the establishing shot, and gets something about twice as often.
+      next = i + (placed ? (c.firstLines.has(n) ? 36 + k.roll(20) : 60 + k.roll(36)) : 10);
     }
   }
 }
@@ -939,7 +940,7 @@ function stamp(c: Ctx, kind: Kind, x: number, y: number): boolean {
       pad(c, x, y, 5, 4, Tile.Cobble);
       put(c, "well", x - 1, y - 2, { talk: "country_well" });
       put(c, "trough", x + 2, y + 1);
-      put(c, "bench", x - 5, y + 1);
+      put(c, "log", x - 5, y + 1);
       break;
     case "wreck":
       pad(c, x, y, 5, 3, Tile.Dirt);
@@ -1027,6 +1028,7 @@ function hamlet(c: Ctx, x0: number, y0: number): void {
     const hx = x0 + sx + (i === slots.length - 1 && w === 9 ? -1 : 0);
     put(c, def, hx, y0 + 1, { talk: k.pick(DOORS) });
     put(c, "flowerbed", hx + (k.chance(0.5) ? 0 : w - 2), y0 + 7);
+    if (k.chance(0.5)) for (let i = 0; i < 3; i++) k.set(hx + 3 + i, y0 + 8, Tile.FlowerBed);
   });
   // The green: worn ground, and the well in the middle of it.
   const gx = x0 + 18;
@@ -1035,14 +1037,14 @@ function hamlet(c: Ctx, x0: number, y0: number): void {
   pad(c, gx, gy, 4, 2.5, Tile.Cobble);
   put(c, "well", gx - 1, gy - 1, { talk: "country_well" });
   put(c, "trough", gx + 3, gy + 1);
-  put(c, "bench", gx - 7, gy - 1);
+  put(c, "log", gx - 7, gy - 1);
   // South of the green: a hen house and its hens, a vegetable plot, a line of washing.
   put(c, "hen_coop", x0 + 4, y0 + 22, { talk: "country_coop" });
   for (let h = 0; h < 3; h++) folk(c, "hen", x0 + 3 + k.roll(6), y0 + 24 + k.roll(3), 3);
   const plotX = x0 + 21;
   const plotY = y0 + 21;
-  for (let j = 0; j < 6; j++) for (let i = 0; i < 12; i++) k.set(plotX + i, plotY + j, j % 2 === 0 ? Tile.Garden : Tile.Dirt);
-  for (let i = 0; i < 12; i += 2) for (let j = 0; j < 6; j += 2) put(c, "crop", plotX + i, plotY + j);
+  for (let j = 0; j < 6; j++) for (let i = 0; i < 12; i++) k.set(plotX + i, plotY + j, j % 2 === 0 ? Tile.Crops : Tile.Dirt);
+  for (let i = 1; i < 12; i += 4) put(c, "crop", plotX + i, plotY + 2);
   run(c, plotX - 1, plotY + 6, 14, true, Tile.Fence);
   put(c, "washing_line", x0 + 11, y0 + 24);
   if (k.chance(0.5)) put(c, "woodpile", x0 + 13, y0 + 20);
@@ -1073,8 +1075,8 @@ function farmstead(c: Ctx, x0: number, y0: number): void {
   // The field: rows of crops inside a fence, the gate on the yard.
   const fx = x0 + 1;
   const fy = y0 + 15;
-  for (let j = 1; j < 13; j++) for (let i = 1; i < 23; i++) k.set(fx + i, fy + j, j % 2 === 1 ? Tile.Garden : Tile.Grass);
-  for (let j = 1; j < 13; j += 2) for (let i = 2; i < 22; i += 2) put(c, "crop", fx + i, fy + j);
+  for (let j = 1; j < 13; j++) for (let i = 1; i < 23; i++) k.set(fx + i, fy + j, j % 2 === 1 ? Tile.Crops : Tile.Dirt);
+  for (let j = 1; j < 13; j += 4) for (let i = 3; i < 22; i += 6) put(c, "crop", fx + i, fy + j);
   pen(c, fx, fy, 24, 14, "n");
   if (k.chance(0.6)) put(c, "scarecrow", fx + 11, fy + 6);
   // The sheep pen.
@@ -1103,8 +1105,8 @@ function cottage(c: Ctx, x0: number, y0: number): void {
   // The garden to the east: a fenced plot, rows and a gate.
   const gx = x0 + 12;
   const gy = y0 + 2;
-  for (let j = 1; j < 9; j++) for (let i = 1; i < 9; i++) k.set(gx + i, gy + j, j % 2 === 1 ? Tile.Garden : Tile.Dirt);
-  for (let j = 1; j < 9; j += 2) for (let i = 1; i < 9; i += 2) put(c, "crop", gx + i, gy + j);
+  for (let j = 1; j < 9; j++) for (let i = 1; i < 9; i++) k.set(gx + i, gy + j, j % 2 === 1 ? Tile.Crops : Tile.Dirt);
+  for (let j = 1; j < 9; j += 4) put(c, "crop", gx + 2 + k.roll(5), gy + j);
   pen(c, gx, gy, 10, 10, "s");
   put(c, k.chance(0.5) ? "woodpile" : "beehive", x0 + 1, y0 + 10);
   if (k.chance(0.6)) put(c, "washing_line", x0 + 4, y0 + 12);
@@ -1121,8 +1123,8 @@ function inn(c: Ctx, x0: number, y0: number): void {
   put(c, "lamp_post", x0 + 15, y0 + 9);
   put(c, "trough", x0 + 16, y0 + 12);
   put(c, "hay_cart", x0 + 20, y0 + 14);
-  put(c, "bench", x0 + 3, y0 + 10);
-  put(c, "bench", x0 + 8, y0 + 13);
+  put(c, "log", x0 + 3, y0 + 10);
+  put(c, "log", x0 + 8, y0 + 13);
   put(c, "barrel", x0 + 24, y0 + 2);
   put(c, "barrel", x0 + 24, y0 + 5);
   folk(c, "folk_keeper", x0 + 10, y0 + 10, 3);
@@ -1151,8 +1153,8 @@ function orchard(c: Ctx, x0: number, y0: number): void {
 function field(c: Ctx, x0: number, y0: number, w: number, h: number): void {
   const k = c.k;
   const crop = k.chance(0.5);
-  for (let j = 1; j < h - 1; j++) for (let i = 1; i < w - 1; i++) k.set(x0 + i, y0 + j, j % 2 === 1 ? Tile.Garden : crop ? Tile.Dirt : Tile.Grass);
-  for (let j = 1; j < h - 1; j += 2) for (let i = 2; i < w - 2; i += 2) if (crop || k.chance(0.3)) put(c, "crop", x0 + i, y0 + j);
+  for (let j = 1; j < h - 1; j++) for (let i = 1; i < w - 1; i++) k.set(x0 + i, y0 + j, j % 2 === 1 ? (crop ? Tile.Crops : Tile.Garden) : crop ? Tile.Dirt : Tile.Grass);
+  for (let j = 1; j < h - 1; j += 4) for (let i = 3; i < w - 2; i += 6) put(c, "crop", x0 + i, y0 + j);
   const gate = roadSide(c, x0 + (w >> 1), y0 + (h >> 1));
   pen(c, x0, y0, w, h, gate, k.chance(0.25) ? Tile.Bush : Tile.Fence);
   if (k.chance(0.45)) put(c, "scarecrow", x0 + (w >> 1) - 1, y0 + (h >> 1));
@@ -1376,7 +1378,7 @@ function graves(c: Ctx, x0: number, y0: number): void {
   const h = 10;
   const gx = x0 + 1;
   const gy = y0 + 1;
-  pen(c, gx, gy, w, h, "s", Tile.Wall);
+  pen(c, gx, gy, w, h, "s", Tile.StoneWall);
   for (let j = 0; j < 2; j++) for (let i = 0; i < 4; i++) if (k.chance(0.8)) put(c, "gravestone", gx + 2 + i * 3, gy + 2 + j * 3, i === 1 && j === 0 ? { talk: "country_grave" } : {});
   put(c, "flowers", gx + 6, gy + 7);
 }

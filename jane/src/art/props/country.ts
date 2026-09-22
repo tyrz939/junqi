@@ -301,33 +301,6 @@ function building(o: House): SpriteSrc {
 
 // --- small things, drawn by hand -------------------------------------------------------------
 
-const WELL = [
-  "....kkkkkkkk....",
-  "..kkjjjjjjjjkk..",
-  ".kjjjJjjjJjjjJk.",
-  "kjjJjjjJjjjJjjjk",
-  "kJJJJJJJJJJJJJJk",
-  "kkkkkkkkkkkkkkkk",
-  "..kt........Tk..",
-  "..kt.kkkkkk.Tk..",
-  "..kttkdddddkTk..",
-  "..kt.kmmmmk.Tk..",
-  "..kt..kttk..Tk..",
-  "..kt...kk...Tk..",
-  ".kkckkkkkkkkkCk.",
-  "kWccWccWccWcCCCk",
-  "kcCccCccCccCcCCk",
-  "kkxxxxxxxxxxxxkk",
-  "kcxBbxxxxxxxBxCk",
-  "kccxxxxxxxxxxCCk",
-  "kWccWccWccWcCCCk",
-  "kcCccCccCccCcCCk",
-  "kccCccCccCccCCCk",
-  "kCCCCCCCCCCCCCCk",
-  ".kkkkkkkkkkkkkk.",
-  "..============..",
-];
-
 const HAYSTACK = [
   "......kkkk......",
   "....kkhhaakk....",
@@ -738,7 +711,6 @@ const sheet: SpriteSheet = {
   inn: building({ w: 12, h: 7, roof: "slate", wall: "stone", door: 0.55, windows: 4, chimney: 0.12, chimney2: 0.88, sign: true, seed: 8 }),
   reed_hut: building({ w: 6, h: 5, roof: "thatch", wall: "planks", door: 0.5, windows: 1, chimney: null, seed: 9 }),
 
-  well: prop(16, 24, 2, { base: WELL }),
   haystack: prop(16, 20, 2, { base: HAYSTACK }),
   hay_cart: prop(24, 16, 2, { base: HAY_CART }),
   cart_wreck: prop(24, 16, 2, { base: CART_WRECK }),

@@ -94,7 +94,12 @@ export function buildCounty(seed: number, attempt: number, rows: readonly Placem
   const half = (ROAD_WIDTH >> 1) + VERGE;
   for (const r of sk.roads) {
     const pts = r.cells.map((c): [number, number] => [centre(c % SKEL_W), centre(Math.floor(c / SKEL_W))]);
-    const line = k.stroke(pts, ROAD_WIDTH, Tile.Road, 1);
+    // The centre line first, then the metal and the verge painted round it with a ROUND brush: a
+    // square brush drawn along a diagonal makes a road half as wide again as the same road running
+    // straight, and a lane that swells at every bend reads as a mistake.
+    const line = k.stroke(pts, 1, Tile.Road, 1);
+    const metal = ((ROAD_WIDTH >> 1) + 0.25) ** 2;
+    const verge = (half + 0.25) ** 2;
     // A verge along every road, a cell each side of the metal, laid along the road's OWN line so it
     // never wanders off it. Grass does not meet a made road edge on: there is always a band of
     // trodden dirt, and drawing it is what stops the road reading as a stripe laid over a field.
@@ -102,13 +107,27 @@ export function buildCounty(seed: number, attempt: number, rows: readonly Placem
     for (const [x, y] of line) {
       for (let oy = -half; oy <= half; oy++) {
         for (let ox = -half; ox <= half; ox++) {
+          const d = ox * ox + oy * oy;
+          if (d > verge) continue;
           const t = k.get(x + ox, y + oy);
-          if (t !== Tile.Road && t !== Tile.Water) k.set(x + ox, y + oy, Tile.Dirt);
+          if (d <= metal) k.set(x + ox, y + oy, Tile.Road);
+          else if (t !== Tile.Road && t !== Tile.Water) k.set(x + ox, y + oy, Tile.Dirt);
         }
       }
     }
     lines.push(line);
     lit.push(line.map(([x, y]) => (sk.road[at(Math.min(SKEL_W - 1, x >> 4), Math.min(SKEL_H - 1, y >> 4))] & ROAD_LIT) !== 0));
+  }
+  // Where a road crosses water it is a bridge, and a bridge is a deck of planks, not a stripe of road on the river.
+  for (const line of lines) {
+    for (const [x, y] of line) {
+      for (let oy = -1; oy <= 1; oy++) {
+        for (let ox = -1; ox <= 1; ox++) {
+          const i = (y + oy) * COUNTY_W + x + ox;
+          if (before[i] === Tile.Water && k.tiles[i] === Tile.Road) k.tiles[i] = Tile.Boardwalk;
+        }
+      }
+    }
   }
   // The Burial Chamber is off the road on purpose. A footpath from the graveyard finds it, and only that.
   const grave = sk.sites.find((s) => s.id === "graveyard");
@@ -157,9 +176,21 @@ export function buildCounty(seed: number, attempt: number, rows: readonly Placem
     if (a < 0 || b <= a) continue;
     const pa = line[Math.min(b, a + 24)];
     const pb = line[Math.max(a, b - 24)];
-    for (const [name, p] of [[row.marks[0], pa], [row.marks[1], pb]] as const) {
+    const ends = [
+      [row.marks[0], pa, row.to],
+      [row.marks[1], pb, row.from],
+    ] as const;
+    for (const [name, p, toward] of ends) {
       clearing(k, p[0], p[1]);
       k.mark(name, p[0], p[1], 1);
+      // A fingerpost where the footpath leaves the road, saying where it goes. Beside the stile, not on it.
+      const there = sk.sites.find((s) => s.id === toward);
+      const metres = Math.round((Math.abs(b - a) * 1.1) / 50) * 50;
+      for (const [ox, oy] of [[2, -1], [-3, -1], [2, 1], [-3, 1]] as const) {
+        if (!there || !k.fits(p[0] + ox, p[1] + oy, 2, 1)) continue;
+        k.prop({ def: "fingerpost", cx: p[0] + ox, cy: p[1] + oy, label: "A fingerpost", use: [{ do: "toast", text: `FOOTPATH. ${there.name.toUpperCase()}, ${metres < 1000 ? `${metres} m` : `${(metres / 1000).toFixed(1)} km`}.` }] }, 2, 1);
+        break;
+      }
     }
   }
 
@@ -188,7 +219,8 @@ export function buildCounty(seed: number, attempt: number, rows: readonly Placem
     let size = { w: 2, h: 2 };
     if (!d.chunk && chunk) {
       size = footprints![d.def ?? "door"] ?? size;
-      const spot = k.spot({ cx: chunk.box.cx - 14, cy: chunk.box.cy - 14, w: chunk.box.w + 28, h: chunk.box.h + 28 }, size.w, size.h, 1, 200);
+      // Room for the cover and for somebody to stand in front of it: open ground three deep below it.
+      const spot = k.spot({ cx: chunk.box.cx - 14, cy: chunk.box.cy - 14, w: chunk.box.w + 28, h: chunk.box.h + 28 }, size.w, size.h + 3, 1, 200);
       cell = spot ? [spot.cx, spot.cy] : undefined;
     }
     if (!cell) continue;
@@ -417,17 +449,18 @@ function ground(biome: Biome, clump: number, r: number, x: number, y: number, s:
       return r < 0.006 ? T.Tree : r < 0.16 ? T.GrassTall : T.Grass;
     }
     case B.Wood:
-      return clump > 0.66 || r < 0.05 ? T.Tree : r < 0.4 ? T.GrassTall : T.Grass;
+      return clump > 0.8 ? T.Pine : clump > 0.66 || r < 0.05 ? T.Tree : r < 0.4 ? T.GrassTall : T.Grass;
     case B.Foothill:
-      return clump > 0.74 ? T.Cliff : r < 0.02 ? T.Tree : clump < 0.3 ? T.Dirt : r < 0.2 ? T.GrassTall : T.Grass;
+      return clump > 0.74 ? T.Cliff : r < 0.02 ? T.Pine : clump < 0.3 ? T.Dirt : r < 0.2 ? T.GrassTall : T.Grass;
     case B.Reed:
-      return clump > 0.78 ? T.Water : r < 0.55 ? T.GrassTall : T.Moss;
+      // Patches of reed and of moss, not a salt-and-pepper of both: the smooth field decides.
+      return clump > 0.78 ? T.Water : clump > 0.47 ? T.GrassTall : T.Moss;
     case B.Marsh:
       return clump > 0.76 ? T.Water : clump < 0.22 ? T.DryBed : r < 0.3 ? T.GrassTall : r < 0.34 ? T.Bush : T.Moss;
     case B.WetWood:
       return clump > 0.68 || r < 0.05 ? T.Tree : r < 0.5 ? T.Moss : T.GrassTall;
     case B.Garden:
-      return clump > 0.7 ? T.Bush : r < 0.03 ? T.Rubble : r < 0.4 ? T.Garden : T.Grass;
+      return clump > 0.7 ? T.Bush : r < 0.03 ? T.Rubble : clump > 0.44 ? T.Garden : T.Grass;
     case B.Slag:
       // Rubble is solid: a scatter of it is cover, a carpet of it is a maze.
       return clump > 0.78 ? T.Cliff : r < 0.05 ? T.Rubble : clump < 0.3 ? T.DryBed : T.Dirt;
@@ -755,7 +788,7 @@ function clearing(k: Kit, x: number, y: number): void {
   for (let oy = -5; oy <= 5; oy++) {
     for (let ox = -7; ox <= 7; ox++) {
       const t = k.get(x + ox, y + oy);
-      if (t === Tile.Tree || t === Tile.Bush || t === Tile.Cliff || t === Tile.Rubble) k.set(x + ox, y + oy, Tile.Grass);
+      if (t === Tile.Tree || t === Tile.Pine || t === Tile.DeadTree || t === Tile.Bush || t === Tile.Cliff || t === Tile.Rubble) k.set(x + ox, y + oy, Tile.Grass);
     }
   }
 }

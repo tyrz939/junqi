@@ -519,6 +519,8 @@ export function validateCatalog(c: Catalog): string[] {
   for (const [id, u] of Object.entries(c.units)) {
     const at = `units.${id}`;
     need(u.strength > 0, `${at}: strength must be > 0`);
+    // What bites looks only at the party's bodies for a target (sim/ai.ts nearestEnemy): a friendly row that fights would be invisible to it.
+    need(u.faction !== "friendly" || u.controller === "npc" || u.controller === "player", `${at}: a friendly unit is a person or the player (npc or player controller)`);
     for (const s of u.book) need(s in c.spells, `${at}: unknown spell "${s}"`);
     for (const p of u.phases ?? []) for (const s of p.book) need(s in c.spells, `${at}: unknown phase spell "${s}"`);
     (u.phases ?? []).forEach((p, n) => {

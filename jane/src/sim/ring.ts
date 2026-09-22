@@ -24,8 +24,14 @@ export function stepRing(w: World, force = false): void {
   for (const p of playersHere(w)) {
     const body = w.rt.units.get(p.unitId);
     if (!body) continue;
-    centres.push(body.x, body.y);
-    key += `${Math.floor(body.x / RING_BLOCK)},${Math.floor(body.y / RING_BLOCK)};`;
+    // Measured from the middle of the block she is in, not from where in it she stands. The ring
+    // is only re-run when she crosses a block, and a load re-runs it wherever she was: measured
+    // from her exact position, a unit at the ring's edge woke on one side of a save and slept on
+    // the other, and the game after a load was not the game that was saved.
+    const bx = Math.floor(body.x / RING_BLOCK);
+    const by = Math.floor(body.y / RING_BLOCK);
+    centres.push((bx + 0.5) * RING_BLOCK, (by + 0.5) * RING_BLOCK);
+    key += `${bx},${by};`;
   }
   if (!force && key === w.rt.ringKey) return;
   w.rt.ringKey = key;
