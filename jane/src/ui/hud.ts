@@ -7,6 +7,7 @@ import type { SimEvent } from "@/sim/events";
 import { focusOf } from "@/sim/interact";
 import { bagCount } from "@/sim/inventory";
 import { requirementCount } from "@/sim/quests";
+import { expandText } from "@/sim/text";
 import type { PlayerView as Sim } from "@/sim/sim";
 import type { BarSlot, Unit } from "@/sim/state";
 import { isEnemy, maxHp, maxMp } from "@/sim/units";
@@ -470,10 +471,10 @@ export class Hud {
         const n = requirementCount(sim, def, prog, i);
         const done = n >= r.qty;
         if (!done) ready = false;
-        return { text: `${r.text} ${n}/${r.qty}`, done };
+        return { text: `${expandText(sim.state, r.text)} ${n}/${r.qty}`, done };
       });
       // Who takes it back (data/quests: `returnTo`). Shown once every step is done, in place of the steps.
-      const back = (def as { returnTo?: string }).returnTo ?? "";
+      const back = expandText(sim.state, (def as { returnTo?: string }).returnTo ?? "");
       rows.push({ name: def.name, ready, back, reqs });
       sig += `${prog.quest}:${ready}:${reqs.map((r) => r.text).join(",")};`;
     }

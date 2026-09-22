@@ -1,0 +1,3592 @@
+{
+  "story_ames": {
+    "speaker": "Mr Ames",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "ames_spectacles"
+          }
+        ],
+        "node": "in_1"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "ames_spectacles"
+          }
+        ],
+        "node": "after"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "ames_spectacles"
+          }
+        ],
+        "node": "wait_1"
+      },
+      {
+        "node": "offer_1"
+      }
+    ],
+    "nodes": {
+      "offer_1": {
+        "lines": [
+          "I've put my spectacles down in the garden and I can't see to find them. You'll appreciate the difficulty.",
+          "They'll be by the beans. The garden gate is round the side."
+        ],
+        "options": [
+          {
+            "label": "I'll look",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "ames_spectacles"
+              }
+            ]
+          },
+          {
+            "label": "Not now"
+          }
+        ]
+      },
+      "wait_1": {
+        "lines": [
+          "In the garden, by the rows. I'd go myself, but I'd only tread on them."
+        ]
+      },
+      "in_1": {
+        "lines": [
+          "That's them. Thank you.",
+          "Have an apple. Have two. I sit out here and watch the road, and there's nobody on it to give them to."
+        ],
+        "options": [
+          {
+            "label": "Here you are",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "ames_spectacles"
+              },
+              {
+                "do": "take",
+                "item": "ames_spectacles",
+                "qty": 1
+              }
+            ]
+          }
+        ]
+      },
+      "after": {
+        "lines": [
+          "I stay out here till the bell, then I go in. I don't know who started that. Everybody does it."
+        ]
+      }
+    }
+  },
+  "story_tull": {
+    "speaker": "Mr Tull",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "tull_billhook"
+          }
+        ],
+        "node": "in_1"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "tull_billhook"
+          }
+        ],
+        "node": "after"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "tull_billhook"
+          }
+        ],
+        "node": "wait_1"
+      },
+      {
+        "node": "offer_1"
+      }
+    ],
+    "nodes": {
+      "offer_1": {
+        "lines": [
+          "You've not seen a bill-hook? Hooked blade, ash handle. I put it down in the clearing and turned round, and it wasn't there.",
+          "It'll be there. Things always are, out here. They're just not there while you're looking."
+        ],
+        "options": [
+          {
+            "label": "I'll look",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "tull_billhook"
+              }
+            ]
+          },
+          {
+            "label": "Not now"
+          }
+        ]
+      },
+      "wait_1": {
+        "lines": [
+          "In the clearing. I've looked. It wants a different pair of eyes."
+        ]
+      },
+      "in_1": {
+        "lines": [
+          "That's it. Where was it?",
+          "Stuck in by the point? I don't do that. Take some wood. I cut more than I burn. I cut more every year."
+        ],
+        "options": [
+          {
+            "label": "Here you are",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "tull_billhook"
+              },
+              {
+                "do": "take",
+                "item": "tull_billhook",
+                "qty": 1
+              }
+            ]
+          }
+        ]
+      },
+      "after": {
+        "lines": [
+          "I stop at four. The light goes wrong under the trees after four, like it's coming in from the side."
+        ]
+      }
+    }
+  },
+  "story_bettany": {
+    "speaker": "Mrs Bettany",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "bettany_key"
+          }
+        ],
+        "node": "in_1"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "bettany_key"
+          }
+        ],
+        "node": "after"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "bettany_key"
+          }
+        ],
+        "node": "wait_1"
+      },
+      {
+        "node": "offer_1"
+      }
+    ],
+    "nodes": {
+      "offer_1": {
+        "lines": [
+          "I've locked myself out, if you can believe it. The spare's under a stone in the garden.",
+          "I can't think which stone. I've been standing here since the milk came. It's silly, but I don't like to turn my back on the house."
+        ],
+        "options": [
+          {
+            "label": "I'll look",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "bettany_key"
+              }
+            ]
+          },
+          {
+            "label": "Not now"
+          }
+        ]
+      },
+      "wait_1": {
+        "lines": [
+          "In the garden. Under a stone. There are a lot of stones."
+        ]
+      },
+      "in_1": {
+        "lines": [
+          "Oh, that's it. Thank you.",
+          "Take these. They were my mother's pansies, and they come up whatever I do to them."
+        ],
+        "options": [
+          {
+            "label": "Here you are",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "bettany_key"
+              },
+              {
+                "do": "take",
+                "item": "bettany_key",
+                "qty": 1
+              }
+            ]
+          }
+        ]
+      },
+      "after": {
+        "lines": [
+          "I lock it at nine and I check it at ten. Once I found it open at ten. I'd checked it at nine."
+        ]
+      }
+    }
+  },
+  "story_leckie": {
+    "speaker": "Mrs Leckie",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "leckie_sacks"
+          }
+        ],
+        "node": "in_3"
+      },
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "leckie_barn"
+          }
+        ],
+        "node": "in_2"
+      },
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "leckie_eggs"
+          }
+        ],
+        "node": "in_1"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "leckie_sacks"
+          }
+        ],
+        "node": "after"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "leckie_sacks"
+          }
+        ],
+        "node": "wait_3"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "leckie_barn"
+          }
+        ],
+        "node": "offer_3"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "leckie_barn"
+          }
+        ],
+        "node": "wait_2"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "leckie_eggs"
+          }
+        ],
+        "node": "offer_2"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "leckie_eggs"
+          }
+        ],
+        "node": "wait_1"
+      },
+      {
+        "node": "offer_1"
+      }
+    ],
+    "nodes": {
+      "offer_1": {
+        "lines": [
+          "The hens have laid. First time in a week.",
+          "Would you fetch them in from the hen house? I'd like them in before anything else has them. There's more about than there was."
+        ],
+        "options": [
+          {
+            "label": "I'll look",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "leckie_eggs"
+              }
+            ]
+          },
+          {
+            "label": "Not now"
+          }
+        ]
+      },
+      "wait_1": {
+        "lines": [
+          "The hen house, by the farmhouse. Mind the brown one; she's sat on them."
+        ]
+      },
+      "in_1": {
+        "lines": [
+          "Three. That's all of them.",
+          "Have an apple. I'd give you an egg, but I want to see them all in the one bowl for a day or two."
+        ],
+        "options": [
+          {
+            "label": "Here you are",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "leckie_eggs"
+              },
+              {
+                "do": "take",
+                "item": "leckie_eggs",
+                "qty": 3
+              }
+            ]
+          }
+        ]
+      },
+      "offer_2": {
+        "lines": [
+          "He went in the barn after his dinner and he hasn't come out.",
+          "I won't knock. He doesn't like it. Would you? Say it's only about his tea."
+        ],
+        "options": [
+          {
+            "label": "I'll look",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "leckie_barn"
+              }
+            ]
+          },
+          {
+            "label": "Not now"
+          }
+        ]
+      },
+      "wait_2": {
+        "lines": [
+          "The big doors. Knock twice. Say it's about his tea."
+        ]
+      },
+      "in_2": {
+        "lines": [
+          "Counting. He'll be counting the sacks.",
+          "He's counted them every day since March. There were twelve in March. Take these for your trouble."
+        ],
+        "options": [
+          {
+            "label": "It's done",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "leckie_barn"
+              }
+            ]
+          }
+        ]
+      },
+      "offer_3": {
+        "lines": [
+          "He says there's eleven. There should be twelve.",
+          "I know where the other is. It's in the sheep pen. He put it there himself on Sunday. Would you fetch it? If I tell him, he'll only start again from one."
+        ],
+        "options": [
+          {
+            "label": "I'll look",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "leckie_sacks"
+              }
+            ]
+          },
+          {
+            "label": "Not now"
+          }
+        ]
+      },
+      "wait_3": {
+        "lines": [
+          "In the pen with the sheep. Don't say I told you."
+        ]
+      },
+      "in_3": {
+        "lines": [
+          "That's twelve. He'll be out now.",
+          "Take this. It's from the pantry. It's good, whatever it is. My mother put it up, and she always knew."
+        ],
+        "options": [
+          {
+            "label": "Here you are",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "leckie_sacks"
+              },
+              {
+                "do": "take",
+                "item": "leckie_sack",
+                "qty": 1
+              }
+            ]
+          }
+        ]
+      },
+      "after": {
+        "lines": [
+          "He came out for his tea. He sat where he could see the barn door. I didn't ask."
+        ]
+      }
+    }
+  },
+  "story_leckie_barn": {
+    "speaker": "The barn door",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "leckie_barn"
+          }
+        ],
+        "node": "knock"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "leckie_sacks"
+          }
+        ],
+        "node": "count"
+      },
+      {
+        "node": "shut"
+      }
+    ],
+    "nodes": {
+      "knock": {
+        "lines": [
+          "You knock twice and say it is only about his tea.",
+          "Inside, a man's voice says he is counting, and he will be out when he has finished, and would you please not knock again."
+        ],
+        "actions": [
+          {
+            "do": "location",
+            "name": "leckie_barn_knocked"
+          }
+        ]
+      },
+      "count": {
+        "lines": [
+          "\"Eleven,\" says the voice behind the door. \"Eleven.\""
+        ]
+      },
+      "shut": {
+        "lines": [
+          "The big doors are shut. Inside, somebody is moving sacks about, slowly."
+        ]
+      }
+    }
+  },
+  "story_rudd": {
+    "speaker": "Mrs Rudd",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "rudd_next_door"
+          }
+        ],
+        "node": "in_2"
+      },
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "rudd_bucket"
+          }
+        ],
+        "node": "in_1"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "rudd_next_door"
+          }
+        ],
+        "node": "after"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "rudd_next_door"
+          }
+        ],
+        "node": "wait_2"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "rudd_bucket"
+          }
+        ],
+        "node": "offer_2"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "rudd_bucket"
+          }
+        ],
+        "node": "wait_1"
+      },
+      {
+        "node": "offer_1"
+      }
+    ],
+    "nodes": {
+      "offer_1": {
+        "lines": [
+          "Would you draw me a bucket from the well? My arms aren't what they were.",
+          "And taste it, would you? It's tasted of something since March. I'd like somebody young to tell me I'm imagining it."
+        ],
+        "options": [
+          {
+            "label": "I'll look",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "rudd_bucket"
+              }
+            ]
+          },
+          {
+            "label": "Not now"
+          }
+        ]
+      },
+      "wait_1": {
+        "lines": [
+          "The well, on the green. Let the bucket right down. The first of it is always warm."
+        ]
+      },
+      "in_1": {
+        "lines": [
+          "Pennies. Did it taste of pennies?",
+          "That's it. That's exactly it. Take a couple of bottles. It's still good water, whatever it tastes of."
+        ],
+        "options": [
+          {
+            "label": "It's done",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "rudd_bucket"
+              }
+            ]
+          }
+        ]
+      },
+      "offer_2": {
+        "lines": [
+          "I want to know if it's the same next door. I've not asked. We don't, much, since March.",
+          "Would you knock? It's the next house along. Don't say it was me wanted to know."
+        ],
+        "options": [
+          {
+            "label": "I'll look",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "rudd_next_door"
+              }
+            ]
+          },
+          {
+            "label": "Not now"
+          }
+        ]
+      },
+      "wait_2": {
+        "lines": [
+          "The next house along. Knock, and ask about the water. Don't say it was me."
+        ]
+      },
+      "in_2": {
+        "lines": [
+          "Since March. They said since March?",
+          "Nobody said. Well. I didn't ask. Take these, and thank you. I'll go round myself tomorrow. I will."
+        ],
+        "options": [
+          {
+            "label": "It's done",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "rudd_next_door"
+              }
+            ]
+          }
+        ]
+      },
+      "after": {
+        "lines": [
+          "I've been round. We had a cup of tea, pennies and all. We didn't talk about it. We talked about the bell, and how it's been going early."
+        ]
+      }
+    }
+  },
+  "story_rudd_well": {
+    "speaker": "The well",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "rudd_bucket"
+          }
+        ],
+        "node": "draw"
+      },
+      {
+        "node": "still"
+      }
+    ],
+    "nodes": {
+      "draw": {
+        "lines": [
+          "You let the bucket right down and wind it up. The water is clear and very cold.",
+          "It smells of pennies. It tastes of them, too."
+        ],
+        "actions": [
+          {
+            "do": "location",
+            "name": "rudd_well_drawn"
+          }
+        ]
+      },
+      "still": {
+        "lines": [
+          "A stone well with a wooden lid. The bucket is up, and the chain is wet to the top."
+        ]
+      }
+    }
+  },
+  "story_rudd_neighbour": {
+    "speaker": "The door",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "rudd_next_door"
+          }
+        ],
+        "node": "ask"
+      },
+      {
+        "node": "shut"
+      }
+    ],
+    "nodes": {
+      "ask": {
+        "lines": [
+          "You knock. A man answers without opening the door.",
+          "\"Pennies? Since March. We drink it anyway. Would you not knock after the bell, please. We don't answer after the bell.\""
+        ],
+        "actions": [
+          {
+            "do": "location",
+            "name": "rudd_next_door_asked"
+          }
+        ]
+      },
+      "shut": {
+        "lines": [
+          "Nobody comes. The curtains are drawn, and have been drawn some time; the sun has faded them in stripes."
+        ]
+      }
+    }
+  },
+  "story_kember": {
+    "speaker": "Mrs Kember",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "kember_glove"
+          }
+        ],
+        "node": "in_2"
+      },
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "kember_prints"
+          }
+        ],
+        "node": "in_1"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "kember_glove"
+          }
+        ],
+        "node": "after"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "kember_glove"
+          }
+        ],
+        "node": "wait_2"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "kember_prints"
+          }
+        ],
+        "node": "offer_2"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "kember_prints"
+          }
+        ],
+        "node": "wait_1"
+      },
+      {
+        "node": "offer_1"
+      }
+    ],
+    "nodes": {
+      "offer_1": {
+        "lines": [
+          "Somebody knocks at my door after the bell. Most nights now. Three knocks, and when I look there's nobody.",
+          "I won't go out after. But the plot's soft; there'd be prints. Would you look, by daylight?"
+        ],
+        "options": [
+          {
+            "label": "I'll look",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "kember_prints"
+              }
+            ]
+          },
+          {
+            "label": "Not now"
+          }
+        ]
+      },
+      "wait_1": {
+        "lines": [
+          "The vegetable plot, past the green. Look in the rows."
+        ]
+      },
+      "in_1": {
+        "lines": [
+          "A glove? And no prints?",
+          "No. Well. Thank you for looking. Take an apple; I don't want you going without something."
+        ],
+        "options": [
+          {
+            "label": "It's done",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "kember_prints"
+              }
+            ]
+          }
+        ]
+      },
+      "offer_2": {
+        "lines": [
+          "I know that glove. I'd rather not say whose.",
+          "Would you take it next door and ask? Knock three times. No. Knock twice."
+        ],
+        "options": [
+          {
+            "label": "I'll look",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "kember_glove"
+              }
+            ]
+          },
+          {
+            "label": "Not now"
+          }
+        ]
+      },
+      "wait_2": {
+        "lines": [
+          "The next house along. Knock twice."
+        ]
+      },
+      "in_2": {
+        "lines": [
+          "His father's. Yes.",
+          "I'll leave a light on in the window. You have this one. It's a good light, and I've others."
+        ],
+        "options": [
+          {
+            "label": "It's done",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "kember_glove"
+              }
+            ]
+          }
+        ]
+      },
+      "after": {
+        "lines": [
+          "Nobody knocked last night. I sat up for it. I'm not sure that's better."
+        ]
+      }
+    }
+  },
+  "story_kember_neighbour": {
+    "speaker": "The door",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "kember_glove"
+          },
+          {
+            "if": "hasItem",
+            "item": "kember_glove"
+          }
+        ],
+        "node": "ask"
+      },
+      {
+        "node": "shut"
+      }
+    ],
+    "nodes": {
+      "ask": {
+        "lines": [
+          "You knock twice. The door opens the width of its chain, and a man takes the glove and looks at it a long time.",
+          "\"That's my father's,\" he says. \"He went out one night in November, to see who was knocking.\""
+        ],
+        "actions": [
+          {
+            "do": "location",
+            "name": "kember_glove_asked"
+          },
+          {
+            "do": "take",
+            "item": "kember_glove",
+            "qty": 1
+          }
+        ]
+      },
+      "shut": {
+        "lines": [
+          "The chain is on. Through the gap you can see a coat on the hook, and a pair of boots under it, very clean."
+        ]
+      }
+    }
+  },
+  "story_pryor": {
+    "speaker": "Mr Pryor",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "pryor_sitters"
+          }
+        ],
+        "node": "in_1"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "pryor_sitters"
+          }
+        ],
+        "node": "after"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "pryor_sitters"
+          }
+        ],
+        "node": "wait_1"
+      },
+      {
+        "node": "offer_1"
+      }
+    ],
+    "nodes": {
+      "offer_1": {
+        "lines": [
+          "There's men sit round a fire out at {place:pryor_camp}, off the road. A fire nobody's lit. They've sat there since the winter.",
+          "I knew them. We all did. Would you put them down? Gently, if there's a gentle way. I don't want to know how."
+        ],
+        "options": [
+          {
+            "label": "I'll go",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "pryor_sitters"
+              }
+            ]
+          },
+          {
+            "label": "Not now"
+          }
+        ]
+      },
+      "wait_1": {
+        "lines": [
+          "{place:pryor_camp}. Off the road. You'll see the fire, and you'll see it isn't lit."
+        ]
+      },
+      "in_1": {
+        "lines": [
+          "It's done, then.",
+          "Don't tell me. Take these. I was keeping them for myself, and I'll not be going anywhere I'd need them."
+        ],
+        "options": [
+          {
+            "label": "It's done",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "pryor_sitters"
+              }
+            ]
+          }
+        ]
+      },
+      "after": {
+        "lines": [
+          "Their mother still lays the places. I don't go round at teatime."
+        ]
+      }
+    }
+  },
+  "story_gunn": {
+    "speaker": "Mr Gunn",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "gunn_room"
+          }
+        ],
+        "node": "in_2"
+      },
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "gunn_bag"
+          }
+        ],
+        "node": "in_1"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "gunn_room"
+          }
+        ],
+        "node": "after"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "gunn_room"
+          }
+        ],
+        "node": "wait_2"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "gunn_bag"
+          }
+        ],
+        "node": "offer_2"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "gunn_bag"
+          }
+        ],
+        "node": "wait_1"
+      },
+      {
+        "node": "offer_1"
+      }
+    ],
+    "nodes": {
+      "offer_1": {
+        "lines": [
+          "There's a bag been in the yard since Sunday. A traveller's. Nobody's come for it.",
+          "Would you bring it in? I'd sooner not open it myself. I'd sooner somebody else had."
+        ],
+        "options": [
+          {
+            "label": "I'll look",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "gunn_bag"
+              }
+            ]
+          },
+          {
+            "label": "Not now"
+          }
+        ]
+      },
+      "wait_1": {
+        "lines": [
+          "In the yard, past the trough. Canvas, with a strap."
+        ]
+      },
+      "in_1": {
+        "lines": [
+          "Nothing with a name in it?",
+          "A ticket for Sunday's train, not punched. He was here for it, then. He just didn't go. Have something from the kitchen."
+        ],
+        "options": [
+          {
+            "label": "Here you are",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "gunn_bag"
+              },
+              {
+                "do": "take",
+                "item": "gunn_bag",
+                "qty": 1
+              }
+            ]
+          }
+        ]
+      },
+      "offer_2": {
+        "lines": [
+          "He had the back room. He left the key on the barrels round the side, every morning, like I'd not know where to look.",
+          "Would you fetch it? I'll let the room. I can't keep a room for a man who sleeps in the yard."
+        ],
+        "options": [
+          {
+            "label": "I'll look",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "gunn_room"
+              }
+            ]
+          },
+          {
+            "label": "Not now"
+          }
+        ]
+      },
+      "wait_2": {
+        "lines": [
+          "The barrels, round the side. On the one nearest the wall."
+        ]
+      },
+      "in_2": {
+        "lines": [
+          "Four?",
+          "We've three rooms. We've always had three. I'll hang it on the board with the others, and I'll not let it. Take these."
+        ],
+        "options": [
+          {
+            "label": "It's done",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "gunn_room"
+              }
+            ]
+          }
+        ]
+      },
+      "after": {
+        "lines": [
+          "Doors shut at nine. There's been a knock at the back, some nights. I leave the key to four on the board, in case."
+        ]
+      }
+    }
+  },
+  "story_gunn_barrels": {
+    "speaker": "",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "gunn_room"
+          }
+        ],
+        "node": "key"
+      },
+      {
+        "node": "barrel"
+      }
+    ],
+    "nodes": {
+      "key": {
+        "lines": [
+          "On top of the barrel nearest the wall: a room key on a wooden tag. The tag says 4."
+        ],
+        "actions": [
+          {
+            "do": "location",
+            "name": "gunn_key_found"
+          }
+        ]
+      },
+      "barrel": {
+        "lines": [
+          "An ale barrel, empty by the sound of it. The ring on top has been worn bright by something put down there every day."
+        ]
+      }
+    }
+  },
+  "story_hurst": {
+    "speaker": "Mr Hurst",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "hurst_camp"
+          }
+        ],
+        "node": "in_2"
+      },
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "hurst_fleece"
+          }
+        ],
+        "node": "in_1"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "hurst_camp"
+          }
+        ],
+        "node": "after"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "hurst_camp"
+          }
+        ],
+        "node": "wait_2"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "hurst_fleece"
+          }
+        ],
+        "node": "offer_2"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "hurst_fleece"
+          }
+        ],
+        "node": "wait_1"
+      },
+      {
+        "node": "offer_1"
+      }
+    ],
+    "nodes": {
+      "offer_1": {
+        "lines": [
+          "I'm three short in the pen. Three sheep don't walk off on their own.",
+          "There's a lot camped at {place:hurst_camp}, off the road. Would you go and look? Not to do anything. I want to know for certain first."
+        ],
+        "options": [
+          {
+            "label": "I'll look",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "hurst_fleece"
+              }
+            ]
+          },
+          {
+            "label": "Not now"
+          }
+        ]
+      },
+      "wait_1": {
+        "lines": [
+          "{place:hurst_camp}. Keep your distance. Look for fleece; they'll not have had the sense to burn it."
+        ]
+      },
+      "in_1": {
+        "lines": [
+          "That's my mark on it. That's that, then.",
+          "Have an apple. I'll be a minute."
+        ],
+        "options": [
+          {
+            "label": "Here you are",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "hurst_fleece"
+              },
+              {
+                "do": "take",
+                "item": "hurst_fleece",
+                "qty": 1
+              }
+            ]
+          }
+        ]
+      },
+      "offer_2": {
+        "lines": [
+          "I'd like them moved on. I can't do it, and there's nobody to send for.",
+          "I'm sorry to ask it. They weren't always like that. Nobody was."
+        ],
+        "options": [
+          {
+            "label": "I'll go",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "hurst_camp"
+              }
+            ]
+          },
+          {
+            "label": "Not now"
+          }
+        ]
+      },
+      "wait_2": {
+        "lines": [
+          "{place:hurst_camp}, off the road. There's three or four of them. Be careful."
+        ]
+      },
+      "in_2": {
+        "lines": [
+          "It's quiet out that way?",
+          "Then take this. The wife keeps it for the winter. The winter can see to itself."
+        ],
+        "options": [
+          {
+            "label": "It's done",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "hurst_camp"
+              }
+            ]
+          }
+        ]
+      },
+      "after": {
+        "lines": [
+          "I've moved the pen nearer the house. They go in at eight now, and I stand with them till nine."
+        ]
+      }
+    }
+  },
+  "story_farrant": {
+    "speaker": "Mrs Farrant",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "farrant_ring"
+          }
+        ],
+        "node": "in_1"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "farrant_ring"
+          }
+        ],
+        "node": "after"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "farrant_ring"
+          }
+        ],
+        "node": "wait_1"
+      },
+      {
+        "node": "offer_1"
+      }
+    ],
+    "nodes": {
+      "offer_1": {
+        "lines": [
+          "I've lost my ring out of the dish on the sill. There was a crow at the window. It had been there all morning, looking in.",
+          "They keep what they take at {place:farrant_camp}, off the road. Would you get it back? Mind them. They don't like being looked at."
+        ],
+        "options": [
+          {
+            "label": "I'll look",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "farrant_ring"
+              }
+            ]
+          },
+          {
+            "label": "Not now"
+          }
+        ]
+      },
+      "wait_1": {
+        "lines": [
+          "{place:farrant_camp}. They keep it all in a box. Don't ask me how a crow comes to have a box."
+        ]
+      },
+      "in_1": {
+        "lines": [
+          "That's it. That's mine.",
+          "Teaspoons? They're not mine. I wouldn't want them now if they were. Have these for your trouble."
+        ],
+        "options": [
+          {
+            "label": "Here you are",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "farrant_ring"
+              },
+              {
+                "do": "take",
+                "item": "farrant_ring",
+                "qty": 1
+              }
+            ]
+          }
+        ]
+      },
+      "after": {
+        "lines": [
+          "I keep the window shut now, and the ring on. I'd rather go without the air."
+        ]
+      }
+    }
+  },
+  "story_vosper": {
+    "speaker": "Mrs Vosper",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "vosper_tin"
+          }
+        ],
+        "node": "in_3"
+      },
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "vosper_reply"
+          }
+        ],
+        "node": "in_2"
+      },
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "vosper_letter"
+          }
+        ],
+        "node": "in_1"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "vosper_tin"
+          }
+        ],
+        "node": "after"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "vosper_tin"
+          }
+        ],
+        "node": "wait_3"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "vosper_reply"
+          }
+        ],
+        "node": "offer_3"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "vosper_reply"
+          }
+        ],
+        "node": "wait_2"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "vosper_letter"
+          }
+        ],
+        "node": "offer_2"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "vosper_letter"
+          }
+        ],
+        "node": "wait_1"
+      },
+      {
+        "node": "offer_1"
+      }
+    ],
+    "nodes": {
+      "offer_1": {
+        "lines": [
+          "The post's being left in the yard now, not at the door. There's a letter out there.",
+          "Would you bring it in? I don't go out to the yard. It's a long way to the yard, these days."
+        ],
+        "options": [
+          {
+            "label": "I'll look",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "vosper_letter"
+              }
+            ]
+          },
+          {
+            "label": "Not now"
+          }
+        ]
+      },
+      "wait_1": {
+        "lines": [
+          "In the yard. It'll be from my son."
+        ]
+      },
+      "in_1": {
+        "lines": [
+          "From my son. Let's see.",
+          "He says the weather's fine and he'll be home on Sunday. He says that every week. Have an apple."
+        ],
+        "options": [
+          {
+            "label": "Here you are",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "vosper_letter"
+              },
+              {
+                "do": "take",
+                "item": "vosper_letter",
+                "qty": 1
+              }
+            ]
+          }
+        ]
+      },
+      "offer_2": {
+        "lines": [
+          "I've written back. Would you take it to my sister at {place:vosper_sister}, down the road? She keeps them.",
+          "She won't open the door. Put it through. She'll know it's me."
+        ],
+        "options": [
+          {
+            "label": "I'll take it",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "vosper_reply"
+              },
+              {
+                "do": "give",
+                "item": "vosper_reply",
+                "qty": 1
+              }
+            ]
+          },
+          {
+            "label": "Not now"
+          }
+        ]
+      },
+      "wait_2": {
+        "lines": [
+          "{place:vosper_sister}, down the road. Through the door. She won't open it."
+        ]
+      },
+      "in_2": {
+        "lines": [
+          "She took it? Good.",
+          "She keeps them all in a tin, his and mine. Take these."
+        ],
+        "options": [
+          {
+            "label": "It's done",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "vosper_reply"
+              }
+            ]
+          }
+        ]
+      },
+      "offer_3": {
+        "lines": [
+          "Would you ask my sister for the tin? All of them, his and mine.",
+          "It's time they were read in the right order. I've been reading them in the wrong one."
+        ],
+        "options": [
+          {
+            "label": "I'll look",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "vosper_tin"
+              }
+            ]
+          },
+          {
+            "label": "Not now"
+          }
+        ]
+      },
+      "wait_3": {
+        "lines": [
+          "{place:vosper_sister}. She'll put it out on the step for you."
+        ]
+      },
+      "in_3": {
+        "lines": [
+          "Thank you. Put it on the table.",
+          "Take this. It was his, from the dresser. He'd want it used."
+        ],
+        "options": [
+          {
+            "label": "Here you are",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "vosper_tin"
+              },
+              {
+                "do": "take",
+                "item": "vosper_tin",
+                "qty": 1
+              }
+            ]
+          }
+        ]
+      },
+      "after": {
+        "lines": [
+          "I've read them all now, in order. I know when he stopped writing. I'm still waiting for Sunday. You do, don't you."
+        ]
+      }
+    }
+  },
+  "story_vosper_sister": {
+    "speaker": "Through the door",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "vosper_reply"
+          },
+          {
+            "if": "hasItem",
+            "item": "vosper_reply"
+          }
+        ],
+        "node": "post"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "vosper_tin"
+          },
+          {
+            "if": "hasItem",
+            "item": "vosper_tin",
+            "not": true
+          }
+        ],
+        "node": "tin"
+      },
+      {
+        "node": "shut"
+      }
+    ],
+    "nodes": {
+      "post": {
+        "lines": [
+          "You put the letter through the flap. It lands on a mat that sounds thick with others.",
+          "From inside, a woman's voice: \"Thank you. I'll put it with the rest.\""
+        ],
+        "actions": [
+          {
+            "do": "location",
+            "name": "vosper_reply_posted"
+          },
+          {
+            "do": "take",
+            "item": "vosper_reply",
+            "qty": 1
+          }
+        ]
+      },
+      "tin": {
+        "lines": [
+          "\"She wants the tin,\" says the voice. \"Well. It's hers as much as mine.\"",
+          "The door opens a hand's width, and a biscuit tin heavy with paper is put out on the step."
+        ],
+        "actions": [
+          {
+            "do": "give",
+            "item": "vosper_tin",
+            "qty": 1
+          }
+        ]
+      },
+      "shut": {
+        "lines": [
+          "Nobody comes. Inside, somebody is sitting very still, the way you do when you hope a knock will go away."
+        ]
+      }
+    }
+  },
+  "story_hackett": {
+    "speaker": "Mr Hackett",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "hackett_tin"
+          }
+        ],
+        "node": "in_2"
+      },
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "hackett_look"
+          }
+        ],
+        "node": "in_1"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "hackett_tin"
+          }
+        ],
+        "node": "after"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "hackett_tin"
+          }
+        ],
+        "node": "wait_2"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "hackett_look"
+          }
+        ],
+        "node": "offer_2"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "hackett_look"
+          }
+        ],
+        "node": "wait_1"
+      },
+      {
+        "node": "offer_1"
+      }
+    ],
+    "nodes": {
+      "offer_1": {
+        "lines": [
+          "I grew up at {place:hackett_house}. Off the road, that way. It's walls now.",
+          "Would you look inside for me and say what's left? I've not been since. I'm not going."
+        ],
+        "options": [
+          {
+            "label": "I'll look",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "hackett_look"
+              }
+            ]
+          },
+          {
+            "label": "Not now"
+          }
+        ]
+      },
+      "wait_1": {
+        "lines": [
+          "{place:hackett_house}. Mind the rubble inside."
+        ]
+      },
+      "in_1": {
+        "lines": [
+          "Marks on the door frame. We did that. Every birthday.",
+          "The last one higher than the rest? There's nobody left to be that tall. Take this, and thank you."
+        ],
+        "options": [
+          {
+            "label": "It's done",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "hackett_look"
+              }
+            ]
+          }
+        ]
+      },
+      "offer_2": {
+        "lines": [
+          "My mother kept a tin under the front step. Everything that mattered went in it.",
+          "Would you fetch it? I know what's in it. I'd still like it."
+        ],
+        "options": [
+          {
+            "label": "I'll look",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "hackett_tin"
+              }
+            ]
+          },
+          {
+            "label": "Not now"
+          }
+        ]
+      },
+      "wait_2": {
+        "lines": [
+          "Under the front step at {place:hackett_house}. The step's still there. It's all that is."
+        ]
+      },
+      "in_2": {
+        "lines": [
+          "That's the tin.",
+          "There. That's the house, with its roof on. Take this. She'd not mind."
+        ],
+        "options": [
+          {
+            "label": "Here you are",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "hackett_tin"
+              },
+              {
+                "do": "take",
+                "item": "hackett_tin",
+                "qty": 1
+              }
+            ]
+          }
+        ]
+      },
+      "after": {
+        "lines": [
+          "I cut on this side of the road now. I can't see it from here. That's how I like it."
+        ]
+      }
+    }
+  },
+  "story_hackett_marks": {
+    "speaker": "",
+    "start": [
+      {
+        "node": "marks"
+      }
+    ],
+    "nodes": {
+      "marks": {
+        "lines": [
+          "Pencil marks on what is left of the door frame, with names and heights beside them. HACKETT, over and over.",
+          "The highest mark is the newest. The pencil has hardly faded."
+        ]
+      }
+    }
+  },
+  "story_tobin": {
+    "speaker": "Mrs Tobin",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "tobin_scissors"
+          }
+        ],
+        "node": "in_1"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "tobin_scissors"
+          }
+        ],
+        "node": "after"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "tobin_scissors"
+          }
+        ],
+        "node": "wait_1"
+      },
+      {
+        "node": "offer_1"
+      }
+    ],
+    "nodes": {
+      "offer_1": {
+        "lines": [
+          "I've left my scissors in the garden. I was cutting flowers.",
+          "Somebody on the road said my name, and I came straight in. There was nobody on the road. Would you fetch them? I'll go out tomorrow."
+        ],
+        "options": [
+          {
+            "label": "I'll look",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "tobin_scissors"
+              }
+            ]
+          },
+          {
+            "label": "Not now"
+          }
+        ]
+      },
+      "wait_1": {
+        "lines": [
+          "In the garden, by the rows. I'd left the flowers there too."
+        ]
+      },
+      "in_1": {
+        "lines": [
+          "Thank you.",
+          "In a row? I didn't leave them in a row. Well. Have these. They're from the same bed."
+        ],
+        "options": [
+          {
+            "label": "Here you are",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "tobin_scissors"
+              },
+              {
+                "do": "take",
+                "item": "tobin_scissors",
+                "qty": 1
+              }
+            ]
+          }
+        ]
+      },
+      "after": {
+        "lines": [
+          "If you hear your name on the road, don't answer it. That's all. I'm not saying anything else."
+        ]
+      }
+    }
+  },
+  "story_venn": {
+    "speaker": "Mrs Venn",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "venn_apples"
+          }
+        ],
+        "node": "in_1"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "venn_apples"
+          }
+        ],
+        "node": "after"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "venn_apples"
+          }
+        ],
+        "node": "wait_1"
+      },
+      {
+        "node": "offer_1"
+      }
+    ],
+    "nodes": {
+      "offer_1": {
+        "lines": [
+          "These are for the woodcutter at {place:venn_wood}. He cuts my wood and he won't take money.",
+          "Would you leave them on his woodpile? He won't stop to be thanked. He never does."
+        ],
+        "options": [
+          {
+            "label": "I'll take it",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "venn_apples"
+              },
+              {
+                "do": "give",
+                "item": "venn_apples",
+                "qty": 1
+              }
+            ]
+          },
+          {
+            "label": "Not now"
+          }
+        ]
+      },
+      "wait_1": {
+        "lines": [
+          "{place:venn_wood}. On the woodpile."
+        ]
+      },
+      "in_1": {
+        "lines": [
+          "Kindling? Tied with green string?",
+          "That's my string. I've never given him any string. Well. Have a couple of the apples. I kept the best back."
+        ],
+        "options": [
+          {
+            "label": "It's done",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "venn_apples"
+              }
+            ]
+          }
+        ]
+      },
+      "after": {
+        "lines": [
+          "I went myself yesterday. He was cutting. He didn't look up. I left the string on the woodpile."
+        ]
+      }
+    }
+  },
+  "story_venn_woodpile": {
+    "speaker": "",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "venn_apples"
+          },
+          {
+            "if": "hasItem",
+            "item": "venn_apples"
+          }
+        ],
+        "node": "leave"
+      },
+      {
+        "node": "pile"
+      }
+    ],
+    "nodes": {
+      "leave": {
+        "lines": [
+          "You leave the apples on top of the woodpile.",
+          "There is a bundle of kindling there already, tied with green string, as if it were waiting to be swapped."
+        ],
+        "actions": [
+          {
+            "do": "location",
+            "name": "venn_apples_left"
+          },
+          {
+            "do": "take",
+            "item": "venn_apples",
+            "qty": 1
+          }
+        ]
+      },
+      "pile": {
+        "lines": [
+          "Split logs stacked bark up, more than one man cuts in a week."
+        ]
+      }
+    }
+  },
+  "story_denny": {
+    "speaker": "Mr Denny",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "denny_light"
+          }
+        ],
+        "node": "in_1"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "denny_light"
+          }
+        ],
+        "node": "after"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "denny_light"
+          }
+        ],
+        "node": "wait_1"
+      },
+      {
+        "node": "offer_1"
+      }
+    ],
+    "nodes": {
+      "offer_1": {
+        "lines": [
+          "There's been a light in {place:denny_ruin} three nights running. Nobody's lived there for years.",
+          "Would you look, by daylight, and tell me it's nothing? I'd take it better from somebody who's been."
+        ],
+        "options": [
+          {
+            "label": "I'll look",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "denny_light"
+              }
+            ]
+          },
+          {
+            "label": "Not now"
+          }
+        ]
+      },
+      "wait_1": {
+        "lines": [
+          "{place:denny_ruin}. By day, mind. Inside the walls."
+        ]
+      },
+      "in_1": {
+        "lines": [
+          "Candles. And a chair.",
+          "Facing the door. Well, that's somebody who wants to see who comes in. That's all that is. Take this. I'll not sleep either way."
+        ],
+        "options": [
+          {
+            "label": "It's done",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "denny_light"
+              }
+            ]
+          }
+        ]
+      },
+      "after": {
+        "lines": [
+          "Four nights now. I've started going home the long way round, so I don't pass it."
+        ]
+      }
+    }
+  },
+  "story_denny_candles": {
+    "speaker": "",
+    "start": [
+      {
+        "node": "look"
+      }
+    ],
+    "nodes": {
+      "look": {
+        "lines": [
+          "Candle ends, a great many, burnt right down in saucers along what is left of the wall.",
+          "One kitchen chair, facing the doorway, with nothing on it. The seat is clean."
+        ]
+      }
+    }
+  },
+  "story_lusk": {
+    "speaker": "Mr Lusk",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "lusk_potatoes"
+          }
+        ],
+        "node": "in_1"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "lusk_potatoes"
+          }
+        ],
+        "node": "after"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "lusk_potatoes"
+          }
+        ],
+        "node": "wait_1"
+      },
+      {
+        "node": "offer_1"
+      }
+    ],
+    "nodes": {
+      "offer_1": {
+        "lines": [
+          "I've potatoes to lift and a back that won't have it.",
+          "Would you lift them for me? Before the frost. It comes on the same night every year. I've written it down."
+        ],
+        "options": [
+          {
+            "label": "I'll look",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "lusk_potatoes"
+              }
+            ]
+          },
+          {
+            "label": "Not now"
+          }
+        ]
+      },
+      "wait_1": {
+        "lines": [
+          "In the garden, the row by the fence. They come up easy this year. Too easy."
+        ]
+      },
+      "in_1": {
+        "lines": [
+          "That's a good row. That's a very good row.",
+          "Bigger than I put them in. Take these from the cupboard instead. I'd rather keep those till I've looked at them properly."
+        ],
+        "options": [
+          {
+            "label": "Here you are",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "lusk_potatoes"
+              },
+              {
+                "do": "take",
+                "item": "lusk_potatoes",
+                "qty": 1
+              }
+            ]
+          }
+        ]
+      },
+      "after": {
+        "lines": [
+          "I've looked at them. They're potatoes. I've put them out of the house all the same."
+        ]
+      }
+    }
+  },
+  "story_arden": {
+    "speaker": "Mr Arden",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "arden_key"
+          }
+        ],
+        "node": "in_1"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "arden_key"
+          }
+        ],
+        "node": "after"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "arden_key"
+          }
+        ],
+        "node": "wait_1"
+      },
+      {
+        "node": "offer_1"
+      }
+    ],
+    "nodes": {
+      "offer_1": {
+        "lines": [
+          "My clock's stopped. It stopped at nine. I went out to see if it was the weather, and I dropped the key.",
+          "Would you find it? It's the only clock I have out here. I don't like not knowing when it is."
+        ],
+        "options": [
+          {
+            "label": "I'll look",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "arden_key"
+              }
+            ]
+          },
+          {
+            "label": "Not now"
+          }
+        ]
+      },
+      "wait_1": {
+        "lines": [
+          "In the clearing somewhere. A little brass key."
+        ]
+      },
+      "in_1": {
+        "lines": [
+          "That's it. Thank you.",
+          "I'll set it by the light and put it right when the bell goes. You always know nine, out here."
+        ],
+        "options": [
+          {
+            "label": "Here you are",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "arden_key"
+              },
+              {
+                "do": "take",
+                "item": "arden_key",
+                "qty": 1
+              }
+            ]
+          }
+        ]
+      },
+      "after": {
+        "lines": [
+          "It's kept time since. Except it stops at nine for a moment every night, and then goes on."
+        ]
+      }
+    }
+  },
+  "story_cope": {
+    "speaker": "Mr Cope",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "cope_shed"
+          }
+        ],
+        "node": "in_1"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "cope_shed"
+          }
+        ],
+        "node": "after"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "cope_shed"
+          }
+        ],
+        "node": "wait_1"
+      },
+      {
+        "node": "offer_1"
+      }
+    ],
+    "nodes": {
+      "offer_1": {
+        "lines": [
+          "The shed door's stuck. Since the weekend. It's never been locked, and it won't open.",
+          "Put your shoulder to it, would you? Low down. It sticks at the bottom."
+        ],
+        "options": [
+          {
+            "label": "I'll look",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "cope_shed"
+              }
+            ]
+          },
+          {
+            "label": "Not now"
+          }
+        ]
+      },
+      "wait_1": {
+        "lines": [
+          "The shed. Shove low down."
+        ]
+      },
+      "in_1": {
+        "lines": [
+          "Open? Good.",
+          "Swept? I don't sweep it. Well. Somebody has. Take this for your shoulder."
+        ],
+        "options": [
+          {
+            "label": "It's done",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "cope_shed"
+              }
+            ]
+          }
+        ]
+      },
+      "after": {
+        "lines": [
+          "I leave the shed door open now. I'd rather see in."
+        ]
+      }
+    }
+  },
+  "story_cope_shed": {
+    "speaker": "",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "cope_shed"
+          }
+        ],
+        "node": "shove"
+      },
+      {
+        "node": "shed"
+      }
+    ],
+    "nodes": {
+      "shove": {
+        "lines": [
+          "You put your shoulder to the door, low down. It holds, and then gives all at once.",
+          "Inside, the floor is swept, everywhere except a square in the middle, the size of a chair."
+        ],
+        "actions": [
+          {
+            "do": "location",
+            "name": "cope_shed_opened"
+          }
+        ]
+      },
+      "shed": {
+        "lines": [
+          "A plank shed. The floor inside is swept round a square of sawdust the size of a chair."
+        ]
+      }
+    }
+  },
+  "story_pardew": {
+    "speaker": "Mr Pardew",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "pardew_nest"
+          }
+        ],
+        "node": "in_1"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "pardew_nest"
+          }
+        ],
+        "node": "after"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "pardew_nest"
+          }
+        ],
+        "node": "wait_1"
+      },
+      {
+        "node": "offer_1"
+      }
+    ],
+    "nodes": {
+      "offer_1": {
+        "lines": [
+          "There's an owl nested in the woodpile. I heard it. I'll not burn a stick of it till I know the nest's empty.",
+          "Would you look? My knees won't have the bending."
+        ],
+        "options": [
+          {
+            "label": "I'll look",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "pardew_nest"
+              }
+            ]
+          },
+          {
+            "label": "Not now"
+          }
+        ]
+      },
+      "wait_1": {
+        "lines": [
+          "The woodpile. The gap halfway up. Mind your fingers."
+        ]
+      },
+      "in_1": {
+        "lines": [
+          "Buttons?",
+          "Owls do that. They take things. Have some wood, from the other pile."
+        ],
+        "options": [
+          {
+            "label": "It's done",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "pardew_nest"
+              }
+            ]
+          }
+        ]
+      },
+      "after": {
+        "lines": [
+          "I'm burning the other pile first. There's plenty."
+        ]
+      }
+    }
+  },
+  "story_pardew_woodpile": {
+    "speaker": "",
+    "start": [
+      {
+        "node": "look"
+      }
+    ],
+    "nodes": {
+      "look": {
+        "lines": [
+          "A gap halfway up the woodpile, lined with straw. No owl.",
+          "In the straw, three buttons: small, brown, a child's, all off the same coat."
+        ],
+        "actions": [
+          {
+            "do": "location",
+            "name": "pardew_nest_seen"
+          }
+        ]
+      }
+    }
+  },
+  "story_voke": {
+    "speaker": "Mr Voke",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "voke_tea"
+          }
+        ],
+        "node": "in_1"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "voke_tea"
+          }
+        ],
+        "node": "after"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "voke_tea"
+          }
+        ],
+        "node": "wait_1"
+      },
+      {
+        "node": "offer_1"
+      }
+    ],
+    "nodes": {
+      "offer_1": {
+        "lines": [
+          "My brother cuts at {place:voke_brother}. We've not spoken since Easter.",
+          "Would you take him this tea? Leave it by his fire. Don't say it's from me. He'll know."
+        ],
+        "options": [
+          {
+            "label": "I'll take it",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "voke_tea"
+              },
+              {
+                "do": "give",
+                "item": "voke_tea",
+                "qty": 1
+              }
+            ]
+          },
+          {
+            "label": "Not now"
+          }
+        ]
+      },
+      "wait_1": {
+        "lines": [
+          "{place:voke_brother}. By the fire. Don't say anything."
+        ]
+      },
+      "in_1": {
+        "lines": [
+          "Did he drink it?",
+          "No, you'd not know. That's fair. Have these."
+        ],
+        "options": [
+          {
+            "label": "It's done",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "voke_tea"
+              }
+            ]
+          }
+        ]
+      },
+      "after": {
+        "lines": [
+          "There was a can on my step this morning. Empty. Washed."
+        ]
+      }
+    }
+  },
+  "story_voke_fire": {
+    "speaker": "",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "voke_tea"
+          },
+          {
+            "if": "hasItem",
+            "item": "voke_tea"
+          }
+        ],
+        "node": "leave"
+      },
+      {
+        "node": "fire"
+      }
+    ],
+    "nodes": {
+      "leave": {
+        "lines": [
+          "You leave the can on a stone by the fire. Nobody says anything."
+        ],
+        "actions": [
+          {
+            "do": "location",
+            "name": "voke_tea_left"
+          },
+          {
+            "do": "take",
+            "item": "voke_tea",
+            "qty": 1
+          }
+        ]
+      },
+      "fire": {
+        "lines": [
+          "A ring of stones and last night's ash. Two stones are set by it to sit on. One is worn smooth; the other is not."
+        ]
+      }
+    }
+  },
+  "story_quayle": {
+    "speaker": "Mrs Quayle",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "quayle_lodger"
+          }
+        ],
+        "node": "in_1"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "quayle_lodger"
+          }
+        ],
+        "node": "after"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "quayle_lodger"
+          }
+        ],
+        "node": "wait_1"
+      },
+      {
+        "node": "offer_1"
+      }
+    ],
+    "nodes": {
+      "offer_1": {
+        "lines": [
+          "His tea's ready and he's not come in. He sits out in the garden, evenings.",
+          "Would you tell him? Mr Grey. That's his name. It was, when he came."
+        ],
+        "options": [
+          {
+            "label": "I'll look",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "quayle_lodger"
+              }
+            ]
+          },
+          {
+            "label": "Not now"
+          }
+        ]
+      },
+      "wait_1": {
+        "lines": [
+          "In the garden. He'll be sat with his cup."
+        ]
+      },
+      "in_1": {
+        "lines": [
+          "Not there? He'll be walking.",
+          "He walks a great deal, now. Take an apple. I'll keep his tea warm. I always do."
+        ],
+        "options": [
+          {
+            "label": "It's done",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "quayle_lodger"
+              }
+            ]
+          }
+        ]
+      },
+      "after": {
+        "lines": [
+          "He came in at ten. I heard him on the stairs. His door has been locked since June, and I have the only key."
+        ]
+      }
+    }
+  },
+  "story_quayle_cup": {
+    "speaker": "",
+    "start": [
+      {
+        "node": "cup"
+      }
+    ],
+    "nodes": {
+      "cup": {
+        "lines": [
+          "A cup of tea on the path, cold, with a skin on it. Nobody in the garden.",
+          "The earth in the rows has been walked, up and back, up and back, in a very straight line."
+        ]
+      }
+    }
+  },
+  "story_hebden": {
+    "speaker": "Mr Hebden",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "hebden_water"
+          }
+        ],
+        "node": "in_1"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "hebden_water"
+          }
+        ],
+        "node": "after"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "hebden_water"
+          }
+        ],
+        "node": "wait_1"
+      },
+      {
+        "node": "offer_1"
+      }
+    ],
+    "nodes": {
+      "offer_1": {
+        "lines": [
+          "Would you water the seedlings? I can't carry the can any more.",
+          "From the left, mind. My wife always did it from the left. They grow toward where she stood."
+        ],
+        "options": [
+          {
+            "label": "I'll look",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "hebden_water"
+              }
+            ]
+          },
+          {
+            "label": "Not now"
+          }
+        ]
+      },
+      "wait_1": {
+        "lines": [
+          "In the garden. From the left."
+        ]
+      },
+      "in_1": {
+        "lines": [
+          "From the left? Good.",
+          "They'll do now. Take these. She grew them, and they come up every year without me."
+        ],
+        "options": [
+          {
+            "label": "It's done",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "hebden_water"
+              }
+            ]
+          }
+        ]
+      },
+      "after": {
+        "lines": [
+          "They lean toward the door now. Just to the left of it. That's where she stood."
+        ]
+      }
+    }
+  },
+  "story_hebden_seedlings": {
+    "speaker": "",
+    "start": [
+      {
+        "node": "water"
+      }
+    ],
+    "nodes": {
+      "water": {
+        "lines": [
+          "You water the row from the left, the way he asked.",
+          "Every seedling in the garden leans the same way: toward the house, a little to the left of the door."
+        ]
+      }
+    }
+  },
+  "story_sayer": {
+    "speaker": "Mr Sayer",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "sayer_ladder"
+          }
+        ],
+        "node": "in_1"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "sayer_ladder"
+          }
+        ],
+        "node": "after"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "sayer_ladder"
+          }
+        ],
+        "node": "wait_1"
+      },
+      {
+        "node": "offer_1"
+      }
+    ],
+    "nodes": {
+      "offer_1": {
+        "lines": [
+          "I lent the family at {place:sayer_house} my ladder in the spring. For the roof.",
+          "I don't need it. I'd just like to know it's still there, and still mine. Would you look?"
+        ],
+        "options": [
+          {
+            "label": "I'll look",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "sayer_ladder"
+              }
+            ]
+          },
+          {
+            "label": "Not now"
+          }
+        ]
+      },
+      "wait_1": {
+        "lines": [
+          "{place:sayer_house}. Off the road. It'll be against the wall. It's got my name on it."
+        ]
+      },
+      "in_1": {
+        "lines": [
+          "Tarred? They've looked after it.",
+          "I'll fetch it Sunday. Take these."
+        ],
+        "options": [
+          {
+            "label": "It's done",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "sayer_ladder"
+              }
+            ]
+          }
+        ]
+      },
+      "after": {
+        "lines": [
+          "I've not fetched it. They'll want it for the roof."
+        ]
+      }
+    }
+  },
+  "story_sayer_ladder": {
+    "speaker": "",
+    "start": [
+      {
+        "node": "ladder"
+      }
+    ],
+    "nodes": {
+      "ladder": {
+        "lines": [
+          "A ladder against the wall, freshly tarred. On the second rung, in white paint: SAYER.",
+          "Under it, in the same paint and a different hand: RETURN BY SUNDAY. There is nothing above it but sky."
+        ]
+      }
+    }
+  },
+  "story_rendle": {
+    "speaker": "Mrs Rendle",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "rendle_coat"
+          }
+        ],
+        "node": "in_1"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "rendle_coat"
+          }
+        ],
+        "node": "after"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "rendle_coat"
+          }
+        ],
+        "node": "wait_1"
+      },
+      {
+        "node": "offer_1"
+      }
+    ],
+    "nodes": {
+      "offer_1": {
+        "lines": [
+          "They had my husband's good coat off the line. I know who. The lot at {place:rendle_camp}, off the road.",
+          "Would you get it back? It's the coat he's to be buried in. He's not ill. It's just the one he's to be buried in."
+        ],
+        "options": [
+          {
+            "label": "I'll look",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "rendle_coat"
+              }
+            ]
+          },
+          {
+            "label": "Not now"
+          }
+        ]
+      },
+      "wait_1": {
+        "lines": [
+          "{place:rendle_camp}. They'll have it in their box. Be careful of them."
+        ]
+      },
+      "in_1": {
+        "lines": [
+          "That's it. Brushed.",
+          "Folded? It's never been folded like that. Take these, with thanks."
+        ],
+        "options": [
+          {
+            "label": "Here you are",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "rendle_coat"
+              },
+              {
+                "do": "take",
+                "item": "rendle_coat",
+                "qty": 1
+              }
+            ]
+          }
+        ]
+      },
+      "after": {
+        "lines": [
+          "He wore it to church on Sunday. He said it fitted better than it used to."
+        ]
+      }
+    }
+  },
+  "story_treloar": {
+    "speaker": "Mr Treloar",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "treloar_bell"
+          }
+        ],
+        "node": "in_1"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "treloar_bell"
+          }
+        ],
+        "node": "after"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "treloar_bell"
+          }
+        ],
+        "node": "wait_1"
+      },
+      {
+        "node": "offer_1"
+      }
+    ],
+    "nodes": {
+      "offer_1": {
+        "lines": [
+          "Has the bell been going early for you? It has for me. I'd like to be sure, and I don't stay up for it.",
+          "Would you stand in my clearing after nine and listen, and tell me in the morning if it goes twice? There's a chalk mark where to stand."
+        ],
+        "options": [
+          {
+            "label": "I'll look",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "treloar_bell"
+              }
+            ]
+          },
+          {
+            "label": "Not now"
+          }
+        ]
+      },
+      "wait_1": {
+        "lines": [
+          "In the clearing, after nine. Stand on the chalk mark. Listen north, toward the hill."
+        ]
+      },
+      "in_1": {
+        "lines": [
+          "Twice? I knew it.",
+          "I'll set my watch by the second one. Take this. You were out after nine for me."
+        ],
+        "options": [
+          {
+            "label": "It's done",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "treloar_bell"
+              }
+            ]
+          }
+        ]
+      },
+      "after": {
+        "lines": [
+          "I set my watch by the second bell now. I'm early for everything. I don't mind."
+        ]
+      }
+    }
+  },
+  "story_treloar_mark": {
+    "speaker": "",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "night"
+          },
+          {
+            "if": "questActive",
+            "quest": "treloar_bell"
+          }
+        ],
+        "node": "listen"
+      },
+      {
+        "node": "day"
+      }
+    ],
+    "nodes": {
+      "listen": {
+        "lines": [
+          "You stand on the chalk mark and listen north.",
+          "The bell goes at nine, from the hill, as it should. It goes again a little after, from somewhere much nearer."
+        ],
+        "actions": [
+          {
+            "do": "location",
+            "name": "treloar_listened"
+          }
+        ]
+      },
+      "day": {
+        "lines": [
+          "An X in chalk on a flat stone, where somebody wants somebody to stand. It has been chalked over more than once."
+        ]
+      }
+    }
+  },
+  "story_gethin": {
+    "speaker": "Mr Gethin",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "gethin_stump"
+          }
+        ],
+        "node": "in_1"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "gethin_stump"
+          }
+        ],
+        "node": "after"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "gethin_stump"
+          }
+        ],
+        "node": "wait_1"
+      },
+      {
+        "node": "offer_1"
+      }
+    ],
+    "nodes": {
+      "offer_1": {
+        "lines": [
+          "There's a stump in the clearing the cutters have put their names in for a hundred years.",
+          "Would you read me the newest? My eyes are going. Somebody's cut one since Friday, and nobody's been."
+        ],
+        "options": [
+          {
+            "label": "I'll look",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "gethin_stump"
+              }
+            ]
+          },
+          {
+            "label": "Not now"
+          }
+        ]
+      },
+      "wait_1": {
+        "lines": [
+          "The old stump, in the clearing. The newest is at the bottom."
+        ]
+      },
+      "in_1": {
+        "lines": [
+          "What did it say?",
+          "Read it again. No. There's nobody by that name round here. Take this, anyway."
+        ],
+        "options": [
+          {
+            "label": "It's done",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "gethin_stump"
+              }
+            ]
+          }
+        ]
+      },
+      "after": {
+        "lines": [
+          "I've not cut my own name in. I'd have to go under the newest one, and I'd rather not."
+        ]
+      }
+    }
+  },
+  "story_gethin_stump": {
+    "speaker": "",
+    "start": [
+      {
+        "node": "names"
+      }
+    ],
+    "nodes": {
+      "names": {
+        "lines": [
+          "Names cut in the stump, one under another, each with its year. The years go back further than the tree could have stood.",
+          "The newest is at the bottom, the wood still pale: {name}, and this year."
+        ]
+      }
+    }
+  },
+  "story_ruck": {
+    "speaker": "Mr Ruck",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "ruck_kindling"
+          }
+        ],
+        "node": "in_1"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "ruck_kindling"
+          }
+        ],
+        "node": "after"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "ruck_kindling"
+          }
+        ],
+        "node": "wait_1"
+      },
+      {
+        "node": "offer_1"
+      }
+    ],
+    "nodes": {
+      "offer_1": {
+        "lines": [
+          "Take this to the old lady at {place:ruck_cottage}? She's nobody to cut for her.",
+          "She'll want to pay you. Don't let her. She's done it thirty years, and I've never once got away."
+        ],
+        "options": [
+          {
+            "label": "I'll take it",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "ruck_kindling"
+              },
+              {
+                "do": "give",
+                "item": "ruck_kindling",
+                "qty": 1
+              }
+            ]
+          },
+          {
+            "label": "Not now"
+          }
+        ]
+      },
+      "wait_1": {
+        "lines": [
+          "{place:ruck_cottage}. Leave it at the door."
+        ]
+      },
+      "in_1": {
+        "lines": [
+          "She paid you, didn't she.",
+          "Thirty years. Never once. Have some wood as well, so you're square with somebody."
+        ],
+        "options": [
+          {
+            "label": "It's done",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "ruck_kindling"
+              }
+            ]
+          }
+        ]
+      },
+      "after": {
+        "lines": [
+          "She told me there was somebody new on the road. I said I'd heard."
+        ]
+      }
+    }
+  },
+  "story_ruck_cottage": {
+    "speaker": "Through the door",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "ruck_kindling"
+          },
+          {
+            "if": "hasItem",
+            "item": "ruck_kindling"
+          }
+        ],
+        "node": "pay"
+      },
+      {
+        "node": "shut"
+      }
+    ],
+    "nodes": {
+      "pay": {
+        "lines": [
+          "The door opens on its chain. A thin hand takes the kindling, and comes back out with a paper bag of grapes.",
+          "\"For your trouble. No, take it. I've always paid for my wood.\""
+        ],
+        "actions": [
+          {
+            "do": "location",
+            "name": "ruck_kindling_left"
+          },
+          {
+            "do": "take",
+            "item": "ruck_kindling",
+            "qty": 1
+          },
+          {
+            "do": "give",
+            "item": "grape",
+            "qty": 3
+          }
+        ]
+      },
+      "shut": {
+        "lines": [
+          "Nobody comes. Inside, somebody is laying a table, one plate at a time."
+        ]
+      }
+    }
+  }
+}

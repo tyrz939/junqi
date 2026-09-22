@@ -40,6 +40,8 @@ import { countySkeleton } from "@/world/county";
 import { SKEL_W } from "@/world/skeleton";
 import pathsJson from "@/data/paths.json";
 import lowfieldsQuests from "@/data/quests/lowfields.json";
+import { DEFAULT_NAME, expandText } from "@/sim/text";
+import { STORIES } from "@/world/names";
 import { yardCatalog } from "./bot";
 
 const catalog = yardCatalog();
@@ -124,7 +126,9 @@ type Ref =
   | { unit: string }
   | { road: [string, string] }
   | { path: string }
-  | { zone: string };
+  | { zone: string }
+  /** A generated place a story claimed on this seed (bp.stories): its footprint. */
+  | { box: { cx: number; cy: number; w: number; h: number } };
 type Landmark = { phrase: RegExp; ref: Ref; says: RegExp };
 
 const LANDMARKS: Landmark[] = [
@@ -198,6 +202,25 @@ const LANDMARKS: Landmark[] = [
   { phrase: /burial chamber/i, ref: { zone: "burial" }, says: /burial chamber/i },
   { phrase: /graveyard/i, ref: { site: "graveyard" }, says: /graveyard|grave/i },
 ];
+
+/**
+ * The generated places' names are landmarks too, but they are the seed's, so they are not typed here:
+ * every story that found a place on this seed (world/stories.ts, bp.stories) adds its place's name as a
+ * phrase, the place's footprint as what it refers to, and the same name as what the board there must say.
+ * A story's text says {place:<story>} and is read with the name put in (sim/text.ts), exactly as she reads it.
+ */
+function storyLandmarks(bp: Blueprint): Landmark[] {
+  const out: Landmark[] = [];
+  for (const s of Object.values(bp.stories ?? {})) {
+    if (!("box" in s)) continue;
+    const name = new RegExp(s.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/^The /, "(?:the |The )?"), "i");
+    out.push({ phrase: name, ref: { box: s.box }, says: name });
+  }
+  return out;
+}
+
+/** Which story each quest is told in (data/stories): a story the seed found no place for has no quests on it. */
+const STORY_OF = new Map(STORIES.flatMap((s) => s.quests.map((q) => [q, s.id] as const)));
 
 // --- the built world, as the player meets it -------------------------------------------------
 
@@ -275,11 +298,14 @@ function treeActions(tree: DialogueTree): { actions: Action[]; time: Time; text:
   return out;
 }
 
-function treeText(c: Catalog, id: string | undefined): string {
+function treeText(c: Catalog, id: string | undefined, seed: number): string {
   const t = id ? c.dialogue[id] : undefined;
   if (!t) return "";
-  return [t.speaker, ...Object.values(t.nodes).flatMap((n) => [...n.lines, ...(n.options ?? []).map((o) => o.label)])].join(" ");
+  return say(seed, [t.speaker, ...Object.values(t.nodes).flatMap((n) => [...n.lines, ...(n.options ?? []).map((o) => o.label)])].join(" "));
 }
+
+/** Text as she reads it on this seed: {name} and the story places' names put in (sim/text.ts). */
+const say = (seed: number, text: string): string => expandText({ name: DEFAULT_NAME, seed }, text);
 
 const worlds = new Map<number, World>();
 
@@ -324,7 +350,7 @@ function world(seed: number): World {
         cx: p.cx,
         cy: p.cy,
         id: `prop:${p.key}`,
-        text: [p.label ?? "", treeText(c, p.talk)].join(" "),
+        text: [p.label ?? "", treeText(c, p.talk, seed)].join(" "),
         hidden: !!p.hidden,
         time: undefined,
       };
@@ -340,7 +366,7 @@ function world(seed: number): World {
       const def = c.units[u.def];
       if (!def) continue;
       const time: Time = def.nightOnly ? "night" : def.dayOnly ? "day" : undefined;
-      const t: Thing = { zone, cx: u.cx, cy: u.cy, id: `unit:${u.key}`, text: [def.name, treeText(c, def.talk)].join(" "), hidden: false, time };
+      const t: Thing = { zone, cx: u.cx, cy: u.cy, id: `unit:${u.key}`, text: [def.name, treeText(c, def.talk, seed)].join(" "), hidden: false, time };
       readable.push(t);
       add(`kill:${u.def}`, t);
       note(t, flatten(def.onDeath), time);
@@ -426,6 +452,8 @@ function world(seed: number): World {
   const road = Tile.Road;
   for (let i = 0; i < tiles.length; i++) if (tiles[i] === road) roadCells[i] = 1;
   for (const line of paths.values()) for (const [x, y] of line) if (x >= 0 && y >= 0 && x < bp.w && y < bp.h) roadCells[y * bp.w + x] = 1;
+  // A footpath a story laid from the road to its place off the road (world/stories.ts) is a path like any other.
+  for (const s of Object.values(bp.stories ?? {})) if ("path" in s && s.path) for (const [x, y] of s.path) roadCells[y * bp.w + x] = 1;
   // Castle's lanes are dirt and its square is cobble, not Road, but in a town every street is a street: the
   // town chunk is ~100 x 70 round its square (world/chunks.ts), so its dirt and cobble count as road.
   const sq = bp.marks.town_square;
@@ -508,12 +536,25 @@ function refPoints(w: World, ref: Ref): { pts: [number, number][]; r: number } |
     const line = w.paths.get(ref.path);
     return line ? { pts: line.filter((_, i) => i % 8 === 0), r: 0 } : null;
   }
+  if ("box" in ref) {
+    // Its rim, every few cells: "seen from the road" is its edge seen, as for any small place.
+    const { cx, cy, w: bw, h: bh } = ref.box;
+    const pts: [number, number][] = [];
+    for (let x = cx; x < cx + bw; x += 4) pts.push([x, cy], [x, cy + bh - 1]);
+    for (let y = cy; y < cy + bh; y += 4) pts.push([cx, y], [cx + bw - 1, y]);
+    return { pts, r: 0 };
+  }
   const d = w.doorTo.get(ref.zone)?.door;
   return d ? { pts: [[d.cx, d.cy]], r: 0 } : null;
 }
 
 /** Half-screens from a cell to a landmark (0 inside a patch or a site's hub). */
 function toRef(w: World, ref: Ref, x: number, y: number): number {
+  if ("box" in ref) {
+    // A footprint: nothing inside it is any distance from it.
+    const b = ref.box;
+    return Math.max(Math.max(0, b.cx - x, x - (b.cx + b.w - 1)) / HALF_W, Math.max(0, b.cy - y, y - (b.cy + b.h - 1)) / HALF_H);
+  }
   const at = refPoints(w, ref);
   if (!at) return Infinity;
   let best = Infinity;
@@ -607,7 +648,17 @@ function audit(seed: number, quests: Catalog["quests"] = catalog.quests): { rows
     problems.push(`seed ${seed} ${quest} ${step}: ${why}`);
   };
 
-  for (const [qid, q] of Object.entries(quests)) {
+  const landmarks = [...LANDMARKS, ...storyLandmarks(w.bps.county)];
+  for (const [qid, raw] of Object.entries(quests)) {
+    // A story the seed found no place for is not on this seed at all: nothing gives it (stories.test counts how rare that is).
+    const story = STORY_OF.get(qid);
+    const placed = story ? w.bps.county.stories?.[story] : undefined;
+    if (placed && "skipped" in placed) {
+      rows.push({ quest: qid, step: "-", text: `(no place on this seed: ${placed.skipped})`, where: "-", walk: "-", road: "-", lead: "-", ok: "skipped" });
+      continue;
+    }
+    // The words as she reads them on this seed, with the generated places' names in.
+    const q = { ...raw, description: say(seed, raw.description), returnTo: say(seed, (raw as { returnTo?: string }).returnTo ?? ""), requirements: raw.requirements.map((r) => ({ ...r, text: say(seed, r.text) })) };
     const tier = TIER[qid]?.tier ?? "near";
     const budget = WALK_BUDGET[tier];
     const givers = (w.sources.get(`quest:${qid}`) ?? []).filter((t) => inCounty(w, t));
@@ -633,7 +684,7 @@ function audit(seed: number, quests: Catalog["quests"] = catalog.quests): { rows
 
       // A. DESCRIPTIVE
       if (/[a-z]+_[a-z]+/i.test(text)) bad("A1 an id shows in the text");
-      const named = LANDMARKS.filter((l) => l.phrase.test(text));
+      const named = landmarks.filter((l) => l.phrase.test(text));
       if (named.length === 0) bad("A2 names no landmark a player could look for");
 
       // Where the step is.
@@ -760,7 +811,7 @@ function audit(seed: number, quests: Catalog["quests"] = catalog.quests): { rows
       const words = `${q.description} ${returnTo} ${q.requirements.map((r) => r.text).join(" ")}`;
       const namedHome = handins.some((h) => {
         const said = h.text.split(/[.:!?]/)[0].trim(); // the label or the speaker, as she would read it first
-        const who = LANDMARKS.filter((l) => l.phrase.test(words)).some((l) => {
+        const who = landmarks.filter((l) => l.phrase.test(words)).some((l) => {
           const hc = inCounty(w, h);
           return hc && toRef(w, l.ref, hc.cx, hc.cy) <= NEAR_LANDMARK;
         });
@@ -816,13 +867,19 @@ describe("quest audit: a person can read it, find it, do it and take it back", (
   }
 
   it("every step's text is short enough for the tracker and every quest says who takes it back", () => {
+    // Read as she reads them: a story's {place:...} is a generated place's name (stories.test holds every seed's longest name to these).
+    for (const seed of SEEDS) {
+      for (const [id, q] of Object.entries(catalog.quests)) {
+        for (const r of q.requirements) expect(say(seed, r.text).length, `${id}: "${say(seed, r.text)}"`).toBeLessThanOrEqual(70);
+        expect(say(seed, q.description).length, `${id}: description`).toBeLessThanOrEqual(SIDE.has(id) ? 320 : 400);
+        expect(say(seed, (q as { returnTo?: string }).returnTo ?? "").length, `${id}: returnTo`).toBeLessThanOrEqual(70);
+      }
+    }
     for (const [id, q] of Object.entries(catalog.quests)) {
-      for (const r of q.requirements) expect(r.text.length, `${id}: "${r.text}"`).toBeLessThanOrEqual(70);
-      expect(q.description.length, `${id}: description`).toBeLessThanOrEqual(SIDE.has(id) ? 320 : 400);
       // The tracker says "Back to <returnTo>" once every step is done (ui/hud.ts), so it reads as a phrase.
       const back = (q as { returnTo?: string }).returnTo ?? "";
       expect(back.length, `${id}: returnTo`).toBeGreaterThan(0);
-      expect(back, `${id}: returnTo starts lower case, it follows "Back to"`).toMatch(/^(the |[A-Z][a-z]+'s |[A-Z][a-z]+, |Pell's |Julie's |Mrs |Miss )/);
+      expect(back, `${id}: returnTo starts lower case, it follows "Back to"`).toMatch(/^(the |[A-Z][a-z]+'s |[A-Z][a-z]+, |Pell's |Julie's |Mrs |Miss |Mr )/);
       expect(back.length, `${id}: returnTo`).toBeLessThanOrEqual(70);
     }
   });

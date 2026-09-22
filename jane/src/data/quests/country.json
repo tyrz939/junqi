@@ -1,0 +1,896 @@
+{
+  "ames_spectacles": {
+    "name": "Mr Ames's Spectacles",
+    "description": "Mr Ames, at {place:ames}, has put his spectacles down in his garden and cannot see to find them. He was looking at the beans. He says he mostly looks at the road.",
+    "completion": "They were on the path between the rows, folded, lenses down. He put them on and looked straight past you at the road.",
+    "returnTo": "Mr Ames, at {place:ames}",
+    "requirements": [
+      {
+        "type": "acquire",
+        "target": "ames_spectacles",
+        "qty": 1,
+        "text": "His spectacles, in the garden at {place:ames}"
+      }
+    ],
+    "rewards": [
+      {
+        "do": "give",
+        "item": "apple",
+        "qty": 2
+      },
+      {
+        "do": "give",
+        "item": "small_water",
+        "qty": 1
+      }
+    ]
+  },
+  "tull_billhook": {
+    "name": "The Bill-hook",
+    "description": "Mr Tull cuts wood at {place:tull}. He put his bill-hook down in the clearing, turned round, and could not find it. He has looked. He would like somebody else to look.",
+    "completion": "It was in the clearing, stuck in the ground by its point. He said he never leaves it like that. He said it twice.",
+    "returnTo": "Mr Tull, at {place:tull}",
+    "requirements": [
+      {
+        "type": "acquire",
+        "target": "tull_billhook",
+        "qty": 1,
+        "text": "His bill-hook, in the clearing at {place:tull}"
+      }
+    ],
+    "rewards": [
+      {
+        "do": "give",
+        "item": "wood",
+        "qty": 2
+      },
+      {
+        "do": "give",
+        "item": "apple",
+        "qty": 1
+      }
+    ]
+  },
+  "bettany_key": {
+    "name": "Locked Out",
+    "description": "Mrs Bettany, at {place:bettany}, has locked herself out. The spare key is under a stone in her garden, and she cannot remember which stone. She has been standing at her own door since the milk came.",
+    "completion": "Under the third stone you turned. She let herself in and locked the door behind her while you were still on the step, and then opened it again to say thank you.",
+    "returnTo": "Mrs Bettany, at {place:bettany}",
+    "requirements": [
+      {
+        "type": "acquire",
+        "target": "bettany_key",
+        "qty": 1,
+        "text": "Her spare key, in the garden at {place:bettany}"
+      }
+    ],
+    "rewards": [
+      {
+        "do": "give",
+        "item": "apple",
+        "qty": 1
+      },
+      {
+        "do": "give",
+        "item": "pansy",
+        "qty": 2
+      }
+    ]
+  },
+  "leckie_eggs": {
+    "name": "Eggs",
+    "description": "Mrs Leckie, at {place:leckie}, says the hens have laid for the first time in a week. She would be glad if somebody fetched the eggs in from the hen house before anything else does.",
+    "completion": "Three eggs, warm. She held each one up to the light before she put it in the bowl.",
+    "returnTo": "Mrs Leckie, at {place:leckie}",
+    "requirements": [
+      {
+        "type": "acquire",
+        "target": "leckie_eggs",
+        "qty": 3,
+        "text": "Eggs, from the hen house at {place:leckie}"
+      }
+    ],
+    "rewards": [
+      {
+        "do": "give",
+        "item": "apple",
+        "qty": 2
+      }
+    ]
+  },
+  "leckie_barn": {
+    "name": "The Barn Door",
+    "description": "Mr Leckie went into the barn at {place:leckie} after his dinner and has not come out. Mrs Leckie will not knock. She would like somebody else to knock, and to say it is only about his tea.",
+    "completion": "He answered through the barn door. He is counting the sacks, he said, and will be out when he has finished. Mrs Leckie says he has been counting them since March.",
+    "returnTo": "Mrs Leckie, at {place:leckie}",
+    "requirements": [
+      {
+        "type": "location",
+        "target": "leckie_barn_knocked",
+        "qty": 1,
+        "text": "The barn door at {place:leckie}"
+      }
+    ],
+    "rewards": [
+      {
+        "do": "give",
+        "item": "small_water",
+        "qty": 2
+      }
+    ]
+  },
+  "leckie_sacks": {
+    "name": "Twelve Sacks",
+    "description": "Mr Leckie counts eleven sacks of meal in the barn at {place:leckie}, and there should be twelve. Mrs Leckie knows the twelfth is in the sheep pen, where he put it himself on Sunday, and will not tell him so.",
+    "completion": "Twelve. He counted them out loud, twice, and came out for his tea. Mrs Leckie gave you a jar from the pantry and did not say what was in it.",
+    "returnTo": "Mrs Leckie, at {place:leckie}",
+    "requirements": [
+      {
+        "type": "acquire",
+        "target": "leckie_sack",
+        "qty": 1,
+        "text": "The twelfth sack, in the sheep pen at {place:leckie}"
+      }
+    ],
+    "rewards": [
+      {
+        "do": "grow",
+        "stat": "strength",
+        "amount": 2,
+        "id": "jar_story_leckie"
+      },
+      {
+        "do": "give",
+        "item": "apple",
+        "qty": 2
+      }
+    ]
+  },
+  "rudd_bucket": {
+    "name": "A Bucket from the Well",
+    "description": "Mrs Rudd, on the green at {place:rudd}, would like a bucket drawn from the well. Her arms are not what they were. She says the water has tasted of something since March, and she would like somebody young to taste it.",
+    "completion": "The water came up clear and very cold. It smelled of pennies. Mrs Rudd drank some and said that was it, that was exactly it.",
+    "returnTo": "Mrs Rudd, on the green at {place:rudd}",
+    "requirements": [
+      {
+        "type": "location",
+        "target": "rudd_well_drawn",
+        "qty": 1,
+        "text": "The well on the green at {place:rudd}"
+      }
+    ],
+    "rewards": [
+      {
+        "do": "give",
+        "item": "small_water",
+        "qty": 2
+      }
+    ]
+  },
+  "rudd_next_door": {
+    "name": "Next Door",
+    "description": "Mrs Rudd would like to know whether the water tastes of pennies next door too, at the next house along the green at {place:rudd}. She has not asked. Nobody on the green has been out much since March.",
+    "completion": "Next door said yes, since March, and they drink it anyway, and would you please not knock after the bell. Mrs Rudd said nobody had said. Then she said she had not asked.",
+    "returnTo": "Mrs Rudd, on the green at {place:rudd}",
+    "requirements": [
+      {
+        "type": "location",
+        "target": "rudd_next_door_asked",
+        "qty": 1,
+        "text": "The next house along the green at {place:rudd}"
+      }
+    ],
+    "rewards": [
+      {
+        "do": "give",
+        "item": "potion_manashield",
+        "qty": 1
+      },
+      {
+        "do": "give",
+        "item": "nasturtium",
+        "qty": 2
+      }
+    ]
+  },
+  "kember_prints": {
+    "name": "Three Knocks",
+    "description": "Mrs Kember, at {place:kember}, says somebody knocks at her door after the bell most nights, and when she looks there is nobody. She would like somebody to look for prints in the vegetable plot, where the ground is soft.",
+    "completion": "No prints in the rows. There was a man's glove on top of the soil, dry, as if it had been put down there that minute.",
+    "returnTo": "Mrs Kember, at {place:kember}",
+    "requirements": [
+      {
+        "type": "location",
+        "target": "kember_plot_looked",
+        "qty": 1,
+        "text": "Prints, in the vegetable plot at {place:kember}"
+      }
+    ],
+    "rewards": [
+      {
+        "do": "give",
+        "item": "apple",
+        "qty": 2
+      }
+    ]
+  },
+  "kember_glove": {
+    "name": "Whose Glove",
+    "description": "Mrs Kember thinks she knows the glove, and does not want to say. She would like it taken to the next house along the green at {place:kember} and asked about. She says to knock three times, and then she says not to.",
+    "completion": "Next door took the glove through the gap of the chain and said it was his father's, and that his father went out one night in November to see who was knocking. Mrs Kember said she would leave a light on. She did not say for which of them.",
+    "returnTo": "Mrs Kember, at {place:kember}",
+    "requirements": [
+      {
+        "type": "location",
+        "target": "kember_glove_asked",
+        "qty": 1,
+        "text": "The glove, to the next house along at {place:kember}"
+      }
+    ],
+    "rewards": [
+      {
+        "do": "give",
+        "item": "light_stone",
+        "qty": 1
+      }
+    ]
+  },
+  "pryor_sitters": {
+    "name": "Round the Cold Fire",
+    "description": "Mr Pryor, who cuts at {place:pryor}, says men sit round a cold fire at {place:pryor_camp}, off the road, and have since the winter. He knew them. He would like them put down, gently, and he does not want to hear how.",
+    "completion": "They sat round a fire that had not been lit in a long while, and did not get up until you were close. Mr Pryor thanked you and did not ask anything.",
+    "returnTo": "Mr Pryor, at {place:pryor}",
+    "requirements": [
+      {
+        "type": "kill",
+        "target": "story_pryor_sitter",
+        "qty": 2,
+        "text": "The men round the cold fire at {place:pryor_camp}"
+      }
+    ],
+    "rewards": [
+      {
+        "do": "give",
+        "item": "potion_stoneskin",
+        "qty": 1
+      },
+      {
+        "do": "give",
+        "item": "hemshade_root",
+        "qty": 2
+      }
+    ]
+  },
+  "gunn_bag": {
+    "name": "Left in the Yard",
+    "description": "Mr Gunn, who keeps {place:gunn}, has had a traveller's bag lying in the yard since Sunday. Nobody has come for it. He would like it brought in, and he would rather not be the one to open it.",
+    "completion": "Nothing in it with a name. A shirt, a razor, and a ticket for the Sunday train, not punched.",
+    "returnTo": "Mr Gunn, at {place:gunn}",
+    "requirements": [
+      {
+        "type": "acquire",
+        "target": "gunn_bag",
+        "qty": 1,
+        "text": "The bag in the yard of {place:gunn}"
+      }
+    ],
+    "rewards": [
+      {
+        "do": "give",
+        "item": "apple",
+        "qty": 2
+      },
+      {
+        "do": "give",
+        "item": "small_water",
+        "qty": 1
+      }
+    ]
+  },
+  "gunn_room": {
+    "name": "Room Four",
+    "description": "The traveller had the back room at {place:gunn}. Mr Gunn says he left his key on the barrels round the side every morning, and he would like it found so the room can be let.",
+    "completion": "A key on a wooden tag, on top of the barrel: 4. Mr Gunn looked at it a while. He has three rooms. He said he would hang it on the board with the others.",
+    "returnTo": "Mr Gunn, at {place:gunn}",
+    "requirements": [
+      {
+        "type": "location",
+        "target": "gunn_key_found",
+        "qty": 1,
+        "text": "The barrels at the side of {place:gunn}"
+      }
+    ],
+    "rewards": [
+      {
+        "do": "give",
+        "item": "potion_lifesteal",
+        "qty": 1
+      },
+      {
+        "do": "give",
+        "item": "grape",
+        "qty": 3
+      }
+    ]
+  },
+  "hurst_fleece": {
+    "name": "Three Short",
+    "description": "Mr Hurst, at {place:hurst}, is three sheep short in the pen. He thinks the lot camped at {place:hurst_camp}, off the road, had them. He would like to know for certain before he does anything he cannot undo.",
+    "completion": "There was fleece caught on the crate at their camp. Mr Hurst turned it over in his hands and said it was his mark, and that was that.",
+    "returnTo": "Mr Hurst, at {place:hurst}",
+    "requirements": [
+      {
+        "type": "acquire",
+        "target": "hurst_fleece",
+        "qty": 1,
+        "text": "Any sign of his sheep at {place:hurst_camp}"
+      }
+    ],
+    "rewards": [
+      {
+        "do": "give",
+        "item": "apple",
+        "qty": 2
+      }
+    ]
+  },
+  "hurst_camp": {
+    "name": "Moved On",
+    "description": "Mr Hurst would like the camp at {place:hurst_camp} moved on. He cannot do it himself and there is nobody to send for. He is sorry to ask. He says they were not always like that, and nobody is, now.",
+    "completion": "It is quiet out that way. Mr Hurst did not ask how. He gave you what his wife keeps for the winter and said the winter could see to itself.",
+    "returnTo": "Mr Hurst, at {place:hurst}",
+    "requirements": [
+      {
+        "type": "kill",
+        "target": "story_hurst_ruffian",
+        "qty": 2,
+        "text": "The ruffians camped at {place:hurst_camp}"
+      }
+    ],
+    "rewards": [
+      {
+        "do": "grow",
+        "stat": "strength",
+        "amount": 2,
+        "id": "jar_story_hurst"
+      },
+      {
+        "do": "give",
+        "item": "potion_stoneskin",
+        "qty": 1
+      }
+    ]
+  },
+  "farrant_ring": {
+    "name": "The Crows' Place",
+    "description": "Mrs Farrant, at {place:farrant}, lost her ring out of the dish on the sill, and there was a crow at the window. She says the crows keep what they take at {place:farrant_camp}, off the road, and have for years.",
+    "completion": "It was in the chest at their place, with buttons, a thimble and a great many teaspoons. Mrs Farrant said the teaspoons were not hers, and she would not want them now if they were.",
+    "returnTo": "Mrs Farrant, at {place:farrant}",
+    "requirements": [
+      {
+        "type": "acquire",
+        "target": "farrant_ring",
+        "qty": 1,
+        "text": "Her ring, where the crows keep things at {place:farrant_camp}"
+      }
+    ],
+    "rewards": [
+      {
+        "do": "give",
+        "item": "apple",
+        "qty": 2
+      },
+      {
+        "do": "give",
+        "item": "pansy",
+        "qty": 2
+      }
+    ]
+  },
+  "vosper_letter": {
+    "name": "The Post",
+    "description": "Mrs Vosper, at {place:vosper}, says the post has been left in her yard lately instead of at the door. There is a letter out there now. She would like it brought in. She does not go out to the yard.",
+    "completion": "A letter, dry, in her son's hand. She read it at the door and said he says the weather is fine and he will be home on Sunday. She said he says that every week.",
+    "returnTo": "Mrs Vosper, at {place:vosper}",
+    "requirements": [
+      {
+        "type": "acquire",
+        "target": "vosper_letter",
+        "qty": 1,
+        "text": "The letter in the yard at {place:vosper}"
+      }
+    ],
+    "rewards": [
+      {
+        "do": "give",
+        "item": "apple",
+        "qty": 2
+      }
+    ]
+  },
+  "vosper_reply": {
+    "name": "Return of Post",
+    "description": "Mrs Vosper has written back, and would like her letter taken to her sister at {place:vosper_sister}, down the road, who keeps them all. Her sister will not open the door. The letter goes through it.",
+    "completion": "It went through the flap onto a mat that sounded thick with others. From inside, her sister said thank you, and that she would put it with the rest.",
+    "returnTo": "Mrs Vosper, at {place:vosper}",
+    "requirements": [
+      {
+        "type": "location",
+        "target": "vosper_reply_posted",
+        "qty": 1,
+        "text": "Her letter, through the door of {place:vosper_sister}"
+      }
+    ],
+    "rewards": [
+      {
+        "do": "give",
+        "item": "small_water",
+        "qty": 2
+      }
+    ]
+  },
+  "vosper_tin": {
+    "name": "In the Right Order",
+    "description": "Mrs Vosper would like her sister at {place:vosper_sister} to send back the tin of letters, all of them, his and hers. She does not say why. She says it is time they were read in the right order.",
+    "completion": "Mrs Vosper sorted the letters on the table by their dates. The newest of her son's was older than the oldest of hers. She thanked you, and gave you something from the dresser that had been his.",
+    "returnTo": "Mrs Vosper, at {place:vosper}",
+    "requirements": [
+      {
+        "type": "acquire",
+        "target": "vosper_tin",
+        "qty": 1,
+        "text": "The tin of letters, from {place:vosper_sister}"
+      }
+    ],
+    "rewards": [
+      {
+        "do": "grow",
+        "stat": "spirit",
+        "amount": 2,
+        "id": "page_story_vosper"
+      },
+      {
+        "do": "give",
+        "item": "apple",
+        "qty": 1
+      }
+    ]
+  },
+  "hackett_look": {
+    "name": "The House Off the Road",
+    "description": "Mr Hackett, at {place:hackett}, grew up at {place:hackett_house}, off the road. It has no roof now. He would like somebody to look inside and tell him what is left. He has not been since, and he is not going.",
+    "completion": "Pencil marks up what was left of the door frame, names and heights. The last mark was higher than any of the others, and newer. Mr Hackett said that could not be right.",
+    "returnTo": "Mr Hackett, at {place:hackett}",
+    "requirements": [
+      {
+        "type": "location",
+        "target": "hackett_marks_seen",
+        "qty": 1,
+        "text": "Inside the walls at {place:hackett_house}"
+      }
+    ],
+    "rewards": [
+      {
+        "do": "give",
+        "item": "wood",
+        "qty": 2
+      },
+      {
+        "do": "give",
+        "item": "apple",
+        "qty": 1
+      }
+    ]
+  },
+  "hackett_tin": {
+    "name": "Under the Step",
+    "description": "Mr Hackett's mother kept a tin under the front step at {place:hackett_house}. He would like it, whatever is in it. He says he knows what is in it, and he would still like it.",
+    "completion": "Buttons, a ration book in his mother's name, and a photograph of a house with a roof on it. He looked at the photograph a long time, and kept it.",
+    "returnTo": "Mr Hackett, at {place:hackett}",
+    "requirements": [
+      {
+        "type": "acquire",
+        "target": "hackett_tin",
+        "qty": 1,
+        "text": "The tin under the step at {place:hackett_house}"
+      }
+    ],
+    "rewards": [
+      {
+        "do": "give",
+        "item": "potion_lifesteal",
+        "qty": 1
+      },
+      {
+        "do": "give",
+        "item": "wood",
+        "qty": 1
+      }
+    ]
+  },
+  "tobin_scissors": {
+    "name": "Her Scissors",
+    "description": "Mrs Tobin, at {place:tobin}, left her scissors in the garden. She was cutting flowers when somebody on the road said her name, and she came straight in, and has not been out since. There was nobody on the road.",
+    "completion": "The scissors were open on the path, and the flowers she had cut lay in a row beside them, heads all one way. She said she had not laid them like that.",
+    "returnTo": "Mrs Tobin, at {place:tobin}",
+    "requirements": [
+      {
+        "type": "acquire",
+        "target": "tobin_scissors",
+        "qty": 1,
+        "text": "Her scissors, in the garden at {place:tobin}"
+      }
+    ],
+    "rewards": [
+      {
+        "do": "give",
+        "item": "pansy",
+        "qty": 2
+      },
+      {
+        "do": "give",
+        "item": "apple",
+        "qty": 1
+      }
+    ]
+  },
+  "venn_apples": {
+    "name": "Windfalls",
+    "description": "Mrs Venn, at {place:venn}, has a bag of windfalls for the woodcutter at {place:venn_wood}, who cuts her wood and will not take money. She would like them left on his woodpile. He will not stop work to be thanked.",
+    "completion": "You left the apples on the woodpile. There was a bundle of kindling on it already, tied with green string. Mrs Venn said it was her string, and that she had never given him any string.",
+    "returnTo": "Mrs Venn, at {place:venn}",
+    "requirements": [
+      {
+        "type": "location",
+        "target": "venn_apples_left",
+        "qty": 1,
+        "text": "Her apples, to the woodpile at {place:venn_wood}"
+      }
+    ],
+    "rewards": [
+      {
+        "do": "give",
+        "item": "apple",
+        "qty": 2
+      },
+      {
+        "do": "give",
+        "item": "wood",
+        "qty": 1
+      }
+    ]
+  },
+  "denny_light": {
+    "name": "A Light in the Walls",
+    "description": "Mr Denny, who cuts at {place:denny}, has seen a light in {place:denny_ruin} from his clearing three nights running. Nobody has lived there for years. He would like somebody to look inside by day and tell him it is nothing.",
+    "completion": "Candle ends inside the walls, a great many, burnt down in saucers, and one kitchen chair facing the doorway. Mr Denny said that was not nothing, and then that it probably was.",
+    "returnTo": "Mr Denny, at {place:denny}",
+    "requirements": [
+      {
+        "type": "location",
+        "target": "denny_candles_seen",
+        "qty": 1,
+        "text": "Inside the walls at {place:denny_ruin}, by day"
+      }
+    ],
+    "rewards": [
+      {
+        "do": "give",
+        "item": "potion_manashield",
+        "qty": 1
+      },
+      {
+        "do": "give",
+        "item": "apple",
+        "qty": 1
+      }
+    ]
+  },
+  "lusk_potatoes": {
+    "name": "Lifting",
+    "description": "Mr Lusk, at {place:lusk}, has potatoes to lift in his garden and a back that will not have it. He would like them up before the frost. He says the frost comes on the same night every year, and he has written it down.",
+    "completion": "A good row, and bigger than he put in. He looked at them a long time and gave you something from the cupboard instead. He said he would look at the potatoes properly before he ate any.",
+    "returnTo": "Mr Lusk, at {place:lusk}",
+    "requirements": [
+      {
+        "type": "acquire",
+        "target": "lusk_potatoes",
+        "qty": 1,
+        "text": "The potatoes in the garden at {place:lusk}"
+      }
+    ],
+    "rewards": [
+      {
+        "do": "give",
+        "item": "hemshade_root",
+        "qty": 2
+      },
+      {
+        "do": "give",
+        "item": "apple",
+        "qty": 1
+      }
+    ]
+  },
+  "arden_key": {
+    "name": "The Clock Key",
+    "description": "Mr Arden, at {place:arden}, keeps a clock on a nail to know when to stop. It stopped at nine last night. He dropped its key in the clearing going out to look at the sky, and he would like to know when it is.",
+    "completion": "The key was in the clearing. He wound the clock and set it by the light, and said it would do until the bell.",
+    "returnTo": "Mr Arden, at {place:arden}",
+    "requirements": [
+      {
+        "type": "acquire",
+        "target": "arden_key",
+        "qty": 1,
+        "text": "The clock key, in the clearing at {place:arden}"
+      }
+    ],
+    "rewards": [
+      {
+        "do": "give",
+        "item": "apple",
+        "qty": 1
+      },
+      {
+        "do": "give",
+        "item": "small_water",
+        "qty": 1
+      }
+    ]
+  },
+  "cope_shed": {
+    "name": "The Shed Door",
+    "description": "Mr Cope, at {place:cope}, cannot get into his shed. The door has stuck since the weekend. He would like somebody to put a shoulder to it. He says it was never locked. He says it has never been locked.",
+    "completion": "The door gave on the second shove. Inside it had been swept, everywhere but a square in the middle the size of a chair. Mr Cope does not sweep.",
+    "returnTo": "Mr Cope, at {place:cope}",
+    "requirements": [
+      {
+        "type": "location",
+        "target": "cope_shed_opened",
+        "qty": 1,
+        "text": "The shed door at {place:cope}"
+      }
+    ],
+    "rewards": [
+      {
+        "do": "give",
+        "item": "iron",
+        "qty": 1
+      },
+      {
+        "do": "give",
+        "item": "wood",
+        "qty": 1
+      }
+    ]
+  },
+  "pardew_nest": {
+    "name": "In the Woodpile",
+    "description": "Mr Pardew, at {place:pardew}, says an owl has nested in his woodpile, and he will not burn a stick of it until he knows the nest is empty. He would like somebody with better knees to look.",
+    "completion": "No owl. In a gap between the logs, a nest of straw, and in it three buttons, a child's, all the same. Mr Pardew said owls do that, and you both let that be the answer.",
+    "returnTo": "Mr Pardew, at {place:pardew}",
+    "requirements": [
+      {
+        "type": "location",
+        "target": "pardew_nest_seen",
+        "qty": 1,
+        "text": "The woodpile at {place:pardew}"
+      }
+    ],
+    "rewards": [
+      {
+        "do": "give",
+        "item": "wood",
+        "qty": 2
+      },
+      {
+        "do": "give",
+        "item": "nasturtium",
+        "qty": 1
+      }
+    ]
+  },
+  "voke_tea": {
+    "name": "His Brother's Tea",
+    "description": "Mr Voke, at {place:voke}, has a can of tea for his brother, who cuts at {place:voke_brother}. They have not spoken since Easter. He would like it left by his brother's fire without a word said.",
+    "completion": "You left the can by the fire. His brother did not look up. When you came back, Mr Voke asked if he had drunk it, and you said you did not know, and he said that was fair.",
+    "returnTo": "Mr Voke, at {place:voke}",
+    "requirements": [
+      {
+        "type": "location",
+        "target": "voke_tea_left",
+        "qty": 1,
+        "text": "The tea, by the fire at {place:voke_brother}"
+      }
+    ],
+    "rewards": [
+      {
+        "do": "give",
+        "item": "apple",
+        "qty": 2
+      },
+      {
+        "do": "give",
+        "item": "small_water",
+        "qty": 1
+      }
+    ]
+  },
+  "quayle_lodger": {
+    "name": "The Lodger",
+    "description": "Mrs Quayle, at {place:quayle}, has a lodger who sits out in the garden in the evenings. His tea is ready and he has not come in. She would like somebody to tell him. She says his name is Mr Grey, or was.",
+    "completion": "In the garden, a cup of tea gone cold, with a skin on it, and nobody. Mrs Quayle said he would be walking. She said he walks a great deal, now.",
+    "returnTo": "Mrs Quayle, at {place:quayle}",
+    "requirements": [
+      {
+        "type": "location",
+        "target": "quayle_garden_seen",
+        "qty": 1,
+        "text": "Her lodger, in the garden at {place:quayle}"
+      }
+    ],
+    "rewards": [
+      {
+        "do": "give",
+        "item": "apple",
+        "qty": 2
+      },
+      {
+        "do": "give",
+        "item": "small_water",
+        "qty": 1
+      }
+    ]
+  },
+  "hebden_water": {
+    "name": "From the Left",
+    "description": "Mr Hebden, at {place:hebden}, would like the seedlings in his garden watered. He cannot carry the can any more. He says to water them from the left, the way his wife did, because they grow toward where she stood.",
+    "completion": "You watered from the left. The seedlings in the garden all lean one way, toward the house, a little to the left of the door.",
+    "returnTo": "Mr Hebden, at {place:hebden}",
+    "requirements": [
+      {
+        "type": "location",
+        "target": "hebden_watered",
+        "qty": 1,
+        "text": "The seedlings in the garden at {place:hebden}"
+      }
+    ],
+    "rewards": [
+      {
+        "do": "give",
+        "item": "pansy",
+        "qty": 2
+      },
+      {
+        "do": "give",
+        "item": "honeylace_lily",
+        "qty": 1
+      }
+    ]
+  },
+  "sayer_ladder": {
+    "name": "The Ladder",
+    "description": "Mr Sayer, at {place:sayer}, lent his ladder to the family at {place:sayer_house} in the spring, to see to their roof. He would like to know it is still there, and still his. He does not need it. He would like to know.",
+    "completion": "The ladder was inside the walls, against the one gable left standing, freshly tarred, SAYER painted on a rung. There is no roof for it to reach. Mr Sayer said that was all right, then, and he would fetch it on Sunday.",
+    "returnTo": "Mr Sayer, at {place:sayer}",
+    "requirements": [
+      {
+        "type": "location",
+        "target": "sayer_ladder_seen",
+        "qty": 1,
+        "text": "His ladder, inside the walls at {place:sayer_house}"
+      }
+    ],
+    "rewards": [
+      {
+        "do": "give",
+        "item": "apple",
+        "qty": 1
+      },
+      {
+        "do": "give",
+        "item": "iron",
+        "qty": 1
+      }
+    ]
+  },
+  "rendle_coat": {
+    "name": "His Good Coat",
+    "description": "Mrs Rendle, at {place:rendle}, had her husband's good coat taken off the line by the lot camped at {place:rendle_camp}, off the road. She would like it back. It is the coat he is to be buried in. He is quite well.",
+    "completion": "The coat was in the chest at their camp, folded and brushed. Mrs Rendle shook it out and held it up and said it had never been folded like that in its life.",
+    "returnTo": "Mrs Rendle, at {place:rendle}",
+    "requirements": [
+      {
+        "type": "acquire",
+        "target": "rendle_coat",
+        "qty": 1,
+        "text": "The coat, in the chest at {place:rendle_camp}"
+      }
+    ],
+    "rewards": [
+      {
+        "do": "give",
+        "item": "potion_stoneskin",
+        "qty": 1
+      },
+      {
+        "do": "give",
+        "item": "apple",
+        "qty": 2
+      }
+    ]
+  },
+  "treloar_bell": {
+    "name": "Nine O'Clock",
+    "description": "Mr Treloar, at {place:treloar}, says the School bell has been going early. He would like somebody to stand in his clearing after the nine o'clock bell, listen, and tell him in the morning whether it rang twice.",
+    "completion": "It rang at nine, from the north, from the hill. Then it rang again, nearer. Mr Treloar said he knew it. He said he would set his watch by the second one.",
+    "returnTo": "Mr Treloar, at {place:treloar}",
+    "requirements": [
+      {
+        "type": "location",
+        "target": "treloar_listened",
+        "qty": 1,
+        "text": "His clearing at {place:treloar}, after the nine o'clock bell"
+      }
+    ],
+    "rewards": [
+      {
+        "do": "give",
+        "item": "potion_manashield",
+        "qty": 1
+      },
+      {
+        "do": "give",
+        "item": "apple",
+        "qty": 1
+      }
+    ]
+  },
+  "gethin_stump": {
+    "name": "Names in the Stump",
+    "description": "Mr Gethin, at {place:gethin}, has an old stump in his clearing that the cutters have put their names in for a hundred years. His eyes are going. He would like the newest name read to him. Somebody cut one since Friday, and nobody has been.",
+    "completion": "The newest cut was fresh, the wood still pale: your name, and this year. Mr Gethin asked you to read it again, and then said there was nobody by that name round here.",
+    "returnTo": "Mr Gethin, at {place:gethin}",
+    "requirements": [
+      {
+        "type": "location",
+        "target": "gethin_names_read",
+        "qty": 1,
+        "text": "The old stump in the clearing at {place:gethin}"
+      }
+    ],
+    "rewards": [
+      {
+        "do": "give",
+        "item": "wood",
+        "qty": 2
+      },
+      {
+        "do": "give",
+        "item": "apple",
+        "qty": 1
+      }
+    ]
+  },
+  "ruck_kindling": {
+    "name": "Kindling",
+    "description": "Mr Ruck, at {place:ruck}, has a bundle of kindling for the old lady at {place:ruck_cottage}, who has nobody to cut for her. He would like it left at her door. She will want to pay. He would like you not to let her.",
+    "completion": "She took the kindling through the door and pressed a bag of grapes on you and would not hear no. Mr Ruck said she has done that every week for thirty years, and he has never once got away.",
+    "returnTo": "Mr Ruck, at {place:ruck}",
+    "requirements": [
+      {
+        "type": "location",
+        "target": "ruck_kindling_left",
+        "qty": 1,
+        "text": "The kindling, to the door of {place:ruck_cottage}"
+      }
+    ],
+    "rewards": [
+      {
+        "do": "give",
+        "item": "wood",
+        "qty": 2
+      }
+    ]
+  }
+}

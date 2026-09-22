@@ -78,7 +78,14 @@ export type Blueprint = {
    * sim and in the validator alike. An id the catalog already has is a validation error.
    */
   triggers?: Record<string, TriggerDef>;
+  /**
+   * The county only: where each story of data/stories found its place on this seed (the place's
+   * kind, its name as the board says it, its footprint), or why it found none.
+   */
+  stories?: Record<string, StoryPlace>;
 };
+
+export type StoryPlace = { kind: string; name: string; box: Rect; path?: [number, number][] } | { skipped: string };
 
 /**
  * Candidates buildZone rolls for one zone and one seed before it gives up. A generated

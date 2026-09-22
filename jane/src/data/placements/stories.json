@@ -1,0 +1,785 @@
+[
+  {
+    "key": "ames_giver",
+    "at": {
+      "place": "ames",
+      "slot": "folk"
+    },
+    "unit": {
+      "def": "story_ames"
+    }
+  },
+  {
+    "key": "ames_spectacles_drop",
+    "at": {
+      "place": "ames",
+      "slot": "garden"
+    },
+    "prop": {
+      "def": "lost_thing",
+      "loot": [
+        {
+          "item": "ames_spectacles",
+          "qty": 1
+        }
+      ],
+      "label": "A pair of spectacles"
+    }
+  },
+  {
+    "key": "tull_giver",
+    "at": {
+      "place": "tull",
+      "slot": "folk"
+    },
+    "unit": {
+      "def": "story_tull"
+    }
+  },
+  {
+    "key": "tull_billhook_drop",
+    "at": {
+      "place": "tull",
+      "slot": "clearing"
+    },
+    "prop": {
+      "def": "lost_thing",
+      "loot": [
+        {
+          "item": "tull_billhook",
+          "qty": 1
+        }
+      ],
+      "label": "A bill-hook"
+    }
+  },
+  {
+    "key": "bettany_giver",
+    "at": {
+      "place": "bettany",
+      "slot": "folk"
+    },
+    "unit": {
+      "def": "story_bettany"
+    }
+  },
+  {
+    "key": "bettany_key_drop",
+    "at": {
+      "place": "bettany",
+      "slot": "garden"
+    },
+    "prop": {
+      "def": "lost_thing",
+      "loot": [
+        {
+          "item": "bettany_key",
+          "qty": 1
+        }
+      ],
+      "label": "A key under a stone"
+    }
+  },
+  {
+    "key": "leckie_giver",
+    "at": {
+      "place": "leckie",
+      "slot": "folk"
+    },
+    "unit": {
+      "def": "story_leckie"
+    }
+  },
+  {
+    "key": "leckie_coop",
+    "at": {
+      "place": "leckie",
+      "slot": "coop"
+    },
+    "edit": {
+      "loot": [
+        {
+          "item": "leckie_eggs",
+          "qty": 3
+        }
+      ]
+    }
+  },
+  {
+    "key": "leckie_barn",
+    "at": {
+      "place": "leckie",
+      "slot": "barn"
+    },
+    "edit": {
+      "talk": "story_leckie_barn"
+    }
+  },
+  {
+    "key": "leckie_sack_drop",
+    "at": {
+      "place": "leckie",
+      "slot": "pen"
+    },
+    "prop": {
+      "def": "lost_thing",
+      "loot": [
+        {
+          "item": "leckie_sack",
+          "qty": 1
+        }
+      ],
+      "label": "A sack of meal"
+    }
+  },
+  {
+    "key": "rudd_giver",
+    "at": {
+      "place": "rudd",
+      "slot": "folk"
+    },
+    "unit": {
+      "def": "story_rudd"
+    }
+  },
+  {
+    "key": "rudd_well",
+    "at": {
+      "place": "rudd",
+      "slot": "well"
+    },
+    "edit": {
+      "talk": "story_rudd_well"
+    }
+  },
+  {
+    "key": "rudd_neighbour",
+    "at": {
+      "place": "rudd",
+      "slot": "house_2"
+    },
+    "edit": {
+      "talk": "story_rudd_neighbour"
+    }
+  },
+  {
+    "key": "kember_giver",
+    "at": {
+      "place": "kember",
+      "slot": "folk"
+    },
+    "unit": {
+      "def": "story_kember"
+    }
+  },
+  {
+    "key": "kember_glove_drop",
+    "at": {
+      "place": "kember",
+      "slot": "plot"
+    },
+    "prop": {
+      "def": "lost_thing",
+      "loot": [
+        {
+          "item": "kember_glove",
+          "qty": 1
+        }
+      ],
+      "label": "Something in the rows",
+      "use": [
+        {
+          "do": "location",
+          "name": "kember_plot_looked"
+        }
+      ]
+    }
+  },
+  {
+    "key": "kember_neighbour",
+    "at": {
+      "place": "kember",
+      "slot": "house_2"
+    },
+    "edit": {
+      "talk": "story_kember_neighbour"
+    }
+  },
+  {
+    "key": "pryor_giver",
+    "at": {
+      "place": "pryor",
+      "slot": "folk"
+    },
+    "unit": {
+      "def": "story_pryor"
+    }
+  },
+  {
+    "key": "pryor_sitters",
+    "at": {
+      "place": "pryor_camp",
+      "slot": "hostiles"
+    },
+    "unit": {
+      "def": "story_pryor_sitter"
+    }
+  },
+  {
+    "key": "gunn_giver",
+    "at": {
+      "place": "gunn",
+      "slot": "folk"
+    },
+    "unit": {
+      "def": "story_gunn"
+    }
+  },
+  {
+    "key": "gunn_bag_drop",
+    "at": {
+      "place": "gunn",
+      "slot": "yard"
+    },
+    "prop": {
+      "def": "lost_thing",
+      "loot": [
+        {
+          "item": "gunn_bag",
+          "qty": 1
+        }
+      ],
+      "label": "A traveller's bag"
+    }
+  },
+  {
+    "key": "gunn_barrels",
+    "at": {
+      "place": "gunn",
+      "slot": "barrels"
+    },
+    "edit": {
+      "talk": "story_gunn_barrels"
+    }
+  },
+  {
+    "key": "hurst_giver",
+    "at": {
+      "place": "hurst",
+      "slot": "folk"
+    },
+    "unit": {
+      "def": "story_hurst"
+    }
+  },
+  {
+    "key": "hurst_ruffians",
+    "at": {
+      "place": "hurst_camp",
+      "slot": "hostiles"
+    },
+    "unit": {
+      "def": "story_hurst_ruffian"
+    }
+  },
+  {
+    "key": "hurst_fleece_drop",
+    "at": {
+      "place": "hurst_camp",
+      "slot": "ground"
+    },
+    "prop": {
+      "def": "lost_thing",
+      "loot": [
+        {
+          "item": "hurst_fleece",
+          "qty": 1
+        }
+      ],
+      "label": "A tuft of fleece"
+    }
+  },
+  {
+    "key": "farrant_giver",
+    "at": {
+      "place": "farrant",
+      "slot": "folk"
+    },
+    "unit": {
+      "def": "story_farrant"
+    }
+  },
+  {
+    "key": "farrant_chest",
+    "at": {
+      "place": "farrant_camp",
+      "slot": "chest"
+    },
+    "edit": {
+      "loot": [
+        {
+          "item": "farrant_ring",
+          "qty": 1
+        },
+        {
+          "item": "grape",
+          "qty": 2
+        }
+      ]
+    }
+  },
+  {
+    "key": "vosper_giver",
+    "at": {
+      "place": "vosper",
+      "slot": "folk"
+    },
+    "unit": {
+      "def": "story_vosper"
+    }
+  },
+  {
+    "key": "vosper_letter_drop",
+    "at": {
+      "place": "vosper",
+      "slot": "yard"
+    },
+    "prop": {
+      "def": "lost_thing",
+      "loot": [
+        {
+          "item": "vosper_letter",
+          "qty": 1
+        }
+      ],
+      "label": "A letter"
+    }
+  },
+  {
+    "key": "vosper_sister_door",
+    "at": {
+      "place": "vosper_sister",
+      "slot": "house"
+    },
+    "edit": {
+      "talk": "story_vosper_sister"
+    }
+  },
+  {
+    "key": "hackett_giver",
+    "at": {
+      "place": "hackett",
+      "slot": "folk"
+    },
+    "unit": {
+      "def": "story_hackett"
+    }
+  },
+  {
+    "key": "hackett_marks",
+    "at": {
+      "place": "hackett_house",
+      "slot": "inside"
+    },
+    "prop": {
+      "def": "look_note",
+      "talk": "story_hackett_marks",
+      "label": "Pencil marks",
+      "use": [
+        {
+          "do": "location",
+          "name": "hackett_marks_seen"
+        }
+      ]
+    }
+  },
+  {
+    "key": "hackett_tin_drop",
+    "at": {
+      "place": "hackett_house",
+      "slot": "step"
+    },
+    "prop": {
+      "def": "lost_thing",
+      "loot": [
+        {
+          "item": "hackett_tin",
+          "qty": 1
+        }
+      ],
+      "label": "A tin under the step"
+    }
+  },
+  {
+    "key": "tobin_giver",
+    "at": {
+      "place": "tobin",
+      "slot": "folk"
+    },
+    "unit": {
+      "def": "story_tobin"
+    }
+  },
+  {
+    "key": "tobin_scissors_drop",
+    "at": {
+      "place": "tobin",
+      "slot": "garden"
+    },
+    "prop": {
+      "def": "lost_thing",
+      "loot": [
+        {
+          "item": "tobin_scissors",
+          "qty": 1
+        }
+      ],
+      "label": "A pair of scissors"
+    }
+  },
+  {
+    "key": "venn_giver",
+    "at": {
+      "place": "venn",
+      "slot": "folk"
+    },
+    "unit": {
+      "def": "story_venn"
+    }
+  },
+  {
+    "key": "venn_woodpile",
+    "at": {
+      "place": "venn_wood",
+      "slot": "woodpile"
+    },
+    "edit": {
+      "talk": "story_venn_woodpile"
+    }
+  },
+  {
+    "key": "denny_giver",
+    "at": {
+      "place": "denny",
+      "slot": "folk"
+    },
+    "unit": {
+      "def": "story_denny"
+    }
+  },
+  {
+    "key": "denny_candles",
+    "at": {
+      "place": "denny_ruin",
+      "slot": "inside"
+    },
+    "prop": {
+      "def": "look_note",
+      "talk": "story_denny_candles",
+      "label": "Candle ends",
+      "use": [
+        {
+          "do": "location",
+          "name": "denny_candles_seen"
+        }
+      ]
+    }
+  },
+  {
+    "key": "lusk_giver",
+    "at": {
+      "place": "lusk",
+      "slot": "folk"
+    },
+    "unit": {
+      "def": "story_lusk"
+    }
+  },
+  {
+    "key": "lusk_potatoes_drop",
+    "at": {
+      "place": "lusk",
+      "slot": "garden"
+    },
+    "prop": {
+      "def": "herb",
+      "loot": [
+        {
+          "item": "lusk_potatoes",
+          "qty": 1
+        }
+      ],
+      "label": "Potato haulms"
+    }
+  },
+  {
+    "key": "arden_giver",
+    "at": {
+      "place": "arden",
+      "slot": "folk"
+    },
+    "unit": {
+      "def": "story_arden"
+    }
+  },
+  {
+    "key": "arden_key_drop",
+    "at": {
+      "place": "arden",
+      "slot": "clearing"
+    },
+    "prop": {
+      "def": "lost_thing",
+      "loot": [
+        {
+          "item": "arden_key",
+          "qty": 1
+        }
+      ],
+      "label": "A little brass key"
+    }
+  },
+  {
+    "key": "cope_giver",
+    "at": {
+      "place": "cope",
+      "slot": "folk"
+    },
+    "unit": {
+      "def": "story_cope"
+    }
+  },
+  {
+    "key": "cope_shed",
+    "at": {
+      "place": "cope",
+      "slot": "shed"
+    },
+    "edit": {
+      "talk": "story_cope_shed"
+    }
+  },
+  {
+    "key": "pardew_giver",
+    "at": {
+      "place": "pardew",
+      "slot": "folk"
+    },
+    "unit": {
+      "def": "story_pardew"
+    }
+  },
+  {
+    "key": "pardew_woodpile",
+    "at": {
+      "place": "pardew",
+      "slot": "woodpile"
+    },
+    "edit": {
+      "talk": "story_pardew_woodpile"
+    }
+  },
+  {
+    "key": "voke_giver",
+    "at": {
+      "place": "voke",
+      "slot": "folk"
+    },
+    "unit": {
+      "def": "story_voke"
+    }
+  },
+  {
+    "key": "voke_fire",
+    "at": {
+      "place": "voke_brother",
+      "slot": "fire"
+    },
+    "edit": {
+      "talk": "story_voke_fire"
+    }
+  },
+  {
+    "key": "quayle_giver",
+    "at": {
+      "place": "quayle",
+      "slot": "folk"
+    },
+    "unit": {
+      "def": "story_quayle"
+    }
+  },
+  {
+    "key": "quayle_cup",
+    "at": {
+      "place": "quayle",
+      "slot": "garden"
+    },
+    "prop": {
+      "def": "cold_cup",
+      "talk": "story_quayle_cup",
+      "label": "A cup of tea",
+      "use": [
+        {
+          "do": "location",
+          "name": "quayle_garden_seen"
+        }
+      ]
+    }
+  },
+  {
+    "key": "hebden_giver",
+    "at": {
+      "place": "hebden",
+      "slot": "folk"
+    },
+    "unit": {
+      "def": "story_hebden"
+    }
+  },
+  {
+    "key": "hebden_seedlings",
+    "at": {
+      "place": "hebden",
+      "slot": "garden"
+    },
+    "prop": {
+      "def": "seedlings",
+      "talk": "story_hebden_seedlings",
+      "label": "Seedlings",
+      "use": [
+        {
+          "do": "location",
+          "name": "hebden_watered"
+        }
+      ]
+    }
+  },
+  {
+    "key": "sayer_giver",
+    "at": {
+      "place": "sayer",
+      "slot": "folk"
+    },
+    "unit": {
+      "def": "story_sayer"
+    }
+  },
+  {
+    "key": "sayer_ladder",
+    "at": {
+      "place": "sayer_house",
+      "slot": "inside"
+    },
+    "prop": {
+      "def": "look_note",
+      "talk": "story_sayer_ladder",
+      "label": "A ladder",
+      "use": [
+        {
+          "do": "location",
+          "name": "sayer_ladder_seen"
+        }
+      ]
+    }
+  },
+  {
+    "key": "rendle_giver",
+    "at": {
+      "place": "rendle",
+      "slot": "folk"
+    },
+    "unit": {
+      "def": "story_rendle"
+    }
+  },
+  {
+    "key": "rendle_chest",
+    "at": {
+      "place": "rendle_camp",
+      "slot": "chest"
+    },
+    "edit": {
+      "loot": [
+        {
+          "item": "rendle_coat",
+          "qty": 1
+        },
+        {
+          "item": "small_water",
+          "qty": 1
+        }
+      ]
+    }
+  },
+  {
+    "key": "treloar_giver",
+    "at": {
+      "place": "treloar",
+      "slot": "folk"
+    },
+    "unit": {
+      "def": "story_treloar"
+    }
+  },
+  {
+    "key": "treloar_mark",
+    "at": {
+      "place": "treloar",
+      "slot": "clearing"
+    },
+    "prop": {
+      "def": "note",
+      "talk": "story_treloar_mark",
+      "label": "A chalk mark"
+    }
+  },
+  {
+    "key": "gethin_giver",
+    "at": {
+      "place": "gethin",
+      "slot": "folk"
+    },
+    "unit": {
+      "def": "story_gethin"
+    }
+  },
+  {
+    "key": "gethin_stump",
+    "at": {
+      "place": "gethin",
+      "slot": "clearing"
+    },
+    "prop": {
+      "def": "cut_stump",
+      "talk": "story_gethin_stump",
+      "label": "The old stump",
+      "use": [
+        {
+          "do": "location",
+          "name": "gethin_names_read"
+        }
+      ]
+    }
+  },
+  {
+    "key": "ruck_giver",
+    "at": {
+      "place": "ruck",
+      "slot": "folk"
+    },
+    "unit": {
+      "def": "story_ruck"
+    }
+  },
+  {
+    "key": "ruck_cottage_door",
+    "at": {
+      "place": "ruck_cottage",
+      "slot": "house"
+    },
+    "edit": {
+      "talk": "story_ruck_cottage"
+    }
+  }
+]

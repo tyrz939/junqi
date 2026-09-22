@@ -20,7 +20,7 @@
 // Same seed, same county: every choice comes from the kit's stream, in a fixed order.
 
 import { Tile } from "@/sim/grid";
-import type { UnitSpawn } from "@/world/blueprint";
+import type { PropSpawn, UnitSpawn } from "@/world/blueprint";
 import type { Chunk } from "@/world/chunks";
 import type { Kit } from "@/world/kit";
 import { at, Biome, MACRO, Region, ROAD, SKEL_H, SKEL_W, type Skeleton } from "@/world/skeleton";
@@ -104,6 +104,37 @@ const WILDLIFE: Record<Region, { def: string; biomes?: Biome[] }[]> = {
   ],
 };
 
+/**
+ * Something the builder made that a story may claim (world/stories.ts): a hamlet, a farm, a
+ * cottage, an inn, a woodcutters' clearing, a camp, a ruin. It remembers where it stands and
+ * what is in it, by name, so a story row can say "the hen house at some farm in the Lowfields"
+ * without knowing where any farm is.
+ */
+export type Place = {
+  /** Build order: the place's number on this seed. */
+  n: number;
+  kind: string;
+  region: Region;
+  threat: number;
+  /** The footprint, top left and size. */
+  box: { cx: number; cy: number; w: number; h: number };
+  /** Cells from the centre to the nearest road or footpath, and to the first walk (the 4-cell field). */
+  road: number;
+  first: number;
+  /** Open cells kept free inside the place for a story to use: the board, the yard, the garden. */
+  slots: Record<string, [number, number]>;
+  /** The place's own props by name (the house, the well, the chest), as prop keys. */
+  things: Record<string, string>;
+  /** Keys of the people who live there, in the order they were stood. */
+  folk: string[];
+  /** Keys of what bites, for a camp or a den. */
+  hostiles: string[];
+};
+
+/** The places `furnishCountry(c, "places")` built, in build order. */
+export function countryPlaces(c: Country): Place[] {
+  return context(c).places;
+}
 export function furnishCountry(c: Country, stage: "roads" | "places" | "life"): void {
   const ctx = context(c);
   if (stage === "roads") {
@@ -130,6 +161,9 @@ type Ctx = Country & {
   dFirst: Uint8Array;
   lampAt: number[];
   firstLines: Set<number>;
+  places: Place[];
+  /** The place being stamped, while it is stamped: what it puts, it owns. */
+  cur: Place | null;
 };
 
 let cached: { c: Country; ctx: Ctx } | null = null;
@@ -148,6 +182,8 @@ function context(c: Country): Ctx {
     dFirst: distanceField(c.lines, (n) => firstLines.has(n)),
     lampAt: [],
     firstLines,
+    places: [],
+    cur: null,
   };
   cached = { c, ctx };
   return ctx;
@@ -257,13 +293,62 @@ function pad(c: Ctx, cx: number, cy: number, rx: number, ry: number, t: Tile): v
   }
 }
 
-function put(c: Ctx, def: string, x: number, y: number, extra: { key?: string; talk?: string; label?: string; loot?: { item: string; qty: number }[]; use?: import("@/sim/state").ActionList } = {}): boolean {
+function put(c: Ctx, def: string, x: number, y: number, extra: { key?: string; talk?: string; label?: string; loot?: { item: string; qty: number }[]; use?: import("@/sim/state").ActionList } = {}): PropSpawn | null {
   const size = c.sizes[def] ?? { w: 1, h: 1 };
   x = Math.round(x);
   y = Math.round(y);
-  if (!c.k.fits(x, y, size.w, size.h)) return false;
-  c.k.prop({ def, cx: x, cy: y, ...extra }, size.w, size.h);
-  return true;
+  if (!c.k.fits(x, y, size.w, size.h)) return null;
+  return c.k.prop({ def, cx: x, cy: y, ...extra }, size.w, size.h);
+}
+
+/** A prop the place being stamped is known by ("the well", "the barn"), for a story to find by name. */
+function own(c: Ctx, name: string, p: PropSpawn | null): PropSpawn | null {
+  if (p && c.cur && !c.cur.things[name]) c.cur.things[name] = p.key;
+  return p;
+}
+
+/**
+ * Keep open ground near (x, y) free for a story: the yard, the garden, the green, the board by the
+ * lane. Taken at the END of a place's build, out of what the build left open, so it moves nothing
+ * that was drawn; nothing of the county's lands there afterwards because the whole footprint is
+ * claimed next. It draws no randomness: a county with its slots kept is the same county without.
+ */
+function keep(c: Ctx, name: string, x: number, y: number, w = 1, h = 1): void {
+  const k = c.k;
+  if (!c.cur) return;
+  x = Math.round(x);
+  y = Math.round(y);
+  for (let r = 0; r <= 3; r++) {
+    for (let oy = -r; oy <= r; oy++) {
+      for (let ox = -r; ox <= r; ox++) {
+        if (Math.max(Math.abs(ox), Math.abs(oy)) !== r) continue;
+        const px = x + ox;
+        const py = y + oy;
+        // Somewhere to stand in front of it, too: the cell below is open ground.
+        if (!k.fits(px, py, w, h) || k.solid(px, py + h) || k.isClaimed(px, py + h) || k.get(px, py) === Tile.Water) continue;
+        k.claim(px, py, w, h);
+        c.cur.slots[name] = [px, py];
+        return;
+      }
+    }
+  }
+}
+
+/**
+ * More than one person of a kind: a def listed here may stand in for the plain one, each with its
+ * own tree (data/units/country.json, data/dialogue), so the county's farmers are not one farmer.
+ * Which one stands at a spot is the spot's own hash, never the kit's stream: adding a variant moves
+ * nothing else in the county. The plain def is always one of the choices.
+ */
+const FOLK_VARIANTS: Record<string, readonly string[]> = {};
+
+function variant(def: string, x: number, y: number): string {
+  const list = FOLK_VARIANTS[def];
+  if (!list || list.length === 0) return def;
+  let h = (Math.imul(x, 0x27d4eb2d) ^ Math.imul(y, 0x165667b1)) >>> 0;
+  h = Math.imul(h ^ (h >>> 15), 0x85ebca6b) >>> 0;
+  const all = [def, ...list];
+  return all[(h ^ (h >>> 13)) % all.length];
 }
 
 /** Somebody who lives here: walks a short round between a few points, and stands at each. */
@@ -278,7 +363,8 @@ function folk(c: Ctx, def: string, x: number, y: number, reach: number): void {
     const py = y + k.int(-reach, reach);
     if (!k.solid(px, py)) patrol.push([px, py, 90 + k.roll(300)]);
   }
-  k.unit(null, def, x, y, patrol.length > 1 ? patrol : undefined);
+  const u = k.unit(null, variant(def, x, y), x, y, patrol.length > 1 ? patrol : undefined);
+  if (c.cur && def.startsWith("folk_")) c.cur.folk.push(u.key);
 }
 
 /** Something that bites, playing at the threat of the ground it stands on. */
@@ -290,7 +376,9 @@ function hostile(c: Ctx, def: string, x: number, y: number, patrol?: UnitSpawn["
   const threat = c.sk.threat[macroOf(x, y)];
   if (threat === 0) return false;
   if (dist(c.dFirst, x, y) < FIRST_CLEAR) return false;
-  k.unit(null, def, x, y, patrol).phase = threat;
+  const u = k.unit(null, def, x, y, patrol);
+  u.phase = threat;
+  if (c.cur) c.cur.hostiles.push(u.key);
   return true;
 }
 
@@ -912,6 +1000,21 @@ function stamp(c: Ctx, kind: Kind, x: number, y: number): boolean {
   const y0 = y - (h >> 1);
   if (!room(c, x0, y0, w, h)) return false;
   clear(c, x0, y0, w, h, kind === "woodcutter" ? Tile.GrassTall : Tile.Grass);
+  const m = macroOf(x, y);
+  c.cur = {
+    n: c.places.length,
+    kind,
+    region: c.sk.region[m] as Region,
+    threat: c.sk.threat[m],
+    box: { cx: x0, cy: y0, w, h },
+    road: dist(c.dRoad, x, y),
+    first: dist(c.dFirst, x, y),
+    slots: {},
+    things: {},
+    folk: [],
+    hostiles: [],
+  };
+  c.places.push(c.cur);
   switch (kind) {
     case "hamlet":
       hamlet(c, x0, y0);
@@ -1000,8 +1103,33 @@ function stamp(c: Ctx, kind: Kind, x: number, y: number): boolean {
       graves(c, x0, y0);
       break;
   }
+  c.cur = null;
   c.k.claim(x0, y0, w, h);
   return true;
+}
+
+/**
+ * The board a place's name will be painted on (world/stories.ts puts it up): on the edge of the
+ * place that faces the road, as near the middle of that edge as the place left room.
+ */
+function keepBoard(c: Ctx, x0: number, y0: number, w: number, h: number): void {
+  if (!c.cur) return;
+  const side = roadSide(c, x0 + (w >> 1), y0 + (h >> 1));
+  const along = side === "n" || side === "s" ? w : h;
+  for (let d = 0; d < along / 2 - 2; d++) {
+    for (const s of d === 0 ? [0] : [d, -d]) {
+      const x = side === "n" || side === "s" ? x0 + (w >> 1) - 1 + s : side === "e" ? x0 + w - 3 : x0 + 1;
+      const y = side === "e" || side === "w" ? y0 + (h >> 1) + s : side === "s" ? y0 + h - 2 : y0 + 1;
+      for (const inset of [0, 1, 2]) {
+        const ix = side === "e" ? x - inset : side === "w" ? x + inset : x;
+        const iy = side === "s" ? y - inset : side === "n" ? y + inset : y;
+        if (!c.k.fits(ix, iy, 2, 1) || c.k.solid(ix, iy + 1) || c.k.isClaimed(ix, iy + 1)) continue;
+        c.k.claim(ix, iy, 2, 1);
+        c.cur!.slots.board = [ix, iy];
+        return;
+      }
+    }
+  }
 }
 
 const COTTAGES = ["cottage_thatch", "cottage_timber", "cottage_slate", "cottage_tile"];
@@ -1026,7 +1154,7 @@ function hamlet(c: Ctx, x0: number, y0: number): void {
     const def = COTTAGES[(first + i) % 4];
     const w = def === "cottage_tile" ? 9 : 8;
     const hx = x0 + sx + (i === slots.length - 1 && w === 9 ? -1 : 0);
-    put(c, def, hx, y0 + 1, { talk: k.pick(DOORS) });
+    own(c, i === 0 ? "house" : `house_${i + 1}`, put(c, def, hx, y0 + 1, { talk: k.pick(DOORS) }));
     put(c, "flowerbed", hx + (k.chance(0.5) ? 0 : w - 2), y0 + 7);
     if (k.chance(0.5)) for (let i = 0; i < 3; i++) k.set(hx + 3 + i, y0 + 8, Tile.FlowerBed);
   });
@@ -1035,23 +1163,27 @@ function hamlet(c: Ctx, x0: number, y0: number): void {
   const gy = y0 + 15;
   pad(c, gx, gy, 11, 5, Tile.Dirt);
   pad(c, gx, gy, 4, 2.5, Tile.Cobble);
-  put(c, "well", gx - 1, gy - 1, { talk: "country_well" });
+  own(c, "well", put(c, "well", gx - 1, gy - 1, { talk: "country_well" }));
   put(c, "trough", gx + 3, gy + 1);
   put(c, "log", gx - 7, gy - 1);
   // South of the green: a hen house and its hens, a vegetable plot, a line of washing.
-  put(c, "hen_coop", x0 + 4, y0 + 22, { talk: "country_coop" });
+  own(c, "coop", put(c, "hen_coop", x0 + 4, y0 + 22, { talk: "country_coop" }));
   for (let h = 0; h < 3; h++) folk(c, "hen", x0 + 3 + k.roll(6), y0 + 24 + k.roll(3), 3);
   const plotX = x0 + 21;
   const plotY = y0 + 21;
   for (let j = 0; j < 6; j++) for (let i = 0; i < 12; i++) k.set(plotX + i, plotY + j, j % 2 === 0 ? Tile.Crops : Tile.Dirt);
   for (let i = 1; i < 12; i += 4) put(c, "crop", plotX + i, plotY + 2);
   run(c, plotX - 1, plotY + 6, 14, true, Tile.Fence);
-  put(c, "washing_line", x0 + 11, y0 + 24);
-  if (k.chance(0.5)) put(c, "woodpile", x0 + 13, y0 + 20);
+  own(c, "washing", put(c, "washing_line", x0 + 11, y0 + 24));
+  if (k.chance(0.5)) own(c, "woodpile", put(c, "woodpile", x0 + 13, y0 + 20));
   // People: two or three, about the green.
   const people = ["folk_old", "folk_woman", "folk_man", "folk_wife"];
   const m = 2 + k.roll(2);
   for (let i = 0; i < m; i++) folk(c, k.pick(people), gx - 8 + k.roll(16), gy - 3 + k.roll(6), 5);
+  keepBoard(c, x0, y0, 36, 30);
+  keep(c, "green", gx + 4, gy - 3);
+  keep(c, "plot", plotX + 6, plotY + 3);
+  keep(c, "yard", x0 + 8, y0 + 18);
   k.claim(x0, y0, 36, 30);
   // The lane leaves by the side the road is on: between two houses if that is north.
   const side = roadSide(c, gx, gy);
@@ -1064,13 +1196,13 @@ function hamlet(c: Ctx, x0: number, y0: number): void {
 /** A farmhouse and a barn across a yard, a fenced field in crops, a pen of sheep, a cart. */
 function farmstead(c: Ctx, x0: number, y0: number): void {
   const k = c.k;
-  put(c, "farmhouse", x0 + 2, y0 + 1, { talk: k.pick(DOORS) });
-  put(c, "barn", x0 + 27, y0 + 1, { talk: "country_barn" });
+  own(c, "house", put(c, "farmhouse", x0 + 2, y0 + 1, { talk: k.pick(DOORS) }));
+  own(c, "barn", put(c, "barn", x0 + 27, y0 + 1, { talk: "country_barn" }));
   pad(c, x0 + 20, y0 + 11, 12, 3.5, Tile.Dirt);
-  put(c, "hay_cart", x0 + 23, y0 + 9);
-  put(c, "haystack", x0 + 15, y0 + 2);
-  put(c, "pump", x0 + 14, y0 + 8, { talk: "country_pump" });
-  put(c, "hen_coop", x0 + 3, y0 + 10, { talk: "country_coop" });
+  own(c, "cart", put(c, "hay_cart", x0 + 23, y0 + 9));
+  own(c, "haystack", put(c, "haystack", x0 + 15, y0 + 2));
+  own(c, "pump", put(c, "pump", x0 + 14, y0 + 8, { talk: "country_pump" }));
+  own(c, "coop", put(c, "hen_coop", x0 + 3, y0 + 10, { talk: "country_coop" }));
   for (let h = 0; h < 3; h++) folk(c, "hen", x0 + 2 + k.roll(6), y0 + 12 + k.roll(2), 3);
   // The field: rows of crops inside a fence, the gate on the yard.
   const fx = x0 + 1;
@@ -1078,7 +1210,7 @@ function farmstead(c: Ctx, x0: number, y0: number): void {
   for (let j = 1; j < 13; j++) for (let i = 1; i < 23; i++) k.set(fx + i, fy + j, j % 2 === 1 ? Tile.Crops : Tile.Dirt);
   for (let j = 1; j < 13; j += 4) for (let i = 3; i < 22; i += 6) put(c, "crop", fx + i, fy + j);
   pen(c, fx, fy, 24, 14, "n");
-  if (k.chance(0.6)) put(c, "scarecrow", fx + 11, fy + 6);
+  if (k.chance(0.6)) own(c, "scarecrow", put(c, "scarecrow", fx + 11, fy + 6));
   // The sheep pen.
   const px = x0 + 27;
   const py = y0 + 17;
@@ -1086,6 +1218,10 @@ function farmstead(c: Ctx, x0: number, y0: number): void {
   for (let s = 0; s < 3; s++) folk(c, "sheep", px + 3 + k.roll(6), py + 3 + k.roll(4), 2);
   folk(c, "folk_farmer", x0 + 20, y0 + 12, 6);
   if (k.chance(0.7)) folk(c, "folk_wife", x0 + 8, y0 + 9, 4);
+  keepBoard(c, x0, y0, 40, 30);
+  keep(c, "yard", x0 + 17, y0 + 12);
+  keep(c, "field", fx + 6, fy + 8);
+  keep(c, "pen", px + 7, py + 6);
   k.claim(x0, y0, 40, 30);
   // Out of the yard by the side the road is on, never through the field.
   const side = roadSide(c, x0 + 20, y0 + 15);
@@ -1100,7 +1236,7 @@ function cottage(c: Ctx, x0: number, y0: number): void {
   const k = c.k;
   const def = k.pick(COTTAGES);
   const hx = x0 + 2;
-  put(c, def, hx, y0 + 1, { talk: k.pick(DOORS) });
+  own(c, "house", put(c, def, hx, y0 + 1, { talk: k.pick(DOORS) }));
   put(c, "flowerbed", hx, y0 + 7);
   // The garden to the east: a fenced plot, rows and a gate.
   const gx = x0 + 12;
@@ -1108,9 +1244,12 @@ function cottage(c: Ctx, x0: number, y0: number): void {
   for (let j = 1; j < 9; j++) for (let i = 1; i < 9; i++) k.set(gx + i, gy + j, j % 2 === 1 ? Tile.Crops : Tile.Dirt);
   for (let j = 1; j < 9; j += 4) put(c, "crop", gx + 2 + k.roll(5), gy + j);
   pen(c, gx, gy, 10, 10, "s");
-  put(c, k.chance(0.5) ? "woodpile" : "beehive", x0 + 1, y0 + 10);
-  if (k.chance(0.6)) put(c, "washing_line", x0 + 4, y0 + 12);
+  own(c, "wood", put(c, k.chance(0.5) ? "woodpile" : "beehive", x0 + 1, y0 + 10));
+  if (k.chance(0.6)) own(c, "washing", put(c, "washing_line", x0 + 4, y0 + 12));
   folk(c, k.pick(["folk_old", "folk_woman", "folk_man", "folk_wife"]), hx + 4, y0 + 9, 4);
+  keepBoard(c, x0, y0, 22, 16);
+  keep(c, "garden", gx + 4, gy + 5);
+  keep(c, "yard", hx + 7, y0 + 10);
   k.claim(x0, y0, 22, 16);
   lane(c, hx + 4, y0 + 9);
 }
@@ -1118,17 +1257,21 @@ function cottage(c: Ctx, x0: number, y0: number): void {
 /** The inn: a long stone house with a sign, a yard, a trough and a cart, and a lamp by the door. */
 function inn(c: Ctx, x0: number, y0: number): void {
   const k = c.k;
-  put(c, "inn", x0 + 2, y0 + 1, { talk: "country_inn" });
+  own(c, "house", put(c, "inn", x0 + 2, y0 + 1, { talk: "country_inn" }));
   pad(c, x0 + 12, y0 + 12, 12, 4, Tile.Cobble);
   put(c, "lamp_post", x0 + 15, y0 + 9);
-  put(c, "trough", x0 + 16, y0 + 12);
-  put(c, "hay_cart", x0 + 20, y0 + 14);
+  own(c, "trough", put(c, "trough", x0 + 16, y0 + 12));
+  own(c, "cart", put(c, "hay_cart", x0 + 20, y0 + 14));
   put(c, "log", x0 + 3, y0 + 10);
   put(c, "log", x0 + 8, y0 + 13);
-  put(c, "barrel", x0 + 24, y0 + 2);
+  own(c, "barrels", put(c, "barrel", x0 + 24, y0 + 2));
   put(c, "barrel", x0 + 24, y0 + 5);
   folk(c, "folk_keeper", x0 + 10, y0 + 10, 3);
-  folk(c, "folk_man", x0 + 6, y0 + 12, 4);
+  // The regular: a man in a grey coat whose tree is about this inn, its sign and its lamp.
+  folk(c, "folk_regular", x0 + 6, y0 + 12, 4);
+  keepBoard(c, x0, y0, 28, 20);
+  keep(c, "yard", x0 + 18, y0 + 11);
+  keep(c, "back", x0 + 25, y0 + 9);
   k.claim(x0, y0, 28, 20);
   lane(c, x0 + 12, y0 + 14, 3);
 }
@@ -1146,7 +1289,8 @@ function orchard(c: Ctx, x0: number, y0: number): void {
   }
   run(c, x0, y0 + 15, 20, true, Tile.Fence, 10);
   if (k.chance(0.5)) put(c, "beehive", x0 + 19, y0 + 8, { talk: "country_hive" });
-  if (k.chance(0.4)) folk(c, "folk_farmer", x0 + 9, y0 + 13, 5);
+  // An orchard's farmer talks about the trees, not about a barn the orchard does not have.
+  if (k.chance(0.4)) folk(c, "folk_orchard", x0 + 9, y0 + 13, 5);
 }
 
 /** A field in crops, fenced, the gate toward the road. Sometimes a scarecrow. */
@@ -1177,12 +1321,16 @@ function woodcutter(c: Ctx, x0: number, y0: number, w: number, h: number): void 
   for (let n = 0; n < 6; n++) put(c, "stump", x0 + 2 + k.roll(w - 4), y0 + 2 + k.roll(h - 4));
   put(c, "log", x0 + 4, y0 + h - 5);
   put(c, "log", x0 + 12, y0 + 3);
-  put(c, "woodpile", x0 + 7, y0 + 4);
+  own(c, "woodpile", put(c, "woodpile", x0 + 7, y0 + 4));
   put(c, "woodpile", x0 + 10, y0 + 4);
-  put(c, k.chance(0.5) ? "shed" : "tent", x0 + 13, y0 + 8, { talk: "country_shed" });
-  put(c, "campfire_cold", x0 + 6, y0 + 9);
+  // Known by what it is: a story that says "his shed" only ever claims a clearing with a shed in it.
+  const shelter = k.chance(0.5) ? "shed" : "tent";
+  own(c, shelter, put(c, shelter, x0 + 13, y0 + 8, { talk: "country_shed" }));
+  own(c, "fire", put(c, "campfire_cold", x0 + 6, y0 + 9));
   const region = c.sk.region[macroOf(x0, y0)] as Region;
   if (region === Region.Lowfields) folk(c, "folk_woodcutter", x0 + 9, y0 + 12, 5);
+  keepBoard(c, x0, y0, w, h);
+  keep(c, "clearing", x0 + (w >> 1) + 1, y0 + (h >> 1) + 2);
 }
 
 /** Still water in a ragged bowl, tall grass round it, a plank to stand on. */
@@ -1237,9 +1385,9 @@ function camp(c: Ctx, x: number, y: number): void {
     who = k.chance(0.5) ? ["soldier", "soldier", "skeleton_guard"] : ["skeleton_guard", "skeleton_clerk", "skeleton_guard", "soldier"];
   }
   if (k.chance(0.35)) who.push(who[0]);
-  put(c, lit ? "camp_fire" : "campfire_cold", x - 1, y - 1);
+  own(c, "fire", put(c, lit ? "camp_fire" : "campfire_cold", x - 1, y - 1));
   if (lit) {
-    put(c, "tent", x - 6, y - 5, { talk: "country_tent" });
+    own(c, "tent", put(c, "tent", x - 6, y - 5, { talk: "country_tent" }));
     put(c, "bedroll", x + 2, y - 4);
     put(c, "bedroll", x - 5, y + 2);
   } else if (region === Region.Works) {
@@ -1249,13 +1397,15 @@ function camp(c: Ctx, x: number, y: number): void {
     put(c, "bones", x + 2, y + 2);
     put(c, "bones", x - 4, y - 3);
   }
-  put(c, "chest", x + 3, y + 1, { loot: loot(c, x, y) });
-  put(c, "crate", x - 6, y + 1);
+  own(c, "chest", put(c, "chest", x + 3, y + 1, { loot: loot(c, x, y) }));
+  own(c, "crate", put(c, "crate", x - 6, y + 1));
   const ringPts: Pt[] = [[-3, -3], [3, -3], [4, 1], [-4, 1], [0, 4], [0, -4], [-2, 3]];
   who.forEach((def, i) => {
     const [ox, oy] = ringPts[i % ringPts.length];
     hostile(c, def, x + ox, y + oy);
   });
+  keepBoard(c, x - 8, y - 7, 16, 14);
+  keep(c, "ground", x + 1, y + 3);
 }
 
 /** A hole in a bank, and what lives in it. */
@@ -1270,7 +1420,7 @@ function den(c: Ctx, x: number, y: number): void {
   else if (biome === Biome.Wood || biome === Biome.WetWood) who = "spider";
   else who = k.chance(0.3) ? "bat" : "rat";
   if (who === "spider") put(c, "web", x - 5, y - 3);
-  else put(c, "den", x - 1, y - 2, { talk: "country_den" });
+  else own(c, "den", put(c, "den", x - 1, y - 2, { talk: "country_den" }));
   put(c, "bones", x + 3, y + 2);
   put(c, "bones", x - 3, y + 3);
   const n = 2 + k.roll(3);
@@ -1282,13 +1432,17 @@ function ruin(c: Ctx, x0: number, y0: number): void {
   const k = c.k;
   const region = c.sk.region[macroOf(x0, y0)] as Region;
   if (region !== Region.Works && k.chance(0.35)) {
-    put(c, "cottage_empty", x0 + 4, y0 + 2, { talk: "country_door_empty" });
+    own(c, "house", put(c, "cottage_empty", x0 + 4, y0 + 2, { talk: "country_door_empty" }));
     pad(c, x0 + 8, y0 + 10, 5, 2, Tile.Dirt);
     for (let n = 0; n < 4; n++) {
       const bx = x0 + 1 + k.roll(14);
       const by = y0 + 9 + k.roll(3);
       if (!k.isClaimed(bx, by) && !k.solid(bx - 1, by) && !k.solid(bx + 1, by) && !k.solid(bx, by - 1) && !k.solid(bx, by + 1)) k.set(bx, by, Tile.Bush);
     }
+    keepBoard(c, x0, y0, 16, 13);
+    // A roofless cottage is looked at from its yard: there is no "inside the walls" to send her to.
+    keep(c, "yard", x0 + 9, y0 + 10);
+    keep(c, "step", x0 + 5, y0 + 10);
     return;
   }
   const wall = region === Region.Works ? Tile.Wall : k.chance(0.5) ? Tile.HouseWall : Tile.Wall;
@@ -1312,10 +1466,13 @@ function ruin(c: Ctx, x0: number, y0: number): void {
     put(c, "barrel", wx + 2, wy + 2);
     put(c, "sleepers", wx + w + 1, wy + 3);
   } else {
-    put(c, "crate", wx + 2, wy + 2);
-    put(c, "campfire_cold", wx + 5, wy + 3);
+    own(c, "crate", put(c, "crate", wx + 2, wy + 2));
+    own(c, "fire", put(c, "campfire_cold", wx + 5, wy + 3));
   }
-  if (k.chance(0.3)) put(c, "chest", wx + 6, wy + 1, { loot: loot(c, wx, wy) });
+  if (k.chance(0.3)) own(c, "chest", put(c, "chest", wx + 6, wy + 1, { loot: loot(c, wx, wy) }));
+  keepBoard(c, x0, y0, 16, 13);
+  keep(c, "inside", wx + 5, wy + 5);
+  keep(c, "step", wx + 4, wy + h + 1);
 }
 
 /** Bare rock breaking the turf: a crag you walk round, boulders fallen off it. */

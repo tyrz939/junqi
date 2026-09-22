@@ -28,7 +28,8 @@ import { applyPlacements, claimPois, PLACEMENTS, type PlaceCtx, type PlacementRo
 import { propFootprints } from "@/sim/catalog";
 import { hasZone } from "@/world/registry";
 import { at, Biome, buildSkeleton, COUNTY_H, COUNTY_W, MACRO, Region, ROAD_LIT, SKEL_H, SKEL_W, type Skeleton } from "@/world/skeleton";
-import { compass, distanceWords, furnishCountry, type Country } from "@/world/country";
+import { compass, countryPlaces, distanceWords, furnishCountry, type Country } from "@/world/country";
+import { claimPlaces, nameBoards, storyRecord } from "@/world/stories";
 
 export { COUNTY_H, COUNTY_W };
 
@@ -287,6 +288,19 @@ export function buildCounty(seed: number, attempt: number, rows: readonly Placem
   applyPlacements(place, "areas", rows);
   // Everything else a county has in it: field edges, hamlets, farms, camps, dens, ruins, ponds.
   furnishCountry(country, "places");
+  // The stories told at those places (world/stories.ts): each claims one, the boards go up with the
+  // places' names on them, and each story's rows go into the place it claimed.
+  const built = countryPlaces(country);
+  const claimed = claimPlaces(seed, k, sk, built, rows);
+  nameBoards(seed, k, built, claimed.claims);
+  // Each story place by name: its footprint as a rect, and a mark on the ground in front of its board (where
+  // `dev tp` puts a tester, and where a person reading the board stands).
+  for (const [id, p] of claimed.claims) {
+    k.rect(`story_${id}`, { ...p.box });
+    const b = p.slots.board;
+    if (b) k.mark(`story_${id}`, b[0], b[1] + 1);
+  }
+  applyPlacements({ ...place, claims: claimed.claims }, "places", rows);
   scatter(k, sk);
 
   // --- 6 wildlife ---------------------------------------------------------------------
@@ -294,7 +308,9 @@ export function buildCounty(seed: number, attempt: number, rows: readonly Placem
   furnishCountry(country, "life");
 
   dropUnreachable(k);
-  return k.done("Castle", false, 1, attempt);
+  const bp = k.done("Castle", false, 1, attempt);
+  bp.stories = storyRecord(seed, claimed);
+  return bp;
 }
 
 /**

@@ -1,0 +1,323 @@
+[
+  {
+    "id": "ames",
+    "kind": "cottage",
+    "first": [
+      0,
+      90
+    ],
+    "quests": [
+      "ames_spectacles"
+    ]
+  },
+  {
+    "id": "tull",
+    "kind": "woodcutter",
+    "first": [
+      0,
+      200
+    ],
+    "quests": [
+      "tull_billhook"
+    ]
+  },
+  {
+    "id": "bettany",
+    "kind": "cottage",
+    "first": [
+      0,
+      110
+    ],
+    "quests": [
+      "bettany_key"
+    ]
+  },
+  {
+    "id": "leckie",
+    "kind": "farmstead",
+    "first": [
+      0,
+      200
+    ],
+    "quests": [
+      "leckie_eggs",
+      "leckie_barn",
+      "leckie_sacks"
+    ]
+  },
+  {
+    "id": "rudd",
+    "kind": "hamlet",
+    "quests": [
+      "rudd_bucket",
+      "rudd_next_door"
+    ]
+  },
+  {
+    "id": "kember",
+    "kind": "hamlet",
+    "quests": [
+      "kember_prints",
+      "kember_glove"
+    ]
+  },
+  {
+    "id": "pryor",
+    "kind": "woodcutter",
+    "quests": [
+      "pryor_sitters"
+    ]
+  },
+  {
+    "id": "pryor_camp",
+    "kind": "camp",
+    "near": {
+      "story": "pryor",
+      "max": 420
+    },
+    "hostile": "skeleton|crow|spider",
+    "count": 3,
+    "quests": []
+  },
+  {
+    "id": "gunn",
+    "kind": "inn",
+    "quests": [
+      "gunn_bag",
+      "gunn_room"
+    ]
+  },
+  {
+    "id": "hurst",
+    "kind": "farmstead",
+    "quests": [
+      "hurst_fleece",
+      "hurst_camp"
+    ]
+  },
+  {
+    "id": "hurst_camp",
+    "kind": "camp",
+    "near": {
+      "story": "hurst",
+      "max": 420
+    },
+    "hostile": "ruffian",
+    "count": 3,
+    "quests": []
+  },
+  {
+    "id": "farrant",
+    "kind": "farmstead",
+    "quests": [
+      "farrant_ring"
+    ]
+  },
+  {
+    "id": "farrant_camp",
+    "kind": "camp",
+    "near": {
+      "story": "farrant",
+      "max": 420
+    },
+    "hostile": "crow",
+    "count": 2,
+    "quests": []
+  },
+  {
+    "id": "vosper",
+    "kind": "cottage",
+    "quests": [
+      "vosper_letter",
+      "vosper_reply",
+      "vosper_tin"
+    ]
+  },
+  {
+    "id": "vosper_sister",
+    "kind": "cottage",
+    "near": {
+      "story": "vosper",
+      "max": 420
+    },
+    "quests": []
+  },
+  {
+    "id": "hackett",
+    "kind": "woodcutter",
+    "quests": [
+      "hackett_look",
+      "hackett_tin"
+    ]
+  },
+  {
+    "id": "hackett_house",
+    "kind": "ruin",
+    "near": {
+      "story": "hackett",
+      "max": 420
+    },
+    "quests": []
+  },
+  {
+    "id": "tobin",
+    "kind": "cottage",
+    "quests": [
+      "tobin_scissors"
+    ]
+  },
+  {
+    "id": "venn",
+    "kind": "cottage",
+    "quests": [
+      "venn_apples"
+    ]
+  },
+  {
+    "id": "venn_wood",
+    "kind": "woodcutter",
+    "near": {
+      "story": "venn",
+      "max": 420
+    },
+    "quests": []
+  },
+  {
+    "id": "denny",
+    "kind": "woodcutter",
+    "quests": [
+      "denny_light"
+    ]
+  },
+  {
+    "id": "denny_ruin",
+    "kind": "ruin",
+    "near": {
+      "story": "denny",
+      "max": 420
+    },
+    "quests": []
+  },
+  {
+    "id": "lusk",
+    "kind": "cottage",
+    "quests": [
+      "lusk_potatoes"
+    ]
+  },
+  {
+    "id": "arden",
+    "kind": "woodcutter",
+    "quests": [
+      "arden_key"
+    ]
+  },
+  {
+    "id": "cope",
+    "kind": "woodcutter",
+    "quests": [
+      "cope_shed"
+    ]
+  },
+  {
+    "id": "pardew",
+    "kind": "woodcutter",
+    "quests": [
+      "pardew_nest"
+    ]
+  },
+  {
+    "id": "voke",
+    "kind": "woodcutter",
+    "quests": [
+      "voke_tea"
+    ]
+  },
+  {
+    "id": "voke_brother",
+    "kind": "woodcutter",
+    "near": {
+      "story": "voke",
+      "max": 420
+    },
+    "quests": []
+  },
+  {
+    "id": "quayle",
+    "kind": "cottage",
+    "quests": [
+      "quayle_lodger"
+    ]
+  },
+  {
+    "id": "hebden",
+    "kind": "cottage",
+    "quests": [
+      "hebden_water"
+    ]
+  },
+  {
+    "id": "sayer",
+    "kind": "woodcutter",
+    "quests": [
+      "sayer_ladder"
+    ]
+  },
+  {
+    "id": "sayer_house",
+    "kind": "ruin",
+    "near": {
+      "story": "sayer",
+      "max": 420
+    },
+    "quests": []
+  },
+  {
+    "id": "rendle",
+    "kind": "cottage",
+    "quests": [
+      "rendle_coat"
+    ]
+  },
+  {
+    "id": "rendle_camp",
+    "kind": "camp",
+    "near": {
+      "story": "rendle",
+      "max": 420
+    },
+    "hostile": "ruffian",
+    "count": 3,
+    "quests": []
+  },
+  {
+    "id": "treloar",
+    "kind": "woodcutter",
+    "quests": [
+      "treloar_bell"
+    ]
+  },
+  {
+    "id": "gethin",
+    "kind": "woodcutter",
+    "quests": [
+      "gethin_stump"
+    ]
+  },
+  {
+    "id": "ruck",
+    "kind": "woodcutter",
+    "quests": [
+      "ruck_kindling"
+    ]
+  },
+  {
+    "id": "ruck_cottage",
+    "kind": "cottage",
+    "near": {
+      "story": "ruck",
+      "max": 420
+    },
+    "quests": []
+  }
+]

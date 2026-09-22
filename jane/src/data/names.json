@@ -1,0 +1,52 @@
+{
+  "hamlet": [
+    "Nether Coombe", "Little Wenham", "Holt End", "Coldharbour", "Sheepwash", "Nettlebed", "Crookham", "Kingsbarrow",
+    "Middle Ditchford", "Much Fenny", "Hob's Green", "Ashby Parva", "Wyke Green", "Stoke Lacy", "Harrow Bottom", "Pennyfold",
+    "Colley End", "Dunmere", "Fallow Cross", "Ettle Green", "Whitmoor", "Lower Lathe", "Thornbury Row", "Starveacre",
+    "Brockhole", "Marling", "Cold Ashby", "Uffley", "Peasmarsh", "Hemley", "Tadwick", "Oxlade", "Quenby", "Wendle",
+    "Bramble End", "Sowerby Parva", "Candle Green", "Ruddock End", "Nutley Row", "Fennimore"
+  ],
+  "farmstead": [
+    "Hollins Farm", "Blackmore Farm", "Lower Cleeve Farm", "Upcott Farm", "Moorend Farm", "Ketley Farm", "Greystone Farm",
+    "Sparrow Farm", "Nine Acres Farm", "Hatch Farm", "Rook's Farm", "Coldwell Farm", "Ladder Farm", "Stonepits Farm",
+    "Furzeleigh Farm", "Whitethorn Farm", "Tanhouse Farm", "Oxbridge Farm", "Bellows Farm", "Middlecott Farm",
+    "Starling Farm", "Crossways Farm", "Handsel Farm", "Pitt Farm", "Bramley Farm", "Merrow Farm", "Pyle Farm",
+    "Yew Tree Farm", "Hazard Farm", "Dunnock Farm"
+  ],
+  "inn": ["The Halfway House"],
+  "cottage": [
+    "Rose Cottage", "Holly Cottage", "Keeper's Cottage", "Ivy Cottage", "Pear Tree Cottage", "Bramble Cottage",
+    "Laburnum Cottage", "Lilac Cottage", "Meadow Cottage", "Myrtle Cottage", "Honeysuckle Cottage", "Toll Cottage",
+    "Stone Cottage", "Hazel Cottage", "Snowdrop Cottage", "Rowan Cottage", "Willow Cottage", "Apple Cottage",
+    "Foxglove Cottage", "Mill Cottage", "Lark Cottage", "Thatch End", "Wren Cottage", "Box Cottage", "Bay Cottage",
+    "Plum Tree Cottage", "Hawthorn Cottage", "Elder Cottage", "Clover Cottage", "Tansy Cottage", "Quince Cottage",
+    "Damson Cottage", "Walnut Cottage", "Laurel Cottage", "Sorrel Cottage", "Chapel Cottage", "Gate Cottage",
+    "Brook Cottage", "Sweetbriar Cottage", "Tinker's Cottage", "Mole End", "Weaver's Cottage", "Bee Cottage",
+    "Lavender Cottage", "Periwinkle Cottage", "Cowslip Cottage", "Jessamine Cottage", "Medlar Cottage", "Teasel Cottage",
+    "Catkin Cottage"
+  ],
+  "woodcutter": {
+    "roots": [
+      "Hazel", "Ashpole", "Birch", "Hornbeam", "Alder", "Rookery", "Beech", "Coppice", "Wych", "Maple", "Spindle",
+      "Lime Kiln", "Charcoal", "Poplar", "Crabtree", "Blackthorn", "Whitebeam", "Owlet", "Bluebell", "Cuckoo"
+    ],
+    "ends": ["Copse", "Spinney", "Holt", "Hanger", "Coppice Wood"]
+  },
+  "camp": [
+    "Hob's Corner", "Nick's Hollow", "Blackpit", "Dead Man's Plack", "Ratcliff Bottom", "Tinker's Hollow", "Charcoal Bottom",
+    "Shepherd's Hollow", "Scrag End", "Wolf Pit", "Bitter End", "Gibbet Lane End", "Cutler's Dell", "Crowcombe Hollow"
+  ],
+  "ruin": [
+    "Blackthorn House", "Fairview", "Hillside", "Mount Pleasant", "Sunnyside", "Belle Vue", "Longview", "Journey's End",
+    "Rosemount", "Crow Lodge", "Albion House", "Coldblow", "Prospect House", "Windyridge"
+  ],
+  "boards": {
+    "hamlet": ["{NAME}. PARISH OF CASTLE. Please drive slowly.", "{NAME}. Please take your litter home.", "{NAME}. PARISH OF CASTLE."],
+    "farmstead": ["{NAME}. Private. No footpath through the yard.", "{NAME}. Eggs. Honesty box.", "{NAME}. Please shut the gate. Please shut it properly."],
+    "inn": ["{NAME}. ROOMS. TEAS."],
+    "cottage": ["{NAME}.", "{NAME}. No hawkers.", "{NAME}. Please shut the gate."],
+    "woodcutter": ["{NAME}. Logs, kindling, pea sticks.", "{NAME}. Felling in progress. Keep to the path."],
+    "camp": ["{NAME}. Private land. No fires.", "{NAME}. No camping. By order of the Parish."],
+    "ruin": ["{NAME}."]
+  }
+}

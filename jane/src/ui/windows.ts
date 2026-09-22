@@ -8,6 +8,7 @@ import type { SimEvent } from "@/sim/events";
 import { nearBench } from "@/sim/interact";
 import { craftOutput } from "@/sim/inventory";
 import { questReady, requirementCount } from "@/sim/quests";
+import { expandText } from "@/sim/text";
 import type { PlayerView as Sim } from "@/sim/sim";
 import { maxHp, maxMp } from "@/sim/units";
 import type { Ctx } from "@/ui/ctx";
@@ -691,15 +692,15 @@ export class GameWindow {
     clear(this.questDetail);
     if (!def) return;
     h("div", "jq-qd-name", this.questDetail, def.name);
-    h("div", "jq-qd-body", this.questDetail, def.description);
+    h("div", "jq-qd-body", this.questDetail, expandText(sim.state, def.description));
     const reqs = h("div", "jq-qd-reqs", this.questDetail);
     def.requirements.forEach((r, i) => {
       const n = prog ? counts[i] : r.qty;
-      h("div", `jq-qd-req${n >= r.qty ? " done" : ""}`, reqs, `${n >= r.qty ? "[x]" : "[ ]"} ${r.text} ${n}/${r.qty}`);
+      h("div", `jq-qd-req${n >= r.qty ? " done" : ""}`, reqs, `${n >= r.qty ? "[x]" : "[ ]"} ${expandText(sim.state, r.text)} ${n}/${r.qty}`);
     });
-    if (!prog) h("div", "jq-qd-done", this.questDetail, def.completion);
+    if (!prog) h("div", "jq-qd-done", this.questDetail, expandText(sim.state, def.completion));
     else if (counts.every((n, i) => n >= def.requirements[i].qty)) {
-      const back = (def as { returnTo?: string }).returnTo;
+      const back = expandText(sim.state, (def as { returnTo?: string }).returnTo ?? "");
       h("div", "jq-qd-ready", this.questDetail, back ? `Ready to hand in: ${back}.` : "Ready to hand in.");
     }
   }

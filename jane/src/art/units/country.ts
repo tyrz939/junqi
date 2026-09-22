@@ -328,6 +328,16 @@ const sheet: SpriteSheet = {
   // A man in a grey coat who looks as if he is waiting for a bus.
   folk_man: person(HEAD_BARE, { ...SKIN, ...BOOTS, h: "#7a5a3a", H: "#54402a", a: "#6e6e74", A: "#4a4a50", v: "#a8a8ac", e: "#3e3e44", E: "#28282e" }),
 
+  // The people with a story to tell (data/stories): the same country clothes in other colours, so the
+  // one who wants something is not the double of every other farmer on the road.
+  villager_farmer: person(HEAD_HAT, { ...SKIN, ...BOOTS, h: "#4a3a2a", H: "#30261c", z: "#7a6a4a", Z: "#54482f", a: "#7a5230", A: "#54381f", v: "#e0d4b8", e: "#3e4a3a", E: "#283024" }),
+  villager_wife: person(HEAD_HAT, { ...SKIN, ...BOOTS, h: "#a06a40", H: "#704a2a", z: "#5a7a58", Z: "#3e5a3c", a: "#8a6a8a", A: "#5e465e", v: "#f0e8d8", e: "#8a6a8a", E: "#5e465e" }),
+  villager_old: person(HEAD_BARE, { ...SKIN_OLD, ...BOOTS, h: "#e8e4dc", H: "#b8b4ac", a: "#4a5a6a", A: "#2e3a46", v: "#9aa0a8", e: "#3a3e44", E: "#24282c" }),
+  villager_woman: person(HEAD_BARE, { ...SKIN, ...BOOTS, h: "#8a4a2a", H: "#5e301a", a: "#5a6a4a", A: "#3c4a30", v: "#e0d8c0", e: "#4a4a3a", E: "#302e24" }),
+  villager_woodcutter: person(HEAD_HAT, { ...SKIN, ...BOOTS, h: "#3a2a1c", H: "#261a10", z: "#6a4a2a", Z: "#46301a", a: "#3a6a4a", A: "#264a32", v: "#5a9a6a", e: "#4a3e30", E: "#302820" }),
+  villager_keeper: person(HEAD_BARE, { ...SKIN, ...BOOTS, h: "#5a4030", H: "#3a2a1e", a: "#6a3a3a", A: "#482626", v: "#f4f0e4", e: "#4a3030", E: "#301e1e" }),
+  villager_man: person(HEAD_BARE, { ...SKIN, ...BOOTS, h: "#3a2a20", H: "#241a14", a: "#4a4a6a", A: "#30304a", v: "#b0b0c0", e: "#34344a", E: "#22222e" }),
+
   // A ruffian is the bandit without the ice: a working coat, a scarf over the face, and a stick.
   ruffian: { ...UNIT_BASE.bandit, palette: { ...UNIT_BASE.bandit.palette, d: "#6a5438", D: "#46361f", f: "#8e7650", r: "#5a5a60", R: "#3a3a40" } },
 

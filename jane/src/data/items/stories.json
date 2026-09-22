@@ -1,0 +1,162 @@
+{
+  "ames_spectacles": {
+    "name": "Spectacles",
+    "icon": "item_glass",
+    "maxStack": 1,
+    "usable": false,
+    "cooldown": 1,
+    "description": "Wire spectacles, one arm mended with cotton. Somebody has cleaned the lenses very carefully."
+  },
+  "tull_billhook": {
+    "name": "Bill-hook",
+    "icon": "item_iron",
+    "maxStack": 1,
+    "usable": false,
+    "cooldown": 1,
+    "description": "A hooked blade on an ash handle, sharp enough to be careful of. Mr Tull's."
+  },
+  "bettany_key": {
+    "name": "Door Key",
+    "icon": "item_key_brass",
+    "maxStack": 1,
+    "usable": false,
+    "cooldown": 1,
+    "description": "A plain door key on a loop of string. Mrs Bettany's spare. It opens nothing of yours."
+  },
+  "leckie_eggs": {
+    "name": "Egg",
+    "icon": "item_stone",
+    "maxStack": 6,
+    "usable": false,
+    "cooldown": 1,
+    "description": "A brown egg, still warm. Mrs Leckie's hens have not laid all week."
+  },
+  "leckie_sack": {
+    "name": "Sack of Meal",
+    "icon": "item_haversack",
+    "maxStack": 1,
+    "usable": false,
+    "cooldown": 1,
+    "description": "A sack of meal, the neck tied with baler twine. It is the twelfth."
+  },
+  "kember_glove": {
+    "name": "Man's Glove",
+    "icon": "item_glove",
+    "maxStack": 1,
+    "usable": false,
+    "cooldown": 1,
+    "description": "A man's leather glove, right hand, dry. The fingers keep the shape of a hand that is not in it."
+  },
+  "gunn_bag": {
+    "name": "Traveller's Bag",
+    "icon": "item_haversack",
+    "maxStack": 1,
+    "usable": false,
+    "cooldown": 1,
+    "description": "Canvas, with a leather strap. A shirt, a razor, a ticket for the Sunday train. No name anywhere."
+  },
+  "hurst_fleece": {
+    "name": "Fleece",
+    "icon": "item_washing",
+    "maxStack": 1,
+    "usable": false,
+    "cooldown": 1,
+    "description": "A tuft of greasy fleece with a blue raddle mark on it. Mr Hurst's."
+  },
+  "farrant_ring": {
+    "name": "Wedding Ring",
+    "icon": "item_amulet",
+    "maxStack": 1,
+    "usable": false,
+    "cooldown": 1,
+    "description": "A thin gold ring, worn flat on one side from years of the same hand."
+  },
+  "vosper_letter": {
+    "name": "Letter",
+    "icon": "item_letter",
+    "maxStack": 1,
+    "usable": false,
+    "cooldown": 1,
+    "description": "Addressed to Mrs Vosper in a young man's hand. The postmark is smudged past reading."
+  },
+  "vosper_reply": {
+    "name": "Mrs Vosper's Letter",
+    "icon": "item_letter",
+    "maxStack": 1,
+    "usable": false,
+    "cooldown": 1,
+    "description": "Sealed, for her son. It is going to her sister's, who keeps them."
+  },
+  "vosper_tin": {
+    "name": "Tin of Letters",
+    "icon": "item_tin",
+    "maxStack": 1,
+    "usable": false,
+    "cooldown": 1,
+    "description": "A biscuit tin, heavy with paper. Two hands, his and hers, and a string round each year."
+  },
+  "hackett_tin": {
+    "name": "Tin",
+    "icon": "item_tin",
+    "maxStack": 1,
+    "usable": false,
+    "cooldown": 1,
+    "description": "A tobacco tin, rusted shut and then not. Buttons, a ration book, a photograph of a house with a roof."
+  },
+  "tobin_scissors": {
+    "name": "Garden Scissors",
+    "icon": "item_iron",
+    "maxStack": 1,
+    "usable": false,
+    "cooldown": 1,
+    "description": "Long-bladed scissors for flowers, a little sticky with sap. Mrs Tobin's."
+  },
+  "venn_apples": {
+    "name": "Bag of Windfalls",
+    "icon": "item_apple",
+    "maxStack": 1,
+    "usable": false,
+    "cooldown": 1,
+    "description": "Bruised apples in a paper bag, for the woodcutter. Mrs Venn picked out the worst ones and put them back."
+  },
+  "lusk_potatoes": {
+    "name": "Potatoes",
+    "icon": "item_herb_root",
+    "maxStack": 1,
+    "usable": false,
+    "cooldown": 1,
+    "description": "A string bag of new potatoes, very clean, as if the soil had not wanted to hold on to them."
+  },
+  "arden_key": {
+    "name": "Clock Key",
+    "icon": "item_key_brass",
+    "maxStack": 1,
+    "usable": false,
+    "cooldown": 1,
+    "description": "A small brass key for winding a clock. It fits nothing of yours."
+  },
+  "voke_tea": {
+    "name": "Can of Tea",
+    "icon": "item_tin",
+    "maxStack": 1,
+    "usable": false,
+    "cooldown": 1,
+    "description": "A tin can of tea with a wire handle, still warm, sugared the way somebody likes it."
+  },
+  "rendle_coat": {
+    "name": "Good Coat",
+    "icon": "item_washing",
+    "maxStack": 1,
+    "usable": false,
+    "cooldown": 1,
+    "description": "A man's black Sunday coat, brushed and folded with care by somebody who was not his wife."
+  },
+  "ruck_kindling": {
+    "name": "Kindling",
+    "icon": "item_wood",
+    "maxStack": 1,
+    "usable": false,
+    "cooldown": 1,
+    "description": "A bundle of split kindling tied with twine, for the old lady down the road."
+  }
+}

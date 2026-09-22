@@ -69,12 +69,12 @@ export class DialogueBox {
       this.full = expandText(sim.state, node?.lines[d.line] ?? "");
       this.shown = 0;
       this.option = 0;
-      const speaker = sim.catalog.dialogue[d.tree]?.speaker ?? "";
+      const speaker = expandText(sim.state, sim.catalog.dialogue[d.tree]?.speaker ?? "");
       this.setSpeaker(speaker);
       this.setSpeakerVis(speaker !== "");
       clear(this.options);
       this.optionRows = (node?.options ?? []).slice(0, 2).map((o, i) => {
-        const row = h("div", "jq-mi jq-option", this.options, o.label);
+        const row = h("div", "jq-mi jq-option", this.options, expandText(sim.state, o.label));
         row.addEventListener("pointerenter", (ev) => {
           if (ev.pointerType === "mouse") this.option = i;
         });

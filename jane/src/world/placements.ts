@@ -17,6 +17,12 @@
 //             anchor a small place the skeleton guarantees BY NAME (data/anchors.json)
 //             slot   an exact cell a set chunk offers (a door's place in a wall). The
 //                    thing goes exactly there, solid ground or not.
+//             place  a generated place a story claimed (world/stories.ts, data/stories), with
+//                    `slot` naming what in it: a cell it kept open ("yard", "garden", "green"),
+//                    one of its own props ("house", "well", "barn", "chest": for `edit`), or
+//                    one of its people ("folk", "folk_2": the row's unit takes her place and
+//                    her round). A story that found no place on a seed places nothing, and
+//                    promises nothing: these rows are not in the contract.
 //           `within`: how far from the spot it may land, in cells.
 //   unit / prop / rect / mark   what to put there (any combination; they share the spot)
 //   edit    instead of placing: change a prop a chunk already placed (give the car a glovebox)
@@ -27,8 +33,9 @@
 // could hand in.
 
 import type { Facing } from "@/sim/state";
-import type { PropSpawn, Rect } from "@/world/blueprint";
+import type { PropSpawn, Rect, UnitSpawn } from "@/world/blueprint";
 import type { Chunk } from "@/world/chunks";
+import type { Place } from "@/world/country";
 import type { Kit } from "@/world/kit";
 import { MACRO, type Skeleton } from "@/world/skeleton";
 
@@ -37,7 +44,7 @@ export type PlacementRow = {
   count?: number;
   /** With `count` in an area: stand them about the patch, each somewhere of its own, not shoulder to shoulder at its centre. */
   spread?: boolean;
-  at: { mark?: string; site?: string; area?: string; poi?: string; near?: string; anchor?: string; slot?: string; within?: number };
+  at: { mark?: string; site?: string; area?: string; poi?: string; near?: string; anchor?: string; slot?: string; place?: string; within?: number };
   /** The key of a prop a chunk placed, and the fields to set on it. Nothing new is placed. */
   edit?: Partial<Omit<PropSpawn, "key" | "cx" | "cy" | "def">>;
   unit?: { def: string; phase?: number; facing?: Facing };
@@ -58,6 +65,7 @@ export function placementContract(rows: readonly PlacementRow[] = PLACEMENTS): {
   const out = { units: [] as string[], props: [] as string[], marks: [] as string[], rects: [] as string[] };
   for (const row of rows) {
     if (row.edit) continue; // the chunk already promised that prop
+    if (row.at.place) continue; // a story's: there when the seed found it a place, and only then
     for (const key of keysOf(row)) {
       if (row.unit) out.units.push(key);
       if (row.prop) out.props.push(key);
@@ -127,9 +135,11 @@ export type PlaceCtx = {
   sizes: Readonly<Record<string, { w: number; h: number }>>;
   /** Threat of the ground under a cell, for a placed creature's phase. */
   threatAt: (cx: number, cy: number) => number;
+  /** Story id -> the generated place it claimed (world/stories.ts). Filled before the "places" stage. */
+  claims?: ReadonlyMap<string, Place>;
 };
 
-export type Stage = "chunks" | "pois" | "areas";
+export type Stage = "chunks" | "pois" | "areas" | "places";
 
 /**
  * Put the rows of one stage on the map. Three stages because the builder claims ground as
@@ -139,8 +149,13 @@ export type Stage = "chunks" | "pois" | "areas";
 export function applyPlacements(ctx: PlaceCtx, stage: Stage, rows: readonly PlacementRow[] = PLACEMENTS): void {
   for (const row of rows) {
     const at = row.at;
-    const rowStage: Stage = at.poi || at.anchor ? "pois" : at.area ? "areas" : "chunks";
+    const rowStage: Stage = at.place ? "places" : at.poi || at.anchor ? "pois" : at.area ? "areas" : "chunks";
     if (rowStage !== stage) continue;
+    if (at.place) {
+      const p = ctx.claims?.get(at.place);
+      if (p) atPlace(ctx, row, p);
+      continue;
+    }
     if (row.edit) {
       const target = ctx.k.props.find((p) => p.key === row.key);
       if (target) Object.assign(target, row.edit);
@@ -194,6 +209,64 @@ export function applyPlacements(ctx: PlaceCtx, stage: Stage, rows: readonly Plac
       if (row.mark && key === keysOf(row)[0]) ctx.k.mark(row.mark, spot.cx, spot.cy + size.h, 1);
     }
   }
+}
+
+/**
+ * A row at a story's place. The place was built and claimed whole, so nothing here searches for
+ * open ground: a kept cell is exactly where the thing goes, a named prop is edited in place, and a
+ * resident is replaced where she stands by the story's own person, who walks her round.
+ */
+function atPlace(ctx: PlaceCtx, row: PlacementRow, p: Place): void {
+  const k = ctx.k;
+  const slot = row.at.slot ?? "";
+  if (row.edit) {
+    const key = p.things[slot];
+    const target = key ? k.props.find((q) => q.key === key) : undefined;
+    if (target) Object.assign(target, row.edit);
+    return;
+  }
+  if (slot === "hostiles") {
+    // A camp that is a story's: what stands round its fire is the story's own creature (one def per
+    // camp, so a kill only counts here, and nothing comes back once it is cleared).
+    if (!row.unit) return;
+    for (const key of p.hostiles) {
+      const u = k.units.find((x) => x.key === key);
+      if (u) u.def = row.unit.def;
+    }
+    return;
+  }
+  let cell: [number, number] | undefined = p.slots[slot];
+  let patrol: UnitSpawn["patrol"];
+  const folk = /^folk(?:_(\d))?$/.exec(slot);
+  if (folk) {
+    const key = p.folk[Number(folk[1] ?? 1) - 1];
+    const n = k.units.findIndex((u) => u.key === key);
+    if (n < 0) return;
+    const was = k.units[n];
+    k.units.splice(n, 1);
+    cell = [was.cx, was.cy];
+    patrol = was.patrol;
+  }
+  if (!cell) {
+    // Beside one of the place's props: the open cell below it.
+    const key = p.things[slot];
+    const q = key ? k.props.find((x) => x.key === key) : undefined;
+    if (!q) return;
+    cell = [q.cx, q.cy + (ctx.sizes[q.def]?.h ?? 1)];
+  }
+  const [cx, cy] = cell;
+  if (row.prop) {
+    const size = ctx.sizes[row.prop.def] ?? { w: 1, h: 1 };
+    k.prop({ ...row.prop, key: row.key, cx, cy }, size.w, size.h);
+  }
+  if (row.unit) {
+    const ux = row.prop ? cx + (ctx.sizes[row.prop.def]?.w ?? 1) : cx;
+    const u = k.unit(row.key, row.unit.def, ux, cy, row.prop ? undefined : patrol);
+    u.facing = row.unit.facing;
+    if (row.unit.phase !== undefined && row.unit.phase > 1) u.phase = row.unit.phase;
+  }
+  if (row.mark) k.mark(row.mark, cx, cy + (row.prop ? (ctx.sizes[row.prop.def]?.h ?? 1) : 1), 1);
+  if (row.rect) k.rect(row.rect.name, { cx: cx - (row.rect.w >> 1), cy: cy - (row.rect.h >> 1), w: row.rect.w, h: row.rect.h });
 }
 
 type Anchor = { cx: number; cy: number; within: number };

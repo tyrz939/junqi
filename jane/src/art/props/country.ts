@@ -698,7 +698,32 @@ const HEN_COOP = [
   "................",
 ];
 
+/** A place's name, painted white on a board between two posts, the letters too small to read from the road. */
+const NAME_BOARD = [
+  "................",
+  "................",
+  ".kkkkkkkkkkkkkk.",
+  "kuuuuuuuuuuuuuUk",
+  "kuxxuxxxuxxuxuUk",
+  "kuuuuuuuuuuuuuUk",
+  "kuxuxxuxxxuxxuUk",
+  "kuuuuuuuuuuuuuUk",
+  "kUUUUUUUUUUUUUUk",
+  ".kkkkkkkkkkkkkk.",
+  "..kmk......kmk..",
+  "..kmk......kmk..",
+  "..kmk......kmk..",
+  "..kmk......kmk..",
+  "..kmk......kmk..",
+  "..kTk......kTk..",
+  "..kTk......kTk..",
+  "..kkk......kkk..",
+  "..===......===..",
+  "................",
+];
+
 const sheet: SpriteSheet = {
+  name_board: prop(16, 20, 1, { base: NAME_BOARD }),
   // Cottages: four roofs-and-walls a hamlet can mix, so no two neighbours are the same house.
   cottage_thatch: building({ w: 8, h: 6, roof: "thatch", wall: "plaster", door: 0.5, windows: 2, chimney: 0.78, seed: 1 }),
   cottage_timber: building({ w: 8, h: 6, roof: "thatch", wall: "timber", door: 0.3, windows: 2, chimney: 0.2, seed: 2 }),
