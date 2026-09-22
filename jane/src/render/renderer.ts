@@ -25,7 +25,7 @@ import { maxHp } from "@/sim/units";
 import { fogSeen } from "@/sim/zones";
 import { buildAtlas, drawSprite, iconDataUrl, type Atlas } from "@/render/atlas";
 import { ambientForHour, Lighting, type Light } from "@/render/lighting";
-import { TileCache } from "@/render/tiles";
+import { STRIP_H as STRIP_ROW_H, TileCache, underCanopy, type StripRef } from "@/render/tiles";
 
 const TARGET_VIEW_H = 216;
 
@@ -69,6 +69,8 @@ export class Renderer {
   private readonly propShown = new Map<number, { x: number; y: number }>();
   /** Reused every frame: the props in the blocks under the view. */
   private readonly propsInView: Prop[] = [];
+  /** Reused every frame: the rows of trees, bushes and fences reaching into the view. */
+  private readonly stripsInView: StripRef[] = [];
   private readonly texts: FloatText[] = [];
   private readonly particles: Particle[] = [];
   private frameNo = 0;
@@ -185,7 +187,7 @@ export class Renderer {
     const key = `${sim.state.seed}:${sim.me.zone}`;
     if (key !== this.zoneKey) {
       this.zoneKey = key;
-      this.tiles.setGrid(sim.rt.grid);
+      this.tiles.setGrid(sim.rt.grid, !bp.indoor);
       this.prev.clear();
       this.propShown.clear();
       this.camReady = false;
@@ -344,8 +346,19 @@ export class Renderer {
       if (u.segments && u.alive) sorted.push({ y: pos.y - 1, draw: () => this.drawSnakeBody(u, vx, vy) });
     }
 
+    // --- trees, bushes, stones, fences: one strip per cell row, sorted with everything else ---
+    for (const s of this.tiles.strips(vx, vy, this.viewW, this.viewH, this.stripsInView)) {
+      sorted.push({ y: s.y, draw: () => ctx.drawImage(s.canvas, 0, s.sy, s.canvas.width, STRIP_ROW_H, s.dx, s.dy, s.canvas.width, STRIP_ROW_H) });
+    }
+
     sorted.sort((a, b) => a.y - b.y);
     for (const d of sorted) d.draw();
+    // Behind a wood's crowns she would be lost: a faint ghost of her shows through, as in Minish Cap.
+    if (player.alive && !player.hidden && underCanopy(sim.rt.grid, pp.x, pp.y)) {
+      ctx.globalAlpha = 0.4;
+      this.drawUnit(sim, player, pp.x - vx, pp.y - vy);
+      ctx.globalAlpha = 1;
+    }
     if (carried) {
       const sprite = this.atlas[sim.catalog.props[carried.def].sprite];
       if (sprite) drawSprite(ctx, sprite, "base", pp.x - vx - sprite.w / 2, pp.y - vy - 26);
@@ -394,7 +407,6 @@ export class Renderer {
     this.lighting.apply(ctx, ambient, lights);
 
     if (bp.indoor) this.drawFog(sim, vx, vy);
-    else this.drawSchool(bp.marks.school_mouth, vx, vy, darkness, sim.state.tick);
 
     // --- unlit overlays ----------------------------------------------------------
     for (const u of sim.zone.units) {
@@ -567,44 +579,6 @@ export class Renderer {
    * drifts and anchored to the world so it slides past as Jane walks. Thin by day,
    * thick by night and in the burial ("Cold, dark, foggy place").
    */
-  /**
-   * The School looms (PLAN.md 2.2). A top-down view has no horizon, so the far landmark is
-   * drawn where the horizon would be: along the top edge of the screen, a dark mass with
-   * one lit window, whenever the School lies north of what she can see. It slides sideways
-   * as she walks east or west of it, grows as she gets nearer, and is gone once the real
-   * building is on screen. Unlit, so it is the one thing the night never hides.
-   */
-  private drawSchool(mark: { cx: number; cy: number } | undefined, vx: number, vy: number, darkness: number, tick: number): void {
-    if (!mark) return;
-    const sx = mark.cx * CELL - vx;
-    const north = vy - mark.cy * CELL; // px the School lies above the top of the view
-    if (north < 40) return;
-    const ctx = this.ctx;
-    // Nearer is larger and further in from the side; ten minutes away it is a thumbnail at the screen's edge.
-    const near = Math.max(0, Math.min(1, 1 - north / 14000));
-    const size = 0.9 + near * 1.1;
-    // How much of her sideways offset shows. Little: it is far away, and it must never slide under the HUD.
-    const pull = 0.015 + near * 0.1;
-    const x = Math.round(this.viewW / 2 + Math.max(-this.viewW * 0.2, Math.min(this.viewW * 0.2, (sx - this.viewW / 2) * pull)));
-    const w = Math.round(46 * size);
-    const h = Math.round(18 * size);
-    ctx.globalAlpha = Math.min(1, north / 160) * (0.72 + darkness * 0.24);
-    ctx.fillStyle = "#0c0912";
-    // Body, a taller wing, two chimneys, the bell tower.
-    ctx.fillRect(x - w / 2, 0, w, Math.round(h * 0.62));
-    ctx.fillRect(x - w / 2 + Math.round(w * 0.1), 0, Math.round(w * 0.3), Math.round(h * 0.8));
-    ctx.fillRect(x + Math.round(w * 0.22), 0, Math.round(w * 0.16), h);
-    ctx.fillRect(x - Math.round(w * 0.42), 0, Math.max(1, Math.round(w * 0.05)), Math.round(h * 0.95));
-    ctx.fillRect(x - Math.round(w * 0.02), 0, Math.max(1, Math.round(w * 0.05)), Math.round(h * 0.9));
-    // The window. It is never not lit. A slow, uneven breath, from the tick so it is the same for everyone.
-    const breath = 0.78 + 0.22 * Math.abs(((tick >> 3) % 40) - 20) / 20;
-    ctx.globalAlpha = Math.min(1, north / 160) * breath;
-    ctx.fillStyle = "#f0d048";
-    const px = Math.max(1, Math.round(size));
-    ctx.fillRect(x + Math.round(w * 0.28), Math.round(h * 0.55), px, px + (size > 1 ? 1 : 0));
-    ctx.globalAlpha = 1;
-  }
-
   private drawMist(vx: number, vy: number, density: number): void {
     const size = 256;
     if (!this.mistTex) {
