@@ -183,6 +183,9 @@ export function buildCounty(seed: number, attempt: number, rows: readonly Placem
     for (const [name, p, toward] of ends) {
       clearing(k, p[0], p[1]);
       k.mark(name, p[0], p[1], 1);
+      // A path end the quests already furnish (data/placements: its own post or sign, saying more) gets no
+      // second post from here: two fingerposts and a sign at one stile read as clutter, not as care.
+      if (rows.some((r) => (r.at as { mark?: string }).mark === name)) continue;
       // A fingerpost where the footpath leaves the road, saying where it goes. Beside the stile, not on it.
       const there = sk.sites.find((s) => s.id === toward);
       const metres = Math.round((Math.abs(b - a) * 1.1) / 50) * 50;
