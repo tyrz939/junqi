@@ -358,6 +358,8 @@ function world(seed: number): World {
       // A thing under a stone is shown by pushing the stone off it (sim/under.ts).
       if (p.under) shown.add(p.under);
       note(t, flatten(p.use), undefined);
+      // A plate's other list: what happens when the stone is pushed off it (the key under the stone).
+      note(t, flatten(p.release), undefined);
       if (p.talk && c.dialogue[p.talk]) for (const n of treeActions(c.dialogue[p.talk])) note(t, n.actions, n.time);
       for (const s of p.loot ?? []) add(`item:${s.item}`, { ...t, qty: s.qty });
       if (def?.bench) {

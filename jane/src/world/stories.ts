@@ -46,7 +46,57 @@ export type Claims = {
   skipped: Map<string, string>;
   /** Footpaths laid to places off the road, by story: the line from the road to the place. */
   paths: Map<string, [number, number][]>;
+  /**
+   * The ground she can walk to from where she starts, as the county stands when the stories claim (1 =
+   * reachable). Worked out only when a tale is placed: a tale's things are set down where she can get to them.
+   */
+  ground?: Uint8Array;
 };
+
+/** Footprints of the things that stop her feet, by def (data/props.json and data/props/*.json). */
+const SOLID_PROPS: ReadonlyMap<string, { w: number; h: number }> = (() => {
+  const files = import.meta.glob(["../data/props.json", "../data/props/*.json"], { eager: true, import: "default" }) as Record<string, Record<string, { w: number; h: number; solid: boolean }>>;
+  const out = new Map<string, { w: number; h: number }>();
+  for (const rows of Object.values(files)) for (const [id, d] of Object.entries(rows)) if (d.solid) out.set(id, { w: d.w, h: d.h });
+  return out;
+})();
+
+/**
+ * Cells reachable on foot from the start mark: the ground, less whatever solid thing already stands on it
+ * (a crate in a doorway shuts a ruin as well as a wall does). The same flood as county.ts dropUnreachable,
+ * with the things in.
+ */
+function walkable(k: Kit): Uint8Array {
+  const w = k.w;
+  const seen = new Uint8Array(w * k.h);
+  const start = k.marks.start;
+  if (!start) return seen.fill(1);
+  const queue = new Int32Array(w * k.h);
+  let head = 0;
+  let tail = 0;
+  const tiles = k.tiles;
+  const blocked = new Uint8Array(w * k.h);
+  for (const p of k.props) {
+    const d = SOLID_PROPS.get(p.def);
+    if (!d || p.hidden) continue;
+    for (let j = p.cy; j < p.cy + d.h; j++) for (let i = p.cx; i < p.cx + d.w; i++) if (i >= 0 && j >= 0 && i < w && j < k.h) blocked[j * w + i] = 1;
+  }
+  const push = (i: number): void => {
+    if (seen[i] || blocked[i] || (TILE_FLAGS[tiles[i]] & F_SOLID) !== 0) return;
+    seen[i] = 1;
+    queue[tail++] = i;
+  };
+  push(start.cy * w + start.cx);
+  while (head < tail) {
+    const i = queue[head++];
+    const x = i % w;
+    if (x + 1 < w) push(i + 1);
+    if (x > 0) push(i - 1);
+    if (i + w < seen.length) push(i + w);
+    if (i >= w) push(i - w);
+  }
+  return seen;
+}
 
 /** The slots a story's rows use at its place: what a place must offer before the story can have it. */
 function slotsWanted(id: string, rows: readonly PlacementRow[]): string[] {
@@ -169,6 +219,7 @@ export function claimPlaces(seed: number, k: Kit, sk: Skeleton, places: readonly
   const claims = new Map<string, Place>();
   const skipped = new Map<string, string>();
   const paths = new Map<string, [number, number][]>();
+  let ground: Uint8Array | undefined;
   const taken = new Set<Place>();
   const defOf = new Map(k.units.map((u) => [u.key, u.def]));
   const reached = new Map<Place, Reach>();
@@ -234,6 +285,18 @@ export function claimPlaces(seed: number, k: Kit, sk: Skeleton, places: readonly
         out("out of sight of a road");
         continue;
       }
+      // A tale is played at its place, not only visited: every cell the place kept open must be ground she can walk to.
+      if (story.tale) {
+        const g = (ground ??= walkable(k));
+        // The board is read from the cell in front of it, and that cell must be come at from somewhere
+        // other than where the board will stand; the other kept cells are stood on.
+        const W = k.w;
+        const front = ([x, y]: [number, number]): boolean => g[(y + 1) * W + x] === 1 && [[x - 1, y + 1], [x + 1, y + 1], [x, y + 2]].some(([i, j]) => g[j * W + i] === 1);
+        if (Object.entries(p.slots).some(([name, c]) => (name === "board" ? !front(c) : !g[c[1] * W + c[0]] && !g[(c[1] + 1) * W + c[0]]))) {
+          out("cut off");
+          continue;
+        }
+      }
       fits.push(p);
     }
     return fits;
@@ -267,7 +330,7 @@ export function claimPlaces(seed: number, k: Kit, sk: Skeleton, places: readonly
     const r = reached.get(p)!;
     if (r.screens > SEEN && r.road) paths.set(story.id, layPath(k, p, r.road, storyName(seed, story.id) ?? ""));
   }
-  return { claims, skipped, paths };
+  return { claims, skipped, paths, ground };
 }
 
 /** Ground a footpath may be trodden over: grass, growth and scrub. Never water, a fence, a wall or a field in crops. */
@@ -329,7 +392,9 @@ export function nameBoards(seed: number, k: Kit, places: readonly Place[], claim
       name = nthName(seed, p.kind, n);
     }
     if (!name) continue;
-    k.prop({ key: `board_${p.n}`, def: "name_board", cx: b[0], cy: b[1], label: name, use: [{ do: "read", text: boardText(p.kind, name, hashString(`${seed}:${p.n}`)) }] }, 2, 1);
+    const own = story ? STORIES.find((s) => s.id === story)?.board : undefined;
+    const text = own ? own.replace("{NAME}", name.toUpperCase()) : boardText(p.kind, name, hashString(`${seed}:${p.n}`));
+    k.prop({ key: `board_${p.n}`, def: "name_board", cx: b[0], cy: b[1], label: name, use: [{ do: "read", text }] }, 2, 1);
   }
 }
 

@@ -1,0 +1,3637 @@
+{
+  "tale_hanney": {
+    "speaker": "Miss Hanney",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "tale_bees_crepe"
+          }
+        ],
+        "node": "in_3"
+      },
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "tale_bees_comb"
+          }
+        ],
+        "node": "in_2"
+      },
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "tale_bees_tell"
+          }
+        ],
+        "node": "in_1"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "tale_bees_crepe"
+          }
+        ],
+        "node": "after_crepe"
+      },
+      {
+        "when": [
+          {
+            "if": "flag",
+            "flag": "tale_bees_left",
+            "eq": 1
+          }
+        ],
+        "node": "after_left"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "tale_bees_crepe"
+          }
+        ],
+        "node": "wait_3"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "tale_bees_comb"
+          }
+        ],
+        "node": "wait_2"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "tale_bees_tell"
+          }
+        ],
+        "node": "offer_2"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "tale_bees_tell"
+          }
+        ],
+        "node": "wait_1"
+      },
+      {
+        "node": "offer_1"
+      }
+    ],
+    "nodes": {
+      "offer_1": {
+        "lines": [
+          "You're not family. There isn't any. You'll do.",
+          "Mr Coram died on Friday. Somebody has to tell his bees, or they'll go. You knock on each hive and tell them. Plainly, mind."
+        ],
+        "options": [
+          {
+            "label": "I'll tell them",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "tale_bees_tell"
+              }
+            ]
+          },
+          {
+            "label": "Not now"
+          }
+        ]
+      },
+      "wait_1": {
+        "lines": [
+          "Knock on the roof of each and say it plain. Three hives. They don't like being kept waiting."
+        ]
+      },
+      "in_1": {
+        "lines": [
+          "Cut? Nobody's been near those hives. I'd have heard. I don't sleep.",
+          "Here. His honey, from last year. He'd want it eaten, not looked at."
+        ],
+        "options": [
+          {
+            "label": "Thank you",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "tale_bees_tell"
+              }
+            ]
+          }
+        ]
+      },
+      "offer_2": {
+        "lines": [
+          "Somebody's cutting his comb. Cleanly, you said. The way he did it.",
+          "Wait by the hives after the bell and see who it is. I'll not. I don't go out after the bell. Nobody sensible does."
+        ],
+        "options": [
+          {
+            "label": "I'll wait for them",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "tale_bees_comb"
+              }
+            ]
+          },
+          {
+            "label": "Not now"
+          }
+        ]
+      },
+      "wait_2": {
+        "lines": [
+          "After the bell, by the hives. Stand still and they'll leave you be."
+        ]
+      },
+      "in_2": {
+        "lines": [
+          "A man in a veil. At his hives. At night.",
+          "Then they've not been told properly, and nor has he. It's crepe you want, black, round each hive. That tells them for certain.",
+          "Or you leave him to it. I'd not blame you either way."
+        ],
+        "options": [
+          {
+            "label": "Give me the crepe",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "tale_bees_comb"
+              },
+              {
+                "do": "quest",
+                "quest": "tale_bees_crepe"
+              },
+              {
+                "do": "give",
+                "item": "tale_crepe",
+                "qty": 1
+              }
+            ]
+          },
+          {
+            "label": "Leave him to it",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "tale_bees_comb"
+              },
+              {
+                "do": "flag",
+                "flag": "tale_bees_left",
+                "value": 1
+              }
+            ],
+            "goto": "leave"
+          }
+        ]
+      },
+      "leave": {
+        "lines": [
+          "Then I'll leave him be.",
+          "He always left me a jar on the step, when there was honey. I dare say he'll go on."
+        ]
+      },
+      "wait_3": {
+        "lines": [
+          "Round each of the three. Knot it at the back, where the wind won't have it."
+        ]
+      },
+      "in_3": {
+        "lines": [
+          "Then that's done. They know, and so does he.",
+          "Nobody'll cut the comb now. It'll go to the bees. It was always theirs."
+        ],
+        "options": [
+          {
+            "label": "It's done",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "tale_bees_crepe"
+              },
+              {
+                "do": "despawn",
+                "unit": "tale_bees_coram"
+              },
+              {
+                "do": "hide",
+                "prop": "tale_bees_veil"
+              }
+            ]
+          }
+        ]
+      },
+      "after_crepe": {
+        "lines": [
+          "The crepe's holding. They're quieter, if anything.",
+          "I've taken his veil in, stake and all. It was only getting wet."
+        ]
+      },
+      "after_left": {
+        "lines": [
+          "He leaves a jar on the step. I let it stand a day before I take it. It seems only fair."
+        ]
+      }
+    }
+  },
+  "tale_coram": {
+    "speaker": "A Man in a Bee Veil",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "flag",
+            "flag": "tale_bees_left",
+            "eq": 1
+          }
+        ],
+        "node": "left"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "tale_bees_comb"
+          }
+        ],
+        "node": "met"
+      },
+      {
+        "node": "busy"
+      }
+    ],
+    "nodes": {
+      "busy": {
+        "lines": [
+          "He is cutting comb by feel, without a light, and does not look up."
+        ]
+      },
+      "met": {
+        "lines": [
+          "Evening. Mind the slot, they're still coming in.",
+          "It wants doing before the frost, and nobody else will. They know me."
+        ],
+        "actions": [
+          {
+            "do": "location",
+            "name": "tale_bees_seen"
+          }
+        ],
+        "options": [
+          {
+            "label": "Mr Coram?",
+            "goto": "name"
+          },
+          {
+            "label": "I'll leave you to it"
+          }
+        ]
+      },
+      "name": {
+        "lines": [
+          "That's the name on the board.",
+          "Go on home. It's no night to be out in, and I'm nearly done."
+        ]
+      },
+      "left": {
+        "lines": [
+          "Evening. There'll be a jar on the step for her by morning.",
+          "Don't tell her it's from me. She knows."
+        ]
+      }
+    }
+  },
+  "tale_bees_hive_1": {
+    "speaker": "A Hive",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "flag",
+            "flag": "tale_bees_crepe_1",
+            "eq": 1
+          }
+        ],
+        "node": "crepe"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "tale_bees_crepe"
+          },
+          {
+            "if": "hasItem",
+            "item": "tale_crepe"
+          }
+        ],
+        "node": "tie"
+      },
+      {
+        "when": [
+          {
+            "if": "flag",
+            "flag": "tale_bees_told_1",
+            "eq": 1
+          }
+        ],
+        "node": "told"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "tale_bees_tell"
+          }
+        ],
+        "node": "knock"
+      },
+      {
+        "node": "look"
+      }
+    ],
+    "nodes": {
+      "look": {
+        "lines": [
+          "A white hive on legs. Bees come and go at the slot along the bottom."
+        ]
+      },
+      "knock": {
+        "lines": [
+          "You knock twice on the roof of the hive and tell them that Mr Coram died on Friday.",
+          "The hum does not change."
+        ],
+        "actions": [
+          {
+            "do": "flag",
+            "flag": "tale_bees_told_1",
+            "value": 1
+          },
+          {
+            "do": "flag",
+            "flag": "tale_bees_told_count",
+            "add": 1
+          },
+          {
+            "do": "if",
+            "when": [
+              {
+                "if": "flag",
+                "flag": "tale_bees_told_count",
+                "min": 3
+              }
+            ],
+            "then": [
+              {
+                "do": "location",
+                "name": "tale_bees_told"
+              }
+            ]
+          }
+        ]
+      },
+      "told": {
+        "lines": [
+          "They have been told. The hum is low and even."
+        ]
+      },
+      "tie": {
+        "lines": [
+          "You tie a length of black crepe round the hive and knot it at the back, where the wind will not have it."
+        ],
+        "actions": [
+          {
+            "do": "flag",
+            "flag": "tale_bees_crepe_1",
+            "value": 1
+          },
+          {
+            "do": "switch",
+            "prop": "tale_bees_hive_1",
+            "on": true
+          },
+          {
+            "do": "flag",
+            "flag": "tale_bees_tied",
+            "add": 1
+          },
+          {
+            "do": "if",
+            "when": [
+              {
+                "if": "flag",
+                "flag": "tale_bees_tied",
+                "min": 3
+              }
+            ],
+            "then": [
+              {
+                "do": "location",
+                "name": "tale_bees_crepe_done"
+              },
+              {
+                "do": "take",
+                "item": "tale_crepe",
+                "qty": 1
+              }
+            ]
+          }
+        ]
+      },
+      "crepe": {
+        "lines": [
+          "Black crepe round the hive, knotted at the back. The bees come and go under it."
+        ]
+      }
+    }
+  },
+  "tale_bees_hive_2": {
+    "speaker": "A Hive",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "flag",
+            "flag": "tale_bees_crepe_2",
+            "eq": 1
+          }
+        ],
+        "node": "crepe"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "tale_bees_crepe"
+          },
+          {
+            "if": "hasItem",
+            "item": "tale_crepe"
+          }
+        ],
+        "node": "tie"
+      },
+      {
+        "when": [
+          {
+            "if": "flag",
+            "flag": "tale_bees_told_2",
+            "eq": 1
+          }
+        ],
+        "node": "told"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "tale_bees_tell"
+          }
+        ],
+        "node": "knock"
+      },
+      {
+        "node": "look"
+      }
+    ],
+    "nodes": {
+      "look": {
+        "lines": [
+          "A white hive on legs. Bees come and go at the slot along the bottom."
+        ]
+      },
+      "knock": {
+        "lines": [
+          "You knock twice on the roof of the hive and tell them that Mr Coram died on Friday.",
+          "The hum does not change."
+        ],
+        "actions": [
+          {
+            "do": "flag",
+            "flag": "tale_bees_told_2",
+            "value": 1
+          },
+          {
+            "do": "flag",
+            "flag": "tale_bees_told_count",
+            "add": 1
+          },
+          {
+            "do": "if",
+            "when": [
+              {
+                "if": "flag",
+                "flag": "tale_bees_told_count",
+                "min": 3
+              }
+            ],
+            "then": [
+              {
+                "do": "location",
+                "name": "tale_bees_told"
+              }
+            ]
+          }
+        ]
+      },
+      "told": {
+        "lines": [
+          "They have been told. The hum is low and even."
+        ]
+      },
+      "tie": {
+        "lines": [
+          "You tie a length of black crepe round the hive and knot it at the back, where the wind will not have it."
+        ],
+        "actions": [
+          {
+            "do": "flag",
+            "flag": "tale_bees_crepe_2",
+            "value": 1
+          },
+          {
+            "do": "switch",
+            "prop": "tale_bees_hive_2",
+            "on": true
+          },
+          {
+            "do": "flag",
+            "flag": "tale_bees_tied",
+            "add": 1
+          },
+          {
+            "do": "if",
+            "when": [
+              {
+                "if": "flag",
+                "flag": "tale_bees_tied",
+                "min": 3
+              }
+            ],
+            "then": [
+              {
+                "do": "location",
+                "name": "tale_bees_crepe_done"
+              },
+              {
+                "do": "take",
+                "item": "tale_crepe",
+                "qty": 1
+              }
+            ]
+          }
+        ]
+      },
+      "crepe": {
+        "lines": [
+          "Black crepe round the hive, knotted at the back. The bees come and go under it."
+        ]
+      }
+    }
+  },
+  "tale_bees_hive_3": {
+    "speaker": "A Hive",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "flag",
+            "flag": "tale_bees_crepe_3",
+            "eq": 1
+          }
+        ],
+        "node": "crepe"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "tale_bees_crepe"
+          },
+          {
+            "if": "hasItem",
+            "item": "tale_crepe"
+          }
+        ],
+        "node": "tie"
+      },
+      {
+        "when": [
+          {
+            "if": "flag",
+            "flag": "tale_bees_told_3",
+            "eq": 1
+          }
+        ],
+        "node": "told"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "tale_bees_tell"
+          }
+        ],
+        "node": "knock"
+      },
+      {
+        "node": "look"
+      }
+    ],
+    "nodes": {
+      "look": {
+        "lines": [
+          "A white hive on legs. Bees come and go at the slot along the bottom."
+        ]
+      },
+      "knock": {
+        "lines": [
+          "You knock twice on the roof of the hive and tell them that Mr Coram died on Friday.",
+          "Lifting the roof to knock, you see comb cut from the frames inside. The cut edges are fresh.",
+          "The hum does not change."
+        ],
+        "actions": [
+          {
+            "do": "flag",
+            "flag": "tale_bees_told_3",
+            "value": 1
+          },
+          {
+            "do": "flag",
+            "flag": "tale_bees_told_count",
+            "add": 1
+          },
+          {
+            "do": "if",
+            "when": [
+              {
+                "if": "flag",
+                "flag": "tale_bees_told_count",
+                "min": 3
+              }
+            ],
+            "then": [
+              {
+                "do": "location",
+                "name": "tale_bees_told"
+              }
+            ]
+          }
+        ]
+      },
+      "told": {
+        "lines": [
+          "They have been told. Somebody has cut comb from this one, cleanly, with a warm knife."
+        ]
+      },
+      "tie": {
+        "lines": [
+          "You tie a length of black crepe round the hive and knot it at the back, where the wind will not have it."
+        ],
+        "actions": [
+          {
+            "do": "flag",
+            "flag": "tale_bees_crepe_3",
+            "value": 1
+          },
+          {
+            "do": "switch",
+            "prop": "tale_bees_hive_3",
+            "on": true
+          },
+          {
+            "do": "flag",
+            "flag": "tale_bees_tied",
+            "add": 1
+          },
+          {
+            "do": "if",
+            "when": [
+              {
+                "if": "flag",
+                "flag": "tale_bees_tied",
+                "min": 3
+              }
+            ],
+            "then": [
+              {
+                "do": "location",
+                "name": "tale_bees_crepe_done"
+              },
+              {
+                "do": "take",
+                "item": "tale_crepe",
+                "qty": 1
+              }
+            ]
+          }
+        ]
+      },
+      "crepe": {
+        "lines": [
+          "Black crepe round the hive, knotted at the back. The bees come and go under it."
+        ]
+      }
+    }
+  },
+  "tale_bees_veil": {
+    "speaker": "A Bee Veil",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "night"
+          }
+        ],
+        "node": "bare"
+      },
+      {
+        "node": "veil"
+      }
+    ],
+    "nodes": {
+      "veil": {
+        "lines": [
+          "A bee veil on a stake by the door: a wide hat, and a net darned in two places.",
+          "The net is damp, as if it had been out in the dew."
+        ]
+      },
+      "bare": {
+        "lines": [
+          "A stake with a nail in the top. There is nothing on the nail."
+        ]
+      }
+    }
+  },
+  "tale_bees_door": {
+    "speaker": "Mr Coram's Door",
+    "start": [
+      {
+        "node": "shut"
+      }
+    ],
+    "nodes": {
+      "shut": {
+        "lines": [
+          "You knock. Nobody answers. The door is locked, and the key is not under the mat. There is no mat."
+        ]
+      }
+    }
+  },
+  "tale_bees_jar": {
+    "speaker": "A Jar of Honey",
+    "start": [
+      {
+        "node": "jar"
+      }
+    ],
+    "nodes": {
+      "jar": {
+        "lines": [
+          "A jar of honey on the step, full to the shoulder, with a clean lid. HANNEY is written on the lid in pencil."
+        ]
+      }
+    }
+  },
+  "tale_pollard_wife": {
+    "speaker": "Mrs Pollard",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "tale_walk_plate"
+          }
+        ],
+        "node": "in_2"
+      },
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "tale_walk_follow"
+          }
+        ],
+        "node": "in_1"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "tale_walk_plate"
+          }
+        ],
+        "node": "after_home"
+      },
+      {
+        "when": [
+          {
+            "if": "flag",
+            "flag": "tale_walk_left",
+            "eq": 1
+          }
+        ],
+        "node": "after_left"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "tale_walk_plate"
+          }
+        ],
+        "node": "wait_2"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "tale_walk_follow"
+          }
+        ],
+        "node": "wait_1"
+      },
+      {
+        "node": "offer_1"
+      }
+    ],
+    "nodes": {
+      "offer_1": {
+        "lines": [
+          "Mrs Pollard. You'll excuse the curlers. I've not been to bed properly since Easter.",
+          "My husband walks in his sleep. After the bell, most nights. I tie a bell on his ankle so I hear him go.",
+          "Would you follow him tonight? See where he gets to. I can't keep up, and I don't like the dark."
+        ],
+        "options": [
+          {
+            "label": "I'll follow him",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "tale_walk_follow"
+              }
+            ]
+          },
+          {
+            "label": "Not now"
+          }
+        ]
+      },
+      "wait_1": {
+        "lines": [
+          "After the bell he comes out of the front door and stands a while, and then he goes. You'll hear the bell."
+        ]
+      },
+      "in_1": {
+        "lines": [
+          "A stone. A dinner, under a cloth.",
+          "He's not asleep, is he. He never was.",
+          "Our Tom's been up at the School since the winter. He never would eat what they gave him."
+        ],
+        "options": [
+          {
+            "label": "Shall I bring the plate back?",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "tale_walk_follow"
+              },
+              {
+                "do": "quest",
+                "quest": "tale_walk_plate"
+              }
+            ],
+            "goto": "plate"
+          },
+          {
+            "label": "Let him go on",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "tale_walk_follow"
+              },
+              {
+                "do": "flag",
+                "flag": "tale_walk_left",
+                "value": 1
+              }
+            ],
+            "goto": "two"
+          }
+        ]
+      },
+      "plate": {
+        "lines": [
+          "Yes. Bring it back. No plate, no going.",
+          "Don't tell him I sent you. Not that it matters. He'll know."
+        ]
+      },
+      "two": {
+        "lines": [
+          "Then I'll do two plates. One from each of us.",
+          "He can carry both. He's steady enough, when he's going there."
+        ]
+      },
+      "wait_2": {
+        "lines": [
+          "The stone's north of the house, not far. The plate's my good one, with the blue rim."
+        ]
+      },
+      "in_2": {
+        "lines": [
+          "That's my good plate.",
+          "He'll sit in tonight, then. He'll sit in the chair by the door and listen for the bell, and I'll sit with him."
+        ],
+        "options": [
+          {
+            "label": "Here it is",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "tale_walk_plate"
+              },
+              {
+                "do": "take",
+                "item": "tale_walk_plate",
+                "qty": 1
+              }
+            ]
+          }
+        ]
+      },
+      "after_home": {
+        "lines": [
+          "He sits in the chair by the door now, nights, and listens for the bell. I sit with him. We don't say much."
+        ]
+      },
+      "after_left": {
+        "lines": [
+          "Two plates on the stone, and both of them clean by morning.",
+          "Don't ask me who. I don't."
+        ]
+      }
+    }
+  },
+  "tale_pollard": {
+    "speaker": "Mr Pollard",
+    "start": [
+      {
+        "node": "gate"
+      }
+    ],
+    "nodes": {
+      "gate": {
+        "lines": [
+          "Evening. Don't mind me.",
+          "I'll not be long. I never am."
+        ],
+        "actions": [
+          {
+            "do": "send",
+            "unit": "tale_walk_pollard",
+            "to": "tale_walk_stone_mark",
+            "then": [
+              {
+                "do": "despawn",
+                "unit": "tale_walk_pollard"
+              },
+              {
+                "do": "spawn",
+                "unit": "tale_walk_pollard",
+                "def": "tale_pollard_stood",
+                "at": "tale_walk_stone_mark"
+              },
+              {
+                "do": "flag",
+                "flag": "tale_walk_arrived",
+                "value": 1
+              },
+              {
+                "do": "if",
+                "when": [
+                  {
+                    "if": "flag",
+                    "flag": "tale_walk_taken",
+                    "eq": 1,
+                    "not": true
+                  }
+                ],
+                "then": [
+                  {
+                    "do": "switch",
+                    "prop": "tale_walk_stone",
+                    "on": true
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "tale_pollard_stood": {
+    "speaker": "Mr Pollard",
+    "start": [
+      {
+        "node": "stone"
+      }
+    ],
+    "nodes": {
+      "stone": {
+        "lines": [
+          "He stands by the stone, his coat buttoned over his pyjamas. The bell on his ankle is still.",
+          "\"It's for our Tom. He's up at the School. He comes down for it when I've gone. He always does.\"",
+          "\"Go on home. It's cold, and you've no bell on.\""
+        ],
+        "actions": [
+          {
+            "do": "location",
+            "name": "tale_walk_seen"
+          }
+        ]
+      }
+    }
+  },
+  "tale_pollard_home": {
+    "speaker": "Mr Pollard",
+    "start": [
+      {
+        "node": "chair"
+      }
+    ],
+    "nodes": {
+      "chair": {
+        "lines": [
+          "Evening. She's in with the kettle.",
+          "I'm listening. You can hear the School from here at nine, if the wind's right. I like to know it's rung."
+        ]
+      }
+    }
+  },
+  "tale_walk_stone": {
+    "speaker": "The Dole Stone",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "flag",
+            "flag": "tale_walk_taken",
+            "eq": 1
+          }
+        ],
+        "node": "bare_after"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "tale_walk_plate"
+          },
+          {
+            "if": "flag",
+            "flag": "tale_walk_arrived",
+            "eq": 1
+          }
+        ],
+        "node": "take"
+      },
+      {
+        "when": [
+          {
+            "if": "flag",
+            "flag": "tale_walk_arrived",
+            "eq": 1
+          },
+          {
+            "if": "night"
+          }
+        ],
+        "node": "dinner"
+      },
+      {
+        "when": [
+          {
+            "if": "flag",
+            "flag": "tale_walk_arrived",
+            "eq": 1
+          }
+        ],
+        "node": "clean"
+      },
+      {
+        "node": "bare"
+      }
+    ],
+    "nodes": {
+      "bare": {
+        "lines": [
+          "A flat stone set on two others, waist high. Cut into the edge: THE DOLE STONE. ANYBODY IN NEED, TAKE AND GIVE THANKS."
+        ]
+      },
+      "dinner": {
+        "lines": [
+          "A dinner plate on the stone, under a cloth. Under the cloth: mutton, potatoes, gravy gone to a skin, and a knife and fork laid straight."
+        ],
+        "actions": [
+          {
+            "do": "location",
+            "name": "tale_walk_seen"
+          }
+        ]
+      },
+      "clean": {
+        "lines": [
+          "A plate with a blue rim on the stone, under a cloth. Under the cloth it is wiped clean, the knife and fork laid across it."
+        ],
+        "actions": [
+          {
+            "do": "location",
+            "name": "tale_walk_seen"
+          }
+        ]
+      },
+      "take": {
+        "lines": [
+          "Mrs Pollard's good plate, with the blue rim, wiped clean."
+        ],
+        "options": [
+          {
+            "label": "Take it",
+            "actions": [
+              {
+                "do": "give",
+                "item": "tale_walk_plate",
+                "qty": 1
+              },
+              {
+                "do": "flag",
+                "flag": "tale_walk_taken",
+                "value": 1
+              },
+              {
+                "do": "flag",
+                "flag": "tale_walk_home",
+                "value": 1
+              },
+              {
+                "do": "switch",
+                "prop": "tale_walk_stone",
+                "on": false
+              }
+            ]
+          },
+          {
+            "label": "Leave it"
+          }
+        ]
+      },
+      "bare_after": {
+        "lines": [
+          "The Dole Stone, bare. There are crumbs on it, and a clean ring where a plate stood."
+        ]
+      }
+    }
+  },
+  "tale_walk_second": {
+    "speaker": "A Second Plate",
+    "start": [
+      {
+        "node": "plate"
+      }
+    ],
+    "nodes": {
+      "plate": {
+        "lines": [
+          "A second plate beside the first, on a stone of its own, under its own cloth. Bread and dripping, cut into soldiers."
+        ]
+      }
+    }
+  },
+  "tale_walk_door": {
+    "speaker": "The Pollards' Door",
+    "start": [
+      {
+        "node": "door"
+      }
+    ],
+    "nodes": {
+      "door": {
+        "lines": [
+          "The door is on the latch. Inside, a clock is ticking, and there is a smell of gravy."
+        ]
+      }
+    }
+  },
+  "tale_walk_chair": {
+    "speaker": "A Kitchen Chair",
+    "start": [
+      {
+        "node": "chair"
+      }
+    ],
+    "nodes": {
+      "chair": {
+        "lines": [
+          "A kitchen chair outside the door, a blanket folded on the seat. The ground under it is worn to bare earth."
+        ]
+      }
+    }
+  },
+  "tale_walk_slippers": {
+    "speaker": "Carpet Slippers",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "night"
+          }
+        ],
+        "node": "gone"
+      },
+      {
+        "node": "slippers"
+      }
+    ],
+    "nodes": {
+      "gone": {
+        "lines": [
+          "The slippers are not by the step."
+        ]
+      },
+      "slippers": {
+        "lines": [
+          "A man's carpet slippers by the step, worn through at the toes. There is grass seed in them."
+        ]
+      }
+    }
+  },
+  "tale_pargeter": {
+    "speaker": "Mr Pargeter",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "tale_horace_box"
+          }
+        ],
+        "node": "in_2"
+      },
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "tale_horace_find"
+          }
+        ],
+        "node": "in_1"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "tale_horace_box"
+          },
+          {
+            "if": "flag",
+            "flag": "tale_horace_blocked",
+            "eq": 1
+          }
+        ],
+        "node": "shut"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "tale_horace_box"
+          }
+        ],
+        "node": "after"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "tale_horace_box"
+          }
+        ],
+        "node": "wait_2"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "tale_horace_find"
+          }
+        ],
+        "node": "offer_2"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "tale_horace_find"
+          }
+        ],
+        "node": "wait_1"
+      },
+      {
+        "node": "offer_1"
+      }
+    ],
+    "nodes": {
+      "offer_1": {
+        "lines": [
+          "He's gone again. Horace. My tortoise. He was my father's, and his father's before that, near enough.",
+          "Follow the dandelions. He takes a bite out of each as he goes, and he doesn't go fast. He's ninety."
+        ],
+        "options": [
+          {
+            "label": "I'll find him",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "tale_horace_find"
+              }
+            ]
+          },
+          {
+            "label": "Not now"
+          }
+        ]
+      },
+      "wait_1": {
+        "lines": [
+          "Bitten dandelions. He always goes the same way. North, up past the house."
+        ]
+      },
+      "in_1": {
+        "lines": [
+          "Horace. You old fool.",
+          "North again. Every autumn, the same. He's never got far. One year he will."
+        ],
+        "options": [
+          {
+            "label": "Here he is",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "tale_horace_find"
+              },
+              {
+                "do": "take",
+                "item": "tale_horace",
+                "qty": 1
+              }
+            ]
+          }
+        ]
+      },
+      "offer_2": {
+        "lines": [
+          "He gets out by the front of his box. Pushes past it, slow as you like.",
+          "There's a flat stone beside it. Push it up against the front for me, and I'll fetch him out of the kitchen after. My back won't push anything these days."
+        ],
+        "options": [
+          {
+            "label": "I'll push it",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "tale_horace_box"
+              }
+            ]
+          },
+          {
+            "label": "Not now"
+          }
+        ]
+      },
+      "wait_2": {
+        "lines": [
+          "The flat stone, up against the front of the box. Push, don't lift. I've got him in the kitchen till it's done."
+        ]
+      },
+      "shut": {
+        "lines": [
+          "That'll hold him.",
+          "In you go, Horace. There. Nose to the stone. That's your winter."
+        ],
+        "actions": [
+          {
+            "do": "location",
+            "name": "tale_horace_shut"
+          }
+        ],
+        "options": [
+          {
+            "label": "There you are",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "tale_horace_box"
+              },
+              {
+                "do": "switch",
+                "prop": "tale_horace_hutch",
+                "on": true
+              }
+            ]
+          }
+        ]
+      },
+      "in_2": {
+        "lines": [
+          "That'll hold him.",
+          "In you go, Horace. There. Nose to the stone. That's your winter."
+        ],
+        "options": [
+          {
+            "label": "There you are",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "tale_horace_box"
+              },
+              {
+                "do": "switch",
+                "prop": "tale_horace_hutch",
+                "on": true
+              }
+            ]
+          }
+        ]
+      },
+      "after": {
+        "lines": [
+          "He sits with his nose to the stone all day. North's the other way, but he doesn't know that.",
+          "Or he does, and he's being patient."
+        ]
+      }
+    }
+  },
+  "tale_horace_door": {
+    "speaker": "Mr Pargeter's Door",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "night"
+          }
+        ],
+        "node": "night"
+      },
+      {
+        "node": "day"
+      }
+    ],
+    "nodes": {
+      "day": {
+        "lines": [
+          "You knock. From the yard, Mr Pargeter calls that he's out here, and has been since six."
+        ]
+      },
+      "night": {
+        "lines": [
+          "You knock. Nobody answers. There is a light on upstairs."
+        ]
+      }
+    }
+  },
+  "tale_horace_hutch": {
+    "speaker": "Horace's Box",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "tale_horace_box"
+          }
+        ],
+        "node": "in"
+      },
+      {
+        "node": "empty"
+      }
+    ],
+    "nodes": {
+      "empty": {
+        "lines": [
+          "A tea chest on its side, straw inside, the front knocked out. The straw is pressed down in a round, the size of a tortoise."
+        ]
+      },
+      "in": {
+        "lines": [
+          "Horace, in his box, with his nose to the stone."
+        ]
+      }
+    }
+  },
+  "tale_horace_bite": {
+    "speaker": "A Dandelion",
+    "start": [
+      {
+        "node": "bite"
+      }
+    ],
+    "nodes": {
+      "bite": {
+        "lines": [
+          "A dandelion, bitten down to the stalk. The bite is fresh, and about the width of a tortoise."
+        ]
+      }
+    }
+  },
+  "tale_coker": {
+    "speaker": "Mr Coker",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "tale_wall_stones"
+          }
+        ],
+        "node": "in"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "tale_wall_stones"
+          },
+          {
+            "if": "flag",
+            "flag": "tale_wall_gap",
+            "min": 3
+          }
+        ],
+        "node": "filled"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "tale_wall_stones"
+          },
+          {
+            "if": "flag",
+            "flag": "tale_wall_stood",
+            "eq": 1
+          }
+        ],
+        "node": "after_stood"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "tale_wall_stones"
+          }
+        ],
+        "node": "after"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "tale_wall_stones"
+          }
+        ],
+        "node": "wait"
+      },
+      {
+        "node": "offer"
+      }
+    ],
+    "nodes": {
+      "offer": {
+        "lines": [
+          "Afternoon. Coker. I wall.",
+          "Three more stones from the heap would see me to my tea, and my back won't lift them. Flat ones, dressed square. They go in easy."
+        ],
+        "options": [
+          {
+            "label": "I'll carry them",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "tale_wall_stones"
+              }
+            ]
+          },
+          {
+            "label": "Not now"
+          }
+        ]
+      },
+      "wait": {
+        "lines": [
+          "Three from the heap by the walls, to the gap at the end. Carry them, don't drag them. They mark."
+        ]
+      },
+      "filled": {
+        "lines": [
+          "That's the three. Set in nice."
+        ],
+        "actions": [
+          {
+            "do": "location",
+            "name": "tale_wall_filled"
+          }
+        ],
+        "goto": "in"
+      },
+      "in": {
+        "lines": [
+          "You'll have seen what they are. Face down, they're only stone.",
+          "Nobody's using them now. Not since they all got up and went walking."
+        ],
+        "options": [
+          {
+            "label": "Leave them in",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "tale_wall_stones"
+              }
+            ]
+          },
+          {
+            "label": "Stand them back up",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "tale_wall_stones"
+              },
+              {
+                "do": "flag",
+                "flag": "tale_wall_stood",
+                "value": 1
+              },
+              {
+                "do": "hide",
+                "prop": "tale_wall_slab_1"
+              },
+              {
+                "do": "hide",
+                "prop": "tale_wall_slab_2"
+              },
+              {
+                "do": "hide",
+                "prop": "tale_wall_slab_3"
+              },
+              {
+                "do": "show",
+                "prop": "tale_wall_stood_1"
+              },
+              {
+                "do": "show",
+                "prop": "tale_wall_stood_2"
+              },
+              {
+                "do": "show",
+                "prop": "tale_wall_stood_3"
+              }
+            ],
+            "goto": "stood"
+          }
+        ]
+      },
+      "stood": {
+        "lines": [
+          "You carry them back and stand them up by the heap, faces out.",
+          "Mr Coker watches you do it and says nothing about it."
+        ]
+      },
+      "after": {
+        "lines": [
+          "It'll be a good wall. It'll go as far as they'll let me have stones."
+        ]
+      },
+      "after_stood": {
+        "lines": [
+          "You stood them up. Suit yourself.",
+          "I'll find more. There's plenty lying face down, round here."
+        ]
+      }
+    }
+  },
+  "tale_wall_run": {
+    "speaker": "Mr Coker's Wall",
+    "start": [
+      {
+        "node": "wall"
+      }
+    ],
+    "nodes": {
+      "wall": {
+        "lines": [
+          "A dry-stone wall, knee high, laid well. It goes nowhere in particular, very straight."
+        ]
+      }
+    }
+  },
+  "tale_wall_lettered": {
+    "speaker": "Mr Coker's Wall",
+    "start": [
+      {
+        "node": "wall"
+      }
+    ],
+    "nodes": {
+      "wall": {
+        "lines": [
+          "A dry-stone wall, knee high, laid well. One stone in it is dressed square, and there are letters cut in the face that meets the next stone: LOVING MEM."
+        ]
+      }
+    }
+  },
+  "tale_wall_mug": {
+    "speaker": "A Tin Mug",
+    "start": [
+      {
+        "node": "mug"
+      }
+    ],
+    "nodes": {
+      "mug": {
+        "lines": [
+          "A tin mug of tea, gone cold, with a skin on it. It has been here since morning."
+        ]
+      }
+    }
+  },
+  "tale_wall_stood": {
+    "speaker": "A Headstone",
+    "start": [
+      {
+        "node": "stone"
+      }
+    ],
+    "nodes": {
+      "stone": {
+        "lines": [
+          "A headstone, stood up by the heap with its face out. The name has worn off in the weather. The dates are still there, and the second one is this year."
+        ]
+      }
+    }
+  },
+  "tale_rook": {
+    "speaker": "Mr Rook",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "tale_boards_back"
+          }
+        ],
+        "node": "in_1"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "tale_boards_door"
+          },
+          {
+            "if": "flag",
+            "flag": "tale_boards_kept",
+            "eq": 1
+          }
+        ],
+        "node": "after_kept"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "tale_boards_door"
+          }
+        ],
+        "node": "wait_2"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "tale_boards_back"
+          }
+        ],
+        "node": "after_1"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "tale_boards_back"
+          }
+        ],
+        "node": "wait_1"
+      },
+      {
+        "node": "offer_1"
+      }
+    ],
+    "nodes": {
+      "offer_1": {
+        "lines": [
+          "Don't knock. Whatever you do.",
+          "My Mary's in there. She was out after the bell on Sunday, and she came back wrong. She's to stop in till she's right.",
+          "I can't get round the back, not on these feet. Would you look at the boards over the back window? See they're holding."
+        ],
+        "options": [
+          {
+            "label": "I'll look",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "tale_boards_back"
+              }
+            ]
+          },
+          {
+            "label": "Not now"
+          }
+        ]
+      },
+      "wait_1": {
+        "lines": [
+          "Round the side, where the back window is. Don't knock."
+        ]
+      },
+      "in_1": {
+        "lines": [
+          "From the inside. She's been at them all night, then.",
+          "She's not to come out. Not till she's right. I've not slept since Sunday, and I'll not start now."
+        ],
+        "options": [
+          {
+            "label": "They're holding",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "tale_boards_back"
+              }
+            ]
+          }
+        ]
+      },
+      "after_1": {
+        "lines": [
+          "Thank you for looking. Don't knock."
+        ]
+      },
+      "wait_2": {
+        "lines": [
+          "Don't you go talking to her. She'll say anything."
+        ]
+      },
+      "after_kept": {
+        "lines": [
+          "Thank you. Another night, then.",
+          "I've new planks. I'll go round again."
+        ]
+      }
+    }
+  },
+  "tale_mary": {
+    "speaker": "Mary Rook",
+    "start": [
+      {
+        "node": "after"
+      }
+    ],
+    "nodes": {
+      "after": {
+        "lines": [
+          "He went off before it was light. Barefoot. He didn't look back at the house.",
+          "I'll not board the door. Not for anybody. Not for him either, if he comes back."
+        ]
+      }
+    }
+  },
+  "tale_boards_boots": {
+    "speaker": "A Pair of Boots",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "tale_boards_back"
+          },
+          {
+            "if": "questActive",
+            "quest": "tale_boards_door",
+            "not": true
+          },
+          {
+            "if": "questDone",
+            "quest": "tale_boards_door",
+            "not": true
+          }
+        ],
+        "node": "ask"
+      },
+      {
+        "node": "look"
+      }
+    ],
+    "nodes": {
+      "look": {
+        "lines": [
+          "A pair of men's boots on the step, full to the laces with black water. Nobody has emptied them."
+        ]
+      },
+      "ask": {
+        "lines": [
+          "Mr Rook's boots, full to the laces with black water. He has not had them on since you came.",
+          "His feet are bare. He walks on them as if they were somebody else's."
+        ],
+        "options": [
+          {
+            "label": "Ask Mary, after the bell",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "tale_boards_door"
+              }
+            ]
+          },
+          {
+            "label": "Leave it"
+          }
+        ]
+      }
+    }
+  },
+  "tale_boards_back": {
+    "speaker": "The Back Window",
+    "start": [
+      {
+        "node": "boards"
+      }
+    ],
+    "nodes": {
+      "boards": {
+        "lines": [
+          "Boards over the back window, nailed at every corner. Every nail has been worked half out, from the inside, all of them the same amount."
+        ],
+        "actions": [
+          {
+            "do": "location",
+            "name": "tale_boards_back_seen"
+          }
+        ]
+      }
+    }
+  },
+  "tale_boards_door": {
+    "speaker": "The Boarded Door",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "flag",
+            "flag": "tale_boards_pulled",
+            "eq": 1
+          }
+        ],
+        "node": "open"
+      },
+      {
+        "when": [
+          {
+            "if": "flag",
+            "flag": "tale_boards_kept",
+            "eq": 1
+          },
+          {
+            "if": "night"
+          }
+        ],
+        "node": "kept_night"
+      },
+      {
+        "when": [
+          {
+            "if": "flag",
+            "flag": "tale_boards_kept",
+            "eq": 1
+          }
+        ],
+        "node": "kept_day"
+      },
+      {
+        "when": [
+          {
+            "if": "night"
+          },
+          {
+            "if": "questActive",
+            "quest": "tale_boards_door"
+          }
+        ],
+        "node": "mary"
+      },
+      {
+        "when": [
+          {
+            "if": "night"
+          }
+        ],
+        "node": "night"
+      },
+      {
+        "node": "day"
+      }
+    ],
+    "nodes": {
+      "day": {
+        "lines": [
+          "The door is boarded over, the planks nailed into the frame. From inside, very quietly, somebody is humming."
+        ]
+      },
+      "night": {
+        "lines": [
+          "You knock. Nobody answers. Something inside moves away from the door."
+        ]
+      },
+      "mary": {
+        "lines": [
+          "\"Is he gone? He goes off after the bell. I don't know where he sleeps.\"",
+          "\"Look at his feet, when he's back. He came in on Sunday without his boots, and he's not put them on since. He can't. They don't fit him now.\"",
+          "\"Take the boards off. Please. Or don't, and I'll go on waiting.\""
+        ],
+        "options": [
+          {
+            "label": "Pull the boards off",
+            "actions": [
+              {
+                "do": "location",
+                "name": "tale_boards_heard"
+              },
+              {
+                "do": "flag",
+                "flag": "tale_boards_pulled",
+                "value": 1
+              },
+              {
+                "do": "switch",
+                "prop": "tale_boards_house",
+                "on": true
+              },
+              {
+                "do": "handin",
+                "quest": "tale_boards_door"
+              }
+            ],
+            "goto": "pulled"
+          },
+          {
+            "label": "Leave them",
+            "actions": [
+              {
+                "do": "location",
+                "name": "tale_boards_heard"
+              },
+              {
+                "do": "flag",
+                "flag": "tale_boards_kept",
+                "value": 1
+              },
+              {
+                "do": "handin",
+                "quest": "tale_boards_door"
+              }
+            ],
+            "goto": "left"
+          }
+        ]
+      },
+      "pulled": {
+        "lines": [
+          "You pull the boards off, one by one. The nails come easily. They were most of the way out already.",
+          "The door opens a hand's width. \"Thank you,\" she says. \"I'll wait for morning. I'd rather see him in the light.\""
+        ]
+      },
+      "left": {
+        "lines": [
+          "You leave the boards where they are.",
+          "After a while, something heavy is pushed against the inside of the door."
+        ]
+      },
+      "open": {
+        "lines": [
+          "The boards are off. The door stands open a hand's width."
+        ]
+      },
+      "kept_night": {
+        "lines": [
+          "Nobody answers. Something heavy has been pushed against the inside of the door."
+        ]
+      },
+      "kept_day": {
+        "lines": [
+          "The door is boarded over. A new stack of planks stands by it."
+        ]
+      }
+    }
+  },
+  "tale_boards_new": {
+    "speaker": "New Planks",
+    "start": [
+      {
+        "node": "planks"
+      }
+    ],
+    "nodes": {
+      "planks": {
+        "lines": [
+          "New planks, and a tin of nails, bright ones."
+        ]
+      }
+    }
+  },
+  "tale_boards_off": {
+    "speaker": "Old Planks",
+    "start": [
+      {
+        "node": "planks"
+      }
+    ],
+    "nodes": {
+      "planks": {
+        "lines": [
+          "The old planks, stacked by the step. The nails in them are bent, and all bent the same way."
+        ]
+      }
+    }
+  },
+  "tale_denholm": {
+    "speaker": "Mr Denholm",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "tale_diver_spanner"
+          }
+        ],
+        "node": "in"
+      },
+      {
+        "when": [
+          {
+            "if": "flag",
+            "flag": "tale_diver_down",
+            "eq": 1
+          }
+        ],
+        "node": "going"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "tale_diver_spanner"
+          }
+        ],
+        "node": "wait"
+      },
+      {
+        "node": "offer"
+      }
+    ],
+    "nodes": {
+      "offer": {
+        "lines": [
+          "You'll have to speak up. There's a good deal of glass between us.",
+          "Denholm. Company diver. I want my spanner, and it's in the chest, and the chest is locked.",
+          "The key's under the flat stone by the step, where I always leave it. I can't bend in this. Nobody can."
+        ],
+        "options": [
+          {
+            "label": "I'll get it",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "tale_diver_spanner"
+              }
+            ]
+          },
+          {
+            "label": "Not now"
+          }
+        ]
+      },
+      "wait": {
+        "lines": [
+          "Under the flat stone. Shove it over, don't lift it. Then the chest."
+        ]
+      },
+      "in": {
+        "lines": [
+          "That's her. Now then.",
+          "Not off. On. They've worked loose, sitting here. Tighten them for me, and I'll go back down.",
+          "There's somebody at the intake grille, knocking. Three, and a rest, and three. The Company says leave it. I've left it long enough."
+        ],
+        "options": [
+          {
+            "label": "Tighten the bolts",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "tale_diver_spanner"
+              },
+              {
+                "do": "take",
+                "item": "tale_spanner",
+                "qty": 1
+              },
+              {
+                "do": "take",
+                "item": "tale_diver_key",
+                "qty": 1
+              },
+              {
+                "do": "flag",
+                "flag": "tale_diver_down",
+                "value": 1
+              },
+              {
+                "do": "show",
+                "prop": "tale_diver_hose_1"
+              },
+              {
+                "do": "show",
+                "prop": "tale_diver_hose_2"
+              },
+              {
+                "do": "send",
+                "unit": "tale_diver_denholm",
+                "to": "tale_diver_away_mark",
+                "then": [
+                  {
+                    "do": "despawn",
+                    "unit": "tale_diver_denholm"
+                  }
+                ]
+              }
+            ],
+            "goto": "down"
+          },
+          {
+            "label": "Undo the bolts",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "tale_diver_spanner"
+              },
+              {
+                "do": "take",
+                "item": "tale_spanner",
+                "qty": 1
+              },
+              {
+                "do": "take",
+                "item": "tale_diver_key",
+                "qty": 1
+              },
+              {
+                "do": "flag",
+                "flag": "tale_diver_up",
+                "value": 1
+              },
+              {
+                "do": "despawn",
+                "unit": "tale_diver_denholm"
+              },
+              {
+                "do": "spawn",
+                "unit": "tale_diver_sitting",
+                "def": "tale_denholm_bare",
+                "at": "tale_diver_seat_mark"
+              },
+              {
+                "do": "show",
+                "prop": "tale_diver_helmet"
+              }
+            ],
+            "goto": "up"
+          }
+        ]
+      },
+      "down": {
+        "lines": [
+          "You tighten the wing nuts till they will not go. He stands up, heavy, and goes off without looking back.",
+          "The pump's hose goes with him along the ground."
+        ]
+      },
+      "up": {
+        "lines": [
+          "The wing nuts come off hard, and then the helmet. There is lake water in the collar.",
+          "\"That's better,\" he says. \"I can hear it plainer without.\""
+        ]
+      },
+      "going": {
+        "lines": [
+          "He does not hear you. The faceplate is tight, and fogged on the inside."
+        ]
+      }
+    }
+  },
+  "tale_denholm_bare": {
+    "speaker": "Mr Denholm",
+    "start": [
+      {
+        "node": "sit"
+      }
+    ],
+    "nodes": {
+      "sit": {
+        "lines": [
+          "Three, and a rest, and three. Hear it? No. You wouldn't. It's not for you.",
+          "I'll sit a while. The Company knows where I am."
+        ]
+      }
+    }
+  },
+  "tale_diver_pump": {
+    "speaker": "An Air Pump",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "flag",
+            "flag": "tale_diver_down",
+            "eq": 1
+          }
+        ],
+        "node": "running"
+      },
+      {
+        "node": "still"
+      }
+    ],
+    "nodes": {
+      "still": {
+        "lines": [
+          "A diver's air pump in a wooden case: two handles, a wheel, a coil of hose. The hose is dry."
+        ]
+      },
+      "running": {
+        "lines": [
+          "The air pump, with nobody at the handles. Its hose runs off along the ground and out of sight."
+        ]
+      }
+    }
+  },
+  "tale_diver_helmet": {
+    "speaker": "A Diving Helmet",
+    "start": [
+      {
+        "node": "helmet"
+      }
+    ],
+    "nodes": {
+      "helmet": {
+        "lines": [
+          "Mr Denholm's helmet, on the ground by the step with the faceplate open. There is a little lake water in the bottom of it."
+        ]
+      }
+    }
+  },
+  "tale_wakes": {
+    "speaker": "Mrs Wakes",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "tale_scarf_row"
+          },
+          {
+            "if": "flag",
+            "flag": "tale_scarf_finished",
+            "eq": 1
+          }
+        ],
+        "node": "in_2f"
+      },
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "tale_scarf_row"
+          },
+          {
+            "if": "flag",
+            "flag": "tale_scarf_pulled",
+            "eq": 1
+          }
+        ],
+        "node": "in_2p"
+      },
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "tale_scarf_rows"
+          }
+        ],
+        "node": "in_1"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "tale_scarf_row"
+          },
+          {
+            "if": "flag",
+            "flag": "tale_scarf_finished",
+            "eq": 1
+          }
+        ],
+        "node": "after_f"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "tale_scarf_row"
+          }
+        ],
+        "node": "after_p"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "tale_scarf_row"
+          }
+        ],
+        "node": "wait_2"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "tale_scarf_rows"
+          }
+        ],
+        "node": "wait_1"
+      },
+      {
+        "node": "offer_1"
+      }
+    ],
+    "nodes": {
+      "offer_1": {
+        "lines": [
+          "Come up, come up. Mind the scarf. It goes a long way.",
+          "I knit a row for everybody who comes up to the door. Always have. My eyes aren't what they were, so I go by the voice.",
+          "Read me the newest rows, would you? Off the end, there, over the arm of the chair."
+        ],
+        "options": [
+          {
+            "label": "I'll read them",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "tale_scarf_rows"
+              }
+            ]
+          },
+          {
+            "label": "Not now"
+          }
+        ]
+      },
+      "wait_1": {
+        "lines": [
+          "The end over the arm of the chair. The newest are nearest me."
+        ]
+      },
+      "in_1": {
+        "lines": [
+          "Did I spell it right? I go by the voice. Voices are harder to spell than you'd think.",
+          "Everybody who comes up to the door. It's not the School's register. It's only mine, and it's warmer.",
+          "Yours isn't finished. I can finish it, or you can pull it out. It's your row. You say."
+        ],
+        "options": [
+          {
+            "label": "I'll think about it",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "tale_scarf_rows"
+              },
+              {
+                "do": "quest",
+                "quest": "tale_scarf_row"
+              }
+            ]
+          }
+        ]
+      },
+      "wait_2": {
+        "lines": [
+          "Your row's on the arm of the chair. Tell me to finish it, or pull it out yourself. I'll not pull it. I never have pulled one."
+        ]
+      },
+      "in_2f": {
+        "lines": [
+          "There. Finished. You're down, and you're warm.",
+          "Take this. Odd ends, but it'll keep the wind off. Your name's in the corner, same as on mine."
+        ],
+        "options": [
+          {
+            "label": "Thank you",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "tale_scarf_row"
+              },
+              {
+                "do": "give",
+                "item": "tale_scarf",
+                "qty": 1
+              }
+            ]
+          }
+        ]
+      },
+      "in_2p": {
+        "lines": [
+          "You pulled it.",
+          "Well. There's a gap now, where you'd be. Nobody has you down anywhere. I hope you know what you're about."
+        ],
+        "options": [
+          {
+            "label": "I do",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "tale_scarf_row"
+              }
+            ]
+          }
+        ]
+      },
+      "after_f": {
+        "lines": [
+          "You're down. Come up any time. You'll not get another row, mind. One each."
+        ]
+      },
+      "after_p": {
+        "lines": [
+          "I've left the gap. I'll not knit over it. Somebody might come back for it."
+        ]
+      }
+    }
+  },
+  "tale_scarf_lap": {
+    "speaker": "The Scarf",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "flag",
+            "flag": "tale_scarf_pulled",
+            "eq": 1
+          }
+        ],
+        "node": "pulled"
+      },
+      {
+        "when": [
+          {
+            "if": "flag",
+            "flag": "tale_scarf_finished",
+            "eq": 1
+          },
+          {
+            "if": "questDone",
+            "quest": "tale_scarf_row"
+          }
+        ],
+        "node": "done"
+      },
+      {
+        "when": [
+          {
+            "if": "flag",
+            "flag": "tale_scarf_finished",
+            "eq": 1
+          }
+        ],
+        "node": "finishing"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "tale_scarf_row"
+          }
+        ],
+        "node": "decide"
+      },
+      {
+        "node": "read"
+      }
+    ],
+    "nodes": {
+      "read": {
+        "lines": [
+          "The newest rows, over the arm of her chair. Plain knitting, with a name worked into each row in a darker wool: SAM ILES. ADA ILES. THE CONSTABLE. MR DUNN.",
+          "The last row is only half done. The half that is done spells {name}."
+        ],
+        "actions": [
+          {
+            "do": "location",
+            "name": "tale_scarf_read"
+          }
+        ]
+      },
+      "decide": {
+        "lines": [
+          "Your row, half done, the needles still in it. The half that is done spells {name}."
+        ],
+        "options": [
+          {
+            "label": "Tell her to finish it",
+            "actions": [
+              {
+                "do": "flag",
+                "flag": "tale_scarf_finished",
+                "value": 1
+              },
+              {
+                "do": "location",
+                "name": "tale_scarf_decided"
+              }
+            ]
+          },
+          {
+            "label": "Pull the row out",
+            "actions": [
+              {
+                "do": "flag",
+                "flag": "tale_scarf_pulled",
+                "value": 1
+              },
+              {
+                "do": "location",
+                "name": "tale_scarf_decided"
+              },
+              {
+                "do": "show",
+                "prop": "tale_scarf_tangle"
+              }
+            ]
+          }
+        ]
+      },
+      "finishing": {
+        "lines": [
+          "Your row, the needles still in it. She says she will finish it with you stood in front of her."
+        ]
+      },
+      "done": {
+        "lines": [
+          "The newest rows. The last one is finished, and it spells {name}."
+        ]
+      },
+      "pulled": {
+        "lines": [
+          "The newest rows. Where your row was there is a gap, and the stitches either side of it do not quite meet."
+        ]
+      }
+    }
+  },
+  "tale_scarf_run": {
+    "speaker": "Mrs Wakes's Scarf",
+    "start": [
+      {
+        "node": "run"
+      }
+    ],
+    "nodes": {
+      "run": {
+        "lines": [
+          "Mrs Wakes's scarf, lying along the ground in a long run. It goes back to her chair."
+        ]
+      }
+    }
+  },
+  "tale_scarf_far": {
+    "speaker": "The Far End",
+    "start": [
+      {
+        "node": "far"
+      }
+    ],
+    "nodes": {
+      "far": {
+        "lines": [
+          "The far end of the scarf. The first rows, faded to no colour at all. There are names worked in, too worn to read."
+        ]
+      }
+    }
+  },
+  "tale_scarf_tangle": {
+    "speaker": "Pulled Wool",
+    "start": [
+      {
+        "node": "wool"
+      }
+    ],
+    "nodes": {
+      "wool": {
+        "lines": [
+          "A tangle of pulled wool, still crimped from the needles. Your row."
+        ]
+      }
+    }
+  },
+  "tale_scarf_door": {
+    "speaker": "Mrs Wakes's Door",
+    "start": [
+      {
+        "node": "door"
+      }
+    ],
+    "nodes": {
+      "door": {
+        "lines": [
+          "Nobody comes to the door. Mrs Wakes is out in front, in her chair."
+        ]
+      }
+    }
+  },
+  "tale_voysey": {
+    "speaker": "Mr Voysey",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "tale_halt_lamp"
+          },
+          {
+            "if": "flag",
+            "flag": "tale_halt_green",
+            "eq": 1
+          }
+        ],
+        "node": "in_green"
+      },
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "tale_halt_lamp"
+          }
+        ],
+        "node": "in_red"
+      },
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "tale_halt_oil"
+          }
+        ],
+        "node": "in_1"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "tale_halt_lamp"
+          },
+          {
+            "if": "flag",
+            "flag": "tale_halt_green",
+            "eq": 1
+          }
+        ],
+        "node": "after_green"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "tale_halt_lamp"
+          }
+        ],
+        "node": "after_red"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "tale_halt_lamp"
+          }
+        ],
+        "node": "wait_2"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "tale_halt_oil"
+          }
+        ],
+        "node": "wait_1"
+      },
+      {
+        "node": "offer_1"
+      }
+    ],
+    "nodes": {
+      "offer_1": {
+        "lines": [
+          "Afternoon. Nothing stops here. We keep the lamps all the same. The Company likes them kept.",
+          "They're dry. The oil's in the lamp locker, and a barrel's rolled against it. My back won't shift it. Would yours?"
+        ],
+        "options": [
+          {
+            "label": "I'll shift it",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "tale_halt_oil"
+              }
+            ]
+          },
+          {
+            "label": "Not now"
+          }
+        ]
+      },
+      "wait_1": {
+        "lines": [
+          "The locker, by the old walls. Push the barrel off the door. It rolls, if you lean on it."
+        ]
+      },
+      "in_1": {
+        "lines": [
+          "Enough for one lamp. That'll do.",
+          "Tonight, after the bell, light the red. Just the red. Red, and the Sunday train runs through without stopping."
+        ],
+        "options": [
+          {
+            "label": "The red",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "tale_halt_oil"
+              },
+              {
+                "do": "quest",
+                "quest": "tale_halt_lamp"
+              }
+            ]
+          }
+        ]
+      },
+      "wait_2": {
+        "lines": [
+          "The red lamp, after the bell. Not the green. We've no call to stop anything here."
+        ]
+      },
+      "in_red": {
+        "lines": [
+          "Red. It ran through, then. I heard it.",
+          "She's still by the bench. She'll be there next Sunday, and I'll be here, and the lamp will be red."
+        ],
+        "options": [
+          {
+            "label": "It was red",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "tale_halt_lamp"
+              }
+            ]
+          }
+        ]
+      },
+      "in_green": {
+        "lines": [
+          "Green.",
+          "I heard it stop in the night. I heard the door go, and I heard it start again.",
+          "She's gone, then. I'd have done the same, once."
+        ],
+        "options": [
+          {
+            "label": "I'm sorry",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "tale_halt_lamp"
+              }
+            ]
+          }
+        ]
+      },
+      "after_red": {
+        "lines": [
+          "The lamp's red every night now. I see to it myself."
+        ]
+      },
+      "after_green": {
+        "lines": [
+          "The bench is empty. I sweep under it all the same."
+        ]
+      }
+    }
+  },
+  "tale_voysey_wife": {
+    "speaker": "Mrs Voysey",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "flag",
+            "flag": "tale_halt_red",
+            "eq": 1
+          }
+        ],
+        "node": "after_red"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "tale_halt_lamp"
+          }
+        ],
+        "node": "ask"
+      },
+      {
+        "node": "wait"
+      }
+    ],
+    "nodes": {
+      "wait": {
+        "lines": [
+          "I'm waiting for the Sunday train.",
+          "It hasn't stopped here in eleven years. Not once. I keep the case packed."
+        ]
+      },
+      "ask": {
+        "lines": [
+          "He'll want red. Red, and it runs through.",
+          "I've a ticket. It's only a single. Green, if you're asked. Green, and it stops, and I get on."
+        ]
+      },
+      "after_red": {
+        "lines": [
+          "Next Sunday, then.",
+          "I'll keep the case packed."
+        ]
+      }
+    }
+  },
+  "tale_halt_timetable": {
+    "speaker": "The Timetable",
+    "start": [
+      {
+        "node": "read"
+      }
+    ],
+    "nodes": {
+      "read": {
+        "lines": [
+          "GOLDSKIN MINING Co. LIGHT RAILWAY. BRICKFIELD HALT. SUNDAYS ONLY.",
+          "Trains stop here on request. To stop the train, show a green lamp after the bell. A red lamp tells the driver to run through."
+        ]
+      }
+    }
+  },
+  "tale_halt_red": {
+    "speaker": "The Red Lamp",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "flag",
+            "flag": "tale_halt_red",
+            "eq": 1
+          }
+        ],
+        "node": "lit"
+      },
+      {
+        "when": [
+          {
+            "if": "flag",
+            "flag": "tale_halt_green",
+            "eq": 1
+          }
+        ],
+        "node": "other"
+      },
+      {
+        "when": [
+          {
+            "if": "night"
+          },
+          {
+            "if": "hasItem",
+            "item": "tale_lamp_oil"
+          }
+        ],
+        "node": "light"
+      },
+      {
+        "node": "dry"
+      }
+    ],
+    "nodes": {
+      "dry": {
+        "lines": [
+          "A signal lamp on a post, with red glass. It is dry and cold. The lamps here are lit after the bell."
+        ]
+      },
+      "light": {
+        "lines": [
+          "A signal lamp with red glass, dry. You have oil for one lamp."
+        ],
+        "options": [
+          {
+            "label": "Light the red",
+            "actions": [
+              {
+                "do": "take",
+                "item": "tale_lamp_oil",
+                "qty": 1
+              },
+              {
+                "do": "switch",
+                "prop": "tale_halt_red",
+                "on": true
+              },
+              {
+                "do": "flag",
+                "flag": "tale_halt_red",
+                "value": 1
+              },
+              {
+                "do": "location",
+                "name": "tale_halt_lit"
+              }
+            ]
+          },
+          {
+            "label": "Not this one"
+          }
+        ]
+      },
+      "lit": {
+        "lines": [
+          "The red lamp, lit. It burns steady."
+        ]
+      },
+      "other": {
+        "lines": [
+          "The red lamp is dry. The oil went in the green."
+        ]
+      }
+    }
+  },
+  "tale_halt_green": {
+    "speaker": "The Green Lamp",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "flag",
+            "flag": "tale_halt_green",
+            "eq": 1
+          }
+        ],
+        "node": "lit"
+      },
+      {
+        "when": [
+          {
+            "if": "flag",
+            "flag": "tale_halt_red",
+            "eq": 1
+          }
+        ],
+        "node": "other"
+      },
+      {
+        "when": [
+          {
+            "if": "night"
+          },
+          {
+            "if": "hasItem",
+            "item": "tale_lamp_oil"
+          }
+        ],
+        "node": "light"
+      },
+      {
+        "node": "dry"
+      }
+    ],
+    "nodes": {
+      "dry": {
+        "lines": [
+          "A signal lamp on a post, with green glass. It is dry and cold. The lamps here are lit after the bell."
+        ]
+      },
+      "light": {
+        "lines": [
+          "A signal lamp with green glass, dry. You have oil for one lamp."
+        ],
+        "options": [
+          {
+            "label": "Light the green",
+            "actions": [
+              {
+                "do": "take",
+                "item": "tale_lamp_oil",
+                "qty": 1
+              },
+              {
+                "do": "switch",
+                "prop": "tale_halt_green",
+                "on": true
+              },
+              {
+                "do": "flag",
+                "flag": "tale_halt_green",
+                "value": 1
+              },
+              {
+                "do": "location",
+                "name": "tale_halt_lit"
+              },
+              {
+                "do": "despawn",
+                "unit": "tale_halt_wife"
+              }
+            ]
+          },
+          {
+            "label": "Not this one"
+          }
+        ]
+      },
+      "lit": {
+        "lines": [
+          "The green lamp, lit. It burns steady."
+        ]
+      },
+      "other": {
+        "lines": [
+          "The green lamp is dry. The oil went in the red."
+        ]
+      }
+    }
+  },
+  "tale_sorrell": {
+    "speaker": "Mr Sorrell",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "tale_vermin_hatch"
+          },
+          {
+            "if": "flag",
+            "flag": "tale_vermin_killed",
+            "eq": 1
+          }
+        ],
+        "node": "in_2k"
+      },
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "tale_vermin_hatch"
+          }
+        ],
+        "node": "in_2f"
+      },
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "tale_vermin_clear"
+          }
+        ],
+        "node": "in_1"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "tale_vermin_hatch"
+          },
+          {
+            "if": "flag",
+            "flag": "tale_vermin_killed",
+            "eq": 1
+          }
+        ],
+        "node": "after_k"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "tale_vermin_hatch"
+          }
+        ],
+        "node": "after_f"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "tale_vermin_hatch"
+          }
+        ],
+        "node": "wait_2"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "tale_vermin_clear"
+          }
+        ],
+        "node": "wait_1"
+      },
+      {
+        "node": "offer_1"
+      }
+    ],
+    "nodes": {
+      "offer_1": {
+        "lines": [
+          "Sorrell. Vermin. The Company pays by the head, and there's more heads in these walls than I've eyes for.",
+          "Web spinners. Four would do. I'll split it with you, and I'll not say which half."
+        ],
+        "options": [
+          {
+            "label": "I'll do it",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "tale_vermin_clear"
+              }
+            ]
+          },
+          {
+            "label": "Not now"
+          }
+        ]
+      },
+      "wait_1": {
+        "lines": [
+          "In the walls, all round. They sit still and spit. Don't stand still and be spat at."
+        ]
+      },
+      "in_1": {
+        "lines": [
+          "Four. That's four fewer.",
+          "Now then. I'll tell you why I leave some.",
+          "What's under that hatch lives on them. They drop in, it eats, it stays down. You've had its supper off it."
+        ],
+        "options": [
+          {
+            "label": "What do I do?",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "tale_vermin_clear"
+              },
+              {
+                "do": "quest",
+                "quest": "tale_vermin_hatch"
+              },
+              {
+                "do": "give",
+                "item": "tale_scrag",
+                "qty": 1
+              }
+            ],
+            "goto": "scrag"
+          }
+        ]
+      },
+      "scrag": {
+        "lines": [
+          "Here. Scrag end, my own dinner. Down the hatch with it after the bell, before it's up.",
+          "Or draw the bolt and be stood there when it comes. I'd not. But you're not me."
+        ]
+      },
+      "wait_2": {
+        "lines": [
+          "The hatch, after the bell. The meat down it, or the bolt back and you stood ready."
+        ]
+      },
+      "in_2f": {
+        "lines": [
+          "Fed, and down. Good. It'll keep a week on that.",
+          "Back to spinners, then. I'll leave you a few."
+        ],
+        "options": [
+          {
+            "label": "Good",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "tale_vermin_hatch"
+              }
+            ]
+          }
+        ]
+      },
+      "in_2k": {
+        "lines": [
+          "You drew the bolt.",
+          "Well. That's the Company's weighbridge with nothing under it, and no call for a vermin man over nothing.",
+          "He leans his pole on the wall. \"I'll finish the week.\""
+        ],
+        "options": [
+          {
+            "label": "Sorry",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "tale_vermin_hatch"
+              },
+              {
+                "do": "show",
+                "prop": "tale_vermin_pole"
+              }
+            ]
+          }
+        ]
+      },
+      "after_f": {
+        "lines": [
+          "It's quiet down there. Fed things are."
+        ]
+      },
+      "after_k": {
+        "lines": [
+          "I've leant my pole on the wall. I'll not want it."
+        ]
+      }
+    }
+  },
+  "tale_vermin_hatch": {
+    "speaker": "A Hatch in the Floor",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "flag",
+            "flag": "tale_vermin_killed",
+            "eq": 1
+          }
+        ],
+        "node": "open"
+      },
+      {
+        "when": [
+          {
+            "if": "flag",
+            "flag": "tale_vermin_fed_down",
+            "eq": 1
+          }
+        ],
+        "node": "fed"
+      },
+      {
+        "when": [
+          {
+            "if": "flag",
+            "flag": "tale_vermin_drawn",
+            "eq": 1
+          }
+        ],
+        "node": "drawn"
+      },
+      {
+        "when": [
+          {
+            "if": "night"
+          },
+          {
+            "if": "questActive",
+            "quest": "tale_vermin_hatch"
+          },
+          {
+            "if": "hasItem",
+            "item": "tale_scrag"
+          }
+        ],
+        "node": "push_meat"
+      },
+      {
+        "when": [
+          {
+            "if": "night"
+          },
+          {
+            "if": "questActive",
+            "quest": "tale_vermin_hatch"
+          }
+        ],
+        "node": "push"
+      },
+      {
+        "when": [
+          {
+            "if": "night"
+          }
+        ],
+        "node": "night"
+      },
+      {
+        "node": "day"
+      }
+    ],
+    "nodes": {
+      "day": {
+        "lines": [
+          "A hatch in the floor, bolted from the outside. The bolt is new. The wood round it is scored from underneath."
+        ]
+      },
+      "night": {
+        "lines": [
+          "A hatch in the floor, bolted. Something under it is breathing, slow."
+        ]
+      },
+      "push_meat": {
+        "lines": [
+          "Something pushes up at the hatch from underneath. The bolt holds, just."
+        ],
+        "options": [
+          {
+            "label": "Meat down the hatch",
+            "actions": [
+              {
+                "do": "take",
+                "item": "tale_scrag",
+                "qty": 1
+              },
+              {
+                "do": "flag",
+                "flag": "tale_vermin_fed_down",
+                "value": 1
+              },
+              {
+                "do": "location",
+                "name": "tale_vermin_fed"
+              }
+            ],
+            "goto": "fed_now"
+          },
+          {
+            "label": "Draw the bolt",
+            "actions": [
+              {
+                "do": "flag",
+                "flag": "tale_vermin_drawn",
+                "value": 1
+              },
+              {
+                "do": "switch",
+                "prop": "tale_vermin_hatch",
+                "on": true
+              },
+              {
+                "do": "spawn",
+                "unit": "tale_vermin_under",
+                "def": "tale_under",
+                "at": "tale_vermin_hatch_mark"
+              },
+              {
+                "do": "aggro",
+                "unit": "tale_vermin_under"
+              }
+            ]
+          }
+        ]
+      },
+      "push": {
+        "lines": [
+          "Something pushes up at the hatch from underneath. The bolt holds, just."
+        ],
+        "options": [
+          {
+            "label": "Draw the bolt",
+            "actions": [
+              {
+                "do": "flag",
+                "flag": "tale_vermin_drawn",
+                "value": 1
+              },
+              {
+                "do": "switch",
+                "prop": "tale_vermin_hatch",
+                "on": true
+              },
+              {
+                "do": "spawn",
+                "unit": "tale_vermin_under",
+                "def": "tale_under",
+                "at": "tale_vermin_hatch_mark"
+              },
+              {
+                "do": "aggro",
+                "unit": "tale_vermin_under"
+              }
+            ]
+          },
+          {
+            "label": "Leave it"
+          }
+        ]
+      },
+      "fed_now": {
+        "lines": [
+          "You draw the bolt a hand's width, push the meat through, and shoot it home again. The pushing stops."
+        ]
+      },
+      "fed": {
+        "lines": [
+          "A hatch in the floor, bolted. It is quiet underneath."
+        ]
+      },
+      "drawn": {
+        "lines": [
+          "The hatch is open. Something came up out of it."
+        ]
+      },
+      "open": {
+        "lines": [
+          "The hatch, open. Underneath, a hole in wet stone goes down further than the light does. Nothing moves in it."
+        ]
+      }
+    }
+  },
+  "tale_vermin_cage": {
+    "speaker": "Cage Traps",
+    "start": [
+      {
+        "node": "cages"
+      }
+    ],
+    "nodes": {
+      "cages": {
+        "lines": [
+          "Two cage traps, empty, the doors tied open with string. Nothing he wants to catch alive."
+        ]
+      }
+    }
+  },
+  "tale_vermin_pole": {
+    "speaker": "Mr Sorrell's Pole",
+    "start": [
+      {
+        "node": "pole"
+      }
+    ],
+    "nodes": {
+      "pole": {
+        "lines": [
+          "Mr Sorrell's pole, leant on the wall, with nothing tied to it."
+        ]
+      }
+    }
+  }
+}

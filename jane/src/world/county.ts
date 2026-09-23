@@ -307,7 +307,7 @@ export function buildCounty(seed: number, attempt: number, rows: readonly Placem
     const b = p.slots.board;
     if (b) k.mark(`story_${id}`, b[0], b[1] + 1);
   }
-  applyPlacements({ ...place, claims: claimed.claims }, "places", rows);
+  applyPlacements({ ...place, claims: claimed.claims, ground: claimed.ground }, "places", rows);
   scatter(k, sk);
 
   // --- 6 wildlife ---------------------------------------------------------------------

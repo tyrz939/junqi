@@ -1,0 +1,149 @@
+{
+  "tale_bees_tell": {
+    "name": "Telling the Bees",
+    "description": "Mr Coram kept bees at {place:tale_bees} and died on Friday. Miss Hanney, who kept them with him, says somebody must knock on each of his three hives and tell them, or they will leave. She says it ought to be family, and there is none.",
+    "completion": "You told them, hive by hive. The hum did not change. One of them had comb cut from it, cleanly, the way it is done.",
+    "returnTo": "Miss Hanney, in the yard at {place:tale_bees}",
+    "requirements": [{ "type": "location", "target": "tale_bees_told", "qty": 1, "text": "Knock on the three hives at {place:tale_bees} and tell them" }],
+    "rewards": [{ "do": "give", "item": "tale_honey", "qty": 2 }]
+  },
+  "tale_bees_comb": {
+    "name": "Who Cuts the Comb",
+    "description": "Somebody has been cutting comb from Mr Coram's hives at {place:tale_bees} since he died, the way he did it. Miss Hanney has heard nobody, and she does not sleep. She would like somebody to wait by the hives after the bell and see who comes.",
+    "completion": "A man in a bee veil among the hives after the bell, cutting comb without a light. He said it wanted doing before the frost, and that they know him.",
+    "returnTo": "Miss Hanney, in the yard at {place:tale_bees}, by day",
+    "requirements": [{ "type": "location", "target": "tale_bees_seen", "qty": 1, "text": "Whoever cuts the comb at {place:tale_bees}, after the bell" }],
+    "rewards": [{ "do": "give", "item": "apple", "qty": 2 }]
+  },
+  "tale_bees_crepe": {
+    "name": "Black Crepe",
+    "description": "Miss Hanney has given you black crepe to tie round Mr Coram's three hives at {place:tale_bees}. That tells the bees for certain, she says, and him. She says it is your choice, since you are the one who saw him.",
+    "completion": "Three hives in black crepe. Miss Hanney stood in the yard a long while, and then said that was that.",
+    "returnTo": "Miss Hanney, in the yard at {place:tale_bees}",
+    "requirements": [{ "type": "location", "target": "tale_bees_crepe_done", "qty": 1, "text": "Black crepe round the three hives at {place:tale_bees}" }],
+    "rewards": [{ "do": "give", "item": "tale_honey", "qty": 2 }, { "do": "give", "item": "potion_lifesteal", "qty": 1 }]
+  },
+
+  "tale_walk_follow": {
+    "name": "The Bell on His Ankle",
+    "description": "Mrs Pollard, at {place:tale_walk}, says her husband walks in his sleep after the bell, most nights. She ties a little bell to his ankle so that she hears him go. She would like somebody to follow him tonight and see where he goes.",
+    "completion": "He walked north from the house to a flat stone and set down a dinner under a cloth. He was not asleep. He said it was for their Tom, who is up at the School.",
+    "returnTo": "Mrs Pollard, at {place:tale_walk}, by day",
+    "requirements": [{ "type": "location", "target": "tale_walk_seen", "qty": 1, "text": "Where Mr Pollard walks to from {place:tale_walk}, after the bell" }],
+    "rewards": [{ "do": "give", "item": "apple", "qty": 2 }]
+  },
+  "tale_walk_plate": {
+    "name": "The Plate",
+    "description": "Mrs Pollard wants her good plate back off the flat stone north of {place:tale_walk}, where her husband leaves a dinner every night. If there is no plate, she says, he will stop going. She does not say what she will tell him.",
+    "completion": "Her good plate, off the stone, wiped clean. She put it away in the dresser and did not say anything.",
+    "returnTo": "Mrs Pollard, at {place:tale_walk}",
+    "requirements": [{ "type": "acquire", "target": "tale_walk_plate", "qty": 1, "text": "Mrs Pollard's plate, off the stone north of {place:tale_walk}" }],
+    "rewards": [{ "do": "give", "item": "potion_manashield", "qty": 1 }]
+  },
+
+  "tale_horace_find": {
+    "name": "Horace",
+    "description": "Mr Pargeter, at {place:tale_horace}, has lost Horace, the tortoise he had off his father. He was out of his box this morning. Mr Pargeter says to follow the bitten dandelions: Horace eats as he goes, and does not go fast.",
+    "completion": "Horace, at the end of the bitten dandelions, facing north. He kept his head out and turned it north the whole way back.",
+    "returnTo": "Mr Pargeter, at {place:tale_horace}",
+    "requirements": [{ "type": "acquire", "target": "tale_horace", "qty": 1, "text": "Horace, at the end of the bitten dandelions by {place:tale_horace}" }],
+    "rewards": [{ "do": "give", "item": "apple", "qty": 3 }]
+  },
+  "tale_horace_box": {
+    "name": "The Front of the Box",
+    "description": "Horace gets out of his box at {place:tale_horace} by pushing past the front of it. Mr Pargeter would like the flat stone beside it pushed up against the front, by day, while he holds Horace. He says it will not stop him for good. It stops him for a winter.",
+    "completion": "The flat stone against the front of the box, and Horace behind it with his nose to the stone.",
+    "returnTo": "Mr Pargeter, at {place:tale_horace}",
+    "requirements": [{ "type": "location", "target": "tale_horace_shut", "qty": 1, "text": "The flat stone against Horace's box at {place:tale_horace}" }],
+    "rewards": [{ "do": "give", "item": "tale_honey", "qty": 1 }, { "do": "give", "item": "potion_manashield", "qty": 1 }]
+  },
+
+  "tale_wall_stones": {
+    "name": "Three Stones",
+    "description": "Mr Coker is building a dry-stone wall out from {place:tale_wall}, and his back will not lift what it did. He would like three stones carried from his heap to the end of the wall, by day, and set in the gap there. He says they are flat and square and go in easy.",
+    "completion": "Three dressed stones in the gap at the end of his wall. Face down they were only stone. He said they were headstones, and that nobody was using them.",
+    "returnTo": "Mr Coker, at {place:tale_wall}",
+    "requirements": [{ "type": "location", "target": "tale_wall_filled", "qty": 1, "text": "Three stones carried to the end of {place:tale_wall}" }],
+    "rewards": [{ "do": "give", "item": "apple", "qty": 2 }, { "do": "give", "item": "potion_lifesteal", "qty": 1 }]
+  },
+
+  "tale_boards_back": {
+    "name": "The Back Window",
+    "description": "Mr Rook has boarded up {place:tale_boards} with his daughter inside. He says she was out after the bell on Sunday and came back wrong. He has not slept since. He would like somebody to check that the boards over the back window are holding.",
+    "completion": "The boards over the back window hold. Every nail has been worked half out, from the inside, all of them the same amount.",
+    "returnTo": "Mr Rook, outside {place:tale_boards}",
+    "requirements": [{ "type": "location", "target": "tale_boards_back_seen", "qty": 1, "text": "The boards over the back window at {place:tale_boards}" }],
+    "rewards": [{ "do": "give", "item": "apple", "qty": 2 }]
+  },
+  "tale_boards_door": {
+    "name": "Her Side of It",
+    "description": "Mr Rook will not have anybody knock at {place:tale_boards}. He sleeps after the bell, when he can. His daughter Mary is on the other side of the boards, and nobody has asked her anything.",
+    "completion": "Mary Rook, through the boards, after the bell. She said her father came in on Sunday without his boots, and has not put them on since, because they do not fit him now.",
+    "returnTo": "the boarded door at {place:tale_boards}",
+    "requirements": [{ "type": "location", "target": "tale_boards_heard", "qty": 1, "text": "Mary Rook, through the boards at {place:tale_boards}, after the bell" }],
+    "rewards": [{ "do": "give", "item": "potion_manashield", "qty": 1 }]
+  },
+
+  "tale_diver_spanner": {
+    "name": "The Spanner",
+    "description": "Mr Denholm, the Company's diver at {place:tale_diver}, wants the spanner out of his tool chest, which is locked. He keeps the key under the flat stone by the step, and in the suit he cannot bend to it.",
+    "completion": "The key under the stone, the spanner in the chest, and a Company chit under the spanner, folded soft. He did not ask for the chit.",
+    "returnTo": "Mr Denholm, at {place:tale_diver}",
+    "requirements": [
+      { "type": "acquire", "target": "tale_diver_key", "qty": 1, "text": "The key under the flat stone at {place:tale_diver}" },
+      { "type": "acquire", "target": "tale_spanner", "qty": 1, "text": "The spanner in the tool chest at {place:tale_diver}" }
+    ],
+    "rewards": [{ "do": "give", "item": "potion_manashield", "qty": 1 }, { "do": "give", "item": "small_water", "qty": 2 }]
+  },
+
+  "tale_scarf_rows": {
+    "name": "The Last Rows",
+    "description": "Mrs Wakes, at {place:tale_scarf}, knits one row for everybody who comes up her path. Her eyes are going. She would like the newest rows read to her, off the scarf where it hangs over the arm of her chair, to be sure she has everybody right.",
+    "completion": "Names worked into the rows in a darker wool, one to a row. The last row is only half done, and the half that is done is your name.",
+    "returnTo": "Mrs Wakes, at {place:tale_scarf}",
+    "requirements": [{ "type": "location", "target": "tale_scarf_read", "qty": 1, "text": "The newest rows of Mrs Wakes's scarf, at {place:tale_scarf}" }],
+    "rewards": [{ "do": "give", "item": "apple", "qty": 2 }]
+  },
+  "tale_scarf_row": {
+    "name": "Your Row",
+    "description": "Half a row of Mrs Wakes's scarf has your name in it. She can finish it or pull it out, she says, and it is your row. Finished, you are counted. Pulled out, nobody has you down anywhere, and she would not like that for anybody.",
+    "completion": "Your row, decided, on the arm of her chair.",
+    "returnTo": "Mrs Wakes, at {place:tale_scarf}",
+    "requirements": [{ "type": "location", "target": "tale_scarf_decided", "qty": 1, "text": "Your row, on the scarf over her chair at {place:tale_scarf}" }],
+    "rewards": [{ "do": "give", "item": "potion_manashield", "qty": 1 }]
+  },
+
+  "tale_halt_oil": {
+    "name": "Lamp Oil",
+    "description": "Mr Voysey keeps {place:tale_halt}. The signal lamps are dry, and the oil is in the lamp locker. A barrel has rolled against the locker and he cannot shift it. He says his back is not what it was, and then that nothing is.",
+    "completion": "A can of paraffin, a third full. Enough for one lamp.",
+    "returnTo": "Mr Voysey, at {place:tale_halt}",
+    "requirements": [{ "type": "acquire", "target": "tale_lamp_oil", "qty": 1, "text": "The oil in the lamp locker at {place:tale_halt}" }],
+    "rewards": [{ "do": "give", "item": "apple", "qty": 2 }]
+  },
+  "tale_halt_lamp": {
+    "name": "The Red Lamp",
+    "description": "Mr Voysey wants the red signal lamp at {place:tale_halt} lit after the bell, so that the Sunday train runs through and does not stop. There is oil for one lamp. Mrs Voysey sits by the bench with her case. She says to light the green.",
+    "completion": "One signal lamp lit at the halt, after the bell. The other stayed dark.",
+    "returnTo": "Mr Voysey, at {place:tale_halt}, by day",
+    "requirements": [{ "type": "location", "target": "tale_halt_lit", "qty": 1, "text": "A signal lamp lit at {place:tale_halt}, after the bell" }],
+    "rewards": [{ "do": "give", "item": "potion_lifesteal", "qty": 1 }]
+  },
+
+  "tale_vermin_clear": {
+    "name": "Vermin",
+    "description": "Mr Sorrell is the Company's vermin man at {place:tale_vermin}. Web spinners have got into the walls there, more than he can see to. He is paid by the head, and he would split it with you. Four would do.",
+    "completion": "Four spinners down. Mr Sorrell counted them twice, and then looked at the hatch in the floor.",
+    "returnTo": "Mr Sorrell, at {place:tale_vermin}",
+    "requirements": [{ "type": "kill", "target": "tale_spinner", "qty": 4, "text": "Web spinners in the walls at {place:tale_vermin}" }],
+    "rewards": [{ "do": "give", "item": "small_water", "qty": 2 }]
+  },
+  "tale_vermin_hatch": {
+    "name": "Under the Hatch",
+    "description": "Whatever is under the hatch at {place:tale_vermin} lives on the spinners that fall in, and you have killed its supper. Mr Sorrell says it comes up after the bell when it is hungry. Either something goes down the hatch first, or somebody is there when it comes up.",
+    "completion": "The hatch at the Weighbridge, after the bell, and whatever was under it seen to, one way or the other.",
+    "returnTo": "Mr Sorrell, at {place:tale_vermin}, by day",
+    "requirements": [{ "type": "location", "target": "tale_vermin_fed", "qty": 1, "text": "The hatch in the floor at {place:tale_vermin}, after the bell" }],
+    "rewards": [{ "do": "give", "item": "potion_lifesteal", "qty": 1 }, { "do": "give", "item": "small_water", "qty": 1 }]
+  }
+}

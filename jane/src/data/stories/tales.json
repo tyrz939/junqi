@@ -1,0 +1,88 @@
+[
+  {
+    "id": "tale_bees",
+    "kind": "ruin",
+    "tale": true,
+    "name": "Coram's",
+    "board": "{NAME}. HONEY, WHEN THERE IS SOME. Please do not stand in front of the hives.",
+    "threat": [0, 3],
+    "quests": ["tale_bees_tell", "tale_bees_comb", "tale_bees_crepe"]
+  },
+  {
+    "id": "tale_walk",
+    "kind": "ruin",
+    "tale": true,
+    "name": "Whinmoor Cottage",
+    "board": "{NAME}. POLLARD. No hawkers, no circulars.",
+    "threat": [0, 3],
+    "quests": ["tale_walk_follow", "tale_walk_plate"]
+  },
+  {
+    "id": "tale_horace",
+    "kind": "ruin",
+    "tale": true,
+    "name": "Sundial Cottage",
+    "board": "{NAME}. PARGETER. Please mind the tortoise.",
+    "threat": [0, 3],
+    "quests": ["tale_horace_find", "tale_horace_box"]
+  },
+  {
+    "id": "tale_wall",
+    "kind": "ruin",
+    "tale": true,
+    "name": "Coker's Wall",
+    "board": "COKER. DRY-STONE WALLING. No job too long.",
+    "threat": [0, 3],
+    "quests": ["tale_wall_stones"]
+  },
+  {
+    "id": "tale_boards",
+    "kind": "ruin",
+    "region": "waters",
+    "tale": true,
+    "name": "Sluice Cottage",
+    "board": "{NAME}. ROOK. Please do not knock.",
+    "threat": [0, 4],
+    "quests": ["tale_boards_back", "tale_boards_door"]
+  },
+  {
+    "id": "tale_diver",
+    "kind": "ruin",
+    "region": "waters",
+    "tale": true,
+    "name": "The Intake",
+    "board": "GOLDSKIN MINING Co. {NAME}. DIVER'S STATION. NO BATHING.",
+    "threat": [0, 4],
+    "quests": ["tale_diver_spanner"]
+  },
+  {
+    "id": "tale_scarf",
+    "kind": "ruin",
+    "region": "waters",
+    "tale": true,
+    "name": "Tenter Cottage",
+    "board": "{NAME}. WAKES. Wool wound, socks turned. Callers welcome.",
+    "threat": [0, 4],
+    "quests": ["tale_scarf_rows", "tale_scarf_row"]
+  },
+  {
+    "id": "tale_halt",
+    "kind": "ruin",
+    "region": "works",
+    "tale": true,
+    "name": "Brickfield Halt",
+    "board": "GOLDSKIN MINING Co. LIGHT RAILWAY. {NAME}. REQUEST STOP.",
+    "threat": [0, 4],
+    "quests": ["tale_halt_oil", "tale_halt_lamp"]
+  },
+  {
+    "id": "tale_vermin",
+    "kind": "ruin",
+    "region": "works",
+    "tale": true,
+    "name": "The Weighbridge",
+    "board": "GOLDSKIN MINING Co. {NAME}. Report all vermin to the vermin man.",
+    "threat": [0, 4],
+    "quests": ["tale_vermin_clear", "tale_vermin_hatch"]
+  }
+]

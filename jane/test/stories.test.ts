@@ -66,13 +66,15 @@ describe("the stories, as data", () => {
   });
 
   it("there are thirty-odd of them, most short, some chains, some that send her to a camp", () => {
-    const told = STORIES.filter((s) => s.quests.length > 0);
+    // The tales (data/stories/tales.json) are held to their own counts in tales.test.ts.
+    const country = STORIES.filter((s) => !s.tale);
+    const told = country.filter((s) => s.quests.length > 0);
     const quests = told.reduce((n, s) => n + s.quests.length, 0);
     const chains = told.filter((s) => s.quests.length >= 2);
-    const camps = told.filter((s) => STORIES.some((h) => h.near?.story === s.id && h.kind === "camp"));
+    const camps = told.filter((s) => country.some((h) => h.near?.story === s.id && h.kind === "camp"));
     expect(told.length).toBeGreaterThanOrEqual(25);
-    expect(STORIES.length).toBeGreaterThanOrEqual(30);
-    expect(STORIES.length).toBeLessThanOrEqual(40);
+    expect(country.length).toBeGreaterThanOrEqual(30);
+    expect(country.length).toBeLessThanOrEqual(40);
     expect(quests).toBeGreaterThanOrEqual(30);
     expect(chains.length).toBeGreaterThanOrEqual(6);
     expect(chains.length).toBeLessThanOrEqual(8);
@@ -91,12 +93,12 @@ describe("the stories, as data", () => {
     }
     for (const a of all) for (const b of all) if (a !== b) expect(b.toLowerCase().includes(a.toLowerCase()), `"${a}" is inside "${b}"`).toBe(false);
     // More names than the busiest seed has places of the kind a story needs: stories draw from the front of the list.
-    for (const kind of KINDS) if (kind !== "inn") expect(allNames(kind).length, kind).toBeGreaterThanOrEqual(STORIES.filter((s) => s.kind === kind).length + 10);
+    for (const kind of KINDS) if (kind !== "inn") expect(allNames(kind).length, kind).toBeGreaterThanOrEqual(STORIES.filter((s) => s.kind === kind && !s.name).length + 10);
   });
 
   it("the words fit the tracker with the longest name any seed could put in, and keep to VOICE.md", () => {
     const longest = new Map(KINDS.map((k) => [k, allNames(k).reduce((a, b) => (b.length > a.length ? b : a), "")]));
-    const worst = (t: string): string => t.replace(PLACE, (_, id: string) => longest.get(byId.get(id)!.kind)!);
+    const worst = (t: string): string => t.replace(PLACE, (_, id: string) => byId.get(id)!.name ?? longest.get(byId.get(id)!.kind)!);
     for (const s of STORIES) {
       for (const id of s.quests) {
         const q = catalog.quests[id] as Catalog["quests"][string] & { returnTo?: string };
