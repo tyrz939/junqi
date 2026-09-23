@@ -17,7 +17,10 @@
 //                 back from the roads so that a road is the safe way and a field is not
 //   the gaps      last, any screen of the county still empty gets something small of its own
 //
-// Same seed, same county: every choice comes from the kit's stream, in a fixed order.
+// Same seed, same county. Every choice is thrown on dice of its own (Kit.within), named for the one thing
+// it decides: a road's beat, a point of the lattice, a macro cell's creature, a place's furnishings (by its
+// kind and where it stands). So a change to one step, or to what stands in one spot, moves only what that
+// step or that spot decides, and never reshuffles the county downstream of it.
 
 import { Tile } from "@/sim/grid";
 import type { PropSpawn, UnitSpawn } from "@/world/blueprint";
@@ -121,7 +124,11 @@ const WILDLIFE: Record<Region, { def: string; biomes?: Biome[] }[]> = {
  * without knowing where any farm is.
  */
 export type Place = {
-  /** Build order: the place's number on this seed. */
+  /**
+   * The place's number on this seed: its top-left cell (y * COUNTY_W + x), so it names the place by where it
+   * stands and not by how many were built before it. A story's pick and a board's key are hashed from it,
+   * and a count would tie them to every place the build set down earlier (a rail re-laid, a row added).
+   */
   n: number;
   kind: string;
   region: Region;
@@ -492,6 +499,8 @@ function roadSide(c: Ctx, x: number, y: number): "n" | "s" | "e" | "w" {
 // --- 1 the roads --------------------------------------------------------------------------------
 
 const roadLines = (c: Ctx): number => c.sk.roads.length;
+/** A road by what it joins, for naming its dice: stable when another road is added or the list reordered. */
+const roadName = (c: Ctx, n: number): string => `${c.sk.roads[n].from}>${c.sk.roads[n].to}`;
 
 /** Unit normal of a line at point i, to the right of travel, as whole cells (cardinal or diagonal). */
 function normal(line: readonly Pt[], i: number): [number, number] {
@@ -753,9 +762,14 @@ function milestones(c: Ctx): void {
  * not, in a straight line with a gate every so often.
  */
 function fences(c: Ctx): void {
+  for (let n = 0; n < roadLines(c); n++) c.k.within(`fences:${roadName(c, n)}`, () => fenceRoad(c, n));
+}
+
+/** One road's field edges, on the road's own dice. */
+function fenceRoad(c: Ctx, n: number): void {
   const sk = c.sk;
   const k = c.k;
-  for (let n = 0; n < roadLines(c); n++) {
+  {
     const line = c.lines[n];
     const SPAN = 26;
     for (let i = 10; i + SPAN < line.length - 10; i += SPAN + 6) {
@@ -885,40 +899,44 @@ function alongRoads(c: Ctx): void {
   const k = c.k;
   for (let n = 0; n < roadLines(c); n++) {
     const line = c.lines[n];
-    let next = 20 + k.roll(30);
+    const road = roadName(c, n);
+    let next = k.within(`along:${road}`, () => 20 + k.roll(30));
     for (let i = 12; i < line.length - 12; i++) {
       if (i < next) continue;
-      const [lx, ly] = line[i];
-      const m = macroOf(lx, ly);
-      if (nearChunk(c, lx, ly, 20) || inDressedArea(c, lx, ly)) continue;
-      const region = sk.region[m] as Region;
-      let placed = false;
-      for (let tries = 0; tries < 3 && !placed; tries++) {
-        const kind = pickKind(k, ALONG[region]);
-        if (!kind) break;
-        const [w, h] = SIZE[kind];
-        const [nx, ny] = normal(line, i);
-        const first = k.chance(0.5) ? 1 : -1;
-        for (const side of [first, -first]) {
-          // Far enough out that the whole footprint clears the road and its verge, and no further.
-          const reach = Math.abs(nx) * (w / 2) + Math.abs(ny) * (h / 2) + 8;
-          for (const extra of [0, 5, 10]) {
-            const x = Math.round(lx + nx * (reach + extra) * side);
-            const y = Math.round(ly + ny * (reach + extra) * side);
-            if (!allowed(c, kind, x, y, -1)) continue;
-            if (stamp(c, kind, x, y)) {
-              placed = true;
-              break;
+      // Dice for this beat of this road: what an earlier beat did (placed or not, and what) moves nothing here.
+      k.within(`along:${road}`, () => {
+        const [lx, ly] = line[i];
+        const m = macroOf(lx, ly);
+        if (nearChunk(c, lx, ly, 20) || inDressedArea(c, lx, ly)) return;
+        const region = sk.region[m] as Region;
+        let placed = false;
+        for (let tries = 0; tries < 3 && !placed; tries++) {
+          const kind = pickKind(k, ALONG[region]);
+          if (!kind) break;
+          const [w, h] = SIZE[kind];
+          const [nx, ny] = normal(line, i);
+          const first = k.chance(0.5) ? 1 : -1;
+          for (const side of [first, -first]) {
+            // Far enough out that the whole footprint clears the road and its verge, and no further.
+            const reach = Math.abs(nx) * (w / 2) + Math.abs(ny) * (h / 2) + 8;
+            for (const extra of [0, 5, 10]) {
+              const x = Math.round(lx + nx * (reach + extra) * side);
+              const y = Math.round(ly + ny * (reach + extra) * side);
+              if (!allowed(c, kind, x, y, -1)) continue;
+              if (stamp(c, kind, x, y)) {
+                placed = true;
+                break;
+              }
             }
+            if (placed) break;
           }
-          if (placed) break;
         }
-      }
-      // The first walk is the establishing shot, and gets something about twice as often. The other
-      // roads' beat was 60 to 96 cells on the 3.6 km county; the square one has shorter roads with as
-      // many people on them, and the Lowfields' lanes are strung with houses the way the first walk is.
-      const dense = c.firstLines.has(n) || region === Region.Lowfields;
-      next = i + (placed ? (dense ? 36 + k.roll(20) : 44 + k.roll(26)) : 10);
+        // The first walk is the establishing shot, and gets something about twice as often. The other
+        // roads' beat was 60 to 96 cells on the 3.6 km county; the square one has shorter roads with as
+        // many people on them, and the Lowfields' lanes are strung with houses the way the first walk is.
+        const dense = c.firstLines.has(n) || region === Region.Lowfields;
+        next = i + (placed ? (dense ? 36 + k.roll(20) : 44 + k.roll(26)) : 10);
+      }, i);
     }
   }
 }
@@ -932,23 +950,26 @@ function places(c: Ctx): void {
   const rowsN = Math.floor(k.h / LATTICE);
   for (let gy = 0; gy < rowsN; gy++) {
     for (let gx = 0; gx < cols; gx++) {
-      const x = gx * LATTICE + 6 + k.roll(LATTICE - 12);
-      const y = gy * LATTICE + 6 + k.roll(LATTICE - 12);
-      if (x < 24 || y < 24 || x > k.w - 24 || y > k.h - 24) continue;
-      if (nearChunk(c, x, y, 16) || inDressedArea(c, x, y)) continue;
-      const m = macroOf(x, y);
-      if (sk.water[m] && k.get(x, y) === Tile.Water) continue;
-      const region = sk.region[m] as Region;
-      const d = dist(c.dRoad, x, y);
-      if (d < 7) continue;
-      const band = d <= 28 ? "road" : "deep";
-      const table = TABLES[region][band];
-      // Three throws: the kind the dice chose, and then others, until one the ground allows fits.
-      for (let tries = 0; tries < 3; tries++) {
-        const kind = pickKind(k, table);
-        if (!kind || !allowed(c, kind, x, y, d)) continue;
-        if (stamp(c, kind, x, y)) break;
-      }
+      // Each point of the lattice on its own dice: where it lands and what it becomes.
+      k.within("lattice", () => {
+        const x = gx * LATTICE + 6 + k.roll(LATTICE - 12);
+        const y = gy * LATTICE + 6 + k.roll(LATTICE - 12);
+        if (x < 24 || y < 24 || x > k.w - 24 || y > k.h - 24) return;
+        if (nearChunk(c, x, y, 16) || inDressedArea(c, x, y)) return;
+        const m = macroOf(x, y);
+        if (sk.water[m] && k.get(x, y) === Tile.Water) return;
+        const region = sk.region[m] as Region;
+        const d = dist(c.dRoad, x, y);
+        if (d < 7) return;
+        const band = d <= 28 ? "road" : "deep";
+        const table = TABLES[region][band];
+        // Three throws: the kind the dice chose, and then others, until one the ground allows fits.
+        for (let tries = 0; tries < 3; tries++) {
+          const kind = pickKind(k, table);
+          if (!kind || !allowed(c, kind, x, y, d)) continue;
+          if (stamp(c, kind, x, y)) break;
+        }
+      }, gx, gy);
     }
   }
 }
@@ -1018,6 +1039,29 @@ function storyQuota(c: Ctx): void {
     }
     return done;
   };
+  const offRoad: OffRoad = (region, kind, count, name, near, far, ground) => {
+    if (count <= 0) return 0;
+    const made = (dMade ??= distanceField(c.lines, (n) => n < roadLines(c)));
+    const spots: [number, number][] = [];
+    for (let y = 24; y < k.h - 24; y += 20) {
+      for (let x = 24; x < k.w - 24; x += 20) {
+        const d = dist(made, x, y);
+        if (d >= near && d <= far && sk.region[macroOf(x, y)] === region && (!ground || ground(sk.biome[macroOf(x, y)] as Biome))) spots.push([x, y]);
+      }
+    }
+    k.within(`quota:${name}`, () => {
+      for (let i = spots.length - 1; i > 0; i--) {
+        const j = k.roll(i + 1);
+        [spots[i], spots[j]] = [spots[j], spots[i]];
+      }
+    });
+    let done = 0;
+    for (const [x, y] of spots) {
+      if (done >= count) break;
+      if (tryAt(region, kind, x, y)) done++;
+    }
+    return done;
+  };
   // Stories that must stand by the first walk get theirs there before anything else takes the roadside.
   for (const s of STORIES) {
     if (!s.first || !QUOTA_KINDS.has(s.kind)) continue;
@@ -1034,31 +1078,20 @@ function storyQuota(c: Ctx): void {
     const target = need * 2 + 1;
     let have = c.places.filter((p) => p.kind === kind && p.region === region).length;
     if (kind === "woodcutter") {
-      // Off the road, in an order the seed shuffles, so they spread over the region rather than fill its top.
-      // Measured from the made roads only: a story's footpath starts from a road, not from another footpath.
-      const made = (dMade ??= distanceField(c.lines, (n) => n < roadLines(c)));
-      const spots: [number, number][] = [];
-      for (let y = 24; y < k.h - 24; y += 20) {
-        for (let x = 24; x < k.w - 24; x += 20) {
-          const d = dist(made, x, y);
-          const b = sk.biome[macroOf(x, y)] as Biome;
-          if (d >= 30 && d <= 110 && (b === Biome.Wood || b === Biome.WetWood || b === Biome.Foothill || b === Biome.Hedge)) spots.push([x, y]);
-        }
-      }
-      for (let i = spots.length - 1; i > 0; i--) {
-        const j = k.roll(i + 1);
-        [spots[i], spots[j]] = [spots[j], spots[i]];
-      }
-      for (const [x, y] of spots) {
-        if (have >= target) break;
-        if (tryAt(region, kind, x, y)) have++;
-      }
+      offRoad(region, kind, target - have, key, 30, 110, (b) => b === Biome.Wood || b === Biome.WetWood || b === Biome.Foothill || b === Biome.Hedge);
       continue;
     }
     for (let n = 0; n < roadLines(c) && have < target; n++) have += alongLine(n, region, kind, target - have);
   }
-  taleQuota(c, alongLine);
+  taleQuota(c, alongLine, offRoad);
 }
+
+/**
+ * Up to `count` of a kind off the road, `near` to `far` cells back from a made road (a story lays its
+ * footpath from a road, not from another footpath), in an order the seed shuffles on dice of its own,
+ * so they spread over the region rather than fill its top. Returns how many stood.
+ */
+type OffRoad = (region: Region, kind: Kind, count: number, name: string, near: number, far: number, ground?: (b: Biome) => boolean) => number;
 
 /**
  * The tales' ruins (data/stories/tales.json), built beside the roads before the dice have the county: a
@@ -1066,7 +1099,7 @@ function storyQuota(c: Ctx): void {
  * clear of every other story's place, and left to the dice a seed can come up without one (the Works is
  * small now). Three of each sort a tale asks for and two over, spaced apart, on ground the tale will take.
  */
-function taleQuota(c: Ctx, alongLine: (n: number, region: Region, kind: Kind, count: number) => number): void {
+function taleQuota(c: Ctx, alongLine: (n: number, region: Region, kind: Kind, count: number) => number, offRoad: OffRoad): void {
   const want = new Map<string, number>();
   for (const s of STORIES) {
     if (!s.tale || s.kind !== "ruin") continue;
@@ -1080,6 +1113,10 @@ function taleQuota(c: Ctx, alongLine: (n: number, region: Region, kind: Kind, co
     c.ruinAs = as;
     const target = need * 3 + 2;
     for (let n = 0; n < roadLines(c) && built() < target; n++) alongLine(n, region, "ruin", target - built());
+    // A region whose roadsides the stories' houses and farms have already taken (the Lowfields, with a
+    // dozen cottage stories) still has its tale: the ruin stands back from the road, where ruins do, and
+    // the story lays a footpath to it (world/stories.ts), well inside the longest path it will lay.
+    if (built() < target) offRoad(region, "ruin", target - built(), `tale:${key}`, 24, 90);
     c.ruinAs = undefined;
   }
 }
@@ -1151,7 +1188,7 @@ function stamp(c: Ctx, kind: Kind, x: number, y: number): boolean {
   clear(c, x0, y0, w, h, kind === "woodcutter" ? Tile.GrassTall : Tile.Grass);
   const m = macroOf(x, y);
   c.cur = {
-    n: c.places.length,
+    n: y0 * COUNTY_W + x0,
     kind,
     region: c.sk.region[m] as Region,
     threat: c.sk.threat[m],
@@ -1164,6 +1201,14 @@ function stamp(c: Ctx, kind: Kind, x: number, y: number): boolean {
     hostiles: [],
   };
   c.places.push(c.cur);
+  // What is in a place is thrown on the place's own dice: its kind and where it stands, nothing else.
+  c.k.within(`place:${kind}`, () => furnish(c, kind, x, y, x0, y0, w, h), x, y);
+  c.cur = null;
+  c.k.claim(x0, y0, w, h);
+  return true;
+}
+
+function furnish(c: Ctx, kind: Kind, x: number, y: number, x0: number, y0: number, w: number, h: number): void {
   switch (kind) {
     case "hamlet":
       hamlet(c, x0, y0);
@@ -1252,9 +1297,6 @@ function stamp(c: Ctx, kind: Kind, x: number, y: number): boolean {
       graves(c, x0, y0);
       break;
   }
-  c.cur = null;
-  c.k.claim(x0, y0, w, h);
-  return true;
 }
 
 /**
@@ -1707,18 +1749,25 @@ function wildlife(c: Ctx): void {
       const cx = mx * MACRO + MACRO / 2;
       const cy = my * MACRO + MACRO / 2;
       if (dist(c.dRoad, cx, cy) < ROAD_CLEAR || dist(c.dFirst, cx, cy) < FIRST_CLEAR) continue;
-      if (!k.chance(WILD[Math.min(6, threat)])) continue;
-      const table = WILDLIFE[sk.region[i] as Region].filter((w) => !w.biomes || w.biomes.includes(sk.biome[i] as Biome));
-      if (table.length === 0) continue;
-      // Company, where the ground is bad: a pair is a reason to go another way.
-      const company = threat >= 3 && k.chance(threat * 0.05) ? 2 : 1;
-      const def = k.pick(table).def;
-      for (let n = 0; n < company; n++) {
-        const spot = k.spot({ cx: mx * MACRO, cy: my * MACRO, w: MACRO, h: MACRO }, 1, 1, 1, 8);
-        if (!spot || dist(c.dRoad, spot.cx, spot.cy) < ROAD_CLEAR) break;
-        hostile(c, def, spot.cx, spot.cy);
-      }
+      k.within("wild", () => wildCell(c, i, mx, my, threat), mx, my);
     }
+  }
+}
+
+/** One macro cell's creature, or pair, on the cell's own dice. */
+function wildCell(c: Ctx, i: number, mx: number, my: number, threat: number): void {
+  const sk = c.sk;
+  const k = c.k;
+  if (!k.chance(WILD[Math.min(6, threat)])) return;
+  const table = WILDLIFE[sk.region[i] as Region].filter((w) => !w.biomes || w.biomes.includes(sk.biome[i] as Biome));
+  if (table.length === 0) return;
+  // Company, where the ground is bad: a pair is a reason to go another way.
+  const company = threat >= 3 && k.chance(threat * 0.05) ? 2 : 1;
+  const def = k.pick(table).def;
+  for (let n = 0; n < company; n++) {
+    const spot = k.spot({ cx: mx * MACRO, cy: my * MACRO, w: MACRO, h: MACRO }, 1, 1, 1, 8);
+    if (!spot || dist(c.dRoad, spot.cx, spot.cy) < ROAD_CLEAR) break;
+    hostile(c, def, spot.cx, spot.cy);
   }
 }
 
@@ -1731,23 +1780,25 @@ function wanderers(c: Ctx): void {
   for (let n = 0; n < roadLines(c); n++) {
     if (c.firstLines.has(n)) continue;
     const line = c.lines[n];
-    for (let i = 60; i < line.length - 60; i += 340 + k.roll(200)) {
-      const [x, y] = line[i];
-      if (nearChunk(c, x, y, 40) || dist(c.dFirst, x, y) < FIRST_CLEAR + 20) continue;
-      const m = macroOf(x, y);
-      const table = WILDLIFE[c.sk.region[m] as Region].filter((w) => !w.biomes || w.biomes.includes(c.sk.biome[m] as Biome));
-      if (table.length === 0) continue;
-      const def = k.pick(table).def;
-      const side = k.chance(0.5) ? 1 : -1;
-      const [nx, ny] = normal(line, i);
-      const a = line[Math.max(0, i - 20)];
-      const b = line[Math.min(line.length - 1, i + 20)];
-      const off = 12;
-      const p0: [number, number] = [Math.round(a[0] + nx * off * side), Math.round(a[1] + ny * off * side)];
-      const p1: [number, number] = [Math.round(b[0] + nx * off * side), Math.round(b[1] + ny * off * side)];
-      if (k.solid(p0[0], p0[1]) || k.solid(p1[0], p1[1])) continue;
-      hostile(c, def, p0[0], p0[1], [[p0[0], p0[1], 240], [p1[0], p1[1], 240]]);
-    }
+    k.within(`wander:${roadName(c, n)}`, () => {
+      for (let i = 60; i < line.length - 60; i += 340 + k.roll(200)) {
+        const [x, y] = line[i];
+        if (nearChunk(c, x, y, 40) || dist(c.dFirst, x, y) < FIRST_CLEAR + 20) continue;
+        const m = macroOf(x, y);
+        const table = WILDLIFE[c.sk.region[m] as Region].filter((w) => !w.biomes || w.biomes.includes(c.sk.biome[m] as Biome));
+        if (table.length === 0) continue;
+        const def = k.pick(table).def;
+        const side = k.chance(0.5) ? 1 : -1;
+        const [nx, ny] = normal(line, i);
+        const a = line[Math.max(0, i - 20)];
+        const b = line[Math.min(line.length - 1, i + 20)];
+        const off = 12;
+        const p0: [number, number] = [Math.round(a[0] + nx * off * side), Math.round(a[1] + ny * off * side)];
+        const p1: [number, number] = [Math.round(b[0] + nx * off * side), Math.round(b[1] + ny * off * side)];
+        if (k.solid(p0[0], p0[1]) || k.solid(p1[0], p1[1])) continue;
+        hostile(c, def, p0[0], p0[1], [[p0[0], p0[1], 240], [p1[0], p1[1], 240]]);
+      }
+    });
   }
 }
 
@@ -1757,7 +1808,6 @@ function wanderers(c: Ctx): void {
  */
 function gaps(c: Ctx): void {
   const k = c.k;
-  const sk = c.sk;
   const gw = Math.floor(k.w / SCREEN_W);
   const gh = Math.floor(k.h / SCREEN_H);
   const has = new Uint8Array(gw * gh);
@@ -1771,47 +1821,54 @@ function gaps(c: Ctx): void {
   for (let sy = 0; sy < gh; sy++) {
     for (let sx = 0; sx < gw; sx++) {
       if (has[sy * gw + sx]) continue;
-      const r = { cx: sx * SCREEN_W + 4, cy: sy * SCREEN_H + 3, w: SCREEN_W - 8, h: SCREEN_H - 6 };
-      let spot = k.spot(r, 3, 3, 1, 30);
-      if (!spot) {
-        // A screen of thick wood or scrub: open a small clearing in it, off anything claimed.
-        for (let tries = 0; tries < 40 && !spot; tries++) {
-          const x = k.int(r.cx, r.cx + r.w - 4);
-          const y = k.int(r.cy, r.cy + r.h - 4);
-          if (room(c, x - 1, y - 1, 5, 5)) {
-            clear(c, x - 1, y - 1, 5, 5, Tile.GrassTall);
-            spot = { cx: x, cy: y };
-          }
-        }
-      }
-      if (!spot) continue;
-      const x = spot.cx + 1;
-      const y = spot.cy + 1;
-      if (nearChunk(c, x, y, 2)) continue;
-      const m = macroOf(x, y);
-      const region = sk.region[m] as Region;
-      // Gentle ground: beside a road, in a haven, or within sight of the first walk.
-      const gentle = dist(c.dRoad, x, y) < ROAD_CLEAR || sk.threat[m] === 0 || dist(c.dFirst, x, y) < FIRST_CLEAR + 8;
-      const roll = k.roll(3);
-      if (region === Region.Works) {
-        put(c, ["sleepers", "gravestone", "bones", "boulder"][roll], x, y);
-      } else if (gentle) {
-        if (roll === 0) put(c, "log", x, y);
-        else if (roll === 1) put(c, "boulder", x, y);
-        else if (roll === 2) {
-          put(c, "stump", x, y);
-          put(c, "flowers", x + 1, y + 1);
-        } else for (let n = 0; n < 4; n++) put(c, "flowers", x - 2 + k.roll(4), y - 1 + k.roll(2));
-      } else if (roll === 0) {
-        for (let n = 0; n < 2; n++) folk(c, "rabbit", x + n * 2, y, 4);
-      } else if (roll === 1) {
-        if (!hostile(c, region === Region.Lowfields ? "crow" : "rat", x, y)) put(c, "boulder", x, y);
-      } else if (roll === 2) {
-        put(c, "boulder", x, y);
-      } else {
-        put(c, "stump", x, y);
-        put(c, "log", x + 2, y + 1);
+      k.within("gap", () => gap(c, sx, sy), sx, sy);
+    }
+  }
+}
+
+/** One empty screen's something small, on the screen's own dice. */
+function gap(c: Ctx, sx: number, sy: number): void {
+  const k = c.k;
+  const sk = c.sk;
+  const r = { cx: sx * SCREEN_W + 4, cy: sy * SCREEN_H + 3, w: SCREEN_W - 8, h: SCREEN_H - 6 };
+  let spot = k.spot(r, 3, 3, 1, 30);
+  if (!spot) {
+    // A screen of thick wood or scrub: open a small clearing in it, off anything claimed.
+    for (let tries = 0; tries < 40 && !spot; tries++) {
+      const x = k.int(r.cx, r.cx + r.w - 4);
+      const y = k.int(r.cy, r.cy + r.h - 4);
+      if (room(c, x - 1, y - 1, 5, 5)) {
+        clear(c, x - 1, y - 1, 5, 5, Tile.GrassTall);
+        spot = { cx: x, cy: y };
       }
     }
+  }
+  if (!spot) return;
+  const x = spot.cx + 1;
+  const y = spot.cy + 1;
+  if (nearChunk(c, x, y, 2)) return;
+  const m = macroOf(x, y);
+  const region = sk.region[m] as Region;
+  // Gentle ground: beside a road, in a haven, or within sight of the first walk.
+  const gentle = dist(c.dRoad, x, y) < ROAD_CLEAR || sk.threat[m] === 0 || dist(c.dFirst, x, y) < FIRST_CLEAR + 8;
+  const roll = k.roll(3);
+  if (region === Region.Works) {
+    put(c, ["sleepers", "gravestone", "bones", "boulder"][roll], x, y);
+  } else if (gentle) {
+    if (roll === 0) put(c, "log", x, y);
+    else if (roll === 1) put(c, "boulder", x, y);
+    else if (roll === 2) {
+      put(c, "stump", x, y);
+      put(c, "flowers", x + 1, y + 1);
+    } else for (let n = 0; n < 4; n++) put(c, "flowers", x - 2 + k.roll(4), y - 1 + k.roll(2));
+  } else if (roll === 0) {
+    for (let n = 0; n < 2; n++) folk(c, "rabbit", x + n * 2, y, 4);
+  } else if (roll === 1) {
+    if (!hostile(c, region === Region.Lowfields ? "crow" : "rat", x, y)) put(c, "boulder", x, y);
+  } else if (roll === 2) {
+    put(c, "boulder", x, y);
+  } else {
+    put(c, "stump", x, y);
+    put(c, "log", x + 2, y + 1);
   }
 }

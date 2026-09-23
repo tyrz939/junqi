@@ -9,7 +9,7 @@
 // dressed like any other, and counts toward the region's budget), and the county gives
 // it a mark and a rect named after it.
 
-import { rngFloat, type RngState } from "@/sim/rng";
+import { ranked, rankBase } from "@/world/skeleton/place";
 import type { Terrain } from "@/world/skeleton/terrain";
 import { at, inside, metres, REGION_IDS, ROAD, ROAD_LIT, SKEL_H, SKEL_W, type PlacedArea, type PlacedPoi, type PlacedSite, type Region, type RegionId, type Road } from "@/world/skeleton/types";
 
@@ -65,10 +65,9 @@ export type AnchorCtx = {
 const APART = 48;
 const DARK_RUN = 22; // macro cells: about 350 m
 
-const pick = <T>(rng: RngState, list: readonly T[]): T => list[Math.min(list.length - 1, Math.floor(rngFloat(rng) * list.length))];
 
 /** Solve the rows in order. Returns null if any cannot be placed; the caller re-rolls the county. */
-export function placeAnchors(ctx: AnchorCtx, rows: readonly AnchorRow[], rng: RngState): PlacedAnchor[] | null {
+export function placeAnchors(ctx: AnchorCtx, rows: readonly AnchorRow[], seed: number, attempt: number): PlacedAnchor[] | null {
   const out: PlacedAnchor[] = [];
   const along = new Map<string, { road: Road; index: number }>();
   const roadOf = (a: string, b: string): Road | undefined => ctx.roads.find((r) => (r.from === a && r.to === b) || (r.from === b && r.to === a));
@@ -225,7 +224,8 @@ export function placeAnchors(ctx: AnchorCtx, rows: readonly AnchorRow[], rng: Rn
       return true;
     });
     if (candidates.length === 0) return null;
-    const cell = pick(rng, candidates);
+    // Each anchor ranks its own candidates: a cell ruled out (the rail took it) moves it only if it was the pick.
+    const cell = ranked(rankBase(seed, `skel:anchor:${row.id}`, attempt), candidates);
     out.push({ id: row.id, kind: row.kind, mx: cell % SKEL_W, my: Math.floor(cell / SKEL_W) });
   }
 

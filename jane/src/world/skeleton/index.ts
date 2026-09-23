@@ -8,10 +8,10 @@ import anchorsJson from "@/data/anchors.json";
 import areasJson from "@/data/areas.json";
 import poisJson from "@/data/pois.json";
 import sitesJson from "@/data/sites.json";
-import { rngFloat, rngSeed } from "@/sim/rng";
+import { stepDice } from "@/sim/rng";
 import { placeAnchors, type AnchorRow } from "@/world/skeleton/anchors";
 import { layRail, railMask } from "@/world/skeleton/rail";
-import { pickCell, placeAreas, placePois, POI_BUDGET, siteCandidates } from "@/world/skeleton/place";
+import { pickCell, placeAreas, placePois, POI_BUDGET, rankBase, rankOf, siteCandidates } from "@/world/skeleton/place";
 import { distanceToRoad, layRoad, roadDistances, route, type Land } from "@/world/skeleton/roads";
 import { buildTerrain, type Terrain } from "@/world/skeleton/terrain";
 import {
@@ -70,7 +70,8 @@ export function buildSkeleton(seed: number, rows: SkeletonRows = SKELETON_ROWS, 
 
 function tryBuild(seed: number, attempt: number, rows: SkeletonRows): Skeleton | null {
   const t = buildTerrain(seed, attempt);
-  const rng = rngSeed(seed, 200 + attempt);
+  // Every step below has dice of its own, from (seed, its name, attempt): the terrain, each site row, the
+  // rail, each patch, the small places, each anchor. Re-tune one and the others stand where they stood.
   // Sites and roads together, one row at a time: stand the site somewhere its row allows,
   // lay its road from the site it hangs off, and measure the row's road rules on the network
   // as it now is. A spot that fails is dropped and another tried, so one awkward site costs
@@ -88,6 +89,7 @@ function tryBuild(seed: number, attempt: number, rows: SkeletonRows): Skeleton |
       candidates = candidates.filter((c) => d[c] * MACRO >= off);
     }
     const from = row.roadFrom ? site(row.roadFrom) : undefined;
+    const rng = stepDice(seed, `skel:site:${row.id}`, attempt);
     let done = false;
     for (let tries = 0; tries < SITE_TRIES && candidates.length > 0 && !done; tries++) {
       const cell = pickCell(rng, candidates);
@@ -145,13 +147,13 @@ function tryBuild(seed: number, attempt: number, rows: SkeletonRows): Skeleton |
   const rail = layRail(seed, attempt, t, road, sites);
   const nearRail = railMask(rail, 1);
   const ctx = { t, road, roadDist, sites, safeDist: distanceToRoad(safe, 1), nearRail };
-  const areas = placeAreas(ctx, rows.areas, rng);
+  const areas = placeAreas(ctx, rows.areas, seed, attempt);
   lightLamps(seed, road, roads, site("town"), safe, t);
   // The line is walked for the roadside beat like a road: a dead signal, a slag wagon, a hut beside it.
-  const pois = placePois(ctx, [...roads, { cells: rail, from: "rail" }], rows.pois, rng);
+  const pois = placePois(ctx, [...roads, { cells: rail, from: "rail" }], rows.pois, seed, attempt);
   // The patches and small places the story needs are not optional: without them this attempt is over.
   for (const row of rows.areas) if (row.required && !areas.some((a) => a.id === row.id)) return null;
-  const anchors = placeAnchors({ t, road, roads, sites, areas, pois, safe, nearRail }, rows.anchors ?? [], rng);
+  const anchors = placeAnchors({ t, road, roads, sites, areas, pois, safe, nearRail }, rows.anchors ?? [], seed, attempt);
   if (!anchors) return null;
   const threat = buildThreat(t, sites, areas, road);
 
@@ -186,7 +188,9 @@ function tryBuild(seed: number, attempt: number, rows: SkeletonRows): Skeleton |
  * river, almost none in the Works. Electric relights dead runs later, for good.
  */
 function lightLamps(seed: number, road: Uint8Array, roads: readonly Road[], town: PlacedSite | undefined, safe: Uint8Array, t: Terrain): void {
-  roads.forEach((r, n) => {
+  roads.forEach((r) => {
+    // Each road's runs of lamps are its own ranking, by what it joins, not by where it falls in the list.
+    const runs = rankBase(seed, `skel:lamps:${r.from}>${r.to}`, 0);
     r.cells.forEach((c, k) => {
       const x = c % SKEL_W;
       const y = Math.floor(c / SKEL_W);
@@ -195,7 +199,7 @@ function lightLamps(seed: number, road: Uint8Array, roads: readonly Road[], town
       if (t.region[c] === Region.Waters) p *= 0.5;
       if (t.region[c] === Region.Works) p = 0.06;
       // Decided per run of six cells (about 100 m), so lamps stand in rows and go dark in rows.
-      const run = rngFloat(rngSeed(seed, 9000 + n * 512 + Math.floor(k / 6)));
+      const run = rankOf(runs, Math.floor(k / 6)) / 4294967296;
       if (safe[c] || d < 420 || run < p) road[c] |= ROAD_LIT;
     });
   });

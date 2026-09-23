@@ -33,7 +33,7 @@ The 2026 Phaser build stepped with a variable `dt`, tested only endpoints, and l
 
 Same seed + same inputs ⇒ same state, bit for bit, tick for tick.
 
-- **RNG:** `sim/rng.ts`, sfc32 with splitmix32 seeding. State is four numbers inside `GameState`, so it saves and resumes mid-sequence. Worldgen uses a separate stream per `(seed, zone, attempt)`, so adding an `rng` call in the mine cannot move a tree in the county. The sim never calls `Math.random`.
+- **RNG:** `sim/rng.ts`, sfc32 with splitmix32 seeding. State is four numbers inside `GameState`, so it saves and resumes mid-sequence. Worldgen uses a separate stream per `(seed, zone, attempt)`, so adding an `rng` call in the mine cannot move a tree in the county; inside the county each generation step has its own (`Kit.within`, `stepDice`, WORLDGEN.md), so re-laying the rail cannot move a cottage either. The sim never calls `Math.random`.
 - **No runtime trigonometry.** `sin`/`cos`/`atan2` may differ in their last bit between JS engines, and one bit is a desync. Facing is a 4-way enum. Aim and headings are unit vectors. Turning is "rotate this vector by a whole-degree table entry" (`sim/angles.ts`); the table is built once and rounded to 1e-9. `sqrt` and the four operators are exact in IEEE 754. The snake's ±3°/tick steering and the 15-bolt ring both run on the table.
 - **Input is quantised.** Move and aim vectors snap to 1/127 before the sim sees them.
 - **Iteration order is array order.** No `Map`/`Set` iteration decides an outcome. The A\* heap breaks ties on cell index.

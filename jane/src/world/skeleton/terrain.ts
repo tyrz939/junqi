@@ -2,7 +2,7 @@
 // Pure function of the seed. No trigonometry: noise is hashed lattice values,
 // smoothed, summed in octaves.
 
-import { rngRange, rngSeed, type RngState } from "@/sim/rng";
+import { rngRange, stepDice, type RngState } from "@/sim/rng";
 import { at, Biome, inside, Region, SKEL_H, SKEL_W } from "@/world/skeleton/types";
 
 function hash2(seed: number, x: number, y: number): number {
@@ -67,7 +67,7 @@ export type Terrain = {
  * Where the river bends, where the borders wobble, how high the hill is: the seed's.
  */
 export function buildTerrain(seed: number, attempt: number): Terrain {
-  const rng: RngState = rngSeed(seed, 100 + attempt);
+  const rng: RngState = stepDice(seed, "skel:terrain", attempt);
   const n = SKEL_W * SKEL_H;
   const height = new Uint8Array(n);
   const water = new Uint8Array(n);

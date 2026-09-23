@@ -3,7 +3,7 @@
 // points of interest (pois.json). Everything is "list the cells that satisfy the
 // row, pick one with the seed": no hill-climbing, nothing that can wander.
 
-import { rngFloat, type RngState } from "@/sim/rng";
+import { hashString, rngFloat, stepDice, type RngState } from "@/sim/rng";
 import type { Terrain } from "@/world/skeleton/terrain";
 import {
   at,
@@ -26,6 +26,37 @@ import {
 
 const pick = <T>(rng: RngState, list: readonly T[]): T => list[Math.min(list.length - 1, Math.floor(rngFloat(rng) * list.length))];
 
+/** The base of a named ranking (`ranked`, `rankOf`): one per (seed, step, attempt). */
+export const rankBase = (seed: number, step: string, attempt: number): number => hashString(`${seed >>> 0}:${step}:${attempt}`);
+
+/** A cell's place in a named ranking: a hash of the ranking's base and the cell, 32 bits. */
+export function rankOf(base: number, cell: number): number {
+  let h = (base ^ Math.imul(cell + 1, 0x9e3779b1)) >>> 0;
+  h = Math.imul(h ^ (h >>> 16), 0x85ebca6b) >>> 0;
+  h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35) >>> 0;
+  return (h ^ (h >>> 16)) >>> 0;
+}
+
+/**
+ * The seed's pick of one cell, by rank rather than by position in the list: the cell that ranks first.
+ * Rule out any other cell (the rail took it, a new row filled it) and the pick stays where it was, where
+ * a dice roll into the list would land somewhere else entirely. Ties go to the lower cell.
+ */
+export function ranked(base: number, cells: readonly number[]): number {
+  let best = cells[0];
+  let top = rankOf(base, best);
+  for (let n = 1; n < cells.length; n++) {
+    const r = rankOf(base, cells[n]);
+    if (r < top || (r === top && cells[n] < best)) {
+      top = r;
+      best = cells[n];
+    }
+  }
+  return best;
+}
+
+/** How far a patch's edge may lie from the nearest road and still be seen from it (m): about a half-screen and a half. */
+const PATCH_SEEN = 40;
 /** Extra metres a patch of threat 4 or more keeps from a haven's fence. */
 const HAVEN_MARGIN = 260;
 /** Sites keep at least this far apart unless a row says otherwise. */
@@ -116,7 +147,7 @@ export type PlaceCtx = { t: Terrain; road: Uint8Array; roadDist: Float32Array; s
  * A row that cannot be placed on this seed is skipped, not fatal: areas are texture,
  * sites are story.
  */
-export function placeAreas(ctx: PlaceCtx, rows: readonly AreaRow[], rng: RngState): PlacedArea[] {
+export function placeAreas(ctx: PlaceCtx, rows: readonly AreaRow[], seed: number, attempt: number): PlacedArea[] {
   const out: PlacedArea[] = [];
   for (const row of rows) {
     const region = REGION_IDS.indexOf(row.region) as Region;
@@ -157,7 +188,11 @@ export function placeAreas(ctx: PlaceCtx, rows: readonly AreaRow[], rng: RngStat
       }
     }
     if (candidates.length === 0) continue;
-    const cell = pick(rng, candidates);
+    // A patch is somewhere she is sent by name, so its edge is seen from a road (a couple of half-screens
+    // off it at most) wherever the row leaves room for that; only where it does not may it lie out of sight.
+    const seen = candidates.filter((i) => ctx.roadDist[i] * MACRO <= row.radius + PATCH_SEEN);
+    // Each patch ranks the ground on its own: a cell ruled out moves the patch only if it was the patch's pick.
+    const cell = ranked(rankBase(seed, `skel:area:${row.id}`, attempt), seen.length > 0 ? seen : candidates);
     out.push({ id: row.id, name: row.name, mx: cell % SKEL_W, my: Math.floor(cell / SKEL_W), row });
   }
   return out;
@@ -178,8 +213,13 @@ const ROADSIDE_EVERY_MAX = 250;
  * steady beat, because the density rule is about what you SEE from the road; then
  * the rest of each region's budget goes deep and along the banks, for whoever leaves it.
  */
-export function placePois(ctx: PlaceCtx, roads: readonly { cells: number[]; from?: string; to?: string }[], rows: readonly PoiRow[], rng: RngState): PlacedPoi[] {
+export function placePois(ctx: PlaceCtx, roads: readonly { cells: number[]; from?: string; to?: string }[], rows: readonly PoiRow[], seed: number, attempt: number): PlacedPoi[] {
   const out: PlacedPoi[] = [];
+  // Nothing here shares dice with anything else. What kind a place is, is its cell's rank; each road's
+  // beat and its spots are that road's own ranking; the deep scatter throws its own stream. So the rail
+  // re-laid, or one more road, moves the small places along it and leaves the rest where they stood.
+  const kindBase = rankBase(seed, "skel:poi:kind", attempt);
+  const unit = (base: number, n: number): number => rankOf(base, n) / 4294967296;
   const count = [0, 0, 0];
   const free = (x: number, y: number): boolean => {
     if (!inside(x, y) || x < 2 || y < 2 || x > SKEL_W - 3 || y > SKEL_H - 3) return false;
@@ -189,17 +229,17 @@ export function placePois(ctx: PlaceCtx, roads: readonly { cells: number[]; from
     for (const p of out) if (metres(x, y, p.mx, p.my) < POI_SPACING) return false;
     return true;
   };
-  const kindFor = (region: Region, where: PoiRow["where"]): PoiRow | null => {
+  const kindFor = (region: Region, where: PoiRow["where"], x: number, y: number): PoiRow | null => {
     const fits = rows.filter((r) => r.regions.includes(REGION_IDS[region]) && (r.where === where || r.where === "any"));
     if (fits.length === 0) return null;
-    let roll = rngFloat(rng) * fits.reduce((n, r) => n + r.weight, 0);
+    let roll = unit(kindBase, at(x, y)) * fits.reduce((n, r) => n + r.weight, 0);
     for (const r of fits) if ((roll -= r.weight) <= 0) return r;
     return fits[fits.length - 1];
   };
   const add = (x: number, y: number, where: PoiRow["where"]): boolean => {
     const region = ctx.t.region[at(x, y)] as Region;
     if (count[region] >= POI_BUDGET) return false;
-    const row = kindFor(region, where);
+    const row = kindFor(region, where, x, y);
     if (!row) return false;
     out.push({ kind: row.kind, name: row.name, mx: x, my: y, region });
     count[region]++;
@@ -213,8 +253,11 @@ export function placePois(ctx: PlaceCtx, roads: readonly { cells: number[]; from
     const first = FIRST_WALK.has(road.from ?? "") && FIRST_WALK.has(road.to ?? "");
     const min = first ? ROADSIDE_EVERY_MIN * 0.5 : ROADSIDE_EVERY_MIN;
     const max = first ? ROADSIDE_EVERY_MAX * 0.5 : ROADSIDE_EVERY_MAX;
+    const name = road.from === "rail" ? "rail" : `${road.from}>${road.to}`;
+    const beat = rankBase(seed, `skel:poi:beat:${name}`, attempt);
+    const side = rankBase(seed, `skel:poi:side:${name}`, attempt);
     let since = 0;
-    let next = min + rngFloat(rng) * (max - min);
+    let next = min + unit(beat, 0) * (max - min);
     for (let k = 1; k < road.cells.length; k++) {
       since += MACRO * 1.2;
       if (since < next) continue;
@@ -225,15 +268,18 @@ export function placePois(ctx: PlaceCtx, roads: readonly { cells: number[]; from
       const spots: [number, number][] = [];
       for (let oy = -2; oy <= 2; oy++) for (let ox = -2; ox <= 2; ox++) if (Math.max(Math.abs(ox), Math.abs(oy)) >= 1 && free(cx + ox, cy + oy)) spots.push([cx + ox, cy + oy]);
       if (spots.length === 0) continue;
-      const [x, y] = pick(rng, spots);
+      const cell = ranked(side, spots.map(([x, y]) => at(x, y)));
+      const x = cell % SKEL_W;
+      const y = Math.floor(cell / SKEL_W);
       if (add(x, y, "roadside")) {
         since = 0;
-        next = min + rngFloat(rng) * (max - min);
+        next = min + unit(beat, k) * (max - min);
       }
     }
   }
 
   // The rest of the budget: banks, then deep country. Bounded tries, so a cramped region ends short, not in a loop.
+  const rng = stepDice(seed, "skel:poi:deep", attempt);
   for (let tries = 0; tries < 4000 && (count[0] < POI_BUDGET || count[1] < POI_BUDGET || count[2] < POI_BUDGET); tries++) {
     const x = 2 + Math.floor(rngFloat(rng) * (SKEL_W - 4));
     const y = 2 + Math.floor(rngFloat(rng) * (SKEL_H - 4));

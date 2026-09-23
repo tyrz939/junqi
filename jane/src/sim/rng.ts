@@ -64,3 +64,12 @@ export function hashString(text: string, h = 0x811c9dc5): number {
   }
   return h >>> 0;
 }
+
+/**
+ * The dice of one named step of a build, from (seed, step, attempt): `stepDice(seed, "county:rail", 3)`.
+ * Each step of world generation throws its own, so re-tuning one step (a rail's bends, one more
+ * placement row, a thinner scatter) moves nothing drawn under any other name.
+ */
+export function stepDice(seed: number, step: string, attempt = 0): RngState {
+  return rngSeed(hashString(`${seed >>> 0}:${step}`), attempt);
+}

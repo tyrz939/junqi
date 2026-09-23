@@ -20,7 +20,7 @@ import { hashString } from "@/sim/rng";
 import type { StoryPlace } from "@/world/blueprint";
 import type { Place } from "@/world/country";
 import type { Kit } from "@/world/kit";
-import { PLACEMENTS, SOLID_PROPS, type PlacementRow } from "@/world/placements";
+import { PLACEMENTS, SOLID_PROPS, taleRoom, type PlacementRow } from "@/world/placements";
 import { MACRO, Region, type Skeleton } from "@/world/skeleton";
 import { boardText, NAMED_KINDS, nthName, STORIES, storiesOfKind, storyName, type StoryRow } from "@/world/names";
 
@@ -316,6 +316,22 @@ export function claimPlaces(seed: number, k: Kit, sk: Skeleton, places: readonly
     }
     const score = (p: Place): number => hashString(`${seed}:${story.id}:${p.n}`);
     fits.sort((a, b) => score(a) - score(b));
+    // A tale also needs everything it sets down about the place to find room there, a short walk from its
+    // front. That is a trial placing of all its things, so it is asked of the seed's choices in turn, best
+    // first, and not of every place that fits.
+    if (story.tale) {
+      const g = (ground ??= walkable(k));
+      const ok = fits.findIndex((q) => {
+        const miss = taleRoom(k, g, q, story.id, rows);
+        if (miss) no[`no room for ${miss}`] = (no[`no room for ${miss}`] ?? 0) + 1;
+        return !miss;
+      });
+      if (ok < 0) {
+        skipped.set(story.id, `no ${story.kind} fits: ${Object.entries(no).map(([why, n]) => `${n} ${why}`).join(", ")}`);
+        continue;
+      }
+      fits = fits.slice(ok);
+    }
     const p = fits[0];
     claims.set(story.id, p);
     taken.add(p);

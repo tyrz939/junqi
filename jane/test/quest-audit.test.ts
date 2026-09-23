@@ -920,8 +920,11 @@ describe("quest audit: a person can read it, find it, do it and take it back", (
     caught(broken("rats_in_the_sheds", [{ type: "kill", target: "plot_tenant", qty: 3, text: "Whoever digs Plot 9, in the allotments, after the bell" }]), "B3");
     // Night-only, and the step does not say so.
     caught(broken("plot_nine", [{ type: "location", target: "plot_tenant_down", qty: 1, text: "Whoever digs Plot 9, in the allotments" }]), "A4");
-    // Too far for what it is: the mine itself, asked by a "near" errand on the platform. (It was the carter's
-    // cart by the mine until the county came in to 2 km square, Sept 24; on seed 3 the cart is inside a near walk now.)
-    caught(broken("to_be_collected", [{ type: "location", target: "mine", qty: 1, text: "The Gold Mine, at the end of the mine road" }]), "C2");
+    // Too far for what it is: the Burial Chamber, asked by a "near" errand on the platform. The rows make
+    // that walk long on every seed (sites.json: the town is 850 m or more from the platform by road, the
+    // graveyard 320 m or more beyond it, the chamber off its footpath), where the mine only sometimes was:
+    // it was the mine until the steps were given dice of their own (Sept 24), and on seed 3 the mine came in
+    // inside a near walk. (Before that it was the carter's cart by the mine, until the county came in square.)
+    caught(broken("to_be_collected", [{ type: "location", target: "burial", qty: 1, text: "The Burial Chamber, on the footpath from the graveyard" }]), "C2");
   }, LONG);
 });

@@ -36,7 +36,8 @@
 // quietly: that is how the last attempt at this game ended up with 61 quests nobody
 // could hand in.
 
-import { hashString, rngSeed, rngU32, type RngState } from "@/sim/rng";
+import { propFootprints } from "@/sim/catalog";
+import { hashString } from "@/sim/rng";
 import { F_SOLID, Tile, TILE_FLAGS } from "@/sim/grid";
 import type { Condition, Facing } from "@/sim/state";
 import type { PropSpawn, Rect, UnitSpawn } from "@/world/blueprint";
@@ -92,7 +93,7 @@ export type PlacementRow = {
    * in the county's stream and nothing else on the seed shifts.
    */
   beside?: string;
-  /** Throw this row's own dice, not the county's (see applyPlacements). For rows added after the seeds were tuned. */
+  /** No longer read: every row throws its own dice now (see applyPlacements). Kept so older rows still parse. */
   ownDice?: boolean;
 };
 
@@ -148,6 +149,9 @@ export function claimPois(sk: Skeleton, pois: PoiSpot[], rows: readonly Placemen
     // Otherwise prefer a free place of the right kind; failing that, any free place, which is re-dressed.
     for (const wantKind of [true, false]) {
       pois.forEach((p, n) => {
+        // A small place the story needs by name (an anchor) is that story's ground, already furnished by its
+        // own rows, and not one of the seed's to hand out: a kind-of-place row takes a rolled one.
+        if (p.anchor) return;
         const claimedAs = taken.get(n);
         if (claimedAs !== undefined && claimedAs !== kind) return;
         if (wantKind && p.kind !== kind) return;
@@ -193,28 +197,10 @@ export type Stage = "chunks" | "pois" | "areas" | "places";
  * small place after it has been dressed, in an area last, on whatever is still open.
  */
 export function applyPlacements(ctx: PlaceCtx, stage: Stage, rows: readonly PlacementRow[] = PLACEMENTS): void {
-  // A row with `ownDice` (and every row placed `at.prop`, which is new) throws its own dice: a stream
-  // of its own, from the stage's start and its key, and the county's stream put back as it was
-  // afterwards. So adding such a row, or a stone to a garden, or eleven parcels to a step, moves
-  // nothing else in the county: not another row's spot, not the next farm along. The older rows keep
-  // drawing on the county's stream as they always have, so no seed anybody has tuned against moves.
-  const k = ctx.k;
-  const start: RngState = [k.rng[0], k.rng[1], k.rng[2], k.rng[3]];
-  const base = rngU32([...start] as RngState);
-  for (const row of rows) {
-    if (!row.ownDice && !row.at.prop) {
-      applyRow(ctx, stage, row);
-      continue;
-    }
-    const outer: RngState = [k.rng[0], k.rng[1], k.rng[2], k.rng[3]];
-    const own = rngSeed(base ^ hashString(row.key), 7);
-    for (let i = 0; i < 4; i++) k.rng[i] = own[i];
-    try {
-      applyRow(ctx, stage, row);
-    } finally {
-      for (let i = 0; i < 4; i++) k.rng[i] = outer[i];
-    }
-  }
+  // Every row throws its own dice, from (seed, its key): so adding a row, or a stone to a garden, or
+  // eleven parcels to a step, moves nothing else in the county, not another row's spot and not the next
+  // farm along. (Until Sept 24, 2026 only rows marked `ownDice` did; the rest shared the county's stream.)
+  for (const row of rows) ctx.k.within(`row:${row.key}`, () => applyRow(ctx, stage, row));
 }
 
 function applyRow(ctx: PlaceCtx, stage: Stage, row: PlacementRow): void {
@@ -391,6 +377,123 @@ function placeCells(ctx: PlaceCtx, from: [number, number], within: number, n: nu
 }
 
 /**
+ * Where a tale's row set by position (dx, dy) goes: the cell for its thing, or null if there is no room.
+ * `room`: open ground for the whole of a small scene (the box, the stone and somewhere to stand to push
+ * it), with this row's thing at (ox, oy) in it; later rows sit `on` it. `dry`: only look, clear nothing.
+ */
+function spotFor(k: Kit, sizes: PlaceCtx["sizes"], reach: ((i: number, j: number) => boolean) | undefined, p: Place, row: PlacementRow, dry: boolean, pool?: Pool): [number, number] | null {
+  const size = row.prop ? (sizes[row.prop.def] ?? { w: 1, h: 1 }) : { w: 1, h: 1 };
+  const [rw, rh, ox, oy] = row.at.room ?? [size.w, size.h, 0, 0];
+  // Only what stops her feet has to leave the ground round it joined up: a person, a solid thing, a scene.
+  const blocks = !!row.unit || !!row.at.room || (row.prop ? SOLID_PROPS.has(row.prop.def) : false);
+  const spot = openAt(k, sizes, reach, p.box.cx + (row.at.dx ?? 0), p.box.cy + (row.at.dy ?? 0), rw, rh, row.at.within ?? 3, blocks, dry, pool);
+  return spot ? [spot[0] + ox, spot[1] + oy] : null;
+}
+
+/** How far round a tale's place its things may be walked to from its front, in cells beyond the footprint. */
+const ON_FOOT = 40;
+const onFoot = new WeakMap<Place, (i: number, j: number) => boolean>();
+
+/**
+ * Ground a short walk from a story's place: from the cell in front of its board (or its middle), over open
+ * ground and round anything solid standing on it, inside a window ON_FOOT cells beyond its footprint, and
+ * only ground she can reach at all. A tale's things go down only here. "The stone north of the house" is
+ * a stone she can walk to from the house, not one across a hedge whose gap is half a mile off (and the
+ * man who walks her there has to find his way too).
+ */
+function nearOnFoot(k: Kit, p: Place, ground: Uint8Array): (i: number, j: number) => boolean {
+  const had = onFoot.get(p);
+  if (had) return had;
+  const x0 = Math.max(0, p.box.cx - ON_FOOT);
+  const y0 = Math.max(0, p.box.cy - ON_FOOT);
+  const x1 = Math.min(k.w, p.box.cx + p.box.w + ON_FOOT);
+  const y1 = Math.min(k.h, p.box.cy + p.box.h + ON_FOOT);
+  const ww = x1 - x0;
+  const wh = y1 - y0;
+  const open = new Uint8Array(ww * wh);
+  for (let j = 0; j < wh; j++) for (let i = 0; i < ww; i++) if (ground[(y0 + j) * k.w + x0 + i] && !k.solid(x0 + i, y0 + j)) open[j * ww + i] = 1;
+  for (const q of k.props) {
+    const s = SOLID_PROPS.get(q.def);
+    if (!s || q.hidden || q.cx + s.w <= x0 || q.cy + s.h <= y0 || q.cx >= x1 || q.cy >= y1) continue;
+    for (let j = q.cy; j < q.cy + s.h; j++) for (let i = q.cx; i < q.cx + s.w; i++) if (i >= x0 && j >= y0 && i < x1 && j < y1) open[(j - y0) * ww + (i - x0)] = 0;
+  }
+  const seen = new Uint8Array(ww * wh);
+  const board = p.slots.board;
+  const from: [number, number] = board ? [board[0], board[1] + 1] : [p.box.cx + (p.box.w >> 1), p.box.cy + p.box.h];
+  const stack: number[] = [];
+  // Start from the front, or from the nearest open cell to it if the front itself is taken.
+  for (let r = 0; r <= 3 && stack.length === 0; r++) {
+    for (let oy = -r; oy <= r && stack.length === 0; oy++) {
+      for (let ox = -r; ox <= r; ox++) {
+        const i = from[0] + ox - x0;
+        const j = from[1] + oy - y0;
+        if (i < 0 || j < 0 || i >= ww || j >= wh || !open[j * ww + i]) continue;
+        seen[j * ww + i] = 1;
+        stack.push(j * ww + i);
+        break;
+      }
+    }
+  }
+  while (stack.length > 0) {
+    const n = stack.pop()!;
+    const i = n % ww;
+    for (const d of [i + 1 < ww ? 1 : 0, i > 0 ? -1 : 0, ww, -ww]) {
+      const m = n + d;
+      if (d === 0 || m < 0 || m >= open.length || seen[m] || !open[m]) continue;
+      seen[m] = 1;
+      stack.push(m);
+    }
+  }
+  const fn = (i: number, j: number): boolean => i >= x0 && j >= y0 && i < x1 && j < y1 && seen[(j - y0) * ww + (i - x0)] === 1;
+  onFoot.set(p, fn);
+  return fn;
+}
+
+/**
+ * Before a tale takes a place: would every one of its things set down by position find room there, in
+ * order, each a short walk from the front? The things are stood in for a moment and taken away again, and
+ * no ground is cleared. Returns the key of the first that would not, or null if all of them would. A tale
+ * that cannot be set out whole at a place does not take it (world/stories.ts).
+ */
+export function taleRoom(k: Kit, ground: Uint8Array, p: Place, story: string, rows: readonly PlacementRow[] = PLACEMENTS): string | null {
+  const sizes = (footprints ??= propFootprints());
+  const reach = nearOnFoot(k, p, ground);
+  // What stands anywhere a row could look, once; the stand-ins go in here and never into the county.
+  const R = ON_FOOT + 32;
+  const inside = (x: number, y: number): boolean => x >= p.box.cx - R && y >= p.box.cy - R && x < p.box.cx + p.box.w + R && y < p.box.cy + p.box.h + R;
+  const pool: Pool = {
+    props: k.props.filter((q) => inside(q.cx, q.cy)),
+    units: k.units.filter((u) => inside(u.cx, u.cy)),
+    marks: Object.values(k.marks).filter((m) => inside(m.cx, m.cy)),
+  };
+  // The place's board goes up before its tale's things are set down (county.ts nameBoards), and the place's
+  // mark in front of it: both are there when the rows look for room, so they are here too.
+  const board = p.slots.board;
+  if (board) {
+    pool.props.push({ key: "board?", def: "name_board", cx: board[0], cy: board[1] });
+    pool.marks!.push({ cx: board[0], cy: board[1] + 1 });
+  }
+  for (const row of rows) {
+    if (row.at.place !== story || (row.at.on === undefined && row.at.dx === undefined && row.at.dy === undefined)) continue;
+    let cell: [number, number] | null;
+    if (row.at.on !== undefined) {
+      // Exactly where the words put it, on a thing stood in above: it needs no room, but it takes some.
+      const under = pool.props.find((q) => q.key === `${row.at.on}?`);
+      if (!under) continue;
+      cell = [under.cx + (row.at.dx ?? 0), under.cy + (row.at.dy ?? 0)];
+    } else cell = spotFor(k, sizes, reach, p, row, true, pool);
+    if (!cell) return row.key;
+    // Stand it in, so the next row finds this one there.
+    if (row.prop) pool.props.push({ ...row.prop, key: `${row.key}?`, cx: cell[0], cy: cell[1] });
+    if (row.unit) pool.units.push({ key: `${row.key}?`, def: row.unit.def, cx: row.prop ? cell[0] + (sizes[row.prop.def]?.w ?? 1) : cell[0], cy: cell[1] });
+    if (row.mark) pool.marks!.push({ cx: cell[0], cy: cell[1] + (row.prop ? (sizes[row.prop.def]?.h ?? 1) : row.unit ? 1 : 0) });
+  }
+  return null;
+}
+type Pool = { props: PropSpawn[]; units: UnitSpawn[]; marks?: { cx: number; cy: number }[] };
+let footprints: Record<string, { w: number; h: number }> | null = null;
+
+/**
  * A row at a story's place. The place was built and claimed whole, so nothing here searches for
  * open ground: a kept cell is exactly where the thing goes, a named prop is edited in place, and a
  * resident is replaced where she stands by the story's own person, who walks her round.
@@ -421,15 +524,9 @@ function atPlace(ctx: PlaceCtx, row: PlacementRow, p: Place): void {
     if (!under) return;
     cell = [under.cx + (row.at.dx ?? 0), under.cy + (row.at.dy ?? 0)];
   } else if (row.at.dx !== undefined || row.at.dy !== undefined) {
-    const size = row.prop ? (ctx.sizes[row.prop.def] ?? { w: 1, h: 1 }) : { w: 1, h: 1 };
-    // `room`: open ground for the whole of a small scene (the box, the stone and somewhere to stand
-    // to push it), with this row's thing at (ox, oy) in it; later rows sit `on` it.
-    const [rw, rh, ox, oy] = row.at.room ?? [size.w, size.h, 0, 0];
-    // Only what stops her feet has to leave the ground round it joined up: a person, a solid thing, a scene.
-    const blocks = !!row.unit || !!row.at.room || (row.prop ? SOLID_PROPS.has(row.prop.def) : false);
-    const spot = openAt(k, ctx.sizes, ctx.ground, p.box.cx + (row.at.dx ?? 0), p.box.cy + (row.at.dy ?? 0), rw, rh, row.at.within ?? 3, blocks);
+    const spot = spotFor(k, ctx.sizes, ctx.ground ? nearOnFoot(k, p, ctx.ground) : undefined, p, row, false);
     if (!spot) return;
-    cell = [spot[0] + ox, spot[1] + oy];
+    cell = spot;
   }
   const folk = /^folk(?:_(\d))?$/.exec(slot);
   if (folk) {
@@ -492,11 +589,11 @@ const SOFT_GROUND = new Set<number>([Tile.Bush, Tile.GrassTall, Tile.Tree, Tile.
  * ground and the things themselves rather than the claim map. It draws no randomness: a tale's dressing
  * moves nothing else in the county.
  */
-function openAt(k: Kit, sizes: PlaceCtx["sizes"], ground: Uint8Array | undefined, x: number, y: number, w: number, h: number, within: number, blocks = true): [number, number] | null {
+function openAt(k: Kit, sizes: PlaceCtx["sizes"], reach: ((i: number, j: number) => boolean) | undefined, x: number, y: number, w: number, h: number, within: number, blocks = true, dry = false, pool?: Pool): [number, number] | null {
   const R = within + 16;
-  const near = k.props.filter((q) => Math.abs(q.cx - x) <= R && Math.abs(q.cy - y) <= R);
-  const people = k.units.filter((u) => Math.abs(u.cx - x) <= R && Math.abs(u.cy - y) <= R);
-  const marks = Object.values(k.marks).filter((m) => Math.abs(m.cx - x) <= R && Math.abs(m.cy - y) <= R);
+  const near = (pool?.props ?? k.props).filter((q) => Math.abs(q.cx - x) <= R && Math.abs(q.cy - y) <= R);
+  const people = (pool?.units ?? k.units).filter((u) => Math.abs(u.cx - x) <= R && Math.abs(u.cy - y) <= R);
+  const marks = (pool?.marks ?? Object.values(k.marks)).filter((m) => Math.abs(m.cx - x) <= R && Math.abs(m.cy - y) <= R);
   /**
    * Would a solid thing here shut a way through? The open ground round it, looked at in a window a few
    * cells wide, must still join up without it: a chest set in the one gap to a board, a person stood in a
@@ -557,20 +654,24 @@ function openAt(k: Kit, sizes: PlaceCtx["sizes"], ground: Uint8Array | undefined
         if (t === Tile.Water || t === Tile.Road) return false;
       }
     }
+    // Nothing already stands on it, nor hard against it: two things touching are one thing to the eye, and
+    // "use" beside them acts on whichever is nearer (a dandelion is not the tortoise).
     for (const q of near) {
       const s = sizes[q.def] ?? { w: 1, h: 1 };
-      if (q.cx < cx + w && q.cx + s.w > cx && q.cy < cy + h && q.cy + s.h > cy) return false;
+      if (q.hidden) {
+        if (q.cx < cx + w && q.cx + s.w > cx && q.cy < cy + h && q.cy + s.h > cy) return false;
+      } else if (q.cx <= cx + w && q.cx + s.w >= cx && q.cy <= cy + h && q.cy + s.h >= cy) return false;
     }
     if (people.some((u) => u.cx >= cx && u.cx < cx + w && u.cy >= cy && u.cy < cy + h)) return false;
     // Not on a mark, nor hard beside one: that is where somebody stands (in front of a board, at a door).
     if (marks.some((m) => m.cx >= cx - 1 && m.cx <= cx + w && m.cy >= cy - 1 && m.cy <= cy + h)) return false;
     if (blocks && seals(cx, cy)) return false;
-    if (!ground) return true;
-    // Somewhere she can already walk to touches it: the ground under it, or beside it.
+    if (!reach) return true;
+    // Somewhere she can walk to from the place touches it: the ground under it, or beside it.
     for (let j = cy - 1; j <= cy + h; j++) {
       for (let i = cx - 1; i <= cx + w; i++) {
         const corner = (i === cx - 1 || i === cx + w) && (j === cy - 1 || j === cy + h);
-        if (!corner && i >= 0 && j >= 0 && i < k.w && j < k.h && ground[j * k.w + i]) return true;
+        if (!corner && reach(i, j)) return true;
       }
     }
     return false;
@@ -579,7 +680,7 @@ function openAt(k: Kit, sizes: PlaceCtx["sizes"], ground: Uint8Array | undefined
     for (let oy = -r; oy <= r; oy++) {
       for (let ox = -r; ox <= r; ox++) {
         if (Math.max(Math.abs(ox), Math.abs(oy)) !== r || !free(x + ox, y + oy)) continue;
-        for (let j = y + oy; j < y + oy + h; j++) for (let i = x + ox; i < x + ox + w; i++) if (SOFT_GROUND.has(k.get(i, j))) k.set(i, j, Tile.Dirt);
+        if (!dry) for (let j = y + oy; j < y + oy + h; j++) for (let i = x + ox; i < x + ox + w; i++) if (SOFT_GROUND.has(k.get(i, j))) k.set(i, j, Tile.Dirt);
         return [x + ox, y + oy];
       }
     }
