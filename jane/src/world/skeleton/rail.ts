@@ -19,7 +19,7 @@ const DX = [1, 0, -1, 0];
 const DY = [0, 1, 0, -1];
 const NORTH = 3;
 /** A change of heading costs as much as this many macro cells of straight line. */
-const TURN = 8;
+const TURN = 6;
 
 /**
  * The line, macro cells in order: the south edge, up column 0 through the halt, then from where

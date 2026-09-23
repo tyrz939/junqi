@@ -604,7 +604,7 @@ const EDGE = 4;
  * the county through the trees, a fence crosses it: the rails run on under it and out of sight.
  */
 /** The widest a bend of the line is drawn (cells from the corner to where the curve begins). */
-const RAIL_BEND = 40;
+const RAIL_BEND = 32;
 
 /**
  * The skeleton's line is square to the grid (skeleton/rail.ts): straights and right-angle corners.
