@@ -8,8 +8,8 @@ import type { Blueprint, Rect } from "@/world/blueprint";
 import { Kit } from "@/world/kit";
 
 /**
- * A cottage's inside: a kitchen and a front room, 13 m by 9 of floor between them. It was 44 by
- * 30 (a hall behind a ten-metre front door) until Sept 24: Julie is one more person on the station
+ * A cottage's inside: a kitchen and a front room, 28 m by 20 of floor between them. It was 44 by
+ * 30 until Sept 24: Julie is one more person on the station
  * road, and her house is the size of her neighbours'. Everything the story uses is still here.
  */
 export function buildHouse(seed: number, attempt: number): Blueprint {
