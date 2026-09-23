@@ -39,7 +39,7 @@ const POINTER_HINT: Record<TabId, string> = {
   inventory: "Drag to move - right-click or double-tap to use - drag out of the window to destroy",
   book: "Drag a spell onto the bar, or click it to bind the first empty slot",
   quests: "",
-  map: "Gold marks are ways out",
+  map: "Wheel or + / -: zoom - drag: look round - 0: back to Jane",
 };
 
 export class GameWindow {
@@ -76,6 +76,7 @@ export class GameWindow {
   private questSel = "";
 
   private readonly map: MapPane;
+  private readonly win: HTMLDivElement;
 
   // pad focus
   private cursor: Cursor = { region: "bag", index: 0 };
@@ -94,6 +95,7 @@ export class GameWindow {
 
     const win = h("div", "jq-window jq-panel", this.el);
     win.dataset.drop = "window";
+    this.win = win;
 
     const head = h("div", "jq-tabs", win);
     for (const t of TABS) {
@@ -239,6 +241,10 @@ export class GameWindow {
       this.toggle(tab);
       return true;
     }
+    if (this.tab === "map" && (a === "up" || a === "down" || a === "left" || a === "right" || a === "confirm")) {
+      this.map.action(a);
+      return true;
+    }
     switch (a) {
       case "tabLeft":
         this.setTab(cycleTab(this.tab, -1));
@@ -280,7 +286,12 @@ export class GameWindow {
         if (frameNo % 6 === 0 || this.questListSig === "\u0000") this.patchQuests(sim);
         break;
       case "map":
-        for (const ev of events) if (ev.e === "tiles" || ev.e === "zone") this.map.invalidate();
+        for (const ev of events) {
+          if (ev.e === "zone") this.map.invalidate();
+          else if (ev.e === "tiles") this.map.tilesChanged();
+        }
+        // Out in the country the chart wants the whole screen; a cellar fits the usual window.
+        this.win.classList.toggle("jq-window-wide", !sim.rt.bp.indoor);
         this.map.frame(sim);
         break;
     }
@@ -309,6 +320,7 @@ export class GameWindow {
     this.questDetailSig = "\u0000";
     this.cursor = homeCursor(this.layout());
     if (tab === "map") this.map.invalidate();
+    else this.win.classList.remove("jq-window-wide");
   }
 
   private layout(): NavLayout {
@@ -512,6 +524,7 @@ export class GameWindow {
 
   private hintText(): string {
     if (!this.keysMode) return POINTER_HINT[this.tab];
+    if (this.tab === "map") return "Arrows: look round - Confirm: zoom - Tab keys: switch page - Cancel: close";
     if (this.popover.isOpen) return "Up / Down: choose - Confirm: select - Cancel: back";
     if (this.held) {
       if (this.held.kind === "bag") return "Confirm: put down on a bag slot, craft input or bar slot - Cancel: never mind";

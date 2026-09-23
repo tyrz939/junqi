@@ -137,27 +137,30 @@ export function placeArrival(w: World, player: PlayerState, body: Unit, req: Tra
 }
 
 // --- fog -----------------------------------------------------------------------
-// One bit per 16 px block, interiors only. Lives in ZoneState so it saves for free,
-// and is shared: what one of the party has seen, the map shows to all of them.
+// One bit per 16 px block indoors, per 64 px block outdoors (rt.fogCell). Lives in ZoneState
+// so it saves for free, and is shared: what one of the party has seen, the map shows to all. Interiors black out what is unseen on
+// screen; outdoors the ground is always drawn and the bits only decide what the map shows.
 
 const FOG_RADIUS = 9; // blocks = 144 px, a little over half the view height
+const FOG_RADIUS_OUT = 4; // blocks = 256 px: about half a wide outdoor view, what she can see
 
 export function stampFog(w: World): void {
-  if (!w.rt.bp.indoor) return;
   const fog = w.zone.fog;
   const fw = w.rt.fogW;
+  const r = w.rt.bp.indoor ? FOG_RADIUS : FOG_RADIUS_OUT;
+  const lim = w.rt.bp.indoor ? r * r : r * r + r; // the coarse outdoor disc, rounded out a little
   for (const p of playersHere(w)) {
     const body = w.rt.units.get(p.unitId);
     if (!body) continue;
-    const bx = Math.floor(body.x / (CELL * 2));
-    const by = Math.floor(body.y / (CELL * 2));
-    for (let y = by - FOG_RADIUS; y <= by + FOG_RADIUS; y++) {
+    const bx = Math.floor(body.x / (CELL * w.rt.fogCell));
+    const by = Math.floor(body.y / (CELL * w.rt.fogCell));
+    for (let y = by - r; y <= by + r; y++) {
       if (y < 0 || y >= w.rt.fogH) continue;
-      for (let x = bx - FOG_RADIUS; x <= bx + FOG_RADIUS; x++) {
+      for (let x = bx - r; x <= bx + r; x++) {
         if (x < 0 || x >= fw) continue;
         const dx = x - bx;
         const dy = y - by;
-        if (dx * dx + dy * dy > FOG_RADIUS * FOG_RADIUS) continue;
+        if (dx * dx + dy * dy > lim) continue;
         const bit = y * fw + x;
         const word = bit >> 5;
         while (fog.length <= word) fog.push(0);

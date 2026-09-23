@@ -3,7 +3,7 @@
 // and on load; throwing it away and rebuilding must never change behaviour.
 
 import type { Catalog, TriggerDef } from "@/sim/catalog";
-import { CELL } from "@/sim/constants";
+import { CELL, FOG_CELLS_IN, FOG_CELLS_OUT } from "@/sim/constants";
 import type { SimEvent } from "@/sim/events";
 import { cellOf, Grid } from "@/sim/grid";
 import { PathFinder } from "@/sim/path";
@@ -43,6 +43,8 @@ export type ZoneRuntime = {
   /** Signature of every player's load-ring block in this zone; "" forces a rebuild next tick. */
   ringKey: string;
   pathsThisTick: number;
+  /** Cells per fog bit on a side: FOG_CELLS_IN indoors, FOG_CELLS_OUT out. */
+  fogCell: number;
   fogW: number;
   fogH: number;
 };
@@ -133,8 +135,9 @@ export function buildRuntime(catalog: Catalog, bp: Blueprint, zone: ZoneState): 
     propDirty: [],
     ringKey: "",
     pathsThisTick: 0,
-    fogW: Math.ceil(bp.w / 2),
-    fogH: Math.ceil(bp.h / 2),
+    fogCell: bp.indoor ? FOG_CELLS_IN : FOG_CELLS_OUT,
+    fogW: Math.ceil(bp.w / (bp.indoor ? FOG_CELLS_IN : FOG_CELLS_OUT)),
+    fogH: Math.ceil(bp.h / (bp.indoor ? FOG_CELLS_IN : FOG_CELLS_OUT)),
   };
   for (const p of zone.props) indexProp(catalog, rt, p);
   for (const u of zone.units) {

@@ -9,6 +9,14 @@ export const TICK_SECONDS = 1 / TICK_RATE;
 /** Path / collision / occupancy cell, in pixels. One value, everywhere. */
 export const CELL = 8;
 
+/**
+ * Cells per fog bit. Interiors keep a fine record (2 cells, the renderer blacks out the unseen);
+ * outdoors the county is only charted for the map, one bit per 8x8 cells (3600x2000 cells is
+ * 450x250 bits, 3516 numbers in a save).
+ */
+export const FOG_CELLS_IN = 2;
+export const FOG_CELLS_OUT = 8;
+
 /** Combat talks in metres, path talks in pixels. 2020: one metre is one path cell. */
 export const PX_PER_METRE = 8;
 

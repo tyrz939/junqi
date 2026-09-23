@@ -1284,29 +1284,69 @@
 }
 
 /* map */
+/* Out in the country the window takes the screen, bar a margin; a cellar keeps the usual size. */
+.jq-window.jq-window-wide {
+  top: calc(8 * var(--u));
+  left: calc(8 * var(--u));
+  right: calc(8 * var(--u));
+  bottom: calc(8 * var(--u));
+  width: auto;
+  height: auto;
+  transform: none;
+}
 .jq-map {
   display: flex;
   flex-direction: column;
   height: 100%;
 }
-.jq-map-title {
+.jq-map-head {
   flex: none;
-  height: calc(10 * var(--u));
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  height: calc(12 * var(--u));
+}
+.jq-map-title {
   color: var(--gold);
   letter-spacing: calc(1 * var(--u));
 }
+.jq-map-tools {
+  display: flex;
+  gap: calc(3 * var(--u));
+}
+.jq-map-btn {
+  min-width: calc(10 * var(--u));
+  height: calc(10 * var(--u));
+  padding: 0 calc(3 * var(--u));
+  line-height: calc(9 * var(--u));
+  text-align: center;
+  font-size: var(--fs-s);
+  color: var(--parch-dim);
+  background: var(--slate-2);
+  border: var(--u) solid var(--plum);
+  cursor: pointer;
+  pointer-events: auto;
+}
+.jq-map-btn:hover {
+  color: var(--parch);
+  border-color: var(--plum-hi);
+}
 .jq-map-stage {
+  position: relative;
   flex: 1;
   min-height: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: var(--ink);
+  overflow: hidden;
+  background: #0d0a13;
   border: var(--u) solid var(--plum);
+  cursor: grab;
+  pointer-events: auto;
+  touch-action: none;
+}
+.jq-map-stage.jq-dragging {
+  cursor: grabbing;
 }
 .jq-map-wrap {
-  position: relative;
-  flex: none;
+  position: absolute;
 }
 .jq-map-canvas {
   display: block;
@@ -1323,6 +1363,20 @@
   box-shadow: 0 0 0 var(--u) var(--red);
   animation: jq-blink 0.5s steps(2, jump-none) infinite alternate;
   pointer-events: none;
+}
+/* The School: the one mark on the chart, the same size at every zoom. */
+.jq-map-school {
+  position: absolute;
+  width: calc(18 * var(--u));
+  height: calc(14 * var(--u));
+  margin: calc(-10 * var(--u)) 0 0 calc(-9 * var(--u));
+  pointer-events: none;
+}
+.jq-map-school-art {
+  display: block;
+  width: 100%;
+  height: 100%;
+  image-rendering: pixelated;
 }
 
 /* --- dialogue ---------------------------------------------------------------------- */

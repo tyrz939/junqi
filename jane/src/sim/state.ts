@@ -191,7 +191,7 @@ export type ZoneState = {
   triggers: TriggerState[];
   /** Tile changes since generation: [cellIndex, tile, ...]. Terrain itself is seed-derived. */
   tileDeltas: number[];
-  /** Seen-bits, one per 16 px block, packed 32 to a number. Interiors only; the county is live radar. */
+  /** Seen-bits, one per 16 px block, packed 32 to a number. Interiors black out the unseen; outdoors it is the map's record of where she has been. */
   fog: number[];
   /**
    * Solid `fill`s that could not land because somebody was standing in the rect:
