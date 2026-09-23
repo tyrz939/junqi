@@ -8,9 +8,10 @@
 // sim stays at 60.
 //
 // Frame:  tile chunks -> flat props -> grounds -> drops -> y-sorted props/units
-//         -> projectiles -> particles -> LIGHT (multiply) -> fog -> unlit overlays
+//         -> projectiles -> effects (render/fx.ts) -> LIGHT (multiply) -> fog -> unlit overlays
 //         (health bars, floating text, reticle) -> debug
 
+import { remainsOf } from "@/art/corpse";
 import type { SpriteSheet } from "@/art/types";
 import { SEAT_COATS, seatSprite } from "@/art/units";
 import { CELL, RING_RADIUS } from "@/sim/constants";
@@ -24,6 +25,7 @@ import { FACING_DX, FACING_DY, type Prop, type School, type Unit } from "@/sim/s
 import { maxHp } from "@/sim/units";
 import { fogSeen } from "@/sim/zones";
 import { buildAtlas, drawSprite, iconDataUrl, type Atlas } from "@/render/atlas";
+import { Fx, SPELL_FX, STATUS_FX, type Painter } from "@/render/fx";
 import { ambientForHour, Lighting, type Light } from "@/render/lighting";
 import { STRIP_H as STRIP_ROW_H, TileCache, underCanopy, type StripRef } from "@/render/tiles";
 
@@ -47,7 +49,6 @@ const SCHOOL_COLOR: Record<School, string> = {
 };
 
 type FloatText = { x: number; y: number; text: string; color: string; age: number; big: boolean };
-type Particle = { x: number; y: number; vx: number; vy: number; life: number; color: string };
 type Drawable = { y: number; draw: () => void };
 
 export class Renderer {
@@ -72,7 +73,20 @@ export class Renderer {
   /** Reused every frame: the rows of trees, bushes and fences reaching into the view. */
   private readonly stripsInView: StripRef[] = [];
   private readonly texts: FloatText[] = [];
-  private readonly particles: Particle[] = [];
+  /** Spell and death effects: casts, bolts, impacts, what lies on the ground, statuses (render/fx.ts). */
+  private readonly fx = new Fx();
+  /** Casts and deaths wait for the next frame, which has the sim to ask who faced where and what died. */
+  private readonly pendingFx: SimEvent[] = [];
+  /** This frame's camera, so effects can be drawn in world coordinates. */
+  private fxX = 0;
+  private fxY = 0;
+  private readonly painter: Painter = {
+    rect: (x, y, w, h, color, alpha) => {
+      this.ctx.globalAlpha = alpha;
+      this.ctx.fillStyle = color;
+      this.ctx.fillRect(Math.round(x) - this.fxX, Math.round(y) - this.fxY, w, h);
+    },
+  };
   private frameNo = 0;
   showGrid = false;
   /** Cursor in canvas client pixels; null when the mouse is not the active aim device. */
@@ -134,16 +148,20 @@ export class Renderer {
           if ((ev.unit === mine || ev.from === mine) && (ev.amount > 0 || ev.absorbed > 0)) {
             this.text(ev.x, ev.y - 14, ev.amount > 0 ? String(ev.amount) : "absorb", ev.crit ? "#f0d048" : SCHOOL_COLOR[ev.school], ev.crit);
           }
-          this.burst(ev.x, ev.y - 6, SCHOOL_COLOR[ev.school], ev.crit ? 8 : 4);
+          if (ev.amount > 0) this.fx.hit(ev.school, ev.x, ev.y, ev.crit);
           break;
         case "heal":
           if (ev.unit === mine || ev.from === mine) this.text(ev.x, ev.y - 14, `+${ev.amount}`, SCHOOL_COLOR.heal, false);
           break;
         case "death":
-          this.burst(ev.x, ev.y - 6, "#a868c8", 14);
+        case "cast":
+          this.pendingFx.push(ev);
           break;
         case "impact":
-          this.burst(ev.x, ev.y, SCHOOL_COLOR[ev.school], 6);
+          this.fx.impact(ev.spell, ev.x, ev.y);
+          break;
+        case "swing":
+          this.fx.swing(ev.x, ev.y, ev.facing);
           break;
         case "shake":
           this.shake = Math.min(6, this.shake + ev.amount);
@@ -171,12 +189,16 @@ export class Renderer {
     this.texts.push({ x, y: yy, text, color, age: 0, big });
   }
 
-  private burst(x: number, y: number, color: string, n: number): void {
-    for (let i = 0; i < n; i++) {
-      const a = (i / n) * Math.PI * 2 + this.frameNo;
-      const s = 0.4 + ((i * 37) % 10) / 12;
-      this.particles.push({ x, y, vx: Math.cos(a) * s, vy: Math.sin(a) * s - 0.3, life: 18 + ((i * 13) % 12), color });
+  /** Casts and deaths from the last events, now that the sim can say who faced where and what died. */
+  private flushPendingFx(sim: Sim): void {
+    for (const ev of this.pendingFx) {
+      if (ev.e === "cast") this.fx.cast(ev.spell, ev.x, ev.y, sim.rt.units.get(ev.unit)?.facing ?? 1);
+      else if (ev.e === "death") {
+        const def = sim.catalog.units[ev.def];
+        this.fx.death(remainsOf(def ? def.sprite : ""), ev.x, ev.y);
+      }
     }
+    this.pendingFx.length = 0;
   }
 
   draw(sim: Sim, alpha: number): void {
@@ -190,6 +212,7 @@ export class Renderer {
       this.tiles.setGrid(sim.rt.grid, !bp.indoor);
       this.prev.clear();
       this.propShown.clear();
+      this.fx.clear();
       this.camReady = false;
     }
     const lerp = (u: Unit): { x: number; y: number } => {
@@ -233,6 +256,10 @@ export class Renderer {
     const sy = this.shake > 0.2 ? Math.round(Math.cos(this.frameNo * 2.3) * this.shake) : 0;
     const vx = Math.round(this.camX) + sx;
     const vy = Math.round(this.camY) + sy;
+
+    this.fxX = vx;
+    this.fxY = vy;
+    this.flushPendingFx(sim);
 
     ctx.globalCompositeOperation = "source-over";
     ctx.globalAlpha = 1;
@@ -307,18 +334,16 @@ export class Renderer {
     }
 
     // --- ground effects and drops ------------------------------------------------
+    // Scorch, stains and rime left by impacts lie under everything that stands.
+    this.fx.drawGroundMarks(this.painter);
     for (const g of sim.zone.grounds) {
       if (!inView(g.x, g.y, 40)) continue;
-      ctx.globalAlpha = Math.min(0.6, g.left / 60);
-      ctx.strokeStyle = "#f4f0e6";
-      ctx.lineWidth = 1;
-      for (let r = g.radius; r > 2; r -= 4) {
-        ctx.beginPath();
-        ctx.arc(Math.round(g.x - vx), Math.round(g.y - vy), r, 0, Math.PI * 2);
-        ctx.stroke();
-      }
-      ctx.globalAlpha = 1;
+      const spell = sim.catalog.spells[g.spell];
+      const look = SPELL_FX[g.spell]?.ground;
+      if (!look) continue;
+      this.fx.drawGround(this.painter, look, g.x, g.y, g.radius, (spell.duration ?? 60) - g.left, g.left, spell.pulse ?? 0);
     }
+    ctx.globalAlpha = 1;
     for (const d of sim.zone.drops) {
       if (!inView(d.x, d.y, 16)) continue;
       const icon = this.atlas[sim.catalog.items[d.item].icon];
@@ -366,35 +391,19 @@ export class Renderer {
 
     // --- projectiles -------------------------------------------------------------
     for (const p of sim.zone.projectiles) {
-      const x = p.x - p.vx * (1 - alpha) - vx;
-      const y = p.y - p.vy * (1 - alpha) - vy - 6;
+      // World coordinates, lifted to hand height; each spell's own look (render/fx.ts).
+      const x = p.x - p.vx * (1 - alpha);
+      const y = p.y - p.vy * (1 - alpha) - 6;
       const spell = sim.catalog.spells[p.spell];
-      const color = SCHOOL_COLOR[spell.school];
-      ctx.fillStyle = color;
-      ctx.globalAlpha = 0.35;
-      ctx.fillRect(Math.round(x - p.vx * 2) - 1, Math.round(y - p.vy * 2) - 1, 3, 3);
-      ctx.globalAlpha = 0.6;
-      ctx.fillRect(Math.round(x - p.vx) - 1, Math.round(y - p.vy) - 1, 3, 3);
-      ctx.globalAlpha = 1;
-      ctx.fillRect(Math.round(x) - 2, Math.round(y) - 2, 4, 4);
-      ctx.fillStyle = "#ffffff";
-      ctx.fillRect(Math.round(x) - 1, Math.round(y) - 1, 2, 2);
-      if (spell.glow) lights.push({ x, y, radius: spell.glow * Math.min(1, p.age / 5), color, intensity: 0.9 });
+      const look = SPELL_FX[p.spell]?.bolt;
+      if (!look || !inView(x, y, 16)) continue;
+      this.fx.drawBolt(this.painter, look, x, y, p.vx, p.vy, p.age, (spell.glow ?? 0) * Math.min(1, p.age / 5));
     }
 
-    for (let i = this.particles.length - 1; i >= 0; i--) {
-      const p = this.particles[i];
-      p.x += p.vx;
-      p.y += p.vy;
-      p.vy += 0.03;
-      if (--p.life <= 0) {
-        this.particles.splice(i, 1);
-        continue;
-      }
-      ctx.globalAlpha = Math.min(1, p.life / 10);
-      ctx.fillStyle = p.color;
-      ctx.fillRect(Math.round(p.x - vx), Math.round(p.y - vy), 1, 1);
-    }
+    // Everything in the air: sparks, embers, smoke, slashes, blast fronts.
+    this.fx.draw(this.painter);
+    this.fx.step();
+    this.fx.takeLights(lights, vx, vy);
     ctx.globalAlpha = 1;
 
     // --- fog: drawn BEFORE the light pass, so lamps glow in it and the dark swallows it ---
@@ -505,10 +514,11 @@ export class Renderer {
       ctx.fillRect(Math.round(x) - 5, Math.round(y) - 14, 10, 14);
       return;
     }
+    const ghost = ctx.globalAlpha < 1;
     if (!u.alive) {
-      ctx.globalAlpha = 0.75;
-      drawSprite(ctx, sprite, "dead", x, y, false, "down");
-      ctx.globalAlpha = 1;
+      // The body, drawn solid (art/corpse.ts gives every sprite one). It lies the way it faced when
+      // it fell, so a field of dead rats is not a field of the same rat.
+      drawSprite(ctx, sprite, "dead", x, y, u.facing === 2, "dead");
       return;
     }
     // The contact shadow. It was one hard 10x3 rectangle, the same under a rat and under a boss, and
@@ -540,12 +550,14 @@ export class Renderer {
       ctx.globalAlpha = 1;
       ctx.globalCompositeOperation = "source-over";
     }
-    for (const s of u.statuses) {
-      const e = sim.catalog.effects[s.effect];
-      if (e.speed !== undefined && e.speed < 1) {
-        ctx.fillStyle = e.speed === 0 ? "#f0d048" : "#a8e0f8";
-        ctx.fillRect(Math.round(x) - 4, Math.round(y) + 1, 8, 1);
+    // What she is wearing: flames, rime, bubbles, stars (render/fx.ts). Not on the faint copy of
+    // her drawn through a wood's canopy, which would draw them, and shed their sparks, twice.
+    if (!ghost) {
+      for (const s of u.statuses) {
+        const look = STATUS_FX[s.effect];
+        if (look) this.fx.drawStatus(this.painter, look, x + this.fxX, y + this.fxY, sprite.ay, this.frameNo + u.id * 7, s.left);
       }
+      ctx.globalAlpha = 1;
     }
   }
 
@@ -698,6 +710,6 @@ export class Renderer {
   }
 
   get stats(): { chunks: number; chunksBuilt: number; particles: number; scale: number } {
-    return { chunks: this.tiles.size, chunksBuilt: this.tiles.built, particles: this.particles.length, scale: this.scale };
+    return { chunks: this.tiles.size, chunksBuilt: this.tiles.built, particles: this.fx.count, scale: this.scale };
   }
 }
