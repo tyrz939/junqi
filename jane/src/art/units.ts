@@ -1,6 +1,7 @@
 // Unit sprites: the base sheet (art/unit-base.ts) plus every fragment under art/units/.
 // Art is source code: one palette character per pixel, "." is transparent.
 import type { SpriteSheet } from "@/art/types";
+import { CORPSES, PERSON_CORPSE, withCorpse } from "@/art/corpse";
 import { UNIT_BASE } from "@/art/unit-base";
 
 export const UNIT_SPRITES: SpriteSheet = { ...UNIT_BASE };
@@ -40,4 +41,14 @@ for (const path of Object.keys(UNIT_SPRITES_FRAGMENTS).sort()) {
     if (id in UNIT_SPRITES) throw new Error(`art: "${id}" is drawn twice (again in ${path})`);
     UNIT_SPRITES[id] = sprite;
   }
+}
+
+// --- the dead ------------------------------------------------------------------------------
+// Every sprite gets its "dead" frame here, once the fragments are in: see art/corpse.ts. A sprite
+// that is not listed there is a standing person (16 x 20) and falls on its back; anything else
+// left unlisted is an error, never a standing drawing at three-quarter alpha.
+for (const [id, s] of Object.entries(UNIT_SPRITES)) {
+  const spec = CORPSES[id];
+  if (!spec && (s.w !== 16 || s.h !== 20)) throw new Error(`art: "${id}" has no corpse in art/corpse.ts`);
+  UNIT_SPRITES[id] = withCorpse(s, spec ?? PERSON_CORPSE);
 }
