@@ -24,7 +24,7 @@ Art is source code (palette-character grids rasterised at boot). The repo ships 
 
 ## The first hour
 
-New Game puts Jane on the platform at Castle Halt at 17:00, with a fire, a sign and one road. The county is 3.6 km by 2 km and different every seed; the story's places are always there, at distances the story needs. The lamp posts come on at 18:30, three real minutes later, which is about when she reaches Julie's gate if she keeps to the road.
+New Game puts Jane on the platform at Castle Halt at 17:00, with a fire, a sign and one road. The county is 2 km square and different every seed; the story's places are always there, at distances the story needs. The station road to Julie's gate is a minute or two on foot; the lamp posts come on at 18:30, three real minutes after she steps off the train.
 
 1. Follow the lit road east to Julie's house (two to four minutes). Reaching the stoop completes the letter.
 2. **E** on the dog. Take the quest. **Space** (or left click) swings. Put the yard skeleton down. A kill before you accept does not count; that is 2020's rule.

@@ -328,14 +328,14 @@ A change is off-bar if:
 | --- | --- | --- |
 | Story places are rows with rules (`sites.json`): region, terrain, distances by road or by line, across the river, off the road | solved site by site with its road, re-tried locally, re-rolled if it cannot hold | **IN** — K, 64 seeds (1,000 as a soak) |
 | Roads join the story and merge into one network; one to three bridges | A\* over roughness and slope | **IN** — K |
-| Ten minutes across by road | the far shore is ≥ 3.6 km from the platform | **IN** — K |
+| Five minutes across by road | the far shore is ≥ 2.2 km from the platform (3.6 km until the county went square, 2026-09-24) | **IN** — K |
 | The School stands over the town | crown site, town capped in height | **IN** — K |
 | Danger is a map: region base, named patches (`areas.json`), dungeon rings, roads, havens | `threat` 0..6 per macro cell | **IN** — K |
 | Night and lamps change the map | `threatAt(s, x, y, night)` | **IN** — K |
 | The first walk is safe and lit | checked on every seed | **IN** — K |
 | Density: 22 to 30 small places per region, nothing-to-see stretches ≤ 900 m | roadside beat, then banks and deep country | **IN** — K |
 | Seed viewer | `viewer.html` | **SHAPE** — hand-checked |
-| The playable county is built from the skeleton: 3600 × 2000, roads, bridges, set chunks joined by their gates | `world/county.ts`, `world/chunks.ts` | **IN** — Y: every mark reachable from the platform on two seeds; W: the lock-and-key solver on four |
+| The playable county is built from the skeleton: 2000 × 2000, roads, bridges, set chunks joined by their gates | `world/county.ts`, `world/chunks.ts` | **IN** — Y: every mark reachable from the platform on two seeds; W: the lock-and-key solver on four |
 | New Game starts on the platform; Julie's gate is two to four minutes by the lit road | a bot walks it | **IN** — Y |
 | Wildlife by region, biome and threat; a spawn's `phase` scales its row | `PHASE_SCALE` | **IN** — Y |
 | Nothing spawns in a haven, on the first walk, or in a wall | | **IN** — Y |

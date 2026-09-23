@@ -23,8 +23,9 @@ import { Tile } from "@/sim/grid";
 import type { PropSpawn, UnitSpawn } from "@/world/blueprint";
 import type { Chunk } from "@/world/chunks";
 import type { Kit } from "@/world/kit";
-import { at, Biome, MACRO, Region, ROAD, SKEL_H, SKEL_W, type Skeleton } from "@/world/skeleton";
+import { at, Biome, COUNTY_H, COUNTY_W, MACRO, Region, ROAD, SKEL_H, SKEL_W, type Skeleton } from "@/world/skeleton";
 import { roadDistances } from "@/world/skeleton/roads";
+import { STORIES } from "@/world/names";
 
 type Pt = readonly [number, number];
 
@@ -48,24 +49,33 @@ const LAMP_STEP = 22;
 const LAMP_OFF = 3;
 /** Milestones, cells apart along a road. */
 const MILE_STEP = 230;
-/** The lattice places are thrown on. */
-const LATTICE = 44;
+/**
+ * The lattice places are thrown on. 44 on the 3.6 km county; 41 since it came in to 2 km square,
+ * where the roads, havens and set places (which did not shrink) take a bigger share of the ground
+ * and a sparser lattice left fewer things on each screen than before.
+ */
+const LATTICE = 41;
 /** Nothing that bites stands nearer a road than this (cells): its eye is 16 m. */
 const ROAD_CLEAR = 22;
 /** Camps stand back from the road by this much, so a careful walker passes them. */
 const CAMP_BACK = 26;
 /** Nothing that bites within this of the first walk (station, Julie's, the town). */
 const FIRST_CLEAR = 44;
-/** Wildlife: the chance a macro cell away from the road has something in it, by threat. */
-const WILD = [0, 0.018, 0.026, 0.04, 0.09, 0.11, 0.13];
+/**
+ * Wildlife: the chance a macro cell away from the road has something in it, by threat. Threats 2 and 3
+ * went up by a tenth when the county came in to 2 km square (Sept 24): it gives more of its ground to
+ * roads and havens, and a screen should hold as much as it did. (Threat 1 is held where it was so the
+ * Works stay 1.6 times as thick as the Lowfields, test/harshness.)
+ */
+const WILD = [0, 0.018, 0.029, 0.044, 0.09, 0.11, 0.13];
 /** A screen, for the last pass: the camera's view in cells. */
 const SCREEN_W = 48;
 const SCREEN_H = 27;
 
 // Distances are kept on a 4-cell grid: fine enough to stand a camp by, 16 times cheaper to fill.
 const DB = 4;
-const DW = Math.ceil(3600 / DB);
-const DH = Math.ceil(2000 / DB);
+const DW = Math.ceil(COUNTY_W / DB);
+const DH = Math.ceil(COUNTY_H / DB);
 
 /** What the builder may build over: open ground and growth, never water, a road or anything made. */
 const BUILDABLE = new Uint8Array(64);
@@ -813,8 +823,8 @@ type Weights = Partial<Record<Kind, number>>;
 
 const TABLES: Record<Region, { road: Weights; deep: Weights }> = {
   [Region.Lowfields]: {
-    road: { hamlet: 6, farmstead: 6, cottage: 7, inn: 1, orchard: 3, field: 5, shrine: 2, well: 2, wreck: 2, hay: 2, meadow: 3, herd: 3, woodcutter: 3, pond: 2, stones: 1 },
-    deep: { camp: 5, den: 3, ruin: 4, pond: 3, outcrop: 2, stones: 2, orchard: 1, herd: 4, woodcutter: 2, meadow: 3, field: 2, farmstead: 1 },
+    road: { hamlet: 6, farmstead: 7, cottage: 10, inn: 1, orchard: 3, field: 4, shrine: 2, well: 2, wreck: 2, hay: 2, meadow: 3, herd: 4, woodcutter: 6, pond: 2, stones: 1 },
+    deep: { camp: 5, den: 3, ruin: 4, pond: 3, outcrop: 2, stones: 2, orchard: 1, herd: 5, woodcutter: 2, meadow: 3, field: 2, farmstead: 1 },
   },
   [Region.Waters]: {
     road: { reedhut: 6, cottage: 3, ruin: 4, glass: 3, pond: 3, shrine: 2, meadow: 3, wreck: 2, well: 1, herd: 1, graves: 1 },
@@ -858,7 +868,7 @@ const ROADSIDE: Set<Kind> = new Set(["hamlet", "farmstead", "cottage", "inn", "s
 
 /** Roadside kinds, the road table without the kinds that belong in the middle of a field. */
 const ALONG: Record<Region, Weights> = {
-  [Region.Lowfields]: { hamlet: 6, farmstead: 6, cottage: 7, inn: 1, orchard: 3, field: 4, shrine: 2, well: 2, wreck: 2, hay: 2, meadow: 2, woodcutter: 3, pond: 1 },
+  [Region.Lowfields]: { hamlet: 6, farmstead: 7, cottage: 10, inn: 1, orchard: 3, field: 4, shrine: 2, well: 2, wreck: 2, hay: 2, meadow: 2, woodcutter: 6, pond: 1 },
   [Region.Waters]: { reedhut: 6, cottage: 3, ruin: 4, glass: 3, pond: 2, shrine: 2, meadow: 2, wreck: 2, well: 1, graves: 1 },
   [Region.Works]: { ruin: 6, slag: 5, wreck: 3, graves: 2, shrine: 1 },
 };
@@ -902,8 +912,11 @@ function alongRoads(c: Ctx): void {
           if (placed) break;
         }
       }
-      // The first walk is the establishing shot, and gets something about twice as often.
-      next = i + (placed ? (c.firstLines.has(n) ? 36 + k.roll(20) : 60 + k.roll(36)) : 10);
+      // The first walk is the establishing shot, and gets something about twice as often. The other
+      // roads' beat was 60 to 96 cells on the 3.6 km county; the square one has shorter roads with as
+      // many people on them, and the Lowfields' lanes are strung with houses the way the first walk is.
+      const dense = c.firstLines.has(n) || region === Region.Lowfields;
+      next = i + (placed ? (dense ? 36 + k.roll(20) : 44 + k.roll(26)) : 10);
     }
   }
 }
@@ -911,6 +924,7 @@ function alongRoads(c: Ctx): void {
 function places(c: Ctx): void {
   const sk = c.sk;
   const k = c.k;
+  storyQuota(c);
   alongRoads(c);
   const cols = Math.floor(k.w / LATTICE);
   const rowsN = Math.floor(k.h / LATTICE);
@@ -934,6 +948,106 @@ function places(c: Ctx): void {
         if (stamp(c, kind, x, y)) break;
       }
     }
+  }
+}
+
+const REGION_OF: Record<string, Region> = { lowfields: Region.Lowfields, waters: Region.Waters, works: Region.Works };
+/** Kinds the builder can be asked for by name; camps and ruins come of the ground and are plentiful. */
+const QUOTA_KINDS: ReadonlySet<string> = new Set(["hamlet", "farmstead", "cottage", "inn", "woodcutter"]);
+/** Places held for the stories keep this far apart (cells): a story will not stand within 60 of another's. */
+const QUOTA_APART = 66;
+
+/**
+ * The places the stories will ask for, built first. Every story in data/stories claims a place of its
+ * kind in its region (world/stories.ts), a story's place stands 60 cells or more from another's, and
+ * the square county (Sept 24) has about half the ground of the long one: left to the dice, a seed could
+ * come up with nine cottages for eleven cottage stories, all in a row. So before the roadside beat:
+ *
+ *   houses, farms, hamlets and inns (seen from the road, or a story will not have them) are set beside
+ *   the roads, the first walk's first, spaced so that no two crowd each other;
+ *   woodyards (a story lays a footpath to one) are set off the road, 30 to 110 cells back, in the woods
+ *   and the hedged fields, spaced the same way.
+ *
+ * Twice as many as the stories need, because some are turned down: a footpath cannot find its way to
+ * a woodyard in thick wood, or two stand too near to both be taken.
+ */
+function storyQuota(c: Ctx): void {
+  const sk = c.sk;
+  const k = c.k;
+  const want = new Map<string, number>();
+  for (const s of STORIES) {
+    if (!QUOTA_KINDS.has(s.kind)) continue;
+    const key = `${s.region ?? "lowfields"}:${s.kind}`;
+    want.set(key, (want.get(key) ?? 0) + 1);
+  }
+  let dMade: Uint8Array | undefined;
+  const opening = sk.sites.filter((s) => s.id === "station" || s.id === "julie_house").map((s) => [s.mx * MACRO + MACRO / 2, s.my * MACRO + MACRO / 2, s.id === "station" ? 190 : 120] as const);
+  const free = (x: number, y: number): boolean =>
+    !nearChunk(c, x, y, 20) &&
+    !inDressedArea(c, x, y) &&
+    !opening.some(([ox, oy, r]) => Math.hypot(ox - x, oy - y) < r) &&
+    !c.places.some((p) => QUOTA_KINDS.has(p.kind) && Math.hypot(p.box.cx + p.box.w / 2 - x, p.box.cy + p.box.h / 2 - y) < QUOTA_APART);
+  // On ground no worse than threat 2, which is where a story's people live unless it says otherwise.
+  const tryAt = (region: Region, kind: Kind, x: number, y: number): boolean =>
+    sk.region[macroOf(x, y)] === region && sk.threat[macroOf(x, y)] <= 2 && free(x, y) && allowed(c, kind, x, y, -1) && stamp(c, kind, x, y);
+  /** Beside one road, every twelve cells, until `count` more stand; returns how many did. */
+  const alongLine = (n: number, region: Region, kind: Kind, count: number): number => {
+    const [w, h] = SIZE[kind];
+    const line = c.lines[n];
+    let done = 0;
+    for (let i = 12; i < line.length - 12 && done < count; i += 12) {
+      const [lx, ly] = line[i];
+      const [nx, ny] = normal(line, i);
+      const reach = Math.abs(nx) * (w / 2) + Math.abs(ny) * (h / 2) + 8;
+      search: for (const side of [1, -1]) {
+        for (const extra of [0, 6, 12]) {
+          if (tryAt(region, kind, Math.round(lx + nx * (reach + extra) * side), Math.round(ly + ny * (reach + extra) * side))) {
+            done++;
+            break search;
+          }
+        }
+      }
+    }
+    return done;
+  };
+  // Stories that must stand by the first walk get theirs there before anything else takes the roadside.
+  for (const s of STORIES) {
+    if (!s.first || !QUOTA_KINDS.has(s.kind)) continue;
+    let left = 2;
+    for (const n of c.firstLines) if (left > 0) left -= alongLine(n, REGION_OF[s.region ?? "lowfields"], s.kind as Kind, left);
+  }
+  // The big ones first: a farm needs a field's width of open roadside, and cottages fit in round it.
+  const order = ["hamlet", "farmstead", "inn", "cottage", "woodcutter"];
+  const keys = [...want.keys()].sort((a, b) => order.indexOf(a.split(":")[1]) - order.indexOf(b.split(":")[1]) || (a < b ? -1 : 1));
+  for (const key of keys) {
+    const need = want.get(key)!;
+    const [regionId, kind] = key.split(":") as [string, Kind];
+    const region = REGION_OF[regionId];
+    const target = need * 2 + 1;
+    let have = c.places.filter((p) => p.kind === kind && p.region === region).length;
+    if (kind === "woodcutter") {
+      // Off the road, in an order the seed shuffles, so they spread over the region rather than fill its top.
+      // Measured from the made roads only: a story's footpath starts from a road, not from another footpath.
+      const made = (dMade ??= distanceField(c.lines, (n) => n < roadLines(c)));
+      const spots: [number, number][] = [];
+      for (let y = 24; y < k.h - 24; y += 20) {
+        for (let x = 24; x < k.w - 24; x += 20) {
+          const d = dist(made, x, y);
+          const b = sk.biome[macroOf(x, y)] as Biome;
+          if (d >= 30 && d <= 110 && (b === Biome.Wood || b === Biome.WetWood || b === Biome.Foothill || b === Biome.Hedge)) spots.push([x, y]);
+        }
+      }
+      for (let i = spots.length - 1; i > 0; i--) {
+        const j = k.roll(i + 1);
+        [spots[i], spots[j]] = [spots[j], spots[i]];
+      }
+      for (const [x, y] of spots) {
+        if (have >= target) break;
+        if (tryAt(region, kind, x, y)) have++;
+      }
+      continue;
+    }
+    for (let n = 0; n < roadLines(c) && have < target; n++) have += alongLine(n, region, kind, target - have);
   }
 }
 
@@ -980,7 +1094,9 @@ function allowed(c: Ctx, kind: Kind, x: number, y: number, d: number): boolean {
     case "den":
       return d >= CAMP_BACK && threat > 0 && dist(c.dFirst, x, y) >= FIRST_CLEAR + 8;
     case "woodcutter":
-      return biome === Biome.Wood || biome === Biome.WetWood || biome === Biome.Foothill;
+      // The copses of the hedged fields are worked too. (The square county has half the woodland the long
+      // one had, and the Lowfields' stories ask for a dozen woodcutters' clearings.)
+      return biome === Biome.Wood || biome === Biome.WetWood || biome === Biome.Foothill || biome === Biome.Hedge;
     case "reedhut":
       return biome === Biome.Reed || biome === Biome.Marsh || biome === Biome.WetWood || biome === Biome.Garden;
     case "outcrop":

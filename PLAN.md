@@ -45,7 +45,9 @@ The 2020 story doc has Jane hear singing "about Day and night" in the tunnel and
 
 Walk speed is 60 px/s. A ten-minute crossing by road is 36,000 px of road; roads wander about 1.25×, so:
 
-**The county is 3,600 × 2,000 cells = 28,800 × 16,000 px.** About 29× today's area. Eight minutes as the crow flies, ten or more by road, longer at night. Sprint does not change this much: it lasts three seconds and takes three to come back.
+**The county is 2,000 × 2,000 cells = 16,000 × 16,000 px**, 2 km square. About four and a half minutes as the crow flies, five or six by road, longer at night. Sprint does not change this much: it lasts three seconds and takes three to come back.
+
+*(It was 3,600 × 2,000 until 2026-09-24. After playing it: "world scale does feel too big atm. keep vertical the same but maybe shrink sideways to be square with current vertical. walking distances can be a little shorter ideally." The height, the three regions, the river and the hill are as they were; every distance rule in `sites.json`, `anchors.json` and `areas.json` came in by about 0.6 to 0.65, and the lattice the open country is thrown on was tightened so a screen holds at least as much as it did. With half the ground, the Lowfields could no longer be left to the dice for the places the stories claim (a dozen cottages, a dozen woodyards, the farms and the inn), so `country.ts` builds those first, spaced apart, twice as many as the stories need: a story now finds no place on about 1 seed-story in 100, where it was 14 in 100 on the long county.)*
 
 It is **one seamless overworld**, not three loading zones. Interiors and dungeons stay separate zones as now.
 
@@ -63,7 +65,7 @@ Regions are a design idea (theme, enemy families, music later), not a technical 
 
 This moves the Burial Chamber from Julie's yard (where 2020's room put it, and where the live build has it) to the east, fifth, where 2020's design put it. Its current content is kept and re-tuned to phase 5; the other three corners and the wizard are added then.
 
-**New Game starts at the station**, 17:00, as `Story.docx` has it. Julie's house is a two to three minute walk by a lamp-lit road: long enough to see the sun go down and read the first sign, short enough that nobody quits. (The previous README said "do not start a map trek". With this direction the trek *is* the game; the first one is just short.)
+**New Game starts at the station**, 17:00, as `Story.docx` has it. Julie's house is a one to two minute walk (520 to 850 m) by a lamp-lit road: long enough to see the sun go down and read the first sign, short enough that nobody quits. (The previous README said "do not start a map trek". With this direction the trek *is* the game; the first one is just short.)
 
 ### 2.3 The skeleton generator
 
@@ -72,13 +74,15 @@ A seed produces the world in layers, coarse to fine. Each layer is a pure functi
 1. **Skeleton** (instant, on a 16-cell macro grid): region bands with wobbly borders; the river; the hill. Then the **required sites** placed by solving constraints, for example:
 
    ```
-   station      on the west edge road
-   julie_house  600–900 m from station by road, never in sight of the town square
-   gold_mine    in foothills, >= 1500 m from julie_house, in the Lowfields
-   museum       across the river from the town, within 200 m of a bridge
-   school       highest ground in the Works, >= 2500 m from the station
-   burial       within 300 m of the graveyard, not visible from any road
+   station      on the west edge, where the railway runs along the county's fence
+   julie_house  520–850 m from station by road
+   gold_mine    in foothills, >= 700 m from julie_house, in the Lowfields
+   museum       across the river from the town, 300–850 m from it by road
+   school       highest ground in the Works, >= 1300 m from the station by road
+   burial       120–260 m from the graveyard, not seen from any road
    ```
+
+   (The 2 km square county's numbers; `sites.json` is the truth.) **The railway** is laid on the skeleton after the sites and roads (`skeleton/rail.ts`): in from the south edge up the west fence, through the halt, north to the Works and east across them, over the river on a trestle and across the roads on the level, and out through the east fence. It never stops dead; a fence crosses it where it leaves the county, and nothing small is placed on it.
 
    Constraints are rows (`sites.json`), checked, and a skeleton that cannot satisfy them is re-rolled. **This is what "consistent where it counts" means, as data.**
 2. **Roads**: routed between sites over a cost field (avoid water, prefer valleys), so every seed's road network is different and always connects the story. Lamp-post runs are a road attribute: lit near the town, failing eastwards.
@@ -249,7 +253,7 @@ Rules:
 | **M0** | Key hints in dialogue; the letter in proper English; this plan, `STORY.md`, `VOICE.md`; beds and fires; the name step; the dog reworked and absent after dark; the bell; mist and longer light | *Done.* |
 | **M1** | Engine at scale (§4), with the 2 ms budget test. *Done: windowed A\*, sparse occupancy, props bucketed by block, gzip saves in IndexedDB, the budget test, the downsampled map. A county builds and validates in about a second, so the Web Worker and loading screen are not needed yet; they are the fix if New Game ever feels slow on a weak machine* | Tests |
 | **M1b** | **Co-op-ready sim** (`PLATFORM.md` §2): `players[]`, per-player input and commands, every zone with a player in it ticks, party-shared quests and flags, nothing pauses when there is more than one player, join / leave as commands, the server-wide party penalty. No networking yet | *Done.* `test/coop.test.ts`, 20 tests: four seats, a split across two zones, the shared fire, shared learning, keys handed on, a heal aimed at a friend, a two-seat replay that hashes the same |
-| **M2** | Skeleton generator, `sites.json` / `areas.json` / `pois.json`, roads, lamps, regions, the threat field, **seed viewer**; then the playable 3600 × 2000 county rasterised from it. ***Done.** John approved the maps and the names. New Game starts on the platform at Castle Halt; the yard, the town, the mine mouth, the graveyard and the burial stair are set chunks stamped where the skeleton puts them; the later dungeons stand as shapes with no door. The School now looms along the top of the screen. Still to do here: set chunks as data rather than code* | John looked at 24 maps |
+| **M2** | Skeleton generator, `sites.json` / `areas.json` / `pois.json`, roads, lamps, regions, the threat field, **seed viewer**; then the playable county rasterised from it (3600 × 2000 then; 2000 × 2000 since 2026-09-24). ***Done.** John approved the maps and the names. New Game starts on the platform at Castle Halt; the yard, the town, the mine mouth, the graveyard and the burial stair are set chunks stamped where the skeleton puts them; the later dungeons stand as shapes with no door. The School now looms along the top of the screen. Still to do here: set chunks as data rather than code* | John looked at 24 maps |
 | **M3** | The Lowfields to density: station start, town hub, farm, wood, side quests, wildlife, lamp-light rule, first omens; Julie's loop re-sited. *Built so far: the 19 side quests of `QUESTS.md` Part 3 as data, the places they stand on (anchors, dressed patches, the footpath), growth by finding, night-only creatures. Not yet: omens (the flags exist in the quests and default to off), wildlife tuning, anything John has played* | John plays an hour |
 | **M4** | Dungeon generator; the mine rebuilt through it with room variants. *Built: `DUNGEONS.md` and `src/world/dungeon/`; the generated mine (1,000 seeds, zero fallbacks, a solo bot finishes it). Next: the shared verbs and the other dungeons* | John runs the mine on three seeds |
 | **M4b** | The other dungeons on the generator. *Done: the Museum, the ruined library, Butterfly Forest, the Burial Chamber, the pipes, the Factory and the School. All seven are on the generator. Then: the two optional ones, a second and third variant for every room pool, and the co-op tag tests* | John runs each on three seeds |

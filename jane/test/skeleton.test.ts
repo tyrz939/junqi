@@ -41,9 +41,11 @@ describe("the county skeleton", () => {
     }
   });
 
-  it("is ten minutes across by road: the far shore is at least 3.6 km from the platform", () => {
+  // Sept 24: the county went from 3.6 x 2 km to 2 km square ("walking distances can be a little shorter").
+  // The far shore is still the far end of the county, a five-minute walk rather than ten.
+  it("is five minutes across by road: the far shore is at least 2.2 km from the platform", () => {
     for (const s of all) {
-      const c = s.checks.find((k) => k.rule.startsWith("lake_statue 3600"));
+      const c = s.checks.find((k) => k.rule.startsWith("lake_statue 2200"));
       expect(c?.ok, `${s.seed} ${c?.detail}`).toBe(true);
     }
   });
@@ -84,6 +86,33 @@ describe("the county skeleton", () => {
     }
     expect(threatAt(s, lit % s.w, Math.floor(lit / s.w), true)).toBe(s.threat[lit]);
     expect(threatAt(s, dark % s.w, Math.floor(dark / s.w), true)).toBeGreaterThan(s.threat[dark]);
+  });
+
+  it("the railway runs through the halt and off the map at both ends, over the river, clear of every place", () => {
+    for (const s of all) {
+      const rail = s.rail;
+      const station = s.sites.find((x) => x.id === "station")!;
+      expect(rail.includes(at(station.mx, station.my)), `${s.seed}: through the halt`).toBe(true);
+      const [a, b] = [rail[0], rail[rail.length - 1]];
+      expect(Math.floor(a / s.w), `${s.seed}: in from the south edge`).toBe(s.h - 1);
+      expect([b % s.w === s.w - 1, Math.floor(b / s.w) === 0].some(Boolean), `${s.seed}: out at the east or north edge`).toBe(true);
+      // One piece: every cell touches the next.
+      for (let i = 1; i < rail.length; i++) {
+        expect(Math.max(Math.abs((rail[i] % s.w) - (rail[i - 1] % s.w)), Math.abs(Math.floor(rail[i] / s.w) - Math.floor(rail[i - 1] / s.w))), `${s.seed}: step ${i}`).toBe(1);
+      }
+      for (const x of s.sites) {
+        if (x.id === "station") continue;
+        // Up the west fence the line is in column 0, which no chunk reaches (chunks.ts boxAt keeps every box 8 cells in).
+        for (const c of rail) if (c % s.w !== 0) expect(Math.hypot((c % s.w) - x.mx, Math.floor(c / s.w) - x.my) * 16, `${s.seed}: rail by ${x.id}`).toBeGreaterThan(90);
+      }
+      const onRail = new Set(rail);
+      for (const p of s.pois) expect(onRail.has(at(p.mx, p.my)), `${s.seed}: ${p.name} on the line`).toBe(false);
+      for (const c of rail) expect(s.water[c], `${s.seed}: the rail crosses the lake`).not.toBe(2);
+    }
+    // Most seeds carry it east across the Works and over the river.
+    const east = all.filter((s) => s.rail[s.rail.length - 1] % s.w === s.w - 1);
+    expect(east.length / all.length).toBeGreaterThan(0.9);
+    expect(east.every((s) => s.rail.some((c) => s.water[c] === 1))).toBe(true);
   });
 
   it("crosses the river in few places, and is quick enough to run on a title screen", () => {

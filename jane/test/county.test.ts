@@ -57,7 +57,7 @@ function reachable(bp: Blueprint, from: string): Uint8Array {
 }
 
 describe("the county", () => {
-  it("is 3600 x 2000, carries the story's names, and builds in a second or two", () => {
+  it("is 2000 x 2000, carries the story's names, and builds in a second or two", () => {
     for (const seed of SEEDS) {
       const bp = county(seed);
       expect([bp.w, bp.h]).toEqual([COUNTY_W, COUNTY_H]);
@@ -108,8 +108,10 @@ describe("the county", () => {
     const sk = countySkeleton(SEEDS[0], bp.attempts - 1);
     const wild = bp.units.filter((u) => u.phase !== undefined);
     // The density brief (2026-09-23): thousands, not hundreds. Mobs everywhere off the road, like a WoW zone.
-    expect(wild.length).toBeGreaterThan(2500);
-    expect(wild.length).toBeLessThan(9000);
+    // (2500 to 9000 on the 3.6 x 2 km county. It is 2 km square since Sept 24, so the same per screen is 1400 to
+    // 5000; the floor is set above that, because the square county carries more a screen than the old one did.)
+    expect(wild.length).toBeGreaterThan(2000);
+    expect(wild.length).toBeLessThan(5000);
     for (const u of wild) {
       const threat = sk.threat[at(u.cx >> 4, u.cy >> 4)];
       expect(threat).toBeGreaterThan(0);
@@ -160,7 +162,9 @@ describe("the county", () => {
 });
 
 describe("the first evening", () => {
-  it("she steps off the train and can walk the lit road to Julie's gate in two to four minutes", () => {
+  // Two to four minutes on the 3.6 km county. The user, Sept 24: "walking distances can be a little shorter".
+  // The station road is 520 to 850 m now, a minute or two, still a walk with things beside it.
+  it("she steps off the train and can walk the lit road to Julie's gate in one to three minutes", () => {
     const seed = SEEDS[0];
     const sim = Sim.newGame(buildCatalog(), seed);
     const bp = county(seed);
@@ -178,8 +182,8 @@ describe("the first evening", () => {
     const gate = bp.marks.yard_gate;
     expect(walkTo(sim, gate.cx * 8 + 4, gate.cy * 8 + 4, 12, 60 * 90)).toBe(true);
     const minutes = (sim.state.tick - t0) / 3600;
-    expect(minutes).toBeGreaterThan(1.5);
-    expect(minutes).toBeLessThan(4.5);
+    expect(minutes).toBeGreaterThan(1);
+    expect(minutes).toBeLessThan(3);
     expect(sim.player.alive).toBe(true);
     // And the dog is where it always is.
     const dog = sim.rt.unitsByKey.get("dog")!;

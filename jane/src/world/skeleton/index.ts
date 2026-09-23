@@ -10,6 +10,7 @@ import poisJson from "@/data/pois.json";
 import sitesJson from "@/data/sites.json";
 import { rngFloat, rngSeed } from "@/sim/rng";
 import { placeAnchors, type AnchorRow } from "@/world/skeleton/anchors";
+import { layRail, railMask } from "@/world/skeleton/rail";
 import { pickCell, placeAreas, placePois, POI_BUDGET, siteCandidates } from "@/world/skeleton/place";
 import { distanceToRoad, layRoad, roadDistances, route, type Land } from "@/world/skeleton/roads";
 import { buildTerrain, type Terrain } from "@/world/skeleton/terrain";
@@ -135,18 +136,22 @@ function tryBuild(seed: number, attempt: number, rows: SkeletonRows): Skeleton |
   // Check them now, so a bad attempt costs a few milliseconds instead of the whole build.
   const early: Skeleton = {
     seed, attempt, w: SKEL_W, h: SKEL_H, height: t.height, water: t.water, region: t.region, biome: t.biome,
-    road, threat: new Uint8Array(SKEL_W * SKEL_H), sites, areas: [], pois: [], anchors: [], roads, checks: [], ok: false,
+    road, threat: new Uint8Array(SKEL_W * SKEL_H), sites, areas: [], pois: [], anchors: [], roads, rail: [], checks: [], ok: false,
   };
   early.checks = roadChecks(early);
   if (!early.checks.every((c) => c.ok)) return early;
 
-  const ctx = { t, road, roadDist, sites, safeDist: distanceToRoad(safe, 1) };
+  // The railway, now that the places it must keep off and the roads it must cross are known.
+  const rail = layRail(seed, attempt, t, road, sites);
+  const nearRail = railMask(rail, 1);
+  const ctx = { t, road, roadDist, sites, safeDist: distanceToRoad(safe, 1), nearRail };
   const areas = placeAreas(ctx, rows.areas, rng);
   lightLamps(seed, road, roads, site("town"), safe, t);
-  const pois = placePois(ctx, roads, rows.pois, rng);
+  // The line is walked for the roadside beat like a road: a dead signal, a slag wagon, a hut beside it.
+  const pois = placePois(ctx, [...roads, { cells: rail, from: "rail" }], rows.pois, rng);
   // The patches and small places the story needs are not optional: without them this attempt is over.
   for (const row of rows.areas) if (row.required && !areas.some((a) => a.id === row.id)) return null;
-  const anchors = placeAnchors({ t, road, roads, sites, areas, pois, safe }, rows.anchors ?? [], rng);
+  const anchors = placeAnchors({ t, road, roads, sites, areas, pois, safe, nearRail }, rows.anchors ?? [], rng);
   if (!anchors) return null;
   const threat = buildThreat(t, sites, areas, road);
 
@@ -166,6 +171,7 @@ function tryBuild(seed: number, attempt: number, rows: SkeletonRows): Skeleton |
     pois,
     anchors,
     roads,
+    rail,
     checks: [],
     ok: false,
   };
@@ -185,7 +191,7 @@ function lightLamps(seed: number, road: Uint8Array, roads: readonly Road[], town
       const x = c % SKEL_W;
       const y = Math.floor(c / SKEL_W);
       const d = town ? metres(x, y, town.mx, town.my) : 1e9;
-      let p = Math.max(0, 0.75 - d / 2400);
+      let p = Math.max(0, 0.75 - d / 1500);
       if (t.region[c] === Region.Waters) p *= 0.5;
       if (t.region[c] === Region.Works) p = 0.06;
       // Decided per run of six cells (about 100 m), so lamps stand in rows and go dark in rows.
@@ -204,8 +210,8 @@ function buildThreat(t: Terrain, sites: readonly PlacedSite[], areas: readonly P
       const i = at(x, y);
       const r = t.region[i] as Region;
       if (r === Region.Lowfields) threat[i] = 1;
-      else if (r === Region.Waters) threat[i] = (x - t.riverX[y]) * MACRO > 900 ? 3 : 2;
-      else threat[i] = school && metres(x, y, school.mx, school.my) < 700 ? 5 : 4;
+      else if (r === Region.Waters) threat[i] = (x - t.riverX[y]) * MACRO > 550 ? 3 : 2;
+      else threat[i] = school && metres(x, y, school.mx, school.my) < 450 ? 5 : 4;
     }
   }
   const stamp = (mx: number, my: number, radius: number, fn: (old: number) => number): void => {
@@ -274,6 +280,11 @@ function roadChecks(s: Skeleton): Check[] {
 function validate(s: Skeleton, safe: Uint8Array): Check[] {
   const checks = roadChecks(s);
   const check = (rule: string, ok: boolean, detail: string): void => void checks.push({ rule, ok, detail });
+
+  // The line never stops dead: it leaves the county at both ends (rail.ts).
+  const ends = s.rail.length > 1 ? [s.rail[0], s.rail[s.rail.length - 1]] : [];
+  const onEdge = (c: number): boolean => c % SKEL_W === 0 || c % SKEL_W === SKEL_W - 1 || Math.floor(c / SKEL_W) === 0 || Math.floor(c / SKEL_W) === SKEL_H - 1;
+  check("the railway runs off the map at both ends", ends.length === 2 && ends.every(onEdge), `${s.rail.length} cells`);
 
   // The first evening is a walk, not a fight.
   let worst = 0;

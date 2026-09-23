@@ -57,6 +57,8 @@ export type AnchorCtx = {
   pois: PlacedPoi[];
   /** The first walk (station, Julie's, town). Its lamps are never put out, whatever else shares its cells. */
   safe: Uint8Array;
+  /** The railway and the cells beside it: an anchor never stands on the line. */
+  nearRail?: Uint8Array;
 };
 
 /** Anchors keep this far apart unless one is placed `after` another. */
@@ -83,7 +85,7 @@ export function placeAnchors(ctx: AnchorCtx, rows: readonly AnchorRow[], rng: Rn
         for (let oy = -2; oy <= 2; oy++) for (let ox = -2; ox <= 2; ox++) roadside[at(x + ox, y + oy)] = 1;
         continue;
       }
-      if (ctx.t.water[i]) continue;
+      if (ctx.t.water[i] || ctx.nearRail?.[i]) continue;
       let clear = true;
       // Never inside a set chunk: the chunk would clear it away.
       for (const s of ctx.sites) {

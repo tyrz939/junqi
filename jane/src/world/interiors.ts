@@ -7,37 +7,42 @@ import { Tile } from "@/sim/grid";
 import type { Blueprint, Rect } from "@/world/blueprint";
 import { Kit } from "@/world/kit";
 
+/**
+ * A cottage's inside: a kitchen and a front room, 13 m by 9 of floor between them. It was 44 by
+ * 30 (a hall behind a ten-metre front door) until Sept 24: Julie is one more person on the station
+ * road, and her house is the size of her neighbours'. Everything the story uses is still here.
+ */
 export function buildHouse(seed: number, attempt: number): Blueprint {
-  const k = new Kit("house", 48, 36, seed, attempt, Tile.Wall);
-  const kitchen: Rect = { cx: 2, cy: 2, w: 22, h: 30 };
-  const living: Rect = { cx: 26, cy: 2, w: 20, h: 30 };
+  const k = new Kit("house", 34, 25, seed, attempt, Tile.Wall);
+  const kitchen: Rect = { cx: 2, cy: 2, w: 15, h: 20 };
+  const living: Rect = { cx: 19, cy: 2, w: 13, h: 20 };
   k.fill(kitchen.cx, kitchen.cy, kitchen.w, kitchen.h, Tile.FloorWood);
   k.fill(living.cx, living.cy, living.w, living.h, Tile.FloorWood);
-  const doorway = 12 + k.int(0, 6);
-  k.fill(24, doorway, 2, 5, Tile.FloorWood);
+  const doorway = 8 + k.int(0, 6);
+  k.fill(17, doorway, 2, 5, Tile.FloorWood);
   k.rect("kitchen", kitchen);
 
   // Front door, in the living room's south wall.
-  k.prop({ key: "front_door", def: "door", cx: 35, cy: 32, to: { zone: "county", mark: "house_front" } }, 2, 2);
-  k.mark("front", 35, 30, 3);
+  k.prop({ key: "front_door", def: "door", cx: 25, cy: 22, to: { zone: "county", mark: "house_front" } }, 2, 2);
+  k.mark("front", 25, 20, 3);
 
   // Two hatches on one wall, both to the cellar.
   k.prop({ key: "hatch_a", def: "hatch", cx: 4, cy: 4, to: { zone: "cellar", mark: "stair_a" } }, 2, 2);
-  k.prop({ key: "hatch_b", def: "hatch", cx: 10, cy: 4, to: { zone: "cellar", mark: "stair_b" } }, 2, 2);
+  k.prop({ key: "hatch_b", def: "hatch", cx: 9, cy: 4, to: { zone: "cellar", mark: "stair_b" } }, 2, 2);
   k.mark("hatch_a", 5, 7, 1);
-  k.mark("hatch_b", 11, 7, 1);
+  k.mark("hatch_b", 10, 7, 1);
 
-  k.prop({ def: "stove", cx: 16, cy: 2 }, 2, 2);
-  k.prop({ key: "ice_orb", def: "orb_ice", cx: 20, cy: 2, talk: "orb_ice" }, 2, 2);
-  k.prop({ def: "table", cx: 8, cy: 14 }, 3, 2);
-  k.prop({ key: "julies_note", def: "note", cx: 12, cy: 15, talk: "julies_note" }, 1, 1);
-  k.prop({ key: "bench", def: "bench", cx: 4, cy: 24 }, 3, 2);
+  k.prop({ def: "stove", cx: 12, cy: 2 }, 2, 2);
+  k.prop({ key: "ice_orb", def: "orb_ice", cx: 15, cy: 2, talk: "orb_ice" }, 2, 2);
+  k.prop({ def: "table", cx: 6, cy: 11 }, 3, 2);
+  k.prop({ key: "julies_note", def: "note", cx: 10, cy: 12, talk: "julies_note" }, 1, 1);
+  k.prop({ key: "bench", def: "bench", cx: 3, cy: 17 }, 3, 2);
   k.prop(
     {
       key: "pantry_chest",
       def: "chest",
-      cx: 10,
-      cy: 28,
+      cx: 9,
+      cy: 19,
       loot: [
         { item: "gold_dust", qty: 2 },
         { item: "small_water", qty: 3 },
@@ -47,17 +52,17 @@ export function buildHouse(seed: number, attempt: number): Blueprint {
     2,
     2,
   );
-  k.prop({ key: "fruit_bowl", def: "fruit_bowl", cx: 16, cy: 22, loot: [{ item: "apple", qty: 4 }] }, 2, 1);
-  k.prop({ def: "shelf", cx: 16, cy: 30 }, 3, 1);
+  k.prop({ key: "fruit_bowl", def: "fruit_bowl", cx: 13, cy: 15, loot: [{ item: "apple", qty: 4 }] }, 2, 1);
+  k.prop({ def: "shelf", cx: 12, cy: 20 }, 3, 1);
 
-  // Living room: leftover furniture along the wall, as 2020 stacked its benches.
-  k.prop({ key: "julies_bed", def: "bed", cx: 42, cy: 3, talk: "bed" }, 2, 3);
-  k.prop({ def: "shelf", cx: 30, cy: 2 }, 3, 1);
-  k.prop({ def: "shelf", cx: 36, cy: 2 }, 3, 1);
-  k.prop({ def: "table", cx: 30 + k.int(0, 4), cy: 14 + k.int(0, 4) }, 3, 2);
-  k.prop({ def: "torch", cx: 27, cy: 3 }, 1, 1);
-  k.prop({ def: "torch", cx: 3, cy: 12 }, 1, 1);
-  k.prop({ def: "torch", cx: 44, cy: 28 }, 1, 1);
+  // Front room: leftover furniture along the wall, as 2020 stacked its benches.
+  k.prop({ key: "julies_bed", def: "bed", cx: 29, cy: 3, talk: "bed" }, 2, 3);
+  k.prop({ def: "shelf", cx: 21, cy: 2 }, 3, 1);
+  k.prop({ def: "shelf", cx: 25, cy: 2 }, 3, 1);
+  k.prop({ def: "table", cx: 21 + k.int(0, 4), cy: 10 + k.int(0, 3) }, 3, 2);
+  k.prop({ def: "torch", cx: 20, cy: 3 }, 1, 1);
+  k.prop({ def: "torch", cx: 3, cy: 10 }, 1, 1);
+  k.prop({ def: "torch", cx: 30, cy: 19 }, 1, 1);
   return k.done("Julie's House", true, 0.72, attempt);
 }
 

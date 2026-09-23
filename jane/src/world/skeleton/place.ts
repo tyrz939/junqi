@@ -108,7 +108,8 @@ export function siteCandidates(t: Terrain, row: SiteRow, placed: readonly Placed
 export const pickCell = (rng: RngState, cells: readonly number[]): number => pick(rng, cells);
 
 /** `safeDist`: macro cells to the first walk (station, Julie's, town). Nothing above threat 1 may reach it. */
-export type PlaceCtx = { t: Terrain; road: Uint8Array; roadDist: Float32Array; sites: PlacedSite[]; safeDist: Float32Array };
+/** `nearRail`: the railway's macro cells and those beside them (skeleton/rail.ts). Nothing small stands on the line. */
+export type PlaceCtx = { t: Terrain; road: Uint8Array; roadDist: Float32Array; sites: PlacedSite[]; safeDist: Float32Array; nearRail?: Uint8Array };
 
 /**
  * Sub-areas: named patches with their own danger, in every region (PLAN.md 2.6).
@@ -183,7 +184,7 @@ export function placePois(ctx: PlaceCtx, roads: readonly { cells: number[]; from
   const free = (x: number, y: number): boolean => {
     if (!inside(x, y) || x < 2 || y < 2 || x > SKEL_W - 3 || y > SKEL_H - 3) return false;
     const i = at(x, y);
-    if (ctx.t.water[i] || ctx.road[i] & ROAD) return false;
+    if (ctx.t.water[i] || ctx.road[i] & ROAD || ctx.nearRail?.[i]) return false;
     for (const s of ctx.sites) if (metres(x, y, s.mx, s.my) < Math.max(110, (s.row.hub ?? 0) + 40)) return false;
     for (const p of out) if (metres(x, y, p.mx, p.my) < POI_SPACING) return false;
     return true;
