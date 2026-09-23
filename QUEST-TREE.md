@@ -64,7 +64,7 @@ The camera shows **48 x 27 cells** (1 cell = 1 m). Half a screen is 24 across an
 
 Animal and people lines were rewritten to what the sim does: sheep keep to a few yards and are gone at the bell (`dayOnly`), hens walk the same few spots in order (their patrol), rabbits never run (no flee), the ginger cat walks the south side of the square end to end. **A new line that says where something is gets a row in the truth test, or is written so it cannot be wrong.**
 
-New placement fields that made these cheap: `hides` (a thing under a pushable prop), `at.prop` (in front of a prop), `beside`, `count`/`within` at a story place (open cells round a slot, no dice), and `ownDice` (a row added after the seeds were tuned draws its own stream, so it moves nothing else).
+New placement fields that made these cheap: `hides` (a thing under a pushable prop), `at.prop` (in front of a prop), `beside`, `count`/`within` at a story place (open cells round a slot, no dice), and `ownDice` (a row added after the seeds were tuned draws its own stream, so it moves nothing else; since Sept 24 every row does, by its key, and `ownDice` is no longer read).
 
 **The audit can fail.** One more test feeds it seven quests broken on purpose (a bare noun, an id in the text, a step pointed at the wrong place, a target nothing produces, three of a creature that stands once, a night-only step that does not say so, a "near" errand sent across the map) and checks each is caught by the right rule.
 

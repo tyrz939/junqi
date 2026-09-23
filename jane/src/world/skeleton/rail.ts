@@ -7,7 +7,7 @@
 // Decided here, on the macro grid, after the sites and roads and before anything small is placed,
 // so the small places can keep off it and the roadside beat can use it. county.ts lays the cells.
 
-import { rngFloat, rngSeed } from "@/sim/rng";
+import { rngFloat, stepDice } from "@/sim/rng";
 import { Heap } from "@/world/skeleton/roads";
 import type { Terrain } from "@/world/skeleton/terrain";
 import { at, inside, metres, Region, ROAD, SKEL_H, SKEL_W, type PlacedSite } from "@/world/skeleton/types";
@@ -20,6 +20,8 @@ const DY = [0, 1, 0, -1];
 const NORTH = 3;
 /** A change of heading costs as much as this many macro cells of straight line. */
 const TURN = 6;
+/** What the search charges for a change of heading. An object, so a test can re-tune it and see what else moves (test/streams). */
+export const RAIL_COST = { turn: TURN };
 
 /**
  * The line, macro cells in order: the south edge, up column 0 through the halt, then from where
@@ -30,7 +32,7 @@ const TURN = 6;
 export function layRail(seed: number, attempt: number, t: Terrain, road: Uint8Array, sites: readonly PlacedSite[]): number[] {
   const station = sites.find((s) => s.id === "station");
   if (!station) return [];
-  const rng = rngSeed(seed, 700 + attempt);
+  const rng = stepDice(seed, "skel:rail", attempt);
   const out: number[] = [];
   // In from the south edge, up the west fence to the halt.
   for (let y = SKEL_H - 1; y > station.my; y--) out.push(at(0, y));
@@ -114,7 +116,7 @@ function search(t: Terrain, road: Uint8Array, sites: readonly PlacedSite[], from
       // a road square on and once: a road cell is dear, so it never runs along one.
       const slope = Math.abs(t.height[to] - t.height[cell]);
       let step = 1 + slope * 0.6;
-      if (d !== dir) step += TURN;
+      if (d !== dir) step += RAIL_COST.turn;
       // It keeps in from the fence: a line that hugs the tree line is a line going nowhere.
       if (ny < 10) step += (10 - ny) * 0.4;
       if (t.water[to] === 1) step += 6;

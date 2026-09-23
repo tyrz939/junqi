@@ -106,7 +106,7 @@ What a player actually had to do in 2020, from door keys, chest contents, plates
 | **Pocket** | Authored ground with fixed keys (`dog`, `house_door`, `gate_boss`) | Offset a few cells, mirror a doorway | Omit the pocket or rename a key |
 | **Connector** | Roads, corridors, clutter, wildlife | Shape, length | Cut a pocket off. The solver re-rolls if it does |
 
-In code: `Kit` (`world/kit.ts`) is the painter. `k.claim()` marks authored ground so scatter never lands on it (no tree on the stoop). `k.spot()` finds open unclaimed footprints. One RNG stream per `(seed, zone, attempt)`.
+In code: `Kit` (`world/kit.ts`) is the painter. `k.claim()` marks authored ground so scatter never lands on it (no tree on the stoop). `k.spot()` finds open unclaimed footprints. One RNG stream per `(seed, zone, attempt)`, and inside the county one per step: `k.within(step, fn)` hands `fn` the dice of `(seed, zone, step, attempt)` (a road's beat, a lattice point, a macro cell's wildlife, a place's furnishings by kind and cell, a placement row by key), and the county's anonymous things are keyed by their cell, not by a count. Re-tuning one step moves only that step's output; `test/streams.test.ts` proves it. The skeleton does the same with `stepDice(seed, step, attempt)` and rank-by-hash picks (`ranked`), so ruling out one candidate (the rail took it) only moves a pick that was that candidate.
 
 ---
 

@@ -4,16 +4,24 @@
 // do not place 400 fences one by one".
 
 import { Tile, TILE_FLAGS, F_SOLID } from "@/sim/grid";
-import { hashString, irandom, rngChance, rngFloat, rngPick, rngRange, rngSeed, type RngState } from "@/sim/rng";
+import { hashString, irandom, rngChance, rngFloat, rngPick, rngRange, rngSeed, stepDice, type RngState } from "@/sim/rng";
 import type { ZoneId } from "@/sim/state";
 import type { Blueprint, Mark, PropSpawn, Rect, UnitSpawn } from "@/world/blueprint";
+
+/** A 32-bit finaliser (murmur3's): every input bit moves every output bit. */
+function mix32(h: number): number {
+  h = Math.imul(h ^ (h >>> 16), 0x85ebca6b);
+  h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35);
+  return (h ^ (h >>> 16)) >>> 0;
+}
 
 export class Kit {
   readonly zone: ZoneId;
   readonly w: number;
   readonly h: number;
   readonly tiles: Uint8Array;
-  readonly rng: RngState;
+  /** The dice in hand. The zone's own stream until a step takes up its own (`within`). */
+  rng: RngState;
   readonly units: UnitSpawn[] = [];
   readonly props: PropSpawn[] = [];
   readonly marks: Record<string, Mark> = {};
@@ -21,15 +29,62 @@ export class Kit {
   /** Cells claimed by a prop footprint or a mark, so scatter never lands on them. */
   private readonly claimed: Uint8Array;
   private anon = 0;
+  private readonly seed: number;
+  private readonly attempt: number;
+  /**
+   * Name anonymous things by where they stand (`county_rock_812_40`), not by how many came before them.
+   * With the steps on dice of their own (`within`), a count would still tie every step to the ones
+   * before it: one more lamp by the rail and every sheep in the county has a new name.
+   */
+  private readonly keysByPlace: boolean;
+  private readonly used = new Set<string>();
+  private readonly bases = new Map<string, number>();
 
-  constructor(zone: ZoneId, w: number, h: number, seed: number, attempt: number, fill: Tile) {
+  constructor(zone: ZoneId, w: number, h: number, seed: number, attempt: number, fill: Tile, opts: { keysByPlace?: boolean } = {}) {
     this.zone = zone;
     this.w = w;
     this.h = h;
     this.tiles = new Uint8Array(w * h).fill(fill);
     this.claimed = new Uint8Array(w * h);
+    this.seed = seed >>> 0;
+    this.attempt = attempt;
+    this.keysByPlace = opts.keysByPlace ?? false;
     // One stream per (seed, zone, attempt): adding a call in one zone never shifts another.
     this.rng = rngSeed(seed ^ hashString(zone), 100 + attempt);
+  }
+
+  /**
+   * The dice of one named step of the build: a stream of its own from (seed, zone, step, attempt), in
+   * hand while `fn` runs and the caller's put back afterwards. A step that throws more dice or fewer (a
+   * rail with a new bend, one more placement row, a re-tuned scatter) moves nothing drawn under any
+   * other name. Name the smallest thing that is decided on its own: a road, a lattice point, a macro cell.
+   */
+  within<T>(step: string, fn: () => T, a?: number, b?: number): T {
+    const outer = this.rng;
+    if (a === undefined) this.rng = stepDice(this.seed, `${this.zone}:${step}`, this.attempt);
+    else {
+      // A step taken once per cell, point or beat (`within("wild", fn, mx, my)`): a stream of its own for
+      // each (step, a, b), from the step's name hashed once and the numbers mixed in, with no string per call.
+      let base = this.bases.get(step);
+      if (base === undefined) this.bases.set(step, (base = hashString(`${this.seed}:${this.zone}:${step}`)));
+      let h = mix32(base ^ Math.imul(a + 1, 0x9e3779b1));
+      if (b !== undefined) h = mix32(h ^ Math.imul(b + 1, 0x85ebca6b));
+      this.rng = rngSeed(h, this.attempt);
+    }
+    try {
+      return fn();
+    } finally {
+      this.rng = outer;
+    }
+  }
+
+  private anonKey(def: string, cx: number, cy: number): string {
+    if (!this.keysByPlace) return `${this.zone}_${def}_${this.anon++}`;
+    const base = `${this.zone}_${def}_${cx}_${cy}`;
+    let key = base;
+    for (let n = 2; this.used.has(key); n++) key = `${base}_${n}`;
+    this.used.add(key);
+    return key;
   }
 
   // --- random helpers ---
@@ -161,13 +216,13 @@ export class Kit {
     return true;
   }
   prop(spawn: Omit<PropSpawn, "key"> & { key?: string }, w: number, h: number): PropSpawn {
-    const full: PropSpawn = { ...spawn, key: spawn.key ?? `${this.zone}_${spawn.def}_${this.anon++}` };
+    const full: PropSpawn = { ...spawn, key: spawn.key ?? this.anonKey(spawn.def, spawn.cx, spawn.cy) };
     this.props.push(full);
     this.claim(full.cx, full.cy, w, h);
     return full;
   }
   unit(key: string | null, def: string, cx: number, cy: number, patrol?: UnitSpawn["patrol"]): UnitSpawn {
-    const u: UnitSpawn = { key: key ?? `${this.zone}_${def}_${this.anon++}`, def, cx, cy, patrol };
+    const u: UnitSpawn = { key: key ?? this.anonKey(def, cx, cy), def, cx, cy, patrol };
     this.units.push(u);
     this.claim(cx, cy, 1, 1);
     return u;

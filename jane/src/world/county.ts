@@ -60,6 +60,11 @@ let footprints: Record<string, { w: number; h: number }> | null = null;
 // One skeleton per seed is plenty to remember: a county is asked for once a game, and again only when validation re-rolls it.
 let lastSkeleton: { key: string; list: Skeleton[] } | null = null;
 
+/** Forget the remembered skeletons: for a test that re-tunes the skeleton itself (test/streams). */
+export function forgetCountySkeletons(): void {
+  lastSkeleton = null;
+}
+
 /** The `attempt`-th valid skeleton of a seed. Attempt 0 is the county the seed viewer shows. */
 export function countySkeleton(seed: number, attempt: number): Skeleton {
   const key = String(seed >>> 0);
@@ -74,12 +79,14 @@ export function countySkeleton(seed: number, attempt: number): Skeleton {
 
 export function buildCounty(seed: number, attempt: number, rows: readonly PlacementRow[] = PLACEMENTS): Blueprint {
   const sk = countySkeleton(seed, attempt);
-  const k = new Kit("county", COUNTY_W, COUNTY_H, seed, attempt, Tile.Grass);
+  // Every step below throws dice of its own (Kit.within), named for what it decides, and things are named
+  // by where they stand: re-tuning one step moves that step's things and nothing drawn under another name.
+  const k = new Kit("county", COUNTY_W, COUNTY_H, seed, attempt, Tile.Grass, { keysByPlace: true });
   paintLand(k, sk, seed);
   // Patches that are places, not only a threat number (the allotments, the planted field, the quarry face).
   // Before the roads and chunks, so a road that crosses one simply crosses it.
   const areaSlots: Record<string, [number, number]> = {};
-  for (const a of sk.areas) Object.assign(areaSlots, AREA_DRESS[a.id]?.(k, a.mx * MACRO + MACRO / 2, a.my * MACRO + MACRO / 2, a.row.radius) ?? {});
+  for (const a of sk.areas) Object.assign(areaSlots, k.within(`area:${a.id}`, () => AREA_DRESS[a.id]?.(k, a.mx * MACRO + MACRO / 2, a.my * MACRO + MACRO / 2, a.row.radius)) ?? {});
 
   // Tree line round the edge: the county is a bowl, not a plane.
   k.fill(0, 0, COUNTY_W, 4, Tile.Tree);
@@ -99,7 +106,7 @@ export function buildCounty(seed: number, attempt: number, rows: readonly Placem
     // The centre line first, then the metal and the verge painted round it with a ROUND brush: a
     // square brush drawn along a diagonal makes a road half as wide again as the same road running
     // straight, and a lane that swells at every bend reads as a mistake.
-    const line = k.stroke(pts, 1, Tile.Road, 1);
+    const line = k.within(`road:${r.from}>${r.to}`, () => k.stroke(pts, 1, Tile.Road, 1));
     const metal = ((ROAD_WIDTH >> 1) + 0.25) ** 2;
     const verge = (half + 0.25) ** 2;
     // A verge along every road, a cell each side of the metal, laid along the road's OWN line so it
@@ -135,7 +142,7 @@ export function buildCounty(seed: number, attempt: number, rows: readonly Placem
   const grave = sk.sites.find((s) => s.id === "graveyard");
   const burial = sk.sites.find((s) => s.id === "burial");
   if (grave && burial) {
-    lines.push(k.stroke([[centre(grave.mx), centre(grave.my)], [centre(burial.mx), centre(burial.my)]], 2, Tile.Dirt, 2));
+    lines.push(k.within("path:burial", () => k.stroke([[centre(grave.mx), centre(grave.my)], [centre(burial.mx), centre(burial.my)]], 2, Tile.Dirt, 2)));
     lit.push([]);
   }
   // Footpaths (data/paths.json): site to site by way of a named small place. Laid like roads, centre to
@@ -146,15 +153,17 @@ export function buildCounty(seed: number, attempt: number, rows: readonly Placem
     const to = sk.sites.find((s) => s.id === row.to);
     const via = sk.anchors.find((a) => a.id === row.via) ?? sk.areas.find((a) => a.id === row.via);
     if (!from || !to || !via) continue;
-    const line = k.stroke(
-      [
-        [centre(from.mx), centre(from.my)],
-        [centre(via.mx), centre(via.my) + 5],
-        [centre(to.mx), centre(to.my)],
-      ],
-      row.width,
-      Tile.Dirt,
-      2,
+    const line = k.within(`path:${row.id}`, () =>
+      k.stroke(
+        [
+          [centre(from.mx), centre(from.my)],
+          [centre(via.mx), centre(via.my) + 5],
+          [centre(to.mx), centre(to.my)],
+        ],
+        row.width,
+        Tile.Dirt,
+        2,
+      ),
     );
     lines.push(line);
     lit.push([]);
@@ -165,7 +174,7 @@ export function buildCounty(seed: number, attempt: number, rows: readonly Placem
   const chunks: Chunk[] = [];
   for (const s of sk.sites) {
     const build = CHUNKS[s.id];
-    if (build) chunks.push(build(k, centre(s.mx), centre(s.my)));
+    if (build) chunks.push(k.within(`chunk:${s.id}`, () => build(k, centre(s.mx), centre(s.my))));
   }
   // Each set place's ground, by name, so a measure of the open country can tell it from a town.
   for (const c of chunks) if (!k.rects[`site_${c.id}`]) k.rect(`site_${c.id}`, c.box);
@@ -229,7 +238,7 @@ export function buildCounty(seed: number, attempt: number, rows: readonly Placem
     if (!d.chunk && chunk) {
       size = footprints![d.def ?? "door"] ?? size;
       // Room for the cover and for somebody to stand in front of it: open ground three deep below it.
-      const spot = k.spot({ cx: chunk.box.cx - 14, cy: chunk.box.cy - 14, w: chunk.box.w + 28, h: chunk.box.h + 28 }, size.w, size.h + 3, 1, 200);
+      const spot = k.within(`door:${d.key}`, () => k.spot({ cx: chunk.box.cx - 14, cy: chunk.box.cy - 14, w: chunk.box.w + 28, h: chunk.box.h + 28 }, size.w, size.h + 3, 1, 200));
       cell = spot ? [spot.cx, spot.cy] : undefined;
     }
     if (!cell) continue;
@@ -271,7 +280,8 @@ export function buildCounty(seed: number, attempt: number, rows: readonly Placem
   // past every one of them long before she can do anything about them.
   if (hasZone("factory")) relayRuns(k, lines, lit);
 
-  pois.forEach((p, n) => smallPlace(k, p.kind, p.x, p.y, p.anchor ?? `poi_${n}`));
+  // Each small place on dice of its own, named for where it stands: one more or one fewer moves no other.
+  pois.forEach((p, n) => k.within("small", () => smallPlace(k, p.kind, p.x, p.y, p.anchor ?? `poi_${n}`), p.x, p.y));
   // A signpost says something. The seed's own roadside posts were drawn with nothing on them, and a sign
   // you cannot read is worse than no sign: it names the two nearest places, which way, and how far.
   for (const p of k.props) {
@@ -603,8 +613,11 @@ const EDGE = 4;
  * track, a deck of planks either side, a rail of fence at the edges). At each end, where it leaves
  * the county through the trees, a fence crosses it: the rails run on under it and out of sight.
  */
-/** The widest a bend of the line is drawn (cells from the corner to where the curve begins). */
-const RAIL_BEND = 32;
+/**
+ * The widest a bend of the line is drawn (cells from the corner to where the curve begins). A field of an
+ * object, not a constant, so a test can re-lay the line and see that nothing else in the county moves.
+ */
+export const RAIL_SHAPE = { bend: 32 };
 
 /**
  * The skeleton's line is square to the grid (skeleton/rail.ts): straights and right-angle corners.
@@ -638,7 +651,7 @@ function railCurves(pts: readonly [number, number][], sk: Skeleton): [number, nu
       }
       return p;
     };
-    let r = Math.min(RAIL_BEND, Math.floor(la / 2), Math.floor(lb / 2));
+    let r = Math.min(RAIL_SHAPE.bend,Math.floor(la / 2), Math.floor(lb / 2));
     while (r > 2 && curve(r).some(([x, y]) => sk.water[at(x >> 4, y >> 4)] === 2)) r >>= 1;
     out.push(...(r > 0 ? curve(r) : [corners[i]]));
   }
@@ -1071,19 +1084,26 @@ function scatter(k: Kit, sk: Skeleton): void {
     const t = k.get(x, y);
     return !k.isClaimed(x, y) && !k.solid(x, y) && t !== Tile.Water && t !== Tile.Road;
   };
-  for (let n = 0; n < 700; n++) {
-    const x = k.int(10, COUNTY_W - 11);
-    const y = k.int(10, COUNTY_H - 11);
-    if (!open(x, y)) continue;
-    const region = sk.region[at(x >> 4, y >> 4)] as Region;
-    const herbs = region === Region.Lowfields ? FIELD_HERBS : region === Region.Waters ? WATER_HERBS : WORKS_HERBS;
-    k.prop({ def: "herb", cx: x, cy: y, loot: [{ item: k.pick(herbs), qty: 1 }] }, 1, 1);
-  }
-  for (let n = 0; n < 260; n++) {
-    const x = k.int(10, COUNTY_W - 11);
-    const y = k.int(10, COUNTY_H - 11);
-    if (open(x, y)) k.prop({ def: "rock", cx: x, cy: y }, 1, 1);
-  }
+  // The same three throws for every herb, placed or not, so the spots tried are the seed's alone: what
+  // stands in the way of one throw decides that throw and never moves the next.
+  k.within("herbs", () => {
+    for (let n = 0; n < 700; n++) {
+      const x = k.int(10, COUNTY_W - 11);
+      const y = k.int(10, COUNTY_H - 11);
+      const pick = k.float();
+      if (!open(x, y)) continue;
+      const region = sk.region[at(x >> 4, y >> 4)] as Region;
+      const herbs = region === Region.Lowfields ? FIELD_HERBS : region === Region.Waters ? WATER_HERBS : WORKS_HERBS;
+      k.prop({ def: "herb", cx: x, cy: y, loot: [{ item: herbs[Math.floor(pick * herbs.length)], qty: 1 }] }, 1, 1);
+    }
+  });
+  k.within("rocks", () => {
+    for (let n = 0; n < 260; n++) {
+      const x = k.int(10, COUNTY_W - 11);
+      const y = k.int(10, COUNTY_H - 11);
+      if (open(x, y)) k.prop({ def: "rock", cx: x, cy: y }, 1, 1);
+    }
+  });
 }
 
 /**
