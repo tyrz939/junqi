@@ -239,6 +239,12 @@ export type PropDef = {
   /** Draw order bias: floor decals draw under units. */
   flat?: boolean;
   prompt?: string;
+  /**
+   * What is said of it, after its label, when it is tried while locked: "is locked" unless set. A
+   * page held down by a mechanism "is held fast", a jar behind a grille "is out of reach": only a
+   * thing with a lock is locked.
+   */
+  lockedSays?: string;
 };
 
 export type DialogueOption = { label: string; goto?: string; actions?: ActionList };

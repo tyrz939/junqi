@@ -206,8 +206,13 @@ function goTo(sim: Sim, mark: string): void {
 }
 
 function useProp(sim: Sim, key: string): void {
-  expect(walkToProp(sim, key), `walk to ${key}`).toBe(true);
   const prop = sim.rt.propsByKey.get(key)!;
+  // Somebody may be standing at one side of it (the story's own giver beside the well): step round, as a player does.
+  const mine = (): boolean => {
+    const at = focusOf(sim, sim.player);
+    return at?.kind === "prop" && at.id === prop.id;
+  };
+  expect(walkToProp(sim, key, mine), `walk to ${key}`).toBe(true);
   const f = focusOf(sim, sim.player);
   expect(f?.kind === "prop" && f.id === prop.id, `USE beside ${key} acts on ${key}, not ${JSON.stringify(f)}`).toBe(true);
   sim.command({ t: "use" });

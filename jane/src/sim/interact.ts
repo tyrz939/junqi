@@ -126,12 +126,24 @@ export function use(w: World, u: Unit): void {
   if (p) useProp(w, u, p);
 }
 
+/**
+ * What trying a locked thing says. A label that is a name reads as one ("The trunk is locked"); a
+ * label that is the words painted on it ("No. 1 LINE", "OUTFALL. Company men only") is read off it
+ * first ("No. 1 LINE: the gate is locked"). A thing without a lock says what does hold it (lockedSays).
+ */
+export function lockedToast(def: { name: string; lockedSays?: string }, label: string | undefined): string {
+  const says = def.lockedSays ?? "is locked";
+  if (!label) return def.lockedSays ? `It ${says}` : "Locked";
+  if (/[A-Z]{3}/.test(label)) return `${label}: the ${def.name.toLowerCase()} ${says}`;
+  return `${label} ${says}`;
+}
+
 function useProp(w: World, u: Unit, p: Prop): void {
   const def = w.catalog.props[p.def];
   if (p.locked) {
     const key = p.keyTag ? findKey(w, u, p.keyTag) : null;
     if (!key) {
-      w.emit({ e: "toast", text: p.label ? `${p.label} is locked` : "Locked" });
+      w.emit({ e: "toast", text: lockedToast(def, p.label) });
       w.emit({ e: "sfx", name: "locked", x: u.x, y: u.y });
       return;
     }

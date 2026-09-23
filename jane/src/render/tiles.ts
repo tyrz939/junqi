@@ -1049,8 +1049,30 @@ function paintHard(ctx: CanvasRenderingContext2D, grid: Grid, t: number, cx: num
     case Tile.Track:
     case Tile.Rail: {
       // Rails run the way the track runs, sleepers lie across it, ballast under both.
-      const alongX = at(-1, 0) === t || at(1, 0) === t;
-      if (alongX) {
+      const w = at(-1, 0) === t;
+      const e = at(1, 0) === t;
+      const n = at(0, -1) === t;
+      const s = at(0, 1) === t;
+      const alongX = w || e;
+      if (w !== e && n !== s) {
+        // A bend (the county's line rounds its corners, and a curve laid in square cells is a run of
+        // them): each rail comes in from one side and turns out through the other, a sleeper laid
+        // across the turn. On a steep stretch every cell is a bend, and the rails zigzag on unbroken.
+        const sx = w ? -1 : 1;
+        const sy = n ? -1 : 1;
+        const kx = sx < 0 ? 0 : CELL - 1;
+        const ky = sy < 0 ? 0 : CELL - 1;
+        for (let i = 1; i < CELL - 1; i++) dot(kx - sx * i, ky - sy * i, sw.b, 1, 2);
+        // The inner rail keeps near the corner the two neighbours share, the outer swings wide.
+        for (const [ry, rx] of [sy < 0 ? [2, sx < 0 ? 2 : 5] : [5, sx < 0 ? 2 : 5], sy < 0 ? [5, sx < 0 ? 5 : 2] : [2, sx < 0 ? 5 : 2]]) {
+          const x0 = sx < 0 ? 0 : rx;
+          const y0 = sy < 0 ? 0 : ry;
+          dot(x0, ry, sw.a, sx < 0 ? rx + 1 : CELL - rx, 1);
+          dot(x0, ry + 1, SHADE, sx < 0 ? rx : CELL - rx, 1);
+          dot(rx, y0, sw.a, 1, sy < 0 ? ry + 1 : CELL - ry);
+          dot(rx + 1, y0, SHADE, 1, sy < 0 ? ry : CELL - ry);
+        }
+      } else if (alongX) {
         dot((h % 3) + 1, 0, sw.b, 2, CELL);
         dot(0, 2, sw.a, CELL, 1);
         dot(0, 3, SHADE, CELL, 1);

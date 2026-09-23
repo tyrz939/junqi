@@ -2,7 +2,8 @@
 // never stands in anyone's way and never claims a floor cell a crate might be pushed through.
 // Nothing here is rolled: the same rooms and corridors are lit the same way on every seed.
 //
-//   rooms      a pair flanking every door the room uses, one clear cell from the opening; then
+//   rooms      a pair flanking every door the room uses (a doorway, or a door prop standing against
+//              the wall: a way out, a stair), one clear cell from the opening, never over it; then
 //              along each wall at the dungeon's rhythm, spaced evenly between those pairs and the
 //              corners. North and south walls at `every`, east and west at half the count.
 //   corridors  one every `corridor` cells, on the wall a lamp would be seen on (the north face of
@@ -58,7 +59,7 @@ export function mountOn(k: Kit, wall: Tile, x: number, y: number): { side: Side;
   return null;
 }
 
-export function placeLamps(def: DungeonDef, k: Kit, wall: Tile, rooms: LitRoom[], corridors: LitCorridor[], reserved = new Set<number>()): Lamp[] {
+export function placeLamps(def: DungeonDef, k: Kit, wall: Tile, rooms: LitRoom[], corridors: LitCorridor[], reserved = new Set<number>(), doors: readonly Rect[] = []): Lamp[] {
   const plan = def.lights;
   if (!plan) return [];
   const zone = def.id;
@@ -66,9 +67,20 @@ export function placeLamps(def: DungeonDef, k: Kit, wall: Tile, rooms: LitRoom[]
   const taken = new Set<number>(reserved);
   const open = (x: number, y: number): boolean => (TILE_FLAGS[k.get(x, y)] & F_SOLID) === 0;
   const isWall = (x: number, y: number): boolean => k.get(x, y) === wall;
+  // A door prop (a way out, a stair) stands against a wall: its footprint, and the stretch of wall
+  // it stands against, is an opening like any doorway, so the lamps flank it one cell clear.
+  const door = new Uint8Array(k.w * k.h);
+  for (const d of doors) for (let y = d.cy; y < d.cy + d.h; y++) for (let x = d.cx; x < d.cx + d.w; x++) if (x >= 0 && y >= 0 && x < k.w && y < k.h) door[y * k.w + x] = 1;
+  const isDoor = (x: number, y: number): boolean => x >= 0 && y >= 0 && x < k.w && y < k.h && door[y * k.w + x] === 1;
+  const byDoor = (x: number, y: number): boolean => isDoor(x, y) || isDoor(x + 1, y) || isDoor(x - 1, y) || isDoor(x, y + 1) || isDoor(x, y - 1);
+  const nearDoor = (x: number, y: number): boolean => {
+    for (let oy = -1; oy <= 1; oy++) for (let ox = -1; ox <= 1; ox++) if (isDoor(x + ox, y + oy)) return true;
+    return false;
+  };
   const add = (key: string, side: Side, x: number, y: number): void => {
     const at = y * k.w + x;
-    if (taken.has(at)) return;
+    // Never over a door or in the cell beside it, whatever put it there.
+    if (taken.has(at) || nearDoor(x, y)) return;
     taken.add(at);
     lamps.push({ key, def: `${plan.prop}_${side}`, cx: x, cy: y });
   };
@@ -85,7 +97,8 @@ export function placeLamps(def: DungeonDef, k: Kit, wall: Tile, rooms: LitRoom[]
       const every = side === "n" || side === "s" ? plan.every : plan.every * 2;
       // A cell of this room's wall that shows its face to the room's floor on this side. The floor
       // it faces is inside the rim: the cells of a doorway are not a room to light.
-      const face = (x: number, y: number): boolean => inBox(r, x, y) && isWall(x, y) && inner(r, x + ix, y + iy) && open(x + ix, y + iy);
+      const face = (x: number, y: number): boolean => inBox(r, x, y) && isWall(x, y) && inner(r, x + ix, y + iy) && open(x + ix, y + iy) && !byDoor(x, y);
+      const opening = (x: number, y: number): boolean => inBox(r, x, y) && (open(x, y) || byDoor(x, y));
       const seen = new Set<number>();
       for (let y = r.y; y < r.y + r.h; y++) {
         for (let x = r.x; x < r.x + r.w; x++) {
@@ -97,8 +110,8 @@ export function placeLamps(def: DungeonDef, k: Kit, wall: Tile, rooms: LitRoom[]
             len++;
           }
           // The run ends in an opening (a doorway, or the room going on round a pillar) or a corner.
-          const doorAt0 = inBox(r, x - ax, y - ay) && open(x - ax, y - ay);
-          const doorAtEnd = inBox(r, x + ax * len, y + ay * len) && open(x + ax * len, y + ay * len);
+          const doorAt0 = opening(x - ax, y - ay);
+          const doorAtEnd = opening(x + ax * len, y + ay * len);
           // Only the room's own rim flanks doors; a wall standing inside the room is just wall.
           const rim = (x - r.x === 0 || y - r.y === 0 || x - r.x === r.w - 1 || y - r.y === r.h - 1);
           for (const i of lampsAlong(len, every, doorAt0 && rim, doorAtEnd && rim)) add(`${zone}_${r.node.id}_lamp_${n++}`, side, x + ax * i, y + ay * i);

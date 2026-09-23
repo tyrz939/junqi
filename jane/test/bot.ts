@@ -52,7 +52,8 @@ export function walkTo(sim: Sim, x: number, y: number, near = 6, maxTicks = 60 *
   return false;
 }
 
-export function walkToProp(sim: Sim, key: string): boolean {
+/** Walk to a side of a prop and face it. With `ok`, a side where `ok` is false (somebody standing in the way of it) is passed over for the next. */
+export function walkToProp(sim: Sim, key: string, ok: () => boolean = () => true): boolean {
   const prop = sim.rt.propsByKey.get(key);
   if (!prop) throw new Error(`no prop ${key}`);
   const c = propCentre(sim.catalog, prop);
@@ -64,14 +65,17 @@ export function walkToProp(sim: Sim, key: string): boolean {
     [prop.cx * CELL - 5, c.y],
     [(prop.cx + def.w) * CELL + 5, c.y],
   ];
+  let reached = false;
   for (const [x, y] of sides) {
     if (sim.rt.grid.solid(cellOf(x), cellOf(y))) continue;
     if (walkTo(sim, x, y, 3)) {
       face(sim, c.x, c.y);
+      reached = true;
+      if (!ok()) continue;
       return true;
     }
   }
-  return false;
+  return reached;
 }
 
 /**

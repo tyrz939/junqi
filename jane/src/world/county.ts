@@ -603,6 +603,49 @@ const EDGE = 4;
  * track, a deck of planks either side, a rail of fence at the edges). At each end, where it leaves
  * the county through the trees, a fence crosses it: the rails run on under it and out of sight.
  */
+/** The widest a bend of the line is drawn (cells from the corner to where the curve begins). */
+const RAIL_BEND = 32;
+
+/**
+ * The skeleton's line is square to the grid (skeleton/rail.ts): straights and right-angle corners.
+ * Keep only the corners, and round each one into a curve (a quadratic from where the bend begins,
+ * through the corner's pull, to where it ends) as wide as the straights either side allow. A bend
+ * that would swing over the lake is drawn tighter.
+ */
+function railCurves(pts: readonly [number, number][], sk: Skeleton): [number, number][] {
+  const sign = (a: [number, number], b: [number, number]): string => `${Math.sign(b[0] - a[0])},${Math.sign(b[1] - a[1])}`;
+  const corners: [number, number][] = [pts[0]];
+  for (let i = 1; i + 1 < pts.length; i++) if (sign(pts[i - 1], pts[i]) !== sign(pts[i], pts[i + 1])) corners.push(pts[i]);
+  corners.push(pts[pts.length - 1]);
+  const len = (a: [number, number], b: [number, number]): number => Math.abs(b[0] - a[0]) + Math.abs(b[1] - a[1]);
+  const out: [number, number][] = [corners[0]];
+  for (let i = 1; i + 1 < corners.length; i++) {
+    const [cx, cy] = corners[i];
+    const a = corners[i - 1];
+    const b = corners[i + 1];
+    const la = len(a, corners[i]);
+    const lb = len(corners[i], b);
+    const ia = [Math.sign(cx - a[0]), Math.sign(cy - a[1])];
+    const ob = [Math.sign(b[0] - cx), Math.sign(b[1] - cy)];
+    const curve = (r: number): [number, number][] => {
+      const p: [number, number][] = [];
+      for (let s = 0; s <= 2 * r; s++) {
+        const t = s / (2 * r);
+        // B(t) = (1-t)^2 P0 + 2t(1-t) C + t^2 P2, with P0 = C - r*in and P2 = C + r*out.
+        const x = cx - (1 - t) * (1 - t) * r * ia[0] + t * t * r * ob[0];
+        const y = cy - (1 - t) * (1 - t) * r * ia[1] + t * t * r * ob[1];
+        p.push([Math.round(x), Math.round(y)]);
+      }
+      return p;
+    };
+    let r = Math.min(RAIL_BEND, Math.floor(la / 2), Math.floor(lb / 2));
+    while (r > 2 && curve(r).some(([x, y]) => sk.water[at(x >> 4, y >> 4)] === 2)) r >>= 1;
+    out.push(...(r > 0 ? curve(r) : [corners[i]]));
+  }
+  out.push(corners[corners.length - 1]);
+  return out;
+}
+
 function layRailway(k: Kit, sk: Skeleton): void {
   if (sk.rail.length < 2) return;
   const pts: [number, number][] = sk.rail.map((c) => {
@@ -619,12 +662,13 @@ function layRailway(k: Kit, sk: Skeleton): void {
   };
   pts.unshift(reach(pts[0]));
   pts.push(reach(pts[pts.length - 1]));
+  const path = railCurves(pts, sk);
   // The centre line, four-connected, so every sleeper has a neighbour along the way the line runs.
   const line: [number, number][] = [];
-  line.push(pts[0]);
-  for (let n = 0; n + 1 < pts.length; n++) {
-    const [ax, ay] = pts[n];
-    const [bx, by] = pts[n + 1];
+  line.push(path[0]);
+  for (let n = 0; n + 1 < path.length; n++) {
+    const [ax, ay] = path[n];
+    const [bx, by] = path[n + 1];
     const steps = Math.max(Math.abs(bx - ax), Math.abs(by - ay));
     for (let s = 1; s <= steps; s++) {
       const x = Math.round(ax + ((bx - ax) * s) / steps);
