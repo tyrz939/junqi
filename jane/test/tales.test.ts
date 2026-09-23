@@ -117,6 +117,7 @@ function thingsOf(id: string): { props: string[]; units: string[]; marks: string
   for (const r of PLACEMENTS) {
     if (r.at.place !== id || r.edit) continue;
     if (r.prop) out.props.push(r.key);
+    if (r.hides) out.props.push(r.hides.key);
     if (r.unit) out.units.push(r.key);
     if (r.mark) out.marks.push(r.mark);
   }

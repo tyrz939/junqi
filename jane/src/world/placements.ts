@@ -447,7 +447,9 @@ function atPlace(ctx: PlaceCtx, row: PlacementRow, p: Place): void {
     cell = [q.cx, q.cy + (ctx.sizes[q.def]?.h ?? 1)];
   }
   const [cx, cy] = cell;
-  if (row.prop && ((row.count ?? 1) > 1 || row.at.within !== undefined)) {
+  // A tale's row set by position (dx, dy, on) has its cell already: `within` there was how far to look for it.
+  const byPosition = row.at.dx !== undefined || row.at.dy !== undefined || row.at.on !== undefined;
+  if (row.prop && !byPosition && ((row.count ?? 1) > 1 || row.at.within !== undefined)) {
     // Several of a thing about the slot (the stones in a garden), or one beside what already stands on
     // it (the chair by the candles): each on open floor of its own, nearest the slot.
     const size = ctx.sizes[row.prop.def] ?? { w: 1, h: 1 };

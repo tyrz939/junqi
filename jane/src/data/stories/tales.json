@@ -5,8 +5,15 @@
     "tale": true,
     "name": "Coram's",
     "board": "{NAME}. HONEY, WHEN THERE IS SOME. Please do not stand in front of the hives.",
-    "threat": [0, 3],
-    "quests": ["tale_bees_tell", "tale_bees_comb", "tale_bees_crepe"]
+    "threat": [
+      0,
+      3
+    ],
+    "quests": [
+      "tale_bees_tell",
+      "tale_bees_comb",
+      "tale_bees_crepe"
+    ]
   },
   {
     "id": "tale_walk",
@@ -14,8 +21,14 @@
     "tale": true,
     "name": "Whinmoor Cottage",
     "board": "{NAME}. POLLARD. No hawkers, no circulars.",
-    "threat": [0, 3],
-    "quests": ["tale_walk_follow", "tale_walk_plate"]
+    "threat": [
+      0,
+      3
+    ],
+    "quests": [
+      "tale_walk_follow",
+      "tale_walk_plate"
+    ]
   },
   {
     "id": "tale_horace",
@@ -23,8 +36,14 @@
     "tale": true,
     "name": "Sundial Cottage",
     "board": "{NAME}. PARGETER. Please mind the tortoise.",
-    "threat": [0, 3],
-    "quests": ["tale_horace_find", "tale_horace_box"]
+    "threat": [
+      0,
+      3
+    ],
+    "quests": [
+      "tale_horace_find",
+      "tale_horace_box"
+    ]
   },
   {
     "id": "tale_wall",
@@ -32,8 +51,13 @@
     "tale": true,
     "name": "Coker's Wall",
     "board": "COKER. DRY-STONE WALLING. No job too long.",
-    "threat": [0, 3],
-    "quests": ["tale_wall_stones"]
+    "threat": [
+      0,
+      3
+    ],
+    "quests": [
+      "tale_wall_stones"
+    ]
   },
   {
     "id": "tale_boards",
@@ -42,8 +66,14 @@
     "tale": true,
     "name": "Sluice Cottage",
     "board": "{NAME}. ROOK. Please do not knock.",
-    "threat": [0, 4],
-    "quests": ["tale_boards_back", "tale_boards_door"]
+    "threat": [
+      0,
+      4
+    ],
+    "quests": [
+      "tale_boards_back",
+      "tale_boards_door"
+    ]
   },
   {
     "id": "tale_diver",
@@ -52,8 +82,13 @@
     "tale": true,
     "name": "The Intake",
     "board": "GOLDSKIN MINING Co. {NAME}. DIVER'S STATION. NO BATHING.",
-    "threat": [0, 4],
-    "quests": ["tale_diver_spanner"]
+    "threat": [
+      0,
+      4
+    ],
+    "quests": [
+      "tale_diver_spanner"
+    ]
   },
   {
     "id": "tale_scarf",
@@ -62,8 +97,14 @@
     "tale": true,
     "name": "Tenter Cottage",
     "board": "{NAME}. WAKES. Wool wound, socks turned. Callers welcome.",
-    "threat": [0, 4],
-    "quests": ["tale_scarf_rows", "tale_scarf_row"]
+    "threat": [
+      0,
+      4
+    ],
+    "quests": [
+      "tale_scarf_rows",
+      "tale_scarf_row"
+    ]
   },
   {
     "id": "tale_halt",
@@ -72,8 +113,14 @@
     "tale": true,
     "name": "Brickfield Halt",
     "board": "GOLDSKIN MINING Co. LIGHT RAILWAY. {NAME}. REQUEST STOP.",
-    "threat": [0, 4],
-    "quests": ["tale_halt_oil", "tale_halt_lamp"]
+    "threat": [
+      0,
+      5
+    ],
+    "quests": [
+      "tale_halt_oil",
+      "tale_halt_lamp"
+    ]
   },
   {
     "id": "tale_vermin",
@@ -82,7 +129,13 @@
     "tale": true,
     "name": "The Weighbridge",
     "board": "GOLDSKIN MINING Co. {NAME}. Report all vermin to the vermin man.",
-    "threat": [0, 4],
-    "quests": ["tale_vermin_clear", "tale_vermin_hatch"]
+    "threat": [
+      0,
+      5
+    ],
+    "quests": [
+      "tale_vermin_clear",
+      "tale_vermin_hatch"
+    ]
   }
 ]

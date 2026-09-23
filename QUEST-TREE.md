@@ -407,7 +407,7 @@ GOLDSKIN MINING Co. DIVER'S STATION. NO BATHING. Mr Denholm, in a brass helmet a
 
 | Step | Where | Verb | What she finds |
 | --- | --- | --- | --- |
-| "The key under the flat stone at the Intake" | the flat stone | push it off (hold USE); a small iron key where it lay | the key (a real key, drawn as one) |
+| "The key under the flat stone at the Intake" | the flat stone | push it off (hold USE); once he has asked, a small iron key where it lay (`hides`, quest-gated) | the key (a real key, drawn as one) |
 | "The spanner in the tool chest at the Intake" | the chest in the ruin | unlock, open | the spanner, and a Company chit: DIVER DENHOLM TO SURFACE AND REPORT |
 
 **Turn:** he does not want the helmet off. He wants it tightened: somebody is knocking at the intake grille, three and a rest and three, and the Company says leave it. **Choice:** *tighten the bolts* (he walks off heavy without looking back; the pump's hose runs off along the ground after him and he is not there again) or *undo the bolts* (the helmet on the ground by the step with lake water in it, and an old man bareheaded who stays: "I can hear it plainer without.").
