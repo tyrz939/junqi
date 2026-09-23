@@ -10,7 +10,7 @@ coop    -
 heat    0
 grid
 ##############nnn##############
-#..t..t.hhh...___.....VVV.J.t.#
+#.......hhh...___.....VVV.J...#
 #.............................#
 #..DD.........................#
 #..DD.....................WW..#
@@ -43,4 +43,3 @@ W chest:wood 2x2
 O chest:office 2x2
 b dress:desk 3x2
 h dress:shelf 3x1
-t dress:torch

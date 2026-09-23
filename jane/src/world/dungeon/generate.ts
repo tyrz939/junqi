@@ -20,6 +20,7 @@ import type { Action, ActionList, Condition, Stack } from "@/sim/state";
 import { ZONE_ATTEMPTS, type Blueprint, type Rect } from "@/world/blueprint";
 import { Kit } from "@/world/kit";
 import { embed, embedFallback, Lanes } from "@/world/dungeon/layout";
+import { mountOn, placeLamps, type Lamp, type LitCorridor } from "@/world/dungeon/lights";
 import { templateById } from "@/world/dungeon/pools";
 import { BAY_H, BAY_W, BORDER, shapeOf, type Shape } from "@/world/dungeon/room";
 import type { Corridor, Door, DungeonDef, EdgeKind, Holding, Layout, LockinSpec, MissionNode, Placement, Side, Socket, StateVar } from "@/world/dungeon/types";
@@ -203,23 +204,33 @@ export function buildDungeon(def: DungeonDef, seed: number, attempt: number, opt
     return { d, x: r.x + d.cx, y: r.y + d.cy };
   };
   /** From just outside the rim to the edge of the lane: at least one cell, always. */
-  const carveStub = (r: RoomInfo, doorId: string, port: number): void => {
+  /** What each corridor carved, for the lamps: the walk to a boss is left dark. */
+  const carved: LitCorridor[] = [];
+  const carve = (to: Rect[], x: number, y: number, w: number, h: number): void => {
+    k.fill(x, y, w, h, FLOOR);
+    to.push({ cx: x, cy: y, w, h });
+  };
+  const carveStub = (r: RoomInfo, doorId: string, port: number, to: Rect[] = []): void => {
     const { d, x, y } = doorAt(r, doorId);
     const [px, py] = lanes.cell(port);
-    if (d.side === "n") k.fill(x - 1, py + 2, 3, y - (py + 2), FLOOR);
-    else if (d.side === "s") k.fill(x - 1, y + 1, 3, py - 2 - y, FLOOR);
-    else if (d.side === "w") k.fill(px + 2, y - 1, x - (px + 2), 3, FLOOR);
-    else k.fill(x + 1, y - 1, px - 2 - x, 3, FLOOR);
+    if (d.side === "n") carve(to, x - 1, py + 2, 3, y - (py + 2));
+    else if (d.side === "s") carve(to, x - 1, y + 1, 3, py - 2 - y);
+    else if (d.side === "w") carve(to, px + 2, y - 1, x - (px + 2), 3);
+    else carve(to, x + 1, y - 1, px - 2 - x, 3);
   };
   for (const c of layout.corridors) {
+    const kinds = [roomOf(c.a.node).node.kind, roomOf(c.b.node).node.kind];
+    const lit: LitCorridor = { rects: [], dark: kinds.includes("boss") || kinds.includes("miniboss") };
+    carved.push(lit);
+    // The stubs are the doorways' own few cells: the room's pair of lamps beside the door lights them.
     carveStub(roomOf(c.a.node), c.a.door, c.lane[0]);
     carveStub(roomOf(c.b.node), c.b.door, c.lane[c.lane.length - 1]);
     for (let n = 0; n < c.lane.length; n++) {
       const [ax, ay] = lanes.cell(c.lane[n]);
-      k.fill(ax - 1, ay - 1, 3, 3, FLOOR);
+      carve(lit.rects, ax - 1, ay - 1, 3, 3);
       if (n + 1 === c.lane.length) break;
       const [bx, by] = lanes.cell(c.lane[n + 1]);
-      k.fill(Math.min(ax, bx) - 1, Math.min(ay, by) - 1, Math.abs(bx - ax) + 3, Math.abs(by - ay) + 3, FLOOR);
+      carve(lit.rects, Math.min(ax, bx) - 1, Math.min(ay, by) - 1, Math.abs(bx - ax) + 3, Math.abs(by - ay) + 3);
     }
   }
 
@@ -409,6 +420,31 @@ export function buildDungeon(def: DungeonDef, seed: number, attempt: number, opt
     info.lockins.push({ node: node.id, gate, wayIn, mark: markName, rect: rectName, lock, clear });
   }
 
+  // --- lamps: on the walls, by rule (lights.ts) --------------------------------------------
+  // A lamp the mission hangs itself (a family name in a holding) keeps its wall cell.
+  const reserved = new Set<number>();
+  for (const r of info.rooms) {
+    for (const hd of r.node.holds) {
+      if (!("prop" in hd) || !hd.prop || foot[hd.prop] || !foot[`${hd.prop}_n`]) continue;
+      const s = r.shape.sockets.find((x) => x.id === hd.socket);
+      const m = s && mountOn(k, WALL, r.x + s.cx, r.y + s.cy);
+      if (m) reserved.add(m.y * W + m.x);
+    }
+  }
+  const lamps: Lamp[] = placeLamps(def, k, WALL, info.rooms.map((r) => ({ node: r.node, x: r.x, y: r.y, w: r.shape.w, h: r.shape.h })), carved, reserved);
+  const lampState = def.lights?.state;
+  if (lampState) {
+    const sv = stateOf(lampState.var);
+    if (!sv.values.includes(lampState.is)) throw new Error(`Dungeon "${zone}": lamps follow "${lampState.var}" being "${lampState.is}", which it never is`);
+  }
+  for (const l of lamps) {
+    if (!foot[l.def]) throw new Error(`Dungeon "${zone}": lamp row "${l.def}" is not a prop row`);
+    k.prop({ key: l.key, def: l.def, cx: l.cx, cy: l.cy, on: lampState ? stateOf(lampState.var).initial === lampState.is : undefined }, 1, 1);
+  }
+  /** What a control of this state does to the lamps on the way to `value`. */
+  const lampsTo = (state: string, value: string): Action[] =>
+    lampState && lampState.var === state ? lamps.map((l): Action => ({ do: "switch", prop: l.key, on: value === lampState.is })) : [];
+
   // --- fill: marks, rects, holdings --------------------------------------------------------
   for (const room of info.rooms) {
     const { node, shape } = room;
@@ -433,7 +469,17 @@ export function buildDungeon(def: DungeonDef, seed: number, attempt: number, opt
         k.unit(key, hd.unit, room.x + s.cx + (s.w >> 1), room.y + s.cy + (s.h >> 1), patrol.length > 1 ? patrol : undefined).phase = def.phase;
         continue;
       }
-      const propDef = hd.prop ?? "chest";
+      let propDef = hd.prop ?? "chest";
+      let px = room.x + s.cx;
+      let py = room.y + s.cy;
+      // A lamp the mission names by its family (`gas_lamp`) hangs on the wall its socket stands against.
+      if (!foot[propDef] && foot[`${propDef}_n`]) {
+        const m = mountOn(k, WALL, px, py);
+        if (!m) throw new Error(`Dungeon "${zone}": lamp socket ${s.id} of ${shape.template.id} has no wall beside it to hang on`);
+        propDef = `${propDef}_${m.side}`;
+        px = m.x;
+        py = m.y;
+      }
       const f = foot[propDef];
       if (!f || f.w !== s.w || f.h !== s.h) throw new Error(`Dungeon "${zone}": "${propDef}" does not fit socket ${s.id} of ${shape.template.id} (${s.w}x${s.h})`);
       const guarded = (hd.guardedBy ?? []).length > 0;
@@ -453,6 +499,7 @@ export function buildDungeon(def: DungeonDef, seed: number, attempt: number, opt
         const drive = (value: string): ActionList => [
           { do: "flag", flag: sv.flag, value: value === sv.initial ? 0 : 1 },
           ...stateGates.filter((g) => g.state === sv.id).map((g): Action => ({ do: g.is === value ? "unlock" : "lock", prop: g.gate })),
+          ...lampsTo(sv.id, value),
           ...(resolve(node, key, hd.becomes?.[value]) ?? []),
         ];
         use = [{ do: "if", when: [{ if: "flag", flag: sv.flag }], then: drive(sv.initial), else: drive(other) }, ...(use ?? [])];
@@ -462,8 +509,8 @@ export function buildDungeon(def: DungeonDef, seed: number, attempt: number, opt
         {
           key,
           def: propDef,
-          cx: room.x + s.cx,
-          cy: room.y + s.cy,
+          cx: px,
+          cy: py,
           locked: hd.locked || guarded || undefined,
           hidden: "hidden" in hd ? hd.hidden : undefined,
           on: "on" in hd ? hd.on : undefined,

@@ -95,6 +95,11 @@ export type MissionNode = {
   /** 0 .. 1.3, share of budget.baseHeat. 0 = no enemies ever. */
   heat: number;
   triggers?: NodeTrigger[];
+  /**
+   * No lamps on its walls: the room is dark on purpose, because its own light is the puzzle (the
+   * shot-firer's lamp, the great torch's hall). Left out: lit like every other room.
+   */
+  dark?: boolean;
 };
 
 export type LockinSpec = {
@@ -126,6 +131,23 @@ export type EdgeKind =
   /** Passable only while the state has this value: a gate the state's controls drive. `gate` names other prop rows for it ([across a north-south corridor, across an east-west one]). */
   | { t: "state"; var: string; is: string; gateAs?: string; gate?: [string, string]; label?: string }
   | { t: "sight" };
+
+/**
+ * Lamps go on walls by rule, never scattered: a pair flanking every door a room uses, then along
+ * each wall at an even rhythm; in the corridors, one every `corridor` cells on the wall. The
+ * corridors into a boss or a mini-boss are left dark, and so is a node marked `dark`: the dark
+ * stretches are chosen, never rolled.
+ */
+export type LightPlan = {
+  /** A family of four prop rows, `<prop>_n` `_s` `_e` `_w`: the lamp as it hangs on that wall of the room. */
+  prop: string;
+  /** Cells between lamps along a room's north and south walls. East and west walls take half as many. */
+  every: number;
+  /** Cells between lamps along a corridor. 0: the corridors are not lit. */
+  corridor: number;
+  /** Lamps that are on only while a state has this value, switched by the state's controls both ways. */
+  state?: { var: string; is: string };
+};
 
 export type MissionEdge = { from: string; to: string; kind: EdgeKind; shortcut?: boolean; also?: EdgeKind[] };
 
@@ -165,6 +187,8 @@ export type DungeonDef = {
   };
   /** Dressing a `dress:<name>` socket may become, by name: prop defs to pick from, and how often it is there at all. */
   dress: Record<string, { props: string[]; chance: number }>;
+  /** How the building is lit (world/dungeon/lights.ts). Left out: no lamps are put up at all (the Forest). */
+  lights?: LightPlan;
   /** One hand-placed embedding, used if every attempt fails. */
   fallback: Placement[];
 };

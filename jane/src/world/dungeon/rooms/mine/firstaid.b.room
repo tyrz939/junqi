@@ -10,7 +10,7 @@ coop    -
 heat    0
 grid
 ##########nnn##########
-#.t.hhh...___.........#
+#...hhh...___.........#
 #................SS...#
 #................SS...#
 #.....................#
@@ -32,4 +32,3 @@ e door e1
 S rest:main 2x2
 h dress:shelf 3x1
 b dress:cot 3x2
-t dress:torch

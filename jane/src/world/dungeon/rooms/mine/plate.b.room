@@ -10,7 +10,7 @@ coop    plate_or_friend
 heat    3
 grid
 ##############nnn##############
-#...t......t..___...t.....t...#
+#.............___.............#
 #.............................#
 #.......#.....................#
 #..PP...#................??...#
@@ -41,5 +41,4 @@ P plate:main 2x2
 C chest:reward 2x2
 B push:main 2x2 barrel | crate
 r spawn
-t dress:torch
 ? dress:pile 2x2

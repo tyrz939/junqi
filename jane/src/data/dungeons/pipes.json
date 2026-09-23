@@ -234,8 +234,8 @@
     "baseHeat": 6,
     "enemies": { "rat": 1, "bat": 1, "spider": 1, "wall_spider": 2 }
   },
+  "lights": { "prop": "caged_bulb", "every": 10, "corridor": 14 },
   "dress": {
-    "torch": { "props": ["torch"], "chance": 0.8 },
     "pile": { "props": ["crate", "barrel"], "chance": 0.5 },
     "pillar": { "props": ["pillar"], "chance": 1 },
     "shelf": { "props": ["shelf"], "chance": 1 }
