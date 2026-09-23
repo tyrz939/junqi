@@ -355,6 +355,8 @@ function world(seed: number): World {
         time: undefined,
       };
       if (t.text.trim()) readable.push(t);
+      // A thing under a stone is shown by pushing the stone off it (sim/under.ts).
+      if (p.under) shown.add(p.under);
       note(t, flatten(p.use), undefined);
       if (p.talk && c.dialogue[p.talk]) for (const n of treeActions(c.dialogue[p.talk])) note(t, n.actions, n.time);
       for (const s of p.loot ?? []) add(`item:${s.item}`, { ...t, qty: s.qty });

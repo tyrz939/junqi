@@ -13,5 +13,35 @@
     "key": "washing_arms",
     "at": { "slot": "washing_arms" },
     "prop": { "def": "town_washing", "loot": [{ "item": "town_washing", "qty": 1 }] }
+  },
+  {
+    "key": "pound7_milk",
+    "at": {
+      "prop": "door_pound_7",
+      "within": 4
+    },
+    "prop": {
+      "def": "milk_bottles",
+      "label": "The milk on the step of No. 7"
+    }
+  },
+  {
+    "key": "orchard_windfall",
+    "ownDice": true,
+    "count": 3,
+    "at": {
+      "mark": "orchard",
+      "within": 8
+    },
+    "prop": {
+      "def": "lost_thing",
+      "loot": [
+        {
+          "item": "apple",
+          "qty": 1
+        }
+      ],
+      "label": "A windfall"
+    }
   }
 ]

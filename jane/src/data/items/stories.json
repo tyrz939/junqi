@@ -1,7 +1,7 @@
 {
   "ames_spectacles": {
     "name": "Spectacles",
-    "icon": "item_glass",
+    "icon": "item_spectacles",
     "maxStack": 1,
     "usable": false,
     "cooldown": 1,
@@ -9,7 +9,7 @@
   },
   "tull_billhook": {
     "name": "Bill-hook",
-    "icon": "item_iron",
+    "icon": "item_billhook",
     "maxStack": 1,
     "usable": false,
     "cooldown": 1,
@@ -25,7 +25,7 @@
   },
   "leckie_eggs": {
     "name": "Egg",
-    "icon": "item_stone",
+    "icon": "item_egg",
     "maxStack": 6,
     "usable": false,
     "cooldown": 1,
@@ -33,7 +33,7 @@
   },
   "leckie_sack": {
     "name": "Sack of Meal",
-    "icon": "item_haversack",
+    "icon": "item_sack",
     "maxStack": 1,
     "usable": false,
     "cooldown": 1,
@@ -41,7 +41,7 @@
   },
   "kember_glove": {
     "name": "Man's Glove",
-    "icon": "item_glove",
+    "icon": "item_glove_brown",
     "maxStack": 1,
     "usable": false,
     "cooldown": 1,
@@ -57,7 +57,7 @@
   },
   "hurst_fleece": {
     "name": "Fleece",
-    "icon": "item_washing",
+    "icon": "item_fleece",
     "maxStack": 1,
     "usable": false,
     "cooldown": 1,
@@ -65,7 +65,7 @@
   },
   "farrant_ring": {
     "name": "Wedding Ring",
-    "icon": "item_amulet",
+    "icon": "item_ring",
     "maxStack": 1,
     "usable": false,
     "cooldown": 1,
@@ -105,7 +105,7 @@
   },
   "tobin_scissors": {
     "name": "Garden Scissors",
-    "icon": "item_iron",
+    "icon": "item_scissors",
     "maxStack": 1,
     "usable": false,
     "cooldown": 1,
@@ -121,7 +121,7 @@
   },
   "lusk_potatoes": {
     "name": "Potatoes",
-    "icon": "item_herb_root",
+    "icon": "item_potatoes",
     "maxStack": 1,
     "usable": false,
     "cooldown": 1,
@@ -145,7 +145,7 @@
   },
   "rendle_coat": {
     "name": "Good Coat",
-    "icon": "item_washing",
+    "icon": "item_coat",
     "maxStack": 1,
     "usable": false,
     "cooldown": 1,
@@ -158,5 +158,13 @@
     "usable": false,
     "cooldown": 1,
     "description": "A bundle of split kindling tied with twine, for the old lady down the road."
+  },
+  "crow_spoons": {
+    "name": "Teaspoons",
+    "icon": "item_spoons",
+    "maxStack": 1,
+    "usable": false,
+    "cooldown": 1,
+    "description": "Six teaspoons, no two alike, out of the crows' box. Nobody at the farm will own to them."
   }
 }

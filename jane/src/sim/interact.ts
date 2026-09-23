@@ -18,6 +18,7 @@ import { startDialogue } from "@/sim/dialogue";
 import { bagAdd, bagCount, bagRemove } from "@/sim/inventory";
 import { nearestDrop, pickUp } from "@/sim/loot";
 import { requestTravel } from "@/sim/zones";
+import { uncover } from "@/sim/under";
 import { distance, isEnemy, moveUnit, placeUnit, spendEnergy } from "@/sim/units";
 
 /** 2020: hold USE for 30 frames with 20 energy in the tank; the push costs those 20. */
@@ -302,6 +303,7 @@ function putDown(w: World, u: Unit): void {
   p.solid = def.solid;
   u.carrying = 0;
   w.emit({ e: "prop", prop: p.id, change: "push" });
+  uncover(w, p);
 }
 
 // --- push / pull -----------------------------------------------------------
@@ -357,6 +359,7 @@ export function holdUse(w: World, u: Unit, mx: number, my: number): boolean {
   if (dir > 0) moveUnit(w, u, fx * CELL, fy * CELL);
   w.emit({ e: "prop", prop: p.id, change: "push" });
   w.emit({ e: "sfx", name: "push", x: u.x, y: u.y });
+  uncover(w, p);
   return true;
 }
 

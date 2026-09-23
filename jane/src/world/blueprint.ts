@@ -7,7 +7,7 @@
 // contract that lets geometry roll per seed while the story stays fixed.
 
 import type { TriggerDef } from "@/sim/catalog";
-import type { ActionList, Facing, Stack, ZoneId } from "@/sim/state";
+import type { ActionList, Condition, Facing, Stack, ZoneId } from "@/sim/state";
 
 export type Rect = { cx: number; cy: number; w: number; h: number };
 export type Mark = { cx: number; cy: number; facing?: Facing };
@@ -54,6 +54,10 @@ export type PropSpawn = {
    * nobody is ever shut in.
    */
   nightLock?: string;
+  /** The key of a hidden prop this one lies on: shown when this one is pushed off it (sim/under.ts). */
+  under?: string;
+  /** ...and only while these hold: nothing is under Mrs Bettany's stone until she has said so. */
+  underWhen?: Condition[];
 };
 
 export type Blueprint = {

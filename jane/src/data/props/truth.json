@@ -1,0 +1,14 @@
+{
+  "garden_stone": { "name": "Stone", "sprite": "garden_stone", "w": 1, "h": 1, "solid": true, "blockLos": false, "push": true },
+  "step_stone": { "name": "Loose Step", "sprite": "step_stone", "w": 1, "h": 1, "solid": true, "blockLos": false, "push": true },
+  "dinner_tin": { "name": "Dinner Tin", "sprite": "dinner_tin", "w": 1, "h": 1, "solid": false, "blockLos": false, "flat": true },
+  "candle_ends": { "name": "Candle Ends", "sprite": "candle_ends", "w": 1, "h": 1, "solid": false, "blockLos": false, "flat": true, "prompt": "Look" },
+  "pencil_marks": { "name": "Pencil Marks", "sprite": "pencil_marks", "w": 1, "h": 1, "solid": false, "blockLos": false, "flat": true, "prompt": "Look" },
+  "chalk_mark": { "name": "Chalk Mark", "sprite": "chalk_mark", "w": 1, "h": 1, "solid": false, "blockLos": false, "flat": true, "prompt": "Look" },
+  "leaning_ladder": { "name": "Ladder", "sprite": "leaning_ladder", "w": 1, "h": 1, "solid": true, "blockLos": false, "prompt": "Look" },
+  "sitting_stone": { "name": "Stone", "sprite": "garden_stone", "w": 1, "h": 1, "solid": true, "blockLos": false },
+  "parcel": { "name": "Parcel", "sprite": "parcel", "w": 1, "h": 1, "solid": false, "blockLos": false, "flat": true },
+  "milk_bottles": { "name": "Milk", "sprite": "milk_bottles", "w": 1, "h": 1, "solid": false, "blockLos": false, "flat": true },
+  "kitchen_chair": { "name": "Chair", "sprite": "kitchen_chair", "w": 1, "h": 1, "solid": true, "blockLos": false },
+  "unclaimed_shelf": { "name": "Shelf", "sprite": "unclaimed_shelf", "w": 2, "h": 2, "solid": true, "blockLos": false, "prompt": "Look" }
+}

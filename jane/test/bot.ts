@@ -74,6 +74,33 @@ export function walkToProp(sim: Sim, key: string): boolean {
   return false;
 }
 
+/**
+ * Push a `push` prop one cell, as a person does: stand against a side, face it, and hold USE
+ * leaning into it. Tries each side until the prop moves. Returns false if it never did.
+ */
+export function pushProp(sim: Sim, key: string): boolean {
+  const prop = sim.rt.propsByKey.get(key);
+  if (!prop) throw new Error(`no prop ${key}`);
+  const def = sim.catalog.props[prop.def];
+  const c = propCentre(sim.catalog, prop);
+  const sides: [number, number, number, number][] = [
+    [c.x, (prop.cy + def.h) * CELL + 4, 0, -1],
+    [c.x, prop.cy * CELL - 4, 0, 1],
+    [prop.cx * CELL - 4, c.y, 1, 0],
+    [(prop.cx + def.w) * CELL + 4, c.y, -1, 0],
+  ];
+  const [x0, y0] = [prop.cx, prop.cy];
+  for (const [x, y, mx, my] of sides) {
+    if (sim.rt.grid.solid(cellOf(x), cellOf(y))) continue;
+    if (!walkTo(sim, x, y, 2)) continue;
+    sim.tick({ mx: mx * 0.2, my: my * 0.2, sprint: false, useHeld: false, ax: 0, ay: 0 });
+    for (let t = 0; t < 45 && prop.cx === x0 && prop.cy === y0; t++) sim.tick({ mx, my, sprint: false, useHeld: true, ax: 0, ay: 0 });
+    idle(sim, 2);
+    if (prop.cx !== x0 || prop.cy !== y0) return true;
+  }
+  return false;
+}
+
 export function walkToUnit(sim: Sim, key: string, near = 14): Unit {
   const u = sim.rt.unitsByKey.get(key);
   if (!u) throw new Error(`no unit ${key}`);

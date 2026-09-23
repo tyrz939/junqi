@@ -13,7 +13,7 @@
       "b": { "lines": ["You'll hear the bell at nine, from the School up north. I'm always indoors by then. I couldn't tell you what happens if you're not, and I don't mean to find out."], "actions": [{ "do": "flag", "flag": "said:farmer", "value": 2 }] },
       "c": { "lines": ["If you pass a barn with a card on its doors, leave it be. Most have one now. I put one on mine myself, and I couldn't tell you why."], "actions": [{ "do": "flag", "flag": "said:farmer", "value": 3 }] },
       "d": { "lines": ["Keep to the road once the lamps are lit. Things come out of the rough ground after dark. They don't come onto the road, mostly. They stand at the edge of it."], "actions": [{ "do": "flag", "flag": "said:farmer", "value": 4 }] },
-      "e": { "lines": ["The crows have taken to following people instead of the plough. They stop at the fence. I haven't asked them why."], "actions": [{ "do": "flag", "flag": "said:farmer", "value": 0 }] }
+      "e": { "lines": ["The crows have taken to following people instead of the plough. They follow so far and turn back, always at the same spot. I haven't asked them why."], "actions": [{ "do": "flag", "flag": "said:farmer", "value": 0 }] }
     }
   },
   "country_wife": {
@@ -130,7 +130,7 @@
   "country_door_2": {
     "speaker": "Door",
     "start": [{ "node": "knock" }],
-    "nodes": { "knock": { "lines": ["Nobody answers. There is a clean cup on the step, upside down, the way you leave one for somebody."] } }
+    "nodes": { "knock": { "lines": ["Nobody answers. Come back after dark and the windows are lit, and nobody answers then either."] } }
   },
   "country_door_3": {
     "speaker": "Door",
@@ -208,16 +208,16 @@
   "country_hen": {
     "speaker": "Hen",
     "start": [{ "node": "look" }],
-    "nodes": { "look": { "lines": ["The hen watches the road the whole time you stand there. Not you: the road."] } }
+    "nodes": { "look": { "lines": ["The hen goes round the same few spots, always in the same order, and stands at each one a while before it moves on."] } }
   },
   "country_sheep": {
     "speaker": "Sheep",
     "start": [{ "node": "look" }],
-    "nodes": { "look": { "lines": ["The sheep all face the same way. It is not the way the wind is blowing."] } }
+    "nodes": { "look": { "lines": ["They keep to the same few yards of grass all day, though nothing is stopping them. Nobody brings them in, and by the bell they are not here."] } }
   },
   "country_rabbit": {
     "speaker": "Rabbit",
     "start": [{ "node": "look" }],
-    "nodes": { "look": { "lines": ["It does not run until you are two steps away. Then it runs, and stops, and waits for you again."] } }
+    "nodes": { "look": { "lines": ["It does not run from you. As far as you can see, it does not run from anything."] } }
   }
 }

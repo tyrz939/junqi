@@ -1,15 +1,15 @@
 {
   "lost_property": {
     "name": "Lost Property",
-    "description": "The lost-property book at Castle Halt lists three things lost between the Halt and Julie's gate: a red glove at the well on the station road, a felt hat on the signpost on the same road, a dinner tin under a cart further along it, before Julie's gate. All three are beside the road she walks to Julie's.",
+    "description": "The lost-property book at Castle Halt lists three things lost along the station road: a red glove by the well, a felt hat at the signpost, and a dinner tin by a cart further along the same road. All three are beside the road, where anybody walking it would see them.",
     "completion": "You enter all three. Beside each line a date of return was already pencilled in. All three dates are next Sunday.",
     "returnTo": "the lost-property book, on the platform at Castle Halt",
     "requirements": [
       { "type": "acquire", "target": "lost_glove", "qty": 1, "text": "A red glove, at the well on the station road" },
-      { "type": "acquire", "target": "lost_hat", "qty": 1, "text": "A felt hat, on the signpost on the station road" },
-      { "type": "acquire", "target": "lost_tin", "qty": 1, "text": "A dinner tin, under the cart on the station road" }
+      { "type": "acquire", "target": "lost_hat", "qty": 1, "text": "A felt hat, at the signpost on the station road" },
+      { "type": "acquire", "target": "lost_tin", "qty": 1, "text": "A dinner tin, by the cart on the station road" }
     ],
-    "rewards": [{ "do": "give", "item": "apple", "qty": 2 }, { "do": "give", "item": "key_generic", "qty": 1 }]
+    "rewards": [{ "do": "give", "item": "apple", "qty": 2 }]
   },
   "left_luggage": {
     "name": "Left Luggage",
@@ -24,7 +24,7 @@
   },
   "to_be_collected": {
     "name": "To Be Collected",
-    "description": "A pencilled entry says a parcel is left on the platform crate each evening after the bell, and that it is not lost property and is always collected. It does not say who leaves it. It asks that someone check it is still being collected.",
+    "description": "A pencilled entry says a parcel is left by the platform crate each evening after the bell, and that it is not lost property and is always collected. It does not say who leaves it. It asks that someone check it is still being collected.",
     "completion": "There is a parcel on the crate. Brown paper, string, no label. It is warm. You were watching the platform and you did not see it put there.",
     "returnTo": "the lost-property book, on the platform at Castle Halt",
     "requirements": [
@@ -100,12 +100,12 @@
   },
   "her_coat": {
     "name": "Her Coat",
-    "description": "The nurse's case is on the back seat of the car, locked. Her coat is not in the car. A woman's prints lead off behind it into the wood, and they are not hurried. Her second note says not to come and look, and that she means it kindly.",
+    "description": "The nurse's case is on the ground by the car, locked. Her coat is not in the car. A woman's prints lead off behind it into the wood, and they are not hurried. Her second note says not to come and look, and that she means it kindly.",
     "completion": "The case opens. Dressings, a thermometer, a parcel made up for Mrs Allen. Everything is in its place. Nothing in it has been used.",
     "returnTo": "the nurse's case, in the car in the wood",
     "requirements": [
       { "type": "location", "target": "nurses_coat", "qty": 1, "text": "Her coat, at the end of her prints into the wood behind the car" },
-      { "type": "location", "target": "nurses_case", "qty": 1, "text": "Her case, on the back seat of the car" }
+      { "type": "location", "target": "nurses_case", "qty": 1, "text": "Her case, on the ground by the car" }
     ],
     "rewards": [{ "do": "give", "item": "potion_lifesteal", "qty": 1 }]
   },
@@ -150,7 +150,7 @@
     "requirements": [
       { "type": "acquire", "target": "white_water_rose", "qty": 3, "text": "White water roses, below the jetty at Sallow Bottom" }
     ],
-    "rewards": [{ "do": "give", "item": "rock", "qty": 2 }, { "do": "give", "item": "small_water", "qty": 2 }]
+    "rewards": [{ "do": "show", "prop": "garden_book_gift" }]
   },
   "rose_and_stone": {
     "name": "Rose and Stone",
@@ -174,7 +174,7 @@
   },
   "down_at_five": {
     "name": "Down at Five: 4",
-    "description": "A cold camp at the foot of Quarry Steps: five dinner tins laid out, a kettle, a tally slate. The slate says five men went up at seven and four came down at five, and that the foreman would see about it. There is no later entry.",
+    "description": "A cold camp at the foot of Quarry Steps: five dinner tins laid out by the fire, and a tally slate. The slate says five men went up at seven and four came down at five, and that the foreman would see about it. There is no later entry.",
     "completion": "At the top, a rock the size of a shed lies across the mouth of an adit. It was placed, not fallen. In the foreman's tin beside it: a gilder's book with one leaf left. Behind the rock someone is working, steadily, with a hand pick.",
     "returnTo": "the tally slate at the gang's camp",
     "requirements": [

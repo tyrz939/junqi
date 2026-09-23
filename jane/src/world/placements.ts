@@ -17,6 +17,7 @@
 //             anchor a small place the skeleton guarantees BY NAME (data/anchors.json)
 //             slot   an exact cell a set chunk offers (a door's place in a wall). The
 //                    thing goes exactly there, solid ground or not.
+//             prop   a prop some chunk placed, by key: the open ground in front of it (a door's step)
 //             place  a generated place a story claimed (world/stories.ts, data/stories), with
 //                    `slot` naming what in it: a cell it kept open ("yard", "garden", "green"),
 //                    one of its own props ("house", "well", "barn", "chest": for `edit`), or
@@ -26,13 +27,18 @@
 //           `within`: how far from the spot it may land, in cells.
 //   unit / prop / rect / mark   what to put there (any combination; they share the spot)
 //   edit    instead of placing: change a prop a chunk already placed (give the car a glovebox)
+//   hides   a thing lying UNDER the placed prop (which pushes): a hidden prop at the same cell,
+//           shown when the prop is pushed off it (sim/under.ts), only while `when` holds. With
+//           `count`, it is under ONE of them, the seed's choice: "she cannot remember which stone".
 //
 // Everything a row names is added to the county's contract, so a seed that cannot place
 // it fails validation and is re-rolled like any other broken county. Nothing is skipped
 // quietly: that is how the last attempt at this game ended up with 61 quests nobody
 // could hand in.
 
-import type { Facing } from "@/sim/state";
+import { hashString, rngSeed, rngU32, type RngState } from "@/sim/rng";
+import { F_SOLID, Tile, TILE_FLAGS } from "@/sim/grid";
+import type { Condition, Facing } from "@/sim/state";
 import type { PropSpawn, Rect, UnitSpawn } from "@/world/blueprint";
 import type { Chunk } from "@/world/chunks";
 import type { Place } from "@/world/country";
@@ -44,13 +50,22 @@ export type PlacementRow = {
   count?: number;
   /** With `count` in an area: stand them about the patch, each somewhere of its own, not shoulder to shoulder at its centre. */
   spread?: boolean;
-  at: { mark?: string; site?: string; area?: string; poi?: string; near?: string; anchor?: string; slot?: string; place?: string; within?: number };
+  at: { mark?: string; site?: string; area?: string; poi?: string; near?: string; anchor?: string; slot?: string; place?: string; prop?: string; within?: number };
   /** The key of a prop a chunk placed, and the fields to set on it. Nothing new is placed. */
   edit?: Partial<Omit<PropSpawn, "key" | "cx" | "cy" | "def">>;
   unit?: { def: string; phase?: number; facing?: Facing };
   prop?: Omit<PropSpawn, "key" | "cx" | "cy">;
   rect?: { name: string; w: number; h: number };
   mark?: string;
+  hides?: { key: string; prop: Omit<PropSpawn, "key" | "cx" | "cy">; when?: Condition[] };
+  /**
+   * Where the words put it: once placed, move it to the nearest open cell beside this prop (by key).
+   * "A child's red glove lies by the well wall." Moving draws no dice, so the row keeps its old spot
+   * in the county's stream and nothing else on the seed shifts.
+   */
+  beside?: string;
+  /** Throw this row's own dice, not the county's (see applyPlacements). For rows added after the seeds were tuned. */
+  ownDice?: boolean;
 };
 
 const FILES = import.meta.glob("../data/placements/*.json", { eager: true, import: "default" }) as Record<string, PlacementRow[]>;
@@ -70,6 +85,7 @@ export function placementContract(rows: readonly PlacementRow[] = PLACEMENTS): {
       if (row.unit) out.units.push(key);
       if (row.prop) out.props.push(key);
     }
+    if (row.hides) out.props.push(row.hides.key);
     if (row.mark) out.marks.push(row.mark);
     if (row.rect) out.rects.push(row.rect.name);
   }
@@ -147,32 +163,62 @@ export type Stage = "chunks" | "pois" | "areas" | "places";
  * small place after it has been dressed, in an area last, on whatever is still open.
  */
 export function applyPlacements(ctx: PlaceCtx, stage: Stage, rows: readonly PlacementRow[] = PLACEMENTS): void {
+  // A row with `ownDice` (and every row placed `at.prop`, which is new) throws its own dice: a stream
+  // of its own, from the stage's start and its key, and the county's stream put back as it was
+  // afterwards. So adding such a row, or a stone to a garden, or eleven parcels to a step, moves
+  // nothing else in the county: not another row's spot, not the next farm along. The older rows keep
+  // drawing on the county's stream as they always have, so no seed anybody has tuned against moves.
+  const k = ctx.k;
+  const start: RngState = [k.rng[0], k.rng[1], k.rng[2], k.rng[3]];
+  const base = rngU32([...start] as RngState);
   for (const row of rows) {
+    if (!row.ownDice && !row.at.prop) {
+      applyRow(ctx, stage, row);
+      continue;
+    }
+    const outer: RngState = [k.rng[0], k.rng[1], k.rng[2], k.rng[3]];
+    const own = rngSeed(base ^ hashString(row.key), 7);
+    for (let i = 0; i < 4; i++) k.rng[i] = own[i];
+    try {
+      applyRow(ctx, stage, row);
+    } finally {
+      for (let i = 0; i < 4; i++) k.rng[i] = outer[i];
+    }
+  }
+}
+
+function applyRow(ctx: PlaceCtx, stage: Stage, row: PlacementRow): void {
+  {
     const at = row.at;
     const rowStage: Stage = at.place ? "places" : at.poi || at.anchor ? "pois" : at.area ? "areas" : "chunks";
-    if (rowStage !== stage) continue;
+    if (at.prop) {
+      // Beside a prop another row or a chunk placed: in the first stage the prop is there by, once.
+      if (!ctx.k.props.some((p) => p.key === at.prop) || ctx.k.props.some((p) => p.key === keysOf(row)[0])) return;
+    } else if (rowStage !== stage) return;
     if (at.place) {
       const p = ctx.claims?.get(at.place);
       if (p) atPlace(ctx, row, p);
-      continue;
+      return;
     }
     if (row.edit) {
       const target = ctx.k.props.find((p) => p.key === row.key);
       if (target) Object.assign(target, row.edit);
-      continue;
+      return;
     }
     if (at.slot) {
       // Exactly there. A door belongs IN the wall, which no search for open ground would ever choose.
       const cell = ctx.chunks.map((c) => c.slots?.[at.slot!]).find((s) => s !== undefined) ?? ctx.areaSlots[at.slot];
       if (cell && row.prop) {
         const size = ctx.sizes[row.prop.def] ?? { w: 1, h: 1 };
-        ctx.k.prop({ ...row.prop, key: row.key, cx: cell[0], cy: cell[1] }, size.w, size.h);
+        const top = ctx.k.prop({ ...row.prop, key: row.key, cx: cell[0], cy: cell[1] }, size.w, size.h);
+        hideUnder(ctx, row, top);
       }
-      continue;
+      return;
     }
     const anchor = anchorOf(ctx, row);
-    if (!anchor) continue;
+    if (!anchor) return;
     const size = row.prop ? (ctx.sizes[row.prop.def] ?? { w: 1, h: 1 }) : { w: 1, h: 1 };
+    const tops: PropSpawn[] = [];
     for (const key of keysOf(row)) {
       // Spread: a point of its own somewhere in the patch, then the nearest open ground to THAT.
       let from: Anchor = anchor;
@@ -192,7 +238,7 @@ export function applyPlacements(ctx: PlaceCtx, stage: Stage, rows: readonly Plac
       }
       const spot = openSpot(ctx.k, from, size.w, size.h) ?? (row.spread ? openSpot(ctx.k, anchor, size.w, size.h) : null);
       if (!spot) break;
-      if (row.prop) ctx.k.prop({ ...row.prop, key, cx: spot.cx, cy: spot.cy }, size.w, size.h);
+      if (row.prop) tops.push(ctx.k.prop({ ...row.prop, key, cx: spot.cx, cy: spot.cy }, size.w, size.h));
       if (row.unit) {
         // Beside the prop if there is one, on the spot if not.
         const ux = row.prop ? spot.cx + size.w : spot.cx;
@@ -208,7 +254,110 @@ export function applyPlacements(ctx: PlaceCtx, stage: Stage, rows: readonly Plac
       }
       if (row.mark && key === keysOf(row)[0]) ctx.k.mark(row.mark, spot.cx, spot.cy + size.h, 1);
     }
+    if (row.beside) for (const t of tops) moveBeside(ctx, t, row.beside);
+    if (tops.length > 0) hideUnder(ctx, row, pickTop(row, tops));
   }
+}
+
+/**
+ * Put a placed thing on the nearest open cell touching a prop's footprint: not a wall, not water, not
+ * under another prop. Tried in rings outward from the footprint's edge, in a fixed order, no dice.
+ */
+function moveBeside(ctx: PlaceCtx, t: PropSpawn, key: string): void {
+  const k = ctx.k;
+  const q = k.props.find((p) => p.key === key);
+  if (!q) return;
+  const qs = ctx.sizes[q.def] ?? { w: 1, h: 1 };
+  const ts = ctx.sizes[t.def] ?? { w: 1, h: 1 };
+  const taken = (x: number, y: number): boolean =>
+    k.props.some((p) => {
+      if (p === t) return false;
+      const s = ctx.sizes[p.def] ?? { w: 1, h: 1 };
+      return x < p.cx + s.w && p.cx < x + ts.w && y < p.cy + s.h && p.cy < y + ts.h;
+    }) || k.units.some((u) => u.cx >= x && u.cx < x + ts.w && u.cy >= y && u.cy < y + ts.h);
+  const open = (x: number, y: number): boolean => {
+    for (let j = 0; j < ts.h; j++) for (let i = 0; i < ts.w; i++) if (k.solid(x + i, y + j) || k.get(x + i, y + j) === Tile.Water) return false;
+    return !taken(x, y);
+  };
+  for (let r = 1; r <= 3; r++) {
+    // The front first (below the footprint, where she stands to use it), then the sides, then behind.
+    const ring: [number, number][] = [];
+    for (let x = q.cx - r - ts.w + 1; x < q.cx + qs.w + r; x++) ring.push([x, q.cy + qs.h + r - 1]);
+    for (let y = q.cy + qs.h + r - 2; y > q.cy - r - ts.h; y--) {
+      ring.push([q.cx - r - ts.w + 1, y]);
+      ring.push([q.cx + qs.w + r - 1, y]);
+    }
+    for (let x = q.cx - r - ts.w + 1; x < q.cx + qs.w + r; x++) ring.push([x, q.cy - r - ts.h + 1]);
+    for (const [x, y] of ring) {
+      if (!open(x, y)) continue;
+      t.cx = x;
+      t.cy = y;
+      k.claim(x, y, ts.w, ts.h);
+      return;
+    }
+  }
+}
+
+/** Which of a row's props the thing is under: a hash of where they stand, so the seed chooses and the stream is not drawn on. */
+function pickTop(row: PlacementRow, tops: readonly PropSpawn[]): PropSpawn {
+  if (tops.length === 1) return tops[0];
+  const at = tops.map((t) => `${t.cx},${t.cy}`).join(";");
+  return tops[hashString(`${row.key}:${at}`) % tops.length];
+}
+
+/** The thing a row `hides`: a hidden prop at the top prop's cell, which the top prop names as lying `under` it. */
+function hideUnder(ctx: PlaceCtx, row: PlacementRow, top: PropSpawn): void {
+  const h = row.hides;
+  if (!h) return;
+  const size = ctx.sizes[h.prop.def] ?? { w: 1, h: 1 };
+  ctx.k.prop({ ...h.prop, key: h.key, cx: top.cx, cy: top.cy, hidden: true }, size.w, size.h);
+  top.under = h.key;
+  if (h.when) top.underWhen = h.when;
+}
+
+/**
+ * Open cells at a story's place, nearest the slot first, for a row with `count`: the place was
+ * claimed whole, so the kit's own "open ground" says no everywhere in it. A cell here is floor that
+ * nothing solid stands on and nobody stands on, with open floor on both sides along one axis, so a
+ * pushed thing can go one way and she can stand on the other.
+ */
+function placeCells(ctx: PlaceCtx, from: [number, number], within: number, n: number, key: string): [number, number][] {
+  const k = ctx.k;
+  const x0 = from[0] - within - 1;
+  const y0 = from[1] - within - 1;
+  const span = within * 2 + 3;
+  const busy = new Uint8Array(span * span);
+  const mark = (x: number, y: number): void => {
+    if (x >= x0 && y >= y0 && x < x0 + span && y < y0 + span) busy[(y - y0) * span + (x - x0)] = 1;
+  };
+  for (const p of k.props) {
+    const s = ctx.sizes[p.def] ?? { w: 1, h: 1 };
+    if (p.cx > x0 + span || p.cy > y0 + span || p.cx + s.w < x0 || p.cy + s.h < y0) continue;
+    for (let j = 0; j < s.h; j++) for (let i = 0; i < s.w; i++) mark(p.cx + i, p.cy + j);
+  }
+  for (const u of k.units) mark(u.cx, u.cy);
+  const open = (x: number, y: number): boolean => {
+    if (x < x0 || y < y0 || x >= x0 + span || y >= y0 + span) return false;
+    return busy[(y - y0) * span + (x - x0)] === 0 && (TILE_FLAGS[k.get(x, y)] & F_SOLID) === 0;
+  };
+  const cells: [number, number][] = [];
+  for (let y = from[1] - within; y <= from[1] + within; y++) {
+    for (let x = from[0] - within; x <= from[0] + within; x++) {
+      if (!open(x, y)) continue;
+      if (!((open(x - 1, y) && open(x + 1, y)) || (open(x, y - 1) && open(x, y + 1)))) continue;
+      cells.push([x, y]);
+    }
+  }
+  // Nearest first, then the seed's hash; never two side by side, so each one can be pushed.
+  const d = (c: [number, number]): number => Math.max(Math.abs(c[0] - from[0]), Math.abs(c[1] - from[1]));
+  cells.sort((a, b) => d(a) - d(b) || hashString(`${key}:${a[0]},${a[1]}`) - hashString(`${key}:${b[0]},${b[1]}`));
+  const out: [number, number][] = [];
+  for (const c of cells) {
+    if (out.some((o) => Math.abs(o[0] - c[0]) <= 1 && Math.abs(o[1] - c[1]) <= 1)) continue;
+    out.push(c);
+    if (out.length === n) break;
+  }
+  return out;
 }
 
 /**
@@ -255,9 +404,18 @@ function atPlace(ctx: PlaceCtx, row: PlacementRow, p: Place): void {
     cell = [q.cx, q.cy + (ctx.sizes[q.def]?.h ?? 1)];
   }
   const [cx, cy] = cell;
-  if (row.prop) {
+  if (row.prop && ((row.count ?? 1) > 1 || row.at.within !== undefined)) {
+    // Several of a thing about the slot (the stones in a garden), or one beside what already stands on
+    // it (the chair by the candles): each on open floor of its own, nearest the slot.
     const size = ctx.sizes[row.prop.def] ?? { w: 1, h: 1 };
-    k.prop({ ...row.prop, key: row.key, cx, cy }, size.w, size.h);
+    const keys = keysOf(row);
+    const cells = placeCells(ctx, cell, row.at.within ?? 3, keys.length, row.key);
+    const tops = cells.map(([x, y], n) => k.prop({ ...row.prop!, key: keys[n], cx: x, cy: y }, size.w, size.h));
+    if (tops.length > 0) hideUnder(ctx, row, pickTop(row, tops));
+  } else if (row.prop) {
+    const size = ctx.sizes[row.prop.def] ?? { w: 1, h: 1 };
+    const top = k.prop({ ...row.prop, key: row.key, cx, cy }, size.w, size.h);
+    hideUnder(ctx, row, top);
   }
   if (row.unit) {
     const ux = row.prop ? cx + (ctx.sizes[row.prop.def]?.w ?? 1) : cx;
@@ -286,6 +444,13 @@ function anchorOf(ctx: PlaceCtx, row: PlacementRow): Anchor | null {
     const a = ctx.sk.areas.find((x) => x.id === at.area);
     if (!a) return null;
     return { cx: a.mx * MACRO + MACRO / 2, cy: a.my * MACRO + MACRO / 2, within: at.within ?? Math.floor(a.row.radius * 0.8) };
+  }
+  if (at.prop) {
+    // In front of it: the cell below its footprint, the middle of its width. A door's step.
+    const q = ctx.k.props.find((x) => x.key === at.prop);
+    if (!q) return null;
+    const s = ctx.sizes[q.def] ?? { w: 1, h: 1 };
+    return { cx: q.cx + (s.w >> 1), cy: q.cy + s.h, within: at.within ?? 3 };
   }
   if (at.anchor) {
     const p = ctx.pois.find((x) => x.anchor === at.anchor);

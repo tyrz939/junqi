@@ -271,7 +271,9 @@ export function buildCounty(seed: number, attempt: number, rows: readonly Placem
   // you cannot read is worse than no sign: it names the two nearest places, which way, and how far.
   for (const p of k.props) {
     if (p.def !== "signpost" || p.talk || p.use) continue;
+    // Somebody's house is not a place a signpost names: Julie's no more than anybody else's.
     const near = sk.sites
+      .filter((s) => s.id !== "julie_house")
       .map((s) => ({ s, dx: centre(s.mx) - p.cx, dy: centre(s.my) - p.cy }))
       .map((o) => ({ ...o, m: Math.hypot(o.dx, o.dy) }))
       .sort((a, b) => a.m - b.m)

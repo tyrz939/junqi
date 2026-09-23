@@ -149,6 +149,13 @@ export type Prop = {
   /** Said instead of opening, between nine and six. "" = an ordinary door. */
   nightLock: string;
   awake: boolean;
+  /**
+   * The key of a hidden prop lying under this one (a key under a stone, a tin under a loose flag).
+   * It comes to light the first time this prop is moved off it, if `underWhen` holds then (or later,
+   * when a quest is given with it still uncovered): sim/under.ts. Cleared once shown.
+   */
+  under?: string;
+  underWhen?: Condition[];
 };
 
 export type Drop = { id: number; item: string; qty: number; x: number; y: number; age: number };

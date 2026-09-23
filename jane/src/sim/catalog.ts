@@ -234,6 +234,8 @@ export type PropDef = {
    * Something that `shunsLight` walks straight through it. Everything else about it is light.
    */
   light?: { radius: number; color: string; flicker: number; cold?: boolean };
+  /** A thing on the ground that is drawn as what it holds: its first loot item's icon, at ground scale. The sprite is only for when it holds nothing. */
+  showsLoot?: boolean;
   /** Draw order bias: floor decals draw under units. */
   flat?: boolean;
   prompt?: string;

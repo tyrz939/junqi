@@ -58,7 +58,9 @@ export function createZoneState(state: GameState, catalog: Catalog, bp: Blueprin
     const def = catalog.props[s.def];
     if (!def) throw new Error(`Blueprint ${bp.zone}: unknown prop def "${s.def}" (${s.key})`);
     const locked = s.locked ?? false;
+    const lying = s.under ? { under: s.under, ...(s.underWhen ? { underWhen: s.underWhen } : {}) } : {};
     return {
+      ...lying,
       id: state.nextId++,
       key: s.key,
       def: s.def,

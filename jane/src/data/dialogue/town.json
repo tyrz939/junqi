@@ -418,7 +418,7 @@
     "speaker": "The Sweeper",
     "start": [{ "when": [{ "if": "flag", "flag": "talked_sweeper" }], "node": "again" }, { "node": "a" }],
     "nodes": {
-      "a": { "lines": ["Mind the pile. I sweep the square twice a day. Leaves in the morning. In the evening it's mostly salt."], "actions": [{ "do": "flag", "flag": "talked_sweeper" }] },
+      "a": { "lines": ["I sweep the square twice a day. Leaves in the morning. In the evening it's mostly salt."], "actions": [{ "do": "flag", "flag": "talked_sweeper" }] },
       "again": { "lines": ["If you're about after the lamps, keep to the cobbles. I've never seen anything on the cobbles. I've never looked, mind."] }
     }
   },
@@ -459,7 +459,7 @@
       { "node": "first" }
     ],
     "nodes": {
-      "first": { "lines": ["I sit out here till six. Mrs Garland likes the yard kept, and I like to see who comes up the street."], "actions": [{ "do": "flag", "flag": "talked_mr_cobb", "value": 1 }] },
+      "first": { "lines": ["I sit out here till the bell. Mrs Garland likes the yard kept, and I like to see who comes up the street."], "actions": [{ "do": "flag", "flag": "talked_mr_cobb", "value": 1 }] },
       "again": { "lines": ["After nine she'll let you in, but she likes you to stay till it's light. Most do. I've never walked home in the dark, and I don't mean to start."], "actions": [{ "do": "flag", "flag": "talked_mr_cobb", "value": 2 }] },
       "third": { "lines": ["A sheet came over the rails into this yard this morning, off somebody's line. There wasn't a breath of wind. I left it where it lay."] }
     }
@@ -655,7 +655,7 @@
     "start": [{ "when": [{ "if": "flag", "flag": "talked_mr_lyle" }], "node": "again" }, { "node": "a" }],
     "nodes": {
       "a": { "lines": ["We're not courting. We're sitting."], "actions": [{ "do": "flag", "flag": "talked_mr_lyle" }] },
-      "again": { "lines": ["We sit facing the Doctor's. Miss Orme likes to be near a doctor after her dinner. He never opens, but it's a comfort to be near one."] }
+      "again": { "lines": ["We sit where we can see the Doctor's. Miss Orme likes to be near a doctor after her dinner. He never opens, but it's a comfort to be near one."] }
     }
   },
   "miss_orme": {
@@ -731,7 +731,7 @@
   "ginger_cat": {
     "speaker": "A Ginger Cat",
     "start": [{ "node": "a" }],
-    "nodes": { "a": { "lines": ["A ginger cat. It follows the sweeper round the square at a distance of exactly one broom."] } }
+    "nodes": { "a": { "lines": ["A ginger cat. It walks the south side of the square end to end, and sits at each end for exactly as long as it sat last time."] } }
   },
   "hen": {
     "speaker": "Hen",
@@ -833,7 +833,7 @@
       },
       "milk": {
         "lines": ["You lift the latch and set the three bottles inside. The hall is swept. Mrs Oddie's loaf is on the table, not touched. On the mat, the milk money, counted out."],
-        "actions": [{ "do": "location", "name": "milk_in" }]
+        "actions": [{ "do": "location", "name": "milk_in" }, { "do": "hide", "prop": "pound7_milk" }]
       },
       "rinsed": { "lines": ["The curtains are drawn. On the step, one empty bottle, rinsed and put out for the Milkman."] },
       "a": { "lines": ["The curtains are drawn. Three bottles of milk on the step, one for each morning. The oldest has not turned."] }

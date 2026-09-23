@@ -64,20 +64,35 @@
     }
   },
   {
-    "key": "bettany_key_drop",
+    "key": "bettany_stone",
+    "count": 4,
     "at": {
       "place": "bettany",
-      "slot": "garden"
+      "slot": "garden",
+      "within": 3
     },
     "prop": {
-      "def": "lost_thing",
-      "loot": [
+      "def": "garden_stone",
+      "label": "A stone"
+    },
+    "hides": {
+      "key": "bettany_key_drop",
+      "prop": {
+        "def": "lost_thing",
+        "loot": [
+          {
+            "item": "bettany_key",
+            "qty": 1
+          }
+        ],
+        "label": "A key on a loop of string"
+      },
+      "when": [
         {
-          "item": "bettany_key",
-          "qty": 1
+          "if": "questActive",
+          "quest": "bettany_key"
         }
-      ],
-      "label": "A key under a stone"
+      ]
     }
   },
   {
@@ -322,8 +337,8 @@
           "qty": 1
         },
         {
-          "item": "grape",
-          "qty": 2
+          "item": "crow_spoons",
+          "qty": 1
         }
       ]
     }
@@ -366,6 +381,25 @@
     }
   },
   {
+    "key": "vosper_tin_drop",
+    "at": {
+      "place": "vosper_sister",
+      "slot": "house",
+      "within": 2
+    },
+    "prop": {
+      "def": "lost_thing",
+      "hidden": true,
+      "loot": [
+        {
+          "item": "vosper_tin",
+          "qty": 1
+        }
+      ],
+      "label": "A biscuit tin, heavy with paper"
+    }
+  },
+  {
     "key": "hackett_giver",
     "at": {
       "place": "hackett",
@@ -382,7 +416,7 @@
       "slot": "inside"
     },
     "prop": {
-      "def": "look_note",
+      "def": "pencil_marks",
       "talk": "story_hackett_marks",
       "label": "Pencil marks",
       "use": [
@@ -394,20 +428,33 @@
     }
   },
   {
-    "key": "hackett_tin_drop",
+    "key": "hackett_step",
     "at": {
       "place": "hackett_house",
       "slot": "step"
     },
     "prop": {
-      "def": "lost_thing",
-      "loot": [
+      "def": "step_stone",
+      "label": "The front step"
+    },
+    "hides": {
+      "key": "hackett_tin_drop",
+      "prop": {
+        "def": "lost_thing",
+        "loot": [
+          {
+            "item": "hackett_tin",
+            "qty": 1
+          }
+        ],
+        "label": "A tin, rusted shut"
+      },
+      "when": [
         {
-          "item": "hackett_tin",
-          "qty": 1
+          "if": "questActive",
+          "quest": "hackett_tin"
         }
-      ],
-      "label": "A tin under the step"
+      ]
     }
   },
   {
@@ -474,7 +521,7 @@
       "slot": "inside"
     },
     "prop": {
-      "def": "look_note",
+      "def": "candle_ends",
       "talk": "story_denny_candles",
       "label": "Candle ends",
       "use": [
@@ -483,6 +530,18 @@
           "name": "denny_candles_seen"
         }
       ]
+    }
+  },
+  {
+    "key": "denny_chair",
+    "at": {
+      "place": "denny_ruin",
+      "slot": "inside",
+      "within": 2
+    },
+    "prop": {
+      "def": "kitchen_chair",
+      "label": "A kitchen chair"
     }
   },
   {
@@ -600,6 +659,19 @@
     }
   },
   {
+    "key": "voke_seat",
+    "count": 2,
+    "at": {
+      "place": "voke_brother",
+      "slot": "fire",
+      "within": 3
+    },
+    "prop": {
+      "def": "sitting_stone",
+      "label": "A stone to sit on"
+    }
+  },
+  {
     "key": "quayle_giver",
     "at": {
       "place": "quayle",
@@ -672,7 +744,7 @@
       "slot": "inside"
     },
     "prop": {
-      "def": "look_note",
+      "def": "leaning_ladder",
       "talk": "story_sayer_ladder",
       "label": "A ladder",
       "use": [
@@ -729,7 +801,7 @@
       "slot": "clearing"
     },
     "prop": {
-      "def": "note",
+      "def": "chalk_mark",
       "talk": "story_treloar_mark",
       "label": "A chalk mark"
     }
