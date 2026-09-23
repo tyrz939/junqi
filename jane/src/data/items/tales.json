@@ -1,0 +1,86 @@
+{
+  "tale_honey": {
+    "name": "Comb Honey",
+    "icon": "item_honey",
+    "maxStack": 5,
+    "usable": true,
+    "cooldown": 20,
+    "use": [{ "do": "heal", "amount": 25 }],
+    "description": "Mr Coram's, from last year, in a jar with a paper lid. Eaten off the knife it mends a little of anything."
+  },
+  "tale_crepe": {
+    "name": "Black Crepe",
+    "icon": "item_crepe",
+    "maxStack": 1,
+    "usable": false,
+    "cooldown": 1,
+    "description": "A strip of black crepe, long enough to go round three hives. Miss Hanney cut it off something and did not say what."
+  },
+  "tale_walk_plate": {
+    "name": "Dinner Plate",
+    "icon": "item_plate",
+    "maxStack": 1,
+    "usable": false,
+    "cooldown": 1,
+    "description": "Mrs Pollard's good plate, with a blue rim. Wiped clean, the knife and fork laid across it."
+  },
+  "tale_horace": {
+    "name": "Horace",
+    "icon": "item_tortoise",
+    "maxStack": 1,
+    "usable": false,
+    "cooldown": 1,
+    "bound": true,
+    "description": "A tortoise, ninety years old and heavier than he looks. However he is held, he turns his head to the north."
+  },
+  "tale_diver_key": {
+    "name": "Chest Key",
+    "icon": "item_key_iron",
+    "maxStack": 1,
+    "usable": false,
+    "cooldown": 1,
+    "bound": true,
+    "opens": "tale_diver",
+    "description": "A small iron key, cold from being under a stone. The bow is stamped CO."
+  },
+  "tale_spanner": {
+    "name": "Diver's Spanner",
+    "icon": "item_spanner",
+    "maxStack": 1,
+    "usable": false,
+    "cooldown": 1,
+    "description": "A spanner as long as your forearm, sized for the wing nuts on a diving helmet and nothing else."
+  },
+  "tale_chit": {
+    "name": "Company Chit",
+    "icon": "item_letter",
+    "maxStack": 1,
+    "usable": false,
+    "cooldown": 1,
+    "description": "GOLDSKIN MINING Co. DIVER DENHOLM TO SURFACE AND REPORT. It has been folded and unfolded until the folds are soft."
+  },
+  "tale_scarf": {
+    "name": "Short Scarf",
+    "icon": "item_scarf",
+    "maxStack": 1,
+    "usable": false,
+    "cooldown": 1,
+    "description": "Odd ends of Mrs Wakes's wool, knitted up short. Your name is worked into one corner in the darker wool."
+  },
+  "tale_lamp_oil": {
+    "name": "Lamp Oil",
+    "icon": "item_oil_can",
+    "maxStack": 1,
+    "usable": false,
+    "cooldown": 1,
+    "description": "A can of paraffin, a third full. Enough to fill one signal lamp."
+  },
+  "tale_scrag": {
+    "name": "Scrag End",
+    "icon": "item_meat",
+    "maxStack": 1,
+    "usable": false,
+    "cooldown": 1,
+    "description": "Neck of mutton in newspaper. Mr Sorrell's own dinner, he says, and it will not mind."
+  }
+}

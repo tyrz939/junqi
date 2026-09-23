@@ -1,0 +1,49 @@
+[
+  {
+    "hour": 6,
+    "actions": [
+      { "do": "if", "when": [{ "if": "flag", "flag": "tale_bees_left", "eq": 1 }], "then": [{ "do": "show", "prop": "tale_bees_jar" }] },
+      { "do": "if", "when": [{ "if": "flag", "flag": "tale_walk_left", "eq": 1 }], "then": [{ "do": "show", "prop": "tale_walk_second" }] },
+      { "do": "if", "when": [{ "if": "flag", "flag": "tale_boards_kept", "eq": 1 }], "then": [{ "do": "show", "prop": "tale_boards_new" }] },
+      {
+        "do": "if",
+        "when": [{ "if": "flag", "flag": "tale_boards_pulled", "eq": 1 }],
+        "then": [
+          { "do": "despawn", "unit": "tale_boards_rook" },
+          { "do": "hide", "prop": "tale_boards_boots" },
+          { "do": "show", "prop": "tale_boards_off" },
+          { "do": "spawn", "unit": "tale_boards_mary", "def": "tale_mary", "at": "tale_boards_mary_mark" }
+        ]
+      }
+    ]
+  },
+  {
+    "hour": 21,
+    "actions": [
+      {
+        "do": "if",
+        "when": [{ "if": "flag", "flag": "tale_walk_home", "eq": 1 }],
+        "then": [
+          { "do": "despawn", "unit": "tale_walk_pollard" },
+          { "do": "spawn", "unit": "tale_walk_pollard_home", "def": "tale_pollard_home", "at": "tale_walk_chair_mark" }
+        ]
+      }
+    ]
+  },
+  {
+    "hour": 22,
+    "actions": [
+      {
+        "do": "send",
+        "unit": "tale_walk_pollard",
+        "to": "tale_walk_stone_mark",
+        "then": [
+          { "do": "despawn", "unit": "tale_walk_pollard" },
+          { "do": "spawn", "unit": "tale_walk_pollard", "def": "tale_pollard_stood", "at": "tale_walk_stone_mark" },
+          { "do": "flag", "flag": "tale_walk_arrived", "value": 1 },
+          { "do": "if", "when": [{ "if": "flag", "flag": "tale_walk_taken", "eq": 1, "not": true }], "then": [{ "do": "switch", "prop": "tale_walk_stone", "on": true }] }
+        ]
+      }
+    ]
+  }
+]

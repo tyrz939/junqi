@@ -303,3 +303,133 @@ The red glove's name tape (it says SCHOOL and nothing else) was already there, a
 
 - `sim/catalog.ts`: add `returnTo?: string` to `QuestDef`. The UI reads it through a local cast today.
 - World (B1/B2): keep the marks `graveyard_gate`, `allotment_shed`, and the sites `farm`, `gold_mine`, `town`, `car_wood` that the new tracks and signs are placed by; keep one road from the station to Julie's, and Julie's to Castle, and the mine and graveyard roads leaving Castle (the dog's directions depend on it). The audit will say by name if any of that stops being true.
+
+---
+
+## 10. Tales (`data/stories/tales.json`, `data/quests/tales.json`)
+
+*Added 24 September 2026, after John asked for "real mini stories in the world with NPCs that kind of obviously are more than the usual ... 2-3 deep, a little bit gripping, not all the same."*
+
+Nine short stories, each with one person at it who is plainly more than a neighbour: a drawing of their own (`art/units/tales.ts`), a voice of their own, and a place that shows what happened before they say a word. Each goes two or three steps, and the second step changes what the first one meant. Seven end on a choice, and both ways leave something changed in the world: a door left open or boarded again, a person gone the next morning, a lamp lit red or green.
+
+**What was already told, so these are not.** Before choosing, the 26 main and Lowfields quests, the 16 in Castle and the 36 country stories were listed by premise. The country stories are mostly *find my lost thing* (spectacles, bill-hook, key, scissors, clock key, ring, coat, glove, bag), *take this to someone* (windfalls, tea, kindling, letters, loaves, roses, apples), *knock and tell him his tea is ready* (Mr Leckie, Robert, the lodger), *look and report* (the ruin's candles, the bell ringing twice, the name in the stump, the memorial), *count something* (scarecrows, lanes, paces, lamps) and *clear a camp*. None of the tales below is any of those.
+
+**How they are placed.** Every tale claims a ruin (the county has hundreds, in all three regions, near roads or reached by a laid footpath), so they never take a cottage or a farm from a country story and they land on every seed: **20 of 20 on seeds 1 to 20, all nine, with everything they put down reachable on foot** (`test/tales.test.ts` measures it). A tale's place has its own name, the same on every seed, and its own words on the board. A tale is only given a place whose kept cells she can walk to from the platform (stories.ts `walkable`, things standing counted), and its things are set down by position in the place (`at: { dx, dy, room, on }`, placements.ts) on open ground next to ground she can already reach. Nothing a tale sets down draws on the county's dice (a footpath laid to its place can still move what the country scatters afterwards, as any story's can), and on seeds 1 to 20 the tales cause no county to be re-rolled.
+
+| | Tale | Where | Who | Hours | Tone | Verbs |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | Telling the Bees | Coram's, the Lowfields | Miss Hanney, in a bee veil | day, then after the bell | tender, uneasy | knock on hives, wait for night, tie crepe |
+| 2 | The Bell on His Ankle | Whinmoor Cottage, the Lowfields | Mrs Pollard in curlers; Mr Pollard in pyjamas, a bell on his ankle | after the bell | tender | follow him, read what is on the stone |
+| 3 | Horace | Sundial Cottage, the Lowfields | Mr Pargeter, a panama, ninety-year-old tortoise | day | funny-sad | follow a trail of bitten dandelions, push a stone |
+| 4 | Three Stones | Coker's Wall, the Lowfields | Mr Coker, a waller in a leather apron | day | dark-funny | carry stones |
+| 5 | The Boarded House | Sluice Cottage, the Waters | Mr Rook, barefoot, a hammer; Mary, a voice behind boards | day, then after the bell | tense | look at the back boards, listen at the door, pull the boards |
+| 6 | The Spanner | The Intake, the Waters | Mr Denholm, the Company's diver, in his helmet | day | funny-sad, uneasy | push the stone off the key, open the chest |
+| 7 | The Last Rows | Tenter Cottage, the Waters | Mrs Wakes, in her rocking chair, knitting | day | eerie, kind | follow the scarf, read it, pull a row out |
+| 8 | Lamp Oil / The Red Lamp | Brickfield Halt, the Works | Mr Voysey, a railwayman's cap; Mrs Voysey with her case | day, then after the bell | sad | push a barrel off a locker, light a lamp |
+| 9 | Vermin / Under the Hatch | The Weighbridge, the Works | Mr Sorrell, the vermin man, his pole over his shoulder | day, then after the bell | funny, then tense | kill, then feed or fight |
+
+The School looms in four of them, lightly and never explained: the Pollards' Tom "is up at the School"; Mrs Wakes's scarf "is not the School's register"; Horace walks north every autumn; the dead come up in two more (the man at the hives, Coker's headstones: "not since they all got up and went walking").
+
+### 1. Telling the Bees (Coram's)
+
+In the yard: three white hives on legs, a bee veil on a stake by the door with the net damp as if it had been out in the dew. Miss Hanney, in a veil of her own, says Mr Coram died on Friday and somebody must tell the bees or they will leave; it ought to be family, and there is none.
+
+| Step | Where | Verb | What she finds |
+| --- | --- | --- | --- |
+| "Knock on the three hives at Coram's and tell them" | the three hives | knock on each (USE) | at the third, lifting the roof, comb freshly cut from the frames |
+| "Whoever cuts the comb at Coram's, after the bell" | among the hives, after nine | wait for night | a man in a bee veil cutting comb without a light: "That's the name on the board." |
+| "Black crepe round the three hives at Coram's" | the hives | tie crepe on each (USE, with the crepe) | the hives in black |
+
+**Turn:** the errand for a dead man's bees is an errand for the dead man, who is still keeping them. **Choice** (Miss Hanney, after the second): *give me the crepe* (tied on, the hives change; nobody is at the hives after the bell again; his veil is taken in off the stake) or *leave him to it* (from the next morning a jar of honey stands on his step with HANNEY on the lid, and he is at the hives every night). Returns: Miss Hanney, by day.
+
+### 2. The Bell on His Ankle (Whinmoor Cottage)
+
+A lived-in cottage; outside the door a kitchen chair with a blanket, the ground under it worn to earth; a man's carpet slippers by the step, worn through at the toes, grass seed in them (gone from the step at night). Mrs Pollard, in curlers and a dressing gown, says her husband walks in his sleep after the bell, and she ties a bell on his ankle to hear him go.
+
+| Step | Where | Verb | What she finds |
+| --- | --- | --- | --- |
+| "Where Mr Pollard walks to from Whinmoor Cottage, after the bell" | a flat stone north of the house, the Dole Stone | follow him (he goes when spoken to, and by himself at ten) | a dinner set on the stone under a cloth; he is awake: "It's for our Tom. He's up at the School." |
+| "Mrs Pollard's plate, off the stone north of Whinmoor Cottage" | the Dole Stone, by day | take the plate | the plate wiped clean under the cloth |
+
+**Turn:** he is not asleep and never was. **Choice** (Mrs Pollard): *bring the plate back* (then from that night he sits in the chair by his door and listens for the bell, and the stone is bare) or *let him go on* (from the next morning a second plate stands by the first, bread and dripping cut into soldiers).
+
+### 3. Horace (Sundial Cottage)
+
+The board says *Please mind the tortoise.* In the yard a tea chest on its side, straw pressed in a tortoise-sized round, the front knocked out; a flat stone beside it. Mr Pargeter has lost Horace, ninety, his father's.
+
+| Step | Where | Verb | What she finds |
+| --- | --- | --- | --- |
+| "Horace, at the end of the bitten dandelions by Sundial Cottage" | four bitten dandelions north from the house, and Horace at the end | follow the trail, pick him up | "Horace, facing north" |
+| "The flat stone against Horace's box at Sundial Cottage" | the front of the box | push the stone (hold USE) against the front | Horace in his box, nose to the stone |
+
+**Turn:** he was not lost, he was going somewhere: north, every autumn. **Ending:** Horace sits in his box with his nose to the stone. "North's the other way, but he doesn't know that. Or he does, and he's being patient."
+
+### 4. Three Stones (Coker's Wall)
+
+A knee-high dry-stone wall running out from a ruin, going nowhere in particular, very straight; a heap of flat dressed stones by the walls; a tin mug of tea gone cold. One stone in the wall has letters on the face that meets the next: LOVING MEM.
+
+| Step | Where | Verb | What she finds |
+| --- | --- | --- | --- |
+| "Three stones carried to the end of Coker's Wall" | the heap, then the gap at the end of the wall | carry each (USE to lift, USE to set down) | three set in the gap |
+
+**Turn:** "You'll have seen what they are. Face down, they're only stone. Nobody's using them now. Not since they all got up and went walking." **Choice:** *leave them in* or *stand them back up* (three headstones stand by the heap, faces out, the second date this year; he says he'll find more).
+
+### 5. The Boarded House (Sluice Cottage)
+
+A cottage with planks nailed across both windows and the door. Mr Rook, in shirt-sleeves and braces, a claw hammer, barefoot; on the step a pair of men's boots full to the laces with black water. The board says *Please do not knock.* He says his Mary was out after the bell on Sunday and came back wrong.
+
+| Step | Where | Verb | What she finds |
+| --- | --- | --- | --- |
+| "The boards over the back window at Sluice Cottage" | the boarded window at the side | look | every nail worked half out from the inside |
+| "Mary Rook, through the boards at Sluice Cottage, after the bell" | the boarded door, after nine (given by the boots: "Ask Mary, after the bell") | knock, listen | "Look at his feet. He came in on Sunday without his boots, and he's not put them on since. He can't. They don't fit him now." |
+
+**Turn:** each says the other came back wrong, and both have a thing to show for it. **Choice** at the door: *pull the boards off* (the door stands open a hand's width; next morning Mr Rook and his boots are gone and Mary stands in the yard: "He went off before it was light. Barefoot.") or *leave them* (next morning new planks and a tin of nails by the door; "Another night, then.").
+
+### 6. The Spanner (the Intake)
+
+GOLDSKIN MINING Co. DIVER'S STATION. NO BATHING. Mr Denholm, in a brass helmet and a canvas suit, sits by an air pump whose hose is dry. "You'll have to speak up. There's a good deal of glass between us." He wants his spanner out of his tool chest; the key is where he always leaves it, under the flat stone by the step.
+
+| Step | Where | Verb | What she finds |
+| --- | --- | --- | --- |
+| "The key under the flat stone at the Intake" | the flat stone | push it off (hold USE); a small iron key where it lay | the key (a real key, drawn as one) |
+| "The spanner in the tool chest at the Intake" | the chest in the ruin | unlock, open | the spanner, and a Company chit: DIVER DENHOLM TO SURFACE AND REPORT |
+
+**Turn:** he does not want the helmet off. He wants it tightened: somebody is knocking at the intake grille, three and a rest and three, and the Company says leave it. **Choice:** *tighten the bolts* (he walks off heavy without looking back; the pump's hose runs off along the ground after him and he is not there again) or *undo the bolts* (the helmet on the ground by the step with lake water in it, and an old man bareheaded who stays: "I can hear it plainer without.").
+
+### 7. The Last Rows (Tenter Cottage)
+
+Mrs Wakes in her rocking chair outside her door, knitting, the scarf running out along the ground from her lap; its far end faded to no colour. She knits a row for everybody who comes up to the door.
+
+| Step | Where | Verb | What she finds |
+| --- | --- | --- | --- |
+| "The newest rows of Mrs Wakes's scarf, at Tenter Cottage" | the scarf over the arm of her chair | read it | SAM ILES. ADA ILES. THE CONSTABLE. MR DUNN. The last row half done: {name} |
+| "Your row, on the scarf over her chair at Tenter Cottage" | the same | tell her to finish it, or pull it out | |
+
+**Turn:** it is a register, and you are in it. "It's not the School's register. It's only mine, and it's warmer." **Choice:** *finish it* (she gives you a short scarf with your name in the corner) or *pull it out* (a tangle of pulled wool by her chair, a gap in the scarf she will not knit over).
+
+### 8. The Red Lamp (Brickfield Halt)
+
+GOLDSKIN MINING Co. LIGHT RAILWAY. REQUEST STOP. A length of track, a bench, a timetable ("To stop the train, show a green lamp after the bell. A red lamp tells the driver to run through."), two dark signal lamps. Mr Voysey keeps the lamps though nothing stops. Mrs Voysey stands by the bench with her suitcase packed.
+
+| Step | Where | Verb | What she finds |
+| --- | --- | --- | --- |
+| "The oil in the lamp locker at Brickfield Halt" | the lamp locker by the walls, a barrel rolled against it | push the barrel off; the locker opens | a can of paraffin, "enough to fill one signal lamp" |
+| "A signal lamp lit at Brickfield Halt, after the bell" | the red lamp or the green | light one | |
+
+**Turn:** the errand is to keep his wife from leaving. "He'll want red. Red, and it runs through. I've a ticket. It's only a single." **Choice:** light the *red* (it burns every night after; she is still by the bench: "Next Sunday, then.") or the *green* (it burns green; she is gone in the morning, and he says he heard it stop).
+
+### 9. Under the Hatch (the Weighbridge)
+
+Web spinners in the walls, two empty cage traps with the doors tied open, a hatch in the floor bolted from the outside, the wood round it scored from underneath. Mr Sorrell, the Company's vermin man, with his catch tied on a pole.
+
+| Step | Where | Verb | What she finds |
+| --- | --- | --- | --- |
+| "Web spinners in the walls at the Weighbridge" | round the walls (five stand, four asked) | kill | |
+| "The hatch in the floor at the Weighbridge, after the bell" | the hatch, after nine | feed it the scrag end he gives you, or draw the bolt | something pushing up; it is quiet, or it comes up and is put down |
+
+**Turn:** the vermin were its supper; clearing them is what makes it come up. **Choice:** *meat down the hatch* (bolted and quiet; he goes back to spinners) or *draw the bolt* (the hatch open over a hole in wet stone with nothing in it; his pole leant on the wall: "I'll finish the week.").
+
+### What the audit and the tests hold them to
+
+- The quest audit (rules A to E) covers every tale quest on seeds 3, 2026 and 77, like any other; a plate's `release` list (the stone pushed off) now counts as something that shows a thing.
+- `test/tales.test.ts`: the count and depth, fixed names clear of every board name, VOICE.md's hard rules, at least half turning on a physical verb; every tale landing whole and reachable on seeds 1 to 20; and every tale played end to end on seeds 3 and 2026, one branch of its choice on each, with the stone pushed, the stones carried and Mr Pollard followed, and the ending checked in the world.

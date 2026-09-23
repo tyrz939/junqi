@@ -38,15 +38,42 @@ import type { Chunk } from "@/world/chunks";
 import type { Place } from "@/world/country";
 import type { Kit } from "@/world/kit";
 import { MACRO, type Skeleton } from "@/world/skeleton";
+import { Tile } from "@/sim/grid";
 
 export type PlacementRow = {
   key: string;
   count?: number;
   /** With `count` in an area: stand them about the patch, each somewhere of its own, not shoulder to shoulder at its centre. */
   spread?: boolean;
-  at: { mark?: string; site?: string; area?: string; poi?: string; near?: string; anchor?: string; slot?: string; place?: string; within?: number };
-  /** The key of a prop a chunk placed, and the fields to set on it. Nothing new is placed. */
-  edit?: Partial<Omit<PropSpawn, "key" | "cx" | "cy" | "def">>;
+  at: {
+    mark?: string;
+    site?: string;
+    area?: string;
+    poi?: string;
+    near?: string;
+    anchor?: string;
+    slot?: string;
+    place?: string;
+    within?: number;
+    /**
+     * At a story's place, by where in it rather than by a kept cell: cells from the place's top-left
+     * (a tale dresses its place the way a set is dressed: the chair here, the drag marks there). The
+     * thing goes on the nearest open ground within `within` cells (default 3); growth and rubble under
+     * it are cleared, water and walls are not.
+     */
+    dx?: number;
+    dy?: number;
+    /** At a story's place, on exactly the cell of a thing an earlier row put there (by key), moved by dx, dy: the key under the stone. */
+    on?: string;
+    /** With dx, dy: the open ground to find, [w, h, ox, oy], and where in it this row's thing goes. */
+    room?: [number, number, number, number];
+  };
+  /**
+   * The key of a prop a chunk placed, and the fields to set on it. Nothing new is placed. A `def` may be
+   * changed only for one of the same footprint (a tale boards up a roofless cottage it has claimed), and
+   * a `key` given so that a tale's words can name the thing (switch the house, show the boards).
+   */
+  edit?: Partial<Omit<PropSpawn, "cx" | "cy">>;
   unit?: { def: string; phase?: number; facing?: Facing };
   prop?: Omit<PropSpawn, "key" | "cx" | "cy">;
   rect?: { name: string; w: number; h: number };
@@ -137,6 +164,8 @@ export type PlaceCtx = {
   threatAt: (cx: number, cy: number) => number;
   /** Story id -> the generated place it claimed (world/stories.ts). Filled before the "places" stage. */
   claims?: ReadonlyMap<string, Place>;
+  /** Ground she can walk to (world/stories.ts): a tale's things are set down only where she can reach them. */
+  ground?: Uint8Array;
 };
 
 export type Stage = "chunks" | "pois" | "areas" | "places";
@@ -237,6 +266,19 @@ function atPlace(ctx: PlaceCtx, row: PlacementRow, p: Place): void {
   }
   let cell: [number, number] | undefined = p.slots[slot];
   let patrol: UnitSpawn["patrol"];
+  if (row.at.on !== undefined) {
+    const under = k.props.find((q) => q.key === row.at.on);
+    if (!under) return;
+    cell = [under.cx + (row.at.dx ?? 0), under.cy + (row.at.dy ?? 0)];
+  } else if (row.at.dx !== undefined || row.at.dy !== undefined) {
+    const size = row.prop ? (ctx.sizes[row.prop.def] ?? { w: 1, h: 1 }) : { w: 1, h: 1 };
+    // `room`: open ground for the whole of a small scene (the box, the stone and somewhere to stand
+    // to push it), with this row's thing at (ox, oy) in it; later rows sit `on` it.
+    const [rw, rh, ox, oy] = row.at.room ?? [size.w, size.h, 0, 0];
+    const spot = openAt(k, ctx.sizes, ctx.ground, p.box.cx + (row.at.dx ?? 0), p.box.cy + (row.at.dy ?? 0), rw, rh, row.at.within ?? 3);
+    if (!spot) return;
+    cell = [spot[0] + ox, spot[1] + oy];
+  }
   const folk = /^folk(?:_(\d))?$/.exec(slot);
   if (folk) {
     const key = p.folk[Number(folk[1] ?? 1) - 1];
@@ -265,8 +307,61 @@ function atPlace(ctx: PlaceCtx, row: PlacementRow, p: Place): void {
     u.facing = row.unit.facing;
     if (row.unit.phase !== undefined && row.unit.phase > 1) u.phase = row.unit.phase;
   }
-  if (row.mark) k.mark(row.mark, cx, cy + (row.prop ? (ctx.sizes[row.prop.def]?.h ?? 1) : 1), 1);
+  // Below a thing, below a person; a mark on its own is where it was put.
+  if (row.mark) k.mark(row.mark, cx, cy + (row.prop ? (ctx.sizes[row.prop.def]?.h ?? 1) : row.unit ? 1 : 0), 1);
   if (row.rect) k.rect(row.rect.name, { cx: cx - (row.rect.w >> 1), cy: cy - (row.rect.h >> 1), w: row.rect.w, h: row.rect.h });
+}
+
+/** Growth and rubble a tale may clear from under what it sets down. Water, walls and fences stay. */
+const SOFT_GROUND = new Set<number>([Tile.Bush, Tile.GrassTall, Tile.Tree, Tile.Pine, Tile.DeadTree, Tile.Rubble]);
+
+/**
+ * The nearest footprint to (x, y), in rings out to `within`, whose ground is walkable or only growth,
+ * and on which nothing already stands. Inside a built place every cell is claimed, so this looks at the
+ * ground and the things themselves rather than the claim map. It draws no randomness: a tale's dressing
+ * moves nothing else in the county.
+ */
+function openAt(k: Kit, sizes: PlaceCtx["sizes"], ground: Uint8Array | undefined, x: number, y: number, w: number, h: number, within: number): [number, number] | null {
+  const R = within + 16;
+  const near = k.props.filter((q) => Math.abs(q.cx - x) <= R && Math.abs(q.cy - y) <= R);
+  const people = k.units.filter((u) => Math.abs(u.cx - x) <= R && Math.abs(u.cy - y) <= R);
+  const marks = Object.values(k.marks).filter((m) => Math.abs(m.cx - x) <= R && Math.abs(m.cy - y) <= R);
+  const free = (cx: number, cy: number): boolean => {
+    for (let j = cy; j < cy + h; j++) {
+      for (let i = cx; i < cx + w; i++) {
+        if (i < 0 || j < 0 || i >= k.w || j >= k.h) return false;
+        const t = k.get(i, j);
+        if (k.solid(i, j) && !SOFT_GROUND.has(t)) return false;
+        if (t === Tile.Water || t === Tile.Road) return false;
+      }
+    }
+    for (const q of near) {
+      const s = sizes[q.def] ?? { w: 1, h: 1 };
+      if (q.cx < cx + w && q.cx + s.w > cx && q.cy < cy + h && q.cy + s.h > cy) return false;
+    }
+    if (people.some((u) => u.cx >= cx && u.cx < cx + w && u.cy >= cy && u.cy < cy + h)) return false;
+    // Not on a mark, nor hard beside one: that is where somebody stands (in front of a board, at a door).
+    if (marks.some((m) => m.cx >= cx - 1 && m.cx <= cx + w && m.cy >= cy - 1 && m.cy <= cy + h)) return false;
+    if (!ground) return true;
+    // Somewhere she can already walk to touches it: the ground under it, or beside it.
+    for (let j = cy - 1; j <= cy + h; j++) {
+      for (let i = cx - 1; i <= cx + w; i++) {
+        const corner = (i === cx - 1 || i === cx + w) && (j === cy - 1 || j === cy + h);
+        if (!corner && i >= 0 && j >= 0 && i < k.w && j < k.h && ground[j * k.w + i]) return true;
+      }
+    }
+    return false;
+  };
+  for (let r = 0; r <= within; r++) {
+    for (let oy = -r; oy <= r; oy++) {
+      for (let ox = -r; ox <= r; ox++) {
+        if (Math.max(Math.abs(ox), Math.abs(oy)) !== r || !free(x + ox, y + oy)) continue;
+        for (let j = y + oy; j < y + oy + h; j++) for (let i = x + ox; i < x + ox + w; i++) if (SOFT_GROUND.has(k.get(i, j))) k.set(i, j, Tile.Dirt);
+        return [x + ox, y + oy];
+      }
+    }
+  }
+  return null;
 }
 
 type Anchor = { cx: number; cy: number; within: number };

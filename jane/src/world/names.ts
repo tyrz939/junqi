@@ -39,6 +39,15 @@ export type StoryRow = {
   count?: number;
   /** The quests told here, in the order she meets them. */
   quests: string[];
+  /**
+   * The tales (data/stories/tales.json, QUEST-TREE.md "Tales"): the few stories with somebody at them
+   * who is more than a neighbour. A tale's place has its own name, the same on every seed, and its own
+   * words on the board; it takes no name from the seed's list.
+   */
+  tale?: boolean;
+  name?: string;
+  /** What the board at the place says, instead of the kind's usual line. {NAME} is the name in capitals. */
+  board?: string;
 };
 
 const FILES = import.meta.glob("../data/stories/*.json", { eager: true, import: "default" }) as Record<string, StoryRow[]>;
@@ -106,14 +115,15 @@ export function nthName(seed: number, kind: string, n: number): string {
 
 /** How many stories take their names from a kind's list before the unclaimed places start on it. */
 export function storiesOfKind(kind: string): number {
-  return STORIES.filter((s) => s.kind === kind).length;
+  return STORIES.filter((s) => s.kind === kind && !s.name).length;
 }
 
-/** The name a story's place has on this seed, whether or not the seed found it a place. */
+/** The name a story's place has on this seed, whether or not the seed found it a place. A tale's is its own. */
 export function storyName(seed: number, id: string): string | undefined {
   const s = STORY_BY_ID.get(id);
   if (!s) return undefined;
-  const n = STORIES.filter((x) => x.kind === s.kind).indexOf(s);
+  if (s.name) return s.name;
+  const n = STORIES.filter((x) => x.kind === s.kind && !x.name).indexOf(s);
   return nthName(seed, s.kind, n);
 }
 
