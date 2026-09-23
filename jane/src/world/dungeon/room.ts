@@ -563,6 +563,33 @@ export function lintRoom(t: RoomTemplate): string[] {
     if (!t.sockets.some((s) => s.id === b.until)) errors.push(`blocks names "${b.until}", which is not a socket`);
   }
 
+  // 6. Dressing stands where somebody would have put it. A pile, a shelf or a cot is against a
+  // wall (a shelf with its back to it); nothing dressed stands within two cells of a doorway;
+  // and no lamp is dressing at all, because lamps go on the walls by rule (lights.ts).
+  for (const s of t.sockets) {
+    if (s.kind !== "dress") continue;
+    const name = s.id.split(":")[1];
+    if (name === "torch") errors.push(`rule 6: ${s.id} is a lamp on the floor; lamps hang on walls by rule (lights.ts)`);
+    const row = (y: number): boolean => Array.from({ length: s.w }, (_, i) => at(s.cx + i, y) === "#").every(Boolean);
+    const col = (x: number): boolean => Array.from({ length: s.h }, (_, j) => at(x, s.cy + j) === "#").every(Boolean);
+    const backed = s.w >= s.h ? row(s.cy - 1) || row(s.cy + s.h) : col(s.cx - 1) || col(s.cx + s.w);
+    let touches = false;
+    for (let j = 0; j < s.h; j++) touches ||= at(s.cx - 1, s.cy + j) === "#" || at(s.cx + s.w, s.cy + j) === "#";
+    for (let i = 0; i < s.w; i++) touches ||= at(s.cx + i, s.cy - 1) === "#" || at(s.cx + i, s.cy + s.h) === "#";
+    if (name === "shelf" && !backed) errors.push(`rule 6: ${s.id} at (${s.cx},${s.cy}) does not have its back to a wall`);
+    else if ((name === "pile" || name === "cot") && !touches) errors.push(`rule 6: ${s.id} at (${s.cx},${s.cy}) stands out in the room, not against a wall`);
+    if (!socketIsSolid(s)) continue;
+    for (const key of sills) {
+      const [sx, sy] = key.split(",").map(Number);
+      const dx = Math.max(s.cx - sx, 0, sx - (s.cx + s.w - 1));
+      const dy = Math.max(s.cy - sy, 0, sy - (s.cy + s.h - 1));
+      if (Math.max(dx, dy) <= 2) {
+        errors.push(`rule 6: ${s.id} at (${s.cx},${s.cy}) crowds the doorway at (${sx},${sy})`);
+        break;
+      }
+    }
+  }
+
   // Every transform it claims must fit its bays with its doors on the mouth lines.
   for (const s of shapesOf(t)) if (!s.fits) errors.push(`turn ${s.turn}${s.mirror ? " mirrored" : ""} does not fit ${s.bays[0]}x${s.bays[1]} bays with its doors on the mouth lines`);
   return errors;

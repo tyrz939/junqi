@@ -7,7 +7,8 @@
 //   3 route    a corridor for every edge, along the lines between bays         (layout.ts)
 //   4 lock     gates, verb props, lock-ins and their way in, flag gates, state gates (and, in 5, the
 //              one list per control that drives them both ways)
-//   5 fill     holdings into sockets, the enemy mix by heat, dressing
+//   5 fill     lamps on the walls by rule (lights.ts), holdings into sockets, the enemy mix by
+//              heat, dressing
 //   6 name     bound things get their contract name, the rest `${zone}_${node}_${socket}`
 //   7 emit     the Blueprint and the trigger rows it carries
 //

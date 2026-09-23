@@ -1,4 +1,4 @@
-// Where the lamps go (DUNGEONS.md 2.9). A lamp hangs on a wall, in the wall cell itself, so it
+// Where the lamps go. A lamp hangs on a wall, in the wall cell itself, so it
 // never stands in anyone's way and never claims a floor cell a crate might be pushed through.
 // Nothing here is rolled: the same rooms and corridors are lit the same way on every seed.
 //
@@ -83,8 +83,8 @@ export function placeLamps(def: DungeonDef, k: Kit, wall: Tile, rooms: LitRoom[]
       const [ix, iy] = IN[side];
       const [ax, ay] = ALONG[side];
       const every = side === "n" || side === "s" ? plan.every : plan.every * 2;
-      /** A cell of this room's wall that shows its face to the room's floor on this side. */
-      // The floor it faces is inside the rim: the cells of a doorway are not a room to light.
+      // A cell of this room's wall that shows its face to the room's floor on this side. The floor
+      // it faces is inside the rim: the cells of a doorway are not a room to light.
       const face = (x: number, y: number): boolean => inBox(r, x, y) && isWall(x, y) && inner(r, x + ix, y + iy) && open(x + ix, y + iy);
       const seen = new Set<number>();
       for (let y = r.y; y < r.y + r.h; y++) {
@@ -123,7 +123,9 @@ export function placeLamps(def: DungeonDef, k: Kit, wall: Tile, rooms: LitRoom[]
         }
       }
     }
-    const inRoom = (x: number, y: number): boolean => rooms.some((r) => inBox(r, x, y));
+    const boxes = new Uint8Array(k.w * k.h);
+    for (const r of rooms) for (let y = r.y; y < r.y + r.h; y++) boxes.fill(1, y * k.w + r.x, y * k.w + r.x + r.w);
+    const inRoom = (x: number, y: number): boolean => boxes[y * k.w + x] === 1;
     const lit = (x: number, y: number): boolean => x >= 0 && y >= 0 && x < k.w && y < k.h && mask[y * k.w + x] === 1 && open(x, y) && !inRoom(x, y);
     const every = plan.corridor;
     const phase = (v: number, shift: number): boolean => (v + shift) % every === 0;

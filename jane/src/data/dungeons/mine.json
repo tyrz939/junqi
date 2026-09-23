@@ -194,7 +194,7 @@
     "pillar": { "props": ["pillar"], "chance": 1 },
     "shelf": { "props": ["shelf"], "chance": 1 },
     "desk": { "props": ["table"], "chance": 1 },
-    "cot": { "props": ["table"], "chance": 1 }
+    "cot": { "props": ["bed"], "chance": 1 }
   },
   "fallback": [
     { "node": "entry", "template": "mine.entry.a", "bay": [1, 3], "turn": 0, "mirror": false },
