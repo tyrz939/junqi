@@ -48,6 +48,8 @@ export type StoryRow = {
   name?: string;
   /** What the board at the place says, instead of the kind's usual line. {NAME} is the name in capitals. */
   board?: string;
+  /** A tale at a ruin: a roofless cottage ("house") or four walls ("walls"). The county builds some of the sort asked for (country.ts taleQuota). */
+  ruin?: "house" | "walls";
 };
 
 const FILES = import.meta.glob("../data/stories/*.json", { eager: true, import: "default" }) as Record<string, StoryRow[]>;

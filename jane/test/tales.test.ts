@@ -35,6 +35,8 @@ import { face, idle, talkThrough, walkTo, walkToProp, yardCatalog } from "./bot"
 const catalog = yardCatalog();
 const TALES = STORIES.filter((s) => s.tale);
 const LONG = 900_000;
+/** Seeds 1 to 20, and the three every other test plays or nobody has tuned against. */
+const ALL_SEEDS = [...Array.from({ length: 20 }, (_, i) => i + 1), 2026, 77, 123];
 const KINDS = ["hamlet", "farmstead", "cottage", "inn", "woodcutter", "camp", "ruin"];
 
 // --- 1. the data ---------------------------------------------------------------------------------
@@ -159,7 +161,7 @@ describe("the tales, on seeds 1 to 20", () => {
   it("every tale finds its place, puts down everything it needs, and all of it can be walked to", () => {
     const landed = new Map<string, number>();
     const problems: string[] = [];
-    const SEEDS = Array.from({ length: 20 }, (_, i) => i + 1);
+    const SEEDS = ALL_SEEDS;
     for (const seed of SEEDS) {
       const bp = blueprintFor("county", seed);
       const seen = flood(bp);
@@ -233,8 +235,12 @@ function strike(sim: Sim, hour: number, mark: string): void {
 }
 
 function useProp(sim: Sim, key: string, choices: number[] = []): void {
-  expect(walkToProp(sim, key), `walk to ${key}`).toBe(true);
   const prop = sim.rt.propsByKey.get(key)!;
+  const aimed = (): boolean => {
+    const f = focusOf(sim, sim.player);
+    return f?.kind === "prop" && f.id === prop.id;
+  };
+  expect(walkToProp(sim, key, aimed), `walk to ${key}`).toBe(true);
   const f = focusOf(sim, sim.player);
   expect(f?.kind === "prop" && f.id === prop.id, `USE beside ${key} acts on it, not ${JSON.stringify(f)}`).toBe(true);
   sim.command({ t: "use" });
@@ -248,7 +254,7 @@ function talkTo(sim: Sim, key: string, choices: number[] = []): void {
   expect(u, `${key} is there`).toBeDefined();
   expect(u!.hidden, `${key} is not away`).toBe(false);
   let ok = false;
-  for (const [ox, oy] of [[0, 10], [10, 0], [-10, 0], [0, -10], [0, 0]]) {
+  for (const [ox, oy] of [[0, 10], [10, 0], [-10, 0], [0, -10], [8, 8], [-8, 8], [8, -8], [-8, -8], [0, 16], [16, 0], [-16, 0], [0, -16], [0, 0]]) {
     if (!walkTo(sim, u!.x + ox, u!.y + oy, 4)) continue;
     face(sim, u!.x, u!.y);
     const f = focusOf(sim, sim.player);
@@ -536,7 +542,8 @@ describe("the tales, played end to end", () => {
   it("every tale has a play here", () => {
     expect(Object.keys(PLAYS).sort()).toEqual(TALES.map((t) => t.id).sort());
   });
-  for (const [seed, branch] of [[3, "a"], [2026, "b"]] as const) {
+  for (const [n, seed] of ALL_SEEDS.entries()) {
+    const branch: Branch = n % 2 === 0 ? "a" : "b";
     for (const t of TALES) {
       it(`seed ${seed}: ${t.id} (${branch === "a" ? "first" : "second"} way)`, () => {
         const sim = newGame(seed);

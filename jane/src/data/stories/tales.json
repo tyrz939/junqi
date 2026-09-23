@@ -13,7 +13,8 @@
       "tale_bees_tell",
       "tale_bees_comb",
       "tale_bees_crepe"
-    ]
+    ],
+    "ruin": "house"
   },
   {
     "id": "tale_walk",
@@ -28,7 +29,8 @@
     "quests": [
       "tale_walk_follow",
       "tale_walk_plate"
-    ]
+    ],
+    "ruin": "house"
   },
   {
     "id": "tale_horace",
@@ -43,7 +45,8 @@
     "quests": [
       "tale_horace_find",
       "tale_horace_box"
-    ]
+    ],
+    "ruin": "house"
   },
   {
     "id": "tale_wall",
@@ -57,7 +60,8 @@
     ],
     "quests": [
       "tale_wall_stones"
-    ]
+    ],
+    "ruin": "walls"
   },
   {
     "id": "tale_boards",
@@ -73,7 +77,8 @@
     "quests": [
       "tale_boards_back",
       "tale_boards_door"
-    ]
+    ],
+    "ruin": "house"
   },
   {
     "id": "tale_diver",
@@ -88,7 +93,8 @@
     ],
     "quests": [
       "tale_diver_spanner"
-    ]
+    ],
+    "ruin": "walls"
   },
   {
     "id": "tale_scarf",
@@ -104,7 +110,8 @@
     "quests": [
       "tale_scarf_rows",
       "tale_scarf_row"
-    ]
+    ],
+    "ruin": "house"
   },
   {
     "id": "tale_halt",
@@ -120,7 +127,8 @@
     "quests": [
       "tale_halt_oil",
       "tale_halt_lamp"
-    ]
+    ],
+    "ruin": "walls"
   },
   {
     "id": "tale_vermin",
@@ -136,6 +144,7 @@
     "quests": [
       "tale_vermin_clear",
       "tale_vermin_hatch"
-    ]
+    ],
+    "ruin": "walls"
   }
 ]

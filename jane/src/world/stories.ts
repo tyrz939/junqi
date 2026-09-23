@@ -20,7 +20,7 @@ import { hashString } from "@/sim/rng";
 import type { StoryPlace } from "@/world/blueprint";
 import type { Place } from "@/world/country";
 import type { Kit } from "@/world/kit";
-import { PLACEMENTS, type PlacementRow } from "@/world/placements";
+import { PLACEMENTS, SOLID_PROPS, type PlacementRow } from "@/world/placements";
 import { MACRO, Region, type Skeleton } from "@/world/skeleton";
 import { boardText, NAMED_KINDS, nthName, STORIES, storiesOfKind, storyName, type StoryRow } from "@/world/names";
 
@@ -52,14 +52,6 @@ export type Claims = {
    */
   ground?: Uint8Array;
 };
-
-/** Footprints of the things that stop her feet, by def (data/props.json and data/props/*.json). */
-const SOLID_PROPS: ReadonlyMap<string, { w: number; h: number }> = (() => {
-  const files = import.meta.glob(["../data/props.json", "../data/props/*.json"], { eager: true, import: "default" }) as Record<string, Record<string, { w: number; h: number; solid: boolean }>>;
-  const out = new Map<string, { w: number; h: number }>();
-  for (const rows of Object.values(files)) for (const [id, d] of Object.entries(rows)) if (d.solid) out.set(id, { w: d.w, h: d.h });
-  return out;
-})();
 
 /**
  * Cells reachable on foot from the start mark: the ground, less whatever solid thing already stands on it

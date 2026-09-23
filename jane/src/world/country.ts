@@ -174,6 +174,8 @@ type Ctx = Country & {
   places: Place[];
   /** The place being stamped, while it is stamped: what it puts, it owns. */
   cur: Place | null;
+  /** A ruin built for a tale is the one the tale asked for: a roofless cottage ("house") or walls. Unset, the dice say. */
+  ruinAs?: "house" | "walls";
 };
 
 let cached: { c: Country; ctx: Ctx } | null = null;
@@ -988,8 +990,14 @@ function storyQuota(c: Ctx): void {
     !opening.some(([ox, oy, r]) => Math.hypot(ox - x, oy - y) < r) &&
     !c.places.some((p) => QUOTA_KINDS.has(p.kind) && Math.hypot(p.box.cx + p.box.w / 2 - x, p.box.cy + p.box.h / 2 - y) < QUOTA_APART);
   // On ground no worse than threat 2, which is where a story's people live unless it says otherwise.
+  // A tale's ruin stands where the tale will take it: the Works is threatened ground all over, and a tale there is.
   const tryAt = (region: Region, kind: Kind, x: number, y: number): boolean =>
-    sk.region[macroOf(x, y)] === region && sk.threat[macroOf(x, y)] <= 2 && free(x, y) && allowed(c, kind, x, y, -1) && stamp(c, kind, x, y);
+    sk.region[macroOf(x, y)] === region &&
+    sk.threat[macroOf(x, y)] <= (kind === "ruin" ? (region === Region.Works ? 5 : 3) : 2) &&
+    free(x, y) &&
+    (kind !== "ruin" || !c.places.some((p) => p.kind === "ruin" && Math.hypot(p.box.cx + p.box.w / 2 - x, p.box.cy + p.box.h / 2 - y) < QUOTA_APART)) &&
+    allowed(c, kind, x, y, -1) &&
+    stamp(c, kind, x, y);
   /** Beside one road, every twelve cells, until `count` more stand; returns how many did. */
   const alongLine = (n: number, region: Region, kind: Kind, count: number): number => {
     const [w, h] = SIZE[kind];
@@ -1048,6 +1056,31 @@ function storyQuota(c: Ctx): void {
       continue;
     }
     for (let n = 0; n < roadLines(c) && have < target; n++) have += alongLine(n, region, kind, target - have);
+  }
+  taleQuota(c, alongLine);
+}
+
+/**
+ * The tales' ruins (data/stories/tales.json), built beside the roads before the dice have the county: a
+ * tale needs a ruin of its own sort (a roofless cottage, or four walls) in its region, seen from a road and
+ * clear of every other story's place, and left to the dice a seed can come up without one (the Works is
+ * small now). Three of each sort a tale asks for and two over, spaced apart, on ground the tale will take.
+ */
+function taleQuota(c: Ctx, alongLine: (n: number, region: Region, kind: Kind, count: number) => number): void {
+  const want = new Map<string, number>();
+  for (const s of STORIES) {
+    if (!s.tale || s.kind !== "ruin") continue;
+    const key = `${s.region ?? "lowfields"}:${s.ruin ?? "walls"}`;
+    want.set(key, (want.get(key) ?? 0) + 1);
+  }
+  for (const [key, need] of [...want].sort((a, b) => (a[0] < b[0] ? -1 : 1))) {
+    const [regionId, as] = key.split(":") as [string, "house" | "walls"];
+    const region = REGION_OF[regionId];
+    const built = (): number => c.places.filter((p) => p.kind === "ruin" && p.region === region && ("house" in p.things) === (as === "house")).length;
+    c.ruinAs = as;
+    const target = need * 3 + 2;
+    for (let n = 0; n < roadLines(c) && built() < target; n++) alongLine(n, region, "ruin", target - built());
+    c.ruinAs = undefined;
   }
 }
 
@@ -1547,7 +1580,7 @@ function den(c: Ctx, x: number, y: number): void {
 function ruin(c: Ctx, x0: number, y0: number): void {
   const k = c.k;
   const region = c.sk.region[macroOf(x0, y0)] as Region;
-  if (region !== Region.Works && k.chance(0.35)) {
+  if (c.ruinAs ? c.ruinAs === "house" && region !== Region.Works : region !== Region.Works && k.chance(0.35)) {
     own(c, "house", put(c, "cottage_empty", x0 + 4, y0 + 2, { talk: "country_door_empty" }));
     pad(c, x0 + 8, y0 + 10, 5, 2, Tile.Dirt);
     for (let n = 0; n < 4; n++) {

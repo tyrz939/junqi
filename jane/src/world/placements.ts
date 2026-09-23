@@ -425,7 +425,9 @@ function atPlace(ctx: PlaceCtx, row: PlacementRow, p: Place): void {
     // `room`: open ground for the whole of a small scene (the box, the stone and somewhere to stand
     // to push it), with this row's thing at (ox, oy) in it; later rows sit `on` it.
     const [rw, rh, ox, oy] = row.at.room ?? [size.w, size.h, 0, 0];
-    const spot = openAt(k, ctx.sizes, ctx.ground, p.box.cx + (row.at.dx ?? 0), p.box.cy + (row.at.dy ?? 0), rw, rh, row.at.within ?? 3);
+    // Only what stops her feet has to leave the ground round it joined up: a person, a solid thing, a scene.
+    const blocks = !!row.unit || !!row.at.room || (row.prop ? SOLID_PROPS.has(row.prop.def) : false);
+    const spot = openAt(k, ctx.sizes, ctx.ground, p.box.cx + (row.at.dx ?? 0), p.box.cy + (row.at.dy ?? 0), rw, rh, row.at.within ?? 3, blocks);
     if (!spot) return;
     cell = [spot[0] + ox, spot[1] + oy];
   }
@@ -473,6 +475,14 @@ function atPlace(ctx: PlaceCtx, row: PlacementRow, p: Place): void {
   if (row.rect) k.rect(row.rect.name, { cx: cx - (row.rect.w >> 1), cy: cy - (row.rect.h >> 1), w: row.rect.w, h: row.rect.h });
 }
 
+/** Footprints of the things that stop her feet, by def (data/props.json and data/props/*.json). */
+export const SOLID_PROPS: ReadonlyMap<string, { w: number; h: number }> = (() => {
+  const files = import.meta.glob(["../data/props.json", "../data/props/*.json"], { eager: true, import: "default" }) as Record<string, Record<string, { w: number; h: number; solid: boolean }>>;
+  const out = new Map<string, { w: number; h: number }>();
+  for (const rows of Object.values(files)) for (const [id, d] of Object.entries(rows)) if (d.solid) out.set(id, { w: d.w, h: d.h });
+  return out;
+})();
+
 /** Growth and rubble a tale may clear from under what it sets down. Water, walls and fences stay. */
 const SOFT_GROUND = new Set<number>([Tile.Bush, Tile.GrassTall, Tile.Tree, Tile.Pine, Tile.DeadTree, Tile.Rubble]);
 
@@ -482,11 +492,62 @@ const SOFT_GROUND = new Set<number>([Tile.Bush, Tile.GrassTall, Tile.Tree, Tile.
  * ground and the things themselves rather than the claim map. It draws no randomness: a tale's dressing
  * moves nothing else in the county.
  */
-function openAt(k: Kit, sizes: PlaceCtx["sizes"], ground: Uint8Array | undefined, x: number, y: number, w: number, h: number, within: number): [number, number] | null {
+function openAt(k: Kit, sizes: PlaceCtx["sizes"], ground: Uint8Array | undefined, x: number, y: number, w: number, h: number, within: number, blocks = true): [number, number] | null {
   const R = within + 16;
   const near = k.props.filter((q) => Math.abs(q.cx - x) <= R && Math.abs(q.cy - y) <= R);
   const people = k.units.filter((u) => Math.abs(u.cx - x) <= R && Math.abs(u.cy - y) <= R);
   const marks = Object.values(k.marks).filter((m) => Math.abs(m.cx - x) <= R && Math.abs(m.cy - y) <= R);
+  /**
+   * Would a solid thing here shut a way through? The open ground round it, looked at in a window a few
+   * cells wide, must still join up without it: a chest set in the one gap to a board, a person stood in a
+   * doorway, a wall built across a path are all turned down, and the thing goes somewhere nearby instead.
+   */
+  const seals = (cx: number, cy: number): boolean => {
+    const M = 6;
+    const x0 = cx - M;
+    const y0 = cy - M;
+    const ww = w + M * 2;
+    const wh = h + M * 2;
+    const open = new Uint8Array(ww * wh);
+    for (let j = 0; j < wh; j++) {
+      for (let i = 0; i < ww; i++) {
+        const gx = x0 + i;
+        const gy = y0 + j;
+        const inside = gx >= cx && gx < cx + w && gy >= cy && gy < cy + h;
+        if (!inside && gx >= 0 && gy >= 0 && gx < k.w && gy < k.h && !k.solid(gx, gy)) open[j * ww + i] = 1;
+      }
+    }
+    for (const q of near) {
+      const s = SOLID_PROPS.get(q.def);
+      if (!s || q.hidden) continue;
+      for (let j = q.cy; j < q.cy + s.h; j++) for (let i = q.cx; i < q.cx + s.w; i++) if (i >= x0 && j >= y0 && i < x0 + ww && j < y0 + wh) open[(j - y0) * ww + (i - x0)] = 0;
+    }
+    for (const u of people) if (u.cx >= x0 && u.cy >= y0 && u.cx < x0 + ww && u.cy < y0 + wh) open[(u.cy - y0) * ww + (u.cx - x0)] = 0;
+    // The open cells beside it, and the marks nearby: all must be one piece of ground.
+    const must: number[] = [];
+    for (let j = cy - 1; j <= cy + h; j++) {
+      for (let i = cx - 1; i <= cx + w; i++) {
+        const edge = (i === cx - 1 || i === cx + w) !== (j === cy - 1 || j === cy + h);
+        if (edge && open[(j - y0) * ww + (i - x0)]) must.push((j - y0) * ww + (i - x0));
+      }
+    }
+    for (const mk of marks) if (mk.cx >= x0 && mk.cy >= y0 && mk.cx < x0 + ww && mk.cy < y0 + wh && open[(mk.cy - y0) * ww + (mk.cx - x0)]) must.push((mk.cy - y0) * ww + (mk.cx - x0));
+    if (must.length < 2) return false;
+    const seen = new Uint8Array(ww * wh);
+    const queue = [must[0]];
+    seen[must[0]] = 1;
+    while (queue.length > 0) {
+      const n = queue.pop()!;
+      const i = n % ww;
+      for (const d of [i + 1 < ww ? 1 : 0, i > 0 ? -1 : 0, ww, -ww]) {
+        const nb = n + d;
+        if (d === 0 || nb < 0 || nb >= open.length || seen[nb] || !open[nb]) continue;
+        seen[nb] = 1;
+        queue.push(nb);
+      }
+    }
+    return must.some((n) => !seen[n]);
+  };
   const free = (cx: number, cy: number): boolean => {
     for (let j = cy; j < cy + h; j++) {
       for (let i = cx; i < cx + w; i++) {
@@ -503,6 +564,7 @@ function openAt(k: Kit, sizes: PlaceCtx["sizes"], ground: Uint8Array | undefined
     if (people.some((u) => u.cx >= cx && u.cx < cx + w && u.cy >= cy && u.cy < cy + h)) return false;
     // Not on a mark, nor hard beside one: that is where somebody stands (in front of a board, at a door).
     if (marks.some((m) => m.cx >= cx - 1 && m.cx <= cx + w && m.cy >= cy - 1 && m.cy <= cy + h)) return false;
+    if (blocks && seals(cx, cy)) return false;
     if (!ground) return true;
     // Somewhere she can already walk to touches it: the ground under it, or beside it.
     for (let j = cy - 1; j <= cy + h; j++) {
