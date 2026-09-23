@@ -182,7 +182,7 @@
       "demands": [], "grants": [{ "key": "museum_floor" }]
     },
     {
-      "id": "science", "kind": "miniboss", "order": 6, "critical": true, "pool": "museum.science", "heat": 0,
+      "id": "science", "kind": "miniboss", "order": 6, "critical": true, "pool": "museum.science", "heat": 0, "dark": true,
       "holds": [
         { "socket": "unit:firer", "unit": "shot_firer" },
         { "socket": "prop:page", "prop": "page_explosion", "talk": "page_explosion", "label": "The shot-firer's glove", "guardedBy": ["@unit:firer"] },
@@ -363,8 +363,8 @@
     "baseHeat": 7,
     "enemies": { "bat": 1, "stuffed_fox": 2, "waxwork": 2, "armour": 3 }
   },
+  "lights": { "prop": "museum_wall_lamp", "every": 9, "corridor": 14, "state": { "var": "lights", "is": "lit" } },
   "dress": {
-    "torch": { "props": ["torch"], "chance": 0.8 },
     "pile": { "props": ["crate", "barrel"], "chance": 0.5 },
     "pillar": { "props": ["pillar"], "chance": 1 },
     "case": { "props": ["museum_case"], "chance": 1 },

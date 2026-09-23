@@ -140,7 +140,7 @@
       "demands": [], "grants": [{ "key": "snake_boss" }]
     },
     {
-      "id": "snake", "kind": "miniboss", "order": 7, "critical": true, "pool": "burial.snake", "heat": 0,
+      "id": "snake", "kind": "miniboss", "order": 7, "critical": true, "pool": "burial.snake", "heat": 0, "dark": true,
       "holds": [
         {
           "socket": "boss:main", "unit": "burial_snake",
@@ -288,7 +288,7 @@
       "demands": [], "grants": [{ "flag": "spider_down" }]
     },
     {
-      "id": "dark", "kind": "puzzle", "order": 7, "critical": true, "pool": "burial.dark", "heat": 0.5,
+      "id": "dark", "kind": "puzzle", "order": 7, "critical": true, "pool": "burial.dark", "heat": 0.5, "dark": true,
       "holds": [
         { "socket": "push:torch", "prop": "great_torch", "label": "The great torch" },
         { "socket": "prop:brazier_a", "prop": "brazier", "label": "Brazier" },
@@ -313,7 +313,7 @@
       "demands": [], "grants": []
     },
     {
-      "id": "parade", "kind": "miniboss", "order": 7, "critical": true, "pool": "burial.parade", "heat": 0,
+      "id": "parade", "kind": "miniboss", "order": 7, "critical": true, "pool": "burial.parade", "heat": 0, "dark": true,
       "holds": [
         { "socket": "boss:main", "unit": "the_soldier" },
         { "socket": "prop:brazier_a", "prop": "brazier", "label": "Brazier" },
@@ -338,7 +338,7 @@
       "demands": [], "grants": [{ "flag": "soldier_down" }]
     },
     {
-      "id": "vault", "kind": "boss", "order": 8, "critical": true, "pool": "burial.vault", "heat": 0,
+      "id": "vault", "kind": "boss", "order": 8, "critical": true, "pool": "burial.vault", "heat": 0, "dark": true,
       "holds": [
         { "socket": "boss:main", "unit": "goldskin" },
         {
@@ -436,8 +436,8 @@
     "baseHeat": 10,
     "enemies": { "bat": 1, "rat": 1, "spider": 1, "skeleton": 2, "statue": 2, "pumpkin": 2, "cactus": 2, "wall_spider": 2, "skeleton_guard": 3, "soldier": 3 }
   },
+  "lights": { "prop": "cold_sconce", "every": 10, "corridor": 16 },
   "dress": {
-    "torch": { "props": ["torch"], "chance": 0.8 },
     "coldtorch": { "props": ["torch_blue"], "chance": 1 },
     "pile": { "props": ["barrel", "crate"], "chance": 0.5 },
     "pillar": { "props": ["pillar"], "chance": 1 },

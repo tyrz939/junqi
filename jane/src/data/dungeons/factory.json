@@ -358,8 +358,8 @@
     "baseHeat": 9,
     "enemies": { "rat": 1, "bat": 1, "sentry": 3 }
   },
+  "lights": { "prop": "lamp_cage", "every": 10, "corridor": 12 },
   "dress": {
-    "torch": { "props": ["torch"], "chance": 0.8 },
     "pile": { "props": ["crate", "barrel"], "chance": 0.5 },
     "pillar": { "props": ["pillar"], "chance": 1 },
     "bench": { "props": ["table"], "chance": 1 },

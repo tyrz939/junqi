@@ -406,6 +406,7 @@
       "critical": true,
       "pool": "school.corridor",
       "heat": 0.5,
+      "dark": true,
       "holds": [
         {
           "socket": "boss:main",
@@ -444,11 +445,11 @@
         },
         {
           "socket": "prop:lamp_a",
-          "prop": "torch"
+          "prop": "gas_lamp"
         },
         {
           "socket": "prop:lamp_b",
-          "prop": "torch"
+          "prop": "gas_lamp"
         },
         {
           "socket": "prop:pegs",
@@ -523,6 +524,7 @@
       "critical": true,
       "pool": "school.top_corridor",
       "heat": 0.4,
+      "dark": true,
       "holds": [
         {
           "socket": "unit:master_a",
@@ -534,11 +536,11 @@
         },
         {
           "socket": "prop:lamp_a",
-          "prop": "torch"
+          "prop": "gas_lamp"
         },
         {
           "socket": "prop:lamp_b",
-          "prop": "torch"
+          "prop": "gas_lamp"
         },
         {
           "socket": "jar:main",
@@ -941,12 +943,12 @@
         },
         {
           "socket": "prop:lamp_a",
-          "prop": "torch",
+          "prop": "gas_lamp",
           "hidden": true
         },
         {
           "socket": "prop:lamp_b",
-          "prop": "torch",
+          "prop": "gas_lamp",
           "hidden": true
         },
         {
@@ -1250,6 +1252,7 @@
       "critical": true,
       "pool": "school.tower",
       "heat": 0,
+      "dark": true,
       "holds": [
         {
           "socket": "boss:main",
@@ -1833,13 +1836,8 @@
       "master": 4
     }
   },
+  "lights": { "prop": "gas_lamp", "every": 9, "corridor": 14 },
   "dress": {
-    "torch": {
-      "props": [
-        "torch"
-      ],
-      "chance": 0.8
-    },
     "desk": {
       "props": [
         "table"
