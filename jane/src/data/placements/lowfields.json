@@ -30,7 +30,7 @@
       "within": 12
     },
     "prop": {
-      "def": "boss_chest",
+      "def": "luggage_trunk",
       "locked": true,
       "keyTag": "left_luggage",
       "label": "The trunk",

@@ -1,7 +1,7 @@
 {
-  "jar": { "name": "Jar", "sprite": "jar", "w": 1, "h": 1, "solid": true, "blockLos": false, "once": true, "prompt": "Open" },
+  "jar": { "name": "Jar", "sprite": "jar", "w": 1, "h": 1, "solid": true, "blockLos": false, "once": true, "prompt": "Open", "lockedSays": "is out of reach" },
   "jar_big": { "name": "Large Jar", "sprite": "jar_big", "w": 2, "h": 2, "solid": true, "blockLos": false, "once": true, "prompt": "Open" },
-  "leaf_page": { "name": "Gold-Leaf Page", "sprite": "leaf_page", "w": 1, "h": 1, "solid": false, "blockLos": false, "flat": true, "once": true, "prompt": "Read" },
+  "leaf_page": { "name": "Gold-Leaf Page", "sprite": "leaf_page", "w": 1, "h": 1, "solid": false, "blockLos": false, "flat": true, "once": true, "prompt": "Read", "lockedSays": "is held fast" },
   "way_in": { "name": "Way In", "sprite": "way_in", "w": 2, "h": 1, "solid": false, "blockLos": false, "flat": true, "prompt": "Climb in" },
   "notice": { "name": "Notice", "sprite": "sign", "w": 2, "h": 1, "solid": true, "blockLos": false, "prompt": "Read" },
   "hoist_lever": { "name": "Hoist Lever", "sprite": "lever", "w": 1, "h": 1, "solid": true, "blockLos": false, "once": true, "prompt": "Pull" },
