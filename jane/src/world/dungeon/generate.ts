@@ -432,7 +432,16 @@ export function buildDungeon(def: DungeonDef, seed: number, attempt: number, opt
       if (m) reserved.add(m.y * W + m.x);
     }
   }
-  const lamps: Lamp[] = placeLamps(def, k, WALL, info.rooms.map((r) => ({ node: r.node, x: r.x, y: r.y, w: r.shape.w, h: r.shape.h })), carved, reserved);
+  // A door or a way out stands against its wall: no lamp hangs over it, nor in the cell beside it.
+  const doors: Rect[] = [];
+  for (const r of info.rooms) {
+    for (const hd of r.node.holds) {
+      if ("unit" in hd) continue;
+      const s = r.shape.sockets.find((x) => x.id === hd.socket);
+      if (s && (s.kind === "exit" || hd.prop === "door" || ("to" in hd && hd.to))) doors.push({ cx: r.x + s.cx, cy: r.y + s.cy, w: s.w, h: s.h });
+    }
+  }
+  const lamps: Lamp[] = placeLamps(def, k, WALL, info.rooms.map((r) => ({ node: r.node, x: r.x, y: r.y, w: r.shape.w, h: r.shape.h })), carved, reserved, doors);
   const lampState = def.lights?.state;
   if (lampState) {
     const sv = stateOf(lampState.var);

@@ -54,6 +54,17 @@ describe("the lamps of a generated dungeon", () => {
           expect(TILE_FLAGS[bp.tiles[(p.cy + dy) * bp.w + p.cx + dx]] & F_SOLID, `${p.key} faces open floor`).toBe(0);
           expect(catalog.props[p.def].solid, `${p.def} stands in nobody's way`).toBe(false);
         }
+        // No lamp hangs over a door or a way out, or in the wall cell beside one: the pair flanks it a cell clear.
+        const doors = bp.props.filter((p) => p.to || p.def === "door");
+        expect(doors.length, `${id} seed ${seed} has a way out`).toBeGreaterThan(0);
+        for (const d of doors) {
+          const f = catalog.props[d.def];
+          for (const p of lamps) {
+            const dx = Math.max(d.cx - p.cx, p.cx - (d.cx + f.w - 1), 0);
+            const dy = Math.max(d.cy - p.cy, p.cy - (d.cy + f.h - 1), 0);
+            expect(Math.max(dx, dy), `${p.key} hangs clear of ${d.key}`).toBeGreaterThan(1);
+          }
+        }
         for (const r of info.rooms) {
           const mine = lamps.filter((p) => new RegExp(`^${id}_${r.node.id}_lamp_\\d+$`).test(p.key)).length;
           if (r.node.dark) expect(mine, `${id} ${r.node.id} is dark on purpose`).toBe(0);
