@@ -50,6 +50,22 @@ The camera shows **48 x 27 cells** (1 cell = 1 m). Half a screen is 24 across an
 | **E1** | What completes a location step stands at the place the step names, not somewhere else | `NEAR_LANDMARK` |
 | | Tracks the quests send her up never cross water (a dirt stroke over a river would be a ford) | |
 
+**The words are true** (`jane/test/truth.test.ts`, added 24 September 2026 after John picked up Mrs Bettany's "key under a stone" lying in the open before she had asked). The audit proves she can find the place; this proves what the words say is there is there, the way they say it, on three seeds:
+
+| Claim in the words | What the world holds |
+| --- | --- |
+| "The spare's under a stone in the garden." "There are four stones, and they shift if you lean on them." | Four pushable stones on the garden rows; the key is a hidden prop under ONE (the seed's choice), shown when that stone is pushed off it, and only once she has been asked (`hides`, `sim/under.ts`). Pushed early, the stone has earth under it; the key is there the moment she is asked |
+| "My mother kept a tin under the front step." | A loose step (pushable) at the ruin's door, the tin under it, the same way |
+| "By the well wall", "at the foot of the post", "in the road beside it", "by the tailboard", "on the ground by the car" | Within 3 cells of that prop (`beside`: moved there after placing, no dice drawn) |
+| "Eleven parcels", "five dinner tins", "three bottles of milk on the step", "the ones on the ground" | Eleven parcels, five tins by the cold fire, the milk at No. 7's door, three windfalls under the orchard trees |
+| "In the pen with the sheep", "Candles. And a chair.", "Two stones are set by it to sit on", "Teaspoons?", "a biscuit tin is put out on the step" | Sheep round the sack; a kitchen chair by the candle ends; two sitting stones by the brother's fire; teaspoons in the crows' box; the sister's door puts the tin out (`show`) rather than handing it over |
+| Every thing lying on the ground | Drawn as the item it holds (`showsLoot`), with an icon of its own shape; paper only for letters |
+| Signs, boards, fingerposts, milestones | Never name Julie: a roadside signpost names places, not anybody's house |
+
+Animal and people lines were rewritten to what the sim does: sheep keep to a few yards and are gone at the bell (`dayOnly`), hens walk the same few spots in order (their patrol), rabbits never run (no flee), the ginger cat walks the south side of the square end to end. **A new line that says where something is gets a row in the truth test, or is written so it cannot be wrong.**
+
+New placement fields that made these cheap: `hides` (a thing under a pushable prop), `at.prop` (in front of a prop), `beside`, `count`/`within` at a story place (open cells round a slot, no dice), and `ownDice` (a row added after the seeds were tuned draws its own stream, so it moves nothing else).
+
 **The audit can fail.** One more test feeds it seven quests broken on purpose (a bare noun, an id in the text, a step pointed at the wrong place, a target nothing produces, three of a creature that stands once, a night-only step that does not say so, a "near" errand sent across the map) and checks each is caught by the right rule.
 
 `QUEST_REPORT=1 npx vitest run test/quest-audit.test.ts` prints the whole table for every seed: step, source, bearing and walk from the giver, half-screens to the nearest road, half-screens to the named landmark, verdict.
@@ -168,13 +184,13 @@ Chains are independent; only the order inside a chain is fixed. Walks below: **s
 
 ### Chain A. Lost Property (the book on the platform, Castle Halt)
 
-**A1 Lost Property.** Offered from the first minute by a table labelled "Lost Property" under the platform lamp. Hand-in: the same book. Pays apples and a plain key (the unclaimed shelf beside the book). Tier far.
+**A1 Lost Property.** Offered from the first minute by a table labelled "Lost Property" under the platform lamp. Hand-in: the same book. Pays apples, and the unclaimed shelf beside the book then lets her take **one article** of three (a lamp stone, two bottles of water tied together, a bag of grapes): a shelf with a card, not a chest. The book's directions are the road's, not Julie's gate. Tier near.
 
 | Step | Where (seed 3 / 2026) | Thinking | Confuse | Verdict |
 | --- | --- | --- | --- | --- |
 | "A red glove, at the well on the station road" | Beside the station road, on screen from it (0.5 / 0.9 half-screens). 753 / 1,350 steps. The well's plate says "THE WELL ON THE STATION ROAD" and the prompt says "Pick up: A red glove" | "I walked this road. Was there a well?" Often she already has it (endowed progress) | The well used to be a cobble pad with no well (the old confusion); now a well head and a plate | OK |
-| "A felt hat, on the signpost on the same road" | Beside the same road, 1,019 / 501 | "The signpost I passed" | Glove and hat order differs per seed; order is free | OK |
-| "A dinner tin, under the cart on the Castle road" | Beside the Julie's-to-Castle road, past Julie's gate: 1,987 / 1,621 | "One road further than I have been" | Over the near budget, by design; tier far | OK (far) |
+| "A felt hat, at the signpost on the station road" | Beside the same road, 1,019 / 501; lies at the foot of the post (`beside`) | "The signpost I passed" | Glove and hat order differs per seed; order is free | OK |
+| "A dinner tin, by the cart on the station road" | In the road beside the cart (`beside`), further along the station road | "The cart I passed" | | OK |
 | **Back to** the lost-property book, on the platform at Castle Halt | 1,987 / 1,621 back | "Back where I started" | | OK |
 
 **A2 Left Luggage.** The book's next page, once A1 is done. The trunk (label "The trunk") has stood locked on the platform since the first minute. Cross tier.
@@ -234,7 +250,7 @@ The car is off the road in a wood; a signpost at a lay-by on the wood road says 
 
 | "Her coat, at the end of her prints into the wood behind the car" | Her prints are a trodden line from the car to the hollow tree: 192 / 209 steps. Picking up "The nurse's coat, on a hollow tree" completes it | "Follow the prints" | **Was**: "a hollow tree in the wood", 6 half-screens or more off any path, in a wood that is all trees | Fixed (C1) |
 | --- | --- | --- | --- | --- |
-| "Her case, on the back seat of the car" | The case (label "The nurse's case"); opening it hands in and gives D3 | | | OK |
+| "Her case, on the ground by the car" | The case (label "The nurse's case"); opening it hands in and gives D3 | | | OK |
 
 **D3 Mrs Allen's Dressing.** Given by the case, with the parcel already in hand. **Back to** Mrs Allen's sister's door, facing the fire in Castle square: 1,415 / 812 steps. The door is labelled "Mrs Allen's sister's door".
 
