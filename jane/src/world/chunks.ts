@@ -56,7 +56,8 @@ export const station: Build = (k, _ox, oy) => {
   const my = box.cy + 17;
   clear(k, box);
   const L = new Local(k, 0, my); // x as the county has it (the line is at x 4), y from the middle of the platform
-  k.fill(4, box.cy - 40, 3, box.h + 80, Tile.Rail);
+  // The platform's own length of line. The line goes on beyond it both ways, to the county's edge (county.ts layRailway).
+  k.fill(4, box.cy, 3, box.h, Tile.Rail);
   L.f(7, -14, 9, 28, Tile.Cobble);
   L.f(16, -14, 1, 28, Tile.Fence);
   L.f(16, -2, 1, 5, Tile.Cobble);
@@ -105,72 +106,74 @@ export const station: Build = (k, _ox, oy) => {
 };
 
 /**
- * Auntie Julie's yard: the fence, the house, the stoop, the dog, the thing in the far corner.
- * A cottage, not a manor: a vegetable plot, apple trees, a hen house, the washing line, a
- * woodpile against the wall; a lane across the yard gate to gate, and one down to the south.
+ * Auntie Julie's: the fence, the house, the stoop, the dog, the thing in the far corner.
+ * One more cottage on the station road, the size of the others in the county (country.ts
+ * builds them 22 x 16 round an 8 x 6 house; this one has a yard for the dog, the hens and
+ * the thing in the corner, so it is 42 x 28, about a farmstead's ground: it was 64 x 48). A vegetable plot, two apple
+ * trees, a hen house, the washing line, the water butt and the wood against the wall; one
+ * lamp by the door; a lane across the yard gate to gate, and one down to the south.
+ *
+ *    0  plot  apple  [ house    ] wood             skeleton
+ *    9  plot         lamp stoop flowers  book    fire
+ *   15  gate ====== lane ================================ gate
+ *   20  apple    |south lane|      washing       hens
  */
 export const julieYard: Build = (k, ox, oy) => {
-  const W = 64;
-  const H = 48;
+  const W = 42;
+  const H = 28;
   const box = boxAt(k, ox, oy, W, H);
   clear(k, box);
   k.outline(box.cx, box.cy, W, H, Tile.Fence);
   const L = new Local(k, box.cx, box.cy);
-  const hx = 26;
-  const hy = 5;
-  const hw = 16;
-  const hh = 11;
+  const hx = 14;
+  const hy = 2;
+  const hw = 10;
+  const hh = 7;
   const doorX = hx + Math.floor(hw / 2) - 1;
   k.house(box.cx + hx, box.cy + hy, hw, hh);
-  L.p("town_chimney", hx + 3, hy);
+  L.p("town_chimney", hx + 2, hy);
   L.p("door", doorX, hy + hh - 2, { key: "house_door", locked: true, keyTag: "auntie_house", to: { zone: "house", mark: "front" }, label: "Julie's door" });
-  const gateY = 24;
+  const gateY = 15;
   // One lane across the yard under the stoop, gate to gate; the door's own path drops onto it.
   L.f(0, gateY - 1, W, 3, Tile.Dirt);
-  L.f(doorX - 3, hy + hh, 8, 4, Tile.Dirt);
-  L.f(doorX, hy + hh + 2, 3, gateY - (hy + hh + 2), Tile.Dirt);
+  L.f(doorX - 2, hy + hh, 6, 2, Tile.Dirt);
+  L.f(doorX, hy + hh + 2, 2, gateY - (hy + hh + 2), Tile.Dirt);
   // And one down to the south gate, so whichever way the road comes there is a way in.
-  const southX = 14;
+  const southX = 8;
   L.f(southX - 1, gateY, 3, H - gateY, Tile.Dirt);
-  L.rect("stoop", doorX - 8, hy + hh, 18, 10);
+  L.rect("stoop", doorX - 6, hy + hh, 14, 7);
   L.mark("house_front", doorX, hy + hh + 1, 1);
   // Just inside the west gate: where the old small county began. Tests and the console still use it.
-  L.mark("yard_gate", 5, gateY, 0);
-  L.u("dog", "dog", doorX + 4, hy + hh + 3);
+  L.mark("yard_gate", 3, gateY, 0);
+  L.u("dog", "dog", doorX + 4, hy + hh + 2);
   L.p("lamp_post", doorX - 3, hy + hh);
-  L.p("lamp_post", 2, gateY - 3);
-  L.p("town_flower_bed", hx, hy + hh);
-  L.p("town_flower_bed", hx + hw - 3, hy + hh);
+  L.p("town_flower_bed", doorX + 4, hy + hh);
   // A fire in the yard: the first place to rest, before the house key and its bed.
-  L.p("campfire", 47, 18, { key: "yard_fire", talk: "fire" });
-  // Beside the water butt, as the quest says ("by the barrel in her yard"), and well clear of the dog on the step.
-  L.mark("garden_book", 43, 17, 1);
+  L.p("campfire", 31, 9, { key: "yard_fire", talk: "fire" });
   // Against the house: the water butt and the wood.
-  L.p("barrel", hx + hw + 1, hy + hh - 2);
-  L.p("town_woodpile", hx + hw + 1, hy + 6);
+  L.p("barrel", hx + hw + 1, hy + 4);
+  L.p("town_woodpile", hx + hw + 1, hy + 1);
+  // Beside the water butt, as the quest says ("by the barrel in her yard"), and clear of the dog on the step.
+  L.mark("garden_book", hx + hw + 3, hy + hh, 1);
   // West of the house: the vegetable plot, fenced, and the apple trees.
-  L.fence(4, 4, 13, 9, [
-    [10, 12],
-    [11, 12],
+  L.fence(2, 2, 9, 8, [
+    [6, 9],
+    [7, 9],
   ]);
-  L.f(5, 5, 11, 7, Tile.Garden);
-  L.f(10, 5, 2, 8, Tile.Dirt);
-  L.p("apple_tree", 19, 5, { loot: [{ item: "apple", qty: 3 }] });
-  L.p("apple_tree", 21, 11, { loot: [{ item: "apple", qty: 2 }] });
-  L.p("apple_tree", 6, 16, { loot: [{ item: "apple", qty: 2 }] });
-  // East: the washing line, the hen house and its hens, a bench in the sun.
-  L.p("town_washing_line", 47, 5);
-  L.p("town_hen_coop", 54, 9, { key: "julies_hens", talk: "hen_coop" });
+  L.f(3, 3, 7, 6, Tile.Garden);
+  L.f(6, 3, 2, 7, Tile.Dirt);
+  L.p("apple_tree", 11, 3, { loot: [{ item: "apple", qty: 3 }] });
+  L.p("apple_tree", 3, 20, { loot: [{ item: "apple", qty: 2 }] });
+  // Over the lane: the washing line, the hen house and its hens.
+  L.p("town_washing_line", 22, 21);
+  L.p("town_hen_coop", 33, 22, { key: "julies_hens", talk: "hen_coop" });
   // Julie's hens keep still. (A unit walking at the edge of the load ring can wake on one side of a
   // save and not the other: sim/ring.ts measures from her exact position, not her block. Reported.)
-  L.u(null, "town_hen", 52, 14, 1);
-  L.u(null, "town_hen_brown", 58, 15, 2);
-  L.u(null, "town_hen", 55, 17, 0);
-  L.p("town_park_bench", 47, 14);
-  L.p("town_flower_bed", 20, 30);
-  L.p("town_flower_bed", 44, 30);
-  // The quest skeleton stands in the yard's far corner, in sight of the stoop.
-  L.u("yard_skeleton", "skeleton", W - 10, H - 8);
+  L.u(null, "town_hen", 31, 25, 1);
+  L.u(null, "town_hen_brown", 37, 25, 2);
+  // The quest skeleton stands in the yard's far corner, in sight of the stoop, and out of reach of anyone
+  // who only comes in at the west gate and stands about (test/budget.test.ts strolls there).
+  L.u("yard_skeleton", "skeleton", W - 2, 1);
   return {
     id: "julie_house",
     box,

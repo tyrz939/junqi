@@ -75,14 +75,16 @@ export function buildTerrain(seed: number, attempt: number): Terrain {
   const biome = new Uint8Array(n);
   const s = (seed ^ Math.imul(attempt + 1, 0x9e3779b1)) >>> 0;
 
-  // The river: a wandering column, top to bottom, between 52% and 66% of the width.
+  // The river: a wandering column, top to bottom, about 60 to 66% of the way across. On the square county
+  // (Sept 24) it sits a little further east than it did, because the Lowfields hold the town, the first walk
+  // and every story place, and its sideways wander is scaled to the narrower map.
   const riverX = new Int16Array(SKEL_H);
-  const riverBase = rngRange(rng, SKEL_W * 0.54, SKEL_W * 0.64);
-  const lean = rngRange(rng, -14, 14); // drifts east or west as it goes south
+  const riverBase = rngRange(rng, SKEL_W * 0.58, SKEL_W * 0.66);
+  const lean = rngRange(rng, -8, 8); // drifts east or west as it goes south
   for (let y = 0; y < SKEL_H; y++) {
     const t = y / (SKEL_H - 1);
-    const wander = (fbm(s + 11, 0, y, 38, 2) - 0.5) * 64 + (fbm(s + 12, 0, y, 11, 1) - 0.5) * 14;
-    riverX[y] = Math.round(Math.min(SKEL_W * 0.72, Math.max(SKEL_W * 0.46, riverBase + lean * (t - 0.5) + wander)));
+    const wander = (fbm(s + 11, 0, y, 38, 2) - 0.5) * 36 + (fbm(s + 12, 0, y, 11, 1) - 0.5) * 8;
+    riverX[y] = Math.round(Math.min(SKEL_W * 0.74, Math.max(SKEL_W * 0.5, riverBase + lean * (t - 0.5) + wander)));
   }
 
   // The hill: one crown in the north, a little west of the river so it stands over the town.
@@ -128,7 +130,8 @@ export function buildTerrain(seed: number, attempt: number): Terrain {
     }
   }
   const lake = {
-    mx: Math.round(rngRange(rng, SKEL_W * 0.82, SKEL_W * 0.92)),
+    // Clear of the east fence by its own width: on a square county 92% of the width put its far shore off the map.
+    mx: Math.round(rngRange(rng, SKEL_W * 0.78, SKEL_W * 0.86)),
     my: Math.round(rngRange(rng, SKEL_H * 0.5, SKEL_H * 0.78)),
     r: Math.round(rngRange(rng, 7, 10)),
   };

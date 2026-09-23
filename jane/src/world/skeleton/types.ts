@@ -4,12 +4,13 @@
 // patch is. PLAN.md 2.3.
 //
 // One macro cell is 16 x 16 cells. A cell is 8 px and a metre is 8 px, so a macro
-// cell is 16 m across and the county (225 x 125 macro) is 3600 m by 2000 m.
+// cell is 16 m across and the county (125 x 125 macro) is 2000 m square. (It was
+// 3600 by 2000 until Sept 24: "shrink sideways to be square". The height stayed.)
 
 export const MACRO = 16; // cells per macro cell, and therefore metres
-export const SKEL_W = 225;
+export const SKEL_W = 125;
 export const SKEL_H = 125;
-export const COUNTY_W = SKEL_W * MACRO; // 3600 cells
+export const COUNTY_W = SKEL_W * MACRO; // 2000 cells
 export const COUNTY_H = SKEL_H * MACRO; // 2000 cells
 
 export const enum Region {
@@ -126,6 +127,11 @@ export type Skeleton = {
   /** Small places the story needs, by name. Each is also in `pois`. */
   anchors: { id: string; kind: string; mx: number; my: number }[];
   roads: Road[];
+  /**
+   * The railway, macro cells in order from the south edge, through the halt, to the east edge.
+   * Walkable (sleepers and ballast), crossed by roads on the level and by the river on a trestle.
+   */
+  rail: number[];
   checks: Check[];
   ok: boolean;
 };

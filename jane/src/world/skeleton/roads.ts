@@ -10,7 +10,7 @@ const DY = [0, 1, 0, -1, 1, -1, 1, -1];
 const LEN = [1, 1, 1, 1, Math.SQRT2, Math.SQRT2, Math.SQRT2, Math.SQRT2];
 
 /** A binary heap of (cost, cell). Ties break on cell index, so the route never depends on insertion order. */
-class Heap {
+export class Heap {
   // Typed and preallocated: this is the inner loop of every road, and the solver lays a few dozen per county.
   private cost = new Float64Array(4096);
   private cell = new Int32Array(4096);

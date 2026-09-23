@@ -166,7 +166,9 @@ describe("density", () => {
       expect(s.inView, `seed ${s.seed}: stretches of the first walk with nothing in view`).toBeGreaterThan(0.95);
       // It is lived in, and it is not safe.
       expect(s.folk).toBeGreaterThan(150);
-      expect(s.hostile).toBeGreaterThan(2500);
+      // Per screen, not a head count: 2500 on the 3.6 km county was 0.46 a screen of land; the 2 km square one
+      // (Sept 24) is held to more than that, 0.7, which is about what the old one had (0.79).
+      expect(s.hostile / s.land).toBeGreaterThan(0.7);
       for (const def of ["cottage_thatch", "farmhouse", "barn", "well", "fingerpost", "milestone", "tent", "den"]) expect(s.byDef[def] ?? 0, `seed ${s.seed}: no ${def}`).toBeGreaterThan(0);
     }
   });

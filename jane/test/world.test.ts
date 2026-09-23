@@ -64,9 +64,9 @@ describe("worldgen", () => {
       expect(TILE_FLAGS[bp.tiles[s.cy * bp.w + s.cx]] & F_SOLID).toBe(0);
       expect(s.cx).toBeLessThan(40);
       const dog = bp.units.find((u) => u.key === "dog")!;
-      // Story.docx: she arrives at five and walks. Two to three minutes by road is 900 to 1350 m;
-      // the crow's distance is shorter, and never trivial.
-      expect(Math.hypot(dog.cx - s.cx, dog.cy - s.cy)).toBeGreaterThan(450);
+      // Story.docx: she arrives at five and walks. Since the county came in to 2 km square (Sept 24) the
+      // station road is 520 to 850 m, a minute or two; the crow's distance is shorter, and never trivial.
+      expect(Math.hypot(dog.cx - s.cx, dog.cy - s.cy)).toBeGreaterThan(300);
       const gate = bp.marks.yard_gate;
       const stoop = bp.rects.stoop;
       const inside = gate.cx >= stoop.cx && gate.cy >= stoop.cy && gate.cx < stoop.cx + stoop.w && gate.cy < stoop.cy + stoop.h;

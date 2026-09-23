@@ -1,4 +1,5 @@
-// The county: 3600 x 2000 cells, 3.6 km by 2 km, ten minutes across by road.
+// The county: 2000 x 2000 cells, 2 km square, five minutes across by road. (3.6 km by 2 km until
+// Sept 24, 2026: the walks were too long for what was on them. The height stayed; the width came in.)
 // (2020's room_zone1 was 640 x 384. PLAN.md 2.1 is why this one is not.)
 //
 // It is built FROM the skeleton (world/skeleton): that decided, on a coarse grid,
@@ -169,6 +170,10 @@ export function buildCounty(seed: number, attempt: number, rows: readonly Placem
   // Each set place's ground, by name, so a measure of the open country can tell it from a town.
   for (const c of chunks) if (!k.rects[`site_${c.id}`]) k.rect(`site_${c.id}`, c.box);
   for (const line of lines) for (const c of chunks) linkRoad(k, line, c);
+  // The railway: through the halt and on, off the map at both ends (skeleton/rail.ts). After the roads,
+  // so where they meet the road keeps its metal (a level crossing), and after the chunks, so the halt's
+  // own platform rails stay as they were drawn.
+  layRailway(k, sk);
   // A footpath's two ends get a mark each, a little way out from the chunk it leaves: where the fingerpost stands.
   for (const { row, line } of footpaths) {
     const outside = (p: readonly [number, number]): boolean => chunks.every((c) => p[0] < c.box.cx - 8 || p[1] < c.box.cy - 8 || p[0] >= c.box.cx + c.box.w + 8 || p[1] >= c.box.cy + c.box.h + 8);
@@ -309,10 +314,85 @@ export function buildCounty(seed: number, attempt: number, rows: readonly Placem
   // By region, biome and threat, kept back from the roads; then anything left empty gets something.
   furnishCountry(country, "life");
 
+  cutThrough(k);
   dropUnreachable(k);
   const bp = k.done("Castle", false, 1, attempt);
   bp.stories = storyRecord(seed, claimed);
   return bp;
+}
+
+/**
+ * A named place (a story's ruin, a cottage the quests send her to) that the wood has closed round is
+ * not lost: somebody cut a way to it. Flood from the platform; for each named mark the flood never
+ * reached, find the shortest way out to ground it did reach, going through trees, scrub and rubble
+ * but never water, a wall or a fence, and clear that way to a trodden path. The square county (Sept
+ * 24) puts more of its places between a wood and the river, where this used to throw the county away.
+ */
+function cutThrough(k: Kit): void {
+  const start = k.marks.start;
+  if (!start) return;
+  const w = k.w;
+  const n = w * k.h;
+  const flags = TILE_FLAGS;
+  const tiles = k.tiles;
+  const open = (i: number): boolean => (flags[tiles[i]] & F_SOLID) === 0;
+  const CUT = new Uint8Array(64);
+  for (const t of [Tile.Tree, Tile.Pine, Tile.DeadTree, Tile.Bush, Tile.Hedge, Tile.Rubble]) CUT[t] = 1;
+  const seen = new Uint8Array(n);
+  const queue = new Int32Array(n);
+  // Unrolled, as in dropUnreachable: this runs over every cell of the county.
+  let tail = 0;
+  const push = (j: number): void => {
+    if (seen[j] || !open(j)) return;
+    seen[j] = 1;
+    queue[tail++] = j;
+  };
+  const flood = (from: number): void => {
+    let head = 0;
+    tail = 0;
+    push(from);
+    while (head < tail) {
+      const i = queue[head++];
+      const x = i % w;
+      if (x + 1 < w) push(i + 1);
+      if (x > 0) push(i - 1);
+      if (i + w < n) push(i + w);
+      if (i >= w) push(i - w);
+    }
+  };
+  flood(start.cy * w + start.cx);
+  const prev = new Int32Array(n);
+  for (const name of Object.keys(k.marks)) {
+    if (name.startsWith("poi_")) continue;
+    const m = k.marks[name];
+    const from = m.cy * w + m.cx;
+    if (seen[from] || !open(from)) continue;
+    // Breadth first out from the mark, over open ground and anything an axe can clear, to the reached country.
+    prev.fill(-1);
+    let head = 0;
+    let end = 0;
+    prev[from] = from;
+    queue[end++] = from;
+    let found = -1;
+    const step = (i: number, j: number): void => {
+      if (found >= 0 || prev[j] >= 0 || !(open(j) || CUT[tiles[j]])) return;
+      prev[j] = i;
+      if (seen[j]) found = j;
+      else queue[end++] = j;
+    };
+    // Bounded: a way out is a few dozen cells of thicket, never a search of half the county.
+    while (head < end && found < 0 && end < 400000) {
+      const i = queue[head++];
+      const x = i % w;
+      if (x + 1 < w) step(i, i + 1);
+      if (x > 0) step(i, i - 1);
+      if (i + w < n) step(i, i + w);
+      if (i >= w) step(i, i - w);
+    }
+    if (found < 0) continue;
+    for (let i = found; i !== from; i = prev[i]) if (!open(i)) tiles[i] = Tile.Dirt;
+    flood(from);
+  }
 }
 
 /**
@@ -499,12 +579,127 @@ function ground(biome: Biome, clump: number, r: number, x: number, y: number, s:
       // Rubble is solid: a scatter of it is cover, a carpet of it is a maze.
       return clump > 0.78 ? T.Cliff : r < 0.05 ? T.Rubble : clump < 0.3 ? T.DryBed : T.Dirt;
     case B.Yard:
-      return y % 46 < 2 && hash01(s + 9, Math.floor(x / 40), Math.floor(y / 46)) > 0.5 ? T.Track : r < 0.04 ? T.Rubble : clump > 0.6 ? T.Cobble : T.Dirt;
+      // The yards' old hardstandings, in strips. (These were lengths of track, forty cells long and ending
+      // in the grass for no reason; the Works' railway is one line now, laid whole, and it goes somewhere.)
+      return y % 46 < 2 && hash01(s + 9, Math.floor(x / 40), Math.floor(y / 46)) > 0.5 ? T.Cobble : r < 0.04 ? T.Rubble : clump > 0.6 ? T.Cobble : T.Dirt;
     case B.Hill:
       return clump > 0.72 ? T.Cliff : r < 0.04 ? T.Rubble : clump < 0.35 ? T.Grass : T.Dirt;
     default:
       return T.Grass;
   }
+}
+
+// --- the railway -----------------------------------------------------------------------
+
+/** Up the west fence the line runs at this column: the halt's platform rails (chunks.ts station) are at 4 to 6. */
+const RAIL_WEST_X = 5;
+/** The tree line round the county is this deep; the boundary fence crosses the line at its inner edge. */
+const EDGE = 4;
+
+/**
+ * The line in cells: one width of sleepers and rails, walkable, with a shoulder of ballast either
+ * side and the growth cut back a cell beyond that. Where a road crosses it the road keeps its
+ * metal and a sign stands at the crossing; where it crosses water it goes over on a trestle (the
+ * track, a deck of planks either side, a rail of fence at the edges). At each end, where it leaves
+ * the county through the trees, a fence crosses it: the rails run on under it and out of sight.
+ */
+function layRailway(k: Kit, sk: Skeleton): void {
+  if (sk.rail.length < 2) return;
+  const pts: [number, number][] = sk.rail.map((c) => {
+    const mx = c % SKEL_W;
+    const my = Math.floor(c / SKEL_W);
+    return [mx === 0 ? RAIL_WEST_X : mx * MACRO + MACRO / 2, my * MACRO + MACRO / 2];
+  });
+  // Out to the map's own edge at both ends.
+  const reach = (p: [number, number]): [number, number] => {
+    if (p[1] >= COUNTY_H - MACRO) return [p[0], COUNTY_H - 1];
+    if (p[1] < MACRO) return [p[0], 0];
+    if (p[0] >= COUNTY_W - MACRO) return [COUNTY_W - 1, p[1]];
+    return [0, p[1]];
+  };
+  pts.unshift(reach(pts[0]));
+  pts.push(reach(pts[pts.length - 1]));
+  // The centre line, four-connected, so every sleeper has a neighbour along the way the line runs.
+  const line: [number, number][] = [];
+  line.push(pts[0]);
+  for (let n = 0; n + 1 < pts.length; n++) {
+    const [ax, ay] = pts[n];
+    const [bx, by] = pts[n + 1];
+    const steps = Math.max(Math.abs(bx - ax), Math.abs(by - ay));
+    for (let s = 1; s <= steps; s++) {
+      const x = Math.round(ax + ((bx - ax) * s) / steps);
+      const y = Math.round(ay + ((by - ay) * s) / steps);
+      const [px, py] = line[line.length - 1];
+      // A diagonal step becomes two square ones.
+      if (x !== px && y !== py) line.push([x, py]);
+      line.push([x, y]);
+    }
+  }
+  const inner = (x: number, y: number): boolean => x >= EDGE && y >= EDGE && x < COUNTY_W - EDGE && y < COUNTY_H - EDGE;
+  const centre = new Set(line.map(([x, y]) => y * COUNTY_W + x));
+  // Anything small already standing where the line goes gives way to it (a scatter from a patch's dressing).
+  // Nothing with a name is ever this near the line: sites keep 96 m off and small places a macro cell.
+  for (let n = k.props.length - 1; n >= 0; n--) {
+    const p = k.props[n];
+    if (!p.key.startsWith("county_")) continue;
+    let hit = false;
+    for (let oy = -1; oy <= 2 && !hit; oy++) for (let ox = -1; ox <= 2 && !hit; ox++) hit = centre.has((p.cy + oy) * COUNTY_W + p.cx + ox);
+    if (hit) k.props.splice(n, 1);
+  }
+  const GROWTH = new Set<Tile>([Tile.Tree, Tile.Pine, Tile.DeadTree, Tile.Bush, Tile.Cliff, Tile.Rubble, Tile.Hedge, Tile.Fence, Tile.Wall]);
+  let crossing = false;
+  let signs = 0;
+  line.forEach(([x, y], i) => {
+    const here = k.get(x, y);
+    // A level crossing: the road keeps its metal, and a sign stands at the first crossing of each road.
+    if (here === Tile.Road || here === Tile.Boardwalk) {
+      if (!crossing) {
+        const [px, py] = line[Math.max(0, i - 3)];
+        for (const [ox, oy] of [[2, 0], [-3, 0], [0, 2], [0, -2]] as const) {
+          if (!k.fits(px + ox, py + oy, 2, 1) || centre.has((py + oy) * COUNTY_W + px + ox)) continue;
+          k.prop({ key: `rail_crossing_${signs++}`, def: "sign", cx: px + ox, cy: py + oy, label: "A crossing sign", use: [{ do: "read", text: "RAILWAY CROSSING. STOP, LOOK AND LISTEN." }] }, 2, 1);
+          break;
+        }
+      }
+      crossing = true;
+      return;
+    }
+    crossing = false;
+    if (here === Tile.Rail) return; // the halt's own platform rails
+    const wet = here === Tile.Water;
+    k.set(x, y, Tile.Track);
+    for (let oy = -2; oy <= 2; oy++) {
+      for (let ox = -2; ox <= 2; ox++) {
+        const cx = x + ox;
+        const cy = y + oy;
+        if ((ox === 0 && oy === 0) || !inner(cx, cy) || centre.has(cy * COUNTY_W + cx)) continue;
+        const t = k.get(cx, cy);
+        if (t === Tile.Road || t === Tile.Boardwalk || t === Tile.Track || t === Tile.Rail) continue;
+        const near = Math.max(Math.abs(ox), Math.abs(oy)) === 1;
+        if (t === Tile.Water) {
+          // The trestle: planks either side of the rails, and a rail of fence along its edges.
+          if (near || wet) k.set(cx, cy, near ? Tile.Boardwalk : Tile.Fence);
+        } else if (near) k.set(cx, cy, Tile.Dirt);
+        else if (GROWTH.has(t)) k.set(cx, cy, sk.region[at(cx >> 4, cy >> 4)] === Region.Works ? Tile.Dirt : Tile.Grass);
+      }
+    }
+  });
+  // Where it leaves: a fence across the cutting at the inner edge of the trees, the rails running on beyond it.
+  for (const end of [line[0], line[line.length - 1]]) {
+    const vertical = end[1] === 0 || end[1] === COUNTY_H - 1;
+    // `d` counts in from the map's edge: the trees are d 0 to EDGE - 1, and the fence stands on the last of them.
+    const cell = (d: number, o: number): [number, number] =>
+      vertical ? [end[0] + o, end[1] === 0 ? d : COUNTY_H - 1 - d] : [end[0] === 0 ? d : COUNTY_W - 1 - d, end[1] + o];
+    for (let o = -3; o <= 3; o++) k.set(...cell(EDGE - 1, o), Tile.Fence);
+    // Beyond the fence the trees stand back from the line, so the rails are seen to go on.
+    for (let d = 0; d < EDGE - 1; d++) {
+      k.set(...cell(d, 0), Tile.Track);
+      k.set(...cell(d, -1), Tile.Dirt);
+      k.set(...cell(d, 1), Tile.Dirt);
+    }
+  }
+  // The line is the line: nothing the country builds later stands on it.
+  for (const [x, y] of line) k.claim(x - 2, y - 2, 5, 5);
 }
 
 // --- links ---------------------------------------------------------------------------

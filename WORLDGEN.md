@@ -223,7 +223,9 @@ The 2026 generators for the museum, factory, school, pipes and forest are in `ar
 
 ## 9. The county as built (September 2026)
 
-The direction note at the top of this file is now code. `jane/src/world/skeleton/` decides a 3600 × 2000 m county from rows (`sites.json`, `areas.json`, `pois.json`); `jane/src/world/county.ts` turns it into cells and `chunks.ts` holds the authored places it stamps. `ENGINE.md` §8.1 and §8.2 describe both; the seed viewer (`/viewer.html`) shows 24 at a time. The zone contract above is unchanged: the county still promises `dog`, `yard_skeleton`, `house_door`, `mine_door`, `burial_door`, `start`, `house_front`, `mine_mouth`, `burial_mouth` and the `stoop` rect on every seed, and the same solver still proves it.
+The direction note at the top of this file is now code. `jane/src/world/skeleton/` decides a 2000 × 2000 m county (3600 × 2000 until 2026-09-24) from rows (`sites.json`, `areas.json`, `pois.json`); `jane/src/world/county.ts` turns it into cells and `chunks.ts` holds the authored places it stamps. `ENGINE.md` §8.1 and §8.2 describe both; the seed viewer (`/viewer.html`) shows 24 at a time. The zone contract above is unchanged: the county still promises `dog`, `yard_skeleton`, `house_door`, `mine_door`, `burial_door`, `start`, `house_front`, `mine_mouth`, `burial_mouth` and the `stoop` rect on every seed, and the same solver still proves it.
+
+The railway is part of the skeleton (`skeleton/rail.ts`): it comes in at the south edge along the west fence, runs through Castle Halt, turns east where the Works begin, crosses the roads on the level (a sign at each crossing) and the river on a trestle, and leaves through the east fence. Where it leaves, a fence crosses it and the rails run on through the trees to the edge of the map. It is walkable, sleepers and ballast, not a wall. Nothing small is placed on it, and the roadside beat walks it like a road, so dead signals and slag wagons stand beside it.
 
 ## Source
 

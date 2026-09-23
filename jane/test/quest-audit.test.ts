@@ -918,7 +918,8 @@ describe("quest audit: a person can read it, find it, do it and take it back", (
     caught(broken("rats_in_the_sheds", [{ type: "kill", target: "plot_tenant", qty: 3, text: "Whoever digs Plot 9, in the allotments, after the bell" }]), "B3");
     // Night-only, and the step does not say so.
     caught(broken("plot_nine", [{ type: "location", target: "plot_tenant_down", qty: 1, text: "Whoever digs Plot 9, in the allotments" }]), "A4");
-    // Too far for what it is: the carter's cart, asked by a "near" errand on the platform.
-    caught(broken("to_be_collected", [{ type: "location", target: "carters_cart", qty: 1, text: "The carter's cart, on the mine road near the mine" }]), "C2");
+    // Too far for what it is: the mine itself, asked by a "near" errand on the platform. (It was the carter's
+    // cart by the mine until the county came in to 2 km square, Sept 24; on seed 3 the cart is inside a near walk now.)
+    caught(broken("to_be_collected", [{ type: "location", target: "mine", qty: 1, text: "The Gold Mine, at the end of the mine road" }]), "C2");
   }, LONG);
 });
