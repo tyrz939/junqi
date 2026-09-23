@@ -14,9 +14,12 @@ import { at, inside, metres, Region, ROAD, SKEL_H, SKEL_W, type PlacedSite } fro
 
 /** Nothing the line passes comes nearer a set place than this (m): the biggest chunk is 60 x 44 cells. */
 const KEEP_OFF_SITES = 96;
-const DX = [1, 0, -1, 0, 1, 1, -1, -1];
-const DY = [0, 1, 0, -1, 1, -1, 1, -1];
-const LEN = [1, 1, 1, 1, Math.SQRT2, Math.SQRT2, Math.SQRT2, Math.SQRT2];
+/** Headings: east, south, west, north (so `d + 2 & 3` is the way back). */
+const DX = [1, 0, -1, 0];
+const DY = [0, 1, 0, -1];
+const NORTH = 3;
+/** A change of heading costs as much as this many macro cells of straight line. */
+const TURN = 8;
 
 /**
  * The line, macro cells in order: the south edge, up column 0 through the halt, then from where
@@ -56,8 +59,8 @@ function search(t: Terrain, road: Uint8Array, sites: readonly PlacedSite[], from
   for (let y = 0; y < SKEL_H; y++) {
     for (let x = 0; x < SKEL_W; x++) {
       const i = at(x, y);
-      // The lake is never crossed; the map's edge rows are the fence, not the line.
-      if (t.water[i] === 2 || y < 2 || y > SKEL_H - 3) blocked[i] = 1;
+      // The lake is never crossed; the rows under the tree line are the fence, not the line.
+      if (t.water[i] === 2 || y < 4 || y > SKEL_H - 5) blocked[i] = 1;
       else if (worksOnly && t.region[i] !== Region.Works && !t.water[i]) blocked[i] = 1;
     }
   }
@@ -70,53 +73,65 @@ function search(t: Terrain, road: Uint8Array, sites: readonly PlacedSite[], from
   const goal = at(SKEL_W - 1, toY);
   blocked[start] = 0;
   blocked[goal] = 0;
-  const dist = new Float64Array(n).fill(Infinity);
-  const prev = new Int32Array(n).fill(-1);
-  const closed = new Uint8Array(n);
+  // The search runs over (cell, heading): a railway is long straights and few, wide bends, so every
+  // change of heading costs as much as TURN cells of line, and it only ever runs square to the grid.
+  // county.ts rounds each bend into a curve. (Eight ways with no bend cost laid 45-degree staircases.)
+  const dist = new Float64Array(n * 4).fill(Infinity);
+  const prev = new Int32Array(n * 4).fill(-1);
+  const closed = new Uint8Array(n * 4);
   const heap = new Heap();
   const bx = SKEL_W - 1;
-  const h = (x: number, y: number): number => {
-    const dx = Math.abs(x - bx);
-    const dy = Math.abs(y - toY);
-    return Math.max(dx, dy) + (Math.SQRT2 - 1) * Math.min(dx, dy);
-  };
-  dist[start] = 0;
-  heap.push(h(0, fromY), start);
+  const h = (x: number, y: number): number => Math.abs(x - bx) + Math.abs(y - toY);
+  // It comes in heading north, up the west fence.
+  const first = start * 4 + NORTH;
+  dist[first] = 0;
+  heap.push(h(0, fromY), first);
+  let end = -1;
   while (heap.size > 0) {
     heap.pop();
-    const cell = heap.topCell;
-    if (cell === goal) break;
-    if (closed[cell]) continue;
-    closed[cell] = 1;
+    const state = heap.topCell;
+    if (closed[state]) continue;
+    const cell = state >> 2;
+    if (cell === goal) {
+      end = state;
+      break;
+    }
+    closed[state] = 1;
+    const dir = state & 3;
     const cx = cell % SKEL_W;
     const cy = (cell - cx) / SKEL_W;
-    for (let d = 0; d < 8; d++) {
+    for (let d = 0; d < 4; d++) {
+      if (d === ((dir + 2) & 3)) continue; // it never doubles back
       const nx = cx + DX[d];
       const ny = cy + DY[d];
       if (!inside(nx, ny)) continue;
       const to = at(nx, ny);
-      if (blocked[to] || closed[to]) continue;
-      // Only the start and the exit may stand on the map's side columns.
-      if ((nx === 0 || nx === SKEL_W - 1) && to !== goal) continue;
+      const ns = to * 4 + d;
+      if (blocked[to] || closed[ns]) continue;
+      // Only the exit, and the line still running on up the west fence, may stand on the map's side columns.
+      if ((nx === 0 || nx === SKEL_W - 1) && to !== goal && !(nx === 0 && cx === 0 && d === NORTH)) continue;
       // A railway hates a gradient, crosses water on a trestle it would rather not build, and meets
       // a road square on and once: a road cell is dear, so it never runs along one.
       const slope = Math.abs(t.height[to] - t.height[cell]);
-      let step = LEN[d] * (1 + slope * 0.6);
+      let step = 1 + slope * 0.6;
+      if (d !== dir) step += TURN;
+      // It keeps in from the fence: a line that hugs the tree line is a line going nowhere.
+      if (ny < 10) step += (10 - ny) * 0.4;
       if (t.water[to] === 1) step += 6;
       if (road[to] & ROAD) step += 5;
       // Out of the Works the line may go, if it must, but dearly: it is the Works' railway.
       if (!worksOnly && t.region[to] !== Region.Works) step += 4;
-      const c = dist[cell] + step;
-      if (c < dist[to]) {
-        dist[to] = c;
-        prev[to] = cell;
-        heap.push(c + h(nx, ny), to);
+      const c = dist[state] + step;
+      if (c < dist[ns]) {
+        dist[ns] = c;
+        prev[ns] = state;
+        heap.push(c + h(nx, ny), ns);
       }
     }
   }
-  if (dist[goal] === Infinity) return null;
+  if (end < 0) return null;
   const cells: number[] = [];
-  for (let c = goal; c !== -1; c = prev[c]) cells.push(c);
+  for (let s = end; s !== -1; s = prev[s]) cells.push(s >> 2);
   return cells.reverse();
 }
 
