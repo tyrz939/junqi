@@ -11,6 +11,7 @@ import type { World } from "@/sim/runtime";
 import type { QuestProgress, Unit } from "@/sim/state";
 import { bagCount } from "@/sim/inventory";
 import { runActions } from "@/sim/actions";
+import { uncoverAll } from "@/sim/under";
 
 export function questActive(w: World, id: string): QuestProgress | undefined {
   return w.state.quests.active.find((q) => q.quest === id);
@@ -55,6 +56,8 @@ export function giveQuest(w: World, id: string): boolean {
   w.emit({ e: "quest", quest: id, change: "given" }, true);
   w.emit({ e: "toast", text: `Quest: ${def.name}` }, true);
   if (questReady(w, id)) w.emit({ e: "quest", quest: id, change: "ready" }, true);
+  // A stone already pushed off the spot before she was told what is under it: it is there now.
+  uncoverAll(w);
   return true;
 }
 

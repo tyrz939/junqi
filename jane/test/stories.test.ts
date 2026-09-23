@@ -29,7 +29,7 @@ import { MACRO, SKEL_W } from "@/world/skeleton";
 import storyQuests from "@/data/quests/country.json";
 import storyDialogue from "@/data/dialogue/stories.json";
 import storyItems from "@/data/items/stories.json";
-import { face, idle, walkTo, walkToProp, yardCatalog } from "./bot";
+import { face, idle, pushProp, walkTo, walkToProp, yardCatalog } from "./bot";
 
 const catalog = yardCatalog();
 /** The two seeds every other test plays, and two nobody has tuned anything against. */
@@ -262,6 +262,19 @@ function doStep(sim: Sim, r: Catalog["quests"][string]["requirements"][number]):
   };
   const p = bp.props.find(does);
   expect(p, `something that does "${r.text}"`).toBeDefined();
+  // Put out by somebody (the sister's tin on her step): ask at whatever shows it first.
+  const shower = bp.props.find((q) => q.key !== p!.key && [...acts(q.use), ...treeActs(q.talk)].some((a) => a.do === "show" && a.prop === p!.key));
+  if (shower && sim.rt.propsByKey.get(p!.key)!.hidden) {
+    useProp(sim, shower.key);
+    expect(sim.rt.propsByKey.get(p!.key)!.hidden, `${shower.key} puts ${p!.key} out`).toBe(false);
+  }
+  // Under a stone: it is not there to be picked up until the stone is pushed off it (sim/under.ts).
+  const top = bp.props.find((q) => q.under === p!.key);
+  if (top) {
+    expect(sim.rt.propsByKey.get(p!.key)!.hidden, `${p!.key} lies hidden under ${top.key}`).toBe(true);
+    expect(pushProp(sim, top.key), `${top.key} can be pushed off it`).toBe(true);
+    expect(sim.rt.propsByKey.get(p!.key)!.hidden, `${p!.key} is uncovered once ${top.key} moves`).toBe(false);
+  }
   useProp(sim, p!.key);
 }
 
@@ -304,7 +317,7 @@ const bagOf = (sim: Sim, item: string): number => bagCount(sim.player, item);
 
 /** Stories played on each seed: every kind of step and giver the batch uses, a chain three deep, both camps' kinds of work, the night step. */
 const SAMPLE: Record<number, string[]> = {
-  3: ["ames", "leckie", "hurst", "vosper", "treloar"],
+  3: ["ames", "bettany", "leckie", "hurst", "vosper", "treloar"],
   2026: ["rudd", "farrant", "hackett", "gunn", "venn"],
 };
 

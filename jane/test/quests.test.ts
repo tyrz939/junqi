@@ -492,12 +492,11 @@ describe("the Lowfields side quests, played", () => {
     expectDone(sim, "lost_property");
     expect([has(sim, "lost_glove"), has(sim, "lost_hat"), has(sim, "lost_tin")]).toEqual([0, 0, 0]);
     expect(has(sim, "apple")).toBe(apples + 2);
-    expect(has(sim, "key_generic")).toBe(1);
-    // One article from the unclaimed shelf: the plain key turns once and is the lock's.
-    press(sim, "unclaimed_shelf");
-    press(sim, "unclaimed_shelf");
-    expect(has(sim, "key_generic")).toBe(0);
-    expect(has(sim, "grape")).toBe(4);
+    // One article from the unclaimed shelf, and only one: a shelf with a card, not a locked chest.
+    const before = [has(sim, "light_stone"), has(sim, "small_water"), has(sim, "grape")];
+    read(sim, "unclaimed_shelf", "shelf_choose", [0]);
+    read(sim, "unclaimed_shelf", "shelf_after");
+    expect([has(sim, "light_stone"), has(sim, "small_water"), has(sim, "grape")]).toEqual([before[0] + 1, before[1], before[2]]);
 
     // A2. The trunk was there all along, and is locked.
     read(sim, "lost_property_book", "ll_offer", [0]);
@@ -792,6 +791,9 @@ describe("the Lowfields side quests, played", () => {
     expect(has(sim, "white_water_rose")).toBe(3);
     read(sim, "garden_book", "book_in_1", [0], "garden_book");
     expectDone(sim, "before_the_bell");
+    // "two rocks and two vials of water on the ground by the book that you would swear were not there"
+    expect(sim.rt.propsByKey.get("garden_book_gift")!.hidden).toBe(false);
+    press(sim, "garden_book_gift");
     expect([has(sim, "rock"), has(sim, "small_water")]).toEqual([2, 2]);
     expect(has(sim, "white_water_rose"), "the roses are kept: the next page needs one").toBe(3);
 

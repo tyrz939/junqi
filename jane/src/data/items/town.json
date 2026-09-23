@@ -17,7 +17,7 @@
   },
   "town_cap": {
     "name": "Robert's Cap",
-    "icon": "item_hat",
+    "icon": "item_cap",
     "maxStack": 1,
     "usable": false,
     "cooldown": 1,
@@ -25,7 +25,7 @@
   },
   "town_loaf": {
     "name": "A Loaf",
-    "icon": "item_present",
+    "icon": "item_loaf",
     "maxStack": 1,
     "usable": false,
     "cooldown": 1,

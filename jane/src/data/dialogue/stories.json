@@ -234,7 +234,7 @@
       },
       "wait_1": {
         "lines": [
-          "In the garden. Under a stone. There are a lot of stones."
+          "In the garden. Under a stone. There are four stones, and they shift if you lean on them."
         ]
       },
       "in_1": {
@@ -1401,7 +1401,7 @@
       },
       "after": {
         "lines": [
-          "I've moved the pen nearer the house. They go in at eight now, and I stand with them till nine."
+          "I count them at eight now, and again before the bell. It comes to three both times. It always did."
         ]
       }
     }
@@ -1791,9 +1791,8 @@
         ],
         "actions": [
           {
-            "do": "give",
-            "item": "vosper_tin",
-            "qty": 1
+            "do": "show",
+            "prop": "vosper_tin_drop"
           }
         ]
       },
@@ -1930,7 +1929,7 @@
       },
       "wait_2": {
         "lines": [
-          "Under the front step at {place:hackett_house}. The step's still there. It's all that is."
+          "Under the front step at {place:hackett_house}. It was always loose; lean on it and it goes."
         ]
       },
       "in_2": {
@@ -2035,7 +2034,7 @@
       },
       "wait_1": {
         "lines": [
-          "In the garden, by the rows. I'd left the flowers there too."
+          "In the garden, by the rows. Where I dropped them, I suppose."
         ]
       },
       "in_1": {
@@ -2358,7 +2357,7 @@
       },
       "wait_1": {
         "lines": [
-          "In the garden, the row by the fence. They come up easy this year. Too easy."
+          "In the garden, in the rows. They come up easy this year. Too easy."
         ]
       },
       "in_1": {
@@ -3132,8 +3131,8 @@
     "nodes": {
       "ladder": {
         "lines": [
-          "A ladder against the wall, freshly tarred. On the second rung, in white paint: SAYER.",
-          "Under it, in the same paint and a different hand: RETURN BY SUNDAY. There is nothing above it but sky."
+          "A ladder, freshly tarred, stands up in the middle of the floor. It is leaning on nothing.",
+          "On the second rung, in white paint: SAYER. Under it, in a different hand: RETURN BY SUNDAY."
         ]
       }
     }

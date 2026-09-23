@@ -112,8 +112,8 @@
       "lp_offer": {
         "lines": [
           "CASTLE HALT. LOST PROPERTY. The office is not staffed. It is still open.",
-          "Reported lost and not yet found. On the station road, between here and Julie's gate: one child's glove, red, at the well. One man's felt hat, on the signpost on the same road.",
-          "Further along the station road, before Julie's gate: one carter's dinner tin, under the seat of a cart that did not arrive.",
+          "Reported lost and not yet found, all on the station road: one child's glove, red, at the well. One man's felt hat, at the signpost on the same road.",
+          "Further along the same road: one carter's dinner tin, by a cart that did not arrive.",
           "All three are beside the road. Finders please enter items below. A pencil is provided."
         ],
         "options": [
@@ -133,7 +133,7 @@
       },
       "lp_wait": {
         "lines": [
-          "Glove: the well on the station road. Hat: the signpost on the same road. Tin: the cart further along the station road, before Julie's gate. The pencil is on its string."
+          "Glove: the well on the station road. Hat: the signpost on the same road. Tin: the cart further along the station road. The pencil is on its string."
         ]
       },
       "lp_in": {
@@ -219,7 +219,7 @@
       },
       "tbc_offer": {
         "lines": [
-          "In pencil, a different hand: Parcel, brown paper, string. Left on the platform crate each evening after the bell. NOT lost property. Do not hand in. It is collected.",
+          "In pencil, a different hand: Parcel, brown paper, string. Left by the platform crate each evening after the bell. NOT lost property. Do not hand in. It is collected.",
           "Underneath: would somebody check that it still is."
         ],
         "options": [
@@ -479,7 +479,7 @@
       },
       "rats_in": {
         "lines": [
-          "A second sheet behind the first: the shed key is on the nail behind this board. Members only. Anyone who has dealt with six is a member."
+          "A second sheet behind the first, and a key pinned under it for the shed. Members only. Anyone who has dealt with six is a member."
         ],
         "options": [
           {
@@ -866,7 +866,7 @@
       },
       "day": {
         "lines": [
-          "A scarecrow. One. Straw, a sack, a coat somebody wore for years. It faces the road."
+          "A scarecrow. One. Straw, a sack, a coat somebody wore for years."
         ],
         "actions": [
           {
@@ -895,7 +895,7 @@
     "nodes": {
       "night": {
         "lines": [
-          "Two. It faces the farm."
+          "Two."
         ],
         "actions": [
           {
@@ -906,7 +906,7 @@
       },
       "day": {
         "lines": [
-          "Two. The same straw, a better hat. It faces the farm."
+          "Two. The same straw, the same sack, the same coat."
         ],
         "actions": [
           {
@@ -935,7 +935,7 @@
     "nodes": {
       "night": {
         "lines": [
-          "Three. Straw, an old coat, a turnip for a head. The rows behind it are not still."
+          "Three. Straw, an old coat, a sack for a head. The rows behind it are not still."
         ],
         "actions": [
           {
@@ -1070,7 +1070,7 @@
       "glovebox_second": {
         "lines": [
           "In her hand: If I am not back by dark, do not come and look. I mean it kindly. The wood behind the car is not the wood in front of it.",
-          "Her case is on the back seat, locked. Her coat is gone. There are prints behind the car, a woman's shoe, going in. They are not hurried. None come back."
+          "Her case is on the ground by the car, locked. Her coat is gone. There are prints behind the car, a woman's shoe, going in. They are not hurried. None come back."
         ],
         "options": [
           {
@@ -1170,7 +1170,7 @@
     "nodes": {
       "read": {
         "lines": [
-          "Eleven parcels on the step in the nurse's wrapping, none opened. The oldest has moss on it. A card has been pushed out under the door: NEXT TIME PLEASE BRING YOUR BAG. M. AND E. CRANE."
+          "Eleven parcels round the step in the nurse's wrapping, none opened. The oldest has moss on it. A card has been pushed out under the door: NEXT TIME PLEASE BRING YOUR BAG. M. AND E. CRANE."
         ],
         "actions": [
           {
@@ -1527,7 +1527,7 @@
       },
       "brazier_empty": {
         "lines": [
-          "An iron basket on legs, swept out, with a dry place under it for planks. It has been kept ready by someone with nothing to put in it."
+          "A ring of stones, swept out, with a dry place beside it for planks. It has been kept ready by someone with nothing to put in it."
         ]
       }
     }
@@ -1626,7 +1626,7 @@
       },
       "book_in_1": {
         "lines": [
-          "The next page has been turned down for you. There are two rocks and two vials of water on the barrel that you would swear were not there this morning."
+          "The next page has been turned down for you. There are two rocks and two vials of water on the ground by the book that you would swear were not there this morning."
         ],
         "options": [
           {
@@ -1822,7 +1822,7 @@
         "lines": [
           "QUARRY STEPS. GANG OF 5. Dinners: 5. Up at seven: 5. Down at five: 4.",
           "Foreman to see about it.",
-          "Five tins are laid out by the kettle. Four have been eaten from."
+          "Five tins are laid out by the cold fire. Four have been eaten from."
         ],
         "options": [
           {
@@ -1977,7 +1977,7 @@
       "glove": {
         "lines": [
           "CASTLE PARISH. THE WELL ON THE STATION ROAD. Drawn at your own risk since the mains came.",
-          "A child's red glove is laid out on the wall to dry. It has been dry for a long time.",
+          "A child's red glove lies by the well wall, laid out flat to dry. It has been dry for a long time.",
           "Away north over the fields there is a big building on a hill, with one window lit. It is the only light in that direction."
         ]
       },
@@ -2017,7 +2017,7 @@
       "hat": {
         "lines": [
           "CASTLE HALT one way. CASTLE the other. The post was painted this year.",
-          "A man's felt hat sits on the arm for Castle, brim up. The inside of it is dry."
+          "A man's felt hat lies at the foot of the post, brim up. The inside of it is dry."
         ]
       },
       "bare": {
@@ -2055,13 +2055,13 @@
     "nodes": {
       "tin": {
         "lines": [
-          "A carter's cart on the station road, tipped over with one shaft in the ditch. The load is gone and the straps are still done up.",
-          "There is a dinner tin under the seat."
+          "A carter's cart left on the station road with nothing in the shafts. The sacks are still roped down, and grass has come up through the spokes.",
+          "A dinner tin lies in the road beside it."
         ]
       },
       "empty": {
         "lines": [
-          "A carter's cart on the station road, tipped over with one shaft in the ditch. The load is gone and the straps are still done up."
+          "A carter's cart left on the station road with nothing in the shafts. The sacks are still roped down, and grass has come up through the spokes."
         ]
       }
     }
@@ -2086,7 +2086,7 @@
       "key": {
         "lines": [
           "A full cart standing in the ruts on the mine road. Nothing is in the shafts and the load is still roped down.",
-          "The carter's key is on the ground under the tailboard."
+          "The carter's key is on the ground by the tailboard."
         ]
       },
       "stood": {
@@ -2196,6 +2196,128 @@
       "read": {
         "lines": [
           "GOLDSKIN MINING Co. QUARRY STEPS, by the quarry track. Quarry gang only. Gang stood down."
+        ]
+      }
+    }
+  },
+  "unclaimed_shelf": {
+    "speaker": "The unclaimed shelf",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "flag",
+            "flag": "took_unclaimed"
+          }
+        ],
+        "node": "shelf_after"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "lost_property"
+          }
+        ],
+        "node": "shelf_choose"
+      },
+      {
+        "node": "shelf_look"
+      }
+    ],
+    "nodes": {
+      "shelf_look": {
+        "lines": [
+          "UNCLAIMED. A lamp stone, two bottles of water tied at the necks, and a paper bag of grapes that have not gone off.",
+          "A card: FINDERS ONLY. ONE ARTICLE EACH. SEE THE BOOK."
+        ]
+      },
+      "shelf_choose": {
+        "lines": [
+          "UNCLAIMED. A lamp stone, two bottles of water tied at the necks, and a paper bag of grapes that have not gone off.",
+          "A card: FINDERS ONLY. ONE ARTICLE EACH. Your three lines are in the book."
+        ],
+        "options": [
+          {
+            "label": "The lamp stone",
+            "goto": "shelf_taken",
+            "actions": [
+              {
+                "do": "give",
+                "item": "light_stone",
+                "qty": 1
+              },
+              {
+                "do": "flag",
+                "flag": "took_unclaimed"
+              }
+            ]
+          },
+          {
+            "label": "Something else",
+            "goto": "shelf_choose_2"
+          }
+        ]
+      },
+      "shelf_choose_2": {
+        "lines": [
+          "One article. The water, then?"
+        ],
+        "options": [
+          {
+            "label": "The water",
+            "goto": "shelf_taken",
+            "actions": [
+              {
+                "do": "give",
+                "item": "small_water",
+                "qty": 2
+              },
+              {
+                "do": "flag",
+                "flag": "took_unclaimed"
+              }
+            ]
+          },
+          {
+            "label": "Something else",
+            "goto": "shelf_choose_3"
+          }
+        ]
+      },
+      "shelf_choose_3": {
+        "lines": [
+          "One article. The grapes?"
+        ],
+        "options": [
+          {
+            "label": "The grapes",
+            "goto": "shelf_taken",
+            "actions": [
+              {
+                "do": "give",
+                "item": "grape",
+                "qty": 4
+              },
+              {
+                "do": "flag",
+                "flag": "took_unclaimed"
+              }
+            ]
+          },
+          {
+            "label": "Leave them"
+          }
+        ]
+      },
+      "shelf_taken": {
+        "lines": [
+          "You take one article. Nobody is there to see which."
+        ]
+      },
+      "shelf_after": {
+        "lines": [
+          "The shelf, less one article. The gap where it stood has already been dusted round."
         ]
       }
     }

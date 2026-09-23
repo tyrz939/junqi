@@ -18,24 +18,9 @@
       "within": 12
     },
     "prop": {
-      "def": "chest",
-      "locked": true,
-      "keyTag": "generic",
-      "label": "The unclaimed shelf",
-      "loot": [
-        {
-          "item": "light_stone",
-          "qty": 1
-        },
-        {
-          "item": "small_water",
-          "qty": 2
-        },
-        {
-          "item": "grape",
-          "qty": 4
-        }
-      ]
+      "def": "unclaimed_shelf",
+      "talk": "unclaimed_shelf",
+      "label": "The unclaimed shelf"
     }
   },
   {
@@ -173,6 +158,7 @@
   },
   {
     "key": "nurses_case",
+    "beside": "car_wreck",
     "at": {
       "site": "car_wood",
       "within": 8
@@ -350,6 +336,7 @@
   },
   {
     "key": "lost_glove_drop",
+    "beside": "halt_well_head",
     "at": {
       "anchor": "halt_well",
       "within": 8
@@ -379,6 +366,7 @@
   },
   {
     "key": "lost_hat_drop",
+    "beside": "halt_signpost_post",
     "at": {
       "anchor": "halt_signpost",
       "within": 8
@@ -408,6 +396,7 @@
   },
   {
     "key": "lost_tin_drop",
+    "beside": "halt_cart_body",
     "at": {
       "anchor": "halt_cart",
       "within": 8
@@ -437,6 +426,7 @@
   },
   {
     "key": "carters_key_drop",
+    "beside": "carters_cart_body",
     "at": {
       "anchor": "carters_cart",
       "within": 8
@@ -737,7 +727,8 @@
       "within": 20
     },
     "prop": {
-      "def": "rock"
+      "def": "dinner_tin",
+      "label": "A dinner tin"
     }
   },
   {
@@ -889,6 +880,53 @@
       "def": "sign",
       "talk": "graveyard_sign",
       "label": "The graveyard"
+    }
+  },
+  {
+    "key": "garden_book_gift",
+    "ownDice": true,
+    "at": {
+      "mark": "garden_book",
+      "within": 4
+    },
+    "prop": {
+      "def": "lost_thing",
+      "hidden": true,
+      "loot": [
+        {
+          "item": "rock",
+          "qty": 2
+        },
+        {
+          "item": "small_water",
+          "qty": 2
+        }
+      ],
+      "label": "Two rocks and two vials of water"
+    }
+  },
+  {
+    "key": "crane_parcels",
+    "ownDice": true,
+    "count": 11,
+    "at": {
+      "anchor": "cottage_crane",
+      "within": 12
+    },
+    "prop": {
+      "def": "parcel",
+      "label": "A parcel in the nurse's wrapping"
+    }
+  },
+  {
+    "key": "foreman_tin",
+    "at": {
+      "prop": "quarry_adit",
+      "within": 4
+    },
+    "prop": {
+      "def": "dinner_tin",
+      "label": "The foreman's tin"
     }
   }
 ]

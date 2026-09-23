@@ -295,8 +295,17 @@ export class Renderer {
       const frame = p.used && p.loot === null && sprite?.frames.open ? "open" : (p.on || (def.nightOnly && night)) && sprite?.frames.on ? "on" : rest;
       const sxp = shown.x;
       const syp = shown.y;
+      // A thing lying on the ground looks like what it is: a key is a key, a glove a glove. Paper only for paper.
+      const held = def.showsLoot && p.loot && p.loot.length > 0 ? sim.catalog.items[p.loot[0].item] : undefined;
+      const look = held ? this.atlas[held.icon] : undefined;
       const paint = (): void => {
-        if (sprite) drawSprite(ctx, sprite, frame, sxp - vx, syp - vy);
+        if (look) {
+          const lx = Math.round(sxp - vx + (def.w * CELL) / 2);
+          const ly = Math.round(syp - vy + def.h * CELL);
+          ctx.fillStyle = "#00000040";
+          ctx.fillRect(lx - 4, ly - 2, 8, 2);
+          ctx.drawImage(look.canvas, 0, 0, 16, 16, lx - 5, ly - 10, 10, 10);
+        } else if (sprite) drawSprite(ctx, sprite, frame, sxp - vx, syp - vy);
         else {
           ctx.fillStyle = "#c8403c";
           ctx.fillRect(sxp - vx, syp - vy, def.w * CELL, def.h * CELL);
