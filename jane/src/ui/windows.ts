@@ -76,7 +76,6 @@ export class GameWindow {
   private questSel = "";
 
   private readonly map: MapPane;
-  private readonly win: HTMLDivElement;
 
   // pad focus
   private cursor: Cursor = { region: "bag", index: 0 };
@@ -95,7 +94,6 @@ export class GameWindow {
 
     const win = h("div", "jq-window jq-panel", this.el);
     win.dataset.drop = "window";
-    this.win = win;
 
     const head = h("div", "jq-tabs", win);
     for (const t of TABS) {
@@ -290,8 +288,6 @@ export class GameWindow {
           if (ev.e === "zone") this.map.invalidate();
           else if (ev.e === "tiles") this.map.tilesChanged();
         }
-        // Out in the country the chart wants the whole screen; a cellar fits the usual window.
-        this.win.classList.toggle("jq-window-wide", !sim.rt.bp.indoor);
         this.map.frame(sim);
         break;
     }
@@ -320,7 +316,6 @@ export class GameWindow {
     this.questDetailSig = "\u0000";
     this.cursor = homeCursor(this.layout());
     if (tab === "map") this.map.invalidate();
-    else this.win.classList.remove("jq-window-wide");
   }
 
   private layout(): NavLayout {

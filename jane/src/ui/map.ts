@@ -1,4 +1,4 @@
-// Map tab. A rough chart, not a photograph: outdoors one map pixel stands for a 16x16 block of
+// Map tab. A rough chart, not a photograph: outdoors one map pixel stands for an 8x8 block of
 // cells and says the most telling thing in it (a road, water, a roof, the woods). Ground she has
 // not seen lies under a dark smoke that thins at the edge of where she has walked. Nothing is
 // labelled; the one mark is the School, which she always knows the way to.
@@ -15,7 +15,7 @@ import { cached, h, textOf } from "@/ui/dom";
 import { packRgb, parseCssColor } from "@/ui/format";
 
 /** Outdoors, one map pixel is this many cells on a side. */
-export const OUT_STEP = 16;
+export const OUT_STEP = 8;
 /** Indoors the map is finer, but never wider or taller than this many pixels. */
 const MAX_MAP_PX = 900;
 /** Zoom is a whole multiple of the fit-to-window scale, so pixels stay square and crisp. */
@@ -29,7 +29,7 @@ const UNKNOWN = packRgb(60, 50, 80);
 
 /**
  * Outdoors the chart speaks in a few inks, not in tiles: meadow, woods, heath, marsh, farmland,
- * sand, rock, water, road, roofs. Each ink claims a block by how much of it there is, times its
+ * sand, rock, water, road, railway, roofs. Each ink claims a block by how much of it there is, times its
  * weight, so a road four cells wide still shows in a block of meadow, and so does a hamlet.
  */
 const enum Ink {
@@ -43,6 +43,7 @@ const enum Ink {
   Rock,
   Water,
   Road,
+  Rail,
   Roofs,
   Count,
 }
@@ -59,15 +60,17 @@ const INK_COLOUR: readonly number[] = [
   packRgb(112, 104, 94), // rock
   packRgb(62, 98, 140), // water
   packRgb(204, 184, 140), // road
+  packRgb(64, 58, 56), // the railway
   packRgb(156, 72, 56), // roofs
 ];
-const INK_WEIGHT: readonly number[] = [0, 1, 1, 1, 1, 1, 1, 1, 2.5, 4, 6];
+const INK_WEIGHT: readonly number[] = [0, 1, 1, 1, 1, 1, 1, 1, 2.5, 4, 4, 6];
 const INK_OF: Uint8Array = (() => {
   const k = new Uint8Array(TILE_COUNT).fill(Ink.Meadow);
   k[Tile.Void] = Ink.None;
   const set = (ink: Ink, ts: Tile[]): void => ts.forEach((t) => (k[t] = ink));
   set(Ink.Woods, [Tile.Tree, Tile.Pine, Tile.Bush, Tile.Hedge]);
-  set(Ink.Heath, [Tile.Dirt, Tile.DryBed, Tile.DeadTree, Tile.Track]); // a track is a trodden line on the heath, not a road
+  set(Ink.Heath, [Tile.Dirt, Tile.DryBed, Tile.DeadTree]);
+  set(Ink.Rail, [Tile.Track]); // the railway: a dark line from edge to edge
   set(Ink.Marsh, [Tile.Moss]);
   set(Ink.Farm, [Tile.Crops, Tile.Garden]);
   set(Ink.Sand, [Tile.Sand]);

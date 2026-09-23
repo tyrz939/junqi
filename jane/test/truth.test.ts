@@ -14,7 +14,10 @@ import { Sim } from "@/sim/sim";
 import { blueprintFor } from "@/sim/zones";
 import type { Blueprint, PropSpawn } from "@/world/blueprint";
 import { expandText } from "@/sim/text";
-import { pushProp, idle, yardCatalog } from "./bot";
+import { pushProp, idle, walkTo, yardCatalog } from "./bot";
+import { focusOf } from "@/sim/interact";
+import { CELL } from "@/sim/constants";
+import { propCentre } from "@/sim/runtime";
 
 const catalog = yardCatalog();
 const SEEDS = [3, 2026, 77];
@@ -191,5 +194,36 @@ describe("nothing the text hides can be found before she is told to look", () =>
     idle(sim, 2);
     expect(sim.state.quests.active.some((q) => q.quest === "bettany_key"), "the quest is given").toBe(true);
     expect(key.hidden, "the key is there now").toBe(false);
+  }, LONG);
+});
+
+describe("the game says what moves", () => {
+  it("standing at one of Mrs Bettany's stones, the prompt says it pushes", () => {
+    const seed = SEEDS.find((s) => storyHas(county(s), "bettany"))!;
+    const sim = Sim.newGame(catalog, seed);
+    sim.command({ t: "dev", dev: { op: "god", on: true } });
+    sim.command({ t: "dev", dev: { op: "tp", zone: "county", mark: "story_bettany" } });
+    idle(sim, 3);
+    const top = county(seed).props.find((p) => p.under === "bettany_key_drop")!;
+    const stone = sim.rt.propsByKey.get(top.key)!;
+    const c = propCentre(sim.catalog, stone);
+    const def = sim.catalog.props[stone.def];
+    const sides: [number, number, number, number][] = [
+      [c.x, (stone.cy + def.h) * CELL + 4, 0, -1],
+      [c.x, stone.cy * CELL - 4, 0, 1],
+      [stone.cx * CELL - 4, c.y, 1, 0],
+      [(stone.cx + def.w) * CELL + 4, c.y, -1, 0],
+    ];
+    let prompt = "";
+    for (const [x, y, mx, my] of sides) {
+      if (!walkTo(sim, x, y, 2)) continue;
+      sim.tick({ mx: mx * 0.2, my: my * 0.2, sprint: false, useHeld: false, ax: 0, ay: 0 });
+      const f = focusOf(sim.view(0), sim.player);
+      if (f?.kind === "prop" && f.id === stone.id) {
+        prompt = f.prompt;
+        break;
+      }
+    }
+    expect(prompt).toMatch(/hold to push/i);
   }, LONG);
 });

@@ -54,10 +54,21 @@ function interactable(w: World, p: Prop): boolean {
   if (p.talk) return true;
   if (def.carry || def.bench) return true;
   if (p.use && !(def.once && p.used) && !def.answers) return true;
+  // A stone, a barrel, a bale: nothing to open, but it moves. The prompt is how she learns that.
+  if (def.push) return true;
   return false;
 }
 
+/** A thing that only pushes loses a tie to a thing with words or contents beside it: the note by the crate is read first. */
+const PUSH_ONLY_PENALTY = 6;
+
 function promptFor(w: World, p: Prop): string {
+  const verb = firstVerb(w, p);
+  if (!w.catalog.props[p.def].push) return verb ?? "Use";
+  return verb ? `${verb} (hold to push)` : "Hold to push";
+}
+
+function firstVerb(w: World, p: Prop): string | null {
   const def = w.catalog.props[p.def];
   if (p.locked) return "Unlock";
   if (p.to) return p.nightLock && isNight(w.state) ? "Try the door" : (def.prompt ?? "Enter");
@@ -66,7 +77,8 @@ function promptFor(w: World, p: Prop): string {
   if (def.carry) return "Pick up";
   if (def.bench) return "Craft";
   if (p.talk) return def.prompt ?? "Read";
-  return def.prompt ?? "Use";
+  if (p.use && !(def.once && p.used) && !def.answers) return def.prompt ?? "Use";
+  return def.prompt ?? null;
 }
 
 /** What USE would act on right now. Pure; the HUD calls it every frame for the prompt and highlight. */
@@ -95,8 +107,9 @@ export function focusOf(w: World, u: Unit): Focus {
     if (d > USE_REACH) continue;
     const c = propCentre(w.catalog, p);
     const behind = (c.x - u.x) * fx + (c.y - u.y) * fy < 0 ? 8 : 0;
-    if (d + behind < bestScore) {
-      bestScore = d + behind;
+    const pushOnly = w.catalog.props[p.def].push && firstVerb(w, p) === null ? PUSH_ONLY_PENALTY : 0;
+    if (d + behind + pushOnly < bestScore) {
+      bestScore = d + behind + pushOnly;
       best = { kind: "prop", id: p.id, prompt: promptFor(w, p) };
     }
   }
@@ -222,6 +235,7 @@ function useProp(w: World, u: Unit, p: Prop): void {
     return;
   }
   if (def.bench) w.emit({ e: "prop", prop: p.id, change: "use" });
+  else if (def.push) w.emit({ e: "toast", text: "It shifts a little. Hold to push it." });
 }
 
 /**

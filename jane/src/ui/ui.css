@@ -1284,16 +1284,6 @@
 }
 
 /* map */
-/* Out in the country the window takes the screen, bar a margin; a cellar keeps the usual size. */
-.jq-window.jq-window-wide {
-  top: calc(8 * var(--u));
-  left: calc(8 * var(--u));
-  right: calc(8 * var(--u));
-  bottom: calc(8 * var(--u));
-  width: auto;
-  height: auto;
-  transform: none;
-}
 .jq-map {
   display: flex;
   flex-direction: column;
