@@ -6,6 +6,8 @@ use std::path::Path;
 use jane_art::sheet::Image;
 use jane_world::skeleton::{Biome, SKEL_H, SKEL_W, Terrain, Water, build_terrain};
 
+mod dungeon;
+
 const SCALE: u32 = 4;
 
 fn biome_rgb(b: Biome) -> [u8; 3] {
@@ -62,6 +64,9 @@ fn seeds(args: &[String]) -> Result<std::ops::Range<u32>, String> {
 }
 
 pub fn run(args: &[String]) -> Result<(), String> {
+    if let Some(which) = args.iter().position(|a| a == "--dungeon").and_then(|i| args.get(i + 1)) {
+        return dungeon::run(args, which);
+    }
     let range = seeds(args)?;
     let out = args.iter().position(|a| a == "--out").and_then(|i| args.get(i + 1)).map_or("sheets", String::as_str);
     std::fs::create_dir_all(out).map_err(|e| format!("{out}: {e}"))?;

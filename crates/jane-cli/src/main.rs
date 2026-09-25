@@ -12,6 +12,8 @@ commands:
   check [--data DIR]                  compile /data and list every error and warning (no codegen)
   view [--seeds A..B | --seed N] [--out DIR]
                                       draw each seed's county as a PNG (today: the skeleton's land)
+  view --dungeon <id|all> [--seeds A..B | --seed N] [--out DIR] [--no-png]
+                                      draw each seed's generated dungeon, with attempts and build time
   help                                this text";
 
 fn main() -> ExitCode {
