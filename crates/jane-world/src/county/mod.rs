@@ -33,15 +33,17 @@
 //! Same seed, same county.
 
 pub mod chunks;
+pub mod country;
 pub mod doors;
 pub mod land;
 pub mod links;
 pub mod paths;
 pub mod rail;
 pub mod roads;
+pub mod small;
 
 use jane_core::num::Permille;
-use jane_core::{Blueprint, Grid, Tile, ZoneId};
+use jane_core::{Blueprint, Grid, Rect, Tile, ZoneId};
 
 pub use self::chunks::Chunk;
 use crate::kit::Kit;
@@ -68,6 +70,13 @@ pub struct County<'a> {
     pub footpaths: Vec<Footpath>,
     /// The set places as stamped, in site row order.
     pub chunks: Vec<Chunk>,
+    /// What the country's three stages share: the distance fields, the lamps stood so far.
+    pub country: country::Ctx,
+    /// The places the country built, in build order: what the stories stage claims.
+    pub places: Vec<country::Place>,
+    /// The skeleton's small places, in its order; the placements stage may re-kind a rolled one
+    /// before `small_places` dresses them.
+    pub pois: Vec<small::PoiSpot>,
 }
 
 /// The centre cell of macro cell `m`, on either axis.
@@ -86,6 +95,9 @@ impl<'a> County<'a> {
             before: None,
             footpaths: Vec::new(),
             chunks: Vec::new(),
+            country: country::Ctx::default(),
+            places: Vec::new(),
+            pois: small::poi_spots(sk),
         }
     }
 
@@ -182,22 +194,41 @@ fn stamp_chunks(c: &mut County<'_>) {
 fn place_chunks(_: &mut County<'_>) {}
 
 /// The roads' furniture while their margins are open (lamps, a lamp at each end of a bridge, a
-/// fingerpost at every fork, milestones), then every road's margin claimed. PORT.md §6.m stage 7
-/// lands here.
-fn road_furniture(_: &mut County<'_>) {}
+/// fingerpost at every fork, milestones: `country::furnish_roads`), then every road's, path's
+/// and footpath's margin claimed, three cells each side of its centre line.
+fn road_furniture(c: &mut County<'_>) {
+    // Every chunk's ground, six cells round its box, is spoken for before anything is built
+    // round it. `place_chunks` claims it too once its rows are in; a claim twice is one claim.
+    for ch in &c.chunks {
+        c.k.claim(ch.bounds.grow(6));
+    }
+    country::furnish_roads(c);
+    for line in &c.lines {
+        for &(x, y) in line {
+            c.k.claim(Rect::new(x - 3, y - 3, 7, 7));
+        }
+    }
+}
 
-/// The longest dark stretches get a relay box and a run of dead lamps (`relayRuns`). PORT.md
-/// §6.m stage 7 lands here.
-fn relays(_: &mut County<'_>) {}
+/// The longest dark stretches get a relay box and a run of dead lamps (`country::relays`).
+fn relays(c: &mut County<'_>) {
+    country::relays::relay_runs(c);
+}
 
-/// The skeleton's small places dressed as their kind (`smallPlace`), roadside signposts given
-/// words, each needed place's rect, and the `pois` and `areas` placement rows. PORT.md §6.m
-/// stage 7 lands here.
-fn small_places(_: &mut County<'_>) {}
+/// The skeleton's small places dressed as their kind, roadside signposts given words, each
+/// needed place's rect (`small::small_places`). The `pois` placement rows, the small places'
+/// claim (`small::claim_small_places`) and the `areas` placement rows follow, in that order.
+fn small_places(c: &mut County<'_>) {
+    small::small_places(c);
+}
 
-/// Everything else a county has in it (`furnishCountry(..., "places")`). PORT.md §6.m stage 7
-/// lands here.
-fn country(_: &mut County<'_>) {}
+/// Everything else a county has in it: the small places claimed (again, if the placements stage
+/// did), then field edges, the stories' quota, hamlets, farms, camps, dens, ruins, ponds
+/// (`country::furnish_places`). Leaves `County::places` for the stories stage.
+fn country(c: &mut County<'_>) {
+    small::claim_small_places(c);
+    country::furnish_places(c);
+}
 
 /// The stories claim places, the boards go up with the places' names, each story's rows go into
 /// its place, and `Blueprint::stories` records where each landed. PORT.md §6.m stage 8 lands here.
@@ -206,9 +237,11 @@ fn stories(_: &mut County<'_>) {}
 /// Herbs and rocks on open unclaimed ground. PORT.md §6.m stage 9 lands here.
 fn scatter(_: &mut County<'_>) {}
 
-/// Wildlife by region, biome and threat (`furnishCountry(..., "life")`). PORT.md §6.m stage 9
-/// lands here.
-fn wildlife(_: &mut County<'_>) {}
+/// Wildlife by region, biome and threat, wanderers along the field edges, then something small
+/// on every screen still empty (`country::furnish_life`).
+fn wildlife(c: &mut County<'_>) {
+    country::furnish_life(c);
+}
 
 /// A way cut through thicket to any named place the flood from `start` never reached. PORT.md
 /// §6.m stage 9 lands here.

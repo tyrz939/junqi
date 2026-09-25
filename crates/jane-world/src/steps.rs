@@ -39,6 +39,20 @@ pub enum Step {
     IntHouse,
     /// The cellar: `a` is the decision (the rooms' depths, each pile, the rats, the roses).
     IntCellar,
+    /// A road's field edges: `a` is the road (`walk_key` of its ends).
+    CountyFences,
+    /// The roadside beat: `a` is the road, `b` the point of its line (-1: where the beat starts).
+    CountyAlong,
+    /// A point of the country's lattice: `(a, b)` is its column and row.
+    CountyLattice,
+    /// A country place's furnishings: `a` is its centre cell (`y * COUNTY_W + x`), `b` its kind.
+    CountyPlace,
+    /// The stories' quota's shuffle of off-road spots: `a` names the region and kind, `b` the pass.
+    CountyQuota,
+    /// A road's wanderers: `a` is the road.
+    CountyWander,
+    /// An empty screen's something small: `(a, b)` is the screen.
+    CountyGap,
 }
 
 impl From<Step> for u16 {

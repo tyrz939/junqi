@@ -386,6 +386,12 @@ impl Kit {
         self.bp.props.last_mut().expect("just pushed")
     }
 
+    /// The props placed so far, to finish a row after the fact (a signpost's words, a relay box's
+    /// switch once its lamps stand).
+    pub fn props_mut(&mut self) -> &mut [PropSpawn] {
+        &mut self.bp.props
+    }
+
     /// Keep only the props `keep` says to.
     pub fn retain_props(&mut self, keep: impl FnMut(&PropSpawn) -> bool) {
         self.bp.props.retain(keep);
