@@ -2,6 +2,7 @@
 //! are, the roads between them, how dangerous each patch is. Decided on the 125 x 125 macro grid
 //! before a tile is drawn.
 
+pub mod rail;
 pub mod roads;
 pub mod terrain;
 pub mod types;
