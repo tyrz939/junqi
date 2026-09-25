@@ -22,7 +22,9 @@
 //! | `place_chunks` | placement rows inside the chunks, then the chunks claimed | 7 |
 //! | `road_furniture` | lamps, bridge lamps, forks, milestones; the roads' margins claimed | 7 |
 //! | `relays` | relay boxes and dead lamp runs | 7 |
-//! | `small_places` | the skeleton's small places dressed, signposts given words, placements | 7 |
+//! | `small_places` | the skeleton's small places dressed, signposts given words, anchors' rects | 7 |
+//! | `place_pois` | placement rows at the small places, then the small places claimed | 7 |
+//! | `place_areas` | placement rows in the named patches | 7 |
 //! | `country` | field edges, hamlets, farms, camps, dens, ruins, ponds | 7 |
 //! | `stories` | stories claim places, boards go up, the stories' rows | 8 |
 //! | `scatter` | herbs and rocks | 9 |
@@ -32,18 +34,23 @@
 //!
 //! Same seed, same county.
 
+pub mod areas;
 pub mod chunks;
 pub mod doors;
+pub mod finish;
 pub mod land;
 pub mod links;
 pub mod paths;
+pub mod placements;
 pub mod rail;
 pub mod roads;
+pub mod tale_ground;
 
 use jane_core::num::Permille;
-use jane_core::{Blueprint, Grid, Tile, ZoneId};
+use jane_core::{Blueprint, Grid, NameId, Rect, Tile, ZoneId};
 
 pub use self::chunks::Chunk;
+use self::placements::{PoiSpot, Stage, apply_placements, claim_pois};
 use crate::kit::Kit;
 use crate::skeleton::{COUNTY_H, COUNTY_W, MACRO, Skeleton, SkeletonError, SkeletonRows, build_skeleton};
 
@@ -68,6 +75,17 @@ pub struct County<'a> {
     pub footpaths: Vec<Footpath>,
     /// The set places as stamped, in site row order.
     pub chunks: Vec<Chunk>,
+    /// Exact cells the dressed patches offer placement rows, by name (`quarry_adit`).
+    pub area_slots: Vec<(NameId, (i32, i32))>,
+    /// The skeleton's small places, rolled then anchors', each with the kind it is dressed as: the
+    /// seed's roll, or the kind a `poi` placement row needed (set at `place_chunks`, before the
+    /// small places are dressed).
+    pub pois: Vec<PoiSpot>,
+    /// Which small place each `poi` placement row claimed: `(row key, index into pois)`.
+    pub claimed: Vec<(NameId, usize)>,
+    /// Every cell the flood from `start` reached once the way was cut through (`y * w + x`), for
+    /// `drop_unreachable` right after; taken by it. Stale if the ground changes in between.
+    pub reached: Option<Vec<bool>>,
 }
 
 /// The centre cell of macro cell `m`, on either axis.
@@ -86,6 +104,10 @@ impl<'a> County<'a> {
             before: None,
             footpaths: Vec::new(),
             chunks: Vec::new(),
+            area_slots: Vec::new(),
+            pois: PoiSpot::all(sk),
+            claimed: Vec::new(),
+            reached: None,
         }
     }
 
@@ -114,6 +136,8 @@ pub const STAGES: &[(&str, StageFn)] = &[
     ("road_furniture", road_furniture),
     ("relays", relays),
     ("small_places", small_places),
+    ("place_pois", place_pois),
+    ("place_areas", place_areas),
     ("country", country),
     ("stories", stories),
     ("scatter", scatter),
@@ -153,8 +177,10 @@ pub fn build_county_on(sk: &Skeleton, attempt: u8) -> Blueprint {
 // --- stages of later ports -------------------------------------------------------------------
 
 /// Patches that are places, dressed before the roads so a road that crosses one simply crosses
-/// it (`AREA_DRESS`, `world/areas.ts`). PORT.md §6.m stage 7 lands here.
-fn areas(_: &mut County<'_>) {}
+/// it (`AREA_DRESS`, `world/areas.ts`).
+fn areas(c: &mut County<'_>) {
+    areas::dress_areas(c);
+}
 
 /// The set places, stamped where the skeleton put them, in site row order (`chunks::stamp`);
 /// each one's ground as a `site_<id>` rect, so a measure of the open country can tell it from a
@@ -177,9 +203,46 @@ fn stamp_chunks(c: &mut County<'_>) {
     links::link_lines(c);
 }
 
-/// Placement rows that go inside a chunk, while its open ground is still open; then every chunk's
-/// ground claimed. PORT.md §6.m stage 7 lands here.
-fn place_chunks(_: &mut County<'_>) {}
+/// Cells round a chunk's box closed to what comes after its placement rows.
+const CHUNK_CLAIM: i32 = 6;
+/// A small place's ground, closed once its placement rows are down: this far each side of its
+/// centre, and this far above and below it.
+const POI_CLAIM_X: i32 = 7;
+const POI_CLAIM_Y: i32 = 6;
+
+/// Which small place each `poi` placement row gets (so the small places are dressed as the rows
+/// need them); the placement rows that go inside a chunk, while its open ground is still open; then
+/// every chunk's ground claimed. A gate is a way in: it is claimed first, so nothing placed by name
+/// stands on it (a sign set down by the graveyard's gate once shut it).
+fn place_chunks(c: &mut County<'_>) {
+    let rows = jane_data::catalog().county.placements;
+    for i in 0..c.chunks.len() {
+        for g in 0..c.chunks[i].gates.len() {
+            let (x, y) = c.chunks[i].gates[g];
+            c.k.claim(Rect::new(x, y, 1, 1));
+        }
+    }
+    c.claimed = claim_pois(c.sk, &mut c.pois, rows);
+    apply_placements(c, Stage::Chunks, rows);
+    for i in 0..c.chunks.len() {
+        c.k.claim(c.chunks[i].bounds.grow(CHUNK_CLAIM));
+    }
+}
+
+/// The placement rows at the small places, once they are dressed; then each small place's ground
+/// claimed.
+fn place_pois(c: &mut County<'_>) {
+    apply_placements(c, Stage::Pois, jane_data::catalog().county.placements);
+    for i in 0..c.pois.len() {
+        let p = c.pois[i];
+        c.k.claim(Rect::new(p.x - POI_CLAIM_X, p.y - POI_CLAIM_Y, 2 * POI_CLAIM_X + 1, 2 * POI_CLAIM_Y + 1));
+    }
+}
+
+/// What the quests put in the named patches, before the country fills up round it.
+fn place_areas(c: &mut County<'_>) {
+    apply_placements(c, Stage::Areas, jane_data::catalog().county.placements);
+}
 
 /// The roads' furniture while their margins are open (lamps, a lamp at each end of a bridge, a
 /// fingerpost at every fork, milestones), then every road's margin claimed. PORT.md §6.m stage 7
@@ -200,20 +263,25 @@ fn small_places(_: &mut County<'_>) {}
 fn country(_: &mut County<'_>) {}
 
 /// The stories claim places, the boards go up with the places' names, each story's rows go into
-/// its place, and `Blueprint::stories` records where each landed. PORT.md §6.m stage 8 lands here.
+/// its place (`placements::apply_placements(c, Stage::Places, ..)`), and `Blueprint::stories`
+/// records where each landed. PORT.md §6.m stage 8 lands here.
 fn stories(_: &mut County<'_>) {}
 
-/// Herbs and rocks on open unclaimed ground. PORT.md §6.m stage 9 lands here.
-fn scatter(_: &mut County<'_>) {}
+/// Herbs and rocks on open unclaimed ground.
+fn scatter(c: &mut County<'_>) {
+    finish::scatter(c);
+}
 
 /// Wildlife by region, biome and threat (`furnishCountry(..., "life")`). PORT.md §6.m stage 9
 /// lands here.
 fn wildlife(_: &mut County<'_>) {}
 
-/// A way cut through thicket to any named place the flood from `start` never reached. PORT.md
-/// §6.m stage 9 lands here.
-fn cut_through(_: &mut County<'_>) {}
+/// A way cut through thicket to any named place the flood from `start` never reached.
+fn cut_through(c: &mut County<'_>) {
+    finish::cut_through(c);
+}
 
-/// Small places and creatures the flood from `start` never reached are dropped. PORT.md §6.m
-/// stage 9 lands here.
-fn drop_unreachable(_: &mut County<'_>) {}
+/// Small places and creatures the flood from `start` never reached are dropped.
+fn drop_unreachable(c: &mut County<'_>) {
+    finish::drop_unreachable(c);
+}
