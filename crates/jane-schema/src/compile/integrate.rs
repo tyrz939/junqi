@@ -2,10 +2,11 @@
 //! condition, trigger or quest uses is provided by some declared source, and every flag read is
 //! written somewhere.
 //!
-//! **Scope today.** Names are checked county-wide, not per zone, and a miss is a *warning*: the
-//! county's authored places are still code (`chunks.ts`, `interiors.ts`, `areas.ts`) until they
-//! become `.chunk` files (PORT.md §6.f, P2 stage 6), and the names they draw have no declared
-//! provider yet. When the chunks land, a miss becomes an error and the check goes per zone.
+//! **Scope today.** Names are checked county-wide, not per zone, and a miss is a *warning*. The
+//! county's set places are `.chunk` files now (PORT.md §6.f) and provide what they draw; the dressed
+//! areas (`areas.ts`) and the interiors (`interiors.ts`) are still code, and the few names only they
+//! draw have no declared provider yet. When they are data too, a miss becomes an error and the check
+//! goes per zone.
 
 use std::collections::BTreeSet;
 
@@ -40,6 +41,10 @@ fn provided(c: &Catalog) -> BTreeSet<NameId> {
     let mut out = BTreeSet::new();
     for p in c.county.provides() {
         out.insert(p.name);
+    }
+    // The authored places' keyed props and units, marks and rects (PORT.md §6.f).
+    for (_, n) in c.chunks.exports() {
+        out.insert(n);
     }
     for m in c.dungeons.missions {
         for n in m.provides {
@@ -169,7 +174,7 @@ pub fn check(c: &Catalog, diag: &mut Diagnostics) {
         diag.warn(
             "providers",
             format!(
-                "{} name(s) used with no declared provider (authored places are still code until .chunk files land): {}",
+                "{} name(s) used with no declared provider (dressed areas and interiors are still code): {}",
                 missing.len(),
                 missing.join(", ")
             ),

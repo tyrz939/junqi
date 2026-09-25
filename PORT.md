@@ -298,6 +298,8 @@ The streams test carries.
 
 **Rule:** a chunk grid never references a coordinate outside its box; gates and slots are the only things the county reads from it.
 
+*(Data side built: the sixteen places of `chunks.ts` are `data/chunks/*.chunk`, a tile `grid` plus optional `things`, `names` and `claims` layers, one legend, and a header of `id`, `box`, `anchor`, `pin`, `face`, `gates`, `slots`, `around`; the grammar is `jane-schema/src/compile/tables/chunks/parse.rs` and `data/chunks/README.md`. `Catalog::chunks` holds them laid out and linted; the graveyard's coffins are the one fill. The station's `halt_approach`, the one rect that reaches past a box, is an `around` header line. The stamper is next.)*
+
 ### 6.g Tuning to data
 
 `data/tuning/skeleton.json`, `county.json`, `country.json`, `dungeon.json`, `chunks.json` (and `sim.json` for the sim's tables, `ARCHITECTURE.md` §6): every constant the audit listed, integers or `Q16`. Builders take `&Tuning`; the static is the default; the streams test flips a value in memory. Structural constants (`CELL`, `TICK_RATE`, `RING_BLOCK`, `PATH_WINDOW`, `MAX_PLAYERS`) stay Rust `const`.
