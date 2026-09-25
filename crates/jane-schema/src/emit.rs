@@ -437,13 +437,13 @@ impl Emit for Action {
             Action::Status(e) => one(out, "Status", e),
             Action::Heal(h) => one(out, "Heal", h),
             Action::Travel { zone, mark } => {
-                Fields::open(out, "Action::Travel").f("zone", zone).f("mark", mark).close()
+                Fields::open(out, "Action::Travel").f("zone", zone).f("mark", mark).close();
             }
             Action::Talk(d) => one(out, "Talk", d),
             Action::Throw(i) => one(out, "Throw", i),
             Action::Shake(n) => one(out, "Shake", n),
             Action::Camera { mode, rect } => {
-                Fields::open(out, "Action::Camera").f("mode", mode).f("rect", rect).close()
+                Fields::open(out, "Action::Camera").f("mode", mode).f("rect", rect).close();
             }
             Action::If { when, then, els } => {
                 Fields::open(out, "Action::If").f("when", when).f("then", then).f("els", els).close();

@@ -34,12 +34,6 @@
     "keyTag": "school"
   },
   {
-    "zone": "icehouse",
-    "chunk": "lake_statue",
-    "key": "icehouse_door",
-    "label": "The ice house"
-  },
-  {
     "zone": "pipes",
     "near": "town",
     "def": "manhole",
