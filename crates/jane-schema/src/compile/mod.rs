@@ -44,6 +44,7 @@ pub fn build_source(src: &Source) -> Built {
     let story = tables::story::compile(src, &mut cx);
     let county = tables::county::compile(src, &mut cx);
     let dungeons = tables::dungeons::compile(src, &mut cx);
+    let chunks = tables::chunks::compile(src, &mut cx, &story, &county, &dungeons);
     check_limits(&mut cx);
 
     let mut catalog = Catalog {
@@ -58,6 +59,7 @@ pub fn build_source(src: &Source) -> Built {
         story,
         county,
         dungeons,
+        chunks,
     };
     integrate::check(&catalog, &mut cx.diag);
     catalog.content_hash = content_hash(&catalog);

@@ -11,11 +11,13 @@ use jane_core::ids::Key;
 
 use crate::model;
 
+pub mod chunks;
 pub mod combat;
 pub mod county;
 pub mod dungeons;
 pub mod story;
 
+pub use chunks::*;
 pub use combat::*;
 pub use county::*;
 pub use dungeons::*;
@@ -42,6 +44,8 @@ model! {
         pub story: Story,
         pub county: County,
         pub dungeons: Dungeons,
+        /// The county's authored places (`data/chunks`), after the groups whose names they use.
+        pub chunks: Chunks,
     }
 }
 

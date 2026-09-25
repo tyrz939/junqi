@@ -1,0 +1,6 @@
+{
+  "boxMargin": 8,
+  "fills": [
+    { "id": "graveyard_coffins", "def": "coffin", "count": 4, "tries": 60, "margin": 1 }
+  ]
+}
