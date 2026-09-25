@@ -1,5 +1,7 @@
 # Jane — Engine
 
+> **Record of the TypeScript build (September 2026).** The game is being rewritten natively in Rust: `PORT.md` is the plan, `ARCHITECTURE.md` supersedes this file for the engine, `ART.md` and `PRESENTATION.md` supersede §9 to §11. This file stays because it is the best description of the sim's rules and *why* each exists; where the Rust design changes a rule, `ARCHITECTURE.md` §10 says so. §8 (worldgen) is carried by `PORT.md` §6.
+
 How the live build in `jane/` works, and why each choice was made. Pair with `SYSTEMS.md` (the bar), `LEARNING.md` (what 2020 proved), `archive/phaser-remake-2026/POSTMORTEM.md` (what the last attempt got wrong).
 
 Web. TypeScript, Vite, Vitest. **Zero runtime dependencies**: no Phaser, no framework. The production bundle is the game's own code.

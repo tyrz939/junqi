@@ -6,6 +6,8 @@ Jane is not a theme-park MMO and not a combat sandbox. It is an **MMO-lite for o
 
 This file was rewritten in September 2026 when the Phaser remake was archived. The previous version marked forty-odd rows **IN**; an audit found a dozen of them were partial, stubbed or false (`archive/phaser-remake-2026/POSTMORTEM.md`). Hence the first rule.
 
+> **The bar now applies to the Rust build (`PORT.md`).** By Rule 0, every **IN** below is IN *for the TypeScript build*; for the native build every row is **SHAPE** until a Rust test names it, and the row is re-marked as each `PORT.md` phase gate passes. The contracts in the rows do not change; the file map in §11 is the TypeScript build's record, and `PORT.md` §4 is the crate map that replaces it. Rule 1's "one case in `actions.ts`" becomes one variant of `Action` (`ARCHITECTURE.md` §5); Rule 2's boot error becomes a build error (`ARCHITECTURE.md` §6); Rule 5's list gains "no floats" (`ARCHITECTURE.md` §0).
+
 ---
 
 ## The bar
@@ -289,7 +291,7 @@ A change is off-bar if:
 - State on a sprite, a scene, a singleton, or anywhere but `GameState`
 - Combat that writes `hp` in the same call that queues damage
 
-## 11. File map (live)
+## 11. File map (TypeScript build, record; the Rust crate map is `PORT.md` §4)
 
 | Concern | Lives here |
 | --- | --- |

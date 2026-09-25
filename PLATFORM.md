@@ -1,5 +1,7 @@
 # Project Jane — How people will play
 
+> **Partly superseded (September 2026).** The game is being rewritten natively in Rust (`PORT.md`). §1 (why lockstep), §2 (the co-op rules, all decided), §5 to §7 stand. §3 (browser, PWA, Electron, Tauri) and §4 (a WebSocket relay, guests open a URL) are void: everyone runs the native build, the host is `jane-app` or `jane serve` on any machine including a Pi, and the protocol is `ARCHITECTURE.md` §7. §8's two questions are answered there (Host / Join on the title and pause menus; the client token lives in `config.json` beside the saves).
+
 Browser or app, alone or together, and what each costs. Written September 2026 from John's direction: **co-op would be a huge benefit (it is why 2020's engine was MMO-shaped), LAN only, and the game may run in a browser or as an app in a window.** Pair with `ENGINE.md` (the sim this leans on) and `PLAN.md` (where the work is scheduled).
 
 The short version: **the engine is unusually well placed for LAN co-op, the app question is nearly free, and the expensive part is not networking. It is every place the sim says "the player", and that gets more expensive with every system built before it is fixed.**
@@ -96,6 +98,8 @@ It also pays off at once without any network: a test with **two bots in one sim*
 
 ## 3. Browser, app, or both
 
+*Void since the Rust decision: the product is the native build, one dedicated binary per target (`PORT.md` §1, §3). Kept as the record of the web-era reasoning.*
+
 **Both, and the browser build stays the product.** The game is a static site: `dist/` is 290 kB and needs no server to play alone.
 
 | Way to play | What it takes | Verdict |
@@ -110,6 +114,8 @@ Saves are gzip in IndexedDB (done, `ENGINE.md` §3), with `localStorage` as the 
 ---
 
 ## 4. LAN co-op: the shape
+
+*Void since the Rust decision: the shape is now `ARCHITECTURE.md` §7 (TCP star, host relays and paces, input delay 3, hash every 60 frames, join by snapshot, `jane serve` headless). Step 1 below is done in the TS build and is what the Rust sim carries; steps 2 to 5 are replaced by `PORT.md` P8.*
 
 Browsers cannot accept connections, so somebody has to run something that can. The clean LAN story:
 

@@ -1,5 +1,7 @@
 # Jane: Dungeons
 
+> **Design truth, with the build moving to Rust (September 2026).** The mission graphs, the template format, the checks C1 to C12 and the seven dungeons carry unchanged. Where a fact below has drifted from the code it is marked *(corrected)*; the port's changes to the generator (solver as a module, templates linted at build time, `data/rooms/`) are `PORT.md` §6.k and §5.3. File paths are the TypeScript build's.
+
 What a dungeon is in this game, how one is generated, and what the seven of them are. Written September 2026. Pair with `PLAN.md` section 3 (authored mission, generated space), `DESIGN-2020.md` section 4 (what 2020 drew), `STORY.md`, `VOICE.md`, `PLATFORM.md` section 2 (co-op) and `MISSING-SYSTEMS.md`.
 
 This is a design, not code. Nothing here is IN until a test names it (`SYSTEMS.md` Rule 0). Anything about feel, tone or difficulty that a test cannot settle is marked **Question for John**.
@@ -178,7 +180,7 @@ A dungeon ships when every line is true. Lines marked (S) are proven by the solv
 | Thing | Where | Who writes it |
 | --- | --- | --- |
 | Mission graph: the fixed order of challenges, their locks and keys, the contract names | `data/dungeons/<id>.json` | Authored once per dungeon |
-| Room templates: text grids with named sockets, in pools | `src/world/templates/<dungeon>/*.room` | Authored, three or more per pool |
+| Room templates: text grids with named sockets, in pools | `src/world/dungeon/rooms/<dungeon>/*.room` *(corrected: not `templates/`)*; `data/rooms/<dungeon>/*.room` in the Rust build | Authored, three or more per pool |
 | Story rows that lean on contract names: triggers, dialogue, quests | `data/*.json` as today | Authored, unchanged by the generator |
 | Layout, corridors, which template fills which node, dressing, enemy mix | `src/world/dungeon.ts` | Generated per seed, then proven |
 
@@ -186,9 +188,9 @@ The generator returns an ordinary `Blueprint` through `Kit`, so `buildZone`, the
 
 ### 2.1 Units of space
 
-- **Bay.** The lattice cell: 36 x 28 cells, of which the outer 4 on every side are margin. Corridors run in the margins and never through a room.
+- **Bay.** The lattice cell: 36 x 28 cells, of which the outer 3 on every side are rim *(corrected: the code's `RIM_LO` is 3, not 4)*, with an 8-cell border round the whole lattice (`BORDER`). Corridors run in the rims and never through a room.
 - **Room footprint.** 1 x 1, 2 x 1, 1 x 2 or 2 x 2 bays. A 1 x 1 room has at most 28 x 20 cells of floor, which is under one view (K8). A 2 x 1 hub has 64 x 20. A 2 x 2 arena has 64 x 48.
-- **Lattice.** 4 x 4 bays for the mine (144 x 112 cells plus an 8-cell border is today's 160 x 130 exactly), up to 6 x 5 for the School.
+- **Lattice.** 4 x 4 bays for the mine (144 x 112 cells plus the 8-cell border each side is 160 x 128: `W = 16 + cols x 36`, `H = 16 + rows x 28`), up to 6 x 6 for the Burial Chamber and 6 x 5 for the School.
 - **Mouth.** A door opening: 3 cells on a room's rim, centred on a bay side, so two facing mouths in adjacent bays always line up and a straight 3-wide corridor joins them. Gates are placed by the generator in the corridor just outside a mouth, never by the template.
 - **Sill.** The floor cell row just inside every mouth carries the `Sill` tile: walkable, but a pushed prop cannot cross it. Barrels never leave their room, so they can never jam a corridor or be lost to their plate.
 
@@ -203,7 +205,7 @@ type DungeonDef = {
   tiles: { floor: Tile; wall: Tile; alt: Tile[] };
   indoor: boolean;
   ambient: number;
-  lattice: { cols: number; rows: number };          // bays are 36 x 28, margin 4
+  lattice: { cols: number; rows: number };          // bays are 36 x 28, rim 3, border 8
   givenVerbs: Verb[];                 // known on arrival; proven by earlier dungeons
   givenKeys: string[];                // `opens` tags handed over outside (today's GIVEN_KEYS)
   states: StateVar[];                 // reversible building-wide mechanisms. At most 3
@@ -267,8 +269,8 @@ type EdgeKind =
   | { t: "verb"; verb: Verb; prop: string; needs?: Stack[]; propAs?: string } // broken_steps, rubble, web_wall
   | { t: "state"; var: string; is: string }                                 // passable only in that state
   | { t: "lockin"; gateAs?: string }                                        // seals on entry, opens on clear
-  | { t: "oneway"; how: "drop" | "opens_on"; flag?: string }                // from -> to only, or until flag
-  | { t: "sight" };                                                         // see, do not pass: the tease
+  | { t: "oneway"; how: "drop" | "opens_on"; flag?: string }                // from -> to only, or until flag. (corrected) only `opens_on` is built: a gate plus a `while` trigger on the flag; `drop` is not
+  | { t: "sight" };                                                         // see, do not pass: the tease. (corrected) mission lint checks a sight edge has a corridor; the see-through tile run of 2.4 is not built
 
 type MissionEdge = { from: string; to: string; kind: EdgeKind; shortcut?: boolean; also?: EdgeKind[] };
 
@@ -381,7 +383,7 @@ buildDungeon(def, seed, attempt):
 
   1. choose   for each node in order: pick a template from its pool, seeded,
               skipping any template already used in this dungeon (K13)
-  2. embed    place the entrance at a seeded bay on a seeded edge of the lattice
+  2. embed    place the entrance at an edge bay of the lattice ((corrected) the best-scored edge bay, not a seeded one; attempt 11 stamps the mission's fallback layout instead)
               for each critical node in `order`:
                  candidates = free bays (or bay groups) adjacent to a placed neighbour in the graph,
                               times the template's allowed turns and mirror,

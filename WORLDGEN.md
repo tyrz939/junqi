@@ -1,12 +1,14 @@
 # Jane — Hybrid Worldgen
 
+> **Design truth, with the build moving to Rust (September 2026).** The zone contract, the solver and the placement language here carry unchanged. What the port changes about *how* the county and dungeons are generated (one seed scheme, integer noise, chunks as data, tuning as data, one flood) is `PORT.md` §6; the engine side is `ARCHITECTURE.md`. File paths below are the TypeScript build's.
+
 Pair with `SYSTEMS.md` (bar), `ENGINE.md` §8 (how the builders and the solver work), `DESIGN-2020.md` §4 (what 2020 *drew*), `LEARNING-SYSTEMS.md` (2020 paths). This file is how zones are grown without copying GameMaker rooms: what 2020 *placed*, the grammar taken from it, and the contract each live zone keeps.
 
 **Rule:** read the 2020 rooms for *placement language*. Do not stamp instance x/y from the `.yy` files. Same story every seed. Geometry and clutter roll. Story objects are fixed **names** at jittered positions.
 
-**Rule:** the whole zone exists in state; only a load ring thinks. Today's county is 640 × 384 cells (5120 × 3072 px), the size of 2020's `room_zone1`.
+**Rule:** the whole zone exists in state; only a load ring thinks. Today's county is 2,000 × 2,000 cells (16,000 × 16,000 px); it was 640 × 384, the size of 2020's `room_zone1`, until M2.
 
-**Direction (September 2026, `PLAN.md`):** the county grows to about 3,600 × 2,000 cells, a ten-minute walk across, generated from a skeleton of required sites at required distances. An earlier version of this file said "do not grow the county". That was aimed at the 2026 Phaser build, which made a 2000 × 1200 map and then invented content to fill it, with no structure and no checks. **Size was never the fault. Filling space without a plan was.** The plan is `PLAN.md` §2: constraints as rows, a density budget that is tested, a seed viewer. §4 below describes the zones as they stand until milestone M2 replaces the county builder.
+**Direction (September 2026, `PLAN.md`):** the county grows to 2,000 × 2,000 cells (3,600 × 2,000 until it went square on 2026-09-24), a ten-minute walk across, generated from a skeleton of required sites at required distances. An earlier version of this file said "do not grow the county". That was aimed at the 2026 Phaser build, which made a 2000 × 1200 map and then invented content to fill it, with no structure and no checks. **Size was never the fault. Filling space without a plan was.** The plan is `PLAN.md` §2: constraints as rows, a density budget that is tested, a seed viewer. §4 below describes the zones as they stand until milestone M2 replaces the county builder.
 
 **Rule:** kitchen hatches are the cellar. Yard doors are the mine and the burial. The basement is not the underworld.
 
@@ -118,11 +120,13 @@ Every builder returns a `Blueprint`: tiles, unit and prop spawn rows, and **name
 
 | Zone | Size (cells) | Required units | Required props | Marks | Rects |
 | --- | --- | --- | --- | --- | --- |
-| `county` "Castle" | 640 × 384 | `dog` `yard_skeleton` | `house_door` `mine_door` `burial_door` | `start` `house_front` `mine_mouth` `burial_mouth` | `stoop` |
-| `house` | 48 × 36 | — | `front_door` `hatch_a` `hatch_b` `bench` `ice_orb` `julies_note` `pantry_chest` | `front` `hatch_a` `hatch_b` | `kitchen` |
+| `county` "Castle" | 2000 × 2000 | `dog` `yard_skeleton` | `house_door` `mine_door` `burial_door` | `start` `house_front` `mine_mouth` `burial_mouth` | `stoop` |
+| `house` | 34 × 25 | — | `front_door` `hatch_a` `hatch_b` `bench` `ice_orb` `julies_note` `pantry_chest` | `front` `hatch_a` `hatch_b` | `kitchen` |
 | `cellar` | 100 × 76 | — | `stair_a` `stair_b` `cellar_chest` `iron_door_a` `iron_door_b` `storage_gate` `storage_chest` `potion_bench` | `stair_a` `stair_b` | `cellar` |
-| `mine` | 160 × 130 | `clerk` `headmaster` `iron_knuckles` | `exit_door` `plate_a` `plate_chest` `store_chest` `gate_generic_a/b` `gate_hm` `broken_steps` `boss_key_chest` `gate_vault` `vault_chest` `gate_boss` | `entry` | `mine_entry` `boss_arena` |
-| `burial` | 176 × 150 | `burial_snake` `garden_flower` | `exit_door` `torch_a/b` `torch_chest` `snake_key_chest` `gate_snake` `giant_key_chest` `snake_gate_east/south` `root_a/b/c` `fire_scroll` | `entry` `lockin_a–d` | `burial_entry` `garden` `lockin_room` `snake_arena` `everywhere` |
+| `mine` | 160 × 128 | `clerk` `headmaster` `iron_knuckles` | `exit_door` `plate_a` `plate_chest` `store_chest` `gate_generic_a/b` `gate_hm` `broken_steps` `boss_key_chest` `gate_vault` `vault_chest` `gate_boss` | `entry` | `mine_entry` `boss_arena` |
+| `burial` | 232 × 184 | `burial_snake` `garden_flower` | `exit_door` `torch_a/b` `torch_chest` `snake_key_chest` `gate_snake` `giant_key_chest` `snake_gate_east/south` `root_a/b/c` `fire_scroll` | `entry` `lockin_a–d` | `burial_entry` `garden` `lockin_room` `snake_arena` `everywhere` |
+
+Sizes corrected 2026-09-26 against the code: a generated dungeon is `W = 16 + cols × 36`, `H = 16 + rows × 28` cells (`world/dungeon/generate.ts`), so the 4 × 4 mine is 160 × 128 and the 6 × 6 burial 232 × 184; the other generated zones are `arms` 34 × 25, `church` 22 × 36, `factory` and `forest` 232 × 128, `library` 124 × 100, `museum` and `pipes` 196 × 128, `school` 232 × 156.
 
 **The solver** floods from the entrance with locked gates shut, then repeats until nothing changes: loot reachable chests (keys by `opens` tag, materials by item), open gates a held key fits, fire reachable plates / levers / cold torches, fire repairables whose `needs` are in hand, kill reachable hostiles (guaranteed drops and `onDeath` unlocks), fire `while` triggers whose rect is reached. It fails a candidate for: a missing name, a duplicate key, an unknown row, a trigger whose rect does not exist, anything spawning in a wall, an unreachable mark / required unit / required prop, or a gate that never opens. `test/world.test.ts`: five zones × 25 seeds, plus a deliberately sealed gate the solver must reject.
 
@@ -210,6 +214,8 @@ Live (`sim/ring.ts`): same constants, same rule, re-evaluated on block change on
 ---
 
 ## 8. Adding a zone
+
+*In the Rust build a zone is a row in `data/zones.json` (id, kind, contract, given keys and verbs, states) plus one match arm in `jane-world`'s builder; all thirteen zones always exist and `doors.json` always applies (`PORT.md` §6.l, `ARCHITECTURE.md` §6). The steps below are the TypeScript build's.*
 
 1. Add the id to `ZoneId` / `ZONE_IDS` (`sim/state.ts`). The compiler lists what else needs it.
 2. Write `world/<zone>.ts`: a `Kit`, rooms, corridors three cells wide where a gate sits, props with keys for anything the story names, marks for every way in.
