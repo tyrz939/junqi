@@ -1,0 +1,17 @@
+# jane-art goldens: FNV-1a over size and all four layers (ART.md §1).
+# Regenerate with `jane sheet --bless` or `JANE_BLESS=1 cargo test -p jane-art --test golden`.
+sphere 334d59d0
+ball 592e5507
+panel 2484aab7
+lamp 81ac35fa
+still 3bd3f675
+font-fine 53580871
+font-fine-marks 4068a4b9
+font-small cd4fb9f5
+font-small-bold b5725a62
+font-head de97be91
+chrome-panel b33cac0e
+chrome-button bc0459e7
+chrome-bar d646a110
+chrome-slot dcb9c47e
+chrome-sweep 3212dc9c
