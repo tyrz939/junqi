@@ -11,6 +11,8 @@ use jane_world::skeleton::{
     Biome, MACRO, ROAD, ROAD_BRIDGE, ROAD_LIT, SKEL_H, SKEL_W, Skeleton, Terrain, Water, build_terrain, skeleton,
 };
 
+mod dungeon;
+
 /// Pixels per macro cell.
 const SCALE: u32 = 6;
 
@@ -252,6 +254,9 @@ fn seeds(args: &[String]) -> Result<std::ops::Range<u32>, String> {
 }
 
 pub fn run(args: &[String]) -> Result<(), String> {
+    if let Some(which) = args.iter().position(|a| a == "--dungeon").and_then(|i| args.get(i + 1)) {
+        return dungeon::run(args, which);
+    }
     let range = seeds(args)?;
     let out = args.iter().position(|a| a == "--out").and_then(|i| args.get(i + 1)).map_or("sheets", String::as_str);
     let threat = args.iter().any(|a| a == "--threat");

@@ -14,6 +14,8 @@ commands:
   view [--seeds A..B | --seed N] [--out DIR] [--threat]
                                       draw each seed's skeleton as a PNG, with a .txt of its sites and checks
                                       (--threat: colour the ground by daytime threat, not biome)
+  view --dungeon <id|all> [--seeds A..B | --seed N] [--out DIR] [--no-png]
+                                      draw each seed's generated dungeon, with attempts and build time
 {SHEET}
   help                                this text";
 
