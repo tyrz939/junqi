@@ -1,0 +1,13 @@
+[package]
+name = "jane-core"
+description = "Rng, hashes, the numeric types, grids, flood, chamfer, A*, ids and the Blueprint: what every other crate stands on"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+
+[lints]
+workspace = true

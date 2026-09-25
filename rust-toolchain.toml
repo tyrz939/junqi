@@ -1,0 +1,6 @@
+# Current stable, pinned. A bump is its own commit (PORT.md §3.1).
+# The eight float-free crates also build on 1.85 (CI `check` job) so a rust9x fork can build them.
+[toolchain]
+channel = "1.94.1"
+components = ["clippy", "rustfmt"]
+profile = "minimal"

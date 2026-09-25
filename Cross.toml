@@ -1,0 +1,6 @@
+# ARM builds through `cross` (PORT.md §3.2). The images add SDL2 and Mesa dev packages once jane-app needs them.
+[target.aarch64-unknown-linux-gnu]
+dockerfile = "tools/cross/Dockerfile.aarch64"
+
+[target.armv7-unknown-linux-gnueabihf]
+dockerfile = "tools/cross/Dockerfile.armv7"

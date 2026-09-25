@@ -1,0 +1,16 @@
+[package]
+name = "jane-sim"
+description = "The deterministic simulation: state tree, tick, verbs, save, replay, hash, View"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+jane-core.workspace = true
+jane-data.workspace = true
+jane-world.workspace = true
+
+[lints]
+workspace = true

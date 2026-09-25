@@ -1,0 +1,15 @@
+[package]
+name = "jane-net"
+description = "Lockstep over std::net"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+jane-core.workspace = true
+jane-sim.workspace = true
+
+[lints]
+workspace = true

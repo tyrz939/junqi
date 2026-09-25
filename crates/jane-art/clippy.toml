@@ -1,0 +1,15 @@
+# A float-free crate (PORT.md §3.4, ARCHITECTURE.md §0). Iteration order is array or BTreeMap order;
+# hash maps only through core's `Lookup`, which cannot be iterated.
+disallowed-types = [
+  { path = "std::collections::HashMap", reason = "iteration order is not deterministic; use BTreeMap, IndexMap or core::Lookup" },
+  { path = "std::collections::HashSet", reason = "iteration order is not deterministic; use BTreeSet or IndexSet" },
+  { path = "std::hash::RandomState", reason = "a random seed per process is a desync" },
+  { path = "std::time::Instant", reason = "wall time never reaches the deterministic crates" },
+  { path = "std::time::SystemTime", reason = "wall time never reaches the deterministic crates" },
+]
+disallowed-methods = [
+  { path = "std::env::var", reason = "configuration is passed in, never read from the environment inside a library" },
+  { path = "slice::sort_unstable", reason = "sort with a total key ending in an id (PORT.md §6.d)" },
+  { path = "slice::sort_unstable_by", reason = "sort with a total key ending in an id (PORT.md §6.d)" },
+  { path = "slice::sort_unstable_by_key", reason = "sort with a total key ending in an id (PORT.md §6.d)" },
+]

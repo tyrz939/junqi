@@ -1,0 +1,5 @@
+FROM ghcr.io/cross-rs/aarch64-unknown-linux-gnu:main
+# SDL2 and Mesa for jane-app on the Pi (PORT.md §3.2). The headless crates need none of it.
+RUN dpkg --add-architecture arm64 && apt-get update && \
+    apt-get install -y --no-install-recommends libsdl2-dev:arm64 libgles2-mesa-dev:arm64 libegl1-mesa-dev:arm64 && \
+    rm -rf /var/lib/apt/lists/*

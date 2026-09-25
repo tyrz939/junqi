@@ -1,0 +1,84 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "UNLICENSED"
+publish = false
+
+[workspace.dependencies]
+jane-core = { path = "crates/jane-core" }
+jane-schema = { path = "crates/jane-schema" }
+jane-data = { path = "crates/jane-data" }
+jane-world = { path = "crates/jane-world" }
+jane-sim = { path = "crates/jane-sim" }
+jane-bot = { path = "crates/jane-bot" }
+jane-net = { path = "crates/jane-net" }
+jane-art = { path = "crates/jane-art" }
+jane-present = { path = "crates/jane-present" }
+jane-render-soft = { path = "crates/jane-render-soft" }
+jane-render-gl2 = { path = "crates/jane-render-gl2" }
+jane-render-wgpu = { path = "crates/jane-render-wgpu" }
+
+# PORT.md §3.5: every dependency here was added by a commit that says why.
+indexmap = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+xxhash-rust = { version = "0.8", features = ["xxh3"] }
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_debug_implementations = "warn"
+rust_2018_idioms = { level = "warn", priority = -1 }
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+# Pedantic where sane (PORT.md §3.4). Integer code casts on purpose; each cast site is checked
+# by the `checked` profile and the cross-target hash, not by these lints.
+cast_possible_truncation = "allow"
+cast_possible_wrap = "allow"
+cast_sign_loss = "allow"
+cast_lossless = "allow"
+doc_markdown = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+module_name_repetitions = "allow"
+must_use_candidate = "allow"
+similar_names = "allow"
+many_single_char_names = "allow"
+too_many_lines = "allow"
+struct_excessive_bools = "allow"
+unreadable_literal = "allow"
+return_self_not_must_use = "allow"
+# The float-free crates deny these in their own lib.rs (PORT.md §3.4).
+float_arithmetic = "allow"
+float_cmp = "allow"
+
+[profile.dev]
+opt-level = 1
+overflow-checks = true
+debug-assertions = true
+
+[profile.dev.package."*"]
+opt-level = 3
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+overflow-checks = false
+strip = true
+
+# The determinism suite runs here: release speed, a real overflow is a panic not a desync (PORT.md §3.3).
+[profile.checked]
+inherits = "release"
+overflow-checks = true
+debug-assertions = true
+panic = "unwind"
+lto = "thin"
+codegen-units = 16

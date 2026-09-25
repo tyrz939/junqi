@@ -1,0 +1,27 @@
+[package]
+name = "jane-cli"
+description = "jane: gen, check, bench, replay, sheet, view, serve and the rest, headless"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "jane"
+path = "src/main.rs"
+
+[dependencies]
+jane-core.workspace = true
+jane-schema.workspace = true
+jane-data.workspace = true
+jane-world.workspace = true
+jane-sim.workspace = true
+jane-net.workspace = true
+jane-bot.workspace = true
+jane-art.workspace = true
+jane-present.workspace = true
+jane-render-soft.workspace = true
+
+[lints]
+workspace = true

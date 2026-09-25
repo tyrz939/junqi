@@ -1,0 +1,15 @@
+[package]
+name = "jane-art"
+description = "Procedural sprites, tiles, font, icons and chrome, with albedo, normal, emissive and height"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+jane-core.workspace = true
+jane-data.workspace = true
+
+[lints]
+workspace = true

@@ -1,0 +1,15 @@
+[package]
+name = "jane-world"
+description = "Worldgen: skeleton, county, interiors, dungeons, the solver and its checks"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+jane-core.workspace = true
+jane-data.workspace = true
+
+[lints]
+workspace = true

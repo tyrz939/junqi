@@ -6,6 +6,8 @@ export default defineConfig({
   resolve: {
     alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) },
   },
+  // Content lives at /data (PORT.md §2); src/data and the room templates are symlinks to it.
+  server: { fs: { allow: [".."] } },
   build: {
     target: "es2022",
     sourcemap: true,

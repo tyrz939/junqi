@@ -1,0 +1,5 @@
+FROM ghcr.io/cross-rs/armv7-unknown-linux-gnueabihf:main
+# SDL2 and Mesa for jane-app on the Pi (PORT.md §3.2). The headless crates need none of it.
+RUN dpkg --add-architecture armhf && apt-get update && \
+    apt-get install -y --no-install-recommends libsdl2-dev:armhf libgles2-mesa-dev:armhf libegl1-mesa-dev:armhf && \
+    rm -rf /var/lib/apt/lists/*
