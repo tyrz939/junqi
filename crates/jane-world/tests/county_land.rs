@@ -3,7 +3,8 @@
 //! (the size, the first walk being a road all the way, the same county for the same seed) and
 //! stage 5's own floors: a road within 3 cells of every skeleton road cell's centre, water under a
 //! road is a bridge of planks, the rail raster is 4-connected edge to edge, and the tree line
-//! holds. `SEEDS` seeds (64 by default); a county's land is a tenth of a second in a dev build.
+//! holds. A set place is drawn over whatever road ran into it (stage 6), so the road and bridge
+//! checks leave every chunk's box out. `SEEDS` seeds (64 by default); a county's land is a tenth of a second in a dev build.
 //! A sheet of the first seeds is drawn to `$CARGO_TARGET_TMPDIR/sheets/` (never asserted).
 
 mod common;
@@ -77,6 +78,11 @@ fn tile(c: &County<'_>, x: i32, y: i32) -> Tile {
     c.k.get(x, y)
 }
 
+/// Whether `(x, y)` is within `margin` cells of a chunk's box: the stamp drew over what was there.
+fn in_chunk(c: &County<'_>, x: i32, y: i32, margin: i32) -> bool {
+    c.chunks.iter().any(|ch| ch.bounds.grow(margin).contains(x, y))
+}
+
 #[test]
 fn is_two_thousand_cells_square() {
     let bp = build_county(seed_list()[0], 0).expect("builds");
@@ -95,6 +101,9 @@ fn roads_follow_the_skeleton(sk: &Skeleton, c: &County<'_>, bad: &mut Vec<String
     for (n, r) in sk.roads.iter().enumerate() {
         for &(mx, my) in &r.cells {
             let (cx, cy) = (mx * MACRO + MACRO / 2, my * MACRO + MACRO / 2);
+            if in_chunk(c, cx, cy, 3) {
+                continue;
+            }
             let found = (-3..=3).any(|oy: i32| {
                 (-3..=3).any(|ox: i32| {
                     ox * ox + oy * oy <= 9 && matches!(tile(c, cx + ox, cy + oy), Tile::Road | Tile::Boardwalk)
@@ -140,7 +149,7 @@ fn bridges_are_planks(sk: &Skeleton, c: &County<'_>, bad: &mut Vec<String>) {
     for y in 0..COUNTY_H {
         for x in 0..COUNTY_W {
             let (was, now) = (before.read(x, y, Tile::Void), tile(c, x, y));
-            if was == Tile::Water && now == Tile::Road {
+            if was == Tile::Water && now == Tile::Road && !in_chunk(c, x, y, 0) {
                 bad.push(format!("seed {}: road on water at ({x}, {y})", sk.seed));
             }
             planks += u32::from(now == Tile::Boardwalk);
