@@ -1,0 +1,49 @@
+[
+  {
+    "id": "county",
+    "kind": "county",
+    "contract": {
+      "units": ["dog", "yard_skeleton"],
+      "props": ["house_door", "mine_door", "adit_door", "burial_door"],
+      "marks": ["start", "house_front", "mine_mouth", "mine_adit", "burial_mouth"],
+      "rects": ["stoop", "mine_yard"]
+    },
+    "givenKeys": ["auntie_house"]
+  },
+  {
+    "id": "house",
+    "kind": "interior",
+    "contract": {
+      "props": ["front_door", "hatch_a", "hatch_b", "bench", "ice_orb", "julies_note", "pantry_chest"],
+      "marks": ["front", "hatch_a", "hatch_b"],
+      "rects": ["kitchen"]
+    }
+  },
+  {
+    "id": "cellar",
+    "kind": "interior",
+    "contract": {
+      "props": ["stair_a", "stair_b", "cellar_chest", "iron_door_a", "iron_door_b", "storage_gate", "storage_chest", "potion_bench"],
+      "marks": ["stair_a", "stair_b"],
+      "rects": ["cellar"]
+    }
+  },
+  { "id": "mine", "kind": "dungeon", "mission": "mine" },
+  { "id": "burial", "kind": "dungeon", "mission": "burial", "contract": { "rects": ["everywhere"] } },
+  {
+    "id": "arms",
+    "kind": "interior",
+    "contract": { "units": ["mrs_garland"], "props": ["exit_door", "arms_bed"], "marks": ["entry"], "rects": ["tap_room"] }
+  },
+  {
+    "id": "church",
+    "kind": "interior",
+    "contract": { "units": ["vicar"], "props": ["exit_door", "visitors_book"], "marks": ["entry"], "rects": ["nave"] }
+  },
+  { "id": "factory", "kind": "dungeon", "mission": "factory" },
+  { "id": "forest", "kind": "dungeon", "mission": "forest" },
+  { "id": "library", "kind": "dungeon", "mission": "library" },
+  { "id": "museum", "kind": "dungeon", "mission": "museum" },
+  { "id": "pipes", "kind": "dungeon", "mission": "pipes" },
+  { "id": "school", "kind": "dungeon", "mission": "school" }
+]
