@@ -35,6 +35,10 @@ pub enum Step {
     DunFill,
     DunLights,
     DunDress,
+    /// Julie's house: `a` is the decision (0 the kitchen doorway, 1 the front room's table).
+    IntHouse,
+    /// The cellar: `a` is the decision (the rooms' depths, each pile, the rats, the roses).
+    IntCellar,
 }
 
 impl From<Step> for u16 {

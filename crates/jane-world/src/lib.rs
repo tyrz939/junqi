@@ -7,6 +7,7 @@
 
 pub mod county;
 pub mod dungeon;
+pub mod interiors;
 pub mod kit;
 pub mod skeleton;
 pub mod solve;
