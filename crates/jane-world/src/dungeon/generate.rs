@@ -23,10 +23,10 @@
 use jane_core::action::{Action, CameraMode, Cond, Condition, FlagKey, FlagOp, FlagTest, Stat};
 use jane_core::blueprint::{Door, Mark, PropSpawn, Trigger, TriggerMode, UnitSpawn, Waypoint, ZONE_ATTEMPTS};
 use jane_core::tile::F_SOLID;
-use jane_core::{Blueprint, Cell, Key, NameId, PropDefId, Rect, Sfc32, TextRef, Tile, UnitDefId, ZoneId};
+use jane_core::{Blueprint, Cell, Key, NameId, PropDefId, Rect, Sfc32, TemplateId, TextRef, Tile, UnitDefId, ZoneId};
 use jane_data::{
-    BAY_H, BAY_W, BORDER, MissionDef, MissionEdgeKind, MissionNodeKind, MissionNodeNames, MissionProp, RoomDoor,
-    RoomShape, RoomSide, RoomSocketKind, RoomTemplate, catalog,
+    BAY_H, BAY_W, BORDER, MissionDef, MissionEdgeKind, MissionNodeKind, MissionNodeNames, MissionPlacement,
+    MissionProp, RoomDoor, RoomShape, RoomSide, RoomSocketKind, RoomTemplate, catalog,
 };
 
 use super::bind::Binding;
@@ -101,6 +101,9 @@ pub struct BuildInfo {
     pub corridors: Vec<LitCorridor>,
     /// Why there is no dungeon here, when there is not. A candidate with errors is never accepted.
     pub errors: Vec<String>,
+    /// The attempts before this one that were refused, each with the first reason given
+    /// (filled by `build_with`).
+    pub rejected: Vec<(u8, String)>,
 }
 
 impl BuildInfo {
@@ -267,6 +270,14 @@ struct Gen<'l> {
     state_gates: Vec<(u8, u8, Key)>,
     /// Every wall lamp, for the lists that switch them.
     lamps: Vec<Key>,
+    /// The template harness: every door of every room opens onto a dead-end stub with a mark at
+    /// its end ([`door_mark`]), so a room can be solved alone from each door.
+    stubs: bool,
+}
+
+/// The mark at the end of a harness stub: `<zone>_room_<node>_door_<door>`.
+pub fn door_mark(m: &MissionDef, node: usize, door: &RoomDoor) -> String {
+    format!("{}_room_{}_door_{}", m.id, m.nodes[node].id, door.id)
 }
 
 impl Gen<'_> {
@@ -320,8 +331,11 @@ impl Gen<'_> {
             };
             let x = BORDER + i32::from(p.bay.0) * BAY_W + shape.ox;
             let y = BORDER + i32::from(p.bay.1) * BAY_H + shape.oy;
-            let doors: Vec<usize> =
-                layout.corridors.iter().flat_map(|c| [c.a, c.b]).filter(|u| u.node == node).map(|u| u.door).collect();
+            let doors: Vec<usize> = if self.stubs {
+                (0..shape.doors.len()).collect()
+            } else {
+                layout.corridors.iter().flat_map(|c| [c.a, c.b]).filter(|u| u.node == node).map(|u| u.door).collect()
+            };
             // The three cells of each door in use, and the three just inside them.
             let mut open: Vec<(i32, i32)> = Vec::new();
             for &di in &doors {
@@ -415,6 +429,40 @@ impl Gen<'_> {
                 lit.rects.push(r);
             }
             self.info.corridors.push(lit);
+        }
+        if self.stubs {
+            self.door_stubs();
+        }
+    }
+
+    /// A rect the zone's own contract (`zones.json`) names and nothing here drew is the whole
+    /// zone: the story's rows for the Burial name `everywhere`, which the generator calls
+    /// `<zone>_all` (the TypeScript's `burial.ts` aliased it the same way).
+    fn zone_rects(&mut self) {
+        let (w, h) = (self.k.w, self.k.h);
+        for &r in catalog().county.zone(self.zone).contract.rects {
+            if !self.k.bp.rects.contains_key(&Key::Name(r)) {
+                self.k.rect(Key::Name(r), Rect::new(0, 0, w, h));
+            }
+        }
+    }
+
+    /// Every door of every room onto a stub ending in a marked 3x3 of floor (the harness's).
+    fn door_stubs(&mut self) {
+        let floor = self.m.floor;
+        for p in &self.layout.placements {
+            let node = usize::from(p.node);
+            let Some(ri) = self.room_at[node] else { continue };
+            let shape = self.info.rooms[ri].shape;
+            for (di, d) in shape.doors.iter().enumerate() {
+                let port = self.lanes.port(i32::from(p.bay.0), i32::from(p.bay.1), shape.bays, d);
+                self.carve_stub(node, di, port);
+                let (px, py) = self.lanes.cell(port);
+                self.k.fill(px - 1, py - 1, 3, 3, floor);
+                let name = door_mark(self.m, node, d);
+                let key = self.k.bp.local(&name);
+                self.k.mark(key, px, py);
+            }
         }
     }
 
@@ -1069,7 +1117,51 @@ pub fn build_candidate(zone: ZoneId, seed: u32, attempt: u8) -> Built {
         .dungeons
         .mission_of(zone)
         .unwrap_or_else(|| panic!("zone \"{}\" is not a generated dungeon", zone.name()));
-    let (w, h) = (2 * BORDER + i32::from(m.cols) * BAY_W, 2 * BORDER + i32::from(m.rows) * BAY_H);
+    build_mission(m, seed, attempt)
+}
+
+/// [`build_candidate`] for a mission given as data (a test may hand one that asks for something
+/// other than the catalog's).
+pub fn build_mission(m: &'static MissionDef, seed: u32, attempt: u8) -> Built {
+    let layout = if attempt >= ZONE_ATTEMPTS - 1 {
+        embed_fallback(m).map_err(|e| vec![e])
+    } else {
+        embed(m, seed, m.zone, attempt).ok_or_else(Vec::new)
+    };
+    assemble(m, seed, attempt, layout, (m.cols, m.rows), false)
+}
+
+/// One room and nothing else, as a whole (small) zone: the template harness's blueprint
+/// (`buildRoomAlone`). The node's holdings fill its sockets; every door opens onto a stub whose
+/// end is marked ([`door_mark`]). The room stands in bay (1, 1) of a lattice one bay wider than
+/// it all round, stamped as the hand-placed attempt is: exactly this shape, exactly here.
+pub fn build_room_alone(m: &'static MissionDef, node: usize, template: TemplateId, shape: &'static RoomShape) -> Built {
+    let layout = Layout {
+        placements: vec![MissionPlacement {
+            node: node as u8,
+            template,
+            bay: (1, 1),
+            turn: shape.turn,
+            mirror: shape.mirror,
+        }],
+        corridors: Vec::new(),
+        dropped: (0..m.nodes.len()).filter(|&n| n != node).map(|n| n as u8).collect(),
+        fallback: true,
+    };
+    assemble(m, 1, ZONE_ATTEMPTS - 1, Ok(layout), (shape.bays.0 + 2, shape.bays.1 + 2), true)
+}
+
+/// Stamp a layout (or say why there is none) onto a lattice of `cols x rows` bays.
+fn assemble(
+    m: &'static MissionDef,
+    seed: u32,
+    attempt: u8,
+    layout: Result<Layout, Vec<String>>,
+    (cols, rows): (u8, u8),
+    stubs: bool,
+) -> Built {
+    let zone = m.zone;
+    let (w, h) = (2 * BORDER + i32::from(cols) * BAY_W, 2 * BORDER + i32::from(rows) * BAY_H);
     let mut bp = Blueprint::new(zone, w as u32, h as u32, m.wall);
     bp.name = TextRef::Text(m.name);
     bp.indoor = m.indoor;
@@ -1084,21 +1176,15 @@ pub fn build_candidate(zone: ZoneId, seed: u32, attempt: u8) -> Built {
         controls: Vec::new(),
         corridors: Vec::new(),
         errors: Vec::new(),
+        rejected: Vec::new(),
     };
-    let layout = if attempt >= ZONE_ATTEMPTS - 1 {
-        match embed_fallback(m) {
-            Ok(l) => Some(l),
-            Err(e) => {
-                info.errors.push(e);
-                None
-            }
+    let layout = match layout {
+        Ok(l) => l,
+        Err(errors) => {
+            info.errors.extend(errors);
+            info.errors.push(format!("dungeon \"{}\": embed: no layout found", m.id));
+            return Built { blueprint: bp, info };
         }
-    } else {
-        embed(m, seed, zone, attempt)
-    };
-    let Some(layout) = layout else {
-        info.errors.push(format!("dungeon \"{}\": embed: no layout found", m.id));
-        return Built { blueprint: bp, info };
     };
     let mut g = Gen {
         m,
@@ -1108,12 +1194,13 @@ pub fn build_candidate(zone: ZoneId, seed: u32, attempt: u8) -> Built {
         layout: &layout,
         k: Kit { bp, claimed: vec![false; (w * h) as usize], w, h },
         info,
-        lanes: Lanes::new(i32::from(m.cols), i32::from(m.rows)),
+        lanes: Lanes::new(i32::from(cols), i32::from(rows)),
         rows: Rows::new(),
         at_self: catalog().name_id("@self"),
         room_at: vec![None; m.nodes.len()],
         state_gates: Vec::new(),
         lamps: Vec::new(),
+        stubs,
     };
     g.rooms();
     if g.info.errors.is_empty() {
@@ -1121,6 +1208,7 @@ pub fn build_candidate(zone: ZoneId, seed: u32, attempt: u8) -> Built {
         g.locks();
         g.lamps();
         g.fill();
+        g.zone_rects();
     }
     let mut info = g.info;
     let blueprint = g.k.bp;

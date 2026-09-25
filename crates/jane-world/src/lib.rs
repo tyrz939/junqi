@@ -6,6 +6,25 @@
 #![deny(clippy::float_arithmetic, clippy::float_cmp)]
 
 pub mod dungeon;
+pub mod hash;
 pub mod skeleton;
 pub mod solve;
 pub mod steps;
+
+use jane_core::{Blueprint, ZoneId};
+
+/// The zone a seed builds, proven: every candidate is judged by the solver (and, for a generated
+/// dungeon, checks C1 to C12) and re-rolled until one holds (`buildZone`).
+///
+/// `None` for a zone whose builder has not landed yet: today that is the county and the four
+/// interiors (house, cellar, arms, church), whose ports are other units of PORT.md §6.m. The eight
+/// generated dungeons are here. Never panics.
+pub fn build_zone(zone: ZoneId, seed: u32) -> Option<Blueprint> {
+    jane_data::catalog().dungeons.mission_of(zone)?;
+    Some(dungeon::build(zone, seed).blueprint)
+}
+
+/// Is this a zone [`build_zone`] can build today?
+pub fn builds(zone: ZoneId) -> bool {
+    jane_data::catalog().dungeons.mission_of(zone).is_some()
+}
