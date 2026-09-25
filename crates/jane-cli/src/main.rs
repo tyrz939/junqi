@@ -10,8 +10,9 @@ const USAGE: &str = "usage: jane <command> [options]
 
 commands:
   check [--data DIR]                  compile /data and list every error and warning (no codegen)
-  view [--seeds A..B | --seed N] [--out DIR]
-                                      draw each seed's county as a PNG (today: the skeleton's land)
+  view [--seeds A..B | --seed N] [--out DIR] [--threat]
+                                      draw each seed's skeleton as a PNG, with a .txt of its sites and checks
+                                      (--threat: colour the ground by daytime threat, not biome)
   help                                this text";
 
 fn main() -> ExitCode {

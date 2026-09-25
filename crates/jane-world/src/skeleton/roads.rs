@@ -58,26 +58,44 @@ pub struct Road {
 #[derive(Clone, Debug)]
 pub struct Land<'a> {
     pub terrain: &'a Terrain,
+    /// Read it freely; lay roads with [`lay_road`], which keeps the costs in step.
     pub road: Grid<u8>,
+    /// What entering each cell costs per unit of length, Q8, worked out once and kept in step with
+    /// `road`: [`BLOCKED`] for the lake; [`SLOPED`] marks dry ground off the road, which adds the climb.
+    enter: Vec<u32>,
 }
+
+/// No road enters the cell.
+const BLOCKED: u32 = u32::MAX;
+/// Dry ground off the road: the climb from the cell before is added.
+const SLOPED: u32 = 1 << 31;
 
 impl<'a> Land<'a> {
     pub fn new(terrain: &'a Terrain) -> Self {
-        Self { terrain, road: Grid::new(SKEL_W as u32, SKEL_H as u32, 0) }
+        let enter = (0..SKEL_H)
+            .flat_map(|y| (0..SKEL_W).map(move |x| (x, y)))
+            .map(|(x, y)| match terrain.water.read(x, y, Water::Lake) {
+                Water::Lake => BLOCKED,
+                Water::River => RIVER_Q8,
+                Water::Dry => u32::from(terrain.rough.read(x, y, 0)) | SLOPED,
+            })
+            .collect();
+        Self { terrain, road: Grid::new(SKEL_W as u32, SKEL_H as u32, 0), enter }
     }
 
-    /// The cost of one step, `None` where no road may go (the lake).
+    /// The cost of one step, `None` where no road may go (the lake). Along an existing road is the
+    /// cheapest step there is, then the river's bridge, then dry ground by its roughness and climb.
     fn step_cost(&self, from: (i32, i32), to: (i32, i32)) -> Option<u32> {
-        let t = self.terrain;
         let len10 = if from.0 != to.0 && from.1 != to.1 { 14 } else { 10 };
-        let per = match t.water.read(to.0, to.1, Water::Lake) {
-            Water::Lake => return None,
-            _ if self.road.read(to.0, to.1, 0) & ROAD != 0 => ON_ROAD_Q8,
-            Water::River => RIVER_Q8,
-            Water::Dry => {
-                let slope = u32::from(t.height.read(to.0, to.1, 0).abs_diff(t.height.read(from.0, from.1, 0)));
-                u32::from(t.rough.read(to.0, to.1, 0)) + slope * SLOPE_Q8
+        let at = |(x, y): (i32, i32)| (y * SKEL_W + x) as usize;
+        let per = match self.enter[at(to)] {
+            BLOCKED => return None,
+            p if p & SLOPED != 0 => {
+                let h = self.terrain.height.as_slice();
+                let slope = u32::from(h[at(to)].abs_diff(h[at(from)]));
+                (p & !SLOPED) + slope * SLOPE_Q8
             }
+            p => p,
         };
         Some(len10 * per)
     }
@@ -99,6 +117,11 @@ impl Default for Router {
 impl Router {
     pub fn new() -> Self {
         Self { astar: Astar::new(SKEL_W as u32, SKEL_H as u32), out: Vec::new() }
+    }
+
+    /// Macro cells expanded by every search this router has run.
+    pub fn expanded(&self) -> u64 {
+        self.astar.expanded
     }
 
     /// The cheapest way from `a` to `b` over the cost field: inside a corridor around the two
@@ -154,6 +177,9 @@ pub fn lay_road(land: &mut Land<'_>, from: RoadEnd, to: RoadEnd, cells: Vec<(i32
             bits |= ROAD_BRIDGE;
         }
         land.road.set(x, y, bits);
+        if land.enter[(y * SKEL_W + x) as usize] != BLOCKED {
+            land.enter[(y * SKEL_W + x) as usize] = ON_ROAD_Q8;
+        }
         if i > 0 {
             let (px, py) = cells[i - 1];
             len10 += if px != x && py != y { 14 } else { 10 };

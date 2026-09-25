@@ -12,27 +12,20 @@ pub const SKEL_H: i32 = 125;
 pub const COUNTY_W: i32 = SKEL_W * MACRO;
 pub const COUNTY_H: i32 = SKEL_H * MACRO;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
-#[repr(u8)]
-pub enum Region {
-    /// The south-west: the town, the first walk, every story place.
-    #[default]
-    Lowfields,
-    /// East of the river.
-    Waters,
-    /// The north: the hill, the School on its crown.
-    Works,
-}
+/// The three regions, west to east: the catalog's own enum, so a row's `region` and a macro
+/// cell's are one type. Lowfields: the south-west, the town, the first walk, every story place.
+/// Waters: east of the river. Works: the north, the hill, the School on its crown.
+pub use jane_data::Region;
 
-impl Region {
-    pub const ALL: [Region; 3] = [Region::Lowfields, Region::Waters, Region::Works];
+/// Every region, in the enum's order (`r as usize` indexes arrays of three).
+pub const REGIONS: [Region; 3] = [Region::Lowfields, Region::Waters, Region::Works];
 
-    pub const fn name(self) -> &'static str {
-        match self {
-            Region::Lowfields => "lowfields",
-            Region::Waters => "waters",
-            Region::Works => "works",
-        }
+/// A region's content id (`"lowfields"`).
+pub const fn region_name(r: Region) -> &'static str {
+    match r {
+        Region::Lowfields => "lowfields",
+        Region::Waters => "waters",
+        Region::Works => "works",
     }
 }
 
@@ -92,4 +85,19 @@ pub const fn metres_sq(ax: i32, ay: i32, bx: i32, by: i32) -> i64 {
     let dx = (ax - bx) as i64;
     let dy = (ay - by) as i64;
     (dx * dx + dy * dy) * (MACRO as i64) * (MACRO as i64)
+}
+
+/// Whether two macro cells are nearer than `tenths` tenths of a metre, crow's distance.
+pub const fn nearer_than(ax: i32, ay: i32, bx: i32, by: i32, tenths: i64) -> bool {
+    metres_sq(ax, ay, bx, by) * 100 < tenths * tenths
+}
+
+/// A macro cell as one number, `y * SKEL_W + x`: the order candidate lists and rankings use.
+pub const fn cell_of(x: i32, y: i32) -> u32 {
+    (y * SKEL_W + x) as u32
+}
+
+/// The macro cell a [`cell_of`] number names.
+pub const fn xy_of(c: u32) -> (i32, i32) {
+    ((c % SKEL_W as u32) as i32, (c / SKEL_W as u32) as i32)
 }
