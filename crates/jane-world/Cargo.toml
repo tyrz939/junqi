@@ -11,5 +11,9 @@ publish.workspace = true
 jane-core.workspace = true
 jane-data.workspace = true
 
+[dev-dependencies]
+# The county tests draw a sheet with jane-art's PNG encoder (PORT.md §6.m stage 5: "a PNG").
+jane-art.workspace = true
+
 [lints]
 workspace = true
