@@ -4,16 +4,27 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 use std::time::Instant;
 
+mod view;
+
 const USAGE: &str = "usage: jane <command> [options]
 
 commands:
-  check [--data DIR]    compile /data and list every error and warning (no codegen)
-  help                  this text";
+  check [--data DIR]                  compile /data and list every error and warning (no codegen)
+  view [--seeds A..B | --seed N] [--out DIR]
+                                      draw each seed's county as a PNG (today: the skeleton's land)
+  help                                this text";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     match args.first().map(String::as_str) {
         Some("check") => check(&args[1..]),
+        Some("view") => match view::run(&args[1..]) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(e) => {
+                eprintln!("jane view: {e}");
+                ExitCode::FAILURE
+            }
+        },
         Some("help" | "-h" | "--help") | None => {
             println!("{USAGE}");
             ExitCode::SUCCESS

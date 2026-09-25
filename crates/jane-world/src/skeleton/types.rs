@@ -1,0 +1,95 @@
+//! The county's skeleton: everything about a seed that can be decided on a coarse grid in
+//! milliseconds, before a single tile is drawn (WORLDGEN.md, PLAN.md §2.3).
+//!
+//! One macro cell is 16 x 16 cells; a cell is a metre, so a macro cell is 16 m and the county
+//! (125 x 125 macro cells) is 2000 m square.
+
+/// Cells per macro cell, and so metres per macro cell.
+pub const MACRO: i32 = 16;
+pub const SKEL_W: i32 = 125;
+pub const SKEL_H: i32 = 125;
+/// The county in cells.
+pub const COUNTY_W: i32 = SKEL_W * MACRO;
+pub const COUNTY_H: i32 = SKEL_H * MACRO;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+#[repr(u8)]
+pub enum Region {
+    /// The south-west: the town, the first walk, every story place.
+    #[default]
+    Lowfields,
+    /// East of the river.
+    Waters,
+    /// The north: the hill, the School on its crown.
+    Works,
+}
+
+impl Region {
+    pub const ALL: [Region; 3] = [Region::Lowfields, Region::Waters, Region::Works];
+
+    pub const fn name(self) -> &'static str {
+        match self {
+            Region::Lowfields => "lowfields",
+            Region::Waters => "waters",
+            Region::Works => "works",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+#[repr(u8)]
+pub enum Biome {
+    #[default]
+    Field,
+    Hedge,
+    Wood,
+    Foothill,
+    Reed,
+    Marsh,
+    WetWood,
+    Garden,
+    Slag,
+    Yard,
+    Hill,
+    Town,
+}
+
+impl Biome {
+    pub const ALL: [Biome; 12] = [
+        Biome::Field,
+        Biome::Hedge,
+        Biome::Wood,
+        Biome::Foothill,
+        Biome::Reed,
+        Biome::Marsh,
+        Biome::WetWood,
+        Biome::Garden,
+        Biome::Slag,
+        Biome::Yard,
+        Biome::Hill,
+        Biome::Town,
+    ];
+}
+
+/// What water a macro cell holds.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+#[repr(u8)]
+pub enum Water {
+    #[default]
+    Dry,
+    /// A road may bridge it, dearly.
+    River,
+    /// Nothing crosses it.
+    Lake,
+}
+
+pub const fn inside(mx: i32, my: i32) -> bool {
+    mx >= 0 && my >= 0 && mx < SKEL_W && my < SKEL_H
+}
+
+/// Squared crow's distance between two macro cells, in square metres. Compare, never root.
+pub const fn metres_sq(ax: i32, ay: i32, bx: i32, by: i32) -> i64 {
+    let dx = (ax - bx) as i64;
+    let dy = (ay - by) as i64;
+    (dx * dx + dy * dy) * (MACRO as i64) * (MACRO as i64)
+}
