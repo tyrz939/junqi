@@ -156,6 +156,7 @@ dependencies = [
 name = "jane-world"
 version = "0.1.0"
 dependencies = [
+ "jane-art",
  "jane-core",
  "jane-data",
 ]

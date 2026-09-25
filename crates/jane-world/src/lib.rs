@@ -5,7 +5,9 @@
 
 #![deny(clippy::float_arithmetic, clippy::float_cmp)]
 
+pub mod county;
 pub mod dungeon;
+pub mod kit;
 pub mod skeleton;
 pub mod solve;
 pub mod steps;

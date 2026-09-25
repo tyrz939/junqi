@@ -5,6 +5,7 @@
 
 use std::fmt::Write as _;
 use std::path::Path;
+use std::time::Instant;
 
 use jane_art::sheet::Image;
 use jane_world::skeleton::{
@@ -257,6 +258,9 @@ pub fn run(args: &[String]) -> Result<(), String> {
     if let Some(which) = args.iter().position(|a| a == "--dungeon").and_then(|i| args.get(i + 1)) {
         return dungeon::run(args, which);
     }
+    if args.iter().any(|a| a == "--county") {
+        return run_county(args);
+    }
     let range = seeds(args)?;
     let out = args.iter().position(|a| a == "--out").and_then(|i| args.get(i + 1)).map_or("sheets", String::as_str);
     let threat = args.iter().any(|a| a == "--threat");
@@ -277,4 +281,157 @@ pub fn run(args: &[String]) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+// --- the county in cells -------------------------------------------------------------------
+
+/// A tile's colour on the county sheet.
+fn tile_rgb(t: jane_core::Tile) -> [u8; 3] {
+    use jane_core::Tile as T;
+    match t {
+        T::Void => [0, 0, 0],
+        T::Grass => [118, 164, 84],
+        T::GrassTall => [92, 140, 66],
+        T::Dirt => [150, 122, 84],
+        T::Road => [96, 92, 90],
+        T::Water => [52, 96, 170],
+        T::Sand => [206, 190, 140],
+        T::Bush => [60, 110, 50],
+        T::Tree => [34, 84, 40],
+        T::Fence => [120, 84, 52],
+        T::HouseWall => [150, 110, 90],
+        T::HouseRoof => [130, 60, 50],
+        T::Floor | T::FloorWood => [170, 140, 100],
+        T::Wall | T::WallTop | T::StoneWall => [110, 106, 100],
+        T::Moss => [104, 140, 80],
+        T::DryBed => [160, 148, 110],
+        T::Garden => [120, 100, 60],
+        T::Rubble => [120, 110, 100],
+        T::Track => [70, 56, 44],
+        T::GrownPath => [130, 140, 90],
+        T::Cobble => [150, 146, 136],
+        T::Rail => [40, 40, 44],
+        T::Cliff => [96, 90, 84],
+        T::Hedge => [46, 96, 46],
+        T::Boardwalk => [176, 130, 70],
+        T::DeadTree => [90, 80, 60],
+        T::Glass => [170, 200, 220],
+        T::FlowerBed => [200, 120, 160],
+        T::Stepping => [140, 140, 150],
+        T::Crops => [190, 170, 80],
+        T::Ice => [210, 230, 240],
+        _ => [255, 0, 255],
+    }
+}
+
+/// A pine: a tree drawn darker and bluer.
+const PINE_RGB: [u8; 3] = [24, 62, 44];
+
+/// The county's cells, one pixel a cell, or the mean of `scale x scale` cells a pixel. Pine paint
+/// is drawn over trees; marks are white dots, props yellow.
+pub fn county_image(bp: &jane_core::Blueprint, scale: u32) -> Image {
+    let (w, h) = (bp.w(), bp.h());
+    let mut rgb: Vec<[u8; 3]> = bp.tiles.as_slice().iter().map(|&t| tile_rgb(t)).collect();
+    for &(r, m) in &bp.paint {
+        if m != jane_core::Material::Pine {
+            continue;
+        }
+        for (x, y) in r.cells() {
+            if bp.tiles.read(x, y, jane_core::Tile::Void) == jane_core::Tile::Tree {
+                rgb[(y as u32 * w + x as u32) as usize] = PINE_RGB;
+            }
+        }
+    }
+    for p in &bp.props {
+        rgb[(u32::from(p.cell.y) * w + u32::from(p.cell.x)) as usize] = [255, 220, 0];
+    }
+    let s = scale.max(1);
+    let mut img = Image::new(w / s, h / s, [0, 0, 0, 255]);
+    for py in 0..h / s {
+        for px in 0..w / s {
+            let mut sum = [0u32; 3];
+            for y in py * s..py * s + s {
+                for x in px * s..px * s + s {
+                    let c = rgb[(y * w + x) as usize];
+                    for k in 0..3 {
+                        sum[k] += u32::from(c[k]);
+                    }
+                }
+            }
+            let n = s * s;
+            img.set(px, py, [(sum[0] / n) as u8, (sum[1] / n) as u8, (sum[2] / n) as u8, 255]);
+        }
+    }
+    for m in bp.marks.values() {
+        let (x, y) = (i32::from(m.cell.x) / s as i32, i32::from(m.cell.y) / s as i32);
+        dot(&mut img, (x, y), 1, [255, 255, 255, 255]);
+    }
+    img
+}
+
+/// `jane view --county [--seeds A..B | --seed N] [--scale S] [--out DIR] [--x X --y Y --size N --zoom Z]`:
+/// the county's cells as a PNG per seed (`county-cells-<seed>.png`), one pixel a cell unless
+/// `--scale` averages; `--x`, `--y`, `--size` crop a square of cells instead, `--zoom` pixels a
+/// cell. Prints each stage's wall time.
+fn run_county(args: &[String]) -> Result<(), String> {
+    let range = seeds(args)?;
+    let get = |k: &str| args.iter().position(|a| a == k).and_then(|i| args.get(i + 1));
+    let num = |k: &str, d: u32| get(k).map_or(Ok(d), |s| s.parse::<u32>().map_err(|_| format!("bad {k} {s}")));
+    let out = get("--out").map_or("sheets", String::as_str);
+    let scale = num("--scale", 1)?;
+    std::fs::create_dir_all(out).map_err(|e| format!("{out}: {e}"))?;
+    for seed in range {
+        let t0 = Instant::now();
+        let sk = jane_world::county::county_skeleton(seed, 0).map_err(|e| format!("seed {seed}: {e}"))?;
+        let mut line = format!("seed {seed}: skeleton {:.1} ms", ms(t0));
+        let mut c = jane_world::county::County::new(&sk, 0);
+        let mut total = 0.0;
+        for (name, stage) in jane_world::county::STAGES {
+            let t = Instant::now();
+            stage(&mut c);
+            let d = ms(t);
+            total += d;
+            if d >= 0.05 {
+                let _ = write!(line, ", {name} {d:.1}");
+            }
+        }
+        let bp = c.done();
+        let _ = write!(
+            line,
+            "; county {total:.1} ms, {} paint rects, {} props, {} marks",
+            bp.paint.len(),
+            bp.props.len(),
+            bp.marks.len()
+        );
+        println!("{line}");
+        let img = if let Some(x) = get("--x") {
+            let parse = |s: &String| s.parse::<i32>().map_err(|_| format!("bad number {s}"));
+            let (x, y, size) = (parse(x)?, get("--y").map_or(Ok(0), parse)?, num("--size", 400)? as i32);
+            crop(&county_image(&bp, 1), x, y, size, num("--zoom", 1)?.max(1))
+        } else {
+            county_image(&bp, scale)
+        };
+        let path = Path::new(out).join(format!("county-cells-{seed}.png"));
+        std::fs::write(&path, img.png()).map_err(|e| format!("{}: {e}", path.display()))?;
+        println!("{}", path.display());
+    }
+    Ok(())
+}
+
+fn ms(t: Instant) -> f64 {
+    t.elapsed().as_secs_f64() * 1000.0
+}
+
+/// A `size x size` square of `img` from `(x, y)`, each pixel drawn `zoom` pixels square.
+fn crop(img: &Image, x: i32, y: i32, size: i32, zoom: u32) -> Image {
+    let mut out = Image::new(size as u32 * zoom, size as u32 * zoom, [0, 0, 0, 255]);
+    for j in 0..size {
+        for i in 0..size {
+            let (sx, sy) = (x + i, y + j);
+            if sx >= 0 && sy >= 0 && (sx as u32) < img.w && (sy as u32) < img.h {
+                out.block(i as u32, j as u32, zoom, img.get(sx as u32, sy as u32));
+            }
+        }
+    }
+    out
 }
