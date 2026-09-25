@@ -94,6 +94,12 @@ impl Source {
         self.files.get(rel)
     }
 
+    /// Every JSON file, in path order: for checks that read every list the data holds, whatever
+    /// table it is in (a quest given and handed in by some row).
+    pub fn json_files(&self) -> impl Iterator<Item = (&str, &Value)> {
+        self.files.iter().map(|(k, v)| (k.as_str(), v))
+    }
+
     /// Every JSON file directly in `dir` (not the base file beside it), in path order.
     pub fn files_in(&self, dir: &str) -> impl Iterator<Item = (&str, &Value)> {
         let prefix = format!("{dir}/");
