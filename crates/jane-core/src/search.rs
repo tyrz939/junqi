@@ -192,6 +192,12 @@ pub struct PathQuery {
     pub budget: u32,
     /// Return the best partial path when the goal cannot be reached inside the window.
     pub partial: bool,
+    /// Search only inside this rect (clipped to the grid; its area must fit the scratch). `None`:
+    /// the scratch-sized window centred on the start.
+    pub window: Option<Rect>,
+    /// Offer a diagonal step even when an orthogonal neighbour is closed (roads across the
+    /// macro grid do; feet in the sim never do).
+    pub cut_corners: bool,
 }
 
 /// Windowed A* on a grid. All scratch lives in a fixed window centred on the start, so memory is
@@ -249,11 +255,29 @@ impl Astar {
         if (sx, sy) == (tx, ty) {
             return PathEnd::Found;
         }
-        let ww = self.ww.min(q.grid_w) as i32;
-        let wh = self.wh.min(q.grid_h) as i32;
-        let ox = (sx - (ww >> 1)).clamp(0, q.grid_w as i32 - ww);
-        let oy = (sy - (wh >> 1)).clamp(0, q.grid_h as i32 - wh);
-        let window = Rect::new(ox, oy, ww, wh);
+        let window = match q.window {
+            Some(r) => {
+                let Some(r) = r.intersect(Rect::new(0, 0, q.grid_w as i32, q.grid_h as i32)) else {
+                    return PathEnd::None;
+                };
+                assert!(
+                    r.area() <= i64::from(self.ww) * i64::from(self.wh),
+                    "A* window {r:?} is larger than its scratch"
+                );
+                r
+            }
+            None => {
+                let ww = self.ww.min(q.grid_w) as i32;
+                let wh = self.wh.min(q.grid_h) as i32;
+                let ox = (sx - (ww >> 1)).clamp(0, q.grid_w as i32 - ww);
+                let oy = (sy - (wh >> 1)).clamp(0, q.grid_h as i32 - wh);
+                Rect::new(ox, oy, ww, wh)
+            }
+        };
+        if !window.contains(sx, sy) {
+            return PathEnd::None;
+        }
+        let (ox, oy, ww) = (window.x, window.y, window.w);
         let local = |x: i32, y: i32| ((y - oy) * ww + (x - ox)) as u32;
         let global = |n: u32| ((n as i32 % ww) + ox, (n as i32 / ww) + oy);
         let goal_inside = window.contains(tx, ty);
@@ -313,7 +337,7 @@ impl Astar {
                         6 => (2, 3),
                         _ => (0, 3),
                     };
-                    if straight_ok[a] && straight_ok[b] && window.contains(cx, cy) {
+                    if (q.cut_corners || (straight_ok[a] && straight_ok[b])) && window.contains(cx, cy) {
                         step((nx, ny), (cx, cy))
                     } else {
                         None
@@ -458,6 +482,8 @@ mod tests {
             max_cost: 10_000,
             budget: 10_000,
             partial: false,
+            window: None,
+            cut_corners: false,
         };
         assert_eq!(a.find(&q, step_on(&g), octile_to(q.goal), &mut out), PathEnd::Found);
         assert_eq!(*out.last().unwrap(), (9, 4));
@@ -491,14 +517,64 @@ mod tests {
             max_cost: 1000,
             budget: 1000,
             partial: false,
+            window: None,
+            cut_corners: false,
         };
         assert_eq!(a.find(&q, step_on(&g), octile_to(q.goal), &mut out), PathEnd::None);
         q.partial = true;
         assert_eq!(a.find(&q, step_on(&g), octile_to(q.goal), &mut out), PathEnd::Partial);
         assert_eq!(out.last().map(|c| c.0), Some(1));
         let open = maze(&["....."]);
-        let q =
-            PathQuery { grid_w: 5, grid_h: 1, start: (0, 0), goal: (4, 0), max_cost: 30, budget: 1000, partial: false };
+        let q = PathQuery {
+            grid_w: 5,
+            grid_h: 1,
+            start: (0, 0),
+            goal: (4, 0),
+            max_cost: 30,
+            budget: 1000,
+            partial: false,
+            window: None,
+            cut_corners: false,
+        };
+        assert_eq!(a.find(&q, step_on(&open), octile_to(q.goal), &mut out), PathEnd::None);
+    }
+
+    #[test]
+    fn astar_explicit_window_and_corner_cutting() {
+        let g = maze(&[
+            ".#", //
+            "#.",
+        ]);
+        let mut a = Astar::new(8, 8);
+        let mut out = Vec::new();
+        let mut q = PathQuery {
+            grid_w: 2,
+            grid_h: 2,
+            start: (0, 0),
+            goal: (1, 1),
+            max_cost: 100,
+            budget: 100,
+            partial: false,
+            window: Some(Rect::new(-5, -5, 20, 20)),
+            cut_corners: false,
+        };
+        assert_eq!(a.find(&q, step_on(&g), octile_to(q.goal), &mut out), PathEnd::None);
+        q.cut_corners = true;
+        assert_eq!(a.find(&q, step_on(&g), octile_to(q.goal), &mut out), PathEnd::Found);
+        assert_eq!(out, [(1, 1)]);
+        // A window that leaves the goal out finds nothing without `partial`.
+        let open = Grid::new(10, 1, true);
+        let q = PathQuery {
+            grid_w: 10,
+            grid_h: 1,
+            start: (0, 0),
+            goal: (9, 0),
+            max_cost: 1000,
+            budget: 1000,
+            partial: false,
+            window: Some(Rect::new(0, 0, 5, 1)),
+            cut_corners: false,
+        };
         assert_eq!(a.find(&q, step_on(&open), octile_to(q.goal), &mut out), PathEnd::None);
     }
 
@@ -516,6 +592,8 @@ mod tests {
             max_cost: u32::MAX,
             budget: 100_000,
             partial: true,
+            window: None,
+            cut_corners: false,
         };
         assert_eq!(a.find(&q, step_on(&g), octile_to(q.goal), &mut out), PathEnd::Partial);
         assert_eq!(out.last(), Some(&(63, 0)));
