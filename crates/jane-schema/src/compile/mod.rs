@@ -6,6 +6,7 @@
 pub mod ctx;
 pub mod diag;
 pub mod fraction;
+pub mod integrate;
 pub mod lists;
 pub mod source;
 pub mod tables;
@@ -58,6 +59,7 @@ pub fn build_source(src: &Source) -> Built {
         county,
         dungeons,
     };
+    integrate::check(&catalog, &mut cx.diag);
     catalog.content_hash = content_hash(&catalog);
     let ok = cx.diag.is_ok();
     Built { catalog: ok.then(|| &*Box::leak(Box::new(catalog))), diag: cx.diag }
