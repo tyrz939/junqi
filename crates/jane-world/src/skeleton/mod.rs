@@ -3,6 +3,7 @@
 //! before a tile is drawn.
 
 pub mod rail;
+pub mod rank;
 pub mod roads;
 pub mod terrain;
 pub mod types;
