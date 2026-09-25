@@ -328,7 +328,8 @@ fn tile_rgb(t: jane_core::Tile) -> [u8; 3] {
 const PINE_RGB: [u8; 3] = [24, 62, 44];
 
 /// The county's cells, one pixel a cell, or the mean of `scale x scale` cells a pixel. Pine paint
-/// is drawn over trees; marks are white dots, props yellow.
+/// is drawn over trees; marks are white dots, props yellow, doors into other zones (a prop with a
+/// `to`) cyan over their whole footprint.
 pub fn county_image(bp: &jane_core::Blueprint, scale: u32) -> Image {
     let (w, h) = (bp.w(), bp.h());
     let mut rgb: Vec<[u8; 3]> = bp.tiles.as_slice().iter().map(|&t| tile_rgb(t)).collect();
@@ -342,8 +343,19 @@ pub fn county_image(bp: &jane_core::Blueprint, scale: u32) -> Image {
             }
         }
     }
+    let cat = jane_data::catalog();
     for p in &bp.props {
-        rgb[(u32::from(p.cell.y) * w + u32::from(p.cell.x)) as usize] = [255, 220, 0];
+        let (x, y) = (u32::from(p.cell.x), u32::from(p.cell.y));
+        if p.to.is_some() {
+            let row = cat.story.prop(p.def);
+            for j in y..(y + u32::from(row.h)).min(h) {
+                for i in x..(x + u32::from(row.w)).min(w) {
+                    rgb[(j * w + i) as usize] = [0, 230, 255];
+                }
+            }
+        } else {
+            rgb[(y * w + x) as usize] = [255, 220, 0];
+        }
     }
     let s = scale.max(1);
     let mut img = Image::new(w / s, h / s, [0, 0, 0, 255]);

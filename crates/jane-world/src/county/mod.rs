@@ -32,23 +32,20 @@
 //!
 //! Same seed, same county.
 
+pub mod chunks;
+pub mod doors;
 pub mod land;
+pub mod links;
 pub mod paths;
 pub mod rail;
 pub mod roads;
 
 use jane_core::num::Permille;
-use jane_core::{Blueprint, Grid, Rect, Tile, ZoneId};
+use jane_core::{Blueprint, Grid, Tile, ZoneId};
 
+pub use self::chunks::Chunk;
 use crate::kit::Kit;
 use crate::skeleton::{COUNTY_H, COUNTY_W, MACRO, Skeleton, SkeletonError, SkeletonRows, build_skeleton};
-
-/// A set place's ground: a chunk's box, by the site row it stands for. Stage 6 fills the list.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct ChunkBox {
-    pub site: u8,
-    pub bounds: Rect,
-}
 
 /// A footpath as laid: its row in `data/paths.json` and its centre line (an index into `lines`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -69,7 +66,8 @@ pub struct County<'a> {
     /// The ground as it was before any road: where a road crosses water it is a bridge.
     pub before: Option<Grid<Tile>>,
     pub footpaths: Vec<Footpath>,
-    pub chunks: Vec<ChunkBox>,
+    /// The set places as stamped, in site row order.
+    pub chunks: Vec<Chunk>,
 }
 
 /// The centre cell of macro cell `m`, on either axis.
@@ -108,10 +106,10 @@ pub const STAGES: &[(&str, StageFn)] = &[
     ("edge", land::tree_line),
     ("roads", roads::lay_roads),
     ("paths", roads::lay_paths),
-    ("chunks", chunks),
+    ("chunks", stamp_chunks),
     ("rail", rail::lay_railway),
     ("path_ends", paths::path_ends),
-    ("doors", doors),
+    ("doors", doors::set_doors),
     ("place_chunks", place_chunks),
     ("road_furniture", road_furniture),
     ("relays", relays),
@@ -158,14 +156,26 @@ pub fn build_county_on(sk: &Skeleton, attempt: u8) -> Blueprint {
 /// it (`AREA_DRESS`, `world/areas.ts`). PORT.md §6.m stage 7 lands here.
 fn areas(_: &mut County<'_>) {}
 
-/// The set places, stamped where the skeleton put them; each one's ground as a `site_<id>` rect;
-/// every road, path and footpath joined round the box to its nearest gate (`linkRoad`). Fills
-/// `County::chunks`. PORT.md §6.m stage 6 lands here.
-fn chunks(_: &mut County<'_>) {}
-
-/// A door into each dungeon, set into its landmark's face or stood beside a site, with the mark
-/// its own way out arrives at and open ground claimed in front. PORT.md §6.m stage 6 lands here.
-fn doors(_: &mut County<'_>) {}
+/// The set places, stamped where the skeleton put them, in site row order (`chunks::stamp`);
+/// each one's ground as a `site_<id>` rect, so a measure of the open country can tell it from a
+/// town; then every road, path and footpath joined round the box to its nearest gate
+/// (`links::link_lines`).
+fn stamp_chunks(c: &mut County<'_>) {
+    let cat = jane_data::catalog();
+    for s in &c.sk.sites {
+        if let Some(def) = cat.chunks.at_site(s.row) {
+            let ch = chunks::stamp(&mut c.k, def, s.row, centre(s.mx), centre(s.my));
+            c.chunks.push(ch);
+        }
+    }
+    for i in 0..c.chunks.len() {
+        let key = c.k.local(&format!("site_{}", c.chunks[i].id()));
+        if !c.k.blueprint().rects.contains_key(&key) {
+            c.k.rect(key, c.chunks[i].bounds);
+        }
+    }
+    links::link_lines(c);
+}
 
 /// Placement rows that go inside a chunk, while its open ground is still open; then every chunk's
 /// ground claimed. PORT.md §6.m stage 7 lands here.
