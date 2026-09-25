@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 use std::time::Instant;
 
+mod sheet_cmd;
 mod view;
 
 const USAGE: &str = "usage: jane <command> [options]
@@ -12,7 +13,12 @@ commands:
   check [--data DIR]                  compile /data and list every error and warning (no codegen)
   view [--seeds A..B | --seed N] [--out DIR]
                                       draw each seed's county as a PNG (today: the skeleton's land)
+{SHEET}
   help                                this text";
+
+fn usage() -> String {
+    USAGE.replace("{SHEET}", sheet_cmd::USAGE)
+}
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -25,12 +31,19 @@ fn main() -> ExitCode {
                 ExitCode::FAILURE
             }
         },
+        Some("sheet") => match sheet_cmd::run(&args[1..]) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(e) => {
+                eprintln!("jane sheet: {e}");
+                ExitCode::FAILURE
+            }
+        },
         Some("help" | "-h" | "--help") | None => {
-            println!("{USAGE}");
+            println!("{}", usage());
             ExitCode::SUCCESS
         }
         Some(other) => {
-            eprintln!("jane: unknown command \"{other}\"\n\n{USAGE}");
+            eprintln!("jane: unknown command \"{other}\"\n\n{}", usage());
             ExitCode::from(2)
         }
     }
