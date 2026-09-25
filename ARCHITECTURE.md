@@ -99,7 +99,7 @@ along(a: Angle, s: Fx) -> Vec2
 
 **RNG.** `next_u32`, `below(n)` (Lemire multiply-shift; `n == 0` gives 0), `irandom`, `chance(Permille)`, `pick`. `seeded(seed, stream)` is a splitmix32 spread plus 12 warm-ups. Worldgen draws through `dice()` (PORT §6.a). `rngFloat` is gone.
 
-**Worldgen in integers** (the table is PORT §6.c; the shape of it): `hash2 -> u32` read as `Q16 = h >> 16`; `smooth_q16` in `i64`; fbm weights are shifts; chamfer `u16` steps 10/14; road costs `i32` in Q8 × tenths (`len10 ∈ {10, 14}`, `rough_q8 = 179 + (fbm_q16 * 666 >> 16) + ground_q8`, slope × 56, water × 7680, road × 77, heuristic `77 * octile10 / 100`), heap key `(cost: i64, cell: u32)`; metres through `dist_sq` against `(m / MACRO)²`; `roadDistances` in tenths 160/226; terrain `dy * 5 / 4`, hill through `isqrt` and `smooth_q16`; the county painter's bilinear becomes Q16 per-row gradients (the DDA it already is); dungeon scores integer; `heat` through `mul_div_round`.
+**Worldgen in integers** (the table is PORT §6.c; the shape of it): `hash2 -> u32` read as `Q16 = h >> 16`; `smooth_q16` in `i64`; fbm weights are shifts; chamfer `u16` steps 10/14; road costs `i32` in Q8 × tenths (`len10 ∈ {10, 14}`, `rough_q8 = 179 + (fbm_q16 * 666 >> 16) + ground_q8`, slope × 56, water × 7680, road × 77, heuristic `77 * octile10`: the road rate times the octile distance in the same tenths, so it never overestimates), costs `u32` in core's one A* (a window and `cut_corners`); metres through `dist_sq` against `(m / MACRO)²`; `roadDistances` in tenths 160/226; terrain `dy * 5 / 4`, hill through `isqrt` and `smooth_q16`; the county painter's bilinear becomes Q16 per-row gradients (the DDA it already is); dungeon scores integer; `heat` through `mul_div_round`.
 
 ## 3. State model
 

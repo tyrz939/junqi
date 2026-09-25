@@ -8,7 +8,7 @@ The plan for the native rewrite. Pair with `PLAN.md` (the game), `ARCHITECTURE.m
 
 **Rule:** not a 1:1 port. Algorithms and content contracts carry. Architecture is fixed where the audit found it wrong. Seeds do not match the TypeScript and nothing is kept compatible with it.
 
-**Rule:** nothing below exists yet. This is a plan; a claim that something runs is a bug in this file until a phase gate (§7) says otherwise.
+**Rule:** this is a plan; a claim that something runs is a bug in this file until a phase gate (§7) says otherwise. *(2026-09-26: P0's workspace and CI exist, P1 is under way, P2's skeleton land, roads and rail are ported; README's "Where it stands" is the record.)*
 
 ## 1. What is decided
 
@@ -116,7 +116,7 @@ The plan for the native rewrite. Pair with `PLAN.md` (the game), `ARCHITECTURE.m
 | `core`, `schema`, `data`, `world`, `sim`, `net`, `bot`, `art` | `clippy::float_arithmetic = "deny"`, `clippy::float_cmp = "deny"`, `clippy::disallowed_types` (HashMap, HashSet, RandomState, Instant, rand; Rc, RefCell, `Arc<Mutex>` in `sim` and `world`), `clippy::disallowed_methods` (f32/f64 conversions, `sort_unstable*`, `std::env::var`) |
 | same eight | CI grep gate: `rg '\bf(32\|64)\b' crates/jane-{core,schema,data,world,sim,net,bot,art}/src` returns nothing, and so does `rg 'as f'` |
 
-`schema` has one exception: the build-side `deserialize_with` functions that read a JSON fraction (`0.16`, `0.62`) and emit `Permille` or `Q16`. They are the only place an f64 is named, they run on the host at build time, and they carry a local `allow` with the reason. `IndexMap`/`IndexSet` and `BTreeMap` are the allowed maps in the float-free crates; hash maps only through a `Lookup<K, V>` that cannot be iterated (`ARCHITECTURE.md` §0).
+`schema` has one exception: the build-side reader of JSON numbers, `crates/jane-schema/src/compile/fraction.rs` (a `Num` type raw structs hold, read only through unit methods that emit `Tick`, `Permille`, `Fx`, `Angle` or `Q16`). It is the only file an f64 is named in, it runs on the host at build time, it carries a local `allow` with the reason, and the float gate skips it by path. `IndexMap`/`IndexSet` and `BTreeMap` are the allowed maps in the float-free crates; hash maps only through a `Lookup<K, V>` that cannot be iterated (`ARCHITECTURE.md` §0).
 
 ### 3.5 Dependency policy
 
@@ -176,7 +176,7 @@ jane-cli <-- schema, world, sim, net, bot, art, present, render-soft     no SDL
 | --- | --- | --- | --- | --- |
 | `jane-core` | Rng (sfc32 + splitmix seed), `dice()`, FNV-1a and `mix32`, the numeric types (`Fx(i32)` 1/256 px, `Milli`, `Permille`, `Angle(u16)`, `Tick`, `Q16`; `ARCHITECTURE.md` §2), `Grid<T>`, `Rect`, `Cell`, ids (`newtype u16`), `View` constants, `Blueprint`, the `Action` and `Condition` enums, one flood/BFS, one chamfer, one A*, one weighted pick, sort helpers with total keys | none | forbid | none |
 | `jane-schema` | The schema: serde structs with `deny_unknown_fields`, table merge, interning, cross-ref and provider validation, room and chunk parsing and lint, look validation, codegen to Rust source, the content hash | core, serde, serde_json, xxhash-rust | forbid | none (build-side f64 only inside `deserialize_with`, §3.4) |
-| `jane-data` | `build.rs` runs `jane-schema` over `/data`, emits `catalog.rs`, `names.rs`, `text.rs`, `tuning.rs`, `zones.rs`, `rooms.rs`, `chunks.rs`, `looks.rs` statics; typed accessors by id (`ARCHITECTURE.md` §6) | core; build-dep schema | forbid | none |
+| `jane-data` | `build.rs` runs `jane-schema` over `/data`, emits `catalog.rs`, `names.rs`, `text.rs`, `tuning.rs`, `zones.rs`, `rooms.rs`, `chunks.rs`, `looks.rs` statics; typed accessors by id (`ARCHITECTURE.md` §6). *(Built 2026-09-26: one `catalog.rs`; the catalog's types are `jane-schema`'s `model`, which builds without serde, so data depends on schema's model and runs its `compile` feature from `build.rs`)* | core, schema (model); build-dep schema (compile) | forbid | none |
 | `jane-world` | Skeleton, county, interiors, dungeons, placements, stories, names, solver, checks. `build_zone(zone, seed) -> Blueprint` | core, data | forbid | none |
 | `jane-sim` | State tree, tick, actions, path, ai, combat, interact, inventory, quests, dialogue, triggers, clock, light, ring, save, replay, hash, `view::View` and `Event` (`ARCHITECTURE.md` §11) | core, data, world, postcard, lz4_flex, xxhash-rust | forbid | none |
 | `jane-bot` | Headless player over `jane-sim`: walks the first five minutes and every dungeon, records the replay fixtures, drives the bot-session hash gate. What `test/bot.ts` was, as a crate the suite and `jane-cli` share | core, data, sim | forbid | none |
