@@ -4,6 +4,8 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 use std::time::Instant;
 
+#[path = "gen.rs"]
+mod gen_cmd;
 mod sheet_cmd;
 mod view;
 
@@ -15,12 +17,14 @@ commands:
                                       draw each seed's skeleton as a PNG, with a .txt of its sites and checks
                                       (--threat: colour the ground by daytime threat, not biome)
   view --dungeon <id|all> [--seeds A..B | --seed N] [--out DIR] [--no-png]
-                                      draw each seed's generated dungeon, with attempts and build time
+                                      draw each seed's generated dungeon, with its attempts after validation
+                                      (the solver and C1 to C12) and build time
+{GEN}
 {SHEET}
   help                                this text";
 
 fn usage() -> String {
-    USAGE.replace("{SHEET}", sheet_cmd::USAGE)
+    USAGE.replace("{GEN}", gen_cmd::USAGE).replace("{SHEET}", sheet_cmd::USAGE)
 }
 
 fn main() -> ExitCode {
@@ -31,6 +35,13 @@ fn main() -> ExitCode {
             Ok(()) => ExitCode::SUCCESS,
             Err(e) => {
                 eprintln!("jane view: {e}");
+                ExitCode::FAILURE
+            }
+        },
+        Some("gen") => match gen_cmd::run(&args[1..]) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(e) => {
+                eprintln!("jane gen: {e}");
                 ExitCode::FAILURE
             }
         },

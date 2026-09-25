@@ -1,6 +1,7 @@
 //! `jane view --dungeon <id|all> [--seeds A..B | --seed N] [--out DIR] [--no-png]`: each seed's
 //! generated dungeon as a PNG (a colour per tile family, props as dots, units as diamonds, marks
-//! as crosses), and a line per build with its attempts, whether it fell back, and its time.
+//! as crosses), and a line per build with its attempts after validation (the solver and checks
+//! C1 to C12), whether it fell back, and its time; each refused attempt with its first reason.
 
 use std::path::Path;
 use std::time::Instant;
@@ -130,6 +131,7 @@ pub fn run(args: &[String], which: &str) -> Result<(), String> {
     std::fs::create_dir_all(out).map_err(|e| format!("{out}: {e}"))?;
     for zone in zones(which)? {
         let (mut n, mut total_us, mut worst_us, mut worst_attempts, mut fallbacks) = (0u32, 0u128, 0u128, 0u8, 0u32);
+        let mut attempts_sum = 0u32;
         for seed in range.clone() {
             let t0 = Instant::now();
             let built = build(zone, seed);
@@ -140,6 +142,7 @@ pub fn run(args: &[String], which: &str) -> Result<(), String> {
             total_us += us;
             worst_us = worst_us.max(us);
             worst_attempts = worst_attempts.max(bp.attempts);
+            attempts_sum += u32::from(bp.attempts);
             fallbacks += u32::from(fallback);
             if draw {
                 let path = Path::new(out).join(format!("dungeon-{}-{seed}.png", zone.name()));
@@ -156,19 +159,26 @@ pub fn run(args: &[String], which: &str) -> Result<(), String> {
                     us % 1000
                 );
             }
+            for (attempt, why) in &built.info.rejected {
+                println!("  seed {seed}: attempt {} refused: {why}", attempt + 1);
+            }
             for e in &built.info.errors {
                 println!("  seed {seed}: {e}");
             }
         }
         if n > 0 {
             let mean = total_us / u128::from(n);
+            // Mean attempts in hundredths, as integers.
+            let att = attempts_sum * 100 / n;
             println!(
-                "{}: {n} seeds, mean {}.{:03} ms, worst {}.{:03} ms, worst attempts {worst_attempts}/{ZONE_ATTEMPTS}, fallback {fallbacks}",
+                "{}: {n} seeds, mean {}.{:03} ms, worst {}.{:03} ms, attempts mean {}.{:02} worst {worst_attempts}/{ZONE_ATTEMPTS}, fallback {fallbacks}",
                 zone.name(),
                 mean / 1000,
                 mean % 1000,
                 worst_us / 1000,
-                worst_us % 1000
+                worst_us % 1000,
+                att / 100,
+                att % 100
             );
         }
     }
