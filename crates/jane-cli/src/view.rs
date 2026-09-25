@@ -13,6 +13,7 @@ use jane_world::skeleton::{
 };
 
 mod dungeon;
+mod interior;
 
 /// Pixels per macro cell.
 const SCALE: u32 = 6;
@@ -255,6 +256,9 @@ fn seeds(args: &[String]) -> Result<std::ops::Range<u32>, String> {
 }
 
 pub fn run(args: &[String]) -> Result<(), String> {
+    if let Some(which) = args.iter().position(|a| a == "--interior").and_then(|i| args.get(i + 1)) {
+        return interior::run(args, which);
+    }
     if let Some(which) = args.iter().position(|a| a == "--dungeon").and_then(|i| args.get(i + 1)) {
         return dungeon::run(args, which);
     }

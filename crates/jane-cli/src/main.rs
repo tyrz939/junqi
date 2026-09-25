@@ -18,6 +18,8 @@ commands:
                                       draw a built county's cells, and time each stage
   view --dungeon <id|all> [--seeds A..B | --seed N] [--out DIR] [--no-png]
                                       draw each seed's generated dungeon, with attempts and build time
+  view --interior <house|cellar|arms|church|all> [--seeds A..B | --seed N] [--out DIR]
+                                      draw each seed's hand-built interior, with attempts and the solver's verdict
 {SHEET}
   help                                this text";
 

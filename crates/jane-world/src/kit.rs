@@ -411,6 +411,39 @@ impl Kit {
     }
 }
 
+// --- motifs ---------------------------------------------------------------------------------
+
+impl Kit {
+    /// Props of `def` at even spacing along the inside of a room's north and south walls: every
+    /// `every` cells from two in along the top row, and from two and a half-step in along the
+    /// bottom row, skipping a cell that is claimed or solid. `r` is the room's floor.
+    pub fn torch_run(&mut self, r: Rect, every: i32, def: PropDefId) {
+        let step = usize::try_from(every.max(1)).unwrap_or(1);
+        for (x0, y) in [(r.x + 2, r.y), (r.x + 2 + every / 2, r.y + r.h - 1)] {
+            for x in (x0..r.x + r.w - 1).step_by(step) {
+                if !self.is_claimed(x, y) && !self.solid(x, y) {
+                    self.prop(None, def, x, y);
+                }
+            }
+        }
+    }
+
+    /// Up to `count` props of `def` piled into `r`: each at an open spot for its footprint (the
+    /// catalog's `w x h`) found with `rng`; one with no spot is left out.
+    pub fn pile(&mut self, rng: &mut Sfc32, r: Rect, def: PropDefId, count: u32) {
+        let row = jane_data::catalog().story.prop(def);
+        let (w, h) = (i32::from(row.w), i32::from(row.h));
+        for _ in 0..count {
+            if let Some((x, y)) = self.spot(rng, r, w, h, 0, SPOT_TRIES) {
+                self.prop(None, def, x, y);
+            }
+        }
+    }
+}
+
+/// How many places [`Kit::spot`] tries before a painter gives a thing up (the TypeScript's default).
+pub const SPOT_TRIES: u32 = 60;
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -484,5 +517,45 @@ mod tests {
         assert_eq!(bp.attempts, 3);
         assert_eq!(bp.text(bp.name), Some("Castle"));
         assert_eq!(bp.props.len(), 1);
+    }
+}
+
+#[cfg(test)]
+mod motif_tests {
+    use super::*;
+
+    fn room() -> (Kit, Rect) {
+        let mut k = Kit::new(ZoneId::Cellar, 30, 20, 3, 0, Tile::Wall, false);
+        let r = Rect::new(2, 2, 20, 10);
+        k.fill(r, Tile::Floor);
+        (k, r)
+    }
+
+    #[test]
+    fn a_torch_run_lines_the_north_and_south_walls_and_skips_what_is_taken() {
+        let torch = jane_data::catalog().story.prop_id("torch").expect("a torch row");
+        let (mut k, r) = room();
+        k.claim(Rect::new(13, 2, 1, 1));
+        k.torch_run(r, 9, torch);
+        let at: Vec<(u16, u16)> = k.blueprint().props.iter().map(|p| (p.cell.x, p.cell.y)).collect();
+        // North from x 4 every 9 (13 is claimed); south from x 8 every 9, below x 21.
+        assert_eq!(at, vec![(4, 2), (8, 11), (17, 11)]);
+    }
+
+    #[test]
+    fn a_pile_lands_on_open_ground_without_overlap() {
+        let barrel = jane_data::catalog().story.prop_id("barrel").expect("a barrel row");
+        let (mut k, r) = room();
+        let mut rng = k.dice(Step::IntCellar, 0, 0);
+        k.pile(&mut rng, Rect::new(r.x, r.y, 8, 6), barrel, 3);
+        let props = &k.blueprint().props;
+        assert_eq!(props.len(), 3, "room for three");
+        for (i, a) in props.iter().enumerate() {
+            assert!(Rect::new(2, 2, 8, 6).contains(i32::from(a.cell.x), i32::from(a.cell.y)));
+            for b in &props[i + 1..] {
+                let (dx, dy) = (i32::from(a.cell.x) - i32::from(b.cell.x), i32::from(a.cell.y) - i32::from(b.cell.y));
+                assert!(dx.abs() >= 2 || dy.abs() >= 2, "{a:?} {b:?}");
+            }
+        }
     }
 }
