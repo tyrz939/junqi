@@ -7,8 +7,19 @@ rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
 
+[features]
+# Load /data at startup through the same compile instead of the statics (ARCHITECTURE.md §6).
+dev-data = ["jane-schema/compile"]
+
 [dependencies]
 jane-core.workspace = true
+jane-schema.workspace = true
+
+[build-dependencies]
+jane-schema = { workspace = true, features = ["compile"] }
+
+[dev-dependencies]
+jane-schema = { workspace = true, features = ["compile"] }
 
 [lints]
 workspace = true

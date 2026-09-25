@@ -1,5 +1,15 @@
-//! The content schema: serde structs for every table, merge, interning, validation and codegen.
+//! The content schema: the compiled catalog's types (`model`), how they print as Rust
+//! (`emit`), and, with the `compile` feature, the compile from `/data` itself: serde structs
+//! for every table, merge, unit conversion, interning, validation and codegen (PORT.md §5).
 //!
-//! Float-free: no floating-point type anywhere in this crate (PORT.md §3.4).
+//! `jane-data` depends on the model for its types and runs the compile from its build script.
+//!
+//! Float-free: no floating-point type anywhere in this crate but `compile/fraction.rs`, the
+//! build-side reader of JSON numbers (PORT.md §3.4).
 
 #![deny(clippy::float_arithmetic, clippy::float_cmp)]
+
+#[cfg(feature = "compile")]
+pub mod compile;
+pub mod emit;
+pub mod model;

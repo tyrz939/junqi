@@ -7,8 +7,17 @@ rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
 
+[features]
+# The compile from /data. jane-data's build script and jane-cli turn it on; the game links only
+# the model.
+compile = ["dep:serde", "dep:serde_json", "dep:indexmap", "dep:xxhash-rust"]
+
 [dependencies]
 jane-core.workspace = true
+indexmap = { workspace = true, optional = true }
+serde = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
+xxhash-rust = { workspace = true, optional = true }
 
 [lints]
 workspace = true
