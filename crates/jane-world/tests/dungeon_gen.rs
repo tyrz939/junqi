@@ -1,13 +1,16 @@
-//! PORT.md §6.m stages 12 and 13: the dungeon generator's layout, locks, lamps, fill and names,
-//! held to all eight missions over `SEEDS` seeds. Carries the structural parts of
+//! PORT.md §6.m stages 12 to 15: the dungeon generator's layout, locks, lamps, fill and names,
+//! held to all eight missions over `SEEDS` seeds, every one of them proven by the solver and
+//! checks C1 to C12 inside the attempt budget, the fallback included. Carries the structural parts of
 //! `jane/test/{dungeon-gen,dungeons,dungeon-dressing}.test.ts` and of the per-dungeon files: every
 //! seed embeds without the fallback, corridors never cross or break into a room, rooms sit in
 //! their bays, the contract's names are all there, names do not move with the attempt, the lamps
 //! follow their rules, heat stays within its cap, and the same seed is the same dungeon.
-//! What needs the solver (C1 to C12, the first completion) or the sim (the bots) is not here.
+//! The checks' own rejections are `dungeon_checks.rs`; the walks and the per-dungeon proofs are
+//! `dungeon_missions.rs`; what needs the sim (the bots) carries in P4.
 
 mod common;
 
+use std::fmt::Write as _;
 use std::sync::OnceLock;
 
 use jane_core::action::{Action, Condition, FlagKey, FlagOp};
@@ -17,9 +20,10 @@ use jane_core::{Blueprint, Key, ListRef, Rect, Tile, ZoneId};
 use jane_data::{
     BAY_H, BAY_W, BORDER, MissionDef, MissionEdgeKind, MissionNodeKind, MissionProp, RoomSide, RoomSocketKind, catalog,
 };
+use jane_world::dungeon::checks::check_dungeon;
 use jane_world::dungeon::layout::Lanes;
 use jane_world::dungeon::lights::into;
-use jane_world::dungeon::{Built, build, build_candidate, build_dungeon};
+use jane_world::dungeon::{Built, build, build_candidate, build_dungeon, build_with};
 
 fn missions() -> &'static [MissionDef] {
     catalog().dungeons.missions
@@ -650,4 +654,71 @@ fn the_fallback_is_whole_and_the_same_on_every_seed() {
         assert_eq!(b.info.layout, a.info.layout, "{}", m.id);
         assert_eq!(b.blueprint.tiles, a.blueprint.tiles, "{}", m.id);
     }
+}
+
+// --- stages 14 and 15 wired in: the solver and C1 to C12 judge every candidate ----------------
+
+fn shown(faults: &[jane_world::dungeon::checks::Fault]) -> Vec<String> {
+    faults.iter().map(ToString::to_string).collect()
+}
+
+/// `dungeon-gen.test.ts` (and every per-dungeon file) "64 seeds: every one is proven (solver and
+/// C1 to C12) inside the attempt budget, and none needs the fallback". `build` already refused
+/// every candidate the solver or a check would not pass; this proves the one it kept, again, and
+/// reports how many attempts it took.
+#[test]
+fn every_dungeon_every_seed_is_proven_by_the_solver_and_c1_to_c12() {
+    let mut report = String::new();
+    for m in missions() {
+        let (mut n, mut sum, mut worst, mut refused) = (0u32, 0u32, 0u8, 0usize);
+        for (_, seed, b) in sweep().iter().filter(|x| x.0.zone == m.zone) {
+            let faults = check_dungeon(b);
+            assert!(faults.is_empty(), "{} seed {seed}: {:?}", m.id, shown(&faults));
+            assert_eq!(b.info.rejected.len(), usize::from(b.blueprint.attempts) - 1, "{} seed {seed}", m.id);
+            n += 1;
+            sum += u32::from(b.blueprint.attempts);
+            worst = worst.max(b.blueprint.attempts);
+            refused += b.info.rejected.len();
+        }
+        // A dungeon is small and its pools are sound: a seed that needs more than a handful of
+        // attempts is a pool or a mission to look at (the TypeScript held the mine to 4).
+        assert!(worst <= 5, "{}: worst attempts {worst}", m.id);
+        let _ = writeln!(
+            report,
+            "{}: {n} seeds, attempts mean {}.{:02} worst {worst}, {refused} refused",
+            m.id,
+            sum / n,
+            sum * 100 / n % 100
+        );
+    }
+    println!("{report}");
+}
+
+/// "The hand-placed fallback is a whole, proven dungeon: the last attempt never throws at the
+/// player": it passes the solver and every check, on any seed.
+#[test]
+fn the_fallback_is_a_proven_dungeon() {
+    for m in missions() {
+        let b = build_candidate(m.zone, 99, ZONE_ATTEMPTS - 1);
+        let faults = check_dungeon(&b);
+        assert!(faults.is_empty(), "{}: {:?}", m.id, shown(&faults));
+    }
+}
+
+/// A candidate the judge refuses is re-rolled and the refusal kept; the last attempt is judged
+/// too, and kept with its reasons when even it is refused.
+#[test]
+fn a_refused_candidate_is_rerolled_and_the_last_is_judged_too() {
+    let m = catalog().dungeons.mission_of(ZoneId::Mine).expect("the mine");
+    assert_eq!(build_candidate(m.zone, 31, 0).info.errors, Vec::<String>::new(), "seed 31 embeds at once");
+    let refuse_two = |b: &Built| if b.blueprint.attempts <= 2 { Err(vec!["not yet".to_owned()]) } else { Ok(()) };
+    let b = build_with(m.zone, 31, &refuse_two);
+    assert_eq!(b.blueprint.attempts, 3);
+    assert_eq!(b.info.rejected, vec![(0, "not yet".to_owned()), (1, "not yet".to_owned())]);
+    let refuse_all = |_: &Built| Err(vec!["never".to_owned()]);
+    let b = build_with(m.zone, 31, &refuse_all);
+    assert_eq!(b.blueprint.attempts, ZONE_ATTEMPTS);
+    assert!(b.info.layout.as_ref().unwrap().fallback);
+    assert_eq!(b.info.errors, vec!["never".to_owned()]);
+    assert_eq!(b.info.rejected.len(), usize::from(ZONE_ATTEMPTS) - 1);
 }

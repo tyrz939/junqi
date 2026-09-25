@@ -324,7 +324,7 @@ Attempts stay (40/12/12). Added `GenStats { attempts, floods, cells_visited, ms 
 
 ```
 jane-world/src/solve/  model.rs flood.rs passes/{loot,gates,mechanisms,repairs,kills,triggers,hops,ifs,states}.rs run.rs ablate.rs report.rs
-jane-world/src/dungeon/checks/  mod.rs c01_locks.rs c03_plain_keys.rs c04_sinks.rs c05_teacher.rs c06_lockin.rs c07_crit_len.rs c08_rest.rs c09_cycle.rs c10_seen.rs c11_plates.rs c12_trigger_solid.rs
+jane-world/src/dungeon/checks/  mod.rs c01_locks.rs c03_plain_keys.rs c04_sinks.rs c05_teacher.rs c06_lockin.rs c07_rest.rs c08_crit_len.rs c09_cycle.rs c10_seen.rs c11_plates.rs c12_trigger_solid.rs
 ```
 
 Passes share `fn(&mut Solve) -> Changed`, each unit-tested. `BuildInfo` is a field. Stateful flood ≤ 3 states as layers.
