@@ -215,12 +215,12 @@ impl Guest {
         if self.over() {
             return;
         }
-        if now - self.heard >= HOST_GONE_MS {
+        if now.saturating_sub(self.heard) >= HOST_GONE_MS {
             self.end("the host has said nothing for 10 s");
             return;
         }
         match self.phase {
-            Phase::Hello if now - self.said >= HELLO_EVERY_MS => {
+            Phase::Hello if now.saturating_sub(self.said) >= HELLO_EVERY_MS => {
                 let hello = Msg::Hello(self.cfg.hello.clone());
                 self.send(&hello, now);
             }
@@ -237,12 +237,12 @@ impl Guest {
                     }
                 }
             }
-            Phase::Ready if now - self.said >= READY_EVERY_MS => self.send(&Msg::Ready, now),
+            Phase::Ready if now.saturating_sub(self.said) >= READY_EVERY_MS => self.send(&Msg::Ready, now),
             Phase::Playing => {
                 for (frame, hash) in std::mem::take(&mut self.hashes) {
                     self.send(&Msg::Hash { frame, hash }, now);
                 }
-                if self.fresh || now - self.said >= INPUTS_EVERY_MS {
+                if self.fresh || now.saturating_sub(self.said) >= INPUTS_EVERY_MS {
                     self.send_inputs(now);
                 }
             }

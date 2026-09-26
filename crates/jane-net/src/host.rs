@@ -25,8 +25,8 @@ use jane_sim::{ClientToken, Seat, Sim, Stepped};
 use crate::book::{Book, step};
 use crate::link::{Link, Listener};
 use crate::wire::{
-    self, BUILD, Bundle, ByeWhy, DEFAULT_DELAY, HASH_EVERY, Hello, Item, MAX_DELAY, MIN_DELAY, Msg, PROTO, Refusal,
-    Report, Why, content_hash,
+    self, BUILD, Bundle, ByeWhy, DEFAULT_DELAY, Hello, Item, MAX_DELAY, MIN_DELAY, Msg, PROTO, Refusal, Report, Why,
+    content_hash,
 };
 
 /// Frames a joiner has to load the world and catch up before her input is awaited.
@@ -352,7 +352,10 @@ impl Host {
             let c = &mut self.conns[i];
             match c.state {
                 State::Seated => {
-                    if c.acked < next && now - c.ack_moved >= RESEND_MS && now - c.resent >= RESEND_MS {
+                    if c.acked < next
+                        && now.saturating_sub(c.ack_moved) >= RESEND_MS
+                        && now.saturating_sub(c.resent) >= RESEND_MS
+                    {
                         if c.acked < oldest {
                             // Too far behind for the bundles kept: the world again.
                             c.state = State::Joining { resync: true };
@@ -366,12 +369,12 @@ impl Host {
                             c.last_sent = now;
                         }
                     }
-                    if now - c.last_sent >= BEAT_MS {
+                    if now.saturating_sub(c.last_sent) >= BEAT_MS {
                         let _ = c.link.send(wire::encode(&Msg::Beat));
                         c.last_sent = now;
                     }
                 }
-                State::Hello | State::Accepted if now - c.since >= HANDSHAKE_MS => {
+                State::Hello | State::Accepted if now.saturating_sub(c.since) >= HANDSHAKE_MS => {
                     c.link.close();
                     c.state = State::Closed;
                 }
@@ -453,7 +456,7 @@ impl Host {
             Msg::Hello(h) if matches!(state, State::Hello | State::Accepted) => self.on_hello(i, &h, now),
             Msg::Ready => match state {
                 State::Accepted => self.conns[i].state = State::Joining { resync: false },
-                State::Seated if !self.conns[i].heard && now - self.conns[i].welcomed >= REWELCOME_MS => {
+                State::Seated if !self.conns[i].heard && now.saturating_sub(self.conns[i].welcomed) >= REWELCOME_MS => {
                     // The welcome was lost: the world again, as it is now.
                     self.conns[i].state = State::Joining { resync: true };
                 }
@@ -742,11 +745,11 @@ impl Host {
                 now
             }
         };
-        let waited = now - since;
+        let waited = now.saturating_sub(since);
         if waited >= self.cfg.stall_ms {
             let v = StallView { frame: f, seats: missing, waited_ms: waited, wait: self.cfg.wait };
             self.stall = Some(v);
-            if now - self.stall_said >= self.cfg.stall_ms {
+            if now.saturating_sub(self.stall_said) >= self.cfg.stall_ms {
                 self.stall_said = now;
                 let m = Msg::Stall { frame: f, seats: missing, waited_ms: waited as u32, wait: self.cfg.wait };
                 self.broadcast(&m, now);
@@ -769,10 +772,4 @@ impl Host {
             self.blocked = None;
         }
     }
-}
-
-/// The hash points a peer hashes at: after the step that brings the frame to a multiple of
-/// [`HASH_EVERY`].
-pub fn is_hash_point(frame: u32) -> bool {
-    frame % HASH_EVERY == 0
 }

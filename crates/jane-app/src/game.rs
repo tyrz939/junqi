@@ -11,15 +11,14 @@ use jane_present::input::{
 };
 use jane_present::{Backend, Present, Tier};
 use jane_render_soft::Soft;
+use jane_sim::Seat;
 use jane_sim::event::Event;
-use jane_sim::input::{Command, InputFrame, StampedCommand, StepInput};
-use jane_sim::tuning::MAX_PLAYERS;
-use jane_sim::{Blueprints, Seat, Sim};
+use jane_sim::input::Command;
 
 use crate::Args;
 use crate::devices::{Devices, Happened};
 use crate::screen::{self, Target};
-use crate::shot;
+use crate::{session, shot};
 
 /// A tick is `1/60` s; the accumulator counts nanoseconds times 60, so a tick is exactly 1e9.
 const TICK: u64 = 1_000_000_000;
@@ -28,8 +27,8 @@ const TICK: u64 = 1_000_000_000;
 const MAX_CATCH_UP: u64 = 5;
 /// The window while the county builds, and the stub scene's clear.
 const LOADING: u32 = 0xff10_1014;
-/// The seat this window plays.
-const ME: Seat = Seat(0);
+/// A guest this many frames behind the host steps extra frames to catch up.
+const BEHIND: u32 = 2;
 
 /// A second's worth of counts for the title bar.
 #[derive(Debug, Default)]
@@ -61,9 +60,19 @@ pub fn run(args: &Args) -> Result<(), String> {
     let _ = canvas.window_mut().set_title(&format!("Jane: seed {}, building the county", args.seed));
     pump.pump_events();
     let t0 = Instant::now();
-    let bps = Blueprints::build(args.seed).map_err(|e| format!("seed {}: {e}", args.seed))?;
-    let mut sim = Sim::new_game_with(bps, &args.name);
-    println!("jane-app: seed {}: the county built in {} ms", args.seed, t0.elapsed().as_millis());
+    // The session's clock, in milliseconds from here.
+    let clock = t0;
+    // Alone or hosting, the world is built (or loaded) here; joining, it comes from the host.
+    let mut session = match &args.join {
+        Some(addr) => session::join(args, addr, clock, |title| {
+            let _ = canvas.window_mut().set_title(title);
+            !pump.poll_iter().any(|e| matches!(e, sdl2::event::Event::Quit { .. }))
+        })?,
+        None => session::start(session::load_or_new(args)?, args)?,
+    };
+    let me = session.seat().unwrap_or(Seat::HOST);
+    let seed = session.sim().map_or(args.seed, |s| s.state().seed);
+    println!("jane-app: seed {seed}: the world ready in {} ms, seat {}", t0.elapsed().as_millis(), me.0);
 
     let mut present = Present::new(Tier::T0);
     let mut soft = Soft::new();
@@ -76,8 +85,7 @@ pub fn run(args: &Args) -> Result<(), String> {
     let mut canvas_px = canvas_size(win.0, win.1);
 
     let mut paused = false;
-    let mut pending: Vec<StampedCommand> = Vec::new();
-    let mut seq: u16 = 0;
+    let mut pending: Vec<Command> = Vec::new();
     let mut events: Vec<Event> = Vec::with_capacity(64);
     let mut edges: Vec<Edge> = Vec::with_capacity(8);
     let mut camera = (0, 0);
@@ -105,10 +113,10 @@ pub fn run(args: &Args) -> Result<(), String> {
 
         // The devices, once a frame: one held frame for every tick of it, and the presses.
         let mode = if paused { Mode::Ui } else { Mode::Play };
-        let feet = sim
-            .view(ME)
-            .map(|v| world_to_canvas(v.body().pos, camera))
-            .filter(|&(x, y)| (0.0..f32::from(canvas_px.0)).contains(&x) && (0.0..f32::from(canvas_px.1)).contains(&y));
+        let feet =
+            session.sim().and_then(|s| s.view(me)).map(|v| world_to_canvas(v.body().pos, camera)).filter(|&(x, y)| {
+                (0.0..f32::from(canvas_px.0)).contains(&x) && (0.0..f32::from(canvas_px.1)).contains(&y)
+            });
         let held = input.sample(&devices.state, &Context { mode, feet });
         let cursor = devices.state.mouse.pos.filter(|_| input.aiming_with_mouse());
         devices.state.end_sample();
@@ -120,10 +128,13 @@ pub fn run(args: &Args) -> Result<(), String> {
                 // one (a pad) the sim picks the friend nearest the aim line.
                 Edge::Game(GameAction::Bar(slot)) => Command::Bar {
                     slot,
-                    on: cursor.and_then(|c| sim.view(ME).map(|v| pick(&v, canvas_to_world(c, camera)))),
+                    on: cursor.and_then(|c| {
+                        session.sim().and_then(|s| s.view(me)).map(|v| pick(&v, canvas_to_world(c, camera)))
+                    }),
                 },
                 Edge::Ui(UiAction::Pause) => {
                     // Alone, pause freezes the world: the sim does not step (PRESENTATION.md §1.11).
+                    // With company (or open to it) her stick is idle and the world goes on.
                     paused = true;
                     pending.clear();
                     continue;
@@ -145,8 +156,7 @@ pub fn run(args: &Args) -> Result<(), String> {
                 // Bags, book, quests, map, console, the overlays, save and load: P7's screens.
                 Edge::Ui(_) => continue,
             };
-            seq = seq.wrapping_add(1);
-            pending.push(StampedCommand { seat: Some(ME), seq, cmd });
+            pending.push(cmd);
         }
 
         // The clock: whole ticks due since the last frame, at most MAX_CATCH_UP of them.
@@ -160,27 +170,36 @@ pub fn run(args: &Args) -> Result<(), String> {
             due = MAX_CATCH_UP;
         }
         let mut done = false;
-        for _ in 0..due {
+        // A guest behind the host steps what it has in hand beyond the clock's ticks.
+        let extra = u64::from(session.backlog().saturating_sub(BEHIND)).min(MAX_CATCH_UP);
+        let ms = clock.elapsed().as_millis() as u64;
+        session.poll(ms);
+        for i in 0..due + extra {
             let t = Instant::now();
             events.clear();
-            if !paused {
-                let mut frames = [InputFrame::IDLE; MAX_PLAYERS];
-                frames[ME.index()] = held;
-                sim.step(&StepInput { frames, commands: &pending });
-                pending.clear();
-                events.extend_from_slice(sim.drain_events());
+            // Alone this steps unless paused; at a table, when every seat's input has come.
+            if session.try_step(ms, held, &mut pending, paused).is_some() {
+                events.extend_from_slice(session.events());
             }
             // Every tick, the world frozen or not: toasts fade and cursors blink in a pause.
-            if let Some(v) = sim.view(ME) {
+            if let Some(v) = session.sim().and_then(|s| s.view(me)) {
                 present.tick(&v, &events);
             }
-            acc -= TICK;
-            ticks += 1;
+            if i < due {
+                acc -= TICK;
+                ticks += 1;
+            }
             stats.ticks += 1;
             stats.tick_time += t.elapsed();
             if args.ticks.is_some_and(|n| ticks >= n) {
                 done = true;
                 break;
+            }
+        }
+        session.poll(ms);
+        if session.take_rested() {
+            if let (Some(path), Some(sim)) = (&args.save, session.sim()) {
+                session::write_save(std::path::Path::new(path), sim);
             }
         }
 
@@ -198,7 +217,7 @@ pub fn run(args: &Args) -> Result<(), String> {
         stats.draw_time += t.elapsed();
         canvas.present();
         stats.frames += 1;
-        title(&mut canvas, &mut stats, args.seed, paused, dropped);
+        title(&mut canvas, &mut stats, seed, paused, dropped, &mut session);
         if done {
             break;
         }
@@ -213,17 +232,36 @@ pub fn run(args: &Args) -> Result<(), String> {
         shot::write(path, px, w, h)?;
         println!("jane-app: shot {path} ({w} x {h})");
     }
-    println!(
-        "jane-app: seed {}: {ticks} ticks, {dropped} dropped, frame {}, hash {:016x}",
-        args.seed,
-        sim.state().frame,
-        sim.hash()
-    );
+    if let (Some(path), Some(sim)) = (&args.save, session.sim()) {
+        if !matches!(session, jane_net::Session::Guest(_)) {
+            session::write_save(std::path::Path::new(path), sim);
+        }
+    }
+    if let Some(sim) = session.sim() {
+        println!(
+            "jane-app: seed {seed}: {ticks} ticks, {dropped} dropped, frame {}, hash {:016x}",
+            sim.state().frame,
+            sim.hash()
+        );
+    }
+    if let jane_net::Session::Host(h) = &session {
+        let c = h.checks();
+        println!("jane-app: hash checks with guests: {} agreed, {} differed, last at frame {}", c.ok, c.bad, c.last);
+    }
+    session.close();
     Ok(())
 }
 
-/// Once a second: frames a second and the average tick and draw, until the F2 overlay exists.
-fn title(canvas: &mut sdl2::render::WindowCanvas, s: &mut Stats, seed: u32, paused: bool, dropped: u64) {
+/// Once a second: frames a second and the average tick and draw, until the F2 overlay exists;
+/// hosting or joined, who is at the table and whether it waits for anyone.
+fn title(
+    canvas: &mut sdl2::render::WindowCanvas,
+    s: &mut Stats,
+    seed: u32,
+    paused: bool,
+    dropped: u64,
+    session: &mut jane_net::Session,
+) {
     let since = *s.since.get_or_insert_with(Instant::now);
     let el = since.elapsed();
     if el < Duration::from_secs(1) {
@@ -241,6 +279,24 @@ fn title(canvas: &mut sdl2::render::WindowCanvas, s: &mut Stats, seed: u32, paus
     }
     if paused {
         t += ", paused";
+    }
+    let st = session.status();
+    if st.role != "alone" {
+        let _ = write!(t, ", {} ({} at the table", st.role, st.seats);
+        if let Some(p) = session.port() {
+            let _ = write!(t, ", port {p}");
+        }
+        t += ")";
+    }
+    if let Some(stall) = st.stall {
+        let who: Vec<String> = (0..4).filter(|i| stall.seats & (1 << i) != 0).map(|i| i.to_string()).collect();
+        let _ = write!(t, ", waiting for seat {} ({} s)", who.join(" and "), stall.waited_ms / 1000);
+    }
+    if let Some(end) = st.ended {
+        let _ = write!(t, ", {end}");
+    }
+    if let Some(r) = st.desync {
+        eprintln!("jane-app: {r}");
     }
     let _ = canvas.window_mut().set_title(&t);
     *s = Stats { since: Some(Instant::now()), ..Stats::default() };
