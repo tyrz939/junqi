@@ -8,8 +8,8 @@ use jane_core::grid::Rect;
 use jane_data::{TileGroup, TilePattern as P};
 
 use super::{
-    CELL, CHUNK_CELLS, CasterSeg, Chunk, NONE, Painter, Placed, STRIP_BELOW, STRIP_H, STRIP_MARGIN, Style, fast, pack,
-    salt,
+    CELL, CHUNK_CELLS, CHUNK_PX, CasterSeg, Chunk, NONE, Painter, Placed, STRIP_BELOW, STRIP_H, STRIP_MARGIN, Standing,
+    Style, fast, pack, salt,
 };
 use crate::canvas::{Canvas, FLAT, Z, normal};
 use crate::flora::{Bank, Sprite};
@@ -447,7 +447,12 @@ pub mod mask {
 /// what is drawn and resolved, with its mask.
 pub(super) fn strips(p: &mut Painter, x0: i32, y0: i32, seed: u32, out: &mut Chunk) {
     let sw = p.s.row.w();
-    for row in 0..CHUNK_CELLS {
+    let placed = p.standing == Standing::Placed;
+    // Placed, a fence in the row above the chunk reaches 4 px into it and one in the two rows
+    // below it stands up into it: those rows are laid too, for what falls inside.
+    let rows = if placed { -1..CHUNK_CELLS + 2 } else { 0..CHUNK_CELLS };
+    for row in rows {
+        let inner = (0..CHUNK_CELLS).contains(&row);
         let mut any = false;
         let mut canopy = false;
         let mut built = false;
@@ -486,7 +491,19 @@ pub(super) fn strips(p: &mut Painter, x0: i32, y0: i32, seed: u32, out: &mut Chu
                 p.s.thing = thing;
                 continue;
             }
+            if !inner {
+                continue;
+            }
             let Some(t) = thing(p, cx, row, seed) else { continue };
+            out.placed.push(Placed {
+                sprite: t.pick.index(),
+                x: (cx * CELL + 8 + t.ox) as i16,
+                y: ((row + 1) * CELL - 2 + t.oy) as i16,
+                row: row as u8,
+            });
+            if placed {
+                continue;
+            }
             if !any {
                 reset_row(p);
                 any = true;
@@ -499,12 +516,6 @@ pub(super) fn strips(p: &mut Painter, x0: i32, y0: i32, seed: u32, out: &mut Chu
             grow_bb(&mut p.s.row_bb, sx, sy, cw, ch);
             let trunk = if t.canopy { Some(p.styles.tile(Tile::Tree).accent.unwrap_or(Ramp::Bark)) } else { None };
             mark(&mut p.s.rowmask, sw, &s.canvas, sx, sy, trunk);
-            out.placed.push(Placed {
-                sprite: t.pick.index(),
-                x: (cx * CELL + 8 + t.ox) as i16,
-                y: ((row + 1) * CELL - 2 + t.oy) as i16,
-                row: row as u8,
-            });
         }
         if any {
             if built {
@@ -522,7 +533,31 @@ pub(super) fn strips(p: &mut Painter, x0: i32, y0: i32, seed: u32, out: &mut Chu
                     }
                 }
             }
-            crop(p, row, canopy, out);
+            if placed {
+                bake(p, row);
+            } else {
+                crop(p, row, canopy, out);
+            }
+        }
+    }
+}
+
+/// Paint the strip canvas's drawn px into the ground layers, where they fall in the chunk: a
+/// fence or a low wall laid flat with the walls, its heights kept for the light.
+fn bake(p: &mut Painter, row: i32) {
+    let bb = p.s.row_bb;
+    let top = (row + 1) * CELL + STRIP_BELOW - STRIP_H;
+    for y in bb.y.max(0)..bb.bottom().min(STRIP_H) {
+        let ly = top + y;
+        if !(0..CHUNK_PX).contains(&ly) {
+            continue;
+        }
+        for x in bb.x.max(STRIP_MARGIN)..bb.right().min(STRIP_MARGIN + CHUNK_PX) {
+            let ix = p.s.row.get(x, y);
+            if ix.is_opaque() {
+                let (n, z) = (p.s.row.normal_at(x, y), p.s.row.height_at(x, y));
+                p.s.ly.put(x - STRIP_MARGIN, ly, ix, n, i32::from(z));
+            }
         }
     }
 }

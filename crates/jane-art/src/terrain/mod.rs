@@ -124,6 +124,52 @@ pub struct TileMap {
 
 const MATERIALS: [Material; 4] = [Material::RoofSlate, Material::RoofThatch, Material::BrickWall, Material::Pine];
 
+/// A material as the byte a paint grid keeps: 0 for none.
+fn code(m: Material) -> u8 {
+    MATERIALS.iter().position(|&x| x == m).map_or(0, |i| i as u8 + 1)
+}
+
+/// A paint grid's byte as its material.
+fn decode(k: u8) -> Option<Material> {
+    k.checked_sub(1).and_then(|i| MATERIALS.get(usize::from(i)).copied())
+}
+
+/// A zone's render-only paint (`Blueprint::paint`) flattened to a byte a cell, later rects over
+/// earlier: what a renderer keeps beside a view that hands it the rects, so the painter reads a
+/// cell's material in O(1). Refilled per zone without allocating once it has held the largest.
+#[derive(Clone, Debug, Default)]
+pub struct PaintMap {
+    w: i32,
+    h: i32,
+    k: Vec<u8>,
+}
+
+impl PaintMap {
+    /// Refill for a zone of `(w, h)` cells painted `paint`.
+    pub fn fill(&mut self, (w, h): (u32, u32), paint: &[(Rect, Material)]) {
+        (self.w, self.h) = (w as i32, h as i32);
+        self.k.clear();
+        self.k.resize(w as usize * h as usize, 0);
+        for &(r, m) in paint {
+            let k = code(m);
+            for y in r.y.max(0)..r.bottom().min(self.h) {
+                for x in r.x.max(0)..r.right().min(self.w) {
+                    self.k[(y * self.w + x) as usize] = k;
+                }
+            }
+        }
+    }
+
+    /// The material painted over cell `(x, y)`, if any.
+    #[inline]
+    pub fn get(&self, x: i32, y: i32) -> Option<Material> {
+        if x < 0 || y < 0 || x >= self.w || y >= self.h {
+            return None;
+        }
+        decode(self.k[(y * self.w + x) as usize])
+    }
+}
+
 impl TileMap {
     /// Tiles with no paint.
     pub fn new(tiles: Grid<Tile>, outdoor: bool) -> TileMap {
@@ -135,16 +181,14 @@ impl TileMap {
     pub fn from_blueprint(bp: &Blueprint) -> TileMap {
         let mut m = TileMap::new(bp.tiles.clone(), !bp.indoor);
         for &(r, mat) in &bp.paint {
-            let k = MATERIALS.iter().position(|&x| x == mat).map_or(0, |i| i as u8 + 1);
-            m.paint.fill_rect(r, k);
+            m.paint.fill_rect(r, code(mat));
         }
         m
     }
 
     /// Paint `mat` over `r`.
     pub fn set_material(&mut self, r: Rect, mat: Material) {
-        let k = MATERIALS.iter().position(|&x| x == mat).map_or(0, |i| i as u8 + 1);
-        self.paint.fill_rect(r, k);
+        self.paint.fill_rect(r, code(mat));
     }
 }
 
@@ -156,10 +200,7 @@ impl TileSource for TileMap {
         self.tiles.read(x, y, Tile::Void)
     }
     fn material(&self, x: i32, y: i32) -> Option<Material> {
-        match self.paint.read(x, y, 0) {
-            0 => None,
-            k => MATERIALS.get(usize::from(k - 1)).copied(),
-        }
+        decode(self.paint.read(x, y, 0))
     }
     fn outdoor(&self) -> bool {
         self.outdoor
@@ -298,9 +339,9 @@ impl Chunk {
             },
             strips: Vec::new(),
             n_strips: 0,
-            water: Vec::new(),
-            casters: Vec::new(),
-            placed: Vec::new(),
+            water: Vec::with_capacity((CHUNK_CELLS * CHUNK_CELLS) as usize),
+            casters: Vec::with_capacity(256),
+            placed: Vec::with_capacity((CHUNK_CELLS * CHUNK_CELLS) as usize),
         }
     }
 
@@ -493,11 +534,26 @@ struct Scratch {
     thing: Canvas,
 }
 
+/// How a painter hands over the standing things of a chunk.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Standing {
+    /// Every row's trees, shrubs, stones, fences and low walls stamped into [`Chunk::strips`]
+    /// (the sheets, and a renderer that sorts strips among its units), and listed in
+    /// [`Chunk::placed`] too.
+    #[default]
+    Strips,
+    /// No strips: the flora only as [`Chunk::placed`] (a renderer draws them from its atlas and
+    /// sorts them one by one), and the fences and low walls painted into the ground layers like
+    /// the walls, the tops of the row below the chunk that reach up into it included.
+    Placed,
+}
+
 /// The chunk painter: the styles, the flora bank and the scratch. One per thread that paints.
 #[derive(Clone, Debug)]
 pub struct Painter {
     styles: Styles,
     bank: Bank,
+    standing: Standing,
     s: Scratch,
     /// The chunk being painted: its first world cell, and the world seed.
     x0c: i32,
@@ -556,7 +612,7 @@ impl Painter {
             row_bb: Rect::new(0, 0, CHUNK_PX + 2 * STRIP_MARGIN, STRIP_H),
             thing: Canvas::new(3 * CELL, STRIP_H),
         };
-        Painter { styles, bank: Bank::new(ramps), s, x0c: 0, y0c: 0, seed: 0 }
+        Painter { styles, bank: Bank::new(ramps), standing: Standing::Strips, s, x0c: 0, y0c: 0, seed: 0 }
     }
 
     /// The styles it paints with.
@@ -567,6 +623,11 @@ impl Painter {
     /// The flora it stamps.
     pub fn bank(&self) -> &Bank {
         &self.bank
+    }
+
+    /// Hand the standing things over as `standing` from the next chunk on.
+    pub fn set_standing(&mut self, standing: Standing) {
+        self.standing = standing;
     }
 
     /// Paint chunk `(cx, cy)` of `src` under world seed `seed` into `out` (see [`paint_chunk`]).

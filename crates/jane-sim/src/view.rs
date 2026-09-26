@@ -138,6 +138,12 @@ impl<'a> View<'a> {
         self.rt.grid.tile_at(cx, cy)
     }
 
+    /// The zone's render-only paint over its tiles, in paint order (a roof's slate, a wood's
+    /// pines; PORT.md §6.i). The presentation reads it; nothing in the sim does.
+    pub fn paint(&self) -> &'a [(Rect, jane_core::Material)] {
+        &self.bp.paint
+    }
+
     pub fn flags(&self, cx: i32, cy: i32) -> u8 {
         self.rt.grid.flags_at(cx, cy)
     }
