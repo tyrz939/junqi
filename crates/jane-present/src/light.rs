@@ -60,6 +60,13 @@ const MOON_TOP: i32 = 38;
 /// The sun on flat ground high in the sky, and low, on the horizon's edge.
 const SUN_HIGH: [i32; 3] = [214, 204, 184];
 const SUN_LOW: [i32; 3] = [255, 176, 96];
+/// The broadest light that still throws a T0 silhouette (5 degrees): the sun and the moon do,
+/// the afterglow does not.
+pub const SILHOUETTE_SPREAD: u16 = (5 * 65536 / 360) as u16;
+
+/// The western sky after sunset on flat ground, and how long it glows.
+const AFTERGLOW: [i32; 3] = [96, 66, 104];
+const GLOW: i32 = HOUR * 3 / 4;
 /// The full moon on flat ground.
 const MOON: [i32; 3] = [58, 74, 120];
 
@@ -161,6 +168,16 @@ pub fn sky(clock: u32, day: u32, indoor: bool, permille: i16, region: Region) ->
             elevation: el,
             colour: colour.map(|c| c.clamp(0, 255) as u8),
             spread: deg(2) as u16 + (deg(3) * (20000 - s.min(20000)) / 20000) as u16,
+        })
+    } else if (SET..SET + GLOW).contains(&t) {
+        // The afterglow: for three quarters of an hour after sunset the western sky is the
+        // brightest thing in it, a low violet light from where the sun went down, fading.
+        let left = SET + GLOW - t;
+        Some(Directional {
+            azimuth: Angle((deg(180) + deg(16) / 4) as u16),
+            elevation: Angle(deg(10) as u16),
+            colour: mix([0; 3], AFTERGLOW, left, GLOW).map(|c| c.clamp(0, 255) as u8),
+            spread: deg(7) as u16,
         })
     } else if let Some((az, el, s)) = arc(t, SET, RISE, MOON_TOP) {
         let phase = moon_phase(day);

@@ -203,7 +203,7 @@ impl Prep {
                         let [r, gg, b] = lin3(l.colour);
                         // Flame light leans warm: a yellow lamp reads as a lamp on green grass,
                         // not as lime.
-                        let [r, gg, b] = [r * POINT_GAIN, gg * POINT_GAIN * 0.8, b * POINT_GAIN * 0.7];
+                        let [r, gg, b] = [r * POINT_GAIN, gg * POINT_GAIN * 0.72, b * POINT_GAIN * 0.55];
                         f32s(&mut self.lights, &[r, gg, b, f32::from(l.size)]);
                         f32s(&mut self.lights, &[dir.0, dir.1, cone, if l.casts { 1.0 } else { 0.0 }]);
                         self.n_lights += 1;

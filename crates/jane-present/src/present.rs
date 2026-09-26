@@ -604,9 +604,10 @@ impl Present {
 
         let sky = &self.sky;
         f.passes.push(Pass::Sprites { layer: Depth::Ground, cmds: ground });
-        // Silhouette sun shadows under the standing things, where the tier has no shadow maps.
+        // Silhouette sun shadows under the standing things, where the tier has no shadow maps:
+        // from a sun or a moon, not from the afterglow, a sky too broad to throw a silhouette.
         if f.tier <= Tier::T1
-            && let Some(sun) = sky.sun
+            && let Some(sun) = sky.sun.filter(|s| s.spread <= crate::light::SILHOUETTE_SPREAD)
             && casters.len > 0
         {
             f.passes.push(Pass::Silhouettes { sun, shade: sky.shade, casters });
