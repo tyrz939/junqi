@@ -1,7 +1,7 @@
 //! The dialogue box (PRESENTATION.md §3.2): the speaker's name, the line revealed at three
 //! characters a tick, at most two options, a "more" mark while a line continues, and hints for
 //! the device in hand. It sends what `jane-bot` sends: `Advance` for the next line, `Choose` for
-//! an option, `CloseDialogue` to walk away. A press while the line is still typing shows the
+//! an option, `CloseDialogue` to walk away (Esc, or the pad's B). A press while the line is still typing shows the
 //! rest of it first.
 
 use jane_art::font::Face;
@@ -156,12 +156,17 @@ pub fn draw(ui: &mut Ui, bx: &mut DialogueBox, d: &DialogueView, cx: HudCtx<'_>)
     if !ui.interactive {
         return;
     }
-    // Keys: Use, Confirm, Space and Enter go on; 1 and 2 pick; up and down move the light.
+    // Keys: Use, Confirm, Space and Enter go on; 1 and 2 pick; up and down move the light; back
+    // (Esc, the pad's B) walks away.
     let n = d.options.len() as u8;
     let mut go = false;
     for a in ui.input.actions.clone() {
         match a {
             UiAction::Confirm => go = true,
+            UiAction::Cancel => {
+                ui.command(Command::CloseDialogue);
+                return;
+            }
             UiAction::Up if n > 0 => bx.focus = (bx.focus + n - 1) % n,
             UiAction::Down if n > 0 => bx.focus = (bx.focus + 1) % n,
             _ => {}

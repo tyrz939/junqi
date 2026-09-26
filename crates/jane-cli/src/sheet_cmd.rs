@@ -31,6 +31,8 @@ pub const USAGE: &str = "  sheet layers <what> [--frame F] [--out DIR]
                                       frame is drawn headless through the presenter and soft (T0), or
                                       wgpu (T2) with the gpu feature; --night sets the clock to 22:00
                                       first; --wide draws 21:9 (1008 x 432)
+  sheet ui [screen ...] [--out DIR]   the UI in states play rarely shows at once (hud, dead, choice,
+                                      tooltip, popover, drag, pause), headless through soft
   sheet --bless                       rewrite crates/jane-art/tests/golden.txt from the current art";
 
 /// jane-art's golden file, from this crate's manifest.
@@ -146,6 +148,10 @@ pub fn run(args: &[String]) -> Result<(), String> {
             }
         }
         Some("scene") => scene(args)?,
+        Some("ui") => {
+            let names: Vec<String> = args[1..].iter().take_while(|a| !a.starts_with("--")).cloned().collect();
+            crate::ui_sheet::run(&out, &names)?;
+        }
         _ => return Err(format!("usage:\n{USAGE}")),
     }
     Ok(())

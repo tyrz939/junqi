@@ -12,6 +12,7 @@ mod play;
 mod scene;
 mod sheet_cmd;
 mod snap;
+mod ui_sheet;
 mod view;
 
 const USAGE: &str = "usage: jane <command> [options]

@@ -111,7 +111,7 @@ Things worth knowing: Repair costs what the thing is made of. A pressure plate s
 | Bar slots 2–5 / 6–8 | 2–5 / 6–8 | X, Y, LB, RB |
 | Bag / book / log / map (one window, four tabs) | I or Tab / K / J / M, or the HUD's buttons | View; LB and RB change tab |
 | In the window | Drag to move, to the bar, to the bench, or off to destroy; right click for Use, Put on the bar, Destroy | Stick moves the ring, A picks up and puts down |
-| Dialogue | E, Space, Enter or a click goes on (a press mid-line shows the rest); 1 and 2, or up, down and E, choose | B goes on |
+| Dialogue | E, Space, Enter or a click goes on (a press mid-line shows the rest); 1 and 2, or up, down and E, choose; Esc walks away | A goes on; B walks away |
 | Pause, back | Esc | Menu, B |
 | Save / load | F5 / F9, **only within reach of a bed or a fire**. Resting at one (E) saves by itself | |
 | Terminal | `` ` `` — type `help`; Tab completes, up and down walk the history | |

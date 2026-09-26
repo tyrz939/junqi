@@ -56,7 +56,9 @@ pub fn draw(ui: &mut Ui, b: &ViewBuffers, cx: HudCtx<'_>) {
     // Under an open window the plates it covers step aside; the bar stays, a place to drop.
     if !cx.window_open {
         vitals(ui, b);
-        target(ui, b, cw);
+        if !b.me.dead {
+            target(ui, b, cw);
+        }
         sky(ui, b, cw);
         tracker(ui, b, cw);
     }
@@ -65,7 +67,9 @@ pub fn draw(ui: &mut Ui, b: &ViewBuffers, cx: HudCtx<'_>) {
     let top = prompt(ui, b, bar, cx);
     toasts(ui, b, top);
     buttons(ui, ch);
-    banner(ui, b, cw, ch);
+    if !b.me.dead {
+        banner(ui, b, cw, ch);
+    }
     if b.me.dead {
         veil(ui, b, cw, ch);
     }
@@ -98,7 +102,7 @@ fn vitals(ui: &mut Ui, b: &ViewBuffers) {
     for (i, s) in h.statuses.iter().enumerate() {
         let r = Rect::new(x + i as i32 * 24, y + 62, 20, 20);
         let left = (s.ticks_left.min(s.total) * 1000 / s.total.max(1)) as u16;
-        let v = SlotView { icon: Some(s.icon), usable: true, cooldown: 1000 - left, ..SlotView::default() };
+        let v = SlotView { icon: Some(s.icon), usable: true, gcd: 1000 - left, ..SlotView::default() };
         ui.slot(wid("chip", i as u32), r, &v, None, DropTarget::Window, false);
         if s.harmful {
             ui.fill(Rect::new(i32::from(r.x) + 2, i32::from(r.y) + 18, 16, 1), argb(style::bad(), 200));
@@ -405,10 +409,10 @@ fn banner(ui: &mut Ui, b: &ViewBuffers, cw: i32, ch: i32) {
 
 fn veil(ui: &mut Ui, b: &ViewBuffers, cw: i32, ch: i32) {
     // A cold violet veil, deepening toward the edges.
-    ui.fill(Rect::new(0, 0, cw, ch), argb(Ramp::ClothPlum.at(Tone::Deep), 120));
-    for k in 0..6 {
-        let d = 6 + k * 10;
-        let a = (70 - k * 11).max(0) as u8;
+    ui.fill(Rect::new(0, 0, cw, ch), argb(Ramp::ClothPlum.at(Tone::Deep), 170));
+    for k in 0..8 {
+        let d = 6 + k * 12;
+        let a = (96 - k * 12).max(0) as u8;
         ui.fill(Rect::new(0, 0, cw, d), argb(style::INK, a));
         ui.fill(Rect::new(0, ch - d, cw, d), argb(style::INK, a));
     }

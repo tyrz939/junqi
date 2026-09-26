@@ -1012,7 +1012,8 @@ impl Ui {
     /// stayed `TIP_TICKS`. `text` is only read when it shows; `\n` breaks a line, and the first
     /// line is the title.
     pub fn tip(&mut self, id: WidgetId, r: Rect, text: impl FnOnce(&mut String)) {
-        if self.drag.is_some_and(|d| d.moved) || self.popover.is_some() {
+        // Only the widget under the pointer asks; the rest of a row of slots stay quiet.
+        if !self.hover(r) || self.popover.is_some() {
             return;
         }
         if self.tip.0 != id {
@@ -1106,13 +1107,14 @@ impl Ui {
         self.set_clip(Rect::CANVAS);
         self.panel(r, PanelStyle::Tip);
         let mut chosen = None;
-        let mut focus = p.focus;
+        let row_at = |i: usize| Rect::new(x + 3, y + 4 + i as i32 * lh, w - 6, lh);
+        // The row under the pointer is the lit one, before any is drawn.
+        let mut focus = (0..items.len())
+            .find(|&i| self.input.pointer.is_some_and(|q| row_at(i).contains(q)))
+            .map_or(p.focus, |i| i as u8);
         for (i, s) in items.iter().enumerate() {
-            let row = Rect::new(x + 3, y + 4 + i as i32 * lh, w - 6, lh);
+            let row = row_at(i);
             let over = self.input.pointer.is_some_and(|q| row.contains(q));
-            if over {
-                focus = i as u8;
-            }
             let lit = focus == i as u8;
             if lit {
                 self.fill(row, argb(jane_art::Ramp::UiPanel.at(jane_art::Tone::Light), 90));
@@ -1324,6 +1326,8 @@ mod tests {
         for t in 1..=25 {
             u.begin(at((5, 5), false, false, false), t, (768, 432));
             u.tip(wid("t", 0), r, |s| s.push_str("Brass key\nIt fits a lock somewhere."));
+            // A slot the pointer is not over asks too, every frame, and must not reset it.
+            u.tip(wid("t", 1), Rect::new(200, 200, 36, 36), |s| s.push_str("Elsewhere"));
             u.finish(&mut frame);
             let tip_drawn = frame.ui.iter().any(|c| matches!(c, UiCmd::Fill { dst, .. } if dst.x > 5));
             assert_eq!(tip_drawn, t > 20, "tick {t}");
