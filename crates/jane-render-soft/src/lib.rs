@@ -2,12 +2,14 @@
 //! frames are byte-identical across targets.
 
 pub mod blit;
+pub mod lightmap;
 pub mod silhouette;
 
 use jane_present::frame::CHUNK_PX;
 use jane_present::{AtlasPages, Backend, Caps, Frame, Page, Pass, Tier};
 
 use crate::blit::Target;
+use crate::lightmap::LightMap;
 use crate::silhouette::Mask;
 
 /// The `soft` backend: one `u32` framebuffer, `0xAARRGGBB`.
@@ -19,6 +21,8 @@ pub struct Soft {
     atlas: AtlasPages,
     /// The silhouette shadows' coverage, the canvas's size.
     mask: Mask,
+    /// The light buffer at a quarter of the canvas.
+    lights: LightMap,
     /// Pixels written by the last frame (the bench's proxy, §1.12).
     pub pixels_written: u64,
 }
@@ -89,10 +93,14 @@ impl Backend for Soft {
                     }
                     written += silhouette::apply(t, &mut self.mask, shade);
                 }
-                // T0 lights by the ambient alone: the lightmap of §1.7 lands with PORT.md §7.1
-                // step 5, and the sun's share is already in the ambient.
-                Pass::Lights { ambient, .. } => {
-                    if ambient.iter().any(|&c| c < 254) {
+                // T0 lights by the lightmap (§1.7): the ambient, the sun's share already in it,
+                // and every point light's pool; by the ambient alone when no light shows.
+                Pass::Lights { ambient, points, .. } => {
+                    let points = frame.lights_in(points);
+                    if !points.is_empty() {
+                        self.lights.build((t.w, t.h), ambient, points);
+                        written += self.lights.apply(t);
+                    } else if ambient.iter().any(|&c| c < 254) {
                         blit::multiply(t, ambient);
                         written += n as u64;
                     }

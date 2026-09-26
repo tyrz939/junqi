@@ -18,7 +18,7 @@ use crate::blit::Target;
 /// The longest a shadow gets, in heights: a sun this low casts no further (8 x 256).
 const MAX_COT_Q8: i32 = 8 * 256;
 /// How much of its strength a shadow keeps at its tip, of 256.
-const TIP: i32 = 150;
+const TIP: i32 = 170;
 
 /// The 4 x 4 ordered dither (thresholds 0..16), for the soft edge.
 const BAYER4: [[u8; 4]; 4] = [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]];

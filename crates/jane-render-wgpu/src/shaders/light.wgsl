@@ -34,9 +34,7 @@ struct LitOut {
     @location(1) bloom: vec4<f32>,
 };
 
-fn height_at(q: vec2<f32>) -> f32 {
-    let x = i32(floor(q.x));
-    let y = i32(floor(q.y));
+fn texel_height(x: i32, y: i32) -> f32 {
     let w = i32(g.full.x);
     if x < 0 || y < 0 || x >= w || y >= i32(g.full.y) {
         return 0.0;
@@ -44,9 +42,31 @@ fn height_at(q: vec2<f32>) -> f32 {
     return f32(hmap[u32(y * w + x)]);
 }
 
+// The height field between texels, bilinear: an edge seen at a slant is a slope, not a stair,
+// so a penumbra has no steps in it.
+fn height_at(q: vec2<f32>) -> f32 {
+    let p = q - 0.5;
+    let b = floor(p);
+    let f = p - b;
+    let x = i32(b.x);
+    let y = i32(b.y);
+    let top = mix(texel_height(x, y), texel_height(x + 1, y), f.x);
+    let bottom = mix(texel_height(x, y + 1), texel_height(x + 1, y + 1), f.x);
+    return mix(top, bottom, f.y);
+}
+
+// The tallest of the four texels round `q`: what a long step samples, so a step of up to three
+// px never walks through a thin post it should have hit.
+fn height_max(q: vec2<f32>) -> f32 {
+    let b = floor(q - 0.5);
+    let x = i32(b.x);
+    let y = i32(b.y);
+    return max(max(texel_height(x, y), texel_height(x + 1, y)), max(texel_height(x, y + 1), texel_height(x + 1, y + 1)));
+}
+
 // How much of a light toward `l` (unit, x east, y south, z up) reaches `p`, marching at most
 // `max_t` px across the ground from `t0`, with penumbra factor `k`.
-fn trace(p: vec3<f32>, l: vec3<f32>, max_t: f32, k: f32, t0: f32) -> f32 {
+fn trace(p: vec3<f32>, l: vec3<f32>, max_t: f32, k: f32, t0: f32, max_step: f32) -> f32 {
     let lxy = length(l.xy);
     if lxy < 0.0005 {
         return 1.0;
@@ -55,6 +75,7 @@ fn trace(p: vec3<f32>, l: vec3<f32>, max_t: f32, k: f32, t0: f32) -> f32 {
     let rise = l.z / lxy;
     var res = 1.0;
     var t = t0;
+    var step = 1.0;
     for (var i = 0; i < 160; i++) {
         if t >= max_t {
             break;
@@ -63,12 +84,14 @@ fn trace(p: vec3<f32>, l: vec3<f32>, max_t: f32, k: f32, t0: f32) -> f32 {
         if rise >= 0.0 && z > g.hmax {
             break;
         }
-        let hq = height_at(p.xy + dir * t);
+        let q = p.xy + dir * t;
+        let hq = select(height_at(q), height_max(q), step > 1.25);
         res = min(res, k * (z - hq) / t);
         if res <= 0.0 {
             return 0.0;
         }
-        t += clamp(t * 0.05, 1.0, 3.0);
+        step = clamp(t * 0.05, 1.0, max_step);
+        t += step;
     }
     let r = clamp(res, 0.0, 1.0);
     return r * r * (3.0 - 2.0 * r);
@@ -92,7 +115,7 @@ fn ground_ao(p: vec3<f32>) -> f32 {
 // A windowed inverse square: 1 at the light, 0 at its radius, never a hard rim.
 fn falloff(x: f32) -> f32 {
     let w = clamp(1.0 - x * x, 0.0, 1.0);
-    return w * w / (1.0 + 9.0 * x * x);
+    return w * w / (1.0 + 4.0 * x * x);
 }
 
 @fragment
@@ -107,10 +130,12 @@ fn fs_light(i: FullOut) -> LitOut {
     let nx = (nh.r * 255.0 - 128.0) / 127.0;
     let ny = (nh.g * 255.0 - 128.0) / 127.0;
     let n = vec3<f32>(nx, ny, sqrt(max(1.0 - nx * nx - ny * ny, 0.0)));
-    // Where this pixel is: on the ground under it, `h` above.
-    let p = vec3<f32>(f32(q.x) + 0.5, f32(q.y) + 0.5 + h, h);
-    // A standing thing's own body is not its own shadow: start past its depth.
-    let t0 = select(1.0, depth * 0.5 + 1.5, h > 0.5);
+    // Where this pixel is: on the ground under it, `h` above. A standing thing's face is the
+    // front of its body, half its depth toward the viewer from the line it stands on, so its
+    // own body never shadows its face.
+    let front = select(0.0, depth * 0.5 + 1.0, h > 0.5);
+    let p = vec3<f32>(f32(q.x) + 0.5, f32(q.y) + 0.5 + h + front, h);
+    let t0 = 1.0;
 
     var light = g.fill.rgb;
     if h < 3.0 {
@@ -122,7 +147,7 @@ fn fs_light(i: FullOut) -> LitOut {
         // to two and a half times that.
         let ndl = min(max(dot(n, l), 0.0) / max(l.z, 0.2), 2.5);
         if ndl > 0.0 {
-            light += g.sun_col.rgb * ndl * trace(p, l, 2000.0, g.sun_col.w, t0);
+            light += g.sun_col.rgb * ndl * trace(p, l, 2000.0, g.sun_col.w, t0, 3.0);
         }
     }
     let tile = vec2<u32>(px) / 32u;
@@ -149,7 +174,7 @@ fn fs_light(i: FullOut) -> LitOut {
         var sh = 1.0;
         if lt.spot.w > 0.5 {
             let dxy = length(v.xy);
-            sh = trace(p, l, dxy - (lt.col.w + 3.0), clamp(dxy / max(lt.col.w, 1.0), 2.0, 40.0), t0);
+            sh = trace(p, l, dxy - (lt.col.w + 3.0), clamp(dxy / max(lt.col.w, 1.0), 2.0, 16.0), t0, 1.0);
         }
         light += lt.col.rgb * att * sh;
     }

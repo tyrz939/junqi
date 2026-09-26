@@ -17,6 +17,10 @@
 //! 5. **Grade** per region and hour into the canvas, which `read_back` reads and `present`
 //!    upscales to the window by sharp bilinear.
 
+// Canvas sizes, px counts and timestamp deltas become f32 and f64 for the GPU: all far below
+// the 2^23 a float holds exactly.
+#![allow(clippy::cast_precision_loss)]
+
 mod gpu;
 pub mod prep;
 
@@ -25,7 +29,7 @@ use std::sync::atomic::{AtomicU8, Ordering};
 use std::time::Instant;
 
 use jane_present::frame::{CHUNK_PX, ChunkLayers};
-use jane_present::{AtlasPages, Backend, CLUT_LEN, Caps, Frame, FrameStats, FrameTimes, Tier};
+use jane_present::{AO_TINT, AtlasPages, Backend, CLUT_LEN, Caps, Frame, FrameStats, FrameTimes, Tier};
 
 use crate::gpu::{B, Gpu, array_view, group, layout, texture, write_layer};
 use crate::prep::{GUARD, Kind, MAX_LIGHTS, Prep, TILE, TILE_CAP};
@@ -71,16 +75,33 @@ struct Pipes {
 fn module(device: &wgpu::Device, label: &str, src: &str) -> wgpu::ShaderModule {
     device.create_shader_module(wgpu::ShaderModuleDescriptor {
         label: Some(label),
-        source: wgpu::ShaderSource::Wgsl(format!("{COMMON}\n{src}").into()),
+        source: wgpu::ShaderSource::Wgsl(format!("{COMMON}\n{}\n{src}", ao_tint()).into()),
     })
 }
 
+/// The contact shadow's tint as a WGSL constant, from the one the palette holds.
+fn ao_tint() -> String {
+    let [r, g, b] = AO_TINT.map(|c| f32::from(c) / 256.0);
+    format!("const AO_TINT = vec3<f32>({r:.6}, {g:.6}, {b:.6});")
+}
+
+/// A colour target as the pipeline's list holds it (`Some`: an attachment written to).
+#[allow(clippy::unnecessary_wraps)]
 fn target(format: wgpu::TextureFormat, blend: Option<wgpu::BlendState>) -> Option<wgpu::ColorTargetState> {
     Some(wgpu::ColorTargetState { format, blend, write_mask: wgpu::ColorWrites::ALL })
 }
 
 /// Straight alpha over what is there.
 const OVER: wgpu::BlendState = wgpu::BlendState::ALPHA_BLENDING;
+/// What is there, multiplied.
+const MULTIPLY: wgpu::BlendState = wgpu::BlendState {
+    color: wgpu::BlendComponent {
+        src_factor: wgpu::BlendFactor::Zero,
+        dst_factor: wgpu::BlendFactor::Src,
+        operation: wgpu::BlendOperation::Add,
+    },
+    alpha: wgpu::BlendComponent::REPLACE,
+};
 /// Added to what is there.
 const ADD: wgpu::BlendState = wgpu::BlendState {
     color: wgpu::BlendComponent {
@@ -182,6 +203,7 @@ impl Pipes {
         let masked =
             |format| Some(wgpu::ColorTargetState { format, blend: None, write_mask: wgpu::ColorWrites::empty() });
         let over = [target(ALBEDO, Some(OVER)), masked(NH), masked(ALBEDO)];
+        let multiply = [target(ALBEDO, Some(MULTIPLY)), masked(NH), masked(ALBEDO)];
         let chunk =
             render_pipeline(device, "chunks", &[&gbuf_layout], &gm, "vs_chunk", "fs_chunk", &[chunk_buf], true, &three);
         let sprite = render_pipeline(
@@ -204,7 +226,7 @@ impl Pipes {
             "fs_contact",
             std::slice::from_ref(&sprite_buf),
             true,
-            &over,
+            &multiply,
         );
         let ghost = render_pipeline(
             device,
