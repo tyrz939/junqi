@@ -111,6 +111,8 @@ fn explosion_splashes_the_whole_blow() {
     let b = spawn(&mut s, "skeleton", 17, 11);
     strong(&mut s, a, 400);
     strong(&mut s, b, 400);
+    rooted(&mut s, a);
+    rooted(&mut s, b);
     cast(&mut s, 0, "explosion", aim(Angle::EAST), None);
     steps(&mut s, 60);
     let (ua, ub) = (unit(&s, a), unit(&s, b));

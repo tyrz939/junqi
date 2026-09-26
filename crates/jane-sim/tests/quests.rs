@@ -339,12 +339,17 @@ fn the_right_of_way_stile_to_stile_and_a_haversack_found_not_offered() {
     read(&mut s, "lost_property_book", "lp_offer", &[1], None);
 }
 
-/// What a fight comes to (`quests.test.ts strike`): she walks up and puts it down with the bar.
+/// What a fight comes to (`quests.test.ts strike`, which struck from afar): she walks up and puts
+/// it down with the bar. These tests are about the quests, not the balance: with the AI in, the
+/// rest of a group comes for her too, so she fights with the console's god mode on (hits still
+/// land on her; none hurts), as the TS's remote strike never let anything reach her.
 fn strike(s: &mut Sim, key: &str) {
     let u = unit(s, key);
     assert!(!u.hidden, "{key} is there");
+    cmd(s, Command::Dev(DevOp::God(true)));
     assert!(walk_to(s, u.pos, jane_core::Fx::from_px(16)), "walk to {key}");
     assert!(fight(s, key), "{key} goes down");
+    cmd(s, Command::Dev(DevOp::God(false)));
     idle(s, 2);
 }
 

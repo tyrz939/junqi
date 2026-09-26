@@ -77,6 +77,13 @@ pub fn spawn(s: &mut Sim, def: &str, x: i32, y: i32) -> UnitId {
     id
 }
 
+/// Hold a creature where it stands: its stop clock never runs out, so its controller never
+/// walks it (it still notices, turns and fights from where it is). For tests about something
+/// other than the AI, now that the AI moves things.
+pub fn rooted(s: &mut Sim, id: UnitId) {
+    edit(s, id, |u| u.stop_until = jane_core::Tick(u32::MAX / 2));
+}
+
 pub fn steps(s: &mut Sim, n: u32) {
     for _ in 0..n {
         s.step(&StepInput::IDLE);

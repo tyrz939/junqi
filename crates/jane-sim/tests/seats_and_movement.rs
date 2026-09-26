@@ -19,7 +19,8 @@ fn start_sym() -> jane_core::Sym {
 }
 
 /// The seed's blueprints with the county swapped for a 128 x 64 field of grass: a wall down
-/// x = 40 from y = 20, a skeleton near the start and one far off, `start` at (10, 10).
+/// x = 40 from y = 20, a dog near the start and one far off (npcs: nothing that would come for
+/// her and be kept awake by the fight), `start` at (10, 10).
 fn field() -> Sim {
     let cat = jane_data::catalog();
     let real = common::bps();
@@ -29,17 +30,10 @@ fn field() -> Sim {
         Key::Name(cat.story.start.mark),
         Mark { cell: Cell::new(10, 10), facing: Some(jane_core::action::Facing::East) },
     );
-    let skeleton = cat.combat.unit_id("skeleton").unwrap();
+    let dog = cat.combat.unit_id("dog").unwrap();
     for (name, x) in [("near", 20u16), ("far", 100)] {
         let key = bp.local(name);
-        bp.units.push(UnitSpawn {
-            key,
-            def: skeleton,
-            cell: Cell::new(x, 10),
-            facing: None,
-            patrol: Vec::new(),
-            phase: 0,
-        });
+        bp.units.push(UnitSpawn { key, def: dog, cell: Cell::new(x, 10), facing: None, patrol: Vec::new(), phase: 0 });
     }
     let zones =
         std::array::from_fn(|i| if i == 0 { Arc::new(bp.clone()) } else { Arc::clone(real.get(ZoneId::ALL[i])) });

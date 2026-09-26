@@ -80,6 +80,7 @@ pub struct WorldOps {
 pub struct Scratch {
     pub path: PathScratch,
     pub props: Vec<PropIx>,
+    /// Step 7's snapshot of the awake list.
     pub units: Vec<UnitId>,
     /// A second prop buffer, for a search inside a loop over `props` (focus, world spells).
     pub props_b: Vec<PropIx>,
@@ -95,6 +96,8 @@ pub struct Scratch {
     pub near: Vec<UnitId>,
     /// Corpses due to stand up this tick.
     pub due: Vec<UnitId>,
+    /// The lights near a search by something that shuns light (`ai::follow_to`).
+    pub lights: crate::ai::LitField,
 }
 
 pub struct Ctx<'a> {

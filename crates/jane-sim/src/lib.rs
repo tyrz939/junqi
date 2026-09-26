@@ -19,9 +19,10 @@
 //! | [`flight`], [`status`], [`flush`] | steps 8, 9 and 10: bolts and pools, statuses, the flush (death, phases) |
 //! | [`life`], [`loot`] | regen, respawn and waking; drops |
 //! | [`interact`], [`inventory`], [`bag`], [`dialogue`], [`quests`] | USE and the world verbs; bags, items and crafting; conversations; the quest log |
-//! | [`triggers`], [`under`], [`clear`], [`light`], [`orders`], [`verbs`] | triggers and plates; things under things; nothing solid lands on a unit; the light rule; `Send`; rest and growth |
+//! | [`triggers`], [`under`], [`clear`], [`light`], [`verbs`] | triggers and plates; things under things; nothing solid lands on a unit; the light rule; rest and growth |
 //! | [`journal`] | what is known (§3.7) |
 //! | [`hooks`] | combat's calls into the interact, inventory, quests, triggers, journal and living-world units |
+//! | [`ai`], [`snake`], [`npc`], [`presence`] | step 7's controllers (the AI loop, the snake, orders and npcs), step 3's schedules |
 //! | [`sim`], `seats`, `travel` | the scheduler, seats and commands, travel |
 //! | [`save`] | save, load and the hash |
 //! | [`view`] | what a seat sees |
@@ -29,6 +30,9 @@
 #![deny(clippy::float_arithmetic, clippy::float_cmp)]
 
 pub mod actions;
+pub mod ai;
+#[cfg(test)]
+mod ai_tests;
 pub mod assist;
 pub mod bag;
 pub mod blueprints;
@@ -54,14 +58,16 @@ pub mod life;
 pub mod light;
 pub mod loot;
 pub mod los;
-pub mod orders;
+pub mod npc;
 pub mod path;
+pub mod presence;
 pub mod quests;
 pub mod ring;
 pub mod runtime;
 pub mod save;
 mod seats;
 pub mod sim;
+pub mod snake;
 pub mod state;
 pub mod status;
 pub mod sym;

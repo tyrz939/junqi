@@ -26,8 +26,9 @@ use crate::tuning::{BAG_SLOTS, BAR_SLOTS, CRAFT_INPUTS};
 /// The save and hash schema's version. Bumped by any change to a type in this module.
 ///
 /// 2: a projectile's faction, velocity and blow (combat). 3: the journal (`Journal`'s entries
-/// and known facts).
-pub const SAVE_VERSION: u16 = 3;
+/// and known facts). 4: the controllers' fields live (`patrol_at`, `dwell_until`, `order`, `path`,
+/// `snake`; a path let go keeps its box with no goal, and the snake's `phase_tick` is a count).
+pub const SAVE_VERSION: u16 = 4;
 
 /// A fixed-size bit set (trigger bits, consequences done).
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -555,9 +556,10 @@ pub enum CombatState {
 /// Live in the foundation: `id key def controller faction pos facing strength spirit hp mp energy
 /// energy_locked alive stop_until synced home awake hidden carrying hold`. Live in combat
 /// (`combat`, `status`, `flush`, `life`): `gcd_until cooldowns target combat statuses died_at
-/// phase`, and `hp` changes only in the flush (and `life`: regen, respawn, revive). Present and
-/// inert until their owners land: `item_cooldowns patrol patrol_at dwell_until order path snake`
-/// (inventory, ai and snake units).
+/// phase`, and `hp` changes only in the flush (and `life`: regen, respawn, revive; and the
+/// snake's reset). Live in the controllers (`ai`, `npc`, `snake`, `presence`): `patrol patrol_at
+/// dwell_until order path snake`, and `hidden` by the hour. Present and inert until its owner
+/// lands: `item_cooldowns` (inventory).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Unit {
     pub id: UnitId,
@@ -590,11 +592,14 @@ pub struct Unit {
     pub combat: CombatState,
     pub home: Vec2,
     pub patrol: Option<Box<Patrol>>,
+    /// The patrol point it is walking to (modulo the points).
     pub patrol_at: u16,
+    /// Standing at a patrol point until this tick, inclusive.
     pub dwell_until: Tick,
     /// Somewhere it has been sent (`Send`).
     pub order: Option<Box<Order>>,
-    /// Authoritative: it moves the unit next tick (§3.3).
+    /// Authoritative: it moves the unit next tick (§3.3). A path let go keeps its box with
+    /// `goal == ai::NO_GOAL` (`ai::clear_path`), so a chase allocates nothing once warm.
     pub path: Option<Box<PathCache>>,
     pub statuses: Vec<StatusInst>,
     pub died_at: Option<Tick>,
@@ -647,12 +652,17 @@ pub struct StatusInst {
     pub pool: Milli,
 }
 
+/// A snake's own mover (`snake.rs`).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SnakeBody {
+    /// Where it is going; turned at most `speed x 4` degrees a tick.
     pub heading: Angle,
+    /// Ticks spent in the phase as the phase counts them (moving ticks following her, coiled
+    /// ticks spitting): a count, not a time.
     pub phase_tick: Tick,
+    /// Moving ticks since the last trail point, `0..SNAKE_NODE_EVERY`.
     pub step: u16,
-    /// The body's trail, newest first.
+    /// The body's trail, newest first; always the row's `segments` long.
     pub trail: Vec<Vec2>,
 }
 

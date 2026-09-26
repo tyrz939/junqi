@@ -18,7 +18,7 @@ use crate::journal;
 use crate::state::{FactKey, FlagKey, Source, Speaker, TravelRequest};
 use crate::tuning::SPAWN_RADIUS;
 use crate::units::new_unit;
-use crate::{dialogue, inventory, orders, quests, verbs};
+use crate::{dialogue, inventory, npc, quests, verbs};
 
 /// What a list lands on: the unit healed, the prop used. Never changes inside a list.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -287,7 +287,7 @@ pub fn run_action(cx: &mut Ctx<'_>, a: &Action, subject: Subject) {
         Action::Send { unit, to, then } => {
             let (u, m) = (cx.sym(unit), cx.sym(to));
             let (Some(&id), Some(mark)) = (cx.rt.unit_names.get(&u), cx.rt.mark(m)) else { return };
-            orders::send(cx, id, Vec2::centre(i32::from(mark.cell.x), i32::from(mark.cell.y)), then);
+            npc::send(cx, id, Vec2::centre(i32::from(mark.cell.x), i32::from(mark.cell.y)), then);
         }
         Action::Reveal(names) => {
             let keys: &[jane_core::Key] = match names {
