@@ -1,4 +1,5 @@
 [
   { "hour": 17, "minute": 10, "actions": [{ "do": "flag", "flag": "train_in", "value": 0 }] },
-  { "hour": 18, "actions": [{ "do": "flag", "flag": "train_signalled", "value": 0 }] }
+  { "hour": 18, "actions": [{ "do": "flag", "flag": "train_signalled", "value": 0 }] },
+  { "hour": 18, "minute": 30, "actions": [{ "do": "if", "when": [{ "if": "flag", "flag": "wing_lit" }], "then": [{ "do": "flag", "flag": "wing_seen", "value": 1 }] }] }
 ]

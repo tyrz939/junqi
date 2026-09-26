@@ -510,7 +510,7 @@
       { "node": "offer" }
     ],
     "nodes": {
-      "news_burial": {"lines": ["They say the fog's gone off the graveyard. I might go in on Sunday and see her. I might."], "actions": [{"do": "flag", "flag": "said_burial_mr_sallis"}]},
+      "news_burial": {"lines": ["They say the fog's gone off the old graveyard, up the road. Mrs Sallis is behind the church, where it was always clear. I might go in and see her on Sunday. I might."], "actions": [{"do": "flag", "flag": "said_burial_mr_sallis"}]},
       "offer": {
         "lines": [
           "Dry spring. The roses have done well anyway. They do better every year, and nobody has fed them since Mrs Sallis.",

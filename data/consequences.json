@@ -41,7 +41,7 @@
     "on": { "if": "questDone", "quest": "defeat_skeleton" },
     "edits": [{ "do": "despawn", "unit": "yard_skeleton" }]
   },
-  {"id": "wing_lit", "on": {"if": "dead", "unit": "attendant"}, "edits": [{"do": "switch", "prop": "museum_wing_lamp", "on": true}], "spreads": [{"to": ["constable"], "after": 2880}, {"to": ["mr_ince", "mrs_garland"], "after": 3600}]},
+  {"id": "wing_lit", "on": {"if": "dead", "unit": "attendant"}, "edits": [{"do": "switch", "prop": "museum_wing_lamp", "on": true}, {"do": "flag", "flag": "wing_lit", "value": 1}], "spreads": [{"to": ["constable"], "after": 2880}, {"to": ["mr_ince", "mrs_garland"], "after": 3600}]},
   {"id": "forest_quiet", "on": {"if": "dead", "unit": "emperor"}, "edits": [{"do": "despawn", "unit": "forest_road_fly_1"}, {"do": "despawn", "unit": "forest_road_fly_2"}]},
   {"id": "works_dark", "on": {"if": "dead", "unit": "foreman"}, "edits": [{"do": "switch", "prop": "factory_lamp", "on": false}], "spreads": [{"to": ["sweeper"], "after": 2880}, {"to": ["constable"], "after": 3360}, {"to": ["mrs_tace"], "after": 3600}]},
   {"id": "burial_quiet", "on": {"if": "dead", "unit": "goldskin"}, "edits": [{"do": "despawn", "unit": "graveyard_skeleton_a"}, {"do": "despawn", "unit": "graveyard_skeleton_b"}], "spreads": [{"to": ["vicar"], "after": 1440}, {"to": ["mr_tolly", "mrs_garland"], "after": 2880}, {"to": ["mr_sallis"], "after": 3360}]},

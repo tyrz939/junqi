@@ -432,4 +432,16 @@ fn each_act_changes_what_the_county_shows_out_of_her_sight() {
         let gone = county.units.iter().find(|x| x.key == Some(sym(&s, u))).is_none_or(|x| !x.alive || x.hidden);
         assert!(gone, "{u} is gone");
     }
+    // The constable sees the Museum's lamp at the lamps, and keeps the east end of the street of
+    // an evening from then on.
+    assert_eq!(flag(&s, "wing_seen"), 0);
+    s.state_mut().clock = 18 * TICKS_PER_HOUR + TICKS_PER_HOUR / 2 - 1;
+    idle(&mut s, 2);
+    assert_eq!(flag(&s, "wing_seen"), 1);
+    let constable = cat.combat.unit(cat.combat.unit_id("town_constable").unwrap());
+    let evening = constable.schedule.first().expect("rows");
+    assert_eq!(
+        (evening.hour_from, evening.hour_to, evening.slot),
+        (18, 21, jane_data::ScheduleSlot::Mark(nid("street_east")))
+    );
 }
