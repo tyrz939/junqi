@@ -5,7 +5,8 @@
 //! - A chunk draws each cell as its tile's flat swatch (PRESENTATION.md §1.6's fallback). For the
 //!   lit tiers it also gets a relief the light can find: walls rise as faces to the south, roofs
 //!   are pitched east-west, a wood's canopy is lumpy and tall, hedges and fences stand.
-//! - A unit draws the step-1 demo `ball`, its plum cloth swapped per kind (her, another seat,
+//! - A unit whose sprite has no look yet (`people` draws those that do: Jane and the townsfolk
+//!   from ART.md §8 step 2) draws the step-1 demo `ball`, its plum cloth swapped per kind (her, another seat,
 //!   four folk variants, hostile, the dead): a coat swap is an index remap (ART.md §1). Its
 //!   height stands it up: each px as high as it is above her feet, as a person's will be.
 //! - A prop draws the demo sprite nearest its size, at 1x or half size; a prop with a light

@@ -180,3 +180,31 @@ pub fn closeup(r: &Rendered, ids: &[FrameId], font: &Font, scale: u32) -> Image 
     }
     img
 }
+
+/// `jane sheet silhouettes <id> ...`: each look's standing frames filled black on a pale
+/// ground, at 3x, then the frames themselves under them: do they differ in outline alone?
+pub fn silhouettes(sets: &[Rendered], font: &Font) -> Image {
+    const S: u32 = 3;
+    let (fw, fh) = (person::W as u32 * S, person::H as u32 * S);
+    let ids = [FrameId::Down, FrameId::Side];
+    let cell = (ids.len() as u32 * (fw + 2) + PAD, fh * 2 + 30);
+    let mut img = Image::new(PAD + sets.len() as u32 * cell.0, PAD + cell.1, [BG[0], BG[1], BG[2], 255]);
+    for (k, r) in sets.iter().enumerate() {
+        let x0 = PAD + k as u32 * cell.0;
+        label(&mut img, font, x0, PAD, r.name, Face::Fine, TEXT);
+        for (j, id) in ids.iter().enumerate() {
+            let Some(c) = r.set.frame(*id) else { continue };
+            let x = x0 + j as u32 * (fw + 2);
+            img.fill(x, PAD + 14, fw, fh, [214, 208, 196]);
+            for cy in 0..c.h() {
+                for cx in 0..c.w() {
+                    if c.get(cx, cy).is_opaque() {
+                        img.fill(x + cx as u32 * S, PAD + 14 + cy as u32 * S, S, S, [24, 20, 30]);
+                    }
+                }
+            }
+            draw(&mut img, c, x, PAD + 16 + fh, S);
+        }
+    }
+    img
+}
