@@ -65,6 +65,8 @@ pub struct Opts {
     pub model: Model,
     /// Set the clock to this hour after the play (`--night` is 22).
     pub hour: Option<u8>,
+    /// Then let this many minutes of the clock pass, the world idle (18:40 is hour 18, 40).
+    pub minute: u8,
     pub canvas: (u16, u16),
     pub backend: Which,
 }
@@ -139,6 +141,13 @@ fn play(bps: Blueprints, o: &Opts, tier: Tier) -> Result<(Tap, Present, u32), St
         let events = host.sim.drain_events().to_vec();
         let v = host.sim.view(seat).ok_or("seat 0 is not in the world")?;
         present.tick(&v, &events);
+        // Two ticks of the clock a second (7200 an hour): 120 a minute.
+        for _ in 0..u32::from(o.minute) * 120 {
+            host.sim.step(&StepInput { frames: [InputFrame::IDLE; 4], commands: &[] });
+            let events = host.sim.drain_events().to_vec();
+            let v = host.sim.view(seat).ok_or("seat 0 is not in the world")?;
+            present.tick(&v, &events);
+        }
     }
     Ok((host, present, played))
 }
@@ -297,6 +306,7 @@ mod tests {
             ticks: 240,
             model: Model::Reader,
             hour: Some(22),
+            minute: 0,
             canvas: (768, 432),
             backend: Which::Soft,
         };

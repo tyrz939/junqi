@@ -313,6 +313,7 @@ fn frames(args: &[String]) -> Result<(), String> {
         ticks: num("--ticks", 600)?,
         model: jane_bot::Model::Reader,
         hour: Some(u8::try_from(num("--hour", 22)? % 24).unwrap_or(22)),
+        minute: 0,
         canvas,
         backend,
     };

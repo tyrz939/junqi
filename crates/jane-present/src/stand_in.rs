@@ -121,6 +121,9 @@ pub fn paint_chunk(
     }
 }
 
+/// How tall a wall's face stands, px: three cells.
+const WALL: i32 = 48;
+
 /// Stands up walls and faces.
 fn wall_like(t: Tile) -> bool {
     use jane_core::Tile as T;
@@ -142,15 +145,11 @@ fn relief(t: &impl Fn(i32, i32) -> Tile, (cx, cy): (i32, i32), x: i32, y: i32) -
     };
     match here {
         _ if wall_like(here) => {
-            // Cells of wall below this one: 0 for the foot of a wall, one more a cell up.
-            let below = (1..=2).take_while(|&k| wall_like(t(0, k))).count() as i32;
-            if below >= 2 {
-                // The wall's top, seen from above: flat and high.
-                (normal(0, -20), 40)
-            } else {
-                let z = below * CELL + (CELL - y);
-                (normal(0, 96), z.clamp(1, 40) as u8)
-            }
+            // A wall is a face rising from the row it stands on: each px as high as it is above
+            // that row, up to WALL; past that, the wall's thickness seen from above, flat.
+            let below = (1..=8).take_while(|&k| wall_like(t(0, k))).count() as i32;
+            let z = below * CELL + (CELL - y);
+            if z > WALL { (normal(0, -12), WALL as u8) } else { (normal(0, 96), z.max(1) as u8) }
         }
         T::HouseRoof => {
             // The run of roof in this column: pitched along it, the ridge in the middle.
@@ -160,8 +159,11 @@ fn relief(t: &impl Fn(i32, i32) -> Tile, (cx, cy): (i32, i32), x: i32, y: i32) -
             let r = up * CELL + y;
             let mid = len / 2;
             let off = (r - mid) * 127 / mid.max(1);
+            // The eaves sit on the wall's face under the roof, the ridge 14 px above them.
+            let wall = (1..=3).take_while(|&k| wall_like(t(0, down + k))).count() as i32;
+            let eaves = (wall * CELL).clamp(12, WALL);
             let rise = 14 - 14 * (r - mid).abs() / mid.max(1);
-            (normal(0, off.clamp(-80, 80)), (30 + rise) as u8)
+            (normal(0, off.clamp(-80, 80)), (eaves + rise) as u8)
         }
         T::Tree => lump(44, 30),
         T::DeadTree => lump(30, 20),
@@ -172,11 +174,6 @@ fn relief(t: &impl Fn(i32, i32) -> Tile, (cx, cy): (i32, i32), x: i32, y: i32) -
             } else {
                 ([128, 128], 0)
             }
-        }
-        T::Crops | T::GrassTall => {
-            // Rows of growth: ridges running east-west, 4 px apart.
-            let ny = [-50, -20, 20, 50][(y & 3) as usize];
-            (normal(0, ny), 2)
         }
         _ => ([128, 128], 0),
     }
@@ -220,6 +217,23 @@ pub struct StandIns {
     props: Vec<(i32, i32, RefId)>,
     /// The lamp at 1x and half.
     lamps: [(i32, i32, RefId); 2],
+    /// The same lamps with their glass dark: a lamp the view says is out does not glow.
+    dark: [RefId; 2],
+    /// How high the lamps' glass glows above their foot, px: where their light shines from.
+    glass: [u8; 2],
+}
+
+/// How high the middle of a canvas's glowing px stands above `foot`, px.
+fn glow_height(c: &jane_art::Canvas, foot: i16) -> u8 {
+    let rows: Vec<i32> = (0..c.h()).filter(|&y| (0..c.w()).any(|x| c.emissive_at(x, y) != Ix::CLEAR)).collect();
+    let mid = if rows.is_empty() { i32::from(foot) / 2 } else { rows.iter().sum::<i32>() / rows.len() as i32 };
+    (i32::from(foot) - mid).clamp(1, 255) as u8
+}
+
+/// The row a stand-in stands on: one below its lowest opaque px (the demo sprites float in
+/// their boxes; a person's feet are her anchor).
+fn foot_of(c: &jane_art::Canvas) -> i16 {
+    (0..c.h()).rev().find(|&y| (0..c.w()).any(|x| c.get(x, y).is_opaque())).map_or(c.h(), |y| y + 1) as i16
 }
 
 /// A stand-in texel stood up: its height is how far it is above the foot row `foot` (a person
@@ -254,21 +268,25 @@ impl StandIns {
             })
         });
         let mut props = Vec::new();
+        // A prop's anchor is the row it stands on (its foot), from its box's top-left.
+        let mut pack = |c: &jane_art::Canvas, glass: bool| {
+            let (w, h, f) = (c.w(), c.h(), foot_of(c));
+            let hf = f / 2;
+            let lit = |t: Texel| if glass { t } else { Texel { emissive: Ix::CLEAR, ..t } };
+            (
+                (w, h, atlas.add_canvas(c, (0, f), f as u8, |_, y, t| lit(standing(t, y, f)))),
+                (w / 2, h / 2, atlas.add_canvas_half(c, (0, hf), hf as u8, |_, y, t| lit(standing(t, y, hf)))),
+            )
+        };
         for name in PROP_DEMOS {
-            let c = demo::sprite(name).expect("a demo sprite");
-            let (w, h) = (c.w(), c.h());
-            props.push((w, h, atlas.add_canvas(&c, (0, h as i16), h as u8, |_, y, t| standing(t, y, h as i16))));
-            let hh = (h / 2) as i16;
-            props.push((w / 2, h / 2, atlas.add_canvas_half(&c, (0, hh), hh as u8, |_, y, t| standing(t, y, hh))));
+            let (full, half) = pack(&demo::sprite(name).expect("a demo sprite"), true);
+            props.extend([full, half]);
         }
         let lamp = demo::lamp();
-        let (w, h) = (lamp.w(), lamp.h());
-        let hh = (h / 2) as i16;
-        let lamps = [
-            (w, h, atlas.add_canvas(&lamp, (0, h as i16), h as u8, |_, y, t| standing(t, y, h as i16))),
-            (w / 2, h / 2, atlas.add_canvas_half(&lamp, (0, hh), hh as u8, |_, y, t| standing(t, y, hh))),
-        ];
-        StandIns { units, props, lamps }
+        let (full, half) = pack(&lamp, true);
+        let (dark_full, dark_half) = pack(&lamp, false);
+        let g = glow_height(&lamp, foot_of(&lamp));
+        StandIns { units, props, lamps: [full, half], dark: [dark_full.2, dark_half.2], glass: [g, g / 2] }
     }
 
     /// A unit's stand-in.
@@ -280,6 +298,16 @@ impl StandIns {
             UnitKind::Hostile => 6,
             UnitKind::Dead => 7,
         }]
+    }
+
+    /// How high a lamp stand-in's glass glows above its foot, px; `None` for any other.
+    pub fn glass(&self, id: RefId) -> Option<u8> {
+        (0..2).find(|&i| self.lamps[i].2 == id || self.dark[i] == id).map(|i| self.glass[i])
+    }
+
+    /// The stand-in drawn for `id` when its light is out: a lamp's dark twin, else itself.
+    pub fn unlit(&self, id: RefId) -> RefId {
+        self.lamps.iter().position(|l| l.2 == id).map_or(id, |i| self.dark[i])
     }
 
     /// A prop's stand-in: the demo nearest its box (the footprint, `w x h` cells, plus a cell
