@@ -1,0 +1,154 @@
+//! The people composer (ART.md §2.1, §4, §4.1): one generator for every person at 32 x 40 with
+//! the feet on (16, 36).
+//!
+//! ```text
+//! person::render(look, seed) -> SpriteSet     every frame a person promises, four layers each
+//! person::seat(&set, seat)   -> SpriteSet     the coat swap of seat 1..=3 (seat 0 is the set)
+//! person::seed(sprite_name)  -> u32           the stable seed of a sprite id
+//! ```
+//!
+//! Frames (ART.md §4): `Down, Down1, Down2, Down3, DownB`, the same for `Up` and `Side`, then
+//! `Dead` and `Dead2` (§4.1, [`fallen`]). West is `Side` mirrored at draw time; a mirrored
+//! normal has its `nx` flipped by the blit.
+
+mod build;
+mod draw;
+mod fallen;
+mod hair;
+mod pose;
+
+use jane_core::hash::fnv1a;
+use jane_data::{EmitRole, PersonLook, Skin};
+
+pub use build::{Proportions, of as proportions};
+pub use pose::{BREATHE, Facing, LIVING, Pose, WALK_DOWN, WALK_SIDE, WALK_UP};
+
+use crate::canvas::Canvas;
+use crate::palette::{Ix, Ramp, Tone};
+use crate::sprite::{FrameId, Role, SpriteSet};
+
+/// A person's frame, px.
+pub const W: i32 = 32;
+/// A person's frame, px.
+pub const H: i32 = 40;
+/// The feet: `(w / 2, h - 4)` (ART.md §1).
+pub const AX: i32 = 16;
+/// The feet's row.
+pub const AY: i32 = 36;
+
+/// The four seats' coats (ART.md §3): seat 0 wears the look's own coat; seats 1 to 3 swap the
+/// coat role to these, and nothing else. Chosen to stay apart in the dark and the mist and off
+/// the enemy reds, as the TS build's `SEAT_COATS` were.
+pub const SEAT_COATS: [Ramp; 3] = [Ramp::ClothTeal, Ramp::ClothMoss, Ramp::ClothOchre];
+
+/// Every frame a step-2 person promises, in order.
+pub fn frame_ids() -> impl Iterator<Item = FrameId> {
+    LIVING.iter().map(|(f, _, _)| *f).chain([FrameId::Dead, FrameId::Dead2])
+}
+
+/// The stable seed of a sprite id: FNV-1a of its name, so it never moves when rows are added.
+pub fn seed(sprite: &str) -> u32 {
+    fnv1a(sprite.as_bytes())
+}
+
+/// A look resolved to ramps: what every part is drawn in.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Dress {
+    look: PersonLook,
+    skin: Ramp,
+    hair: Ramp,
+    hat: Ramp,
+    coat: Ramp,
+    front: Ramp,
+    legs: Ramp,
+    boots: Ramp,
+    pack: Ramp,
+    eye: Ix,
+    eye_emits: bool,
+}
+
+/// A ramp named in a look, or an error naming it.
+pub fn ramp(name: &str) -> Result<Ramp, String> {
+    Ramp::by_name(name).ok_or_else(|| format!("no ramp \"{name}\""))
+}
+
+impl Dress {
+    fn new(look: &PersonLook) -> Result<Dress, String> {
+        let b = &look.body;
+        let skin = match look.head.skin {
+            Skin::Skin => Ramp::Skin,
+            Skin::SkinPale => Ramp::SkinPale,
+            Skin::SkinDark => Ramp::SkinDark,
+            Skin::Bone => Ramp::Bone,
+            Skin::Wax => Ramp::Plaster,
+            Skin::Stone | Skin::None => Ramp::Stone,
+            Skin::Metal => Ramp::Iron,
+        };
+        let coat = ramp(b.coat_ramp)?;
+        let eye_emits = look.emits.contains(&EmitRole::Eye);
+        Ok(Dress {
+            look: *look,
+            skin,
+            hair: ramp(look.head.hair_ramp)?,
+            hat: look.head.hat_ramp.map_or(Ok(coat), ramp)?,
+            coat,
+            front: b.front_ramp.map_or(Ok(Ramp::ClothLinen), ramp)?,
+            legs: ramp(b.legs_ramp)?,
+            boots: b.boots_ramp.map_or(Ok(Ramp::Leather), ramp)?,
+            pack: Ramp::Leather,
+            eye: if eye_emits { Ramp::Ember.at(Tone::High) } else { Ix::SEAM },
+            eye_emits,
+        })
+    }
+
+    /// The ramp each role is drawn in.
+    fn roles(&self) -> Vec<(Role, Ramp)> {
+        let mut out = vec![(Role::Skin, self.skin), (Role::Coat, self.coat), (Role::Legs, self.legs)];
+        if self.look.head.hair != jane_data::Hair::Bald {
+            out.push((Role::Hair, self.hair));
+        }
+        if self.look.head.hat != jane_data::Hat::None {
+            out.push((Role::Hat, self.hat));
+        }
+        if self.look.body.front != jane_data::Front::None || self.look.body.coat == jane_data::Coat::Apron {
+            out.push((Role::Front, self.front));
+        }
+        out.push((Role::Boots, self.boots));
+        if self.look.body.pack {
+            out.push((Role::Pack, self.pack));
+        }
+        out
+    }
+}
+
+/// Render every frame of `look` (its `vary` already resolved: [`PersonLook::variant`]). `seed`
+/// is the sprite's stable id ([`seed`]); it places the hair's strokes.
+pub fn render(look: &PersonLook, seed: u32) -> Result<SpriteSet, String> {
+    let d = Dress::new(look)?;
+    let p = proportions(look.build);
+    let mut frames: Vec<(FrameId, Canvas)> =
+        LIVING.iter().map(|&(id, facing, pose)| (id, draw::frame(&d, p, facing, pose, seed))).collect();
+    let side = draw::frame(&d, p, Facing::Side, WALK_SIDE[0], seed);
+    // Dead2: the near arm flung out ahead of her, so it lies above the body.
+    let fling = draw::frame(&d, p, Facing::Side, Pose { arm: [7, 0], ..Pose::default() }, seed);
+    frames.push((FrameId::Dead, fallen::fallen(&side, seed)));
+    frames.push((FrameId::Dead2, fallen::fallen(&fling, seed ^ 1)));
+    let mut emits = Vec::new();
+    for e in look.emits {
+        emits.push(match e {
+            EmitRole::Eye => Role::Eye,
+            EmitRole::Glass => Role::Glass,
+            EmitRole::Held => Role::Held,
+        });
+    }
+    Ok(SpriteSet { w: W, h: H, ax: AX, ay: AY, frames, roles: d.roles(), emits })
+}
+
+/// Seat `seat`'s set (ART.md §3): seat 0 is `set` itself; seats 1 to 3 swap the coat role to
+/// [`SEAT_COATS`] and nothing else.
+pub fn seat(set: &SpriteSet, seat: usize) -> SpriteSet {
+    match seat.checked_sub(1).and_then(|k| SEAT_COATS.get(k)) {
+        Some(&coat) => set.swap(Role::Coat, coat),
+        None => set.clone(),
+    }
+}
