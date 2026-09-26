@@ -160,6 +160,14 @@ impl PropBuckets {
             out.sort();
         }
     }
+
+    /// Whether `f` says yes to any prop whose footprint may touch the inclusive cell rect,
+    /// asked bucket by bucket until the first yes; no buffer (light asks this).
+    pub fn any_in(&self, cx0: i32, cy0: i32, cx1: i32, cy1: i32, mut f: impl FnMut(PropIx) -> bool) -> bool {
+        let (bx0, by0, bx1, by1) = self.blocks.range(cx0 - self.reach_w, cy0 - self.reach_h, cx1, cy1);
+        (by0..=by1)
+            .any(|by| (bx0..=bx1).any(|bx| self.buckets[(by * self.blocks.w + bx) as usize].iter().any(|&ix| f(ix))))
+    }
 }
 
 /// Present units by block, as one sorted list of `(block, id)`: a query is a binary search per

@@ -113,6 +113,7 @@ fn never_a_friend_a_passer_by_or_a_corpse() {
 fn the_sticky_unit_holds_a_little_outside_the_cone_for_a_while() {
     let mut s = fresh();
     let foe = spawn(&mut s, "skeleton", 20, 14);
+    rooted(&mut s, foe);
     let bearing = bearing_to(&s, me(&s), foe);
     let d = Angle::EAST.diff(bearing);
     assert!(d > i32::from(ASSIST_PAD.cone.0) && d <= i32::from(ASSIST_PAD.cone.0) + i32::from(ASSIST_PAD.slack.0));
@@ -160,6 +161,7 @@ fn assist_replays_exactly() {
                 u.strength = 4000;
                 u.hp = jane_sim::units::max_hp(u);
             });
+            rooted(&mut s, id);
         }
         s
     };

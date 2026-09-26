@@ -18,6 +18,7 @@
 //! | [`combat`], [`assist`] | the cast pipeline, the combat verbs and the console's; aim assist |
 //! | [`flight`], [`status`], [`flush`] | steps 8, 9 and 10: bolts and pools, statuses, the flush (death, phases) |
 //! | [`life`], [`loot`] | regen, respawn and waking; drops |
+//! | [`ai`], [`snake`], [`npc`], [`presence`], [`light`] | step 7's controllers (the AI loop, the snake, orders and npcs), step 3's schedules, the light rule |
 //! | [`hooks`] | combat's calls into the interact, inventory, quests, triggers and living-world units |
 //! | [`sim`], `seats`, `travel` | the scheduler, seats and commands, travel |
 //! | [`save`] | save, load and the hash |
@@ -26,6 +27,9 @@
 #![deny(clippy::float_arithmetic, clippy::float_cmp)]
 
 pub mod actions;
+pub mod ai;
+#[cfg(test)]
+mod ai_tests;
 pub mod assist;
 pub mod bag;
 pub mod blueprints;
@@ -43,14 +47,18 @@ pub mod hooks;
 pub mod ids;
 pub mod input;
 pub mod life;
+pub mod light;
 pub mod loot;
 pub mod los;
+pub mod npc;
 pub mod path;
+pub mod presence;
 pub mod ring;
 pub mod runtime;
 pub mod save;
 mod seats;
 pub mod sim;
+pub mod snake;
 pub mod state;
 pub mod status;
 pub mod sym;

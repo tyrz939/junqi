@@ -79,6 +79,7 @@ pub struct WorldOps {
 pub struct Scratch {
     pub path: PathScratch,
     pub props: Vec<PropIx>,
+    /// Step 7's snapshot of the awake list.
     pub units: Vec<UnitId>,
     /// Blows waiting for their zone's flush (step 10), per zone, in the order they were dealt.
     /// Empty between steps: what a step deals, the step lands (`combat::Hit`).
@@ -90,6 +91,8 @@ pub struct Scratch {
     pub near: Vec<UnitId>,
     /// Corpses due to stand up this tick.
     pub due: Vec<UnitId>,
+    /// The lights near a search by something that shuns light (`ai::follow_to`).
+    pub lights: crate::ai::LitField,
 }
 
 pub struct Ctx<'a> {

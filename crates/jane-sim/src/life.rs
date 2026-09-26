@@ -7,9 +7,10 @@
 //! when it wakes, and anything that reads or writes mp or hp pays first. Per tick a living unit
 //! gains `spirit` milli-mp (the TS's `spirit / 1000` a step, exact), and an idle AI (its row's
 //! `auto_regen` while idle, any AI while leashing, never under orders) gains `max / 300` hp and
-//! mp, floored; the sums are the per-tick sums because every rate is fixed between writes and
-//! clamping a sum of gains equals clamping each. Sleepers are idle by definition. The AI
-//! controller does not regen: step 5 does it for everyone.
+//! mp, floored (a snake out of its fight gains the hp only, `snake.ts`); the sums are the
+//! per-tick sums because every rate is fixed between writes and clamping a sum of gains equals
+//! clamping each. Sleepers are idle by definition. The controllers do not regen: step 5 does it
+//! for everyone.
 
 use jane_core::{Milli, Tick, Vec2};
 use jane_data::Controller;
@@ -46,9 +47,13 @@ pub fn pay_regen(u: &mut Unit, now: Tick) {
     }
     let (hp_max, mp_max) = (i64::from(max_hp(u).0), i64::from(max_mp(u).0));
     let mut mp = i64::from(u.mp.0) + n * i64::from(u.spirit);
-    if idle_regen(u) {
+    let idle = idle_regen(u);
+    // A snake out of its fight mends its health, not its mana (`snake.ts`).
+    if idle || (u.controller == Controller::Snake && u.combat != CombatState::Combat) {
         let hp = i64::from(u.hp.0) + n * (hp_max / i64::from(REGEN_DIVISOR));
         u.hp = Milli(hp.min(hp_max).max(i64::from(u.hp.0)) as i32);
+    }
+    if idle {
         mp += n * (mp_max / i64::from(REGEN_DIVISOR));
         if u.hp.0 >= max_hp(u).0 {
             reset_phases(u);

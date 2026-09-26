@@ -43,6 +43,10 @@ pub struct Sim {
     pub(crate) start_sym: Sym,
     /// The heroine's unit row.
     pub(crate) jane: UnitDefId,
+    /// §8 `awake_only_equals_everyone`: tick every unit the old way (regen paid to every unit
+    /// every tick, the controllers' pass over every unit asking whether it is awake). A test
+    /// switch; never saved, and it must never change a hash.
+    everyone: bool,
 }
 
 impl Sim {
@@ -99,6 +103,7 @@ impl Sim {
             drained: Vec::with_capacity(64),
             start_sym: crate::sym::of_name(cat.name_id("start").expect("the catalog names \"start\"")),
             jane: cat.combat.unit_id("jane").expect("units.json has \"jane\""),
+            everyone: false,
         }
     }
 
@@ -119,6 +124,32 @@ impl Sim {
 
     pub fn blueprint(&self, z: ZoneId) -> &Arc<Blueprint> {
         self.bps.get(z)
+    }
+
+    /// §8 `awake_only_equals_everyone`: with `on`, every unit is ticked the old way (see the
+    /// field). For that test alone.
+    #[doc(hidden)]
+    pub fn tick_everyone(&mut self, on: bool) {
+        self.everyone = on;
+    }
+
+    /// Pay every unit of every zone its regen to now (§4.3). Invisible to every future tick:
+    /// regen paid early is the regen paid late, which is the rule this proves; only `synced`,
+    /// the bookkeeping, moves. `awake_only_equals_everyone` settles both sims before it
+    /// compares them, since the old way keeps every sleeper's `synced` current.
+    #[doc(hidden)]
+    pub fn settle(&mut self) {
+        let now = self.state.tick;
+        for zs in self.state.zones.iter_mut().flatten() {
+            for u in &mut zs.units {
+                crate::life::pay_regen(u, now);
+            }
+        }
+    }
+
+    /// The path finder's counters (derived; reset by a runtime rebuild).
+    pub fn path_stats(&self) -> crate::path::PathStats {
+        self.scratch.path.stats
     }
 
     /// A live zone's runtime.
@@ -257,11 +288,11 @@ impl Sim {
     ///  1 freeze        frozen: stop here
     ///  2 clock         tick, clock, day; clock rows once, actor None; the hour's world rolls
     ///    for each live zone in ZoneId order, taken out of state.zones:
-    ///  3 presence      every 30 ticks                       (living-world unit)
+    ///  3 presence      every 30 ticks: schedules, dayOnly, nightOnly
     ///  4 ring          on a seat's block change
     ///  5 catch-up      units that woke: regen, pulses        (combat and status units)
     ///  6 players       seat order: input, energy, movement   (hold-to-push: interact unit)
-    ///  7 controllers   ai | snake | npc                      (ai and snake units)
+    ///  7 controllers   ai | snake | npc (orders, patrols)
     ///  8 projectiles   and grounds                           (combat unit)
     ///  9 statuses                                            (status unit)
     /// 10 flush x2      the only place hp changes             (combat unit)
@@ -355,10 +386,12 @@ impl Sim {
     }
 
     fn step_zone(&mut self, z: ZoneId, input: &StepInput<'_>, snap: &PartySnap) {
+        let everyone = self.everyone;
         self.with_ctx(z, None, snap, false, |cx| {
             cx.rt.paths_this_tick = 0;
-            // 3 presence: the living-world unit (schedules; dayOnly and nightOnly are two-slot
-            // schedules). Nothing yet.
+            // 3 presence: schedules (dayOnly and nightOnly are two-slot schedules); nothing
+            // appears, vanishes or jumps inside a watcher's box.
+            crate::presence::step_presence(cx);
 
             // 4 ring
             let w = Watchers::of(cx.world, z, cx.zone);
@@ -366,7 +399,14 @@ impl Sim {
 
             // 5 catch-up: every awake unit's regen paid to now (a unit that woke this tick
             // catches up here, its phase reset with it); its missed pulses land at step 9.
-            crate::life::pay_awake(cx);
+            if everyone {
+                let now = cx.world.tick;
+                for u in &mut cx.zone.units {
+                    crate::life::pay_regen(u, now);
+                }
+            } else {
+                crate::life::pay_awake(cx);
+            }
 
             // Where everything awake stood before anyone moved (View's `prev_pos`).
             cx.rt.prev_pos.clear();
@@ -386,7 +426,8 @@ impl Sim {
                 }
             }
 
-            // 7 controllers: the ai and snake units, over the awake_units snapshot.
+            // 7 controllers, over the awake_units snapshot: ai | snake | npc; stunned skip.
+            crate::ai::step_controllers(cx, everyone);
 
             // 8 projectiles and grounds
             crate::flight::step_projectiles(cx);

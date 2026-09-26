@@ -50,8 +50,8 @@ impl Sim {
             let w = Watchers::of(cx.world, req.zone, cx.zone);
             step_ring(cx.zone, cx.rt, &w, true, &mut cx.scratch.props);
             stamp_seats_fog(cx);
-            // The living-world unit: presence with no watcher box (arriving at night, it was
-            // already gone).
+            // Presence with no watcher box: arriving at night, it was already gone.
+            crate::presence::presence(cx, true);
             cx.emit(EventKind::Zone { zone: req.zone, first });
         });
     }

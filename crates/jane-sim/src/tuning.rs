@@ -153,3 +153,61 @@ pub const ASSIST_MOUSE: Assist = Assist {
 /// target, and (smaller) the sticky unit.
 pub const ASSIST_TARGET_BONUS: i32 = Angle::from_degrees(2).0 as i32;
 pub const ASSIST_STICKY_BONUS: i32 = Angle::from_degrees(1).0 as i32;
+
+// --- light (`light.ts`) ------------------------------------------------------------------------
+
+/// Lamp posts burn from 18:30 to 06:30 (`light.ts LAMPS_ON`, `LAMPS_OFF`), in clock ticks.
+pub const LAMPS_ON: u32 = TICKS_PER_HOUR * 37 / 2;
+pub const LAMPS_OFF: u32 = TICKS_PER_HOUR * 13 / 2;
+
+// --- controllers (`ai.ts`, `snake.ts`, `sim.ts stepDayOnly`) ----------------------------------
+
+/// An idle creature looks about it every this many ticks, staggered by `think_offset`.
+pub const AGGRO_PERIOD: u32 = 10;
+/// Night reach, tenths: aggro `* (10 + 4 * dark) / 10`, leash `* (10 + 6 * dark) / 10` (§2).
+pub const NIGHT_AGGRO: i32 = 4;
+pub const NIGHT_LEASH: i32 = 6;
+/// A creature at this multiple of its row's strength (the phase table's threat 4) is deep
+/// county: the night counts twice for it.
+pub const WORKS_SCALE: u16 = PHASE_SCALE[4] as u16;
+/// A sent unit gives up after this long plus three times what the straight walk would take.
+pub const ORDER_BASE: Tick = Tick(600);
+/// How far a sent unit plans in one go, in cells (`ai.ts ORDER_PATH_METRES`).
+pub const ORDER_PATH_CELLS: u32 = 400;
+/// "Beside the mark will do": arrived within 1.5 cells.
+pub const ORDER_ARRIVED_FX: i32 = CELL_FX * 3 / 2;
+/// A patrol plans at most this far in one go, in cells (`ai.ts patrol`, 200 m).
+pub const PATROL_PATH_CELLS: u32 = 200;
+/// A patrol point is reached within a cell (a snake's within a cell and a half).
+pub const PATROL_REACHED_FX: i32 = CELL_FX;
+pub const SNAKE_PATROL_REACHED_FX: i32 = CELL_FX * 3 / 2;
+/// A leashing creature steps the last of the way home in one move when this close, or within
+/// its own run speed (`Math.max(run, 1.5)`).
+pub const LEASH_SNAP_FX: i32 = FX_ONE * 3 / 2;
+/// A leash's path may be this many times the leash long; a chase's twice it (`ai.ts`).
+pub const LEASH_PATH_TIMES: i32 = 4;
+pub const CHASE_PATH_TIMES: i32 = 2;
+/// A creature that cannot resist its bait eats it within 16 px, and it is poisoned: 10 000
+/// nature, from nobody (`ai.ts seekBait`).
+pub const BAIT_EAT_FX: i32 = 16 * FX_ONE;
+pub const BAIT_HIT: Milli = Milli(10_000_000);
+/// A walker whose way is blocked, or lit, plans again within this many ticks.
+pub const REPATH_SOON: Tick = Tick(4);
+/// The snake: its phase clock (`snake.ts SNAKE_FOLLOW_TICKS`, `SNAKE_SPIT_TICKS`), and a trail
+/// point every this many moving ticks.
+pub const SNAKE_FOLLOW_TICKS: u32 = 900;
+pub const SNAKE_SPIT_TICKS: u32 = 300;
+pub const SNAKE_NODE_EVERY: u16 = 4;
+/// It coils at home within 16 px before it spits.
+pub const SNAKE_HOME_FX: i32 = 16 * FX_ONE;
+/// Its turn per tick is `speed x 4` degrees for a speed in px per tick: with `speed` in `Fx`,
+/// `speed * 4 * 65 536 / (360 * 256)` angle units (0.75 px a tick turns 3°, 1.2 turns 4.8°).
+pub const SNAKE_TURN_NUM: i32 = 4 * 65_536;
+pub const SNAKE_TURN_DEN: i32 = 360 * FX_ONE;
+/// Presence (§4.6.a): nothing appears, vanishes or jumps while a seat here stands within this
+/// box of it (120 x 80 px each way, `sim.ts stepDayOnly`).
+pub const WATCH_X_FX: i32 = 120 * FX_ONE;
+pub const WATCH_Y_FX: i32 = 80 * FX_ONE;
+/// A unit shown again where something solid now stands comes back on the nearest free cell
+/// within this many.
+pub const PRESENCE_NUDGE_RADIUS: i32 = 6;
