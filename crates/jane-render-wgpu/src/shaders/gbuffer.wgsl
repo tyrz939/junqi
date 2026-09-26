@@ -125,16 +125,35 @@ fn fs_sprite(i: SpriteOut) -> GOut {
     return o;
 }
 
-// The contact shadow (index 1): a cool darkening of the albedo under it, never grey (ART.md
-// §3.1). Drawn for a whole pass before its opaque texels, so it lies on the ground and never on
-// the thing standing behind.
+// The contact shadow (index 1): a cool multiply of the albedo under it (`AO_TINT`, never grey,
+// ART.md §3.1), softened by how much of each texel's 3 x 3 the index-1 mask covers, so a clear
+// texel beside the mask takes a little of it (`jane_art::palette::ao`, in linear light). Drawn
+// for a whole pass before its opaque texels, so it lies on the ground and never on the thing
+// standing behind. Blended as `dst * src`.
 @fragment
 fn fs_contact(i: SpriteOut) -> @location(0) vec4<f32> {
-    let ix = textureLoad(atlas_albedo, texel(i), i32(i.info.x), 0).r;
-    if ix != 1u {
+    let page = i32(i.info.x);
+    let t = texel(i);
+    let ix = textureLoad(atlas_albedo, t, page, 0).r;
+    if ix > 1u {
         discard;
     }
-    return vec4<f32>(0.010, 0.012, 0.035, g.misc.w);
+    let lo = vec2<i32>(i32(i.src.x), i32(i.src.y));
+    let hi = lo + vec2<i32>(i32(i.src.z), i32(i.src.w)) - 1;
+    var cover = 0.0;
+    for (var dy = -1; dy <= 1; dy++) {
+        for (var dx = -1; dx <= 1; dx++) {
+            let q = t + vec2<i32>(dx, dy);
+            if all(q >= lo) && all(q <= hi) && textureLoad(atlas_albedo, q, page, 0).r == 1u {
+                cover += 1.0;
+            }
+        }
+    }
+    if cover == 0.0 {
+        discard;
+    }
+    let f = 1.0 - (1.0 - AO_TINT) * cover / 9.0;
+    return vec4<f32>(pow(f, vec3<f32>(2.2)), 1.0);
 }
 
 // A ghost: the albedo alone, over what is under it; it neither casts nor catches a height.

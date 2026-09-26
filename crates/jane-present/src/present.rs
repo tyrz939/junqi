@@ -325,7 +325,11 @@ impl Present {
                 y: i32::from(p.cell.y) * CELL,
                 w: i32::from(d.w) * CELL,
                 h: i32::from(d.h) * CELL,
-                look: stand.prop(d.w, d.h, d.flat, d.light.is_some()),
+                look: {
+                    let look = stand.prop(d.w, d.h, d.flat, d.light.is_some());
+                    // A lamp the view says is out has dark glass.
+                    if d.light.is_some() && view.light_showing(p).is_none() { stand.unlit(look) } else { look }
+                },
                 flat: d.flat,
             });
         });
@@ -345,16 +349,18 @@ impl Present {
             let (x, y) = (i32::from(p.cell.x) * CELL, i32::from(p.cell.y) * CELL);
             let (w, h) = (i32::from(d.w) * CELL, i32::from(d.h) * CELL);
             // Where the flame is: a building's lit windows on its front, low; a thing on the
-            // floor just above it; a lamp at its glass; a fire or a stove at its heart.
+            // floor just above it; else where its sprite glows, standing on its foot (the row
+            // its sprite stands on, as it is drawn: bottom-centred on the footprint).
+            let look = stand.prop(d.w, d.h, d.flat, true);
+            let r = atlas.get(look);
             let (gx, gy, height, size) = if d.w >= 3 || d.h >= 3 {
                 (x + w / 2, y + h + 4, 16, 12)
             } else if d.flat {
                 (x + w / 2, y + h / 2, 4, 6)
-            } else if d.w == 1 && d.h == 1 {
-                let r = atlas.get(stand.prop(d.w, d.h, d.flat, true));
-                (x + w / 2, y + h - 3, (i32::from(r.height) * 11 / 16).clamp(8, 60), 6)
             } else {
-                (x + w / 2, y + h / 2, 12, 12)
+                let foot = y + h - i32::from(r.src.h) + i32::from(r.ay);
+                let glass = stand.glass(look).map_or(i32::from(r.height) * 2 / 3, i32::from);
+                (x + w / 2, foot, glass.clamp(4, 60), if d.w == 1 { 6 } else { 10 })
             };
             lights.push(LightRec {
                 id: p.id.get(),
@@ -460,7 +466,7 @@ impl Present {
             let foot = p.y + p.h - cam.1;
             let caster = (!p.flat).then(|| Caster {
                 sprite: 0,
-                foot: clamp16(x + i32::from(r.src.w) / 2, foot),
+                foot: clamp16(x + i32::from(r.src.w) / 2, y + i32::from(r.ay)),
                 height: r.src.h.min(255) as u8,
                 depth: (p.h / 4).clamp(4, 12) as u8,
             });
@@ -487,7 +493,7 @@ impl Present {
                     height: 20,
                     colour: scale(LANTERN, k),
                     radius: LANTERN_RADIUS,
-                    size: 3,
+                    size: 5,
                     casts: true,
                     kind: LightKind::Point,
                 });
@@ -598,9 +604,10 @@ impl Present {
 
         let sky = &self.sky;
         f.passes.push(Pass::Sprites { layer: Depth::Ground, cmds: ground });
-        // Silhouette sun shadows under the standing things, where the tier has no shadow maps.
+        // Silhouette sun shadows under the standing things, where the tier has no shadow maps:
+        // from a sun or a moon, not from the afterglow, a sky too broad to throw a silhouette.
         if f.tier <= Tier::T1
-            && let Some(sun) = sky.sun
+            && let Some(sun) = sky.sun.filter(|s| s.spread <= crate::light::SILHOUETTE_SPREAD)
             && casters.len > 0
         {
             f.passes.push(Pass::Silhouettes { sun, shade: sky.shade, casters });

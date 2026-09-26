@@ -38,7 +38,7 @@ jane-present/src/
   bench     headless frame loop through any backend; pixel counting on soft (§1.12)
   film      jane film: N ticks from a save to PNG frames (§6)
 
-jane-render-soft/src/  fb, blit, lightmap, mist, upscale, readback  |  gl2/src/  context, shaders, shadowgeom, targets, upscale  |  wgpu/src/  device, pipelines, shadows, post, water, readback
+jane-render-soft/src/  fb, blit, lightmap, mist, upscale, readback  |  gl2/src/  context, shaders, shadowgeom, targets, upscale  |  wgpu/src/  gpu (device, layouts), prep (Frame to instance lists, lights, tiles), lib (pipelines, targets, shadows, post, present, read-back), shaders/{common, gbuffer, scatter, light, post}.wgsl
 ```
 
 **Rule:** nothing in `jane-present` reads `GameState`. It reads `jane_sim::view::View` and `Event`, builds its own buffers (§3.6) and sends `Command`s through the app. It never writes state.
@@ -65,32 +65,45 @@ The `Frame` owns one flat `Vec` per kind of command, and a pass names a `Span` (
 
 ```
 pub struct Frame { tier: Tier, canvas: (u16, u16), camera: (i32, i32) /* the view's top-left in the zone, canvas px, interpolated */,
-                   clear: u32, passes: Vec<Pass>, chunks: Vec<ChunkCmd>, sprites: Vec<SpriteCmd>, layers: Vec<ChunkLayers> }
-pub struct Span { start: u32, len: u32 }                      // frame.chunks_in(s), frame.sprites_in(s)
-pub enum Pass {                                                // landed (P6 steps 1 and 2)
+                   clear: u32, passes: Vec<Pass>, chunks: Vec<ChunkCmd>, sprites: Vec<SpriteCmd>, layers: Vec<ChunkLayers>,
+                   lights: Vec<Light>, casters: Vec<Caster> }
+pub struct Span { start: u32, len: u32 }                      // frame.chunks_in(s), sprites_in, lights_in, casters_in
+pub type Rgb = [u8; 3];                                        // 255 is full
+pub enum Pass {                                                // landed (P6 steps 1, 2 and 5; P6c)
   Terrain { chunks: Span },                                    // ChunkCmd { id: ChunkId { cx, cy }, generation: u32, x, y: i32, slot: u16 }
   Sprites { layer: Depth, cmds: Span },                        // already in draw order; Standing is y-sorted
-  Lights { ambient: [u8; 3] },                                 // the ambient alone until the lightmap (PORT.md §7.1 step 5)
+  Silhouettes { sun: Directional, shade: Rgb, casters: Span }, // T0 and T1 only, between Ground and Standing (§1.3 `silhouettes`)
+  Lights { ambient: Rgb, fill: Rgb, sun: Option<Directional>, points: Span, casters: Span },
+  Post(Post),                                                  // T2 only, last
 }
+pub struct Directional { azimuth: Angle /* toward it, 0 east, a quarter turn south */, elevation: Angle, colour: Rgb /* on flat ground */, spread: u16 /* angular radius */ }
+pub struct Light { pos: (i32, i32) /* its ground point */, height: u8, colour: Rgb /* flicker applied */, radius: u16, size: u8, casts: bool,
+                   kind: Point | Spot { dir: Angle, cone: Angle } }
+pub struct Caster { sprite: u32 /* index into sprites: its albedo is the silhouette */, foot: (i16, i16), height: u8, depth: u8 }
+pub struct Post { tint: Rgb, lift: Rgb, saturation: u8 /* 128 is as lit */, bloom: u8, exposure: u8 /* 128 is 1 */ }
 pub struct SpriteCmd { page: u8, src: Src { x, y, w, h: u16 }, x: i16, y: i16, flags: Flags { mirror, tint: None | Flash(u8) | Ghost(u8) }, height_px: u8 }
-pub struct ChunkLayers { albedo: Vec<u32> }                    // resolved; normal, emissive and height land with the chunk painter
+pub struct ChunkLayers { albedo: Vec<u32>, normal: Vec<[u8; 2]>, emissive: Vec<u32>, height: Vec<u8> }   // T0 fills the albedo alone
 pub enum Depth { Sky, FarLandmark, FarTreeline, Ground, Standing, Canopy, NearFog, Weather, Ui }
 ```
 
-Every command is in canvas coordinates already (the camera taken off); `camera` is there for parallax. The passes still to come keep the same shape, a `Span` into a list the `Frame` owns (`points: Span` into `lights`, `casters: Span`, `parts: Span`, `cmds: Span` into `ui`), or plain values:
+**The light pass carries both halves of the light.** `ambient` is the flat light T0 multiplies by (the clock's keyframes, as before). `fill` is the sky's own light, what a surface in shadow is lit by on T1 and T2: blue by day, violet at dusk, a deep blue-violet at night that keeps its value; indoors the zone's `ambient`, blue-tinted. `sun` is the sun or the moon, its colour the light it throws on flat ground, so `fill + sun.colour` is roughly `ambient` and T0, which has no directional light, loses nothing by folding it in. All of it is `jane_present::light::sky(clock, day, indoor, permille, region)`, integer, so the sun's angle a T0 frame shears its silhouettes by is the same bytes on every target. On T0 the pass is still left out at full ambient; on T1 and T2 it is always there, since noon has a sun.
+
+**Sources.** Every prop the view says is showing (`View::light_showing`), standing on the row its sprite stands on at the height its glass glows (a building's lit windows on its front, 16 px up); every unit glow of the catalog; her lantern (radius 136, at her side the way she faces, 20 px up) when the flat light is below 750 permille. Flicker is `light::flicker`, a 64-step table walked ten steps a second from a place set by the id. The lights whose reach touches the canvas are kept, the nearest to its middle first, up to the tier's `max_lights` (16, 32, 128); T1 lets the nearest 8 cast and T2 the nearest 32.
+
+**Casters** are every unit standing and every prop not flat: its sprite (the silhouette), its foot (a unit's feet, a prop's lowest drawn row), its height and its depth across the ground (a person 5 px, a prop a quarter of its footprint, 4 to 12). Wall runs, roofs and canopy cast from the chunks' height layer on T2 and not at all on T0.
+
+Every command is in canvas coordinates already (the camera taken off); `camera` is there for parallax. The passes still to come keep the same shape, a `Span` into a list the `Frame` owns (`parts: Span`, `cmds: Span` into `ui`), or plain values:
 
 ```
   Sky { bands: Span, stars: Span, moon: Option<Moon> },
   Parallax { layer: Depth, factor: Q8, sprites: Span },                                // far landmark, far treeline
-  Lights { ambient: Rgb, sun: Option<Directional>, points: Span, casters: Span },
   Fog { volumes: Span /* FogVolume { rect, density: u8, colour: Rgb, drift: (i16, i16) } */ },
   Weather { kind: Clear | Mist | Rain | Storm, intensity: u8, wind: i8 },
   Particles { parts: Span },
   Ui { cmds: Span },
-pub struct Light { pos: (i32, i32), height: u8, colour: Rgb, radius: u16, falloff: Falloff, casts: bool, kind: Point | Spot { dir: Angle, cone: u8 } }
-pub struct Caster { segs: Span, height: u8 }                                           // footprint edges at ground
-pub struct Post { grade: GradeId /* region x hour */, tint: Rgb, bloom: u8, exposure: u8 }
 ```
+
+T1's shadow geometry wants footprint edges; a `Caster` carries the foot, the depth and the sprite's width, which is its box, and `segs` join it when `gl2` lands.
 
 Passes are in draw order and a backend draws them in that order; `Pass::needs()` is the tier its `Features` row asks, and a backend below the tier a pass needs draws what its `Features` row says (§1.3), never something of its own. The `Vec`s inside are reserved once and cleared, never dropped: no allocation after the second frame (§1.12).
 
@@ -102,14 +115,17 @@ pub trait Backend {
   fn upload_atlas(&mut self, pages: &AtlasPages);          // albedo, normal, emissive, height; once at boot, again on a CLUT change
   fn draw(&mut self, frame: &Frame);                       // caches chunks by (id, gen); uploads on a miss
   fn read_back(&mut self, out: &mut Vec<u32>) -> (u16, u16);   // the canvas as 0xAARRGGBB; sheets, film, bench
+  fn stats(&self) -> Option<FrameStats> { None }           // frame times per pass (§1.12); soft and wgpu both give them
 }
 ```
+
+`Caps` also names the backend (`soft`, `wgpu`) for the title bar, F2 and `jane bench`. `AtlasPages` carries each page's four layers (`Page { w, h, albedo: Vec<u16>, normal: Vec<[u8; 2]>, emissive: Vec<u16>, height: Vec<u8> }`); a presenter at T0 packs the albedo alone and `soft` keeps only that.
 
 | Backend | Tier | Runs on | Draws |
 | --- | --- | --- | --- |
 | `jane-render-soft` | T0 | any CPU; the fallback when no GPU or no driver; `jane serve`, tests and CI | the previous software design: CLUT blits into a `u32` framebuffer, the multiply lightmap, one mist tile, nearest upscale. Full 768 x 432, or **half res** 384 x 216 (a 2:1 decimated atlas built at boot; every `Frame` coordinate shifted down by one) for the Pentium 4 |
 | `jane-render-gl2` | T1 | any GPU from about 2006 (GeForce 6, 7, 8; Radeon X and HD 2000; Intel GMA 950 and up where the driver allows) and Raspberry Pi 2, 3 and 4 by GLES 2 through Mesa V3D and VC4 | normal-mapped lighting in a fragment shader, hard cast shadows from 2D shadow geometry, fog layers, particles, tint. No post beyond tint |
-| `jane-render-wgpu` | T2 | modern PCs and Pi 4 and 5 by Vulkan 1.1 (V3DV) | everything T1 plus soft shadows, many lights, bloom, colour grading, screen-space water reflection, higher particle caps |
+| `jane-render-wgpu` | T2 | modern PCs and Pi 4 and 5 by Vulkan 1.1 (V3DV) | everything T1 plus soft shadows, many lights, bloom, colour grading, screen-space water reflection, higher particle caps. **As built** (P6c): wgpu 30, WGSL; a G-buffer, a height field and one light pass with soft shadows traced through it (§1.7), bloom, the grade, sharp-bilinear upscale in `present`, `read_back` of the graded canvas |
 
 **Rule:** a backend is a function of the `Frame` and its own caches. It reads no view, no event and no tuning row; everything it needs to draw is in the `Frame` or was uploaded.
 
@@ -119,28 +135,28 @@ pub trait Backend {
 
 ### 1.3 Tiers and the Features ladder
 
-`jane-app` probes at boot: request a `wgpu` adapter that reports Vulkan 1.1, DX12, Metal or GLES 3 with the limits T2 needs (T2); else create a GL 2.1 or GLES 2 context through SDL and check for framebuffer objects, eight texture units and a fragment shader (T1); else `soft` (T0). `config.json` under `[present]` carries `backend = auto | soft | gl2 | wgpu` and one key per `Features` row. The probe's result and the rows in force are printed on the F2 overlay and by `jane bench`.
+`jane-app` probes at boot: request a `wgpu` adapter that reports Vulkan 1.1, DX12, Metal or GLES 3 with the limits T2 needs (T2); else create a GL 2.1 or GLES 2 context through SDL and check for framebuffer objects, eight texture units and a fragment shader (T1); else `soft` (T0). **As built:** `jane-app --backend auto|soft|wgpu`, `auto` by default, asks wgpu for a high-performance adapter compatible with the window's surface whose downlevel capabilities are WebGPU-compliant (compute, storage buffers in the fragment stage); if there is none it prints why and draws with `soft`, and `--backend wgpu` fails loudly instead. `gl2` is not in the probe until it exists. The SDL window lends wgpu its handles through `raw-window-handle` with no unsafe code: wgpu wants a `Send + Sync` handle source and SDL's `Window` is neither, so a zero-sized token lends the handles of a clone of the game window leaked once for the life of the process and kept in a thread-local (`jane-app/src/handle.rs`). The title bar names the backend, the adapter and the GPU frame times. `config.json` under `[present]` carries `backend = auto | soft | gl2 | wgpu` and one key per `Features` row. The probe's result and the rows in force are printed on the F2 overlay and by `jane bench`.
 
 Every visual feature is a row. A row names the tier it needs, its default per tier and its `config.json` key, so T0 and T1 degrade by rule, never by accident.
 
 | Feature | Needs | T0 | T1 | T2 | Key |
 | --- | --- | --- | --- | --- | --- |
-| Multiply lightmap, additive discs, ambient | T0 | on | replaced by shader lighting | replaced | none |
-| Normal-mapped lighting (N dot L with light height) | T1 | no | on | on | `normal_light` |
+| Multiply lightmap, additive discs, ambient | T0 | on (built: a quarter-size buffer, cubic falloff, a pool at most half again as bright, weaker by day) | replaced by shader lighting | replaced | none |
+| Normal-mapped lighting (N dot L with light height) | T1 | no | on | on (built) | `normal_light` |
 | Emissive layer (lamps, windows, orbs, spells glow unlit) | T0 | as albedo | on | on | none |
 | Hard cast shadows from shadow geometry | T1 | no | on, 8 casting lights | on | `shadows` |
-| Soft shadows, penumbra by distance | T2 | no | no | on | `soft_shadows` |
-| Sun and moon as a directional caster | T1 | ambient only | on | on | `sun_shadows` |
-| Silhouette sun shadows: each unit's and prop's albedo mask sheared along the sun by its height, tinted by the ambient, soft-edged by one dither step (decided 2026-09-27: shadows are a showpiece on every tier) | T0 | on | on | replaced by soft shadow maps | `silhouettes` |
-| Light count on screen | | 16 | 32 | 128 | `max_lights` |
+| Soft shadows, penumbra by distance | T2 | no | no | on (built: traced through the height field, §1.7) | `soft_shadows` |
+| Sun and moon as a directional caster | T1 | ambient only | on | on (built) | `sun_shadows` |
+| Silhouette sun shadows: each unit's and prop's albedo mask sheared along the sun by its height, tinted by the ambient, soft-edged by one dither step (decided 2026-09-27: shadows are a showpiece on every tier) | T0 | on (built) | on | replaced by the traced soft shadows | `silhouettes` |
+| Light count on screen (casting: T1 8, T2 32) | | 16 | 32 | 128 (built: culled per 32 x 32 tile) | `max_lights` |
 | Fog volumes per area | T0 | one drift tile | layered, drifting | layered, drifting | `fog` |
 | God rays through canopy | T2 | no | no | on | `god_rays` |
 | Wetness specular after rain | T1 | no | on | on | `wet` |
 | Water | T0 | shimmer pixel | shimmer and refraction | reflection and refraction | `water` |
-| Bloom on emissive | T2 | no | no | on | `bloom` |
-| Colour grading per region and hour | T0 | CLUT tint | tint | 3D LUT | `grade` |
+| Bloom on emissive | T2 | no | no | on (built) | `bloom` |
+| Colour grading per region and hour | T0 | CLUT tint (not yet) | tint | 3D LUT; built as the same terms in the shader (exposure, a soft shoulder, saturation, tint, a coloured lift) | `grade` |
 | Particle pool; weather particles (rain, storm) a third of it | | 900 | 2000 | 8000 | `max_particles` |
-| Sharp bilinear upscale | T1 | nearest | on | on | `sharp` |
+| Sharp bilinear upscale | T1 | nearest | on | on (built) | `sharp` |
 | Half-res canvas; frame skip | T0 | options | frame skip only | frame skip only | `half_res`, `frame_skip` |
 
 **Rule:** a row's tier is the truth. A test builds the `Frame` for a night in the town at every tier and asserts that no pass a tier cannot draw is present in that tier's `Frame`, and that every pass present is drawn by `soft` without a panic.
@@ -151,7 +167,7 @@ Every visual feature is a row. A row names the tier it needs, its default per ti
 | --- | --- | --- | --- |
 | `soft` framebuffer | `u32` `0xAARRGGBB`, one `Vec<u32>` | 1.3 MB (332 KB at half res) | linear sweeps; SDL streaming texture takes it as is; the light pass is a per-channel multiply |
 | Albedo pages | 16-bit master-palette indices (`jane_art::palette::Ix`) into one CLUT `[u32; 1024]`, 2048 x 2048 | 8 MB a page; the whole set ~19 MB, the only pages `soft` holds (`ART.md`, the pipeline section) | one lookup; coat swaps, ghosts and dead ramps are free; on the GPU the CLUT is a 1024 x 1 texture and an albedo texel is two bytes (`LUMINANCE_ALPHA` on GLES 2), the index `lo + 256 * hi` |
-| Normal, emissive, height pages | RG8 tangent-space; 16-bit emissive index (an `Ix`, 0 is dark); 8-bit height; the albedo's layout | 5 bytes a texel together | generated by `jane-art` from the shape primitives a look used, never painted; lamps, lit windows, orbs and spells glow unlit; height gives shadow length and water (a person is 40, a barrel its `rise`) |
+| Normal, emissive, height pages | RG8 tangent-space; 16-bit emissive index (an `Ix`, 0 is dark); 8-bit height; the albedo's layout (on T2: `Rg8Unorm`, `R16Uint`, `R8Unorm` array textures beside the `R16Uint` albedo, the CLUT a 1024 x 1 `Rgba8UnormSrgb`) | 5 bytes a texel together | generated by `jane-art` from the shape primitives a look used, never painted; lamps, lit windows, orbs and spells glow unlit; height gives shadow length and water (a person is 40, a barrel its `rise`) |
 | Terrain chunks | four layers, 256 x 256 px | 512 KB a chunk on a GPU, 256 KB on `soft`; LRU 48 | the ground is the biggest draw (§1.6) |
 | `soft` light buffer | `[u16; 3]` per cell at 1/4 resolution (192 x 108) | 124 KB | §1.7 |
 | T1 light and shadow targets | RGB8 at 1/2 resolution; one 8-bit shadow mask | 400 KB and 83 KB | §1.7 |
@@ -195,7 +211,7 @@ The pass order of `ENGINE.md` §9 with the atmosphere layers between:
 
 About 8 ms a chunk on a Pi 3 and 4 ms on a Pi 4 at 2x, so chunks are painted on the worker thread `jane-app` owns (the loading-screen thread), one ahead in the camera's heading, and a frame never waits: a chunk not yet painted draws its region's flat ground swatch for the frames it takes. At most two land in one frame.
 
-**As built (P6 step 2).** Until the painter lands, `jane_present::stand_in::paint_chunk` paints each cell as its tile's flat swatch, on the presenter's thread in `tick()`, every chunk under the view and 64 px round it (a swatch chunk is a fill, not 8 ms). The 48 slots' layers are made when the presenter is (12 MB on `soft`) and live in the `Frame`'s `layers`, so walking into new ground never allocates; a `ChunkCmd` names its slot and its `generation`, which is bumped by every paint.
+**As built (P6 step 2).** Until the painter lands, `jane_present::stand_in::paint_chunk` paints each cell as its tile's flat swatch, on the presenter's thread in `tick()`, every chunk under the view and 64 px round it (a swatch chunk is a fill, not 8 ms). The 48 slots' layers are made when the presenter is (12 MB on `soft`, which gets the albedo alone; 34 MB with the four layers of T1 and T2) and live in the `Frame`'s `layers`, so walking into new ground never allocates; a `ChunkCmd` names its slot and its `generation`, which is bumped by every paint. For the lit tiers the stand-in paints a relief with the swatch: a wall is a face rising from the row it stands on (three cells at most) and looking south, a roof is pitched east-west with its eaves on that face, a wood's canopy is lumpy and 30 to 44 px tall, hedges and fences stand.
 
 ### 1.7 Lighting and shadows
 
@@ -211,11 +227,13 @@ The reference is the Elysian Shadows look: a pixel-art county whose lamps throw 
 
 | Tier | Lighting | Shadows |
 | --- | --- | --- |
-| T0 `soft` | the previous design: a light buffer at 1/4 resolution cleared to ambient, every light **added** as `colour * LUT[(d2 * 255) / r2] * intensity` over its disc, upsampled bilinear (or nearest plus Bayer under `light_steps`) and multiplied `dst = (dst * L) >> 8`. No normals; emissive texels are drawn as albedo at full brightness | contact shadows only (index 1) |
+| T0 `soft` | the previous design: a light buffer at 1/4 resolution cleared to ambient, every light **added** as `colour * LUT[(d2 * 255) / r2] * intensity` over its disc, upsampled bilinear (or nearest plus Bayer under `light_steps`) and multiplied `dst = (dst * L) >> 8`. No normals; emissive texels are drawn as albedo at full brightness. **As built**: the LUT is `(1 - d2/r2)^3`, a pool lifts a pixel to at most 1.5x, its gain falls by day, and flame light leans warm as on T2 | the contact shadow (index 1) and the **silhouettes** of the sun or moon: each caster's rows laid on the ground `h * cot(elevation)` px away from the sun, stretched to meet the next row's and as thick as the caster is deep, gathered in a coverage mask so two never darken twice, fading toward the tip, multiplied toward the sky's `shade`, the edge px at five eighths and a ring outside at three eighths through the 4 x 4 Bayer. Integer |
 | T1 `gl2` | per light, a quad over its disc; the fragment shader reads albedo, normal and emissive, computes N dot L with the light's height as z, applies the falloff and the shadow mask, and adds into a half-res light target; ambient and sun first; one multiply pass at the end; emissive added unlit | **hard**: for each casting light and each caster in its disc, every footprint edge facing away from the light is extruded to the disc's rim scaled by `height`, drawn into the shadow mask with the stencil where the context has one and by alpha accumulation into a small FBO where it has not; the light's quad reads the mask. 8 casting lights, then the nearest 8 by rule |
-| T2 `wgpu` | the same terms in WGSL over a tiled light list (128 lights, culled per 64 x 64 tile), one pass | **soft**: a 1D polar shadow map per casting light from the same casters, sampled with a penumbra that widens with distance from the occluder; the sun as a directional map over the view. 32 casting lights |
+| T2 `wgpu` | the same terms in WGSL over a tiled light list (128 lights, culled per 32 x 32 tile on the CPU, 64 a tile at most), one pass: the fill, the sun (N dot L over its elevation's sine, so its colour is its light on flat ground, capped at 2.5x on a face turned to a low sun), each point light by N dot L with its height as z and a windowed inverse square, emissive added unlit; the height field's ambient occlusion darkens the ground at the foot of what stands | **soft**: traced through the height field (below) from every lit pixel toward the sun or moon and each of the 32 casting lights, the penumbra widening with the distance from what casts it, tinted by the fill |
 
-**Rule:** what is lit is decided by the view (`light_showing`), the tier decides only how it looks. A lamp the sim says is lit is lit on every tier; a lamp the sim says is dark casts nothing anywhere.
+**The T2 shadow technique: a height field seen from above, traced with a clearance penumbra.** The G-buffer (the canvas and a 64 px guard band round it, so a caster just off screen still casts) holds each pixel's albedo, normal, emissive, height and depth. In the 3/4 view a pixel `h` px up at `(x, y)` stands on the ground at `(x, y + h)`, so a compute pass stands every lifted pixel on its ground point in a buffer the canvas's size, the tallest winning, a px wider each side and as many rows deep as the caster is: an upright sprite's columns land on its feet and become a thin wall as tall and as shaped as it is, and a roof lands on the house under it. The light pass then marches from each lit pixel (from the front of its body when it stands) toward each light across that field, the ray rising as the light is high, and keeps `min(k * clearance / t)`: `t` px from the pixel, how far the ray clears the field there, `k` the light's distance over its size (or `1 / tan` of the sun's spread, 2 to 5 degrees, widest at dusk). Steps are 1 px near and up to 3 far, a long step reading the tallest of four texels so a thin post is never stepped past, a short one bilinear so a penumbra has no stairs. **Why this and not 1D polar maps or SDFs:** it casts from what the art drew (every px's true height, `ART.md` §1.1) rather than from footprint segments, so a person's shadow is her silhouette, a canopy's is lumpy and a fence throws a comb; the sun is one more light, not a directional map to place; the penumbra comes free and widens with distance as a real one does; the terrain casts with no geometry of its own; and it is one compute pass and one fragment pass at canvas resolution, independent of the output's 4K. Its limits: what is hidden behind something else on screen does not cast, and nothing off the guard band casts in.
+
+**Rule:** what is lit is decided by the view (`light_showing`), the tier decides only how it looks. A lamp the sim says is lit is lit on every tier; a lamp the sim says is dark casts nothing anywhere, and its glass is dark.
 
 ### 1.8 Materials: wetness and water
 
@@ -303,6 +321,10 @@ Pentium 4: `-C target-cpu=pentium4`, no `u64` in an inner loop; where SDL has no
 | 8 | `frame_skip = 1`: draw every other tick, 30 fps | half the frame | last resort; the sim still steps at 60 and the catch-up cap in `jane-app` still holds |
 
 **Measurement.** `FrameStats` per pass (sky, parallax, chunks, water, list, fx, shadows, light, fog, weather, grade, ui, upscale); F2 prints p50 and p99 over 120 frames, the backend, the tier and the rows in force. `jane bench --save <slot> --frames 600 [--night] [--wide] [--backend b] [--tier t]` runs the same loop headless and prints the table per tier it can reach on the machine, plus **pixels written per frame** on `soft`. CI asserts the deterministic proxies on every target through `soft`: pixels ≤ 6 x canvas area at night, draw list ≤ 1500 in town, lights in the `Frame` ≤ the tier's `max_lights`, casters ≤ 256, chunks landed per frame ≤ 2, and no allocation after the second frame (a counting allocator in the test; a `#[global_allocator]` is an `unsafe impl`, which the workspace's `unsafe_code = "forbid"` refuses in tests too, so until the one-exception crate of `PORT.md` §3.4 exists the in-tree test holds every `Frame` list and the framebuffer to its address and capacity, and the counting allocator runs out of tree: 0 allocations in `tick` + `draw` + `soft` over 2400 frames after the second, idle, walking and idle, on 2026-09-27).
+
+**Measured (2026-09-27, T2).** `jane bench frames --backend wgpu` on the owner's desk (RTX 3060, Vulkan), the town at 22:00 with 7 lights, 768 x 432 upscaled to an offscreen 3840 x 2160: the GPU's own clock p50 1.84 ms, p99 2.40 ms (the light pass 1.6 ms of it, the height field 0.02, the G-buffer 0.04, bloom and grade 0.05, the upscale 0.12); the whole frame to its last pixel p50 2.2, p99 2.8 ms; at 17:00 p99 2.9 ms; at 21:9 (1008 x 432 to 5040 x 2160) p99 3.1 ms. The gate is p99 < 6 ms. `soft` on the same machine: 1.5 ms p50, 1.8 p99 at 768 x 432, the silhouettes 0.5 and the lightmap 0.9 of it.
+
+**`FrameStats`** (`jane_present::backend`) is what F2 and `jane bench` read: the whole frame's last time, p50 and p99 over 120 frames; the same per pass in `[u32; 13]` arrays keyed by `StatPass` (sky, parallax, chunks, water, list, fx, shadows, light, fog, weather, grade, ui, upscale; a pass a backend does not split reads 0); whether the clock is the GPU's; the last frame's draw calls, lights, casters and px written (`soft`). `wgpu` writes timestamp queries at every pass boundary and reads them a frame or two late, the upscale in `present` with its own; without `TIMESTAMP_QUERY` it keeps the CPU's encode and submit. `soft` times each pass on the CPU.
 
 **Rule:** a number in these tables is replaced by a measured one at P6 and enforced at P9; a guess never gates.
 
@@ -500,11 +522,11 @@ All are `jane-cli` subcommands drawing through `jane-render-soft` into an unshow
 | `jane sheet county <seed> [--night] [--layer l]` | the skeleton card at 1x |
 | `jane sheet county <seed> --full [--at mark] [--radius cells]` | the real chunk painter over a window of the county, all four layers side by side |
 | `jane sheet dungeon <id> <seed>` | the dungeon's floor with names |
-| `jane sheet scene --save <slot> [--tick n] [--night] [--tier t] [--backend b]` | one whole frame, headless, lighting, atmosphere and UI included; at T0 through `soft` it is the frame CI attaches; at T1 or T2 locally it is the frame the owner reviews. **As built** (no save slots yet): `jane sheet scene [--seed n] [--minutes m \| --ticks t] [--model reader\|rusher] [--night \| --hour h] [--wide] [--out file.png \| dir]` plays the seed from New Game with a player model as `jane play` does, the presenter ticking beside it every frame, sets the clock if asked, and writes one T0 frame (768 x 432, or 1008 x 432 with `--wide`) to `sheets/` |
+| `jane sheet scene --save <slot> [--tick n] [--night] [--tier t] [--backend b]` | one whole frame, headless, lighting, atmosphere and UI included; at T0 through `soft` it is the frame CI attaches; at T1 or T2 locally it is the frame the owner reviews. **As built** (no save slots yet): `jane sheet scene [--seed n] [--minutes m \| --ticks t] [--model reader\|rusher] [--night \| --hour h] [--wide] [--out file.png \| dir]` plays the seed from New Game with a player model as `jane play` does, the presenter ticking beside it every frame, sets the clock if asked (`--hour 18:40` lets the minutes pass with the world idle), and writes one frame (768 x 432, or 1008 x 432 with `--wide`) to `sheets/`: T0 through `soft`, or T2 through `wgpu` with `--backend wgpu` when `jane-cli` is built with its `gpu` feature |
 | `jane film --save <slot> --ticks N --out dir/ [--every k] [--tier t] [--backend b]` | N ticks from a save, one frame per tick at `alpha = 1`, a PNG per frame (or every k-th), the `FrameStats` table beside them; through `soft` at T0 on CI, any backend locally. The same tool over a trace range (`--trace`, `--from`, `--to`, `--clips`) is the film clip of `VERIFICATION.md` L7. Frames and scene sheets are how a lamp coming on at 18:30, a shadow swinging with the sun or the rain starting is looked at, not asserted |
 | `jane sheet fx <spell>` | the effect's parts over 60 ticks, one column per tick, with its lights |
 | `jane sheet units\|props\|icons\|flora\|chrome\|font`, `unit <id>`, `title` | `ART.md`, the pipeline section; a unit sheet shows all four layers |
-| `jane bench --save <slot> --frames 600 [--night] [--wide] [--backend b] [--tier t]` | §1.12; reports per tier the machine can reach |
+| `jane bench --save <slot> --frames 600 [--night] [--wide] [--backend b] [--tier t]` | §1.12; reports per tier the machine can reach. **As built**: `jane bench frames [--backend soft\|wgpu] [--frames n] [--seed n] [--ticks t] [--hour h] [--wide] [--output WxH]` plays to a frame, then times n there: the `Frame` built, the backend's draw, the whole frame to its last pixel at the output size (wgpu upscales to an offscreen target, 3840 x 2160 by default) and the `FrameStats` table |
 
 Sheets and films are artefacts on every CI run, never asserted (`PORT.md` §3.6); the `soft` frames are byte-identical across targets, so a film diff between two commits is a review tool, not a gate. A generator is reviewed by looking at two dozen maps, not by playing two dozen games (`ENGINE.md` §8.2); a renderer is reviewed by looking at a film of the first evening.
 
@@ -519,7 +541,7 @@ Each is a one-line edit if the owner flips it before P6.
 | Upscale | Integer where the height divides; else sharp bilinear on T1 and T2 and nearest on T0 with an integer-window toggle | preamble |
 | Window | Wider canvas at the same height, no bars; the 48 x 27 guarantees hold for wider | preamble |
 | Sprites | Four layers from `jane-art`: albedo (indexed), normal (RG8), emissive, height; people 32 x 40; 2048 x 2048 pages; T0 uploads albedo only | §1.4 |
-| Lighting and shadows | Point and spot lights with height and a cast flag; sun and moon directional by the clock; ambient by hour, zone and area; occluders are props, units, wall runs and canopy with height; T0 multiply lightmap and contact shadows, T1 normal-mapped with hard shadows from 8 casting lights, T2 tiled with soft shadows from 32 | §1.7 |
+| Lighting and shadows | Point and spot lights with height and a cast flag; sun and moon directional by the clock; ambient by hour, zone and area; occluders are props, units, wall runs and canopy with height; T0 multiply lightmap, contact shadows and sun silhouettes, T1 normal-mapped with hard shadows from 8 casting lights, T2 tiled with soft shadows from 32 traced through a height field | §1.7 |
 | Materials and atmosphere | Per-cell wetness in the presenter after rain, specular on T1 and T2; water shimmer on T0, refraction on T1, reflection on T2; fog volumes per area by hour and weather; nine depth layers; god rays T2 only; grading per region and hour as tint on T0 and T1 and a LUT on T2; weather read from the view (`WORLD.md`), never rolled here | §1.8, §1.9 |
 | Features | Every visual feature is a `Features` row with a tier and a `config.json` key; the degrade ladder is the order they come off | §1.3, §1.12 |
 | Gates | T2 modern PC 60 at 4K with headroom; T1 Pi 4 60 at 768 x 432 with 8 casting lights; T1 GeForce 7 class 60 with shadows off; T0 Pentium 4 60 at half res or 30 at full; Pi 3 best effort at T1, not a gate | §1.12 |

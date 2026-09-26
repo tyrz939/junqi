@@ -2,12 +2,16 @@
 //! frames are byte-identical across targets.
 
 pub mod blit;
+pub mod lightmap;
 pub mod silhouette;
 
+use std::time::Instant;
+
 use jane_present::frame::CHUNK_PX;
-use jane_present::{AtlasPages, Backend, Caps, Frame, Page, Pass, Tier};
+use jane_present::{AtlasPages, Backend, Caps, Frame, FrameStats, FrameTimes, Page, Pass, StatPass, Tier};
 
 use crate::blit::Target;
+use crate::lightmap::LightMap;
 use crate::silhouette::Mask;
 
 /// The `soft` backend: one `u32` framebuffer, `0xAARRGGBB`.
@@ -19,8 +23,12 @@ pub struct Soft {
     atlas: AtlasPages,
     /// The silhouette shadows' coverage, the canvas's size.
     mask: Mask,
+    /// The light buffer at a quarter of the canvas.
+    lights: LightMap,
     /// Pixels written by the last frame (the bench's proxy, §1.12).
     pub pixels_written: u64,
+    /// The CPU's time per pass (§1.12); never read by the pixel path.
+    times: FrameTimes,
 }
 
 impl Soft {
@@ -52,6 +60,9 @@ impl Backend for Soft {
     }
 
     fn draw(&mut self, frame: &Frame) {
+        let start = Instant::now();
+        let mut pass_us = [0u32; StatPass::COUNT];
+        let mut calls = 0u32;
         (self.w, self.h) = frame.canvas;
         let n = usize::from(self.w) * usize::from(self.h);
         if self.fb.len() == n {
@@ -62,10 +73,21 @@ impl Backend for Soft {
         }
         let mut written = n as u64;
         let t = &mut Target { px: &mut self.fb, w: i32::from(self.w), h: i32::from(self.h) };
+        pass_us[StatPass::Sky as usize] = start.elapsed().as_micros() as u32;
         for pass in &frame.passes {
+            let at = Instant::now();
+            calls += 1;
+            let stat = match *pass {
+                Pass::Terrain { .. } => StatPass::Chunks,
+                Pass::Sprites { .. } => StatPass::List,
+                Pass::Silhouettes { .. } => StatPass::Shadows,
+                Pass::Lights { .. } => StatPass::Light,
+                Pass::Post(_) => StatPass::Grade,
+            };
             match *pass {
                 Pass::Terrain { chunks } => {
                     for c in frame.chunks_in(chunks) {
+                        calls += 1;
                         blit::chunk(t, &frame.layers_of(c).albedo, CHUNK_PX, c.x, c.y);
                         written += (CHUNK_PX * CHUNK_PX) as u64;
                     }
@@ -73,6 +95,7 @@ impl Backend for Soft {
                 Pass::Sprites { cmds, .. } => {
                     for s in frame.sprites_in(cmds) {
                         if let Some(page) = self.atlas.pages.get(usize::from(s.page)) {
+                            calls += 1;
                             blit::sprite(t, page, &self.atlas.clut, s.src, i32::from(s.x), i32::from(s.y), s.flags);
                             written += u64::from(s.src.w) * u64::from(s.src.h);
                         }
@@ -89,10 +112,14 @@ impl Backend for Soft {
                     }
                     written += silhouette::apply(t, &mut self.mask, shade);
                 }
-                // T0 lights by the ambient alone: the lightmap of §1.7 lands with PORT.md §7.1
-                // step 5, and the sun's share is already in the ambient.
-                Pass::Lights { ambient, .. } => {
-                    if ambient.iter().any(|&c| c < 254) {
+                // T0 lights by the lightmap (§1.7): the ambient, the sun's share already in it,
+                // and every point light's pool; by the ambient alone when no light shows.
+                Pass::Lights { ambient, points, .. } => {
+                    let points = frame.lights_in(points);
+                    if !points.is_empty() {
+                        self.lights.build((t.w, t.h), ambient, points);
+                        written += self.lights.apply(t);
+                    } else if ambient.iter().any(|&c| c < 254) {
                         blit::multiply(t, ambient);
                         written += n as u64;
                     }
@@ -100,8 +127,15 @@ impl Backend for Soft {
                 // A T2 pass: a T0 frame never holds one (§1.3), and soft draws nothing of its own.
                 Pass::Post(_) => {}
             }
+            pass_us[stat as usize] += at.elapsed().as_micros() as u32;
         }
         self.pixels_written = written;
+        self.times.push_passes(start.elapsed().as_micros() as u32, pass_us);
+        self.times.set_counts(calls, frame.lights.len() as u32, frame.casters.len() as u32, written);
+    }
+
+    fn stats(&self) -> Option<FrameStats> {
+        Some(self.times.stats())
     }
 
     fn read_back(&mut self, out: &mut Vec<u32>) -> (u16, u16) {

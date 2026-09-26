@@ -25,7 +25,7 @@ pub const USAGE: &str = "  sheet layers <what> [--frame F] [--out DIR]
   sheet person --grid [--out DIR]     every build by every hair and coat
   sheet all [--out DIR]               every sheet above, for every sprite
   sheet list                          the sprites <what> can name
-  sheet scene [--seed N] [--minutes M | --ticks T] [--model reader|rusher] [--night | --hour H]
+  sheet scene [--seed N] [--minutes M | --ticks T] [--model reader|rusher] [--night | --hour H[:MM]]
               [--wide] [--backend soft|wgpu] [--out PATH.png | --out DIR]
                                       a model plays the seed from New Game (default 1 minute), then one
                                       frame is drawn headless through the presenter and soft (T0), or
@@ -173,7 +173,14 @@ fn scene(args: &[String]) -> Result<(), String> {
         (None, m) => m.unwrap_or(1) * 60 * 60,
     };
     let model = jane_bot::Model::parse(flag("--model").unwrap_or("reader")).ok_or("--model: reader or rusher")?;
-    let hour = match (args.iter().any(|a| a == "--night"), num("--hour")?) {
+    let (hour_arg, minute) = match flag("--hour").map(|h| h.split_once(':').unwrap_or((h, "0"))) {
+        Some((h, m)) => (
+            Some(h.parse::<u32>().map_err(|_| format!("--hour: not an hour: {h}"))?),
+            m.parse::<u8>().map_err(|_| format!("--hour: not minutes: {m}"))?.min(59),
+        ),
+        None => (None, 0),
+    };
+    let hour = match (args.iter().any(|a| a == "--night"), hour_arg) {
         (_, Some(h)) => Some(u8::try_from(h % 24).expect("an hour")),
         (true, None) => Some(22),
         (false, None) => None,
@@ -182,7 +189,7 @@ fn scene(args: &[String]) -> Result<(), String> {
     let backend = crate::scene::Which::parse(flag("--backend").unwrap_or("soft")).ok_or("--backend: soft or wgpu")?;
     let name = format!(
         "scene-{seed}-{ticks}{}-{}-{}",
-        hour.map_or(String::new(), |h| format!("-h{h:02}")),
+        hour.map_or(String::new(), |h| format!("-h{h:02}{minute:02}")),
         model.name(),
         backend.name()
     );
@@ -192,7 +199,7 @@ fn scene(args: &[String]) -> Result<(), String> {
         None => PathBuf::from("sheets").join(format!("{name}.png")),
     };
     let bps = jane_sim::Blueprints::build(seed).map_err(|e| format!("seed {seed}: {e}"))?;
-    let shot = crate::scene::render(bps, &crate::scene::Opts { seed, ticks, model, hour, canvas, backend })?;
+    let shot = crate::scene::render(bps, &crate::scene::Opts { seed, ticks, model, hour, minute, canvas, backend })?;
     if let Some(dir) = path.parent().filter(|d| !d.as_os_str().is_empty()) {
         std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     }

@@ -17,7 +17,10 @@ jane-art.workspace = true
 jane-render-soft.workspace = true
 jane-render-gl2.workspace = true
 jane-render-wgpu.workspace = true
-sdl2.workspace = true
+# raw-window-handle: the SDL window lends wgpu its handle (src/handle.rs).
+sdl2 = { workspace = true, features = ["raw-window-handle"] }
+raw-window-handle.workspace = true
+wgpu.workspace = true
 
 [lints]
 workspace = true

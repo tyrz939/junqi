@@ -17,13 +17,14 @@ pub const TILE_CAP: usize = 64;
 pub const MAX_LIGHTS: usize = 128;
 /// How much brighter a point light is than its colour byte says, in linear light: a lamp's pool
 /// is brighter than the dusk round it.
-const POINT_GAIN: f32 = 2.4;
+const POINT_GAIN: f32 = 3.0;
 /// The emissive layer's gain: lamp glass and lit windows read as sources.
 const EMISSIVE_GAIN: f32 = 1.35;
+/// The sun's light on flat ground is its colour byte times this, in linear light: a low sun
+/// throws strong light, and the eye adapts to the dimmer ground (the exposure's job, here).
+const SUN_GAIN: f32 = 1.6;
 /// The tallest thing the terrain raises, px (the stand-in walls and canopy).
-const TERRAIN_TOP: f32 = 48.0;
-/// The contact shadow's darkening, of 1.
-const CONTACT: f32 = 0.3;
+const TERRAIN_TOP: f32 = 64.0;
 
 /// How a run of sprites is drawn.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -199,7 +200,10 @@ impl Prep {
                             &mut self.lights,
                             &[l.pos.0 as f32 + g, l.pos.1 as f32 + g, f32::from(l.height), f32::from(l.radius)],
                         );
-                        let [r, gg, b] = lin3(l.colour).map(|v| v * POINT_GAIN);
+                        let [r, gg, b] = lin3(l.colour);
+                        // Flame light leans warm: a yellow lamp reads as a lamp on green grass,
+                        // not as lime.
+                        let [r, gg, b] = [r * POINT_GAIN, gg * POINT_GAIN * 0.72, b * POINT_GAIN * 0.55];
                         f32s(&mut self.lights, &[r, gg, b, f32::from(l.size)]);
                         f32s(&mut self.lights, &[dir.0, dir.1, cone, if l.casts { 1.0 } else { 0.0 }]);
                         self.n_lights += 1;
@@ -224,7 +228,7 @@ impl Prep {
             Some(s) => {
                 let (az, el) = (rad(s.azimuth.0), rad(s.elevation.0));
                 f32s(&mut self.globals, &[el.cos() * az.cos(), el.cos() * az.sin(), el.sin(), 1.0]);
-                let [r, gg, b] = lin3(s.colour);
+                let [r, gg, b] = lin3(s.colour).map(|v| v * SUN_GAIN);
                 let k = 1.0 / rad(s.spread.max(60)).tan();
                 f32s(&mut self.globals, &[r, gg, b, k]);
             }
@@ -237,7 +241,7 @@ impl Prep {
         f32s(&mut self.globals, &[tr, tg, tb, f32::from(post.saturation) / 128.0]);
         let [lr, lg, lb] = post.lift.map(|c| f32::from(c) / 255.0);
         f32s(&mut self.globals, &[lr, lg, lb, f32::from(post.exposure) / 128.0]);
-        f32s(&mut self.globals, &[f32::from(post.bloom) / 255.0 * 1.4, ticks as f32, EMISSIVE_GAIN, CONTACT]);
+        f32s(&mut self.globals, &[f32::from(post.bloom) / 255.0 * 1.4, ticks as f32, EMISSIVE_GAIN, 0.0]);
         debug_assert_eq!(self.globals.len(), 128);
     }
 
