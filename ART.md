@@ -2,7 +2,7 @@
 
 How every pixel in the native build is made. Pair with `PRESENTATION.md` (what draws it, lights it and lays out the UI), `ARCHITECTURE.md` (the engine, and the `View` presentation reads, its §11), `PORT.md` (the plan: P5 is the art phase, §6.i is where render-only tiles leave the sim) and `PLAN.md` §6 (the art gaps the web build left).
 
-**Status:** design. Nothing under `crates/jane-art/` exists yet. The TS build's generators (`jane/src/art/`) are the reference for method until P5 lands and `jane/` is archived at P10; they are not the reference for the look, which moved up on 2026-09-26 (§0).
+**Status:** §8 steps 1 and 2 are built: the palette, canvas, font, chrome and light pass, and the Person composer with its looks (`data/looks/persons.json`: Jane and her seats, the town, the country folk, the villagers). The rest is design. The TS build's generators (`jane/src/art/`) are the reference for method until P5 lands and `jane/` is archived at P10; they are not the reference for the look, which moved up on 2026-09-26 (§0).
 
 Crate `jane-art`: depends on `jane-core` and `jane-data` only. No SDL. **No floats**: it sits in the lint table of the deterministic crates (PORT §3.4), so a sheet hashes the same on every target. Sphere shading, bevel normals and gradients come from integer tables. No allocation after boot beyond the atlas pages. Runs headless in tests.
 
@@ -66,7 +66,21 @@ pub enum Look {
 }
 ```
 
-`Look` is a `jane-schema` struct (serde, `deny_unknown_fields`) compiled by `jane-data` into `LOOKS: &[(SpriteId, Look)]`. Its meaning lives here: `jane-art::looks` renders every entry, and nothing else in the game reads a look.
+`Look` is a `jane-schema` struct (serde, `deny_unknown_fields`) compiled by `jane-data` into `LOOKS: &[(SpriteId, Look)]` (`jane_data::looks()`), a static beside the catalog and outside its content hash: a new coat changes no behaviour, so it never makes a save, a replay or a fixture stale. Its meaning lives here: `jane-art::looks` renders every entry, and nothing else in the game reads a look.
+
+As built (step 2), the API the renderer and the atlas builder consume:
+
+```rust
+jane_art::looks::all() -> Result<Vec<Rendered>, String>        // every look x variant x seat
+jane_art::looks::render(name) -> Result<Vec<Rendered>, String> // one sprite's sets
+pub struct Rendered { sprite: SpriteId, name: &str, variant: u8, seat: u8, set: SpriteSet }  // key(): "jane@2", "villager_old#1"
+jane_art::person::render(&PersonLook, seed) -> Result<SpriteSet, String>
+jane_art::person::seat(&SpriteSet, seat) -> SpriteSet           // seat 0 is the set; 1..=3 swap the coat
+pub struct SpriteSet { w, h, ax, ay: i32, frames: Vec<(FrameId, Canvas)>, roles: Vec<(Role, Ramp)>, emits: Vec<Role> }
+SpriteSet::frame(FrameId) -> Option<&Canvas>;  SpriteSet::swap(Role, Ramp) -> SpriteSet;  SpriteSet::hash() -> u32
+```
+
+`RoleMap` became `roles: Vec<(Role, Ramp)>`: every role is drawn in a ramp of its own, so a swap by role is a remap of that ramp's tones (and, in a dead frame, of their pallid twins).
 
 | Rule | Why |
 | --- | --- |
@@ -120,18 +134,20 @@ A sprite has all four at one size, always. The font and the chrome carry albedo 
 | --- | --- | --- |
 | `build` | slim, broad, child, stout | A per-build table of eight numbers: head y, head w, shoulder w, waist w, hip w, leg h, arm y, arm l. Every other axis and every frame table reads it |
 | `hair` | short, cropped, long, bun, pigtails, bald, curlers, wet | `hair_ramp` from the hair group; drawn as `strokes(hair)` over a `soft_ellipse` skull, so it has volume and a highlight |
-| `hat` | none, cap, brim, peaked, helmet, scarf, veil, cloche, panama, diving | Drawn over hair; `up` shows its back; a brim casts a small shadow on the face by height |
+| `hat` | none, cap, brim, peaked, helmet, scarf, veil, cloche, panama, diving | Drawn over hair; `up` shows its back; a brim casts a small shadow on the face by height. `hat_ramp` names its cloth (the coat's when left out). `veil` and `diving` are placeholders until the tales' step |
 | `skin` | skin, skin_pale, skin_dark, bone, wax, stone, metal, none | `bone` is the skeleton, `wax` the waxwork, `stone` the statue, `metal` the armour; `none` with `ghost` is the shade. Skin is never dithered |
 | `face` | plain, glasses, beard, grim, none | Two eye pixels of `Eye` role, a nose shadow, a mouth line; `glasses` is two `k` rings with a `glint` |
 | `coat` | coat, dress, gown, apron, smock, jacket, nightdress, overcoat, canvas, cardigan | `coat_ramp`; `folds` gives cloth its shade bands; the seat swap replaces this role only (§3) |
 | `front` | none, apron, shirt, waistcoat, scarf, tie, braces | `front_ramp`; goes to coat on `up` |
-| `legs`, `boots`, `pack` | trousers, skirt, bare, pyjamas; boots, shoes, bare; true, false | `legs_ramp`; the pack is drawn on `up`, a strap on `side` |
-| `held` | none, hammer, pole, suitcase, dish, bell, lantern, billhook, broom, book, pipe | The composer owns the hand position per frame, so a held thing follows the swing; a held item declares its `hand` for the mirrored side; a lantern emits |
+| `legs`, `boots`, `pack` | trousers, skirt, bare, pyjamas; boots, shoes, bare; true, false | `legs_ramp` (under a skirt, the stockings; a skirt shows as its own panel only under a coat too short to cover the knee); `boots_ramp`, leather when left out; the pack is drawn on `up`, a strap on `side` |
+| `held` | none, hammer, pole, suitcase, dish, bell, lantern, billhook, broom, book, pipe | The composer owns the hand position per frame, so a held thing follows the swing; a held item declares its `hand` for the mirrored side; a lantern emits. Parsed from step 2, drawn from step 7 (§8) |
 | `extras` | watch_chain, bell_ankle, shawl, seated, wet | Any number |
 | `emits` | eye, glass, held | Which roles may write the emissive layer; anything else is a test failure |
 | `ghost` | true, false | Ramps go to mist and the figure is a 50 % checker; height halves so its shadow is faint. No alpha anywhere in a sprite |
 
-Composition order: legs, boots, coat, front, arms, skin, face, hair, hat, held, extras. Bodies are `soft_ellipse` and `rect_round`, cloth is `folds`, hair and fur are `strokes`, and every one of them writes its normals and height as it goes. `ao_contact` runs under the feet and under the arms where they meet the coat; `Canvas::outline()` runs last and is never typed by a generator.
+Composition order: legs, boots, coat, front, arms, skin, face, hair, hat, held, extras (long hair behind the head, the far arm and leg, and on `side` the pack are drawn first, and the near arm last). Bodies, limbs and skirts are `polygon_lit`, heads `ellipse_lit` (skin is never dithered, so never `soft_ellipse`, and `unchecker` takes out a band edge that falls in a checker), cloth is `folds`, hair is drawn on a layer of its own with its tones held between `deep` and `lift` and a few `strokes(hair)`, then stamped as one part so one head of hair never seams against itself. Every one of them writes its normals and its relief as it goes: relief is what stands in front of what (a sleeve two px proud of the coat), `outline()` finds seams by relief alone, and `upright(ay)` then adds each row's height above the feet (5 px a 4 rows, so the head stands 40). `ao_contact` runs under the feet; `Canvas::outline()` is never typed by a generator.
+
+The build table as built (px, 32 x 40, feet on row 36): `slim` head_y 4, head_w 16, shoulder_w 12, waist_w 10, hip_w 12, leg_h 7, arm_y 22, arm_l 9. The skull is `head_w - 2` wide and 13 tall two rows under head_y, the neck two rows, the hip `36 - leg_h`. `child` (the town's four), `broad` and `stout` are first drafts in the same table; only `slim` is tuned.
 
 ### 2.2 Creature
 
@@ -164,6 +180,7 @@ fill_rect  rect_lit  rect_bevel  rect_round  ellipse  ellipse_lit  soft_ellipse 
 gradient(rect, ramp, dir, dither)   folds(rect, ramp, period, phase)   strokes(rect, ramp, kind: fur | feather | grass | hair, density, seed)
 grain(rect, material: wood | iron | stone, seed)   courses(rect, material, seed)   ao_contact(rect, spread)
 stamp  outline  shadow_ellipse  mirror_x  rotate_ccw  crop  shorten_to  remap  checker
+polygon_lit(pts, ramp, curve, z)   set_clip(rect)   upright(ay)   unchecker(ramp)   scale_heights   quench   bounds
 ```
 
 | Primitive | Albedo | Normal | Height |
@@ -177,6 +194,8 @@ stamp  outline  shadow_ellipse  mirror_x  rotate_ccw  crop  shorten_to  remap  c
 | `grain` | wood ring lines, iron pitting, stone speckle, by hash | grooves for wood and stone | unchanged |
 | `courses` | brick, slate, thatch, plank and stone in courses with mortar | mortar grooves | the course's relief |
 | `ao_contact` | index 1 darkening under a thing where it meets what it stands on | unchanged | unchanged |
+| `polygon_lit` | the polygon in hard bands of the ramp, lit as an upright cylinder | across each row from `-curve` to `+curve` in `nx`; the top rows tilt up | `lo` on the bottom row to `hi` on the top |
+| `upright` | unchanged | unchanged | each row's height above the feet added to the relief |
 | `outline` | `k` where a drawn pixel meets clear, `K` at an interior seam | unchanged | unchanged |
 
 `shadow_ellipse` survives only for flat props with no height worth casting; everything else gets its shadow from height in the light pass. `courses` is the brick, slate, thatch, plank and stone logic pulled out of `house()` so a chimney, a well and a wall lay the same course. Dither is for gradients and soft edges only, never as texture noise on skin or cloth.
@@ -309,7 +328,7 @@ Tests: every weather kind and every area has an entry that draws pixels; every s
 | No pure black, no pure white | Palette |
 | Region palettes: the Lowfields are warm greens and plaster; the Waters blue-greens, reed and slate; the Works slag greys and brick | `RegionStyle { ground, wall, roof, lamp, sky, mist }` rows |
 
-**Seat colours.** `jane@1`, `jane@2`, `jane@3` are `Look::Swap` of the coat roles and nothing else (decided: seats are coat-only, hair and skin stay). Any sprite swaps by role the same way, which replaces the TS build's ~50 swap sprites. A swap touches the albedo only; normals, emissive and height are shared. Each swap gets its own atlas entry and its own corpse.
+**Seat colours.** `jane@1`, `jane@2`, `jane@3` (teal, moss and ochre: `person::SEAT_COATS`, the TS build's `SEAT_COATS`) are swaps of the coat role and nothing else; a sprite gets them when a unit row a player controls names it (decided: seats are coat-only, hair and skin stay). Any sprite swaps by role the same way, which replaces the TS build's ~50 swap sprites. A swap touches the albedo only; normals, emissive and height are shared. Each swap gets its own atlas entry and its own corpse.
 
 **Per-instance variation** (decided: in, kept). A person or creature row may carry bounded variants:
 
@@ -327,7 +346,7 @@ Every frame after `Down` is derived, so a look is written once. The composer kee
 | --- | --- |
 | `up` | The skull's skin and face become hair (or the hat's back); eyes go; front and buttons become coat; the pack is drawn |
 | `side` (east) | Columns left of the skull centre become hair; one eye; one nose pixel outside the skull; the torso is 12 wide; the near arm over the coat, the far arm behind. West is mirrored at draw time, and a held item declares its `hand` so the mirror puts it right; a mirrored normal has its `nx` flipped by the blit |
-| walk `_1 _2 _3` with the standing frame as contact | the four poses of a walk cycle: contact (the standing frame, both feet down), down (bob -2, legs crossing), pass (bob 0, one leg lifted), up (bob -1, legs apart); arms swing against the legs; `folds` phase advances a quarter a frame |
+| walk `_1 _2 _3` with the standing frame first | the four poses of a walk cycle, bob in px down the screen: stand (the standing frame, both feet down: a pass), `_1` stride (near foot 3 px forward, far 3 back, bob +1), `_2` pass (feet together, the far foot lifted 2, bob 0), `_3` stride (far foot forward, bob +1); seen from the front a stride is the forward foot a pixel lower and the back one lifted a pixel. Arms swing against the legs; `folds` phase advances a quarter a frame. (Corrected 2026-09-27: the first draft's four were half a cycle, contact to up, with the sign of the bob muddled) |
 | breathe `_b` | the chest and shoulders 1 px up, the head 1 px up, the coat's folds phase a half turn; the renderer alternates it with the standing frame every 40 ticks |
 | `atk_1..3` | wind-up (lean back 2, held thing raised), strike (lean forward 3, arm extended, the held thing at full reach), recover (lean 1); per facing |
 | `cast_1..3` | hands together, hands out with a school-coloured emissive glow between them, hands down; per facing |
@@ -341,13 +360,13 @@ Creatures read the same table shape with their plan's own cycle: a trot moves di
 
 | Style | Who | How |
 | --- | --- | --- |
-| `fallen` | every Person | `side` rotated a quarter turn anticlockwise, repeated columns removed to 28 wide at most, dropped to `ay - 2`, pallor applied, a pool at 38 % from the head; `Dead2` is the same with the near arm flung, picked by unit id. Height falls to the body's thickness so its cast shadow is a sliver |
+| `fallen` | every Person | `side` rotated a quarter turn anticlockwise, repeated columns removed to 28 wide at most, dropped to `ay - 2`, pallor applied, a pool at 38 % from the head; `Dead2` is the same with the near arm flung ahead of her (so it lies above the body), picked by unit id. Height falls to a seventh, the body's thickness, so its cast shadow is a sliver |
 | `topple`, `legs_up` | plants; small quadrupeds and birds | on the stem; on the back |
 | `scrap` | machines and armour | 8 x 8 plates in two courses |
 | `melt`, `wisp` | waxwork; shade | |
 | `pose` | every other creature | the plan's own `Dead` |
 
-Six muted pool pairs. `pallor` darkens by 14 % and greys by 20 %; the `*_dead` ramps exist once in the palette; a dead frame never emits. Tests: a dead frame is not a living frame, is shorter, is not floating (its lowest pixel is at or below `ay - 2`), and is more than 16 px across.
+Six muted pool pairs (step 2 has the one people need, `pool`). `pallor` darkens by 14 % and greys by 20 %; the pallid twins exist once in the palette, for the ramps a person is made of (`palette::PALLID`: skin, hair, cloth, leather), and any other ramp goes a tone darker; a dead frame never emits. Tests: a dead frame is not a living frame, is shorter, is not floating (its lowest pixel is at or below `ay - 2`), and is more than 16 px across.
 
 ## 5. Pipeline
 
@@ -378,9 +397,9 @@ Six muted pool pairs. `pallor` darkens by 14 % and greys by 20 %; the `*_dead` r
 | Command | Draws |
 | --- | --- |
 | `jane sheet units`, `props`, `icons`, `flora`, `chrome`, `font` | a family, every row, 1x and 4x on its real background, day-lit |
-| `jane sheet unit <id>` | all frames of every cycle, every seat, every variant, the corpse, on a 4x grid |
+| `jane sheet unit <id>` | all frames of every cycle, every seat, every variant, the corpse, on a 4x grid, each set with a 1x strip and its west frames mirrored; `--seat N` and `--scale N` narrow and zoom it |
 | `jane sheet light <id>` | the sprite lit from eight directions and from above, with the cast shadow, through the same integer light pass the renderer uses |
-| `jane sheet layers <id>` | albedo, normal (as a colour ramp), emissive and height side by side at 4x |
+| `jane sheet layers <id>` | albedo, normal (as a colour ramp), emissive and height side by side at 4x; for a look, `--frame side_1` picks the frame (`down` by default), as for `light` |
 | `jane sheet person --grid`, `palette` | every build by every hair and coat; the table and the ramps in luminance order |
 | `jane sheet terrain` | every tile in every autotile context, dry and wet |
 | `jane sheet weather <kind>` | the kind's masks and sprites, and sixty ticks of its motion over a plain ground |
@@ -401,8 +420,8 @@ PNG through a 60-line encoder in `jane-art::sheet` (stored deflate, crc32, adler
 | layers | every sprite has all four layers at one size; every normal decodes to unit length within 2 of 255; emissive is non-zero only on declared roles; height ≥ 1 on every opaque pixel and 0 on clear |
 | lit sphere | a generated `soft_ellipse` lit from eight directions through the integer light pass: the brightest quarter of its pixels lies in the light's half of the disc for every direction, and the eight results are pairwise distinct |
 | outline closed | every drawn pixel meeting clear is `k`; no coloured pixel touches index 0 |
-| colour budget | the §3 caps per family; no 2 x 2 checker of two skin tones in any person frame |
-| silhouette distinct | any two sprites of a family: the XOR of their masks is at least 6 % of the union, or, for swaps and variants of one base, the mean colour distance is at least 24 |
+| colour budget | the §3 caps per family, `k` and `K` aside, over a sprite's living frames and again over its dead frames (which are in pallid twins); no 2 x 2 checker of two skin tones in any person frame |
+| silhouette distinct | any two sprites of a family, standing: the XOR of their masks is at least 6 % of the union, or (one cut in other cloth: a swap, a variant, two neighbours dressed alike) at least 6 % of the union is recoloured and the recoloured pixels differ by 24 of 255 a channel on average |
 | contrast | §3, per hostile unit row against every spawning zone's floor swatch |
 | dead frames | §4.1's four rules for every unit row |
 | no grids | §1's two greps over the crate |
