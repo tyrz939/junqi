@@ -3,14 +3,15 @@
 //! One layer of "seen" per combination of the state flags; without states it is the one layer,
 //! so the county pays nothing for the idea. Each layer floods through `jane_core::search::flood`
 //! (PORT.md §6.e: one flood), four ways, stopped by solid terrain and by what the props of that
-//! layer block. A flood is the whole zone, and the county is four million cells: `run.rs` floods
+//! layer block; which cells, not how far, so through the flood's fast path that keeps no
+//! distances (`jane_core::search::fill`). A flood is the whole zone, and the county is four million cells: `run.rs` floods
 //! again only when something that blocks FEET has changed.
 
 use std::collections::VecDeque;
 
 use jane_core::Tile;
 use jane_core::grid::Grid;
-use jane_core::search::{Conn, Reach, flood};
+use jane_core::search::{Fill, fill};
 use jane_core::tile::F_SOLID;
 
 use super::model::{MAX_LAYERS, Solve};
@@ -31,7 +32,7 @@ pub(crate) struct Layers {
     pub reached: [bool; MAX_LAYERS],
     /// The pass that first reached each cell, or -1: only when traced.
     pub first_seen: Option<Vec<i16>>,
-    reach: Reach,
+    reach: Fill,
     pub floods: u32,
     pub visited: u64,
 }
@@ -48,7 +49,7 @@ impl Layers {
             any: if count > 1 { vec![0; n] } else { Vec::new() },
             reached: [false; MAX_LAYERS],
             first_seen: trace.then(|| vec![-1; n]),
-            reach: Reach::new(),
+            reach: Fill::new(),
             floods: 0,
             visited: 0,
         }
@@ -99,26 +100,28 @@ impl Layers {
         let terrain = tiles.as_slice();
         let seen = &self.seen[s];
         let blocked = &self.blocked[s];
-        let open = |x: i32, y: i32| {
-            let i = y as usize * w as usize + x as usize;
-            seen[i] == 0 && blocked[i] == 0 && terrain[i].flags() & F_SOLID == 0
-        };
-        let starts: Vec<(i32, i32)> = seeds.iter().copied().filter(|&(x, y)| self.inside(x, y) && open(x, y)).collect();
+        let open = |i: usize| seen[i] == 0 && blocked[i] == 0 && terrain[i].flags() & F_SOLID == 0;
+        let starts: Vec<(i32, i32)> =
+            seeds.iter().copied().filter(|&(x, y)| self.inside(x, y) && open(self.ix(x, y))).collect();
         if starts.is_empty() {
             return false;
         }
-        flood(w, h, &starts, Conn::Four, u32::MAX, open, &mut self.reach);
+        fill(w, h, &starts, open, &mut self.reach);
         self.floods += 1;
         self.visited += u64::from(self.reach.count());
         let (seen, any, first) = (&mut self.seen[s], &mut self.any, &mut self.first_seen);
-        for c in self.reach.order() {
-            let i = c.0 as usize;
-            seen[i] = 1;
+        for r in self.reach.runs() {
+            let cells = r.cells(w);
+            seen[cells.clone()].fill(1);
             if !any.is_empty() {
-                any[i] = 1;
+                any[cells.clone()].fill(1);
             }
-            if let Some(f) = first.as_mut().filter(|f| f[i] < 0) {
-                f[i] = pass as i16;
+            if let Some(f) = first.as_mut() {
+                for c in &mut f[cells] {
+                    if *c < 0 {
+                        *c = pass as i16;
+                    }
+                }
             }
         }
         self.reached[s] = true;

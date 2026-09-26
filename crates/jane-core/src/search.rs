@@ -129,6 +129,168 @@ pub fn flood(
     }
 }
 
+/// A run of cells along one row: `x0..x1` of row `y`, the end not included.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Run {
+    pub y: u32,
+    pub x0: u32,
+    pub x1: u32,
+}
+
+impl Run {
+    /// The run's cell indices, `y * w + x`, as a range.
+    pub fn cells(self, w: u32) -> std::ops::Range<usize> {
+        let row = self.y as usize * w as usize;
+        row + self.x0 as usize..row + self.x1 as usize
+    }
+}
+
+/// What [`fill`] reached: which cells, as a bitset and as runs along rows; no distances, no order.
+#[derive(Clone, Debug, Default)]
+pub struct Fill {
+    w: u32,
+    h: u32,
+    seen: Vec<u64>,
+    runs: Vec<Run>,
+    count: u32,
+    /// Cells still to look at, `(x, y)`.
+    stack: Vec<(u32, u32)>,
+}
+
+impl Fill {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn w(&self) -> u32 {
+        self.w
+    }
+
+    pub fn h(&self) -> u32 {
+        self.h
+    }
+
+    /// Outside the grid is unreached.
+    pub fn reached(&self, x: i32, y: i32) -> bool {
+        x >= 0
+            && y >= 0
+            && (x as u32) < self.w
+            && (y as u32) < self.h
+            && self.seen_ix(y as usize * self.w as usize + x as usize)
+    }
+
+    /// Every reached cell, once each, as runs along rows (in no promised order).
+    pub fn runs(&self) -> &[Run] {
+        &self.runs
+    }
+
+    pub fn count(&self) -> u32 {
+        self.count
+    }
+
+    fn seen_ix(&self, i: usize) -> bool {
+        self.seen[i >> 6] >> (i & 63) & 1 != 0
+    }
+
+    fn reset(&mut self, w: u32, h: u32) {
+        self.w = w;
+        self.h = h;
+        self.seen.clear();
+        self.seen.resize((w as usize * h as usize).div_ceil(64), 0);
+        self.runs.clear();
+        self.stack.clear();
+        self.count = 0;
+    }
+
+    /// Mark `x0..x1` of row `y` reached.
+    fn mark(&mut self, y: u32, x0: u32, x1: u32) {
+        let row = y as usize * self.w as usize;
+        let (a, b) = (row + x0 as usize, row + x1 as usize);
+        let (wa, wb) = (a >> 6, (b - 1) >> 6);
+        let lo = u64::MAX << (a & 63);
+        let hi = u64::MAX >> (63 - ((b - 1) & 63));
+        if wa == wb {
+            self.seen[wa] |= lo & hi;
+        } else {
+            self.seen[wa] |= lo;
+            self.seen[wa + 1..wb].fill(u64::MAX);
+            self.seen[wb] |= hi;
+        }
+        self.runs.push(Run { y, x0, x1 });
+        self.count += x1 - x0;
+    }
+}
+
+/// [`flood`] four ways with no budget, when only WHICH cells are reached matters: exactly the cells
+/// that flood reaches, found a row's run at a time (a scanline fill) and kept as a bitset and runs,
+/// with no distances and no order. The county's whole-map questions (what she can walk to from the
+/// platform; the solver's layers) ask this: it never writes a distance per cell. `open(i)` is asked
+/// by cell index `y * w + x`, only for cells inside the grid and not yet reached. Starts are reached
+/// whether open or not; outside the grid they are skipped.
+pub fn fill(w: u32, h: u32, starts: &[(i32, i32)], mut open: impl FnMut(usize) -> bool, out: &mut Fill) {
+    out.reset(w, h);
+    let wu = w as usize;
+    for &(x, y) in starts {
+        if x < 0 || y < 0 || x as u32 >= w || y as u32 >= h {
+            continue;
+        }
+        let (x, y) = (x as u32, y as u32);
+        let i = y as usize * wu + x as usize;
+        if out.seen_ix(i) {
+            continue;
+        }
+        if open(i) {
+            out.stack.push((x, y));
+        } else {
+            // A closed start is reached alone; its open neighbours go on from it.
+            out.mark(y, x, x + 1);
+            if x > 0 {
+                out.stack.push((x - 1, y));
+            }
+            if x + 1 < w {
+                out.stack.push((x + 1, y));
+            }
+            if y > 0 {
+                out.stack.push((x, y - 1));
+            }
+            if y + 1 < h {
+                out.stack.push((x, y + 1));
+            }
+        }
+        while let Some((x, y)) = out.stack.pop() {
+            let row = y as usize * wu;
+            if out.seen_ix(row + x as usize) || !open(row + x as usize) {
+                continue;
+            }
+            let mut x0 = x;
+            while x0 > 0 && !out.seen_ix(row + x0 as usize - 1) && open(row + x0 as usize - 1) {
+                x0 -= 1;
+            }
+            let mut x1 = x + 1;
+            while x1 < w && !out.seen_ix(row + x1 as usize) && open(row + x1 as usize) {
+                x1 += 1;
+            }
+            out.mark(y, x0, x1);
+            // One seed for each open stretch of the rows above and below, along this run.
+            for ny in [y.wrapping_sub(1), y + 1] {
+                if ny >= h {
+                    continue;
+                }
+                let nrow = ny as usize * wu;
+                let mut inside = false;
+                for nx in x0..x1 {
+                    let j = nrow + nx as usize;
+                    let o = !out.seen_ix(j) && open(j);
+                    if o && !inside {
+                        out.stack.push((nx, ny));
+                    }
+                    inside = o;
+                }
+            }
+        }
+    }
+}
+
 /// Chamfer distance transform in tenths of a cell (10 straight, 14 diagonal), two raster passes,
 /// from every cell `source` names. Saturates at `u16::MAX`; with no source every cell is `u16::MAX`.
 pub fn chamfer(w: u32, h: u32, mut source: impl FnMut(i32, i32) -> bool) -> Grid<u16> {
@@ -427,6 +589,42 @@ mod tests {
             for y in 0..h as i32 {
                 for x in 0..w as i32 {
                     assert_eq!(r.dist(x, y), want[g.ix(x as u32, y as u32)], "({x},{y})");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn fill_reaches_what_flood_reaches() {
+        let mut rng = crate::rng::Sfc32::seeded(9, 0);
+        let (mut r, mut f) = (Reach::new(), Fill::new());
+        for round in 0..200 {
+            let (w, h) = (1 + rng.below(70), 1 + rng.below(40));
+            let odds = 40 + rng.below(50);
+            let cells: Vec<bool> = (0..w * h).map(|_| rng.below(100) < odds).collect();
+            let g = Grid::from_vec(w, h, cells);
+            // Starts open or shut, repeated, and outside the grid.
+            let mut starts: Vec<(i32, i32)> =
+                (0..=rng.below(4)).map(|_| (rng.below(w + 2) as i32 - 1, rng.below(h + 2) as i32 - 1)).collect();
+            if round % 7 == 0 {
+                starts.push(starts[0]);
+            }
+            flood(w, h, &starts, Conn::Four, u32::MAX, |x, y| g.read(x, y, false), &mut r);
+            fill(w, h, &starts, |i| g.as_slice()[i], &mut f);
+            assert_eq!(f.count(), r.count(), "round {round}");
+            let mut from_runs = vec![false; (w * h) as usize];
+            for run in f.runs() {
+                for i in run.cells(w) {
+                    assert!(!from_runs[i], "round {round}: cell {i} in two runs");
+                    from_runs[i] = true;
+                }
+            }
+            for y in -1..=h as i32 {
+                for x in -1..=w as i32 {
+                    assert_eq!(f.reached(x, y), r.reached(x, y), "round {round} ({x},{y})");
+                    if f.reached(x, y) {
+                        assert!(from_runs[g.ix(x as u32, y as u32)]);
+                    }
                 }
             }
         }

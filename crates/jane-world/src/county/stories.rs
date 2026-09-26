@@ -19,12 +19,13 @@
 //! `4 dy <= 5 HALF_H` (1.25 half-screens) with `jane_core::view`'s half-screen; the seed's choice
 //! among the places that fit ranks by `mix32(fnv1a(step, seed, story, place))` with the place's
 //! number to break a tie; the walkable ground and the ground a short walk from a tale's place are
-//! `jane_core::search::flood`.
+//! `jane_core::search::fill` and `flood`.
 
 use jane_core::action::{Action, Facing};
 use jane_core::blueprint::StoryPlace;
 use jane_core::hash::Fnv;
-use jane_core::search::{Conn, Reach as Flood, flood};
+use jane_core::search::{Fill, fill};
+use jane_core::tile::F_SOLID;
 use jane_core::view::{HALF_H_CELLS, HALF_W_CELLS};
 use jane_core::{Blueprint, Key, NameId, Rect, StoryId, Tile, UnitDefId};
 use jane_data::{PlaceAt, PlacementDef, StoryDef};
@@ -183,20 +184,13 @@ pub fn walkable(k: &Kit, blocked: &[bool]) -> Vec<bool> {
     let Some(start) = jane_data::catalog().name_id("start").and_then(|s| k.blueprint().marks.get(&Key::Name(s))) else {
         return vec![true; n];
     };
-    let mut reach = Flood::new();
+    let mut reach = Fill::new();
     let s = (i32::from(start.cell.x), i32::from(start.cell.y));
-    flood(
-        w as u32,
-        h as u32,
-        &[s],
-        Conn::Four,
-        u32::MAX,
-        |x, y| !blocked[(y * w + x) as usize] && !k.solid(x, y),
-        &mut reach,
-    );
+    let tiles = k.blueprint().tiles.as_slice();
+    fill(w as u32, h as u32, &[s], |i| !blocked[i] && tiles[i].flags() & F_SOLID == 0, &mut reach);
     let mut seen = vec![false; n];
-    for c in reach.order() {
-        seen[c.0 as usize] = true;
+    for r in reach.runs() {
+        seen[r.cells(w as u32)].fill(true);
     }
     seen
 }
