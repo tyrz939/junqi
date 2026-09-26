@@ -7,8 +7,9 @@
 //!
 //! `key` presses and releases a key by its cap name (`E`, `Tab`, `Esc`, `F2`, `Space`, `1`);
 //! `down` and `up` hold and let go; `click`, `rclick` and `move` are canvas px; `type` enters
-//! text as the keyboard would; `shot` writes the canvas as a PNG. Ticks count from the app's
-//! start, title screen included.
+//! text as the keyboard would; `shot` writes the canvas as a PNG; `bot reader` (or `rusher`)
+//! hands the seat to a headless player from `jane-bot` until `bot off` (or, with `bot talk`, a
+//! reader until the first conversation opens), to reach a place worth a look. Ticks count from the app's start, title screen included.
 
 use jane_present::input::key_code;
 
@@ -23,6 +24,8 @@ pub enum Step {
     Move(i32, i32),
     Type(String),
     Shot(String),
+    /// A headless player takes the seat (`reader`, `rusher`), or gives it back (`off`).
+    Bot(String),
 }
 
 /// A parsed script: steps by tick, in order.
@@ -55,6 +58,10 @@ impl Script {
                 "move" => Step::Move(num(0)?, num(1)?),
                 "type" => Step::Type(rest.join(" ")),
                 "shot" => Step::Shot(rest.first().ok_or_else(bad)?.to_string()),
+                "bot" => match rest.first().copied() {
+                    Some(m @ ("reader" | "rusher" | "off" | "talk")) => Step::Bot(m.to_string()),
+                    _ => return Err(bad()),
+                },
                 _ => return Err(bad()),
             };
             steps.push((t, step));

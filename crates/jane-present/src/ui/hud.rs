@@ -53,10 +53,13 @@ pub fn bar_rect(canvas: (i32, i32)) -> Rect {
 /// Draws the HUD. Pointer presses on the bar and the chrome buttons become `UiOut`s.
 pub fn draw(ui: &mut Ui, b: &ViewBuffers, cx: HudCtx<'_>) {
     let (cw, ch) = ui.canvas;
-    vitals(ui, b);
-    target(ui, b, cw);
-    sky(ui, b, cw);
-    tracker(ui, b, cw);
+    // Under an open window the plates it covers step aside; the bar stays, a place to drop.
+    if !cx.window_open {
+        vitals(ui, b);
+        target(ui, b, cw);
+        sky(ui, b, cw);
+        tracker(ui, b, cw);
+    }
     let bar = bar_rect((cw, ch));
     bar_slots(ui, b, bar, cx);
     let top = prompt(ui, b, bar, cx);

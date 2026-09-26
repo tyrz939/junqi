@@ -815,7 +815,9 @@ impl Ui {
         let clicked = enabled
             && ((over && self.input.released && self.active_was(id))
                 || (focused && self.interactive && self.input.has(UiAction::Confirm)));
-        let lit = over || (focused && self.nav);
+        // A menu row shows its light whatever the device (the rows follow the pointer); the
+        // other kinds only while the keys or a pad drive.
+        let lit = over || (focused && (self.nav || kind == ButtonKind::Menu));
         let (x, y, w, h) = (i32::from(r.x), i32::from(r.y), i32::from(r.w), i32::from(r.h));
         let down = i32::from(held);
         match kind {

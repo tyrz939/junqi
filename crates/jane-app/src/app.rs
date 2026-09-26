@@ -25,6 +25,7 @@ use jane_present::ui::loading::{self, Card, LoadingState};
 use jane_present::ui::menus::{self, MenuState, PauseInfo, SlotMode, SlotRow};
 use jane_present::ui::perf::{self, FrameInfo, PerfLog, PerfView, SimInfo, TopLine};
 use jane_present::ui::title::{self, TitleInfo, TitleState};
+use jane_present::ui::window::{self, WindowState};
 use jane_present::ui::world::{self, WorldDebug};
 use jane_present::view::ViewBuffers;
 use jane_present::{Frame, Present};
@@ -123,6 +124,39 @@ struct App<'a> {
     paths: (u64, u64, u64),
     started: Instant,
     backend_name: String,
+    /// A headless player on the seat (`--bot`, a script's `bot`): it plays, the UI shows it.
+    bot: Option<jane_bot::Bot>,
+    /// Give the seat back the moment a conversation opens (a script's `bot talk`).
+    bot_until_talk: bool,
+    /// The window (bag, book, log, map) and whether it is open; its state (the map's chart)
+    /// outlives a close.
+    win: WindowState,
+    win_open: bool,
+}
+
+/// The sim as the bot's host, keeping what it drains for the presenter too.
+struct Rec<'a> {
+    sim: &'a mut Sim,
+    events: &'a mut Vec<Event>,
+}
+
+impl jane_bot::Host for Rec<'_> {
+    fn view(&self, seat: Seat) -> Option<jane_sim::View<'_>> {
+        self.sim.view(seat)
+    }
+
+    fn step(&mut self, input: &StepInput<'_>) -> jane_sim::Stepped {
+        self.sim.step(input)
+    }
+
+    fn drain_events(&mut self) -> &[Event] {
+        self.events.extend_from_slice(self.sim.drain_events());
+        self.events
+    }
+
+    fn sim(&self) -> &Sim {
+        self.sim
+    }
 }
 
 pub fn run(
@@ -178,6 +212,10 @@ pub fn run(
         paths: (0, 0, 0),
         started: Instant::now(),
         backend_name: describe.clone(),
+        bot: args.bot.as_deref().and_then(jane_bot::Model::parse).map(jane_bot::Bot::story),
+        bot_until_talk: false,
+        win: WindowState::default(),
+        win_open: false,
     };
     app.read_slots();
     if args.new {
@@ -247,6 +285,11 @@ pub fn run(
                     }
                     Step::Type(t) => typed.push_str(&t),
                     Step::Shot(p) => script_shot = Some(p),
+                    Step::Bot(m) => {
+                        app.bot_until_talk = m == "talk";
+                        let model = if m == "talk" { "reader" } else { m.as_str() };
+                        app.bot = jane_bot::Model::parse(model).map(jane_bot::Bot::story);
+                    }
                 }
             }
         }
@@ -417,7 +460,7 @@ impl App<'_> {
             return Mode::Text;
         }
         match self.scene {
-            Scene::Play if self.menus.is_empty() && !self.talking() => Mode::Play,
+            Scene::Play if self.menus.is_empty() && !self.talking() && !self.win_open => Mode::Play,
             _ => Mode::Ui,
         }
     }
@@ -428,7 +471,20 @@ impl App<'_> {
 
     /// The world is held: a menu is up with nobody else here, or F6 holds it.
     fn world_held(&self) -> bool {
-        !self.menus.is_empty() || (self.speed.held && !self.speed.step)
+        !self.menus.is_empty() || self.win_open || (self.speed.held && !self.speed.step)
+    }
+
+    /// Opens the window on `tab`, switches to it, or closes the window when it is already there.
+    fn window_key(&mut self, tab: usize) {
+        if !matches!(self.scene, Scene::Play) || !self.menus.is_empty() {
+            return;
+        }
+        if self.win_open && self.win.tab == tab {
+            self.win_open = false;
+        } else {
+            self.win_open = true;
+            self.win.tab = tab;
+        }
     }
 
     fn tick(&mut self, held: InputFrame, events: &mut Vec<Event>) {
@@ -470,14 +526,18 @@ impl App<'_> {
                 let held_still = self.world_held();
                 let Some(sim) = self.sim.as_mut() else { return };
                 if !held_still {
-                    let mut frames = [InputFrame::IDLE; MAX_PLAYERS];
-                    frames[ME.index()] = held;
-                    self.pending.sort_by_key(|c| (c.seat, c.seq));
                     let t = Instant::now();
-                    sim.step(&StepInput { frames, commands: &self.pending });
+                    if let Some(bot) = &mut self.bot {
+                        bot.step(&mut Rec { sim, events });
+                    } else {
+                        let mut frames = [InputFrame::IDLE; MAX_PLAYERS];
+                        frames[ME.index()] = held;
+                        self.pending.sort_by_key(|c| (c.seat, c.seq));
+                        sim.step(&StepInput { frames, commands: &self.pending });
+                        events.extend_from_slice(sim.drain_events());
+                    }
                     let us = t.elapsed().as_micros() as u32;
                     self.pending.clear();
-                    events.extend_from_slice(sim.drain_events());
                     self.stages[0] += us;
                     self.perf.tick(us, events.len());
                     self.speed.step = false;
@@ -487,6 +547,10 @@ impl App<'_> {
                     self.present.tick(&v, events);
                     self.bufs.tick(&v, events);
                     self.stages[1] += t.elapsed().as_micros() as u32;
+                    if self.bot_until_talk && self.bufs.dialogue.is_some() {
+                        self.bot = None;
+                        self.bot_until_talk = false;
+                    }
                     if events.iter().any(|e| matches!(e.kind, jane_sim::EventKind::Rest)) {
                         self.autosave();
                     }
@@ -536,6 +600,12 @@ impl App<'_> {
                     } else if !self.menus.is_empty() {
                         self.menus.pop();
                         self.menu_state = MenuState::default();
+                    } else if self.win_open {
+                        if self.win.destroy.is_some() {
+                            actions.push(a);
+                        } else {
+                            self.win_open = false;
+                        }
                     } else if self.talking() {
                         actions.push(a);
                     }
@@ -561,6 +631,10 @@ impl App<'_> {
                         self.speed.held = true;
                     }
                 }
+                UiAction::Bags => self.window_key(0),
+                UiAction::Book => self.window_key(1),
+                UiAction::Quests => self.window_key(2),
+                UiAction::Map => self.window_key(3),
                 UiAction::Debug => self.perf_level = (self.perf_level + 1) % 3,
                 UiAction::Grid => self.world_dbg.on = !self.world_dbg.on,
                 UiAction::Slow => self.speed.quarters = if self.speed.quarters == 1 { 4 } else { 1 },
@@ -618,6 +692,8 @@ impl App<'_> {
                     self.menu_state = MenuState::default();
                 }
             }
+            AppIntent::OpenWindow(tab) => self.window_key(usize::from(tab)),
+            AppIntent::CloseWindow => self.win_open = false,
             AppIntent::Back => {
                 self.menus.pop();
                 self.menu_state = MenuState::default();
@@ -722,7 +798,7 @@ impl App<'_> {
     /// The UI's layers, bottom to top; only the top one answers.
     fn draw_ui(&mut self, stats: Option<jane_present::FrameStats>) {
         let pad = self.input.pad_active();
-        let cx = HudCtx { bindings: &self.input.bindings, pad, window_open: false };
+        let cx = HudCtx { bindings: &self.input.bindings, pad, window_open: self.win_open };
         match &mut self.scene {
             Scene::Title => {
                 self.ui.interactive = self.menus.is_empty();
@@ -743,6 +819,11 @@ impl App<'_> {
                 let top_is_hud = self.menus.is_empty() && self.bufs.dialogue.is_none();
                 self.ui.interactive = top_is_hud;
                 hud::draw(&mut self.ui, &self.bufs, cx);
+                if self.win_open && self.bufs.dialogue.is_none() {
+                    self.ui.interactive = self.menus.is_empty();
+                    let v = self.sim.as_ref().and_then(|s| s.view(ME));
+                    window::draw(&mut self.ui, &mut self.win, &self.bufs, v.as_ref(), cx);
+                }
                 if let Some(d) = &self.bufs.dialogue {
                     self.ui.interactive = self.menus.is_empty();
                     dialogue::draw(&mut self.ui, &mut self.dialogue, d, cx);

@@ -10,10 +10,12 @@ pub mod dialogue;
 pub mod hud;
 pub mod icons;
 pub mod loading;
+pub mod map;
 pub mod menus;
 pub mod perf;
 pub mod style;
 pub mod title;
+pub mod window;
 pub mod world;
 
 pub use art::{Mark, UiArt};

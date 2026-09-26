@@ -26,7 +26,8 @@ pub const USAGE: &str = "jane-app [--new] [--seed N] [--name NAME] [--scale K] [
   --shot PATH     write the canvas as a PNG on exit; F12 writes PATH-0001.png and on
   --script STEPS  inputs at ticks: \"tick 60 key E; tick 90 click 384 200; tick 120 shot a.png\"
   --data-dir DIR  where saves and config.json live (default: beside the exe when a file called
-                  portable is there, else the user's data folder)";
+                  portable is there, else the user's data folder)
+  --bot MODEL     a headless player (reader or rusher) plays the seat; the UI shows it";
 
 /// Which backend draws (PRESENTATION.md §1.3).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -52,6 +53,8 @@ pub struct Args {
     pub seed_given: bool,
     pub script: Option<String>,
     pub data_dir: Option<String>,
+    /// A headless player takes the seat (`reader` or `rusher`).
+    pub bot: Option<String>,
 }
 
 fn parse(args: &[String], clock_seed: u32) -> Result<Args, String> {
@@ -66,6 +69,7 @@ fn parse(args: &[String], clock_seed: u32) -> Result<Args, String> {
         seed_given: false,
         script: None,
         data_dir: None,
+        bot: None,
     };
     let mut it = args.iter();
     while let Some(a) = it.next() {
@@ -79,6 +83,13 @@ fn parse(args: &[String], clock_seed: u32) -> Result<Args, String> {
             "--new" => out.new = true,
             "--script" => out.script = Some(value()?.clone()),
             "--data-dir" => out.data_dir = Some(value()?.clone()),
+            "--bot" => {
+                let m = value()?.clone();
+                if !matches!(m.as_str(), "reader" | "rusher") {
+                    return Err(format!("--bot: reader or rusher, not {m}"));
+                }
+                out.bot = Some(m);
+            }
             "--name" => out.name.clone_from(value()?),
             "--scale" => out.scale = Some(u32::try_from(num(value()?)?).map_err(|_| format!("{a}: too big"))?),
             "--ticks" => out.ticks = Some(num(value()?)?),
@@ -153,6 +164,7 @@ mod tests {
                 seed_given: true,
                 script: None,
                 data_dir: None,
+                bot: None,
             }
         );
         let d = parse(&[], 99).unwrap();

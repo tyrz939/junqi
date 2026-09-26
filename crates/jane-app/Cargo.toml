@@ -11,6 +11,7 @@ publish.workspace = true
 jane-core.workspace = true
 jane-data.workspace = true
 jane-sim.workspace = true
+jane-bot.workspace = true
 jane-net.workspace = true
 jane-present.workspace = true
 jane-art.workspace = true

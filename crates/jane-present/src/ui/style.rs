@@ -83,4 +83,4 @@ pub fn well_lit() -> Ix {
 }
 
 /// How opaque a panel's body is.
-pub const PANEL_A: u8 = 226;
+pub const PANEL_A: u8 = 246;

@@ -487,7 +487,9 @@ impl ViewBuffers {
             casts: me.stats.casts,
         };
         w.book.clear();
-        for &id in v.learned() {
+        // What she casts: her own row's book, then what the party has learned.
+        let own = cat.combat.unit(body.def).book;
+        for &id in own.iter().chain(v.learned().iter().filter(|s| !own.contains(s))) {
             let bound = me.bar.iter().position(|b| *b == Some(BarSlot::Spell(id))).map(|i| i as u8);
             w.book.push(SpellRow { id, bound });
         }
