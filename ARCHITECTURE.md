@@ -359,7 +359,8 @@ enum Action {
   NightLock { prop, lock: NightLock { says, from, to, keyed } }, NightUnlock(NameId) /* a door's hours, for good */ }
 
 enum Condition { Flag { key, test: Eq | Min | NonZero }, Night, QuestActive, QuestReady, QuestDone, HasItem { item, qty }, HasSpell(SpellId), Dead(NameId),
-  Knows { fact: FactKey }, Heard { claim: TextId }, SpeakerKnows(StoryId) /* §3.7, §4.6.e */ }
+  Knows { fact: FactKey }, Heard { claim: TextId }, SpeakerKnows(StoryId) /* §3.7, §4.6.e */,
+  Hours { from, to } /* the clock's hour, from up to to, wrapping midnight: a door's nightHours rule (`hour_within`) */ }
 struct Cond { not: bool, c: Condition }
 ```
 

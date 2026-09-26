@@ -223,6 +223,14 @@ pub enum RawCond {
         #[serde(default)]
         not: bool,
     },
+    /// The clock's hour is `from` up to `to`, wrapping midnight: `{"if": "hours", "from": 16,
+    /// "to": 10}` (a door's `nightHours` rule).
+    Hours {
+        from: u8,
+        to: u8,
+        #[serde(default)]
+        not: bool,
+    },
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq)]
@@ -489,6 +497,14 @@ pub fn cond(cx: &mut Ctx, at: &str, c: &RawCond) -> Option<Cond> {
         }
         RawCond::Heard { claim, not } => (*not, Condition::Heard(cx.text(claim))),
         RawCond::SpeakerKnows { story, not } => (*not, Condition::SpeakerKnows(cx.story(at, story)?)),
+        RawCond::Hours { from, to, not } => {
+            cx.diag.need(
+                *from < 24 && *to < 24 && from != to,
+                at,
+                format!("hours [{from}, {to}]: two different hours, 0 to 23"),
+            );
+            (*not, Condition::Hours { from: *from, to: *to })
+        }
     };
     Some(Cond { not, c })
 }

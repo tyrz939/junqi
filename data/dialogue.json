@@ -242,7 +242,7 @@
   "sign_town": {
     "speaker": "Sign",
     "start": [{ "node": "read" }],
-    "nodes": { "read": { "lines": ["CASTLE. Train: Sunday. Museum, factory and school across the river. Bridge out."] } }
+    "nodes": { "read": { "lines": ["CASTLE. Train: Sunday. Museum (ten to four), factory and school across the river. Bridge out."] } }
   },
   "bed": {
     "speaker": "Bed",

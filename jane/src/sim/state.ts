@@ -358,4 +358,6 @@ export type Condition = (
   | { if: "hasItem"; item: string; qty?: number }
   | { if: "knows"; spell: string }
   | { if: "dead"; unit: string }
+  /** The hour is `from` up to `to`, wrapping midnight (the Museum's bench; a door's `nightHours` rule). */
+  | { if: "hours"; from: number; to: number }
 ) & { not?: boolean };

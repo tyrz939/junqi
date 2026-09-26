@@ -137,13 +137,19 @@ impl NightLock {
 
     /// Is the door shut at `hour` (0..=23)? `from == to` is never.
     pub const fn shut_at(&self, hour: u8) -> bool {
-        if self.from < self.to {
-            hour >= self.from && hour < self.to
-        } else if self.from > self.to {
-            hour >= self.from || hour < self.to
-        } else {
-            false
-        }
+        hour_within(hour, self.from, self.to)
+    }
+}
+
+/// Is `hour` (0..=23) in the hours `from` up to `to`, wrapping midnight? `from == to` is never.
+/// A door's hours and `Condition::Hours` are this one rule.
+pub const fn hour_within(hour: u8, from: u8, to: u8) -> bool {
+    if from < to {
+        hour >= from && hour < to
+    } else if from > to {
+        hour >= from || hour < to
+    } else {
+        false
     }
 }
 
@@ -314,7 +320,10 @@ pub enum FactKey {
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 pub enum Condition {
-    Flag { key: FlagKey, test: FlagTest },
+    Flag {
+        key: FlagKey,
+        test: FlagTest,
+    },
     Night,
     QuestActive(QuestId),
     QuestReady(QuestId),
@@ -325,6 +334,12 @@ pub enum Condition {
     Knows(FactKey),
     Heard(TextId),
     SpeakerKnows(StoryId),
+    /// The clock's hour is `from` up to `to`, wrapping midnight ([`hour_within`], a door's hours'
+    /// rule): the Museum's bench knows when the doors are shut.
+    Hours {
+        from: u8,
+        to: u8,
+    },
 }
 
 /// A condition, or its negation.

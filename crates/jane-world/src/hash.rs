@@ -731,6 +731,11 @@ impl Feed for Cond {
                 h.u8(10);
                 h.u16(s.0);
             }
+            Condition::Hours { from, to } => {
+                h.u8(11);
+                h.u8(from);
+                h.u8(to);
+            }
         }
     }
 }

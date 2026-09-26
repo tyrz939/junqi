@@ -5,7 +5,8 @@
     "key": "museum_door",
     "label": "The Museum",
     "keyTag": "museum",
-    "nightLock": "Open until nine. The door is not locked. It is just not open."
+    "nightLock": "Open ten to four. The door is not locked. It is just not open.",
+    "nightHours": [16, 10]
   },
   {
     "zone": "library",

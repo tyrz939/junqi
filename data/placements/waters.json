@@ -1,0 +1,7 @@
+[
+  {
+    "key": "museum_bench",
+    "at": { "mark": "museum_mouth", "within": 8 },
+    "prop": { "def": "museum_bench", "talk": "museum_bench", "label": "A bench" }
+  }
+]

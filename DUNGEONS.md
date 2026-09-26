@@ -677,7 +677,7 @@ The Headmaster brought the school down here when the nights got longer, because 
 
 ### 3.2 The Museum (phase 2): Explosion
 
-**Fiction.** The Castle Museum is limestone, with four wings off a round hall: SCIENCE, ARTS, HISTORY, and one whose name has been painted over in council cream. The floor plan by the cloakroom still shows it. It is open until nine, like the rest of the county. A notice from the Attendant asks visitors not to touch the exhibits, and adds that the exhibits have been asked the same.
+**Fiction.** The Castle Museum is limestone, with four wings off a round hall: SCIENCE, ARTS, HISTORY, and one whose name has been painted over in council cream. The floor plan by the cloakroom still shows it. It opens at ten and shuts at four, as museums do. A notice from the Attendant asks visitors not to touch the exhibits, and adds that the exhibits have been asked the same.
 
 With the lights on it is a museum. The armour stands on its plinths, the fox is in its case, the waxwork miner in the Goldskin gallery holds up his lamp. The lights are on one breaker in the maintenance room. When they go off the plinths are empty, and you can hear where the exhibits have got to. When they come back everything is in its place. The dents stay.
 
@@ -749,7 +749,7 @@ magic  -oneway opens_on museum_cleared-> atrium   shortcut: the fire door
 
 **What Explosion re-opens.** The rock over the cave mouth in the Lowfields (`PLAN.md`). The mine's powder store. The cellar wall behind the roses. Quarry Steps. The grate between the pipes and the Factory.
 
-**At night.** The front door does not open after nine (`nightLock`: "Open until nine. The door is not locked. It is just not open.", the bell's hours: shut from nine to six). The way in at night is up the sewer stair from the pipes, once those are open. After the bell the breaker will not hold: it trips back to dark within a few seconds (`if night`). The night Museum is the dark Museum throughout, with no relief. The lit-only plinth in History cannot be reached at night; one dark-only case in Arts holds better loot. Day and night are both worth a visit, and neither is required.
+**Opening hours, and at night.** The front door opens at ten and shuts at four (`nightLock` with `nightHours: [16, 10]`: "Open ten to four. The door is not locked. It is just not open."), and says so to anyone who tries it out of hours. It is the county's door, so nobody is ever shut in: the way out is never locked. The sign at Castle Halt and the floor plan give the same hours, and the bench on the steps waits with her until ten (a `rest` until 10, the whole party sitting; the night is lived as a bed's is). The way in while the door is shut is up the sewer stair from the pipes, once those are open. After the bell the breaker will not hold: it trips back to dark within a few seconds (`if night`). The night Museum is the dark Museum throughout, with no relief. The lit-only plinth in History cannot be reached at night; one dark-only case in Arts holds better loot. Day and night are both worth a visit, and neither is required.
 
 **With 2 to 4 players.** One stands at the breaker and one crosses a wing: lights off to clear a doorway, lights on to freeze what is chasing her (`lure_and_lever`). It is the best co-op toy in the game and it is a split, so it is priced: every throw to dark also wakes one stuffed fox in the corridor by Maintenance. The breaker-holder must not linger. In the rotunda, one fights and one runs for the breaker. Natural history's two plinths are `twin_hold`.
 

@@ -1,0 +1,20 @@
+{
+  "museum_bench": {
+    "speaker": "Bench",
+    "start": [{ "when": [{ "if": "hours", "from": 16, "to": 10 }], "node": "shut" }, { "node": "open" }],
+    "nodes": {
+      "shut": {
+        "lines": [
+          "A bench facing the Museum doors. A brass plate on the back: THE FRIENDS OF THE CASTLE MUSEUM, FOR THOSE WHO COME EARLY.",
+          "The doors open at ten. Somebody has worn the paint off the end nearest them."
+        ],
+        "options": [
+          { "label": "Wait for ten", "actions": [{ "do": "rest", "until": 10 }], "goto": "waited" },
+          { "label": "Not now" }
+        ]
+      },
+      "waited": { "lines": ["You sit. Nobody else comes. At ten there is a sound of bolts behind the doors, and then nothing."] },
+      "open": { "lines": ["A bench facing the Museum doors. They are open. Nobody is on the bench, and nobody has been."] }
+    }
+  }
+}

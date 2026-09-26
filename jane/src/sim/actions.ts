@@ -345,6 +345,12 @@ function conditionHolds(w: World, c: Condition): boolean {
       const u = w.rt.unitsByKey.get(c.unit);
       return u ? !u.alive : (w.state.flags[`dead:${c.unit}`] ?? 0) !== 0;
     }
+    case "hours": {
+      const hour = Math.floor(w.state.clock / TICKS_PER_HOUR);
+      if (c.from < c.to) return hour >= c.from && hour < c.to;
+      if (c.from > c.to) return hour >= c.from || hour < c.to;
+      return false;
+    }
     default: {
       const never: never = c;
       throw new Error(`Unhandled condition ${JSON.stringify(never)}`);

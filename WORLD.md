@@ -44,7 +44,7 @@ One game hour is two real minutes. A day is 48 real minutes; the night is 18 of 
 
 **Rule: the bell is heard in every zone, including dungeons, at nine and at six.** It is the one signal the whole county shares, and the one clock text may rely on.
 
-**Rule: a bed sleeps the clock to 06:00 and no other hour.** A fire rests but does not sleep. Nothing else moves the clock. **The night she sleeps is lived:** the weather turns on every hour of it, the ground wets and dries, the patches refill every ten minutes, what was due to stand up stands up, and what the county was going to do it does, exactly as if she had sat up all night by the bed. Only nobody walks about while she sleeps (`ARCHITECTURE.md` §4.6.f).
+**Rule: a bed sleeps the clock to 06:00 and no other hour,** and only two seats written to say otherwise sleep to another: the School's far bed (its card: woken at the bell) and the bench on the Museum's steps (until ten, when the doors open). A fire rests but does not sleep. Nothing else moves the clock. **The night she sleeps is lived:** the weather turns on every hour of it, the ground wets and dries, the patches refill every ten minutes, what was due to stand up stands up, and what the county was going to do it does, exactly as if she had sat up all night by the bed. Only nobody walks about while she sleeps (`ARCHITECTURE.md` §4.6.f).
 
 ### 2.2 The shape of a day
 
@@ -52,10 +52,10 @@ One game hour is two real minutes. A day is 48 real minutes; the night is 18 of 
 | --- | --- | --- | --- | --- | --- |
 | 06 to 07 | Bell. Doors unlock. The sweeper takes the leaves off the square | Fire burning. Nobody | Hens out. The farmer at the pump | Reedcutters at the fire, tea | The canteen hatch opens |
 | 07 to 09 | Milk round, High Street then Pound Lane. No. 7's bottles stay | | Sheep turned out. Woodcutters to the clearings | Cutters go into the beds | Nobody. The rota says day shift; nobody comes |
-| 09 to 12 | Shops open. Mr Cobb takes his seat outside the Arms | | Field work. The farmer on the track | Cutting. Hut doors open | Watchmen's huts empty by day |
+| 09 to 12 | Shops open. Mr Cobb takes his seat outside the Arms | | Field work. The farmer on the track | Cutting. Hut doors open. The Museum opens at ten | Watchmen's huts empty by day |
 | 12 to 14 | Dinner. Miss Orme sits where she can see the Doctor's | | Doors shut for dinner (knock lines change) | Cutters at the fire | Five tins put out at the hatch. Nobody comes |
 | 14 to 16 | Afternoon. Children out until tea | | | Cutters back in | |
-| 16 to 17 | Second post at four. Tea. Children in | | Hens in. Sheep penned | Cutters out of the water by five | |
+| 16 to 17 | Second post at four. Tea. Children in | | Hens in. Sheep penned | The Museum shuts at four. Cutters out of the water by five | |
 | 17 to 18:30 | Evening. People at doors, talking about the lamps | The train (Sundays only) | The farmer's last look at the scarecrows | Cutters stack the day's reed | The hatch closes |
 | 18:30 to 21 | Lamps. People go in, street by street, north end first | | Doors barred, "at nine, everybody along here does" | Fire built up. Nobody past the landing | Hut fires lit by whoever is there |
 | 21 to 06 | Bell. Streets empty. Windows lit; some go dark at midnight. The Arms lit till it is light | Fire. The parcel, some nights | Dark. One window at Whinmoor. Mr Pollard walks at ten | Mist. Something on the far bank | The night shift on Cinder Walk. The Factory's lights on |

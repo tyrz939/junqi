@@ -168,11 +168,11 @@ Headers and key claims; later passes expand each to the §2 format.
 
 ### The Museum · hours 3 to 5 · Explosion
 
-- **Sees / hears / can do.** Across the river by the tollhouse bridge (the toll board, the omen). A hub and four wings, two states: lights on, a museum; lights off, empty plinths. The MAGIC wing. A portrait with the face scratched out. The forest key.
+- **Sees / hears / can do.** Across the river by the tollhouse bridge (the toll board, the omen). The doors open ten to four (the sign at the Halt said so); out of hours the door says when it opens, and the bench on the steps waits with her until ten. A hub and four wings, two states: lights on, a museum; lights off, empty plinths. The MAGIC wing. A portrait with the face scratched out. The forest key.
 - **Knows after.** What the gold was for. **Does not:** who scratched the portrait.
 - **Meanwhile.** Nobody in the Waters talks to the town. The wing's lights stay on after, seen from the bridge at night.
-- **Checks.** `[L1:museum across the river from town, 300 to 850 m by road]` `[L5:omen, proposed: the bridge counts; when true the third crossing of a night is different and survivable]` `[L6:consequences: the wing lit after]` `[L5:cohesion: the portrait is Goldskin's and no line says so]`
-- **Varies.** The bridge count (*proposed*). The Waters' mist weight after dark.
+- **Checks.** `[L1:museum across the river from town, 300 to 850 m by road]` `[L5:omen, proposed: the bridge counts; when true the third crossing of a night is different and survivable]` `[L6:consequences: the wing lit after]` `[L5:cohesion: the portrait is Goldskin's and no line says so]` `[L5:the door, the floor plan and the Halt's sign agree: ten to four]` `[L1:the Museum's way out never night-locked; the solver needs no hour]`
+- **Varies.** Whether she comes in its hours: after four and before ten she waits on the bench, sleeps elsewhere, or comes up from the pipes. The bridge count (*proposed*). The Waters' mist weight after dark.
 
 ### The ruined library and Butterfly Forest · hours 5 to 7 · Grow
 
