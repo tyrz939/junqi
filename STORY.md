@@ -1,6 +1,6 @@
 # Jane — Story
 
-**Status: draft for John's review.** Generated from the 2020 material (`DESIGN-2020.md`), the Trello boards (`OLD-NOTES.md`) and what the live build already says. Nothing here is final until it has been read. Lines marked **[2020]** come from the original documents. Lines marked **[new]** are proposals. Section 7 lists the choices that matter.
+**Status: settled on the choices in §7 (26 September 2026); the School act and the endings are still to write.** Generated from the 2020 material (`DESIGN-2020.md`), the Trello boards (`OLD-NOTES.md`) and what the live build already says. Nothing here is final until it has been read. Lines marked **[2020]** come from the original documents. Lines marked **[new]** are proposals. Section 7 lists the choices that matter.
 
 The story is not the point of Jane. The place is. This document exists so the place is **consistent**: so every sign, room and enemy can be checked against one account of what is true in Castle.
 
@@ -96,8 +96,12 @@ Claims the world makes, some true per seed (`PLAN.md` §5). Each must be fair: i
 
 ## 7. Choices for John
 
-1. ~~The dog is what is left of Julie.~~ **Decided: yes.** See §3.
-2. **Goldskin is the wizard.** Ties the mine, the Factory and the Burial into one cause. Alternative: the wizard is a stranger and Goldskin merely a fool.
-3. **The undead are townsfolk.** This makes the Headmaster and the schoolchildren land harder, and makes killing them uneasy rather than heroic. Alternative: they are just dead things that got up.
-4. **The ending is a choice with no right answer.** Alternative: one ending, the shield restored.
-5. **Tone ceiling.** Unease, dread, sadness: yes. Gore, cruelty to children on screen, jump scares: no. The children are never shown as enemies. Confirm.
+All five decided, 26 September 2026.
+
+1. **The dog is what is left of Julie.** Yes. See §3.
+2. **Goldskin is the wizard.** Yes. One cause ties the mine, the Factory and the Burial.
+3. **The undead are townsfolk**, the ones who were outside when the county changed its mind. Yes. The Headmaster and the mine land harder for it; killing them is uneasy, not heroic.
+4. **The ending is a choice with no right answer.** Yes: hold the shield as Julie did, put the Ball back in the hill (the night goes, and everyone in it, the dog too), or take the Sunday train. Each has its own short epilogue, and each pays off the dog.
+5. **Tone ceiling.** Unease, dread and sadness: yes. Gore, cruelty to children on screen, jump scares: no. The children are never shown as enemies.
+
+**And the town notices [decided].** Castle reacts as things happen: what she has done (a boss down, a place opened, a light lit, a thing brought up) changes what people say, where they stand and what the county shows, from the next time she meets it, never in front of her by magic. Each change is a consequence or a rumour the living world already carries (`WORLD.md`), heard first by whoever would hear it first.
