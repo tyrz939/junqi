@@ -16,6 +16,10 @@ pub struct Caps {
 /// Entries in the CLUT: the master palette's ceiling (ART.md §2.7).
 pub const CLUT_LEN: usize = 1024;
 
+/// The contact shadow's multiply per channel, 1/256ths, at full cover (`jane_art::palette`):
+/// every backend darkens under index 1 by it, scaled by how much of the texel's 3 x 3 is index 1.
+pub const AO_TINT: [u16; 3] = jane_art::palette::AO_TINT;
+
 /// One atlas page, four layers of one layout (PRESENTATION.md §1.4), each `w * h` row-major.
 /// Albedo is master-palette indices: 0 clear, 1 the contact shadow, every other index opaque.
 /// The other three are empty on a page built for `soft` alone and never read by it.
