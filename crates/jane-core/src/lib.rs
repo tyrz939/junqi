@@ -26,7 +26,7 @@ pub use indexmap;
 
 pub use action::{Action, Cond, Condition, CondsRef, FlagKey, ListRef, NamesRef, Stack, TextRef};
 pub use angle::Angle;
-pub use blueprint::Blueprint;
+pub use blueprint::{Blueprint, RegionMap};
 pub use grid::{Cell, CellIx, Grid, Rect};
 pub use ids::*;
 pub use misc::{Lookup, pick_weighted, sort_by_total_key, view};

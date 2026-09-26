@@ -49,14 +49,16 @@ pub mod small;
 pub mod stories;
 pub mod tale_ground;
 
-use jane_core::blueprint::{Area, ZONE_ATTEMPTS};
+use jane_core::blueprint::{Area, RegionMap, ZONE_ATTEMPTS};
 use jane_core::num::Permille;
 use jane_core::{Blueprint, Grid, Key, NameId, Rect, Tile, ZoneId};
 
 pub use self::chunks::Chunk;
 use self::placements::{PoiSpot, Stage, apply_placements, claim_pois};
 use crate::kit::Kit;
-use crate::skeleton::{COUNTY_H, COUNTY_W, MACRO, Skeleton, SkeletonError, SkeletonRows, build_skeleton};
+use crate::skeleton::{
+    COUNTY_H, COUNTY_W, MACRO, SKEL_H, SKEL_W, Skeleton, SkeletonError, SkeletonRows, build_skeleton,
+};
 use crate::solve::{ZoneRules, validate};
 
 /// A footpath as laid: its row in `data/paths.json` and its centre line (an index into `lines`).
@@ -135,7 +137,8 @@ impl<'a> County<'a> {
     }
 
     /// The finished blueprint, with the skeleton's patches as placed: each a square of its radius
-    /// about its centre (the ecology's areas, ARCHITECTURE.md §4.6.c).
+    /// about its centre (the ecology's areas, ARCHITECTURE.md §4.6.c); and the skeleton's region
+    /// of every macro cell, so the sky that rains on a cell is its region's (§4.6.b).
     pub fn done(self) -> Blueprint {
         let areas = self
             .sk
@@ -149,8 +152,15 @@ impl<'a> County<'a> {
                 }
             })
             .collect();
+        let mut regions = RegionMap::new(MACRO as u16, SKEL_W as u16, SKEL_H as u16, 0);
+        for my in 0..SKEL_H {
+            for mx in 0..SKEL_W {
+                regions.set(mx as u16, my as u16, self.sk.region_at(mx, my) as u8);
+            }
+        }
         let mut bp = self.k.done("Castle", false, Permille::ONE);
         bp.areas = areas;
+        bp.regions = regions;
         bp
     }
 }

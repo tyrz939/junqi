@@ -183,7 +183,7 @@ Long traces (a Cautious and an Explorer for eight real hours each) sampled every
 | --- | --- | --- |
 | Schedules | Nobody teleports in view: a unit seen at tick t and t + 30 moved at most its speed × 30. Every named person is somewhere plausible each hour (at home, on patrol, at their place, or gone for a stated reason) | hourly, every named unit |
 | Presence | Day-only and night-only things hide and show never within 120 × 80 px of a watcher (`ARCHITECTURE.md` §4.2 step 3) | every tick in view |
-| Ecology | Populations recover on their respawn rows; a pocket the player thins stays thin for the respawn time and not longer; nothing respawns in view; `respawn: 0` stays dead | hourly counts by area |
+| Ecology | Populations recover on their respawn rows; a pocket the player thins stays thin for the respawn time and not longer, and one she clears refills within ten game minutes of falling under its `hold` line; nothing respawns in view; `respawn: 0` stays dead | counts by area every ten game minutes |
 | Weather | When weather lands (`PLAN.md` §6): bands per region (mist in the Waters, clear on the first walk); no storm on the first walk; mist never hides a lit lamp inside its reach | hourly |
 | Consequences | Every quest outcome visibly changes something (a prop, a person, a door, a light) and the change is journaled; both branches of every choice | per quest on the trace |
 | Rumours after the event | A rumour of an event is offered only after its tick, and within a day of it | per rumour |

@@ -1,24 +1,30 @@
 //! The living world (ARCHITECTURE.md §4.6, §8; WORLD.md; `living.rs`): the world stream draws
-//! the same whatever the party does, the sky holds until it is due, rain puts a fire out at its
-//! line, hunting thins a patch and time refills it, a consequence fires once and lands where
-//! nobody was, a rumour reaches its person when it says, and a schedule never moves anyone in
-//! view. Then the determinism gates with all of it running over a game day.
-//! Run under `--profile checked` too.
+//! the same whatever the party does, the sky holds until it is due and follows the region under
+//! her feet, rain puts a fire out at its line by its own region's ramp, hunting thins a patch and
+//! every ten minutes time refills it, a consequence fires once and lands where nobody was (a
+//! lock among its edits), a rumour reaches its person when it says, a schedule never moves anyone
+//! in view, and a bed's night is the night idled through, world for world. Then the determinism
+//! gates with all of it running over a game day. Run under `--profile checked` too.
 
 mod common;
 
-use common::bot::{cmd, idle, place, prop, sym, unit};
+use std::sync::Arc;
+
+use common::bot::{cmd, holds, idle, place, prop, sym, unit, walk_to_prop, zone_of};
 use common::{SEED, Tape, bps, new_game};
 use jane_core::action::{Facing, School};
 use jane_core::num::{CELL_FX, dist_sq};
-use jane_core::{Milli, Sfc32, Tick, Vec2, ZoneId};
+use jane_core::{Action, Key, Milli, Sfc32, Tick, Vec2, ZoneId};
 use jane_data::{Region, ScheduleSlot, catalog};
-use jane_sim::living::{ScheduleWhere, region_ix};
+use jane_sim::living::{ScheduleWhere, region_at, region_ix};
+use jane_sim::save::hash_of;
 use jane_sim::state::{FactKey, FlagKey, Source, WeatherKind, WeatherState};
-use jane_sim::{Command, DevOp, EventKind, Hit, Seat, Sim, StepInput, UnitId};
+use jane_sim::{Blueprints, Command, DevOp, EventKind, Hit, Seat, Sim, StepInput, UnitId};
 
 const HOUR: u32 = 7200;
 const DAY: u32 = 24 * HOUR;
+/// The ecology's step: ten game minutes.
+const MARK: u32 = HOUR / 6;
 
 fn tp(sim: &mut Sim, zone: ZoneId) {
     let mark = jane_sim::sym::of_name(catalog().name_id("start").unwrap());
@@ -26,11 +32,26 @@ fn tp(sim: &mut Sim, zone: ZoneId) {
     assert_eq!(sim.state().players[0].zone, zone);
 }
 
-/// Draws the world stream makes when the hour turns: two per region, one per area of every zone.
-fn draws_an_hour() -> u32 {
+/// Areas of every blueprint: one ecology draw each, every ten minutes.
+fn areas() -> u32 {
     let areas: usize = ZoneId::ALL.iter().map(|&z| bps().get(z).areas.len()).sum();
     assert!(areas >= 6, "the county's patches are on its blueprint ({areas})");
-    6 + areas as u32
+    areas as u32
+}
+
+/// Draws the world stream makes at a ten-minute mark: two per region on the hour, then one per
+/// area of every zone.
+fn draws_at(clock: u32) -> u32 {
+    match clock {
+        c if c % HOUR == 0 => 6 + areas(),
+        c if c % MARK == 0 => areas(),
+        _ => 0,
+    }
+}
+
+/// Draws in a whole hour: the skies once, the areas six times.
+fn draws_an_hour() -> u32 {
+    6 + 6 * areas()
 }
 
 fn county_unit_ids(sim: &Sim, prefix: &str) -> Vec<UnitId> {
@@ -59,6 +80,42 @@ fn area_ix(sim: &Sim, name: &str) -> usize {
         .expect("the patch is placed")
 }
 
+fn sky(kind: WeatherKind, now: Tick) -> WeatherState {
+    WeatherState { kind, since: now, until: Tick(u32::MAX) }
+}
+
+/// A free cell of the county in `region`, from the region map (the skeleton's macro grid).
+fn cell_in(sim: &Sim, region: Region) -> (i32, i32) {
+    let bp = sim.blueprint(ZoneId::County);
+    let grid = &sim.runtime(ZoneId::County).expect("she is in the county").grid;
+    let m = &bp.regions;
+    let s = i32::from(m.scale);
+    for my in (0..i32::from(m.h)).rev() {
+        for mx in 0..i32::from(m.w) {
+            if m.region_at(mx * s, my * s) != Some(region_ix(region) as u8) {
+                continue;
+            }
+            let (x, y) = (mx * s + s / 2, my * s + s / 2);
+            if let Some((x, y)) = grid.nearest_free(x, y, 3, None) {
+                if region_at(bp, x, y) == region {
+                    return (x, y);
+                }
+            }
+        }
+    }
+    panic!("no free cell in {region:?}");
+}
+
+fn weather_events(sim: &mut Sim) -> Vec<(Option<Seat>, Region, WeatherKind)> {
+    sim.drain_events()
+        .iter()
+        .filter_map(|e| match e.kind {
+            EventKind::Weather { region, kind } => Some((e.to, region, kind)),
+            _ => None,
+        })
+        .collect()
+}
+
 /// §8 `zone_order_does_not_move_rolls`: two parties go round the county's doors in two orders;
 /// the world stream, the skies and the county's patches come out the same, draw for draw.
 #[test]
@@ -83,7 +140,7 @@ fn zone_order_does_not_move_rolls() {
     assert_eq!(a.state().weather, b.state().weather);
     let pa = &a.state().zone(ZoneId::County).unwrap().pressure;
     assert_eq!(pa, &b.state().zone(ZoneId::County).unwrap().pressure);
-    // And it did draw: exactly the hour's draws, every hour, visited or not.
+    // And it did draw: exactly each mark's draws, every mark, visited or not.
     let mut fresh = Sfc32::seeded(SEED, 1);
     for _ in 0..4 * draws_an_hour() {
         fresh.next_u32();
@@ -91,12 +148,11 @@ fn zone_order_does_not_move_rolls() {
     assert_eq!(a.state().rng, fresh);
 }
 
-/// §4.6.b: the stream moves only when the hour turns, by the same count every hour; a sky
-/// changes only on the hour and never before its `until`; the first walk is clear.
+/// §4.6.b, §4.6.c: the stream moves only on a ten-minute mark, the skies' draws only on the hour;
+/// a sky changes only on the hour and never before its `until`; the first walk is clear.
 #[test]
 fn weather_rolls_on_the_hour_and_holds_until_it_is_due() {
     let mut s = new_game();
-    let per_hour = draws_an_hour();
     let mut fresh = Sfc32::seeded(SEED, 1);
     let clear = Tick(u32::from(catalog().living.tuning.clear_hours) * HOUR);
     let mut changes = 0;
@@ -105,11 +161,14 @@ fn weather_rolls_on_the_hour_and_holds_until_it_is_due() {
         let (rng0, sky0) = (s.state().rng, s.state().weather);
         s.step(&StepInput::IDLE);
         let st = s.state();
+        for _ in 0..draws_at(st.clock) {
+            fresh.next_u32();
+        }
+        assert_eq!(st.rng, fresh, "{}:{:02}", st.clock / HOUR, st.clock % HOUR / 120);
+        if st.clock % MARK != 0 {
+            assert_eq!(st.rng, rng0, "a draw off the mark");
+        }
         if st.clock % HOUR == 0 {
-            for _ in 0..per_hour {
-                fresh.next_u32();
-            }
-            assert_eq!(st.rng, fresh, "hour {}", st.clock / HOUR);
             for (now, then) in st.weather.iter().zip(sky0) {
                 if *now != then {
                     assert!(then.until <= st.tick, "a sky changed before it was due");
@@ -119,8 +178,7 @@ fn weather_rolls_on_the_hour_and_holds_until_it_is_due() {
                 kinds.insert(now.kind);
             }
         } else {
-            assert_eq!(st.rng, rng0, "a draw off the hour");
-            assert_eq!(st.weather, sky0);
+            assert_eq!(st.weather, sky0, "a sky moves only on the hour");
         }
         if st.tick < clear {
             assert!(st.weather.iter().all(|w| w.kind == WeatherKind::Clear), "the first walk is clear");
@@ -129,11 +187,70 @@ fn weather_rolls_on_the_hour_and_holds_until_it_is_due() {
     assert!(changes >= 3, "a day of skies changed {changes} times");
     assert!(kinds.len() >= 2, "{kinds:?}");
     let v = s.view(Seat(0)).unwrap();
-    assert_eq!(v.weather(), &s.state().weather[region_ix(Region::Lowfields)], "the county is under the Lowfields sky");
+    assert_eq!(v.region(), Region::Lowfields, "she starts in the town");
+    assert_eq!(v.weather(), &s.state().weather[region_ix(Region::Lowfields)], "the sky over her is her region's");
 }
 
-/// §4.6.b: rain wets the county a step at a time; a campfire's light is out exactly while the
-/// ramp stands at its `douse` or over it, and back when it falls under. Indoors stays dry.
+/// Decision 1 (§4.6.b): the county is three skies, by the skeleton's region under each cell. The
+/// sky over her is the one over her feet; walking into another region, or her own sky turning,
+/// tells her (and only her); the ramp under her is her region's; any other zone is under its
+/// zone's sky.
+#[test]
+fn the_sky_follows_the_region_under_her_feet() {
+    let mut s = new_game();
+    let bp = Arc::clone(s.blueprint(ZoneId::County));
+    assert_eq!((bp.regions.scale, bp.regions.w, bp.regions.h), (16, 125, 125), "the skeleton's macro grid");
+    for r in [Region::Lowfields, Region::Waters, Region::Works] {
+        let n = bp.regions.cells.iter().map(|&b| u32::from(b == region_ix(r) as u8)).sum::<u32>();
+        assert!(n > 1000, "{r:?} covers {n} macro cells");
+    }
+    let waters = cell_in(&s, Region::Waters);
+    let works = cell_in(&s, Region::Works);
+    let now = s.state().tick;
+    let st = s.state_mut();
+    st.weather[region_ix(Region::Lowfields)] = sky(WeatherKind::Clear, now);
+    st.weather[region_ix(Region::Waters)] = sky(WeatherKind::Rain, now);
+    st.weather[region_ix(Region::Works)] = sky(WeatherKind::Clear, now);
+    idle(&mut s, 1);
+    assert_eq!(weather_events(&mut s), [], "her own sky did not change");
+    assert_eq!(s.view(Seat(0)).unwrap().weather().kind, WeatherKind::Clear);
+
+    // Across the river: the Waters' rain is over her, and she is told.
+    place(&mut s, waters.0, waters.1, Facing::South);
+    idle(&mut s, 1);
+    assert_eq!(weather_events(&mut s), [(Some(Seat(0)), Region::Waters, WeatherKind::Rain)]);
+    let v = s.view(Seat(0)).unwrap();
+    assert_eq!((v.region(), v.weather().kind), (Region::Waters, WeatherKind::Rain));
+    // The Waters' ramp climbs under her; the Lowfields' and the Works' stay dry.
+    idle(&mut s, 10 * 60);
+    let w = s.state().zone(ZoneId::County).unwrap().wetness;
+    assert!(w[region_ix(Region::Waters)] > 0 && w[region_ix(Region::Lowfields)] == 0, "{w:?}");
+    assert_eq!(w[region_ix(Region::Works)], 0);
+    assert_eq!(s.view(Seat(0)).unwrap().wetness(), w[region_ix(Region::Waters)]);
+
+    // Into the Works: another region is another sky, clear or not.
+    place(&mut s, works.0, works.1, Facing::South);
+    idle(&mut s, 1);
+    assert_eq!(weather_events(&mut s), [(Some(Seat(0)), Region::Works, WeatherKind::Clear)]);
+    assert_eq!(s.view(Seat(0)).unwrap().wetness(), 0);
+    // Standing still, her sky turning is said too.
+    let now = s.state().tick;
+    s.state_mut().weather[region_ix(Region::Works)] = sky(WeatherKind::Mist, now);
+    idle(&mut s, 1);
+    assert_eq!(weather_events(&mut s), [(Some(Seat(0)), Region::Works, WeatherKind::Mist)]);
+
+    // Any other zone is its row's in weather.json: the Museum is under the Waters.
+    tp(&mut s, ZoneId::Museum);
+    let v = s.view(Seat(0)).unwrap();
+    assert_eq!((v.region(), v.weather().kind), (Region::Waters, WeatherKind::Rain));
+    assert!(s.blueprint(ZoneId::Museum).regions.is_empty());
+    let museum = s.state().zone(ZoneId::Museum).unwrap().wetness;
+    assert_eq!((museum[region_ix(Region::Lowfields)], museum[region_ix(Region::Works)]), (0, 0), "one ramp");
+}
+
+/// §4.6.b: rain wets the county a step at a time, region by region; a campfire's light is out
+/// exactly while the ramp of its own region stands at its `douse` or over it, and back when it
+/// falls under, whatever the other regions' ramps say. Indoors stays dry.
 #[test]
 fn wetness_douses_a_fire_exactly_at_the_threshold() {
     let mut s = new_game();
@@ -144,39 +261,49 @@ fn wetness_douses_a_fire_exactly_at_the_threshold() {
     let douse = cat.story.prop(campfire).douse.unwrap();
     let fire =
         s.state().zone(ZoneId::County).unwrap().props.iter().find(|p| p.def == campfire && !p.hidden).unwrap().clone();
+    let here = s.runtime(ZoneId::County).unwrap().region_at(i32::from(fire.cell.x), i32::from(fire.cell.y));
+    let other = if here == Region::Waters { Region::Works } else { Region::Waters };
+    let (r, o) = (region_ix(here), region_ix(other));
     let t = cat.living.tuning.wetness;
-    let rain = WeatherState { kind: WeatherKind::Rain, since: s.state().tick, until: Tick(u32::MAX) };
-    s.state_mut().weather[region_ix(Region::Lowfields)] = rain;
+    let ramp = |s: &Sim| s.state().zone(ZoneId::County).unwrap().wetness;
+    let now = s.state().tick;
+    s.state_mut().weather[r] = sky(WeatherKind::Rain, now);
+    s.state_mut().weather[o] = sky(WeatherKind::Clear, now);
     let (mut went_out, mut prev) = (false, 0u8);
     for _ in 0..(256 / u32::from(t.rise) + 2) * t.every.0 {
         s.step(&StepInput::IDLE);
-        let w = s.state().zone(ZoneId::County).unwrap().wetness;
+        let w = ramp(&s)[r];
         assert!(w == prev || w == prev.saturating_add(t.rise), "{prev} to {w}");
         prev = w;
         let lit = s.view(Seat(0)).unwrap().light_showing(&fire).is_some();
         assert_eq!(lit, w < douse, "wetness {w}");
         went_out |= !lit;
-        assert_eq!(s.state().zone(ZoneId::House).unwrap().wetness, 0, "a roof keeps the rain off");
+        assert_eq!(ramp(&s)[o], 0, "another region's sky is clear");
+        assert_eq!(s.state().zone(ZoneId::House).unwrap().wetness, [0; 3], "a roof keeps the rain off");
     }
     assert!(went_out && prev == 255);
-    // The rain stops; the ground dries; the fire is a light again under its line.
-    s.state_mut().weather[region_ix(Region::Lowfields)] =
-        WeatherState { kind: WeatherKind::Clear, since: s.state().tick, until: Tick(u32::MAX) };
+    // The rain moves to the other region: the ground dries here and the fire is a light again
+    // under its line, while the other region's ramp is soaked.
+    let now = s.state().tick;
+    s.state_mut().weather[r] = sky(WeatherKind::Clear, now);
+    s.state_mut().weather[o] = sky(WeatherKind::Storm, now);
     let mut back = false;
     for _ in 0..(256 / u32::from(t.fall) + 2) * t.every.0 {
         s.step(&StepInput::IDLE);
-        let w = s.state().zone(ZoneId::County).unwrap().wetness;
+        let w = ramp(&s)[r];
         let lit = s.view(Seat(0)).unwrap().light_showing(&fire).is_some();
         assert_eq!(lit, w < douse, "wetness {w}");
         back |= lit;
     }
-    assert!(back && s.state().zone(ZoneId::County).unwrap().wetness == 0);
-    assert_eq!(s.view(Seat(0)).unwrap().wetness(), 0);
+    assert!(back && ramp(&s)[r] == 0);
+    assert_eq!(ramp(&s)[o], 255);
+    assert!(s.view(Seat(0)).unwrap().light_showing(&fire).is_some(), "the storm is over another region");
 }
 
-/// §4.6.c: one kill does not hold a patch back, so the rat stands up on its own clock; clear the
-/// allotments and the rats wait past their clock, each hour taking pressure off, and stand up
-/// again on an hour once the patch is under its line.
+/// §4.6.c, decision 2: one kill does not hold a patch back, so the rat stands up on its own
+/// clock; clear the allotments and the rats wait past their clock, every ten game minutes taking
+/// pressure off and looking at them again, and stand up again on a mark once the patch is under
+/// its line.
 #[test]
 fn hunting_thins_an_area_and_time_refills_it() {
     let cat = catalog();
@@ -212,10 +339,11 @@ fn hunting_thins_an_area_and_time_refills_it() {
         s.step(&StepInput::IDLE);
     }
     assert!(rats.iter().all(|&r| !alive(&s, r)), "the patch is held back past the rats' own clock");
+    let now = s.state().tick;
     let due = &s.state().zone(ZoneId::County).unwrap().sleeping_due;
     for &r in &rats {
         let &(at, _) = due.iter().find(|e| e.1 == r).expect("still due");
-        assert!(at > s.state().tick);
+        assert!(at > now && at.0 - now.0 <= MARK, "looked at again at the next mark, not the next hour");
     }
     let mut last = s.state().zone(ZoneId::County).unwrap().pressure[a];
     let mut back_at = None;
@@ -223,16 +351,16 @@ fn hunting_thins_an_area_and_time_refills_it() {
         s.step(&StepInput::IDLE);
         let st = s.state();
         let p = st.zone(ZoneId::County).unwrap().pressure[a];
-        if st.clock % HOUR == 0 {
+        if st.clock % MARK == 0 {
             let off = last - p;
             assert!(off >= eco.recover / 2 && off <= eco.recover / 2 + eco.recover || p == 0, "{last} to {p}");
         } else {
-            assert_eq!(p, last, "pressure moves only on the hour, or with a kill");
+            assert_eq!(p, last, "pressure moves only on a mark, or with a kill");
         }
         last = p;
         let up = rats.iter().filter(|&&r| alive(&s, r)).count();
         if up > 0 && back_at.is_none() {
-            assert_eq!(st.clock % HOUR, 0, "they stand up on the hour");
+            assert_eq!(st.clock % MARK, 0, "they stand up on a mark");
             assert!(p < pop.hold);
             back_at = Some(st.tick);
         }
@@ -412,6 +540,216 @@ fn a_schedule_obeys_the_watcher_box() {
     assert!(arrived, "he reached his seat");
 }
 
+/// Decision 4 (§4.6.d): a consequence may lock a door. Julie's Kitchen done while she is in the
+/// house: the county is nobody's, so the lock waits; she walks out and the door behind her is
+/// locked; her key (bound, not used up) opens it and she goes back in.
+#[test]
+fn a_consequence_locks_a_door_where_nobody_is_and_her_key_opens_it() {
+    let cat = catalog();
+    let id = cat.living.consequence_id("house_kept").unwrap();
+    let key = cat.combat.item_id("key_auntie_house").unwrap();
+    let mut s = new_game();
+    cmd(&mut s, Command::Dev(DevOp::Give { item: key, qty: 1 }));
+    let door = prop(&s, "house_door").id;
+    let locked = |s: &Sim| {
+        let z = s.state().zone(ZoneId::County).unwrap();
+        z.props[z.prop_ix(door).unwrap() as usize].locked
+    };
+    let ix = s.state().zone(ZoneId::County).unwrap().prop_ix(door).unwrap() as usize;
+    s.state_mut().zone_mut(ZoneId::County).unwrap().props[ix].locked = false;
+    s.rebuild_runtimes();
+    tp(&mut s, ZoneId::House);
+    s.drain_events();
+    s.state_mut().quests.done.push(cat.story.quest_id("see_the_kitchen").unwrap());
+    idle(&mut s, 1);
+    assert!(s.drain_events().iter().any(|e| e.kind == EventKind::Consequence(id)));
+    assert_eq!(s.state().consequences_owed, [(ZoneId::County, id)], "nobody is in the county");
+    assert!(!locked(&s), "not yet: the county is not live");
+    let mut t = Sim::from_save_with(&s.save(), bps()).expect("loads");
+    tp(&mut t, ZoneId::County);
+    assert!(locked(&t), "locked behind her the moment she is out");
+    assert!(t.state().consequences_owed.is_empty());
+    let d = prop(&t, "house_door");
+    let def = catalog().story.prop(d.def);
+    place(&mut t, i32::from(d.cell.x) + i32::from(def.w) / 2, i32::from(d.cell.y) + i32::from(def.h), Facing::North);
+    idle(&mut t, 2);
+    t.drain_events();
+    cmd(&mut t, Command::Use);
+    let ev = t.drain_events().to_vec();
+    assert!(ev.iter().any(|e| e.kind == EventKind::Toast(jane_sim::event::ToastKind::UnlockedWith(key))), "{ev:?}");
+    assert!(!locked(&t));
+    assert_eq!(holds(&t, "key_auntie_house"), 1, "a bound key is not used up");
+    cmd(&mut t, Command::Use);
+    idle(&mut t, 2);
+    assert_eq!(zone_of(&t), ZoneId::House);
+    // Once, ever: the county never locks it again.
+    tp(&mut t, ZoneId::County);
+    idle(&mut t, 3);
+    assert!(!locked(&t));
+}
+
+// --- a bed's night (decision 3) --------------------------------------------------------------
+
+/// The seed's blueprints with a bed beside a free cell near the county's `start`, whose use
+/// sleeps to six (`Rest { until: 6 }`); and that cell, where she stands facing it.
+fn a_county_with_a_bed() -> (Blueprints, (i32, i32)) {
+    let real = bps();
+    let probe = new_game();
+    let grid = &probe.runtime(ZoneId::County).unwrap().grid;
+    let start = probe.blueprint(ZoneId::County).marks[&Key::Name(catalog().name_id("start").unwrap())].cell;
+    let (sx, sy) = (i32::from(start.x), i32::from(start.y));
+    let spot = (0..30)
+        .flat_map(|r| (-r..=r).flat_map(move |dy| (-r..=r).map(move |dx| (sx + dx, sy + dy))))
+        .find(|&(x, y)| (0..4).all(|dx| (-2..=2).all(|dy| grid.free(x + dx, y + dy, None))))
+        .expect("a free spot by the start");
+    let mut county = (**real.get(ZoneId::County)).clone();
+    let k = county.local("night_bed");
+    let sleep = county.push_list(vec![Action::Rest { until: Some(6) }]);
+    let mut bed = common::room::spawn(k, "bed", (spot.0 + 1) as u16, (spot.1 - 1) as u16);
+    bed.use_list = Some(sleep);
+    county.props.push(bed);
+    let county = Arc::new(county);
+    let zones = std::array::from_fn(|i| {
+        if ZoneId::ALL[i] == ZoneId::County { Arc::clone(&county) } else { Arc::clone(real.get(ZoneId::ALL[i])) }
+    });
+    (Blueprints::from_parts(SEED, zones), spot)
+}
+
+/// Everything world-level (§4.6): the clock and the tick, the world stream, the skies, the
+/// flags, the consequences and what is owed, the rumours; and per zone state, the ramps, the
+/// patches' pressure, the corpses due and which units stand. Not in it: where anything is, who is
+/// awake, what anyone is doing or has in mind, her own body, the fog, the journal's sightings,
+/// the id counters, `frame`.
+fn world_hash(s: &Sim) -> u64 {
+    let st = s.state();
+    let zones: Vec<_> = st
+        .zones
+        .iter()
+        .flatten()
+        .map(|z| {
+            let standing: Vec<(UnitId, bool)> = z.units.iter().map(|u| (u.id, u.alive)).collect();
+            (z.id as u8, z.wetness, z.pressure.clone(), z.sleeping_due.clone(), standing)
+        })
+        .collect();
+    let cons: Vec<_> = (0..catalog().living.consequences.len() as u16)
+        .map(|i| st.journal.known.get(&FactKey::Consequence(jane_core::ConsequenceId(i))).map(|k| k.since))
+        .collect();
+    hash_of(&(
+        (st.tick, st.clock, st.day, st.rng, st.weather),
+        (&st.flags, &st.consequences_done, &st.consequences_owed, &st.rumours),
+        cons,
+        zones,
+    ))
+}
+
+/// The same night two ways, from 22:00: one sim uses the bed (the night passes in one step), the
+/// other idles by it through the same eight hours, a step a tick. `kills` of the allotments' four
+/// rats die at five in the afternoon, due at three in the morning. Iron Knuckles is dead the
+/// tick the night starts, so the mine's consequence fires on the night's first tick and lands in
+/// the live county.
+fn the_same_night(kills: usize) -> (Sim, Sim) {
+    let (bps, (x, y)) = a_county_with_a_bed();
+    let cat = catalog();
+    let mut sims = [Sim::new_game_with(bps.clone(), "Jane"), Sim::new_game_with(bps, "Jane")];
+    for s in &mut sims {
+        place(s, x, y, Facing::East);
+        cmd(s, Command::Dev(DevOp::God(true)));
+        for r in county_unit_ids(s, "rat_allotment_").into_iter().take(kills) {
+            kill(s, ZoneId::County, r);
+        }
+        idle(s, 1);
+        cmd(s, Command::Dev(DevOp::Time { hour: 22 }));
+        let knuckles = FlagKey::Dead(sym(s, "iron_knuckles"));
+        s.state_mut().flags.insert(knuckles, 1);
+        s.state_mut().quests.done.push(cat.story.quest_id("ames_spectacles").unwrap());
+        s.drain_events();
+    }
+    let [mut slept, mut idled] = sims;
+    assert_eq!(world_hash(&slept), world_hash(&idled));
+    let (t0, c0) = (slept.state().tick, slept.state().clock);
+    assert_eq!(c0 / HOUR, 22);
+    let night = DAY - c0 + 6 * HOUR;
+    cmd(&mut slept, Command::Use);
+    assert!(slept.drain_events().iter().any(|e| e.kind == EventKind::Rest), "she used the bed");
+    // The night and then the step's own tick: the clock and the tick moved together.
+    assert_eq!((slept.state().tick.0, slept.state().clock), (t0.0 + night + 1, 6 * HOUR + 1));
+    for _ in 0..=night {
+        idled.step(&StepInput::IDLE);
+    }
+    assert_eq!((idled.state().tick, idled.state().clock), (slept.state().tick, slept.state().clock));
+    (slept, idled)
+}
+
+/// Decision 3: sleeping eight hours is, world for world, idling through them. The stream drew
+/// the same draws (eight hours of skies, 48 marks of ecology), the skies and the ramps are the
+/// same, the patches' pressure is the same, the consequence fired on the same tick, and the rats
+/// stood up (or were held) on the same ticks under the same rules. What may differ is only what
+/// moves: where anyone stands, who is awake, her body.
+#[test]
+fn a_night_slept_is_a_night_idled() {
+    // Two kills: under the line by three o'clock, so both rats stand on their own tick, mid-gap.
+    let (slept, idled) = the_same_night(2);
+    assert_eq!(world_hash(&slept), world_hash(&idled));
+    let rats = county_unit_ids(&slept, "rat_allotment_");
+    assert!(rats.iter().take(2).all(|&r| alive(&slept, r)), "they stood up while she slept");
+    let id = catalog().living.consequence_id("mine_quiet").unwrap();
+    let fired = slept.state().journal.known.get(&FactKey::Consequence(id)).map(|k| k.since);
+    // The night was eight hours less the tick the clock was set in; its first tick fired it.
+    assert_eq!(fired, Some(Tick(slept.state().tick.0 - (8 * HOUR - 1))));
+    assert!(
+        slept.state().zone(ZoneId::County).unwrap().units.iter().any(|u| u.key == Some(sym(&slept, "mine_watcher")))
+    );
+    assert!(!slept.state().rumours.is_empty(), "the rumour started");
+
+    // Four kills: held past their tick, looked at again every mark, still held at six.
+    let (slept, idled) = the_same_night(4);
+    assert_eq!(world_hash(&slept), world_hash(&idled));
+    let z = slept.state().zone(ZoneId::County).unwrap();
+    assert!(rats.iter().all(|&r| !alive(&slept, r)));
+    for &(at, _) in z.sleeping_due.iter().filter(|e| rats.contains(&e.1)) {
+        assert!(at > slept.state().tick && at.0 - slept.state().tick.0 <= MARK, "held to the next mark");
+    }
+    let p = z.pressure[area_ix(&slept, "allotments")];
+    let pop = catalog().living.ecology_of(catalog().name_id("allotments").unwrap()).unwrap();
+    assert!(p < 4 * pop.populations[0].weight && p >= pop.populations[0].hold, "{p}");
+
+    // And the night is the same night through a save and a load, and a rebuild.
+    let (bps, (x, y)) = a_county_with_a_bed();
+    let mut a = Sim::new_game_with(bps.clone(), "Jane");
+    place(&mut a, x, y, Facing::East);
+    idle(&mut a, 5);
+    let mut b = Sim::from_save_with(&a.save(), bps).expect("loads");
+    b.rebuild_runtimes();
+    cmd(&mut a, Command::Use);
+    cmd(&mut b, Command::Use);
+    assert_eq!(a.hash(), b.hash());
+    assert_eq!(a.state().clock, 6 * HOUR + 1);
+}
+
+/// A bed in the house is a conversation: alone, the world holds while she reads, and the night
+/// still passes when she chooses to sleep (a frozen step). The tick moves with the clock, so a
+/// timer set before she slept has run out when she wakes.
+#[test]
+fn the_house_bed_sleeps_to_six_in_a_frozen_step() {
+    let mut s = new_game();
+    tp(&mut s, ZoneId::House);
+    assert!(walk_to_prop(&mut s, "julies_bed"));
+    let (t0, c0) = (s.state().tick, s.state().clock);
+    // A cooldown of an hour, set now: it is due long before morning.
+    let body = s.state().players[0].unit;
+    let until = t0.after(Tick(HOUR));
+    s.state_mut().zone_mut(ZoneId::House).unwrap().unit_mut(body).unwrap().stop_until = until;
+    cmd(&mut s, Command::Use);
+    assert!(s.frozen(), "alone, reading");
+    let t1 = s.state().tick;
+    cmd(&mut s, Command::Choose { option: 0 });
+    let gap = 24 * HOUR - c0 + 6 * HOUR;
+    assert_eq!(s.state().clock, 6 * HOUR, "a frozen step: the night, and no tick after it");
+    assert_eq!(s.state().tick, t1.after(Tick(gap)));
+    assert!(s.state().tick > until, "the timer has run out");
+    assert_eq!(s.state().day, 1);
+}
+
 // --- the determinism gates, with the living world running over a game day ---------------------
 
 /// What the day's tape does to the world besides moving: a story and a quest done (a rumour, a
@@ -471,7 +809,8 @@ fn same_tape_same_hash_over_a_living_day() {
     // The day did live.
     assert!(skies.len() >= 2, "{skies:?}");
     assert!(!a.state().rumours.is_empty());
-    assert!(a.state().consequences_done.get(0) && a.state().consequences_done.get(1));
+    let fired = |id: &str| a.state().consequences_done.get(u32::from(catalog().living.consequence_id(id).unwrap().0));
+    assert!(fired("allotments_thinned") && fired("mine_quiet"));
 }
 
 /// `save_load_continue`: saved twice across the day, loaded, continued: the run that never

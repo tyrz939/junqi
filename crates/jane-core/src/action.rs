@@ -227,6 +227,8 @@ impl Action {
             self,
             Action::Show(_)
                 | Action::Hide(_)
+                | Action::Lock(_)
+                | Action::Unlock(_)
                 | Action::Switch { .. }
                 | Action::Spawn { .. }
                 | Action::Despawn(_)
@@ -304,6 +306,7 @@ mod tests {
         assert!(Action::Travel { zone: ZoneId::Mine, mark: Key::Local(0) }.needs_actor());
         assert!(!Action::Show(Key::Local(0)).needs_actor());
         assert!(Action::Show(Key::Local(0)).is_world_verb());
+        assert!(Action::Lock(Key::Local(0)).is_world_verb() && Action::Unlock(Key::Local(0)).is_world_verb());
         assert!(!Action::Learn(SpellId(0)).is_world_verb());
     }
 }

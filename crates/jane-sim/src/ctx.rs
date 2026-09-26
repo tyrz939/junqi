@@ -72,6 +72,10 @@ pub enum WorldOp {
 #[derive(Debug, Default)]
 pub struct WorldOps {
     pub ops: Vec<WorldOp>,
+    /// A bed's `Rest { until }` with the whole party resting: the hour to sleep to. The step runs
+    /// it (`living::Sim::sleep_to`) after the commands or at its end, never mid-zone, so it is
+    /// empty between steps and never saved. The first asked in a step wins.
+    pub sleep: Option<u8>,
 }
 
 /// Per-sim scratch (§3.3 `Sim.scratch`): every temporary buffer a tick uses, `clear()`ed and

@@ -20,8 +20,8 @@ use crate::runtime::{ZoneRuntime, find_locals};
 use crate::state::{Bits, GameState, Growth, Journal, Quests, SAVE_VERSION};
 use crate::sym::SymTable;
 use crate::tuning::{
-    ENERGY_CARRY, ENERGY_REGEN, ENERGY_SPRINT, FOG_EVERY, MAX_PLAYERS, MOVE_DEADZONE, PLAYER_RESPAWN, START_HOUR,
-    TICKS_PER_DAY, TICKS_PER_HOUR,
+    ECOLOGY_EVERY, ENERGY_CARRY, ENERGY_REGEN, ENERGY_SPRINT, FOG_EVERY, MAX_PLAYERS, MOVE_DEADZONE, PLAYER_RESPAWN,
+    START_HOUR, TICKS_PER_DAY, TICKS_PER_HOUR,
 };
 use crate::units::{def_of, face_angle, move_unit, restore_energy, spend_energy};
 use crate::zone::create_zone_state;
@@ -48,6 +48,9 @@ pub struct Sim {
     /// every tick, the controllers' pass over every unit asking whether it is awake). A test
     /// switch; never saved, and it must never change a hash.
     everyone: bool,
+    /// The region and sky over each seat as the last step left it, for `EventKind::Weather`
+    /// (`living::Sim::say_skies`). Derived: made again from the state on a load.
+    pub(crate) skies: [Option<(jane_data::Region, crate::state::WeatherKind)>; MAX_PLAYERS],
 }
 
 impl Sim {
@@ -94,7 +97,9 @@ impl Sim {
 
     pub(crate) fn adopt(state: GameState, bps: Blueprints) -> Sim {
         let cat = jane_data::catalog();
+        let skies = std::array::from_fn(|seat| crate::living::sky_over(&state, &bps, seat));
         Sim {
+            skies,
             state,
             bps,
             rts: none_per_zone(),
@@ -304,9 +309,11 @@ impl Sim {
     ///
     /// ```text
     ///  0 commands      (seat, seq) order; Join / Leave / Open are world level
-    ///  1 freeze        frozen: stop here
-    ///  2 clock         tick, clock, day; on the hour the world rolls, then clock rows once,
-    ///                  actor None; the rain ramp, consequences, rumours, owed edits (living)
+    ///    sleep         a bed chosen: the world lives through the night (living `sleep_to`)
+    ///  1 freeze        frozen: stop here (the skies told)
+    ///  2 clock         tick, clock, day; every ten minutes the world rolls (skies on the hour,
+    ///                  ecology), then on the hour clock rows once, actor None; the rain ramp,
+    ///                  consequences, rumours, owed edits (living)
     ///    for each live zone in ZoneId order, taken out of state.zones:
     ///  3 presence      every 30 ticks: schedules, dayOnly, nightOnly
     ///  4 ring          on a seat's block change
@@ -320,6 +327,7 @@ impl Sim {
     /// 12 housekeeping  prop flags, fills owed, fog every 10   (drops: loot unit)
     /// 13 zone ops      spawn, despawn, wake; the zone goes back; world ops drain
     /// 14 travel        seat order
+    ///    sleep         a bed chosen after step 0 (a trigger, a clock row); each seat's sky told
     /// 15 drop          runtimes of zones nobody is in
     /// ```
     pub fn step(&mut self, input: &StepInput<'_>) -> Stepped {
@@ -328,8 +336,12 @@ impl Sim {
         for c in input.commands {
             self.command(c, &input.frames);
         }
+        // A bed chosen: the night passes before anything else moves (alone at a bed's
+        // conversation, this is a frozen step: the night passes all the same).
+        self.run_sleep();
         // 1
         if self.frozen() {
+            self.say_skies();
             // Only the console can deal a blow while she reads alone; a step that does not run
             // does not land it.
             self.clear_hits();
@@ -352,6 +364,9 @@ impl Sim {
                 self.perform_travel(Seat(seat as u8));
             }
         }
+        // A bed chosen after the commands; then what each seat's sky is now.
+        self.run_sleep();
+        self.say_skies();
         // 15
         self.drop_empty();
         // A blow queued on a zone that did not tick this step (its last seat left it this frame)
@@ -375,7 +390,16 @@ impl Sim {
         self.scratch.hits[z.index()].push(hit);
     }
 
-    fn step_clock(&mut self) {
+    /// `Rest { until }` asked for a night: run it (`living::Sim::sleep_to`).
+    fn run_sleep(&mut self) {
+        if let Some(hour) = self.wops.sleep.take() {
+            self.sleep_to(hour);
+        }
+    }
+
+    /// Step 2 for one tick: the clock moves, and the world's work of the tick it reaches (a bed's
+    /// night works its ticks through this too). Whether a consequence fired or owed edits landed.
+    pub(crate) fn step_clock(&mut self) -> bool {
         let s = &mut self.state;
         s.tick = Tick(s.tick.0 + 1);
         s.clock += 1;
@@ -383,11 +407,14 @@ impl Sim {
             s.clock = 0;
             s.day += 1;
         }
-        if s.clock % TICKS_PER_HOUR == 0 {
-            let hour = (s.clock / TICKS_PER_HOUR) as u8;
-            // The world stream, once an hour, in its fixed order: the sky of every region, then
-            // every area's ecology (§4.4, `living.rs`).
-            self.world_rolls();
+        let clock = s.clock;
+        if clock % ECOLOGY_EVERY == 0 {
+            // The world stream, every ten minutes, in its fixed order: on the hour the sky of
+            // every region, then every area's ecology (§4.4, `living.rs`).
+            self.world_rolls(clock % TICKS_PER_HOUR == 0);
+        }
+        if clock % TICKS_PER_HOUR == 0 {
+            let hour = (clock / TICKS_PER_HOUR) as u8;
             // Clock rows run once, with no actor, in the county (the rows name county things);
             // what they say is heard by the whole party. The county's runtime is made for them if
             // nobody is there, and dropped again at step 15.
@@ -403,7 +430,7 @@ impl Sim {
         }
         // Every tick: the rain ramp, consequences that fire, rumours that start, edits owed to a
         // zone that is live now (§4.6, `living.rs`).
-        self.step_living();
+        self.step_living()
     }
 
     fn step_zone(&mut self, z: ZoneId, input: &StepInput<'_>, snap: &PartySnap) {

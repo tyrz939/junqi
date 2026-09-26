@@ -30,7 +30,9 @@ use crate::tuning::{BAG_SLOTS, BAR_SLOTS, CRAFT_INPUTS};
 /// `snake`; a path let go keeps its box with no goal, and the snake's `phase_tick` is a count).
 /// 5: the living world lives (a sky per region, the consequences owed a zone, the journal's
 /// `Consequence` fact; `wetness`, `pressure`, `consequences_done` and `rumours` written).
-pub const SAVE_VERSION: u16 = 5;
+/// 6: a zone's rain ramp is one per region (`wetness: [u8; 3]`: the county is under three
+/// skies); the ecology steps every ten game minutes; a bed's night moves the tick too.
+pub const SAVE_VERSION: u16 = 6;
 
 /// A fixed-size bit set (trigger bits, consequences done).
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -90,7 +92,8 @@ pub struct GameState {
     pub seed: u32,
     /// Step calls: the wire and replay clock.
     pub frame: u32,
-    /// Advances only when not frozen.
+    /// Advances only when not frozen, one a step; a bed's night advances it by the time slept,
+    /// with the clock (`living::Sim::sleep_to`).
     pub tick: Tick,
     /// Ticks since midnight.
     pub clock: u32,
@@ -100,8 +103,8 @@ pub struct GameState {
     /// Whether anyone else may sit down. A save always loads closed.
     pub open: bool,
     pub next: Counters,
-    /// The world stream: weather and ecology, drawn once an hour in a fixed order (§4.4,
-    /// `living.rs`). Nothing else draws from it.
+    /// The world stream: weather on the hour and ecology every ten game minutes, drawn in a
+    /// fixed order (§4.4, `living.rs`). Nothing else draws from it.
     pub rng: Sfc32,
     /// In seat order; at most four. A seat is never removed: a leaver's body is parked.
     pub players: Vec<PlayerState>,
@@ -467,8 +470,10 @@ pub struct ZoneState {
     pub pending_fill: Vec<Fill>,
     /// Corpses to stand up, sorted `(tick, id)`. Owned by the combat unit.
     pub sleeping_due: Vec<(Tick, UnitId)>,
-    /// The rain ramp (§4.6.b, `living.rs`): 0 dry, 255 soaked; a fire goes out at its `douse`.
-    pub wetness: u8,
+    /// The rain ramps (§4.6.b, `living.rs`), one per region in region order: 0 dry, 255 soaked;
+    /// a fire goes out at its `douse` by the ramp of the region it stands in. The county steps
+    /// all three (it lies under three skies), any other zone only its own region's.
+    pub wetness: [u8; REGIONS],
     /// Per area, in the blueprint's area order (§4.6.c, `living.rs`): what hunting has taken.
     pub pressure: Vec<u16>,
     /// The block every seat here stood in when the ring last ran; `None` before it ever ran.

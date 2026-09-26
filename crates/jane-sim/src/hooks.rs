@@ -74,8 +74,8 @@ pub fn unit_died(cx: &mut Ctx<'_>, unit: UnitId, _slayer: Option<Seat>) {
 }
 
 /// May this corpse stand up now? The ecology says no while its def is at its area's `cap` or the
-/// pressure is at the row's `hold` line, and pushes it back onto `sleeping_due` at the next hour
-/// itself (`living::may_stand`).
+/// pressure is at the row's `hold` line, and pushes it back onto `sleeping_due` at the next
+/// ten-minute mark itself (`living::may_stand`).
 pub fn respawn_allowed(cx: &mut Ctx<'_>, unit: UnitId) -> bool {
     crate::living::may_stand(cx, unit)
 }
