@@ -248,6 +248,9 @@ pub struct Scene<'a> {
 pub fn light_scene(s: &Scene<'_>, sun: &Sun, ambient: [u16; 3], points: &[Point], glow: u16) -> Vec<[u8; 3]> {
     /// The haze: this many 256ths of a lamp's colour, added where it falls, whatever it lands on.
     const HAZE: i64 = 22;
+    /// How much of what a lamp lights it sees as grey, of 256: a warm lamp on green grass warms
+    /// it toward the lamp's colour instead of multiplying it into lime.
+    const WASH: i32 = 128;
     let l = sun.toward();
     let hf = Heights { w: s.w, h: s.h, z: s.height };
     let march = March::new(&hf, sun);
@@ -255,6 +258,7 @@ pub fn light_scene(s: &Scene<'_>, sun: &Sun, ambient: [u16; 3], points: &[Point]
     // Light per pixel per channel in 1/4096ths of full, and the haze in 1/16ths of a level.
     let mut acc: Vec<[i32; 3]> = Vec::with_capacity(n);
     let mut haze: Vec<[i32; 3]> = vec![[0; 3]; n];
+    let mut lamp: Vec<[i32; 3]> = vec![[0; 3]; n];
     for y in 0..s.h {
         for x in 0..s.w {
             let i = (y * s.w + x) as usize;
@@ -284,7 +288,7 @@ pub fn light_scene(s: &Scene<'_>, sun: &Sun, ambient: [u16; 3], points: &[Point]
                 let f = t * t / 65536;
                 for k in 0..3 {
                     let c = i64::from(p.colour[k]);
-                    acc[i][k] += (c * 16 * f / 65536 * dot / 4096) as i32;
+                    lamp[i][k] += (c * 16 * f / 65536 * dot / 4096) as i32;
                     haze[i][k] += (c * 16 * f / 65536 * HAZE / 256) as i32;
                 }
             }
@@ -296,9 +300,11 @@ pub fn light_scene(s: &Scene<'_>, sun: &Sun, ambient: [u16; 3], points: &[Point]
         let base = [(a >> 16) as u8, (a >> 8) as u8, a as u8];
         let e = s.emissive[i];
         let g = if e == Ix::CLEAR { [0; 3] } else { rgb(e) };
+        let luma = (299 * i32::from(base[0]) + 587 * i32::from(base[1]) + 114 * i32::from(base[2])) / 1000;
         let mut px = [0u8; 3];
         for k in 0..3 {
-            let v = (i32::from(base[k]) * acc[i][k]) >> 12;
+            let washed = (i32::from(base[k]) * (256 - WASH) + luma * WASH) >> 8;
+            let v = (i32::from(base[k]) * acc[i][k] + washed * lamp[i][k]) >> 12;
             px[k] = (v + haze[i][k] / 16 + i32::from(g[k]) * i32::from(glow) / 256).clamp(0, 255) as u8;
         }
         out.push(px);
