@@ -84,15 +84,13 @@ impl Mine {
             self.reset();
             return None;
         }
-        let Some(k) = boss(v) else {
-            self.reset();
-            return None;
-        };
-        if !crate::fight::on_me(v, k) {
+        // Not on her (or asleep out of her sight, as he is while she walks to the stove): the
+        // walk to the stove, if she is on it.
+        let Some(k) = boss(v).filter(|k| crate::fight::on_me(v, k)) else {
             self.placed = None;
             self.bait = None;
-            return self.prepare(v, cx, k);
-        }
+            return self.prepare(v, cx);
+        };
         if matches!(self.task, Some(Task::Use(_))) && self.resting {
             self.task = None;
         }
@@ -181,7 +179,11 @@ impl Mine {
 
     /// Before the big door: with its key in her bag and hurt, the First Aid stove first (the
     /// door drops behind her, and he out-hits her four to one). A few trips at most.
-    fn prepare(&mut self, v: &View<'_>, cx: &mut Ctx, k: &Unit) -> Option<Act> {
+    fn prepare(&mut self, v: &View<'_>, cx: &mut Ctx) -> Option<Act> {
+        // Whatever comes at her on the way is the fight's (the walk waits for it).
+        if sense::enemies(v).iter().any(|u| crate::fight::on_me(v, u)) {
+            return None;
+        }
         if self.resting {
             if let Some(t) = &mut self.task {
                 match t.tick(v, cx) {
@@ -194,18 +196,24 @@ impl Mine {
             self.resting = false;
             return None;
         }
-        if sense::hp_permille(v.body()) >= 850 || self.rests >= 3 || !holds_key_to(v, k) {
+        if sense::hp_permille(v.body()) >= 850 || self.rests >= 3 {
+            return None;
+        }
+        let me = v.body().pos;
+        // At the door (on her way to unlock it), not the moment the key is in her bag: what she
+        // meets on the way there would only need mending again.
+        if door_she_holds(v).is_none_or(|d| sense::to_prop(d, me) > 16 * CELL) {
             return None;
         }
         let cat = jane_data::catalog();
-        let me = v.body().pos;
         let stove = v
             .props()
             .filter(|p| !p.hidden && cat.story.prop(p.def).rest && v.prop_spawn(p).is_some_and(|s| s.talk.is_some()))
             .min_by_key(|p| (sense::to_prop(p, me), p.id))?;
         self.rests += 1;
-        self.resting = true;
-        self.start(v, cx, Task::Use(UseProp::new(stove.id)))
+        let a = self.start(v, cx, Task::Use(UseProp::new(stove.id)));
+        self.resting = a.is_some();
+        a
     }
 
     /// Begin a task, if its first frame acts.
@@ -297,15 +305,17 @@ fn boss<'a>(v: &View<'a>) -> Option<&'a Unit> {
     sense::units_of(v, def).into_iter().find(|u| u.alive && !u.hidden)
 }
 
-/// Does she hold the key to a locked door by his ground (within his leash and a little of his
-/// home): the big door, the one the hub looks at?
-fn holds_key_to(v: &View<'_>, k: &Unit) -> bool {
+/// The big door's lock: the Large Mine Key's tag ("Opens the door everyone in the mine stopped
+/// opening").
+const BIG_DOOR: &str = "mine_boss";
+
+/// The big door (the one the hub looks at), locked, with its key in her bag.
+fn door_she_holds<'a>(v: &View<'a>) -> Option<&'a Prop> {
     let cat = jane_data::catalog();
-    let leash = i64::from(cat.combat.unit(k.def).leash.0);
-    v.props().filter(|p| p.locked && dist(prop_centre(p), k.home) <= leash + 12 * CELL).any(|p| {
+    v.props().filter(|p| p.locked).find(|p| {
         let tag = v.prop_spawn(p).and_then(|s| s.key_tag);
         let Some(jane_core::Key::Name(n)) = tag else { return false };
-        v.me().bag.iter().flatten().any(|s| cat.combat.item(s.item).opens == Some(n))
+        cat.name(n) == BIG_DOOR && v.me().bag.iter().flatten().any(|s| cat.combat.item(s.item).opens == Some(n))
     })
 }
 
@@ -324,9 +334,10 @@ fn crosses(from: Vec2, to: Vec2, r: Rect) -> bool {
     })
 }
 
-/// Is `p` within three cells of the straight way from `a` to `b` (in her way)?
+/// Is `p` in her way from `a` to `b`: nearer `b` than she is, or within three cells of the far
+/// part of the way? (Close behind her is where he should be: she outruns him.)
 fn beside_path(p: Vec2, a: Vec2, b: Vec2) -> bool {
-    (0..=16).any(|i| dist(along(a, b, i), p) < 3 * CELL)
+    dist(p, b) <= dist(a, b) || (6..=16).any(|i| dist(along(a, b, i), p) < 3 * CELL)
 }
 
 /// Is his centre's cell in the rect (as a `strike` counts it)?
