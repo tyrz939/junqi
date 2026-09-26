@@ -68,7 +68,17 @@ pub struct Nav {
     pub roads: bool,
     /// Why the last `NoWay` was said (for a debugging line).
     pub why: &'static str,
+    /// The plan over blocks for a goal beyond the window, and the waypoint on it walked to now.
+    pub coarse: crate::coarse::Coarse,
+    waypoint: Option<(i32, i32)>,
+    /// What the path in hand leads to: the goal, or a waypoint toward it.
+    target: Option<(i32, i32)>,
 }
+
+/// Cells (the larger of across and down) beyond which a goal is planned over blocks first.
+pub const FAR: i32 = WINDOW as i32 / 2 - 24;
+/// How far along the block plan a waypoint is taken, cells.
+pub const WAYPOINT_REACH: i32 = 110;
 
 /// What a step off the road costs a walker who keeps to roads, over the step's own cost.
 pub const OFF_ROAD: u32 = 15;
@@ -130,6 +140,9 @@ impl Nav {
             plans: 0,
             roads: false,
             why: "",
+            coarse: crate::coarse::Coarse::new(),
+            waypoint: None,
+            target: None,
         }
     }
 
@@ -141,6 +154,8 @@ impl Nav {
     /// Forget the path (a new goal, a new zone).
     pub fn reset(&mut self) {
         self.path.clear();
+        self.waypoint = None;
+        self.target = None;
         self.at = 0;
         self.goal = None;
         self.replan_in = 0;
@@ -236,17 +251,51 @@ impl Nav {
             }
         }
         let own = pos.cell();
+        // A goal beyond the window: toward a waypoint on the plan over blocks, the next one
+        // once she is near it (or the path to it runs out).
+        let cheb = |a: (i32, i32), b: (i32, i32)| (a.0 - b.0).abs().max((a.1 - b.1).abs());
+        let target = if cheb(own, goal) > FAR {
+            match self.waypoint {
+                Some(w) if cheb(w, own) > 6 && self.at < self.path.len() => w,
+                _ => {
+                    let roads = self.roads && !v.indoor();
+                    let w = self.coarse.waypoint(v, own, goal, roads, WAYPOINT_REACH).unwrap_or(goal);
+                    if self.waypoint != Some(w) {
+                        // A new waypoint on the plan is progress along it.
+                        self.fruitless = 0;
+                        self.best_dist = i64::MAX;
+                    }
+                    self.waypoint = Some(w);
+                    w
+                }
+            }
+        } else {
+            self.waypoint = None;
+            goal
+        };
+        if self.target != Some(target) {
+            self.target = Some(target);
+            self.path.clear();
+            self.at = 0;
+        }
         if self.at >= self.path.len() || self.replan_in == 0 {
             if own == goal {
                 // Standing on the goal cell but not within `near` of the point: walk straight at it.
                 return Go::Walk(stick(pos, to, false));
             }
             // Cells shunned for someone in the way may be what walls her in: forget them first.
-            if (!self.plan(v, own, goal) || self.path.is_empty()) && !self.shun.is_empty() {
+            if (!self.plan(v, own, target) || self.path.is_empty()) && !self.shun.is_empty() {
                 self.shun.clear();
-                self.plan(v, own, goal);
+                self.plan(v, own, target);
             }
             if self.path.is_empty() {
+                if target != goal {
+                    // That crossing of the block plan cannot be made from here: round it.
+                    self.coarse.failed(own, target, v.frame());
+                    self.waypoint = None;
+                    self.target = None;
+                    return Go::Walk(InputFrame::IDLE);
+                }
                 self.why = "no path";
                 return Go::NoWay;
             }
@@ -259,7 +308,7 @@ impl Nav {
                 self.at += 1;
                 // A step along a path that ends at the goal is progress, however far round it
                 // goes (a gallery that doubles back is not hopeless).
-                if self.path.last() == Some(&goal) {
+                if self.path.last() == Some(&target) {
                     self.fruitless = 0;
                 }
                 continue;

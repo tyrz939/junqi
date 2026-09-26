@@ -53,6 +53,12 @@ pub struct Ctx {
     pub notes: BTreeMap<ZoneId, Vec<PropNote>>,
     /// Enemies she has seen standing, by def: where each was last seen (forgotten once seen down).
     pub seen_foes: BTreeMap<jane_core::UnitDefId, BTreeMap<UnitId, (ZoneId, Vec2)>>,
+    /// Which of the three endings she chooses at Yours to Say, if told (the choice policy).
+    pub ending: Option<crate::Ending>,
+    /// She wants the night (or the day) slept away at the next bed: waiting for a Sunday.
+    pub sleep: bool,
+    /// The day she signalled the Sunday train at the name board.
+    pub signalled: Option<u32>,
 }
 
 /// What a prop was seen to do: enough to go back for it from another zone.
@@ -70,6 +76,12 @@ pub struct PropNote {
     /// A bed or a fire.
     pub rest: bool,
     pub door: Option<ZoneId>,
+    /// Which ending it plays, when it is one of the three (`the_end`).
+    pub ending: Option<u8>,
+    /// It signals the Sunday train.
+    pub signals: bool,
+    /// A bed that sleeps the night away.
+    pub sleeps: bool,
 }
 
 impl PropNote {
@@ -85,12 +97,21 @@ impl PropNote {
             bench: jane_data::catalog().story.prop(p.def).bench,
             rest: jane_data::catalog().story.prop(p.def).rest,
             door: crate::sense::door_of(v, p).map(|d| d.zone),
+            ending: None,
+            signals: false,
+            sleeps: false,
         };
         crate::sense::visit_prop(v, p, &mut |a| match *a {
             Action::HandIn(q) => n.hands_in.push(q),
             Action::Quest(q) => n.gives.push(q),
             Action::Location(jane_core::Key::Name(name)) => n.places.push(name),
-            _ => {}
+            Action::Rest { until: Some(_), .. } => n.sleeps = true,
+            _ => {
+                if let Some(e) = crate::sense::sets_the_end(a) {
+                    n.ending = Some(e);
+                }
+                n.signals |= crate::sense::signals_train(a);
+            }
         });
         if !p.used {
             if let Some(s) = v.prop_spawn(p) {
@@ -120,6 +141,9 @@ impl Ctx {
             frames: 0,
             notes: BTreeMap::new(),
             seen_foes: BTreeMap::new(),
+            ending: None,
+            sleep: false,
+            signalled: None,
         }
     }
 
@@ -434,7 +458,7 @@ fn use_prop(u: &mut UseProp, v: &View<'_>, cx: &mut Ctx) -> Status {
                 u.sides = sides(v, p, me);
             }
             let Some(&(at, _)) = u.sides.get(u.side as usize) else {
-                return Status::Failed(format!("no side of it to stand at (tried {})", u.side));
+                return Status::Failed(format!("no side of it to stand at (tried {}; the last: {})", u.side, cx.nav.why));
             };
             match cx.nav.go(v, at, Fx::from_px(3), cx.sprint()) {
                 Go::Walk(f) => Status::Act(Act::hold(f)),

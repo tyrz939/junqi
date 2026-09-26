@@ -56,6 +56,8 @@ pub enum Goal {
     Look(ZoneId, PropId),
     /// Mend at a fire or a bed.
     Rest,
+    /// Home before dark: the night slept away in Julie's bed.
+    Sleep,
     /// In a dungeon with the quest's thing out of reach: what the crawl would do next.
     Explore(crate::crawl::Try),
 }
@@ -69,6 +71,8 @@ enum Target {
     Zone(ZoneId),
     /// A point in another zone.
     At(ZoneId, Vec2),
+    /// Nothing to do for it for this many hours (whoever takes it back is not about till then).
+    Later(u8),
 }
 
 #[derive(Debug, Default)]
@@ -90,6 +94,18 @@ pub struct Story {
     fled_at: u32,
     /// Fires she could not get to (something guards the way).
     bad_fires: std::collections::BTreeSet<PropId>,
+    /// A dungeon a quest step sends her into, played whole by a crawl (in by its door, through
+    /// its locks and verbs to its boss, and out), and the step it is for.
+    dungeon: Option<(Box<crate::crawl::Crawl>, Goal)>,
+}
+
+/// Frames a dungeon's crawl may run before the story takes her out of it and tries later: forty
+/// game minutes (the crawl test gives one twenty).
+const CRAWL_FRAMES: u32 = 60 * 60 * 40;
+
+/// A zone a quest step is played in whole: a dungeon, not the county or the house.
+pub fn dungeon(z: ZoneId) -> bool {
+    !matches!(z, ZoneId::County | ZoneId::House)
 }
 
 /// Frames to set a failed objective aside (doubling with each failure).
@@ -145,6 +161,9 @@ impl Story {
 
     /// What it is doing, for a debugging line.
     pub fn status(&self) -> String {
+        if let Some((c, g)) = &self.dungeon {
+            return format!("{g:?} by crawling the {}: {}", c.zone.name(), c.status());
+        }
         match &self.task {
             Some((t, g)) => format!("{g:?} {t:?}"),
             None => "-".into(),
@@ -155,6 +174,9 @@ impl Story {
     pub fn explain(&self, v: &View<'_>, cx: &Ctx) -> String {
         let cat = jane_data::catalog();
         let mut out = format!("blocked {:?}\n", self.blocked);
+        if let Some((c, _)) = &self.dungeon {
+            let _ = writeln!(out, "  crawl: {}", c.why_stuck(v));
+        }
         if let Some(ex) = &self.explorer {
             let _ = writeln!(out, "  explorer: {}", ex.why_stuck(v));
         }
@@ -178,9 +200,58 @@ impl Story {
         out
     }
 
-    pub fn think(&mut self, v: &View<'_>, cx: &mut Ctx, notes: &mut Vec<Mark>) -> Act {
+    pub fn think(&mut self, v: &View<'_>, cx: &mut Ctx, events: &[jane_sim::Event], notes: &mut Vec<Mark>) -> Act {
         if let Some(a) = talk::answer(v, cx) {
             return a;
+        }
+        // After an ending the game closes (STORY.md §10): the last page has been read.
+        if v.the_end() != 0 {
+            if !self.done {
+                self.done = true;
+                let how = ["", "held the shield", "put the Ball back in the hill", "took the Sunday train"];
+                notes.push(Mark::Note(format!("the end: {}", how[usize::from(v.the_end().min(3))])));
+            }
+            return Act::idle();
+        }
+        // A dungeon under way: the crawl plays it, in and out again.
+        if let Some((c, g)) = &mut self.dungeon {
+            let g = *g;
+            if !c.done() && c.frames < CRAWL_FRAMES {
+                let a = c.think(v, cx, events, notes);
+                if !c.done() {
+                    return a;
+                }
+            }
+            let (c, _) = self.dungeon.take().expect("a crawl");
+            // Deaths in there were the crawl's to count.
+            self.deaths = v.me().stats.deaths;
+            self.task = None;
+            let why = match (&c.stuck, c.done()) {
+                (Some(why), _) => Some(format!("the {}: {why}", c.zone.name())),
+                (None, false) => Some(format!("the {} took too long", c.zone.name())),
+                (None, true) => None,
+            };
+            match why {
+                // Every step still open there waits with it, not only the one that sent her in.
+                Some(why) => {
+                    self.set_aside(v, g, &why, notes);
+                    for s in Self::steps_in(v, c.zone) {
+                        if s != g {
+                            self.set_aside(v, s, &why, &mut Vec::new());
+                        }
+                    }
+                }
+                None => notes.push(Mark::Note(format!("done with the {}", c.zone.name()))),
+            }
+            return Act::idle();
+        }
+        // In a dungeon a quest step names: play it whole.
+        let here = v.zone();
+        if dungeon(here) && self.task.is_none() {
+            if let Some(g) = self.step_in(v, here) {
+                self.dungeon = Some((Box::new(crate::crawl::Crawl::new(here)), g));
+                return Act::idle();
+            }
         }
         if !v.body().alive {
             // Whatever she was doing got her killed: something else first, for a while.
@@ -227,12 +298,17 @@ impl Story {
             }
             if let Some((task, goal)) = &mut self.task {
                 let goal = *goal;
+                // Waiting where she was told to wait is not "reached, and it did not count".
+                let waiting = matches!(task, Task::Wait(_));
                 match task.tick(v, cx) {
                     Status::Act(a) => return a,
                     Status::Done => {
                         self.task = None;
                         self.fails.remove(&goal);
-                        if self.last == Some(goal) {
+                        if waiting {
+                            self.last = None;
+                            self.again = 0;
+                        } else if self.last == Some(goal) {
                             self.again += 1;
                         } else {
                             self.last = Some(goal);
@@ -272,6 +348,19 @@ impl Story {
                 Some((other, goal)) => {
                     // A zone or a point elsewhere: the door that leads there.
                     let (Target::Zone(z) | Target::At(z, _)) = other else { unreachable!() };
+                    // A quest step in a dungeon: the dungeon played whole, from its door.
+                    if matches!(goal, Goal::Step(..)) && dungeon(z) {
+                        // Its door keeps hours ("Open ten to four"): come back when it is open.
+                        let wait = sense::hours_till_open(v, z);
+                        if wait > 0 {
+                            let until = v.frame() + u32::from(wait) * jane_sim::tuning::TICKS_PER_HOUR;
+                            self.blocked.insert(goal, until);
+                            notes.push(Mark::Note(format!("the {} is shut for {wait} h", z.name())));
+                            continue;
+                        }
+                        self.dungeon = Some((Box::new(crate::crawl::Crawl::new(z)), goal));
+                        return Act::idle();
+                    }
                     match route(v, cx, z) {
                         Some(t) => {
                             self.task = Some((t, goal));
@@ -295,6 +384,26 @@ impl Story {
         Act::idle()
     }
 
+    /// An open quest step that `z` is the place for (its text names the dungeon), not set aside.
+    fn step_in(&self, v: &View<'_>, z: ZoneId) -> Option<Goal> {
+        Self::steps_in(v, z).into_iter().find(|&g| self.open(v, g))
+    }
+
+    /// Every quest step not yet done that `z` is the place for.
+    fn steps_in(v: &View<'_>, z: ZoneId) -> Vec<Goal> {
+        let cat = jane_data::catalog();
+        let mut out = Vec::new();
+        for q in v.quests().filter(|q| !q.ready) {
+            let def = cat.story.quest(q.quest);
+            for (i, r) in def.requirements.iter().enumerate() {
+                if q.count(i) < r.qty && zone_of_step(q.quest, i) == Some(z) {
+                    out.push(Goal::Step(q.quest, i as u8));
+                }
+            }
+        }
+        out
+    }
+
     fn set_aside(&mut self, v: &View<'_>, goal: Goal, why: &str, notes: &mut Vec<Mark>) {
         let n = self.fails.entry(goal).or_insert(0);
         *n += 1;
@@ -311,6 +420,14 @@ impl Story {
 
     fn choose(&mut self, v: &View<'_>, cx: &mut Ctx) -> Option<(Target, Goal)> {
         let cat = jane_data::catalog();
+        // Home before dark (the first thing the county teaches): out of doors from eight in the
+        // evening she goes back to Julie's and sleeps till six. In a dungeon the hour is its own.
+        let night = !(6..20).contains(&v.hour());
+        let home = night && matches!(v.zone(), ZoneId::County | ZoneId::House) && has_home(v);
+        cx.sleep = waits_for_sunday(v, cx) || home;
+        if home && self.open(v, Goal::Sleep) {
+            return Some((bed(v, cx), Goal::Sleep));
+        }
         let here = v.zone();
         let at = v.body().pos;
         // Candidates with a cost: (distance-ish, goal, target). Nearest first; ties by goal.
@@ -333,6 +450,7 @@ impl Story {
                 Target::Task(_) => 0,
                 // Another zone: far.
                 Target::Zone(_) | Target::At(..) => i64::from(400 * CELL_FX),
+                Target::Later(_) => i64::MAX,
             }
         };
         // 0: low, with nothing to eat: a fire or a bed first.
@@ -367,12 +485,19 @@ impl Story {
         // an errand for a book or a board.
         for q in v.quests() {
             let waited = someone_waits(q.quest);
-            let near = |c: i64| if waited { c / 2 } else { c };
+            // Told how to end it, she goes and does it: Yours to Say before any errand.
+            let decided = cx.ending.is_some() && Some(q.quest) == the_choice();
+            let near = |c: i64| if decided { 0 } else if waited { c / 2 } else { c };
             let g = Goal::HandIn(q.quest);
             if q.ready {
                 if self.open(v, g) {
-                    if let Some(t) = hand_in(v, cx, q.quest) {
-                        offer(near(cost_of(&t)), g, t, &mut best);
+                    match hand_in(v, cx, q.quest) {
+                        // Whoever takes it back is not about: come back when they are.
+                        Some(Target::Later(h)) => {
+                            self.blocked.insert(g, v.frame() + u32::from(h) * jane_sim::tuning::TICKS_PER_HOUR);
+                        }
+                        Some(t) => offer(near(cost_of(&t)), g, t, &mut best),
+                        None => {}
                     }
                 }
                 continue;
@@ -524,6 +649,7 @@ fn goal_name(v: &View<'_>, g: Goal) -> String {
         Goal::Step(q, i) => format!("{} step {}", cat.story.quest(q).id, i + 1),
         Goal::Talk(z, u) => format!("talk to {:?} in {}", u, z.name()),
         Goal::Rest => "rest at a fire or a bed".into(),
+        Goal::Sleep => "home to sleep".into(),
         Goal::Explore(t) => format!("explore: {t:?}"),
         Goal::Look(z, p) => {
             let name = v.prop(p).filter(|_| v.zone() == z).map_or("?", |p| v.name(p.key));
@@ -572,10 +698,107 @@ pub fn someone_waits(q: QuestId) -> bool {
     hit
 }
 
+/// Yours to Say's quest, by its row.
+fn the_choice() -> Option<QuestId> {
+    jane_data::catalog().story.quest_id("the_choice")
+}
+
+/// Is she waiting for a Sunday: Yours to Say ready, the train her way, and not on the day?
+fn waits_for_sunday(v: &View<'_>, cx: &Ctx) -> bool {
+    let ready = the_choice().is_some_and(|c| v.quests().any(|q| q.quest == c && q.ready));
+    ready && cx.ending == Some(crate::Ending::Train) && !(v.weekday() == 0 && v.hour() < 17)
+}
+
+/// Where Yours to Say is taken in (STORY.md §10): the thing that plays the ending she has chosen
+/// (any, when she has not been told), here or seen elsewhere; the train on a Sunday.
+fn choice(v: &View<'_>, cx: &Ctx) -> Option<Target> {
+    let here = v.zone();
+    if cx.ending == Some(crate::Ending::Train) {
+        return train(v, cx);
+    }
+    let fits = |n: u8| cx.ending.is_none_or(|e| e.the_end() == n);
+    for p in v.props().filter(|p| !p.hidden) {
+        let mut ends: Option<u8> = None;
+        sense::visit_prop(v, p, &mut |a| ends = ends.or(sense::sets_the_end(a)));
+        if ends.is_some_and(fits) {
+            return Some(Target::Task(Task::Use(UseProp::new(p.id))));
+        }
+    }
+    for (&z, notes) in &cx.notes {
+        if z != here {
+            if let Some(n) = notes.iter().find(|n| n.ending.is_some_and(fits)) {
+                return Some(Target::At(z, n.at));
+            }
+        }
+    }
+    // Not seen yet: the place the log names.
+    match cx.ending {
+        Some(crate::Ending::Hold) => Some(Target::Zone(ZoneId::Cellar)),
+        Some(crate::Ending::Hill) => Some(Target::Zone(ZoneId::Mine)),
+        _ => None,
+    }
+}
+
+/// The Sunday train: sleep the days away at a bed until a Sunday morning, then signal at the
+/// name board ("Trains stop by request") and stand on the platform for five.
+fn train(v: &View<'_>, cx: &Ctx) -> Option<Target> {
+    let here = v.zone();
+    let (day, hour) = (v.clock().1, v.hour());
+    let sunday = v.weekday() == 0;
+    if sunday && hour < 18 && cx.signalled == Some(day) {
+        // On the platform, and wait there.
+        if here != ZoneId::County {
+            return Some(Target::Zone(ZoneId::County));
+        }
+        let r = v.rect(v.sym("platform")?)?;
+        let at = v.body().pos.cell();
+        if r.contains(at.0, at.1) {
+            return Some(Target::Task(Task::Wait(120)));
+        }
+        return inside(v, v.sym("platform")?).map(|to| Target::Task(Task::Walk { to, near: Fx::from_px(2) }));
+    }
+    if sunday && (6..17).contains(&hour) {
+        if let Some(p) = v.props().find(|p| !p.hidden && sense::prop_does(v, p, &sense::signals_train)) {
+            return Some(Target::Task(Task::Use(UseProp::new(p.id))));
+        }
+        return cx
+            .notes
+            .iter()
+            .find_map(|(&z, ns)| ns.iter().find(|n| n.signals).map(|n| Target::At(z, n.at)))
+            .or(Some(Target::Zone(ZoneId::County)));
+    }
+    // Not the day: Julie's bed, and the night slept away.
+    Some(bed(v, cx))
+}
+
+/// Has she been let into Julie's house (the kitchen stood in)?
+fn has_home(v: &View<'_>) -> bool {
+    let cat = jane_data::catalog();
+    cat.story.quest_id("see_the_kitchen").is_some_and(|q| v.quests_done().contains(&q))
+}
+
+/// Julie's bed, to sleep in (a bed in the county may be behind a door she has no key to).
+fn bed(v: &View<'_>, cx: &Ctx) -> Target {
+    if v.zone() == ZoneId::House {
+        if let Some(p) = v
+            .props()
+            .filter(|p| !p.hidden && sense::prop_does(v, p, &|a| matches!(a, Action::Rest { until: Some(_), .. })))
+            .min_by_key(|p| (to_prop(p, v.body().pos), p.id))
+        {
+            return Target::Task(Task::Use(UseProp::new(p.id)));
+        }
+    }
+    let house = cx.notes.get(&ZoneId::House).and_then(|ns| ns.iter().find(|n| n.sleeps));
+    house.map_or(Target::Zone(ZoneId::House), |n| Target::At(ZoneId::House, n.at))
+}
+
 /// Where to hand `q` in.
 fn hand_in(v: &View<'_>, cx: &Ctx, q: QuestId) -> Option<Target> {
     let cat = jane_data::catalog();
     let here = v.zone();
+    if Some(q) == the_choice() {
+        return choice(v, cx);
+    }
     let does = |a: &Action| matches!(a, Action::HandIn(x) if *x == q);
     // A trigger here.
     for (t, fired) in v.triggers() {
@@ -596,6 +819,18 @@ fn hand_in(v: &View<'_>, cx: &Ctx, q: QuestId) -> Option<Target> {
     for p in v.props() {
         if sense::prop_does(v, p, &does) {
             return Some(Target::Task(Task::Use(UseProp::new(p.id))));
+        }
+    }
+    // Someone who keeps hours (the dog: the step by day, the Museum's steps from four for the
+    // forest...), where their hours put them now, as the log's `returnTo` says; not about till
+    // later, then later.
+    for (i, u) in cat.combat.units.iter().enumerate() {
+        let Some(tree) = u.talk else { continue };
+        if u.schedule.is_empty() || !tree_has(v, tree, &does) {
+            continue;
+        }
+        if let Some(t) = keeps_hours(v, UnitDefId(i as u16)) {
+            return Some(t);
         }
     }
     // Someone she saw elsewhere, or saw here and has lost sight of.
@@ -631,6 +866,26 @@ fn hand_in(v: &View<'_>, cx: &Ctx, q: QuestId) -> Option<Target> {
         }
     }
     None
+}
+
+/// Where a person who keeps hours stands now (a county mark), or how long till they are about.
+fn keeps_hours(v: &View<'_>, def: UnitDefId) -> Option<Target> {
+    use jane_data::ScheduleSlot;
+    let hour = v.hour();
+    match v.slot_at_hour(def, hour)? {
+        ScheduleSlot::Mark(n) => {
+            if v.zone() != ZoneId::County {
+                return Some(Target::Zone(ZoneId::County));
+            }
+            let m = v.mark(jane_sim::sym::of_name(n))?;
+            let at = Vec2::centre(i32::from(m.cell.x), i32::from(m.cell.y));
+            Some(Target::Task(Task::Walk { to: at, near: Fx::from_px(10) }))
+        }
+        ScheduleSlot::Absent => (1..24u8)
+            .find(|h| matches!(v.slot_at_hour(def, (hour + h) % 24), Some(ScheduleSlot::Mark(_))))
+            .map(Target::Later),
+        ScheduleSlot::Patrol | ScheduleSlot::Inside(_) => None,
+    }
 }
 
 /// A walkable cell inside a named rect of this zone, the nearest to her.
@@ -809,6 +1064,14 @@ pub fn route(v: &View<'_>, cx: &Ctx, z: ZoneId) -> Option<Task> {
     };
     let mut next = z;
     let mut doors = doors_to(v, next);
+    // Every door here into it shut to her (the School's front doors, bolted from inside): the
+    // other way in, through a place she has seen a door from into it, or one the log names.
+    if !doors.is_empty() && !doors.iter().any(|p| crate::sense::can_open(v, p)) {
+        if let Some(y) = way_round(v, cx, z).filter(|&y| y != here && !doors_to(v, y).is_empty()) {
+            next = y;
+            doors = doors_to(v, y);
+        }
+    }
     if doors.is_empty() {
         next = if here == ZoneId::County { via(z) } else { via(here) };
         doors = doors_to(v, next);
@@ -816,6 +1079,7 @@ pub fn route(v: &View<'_>, cx: &Ctx, z: ZoneId) -> Option<Task> {
     if doors.is_empty() && here != ZoneId::County {
         doors = doors_to(v, ZoneId::County);
     }
+    let _ = next;
     // Of several doors there, one she can open (the mine's mouth, not the adit barred from
     // inside), then one not yet taken (the other hatch).
     doors.sort_by_key(|p| {
@@ -823,4 +1087,42 @@ pub fn route(v: &View<'_>, cx: &Ctx, z: ZoneId) -> Option<Task> {
     });
     let d = doors.first()?;
     Some(Task::Use(UseProp { presses: if d.locked { 2 } else { 1 }, ..UseProp::new(d.id) }))
+}
+
+/// Another way into `z`: a zone she has seen a door from into it, else a dungeon the log's
+/// words about `z` name ("The stair out of the Burial Chamber comes up in its boiler room").
+fn way_round(v: &View<'_>, cx: &Ctx, z: ZoneId) -> Option<ZoneId> {
+    let cat = jane_data::catalog();
+    let here = v.zone();
+    if let Some((&y, _)) =
+        cx.notes.iter().find(|(y, ns)| **y != z && **y != here && ns.iter().any(|n| n.door == Some(z)))
+    {
+        return Some(y);
+    }
+    v.quests().find_map(|q| {
+        let text = cat.text(cat.story.quest(q.quest).description);
+        let named = zones_in_text(text);
+        named.contains(&z).then(|| named.into_iter().find(|&y| y != z && y != here)).flatten()
+    })
+}
+
+/// Every dungeon a text names where the thing is (see [`zone_in_text`]), in the text's order.
+fn zones_in_text(text: &str) -> Vec<ZoneId> {
+    let t = text.to_lowercase();
+    let mut out: Vec<(usize, ZoneId)> = [
+        ("cellar", ZoneId::Cellar),
+        ("mine", ZoneId::Mine),
+        ("burial", ZoneId::Burial),
+        ("factory", ZoneId::Factory),
+        ("forest", ZoneId::Forest),
+        ("library", ZoneId::Library),
+        ("museum", ZoneId::Museum),
+        ("pipes", ZoneId::Pipes),
+        ("school", ZoneId::School),
+    ]
+    .into_iter()
+    .filter_map(|(w, z)| t.find(w).map(|i| (i, z)))
+    .collect();
+    out.sort();
+    out.into_iter().map(|(_, z)| z).collect()
 }

@@ -56,6 +56,26 @@ pub fn answer(v: &View<'_>, cx: &mut Ctx) -> Option<Act> {
         if has(&|a| matches!(a, Action::Rest { until: None })) {
             s += 20;
         }
+        // The end of the game only the way she has chosen (any, when she has not been told);
+        // the Sunday train signalled only when that is her way; a bed slept in only when she
+        // is waiting for a day.
+        let mut ending = None;
+        let mut signal = false;
+        if let Some(l) = o.actions {
+            crate::sense::visit(&|r| v.list(r), l, &mut |a| {
+                ending = ending.or(crate::sense::sets_the_end(a));
+                signal |= crate::sense::signals_train(a);
+            });
+        }
+        if let Some(n) = ending {
+            s += if cx.ending.is_none_or(|e| e.the_end() == n) { 200 } else { -1000 };
+        }
+        if signal && cx.ending == Some(crate::Ending::Train) {
+            s += 150;
+        }
+        if cx.sleep && has(&|a| matches!(a, Action::Rest { until: Some(_), .. })) {
+            s += 150;
+        }
         // A line that ends the talk over one that leads to more of it: the Rusher always, the
         // Reader too (it has read the question; the answer is in the log).
         if o.goto.is_none() {
@@ -71,6 +91,15 @@ pub fn answer(v: &View<'_>, cx: &mut Ctx) -> Option<Act> {
             best_s = s;
             best = i as u8;
         }
+    }
+    // Signalled: she remembers the day, and waits on the platform for five.
+    let signalled = node.options.get(usize::from(best)).and_then(|o| o.actions).is_some_and(|l| {
+        let mut hit = false;
+        crate::sense::visit(&|r| v.list(r), l, &mut |a| hit |= crate::sense::signals_train(a));
+        hit
+    });
+    if signalled {
+        cx.signalled = Some(v.clock().1);
     }
     Some(Act::press(Command::Choose { option: best }))
 }

@@ -74,14 +74,62 @@ pub fn doors_to<'a>(v: &View<'a>, z: jane_core::ZoneId) -> Vec<&'a Prop> {
     out
 }
 
+/// A catalog flag's key, by name.
+fn named_flag(name: &str) -> Option<jane_core::action::FlagKey> {
+    jane_data::catalog().name_id(name).map(|n| jane_core::action::FlagKey::Named(jane_core::Key::Name(n)))
+}
+
+/// Does this action end the game, and which way (`the_end` 1 hold, 2 hill, 3 train)?
+pub fn sets_the_end(a: &Action) -> Option<u8> {
+    match *a {
+        Action::Flag { key, op: jane_core::action::FlagOp::Set(n) } if Some(key) == named_flag("the_end") && n > 0 => {
+            Some(n as u8)
+        }
+        _ => None,
+    }
+}
+
+/// Does this action signal the Sunday train (the name board's line)?
+pub fn signals_train(a: &Action) -> bool {
+    matches!(*a, Action::Flag { key, op: jane_core::action::FlagOp::Set(n) }
+        if Some(key) == named_flag("train_signalled") && n != 0)
+}
+
 /// Can she open it: it is not locked, or she holds a key whose tag fits.
 pub fn can_open(v: &View<'_>, p: &Prop) -> bool {
-    if !p.locked {
-        return true;
+    !p.locked || keyed_for(v, p)
+}
+
+/// The hours a door keeps now, as the sim reads them (`interact::night_lock_of`): a verb's, else
+/// its row's. What its notice says ("Open ten to four").
+pub fn night_lock(v: &View<'_>, p: &Prop) -> Option<jane_core::NightLock> {
+    use jane_sim::state::NightState;
+    match p.night {
+        NightState::AsSpawned => v.prop_spawn(p).and_then(|s| s.night_lock),
+        NightState::Locked(l) => Some(l),
+        NightState::Open => None,
     }
+}
+
+/// Is this door shut to her at `hour` (inside its hours, and not a keyed lock she holds the key
+/// to)?
+pub fn shut_at(v: &View<'_>, p: &Prop, hour: u8) -> bool {
+    night_lock(v, p).is_some_and(|l| l.shut_at(hour) && !(l.keyed && keyed_for(v, p)))
+}
+
+/// Does she hold a key whose tag fits this prop's lock?
+pub fn keyed_for(v: &View<'_>, p: &Prop) -> bool {
     let cat = jane_data::catalog();
     let Some(jane_core::Key::Name(tag)) = v.prop_spawn(p).and_then(|s| s.key_tag) else { return false };
     v.me().bag.iter().flatten().any(|s| cat.combat.item(s.item).opens == Some(tag))
+}
+
+/// Hours until some door here into `z` is answered, when every one is shut now (0: one is open
+/// now, or there is none here to wait for).
+pub fn hours_till_open(v: &View<'_>, z: jane_core::ZoneId) -> u8 {
+    let doors = doors_to(v, z);
+    let hour = v.hour();
+    (0..24u8).find(|&h| doors.iter().any(|p| !shut_at(v, p, (hour + h) % 24))).unwrap_or(0)
 }
 
 pub fn holds(v: &View<'_>, item: ItemId) -> u32 {

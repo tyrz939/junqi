@@ -14,7 +14,7 @@ use jane_sim::{Blueprints, Seat, Sim, StepInput};
 
 pub const USAGE: &str = "  play --model reader|rusher --seed N [--minutes M] [--dungeon ZONE] [--tape OUT.jrp]
        [--snap OUT.png [--snap-every S]] [--ending hold|hill|train] [--profile]
-       [--explain] [--explain-every S]
+       [--explain] [--explain-every S] [--from ACT]
                                       a player model plays a seed headless from New Game (or a dungeon from
                                       its door, the console setting up the kit): one line per milestone;
                                       --snap draws the world round her at the end (and every S seconds of
@@ -22,7 +22,9 @@ pub const USAGE: &str = "  play --model reader|rusher --seed N [--minutes M] [--
                                       --ending: which of the three the bot chooses at Yours to Say;
                                       --profile: where the time went, the sim's phases and the bot's;
                                       --explain: what the bot holds, is doing and is blocked by, at the end
-                                      (and every S seconds of play)
+                                      (and every S seconds of play); --from: the story from an act
+                                      (mine museum forest factory burial school choice), the acts
+                                      before it written in by the console: for looking, never a tape
   play --fixture PATH                 write the bot-session hash fixture (seeds 1 to 3, both models, 5 min)
   replay verify FILE...               re-simulate each tape and hold it to its hash stream
   replay record --model M --seed N [--minutes M] [--dungeon ZONE] OUT.jrp
@@ -98,8 +100,14 @@ fn play(args: &[String], tape: Option<&str>) -> Result<(), String> {
         }
         None => Bot::story(model),
     };
+    if let Some(act) = flag(args, "--from") {
+        if tape.is_some() || dungeon.is_some() {
+            return Err("--from: a story started part way is for looking at, not a tape or a crawl".into());
+        }
+        bot.setup = jane_bot::console::start_at(&mut sim, act)?;
+    }
     if let Some(e) = flag(args, "--ending") {
-        bot.ending = Some(jane_bot::Ending::parse(e).ok_or("--ending: hold, hill or train")?);
+        bot.ctx.ending = Some(jane_bot::Ending::parse(e).ok_or("--ending: hold, hill or train")?);
     }
     let frames = minutes * 60 * 60;
     let mut rec = Recorder::new(sim);
@@ -163,6 +171,13 @@ fn play(args: &[String], tape: Option<&str>) -> Result<(), String> {
     }
     if args.iter().any(|a| a == "--explain") {
         println!("{}", bot.explain(&v));
+    }
+    // The ground round a prop of the zone she ends in, by key.
+    if let Some(key) = flag(args, "--show-prop") {
+        match v.sym(key).and_then(|k| jane_bot::sense::prop_by_key(&v, k)) {
+            Some(p) => println!("{key} at {:?}:\n{}", p.cell, jane_bot::ascii(&v, jane_bot::sense::prop_rect(p), 6)),
+            None => println!("{key}: not in the {}", v.zone().name()),
+        }
     }
     if let Some(path) = snap {
         write_snap(&v, path)?;

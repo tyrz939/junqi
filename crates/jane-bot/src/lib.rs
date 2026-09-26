@@ -24,6 +24,7 @@
 //! | [`fight`] | the bar: melee, bolts, an apple when low, backing off |
 //! | [`talk`] | a conversation: which line to take |
 //! | [`story`] | the quest log read as objectives (the Reader and the Rusher) |
+//! | [`console`] | a story test's setup: a new game put at the start of an act |
 //! | [`crawl`] | a dungeon: keys, locks, plates, verbs, the boss, the way out |
 //! | [`tactics`] | what each dungeon and boss asks beyond the crawl's general order |
 //! | [`fixture`] | the bot-session hash fixture (`bot-hash-<target>.txt`) |
@@ -35,6 +36,8 @@
 
 #![deny(clippy::float_arithmetic, clippy::float_cmp)]
 
+pub mod coarse;
+pub mod console;
 pub mod crawl;
 pub mod fight;
 pub mod fixture;
@@ -279,8 +282,6 @@ pub struct Bot {
     pub log: Vec<Milestone>,
     /// Console commands to send before playing (the tests' setup), one a frame.
     pub setup: Vec<Command>,
-    /// The ending it chooses, if told.
-    pub ending: Option<Ending>,
 }
 
 impl Bot {
@@ -294,7 +295,6 @@ impl Bot {
             events: Vec::new(),
             log: Vec::new(),
             setup: Vec::new(),
-            ending: None,
         }
     }
 
@@ -394,7 +394,7 @@ impl Bot {
         }
         let mut notes = Vec::new();
         let act = match &mut self.plan {
-            Plan::Story(s) => s.think(v, &mut self.ctx, &mut notes),
+            Plan::Story(s) => s.think(v, &mut self.ctx, &self.events, &mut notes),
             Plan::Crawl(c) => c.think(v, &mut self.ctx, &self.events, &mut notes),
         };
         for m in notes {
