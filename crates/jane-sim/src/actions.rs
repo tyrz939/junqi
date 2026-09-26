@@ -120,6 +120,7 @@ fn condition(cx: &Ctx<'_>, c: Condition) -> bool {
         Condition::Heard(t) => journal::heard(cx.world, t),
         // Whoever she is talking to has heard of it by now (§4.6.e); false outside a conversation.
         Condition::SpeakerKnows(s) => crate::living::speaker_knows(cx, s),
+        Condition::SpeakerHeard(c) => crate::living::speaker_heard(cx, c),
         // A door's hours' rule, on the clock everyone shares.
         Condition::Hours { from, to } => jane_core::action::hour_within(cx.world.hour() as u8, from, to),
         Condition::Weekday(d) => cx.world.weekday() == d,

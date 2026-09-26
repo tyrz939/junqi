@@ -8,6 +8,10 @@
       { "do": "despawn", "unit": "rat_allotment_3" },
       { "do": "despawn", "unit": "rat_allotment_4" },
       { "do": "flag", "flag": "allotments_quiet", "value": 1 }
+    ],
+    "spreads": [
+      { "to": ["milkman"], "after": 1440 },
+      { "to": ["mrs_bex"], "after": 2880 }
     ]
   },
   {
@@ -23,11 +27,23 @@
       { "do": "nightUnlock", "prop": "mine_door" },
       { "do": "flag", "flag": "mine_quiet", "value": 1 }
     ],
-    "contradicts": "GOLDSKIN MINING Co. CLOSED. No entry. No exit either, some nights."
+    "contradicts": "GOLDSKIN MINING Co. CLOSED. No entry. No exit either, some nights.",
+    "spreads": [
+      { "to": ["mr_cobb"], "after": 360 },
+      { "to": ["mrs_garland"], "after": 1440 },
+      { "to": ["constable", "mr_ince"], "after": 2160 },
+      { "to": ["milkman"], "after": 2880 },
+      { "to": ["door_pound_3", "mr_hale"], "after": 3360 }
+    ]
   },
   {
     "id": "yard_clear",
     "on": { "if": "questDone", "quest": "defeat_skeleton" },
     "edits": [{ "do": "despawn", "unit": "yard_skeleton" }]
-  }
+  },
+  {"id": "wing_lit", "on": {"if": "dead", "unit": "attendant"}, "edits": [{"do": "switch", "prop": "museum_wing_lamp", "on": true}, {"do": "flag", "flag": "wing_lit", "value": 1}], "spreads": [{"to": ["constable"], "after": 2880}, {"to": ["mr_ince", "mrs_garland"], "after": 3600}]},
+  {"id": "forest_quiet", "on": {"if": "dead", "unit": "emperor"}, "edits": [{"do": "despawn", "unit": "forest_road_fly_1"}, {"do": "despawn", "unit": "forest_road_fly_2"}]},
+  {"id": "works_dark", "on": {"if": "dead", "unit": "foreman"}, "edits": [{"do": "switch", "prop": "factory_lamp", "on": false}], "spreads": [{"to": ["sweeper"], "after": 2880}, {"to": ["constable"], "after": 3360}, {"to": ["mrs_tace"], "after": 3600}]},
+  {"id": "burial_quiet", "on": {"if": "dead", "unit": "goldskin"}, "edits": [{"do": "despawn", "unit": "graveyard_skeleton_a"}, {"do": "despawn", "unit": "graveyard_skeleton_b"}], "spreads": [{"to": ["vicar"], "after": 1440}, {"to": ["mr_tolly", "mrs_garland"], "after": 2880}, {"to": ["mr_sallis"], "after": 3360}]},
+  {"id": "bell_stopped", "on": {"if": "dead", "unit": "ringer"}, "edits": [{"do": "flag", "flag": "bell_stopped", "value": 1}, {"do": "switch", "prop": "school_lamp_a", "on": false}, {"do": "switch", "prop": "school_lamp_b", "on": false}]}
 ]

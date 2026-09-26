@@ -9,6 +9,8 @@
     "walk": 1, "run": 2, "aggro": 0, "leash": 0, "bounds": 1, "book": [],
     "respawn": 0, "autoRegen": true, "loot": [], "sprite": "dog", "talk": "dog",
     "schedule": [
+      { "from": 0, "to": 0, "absent": true, "flag": "night_gone" },
+      { "from": 6, "to": 21, "mark": "dog_halt", "flag": "train_signalled" },
       { "from": 16, "to": 21, "mark": "dog_museum", "while": "the_forest" },
       { "from": 18, "to": 21, "mark": "dog_graveyard", "while": "the_factory" },
       { "from": 18, "to": 21, "mark": "dog_graveyard", "while": "the_burial" },
@@ -100,7 +102,11 @@
   "headmaster": {
     "name": "The Headmaster", "faction": "undead", "controller": "ai", "strength": 60, "spirit": 1,
     "walk": 0.4, "run": 0.8, "aggro": 10, "leash": 30, "bounds": 1, "book": ["hand_bell", "melee_fast"],
-    "respawn": 0, "autoRegen": true, "loot": [{ "item": "key_mine_vault", "qty": 1, "chance": 1 }], "sprite": "miniboss", "boss": true
+    "respawn": 0, "autoRegen": true, "loot": [{ "item": "key_mine_vault", "qty": 1, "chance": 1 }], "sprite": "miniboss", "boss": true,
+    "onDeath": [
+      { "do": "toast", "text": "The hand-bell goes down and does not ring. The register under his arm is open at today: forty-one names, every one marked present, and none of them here." },
+      { "do": "toast", "text": "It is countersigned at the foot of the page, in a different hand: A. NOONE." }
+    ]
   },
   "iron_knuckles": {
     "name": "Iron Knuckles", "faction": "undead", "controller": "ai", "strength": 160, "spirit": 1,

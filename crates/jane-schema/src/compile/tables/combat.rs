@@ -475,7 +475,8 @@ struct RawUnit {
 
 /// One row of a unit's hours (ARCHITECTURE.md §4.6.a): `{"from": 9, "to": 21, "mark": "arms_front"}`,
 /// or `"inside": "<prop>"`, `"patrol": true`, `"absent": true`; `"while": "<quest>"` (only while it
-/// is in the log) or `"after": "<quest>"` (only once it is handed in) makes it an override.
+/// is in the log), `"after": "<quest>"` (only once it is handed in) or `"flag": "<flag>"` (while
+/// the world's flag is set) makes it an override.
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RawSlot {
@@ -490,6 +491,7 @@ struct RawSlot {
     #[serde(rename = "while")]
     during: Option<String>,
     after: Option<String>,
+    flag: Option<String>,
 }
 
 /// The most a person's hours may move either way, in minutes: under the half hour, so "at the
@@ -566,13 +568,15 @@ fn schedule(cx: &mut Ctx, at: &str, r: &RawUnit) -> &'static [ScheduleRow] {
         } else {
             ScheduleSlot::Absent
         };
-        cx.diag.need(s.during.is_none() || s.after.is_none(), &at, "a row is while one quest or after one, not both");
-        let when = match (&s.during, &s.after) {
-            (Some(q), _) => cx.quest(&format!("{at}.while"), q).map(ScheduleWhen::While),
-            (None, Some(q)) => cx.quest(&format!("{at}.after"), q).map(ScheduleWhen::After),
-            (None, None) => None,
+        let whens = usize::from(s.during.is_some()) + usize::from(s.after.is_some()) + usize::from(s.flag.is_some());
+        cx.diag.need(whens <= 1, &at, "a row is while one quest, after one, or while one flag: one of them");
+        let when = match (&s.during, &s.after, &s.flag) {
+            (Some(q), _, _) => cx.quest(&format!("{at}.while"), q).map(ScheduleWhen::While),
+            (None, Some(q), _) => cx.quest(&format!("{at}.after"), q).map(ScheduleWhen::After),
+            (None, None, Some(f)) => Some(ScheduleWhen::Flag(cx.name(f))),
+            (None, None, None) => None,
         };
-        if s.during.is_none() && s.after.is_none() {
+        if whens == 0 {
             for (h, n) in hours.iter_mut().enumerate() {
                 if model::in_span(h as u8, s.from, s.to) {
                     *n += 1;

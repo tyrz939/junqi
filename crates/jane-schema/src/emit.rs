@@ -351,6 +351,7 @@ impl Emit for Condition {
             Condition::Knows(f) => wrap(out, "Knows", &|o| f.emit(o)),
             Condition::Heard(t) => wrap(out, "Heard", &|o| t.emit(o)),
             Condition::SpeakerKnows(s) => wrap(out, "SpeakerKnows", &|o| s.emit(o)),
+            Condition::SpeakerHeard(c) => wrap(out, "SpeakerHeard", &|o| c.emit(o)),
             Condition::Hours { from, to } => {
                 let _ = write!(out, "Condition::Hours {{ from: {from}, to: {to} }}");
             }

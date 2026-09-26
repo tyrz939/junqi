@@ -4,7 +4,7 @@ The living county. Written 26 September 2026 from John's direction: *"the world 
 
 **Status: design for the Rust build.** Where a row or a check is named, it is the row or check that must exist for the section to be true. Proposals are marked *proposed*; John decides them.
 
-**Built so far (the engine, P4, `jane_sim::living`), each with a small row of shipped content:** §5.2's weather table as `data/weather.json` (a sky per region, the first walk held clear; in the county the sky over her is the region under her feet, by the skeleton's region grid); the rain ramp, one per region, and the douse rule (a campfire's light goes out at `douse` 160 in its own region's rain and comes back when that ramp falls under it, not at six); `data/ecology.json` for the allotments, the Top Field and Quarry Steps (pressure, `cap`, `hold`, recovery every ten game minutes); `data/consequences.json` with B1's "rats at four, not eight", Julie's Kitchen (her door night-locked, a lock she holds the key to) and the mine going quiet when Iron Knuckles falls (a spawn by the Company notice that waits for her to come back up); a bed's night lived through (§2.1); Mr Cobb's hours as a schedule (§3.1: in the Arms after the bell, the yard in the morning, his seat by day); one rumour (Mr Ames's spectacles, heard at No. 3, Pound Lane half a day later, the door speaking for whoever is behind it). The rest of this document is still design.
+**Built so far (the engine, P4, `jane_sim::living`), each with a small row of shipped content:** §5.2's weather table as `data/weather.json` (a sky per region, the first walk held clear; in the county the sky over her is the region under her feet, by the skeleton's region grid); the rain ramp, one per region, and the douse rule (a campfire's light goes out at `douse` 160 in its own region's rain and comes back when that ramp falls under it, not at six); `data/ecology.json` for the allotments, the Top Field and Quarry Steps (pressure, `cap`, `hold`, recovery every ten game minutes); `data/consequences.json` with B1's "rats at four, not eight", Julie's Kitchen (her door night-locked, a lock she holds the key to) and the mine going quiet when Iron Knuckles falls (a spawn by the Company notice that waits for her to come back up); a bed's night lived through (§2.1); Mr Cobb's hours as a schedule (§3.1: in the Arms after the bell, the yard in the morning, his seat by day); one rumour (Mr Ames's spectacles, heard at No. 3, Pound Lane half a day later, the door speaking for whoever is behind it). *Built 26 September 2026, the story pass:* **the town's news** (a consequence row's `spreads`, §7.2: the six spine bosses and the allotment sheds reach the people who would hear first, in order), the county's edits for each act (§6), the bell stopping when the Timekeeper falls (§2.1), people who move when something has happened (a schedule row's `flag`, §3), and the three endings (`STORY.md` §10). The rest of this document is still design.
 
 ---
 
@@ -35,10 +35,10 @@ One game hour is two real minutes. A day is 48 real minutes; the night is 18 of 
 | 18:00 | 2 | Church bell, evensong. The town only; it is not *the* bell |
 | 18:30 | 3 | Lamps come on where lamps work. The School's window is already lit |
 | 20:50 | 7.7 | Tuesdays, the bell *if that omen is true* (`omen:early_bell`): the same bell, ten minutes early, and not again at nine. The night keeps its hour |
-| 21:00 | 8 | **The bell.** Night. `nightLock` doors shut. The dog is not on the step. The night shift is up on the roads' unlit edges and the rough ground (§4.3); the lamps are the safe line. The Works' wicket opens for the night shift |
+| 21:00 | 8 | **The bell.** (Once the Timekeeper is down: "Nine o'clock. No bell.", and the night all the same; `bell_stopped`, `nine_silent`.) Night. `nightLock` doors shut. The dog is not on the step. The night shift is up on the roads' unlit edges and the rough ground (§4.3); the lamps are the safe line. The Works' wicket opens for the night shift |
 | 22:00 | 10 | The east road's lamps go out *if that omen is true* (`omen:east_lamps`: the road from Castle over the river to the Museum, whose lamps are a row of their own, `lamp_east`; lit again for the evening at 18:00). The bridge's two lamps and the Museum's are not the run |
 | 05:00 | 24 | First light. Fen mist thickest. The mine's door, if barred (`omen:mine_no_exit`), is open again |
-| 06:00 | 26 | **The bell again.** Day. Doors open. The dog is on the step (or at the top of Church Lane, the School's morning). The night shift is gone |
+| 06:00 | 26 | **The bell again.** (Once the Timekeeper is down: "Six o'clock, and no bell.") Day. Doors open. The dog is on the step (or at the top of Church Lane, the School's morning). The night shift is gone |
 | 07:00 | 28 | Milk round (the Milkman, seven to nine). Farms turn out |
 | 12:00 | 38 | Noon: the statue in the lake faces the way it faces by day |
 | 16:00 | 46 | Second post. The last safe hour to start a long walk |
@@ -74,7 +74,7 @@ Days count from arrival. Arrival is a Sunday, day 1.
 | 3, Tuesday | Mrs Fenn's day: the bell goes early *if that omen is true* (20:50, every Tuesday, `omen:early_bell`). The sweeper finds salt again |
 | 4, Wednesday | Market. The farmer in Castle. Whatever she has done by now is known at the Arms |
 | 7, Saturday | The town shuts early. Mr Cobb does not sit out |
-| 8, Sunday | **The train.** 17:00: a whistle as it comes in and another as it goes, and the Sunday sacks on the platform until Monday morning. The Lost Property dates fall due. The ending offers the train |
+| 8, Sunday | **The train.** 17:00: a whistle as it comes in and another as it goes, and the Sunday sacks on the platform until Monday morning. The Lost Property dates fall due. From the choice on, any Sunday the train stops: she signals at the name board and is on the platform at five, and it stands there till ten past (`train_in`; `STORY.md` §10) |
 | 15, 22, ... | Every Sunday, the train. "Does not always stop" (pencilled on the timetable at the Halt) is an omen: when true (`omen:train_through`), it runs through one Sunday in three, the first after she came (day 8) and every third after (29, 50, ...): one whistle, and no sacks |
 
 **Rule: nothing in the calendar is required by the spine.** A day-keyed event is texture, a rumour trigger, or an omen's payoff. A player who sleeps through everything loses nothing she needs.
@@ -104,16 +104,16 @@ The town is a set chunk: the square (fountain, memorial, Mr Tolly's bench, the p
 | Mrs Crewe | No. 2, Cross Lane | Her seed stall | None | Julie had "the lot" off her (pansies, nasturtiums, lilies) and never said what for |
 | The Milkman | No. 4, Back Lane, by the dairy yard | His round, 07:00 to 09:00, behind Pound Lane ("I'm round from seven, and the milk's on every step by nine"); in the rest of the day | The round, in order | No. 7's three bottles (always: the bottles are placed). Which doors took milk (from day 2) |
 | Miss Dray | The post office | Outside it from 09:00 to 18:00, waiting for the second post at four (the door: OPEN NINE TILL HALF PAST FIVE) | None | The three mis-numbered letters. The Sunday sacks (day 8) |
-| Mrs Tace | No. 6, Cross Lane: the door on the latch "for somebody else" | Her step | None | The School's window, "always the same one lit", from the top of Church Lane (always: a fixed light) |
+| Mrs Tace | No. 6, Cross Lane: the door on the latch "for somebody else" | Her step; from the first night with no bell, the top of Church Lane (`church_lane_top`, a row with `flag: nine_silent`), to see them come down | Step, or the lane up to the north gate | The School's window, "always the same one lit", from the top of Church Lane (always: a fixed light) |
 | Mrs Fenn | No. 1, Back Lane, where a clock strikes the quarter twice | Her door | None | "In before the lamps." The bell going early on Tuesday, checked against her kitchen clock (she says it from day 4 on every seed; it rang at ten to nine on the Tuesdays of a third of seeds, `omen:early_bell`) |
 | Tilly | No. 1, Pound Lane | The square | Home to the fountain | Sixpence in the churchyard. After: at the lamps he sits in her window facing the hill; by day he sits by the fountain with his back to it (`sixpence_home`) |
 | Mr Tolly | No. 3, High Street | His bench in the square | Door to bench | The memorial's last name, cut sharper (always) |
-| Dr Vane | The Doctor's, Pound Lane | Out in the lane by his door from 12:00 to 20:00 ("in the lane most afternoons"); the surgery never opens | None | Nobody has been ill since the spring. He fills a vial from the tap |
+| Dr Vane | The Doctor's, Pound Lane | Out in the lane by his door from 12:00 to 20:00 ("in the lane most afternoons"); the surgery never opens | None | Nobody has been ill since the spring. He fills a vial from the tap. After Counted Out, told the cases had trades on them: Julie had his list of everyone he signed fit |
 | Miss Orme | No. 3, Pound Lane, next door to the Doctor's | The bench by the Doctor's with Mr Lyle, 13:00 to 19:00 ("since lunch"; he walks her home at the lamps) | Door to bench | What Mr Lyle says about the bell, and that she has heard both |
 | Mr Lyle | A room at the Arms | Beside Miss Orme, 13:00 to 19:00 | The Arms to the bench | By report, through Miss Orme: "the bell at nine is the church." Wrong, checkably: the church rings at six, for evensong |
 | Mr Hale | Over the Forge, Cross Lane | The Forge door, open a crack | None | Robert. HALE, R. on the memorial (the name is cut) |
-| The constable, Mr Ince | The Castle Arms, after the bell | The constable walks the High Street end to end; Mr Ince reads Sunday's paper | The street | A hundred and twelve paces, then more. The piece on page four about the east road's lamps |
-| Mrs Hobb, Mrs Marsh, Mrs Oddie, Mrs Wick, Mrs Bex, Mr Pound, Mr Sallis, the sweeper, Nell, Dot, Robin | Their doors: Mrs Hobb No. 7 and Mr Sallis No. 1, High Street (the orchard behind, and the card IN THE GARDEN); Mrs Marsh No. 5, High Street (ROUND AT THE LINE); Mrs Oddie No. 3, Mrs Wick No. 5 and Mrs Bex No. 6, Back Lane; Mr Pound over Castle Stores; the sweeper and Dot No. 13, Pound Lane; Nell and Robin No. 9, Cross Lane (the two voices and their mum) | Doors, steps, stalls and the square by day; in by nine | Door to the square and back | One true thing and one false thing each (`STORY.md` §5). The sweeper's salt. The street "takes longer" after four |
+| The constable, Mr Ince | The Castle Arms, after the bell | The constable walks the High Street end to end (from the evening the Museum's lamp is first lit, he stands at the east end from six till the bell, looking at it); Mr Ince reads Sunday's paper | The street | A hundred and twelve paces, then more. The piece on page four about the east road's lamps |
+| Mrs Hobb, Mrs Marsh, Mrs Oddie, Mrs Wick, Mrs Bex, Mr Pound, Mr Sallis, the sweeper, Nell, Dot, Robin | Their doors: Mrs Hobb No. 7 and Mr Sallis No. 1, High Street (the orchard behind, and the card IN THE GARDEN); Mrs Marsh No. 5, High Street (ROUND AT THE LINE); Mrs Oddie No. 3, Mrs Wick No. 5 and Mrs Bex No. 6, Back Lane; Mr Pound over Castle Stores; the sweeper and Dot No. 13, Pound Lane; Nell and Robin No. 9, Cross Lane (the two voices and their mum) | Doors, steps, stalls and the square by day; in by nine | Door to the square and back | One true thing and one false thing each (`STORY.md` §5.1). The sweeper's salt. The street "takes longer" after four |
 | A Woman with a Case | A room at the Arms, since Sunday | By the post office, where the letters go on Sunday's train | None | On the Sunday she came, whether the train has been; from the first morning, "Is it Sunday?" and "I have been here since Sunday. It has not been Sunday since" (a clock row counts mornings) |
 | Mr Quill, Mr Ennis | The Castle Arms, all hours | The tap room | None | The Arms' regulars |
 | The ginger cat | Nowhere: it keeps no hours | Cross Lane along the south side of the square, lamp to lamp, sitting at each end as long as it sat last time | End to end | Its line is its route (the chunk's waypoints: 34 to 69, 900 and 600 ticks) |
@@ -172,6 +172,8 @@ The town is a set chunk: the square (fountain, memorial, Mr Tolly's bench, the p
 | 16:00 to 21:00, while Counted Out is in her log | `Mark` `dog_museum`: the Museum's steps | Takes the forest back, nearer than the step. Its offer and the quest's returnTo say so |
 | 18:00 to 21:00, while Not Relieved or Under the Stone is in her log | `Mark` `dog_graveyard`: inside the graveyard gate | Takes the Factory and the Burial back |
 | 06:00 to 12:00, while The Bell at Nine is in her log | `Mark` `dog_church_lane`: the top of Church Lane, by the north gate | Takes the School back, the morning after |
+| 06:00 to 21:00, the Sunday she signals the train (`flag: train_signalled`) | `Mark` `dog_halt`: the platform at Castle Halt | Sees her off (`STORY.md` §10) |
+| Every hour, once the Ball is back in the hill (`flag: night_gone`) | `Absent` | Gone with the night |
 | 21:00 to 06:00, once the key is given | `Absent`. Nobody sees it leave (the presence rule: nothing hides in view) | Nothing. The step is empty; the house is not. On the first night it waits on the step whatever the hour |
 
 Outside a meeting's hours the dog is on the step, and never in two places. Each meeting is a schedule row with `while` (built 26 September 2026); the spine test walks there and finds it.
@@ -330,7 +332,7 @@ All *proposed* unless `QUESTS.md` already states the consequence.
 | The Thing in the Yard | The fence line clear; skeletons never spawn inside Julie's fence again | The yard |
 | Julie's Kitchen | The house is a hub: threat 0, `nightLock` on the door with her key. *Shipped:* `house_kept`, the door night-locked once she has seen the kitchen: from nine to six it answers only a key that fits it, and hers is bound (the door out never locks, so nobody is shut in) | The door |
 | Dust, Water, Pansy; Under the House | The bench lit; the cellar's rats at two for good; the roses grow back | The kitchen, the cellar |
-| The Gold Mine | The Company notice overpainted OPEN; the mine's skeletons stop walking the road; the town hears (§7) | The mine road; the Arms |
+| The Gold Mine | *Built* (`mine_quiet`, on Iron Knuckles' death): someone sits under the Company notice at the mouth; the mine's door is never barred at night again; the town hears (§7.2). *Proposed:* the notice overpainted OPEN; the mine's skeletons stop walking the road | The mine road; the Arms |
 | A1, A2 Lost Property, Left Luggage | Three lines filled; the shelf open, one article gone; the trunk stands open | The platform |
 | A3 To Be Collected | Parcel taken: the platform lamp never lights again. Left: the crate empty at six | The platform, every night |
 | B1, B2 The allotments | Rats at four, not eight; the hens lay; Plot 9 dug over, the stake gone, "Plot 9 is let" | The allotments, the farm |
@@ -356,9 +358,10 @@ All *proposed* unless `QUESTS.md` already states the consequence.
 | K13 No. 14, Again | The dead run lit for good, threat -1 at night on that road, permanently; a new post where 14 stood | The Lowfields |
 | K14 The Adit | The rock gone; the adit open | Quarry Steps |
 | Tales 1 to 9 | As `QUEST-TREE.md` §10 states per branch: the hives in black or a honey jar; the chair or a second plate; the boots gone or new planks; the red lamp or the green | Each tale's place, every day after |
-| The Museum; Butterfly Forest; the Factory (the spine, `QUEST-TREE.md` §5) | The wing's lights stay on, seen from the bridge at night; the butterflies gone from the road; the Factory dark for good, the Works darker after the bell, not safer | The Waters, the Works |
-| Under the Stone (the Burial) | The ground right again; the graveyard's ground fog gone; the four markers' keepers up; Goldskin said by name in the town | The graveyard, Chapel Rise; the Arms |
-| The School | The ending chosen. §9 |
+| The Museum; Butterfly Forest; the Factory (the spine, `QUEST-TREE.md` §5) | *Built*, each on its boss's death: the lamp over the Museum's west end lit at night (`wing_lit`, `museum_wing_lamp`); the two butterflies on the road by the forest gate gone (`forest_quiet`); the lamp at the Factory's gate out for good (`works_dark`, `factory_lamp`) | The Waters, the Works |
+| Under the Stone (the Burial) | *Built* (`burial_quiet`, on Goldskin's death): the graveyard's two skeletons gone; Goldskin said by name in the town. *Proposed:* the ground fog gone (a presentation layer); the four markers' keepers up | The graveyard; the Arms |
+| The Bell at Nine (the School) | *Built* (`bell_stopped`, on the Timekeeper's death): the bell stops, at nine and at six and on Tuesdays; the School's two lamps out; Mrs Tace up at the top of Church Lane | Everywhere; the School's front |
+| Yours to Say | The ending chosen, and the game closes (`STORY.md` §10) | The study, the mine, the Halt |
 
 **Rule: a consequence is a set of world edits that runs once and lands in every zone it names, never a flag alone.** A quest whose only consequence is a flag fails the cohesion test.
 
@@ -393,6 +396,7 @@ A story row declares `spreads: { to: [person], after: <days> }`. From the tick t
 | Mrs Garland | Everyone who drinks | The bar | Same day |
 | The Milkman | Every door on the round | The step | Next morning |
 | Her deed at the mine | The Misses Crane | Their window on the mine road | Next day |
+| **Built: the town's news** | A consequence row's `spreads`, in the order they hear it (`STORY.md` §11) | The mine: Mr Cobb (who sees who comes up the street) 3 h, Mrs Garland 12 h, the constable and Mr Ince 18 h, the Milkman 24 h, No. 3, Pound Lane and Mr Hale 28 h. The Museum's lamp: the constable (from the east end of the street at dusk) 24 h, Mr Ince and Mrs Garland 30 h. The Works dark: the sweeper 24 h, the constable 28 h, Mrs Tace 30 h. Goldskin: the vicar (from the church door) 12 h, Mr Tolly and Mrs Garland 24 h, Mr Sallis 28 h. The sheds: the Milkman 12 h, Mrs Bex 24 h. The bell's silence is heard by everyone at once, at the first nine it does not ring | Each line said once |
 | The Cranes | Mrs Allen | Nobody direct. The farmer at market, Wednesday | Up to 3 days |
 | The reedcutters | The town | Nobody crosses the bridge. The Waters hear nothing from the town and tell it nothing | Never, unless she carries it (a `tells` with her as source) |
 | The canteen hatch | Nobody | | Never. The Works are cut off |
@@ -463,11 +467,12 @@ Cross-region references that must agree. Each row is an L5 cohesion check: the s
 | Act | Dungeon | She learns to do | The county knows at the boundary | The world changes |
 | --- | --- | --- | --- | --- |
 | 0 Arrival | The road, the house, the cellar | Walk, read, craft, Icebolt | "Someone came on the Sunday train" (day 2, the town) | The house is a hub |
-| 1 The Mine | The Gold Mine | Repair | "The mine's open again. The bones off the mine road have stopped" (the Arms, next day) | The mine road quiet at night; the Museum key |
-| 2 The Waters | The Museum, the ruined library, Butterfly Forest | Explosion, Grow | Nothing. The Waters do not talk to the town; she carries it or nobody knows | Lights in the wing; the forest road clear; the Amulet |
-| 3 The Works | The pipes, the Factory | Electric | The night shift stops walking (if K3); the Factory dark | The dead run relit (K13); the Works darker |
-| 4 The Burial | The Burial Chamber | Fire | "Goldskin" said aloud in the town for the first time | The ground fog gone; the four corners quiet |
-| 5 The School | The School | Everything | The bell's meaning. The choice | The ending |
+| 1 The Mine | The Gold Mine | Repair | Mr Cobb saw her come back down the mine road; the Arms by that night, the milk round the next morning | Someone under the Company notice; the mine's door never barred; the Museum key |
+| 2 The Waters | The Museum, the ruined library, Butterfly Forest | Explosion, Grow | The constable sees the Museum's lamp from the east end of the street. Nothing else: the Waters do not talk to the town; she carries the forest to Dr Vane or nobody knows | The wing's lamp lit; the forest road's butterflies gone; the Amulet |
+| 3 The Works | The pipes, the Factory | Electric | The sweeper: no soot on the square; Mrs Tace | The Factory's lamp out; the dead run relit (K13); the Works darker |
+| 4 The Burial | The Burial Chamber | Fire | "Goldskin" said aloud in the town for the first time: the vicar, then Mr Tolly and the Arms | The graveyard's skeletons gone |
+| 5 The School | The School | Everything | The bell does not ring, and everybody heard it not ring | The School's lamps out; Mrs Tace at the top of Church Lane; Yours to Say |
+| 6 The choice | The study, the mine's vault, or the Halt | Carry it | Nothing: the game closes | `STORY.md` §10 |
 
 *The reference build had the Burial second, after the mine, and the data kept that order until 26 September 2026; `PLAN.md` §2.2 moves it fifth, and the data now follows the plan: the dog offers each act's place in this order (`QUEST-TREE.md` §5), and the Burial's stair stays locked until the Factory's key.*
 
@@ -480,7 +485,8 @@ Cross-region references that must agree. Each row is an L5 cohesion check: the s
 | After 2 | What the gold was for (the MAGIC wing); where the well were sent; Grow, from the last page | The Factory offered, by the pipes | The reedcutters; the tollkeeper's tally; the dog, one slip |
 | After 3 | The Works ran on the same gold; the foreman's diary; the four markers; the Chairman's Key opens the stair under the Hoar Stone | The Burial offered, via the graveyard footpath | The canteen hatch; the Voyseys |
 | After 4 | Goldskin is the wizard; the Ball; the shield was Julie's | The School offered | Nobody new. The town says his name |
-| After 5 | The choice made | None | The dog, or not |
+| After 5 | Who rings the bell; the Ball is hers to say | Yours to Say | The dog, at the top of Church Lane |
+| After 6 | The choice made (`the_end`) | None | The dog, or not |
 
 ### 9.3 Side stories on the spine
 
@@ -490,9 +496,9 @@ Cross-region references that must agree. Each row is an L5 cohesion check: the s
 | Country stories | 27 households | Anywhere in the region's open country | *Find, take, knock, look, count, clear.* Never the spine's nouns |
 | Tales | 9 | Ruins, three per region | Two or three deep, a turn, a choice; the choice's consequence stands every day after |
 | Omens | About a third true | Signs, notes, stones, rumours, per region | Fair; never on the first walk |
-| The dog's chain | 8 pokes | The step, by day | Slips once per act, under pressure |
+| The dog's chain | 8 pokes | The step, by day | Slips twice in the game, both behind a question she asks: the forest, and the choice (`STORY.md` §3) |
 
-**Proposed 1: the act rumour.** Each act boundary starts one rumour in the town (§9.1's column). It is the one place the county acknowledges her, and it travels at rumour speed, so a fast player hears it after she has done the next thing.
+**Built 1: the act's news.** Each act's boss starts the town's news (§7.2, §9.1's column; `STORY.md` §11). It is the one place the county acknowledges her, and it travels at rumour speed, so a fast player hears it after she has done the next thing.
 
 **Proposed 2: the Waters' silence is the Waters' idea.** Nobody there talks to the town; the tollkeeper stopped counting. She is the only carrier: telling Mrs Garland what the wing showed is a `tells` with her as source, and the only way the town learns act 2. Optional, never required.
 

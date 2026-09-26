@@ -120,9 +120,10 @@
       "id": "vault", "kind": "reward", "order": 6, "critical": true, "pool": "mine.vault", "heat": 0.6,
       "holds": [
         { "socket": "chest:vault", "prop": "boss_chest", "loot": [{ "item": "gold_bar", "qty": 5 }, { "item": "key_museum", "qty": 1 }] },
-        { "socket": "page:main", "prop": "leaf_page", "use": [{ "do": "grow", "stat": "spirit", "amount": 6, "id": "@self" }, { "do": "hide", "prop": "@self" }] }
+        { "socket": "page:main", "prop": "leaf_page", "use": [{ "do": "grow", "stat": "spirit", "amount": 6, "id": "@self" }, { "do": "hide", "prop": "@self" }] },
+        { "socket": "prop:seam", "prop": "mine_seam", "talk": "mine_seam", "label": "The seam" }
       ],
-      "binds": [{ "from": "chest:vault", "as": "vault_chest", "what": "prop" }],
+      "binds": [{ "from": "chest:vault", "as": "vault_chest", "what": "prop" }, { "from": "prop:seam", "as": "mine_seam", "what": "prop" }],
       "demands": [], "grants": [{ "key": "museum" }]
     },
     {

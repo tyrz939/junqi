@@ -1,7 +1,8 @@
 //! The spine in STORY.md §4's order (QUEST-TREE.md §5), held on the real seed: after the mine
 //! the dog offers the Museum, not the Burial, and each hand-in after that offers the next place
-//! (the forest, the Factory, the Burial, the School) until the epilogue; the Burial's stair stays
-//! shut until she carries the Chairman's Key from the Factory, whatever else she holds; the walk
+//! (the forest, the Factory, the Burial, the School) and then the choice (`endings.rs` plays
+//! it); the Burial's stair stays shut until she carries the Chairman's Key from the Factory,
+//! whatever else she holds; the walk
 //! back to the dog is a walk and never a slog, on three seeds, because the dog meets her nearer
 //! for the far acts, and is really there; and every door the story has not sent her to yet is shut
 //! to her, with the one way round the night allows.
@@ -75,7 +76,11 @@ fn after_the_mine_the_dog_offers_the_museum_and_the_spine_runs_to_the_school() {
         talk_through(&mut s, &[0]);
         assert!(quest_active(&s, next), "{offer} gives {next}");
     }
+    // The School handed in, the last thing the dog gives is the choice (STORY.md §10).
     been_through(&mut s, &["the_school"], &[]);
+    assert_eq!(the_dog_says(&mut s), "school_done_again");
+    talk_through(&mut s, &[0, 1]);
+    assert!(quest_active(&s, "the_choice"), "Yours to Say");
     assert_eq!(the_dog_says(&mut s), "epilogue");
 }
 

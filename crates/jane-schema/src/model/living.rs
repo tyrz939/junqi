@@ -11,7 +11,7 @@ use jane_core::action::{Condition, ListRef};
 use jane_core::ids::{NameId, TextId, UnitDefId, ZoneId};
 use jane_core::num::Tick;
 
-use crate::model::Region;
+use crate::model::{Region, Spreads};
 use crate::{model, model_enum};
 
 model_enum! {
@@ -123,6 +123,9 @@ model! {
         pub confirms: Option<TextId>,
         /// A claim the world gives the lie to.
         pub contradicts: Option<TextId>,
+        /// Who hears of it, and when: each group from the tick it fires plus its `after`, the
+        /// first to hear first (the town's news; `Condition::SpeakerHeard`).
+        pub spreads: &'static [Spreads],
     }
 }
 

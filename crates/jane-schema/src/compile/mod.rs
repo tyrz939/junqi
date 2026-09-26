@@ -88,6 +88,13 @@ fn check_limits(cx: &mut Ctx) {
     for (what, n) in pools {
         cx.diag.need(u16::try_from(n).is_ok(), "catalog", format!("{n} {what}: more than a u16 can index"));
     }
+    // The town's news is kept under story ids counted down from the top (`living::news_key`).
+    let (stories, news) = (cx.ids.stories.len(), cx.ids.consequences.len());
+    cx.diag.need(
+        stories + news < usize::from(u16::MAX),
+        "catalog",
+        "stories and consequences share the story id range",
+    );
 }
 
 /// xxh3 of the emitted catalog with the English left out: everything that changes behaviour.

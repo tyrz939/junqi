@@ -60,26 +60,40 @@ fn the_patches_have_their_populations() {
 fn consequences_change_the_world() {
     let c = catalog();
     let ids: Vec<&str> = c.living.consequences.iter().map(|r| r.id).collect();
-    assert_eq!(ids, ["allotments_thinned", "house_kept", "mine_quiet", "yard_clear"]);
-    let thinned = &c.living.consequences[0];
+    assert_eq!(
+        ids,
+        [
+            "allotments_thinned",
+            "bell_stopped",
+            "burial_quiet",
+            "forest_quiet",
+            "house_kept",
+            "mine_quiet",
+            "wing_lit",
+            "works_dark",
+            "yard_clear"
+        ]
+    );
+    let row = |id: &str| &c.living.consequences[c.living.consequence_id(id).unwrap().index()];
+    let thinned = row("allotments_thinned");
     assert_eq!(thinned.on, Condition::QuestDone(c.story.quest_id("rats_in_the_sheds").unwrap()));
     assert!(c.list(thinned.edits).contains(&Action::Despawn(Key::Name(name("rat_allotment_4")))));
     // Julie's Kitchen (WORLD.md §6): the house is hers; its door is night-locked, the bell's hours,
     // and her key opens it.
-    let kept = &c.living.consequences[1];
+    let kept = row("house_kept");
     assert_eq!(kept.on, Condition::QuestDone(c.story.quest_id("see_the_kitchen").unwrap()));
     assert_eq!(kept.zone, ZoneId::County);
     let [Action::NightLock { prop, lock }] = c.list(kept.edits) else { panic!("one night lock") };
     assert_eq!(*prop, Key::Name(name("house_door")));
     assert!(lock.keyed && (lock.from, lock.to) == (21, 6));
-    let quiet = &c.living.consequences[2];
+    let quiet = row("mine_quiet");
     assert_eq!(quiet.on, Condition::Dead(Key::Name(name("iron_knuckles"))));
     assert_eq!(quiet.zone, ZoneId::County, "it fires in the mine and lands on the mine road");
     assert!(c.list(quiet.edits).iter().any(|a| matches!(a, Action::Spawn { .. })));
     let said = c.text(quiet.contradicts.expect("the sign's claim"));
     assert!(said.starts_with("GOLDSKIN MINING Co."), "{said}");
     // The Thing in the Yard: the fence line clear for good (WORLD.md §6).
-    let yard = &c.living.consequences[3];
+    let yard = row("yard_clear");
     assert_eq!(yard.on, Condition::QuestDone(c.story.quest_id("defeat_skeleton").unwrap()));
     assert_eq!(c.list(yard.edits), [Action::Despawn(Key::Name(name("yard_skeleton")))]);
 }
@@ -93,8 +107,14 @@ fn a_rumour_travels_to_a_door_that_can_say_it() {
     assert_eq!(sp.to, [name("door_pound_3")]);
     assert_eq!(sp.after.0, 1440 * 60, "half a game day");
     let t = c.story.dialogue(c.story.dialogue_id("door_pound_3_heard").unwrap());
-    let rule = c.conds_of(t.start[0].when.unwrap());
-    assert_eq!(rule[0].c, Condition::SpeakerKnows(ames.id));
+    let asks = t.start.iter().filter_map(|r| r.when).map(|w| c.conds_of(w)[0].c);
+    assert!(asks.clone().any(|k| k == Condition::SpeakerKnows(ames.id)));
+    // The town's news of the mine reaches the same door, a little after the milk round.
+    let mine = c.living.consequence_id("mine_quiet").unwrap();
+    assert!(asks.clone().any(|k| k == Condition::SpeakerHeard(mine)));
+    let row = &c.living.consequences[mine.index()];
+    let heard = |n: &str| row.spreads.iter().find(|g| g.to.contains(&name(n))).map(|g| g.after).expect(n);
+    assert!(heard("mr_cobb") < heard("mrs_garland") && heard("milkman") < heard("door_pound_3"));
     let heard = t.node(t.node_index("heard").unwrap());
     assert_eq!(heard.lines[0].tells, [FactKey::Rumour(ames.id)]);
 }

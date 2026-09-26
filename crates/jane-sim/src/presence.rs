@@ -64,6 +64,9 @@ pub fn when_holds(when: Option<ScheduleWhen>, world: &GameState) -> bool {
         None => true,
         Some(ScheduleWhen::While(q)) => world.quests.active.iter().any(|p| p.quest == q),
         Some(ScheduleWhen::After(q)) => world.quests.done.contains(&q),
+        Some(ScheduleWhen::Flag(n)) => {
+            world.flags.get(&crate::state::FlagKey::Named(crate::sym::of_name(n))).is_some_and(|&v| v != 0)
+        }
     }
 }
 

@@ -16,7 +16,9 @@
       { "when": [{ "if": "questDone", "quest": "defeat_skeleton", "not": true }], "node": "intro" },
       { "when": [{ "if": "questDone", "quest": "number_fourteen" }, { "if": "flag", "flag": "said_fourteen" }, { "if": "flag", "flag": "dog_heard_lamps", "not": true }], "node": "lamps_counted_f" },
       { "when": [{ "if": "questDone", "quest": "number_fourteen" }, { "if": "flag", "flag": "dog_heard_lamps", "not": true }], "node": "lamps_counted" },
-      { "when": [{ "if": "questDone", "quest": "the_school" }], "node": "epilogue" },
+      { "when": [{ "if": "flag", "flag": "the_end" }], "node": "closed" },
+      { "when": [{ "if": "questDone", "quest": "the_school" }, { "if": "flag", "flag": "offered_choice", "not": true }], "node": "school_done_again" },
+      { "when": [{ "if": "questActive", "quest": "the_choice" }], "node": "epilogue" },
       { "when": [{ "if": "questDone", "quest": "the_burial" }, { "if": "flag", "flag": "offered_school", "not": true }], "node": "offer_school" },
       { "when": [{ "if": "questDone", "quest": "the_factory" }, { "if": "flag", "flag": "offered_burial", "not": true }], "node": "offer_burial" },
       { "when": [{ "if": "questDone", "quest": "the_forest" }, { "if": "flag", "flag": "offered_factory", "not": true }], "node": "offer_factory" },
@@ -120,7 +122,11 @@
         ]
       },
       "mine_done": {
-        "lines": ["You smell like rust and old gold. Good.", "Eat something."],
+        "lines": [
+          "You smell like rust and old gold. Good.",
+          "He kept the register to the end, then. Forty-one, all present. He took them down because the bell said in, and in is where he kept them.",
+          "Eat something."
+        ],
         "options": [{ "label": "Here", "actions": [{ "do": "handin", "quest": "the_mine" }] }]
       },
       "offer_museum": {
@@ -136,7 +142,8 @@
       "museum_done": {
         "lines": [
           "Plaster in your hair. You found the wing.",
-          "The old families took a little of the gold, for the bench, and left the rest in the hill. That was the whole of the arrangement. Then somebody bought the hill."
+          "The old families took a little of the gold, for the bench, and left the rest in the hill. That was the whole of the arrangement. Then somebody bought the hill.",
+          "He built the School on the hill with what came out of it, and the town sent its children up there gladly. It was a good school. That was the worst of it."
         ],
         "options": [{ "label": "Here", "actions": [{ "do": "handin", "quest": "the_museum" }] }]
       },
@@ -177,12 +184,16 @@
         ]
       },
       "factory_done": {
-        "lines": ["You smell of hot wire.", "Keep that key on you. It is the Chairman's own, and it opens one door in the county."],
+        "lines": [
+          "You smell of hot wire.",
+          "The stand that orb was on came out of the study under the house. Somebody carried it all the way to the Works the winter before you came, and wired it in, so that it would be there.",
+          "Keep that key on you. It is the Chairman's own, and it opens one door in the county."
+        ],
         "options": [{ "label": "Here", "actions": [{ "do": "handin", "quest": "the_factory" }] }]
       },
       "offer_burial": {
         "lines": [
-          "The burial is past Castle, off the graveyard road: the one that goes north, toward the School. Do not go as far as the School. A footpath from the graveyard goes to the Hoar Stone, the one that says DO NOT, and the Chairman's key unlocks the stair under it.",
+          "The burial is past Castle, off the graveyard road: the one that goes north, toward the School. Do not go as far as the School. A footpath from the graveyard goes to the Hoar Stone, the one that says DO NOT, and the Chairman's Key unlocks the stair under it.",
           "The meat from under the house: soak it in Stranglethorn, water and snakeroot, at a bench. The small snakes down there cannot be fought. They can be fed.",
           "The torches down there are blue and they only wake for cold. What burns is in the garden. The big snake keeps its own room and never stops moving. Hit the tail if you cannot reach the head.",
           "Whatever is under that stone was buried with the county's gold, all of it, cast into one ball. Bring the ball up. I will be at the graveyard gate again, from six till the bell."
@@ -193,7 +204,11 @@
         ]
       },
       "burial_done": {
-        "lines": ["You found him, then. Gnox Goldskin, with his arms round it.", "She is not dead, {name}. I would know."],
+        "lines": [
+          "You found him, then. Gnox Goldskin, with his arms round it.",
+          "The stone says leave it there. That was her hand, and it was right when it was written. It is not right now.",
+          "She is not dead, {name}. I would know."
+        ],
         "options": [{ "label": "Then I keep walking", "actions": [{ "do": "handin", "quest": "the_burial" }] }]
       },
       "offer_school": {
@@ -213,10 +228,35 @@
           "Amos Noone kept the Company's time, and when the nights got long he kept the county's. Somebody had to tell it when to be in.",
           "She held it over the county for as long as anyone could have. Longer. What happens to the ball now is yours to say."
         ],
-        "options": [{ "label": "Here", "actions": [{ "do": "handin", "quest": "the_school" }] }]
+        "options": [
+          {
+            "label": "Say what?",
+            "actions": [{ "do": "handin", "quest": "the_school" }, { "do": "quest", "quest": "the_choice" }, { "do": "flag", "flag": "offered_choice" }],
+            "goto": "the_three"
+          }
+        ]
+      },
+      "school_done_again": {
+        "lines": ["What happens to the ball now is yours to say. I will tell you what it can do. I will not tell you which."],
+        "options": [{ "label": "Tell me", "actions": [{ "do": "quest", "quest": "the_choice" }, { "do": "flag", "flag": "offered_choice" }], "goto": "the_three" }]
+      },
+      "the_three": {
+        "lines": [
+          "The ring in the dust on the study desk is its size. Set it there and sit with it, and the days stay days, inside. Whoever sits there does not go far again.",
+          "Or take it back down the mine to the vault, and put it in the hill it came out of. Then the county is one place, by day, for good. The night goes, and everything that is in it.",
+          "Or leave it, and take the train. It stops at the Halt on a Sunday if you signal. Nobody here would think the less of you."
+        ],
+        "options": [{ "label": "What would she do?", "goto": "the_ask" }, { "label": "I'll think" }]
+      },
+      "the_ask": {
+        "lines": ["I held it.", "She held it. Nobody asked her, and she did not ask anybody. That is not an answer, {name}. It is only what happened."]
       },
       "epilogue": {
-        "lines": ["There is a train on Sunday. The county still turns. Walk."]
+        "lines": ["There is a train on Sunday. The county still turns. Walk.", "Or do not. The ring, the hill or the train. I have said all I am going to say about it."],
+        "options": [{ "label": "Say it again", "goto": "the_three" }, { "label": "No" }]
+      },
+      "closed": {
+        "lines": ["The dog is asleep, and does not wake."]
       },
       "stoneskin_done": {
         "lines": [
@@ -298,8 +338,12 @@
   },
   "study_desk": {
     "speaker": "The Study Desk",
-    "start": [{ "node": "look" }],
+    "start": [{"when": [{"if": "questActive", "quest": "the_choice"}, {"if": "hasItem", "item": "the_ball", "qty": 1}], "node": "ring"}, {"node": "look"}],
     "nodes": {
+      "ring": {"lines": ["The clean ring in the dust is the Ball's size exactly.", "The chair has been pulled up to it. The seat is worn, and the dust on the desk stops where two arms would rest."], "options": [{"label": "Set the ball in the ring and sit down", "actions": [{"do": "handin", "quest": "the_choice"}, {"do": "take", "item": "the_ball", "qty": 1}, {"do": "take", "item": "key_stair", "qty": 1}, {"do": "flag", "flag": "shield_held"}, {"do": "flag", "flag": "the_end", "value": 1}], "goto": "held_1"}, {"label": "Not yet"}]},
+      "held_1": {"lines": ["It sits in the ring as if the ring had been cut for it. It is warm, and then it is the warmth of the room, and then the room is the warmth of it.", "Up the stair the kitchen clock goes on. Out in the county the lamps come on at half past six, and nobody notices that they are a little brighter than they were."], "goto": "held_2"},
+      "held_2": {"lines": ["At nine there is no bell. At six Ernest Dunn comes down from the back room of the Arms for his own tray.", "He walks across the square to where his brother is waiting by the telephone. Neither of them says anything about the spring.", "On Cinder Walk the night shift walks until six, as it always has. The Works were never inside it, and nobody was ever going to relieve them from here."], "goto": "held_3"},
+      "held_3": {"lines": ["Julie's Other Key goes on the nail by the stove, under the house key. LOCKED, AND KEPT LOCKED. That is your work now. It was hers.", "Late, something comes down the cellar stair one step at a time, the way a dog does, and lies across your feet. It is after nine. It has never been in the house after nine.", "You put your hand on its head. \"She is not dead, {name},\" it says. \"I would know. She is asleep.\""]},
       "look": {
         "lines": [
           "Nothing on the desk. The dust is even all over it but for one clean ring, the size of the stand the orb sits on in the kitchen.",
@@ -349,8 +393,8 @@
   },
   "sign_burial": {
     "speaker": "Standing Stone",
-    "start": [{ "node": "read" }],
-    "nodes": { "read": { "lines": ["THE HOAR STONE. DO NOT. Underneath, smaller, scratched later: he took the ball down with him. leave it there."] } }
+    "start": [{"when": [{"if": "questDone", "quest": "the_burial"}], "node": "known"}, {"node": "read"}],
+    "nodes": { "known": {"lines": ["THE HOAR STONE. DO NOT. Underneath, smaller, scratched later: he took the ball down with him. leave it there.", "The scratches make their letters the way the letter in your bag does. You were not looking for it, the first time."]}, "read": { "lines": ["THE HOAR STONE. DO NOT. Underneath, smaller, scratched later: he took the ball down with him. leave it there."] } }
   },
   "sign_town": {
     "speaker": "Sign",

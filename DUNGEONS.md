@@ -892,7 +892,7 @@ A lit lamp cannot answer a bolt (`schoolTouch` skips props that are `on`), which
 
 **Fiction.** The burial ground is older than the town and was full before Goldskin bought a place in it. The stair goes down to a square hall with a passage off each side. It is cold, and it is the kind of cold that comes off something. The torches burn blue if they burn at all, and they show things the ordinary kind do not.
 
-He was buried with what he liked to look at, and with company. The four he trusted went into the four corners. One kept snakes. One loved her garden. The stones say so. They do not say why the four dates are the same, or who has been bringing the soldier fresh flowers.
+He was buried with what he liked to look at, and with company. The four he trusted went into the four corners: the keeper of his snakes, his gardener, his housekeeper, his soldier. The notice at the foot of the stair names them in the order they were dug. They do not say why the four dates are the same, or who has been bringing the soldier fresh flowers.
 
 **The idea.** *Cold light shows what is there. Warm light keeps it off.* Two kinds of flame, two schools. **Cold torches** (`torch_blue`, built: they answer frost) reveal: lighting one `show`s what was hidden near it: a door, a chest, the far half of a floor. **Braziers** (new: they answer fire) protect: the dead of this place (`shade`, `shunsLight`) will not step into warm light. And 2020's note, "Large Torch can push": the **great torch** is a pushable prop with a warm light. Pushing takes thirty ticks and twenty energy a cell. It is a rest room she moves one cell at a time through a hall full of things standing at the edge of its light. That is the image of this dungeon, and it is one prop row and one AI flag.
 
@@ -983,7 +983,7 @@ order node         kind      holds                                              
 3f    ice_house    puzzle    Icebolt: cold torches in the yard's ice house show the floor that is there. Break only         0.7
 4     caretaker    miniboss  the Caretaker, in the corridors at night only. Carries the tower key                        1.2
 5     tower        boss      `while` six lesson flags and the tower key. The top room. The Timekeeper                      boss
-6     top_room     reward    the register. The lit window. The choice (`STORY.md` section 4) is made here or carried out of here
+6     top_room     reward    the register (his time book). The lit window. The Ball is carried out of here to one of three places (`STORY.md` §10)
 -     staff_room   side      leaf page. Night only
 -     lost_property side     small jars x2. Break only
 ```

@@ -4,17 +4,34 @@
     "actions": [
       {
         "do": "if",
-        "when": [{ "if": "flag", "flag": "omen:early_bell" }],
-        "then": [
+        "when": [{ "if": "flag", "flag": "bell_stopped" }],
+        "then": [{ "do": "toast", "text": "Nine o'clock. No bell." }, { "do": "flag", "flag": "nine_silent", "value": 1 }],
+        "else": [
           {
             "do": "if",
-            "when": [{ "if": "weekday", "day": "tuesday", "not": true }],
-            "then": [{ "do": "toast", "text": "A school bell, a long way off. Nine o'clock." }]
+            "when": [{ "if": "flag", "flag": "omen:early_bell" }],
+            "then": [
+              {
+                "do": "if",
+                "when": [{ "if": "weekday", "day": "tuesday", "not": true }],
+                "then": [{ "do": "toast", "text": "A school bell, a long way off. Nine o'clock." }]
+              }
+            ],
+            "else": [{ "do": "toast", "text": "A school bell, a long way off. Nine o'clock." }]
           }
-        ],
-        "else": [{ "do": "toast", "text": "A school bell, a long way off. Nine o'clock." }]
+        ]
       }
     ]
   },
-  { "hour": 6, "actions": [{ "do": "toast", "text": "The bell again. It is only morning." }] }
+  {
+    "hour": 6,
+    "actions": [
+      {
+        "do": "if",
+        "when": [{ "if": "flag", "flag": "bell_stopped" }],
+        "then": [{ "do": "toast", "text": "Six o'clock, and no bell. It is morning all the same." }],
+        "else": [{ "do": "toast", "text": "The bell again. It is only morning." }]
+      }
+    ]
+  }
 ]

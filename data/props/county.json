@@ -32,5 +32,8 @@
     "nightOnly": true,
     "lightWhenOn": true,
     "light": { "radius": 96, "color": "#f6cd40", "flicker": 0.05 }
-  }
+  },
+  "lamp_wing": {"name": "Lamp Post", "sprite": "lamp_post", "w": 1, "h": 1, "solid": true, "blockLos": false, "nightOnly": true, "lightWhenOn": true, "light": {"radius": 96, "color": "#f6cd40", "flicker": 0.05}},
+  "lamp_works": {"name": "Lamp Post", "sprite": "lamp_post", "w": 1, "h": 1, "solid": true, "blockLos": false, "nightOnly": true, "lightWhenOn": true, "light": {"radius": 96, "color": "#f6cd40", "flicker": 0.05}},
+  "lamp_school": {"name": "Lamp Post", "sprite": "lamp_post", "w": 1, "h": 1, "solid": true, "blockLos": false, "nightOnly": true, "lightWhenOn": true, "light": {"radius": 96, "color": "#f6cd40", "flicker": 0.05}}
 }

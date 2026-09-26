@@ -22,5 +22,6 @@
   "into_school": {
     "zone": "school", "rect": "school_hall", "once": true,
     "actions": [{ "do": "location", "name": "school" }]
-  }
+  },
+  "halt_train": {"zone": "county", "rect": "platform", "mode": "while", "once": false, "when": [{"if": "flag", "flag": "train_in"}, {"if": "flag", "flag": "train_signalled"}], "actions": [{"do": "flag", "flag": "train_signalled", "value": 0}, {"do": "talk", "tree": "the_train"}]}
 }

@@ -29,7 +29,7 @@ fn every_table_is_there_in_id_order() {
     let k = &c().combat;
     assert_eq!(k.spells.len(), 24);
     assert_eq!(k.effects.len(), 20);
-    assert_eq!(k.units.len(), 154);
+    assert_eq!(k.units.len(), 155);
     for ids in [
         k.spells.iter().map(|s| s.id).collect::<Vec<_>>(),
         k.effects.iter().map(|e| e.id).collect(),
@@ -165,7 +165,17 @@ fn the_forest_has_a_day_and_a_night() {
     // (WORLD.md §3.6). The overrides come first; the plain row covers the whole day.
     let dog = unit("dog");
     assert!(!dog.day_only);
-    let night = dog.schedule.iter().find(|r| r.slot == jane_data::ScheduleSlot::Absent).expect("a night row");
+    // Two rows the endings hold: gone for good once the night goes (the Ball back in the hill),
+    // and at the Halt on the day she signals the Sunday train (STORY.md §10).
+    let gone = dog.schedule.iter().find(|r| r.slot == jane_data::ScheduleSlot::Absent && r.hour_from == r.hour_to);
+    assert!(gone.is_some_and(|r| matches!(r.when, Some(jane_data::ScheduleWhen::Flag(_)))), "gone with the night");
+    let halt = dog.schedule.iter().filter(|r| matches!(r.when, Some(jane_data::ScheduleWhen::Flag(_)))).count();
+    assert_eq!(halt, 2, "gone with the night, and at the Halt for the train");
+    let night = dog
+        .schedule
+        .iter()
+        .find(|r| r.slot == jane_data::ScheduleSlot::Absent && r.hour_from != r.hour_to)
+        .expect("a night row");
     assert_eq!((night.hour_from, night.hour_to), (21, 6));
     assert!(matches!(night.when, Some(jane_data::ScheduleWhen::After(_))));
     let meets = dog.schedule.iter().filter(|r| matches!(r.when, Some(jane_data::ScheduleWhen::While(_)))).count();

@@ -14,7 +14,7 @@ use jane_core::action::{Action, Condition, FlagKey};
 use jane_core::ids::{Key, NameId};
 
 use super::diag::Diagnostics;
-use crate::model::{Catalog, ReqTarget, ScheduleSlot};
+use crate::model::{Catalog, ReqTarget, ScheduleSlot, ScheduleWhen};
 
 /// What a name is used as.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -147,6 +147,9 @@ pub fn check(c: &Catalog, diag: &mut Diagnostics) {
                 }
                 ScheduleSlot::Patrol | ScheduleSlot::Absent => {}
             }
+            if let Some(ScheduleWhen::Flag(n)) = r.when {
+                flags_read.insert(FlagKey::Named(Key::Name(n)));
+            }
         }
     }
     // A quest's location step is counted by the flag its `location` verb writes.
@@ -235,6 +238,25 @@ fn living(c: &Catalog, provided: &BTreeSet<NameId>, flags_written: &BTreeSet<Fla
                 diag.need(named, &at, "the dead name is nothing any zone provides");
             }
             _ => {}
+        }
+        for sp in r.spreads {
+            for &n in sp.to {
+                let at = format!("consequences.{}.spreads", r.id);
+                diag.need(provided.contains(&n), &at, format!("\"{}\" is nobody any zone provides", c.name(n)));
+            }
+        }
+    }
+    // A line that asks whether someone has heard the news asks of a row that spreads it.
+    for conds in c.conds {
+        for cond in *conds {
+            if let Condition::SpeakerHeard(id) = cond.c {
+                let r = &c.living.consequences[id.index()];
+                diag.need(
+                    !r.spreads.is_empty(),
+                    format!("consequences.{}", r.id),
+                    "a line asks whether someone has heard of it, and it spreads to nobody",
+                );
+            }
         }
     }
     for s in c.county.stories {

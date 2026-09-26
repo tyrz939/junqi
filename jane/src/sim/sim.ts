@@ -496,9 +496,10 @@ export class Sim implements World {
       const def = this.catalog.units[u.def];
       if (!def.dayOnly && !def.nightOnly && !def.schedule) continue;
       const q = this.state.quests;
-      const holds = (r: { while?: string; after?: string }): boolean =>
-        r.while ? q.active.some((p) => p.quest === r.while) : r.after ? q.done.includes(r.after) : true;
-      const rows = def.schedule ? [...def.schedule.filter((r) => r.while || r.after), ...def.schedule.filter((r) => !r.while && !r.after)] : undefined;
+      const holds = (r: { while?: string; after?: string; flag?: string }): boolean =>
+        r.while ? q.active.some((p) => p.quest === r.while) : r.after ? q.done.includes(r.after) : r.flag ? (this.state.flags[r.flag] ?? 0) !== 0 : true;
+      const when = (r: { while?: string; after?: string; flag?: string }): boolean => !!(r.while || r.after || r.flag);
+      const rows = def.schedule ? [...def.schedule.filter(when), ...def.schedule.filter((r) => !when(r))] : undefined;
       const slot = rows?.find((r) => inSpan(hour, r.from, r.to) && holds(r));
       if (def.schedule && !slot) continue;
       const away = slot

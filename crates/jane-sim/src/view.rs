@@ -320,6 +320,15 @@ impl<'a> View<'a> {
         self.state.is_night()
     }
 
+    /// The story's close (STORY.md §10): 0 while it is open; after an ending's last page, which
+    /// one (1 the shield held, 2 the Ball back in the hill, 3 the Sunday train), from the world's
+    /// flag `the_end`. The presentation closes on it: the last page stays up, then the title.
+    pub fn the_end(&self) -> u8 {
+        let Some(s) = self.sym("the_end") else { return 0 };
+        let v = self.state.flags.get(&crate::state::FlagKey::Named(s)).copied().unwrap_or(0);
+        u8::try_from(v).unwrap_or(0)
+    }
+
     /// The spells the world has learned (growth is the party's).
     pub fn learned(&self) -> &'a [SpellId] {
         &self.state.growth.spells

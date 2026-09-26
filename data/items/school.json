@@ -1,7 +1,7 @@
 {
   "key_stair": {
     "name": "Julie's Other Key", "icon": "item_key_brass", "maxStack": 1, "usable": false, "cooldown": 1, "bound": true, "opens": "school_stair",
-    "description": "Small and bright, on a loop of garden twine. The label is in the hand of the letter: THE STAIR UNDER THE SCHOOL. LOCKED, AND KEPT LOCKED. NOT FOR HIM."
+    "description": "Small and bright, on a loop of garden twine. The label is in the hand of the letter: THE STAIR UNDER THE SCHOOL. LOCKED, AND KEPT LOCKED. NOT FOR HIM. The back of the label is written on too, under the twine."
   },
   "key_school": {
     "name": "School Door Key", "icon": "item_key_brass", "maxStack": 1, "usable": false, "cooldown": 1, "opens": "school",

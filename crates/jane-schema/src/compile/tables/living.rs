@@ -17,7 +17,8 @@
 //!   not a flag (WORLD.md §6: a flag alone
 //!   fails the cohesion test); a claim confirmed or contradicted is a line some row already says,
 //!   and not both. That a flag `on` is set somewhere, and that a `dead` name is provided, needs every
-//!   list: `integrate.rs`.
+//!   list: `integrate.rs`. Its `spreads` (the town's news) are groups of listeners, each with a
+//!   delay no shorter than the one before: whoever would hear first is written first.
 //! - **tuning**: the journal keeps at least one entry per kind; the rain ramp steps at least
 //!   every tick.
 
@@ -231,6 +232,18 @@ struct RawConsequence {
     edits: Vec<RawAction>,
     confirms: Option<String>,
     contradicts: Option<String>,
+    #[serde(default)]
+    spreads: Vec<RawNews>,
+}
+
+/// One group of listeners: the people (unit or door keys) who hear `after` seconds from the tick
+/// the consequence fires.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawNews {
+    to: Vec<String>,
+    /// Seconds.
+    after: Num,
 }
 
 fn county() -> String {
@@ -303,7 +316,33 @@ fn consequences(src: &Source, cx: &mut Ctx) -> &'static [ConsequenceDef] {
         );
         let confirms = claim(cx, &format!("{at}.confirms"), r.confirms.as_deref());
         let contradicts = claim(cx, &format!("{at}.contradicts"), r.contradicts.as_deref());
-        out.push(ConsequenceDef { id: leak_str(&r.id), on: on.c, zone, edits, confirms, contradicts });
+        let spreads = news(cx, &format!("{at}.spreads"), &r.spreads);
+        out.push(ConsequenceDef { id: leak_str(&r.id), on: on.c, zone, edits, confirms, contradicts, spreads });
+    }
+    leak(out)
+}
+
+/// The town's news: who hears, in the order they hear it. Nobody is told twice.
+fn news(cx: &mut Ctx, at: &str, rows: &[RawNews]) -> &'static [model::Spreads] {
+    let mut out = Vec::with_capacity(rows.len());
+    let mut last = Tick(0);
+    let mut told: Vec<&str> = Vec::new();
+    for (n, r) in rows.iter().enumerate() {
+        let at = format!("{at}[{n}]");
+        let after = r.after.ticks().map_err(|e| cx.diag.error(&at, e)).unwrap_or_default();
+        cx.diag.need(!r.to.is_empty(), &at, "spreads to nobody");
+        cx.diag.need(after >= last, &at, "the groups are written in the order they hear: each after the one before");
+        last = after;
+        for t in &r.to {
+            cx.diag.need(
+                !t.is_empty() && !told.contains(&t.as_str()),
+                &at,
+                format!("\"{t}\" is told twice, or is empty"),
+            );
+            told.push(t);
+        }
+        let to = leak(r.to.iter().map(|t| cx.name(t)).collect());
+        out.push(model::Spreads { to, after });
     }
     leak(out)
 }
