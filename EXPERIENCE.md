@@ -200,10 +200,10 @@ Headers and key claims; later passes expand each to the §2 format.
 
 ### The School · hours 13 to 15 · everything
 
-- **Sees / hears / can do.** The Bellfield at nine. The building follows the timetable: six lessons, a tower, the bell. Every verb. The choice: re-make the shield and hold it; put the Ball back in the hill; take the Sunday train.
+- **Sees / hears / can do.** Up the stair out of the Burial, the one behind Goldskin, into the boiler room: the caretaker's bin, and on it the key to the front doors, which are bolted from inside. After, those doors are the way down to the Bellfield and back. The Bellfield at nine. The building follows the timetable: six lessons, a tower, the bell. Every verb. The choice: re-make the shield and hold it; put the Ball back in the hill; take the Sunday train.
 - **Knows after.** What the bell was for. **Does not:** which choice was right. The game does not say.
 - **Meanwhile.** The two bells, if K12 was done, falling out of time.
-- **Checks.** `[L1:school on the crown, at least 1300 m from the station by road, north of every Lowfields place]` `[L6:the window lit every hour of every day until the end]` `[L5:no line calls any choice right]` `[L5:the children are never shown and never enemies]` `[L7:dossier: the School in every first-hour dossier, seen or read, before the bell]`
+- **Checks.** `[L1:school on the crown, at least 1300 m from the station by road, north of every Lowfields place]` `[L1:the way in is the Burial's stair; the front doors' key is inside, in the boiler room]` `[L6:the window lit every hour of every day until the end]` `[L5:no line calls any choice right]` `[L5:the children are never shown and never enemies]` `[L7:dossier: the School in every first-hour dossier, seen or read, before the bell]`
 - **Varies.** The ending. Whether the dog is on the step after.
 
 ---

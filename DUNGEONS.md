@@ -972,7 +972,7 @@ The bed is a lever. That is the only new trick, and it needs no engine work: `re
 
 ```
 order node         kind      holds                                                       heat
-0     boiler       entrance  up the stair from the Burial. (The front doors open from inside later: the shortcut to the Bellfield)   0.4
+0     boiler       entrance  up the stair from the Burial (the stair stands behind Goldskin: its room opens when he is down). The key to the front doors lies on the caretaker's bin: the county door is bolted from inside, and this key opens it from outside after, the shortcut to the Bellfield   0.4
 1     hall         hub       the bell rope: grants state `period`. The timetable (notice). Six doors and a tower stair, seen and shut   0
 2     sick_bay     rest      two beds. A fire in the grate. Nothing comes in                0
 3a    woodwork     puzzle    Repair: a run of broken benches to cross a flooded floor; wood in the racks. Lessons only     0.8
@@ -998,7 +998,7 @@ Each lesson ends at a classroom clock that she stops (a `once` prop: `flag lesso
 
 **Boss: the Ringer.** 5,000 HP. **Question for John:** who or what rings the bell is `STORY.md`'s open question, and this document does not answer it. The name is a placeholder and the fight is written so that the answer can change without the fight changing. The belfry is round. The bell tolls on a fixed count, every twenty seconds, and each toll does two things: a ring of bolts outward from the centre (the snake's `snake_ring`, at scale), and the room changes face, day to night to day (`onEnter` cannot do this; it is a timer, so the Ringer takes the snake's route: a small custom clock in its controller, which would be a second exception to the one-custom-mover rule and needs agreeing). By day the Ringer can be hurt and the floor is plain. By night it cannot be seen outside cold light, shades stand at the edge of warm light, dead sockets want sparking to keep two lamps burning, and buds in the moonbeam from the one window bloom into cover that stops the next ring. Every verb has one job. None is required; each makes one toll survivable.
 
-**Rewards.** Big jar, and the ending. **Rest:** the sick bay. **Shortcut:** the front doors, opened from inside, onto the Bellfield (threat 6) and the road down.
+**Rewards.** Big jar, and the ending. **Rest:** the sick bay. **Shortcut:** the front doors, opened from inside (`key_school`, on the caretaker's bin in the boiler room; the county's `school_door` takes it), onto the Bellfield (threat 6) and the road down.
 
 **With 2 to 4 players.** The timetable splits parties by temptation: three lessons are open at once and the hall is between them. The corridors during lessons are why that is a bad idea and why break is the time to move. The belfry gives every player a verb to mind.
 
