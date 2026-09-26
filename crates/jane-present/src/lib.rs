@@ -18,11 +18,16 @@ pub mod chunks;
 pub mod drawlist;
 pub mod frame;
 pub mod input;
+/// The names bindings use in data and in `config.json` (shared with build.rs).
+pub mod input_names;
 pub mod light;
 pub mod people;
 pub mod present;
 pub mod stand_in;
 pub mod terrain;
+pub mod text;
+pub mod ui;
+pub mod view;
 
 pub use backend::{AO_TINT, AtlasPages, Backend, CLUT_LEN, Caps, FrameStats, FrameTimes, Page, StatPass};
 pub use frame::{

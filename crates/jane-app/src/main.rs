@@ -3,22 +3,32 @@
 //!
 //! No SDL type leaves this crate: `jane-present` sees a `DeviceState` and hands back a `Frame`.
 
+mod app;
+mod config;
+mod console;
 mod devices;
 mod game;
 mod handle;
+mod saves;
 mod screen;
+mod script;
 mod shot;
 
 use std::process::ExitCode;
 
-pub const USAGE: &str =
-    "jane-app [--seed N] [--name NAME] [--scale K] [--backend auto|soft|wgpu] [--ticks N] [--shot PATH]
-  --seed N      the county (default: from the clock; printed at start)
-  --name NAME   the heroine's name (default Jane)
-  --scale K     the window starts at K x 768 x 432 (default 2, or 1 where 2 does not fit)
-  --backend B   auto (default: wgpu at T2 where an adapter can draw it, else soft), soft (T0), wgpu (T2)
-  --ticks N     run N ticks, then exit (tests, automation)
-  --shot PATH   write the canvas as a PNG on exit; F12 writes PATH-0001.png and on";
+pub const USAGE: &str = "jane-app [--new] [--seed N] [--name NAME] [--scale K] [--backend auto|soft|wgpu]
+         [--ticks N] [--shot PATH] [--script STEPS] [--data-dir DIR]
+  --new           skip the title: New Game at once (with --seed and --name)
+  --seed N        the county New Game builds (default: from the clock)
+  --name NAME     the heroine's name (default: the last one given, else Jane)
+  --scale K       the window starts at K x 768 x 432 (default 2, or 1 where 2 does not fit)
+  --backend B     auto (default: wgpu at T2 where an adapter can draw it, else soft), soft (T0), wgpu (T2)
+  --ticks N       run N ticks (title included), then exit (tests, automation)
+  --shot PATH     write the canvas as a PNG on exit; F12 writes PATH-0001.png and on
+  --script STEPS  inputs at ticks: \"tick 60 key E; tick 90 click 384 200; tick 120 shot a.png\"
+  --data-dir DIR  where saves and config.json live (default: beside the exe when a file called
+                  portable is there, else the user's data folder)
+  --bot MODEL     a headless player (reader or rusher) plays the seat; the UI shows it";
 
 /// Which backend draws (PRESENTATION.md §1.3).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -38,6 +48,14 @@ pub struct Args {
     pub ticks: Option<u64>,
     pub shot: Option<String>,
     pub backend: BackendChoice,
+    /// Straight into New Game, no title.
+    pub new: bool,
+    /// `--seed` was given: New Game from the title uses it too.
+    pub seed_given: bool,
+    pub script: Option<String>,
+    pub data_dir: Option<String>,
+    /// A headless player takes the seat (`reader` or `rusher`).
+    pub bot: Option<String>,
 }
 
 fn parse(args: &[String], clock_seed: u32) -> Result<Args, String> {
@@ -48,13 +66,31 @@ fn parse(args: &[String], clock_seed: u32) -> Result<Args, String> {
         ticks: None,
         shot: None,
         backend: BackendChoice::Auto,
+        new: false,
+        seed_given: false,
+        script: None,
+        data_dir: None,
+        bot: None,
     };
     let mut it = args.iter();
     while let Some(a) = it.next() {
         let mut value = || it.next().ok_or_else(|| format!("{a}: needs a value"));
         let num = |s: &String| s.parse::<u64>().map_err(|_| format!("{a}: not a number: {s}"));
         match a.as_str() {
-            "--seed" => out.seed = u32::try_from(num(value()?)?).map_err(|_| format!("{a}: too big"))?,
+            "--seed" => {
+                out.seed = u32::try_from(num(value()?)?).map_err(|_| format!("{a}: too big"))?;
+                out.seed_given = true;
+            }
+            "--new" => out.new = true,
+            "--script" => out.script = Some(value()?.clone()),
+            "--data-dir" => out.data_dir = Some(value()?.clone()),
+            "--bot" => {
+                let m = value()?.clone();
+                if !matches!(m.as_str(), "reader" | "rusher") {
+                    return Err(format!("--bot: reader or rusher, not {m}"));
+                }
+                out.bot = Some(m);
+            }
             "--name" => out.name.clone_from(value()?),
             "--scale" => out.scale = Some(u32::try_from(num(value()?)?).map_err(|_| format!("{a}: too big"))?),
             "--ticks" => out.ticks = Some(num(value()?)?),
@@ -77,7 +113,7 @@ fn parse(args: &[String], clock_seed: u32) -> Result<Args, String> {
 }
 
 /// A seed from the clock, for a New Game nobody chose a seed for.
-fn clock_seed() -> u32 {
+pub fn clock_seed() -> u32 {
     let t = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default();
     (t.as_secs() as u32) ^ t.subsec_nanos()
 }
@@ -125,6 +161,11 @@ mod tests {
                 ticks: Some(300),
                 shot: Some("sheets/app.png".into()),
                 backend: BackendChoice::Wgpu,
+                new: false,
+                seed_given: true,
+                script: None,
+                data_dir: None,
+                bot: None,
             }
         );
         let d = parse(&[], 99).unwrap();

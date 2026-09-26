@@ -4,6 +4,7 @@
 pub mod blit;
 pub mod lightmap;
 pub mod silhouette;
+pub mod ui;
 
 use std::time::Instant;
 
@@ -128,6 +129,13 @@ impl Backend for Soft {
                 Pass::Post(_) => {}
             }
             pass_us[stat as usize] += at.elapsed().as_micros() as u32;
+        }
+        // The `Ui` pass: after everything, unlit (PRESENTATION.md §3.1).
+        if !frame.ui.is_empty() {
+            let at = Instant::now();
+            calls += frame.ui.len() as u32;
+            written += ui::draw(t, frame, &self.atlas);
+            pass_us[StatPass::Ui as usize] += at.elapsed().as_micros() as u32;
         }
         self.pixels_written = written;
         self.times.push_passes(start.elapsed().as_micros() as u32, pass_us);

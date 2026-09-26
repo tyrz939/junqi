@@ -336,6 +336,7 @@ name = "jane-app"
 version = "0.1.0"
 dependencies = [
  "jane-art",
+ "jane-bot",
  "jane-core",
  "jane-data",
  "jane-net",
@@ -344,8 +345,11 @@ dependencies = [
  "jane-render-soft",
  "jane-render-wgpu",
  "jane-sim",
+ "jane-world",
  "raw-window-handle",
  "sdl2",
+ "serde",
+ "serde_json",
  "wgpu",
 ]
 
@@ -416,6 +420,7 @@ dependencies = [
  "jane-data",
  "jane-sim",
  "jane-world",
+ "serde_json",
 ]
 
 [[package]]
