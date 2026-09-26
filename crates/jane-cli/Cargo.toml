@@ -22,6 +22,12 @@ jane-bot.workspace = true
 jane-art.workspace = true
 jane-present.workspace = true
 jane-render-soft.workspace = true
+jane-render-wgpu = { workspace = true, optional = true }
+
+[features]
+# PRESENTATION.md §6: the GPU backends for local use (`--backend wgpu`), off by default so CI and a
+# Pi host build with no GPU stack.
+gpu = ["dep:jane-render-wgpu"]
 
 [lints]
 workspace = true

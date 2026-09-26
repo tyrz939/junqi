@@ -16,10 +16,11 @@ pub const USAGE: &str = "  sheet layers <what> [--out DIR]     a sprite's albedo
   sheet all [--out DIR]               every sheet above, for every sprite
   sheet list                          the sprites <what> can name
   sheet scene [--seed N] [--minutes M | --ticks T] [--model reader|rusher] [--night | --hour H]
-              [--wide] [--out PATH.png | --out DIR]
+              [--wide] [--backend soft|wgpu] [--out PATH.png | --out DIR]
                                       a model plays the seed from New Game (default 1 minute), then one
-                                      frame is drawn headless through the presenter and soft; --night
-                                      sets the clock to 22:00 first; --wide draws 21:9 (1008 x 432)
+                                      frame is drawn headless through the presenter and soft (T0), or
+                                      wgpu (T2) with the gpu feature; --night sets the clock to 22:00
+                                      first; --wide draws 21:9 (1008 x 432)
   sheet --bless                       rewrite crates/jane-art/tests/golden.txt from the current art";
 
 /// jane-art's golden file, from this crate's manifest.
@@ -98,14 +99,20 @@ fn scene(args: &[String]) -> Result<(), String> {
         (false, None) => None,
     };
     let canvas = if args.iter().any(|a| a == "--wide") { (1008, 432) } else { (768, 432) };
-    let name = format!("scene-{seed}-{ticks}{}-{}", hour.map_or(String::new(), |h| format!("-h{h:02}")), model.name());
+    let backend = crate::scene::Which::parse(flag("--backend").unwrap_or("soft")).ok_or("--backend: soft or wgpu")?;
+    let name = format!(
+        "scene-{seed}-{ticks}{}-{}-{}",
+        hour.map_or(String::new(), |h| format!("-h{h:02}")),
+        model.name(),
+        backend.name()
+    );
     let path = match flag("--out") {
         Some(p) if p.ends_with(".png") => PathBuf::from(p),
         Some(dir) => PathBuf::from(dir).join(format!("{name}.png")),
         None => PathBuf::from("sheets").join(format!("{name}.png")),
     };
     let bps = jane_sim::Blueprints::build(seed).map_err(|e| format!("seed {seed}: {e}"))?;
-    let shot = crate::scene::render(bps, &crate::scene::Opts { seed, ticks, model, hour, canvas })?;
+    let shot = crate::scene::render(bps, &crate::scene::Opts { seed, ticks, model, hour, canvas, backend })?;
     if let Some(dir) = path.parent().filter(|d| !d.as_os_str().is_empty()) {
         std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     }
