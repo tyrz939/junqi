@@ -334,13 +334,37 @@ impl Emit for ScheduleSlot {
     }
 }
 
+/// When a schedule row holds besides its hours. A row with one is looked at before the rows
+/// without, which cover every hour of the day by themselves (WORLD.md §3.6: the dog meets her
+/// somewhere else while a quest is in her log, and is gone at night once the key is given).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ScheduleWhen {
+    /// While this quest is in the log (given and not handed in; ready counts).
+    While(QuestId),
+    /// Once this quest has been handed in.
+    After(QuestId),
+}
+
+impl Emit for ScheduleWhen {
+    fn emit(&self, out: &mut String) {
+        let (v, q) = match self {
+            ScheduleWhen::While(q) => ("ScheduleWhen::While(", q),
+            ScheduleWhen::After(q) => ("ScheduleWhen::After(", q),
+        };
+        out.push_str(v);
+        q.emit(out);
+        out.push(')');
+    }
+}
+
 model! {
     /// One row of a unit's schedule: from `hour_from` up to `hour_to` (hours 0..=23; a row may
-    /// wrap midnight), the unit is at `slot`.
+    /// wrap midnight), the unit is at `slot`; with `when`, only while that holds.
     pub struct ScheduleRow {
         pub hour_from: u8,
         pub hour_to: u8,
         pub slot: ScheduleSlot,
+        pub when: Option<ScheduleWhen>,
     }
 }
 
@@ -395,8 +419,15 @@ model! {
         /// It will not step into warm light: it walks to the edge of it and waits there.
         pub shuns_light: bool,
         /// Where the unit is by the hour (ARCHITECTURE.md §4.6.a). Empty: always present (or
-        /// `day_only` / `night_only`). Content does not write it yet.
+        /// `day_only` / `night_only`).
         pub schedule: &'static [ScheduleRow],
+        /// How far, in minutes either way, this person's hours move from day to day (WORLD.md
+        /// §3.1): each day draws its own offset, in fives, and no hour moves across a bell. 0:
+        /// the hours as written.
+        pub vary: u8,
+        /// Whose dice move the hours: the FNV-1a of this row's id, or of the id `varyWith` names
+        /// (two who keep hours together draw together: Miss Orme and Mr Lyle go in as one).
+        pub vary_key: u32,
         /// Unit defs an idle one takes as a target inside its aggro reach (ARCHITECTURE.md §4.6.c).
         pub hunts: &'static [UnitDefId],
         /// Unit defs an idle one walks its leash away from (ARCHITECTURE.md §4.6.c).

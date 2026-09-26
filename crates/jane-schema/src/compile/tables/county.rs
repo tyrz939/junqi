@@ -781,6 +781,9 @@ struct RawDoor {
     key_tag: Option<String>,
     night_lock: Option<String>,
     night_hours: Option<[u8; 2]>,
+    /// The key does not lock the door: it answers the `nightLock` at the hours it is shut.
+    #[serde(default)]
+    keyed: bool,
     mark: Option<String>,
     #[serde(default)]
     from_below: bool,
@@ -821,6 +824,11 @@ fn doors(src: &Source, cx: &mut Ctx, zones: &[ZoneDef], sites: &Keyed<SiteDef>) 
             }
         };
         cx.diag.need(!r.from_below || r.mark.is_some(), &at, "fromBelow with no mark: a way up that arrives nowhere");
+        cx.diag.need(
+            !r.keyed || (r.key_tag.is_some() && r.night_lock.is_some()),
+            &at,
+            "keyed: a key that answers a nightLock needs both a keyTag and a nightLock",
+        );
         cx.diag.need(r.chunk.is_none() || r.def.is_none(), &at, "a door set into a landmark's face is a door: no def");
         // Where it leads must be there, whenever it can be known from data.
         let to = if r.from_below {
@@ -849,6 +857,7 @@ fn doors(src: &Source, cx: &mut Ctx, zones: &[ZoneDef], sites: &Keyed<SiteDef>) 
             label: say(cx, &at, &r.label),
             key_tag: r.key_tag.as_deref().map(|t| name(cx, &at, t)),
             night_lock: night_lock(cx, &at, r.night_lock.as_deref(), r.night_hours),
+            keyed: r.keyed,
             mark: r.mark.as_deref().map(|m| name(cx, &at, m)),
             to,
         });

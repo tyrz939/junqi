@@ -42,11 +42,11 @@ pub fn set_doors(c: &mut County<'_>) {
         };
         let Some((x, y)) = at else { continue };
         let p = c.k.prop(Some(Key::Name(d.key)), d.def, x, y);
-        p.locked = d.key_tag.is_some();
+        p.locked = d.key_tag.is_some() && !d.keyed;
         p.key_tag = d.key_tag.map(Key::Name);
         p.to = d.to.map(|m| Door { zone: d.zone, mark: Key::Name(m) });
         p.label = Some(TextRef::Text(d.label));
-        p.night_lock = d.night_lock.map(jane_data::NightLockDef::lock);
+        p.night_lock = d.night_lock.map(|l| jane_core::NightLock { keyed: d.keyed, ..l.lock() });
         if let Some(m) = d.mark {
             c.k.mark(Key::Name(m), x, y + h, Some(Facing::South));
         }

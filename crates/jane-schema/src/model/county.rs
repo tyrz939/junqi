@@ -406,6 +406,10 @@ model! {
         pub key_tag: Option<NameId>,
         /// What it says at the hours it is shut instead of opening.
         pub night_lock: Option<NightLockDef>,
+        /// The `key_tag` does not lock it: a key that fits answers the `night_lock` at its shut
+        /// hours, and at the others the door opens for anyone (the Works' wicket: the night shift
+        /// goes in at nine; day men by the gate key).
+        pub keyed: bool,
         /// A county mark in front of it: where the dungeon's own way out arrives.
         pub mark: Option<NameId>,
         /// The mark in `zone` it leads to (`entry`); `None` for a way that opens only from below (a

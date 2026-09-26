@@ -129,6 +129,8 @@ pub struct RawHolding {
     pub use_list: Option<Vec<RawAction>>,
     pub release: Option<Vec<RawAction>>,
     pub locked: Option<bool>,
+    /// Locked to a key the story hands over from outside (the mission's `givenKeys` names it).
+    pub key_tag: Option<String>,
     pub hidden: Option<bool>,
     pub on: Option<bool>,
     pub label: Option<String>,

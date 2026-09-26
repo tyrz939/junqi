@@ -524,7 +524,7 @@ pub enum ScheduleWhere {
 /// hours (always present) or one not here.
 pub fn schedule_state(state: &GameState, zone: &ZoneState, rt: &ZoneRuntime, unit: UnitId) -> Option<ScheduleState> {
     let u = zone.unit(unit)?;
-    let slot = crate::presence::slot_of(def_of(u), state)?;
+    let slot = crate::presence::slot_of_unit(u, state)?;
     let (x, y) = u.pos.cell();
     let here = ScheduleWhere::Walking(Cell::new(x.max(0) as u16, y.max(0) as u16));
     let inside = |n: NameId| {
@@ -533,7 +533,9 @@ pub fn schedule_state(state: &GameState, zone: &ZoneState, rt: &ZoneRuntime, uni
     let at = match slot {
         // Hidden, whatever the hour says now: still wherever the last hiding slot put it (a
         // person waits behind her door until nobody is watching the step).
-        _ if u.hidden => hidden_in(def_of(u), state.hour() as u8).map_or(ScheduleWhere::Away, inside),
+        _ if u.hidden => {
+            hidden_in(def_of(u), state, crate::presence::own_hour(def_of(u), state)).map_or(ScheduleWhere::Away, inside)
+        }
         ScheduleSlot::Mark(n) => {
             let there = rt.mark(of_name(n)).is_some_and(|m| {
                 let to = Vec2::centre(i32::from(m.cell.x), i32::from(m.cell.y));
@@ -546,12 +548,12 @@ pub fn schedule_state(state: &GameState, zone: &ZoneState, rt: &ZoneRuntime, uni
     Some(ScheduleState { slot, at })
 }
 
-/// The prop the latest hiding slot of a unit's hours (at or before `hour`) puts it behind:
-/// `Inside(prop)` names it, `Absent` (and the `dayOnly` shorthand) none.
-fn hidden_in(def: &jane_data::UnitDef, hour: u8) -> Option<NameId> {
+/// The prop the latest hiding slot of a unit's hours (at or before `hour`, the rows that hold
+/// now) puts it behind: `Inside(prop)` names it, `Absent` (and the `dayOnly` shorthand) none.
+fn hidden_in(def: &jane_data::UnitDef, state: &GameState, hour: u8) -> Option<NameId> {
     for back in 0..24u8 {
         let h = (hour + 24 - back) % 24;
-        let Some(r) = def.schedule.iter().find(|r| jane_data::in_span(h, r.hour_from, r.hour_to)) else { continue };
+        let Some(r) = crate::presence::row_at(def, state, h) else { continue };
         match r.slot {
             ScheduleSlot::Inside(n) => return Some(n),
             ScheduleSlot::Absent => return None,

@@ -53,6 +53,12 @@ pub enum Step {
     CountyWander,
     /// An empty screen's something small: `(a, b)` is the screen.
     CountyGap,
+    /// A person's hours on a day (not worldgen: the sim draws it, the same for every seat and
+    /// every load): `a` is the person's name, `b` the day (WORLD.md §3.1).
+    SimHours,
+    /// What stands up at the bell on a road's unlit edge and on the rough ground: `a` is the road
+    /// (`-1`: the ground), `b` the point of its line (the macro cell's `y * SKEL_W + x`).
+    CountyNight,
 }
 
 impl From<Step> for u16 {
