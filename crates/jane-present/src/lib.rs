@@ -19,6 +19,7 @@ pub mod drawlist;
 pub mod frame;
 pub mod input;
 pub mod light;
+pub mod people;
 pub mod present;
 pub mod stand_in;
 

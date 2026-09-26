@@ -25,6 +25,7 @@ use crate::frame::{
     Pass, Rgb, Span, SpriteCmd, Tier, Tint,
 };
 use crate::light::{Sky, flicker, lantern_lit, sky};
+use crate::people::{self, People};
 use crate::stand_in::{self, StandIns, UnitKind};
 
 /// A unit moving further than this in a tick (40 sim px, `Fx`) snaps instead of sliding: travel,
@@ -74,6 +75,9 @@ struct UnitRec {
     me: bool,
     /// Its glow: radius canvas px and colour.
     glow: Option<(u16, Rgb)>,
+    /// The unit's person look in [`People`], when its sprite has one; else `look` stands in.
+    person: Option<u16>,
+    facing: Facing,
 }
 
 /// A prop near the view, this tick.
@@ -109,6 +113,7 @@ struct LightRec {
 pub struct Present {
     atlas: Atlas,
     stand: StandIns,
+    people: People,
     frame: Frame,
     tick: u32,
     /// The canvas the last frame was drawn for; the camera frames for it.
@@ -134,11 +139,13 @@ impl Present {
     pub fn new(tier: Tier) -> Present {
         let mut atlas = Atlas::with_layers(tier > Tier::T0);
         let stand = StandIns::build(&mut atlas);
+        let people = People::build(&mut atlas);
         let mut frame = Frame::new(tier);
         let chunks = ChunkCache::reserved(&mut frame.layers, tier);
         Present {
             atlas,
             stand,
+            people,
             frame,
             tick: 0,
             canvas: (CANVAS_W, CANVAS_H),
@@ -241,6 +248,8 @@ impl Present {
 
     fn read_units(&mut self, view: &View<'_>, area: Rect) {
         let me = view.me().unit;
+        let my_seat = view.seat().index() as u8;
+        let cat = jane_data::catalog();
         self.units_next.clear();
         for uv in view.units_in(area) {
             let u = uv.unit;
@@ -260,6 +269,17 @@ impl Present {
             } else {
                 UnitKind::Hostile
             };
+            // A seat's coat: hers by her seat; another player's, one of the other three, by id
+            // (the view names no other seat's body).
+            let seat = match kind {
+                UnitKind::Me => my_seat,
+                UnitKind::Seat => {
+                    let s = 1 + (id % 3) as u8;
+                    if s == my_seat { 0 } else { s }
+                }
+                _ => 0,
+            };
+            let person = self.people.set(cat.combat.unit(u.def).sprite, uv.variant, seat);
             self.units_next.push(UnitRec {
                 id,
                 prev,
@@ -276,6 +296,8 @@ impl Present {
                     .glow
                     .filter(|_| u.alive)
                     .map(|g| ((g.radius.0 >> FX_TO_CANVAS).clamp(0, 1024) as u16, rgb(g.color))),
+                person,
+                facing: u.facing,
             });
         }
         self.units_next.sort_unstable_by_key(|r| r.id);
@@ -483,14 +505,24 @@ impl Present {
                 });
                 n_glows += 1;
             }
-            let r = self.atlas.get(u.look);
-            // The walk frame, as far as a stand-in can walk: a one-px bob.
-            let bob = i32::from((u.anim / 9) & 1 == 1);
+            // A person shows its walk, breathe or dead frame (ART.md §4); a stand-in walks with
+            // a one-px bob.
+            let (look, mirror, bob) = match u.person {
+                Some(set) => {
+                    let pose = people::Pose { facing: u.facing, anim: u.anim, tick: self.tick, dead: u.dead, id: u.id };
+                    let (look, mirror) = self.people.frame(set, pose);
+                    (look, mirror, 0)
+                }
+                None => (u.look, u.mirror, i32::from((u.anim / 9) & 1 == 1)),
+            };
+            let r = self.atlas.get(look);
             let (x, y) = (sx - i32::from(r.ax), sy - i32::from(r.ay) - bob);
             if !on_canvas(x, y, r.src.w, r.src.h) {
                 continue;
             }
-            let tint = if u.dead {
+            let tint = if u.dead && u.person.is_some() {
+                Tint::None
+            } else if u.dead {
                 Tint::Ghost(160)
             } else if self.tick < u.hurt_until && u.hurt_until - self.tick > HURT_TICKS - FLASH_TICKS {
                 Tint::Flash(128)
@@ -506,7 +538,7 @@ impl Present {
             self.standing.push(DrawCmd {
                 y: sy,
                 key: 0x8000_0000 | u.id,
-                sprite: sprite(r, x, y, Flags { mirror: u.mirror, tint }),
+                sprite: sprite(r, x, y, Flags { mirror, tint }),
                 caster,
             });
         }
