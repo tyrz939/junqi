@@ -23,7 +23,41 @@ pub const USAGE: &str = "  serve [--seed N | --save PATH] [--name NAME] [--port 
                                       there and written whenever anyone rests and at the end; --record writes
                                       a new game's session as a .jrp (`jane replay verify` re-simulates it)
   join ADDR[:PORT] [--model reader|rusher|idle] [--token N] [--ticks N] [--every S]
-                                      a headless guest played by a bot model; the same status line";
+                                      a headless guest played by a bot model; the same status line
+  find [--port P]                     list the hosts on the LAN (a UDP broadcast, two seconds)";
+
+/// `jane find`: ask the LAN who hosts, for two seconds, and list what answered.
+pub fn find(args: &[String]) -> Result<(), String> {
+    let o = opts(args, false)?;
+    let mut f = jane_net::discovery::Finder::new(o.port).map_err(|e| e.to_string())?;
+    let t0 = Instant::now();
+    let mut asked = None;
+    while t0.elapsed() < Duration::from_secs(2) {
+        if asked.is_none_or(|a: Instant| a.elapsed() >= Duration::from_millis(500)) {
+            f.ask();
+            asked = Some(Instant::now());
+        }
+        f.poll();
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    let found = f.poll();
+    if found.is_empty() {
+        println!("no host answered on udp {}", o.port);
+    }
+    for h in found {
+        let o = &h.offer;
+        println!(
+            "{}  {}  {}/{} seated  frame {}{}",
+            h.addr,
+            o.name,
+            o.seats_used,
+            o.seats,
+            o.frame,
+            if o.joinable() { "" } else { "  (not joinable by this build: content, build or a full table)" }
+        );
+    }
+    Ok(())
+}
 
 struct Opts {
     seed: u32,

@@ -96,6 +96,8 @@ Headless, on a Pi or any machine nobody plays at:
 ```bash
 cargo jane serve --seed 7 --save world.jsave --port 7777     # one status line: tick, seats, hash, hash checks agreed
 cargo jane join 127.0.0.1:7777 --model rusher                 # a bot plays a seat headless (soaks, tests)
+cargo jane find                                               # who hosts on this LAN (a UDP broadcast)
+cargo jane serve --seed 7 --record session.jrp --ticks 36000  # a new game's session as a tape: cargo jane replay verify session.jrp
 ```
 
 On a headless host the first to join takes seat 0. Internet play is not supported: a LAN only, for now.

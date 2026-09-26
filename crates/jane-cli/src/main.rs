@@ -79,8 +79,12 @@ fn main() -> ExitCode {
             }
         },
         Some(c @ ("play" | "replay")) => play::main(c, &args[1..]),
-        Some(c @ ("serve" | "join")) => {
-            let r = if c == "serve" { serve::serve(&args[1..]) } else { serve::join(&args[1..]) };
+        Some(c @ ("serve" | "join" | "find")) => {
+            let r = match c {
+                "serve" => serve::serve(&args[1..]),
+                "join" => serve::join(&args[1..]),
+                _ => serve::find(&args[1..]),
+            };
             match r {
                 Ok(()) => ExitCode::SUCCESS,
                 Err(e) => {
