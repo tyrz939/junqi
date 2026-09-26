@@ -510,6 +510,8 @@ struct View<'a>   // one seat, her zone, read only
   dialogue() -> Option<DialogueView { speaker, lines: &[TextId], line, options: &[TextId], awaiting_choice }>
   quests() -> impl Iterator<QuestView { id, counts }>, near_bench(), near_rest(), craft_output(), book(), marks(), rects(), debug()
   assisted_aim(frame, spell) -> Option<Angle>                                  // §5.4; the reticle draws it, the sim casts along it
+  tick(), frame(), is_night(), learned(), sym(&str), name(Sym), mark(Sym), rect(Sym), triggers(), list(ListRef),
+  unit(UnitId), props(), sight(a, b)                                           // what jane-bot's models read (§8), all derived
   journal() -> impl Iterator<&JournalEntry>, known(fact: FactKey) -> Option<&Known>   // §3.7; the log and the map read these
   weather() -> &WeatherState, wetness() -> u8                                   // §4.6; presentation's mist and puddles, no rule
   schedule_state(unit) -> Option<ScheduleState { slot, where: Mark(NameId) | Inside(PropId) | Walking(Cell) }>   // so a door can say who is in

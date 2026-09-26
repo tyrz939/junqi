@@ -25,6 +25,7 @@
 //! | [`ai`], [`snake`], [`npc`], [`presence`] | step 7's controllers (the AI loop, the snake, orders and npcs), step 3's schedules |
 //! | [`sim`], `seats`, `travel` | the scheduler, seats and commands, travel |
 //! | [`save`] | save, load and the hash |
+//! | [`replay`] | tapes: record, re-simulate, verify (`.jrp`) |
 //! | [`view`] | what a seat sees |
 
 #![deny(clippy::float_arithmetic, clippy::float_cmp)]
@@ -62,6 +63,7 @@ pub mod npc;
 pub mod path;
 pub mod presence;
 pub mod quests;
+pub mod replay;
 pub mod ring;
 pub mod runtime;
 pub mod save;

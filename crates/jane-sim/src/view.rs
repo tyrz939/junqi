@@ -2,15 +2,23 @@
 //! frame from this and nothing else. Landed so far: the seat, the ground and who stands on it,
 //! the clock; what USE would do, her conversation, the quest log, the bench and the fire, the
 //! craft row, the journal, and the light rule. The rest of §11 lands with the systems it reads.
+//!
+//! What the headless player reads besides (`jane-bot`, ARCHITECTURE.md §8: a model is a policy
+//! over View): the tick and `frozen`, the zone's marks and rects by name, the rows of its trigger
+//! table, action lists of either source, a unit by id, the spells learned, and names. All
+//! derived and read-only.
 
-use jane_core::blueprint::PropSpawn;
-use jane_core::{Angle, Blueprint, DialogueId, ItemId, QuestId, Rect, SpellId, TextRef, Tile, Vec2, ZoneId};
+use jane_core::action::Action;
+use jane_core::blueprint::{Mark, PropSpawn};
+use jane_core::{
+    Angle, Blueprint, DialogueId, ItemId, ListRef, QuestId, Rect, SpellId, Sym, TextRef, Tick, Tile, Vec2, ZoneId,
+};
 use jane_data::{DialogueNode, Light};
 
 use crate::ids::{Seat, UnitId};
 use crate::input::InputFrame;
 use crate::interact::{Focus, Here, focus_of, near_bench, near_rest, spawn_of};
-use crate::runtime::ZoneRuntime;
+use crate::runtime::{ZoneRuntime, ZoneTrigger};
 use crate::sim::Sim;
 use crate::state::{
     Drop, FactKey, GameState, Ground, JournalEntry, Known, PlayerState, Projectile, Prop, QuestProgress, Speaker, Unit,
@@ -279,6 +287,101 @@ impl<'a> View<'a> {
     /// A prop by id in her zone.
     pub fn prop(&self, id: crate::ids::PropId) -> Option<&'a Prop> {
         self.zone.prop_ix(id).map(|i| &self.zone.props[i as usize])
+    }
+}
+
+/// What the headless player reads (see the module doc).
+impl<'a> View<'a> {
+    /// Ticks advanced since New Game.
+    pub fn tick(&self) -> Tick {
+        self.state.tick
+    }
+
+    /// Step calls since New Game (the replay and wire clock).
+    pub fn frame(&self) -> u32 {
+        self.state.frame
+    }
+
+    /// Alone and talking: the world holds still (`Sim::frozen`).
+    pub fn frozen(&self) -> bool {
+        let mut n = 0;
+        let mut talking = false;
+        for p in self.state.connected() {
+            n += 1;
+            talking = p.dialogue.is_some();
+        }
+        n == 1 && talking
+    }
+
+    /// 21:00 to 06:00.
+    pub fn is_night(&self) -> bool {
+        self.state.is_night()
+    }
+
+    /// The spells the world has learned (growth is the party's).
+    pub fn learned(&self) -> &'a [SpellId] {
+        &self.state.growth.spells
+    }
+
+    /// A name's sym, content or generated (`None`: never interned).
+    pub fn sym(&self, name: &str) -> Option<Sym> {
+        self.state.syms.find(name)
+    }
+
+    /// A sym's name.
+    pub fn name(&self, s: Sym) -> &'a str {
+        self.state.syms.name(s)
+    }
+
+    /// A mark of this zone by name.
+    pub fn mark(&self, s: Sym) -> Option<Mark> {
+        self.rt.marks.get(&s).copied()
+    }
+
+    /// A rect of this zone by name.
+    pub fn rect(&self, s: Sym) -> Option<Rect> {
+        self.rt.rects.get(&s).copied()
+    }
+
+    /// Every mark of this zone with its name, in the blueprint's order.
+    pub fn marks(&self) -> impl Iterator<Item = (Sym, Mark)> + 'a {
+        let locals: &'a [Sym] = &self.rt.locals;
+        self.bp.marks.iter().map(move |(&k, &m)| (crate::sym::of_key(k, locals), m))
+    }
+
+    /// Every rect of this zone with its name, in the blueprint's order.
+    pub fn rects(&self) -> impl Iterator<Item = (Sym, Rect)> + 'a {
+        let locals: &'a [Sym] = &self.rt.locals;
+        self.bp.rects.iter().map(move |(&k, &r)| (crate::sym::of_key(k, locals), r))
+    }
+
+    /// This zone's merged trigger table in the order its bits index, each with whether it fired.
+    pub fn triggers(&self) -> impl Iterator<Item = (&'a ZoneTrigger, bool)> + 'a {
+        let zone = self.zone;
+        self.rt.triggers.iter().enumerate().map(move |(i, t)| (t, zone.triggers.fired.get(i as u32)))
+    }
+
+    /// An action list from the catalog or this zone's blueprint.
+    pub fn list(&self, r: ListRef) -> &'a [Action] {
+        match r {
+            ListRef::Catalog(_) => jane_data::catalog().list(r),
+            ListRef::Blueprint(_) => self.bp.list(r).unwrap_or(&[]),
+        }
+    }
+
+    /// A unit of this zone by id, if it is awake and in the world (what `units_in` would show).
+    pub fn unit(&self, id: UnitId) -> Option<&'a Unit> {
+        self.zone.unit(id).filter(|u| u.awake && !u.hidden)
+    }
+
+    /// Every prop of this zone, hidden ones left out, in id order.
+    pub fn props(&self) -> impl Iterator<Item = &'a Prop> + 'a {
+        self.zone.props.iter().filter(|p| !p.hidden)
+    }
+
+    /// The sim's own sight line from `a` to `b` (what a bolt or a spell asking for sight needs).
+    pub fn sight(&self, a: Vec2, b: Vec2) -> bool {
+        crate::los::line_of_sight(&self.rt.grid, a, b)
     }
 }
 
