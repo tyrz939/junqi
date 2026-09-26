@@ -12,6 +12,7 @@ pub mod canvas;
 pub mod chrome;
 pub mod creature;
 pub mod demo;
+pub mod flora;
 pub mod font;
 pub mod hash;
 pub mod house;
@@ -26,6 +27,7 @@ pub mod sheet;
 pub mod sheet_kit;
 pub mod sheet_person;
 pub mod sprite;
+pub mod terrain;
 
 pub use canvas::{Canvas, Z};
 pub use font::{Face, Font, Style};

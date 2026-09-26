@@ -24,6 +24,7 @@ pub mod people;
 pub mod present;
 pub mod props;
 pub mod stand_in;
+pub mod terrain;
 
 pub use backend::{AO_TINT, AtlasPages, Backend, CLUT_LEN, Caps, FrameStats, FrameTimes, Page, StatPass};
 pub use frame::{

@@ -248,7 +248,7 @@ fn finish(c: &mut Canvas, coat: &Coat, ax: i32, ay: i32) {
     let (w, _, _, _) = size(coat.look.plan);
     let spread = w / 2 - 2;
     c.ao_contact(Rect::new(ax - spread, ay - 1, 2 * spread, 4), 0);
-    c.outline_sel();
+    c.outline();
     for &r in &ramps {
         c.declutter(r);
     }
@@ -266,7 +266,7 @@ fn finish_dead(c: &mut Canvas, coat: &Coat, ax: i32, ay: i32) {
     let (w, _, _, _) = size(coat.look.plan);
     let spread = w / 2 - 1;
     c.ao_contact(Rect::new(ax - spread, ay - 2, 2 * spread, 4), 0);
-    c.outline_sel();
+    c.outline();
     c.remap(pallor);
     c.quench();
     c.dome_heights(4);

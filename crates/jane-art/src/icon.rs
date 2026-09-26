@@ -110,7 +110,7 @@ fn finish(c: &mut Canvas, ramp: Ramp, trim: Ramp) {
         c.declutter(r);
     }
     c.despike();
-    c.outline_sel();
+    c.outline();
     c.relight(&glow);
     c.cap_heights(4);
 }

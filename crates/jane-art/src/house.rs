@@ -423,7 +423,7 @@ fn finish(c: &mut Canvas, s: &Stuff, foot: i32, depth: i32, eave: i32, ridge: i3
         c.declutter(r);
     }
     c.despike();
-    c.outline_sel();
+    c.outline();
     c.relight(&glow);
     c.upright(foot);
     if ridge > 0 && eave > ridge {

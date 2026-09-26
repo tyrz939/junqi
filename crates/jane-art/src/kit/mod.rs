@@ -197,7 +197,7 @@ fn finish(c: &mut Canvas, k: &Kit, stand: Stand) {
     // would turn it to soot. It is the one thing in the kit drawn unlined.
     if k.look.shape != "web" {
         c.despike();
-        c.outline_sel();
+        c.outline();
     }
     for r in k.ramps() {
         c.declutter(r);

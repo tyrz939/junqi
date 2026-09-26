@@ -1,8 +1,8 @@
 //! Hue-shifted ramps (the owner's craft rule, 2026-09-27): a ramp is not one hue walked from
 //! dark to light. Its shadows step toward a cool hue (violet-blue; rose-violet for skin), its
 //! lights toward a warm one (yellow; peach for skin), and its saturation peaks in the midtones
-//! and falls at both ends. The people's ramps are built this way; the step-1 ramps other
-//! families own keep their straight mix until their owners move them over.
+//! and falls at both ends. The people's ramps and the terrain's and flora's are built this
+//! way; the rest (the chrome, the step-1 odds and ends) keep their straight mix.
 //!
 //! All integer: hue in tenths of a degree (0..3600), saturation and lightness in thousandths.
 
@@ -38,13 +38,63 @@ pub const fn shadow_hue(r: Ramp) -> Option<i32> {
         | Ramp::ClothBrick
         | Ramp::ClothLinen
         | Ramp::Leather
-        | Ramp::Pool => Some(COOL),
+        | Ramp::Pool
+        // The terrain and flora (ART.md §2.6): the ground, its walls and roofs, what grows on it.
+        // `stone` keeps the straight mix (violet shade, cream light): the lit-sphere test's ramp,
+        // whose crown the wider HSL steps would light brighter than a low side light.
+        | Ramp::Grass
+        | Ramp::Leaf
+        | Ramp::Turf
+        | Ramp::TurfDry
+        | Ramp::Marsh
+        | Ramp::Hedge
+        | Ramp::LeafOlive
+        | Ramp::LeafDeep
+        | Ramp::Needle
+        | Ramp::Shrub
+        | Ramp::Crop
+        | Ramp::Earth
+        | Ramp::Gravel
+        | Ramp::Sand
+        | Ramp::Mud
+        | Ramp::Soil
+        | Ramp::Ballast
+        | Ramp::Cave
+        | Ramp::Reed
+        | Ramp::Thatch
+        | Ramp::Slate
+        | Ramp::Setts
+        | Ramp::Rock
+        | Ramp::RockFace
+        | Ramp::FloorStone
+        | Ramp::WallDark
+        | Ramp::CaveWall
+        | Ramp::Temple
+        | Ramp::TempleWall
+        | Ramp::Museum
+        | Ramp::MuseumWall
+        | Ramp::Pipe
+        | Ramp::PipeWall
+        | Ramp::Works
+        | Ramp::WorksWall
+        | Ramp::SchoolWall
+        | Ramp::Deadwood
+        | Ramp::Water
+        | Ramp::Ice
+        | Ramp::Brick
+        | Ramp::RoofTile
+        | Ramp::Bark
+        | Ramp::WoodOak
+        | Ramp::Plaster
         // The kit's and the creatures' own materials (ART.md §8 steps 4 and 5): woods, metals,
-        // glass and bone. The terrain's (stone, slate, brick, plaster, oak, bark, the greens)
-        // are its painter's to shift.
-        Ramp::WoodDark | Ramp::WoodPale | Ramp::Iron | Ramp::Brass | Ramp::Copper | Ramp::Glass | Ramp::Bone => {
-            Some(COOL)
-        }
+        // glass and bone.
+        | Ramp::WoodDark
+        | Ramp::WoodPale
+        | Ramp::Iron
+        | Ramp::Brass
+        | Ramp::Copper
+        | Ramp::Glass
+        | Ramp::Bone => Some(COOL),
         _ => None,
     }
 }
