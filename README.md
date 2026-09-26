@@ -64,6 +64,7 @@ cargo jane view --interior all --seed 1                  # the house, cellar, Ar
 cargo jane gen --zones all --seeds 1..16 --hash          # every zone built and proven; one hash per (zone, seed)
 cargo jane hash --seed 7 --frames 600                    # a new game stepped, and its state hash
 cargo jane sheet light sphere                            # art sheets: layers, light, font, chrome, palette
+cargo jane sheet ui                                      # the UI's screens headless: hud, dead, choice, tooltip, popover, drag, pause
 ```
 
 The game, in a window:
