@@ -324,7 +324,21 @@ pub fn tile_rgb(t: jane_core::Tile) -> [u8; 3] {
         T::Stepping => [140, 140, 150],
         T::Crops => [190, 170, 80],
         T::Ice => [210, 230, 240],
-        _ => [255, 0, 255],
+        T::CaveFloor => [120, 108, 92],
+        T::CaveWall => [52, 46, 44],
+        T::TempleFloor => [176, 170, 156],
+        T::TempleWall => [70, 66, 80],
+        // The rest are dungeon tiles: walls dark, water blue, floors a stone grey.
+        _ => {
+            let f = t.flags();
+            if f & jane_core::tile::F_WATER != 0 {
+                [60, 100, 170]
+            } else if f & jane_core::tile::F_SOLID != 0 {
+                [64, 58, 62]
+            } else {
+                [140, 132, 118]
+            }
+        }
     }
 }
 
