@@ -278,6 +278,8 @@ Units: `snapshot()` before each sim tick into a flat `Vec<(UnitId, Fx, Fx)>` sor
 | Timer | Rule |
 | --- | --- |
 | Walk frame | a person: `1 + (anim_ticks - 1) / 6` of the six-frame cycle, mod 6 (`jane_present::people::pick`); standing, the standing frame and the breathe in turn every 40 ticks, out of step by unit id; a stand-in: a 1-px bob, `(anim_ticks / 9) & 1` |
+| Creature frame | as a person's walk and breathe (`jane_present::creatures::pick`); stood still 90 ticks, the idle pair (the dog and the cats sit and look at you, a hen pecks), each beat 48 ticks, facing the viewer and never mirrored; on a `Cast` event, the attack's three beats, 4 ticks each, for a creature that fights; dead, its dead pose |
+| Prop frame | `open` (looted or used) over `on` (thrown, pressed, or a light the view says shows) over a base picked by the prop's id (`jane_present::props`); a lit prop's light shines from the height its glass glows at; a building's `on` frame lights its windows |
 | Lunge, lift | the TS offsets over the cast's own ticks, unchanged, at 2x |
 | Hurt | `hurt_until = tick + 8`; flash 50 % for the first 4 ticks |
 | Float text | lives 60 ticks; rises 2 px every 3 ticks; school colour, outlined (`ART.md`, the chrome section) |
