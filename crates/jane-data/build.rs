@@ -16,5 +16,8 @@ fn main() {
         panic!("/data does not compile: {} error(s); `cargo jane check` lists them", built.diag.errors.len());
     };
     let out = PathBuf::from(std::env::var_os("OUT_DIR").expect("cargo sets OUT_DIR")).join("catalog.rs");
-    std::fs::write(&out, jane_schema::compile::codegen(catalog)).expect("write catalog.rs");
+    let mut src = jane_schema::compile::codegen(catalog);
+    src.push_str(&jane_schema::compile::codegen_looks(built.looks));
+    src.push_str(&jane_schema::compile::codegen_tile_looks(built.tile_looks));
+    std::fs::write(&out, src).expect("write catalog.rs");
 }

@@ -91,7 +91,7 @@ fn base(p: &mut Painter, wx0: i32, wy0: i32, seed: u32) {
                     if dry {
                         r = Ramp::TurfDry;
                     }
-                    (patch_tone(v, m, 56, 198), FLAT)
+                    (patch_tone(v, m, 50, 212), FLAT)
                 }
                 _ => (patch_tone(v, m, 18, 188), FLAT),
             };

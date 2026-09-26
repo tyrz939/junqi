@@ -2,7 +2,7 @@
 //! row itself and its ramps as palette [`Ramp`]s.
 
 use jane_core::{Material, Tile};
-use jane_data::{Looks, TileGroup, TileHeight, TileStyle};
+use jane_data::{TileGroup, TileHeight, TileLooks, TileStyle};
 
 use crate::palette::Ramp;
 
@@ -71,7 +71,7 @@ fn resolve(tile: Tile, row: &TileStyle, what: &str) -> Result<Style, String> {
 impl Styles {
     /// Resolve every row of `looks`. An unknown ramp name, a tile with no row or a material with
     /// no row is an error naming it.
-    pub fn from_looks(looks: &Looks) -> Result<Styles, String> {
+    pub fn from_looks(looks: &TileLooks) -> Result<Styles, String> {
         let mut tiles = vec![None; 64];
         for (t, row) in looks.tiles {
             tiles[usize::from(t.id())] = Some(resolve(*t, row, t.name())?);
@@ -96,8 +96,7 @@ impl Styles {
 
     /// The styles compiled into this build (`data/looks/tiles.json`).
     pub fn compiled() -> Styles {
-        Styles::from_looks(&jane_data::catalog().looks)
-            .expect("data/looks/tiles.json covers every tile (a jane-art test)")
+        Styles::from_looks(&jane_data::tile_looks()).expect("data/looks/tiles.json covers every tile (a jane-art test)")
     }
 
     /// The style of `t`.

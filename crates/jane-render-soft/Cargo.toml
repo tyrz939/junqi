@@ -8,10 +8,11 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
+# The sun's angle by jane-core's integer sine table, so a silhouette shears the same on every target.
+jane-core.workspace = true
 jane-present.workspace = true
 
 [dev-dependencies]
-jane-core.workspace = true
 jane-sim.workspace = true
 
 [lints]

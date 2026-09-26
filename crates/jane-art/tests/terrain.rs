@@ -160,5 +160,5 @@ fn the_county_sample_has_canopy_water_casters_and_lit_windows() {
 
 #[test]
 fn every_style_resolves_its_ramps() {
-    Styles::from_looks(&jane_data::catalog().looks).unwrap();
+    Styles::from_looks(&jane_data::tile_looks()).unwrap();
 }

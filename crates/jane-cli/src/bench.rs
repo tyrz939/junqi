@@ -35,7 +35,14 @@ use crate::gen_cmd;
 pub const USAGE: &str = "  bench gen [--zones <all|dungeons|id,id..>] [--seeds A..B | --seed N] [--json]
                                       time worldgen stage by stage (skeleton, county stages, solver,
                                       each dungeon's build, solve and checks, New Game) against
-                                      tools/perf/thresholds.json; --json prints that file's shape";
+                                      tools/perf/thresholds.json; --json prints that file's shape
+  bench frames [--backend soft|wgpu] [--frames N] [--seed N] [--ticks T] [--hour H] [--wide]
+               [--output WxH]
+                                      play to a frame (default: the town at 22:00 after 600 ticks), then
+                                      time N frames there (default 600): the Frame built, the backend's
+                                      draw, the whole frame to the last pixel at the output size
+                                      (wgpu: default 3840x2160, an offscreen 4K target), and the
+                                      GPU's own clock (PRESENTATION.md §1.12)";
 
 /// The rows PORT.md §9.4 gates, by metric name.
 const GATED: [&str; 4] = ["skeleton_attempt", "county_build_solve", "dungeon", "new_game"];
@@ -192,6 +199,7 @@ fn dungeon(b: &mut Bench, zone: ZoneId, seed: u32) {
 pub fn run(args: &[String]) -> Result<(), String> {
     match args.first().map(String::as_str) {
         Some("gen") => gen_bench(&args[1..]),
+        Some("frames") => frames(&args[1..]),
         _ => Err(format!("usage:\n{USAGE}")),
     }
 }
@@ -279,6 +287,59 @@ fn gen_bench(args: &[String]) -> Result<(), String> {
         let verdict = gate(n)
             .map_or(String::new(), |g| format!("< {} ms {}", g / 1000, if p99 / 1000 < g { "met" } else { "MISSED" }));
         println!("{n:<34} {count:>4} {:>10} {:>10} {:>10} {:>10}  {verdict}", ms(med), ms(p99), ms(max), ms(mean));
+    }
+    Ok(())
+}
+
+/// `jane bench frames`.
+fn frames(args: &[String]) -> Result<(), String> {
+    use crate::scene::{Opts, Which, bench};
+    let flag = |name: &str| args.iter().position(|a| a == name).and_then(|i| args.get(i + 1)).map(String::as_str);
+    let num = |name: &str, d: u32| {
+        flag(name).map_or(Ok(d), |s| s.parse::<u32>().map_err(|_| format!("{name}: not a number: {s}")))
+    };
+    let backend = Which::parse(flag("--backend").unwrap_or("soft")).ok_or("--backend: soft or wgpu")?;
+    let seed = num("--seed", 1)?;
+    let output = match flag("--output") {
+        Some(s) => {
+            let (w, h) = s.split_once('x').ok_or("--output: WxH")?;
+            (w.parse::<u32>().map_err(|_| "--output: WxH")?, h.parse::<u32>().map_err(|_| "--output: WxH")?)
+        }
+        None => (3840, 2160),
+    };
+    let canvas = if args.iter().any(|a| a == "--wide") { (1008, 432) } else { (768, 432) };
+    let o = Opts {
+        seed,
+        ticks: num("--ticks", 600)?,
+        model: jane_bot::Model::Reader,
+        hour: Some(u8::try_from(num("--hour", 22)? % 24).unwrap_or(22)),
+        canvas,
+        backend,
+    };
+    let bps = jane_sim::Blueprints::build(seed).map_err(|e| format!("seed {seed}: {e}"))?;
+    let n = num("--frames", 600)?;
+    let r = bench(bps, &o, n, output)?;
+    let us =
+        |(a, b): (u32, u32)| format!("p50 {:>6.2} ms  p99 {:>6.2} ms", f64::from(a) / 1000.0, f64::from(b) / 1000.0);
+    println!(
+        "{}: {} frames of {} x {} at {:02}:00, output {} x {}",
+        r.line,
+        r.frames,
+        canvas.0,
+        canvas.1,
+        o.hour.unwrap_or(0),
+        output.0,
+        output.1
+    );
+    println!("  frame built (present.draw)   {}", us(r.build));
+    println!("  backend draw (submitted)     {}", us(r.submit));
+    println!("  whole frame, to last pixel   {}", us(r.whole));
+    if let Some(s) = r.stats {
+        println!(
+            "  {} {}",
+            if s.gpu_clock { "GPU clock, gbuffer to grade" } else { "backend draw (its own)     " },
+            us((s.p50_us, s.p99_us))
+        );
     }
     Ok(())
 }

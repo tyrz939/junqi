@@ -36,6 +36,11 @@ xxhash-rust = { version = "0.8", features = ["xxh3"] }
 # linked statically on x86 (CMake on the build machine, no DLL beside the exe); the Pi links the distro
 # package through its own target config.
 sdl2 = { version = "0.37", default-features = false, features = ["bundled", "static-link"] }
+# jane-render-wgpu and jane-app only (PORT.md §3.5, §7.1 step 7): T2 draws through wgpu (Vulkan, DX12,
+# Metal or GLES 3 behind one safe API; WGSL shaders), and the SDL2 window hands it a surface through
+# raw-window-handle. No web backend: the game is native.
+wgpu = { version = "30", default-features = false, features = ["std", "parking_lot", "dx12", "metal", "vulkan", "gles", "wgsl"] }
+raw-window-handle = "0.6"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

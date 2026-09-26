@@ -17,6 +17,8 @@ fn marks(p: &mut Present, soft: &mut Soft, alpha: u8) -> Vec<(usize, usize)> {
         (f.chunks.as_ptr() as usize, f.chunks.capacity()),
         (f.sprites.as_ptr() as usize, f.sprites.capacity()),
         (f.layers.as_ptr() as usize, f.layers.capacity()),
+        (f.lights.as_ptr() as usize, f.lights.capacity()),
+        (f.casters.as_ptr() as usize, f.casters.capacity()),
     ];
     m.extend(f.layers.iter().map(|l| (l.albedo.as_ptr() as usize, l.albedo.capacity())));
     soft.draw(f);

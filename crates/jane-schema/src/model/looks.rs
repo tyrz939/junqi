@@ -1,195 +1,240 @@
-//! Looks (ART.md §1, §5): how a thing is drawn, compiled from `data/looks/`. Their meaning lives in
-//! `jane-art`, which is the only reader. Today the terrain's rows: one [`TileStyle`] per sim tile
-//! and one per render-only [`Material`] (ART.md §2.6, PORT.md §6.i), from `data/looks/tiles.json`.
+//! The looks table (ART.md §1, §5; PORT.md §5.3): `data/looks/*.json`, keyed by the sprite id a
+//! row names, each value a [`Look`]. Its meaning lives in `jane-art`, which renders every entry;
+//! nothing else in the game reads a look.
 //!
-//! Units: `rise` is screen px at 16 px a cell (ART.md §0); `detail` is per pattern (a density out of
-//! 16, a course pitch in px); `wet` is 0, 1 or 2 (ART.md §2.6).
+//! The looks are not part of the [`Catalog`](crate::model::Catalog): they change no behaviour, so
+//! they are emitted as a static of their own (`LOOKS`) and stay out of the content hash, and a
+//! new coat never makes a save or a replay stale.
 //!
-//! Looks change no behaviour: the content hash leaves them out, so a palette or pattern edit never
-//! refuses a save.
+//! Today, ART.md §8 step 2: the Person family. Ramps are named by the strings `jane-art`'s
+//! palette knows (`"cloth_plum"`); `jane-art`'s tests resolve every one.
 
-use jane_core::{Material, Tile};
+use jane_core::ids::SpriteId;
 
 use crate::{model, model_enum};
 
 model_enum! {
-    /// What a tile autotiles against (ART.md §2.6).
-    pub enum TileGroup {
-        /// Open ground: chamfers against other ground, takes a rim where it stands over lower ground.
-        Ground,
-        /// Water and ice: the lowest ground; a dark band under its bank and a lip elsewhere.
-        Water,
-        /// A block with a face where its south is open: walls, cliffs, hedges, the void.
-        Wall,
-        /// A roof: courses, a ridge where its north is not roof, an eave where its south is not.
-        Roof,
-        /// Stands on the ground: takes the ground of its neighbours (`inherit` when none has any).
-        Flora,
-        /// Made floor with a painter of its own per cell: boards, slabs, rails, sills, glass.
-        Made,
-    }
+    /// A person's proportions: a per-build table of eight numbers in `jane-art` (ART.md §2.1).
+    #[cfg_attr(feature = "compile", derive(serde::Deserialize), serde(rename_all = "snake_case"))]
+    pub enum Build { Slim, Broad, Child, Stout }
 }
 
 model_enum! {
-    /// How far a tile stands above the ground plane (ART.md §2.6).
-    pub enum TileHeight {
-        /// Flat: its `rise` is the few px a bank stands over what is below it.
-        Flat,
-        /// Raised: a face is drawn below its top; `rise` is the top's height.
-        Raised,
-        /// Canopy: drawn in the chunk's strips above the y-sort; `rise` is the crown's top.
-        Canopy,
-    }
+    /// How the hair is worn.
+    #[cfg_attr(feature = "compile", derive(serde::Deserialize), serde(rename_all = "snake_case"))]
+    pub enum Hair { Short, Cropped, Long, Bun, Pigtails, Bald, Curlers, Wet }
 }
 
 model_enum! {
-    /// The facing the normal layer gets (ART.md §2.6).
-    pub enum TileNormal {
-        /// Up, with the lift of whatever strokes and stones are drawn on it.
-        Flat,
-        /// A rock face: south, ridged.
-        Cliff,
-        /// A built face: south, with mortar grooves.
-        Wall,
-        /// A pitch by facing: the ridge's slope south, the hips east and west.
-        Roof,
-        /// Flat; the renderer ripples it.
-        Water,
-    }
+    /// What is on the head, over the hair.
+    #[cfg_attr(feature = "compile", derive(serde::Deserialize), serde(rename_all = "snake_case"))]
+    pub enum Hat { None, Cap, Brim, Peaked, Helmet, Scarf, Veil, Cloche, Panama, Diving }
 }
 
 model_enum! {
-    /// The painter a tile's cells are drawn by: the swatch's per-cell hash pattern (ART.md §2.6).
-    pub enum TilePattern {
-        /// Nothing: the dark outside a zone.
-        Void,
-        /// Grass: blades, tufts, now and then a flower, meadow patches.
-        Turf,
-        /// Bare earth: pebbles, scuffs.
-        Earth,
-        /// A made road: gravel and ruts along the run.
-        Gravel,
-        /// Sand: speckle and wind ripples.
-        Sand,
-        /// Marsh: dark wet patches, a glint of standing water.
-        Marsh,
-        /// Mud dried and split.
-        Cracked,
-        /// Dug soil in rows.
-        Soil,
-        /// Crops: soil with a line of leaf along each furrow.
-        Crops,
-        /// Setts and flags: irregular laid stones in courses.
-        Setts,
-        /// Water: depth from the shore, a bank shadow, a lip, ripple glints.
-        Water,
-        /// Ice: pale, with scratches.
-        Ice,
-        /// A cliff: a rocky top with a lit lip; a ridged face two cells tall where it drops south.
-        Cliff,
-        /// Plastered walling, with a window every few cells.
-        Plaster,
-        /// Brick walling in courses, with a window every few cells.
-        Brick,
-        /// Clay roof tiles.
-        RoofTile,
-        /// Slates.
-        Slate,
-        /// Thatch in bundles.
-        Thatch,
-        /// Square floor slabs.
-        Slabs,
-        /// Floorboards.
-        Boards,
-        /// Dressed stone walling in courses.
-        Block,
-        /// Rough rock walling.
-        Rock,
-        /// A rough rock floor.
-        RockFloor,
-        /// Rails on sleepers on ballast, bending with the line.
-        Rail,
-        /// A threshold stone.
-        Sill,
-        /// A glass case.
-        Glass,
-        /// A clipped hedge.
-        Hedge,
-        /// Planks laid across the way the walk runs.
-        Boardwalk,
-        /// Long grass (reeds in the wet).
-        Tuft,
-        /// A planted flower bed.
-        Flowers,
-        /// Stepping stones.
-        Stepping,
-        /// A broadleaf tree, in the strips.
-        Tree,
-        /// A conifer, in the strips.
-        Pine,
-        /// A bare dead trunk, in the strips.
-        DeadTree,
-        /// A shrub, in the strips.
-        Bush,
-        /// A pile of stones, in the strips.
-        Rubble,
-        /// A post-and-rail fence, in the strips.
-        Fence,
-        /// A low dry-stone wall, in the strips.
-        StoneWall,
+    /// The skin ramp; `bone`, `wax`, `stone` and `metal` are the skeleton, the waxwork, the
+    /// statue and the armour, and `none` with `ghost` is the shade.
+    #[cfg_attr(feature = "compile", derive(serde::Deserialize), serde(rename_all = "snake_case"))]
+    pub enum Skin { Skin, SkinPale, SkinDark, Bone, Wax, Stone, Metal, None }
+}
+
+model_enum! {
+    /// What the face carries besides its eyes, nose and mouth.
+    #[cfg_attr(feature = "compile", derive(serde::Deserialize), serde(rename_all = "snake_case"))]
+    pub enum Face { Plain, Glasses, Beard, Grim, None }
+}
+
+model_enum! {
+    /// The garment over the body; the seat swap replaces its ramp and nothing else.
+    #[cfg_attr(feature = "compile", derive(serde::Deserialize), serde(rename_all = "snake_case"))]
+    pub enum Coat { Coat, Dress, Gown, Apron, Smock, Jacket, Nightdress, Overcoat, Canvas, Cardigan }
+}
+
+model_enum! {
+    /// What shows at the front of the coat; it goes to coat on `up`.
+    #[cfg_attr(feature = "compile", derive(serde::Deserialize), serde(rename_all = "snake_case"))]
+    pub enum Front { None, Apron, Shirt, Waistcoat, Scarf, Tie, Braces }
+}
+
+model_enum! {
+    /// What is on the legs.
+    #[cfg_attr(feature = "compile", derive(serde::Deserialize), serde(rename_all = "snake_case"))]
+    pub enum Legs { Trousers, Skirt, Bare, Pyjamas }
+}
+
+model_enum! {
+    /// What is on the feet.
+    #[cfg_attr(feature = "compile", derive(serde::Deserialize), serde(rename_all = "snake_case"))]
+    pub enum Boots { Boots, Shoes, Bare }
+}
+
+model_enum! {
+    /// A thing in the hand; the composer owns the hand's position per frame.
+    #[cfg_attr(feature = "compile", derive(serde::Deserialize), serde(rename_all = "snake_case"))]
+    pub enum HeldItem { None, Hammer, Pole, Suitcase, Dish, Bell, Lantern, Billhook, Broom, Book, Pipe }
+}
+
+model_enum! {
+    /// Something extra; any number. `stoop`: an old back, the head carried low and forward.
+    #[cfg_attr(feature = "compile", derive(serde::Deserialize), serde(rename_all = "snake_case"))]
+    pub enum Extra { WatchChain, BellAnkle, Shawl, Seated, Wet, Stoop }
+}
+
+model_enum! {
+    /// A role that may write the emissive layer; any other that does is a test failure.
+    #[cfg_attr(feature = "compile", derive(serde::Deserialize), serde(rename_all = "snake_case"))]
+    pub enum EmitRole { Eye, Glass, Held }
+}
+
+model! {
+    /// The head: hair, hat, skin and face.
+    pub struct PersonHead {
+        pub hair: Hair,
+        /// A ramp of the hair group.
+        pub hair_ramp: &'static str,
+        pub hat: Hat,
+        /// The hat's ramp; `jane-art` picks one when there is none.
+        pub hat_ramp: Option<&'static str>,
+        pub skin: Skin,
+        pub face: Face,
     }
 }
 
 model! {
-    /// One tile's look (ART.md §2.6): the row `jane_art::terrain` paints it from.
-    pub struct TileStyle {
-        pub group: TileGroup,
-        /// The tile whose ground shows under a standing thing no neighbour lends ground to, or the
-        /// tile whose ground this one is drawn as (a grown path is grass).
-        pub inherit: Option<Tile>,
-        pub height: TileHeight,
-        /// Screen px: a ground's standing over lower ground; a wall's or roof's top; a crown's top.
-        pub rise: u8,
-        /// The swatch's material ramp, by `jane_art::Ramp` name (a jane-art test resolves every one).
-        pub ramp: &'static str,
-        /// A second ramp the pattern draws with (bark under leaf, timber on plaster), or `""`.
-        pub accent: &'static str,
-        pub pattern: TilePattern,
-        /// The sub-cell table's one number: a density out of 16 or a pitch in px, by pattern.
-        pub detail: u8,
-        pub normal: TileNormal,
-        /// How the tile takes rain: 0 stays matt, 1 darkens, 2 darkens and reflects the sky.
-        pub wet: u8,
-        /// Out of doors a wide block of it is a building's roof; its face shows where its south is open.
-        pub wall_like: bool,
-        /// Wild ground, which the speckle filter may redraw as its surroundings.
-        pub wild: bool,
+    /// The body: coat, front, legs, boots, pack.
+    pub struct PersonBody {
+        pub coat: Coat,
+        pub coat_ramp: &'static str,
+        pub front: Front,
+        /// The front's ramp; `jane-art` picks one when there is none.
+        pub front_ramp: Option<&'static str>,
+        pub legs: Legs,
+        pub legs_ramp: &'static str,
+        pub boots: Boots,
+        /// The boots' ramp; `jane-art` picks leather when there is none.
+        pub boots_ramp: Option<&'static str>,
+        /// A pack on the back: drawn on `up`, a strap on `side`.
+        pub pack: bool,
     }
 }
 
 model! {
-    /// The looks compiled so far (ART.md §8 step 3: terrain).
-    pub struct Looks {
-        /// Every sim tile's style, in `Tile::ALL` order.
-        pub tiles: &'static [(Tile, TileStyle)],
-        /// Every render-only material's style, in `Material` order.
-        pub materials: &'static [(Material, TileStyle)],
+    /// Per-instance variants (ART.md §3): each list replaces its axis, the product of the list
+    /// lengths (an empty list counts one) is at most four, and variant `k` is `k` in mixed radix
+    /// over the lists in field order.
+    pub struct PersonVary {
+        pub hair: &'static [Hair],
+        pub hair_ramp: &'static [&'static str],
+        pub hat: &'static [Hat],
+        pub face: &'static [Face],
+        pub coat_ramp: &'static [&'static str],
+        pub front_ramp: &'static [&'static str],
+        pub legs_ramp: &'static [&'static str],
     }
 }
 
-impl Looks {
-    /// No looks: what a fixture without `data/looks` compiles to.
-    pub const EMPTY: Looks = Looks { tiles: &[], materials: &[] };
+impl PersonVary {
+    /// No variation: one variant.
+    pub const NONE: PersonVary =
+        PersonVary { hair: &[], hair_ramp: &[], hat: &[], face: &[], coat_ramp: &[], front_ramp: &[], legs_ramp: &[] };
 
-    /// The style of `t`, if the data has one.
-    pub fn tile(&self, t: Tile) -> Option<&'static TileStyle> {
-        let tiles: &'static [(Tile, TileStyle)] = self.tiles;
-        tiles.iter().find(|(k, _)| *k == t).map(|(_, s)| s)
+    /// The list lengths in field order, an empty list as one.
+    pub fn radices(&self) -> [usize; 7] {
+        [
+            self.hair.len(),
+            self.hair_ramp.len(),
+            self.hat.len(),
+            self.face.len(),
+            self.coat_ramp.len(),
+            self.front_ramp.len(),
+            self.legs_ramp.len(),
+        ]
+        .map(|n| n.max(1))
     }
 
-    /// The style of `m`, if the data has one.
-    pub fn material(&self, m: Material) -> Option<&'static TileStyle> {
-        let mats: &'static [(Material, TileStyle)] = self.materials;
-        mats.iter().find(|(k, _)| *k == m).map(|(_, s)| s)
+    /// How many variants the row has: the product of [`PersonVary::radices`].
+    pub fn count(&self) -> usize {
+        self.radices().iter().product()
     }
 }
+
+model! {
+    /// A person (ART.md §2.1): one composer at 32 x 40, feet on (16, 36).
+    pub struct PersonLook {
+        pub build: Build,
+        pub head: PersonHead,
+        pub body: PersonBody,
+        pub held: HeldItem,
+        pub extras: &'static [Extra],
+        pub emits: &'static [EmitRole],
+        /// Ramps go to mist and the figure is a 50 % checker; height halves.
+        pub ghost: bool,
+        pub vary: PersonVary,
+    }
+}
+
+impl PersonLook {
+    /// Variant `k` of this look (`k` below [`PersonVary::count`]; wraps), with its `vary` emptied.
+    pub fn variant(&self, k: usize) -> PersonLook {
+        let v = self.vary;
+        let mut out = PersonLook { vary: PersonVary::NONE, ..*self };
+        let mut k = k % v.count();
+        let mut pick = |n: usize| {
+            let n = n.max(1);
+            let i = k % n;
+            k /= n;
+            i
+        };
+        let i = pick(v.hair.len());
+        if let Some(&h) = v.hair.get(i) {
+            out.head.hair = h;
+        }
+        let i = pick(v.hair_ramp.len());
+        if let Some(&r) = v.hair_ramp.get(i) {
+            out.head.hair_ramp = r;
+        }
+        let i = pick(v.hat.len());
+        if let Some(&h) = v.hat.get(i) {
+            out.head.hat = h;
+        }
+        let i = pick(v.face.len());
+        if let Some(&f) = v.face.get(i) {
+            out.head.face = f;
+        }
+        let i = pick(v.coat_ramp.len());
+        if let Some(&r) = v.coat_ramp.get(i) {
+            out.body.coat_ramp = r;
+        }
+        let i = pick(v.front_ramp.len());
+        if let Some(&r) = v.front_ramp.get(i) {
+            out.body.front_ramp = Some(r);
+        }
+        let i = pick(v.legs_ramp.len());
+        if let Some(&r) = v.legs_ramp.get(i) {
+            out.body.legs_ramp = r;
+        }
+        out
+    }
+}
+
+/// A look: what a sprite id is drawn as. One variant per generator family as the families land
+/// (ART.md §8); today, people.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Look {
+    Person(PersonLook),
+}
+
+impl crate::emit::Emit for Look {
+    fn emit(&self, out: &mut String) {
+        match self {
+            Look::Person(p) => {
+                out.push_str("Look::Person(");
+                p.emit(out);
+                out.push(')');
+            }
+        }
+    }
+}
+
+/// The compiled looks table: every look by the sprite id it draws, in file then key order.
+pub type Looks = &'static [(SpriteId, Look)];

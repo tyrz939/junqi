@@ -14,7 +14,7 @@ pub mod tables;
 use std::path::Path;
 
 use crate::emit::{Emit, PRELUDE};
-use crate::model::Catalog;
+use crate::model::{Catalog, Looks, TileLooks};
 use ctx::{Ctx, Ids, leak, leak_str};
 use diag::Diagnostics;
 use source::Source;
@@ -23,6 +23,11 @@ use source::Source;
 #[derive(Debug)]
 pub struct Built {
     pub catalog: Option<&'static Catalog>,
+    /// The looks table (`data/looks`), a static of its own beside the catalog: looks change no
+    /// behaviour, so they stay out of the content hash. Empty when the compile failed.
+    pub looks: Looks,
+    /// The terrain's looks (`data/looks/tiles.json`), a static of their own for the same reason.
+    pub tile_looks: TileLooks,
     pub diag: Diagnostics,
 }
 
@@ -33,7 +38,13 @@ pub fn build(root: &Path) -> Built {
     let mut built = build_source(&src);
     diag.errors.append(&mut built.diag.errors);
     diag.warnings.append(&mut built.diag.warnings);
-    Built { catalog: if diag.is_ok() { built.catalog } else { None }, diag }
+    let ok = diag.is_ok();
+    Built {
+        catalog: if ok { built.catalog } else { None },
+        looks: if ok { built.looks } else { &[] },
+        tile_looks: if ok { built.tile_looks } else { TileLooks::EMPTY },
+        diag,
+    }
 }
 
 /// Compile an already-read source.
@@ -52,8 +63,9 @@ pub fn build_source(src: &Source) -> Built {
     let living = tables::living::compile(src, &mut cx, &county);
     // What another can be had of, once everything that gives one is known.
     combat.items = tables::combat::late_replaceable(&cx, &combat, &living, &county);
-    let looks = tables::looks::compile(src, &mut cx);
     check_limits(&mut cx);
+    let looks = tables::looks::compile(src, &mut cx);
+    let tile_looks = tables::tile_looks::compile(src, &mut cx);
 
     let mut catalog = Catalog {
         content_hash: 0,
@@ -69,12 +81,16 @@ pub fn build_source(src: &Source) -> Built {
         dungeons,
         chunks,
         living,
-        looks,
     };
     integrate::check(&catalog, &mut cx.diag);
     catalog.content_hash = content_hash(&catalog);
     let ok = cx.diag.is_ok();
-    Built { catalog: ok.then(|| &*Box::leak(Box::new(catalog))), diag: cx.diag }
+    Built {
+        catalog: ok.then(|| &*Box::leak(Box::new(catalog))),
+        looks: if ok { looks } else { &[] },
+        tile_looks: if ok { tile_looks } else { TileLooks::EMPTY },
+        diag: cx.diag,
+    }
 }
 
 /// Every pool is indexed by a `u16`.
@@ -99,11 +115,25 @@ fn check_limits(cx: &mut Ctx) {
     );
 }
 
-/// xxh3 of the emitted catalog with the English and the looks left out: everything that changes
-/// behaviour.
+/// xxh3 of the emitted catalog with the English left out: everything that changes behaviour.
 pub fn content_hash(c: &Catalog) -> u64 {
-    let behaviour = Catalog { content_hash: 0, texts: &[], looks: crate::model::Looks::EMPTY, ..*c };
+    let behaviour = Catalog { content_hash: 0, texts: &[], ..*c };
     xxhash_rust::xxh3::xxh3_64(crate::emit::to_rust(&behaviour).as_bytes())
+}
+
+/// The Rust source of `pub static LOOKS`, which follows the catalog in the same file.
+pub fn codegen_looks(looks: Looks) -> String {
+    let mut out = String::with_capacity(1 << 16);
+    out.push_str(
+        "
+pub static LOOKS: Looks = ",
+    );
+    looks.emit(&mut out);
+    out.push_str(
+        ";
+",
+    );
+    out
 }
 
 /// The Rust source of `pub static CATALOG`.
@@ -113,6 +143,14 @@ pub fn codegen(c: &Catalog) -> String {
     out.push_str(PRELUDE);
     out.push_str("\npub static CATALOG: Catalog = ");
     c.emit(&mut out);
+    out.push_str(";\n");
+    out
+}
+
+/// The Rust source of `pub static TILE_LOOKS`, which follows the looks in the same file.
+pub fn codegen_tile_looks(looks: TileLooks) -> String {
+    let mut out = String::from("\npub static TILE_LOOKS: TileLooks = ");
+    looks.emit(&mut out);
     out.push_str(";\n");
     out
 }

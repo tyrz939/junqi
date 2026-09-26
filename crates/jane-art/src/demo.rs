@@ -143,6 +143,17 @@ pub fn golden_file(font: &Font) -> String {
     for (name, c) in goldens(font) {
         let _ = writeln!(s, "{name} {:08x}", c.hash());
     }
+    // Every look, variant and seat: the hash of all its frames (ART.md §8 step 2 on).
+    match crate::looks::all() {
+        Ok(sets) => {
+            for r in sets {
+                let _ = writeln!(s, "unit:{} {:08x}", r.key(), r.set.hash());
+            }
+        }
+        Err(e) => {
+            let _ = writeln!(s, "looks-error {e}");
+        }
+    }
     s
 }
 

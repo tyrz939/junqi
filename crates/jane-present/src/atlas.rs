@@ -1,7 +1,9 @@
-//! The atlas (PRESENTATION.md §1.4): albedo pages of master-palette indices, packed at boot, and
-//! the sprite table the scene looks frames up in. Nothing renders from a look during play.
+//! The atlas (PRESENTATION.md §1.4): pages of four layers (albedo and emissive as master-palette
+//! indices, normal, height), packed at boot, and the sprite table the scene looks frames up in.
+//! Nothing renders from a look during play. An atlas for `soft` alone packs the albedo only.
 
 use jane_art::Canvas;
+use jane_art::canvas::{FLAT, Normal};
 use jane_art::palette::{self, Ix};
 
 use crate::backend::{AtlasPages, CLUT_LEN, Page};
@@ -23,12 +25,38 @@ pub struct SpriteRef {
 /// Index into [`Atlas::refs`].
 pub type RefId = u16;
 
+/// One texel of the four layers.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Texel {
+    pub albedo: Ix,
+    pub normal: Normal,
+    pub emissive: Ix,
+    pub height: u8,
+}
+
+impl Texel {
+    /// Clear in every layer.
+    pub const CLEAR: Texel = Texel { albedo: Ix::CLEAR, normal: FLAT, emissive: Ix::CLEAR, height: 0 };
+
+    /// A canvas's texel at `(x, y)`.
+    pub fn of(c: &Canvas, x: i32, y: i32) -> Texel {
+        Texel {
+            albedo: c.get(x, y),
+            normal: c.normal_at(x, y),
+            emissive: c.emissive_at(x, y),
+            height: c.height_at(x, y),
+        }
+    }
+}
+
 /// The packed pages and their sprite table.
 #[derive(Debug)]
 pub struct Atlas {
     pub pages: AtlasPages,
     pub refs: Vec<SpriteRef>,
     shelf: (u16, u16, u16),
+    /// Whether the normal, emissive and height layers are packed (T1 and up).
+    lit: bool,
 }
 
 /// The width of a page as packed here. 2048 is the ceiling (ART.md §5); the stand-ins need far
@@ -36,21 +64,48 @@ pub struct Atlas {
 const PAGE_W: u16 = 512;
 
 impl Atlas {
-    /// An empty atlas with the master palette as its CLUT.
+    /// An empty atlas with the master palette as its CLUT, albedo only (for `soft`).
     pub fn new() -> Atlas {
+        Atlas::with_layers(false)
+    }
+
+    /// An empty atlas; `lit` packs the normal, emissive and height layers beside the albedo.
+    pub fn with_layers(lit: bool) -> Atlas {
         let mut clut = vec![0xff00_0000; CLUT_LEN];
         for (i, c) in palette::PALETTE.iter().enumerate() {
             clut[i] = 0xff00_0000 | u32::from(c[0]) << 16 | u32::from(c[1]) << 8 | u32::from(c[2]);
         }
         Atlas {
-            pages: AtlasPages { clut, pages: vec![Page { w: PAGE_W, h: 0, albedo: Vec::new() }] },
+            pages: AtlasPages { clut, pages: vec![Page { w: PAGE_W, ..Page::default() }] },
             refs: Vec::new(),
             shelf: (0, 0, 0),
+            lit,
         }
     }
 
-    /// Packs a `w x h` grid of indices given by `px(x, y)`; returns its id.
+    /// Whether the atlas packs all four layers.
+    pub fn lit(&self) -> bool {
+        self.lit
+    }
+
+    /// Packs a `w x h` grid of indices given by `px(x, y)`, flat and dark, one px above the
+    /// ground where opaque; returns its id.
     pub fn add(&mut self, w: u16, h: u16, anchor: (i16, i16), height: u8, px: impl Fn(i32, i32) -> Ix) -> RefId {
+        self.add_texels(w, h, anchor, height, |x, y| {
+            let a = px(x, y);
+            Texel { albedo: a, height: u8::from(a.is_opaque()), ..Texel::CLEAR }
+        })
+    }
+
+    /// Packs a `w x h` grid of texels given by `px(x, y)`; returns its id.
+    pub fn add_texels(
+        &mut self,
+        w: u16,
+        h: u16,
+        anchor: (i16, i16),
+        height: u8,
+        px: impl Fn(i32, i32) -> Texel,
+    ) -> RefId {
         assert!(w <= PAGE_W, "a sprite wider than a page");
         let (mut sx, mut sy, mut sh) = self.shelf;
         if sx + w > PAGE_W {
@@ -59,15 +114,28 @@ impl Atlas {
             sh = 0;
         }
         sh = sh.max(h);
+        let lit = self.lit;
         let page = &mut self.pages.pages[0];
         if sy + h > page.h {
             page.h = sy + h;
-            page.albedo.resize(usize::from(page.w) * usize::from(page.h), 0);
+            let n = usize::from(page.w) * usize::from(page.h);
+            page.albedo.resize(n, 0);
+            if lit {
+                page.normal.resize(n, FLAT);
+                page.emissive.resize(n, 0);
+                page.height.resize(n, 0);
+            }
         }
         for y in 0..h {
             for x in 0..w {
                 let i = usize::from(sy + y) * usize::from(page.w) + usize::from(sx + x);
-                page.albedo[i] = px(i32::from(x), i32::from(y)).0;
+                let t = px(i32::from(x), i32::from(y));
+                page.albedo[i] = t.albedo.0;
+                if lit {
+                    page.normal[i] = t.normal;
+                    page.emissive[i] = t.emissive.0;
+                    page.height[i] = t.height;
+                }
             }
         }
         self.shelf = (sx + w, sy, sh);
@@ -75,22 +143,37 @@ impl Atlas {
         (self.refs.len() - 1) as RefId
     }
 
-    /// Packs a canvas's albedo through `remap` (a swap: ART.md §1, "swaps are index remaps").
-    pub fn add_canvas(&mut self, c: &Canvas, anchor: (i16, i16), height: u8, remap: impl Fn(Ix) -> Ix) -> RefId {
-        self.add(c.w() as u16, c.h() as u16, anchor, height, |x, y| remap(c.get(x, y)))
+    /// Packs a canvas's four layers, each texel through `map` (a swap is an albedo remap, ART.md
+    /// §1, "swaps are index remaps"; a stand-in may reshape its height).
+    pub fn add_canvas(
+        &mut self,
+        c: &Canvas,
+        anchor: (i16, i16),
+        height: u8,
+        map: impl Fn(i32, i32, Texel) -> Texel,
+    ) -> RefId {
+        self.add_texels(c.w() as u16, c.h() as u16, anchor, height, |x, y| map(x, y, Texel::of(c, x, y)))
     }
 
     /// Packs a canvas at half size, 2:1 decimated: each 2 x 2 block takes its first opaque
-    /// pixel, else the contact shadow if it has one, else clear.
-    pub fn add_canvas_half(&mut self, c: &Canvas, anchor: (i16, i16), height: u8) -> RefId {
-        self.add((c.w() / 2) as u16, (c.h() / 2) as u16, anchor, height, |x, y| {
-            let block = [(0, 0), (1, 0), (0, 1), (1, 1)].map(|(dx, dy)| c.get(2 * x + dx, 2 * y + dy));
-            block
+    /// texel, else the contact shadow if it has one, else clear; `map` as in
+    /// [`add_canvas`](Self::add_canvas), in the half-size coordinates.
+    pub fn add_canvas_half(
+        &mut self,
+        c: &Canvas,
+        anchor: (i16, i16),
+        height: u8,
+        map: impl Fn(i32, i32, Texel) -> Texel,
+    ) -> RefId {
+        self.add_texels((c.w() / 2) as u16, (c.h() / 2) as u16, anchor, height, |x, y| {
+            let block = [(0, 0), (1, 0), (0, 1), (1, 1)].map(|(dx, dy)| Texel::of(c, 2 * x + dx, 2 * y + dy));
+            let t = block
                 .iter()
                 .copied()
-                .find(|i| i.is_opaque())
-                .or_else(|| block.iter().copied().find(|&i| i == Ix::AO))
-                .unwrap_or(Ix::CLEAR)
+                .find(|t| t.albedo.is_opaque())
+                .or_else(|| block.iter().copied().find(|t| t.albedo == Ix::AO))
+                .unwrap_or(Texel::CLEAR);
+            map(x, y, Texel { height: t.height / 2, ..t })
         })
     }
 
@@ -131,6 +214,28 @@ mod tests {
                 let (p, q) = (a.get(p).src, a.get(q).src);
                 let apart = p.x + p.w <= q.x || q.x + q.w <= p.x || p.y + p.h <= q.y || q.y + q.h <= p.y;
                 assert!(apart, "{p:?} overlaps {q:?}");
+            }
+        }
+    }
+
+    #[test]
+    fn a_lit_atlas_packs_four_layers_and_a_soft_one_the_albedo_alone() {
+        let lamp = jane_art::demo::lamp();
+        for lit in [false, true] {
+            let mut a = Atlas::with_layers(lit);
+            let id = a.add_canvas(&lamp, (0, 48), 48, |_, _, t| t);
+            let page = &a.pages.pages[0];
+            assert_eq!(page.lit(), lit);
+            if lit {
+                let r = a.get(id).src;
+                let (x, y) = (16, 14);
+                let i = (usize::from(r.y) + y) * usize::from(page.w) + usize::from(r.x) + x;
+                assert_eq!(page.emissive[i], lamp.emissive_at(x as i32, y as i32).0);
+                assert!(page.emissive[i] != 0, "the lamp's glass glows");
+                assert_eq!(page.height[i], lamp.height_at(x as i32, y as i32));
+                assert_eq!(page.normal[i], lamp.normal_at(x as i32, y as i32));
+            } else {
+                assert!(page.normal.is_empty() && page.emissive.is_empty() && page.height.is_empty());
             }
         }
     }

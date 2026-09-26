@@ -1,14 +1,20 @@
 [package]
 name = "jane-render-wgpu"
-description = "T2 backend: Vulkan / DX12 / Metal"
+description = "T2 backend: Vulkan / DX12 / Metal / GLES 3 through wgpu"
 version.workspace = true
 edition.workspace = true
-rust-version.workspace = true
+# wgpu 30 asks for 1.87; this crate is not one of the float-free eight that build on 1.85.
+rust-version = "1.87"
 license.workspace = true
 publish.workspace = true
 
 [dependencies]
 jane-present.workspace = true
+wgpu.workspace = true
+
+[dev-dependencies]
+jane-core.workspace = true
+jane-sim.workspace = true
 
 [lints]
 workspace = true

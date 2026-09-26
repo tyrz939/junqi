@@ -2,7 +2,7 @@
 //! counting sort on `y` (canvas rows) with ties broken by `key` (the id), into buffers reserved
 //! once. Linear, stable, and the same order for the same set however it was pushed.
 
-use crate::frame::SpriteCmd;
+use crate::frame::{Caster, SpriteCmd};
 
 /// One thing that stands: sorted by `y` (its feet, canvas px), then `key`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -10,6 +10,8 @@ pub struct DrawCmd {
     pub y: i32,
     pub key: u32,
     pub sprite: SpriteCmd,
+    /// What it throws a shadow as, if it throws one (`sprite` is filled when the frame is).
+    pub caster: Option<Caster>,
 }
 
 /// The standing draw list.
@@ -61,7 +63,7 @@ impl DrawList {
             self.counts[i + 1] += self.counts[i];
         }
         self.sorted.clear();
-        self.sorted.resize(self.cmds.len(), DrawCmd { y: 0, key: 0, sprite: EMPTY });
+        self.sorted.resize(self.cmds.len(), DrawCmd { y: 0, key: 0, sprite: EMPTY, caster: None });
         for c in &self.cmds {
             let b = bucket(c.y);
             self.sorted[self.counts[b] as usize] = *c;
@@ -100,7 +102,7 @@ mod tests {
     use super::*;
 
     fn cmd(y: i32, key: u32) -> DrawCmd {
-        DrawCmd { y, key, sprite: SpriteCmd { x: key as i16, ..EMPTY } }
+        DrawCmd { y, key, sprite: SpriteCmd { x: key as i16, ..EMPTY }, caster: None }
     }
 
     fn order(l: &mut DrawList, y0: i32, rows: u32) -> Vec<(i32, u32)> {
@@ -131,8 +133,8 @@ mod tests {
     #[test]
     fn equal_keys_keep_push_order() {
         let mut l = DrawList::default();
-        l.push(DrawCmd { y: 5, key: 1, sprite: SpriteCmd { x: 100, ..EMPTY } });
-        l.push(DrawCmd { y: 5, key: 1, sprite: SpriteCmd { x: 200, ..EMPTY } });
+        l.push(DrawCmd { y: 5, key: 1, sprite: SpriteCmd { x: 100, ..EMPTY }, caster: None });
+        l.push(DrawCmd { y: 5, key: 1, sprite: SpriteCmd { x: 200, ..EMPTY }, caster: None });
         let xs: Vec<i16> = l.sort(0, 10).iter().map(|c| c.sprite.x).collect();
         assert_eq!(xs, [100, 200]);
     }

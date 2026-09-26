@@ -19,11 +19,13 @@ pub mod drawlist;
 pub mod frame;
 pub mod input;
 pub mod light;
+pub mod people;
 pub mod present;
 pub mod stand_in;
 
-pub use backend::{AtlasPages, Backend, CLUT_LEN, Caps, Page};
+pub use backend::{AtlasPages, Backend, CLUT_LEN, Caps, FrameStats, FrameTimes, Page};
 pub use frame::{
-    CANVAS_H, CANVAS_W, ChunkCmd, ChunkId, ChunkLayers, Depth, Flags, Frame, Pass, Span, SpriteCmd, Src, Tier, Tint,
+    CANVAS_H, CANVAS_W, Caster, ChunkCmd, ChunkId, ChunkLayers, Depth, Directional, Flags, Frame, Light, LightKind,
+    Pass, Post, Rgb, Span, SpriteCmd, Src, Tier, Tint,
 };
 pub use present::Present;

@@ -2,21 +2,26 @@
 //! land: the chunk painter (`jane_art::terrain::paint_chunk`, ART.md §8 step 3) replaces
 //! [`paint_chunk`], and the person, creature and prop looks replace [`StandIns`].
 //!
-//! - A chunk draws each cell as its tile's flat swatch (PRESENTATION.md §1.6's fallback).
-//! - A unit draws the step-1 demo `ball`, its plum cloth swapped per kind (her, another seat,
-//!   four folk variants, hostile, the dead): a coat swap is an index remap (ART.md §1).
+//! - A chunk draws each cell as its tile's flat swatch (PRESENTATION.md §1.6's fallback). For the
+//!   lit tiers it also gets a relief the light can find: walls rise as faces to the south, roofs
+//!   are pitched east-west, a wood's canopy is lumpy and tall, hedges and fences stand.
+//! - A unit whose sprite has no look yet (`people` draws those that do: Jane and the townsfolk
+//!   from ART.md §8 step 2) draws the step-1 demo `ball`, its plum cloth swapped per kind (her, another seat,
+//!   four folk variants, hostile, the dead): a coat swap is an index remap (ART.md §1). Its
+//!   height stands it up: each px as high as it is above her feet, as a person's will be.
 //! - A prop draws the demo sprite nearest its size, at 1x or half size; a prop with a light
 //!   draws the `lamp`.
 //!
 //! All of it is drawn by `jane-present`, never by `jane-art`. [`tile_rgb`] outlives the rest:
 //! `jane view` and `jane play --snap` colour their maps with it, so it moves when this goes.
 
+use jane_art::canvas::normal;
 use jane_art::demo;
 use jane_art::palette::{Ix, Ramp};
 use jane_core::Tile;
 
-use crate::atlas::{Atlas, RefId};
-use crate::frame::{CELL, CHUNK_CELLS, CHUNK_PX, ChunkId};
+use crate::atlas::{Atlas, RefId, Texel};
+use crate::frame::{CELL, CHUNK_CELLS, CHUNK_PX, ChunkId, ChunkLayers};
 
 /// A tile's flat swatch (the colours `jane view` has drawn the county in since P2).
 pub fn tile_rgb(t: Tile) -> [u8; 3] {
@@ -71,15 +76,25 @@ pub fn tile_rgb(t: Tile) -> [u8; 3] {
     }
 }
 
-/// Paints chunk `id` as flat swatches into `px` (`CHUNK_PX` square, `0xAARRGGBB`), reading the
-/// ground through `tile(cx, cy)`. Cells outside the zone (`w x h` cells) take `outside`.
-pub fn paint_chunk(id: ChunkId, (w, h): (u32, u32), outside: u32, tile: impl Fn(i32, i32) -> Tile, px: &mut [u32]) {
+/// Paints chunk `id` as flat swatches into `layers` (`CHUNK_PX` square), reading the ground
+/// through `tile(cx, cy)`. Cells outside the zone (`w x h` cells) take `outside`. The albedo is
+/// the same at every tier; where the layers carry them (T1 and T2), the normal and height get
+/// the stand-in relief ([`relief`]).
+pub fn paint_chunk(
+    id: ChunkId,
+    (w, h): (u32, u32),
+    outside: u32,
+    tile: impl Fn(i32, i32) -> Tile,
+    layers: &mut ChunkLayers,
+) {
     let side = CHUNK_PX as usize;
-    debug_assert_eq!(px.len(), side * side);
+    debug_assert_eq!(layers.albedo.len(), side * side);
+    let lit = layers.lit();
+    let inside = |cx: i32, cy: i32| cx >= 0 && cy >= 0 && cx < w as i32 && cy < h as i32;
     for j in 0..CHUNK_CELLS {
         for i in 0..CHUNK_CELLS {
             let (cx, cy) = (i32::from(id.cx) * CHUNK_CELLS + i, i32::from(id.cy) * CHUNK_CELLS + j);
-            let c = if cx < w as i32 && cy < h as i32 {
+            let c = if inside(cx, cy) {
                 let [r, g, b] = tile_rgb(tile(cx, cy));
                 0xff00_0000 | u32::from(r) << 16 | u32::from(g) << 8 | u32::from(b)
             } else {
@@ -88,9 +103,83 @@ pub fn paint_chunk(id: ChunkId, (w, h): (u32, u32), outside: u32, tile: impl Fn(
             let x0 = (i * CELL) as usize;
             for y in 0..CELL as usize {
                 let row = (j * CELL) as usize + y;
-                px[row * side + x0..row * side + x0 + CELL as usize].fill(c);
+                layers.albedo[row * side + x0..row * side + x0 + CELL as usize].fill(c);
+            }
+            if !lit {
+                continue;
+            }
+            let t = |dx: i32, dy: i32| if inside(cx + dx, cy + dy) { tile(cx + dx, cy + dy) } else { Tile::Void };
+            for y in 0..CELL {
+                for x in 0..CELL {
+                    let k = ((j * CELL + y) as usize) * side + (i * CELL + x) as usize;
+                    let (n, z) = if inside(cx, cy) { relief(&t, (cx, cy), x, y) } else { ([128, 128], 0) };
+                    layers.normal[k] = n;
+                    layers.height[k] = z;
+                    layers.emissive[k] = 0;
+                }
             }
         }
+    }
+}
+
+/// Stands up walls and faces.
+fn wall_like(t: Tile) -> bool {
+    use jane_core::Tile as T;
+    matches!(t, T::HouseWall | T::Wall | T::WallTop | T::StoneWall | T::TempleWall | T::CaveWall | T::Cliff)
+}
+
+/// The stand-in relief of pixel `(x, y)` of cell `(cx, cy)`, where `t(dx, dy)` is the tile `dx, dy`
+/// cells away (`t(0, 0)` the cell's own): `(normal, height px)`. Faces look south (the 3/4
+/// view sees a wall's south face), a face's px as high as it stands above the wall's foot.
+fn relief(t: &impl Fn(i32, i32) -> Tile, (cx, cy): (i32, i32), x: i32, y: i32) -> ([u8; 2], u8) {
+    use jane_core::Tile as T;
+    let here = t(0, 0);
+    let lump = |top: i32, lo: i32| {
+        // A dome over each 2 x 2 cells: the canopy lumps, a hedge's rounded top.
+        let (bx, by) = ((cx & 1) * CELL + x - CELL, (cy & 1) * CELL + y - CELL);
+        let d2 = bx * bx + by * by;
+        let z = (top - (top - lo) * d2 / (CELL * CELL)).clamp(lo, top);
+        (normal(bx * 127 / 18, by * 127 / 18), z as u8)
+    };
+    match here {
+        _ if wall_like(here) => {
+            // Cells of wall below this one: 0 for the foot of a wall, one more a cell up.
+            let below = (1..=2).take_while(|&k| wall_like(t(0, k))).count() as i32;
+            if below >= 2 {
+                // The wall's top, seen from above: flat and high.
+                (normal(0, -20), 40)
+            } else {
+                let z = below * CELL + (CELL - y);
+                (normal(0, 96), z.clamp(1, 40) as u8)
+            }
+        }
+        T::HouseRoof => {
+            // The run of roof in this column: pitched along it, the ridge in the middle.
+            let up = (1..=12).take_while(|&k| t(0, -k) == T::HouseRoof).count() as i32;
+            let down = (1..=12).take_while(|&k| t(0, k) == T::HouseRoof).count() as i32;
+            let len = (up + down + 1) * CELL;
+            let r = up * CELL + y;
+            let mid = len / 2;
+            let off = (r - mid) * 127 / mid.max(1);
+            let rise = 14 - 14 * (r - mid).abs() / mid.max(1);
+            (normal(0, off.clamp(-80, 80)), (30 + rise) as u8)
+        }
+        T::Tree => lump(44, 30),
+        T::DeadTree => lump(30, 20),
+        T::Bush | T::Hedge => lump(14, 6),
+        T::Fence => {
+            if y >= 6 {
+                (normal(0, 90), (CELL - y + 4).clamp(1, 14) as u8)
+            } else {
+                ([128, 128], 0)
+            }
+        }
+        T::Crops | T::GrassTall => {
+            // Rows of growth: ridges running east-west, 4 px apart.
+            let ny = [-50, -20, 20, 50][(y & 3) as usize];
+            (normal(0, ny), 2)
+        }
+        _ => ([128, 128], 0),
     }
 }
 
@@ -134,6 +223,17 @@ pub struct StandIns {
     lamps: [(i32, i32, RefId); 2],
 }
 
+/// A stand-in texel stood up: its height is how far it is above the foot row `foot` (a person
+/// is as tall as she is drawn), at least 1 where it is opaque; the contact shadow and clear
+/// keep 0.
+fn standing(t: Texel, y: i32, foot: i16) -> Texel {
+    if t.albedo.is_opaque() {
+        Texel { height: (i32::from(foot) - y).clamp(1, 255) as u8, ..t }
+    } else {
+        Texel { height: 0, ..t }
+    }
+}
+
 /// `ix` with ramp `from` swapped for `to`, tone for tone.
 fn swap(ix: Ix, from: Ramp, to: Ramp) -> Ix {
     match Ramp::of(ix) {
@@ -148,19 +248,26 @@ impl StandIns {
         let ball = demo::ball();
         // Feet at h - 4, the contact shadow's middle (ART.md §1: units anchor by the feet).
         let feet = ((ball.w() / 2) as i16, (ball.h() - 4) as i16);
-        let units = COATS.map(|coat| atlas.add_canvas(&ball, feet, 40, |ix| swap(ix, Ramp::ClothPlum, coat)));
+        let units = COATS.map(|coat| {
+            atlas.add_canvas(&ball, feet, 40, |_, y, t| Texel {
+                albedo: swap(t.albedo, Ramp::ClothPlum, coat),
+                ..standing(t, y, feet.1)
+            })
+        });
         let mut props = Vec::new();
         for name in PROP_DEMOS {
             let c = demo::sprite(name).expect("a demo sprite");
             let (w, h) = (c.w(), c.h());
-            props.push((w, h, atlas.add_canvas(&c, (0, h as i16), 16, |ix| ix)));
-            props.push((w / 2, h / 2, atlas.add_canvas_half(&c, (0, (h / 2) as i16), 8)));
+            props.push((w, h, atlas.add_canvas(&c, (0, h as i16), h as u8, |_, y, t| standing(t, y, h as i16))));
+            let hh = (h / 2) as i16;
+            props.push((w / 2, h / 2, atlas.add_canvas_half(&c, (0, hh), hh as u8, |_, y, t| standing(t, y, hh))));
         }
         let lamp = demo::lamp();
         let (w, h) = (lamp.w(), lamp.h());
+        let hh = (h / 2) as i16;
         let lamps = [
-            (w, h, atlas.add_canvas(&lamp, (0, h as i16), 48, |ix| ix)),
-            (w / 2, h / 2, atlas.add_canvas_half(&lamp, (0, (h / 2) as i16), 24)),
+            (w, h, atlas.add_canvas(&lamp, (0, h as i16), h as u8, |_, y, t| standing(t, y, h as i16))),
+            (w / 2, h / 2, atlas.add_canvas_half(&lamp, (0, hh), hh as u8, |_, y, t| standing(t, y, hh))),
         ];
         StandIns { units, props, lamps }
     }
@@ -192,10 +299,11 @@ mod tests {
 
     #[test]
     fn a_chunk_is_its_tiles_swatches() {
-        let mut px = vec![0u32; (CHUNK_PX * CHUNK_PX) as usize];
+        let mut layers = ChunkLayers::new(crate::Tier::T0);
         // A 20 x 20 zone of grass with one road cell at (17, 18): chunk (1, 1) holds it.
         let tile = |x: i32, y: i32| if (x, y) == (17, 18) { Tile::Road } else { Tile::Grass };
-        paint_chunk(ChunkId { cx: 1, cy: 1 }, (20, 20), 0xff00_0001, tile, &mut px);
+        paint_chunk(ChunkId { cx: 1, cy: 1 }, (20, 20), 0xff00_0001, tile, &mut layers);
+        let px = &layers.albedo;
         let at = |x: i32, y: i32| px[(y * CHUNK_PX + x) as usize];
         let [r, g, b] = tile_rgb(Tile::Road);
         assert_eq!(at(16 + 5, 32 + 15), 0xff00_0000 | u32::from(r) << 16 | u32::from(g) << 8 | u32::from(b));
@@ -221,5 +329,42 @@ mod tests {
         assert!(small.src.w < big.src.w, "{small:?} {big:?}");
         let lamp = *a.get(s.prop(1, 1, false, true));
         assert_eq!((lamp.src.w, lamp.src.h), (16, 24));
+    }
+
+    #[test]
+    fn the_lit_tiers_get_relief_and_the_same_albedo() {
+        // A wall two cells tall at x = 3 with its foot on row 5; a roof over rows 0 to 3.
+        let tile = |x: i32, y: i32| match (x, y) {
+            (3, 4 | 5) => Tile::HouseWall,
+            (3, 0..=3) => Tile::HouseRoof,
+            _ => Tile::Grass,
+        };
+        let id = ChunkId { cx: 0, cy: 0 };
+        let (mut t0, mut t2) = (ChunkLayers::new(crate::Tier::T0), ChunkLayers::new(crate::Tier::T2));
+        paint_chunk(id, (16, 16), 0, tile, &mut t0);
+        paint_chunk(id, (16, 16), 0, tile, &mut t2);
+        assert_eq!(t0.albedo, t2.albedo);
+        assert!(!t0.lit() && t2.lit());
+        let z = |x: i32, y: i32| t2.height[(y * CHUNK_PX + x) as usize];
+        // The wall's face rises from its foot; grass lies flat.
+        assert!(z(3 * 16 + 8, 5 * 16 + 15) < z(3 * 16 + 8, 5 * 16 + 1));
+        assert!(z(3 * 16 + 8, 4 * 16 + 1) > z(3 * 16 + 8, 5 * 16 + 1));
+        assert_eq!(z(0, 0), 0);
+        // The roof's two pitches face north and south.
+        let ny = |x: i32, y: i32| t2.normal[(y * CHUNK_PX + x) as usize][1];
+        assert!(ny(3 * 16 + 8, 2) < 128 && ny(3 * 16 + 8, 60) > 128);
+    }
+
+    #[test]
+    fn a_standing_stand_in_is_as_high_as_it_is_above_its_feet() {
+        let mut a = Atlas::with_layers(true);
+        let s = StandIns::build(&mut a);
+        let r = *a.get(s.unit(UnitKind::Me));
+        let page = &a.pages.pages[0];
+        let col = usize::from(r.src.x) + 16;
+        let top =
+            (0..r.src.h).find(|&y| page.albedo[usize::from(r.src.y + y) * usize::from(page.w) + col] > 1).unwrap();
+        let z = page.height[usize::from(r.src.y + top) * usize::from(page.w) + col];
+        assert_eq!(i32::from(z), i32::from(r.ay) - i32::from(top));
     }
 }
