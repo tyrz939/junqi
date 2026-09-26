@@ -17,6 +17,12 @@ pub fn catalog() -> &'static Catalog {
     &generated::CATALOG
 }
 
+/// The looks compiled into this build (`data/looks`, ART.md §5): every look by the sprite id it
+/// draws. Apart from the catalog, and outside its content hash.
+pub fn looks() -> Looks {
+    generated::LOOKS
+}
+
 /// Compile a data dir at startup through the same code the build script ran (`dev-data`).
 /// A catalog reload needs a new game.
 #[cfg(feature = "dev-data")]

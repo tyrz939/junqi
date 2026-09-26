@@ -14,7 +14,7 @@ pub mod tables;
 use std::path::Path;
 
 use crate::emit::{Emit, PRELUDE};
-use crate::model::Catalog;
+use crate::model::{Catalog, Looks};
 use ctx::{Ctx, Ids, leak, leak_str};
 use diag::Diagnostics;
 use source::Source;
@@ -23,6 +23,9 @@ use source::Source;
 #[derive(Debug)]
 pub struct Built {
     pub catalog: Option<&'static Catalog>,
+    /// The looks table (`data/looks`), a static of its own beside the catalog: looks change no
+    /// behaviour, so they stay out of the content hash. Empty when the compile failed.
+    pub looks: Looks,
     pub diag: Diagnostics,
 }
 
@@ -33,7 +36,8 @@ pub fn build(root: &Path) -> Built {
     let mut built = build_source(&src);
     diag.errors.append(&mut built.diag.errors);
     diag.warnings.append(&mut built.diag.warnings);
-    Built { catalog: if diag.is_ok() { built.catalog } else { None }, diag }
+    let ok = diag.is_ok();
+    Built { catalog: if ok { built.catalog } else { None }, looks: if ok { built.looks } else { &[] }, diag }
 }
 
 /// Compile an already-read source.
@@ -53,6 +57,7 @@ pub fn build_source(src: &Source) -> Built {
     // What another can be had of, once everything that gives one is known.
     combat.items = tables::combat::late_replaceable(&cx, &combat, &living, &county);
     check_limits(&mut cx);
+    let looks = tables::looks::compile(src, &mut cx);
 
     let mut catalog = Catalog {
         content_hash: 0,
@@ -72,7 +77,7 @@ pub fn build_source(src: &Source) -> Built {
     integrate::check(&catalog, &mut cx.diag);
     catalog.content_hash = content_hash(&catalog);
     let ok = cx.diag.is_ok();
-    Built { catalog: ok.then(|| &*Box::leak(Box::new(catalog))), diag: cx.diag }
+    Built { catalog: ok.then(|| &*Box::leak(Box::new(catalog))), looks: if ok { looks } else { &[] }, diag: cx.diag }
 }
 
 /// Every pool is indexed by a `u16`.
@@ -101,6 +106,21 @@ fn check_limits(cx: &mut Ctx) {
 pub fn content_hash(c: &Catalog) -> u64 {
     let behaviour = Catalog { content_hash: 0, texts: &[], ..*c };
     xxhash_rust::xxh3::xxh3_64(crate::emit::to_rust(&behaviour).as_bytes())
+}
+
+/// The Rust source of `pub static LOOKS`, which follows the catalog in the same file.
+pub fn codegen_looks(looks: Looks) -> String {
+    let mut out = String::with_capacity(1 << 16);
+    out.push_str(
+        "
+pub static LOOKS: Looks = ",
+    );
+    looks.emit(&mut out);
+    out.push_str(
+        ";
+",
+    );
+    out
 }
 
 /// The Rust source of `pub static CATALOG`.
