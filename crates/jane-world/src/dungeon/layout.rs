@@ -438,7 +438,7 @@ impl State {
         let me_node = self.placed[me].node;
         let mut made: Vec<Corridor> = Vec::new();
         let (mut scratch, mut queue) = (std::mem::take(&mut self.scratch), std::mem::take(&mut self.queue));
-        let mut targets: Vec<usize> = Vec::new();
+        let mut targets: Vec<(usize, usize)> = Vec::new();
         for &ei in &g.edges_of[me_node] {
             let e = &g.m.edges[ei];
             let other_node = if usize::from(e.from) == me_node { usize::from(e.to) } else { usize::from(e.from) };
@@ -446,53 +446,50 @@ impl State {
             if oi == me {
                 continue;
             }
-            // (my door, their door, lane)
-            let mut best: Option<(usize, usize, Vec<u16>)> = None;
-            let one_bay = self.placed[me].shape.bays == (1, 1);
+            // Their free doors, as (door, port).
+            let other = &self.placed[oi];
+            targets.clear();
+            targets
+                .extend((0..other.shape.doors.len()).filter(|&t| !other.uses(t)).map(|t| (t, self.port_of(other, t))));
+            let ports: Vec<usize> = targets.iter().map(|&(_, to)| to).collect();
+            // The first corridor of a one-bay room is routed over lanes nobody has touched since
+            // the cache was started, so a flood from the same port is the same flood; and a lane
+            // is as long from either end, so the cache floods from their doors, which stay put
+            // while this room is tried everywhere, instead of from each of its own.
+            let cached = made.is_empty() && self.placed[me].shape.bays == (1, 1);
+            // (my door, their door, lane length - 1, my port, their port): the first shortest.
+            let mut best: Option<(usize, usize, i16, usize, usize)> = None;
             for mine in 0..self.placed[me].shape.doors.len() {
                 if self.placed[me].uses(mine) {
                     continue;
                 }
                 let from = self.port_of(&self.placed[me], mine);
-                // The first corridor of a one-bay room is routed over lanes nobody has touched since
-                // the cache was started, so a flood from the same port is the same flood.
-                let flood: &Flood = match floods.as_deref_mut() {
-                    Some(cache) if made.is_empty() && one_bay => {
-                        cache[from].get_or_insert_with(|| self.lanes.flood(from))
-                    }
-                    _ => {
-                        let other = &self.placed[oi];
-                        targets.clear();
-                        targets.extend(
-                            (0..other.shape.doors.len()).filter(|&t| !other.uses(t)).map(|t| self.port_of(other, t)),
-                        );
-                        self.lanes.flood_into(from, Some(&targets), &mut scratch, &mut queue);
-                        &scratch
-                    }
-                };
-                let other = &self.placed[oi];
-                for theirs in 0..other.shape.doors.len() {
-                    if other.uses(theirs) {
+                if !cached || floods.is_none() {
+                    self.lanes.flood_into(from, Some(&ports), &mut scratch, &mut queue);
+                }
+                for &(theirs, to) in &targets {
+                    let d = match floods.as_deref_mut() {
+                        Some(cache) if cached => cache[to].get_or_insert_with(|| self.lanes.flood(to)).dist[from],
+                        _ => scratch.dist[to],
+                    };
+                    if d < 0 || best.is_some_and(|b| b.2 <= d) {
                         continue;
                     }
-                    let to = self.port_of(other, theirs);
-                    let d = flood.dist[to];
-                    if d < 0 {
-                        continue;
-                    }
-                    if best.as_ref().is_some_and(|b| b.2.len() <= d as usize + 1) {
-                        continue;
-                    }
-                    let mut lane = Vec::with_capacity(d as usize + 1);
-                    let mut n = to as i16;
-                    while n >= 0 {
-                        lane.push(n as u16);
-                        n = flood.prev[n as usize];
-                    }
-                    lane.reverse();
-                    best = Some((mine, theirs, lane));
+                    best = Some((mine, theirs, d, from, to));
                 }
             }
+            // The lane itself, as the flood from my door gives it: back along it from theirs.
+            let best = best.map(|(mine, theirs, d, from, to)| {
+                self.lanes.flood_into(from, Some(&[to]), &mut scratch, &mut queue);
+                let mut lane = Vec::with_capacity(d as usize + 1);
+                let mut n = to as i16;
+                while n >= 0 {
+                    lane.push(n as u16);
+                    n = scratch.prev[n as usize];
+                }
+                lane.reverse();
+                (mine, theirs, lane)
+            });
             let Some((mine, theirs, lane)) = best else {
                 self.disconnect(&made);
                 (self.scratch, self.queue) = (scratch, queue);
