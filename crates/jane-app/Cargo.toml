@@ -13,6 +13,7 @@ jane-data.workspace = true
 jane-sim.workspace = true
 jane-net.workspace = true
 jane-present.workspace = true
+jane-art.workspace = true
 jane-render-soft.workspace = true
 jane-render-gl2.workspace = true
 jane-render-wgpu.workspace = true
