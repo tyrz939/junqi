@@ -86,6 +86,18 @@ pub fn grow(cx: &mut Ctx<'_>, stat: Stat, amount: i16, id: Sym) -> bool {
     true
 }
 
+/// The console's growth (`DevOp::Grow`): what a finding gives, with no finding to remember and
+/// nothing said.
+pub fn dev_grow(cx: &mut Ctx<'_>, stat: Stat, amount: i16) {
+    let g = &mut cx.world.growth;
+    let v = match stat {
+        Stat::Strength => &mut g.strength,
+        Stat::Spirit => &mut g.spirit,
+    };
+    *v = v.saturating_add_signed(amount);
+    cx.wops.ops.push(WorldOp::Grow { stat, amount });
+}
+
 /// `WorldOp::Grow` landing: every body gains it; the new health is hers at once.
 pub fn grow_bodies(state: &mut GameState, stat: Stat, amount: i16) {
     let now = state.tick;
