@@ -45,7 +45,7 @@ jane-cli ── sim, world, net, bot, schema, art, present (headless; `jane serv
 | `jane-app → present, sim, net` | The SDL2 binary: window, input, audio, loop, saves, config |
 | `jane-cli → sim, world, net, bot, schema, art, present` | `gen`, `check`, `bench`, `replay`, `sheet`, `view`, `serve`, `soak`, `hash`, `film`. PNG through `jane-art::sheet` (ART §5), no image crate |
 
-Import cycles inside the old sim become modules sharing one `Ctx` (§5). Dependencies allowed: `serde` and `serde_json` (schema only), `postcard`, `lz4_flex`, `xxhash-rust` (xxh3), `indexmap`, `sdl2` (app only). Nothing else without a commit that says why (PORT §3.5).
+Import cycles inside the old sim become modules sharing one `Ctx` (§5). Dependencies allowed: `serde` and `serde_json` (schema; `serde` also for the sim's save, through `jane-core`'s optional `serde` feature), `postcard`, `lz4_flex`, `xxhash-rust` (xxh3), `indexmap`, `sdl2` (app only). Nothing else without a commit that says why (PORT §3.5).
 
 **Rule:** `jane-world` and `jane-sim` share nothing but `jane-core` types and the `Blueprint`.
 
@@ -112,7 +112,7 @@ along(a: Angle, s: Fx) -> Vec2
 | Runtime names | `Sym(u32)` | Interned at runtime, pre-seeded with `NAMES` so `Sym(n) == NameId(n)` below `NAMES.len()`. Generator-only names append; a save stores only the tail, as strings |
 | Instances | `UnitId, PropId, DropId, ProjId, GroundId` | `NonZeroU32`, one monotonic counter each in `GameState.next`, never reused. Generational arenas rejected: ids must be stable across saves, and four billion per kind is unreachable |
 | Seats | `Seat(u8)`, `ClientToken(u64)` | |
-| Flags | `FlagKey = enum { Named(NameId), Been(NameId), Dead(Sym) }` | Replaces the `been:` and `dead:` string surgery |
+| Flags | `FlagKey = enum { Named(Sym), Been(Sym), Dead(Sym) }` in state (a content name's `Sym` is its `NameId`; content's own `FlagKey` names a blueprint `Key`, resolved when the verb runs) | Replaces the `been:` and `dead:` string surgery |
 | Lists | `ListRef = enum { Catalog(u16), Blueprint(u16) }` | An action list is a slice, never copied per instance |
 
 Units per zone are a `Vec<Unit>` in ascending id (spawn appends, despawn removes in place), found by binary search. Props likewise, never removed. Each zone runtime keeps `Lookup<NameId, PropIx>` and `Lookup<NameId, UnitId>`.
@@ -137,7 +137,8 @@ PlayerState { seat, who, unit: UnitId, zone, last_mark: NameId, respawn_at: Opti
 ZoneState { id, rng: Sfc32 /* this zone's combat, loot and fan dice */, units: Vec<Unit>, props: Vec<Prop>, drops, projectiles, grounds,
   triggers: TriggerBits { fired: BitVec, inside: BitVec }, tile_deltas: BTreeMap<CellIx, Tile> /* compacted */,
   fog: Box<[u32]> /* fixed size */, pending_fill: Vec<Fill>, sleeping_due: Vec<(Tick, UnitId)>,
-  wetness: u8 /* the rain ramp, §4.6 */, pressure: Vec<u16> /* per area, in the blueprint's area order, §4.6 */ }
+  wetness: u8 /* the rain ramp, §4.6 */, pressure: Vec<u16> /* per area, in the blueprint's area order, §4.6 */,
+  ring_key: Option<[Option<(i32, i32)>; 4]> /* each seat's ring block when the ring last ran, §3.3 */ }
 
 Unit { id, key: Option<Sym>, def, controller, faction, pos: Vec2, facing, strength, spirit, hp, mp, energy: Milli, energy_locked, alive,
   gcd_until, stop_until: Tick, cooldowns: Vec<(SpellId, Tick)>, item_cooldowns, synced: Tick, target: Option<UnitId>, combat, home,
@@ -153,9 +154,9 @@ Prop { id, key, def, spawn: Option<u16> /* index into Blueprint.props: keyTag, t
 
 ### 3.3 Authoritative vs derived
 
-**Authoritative:** everything in §3.2, including `Unit.awake` (one bit; changes only on ring re-evaluation; saved so the invariant is checkable) and `PathCache` (it moves the unit next tick).
+**Authoritative:** everything in §3.2, including `Unit.awake` (one bit; changes only on ring re-evaluation; saved so the invariant is checkable), `PathCache` (it moves the unit next tick) and `ZoneState.ring_key` (whether the ring runs next tick depends on it, and an `awake` bit held up by combat or an order outlasts its reason until the ring runs again; a rebuilt runtime that forgot the key would run the ring when the live one did not).
 
-**Derived** (`ZoneRuntime`; rebuilt on load and on zone entry): `Arc<Blueprint>`; `Grid { tiles, flags }` = blueprint plus deltas; occupancy `Lookup<CellIx, UnitId>` plus the `F_OCC` bit; `prop_buckets` per 16-cell block; `awake_props: BitVec`; `plates`; `unit_blocks` of awake, alive, unhidden units per block; `awake_units`; `names`; `unit_names`; the merged trigger table; `ring_key`; `dirty_rects`; `prev_pos`.
+**Derived** (`ZoneRuntime`; rebuilt on load and on zone entry): `Grid { tiles, flags }` = blueprint plus deltas; occupancy as a **count** per cell, `Lookup<CellIx, u16>`, plus the `F_OCC` bit (the TS kept the first unit to claim a cell, so who held a shared cell depended on arrival order and a rebuild could disagree; "occupied by someone else" is "occupied, and not my own cell", and who stands where is asked of `unit_blocks`); `prop_buckets` per 16-cell block; `awake_props` (re-derived from `ring_key` on a rebuild); `plates`; `unit_blocks` of awake, alive, unhidden units per block, one sorted `(block, id)` list; `awake_units`; `names`; `unit_names`; the merged trigger table; `dirty_rects`; `prev_pos`. The blueprints live beside the runtimes in `Sim` (`Blueprints`, one `Arc<Blueprint>` per zone), not inside them.
 
 **Derived** (`Sim.scratch`, one per sim): one `PathScratch` (256² window, ~3 MB, shared by every zone), `LitField`, `hits`, `ops`, the event buffer.
 
@@ -172,19 +173,19 @@ enum Command { Use, Bar { slot, on }, Cast { spell, on }, Item(ItemId), BagMove,
   Bind, Unbind, BarSwap, Advance, Choose, CloseDialogue, Join { who }, Leave, Open(bool), Dev(DevOp) }
 ```
 
-The client turns move and aim into `(Angle, magnitude)` with whatever arithmetic it likes and quantises; the sim never normalises. Facing from angle by octant; an exact 45° keeps the current facing. `Sim.aims` is gone: a `Cast` at frame `f` reads `frames[seat].aim` of frame `f`, so the aim is in the record. The frame carries the raw aim and the assist profile, never an assisted angle: the sim resolves assist itself at cast time (§5.4), so a replay of the recorded frames reproduces every assisted cast exactly.
+The client turns move and aim into `(Angle, magnitude)` with whatever arithmetic it likes and quantises; the sim never normalises. Facing from angle by the dominant axis; an exact 45° keeps the current axis (`faceVector`). `Sim.aims` is gone: a `Cast` at frame `f` reads `frames[seat].aim` of frame `f`, so the aim is in the record. The frame carries the raw aim and the assist profile, never an assisted angle: the sim resolves assist itself at cast time (§5.4), so a replay of the recorded frames reproduces every assisted cast exactly.
 
 ### 3.5 Save
 
-serde + `postcard` (varints, canonical) + an `lz4_flex` frame. Header: magic `JANE`, `save_version: u16`, `content_hash: u64`, `build`, and a summary (zone, day, hour, hp) readable without decoding the body. About 150 KB compressed for a busy county.
+serde + `postcard` (varints, canonical) + an `lz4_flex` block, its size prepended (the block format: the frame format's checksum would pull in a second hash crate). Layout: `JANE`, a `u32` header length, the postcard header (`save_version: u16`, `content_hash: u64`, `build`, and a summary: zone, day, hour, hp, max hp) readable without decoding the body, then the body. Core types serialize through `jane-core`'s `serde` feature, which only the sim turns on; a `Tile` is saved as its id. About 150 KB compressed for a busy county.
 
 **Content pin.** Same `content_hash`: load. Different: a typed `SaveMigration` chain if one exists, else **refuse** in release. In dev, `--allow-content-drift` remaps the `Sym` tail by string and drops gone ids with a report. Migrations are Rust functions over typed previous structs, kept twelve months. `Sym` tails are stored as strings (readable, a few KB).
 
-`from_save` closes the world, parks every seat but 0, rebuilds blueprints and runtimes for live zones, runs the ring with `force`, and does not step. Slots are owned by `jane-app` and `jane serve`; the sim only encodes bytes.
+`from_save` closes the world, parks every seat but 0, rebuilds blueprints and runtimes for live zones, runs the ring (without `force`: it runs where the seats left stand somewhere other than the saved `ring_key`, so a solo save continues exactly as if never saved), and does not step. Slots are owned by `jane-app` and `jane serve`; the sim only encodes bytes.
 
 ### 3.6 Hash
 
-`Sim::hash() -> u64` is xxh3-64 of the postcard encoding streamed into the hasher: the same schema as the save, so saved and hashed cannot drift. `zone_hashes() -> [u64; ZONE_COUNT]` comes out of the same pass for desync localisation. Under 1 ms on a Pi 3, taken once a second.
+`Sim::hash() -> u64` is xxh3-64 of the postcard encoding streamed into the hasher: the same schema as the save, so saved and hashed cannot drift. `zone_hashes() -> [u64; ZONE_COUNT]` hashes each zone's encoding alone (a second pass, asked only after a mismatch) for desync localisation. Under 1 ms on a Pi 3, taken once a second.
 
 ### 3.7 Journal and known facts
 
@@ -224,25 +225,30 @@ enum Source { Seen, Visited, Named,          // Place
 
 ```
 impl Sim {
-  fn new_game(seed, name) -> Sim          // builds all 13 zone blueprints up front (§9); applies Join { host } as frame 0's command
-  fn from_save(&[u8]) -> Result<Sim>
+  fn new_game(seed, name) -> Sim          // builds all 13 zone blueprints up front (§9); sits the host down (Join { host }) before frame 0
+  fn new_game_with(Blueprints, name) -> Sim            // over blueprints already built (tests, benches, peers share one Arc'd set)
+  fn from_save(&[u8]) -> Result<Sim, SaveError>
+  fn from_save_with(&[u8], Blueprints) -> Result<Sim, SaveError>
   fn step(&mut self, &StepInput) -> Stepped { ran: bool }   // ALWAYS applies commands; advances unless frozen
   fn frozen(&self) -> bool
   fn drain_events(&mut self) -> &[Event]
-  fn view(&self, seat) -> View<'_>
+  fn view(&self, seat) -> Option<View<'_>>              // None for a seat not connected
   fn save(&self) -> Vec<u8>
   fn hash(&self) -> u64
+  fn zone_hashes(&self) -> [u64; ZONE_COUNT]
+  fn rebuild_runtimes(&mut self)                        // §8 runtime_rebuild_is_invisible
 }
 ```
 
-`frame` counts step calls; `tick` counts advances. Replay and the wire speak `frame`. With two or more seats `frozen` is never true. Alone, a frozen step is a run-length entry in the replay. "Frozen while one player is in dialogue" generalises to a predicate the shell may also read for menus, never a broadcast.
+`frame` counts step calls (frozen ones too; it is bumped at the end of the step, so during step `n` it reads `n`); `tick` counts advances. Replay and the wire speak `frame`. With two or more seats `frozen` is never true. Alone, a frozen step is a run-length entry in the replay. "Frozen while one player is in dialogue" generalises to a predicate the shell may also read for menus, never a broadcast.
 
 ### 4.2 Order
 
 ```
  0 commands      (seat, seq) order, in that seat's zone ctx, actor = seat; Join / Leave / Open are world level; Dev is ordinary
  1 freeze        if frozen(): return { ran: false }
- 2 clock         tick++, clock++, day rollover; clock rows fire ONCE, actor None;
+ 2 clock         tick++, clock++, day rollover; clock rows fire ONCE, actor None, in the county's ctx (its runtime made for them
+                 if nobody is there, dropped at 15), heard by the whole party;
                  on the hour: weather and ecology rolls from the world stream in fixed order (§4.4); consequences whose bit is
                  clear and trigger is true fire once; pending rumours land (§4.6)
                  PartySnap { size, bodies: [Option<(ZoneId, UnitId, Vec2)>; 4], resting: [bool; 4] }
@@ -464,7 +470,7 @@ CLI: `jane replay verify | record | diff | trace`, `jane hash --seed N --frames 
 
 **Memory.** County: 4 M tiles `u8` + 4 M flags `u8` = 8 MB; the blueprint keeps its own 4 M for delta compaction: 12 MB per live county. One shared A* scratch ~3 MB. A `Unit` is ~120 B; 3 000 of them are 360 KB. No `u128`.
 
-**Tick.** Median **under 1 ms on a Pi 3** in a busy county with one seat; **under 4 ms worst** with four seats in four zones and 60 awake AI each. Only awake work: `awake_units` drives controllers, statuses, the flush, victim search through `unit_blocks`, plates and `clear_footprint`. Spatial: props by 16-cell block; awake units by block, updated in `move_unit`. Path: windowed A*, integer costs 10/14, budget 6 000, four searches per tick per zone, node-index tie-break. `Scratch` owns every temporary `Vec` (`clear()`, never `new()`); boxed optional unit parts are allocated on spawn only; a counting allocator asserts zero allocations across 600 steps after warm-up. Enums matched in place; no trait objects in the tick. No threads in the sim.
+**Tick.** Median **under 1 ms on a Pi 3** in a busy county with one seat; **under 4 ms worst** with four seats in four zones and 60 awake AI each. Only awake work: `awake_units` drives controllers, statuses, the flush, victim search through `unit_blocks`, plates and `clear_footprint`. Spatial: props by 16-cell block; awake units by block, updated in `move_unit`. Path: windowed A*, integer costs 10/14, budget 6 000, four searches per tick per zone, node-index tie-break. `Scratch` owns every temporary `Vec` (`clear()`, never `new()`); boxed optional unit parts are allocated on spawn only; a counting allocator asserts zero allocations across 600 steps after warm-up (a `#[global_allocator]` is an `unsafe impl`, which `unsafe_code = "forbid"` refuses in every workspace crate and its tests, so that check needs a home outside the lint: a small crate with the one exception PORT §3.4 allows. Measured out of tree for the movement-only tick, P4's first slice: 0 allocations in 100 000 steps after 600 of warm-up). Enums matched in place; no trait objects in the tick. No threads in the sim.
 
 **Worldgen.** About 50 ms on x86_64 and about 0.5 s on a Pi 3 per county including validation (PORT §9.4 has the gates). **New Game builds all 13 zones up front** on an app thread behind a loading screen that shows the skeleton as it lands; the sim is handed finished blueprints and never builds mid-play. A blueprint disk cache (`~/.cache/jane/<content_hash>/<seed>-<zone>.bp`) is deferred to P9 and built only if the Pi misses its gate.
 

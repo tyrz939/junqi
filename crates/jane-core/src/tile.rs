@@ -115,6 +115,23 @@ tiles! {
     DeadTree = 50: F_SOLID,
 }
 
+/// A tile is saved as its id, the number content and room legends use, so a save does not
+/// depend on where a variant sits in the enum.
+#[cfg(feature = "serde")]
+impl serde::Serialize for Tile {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        s.serialize_u8(self.id())
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for Tile {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Tile, D::Error> {
+        let id = <u8 as serde::Deserialize>::deserialize(d)?;
+        Tile::from_id(id).ok_or_else(|| serde::de::Error::custom(format_args!("no tile has id {id}")))
+    }
+}
+
 /// Render-only variation a builder paints over terrain (`Blueprint::paint`). The sim never reads it.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 #[repr(u8)]

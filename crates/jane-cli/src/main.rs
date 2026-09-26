@@ -6,6 +6,7 @@ use std::time::Instant;
 
 #[path = "gen.rs"]
 mod gen_cmd;
+mod hash_cmd;
 mod sheet_cmd;
 mod view;
 
@@ -25,10 +26,11 @@ commands:
                                       draw each seed's hand-built interior, with attempts and the solver's verdict
 {GEN}
 {SHEET}
+{HASH}
   help                                this text";
 
 fn usage() -> String {
-    USAGE.replace("{GEN}", gen_cmd::USAGE).replace("{SHEET}", sheet_cmd::USAGE)
+    USAGE.replace("{GEN}", gen_cmd::USAGE).replace("{SHEET}", sheet_cmd::USAGE).replace("{HASH}", hash_cmd::USAGE)
 }
 
 fn main() -> ExitCode {
@@ -46,6 +48,13 @@ fn main() -> ExitCode {
             Ok(()) => ExitCode::SUCCESS,
             Err(e) => {
                 eprintln!("jane gen: {e}");
+                ExitCode::FAILURE
+            }
+        },
+        Some("hash") => match hash_cmd::run(&args[1..]) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(e) => {
+                eprintln!("jane hash: {e}");
                 ExitCode::FAILURE
             }
         },

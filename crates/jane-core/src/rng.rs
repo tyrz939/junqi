@@ -9,6 +9,7 @@ use crate::num::Permille;
 
 /// sfc32: four words of state, passes PractRand, integer ops only.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Sfc32 {
     pub a: u32,
     pub b: u32,

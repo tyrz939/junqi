@@ -7,6 +7,7 @@ use std::ops::{Add, AddAssign, Neg, Sub, SubAssign};
 
 /// Fixed-point position and distance: 1/256 px. A cell is 8 px, so `CELL_FX = 2048`.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Fx(pub i32);
 
 pub const FX_ONE: i32 = 256;
@@ -79,6 +80,7 @@ impl SubAssign for Fx {
 
 /// A point in a zone.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Vec2 {
     pub x: Fx,
     pub y: Fx,
@@ -128,6 +130,7 @@ pub const fn within(a: Vec2, b: Vec2, r: Fx) -> bool {
 
 /// Thousandths of a point: hp, mp, energy, hits.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Milli(pub i32);
 
 impl Milli {
@@ -166,6 +169,7 @@ impl SubAssign for Milli {
 
 /// Thousandths of one: chances, resists, effect speed, lifesteal, fractions of health.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Permille(pub i16);
 
 impl Permille {
@@ -180,6 +184,7 @@ pub const fn scale(a: i32, p: Permille) -> i32 {
 
 /// A count of 60 Hz ticks: 2.2 years before it wraps.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Tick(pub u32);
 
 pub const TICK_RATE: u32 = 60;
@@ -200,12 +205,14 @@ impl Tick {
 
 /// Q15: cos and sin table entries, 32768 = 1.0.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Q15(pub i32);
 
 pub const Q15_ONE: i32 = 1 << 15;
 
 /// 16.16 fixed point for worldgen noise, terrain fields and county lattices. Never in the sim.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Q16(pub i32);
 
 pub const Q16_ONE: i32 = 1 << 16;
