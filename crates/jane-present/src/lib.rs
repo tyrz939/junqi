@@ -22,6 +22,7 @@ pub mod light;
 pub mod people;
 pub mod present;
 pub mod stand_in;
+pub mod terrain;
 
 pub use backend::{AtlasPages, Backend, CLUT_LEN, Caps, FrameStats, FrameTimes, Page};
 pub use frame::{

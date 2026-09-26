@@ -2,6 +2,10 @@
 //! square layers, LRU 48, keyed by `(id, generation)`, invalidated per rect on `Event::Tiles(rect)`,
 //! dropped whole on a zone change. The layers themselves live in the `Frame` (by slot), so a
 //! backend reads them from the frame it is handed; this is the bookkeeping.
+//!
+//! A chunk is painted properly (the terrain painter) or roughly (its cells' flat swatches, for
+//! the ticks the painter's budget has not reached it yet, §1.6). A stale chunk keeps drawing
+//! what it last had until it is painted again.
 
 use jane_core::Rect;
 
@@ -18,6 +22,21 @@ struct Slot {
     used: u32,
     /// Its cells changed since it was painted.
     stale: bool,
+    /// Painted as swatches, waiting for the painter.
+    rough: bool,
+}
+
+/// What a chunk needs before it is done.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Need {
+    /// Painted properly and fresh.
+    Nothing,
+    /// Painted as swatches: the painter, when the budget allows.
+    Paint,
+    /// Painted, but its cells have changed since.
+    Repaint,
+    /// Not in the cache: nothing to draw until it is painted.
+    Missing,
 }
 
 #[derive(Debug)]
@@ -28,12 +47,14 @@ pub struct ChunkCache {
     next_gen: u32,
     /// Chunks painted since New Game (a test reads it).
     pub painted: u32,
+    /// Of them, those the terrain painter painted (not swatches).
+    pub landed: u32,
 }
 
 impl ChunkCache {
     /// An empty cache whose slots are made as they are first wanted.
     pub fn new(tier: Tier) -> ChunkCache {
-        ChunkCache { slots: Vec::new(), tier, next_gen: 0, painted: 0 }
+        ChunkCache { slots: Vec::new(), tier, next_gen: 0, painted: 0, landed: 0 }
     }
 
     /// A cache with all [`LRU`] slots' layers made now (256 KB each on `soft`, 12 MB in all; 704
@@ -44,9 +65,26 @@ impl ChunkCache {
         ChunkCache { slots: vec![Slot::default(); LRU], ..ChunkCache::new(tier) }
     }
 
-    /// The slot holding `id`, painted and fresh.
+    /// The slot holding `id` and its generation: what draws it, stale or rough or not.
     pub fn find(&self, id: ChunkId) -> Option<(u16, u32)> {
-        self.slots.iter().position(|s| s.id == Some(id) && !s.stale).map(|i| (i as u16, self.slots[i].generation))
+        self.slots.iter().position(|s| s.id == Some(id)).map(|i| (i as u16, self.slots[i].generation))
+    }
+
+    /// What `id` needs.
+    pub fn need(&self, id: ChunkId) -> Need {
+        match self.slots.iter().find(|s| s.id == Some(id)) {
+            None => Need::Missing,
+            Some(s) if s.stale => Need::Repaint,
+            Some(s) if s.rough => Need::Paint,
+            Some(_) => Need::Nothing,
+        }
+    }
+
+    /// Stamps `id` as wanted at `now` without painting it.
+    pub fn touch(&mut self, id: ChunkId, now: u32) {
+        if let Some(s) = self.slots.iter_mut().find(|s| s.id == Some(id)) {
+            s.used = now;
+        }
     }
 
     /// Marks every chunk touching `cells` stale (`Event::Tiles`).
@@ -69,17 +107,26 @@ impl ChunkCache {
         }
     }
 
-    /// Makes sure `id` is painted and fresh, painting it into `layers` with `paint` if not;
-    /// `now` stamps it as wanted. A new slot is taken while there are fewer than [`LRU`], then
-    /// the least recently wanted one is reused.
-    pub fn want(&mut self, id: ChunkId, now: u32, layers: &mut Vec<ChunkLayers>, paint: impl FnOnce(&mut ChunkLayers)) {
+    /// Makes sure `id` is painted and fresh, painting it into `layers` with `paint(slot, layers)`
+    /// if not; `rough` says the paint is the swatches, which a proper paint later replaces (a
+    /// rough `want` of a chunk painted properly and fresh paints nothing). `now` stamps it as
+    /// wanted. A new slot is taken while there are fewer than [`LRU`], then the least recently
+    /// wanted one is reused.
+    pub fn want(
+        &mut self,
+        id: ChunkId,
+        now: u32,
+        layers: &mut Vec<ChunkLayers>,
+        rough: bool,
+        paint: impl FnOnce(u16, &mut ChunkLayers),
+    ) {
         if let Some(i) = self.slots.iter().position(|s| s.id == Some(id)) {
             let s = &mut self.slots[i];
             s.used = now;
-            if !s.stale {
+            if !s.stale && (rough || !s.rough) {
                 return;
             }
-            self.paint_into(i, id, now, layers, paint);
+            self.paint_into(i, id, now, layers, rough, paint);
             return;
         }
         let i = if let Some(free) = self.slots.iter().position(|s| s.id.is_none()) {
@@ -92,7 +139,7 @@ impl ChunkCache {
             // Least recently wanted; ties to the lowest slot.
             (0..self.slots.len()).min_by_key(|&i| self.slots[i].used).expect("LRU > 0")
         };
-        self.paint_into(i, id, now, layers, paint);
+        self.paint_into(i, id, now, layers, rough, paint);
     }
 
     fn paint_into(
@@ -101,12 +148,14 @@ impl ChunkCache {
         id: ChunkId,
         now: u32,
         layers: &mut [ChunkLayers],
-        paint: impl FnOnce(&mut ChunkLayers),
+        rough: bool,
+        paint: impl FnOnce(u16, &mut ChunkLayers),
     ) {
-        paint(&mut layers[i]);
+        paint(i as u16, &mut layers[i]);
         self.next_gen = self.next_gen.wrapping_add(1);
-        self.slots[i] = Slot { id: Some(id), generation: self.next_gen, used: now, stale: false };
+        self.slots[i] = Slot { id: Some(id), generation: self.next_gen, used: now, stale: false, rough };
         self.painted += 1;
+        self.landed += u32::from(!rough);
     }
 }
 
@@ -121,32 +170,50 @@ mod tests {
     #[test]
     fn a_chunk_is_painted_once_then_again_when_its_tiles_change() {
         let (mut c, mut layers) = (ChunkCache::new(Tier::T0), Vec::new());
-        c.want(id(1, 1), 0, &mut layers, |l| l.albedo.fill(7));
-        c.want(id(1, 1), 1, &mut layers, |_| panic!("painted twice"));
+        c.want(id(1, 1), 0, &mut layers, false, |_, l| l.albedo.fill(7));
+        c.want(id(1, 1), 1, &mut layers, false, |_, _| panic!("painted twice"));
         let (slot, generation) = c.find(id(1, 1)).unwrap();
         assert_eq!(layers[usize::from(slot)].albedo[0], 7);
         // A tile changed in a neighbouring chunk: this one is untouched.
         c.invalidate(Rect::new(40, 16, 2, 2));
         assert_eq!(c.find(id(1, 1)), Some((slot, generation)));
-        // One changed inside it: repainted under a new generation.
+        // One changed inside it: it draws what it had until it is repainted under a new generation.
         c.invalidate(Rect::new(20, 20, 1, 1));
-        assert_eq!(c.find(id(1, 1)), None);
-        c.want(id(1, 1), 2, &mut layers, |l| l.albedo.fill(9));
+        assert_eq!(c.need(id(1, 1)), Need::Repaint);
+        assert_eq!(c.find(id(1, 1)), Some((slot, generation)));
+        c.want(id(1, 1), 2, &mut layers, false, |_, l| l.albedo.fill(9));
         let (slot2, gen2) = c.find(id(1, 1)).unwrap();
         assert_eq!(slot2, slot);
         assert_ne!(gen2, generation);
         assert_eq!(layers[usize::from(slot)].albedo[0], 9);
+        assert_eq!(c.need(id(1, 1)), Need::Nothing);
+    }
+
+    #[test]
+    fn a_rough_chunk_is_painted_again_properly_and_never_the_other_way() {
+        let (mut c, mut layers) = (ChunkCache::new(Tier::T0), Vec::new());
+        assert_eq!(c.need(id(2, 3)), Need::Missing);
+        c.want(id(2, 3), 0, &mut layers, true, |_, l| l.albedo.fill(1));
+        assert_eq!(c.need(id(2, 3)), Need::Paint);
+        c.want(id(2, 3), 1, &mut layers, true, |_, _| panic!("a swatch over a swatch"));
+        c.want(id(2, 3), 2, &mut layers, false, |slot, l| {
+            assert_eq!(slot, 0);
+            l.albedo.fill(2);
+        });
+        assert_eq!(c.need(id(2, 3)), Need::Nothing);
+        c.want(id(2, 3), 3, &mut layers, true, |_, _| panic!("a swatch over the painter's work"));
+        assert_eq!(layers[0].albedo[0], 2);
     }
 
     #[test]
     fn it_keeps_48_and_reuses_the_least_recently_wanted() {
         let (mut c, mut layers) = (ChunkCache::new(Tier::T0), Vec::new());
         for i in 0..LRU as u16 {
-            c.want(id(i, 0), u32::from(i), &mut layers, |_| {});
+            c.want(id(i, 0), u32::from(i), &mut layers, false, |_, _| {});
         }
         // Chunk 0 wanted again, so chunk 1 is now the oldest.
-        c.want(id(0, 0), 100, &mut layers, |_| {});
-        c.want(id(99, 0), 101, &mut layers, |_| {});
+        c.want(id(0, 0), 100, &mut layers, false, |_, _| {});
+        c.want(id(99, 0), 101, &mut layers, false, |_, _| {});
         assert_eq!(layers.len(), LRU);
         assert!(c.find(id(0, 0)).is_some());
         assert!(c.find(id(1, 0)).is_none());
@@ -157,11 +224,11 @@ mod tests {
     fn a_zone_change_drops_every_chunk_and_keeps_the_memory() {
         let (mut c, mut layers) = (ChunkCache::new(Tier::T0), Vec::new());
         for i in 0..5 {
-            c.want(id(i, 0), 0, &mut layers, |_| {});
+            c.want(id(i, 0), 0, &mut layers, false, |_, _| {});
         }
         c.drop_all();
         assert!((0..5).all(|i| c.find(id(i, 0)).is_none()));
-        c.want(id(0, 0), 1, &mut layers, |_| {});
+        c.want(id(0, 0), 1, &mut layers, false, |_, _| {});
         assert_eq!(layers.len(), 5);
     }
 }
