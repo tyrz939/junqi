@@ -411,13 +411,14 @@ pub fn diff_states(a: &crate::state::GameState, b: &crate::state::GameState) -> 
     for (i, (za, zb)) in a.zones.iter().zip(&b.zones).enumerate() {
         let z = jane_core::ZoneId::ALL[i].name();
         match (za.as_deref(), zb.as_deref()) {
-            (Some(x), Some(y)) if hash_of(x) != hash_of(y) => {
+            (Some(x), Some(y)) if x != y => {
                 let mut zp = |name: &str, p: u64, q: u64| {
                     if p != q {
                         out.push(format!("{z}.{name}"));
                     }
                 };
                 zp("rng", hash_of(&x.rng), hash_of(&y.rng));
+                zp("spawned", hash_of(&x.spawned), hash_of(&y.spawned));
                 zp("drops", hash_of(&x.drops), hash_of(&y.drops));
                 zp("projectiles", hash_of(&x.projectiles), hash_of(&y.projectiles));
                 zp("grounds", hash_of(&x.grounds), hash_of(&y.grounds));

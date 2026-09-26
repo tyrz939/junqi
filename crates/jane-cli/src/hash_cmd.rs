@@ -98,7 +98,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
     let built_ms = t0.elapsed().as_millis();
     println!("# jane hash --seed {seed} --frames {frames}{}", if party { " --party" } else { "" });
     println!("# content {:016x}, save version {}", jane_data::catalog().content_hash, jane_sim::state::SAVE_VERSION);
-    println!("# frame hash (xxh3-64 of the state's postcard encoding)");
+    println!("# frame hash (xxh3-64 of the save's encoding of the state)");
     println!("{:>7} {:016x}", 0, sim.hash());
 
     let mut tape = Tape::new(seed, party);
