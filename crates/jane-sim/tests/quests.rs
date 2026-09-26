@@ -1,7 +1,8 @@
-//! A Lowfields side quest played end to end by the headless player, on the real seed: the
-//! non-combat part of `jane/test/quests.test.ts` "A. Lost Property" (A1 three things found by
-//! reading, A2 the carter's key across the map and the trunk, A3 the parcel after the bell). Offered, accepted, done, handed
-//! in, paid, and not payable twice; growth by a page found once.
+//! The Lowfields side quests played end to end by the headless player on the real seed
+//! (`jane/test/quests.test.ts` "the Lowfields side quests, played"): offered, accepted, done,
+//! handed in, paid, and not payable twice; growth by a page or a jar found once. A to H, all but
+//! what waits on the presence step (Plot 9's tenant, the living-world unit's): the TS's `strike`
+//! is the bot walking up and meleeing, so a place on the way is visited on the way.
 
 mod common;
 
@@ -336,4 +337,121 @@ fn the_right_of_way_stile_to_stile_and_a_haversack_found_not_offered() {
     assert_eq!(holds(&s, "haversack"), 0);
     assert_eq!([holds(&s, "hemshade_root"), holds(&s, "small_water")], [3, 2]);
     read(&mut s, "lost_property_book", "lp_offer", &[1], None);
+}
+
+/// What a fight comes to (`quests.test.ts strike`): she walks up and puts it down with the bar.
+fn strike(s: &mut Sim, key: &str) {
+    let u = unit(s, key);
+    assert!(!u.hidden, "{key} is there");
+    assert!(walk_to(s, u.pos, jane_core::Fx::from_px(16)), "walk to {key}");
+    assert!(fight(s, key), "{key} goes down");
+    idle(s, 2);
+}
+
+#[test]
+fn the_company_five_men_paid_off_and_the_one_who_never_came_down() {
+    // quests.test.ts "G. The Company".
+    let mut s = new_game();
+    // Before the gang is stood down the slate is only a slate.
+    read(&mut s, "tally_slate", "slate_plain", &[], Some("quarry_camp"));
+    read(&mut s, "company_notice", "company_offer", &[0], Some("company_notice"));
+    for key in ["quarryman_a_1", "quarryman_a_2", "quarryman_a_3", "quarryman_b_1"] {
+        strike(&mut s, key);
+    }
+    read(&mut s, "company_notice", "company_wait", &[], Some("company_notice"));
+    strike(&mut s, "quarryman_b_2");
+    read(&mut s, "company_notice", "company_in", &[0], Some("company_notice"));
+    expect_done(&s, "stood_down");
+    assert_eq!([holds(&s, "iron"), holds(&s, "wood")], [4, 2]);
+    read(&mut s, "company_notice", "company_after", &[], None);
+
+    // The TS struck from afar; walking up to the gang she has been to the quarry top already, and
+    // a place visited before the quest was taken still counts (the `Been` flag).
+    read(&mut s, "tally_slate", "slate_offer", &[0], Some("quarry_camp"));
+    tp(&mut s, "quarry_top");
+    assert_eq!(been(&s, "quarry_top"), Some(1));
+    read(&mut s, "quarry_adit", "look", &[], None);
+    let spirit = me(&s).spirit;
+    read(&mut s, "tally_slate", "slate_in", &[0], Some("quarry_camp"));
+    expect_done(&s, "down_at_five");
+    assert!(s.state().growth.found.contains(&sym(&s, "page_quarry")));
+    assert_eq!(me(&s).spirit, spirit + 3);
+    read(&mut s, "tally_slate", "slate_after", &[], None);
+}
+
+#[test]
+fn the_allotments_one_notice_at_a_time_six_rats_and_the_shed() {
+    // quests.test.ts "B. The Allotments", to the shed (Plot 9's tenant keeps his hours by the
+    // presence step, the living-world unit's).
+    let mut s = new_game();
+    // The board shows one notice. Refuse the footpath and it moves on.
+    read(&mut s, "parish_board", "path_offer", &[1], Some("town_square"));
+    read(&mut s, "parish_board", "rats_offer", &[0], None);
+    read(&mut s, "parish_board", "rats_wait", &[], None);
+    tp(&mut s, "allotment_shed");
+    let rats = jane_data::catalog().story.quest_id("rats_in_the_sheds").unwrap();
+    for key in ["rat_shed_1", "rat_shed_2", "rat_shed_3", "rat_shed_4", "rat_allotment_1"] {
+        strike(&mut s, key);
+    }
+    assert!(!jane_sim::quests::ready(s.state(), rats));
+    strike(&mut s, "rat_allotment_2");
+    assert!(jane_sim::quests::ready(s.state(), rats));
+    press(&mut s, "allotment_shed", None);
+    assert!(prop(&s, "allotment_shed").locked, "members only");
+    read(&mut s, "parish_board", "rats_in", &[0], Some("town_square"));
+    expect_done(&s, "rats_in_the_sheds");
+    assert_eq!(holds(&s, "key_generic"), 1);
+    assert_eq!(holds(&s, "pansy"), 2);
+    press(&mut s, "allotment_shed", Some("allotment_shed"));
+    press(&mut s, "allotment_shed", None);
+    assert_eq!(holds(&s, "key_generic"), 0);
+    assert_eq!(holds(&s, "honeylace_lily"), 2);
+}
+
+#[test]
+fn lowfield_farm_three_scarecrows_by_day_the_same_after_the_bell_and_six_that_are_not_turnips() {
+    // quests.test.ts "C. Lowfield Farm".
+    let mut s = new_game();
+    let scarecrows = ["scarecrow_gate", "scarecrow_hedge", "scarecrow_top"];
+    read(&mut s, "farm_door", "farmer_first", &[0], Some("farm_door"));
+    read(&mut s, "farm_door", "farmer_wait_1", &[], None);
+    for k in scarecrows {
+        read(&mut s, k, "day", &[], Some(k));
+    }
+    let apples = holds(&s, "apple");
+    read(&mut s, "farm_door", "farmer_in_1", &[0], Some("farm_door"));
+    expect_done(&s, "three_scarecrows");
+    assert_eq!(holds(&s, "apple"), apples + 4);
+
+    // The same walk with the county's one rule applied to it: by day it does not count.
+    read(&mut s, "farm_door", "farmer_second", &[0], None);
+    read(&mut s, "scarecrow_gate", "day", &[], Some("scarecrow_gate"));
+    let after = jane_data::catalog().story.quest_id("after_the_bell").unwrap();
+    assert!(!jane_sim::quests::ready(s.state(), after));
+    night(&mut s);
+    for k in scarecrows {
+        read(&mut s, k, "night", &[], Some(k));
+    }
+    assert!(jane_sim::quests::ready(s.state(), after));
+    read(&mut s, "farm_door", "farmer_in_2", &[0], Some("farm_door"));
+    expect_done(&s, "after_the_bell");
+    assert_eq!(holds(&s, "potion_stoneskin"), 1);
+    assert_eq!(holds(&s, "nasturtium"), 2);
+
+    // By day, as he said. Seven stand in the field; six are asked for.
+    day(&mut s);
+    read(&mut s, "farm_door", "farmer_third", &[0], None);
+    tp(&mut s, "top_field");
+    let turnips = jane_data::catalog().story.quest_id("not_turnips").unwrap();
+    for n in 1..=5 {
+        strike(&mut s, &format!("pumpkin_top_{n}"));
+    }
+    assert!(!jane_sim::quests::ready(s.state(), turnips));
+    strike(&mut s, "pumpkin_top_6");
+    let strength = me(&s).strength;
+    read(&mut s, "farm_door", "farmer_in_3", &[0], Some("farm_door"));
+    expect_done(&s, "not_turnips");
+    assert!(s.state().growth.found.contains(&sym(&s, "jar_farm")));
+    assert_eq!(me(&s).strength, strength + 3);
+    read(&mut s, "farm_door", "farmer_idle", &[], None);
 }
