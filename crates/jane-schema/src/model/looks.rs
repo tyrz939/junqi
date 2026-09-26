@@ -319,13 +319,55 @@ model! {
     }
 }
 
+model_enum! {
+    /// A building's style (ART.md §2.4): its proportions and its details.
+    #[cfg_attr(feature = "compile", derive(serde::Deserialize), serde(rename_all = "snake_case"))]
+    pub enum HouseStyle { Cottage, Farmhouse, Barn, Inn, Shed, Hut, Steeple }
+}
+
+model_enum! {
+    /// A roof's material.
+    #[cfg_attr(feature = "compile", derive(serde::Deserialize), serde(rename_all = "snake_case"))]
+    pub enum Roofing { Thatch, Slate, Tile, Tin, Reed }
+}
+
+model_enum! {
+    /// A wall's material: plaster, timber framing over plaster, stone, brick or boards.
+    #[cfg_attr(feature = "compile", derive(serde::Deserialize), serde(rename_all = "snake_case"))]
+    pub enum Walling { Plaster, Timber, Stone, Brick, Board, Reed }
+}
+
+model! {
+    /// A building (ART.md §2.4): the `house()` painter's row.
+    pub struct HouseLook {
+        pub style: HouseStyle,
+        pub storeys: u8,
+        pub roof: Roofing,
+        pub wall: Walling,
+        pub dormers: bool,
+        pub porch: bool,
+        pub lean_to: bool,
+        pub boarded: bool,
+        /// Its mass against the sky only: the title and the far landmark.
+        pub silhouette: bool,
+        /// How far it stands above its footprint, px.
+        pub rise: u8,
+        /// The door's and the trim's ramps.
+        pub door: &'static str,
+        pub trim: &'static str,
+        /// Its windows glow at night.
+        pub lit: bool,
+    }
+}
+
 /// A look: what a sprite id is drawn as. One variant per generator family as the families land
-/// (ART.md §8): people, creatures and props.
+/// (ART.md §8): people, creatures, props and buildings.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Look {
     Person(PersonLook),
     Creature(CreatureLook),
     Prop(PropLook),
+    Building(HouseLook),
 }
 
 impl crate::emit::Emit for Look {
@@ -334,6 +376,7 @@ impl crate::emit::Emit for Look {
             Look::Person(p) => ("Look::Person(", p),
             Look::Creature(c) => ("Look::Creature(", c),
             Look::Prop(p) => ("Look::Prop(", p),
+            Look::Building(b) => ("Look::Building(", b),
         };
         out.push_str(name);
         inner.emit(out);

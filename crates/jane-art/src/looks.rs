@@ -50,6 +50,8 @@ pub enum Family {
     Creature,
     /// The prop kit (§2.3).
     Prop,
+    /// Buildings (§2.4).
+    Building,
 }
 
 impl Family {
@@ -59,6 +61,7 @@ impl Family {
             Look::Person(_) => Family::Person,
             Look::Creature(_) => Family::Creature,
             Look::Prop(_) => Family::Prop,
+            Look::Building(_) => Family::Building,
         }
     }
 }
@@ -78,7 +81,7 @@ pub fn name_of(id: SpriteId) -> &'static str {
 pub fn variants(id: SpriteId) -> usize {
     looks().iter().find(|(s, _)| *s == id).map_or(1, |(_, l)| match l {
         Look::Person(p) => p.vary.count(),
-        Look::Creature(_) | Look::Prop(_) => 1,
+        Look::Creature(_) | Look::Prop(_) | Look::Building(_) => 1,
     })
 }
 
@@ -119,6 +122,10 @@ fn render_entry(id: SpriteId, look: &Look) -> Result<Vec<Rendered>, String> {
         }
         Look::Prop(p) => {
             let set = kit::render(p, id, kit::seed(name)).map_err(|e| format!("{name}: {e}"))?;
+            out.push(Rendered { sprite: id, name, variant: 0, seat: 0, set });
+        }
+        Look::Building(b) => {
+            let set = crate::house::render(b, id, kit::seed(name)).map_err(|e| format!("{name}: {e}"))?;
             out.push(Rendered { sprite: id, name, variant: 0, seat: 0, set });
         }
     }

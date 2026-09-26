@@ -1417,6 +1417,19 @@ impl Canvas {
         }
     }
 
+    /// Set the height of every drawn pixel in `r` to `f(x, y)` (at least 1): a roof that lands
+    /// on the house under it, rising from the eave's height to the ridge's.
+    pub fn heights_by(&mut self, r: Rect, f: impl Fn(i32, i32) -> i32) {
+        for y in r.y.max(0)..r.bottom().min(self.h) {
+            for x in r.x.max(0)..r.right().min(self.w) {
+                let i = (y * self.w + x) as usize;
+                if self.albedo[i].is_opaque() {
+                    self.height[i] = f(x, y).clamp(1, 255) as u8;
+                }
+            }
+        }
+    }
+
     /// Whether any drawn pixel of this canvas has the albedo `ix`.
     pub fn has(&self, ix: Ix) -> bool {
         self.albedo.contains(&ix)

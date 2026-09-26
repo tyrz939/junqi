@@ -129,6 +129,9 @@ pub fn run(args: &[String]) -> Result<(), String> {
             sets.extend(looks::family(looks::Family::Creature)?);
             write(&out, "units", &sheet_person::units(&sets, &font))?;
         }
+        Some("buildings") => {
+            write(&out, "buildings", &jane_art::sheet_kit::props(&looks::family(looks::Family::Building)?, &font))?;
+        }
         Some("props") => {
             let mut sets = looks::family(looks::Family::Prop)?;
             if let Some(f) = args.iter().position(|a| a == "--only").and_then(|i| args.get(i + 1)) {

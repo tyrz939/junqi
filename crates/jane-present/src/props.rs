@@ -43,7 +43,8 @@ impl Props {
     /// out, and its props keep their stand-in.
     pub fn build(atlas: &mut Atlas) -> Props {
         let mut sets = Vec::new();
-        for r in looks::family(Family::Prop).unwrap_or_default() {
+        let all = looks::family(Family::Prop).unwrap_or_default().into_iter();
+        for r in all.chain(looks::family(Family::Building).unwrap_or_default()) {
             let h = r.set.h;
             let mut set = Set { sprite: r.sprite, bases: Vec::new(), on: None, open: None, glass: None };
             for (f, c) in &r.set.frames {

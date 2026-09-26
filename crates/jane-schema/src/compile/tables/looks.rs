@@ -19,8 +19,8 @@ use crate::compile::ctx::{Ctx, leak, leak_str};
 use crate::compile::source::{Source, typed};
 use crate::model::{
     Anatomy, Boots, Build, Coat, CreatureLook, CreatureRamps, Ears, EmitRole, Extra, Face, Front, Hair, Hat, HeldItem,
-    Legs, Look, Marking, Mount, PersonBody, PersonHead, PersonLook, PersonVary, Plan, PropFamily, PropLook,
-    PropMaterials, PropState, Skin, Tail,
+    HouseLook, HouseStyle, Legs, Look, Marking, Mount, PersonBody, PersonHead, PersonLook, PersonVary, Plan,
+    PropFamily, PropLook, PropMaterials, PropState, Roofing, Skin, Tail, Walling,
 };
 use jane_core::ids::SpriteId;
 
@@ -40,6 +40,38 @@ enum RawLook {
     SmallThing(RawProp),
     Ritual(RawProp),
     Structure(RawProp),
+    Building(RawHouse),
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawHouse {
+    style: HouseStyle,
+    #[serde(default = "one")]
+    storeys: u8,
+    roof: Roofing,
+    wall: Walling,
+    #[serde(default)]
+    dormers: bool,
+    #[serde(default)]
+    porch: bool,
+    #[serde(default)]
+    lean_to: bool,
+    #[serde(default)]
+    boarded: bool,
+    #[serde(default)]
+    silhouette: bool,
+    rise: u8,
+    #[serde(default = "wood_dark")]
+    door: String,
+    #[serde(default = "wood_dark")]
+    trim: String,
+    #[serde(default)]
+    lit: bool,
+}
+
+fn wood_dark() -> String {
+    "wood_dark".into()
 }
 
 #[derive(Deserialize)]
@@ -252,6 +284,24 @@ pub fn compile(src: &Source, cx: &mut Ctx) -> &'static [(SpriteId, Look)] {
             RawLook::SmallThing(p) => prop(PropFamily::SmallThing, &p, &at, cx),
             RawLook::Ritual(p) => prop(PropFamily::Ritual, &p, &at, cx),
             RawLook::Structure(p) => prop(PropFamily::Structure, &p, &at, cx),
+            RawLook::Building(h) => {
+                cx.diag.need((1..=3).contains(&h.storeys), &at, "a building has one to three storeys");
+                Look::Building(HouseLook {
+                    style: h.style,
+                    storeys: h.storeys,
+                    roof: h.roof,
+                    wall: h.wall,
+                    dormers: h.dormers,
+                    porch: h.porch,
+                    lean_to: h.lean_to,
+                    boarded: h.boarded,
+                    silhouette: h.silhouette,
+                    rise: h.rise,
+                    door: leak_str(&h.door),
+                    trim: leak_str(&h.trim),
+                    lit: h.lit,
+                })
+            }
         };
         out.push((SpriteId(sprite as u16), look));
     }

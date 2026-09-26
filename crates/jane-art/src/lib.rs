@@ -14,6 +14,7 @@ pub mod creature;
 pub mod demo;
 pub mod font;
 pub mod hash;
+pub mod house;
 pub mod hue;
 pub mod kit;
 pub mod light;
