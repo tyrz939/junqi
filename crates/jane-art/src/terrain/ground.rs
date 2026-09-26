@@ -11,7 +11,7 @@
 use jane_core::Tile;
 use jane_data::TilePattern as P;
 
-use super::{CELL, CHUNK_CELLS, CHUNK_PX, MM, NONE, Painter, salt};
+use super::{CELL, CHUNK_CELLS, CHUNK_PX, MM, NONE, Painter, fast, salt};
 use crate::canvas::{FLAT, Normal, UNIT, normal};
 use crate::hash::{below, h32};
 use crate::palette::{Ix, Ramp, Tone, letter};
@@ -39,15 +39,6 @@ pub(super) fn paint(p: &mut Painter, x0: i32, y0: i32, seed: u32) {
     }
 }
 
-/// The meander of a tone boundary at world px `(wx, wy)`: a smooth 8 px field and a 2 px cluster
-/// jitter, so a patch's edge wanders in clusters and is never a checker.
-#[inline]
-fn meander(p: &Painter, wx: i32, wy: i32, seed: u32) -> i32 {
-    let smooth = (p.s.wob_x.at(wx, wy) - 128) / 4;
-    let cluster = below(h32((wx >> 1) as u32, (wy >> 1) as u32, seed ^ salt::PATCH), 13) as i32 - 6;
-    smooth + cluster
-}
-
 /// A tone in `Mid, Base, Lift` from a patch value 0..=255 and its meander: `Base` between `lo`
 /// and `hi`.
 #[inline]
@@ -62,19 +53,16 @@ fn patch_tone(v: i32, m: i32, lo: i32, hi: i32) -> Tone {
     }
 }
 
-/// The patch value at world px: broad patches and finer ones over them.
-#[inline]
-fn patch_at(p: &Painter, wx: i32, wy: i32) -> i32 {
-    (p.s.patch.at(wx, wy) * 2 + p.s.fine.at(wx, wy)) / 3
-}
-
-/// Whether grass at world px is the dry kind: a quarter of the county or so, in wide drifts.
-#[inline]
-fn dry_at(p: &Painter, wx: i32, wy: i32, m: i32) -> bool {
-    p.s.lush.at(wx, wy) + m / 3 > 168
-}
-
 fn base(p: &mut Painter, wx0: i32, wy0: i32, seed: u32) {
+    // The fields over the chunk, a row at a time: patches (two parts broad to one fine), the
+    // meander's smooth part and the lush drifts.
+    for buf in [&mut p.s.pv, &mut p.s.mv, &mut p.s.lv] {
+        buf.fill(0);
+    }
+    p.s.patch.add_box(wx0, wy0, CHUNK_PX, CHUNK_PX, 2, &mut p.s.pv);
+    p.s.fine.add_box(wx0, wy0, CHUNK_PX, CHUNK_PX, 1, &mut p.s.pv);
+    p.s.wob_x.add_box(wx0, wy0, CHUNK_PX, CHUNK_PX, 1, &mut p.s.mv);
+    p.s.lush.add_box(wx0, wy0, CHUNK_PX, CHUNK_PX, 1, &mut p.s.lv);
     for y in 0..CHUNK_PX {
         for x in 0..CHUNK_PX {
             let g = p.surf_px(x, y);
@@ -83,24 +71,27 @@ fn base(p: &mut Painter, wx0: i32, wy0: i32, seed: u32) {
             }
             let st = *p.styles.id(g);
             let (wx, wy) = (wx0 + x, wy0 + y);
-            let v = patch_at(p, wx, wy);
-            let m = meander(p, wx, wy, seed);
+            let i = (y * CHUNK_PX + x) as usize;
+            let v = p.s.pv[i] / 3;
+            let cluster = below(fast((wx >> 1) as u32, (wy >> 1) as u32, seed ^ salt::PATCH), 13) as i32 - 6;
+            let m = (p.s.mv[i] - 128) / 4 + cluster;
+            let dry = p.s.lv[i] + m / 3 > 168;
             let mut r = st.ramp;
             let z = i32::from(st.row.rise).max(1);
             let (tone, n) = match st.row.pattern {
                 P::Water => (water_tone(p, x, y, v, m), FLAT),
                 P::Ice => (if v + m / 2 > 150 { Tone::High } else { Tone::Light }, FLAT),
-                P::Setts => setts(wx, wy, seed),
+                P::Setts => setts(wx, wy, seed, (v - 128) * 2 + 128 + m),
                 P::Soil => soil(wy, v, m),
                 P::Marsh => {
                     let t = patch_tone(v, m, 84, 196);
                     (if v + m / 2 < 86 { Tone::Shade } else { t }, FLAT)
                 }
                 P::Turf => {
-                    if dry_at(p, wx, wy, m) {
+                    if dry {
                         r = Ramp::TurfDry;
                     }
-                    (patch_tone(v, m, 70, 186), FLAT)
+                    (patch_tone(v, m, 56, 198), FLAT)
                 }
                 _ => (patch_tone(v, m, 18, 188), FLAT),
             };
@@ -122,26 +113,27 @@ fn water_tone(p: &Painter, x: i32, y: i32, v: i32, m: i32) -> Tone {
     let bottom = dep(cx, cy + 1) * (CELL - fx) + dep(cx + 1, cy + 1) * fx;
     let cell10 = (top * (CELL - fy) + bottom * fy) * 10 / (CELL * CELL);
     let d = if shore < 16 { shore } else { 16 + (cell10 - 10).max(0) };
-    let d = d + (v - 128) / 10 + m / 6;
+    // Near the bank the bands wander in clusters; out in the deep only broad slow swells move them.
+    let d = if d < 22 { d + (v - 128) / 10 + m / 6 } else { d + (v - 128) / 6 };
     match d {
         d if d < 4 => Tone::Light,
         d if d < 10 => Tone::Lift,
         d if d < 22 => Tone::Base,
-        d if d < 34 => Tone::Mid,
+        d if d < 46 => Tone::Mid,
         _ => Tone::Shade,
     }
 }
 
 /// Setts: courses 7 px tall of stones 7 to 12 px wide, a joint round each, each stone a tone of
 /// its own, lit along its top and left edges, shaded along its bottom, domed for the light pass.
-fn setts(wx: i32, wy: i32, seed: u32) -> (Tone, Normal) {
+fn setts(wx: i32, wy: i32, seed: u32, patch: i32) -> (Tone, Normal) {
     const H: i32 = 7;
     let course = wy.div_euclid(H);
     let yy = wy.rem_euclid(H);
-    let xs = wx + (h32(course as u32, 0, seed ^ salt::CELL) % 23) as i32;
+    let xs = wx + (fast(course as u32, 0, seed ^ salt::CELL) % 23) as i32;
     let block = xs.div_euclid(36);
     let lx = xs.rem_euclid(36);
-    let h = h32(block as u32, course as u32, seed ^ salt::CELL);
+    let h = fast(block as u32, course as u32, seed ^ salt::CELL);
     let c1 = 7 + (h % 6) as i32;
     let c2 = c1 + 7 + (h >> 4) as i32 % 6;
     let c3 = c2 + 7 + (h >> 8) as i32 % 6;
@@ -162,10 +154,18 @@ fn setts(wx: i32, wy: i32, seed: u32) -> (Tone, Normal) {
         1 | 2 => Tone::Lift,
         _ => Tone::Base,
     };
+    // Broad wear over many stones: damp and dark in the hollows, bleached on the crowns.
+    let body = if patch < 46 {
+        body.step(-1)
+    } else if patch > 210 {
+        body.step(1)
+    } else {
+        body
+    };
     // The stone's dome: normals from its middle, in 1/127ths.
     let w = end - 1 - start;
-    let nx = ((2 * (lx - start) + 1 - w) * 90 / w.max(1)).clamp(-90, 90);
-    let ny = ((2 * yy + 1 - (H - 1)) * 90 / (H - 1)).clamp(-90, 90);
+    let nx = ((2 * (lx - start) + 1 - w) * 36 / w.max(1)).clamp(-36, 36);
+    let ny = ((2 * yy + 1 - (H - 1)) * 36 / (H - 1)).clamp(-36, 36);
     let t = if yy == 0 || lx == start {
         body.step(1)
     } else if yy == H - 2 || lx == end - 2 {
@@ -195,6 +195,10 @@ fn edges(p: &mut Painter) {
     let rise = |p: &Painter, g: u8| i32::from(p.styles.id(g).row.rise);
     for y in 0..CHUNK_PX {
         for x in 0..CHUNK_PX {
+            // No edge falls in a cell whose eight neighbours are all its own surface.
+            if !p.s.mixed[Painter::at(x / CELL, y / CELL)] {
+                continue;
+            }
             let m = p.surf_px(x, y);
             if m == NONE {
                 continue;
@@ -286,21 +290,29 @@ fn detail(p: &mut Painter, cx: i32, cy: i32, wx: i32, wy: i32, seed: u32) {
             // Pebbles in clusters; now and then a crack in the dry of a lane.
             let (odds, n) = if st.row.pattern == P::Gravel { (2, 4) } else { (5, 3) };
             if h % odds == 0 {
-                let (ax, ay) = (px + 3 + below(h >> 4, 10) as i32, py + 3 + below(h >> 8, 10) as i32);
-                for s in 0..2 + below(h >> 12, n) as i32 {
+                let (ax, ay) =
+                    (px + 3 + below(h.rotate_right(4), 10) as i32, py + 3 + below(h.rotate_right(8), 10) as i32);
+                for s in 0..2 + below(h.rotate_right(12), n) as i32 {
                     let hs = h32(h, s as u32, 1);
-                    let (x, y) = (ax + below(hs, 7) as i32 - 3, ay + below(hs >> 8, 5) as i32 - 2);
+                    let (x, y) = (ax + below(hs, 7) as i32 - 3, ay + below(hs.rotate_right(8), 5) as i32 - 2);
                     pebble(p, x, y, g, hs >> 16 & 3 == 0, z);
                 }
             }
             if st.row.pattern == P::Earth && (h >> 20) % 11 == 3 {
-                crack(p, px + 2 + below(h >> 5, 12) as i32, py + 3 + below(h >> 9, 10) as i32, g, h, 6);
+                crack(
+                    p,
+                    px + 2 + below(h.rotate_right(5), 12) as i32,
+                    py + 3 + below(h.rotate_right(9), 10) as i32,
+                    g,
+                    h,
+                    6,
+                );
             }
         }
         P::Sand => {
             // A wind ripple: a lit crest over its shade, a run of 6 to 11 px.
             if h & 3 != 0 {
-                let (x, y) = (px + below(h >> 4, 8) as i32, py + 3 + below(h >> 8, 10) as i32);
+                let (x, y) = (px + below(h.rotate_right(4), 8) as i32, py + 3 + below(h.rotate_right(8), 10) as i32);
                 let len = 6 + (h >> 12) as i32 % 6;
                 for i in 0..len {
                     let yy = y + i32::from((i + (h >> 16) as i32 % 3) % 6 == 0) - i32::from(i > len - 3);
@@ -324,7 +336,7 @@ fn detail(p: &mut Painter, cx: i32, cy: i32, wx: i32, wy: i32, seed: u32) {
         P::Cracked => {
             for c in 0..2 {
                 let hc = h32(h, c, 4);
-                crack(p, px + below(hc, 16) as i32, py + below(hc >> 4, 16) as i32, g, hc, 10);
+                crack(p, px + below(hc, 16) as i32, py + below(hc.rotate_right(4), 16) as i32, g, hc, 10);
             }
         }
         P::Soil => {
@@ -339,8 +351,11 @@ fn detail(p: &mut Painter, cx: i32, cy: i32, wx: i32, wy: i32, seed: u32) {
             }
         }
         P::Setts => {
-            // A weed in a joint here and there.
-            if h % 9 == 1 {
+            // Weeds in the joints: along the square's edge where the grass creeps in, and now and
+            // then a tuft far out on it.
+            let edge =
+                [(0, -1), (0, 1), (-1, 0), (1, 0)].iter().any(|&(dx, dy)| p.s.surf[Painter::at(cx + dx, cy + dy)] != g);
+            if (edge && h % 3 == 1) || h % 73 == 1 {
                 let (x, y) = (px + 1 + (h >> 3) as i32 % 13, py + 1 + (h >> 7) as i32 % 13);
                 for (dx, dy, t) in [(0, 0, Tone::Shade), (1, 0, Tone::Mid), (0, -1, Tone::Base), (1, -1, Tone::Light)] {
                     if own(p, x + dx, y + dy, g) {
@@ -350,14 +365,18 @@ fn detail(p: &mut Painter, cx: i32, cy: i32, wx: i32, wy: i32, seed: u32) {
             }
         }
         P::Water => {
-            // A ripple on open water: a lit crest and the shade behind it.
-            if h & 3 == 0 && p.s.depth[k] >= 2 {
-                let (x, y) = (px + 1 + (h >> 3) as i32 % 9, py + 3 + (h >> 7) as i32 % 10);
-                let len = 3 + (h >> 11) as i32 % 4;
-                for i in 0..len {
-                    if own(p, x + i, y, g) && own(p, x + i, y + 1, g) {
-                        p.s.ly.step(x + i, y, if i == len / 2 { 3 } else { 2 });
-                        p.s.ly.step(x + i, y + 1, -1);
+            // Ripples on open water, in trains where the wind catches it: a lit crest over the
+            // shade behind it, two or three in a train, each a little shorter.
+            if cluster > 150 && h % 3 == 0 && p.s.depth[k] >= 2 {
+                let (x, y) = (px + 1 + (h >> 3) as i32 % 8, py + 2 + (h >> 7) as i32 % 8);
+                for r in 0..2 + (h >> 20) as i32 % 2 {
+                    let len = 5 - r + (h >> (11 + r)) as i32 % 3;
+                    let (rx, ry) = (x + r * 2 + (h >> (14 + r)) as i32 % 2, y + r * 3);
+                    for i in 0..len {
+                        if own(p, rx + i, ry, g) && own(p, rx + i, ry + 1, g) {
+                            p.s.ly.step(rx + i, ry, if i == len / 2 { 3 } else { 2 });
+                            p.s.ly.step(rx + i, ry + 1, -1);
+                        }
                     }
                 }
             }
@@ -392,18 +411,28 @@ fn turf(p: &mut Painter, cx: i32, cy: i32, wx: i32, wy: i32, g: u8, h: u32, z: i
     let n = ((cluster - 118) / 34).clamp(0, 3) + i32::from(h % 7 == 0);
     for t in 0..n as u32 {
         let ht = h32(h, t, 8);
-        let (x, y) = (px + 2 + below(ht, 12) as i32, py + 5 + below(ht >> 8, 10) as i32);
+        let (x, y) = (px + 2 + below(ht, 12) as i32, py + 5 + below(ht.rotate_right(8), 10) as i32);
         let r = p.s.ly.tone(x, y).map_or(Ramp::Turf, |(r, _)| r);
-        tuft(p, x, y, g, r, 3 + below(ht >> 16, 3) as i32, ht >> 20, z, 3 + below(ht >> 24, 2) as i32);
+        tuft(
+            p,
+            x,
+            y,
+            g,
+            r,
+            3 + below(ht.rotate_right(16), 3) as i32,
+            ht >> 20,
+            z,
+            3 + below(ht.rotate_right(24), 2) as i32,
+        );
     }
     // Meadow patches where the flowers are thick, one colour to a patch.
     let meadow = h32((wx >> 3) as u32, (wy >> 3) as u32, seed ^ salt::CELL ^ 0x0a0a) & 255;
     if meadow < 30 && h % 3 == 0 {
         let colour = FLOWERS[(meadow % 5) as usize];
-        let (ax, ay) = (px + 3 + below(h >> 5, 10) as i32, py + 3 + below(h >> 9, 10) as i32);
-        for f in 0..3 + below(h >> 13, 3) {
+        let (ax, ay) = (px + 3 + below(h.rotate_right(5), 10) as i32, py + 3 + below(h.rotate_right(9), 10) as i32);
+        for f in 0..3 + below(h.rotate_right(13), 3) {
             let hf = h32(h, f, 9);
-            flower(p, ax + below(hf, 7) as i32 - 3, ay + below(hf >> 8, 5) as i32 - 2, g, colour, z);
+            flower(p, ax + below(hf, 7) as i32 - 3, ay + below(hf.rotate_right(8), 5) as i32 - 2, g, colour, z);
         }
     } else if h % 97 == 11 {
         flower(p, px + 4 + (h >> 3) as i32 % 8, py + 6, g, FLOWERS[((h >> 1) % 5) as usize], z);
@@ -417,7 +446,7 @@ fn turf(p: &mut Painter, cx: i32, cy: i32, wx: i32, wy: i32, g: u8, h: u32, z: i
         let leaves = trees / 3 + u32::from(h % 5 < trees.min(4));
         for l in 0..leaves {
             let hl = h32(h, l, 10);
-            leaf(p, px + below(hl, 15) as i32, py + below(hl >> 8, 15) as i32, g, hl >> 16, z);
+            leaf(p, px + below(hl, 15) as i32, py + below(hl.rotate_right(8), 15) as i32, g, hl >> 16, z);
         }
     }
     // Blades over the lip where lower ground cuts in: south and east, and a few to the north.

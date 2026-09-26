@@ -374,7 +374,7 @@ pub fn pine(seed: u32, needle: Ramp, bark: Ramp) -> Sprite {
             if half < 2 {
                 continue;
             }
-            let x = ax - half + 1 + below(hs >> 8, (2 * half - 2).max(1) as u32) as i32;
+            let x = ax - half + 1 + below(hs.rotate_right(8), (2 * half - 2).max(1) as u32) as i32;
             let side = if x < ax { -1 } else { 1 };
             let t = if side < 0 { Tone::Light } else { Tone::Shade };
             for i in 0..2 {

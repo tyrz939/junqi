@@ -4,7 +4,7 @@ sphere 0c8cf1cf
 ball d604fb15
 panel 6e48f304
 lamp f26dc70a
-still 65037d62
+still 5b7aeb87
 font-fine 53580871
 font-fine-marks 4068a4b9
 font-small cd4fb9f5

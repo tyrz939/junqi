@@ -36,6 +36,8 @@ impl Style {
 pub struct Styles {
     tiles: Vec<Option<Style>>,
     materials: [Option<Style>; 4],
+    /// Every id 0..=255 to its style (Void's for an id no tile has): the hot lookup.
+    by_id: Vec<Style>,
 }
 
 /// The tile a material paints over (PORT.md §6.i).
@@ -86,7 +88,10 @@ impl Styles {
         if materials.iter().any(Option::is_none) {
             return Err("a render-only material has no look".into());
         }
-        Ok(Styles { tiles, materials })
+        let void = tiles[0].ok_or("tile Void has no look")?;
+        let by_id =
+            (0..=255u8).map(|i| Tile::from_id(i).and_then(|t| tiles[usize::from(t.id())]).unwrap_or(void)).collect();
+        Ok(Styles { tiles, materials, by_id })
     }
 
     /// The styles compiled into this build (`data/looks/tiles.json`).
@@ -102,7 +107,7 @@ impl Styles {
 
     /// The style of tile id `id` (a surface id); Void's for an id no tile has.
     pub fn id(&self, id: u8) -> &Style {
-        Tile::from_id(id).map_or_else(|| self.tile(Tile::Void), |t| self.tile(t))
+        &self.by_id[usize::from(id)]
     }
 
     /// The style a cell is drawn with: `m` when it paints over `t`, else `t`'s.

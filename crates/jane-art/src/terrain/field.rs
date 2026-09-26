@@ -44,6 +44,35 @@ impl Field {
         }
     }
 
+    /// `k` times the field at every px of the box `(x0, y0, w, h)` of world px (inside the filled
+    /// box), added into `out` row by row: the same numbers as [`Field::at`], worked a lattice
+    /// cell at a time, so a chunk's worth costs a multiply a px.
+    pub fn add_box(&self, x0: i32, y0: i32, w: i32, h: i32, k: i32, out: &mut [i32]) {
+        let mask = (1 << self.shift) - 1;
+        let n = self.n as usize;
+        let v = |i: usize| i32::from(self.vals.get(i).copied().unwrap_or(128));
+        for y in 0..h {
+            let wy = y0 + y;
+            let gy = (wy >> self.shift) - self.ly;
+            let ty = smooth(((wy & mask) * 256) >> self.shift);
+            let mut last = i32::MIN;
+            let (mut a, mut b) = (0, 0);
+            let row = &mut out[(y * w) as usize..((y + 1) * w) as usize];
+            for (x, o) in row.iter_mut().enumerate() {
+                let wx = x0 + x as i32;
+                let gx = (wx >> self.shift) - self.lx;
+                if gx != last {
+                    last = gx;
+                    let kk = usize::try_from(gy * self.n + gx).unwrap_or(0);
+                    a = v(kk) * (256 - ty) + v(kk + n) * ty;
+                    b = v(kk + 1) * (256 - ty) + v(kk + 1 + n) * ty;
+                }
+                let tx = smooth(((wx & mask) * 256) >> self.shift);
+                *o += k * ((a * (256 - tx) + b * tx) >> 16);
+            }
+        }
+    }
+
     /// The field at world px `(x, y)` inside the box, 0..=255.
     pub fn at(&self, x: i32, y: i32) -> i32 {
         let (gx, gy) = ((x >> self.shift) - self.lx, (y >> self.shift) - self.ly);

@@ -441,6 +441,9 @@ struct Scratch {
     surf: Vec<u8>,
     /// The speckle filter's output.
     surf2: Vec<u8>,
+    /// Cells with another surface among their eight neighbours; whether any water is in reach.
+    mixed: Vec<bool>,
+    water_near: bool,
     /// Water cells' distance to land in cells, 0 on land, at most 3.
     depth: Vec<u8>,
     /// The surface per px for cells `-1..17`: before and after the wobble.
@@ -452,6 +455,10 @@ struct Scratch {
     ly: Layers,
     /// Broad patches over the chunk; the wobble over the surface map.
     patch: Field,
+    /// The fields worked over the chunk: patches, the meander, the lush drifts.
+    pv: Vec<i32>,
+    mv: Vec<i32>,
+    lv: Vec<i32>,
     fine: Field,
     /// Lush and dry grass, over many cells.
     lush: Field,
@@ -460,6 +467,8 @@ struct Scratch {
     /// One strip row being drawn, its mask, and one standing thing.
     row: Canvas,
     rowmask: Vec<u8>,
+    /// Where the strip canvas was last drawn: what the next row clears.
+    row_bb: Rect,
     thing: Canvas,
 }
 
@@ -507,17 +516,23 @@ impl Painter {
             surf: vec![NONE; cells],
             surf2: vec![NONE; cells],
             depth: vec![0; cells],
+            mixed: vec![true; cells],
+            water_near: false,
             mm0: vec![NONE; map],
             mm: vec![NONE; map],
             shore: vec![0; map],
             ly: Layers::new(),
             patch: Field::default(),
+            pv: vec![0; (CHUNK_PX * CHUNK_PX) as usize],
+            mv: vec![0; (CHUNK_PX * CHUNK_PX) as usize],
+            lv: vec![0; (CHUNK_PX * CHUNK_PX) as usize],
             fine: Field::default(),
             lush: Field::default(),
             wob_x: Field::default(),
             wob_y: Field::default(),
             row: Canvas::new(CHUNK_PX + 2 * STRIP_MARGIN, STRIP_H),
             rowmask: vec![0; ((CHUNK_PX + 2 * STRIP_MARGIN) * STRIP_H) as usize],
+            row_bb: Rect::new(0, 0, CHUNK_PX + 2 * STRIP_MARGIN, STRIP_H),
             thing: Canvas::new(3 * CELL, STRIP_H),
         };
         Painter { styles, bank: Bank::new(ramps), s, x0c: 0, y0c: 0, seed: 0 }
@@ -658,6 +673,25 @@ impl Painter {
                 self.s.paint[k] = Tile::from_id(self.s.surf[k]).unwrap_or(Tile::Grass);
             }
         }
+        // Which cells have another surface among their eight neighbours: only there can an edge
+        // fall, so the passes that draw edges skip the rest.
+        self.s.water_near = false;
+        for j in 0..GM {
+            for i in 0..GM {
+                let k = Self::k(i, j);
+                let g = self.s.surf[k];
+                self.s.water_near |= g != NONE && self.styles.id(g).is_water();
+                let mut mixed = i == 0 || j == 0 || i == GM - 1 || j == GM - 1;
+                for dj in -1..=1 {
+                    for di in -1..=1 {
+                        if !mixed {
+                            mixed = self.s.surf[(k as i32 + dj * GM + di) as usize] != g;
+                        }
+                    }
+                }
+                self.s.mixed[k] = mixed;
+            }
+        }
         // Water depth in cells, up to 3, by three passes of the four neighbours.
         for k in 0..self.s.depth.len() {
             self.s.depth[k] = u8::from(self.s.surf[k] != NONE && self.styles.id(self.s.surf[k]).is_water()) * 3;
@@ -754,14 +788,7 @@ impl Painter {
         for cj in 0..CHUNK_CELLS + 2 {
             for ci in 0..CHUNK_CELLS + 2 {
                 let k = Self::k(ci + M - 1, cj + M - 1);
-                let g = self.s.surf[k];
-                let mut mixed = false;
-                for dj in -1..=1 {
-                    for di in -1..=1 {
-                        mixed |= self.s.surf[(k as i32 + dj * GM + di) as usize] != g;
-                    }
-                }
-                if !mixed || g == NONE {
+                if !self.s.mixed[k] || self.s.surf[k] == NONE {
                     continue;
                 }
                 for py in cj * CELL..cj * CELL + CELL {
@@ -782,6 +809,47 @@ impl Painter {
                         if self.styles.id(here).row.wild || self.styles.id(there).row.wild {
                             self.s.mm[i] = there;
                         }
+                    }
+                }
+            }
+        }
+        // Water's slivers: where two pools meet only at a corner the chamfers leave a thread of
+        // water a px or two wide; a px of water with three or fewer water px round it goes to the
+        // land beside it, and a px of land hemmed in by seven goes to water.
+        if !self.s.water_near {
+            self.s.shore.fill(0);
+            return;
+        }
+        let is_water = |p: &Painter, g: u8| g != NONE && p.styles.id(g).is_water();
+        self.s.mm0.copy_from_slice(&self.s.mm);
+        for y in 1..MM - 1 {
+            for x in 1..MM - 1 {
+                if !self.s.mixed[Self::k(x / CELL + M - 1, y / CELL + M - 1)] {
+                    continue;
+                }
+                let i = (y * MM + x) as usize;
+                let here = self.s.mm0[i];
+                if here == NONE {
+                    continue;
+                }
+                let (mut wet, mut land) = (0, NONE);
+                for (dx, dy) in [(-1, -1), (0, -1), (1, -1), (-1, 0), (1, 0), (-1, 1), (0, 1), (1, 1)] {
+                    let n = self.s.mm0[((y + dy) * MM + x + dx) as usize];
+                    if is_water(self, n) {
+                        wet += 1;
+                    } else if n != NONE && land == NONE {
+                        land = n;
+                    }
+                }
+                if is_water(self, here) && wet <= 3 && land != NONE {
+                    self.s.mm[i] = land;
+                } else if !is_water(self, here) && wet >= 7 {
+                    let w = [(0, -1), (-1, 0), (1, 0), (0, 1)]
+                        .iter()
+                        .map(|(dx, dy)| self.s.mm0[((y + dy) * MM + x + dx) as usize])
+                        .find(|&n| is_water(self, n));
+                    if let Some(w) = w {
+                        self.s.mm[i] = w;
                     }
                 }
             }
@@ -862,6 +930,13 @@ impl Painter {
         }
         standing::casters(self, x0, y0, out);
     }
+}
+
+/// A cheap hash for the per-pixel paths (a stone of a course, a cluster of an edge): one
+/// multiply per field into jane-core's `mix32`. What is picked once a cell uses `h32`.
+#[inline]
+pub(crate) const fn fast(a: u32, b: u32, salt: u32) -> u32 {
+    jane_core::hash::mix32(a.wrapping_mul(0x9e37_79b1) ^ b.wrapping_mul(0x85eb_ca77) ^ salt.wrapping_mul(0xc2b2_ae3d))
 }
 
 /// `ix` as `0xFFRRGGBB`.

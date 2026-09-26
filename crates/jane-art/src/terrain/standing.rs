@@ -8,7 +8,7 @@ use jane_core::grid::Rect;
 use jane_data::{TileGroup, TilePattern as P};
 
 use super::{
-    CELL, CHUNK_CELLS, CasterSeg, Chunk, NONE, Painter, STRIP_BELOW, STRIP_H, STRIP_MARGIN, Style, pack, salt,
+    CELL, CHUNK_CELLS, CasterSeg, Chunk, NONE, Painter, STRIP_BELOW, STRIP_H, STRIP_MARGIN, Style, fast, pack, salt,
 };
 use crate::canvas::{Canvas, FLAT, Z, normal};
 use crate::flora::{Bank, Sprite};
@@ -162,19 +162,38 @@ pub(super) fn ground(p: &mut Painter, x0: i32, y0: i32, seed: u32) {
             let (px, py) = (cx * CELL, cy * CELL);
             let z = p.s.ly.z(px + 8, py + 8);
             match st.row.pattern {
-                P::Tuft if h & 3 != 3 => {
-                    let wet = g != NONE && matches!(p.styles.id(g).row.pattern, P::Marsh | P::Cracked);
-                    let r = if wet { st.accent.unwrap_or(Ramp::Reed) } else { st.ramp };
-                    for k in 0..2 {
-                        let hk = h32(h, k, 1);
-                        let (x, y) = (px + 3 + below(hk, 10) as i32, py + 9 + below(hk >> 8, 6) as i32);
-                        tall_tuft(p, x, y, r, 5 + (hk >> 16) as i32 % 3, hk >> 20, z);
-                    }
-                }
                 P::Flowers => flower_bed(p, px, py, wx, wy, &st, h, z, seed),
                 P::Stepping => stepping(p, px, py, &st, h, z),
                 P::Crops => crops(p, px, py, wx, wy, g, &st, h, z),
                 _ => {}
+            }
+        }
+    }
+    // Long grass, from the cells round the chunk too (its blades reach into the next cell): clumps
+    // scattered anywhere in the cell, drawn top to bottom so the nearer overlap the further, so a
+    // stand of it reads as one meadow and never as a row of tufts to a cell.
+    for cy in -1..=CHUNK_CELLS {
+        for cx in -1..=CHUNK_CELLS {
+            let st = own(p, cx, cy);
+            if st.row.pattern != P::Tuft {
+                continue;
+            }
+            let g = p.s.surf[Painter::at(cx, cy)];
+            let wet = g != NONE && matches!(p.styles.id(g).row.pattern, P::Marsh | P::Cracked);
+            let r = if wet { st.accent.unwrap_or(Ramp::Reed) } else { st.ramp };
+            let (wx, wy) = (x0 + cx, y0 + cy);
+            let h = h32(wx as u32, wy as u32, seed ^ salt::STAND ^ 0x11);
+            let n = 4 + below(h, 3);
+            let mut spots = [(0i32, 0i32, 0u32); 6];
+            for k in 0..n {
+                let hk = h32(h, k, 1);
+                spots[k as usize] =
+                    (cy * CELL + 3 + below(hk.rotate_right(8), 14) as i32, cx * CELL + below(hk, 16) as i32, hk);
+            }
+            spots[..n as usize].sort_by_key(|&(y, x, hk)| (y, x, hk));
+            for &(y, x, hk) in &spots[..n as usize] {
+                let z = p.s.ly.z(x, y);
+                tall_tuft(p, x, y, r, 2 + (hk >> 16) as i32 % 3, hk >> 20, z);
             }
         }
     }
@@ -213,7 +232,7 @@ fn contact(p: &mut Painter, cx: i32, cy: i32, rx: i32, ry: i32, (wx0, wy0): (i32
             if d > 256 {
                 continue;
             }
-            let cluster = h32(((wx0 + x) >> 1) as u32, ((wy0 + y) >> 1) as u32, seed ^ salt::STAND) & 255;
+            let cluster = fast(((wx0 + x) >> 1) as u32, ((wy0 + y) >> 1) as u32, seed ^ salt::STAND) & 255;
             let s = if d < 80 {
                 -2
             } else if d < 190 || (cluster as i32) > (d - 190) * 4 {
@@ -233,8 +252,8 @@ fn tall_tuft(p: &mut Painter, x: i32, y: i32, r: Ramp, n: i32, h: u32, z: i32) {
     for b in 0..n {
         let hb = h32(h, b as u32, 2);
         let spread = b * 2 - n + 1;
-        let len = 5 + (n - spread.abs()) + (hb % 3) as i32;
-        let lean = spread.signum() * (1 + (hb >> 2) as i32 % 2);
+        let len = 3 + (n - spread.abs()) + (hb % 4) as i32;
+        let lean = spread.signum() * (1 + (hb >> 2) as i32 % 2) + i32::from(spread == 0) * ((hb >> 4) as i32 % 3 - 1);
         for i in 0..len {
             let (bx, by) = (x + spread / 2 + lean * i * i / (len * len).max(1) * 2, y - i);
             let tone = if i == len - 1 {
@@ -266,7 +285,7 @@ fn flower_bed(p: &mut Painter, px: i32, py: i32, wx: i32, wy: i32, st: &Style, h
     let bloom = |t: Tone| if bed == 5 { st.ramp.at(t) } else { letter(colours[bed as usize]).unwrap_or(Ix::INK) };
     for y in 3..CELL - 1 {
         for x in 1..CELL - 1 {
-            let hh = h32((px + x) as u32, (py + y) as u32, h);
+            let hh = fast((px + x) as u32, (py + y) as u32, h);
             if hh & 3 != 0 {
                 let t = if (x + y) & 3 == 0 {
                     Tone::Light
@@ -284,7 +303,7 @@ fn flower_bed(p: &mut Painter, px: i32, py: i32, wx: i32, wy: i32, st: &Style, h
             break;
         }
         let hk = h32(h, k, 3);
-        let (fx, fy) = (px + 3 + below(hk, 10) as i32, py + 4 + below(hk >> 8, 8) as i32);
+        let (fx, fy) = (px + 3 + below(hk, 10) as i32, py + 4 + below(hk.rotate_right(8), 8) as i32);
         for (dx, dy) in [(-1, 0), (1, 0), (0, -1), (0, 1)] {
             p.s.ly.put(fx + dx, fy + dy, bloom(Tone::Light), normal(dx * 50, dy * 50), z + 3);
         }
@@ -382,7 +401,7 @@ fn stone_wall(c: &mut Canvas, r: Ramp, (w, e, n, s): (bool, bool, bool, bool), h
     for y in (top + 2..face - 1).step_by(5) {
         let off = ((y + (h & 3) as i32) & 3) - 1;
         c.hline(x0, x1 - 1, y, r.at(Tone::Shade), 16);
-        c.vline(x0 + 5 + off, y - 4, y, r.at(Tone::Shade), 16);
+        c.vline(x0 + 5 + off, (y - 4).max(top + 2), y, r.at(Tone::Shade), 16);
         c.vline(x0 + 11 - off, y + 1, y + 4, r.at(Tone::Shade), 16);
     }
     if !s {
@@ -413,9 +432,16 @@ pub(super) fn strips(p: &mut Painter, x0: i32, y0: i32, seed: u32, out: &mut Chu
     for row in 0..CHUNK_CELLS {
         let mut any = false;
         let mut canopy = false;
-        for cx in 0..CHUNK_CELLS {
+        let mut built = false;
+        // The fences and walls of the cells either side of the chunk are laid first, only so the
+        // outline sees a run go on past the seam; they are cleared again after it.
+        for cx in [-1, CHUNK_CELLS].into_iter().chain(0..CHUNK_CELLS) {
             let st = own(p, cx, row);
             let foot = STRIP_H - STRIP_BELOW;
+            let margin = !(0..CHUNK_CELLS).contains(&cx);
+            if margin && !matches!(st.row.pattern, P::Fence | P::StoneWall) {
+                continue;
+            }
             if matches!(st.row.pattern, P::Fence | P::StoneWall) {
                 let same = |dx: i32, dy: i32| raw(p, cx + dx, row + dy) == st.tile;
                 let nb = (same(-1, 0), same(1, 0), same(0, -1), same(0, 1));
@@ -426,34 +452,68 @@ pub(super) fn strips(p: &mut Painter, x0: i32, y0: i32, seed: u32, out: &mut Chu
                 } else {
                     stone_wall(&mut p.s.thing, st.ramp, nb, h);
                 }
-                p.s.thing.outline();
                 if !any {
-                    p.s.row.clear();
-                    p.s.rowmask.fill(mask::CLEAR);
+                    reset_row(p);
                     any = true;
                 }
                 let (sx, sy) = (STRIP_MARGIN + cx * CELL - CELL, 0);
+                built = true;
                 let thing = std::mem::replace(&mut p.s.thing, Canvas::new(0, 0));
                 p.s.row.stamp(&thing, sx, sy);
+                grow_bb(&mut p.s.row_bb, sx, sy, thing.w(), thing.h());
                 mark(&mut p.s.rowmask, sw, &thing, sx, sy, None);
+                if margin {
+                    retag(&mut p.s.rowmask, sw, &thing, sx, sy);
+                }
                 p.s.thing = thing;
                 continue;
             }
             let Some(t) = thing(p, cx, row, seed) else { continue };
             if !any {
-                p.s.row.clear();
-                p.s.rowmask.fill(mask::CLEAR);
+                reset_row(p);
                 any = true;
             }
             canopy |= t.canopy;
             let s = sprite(&p.bank, t.pick);
             let (sx, sy) = (STRIP_MARGIN + cx * CELL + 8 + t.ox - s.ax, foot - 2 + t.oy - s.ay);
             p.s.row.stamp(&s.canvas, sx, sy);
+            let (cw, ch) = (s.canvas.w(), s.canvas.h());
+            grow_bb(&mut p.s.row_bb, sx, sy, cw, ch);
             let trunk = if t.canopy { Some(p.styles.tile(Tile::Tree).accent.unwrap_or(Ramp::Bark)) } else { None };
             mark(&mut p.s.rowmask, sw, &s.canvas, sx, sy, trunk);
         }
         if any {
+            if built {
+                // Fences and low walls are outlined once the row is laid, so a run of them is one
+                // piece and no join shows where one cell meets the next.
+                p.s.row.outline();
+                let bb = p.s.row_bb;
+                for y in bb.y.max(0)..bb.bottom().min(STRIP_H) {
+                    for x in bb.x.max(0)..bb.right().min(sw) {
+                        let i = (y * sw + x) as usize;
+                        if p.s.rowmask[i] == BORROWED {
+                            p.s.row.clear_px(x, y);
+                            p.s.rowmask[i] = mask::CLEAR;
+                        }
+                    }
+                }
+            }
             crop(p, row, canopy, out);
+        }
+    }
+}
+
+/// A mask value for a strip's scratch only: a px laid by a cell beyond the chunk, for the outline.
+const BORROWED: u8 = 255;
+
+/// Mark a stamped thing's drawn pixels as borrowed from beyond the chunk.
+fn retag(m: &mut [u8], sw: i32, c: &Canvas, sx: i32, sy: i32) {
+    for y in 0..c.h() {
+        for x in 0..c.w() {
+            let (tx, ty) = (sx + x, sy + y);
+            if c.get(x, y).is_opaque() && tx >= 0 && ty >= 0 && tx < sw && ty < STRIP_H {
+                m[(ty * sw + tx) as usize] = BORROWED;
+            }
         }
     }
 }
@@ -477,12 +537,36 @@ fn mark(m: &mut [u8], sw: i32, c: &Canvas, sx: i32, sy: i32, trunk: Option<Ramp>
     }
 }
 
+/// Clear the strip canvas and its mask where the last row drew, and start a new drawn box.
+fn reset_row(p: &mut Painter) {
+    let bb = p.s.row_bb;
+    let sw = p.s.row.w();
+    p.s.row.clear_rect(bb);
+    for y in bb.y.max(0)..bb.bottom().min(STRIP_H) {
+        let (a, b) = (bb.x.max(0), bb.right().min(sw).max(bb.x.max(0)));
+        p.s.rowmask[(y * sw + a) as usize..(y * sw + b) as usize].fill(mask::CLEAR);
+    }
+    p.s.row_bb = Rect::new(0, 0, 0, 0);
+}
+
+/// Grow the drawn box by a stamp at `(x, y)` of `w x h`.
+fn grow_bb(bb: &mut Rect, x: i32, y: i32, w: i32, h: i32) {
+    if bb.w == 0 {
+        *bb = Rect::new(x, y, w, h);
+        return;
+    }
+    let (x0, y0) = (bb.x.min(x), bb.y.min(y));
+    let (x1, y1) = (bb.right().max(x + w), bb.bottom().max(y + h));
+    *bb = Rect::new(x0, y0, x1 - x0, y1 - y0);
+}
+
 /// Crop the strip canvas to what is drawn and write it out, resolved.
 fn crop(p: &Painter, row: i32, canopy: bool, out: &mut Chunk) {
     let c = &p.s.row;
+    let bb = p.s.row_bb;
     let (mut x0, mut y0, mut x1, mut y1) = (c.w(), c.h(), -1, -1);
-    for y in 0..c.h() {
-        for x in 0..c.w() {
+    for y in bb.y.max(0)..bb.bottom().min(c.h()) {
+        for x in bb.x.max(0)..bb.right().min(c.w()) {
             if c.get(x, y).is_opaque() {
                 x0 = x0.min(x);
                 y0 = y0.min(y);

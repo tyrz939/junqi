@@ -232,6 +232,21 @@ impl Canvas {
         self.emitting = false;
     }
 
+    /// Clear the rect `r` (clipped to the canvas) in all four layers: a scratch canvas cleared
+    /// only where it was drawn.
+    pub fn clear_rect(&mut self, r: Rect) {
+        let (x0, y0) = (r.x.max(0), r.y.max(0));
+        let (x1, y1) = (r.right().min(self.w), r.bottom().min(self.h));
+        for y in y0..y1 {
+            let s = (y * self.w + x0) as usize..(y * self.w + x1.max(x0)) as usize;
+            self.albedo[s.clone()].fill(Ix::CLEAR);
+            self.normal[s.clone()].fill(FLAT);
+            self.emissive[s.clone()].fill(Ix::CLEAR);
+            self.height[s.clone()].fill(0);
+            self.parts[s].fill(0);
+        }
+    }
+
     /// Width in px.
     pub fn w(&self) -> i32 {
         self.w
@@ -595,7 +610,7 @@ impl Canvas {
             let g = h32(seed, k, salt::STROKES ^ 1);
             let (x, y) = (r.x + below(h, r.w as u32) as i32, r.y + below(g, r.h as u32) as i32);
             let lighter = h >> 31 == 1;
-            let lean = below(g >> 8, 3) as i32 - 1;
+            let lean = below(g.rotate_right(8), 3) as i32 - 1;
             let long = (g >> 20 & 3) as i32;
             let mut px: Vec<(i32, i32, i32)> = Vec::new(); // x, y, tone step
             match kind {
