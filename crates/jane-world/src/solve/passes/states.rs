@@ -132,6 +132,10 @@ pub(crate) fn edges(sv: &mut Solve<'_>, s: usize, seeds: &mut [Vec<(i32, i32)>],
         if !sv.can_work(c, s) || !sv.touches_in(c, s) {
             continue;
         }
+        let pass = sv.pass;
+        if let Some(t) = sv.trail.as_mut() {
+            t.edges.entry(c).or_insert(pass + 1);
+        }
         let to = pull(sv, sv.use_of(c), s, None);
         if to == s || sv.states.governed[to].is_none() {
             continue;

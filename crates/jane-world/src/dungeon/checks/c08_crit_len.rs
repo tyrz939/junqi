@@ -8,7 +8,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use jane_core::action::FlagKey;
 use jane_core::ids::{ItemId, Key, NameId, SpellId};
 use jane_core::tile::F_SOLID;
-use jane_core::{Blueprint, Grid, Tile};
+use jane_core::{Blueprint, Grid};
 use jane_data::{MissionEdgeKind, MissionNodeKind, catalog};
 
 use super::{Check, Ctx, Fault, gains_of};
@@ -113,6 +113,7 @@ pub fn first_completion(bp: &Blueprint, info: &BuildInfo) -> Walk {
         }
         _ => {}
     };
+    let floor = floor_of(bp);
     let mut here = entrance;
     collect(&mut hand, here.node);
     out.order.push(here.node);
@@ -184,7 +185,7 @@ pub fn first_completion(bp: &Blueprint, info: &BuildInfo) -> Walk {
             }
         }
         let to = todo[ti];
-        let d = distance_to(&distances(bp, here.centre, &opened), to.centre);
+        let d = distance_to(&walk(bp, &floor, here.centre, &opened, Some(to.centre)), to.centre);
         let Some(d) = d else {
             out.errors.push(format!("no way to walk from {} to {}", m.nodes[here.node].id, m.nodes[to.node].id));
             return out;
@@ -203,9 +204,27 @@ pub fn first_completion(bp: &Blueprint, info: &BuildInfo) -> Walk {
 /// -1 where it cannot get. A locked gate and anything solid that is neither pushed nor carried
 /// stand in the way; a hidden prop does not.
 pub fn distances(bp: &Blueprint, from: (i32, i32), open: &BTreeSet<Key>) -> Grid<i32> {
+    walk(bp, &floor_of(bp), from, open, None)
+}
+
+/// A walk's cells before it starts: [`FREE`] on the floor, [`CLOSED`] on solid ground.
+fn floor_of(bp: &Blueprint) -> Vec<i32> {
+    bp.tiles.as_slice().iter().map(|t| if t.flags() & F_SOLID == 0 { FREE } else { CLOSED }).collect()
+}
+
+/// A walk's cell not reached yet that can be; one that cannot (solid, or something stands on it).
+/// Every other value is the distance there. The grid handed out reads -1 for both.
+const FREE: i32 = -1;
+const CLOSED: i32 = -2;
+
+/// [`distances`], stopped as soon as `to` has its distance, if it is given: [`distance_to`] of
+/// `to` reads only that cell when it has one, and the whole flood when it has none. `floor` is
+/// [`floor_of`] the blueprint.
+fn walk(bp: &Blueprint, floor: &[i32], from: (i32, i32), open: &BTreeSet<Key>, to: Option<(i32, i32)>) -> Grid<i32> {
     let cat = catalog();
     let (w, h) = (bp.w() as i32, bp.h() as i32);
-    let mut blocked = Grid::new(bp.w(), bp.h(), false);
+    // What she can stand on: the floor less what stands on it.
+    let mut cells = floor.to_vec();
     for p in &bp.props {
         if p.hidden || open.contains(&p.key) {
             continue;
@@ -214,25 +233,28 @@ pub fn distances(bp: &Blueprint, from: (i32, i32), open: &BTreeSet<Key>) -> Grid
         let shut = if d.gate { p.locked } else { d.solid && !d.push && !d.carry };
         if shut {
             let r = jane_core::Rect::new(i32::from(p.cell.x), i32::from(p.cell.y), i32::from(d.w), i32::from(d.h));
-            blocked.fill_rect(r, true);
+            if let Some(r) = r.intersect(jane_core::Rect::new(0, 0, w, h)) {
+                for y in r.y..r.bottom() {
+                    cells[(y * w + r.x) as usize..(y * w + r.right()) as usize].fill(CLOSED);
+                }
+            }
         }
     }
-    let free = |x: i32, y: i32| {
-        x >= 0
-            && y >= 0
-            && x < w
-            && y < h
-            && bp.tiles.read(x, y, Tile::Void).flags() & F_SOLID == 0
-            && !blocked.read(x, y, true)
+    let done = |mut cells: Vec<i32>| {
+        for c in &mut cells {
+            *c = (*c).max(FREE);
+        }
+        Grid::from_vec(bp.w(), bp.h(), cells)
     };
-    let mut dist = Grid::new(bp.w(), bp.h(), -1i32);
+    let inside = |x: i32, y: i32| x >= 0 && y >= 0 && x < w && y < h;
+    let free = |cells: &[i32], x: i32, y: i32| inside(x, y) && cells[(y * w + x) as usize] == FREE;
     // The room's middle may have a pillar on it: start from a cell near it that is floor.
     let mut start = from;
     let mut r = 0;
-    while r < NEAR && !free(start.0, start.1) {
+    while r < NEAR && !free(&cells, start.0, start.1) {
         for y in from.1 - r..=from.1 + r {
             for x in from.0 - r..=from.0 + r {
-                if free(x, y) {
+                if free(&cells, x, y) {
                     start = (x, y);
                 }
             }
@@ -240,24 +262,30 @@ pub fn distances(bp: &Blueprint, from: (i32, i32), open: &BTreeSet<Key>) -> Grid
         r += 1;
     }
     // Found nothing: the flood starts where it stands and reaches what is free beside it.
-    if dist.get(start.0, start.1).is_none() {
-        return dist;
+    if !inside(start.0, start.1) {
+        return done(cells);
     }
-    dist.set(start.0, start.1, 0);
+    cells[(start.1 * w + start.0) as usize] = 0;
+    if to == Some(start) {
+        return done(cells);
+    }
     let mut queue = vec![start];
     let mut head = 0;
     while head < queue.len() {
         let (x, y) = queue[head];
         head += 1;
-        let d = dist.read(x, y, 0) + 1;
+        let d = cells[(y * w + x) as usize] + 1;
         for (nx, ny) in [(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)] {
-            if free(nx, ny) && dist.read(nx, ny, 0) < 0 {
-                dist.set(nx, ny, d);
+            if free(&cells, nx, ny) {
+                cells[(ny * w + nx) as usize] = d;
+                if to == Some((nx, ny)) {
+                    return done(cells);
+                }
                 queue.push((nx, ny));
             }
         }
     }
-    dist
+    done(cells)
 }
 
 /// The nearest reachable cell to a room's middle, as a distance.

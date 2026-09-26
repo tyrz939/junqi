@@ -37,10 +37,10 @@ use jane_core::ids::{ItemId, Key, NameId, SpellId};
 use jane_data::{Answers, Catalog, MissionDef, MissionNode, SpellKind, WorldSpell, catalog};
 
 use super::generate::{BuildInfo, Built, RoomInfo};
-use crate::solve::model::{Options, ZoneRules};
+use crate::solve::model::{Options, Trail, ZoneRules};
 use crate::solve::report::{Report, name_of};
 use crate::solve::rows::each_action;
-use crate::solve::run::solve;
+use crate::solve::run::{resolve, solve_kept};
 
 pub mod c01_locks;
 pub mod c03_plain_keys;
@@ -157,6 +157,8 @@ pub struct Ctx<'a> {
     pub opts: Options,
     /// The traced solve of the whole blueprint.
     pub base: Report,
+    /// How it went, pass by pass, for [`Self::resolve`] to go on from.
+    pub trail: Trail,
     /// The first completion (C8), which C7 reads too.
     pub walk: Walk,
 }
@@ -183,9 +185,11 @@ impl Ctx<'_> {
         self.bp.props.iter().find(|p| p.key == k)
     }
 
-    /// Solve again, traced, with these options.
+    /// Solve again, traced, with these options: `opts` with more withheld or shut than
+    /// [`Self::opts`] goes on from the base solve's trail (`solve::run::resolve`), and reports
+    /// what a solve from the start would.
     pub fn resolve(&self, opts: &Options) -> Report {
-        solve(self.bp, &self.rules, opts)
+        resolve(self.bp, &self.rules, &self.opts, &self.base, &self.trail, opts)
     }
 }
 
@@ -208,12 +212,12 @@ pub fn check(bp: &Blueprint, info: &BuildInfo) -> Vec<Fault> {
     let m = info.mission;
     let rules = rules_of(m);
     let opts = Options { trace: true, ..Options::default() };
-    let base = solve(bp, &rules, &opts);
+    let (base, trail) = solve_kept(bp, &rules, &opts);
     if !base.ok() {
         return base.lines(bp).into_iter().map(|e| Fault::new(Check::Solver, e)).collect();
     }
     let walk = first_completion(bp, info);
-    let c = Ctx { bp, info, m, cat: catalog(), rules, opts, base, walk };
+    let c = Ctx { bp, info, m, cat: catalog(), rules, opts, base, trail, walk };
     let mut out = Vec::new();
     for check in ORDER {
         out.extend(run(check, &c));

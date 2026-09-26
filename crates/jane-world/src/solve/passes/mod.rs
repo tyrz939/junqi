@@ -126,6 +126,9 @@ impl Solve<'_> {
                 if self.opts.withhold.flags.contains(&key) || self.states.bit(key).is_some() {
                     return;
                 }
+                if let Some(t) = self.trail.as_mut() {
+                    t.flags.entry(key).or_insert(self.pass + 1);
+                }
                 let v = self.flags.entry(key).or_insert(0);
                 match op {
                     FlagOp::Set(x) => *v = x,
@@ -136,6 +139,9 @@ impl Solve<'_> {
                 if !self.opts.withhold.verbs.contains(&sp) {
                     if let Some(v) = self.verbs.as_mut() {
                         v.insert(sp);
+                        if let Some(t) = self.trail.as_mut() {
+                            t.verbs.entry(sp).or_insert(self.pass + 1);
+                        }
                     }
                 }
             }

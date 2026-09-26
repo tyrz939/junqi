@@ -2,6 +2,7 @@
 //!
 //! **Rule:** noise output is a pure function of `(x, y, salt)`. No state, no float, no table.
 
+use crate::grid::Rect;
 use crate::hash::hash2;
 use crate::num::{Q16, Q16_ONE};
 
@@ -53,9 +54,76 @@ pub fn fbm(x: i32, y: i32, period: i32, salt: u32, octaves: u32, gain_shift: u32
     Q16(((sum << 16) / total) as i32)
 }
 
+/// [`fbm`] at every point of box `b`, row by row: the same numbers,
+/// worked out a row and a column at a time. Each octave's lattice values are hashed once for the
+/// box, not four times a point, and where a point falls between them once a column and once a row.
+pub fn fbm_box(b: Rect, period: i32, salt: u32, octaves: u32, gain_shift: u32) -> Vec<Q16> {
+    let (x0, y0, w, h) = (b.x, b.y, b.w.max(0) as usize, b.h.max(0) as usize);
+    let mut sum = vec![0i64; w * h];
+    let mut total: i64 = 0;
+    let mut amp: i64 = i64::from(Q16_ONE);
+    // Where each column (row) falls on an octave's lattice: the cell, and the smoothed fraction.
+    let place = |from: i32, n: usize, p: i32| -> Vec<(i32, Q16)> {
+        (0..n as i32)
+            .map(|i| {
+                let t = Q16::ratio(from + i, p);
+                (t.floor(), Q16::smooth(t.frac()))
+            })
+            .collect()
+    };
+    for o in 0..octaves {
+        let p = (period >> o).max(2);
+        let octave_salt = salt.wrapping_add(o.wrapping_mul(7919));
+        let (cols, rows) = (place(x0, w, p), place(y0, h, p));
+        let (Some(&(lx, _)), Some(&(ly, _))) = (cols.first(), rows.first()) else { return Vec::new() };
+        let lw = (cols[w - 1].0 - lx + 2) as usize;
+        let lh = (rows[h - 1].0 - ly + 2) as usize;
+        let lattice: Vec<Q16> =
+            (0..lh * lw).map(|i| lattice(lx + (i % lw) as i32, ly + (i / lw) as i32, octave_salt)).collect();
+        for (j, &(cy, ty)) in rows.iter().enumerate() {
+            let top = &lattice[(cy - ly) as usize * lw..];
+            let bottom = &lattice[(cy - ly + 1) as usize * lw..];
+            for (i, &(cx, tx)) in cols.iter().enumerate() {
+                let k = (cx - lx) as usize;
+                let upper = Q16::lerp(top[k], top[k + 1], tx);
+                let lower = Q16::lerp(bottom[k], bottom[k + 1], tx);
+                let v = Q16::lerp(upper, lower, ty);
+                sum[j * w + i] += (i64::from(v.0) * amp) >> 16;
+            }
+        }
+        total += amp;
+        amp >>= gain_shift;
+        if amp == 0 {
+            break;
+        }
+    }
+    if total == 0 {
+        return vec![Q16::ZERO; w * h];
+    }
+    sum.into_iter().map(|s| Q16(((s << 16) / total) as i32)).collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn fbm_box_is_fbm_at_every_point() {
+        let mut rng = crate::rng::Sfc32::seeded(3, 0);
+        for _ in 0..60 {
+            let (x0, y0) = (rng.below(200) as i32 - 100, rng.below(200) as i32 - 100);
+            let (w, h) = (1 + rng.below(40), 1 + rng.below(40));
+            let period = rng.below(60) as i32 - 2;
+            let (salt, octaves, gain) = (rng.next_u32(), rng.below(6), rng.below(3));
+            let got = fbm_box(Rect::new(x0, y0, w as i32, h as i32), period, salt, octaves, gain);
+            for y in 0..h as i32 {
+                for x in 0..w as i32 {
+                    let want = fbm(x0 + x, y0 + y, period, salt, octaves, gain);
+                    assert_eq!(got[(y * w as i32 + x) as usize], want, "({x0}+{x}, {y0}+{y}) period {period}");
+                }
+            }
+        }
+    }
 
     #[test]
     fn value_is_in_range_and_pure() {

@@ -4,7 +4,8 @@
 
 use jane_core::action::Stack;
 use jane_core::grid::DIRS4;
-use jane_core::search::{Conn, Reach, flood};
+use jane_core::search::{Conn, Fill, Reach, fill, flood};
+use jane_core::tile::F_SOLID;
 use jane_core::{Key, Rect, Tile};
 
 use super::County;
@@ -116,13 +117,12 @@ pub fn blocked_by_props(k: &Kit) -> Vec<bool> {
 /// found. By cell index (`y * w + x`); `None` for a county with no `start`.
 fn from_start(k: &Kit, blocked: &[bool]) -> Option<Vec<bool>> {
     let s = start(k)?;
-    let w = k.w();
-    let mut reach = Reach::new();
-    let open = |x: i32, y: i32| !k.solid(x, y) && !blocked[(y * w + x) as usize];
-    flood(k.w() as u32, k.h() as u32, &[s], Conn::Four, u32::MAX, open, &mut reach);
+    let tiles = k.blueprint().tiles.as_slice();
+    let mut reach = Fill::new();
+    fill(k.w() as u32, k.h() as u32, &[s], |i| tiles[i].flags() & F_SOLID == 0 && !blocked[i], &mut reach);
     let mut seen = vec![false; (k.w() * k.h()) as usize];
-    for c in reach.order() {
-        seen[c.0 as usize] = true;
+    for r in reach.runs() {
+        seen[r.cells(k.w() as u32)].fill(true);
     }
     Some(seen)
 }
@@ -172,6 +172,7 @@ pub fn cut_through(c: &mut County<'_>) {
         }))
         .collect();
     let mut out = Reach::new();
+    let mut fresh = Fill::new();
     for t in targets {
         let open = |k: &Kit, x: i32, y: i32| k.inside(x, y) && !k.solid(x, y) && !blocked[ix(x, y)];
         // Where the way out starts: the cell itself, or the open cells round the thing.
@@ -218,10 +219,11 @@ pub fn cut_through(c: &mut County<'_>) {
             (x, y, d) = (x + dx, y + dy, d - 1);
         }
         // Its ground is the reached country's now.
-        let fresh = |x: i32, y: i32| !k.solid(x, y) && !blocked[ix(x, y)] && !seen[ix(x, y)];
-        flood(w as u32, h as u32, &starts, Conn::Four, u32::MAX, fresh, &mut out);
-        for c in out.order() {
-            seen[c.0 as usize] = true;
+        let tiles = k.blueprint().tiles.as_slice();
+        let open = |i: usize| tiles[i].flags() & F_SOLID == 0 && !blocked[i] && !seen[i];
+        fill(w as u32, h as u32, &starts, open, &mut fresh);
+        for r in fresh.runs() {
+            seen[r.cells(w as u32)].fill(true);
         }
     }
     c.reached = Some(seen);

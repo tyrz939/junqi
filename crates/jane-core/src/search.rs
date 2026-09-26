@@ -129,6 +129,251 @@ pub fn flood(
     }
 }
 
+/// A run of cells along one row: `x0..x1` of row `y`, the end not included.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Run {
+    pub y: u32,
+    pub x0: u32,
+    pub x1: u32,
+}
+
+impl Run {
+    /// The run's cell indices, `y * w + x`, as a range.
+    pub fn cells(self, w: u32) -> std::ops::Range<usize> {
+        let row = self.y as usize * w as usize;
+        row + self.x0 as usize..row + self.x1 as usize
+    }
+}
+
+/// What [`fill`] reached: which cells, as a bitset and as runs along rows; no distances, no order.
+#[derive(Clone, Debug, Default)]
+pub struct Fill {
+    w: u32,
+    h: u32,
+    /// Reached, a bit a cell, `y * w + x`.
+    seen: Vec<u64>,
+    /// Open, a bit a cell; a word is good only once its bit in `known` is set.
+    open: Vec<u64>,
+    /// A bit per word of `open`: asked already.
+    known: Vec<u64>,
+    runs: Vec<Run>,
+    count: u32,
+    /// Cells still to look at, `(x, y)`.
+    stack: Vec<(u32, u32)>,
+}
+
+impl Fill {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    pub fn w(&self) -> u32 {
+        self.w
+    }
+
+    pub fn h(&self) -> u32 {
+        self.h
+    }
+
+    /// Outside the grid is unreached.
+    pub fn reached(&self, x: i32, y: i32) -> bool {
+        x >= 0
+            && y >= 0
+            && (x as u32) < self.w
+            && (y as u32) < self.h
+            && self.seen_ix(y as usize * self.w as usize + x as usize)
+    }
+
+    /// Every reached cell, once each, as runs along rows (in no promised order).
+    pub fn runs(&self) -> &[Run] {
+        &self.runs
+    }
+
+    pub fn count(&self) -> u32 {
+        self.count
+    }
+
+    fn seen_ix(&self, i: usize) -> bool {
+        self.seen[i >> 6] >> (i & 63) & 1 != 0
+    }
+
+    fn reset(&mut self, w: u32, h: u32) {
+        self.w = w;
+        self.h = h;
+        let words = (w as usize * h as usize).div_ceil(64);
+        self.seen.clear();
+        self.seen.resize(words, 0);
+        self.open.resize(words, 0);
+        self.known.clear();
+        self.known.resize(words.div_ceil(64), 0);
+        self.runs.clear();
+        self.stack.clear();
+        self.count = 0;
+    }
+
+    /// Word `k` of the cells that are open and not reached, asking `open` of its cells the first
+    /// time it is wanted.
+    #[inline]
+    fn avail(&mut self, k: usize, open: &mut impl FnMut(usize) -> u64) -> u64 {
+        if self.known[k >> 6] >> (k & 63) & 1 == 0 {
+            self.ask(k, open);
+        }
+        self.open[k] & !self.seen[k]
+    }
+
+    /// Ask `open` for word `k`.
+    #[cold]
+    #[inline(never)]
+    fn ask(&mut self, k: usize, open: &mut impl FnMut(usize) -> u64) {
+        let past = (self.w as usize * self.h as usize).saturating_sub(k << 6);
+        let inside = if past >= 64 { u64::MAX } else { (1 << past) - 1 };
+        self.open[k] = open(k) & inside;
+        self.known[k >> 6] |= 1 << (k & 63);
+    }
+
+    /// The first cell from `p` on, before `end`, that is not open or is reached; `end` if none.
+    fn run_end(&mut self, p: usize, end: usize, open: &mut impl FnMut(usize) -> u64) -> usize {
+        let (mut k, mut mask) = (p >> 6, u64::MAX << (p & 63));
+        loop {
+            let stop = !self.avail(k, open) & mask;
+            if stop != 0 {
+                return ((k << 6) + stop.trailing_zeros() as usize).min(end);
+            }
+            k += 1;
+            mask = u64::MAX;
+            if k << 6 >= end {
+                return end;
+            }
+        }
+    }
+
+    /// The first cell of the open, unreached stretch that ends at `p`, not before `start`.
+    fn run_start(&mut self, p: usize, start: usize, open: &mut impl FnMut(usize) -> u64) -> usize {
+        let (mut k, bit) = (p >> 6, p & 63);
+        let mut mask = if bit == 0 { 0 } else { u64::MAX >> (64 - bit) };
+        loop {
+            let stop = !self.avail(k, open) & mask;
+            if stop != 0 {
+                return ((k << 6) + 63 - stop.leading_zeros() as usize + 1).max(start);
+            }
+            if k << 6 <= start {
+                return start;
+            }
+            k -= 1;
+            mask = u64::MAX;
+        }
+    }
+
+    /// Mark cells `a..b` of row `y` (by index) reached.
+    fn mark(&mut self, y: u32, a: usize, b: usize) {
+        let (wa, wb) = (a >> 6, (b - 1) >> 6);
+        let lo = u64::MAX << (a & 63);
+        let hi = u64::MAX >> (63 - ((b - 1) & 63));
+        if wa == wb {
+            self.seen[wa] |= lo & hi;
+        } else {
+            self.seen[wa] |= lo;
+            self.seen[wa + 1..wb].fill(u64::MAX);
+            self.seen[wb] |= hi;
+        }
+        let row = y as usize * self.w as usize;
+        self.runs.push(Run { y, x0: (a - row) as u32, x1: (b - row) as u32 });
+        self.count += (b - a) as u32;
+    }
+
+    /// A seed at the first cell of each open, unreached stretch of cells `a..b` of row `y`.
+    fn seed_row(&mut self, y: u32, a: usize, b: usize, open: &mut impl FnMut(usize) -> u64) {
+        let row = y as usize * self.w as usize;
+        let mut carry = 0u64;
+        for k in a >> 6..=(b - 1) >> 6 {
+            let lo = if k == a >> 6 { u64::MAX << (a & 63) } else { u64::MAX };
+            let hi = if k == (b - 1) >> 6 { u64::MAX >> (63 - ((b - 1) & 63)) } else { u64::MAX };
+            let m = self.avail(k, open) & lo & hi;
+            let mut firsts = m & !((m << 1) | carry);
+            carry = m >> 63;
+            while firsts != 0 {
+                let i = (k << 6) + firsts.trailing_zeros() as usize;
+                self.stack.push(((i - row) as u32, y));
+                firsts &= firsts - 1;
+            }
+        }
+    }
+}
+
+/// [`flood`] four ways with no budget, when only WHICH cells are reached matters: exactly the cells
+/// that flood reaches, found a row's run at a time (a scanline fill over bitsets) and kept as a
+/// bitset and runs, with no distances and no order. The county's whole-map questions (what she can
+/// walk to from the platform; the solver's layers) ask this: it never writes a distance per cell.
+/// `open(i)` is asked by cell index `y * w + x`, sixty-four cells at a time where the fill goes,
+/// and must not change while it runs. Starts are reached whether open or not; outside the grid they
+/// are skipped.
+pub fn fill(w: u32, h: u32, starts: &[(i32, i32)], mut open: impl FnMut(usize) -> bool, out: &mut Fill) {
+    let n = w as usize * h as usize;
+    let word = |k: usize| {
+        let base = k << 6;
+        let mut m = 0u64;
+        for i in base..(base + 64).min(n) {
+            m |= u64::from(open(i)) << (i - base);
+        }
+        m
+    };
+    fill_words(w, h, starts, word, out);
+}
+
+/// [`fill`] with `open` asked sixty-four cells at once: `open(k)` has bit `j` set when cell
+/// `64 k + j` is open (bits past the grid's last cell are ignored). For a caller that keeps what is
+/// open in whole rows of bytes or bits and can answer a word without a question a cell.
+pub fn fill_words(w: u32, h: u32, starts: &[(i32, i32)], mut open: impl FnMut(usize) -> u64, out: &mut Fill) {
+    out.reset(w, h);
+    let wu = w as usize;
+    let open = &mut open;
+    for &(x, y) in starts {
+        if x < 0 || y < 0 || x as u32 >= w || y as u32 >= h {
+            continue;
+        }
+        let (x, y) = (x as u32, y as u32);
+        let i = y as usize * wu + x as usize;
+        if out.seen_ix(i) {
+            continue;
+        }
+        if out.avail(i >> 6, open) >> (i & 63) & 1 != 0 {
+            out.stack.push((x, y));
+        } else {
+            // A closed start is reached alone; its open neighbours go on from it.
+            out.mark(y, i, i + 1);
+            if x > 0 {
+                out.stack.push((x - 1, y));
+            }
+            if x + 1 < w {
+                out.stack.push((x + 1, y));
+            }
+            if y > 0 {
+                out.stack.push((x, y - 1));
+            }
+            if y + 1 < h {
+                out.stack.push((x, y + 1));
+            }
+        }
+        while let Some((x, y)) = out.stack.pop() {
+            let row = y as usize * wu;
+            let p = row + x as usize;
+            if out.avail(p >> 6, open) >> (p & 63) & 1 == 0 {
+                continue;
+            }
+            let a = out.run_start(p, row, open);
+            let b = out.run_end(p, row + wu, open);
+            out.mark(y, a, b);
+            // One seed for each open stretch of the rows above and below, along this run.
+            if y > 0 {
+                out.seed_row(y - 1, a - wu, b - wu, open);
+            }
+            if y + 1 < h {
+                out.seed_row(y + 1, a + wu, b + wu, open);
+            }
+        }
+    }
+}
+
 /// Chamfer distance transform in tenths of a cell (10 straight, 14 diagonal), two raster passes,
 /// from every cell `source` names. Saturates at `u16::MAX`; with no source every cell is `u16::MAX`.
 pub fn chamfer(w: u32, h: u32, mut source: impl FnMut(i32, i32) -> bool) -> Grid<u16> {
@@ -200,17 +445,30 @@ pub struct PathQuery {
     pub cut_corners: bool,
 }
 
+/// One node of the A* window: its best `g` so far and where from, and the searches (by
+/// generation) that stamped and closed it.
+#[derive(Clone, Copy, Debug, Default)]
+struct Node {
+    g: u32,
+    from: u32,
+    stamp: u32,
+    closed: u32,
+}
+
+/// Bits of a heap key that hold the node: `f` is at most `2 * u32::MAX`, 33 bits, above them.
+const NODE_BITS: u32 = 31;
+const NODE_MASK: u64 = (1 << NODE_BITS) - 1;
+
 /// Windowed A* on a grid. All scratch lives in a fixed window centred on the start, so memory is
 /// constant whatever the zone's size; "clearing" between searches is a generation bump.
 #[derive(Debug)]
 pub struct Astar {
     ww: u32,
     wh: u32,
-    g: Vec<u32>,
-    from: Vec<u32>,
-    stamp: Vec<u32>,
-    closed: Vec<u32>,
-    heap: BinaryHeap<Reverse<(u64, u32)>>,
+    /// A node's scratch together, so a look at a neighbour is one cache line.
+    nodes: Vec<Node>,
+    /// `(f << NODE_BITS) | node`: one number orders as `(f, node)` does, and compares faster.
+    heap: BinaryHeap<Reverse<u64>>,
     generation: u32,
     /// Nodes expanded, summed over searches.
     pub expanded: u64,
@@ -220,13 +478,11 @@ impl Astar {
     /// Scratch for a `ww x wh` window (the sim uses 256 x 256).
     pub fn new(ww: u32, wh: u32) -> Self {
         let n = (ww as usize) * (wh as usize);
+        assert!(n as u64 <= NODE_MASK + 1, "an A* window of {ww} x {wh} is too large");
         Self {
             ww,
             wh,
-            g: vec![0; n],
-            from: vec![0; n],
-            stamp: vec![0; n],
-            closed: vec![0; n],
+            nodes: vec![Node::default(); n],
             heap: BinaryHeap::with_capacity(n.min(1 << 16)),
             generation: 0,
             expanded: 0,
@@ -237,7 +493,8 @@ impl Astar {
     /// between adjacent cells (both in grid coordinates), or `None` when it cannot be taken;
     /// a diagonal step is offered only after both orthogonal steps are `Some` (no corner
     /// cutting). `heuristic(cell)` must not overestimate. The path, without the start, is
-    /// written to `out` in grid coordinates.
+    /// written to `out` in grid coordinates. `step` is not asked about a step into a cell the
+    /// search has closed, unless a diagonal's corner rule needs the answer.
     pub fn find(
         &mut self,
         q: &PathQuery,
@@ -286,26 +543,24 @@ impl Astar {
 
         self.generation = self.generation.wrapping_add(1);
         if self.generation == 0 {
-            self.stamp.fill(0);
-            self.closed.fill(0);
+            self.nodes.fill(Node::default());
             self.generation = 1;
         }
         let gen_ = self.generation;
         self.heap.clear();
-        self.g[start as usize] = 0;
-        self.from[start as usize] = u32::MAX;
-        self.stamp[start as usize] = gen_;
+        self.nodes[start as usize] = Node { g: 0, from: u32::MAX, stamp: gen_, ..self.nodes[start as usize] };
         let h0 = heuristic((sx, sy));
-        self.heap.push(Reverse((u64::from(h0), start)));
+        self.heap.push(Reverse(u64::from(h0) << NODE_BITS | u64::from(start)));
         let mut best = start;
         let mut best_h = h0;
         let mut expanded = 0u32;
 
-        while let Some(Reverse((_, node))) = self.heap.pop() {
-            if self.closed[node as usize] == gen_ {
+        while let Some(Reverse(key)) = self.heap.pop() {
+            let node = (key & NODE_MASK) as u32;
+            if self.nodes[node as usize].closed == gen_ {
                 continue;
             }
-            self.closed[node as usize] = gen_;
+            self.nodes[node as usize].closed = gen_;
             if node == goal {
                 self.expanded += u64::from(expanded);
                 self.unwind(node, start, global, out);
@@ -321,12 +576,18 @@ impl Astar {
                 best_h = h;
                 best = node;
             }
-            let base = self.g[node as usize];
+            let base = self.nodes[node as usize].g;
             let mut straight_ok = [false; 4];
             for (d, &(dx, dy)) in DIRS8.iter().enumerate() {
                 let (cx, cy) = (nx + dx, ny + dy);
+                let inside = window.contains(cx, cy);
+                // A closed cell is never entered again: its step is not asked, unless a diagonal
+                // waits on whether it could be taken.
+                if inside && (d >= 4 || q.cut_corners) && self.nodes[local(cx, cy) as usize].closed == gen_ {
+                    continue;
+                }
                 let cost = if d < 4 {
-                    let c = if window.contains(cx, cy) { step((nx, ny), (cx, cy)) } else { None };
+                    let c = if inside { step((nx, ny), (cx, cy)) } else { None };
                     straight_ok[d] = c.is_some();
                     c
                 } else {
@@ -337,7 +598,7 @@ impl Astar {
                         6 => (2, 3),
                         _ => (0, 3),
                     };
-                    if (q.cut_corners || (straight_ok[a] && straight_ok[b])) && window.contains(cx, cy) {
+                    if (q.cut_corners || (straight_ok[a] && straight_ok[b])) && inside {
                         step((nx, ny), (cx, cy))
                     } else {
                         None
@@ -345,20 +606,20 @@ impl Astar {
                 };
                 let Some(cost) = cost else { continue };
                 let next = local(cx, cy);
-                if self.closed[next as usize] == gen_ {
+                let there = &mut self.nodes[next as usize];
+                if there.closed == gen_ {
                     continue;
                 }
                 let g = base.saturating_add(cost);
                 if g > q.max_cost {
                     continue;
                 }
-                if self.stamp[next as usize] == gen_ && self.g[next as usize] <= g {
+                if there.stamp == gen_ && there.g <= g {
                     continue;
                 }
-                self.g[next as usize] = g;
-                self.from[next as usize] = node;
-                self.stamp[next as usize] = gen_;
-                self.heap.push(Reverse((u64::from(g) + u64::from(heuristic((cx, cy))), next)));
+                (there.g, there.from, there.stamp) = (g, node, gen_);
+                let f = u64::from(g) + u64::from(heuristic((cx, cy)));
+                self.heap.push(Reverse(f << NODE_BITS | u64::from(next)));
             }
         }
         self.expanded += u64::from(expanded);
@@ -373,7 +634,7 @@ impl Astar {
         let mut n = end;
         while n != start && n != u32::MAX {
             out.push(global(n));
-            n = self.from[n as usize];
+            n = self.nodes[n as usize].from;
         }
         out.reverse();
     }
@@ -427,6 +688,51 @@ mod tests {
             for y in 0..h as i32 {
                 for x in 0..w as i32 {
                     assert_eq!(r.dist(x, y), want[g.ix(x as u32, y as u32)], "({x},{y})");
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn fill_reaches_what_flood_reaches() {
+        let mut rng = crate::rng::Sfc32::seeded(9, 0);
+        let (mut r, mut f) = (Reach::new(), Fill::new());
+        for round in 0..200 {
+            let (w, h) = (1 + rng.below(150), 1 + rng.below(40));
+            let odds = 40 + rng.below(50);
+            let cells: Vec<bool> = (0..w * h).map(|_| rng.below(100) < odds).collect();
+            let g = Grid::from_vec(w, h, cells);
+            // Starts open or shut, repeated, and outside the grid.
+            let mut starts: Vec<(i32, i32)> =
+                (0..=rng.below(4)).map(|_| (rng.below(w + 2) as i32 - 1, rng.below(h + 2) as i32 - 1)).collect();
+            if round % 7 == 0 {
+                starts.push(starts[0]);
+            }
+            flood(w, h, &starts, Conn::Four, u32::MAX, |x, y| g.read(x, y, false), &mut r);
+            fill(w, h, &starts, |i| g.as_slice()[i], &mut f);
+            assert_eq!(f.count(), r.count(), "round {round}");
+            // A word at a time, with every bit past the grid's end set: they are ignored.
+            let cells = g.as_slice();
+            let word = |k: usize| {
+                (0..64).fold(0u64, |m, j| m | u64::from(cells.get((k << 6) + j).copied().unwrap_or(true)) << j)
+            };
+            let mut by_word = Fill::new();
+            fill_words(w, h, &starts, word, &mut by_word);
+            assert_eq!(by_word.count(), r.count(), "round {round}");
+            assert_eq!(by_word.runs().len(), f.runs().len(), "round {round}");
+            let mut from_runs = vec![false; (w * h) as usize];
+            for run in f.runs() {
+                for i in run.cells(w) {
+                    assert!(!from_runs[i], "round {round}: cell {i} in two runs");
+                    from_runs[i] = true;
+                }
+            }
+            for y in -1..=h as i32 {
+                for x in -1..=w as i32 {
+                    assert_eq!(f.reached(x, y), r.reached(x, y), "round {round} ({x},{y})");
+                    if f.reached(x, y) {
+                        assert!(from_runs[g.ix(x as u32, y as u32)]);
+                    }
                 }
             }
         }

@@ -1,0 +1,12 @@
+{
+  "source": "PORT.md §9.4, Modern PC (T2): release, one thread; `jane bench gen --json` prints this shape",
+  "class": "modern-pc",
+  "unit": "us",
+  "stat": "p99",
+  "gen": {
+    "skeleton_attempt": 10000,
+    "county_build_solve": 300000,
+    "dungeon": 15000,
+    "new_game": 500000
+  }
+}

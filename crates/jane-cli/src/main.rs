@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 use std::time::Instant;
 
+mod bench;
 #[path = "gen.rs"]
 mod gen_cmd;
 mod hash_cmd;
@@ -26,13 +27,18 @@ commands:
   view --interior <house|cellar|arms|church|all> [--seeds A..B | --seed N] [--out DIR]
                                       draw each seed's hand-built interior, with attempts and the solver's verdict
 {GEN}
+{BENCH}
 {SHEET}
 {HASH}
   play --model reader|rusher --seed N | replay verify|record|diff   a player model plays; tapes (`jane play --help`)
   help                                this text";
 
 fn usage() -> String {
-    USAGE.replace("{GEN}", gen_cmd::USAGE).replace("{SHEET}", sheet_cmd::USAGE).replace("{HASH}", hash_cmd::USAGE)
+    USAGE
+        .replace("{GEN}", gen_cmd::USAGE)
+        .replace("{BENCH}", bench::USAGE)
+        .replace("{SHEET}", sheet_cmd::USAGE)
+        .replace("{HASH}", hash_cmd::USAGE)
 }
 
 fn main() -> ExitCode {
@@ -50,6 +56,13 @@ fn main() -> ExitCode {
             Ok(()) => ExitCode::SUCCESS,
             Err(e) => {
                 eprintln!("jane gen: {e}");
+                ExitCode::FAILURE
+            }
+        },
+        Some("bench") => match bench::run(&args[1..]) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(e) => {
+                eprintln!("jane bench: {e}");
                 ExitCode::FAILURE
             }
         },

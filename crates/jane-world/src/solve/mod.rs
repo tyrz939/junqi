@@ -36,7 +36,7 @@ pub mod run;
 pub mod sketch;
 
 pub use ablate::{Grant, Withhold, lock_holds, without};
-pub use model::{Contract, KeyTag, MAX_STATES, Options, ZoneRules};
+pub use model::{Contract, KeyTag, MAX_STATES, Options, Trail, ZoneRules};
 pub use report::{BuildInfo, Owner, Report, RowFault, SolveError, TriggerName};
-pub use run::{solve, validate};
+pub use run::{resolve, solve, solve_kept, validate};
 pub use sketch::Sketch;
