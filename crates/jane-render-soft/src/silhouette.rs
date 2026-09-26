@@ -105,39 +105,41 @@ pub fn cast(mask: &mut Mask, page: &Page, s: &SpriteCmd, c: &Caster, (kx, ky): (
 }
 
 /// Applies the mask to `t` and clears it: each covered pixel toward `dst * shade` by its
-/// strength, a pixel on the shadow's edge only where the dither says. Returns pixels written.
+/// strength, a covered pixel on the shadow's edge by five eighths of it, and the ring of px just
+/// outside by three eighths where the ordered dither says: the edge is one dither step soft, and
+/// a post's thin shadow keeps its body. Returns pixels written.
 pub fn apply(t: &mut Target<'_>, mask: &mut Mask, shade: Rgb) -> u64 {
     let Some((x0, y0, x1, y1)) = mask.dirty.take() else { return 0 };
-    let w = mask.w;
-    let at =
-        |m: &[u8], x: i32, y: i32| if x < 0 || y < 0 || x >= w || y >= mask.h { 0 } else { m[(y * w + x) as usize] };
+    let (w, h) = (mask.w, mask.h);
+    let at = |m: &[u8], x: i32, y: i32| if x < 0 || y < 0 || x >= w || y >= h { 0 } else { m[(y * w + x) as usize] };
     let mut n = 0;
     let [sr, sg, sb] = shade.map(|c| 256 - i32::from(c) - i32::from(c >> 7));
-    for y in y0..y1 {
-        for x in x0..x1 {
-            let m = mask.px[(y * w + x) as usize];
-            if m == 0 {
-                continue;
-            }
-            let edge = at(&mask.px, x - 1, y) == 0
-                || at(&mask.px, x + 1, y) == 0
-                || at(&mask.px, x, y - 1) == 0
-                || at(&mask.px, x, y + 1) == 0;
-            if edge && BAYER4[(y & 3) as usize][(x & 3) as usize] >= 8 {
-                continue;
-            }
-            let m = i32::from(m) + i32::from(m >> 7);
+    for y in (y0 - 1).max(0)..(y1 + 1).min(h) {
+        for x in (x0 - 1).max(0)..(x1 + 1).min(w) {
+            let m = i32::from(mask.px[(y * w + x) as usize]);
+            let near = [(x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)].map(|(a, b)| i32::from(at(&mask.px, a, b)));
+            let s = if m > 0 {
+                if near.contains(&0) { m * 5 / 8 } else { m }
+            } else {
+                let most = near.into_iter().max().unwrap_or(0);
+                if most == 0 || BAYER4[(y & 3) as usize][(x & 3) as usize] >= 8 {
+                    continue;
+                }
+                most * 3 / 8
+            };
+            let s = s + (s >> 7);
             let d = &mut t.px[(y * t.w + x) as usize];
             let c = *d;
             let ch = |shift: u32, k: i32| {
                 let v = ((c >> shift) & 0xff) as i32;
-                ((v * (256 - ((k * m) >> 8))) >> 8) as u32
+                ((v * (256 - ((k * s) >> 8))) >> 8) as u32
             };
             *d = 0xff00_0000 | ch(16, sr) << 16 | ch(8, sg) << 8 | ch(0, sb);
             n += 1;
         }
-        let row = &mut mask.px[(y * w + x0) as usize..(y * w + x1) as usize];
-        row.fill(0);
+    }
+    for y in y0..y1 {
+        mask.px[(y * w + x0) as usize..(y * w + x1) as usize].fill(0);
     }
     n
 }
