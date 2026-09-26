@@ -220,6 +220,18 @@ impl Canvas {
         Canvas { flat: true, ..Canvas::new(w, h) }
     }
 
+    /// Clear all four layers, keeping the size and the flat flag: a scratch canvas reused
+    /// without allocating (the chunk painter's strips).
+    pub fn clear(&mut self) {
+        self.albedo.fill(Ix::CLEAR);
+        self.normal.fill(FLAT);
+        self.emissive.fill(Ix::CLEAR);
+        self.height.fill(0);
+        self.parts.fill(0);
+        self.part = 0;
+        self.emitting = false;
+    }
+
     /// Width in px.
     pub fn w(&self) -> i32 {
         self.w
@@ -439,33 +451,25 @@ impl Canvas {
         }
     }
 
-    /// A soft lit ellipsoid filling the box `r`: [`Canvas::ellipse_lit`]'s shading with an
-    /// ordered dither across each tone boundary instead of a hard band, and its outer 2 px
-    /// blended a tone darker by the same dither. Same normals and dome height.
+    /// A soft lit ellipsoid filling the box `r`: [`Canvas::ellipse_lit`]'s shading in all eight
+    /// tones of the ramp (the half-steps are what soften a boundary), each boundary broken into
+    /// 2 px clusters by a hash so no band runs ruled, and a tone of reflected light just inside
+    /// the edge on the shadow side. No dither: soft is made of more tones, never of a checker
+    /// (ART.md §3.1). Same normals and dome height.
     pub fn soft_ellipse(&mut self, r: Rect, ramp: Ramp, z: Z) {
         self.begin();
-        let small = r.w.min(r.h);
+        let seed = h32(r.x as u32, r.y as u32, (r.w * 131 + r.h) as u32);
         for y in r.y..r.bottom() {
             for x in r.x..r.right() {
                 let Some(n) = sphere_at(r, x, y) else { continue };
                 let lam = lambert(n);
-                let i = band(lam);
-                let mut tone = i as i32;
-                if i < 7 {
-                    let (lo, hi) = (SHADE_AT[i].max(-UNIT), SHADE_AT[i + 1]);
-                    let t = (lam - lo) * 16 / (hi - lo).max(1);
-                    // Dither only the upper part of a band into the next tone: 2 or 3 px wide.
-                    if t >= 9 && (t - 9) * 16 / 7 > i32::from(bayer(x, y)) {
-                        tone += 1;
-                    }
+                let jitter = below(h32((x >> 1) as u32, (y >> 1) as u32, seed ^ salt::STROKES), 13) as i32 - 6;
+                let mut tone = Tone::ALL[band(lam + jitter)];
+                let inner = N4.iter().all(|&(dx, dy)| sphere_at(r, x + dx, y + dy).is_some());
+                let near = sphere_at(r, x + 2, y).is_none() || sphere_at(r, x, y + 2).is_none();
+                if lam < 0 && inner && near {
+                    tone = tone.step(1);
                 }
-                // Distance from the edge in eighths of a px, by the radius along the normal.
-                let len = isqrt((n[0] * n[0] + n[1] * n[1]) as u64) as i32;
-                let e8 = (UNIT - len) * small * 4 / UNIT;
-                if e8 < 16 && 16 - e8 > i32::from(bayer(x, y)) {
-                    tone -= 1;
-                }
-                let tone = Tone::ALL[tone.clamp(0, 7) as usize];
                 self.put(x, y, ramp.at(tone), normal(n[0], n[1]), z.at(n[2], UNIT));
             }
         }
@@ -640,7 +644,8 @@ impl Canvas {
     }
 
     /// The baked contact shadow: index 1 on the clear pixels of the ellipse in `r` (under a
-    /// thing, where it meets what it stands on), thinned by dither over its outer `spread` px.
+    /// thing, where it meets what it stands on), drawn `spread / 2` px inside the ellipse's edge
+    /// so it hugs the foot. Solid: a contact shadow is never a checker (ART.md §3.1).
     pub fn ao_contact(&mut self, r: Rect, spread: i32) {
         self.begin();
         let small = r.w.min(r.h);
@@ -652,7 +657,7 @@ impl Canvas {
                 }
                 let len = isqrt((n[0] * n[0] + n[1] * n[1]) as u64) as i32;
                 let e8 = (UNIT - len) * small * 4 / UNIT;
-                if 2 * e8 > i32::from(bayer(x, y)) * spread {
+                if e8 >= spread * 4 {
                     self.put(x, y, Ix::AO, FLAT, 0);
                 }
             }
@@ -696,10 +701,14 @@ impl Canvas {
         }
     }
 
-    /// The outline, run last and never typed by a generator (ART.md §3): every drawn pixel that
-    /// meets clear, AO or the canvas edge becomes `k`; a pixel of a later part standing at least
-    /// 2 px above an earlier part it touches becomes `K`, the interior seam. Normals and heights
-    /// stay; outlined pixels stop emitting.
+    /// The outline, run last and never typed by a generator (ART.md §3): **selective**. Every
+    /// drawn pixel that meets clear, AO or the canvas edge becomes an outline pixel in its own
+    /// material's dark: the ramp's deep tone where the edge faces down or right, away from the
+    /// light, and its shade where it faces only up or left, so the lit edge reads lighter; `k`
+    /// only for a pixel that is no ramp's. A pixel of a later part standing at least 2 px above an
+    /// earlier part it touches is the interior seam: its material's shade over the same material,
+    /// `K` between unlike ones. A flat canvas (the font, the chrome) keeps the plain `k` and `K`
+    /// of the UI (§7). Normals and heights stay; outlined pixels stop emitting.
     pub fn outline(&mut self) {
         let mut out = self.albedo.clone();
         for y in 0..self.h {
@@ -708,13 +717,24 @@ impl Canvas {
                 if !self.albedo[i].is_opaque() {
                     continue;
                 }
-                if N4.iter().any(|&(dx, dy)| !self.get(x + dx, y + dy).is_opaque()) {
-                    out[i] = Ix::INK;
-                } else if N4.iter().any(|&(dx, dy)| {
-                    let j = ((y + dy) * self.w + x + dx) as usize;
+                let open = |dx: i32, dy: i32| !self.get(x + dx, y + dy).is_opaque();
+                let seam = N4.iter().find(|&&(dx, dy)| {
+                    let Some(j) = self.idx(x + dx, y + dy) else { return false };
                     self.parts[j] < self.parts[i] && self.height[i] >= self.height[j].saturating_add(SEAM_RISE)
-                }) {
-                    out[i] = Ix::SEAM;
+                });
+                let own = Ramp::of(self.albedo[i]);
+                if N4.iter().any(|&(dx, dy)| open(dx, dy)) {
+                    let away = open(0, 1) || open(1, 0);
+                    out[i] = match own {
+                        Some((r, _)) if !self.flat => r.at(if away { Tone::Deep } else { Tone::Shade }),
+                        _ => Ix::INK,
+                    };
+                } else if let Some(&(dx, dy)) = seam {
+                    let under = Ramp::of(self.get(x + dx, y + dy)).map(|(r, _)| r);
+                    out[i] = match own {
+                        Some((r, _)) if !self.flat && under == Some(r) => r.at(Tone::Shade),
+                        _ => Ix::SEAM,
+                    };
                 }
                 if out[i] != self.albedo[i] {
                     self.emissive[i] = Ix::CLEAR;
@@ -872,12 +892,28 @@ mod tests {
         let mut c = Canvas::new(16, 16);
         c.fill_rect(Rect::new(1, 1, 14, 14), Ramp::Stone.at(Tone::Base), 2);
         c.fill_rect(Rect::new(5, 5, 6, 6), Ramp::Iron.at(Tone::Base), 6);
+        c.fill_rect(Rect::new(9, 9, 3, 3), Ramp::Stone.at(Tone::Light), 9);
         c.outline();
-        assert_eq!(c.get(1, 1), Ix::INK);
-        assert_eq!(c.get(14, 7), Ix::INK);
-        assert_eq!(c.get(5, 7), Ix::SEAM, "the raised part's edge");
+        assert_eq!(c.get(1, 1), Ramp::Stone.at(Tone::Shade), "a lit top-left edge: the material's shade");
+        assert_eq!(c.get(14, 7), Ramp::Stone.at(Tone::Deep), "an edge away from the light: its deep");
+        assert_eq!(c.get(7, 14), Ramp::Stone.at(Tone::Deep));
+        assert_eq!(c.get(5, 7), Ix::SEAM, "the raised part's edge over an unlike material");
+        assert_eq!(c.get(9, 10), Ix::SEAM, "stone over iron is unlike too");
         assert_eq!(c.get(4, 7), Ramp::Stone.at(Tone::Base), "the lower part is untouched");
         assert_eq!(c.get(7, 7), Ramp::Iron.at(Tone::Base));
+        let mut flat = Canvas::flat(8, 8);
+        flat.fill_rect(Rect::new(1, 1, 6, 6), Ramp::UiPanel.at(Tone::Base), 0);
+        flat.outline();
+        assert_eq!(flat.get(1, 1), Ix::INK, "the chrome keeps its k");
+    }
+
+    #[test]
+    fn a_seam_within_one_material_is_its_own_shade() {
+        let mut c = Canvas::new(12, 12);
+        c.fill_rect(Rect::new(1, 1, 10, 10), Ramp::Stone.at(Tone::Base), 2);
+        c.fill_rect(Rect::new(4, 4, 4, 4), Ramp::Stone.at(Tone::Light), 6);
+        c.outline();
+        assert_eq!(c.get(4, 5), Ramp::Stone.at(Tone::Shade));
     }
 
     #[test]
