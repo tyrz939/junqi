@@ -21,6 +21,7 @@ pub mod looks;
 pub mod palette;
 pub mod person;
 pub mod sheet;
+pub mod sheet_kit;
 pub mod sheet_person;
 pub mod sprite;
 

@@ -129,6 +129,13 @@ pub fn run(args: &[String]) -> Result<(), String> {
             sets.extend(looks::family(looks::Family::Creature)?);
             write(&out, "units", &sheet_person::units(&sets, &font))?;
         }
+        Some("props") => {
+            let mut sets = looks::family(looks::Family::Prop)?;
+            if let Some(f) = args.iter().position(|a| a == "--only").and_then(|i| args.get(i + 1)) {
+                sets.retain(|r| f.split(',').any(|p| r.name.contains(p)));
+            }
+            write(&out, "props", &jane_art::sheet_kit::props(&sets, &font))?;
+        }
         Some("creatures") => {
             write(&out, "creatures", &sheet_person::units(&looks::family(looks::Family::Creature)?, &font))?;
         }

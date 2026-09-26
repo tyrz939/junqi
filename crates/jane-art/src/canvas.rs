@@ -1382,6 +1382,41 @@ impl Canvas {
         }
     }
 
+    /// Fill `r` with `ix` facing `n` at height `z`, as one part: a flat top faces up, a board
+    /// faces south; the kit's parts paint over it in the same part.
+    pub fn fill_normal(&mut self, r: Rect, ix: Ix, n: Normal, z: u8) {
+        self.begin();
+        for y in r.y..r.bottom() {
+            for x in r.x..r.right() {
+                self.put(x, y, ix, n, z);
+            }
+        }
+    }
+
+    /// Recolour what emits by `f`, in the albedo and the emissive alike: a flame turned cold, a
+    /// lens turned red.
+    pub fn remap_emitting(&mut self, f: impl Fn(Ix) -> Ix) {
+        for (a, e) in self.albedo.iter_mut().zip(self.emissive.iter_mut()) {
+            if *e != Ix::CLEAR {
+                *a = f(*a);
+                *e = *a;
+            }
+        }
+    }
+
+    /// Put back what glowed: each `(x, y, ix)` drawn in `ix` and emitting it again, where the
+    /// pixel is still drawn (a lamp's glass after the outline).
+    pub fn relight(&mut self, glow: &[(i32, i32, Ix)]) {
+        for &(x, y, ix) in glow {
+            if let Some(i) = self.idx(x, y) {
+                if self.albedo[i].is_opaque() && !self.flat {
+                    self.albedo[i] = ix;
+                    self.emissive[i] = ix;
+                }
+            }
+        }
+    }
+
     /// Whether any drawn pixel of this canvas has the albedo `ix`.
     pub fn has(&self, ix: Ix) -> bool {
         self.albedo.contains(&ix)

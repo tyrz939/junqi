@@ -13,8 +13,14 @@
 //! ([`Canvas::upright`]), and a lid or a table top is flat at the height of the face under it
 //! ([`Canvas::lid`]); a thing lying flat on the ground is capped at a few px.
 
+mod barrier;
+mod container;
+mod furniture;
+mod lamp;
 pub(crate) mod parts;
+mod ritual;
 mod sign;
+mod structure;
 
 use jane_core::grid::Rect;
 use jane_core::ids::SpriteId;
@@ -156,6 +162,12 @@ fn draw(c: &mut Canvas, k: &Kit, state: State) -> Result<Stand, String> {
     let unknown = || format!("no {:?} shape \"{}\"", k.look.family, k.look.shape);
     match k.look.family {
         PropFamily::Sign => sign::draw(c, k, state).ok_or_else(unknown),
+        PropFamily::Lamp => lamp::draw(c, k, state).ok_or_else(unknown),
+        PropFamily::Barrier => barrier::draw(c, k, state).ok_or_else(unknown),
+        PropFamily::Container => container::draw(c, k, state).ok_or_else(unknown),
+        PropFamily::Ritual => ritual::draw(c, k, state).ok_or_else(unknown),
+        PropFamily::Furniture => furniture::draw(c, k, state).ok_or_else(unknown),
+        PropFamily::Structure => structure::draw(c, k, state).ok_or_else(unknown),
         _ => Err(unknown()),
     }
 }
@@ -167,14 +179,28 @@ pub(crate) const HARD: [Tone; 8] =
 
 /// Clusters, the contact shadow, the selective outline, the true heights.
 fn finish(c: &mut Canvas, k: &Kit, stand: Stand) {
+    // What glows is light, not paint: it keeps its colour through the clean-up and the outline
+    // (a candle's flame is five px, and a line would eat it).
+    let glow: Vec<(i32, i32, crate::palette::Ix)> = (0..c.h())
+        .flat_map(|y| (0..c.w()).map(move |x| (x, y)))
+        .filter_map(|(x, y)| {
+            let e = c.emissive_at(x, y);
+            (e != crate::palette::Ix::CLEAR).then_some((x, y, e))
+        })
+        .collect();
     for r in k.ramps() {
         c.declutter(r);
     }
-    c.despike();
-    c.outline_sel();
+    // Silk is a thread a px wide and pale: despiking would eat it from its ends and a line
+    // would turn it to soot. It is the one thing in the kit drawn unlined.
+    if k.look.shape != "web" {
+        c.despike();
+        c.outline_sel();
+    }
     for r in k.ramps() {
         c.declutter(r);
     }
+    c.relight(&glow);
     match stand {
         Stand::Up(tops) => {
             c.upright(k.foot());
