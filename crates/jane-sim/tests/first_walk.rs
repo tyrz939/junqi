@@ -138,3 +138,24 @@ fn letter_dog_key_kitchen_note_chest_bench_orb() {
     let (cx, cy) = near_door.cell();
     assert!((cx - i32::from(front.cell.x)).abs() <= 8 && (cy - i32::from(front.cell.y)).abs() <= 8);
 }
+
+#[test]
+fn the_dog_only_says_the_city_dog_line_if_you_keep_bothering_it() {
+    // rest.test.ts "the dog only says the city-dog line if you keep bothering it".
+    let cat = jane_data::catalog();
+    let mut s = new_game();
+    let gate = sym(&s, "yard_gate");
+    cmd(&mut s, Command::Dev(DevOp::Tp { zone: ZoneId::County, mark: gate }));
+    // Past the intro, nothing to hand in: the idle chain.
+    s.state_mut().quests.done.push(cat.story.quest_id("defeat_skeleton").unwrap());
+    assert!(walk_to_unit(&mut s, "dog"));
+    let mut heard = Vec::new();
+    for _ in 0..6 {
+        cmd(&mut s, Command::Use);
+        let d = s.view(Seat(0)).unwrap().dialogue().expect("the dog answers");
+        assert_eq!(d.tree, cat.story.dialogue_id("dog"));
+        heard.push(d.node.unwrap().id);
+        talk_through(&mut s, &[]);
+    }
+    assert_eq!(heard, ["idle", "poke_1", "poke_2", "poke_3", "poke_4", "poke_5"]);
+}

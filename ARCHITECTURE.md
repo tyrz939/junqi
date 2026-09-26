@@ -493,7 +493,7 @@ struct View<'a>   // one seat, her zone, read only
   props_in(CellRect) -> impl Iterator<&Prop>, prop_spawn(&Prop) -> Option<&PropSpawn>,
   light_showing(&Prop) -> Option<&Light>, lamps_lit()                          // THE rule, shared with the sim
   drops(), projectiles(), grounds(), unit_at(Vec2),
-  focus() -> Option<Focus { target: FocusRef, verb: Verb /* Enter, Unlock, Open, PickUp, Craft, Read, Use, HoldToPush, Take(ItemId), Talk, PutDown, Custom(TextId) */ }>
+  focus() -> Option<Focus { target: FocusRef, verb: Verb /* Enter, TryTheDoor, Unlock, Open, PickUp, Craft, Read, Use, HoldToPush, Take(ItemId), Talk, PutDown, Custom(TextId) */, pushes: bool /* "(hold to push)" */ }>
   hud() -> Hud { hp, max_hp, mp, max_mp, energy, statuses, target: Option<(UnitId, Permille)> }
   dialogue() -> Option<DialogueView { speaker, lines: &[TextId], line, options: &[TextId], awaiting_choice }>
   quests() -> impl Iterator<QuestView { id, counts }>, near_bench(), near_rest(), craft_output(), book(), marks(), rects(), debug()
@@ -509,10 +509,10 @@ enum EventKind { Toast(ToastKind), Damage { unit, from, at, amount, school, crit
   Quest { quest, change }, Zone { zone, first }, Shake, Camera, Tiles(CellRect), Prop { prop, change }, Bag, Dialogue, PlayerDied, Rest,
   Sfx { kind, at }, Party { connected }, Journal(JournalKind), Weather { kind }, Consequence(ConsequenceId) }
 
-enum ToastKind { Text(TextId), QuestGiven, QuestDone, KillProgress { quest, req, n, of }, InventoryFull, TooTired, Needs { item, qty },
-  NothingToRepair, NothingGrowsWithoutLight, NothingGrows, Locked { prop }, UnlockedWith(ItemId), NightLock(TextId), WokeAtRest, WokeAtDoor,
-  PartyChanged, LeftWhatMattered, PutDownFirst, ShouldKeep, NotHurt, FitsALock, ItShifts, NoRoom, NightWaits, Stronger, WordsStay,
-  Learned(SpellId), Under { top, label }, SpellError(SpellError) }
+enum ToastKind { Text(TextRef), QuestGiven(QuestId), QuestDone(QuestId), KillProgress { quest, req, n, of }, InventoryFull, TooTired, Needs { item, qty },
+  NothingToRepair, NothingGrowsWithoutLight, NothingGrows, Locked { prop } /* its label and `locked_says` */, UnlockedWith(ItemId), NightLock(TextRef),
+  WokeAtRest, WokeAtDoor, PartyChanged, LeftWhatMattered, PutDownFirst, ShouldKeep, NotHurt, FitsALock, ItShifts, NoRoom, NightWaits, Stronger,
+  WordsStay, Learned(SpellId), Under { top, found } /* found's label */, SpellError(SpellError) }
 ```
 
 Routing is the TS rule: personal kinds carry `to`; zone-local kinds carry `in_zone`; party-wide kinds carry neither. `events_for(seat)` filters. Strings come from `TEXT[id]`, expanded by `jane-present::text::expand(s, heroine, seed)`.
