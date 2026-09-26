@@ -28,7 +28,7 @@ use jane_core::ZoneId;
 use jane_world::county::{County, STAGES, county_skeleton};
 use jane_world::dungeon::checks::{self, Ctx, ORDER, first_completion, rules_of};
 use jane_world::skeleton::{SkeletonRows, build_skeleton};
-use jane_world::solve::{Options, ZoneRules, solve, validate};
+use jane_world::solve::{Options, ZoneRules, solve_kept, validate};
 
 use crate::gen_cmd;
 
@@ -155,13 +155,13 @@ fn dungeon(b: &mut Bench, zone: ZoneId, seed: u32) {
             let rules = rules_of(info.mission);
             let opts = Options { trace: true, ..Options::default() };
             let t = Instant::now();
-            let base = solve(bp, &rules, &opts);
+            let (base, trail) = solve_kept(bp, &rules, &opts);
             part("solve", ns(t));
             if base.ok() {
                 let t = Instant::now();
                 let walk = first_completion(bp, info);
                 part("walk", ns(t));
-                let c = Ctx { bp, info, m: info.mission, cat: jane_data::catalog(), rules, opts, base, walk };
+                let c = Ctx { bp, info, m: info.mission, cat: jane_data::catalog(), rules, opts, base, trail, walk };
                 let mut faults = 0;
                 for check in ORDER {
                     let t = Instant::now();

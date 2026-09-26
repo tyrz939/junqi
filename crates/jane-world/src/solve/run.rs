@@ -9,8 +9,9 @@ use jane_core::blueprint::Blueprint;
 use jane_core::grid::Grid;
 use jane_core::tile::F_SOLID;
 
+use super::ablate::Grant;
 use super::flood::Layers;
-use super::model::{KeyTag, MAX_PASSES, MAX_STATES, Options, PropState, Solve, States, TriggerRow, ZoneRules};
+use super::model::{KeyTag, MAX_PASSES, MAX_STATES, Options, PropState, Solve, States, Trail, TriggerRow, ZoneRules};
 use super::passes::{Pass, gates, hops, ifs, kills, loot, mechanisms, repairs, states, triggers};
 use super::report::{BuildInfo, Owner, Report, SolveError, TriggerName, name_of};
 use super::rows;
@@ -41,6 +42,98 @@ pub fn solve(bp: &Blueprint, rules: &ZoneRules, opts: &Options) -> Report {
         Err(errors) => return Report { errors, info: BuildInfo::default() },
     };
     s.run();
+    s.finish()
+}
+
+/// [`solve`], keeping a [`Trail`] of it for [`resolve`] to go on from.
+pub fn solve_kept(bp: &Blueprint, rules: &ZoneRules, opts: &Options) -> (Report, Trail) {
+    let mut s = match Solve::new(bp, rules, opts) {
+        Ok(s) => s,
+        Err(errors) => return (Report { errors, info: BuildInfo::default() }, Trail::default()),
+    };
+    s.trail = Some(Box::new(Trail { prop_ix: s.prop_ix.clone(), states: s.states.clone(), ..Trail::default() }));
+    s.run();
+    let trail = s.trail.take().map(|t| *t).unwrap_or_default();
+    (s.finish(), trail)
+}
+
+/// The same report as `solve(bp, rules, opts)`, where `opts` is `base` with more withheld or
+/// shut (what `Options::without` makes) and `base` was solved by [`solve_kept`] into `report` and
+/// `trail` (C1 and C6 ask this of every lock and lock-in).
+///
+/// Until the first pass in which the base solve had, worked or opened what is taken away, the
+/// solve without it goes exactly as the base did, so it goes on from the trail's copy of the
+/// solve as that pass began, with the thing taken away: a key tag, spell or flag from the pass it
+/// was first had in (from the start if given at the door); a prop's lists from the pass it was
+/// first fired, looted, read or opened, or a flood went on from it into another layer; a gate
+/// kept shut from the pass it was first opened, or from the start if it is ever unlocked without
+/// being opened. If none of them ever made a difference, the report is the base's.
+pub fn resolve(
+    bp: &Blueprint,
+    rules: &ZoneRules,
+    base: &Options,
+    report: &Report,
+    trail: &Trail,
+    opts: &Options,
+) -> Report {
+    let (w, bw) = (&opts.withhold, &base.withhold);
+    let same = opts.entry == base.entry && opts.fragment == base.fragment && opts.trace == base.trace;
+    let more = w.keys.starts_with(&bw.keys)
+        && w.verbs.starts_with(&bw.verbs)
+        && w.flags.starts_with(&bw.flags)
+        && w.props.starts_with(&bw.props)
+        && opts.shut.starts_with(&base.shut);
+    if !same || !more || trail.starts.is_empty() {
+        return solve(bp, rules, opts);
+    }
+    let grants = w.keys[bw.keys.len()..]
+        .iter()
+        .map(|&k| Grant::Key(k))
+        .chain(w.verbs[bw.verbs.len()..].iter().map(|&v| Grant::Verb(v)))
+        .chain(w.flags[bw.flags.len()..].iter().map(|&f| Grant::Flag(f)))
+        .chain(w.props[bw.props.len()..].iter().map(|&p| Grant::Prop(p)))
+        .chain(opts.shut[base.shut.len()..].iter().map(|&p| Grant::Shut(p)));
+    // The first pass each grant made a difference in: `Some(0)` from the start, `None` never.
+    let fired = |k| report.info.fired(k).map(|p| p + 1);
+    let mut from: Option<u16> = None;
+    for g in grants {
+        let first = match g {
+            Grant::Key(tag) => {
+                if rules.given_keys.iter().any(|&k| KeyTag::Tag(k) == tag) {
+                    return solve(bp, rules, opts);
+                }
+                trail.keys.get(&tag).copied()
+            }
+            Grant::Verb(sp) => {
+                if rules.given_verbs.as_ref().is_some_and(|v| v.contains(&sp)) {
+                    return solve(bp, rules, opts);
+                }
+                trail.verbs.get(&sp).copied()
+            }
+            Grant::Flag(f) => trail.flags.get(&f).copied(),
+            Grant::Prop(k) => {
+                let edge = trail.prop_ix.get(&k).and_then(|i| trail.edges.get(i)).copied();
+                [fired(k), edge].into_iter().flatten().min()
+            }
+            Grant::Shut(k) => {
+                let Some(&i) = trail.prop_ix.get(&k) else { continue };
+                let unlocked =
+                    !bp.props[i].locked || trail.states.governed.iter().flatten().any(|g| g[i].locked == Some(false));
+                if unlocked { Some(1) } else { fired(k) }
+            }
+        };
+        if let Some(p) = first {
+            from = Some(from.map_or(p, |f| f.min(p)));
+        }
+    }
+    let Some(from) = from else { return report.clone() };
+    let pass = from - 1;
+    let mut s = Solve::restore(bp, rules, opts, trail, pass);
+    for (i, p) in bp.props.iter().enumerate() {
+        s.props[i].shut |= opts.shut.contains(&p.key);
+        s.props[i].withheld |= w.props.contains(&p.key);
+    }
+    s.run_from(pass);
     s.finish()
 }
 
@@ -208,6 +301,7 @@ impl<'a> Solve<'a> {
             opened: false,
             pass: 0,
             reached_cells: 0,
+            trail: None,
         };
         for &k in &rules.given_keys {
             s.add_key(KeyTag::Tag(k), 99);
@@ -222,7 +316,18 @@ impl<'a> Solve<'a> {
     /// Flood, then keep collecting and spending on what that flood reached until nothing new
     /// happens; flood again only if something that blocks feet changed.
     pub(crate) fn run(&mut self) {
-        for pass in 0..MAX_PASSES {
+        self.run_from(0);
+    }
+
+    /// [`Self::run`] from pass `first` on, with the solve as that pass begins.
+    pub(crate) fn run_from(&mut self, first: u16) {
+        for pass in first..MAX_PASSES {
+            if self.trail.is_some() {
+                let snap = self.snapshot();
+                if let Some(t) = self.trail.as_mut() {
+                    t.starts.push(snap);
+                }
+            }
             self.pass = pass;
             self.flood_all();
             self.settle();

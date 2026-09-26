@@ -46,6 +46,13 @@ pub(crate) struct Layers {
     pub visited: u64,
 }
 
+/// A copy without the scratch ([`Layers::keep`]).
+impl Clone for Layers {
+    fn clone(&self) -> Self {
+        self.keep()
+    }
+}
+
 impl Layers {
     pub fn new(w: u32, h: u32, count: usize, trace: bool) -> Self {
         let n = (w as usize) * (h as usize);
@@ -66,6 +73,28 @@ impl Layers {
             last: None,
             floods: 0,
             visited: 0,
+        }
+    }
+
+    /// A copy for the trail, without the scratch.
+    pub fn keep(&self) -> Self {
+        Layers {
+            w: self.w,
+            h: self.h,
+            count: self.count,
+            seen: self.seen.clone(),
+            blocked: self.blocked.clone(),
+            any: self.any.clone(),
+            reached: self.reached,
+            first_seen: self.first_seen.clone(),
+            reach: Fill::new(),
+            solid: self.solid.clone(),
+            before: Vec::new(),
+            stamped: self.stamped.clone(),
+            stamped_before: self.stamped_before.clone(),
+            last: self.last.clone(),
+            floods: self.floods,
+            visited: self.visited,
         }
     }
 
@@ -107,7 +136,7 @@ impl Layers {
 
     pub fn count_any(&self) -> u32 {
         let g = if self.count == 1 { &self.seen[0] } else { &self.any };
-        g.iter().filter(|&&c| c != 0).count() as u32
+        g.iter().map(|&c| u32::from(c != 0)).sum()
     }
 
     pub fn clear_any(&mut self) {

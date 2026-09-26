@@ -258,6 +258,42 @@ pub(crate) struct Solve<'a> {
     pub opened: bool,
     pub pass: u16,
     pub reached_cells: u32,
+    /// Kept pass by pass when the solve is asked for one (`run::solve_kept`).
+    pub trail: Option<Box<Trail>>,
+}
+
+/// What a solve went through, kept so it can be asked again without one grant and go on from the
+/// last pass the grant made no difference to (`run::resolve`): the solve as each pass began, and
+/// the pass (plus one) each thing was first had in.
+#[derive(Debug, Default)]
+pub struct Trail {
+    pub(crate) starts: Vec<Snapshot>,
+    pub(crate) prop_ix: BTreeMap<Key, usize>,
+    pub(crate) states: States,
+    pub(crate) keys: BTreeMap<KeyTag, u16>,
+    pub(crate) verbs: BTreeMap<SpellId, u16>,
+    pub(crate) flags: BTreeMap<FlagKey, u16>,
+    /// Controls (by prop index) a flood first went on from into another layer.
+    pub(crate) edges: BTreeMap<usize, u16>,
+}
+
+/// A [`Solve`] as a pass began: everything a pass can change. The blueprint, the rules and the
+/// options are the caller's; `prop_ix` and `states` never change after `Solve::new` and are kept
+/// once, in the [`Trail`].
+#[derive(Clone, Debug)]
+pub(crate) struct Snapshot {
+    props: Vec<PropState>,
+    triggers: Vec<TriggerRow>,
+    keys: BTreeMap<KeyTag, i32>,
+    verbs: Option<BTreeSet<SpellId>>,
+    flags: BTreeMap<FlagKey, i32>,
+    dead: BTreeSet<Key>,
+    waiting: Vec<Waiting>,
+    deferred: Vec<Deferred>,
+    layers: Layers,
+    hops: Vec<(Key, usize)>,
+    entry: (i32, i32),
+    reached_cells: u32,
 }
 
 impl<'a> Solve<'a> {
@@ -349,7 +385,62 @@ impl<'a> Solve<'a> {
 
     pub fn add_key(&mut self, tag: KeyTag, qty: i32) {
         if !self.opts.withhold.keys.contains(&tag) {
+            if let Some(t) = self.trail.as_mut() {
+                t.keys.entry(tag).or_insert(self.pass + 1);
+            }
             *self.keys.entry(tag).or_insert(0) += qty;
+        }
+    }
+
+    /// The solve as it stands, for the trail.
+    pub(crate) fn snapshot(&self) -> Snapshot {
+        Snapshot {
+            props: self.props.clone(),
+            triggers: self.triggers.clone(),
+            keys: self.keys.clone(),
+            verbs: self.verbs.clone(),
+            flags: self.flags.clone(),
+            dead: self.dead.clone(),
+            waiting: self.waiting.clone(),
+            deferred: self.deferred.clone(),
+            layers: self.layers.keep(),
+            hops: self.hops.clone(),
+            entry: self.entry,
+            reached_cells: self.reached_cells,
+        }
+    }
+
+    /// The solve kept in `trail` as pass `pass` began, asked with `opts`.
+    pub(crate) fn restore(
+        bp: &'a Blueprint,
+        rules: &'a ZoneRules,
+        opts: &'a Options,
+        trail: &Trail,
+        pass: u16,
+    ) -> Self {
+        let s = trail.starts[usize::from(pass)].clone();
+        Solve {
+            bp,
+            cat: jane_data::catalog(),
+            rules,
+            opts,
+            prop_ix: trail.prop_ix.clone(),
+            props: s.props,
+            triggers: s.triggers,
+            keys: s.keys,
+            verbs: s.verbs,
+            flags: s.flags,
+            dead: s.dead,
+            waiting: s.waiting,
+            deferred: s.deferred,
+            states: trail.states.clone(),
+            layers: s.layers,
+            hops: s.hops,
+            entry: s.entry,
+            opened: false,
+            pass,
+            reached_cells: s.reached_cells,
+            trail: None,
         }
     }
 
