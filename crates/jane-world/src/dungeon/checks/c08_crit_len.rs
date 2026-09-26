@@ -184,7 +184,7 @@ pub fn first_completion(bp: &Blueprint, info: &BuildInfo) -> Walk {
             }
         }
         let to = todo[ti];
-        let d = distance_to(&distances(bp, here.centre, &opened), to.centre);
+        let d = distance_to(&walk(bp, here.centre, &opened, Some(to.centre)), to.centre);
         let Some(d) = d else {
             out.errors.push(format!("no way to walk from {} to {}", m.nodes[here.node].id, m.nodes[to.node].id));
             return out;
@@ -203,6 +203,12 @@ pub fn first_completion(bp: &Blueprint, info: &BuildInfo) -> Walk {
 /// -1 where it cannot get. A locked gate and anything solid that is neither pushed nor carried
 /// stand in the way; a hidden prop does not.
 pub fn distances(bp: &Blueprint, from: (i32, i32), open: &BTreeSet<Key>) -> Grid<i32> {
+    walk(bp, from, open, None)
+}
+
+/// [`distances`], stopped as soon as `to` has its distance, if it is given: [`distance_to`] of
+/// `to` reads only that cell when it has one, and the whole flood when it has none.
+fn walk(bp: &Blueprint, from: (i32, i32), open: &BTreeSet<Key>, to: Option<(i32, i32)>) -> Grid<i32> {
     let cat = catalog();
     let (w, h) = (bp.w() as i32, bp.h() as i32);
     let mut blocked = Grid::new(bp.w(), bp.h(), false);
@@ -244,6 +250,9 @@ pub fn distances(bp: &Blueprint, from: (i32, i32), open: &BTreeSet<Key>) -> Grid
         return dist;
     }
     dist.set(start.0, start.1, 0);
+    if to == Some(start) {
+        return dist;
+    }
     let mut queue = vec![start];
     let mut head = 0;
     while head < queue.len() {
@@ -253,6 +262,9 @@ pub fn distances(bp: &Blueprint, from: (i32, i32), open: &BTreeSet<Key>) -> Grid
         for (nx, ny) in [(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)] {
             if free(nx, ny) && dist.read(nx, ny, 0) < 0 {
                 dist.set(nx, ny, d);
+                if to == Some((nx, ny)) {
+                    return dist;
+                }
                 queue.push((nx, ny));
             }
         }
