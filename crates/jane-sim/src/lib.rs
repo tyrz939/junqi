@@ -21,6 +21,7 @@
 //! | [`interact`], [`inventory`], [`bag`], [`dialogue`], [`quests`] | USE and the world verbs; bags, items and crafting; conversations; the quest log |
 //! | [`triggers`], [`under`], [`clear`], [`light`], [`verbs`] | triggers and plates; things under things; nothing solid lands on a unit; the light rule; rest and growth |
 //! | [`journal`] | what is known (§3.7) |
+//! | [`living`] | the living world (§4.6): the sky, the rain ramp, ecology, consequences, rumours |
 //! | [`hooks`] | combat's calls into the interact, inventory, quests, triggers, journal and living-world units |
 //! | [`ai`], [`snake`], [`npc`], [`presence`] | step 7's controllers (the AI loop, the snake, orders and npcs), step 3's schedules |
 //! | [`sim`], `seats`, `travel` | the scheduler, seats and commands, travel |
@@ -57,6 +58,7 @@ pub mod inventory;
 pub mod journal;
 pub mod life;
 pub mod light;
+pub mod living;
 pub mod loot;
 pub mod los;
 pub mod npc;

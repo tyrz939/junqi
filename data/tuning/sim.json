@@ -1,0 +1,5 @@
+{
+  "journalRing": 512,
+  "wetness": { "every": 1, "rise": 3, "fall": 1 },
+  "clearHours": 2
+}

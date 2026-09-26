@@ -177,7 +177,9 @@ pub const ITEM_STOP: Tick = Tick(30);
 /// Plates are looked at every this many ticks (`triggers.ts PLATE_PERIOD`).
 pub const PLATE_PERIOD: u32 = 6;
 /// Journal entries kept per kind (ARCHITECTURE.md §12).
-pub const JOURNAL_RING: u32 = 512;
+pub fn journal_ring() -> u32 {
+    u32::from(jane_data::catalog().living.tuning.journal_ring)
+}
 
 // --- controllers (`ai.ts`, `snake.ts`, `sim.ts stepDayOnly`) ----------------------------------
 

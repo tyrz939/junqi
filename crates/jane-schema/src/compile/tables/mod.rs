@@ -4,4 +4,5 @@ pub mod chunks;
 pub mod combat;
 pub mod county;
 pub mod dungeons;
+pub mod living;
 pub mod story;

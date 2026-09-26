@@ -17,7 +17,7 @@ use crate::ids::Seat;
 use crate::input::{InputFrame, StepInput, Stepped};
 use crate::ring::{Watchers, step_ring, wake_props};
 use crate::runtime::{ZoneRuntime, find_locals};
-use crate::state::{Bits, GameState, Growth, Journal, Quests, SAVE_VERSION, WeatherState};
+use crate::state::{Bits, GameState, Growth, Journal, Quests, SAVE_VERSION};
 use crate::sym::SymTable;
 use crate::tuning::{
     ENERGY_CARRY, ENERGY_REGEN, ENERGY_SPRINT, FOG_EVERY, MAX_PLAYERS, MOVE_DEADZONE, PLAYER_RESPAWN, START_HOUR,
@@ -82,8 +82,9 @@ impl Sim {
             growth: Growth::default(),
             syms: SymTable::default(),
             journal: Journal::default(),
-            weather: WeatherState::default(),
-            consequences_done: Bits::new(0),
+            weather: crate::living::first_skies(),
+            consequences_done: Bits::new(jane_data::catalog().living.consequences.len() as u32),
+            consequences_owed: Vec::new(),
             rumours: BTreeMap::new(),
         };
         let mut sim = Self::adopt(state, bps);
@@ -304,7 +305,8 @@ impl Sim {
     /// ```text
     ///  0 commands      (seat, seq) order; Join / Leave / Open are world level
     ///  1 freeze        frozen: stop here
-    ///  2 clock         tick, clock, day; clock rows once, actor None; the hour's world rolls
+    ///  2 clock         tick, clock, day; on the hour the world rolls, then clock rows once,
+    ///                  actor None; the rain ramp, consequences, rumours, owed edits (living)
     ///    for each live zone in ZoneId order, taken out of state.zones:
     ///  3 presence      every 30 ticks: schedules, dayOnly, nightOnly
     ///  4 ring          on a seat's block change
@@ -381,26 +383,27 @@ impl Sim {
             s.clock = 0;
             s.day += 1;
         }
-        if s.clock % TICKS_PER_HOUR != 0 {
-            return;
-        }
-        let hour = (s.clock / TICKS_PER_HOUR) as u8;
-        // The living-world unit: weather for every region, then ecology for every area, from the
-        // world stream; consequences whose bit is clear; rumours that land (§4.4, §4.6).
-        //
-        // Clock rows run once, with no actor, in the county (the rows name county things); what
-        // they say is heard by the whole party. The county's runtime is made for them if nobody
-        // is there, and dropped again at step 15.
-        let cat = jane_data::catalog();
-        if cat.story.clock_at(hour).next().is_none() {
-            return;
-        }
-        let snap = PartySnap::of(&self.state);
-        self.with_ctx(ZoneId::County, None, &snap, true, |cx| {
-            for row in cat.story.clock_at(hour) {
-                run_actions(cx, row.actions, Subject::None);
+        if s.clock % TICKS_PER_HOUR == 0 {
+            let hour = (s.clock / TICKS_PER_HOUR) as u8;
+            // The world stream, once an hour, in its fixed order: the sky of every region, then
+            // every area's ecology (§4.4, `living.rs`).
+            self.world_rolls();
+            // Clock rows run once, with no actor, in the county (the rows name county things);
+            // what they say is heard by the whole party. The county's runtime is made for them if
+            // nobody is there, and dropped again at step 15.
+            let cat = jane_data::catalog();
+            if cat.story.clock_at(hour).next().is_some() {
+                let snap = PartySnap::of(&self.state);
+                self.with_ctx(ZoneId::County, None, &snap, true, |cx| {
+                    for row in cat.story.clock_at(hour) {
+                        run_actions(cx, row.actions, Subject::None);
+                    }
+                });
             }
-        });
+        }
+        // Every tick: the rain ramp, consequences that fire, rumours that start, edits owed to a
+        // zone that is live now (§4.6, `living.rs`).
+        self.step_living();
     }
 
     fn step_zone(&mut self, z: ZoneId, input: &StepInput<'_>, snap: &PartySnap) {

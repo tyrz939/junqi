@@ -104,6 +104,15 @@ pub enum StoryPlace {
     Skipped(TextRef),
 }
 
+/// A named patch of the skeleton as laid in a zone (the county's allotments, the Top Field): its
+/// name and the square it covers. The ecology keeps a pressure per area, in this list's order
+/// (ARCHITECTURE.md §4.6.c); a unit belongs to the first area whose rect holds its home cell.
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
+pub struct Area {
+    pub name: Key,
+    pub rect: Rect,
+}
+
 /// A zone as built.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Blueprint {
@@ -136,6 +145,8 @@ pub struct Blueprint {
     pub texts: Vec<String>,
     /// Names the generator made: `Key::Local(i)` is `local_names[i]`.
     pub local_names: Vec<String>,
+    /// The county only: the skeleton's patches as placed, in the skeleton's order (§4.6.c).
+    pub areas: Vec<Area>,
 }
 
 impl Blueprint {
@@ -160,6 +171,7 @@ impl Blueprint {
             name_lists: Vec::new(),
             texts: vec![String::new()],
             local_names: Vec::new(),
+            areas: Vec::new(),
         }
     }
 
@@ -219,6 +231,11 @@ impl Blueprint {
             NamesRef::Blueprint(i) => self.name_lists.get(usize::from(i)).map(Vec::as_slice),
             NamesRef::Catalog(_) => None,
         }
+    }
+
+    /// The index of the first area whose rect holds cell `(x, y)`.
+    pub fn area_at(&self, x: i32, y: i32) -> Option<usize> {
+        self.areas.iter().position(|a| a.rect.contains(x, y))
     }
 
     pub fn text(&self, r: TextRef) -> Option<&str> {

@@ -1,0 +1,22 @@
+[
+  {
+    "id": "allotments_thinned",
+    "on": { "if": "questDone", "quest": "rats_in_the_sheds" },
+    "edits": [
+      { "do": "despawn", "unit": "rat_allotment_1" },
+      { "do": "despawn", "unit": "rat_allotment_2" },
+      { "do": "despawn", "unit": "rat_allotment_3" },
+      { "do": "despawn", "unit": "rat_allotment_4" },
+      { "do": "flag", "flag": "allotments_quiet", "value": 1 }
+    ]
+  },
+  {
+    "id": "mine_quiet",
+    "on": { "if": "dead", "unit": "iron_knuckles" },
+    "edits": [
+      { "do": "spawn", "unit": "mine_watcher", "def": "folk_old", "at": "company_notice" },
+      { "do": "flag", "flag": "mine_quiet", "value": 1 }
+    ],
+    "contradicts": "GOLDSKIN MINING Co. - CLOSED. No entry. No exit either, some nights."
+  }
+]

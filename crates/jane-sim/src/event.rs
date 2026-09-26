@@ -9,7 +9,7 @@ use jane_core::action::{CameraMode, Facing, School};
 use jane_core::{EffectId, ItemId, Milli, QuestId, Rect, SpellId, Sym, TextRef, UnitDefId, Vec2, ZoneId};
 
 use crate::ids::{PropId, Seat, UnitId};
-use crate::state::{JournalKind, PlayerState};
+use crate::state::{JournalKind, PlayerState, WeatherKind};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Event {
@@ -256,6 +256,14 @@ pub enum EventKind {
     },
     /// Something new is understood (a new fact, or a stronger source for one). Party-wide.
     Journal(JournalKind),
+    // --- the living world (`living.rs`) ----------------------------------------------------
+    /// A region's sky changed. Party-wide.
+    Weather {
+        region: jane_data::Region,
+        kind: WeatherKind,
+    },
+    /// Something the county does for good has happened (§4.6.d). Party-wide.
+    Consequence(jane_core::ConsequenceId),
 }
 
 impl EventKind {

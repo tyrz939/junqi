@@ -50,6 +50,8 @@ impl Sim {
             place_arrival(cx, &mut body, req, start);
             let ix = cx.zone.insert_unit(body);
             cx.rt.add_unit(&cx.zone.units[ix]);
+            // What the county did while nobody was here is here when she comes (§4.6.d).
+            crate::living::land_owed(cx);
             let w = Watchers::of(cx.world, req.zone, cx.zone);
             step_ring(cx.zone, cx.rt, &w, true, &mut cx.scratch.props);
             stamp_seats_fog(cx);

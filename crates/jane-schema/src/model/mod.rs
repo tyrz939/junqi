@@ -15,12 +15,14 @@ pub mod chunks;
 pub mod combat;
 pub mod county;
 pub mod dungeons;
+pub mod living;
 pub mod story;
 
 pub use chunks::*;
 pub use combat::*;
 pub use county::*;
 pub use dungeons::*;
+pub use living::*;
 pub use story::*;
 
 model! {
@@ -46,6 +48,9 @@ model! {
         pub dungeons: Dungeons,
         /// The county's authored places (`data/chunks`), after the groups whose names they use.
         pub chunks: Chunks,
+        /// The living world (ARCHITECTURE.md §4.6): weather, ecology, consequences, the sim's
+        /// tuning. Compiled last, so the names and texts it adds come after everyone else's.
+        pub living: Living,
     }
 }
 

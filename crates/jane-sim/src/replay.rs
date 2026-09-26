@@ -404,9 +404,9 @@ pub fn diff_states(a: &crate::state::GameState, b: &crate::state::GameState) -> 
     part("syms", hash_of(&a.syms), hash_of(&b.syms));
     part("journal", hash_of(&a.journal), hash_of(&b.journal));
     part(
-        "weather",
-        hash_of(&(a.weather, &a.consequences_done, &a.rumours)),
-        hash_of(&(b.weather, &b.consequences_done, &b.rumours)),
+        "living world",
+        hash_of(&(a.weather, &a.consequences_done, &a.consequences_owed, &a.rumours)),
+        hash_of(&(b.weather, &b.consequences_done, &b.consequences_owed, &b.rumours)),
     );
     for (i, (za, zb)) in a.zones.iter().zip(&b.zones).enumerate() {
         let z = jane_core::ZoneId::ALL[i].name();

@@ -2,7 +2,9 @@
 
 The living county. Written 26 September 2026 from John's direction: *"the world needs to breathe and live and be cohesive in a global context."* Pair with `PLAN.md` (the agreement), `STORY.md` (what is true), `VOICE.md` (how Castle talks), `QUESTS.md` and `QUEST-TREE.md` (what she is asked), `EXPERIENCE.md` (what she meets, minute by minute), `ARCHITECTURE.md` §3.7 and §4.6 (the engine hooks this doc leans on: **journal and known facts, schedules, weather, ecology, consequences, rumours**) and `VERIFICATION.md` (the checks: L5 truth and cohesion, L6 the living world).
 
-**Status: design for the Rust build. Nothing here is built.** Where a row or a check is named, it is the row or check that must exist for the section to be true. Proposals are marked *proposed*; John decides them.
+**Status: design for the Rust build.** Where a row or a check is named, it is the row or check that must exist for the section to be true. Proposals are marked *proposed*; John decides them.
+
+**Built so far (the engine, P4, `jane_sim::living`), each with a small row of shipped content:** §5.2's weather table as `data/weather.json` (a sky per region, the first walk held clear); the rain ramp and the douse rule (a campfire's light goes out at `douse` 160 and comes back when the ramp falls under it, not at six); `data/ecology.json` for the allotments, the Top Field and Quarry Steps (pressure, `cap`, `hold`, hourly recovery); `data/consequences.json` with B1's "rats at four, not eight" and the mine going quiet when Iron Knuckles falls (a spawn by the Company notice that waits for her to come back up); Mr Cobb's hours as a schedule (§3.1: in the Arms after the bell, the yard in the morning, his seat by day); one rumour (Mr Ames's spectacles, heard at No. 3, Pound Lane half a day later, the door speaking for whoever is behind it). The rest of this document is still design.
 
 ---
 

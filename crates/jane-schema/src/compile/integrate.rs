@@ -14,7 +14,7 @@ use jane_core::action::{Action, Condition, FlagKey};
 use jane_core::ids::{Key, NameId};
 
 use super::diag::Diagnostics;
-use crate::model::{Catalog, ReqTarget};
+use crate::model::{Catalog, ReqTarget, ScheduleSlot};
 
 /// What a name is used as.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -135,6 +135,20 @@ pub fn check(c: &Catalog, diag: &mut Diagnostics) {
     for t in c.story.triggers {
         use_key(Use::Rect, t.trigger.rect, &mut used);
     }
+    // A schedule's marks and the props a unit is inside (ARCHITECTURE.md §4.6.a).
+    for u in c.combat.units {
+        for r in u.schedule {
+            match r.slot {
+                ScheduleSlot::Mark(n) => {
+                    used.insert((Use::Mark, n));
+                }
+                ScheduleSlot::Inside(n) => {
+                    used.insert((Use::Prop, n));
+                }
+                ScheduleSlot::Patrol | ScheduleSlot::Absent => {}
+            }
+        }
+    }
     // A quest's location step is counted by the flag its `location` verb writes.
     for q in c.story.quests {
         for r in q.requirements {
@@ -163,6 +177,8 @@ pub fn check(c: &Catalog, diag: &mut Diagnostics) {
         }
     }
 
+    living(c, &provided, &flags_written, diag);
+
     let is_socket = |n: NameId| c.name(n).starts_with('@');
     let mut missing: Vec<String> = used
         .iter()
@@ -189,5 +205,32 @@ pub fn check(c: &Catalog, diag: &mut Diagnostics) {
     let unset: Vec<String> = flags_read.difference(&flags_written).filter_map(|&k| flag_name(k)).collect();
     if !unset.is_empty() {
         diag.warn("flags", format!("{} flag(s) read but never set: {}", unset.len(), unset.join(", ")));
+    }
+}
+
+/// The living world's rows against everything else (ARCHITECTURE.md §6): a consequence's flag is
+/// set by some list, its named death and a story's listeners are provided names. Errors: these
+/// rows are new, and nothing in them is waiting on code to become data.
+fn living(c: &Catalog, provided: &BTreeSet<NameId>, flags_written: &BTreeSet<FlagKey>, diag: &mut Diagnostics) {
+    for r in c.living.consequences {
+        let at = format!("consequences.{}.on", r.id);
+        match r.on {
+            Condition::Flag { key, .. } => {
+                diag.need(flags_written.contains(&key), &at, "the flag is never set: the consequence could never fire");
+            }
+            Condition::Dead(k) => {
+                let named = name(k).is_some_and(|n| provided.contains(&n));
+                diag.need(named, &at, "the dead name is nothing any zone provides");
+            }
+            _ => {}
+        }
+    }
+    for s in c.county.stories {
+        let Some(sp) = s.spreads else { continue };
+        let at = format!("stories.{}.spreads", s.key);
+        diag.need(!s.quests.is_empty(), &at, "a story spreads from its first quest handed in; this one has none");
+        for &n in sp.to {
+            diag.need(provided.contains(&n), &at, format!("\"{}\" is nobody any zone provides", c.name(n)));
+        }
     }
 }
