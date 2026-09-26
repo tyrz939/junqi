@@ -214,7 +214,7 @@ enum Source { Seen, Visited, Named,          // Place
 
 | | |
 | --- | --- |
-| **Writers** | `Location` (Place Visited); arriving in a zone (Place Seen, the zone's name); a dialogue line's `tells` field as the line is shown (Place Named, Person Talked, Thing Seen, Claim Told, Route and Danger Told, Rumour Heard); talking to a unit with a key (Person Met); sign `Read` of a content text (Claim Read); a kill (Person Dead through `hooks::on_kill`; Danger AttackedIn once areas reach the blueprint); a chest, a pick-up, a reward or a craft (Thing Held); `Travel` and a door (Route Walked, from the mark she came in by to the mark she arrives at); the first hit taken in an area and leaving it under aggro (Danger AttackedIn, Fled); a `Consequence` firing (§4.6) that confirms or contradicts a `Claim` |
+| **Writers** | `Location` (Place Visited); arriving in a zone (Place Seen, the zone's name); a dialogue line's `tells` field as the line is shown (Place Named, Person Talked, Thing Seen, Claim Told, Route and Danger Told, Rumour Heard); talking to a unit with a key (Person Met); sign `Read` of a content text (Claim Read); a kill (Person Dead through `hooks::unit_died`; Danger AttackedIn once areas reach the blueprint); a chest, a pick-up, a reward or a craft (Thing Held); `Travel` and a door (Route Walked, from the mark she came in by to the mark she arrives at); the first hit taken in an area and leaving it under aggro (Danger AttackedIn, Fled); a `Consequence` firing (§4.6) that confirms or contradicts a `Claim` |
 | **Readers** | `Condition::Knows { fact: FactKey }` and `Condition::Heard { claim: TextId }` (§5), so a line can say "you have seen the mill" or "you were told the bridge was out"; the quest legibility checks in `VERIFICATION.md`; the quest log's own text (`View::journal()`, `View::known(fact)`, §11); the map, which draws a named place only once it is `Known` |
 | **Upgrade** | A stronger `Source` for the same key replaces a weaker one (`Seen` → `Visited` → `Named`; `Met` → `Talked` → `Dead`; `Seen` → `Held`; `AttackedIn` → `Fled`; `Read` and `Told` are equal); `since` keeps the first tick. `Confirmed` and `Contradicted` replace `Told` and `Read` and are final |
 
@@ -255,6 +255,7 @@ impl Sim {
                  on the hour: weather and ecology rolls from the world stream in fixed order (§4.4); consequences whose bit is
                  clear and trigger is true fire once; pending rumours land (§4.6)
                  PartySnap { size, bodies: [Option<(ZoneId, UnitId, Vec2)>; 4], resting: [bool; 4] }
+                 (`resting` is unfilled: `Rest { until }` asks every seat live, as the TS did, `verbs::everyone_resting`)
    for zone in ZoneId order where live (a connected seat is in it): Option::take the zone out of state.zones
  3 presence      every 30 ticks: schedule slots resolved by the clock (dayOnly / nightOnly are two-slot schedules); hide, show
                  and jump only outside 120 x 80 px of a watcher, walk by order inside it (§4.6.a)
@@ -263,7 +264,8 @@ impl Sim {
                  its missed status pulses land at step 9 as one hit (§4.3)
  6 players       seat order: a dead seat wakes at respawn_at; input, sprint and carry energy, hold-to-push, movement
                  (stun and the statuses' speed product apply)
- 7 controllers   over the awake_units snapshot: ai | snake | npc (order or patrol); stunned skip
+ 7 controllers   over the awake_units snapshot: ai | snake | npc (order or patrol); stunned skip. An ai or npc
+                 unit under orders walks them first and minds nothing else (`orders::step_orders` until the ai lands)
  8 projectiles   fly; first sight-blocking cell or enemy body through unit_blocks; splash; school touch. Grounds pulse through unit_blocks
  9 statuses      awake living: pulses into hits
 10 flush x2      the ONLY place a blow changes hp: party permille, god, mana shield, lifesteal (the second pass lands it),
