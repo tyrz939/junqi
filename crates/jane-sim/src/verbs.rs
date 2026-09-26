@@ -1,18 +1,18 @@
 //! The world verbs with more to them than a line (`actions.ts rest, teach, grow, throw, reveal`):
-//! resting at a bed or a fire, growth (spells learned, jars found), bait thrown, and a notice that
-//! is a map. `actions.rs` dispatches to these.
+//! resting at a bed or a fire, growth (spells learned, jars found), bait thrown, a light stone set
+//! down, and a notice that is a map. `actions.rs` dispatches to these.
 
 use jane_core::action::Stat;
 use jane_core::num::CELL_FX;
-use jane_core::{Fx, ItemId, Rect, Sym, Vec2};
+use jane_core::{Cell, Fx, ItemId, PropDefId, Rect, Sym, Vec2};
 
 use crate::ctx::{Ctx, WorldOp};
-use crate::event::{EventKind, ToastKind};
-use crate::ids::UnitId;
+use crate::event::{EventKind, PropChange, ToastKind};
+use crate::ids::{PropIx, UnitId};
 use crate::interact::{Here, near_rest, near_rest_scan};
 use crate::inventory::spawn_drop;
 use crate::los::line_of_sight;
-use crate::state::{GameState, RestPoint};
+use crate::state::{GameState, LootState, Prop, RestPoint};
 use crate::tuning::{ENERGY_MAX, TICKS_PER_HOUR};
 
 /// Is every connected seat within reach of a bed or a fire? Asked live: the actor's zone through
@@ -110,6 +110,56 @@ pub fn throw(cx: &mut Ctx<'_>, thrower: Option<UnitId>, item: ItemId) {
     let open = line_of_sight(&cx.rt.grid, u.pos, to) && !cx.rt.grid.solid(tx, ty);
     let at = if open { to } else { u.pos };
     spawn_drop(cx, item, 1, at);
+}
+
+/// `Place`: a prop of row `def` set down on the cell at `who`'s feet, holding one `item`, so
+/// that picking it up (it is loot, and gone once taken) gives the item back. One of its kind
+/// taken up before is set down again rather than a new one made, so the zone keeps at most as
+/// many as were ever down at once. Made at runtime (no spawn row), saved with the zone.
+pub fn place(cx: &mut Ctx<'_>, who: Option<UnitId>, def: PropDefId, item: ItemId) {
+    let Some(u) = who.and_then(|id| cx.zone.unit(id)) else { return };
+    let (x, y) = u.pos.cell();
+    let cell = Cell::new(x.max(0) as u16, y.max(0) as u16);
+    let loot = LootState::Left(vec![jane_core::Stack { item, qty: 1 }]);
+    let again = cx.zone.props.iter().position(|p| p.spawn.is_none() && p.def == def && p.hidden);
+    let ix = match again {
+        Some(i) => {
+            let ix = i as PropIx;
+            cx.rt.move_prop(cx.zone, ix, cell);
+            let p = &mut cx.zone.props[i];
+            p.hidden = false;
+            p.used = false;
+            p.loot = loot;
+            cx.rt.touch_prop(cx.zone, ix);
+            ix
+        }
+        None => {
+            let id = cx.world.next.prop();
+            let key = cx.world.syms.intern(&format!("{}#{}", cx.cat.story.prop(def).id, id.get()));
+            cx.zone.props.push(Prop {
+                id,
+                key,
+                def,
+                spawn: None,
+                cell,
+                solid: cx.cat.story.prop(def).solid,
+                hidden: false,
+                locked: false,
+                used: false,
+                on: false,
+                loot,
+                under_done: false,
+            });
+            let ix = (cx.zone.props.len() - 1) as PropIx;
+            cx.rt.add_prop(cx.zone, ix);
+            ix
+        }
+    };
+    // Awake at once where she stands: the ring's props are worked out again.
+    let mut scratch = Vec::new();
+    crate::ring::wake_props(cx.zone, cx.rt, &mut scratch);
+    let prop = cx.zone.props[ix as usize].id;
+    cx.emit(EventKind::Prop { prop, change: PropChange::Show });
 }
 
 /// `Reveal`: the fog's seen-bits over a rect, indoors (outdoors the ground is always drawn).

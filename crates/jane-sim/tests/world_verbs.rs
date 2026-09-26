@@ -821,6 +821,44 @@ fn bags_merge_and_swap_and_a_bound_or_story_thing_is_never_destroyed() {
     }
 }
 
+/// QUESTS.md K10: the light stone, paid by six quests, changes play. Used, it is set down at her
+/// feet as a warm light (a shade keeps off it, a sentry sees by it); picked up, it is back in the
+/// bag; set down again, the same stone, not a new one.
+#[test]
+fn a_light_stone_is_set_down_as_a_warm_light_and_picked_up_again() {
+    let cat = jane_data::catalog();
+    let mut s = common::new_game();
+    cmd(&mut s, Command::Dev(DevOp::Give { item: item("light_stone"), qty: 2 }));
+    let stone = cat.story.prop_id("light_stone_down").unwrap();
+    let here = me(&s).pos;
+    let lit = |s: &Sim| {
+        let (zs, rt) = (s.state().zone(ZoneId::County).unwrap(), s.runtime(ZoneId::County).unwrap());
+        jane_sim::light::lit_at(zs, rt, s.state().clock, here, true)
+    };
+    assert!(!lit(&s), "the platform where she stands is dark before the lamps");
+    let count = |s: &Sim| s.state().zone(ZoneId::County).unwrap().props.iter().filter(|p| p.def == stone).count();
+    events(&mut s);
+    cmd(&mut s, Command::Item(item("light_stone")));
+    assert_eq!(holds(&s, "light_stone"), 1);
+    assert_eq!(count(&s), 1);
+    let down = s.state().zone(ZoneId::County).unwrap().props.iter().find(|p| p.def == stone).unwrap().clone();
+    assert_eq!(down.cell, jane_core::Cell::new(here.cell().0 as u16, here.cell().1 as u16), "at her feet");
+    assert!(!down.hidden && down.spawn.is_none());
+    assert!(lit(&s), "a warm light where she stands");
+    assert!(events(&mut s).iter().any(|e| e.kind == EventKind::Prop { prop: down.id, change: PropChange::Show }));
+    // It is what USE would take, and taking it puts it back in the bag and the light out.
+    let f = s.view(Seat(0)).unwrap().focus().expect("the stone at her feet");
+    assert_eq!(f.target, FocusRef::Prop(down.id));
+    cmd(&mut s, Command::Use);
+    assert_eq!(holds(&s, "light_stone"), 2);
+    assert!(!lit(&s));
+    // Set down again: the same stone.
+    idle(&mut s, 120);
+    cmd(&mut s, Command::Item(item("light_stone")));
+    assert_eq!(count(&s), 1);
+    assert!(lit(&s));
+}
+
 #[test]
 fn crafts_by_sorted_ids_and_only_consumes_inputs_when_the_output_fits() {
     // sim.test.ts "crafts by sorted ids and only consumes inputs when the output fits".

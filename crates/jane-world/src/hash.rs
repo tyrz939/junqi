@@ -418,6 +418,7 @@ enum Verb {
     If,
     Send,
     Reveal,
+    Place,
 }
 
 impl Feed for Action {
@@ -571,6 +572,11 @@ impl Feed for Action {
             Action::Throw(i) => {
                 h.u8(Verb::Throw as u8);
                 h.u16(i.0);
+            }
+            Action::Place { prop, item } => {
+                h.u8(Verb::Place as u8);
+                h.u16(prop.0);
+                h.u16(item.0);
             }
             Action::Shake(s) => {
                 h.u8(Verb::Shake as u8);

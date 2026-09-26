@@ -205,6 +205,12 @@ pub enum Action {
     },
     /// Set the fog's seen-bits over these rects of the actor's zone.
     Reveal(NamesRef),
+    /// Set a thing down at the subject's feet: a prop of row `prop`, made where it stands, that
+    /// holds one `item` and gives it back when picked up (the light stone).
+    Place {
+        prop: PropDefId,
+        item: ItemId,
+    },
 }
 
 impl Action {

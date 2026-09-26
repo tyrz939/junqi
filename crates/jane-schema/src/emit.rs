@@ -441,6 +441,9 @@ impl Emit for Action {
             }
             Action::Talk(d) => one(out, "Talk", d),
             Action::Throw(i) => one(out, "Throw", i),
+            Action::Place { prop, item } => {
+                Fields::open(out, "Action::Place").f("prop", prop).f("item", item).close();
+            }
             Action::Shake(n) => one(out, "Shake", n),
             Action::Camera { mode, rect } => {
                 Fields::open(out, "Action::Camera").f("mode", mode).f("rect", rect).close();

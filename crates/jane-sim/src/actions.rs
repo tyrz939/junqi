@@ -270,6 +270,10 @@ pub fn run_action(cx: &mut Ctx<'_>, a: &Action, subject: Subject) {
             let who = subject_unit(cx, subject);
             verbs::throw(cx, who, item);
         }
+        Action::Place { prop, item } => {
+            let who = subject_unit(cx, subject);
+            verbs::place(cx, who, prop, item);
+        }
         Action::Shake(n) => cx.emit(EventKind::Shake(n)),
         Action::Camera { mode, rect } => {
             let rect = rect.map(|r| cx.sym(r));

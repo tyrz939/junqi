@@ -344,7 +344,8 @@ enum Action {
   Spawn { key, def, at }, Despawn(NameId), Aggro(NameId), Location(NameId), Fill { rect, tile },
   Strike { rect, amount: Milli, school, effect, hits_friends }, Status(EffectId), Heal(Flat(Milli) | Pct(Permille)),
   Travel { zone, mark }, Talk(DialogueId), Throw(ItemId), Shake(u8), Camera { mode, rect },
-  If { when: &[Cond], then: ListRef, els: Option<ListRef> }, Send { unit, to, then: Option<ListRef> }, Reveal(&[NameId]) }
+  If { when: &[Cond], then: ListRef, els: Option<ListRef> }, Send { unit, to, then: Option<ListRef> }, Reveal(&[NameId]),
+  Place { prop: PropDefId, item: ItemId } /* a prop made at the subject's feet holding one item: the light stone */ }
 
 enum Condition { Flag { key, test: Eq | Min | NonZero }, Night, QuestActive, QuestReady, QuestDone, HasItem { item, qty }, HasSpell(SpellId), Dead(NameId),
   Knows { fact: FactKey }, Heard { claim: TextId }, SpeakerKnows(StoryId) /* §3.7, §4.6.e */ }

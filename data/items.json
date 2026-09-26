@@ -108,7 +108,11 @@
   "rock": { "name": "Rock", "icon": "item_rock", "maxStack": 16, "usable": false, "cooldown": 60, "description": "Breaks down into stone at a bench." },
   "stone": { "name": "Stone", "icon": "item_stone", "maxStack": 16, "usable": false, "cooldown": 60, "description": "Goes into Stone Skin." },
   "fire_stone": { "name": "Fire Stone", "icon": "item_fire_stone", "maxStack": 16, "usable": false, "cooldown": 60, "description": "Warm to hold. Lights wood." },
-  "light_stone": { "name": "Light Stone", "icon": "item_light_stone", "maxStack": 16, "usable": false, "cooldown": 60, "description": "Throws a circle of light, like a torch that never learned about fire." },
+  "light_stone": {
+    "name": "Light Stone", "icon": "item_light_stone", "maxStack": 16, "usable": true, "cooldown": 1,
+    "description": "Throws a circle of light, like a torch that never learned about fire.",
+    "use": [{ "do": "place", "def": "light_stone_down", "item": "light_stone" }]
+  },
   "night_view_glass": { "name": "Night View Glass", "icon": "item_glass", "maxStack": 16, "usable": false, "cooldown": 60, "description": "See in the dark. Not yet." },
   "small_water": { "name": "Small Vial of Water", "icon": "item_vial_water", "maxStack": 16, "usable": false, "cooldown": 60, "description": "Every potion Julie wrote down starts with one." },
   "small_empty_vial": { "name": "Small Empty Vial", "icon": "item_vial_empty", "maxStack": 16, "usable": false, "cooldown": 60, "description": "Wants filling." },

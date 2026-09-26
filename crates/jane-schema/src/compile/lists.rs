@@ -135,6 +135,10 @@ pub enum RawAction {
     Reveal {
         rects: Vec<String>,
     },
+    Place {
+        def: String,
+        item: String,
+    },
 }
 
 /// A condition as written; `not` negates any of them.
@@ -373,6 +377,7 @@ pub fn action(cx: &mut Ctx, at: &str, a: &RawAction) -> Option<Action> {
         }
         RawAction::Talk { tree } => Action::Talk(cx.dialogue(at, tree)?),
         RawAction::Throw { item } => Action::Throw(cx.item(at, item)?),
+        RawAction::Place { def, item } => Action::Place { prop: cx.prop(at, def)?, item: cx.item(at, item)? },
         RawAction::Shake { amount } => Action::Shake(*amount),
         RawAction::Camera { mode, rect } => {
             let mode = match mode {
