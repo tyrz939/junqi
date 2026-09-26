@@ -375,6 +375,12 @@ impl<'a> View<'a> {
         self.rt.rects.get(&s).copied()
     }
 
+    /// A key as this zone's rows write it (a content name, or one of the blueprint's own), as a
+    /// sym: what `mark`, `rect` and a prop's `key` are asked by.
+    pub fn key_sym(&self, k: jane_core::Key) -> Sym {
+        crate::sym::of_key(k, &self.rt.locals)
+    }
+
     /// Every mark of this zone with its name, in the blueprint's order.
     pub fn marks(&self) -> impl Iterator<Item = (Sym, Mark)> + 'a {
         let locals: &'a [Sym] = &self.rt.locals;
@@ -456,5 +462,23 @@ impl<'a> View<'a> {
     /// for a unit with no hours.
     pub fn schedule_state(&self, unit: UnitId) -> Option<crate::living::ScheduleState> {
         crate::living::schedule_state(self.state, self.zone, self.rt, unit)
+    }
+
+    /// Where a person of this row keeps hour `hour` today, by the row's hours as written (what a
+    /// quest's `returnTo` and a person's own words give): a mark, a patrol, behind a door, or
+    /// away; `None` for a row with no hours (always where it is).
+    pub fn slot_at_hour(&self, def: jane_core::UnitDefId, hour: u8) -> Option<jane_data::ScheduleSlot> {
+        let d = jane_data::catalog().combat.unit(def);
+        crate::presence::row_at(d, self.state, hour).map(|r| r.slot)
+    }
+
+    /// The hour of the day, 0 to 23.
+    pub fn hour(&self) -> u8 {
+        self.state.hour() as u8
+    }
+
+    /// The day of the week, 0 Sunday (the train's day, `if weekday`).
+    pub fn weekday(&self) -> u8 {
+        self.state.weekday()
     }
 }
