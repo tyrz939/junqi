@@ -129,6 +129,9 @@ pub fn run(args: &[String]) -> Result<(), String> {
             sets.extend(looks::family(looks::Family::Creature)?);
             write(&out, "units", &sheet_person::units(&sets, &font))?;
         }
+        Some("icons") => {
+            write(&out, "icons", &jane_art::sheet_kit::icons(&looks::family(looks::Family::Icon)?, &font))?;
+        }
         Some("buildings") => {
             write(&out, "buildings", &jane_art::sheet_kit::props(&looks::family(looks::Family::Building)?, &font))?;
         }

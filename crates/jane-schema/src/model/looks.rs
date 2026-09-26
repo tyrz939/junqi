@@ -360,14 +360,45 @@ model! {
     }
 }
 
+model_enum! {
+    /// An icon's class (ART.md §2.5): the object's shape.
+    #[cfg_attr(feature = "compile", derive(serde::Deserialize), serde(rename_all = "snake_case"))]
+    pub enum IconClass {
+        Flask, Vial, Key, Bar, Orb, Stone, Gem, Herb, Bloom, Mushroom, Fruit, Grapes, Egg, Loaf, Crepe, Meat, Potatoes,
+        Pot, Tin, Glove, Hat, Cap, Coat, Scarf, Fleece, Letter, Parcel, Sack, Tool, Scissors, Spanner, Spoons, Can, Net,
+        Plate, Ring, Amulet, Spectacles, Logs, Butterfly, Tortoise, Dust, Spell, Status,
+    }
+}
+
+model_enum! {
+    /// The mark on a spell's disc or a status ring, or an icon's small overlay.
+    #[cfg_attr(feature = "compile", derive(serde::Deserialize), serde(rename_all = "snake_case"))]
+    pub enum IconMark { None, Flame, Frost, Leaf, Bolt, Burst, Fist, Hammer, Web, Skull, Shield, Drop, Star, Thorn, Heart, Cork }
+}
+
+model! {
+    /// An icon (ART.md §2.5): a class in a material's ramp, with a mark; drawn at 32 and again
+    /// at 16, never downscaled.
+    pub struct IconLook {
+        pub class: IconClass,
+        pub ramp: &'static str,
+        /// A second ramp: a flask's glass, a key's ring, a status's rim.
+        pub trim: Option<&'static str>,
+        pub mark: IconMark,
+        /// It glows a little (a light stone, an orb, a potion).
+        pub glow: bool,
+    }
+}
+
 /// A look: what a sprite id is drawn as. One variant per generator family as the families land
-/// (ART.md §8): people, creatures, props and buildings.
+/// (ART.md §8): people, creatures, props, buildings and icons.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Look {
     Person(PersonLook),
     Creature(CreatureLook),
     Prop(PropLook),
     Building(HouseLook),
+    Icon(IconLook),
 }
 
 impl crate::emit::Emit for Look {
@@ -377,6 +408,7 @@ impl crate::emit::Emit for Look {
             Look::Creature(c) => ("Look::Creature(", c),
             Look::Prop(p) => ("Look::Prop(", p),
             Look::Building(b) => ("Look::Building(", b),
+            Look::Icon(i) => ("Look::Icon(", i),
         };
         out.push_str(name);
         inner.emit(out);

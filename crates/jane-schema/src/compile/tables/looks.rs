@@ -19,7 +19,7 @@ use crate::compile::ctx::{Ctx, leak, leak_str};
 use crate::compile::source::{Source, typed};
 use crate::model::{
     Anatomy, Boots, Build, Coat, CreatureLook, CreatureRamps, Ears, EmitRole, Extra, Face, Front, Hair, Hat, HeldItem,
-    HouseLook, HouseStyle, Legs, Look, Marking, Mount, PersonBody, PersonHead, PersonLook, PersonVary, Plan,
+    HouseLook, HouseStyle, IconClass, IconLook, IconMark, Legs, Look, Marking, Mount, PersonBody, PersonHead, PersonLook, PersonVary, Plan,
     PropFamily, PropLook, PropMaterials, PropState, Roofing, Skin, Tail, Walling,
 };
 use jane_core::ids::SpriteId;
@@ -41,6 +41,24 @@ enum RawLook {
     Ritual(RawProp),
     Structure(RawProp),
     Building(RawHouse),
+    Icon(RawIcon),
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawIcon {
+    class: IconClass,
+    ramp: String,
+    #[serde(default)]
+    trim: Option<String>,
+    #[serde(default = "no_mark")]
+    mark: IconMark,
+    #[serde(default)]
+    glow: bool,
+}
+
+fn no_mark() -> IconMark {
+    IconMark::None
 }
 
 #[derive(Deserialize)]
@@ -284,6 +302,13 @@ pub fn compile(src: &Source, cx: &mut Ctx) -> &'static [(SpriteId, Look)] {
             RawLook::SmallThing(p) => prop(PropFamily::SmallThing, &p, &at, cx),
             RawLook::Ritual(p) => prop(PropFamily::Ritual, &p, &at, cx),
             RawLook::Structure(p) => prop(PropFamily::Structure, &p, &at, cx),
+            RawLook::Icon(i) => Look::Icon(IconLook {
+                class: i.class,
+                ramp: leak_str(&i.ramp),
+                trim: opt(i.trim.as_deref()),
+                mark: i.mark,
+                glow: i.glow,
+            }),
             RawLook::Building(h) => {
                 cx.diag.need((1..=3).contains(&h.storeys), &at, "a building has one to three storeys");
                 Look::Building(HouseLook {

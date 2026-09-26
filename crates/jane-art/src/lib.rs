@@ -16,6 +16,7 @@ pub mod font;
 pub mod hash;
 pub mod house;
 pub mod hue;
+pub mod icon;
 pub mod kit;
 pub mod light;
 pub mod looks;

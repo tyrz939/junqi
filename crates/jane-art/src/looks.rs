@@ -52,6 +52,8 @@ pub enum Family {
     Prop,
     /// Buildings (§2.4).
     Building,
+    /// Icons (§2.5): each look renders at 32 (variant 0) and 16 (variant 1).
+    Icon,
 }
 
 impl Family {
@@ -62,6 +64,7 @@ impl Family {
             Look::Creature(_) => Family::Creature,
             Look::Prop(_) => Family::Prop,
             Look::Building(_) => Family::Building,
+            Look::Icon(_) => Family::Icon,
         }
     }
 }
@@ -81,7 +84,7 @@ pub fn name_of(id: SpriteId) -> &'static str {
 pub fn variants(id: SpriteId) -> usize {
     looks().iter().find(|(s, _)| *s == id).map_or(1, |(_, l)| match l {
         Look::Person(p) => p.vary.count(),
-        Look::Creature(_) | Look::Prop(_) | Look::Building(_) => 1,
+        Look::Creature(_) | Look::Prop(_) | Look::Building(_) | Look::Icon(_) => 1,
     })
 }
 
@@ -127,6 +130,12 @@ fn render_entry(id: SpriteId, look: &Look) -> Result<Vec<Rendered>, String> {
         Look::Building(b) => {
             let set = crate::house::render(b, id, kit::seed(name)).map_err(|e| format!("{name}: {e}"))?;
             out.push(Rendered { sprite: id, name, variant: 0, seat: 0, set });
+        }
+        Look::Icon(i) => {
+            // Variant 0 is the icon at 32, variant 1 the chip at 16 (§2.5).
+            for (v, set) in crate::icon::render(i).map_err(|e| format!("{name}: {e}"))?.into_iter().enumerate() {
+                out.push(Rendered { sprite: id, name, variant: v as u8, seat: 0, set });
+            }
         }
     }
     Ok(out)

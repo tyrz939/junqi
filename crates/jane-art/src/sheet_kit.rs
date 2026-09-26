@@ -36,6 +36,40 @@ fn draw(img: &mut Image, c: &Canvas, x: u32, y: u32, s: u32, night: bool) {
     }
 }
 
+/// `jane sheet icons`: every icon on a dark slot at 32 and its chip at 16, at 1x, then both at
+/// 3x, named.
+pub fn icons(sets: &[Rendered], font: &Font) -> Image {
+    const S: u32 = 3;
+    let cols = 6u32;
+    let (cell_w, cell_h) = (32 + 16 + 32 * S + 16 * S + 40, 32 * S + 26);
+    let names: Vec<&Rendered> = sets.iter().filter(|r| r.variant == 0).collect();
+    let rows = (names.len() as u32).div_ceil(cols);
+    let mut img = Image::new(PAD + cols * cell_w + PAD, PAD + rows * cell_h + PAD, [BG[0], BG[1], BG[2], 255]);
+    let slot = palette::rgb(Ramp::UiSlot.at(Tone::Base));
+    for (k, r) in names.iter().enumerate() {
+        let (x0, y0) = (PAD + (k as u32 % cols) * cell_w, PAD + (k as u32 / cols) * cell_h);
+        label(&mut img, font, x0, y0, r.name, Face::Fine, TEXT);
+        let chip = sets.iter().find(|c| c.sprite == r.sprite && c.variant == 1);
+        let mut x = x0;
+        for (set, s) in [(Some(*r), 1), (chip, 1), (Some(*r), S), (chip, S)] {
+            let Some(set) = set else { continue };
+            let c = &set.set.frames[0].1;
+            let side = c.w() as u32 * s;
+            img.fill(x, y0 + 14, side, side, slot);
+            for cy in 0..c.h() {
+                for cx in 0..c.w() {
+                    let ix = c.get(cx, cy);
+                    if ix.is_opaque() {
+                        img.fill(x + cx as u32 * s, y0 + 14 + cy as u32 * s, s, s, palette::rgb(ix));
+                    }
+                }
+            }
+            x += side + 6;
+        }
+    }
+    img
+}
+
 /// `jane sheet props`: each prop's frames at 1x, then at 3x, then its lit frame at night.
 pub fn props(sets: &[Rendered], font: &Font) -> Image {
     const S: u32 = 3;
