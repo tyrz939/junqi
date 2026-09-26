@@ -2,6 +2,7 @@
 
 /// A cell of a zone.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Cell {
     pub x: u16,
     pub y: u16,
@@ -15,10 +16,12 @@ impl Cell {
 
 /// A flat cell index, `y * w + x`.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct CellIx(pub u32);
 
 /// A rect of cells: `x..x + w`, `y..y + h`.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Rect {
     pub x: i32,
     pub y: i32,

@@ -7,6 +7,7 @@ macro_rules! row_ids {
     ($($(#[$m:meta])* $name:ident),* $(,)?) => {$(
         $(#[$m])*
         #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
+        #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
         pub struct $name(pub u16);
 
         impl $name {
@@ -51,6 +52,7 @@ row_ids! {
 /// A name at runtime: interned by the sim, pre-seeded so `Sym(n) == NameId(n)` below the
 /// content's name count. Generator-only names append; a save stores only the tail, as strings.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Default, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Sym(pub u32);
 
 impl From<NameId> for Sym {
@@ -63,6 +65,7 @@ impl From<NameId> for Sym {
 /// (`Blueprint::local_names`). The sim interns locals into `Sym`s when the zone loads, so
 /// worldgen never touches runtime state.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Key {
     Name(NameId),
     Local(u32),
@@ -71,6 +74,7 @@ pub enum Key {
 /// The thirteen zones, in tick order: `data/zones.json`'s order, which `jane-schema` checks
 /// against this list.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[repr(u8)]
 pub enum ZoneId {
     County,

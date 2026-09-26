@@ -5,6 +5,7 @@ use crate::num::{Fx, Q15, Vec2};
 use crate::trig_table::{ATAN, SIN_QUARTER};
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Angle(pub u16);
 
 impl Angle {

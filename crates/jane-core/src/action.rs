@@ -10,6 +10,7 @@ use crate::tile::Tile;
 
 /// Where a list lives: the compiled catalog, or the blueprint of the zone the list runs in.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum ListRef {
     Catalog(u16),
     Blueprint(u16),
@@ -17,6 +18,7 @@ pub enum ListRef {
 
 /// A condition list, stored like an action list.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum CondsRef {
     Catalog(u16),
     Blueprint(u16),
@@ -24,6 +26,7 @@ pub enum CondsRef {
 
 /// A list of names (`Reveal`), stored like an action list.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum NamesRef {
     Catalog(u16),
     Blueprint(u16),
@@ -31,6 +34,7 @@ pub enum NamesRef {
 
 /// A string: a content text, or one the generator wrote (`Blueprint::texts`).
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum TextRef {
     Text(TextId),
     Local(u16),
@@ -38,6 +42,7 @@ pub enum TextRef {
 
 /// Damage schools. `Blast` is Explosion's and `Shock` is Electric's; each is also what a prop may answer to.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[repr(u8)]
 pub enum School {
     Heal,
@@ -55,6 +60,7 @@ impl School {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Stat {
     Strength,
     Spirit,
@@ -62,6 +68,7 @@ pub enum Stat {
 
 /// 0 east, 1 south, 2 west, 3 north.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[repr(u8)]
 pub enum Facing {
     East,
@@ -84,6 +91,7 @@ impl Facing {
 
 /// A flag's key. The TypeScript's `been:` and `dead:` string prefixes are variants.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum FlagKey {
     Named(Key),
     Been(Key),
@@ -91,12 +99,14 @@ pub enum FlagKey {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum FlagOp {
     Set(i32),
     Add(i32),
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Heal {
     Flat(Milli),
     Pct(Permille),
@@ -110,6 +120,7 @@ pub enum CameraMode {
 
 /// A stack of items.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct Stack {
     pub item: ItemId,
     pub qty: u16,
@@ -227,6 +238,7 @@ impl Action {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum FlagTest {
     Eq(i32),
     Min(i32),
@@ -235,6 +247,7 @@ pub enum FlagTest {
 
 /// What a thing is, for a fact about it.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum Thing {
     Item(ItemId),
     Prop(PropDefId),
@@ -242,6 +255,7 @@ pub enum Thing {
 
 /// A fact the journal can hold (ARCHITECTURE.md §3.7).
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum FactKey {
     Place(Key),
     Person(Key),
