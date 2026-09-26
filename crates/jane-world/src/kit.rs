@@ -231,6 +231,11 @@ impl Kit {
         self.bp.push_list(actions)
     }
 
+    /// A condition list the generator wrote.
+    pub fn conds(&mut self, conds: Vec<jane_core::Cond>) -> jane_core::CondsRef {
+        self.bp.push_conds(conds)
+    }
+
     // --- tiles ------------------------------------------------------------------------------
 
     pub fn inside(&self, x: i32, y: i32) -> bool {

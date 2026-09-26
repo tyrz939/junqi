@@ -68,7 +68,7 @@ pub fn apply_template(p: &mut PropSpawn, t: &PropTemplate) {
     p.needs = t.needs.to_vec();
     p.talk = t.talk;
     p.label = t.label.map(TextRef::Text);
-    p.night_lock = t.night_lock.map(TextRef::Text);
+    p.night_lock = t.night_lock.map(jane_data::NightLockDef::lock);
 }
 
 /// Stamp `def` for site row `site`, whose origin cell is `(ox, oy)`. Its fills throw

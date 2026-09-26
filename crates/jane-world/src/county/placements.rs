@@ -279,7 +279,7 @@ pub fn apply_edit(p: &mut PropSpawn, e: &PropEdit) {
         p.label = Some(TextRef::Text(l));
     }
     if let Some(l) = e.night_lock {
-        p.night_lock = Some(TextRef::Text(l));
+        p.night_lock = Some(l.lock());
     }
 }
 

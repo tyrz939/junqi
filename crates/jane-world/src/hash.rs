@@ -13,7 +13,7 @@
 
 use jane_core::action::{
     Action, CameraMode, Cond, Condition, CondsRef, Facing, FactKey, FlagKey, FlagOp, FlagTest, Heal, ListRef, NamesRef,
-    School, Stack, Stat, TextRef, Thing,
+    NightLock, School, Stack, Stat, TextRef, Thing,
 };
 use jane_core::blueprint::{Door, Mark, PropSpawn, StoryPlace, Trigger, TriggerMode, UnitSpawn, Waypoint};
 use jane_core::grid::{Cell, Rect};
@@ -25,7 +25,7 @@ const FNV64_OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
 const FNV64_PRIME: u64 = 0x0000_0100_0000_01b3;
 
 /// Bump when the byte layout below changes, so an old fixture cannot match by accident.
-pub const LAYOUT: u32 = 3;
+pub const LAYOUT: u32 = 4;
 
 /// FNV-1a 64 over bytes written little-endian.
 #[derive(Clone, Copy, Debug)]
@@ -234,6 +234,15 @@ impl Feed for TextRef {
     }
 }
 
+impl Feed for NightLock {
+    fn feed(&self, h: &mut Hash64) {
+        self.says.feed(h);
+        h.u8(self.from);
+        h.u8(self.to);
+        h.bool(self.keyed);
+    }
+}
+
 impl Feed for FlagKey {
     fn feed(&self, h: &mut Hash64) {
         let (t, k) = match *self {
@@ -418,6 +427,9 @@ enum Verb {
     If,
     Send,
     Reveal,
+    Place,
+    NightLock,
+    NightUnlock,
 }
 
 impl Feed for Action {
@@ -571,6 +583,20 @@ impl Feed for Action {
             Action::Throw(i) => {
                 h.u8(Verb::Throw as u8);
                 h.u16(i.0);
+            }
+            Action::Place { prop, item } => {
+                h.u8(Verb::Place as u8);
+                h.u16(prop.0);
+                h.u16(item.0);
+            }
+            Action::NightLock { prop, lock } => {
+                h.u8(Verb::NightLock as u8);
+                prop.feed(h);
+                lock.feed(h);
+            }
+            Action::NightUnlock(k) => {
+                h.u8(Verb::NightUnlock as u8);
+                k.feed(h);
             }
             Action::Shake(s) => {
                 h.u8(Verb::Shake as u8);

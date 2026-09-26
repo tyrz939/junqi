@@ -9,7 +9,7 @@ mod common;
 
 use jane_core::action::{Facing, FlagOp, FlagTest};
 use jane_core::blueprint::TriggerMode;
-use jane_core::{Action, Angle, Cond, Condition, FlagKey, Rect, Stack, TextRef, Tile, ZoneId};
+use jane_core::{Action, Angle, Cond, Condition, FlagKey, NightLock, Rect, Stack, TextRef, Tile, ZoneId};
 use jane_sim::event::{EventKind, PropChange, ToastKind};
 use jane_sim::input::DevOp;
 use jane_sim::interact::{FocusRef, Verb};
@@ -182,7 +182,7 @@ fn a_door_marked_for_it_is_not_answered_after_dark() {
     let mut r = Room::new(false);
     let says = r.bp.push_text("Nobody comes to the door after dark.".into());
     r.door("shop", 10, 15, ZoneId::House, "front");
-    r.bp.props.last_mut().unwrap().night_lock = Some(says);
+    r.bp.props.last_mut().unwrap().night_lock = Some(NightLock { says, from: 21, to: 6, keyed: false });
     let mut s = r.build();
     place(&mut s, 9, 17, Facing::East);
     cmd(&mut s, Command::Dev(DevOp::Time { hour: 22 }));
@@ -198,6 +198,61 @@ fn a_door_marked_for_it_is_not_answered_after_dark() {
     cmd(&mut s, Command::Use);
     idle(&mut s, 1);
     assert_eq!(zone_of(&s), ZoneId::House);
+}
+
+/// A door keeps its own hours (a Museum's), and a verb can change them for good: a night lock
+/// she holds the key to lets her in and nobody else; a night unlock answers at every hour. The
+/// hours are state, through a save.
+#[test]
+fn a_door_keeps_its_own_hours_and_a_verb_sets_a_night_lock_she_holds() {
+    let mut r = Room::new(false);
+    let says = r.bp.push_text("Open ten to four.".into());
+    r.door("museum", 10, 15, ZoneId::House, "front");
+    r.bp.props.last_mut().unwrap().night_lock = Some(NightLock { says, from: 16, to: 10, keyed: false });
+    let shut = r.bp.push_text("Locked for the night. Julie's key opens it.".into());
+    let door = r.door("julies", 30, 15, ZoneId::House, "front");
+    let tag = r.key("auntie_house");
+    r.bp.props.last_mut().unwrap().key_tag = Some(tag);
+    let lock =
+        r.list(vec![Action::NightLock { prop: door, lock: NightLock { says: shut, from: 21, to: 6, keyed: true } }]);
+    r.prop("lock_lever", "lever", 20, 10, |s| s.use_list = Some(lock));
+    let open = r.list(vec![Action::NightUnlock(door)]);
+    r.prop("open_lever", "lever", 24, 10, |s| s.use_list = Some(open));
+    let mut s = r.build();
+    let verb = |s: &Sim| s.view(Seat(0)).unwrap().focus().map(|f| f.verb);
+    // Its own hours: shut from four in the afternoon, open from ten; the bell has nothing to do with it.
+    place(&mut s, 9, 17, Facing::East);
+    for (hour, shut) in [(9, true), (10, false), (15, false), (16, true), (22, true), (3, true)] {
+        cmd(&mut s, Command::Dev(DevOp::Time { hour }));
+        assert_eq!(verb(&s) == Some(Verb::TryTheDoor), shut, "{hour}:00");
+    }
+    // Julie's door has no hours until the lever gives it the bell's, keyed to her key.
+    place(&mut s, 29, 17, Facing::East);
+    cmd(&mut s, Command::Dev(DevOp::Time { hour: 22 }));
+    assert_ne!(verb(&s), Some(Verb::TryTheDoor));
+    place(&mut s, 19, 10, Facing::East);
+    cmd(&mut s, Command::Use);
+    let s2 = Sim::from_save_with(&s.save(), s.blueprints().clone()).expect("it loads");
+    for mut s in [s, s2] {
+        place(&mut s, 29, 17, Facing::East);
+        events(&mut s);
+        cmd(&mut s, Command::Use);
+        assert!(toasts(&events(&mut s)).contains(&ToastKind::NightLock(shut)), "no key: not answered");
+        idle(&mut s, 1);
+        assert_eq!(zone_of(&s), ZoneId::County);
+        cmd(&mut s, Command::Dev(DevOp::Time { hour: 10 }));
+        assert_ne!(verb(&s), Some(Verb::TryTheDoor), "by day, anyone");
+        cmd(&mut s, Command::Dev(DevOp::Time { hour: 22 }));
+        cmd(&mut s, Command::Dev(DevOp::Give { item: item("key_auntie_house"), qty: 1 }));
+        assert_ne!(verb(&s), Some(Verb::TryTheDoor), "her key: answered");
+        // The other lever answers it at every hour, key or none.
+        place(&mut s, 23, 10, Facing::East);
+        cmd(&mut s, Command::Use);
+        let key = s.state().players[0].bag.iter().position(|x| x.is_some_and(|x| x.item == item("key_auntie_house")));
+        s.state_mut().players[0].bag[key.unwrap()] = None;
+        place(&mut s, 29, 17, Facing::East);
+        assert_ne!(verb(&s), Some(Verb::TryTheDoor), "open at every hour");
+    }
 }
 
 // --- push, pull, carry, under ----------------------------------------------------------------
@@ -785,7 +840,7 @@ fn items_ask_for_the_cooldowns_and_say_why_not() {
 }
 
 #[test]
-fn bags_merge_and_swap_and_a_bound_thing_is_never_destroyed() {
+fn bags_merge_and_swap_and_a_bound_or_story_thing_is_never_destroyed() {
     let mut s = common::new_game();
     let bag = |s: &Sim| s.state().players[0].bag.clone();
     let letter = bag(&s).iter().position(|x| x.is_some_and(|x| x.item == item("julies_letter"))).unwrap() as u8;
@@ -800,8 +855,63 @@ fn bags_merge_and_swap_and_a_bound_thing_is_never_destroyed() {
     cmd(&mut s, Command::Dev(DevOp::Give { item: item("apple"), qty: 2 }));
     let first = bag(&s).iter().position(|x| x.is_some_and(|x| x.item == item("apple"))).unwrap();
     assert_eq!(first, 20, "a gift tops up the stack it has");
+    // An apple is a story thing (a quest asks for one): kept. Gold is not: gone.
     cmd(&mut s, Command::BagDestroy { slot: 20 });
-    assert_eq!(holds(&s, "apple"), 0);
+    assert_eq!(holds(&s, "apple"), 5);
+    assert!(!jane_data::catalog().combat.item(item("gold_bar")).story);
+    cmd(&mut s, Command::Dev(DevOp::Give { item: item("gold_bar"), qty: 2 }));
+    let gold = bag(&s).iter().position(|x| x.is_some_and(|x| x.item == item("gold_bar"))).unwrap() as u8;
+    cmd(&mut s, Command::BagDestroy { slot: gold });
+    assert_eq!(holds(&s, "gold_bar"), 0);
+    // A story key is not bound, and is kept all the same: nothing gives a second.
+    for key in ["key_forest", "key_tower", "key_mine_boss", "key_burial"] {
+        let def = jane_data::catalog().combat.item(item(key));
+        assert!(!def.bound && def.story, "{key}: a story item, not a bound one");
+        cmd(&mut s, Command::Dev(DevOp::Give { item: item(key), qty: 1 }));
+        let slot = bag(&s).iter().position(|x| x.is_some_and(|x| x.item == item(key))).unwrap() as u8;
+        events(&mut s);
+        cmd(&mut s, Command::BagDestroy { slot });
+        assert!(toasts(&events(&mut s)).contains(&ToastKind::ShouldKeep), "{key}");
+        assert_eq!(holds(&s, key), 1, "{key} is kept");
+    }
+}
+
+/// QUESTS.md K10: the light stone, paid by six quests, changes play. Used, it is set down at her
+/// feet as a warm light (a shade keeps off it, a sentry sees by it); picked up, it is back in the
+/// bag; set down again, the same stone, not a new one.
+#[test]
+fn a_light_stone_is_set_down_as_a_warm_light_and_picked_up_again() {
+    let cat = jane_data::catalog();
+    let mut s = common::new_game();
+    cmd(&mut s, Command::Dev(DevOp::Give { item: item("light_stone"), qty: 2 }));
+    let stone = cat.story.prop_id("light_stone_down").unwrap();
+    let here = me(&s).pos;
+    let lit = |s: &Sim| {
+        let (zs, rt) = (s.state().zone(ZoneId::County).unwrap(), s.runtime(ZoneId::County).unwrap());
+        jane_sim::light::lit_at(zs, rt, s.state().clock, here, true)
+    };
+    assert!(!lit(&s), "the platform where she stands is dark before the lamps");
+    let count = |s: &Sim| s.state().zone(ZoneId::County).unwrap().props.iter().filter(|p| p.def == stone).count();
+    events(&mut s);
+    cmd(&mut s, Command::Item(item("light_stone")));
+    assert_eq!(holds(&s, "light_stone"), 1);
+    assert_eq!(count(&s), 1);
+    let down = s.state().zone(ZoneId::County).unwrap().props.iter().find(|p| p.def == stone).unwrap().clone();
+    assert_eq!(down.cell, jane_core::Cell::new(here.cell().0 as u16, here.cell().1 as u16), "at her feet");
+    assert!(!down.hidden && down.spawn.is_none());
+    assert!(lit(&s), "a warm light where she stands");
+    assert!(events(&mut s).iter().any(|e| e.kind == EventKind::Prop { prop: down.id, change: PropChange::Show }));
+    // It is what USE would take, and taking it puts it back in the bag and the light out.
+    let f = s.view(Seat(0)).unwrap().focus().expect("the stone at her feet");
+    assert_eq!(f.target, FocusRef::Prop(down.id));
+    cmd(&mut s, Command::Use);
+    assert_eq!(holds(&s, "light_stone"), 2);
+    assert!(!lit(&s));
+    // Set down again: the same stone.
+    idle(&mut s, 120);
+    cmd(&mut s, Command::Item(item("light_stone")));
+    assert_eq!(count(&s), 1);
+    assert!(lit(&s));
 }
 
 #[test]
@@ -875,8 +985,8 @@ fn never_loses_a_reward_when_the_bag_is_full() {
     assert_eq!(z.drops.len(), drops + 1);
     assert_eq!(z.drops.last().unwrap().item, item("key_auntie_house"));
     // Picked up again once there is room.
-    let slot = 0;
-    cmd(&mut s, Command::BagDestroy { slot });
+    let slot = s.state().players[0].bag.iter().position(|x| x.is_some_and(|x| x.item == item("gold_bar"))).unwrap();
+    cmd(&mut s, Command::BagDestroy { slot: slot as u8 });
     assert_eq!(s.view(Seat(0)).unwrap().focus().map(|f| f.verb), Some(Verb::Take(item("key_auntie_house"))));
     cmd(&mut s, Command::Use);
     assert_eq!(holds(&s, "key_auntie_house"), 1);

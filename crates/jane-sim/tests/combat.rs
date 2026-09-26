@@ -343,10 +343,21 @@ fn a_kill_drops_loot_and_the_corpse_stands_up_on_schedule() {
     steps(&mut s, 1);
     assert_eq!(s.state().zone(Z).unwrap().drops.len(), usize::from(story));
 
-    // Ten minutes, fast-forwarded: it stands up at home, whole.
+    // Ten minutes, fast-forwarded: not while she stands over it (nothing stands up in view)...
     s.state_mut().zone_mut(Z).unwrap().sleeping_due[0].0 = s.state().tick.after(Tick(3));
-    s.drain_events();
     steps(&mut s, 3);
+    assert!(!unit(&s, rat).alive, "she is watching where it lies");
+    let due = s.state().zone(Z).unwrap().sleeping_due[0];
+    assert_eq!(due, (s.state().tick.after(Tick(jane_sim::tuning::PRESENCE_EVERY)), rat), "a beat later");
+    // ...and nor when she stands over its home instead.
+    let body = me(&s);
+    edit(&mut s, body, |u| u.pos = Vec2::centre(22, 21));
+    steps(&mut s, jane_sim::tuning::PRESENCE_EVERY);
+    assert!(!unit(&s, rat).alive, "she is watching its home");
+    // Out of sight of both, it stands up at home, whole.
+    edit(&mut s, body, |u| u.pos = Vec2::centre(15, 32));
+    s.drain_events();
+    steps(&mut s, jane_sim::tuning::PRESENCE_EVERY);
     let r = unit(&s, rat);
     assert!(r.alive && r.hp == max_hp(r) && r.pos == Vec2::centre(20, 20) && r.died_at.is_none());
     assert!(!s.state().flags.contains_key(&FlagKey::Dead(key)));
@@ -390,6 +401,35 @@ fn she_falls_lies_and_wakes_at_the_fire_or_the_door() {
     steps(&mut s, 241);
     assert_eq!(s.state().players[0].zone, ZoneId::House);
     assert_eq!(unit(&s, body).pos, Vec2::centre(5, 5));
+}
+
+/// EXPERIENCE.md §2 "The yard skeleton": before anyone has rested, a death wakes her at the Halt
+/// fire, the party's from New Game, never at a door she has walked through since (so never
+/// resting is never the better plan).
+#[test]
+fn before_the_first_rest_she_wakes_at_the_halt_fire() {
+    let cat = jane_data::catalog();
+    let mut s = common::new_game();
+    let rest = s.state().rest.expect("a rest point from New Game");
+    assert_eq!(rest.zone, Z);
+    let fire_key = jane_core::Key::Name(cat.name_id("station_fire").unwrap());
+    let fire = s.blueprint(Z).props.iter().find(|p| p.key == fire_key).expect("the Halt fire").cell;
+    let (rx, ry) = rest.pos.cell();
+    assert!(
+        (rx - i32::from(fire.x)).abs() <= 3 && (ry - i32::from(fire.y)).abs() <= 3,
+        "beside the Halt fire: {:?} vs {fire:?}",
+        rest.pos.cell()
+    );
+    // Walked into the house (a door she came in by), she dies there: back to the fire.
+    s.drain_events();
+    cmd(&mut s, Some(0), Command::Dev(DevOp::Tp { zone: ZoneId::House, mark: start_sym() }));
+    assert_eq!(s.state().players[0].zone, ZoneId::House);
+    let body = me(&s);
+    s.queue_hit(ZoneId::House, hit(body, 10_000, School::Physical, None));
+    steps(&mut s, 242);
+    assert_eq!(s.state().players[0].zone, Z);
+    assert_eq!(unit(&s, body).pos, rest.pos);
+    assert!(events(&mut s).iter().any(|e| e.kind == EventKind::Toast(ToastKind::WokeAtRest)));
 }
 
 /// `status.ts tickStatuses`: a burn pulses once a second for its four seconds; a sleeper takes

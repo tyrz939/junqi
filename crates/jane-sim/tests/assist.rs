@@ -108,6 +108,78 @@ fn never_a_friend_a_passer_by_or_a_corpse() {
     assert_eq!(s.state().players[0].assist.map(|a| a.unit), Some(foe));
 }
 
+/// A prop of `def` on a cell of the county, `on` or off (made at runtime, as the tests of the AI
+/// make them).
+fn put_prop(s: &mut Sim, def: &str, x: u16, y: u16, on: bool) -> jane_sim::PropId {
+    let cat = jane_data::catalog();
+    let d = cat.story.prop_id(def).unwrap();
+    let st = s.state_mut();
+    let id = st.next.prop();
+    let key = st.syms.intern(&format!("test_{def}_{}", id.get()));
+    st.zone_mut(Z).unwrap().props.push(jane_sim::Prop {
+        id,
+        key,
+        def: d,
+        spawn: None,
+        cell: jane_core::Cell::new(x, y),
+        solid: cat.story.prop(d).solid,
+        hidden: false,
+        locked: false,
+        used: false,
+        on,
+        loot: jane_sim::state::LootState::AsSpawned,
+        under_done: false,
+        night: jane_sim::state::NightState::AsSpawned,
+    });
+    s.rebuild_runtimes();
+    id
+}
+
+fn prop_on(s: &Sim, id: jane_sim::PropId) -> bool {
+    let zs = s.state().zone(Z).unwrap();
+    zs.props[zs.prop_ix(id).unwrap() as usize].on
+}
+
+/// §5.4: a bolt aimed at a prop that answers its school flies raw when the prop is nearer than
+/// the best candidate: a brazier beside a lurker is lit, not missed. Lit already, or behind the
+/// lurker, or of another school, the aim is pulled as ever; the view shows the same.
+#[test]
+fn a_bolt_aimed_at_a_prop_it_would_light_is_not_pulled_off_it() {
+    let mut s = fresh();
+    learn(&mut s, "fireball");
+    let lurker = spawn(&mut s, "lurker", 20, 12);
+    rooted(&mut s, lurker);
+    let d = Angle::EAST.diff(bearing_to(&s, me(&s), lurker));
+    assert!(d > i32::from(ASSIST_PAD.snap.0) && d < i32::from(ASSIST_PAD.cone.0));
+    let fireball = |s: &mut Sim, p: AssistProfile| {
+        rested(s, me(s));
+        let before = s.state().zone(Z).unwrap().projectiles.len();
+        cast(s, 0, "fireball", frame(Angle::EAST, p), None);
+        let zs = s.state().zone(Z).unwrap();
+        assert_eq!(zs.projectiles.len(), before + 1, "the cast went off");
+        zs.projectiles.last().unwrap().heading
+    };
+    // A brazier on the line, nearer than the lurker: the reticle and the bolt stay on it.
+    let brazier = put_prop(&mut s, "brazier", 15, 10, false);
+    let shown = s.view(Seat(0)).unwrap().assisted_aim(&frame(Angle::EAST, AssistProfile::Pad), spell("fireball"));
+    assert_eq!(shown, Some(Angle::EAST));
+    assert_eq!(fireball(&mut s, AssistProfile::Pad), Angle::EAST);
+    assert_eq!(s.state().players[0].assist, None, "nothing made sticky");
+    steps(&mut s, 30);
+    assert!(prop_on(&s, brazier), "lit");
+    // Lit, it no longer answers: the aim is pulled to the lurker again.
+    assert_eq!(fireball(&mut s, AssistProfile::Pad), toward(Angle::EAST, d, 350));
+    // Behind the lurker, it does not hold the aim; nor does an icebolt, which it does not answer.
+    let mut s = fresh();
+    learn(&mut s, "fireball");
+    let lurker = spawn(&mut s, "lurker", 20, 12);
+    rooted(&mut s, lurker);
+    put_prop(&mut s, "brazier", 30, 10, false);
+    assert_eq!(fireball(&mut s, AssistProfile::Pad), toward(Angle::EAST, d, 350));
+    put_prop(&mut s, "brazier", 15, 10, false);
+    assert_eq!(bolt_heading(&mut s, Angle::EAST, AssistProfile::Pad), toward(Angle::EAST, d, 350));
+}
+
 /// The sticky unit stays a candidate `slack` outside the cone for `sticky_ticks`.
 #[test]
 fn the_sticky_unit_holds_a_little_outside_the_cone_for_a_while() {

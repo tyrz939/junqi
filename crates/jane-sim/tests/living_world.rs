@@ -16,9 +16,11 @@ use jane_core::action::{Facing, School};
 use jane_core::num::{CELL_FX, dist_sq};
 use jane_core::{Action, Key, Milli, Sfc32, Tick, Vec2, ZoneId};
 use jane_data::{Region, ScheduleSlot, catalog};
+use jane_sim::event::ToastKind;
+use jane_sim::interact::Verb;
 use jane_sim::living::{ScheduleWhere, region_at, region_ix};
 use jane_sim::save::hash_of;
-use jane_sim::state::{FactKey, FlagKey, Source, WeatherKind, WeatherState};
+use jane_sim::state::{FactKey, FlagKey, NightState, Source, WeatherKind, WeatherState};
 use jane_sim::{Blueprints, Command, DevOp, EventKind, Hit, Seat, Sim, StepInput, UnitId};
 
 const HOUR: u32 = 7200;
@@ -140,9 +142,10 @@ fn zone_order_does_not_move_rolls() {
     assert_eq!(a.state().weather, b.state().weather);
     let pa = &a.state().zone(ZoneId::County).unwrap().pressure;
     assert_eq!(pa, &b.state().zone(ZoneId::County).unwrap().pressure);
-    // And it did draw: exactly each mark's draws, every mark, visited or not.
+    // And it did draw: the omens at New Game, then exactly each mark's draws, every mark, visited
+    // or not.
     let mut fresh = Sfc32::seeded(SEED, 1);
-    for _ in 0..4 * draws_an_hour() {
+    for _ in 0..catalog().story.omens.len() as u32 + 4 * draws_an_hour() {
         fresh.next_u32();
     }
     assert_eq!(a.state().rng, fresh);
@@ -154,6 +157,10 @@ fn zone_order_does_not_move_rolls() {
 fn weather_rolls_on_the_hour_and_holds_until_it_is_due() {
     let mut s = new_game();
     let mut fresh = Sfc32::seeded(SEED, 1);
+    // New Game's own draws: one an omen (omens.rs).
+    for _ in 0..catalog().story.omens.len() {
+        fresh.next_u32();
+    }
     let clear = Tick(u32::from(catalog().living.tuning.clear_hours) * HOUR);
     let mut changes = 0;
     let mut kinds = std::collections::BTreeSet::new();
@@ -300,19 +307,20 @@ fn wetness_douses_a_fire_exactly_at_the_threshold() {
     assert!(s.view(Seat(0)).unwrap().light_showing(&fire).is_some(), "the storm is over another region");
 }
 
-/// §4.6.c, decision 2: one kill does not hold a patch back, so the rat stands up on its own
-/// clock; clear the allotments and the rats wait past their clock, every ten game minutes taking
-/// pressure off and looking at them again, and stand up again on a mark once the patch is under
-/// its line.
+/// §4.6.c, decision 2: one kill does not hold a patch back, so the rat stands up at the next
+/// ten-minute mark, when the ecology looks (QUESTS.md K8), and, if she is watching where it lies
+/// or its home, at the first mark she is not; clear the allotments and the rats wait, every ten
+/// game minutes taking pressure off and looking at them again, and stand up again on a mark once
+/// the patch is under its line.
 #[test]
 fn hunting_thins_an_area_and_time_refills_it() {
     let cat = catalog();
     let rat = cat.combat.unit_id("rat").unwrap();
-    let respawn = cat.combat.unit(rat).respawn;
     let eco = cat.living.ecology_of(cat.name_id("allotments").unwrap()).unwrap();
     let pop = eco.population(rat).unwrap();
+    let next_mark = |s: &Sim| s.state().tick.after(Tick(MARK - s.state().clock % MARK));
 
-    // One rat.
+    // One rat: back at the next mark, not after its row's `respawn`.
     let mut s = new_game();
     let a = area_ix(&s, "allotments");
     let rats = county_unit_ids(&s, "rat_allotment_");
@@ -320,12 +328,38 @@ fn hunting_thins_an_area_and_time_refills_it() {
     kill(&mut s, ZoneId::County, rats[0]);
     s.step(&StepInput::IDLE);
     assert!(!alive(&s, rats[0]));
-    let died = s.state().tick;
     assert_eq!(s.state().zone(ZoneId::County).unwrap().pressure[a], pop.weight);
-    while s.state().tick < died.after(respawn) {
+    let mark = next_mark(&s);
+    assert_eq!(s.state().zone(ZoneId::County).unwrap().sleeping_due, [(mark, rats[0])]);
+    while s.state().tick < mark {
+        assert!(!alive(&s, rats[0]));
         s.step(&StepInput::IDLE);
     }
-    assert!(alive(&s, rats[0]), "one kill: back on its own clock");
+    assert!(alive(&s, rats[0]), "one kill: back at the next ten-minute mark");
+
+    // Watched where it lies: not at that mark, but the first one she is not looking.
+    let mut s = new_game();
+    let at = s.state().zone(ZoneId::County).unwrap().unit(rats[0]).unwrap().pos;
+    let (x, y) = at.cell();
+    place(&mut s, x + 2, y, Facing::West);
+    kill(&mut s, ZoneId::County, rats[0]);
+    s.step(&StepInput::IDLE);
+    let mark = next_mark(&s);
+    while s.state().tick <= mark {
+        s.step(&StepInput::IDLE);
+    }
+    assert!(!alive(&s, rats[0]), "nothing stands up in view");
+    let again = s.state().zone(ZoneId::County).unwrap().sleeping_due.iter().find(|e| e.1 == rats[0]).unwrap().0;
+    assert_eq!(again, mark.after(Tick(MARK)), "looked at again at the next mark");
+    let home = s.state().zone(ZoneId::County).unwrap().unit(rats[0]).unwrap().home;
+    let far = (at.x.0.max(home.x.0) / CELL_FX) + 20;
+    let rt = s.runtime(ZoneId::County).unwrap();
+    let (fx, fy) = rt.grid.nearest_free(far, y, 12, None).expect("somewhere out of sight");
+    place(&mut s, fx, fy, Facing::East);
+    while s.state().tick < again {
+        s.step(&StepInput::IDLE);
+    }
+    assert!(alive(&s, rats[0]), "back at the first mark she was not looking");
 
     // All four.
     let mut s = new_game();
@@ -335,10 +369,11 @@ fn hunting_thins_an_area_and_time_refills_it() {
     s.step(&StepInput::IDLE);
     let died = s.state().tick;
     assert_eq!(s.state().zone(ZoneId::County).unwrap().pressure[a], 4 * pop.weight);
-    while s.state().tick <= died.after(respawn) {
+    let mark = next_mark(&s);
+    while s.state().tick <= mark {
         s.step(&StepInput::IDLE);
     }
-    assert!(rats.iter().all(|&r| !alive(&s, r)), "the patch is held back past the rats' own clock");
+    assert!(rats.iter().all(|&r| !alive(&s, r)), "the patch is held back past the first mark");
     let now = s.state().tick;
     let due = &s.state().zone(ZoneId::County).unwrap().sleeping_due;
     for &r in &rats {
@@ -370,7 +405,7 @@ fn hunting_thins_an_area_and_time_refills_it() {
     }
     let back_at = back_at.expect("the patch refills");
     assert!(rats.iter().all(|&r| alive(&s, r)), "all four back");
-    assert!(back_at.0 - died.0 > respawn.0 + HOUR, "quieter than one kill");
+    assert!(back_at.0 - died.0 > 6 * HOUR, "quieter for hours than one kill");
 }
 
 /// §4.6.d: a consequence fires once, ever, writes the journal and says so to everyone; one whose
@@ -540,20 +575,20 @@ fn a_schedule_obeys_the_watcher_box() {
     assert!(arrived, "he reached his seat");
 }
 
-/// Decision 4 (§4.6.d): a consequence may lock a door. Julie's Kitchen done while she is in the
-/// house: the county is nobody's, so the lock waits; she walks out and the door behind her is
-/// locked; her key (bound, not used up) opens it and she goes back in.
+/// Decision 4 (§4.6.d), WORLD.md §6: Julie's Kitchen done while she is in the house puts a night
+/// lock she holds on Julie's door. The county is nobody's, so it waits; she walks out and it is
+/// there, through a save. At night the door answers only a key that fits it (hers is bound, never
+/// used up); by day it answers anyone; and the door out of the house never shuts her in.
 #[test]
-fn a_consequence_locks_a_door_where_nobody_is_and_her_key_opens_it() {
+fn a_consequence_night_locks_a_door_where_nobody_is_and_her_key_opens_it() {
     let cat = catalog();
     let id = cat.living.consequence_id("house_kept").unwrap();
     let key = cat.combat.item_id("key_auntie_house").unwrap();
     let mut s = new_game();
-    cmd(&mut s, Command::Dev(DevOp::Give { item: key, qty: 1 }));
     let door = prop(&s, "house_door").id;
-    let locked = |s: &Sim| {
+    let night = |s: &Sim| {
         let z = s.state().zone(ZoneId::County).unwrap();
-        z.props[z.prop_ix(door).unwrap() as usize].locked
+        z.props[z.prop_ix(door).unwrap() as usize].night
     };
     let ix = s.state().zone(ZoneId::County).unwrap().prop_ix(door).unwrap() as usize;
     s.state_mut().zone_mut(ZoneId::County).unwrap().props[ix].locked = false;
@@ -564,28 +599,44 @@ fn a_consequence_locks_a_door_where_nobody_is_and_her_key_opens_it() {
     idle(&mut s, 1);
     assert!(s.drain_events().iter().any(|e| e.kind == EventKind::Consequence(id)));
     assert_eq!(s.state().consequences_owed, [(ZoneId::County, id)], "nobody is in the county");
-    assert!(!locked(&s), "not yet: the county is not live");
+    assert_eq!(night(&s), NightState::AsSpawned, "not yet: the county is not live");
     let mut t = Sim::from_save_with(&s.save(), bps()).expect("loads");
     tp(&mut t, ZoneId::County);
-    assert!(locked(&t), "locked behind her the moment she is out");
+    let NightState::Locked(lock) = night(&t) else { panic!("night-locked the moment she is out") };
+    assert!(lock.keyed && (lock.from, lock.to) == (21, 6), "the bell's hours, and her key");
     assert!(t.state().consequences_owed.is_empty());
     let d = prop(&t, "house_door");
     let def = catalog().story.prop(d.def);
-    place(&mut t, i32::from(d.cell.x) + i32::from(def.w) / 2, i32::from(d.cell.y) + i32::from(def.h), Facing::North);
+    let front = (i32::from(d.cell.x) + i32::from(def.w) / 2, i32::from(d.cell.y) + i32::from(def.h));
+    let verb = |t: &Sim| t.view(Seat(0)).unwrap().focus().map(|f| f.verb);
+    place(&mut t, front.0, front.1, Facing::North);
+    // No key, after the bell: not answered. By day: answered.
+    cmd(&mut t, Command::Dev(DevOp::Time { hour: 22 }));
     idle(&mut t, 2);
+    assert_eq!(verb(&t), Some(Verb::TryTheDoor));
     t.drain_events();
     cmd(&mut t, Command::Use);
-    let ev = t.drain_events().to_vec();
-    assert!(ev.iter().any(|e| e.kind == EventKind::Toast(jane_sim::event::ToastKind::UnlockedWith(key))), "{ev:?}");
-    assert!(!locked(&t));
-    assert_eq!(holds(&t, "key_auntie_house"), 1, "a bound key is not used up");
+    assert!(t.drain_events().iter().any(|e| matches!(e.kind, EventKind::Toast(ToastKind::NightLock(_)))));
+    idle(&mut t, 2);
+    assert_eq!(zone_of(&t), ZoneId::County);
+    cmd(&mut t, Command::Dev(DevOp::Time { hour: 10 }));
+    assert_ne!(verb(&t), Some(Verb::TryTheDoor), "by day, anyone");
+    // Her key, after the bell: in, and the key is still hers.
+    cmd(&mut t, Command::Dev(DevOp::Time { hour: 22 }));
+    cmd(&mut t, Command::Dev(DevOp::Give { item: key, qty: 1 }));
+    assert_ne!(verb(&t), Some(Verb::TryTheDoor));
     cmd(&mut t, Command::Use);
     idle(&mut t, 2);
     assert_eq!(zone_of(&t), ZoneId::House);
-    // Once, ever: the county never locks it again.
-    tp(&mut t, ZoneId::County);
-    idle(&mut t, 3);
-    assert!(!locked(&t));
+    assert_eq!(holds(&t, "key_auntie_house"), 1, "a bound key is not used up");
+    // Never shut in: the way out answers at night, key or none.
+    let key_slot = t.state().players[0].bag.iter().position(|x| x.is_some_and(|x| x.item == key)).unwrap();
+    t.state_mut().players[0].bag[key_slot] = None;
+    assert!(walk_to_prop(&mut t, "front_door"));
+    assert_ne!(verb(&t), Some(Verb::TryTheDoor));
+    cmd(&mut t, Command::Use);
+    idle(&mut t, 2);
+    assert_eq!(zone_of(&t), ZoneId::County);
 }
 
 // --- a bed's night (decision 3) --------------------------------------------------------------

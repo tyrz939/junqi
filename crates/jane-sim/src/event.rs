@@ -81,7 +81,7 @@ pub enum ToastKind {
     Learned(SpellId),
     /// She woke at the party's last bed or fire.
     WokeAtRest,
-    /// She woke at the door she came in by (nobody has rested yet).
+    /// She woke at the door she came in by (no rest point at all: a county without a fire).
     WokeAtDoor,
 }
 

@@ -208,6 +208,20 @@ pub fn run_action(cx: &mut Ctx<'_>, a: &Action, subject: Subject) {
             }
             cx.emit(EventKind::Prop { prop: id, change: if lock { PropChange::Lock } else { PropChange::Unlock } });
         }
+        Action::NightLock { prop: k, lock } => {
+            let Some(ix) = prop(cx, k) else { return };
+            let p = &mut cx.zone.props[ix as usize];
+            p.night = crate::state::NightState::Locked(lock);
+            let id = p.id;
+            cx.emit(EventKind::Prop { prop: id, change: PropChange::Lock });
+        }
+        Action::NightUnlock(k) => {
+            let Some(ix) = prop(cx, k) else { return };
+            let p = &mut cx.zone.props[ix as usize];
+            p.night = crate::state::NightState::Open;
+            let id = p.id;
+            cx.emit(EventKind::Prop { prop: id, change: PropChange::Unlock });
+        }
         Action::Switch { prop: k, on } => {
             let Some(ix) = prop(cx, k) else { return };
             let p = &mut cx.zone.props[ix as usize];
@@ -269,6 +283,10 @@ pub fn run_action(cx: &mut Ctx<'_>, a: &Action, subject: Subject) {
         Action::Throw(item) => {
             let who = subject_unit(cx, subject);
             verbs::throw(cx, who, item);
+        }
+        Action::Place { prop, item } => {
+            let who = subject_unit(cx, subject);
+            verbs::place(cx, who, prop, item);
         }
         Action::Shake(n) => cx.emit(EventKind::Shake(n)),
         Action::Camera { mode, rect } => {

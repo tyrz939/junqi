@@ -1,4 +1,9 @@
 {
+  "mine_barred": {
+    "zone": "county", "rect": "mine_yard", "mode": "enter", "once": true,
+    "when": [{ "if": "flag", "flag": "omen:mine_no_exit" }, { "if": "dead", "unit": "iron_knuckles", "not": true }],
+    "actions": [{ "do": "nightLock", "prop": "mine_door", "says": "A bar across the door, on this side.", "hours": [21, 5] }]
+  },
   "adit_unbarred": {
     "zone": "county", "rect": "mine_yard", "mode": "while", "once": true,
     "when": [{ "if": "flag", "flag": "mine_adit_open" }],

@@ -32,7 +32,7 @@ use crate::tuning::{BAG_SLOTS, BAR_SLOTS, CRAFT_INPUTS};
 /// `Consequence` fact; `wetness`, `pressure`, `consequences_done` and `rumours` written).
 /// 6: a zone's rain ramp is one per region (`wetness: [u8; 3]`: the county is under three
 /// skies); the ecology steps every ten game minutes; a bed's night moves the tick too.
-pub const SAVE_VERSION: u16 = 6;
+pub const SAVE_VERSION: u16 = 7;
 
 /// A fixed-size bit set (trigger bits, consequences done).
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -712,6 +712,19 @@ pub enum LootState {
     Left(Vec<Stack>),
 }
 
+/// A door's hours, once a verb has changed them (`Action::NightLock`, `NightUnlock`): the
+/// state beats the spawn row's `night_lock` from then on.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum NightState {
+    /// What its spawn row says.
+    #[default]
+    AsSpawned,
+    /// Shut at these hours, saying this.
+    Locked(jane_core::NightLock),
+    /// Answered at every hour.
+    Open,
+}
+
 /// A prop. What a placed prop leads to, holds, runs and says lives on its blueprint spawn row
 /// (`spawn`), rebuilt from the seed on load; only what changes is here.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -731,4 +744,6 @@ pub struct Prop {
     pub loot: LootState,
     /// What lay under it has been shown.
     pub under_done: bool,
+    /// Its hours, if a verb set them.
+    pub night: NightState,
 }

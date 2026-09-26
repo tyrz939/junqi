@@ -8,10 +8,6 @@ use std::path::Path;
 /// Names only `jane/src/world/areas.ts` draws, in code (the Quarry Steps' top: its rect and mark).
 const DRAWN_BY_AREA_CODE: &[&str] = &["rect \"quarry_top\""];
 
-/// Read and never set: a real content bug, reported to the owner (the `scarecrow_night` trigger
-/// can never fire). Remove it from here when the data is fixed.
-const KNOWN_UNSET_FLAGS: &[&str] = &["omen:scarecrow_closer"];
-
 fn warnings() -> Vec<String> {
     let built = jane_schema::compile::build(&Path::new(env!("CARGO_MANIFEST_DIR")).join("../../data"));
     assert!(built.catalog.is_some(), "{}", built.diag);
@@ -28,12 +24,13 @@ fn every_used_name_has_a_provider_but_the_area_code_ones() {
     }
 }
 
+/// PORT.md §12: a flag read but never set is a build error since P1's triage (the omens set
+/// theirs at New Game, `data/omens.json`), so the catalog built at all says there is none; and it
+/// is no longer a warning.
 #[test]
 fn every_flag_read_is_set_somewhere() {
-    for w in warnings().iter().filter(|w| w.starts_with("flags:")) {
-        let list = w.split_once("never set: ").map_or("", |(_, l)| l);
-        for flag in list.split(", ") {
-            assert!(KNOWN_UNSET_FLAGS.contains(&flag), "a flag read but never set: {flag}");
-        }
-    }
+    assert!(warnings().iter().all(|w| !w.starts_with("flags:")));
+    let cat = jane_data::catalog();
+    let scarecrow = cat.story.omens.iter().find(|o| o.id == "scarecrow_closer").expect("the scarecrow omen");
+    assert_eq!(cat.name(scarecrow.flag), "omen:scarecrow_closer", "what the scarecrow triggers read");
 }

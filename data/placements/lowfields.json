@@ -704,6 +704,13 @@
           "qty": 1
         }
       ],
+      "use": [
+        {
+          "do": "if",
+          "when": [{ "if": "night" }, { "if": "flag", "flag": "omen:roses_after_dark" }],
+          "then": [{ "do": "flag", "flag": "rose_after_dark", "value": 1 }]
+        }
+      ],
       "label": "A white water rose"
     }
   },

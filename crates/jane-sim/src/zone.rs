@@ -76,6 +76,7 @@ pub fn create_zone_state(state: &mut GameState, bp: &Blueprint) -> ZoneState {
             on: s.on,
             loot: LootState::AsSpawned,
             under_done: false,
+            night: crate::state::NightState::AsSpawned,
         });
     }
     let n = zone_triggers(bp, &locals).len() as u32;

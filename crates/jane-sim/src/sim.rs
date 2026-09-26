@@ -66,7 +66,7 @@ impl Sim {
     /// The same over blueprints already built (tests, benches and peers share one set).
     pub fn new_game_with(bps: Blueprints, name: &str) -> Sim {
         let seed = bps.seed();
-        let state = GameState {
+        let mut state = GameState {
             version: SAVE_VERSION,
             seed,
             frame: 0,
@@ -90,9 +90,35 @@ impl Sim {
             consequences_owed: Vec::new(),
             rumours: BTreeMap::new(),
         };
+        // The world stream's first draws: which of the county's claims are true (omens.rs).
+        crate::omens::roll_omens(&mut state);
         let mut sim = Self::adopt(state, bps);
         sim.join(crate::ids::ClientToken::HOST);
+        sim.state.rest = sim.first_rest();
         sim
+    }
+
+    /// The party's waking place before anyone has rested: beside the bed or fire nearest where
+    /// the story starts (in the county, the Halt fire), so a death before the first rest walks
+    /// her back from the platform, never from a door she has walked through since. `None` only
+    /// for a county with no such thing (a test's).
+    fn first_rest(&self) -> Option<crate::state::RestPoint> {
+        let cat = jane_data::catalog();
+        let bp = self.bps.get(ZoneId::County);
+        let start = bp.marks.get(&jane_core::Key::Name(cat.story.start.mark))?.cell;
+        let d2 = |x: i32, y: i32| (x - i32::from(start.x)).pow(2) + (y - i32::from(start.y)).pow(2);
+        let (x, y) = bp
+            .props
+            .iter()
+            .filter(|p| !p.hidden && cat.story.prop(p.def).rest)
+            .map(|p| {
+                let def = cat.story.prop(p.def);
+                (i32::from(p.cell.x) + i32::from(def.w) / 2, i32::from(p.cell.y) + i32::from(def.h) / 2)
+            })
+            .min_by_key(|&(x, y)| d2(x, y))?;
+        let rt = self.rts[ZoneId::County.index()].as_deref()?;
+        let (fx, fy) = rt.grid.nearest_free(x, y, crate::tuning::ARRIVAL_RADIUS, None)?;
+        Some(crate::state::RestPoint { zone: ZoneId::County, pos: jane_core::Vec2::centre(fx, fy) })
     }
 
     pub(crate) fn adopt(state: GameState, bps: Blueprints) -> Sim {
@@ -579,6 +605,8 @@ fn apply_zone_ops(cx: &mut Ctx<'_>) {
     for i in 0..cx.ops.despawn.len() {
         let id = cx.ops.despawn[i];
         forget_unit(cx.zone, cx.rt, cx.party, id);
+        // Gone for good: a corpse despawned never stands up again.
+        cx.zone.sleeping_due.retain(|&(_, due)| due != id);
         if let Some(u) = cx.zone.remove_unit(id) {
             cx.rt.remove_unit(&u);
             cx.events.push(Event { to: None, in_zone: Some(cx.zone.id), kind: EventKind::Despawned { unit: id } });

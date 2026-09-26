@@ -265,7 +265,7 @@ impl<'a> View<'a> {
         let me = self.me();
         let Some(body) = self.zone.unit(me.unit) else { return Some(raw) };
         let def = jane_data::catalog().combat.spell(spell);
-        let mut near = Vec::new();
+        let (mut near, mut props) = (Vec::new(), Vec::new());
         let (a, _) = crate::assist::pick(
             self.zone,
             self.rt,
@@ -276,6 +276,7 @@ impl<'a> View<'a> {
             raw,
             frame.assist,
             &mut near,
+            &mut props,
         );
         Some(a)
     }

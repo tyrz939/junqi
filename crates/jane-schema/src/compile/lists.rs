@@ -135,6 +135,23 @@ pub enum RawAction {
     Reveal {
         rects: Vec<String>,
     },
+    Place {
+        def: String,
+        item: String,
+    },
+    /// `{ "do": "nightLock", "prop", "says", "hours"?: [from, to], "keyed"?: bool }`.
+    #[serde(rename = "nightLock")]
+    NightLock {
+        prop: String,
+        says: String,
+        hours: Option<[u8; 2]>,
+        #[serde(default)]
+        keyed: bool,
+    },
+    #[serde(rename = "nightUnlock")]
+    NightUnlock {
+        prop: String,
+    },
 }
 
 /// A condition as written; `not` negates any of them.
@@ -373,6 +390,17 @@ pub fn action(cx: &mut Ctx, at: &str, a: &RawAction) -> Option<Action> {
         }
         RawAction::Talk { tree } => Action::Talk(cx.dialogue(at, tree)?),
         RawAction::Throw { item } => Action::Throw(cx.item(at, item)?),
+        RawAction::Place { def, item } => Action::Place { prop: cx.prop(at, def)?, item: cx.item(at, item)? },
+        RawAction::NightLock { prop, says, hours, keyed } => {
+            let [from, to] = hours.unwrap_or([jane_core::NightLock::BELL.0, jane_core::NightLock::BELL.1]);
+            cx.diag.need(from < 24 && to < 24 && from != to, at, "nightLock: two different hours, 0 to 23");
+            let says = cx.text_ref(says);
+            Action::NightLock {
+                prop: nonempty(cx, at, "prop", prop),
+                lock: jane_core::NightLock { says, from, to, keyed: *keyed },
+            }
+        }
+        RawAction::NightUnlock { prop } => Action::NightUnlock(nonempty(cx, at, "prop", prop)),
         RawAction::Shake { amount } => Action::Shake(*amount),
         RawAction::Camera { mode, rect } => {
             let mode = match mode {

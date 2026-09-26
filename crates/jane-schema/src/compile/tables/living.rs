@@ -11,7 +11,8 @@
 //! - **ecology**: an area the skeleton has; a unit row that exists, once per area; `cap`,
 //!   `weight` and `hold` at least 1.
 //! - **consequences**: `on` a flag, a quest done or a named death, never negated; edits drawn from
-//!   the world verbs only (`show`, `hide`, `lock`, `unlock`, `switch`, `spawn`, `despawn`, `fill`,
+//!   the world verbs only (`show`, `hide`, `lock`, `unlock`, `nightLock`, `nightUnlock`, `switch`,
+//!   `spawn`, `despawn`, `fill`,
 //!   `send`, `flag`, through `send`'s `then`: [`Action::is_world_verb`]), and at least one that is
 //!   not a flag (WORLD.md §6: a flag alone
 //!   fails the cohesion test); a claim confirmed or contradicted is a line some row already says,
@@ -290,7 +291,7 @@ fn consequences(src: &Source, cx: &mut Ctx) -> &'static [ConsequenceDef] {
         for v in bad {
             cx.diag.error(
                 format!("{at}.edits"),
-                format!("\"{v}\" is not a world verb: a consequence shows, hides, locks, unlocks, switches, spawns, despawns, fills, sends and sets flags"),
+                format!("\"{v}\" is not a world verb: a consequence shows, hides, locks, unlocks, night-locks, night-unlocks, switches, spawns, despawns, fills, sends and sets flags"),
             );
         }
         let only_flags = r.edits.iter().all(|a| matches!(a, RawAction::Flag { .. }));
@@ -467,6 +468,13 @@ mod tests {
         assert_eq!(l.consequences.len(), 1);
         let deep_lock = r#"[{"id": "x", "on": {"if": "questDone", "quest": "q"}, "edits": [{"do": "send", "unit": "u", "to": "m", "then": [{"do": "lock", "prop": "p"}]}]}]"#;
         assert!(errors(&build(&[("consequences.json", deep_lock)]).1).is_empty(), "through send's then too");
+        // A door's hours are a world edit too, the bell's when left out.
+        let night = r#"[{"id": "x", "on": {"if": "questDone", "quest": "q"}, "edits": [{"do": "nightLock", "prop": "p", "says": "Not now.", "keyed": true}, {"do": "nightUnlock", "prop": "g"}]}]"#;
+        let (l, cx) = build(&[("consequences.json", night)]);
+        assert!(errors(&cx).is_empty(), "{:?}", errors(&cx));
+        assert_eq!(l.consequences.len(), 1);
+        let hours = r#"[{"id": "x", "on": {"if": "questDone", "quest": "q"}, "edits": [{"do": "nightLock", "prop": "p", "says": "Not now.", "hours": [4, 4]}]}]"#;
+        assert!(has(&build(&[("consequences.json", hours)]), "two different hours"));
         let toast = r#"[{"id": "x", "on": {"if": "questDone", "quest": "q"}, "edits": [{"do": "toast", "text": "Hello."}, {"do": "lock", "prop": "p"}]}]"#;
         assert!(has(&build(&[("consequences.json", toast)]), "\"Toast\" is not a world verb"));
         let flag = r#"[{"id": "x", "on": {"if": "questDone", "quest": "q"}, "edits": [{"do": "flag", "flag": "f"}]}]"#;

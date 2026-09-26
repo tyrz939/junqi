@@ -610,7 +610,7 @@ corridor -key basement `iron_door_b`-> room B -> stair_b
 2. The study's desk gets an examine line about the ring in the dust. It pays off in the Factory (section 3.4). No mechanism.
 3. Three things that later verbs open: a cracked wall behind the rose alcove (Explosion: a leaf page), a dry planter in the alcove (Grow: the roses come back for good, so Stone Skin becomes renewable), a cold hearth in room B (Fire: a second rest point under the house).
 
-**Enemies.** `rat` x4. No boss. **Rest:** Julie's bed upstairs. **Night:** nothing changes, unless the rose omen is true that seed (`STORY.md` section 6: pick a white rose after dark and "something in the cellar notices": one `soldier` spawned in the study by a trigger on `night`). **Co-op:** two stairs mean two people can come down at both ends and meet in the middle; either iron door can be opened from either side. **Risk:** none new.
+**Enemies.** `rat` x4. No boss. **Rest:** Julie's bed upstairs. **Night:** nothing changes, unless the rose omen is true that seed (`STORY.md` section 6: pick a white rose after dark, here or at Sallow Bottom, and "something in the cellar notices": the rose remembers it, `rose_after_dark`, and the next time she is in the cellar one `rose_soldier`, a soldier who stays down, stands at the study's mark `cellar_study`, never on the stairs). **Co-op:** two stairs mean two people can come down at both ends and meet in the middle; either iron door can be opened from either side. **Risk:** none new.
 
 ---
 
@@ -667,7 +667,7 @@ The Headmaster brought the school down here when the nights got longer, because 
 
 **What Repair re-opens on the surface.** The collapsed footbridge that is the short way home (`PLAN.md` section 2.6). The farm's pump (a side quest). Broken stiles in the Long Hedge. Manhole ladders in town, which are the way into the pipes.
 
-**At night.** The zone is indoors and ignores the clock, but two omens live here. *No exit, some nights:* if true, `exit_door` carries a `nightLock` line from the inside between nine and five, and the adit is the way out. *The Headmaster still rings the bell at nine:* if true, at nine every unit in the mine is sent to its spawn cell (`send`), which resets any fight the player was winning and clears any room she had emptied. **Question for John:** `blueprint.ts` says a `nightLock` goes on the outside door only, so nobody is ever shut in. The omen as written in `PLAN.md` shuts people in. One of the two has to give; this design assumes the omen wins here and only here.
+**At night.** The zone is indoors and ignores the clock, but two omens live here. *No exit, some nights:* if true (`omen:mine_no_exit`), the county's `mine_door` and the mine's `exit_door` are night-locked from nine to five the first time she comes to them (`data/triggers/mine.json`, the entry room's trigger), barred from outside, and the adit is the way out; once Iron Knuckles is down both are unbarred for good (`mine_quiet`, the entry room). *Built.* *The Headmaster still rings the bell at nine* (*proposed*, not an omen row yet): if true, at nine every unit in the mine is sent to its spawn cell (`send`), which resets any fight the player was winning and clears any room she had emptied. **Question for John:** `blueprint.ts` says a `nightLock` goes on the outside door only, so nobody is ever shut in. The omen as written in `PLAN.md` shuts people in. One of the two has to give; this design assumes the omen wins here and only here.
 
 **With 2 to 4 players.** Plate: a friend stands on it. Cage: two friends instead of two barrels. Arena: lure and lever. Guard room: nothing to split for, by design; it is the first real fight and the party should feel why it stays together. Nothing else changes.
 
@@ -677,7 +677,7 @@ The Headmaster brought the school down here when the nights got longer, because 
 
 ### 3.2 The Museum (phase 2): Explosion
 
-**Fiction.** The Castle Museum is limestone, with four wings off a round hall: SCIENCE, ARTS, HISTORY, and one whose name has been painted over in council cream. The floor plan by the cloakroom still shows it. Opening hours are ten to four. A notice from the Attendant asks visitors not to touch the exhibits, and adds that the exhibits have been asked the same.
+**Fiction.** The Castle Museum is limestone, with four wings off a round hall: SCIENCE, ARTS, HISTORY, and one whose name has been painted over in council cream. The floor plan by the cloakroom still shows it. It is open until nine, like the rest of the county. A notice from the Attendant asks visitors not to touch the exhibits, and adds that the exhibits have been asked the same.
 
 With the lights on it is a museum. The armour stands on its plinths, the fox is in its case, the waxwork miner in the Goldskin gallery holds up his lamp. The lights are on one breaker in the maintenance room. When they go off the plinths are empty, and you can hear where the exhibits have got to. When they come back everything is in its place. The dents stay.
 
@@ -749,7 +749,7 @@ magic  -oneway opens_on museum_cleared-> atrium   shortcut: the fire door
 
 **What Explosion re-opens.** The rock over the cave mouth in the Lowfields (`PLAN.md`). The mine's powder store. The cellar wall behind the roses. Quarry Steps. The grate between the pipes and the Factory.
 
-**At night.** The front door does not open after nine (`nightLock`: "Open ten to four. The door is not locked. It is just not open."). The way in at night is up the sewer stair from the pipes, once those are open. After the bell the breaker will not hold: it trips back to dark within a few seconds (`if night`). The night Museum is the dark Museum throughout, with no relief. The lit-only plinth in History cannot be reached at night; one dark-only case in Arts holds better loot. Day and night are both worth a visit, and neither is required.
+**At night.** The front door does not open after nine (`nightLock`: "Open until nine. The door is not locked. It is just not open.", the bell's hours: shut from nine to six). The way in at night is up the sewer stair from the pipes, once those are open. After the bell the breaker will not hold: it trips back to dark within a few seconds (`if night`). The night Museum is the dark Museum throughout, with no relief. The lit-only plinth in History cannot be reached at night; one dark-only case in Arts holds better loot. Day and night are both worth a visit, and neither is required.
 
 **With 2 to 4 players.** One stands at the breaker and one crosses a wing: lights off to clear a doorway, lights on to freeze what is chasing her (`lure_and_lever`). It is the best co-op toy in the game and it is a split, so it is priced: every throw to dark also wakes one stuffed fox in the corridor by Maintenance. The breaker-holder must not linger. In the rotunda, one fights and one runs for the breaker. Natural history's two plinths are `twin_hold`.
 
@@ -880,7 +880,7 @@ A lit lamp cannot answer a bolt (`schoolTouch` skips props that are `on`), which
 
 **Keys and rewards.** Plain keys x2, `key_foreman`, `key_burial`. Big jar. Small jars x2. Leaf pages x2. The diary (three notices, each one fact short). **Rest:** the time office; the works canteen outside (`sites.json`). **Shortcut:** the roller door. **The cellar study** pays off here: the stand is the same stand.
 
-**At night.** Indoors, so the halls do not change. The yard does: the Cooling Yard is threat 5 and +2 at night in the Works, so arriving by the pipes is the sensible way after nine, and the roller door opens onto something she may not want to walk out into. **Omen:** "The day shift clocks off at six. If true: at six the haulers walk to the time office and stand there until seven." An hour a day when the press hall is empty and the rest room is not.
+**At night.** Indoors, so the halls do not change. The yard does: the Cooling Yard is threat 5 past the Factory's own ring (the approach is never harder than the Factory's rooms, phase 4), and after dark in the Works whatever stands in it notices her from further off and follows her further, so arriving by the pipes is the sensible way after nine, and the roller door opens onto something she may not want to walk out into. **Omen:** "The day shift clocks off at six. If true: at six the haulers walk to the time office and stand there until seven." An hour a day when the press hall is empty and the rest room is not.
 
 **With 2 to 4 players.** A carried lamp would be the obvious toy and is not asked for. Instead: the Charge Hand is kited past the sentry by one while the other stays dark. In line A lit, one draws fire at the mouth of the hall while one runs for the fuse box: a split of one room and ten seconds, which is exactly K19. The Foreman: lure and socket.
 

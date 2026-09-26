@@ -63,9 +63,9 @@ Times are **real minutes after New Game**, then the clock. One game hour is two 
 ### 5:00 to 6:30 · 19:30 to 20:15 · The yard skeleton
 
 - **Sees / hears / can do.** One skeleton, phase 1, walking the fence. By day it minds the fence and not her: she starts it (after the bell it comes for her). Melee only. A bar over its head and no number. She wins in a few swings; she can lose.
-- **Knows.** What a swing costs and what a hit costs. **Does not:** that dying now wakes her at the platform: the door she came in by, before any rest.
+- **Knows.** What a swing costs and what a hit costs. **Does not:** that dying now wakes her at the Halt fire on the platform: the party's fire from New Game, until she rests somewhere else.
 - **Meanwhile.** Nothing else in the yard. Nothing comes through the fence.
-- **Checks.** `[L4:first_fight is the yard skeleton inside Julie's fence]` `[L1:one skeleton inside the fence, none within a screen outside it]` `[L6:wake at the start before the first rest]` `[L5:enemy health is never a number]`
+- **Checks.** `[L4:first_fight is the yard skeleton inside Julie's fence]` `[L1:one skeleton inside the fence, none within a screen outside it]` `[L6:wake at the Halt fire before the first rest]` `[L5:enemy health is never a number]`
 - **Varies.** The Co-op pair fights it at 62% each: §3.
 
 ### 6:00 to 7:30 · 20:00 to 20:45 · The key
@@ -73,7 +73,7 @@ Times are **real minutes after New Game**, then the clock. One game hour is two 
 - **Sees / hears / can do.** "Down. Good. The house key was always for you." The key. "There is a bed. Sleep in it. If you die out there you wake in the last place you rested." **E** on the door twice: unlock, enter. The banner: Julie's House.
 - **Knows.** There is a bed; death costs a walk; the key is hers. The journal: Julie's Kitchen is the next step, and the dog is where to come back to. **Does not:** that the dog is about to leave.
 - **Meanwhile.** Doors barring along every road. The Tenant standing up at Plot 9.
-- **Checks.** `[L4:the house key and the kitchen by 8 min, Reader]` `[L6:the key paid to everyone, once]` `[L6:the door takes the key and becomes a nightLock she holds]` `[L5:knows: the reward line and the returnTo]`
+- **Checks.** `[L4:the house key and the kitchen by 8 min, Reader]` `[L6:the key paid to everyone, once]` `[L6:consequences: the yard skeleton gone at hand-in, for good]` `[L6:the door takes the key and becomes a nightLock she holds]` `[L5:knows: the reward line and the returnTo]`
 - **Varies.** The Explorer, back from Castle after nine, finds the skeleton walking and the step empty: she can put the bones down; she cannot hand them in until six; the house is locked; the platform fire is her rest.
 
 ### 7:00 to 10:00 · 20:30 to 22:00 · The kitchen, and the bell
@@ -88,7 +88,7 @@ Times are **real minutes after New Game**, then the clock. One game hour is two 
 
 - **Sees / hears / can do.** Down either hatch. KEYS comes down in room A: a chest with two iron keys, barrels to push. An iron door that takes one. OUT comes down in room B, the other end, behind the second iron door, with a note by it: "THE OTHER WAY OUT. The keys are in the chest at the first stair: the hatch chalked KEYS, by the stove." She goes back up and down the other. A corridor: the rat room (four rats, a chest with a plain key), the potion room with a bench, the study with a clean ring in the dust, the rose alcove (white roses, gatherable), the storage gate (the plain key: wood x4, iron x4, a small jar *proposed*). A second iron door, room B, the other stair. She can fight, push, unlock, gather, craft, read the desk.
 - **Knows.** Rat meat x3 (the dog's next ask is not given yet; the meat counts when it is). One kind of iron key opens either door and is spent. **Does not:** what the ring in the dust was. What the roses are for after dark.
-- **Meanwhile.** 22:00: the east road's lamps go out *if that omen is true*. Mr Pollard walks to the Dole Stone. The Arms lit. Mr Dunn ringing from across the square.
+- **Meanwhile.** 22:00: the east road's lamps go out *if that omen is true* (*proposed*). Mr Pollard walks to the Dole Stone. The Arms lit. Mr Dunn ringing from across the square.
 - **Checks.** `[L1:the cellar's mission graph as DUNGEONS.md 3.0; a way out from either door]` `[L5:the note by the second iron door says where the keys are]` `[L4:the rats and the meat by 20 min, at most one death, Reader]` `[L6:ecology: rats x4 in the cellar, recovery per WORLD.md 4.5]` `[L5:omen: the rose omen true at the seeded rate; when true, one soldier in the study on a rose picked after dark, and the solver proves the stair]` `[L5:claim behind: the wood and iron in the locked storage room]`
 - **Varies.** The Rusher skips the storage room and regrets it at the mine's stair. The rose omen is true on about a third of seeds, and never from behind: the soldier is in the study, not the stair.
 
@@ -106,7 +106,7 @@ Times are **real minutes after New Game**, then the clock. One game hour is two 
 - **Knows.** Where she wakes from now. Day 2, Monday. **Does not:** who pulled the blanket.
 - **Meanwhile.** Everything that came up goes back over the hour. The mine's door, if barred, opened at five. The milk round begins at seven. The dog on the step.
 - **Checks.** `[L6:a bed sleeps to 06:00 and sets the rest point]` `[L6:the morning bell in the house]` `[L6:presence: by 07:00 no night-only unit stands; none hid in view]` `[L4:the first rest before 21:00, Cautious]` `[L5:the bed's two lines]`
-- **Varies.** The Rusher does not rest and is on the mine road at 02:00: threat 1, ring +1, night +1, phase 3 skeletons at 150 HP; "No exit either, some nights" is true on a third of seeds and the door is barred until five; the mine's fire is outside it. That is the design working, not failing.
+- **Varies.** The Rusher does not rest and is on the mine road at 02:00: the road unlit past the last lamp, the mine's approach no harder than the mine's own rooms (phase 1: skeletons at 100 HP, the phase the ground gives them by day), but in the dark they notice her from further off and follow her further; "No exit either, some nights" is true on a third of seeds and the door is barred until five; the mine's fire is outside it. That is the design working, not failing.
 
 ### 19:00 to 22:00 · 06:00 to 07:30 · The morning, the dog
 
@@ -146,11 +146,11 @@ Times are **real minutes after New Game**, then the clock. One game hour is two 
 
 A second seat joins at real minute 5, while seat 1 stands at the stoop.
 
-- **Sees / hears / can do.** The guest appears at the party's last fire. Nobody has rested, so that is the door the party came in by: **the platform at Castle Halt**, 17:15 by the clock, the same sunset. A toast to both: the head count has changed. She has the same name and a different coat. She walks the same road, alone, at 62%: still threat 1, still nothing on it. Seat 1 reads the dog's offer while the world runs; nothing pauses. The skeleton is fought together at 124%, or by one at 62%.
+- **Sees / hears / can do.** The guest appears at the party's last fire. Nobody has rested, so that is the fire the party started by: **the Halt fire on the platform at Castle Halt**, 17:15 by the clock, the same sunset. A toast to both: the head count has changed. She has the same name and a different coat. She walks the same road, alone, at 62%: still threat 1, still nothing on it. Seat 1 reads the dog's offer while the world runs; nothing pauses. The skeleton is fought together at 124%, or by one at 62%.
 - **Knows.** The journal is the world's: the guest opens it and sees the letter done and the bones offered. **Does not:** the guest has no pansy: bags are hers. One potion is made, by one of them; the orb teaches both.
 - **Meanwhile.** The same lamps at real minute 3 for the host; the guest arrives after them. The same bell at real minute 8 for both. The dog leaves for both.
-- **Checks.** `[L6:a joiner arrives at the party's rest point, the start before the first rest]` `[L6:the penalty by head count, everywhere, never on healing]` `[L6:quests, flags, growth and the rest point are the world's; bags are the seat's]` `[L6:the key paid to both]` `[L5:the journal reads the same from either seat]` `[L4:the pair together survives the yard; split, each is warned]`
-- **Varies.** If the guest rests at the platform fire before the host sleeps, the party's rest point is the platform, and whoever dies in the yard walks back from there. The bed sleeps the clock only when both are resting. A guest leaving hands the house key to the host.
+- **Checks.** `[L6:a joiner arrives at the party's rest point, the Halt fire before the first rest]` `[L6:the penalty by head count, everywhere, never on healing]` `[L6:quests, flags, growth and the rest point are the world's; bags are the seat's]` `[L6:the key paid to both]` `[L5:the journal reads the same from either seat]` `[L4:the pair together survives the yard; split, each is warned]`
+- **Varies.** Until one of them rests somewhere else, the party's rest point is the Halt fire, and whoever dies in the yard walks back from there. The bed sleeps the clock only when both are resting. A guest leaving hands the house key to the host.
 
 ---
 
@@ -171,8 +171,8 @@ Headers and key claims; later passes expand each to the §2 format.
 - **Sees / hears / can do.** Across the river by the tollhouse bridge (the toll board, the omen). A hub and four wings, two states: lights on, a museum; lights off, empty plinths. The MAGIC wing. A portrait with the face scratched out. The forest key.
 - **Knows after.** What the gold was for. **Does not:** who scratched the portrait.
 - **Meanwhile.** Nobody in the Waters talks to the town. The wing's lights stay on after, seen from the bridge at night.
-- **Checks.** `[L1:museum across the river from town, 300 to 850 m by road]` `[L5:omen: the bridge counts; when true the third crossing of a night is different and survivable]` `[L6:consequences: the wing lit after]` `[L5:cohesion: the portrait is Goldskin's and no line says so]`
-- **Varies.** The bridge count. The Waters' mist weight after dark.
+- **Checks.** `[L1:museum across the river from town, 300 to 850 m by road]` `[L5:omen, proposed: the bridge counts; when true the third crossing of a night is different and survivable]` `[L6:consequences: the wing lit after]` `[L5:cohesion: the portrait is Goldskin's and no line says so]`
+- **Varies.** The bridge count (*proposed*). The Waters' mist weight after dark.
 
 ### The ruined library and Butterfly Forest · hours 5 to 7 · Grow
 

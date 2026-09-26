@@ -19,7 +19,7 @@
 use jane_core::action::{Facing, School};
 use jane_core::blueprint::PropSpawn;
 use jane_core::num::{CELL_FX, dist_sq, isqrt};
-use jane_core::{Blueprint, Cell, Fx, ItemId, Rect, TextId, Vec2};
+use jane_core::{Blueprint, Cell, Fx, ItemId, NightLock, Rect, TextId, TextRef, Vec2};
 use jane_data::{Answers, Faction, PropDef, WorldSpell};
 
 use crate::actions::{Subject, request_travel, run_actions};
@@ -30,7 +30,7 @@ use crate::ids::{DropId, PropId, PropIx, Seat, UnitId};
 use crate::inventory;
 use crate::light::{lit_at, prop_centre};
 use crate::runtime::ZoneRuntime;
-use crate::state::{GameState, LootState, Prop, Speaker, TravelRequest, Unit, ZoneState};
+use crate::state::{GameState, LootState, NightState, Prop, Speaker, TravelRequest, Unit, ZoneState};
 use crate::tuning::{
     FOCUS_BEHIND_FX, FOCUS_PUSH_ONLY_FX, PICKUP_REACH_FX, PUSH_ENERGY, PUSH_HOLD_TICKS, TALK_REACH_FX, USE_REACH_FX,
     WORLD_SPELL_REACH_FX,
@@ -142,8 +142,44 @@ fn behind(u: &Unit, to: Vec2) -> bool {
     i64::from(to.x.0 - u.pos.x.0) * i64::from(fx) + i64::from(to.y.0 - u.pos.y.0) * i64::from(fy) < 0
 }
 
-fn night_locked(h: &Here<'_>, s: Option<&PropSpawn>) -> bool {
-    s.is_some_and(|s| s.night_lock.is_some()) && h.world.is_night()
+/// The hours a door keeps now: a verb's, else its row's.
+pub fn night_lock_of(bp: &Blueprint, p: &Prop) -> Option<NightLock> {
+    match p.night {
+        NightState::AsSpawned => spawn_of(bp, p).and_then(|s| s.night_lock),
+        NightState::Locked(l) => Some(l),
+        NightState::Open => None,
+    }
+}
+
+/// Does this door refuse `seat` now? What it says if so: it is inside its hours, and it is not
+/// a `keyed` lock she holds a key for (one that fits the door's `keyTag`).
+pub fn night_shut(
+    world: &GameState,
+    bp: &Blueprint,
+    locals: &[jane_core::Sym],
+    p: &Prop,
+    seat: Option<Seat>,
+) -> Option<TextRef> {
+    let lock = night_lock_of(bp, p)?;
+    if !lock.shut_at(world.hour() as u8) {
+        return None;
+    }
+    let tag = spawn_of(bp, p).and_then(|s| s.key_tag);
+    let holds = |seat: Seat| {
+        let (Some(tag), Some(pl)) = (tag, world.player(seat)) else { return false };
+        let cat = jane_data::catalog();
+        let tag = crate::sym::of_key(tag, locals);
+        pl.bag.iter().flatten().any(|s| cat.combat.item(s.item).opens.is_some_and(|o| crate::sym::of_name(o) == tag))
+    };
+    if lock.keyed && seat.is_some_and(holds) {
+        return None;
+    }
+    Some(lock.says)
+}
+
+/// The seat whose body `u` is, if any.
+fn seat_of_body(world: &GameState, u: &Unit) -> Option<Seat> {
+    world.players.iter().find(|p| p.unit == u.id).map(|p| p.seat)
 }
 
 fn interactable(h: &Here<'_>, def: &PropDef, p: &Prop) -> bool {
@@ -162,14 +198,15 @@ fn interactable(h: &Here<'_>, def: &PropDef, p: &Prop) -> bool {
         || def.push
 }
 
-fn first_verb(h: &Here<'_>, def: &PropDef, p: &Prop) -> Option<Verb> {
+fn first_verb(h: &Here<'_>, def: &PropDef, p: &Prop, seat: Option<Seat>) -> Option<Verb> {
     let s = spawn_of(h.bp, p);
     let custom = def.prompt.map(Verb::Custom);
     if p.locked {
         return Some(Verb::Unlock);
     }
     if s.is_some_and(|s| s.to.is_some()) {
-        return Some(if night_locked(h, s) { Verb::TryTheDoor } else { custom.unwrap_or(Verb::Enter) });
+        let shut = night_shut(h.world, h.bp, &h.rt.locals, p, seat).is_some();
+        return Some(if shut { Verb::TryTheDoor } else { custom.unwrap_or(Verb::Enter) });
     }
     // The row knows best what it is: a herb is gathered. A chest has no word of its own.
     if has_loot(h.bp, p) {
@@ -248,7 +285,7 @@ pub fn focus_of(h: &Here<'_>, u: &Unit, units: &mut Vec<UnitId>, props: &mut Vec
         if dd > sq(USE_REACH_FX) {
             continue;
         }
-        let verb = first_verb(h, def, p);
+        let verb = first_verb(h, def, p, seat_of_body(h.world, u));
         let mut s = i64::from(isqrt(dd as u64));
         if behind(u, prop_centre(def, p)) {
             s += i64::from(FOCUS_BEHIND_FX);
@@ -343,8 +380,9 @@ fn use_prop(cx: &mut Ctx<'_>, seat: Seat, body: UnitId, ix: PropIx) {
         return;
     }
     if let Some(to) = spawn.and_then(|s| s.to) {
-        // Some doors are not answered after dark. The key turns; the door does not.
-        if let Some(says) = spawn.and_then(|s| s.night_lock).filter(|_| cx.world.is_night()) {
+        // Some doors are not answered at some hours. The key turns; the door does not (unless
+        // the lock is one she holds the key to).
+        if let Some(says) = night_shut(cx.world, bp, &cx.rt.locals, &cx.zone.props[ix as usize], Some(seat)) {
             cx.emit(EventKind::Toast(ToastKind::NightLock(says)));
             cx.emit(EventKind::Sfx { kind: SfxKind::Locked, at });
             return;

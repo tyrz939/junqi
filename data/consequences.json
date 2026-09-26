@@ -13,15 +13,21 @@
   {
     "id": "house_kept",
     "on": { "if": "questDone", "quest": "see_the_kitchen" },
-    "edits": [{ "do": "lock", "prop": "house_door" }]
+    "edits": [{ "do": "nightLock", "prop": "house_door", "says": "Locked for the night. Julie's key opens it.", "keyed": true }]
   },
   {
     "id": "mine_quiet",
     "on": { "if": "dead", "unit": "iron_knuckles" },
     "edits": [
       { "do": "spawn", "unit": "mine_watcher", "def": "folk_old", "at": "company_notice" },
+      { "do": "nightUnlock", "prop": "mine_door" },
       { "do": "flag", "flag": "mine_quiet", "value": 1 }
     ],
     "contradicts": "GOLDSKIN MINING Co. CLOSED. No entry. No exit either, some nights."
+  },
+  {
+    "id": "yard_clear",
+    "on": { "if": "questDone", "quest": "defeat_skeleton" },
+    "edits": [{ "do": "despawn", "unit": "yard_skeleton" }]
   }
 ]

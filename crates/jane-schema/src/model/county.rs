@@ -375,6 +375,23 @@ impl Emit for DoorAt {
 }
 
 model! {
+    /// A door's `nightLock`: what it says instead of opening, and the hours it is shut, `from` up
+    /// to `to`, wrapping midnight (`nightHours`; the bell's night, 21 to 6, when left out).
+    pub struct NightLockDef {
+        pub says: TextId,
+        pub from: u8,
+        pub to: u8,
+    }
+}
+
+impl NightLockDef {
+    /// The blueprint's lock (a row's is never `keyed`: only a verb makes one of those).
+    pub const fn lock(self) -> jane_core::NightLock {
+        jane_core::NightLock { says: jane_core::TextRef::Text(self.says), from: self.from, to: self.to, keyed: false }
+    }
+}
+
+model! {
     /// A way into a dungeon from the county (`data/doors.json`), in row order. Every zone exists, so
     /// every row applies (PORT.md §6.l).
     pub struct DoorDef {
@@ -387,8 +404,8 @@ model! {
         pub label: TextId,
         /// Locked to this key tag.
         pub key_tag: Option<NameId>,
-        /// What it says after dark instead of opening.
-        pub night_lock: Option<TextId>,
+        /// What it says at the hours it is shut instead of opening.
+        pub night_lock: Option<NightLockDef>,
         /// A county mark in front of it: where the dungeon's own way out arrives.
         pub mark: Option<NameId>,
         /// The mark in `zone` it leads to (`entry`); `None` for a way that opens only from below (a
@@ -518,7 +535,7 @@ model! {
         pub needs: &'static [Stack],
         pub talk: Option<DialogueId>,
         pub label: Option<TextId>,
-        pub night_lock: Option<TextId>,
+        pub night_lock: Option<NightLockDef>,
     }
 }
 
@@ -536,7 +553,7 @@ model! {
         pub use_list: Option<ListRef>,
         pub talk: Option<DialogueId>,
         pub label: Option<TextId>,
-        pub night_lock: Option<TextId>,
+        pub night_lock: Option<NightLockDef>,
     }
 }
 

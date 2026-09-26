@@ -93,6 +93,7 @@ fn check_list(bp: &Blueprint, cat: &'static Catalog, r: ListRef, depth: u8, out:
                 out.push(RowFault::UnknownItem(s.item));
             }
             Action::Throw(i) if i.index() >= c.combat.items.len() => out.push(RowFault::UnknownItem(i)),
+            Action::Place { item, .. } if item.index() >= c.combat.items.len() => out.push(RowFault::UnknownItem(item)),
             Action::Learn(s) if s.index() >= c.combat.spells.len() => out.push(RowFault::UnknownSpell(s)),
             Action::Status(e) if e.index() >= c.combat.effects.len() => out.push(RowFault::UnknownEffect(e)),
             Action::Spawn { def, .. } if def.index() >= c.combat.units.len() => out.push(RowFault::UnknownUnitDef(def)),

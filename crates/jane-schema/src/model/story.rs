@@ -340,6 +340,28 @@ model! {
 }
 
 model! {
+    /// A claim that comes true on some seeds (`data/omens.json`; PLAN.md §5, WORLD.md §7.3).
+    /// Rolled once at New Game from the world stream, in row order: true, it sets its flag to 1,
+    /// and the rows that read the flag (triggers, clock rows, lists) make the county do what the
+    /// claim says. Nothing in the game says which are true.
+    pub struct OmenDef {
+        /// The content id (`"mine_no_exit"`).
+        pub id: &'static str,
+        /// The chance it is true on a seed, out of 1000.
+        pub chance: u16,
+        /// Where its world is.
+        pub region: crate::model::Region,
+        /// True, it costs a fight: at most one lethal omen of a region comes true on a seed (the
+        /// first in row order; a later one rolled true is false).
+        pub lethal: bool,
+        /// The flag set to 1 when it is true (`omen:<id>`): what it sets.
+        pub flag: NameId,
+        /// What the county claims, in the words a row says it (for tools and the dossier).
+        pub claim: TextId,
+    }
+}
+
+model! {
     pub struct Story {
         /// Indexed by `PropDefId`.
         pub props: &'static [PropDef],
@@ -352,6 +374,8 @@ model! {
         /// In file order (base, then fragments in path order): rows of one hour run in this order.
         pub clock: &'static [ClockDef],
         pub start: StartDef,
+        /// In row order: the order they are rolled in.
+        pub omens: &'static [OmenDef],
     }
 }
 

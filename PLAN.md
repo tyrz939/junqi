@@ -114,7 +114,7 @@ Whole game: three regions, six dungeons, 50–60 quests, roughly 15–25 hours. 
 ### 2.5 Harshness
 
 - No fast travel. No map markers beyond what Jane has seen or been told.
-- **Beds and fires** *(decided, built)*: the game saves only within reach of a bed or a fire, resting at one is the save, and dying wakes you at the last one you used, however far that is. A bed can also sleep the clock to morning. Before the first rest you wake at the door you came in by. Placing fires is therefore level design: the distance between two fires is the length of a run.
+- **Beds and fires** *(decided, built)*: the game saves only within reach of a bed or a fire, resting at one is the save, and dying wakes you at the last one you used, however far that is. A bed can also sleep the clock to morning. Before the first rest you wake at the Halt fire, the party's from New Game: never resting is never the better plan. Placing fires is therefore level design: the distance between two fires is the length of a run.
 - Bags are 24 slots and stay 24.
 
 ### 2.6 Danger: how difficulty is laid out
@@ -131,11 +131,11 @@ Whole game: three regions, six dungeons, 50–60 quests, roughly 15–25 hours. 
 | --- | --- |
 | **Region base** | Lowfields 1, Waters 2–3, Works 4–5 |
 | **Sub-areas** (`areas.json`, placed by the skeleton like sites) | Named patches with their own band, *in every region*: the Lowfields have the **Top Field** (3) and the **Wood behind the car** (2–3); the Waters have the **Drowned Lane** (4); the Works have a **safe works canteen** (2, with a fire). Roughly 5–7 per region |
-| **Dungeon rings** | Threat rises by one in a ring around each dungeon mouth; the approach is part of the dungeon |
+| **Dungeon rings** | Threat rises by one in a ring around each dungeon mouth, once however many rings a cell is in, and never above the phase of the dungeon's own rooms (the easiest, where rings meet): the approach is part of the dungeon and never harder than its first room |
 | **Roads and lamps** | −1 on a road; by night, a *lit* road holds that −1 and an unlit one loses it |
 | **Hubs** | Threat 0 inside a hub's fence: nothing spawns, nothing follows you in |
-| **Night** | +1 everywhere outside lamplight, +2 in the Works. Day and night is the spine (§1) |
-| **Day** *(decided, built in the Rust sim)* | Its other face: between six and the bell the county's own creatures on its gentlest ground (threat 1: the Lowfields' fields and roads) start no fight. They watch her go; struck, they fight back. The first evening is a walk, off the road as well as on it, and the fields are a place to be by day and not after nine. Patches, rings, the Waters and the Works bite by day as ever. `tuning.rs WARY_THREAT`, `ai::wary` |
+| **Night** | +1 everywhere outside lamplight, +2 in the Works, felt and not fought: what is out notices her from further off and follows her further (aggro and leash), and is the phase its ground gives it by day. Day and night is the spine (§1) |
+| **Day** *(decided, built in the Rust sim)* | Its other face: between six and the bell the county's own creatures on its gentlest ground (threat 1: the Lowfields' fields and roads) start no fight. They watch her go; struck, they fight back. The first evening is a walk, off the road as well as on it, and the fields are a place to be by day and not after nine. Patches, the dungeons' rings (all but the Gold Mine's, whose rooms are phase 1 and so its approach), the Waters and the Works bite by day as ever. `tuning.rs WARY_THREAT`, `ai::wary` |
 | **True omens** | A true omen can raise or move a pocket ("the scarecrow is closer") |
 
 Enemies are **rows × threat**: one `skeleton` row, scaled by the phase table at spawn, instead of `skeleton_2`, `skeleton_3`. Families still differ by region (what a thing *does*); threat sets what it *costs*. Spawn tables are per area.
@@ -155,7 +155,7 @@ That makes exploring the dangerous pocket the *way you get strong enough for the
 
 **The world tells you; the interface does not** *(decided: threat is felt only)*. No level numbers, no skulls, no name colours. **An enemy's health is never a number**: a bar over its head and in the target frame, nothing more (built: the target frame's figures are gone; Jane's own vitals keep theirs). Threat is signs and rumours (omens), what the dog says, carrion, the colour of the mist, enemies visible from the road, and lamps. A player who walks into the Top Field on the first night was warned, and the warning might even have been false.
 
-**Doors at night are a creative choice, door by door** *(decided)*. There is no curfew rule. A prop row may carry `nightLock`, and then it is locked from nine to six: the shop, yes; the church, never; the pub, only on some seeds (that one is an omen). Each locked door should mean something about who is behind it.
+**Doors at night are a creative choice, door by door** *(decided)*. There is no curfew rule. A prop row may carry `nightLock`, and then it is locked from nine to six (or at its own `nightHours`); a consequence may set or lift one for good: the shop, yes; the church, never; the pub, only on some seeds (that one is an omen). Each locked door should mean something about who is behind it.
 
 **Testable, so it stays true:** threat is a field the seed viewer can paint; the solver checks the upgrade rule above; a test checks that the walk from the station to Julie's house never crosses threat above 1 by day, and that every region has at least one fire inside threat ≤ its base.
 

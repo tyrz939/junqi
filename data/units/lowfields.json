@@ -11,6 +11,11 @@
     "loot": [{ "item": "rock", "qty": 1, "chance": 0.5 }, { "item": "iron", "qty": 1, "chance": 0.25 }],
     "sprite": "skeleton"
   },
+  "rose_soldier": {
+    "name": "Undead Soldier", "faction": "undead", "controller": "ai", "strength": 24, "spirit": 1,
+    "walk": 0.35, "run": 0.75, "aggro": 18, "leash": 70, "bounds": 1, "book": ["melee_stun", "melee"],
+    "respawn": 0, "autoRegen": true, "loot": [], "sprite": "soldier"
+  },
   "plot_tenant": {
     "name": "The Tenant of Plot 9", "faction": "undead", "controller": "ai", "strength": 20, "spirit": 1,
     "walk": 0.55, "run": 1.2, "aggro": 14, "leash": 20, "bounds": 1, "book": ["melee"],

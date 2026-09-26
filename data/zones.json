@@ -24,7 +24,7 @@
     "kind": "interior",
     "contract": {
       "props": ["stair_a", "stair_b", "cellar_chest", "iron_door_a", "iron_door_b", "storage_gate", "storage_chest", "potion_bench"],
-      "marks": ["stair_a", "stair_b"],
+      "marks": ["stair_a", "stair_b", "cellar_study"],
       "rects": ["cellar"]
     }
   },

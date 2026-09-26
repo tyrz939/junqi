@@ -1,0 +1,24 @@
+[
+  {
+    "id": "scarecrow_closer",
+    "chance": 333,
+    "region": "lowfields",
+    "sets": "omen:scarecrow_closer",
+    "claim": "The scarecrow in the top field was not there yesterday."
+  },
+  {
+    "id": "mine_no_exit",
+    "chance": 333,
+    "region": "lowfields",
+    "sets": "omen:mine_no_exit",
+    "claim": "GOLDSKIN MINING Co. CLOSED. No entry. No exit either, some nights."
+  },
+  {
+    "id": "roses_after_dark",
+    "chance": 333,
+    "region": "lowfields",
+    "lethal": true,
+    "sets": "omen:roses_after_dark",
+    "claim": "Please do not pick the white roses after dark."
+  }
+]

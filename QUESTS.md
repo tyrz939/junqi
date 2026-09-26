@@ -71,7 +71,7 @@ Sources marked *(read)* were fetched and read while writing this. Sources marked
 
 *Designer.* Kaplan: "I don't think collection quests are broken, but lots of times we do a bad job." The failures he lists are too few creatures, creatures too far apart, too many items asked for, and items that eat the bag. His own worst quest, "The Green Hills of Stranglethorn", took 19 bag slots when the starting backpack had 16: "This is the worst quest in World of Warcraft. I made it." He also describes fixing drop "streaks" by raising the chance after each failure. Source *(read)*: Shacknews and Game Developer, above.
 
-**So in this game:** bags are 24 slots and stay 24 (`PLAN.md` 2.5), so a quest may hold at most three slots at any moment, and hands them back on completion. Quest items never drop by chance: they are picked up from a place (a prop), or they drop every time. Where a kill quest asks for N, the patch holds at least N+1, close together, and they come back: one kill never holds a patch back, so each returns on its own clock, and a patch she has held back with a hunt refills within ten game minutes of being allowed to (the ecology looks at it every ten game minutes, `WORLD.md` §4.1).
+**So in this game:** bags are 24 slots and stay 24 (`PLAN.md` 2.5), so a quest may hold at most three slots at any moment, and hands them back on completion. Quest items never drop by chance: they are picked up from a place (a prop), or they drop every time. Where a kill quest asks for N, the patch holds at least N+1, close together, and they come back: one kill never holds a patch back, so each stands up again within ten game minutes (at the next ten-minute mark, when the ecology looks at its patch, and never in view), and a patch she has held back with a hunt refills within ten game minutes of being allowed to (`WORLD.md` §4.1).
 
 ### K9. The reason must live inside the world, and completion should change something
 
@@ -210,7 +210,7 @@ Hold every quest against this page. A "no" anywhere is a redline.
 
 11. Requirements are only kill, acquire, location. Counts are six or fewer.
 12. No drop chances. At most three bag slots. Slots are given back at hand-in.
-13. For kill quests: N+1 targets, close together, returning (a held patch refills within ten game minutes of being allowed to, K8); and a named asker with a named fear.
+13. For kill quests: N+1 targets, close together, returning (one kill is back within ten game minutes, a held patch within ten game minutes of being allowed to, K8); and a named asker with a named fear.
 14. Is the first step placed where she may already have been (endowed progress)?
 
 **It pays**
@@ -423,7 +423,7 @@ Type: K kill, A acquire, L location. Threat is by day; add 1 at night outside la
 > 8. **Two sprites more than asked for**: `campfire_cold` (the campfire's only frame is burning) and `adit_rock` (a prop three cells wide needs a sprite 24 px wide, and no rock is).
 > 9. **One mark more**: `nurses_case`, beside the case, so the car can be reached by name.
 > 10. **One line written**: after A1's hand-in the book shows `lp_done`, "Printed at the foot of the page: Finders may take one article from the unclaimed shelf. One."
-> 11. **Not built**: the three proposed omens (3.2) and whatever sets `omen:scarecrow_closer`. The scarecrow triggers are in, and tested with the flag set by hand. Nobody has counted the creatures between the car and the coat.
+> 11. **Not built**: the three proposed omens (3.2). `omen:scarecrow_closer` is set at New Game on the seeds it is true (`data/omens.json`, about a third), and the scarecrow triggers read it. Nobody has counted the creatures between the car and the coat.
 
 Nineteen quests in eight chains. Conventions:
 
@@ -1162,8 +1162,8 @@ All are `maxStack: 1`, `usable: false`, `cooldown: 1`. The keys carry `opens: "l
 
 | id | name | behaviour | spawns | art |
 | --- | --- | --- | --- | --- |
-| `pumpkin_top` | Field Pumpkin | Exactly as `pumpkin` (strength 14, melee, aggro 10, leash 40, respawn 600) | 7 in area `top_field`, phase 3 | reuse sprite `pumpkin` |
-| `quarryman` | Quarryman | As `skeleton` (strength 12, melee, aggro 10, leash 40, respawn 600); loot `rock` 1 at 0.5, `iron` 1 at 0.25 | 6 in area `quarry_steps`, phase 3, in two groups of three | reuse sprite `skeleton` |
+| `pumpkin_top` | Field Pumpkin | Exactly as `pumpkin` (strength 14, melee, aggro 10, leash 40, respawn 600; in `top_field` the ecology row stands it up at the next ten-minute mark instead) | 7 in area `top_field`, phase 3 | reuse sprite `pumpkin` |
+| `quarryman` | Quarryman | As `skeleton` (strength 12, melee, aggro 10, leash 40, respawn 600; in `quarry_steps` the ecology row stands it up at the next ten-minute mark instead); loot `rock` 1 at 0.5, `iron` 1 at 0.25 | 6 in area `quarry_steps`, phase 3, in two groups of three | reuse sprite `skeleton` |
 | `plot_tenant` | The Tenant of Plot 9 | As `skeleton_guard` (strength 16, aggro 12), `respawn: 0`, `nightOnly: true` (ASKS F2), leash 20 so he never leaves the allotments | 1 at mark `plot_nine`, key `plot_tenant`, phase 2 | reuse sprite `skeleton` |
 
 The shared `rat` row serves B1: no new row, only placement.
@@ -1342,6 +1342,6 @@ E2's decision only works if wood is scarce but not absent. Today the Lowfields h
 3. **Anchors in the skeleton** (section D): named, constrained, guaranteed small places, as rows beside `pois.json`, yielding marks and rects. *Why:* quests must be written against names, `poi_<n>` is an index that means something different on every seed, and the kinds are rolled by weight so no kind is guaranteed today. This is generator work, not sim work, and it is the same constraint solver the sites already use.
 4. **Optional: `take` falls through to the party.** When the talker lacks the item, take it from whoever in the party holds it, as `acquire` already counts across bags. *Why:* symmetry, and no stray parcels in a friend's bag. *Without it:* nothing breaks; a harmless item is left behind.
 
-Not asked for, on purpose: no new requirement type, no conditional actions, no timer, no escort, no new zone, no currency, no quest markers. The omen flags (`omen:<id>`, set per seed at New Game) are `PLAN.md` section 5's own milestone; every quest above completes identically with every omen flag at zero.
+Not asked for, on purpose: no new requirement type, no conditional actions, no timer, no escort, no new zone, no currency, no quest markers. The omen flags (`omen:<id>`, set per seed at New Game from `data/omens.json`) are `PLAN.md` section 5's own milestone; every quest above completes identically with every omen flag at zero.
 
 **Two tests worth adding with the rows** (they are what stops this document becoming the Phaser build's 61 of 102): every quest id has at least one reachable `quest` action and one reachable `handin` action somewhere in dialogue, triggers or placed props; and every `location` target named by a quest is produced by at least one trigger, node or placed prop. Placed props carry action lists the catalog validator cannot see today, so the second test must walk a built county.
