@@ -14,7 +14,6 @@ use serde::{Deserialize, Serialize};
 use xxhash_rust::xxh3::Xxh3Default;
 
 use crate::blueprints::{Blueprints, BuildError};
-use crate::ring::{Watchers, step_ring};
 use crate::sim::Sim;
 use crate::state::{CombatState, GameState, SAVE_VERSION};
 use crate::units::max_hp;
@@ -226,8 +225,10 @@ impl Sim {
     }
 
     /// A save is the host's world (§3.5): it loads closed, every seat but the host's is parked
-    /// (her body waits with what she owned), the runtimes of live zones are rebuilt, and the
-    /// ring runs where the seats that are left stand somewhere it did not last run. No step.
+    /// (her body waits with what she owned), and the runtimes of live zones are rebuilt, the
+    /// props' awake bits derived from the saved ring key. The ring itself does not run here: the
+    /// saved key may lag the seats by a block (the ring runs before movement in a step), and the
+    /// next step re-runs it exactly where the unbroken game would. No step.
     pub fn from_state(mut state: GameState, bps: Blueprints) -> Sim {
         state.open = false;
         for i in 1..state.players.len() {
@@ -255,15 +256,9 @@ impl Sim {
         }
         let mut sim = Sim::adopt(state, bps);
         for z in ZoneId::ALL {
-            if !sim.state.is_live(z) {
-                continue;
+            if sim.state.is_live(z) {
+                sim.ensure_runtime(z);
             }
-            sim.ensure_runtime(z);
-            let zone = sim.state.zones[z.index()].as_deref().expect("a live zone has state");
-            let w = Watchers::of(&sim.state, z, zone);
-            let zone = sim.state.zones[z.index()].as_deref_mut().expect("a live zone has state");
-            let rt = sim.rts[z.index()].as_deref_mut().expect("just built");
-            step_ring(zone, rt, &w, false, &mut sim.scratch.props);
         }
         sim
     }

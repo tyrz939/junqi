@@ -19,8 +19,12 @@ fn the_header_reads_without_the_body() {
     assert_eq!(h.summary.zone, ZoneId::County);
     assert_eq!((h.summary.day, h.summary.hour), (0, 17));
     assert!(h.summary.hp.0 > 0 && h.summary.hp == h.summary.max_hp);
-    // A fresh county is a few tens of KB: the seed rebuilds the terrain, only what changed is kept.
-    assert!(bytes.len() < 64 * 1024, "{} bytes", bytes.len());
+    // The seed rebuilds the terrain, so tiles are never saved; but every unit and prop is saved
+    // whole, even untouched. With the county furnished (two thousand creatures, thousands of
+    // props) a fresh save is about 360 KB. ARCHITECTURE.md §3.5 budgets ~150 KB for a busy county:
+    // saving units and props as deltas from their blueprint spawn is the P4 follow-up that gets
+    // there. Until then this bound only catches a regression.
+    assert!(bytes.len() < 512 * 1024, "{} bytes", bytes.len());
 }
 
 #[test]
