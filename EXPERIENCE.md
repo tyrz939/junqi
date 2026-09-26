@@ -106,7 +106,7 @@ Times are **real minutes after New Game**, then the clock. One game hour is two 
 - **Knows.** Where she wakes from now. Day 2, Monday. **Does not:** who pulled the blanket.
 - **Meanwhile.** Everything that came up goes back over the hour. The mine's door, if barred, opened at five. The milk round begins at seven. The dog on the step.
 - **Checks.** `[L6:a bed sleeps to 06:00 and sets the rest point]` `[L6:the morning bell in the house]` `[L6:presence: by 07:00 no night-only unit stands; none hid in view]` `[L4:the first rest before 21:00, Cautious]` `[L5:the bed's two lines]`
-- **Varies.** The Rusher does not rest and is on the mine road at 02:00: threat 1, ring +1, night +1, phase 3 skeletons at 150 HP; "No exit either, some nights" is true on a third of seeds and the door is barred until five; the mine's fire is outside it. That is the design working, not failing.
+- **Varies.** The Rusher does not rest and is on the mine road at 02:00: the road unlit past the last lamp, the mine's approach no harder than the mine's own rooms (phase 1: skeletons at 100 HP, the phase the ground gives them by day), but in the dark they notice her from further off and follow her further; "No exit either, some nights" is true on a third of seeds and the door is barred until five; the mine's fire is outside it. That is the design working, not failing.
 
 ### 19:00 to 22:00 · 06:00 to 07:30 · The morning, the dog
 

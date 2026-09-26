@@ -34,8 +34,28 @@ pub const MAX_ATTEMPTS: u8 = 40;
 const SITE_TRIES: u32 = 14;
 /// Steps back to an earlier site one attempt may take before it is given up.
 const MAX_JUMPS: u32 = 8;
-/// A dungeon's approach is part of the dungeon: threat rises by one inside this ring (m).
-const DUNGEON_RING: i32 = 170;
+/// A dungeon's approach is part of the dungeon: threat rises by one inside this ring (m), never
+/// above the phase of the dungeon's own rooms ([`mouth_phase`]), so the way in is never harder
+/// than the first room.
+pub const DUNGEON_RING: i32 = 170;
+
+/// The phase of the dungeon a site's mouth opens on: the lowest mission phase among the zones
+/// the doors of the site's chunk lead to, and the `doors.json` rows set into that chunk. `None`
+/// for a site the catalog does not have or whose doors lead to no generated dungeon.
+pub fn mouth_phase(site: &str) -> Option<u8> {
+    let cat = jane_data::catalog();
+    let si = cat.county.sites.iter().position(|s| s.id == site)?;
+    let phase = |z: ZoneId| cat.dungeons.mission_of(z).map(|m| m.phase);
+    let chunks = cat.chunks.defs.iter().filter(|c| usize::from(c.site) == si);
+    let by_chunk = chunks.flat_map(|c| c.props.iter().filter_map(|p| p.to.and_then(|t| phase(t.zone))));
+    let by_row = cat
+        .county
+        .doors
+        .iter()
+        .filter(|d| d.to.is_some() && matches!(d.at, jane_data::DoorAt::Chunk(i) if usize::from(i) == si))
+        .filter_map(|d| phase(d.zone));
+    by_chunk.chain(by_row).min()
+}
 /// The longest stretch of road with nothing to see from it (m). PLAN.md 2.4: "up to about two
 /// minutes, used on purpose".
 const LONGEST_EMPTY: u32 = 900;
@@ -603,8 +623,17 @@ fn build_threat(t: &Terrain, sites: &[PlacedSite], areas: &[PlacedArea], road: &
     for a in areas {
         stamp(&mut threat, a.mx, a.my, i32::from(a.def.radius), &|_| a.def.threat);
     }
+    // The rings: one more, once, however many a cell is in, and never above the phase of the
+    // easiest dungeon whose approach it is.
+    let mut cap = Grid::new(SKEL_W as u32, SKEL_H as u32, 0u8);
     for s in sites.iter().filter(|s| s.def.dungeon) {
-        stamp(&mut threat, s.mx, s.my, DUNGEON_RING, &|old| (old + 1).min(6));
+        let phase = mouth_phase(s.def.id).unwrap_or(6);
+        stamp(&mut cap, s.mx, s.my, DUNGEON_RING, &|old| if old == 0 { phase } else { old.min(phase) });
+    }
+    for (v, &c) in threat.as_mut_slice().iter_mut().zip(cap.as_slice()) {
+        if c != 0 {
+            *v = (*v + 1).min(c);
+        }
     }
     // A road is the safer way, always: one less, never below one.
     for (v, &r) in threat.as_mut_slice().iter_mut().zip(road.as_slice()) {
@@ -621,7 +650,10 @@ fn build_threat(t: &Terrain, sites: &[PlacedSite], areas: &[PlacedArea], road: &
 }
 
 /// Threat at a macro cell, by day or by night. Night is a rule on top of the field, not a second
-/// field: +1 outside lamplight, +2 in the Works. Havens stay havens.
+/// field: +1 outside lamplight, +2 in the Works. Havens stay havens. The night's part is felt,
+/// not fought: a creature's phase is the daytime field's where it stands (`county::placements`),
+/// and the dark makes it notice from further and follow further (the sim's `NIGHT_AGGRO`,
+/// `NIGHT_LEASH`), never stronger.
 pub fn threat_at(s: &Skeleton, mx: i32, my: i32, night: bool) -> u8 {
     let base = s.threat.read(mx, my, 0);
     let road = s.road.read(mx, my, 0);

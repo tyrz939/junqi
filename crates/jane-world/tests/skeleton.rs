@@ -180,6 +180,45 @@ fn night_raises_everything_outside_lamplight_more_in_the_works_and_never_a_haven
     assert_eq!(threat_at(s, works.0, works.1, true), s.threat.read(works.0, works.1, 0) + 2);
 }
 
+/// PLAN.md §2.6: a dungeon's approach is part of the dungeon and never harder than its first
+/// room. Inside every dungeon mouth's ring the daytime threat (which is the phase a creature
+/// placed there is given) is at most the phase of the dungeon behind the mouth, on every seed;
+/// and every dungeon site leads to one.
+#[test]
+fn no_dungeon_approach_is_harder_than_its_first_room() {
+    use jane_world::skeleton::{DUNGEON_RING, mouth_phase};
+    let mut rings = 0;
+    for s in all() {
+        for site in s.sites.iter().filter(|x| x.def.dungeon) {
+            let phase = mouth_phase(site.def.id).unwrap_or_else(|| panic!("{} leads to no dungeon", site.def.id));
+            let reach = DUNGEON_RING / jane_world::skeleton::MACRO + 1;
+            for y in site.my - reach..=site.my + reach {
+                for x in site.mx - reach..=site.mx + reach {
+                    let inside = (0..SKEL_W).contains(&x) && (0..SKEL_H).contains(&y);
+                    if !inside || metres_sq(x, y, site.mx, site.my) > i64::from(DUNGEON_RING).pow(2) {
+                        continue;
+                    }
+                    let t = s.threat.read(x, y, 0);
+                    assert!(
+                        t <= phase,
+                        "seed {}: {} at ({x},{y}) is threat {t}, its rooms phase {phase}",
+                        s.seed,
+                        site.def.id
+                    );
+                    rings += 1;
+                }
+            }
+        }
+    }
+    assert!(rings > 0);
+    // The mouths and what lies behind them (data/dungeons/*.json).
+    for (site, phase) in
+        [("gold_mine", 1), ("museum", 2), ("butterfly_forest", 3), ("factory", 4), ("burial", 5), ("school", 6)]
+    {
+        assert_eq!(mouth_phase(site), Some(phase), "{site}");
+    }
+}
+
 #[test]
 fn the_railway_runs_through_the_halt_and_off_the_map_at_both_ends_over_the_river_clear_of_every_place() {
     let all = all();

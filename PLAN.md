@@ -131,10 +131,10 @@ Whole game: three regions, six dungeons, 50–60 quests, roughly 15–25 hours. 
 | --- | --- |
 | **Region base** | Lowfields 1, Waters 2–3, Works 4–5 |
 | **Sub-areas** (`areas.json`, placed by the skeleton like sites) | Named patches with their own band, *in every region*: the Lowfields have the **Top Field** (3) and the **Wood behind the car** (2–3); the Waters have the **Drowned Lane** (4); the Works have a **safe works canteen** (2, with a fire). Roughly 5–7 per region |
-| **Dungeon rings** | Threat rises by one in a ring around each dungeon mouth; the approach is part of the dungeon |
+| **Dungeon rings** | Threat rises by one in a ring around each dungeon mouth, once however many rings a cell is in, and never above the phase of the dungeon's own rooms (the easiest, where rings meet): the approach is part of the dungeon and never harder than its first room |
 | **Roads and lamps** | −1 on a road; by night, a *lit* road holds that −1 and an unlit one loses it |
 | **Hubs** | Threat 0 inside a hub's fence: nothing spawns, nothing follows you in |
-| **Night** | +1 everywhere outside lamplight, +2 in the Works. Day and night is the spine (§1) |
+| **Night** | +1 everywhere outside lamplight, +2 in the Works, felt and not fought: what is out notices her from further off and follows her further (aggro and leash), and is the phase its ground gives it by day. Day and night is the spine (§1) |
 | **True omens** | A true omen can raise or move a pocket ("the scarecrow is closer") |
 
 Enemies are **rows × threat**: one `skeleton` row, scaled by the phase table at spawn, instead of `skeleton_2`, `skeleton_3`. Families still differ by region (what a thing *does*); threat sets what it *costs*. Spawn tables are per area.

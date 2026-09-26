@@ -84,6 +84,7 @@ Every number is per region and per seed and is printed as a table with its band 
 | Road to field creature density | road < 0.6 × field | `harshness` |
 | Works to Lowfields density | > 1.6 × | `harshness` |
 | Threat curve along the spine road | monotone by region base; every pocket above base has a road bending round it and is seen from that road | §2.6 |
+| Dungeon approach | every cell of a dungeon mouth's ring at most the phase of the rooms behind it (built: `no_dungeon_approach_is_harder_than_its_first_room`) | §2.6 |
 | Upgrade rule | by the time the crit path reaches threat N, phase N−1's upgrades are reachable without crossing N | §2.6 |
 | Site distances by road | inside each `sites.json` band | §2.3 |
 | Dungeon crit path | inside `budget.critPathCells` (C8); rest room first reached at 40 to 60 % (C7) | `DUNGEONS.md` §2.6 |

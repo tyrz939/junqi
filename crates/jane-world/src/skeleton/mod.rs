@@ -13,8 +13,8 @@ pub mod types;
 
 pub use anchors::PlacedAnchor;
 pub use build::{
-    Check, Failed, GenStats, MAX_ATTEMPTS, Named, Skeleton, SkeletonError, SkeletonRows, build_skeleton, failures,
-    skeleton, threat_at,
+    Check, DUNGEON_RING, Failed, GenStats, MAX_ATTEMPTS, Named, Skeleton, SkeletonError, SkeletonRows, build_skeleton,
+    failures, mouth_phase, skeleton, threat_at,
 };
 pub use place::{POI_BUDGET, PlacedArea, PlacedPoi, PlacedSite};
 pub use roads::{ROAD, ROAD_BRIDGE, ROAD_LIT, Road, RoadEnd};
