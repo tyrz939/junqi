@@ -9,8 +9,8 @@
 //! south-west, with foothills along their southern edge. Where the river bends, where the
 //! borders wobble, how high the hill is: the seed's.
 
-use jane_core::grid::Grid;
-use jane_core::noise::fbm;
+use jane_core::grid::{Grid, Rect};
+use jane_core::noise::{fbm, fbm_box};
 use jane_core::num::{Q16, Q16_ONE, isqrt, mul_div_floor};
 use jane_core::search::chamfer;
 use jane_core::{Sfc32, ZoneId};
@@ -132,10 +132,13 @@ pub fn build_terrain(seed: u32, attempt: u8) -> Terrain {
     let mut height = Grid::new(w, h, 0u8);
     let mut region = Grid::new(w, h, Region::Lowfields);
     let hill_r_q16 = i64::from(hill_r) << 16;
+    // Every cell's noise at once (`fbm_box` is `fbm` a cell at a time, hashed once a lattice point).
+    let noise = |period, salt, octaves| fbm_box(Rect::new(0, 0, SKEL_W, SKEL_H), period, salt, octaves, 1);
+    let lumps = noise(48, s.height, 4);
     for y in 0..SKEL_H {
         let rx = river_x[y as usize];
         for x in 0..SKEL_W {
-            let mut hq: i64 = (60 << 16) + i64::from(fbm(x, y, 48, s.height, 4, 1).0) * 50;
+            let mut hq: i64 = (60 << 16) + i64::from(lumps[(y * SKEL_W + x) as usize].0) * 50;
             // Distance to the crown with the hill squashed north-south (dy * 5 / 4), in Q16.
             let dx4 = i64::from(x - crown.0) * 4;
             let dy5 = i64::from(y - crown.1) * 5;
@@ -207,10 +210,12 @@ pub fn build_terrain(seed: u32, attempt: u8) -> Terrain {
 
     let mut biome = Grid::new(w, h, Biome::Field);
     let mut rough = Grid::new(w, h, 0u16);
+    let (patches, bigs, roughs) = (noise(14, s.patch, 3), noise(34, s.big, 2), noise(9, s.rough, 2));
     for y in 0..SKEL_H {
         for x in 0..SKEL_W {
-            let patch = fbm(x, y, 14, s.patch, 3, 1).0;
-            let big = fbm(x, y, 34, s.big, 2, 1).0;
+            let at = (y * SKEL_W + x) as usize;
+            let patch = patches[at].0;
+            let big = bigs[at].0;
             let wet10 = wet.read(x, y, u16::MAX);
             let b = match region.read(x, y, Region::Lowfields) {
                 Region::Lowfields => {
@@ -258,7 +263,7 @@ pub fn build_terrain(seed: u32, attempt: u8) -> Terrain {
                 Biome::Hill => 128,
                 _ => 0,
             };
-            let noise = (fbm(x, y, 9, s.rough, 2, 1).0 * 666) >> 16;
+            let noise = (roughs[at].0 * 666) >> 16;
             rough.set(x, y, (179 + noise + ground) as u16);
         }
     }
