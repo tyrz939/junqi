@@ -282,9 +282,17 @@ pub struct ZoneRuntime {
     pub prev_pos: Vec<(UnitId, Vec2)>,
     pub paths_this_tick: u8,
     pub fog: FogGeom,
+    /// The blueprint's region map (the county's; empty elsewhere): whose sky and ramp a cell is
+    /// under (`region_at`).
+    pub regions: jane_core::RegionMap,
 }
 
 impl ZoneRuntime {
+    /// The region cell `(x, y)` lies in (§4.6.b): whose sky rains on it, whose ramp wets it.
+    pub fn region_at(&self, x: i32, y: i32) -> jane_data::Region {
+        crate::living::region_in(&self.regions, self.zone, x, y)
+    }
+
     /// Build from the blueprint and the zone's state. `locals` are the blueprint's local names
     /// as syms (all interned when the zone's state was made).
     pub fn build(bp: &Blueprint, zone: &ZoneState, locals: Vec<Sym>) -> Self {
@@ -324,6 +332,7 @@ impl ZoneRuntime {
             prev_pos: Vec::new(),
             paths_this_tick: 0,
             fog: FogGeom::of(bp),
+            regions: bp.regions.clone(),
         };
         for (i, p) in zone.props.iter().enumerate() {
             rt.index_prop(i as PropIx, p);

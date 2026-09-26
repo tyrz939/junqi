@@ -25,7 +25,7 @@ const FNV64_OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
 const FNV64_PRIME: u64 = 0x0000_0100_0000_01b3;
 
 /// Bump when the byte layout below changes, so an old fixture cannot match by accident.
-pub const LAYOUT: u32 = 2;
+pub const LAYOUT: u32 = 3;
 
 /// FNV-1a 64 over bytes written little-endian.
 #[derive(Clone, Copy, Debug)]
@@ -737,6 +737,7 @@ impl Feed for Blueprint {
             texts,
             local_names,
             areas,
+            regions,
         } = self;
         h.u32(LAYOUT);
         h.u8(*zone as u8);
@@ -786,6 +787,11 @@ impl Feed for Blueprint {
             a.name.feed(h);
             a.rect.feed(h);
         }
+        h.u16(regions.scale);
+        h.u16(regions.w);
+        h.u16(regions.h);
+        h.count(regions.cells.len());
+        h.bytes(&regions.cells);
     }
 }
 
@@ -834,6 +840,12 @@ mod tests {
         let mut b = a.clone();
         b.attempts = 2;
         assert_ne!(hash(&b), base);
+        let mut b = a.clone();
+        b.regions = jane_core::RegionMap::new(16, 1, 1, 0);
+        let with_map = hash(&b);
+        assert_ne!(with_map, base);
+        b.regions.set(0, 0, 2);
+        assert_ne!(hash(&b), with_map);
         // Two strings that concatenate the same do not hash the same.
         let mut b = a.clone();
         b.local_names = vec!["ab".into(), "c".into()];

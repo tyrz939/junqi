@@ -13,7 +13,7 @@ use crate::interact::{Here, near_rest, near_rest_scan};
 use crate::inventory::spawn_drop;
 use crate::los::line_of_sight;
 use crate::state::{GameState, LootState, Prop, RestPoint};
-use crate::tuning::{ENERGY_MAX, TICKS_PER_HOUR};
+use crate::tuning::ENERGY_MAX;
 
 /// Is every connected seat within reach of a bed or a fire? Asked live: the actor's zone through
 /// its runtime, anyone elsewhere by a scan of her zone's props.
@@ -40,8 +40,10 @@ pub fn everyone_resting(cx: &mut Ctx<'_>) -> bool {
 }
 
 /// `Rest`: a bed or a fire mends her, becomes the party's waking place, and asks the app to
-/// save. `until` sleeps the clock forward to that hour (a bed), and only when the whole party is
-/// resting; without it no time passes (a fire).
+/// save. `until` sleeps the world forward to that hour (a bed), and only when the whole party is
+/// resting: the step runs the night (`living::Sim::sleep_to`: the clock and the tick move
+/// together, and the skipped hours' weather, ecology, consequences and respawns happen). Without
+/// it no time passes (a fire).
 pub fn rest(cx: &mut Ctx<'_>, until: Option<u8>) {
     let Some(body) = cx.actor_unit() else { return };
     let now = cx.world.tick;
@@ -55,11 +57,7 @@ pub fn rest(cx: &mut Ctx<'_>, until: Option<u8>) {
     if let Some(h) = until {
         // The clock is everyone's. The night only passes when the whole party is resting.
         if everyone_resting(cx) {
-            let target = u32::from(h) * TICKS_PER_HOUR;
-            if cx.world.clock >= target {
-                cx.world.day += 1;
-            }
-            cx.world.clock = target;
+            cx.wops.sleep.get_or_insert(h);
         } else {
             cx.emit(EventKind::Toast(ToastKind::NightWaits));
         }

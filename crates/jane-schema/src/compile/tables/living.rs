@@ -11,8 +11,9 @@
 //! - **ecology**: an area the skeleton has; a unit row that exists, once per area; `cap`,
 //!   `weight` and `hold` at least 1.
 //! - **consequences**: `on` a flag, a quest done or a named death, never negated; edits drawn from
-//!   the world verbs only (`show`, `hide`, `switch`, `spawn`, `despawn`, `fill`, `send`, `flag`,
-//!   through `send`'s `then`), and at least one that is not a flag (WORLD.md §6: a flag alone
+//!   the world verbs only (`show`, `hide`, `lock`, `unlock`, `switch`, `spawn`, `despawn`, `fill`,
+//!   `send`, `flag`, through `send`'s `then`: [`Action::is_world_verb`]), and at least one that is
+//!   not a flag (WORLD.md §6: a flag alone
 //!   fails the cohesion test); a claim confirmed or contradicted is a line some row already says,
 //!   and not both. That a flag `on` is set somewhere, and that a `dead` name is provided, needs every
 //!   list: `integrate.rs`.
@@ -235,27 +236,12 @@ fn county() -> String {
     "county".to_owned()
 }
 
-/// The world verbs a consequence may run (ARCHITECTURE.md §4.6.d).
-fn world_verb(a: &Action) -> bool {
-    matches!(
-        a,
-        Action::Show(_)
-            | Action::Hide(_)
-            | Action::Switch { .. }
-            | Action::Spawn { .. }
-            | Action::Despawn(_)
-            | Action::Fill { .. }
-            | Action::Send { .. }
-            | Action::Flag { .. }
-    )
-}
-
 /// Every verb of a compiled list that is not a world verb, through `send`'s `then`.
 fn not_world(cx: &Ctx, l: ListRef, out: &mut Vec<String>) {
     let ListRef::Catalog(i) = l else { return };
     let Some(list) = cx.lists.get(usize::from(i)) else { return };
     for a in list {
-        if !world_verb(a) {
+        if !a.is_world_verb() {
             out.push(format!("{a:?}").split([' ', '(', '{']).next().unwrap_or("?").to_owned());
         }
         if let Action::Send { then: Some(t), .. } = *a {
@@ -304,7 +290,7 @@ fn consequences(src: &Source, cx: &mut Ctx) -> &'static [ConsequenceDef] {
         for v in bad {
             cx.diag.error(
                 format!("{at}.edits"),
-                format!("\"{v}\" is not a world verb: a consequence shows, hides, switches, spawns, despawns, fills, sends and sets flags"),
+                format!("\"{v}\" is not a world verb: a consequence shows, hides, locks, unlocks, switches, spawns, despawns, fills, sends and sets flags"),
             );
         }
         let only_flags = r.edits.iter().all(|a| matches!(a, RawAction::Flag { .. }));
@@ -474,8 +460,15 @@ mod tests {
 
         let give = r#"[{"id": "x", "on": {"if": "questDone", "quest": "q"}, "edits": [{"do": "give", "item": "i", "qty": 1}, {"do": "show", "prop": "p"}]}]"#;
         assert!(has(&build(&[("consequences.json", give)]), "is not a world verb"));
-        let lock = r#"[{"id": "x", "on": {"if": "questDone", "quest": "q"}, "edits": [{"do": "lock", "prop": "p"}]}]"#;
-        assert!(has(&build(&[("consequences.json", lock)]), "\"Lock\" is not a world verb"));
+        // A lock or an unlock is a world edit: a door shut for good, a gate left open.
+        let lock = r#"[{"id": "x", "on": {"if": "questDone", "quest": "q"}, "edits": [{"do": "lock", "prop": "p"}, {"do": "unlock", "prop": "g"}]}]"#;
+        let (l, cx) = build(&[("consequences.json", lock)]);
+        assert!(errors(&cx).is_empty(), "{:?}", errors(&cx));
+        assert_eq!(l.consequences.len(), 1);
+        let deep_lock = r#"[{"id": "x", "on": {"if": "questDone", "quest": "q"}, "edits": [{"do": "send", "unit": "u", "to": "m", "then": [{"do": "lock", "prop": "p"}]}]}]"#;
+        assert!(errors(&build(&[("consequences.json", deep_lock)]).1).is_empty(), "through send's then too");
+        let toast = r#"[{"id": "x", "on": {"if": "questDone", "quest": "q"}, "edits": [{"do": "toast", "text": "Hello."}, {"do": "lock", "prop": "p"}]}]"#;
+        assert!(has(&build(&[("consequences.json", toast)]), "\"Toast\" is not a world verb"));
         let flag = r#"[{"id": "x", "on": {"if": "questDone", "quest": "q"}, "edits": [{"do": "flag", "flag": "f"}]}]"#;
         assert!(has(&build(&[("consequences.json", flag)]), "never a flag alone"));
         let not = r#"[{"id": "x", "on": {"if": "questDone", "quest": "q", "not": true}, "edits": [{"do": "show", "prop": "p"}]}]"#;

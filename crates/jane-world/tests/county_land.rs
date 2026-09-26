@@ -15,7 +15,7 @@ use jane_core::{Blueprint, Grid, Tile};
 use jane_world::county::land::EDGE;
 use jane_world::county::rail::{BEND, rail_line};
 use jane_world::county::{County, STAGES, build_county, county_skeleton};
-use jane_world::skeleton::{COUNTY_H, COUNTY_W, MACRO, Skeleton};
+use jane_world::skeleton::{COUNTY_H, COUNTY_W, MACRO, SKEL_H, SKEL_W, Skeleton};
 
 fn seed_list() -> Vec<u32> {
     (0..common::seeds()).map(|i| i.wrapping_mul(2654435761)).collect()
@@ -90,6 +90,28 @@ fn is_two_thousand_cells_square() {
     assert_eq!((COUNTY_W, COUNTY_H), (2000, 2000));
     assert_eq!(bp.attempts, 1);
     assert_eq!(bp.text(bp.name), Some("Castle"));
+}
+
+/// ARCHITECTURE.md §4.6.b: the county carries the skeleton's region of every macro cell, so the
+/// sky that rains on a cell is its region's; every cell of the county answers.
+#[test]
+fn carries_the_skeletons_regions() {
+    let seed = seed_list()[0];
+    let sk = county_skeleton(seed, 0).expect("the catalog's rows build");
+    let bp = jane_world::county::build_county_on(&sk, 0);
+    let m = &bp.regions;
+    assert_eq!((i32::from(m.scale), i32::from(m.w), i32::from(m.h)), (MACRO, SKEL_W, SKEL_H));
+    for my in 0..SKEL_H {
+        for mx in 0..SKEL_W {
+            let want = sk.region_at(mx, my) as u8;
+            for (dx, dy) in [(0, 0), (MACRO - 1, MACRO - 1), (MACRO / 2, 3)] {
+                assert_eq!(bp.region_at(mx * MACRO + dx, my * MACRO + dy), Some(want), "macro ({mx}, {my})");
+            }
+        }
+    }
+    assert_eq!(bp.region_at(COUNTY_W, 0), None);
+    let used: std::collections::BTreeSet<u8> = m.cells.iter().copied().collect();
+    assert_eq!(used.into_iter().collect::<Vec<_>>(), [0, 1, 2], "all three regions");
 }
 
 #[test]

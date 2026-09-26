@@ -4,7 +4,7 @@ The living county. Written 26 September 2026 from John's direction: *"the world 
 
 **Status: design for the Rust build.** Where a row or a check is named, it is the row or check that must exist for the section to be true. Proposals are marked *proposed*; John decides them.
 
-**Built so far (the engine, P4, `jane_sim::living`), each with a small row of shipped content:** §5.2's weather table as `data/weather.json` (a sky per region, the first walk held clear); the rain ramp and the douse rule (a campfire's light goes out at `douse` 160 and comes back when the ramp falls under it, not at six); `data/ecology.json` for the allotments, the Top Field and Quarry Steps (pressure, `cap`, `hold`, hourly recovery); `data/consequences.json` with B1's "rats at four, not eight" and the mine going quiet when Iron Knuckles falls (a spawn by the Company notice that waits for her to come back up); Mr Cobb's hours as a schedule (§3.1: in the Arms after the bell, the yard in the morning, his seat by day); one rumour (Mr Ames's spectacles, heard at No. 3, Pound Lane half a day later, the door speaking for whoever is behind it). The rest of this document is still design.
+**Built so far (the engine, P4, `jane_sim::living`), each with a small row of shipped content:** §5.2's weather table as `data/weather.json` (a sky per region, the first walk held clear; in the county the sky over her is the region under her feet, by the skeleton's region grid); the rain ramp, one per region, and the douse rule (a campfire's light goes out at `douse` 160 in its own region's rain and comes back when that ramp falls under it, not at six); `data/ecology.json` for the allotments, the Top Field and Quarry Steps (pressure, `cap`, `hold`, recovery every ten game minutes); `data/consequences.json` with B1's "rats at four, not eight", Julie's Kitchen (her door locked behind her; her key opens it) and the mine going quiet when Iron Knuckles falls (a spawn by the Company notice that waits for her to come back up); a bed's night lived through (§2.1); Mr Cobb's hours as a schedule (§3.1: in the Arms after the bell, the yard in the morning, his seat by day); one rumour (Mr Ames's spectacles, heard at No. 3, Pound Lane half a day later, the door speaking for whoever is behind it). The rest of this document is still design.
 
 ---
 
@@ -44,7 +44,7 @@ One game hour is two real minutes. A day is 48 real minutes; the night is 18 of 
 
 **Rule: the bell is heard in every zone, including dungeons, at nine and at six.** It is the one signal the whole county shares, and the one clock text may rely on.
 
-**Rule: a bed sleeps the clock to 06:00 and no other hour.** A fire rests but does not sleep. Nothing else moves the clock.
+**Rule: a bed sleeps the clock to 06:00 and no other hour.** A fire rests but does not sleep. Nothing else moves the clock. **The night she sleeps is lived:** the weather turns on every hour of it, the ground wets and dries, the patches refill every ten minutes, what was due to stand up stands up, and what the county was going to do it does, exactly as if she had sat up all night by the bed. Only nobody walks about while she sleeps (`ARCHITECTURE.md` §4.6.f).
 
 ### 2.2 The shape of a day
 
@@ -167,7 +167,7 @@ The town is a set chunk: the square (fountain, memorial, Mr Tolly's bench, the p
 
 ## 4. Creatures and ecology
 
-`ecology.json`: per area (or terrain band), a population per unit def with a `cap`, a `recover` amount per hour, a `hold` line, a day place and a night place, and `hunts` / `flees`. Threat is the field from `PLAN.md` §2.6; ecology decides *what* is in a pocket, threat decides what it costs.
+`ecology.json`: per area (or terrain band), a population per unit def with a `cap`, a `recover` amount every ten game minutes, a `hold` line, a day place and a night place, and `hunts` / `flees`. Threat is the field from `PLAN.md` §2.6; ecology decides *what* is in a pocket, threat decides what it costs.
 
 ### 4.1 Populations by area
 
@@ -195,7 +195,7 @@ The town is a set chunk: the square (fountain, memorial, Mr Tolly's bench, the p
 | | Bellfield (6) | Nothing by day | Everything the School lets out | |
 | All | Hubs (0) | Cats, hens, the sweeper's robin | Cats. The ginger cat walks the square at any hour | |
 
-**Rule: a kill quest's patch holds N+1 of its target within five cells of the patch's centre by day, and refills to N+1 within ten game minutes of the last kill** (`QUESTS.md` K8). That is `cap` N+1 and a `recover` amount that clears one kill's pressure in ten minutes: a rate, not a timer per corpse.
+**Rule: a kill quest's patch holds N+1 of its target within five cells of the patch's centre by day, and refills within ten game minutes of being allowed to** (`QUESTS.md` K8). That is `cap` N+1, a `hold` line one kill never reaches (so the N she was asked for come back on their own clock, `respawn`), and an ecology that looks at a held patch every ten game minutes: once the pressure is under the line, whatever was due stands up at the next ten-minute mark. `recover` is a rate per ten minutes, not a timer per corpse; a patch cleared to the last is quieter for hours.
 
 ### 4.2 Prey and predators
 
@@ -242,7 +242,7 @@ One thing per region walks a road at night, announced by a sign first (`QUESTS.m
 
 ### 4.5 Recovery
 
-**Rule: nothing respawns on a timer. Populations recover toward `cap` at a `recover` rate per area, and the rate is a row.** A patch she cleared is quieter for a day; a patch whose reason she removed (the rats' food, the camp's fire, the shift relieved) stays cleared through a consequence (§6). Bosses and named creatures never return (`respawn: 0`). Nothing stands up in view.
+**Rule: nothing respawns on a timer. Populations recover toward `cap` at a `recover` rate per area, every ten game minutes, and the rate is a row.** A patch she cleared is quieter for a day; a patch whose reason she removed (the rats' food, the camp's fire, the shift relieved) stays cleared through a consequence (§6). Bosses and named creatures never return (`respawn: 0`). Nothing stands up in view.
 
 ---
 
@@ -280,7 +280,7 @@ Shares out of ten. *Proposed*; John tunes by the seed viewer's weather column.
 | | 18:30 to 21 | 5 | 2 | 2 | 1 |
 | | 21 to 06 | 4 | 2 | 2 | 2 |
 
-The county has one sky: one kind is drawn and each region shades it (mist in the Waters is fog; in the Works it is smoke). A storm is a storm everywhere. The first walk's band is clear on every seed.
+**Rule: the sky follows the region under her feet.** The county is three skies, drawn apart by the rows above: the sky that rains on a cell, and that she sees, is the sky of the skeleton's region at that cell (Lowfields, Waters, Works), so she can cross the river out of the rain and into mist. Each region shades its own kinds (mist in the Waters is fog; in the Works it is smoke). A zone off the county is under its row's sky (`weather.json`'s zone lists). The first walk's band is clear on every seed.
 
 ### 5.3 Atmosphere layers
 
@@ -304,14 +304,14 @@ The county has one sky: one kind is drawn and each region shades it (mist in the
 
 ## 6. Consequence
 
-**Rule: every quest outcome changes the world, visibly and for good, and the journal records the change.** `consequences.json`: per quest (or tale branch, or a named death), the world edits that run once: `Show`, `Hide`, `Switch`, `Spawn`, `Despawn`, `Fill`, `Send`, `Flag`, and optionally a `Claim` the edit confirms or contradicts. The log never says what it meant (`VOICE.md` rule 5); the county shows it.
+**Rule: every quest outcome changes the world, visibly and for good, and the journal records the change.** `consequences.json`: per quest (or tale branch, or a named death), the world edits that run once: `Show`, `Hide`, `Lock`, `Unlock`, `Switch`, `Spawn`, `Despawn`, `Fill`, `Send`, `Flag`, and optionally a `Claim` the edit confirms or contradicts. The log never says what it meant (`VOICE.md` rule 5); the county shows it.
 
 All *proposed* unless `QUESTS.md` already states the consequence.
 
 | Quest | Consequence at hand-in | Seen where |
 | --- | --- | --- |
 | The Thing in the Yard | The fence line clear; skeletons never spawn inside Julie's fence again | The yard |
-| Julie's Kitchen | The house is a hub: threat 0, `nightLock` on the door with her key | The door |
+| Julie's Kitchen | The house is a hub: threat 0, `nightLock` on the door with her key. *Shipped:* `house_kept`, the door locked behind her once she has seen the kitchen (her key opens it) | The door |
 | Dust, Water, Pansy; What Snakes Eat | The bench lit; the cellar's rats at two for good; the roses grow back | The kitchen, the cellar |
 | Gnox Goldskin's Mine | The Company notice overpainted OPEN; the mine's skeletons stop walking the road; the town hears (§7) | The mine road; the Arms |
 | The Snake Below | The graveyard's ground fog gone; the four markers' keepers up | Chapel Rise |
@@ -514,7 +514,7 @@ Shapes follow `ARCHITECTURE.md` §4.6; this table says what each row must hold f
 | §2.3 calendar | L6, L1 | Day-keyed rows fire on their day; no spine quest depends on any |
 | §3 people | L6 schedules | Every person at their slot each hour, walking the route between; the route is on road or path |
 | §3 people | L5 claims | Every `tells` line names only things placed within a screen of the speaker or true everywhere |
-| §4 ecology | L6 ecology, havens | Counts at 06:00 and 21:00 match the rows within one; kill N, wait ten game minutes, N+1 stand; nothing leaked crosses a hub fence or the first walk |
+| §4 ecology | L6 ecology, havens | Counts at 06:00 and 21:00 match the rows within one; kill N and N+1 stand again on their own clock; a held patch refills within ten game minutes of falling under its line; nothing leaked crosses a hub fence or the first walk |
 | §4.3 night | L6 presence | At 21:00 every night-only unit is up within a game hour; by 07:00 none remain; none hide or show in view |
 | §5 weather | L6 weather | Same kind for the same seed, day and hour on every replay; no storm on the first walk; mist never hides a lit lamp inside its reach; no kind removes a rest point, key, road or target |
 | §5.3 atmosphere | L1, L6 | Every layer's key resolves on every seed; no layer covers a hub fire; every quest landmark under a layer is visible from its road |

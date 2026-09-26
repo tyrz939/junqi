@@ -4,7 +4,8 @@
 //!
 //! Units: hours are 0..=23 and a span `hour_from..hour_to` may wrap midnight; weights are out of
 //! 1000; a duration band is whole hours; pressure, weights, holds and recovery are plain counts
-//! (a kill adds its row's `weight`, an hour takes the area's `recover` off, give or take half).
+//! (a kill adds its row's `weight`, every ten game minutes the area's `recover` comes off, give
+//! or take half).
 
 use jane_core::action::{Condition, ListRef};
 use jane_core::ids::{NameId, TextId, UnitDefId, ZoneId};
@@ -86,7 +87,8 @@ model! {
         pub cap: u8,
         /// Pressure a kill of one adds; >= 1.
         pub weight: u16,
-        /// While the patch's pressure is at or over this, a corpse due waits for the next hour; >= 1.
+        /// While the patch's pressure is at or over this, a corpse due waits for the next ten-minute
+        /// mark; >= 1.
         pub hold: u16,
     }
 }
@@ -96,7 +98,8 @@ model! {
     pub struct EcologyDef {
         /// A skeleton area (`data/areas.json`).
         pub area: NameId,
-        /// Pressure taken off each hour, give or take half (drawn from the world stream).
+        /// Pressure taken off every ten game minutes, give or take half (drawn from the world
+        /// stream).
         pub recover: u16,
         pub populations: &'static [Population],
     }
@@ -113,7 +116,8 @@ model! {
         pub on: Condition,
         /// Where the edits land: now if someone is there, else when the zone is next live.
         pub zone: ZoneId,
-        /// World verbs only (`Show`, `Hide`, `Switch`, `Spawn`, `Despawn`, `Fill`, `Send`, `Flag`).
+        /// World verbs only (`Show`, `Hide`, `Lock`, `Unlock`, `Switch`, `Spawn`, `Despawn`, `Fill`,
+        /// `Send`, `Flag`: `Action::is_world_verb`).
         pub edits: ListRef,
         /// A claim the world bears out, as the journal records it.
         pub confirms: Option<TextId>,

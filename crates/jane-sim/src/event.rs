@@ -257,7 +257,8 @@ pub enum EventKind {
     /// Something new is understood (a new fact, or a stronger source for one). Party-wide.
     Journal(JournalKind),
     // --- the living world (`living.rs`) ----------------------------------------------------
-    /// A region's sky changed. Party-wide.
+    /// The sky over her changed: its region's sky turned, or she walked under another region's.
+    /// Personal (each seat is told of her own sky).
     Weather {
         region: jane_data::Region,
         kind: WeatherKind,
@@ -281,6 +282,7 @@ impl EventKind {
                 | EventKind::Camera { .. }
                 | EventKind::CastFailed { .. }
                 | EventKind::PlayerDied
+                | EventKind::Weather { .. }
         )
     }
 }

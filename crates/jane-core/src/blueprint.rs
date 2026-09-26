@@ -147,6 +147,54 @@ pub struct Blueprint {
     pub local_names: Vec<String>,
     /// The county only: the skeleton's patches as placed, in the skeleton's order (§4.6.c).
     pub areas: Vec<Area>,
+    /// The county only: the region under each part of it, whose sky rains there (§4.6.b).
+    /// Empty for every other zone, which is under its zone's sky.
+    pub regions: RegionMap,
+}
+
+/// Which region each part of a zone lies in, on a coarse grid: the county's is the skeleton's
+/// macro grid (125 x 125, 16 cells to a macro cell). A byte is a region's index in region order
+/// (`jane_data::Region`: 0 Lowfields, 1 Waters, 2 Works); core does not know the names. Empty
+/// for a zone under one sky.
+#[derive(Clone, PartialEq, Eq, Hash, Debug, Default)]
+pub struct RegionMap {
+    /// Cells to a map cell, each way.
+    pub scale: u16,
+    pub w: u16,
+    pub h: u16,
+    /// Row-major, `w * h` bytes.
+    pub cells: Vec<u8>,
+}
+
+impl RegionMap {
+    /// A map of `w x h` map cells of `scale` cells each, all region `fill`.
+    pub fn new(scale: u16, w: u16, h: u16, fill: u8) -> Self {
+        Self { scale, w, h, cells: vec![fill; usize::from(w) * usize::from(h)] }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.cells.is_empty()
+    }
+
+    /// Set the region of map cell `(mx, my)`; outside is a no-op.
+    pub fn set(&mut self, mx: u16, my: u16, region: u8) {
+        if mx < self.w && my < self.h {
+            self.cells[usize::from(my) * usize::from(self.w) + usize::from(mx)] = region;
+        }
+    }
+
+    /// The region under cell `(x, y)`; `None` off the map or on an empty one.
+    pub fn region_at(&self, x: i32, y: i32) -> Option<u8> {
+        if self.scale == 0 || x < 0 || y < 0 {
+            return None;
+        }
+        let s = i32::from(self.scale);
+        let (mx, my) = (x / s, y / s);
+        if mx >= i32::from(self.w) || my >= i32::from(self.h) {
+            return None;
+        }
+        self.cells.get(my as usize * usize::from(self.w) + mx as usize).copied()
+    }
 }
 
 impl Blueprint {
@@ -172,6 +220,7 @@ impl Blueprint {
             texts: vec![String::new()],
             local_names: Vec::new(),
             areas: Vec::new(),
+            regions: RegionMap::default(),
         }
     }
 
@@ -233,6 +282,11 @@ impl Blueprint {
         }
     }
 
+    /// The region under cell `(x, y)` by the zone's [`RegionMap`]; `None` for a zone with none.
+    pub fn region_at(&self, x: i32, y: i32) -> Option<u8> {
+        self.regions.region_at(x, y)
+    }
+
     /// The index of the first area whose rect holds cell `(x, y)`.
     pub fn area_at(&self, x: i32, y: i32) -> Option<usize> {
         self.areas.iter().position(|a| a.rect.contains(x, y))
@@ -261,5 +315,21 @@ mod tests {
         let t = bp.push_text("The Old Adit".into());
         assert_eq!(bp.text(t), Some("The Old Adit"));
         assert_eq!((bp.w(), bp.h()), (10, 8));
+    }
+
+    #[test]
+    fn a_region_map_answers_by_its_coarse_cell() {
+        let bp = Blueprint::new(ZoneId::County, 64, 64, Tile::Grass);
+        assert_eq!(bp.region_at(3, 3), None, "no map, no answer: the zone's own sky");
+        let mut m = RegionMap::new(16, 4, 4, 0);
+        m.set(1, 0, 2);
+        m.set(3, 3, 1);
+        m.set(9, 9, 1);
+        assert_eq!(m.region_at(15, 15), Some(0));
+        assert_eq!(m.region_at(16, 0), Some(2));
+        assert_eq!(m.region_at(31, 15), Some(2));
+        assert_eq!(m.region_at(63, 63), Some(1));
+        assert_eq!(m.region_at(64, 0), None);
+        assert_eq!(m.region_at(-1, 0), None);
     }
 }

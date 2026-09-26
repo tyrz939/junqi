@@ -11,6 +11,11 @@
     ]
   },
   {
+    "id": "house_kept",
+    "on": { "if": "questDone", "quest": "see_the_kitchen" },
+    "edits": [{ "do": "lock", "prop": "house_door" }]
+  },
+  {
     "id": "mine_quiet",
     "on": { "if": "dead", "unit": "iron_knuckles" },
     "edits": [

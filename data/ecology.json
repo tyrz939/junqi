@@ -1,5 +1,5 @@
 [
-  { "area": "allotments", "recover": 10, "populations": [{ "unit": "rat", "cap": 12, "weight": 50, "hold": 60 }] },
-  { "area": "top_field", "recover": 15, "populations": [{ "unit": "pumpkin_top", "cap": 7, "weight": 20, "hold": 80 }] },
-  { "area": "quarry_steps", "recover": 12, "populations": [{ "unit": "quarryman", "cap": 6, "weight": 25, "hold": 75 }] }
+  { "area": "allotments", "recover": 10, "populations": [{ "unit": "rat", "cap": 12, "weight": 300, "hold": 360 }] },
+  { "area": "top_field", "recover": 15, "populations": [{ "unit": "pumpkin_top", "cap": 7, "weight": 120, "hold": 480 }] },
+  { "area": "quarry_steps", "recover": 12, "populations": [{ "unit": "quarryman", "cap": 6, "weight": 150, "hold": 450 }] }
 ]

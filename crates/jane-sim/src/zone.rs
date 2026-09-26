@@ -33,7 +33,7 @@ pub fn empty_zone_state(bp: &Blueprint, seed: u32) -> ZoneState {
         fog: vec![0; FogGeom::of(bp).words() as usize].into_boxed_slice(),
         pending_fill: Vec::new(),
         sleeping_due: Vec::new(),
-        wetness: 0,
+        wetness: [0; crate::state::REGIONS],
         pressure: vec![0; bp.areas.len()],
         ring_key: None,
     }

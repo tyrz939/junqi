@@ -11,7 +11,7 @@
 use jane_core::action::Action;
 use jane_core::blueprint::{Mark, PropSpawn};
 use jane_core::{
-    Angle, Blueprint, DialogueId, ItemId, ListRef, QuestId, Rect, SpellId, Sym, TextRef, Tick, Tile, Vec2, ZoneId,
+    Angle, Blueprint, Cell, DialogueId, ItemId, ListRef, QuestId, Rect, SpellId, Sym, TextRef, Tick, Tile, Vec2, ZoneId,
 };
 use jane_data::{DialogueNode, Light};
 
@@ -233,7 +233,8 @@ impl<'a> View<'a> {
 
     /// THE light rule, shared with the sim (`light.rs`).
     pub fn light_showing(&self, p: &Prop) -> Option<&'static Light> {
-        crate::light::light_showing(jane_data::catalog().story.prop(p.def), p, self.lamps_lit(), self.zone.wetness)
+        let wet = crate::light::prop_wetness(self.zone, self.rt, p);
+        crate::light::light_showing(jane_data::catalog().story.prop(p.def), p, self.lamps_lit(), wet)
     }
 
     pub fn lamps_lit(&self) -> bool {
@@ -393,9 +394,16 @@ fn prev_pos(rt: &ZoneRuntime, id: UnitId) -> Option<Vec2> {
 /// The living world as presentation reads it (ARCHITECTURE.md §4.6, §11): the sky, the puddles,
 /// where a scheduled person is. None of it changes state.
 impl<'a> View<'a> {
-    /// The sky over her zone's region (`living.rs`): presentation's mist, rain and storm.
+    /// The region she stands in: the county's by the ground under her feet, any other zone's
+    /// its own (`living.rs`).
+    pub fn region(&self) -> jane_data::Region {
+        let (x, y) = self.body().pos.cell();
+        self.rt.region_at(x, y)
+    }
+
+    /// The sky over her: her region's (`living.rs`). Presentation's mist, rain and storm.
     pub fn weather(&self) -> &'a crate::state::WeatherState {
-        crate::living::weather_in(self.state, self.zone.id)
+        &self.state.weather[crate::living::region_ix(self.region())]
     }
 
     /// The sky over any region (the map's weather column, a far view).
@@ -403,9 +411,15 @@ impl<'a> View<'a> {
         &self.state.weather[crate::living::region_ix(region)]
     }
 
-    /// Her zone's rain ramp, 0..=255: puddles, the sound of it. The sim reads it for the douse rule.
+    /// The rain ramp under her feet, 0..=255: puddles, the sound of it. The sim reads the ramp
+    /// of a fire's own ground for the douse rule.
     pub fn wetness(&self) -> u8 {
-        self.zone.wetness
+        self.zone.wetness[crate::living::region_ix(self.region())]
+    }
+
+    /// The rain ramp at any cell of her zone (a puddle she can see from where she stands).
+    pub fn wetness_at(&self, cell: Cell) -> u8 {
+        crate::living::wetness_at(self.zone, self.rt, i32::from(cell.x), i32::from(cell.y))
     }
 
     /// Where a scheduled unit of her zone is and why (a door can say who is behind it); `None`

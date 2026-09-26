@@ -76,8 +76,8 @@ pub fn unit_died(cx: &mut Ctx<'_>, unit: UnitId, _slayer: Option<Seat>) {
 /// May this corpse stand up now? Not in view: a seat inside the watcher box of where it lies or
 /// of its home puts it back a presence beat (`presence::stands_up_unseen`, WORLD.md "nothing
 /// stands up in view"). Then the ecology says no while its def is at its area's `cap` or the
-/// pressure is at the row's `hold` line, and pushes it back onto `sleeping_due` at the next hour
-/// itself (`living::may_stand`).
+/// pressure is at the row's `hold` line, and pushes it back onto `sleeping_due` at the next
+/// ten-minute mark itself (`living::may_stand`).
 pub fn respawn_allowed(cx: &mut Ctx<'_>, unit: UnitId) -> bool {
     crate::presence::stands_up_unseen(cx, unit) && crate::living::may_stand(cx, unit)
 }

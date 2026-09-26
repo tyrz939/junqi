@@ -47,8 +47,9 @@ fn the_patches_have_their_populations() {
     let p = e.population(rat).expect("rats");
     // Eight placed (four in the plots, four at the sheds, WORLD.md §4.1) and the odd wild one.
     assert!(p.cap >= 8, "{}", p.cap);
-    // One kill does not hold a patch back; clearing it does, for most of a day.
-    assert!(p.weight < p.hold && 4 * p.weight >= p.hold + 6 * e.recover);
+    // One kill does not hold a patch back; clearing it does, for hours: `recover` comes off every
+    // ten game minutes (six marks an hour), and four kills are over the line by six hours of it.
+    assert!(p.weight < p.hold && 4 * p.weight >= p.hold + 6 * 6 * e.recover);
     for area in ["top_field", "quarry_steps"] {
         assert!(c.living.ecology_of(name(area)).is_some(), "{area}");
     }
@@ -59,18 +60,23 @@ fn the_patches_have_their_populations() {
 fn consequences_change_the_world() {
     let c = catalog();
     let ids: Vec<&str> = c.living.consequences.iter().map(|r| r.id).collect();
-    assert_eq!(ids, ["allotments_thinned", "mine_quiet", "yard_clear"]);
+    assert_eq!(ids, ["allotments_thinned", "house_kept", "mine_quiet", "yard_clear"]);
     let thinned = &c.living.consequences[0];
     assert_eq!(thinned.on, Condition::QuestDone(c.story.quest_id("rats_in_the_sheds").unwrap()));
     assert!(c.list(thinned.edits).contains(&Action::Despawn(Key::Name(name("rat_allotment_4")))));
-    let quiet = &c.living.consequences[1];
+    // Julie's Kitchen (WORLD.md §6): the house is hers; its door is locked behind her, and her
+    // key opens it.
+    let kept = &c.living.consequences[1];
+    assert_eq!(kept.on, Condition::QuestDone(c.story.quest_id("see_the_kitchen").unwrap()));
+    assert_eq!((kept.zone, c.list(kept.edits)), (ZoneId::County, &[Action::Lock(Key::Name(name("house_door")))][..]));
+    let quiet = &c.living.consequences[2];
     assert_eq!(quiet.on, Condition::Dead(Key::Name(name("iron_knuckles"))));
     assert_eq!(quiet.zone, ZoneId::County, "it fires in the mine and lands on the mine road");
     assert!(c.list(quiet.edits).iter().any(|a| matches!(a, Action::Spawn { .. })));
     let said = c.text(quiet.contradicts.expect("the sign's claim"));
     assert!(said.starts_with("GOLDSKIN MINING Co."), "{said}");
     // The Thing in the Yard: the fence line clear for good (WORLD.md §6).
-    let yard = &c.living.consequences[2];
+    let yard = &c.living.consequences[3];
     assert_eq!(yard.on, Condition::QuestDone(c.story.quest_id("defeat_skeleton").unwrap()));
     assert_eq!(c.list(yard.edits), [Action::Despawn(Key::Name(name("yard_skeleton")))]);
 }

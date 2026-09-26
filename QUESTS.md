@@ -71,7 +71,7 @@ Sources marked *(read)* were fetched and read while writing this. Sources marked
 
 *Designer.* Kaplan: "I don't think collection quests are broken, but lots of times we do a bad job." The failures he lists are too few creatures, creatures too far apart, too many items asked for, and items that eat the bag. His own worst quest, "The Green Hills of Stranglethorn", took 19 bag slots when the starting backpack had 16: "This is the worst quest in World of Warcraft. I made it." He also describes fixing drop "streaks" by raising the chance after each failure. Source *(read)*: Shacknews and Game Developer, above.
 
-**So in this game:** bags are 24 slots and stay 24 (`PLAN.md` 2.5), so a quest may hold at most three slots at any moment, and hands them back on completion. Quest items never drop by chance: they are picked up from a place (a prop), or they drop every time. Where a kill quest asks for N, the patch holds at least N+1, close together, and they return in ten minutes.
+**So in this game:** bags are 24 slots and stay 24 (`PLAN.md` 2.5), so a quest may hold at most three slots at any moment, and hands them back on completion. Quest items never drop by chance: they are picked up from a place (a prop), or they drop every time. Where a kill quest asks for N, the patch holds at least N+1, close together, and they come back: one kill never holds a patch back, so each returns on its own clock, and a patch she has held back with a hunt refills within ten game minutes of being allowed to (the ecology looks at it every ten game minutes, `WORLD.md` §4.1).
 
 ### K9. The reason must live inside the world, and completion should change something
 
@@ -210,7 +210,7 @@ Hold every quest against this page. A "no" anywhere is a redline.
 
 11. Requirements are only kill, acquire, location. Counts are six or fewer.
 12. No drop chances. At most three bag slots. Slots are given back at hand-in.
-13. For kill quests: N+1 targets, close together, returning in ten minutes; and a named asker with a named fear.
+13. For kill quests: N+1 targets, close together, returning (a held patch refills within ten game minutes of being allowed to, K8); and a named asker with a named fear.
 14. Is the first step placed where she may already have been (endowed progress)?
 
 **It pays**
@@ -1010,7 +1010,7 @@ Giver: Julie's garden book, a `note` prop, key `garden_book`, on the barrel by t
 | Giver | The gang's tally slate: a `sign`, key `tally_slate`, tree `tally_slate`, at anchor `quarry_camp` (a cold camp at the foot of the Steps, on the side nearest the mine road) |
 | Plays at | Rect `quarry_top`, at the head of `quarry_steps` |
 | Prerequisite | `stood_down` done |
-| Danger | 3, the far side of the patch she has just thinned. They return in ten minutes |
+| Danger | 3, the far side of the patch she has just thinned. They come back (K8) |
 
 ```json
 "down_at_five": {

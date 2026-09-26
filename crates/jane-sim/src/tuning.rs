@@ -27,6 +27,9 @@ pub const BODY_HALF_FX: i32 = 3 * FX_ONE;
 /// Day clock: one game hour is two real minutes.
 pub const TICKS_PER_HOUR: u32 = 7200;
 pub const TICKS_PER_DAY: u32 = TICKS_PER_HOUR * 24;
+/// The ecology steps every ten game minutes (ARCHITECTURE.md §4.6.c): pressure comes off and a
+/// held corpse is looked at again. Divides the hour, so every hour is also a mark.
+pub const ECOLOGY_EVERY: u32 = TICKS_PER_HOUR / 6;
 /// New games begin at 17:00 ("When she arrived the town it was already 5pm").
 pub const START_HOUR: u32 = 17;
 /// Night, for the sim: 21:00 to 06:00.

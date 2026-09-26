@@ -27,13 +27,19 @@ pub const fn lamps_lit(clock: u32) -> bool {
 }
 
 /// Is this prop's light on? `lamps` is [`lamps_lit`], asked once by the caller; `wetness` is the
-/// zone's rain ramp (ARCHITECTURE.md §4.6.b): a light whose def has a `douse` is out while the
-/// ramp stands at or over it (an open fire in the rain; still a fire to rest at).
+/// rain ramp where the prop stands (ARCHITECTURE.md §4.6.b, [`prop_wetness`]): a light whose def
+/// has a `douse` is out while the ramp stands at or over it (an open fire in the rain; still a
+/// fire to rest at).
 pub fn light_showing(def: &'static PropDef, p: &Prop, lamps: bool, wetness: u8) -> Option<&'static Light> {
     if p.hidden || !def.light_shows(p.on, lamps) || def.douse.is_some_and(|d| wetness >= d) {
         return None;
     }
     def.light.as_ref()
+}
+
+/// The rain ramp a prop stands under: that of the region of its cell.
+pub fn prop_wetness(zone: &ZoneState, rt: &ZoneRuntime, p: &Prop) -> u8 {
+    crate::living::wetness_at(zone, rt, i32::from(p.cell.x), i32::from(p.cell.y))
 }
 
 /// The middle of a prop's footprint.
@@ -68,13 +74,12 @@ pub fn lit_at(zone: &ZoneState, rt: &ZoneRuntime, clock: u32, at: Vec2, warm_onl
     }
     let cat = jane_data::catalog();
     let lamps = lamps_lit(clock);
-    let wet = zone.wetness;
     let (x0, y0) = (Fx(at.x.0 - reach.0).cell(), Fx(at.y.0 - reach.0).cell());
     let (x1, y1) = (Fx(at.x.0 + reach.0).cell(), Fx(at.y.0 + reach.0).cell());
     rt.props.any_in(x0, y0, x1, y1, |ix| {
         let p = &zone.props[ix as usize];
         let def = cat.story.prop(p.def);
-        let Some(light) = light_showing(def, p, lamps, wet) else { return false };
+        let Some(light) = light_showing(def, p, lamps, prop_wetness(zone, rt, p)) else { return false };
         if warm_only && light.cold {
             return false;
         }
