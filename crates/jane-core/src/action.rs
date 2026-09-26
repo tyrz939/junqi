@@ -4,7 +4,9 @@
 //! An `Action` is small and `Copy`: anything of variable length (a nested list, a condition
 //! list, a list of names) is a reference into the catalog or the blueprint, never a copy.
 
-use crate::ids::{DialogueId, EffectId, ItemId, Key, PropDefId, QuestId, SpellId, StoryId, TextId, UnitDefId, ZoneId};
+use crate::ids::{
+    ConsequenceId, DialogueId, EffectId, ItemId, Key, PropDefId, QuestId, SpellId, StoryId, TextId, UnitDefId, ZoneId,
+};
 use crate::num::{Milli, Permille};
 use crate::tile::Tile;
 
@@ -341,6 +343,9 @@ pub enum Condition {
     Knows(FactKey),
     Heard(TextId),
     SpeakerKnows(StoryId),
+    /// Whoever she is talking to has heard of what the county did (a consequence row's `spreads`)
+    /// by now: the town's news, as `SpeakerKnows` is a story's.
+    SpeakerHeard(ConsequenceId),
     /// The clock's hour is `from` up to `to`, wrapping midnight ([`hour_within`], a door's hours'
     /// rule): the Museum's bench knows when the doors are shut.
     Hours {

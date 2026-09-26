@@ -746,6 +746,10 @@ impl Feed for Cond {
                 h.u8(12);
                 h.u8(d);
             }
+            Condition::SpeakerHeard(c) => {
+                h.u8(13);
+                h.u16(c.0);
+            }
         }
     }
 }

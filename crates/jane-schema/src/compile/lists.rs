@@ -224,8 +224,11 @@ pub enum RawCond {
         #[serde(default)]
         not: bool,
     },
+    /// `{"if": "speakerKnows", "story": "ames"}`, or `"news": "<consequence id>"` for what the
+    /// county did (a consequence row's `spreads`).
     SpeakerKnows {
-        story: String,
+        story: Option<String>,
+        news: Option<String>,
         #[serde(default)]
         not: bool,
     },
@@ -522,7 +525,14 @@ pub fn cond(cx: &mut Ctx, at: &str, c: &RawCond) -> Option<Cond> {
             (*not, Condition::Knows(fact))
         }
         RawCond::Heard { claim, not } => (*not, Condition::Heard(cx.text(claim))),
-        RawCond::SpeakerKnows { story, not } => (*not, Condition::SpeakerKnows(cx.story(at, story)?)),
+        RawCond::SpeakerKnows { story, news, not } => match (story, news) {
+            (Some(s), None) => (*not, Condition::SpeakerKnows(cx.story(at, s)?)),
+            (None, Some(n)) => (*not, Condition::SpeakerHeard(cx.consequence(at, n)?)),
+            _ => {
+                cx.diag.error(at, "speakerKnows names a story or a news (a consequence), exactly one");
+                return None;
+            }
+        },
         RawCond::Hours { from, to, not } => {
             cx.diag.need(
                 *from < 24 && *to < 24 && from != to,

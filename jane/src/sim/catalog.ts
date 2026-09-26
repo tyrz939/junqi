@@ -153,8 +153,9 @@ export type UnitDef = {
   /**
    * Where it is by the hour (WORLD.md §3): one slot per span, `from` up to `to`, wrapping midnight.
    * This build keeps only in or out: `inside` and `absent` are away, `mark` and `patrol` are here
-   * (the Rust build also walks a unit to its mark). A row with `while` (the quest is in the log) or
-   * `after` (it is handed in) is looked at first; the plain rows cover the day. `vary` / `varyWith`
+   * (the Rust build also walks a unit to its mark). A row with `while` (the quest is in the log),
+   * `after` (it is handed in) or `flag` (the world's flag is set) is looked at first; the plain rows
+   * cover the day. `vary` / `varyWith`
    * move a person's hours a few minutes a day in the Rust build; this one keeps them as written.
    */
   schedule?: {
@@ -166,6 +167,8 @@ export type UnitDef = {
     absent?: boolean;
     while?: string;
     after?: string;
+    /** While the world's flag is set (the bell stopped, the train signalled). */
+    flag?: string;
   }[];
   vary?: number;
   varyWith?: string;

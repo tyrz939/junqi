@@ -110,6 +110,7 @@ const TIER: Record<string, { tier: Tier; why?: string }> = {
   the_factory: { tier: "far", why: "Julie's yard, through Castle and past the graveyard into the Works" },
   the_burial: { tier: "far", why: "Julie's yard to the graveyard road, the far side of Castle" },
   the_school: { tier: "far", why: "the crown of the hill, the far end of the county from the station" },
+  the_choice: { tier: "far", why: "the Ball carried from the Burial to one of three places: Julie's cellar, the mine's vault or Castle Halt" },
 };
 
 /** Kill counts: more standing than asked (QUESTS.md K8), so the last one is never a wait. */

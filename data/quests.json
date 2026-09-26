@@ -108,5 +108,6 @@
       { "type": "location", "target": "ringer_down", "qty": 1, "text": "Whoever rings the bell, in the School's tower" }
     ],
     "rewards": [{ "do": "flag", "flag": "spine_done" }]
-  }
+  },
+  "the_choice": {"name": "Yours to Say", "description": "The dog will not say what to do with the Ball. Three places will take it. The ring in the dust on the study desk under Julie's house: sit with it there, as she did, and the days stay days. The hollow at the back of the Gold Mine's vault: the hill has it back, and the night goes, and everything in it. Or leave it at Castle Halt and take the Sunday train, which stops if you signal.", "completion": "It is decided. Nobody in Castle will ever tell you it was the right thing, or the wrong one.", "returnTo": "the study desk under Julie's house, the mine's vault, or Castle Halt", "requirements": [{"type": "acquire", "target": "the_ball", "qty": 1, "text": "The Ball, from the Burial Chamber, until you set it down"}], "rewards": []}
 }

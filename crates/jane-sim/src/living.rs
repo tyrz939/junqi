@@ -58,6 +58,12 @@
 //! person she is talking to ([`speaker_knows`]). She learns the rumour when a line that `tells` it
 //! plays (`dialogue.rs`).
 //!
+//! **The town's news.** A consequence row may spread too: when it fires, each group of its
+//! `spreads` hears at that tick plus the group's `after`, the first to hear first, so what she did
+//! reaches the Arms before the milk round. It is kept in the same `rumours` map, under the key
+//! [`news_key`] (the top of the story id range, counting down, where no story is), and
+//! `Condition::SpeakerHeard` asks it ([`speaker_heard`]). A save's layout does not change.
+//!
 //! **A bed's night** ([`Sim::sleep_to`]). `Rest { until }` with the whole party resting runs the
 //! clock *and the tick* on to the hour, and the world lives through the time skipped as though it
 //! had passed a tick at a time: every ten-minute mark and hour crossed draws its rolls and runs
@@ -275,6 +281,12 @@ impl Sim {
                 crate::journal::record(s, ev, FactKey::Claim(t), Source::Contradicted, row.zone, at);
             }
             self.events.push(Event { to: None, in_zone: None, kind: EventKind::Consequence(id) });
+            for sp in row.spreads {
+                let at = self.state.tick.after(sp.after);
+                for &n in sp.to {
+                    self.state.rumours.entry((n, news_key(id))).or_insert(at);
+                }
+            }
             if self.state.is_live(row.zone) {
                 let snap = PartySnap::of(&self.state);
                 self.with_ctx(row.zone, None, &snap, false, |cx| run_actions(cx, row.edits, Subject::None));
@@ -431,6 +443,18 @@ fn spread_rumours(state: &mut GameState) {
             state.rumours.entry((n, s.id)).or_insert(at);
         }
     }
+}
+
+/// Where the town's news of a consequence is kept in `rumours`: the story ids counted down from
+/// the top, which no story reaches (the catalog's pools are checked well under it).
+pub const fn news_key(c: ConsequenceId) -> StoryId {
+    StoryId(u16::MAX - c.0)
+}
+
+/// `Condition::SpeakerHeard`: whoever she is talking to has heard of what the county did (a
+/// consequence's `spreads`) by now. False outside a conversation.
+pub fn speaker_heard(cx: &Ctx<'_>, c: ConsequenceId) -> bool {
+    speaker_knows(cx, news_key(c))
 }
 
 /// `Condition::SpeakerKnows`: whoever she is talking to (a person, or a door that speaks for

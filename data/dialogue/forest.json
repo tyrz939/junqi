@@ -170,5 +170,6 @@
         ]
       }
     }
-  }
+  },
+  "road_butterfly": {"speaker": "Butterfly", "start": [{"node": "a"}], "nodes": {"a": {"lines": ["A butterfly over the road by the forest gate. Its colours are the ones that floated past the window in the tunnel.", "It keeps a little way ahead of you, and then goes back toward the gate, as if it had been told how far to come."]}}}
 }

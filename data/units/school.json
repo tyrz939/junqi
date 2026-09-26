@@ -74,7 +74,7 @@
           { "do": "spawn", "unit": "school_belfry_shade_2", "def": "shade", "at": "school_belfry_shade_b" },
           { "do": "spawn", "unit": "school_belfry_shade_3", "def": "shade", "at": "school_belfry_shade_c" },
           { "do": "shake", "amount": 4 },
-          { "do": "toast", "text": "The bell goes a third time. Three of them are standing at the edge of the light and none of them came up the stair." }
+          { "do": "toast", "text": "The bell goes a third time. Three men in Company overalls are standing at the edge of the light, and none of them came up the stair." }
         ]
       }
     ],

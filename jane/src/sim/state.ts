@@ -360,6 +360,11 @@ export type Condition = (
   | { if: "dead"; unit: string }
   /** The hour is `from` up to `to`, wrapping midnight (the Museum's bench; a door's `nightHours` rule). */
   | { if: "hours"; from: number; to: number }
+  /**
+   * Whoever she is talking to has heard of a story (`story`) or of what the county did (`news`, a
+   * consequence row's `spreads`). The rumours are the Rust build's; this build has none, so false.
+   */
+  | { if: "speakerKnows"; story?: string; news?: string }
   /** The day of the week: New Game (day 0) is a Sunday. */
   | { if: "weekday"; day: "sunday" | "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" }
 ) & { not?: boolean };

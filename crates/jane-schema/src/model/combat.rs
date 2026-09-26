@@ -343,16 +343,27 @@ pub enum ScheduleWhen {
     While(QuestId),
     /// Once this quest has been handed in.
     After(QuestId),
+    /// While this flag of the world's is set (not 0): what the county did, not what she was
+    /// asked (the bell stopped; the train signalled).
+    Flag(NameId),
 }
 
 impl Emit for ScheduleWhen {
     fn emit(&self, out: &mut String) {
-        let (v, q) = match self {
-            ScheduleWhen::While(q) => ("ScheduleWhen::While(", q),
-            ScheduleWhen::After(q) => ("ScheduleWhen::After(", q),
-        };
-        out.push_str(v);
-        q.emit(out);
+        match self {
+            ScheduleWhen::While(q) => {
+                out.push_str("ScheduleWhen::While(");
+                q.emit(out);
+            }
+            ScheduleWhen::After(q) => {
+                out.push_str("ScheduleWhen::After(");
+                q.emit(out);
+            }
+            ScheduleWhen::Flag(n) => {
+                out.push_str("ScheduleWhen::Flag(");
+                n.emit(out);
+            }
+        }
         out.push(')');
     }
 }

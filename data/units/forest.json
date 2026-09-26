@@ -30,5 +30,6 @@
       { "do": "location", "name": "emperor_down" },
       { "do": "toast", "text": "The Emperor comes down on the grass and does not fold its wings." }
     ]
-  }
+  },
+  "road_butterfly": {"name": "Butterfly", "faction": "friendly", "controller": "npc", "strength": 4, "spirit": 1, "walk": 0.8, "run": 1.6, "aggro": 0, "leash": 0, "bounds": 0.5, "book": [], "respawn": 0, "autoRegen": true, "loot": [], "sprite": "butterfly", "talk": "road_butterfly", "dayOnly": true, "glow": {"radius": 18, "color": "#ffd070"}}
 }

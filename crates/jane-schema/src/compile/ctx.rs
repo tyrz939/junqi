@@ -54,6 +54,8 @@ pub struct Ids {
     pub triggers: RowIds,
     pub stories: RowIds,
     pub dungeons: RowIds,
+    /// `data/consequences.json`'s ids, sorted: the order the living world's table is built in.
+    pub consequences: RowIds,
 }
 
 impl Ids {
@@ -83,6 +85,12 @@ impl Ids {
                     .map(|(f, _)| f.trim_start_matches("dungeons/").trim_end_matches(".json").to_owned())
                     .collect();
                 RowIds::from_keys(stems.iter().map(String::as_str))
+            },
+            consequences: {
+                let rows = src.list("consequences", &mut quiet);
+                let ids: Vec<String> =
+                    rows.iter().filter_map(|r| r.value.get("id").and_then(|v| v.as_str()).map(str::to_owned)).collect();
+                RowIds::from_keys(ids.iter().map(String::as_str))
             },
         };
         let _ = diag;
@@ -220,6 +228,11 @@ impl Ctx {
 
     pub fn story(&mut self, at: &str, key: &str) -> Option<StoryId> {
         self.row(at, "story", key, |i| &i.stories, StoryId)
+    }
+
+    /// A consequence row by id: its index in the living world's table, which is sorted the same.
+    pub fn consequence(&mut self, at: &str, key: &str) -> Option<ConsequenceId> {
+        self.row(at, "consequence", key, |i| &i.consequences, ConsequenceId)
     }
 
     pub fn zone(&mut self, at: &str, key: &str) -> Option<ZoneId> {
