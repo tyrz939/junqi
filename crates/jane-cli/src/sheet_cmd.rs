@@ -70,7 +70,12 @@ pub fn run(args: &[String]) -> Result<(), String> {
         Some("light") => {
             let (name, c) = sprite(args.get(1), args)?;
             let suffix = if night { "-night" } else { "" };
-            write(&out, &format!("light-{name}{suffix}"), &sheet::lit(&c, &name, &font, night))?;
+            let img = if demo::sprite(args[1].as_str()).is_some() {
+                sheet::lit(&c, &name, &font, night)
+            } else {
+                sheet::lit_upright(&c, &name, &font, night, person::AY)
+            };
+            write(&out, &format!("light-{name}{suffix}"), &img)?;
         }
         Some("unit") => {
             let what = args.get(1).ok_or("name a look: jane, town_grocer, ...")?;

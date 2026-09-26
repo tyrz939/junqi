@@ -70,6 +70,83 @@ pub fn light(c: &Canvas, sun: &Sun, ambient: [u16; 3], ground: Ground) -> Vec<[u
     out
 }
 
+/// Light an upright sprite (a person: its height layer is each pixel's height above the feet on
+/// row `ay`, `Canvas::upright`) the way a renderer should: every drawn pixel stands over the
+/// ground point under it on the feet's row and throws its shadow `h / tan(elevation)` px away
+/// from the sun, so the ground takes the silhouette's shadow, head and all, soft at its edge by
+/// its cover of each pixel's 3 x 3. Drawn pixels are lit by their normals and never by the
+/// ground's shadow. Returns RGB per pixel, row-major, as [`light`].
+pub fn light_upright(c: &Canvas, ay: i32, sun: &Sun, ambient: [u16; 3], ground: Ground) -> Vec<[u8; 3]> {
+    let l = sun.toward();
+    let (ce, se) = (cos_q15(sun.elevation).0, sin_q15(sun.elevation).0);
+    let (w, h) = (c.w(), c.h());
+    let mut shade = vec![false; (w * h) as usize];
+    if ce > 1700 && se > 0 {
+        // Away from the sun, in 1/256 px per px of height.
+        let (dx, dy) = (-(cos_q15(sun.azimuth).0 >> 7) * ce / se, -(sin_q15(sun.azimuth).0 >> 7) * ce / se);
+        for y in 0..h {
+            for x in 0..w {
+                if !c.get(x, y).is_opaque() {
+                    continue;
+                }
+                let z = i32::from(c.height_at(x, y));
+                // A body is some px deep: it stands on the feet's row and the few behind it.
+                for depth in 0..BODY_DEPTH {
+                    let foot = (x * 256 + 128, (ay - depth) * 256 + 128);
+                    // From this pixel's height to the next row's, so the shadow has no gaps.
+                    let at = |z: i32| ((foot.0 + dx * z) >> 8, (foot.1 + dy * z) >> 8);
+                    let (a, b) = (at(z), at(z + 2));
+                    crate::canvas::bresenham(a.0, a.1, b.0, b.1, |sx, sy| {
+                        if sx >= 0 && sy >= 0 && sx < w && sy < h {
+                            shade[(sy * w + sx) as usize] = true;
+                        }
+                    });
+                }
+            }
+        }
+    }
+    let cover = |x: i32, y: i32| -> i32 {
+        let mut n = 0;
+        for yy in y - 1..=y + 1 {
+            for xx in x - 1..=x + 1 {
+                if xx >= 0 && yy >= 0 && xx < w && yy < h && shade[(yy * w + xx) as usize] {
+                    n += 1;
+                }
+            }
+        }
+        n
+    };
+    let mut out = Vec::with_capacity(c.albedo().len());
+    for y in 0..h {
+        for x in 0..w {
+            let ix = c.get(x, y);
+            let drawn = ix.is_opaque();
+            let base =
+                if drawn { rgb(ix) } else { crate::palette::ao(rgb(ground.ix), crate::palette::ao_cover(c, x, y)) };
+            let [nx, ny, nz] = decode(c.normal_at(x, y));
+            let dot = (nx * l[0] + ny * l[1] + nz * l[2]) >> 15;
+            let mut lam = dot.clamp(0, UNIT);
+            if !drawn {
+                lam = lam * (9 - cover(x, y)) / 9;
+            }
+            let e = c.emissive_at(x, y);
+            let glow = if e == Ix::CLEAR { [0; 3] } else { rgb(e) };
+            let mut px = [0u8; 3];
+            for k in 0..3 {
+                let f = i32::from(ambient[k]) + i32::from(sun.colour[k]) * lam / UNIT;
+                let v = (i32::from(base[k]) * f) >> 8;
+                px[k] = (v + i32::from(glow[k])).min(255) as u8;
+            }
+            out.push(px);
+        }
+    }
+    out
+}
+
+/// How deep an upright body stands on the ground, px: its shadow in a low side light is this
+/// wide.
+const BODY_DEPTH: i32 = 5;
+
 /// A shadow ray toward the sun through the height field, in 1/256 px.
 struct March {
     step: [i32; 2],
@@ -181,6 +258,23 @@ mod tests {
             assert!(!seen.contains(&lit), "{:?} repeats an earlier direction", sun.azimuth);
             seen.push(lit);
         }
+    }
+
+    #[test]
+    fn an_upright_figure_casts_its_silhouette_from_its_feet() {
+        // A 4 px wide post standing 20 rows tall on row 30, heights true (5 px a 4 rows).
+        let mut c = Canvas::new(60, 40);
+        c.fill_rect(Rect::new(28, 10, 4, 21), Ramp::Stone.at(crate::palette::Tone::Base), 1);
+        c.upright(30);
+        let ground = Ground { ix: Ramp::Grass.at(crate::palette::Tone::Base) };
+        let sun = Sun { azimuth: Angle::WEST, elevation: Angle::from_degrees(45), colour: [256; 3] };
+        let lit = light_upright(&c, 30, &sun, [32; 3], ground);
+        let at = |x: i32, y: i32| lit[(y * 60 + x) as usize][1];
+        // East of the feet, as long as the post is tall (25 px at 45°), and not west of it.
+        assert!(at(45, 29) < at(15, 29), "the shadow lies east");
+        assert!(at(54, 29) < at(15, 29), "and reaches the post's height away");
+        assert_eq!(at(15, 29), at(15, 5), "open ground is evenly lit");
+        assert!(at(59, 29) > at(45, 29), "and stops");
     }
 
     #[test]
