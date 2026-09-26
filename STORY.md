@@ -47,7 +47,7 @@ This costs nothing to build, fits the uncertainty the game is made of, and pays 
 - In the cellar study, a clean ring in the dust of the desk, the size of the stand the kitchen orb sits on; the Factory's orb stands on the same stand.
 - The slip for the Waters: asked who sent the county's well to the forest, it says "I did." and then "She did. It was the kindest place she had, and it was a garden then."
 
-**Who sends her where [decided in the build, 26 September 2026].** The dog gives every step of the spine, by day, and each hand-in names the next place and the key she already holds for it: the mine's vault holds the Museum's brass key; the Museum's case, the green-tagged forest key; the Factory's locker, the Company's key to the stair under the stone; the stair behind Goldskin comes up in the School. It never names Goldskin as the thing under the stone before she has seen him ("whatever is under that stone was buried with the county's gold"), and after, it does.
+**Who sends her where [decided in the build, 26 September 2026].** The dog gives every step of the spine, by day, and takes each back on the step, or, for the far acts, at a place it names nearer the work (the Museum's steps, the graveyard gate, the top of Church Lane: `WORLD.md` §3.6), and each hand-in names the next place and the key she already holds for it: the mine's vault holds the Museum's brass key; the Museum's case, the green-tagged forest key; the forest's case marked NIGHT WATCHMAN, the key to the Works; the Factory's locker, the Chairman's Key to the stair under the Hoar Stone; the stair behind Goldskin comes up in the School, and Julie's Other Key, which the dog gives with the School, opens it. It never names Goldskin as the thing under the stone before she has seen him ("whatever is under that stone was buried with the county's gold"), and after, it does.
 
 **Rules for writing it:** the dog never says "I", "me" or "my" about anything Julie did, and never says "she" about anything it could only know by having been her. It slips about once per act, and only under pressure. Nobody else in Castle has ever seen Julie and the dog together, and nobody remarks on it.
 
@@ -60,7 +60,7 @@ This costs nothing to build, fits the uncertainty the game is made of, and pays 
 | 2 | **The Gold Mine** (Lowfields) | Repair, plates, keys; the Headmaster; Iron Knuckles | What Goldskin took. Where the children went. The Museum key |
 | 3 | **The Museum** (the Waters) | Light switches, a key shuffle, a door Repair mends; Explosion (the Shot-Firer's glove) | The old families' wing marked MAGIC: what the gold was for. The forest key |
 | 4 | **The ruined library → Butterfly Forest** | Grow (the library's last page); eight butterflies, no doors | Where the well were sent. They are still there, and they are not coming back. The Amulet |
-| 5 | **Pipes → the Factory** (the Works) | Electric: store it, release it, turn the machines | Goldskin's works ran on the same gold. The foreman's diary **[2020]**. The Company's key to the stair under the stone |
+| 5 | **Pipes → the Factory** (the Works) | Electric: store it, release it, turn the machines | Goldskin's works ran on the same gold. The foreman's diary **[2020]**. The Chairman's Key to the stair under the Hoar Stone |
 | 6 | **The Burial Chamber** | Fire (the gardener's last page), bait, the four corners | Goldskin, and the Ball |
 | 7 | **The School** on the hill | Everything | The bell. What the Ball is for now. The choice |
 
@@ -100,3 +100,32 @@ Claims the world makes, some true per seed (`PLAN.md` §5). Each must be fair: i
 3. **The undead are townsfolk.** This makes the Headmaster and the schoolchildren land harder, and makes killing them uneasy rather than heroic. Alternative: they are just dead things that got up.
 4. **The ending is a choice with no right answer.** Alternative: one ending, the shield restored.
 5. **Tone ceiling.** Unease, dread, sadness: yes. Gore, cruelty to children on screen, jump scares: no. The children are never shown as enemies. Confirm.
+
+## 8. The bell at nine, and who rings it [decided in the build, 26 September 2026]
+
+**Amos Noone, Timekeeper, Goldskin Mining Co.** He rang the Works onto its shifts: the day shift at six, the night shift at nine. The School on the hill was the Company's school, and its bell was his. When the nights got long and Julie's shield began to fail, somebody had to tell the county when to be in, and he did: the bell at nine calls everybody in, and the bell at six lets them out. It is why the town goes indoors at the bell without knowing who started it ("Everybody does it"), and why the night shift walks Cinder Walk from nine to six: whoever was outside when the county changed its mind (§2, and the choice in §7) was put on his night shift, and never relieved.
+
+- **The register** in the top room is his time book: the cloth says REGISTER, the spine under it says G.M.Co. TIME BOOK, every page is signed A. NOONE, TIMEKEEPER, and nobody is absent. The last line is {name}: she is on the books now.
+- **The night of the bell** was the spring night he first rang the whole county in. Mr Tace went up the hill for Peter that evening; Robert Hale went out without his cap; the Headmaster took the children down the mine (the forty-one coats on the School's pegs, the forty-one names on the memorial). Against DUNN, E. the time book says *9 o'c., the night of the bell*, and no time out: Ernest is marked in, and has been ever since. Walter waits for him to ring on the hour.
+- **The pun is the point.** "Who rings the bell?" Noone. The vicar has "stopped answering it"; Mr Lyle says it is the church; the dog says only "Go and see who".
+- **The fight** keeps its placeholder mechanics (`DUNGEONS.md` §3.6); the unit is The Timekeeper, and the toasts are his bell. The dog, taking the School back, names him and says what he was for; it does not slip again here (the forest was this game's one slip under pressure, and the ending, §4 and §7, is the story pass's).
+
+## 9. The names, and why [decided in the build, 26 September 2026]
+
+Every name below is the same everywhere it appears: data, dialogue, signs, banners, the journal, these documents and the tests.
+
+| Name | What it is | Why |
+| --- | --- | --- |
+| **Amos Noone** | The Timekeeper who rings the bell (§8) | An old county surname that says the answer to "who rings it?" out loud, and never winks |
+| **The Timekeeper** | The School's boss unit (was the placeholder "The Ringer") | His job at the Works; the time book is the register |
+| **The Hoar Stone** | The standing stone that says DO NOT, over the Burial's stair | A hoar stone is what an old English parish calls a boundary stone; this one marks where the county's gold went under. The stair's label is "The stair under the Hoar Stone" |
+| **The Chairman's Key** | `key_stone`, from the foreman's locker (was "The Company's Key") | Goldskin was the Company's chairman; the tag says THE CHAIRMAN'S. HIS, NOT OURS. The dog: "It is the Chairman's own" |
+| **The Night Watchman's Key** | `key_works`, in the Collector's case marked NIGHT WATCHMAN | The Works' night watchman was outside when the county changed; the Collector pinned his key where his wings should be. It opens the Works' wicket by day and the Company's grate to the pipes |
+| **Julie's Other Key** | `key_stair`, the dog gives it with the School | On her ring with the house key. Its label: THE STAIR UNDER THE SCHOOL. LOCKED, AND KEPT LOCKED. NOT FOR HIM. She locked Goldskin's way up to the bell |
+| **End of Term** | The mine's quest | The Headmaster confiscates things and gives nothing back at the end of term |
+| **Painted Over** | The Museum's quest | The MAGIC wing's name under council cream |
+| **Counted Out** | The forest's quest | Visitors are counted in and out; the dog: "You were counted out. Good." |
+| **Not Relieved** | The Factory's quest | The rota: "night shift to be relieved at six. Not relieved." |
+| **Under the Stone** | The Burial's quest | Kept: it was already right |
+| **The Bell at Nine** | The School's quest | The one signal the county shares |
+| **The Museum's steps**, **the graveyard gate**, **the top of Church Lane** | Where the dog meets her (`WORLD.md` §3.6) | Places the county already has and names on a sign |
