@@ -12,7 +12,8 @@
 //! **order** (`Send`: it walks there and minds nothing else, [`crate::npc`]), **`sight: lit`**
 //! (it only notices, and only keeps, a target that stands in a prop's light) and
 //! **`shuns_light`** (it will not step into warm light: it walks to the edge and waits). And one
-//! thing that is not a row at all: the night ([`night_reach`]).
+//! thing that is not a row at all: the night ([`night_reach`]), and by day its other face, the
+//! county's gentlest ground left alone ([`wary`]).
 //!
 //! **Walking** is [`follow_to`]: windowed A* ([`crate::path`]) along a cached cell path, re-planned
 //! when it is used up, when the goal moved, or every `REPATH_TICKS`; at most four searches a
@@ -30,7 +31,7 @@
 use jane_core::action::School;
 use jane_core::angle::{along, bearing};
 use jane_core::num::{CELL_FX, dist_sq, isqrt};
-use jane_core::{CellIx, Fx, SpellId, Tick, Vec2};
+use jane_core::{CellIx, Fx, SpellId, Tick, Vec2, ZoneId};
 use jane_data::{Controller, Faction, UnitDef, UnitSight};
 
 use crate::combat::{Hit, distance, is_enemy, max_bounds, metres_between, query_near, queue_hit, try_cast};
@@ -45,7 +46,7 @@ use crate::state::{CombatState, PathCache, Unit, ZoneState};
 use crate::status::{is_stunned, speed_factor};
 use crate::tuning::{
     AGGRO_PERIOD, BAIT_EAT_FX, BAIT_HIT, CHASE_PATH_TIMES, LEASH_PATH_TIMES, LEASH_SNAP_FX, NIGHT_AGGRO, NIGHT_LEASH,
-    PATROL_PATH_CELLS, PATROL_REACHED_FX, REPATH_SOON, WORKS_SCALE,
+    PATROL_PATH_CELLS, PATROL_REACHED_FX, PHASE_SCALE, REPATH_SOON, WARY_THREAT, WORKS_SCALE,
 };
 use crate::units::{def_of, face_vector, move_unit, think_offset};
 
@@ -123,7 +124,8 @@ fn idle(cx: &mut Ctx<'_>, id: UnitId, def: &UnitDef, shy: bool) {
         // The only place a sleeping county asks about the dark, and it asks once every ten ticks.
         let dark = if def.aggro.0 > 0 { night_reach(cx, id, def) } else { 0 };
         let reach = i64::from(def.aggro.0) * i64::from(10 + NIGHT_AGGRO * dark) / 10;
-        let found = nearest_enemy(cx, id, reach, def.sight == UnitSight::Lit).or_else(|| hunted(cx, id, def, reach));
+        let party = if wary(cx, id, def) { None } else { nearest_enemy(cx, id, reach, def.sight == UnitSight::Lit) };
+        let found = party.or_else(|| hunted(cx, id, def, reach));
         if let Some(t) = found {
             let u = cx.zone.unit_mut(id).expect("unit");
             u.target = Some(t);
@@ -274,6 +276,20 @@ pub fn night_reach(cx: &Ctx<'_>, id: UnitId, def: &UnitDef) -> i32 {
         return 0;
     }
     if u32::from(u.strength) >= u32::from(def.strength) * u32::from(WORKS_SCALE) { 2 } else { 1 }
+}
+
+/// Wary (PLAN.md §2.6, "Day"): by day the county's own creatures on its gentlest ground, the
+/// threat of [`WARY_THREAT`] and under, start no fight with the party. They finish one: struck,
+/// they fight back (the flush), and a scripted `aggro` still sends them. Their hunting of each
+/// other goes on. The night (`GameState::is_night`, the bell to six), a
+/// dungeon, or harder ground, and they bite as they always did. A unit's threat is its strength
+/// against its row's, as the phase table scaled it at spawn.
+pub fn wary(cx: &Ctx<'_>, id: UnitId, def: &UnitDef) -> bool {
+    if cx.zone.id != ZoneId::County || cx.world.is_night() {
+        return false;
+    }
+    let Some(u) = cx.zone.unit(id) else { return false };
+    u32::from(u.strength) <= u32::from(def.strength) * u32::from(PHASE_SCALE[usize::from(WARY_THREAT)])
 }
 
 /// The party body nearest `id` (between bodies) within `reach`, alive, awake, unhidden, not a

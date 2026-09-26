@@ -135,6 +135,7 @@ Whole game: three regions, six dungeons, 50–60 quests, roughly 15–25 hours. 
 | **Roads and lamps** | −1 on a road; by night, a *lit* road holds that −1 and an unlit one loses it |
 | **Hubs** | Threat 0 inside a hub's fence: nothing spawns, nothing follows you in |
 | **Night** | +1 everywhere outside lamplight, +2 in the Works. Day and night is the spine (§1) |
+| **Day** *(decided, built in the Rust sim)* | Its other face: between six and the bell the county's own creatures on its gentlest ground (threat 1: the Lowfields' fields and roads) start no fight. They watch her go; struck, they fight back. The first evening is a walk, off the road as well as on it, and the fields are a place to be by day and not after nine. Patches, rings, the Waters and the Works bite by day as ever. `tuning.rs WARY_THREAT`, `ai::wary` |
 | **True omens** | A true omen can raise or move a pocket ("the scarecrow is closer") |
 
 Enemies are **rows × threat**: one `skeleton` row, scaled by the phase table at spawn, instead of `skeleton_2`, `skeleton_3`. Families still differ by region (what a thing *does*); threat sets what it *costs*. Spawn tables are per area.

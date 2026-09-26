@@ -188,6 +188,9 @@ pub const AGGRO_PERIOD: u32 = 10;
 /// Night reach, tenths: aggro `* (10 + 4 * dark) / 10`, leash `* (10 + 6 * dark) / 10` (§2).
 pub const NIGHT_AGGRO: i32 = 4;
 pub const NIGHT_LEASH: i32 = 6;
+/// By day (six to the bell) a county creature at this threat or under starts no fight: the
+/// Lowfields' own ground leaves her be until nine (PLAN.md §2.6, `ai::wary`).
+pub const WARY_THREAT: u8 = 1;
 /// A creature at this multiple of its row's strength (the phase table's threat 4) is deep
 /// county: the night counts twice for it.
 pub const WORKS_SCALE: u16 = PHASE_SCALE[4] as u16;

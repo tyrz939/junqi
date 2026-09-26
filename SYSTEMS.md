@@ -111,6 +111,7 @@ One `Unit` shape. `controller: player | ai | npc | snake`. Do not split Player /
 | Resist per school (unit row × status rows); schools are `heal physical frost fire nature blast shock`; an effect may strip the row's resists (`noResist`: `softened`) or land only on what is weak to a school (`onlyIfWeak`: `jolted`) | **IN** — X: a plated machine takes a fifth of a blow, all of it when softened, and one and a half times a spark either way; the spark jolts it and not a skeleton |
 | Status list as `effects.json` rows read by every unit | **IN** — D (chilled, poisoned via play); catalog E |
 | First-hit aggro; aggro scan every 10 ticks, staggered without 2020's dead-counter bug | **IN** — S: "enemies chase a player who is standing still" |
+| Wary by day (Rust sim): in the county from six to the bell, a creature on threat-1 ground starts no fight with the party; struck, it fights; at the bell it looks again (`PLAN.md` §2.6 *Day*) | **IN** — `jane-sim` `tests/ai.rs` `by_day_the_gentlest_ground_leaves_her_be` |
 | Respawn timer (ticks while asleep too); `respawn: 0` stays dead | **SHAPE** |
 | Player death: stand back up at the last arrival mark after 4 s; lock-ins reset | **IN** — D: "dying inside a lock-in re-opens the gate and re-arms the trap" |
 | Dialogue hook: unit row `talk` | **IN** — S golden path |
@@ -181,7 +182,7 @@ Three quest types only: `kill`, `acquire`, `location`.
 ## 6. AI / path
 
 ```
-idle (regen, patrol, bait, aggro+LOS every 10 ticks)
+idle (regen, patrol, bait, aggro+LOS every 10 ticks; by day on the county's gentlest ground, no aggro on the party)
   → combat (first affordable spell; path in on tooFar / notInLOS; leash past range)
   → leash (clear target, regen, run home) → idle
 ```

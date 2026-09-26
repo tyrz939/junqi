@@ -38,11 +38,11 @@ Times are **real minutes after New Game**, then the clock. One game hour is two 
 
 ### 0:45 to 3:30 · 17:20 to 18:45 · The lit road
 
-- **Sees / hears / can do.** A lamp-lit road, lamps unlit yet, hedges, fields, the well with a plate (THE WELL ON THE STATION ROAD) and a red glove by its wall; further on a signpost with a felt hat at its foot. Rabbits. Crows that follow her a way and turn back. At real minute 3 (18:30) every lamp on this road comes on within a few seconds, north end first. She can pick things up, read the plate, look north.
+- **Sees / hears / can do.** A lamp-lit road, lamps unlit yet, hedges, fields, the well with a plate (THE WELL ON THE STATION ROAD) and a red glove by its wall; further on a signpost with a felt hat at its foot. Rabbits. Crows that follow her a way and turn back. Nothing out here starts a fight with her: by day the Lowfields' own things on their gentlest ground leave her be until the bell (`PLAN.md` §2.6, *Day*), on the road or off it across the fields; she can start one. At real minute 3 (18:30) every lamp on this road comes on within a few seconds, north end first. She can pick things up, read the plate, look north.
 - **Knows.** Nothing new unless she reads the well: "a big building on a hill, with one window lit. It is the only light in that direction." **Does not:** that the crows' turning point is the edge of a threat pocket.
 - **Meanwhile.** Doors shutting in Castle, north end first. The mine's skeletons still lying. The dog on the left-hand board.
-- **Checks.** `[L1:julie_house 520 to 850 m from station by road]` `[L1:halt_well 100 to 280 m and halt_signpost 200 to 420 m from the station, on this road]` `[L1:nothing above threat 1 on this road by day; no true omen on it]` `[L2:the first walk is never empty]` `[L4:time_to_place gate 2 to 4 min, Reader]` `[L6:lamps at 18:30 on the station road on every seed]` `[L6:weather clear on the first walk]` `[L5:claim beside the glove by the well wall]` `[L5:knows school, by the well, not its name]`
-- **Varies.** By seed the well and signpost swap order and the road wanders. The Reader reaches the gate as the lamps come on; the Rusher before them (1.5 to 3 min).
+- **Checks.** `[L1:julie_house 520 to 850 m from station by road]` `[L1:halt_well 100 to 280 m and halt_signpost 200 to 420 m from the station, on this road]` `[L1:nothing above threat 1 on this road by day; no true omen on it]` `[L6:wary: no Damage to her before the stoop, Reader and Rusher, on or off the road]` `[L2:the first walk is never empty]` `[L4:time_to_place gate 2 to 4 min, Reader]` `[L6:lamps at 18:30 on the station road on every seed]` `[L6:weather clear on the first walk]` `[L5:claim beside the glove by the well wall]` `[L5:knows school, by the well, not its name]`
+- **Varies.** By seed the well and signpost swap order and the road wanders. The Reader reaches the gate as the lamps come on; the Rusher before them (1.5 to 3 min), straight across the fields past bats and spiders that watch her go.
 
 ### 2:00 to 4:30 · 18:00 to 19:15 · Julie's gate and stoop
 
@@ -62,7 +62,7 @@ Times are **real minutes after New Game**, then the clock. One game hour is two 
 
 ### 5:00 to 6:30 · 19:30 to 20:15 · The yard skeleton
 
-- **Sees / hears / can do.** One skeleton, phase 1, walking the fence. Melee only. A bar over its head and no number. She wins in a few swings; she can lose.
+- **Sees / hears / can do.** One skeleton, phase 1, walking the fence. By day it minds the fence and not her: she starts it (after the bell it comes for her). Melee only. A bar over its head and no number. She wins in a few swings; she can lose.
 - **Knows.** What a swing costs and what a hit costs. **Does not:** that dying now wakes her at the platform: the door she came in by, before any rest.
 - **Meanwhile.** Nothing else in the yard. Nothing comes through the fence.
 - **Checks.** `[L4:first_fight is the yard skeleton inside Julie's fence]` `[L1:one skeleton inside the fence, none within a screen outside it]` `[L6:wake at the start before the first rest]` `[L5:enemy health is never a number]`
@@ -80,7 +80,7 @@ Times are **real minutes after New Game**, then the clock. One game hour is two 
 
 - **Sees / hears / can do.** A kitchen: the note on the table ("Dust, water, pansy. Make it before you go down any stairs…"), the pantry chest, the bench, the stove, the orb beside it, two hatches, the stairs up to the bed. At real minute 8 the toast: **"A school bell, a long way off. Nine o'clock."** She can read, open, craft (bags with **I**, three things into the row, take the potion), touch the orb (Icebolt), go up, go down.
 - **Knows.** Julie is a witch who wrote lists; the potion; Icebolt; the bell has rung. The journal: Dust, Water, Pansy, back to the dog. **Does not:** that the step is empty now.
-- **Meanwhile.** The dog `Absent`. Night creatures up in every patch of threat 2 and above; skeletons at the edge of the unlit roads; the mine's two or three on the mine road; the night shift in file on Cinder Walk. The station road's lamps hold: nothing on it. Mist on the water.
+- **Meanwhile.** The dog `Absent`. The Lowfields' own ground stops leaving her be; night creatures up in every patch of threat 2 and above; skeletons at the edge of the unlit roads; the mine's two or three on the mine road; the night shift in file on Cinder Walk. The station road's lamps hold: nothing on it. Mist on the water.
 - **Checks.** `[L6:the bell at 21:00, heard in the house zone]` `[L6:the dog absent 21:00 to 06:00 once the bones are down]` `[L6:havens: nothing leaked on the station road or inside Julie's fence]` `[L4:Icebolt by 12 min, Reader]` `[L4:a bed known to the journal before 21:00]` `[L5:claim behind: the note's recipe and the pantry's pansy agree]` `[L1:the orb, the bench, the chest and two hatches in the kitchen chunk]`
 - **Varies.** A Reader who lingered is on the stoop when the bell goes and sees the step empty a minute later, having looked away. Nobody sees the dog leave (`STORY.md` §3; the presence rule).
 
