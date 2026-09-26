@@ -5,8 +5,7 @@
 //!
 //! The pipeline, in the TypeScript's order ([`STAGES`]). Each entry is one function over the
 //! [`County`] being built, and each draws only from its own dice (PORT.md §6.a). PORT.md §6.m
-//! numbers the port's stages; an entry that belongs to a later port stage is a function that does
-//! nothing yet, and says which stage lands there.
+//! numbers the port's stages; every one has landed.
 //!
 //! | Entry | What | Port stage |
 //! | --- | --- | --- |
@@ -32,7 +31,8 @@
 //! | `cut_through` | a way cut to any named place the wood closed round | 9 |
 //! | `drop_unreachable` | small places and creatures nobody can reach are dropped | 9 |
 //!
-//! Same seed, same county.
+//! [`build_proven`] is the county `jane_world::build_zone` hands out: built, judged by the solver,
+//! re-rolled over the next valid skeleton on a refusal. Same seed, same county.
 
 pub mod areas;
 pub mod chunks;
@@ -46,8 +46,10 @@ pub mod placements;
 pub mod rail;
 pub mod roads;
 pub mod small;
+pub mod stories;
 pub mod tale_ground;
 
+use jane_core::blueprint::ZONE_ATTEMPTS;
 use jane_core::num::Permille;
 use jane_core::{Blueprint, Grid, NameId, Rect, Tile, ZoneId};
 
@@ -55,6 +57,7 @@ pub use self::chunks::Chunk;
 use self::placements::{PoiSpot, Stage, apply_placements, claim_pois};
 use crate::kit::Kit;
 use crate::skeleton::{COUNTY_H, COUNTY_W, MACRO, Skeleton, SkeletonError, SkeletonRows, build_skeleton};
+use crate::solve::{ZoneRules, validate};
 
 /// A footpath as laid: its row in `data/paths.json` and its centre line (an index into `lines`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -92,6 +95,15 @@ pub struct County<'a> {
     /// Every cell the flood from `start` reached once the way was cut through (`y * w + x`), for
     /// `drop_unreachable` right after; taken by it. Stale if the ground changes in between.
     pub reached: Option<Vec<bool>>,
+    /// Which place each story claimed, why the others found none, the footpaths laid to places
+    /// off the road (the stories stage).
+    pub story_claims: stories::Claims,
+    /// The ground she could walk to as the county stood when the stories claimed (`y * w + x`),
+    /// if a tale asked: a tale's rows are set down only where she can get to them.
+    pub ground: Option<Vec<bool>>,
+    /// Ground a short walk from each tale's place (an index into `places`), kept from when the
+    /// tale was fitted there, for its rows.
+    pub on_foot: Vec<(usize, tale_ground::OnFoot)>,
 }
 
 /// The centre cell of macro cell `m`, on either axis.
@@ -116,6 +128,9 @@ impl<'a> County<'a> {
             pois: PoiSpot::all(sk),
             claimed: Vec::new(),
             reached: None,
+            story_claims: stories::Claims::default(),
+            ground: None,
+            on_foot: Vec::new(),
         }
     }
 
@@ -172,6 +187,28 @@ pub fn build_county(seed: u32, attempt: u8) -> Result<Blueprint, SkeletonError> 
     Ok(build_county_on(&sk, attempt))
 }
 
+/// The county of `seed`, proven (`buildZone` over `buildCounty`): attempt 0 over the seed's first
+/// valid skeleton, judged by the solver with the county's rules (its contract and what the
+/// placement rows promise); a county the solver refuses is re-rolled at the next attempt over the
+/// next valid skeleton ([`county_skeleton`], each asked for from the one before rather than from
+/// the start). If none of [`ZONE_ATTEMPTS`] holds, the last is returned, `attempts ==
+/// ZONE_ATTEMPTS`, for the caller to refuse. An error only for rows no skeleton can satisfy.
+pub fn build_proven(seed: u32) -> Result<Blueprint, SkeletonError> {
+    let rules = ZoneRules::for_zone(ZoneId::County);
+    let rows = SkeletonRows::catalog();
+    let mut sk = build_skeleton(seed, &rows, 0)?;
+    let mut attempt = 0u8;
+    loop {
+        let bp = build_county_on(&sk, attempt);
+        if attempt + 1 >= ZONE_ATTEMPTS || validate(&bp, &rules).ok() {
+            return Ok(bp);
+        }
+        let Some(from) = sk.attempt.checked_add(1) else { return Ok(bp) };
+        sk = build_skeleton(seed, &rows, from)?;
+        attempt += 1;
+    }
+}
+
 /// The county over a skeleton already built (the caller keeps it: the county's re-rolls and its
 /// tests read it).
 pub fn build_county_on(sk: &Skeleton, attempt: u8) -> Blueprint {
@@ -182,7 +219,7 @@ pub fn build_county_on(sk: &Skeleton, attempt: u8) -> Blueprint {
     c.done()
 }
 
-// --- stages of later ports -------------------------------------------------------------------
+// --- the stages ---------------------------------------------------------------------------------
 
 /// Patches that are places, dressed before the roads so a road that crosses one simply crosses
 /// it (`AREA_DRESS`, `world/areas.ts`).
@@ -285,8 +322,10 @@ fn country(c: &mut County<'_>) {
 
 /// The stories claim places, the boards go up with the places' names, each story's rows go into
 /// its place (`placements::apply_placements(c, Stage::Places, ..)`), and `Blueprint::stories`
-/// records where each landed. PORT.md §6.m stage 8 lands here.
-fn stories(_: &mut County<'_>) {}
+/// records where each landed (`stories::stories`).
+fn stories(c: &mut County<'_>) {
+    stories::stories(c);
+}
 
 /// Herbs and rocks on open unclaimed ground.
 fn scatter(c: &mut County<'_>) {

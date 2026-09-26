@@ -9,8 +9,10 @@
 //! every target, so `tests/fixtures/hashes-<target>.txt` diff byte for byte. Without `--hash` the
 //! line gives attempts, rooms, props, units and the build time.
 //!
-//! Seeds are inclusive here: `--seeds 1..64` is sixty-four seeds. A zone whose builder has not
-//! landed yet (the county today) is named on stderr and skipped.
+//! Seeds are inclusive here: `--seeds 1..64` is sixty-four seeds. `--zones all` is all thirteen
+//! zones in tick order, the county first (proven and re-rolled like any other: its line's
+//! `attempts` says how many candidates it took); `--zones county` builds it alone. A zone with no
+//! builder would be named on stderr and skipped; today there is none.
 
 use std::time::Instant;
 

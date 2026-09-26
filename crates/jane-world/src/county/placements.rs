@@ -237,15 +237,14 @@ fn apply_row(c: &mut County<'_>, stage: Stage, row: &PlacementDef) {
     }
 }
 
-/// A row at a story's place. The stories stage (PORT.md §6.m stage 8) claims the places and hands
-/// them to this: a kept cell is exactly where the thing goes, a named prop is edited in place, a
-/// resident is replaced where she stands by the story's own person, and a tale's row set by
-/// position finds its ground with [`super::tale_ground`]. Until that stage lands no story has a
-/// place, and, as on a seed where a story found none, its rows place nothing and promise nothing.
-fn at_place(_c: &mut County<'_>, _row: &PlacementDef) {}
+/// A row at a story's place, once the stories stage has claimed the places
+/// ([`super::stories::at_place`]).
+fn at_place(c: &mut County<'_>, row: &PlacementDef) {
+    super::stories::at_place(c, row);
+}
 
 /// Set down a row's prop keyed `key`, with the fields its template sets. Returns its index.
-fn put_prop(k: &mut Kit, key: NameId, t: &jane_data::PropTemplate, x: i32, y: i32) -> usize {
+pub fn put_prop(k: &mut Kit, key: NameId, t: &jane_data::PropTemplate, x: i32, y: i32) -> usize {
     apply_template(k.prop(Some(Key::Name(key)), t.def, x, y), t);
     k.blueprint().props.len() - 1
 }
@@ -331,7 +330,7 @@ pub fn move_beside(k: &mut Kit, t: usize, key: Key) {
 
 /// Which of a row's props the thing is under: a hash of where they stand, so the seed chooses and
 /// no dice are drawn.
-fn pick_top(k: &Kit, row: &PlacementDef, tops: &[usize]) -> usize {
+pub fn pick_top(k: &Kit, row: &PlacementDef, tops: &[usize]) -> usize {
     if tops.len() == 1 {
         return tops[0];
     }
@@ -345,7 +344,7 @@ fn pick_top(k: &Kit, row: &PlacementDef, tops: &[usize]) -> usize {
 
 /// The thing a row `hides`: a hidden prop on the top prop's cell, which the top prop names as
 /// lying under it (shown when the top is pushed off it, while `when` holds).
-fn hide_under(k: &mut Kit, row: &PlacementDef, top: usize) {
+pub fn hide_under(k: &mut Kit, row: &PlacementDef, top: usize) {
     let Some(h) = &row.hides else { return };
     let c = k.blueprint().props[top].cell;
     let p = k.prop(Some(Key::Name(h.key)), h.prop.def, i32::from(c.x), i32::from(c.y));

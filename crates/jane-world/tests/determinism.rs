@@ -1,7 +1,8 @@
-//! PORT.md §9.3, the determinism gate's first half, for the zones `build_zone` builds today (the
-//! eight dungeons): 1. `hash(build_zone(z, s))` for seeds 1..=SEEDS, twice in one process, equal;
-//! 2. equal to `tests/fixtures/hashes-x86_64.txt`, which a fresh process wrote (`jane gen --zones
-//! dungeons --seeds 1..16 --hash`); on any other target that is gate 3, byte for byte.
+//! PORT.md §9.3, the determinism gate's first half, for all thirteen zones: 1. `hash(build_zone(z,
+//! s))` for seeds 1..=SEEDS, twice in one process, equal (the county for seeds 1 to 4 only: it is
+//! most of a second a build in the test profile); 2. equal to `tests/fixtures/hashes-x86_64.txt`,
+//! which a fresh process wrote (`jane gen --zones all --seeds 1..16 --hash`); on any other target
+//! that is gate 3, byte for byte.
 
 mod common;
 
@@ -10,13 +11,22 @@ use jane_world::hash::{LAYOUT, hash};
 use jane_world::{build_zone, builds};
 
 fn twice(zone: ZoneId) {
+    twice_up_to(zone, common::seeds());
+}
+
+fn twice_up_to(zone: ZoneId, seeds: u32) {
     assert!(builds(zone));
-    for seed in 1..=common::seeds() {
-        let a = build_zone(zone, seed).expect("a dungeon");
-        let b = build_zone(zone, seed).expect("a dungeon");
+    for seed in 1..=seeds {
+        let a = build_zone(zone, seed).expect("a zone");
+        let b = build_zone(zone, seed).expect("a zone");
         assert_eq!(a, b, "{} seed {seed}", zone.name());
         assert_eq!(hash(&a), hash(&b), "{} seed {seed}", zone.name());
     }
+}
+
+#[test]
+fn the_county_hashes_the_same_twice() {
+    twice_up_to(ZoneId::County, common::seeds().min(4));
 }
 
 #[test]
@@ -60,11 +70,11 @@ fn the_school_hashes_the_same_twice() {
 }
 
 #[test]
-fn zones_without_a_builder_yet_are_none_not_a_panic() {
+fn every_zone_builds() {
     for z in ZoneId::ALL {
-        assert_eq!(build_zone(z, 1).is_some(), builds(z), "{}", z.name());
+        assert!(builds(z), "{}", z.name());
+        assert!(build_zone(z, 1).is_some(), "{}", z.name());
     }
-    assert!(build_zone(ZoneId::County, 1).is_none());
 }
 
 #[test]
@@ -74,7 +84,7 @@ fn another_seed_is_another_hash() {
     let fixed = |z: ZoneId| matches!(z, ZoneId::Arms | ZoneId::Church);
     for zone in ZoneId::ALL.into_iter().filter(|&z| builds(z) && !fixed(z)) {
         for seed in 1..=4 {
-            let h = hash(&build_zone(zone, seed).expect("a dungeon"));
+            let h = hash(&build_zone(zone, seed).expect("a zone"));
             assert!(!seen.contains(&h), "{} seed {seed} hashes like another build", zone.name());
             seen.push(h);
         }
@@ -91,7 +101,7 @@ fn the_hashes_match_the_fixture_file() {
     if !text.lines().any(|l| l == content) {
         eprintln!(
             "hashes-x86_64.txt was written from other content or another hash layout (want \"{content}\"): \
-             rewrite it with `jane gen --zones dungeons --seeds 1..16 --hash`"
+             rewrite it with `jane gen --zones all --seeds 1..16 --hash`"
         );
         return;
     }
@@ -101,9 +111,9 @@ fn the_hashes_match_the_fixture_file() {
         let (Some(zone), Some(seed), Some(want)) = (f.next(), f.next(), f.next()) else { panic!("bad line {line}") };
         let zone = ZoneId::from_name(zone).expect("a zone");
         let seed: u32 = seed.parse().expect("a seed");
-        let got = format!("{:016x}", hash(&build_zone(zone, seed).expect("a dungeon")));
+        let got = format!("{:016x}", hash(&build_zone(zone, seed).expect("a zone")));
         assert_eq!(got, want, "{} seed {seed}", zone.name());
         n += 1;
     }
-    assert_eq!(n, 8 * 16, "every dungeon, seeds 1 to 16");
+    assert_eq!(n, ZoneId::ALL.len() * 16, "every zone, seeds 1 to 16");
 }
