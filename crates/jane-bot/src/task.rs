@@ -280,7 +280,13 @@ fn walk(cx: &mut Ctx, v: &View<'_>, to: Vec2, near: Fx) -> Option<Status> {
     match cx.nav.go(v, to, near, cx.sprint()) {
         Go::Walk(f) => Some(Status::Act(Act::hold(f))),
         Go::Arrived => None,
-        Go::NoWay => Some(Status::Failed(format!("no way to {},{}", to.x.0 / CELL_FX, to.y.0 / CELL_FX))),
+        Go::NoWay => Some(Status::Failed(format!(
+            "no way to {},{} from {:?}: {}",
+            to.x.0 / CELL_FX,
+            to.y.0 / CELL_FX,
+            v.body().pos.cell(),
+            cx.nav.why
+        ))),
     }
 }
 
@@ -335,7 +341,8 @@ impl Task {
                             *near = sides(v, p, v.body().pos);
                         }
                         let Some(&(at, face)) = near.get(*side as usize) else {
-                            return Status::Failed("no side to stand at".into());
+                            let tried: Vec<(i32, i32)> = near.iter().map(|(a, _)| a.cell()).collect();
+                            return Status::Failed(format!("no side to stand at (tried {tried:?})"));
                         };
                         match cx.nav.go(v, at, Fx::from_px(3), cx.sprint()) {
                             Go::Walk(f) => Status::Act(Act::hold(f)),

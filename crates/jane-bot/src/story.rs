@@ -95,9 +95,22 @@ pub struct Story {
 /// Frames to set a failed objective aside (doubling with each failure).
 const SET_ASIDE: u32 = 60 * 30;
 
-/// The dungeons by the name a text would call them.
+/// The dungeons by the name a text would call them, where the text says the thing is in one: a
+/// name used to give a direction ("up the quarry track from the mine", "on the mine road near the
+/// mine", "past the ruined library") is a landmark on the way, not where the thing is.
 pub fn zone_in_text(text: &str) -> Option<ZoneId> {
     let t = text.to_lowercase();
+    let named = |w: &str| {
+        t.match_indices(w).any(|(i, _)| {
+            let before = &t[..i];
+            let after = &t[i + w.len()..];
+            !(before.ends_with("from the ")
+                || before.ends_with("near the ")
+                || before.ends_with("past the ")
+                || before.ends_with("past the ruined ")
+                || after.starts_with(" road"))
+        })
+    };
     [
         ("cellar", ZoneId::Cellar),
         ("mine", ZoneId::Mine),
@@ -110,7 +123,7 @@ pub fn zone_in_text(text: &str) -> Option<ZoneId> {
         ("school", ZoneId::School),
     ]
     .into_iter()
-    .find(|(w, _)| t.contains(w))
+    .find(|(w, _)| named(w))
     .map(|(_, z)| z)
 }
 
@@ -232,7 +245,7 @@ impl Story {
                         }
                         self.task = None;
                         if let (Goal::Explore(t), Some(ex)) = (goal, self.explorer.as_mut()) {
-                            ex.failed(t);
+                            ex.failed(t, &why);
                         } else {
                             self.set_aside(v, goal, &why, notes);
                         }
@@ -803,8 +816,11 @@ pub fn route(v: &View<'_>, cx: &Ctx, z: ZoneId) -> Option<Task> {
     if doors.is_empty() && here != ZoneId::County {
         doors = doors_to(v, ZoneId::County);
     }
-    // Of several doors there, one not yet taken (the other hatch).
-    doors.sort_by_key(|p| (cx.used.contains_key(&(here, p.id)), to_prop(p, v.body().pos), p.id));
+    // Of several doors there, one she can open (the mine's mouth, not the adit barred from
+    // inside), then one not yet taken (the other hatch).
+    doors.sort_by_key(|p| {
+        (!crate::sense::can_open(v, p), cx.used.contains_key(&(here, p.id)), to_prop(p, v.body().pos), p.id)
+    });
     let d = doors.first()?;
     Some(Task::Use(UseProp { presses: if d.locked { 2 } else { 1 }, ..UseProp::new(d.id) }))
 }

@@ -25,6 +25,7 @@
 //! | [`talk`] | a conversation: which line to take |
 //! | [`story`] | the quest log read as objectives (the Reader and the Rusher) |
 //! | [`crawl`] | a dungeon: keys, locks, plates, verbs, the boss, the way out |
+//! | [`tactics`] | what each dungeon and boss asks beyond the crawl's general order |
 //! | [`fixture`] | the bot-session hash fixture (`bot-hash-<target>.txt`) |
 //!
 //! Two player models (VERIFICATION.md §2 L3; P4b adds the rest): the **Reader** takes every
@@ -40,8 +41,11 @@ pub mod fixture;
 pub mod nav;
 pub mod sense;
 pub mod story;
+pub mod tactics;
 pub mod talk;
 pub mod task;
+
+use std::fmt::Write as _;
 
 use jane_core::{QuestId, SpellId, ZoneId};
 use jane_sim::event::{EventKind, QuestChange};
@@ -76,6 +80,47 @@ impl Model {
     /// Runs whenever there is energy to (the Reader walks unless it is going far).
     pub const fn sprints(self) -> bool {
         matches!(self, Model::Rusher)
+    }
+}
+
+/// Which of the three endings a bot chooses at Yours to Say (STORY.md §10): the choice policy
+/// that makes each reachable in a test. Without one it carries the Ball to the nearest of the
+/// three.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Ending {
+    /// The ring on the study desk under Julie's house (`the_end` 1).
+    Hold,
+    /// The seam at the back of the Gold Mine's vault (`the_end` 2).
+    Hill,
+    /// The Sunday train at Castle Halt (`the_end` 3).
+    Train,
+}
+
+impl Ending {
+    pub fn parse(s: &str) -> Option<Ending> {
+        match s {
+            "hold" | "a" | "1" => Some(Ending::Hold),
+            "hill" | "b" | "2" => Some(Ending::Hill),
+            "train" | "c" | "3" => Some(Ending::Train),
+            _ => None,
+        }
+    }
+
+    pub const fn name(self) -> &'static str {
+        match self {
+            Ending::Hold => "hold",
+            Ending::Hill => "hill",
+            Ending::Train => "train",
+        }
+    }
+
+    /// The world's `the_end` for it.
+    pub const fn the_end(self) -> u8 {
+        match self {
+            Ending::Hold => 1,
+            Ending::Hill => 2,
+            Ending::Train => 3,
+        }
     }
 }
 
@@ -144,6 +189,30 @@ impl Milestone {
     }
 }
 
+/// The ground about a rect as text, for a debugging dump: `#` a cell feet cannot cross, `.` one
+/// they can, a prop's footprint by the first letter of its key (upper case when solid), `@` her.
+pub fn ascii(v: &View<'_>, r: jane_core::Rect, pad: i32) -> String {
+    let me = v.body().pos.cell();
+    let mut out = String::new();
+    for y in r.y - pad..r.bottom() + pad {
+        for x in r.x - pad..r.right() + pad {
+            let c = if (x, y) == me {
+                '@'
+            } else if let Some(p) = v.props().find(|p| !p.hidden && sense::prop_rect(p).contains(x, y)) {
+                let ch = v.name(p.key).chars().next().unwrap_or('?');
+                if p.solid { ch.to_ascii_uppercase() } else { ch.to_ascii_lowercase() }
+            } else if nav::walkable(v, x, y) {
+                '.'
+            } else {
+                '#'
+            };
+            out.push(c);
+        }
+        out.push('\n');
+    }
+    out
+}
+
 /// What a bot plays on: a sim, or a sim being recorded.
 pub trait Host {
     fn view(&self, seat: Seat) -> Option<View<'_>>;
@@ -210,6 +279,8 @@ pub struct Bot {
     pub log: Vec<Milestone>,
     /// Console commands to send before playing (the tests' setup), one a frame.
     pub setup: Vec<Command>,
+    /// The ending it chooses, if told.
+    pub ending: Option<Ending>,
 }
 
 impl Bot {
@@ -223,6 +294,7 @@ impl Bot {
             events: Vec::new(),
             log: Vec::new(),
             setup: Vec::new(),
+            ending: None,
         }
     }
 
@@ -271,6 +343,40 @@ impl Bot {
         for m in marks {
             self.log.push(Milestone { tick, frame, zone, mark: m });
         }
+    }
+
+    /// What it holds, what it is doing and what stands in its way, for a debugging dump.
+    pub fn explain(&self, v: &View<'_>) -> String {
+        let cat = jane_data::catalog();
+        let bag: Vec<String> =
+            v.me().bag.iter().flatten().map(|s| format!("{}x{}", s.qty, cat.combat.item(s.item).id)).collect();
+        let mut out = format!(
+            "at {:?} in the {}, clock {:?}; hp {}; bag: {}\n",
+            v.body().pos.cell(),
+            v.zone().name(),
+            v.clock(),
+            v.body().hp.points(),
+            bag.join(" ")
+        );
+        let (x, y) = v.body().pos.cell();
+        out.push_str(&ascii(v, jane_core::Rect::new(x, y, 1, 1), 8));
+        match &self.plan {
+            Plan::Story(s) => {
+                let _ = writeln!(out, "doing: {}", s.status());
+                out.push_str(&s.explain(v, &self.ctx));
+            }
+            Plan::Crawl(c) => {
+                let _ = write!(
+                    out,
+                    "doing: {}\n{}\ntried: {:?}\nfailed: {:?}\n",
+                    c.status(),
+                    c.why_stuck(v),
+                    c.tried_list(),
+                    c.failures
+                );
+            }
+        }
+        out
     }
 
     /// Log a plan's milestone.

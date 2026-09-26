@@ -59,13 +59,15 @@ pub struct Nav {
     /// Cells shunned for a while (stuck against something the flags do not show: someone
     /// standing in a doorway), with the frame they may be tried again.
     shun: BTreeMap<(i32, i32), u32>,
-    /// Frames walked, the clock the shunning counts in.
+    /// Frames walked.
     frames: u32,
     /// Plans made, for the log.
     pub plans: u64,
     /// Keep to roads out of doors: a step off one costs [`OFF_ROAD`] tenths more (the Reader;
     /// the Rusher goes straight).
     pub roads: bool,
+    /// Why the last `NoWay` was said (for a debugging line).
+    pub why: &'static str,
 }
 
 /// What a step off the road costs a walker who keeps to roads, over the step's own cost.
@@ -127,6 +129,7 @@ impl Nav {
             frames: 0,
             plans: 0,
             roads: false,
+            why: "",
         }
     }
 
@@ -161,7 +164,7 @@ impl Nav {
             cut_corners: false,
         };
         let shun = &self.shun;
-        let now = self.frames;
+        let now = v.frame();
         let step = |_: (i32, i32), (cx, cy): (i32, i32)| -> Option<u32> {
             if (cx, cy) != goal && (!walkable(v, cx, cy) || shun.get(&(cx, cy)).is_some_and(|&t| t > now)) {
                 return None;
@@ -198,7 +201,10 @@ impl Nav {
             return Go::Arrived;
         }
         let (tx, ty) = to.cell();
-        let Some(goal) = nearest_walkable(v, tx, ty, 6) else { return Go::NoWay };
+        let Some(goal) = nearest_walkable(v, tx, ty, 6) else {
+            self.why = "nothing walkable by the goal";
+            return Go::NoWay;
+        };
         if self.goal != Some(goal) {
             self.reset();
             self.goal = Some(goal);
@@ -213,7 +219,7 @@ impl Nav {
         if self.still > STUCK {
             if let Some(&c) = self.path.get(self.at) {
                 if c != goal {
-                    self.shun.insert(c, self.frames + 600);
+                    self.shun.insert(c, v.frame() + 600);
                 }
             }
             self.still = 0;
@@ -225,6 +231,7 @@ impl Nav {
         } else {
             self.fruitless += 1;
             if self.fruitless > HOPELESS {
+                self.why = "no nearer for twenty seconds";
                 return Go::NoWay;
             }
         }
@@ -234,7 +241,13 @@ impl Nav {
                 // Standing on the goal cell but not within `near` of the point: walk straight at it.
                 return Go::Walk(stick(pos, to, false));
             }
-            if !self.plan(v, own, goal) || self.path.is_empty() {
+            // Cells shunned for someone in the way may be what walls her in: forget them first.
+            if (!self.plan(v, own, goal) || self.path.is_empty()) && !self.shun.is_empty() {
+                self.shun.clear();
+                self.plan(v, own, goal);
+            }
+            if self.path.is_empty() {
+                self.why = "no path";
                 return Go::NoWay;
             }
         }
@@ -244,6 +257,11 @@ impl Nav {
             let c = Vec2::centre(cx, cy);
             if dist(pos, c) < 384 {
                 self.at += 1;
+                // A step along a path that ends at the goal is progress, however far round it
+                // goes (a gallery that doubles back is not hopeless).
+                if self.path.last() == Some(&goal) {
+                    self.fruitless = 0;
+                }
                 continue;
             }
             let far = d > i64::from(3 * CELL_FX);

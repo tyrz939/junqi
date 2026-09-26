@@ -74,6 +74,16 @@ pub fn doors_to<'a>(v: &View<'a>, z: jane_core::ZoneId) -> Vec<&'a Prop> {
     out
 }
 
+/// Can she open it: it is not locked, or she holds a key whose tag fits.
+pub fn can_open(v: &View<'_>, p: &Prop) -> bool {
+    if !p.locked {
+        return true;
+    }
+    let cat = jane_data::catalog();
+    let Some(jane_core::Key::Name(tag)) = v.prop_spawn(p).and_then(|s| s.key_tag) else { return false };
+    v.me().bag.iter().flatten().any(|s| cat.combat.item(s.item).opens == Some(tag))
+}
+
 pub fn holds(v: &View<'_>, item: ItemId) -> u32 {
     jane_sim::bag::bag_count(&v.me().bag[..], item)
 }

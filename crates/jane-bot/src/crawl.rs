@@ -102,11 +102,13 @@ pub struct Crawl {
     seen_w: u32,
     /// Why it stopped short, when it did.
     pub stuck: Option<String>,
+    /// Why each failed try failed, the last time (for a debugging dump).
+    pub failures: BTreeMap<Try, String>,
 }
 
 /// The cells she can walk to from where she stands (flood over `View::flags`).
 #[derive(Debug, Default)]
-struct Reach {
+pub struct Reach {
     w: u32,
     h: u32,
     seen: Vec<bool>,
@@ -144,7 +146,7 @@ impl Reach {
         }
     }
 
-    fn get(&self, x: i32, y: i32) -> bool {
+    pub fn get(&self, x: i32, y: i32) -> bool {
         x >= 0
             && y >= 0
             && (x as u32) < self.w
@@ -152,19 +154,19 @@ impl Reach {
             && self.seen[(y as u32 * self.w + x as u32) as usize]
     }
 
-    fn point(&self, p: Vec2) -> bool {
+    pub fn point(&self, p: Vec2) -> bool {
         let (x, y) = p.cell();
         self.get(x, y)
     }
 
     /// Within `r` cells of a cell she can stand in (a stack is taken from a little way off).
-    fn near(&self, p: Vec2, r: i32) -> bool {
+    pub fn near(&self, p: Vec2, r: i32) -> bool {
         let (x, y) = p.cell();
         (-r..=r).any(|dy| (-r..=r).any(|dx| self.get(x + dx, y + dy)))
     }
 
     /// A cell beside the prop's footprint she can stand in.
-    fn beside(&self, p: &Prop) -> bool {
+    pub fn beside(&self, p: &Prop) -> bool {
         let r = prop_rect(p);
         (r.x - 1..=r.right()).any(|x| self.get(x, r.y - 1) || self.get(x, r.bottom()))
             || (r.y..r.bottom()).any(|y| self.get(r.x - 1, y) || self.get(r.right(), y))
@@ -180,7 +182,11 @@ fn signature(v: &View<'_>) -> u64 {
     }
     mix(v.learned().len() as u64);
     for p in v.props() {
-        mix(u64::from(p.locked) | u64::from(p.solid) << 1 | u64::from(p.used) << 2 | u64::from(p.on) << 3);
+        mix(u64::from(p.locked)
+            | u64::from(p.solid) << 1
+            | u64::from(p.used) << 2
+            | u64::from(p.on) << 3
+            | u64::from(p.hidden) << 4);
         mix(u64::from(p.cell.x) << 16 | u64::from(p.cell.y));
     }
     mix(v.props().count() as u64);
@@ -237,6 +243,7 @@ impl Crawl {
             seen: Vec::new(),
             seen_w: 0,
             stuck: None,
+            failures: BTreeMap::new(),
         }
     }
 
@@ -332,9 +339,14 @@ impl Crawl {
         }
         let sig = signature(v);
         // Low with nothing to eat: whatever she was doing waits for a bed or a stove.
+        // Low with nothing to eat: whatever she was doing waits for a bed or a stove she can
+        // reach (shut in with a boss, there is none, and she carries on).
         let low = sense::hp_permille(v.body()) < 500 && !fight::has_food(v);
         if low && self.task.as_ref().is_some_and(|(_, w)| !matches!(w, Try::Rest(_))) {
-            self.task = None;
+            self.reach.update(v, sig);
+            if self.rest_in_reach(v).is_some() {
+                self.task = None;
+            }
         }
         for _ in 0..4 {
             if let Some((t, what)) = &mut self.task {
@@ -342,9 +354,10 @@ impl Crawl {
                 match t.tick(v, cx) {
                     Status::Act(a) => return a,
                     Status::Done => self.task = None,
-                    Status::Failed(_) => {
+                    Status::Failed(why) => {
                         self.task = None;
                         self.tried.entry(what).or_insert((sig, 0)).1 += 2;
+                        self.failures.insert(what, why);
                         // Ground she cannot get to is as good as seen.
                         if let Try::Explore(x, y) = what {
                             self.mark_seen(v, x, y);
@@ -495,7 +508,8 @@ impl Crawl {
     }
 
     /// A failed try counts double.
-    pub fn failed(&mut self, what: Try) {
+    pub fn failed(&mut self, what: Try, why: &str) {
+        self.failures.insert(what, why.to_owned());
         self.tried.entry(what).or_insert((0, 0)).1 += 2;
     }
 
@@ -530,14 +544,8 @@ impl Crawl {
         };
         // 0. Low, with nothing to eat: a bed or a stove she can reach.
         if sense::hp_permille(v.body()) < 500 && !fight::has_food(v) {
-            if let Some(p) = v
-                .props()
-                .filter(|p| {
-                    cat.story.prop(p.def).rest && reach.beside(p) && v.prop_spawn(p).is_some_and(|s| s.talk.is_some())
-                })
-                .min_by_key(|p| (near_prop(p), p.id))
-            {
-                return Some((Task::Use(UseProp::new(p.id)), Try::Rest(p.id)));
+            if let Some(p) = self.rest_in_reach(v) {
+                return Some((Task::Use(UseProp::new(p)), Try::Rest(p)));
             }
         }
         // 1. Lying about.
@@ -547,7 +555,7 @@ impl Crawl {
             }
         }
         for p in v.props() {
-            if !reach.beside(p) {
+            if p.hidden || !reach.beside(p) {
                 continue;
             }
             let def = cat.story.prop(p.def);
@@ -602,10 +610,10 @@ impl Crawl {
         }
         // 6. Plates that are up, and something to push onto one.
         if best.as_ref().is_none_or(|b| b.0 > 6) {
-            for plate in v.props().filter(|p| cat.story.prop(p.def).plate && !p.on && reach.beside(p)) {
+            for plate in v.props().filter(|p| !p.hidden && cat.story.prop(p.def).plate && !p.on && reach.beside(p)) {
                 for thing in v.props().filter(|p| {
                     let d = cat.story.prop(p.def);
-                    d.push && p.solid && reach.beside(p)
+                    !p.hidden && d.push && p.solid && reach.beside(p)
                 }) {
                     let what = Try::Push(thing.id, plate.id);
                     if !self.fresh(what, sig) {
@@ -656,13 +664,28 @@ impl Crawl {
         best.map(|(_, _, what, t)| (t, what))
     }
 
+    /// The nearest bed or stove she can walk to, as of the last flood.
+    fn rest_in_reach(&self, v: &View<'_>) -> Option<PropId> {
+        let cat = jane_data::catalog();
+        let at = v.body().pos;
+        v.props()
+            .filter(|p| {
+                !p.hidden
+                    && cat.story.prop(p.def).rest
+                    && self.reach.beside(p)
+                    && v.prop_spawn(p).is_some_and(|s| s.talk.is_some())
+            })
+            .min_by_key(|p| (sense::to_prop(p, at), p.id))
+            .map(|p| p.id)
+    }
+
     /// Everything that stood in the way, for the log.
     pub fn why_stuck(&self, v: &View<'_>) -> String {
         let cat = jane_data::catalog();
         let cat_boss = boss_of(self.zone).map_or("none", |b| jane_data::catalog().combat.unit(b).id);
         let mut out =
             format!("nothing left to try in the {} (its boss: {cat_boss}; down: {:?});", self.zone.name(), self.bosses);
-        for p in v.props() {
+        for p in v.props().filter(|p| !p.hidden) {
             let def = cat.story.prop(p.def);
             let Some(s) = v.prop_spawn(p) else { continue };
             let seen = if self.reach.beside(p) { "reachable" } else { "out of reach" };
@@ -678,6 +701,9 @@ impl Crawl {
                 let needs: Vec<_> =
                     s.needs.iter().map(|n| format!("{}x{}", n.qty, cat.combat.item(n.item).id)).collect();
                 let _ = write!(out, " {} answers {:?} (needs {:?});", v.name(p.key), def.answers, needs);
+                if self.failures.contains_key(&Try::Cast(p.id)) {
+                    let _ = write!(out, "\n{}", crate::ascii(v, prop_rect(p), 4));
+                }
             }
         }
         for u in sense::enemies(v) {

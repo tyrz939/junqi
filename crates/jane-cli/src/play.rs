@@ -13,11 +13,16 @@ use jane_sim::replay::{Recorder, Tape, diff_states, input_at, verify_tape};
 use jane_sim::{Blueprints, Seat, Sim, StepInput};
 
 pub const USAGE: &str = "  play --model reader|rusher --seed N [--minutes M] [--dungeon ZONE] [--tape OUT.jrp]
-       [--snap OUT.png [--snap-every S]]
+       [--snap OUT.png [--snap-every S]] [--ending hold|hill|train] [--profile]
+       [--explain] [--explain-every S]
                                       a player model plays a seed headless from New Game (or a dungeon from
                                       its door, the console setting up the kit): one line per milestone;
                                       --snap draws the world round her at the end (and every S seconds of
-                                      play as OUT-0001.png ...): the sim's view as a map, not the renderer
+                                      play as OUT-0001.png ...): the sim's view as a map, not the renderer;
+                                      --ending: which of the three the bot chooses at Yours to Say;
+                                      --profile: where the time went, the sim's phases and the bot's;
+                                      --explain: what the bot holds, is doing and is blocked by, at the end
+                                      (and every S seconds of play)
   play --fixture PATH                 write the bot-session hash fixture (seeds 1 to 3, both models, 5 min)
   replay verify FILE...               re-simulate each tape and hold it to its hash stream
   replay record --model M --seed N [--minutes M] [--dungeon ZONE] OUT.jrp
@@ -80,7 +85,11 @@ fn play(args: &[String], tape: Option<&str>) -> Result<(), String> {
         .map(|z| ZoneId::from_name(z).ok_or_else(|| format!("--dungeon: no zone {z}")))
         .transpose()?;
     let bps = build(seed)?;
-    let sim = Sim::new_game_with(bps, "Jane");
+    let mut sim = Sim::new_game_with(bps, "Jane");
+    let profile = args.iter().any(|a| a == "--profile");
+    if profile {
+        sim.set_wall_clock(Some(wall_ns));
+    }
     let mut bot = match dungeon {
         Some(z) => {
             let mut b = Bot::new(model, Plan::Crawl(Crawl::new(z)));
@@ -89,6 +98,9 @@ fn play(args: &[String], tape: Option<&str>) -> Result<(), String> {
         }
         None => Bot::story(model),
     };
+    if let Some(e) = flag(args, "--ending") {
+        bot.ending = Some(jane_bot::Ending::parse(e).ok_or("--ending: hold, hill or train")?);
+    }
     let frames = minutes * 60 * 60;
     let mut rec = Recorder::new(sim);
     let t0 = Instant::now();
@@ -97,12 +109,23 @@ fn play(args: &[String], tape: Option<&str>) -> Result<(), String> {
     let snap = flag(args, "--snap");
     let every = num(args, "--snap-every", 0)? * 60;
     let mut shots = 0;
+    let mut prof = Profile::default();
+    let explain_every = num(args, "--explain-every", 0)? * 60;
     for _ in 0..frames {
         if bot.done() {
             break;
         }
+        let f0 = if profile { wall_ns() } else { 0 };
         bot.step(&mut rec);
+        if profile {
+            prof.add(wall_ns() - f0, &rec.sim().metrics());
+        }
         played += 1;
+        if explain_every > 0 && played % explain_every == 0 {
+            if let Some(v) = rec.view(Seat(0)) {
+                println!("{}", bot.explain(&v));
+            }
+        }
         while shown < bot.log.len() {
             println!("{}", bot.log[shown].line());
             shown += 1;
@@ -135,6 +158,12 @@ fn play(args: &[String], tape: Option<&str>) -> Result<(), String> {
     if let Some(why) = bot.stuck() {
         println!("last stuck: {why}");
     }
+    if profile {
+        prof.print(played);
+    }
+    if args.iter().any(|a| a == "--explain") {
+        println!("{}", bot.explain(&v));
+    }
     if let Some(path) = snap {
         write_snap(&v, path)?;
     }
@@ -150,6 +179,87 @@ fn play(args: &[String], tape: Option<&str>) -> Result<(), String> {
         );
     }
     Ok(())
+}
+
+/// Monotonic nanoseconds since the first call: the wall clock lent to the sim for its metrics.
+fn wall_ns() -> u64 {
+    static START: std::sync::OnceLock<Instant> = std::sync::OnceLock::new();
+    START.get_or_init(Instant::now).elapsed().as_nanos() as u64
+}
+
+/// Where the frames' time went: the sim's phases, and the bot (the frame less its step).
+#[derive(Default)]
+struct Profile {
+    frame_ns: u64,
+    step_ns: u64,
+    phase_ns: [u64; jane_sim::metrics::PHASES],
+    paths: u64,
+    expanded: u64,
+    awake: u64,
+    total: u64,
+    /// The slowest steps.
+    worst: Vec<jane_sim::SimMetrics>,
+    steps: Vec<u32>,
+}
+
+/// `num / den` with two decimals, in integers.
+fn ratio(num: u64, den: u64) -> String {
+    let h = num * 100 / den.max(1);
+    format!("{}.{:02}", h / 100, h % 100)
+}
+
+impl Profile {
+    fn add(&mut self, frame_ns: u64, m: &jane_sim::SimMetrics) {
+        self.frame_ns += frame_ns;
+        self.step_ns += u64::from(m.step_ns);
+        for (a, b) in self.phase_ns.iter_mut().zip(m.phase_ns) {
+            *a += u64::from(b);
+        }
+        self.paths += u64::from(m.path_searches);
+        self.expanded += u64::from(m.path_expanded);
+        self.awake += u64::from(m.units_awake);
+        self.total += u64::from(m.units_total);
+        self.steps.push(m.step_ns);
+        self.worst.push(*m);
+        if self.worst.len() > 64 {
+            self.worst.sort_unstable_by_key(|m| std::cmp::Reverse(m.step_ns));
+            self.worst.truncate(8);
+        }
+    }
+
+    fn print(&mut self, frames: u32) {
+        let n = u64::from(frames.max(1));
+        self.steps.sort_unstable();
+        let pct = |p: usize| u64::from(self.steps.get(self.steps.len().saturating_sub(1) * p / 100).copied().unwrap_or(0));
+        println!(
+            "profile: {frames} frames; per frame {} us = sim {} us + bot {} us; sim median {} us, p99 {} us",
+            ratio(self.frame_ns, n * 1000),
+            ratio(self.step_ns, n * 1000),
+            ratio(self.frame_ns.saturating_sub(self.step_ns), n * 1000),
+            ratio(pct(50), 1000),
+            ratio(pct(99), 1000),
+        );
+        for p in jane_sim::Phase::ALL {
+            println!("  {:<13} {:>8} us/frame", p.name(), ratio(self.phase_ns[p.index()], n * 1000));
+        }
+        println!(
+            "  paths {}/frame ({} nodes each); units awake {} of {}",
+            ratio(self.paths, n),
+            ratio(self.expanded, self.paths.max(1)),
+            ratio(self.awake, n),
+            ratio(self.total, n)
+        );
+        self.worst.sort_unstable_by_key(|m| std::cmp::Reverse(m.step_ns));
+        for m in self.worst.iter().take(3) {
+            let top: Vec<String> = {
+                let mut ph: Vec<(u32, jane_sim::Phase)> =
+                    jane_sim::Phase::ALL.iter().map(|&p| (m.phase_ns[p.index()], p)).collect();
+                ph.sort_unstable_by_key(|&(t, p)| (std::cmp::Reverse(t), p));
+                ph.iter().take(3).map(|(t, p)| format!("{} {} us", p.name(), t / 1000)).collect()
+            };
+            println!("  slow step at frame {}: {} us ({})", m.frame, m.step_ns / 1000, top.join(", "));
+        }
+    }
 }
 
 /// `snap.png`, 3 -> `snap-0003.png`.
