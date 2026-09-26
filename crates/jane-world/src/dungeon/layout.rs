@@ -80,11 +80,13 @@ pub struct Lanes {
     pub used: Vec<bool>,
     corners: usize,
     hmids: usize,
-    links: Vec<Vec<u16>>,
+    /// Node `n`'s neighbours are `link_to[link_at[n]..link_at[n + 1]]`, in the order linked.
+    link_at: Vec<u32>,
+    link_to: Vec<u16>,
 }
 
 /// A breadth-first flood over free lane nodes: `prev[n]` is -1 where it never got.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct Flood {
     pub dist: Vec<i16>,
     pub prev: Vec<i16>,
@@ -95,13 +97,21 @@ impl Lanes {
         let corners = ((cols + 1) * (rows + 1)) as usize;
         let hmids = (cols * (rows + 1)) as usize;
         let count = corners + hmids + ((cols + 1) * rows) as usize;
-        let mut l =
-            Self { cols, rows, count, used: vec![false; count], corners, hmids, links: vec![Vec::new(); count] };
+        let mut l = Self {
+            cols,
+            rows,
+            count,
+            used: vec![false; count],
+            corners,
+            hmids,
+            link_at: Vec::new(),
+            link_to: Vec::new(),
+        };
         let link = |links: &mut Vec<Vec<u16>>, a: usize, b: usize| {
             links[a].push(b as u16);
             links[b].push(a as u16);
         };
-        let mut links = std::mem::take(&mut l.links);
+        let mut links = vec![Vec::new(); count];
         for j in 0..=rows {
             for i in 0..cols {
                 link(&mut links, l.hmid(i, j), l.corner(i, j));
@@ -114,8 +124,17 @@ impl Lanes {
                 link(&mut links, l.vmid(i, j), l.corner(i, j + 1));
             }
         }
-        l.links = links;
+        l.link_at.push(0);
+        for n in &links {
+            l.link_to.extend_from_slice(n);
+            l.link_at.push(l.link_to.len() as u32);
+        }
         l
+    }
+
+    /// The lane nodes `n` joins, in the order they were linked.
+    pub fn links(&self, n: usize) -> &[u16] {
+        &self.link_to[self.link_at[n] as usize..self.link_at[n + 1] as usize]
     }
 
     pub fn corner(&self, i: i32, j: i32) -> usize {
@@ -203,28 +222,44 @@ impl Lanes {
 
     /// Breadth-first from a port over free lane nodes.
     pub fn flood(&self, from: usize) -> Flood {
-        let mut f = Flood { dist: vec![-1; self.count], prev: vec![-1; self.count] };
+        let mut f = Flood { dist: Vec::with_capacity(self.count), prev: Vec::with_capacity(self.count) };
+        self.flood_into(from, None, &mut f, &mut Vec::with_capacity(self.count));
+        f
+    }
+
+    /// [`Self::flood`] into `f`, with `queue` for scratch: the search asks thousands of times.
+    /// With `until`, it stops once every node named there has been reached: a breadth-first
+    /// flood never changes a node's `dist` or `prev` once it has reached it, so those nodes, and
+    /// every node on the way back from them, read as the whole flood would leave them.
+    pub fn flood_into(&self, from: usize, until: Option<&[usize]>, f: &mut Flood, queue: &mut Vec<u16>) {
+        f.dist.clear();
+        f.dist.resize(self.count, -1);
+        f.prev.clear();
+        f.prev.resize(self.count, -1);
         if self.used[from] {
-            return f;
+            return;
         }
-        let mut queue = Vec::with_capacity(self.count);
-        queue.push(from);
+        queue.clear();
+        queue.push(from as u16);
         f.dist[from] = 0;
+        let mut left = until.map_or(usize::MAX, |t| t.iter().filter(|&&n| n != from).count());
         let mut q = 0;
-        while q < queue.len() {
-            let n = queue[q];
+        while q < queue.len() && left > 0 {
+            let n = usize::from(queue[q]);
             q += 1;
-            for &m in &self.links[n] {
+            for &m in self.links(n) {
                 let m = usize::from(m);
                 if f.dist[m] >= 0 || self.used[m] {
                     continue;
                 }
                 f.dist[m] = f.dist[n] + 1;
                 f.prev[m] = n as i16;
-                queue.push(m);
+                queue.push(m as u16);
+                if let Some(t) = until {
+                    left -= t.iter().filter(|&&x| x == m).count();
+                }
             }
         }
-        f
     }
 }
 
@@ -290,6 +325,9 @@ struct State {
     corridors: Vec<Corridor>,
     /// Node -> where it stands (index into `placed`), while it stands.
     at: Vec<Option<usize>>,
+    /// Scratch for the floods `connect` does not cache.
+    scratch: Flood,
+    queue: Vec<u16>,
 }
 
 impl State {
@@ -301,6 +339,8 @@ impl State {
             placed: Vec::new(),
             corridors: Vec::new(),
             at: vec![None; m.nodes.len()],
+            scratch: Flood::default(),
+            queue: Vec::new(),
         }
     }
 
@@ -397,6 +437,8 @@ impl State {
         let me = self.placed.len() - 1;
         let me_node = self.placed[me].node;
         let mut made: Vec<Corridor> = Vec::new();
+        let (mut scratch, mut queue) = (std::mem::take(&mut self.scratch), std::mem::take(&mut self.queue));
+        let mut targets: Vec<usize> = Vec::new();
         for &ei in &g.edges_of[me_node] {
             let e = &g.m.edges[ei];
             let other_node = if usize::from(e.from) == me_node { usize::from(e.to) } else { usize::from(e.from) };
@@ -414,14 +456,18 @@ impl State {
                 let from = self.port_of(&self.placed[me], mine);
                 // The first corridor of a one-bay room is routed over lanes nobody has touched since
                 // the cache was started, so a flood from the same port is the same flood.
-                let fresh;
                 let flood: &Flood = match floods.as_deref_mut() {
                     Some(cache) if made.is_empty() && one_bay => {
                         cache[from].get_or_insert_with(|| self.lanes.flood(from))
                     }
                     _ => {
-                        fresh = self.lanes.flood(from);
-                        &fresh
+                        let other = &self.placed[oi];
+                        targets.clear();
+                        targets.extend(
+                            (0..other.shape.doors.len()).filter(|&t| !other.uses(t)).map(|t| self.port_of(other, t)),
+                        );
+                        self.lanes.flood_into(from, Some(&targets), &mut scratch, &mut queue);
+                        &scratch
                     }
                 };
                 let other = &self.placed[oi];
@@ -449,6 +495,7 @@ impl State {
             }
             let Some((mine, theirs, lane)) = best else {
                 self.disconnect(&made);
+                (self.scratch, self.queue) = (scratch, queue);
                 return None;
             };
             for &n in &lane {
@@ -466,6 +513,7 @@ impl State {
                 Corridor { edge: ei, a: b, b: a, lane }
             });
         }
+        (self.scratch, self.queue) = (scratch, queue);
         Some(made)
     }
 
@@ -843,7 +891,7 @@ mod tests {
         assert_eq!(l.cell(l.vmid(4, 1)), (BORDER + 4 * BAY_W, BORDER + BAY_H + MOUTH_Y));
         // Every mid joins two corners; a corner joins two to four mids.
         for n in 0..l.count {
-            let deg = l.links[n].len();
+            let deg = l.links(n).len();
             assert!((2..=4).contains(&deg), "lane {n} has {deg} links");
         }
         let f = l.flood(l.hmid(0, 0));
