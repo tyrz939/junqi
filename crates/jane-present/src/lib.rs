@@ -15,12 +15,14 @@ pub mod atlas;
 pub mod backend;
 pub mod camera;
 pub mod chunks;
+pub mod creatures;
 pub mod drawlist;
 pub mod frame;
 pub mod input;
 pub mod light;
 pub mod people;
 pub mod present;
+pub mod props;
 pub mod stand_in;
 
 pub use backend::{AO_TINT, AtlasPages, Backend, CLUT_LEN, Caps, FrameStats, FrameTimes, Page, StatPass};
