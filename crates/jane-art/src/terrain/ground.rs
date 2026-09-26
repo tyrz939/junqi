@@ -75,7 +75,10 @@ fn base(p: &mut Painter, wx0: i32, wy0: i32, seed: u32) {
             let v = p.s.pv[i] / 3;
             let cluster = below(fast((wx >> 1) as u32, (wy >> 1) as u32, seed ^ salt::PATCH), 13) as i32 - 6;
             let m = (p.s.mv[i] - 128) / 4 + cluster;
-            let dry = p.s.lv[i] + m / 3 > 168;
+            // Dry grass by broad drifts, their edge wandering a little; the green just short of it
+            // lightens toward it, so the one grass turns to the other without a seam.
+            let drift = p.s.lv[i] + m / 6 - 176;
+            let dry = drift > 0;
             let mut r = st.ramp;
             let z = i32::from(st.row.rise).max(1);
             let (tone, n) = match st.row.pattern {
@@ -87,12 +90,14 @@ fn base(p: &mut Painter, wx0: i32, wy0: i32, seed: u32) {
                     let t = patch_tone(v, m, 84, 196);
                     (if v + m / 2 < 86 { Tone::Shade } else { t }, FLAT)
                 }
-                P::Turf => {
-                    if dry {
-                        r = Ramp::TurfDry;
-                    }
-                    (patch_tone(v, m, 50, 212), FLAT)
+                // A meadow is calm: its tones change over wide drifts, and the dry grass keeps
+                // closer to its middle tone than the green does.
+                P::Turf if dry => {
+                    r = Ramp::TurfDry;
+                    (patch_tone(v, m, -1000, 236), FLAT)
                 }
+                P::Turf if drift > -12 => (patch_tone(v, m, 24, 224).step(1).min(Tone::Lift), FLAT),
+                P::Turf => (patch_tone(v, m, 24, 224), FLAT),
                 _ => (patch_tone(v, m, 18, 188), FLAT),
             };
             p.s.ly.put(x, y, r.at(tone), n, z);
@@ -407,8 +412,8 @@ fn own(p: &Painter, x: i32, y: i32, g: u8) -> bool {
 #[allow(clippy::too_many_arguments)]
 fn turf(p: &mut Painter, cx: i32, cy: i32, wx: i32, wy: i32, g: u8, h: u32, z: i32, cluster: i32, seed: u32) {
     let (px, py) = (cx * CELL, cy * CELL);
-    // Tufts: none where the grass is short, up to three where it grows long.
-    let n = ((cluster - 118) / 34).clamp(0, 3) + i32::from(h % 7 == 0);
+    // Tufts: none where the grass is short, up to two where it grows long, now and then one.
+    let n = ((cluster - 140) / 40).clamp(0, 2) + i32::from(h % 9 == 0);
     for t in 0..n as u32 {
         let ht = h32(h, t, 8);
         let (x, y) = (px + 2 + below(ht, 12) as i32, py + 5 + below(ht.rotate_right(8), 10) as i32);
@@ -491,8 +496,9 @@ fn tuft(p: &mut Painter, x: i32, y: i32, g: u8, r: Ramp, n: i32, h: u32, z: i32,
         for i in 0..l {
             let bx = x + spread / 2 + lean * (i * 2 / l);
             let by = y - i;
+            // Dry blades' tips stop short of the ramp's palest, which reads as litter on the grass.
             let tone = if i == l - 1 {
-                Tone::High
+                if r == Ramp::TurfDry { Tone::Lift } else { Tone::High }
             } else if i == l - 2 {
                 Tone::Light
             } else if i == 0 {
