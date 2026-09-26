@@ -445,6 +445,16 @@ pub struct PathQuery {
     pub cut_corners: bool,
 }
 
+/// One node of the A* window: its best `g` so far and where from, and the searches (by
+/// generation) that stamped and closed it.
+#[derive(Clone, Copy, Debug, Default)]
+struct Node {
+    g: u32,
+    from: u32,
+    stamp: u32,
+    closed: u32,
+}
+
 /// Bits of a heap key that hold the node: `f` is at most `2 * u32::MAX`, 33 bits, above them.
 const NODE_BITS: u32 = 31;
 const NODE_MASK: u64 = (1 << NODE_BITS) - 1;
@@ -455,10 +465,8 @@ const NODE_MASK: u64 = (1 << NODE_BITS) - 1;
 pub struct Astar {
     ww: u32,
     wh: u32,
-    g: Vec<u32>,
-    from: Vec<u32>,
-    stamp: Vec<u32>,
-    closed: Vec<u32>,
+    /// A node's scratch together, so a look at a neighbour is one cache line.
+    nodes: Vec<Node>,
     /// `(f << NODE_BITS) | node`: one number orders as `(f, node)` does, and compares faster.
     heap: BinaryHeap<Reverse<u64>>,
     generation: u32,
@@ -474,10 +482,7 @@ impl Astar {
         Self {
             ww,
             wh,
-            g: vec![0; n],
-            from: vec![0; n],
-            stamp: vec![0; n],
-            closed: vec![0; n],
+            nodes: vec![Node::default(); n],
             heap: BinaryHeap::with_capacity(n.min(1 << 16)),
             generation: 0,
             expanded: 0,
@@ -538,15 +543,12 @@ impl Astar {
 
         self.generation = self.generation.wrapping_add(1);
         if self.generation == 0 {
-            self.stamp.fill(0);
-            self.closed.fill(0);
+            self.nodes.fill(Node::default());
             self.generation = 1;
         }
         let gen_ = self.generation;
         self.heap.clear();
-        self.g[start as usize] = 0;
-        self.from[start as usize] = u32::MAX;
-        self.stamp[start as usize] = gen_;
+        self.nodes[start as usize] = Node { g: 0, from: u32::MAX, stamp: gen_, ..self.nodes[start as usize] };
         let h0 = heuristic((sx, sy));
         self.heap.push(Reverse(u64::from(h0) << NODE_BITS | u64::from(start)));
         let mut best = start;
@@ -555,10 +557,10 @@ impl Astar {
 
         while let Some(Reverse(key)) = self.heap.pop() {
             let node = (key & NODE_MASK) as u32;
-            if self.closed[node as usize] == gen_ {
+            if self.nodes[node as usize].closed == gen_ {
                 continue;
             }
-            self.closed[node as usize] = gen_;
+            self.nodes[node as usize].closed = gen_;
             if node == goal {
                 self.expanded += u64::from(expanded);
                 self.unwind(node, start, global, out);
@@ -574,14 +576,14 @@ impl Astar {
                 best_h = h;
                 best = node;
             }
-            let base = self.g[node as usize];
+            let base = self.nodes[node as usize].g;
             let mut straight_ok = [false; 4];
             for (d, &(dx, dy)) in DIRS8.iter().enumerate() {
                 let (cx, cy) = (nx + dx, ny + dy);
                 let inside = window.contains(cx, cy);
                 // A closed cell is never entered again: its step is not asked, unless a diagonal
                 // waits on whether it could be taken.
-                if inside && (d >= 4 || q.cut_corners) && self.closed[local(cx, cy) as usize] == gen_ {
+                if inside && (d >= 4 || q.cut_corners) && self.nodes[local(cx, cy) as usize].closed == gen_ {
                     continue;
                 }
                 let cost = if d < 4 {
@@ -604,19 +606,18 @@ impl Astar {
                 };
                 let Some(cost) = cost else { continue };
                 let next = local(cx, cy);
-                if self.closed[next as usize] == gen_ {
+                let there = &mut self.nodes[next as usize];
+                if there.closed == gen_ {
                     continue;
                 }
                 let g = base.saturating_add(cost);
                 if g > q.max_cost {
                     continue;
                 }
-                if self.stamp[next as usize] == gen_ && self.g[next as usize] <= g {
+                if there.stamp == gen_ && there.g <= g {
                     continue;
                 }
-                self.g[next as usize] = g;
-                self.from[next as usize] = node;
-                self.stamp[next as usize] = gen_;
+                (there.g, there.from, there.stamp) = (g, node, gen_);
                 let f = u64::from(g) + u64::from(heuristic((cx, cy)));
                 self.heap.push(Reverse(f << NODE_BITS | u64::from(next)));
             }
@@ -633,7 +634,7 @@ impl Astar {
         let mut n = end;
         while n != start && n != u32::MAX {
             out.push(global(n));
-            n = self.from[n as usize];
+            n = self.nodes[n as usize].from;
         }
         out.reverse();
     }
