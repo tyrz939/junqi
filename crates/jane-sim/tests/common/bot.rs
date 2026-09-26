@@ -200,6 +200,34 @@ pub fn walk_to_unit(sim: &mut Sim, key: &str) -> bool {
     ok
 }
 
+/// Melee a unit to death, chasing it (`bot.ts fight`): bar slot 0 is melee on a new game.
+pub fn fight(sim: &mut Sim, key: &str) -> bool {
+    for _ in 0..60 * 90 {
+        let target = unit(sim, key);
+        let u = me(sim).clone();
+        if !u.alive {
+            return false;
+        }
+        if !target.alive {
+            return true;
+        }
+        let dist = d(u.pos, target.pos);
+        let dir = iatan2(target.pos.y.0 - u.pos.y.0, target.pos.x.0 - u.pos.x.0);
+        let frame = InputFrame {
+            aim: Some(dir),
+            mv_mag: if dist > 12 * 256 { 127 } else { 0 },
+            mv_dir: dir,
+            ..InputFrame::IDLE
+        };
+        let mut frames = [InputFrame::IDLE; 4];
+        frames[0] = frame;
+        let bar = [StampedCommand { seat: Some(Seat(0)), seq: 0, cmd: Command::Bar { slot: 0, on: None } }];
+        let cmds: &[StampedCommand] = if dist < 18 * 256 { &bar } else { &[] };
+        sim.step(&StepInput { frames, commands: cmds });
+    }
+    !unit(sim, key).alive
+}
+
 /// Click through a conversation, taking `choices` in order at each choice (then the first).
 pub fn talk_through(sim: &mut Sim, choices: &[u8]) {
     let mut n = 0;

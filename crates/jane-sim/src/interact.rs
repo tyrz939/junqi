@@ -25,7 +25,7 @@ use jane_data::{Answers, Faction, PropDef, WorldSpell};
 use crate::actions::{Subject, request_travel, run_actions};
 use crate::ctx::Ctx;
 use crate::dialogue;
-use crate::event::{EventKind, PropChange, Sfx, ToastKind};
+use crate::event::{EventKind, PropChange, SfxKind, ToastKind};
 use crate::ids::{DropId, PropId, PropIx, Seat, UnitId};
 use crate::inventory;
 use crate::light::{lit_at, prop_centre};
@@ -325,7 +325,7 @@ fn use_prop(cx: &mut Ctx<'_>, seat: Seat, body: UnitId, ix: PropIx) {
         let key = spawn.and_then(|s| s.key_tag).and_then(|t| find_key(cx, seat, cx.sym(t)));
         let Some(key) = key else {
             cx.emit(EventKind::Toast(ToastKind::Locked { prop: pid }));
-            cx.emit(EventKind::Sfx { kind: Sfx::Locked, at });
+            cx.emit(EventKind::Sfx { kind: SfxKind::Locked, at });
             return;
         };
         // One use path for every key. 2020 consumed the key; so do we, except bound ones.
@@ -346,7 +346,7 @@ fn use_prop(cx: &mut Ctx<'_>, seat: Seat, body: UnitId, ix: PropIx) {
         // Some doors are not answered after dark. The key turns; the door does not.
         if let Some(says) = spawn.and_then(|s| s.night_lock).filter(|_| cx.world.is_night()) {
             cx.emit(EventKind::Toast(ToastKind::NightLock(says)));
-            cx.emit(EventKind::Sfx { kind: Sfx::Locked, at });
+            cx.emit(EventKind::Sfx { kind: SfxKind::Locked, at });
             return;
         }
         let mark = cx.sym(to.mark);
@@ -457,7 +457,7 @@ fn hop(cx: &mut Ctx<'_>, body: UnitId, mark: jane_core::Sym) {
     }
     u.hold = 0;
     let at = u.pos;
-    cx.emit(EventKind::Sfx { kind: Sfx::Push, at });
+    cx.emit(EventKind::Sfx { kind: SfxKind::Push, at });
 }
 
 /// Props of `pred` within `reach` of `at` (to the footprint): any?
@@ -655,7 +655,7 @@ pub fn hold_use(cx: &mut Ctx<'_>, body: UnitId, mx: i32, my: i32) -> bool {
     }
     let (pid, at) = (cx.zone.props[pix as usize].id, cx.zone.units[ix].pos);
     cx.emit(EventKind::Prop { prop: pid, change: PropChange::Push });
-    cx.emit(EventKind::Sfx { kind: Sfx::Push, at });
+    cx.emit(EventKind::Sfx { kind: SfxKind::Push, at });
     uncover(cx, pix);
     true
 }
@@ -750,6 +750,23 @@ pub fn school_touch(cx: &mut Ctx<'_>, school: School, at: Vec2, touch: Fx, from:
         });
         let Some(ix) = next else { return };
         after = Some(ix);
-        crate::hooks::on_school_touch(cx, school, ix, from);
+        school_switch(cx, ix, from);
     }
+}
+
+/// A bolt's school touched prop `ix` (it answers the school and is not on): it switches on, is
+/// used, and runs its list with `from` as the subject.
+fn school_switch(cx: &mut Ctx<'_>, ix: PropIx, from: Option<UnitId>) {
+    let p = &mut cx.zone.props[ix as usize];
+    if p.hidden || p.on {
+        return;
+    }
+    p.on = true;
+    p.used = true;
+    let pid = p.id;
+    let bp: &Blueprint = cx.bp;
+    if let Some(list) = spawn_of(bp, &cx.zone.props[ix as usize]).and_then(|s| s.use_list) {
+        run_actions(cx, list, from.map_or(Subject::None, Subject::Unit));
+    }
+    cx.emit(EventKind::Prop { prop: pid, change: PropChange::Switch });
 }

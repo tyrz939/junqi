@@ -4,18 +4,16 @@
 
 use jane_core::action::Stat;
 use jane_core::num::CELL_FX;
-use jane_core::{Fx, ItemId, Rect, SpellId, Sym, Vec2};
-use jane_data::BarSlot;
+use jane_core::{Fx, ItemId, Rect, Sym, Vec2};
 
 use crate::ctx::{Ctx, WorldOp};
-use crate::event::{Event, EventKind, ToastKind};
+use crate::event::{EventKind, ToastKind};
 use crate::ids::UnitId;
 use crate::interact::{Here, near_rest, near_rest_scan};
 use crate::inventory::spawn_drop;
 use crate::los::line_of_sight;
-use crate::state::{GameState, PlayerState, RestPoint};
+use crate::state::{GameState, RestPoint};
 use crate::tuning::{ENERGY_MAX, TICKS_PER_HOUR};
-use crate::units::{max_hp, max_mp};
 
 /// Is every connected seat within reach of a bed or a fire? Asked live: the actor's zone through
 /// its runtime, anyone elsewhere by a scan of her zone's props.
@@ -46,9 +44,10 @@ pub fn everyone_resting(cx: &mut Ctx<'_>) -> bool {
 /// resting; without it no time passes (a fire).
 pub fn rest(cx: &mut Ctx<'_>, until: Option<u8>) {
     let Some(body) = cx.actor_unit() else { return };
+    let now = cx.world.tick;
     let Some(u) = cx.zone.unit_mut(body) else { return };
-    u.hp = max_hp(u);
-    u.mp = max_mp(u);
+    crate::life::pay_regen(u, now);
+    crate::zone::heal_full(u);
     u.energy = ENERGY_MAX;
     u.energy_locked = false;
     let pos = u.pos;
@@ -67,31 +66,6 @@ pub fn rest(cx: &mut Ctx<'_>, until: Option<u8>) {
     }
     // To everyone: the world lives on the host's machine, and a guest's rest saves it too.
     cx.emit_all(EventKind::Rest);
-}
-
-/// A newly known spell takes the first empty bar slot, once.
-pub fn bind_learned(p: &mut PlayerState, spell: SpellId) {
-    if p.bar.contains(&Some(BarSlot::Spell(spell))) {
-        return;
-    }
-    if let Some(slot) = p.bar.iter_mut().find(|s| s.is_none()) {
-        *slot = Some(BarSlot::Spell(spell));
-    }
-}
-
-/// Growth is the world's, not hers: one of them touches the orb and all of them know the spell,
-/// including whoever is away and whoever sits down next month. Books are derived from growth.
-pub fn teach(state: &mut GameState, events: &mut Vec<Event>, spell: SpellId) -> bool {
-    if state.growth.spells.contains(&spell) {
-        return false;
-    }
-    state.growth.spells.push(spell);
-    for p in &mut state.players {
-        bind_learned(p, spell);
-    }
-    events.push(Event { to: None, in_zone: None, kind: EventKind::Learn(spell) });
-    events.push(Event { to: None, in_zone: None, kind: EventKind::Toast(ToastKind::Learned(spell)) });
-    true
 }
 
 /// Growth by finding: `id` is the jar itself, so a reward paid to four seats is eaten once.
@@ -114,23 +88,15 @@ pub fn grow(cx: &mut Ctx<'_>, stat: Stat, amount: i16, id: Sym) -> bool {
 
 /// `WorldOp::Grow` landing: every body gains it; the new health is hers at once.
 pub fn grow_bodies(state: &mut GameState, stat: Stat, amount: i16) {
+    let now = state.tick;
     let GameState { players, zones, .. } = state;
     for p in players.iter_mut() {
-        let body = match p.parked.as_deref_mut() {
-            Some(b) => Some(b),
-            None => zones[p.zone.index()].as_deref_mut().and_then(|z| z.unit_mut(p.unit)),
-        };
-        let Some(u) = body else { continue };
-        match stat {
-            Stat::Strength => u.strength = u.strength.saturating_add_signed(amount),
-            Stat::Spirit => u.spirit = u.spirit.saturating_add_signed(amount),
-        }
-        if u.alive {
-            let gain = jane_core::Milli::from_points(i32::from(amount) * crate::tuning::HP_PER_STRENGTH);
-            match stat {
-                Stat::Strength => u.hp = jane_core::Milli((u.hp.0 + gain.0).min(max_hp(u).0)),
-                Stat::Spirit => u.mp = jane_core::Milli((u.mp.0 + gain.0).min(max_mp(u).0)),
-            }
+        if let Some(u) = p.parked.as_deref_mut() {
+            crate::units::grow_body(u, stat, amount);
+        } else if let Some(u) = zones[p.zone.index()].as_deref_mut().and_then(|z| z.unit_mut(p.unit)) {
+            // What regen she was owed is hers first, so the gain lands on her health as it is.
+            crate::life::pay_regen(u, now);
+            crate::units::grow_body(u, stat, amount);
         }
     }
 }

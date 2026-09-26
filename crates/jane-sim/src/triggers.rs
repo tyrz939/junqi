@@ -18,7 +18,7 @@ use jane_core::{Rect, Vec2};
 
 use crate::actions::{Subject, conditions_met, conds, run_actions};
 use crate::ctx::Ctx;
-use crate::event::{EventKind, PropChange, Sfx};
+use crate::event::{EventKind, PropChange, SfxKind};
 use crate::ids::{PropIx, Seat};
 use crate::interact::{footprint, spawn_of};
 use crate::tuning::PLATE_PERIOD;
@@ -129,7 +129,7 @@ fn step_plates(cx: &mut Ctx<'_>) {
         let (pid, cell) = (p.id, p.cell);
         let at = Vec2::centre(i32::from(cell.x), i32::from(cell.y));
         cx.emit(EventKind::Prop { prop: pid, change: PropChange::Switch });
-        cx.emit(EventKind::Sfx { kind: if pressed { Sfx::PlateDown } else { Sfx::PlateUp }, at });
+        cx.emit(EventKind::Sfx { kind: if pressed { SfxKind::PlateDown } else { SfxKind::PlateUp }, at });
         let bp = cx.bp;
         let s = spawn_of(bp, &cx.zone.props[ix as usize]);
         let list = if pressed { s.and_then(|s| s.use_list) } else { s.and_then(|s| s.release) };

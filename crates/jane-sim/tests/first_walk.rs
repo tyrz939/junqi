@@ -1,11 +1,9 @@
-//! The first minutes, played headless on the real seed, as far as they need no fighting.
-//! Carries the non-combat part of `jane/test/sim.test.ts` "the first five minutes, played
-//! headless" and `jane/test/bot.ts`'s walk: in at the yard gate; the stoop hands the letter in;
-//! the dog gives the quest; the house door is locked until the dog gives the key; the kitchen,
-//! the note, the pantry chest, the bench's potion, the orb; and back out of the front door.
-//!
-//! The skeleton in the yard is the combat unit's: its kill is written into the quest log as the
-//! kill hook would (`hooks::on_kill`), and the walk goes on from there.
+//! The first minutes, played headless on the real seed. Carries `jane/test/sim.test.ts` "the
+//! first five minutes, played headless" and `jane/test/bot.ts`'s walk: in at the yard gate; the
+//! stoop hands the letter in; the dog gives the quest; the house door is locked until the dog
+//! gives the key; the skeleton put down with the bar's melee (it does not fight back until the ai
+//! lands; the kill counts through `hooks::quest_kill`); the key; the kitchen, the note, the pantry
+//! chest, the bench's potion, the orb; and back out of the front door.
 
 mod common;
 
@@ -57,9 +55,14 @@ fn letter_dog_key_kitchen_note_chest_bench_orb() {
     idle(&mut s, 2);
     assert_eq!(zone_of(&s), ZoneId::County);
 
-    // The skeleton is the combat unit's; its kill lands in the log as the kill hook writes it.
-    let q = s.state_mut().quests.active.iter_mut().find(|p| p.quest == given).unwrap();
-    q.counts[0] = 1;
+    // The thing in the yard: walk up to it and put it down (it does not fight back until the ai
+    // lands, and the kill counts through `hooks::quest_kill`).
+    let bones = unit(&s, "yard_skeleton");
+    assert!(walk_to(&mut s, bones.pos, jane_core::Fx::from_px(20)));
+    assert!(fight(&mut s, "yard_skeleton"));
+    assert!(me(&s).alive);
+    let q = s.state().quests.active.iter().find(|p| p.quest == given).unwrap();
+    assert_eq!(q.counts[0], 1, "the kill is counted");
 
     assert!(walk_to_unit(&mut s, "dog"));
     cmd(&mut s, Command::Use);

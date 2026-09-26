@@ -104,6 +104,27 @@ pub fn new_unit(
     u
 }
 
+/// Growth by finding lands on a body: the stat rises, and the health or mana it brings is hers
+/// at once if she is alive (finding a jar at 10 hp should feel like finding a jar).
+pub fn grow_body(u: &mut Unit, stat: jane_core::action::Stat, amount: i16) {
+    use jane_core::action::Stat;
+    let gain = Milli::from_points(i32::from(amount) * HP_PER_STRENGTH);
+    match stat {
+        Stat::Strength => {
+            u.strength = u.strength.saturating_add_signed(amount);
+            if u.alive {
+                u.hp = Milli((u.hp.0 + gain.0).min(max_hp(u).0));
+            }
+        }
+        Stat::Spirit => {
+            u.spirit = u.spirit.saturating_add_signed(amount);
+            if u.alive {
+                u.mp = Milli((u.mp.0 + gain.0).min(max_mp(u).0));
+            }
+        }
+    }
+}
+
 /// A patrol from blueprint waypoints (cell centres); `None` for fewer than two.
 pub fn patrol_of(points: &[jane_core::blueprint::Waypoint]) -> Option<Box<Patrol>> {
     (points.len() > 1).then(|| {

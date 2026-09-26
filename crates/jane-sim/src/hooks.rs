@@ -1,33 +1,37 @@
-//! Where combat reaches the world verbs. The combat unit calls these by name and owns none of
-//! what they do: a world spell landing on a prop, a bolt's school touching a prop, a unit dying.
+//! Where combat calls into systems other units own (PORT.md §8: two agents never own one file,
+//! so the seams are here, small and named). The signature is the contract; each body hands the
+//! call to the module that owns what it does. Nothing else in combat reaches into those systems.
 //!
-//! | Hook | Called by | Does |
+//! | Hook | Owner | Called from |
 //! | --- | --- | --- |
-//! | [`on_world_spell`] | a `World` spell cast (`combat.ts tryCast`, kind `world`) | finds the prop (or takes the one given), pays its `needs`, switches it on, runs its list |
-//! | [`on_school_touch`] | a bolt ending ([`crate::interact::school_touch`] finds the props) | switches one answering prop on, runs its list |
-//! | [`on_kill`] | the flush, when a unit dies | kill counts for active quests; the journal's Person Dead |
+//! | [`world_verb`] | interact (`interact.ts worldVerb`) | a `World` spell's cast |
+//! | [`school_touch`] | interact (`interact.ts schoolTouch`) | a bolt's end (step 8) |
+//! | [`use_item`] | inventory (`inventory.ts useItem`) | `Command::Bar` on an item slot |
+//! | [`quest_kill`] | quests (`quests.ts onUnitKilled`) | a kill by one of the party (step 10) |
+//! | [`unit_died`] | journal, living world (§3.7, §4.6.c) | every creature's death (step 10) |
+//! | [`respawn_allowed`] | living world (§4.6.c ecology) | a corpse due to stand up (step 12) |
+//! | [`put_down_dead`] | interact (`sim.ts revivePlayer`, `moveProp`) | a seat waking (step 6) |
+//! | [`reset_lock_ins`] | triggers (`sim.ts revivePlayer`, trigger `reset`) | a seat waking (step 6) |
 
 use jane_core::action::School;
-use jane_core::{Sym, UnitDefId};
+use jane_core::{Cell, Fx, ItemId, UnitDefId, Vec2};
 use jane_data::WorldSpell;
 
-use crate::actions::{Subject, run_actions};
 use crate::ctx::Ctx;
-use crate::event::{EventKind, PropChange, ToastKind};
-use crate::ids::{PropIx, Seat, UnitId};
-use crate::interact::{spawn_of, world_spell_on, world_spell_target};
-use crate::journal;
-use crate::quests;
+use crate::event::{EventKind, ToastKind};
+use crate::ids::{Seat, UnitId};
+use crate::interact::{world_spell_on, world_spell_target};
 use crate::state::{FactKey, Source};
+use crate::tuning::SPAWN_RADIUS;
+use crate::{interact, inventory, journal, quests, triggers};
 
-/// A world spell (Repair, Grow) cast by `caster`. With `prop`, on that prop if it answers;
-/// without, on the nearest prop within 2 m that answers (Grow passes over anything in the dark).
-/// Returns whether the cast was valid: an invalid one costs nothing (2020), and says why.
-pub fn on_world_spell(cx: &mut Ctx<'_>, caster: UnitId, verb: WorldSpell, prop: Option<PropIx>) -> bool {
-    let (target, shaded) = match prop {
-        Some(ix) => (Some(ix), false),
-        None => world_spell_target(cx, caster, verb),
-    };
+/// A `World` spell (Repair, Grow) does its verb to the prop in front of `caster`: the nearest
+/// unused one within 2 m that answers it (Grow passes over anything standing in the dark), paying
+/// what the prop `needs` from her bag, then marking it used and on and running its `use` list.
+/// Returns whether it found something to do; `false` makes the cast fail and cost nothing, and
+/// says why ("Nothing here to repair", "Nothing grows without light", "Needs 2x Rock").
+pub fn world_verb(cx: &mut Ctx<'_>, caster: UnitId, verb: WorldSpell) -> bool {
+    let (target, shaded) = world_spell_target(cx, caster, verb);
     let Some(ix) = target else {
         let why = match verb {
             WorldSpell::Repair => ToastKind::NothingToRepair,
@@ -40,31 +44,65 @@ pub fn on_world_spell(cx: &mut Ctx<'_>, caster: UnitId, verb: WorldSpell, prop: 
     world_spell_on(cx, caster, ix)
 }
 
-/// A bolt of `school` touched prop `ix` (it answers the school and is not on): it switches on,
-/// is used, and runs its list with `from` as the subject.
-pub fn on_school_touch(cx: &mut Ctx<'_>, _school: School, ix: PropIx, from: Option<UnitId>) {
-    let p = &mut cx.zone.props[ix as usize];
-    if p.hidden || p.on {
-        return;
-    }
-    p.on = true;
-    p.used = true;
-    let pid = p.id;
-    let bp = cx.bp;
-    if let Some(list) = spawn_of(bp, &cx.zone.props[ix as usize]).and_then(|s| s.use_list) {
-        run_actions(cx, list, from.map_or(Subject::None, Subject::Unit));
-    }
-    cx.emit(EventKind::Prop { prop: pid, change: PropChange::Switch });
+/// A bolt of `school` ended at `at`: every unhidden prop not yet on that answers the school and
+/// whose middle is within `touch` is switched on and used, and its `use` list runs for `from`.
+pub fn school_touch(cx: &mut Ctx<'_>, school: School, at: Vec2, from: Option<UnitId>, touch: Fx) {
+    interact::school_touch(cx, school, at, touch, from);
 }
 
-/// A unit of `victim_def` (keyed `victim_key`) died, by `killer_seat`'s hand if a seat's. Every
-/// active quest that counts it counts it, whoever made the kill (a friend's kill counts), and a
-/// named victim is known dead.
-pub fn on_kill(cx: &mut Ctx<'_>, _killer_seat: Option<Seat>, victim_def: UnitDefId, victim_key: Option<Sym>) {
-    quests::on_kill(cx, victim_def);
-    if let Some(k) = victim_key {
+/// A bar slot holding an item was pressed: the item is used as `Command::Item` uses it.
+pub fn use_item(cx: &mut Ctx<'_>, seat: Seat, item: ItemId) {
+    let before = cx.actor.replace(seat);
+    inventory::use_item(cx, item);
+    cx.actor = before;
+}
+
+/// One of the party (`seat`) killed a unit of `def`: kill requirements of the quests in the log
+/// count, the progress is said to everyone.
+pub fn quest_kill(cx: &mut Ctx<'_>, _seat: Seat, def: UnitDefId) {
+    quests::on_kill(cx, def);
+}
+
+/// A creature (not a seat's body) died, killed by `slayer` if one of the party: a named one is
+/// known dead (§3.7). The journal's `Danger AttackedIn` and the ecology's pressure wait on areas
+/// in the blueprint and the living-world unit.
+pub fn unit_died(cx: &mut Ctx<'_>, unit: UnitId, _slayer: Option<Seat>) {
+    if let Some(k) = cx.zone.unit(unit).and_then(|u| u.key) {
         journal::learn(cx, FactKey::Person(k), Source::Dead);
     }
+}
+
+/// May this corpse stand up now? The ecology says no while its def is at its area's `cap` or the
+/// pressure is over the row's `hold` line, and pushes it back onto `sleeping_due` at the next
+/// hour itself.
+///
+/// Placeholder (the living-world unit's): always.
+pub fn respawn_allowed(cx: &mut Ctx<'_>, unit: UnitId) -> bool {
+    let _ = (cx, unit);
+    true
+}
+
+/// A seat wakes: what her body carried when she fell stays where she fell, on the nearest free
+/// cell by her body (else where it was lifted from), solid as its row says. `revive_player`
+/// clears `carrying` after.
+pub fn put_down_dead(cx: &mut Ctx<'_>, _seat: Seat, body: UnitId) {
+    let Some(u) = cx.zone.unit(body) else { return };
+    let Some(pid) = u.carrying else { return };
+    let (x, y) = u.pos.cell();
+    let Some(pix) = cx.zone.prop_ix(pid) else { return };
+    if let Some((fx, fy)) = cx.rt.grid.nearest_free(x, y, SPAWN_RADIUS, None) {
+        cx.rt.move_prop(cx.zone, pix, Cell::new(fx as u16, fy as u16));
+    }
+    let p = &mut cx.zone.props[pix as usize];
+    p.solid = cx.cat.story.prop(p.def).solid;
+    cx.rt.touch_prop(cx.zone, pix);
+}
+
+/// A seat wakes: every fired trigger with a `reset` in her zone undoes itself and re-arms, unless
+/// a friend still alive stands in its rect (so a death never leaves a gate shut in her face, and
+/// with company a lock-in holds while someone is still inside).
+pub fn reset_lock_ins(cx: &mut Ctx<'_>, seat: Seat, _body: UnitId) {
+    triggers::reset_on_death(cx, seat);
 }
 
 /// The hooks from the combat unit's side, with a context made the way the step makes one
@@ -161,16 +199,16 @@ mod tests {
             bp.props.push(p);
         });
         s.drain_events();
-        assert!(!in_ctx(&mut s, |cx, me| on_world_spell(cx, me, WorldSpell::Repair, None)));
+        assert!(!in_ctx(&mut s, |cx, me| world_verb(cx, me, WorldSpell::Repair)));
         assert!(toasts(&mut s).contains(&ToastKind::Needs { item: item("rock"), qty: 2 }));
         crate::bag::bag_add(&mut s.state.players[0].bag[..], item("rock"), 3);
-        assert!(in_ctx(&mut s, |cx, me| on_world_spell(cx, me, WorldSpell::Repair, None)));
+        assert!(in_ctx(&mut s, |cx, me| world_verb(cx, me, WorldSpell::Repair)));
         assert_eq!(crate::bag::bag_count(&s.state.players[0].bag[..], item("rock")), 1);
         let p = &s.state.zone(ZoneId::County).unwrap().props[0];
         assert!(p.used && p.on);
         assert_eq!(flag(&s, "mended"), 1);
         // Used: there is nothing left to repair.
-        assert!(!in_ctx(&mut s, |cx, me| on_world_spell(cx, me, WorldSpell::Repair, None)));
+        assert!(!in_ctx(&mut s, |cx, me| world_verb(cx, me, WorldSpell::Repair)));
         assert!(toasts(&mut s).contains(&ToastKind::NothingToRepair));
     }
 
@@ -189,12 +227,12 @@ mod tests {
             bp.props.push(torch);
         });
         s.drain_events();
-        assert!(!in_ctx(&mut s, |cx, me| on_world_spell(cx, me, WorldSpell::Grow, None)));
+        assert!(!in_ctx(&mut s, |cx, me| world_verb(cx, me, WorldSpell::Grow)));
         assert!(toasts(&mut s).contains(&ToastKind::NothingGrowsWithoutLight));
         assert_eq!(flag(&s, "grown"), 0);
         // A torch lit beside it.
         s.state.zone_mut(ZoneId::County).unwrap().props[1].hidden = false;
-        assert!(in_ctx(&mut s, |cx, me| on_world_spell(cx, me, WorldSpell::Grow, None)));
+        assert!(in_ctx(&mut s, |cx, me| world_verb(cx, me, WorldSpell::Grow)));
         assert_eq!(flag(&s, "grown"), 1);
         assert!(s.state.zone(ZoneId::County).unwrap().props[0].on, "it is on, and its own light shows");
     }
@@ -211,10 +249,10 @@ mod tests {
         });
         let at = jane_core::Vec2::centre(20, 20);
         let near = jane_core::Fx::from_px(14);
-        in_ctx(&mut s, |cx, me| crate::interact::school_touch(cx, School::Fire, at, near, Some(me)));
+        in_ctx(&mut s, |cx, me| school_touch(cx, School::Fire, at, Some(me), near));
         assert_eq!(flag(&s, "lit"), 0, "fire does not light a frost torch");
-        in_ctx(&mut s, |cx, me| crate::interact::school_touch(cx, School::Frost, at, near, Some(me)));
-        in_ctx(&mut s, |cx, me| crate::interact::school_touch(cx, School::Frost, at, near, Some(me)));
+        in_ctx(&mut s, |cx, me| school_touch(cx, School::Frost, at, Some(me), near));
+        in_ctx(&mut s, |cx, me| school_touch(cx, School::Frost, at, Some(me), near));
         assert_eq!(flag(&s, "lit"), 1, "once on, a second bolt does nothing");
         let p = &s.state.zone(ZoneId::County).unwrap().props[0];
         assert!(p.on && p.used);
@@ -227,23 +265,21 @@ mod tests {
         let skeleton = cat.combat.unit_id("skeleton").unwrap();
         let q = cat.story.quest_id("defeat_skeleton").unwrap();
         // Not in the log: nothing counts.
-        in_ctx(&mut s, |cx, _| on_kill(cx, Some(Seat(0)), skeleton, None));
+        in_ctx(&mut s, |cx, _| quest_kill(cx, Seat(0), skeleton));
         in_ctx(&mut s, |cx, _| {
             crate::quests::give(cx, q);
         });
         assert!(!crate::quests::ready(&s.state, q));
         s.drain_events();
-        let key = s.state.syms.find("dog").unwrap();
-        in_ctx(&mut s, |cx, _| on_kill(cx, None, skeleton, Some(key)));
-        assert!(crate::quests::ready(&s.state, q), "a friend's kill (or the world's) counts");
+        in_ctx(&mut s, |cx, _| quest_kill(cx, Seat(0), skeleton));
+        assert!(crate::quests::ready(&s.state, q));
         let ev = s.drain_events().to_vec();
         assert!(
             ev.iter().any(|e| e.kind == EventKind::Toast(ToastKind::KillProgress { quest: q, req: 0, n: 1, of: 1 }))
         );
         assert!(ev.iter().any(|e| e.kind == EventKind::Quest { quest: q, change: crate::event::QuestChange::Ready }));
-        assert_eq!(crate::journal::known(&s.state, FactKey::Person(key)).map(|k| k.how), Some(Source::Dead));
         // Counted to its quantity and no further.
-        in_ctx(&mut s, |cx, _| on_kill(cx, None, skeleton, None));
+        in_ctx(&mut s, |cx, _| quest_kill(cx, Seat(0), skeleton));
         assert_eq!(crate::quests::active(&s.state, q).unwrap().counts[0], 1);
     }
 
@@ -268,7 +304,7 @@ mod tests {
         s.rebuild_runtimes();
         s.step(&crate::input::StepInput::IDLE);
         assert!(s.state.zone(ZoneId::County).unwrap().props[0].locked, "the lock-in fired");
-        in_ctx(&mut s, |cx, _| crate::triggers::reset_on_death(cx, Seat(0)));
+        in_ctx(&mut s, |cx, me| reset_lock_ins(cx, Seat(0), me));
         let z = s.state.zone(ZoneId::County).unwrap();
         assert!(!z.props[0].locked && !z.triggers.fired.get(0), "undone and re-armed");
     }

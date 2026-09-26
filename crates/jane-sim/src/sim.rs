@@ -254,10 +254,14 @@ impl Sim {
                         });
                     }
                 }
-                WorldOp::Teach(spell) => {
-                    crate::verbs::teach(&mut self.state, &mut self.events, spell);
-                }
                 WorldOp::Grow { stat, amount } => crate::verbs::grow_bodies(&mut self.state, stat, amount),
+                WorldOp::Teach(spell) => {
+                    if crate::combat::teach(&mut self.state, spell) {
+                        for kind in crate::combat::learned_events(spell) {
+                            self.events.push(Event { to: None, in_zone: None, kind });
+                        }
+                    }
+                }
             }
         }
     }
@@ -289,10 +293,13 @@ impl Sim {
         // 0
         debug_assert!(input.commands.is_sorted_by_key(|c| (c.seat, c.seq)), "commands in (seat, seq) order");
         for c in input.commands {
-            self.command(c);
+            self.command(c, &input.frames);
         }
         // 1
         if self.frozen() {
+            // Only the console can deal a blow while she reads alone; a step that does not run
+            // does not land it.
+            self.clear_hits();
             self.drop_empty();
             self.state.frame += 1;
             return Stepped { ran: false };
@@ -314,8 +321,25 @@ impl Sim {
         }
         // 15
         self.drop_empty();
+        // A blow queued on a zone that did not tick this step (its last seat left it this frame)
+        // is dropped with the room: the queue is empty between steps.
+        self.clear_hits();
         self.state.frame += 1;
         Stepped { ran: true }
+    }
+
+    fn clear_hits(&mut self) {
+        for q in &mut self.scratch.hits {
+            q.clear();
+        }
+    }
+
+    /// Queue a blow on a unit in zone `z`; it lands at the next step's flush. Tests and tools
+    /// only (the console's `Dev` commands are how a tape deals one): nothing here is in a tape.
+    /// The queue lives in the scratch, so [`rebuild_runtimes`](Self::rebuild_runtimes) empties
+    /// it: queue after any edit that rebuilds.
+    pub fn queue_hit(&mut self, z: ZoneId, hit: crate::combat::Hit) {
+        self.scratch.hits[z.index()].push(hit);
     }
 
     fn step_clock(&mut self) {
@@ -358,8 +382,9 @@ impl Sim {
             let w = Watchers::of(cx.world, z, cx.zone);
             step_ring(cx.zone, cx.rt, &w, false, &mut cx.scratch.props);
 
-            // 5 catch-up: the combat and status units (`pay_regen`, missed pulses, phase reset
-            // for units that woke this tick). Nothing yet.
+            // 5 catch-up: every awake unit's regen paid to now (a unit that woke this tick
+            // catches up here, its phase reset with it); its missed pulses land at step 9.
+            crate::life::pay_awake(cx);
 
             // Where everything awake stood before anyone moved (View's `prev_pos`).
             cx.rt.prev_pos.clear();
@@ -382,15 +407,22 @@ impl Sim {
             // 7 controllers: the ai and snake units, over the awake_units snapshot. A unit under
             // orders follows them and minds nothing else (`Send`).
             orders::step_orders(cx);
-            // 8 projectiles and grounds: the combat unit.
-            // 9 statuses: the status unit.
-            // 10 flush x2: the combat unit.
+
+            // 8 projectiles and grounds
+            crate::flight::step_projectiles(cx);
+            crate::flight::step_grounds(cx);
+            // 9 statuses
+            crate::status::step_statuses(cx);
+            // 10 flush: the only place a blow changes hp
+            crate::flush::flush(cx);
 
             // 11 triggers, and plates every 6 ticks
             triggers::step_triggers(cx);
 
-            // 12 housekeeping: drops expire (loot unit); prop flags are re-stamped over what
-            // changed; the fills still owed land if their rect is clear; fog every 10.
+            // 12 housekeeping: drops expire, corpses due stand up; prop flags are re-stamped over
+            // what changed; the fills still owed land if their rect is clear; fog every 10.
+            crate::loot::step_drops(cx);
+            crate::life::respawn_due(cx);
             cx.rt.flush_prop_flags(cx.zone, &mut cx.scratch.props);
             clear::step_pending_fill(cx);
             if cx.world.tick.0 % FOG_EVERY == 0 {
@@ -405,17 +437,19 @@ impl Sim {
 fn tick_player(cx: &mut Ctx<'_>, seat: usize, frame: InputFrame) {
     let tick = cx.world.tick;
     let p = &cx.world.players[seat];
-    let (busy, god, respawning, body) = (p.dialogue.is_some(), p.god, p.respawn_at.is_some(), p.unit);
+    let (busy, god, respawn_at, body) = (p.dialogue.is_some(), p.god, p.respawn_at, p.unit);
     let Some(ix) = cx.zone.unit_ix(body) else { return };
     if !cx.zone.units[ix].alive {
-        // The combat unit stands her back up at `respawn_at`.
-        if !respawning {
-            cx.world.players[seat].respawn_at = Some(tick.after(PLAYER_RESPAWN));
+        // She lies until `respawn_at` (the flush set it when she fell), then wakes.
+        match respawn_at {
+            None => cx.world.players[seat].respawn_at = Some(tick.after(PLAYER_RESPAWN)),
+            Some(at) if tick >= at => crate::life::revive_player(cx, Seat(seat as u8)),
+            Some(_) => {}
         }
         return;
     }
     // With company the world does not stop for a conversation, but she does.
-    let stunned = false; // the status unit
+    let stunned = crate::status::is_stunned(&cx.zone.units[ix], tick);
     let mag = if busy { 0 } else { frame.mv_mag.min(127) };
     let wants_move = mag > MOVE_DEADZONE && tick >= cx.zone.units[ix].stop_until && !stunned;
     let held = frame.use_held && !busy;
@@ -434,8 +468,8 @@ fn tick_player(cx: &mut Ctx<'_>, seat: usize, frame: InputFrame) {
     if wants_move && !braced {
         let def = def_of(u);
         sprinting = frame.sprint && !u.energy_locked && u.energy.0 > 0 && u.carrying.is_none();
-        // The status unit multiplies in the slows (`speedFactor`).
         let mut speed = if sprinting { def.run.0 } else { def.walk.0 };
+        speed = speed * crate::status::speed_factor(u, tick) / 1000;
         if god {
             speed *= 2;
         }

@@ -12,7 +12,7 @@
 //! first time (Place Seen, the zone's name); a dialogue line's `tells` (Place Named, Person
 //! Talked, Thing Seen, Claim Told, Route and Danger Told as claims are, Rumour Heard); talking
 //! to someone with a name (Person Met); a `Read` of a content text (Claim Read); a kill of a
-//! named unit (Person Dead, through `hooks::on_kill`); a chest, a pick-up, a reward or a craft
+//! named unit (Person Dead, through `hooks::unit_died`); a chest, a pick-up, a reward or a craft
 //! (Thing Held); `Travel` and a door (Route Walked, from the mark she came in by to the one she
 //! arrives at).
 //!

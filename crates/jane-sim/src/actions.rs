@@ -2,10 +2,10 @@
 //! triggers, quest rewards, item use, unit death, clock rows and the console all speak it. The
 //! match is exhaustive, so a new verb is a compile error here.
 //!
-//! Every verb but the combat unit's (`Aggro`, `Strike`, `Status`, `Heal`, no-ops until it lands)
-//! is handled here or in the module it names. Player-scoped verbs (`Give`, `Take`, `Rest`,
-//! `Travel`, `Talk`, `Read`) do nothing with `actor == None`. A name that does not resolve is a
-//! no-op plus `EventKind::Missing`.
+//! Every verb is handled here or in the module it names; combat's (`Learn`, `Strike`, `Status`,
+//! `Heal`) are in `combat.rs`. Player-scoped verbs (`Give`, `Take`, `Rest`, `Travel`, `Talk`,
+//! `Read`) do nothing with `actor == None`. A name that does not resolve is a no-op plus
+//! `EventKind::Missing`.
 
 use jane_core::action::{FlagOp, FlagTest};
 use jane_core::{Action, Cond, Condition, CondsRef, ListRef, TextRef, Vec2};
@@ -167,11 +167,6 @@ pub fn run_action(cx: &mut Ctx<'_>, a: &Action, subject: Subject) {
                 inventory::remove(cx, seat, s.item, s.qty);
             }
         }
-        Action::Learn(spell) => {
-            if cx.actor.is_some() {
-                verbs::teach(cx.world, cx.events, spell);
-            }
-        }
         Action::Toast(t) => cx.emit(EventKind::Toast(ToastKind::Text(t))),
         Action::Read(t) => {
             // A read with nobody to read it is a toast.
@@ -309,8 +304,43 @@ pub fn run_action(cx: &mut Ctx<'_>, a: &Action, subject: Subject) {
                 }
             }
         }
-        // The combat unit's verbs, no-ops until it lands.
-        Action::Aggro(_) | Action::Strike { .. } | Action::Status(_) | Action::Heal(_) => {}
+        Action::Aggro(k) => aggro(cx, k),
+        // The combat unit's (combat.rs).
+        Action::Learn(spell) => crate::combat::learn_verb(cx, spell),
+        Action::Strike { rect, amount, school, effect, hits_friends } => {
+            crate::combat::strike_verb(cx, rect, amount, school, effect, hits_friends, subject);
+        }
+        Action::Status(effect) => crate::combat::status_verb(cx, effect, subject),
+        Action::Heal(heal) => crate::combat::heal_verb(cx, heal, subject),
+    }
+}
+
+/// `Aggro`: the unit by that name turns on the actor (else the first living seat here), and is
+/// awake from step 13 on (`actions.ts aggro`).
+fn aggro(cx: &mut Ctx<'_>, k: jane_core::Key) {
+    let s = cx.sym(k);
+    let Some(&id) = cx.rt.unit_names.get(&s) else {
+        cx.emit(EventKind::Missing(s));
+        return;
+    };
+    let z = cx.zone.id;
+    let victim = cx.actor_unit().or_else(|| {
+        cx.world
+            .players
+            .iter()
+            .filter(|p| p.connected && p.zone == z)
+            .map(|p| p.unit)
+            .find(|&b| cx.zone.unit(b).is_some_and(|u| u.alive))
+    });
+    let Some(victim) = victim else { return };
+    let Some(u) = cx.zone.unit_mut(id) else { return };
+    if !u.alive {
+        return;
+    }
+    u.target = Some(victim);
+    u.combat = crate::state::CombatState::Combat;
+    if !u.awake && !cx.ops.wake.contains(&id) {
+        cx.ops.wake.push(id);
     }
 }
 
