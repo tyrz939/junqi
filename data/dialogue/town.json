@@ -1071,9 +1071,16 @@
   },
   "traveller": {
     "speaker": "A Woman with a Case",
-    "start": [{ "when": [{ "if": "flag", "flag": "talked_traveller" }], "node": "again" }, { "node": "first" }],
+    "start": [
+      { "when": [{ "if": "flag", "flag": "mornings", "min": 1 }, { "if": "flag", "flag": "talked_traveller", "min": 2 }], "node": "again" },
+      { "when": [{ "if": "flag", "flag": "mornings", "min": 1 }], "node": "first" },
+      { "when": [{ "if": "flag", "flag": "talked_traveller" }], "node": "sunday_again" },
+      { "node": "sunday" }
+    ],
     "nodes": {
-      "first": { "lines": ["Is it Sunday? I was told the train comes on Sunday."], "actions": [{ "do": "flag", "flag": "talked_traveller" }] },
+      "sunday": { "lines": ["Has the train been? I was told it comes on Sunday, and it is Sunday. I had my case packed by dinner."], "actions": [{ "do": "flag", "flag": "talked_traveller", "value": 1 }] },
+      "sunday_again": { "lines": ["It's too near the lamps to walk down to the Halt now. There'll be another one."] },
+      "first": { "lines": ["Is it Sunday? I was told the train comes on Sunday."], "actions": [{ "do": "flag", "flag": "talked_traveller", "value": 2 }] },
       "again": { "lines": ["I have been here since Sunday. It has not been Sunday since."] }
     }
   },

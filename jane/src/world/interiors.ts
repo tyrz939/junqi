@@ -152,8 +152,9 @@ export function buildCellar(seed: number, attempt: number): Blueprint {
   );
   k.pile({ cx: storage.cx + 1, cy: storage.cy + 5, w: storage.w - 2, h: 5 }, "crate", 3);
 
-  // The study. 2020's sketch put an electricity orb here; that spell is a later door.
-  k.prop({ def: "table", cx: study.cx + 6, cy: study.cy + 4 }, 3, 2);
+  // The study. 2020's sketch put an electricity orb here; that spell is a later door. The desk
+  // has a clean ring in its dust where the stand stood, which the Factory's orb pays off.
+  k.prop({ key: "study_desk", def: "study_desk", cx: study.cx + 6, cy: study.cy + 4, talk: "study_desk" }, 3, 2);
   k.prop({ def: "shelf", cx: study.cx + 2, cy: study.cy }, 3, 1);
   k.prop({ def: "shelf", cx: study.cx + 10, cy: study.cy }, 3, 1);
   const lone = k.spot(study, 1, 1, 1);

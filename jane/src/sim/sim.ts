@@ -489,10 +489,18 @@ export class Sim implements World {
   private stepDayOnly(w: ZoneCtx, force = false): void {
     const night = isNight(this.state);
     const watchers = force ? [] : this.party.units();
+    const hour = Math.floor(this.state.clock / TICKS_PER_HOUR) % 24;
+    const inSpan = (h: number, from: number, to: number): boolean => (from < to ? h >= from && h < to : from > to ? h >= from || h < to : true);
     for (const u of w.zone.units) {
       const def = this.catalog.units[u.def];
-      if (!def.dayOnly && !def.nightOnly) continue;
-      const away = def.dayOnly ? night && (!def.dayOnlyAfter || this.state.quests.done.includes(def.dayOnlyAfter)) : !night;
+      if (!def.dayOnly && !def.nightOnly && !def.schedule) continue;
+      const slot = def.schedule?.find((r) => inSpan(hour, r.from, r.to));
+      if (def.schedule && !slot) continue;
+      const away = slot
+        ? !!(slot.inside || slot.absent)
+        : def.dayOnly
+          ? night && (!def.dayOnlyAfter || this.state.quests.done.includes(def.dayOnlyAfter))
+          : !night;
       if (u.hidden === away) continue;
       // Never vanish or appear while any of them is looking straight at it.
       if (watchers.some((p) => w.rt.units.has(p.id) && Math.abs(u.x - p.x) < 120 && Math.abs(u.y - p.y) < 80)) continue;

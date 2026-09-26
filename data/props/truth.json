@@ -2,6 +2,8 @@
   "garden_stone": { "name": "Stone", "sprite": "garden_stone", "w": 1, "h": 1, "solid": true, "blockLos": false, "push": true },
   "step_stone": { "name": "Loose Step", "sprite": "step_stone", "w": 1, "h": 1, "solid": true, "blockLos": false, "push": true },
   "dinner_tin": { "name": "Dinner Tin", "sprite": "dinner_tin", "w": 1, "h": 1, "solid": false, "blockLos": false, "flat": true },
+  "dog_bowl": { "name": "Dog's Bowl", "sprite": "dinner_tin", "w": 1, "h": 1, "solid": false, "blockLos": false, "flat": true, "prompt": "Look" },
+  "study_desk": { "name": "Desk", "sprite": "table", "w": 3, "h": 2, "solid": true, "blockLos": false, "prompt": "Look" },
   "candle_ends": { "name": "Candle Ends", "sprite": "candle_ends", "w": 1, "h": 1, "solid": false, "blockLos": false, "flat": true, "prompt": "Look" },
   "pencil_marks": { "name": "Pencil Marks", "sprite": "pencil_marks", "w": 1, "h": 1, "solid": false, "blockLos": false, "flat": true, "prompt": "Look" },
   "chalk_mark": { "name": "Chalk Mark", "sprite": "chalk_mark", "w": 1, "h": 1, "solid": false, "blockLos": false, "flat": true, "prompt": "Look" },

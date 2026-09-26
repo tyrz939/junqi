@@ -78,7 +78,6 @@ export const station: Build = (k, _ox, oy) => {
   L.p("lamp_post", 14, 6);
   L.p("town_station_sign", 9, 8, { key: "station_board", talk: "station_board" });
   L.p("town_trolley", 12, 11);
-  L.u("traveller", "town_traveller", 9, 11, 0);
   L.rect("platform", 7, -14, 9, 28);
 
   // The office: nobody behind the glass. What was lost on the road is out in front of it.
@@ -146,6 +145,8 @@ export const julieYard: Build = (k, ox, oy) => {
   // Just inside the west gate: where the old small county began. Tests and the console still use it.
   L.mark("yard_gate", 3, gateY, 0);
   L.u("dog", "dog", doorX + 4, hy + hh + 2);
+  // The dog's bowl, labelled in the hand of the letter (STORY.md §3).
+  L.p("dog_bowl", doorX + 5, hy + hh + 3, { key: "dogs_bowl", talk: "dogs_bowl", label: "The dog's bowl" });
   L.p("lamp_post", doorX - 3, hy + hh);
   L.p("town_flower_bed", doorX + 4, hy + hh);
   // A fire in the yard: the first place to rest, before the house key and its bed.
@@ -402,6 +403,9 @@ export const town: Build = (k, ox, oy) => {
   L.p("town_pillar_box", 64, 22, { key: "pillar_box", talk: "pillar_box" });
   L.mark("post_office", 66, 23, 3);
   L.u("miss_dray", "town_postmistress", 63, 24, 1);
+  // Off the platform (WORLD.md §3.2: the Halt is never given a person): by the post office, where
+  // the letters go on Sunday's train.
+  L.u("traveller", "town_traveller", 67, 24, 2);
 
   // The Castle Arms: the one door on the street that opens, and a yard of tables in front of it.
   L.house(72, 12, 14, 10, { key: "arms_door", label: "The Castle Arms", to: { zone: "arms", mark: "entry" } }, 6, "door");
@@ -650,7 +654,7 @@ export const town: Build = (k, ox, oy) => {
   L.f(87, 64, 2, 4, Tile.Dirt);
   L.u("town_cat", "town_cat_ginger", 34, 46, 1, [
     [34, 48, 900],
-    [58, 48, 600],
+    [69, 48, 600],
   ]);
 
   return {
@@ -741,7 +745,11 @@ export const burialStair: Build = (k, ox, oy) => {
   const bx = box.cx + 5;
   const by = box.cy + 1;
   k.fill(bx, by, 9, 6, Tile.TempleWall);
-  k.prop({ key: "burial_door", def: "burial_mouth", cx: bx + 3, cy: by + 4, to: { zone: "burial", mark: "entry" } }, 3, 2);
+  k.prop(
+    { key: "burial_door", def: "burial_mouth", cx: bx + 3, cy: by + 4, locked: true, keyTag: "burial_gate", to: { zone: "burial", mark: "entry" }, label: "The stair under the stone" },
+    3,
+    2,
+  );
   k.mark("burial_mouth", bx + 4, by + 8, 1);
   k.prop({ key: "sign_burial", def: "sign", cx: bx + 10, cy: by + 7, talk: "sign_burial" }, 2, 1);
   const g = sideGates(box);

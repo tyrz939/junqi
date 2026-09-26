@@ -283,8 +283,9 @@ pub fn build_cellar(seed: u32, attempt: u8) -> Blueprint {
     let mut rng = dice(&b, Cellar::Crates);
     b.k.pile(&mut rng, Rect::new(storage.x + 1, storage.y + 5, storage.w - 2, 5), prop_def("crate"), 3);
 
-    // The study. 2020's sketch put an electricity orb here; that spell is a later door.
-    b.prop(None, "table", study.x + 6, study.y + 4);
+    // The study. 2020's sketch put an electricity orb here; that spell is a later door. The desk
+    // has a clean ring in its dust where the stand stood, which the Factory's orb pays off.
+    b.talker("study_desk", "study_desk", study.x + 6, study.y + 4, "study_desk");
     b.prop(None, "shelf", study.x + 2, study.y);
     b.prop(None, "shelf", study.x + 10, study.y);
     let mut rng = dice(&b, Cellar::LoneRat);

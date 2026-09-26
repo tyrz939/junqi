@@ -4,8 +4,8 @@
 // stalls, gardens, washing, and the people who live here, out of doors until the lamps. The door
 // facing the fire in the square is Mrs Allen's sister's: its door is a row in data/placements, at
 // the `allen_door` slot, and the fire stands straight out from it so the note is right about it.
-// The `washing_*` slots are where Mrs Marsh's washing came down. The ginger cat starts on its
-// beat in Cross Lane (the TypeScript stood it on the lamp at the square's corner).
+// The `washing_*` slots are where Mrs Marsh's washing came down. The ginger cat walks Cross Lane
+// along the south side of the square, lamp to lamp (the TypeScript stood it on the corner lamp).
 id      town
 box     100x70
 anchor  centre
@@ -108,7 +108,7 @@ things
 .....VV.........WW......XX.............cc.........................PP..........NN............UU......
 ...................................fff....fff......fff...fff....p...MM..QQ.......OO.bb..............
 ..................................l..................................l..QQ..........bb..............
-.......fff....bb..fff..........................................γ.........................fff..fff...
+.......fff....bb..fff..........................................γ...Ŧ.....................fff..fff...
 ..............bb..........mmmmm...............ñ.....................................................
 ........ζ................................ZZZZ.........ee.......gg.........................ε.........
 ...YY.........................η..........ZZZZ.........ee.......gg........TTT......TTT....aa.........
@@ -401,7 +401,8 @@ z prop door_talk door_cross_9 {"talk": "door_cross_9", "label": "No. 9, Cross La
 ȟ unit town_hen_brown - west [[32, 64, 160], [27, 66, 120]]
 Ȟ unit town_hen - east [[30, 67, 200], [35, 65, 140]]
 υ unit town_milkman milkman west [[55, 64, 600], [55, 49, 0], [66, 49, 300], [55, 49, 0]]
-ć unit town_cat_ginger town_cat south [[34, 48, 900], [58, 48, 600]]
+ć unit town_cat_ginger town_cat south [[34, 48, 900], [69, 48, 600]]
+Ŧ unit town_traveller traveller west
 φ mark back_lane east
 ĉ mark church_lane_top east
 ò mark orchard south
