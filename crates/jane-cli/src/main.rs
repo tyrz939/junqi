@@ -11,6 +11,7 @@ mod hash_cmd;
 mod play;
 mod scene;
 mod sheet_cmd;
+mod sheet_terrain;
 mod snap;
 mod view;
 
