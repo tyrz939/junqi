@@ -13,8 +13,11 @@ use jane_sim::replay::{Recorder, Tape, diff_states, input_at, verify_tape};
 use jane_sim::{Blueprints, Seat, Sim, StepInput};
 
 pub const USAGE: &str = "  play --model reader|rusher --seed N [--minutes M] [--dungeon ZONE] [--tape OUT.jrp]
+       [--snap OUT.png [--snap-every S]]
                                       a player model plays a seed headless from New Game (or a dungeon from
-                                      its door, the console setting up the kit): one line per milestone
+                                      its door, the console setting up the kit): one line per milestone;
+                                      --snap draws the world round her at the end (and every S seconds of
+                                      play as OUT-0001.png ...): the sim's view as a map, not the renderer
   play --fixture PATH                 write the bot-session hash fixture (seeds 1 to 3, both models, 5 min)
   replay verify FILE...               re-simulate each tape and hold it to its hash stream
   replay record --model M --seed N [--minutes M] [--dungeon ZONE] OUT.jrp
@@ -91,6 +94,9 @@ fn play(args: &[String], tape: Option<&str>) -> Result<(), String> {
     let t0 = Instant::now();
     let mut shown = 0;
     let mut played: u32 = 0;
+    let snap = flag(args, "--snap");
+    let every = num(args, "--snap-every", 0)? * 60;
+    let mut shots = 0;
     for _ in 0..frames {
         if bot.done() {
             break;
@@ -100,6 +106,14 @@ fn play(args: &[String], tape: Option<&str>) -> Result<(), String> {
         while shown < bot.log.len() {
             println!("{}", bot.log[shown].line());
             shown += 1;
+        }
+        if let Some(path) = snap
+            && every > 0
+            && played % every == 0
+        {
+            shots += 1;
+            let v = rec.view(Seat(0)).ok_or("seat 0 is not in the world")?;
+            write_snap(&v, &numbered(path, shots))?;
         }
     }
     let us = t0.elapsed().as_micros().max(1);
@@ -121,6 +135,9 @@ fn play(args: &[String], tape: Option<&str>) -> Result<(), String> {
     if let Some(why) = bot.stuck() {
         println!("last stuck: {why}");
     }
+    if let Some(path) = snap {
+        write_snap(&v, path)?;
+    }
     if let Some(path) = tape {
         let bytes = t.encode();
         std::fs::write(path, &bytes).map_err(|e| format!("{path}: {e}"))?;
@@ -132,6 +149,18 @@ fn play(args: &[String], tape: Option<&str>) -> Result<(), String> {
             bytes.len()
         );
     }
+    Ok(())
+}
+
+/// `snap.png`, 3 -> `snap-0003.png`.
+fn numbered(path: &str, n: u32) -> String {
+    let (stem, ext) = path.rsplit_once('.').unwrap_or((path, "png"));
+    format!("{stem}-{n:04}.{ext}")
+}
+
+fn write_snap(v: &jane_sim::view::View<'_>, path: &str) -> Result<(), String> {
+    std::fs::write(path, crate::snap::snap(v).png()).map_err(|e| format!("{path}: {e}"))?;
+    println!("snap: {path}");
     Ok(())
 }
 
