@@ -1,5 +1,5 @@
 //! Step 14: zone changes, in seat order (`sim.ts performTravel`, `zones.ts placeArrival`).
-//! A request is made by `Travel`, a door (`actions::door_travel`) or `Dev(Tp)` and performed
+//! A request is made by `Travel`, a door (`interact.rs`) or `Dev(Tp)` and performed
 //! here, so nothing is halfway through a unit list when the list changes.
 
 use jane_core::Vec2;
@@ -7,9 +7,10 @@ use jane_core::Vec2;
 use crate::ctx::{Ctx, PartySnap, forget_unit};
 use crate::event::EventKind;
 use crate::ids::Seat;
+use crate::journal;
 use crate::ring::{Watchers, step_ring};
 use crate::sim::{Sim, stamp_seats_fog};
-use crate::state::{TravelRequest, Unit};
+use crate::state::{FactKey, Source, TravelRequest, Unit};
 use crate::tuning::ARRIVAL_RADIUS;
 
 impl Sim {
@@ -34,13 +35,15 @@ impl Sim {
         });
         let Some(body) = body else { return };
         let first = self.state.zone(req.zone).is_none();
-        {
+        let came_by = {
             let p = &mut self.state.players[seat.index()];
             p.zone = req.zone;
+            let came_by = p.last_mark;
             if req.at.is_none() {
                 p.last_mark = req.mark;
             }
-        }
+            came_by
+        };
         let start = self.start_sym;
         self.with_ctx(req.zone, Some(seat), &snap, false, |cx| {
             let mut body = body;
@@ -53,6 +56,12 @@ impl Sim {
             // The living-world unit: presence with no watcher box (arriving at night, it was
             // already gone).
             cx.emit(EventKind::Zone { zone: req.zone, first });
+            // The journal: the place is seen, and the way from where she came in is walked.
+            let place = cx.world.syms.intern(req.zone.name());
+            journal::learn(cx, FactKey::Place(place), Source::Seen);
+            if req.at.is_none() && came_by != req.mark {
+                journal::learn(cx, FactKey::Route(came_by, req.mark), Source::Walked);
+            }
         });
     }
 }

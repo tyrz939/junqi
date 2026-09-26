@@ -13,6 +13,7 @@ use crate::sim::{Sim, stamp_seats_fog};
 use crate::state::{FlagKey, PlayerState, QuestProgress, Stats, TravelRequest, Unit};
 use crate::tuning::{ARRIVAL_RADIUS, BAR_SLOTS, MAX_PLAYERS, TICKS_PER_HOUR};
 use crate::units::{max_hp, max_mp, new_unit};
+use crate::{dialogue, interact, inventory, quests};
 
 impl Sim {
     /// Apply one command (step 0). A cast reads its seat's frame: the raw aim and the assist
@@ -53,8 +54,6 @@ impl Sim {
                     p.bar.swap(usize::from(a), usize::from(b));
                 }
             }
-            // The dialogue unit runs whatever closing a node runs; the box closes here.
-            Command::CloseDialogue => p.dialogue = None,
             Command::Dev(op) => self.dev(seat, op),
             Command::Bar { slot, on } => {
                 let frame = frames[seat.index()];
@@ -64,11 +63,8 @@ impl Sim {
                 let frame = frames[seat.index()];
                 self.in_seat_ctx(seat, |cx| crate::combat::player_cast(cx, seat, spell, on, frame));
             }
-            // A seated join is nobody's; the rest are later units', no-ops until they land.
-            Command::Join { .. }
-            // the interact unit:
-            | Command::Use
-            // the inventory unit:
+            // Her verbs, in her zone's context with her as the actor.
+            Command::Use
             | Command::Item(_)
             | Command::BagMove { .. }
             | Command::BagDestroy { .. }
@@ -76,10 +72,56 @@ impl Sim {
             | Command::CraftClear { .. }
             | Command::CraftClearAll
             | Command::CraftTake
-            // the dialogue unit:
             | Command::Advance
-            | Command::Choose { .. } => {}
+            | Command::Choose { .. }
+            | Command::CloseDialogue => self.seat_command(seat, c.cmd),
+            // A seated join is nobody's.
+            Command::Join { .. } => {}
         }
+    }
+
+    /// A command that acts in the world, run in her zone's context with her as the actor
+    /// (`sim.ts run`). Nothing happens without her body there.
+    fn seat_command(&mut self, seat: Seat, cmd: Command) {
+        let zone = self.state.players[seat.index()].zone;
+        let snap = PartySnap::of(&self.state);
+        self.with_ctx(zone, Some(seat), &snap, false, |cx| {
+            if cx.actor_unit().is_none() {
+                return;
+            }
+            match cmd {
+                Command::Use => {
+                    if cx.world.players[seat.index()].dialogue.is_some() {
+                        dialogue::advance(cx);
+                    } else {
+                        interact::use_(cx);
+                    }
+                }
+                Command::Item(item) => {
+                    inventory::use_item(cx, item);
+                }
+                Command::BagMove { from, to } => inventory::move_slot(cx, seat, from, to),
+                Command::BagDestroy { slot } => {
+                    inventory::destroy(cx, seat, slot);
+                }
+                Command::CraftPut { bag, slot } => inventory::craft_put(cx, seat, bag, slot),
+                Command::CraftClear { slot } => inventory::craft_clear(cx, seat, slot),
+                Command::CraftClearAll => inventory::craft_clear_all(cx, seat),
+                Command::CraftTake => {
+                    inventory::craft_take(cx, seat);
+                }
+                Command::Advance => dialogue::advance(cx),
+                Command::Choose { option } => dialogue::choose(cx, option),
+                Command::CloseDialogue => dialogue::close(cx),
+                Command::Dev(DevOp::Give { item, qty }) => {
+                    inventory::add(cx, seat, item, qty);
+                }
+                Command::Dev(DevOp::Quest(q)) => {
+                    quests::give(cx, q);
+                }
+                _ => {}
+            }
+        });
     }
 
     fn dev(&mut self, seat: Seat, op: DevOp) {
@@ -115,8 +157,7 @@ impl Sim {
                     crate::combat::dev_spawn(cx, b, def);
                 }
             }),
-            // The inventory and quests units.
-            DevOp::Give { .. } | DevOp::Quest(_) => {}
+            DevOp::Give { .. } | DevOp::Quest(_) => self.seat_command(seat, Command::Dev(op)),
         }
     }
 
@@ -226,6 +267,8 @@ impl Sim {
             step_ring(cx.zone, cx.rt, &w, true, &mut cx.scratch.props);
             stamp_seats_fog(cx);
             cx.emit(EventKind::Zone { zone, first: seat == Seat::HOST && fresh });
+            let place = cx.world.syms.intern(zone.name());
+            crate::journal::learn(cx, crate::state::FactKey::Place(place), crate::state::Source::Seen);
         });
         self.announce_party();
         Some(seat)
@@ -264,9 +307,12 @@ impl Sim {
         };
         let snap = PartySnap::of(&self.state);
         let body: Option<Unit> = self.with_ctx(zone, Some(seat), &snap, false, |cx| {
+            // She puts down what she carries, in front of her (`use`); with no room there it
+            // goes back where it was lifted from, solid as its row says.
+            if cx.zone.unit(unit)?.carrying.is_some() {
+                interact::put_down(cx, unit);
+            }
             let ix = cx.zone.unit_ix(unit)?;
-            // The interact unit puts down what she carries (`use`); here it goes back where it
-            // was lifted from, solid as its row says.
             if let Some(pid) = cx.zone.units[ix].carrying.take() {
                 if let Some(pix) = cx.zone.prop_ix(pid) {
                     let p = &mut cx.zone.props[pix as usize];

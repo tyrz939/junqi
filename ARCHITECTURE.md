@@ -197,10 +197,11 @@ The player's long-running context is engine state, not a presentation cache. The
 Journal { entries: Vec<JournalEntry>,                       // a ring of the last N per kind (§12), oldest overwritten
           known: BTreeMap<FactKey, Known { since: Tick, how: Source }> }
 
-JournalEntry { tick: Tick, kind: JournalKind, subject: Subject /* Sym | NameId */, zone: ZoneId, at: Cell }
+JournalEntry { tick: Tick, fact: FactKey, how: Source /* what it is known by from now */, zone: ZoneId, at: Cell }
+                                                    // kind() = fact.kind(): one entry per change to `known`
 
-enum FactKey { Place(NameId), Person(NameId), Thing(ItemId | PropDefId), Claim(TextId),
-               Route(NameId, NameId) /* from, to */, Danger(NameId) /* area */, Rumour(StoryId) }
+enum FactKey { Place(Sym), Person(Sym), Thing(ItemId | PropDefId), Claim(TextId),   // content writes NameId; a Sym
+               Route(Sym, Sym) /* from, to */, Danger(Sym) /* area */, Rumour(StoryId) }   // is a NameId below NAMES.len()
 
 enum Source { Seen, Visited, Named,          // Place
               Met, Talked, Dead,             // Person
@@ -213,9 +214,9 @@ enum Source { Seen, Visited, Named,          // Place
 
 | | |
 | --- | --- |
-| **Writers** | `Location` (Place Visited, Named); `Zone { first }` (Place Seen); a dialogue line's `tells` field (Person Talked, Claim Told, Rumour Heard); sign `Read` (Claim Read); a kill (Person Dead, Danger AttackedIn); a chest or a pick-up (Thing Held); `Travel` and the road walked between two named places (Route Walked); the first hit taken in an area and leaving it under aggro (Danger AttackedIn, Fled); a `Consequence` firing (§4.6) that confirms or contradicts a `Claim` |
+| **Writers** | `Location` (Place Visited); arriving in a zone (Place Seen, the zone's name); a dialogue line's `tells` field as the line is shown (Place Named, Person Talked, Thing Seen, Claim Told, Route and Danger Told, Rumour Heard); talking to a unit with a key (Person Met); sign `Read` of a content text (Claim Read); a kill (Person Dead through `hooks::unit_died`; Danger AttackedIn once areas reach the blueprint); a chest, a pick-up, a reward or a craft (Thing Held); `Travel` and a door (Route Walked, from the mark she came in by to the mark she arrives at); the first hit taken in an area and leaving it under aggro (Danger AttackedIn, Fled); a `Consequence` firing (§4.6) that confirms or contradicts a `Claim` |
 | **Readers** | `Condition::Knows { fact: FactKey }` and `Condition::Heard { claim: TextId }` (§5), so a line can say "you have seen the mill" or "you were told the bridge was out"; the quest legibility checks in `VERIFICATION.md`; the quest log's own text (`View::journal()`, `View::known(fact)`, §11); the map, which draws a named place only once it is `Known` |
-| **Upgrade** | A stronger `Source` for the same key replaces a weaker one (`Seen` → `Visited` → `Named`); `since` keeps the first tick. `Confirmed` and `Contradicted` replace `Told` and `Read` and are final |
+| **Upgrade** | A stronger `Source` for the same key replaces a weaker one (`Seen` → `Visited` → `Named`; `Met` → `Talked` → `Dead`; `Seen` → `Held`; `AttackedIn` → `Fled`; `Read` and `Told` are equal); `since` keeps the first tick. `Confirmed` and `Contradicted` replace `Told` and `Read` and are final |
 
 **Rule:** the journal is append-only and bounded: a ring of the last N entries per kind (§12) plus the `known` map. It is authoritative, saved and hashed. Text is never stored, only ids; `Claim(TextId)` is the line, and presentation expands it.
 
@@ -254,6 +255,7 @@ impl Sim {
                  on the hour: weather and ecology rolls from the world stream in fixed order (§4.4); consequences whose bit is
                  clear and trigger is true fire once; pending rumours land (§4.6)
                  PartySnap { size, bodies: [Option<(ZoneId, UnitId, Vec2)>; 4], resting: [bool; 4] }
+                 (`resting` is unfilled: `Rest { until }` asks every seat live, as the TS did, `verbs::everyone_resting`)
    for zone in ZoneId order where live (a connected seat is in it): Option::take the zone out of state.zones
  3 presence      every 30 ticks: schedule slots resolved by the clock (dayOnly / nightOnly are two-slot schedules); hide, show
                  and jump only outside 120 x 80 px of a watcher, walk by order inside it (§4.6.a)
@@ -262,7 +264,8 @@ impl Sim {
                  its missed status pulses land at step 9 as one hit (§4.3)
  6 players       seat order: a dead seat wakes at respawn_at; input, sprint and carry energy, hold-to-push, movement
                  (stun and the statuses' speed product apply)
- 7 controllers   over the awake_units snapshot: ai | snake | npc (order or patrol); stunned skip
+ 7 controllers   over the awake_units snapshot: ai | snake | npc (order or patrol); stunned skip. An ai or npc
+                 unit under orders walks them first and minds nothing else (`orders::step_orders` until the ai lands)
  8 projectiles   fly; first sight-blocking cell or enemy body through unit_blocks; splash; school touch. Grounds pulse through unit_blocks
  9 statuses      awake living: pulses into hits
 10 flush x2      the ONLY place a blow changes hp: party permille, god, mana shield, lifesteal (the second pass lands it),
@@ -501,7 +504,7 @@ struct View<'a>   // one seat, her zone, read only
   props_in(CellRect) -> impl Iterator<&Prop>, prop_spawn(&Prop) -> Option<&PropSpawn>,
   light_showing(&Prop) -> Option<&Light>, lamps_lit()                          // THE rule, shared with the sim
   drops(), projectiles(), grounds(), unit_at(Vec2),
-  focus() -> Option<Focus { target: FocusRef, verb: Verb /* Enter, Unlock, Open, PickUp, Craft, Read, Use, HoldToPush, Take(ItemId), Talk, PutDown, Custom(TextId) */ }>
+  focus() -> Option<Focus { target: FocusRef, verb: Verb /* Enter, TryTheDoor, Unlock, Open, PickUp, Craft, Read, Use, HoldToPush, Take(ItemId), Talk, PutDown, Custom(TextId) */, pushes: bool /* "(hold to push)" */ }>
   hud() -> Hud { hp, max_hp, mp, max_mp, energy, statuses, target: Option<(UnitId, Permille)> }
   dialogue() -> Option<DialogueView { speaker, lines: &[TextId], line, options: &[TextId], awaiting_choice }>
   quests() -> impl Iterator<QuestView { id, counts }>, near_bench(), near_rest(), craft_output(), book(), marks(), rects(), debug()
@@ -518,10 +521,10 @@ enum EventKind { Toast(ToastKind), Damage { unit, from, at, amount, school, crit
   Quest { quest, change }, Zone { zone, first }, Shake, Camera, Tiles(CellRect), Prop { prop, change }, Bag, Dialogue, PlayerDied, Rest,
   Sfx { kind, at }, Party { connected }, Journal(JournalKind), Weather { kind }, Consequence(ConsequenceId) }
 
-enum ToastKind { Text(TextId), QuestGiven, QuestDone, KillProgress { quest, req, n, of }, InventoryFull, TooTired, Needs { item, qty },
-  NothingToRepair, NothingGrowsWithoutLight, NothingGrows, Locked { prop }, UnlockedWith(ItemId), NightLock(TextId), WokeAtRest, WokeAtDoor,
-  PartyChanged, LeftWhatMattered, PutDownFirst, ShouldKeep, NotHurt, FitsALock, ItShifts, NoRoom, NightWaits, Stronger, WordsStay,
-  Learned(SpellId), Under { top, label }, SpellError(SpellError) }
+enum ToastKind { Text(TextRef), QuestGiven(QuestId), QuestDone(QuestId), KillProgress { quest, req, n, of }, InventoryFull, TooTired, Needs { item, qty },
+  NothingToRepair, NothingGrowsWithoutLight, NothingGrows, Locked { prop } /* its label and `locked_says` */, UnlockedWith(ItemId), NightLock(TextRef),
+  WokeAtRest, WokeAtDoor, PartyChanged, LeftWhatMattered, PutDownFirst, ShouldKeep, NotHurt, FitsALock, ItShifts, NoRoom, NightWaits, Stronger,
+  WordsStay, Learned(SpellId), Under { top, found } /* found's label */, SpellError(SpellError) }
 
 enum SpellError { CastUnsuccessful, YouAreDead, OnCooldown, OnGcd, TooFar, NoTarget, NotEnoughMp, NotEnoughEnergy, NotInLos,
   NotValidTarget }   // a toast only for those worth saying: not the GCD, a cooldown or a plain failure

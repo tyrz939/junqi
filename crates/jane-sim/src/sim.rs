@@ -25,6 +25,7 @@ use crate::tuning::{
 };
 use crate::units::{def_of, face_angle, move_unit, restore_energy, spend_energy};
 use crate::zone::create_zone_state;
+use crate::{clear, interact, orders, triggers};
 
 /// The simulation: the authoritative state, the blueprints it was built from, and every derived
 /// runtime and buffer. Only `state` is saved and hashed.
@@ -231,10 +232,29 @@ impl Sim {
         r
     }
 
+    /// In the order they were queued. A reward list may queue more (a quest given, a jar found):
+    /// those land after the ones already waiting.
     fn drain_world_ops(&mut self) {
-        for op in self.wops.ops.drain(..) {
+        while !self.wops.ops.is_empty() {
+            let op = self.wops.ops.remove(0);
             match op {
                 WorldOp::Announce(kind) => self.events.push(Event { to: None, in_zone: None, kind }),
+                // Everyone in the party is paid, wherever she stands, once each, with her as the
+                // actor: nobody is left without the house key because a friend did the talking.
+                WorldOp::PayRewards { list, .. } => {
+                    for i in 0..self.state.players.len() {
+                        let p = &self.state.players[i];
+                        if !p.connected {
+                            continue;
+                        }
+                        let (zone, unit, seat) = (p.zone, p.unit, p.seat);
+                        let snap = PartySnap::of(&self.state);
+                        self.with_ctx(zone, Some(seat), &snap, false, |cx| {
+                            run_actions(cx, list, Subject::Unit(unit));
+                        });
+                    }
+                }
+                WorldOp::Grow { stat, amount } => crate::verbs::grow_bodies(&mut self.state, stat, amount),
                 WorldOp::Teach(spell) => {
                     if crate::combat::teach(&mut self.state, spell) {
                         for kind in crate::combat::learned_events(spell) {
@@ -242,8 +262,6 @@ impl Sim {
                         }
                     }
                 }
-                // The quests and interact units.
-                WorldOp::PayRewards { .. } | WorldOp::Grow { .. } => {}
             }
         }
     }
@@ -260,13 +278,13 @@ impl Sim {
     ///  3 presence      every 30 ticks                       (living-world unit)
     ///  4 ring          on a seat's block change
     ///  5 catch-up      units that woke: regen, pulses        (combat and status units)
-    ///  6 players       seat order: input, energy, movement   (hold-to-push: interact unit)
-    ///  7 controllers   ai | snake | npc                      (ai and snake units)
+    ///  6 players       seat order: input, energy, movement   (hold-to-push, carry: interact)
+    ///  7 controllers   ai | snake | npc; orders             (ai and snake units)
     ///  8 projectiles   and grounds                           (combat unit)
     ///  9 statuses                                            (status unit)
     /// 10 flush x2      the only place hp changes             (combat unit)
-    /// 11 triggers      and plates                            (triggers unit)
-    /// 12 housekeeping  prop flags, fog every 10 (drops, fills: loot and interact units)
+    /// 11 triggers      and plates
+    /// 12 housekeeping  prop flags, fills owed, fog every 10   (drops: loot unit)
     /// 13 zone ops      spawn, despawn, wake; the zone goes back; world ops drain
     /// 14 travel        seat order
     /// 15 drop          runtimes of zones nobody is in
@@ -386,7 +404,9 @@ impl Sim {
                 }
             }
 
-            // 7 controllers: the ai and snake units, over the awake_units snapshot.
+            // 7 controllers: the ai and snake units, over the awake_units snapshot. A unit under
+            // orders follows them and minds nothing else (`Send`).
+            orders::step_orders(cx);
 
             // 8 projectiles and grounds
             crate::flight::step_projectiles(cx);
@@ -396,13 +416,15 @@ impl Sim {
             // 10 flush: the only place a blow changes hp
             crate::flush::flush(cx);
 
-            // 11 triggers and plates: the triggers unit.
+            // 11 triggers, and plates every 6 ticks
+            triggers::step_triggers(cx);
 
-            // 12 housekeeping: drops expire, corpses due stand up, pending fills land (interact
-            // unit); prop flags are re-stamped over what changed; fog every 10.
+            // 12 housekeeping: drops expire, corpses due stand up; prop flags are re-stamped over
+            // what changed; the fills still owed land if their rect is clear; fog every 10.
             crate::loot::step_drops(cx);
             crate::life::respawn_due(cx);
             cx.rt.flush_prop_flags(cx.zone, &mut cx.scratch.props);
+            clear::step_pending_fill(cx);
             if cx.world.tick.0 % FOG_EVERY == 0 {
                 stamp_seats_fog(cx);
             }
@@ -415,10 +437,9 @@ impl Sim {
 fn tick_player(cx: &mut Ctx<'_>, seat: usize, frame: InputFrame) {
     let tick = cx.world.tick;
     let p = &cx.world.players[seat];
-    let (busy, god, respawn_at) = (p.dialogue.is_some(), p.god, p.respawn_at);
-    let Some(ix) = cx.zone.unit_ix(p.unit) else { return };
-    let u = &mut cx.zone.units[ix];
-    if !u.alive {
+    let (busy, god, respawn_at, body) = (p.dialogue.is_some(), p.god, p.respawn_at, p.unit);
+    let Some(ix) = cx.zone.unit_ix(body) else { return };
+    if !cx.zone.units[ix].alive {
         // She lies until `respawn_at` (the flush set it when she fell), then wakes.
         match respawn_at {
             None => cx.world.players[seat].respawn_at = Some(tick.after(PLAYER_RESPAWN)),
@@ -428,12 +449,18 @@ fn tick_player(cx: &mut Ctx<'_>, seat: usize, frame: InputFrame) {
         return;
     }
     // With company the world does not stop for a conversation, but she does.
-    let stunned = crate::status::is_stunned(u, tick);
+    let stunned = crate::status::is_stunned(&cx.zone.units[ix], tick);
     let mag = if busy { 0 } else { frame.mv_mag.min(127) };
-    let wants_move = mag > MOVE_DEADZONE && tick >= u.stop_until && !stunned;
+    let wants_move = mag > MOVE_DEADZONE && tick >= cx.zone.units[ix].stop_until && !stunned;
     let held = frame.use_held && !busy;
-    // Hold-to-push is the interact unit's (`holdUse`); nothing braces yet.
-    let braced = false;
+    // Held against a pushable she is braced: she leans into it (or pulls it) instead of walking.
+    let braced = if held && !stunned {
+        let (mx, my) = interact::stick_axes(frame.mv_dir, mag);
+        interact::hold_use(cx, body, mx, my)
+    } else {
+        false
+    };
+    let u = &mut cx.zone.units[ix];
     if !held {
         u.hold = 0;
     }
@@ -456,7 +483,10 @@ fn tick_player(cx: &mut Ctx<'_>, seat: usize, frame: InputFrame) {
         spend_energy(u, ENERGY_SPRINT);
     } else if u.carrying.is_some() {
         spend_energy(u, ENERGY_CARRY);
-        // The interact unit: arms give out at zero and she puts it down.
+        // Arms give out: she puts it down.
+        if u.energy.0 == 0 {
+            interact::put_down(cx, body);
+        }
     } else {
         restore_energy(u, ENERGY_REGEN);
     }

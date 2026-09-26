@@ -153,3 +153,39 @@ pub const ASSIST_MOUSE: Assist = Assist {
 /// target, and (smaller) the sticky unit.
 pub const ASSIST_TARGET_BONUS: i32 = Angle::from_degrees(2).0 as i32;
 pub const ASSIST_STICKY_BONUS: i32 = Angle::from_degrees(1).0 as i32;
+
+// --- the world verbs (interact, inventory, dialogue, journal) --------------------------------
+
+/// Interact reach from the feet, measured to a prop's footprint (`constants.ts USE_REACH`, 12 px).
+pub const USE_REACH_FX: i32 = 12 * FX_ONE;
+/// Talking reach, feet to feet (`interact.ts TALK_REACH`, 20 px).
+pub const TALK_REACH_FX: i32 = 20 * FX_ONE;
+/// Picking a drop up, feet to the drop (`loot.ts PICKUP_REACH`, 14 px).
+pub const PICKUP_REACH_FX: i32 = 14 * FX_ONE;
+/// Something behind her scores this much further away (`focusOf`, 8 px).
+pub const FOCUS_BEHIND_FX: i32 = 8 * FX_ONE;
+/// A thing that only pushes loses a tie to one with words or contents (`PUSH_ONLY_PENALTY`, 6 px).
+pub const FOCUS_PUSH_ONLY_FX: i32 = 6 * FX_ONE;
+/// Hold USE this many ticks against a pushable to move it one cell (2020: 30 frames).
+pub const PUSH_HOLD_TICKS: u8 = 30;
+/// A push, and lifting something, want this much energy; a push spends it.
+pub const PUSH_ENERGY: Milli = Milli(20_000);
+/// A world spell (Repair, Grow) finds the nearest answering prop within 2 m.
+pub const WORLD_SPELL_REACH_FX: i32 = 2 * CELL_FX;
+/// Using an item roots her for half a second.
+pub const ITEM_STOP: Tick = Tick(30);
+/// Plates are looked at every this many ticks (`triggers.ts PLATE_PERIOD`).
+pub const PLATE_PERIOD: u32 = 6;
+/// Journal entries kept per kind (ARCHITECTURE.md §12).
+pub const JOURNAL_RING: u32 = 512;
+/// A sent unit gives up after this long plus three times what the straight walk would take.
+pub const ORDER_BASE: Tick = Tick(600);
+/// How far a sent unit plans in one go, in cells (`ai.ts ORDER_PATH_METRES`).
+pub const ORDER_PATH_CELLS: u32 = 400;
+/// "Beside the mark will do": arrived within 1.5 cells.
+pub const ORDER_ARRIVED_FX: i32 = CELL_FX * 3 / 2;
+/// Lamp posts burn from 18:30 to 06:30 (`light.ts LAMPS_ON`, `LAMPS_OFF`), in clock ticks.
+pub const LAMPS_ON: u32 = TICKS_PER_HOUR * 37 / 2;
+pub const LAMPS_OFF: u32 = TICKS_PER_HOUR * 13 / 2;
+/// The nudge search's most cells (`clear.ts NUDGE_CELLS`).
+pub const NUDGE_CELLS: u32 = 1500;

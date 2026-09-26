@@ -18,7 +18,10 @@
 //! | [`combat`], [`assist`] | the cast pipeline, the combat verbs and the console's; aim assist |
 //! | [`flight`], [`status`], [`flush`] | steps 8, 9 and 10: bolts and pools, statuses, the flush (death, phases) |
 //! | [`life`], [`loot`] | regen, respawn and waking; drops |
-//! | [`hooks`] | combat's calls into the interact, inventory, quests, triggers and living-world units |
+//! | [`interact`], [`inventory`], [`bag`], [`dialogue`], [`quests`] | USE and the world verbs; bags, items and crafting; conversations; the quest log |
+//! | [`triggers`], [`under`], [`clear`], [`light`], [`orders`], [`verbs`] | triggers and plates; things under things; nothing solid lands on a unit; the light rule; `Send`; rest and growth |
+//! | [`journal`] | what is known (§3.7) |
+//! | [`hooks`] | combat's calls into the interact, inventory, quests, triggers, journal and living-world units |
 //! | [`sim`], `seats`, `travel` | the scheduler, seats and commands, travel |
 //! | [`save`] | save, load and the hash |
 //! | [`view`] | what a seat sees |
@@ -29,11 +32,13 @@ pub mod actions;
 pub mod assist;
 pub mod bag;
 pub mod blueprints;
+pub mod clear;
 pub mod codec;
 pub mod combat;
 #[cfg(test)]
 mod combat_tests;
 pub mod ctx;
+pub mod dialogue;
 pub mod event;
 pub mod flight;
 pub mod flush;
@@ -42,10 +47,16 @@ pub mod grid;
 pub mod hooks;
 pub mod ids;
 pub mod input;
+pub mod interact;
+pub mod inventory;
+pub mod journal;
 pub mod life;
+pub mod light;
 pub mod loot;
 pub mod los;
+pub mod orders;
 pub mod path;
+pub mod quests;
 pub mod ring;
 pub mod runtime;
 pub mod save;
@@ -55,8 +66,11 @@ pub mod state;
 pub mod status;
 pub mod sym;
 mod travel;
+pub mod triggers;
 pub mod tuning;
+pub mod under;
 pub mod units;
+pub mod verbs;
 pub mod view;
 pub mod zone;
 

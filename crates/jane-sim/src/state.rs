@@ -24,7 +24,10 @@ use crate::sym::SymTable;
 use crate::tuning::{BAG_SLOTS, BAR_SLOTS, CRAFT_INPUTS};
 
 /// The save and hash schema's version. Bumped by any change to a type in this module.
-pub const SAVE_VERSION: u16 = 2;
+///
+/// 2: a projectile's faction, velocity and blow (combat). 3: the journal (`Journal`'s entries
+/// and known facts).
+pub const SAVE_VERSION: u16 = 3;
 
 /// A fixed-size bit set (trigger bits, consequences done).
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -103,11 +106,11 @@ pub struct GameState {
     pub zones: [Option<Box<ZoneState>>; ZONE_COUNT],
     pub flags: BTreeMap<FlagKey, i32>,
     pub quests: Quests,
-    /// The last bed or fire anyone rested at. Owned by the interact unit (Rest).
+    /// The last bed or fire anyone rested at (`verbs::rest`).
     pub rest: Option<RestPoint>,
     pub growth: Growth,
     pub syms: SymTable,
-    /// Owned by the journal unit (§3.7).
+    /// What is known (§3.7, `journal.rs`).
     pub journal: Journal,
     /// Owned by the living-world unit (§4.6.b). `Clear` at New Game.
     pub weather: WeatherState,
@@ -162,7 +165,7 @@ pub struct Quests {
     pub done: Vec<QuestId>,
 }
 
-/// Owned by the quests unit; the host's start quests are given at New Game.
+/// A quest in the log (`quests.rs`); the host's start quests are given at New Game.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct QuestProgress {
     pub quest: QuestId,
@@ -185,9 +188,137 @@ pub struct Growth {
     pub found: Vec<Sym>,
 }
 
-/// The understood record (§3.7). The journal unit gives it its entries and its `known` map.
+/// The understood record (§3.7): what she has been, whom she has met, what she was told and
+/// whether the world bore it out. The fog is the *seen* record; this is the *understood* one.
+/// Written by [`crate::journal`]; read by `Condition::Knows` and `Heard` and by `View`.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Journal {}
+pub struct Journal {
+    /// Every change to `known`, oldest first; bounded to `JOURNAL_RING` entries per kind, the
+    /// oldest of a kind dropped for its newest.
+    pub entries: Vec<JournalEntry>,
+    /// What is known, and how well: one row per fact.
+    pub known: BTreeMap<FactKey, Known>,
+}
+
+/// A fact at runtime: content's `jane_core::action::FactKey` with its names as syms (a content
+/// name's sym is its `NameId`, as for [`FlagKey`]).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub enum FactKey {
+    Place(Sym),
+    Person(Sym),
+    Thing(jane_core::action::Thing),
+    Claim(jane_core::TextId),
+    /// From, to.
+    Route(Sym, Sym),
+    /// An area.
+    Danger(Sym),
+    Rumour(StoryId),
+}
+
+impl FactKey {
+    pub const fn kind(self) -> JournalKind {
+        match self {
+            FactKey::Place(_) => JournalKind::Place,
+            FactKey::Person(_) => JournalKind::Person,
+            FactKey::Thing(_) => JournalKind::Thing,
+            FactKey::Claim(_) => JournalKind::Claim,
+            FactKey::Route(..) => JournalKind::Route,
+            FactKey::Danger(_) => JournalKind::Danger,
+            FactKey::Rumour(_) => JournalKind::Rumour,
+        }
+    }
+}
+
+/// What a journal entry is about; the ring is kept per kind.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub enum JournalKind {
+    Place,
+    Person,
+    Thing,
+    Claim,
+    Route,
+    Danger,
+    Rumour,
+    /// A consequence fired (§4.6.d; the living-world unit writes it).
+    Consequence,
+}
+
+/// How a fact came to be known. Within a kind, a stronger source replaces a weaker one
+/// ([`Source::rank`]); `Confirmed` and `Contradicted` are final.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub enum Source {
+    // Place
+    Seen,
+    Visited,
+    Named,
+    // Person
+    Met,
+    Talked,
+    Dead,
+    // Thing (`Seen` shared)
+    Held,
+    // Claim: how it was heard, and what the world later did to it
+    Read,
+    Told,
+    Confirmed,
+    Contradicted,
+    // Route
+    Walked,
+    // Danger
+    AttackedIn,
+    Fled,
+    // Rumour
+    Heard,
+}
+
+impl Source {
+    /// Strength inside its kind: `Seen` < `Visited` < `Named`; `Met` < `Talked` < `Dead`;
+    /// `Seen` < `Held`; `Read` = `Told` < `Confirmed` = `Contradicted`; `AttackedIn` < `Fled`.
+    pub const fn rank(self) -> u8 {
+        match self {
+            Source::Seen | Source::Met => 0,
+            Source::Visited
+            | Source::Talked
+            | Source::Held
+            | Source::Read
+            | Source::Told
+            | Source::Walked
+            | Source::AttackedIn
+            | Source::Heard => 1,
+            Source::Named | Source::Dead | Source::Fled => 2,
+            Source::Confirmed | Source::Contradicted => 3,
+        }
+    }
+
+    /// Nothing replaces it.
+    pub const fn is_final(self) -> bool {
+        matches!(self, Source::Confirmed | Source::Contradicted)
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Known {
+    /// When it was first known; an upgrade keeps it.
+    pub since: Tick,
+    pub how: Source,
+}
+
+/// One change to what is known: the fact, the source it is known by from now, where and when.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct JournalEntry {
+    pub tick: Tick,
+    pub fact: FactKey,
+    pub how: Source,
+    pub zone: ZoneId,
+    /// Where she stood (the actor's cell; the zone's origin with no actor).
+    pub at: Cell,
+}
+
+impl JournalEntry {
+    pub const fn kind(&self) -> JournalKind {
+        self.fact.kind()
+    }
+}
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum WeatherKind {
@@ -220,13 +351,13 @@ pub struct PlayerState {
     pub last_mark: Sym,
     /// When a dead seat stands back up. The revive itself is the combat unit's.
     pub respawn_at: Option<Tick>,
-    /// Bags are hers, off the body. Owned by the inventory unit (the start kit goes in here).
+    /// Bags are hers, off the body (`bag.rs`, `inventory.rs`; the start kit goes in here).
     pub bag: Box<[Option<Stack>; BAG_SLOTS]>,
     #[serde(with = "codec::bar")]
     pub bar: [Option<BarSlot>; BAR_SLOTS],
-    /// Owned by the inventory unit.
+    /// Her craft row (`inventory.rs`).
     pub craft: [Option<Stack>; CRAFT_INPUTS],
-    /// Owned by the dialogue unit. Alone, the world holds still while this is `Some`.
+    /// Her conversation (`dialogue.rs`). Alone, the world holds still while this is `Some`.
     pub dialogue: Option<Dialogue>,
     pub god: bool,
     pub stats: Stats,
@@ -246,7 +377,7 @@ pub struct Stats {
     pub casts: u32,
 }
 
-/// A conversation, or a thing read. Owned by the dialogue unit.
+/// A conversation, or a thing read (`dialogue.rs`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Dialogue {
     pub tree: Option<DialogueId>,
@@ -296,13 +427,13 @@ pub struct ZoneState {
     /// Owned by the combat unit.
     pub grounds: Vec<Ground>,
     /// One bit each per row of the merged trigger table (`ZoneRuntime::triggers`), in its order.
-    /// Owned by the triggers unit.
+    /// Stepped by `triggers.rs`.
     pub triggers: TriggerBits,
     /// Tiles that differ from the blueprint's; a tile set back to the blueprint's is removed.
     pub tile_deltas: BTreeMap<CellIx, Tile>,
     /// Seen-bits, one per fog block (2 cells indoors, 8 out), 32 to a word; fixed size.
     pub fog: Box<[u32]>,
-    /// Solid fills waiting for their rect to clear. Owned by the interact unit (`clear.ts`).
+    /// Solid fills waiting for their rect to clear (`clear.rs`).
     pub pending_fill: Vec<Fill>,
     /// Corpses to stand up, sorted `(tick, id)`. Owned by the combat unit.
     pub sleeping_due: Vec<(Tick, UnitId)>,

@@ -1,14 +1,21 @@
 //! What one seat sees (ARCHITECTURE.md §11): her zone, read only. `jane-present` builds its
-//! frame from this and nothing else. This is the first slice: the seat, the ground and who
-//! stands on it, and the clock. The rest of §11 lands with the systems it reads.
+//! frame from this and nothing else. Landed so far: the seat, the ground and who stands on it,
+//! the clock; what USE would do, her conversation, the quest log, the bench and the fire, the
+//! craft row, the journal, and the light rule. The rest of §11 lands with the systems it reads.
 
-use jane_core::{Angle, Rect, SpellId, Tile, Vec2, ZoneId};
+use jane_core::blueprint::PropSpawn;
+use jane_core::{Angle, Blueprint, DialogueId, ItemId, QuestId, Rect, SpellId, TextRef, Tile, Vec2, ZoneId};
+use jane_data::{DialogueNode, Light};
 
 use crate::ids::{Seat, UnitId};
 use crate::input::InputFrame;
+use crate::interact::{Focus, Here, focus_of, near_bench, near_rest, spawn_of};
 use crate::runtime::ZoneRuntime;
 use crate::sim::Sim;
-use crate::state::{Drop, GameState, Ground, PlayerState, Projectile, Prop, Unit, ZoneState};
+use crate::state::{
+    Drop, FactKey, GameState, Ground, JournalEntry, Known, PlayerState, Projectile, Prop, QuestProgress, Speaker, Unit,
+    ZoneState,
+};
 
 /// A unit as drawn.
 #[derive(Clone, Copy, Debug)]
@@ -27,7 +34,37 @@ pub struct View<'a> {
     state: &'a GameState,
     zone: &'a ZoneState,
     rt: &'a ZoneRuntime,
+    bp: &'a Blueprint,
     indoor: bool,
+}
+
+/// Her conversation, or the thing she is reading.
+#[derive(Clone, Copy, Debug)]
+pub struct DialogueView {
+    pub speaker: Speaker,
+    pub tree: Option<DialogueId>,
+    /// The node (`None` while reading a thing's words).
+    pub node: Option<&'static DialogueNode>,
+    /// The words of a thing read.
+    pub read: Option<TextRef>,
+    pub line: u16,
+    pub awaiting_choice: bool,
+}
+
+/// A quest in the log.
+#[derive(Clone, Copy, Debug)]
+pub struct QuestView<'a> {
+    pub quest: QuestId,
+    pub ready: bool,
+    state: &'a GameState,
+    prog: &'a QuestProgress,
+}
+
+impl QuestView<'_> {
+    /// Progress on requirement `i`, clamped to what it asks for.
+    pub fn count(&self, i: usize) -> u16 {
+        crate::quests::requirement_count(self.state, self.prog, i)
+    }
 }
 
 impl Sim {
@@ -39,6 +76,7 @@ impl Sim {
             state: &self.state,
             zone: self.state.zone(p.zone)?,
             rt: self.runtime(p.zone)?,
+            bp: self.blueprint(p.zone),
             indoor: self.blueprint(p.zone).indoor,
         })
     }
@@ -120,6 +158,80 @@ impl<'a> View<'a> {
 }
 
 impl<'a> View<'a> {
+    fn here(&self) -> Here<'a> {
+        Here { world: self.state, zone: self.zone, rt: self.rt, bp: self.bp }
+    }
+
+    /// What USE would act on now, and the word for it.
+    pub fn focus(&self) -> Option<Focus> {
+        focus_of(&self.here(), self.body(), &mut Vec::new(), &mut Vec::new())
+    }
+
+    pub fn dialogue(&self) -> Option<DialogueView> {
+        let me = self.me();
+        let d = me.dialogue?;
+        let node = crate::dialogue::current(&d).and_then(|c| match c {
+            crate::dialogue::Current::Node(n) => Some(n),
+            crate::dialogue::Current::Read(_) => None,
+        });
+        Some(DialogueView {
+            speaker: d.speaker,
+            tree: d.tree,
+            node,
+            read: d.read,
+            line: d.line,
+            awaiting_choice: crate::dialogue::awaiting_choice(me),
+        })
+    }
+
+    /// The quest log: active quests in the order they were given.
+    pub fn quests(&self) -> impl Iterator<Item = QuestView<'a>> + 'a {
+        let state = self.state;
+        state.quests.active.iter().map(move |prog| QuestView {
+            quest: prog.quest,
+            ready: crate::quests::ready(state, prog.quest),
+            state,
+            prog,
+        })
+    }
+
+    pub fn quests_done(&self) -> &'a [QuestId] {
+        &self.state.quests.done
+    }
+
+    /// A bench within reach: the bag window shows the craft row.
+    pub fn near_bench(&self) -> bool {
+        near_bench(&self.here(), self.body().pos, &mut Vec::new())
+    }
+
+    /// A bed or a fire within reach: the game can be saved here.
+    pub fn near_rest(&self) -> bool {
+        near_rest(&self.here(), self.body().pos, &mut Vec::new())
+    }
+
+    /// What her craft row makes.
+    pub fn craft_output(&self) -> Option<(ItemId, u16)> {
+        crate::inventory::craft_output(&self.me().craft)
+    }
+
+    /// Every change to what is known, oldest first (§3.7).
+    pub fn journal(&self) -> impl Iterator<Item = &'a JournalEntry> + 'a {
+        self.state.journal.entries.iter()
+    }
+
+    pub fn known(&self, fact: FactKey) -> Option<Known> {
+        crate::journal::known(self.state, fact)
+    }
+
+    /// THE light rule, shared with the sim (`light.rs`).
+    pub fn light_showing(&self, p: &Prop) -> Option<&'static Light> {
+        crate::light::light_showing(jane_data::catalog().story.prop(p.def), p, self.lamps_lit())
+    }
+
+    pub fn lamps_lit(&self) -> bool {
+        crate::light::lamps_lit(self.state.clock)
+    }
+
     /// Bolts in flight here, in the order they were cast.
     pub fn projectiles(&self) -> &'a [Projectile] {
         &self.zone.projectiles
@@ -157,6 +269,16 @@ impl<'a> View<'a> {
             &mut near,
         );
         Some(a)
+    }
+
+    /// A placed prop's row: where it leads, what it holds, its label.
+    pub fn prop_spawn(&self, p: &Prop) -> Option<&'a PropSpawn> {
+        spawn_of(self.bp, p)
+    }
+
+    /// A prop by id in her zone.
+    pub fn prop(&self, id: crate::ids::PropId) -> Option<&'a Prop> {
+        self.zone.prop_ix(id).map(|i| &self.zone.props[i as usize])
     }
 }
 

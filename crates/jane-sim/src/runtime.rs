@@ -160,6 +160,22 @@ impl PropBuckets {
             out.sort();
         }
     }
+
+    /// Does `f` hold for any prop whose footprint may touch the inclusive cell rect? Visits in
+    /// bucket order, stops at the first yes, needs no buffer (the light question, `light.rs`).
+    pub fn any_in(&self, cx0: i32, cy0: i32, cx1: i32, cy1: i32, mut f: impl FnMut(PropIx) -> bool) -> bool {
+        let (bx0, by0, bx1, by1) = self.blocks.range(cx0 - self.reach_w, cy0 - self.reach_h, cx1, cy1);
+        for by in by0..=by1 {
+            for bx in bx0..=bx1 {
+                for &ix in &self.buckets[(by * self.blocks.w + bx) as usize] {
+                    if f(ix) {
+                        return true;
+                    }
+                }
+            }
+        }
+        false
+    }
 }
 
 /// Present units by block, as one sorted list of `(block, id)`: a query is a binary search per
@@ -445,6 +461,35 @@ impl ZoneRuntime {
     /// `solid` or `hidden` changed on this prop: its footprint is re-stamped at housekeeping.
     pub fn touch_prop(&mut self, zone: &ZoneState, ix: PropIx) {
         self.props_dirty.push(Self::footprint(&zone.props[ix as usize]));
+    }
+
+    /// The only way a prop changes cell (push, pull, put down): re-bucketed, and both its
+    /// footprints re-stamped at housekeeping (`runtime.ts moveProp`).
+    pub fn move_prop(&mut self, zone: &mut ZoneState, ix: PropIx, to: jane_core::Cell) {
+        self.touch_prop(zone, ix);
+        let p = &mut zone.props[ix as usize];
+        let from = self.props.blocks.of_cell(i32::from(p.cell.x), i32::from(p.cell.y));
+        let into = self.props.blocks.of_cell(i32::from(to.x), i32::from(to.y));
+        p.cell = to;
+        if from != into {
+            self.props.remove(from, ix);
+            self.props.insert(into, ix);
+        }
+        self.touch_prop(zone, ix);
+    }
+
+    /// Re-stamp the prop flags over one rect of cells from the props as they stand
+    /// (`runtime.ts restampCells`).
+    pub fn restamp_cells(&mut self, zone: &ZoneState, r: Rect, scratch: &mut Vec<PropIx>) {
+        let cat = jane_data::catalog();
+        self.grid.clear_prop_flags_in(r);
+        self.props.query(r.x, r.y, r.right() - 1, r.bottom() - 1, scratch);
+        for &ix in scratch.iter() {
+            let p = &zone.props[ix as usize];
+            if p.solid && !p.hidden {
+                self.grid.stamp_prop(Self::footprint(p), cat.story.prop(p.def).block_los);
+            }
+        }
     }
 
     /// Re-stamp every solid prop: zone entry, load, and whoever set `props_dirty_all`.
