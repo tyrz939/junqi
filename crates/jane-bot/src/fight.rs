@@ -142,9 +142,11 @@ pub fn tell_under(v: &View<'_>) -> Option<jane_core::Vec2> {
         .map(|g| g.pos)
 }
 
-/// Out of a pool before it lands: straight away from its middle, at a run.
+/// Out of a pool before it lands: straight away from its middle, at a run, unless a wall is that
+/// way (a pool laid on her in a doorway), then the nearest way round that is open ground.
 fn step_out(v: &View<'_>, cx: &mut Ctx, from: jane_core::Vec2) -> InputFrame {
     let me = v.body().pos;
+    let pool = v.grounds().iter().find(|g| g.pos == from).map_or(2 * CELL_FX, |g| g.radius.0);
     // Standing on its middle: any way will do; the way she faces is as good as any.
     let from = if from == me {
         let (dx, dy) = v.body().facing.delta();
@@ -153,6 +155,27 @@ fn step_out(v: &View<'_>, cx: &mut Ctx, from: jane_core::Vec2) -> InputFrame {
         from
     };
     cx.fight.retreat = None;
+    // The eight ways out, the most nearly straight away first; the first that lands on open
+    // ground she can see clear to (a diagonal is 181/256 of a straight step).
+    let body = jane_data::catalog().combat.unit(v.body().def).bounds.0;
+    let out = i64::from(pool + body + CELL_FX);
+    let (ax, ay) = (i64::from(me.x.0 - from.x.0), i64::from(me.y.0 - from.y.0));
+    let mut ways: Vec<(i64, i64, i64)> = [(1, 0), (1, 1), (0, 1), (-1, 1), (-1, 0), (-1, -1), (0, -1), (1, -1)]
+        .into_iter()
+        .map(|(dx, dy): (i64, i64)| (-(dx * ax + dy * ay) * if dx != 0 && dy != 0 { 181 } else { 256 }, dx, dy))
+        .collect();
+    ways.sort();
+    for (_, dx, dy) in ways {
+        let step = if dx != 0 && dy != 0 { out * 181 / 256 } else { out };
+        let to = jane_core::Vec2 {
+            x: Fx((i64::from(me.x.0) + dx * step) as i32),
+            y: Fx((i64::from(me.y.0) + dy * step) as i32),
+        };
+        let (cx_, cy_) = to.cell();
+        if crate::nav::walkable(v, cx_, cy_) && v.sight(me, to) {
+            return stick(me, to, true);
+        }
+    }
     stick(from, me, true)
 }
 
