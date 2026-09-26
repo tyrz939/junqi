@@ -22,7 +22,7 @@ pub const USAGE: &str = "  gen --zones <dungeons|all|id,id..> [--seeds A..B | --
                                       build each zone for each seed (A..B inclusive), proven; with --hash
                                       print `zone seed hash` lines for the cross-target determinism gate";
 
-fn zones(which: &str) -> Result<Vec<ZoneId>, String> {
+pub(crate) fn zones(which: &str) -> Result<Vec<ZoneId>, String> {
     let dungeons = || {
         ZoneId::ALL.into_iter().filter(|&z| jane_data::catalog().dungeons.mission_of(z).is_some()).collect::<Vec<_>>()
     };
@@ -33,7 +33,7 @@ fn zones(which: &str) -> Result<Vec<ZoneId>, String> {
     }
 }
 
-fn seeds(args: &[String]) -> Result<std::ops::RangeInclusive<u32>, String> {
+pub(crate) fn seeds(args: &[String]) -> Result<std::ops::RangeInclusive<u32>, String> {
     let get = |k: &str| args.iter().position(|a| a == k).and_then(|i| args.get(i + 1));
     if let Some(s) = get("--seed") {
         let n: u32 = s.parse().map_err(|_| format!("bad seed {s}"))?;
