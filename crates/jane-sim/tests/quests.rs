@@ -417,8 +417,11 @@ fn the_allotments_one_notice_at_a_time_six_rats_and_the_shed() {
 
 #[test]
 fn lowfield_farm_three_scarecrows_by_day_the_same_after_the_bell_and_six_that_are_not_turnips() {
-    // quests.test.ts "C. Lowfield Farm".
+    // quests.test.ts "C. Lowfield Farm", on a seed where the scarecrow stays where it stood (the
+    // omen false: the seed decides, `omens.rs`; the twin is `tests/omens.rs`).
     let mut s = new_game();
+    let omen = jane_sim::state::FlagKey::Named(sym(&s, "omen:scarecrow_closer"));
+    s.state_mut().flags.remove(&omen);
     let scarecrows = ["scarecrow_gate", "scarecrow_hedge", "scarecrow_top"];
     read(&mut s, "farm_door", "farmer_first", &[0], Some("farm_door"));
     read(&mut s, "farm_door", "farmer_wait_1", &[], None);

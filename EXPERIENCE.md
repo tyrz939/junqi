@@ -38,11 +38,11 @@ Times are **real minutes after New Game**, then the clock. One game hour is two 
 
 ### 0:45 to 3:30 · 17:20 to 18:45 · The lit road
 
-- **Sees / hears / can do.** A lamp-lit road, lamps unlit yet, hedges, fields, the well with a plate (THE WELL ON THE STATION ROAD) and a red glove by its wall; further on a signpost with a felt hat at its foot. Rabbits. Crows that follow her a way and turn back. At real minute 3 (18:30) every lamp on this road comes on within a few seconds, north end first. She can pick things up, read the plate, look north.
+- **Sees / hears / can do.** A lamp-lit road, lamps unlit yet, hedges, fields, the well with a plate (THE WELL ON THE STATION ROAD) and a red glove by its wall; further on a signpost with a felt hat at its foot. Rabbits. Crows that follow her a way and turn back. Nothing out here starts a fight with her: by day the Lowfields' own things on their gentlest ground leave her be until the bell (`PLAN.md` §2.6, *Day*), on the road or off it across the fields; she can start one. At real minute 3 (18:30) every lamp on this road comes on within a few seconds, north end first. She can pick things up, read the plate, look north.
 - **Knows.** Nothing new unless she reads the well: "a big building on a hill, with one window lit. It is the only light in that direction." **Does not:** that the crows' turning point is the edge of a threat pocket.
 - **Meanwhile.** Doors shutting in Castle, north end first. The mine's skeletons still lying. The dog on the left-hand board.
-- **Checks.** `[L1:julie_house 520 to 850 m from station by road]` `[L1:halt_well 100 to 280 m and halt_signpost 200 to 420 m from the station, on this road]` `[L1:nothing above threat 1 on this road by day; no true omen on it]` `[L2:the first walk is never empty]` `[L4:time_to_place gate 2 to 4 min, Reader]` `[L6:lamps at 18:30 on the station road on every seed]` `[L6:weather clear on the first walk]` `[L5:claim beside the glove by the well wall]` `[L5:knows school, by the well, not its name]`
-- **Varies.** By seed the well and signpost swap order and the road wanders. The Reader reaches the gate as the lamps come on; the Rusher before them (1.5 to 3 min).
+- **Checks.** `[L1:julie_house 520 to 850 m from station by road]` `[L1:halt_well 100 to 280 m and halt_signpost 200 to 420 m from the station, on this road]` `[L1:nothing above threat 1 on this road by day; no true omen on it]` `[L6:wary: no Damage to her before the stoop, Reader and Rusher, on or off the road]` `[L2:the first walk is never empty]` `[L4:time_to_place gate 2 to 4 min, Reader]` `[L6:lamps at 18:30 on the station road on every seed]` `[L6:weather clear on the first walk]` `[L5:claim beside the glove by the well wall]` `[L5:knows school, by the well, not its name]`
+- **Varies.** By seed the well and signpost swap order and the road wanders. The Reader reaches the gate as the lamps come on; the Rusher before them (1.5 to 3 min), straight across the fields past bats and spiders that watch her go.
 
 ### 2:00 to 4:30 · 18:00 to 19:15 · Julie's gate and stoop
 
@@ -62,7 +62,7 @@ Times are **real minutes after New Game**, then the clock. One game hour is two 
 
 ### 5:00 to 6:30 · 19:30 to 20:15 · The yard skeleton
 
-- **Sees / hears / can do.** One skeleton, phase 1, walking the fence. Melee only. A bar over its head and no number. She wins in a few swings; she can lose.
+- **Sees / hears / can do.** One skeleton, phase 1, walking the fence. By day it minds the fence and not her: she starts it (after the bell it comes for her). Melee only. A bar over its head and no number. She wins in a few swings; she can lose.
 - **Knows.** What a swing costs and what a hit costs. **Does not:** that dying now wakes her at the Halt fire on the platform: the party's fire from New Game, until she rests somewhere else.
 - **Meanwhile.** Nothing else in the yard. Nothing comes through the fence.
 - **Checks.** `[L4:first_fight is the yard skeleton inside Julie's fence]` `[L1:one skeleton inside the fence, none within a screen outside it]` `[L6:wake at the Halt fire before the first rest]` `[L5:enemy health is never a number]`
@@ -78,18 +78,18 @@ Times are **real minutes after New Game**, then the clock. One game hour is two 
 
 ### 7:00 to 10:00 · 20:30 to 22:00 · The kitchen, and the bell
 
-- **Sees / hears / can do.** A kitchen: the note on the table ("Dust, water, pansy. Make it before you go down any stairs…"), the pantry chest, the bench, the stove, the orb beside it, two hatches, the stairs up to the bed. At real minute 8 the toast: **"A school bell, a long way off. Nine o'clock."** She can read, open, craft (bags with **I**, three things into the row, take the potion), touch the orb (Icebolt), go up, go down.
+- **Sees / hears / can do.** A kitchen: the note on the table ("Dust, water, pansy. Make it before you go down any stairs…"), the pantry chest, the bench, the stove, the orb beside it, two hatches chalked in Julie's hand (KEYS, the nearer, by the stove; OUT), the stairs up to the bed. At real minute 8 the toast: **"A school bell, a long way off. Nine o'clock."** She can read, open, craft (bags with **I**, three things into the row, take the potion), touch the orb (Icebolt), go up, go down.
 - **Knows.** Julie is a witch who wrote lists; the potion; Icebolt; the bell has rung. The journal: Dust, Water, Pansy, back to the dog. **Does not:** that the step is empty now.
-- **Meanwhile.** The dog `Absent`. Night creatures up in every patch of threat 2 and above; skeletons at the edge of the unlit roads; the mine's two or three on the mine road; the night shift in file on Cinder Walk. The station road's lamps hold: nothing on it. Mist on the water.
+- **Meanwhile.** The dog `Absent`. The Lowfields' own ground stops leaving her be; night creatures up in every patch of threat 2 and above; skeletons at the edge of the unlit roads; the mine's two or three on the mine road; the night shift in file on Cinder Walk. The station road's lamps hold: nothing on it. Mist on the water.
 - **Checks.** `[L6:the bell at 21:00, heard in the house zone]` `[L6:the dog absent 21:00 to 06:00 once the bones are down]` `[L6:havens: nothing leaked on the station road or inside Julie's fence]` `[L4:Icebolt by 12 min, Reader]` `[L4:a bed known to the journal before 21:00]` `[L5:claim behind: the note's recipe and the pantry's pansy agree]` `[L1:the orb, the bench, the chest and two hatches in the kitchen chunk]`
 - **Varies.** A Reader who lingered is on the stoop when the bell goes and sees the step empty a minute later, having looked away. Nobody sees the dog leave (`STORY.md` §3; the presence rule).
 
 ### 10:00 to 17:00 · 22:00 to 01:30 · The cellar
 
-- **Sees / hears / can do.** Down either hatch. Room A: a chest with two iron keys, barrels to push. An iron door that takes one. A corridor: the rat room (four rats, a chest with a plain key), the potion room with a bench, the study with a clean ring in the dust, the rose alcove (white roses, gatherable), the storage gate (the plain key: wood x4, iron x4, a small jar *proposed*). A second iron door, room B, the other stair. She can fight, push, unlock, gather, craft, read the desk.
+- **Sees / hears / can do.** Down either hatch. KEYS comes down in room A: a chest with two iron keys, barrels to push. An iron door that takes one. OUT comes down in room B, the other end, behind the second iron door, with a note by it: "THE OTHER WAY OUT. The keys are in the chest at the first stair: the hatch chalked KEYS, by the stove." She goes back up and down the other. A corridor: the rat room (four rats, a chest with a plain key), the potion room with a bench, the study with a clean ring in the dust, the rose alcove (white roses, gatherable), the storage gate (the plain key: wood x4, iron x4, a small jar *proposed*). A second iron door, room B, the other stair. She can fight, push, unlock, gather, craft, read the desk.
 - **Knows.** Rat meat x3 (the dog's next ask is not given yet; the meat counts when it is). One kind of iron key opens either door and is spent. **Does not:** what the ring in the dust was. What the roses are for after dark.
 - **Meanwhile.** 22:00: the east road's lamps go out *if that omen is true* (*proposed*). Mr Pollard walks to the Dole Stone. The Arms lit. Mr Dunn ringing from across the square.
-- **Checks.** `[L1:the cellar's mission graph as DUNGEONS.md 3.0; a way out from either door]` `[L4:the rats and the meat by 20 min, at most one death, Reader]` `[L6:ecology: rats x4 in the cellar, recovery per WORLD.md 4.5]` `[L5:omen: the rose omen true at the seeded rate; when true, one soldier in the study on a rose picked after dark, and the solver proves the stair]` `[L5:claim behind: the wood and iron in the locked storage room]`
+- **Checks.** `[L1:the cellar's mission graph as DUNGEONS.md 3.0; a way out from either door]` `[L5:the note by the second iron door says where the keys are]` `[L4:the rats and the meat by 20 min, at most one death, Reader]` `[L6:ecology: rats x4 in the cellar, recovery per WORLD.md 4.5]` `[L5:omen: the rose omen true at the seeded rate; when true, one soldier in the study on a rose picked after dark, and the solver proves the stair]` `[L5:claim behind: the wood and iron in the locked storage room]`
 - **Varies.** The Rusher skips the storage room and regrets it at the mine's stair. The rose omen is true on about a third of seeds, and never from behind: the soldier is in the study, not the stair.
 
 ### 16:00 to 18:00 · 01:00 to 02:00 · The empty step
@@ -134,8 +134,8 @@ Times are **real minutes after New Game**, then the clock. One game hour is two 
 
 ### 33:00 to 60:00 · 13:00 to the evening · Into the mine
 
-- **Sees / hears / can do.** The mine (`DUNGEONS.md` §3.1): a shaft hall, timbered galleries, carts on rails, the store, the first aid room, the pay office made into a classroom with a register and a hand-bell. The broken thing shown first: a stair with two treads gone. A plate under a barrel. The clerk with the keys. The Headmaster. She can fight, push, Repair (with the cellar's wood), key doors, find a jar.
-- **Knows.** Repair costs what the thing is made of. The children came down here. The Headmaster is keeping order. **Does not:** what happened to them; the register never says.
+- **Sees / hears / can do.** The mine (`DUNGEONS.md` §3.1): a shaft hall, timbered galleries, carts on rails, the store, the first aid room, the pay office made into a classroom with a register and a hand-bell. The broken thing shown first: a stair with two treads gone. A plate under a barrel. The clerk with the keys. The Headmaster, who lifts his hand-bell before it rings: where it rings, whoever is still standing there stands still. She can fight, push, Repair (with the cellar's wood), key doors, find a jar.
+- **Knows.** Repair costs what the thing is made of. The children came down here. The Headmaster is keeping order, and the bell is his tell: step out of it and he is standing still with it raised. **Does not:** what happened to them; the register never says.
 - **Meanwhile.** The clock runs; the bell comes at real minute 56 (21:00, day 2) and she hears it underground. If the mine omen is true the front door bars behind her; the second way out is there.
 - **Checks.** `[L1:the mine's mission graph in its fixed order; a second exit always]` `[L6:the bell heard inside the mine]` `[L5:omen: if true, the front door barred 21:00 to 05:00 from outside only]` `[L5:the register lists names and no fates]` `[L4:the verb's first use is in safety; the rest room before the mini-boss]`
 - **Varies.** The whole layout by seed; room variants; whether she brought wood. The Co-op pair enters together; nothing in the mine asks them to split.
@@ -200,10 +200,10 @@ Headers and key claims; later passes expand each to the §2 format.
 
 ### The School · hours 13 to 15 · everything
 
-- **Sees / hears / can do.** The Bellfield at nine. The building follows the timetable: six lessons, a tower, the bell. Every verb. The choice: re-make the shield and hold it; put the Ball back in the hill; take the Sunday train.
+- **Sees / hears / can do.** Up the stair out of the Burial, the one behind Goldskin, into the boiler room: the caretaker's bin, and on it the key to the front doors, which are bolted from inside. After, those doors are the way down to the Bellfield and back. The Bellfield at nine. The building follows the timetable: six lessons, a tower, the bell. Every verb. The choice: re-make the shield and hold it; put the Ball back in the hill; take the Sunday train.
 - **Knows after.** What the bell was for. **Does not:** which choice was right. The game does not say.
 - **Meanwhile.** The two bells, if K12 was done, falling out of time.
-- **Checks.** `[L1:school on the crown, at least 1300 m from the station by road, north of every Lowfields place]` `[L6:the window lit every hour of every day until the end]` `[L5:no line calls any choice right]` `[L5:the children are never shown and never enemies]` `[L7:dossier: the School in every first-hour dossier, seen or read, before the bell]`
+- **Checks.** `[L1:school on the crown, at least 1300 m from the station by road, north of every Lowfields place]` `[L1:the way in is the Burial's stair; the front doors' key is inside, in the boiler room]` `[L6:the window lit every hour of every day until the end]` `[L5:no line calls any choice right]` `[L5:the children are never shown and never enemies]` `[L7:dossier: the School in every first-hour dossier, seen or read, before the bell]`
 - **Varies.** The ending. Whether the dog is on the step after.
 
 ---

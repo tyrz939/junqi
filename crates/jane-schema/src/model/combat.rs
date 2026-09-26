@@ -132,6 +132,10 @@ model! {
         pub duration: Tick,
         /// Between pulses, `Tick` (content writes seconds; 30 ticks when left out, as `combat.ts`).
         pub pulse: Tick,
+        /// From the cast to the first pulse, `Tick` (content writes seconds; 1 tick when left
+        /// out). A pool that lies there a moment before it bites is a tell: it is seen, and
+        /// whoever steps out of it in time is not there when it lands.
+        pub delay: Tick,
     }
 }
 

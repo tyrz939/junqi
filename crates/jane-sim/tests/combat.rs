@@ -481,6 +481,52 @@ fn slows_and_stuns_hold_her() {
     assert!(unit(&s, body).pos.x.0 > p.x.0, "it wears off");
 }
 
+/// A ground spell's `delay` is its tell (the Headmaster's hand-bell, DUNGEONS.md §3.1): the pool
+/// lies under her, seen, and bites only when the delay is up. Stood still in it she is stunned
+/// and struck; walked out of it in time, it rings on nobody. He stands with it raised meanwhile.
+#[test]
+fn a_ground_with_a_delay_is_seen_before_it_bites() {
+    let cat = jane_data::catalog();
+    let bell = spell("hand_bell");
+    let delay = cat.combat.spell(bell).ground.unwrap().delay;
+    assert!(delay.0 >= 30, "long enough to see: {delay:?}");
+    for stand in [true, false] {
+        let mut s = field();
+        let her = me(&s);
+        let hm = spawn(&mut s, "headmaster", 12, 10);
+        edit(&mut s, hm, |u| {
+            u.target = Some(her);
+            u.combat = jane_sim::state::CombatState::Combat;
+        });
+        let hp = unit(&s, her).hp;
+        let mut rung = None;
+        for _ in 0..30 {
+            steps(&mut s, 1);
+            if let Some(g) = s.state().zone(Z).unwrap().grounds.iter().find(|g| g.spell == bell) {
+                rung = Some((g.next_pulse, g.pos));
+                break;
+            }
+        }
+        let (at, pos) = rung.expect("he lifts the bell");
+        assert_eq!(unit(&s, her).hp, hp, "nothing yet");
+        assert_eq!(at.0 - s.state().tick.0, delay.0, "it rings a delay after it is lifted");
+        let hm_at = unit(&s, hm).pos;
+        if stand {
+            steps(&mut s, delay.0 + 2);
+            let u = unit(&s, her);
+            assert!(u.hp < hp, "struck");
+            assert!(u.statuses.iter().any(|st| st.effect == effect("stunned")), "and stood still");
+        } else {
+            walk(&mut s, delay.0 + 2, InputFrame { sprint: true, ..InputFrame::walk(Angle::WEST) });
+            let u = unit(&s, her);
+            assert!(u.pos.x.0 < pos.x.0 - 3 * 8 * 256, "out of it");
+            assert_eq!(u.hp, hp, "it rang on nobody");
+            assert!(!u.statuses.iter().any(|st| st.effect == effect("stunned")));
+            assert_eq!(unit(&s, hm).pos, hm_at, "he stood with it raised");
+        }
+    }
+}
+
 /// coop.test.ts "what one learns they all know, including whoever is away and whoever comes
 /// later": growth is the world's; the bar takes it where there is room.
 #[test]

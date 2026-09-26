@@ -103,6 +103,30 @@ fn a_jar_found_by_one_grows_everyone_once_the_away_and_the_late_included() {
     assert_eq!(strength(&s, 2), before[2] + 4);
 }
 
+/// The console's growth (a test kit's, `DevOp::Grow`) is the same growth: the world's, on every
+/// body at once, health and mana with it; it remembers no finding, so a second is a second.
+#[test]
+fn the_consoles_growth_is_the_worlds() {
+    let mut s = common::new_game();
+    party(&mut s, 2);
+    let body = |s: &Sim, seat: usize| {
+        let p = &s.state().players[seat];
+        let u = s.state().zone(p.zone).unwrap().unit(p.unit).unwrap();
+        (u.strength, u.spirit, jane_sim::units::max_hp(u).0)
+    };
+    let before = [body(&s, 0), body(&s, 1)];
+    cmd(&mut s, Command::Dev(DevOp::Grow { stat: Stat::Strength, amount: 10 }));
+    cmd(&mut s, Command::Dev(DevOp::Grow { stat: Stat::Strength, amount: 10 }));
+    cmd(&mut s, Command::Dev(DevOp::Grow { stat: Stat::Spirit, amount: 6 }));
+    for (seat, b) in before.iter().enumerate() {
+        let a = body(&s, seat);
+        assert_eq!((a.0, a.1), (b.0 + 20, b.1 + 6), "seat {seat}");
+        assert_eq!(a.2, b.2 + 20 * 5_000, "seat {seat}: five health a point of strength");
+    }
+    assert_eq!((s.state().growth.strength, s.state().growth.spirit), (20, 6));
+    assert!(s.state().growth.found.is_empty(), "nothing was found");
+}
+
 #[test]
 fn what_one_learns_they_all_know_and_it_takes_a_bar_slot_once() {
     let cat = jane_data::catalog();

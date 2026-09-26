@@ -1,6 +1,7 @@
-// A place the story reaches later: its ground, its shape against the sky and a mark, and no door.
-// The `school_door` slot in its face is where data/doors.json sets one once the place behind it
-// exists; until then the face is blank, because a locked door with nothing behind it would be a lie.
+// The School on the crown: its ground, its shape against the sky, its front doors and a mark. The
+// doors (data/doors.json `school_door`, in the `school_door` slot) are bolted from inside: the way
+// in is the stair up out of the Burial into the boiler room, where the key on the caretaker's bin
+// opens them from this side after, the shortcut down to the Bellfield (DUNGEONS.md 3.6).
 id      school
 box     60x44
 anchor  centre

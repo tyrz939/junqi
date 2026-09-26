@@ -23,7 +23,7 @@
 use jane_core::action::{School, Stat};
 use jane_core::angle::{along, bearing, cos_q15, sin_q15};
 use jane_core::num::{CELL_FX, dist_sq, div_round, isqrt};
-use jane_core::{Angle, EffectId, Fx, Key, Milli, Sfc32, SpellId, Tick, UnitDefId, Vec2};
+use jane_core::{Angle, EffectId, Fx, Key, Milli, Sfc32, SpellId, UnitDefId, Vec2};
 use jane_data::{Controller, Faction, SpellDef, SpellKind, SpellPower, WorldSpell};
 
 use crate::actions::Subject;
@@ -505,7 +505,8 @@ fn cast_bolt(
     }
 }
 
-/// A pool on the ground under the target (or the caster, cast with an aim or at nobody).
+/// A pool on the ground under the target (or the caster, cast with an aim or at nobody). Its
+/// first pulse comes the row's `delay` after the cast: until then it is only seen.
 fn cast_ground(cx: &mut Ctx<'_>, caster: UnitId, id: SpellId, spell: &SpellDef, target: Option<UnitId>) {
     let Some(pool) = spell.ground else { return };
     let c = cx.zone.unit(caster).expect("caster");
@@ -521,7 +522,7 @@ fn cast_ground(cx: &mut Ctx<'_>, caster: UnitId, id: SpellId, spell: &SpellDef, 
         pos,
         radius: pool.radius,
         until: now.after(pool.duration),
-        next_pulse: now.after(Tick(1)),
+        next_pulse: now.after(pool.delay),
     });
 }
 

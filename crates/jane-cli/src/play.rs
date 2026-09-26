@@ -81,7 +81,7 @@ fn play(args: &[String], tape: Option<&str>) -> Result<(), String> {
     let mut bot = match dungeon {
         Some(z) => {
             let mut b = Bot::new(model, Plan::Crawl(Crawl::new(z)));
-            b.setup = jane_bot::crawl::setup(sim.blueprint(ZoneId::County), sim.blueprint(z));
+            b.setup = jane_bot::crawl::setup(sim.blueprints(), z);
             b
         }
         None => Bot::story(model),

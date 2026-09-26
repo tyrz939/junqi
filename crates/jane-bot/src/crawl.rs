@@ -802,14 +802,137 @@ pub fn mouth_of(bp: &jane_core::Blueprint) -> Option<(ZoneId, jane_core::Key)> {
     bp.props.iter().find_map(|p| p.to.filter(|d| d.zone != bp.zone).map(|d| (d.zone, d.mark)))
 }
 
+/// The dungeons in the order the story walks them (WORLD.md §9.1: the acts), the cellar first.
+pub const ORDER: [ZoneId; 9] = [
+    ZoneId::Cellar,
+    ZoneId::Mine,
+    ZoneId::Museum,
+    ZoneId::Library,
+    ZoneId::Forest,
+    ZoneId::Pipes,
+    ZoneId::Factory,
+    ZoneId::Burial,
+    ZoneId::School,
+];
+
+/// Growth as (strength, spirit).
+pub type Growth = (i32, i32);
+
+/// The `grow`s in an action list (an `if` both ways), added to `out`. `bp` resolves a
+/// blueprint's own lists; a catalog list needs none.
+fn grows(bp: Option<&jane_core::Blueprint>, acts: &[jane_core::Action], out: &mut Growth) {
+    use jane_core::action::{Action, Stat};
+    for a in acts {
+        match *a {
+            Action::Grow { stat: Stat::Strength, amount, .. } => out.0 += i32::from(amount),
+            Action::Grow { stat: Stat::Spirit, amount, .. } => out.1 += i32::from(amount),
+            Action::If { then, els, .. } => {
+                grows(bp, list_of(bp, then), out);
+                if let Some(e) = els {
+                    grows(bp, list_of(bp, e), out);
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+fn list_of(bp: Option<&jane_core::Blueprint>, r: jane_core::ListRef) -> &[jane_core::Action] {
+    match r {
+        jane_core::ListRef::Blueprint(i) => bp.and_then(|b| b.lists.get(usize::from(i))).map_or(&[], Vec::as_slice),
+        jane_core::ListRef::Catalog(_) => jane_data::catalog().list(r),
+    }
+}
+
+/// The growth on offer in a blueprint: every `grow` in its props' `use` lists and in the
+/// conversations its props open (jars, gold-leaf pages, the library's margins).
+pub fn growth_in(bp: &jane_core::Blueprint) -> Growth {
+    let cat = jane_data::catalog();
+    let mut out = (0, 0);
+    for p in &bp.props {
+        if let Some(u) = p.use_list {
+            grows(Some(bp), list_of(Some(bp), u), &mut out);
+        }
+        for n in p.talk.map(|t| cat.story.dialogue(t).nodes).unwrap_or_default() {
+            for a in n.actions.into_iter().chain(n.options.iter().filter_map(|o| o.actions)) {
+                grows(Some(bp), cat.list(a), &mut out);
+            }
+        }
+    }
+    out
+}
+
+/// The growth a player has found by the time she reaches `z` (PLAN.md §2.6: "growth comes from
+/// finding things"): everything the dungeons before it in [`ORDER`] offer and, from the Museum on,
+/// what the county's quests pay in growth (every one of them is a Lowfields errand today, done
+/// between the mine and the river). The cellar and the mine are met as the first hour leaves her:
+/// nothing found. Counted off this seed's own blueprints and the catalog, so the kit follows the
+/// content.
+pub fn growth_before(bps: &jane_sim::Blueprints, z: ZoneId) -> Growth {
+    let cat = jane_data::catalog();
+    let Some(at) = ORDER.iter().position(|&o| o == z) else { return (0, 0) };
+    let mut out = (0, 0);
+    for &d in &ORDER[..at] {
+        let (s, p) = growth_in(bps.get(d));
+        out = (out.0 + s, out.1 + p);
+    }
+    let after_mine = at > ORDER.iter().position(|&o| o == ZoneId::Mine).unwrap_or(0);
+    if after_mine {
+        for q in cat.story.quests {
+            grows(None, cat.list(q.rewards), &mut out);
+        }
+    }
+    out
+}
+
+/// The materials a player carries into `z`: of every item a mending or a growing anywhere in the
+/// story's dungeons asks for (a prop's `needs`: wood, iron), what the places before it in
+/// [`ORDER`] hold in their chests less what their own broken things take, never under nothing.
+/// The cellar's storage room is where the mine's wood comes from (the dog: "Broken stairs want
+/// wood. There is some in the cellar storage"); the mine leaves nothing over.
+pub fn materials_before(bps: &jane_sim::Blueprints, z: ZoneId) -> Vec<(ItemId, u16)> {
+    let Some(at) = ORDER.iter().position(|&o| o == z) else { return Vec::new() };
+    let mut kinds: Vec<ItemId> =
+        ORDER.iter().flat_map(|&d| bps.get(d).props.iter().flat_map(|p| p.needs.iter().map(|s| s.item))).collect();
+    kinds.sort();
+    kinds.dedup();
+    let mut carried: Vec<i32> = vec![0; kinds.len()];
+    for &d in &ORDER[..at] {
+        let bp = bps.get(d);
+        for (k, have) in kinds.iter().zip(carried.iter_mut()) {
+            let found: i32 =
+                bp.props.iter().flat_map(|p| &p.loot).filter(|s| s.item == *k).map(|s| i32::from(s.qty)).sum();
+            let spent: i32 =
+                bp.props.iter().flat_map(|p| &p.needs).filter(|s| s.item == *k).map(|s| i32::from(s.qty)).sum();
+            *have = (*have + found - spent).max(0);
+        }
+    }
+    kinds
+        .into_iter()
+        .zip(carried)
+        .filter(|&(_, n)| n > 0)
+        .map(|(k, n)| (k, n.min(i32::from(u16::MAX)) as u16))
+        .collect()
+}
+
 /// The console setup for a crawl of `z` with the kit a player would carry there: the dungeon's
-/// given verbs learned, its given keys and the key to its county door in the bag, food, the
-/// clock at ten in the morning (the museum is shut after four), and her set down at its door.
-pub fn setup(county: &jane_core::Blueprint, dungeon: &jane_core::Blueprint) -> Vec<jane_sim::Command> {
+/// given verbs learned, its given keys and the key to its county door in the bag, the growth she
+/// would have found before it ([`growth_before`]) and the materials left over from the places
+/// before it ([`materials_before`]), food, the clock at ten in the morning (the
+/// museum is shut after four), and her set down at its door. A county door whose key lies inside
+/// the dungeon (the School's front doors, opened from inside) she cannot carry the first time:
+/// she is set down inside, where the other way in arrives.
+pub fn setup(bps: &jane_sim::Blueprints, z: ZoneId) -> Vec<jane_sim::Command> {
     use jane_sim::{Command, DevOp};
     let cat = jane_data::catalog();
+    let (county, dungeon) = (&**bps.get(ZoneId::County), &**bps.get(z));
     let mut out = vec![Command::Dev(DevOp::Time { hour: 10 })];
-    let z = dungeon.zone;
+    let (strength, spirit) = growth_before(bps, z);
+    for (stat, amount) in [(jane_core::action::Stat::Strength, strength), (jane_core::action::Stat::Spirit, spirit)] {
+        if amount > 0 {
+            out.push(Command::Dev(DevOp::Grow { stat, amount: amount.min(i32::from(i16::MAX)) as i16 }));
+        }
+    }
     if let Some(m) = cat.dungeons.missions.iter().find(|m| m.zone == z) {
         for &s in m.given_verbs {
             out.push(Command::Dev(DevOp::Learn(s)));
@@ -820,17 +943,24 @@ pub fn setup(county: &jane_core::Blueprint, dungeon: &jane_core::Blueprint) -> V
             }
         }
     }
+    let inside = keys_inside(county, dungeon);
     for k in keys_for(county, z) {
-        out.push(Command::Dev(DevOp::Give { item: k, qty: 1 }));
+        if !inside.contains(&k) {
+            out.push(Command::Dev(DevOp::Give { item: k, qty: 1 }));
+        }
+    }
+    for (item, qty) in materials_before(bps, z) {
+        out.push(Command::Dev(DevOp::Give { item, qty }));
     }
     out.push(Command::Dev(DevOp::Give { item: sense::item("apple"), qty: 8 }));
     // What the bench and the first quests will have given her by then.
     for (name, qty) in [("potion_stoneskin", 2), ("potion_manashield", 1)] {
         out.push(Command::Dev(DevOp::Give { item: sense::item(name), qty }));
     }
-    // A county door locked with a tag nothing in the catalog opens (the School's, so far) cannot
-    // be played through: she is set down inside, at the mark by its way out.
-    if keyless(county, z) {
+    // A county door locked with a tag nothing in the catalog opens cannot be played through, and
+    // one whose key is found inside is not, the first time: she is set down inside, at the mark
+    // by its way out.
+    if keyless(county, z) || !inside.is_empty() {
         if let Some(n) = inside_mark(dungeon) {
             out.push(Command::Dev(DevOp::Tp { zone: z, mark: jane_sim::sym::of_name(n) }));
         }
@@ -864,6 +994,15 @@ pub fn keyless(county: &jane_core::Blueprint, z: ZoneId) -> bool {
                 jane_core::Key::Local(_) => true,
             })
     })
+}
+
+/// The keys to the county's doors into a dungeon that lie in the dungeon itself (the School's
+/// front doors: the key is on the caretaker's bin, inside).
+pub fn keys_inside(county: &jane_core::Blueprint, dungeon: &jane_core::Blueprint) -> Vec<ItemId> {
+    keys_for(county, dungeon.zone)
+        .into_iter()
+        .filter(|&k| dungeon.props.iter().any(|p| p.loot.iter().any(|s| s.item == k)))
+        .collect()
 }
 
 /// The keys that open the county's doors into `z` (the kit a player would carry to it).

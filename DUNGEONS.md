@@ -586,7 +586,7 @@ In the order the story reaches them. Each sits at one balance phase (`DESIGN-202
 
 ### 3.0 Julie's cellar (phase 1): keep
 
-**Fiction.** Julie kept the cellar the way she kept everything: labelled, locked where it mattered, and one key short. Two hatches go down from the kitchen wall and come up again at opposite ends, because a cellar with one way out was, in her margin, "a mistake you make once". There are rats, a bench for potions, a storeroom behind a plain lock, and a study with a desk and nothing on it.
+**Fiction.** Julie kept the cellar the way she kept everything: labelled, locked where it mattered, and one key short. Two hatches go down from the kitchen wall and come up again at opposite ends, because a cellar with one way out was, in her margin, "a mistake you make once". There are rats, a bench for potions, a storeroom behind a plain lock, and a study with a desk and nothing on it. The hatches are chalked KEYS (the nearer the doorway, by the stove) and OUT, and a note by the second iron door, at the OUT end, says where the keys are: "THE OTHER WAY OUT… A cellar with one way out is a mistake you make once."
 
 The roses grow without light. The dust on the study desk has a clean ring in it, the size of the stand in the kitchen. The dog does not come down. It says the stairs are steep, which they are not.
 
@@ -654,7 +654,7 @@ The Headmaster brought the school down here when the nights got longer, because 
 
 **Enemies.** All existing rows: `rat`, `bat`, `skeleton`, `skeleton_clerk`, `headmaster`, `iron_knuckles`. Cost budget `baseHeat` 6.
 
-**Mini-boss: the Headmaster** (existing row: `melee_stun`, `melee_fast`). He tests the verb learned before this dungeon: Icebolt's chill (speed x0.6) is how a phase 1 player keeps him at arm's length, and his stun punishes standing still to cast. On death he unlocks the drawer (`onDeath: unlock hm_drawer`). The drawer is a 2 x 2 `once` prop that opens a dialogue tree, like the fire scroll:
+**Mini-boss: the Headmaster** (row: `hand_bell`, `melee_fast`). He tests the verb learned before this dungeon: Icebolt's chill (speed x0.6) is how a phase 1 player keeps him at arm's length, and his stun punishes standing still to cast. The stun has a tell: the **hand-bell** (the one on the desk) is a ground spell with a `delay`. He lifts it and stands with it raised (0.75 s); a ring of 1.25 m lies under her where she stood; when it rings, whoever is still inside it is stunned for two seconds and struck. She sees it, steps out, and has him standing still with his arm up: that is her opening. Stood still to cast inside it, she is his. On death he unlocks the drawer (`onDeath: unlock hm_drawer`). The drawer is a 2 x 2 `once` prop that opens a dialogue tree, like the fire scroll:
 
 > CONFISCATED. To be returned at the end of term.
 > A catapult. A tin of humbugs. One page, in handwriting you know from a letter: "Mending. It costs what the thing is made of. Wood for wood, iron for iron. It will not mend people. I have tried."
@@ -972,7 +972,7 @@ The bed is a lever. That is the only new trick, and it needs no engine work: `re
 
 ```
 order node         kind      holds                                                       heat
-0     boiler       entrance  up the stair from the Burial. (The front doors open from inside later: the shortcut to the Bellfield)   0.4
+0     boiler       entrance  up the stair from the Burial (the stair stands behind Goldskin: its room opens when he is down). The key to the front doors lies on the caretaker's bin: the county door is bolted from inside, and this key opens it from outside after, the shortcut to the Bellfield   0.4
 1     hall         hub       the bell rope: grants state `period`. The timetable (notice). Six doors and a tower stair, seen and shut   0
 2     sick_bay     rest      two beds. A fire in the grate. Nothing comes in                0
 3a    woodwork     puzzle    Repair: a run of broken benches to cross a flooded floor; wood in the racks. Lessons only     0.8
@@ -998,7 +998,7 @@ Each lesson ends at a classroom clock that she stops (a `once` prop: `flag lesso
 
 **Boss: the Ringer.** 5,000 HP. **Question for John:** who or what rings the bell is `STORY.md`'s open question, and this document does not answer it. The name is a placeholder and the fight is written so that the answer can change without the fight changing. The belfry is round. The bell tolls on a fixed count, every twenty seconds, and each toll does two things: a ring of bolts outward from the centre (the snake's `snake_ring`, at scale), and the room changes face, day to night to day (`onEnter` cannot do this; it is a timer, so the Ringer takes the snake's route: a small custom clock in its controller, which would be a second exception to the one-custom-mover rule and needs agreeing). By day the Ringer can be hurt and the floor is plain. By night it cannot be seen outside cold light, shades stand at the edge of warm light, dead sockets want sparking to keep two lamps burning, and buds in the moonbeam from the one window bloom into cover that stops the next ring. Every verb has one job. None is required; each makes one toll survivable.
 
-**Rewards.** Big jar, and the ending. **Rest:** the sick bay. **Shortcut:** the front doors, opened from inside, onto the Bellfield (threat 6) and the road down.
+**Rewards.** Big jar, and the ending. **Rest:** the sick bay. **Shortcut:** the front doors, opened from inside (`key_school`, on the caretaker's bin in the boiler room; the county's `school_door` takes it), onto the Bellfield (threat 6) and the road down.
 
 **With 2 to 4 players.** The timetable splits parties by temptation: three lessons are open at once and the hall is between them. The corridors during lessons are why that is a bad idea and why break is the time to move. The belfry gives every player a verb to mind.
 

@@ -55,6 +55,27 @@ fn new_game_rolls_the_omens_into_flags() {
     }
 }
 
+/// "The scarecrow in the top field was not there yesterday": true, after the bell the top field's
+/// scarecrow is gone from its place and its twin stands nearer the farm, and by day they swap
+/// back; false, it stands where it stood. Either way the swap happens out of her sight (the
+/// trigger's rect is wide on purpose).
+#[test]
+fn the_scarecrow_is_closer_some_nights() {
+    for true_here in [true, false] {
+        let mut s = common::new_game();
+        set_omen(&mut s, "scarecrow_closer", true_here);
+        hour(&mut s, 22);
+        tp(&mut s, ZoneId::County, "scarecrow_top");
+        let (top, near) = (prop(&s, "scarecrow_top"), prop(&s, "scarecrow_top_near"));
+        assert_eq!((top.hidden, near.hidden), (true_here, !true_here), "after the bell, omen {true_here}");
+        tp(&mut s, ZoneId::County, "start");
+        hour(&mut s, 10);
+        tp(&mut s, ZoneId::County, "scarecrow_top");
+        let (top, near) = (prop(&s, "scarecrow_top"), prop(&s, "scarecrow_top_near"));
+        assert_eq!((top.hidden, near.hidden), (false, true), "by day, omen {true_here}");
+    }
+}
+
 /// "No exit either, some nights": true, the mine's front door is barred from nine to five, from
 /// outside (the county's door) and so from inside too; the adit is the second way out. Once Iron
 /// Knuckles is down the bar is gone for good. False, the door is a door.

@@ -147,6 +147,7 @@ impl Sim {
                 }
             }),
             DevOp::Learn(spell) => self.in_seat_ctx(seat, |cx| crate::combat::learn_verb(cx, spell)),
+            DevOp::Grow { stat, amount } => self.in_seat_ctx(seat, |cx| crate::verbs::dev_grow(cx, stat, amount)),
             DevOp::Kill => self.in_seat_ctx(seat, |cx| {
                 if let Some(b) = cx.actor_unit() {
                     crate::combat::dev_kill(cx, b);

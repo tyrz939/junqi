@@ -378,7 +378,7 @@
     {
       "id": "stair", "kind": "exit", "order": 9, "critical": true, "pool": "burial.stair", "heat": 0,
       "holds": [
-        { "socket": "exit:stair", "prop": "door", "to": { "zone": "school", "mark": "boiler" }, "locked": true, "label": "The stair up" },
+        { "socket": "exit:stair", "prop": "door", "to": { "zone": "school", "mark": "boiler" }, "label": "The stair up" },
         { "socket": "jar:big", "prop": "jar_big" },
         { "socket": "chest:ball", "prop": "boss_chest", "label": "His box", "loot": [{ "item": "the_ball", "qty": 1 }, { "item": "gold_bar", "qty": 4 }] }
       ],

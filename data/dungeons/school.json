@@ -67,6 +67,10 @@
             {
               "item": "coal",
               "qty": 2
+            },
+            {
+              "item": "key_school",
+              "qty": 1
             }
           ],
           "label": "The caretaker's bin"
@@ -105,7 +109,11 @@
         }
       ],
       "demands": [],
-      "grants": []
+      "grants": [
+        {
+          "key": "school"
+        }
+      ]
     },
     {
       "id": "hall",

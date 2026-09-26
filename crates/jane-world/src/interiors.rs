@@ -193,11 +193,12 @@ pub fn build_house(seed: u32, attempt: u8) -> Blueprint {
     b.door("front_door", "door", 25, 22, (ZoneId::County, "house_front"), None);
     b.mark("front", 25, 20, Facing::North);
 
-    // Two hatches on one wall, both to the cellar.
-    b.door("hatch_a", "hatch", 4, 4, (ZoneId::Cellar, "stair_a"), None);
-    b.door("hatch_b", "hatch", 9, 4, (ZoneId::Cellar, "stair_b"), None);
-    b.mark("hatch_a", 5, 7, Facing::South);
-    b.mark("hatch_b", 10, 7, Facing::South);
+    // Two hatches on one wall, both to the cellar, chalked in Julie's hand. The one nearer the
+    // doorway goes down to the keys; the far one to the other way out, and a note there says so.
+    b.door("hatch_a", "hatch", 9, 4, (ZoneId::Cellar, "stair_a"), Some("The hatch chalked KEYS"));
+    b.door("hatch_b", "hatch", 4, 4, (ZoneId::Cellar, "stair_b"), Some("The hatch chalked OUT"));
+    b.mark("hatch_a", 10, 7, Facing::South);
+    b.mark("hatch_b", 5, 7, Facing::South);
 
     b.prop(None, "stove", 12, 2);
     b.talker("ice_orb", "orb_ice", 15, 2, "orb_ice");
@@ -325,6 +326,9 @@ pub fn build_cellar(seed: u32, attempt: u8) -> Blueprint {
     b.k.fill(room_b, floor);
     b.door("stair_b", "stairs", 90, 68, (ZoneId::House, "hatch_b"), None);
     b.mark("stair_b", 87, 68, Facing::West);
+    // Come down this end first and the iron door is shut with nothing to open it: the note by it
+    // says where the keys are, in the hand from the kitchen.
+    b.talker("cellar_other_way", "note", 86, 62, "cellar_other_way");
     let mut rng = dice(&b, Cellar::PileB);
     b.k.pile(&mut rng, Rect::new(room_b.x + 1, room_b.y + 1, 8, 6), prop_def("barrel"), 2);
 

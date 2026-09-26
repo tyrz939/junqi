@@ -100,16 +100,55 @@ fn target(s: &Sim, id: UnitId) -> (CombatState, Option<UnitId>) {
 
 // --- chasing ---------------------------------------------------------------------------------
 
-/// sim.test.ts "enemies chase a player who is standing still, and hit them".
+/// sim.test.ts "enemies chase a player who is standing still, and hit them". After the bell: by
+/// day the field is the county's gentlest ground, and that is the next test.
 #[test]
 fn enemies_chase_a_player_standing_still_and_hit_her() {
     let mut s = field();
+    hour(&mut s, 22);
     let foe = spawn(&mut s, "skeleton", 19, 10);
     let hp = unit(&s, me(&s)).hp;
     steps(&mut s, 60 * 12);
     assert_eq!(target(&s, foe), (CombatState::Combat, Some(me(&s))));
     assert!(unit(&s, me(&s)).hp < hp);
     assert!(px(dist(unit(&s, foe).pos, unit(&s, me(&s)).pos)) <= 16, "it came to her");
+}
+
+/// Wary (PLAN.md §2.6 "Day"): by day a creature of the county's gentlest ground (threat 1, as
+/// the phase table left its strength) starts no fight with her, though she stands beside it; she
+/// strikes it and it fights back; at the bell it comes for her. Harder ground, or a dungeon, and
+/// it comes by day as ever.
+#[test]
+fn by_day_the_gentlest_ground_leaves_her_be() {
+    let mut s = field();
+    hour(&mut s, 10);
+    let her = me(&s);
+    let foe = spawn(&mut s, "skeleton", 13, 10);
+    let hp = unit(&s, her).hp;
+    steps(&mut s, 60 * 4);
+    assert_eq!(target(&s, foe), (CombatState::Idle, None), "it has seen her and minds its own business");
+    assert_eq!(unit(&s, her).hp, hp);
+
+    // Harder ground: the same row at threat 2, by the same light, has her at once.
+    let hard = spawn(&mut s, "skeleton", 13, 14);
+    edit(&mut s, hard, |u| u.strength *= 2);
+    steps(&mut s, 20);
+    assert_eq!(target(&s, hard).1, Some(her));
+    remove(&mut s, hard);
+
+    // Struck, it fights back.
+    edit(&mut s, her, |u| u.pos = Vec2::centre(12, 10));
+    steps(&mut s, 1);
+    cmd(&mut s, Some(0), Command::Cast { spell: spell("melee_player"), on: None });
+    steps(&mut s, 30);
+    assert_eq!(target(&s, foe), (CombatState::Combat, Some(her)));
+    remove(&mut s, foe);
+
+    // At the bell the county is what it became.
+    let night = spawn(&mut s, "skeleton", 16, 10);
+    hour(&mut s, 21);
+    steps(&mut s, 20);
+    assert_eq!(target(&s, night).1, Some(her));
 }
 
 /// sim.test.ts "checks range before cooldown, so a cooling-down AI keeps walking": `TooFar`
@@ -165,6 +204,7 @@ fn a_leash_takes_it_home_whole() {
 #[test]
 fn a_lit_sighted_creature_sees_only_what_stands_in_the_light() {
     let mut s = field();
+    hour(&mut s, 22);
     let her = me(&s);
     let sentry = spawn(&mut s, "hauler", 17, 10);
     let plain = spawn(&mut s, "skeleton", 17, 13);
@@ -208,6 +248,7 @@ fn a_lit_sighted_creature_sees_only_what_stands_in_the_light() {
 #[test]
 fn a_shade_waits_at_the_edge_of_warm_light() {
     let mut s = field();
+    hour(&mut s, 22);
     let her = me(&s);
     let lamp = put_prop(&mut s, "brazier", 10, 9, true);
     let shade = spawn(&mut s, "shade", 20, 10);
@@ -392,6 +433,8 @@ fn arriving_at_night_it_was_already_gone() {
 /// tape of her walking about and casting along random aims.
 fn chase() -> Sim {
     let mut s = field();
+    // After the bell, when the county's own ground comes for her too.
+    hour(&mut s, 22);
     for id in ["icebolt", "fireball"] {
         learn(&mut s, id);
     }
@@ -657,7 +700,9 @@ fn the_tick_costs_what_is_awake() {
     let key = jane_sim::sym::of_name(jane_data::catalog().name_id("yard_skeleton").unwrap());
     let skel = *s.runtime(ZoneId::County).unwrap().unit_names.get(&key).unwrap();
     // The seed puts it far from the start (and the lattice all round it): she is stood a few
-    // cells off, the ring wakes it, and it has her.
+    // cells off after the bell (by day it walks its fence and minds it), the ring wakes it, and
+    // it has her.
+    hour(&mut s, 22);
     let (x, y) = unit(&s, skel).pos.cell();
     let (fx, fy) = s.runtime(ZoneId::County).unwrap().grid.nearest_free(x - 6, y, 6, None).unwrap();
     let her = me(&s);

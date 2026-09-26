@@ -107,12 +107,18 @@ pub enum DevOp {
     },
     Kill,
     Spawn(jane_core::UnitDefId),
+    /// Growth as a finding would give it (the party's), with nothing found: a test kit carries
+    /// what the content offers before a place (the bot's dungeon crawl).
+    Grow {
+        stat: jane_core::action::Stat,
+        amount: i16,
+    },
 }
 
 /// A discrete action, addressed to a seat.
 ///
 /// Handled: `Join`, `Leave`, `Open`, `Bind`, `Unbind`, `BarSwap`, `CloseDialogue`,
-/// `Dev(God | Tp | Time | Flag)` (seats); `Bar`, `Cast`, `Dev(Hp | Mp | Learn | Kill | Spawn)`
+/// `Dev(God | Tp | Time | Flag | Grow)` (seats); `Bar`, `Cast`, `Dev(Hp | Mp | Learn | Kill | Spawn)`
 /// (combat). The rest are no-ops until their owners land (interact: `Use`; inventory: `Item`,
 /// `Bag*`, `Craft*`, `Dev(Give)`, a bar slot holding an item; dialogue: `Advance`, `Choose`;
 /// quests: `Dev(Quest)`).
