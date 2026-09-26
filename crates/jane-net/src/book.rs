@@ -44,12 +44,12 @@ impl Book {
         if frame % HASH_EVERY != 0 {
             return None;
         }
-        let h = sim.hash();
+        let (save, h) = sim.save_and_hash();
         self.hashes.push_back((frame, h));
         if self.hashes.len() > HASHES {
             self.hashes.pop_front();
         }
-        self.ring.push_back((frame, sim.save()));
+        self.ring.push_back((frame, save));
         if self.ring.len() > RING {
             self.ring.pop_front();
         }

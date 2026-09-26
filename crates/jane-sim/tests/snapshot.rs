@@ -29,6 +29,8 @@ fn a_snapshot_of_a_live_table_loads_as_that_table_and_plays_on_the_same() {
             joined.push(b);
         }
         if f % 100 == 99 {
+            // One encoding, both answers.
+            assert_eq!(live.save_and_hash(), (live.save(), live.hash()));
             for j in &joined {
                 assert_eq!(j.hash(), live.hash(), "frame {f}: a joiner plays on as the live world");
                 checked += 1;

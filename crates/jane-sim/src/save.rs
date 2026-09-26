@@ -223,6 +223,19 @@ impl Sim {
 
     /// The bytes of a save. Slots are the app's and `jane serve`'s; the sim only encodes.
     pub fn save(&self) -> Vec<u8> {
+        let body = postcard::to_allocvec(&Form::of(&self.state, &self.bps)).expect("the state encodes");
+        self.save_of(&body)
+    }
+
+    /// The save's bytes and the state hash (`hash()`) from one encoding of the form: a lockstep
+    /// peer takes both at every hash point (ARCHITECTURE.md §7), and the hash of the body's
+    /// bytes is the hash streamed.
+    pub fn save_and_hash(&self) -> (Vec<u8>, u64) {
+        let body = postcard::to_allocvec(&Form::of(&self.state, &self.bps)).expect("the state encodes");
+        (self.save_of(&body), xxhash_rust::xxh3::xxh3_64(&body))
+    }
+
+    fn save_of(&self, body: &[u8]) -> Vec<u8> {
         let header = Header {
             save_version: SAVE_VERSION,
             content_hash: jane_data::catalog().content_hash,
@@ -230,8 +243,7 @@ impl Sim {
             summary: self.summary(),
         };
         let head = postcard::to_allocvec(&header).expect("a header encodes");
-        let body = postcard::to_allocvec(&Form::of(&self.state, &self.bps)).expect("the state encodes");
-        let packed = lz4_flex::block::compress_prepend_size(&body);
+        let packed = lz4_flex::block::compress_prepend_size(body);
         let mut out = Vec::with_capacity(8 + head.len() + packed.len());
         out.extend_from_slice(&MAGIC);
         out.extend_from_slice(&(head.len() as u32).to_le_bytes());
