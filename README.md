@@ -10,7 +10,17 @@ This is the third build. The first (Phaser, 2026) is archived in `archive/phaser
 
 ## Where it stands (2026-09-26)
 
-**Phase P0 of `PORT.md`: planning documents only.** No Rust exists. The TypeScript build in `jane/` runs and is the reference until P10 archives it.
+**The Rust build is under way: P0 to P3 of `PORT.md` are built, P4 (the sim) is being built, P5 (art) has begun.** Nothing draws in a window yet; everything below runs headless and is proven by tests. The TypeScript build in `jane/` runs and is the reference until P10 archives it.
+
+| Phase | State |
+| --- | --- |
+| P0 workspace, CI, `/data` | Done. Fourteen crates, the lints, the float gate, CI for six targets (not yet run: the branch has not reached GitHub) |
+| P1 core, schema, data | Done. `jane-core`; every table of `/data` compiled at build time into static Rust (`jane check` in under 0.1 s), with the TypeScript's checks and the cross-table ones (every name provided, every flag set). Looks, bindings, weather and consequences tables are later phases' |
+| P2 skeleton, county | Done. The skeleton, the county's land, roads, rail, 16 authored places as `.chunk` data, doors, furniture, placements, stories and names; every county proven by the solver (0 of 512 re-rolled). About 0.3 s a county, over the 300 ms gate |
+| P3 dungeons, interiors | Done. Eight generated dungeons through the solver and checks C1 to C12 (fallback 0 of 1000), 109 templates proven alone, the four interiors; `jane gen --hash` and the x86_64 hash fixture |
+| P4 sim | Foundation (state, runtime, path, movement, ring, seats, travel, save, hash, View) and combat (casting, bolts, statuses, the flush, loot, aim assist) done; interaction, quests, dialogue, triggers, the journal, AI and the snake in progress; the bot next |
+| P5 art | Step 1 done: palette, the four-layer canvas and its primitives, the stroke font, chrome, a lit-sphere sheet |
+| P6 onward | Not started |
 
 | Doc | What it decides |
 | --- | --- |
@@ -36,19 +46,23 @@ npm run build    # type-check + production bundle (~280 kB, no runtime dependenc
 
 Art is source code (palette-character grids rasterised at boot). The repo ships no image, font or audio file, and the Rust build will ship none either: there it is all generated.
 
-## Run the native build (Rust, from P1)
+## Run the native build (Rust)
 
-Not yet. When it exists:
+What runs today (all headless; `cargo jane` is an alias for `cargo run -q -p jane-cli --`):
 
 ```bash
-cargo run --release -p jane-app          # the game
-cargo test --workspace                   # SEEDS=64 by default
-cargo run -p jane-cli -- check           # validate data/ in under a second
-cargo run -p jane-cli -- view --seeds 1..24 --out sheets/   # the seed viewer, as PNGs
-cargo run -p jane-cli -- play --model reader --seed 7 --hours 1 --trace t.jtr   # a bot plays a seed
-cargo run -p jane-cli -- dossier --trace t.jtr             # what she saw, in prose
-cargo run -p jane-cli -- serve --slot 1 --open             # a headless LAN host
+cargo test --workspace                                   # SEEDS=64 by default; about a minute
+cargo jane check                                         # compile /data, list every error and warning
+cargo jane view --seeds 1..24 --out sheets/              # each seed's skeleton as a PNG (+ a .txt of its checks)
+cargo jane view --county --seed 7 --scale 4              # a built county's cells, with each stage's time
+cargo jane view --dungeon all --seeds 1..9               # generated dungeons, attempts after validation
+cargo jane view --interior all --seed 1                  # the house, cellar, Arms and church
+cargo jane gen --zones all --seeds 1..16 --hash          # every zone built and proven; one hash per (zone, seed)
+cargo jane hash --seed 7 --frames 600                    # a new game stepped, and its state hash
+cargo jane sheet light sphere                            # art sheets: layers, light, font, chrome, palette
 ```
+
+Still to come (`PORT.md` §7): the game itself (`cargo run --release -p jane-app`), bots playing seeds (`jane play`, `dossier`), the LAN host (`jane serve`).
 
 Targets: `x86_64` Linux and Windows, `i686` (SSE2, Pentium 4 era), `aarch64` and `armv7` Linux (Raspberry Pi); Windows 7 and XP later through their own toolchains. One dedicated build per target. Rendering picks a backend at boot: `wgpu` on a modern GPU, `gl2` on anything with an OpenGL 2.1 driver (a 2006 PC, every Pi), `soft` when there is nothing. `PORT.md` §3, `PRESENTATION.md` §1.
 
