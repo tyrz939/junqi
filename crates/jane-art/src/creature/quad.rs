@@ -84,7 +84,7 @@ fn anat(a: Anatomy, plan: Plan) -> Anat {
             head_w: 12,
             head_h: 9,
             head_top: ay - 22,
-            back: ay - 20,
+            back: ay - 17,
         },
         Anatomy::Sheep => Anat {
             rump: Rect::new(5, ay - 13, 11, 10),
@@ -281,7 +281,8 @@ fn leg_side(c: &mut Canvas, ramp: Ramp, x: i32, top: i32, w: i32, reach: i32, li
         m.fill_rect(Rect::new(fx, hock, w - 1, foot - hock), Ix::INK, 1);
         m.fill_rect(Rect::new(fx - 1, hock, 1, 1), Ix::INK, 1);
     } else {
-        let pts = [(x, top - 1), (x + w - 1, top - 1), (fx + w - 1, foot - 1), (fx, foot - 1)];
+        // The foreleg tapers from the elbow to the wrist.
+        let pts = [(x, top - 1), (x + w - 1, top - 1), (fx + w - 1 - i32::from(w > 2), foot - 1), (fx, foot - 1)];
         m.polyline_fill(&pts, Ix::INK, 1);
     }
     // The paw.
@@ -401,7 +402,7 @@ fn tail_side(c: &mut Canvas, k: &Coat, root: (i32, i32), wag: i32) {
 fn ear_side(c: &mut Canvas, k: &Coat, s: Rect, far: bool, lag: i32) {
     let ramp = if k.look.markings.contains(&Marking::DarkFace) { k.mark } else { k.body };
     // At the back of the skull, behind the eye; the far one a px further back.
-    let x = s.x + 1 + i32::from(far) + i32::from(k.look.plan != Plan::QuadrupedMid);
+    let x = s.x + 1 + 2 * i32::from(far) + i32::from(k.look.plan != Plan::QuadrupedMid);
     let y = s.y + 1;
     let kind = match (k.look.ears, far) {
         (Ears::FlopOne, true) => Ears::Prick,
@@ -417,7 +418,7 @@ fn ear_side(c: &mut Canvas, k: &Coat, s: Rect, far: bool, lag: i32) {
         Ears::Flop => {
             // Folded over at the top and hanging behind the eye, its tip a px lower as the
             // head comes down.
-            m.polyline_fill(&[(x - 1, y - 2), (x + 1, y - 2), (x + 1, y + 2 + lag), (x, y + 3 + lag), (x - 1, y + 1)], Ix::INK, 1);
+            m.polyline_fill(&[(x - 1, y - 1), (x + 1, y - 1), (x + 1, y + 2 + lag), (x, y + 3 + lag), (x - 1, y + 1)], Ix::INK, 1);
         }
         Ears::Tall => {
             let lean = -1 - lag;
@@ -612,7 +613,7 @@ fn side(c: &mut Canvas, k: &Coat, a: &Anat, p: &Pose) {
     pelt_side(c, k, a, p);
     // The near legs.
     leg_side(c, leg_ramp(0), a.fore, top, a.leg_w, p.reach[0], p.lift[0], false, ay, relief::LEG);
-    let hind_w = if an == Anatomy::Rabbit { a.leg_w + 2 } else { a.leg_w + i32::from(an == Anatomy::Dog) };
+    let hind_w = if an == Anatomy::Rabbit { a.leg_w + 2 } else { a.leg_w };
     leg_side(c, leg_ramp(2), a.hind, top, hind_w, p.reach[2], p.lift[2], true, ay, relief::LEG);
     if an == Anatomy::Rabbit {
         // The long hind foot flat on the ground.
