@@ -417,14 +417,18 @@ fn face_down(c: &mut Canvas, d: &Dress, r: &Rig) {
     }
 }
 
-/// The head: a lit skull and, under it, a jaw a little squarer than an egg (forward of the
+/// The head: a lit skull and, under it, a flat jaw a little squarer than an egg (forward of the
 /// skull's middle in profile), so a face sits on its neck and not on a stalk.
 fn head(c: &mut Canvas, d: &Dress, r: &Rig, profile: bool) {
     let s = r.skull;
     c.ellipse_lit(s, d.skin, relief::SKULL);
     let ey = r.eye_y();
-    let (x0, x1) = if profile { (s.x + 4, s.right() - 1) } else { (s.x + 1, s.right() - 2) };
-    c.polygon_lit(&[(x0, ey), (x1, ey), (x1 - 1, s.bottom() - 1), (x0 + 1, s.bottom() - 1)], d.skin, 70, relief::SKULL);
+    let (x0, x1) = if profile { (s.x + 5, s.right() - 1) } else { (s.x + 2, s.right() - 3) };
+    c.polyline_fill(
+        &[(x0, ey), (x1, ey), (x1 - 2, s.bottom() - 1), (x0 + 2, s.bottom() - 1)],
+        d.skin.at(Tone::Base),
+        relief::SKULL.lo,
+    );
 }
 
 pub(crate) fn hides_hair(d: &Dress) -> bool {
