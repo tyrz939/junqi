@@ -2,7 +2,7 @@
 
 How every pixel in the native build is made. Pair with `PRESENTATION.md` (what draws it, lights it and lays out the UI), `ARCHITECTURE.md` (the engine, and the `View` presentation reads, its §11), `PORT.md` (the plan: P5 is the art phase, §6.i is where render-only tiles leave the sim) and `PLAN.md` §6 (the art gaps the web build left).
 
-**Status:** design. Nothing under `crates/jane-art/` exists yet. The TS build's generators (`jane/src/art/`) are the reference for method until P5 lands and `jane/` is archived at P10; they are not the reference for the look, which moved up on 2026-09-26 (§0).
+**Status:** building. §8 steps 1 and 3 have landed in `crates/jane-art/` (palette, canvas, font, chrome, light pass; terrain and flora); the rest is design. The TS build's generators (`jane/src/art/`) are the reference for method until P5 lands and `jane/` is archived at P10; they are not the reference for the look, which moved up on 2026-09-26 (§0).
 
 Crate `jane-art`: depends on `jane-core` and `jane-data` only. No SDL. **No floats**: it sits in the lint table of the deterministic crates (PORT §3.4), so a sheet hashes the same on every target. Sphere shading, bevel normals and gradients come from integer tables. No allocation after boot beyond the atlas pages. Runs headless in tests.
 
@@ -226,26 +226,27 @@ Classes: flask and vial, key, bar, orb, stone and gem, herb, food (round, loaf, 
 
 ### 2.6 Terrain and flora
 
-The TS painter carries as an algorithm at 16 px a cell: chamfered material edges, autotile, roofs, cliffs, fences, the water shimmer list and the canopy strips. Its seven tables become **one `TileStyle` row per tile** in `data/looks/tiles.json`:
+The TS painter carries as an algorithm at 16 px a cell: chamfered material edges, autotile, roofs, cliffs, fences, the water shimmer list and the canopy strips. Its seven tables become **one `TileStyle` row per tile** (and one per render-only material) in `data/looks/tiles.json`, keyed by the tile's name in snake case, fields in camel case like every table; `jane-schema` compiles them into `Catalog.looks` (out of the content hash: an art edit never refuses a save), a tile or material with no row is a build error, and a `jane-art` test resolves every ramp name. **As built** (§8 step 3):
 
 | Field | Meaning |
 | --- | --- |
-| `group` | ground, water, wall, roof, flora, made; what it autotiles against |
-| `inherit` | the tile whose ground shows under a chamfered edge |
-| `height` | 0 flat, 1 raised (cliff and wall faces are drawn), 2 canopy (a strip above the y-sort); with `rise` in px for the height layer |
-| `swatch` | the material ramp and the per-cell hash pattern (`courses` for made things, `strokes(grass)` and pebble scatter for ground, `grain(plank)` for boards) |
-| `detail` | the sub-cell table: blade density, pebble count, slate course pitch, furrow spacing, all at 2 px |
+| `group` | ground, water, wall, roof, flora, made. Ground and water chamfer against each other; wall and roof have painters with faces, ridges and eaves; flora stands on the ground its neighbours lend it; made is a floor with a painter of its own per cell |
+| `inherit` | for flora, the ground under it when no neighbour lends one; for ground, the tile it is drawn as (a grown path is grass, crops lie on garden) |
+| `height`, `rise` | flat, raised (a face is drawn below its top) or canopy (a crown in the strips); `rise` in px: a ground's standing over lower ground (grass 4 over earth 2 over road 1 over water 0, which orders the rims), a wall's or roof's top, a crown's top |
+| `ramp`, `accent`, `pattern` | the swatch: its material ramp, a second ramp (bark under leaf, timber on plaster), and the painter (turf, earth, gravel, setts, water, cliff, plaster, brick, roof tile, slate, thatch, slabs, boards, rail, hedge, tuft, flowers, tree, pine, fence, stone wall, and the rest; the schema's enum is the list) |
+| `detail` | the sub-cell table's one number, by pattern: a density out of 16, a course pitch or a slab size in px |
 | `normal` | flat, cliff (the face's slope), wall, roof (pitch by facing), water (flat; the renderer ripples it) |
 | `wet` | how the tile takes rain: 0 grass and thatch stay matt, 1 earth darkens, 2 stone and plank darken and reflect the sky |
-| `wall_like`, `raised` | draws a face below its top and blocks the chamfer; its top is drawn one course up, so what stands behind it is hidden |
-| `map_colour` | the ink for the map chart (PRESENTATION, the map tab) |
-| `ink` | the swatch's dark line for fences, rails and furrows |
+| `wallLike` | out of doors a wide block of it is a building's roof; its face shows where its south is open (walls, cliffs, the void) |
+| `wild` | wild ground the speckle filter may redraw as its surroundings, and whose edges wander |
+
+The map ink and the swatch's dark line are not fields: they are the ramp's base and deep tones.
 
 **Render-only tiles leave the sim** (PORT §6.i). `RoofSlate`, `RoofThatch`, `BrickWall` and `Pine` are not sim tiles: a variant comes from (1) the biome and cell hash, read from the skeleton the blueprint carries, and (2) `Blueprint.paint: Vec<(Rect, Material)>`, written by the chunk stamper where an authored place wants a particular roof or wall. Kept as sim tiles with a reason: Glass, StoneWall, DeadTree, Hedge, Boardwalk, Stepping, Crops, FlowerBed.
 
-`paint_chunk(grid, cx, cy, &mut ChunkLayers, &mut Strips)` paints 16 x 16 cells into the renderer's chunk at 256 x 256 px (PRESENTATION, terrain chunks): `ChunkLayers { albedo: [u32; 256 * 256], normal: [[u8; 2]; 256 * 256], height: [u8; 256 * 256], wet: [u8; 16 * 16] }`. It is the one place indices meet RGB outside the palette module: a chunk is blitted whole and never tinted, so the albedo is resolved through the table as it is painted; the other layers stay raw for the light pass. Water cells keep a caustic phase per cell so the shimmer of §2.8 lines up across a chunk seam.
+`terrain::paint_chunk(&mut Painter, &impl TileSource, seed, cx, cy, &mut Chunk)` paints 16 x 16 cells into the renderer's chunk at 256 x 256 px (PRESENTATION, terrain chunks). `TileSource` is `size`, `tile(x, y)`, and optionally `material(x, y)` (the blueprint's paint) and `outdoor`, so the renderer's `View` and the sheet tool both feed it and `jane-art` never sees the sim. A `Chunk` holds `ChunkLayers { albedo: Vec<u32> /* 0xFFRRGGBB */, normal: Vec<[u8; 2]>, emissive: Vec<Ix> /* lit windows */, height: Vec<u8>, wet: [u8; 16 * 16] }`, its strips (one per cell row with standing things, cropped from the 88-row, 32-px-margin strip to what is drawn, each with albedo, normal, height and a mask of clear, solid and canopy for the ghost pass, dappled light and god rays), its water cells with a shimmer phase from the world cell so the shimmer of §2.8 lines up across a seam, and its caster segments (wall runs merged per straight edge, fences along their run, a square round each trunk). It is the one place indices meet RGB outside the palette module: a chunk is blitted whole and never tinted, so the albedo is resolved through the table as it is painted; the other layers stay raw for the light pass (the emissive layer too: palette indices). A chunk is a pure function of the tiles within `REACH` (4) cells of it, their paint and the seed; `chunks_touched(rect)` is what a `Tiles(rect)` event invalidates. The `Painter` holds the styles, the flora bank and all scratch: nothing is allocated once it and the `Chunk` have painted one.
 
-Flora: the 43 generators port onto `Canvas` at the new scale, their tone tables become ramps, leaves become `strokes(grass)` over a `soft_ellipse` crown so a tree is a lit volume rather than a flat blob, and a canopy tree emits its strip (88 rows with 32-px margins) for the ghost pass.
+Flora: the 43 generators port onto `Canvas` at the new scale, their tone tables become ramps, and a crown is layered leaf masses (a darker back layer, the main ring, a front layer) each a lit sphere with a crescent of shade under it, the whole lit from the top-left with a dark core, leaves as 2 to 3 px clusters lit on the lit side and dark on the shadow side, and a ragged silhouette of leaf tips and notches; the normals are the crown's dome with each mass's sphere over it, so a tree lights as one volume. A canopy tree is stamped into its row's strip for the ghost pass.
 
 ### 2.7 Materials
 
@@ -405,7 +406,7 @@ Six muted pool pairs. `pallor` darkens by 14 % and greys by 20 %; the `*_dead` r
 | `jane sheet light <id>` | the sprite lit from eight directions and from above, with the cast shadow, through the same integer light pass the renderer uses |
 | `jane sheet layers <id>` | albedo, normal (as a colour ramp), emissive and height side by side at 4x |
 | `jane sheet person --grid`, `palette` | every build by every hair and coat; the table and the ramps in luminance order |
-| `jane sheet terrain` | every tile in every autotile context, dry and wet |
+| `jane sheet terrain [--tile name] [--sample]` | every tile in its sixteen neighbour contexts, dry over wet, a sheet a group; `--sample`: a made-up county and interior holding every tile, dry, by day and by night. `jane sheet flora`: the bank with its normals and heights. `jane sheet county <seed> --full [--at mark or x,y] [--radius cells] [--zoom z]`: the chunk painter over a built county, its layers side by side, its albedo, and lit at five in the afternoon and at night, with the paint time a chunk. Terrain goldens: `tests/terrain_golden.txt` |
 | `jane sheet weather <kind>` | the kind's masks and sprites, and sixty ticks of its motion over a plain ground |
 | `jane sheet parallax` | every hour keyframe's sky, treeline, School and cloud, in a strip |
 | `jane sheet title` | the title scene |
@@ -475,7 +476,7 @@ Each step ends with something on screen or on a sheet, and with its acceptance t
 
 1. `palette`, `canvas` at 16 px a cell with the four-layer pipeline and its primitives, `hash`, `font` (Fine and Small at least), `chrome`; `jane sheet layers` and `jane sheet light`. The title and the menus draw; a lit sphere sheet is the first artefact.
 2. Person `slim`, the frame tables, the six-frame walk and the breathe, the derivations, `fallen`, the seat swaps. Looks for Jane and the townsfolk.
-3. Terrain and flora ported; `TileStyle` rows with height, normal and wetness. The county draws, and draws lit at night.
+3. Terrain and flora ported; `TileStyle` rows with height, normal and wetness. The county draws, and draws lit at night. **Landed 2026-09-27** (`jane_art::terrain`, `jane_art::flora`; about 1.5 to 2 ms a chunk on a desktop, release).
 4. Creature `quadruped_mid`, `quadruped_small`, `bird` with their gaits; Person `bone` skin. The first five minutes have their cast.
 5. The kit in first-walk order: `sign`, `lamp` (emissive), `barrier`, `container`, `ritual`, `furniture`, `structure`. The house, the cellar and the mine dress.
 6. Building extensions with emitting windows, the icon classes at 32 and 16, the fx tables with their emissive parts, the attack and cast cycles.
