@@ -16,6 +16,7 @@ pub mod combat;
 pub mod county;
 pub mod dungeons;
 pub mod living;
+pub mod looks;
 pub mod story;
 
 pub use chunks::*;
@@ -23,6 +24,7 @@ pub use combat::*;
 pub use county::*;
 pub use dungeons::*;
 pub use living::*;
+pub use looks::*;
 pub use story::*;
 
 model! {
@@ -51,6 +53,8 @@ model! {
         /// The living world (ARCHITECTURE.md §4.6): weather, ecology, consequences, the sim's
         /// tuning. Compiled last, so the names and texts it adds come after everyone else's.
         pub living: Living,
+        /// How things are drawn (ART.md §5): read by `jane-art` alone, and out of the content hash.
+        pub looks: Looks,
     }
 }
 

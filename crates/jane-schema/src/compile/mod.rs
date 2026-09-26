@@ -52,6 +52,7 @@ pub fn build_source(src: &Source) -> Built {
     let living = tables::living::compile(src, &mut cx, &county);
     // What another can be had of, once everything that gives one is known.
     combat.items = tables::combat::late_replaceable(&cx, &combat, &living, &county);
+    let looks = tables::looks::compile(src, &mut cx);
     check_limits(&mut cx);
 
     let mut catalog = Catalog {
@@ -68,6 +69,7 @@ pub fn build_source(src: &Source) -> Built {
         dungeons,
         chunks,
         living,
+        looks,
     };
     integrate::check(&catalog, &mut cx.diag);
     catalog.content_hash = content_hash(&catalog);
@@ -97,9 +99,10 @@ fn check_limits(cx: &mut Ctx) {
     );
 }
 
-/// xxh3 of the emitted catalog with the English left out: everything that changes behaviour.
+/// xxh3 of the emitted catalog with the English and the looks left out: everything that changes
+/// behaviour.
 pub fn content_hash(c: &Catalog) -> u64 {
-    let behaviour = Catalog { content_hash: 0, texts: &[], ..*c };
+    let behaviour = Catalog { content_hash: 0, texts: &[], looks: crate::model::Looks::EMPTY, ..*c };
     xxhash_rust::xxh3::xxh3_64(crate::emit::to_rust(&behaviour).as_bytes())
 }
 
