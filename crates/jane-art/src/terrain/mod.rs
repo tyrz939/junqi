@@ -242,6 +242,20 @@ pub struct CasterSeg {
     pub height: u8,
 }
 
+/// A flora sprite stood in the chunk: which one (its index in `Painter::bank().all()`), where its
+/// foot is (chunk-local px) and the cell row whose strip holds it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Placed {
+    /// Index into `Bank::all()`.
+    pub sprite: u16,
+    /// Chunk-local px of the sprite's foot.
+    pub x: i16,
+    /// Chunk-local px of the sprite's foot.
+    pub y: i16,
+    /// The cell row it sorts with.
+    pub row: u8,
+}
+
 /// A painted chunk: what the renderer's chunk cache keeps (PRESENTATION.md §1.6).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Chunk {
@@ -257,6 +271,9 @@ pub struct Chunk {
     pub water: Vec<WaterCell>,
     /// The wall runs' caster segments.
     pub casters: Vec<CasterSeg>,
+    /// The flora stamped into the strips, as placements of `Painter::bank().all()` sprites: for a
+    /// renderer that would rather draw trees from its atlas than keep their strips.
+    pub placed: Vec<Placed>,
 }
 
 impl Default for Chunk {
@@ -283,6 +300,7 @@ impl Chunk {
             n_strips: 0,
             water: Vec::new(),
             casters: Vec::new(),
+            placed: Vec::new(),
         }
     }
 
@@ -317,6 +335,9 @@ impl Chunk {
         }
         for w in &self.water {
             f = f.u8(w.x).u8(w.y).u8(w.phase);
+        }
+        for t in &self.placed {
+            f = f.u16(t.sprite).u16(t.x as u16).u16(t.y as u16).u8(t.row);
         }
         for c in &self.casters {
             f = f.i32(c.a.0).i32(c.a.1).i32(c.b.0).i32(c.b.1).u8(c.height);
@@ -561,6 +582,7 @@ impl Painter {
         out.cx = cx;
         out.cy = cy;
         out.n_strips = 0;
+        out.placed.clear();
         standing::strips(self, x0, y0, seed, out);
         self.finish(x0, y0, out);
     }

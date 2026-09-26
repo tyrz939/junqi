@@ -122,6 +122,7 @@ pub fn county(args: &[String], out: &Path, font: &Font) -> Result<(), String> {
     let (x0, y0) = (cells.x.div_euclid(CHUNK_CELLS), cells.y.div_euclid(CHUNK_CELLS));
     let (x1, y1) = ((cells.right() - 1).div_euclid(CHUNK_CELLS), (cells.bottom() - 1).div_euclid(CHUNK_CELLS));
     let mut times: Vec<f64> = Vec::new();
+    let mut strip_kb = 0;
     for _ in 0..2 {
         times.clear();
         for ky in y0..=y1 {
@@ -129,13 +130,15 @@ pub fn county(args: &[String], out: &Path, font: &Font) -> Result<(), String> {
                 let t = Instant::now();
                 terrain::paint_chunk(&mut p, &map, seed, kx, ky, &mut chunk);
                 times.push(t.elapsed().as_secs_f64() * 1000.0);
+                let bytes: usize = chunk.strips().iter().map(|s| usize::from(s.w) * usize::from(s.h) * 8).sum();
+                strip_kb = strip_kb.max(bytes / 1024);
             }
         }
     }
     times.sort_by(f64::total_cmp);
     let mean = times.iter().sum::<f64>() / f64::from(u32::try_from(times.len().max(1)).unwrap_or(1));
     println!(
-        "paint: {} chunks, {:.2} ms a chunk mean, {:.2} median, {:.2} max",
+        "paint: {} chunks, {:.2} ms a chunk mean, {:.2} median, {:.2} max; strips up to {strip_kb} KB a chunk",
         times.len(),
         mean,
         times[times.len() / 2],

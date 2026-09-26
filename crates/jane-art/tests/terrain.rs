@@ -151,6 +151,8 @@ fn the_county_sample_has_canopy_water_casters_and_lit_windows() {
             water += c.water.len();
             casters += c.casters.len();
             glow += c.layers.emissive.iter().filter(|e| e.0 != 0).count();
+            let bank = p.bank().all().len();
+            assert!(c.placed.iter().all(|t| usize::from(t.sprite) < bank && c.strips().iter().any(|s| s.row == t.row)));
         }
     }
     assert!(canopy > 1000 && water > 50 && casters > 20 && glow > 0, "{canopy} {water} {casters} {glow}");

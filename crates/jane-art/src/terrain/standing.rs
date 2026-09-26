@@ -8,7 +8,8 @@ use jane_core::grid::Rect;
 use jane_data::{TileGroup, TilePattern as P};
 
 use super::{
-    CELL, CHUNK_CELLS, CasterSeg, Chunk, NONE, Painter, STRIP_BELOW, STRIP_H, STRIP_MARGIN, Style, fast, pack, salt,
+    CELL, CHUNK_CELLS, CasterSeg, Chunk, NONE, Painter, Placed, STRIP_BELOW, STRIP_H, STRIP_MARGIN, Style, fast, pack,
+    salt,
 };
 use crate::canvas::{Canvas, FLAT, Z, normal};
 use crate::flora::{Bank, Sprite};
@@ -26,6 +27,23 @@ enum Pick {
     Berry(usize),
     Rocks(usize),
     Boulder(usize),
+}
+
+impl Pick {
+    /// The sprite's index in `Bank::all()`'s order.
+    fn index(self) -> u16 {
+        let i = match self {
+            Pick::Large(p, i) => p * 4 + i,
+            Pick::Medium(p, i) => 12 + p * 3 + i,
+            Pick::Pine(i) => 21 + i,
+            Pick::Dead(i) => 24 + i,
+            Pick::Bush(p, i) => 26 + p * 4 + i,
+            Pick::Berry(i) => 34 + i,
+            Pick::Rocks(i) => 36 + i,
+            Pick::Boulder(i) => 40 + i,
+        };
+        i as u16
+    }
 }
 
 fn sprite(b: &Bank, pick: Pick) -> &Sprite {
@@ -481,6 +499,12 @@ pub(super) fn strips(p: &mut Painter, x0: i32, y0: i32, seed: u32, out: &mut Chu
             grow_bb(&mut p.s.row_bb, sx, sy, cw, ch);
             let trunk = if t.canopy { Some(p.styles.tile(Tile::Tree).accent.unwrap_or(Ramp::Bark)) } else { None };
             mark(&mut p.s.rowmask, sw, &s.canvas, sx, sy, trunk);
+            out.placed.push(Placed {
+                sprite: t.pick.index(),
+                x: (cx * CELL + 8 + t.ox) as i16,
+                y: ((row + 1) * CELL - 2 + t.oy) as i16,
+                row: row as u8,
+            });
         }
         if any {
             if built {
@@ -677,6 +701,34 @@ pub(super) fn casters(p: &Painter, x0: i32, y0: i32, out: &mut Chunk) {
             for (a, b) in [((ax, ay), (bx, ay)), ((bx, ay), (bx, by)), ((bx, by), (ax, by)), ((ax, by), (ax, ay))] {
                 out.casters.push(CasterSeg { a, b, height: hgt });
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::flora::Ramps;
+
+    #[test]
+    fn a_placement_names_the_sprite_it_stamps() {
+        let b = Bank::new(Ramps::default());
+        let all = b.all();
+        let mut picks = Vec::new();
+        for p in 0..3 {
+            picks.extend((0..4).map(|i| Pick::Large(p, i)));
+            picks.extend((0..3).map(|i| Pick::Medium(p, i)));
+        }
+        picks.extend((0..3).map(Pick::Pine));
+        picks.extend((0..2).map(Pick::Dead));
+        for p in 0..2 {
+            picks.extend((0..4).map(|i| Pick::Bush(p, i)));
+        }
+        picks.extend((0..2).map(Pick::Berry));
+        picks.extend((0..4).map(Pick::Rocks));
+        picks.extend((0..3).map(Pick::Boulder));
+        for pick in picks {
+            assert!(std::ptr::eq(sprite(&b, pick), all[usize::from(pick.index())].1), "{pick:?}");
         }
     }
 }

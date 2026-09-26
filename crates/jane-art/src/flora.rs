@@ -170,7 +170,7 @@ fn crown(
             let nz = isqrt((UNIT * UNIT - s) as u64) as i32;
             let lam = (lx * BAKE_LIGHT[0] + ly * BAKE_LIGHT[1] + nz * BAKE_LIGHT[2]) / UNIT;
             let (gx, gy) = ((x * 8 + 4 - cx8) * UNIT / rx8.max(1), (y * 8 + 4 - cy8) * UNIT / ry8.max(1));
-            let global = -gy * 36 / 100 - gx * 15 / 100;
+            let global = -gy * 50 / 100 - gx * 22 / 100;
             // The dark core: under the middle of the crown, where no light gets in.
             let core = {
                 let (dx, dy) = (gx, gy - UNIT * 35 / 100);
@@ -184,14 +184,23 @@ fn crown(
                 }
             };
             let jitter = below(h32((x >> 1) as u32, (y >> 1) as u32, seed), 11) as i32 - 5;
-            let mut v = lam * 62 / 100 + global + core - q.back * 20 + jitter + 2;
+            let mut v = lam * 42 / 100 + global + core - q.back * 18 + jitter + 4;
             // The crescent under each mass is what makes a crown read as masses and not a disc.
             if s > UNIT * UNIT * 64 / 100 && ly > UNIT / 6 {
-                v -= 58;
+                v -= 40;
             }
             vals[(y * w + x) as usize] = v;
             let z = (foot_y - y).max(1) + nz * r / (UNIT * 16);
-            c.put(x, y, ramp.at(shade_tone(v)), normal(lx, ly), z.clamp(1, 255) as u8);
+            // The normal: the whole crown's dome, the mass's own sphere a little over it, so the lit tiers
+            // light the crown as one volume with its masses in it, never as a heap of balls.
+            let (cxn, cyn) = (gx.clamp(-UNIT, UNIT), gy.clamp(-UNIT, UNIT));
+            c.put(
+                x,
+                y,
+                ramp.at(shade_tone(v)),
+                normal((cxn * 6 + lx * 4) / 10, (cyn * 6 + ly * 4) / 10),
+                z.clamp(1, 255) as u8,
+            );
         }
     }
     // Leaves: a jittered 3 px lattice over the crown; each point, by hash, a cluster lit on the
