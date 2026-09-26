@@ -13,6 +13,7 @@
 
 pub mod backend;
 pub mod frame;
+pub mod input;
 pub mod present;
 
 pub use backend::{AtlasPages, Backend, Caps};
