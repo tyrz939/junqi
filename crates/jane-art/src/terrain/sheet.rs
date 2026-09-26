@@ -397,7 +397,10 @@ pub fn sample_county() -> TileMap {
         g.set(54 + i, 45 - i, T::Rail);
         g.set(55 + i, 45 - i, T::Rail);
     }
-    fill(&mut g, 60, 30, 1, 11, T::Rail);
+    fill(&mut g, 60, 30, 1, 12, T::Rail);
+    // Two pools that touch only at a corner.
+    fill(&mut g, 44, 34, 2, 2, T::Water);
+    fill(&mut g, 46, 36, 2, 2, T::Water);
     let mut m = TileMap::new(g, true);
     for (r, mat) in mats {
         m.set_material(r, mat);

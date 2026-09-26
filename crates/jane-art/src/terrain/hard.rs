@@ -1067,6 +1067,26 @@ fn rail(p: &mut Painter, c: &Cell) {
         // The corner both neighbours share, in doubled px.
         let kx = if w { 0 } else { 2 * CELL };
         let ky = if n { 0 } else { 2 * CELL };
+        let (hx, vy) = (if w { -1 } else { 1 }, if n { -1 } else { 1 });
+        // A line laid diagonally is a staircase of bends: each turns back the way the last one
+        // came. There the rails run straight across the corner, edge middle to edge middle, and
+        // line up with the next cell's, where arcs would wave; the ballast off the line sinks.
+        if same(p, hx, -vy) || same(p, -hx, vy) {
+            for y in 0..CELL {
+                for x in 0..CELL {
+                    let (dx, dy) = ((2 * x + 1 - kx).abs(), (2 * y + 1 - ky).abs());
+                    // Px from the corner across the line (its middle 8 px out), and along it.
+                    let across = 8 + ((dx + dy) / 2 - 8) * 7 / 10;
+                    let along = (dx - dy) * 7 / 20 + 8;
+                    if across > 15 {
+                        step(p, c, x, y, -1);
+                        continue;
+                    }
+                    lay(p, x, y, along, across);
+                }
+            }
+            return;
+        }
         for y in 0..CELL {
             for x in 0..CELL {
                 let (dx, dy) = (2 * x + 1 - kx, 2 * y + 1 - ky);

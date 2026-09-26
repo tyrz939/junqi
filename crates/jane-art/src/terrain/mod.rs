@@ -852,6 +852,13 @@ impl Painter {
                         continue;
                     }
                     let fill = if rise(self, a) <= rise(self, b) { b } else { a };
+                    // A pinch: our surface goes on past the corner diagonally, the other only
+                    // touches it there. The higher ground keeps its corner, the lower one's is cut,
+                    // so two pools that meet at a corner stay two with a neck of land between.
+                    let d = self.s.surf[(k as i32 + dx + dy * GM) as usize];
+                    if d == g && rise(self, g) > rise(self, fill) {
+                        continue;
+                    }
                     for u in 0..CELL / 2 {
                         for v in 0..CELL / 2 - u {
                             let px = if dx < 0 { u } else { CELL - 1 - u };
