@@ -10,8 +10,7 @@
 //! when it got out, how often it died, and where it stopped and why. A dungeon the crawl cannot
 //! finish is a finding about the bot or the game, reported here as it stands, not hidden: the
 //! test holds every run to getting in and to ending in a known state (out, or stopped with a
-//! reason), and the two dungeons without a boss that it finishes (the cellar, the library) to
-//! finishing.
+//! reason), and the dungeons it finishes (the cellar, the library, the Gold Mine) to finishing.
 
 mod common;
 
@@ -82,7 +81,43 @@ fn the_library() {
 
 #[test]
 fn the_gold_mine() {
-    play(ZoneId::Mine, false);
+    play(ZoneId::Mine, true);
+}
+
+/// "No exit, some nights" (DUNGEONS.md §3.1): with the omen true and in at eight in the evening,
+/// the front door is barred from nine while Iron Knuckles stands, and the crawl works on through
+/// the night. It still finishes and walks out by a door (the adit, or the front door unbarred
+/// once he is down): the omen costs a night, never the run.
+#[test]
+fn the_gold_mine_on_a_barred_night() {
+    use jane_bot::crawl::Crawl;
+    use jane_bot::{Bot, Plan};
+    use jane_sim::{Command, DevOp, Seat};
+    for seed in SEEDS {
+        let sim = new_game(seed);
+        let omen = sim.view(Seat(0)).and_then(|v| v.sym("omen:mine_no_exit")).expect("the omen's flag");
+        let mut setup = crawl::setup(sim.blueprints(), ZoneId::Mine);
+        setup.insert(0, Command::Dev(DevOp::Flag { flag: omen, value: 1 }));
+        for c in &mut setup {
+            if let Command::Dev(DevOp::Time { hour }) = c {
+                *hour = 20;
+            }
+        }
+        let mut rec = jane_sim::replay::Recorder::new(sim);
+        let mut bot = Bot::new(Model::Reader, Plan::Crawl(Crawl::new(ZoneId::Mine)));
+        bot.setup = setup;
+        bot.play(&mut rec, FRAMES);
+        let Plan::Crawl(c) = &bot.plan else { unreachable!() };
+        let hour = rec.sim().view(Seat(0)).map(|v| v.hour());
+        println!(
+            "mine at night seed {seed}: in {} | bosses {} | out {} (hour {hour:?}) | {}",
+            clock(c.entered),
+            c.bosses.len(),
+            clock(c.left),
+            c.stuck.as_deref().unwrap_or("")
+        );
+        assert!(c.left.is_some(), "seed {seed}: did not get out on a barred night: {:?}", c.stuck);
+    }
 }
 
 #[test]
