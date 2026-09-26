@@ -112,6 +112,8 @@ struct LightRec {
 #[derive(Debug)]
 pub struct Present {
     atlas: Atlas,
+    /// Where the UI's glyphs, marks and icons are in the atlas.
+    ui_art: crate::ui::UiArt,
     stand: StandIns,
     people: People,
     frame: Frame,
@@ -140,10 +142,18 @@ impl Present {
         let mut atlas = Atlas::with_layers(tier > Tier::T0);
         let stand = StandIns::build(&mut atlas);
         let people = People::build(&mut atlas);
+        // The UI's page goes last, so no world sprite moves when it grows (PRESENTATION.md §3.1).
+        let (ui_art, mut ui_page) = crate::ui::UiArt::build(atlas.pages.pages.len() as u8);
+        if atlas.lit() {
+            let n = ui_page.albedo.len();
+            (ui_page.normal, ui_page.emissive, ui_page.height) = (vec![[128, 128]; n], vec![0; n], vec![0; n]);
+        }
+        atlas.pages.pages.push(ui_page);
         let mut frame = Frame::new(tier);
         let chunks = ChunkCache::reserved(&mut frame.layers, tier);
         Present {
             atlas,
+            ui_art,
             stand,
             people,
             frame,
@@ -174,6 +184,21 @@ impl Present {
     /// The pages every backend uploads at boot.
     pub fn atlas(&self) -> &AtlasPages {
         &self.atlas.pages
+    }
+
+    /// The UI's page table: what `ui::Ui::new` takes.
+    pub fn ui_art(&self) -> &crate::ui::UiArt {
+        &self.ui_art
+    }
+
+    /// The frame as last drawn (with the `Ui` pass as last finished).
+    pub fn frame(&self) -> &Frame {
+        &self.frame
+    }
+
+    /// The frame, for the UI to finish its pass into after [`draw`](Self::draw).
+    pub fn frame_mut(&mut self) -> &mut Frame {
+        &mut self.frame
     }
 
     /// Ticks presented since New Game.
