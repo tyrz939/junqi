@@ -75,6 +75,6 @@ claims
 legend
 + tile Cobble
 $ tile TempleWall
-B prop burial_mouth burial_door {"locked": true, "keyTag": "burial_gate", "to": {"zone": "burial", "mark": "entry"}, "label": "The stair under the stone"}
+B prop burial_mouth burial_door {"locked": true, "keyTag": "burial_gate", "to": {"zone": "burial", "mark": "entry"}, "label": "The stair under the Hoar Stone"}
 S prop sign sign_burial {"talk": "sign_burial"}
 b mark burial_mouth south

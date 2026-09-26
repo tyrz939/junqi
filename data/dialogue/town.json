@@ -432,7 +432,13 @@
       { "node": "first" }
     ],
     "nodes": {
-      "first": { "lines": ["Good day. Nothing to report. Keep to the lamps after dark and there never will be."], "actions": [{ "do": "flag", "flag": "talked_constable" }] },
+      "first": {
+        "lines": [
+          "Good day. Nothing to report. Keep to the lamps after dark and there never will be.",
+          "After the bell the lamps are the line. Off them, the roads are not mine, and nobody will open a door to you but Mrs Garland."
+        ],
+        "actions": [{ "do": "flag", "flag": "talked_constable" }]
+      },
       "offer": {
         "lines": [
           "I walk the street end to end. A hundred and twelve paces. It was a hundred and ten when I started.",
@@ -448,7 +454,12 @@
         "lines": ["And? How many?", "A hundred and fourteen. People count without meaning to. I'll put it in the book. Take these for your trouble."],
         "options": [{ "label": "Thank you", "actions": [{ "do": "handin", "quest": "the_constables_paces" }] }]
       },
-      "after": { "lines": ["I've stopped walking it after four. I stand at the square and look both ways. It's the same street. It just takes longer."] }
+      "after": {
+        "lines": [
+          "I've stopped walking it after four. I stand at the square and look both ways. It's the same street. It just takes longer.",
+          "I go in at the bell with the rest. What's out on the roads after nine keeps to the dark. Keep to the lamps and it keeps off you."
+        ]
+      }
     }
   },
   "mr_cobb": {
@@ -708,7 +719,7 @@
       { "node": "first" }
     ],
     "nodes": {
-      "first": { "lines": ["Milk's on the step by six. I don't knock. Some houses take it in and some don't, and I leave it anyway."], "actions": [{ "do": "flag", "flag": "talked_milkman" }] },
+      "first": { "lines": ["I'm round from seven, and the milk's on every step by nine. I don't knock. Some houses take it in and some don't, and I leave it anyway."], "actions": [{ "do": "flag", "flag": "talked_milkman" }] },
       "again": { "lines": ["No. 7 hasn't taken theirs in all week. Three bottles on the step. You don't stop for one house, though. Not on a round."] },
       "offer": {
         "lines": [
@@ -858,7 +869,7 @@
     "speaker": "The Post Office",
     "start": [{ "when": [{ "if": "night" }], "node": "night" }, { "node": "day" }],
     "nodes": {
-      "day": { "lines": ["CASTLE POST OFFICE. The counter light is on. Miss Dray is outside, waiting for the second post."] },
+      "day": { "lines": ["CASTLE POST OFFICE. OPEN NINE TILL HALF PAST FIVE. SECOND POST AT FOUR. The counter light is on."] },
       "night": { "lines": ["CLOSED. LAST POSTING 5.30. LETTERS POSTED AFTER THIS GO ON SUNDAY'S TRAIN."] }
     }
   },
@@ -926,6 +937,18 @@
     "speaker": "Fountain",
     "start": [{ "node": "a" }],
     "nodes": { "a": { "lines": ["Clear water, very cold. There are coins on the bottom, and every one of them has landed face down."] } }
+  },
+  "constable_notice": {
+    "speaker": "Police Notice",
+    "start": [{ "node": "read" }],
+    "nodes": {
+      "read": {
+        "lines": [
+          "CASTLE CONSTABULARY. After the bell, keep to the lit roads. Doors are not answered after nine. The Castle Arms will take you in till it is light.",
+          "Persons out after nine on the unlit roads do so at their own risk, and are asked not to."
+        ]
+      }
+    }
   },
   "memorial": {
     "speaker": "Memorial",

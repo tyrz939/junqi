@@ -29,7 +29,7 @@ fn every_table_is_there_in_id_order() {
     let k = &c().combat;
     assert_eq!(k.spells.len(), 24);
     assert_eq!(k.effects.len(), 20);
-    assert_eq!(k.units.len(), 150);
+    assert_eq!(k.units.len(), 152);
     for ids in [
         k.spells.iter().map(|s| s.id).collect::<Vec<_>>(),
         k.effects.iter().map(|e| e.id).collect(),
@@ -160,11 +160,18 @@ fn the_forest_has_a_day_and_a_night() {
     }
     assert!(unit("forest_moth_8").night_only);
     assert!(unit("forest_night_spider").night_only);
-    // catalog.ts dayOnlyAfter: the dog keeps Julie's hours only once the skeleton is dealt with.
+    // The dog keeps Julie's hours only once the skeleton is dealt with: gone from the bell to six
+    // after `defeat_skeleton`, on the step the rest, and at a meeting place while the spine asks
+    // (WORLD.md §3.6). The overrides come first; the plain row covers the whole day.
     let dog = unit("dog");
-    assert!(dog.day_only);
-    // The quest resolved (to `defeat_skeleton`; quests are the story group's table).
-    assert!(dog.day_only_after.is_some());
+    assert!(!dog.day_only);
+    let night = dog.schedule.iter().find(|r| r.slot == jane_data::ScheduleSlot::Absent).expect("a night row");
+    assert_eq!((night.hour_from, night.hour_to), (21, 6));
+    assert!(matches!(night.when, Some(jane_data::ScheduleWhen::After(_))));
+    let meets = dog.schedule.iter().filter(|r| matches!(r.when, Some(jane_data::ScheduleWhen::While(_)))).count();
+    assert_eq!(meets, 4, "the Museum's steps, the graveyard gate twice, the top of Church Lane");
+    let last = dog.schedule.last().expect("rows");
+    assert!(last.when.is_none() && last.hour_from == last.hour_to, "the step, all day");
 }
 
 /// factory.test.ts: the machines only see what is lit, and the Foreman is plated against

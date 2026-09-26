@@ -153,9 +153,22 @@ export type UnitDef = {
   /**
    * Where it is by the hour (WORLD.md §3): one slot per span, `from` up to `to`, wrapping midnight.
    * This build keeps only in or out: `inside` and `absent` are away, `mark` and `patrol` are here
-   * (the Rust build also walks a unit to its mark).
+   * (the Rust build also walks a unit to its mark). A row with `while` (the quest is in the log) or
+   * `after` (it is handed in) is looked at first; the plain rows cover the day. `vary` / `varyWith`
+   * move a person's hours a few minutes a day in the Rust build; this one keeps them as written.
    */
-  schedule?: { from: number; to: number; mark?: string; inside?: string; patrol?: boolean; absent?: boolean }[];
+  schedule?: {
+    from: number;
+    to: number;
+    mark?: string;
+    inside?: string;
+    patrol?: boolean;
+    absent?: boolean;
+    while?: string;
+    after?: string;
+  }[];
+  vary?: number;
+  varyWith?: string;
   /** Item id this unit cannot resist: while idle it walks to a drop of it and dies there. */
   bait?: string;
   /** Snake controller only: body segment count and spacing in px. */

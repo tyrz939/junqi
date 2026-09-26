@@ -1,4 +1,8 @@
 {
+  "key_works": {
+    "name": "The Night Watchman's Key", "icon": "item_key_iron", "maxStack": 1, "usable": false, "cooldown": 1, "bound": true, "opens": "works",
+    "description": "Heavy, on a brass tally stamped 11 and G.M.Co.: WORKS WICKET AND DRAINS. It was pinned in the Collector's case marked NIGHT WATCHMAN, where the wings should have been."
+  },
   "net": {
     "name": "Butterfly Net",
     "description": "Cane, wire and muslin, mended twice. There is a name inked on the handle and it has been scratched out with the same pen.",

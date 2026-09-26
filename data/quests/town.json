@@ -148,11 +148,11 @@
   },
   "paid_to_sunday": {
     "name": "Paid to Sunday",
-    "description": "The Milkman, behind Pound Lane, leaves No. 7 its milk every morning and nobody takes it in. He wants the bottles lifted inside the door. There was always money on the mat, he says.",
+    "description": "The Milkman leaves No. 7 its milk every morning and nobody takes it in. He wants the bottles lifted inside the door. There was always money on the mat, he says. He is on his round behind Pound Lane from seven to nine in the morning.",
     "completion": "The hall swept, Mrs Oddie's loaf on the table untouched, and the milk money counted out on the mat. The Milkman says it is paid to Sunday. It always is.",
     "requirements": [{ "type": "location", "target": "milk_in", "qty": 1, "text": "The milk on the step of No. 7, Pound Lane" }],
     "rewards": [{ "do": "give", "item": "small_water", "qty": 2 }, { "do": "show", "prop": "pound7_milk" }, { "do": "switch", "prop": "pound7_milk", "on": true }],
-    "returnTo": "the Milkman, behind Pound Lane"
+    "returnTo": "the Milkman, on his round behind Pound Lane, seven to nine"
   },
 
   "never_any_eggs": {

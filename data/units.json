@@ -7,12 +7,30 @@
   "dog": {
     "name": "Julie's Dog", "faction": "friendly", "controller": "npc", "strength": 40, "spirit": 3,
     "walk": 1, "run": 2, "aggro": 0, "leash": 0, "bounds": 1, "book": [],
-    "respawn": 0, "autoRegen": true, "loot": [], "sprite": "dog", "talk": "dog", "dayOnly": true, "dayOnlyAfter": "defeat_skeleton"
+    "respawn": 0, "autoRegen": true, "loot": [], "sprite": "dog", "talk": "dog",
+    "schedule": [
+      { "from": 16, "to": 21, "mark": "dog_museum", "while": "the_forest" },
+      { "from": 18, "to": 21, "mark": "dog_graveyard", "while": "the_factory" },
+      { "from": 18, "to": 21, "mark": "dog_graveyard", "while": "the_burial" },
+      { "from": 6, "to": 12, "mark": "dog_church_lane", "while": "the_school" },
+      { "from": 21, "to": 6, "absent": true, "after": "defeat_skeleton" },
+      { "from": 0, "to": 0, "mark": "dogs_step" }
+    ]
   },
   "skeleton": {
     "name": "Skeleton", "faction": "undead", "controller": "ai", "strength": 20, "spirit": 1,
     "walk": 0.55, "run": 1.2, "aggro": 16, "leash": 80, "bounds": 1, "book": ["melee"],
     "respawn": 600, "autoRegen": true, "loot": [], "sprite": "skeleton"
+  },
+  "night_skeleton": {
+    "name": "Night Shift", "faction": "undead", "controller": "ai", "strength": 24, "spirit": 1,
+    "walk": 0.55, "run": 1.3, "aggro": 18, "leash": 70, "bounds": 1, "book": ["melee", "melee_fast"],
+    "respawn": 600, "autoRegen": true, "loot": [], "sprite": "skeleton", "nightOnly": true, "shunsLight": true
+  },
+  "night_soldier": {
+    "name": "Night Shift", "faction": "undead", "controller": "ai", "strength": 28, "spirit": 1,
+    "walk": 0.4, "run": 0.85, "aggro": 20, "leash": 80, "bounds": 1, "book": ["melee_stun", "melee"],
+    "respawn": 600, "autoRegen": true, "loot": [], "sprite": "soldier", "nightOnly": true, "shunsLight": true
   },
   "skeleton_clerk": {
     "name": "Headmaster's Clerk", "faction": "undead", "controller": "ai", "strength": 20, "spirit": 1,
