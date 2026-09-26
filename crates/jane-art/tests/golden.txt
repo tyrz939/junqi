@@ -233,7 +233,7 @@ unit:jane 59ff52b0
 unit:jane@1 6842ec30
 unit:jane@2 c98e9a36
 unit:jane@3 a115bac9
-unit:skeleton a92bca9b
+unit:skeleton 650fb6f7
 unit:town_baker 288730dd
 unit:town_caller f7afca7e
 unit:town_constable 86452e01
@@ -290,7 +290,7 @@ prop:beehive c6b564b2
 prop:bench a6831911
 prop:bones 37d56667
 prop:boss_chest af85b0ff
-prop:boulder 5d393a9c
+prop:boulder 50f58718
 prop:brazier 7d1968cf
 prop:broken_cabinet 592707d7
 prop:broken_hoist f0a168fc
@@ -385,7 +385,7 @@ prop:pipes_penstock_v 332faa0c
 prop:pipes_stove b6a64268
 prop:plate 0dad9dab
 prop:pump 85dd0ddd
-prop:rock 2f5ff585
+prop:rock 375dc87e
 prop:root_wall 20b4000f
 prop:rose 3c07df23
 prop:rubble b308ed0d

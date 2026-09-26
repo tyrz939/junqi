@@ -26,6 +26,11 @@ pub fn fallen(side: &Canvas, seed: u32, pool: bool) -> Canvas {
     let mut lying = stood.rotate_ccw();
     lying.shorten_to(MAX_LEN);
     lying.remap(pallor);
+    if !pool {
+        // Bone has no pallid twin and goes a tone down; the shin's two tones must not cross
+        // into a checker as it turns.
+        lying.unchecker(Ramp::Bone);
+    }
     lying.quench();
     lying.dome_heights(5);
     let Some(b) = lying.bounds() else { return Canvas::new(W, H) };

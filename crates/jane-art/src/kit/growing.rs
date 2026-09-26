@@ -102,8 +102,13 @@ pub(crate) fn draw(c: &mut Canvas, k: &Kit, state: State) -> Option<Stand> {
             ao(c, 1, w - 2, foot, 5);
             for i in 0..n {
                 let hh = parts::hash(k.seed, i, 55);
-                let (sw, sh) = if n == 1 { (w - 4, (h - 4).min(w - 2)) } else { (8 + (hh % 8) as i32, 7 + (hh >> 4 & 7) as i32) };
-                let x = if n == 1 { 2 } else { 1 + ((hh >> 8) % (w - sw - 1).max(1) as u32) as i32 };
+                // One stone: its breadth and its place a little different by the seed.
+                let (sw, sh) = if n == 1 {
+                    (w - 4 - 2 * (hh >> 1 & 1) as i32, (h - 4).min(w - 2) - 2 * (hh >> 2 & 1) as i32)
+                } else {
+                    (8 + (hh % 8) as i32, 7 + (hh >> 4 & 7) as i32)
+                };
+                let x = if n == 1 { 2 + (hh & 1) as i32 } else { 1 + ((hh >> 8) % (w - sw - 1).max(1) as u32) as i32 };
                 let y = foot - sh - if n == 1 { 0 } else { ((hh >> 12) % (h / 3).max(1) as u32) as i32 };
                 let mut m = Canvas::new(c.w(), c.h());
                 m.polyline_fill(&[(x + 2, y), (x + sw - 3, y + 1), (x + sw - 1, y + sh / 2), (x + sw - 2, y + sh - 1), (x + 1, y + sh - 1), (x, y + sh / 3)], Ix::INK, 1);
