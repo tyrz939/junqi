@@ -136,8 +136,11 @@ pub fn apply(t: &mut Target<'_>, mask: &mut Mask, shade: Rgb) -> u64 {
             *d = 0xff00_0000 | ch(16, sr) << 16 | ch(8, sg) << 8 | ch(0, sb);
             n += 1;
         }
-        let row = &mut mask.px[(y * w + x0) as usize..(y * w + x1) as usize];
-        row.fill(0);
+    }
+    // Cleared once every row is laid: a row cleared as it went would read as clear to the row
+    // under it, and every px of every shadow would take the edge's dither.
+    for y in y0..y1 {
+        mask.px[(y * w + x0) as usize..(y * w + x1) as usize].fill(0);
     }
     n
 }
@@ -191,5 +194,21 @@ mod tests {
         assert_eq!(px[10 * 40], 0xff80_8080);
         // The mask is clear for the next frame.
         assert!(mask.px.iter().all(|&m| m == 0) && mask.dirty.is_none());
+    }
+
+    #[test]
+    fn a_shadow_is_solid_inside_and_dithered_only_at_its_edge() {
+        let mut mask = Mask::default();
+        mask.fit(20, 20);
+        mask.span(2, 18, 2, 18, 200);
+        let mut px = vec![0xff80_8080u32; 400];
+        let mut t = Target { px: &mut px, w: 20, h: 20 };
+        apply(&mut t, &mut mask, [128, 128, 200]);
+        // Every px inside the edge is shaded, whatever the dither says there.
+        for y in 3..17 {
+            for x in 3..17 {
+                assert_ne!(px[y * 20 + x], 0xff80_8080, "({x}, {y}) left unshaded");
+            }
+        }
     }
 }
