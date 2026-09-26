@@ -15,7 +15,7 @@ use jane_core::{
 };
 use jane_data::{DialogueNode, Light};
 
-use crate::ids::{Seat, UnitId};
+use crate::ids::{PropIx, Seat, UnitId};
 use crate::input::InputFrame;
 use crate::interact::{Focus, Here, focus_of, near_bench, near_rest, spawn_of};
 use crate::runtime::{ZoneRuntime, ZoneTrigger};
@@ -129,6 +129,11 @@ impl<'a> View<'a> {
         self.indoor
     }
 
+    /// The zone's own light, permille: what an interior is lit by (1000 outdoors).
+    pub fn ambient(&self) -> jane_core::Permille {
+        self.bp.ambient
+    }
+
     pub fn tile(&self, cx: i32, cy: i32) -> Tile {
         self.rt.grid.tile_at(cx, cy)
     }
@@ -162,6 +167,22 @@ impl<'a> View<'a> {
             let d = cat.story.prop(p.def);
             !p.hidden && Rect::new(i32::from(p.cell.x), i32::from(p.cell.y), i32::from(d.w), i32::from(d.h)).overlaps(r)
         })
+    }
+
+    /// [`props_in`](Self::props_in) with the caller's scratch for the block query, so a caller
+    /// that asks every tick (presentation) allocates nothing once `scratch` is warm.
+    pub fn for_props_in(&self, r: Rect, scratch: &mut Vec<PropIx>, mut f: impl FnMut(&'a Prop)) {
+        let cat = jane_data::catalog();
+        self.rt.props.query(r.x, r.y, r.right() - 1, r.bottom() - 1, scratch);
+        for &i in scratch.iter() {
+            let p = &self.zone.props[i as usize];
+            let d = cat.story.prop(p.def);
+            if !p.hidden
+                && Rect::new(i32::from(p.cell.x), i32::from(p.cell.y), i32::from(d.w), i32::from(d.h)).overlaps(r)
+            {
+                f(p);
+            }
+        }
     }
 }
 

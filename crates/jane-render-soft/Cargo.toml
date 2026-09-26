@@ -10,5 +10,9 @@ publish.workspace = true
 [dependencies]
 jane-present.workspace = true
 
+[dev-dependencies]
+jane-core.workspace = true
+jane-sim.workspace = true
+
 [lints]
 workspace = true

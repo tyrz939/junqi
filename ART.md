@@ -55,10 +55,10 @@ Still **zero hand-drawn sprites** (§1). The generators get richer primitives in
 pub fn render(look: &Look, seed: u32) -> SpriteSet
 
 pub struct SpriteSet { w: u8, h: u8, ax: u8, ay: u8, frames: FrameMap, roles: RoleMap, emits: RoleSet }
-pub struct Frame { albedo: Vec<u8>, normal: Vec<[u8; 2]>, emissive: Vec<u8>, height: Vec<u8> }   // all w * h
+pub struct Frame { albedo: Vec<Ix>, normal: Vec<[u8; 2]>, emissive: Vec<Ix>, height: Vec<u8> }   // all w * h; Ix is a u16 master-palette index
 pub enum FrameId { Down, Down1, Down2, Down3, DownB, Up, Up1, Up2, Up3, UpB, Side, Side1, Side2, Side3, SideB,
                    Atk1, Atk2, Atk3, Cast1, Cast2, Cast3, Hurt, Dead, Dead2, Base, Base2, Base3, On, Open }
-pub struct RoleMap([Role; 256])               // albedo index -> Hair | Skin | Coat | CoatShade | Legs | Boots | Glass | Eye | ... | None
+pub struct RoleMap([Role; 1024])              // master-palette index -> Hair | Skin | Coat | CoatShade | Legs | Boots | Glass | Eye | ... | None
 pub enum Look {
     Person(PersonLook), Creature(CreatureLook), Prop(PropLook), Building(HouseLook),
     Icon(IconLook), Flora(FloraLook), Tile(TileStyle), Weather(WeatherLook), Parallax(ParallaxLook),
@@ -355,19 +355,19 @@ Six muted pool pairs. `pallor` darkens by 14 % and greys by 20 %; the `*_dead` r
 
 **Budget.** The Pi 3 must hold 60 fps (owner decision; the degrade order is in PRESENTATION's performance section) and the pages are read-only and packed tight for it; at the new size and depth they live in its RAM and not its L2, and that is a cost PRESENTATION carries in its blit budget. The boot cost is paid once behind the loading screen. Pi 3 target: every look cold in under 3 s, measured by `jane bench art`. The **page cache under the save directory**, keyed by the build hash (content hash plus the `jane-art` version), is allowed and expected on a Pi: written by the game, never shipped, regenerated silently when stale, never the truth (`jane sheet` and the tests always generate), and a warm boot from it is a copy. `vary` is budgeted with the rest: a row with variants costs up to four times its frames, and a test sums looks x variants x frames x layers against the page limit.
 
-**Atlas.** 2048 x 2048 shelf-packed page sets, one set holding four layers of one rect map: albedo 8-bit, normal 16-bit, emissive 8-bit, height 8-bit, five bytes a pixel.
+**Atlas.** 2048 x 2048 shelf-packed page sets, one set holding four layers of one rect map: albedo 16-bit (an `Ix`: the master palette is up to 1024 entries, §2.7, so the pages are not 8-bit; PRESENTATION §1.4), normal 16-bit, emissive 16-bit, height 8-bit, seven bytes a pixel. `soft` holds the albedo pages alone, two bytes a pixel.
 
 | Content | Frames | Pixels | Size, four layers |
 | --- | ---: | ---: | ---: |
-| units, with seats, variants and every cycle a row promises | ~5000 | ~6.4 M | ~32 MB |
-| props | ~400 | ~0.6 M | ~3 MB |
-| buildings | ~40 | ~0.5 M | ~2.5 MB |
-| icons, 32 and 16 | ~180 | ~0.12 M | ~0.6 MB |
-| flora and canopy strips | ~90 | ~0.4 M | ~2 MB |
-| font, four faces, albedo only | ~400 glyphs | ~0.25 M | ~0.25 MB |
-| chrome, albedo only | | ~0.3 M | ~0.3 MB |
-| weather masks and parallax | ~120 | ~1.0 M | ~5 MB |
-| total | | ~9.6 M | **~46 MB: three page sets, four at most** |
+| units, with seats, variants and every cycle a row promises | ~5000 | ~6.4 M | ~45 MB |
+| props | ~400 | ~0.6 M | ~4.2 MB |
+| buildings | ~40 | ~0.5 M | ~3.5 MB |
+| icons, 32 and 16 | ~180 | ~0.12 M | ~0.8 MB |
+| flora and canopy strips | ~90 | ~0.4 M | ~2.8 MB |
+| font, four faces, albedo only | ~400 glyphs | ~0.25 M | ~0.5 MB |
+| chrome, albedo only | | ~0.3 M | ~0.6 MB |
+| weather masks and parallax | ~120 | ~1.0 M | ~7 MB |
+| total | | ~9.6 M | **~64 MB: three page sets, four at most; ~19 MB of albedo on `soft`** |
 
 `Atlas::get(SpriteId) -> &SpriteRef { page, frames: [FrameRect; N], w, h, ax, ay, flat: bool }`; ids are interned `u16` at build; a flat sprite has albedo only. `jane-art` packs the pages; `jane-present` holds and blits them (PRESENTATION, the renderer's formats).
 

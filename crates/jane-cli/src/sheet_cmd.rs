@@ -1,6 +1,7 @@
 //! `jane sheet`: contact sheets from jane-art as PNGs (ART.md §5, PRESENTATION.md §6), and
 //! `--bless`, which rewrites jane-art's golden hashes. Today the step-1 sheets: the demo
-//! sprites' layers and lighting, the font, the chrome and the palette.
+//! sprites' layers and lighting, the font, the chrome and the palette; and `scene`, one whole
+//! frame of a played seed through the presenter and `soft`.
 
 use std::path::{Path, PathBuf};
 
@@ -14,6 +15,11 @@ pub const USAGE: &str = "  sheet layers <what> [--out DIR]     a sprite's albedo
                                       every glyph in every face; the chrome pieces; the palette ramps
   sheet all [--out DIR]               every sheet above, for every sprite
   sheet list                          the sprites <what> can name
+  sheet scene [--seed N] [--minutes M | --ticks T] [--model reader|rusher] [--night | --hour H]
+              [--wide] [--out PATH.png | --out DIR]
+                                      a model plays the seed from New Game (default 1 minute), then one
+                                      frame is drawn headless through the presenter and soft; --night
+                                      sets the clock to 22:00 first; --wide draws 21:9 (1008 x 432)
   sheet --bless                       rewrite crates/jane-art/tests/golden.txt from the current art";
 
 /// jane-art's golden file, from this crate's manifest.
@@ -70,7 +76,45 @@ pub fn run(args: &[String]) -> Result<(), String> {
             write(&out, "palette", &sheet::palette_sheet(&font))?;
         }
         Some("list") => println!("{}", demo::NAMES.join("\n")),
+        Some("scene") => scene(args)?,
         _ => return Err(format!("usage:\n{USAGE}")),
     }
+    Ok(())
+}
+
+fn scene(args: &[String]) -> Result<(), String> {
+    let flag = |name: &str| args.iter().position(|a| a == name).and_then(|i| args.get(i + 1)).map(String::as_str);
+    let num =
+        |name: &str| flag(name).map(|s| s.parse::<u32>().map_err(|_| format!("{name}: not a number: {s}"))).transpose();
+    let seed = num("--seed")?.unwrap_or(1);
+    let ticks = match (num("--ticks")?, num("--minutes")?) {
+        (Some(t), _) => t,
+        (None, m) => m.unwrap_or(1) * 60 * 60,
+    };
+    let model = jane_bot::Model::parse(flag("--model").unwrap_or("reader")).ok_or("--model: reader or rusher")?;
+    let hour = match (args.iter().any(|a| a == "--night"), num("--hour")?) {
+        (_, Some(h)) => Some(u8::try_from(h % 24).expect("an hour")),
+        (true, None) => Some(22),
+        (false, None) => None,
+    };
+    let canvas = if args.iter().any(|a| a == "--wide") { (1008, 432) } else { (768, 432) };
+    let name = format!("scene-{seed}-{ticks}{}-{}", hour.map_or(String::new(), |h| format!("-h{h:02}")), model.name());
+    let path = match flag("--out") {
+        Some(p) if p.ends_with(".png") => PathBuf::from(p),
+        Some(dir) => PathBuf::from(dir).join(format!("{name}.png")),
+        None => PathBuf::from("sheets").join(format!("{name}.png")),
+    };
+    let bps = jane_sim::Blueprints::build(seed).map_err(|e| format!("seed {seed}: {e}"))?;
+    let shot = crate::scene::render(bps, &crate::scene::Opts { seed, ticks, model, hour, canvas })?;
+    if let Some(dir) = path.parent().filter(|d| !d.as_os_str().is_empty()) {
+        std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    }
+    std::fs::write(&path, shot.png()).map_err(|e| format!("{}: {e}", path.display()))?;
+    println!(
+        "{}
+{}",
+        shot.line,
+        path.display()
+    );
     Ok(())
 }

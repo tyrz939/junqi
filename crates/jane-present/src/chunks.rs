@@ -1,0 +1,160 @@
+//! The terrain chunk cache (PRESENTATION.md §1.6): 16 x 16 cells painted into `CHUNK_PX`
+//! square layers, LRU 48, keyed by `(id, generation)`, invalidated per rect on `Event::Tiles(rect)`,
+//! dropped whole on a zone change. The layers themselves live in the `Frame` (by slot), so a
+//! backend reads them from the frame it is handed; this is the bookkeeping.
+
+use jane_core::Rect;
+
+use crate::frame::{CHUNK_CELLS, CHUNK_PX, ChunkId, ChunkLayers};
+
+/// Chunks kept at most.
+pub const LRU: usize = 48;
+
+#[derive(Clone, Copy, Debug, Default)]
+struct Slot {
+    id: Option<ChunkId>,
+    generation: u32,
+    /// The tick it was last wanted.
+    used: u32,
+    /// Its cells changed since it was painted.
+    stale: bool,
+}
+
+#[derive(Debug, Default)]
+pub struct ChunkCache {
+    slots: Vec<Slot>,
+    next_gen: u32,
+    /// Chunks painted since New Game (a test reads it).
+    pub painted: u32,
+}
+
+impl ChunkCache {
+    /// A cache with all [`LRU`] slots' layers made now (256 KB each on `soft`, 12 MB in all),
+    /// so walking into new ground never allocates.
+    pub fn reserved(layers: &mut Vec<ChunkLayers>) -> ChunkCache {
+        layers.clear();
+        layers.extend((0..LRU).map(|_| ChunkLayers { albedo: vec![0; (CHUNK_PX * CHUNK_PX) as usize] }));
+        ChunkCache { slots: vec![Slot::default(); LRU], ..ChunkCache::default() }
+    }
+
+    /// The slot holding `id`, painted and fresh.
+    pub fn find(&self, id: ChunkId) -> Option<(u16, u32)> {
+        self.slots.iter().position(|s| s.id == Some(id) && !s.stale).map(|i| (i as u16, self.slots[i].generation))
+    }
+
+    /// Marks every chunk touching `cells` stale (`Event::Tiles`).
+    pub fn invalidate(&mut self, cells: Rect) {
+        for s in &mut self.slots {
+            if let Some(id) = s.id {
+                let r =
+                    Rect::new(i32::from(id.cx) * CHUNK_CELLS, i32::from(id.cy) * CHUNK_CELLS, CHUNK_CELLS, CHUNK_CELLS);
+                if r.overlaps(cells) {
+                    s.stale = true;
+                }
+            }
+        }
+    }
+
+    /// Forgets every chunk (a zone change). The layers' memory is kept for the next zone.
+    pub fn drop_all(&mut self) {
+        for s in &mut self.slots {
+            *s = Slot::default();
+        }
+    }
+
+    /// Makes sure `id` is painted and fresh, painting it into `layers` with `paint` if not;
+    /// `now` stamps it as wanted. A new slot is taken while there are fewer than [`LRU`], then
+    /// the least recently wanted one is reused.
+    pub fn want(&mut self, id: ChunkId, now: u32, layers: &mut Vec<ChunkLayers>, paint: impl FnOnce(&mut [u32])) {
+        if let Some(i) = self.slots.iter().position(|s| s.id == Some(id)) {
+            let s = &mut self.slots[i];
+            s.used = now;
+            if !s.stale {
+                return;
+            }
+            self.paint_into(i, id, now, layers, paint);
+            return;
+        }
+        let i = if let Some(free) = self.slots.iter().position(|s| s.id.is_none()) {
+            free
+        } else if self.slots.len() < LRU {
+            self.slots.push(Slot::default());
+            layers.push(ChunkLayers { albedo: vec![0; (CHUNK_PX * CHUNK_PX) as usize] });
+            self.slots.len() - 1
+        } else {
+            // Least recently wanted; ties to the lowest slot.
+            (0..self.slots.len()).min_by_key(|&i| self.slots[i].used).expect("LRU > 0")
+        };
+        self.paint_into(i, id, now, layers, paint);
+    }
+
+    fn paint_into(
+        &mut self,
+        i: usize,
+        id: ChunkId,
+        now: u32,
+        layers: &mut [ChunkLayers],
+        paint: impl FnOnce(&mut [u32]),
+    ) {
+        paint(&mut layers[i].albedo);
+        self.next_gen = self.next_gen.wrapping_add(1);
+        self.slots[i] = Slot { id: Some(id), generation: self.next_gen, used: now, stale: false };
+        self.painted += 1;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn id(cx: u16, cy: u16) -> ChunkId {
+        ChunkId { cx, cy }
+    }
+
+    #[test]
+    fn a_chunk_is_painted_once_then_again_when_its_tiles_change() {
+        let (mut c, mut layers) = (ChunkCache::default(), Vec::new());
+        c.want(id(1, 1), 0, &mut layers, |px| px.fill(7));
+        c.want(id(1, 1), 1, &mut layers, |_| panic!("painted twice"));
+        let (slot, generation) = c.find(id(1, 1)).unwrap();
+        assert_eq!(layers[usize::from(slot)].albedo[0], 7);
+        // A tile changed in a neighbouring chunk: this one is untouched.
+        c.invalidate(Rect::new(40, 16, 2, 2));
+        assert_eq!(c.find(id(1, 1)), Some((slot, generation)));
+        // One changed inside it: repainted under a new generation.
+        c.invalidate(Rect::new(20, 20, 1, 1));
+        assert_eq!(c.find(id(1, 1)), None);
+        c.want(id(1, 1), 2, &mut layers, |px| px.fill(9));
+        let (slot2, gen2) = c.find(id(1, 1)).unwrap();
+        assert_eq!(slot2, slot);
+        assert_ne!(gen2, generation);
+        assert_eq!(layers[usize::from(slot)].albedo[0], 9);
+    }
+
+    #[test]
+    fn it_keeps_48_and_reuses_the_least_recently_wanted() {
+        let (mut c, mut layers) = (ChunkCache::default(), Vec::new());
+        for i in 0..LRU as u16 {
+            c.want(id(i, 0), u32::from(i), &mut layers, |_| {});
+        }
+        // Chunk 0 wanted again, so chunk 1 is now the oldest.
+        c.want(id(0, 0), 100, &mut layers, |_| {});
+        c.want(id(99, 0), 101, &mut layers, |_| {});
+        assert_eq!(layers.len(), LRU);
+        assert!(c.find(id(0, 0)).is_some());
+        assert!(c.find(id(1, 0)).is_none());
+        assert!(c.find(id(99, 0)).is_some());
+    }
+
+    #[test]
+    fn a_zone_change_drops_every_chunk_and_keeps_the_memory() {
+        let (mut c, mut layers) = (ChunkCache::default(), Vec::new());
+        for i in 0..5 {
+            c.want(id(i, 0), 0, &mut layers, |_| {});
+        }
+        c.drop_all();
+        assert!((0..5).all(|i| c.find(id(i, 0)).is_none()));
+        c.want(id(0, 0), 1, &mut layers, |_| {});
+        assert_eq!(layers.len(), 5);
+    }
+}
