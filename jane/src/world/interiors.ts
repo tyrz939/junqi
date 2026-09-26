@@ -26,11 +26,12 @@ export function buildHouse(seed: number, attempt: number): Blueprint {
   k.prop({ key: "front_door", def: "door", cx: 25, cy: 22, to: { zone: "county", mark: "house_front" } }, 2, 2);
   k.mark("front", 25, 20, 3);
 
-  // Two hatches on one wall, both to the cellar.
-  k.prop({ key: "hatch_a", def: "hatch", cx: 4, cy: 4, to: { zone: "cellar", mark: "stair_a" } }, 2, 2);
-  k.prop({ key: "hatch_b", def: "hatch", cx: 9, cy: 4, to: { zone: "cellar", mark: "stair_b" } }, 2, 2);
-  k.mark("hatch_a", 5, 7, 1);
-  k.mark("hatch_b", 10, 7, 1);
+  // Two hatches on one wall, both to the cellar, chalked in Julie's hand. The one nearer the
+  // doorway goes down to the keys; the far one to the other way out, and a note there says so.
+  k.prop({ key: "hatch_a", def: "hatch", cx: 9, cy: 4, to: { zone: "cellar", mark: "stair_a" }, label: "The hatch chalked KEYS" }, 2, 2);
+  k.prop({ key: "hatch_b", def: "hatch", cx: 4, cy: 4, to: { zone: "cellar", mark: "stair_b" }, label: "The hatch chalked OUT" }, 2, 2);
+  k.mark("hatch_a", 10, 7, 1);
+  k.mark("hatch_b", 5, 7, 1);
 
   k.prop({ def: "stove", cx: 12, cy: 2 }, 2, 2);
   k.prop({ key: "ice_orb", def: "orb_ice", cx: 15, cy: 2, talk: "orb_ice" }, 2, 2);
@@ -173,6 +174,9 @@ export function buildCellar(seed: number, attempt: number): Blueprint {
   k.fill(b.cx, b.cy, b.w, b.h, F);
   k.prop({ key: "stair_b", def: "stairs", cx: 90, cy: 68, to: { zone: "house", mark: "hatch_b" } }, 2, 2);
   k.mark("stair_b", 87, 68, 2);
+  // Come down this end first and the iron door is shut with nothing to open it: the note by it
+  // says where the keys are, in the hand from the kitchen.
+  k.prop({ key: "cellar_other_way", def: "note", cx: 86, cy: 62, talk: "cellar_other_way" }, 1, 1);
   k.pile({ cx: b.cx + 1, cy: b.cy + 1, w: 8, h: 6 }, "barrel", 2);
 
   for (const r of [a, b, ...rooms]) k.torchRun(r, 9);

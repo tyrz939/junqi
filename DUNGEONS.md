@@ -586,7 +586,7 @@ In the order the story reaches them. Each sits at one balance phase (`DESIGN-202
 
 ### 3.0 Julie's cellar (phase 1): keep
 
-**Fiction.** Julie kept the cellar the way she kept everything: labelled, locked where it mattered, and one key short. Two hatches go down from the kitchen wall and come up again at opposite ends, because a cellar with one way out was, in her margin, "a mistake you make once". There are rats, a bench for potions, a storeroom behind a plain lock, and a study with a desk and nothing on it.
+**Fiction.** Julie kept the cellar the way she kept everything: labelled, locked where it mattered, and one key short. Two hatches go down from the kitchen wall and come up again at opposite ends, because a cellar with one way out was, in her margin, "a mistake you make once". There are rats, a bench for potions, a storeroom behind a plain lock, and a study with a desk and nothing on it. The hatches are chalked KEYS (the nearer the doorway, by the stove) and OUT, and a note by the second iron door, at the OUT end, says where the keys are: "THE OTHER WAY OUT… A cellar with one way out is a mistake you make once."
 
 The roses grow without light. The dust on the study desk has a clean ring in it, the size of the stand in the kitchen. The dog does not come down. It says the stairs are steep, which they are not.
 
