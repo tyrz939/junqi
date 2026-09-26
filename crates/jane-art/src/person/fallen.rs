@@ -44,7 +44,7 @@ pub fn fallen(side: &Canvas, seed: u32) -> Canvas {
         Ramp::Pool,
         [Tone::Deep, Tone::Shade, Tone::Shade, Tone::Mid, Tone::Mid, Tone::Base, Tone::Base, Tone::Base],
     );
-    out.outline_sel();
+    out.outline();
     out.ao_contact(Rect::new(AX - b.w / 2 - 1, AY - 4, b.w + 2, 4), 0);
     out.stamp(&lying, x, y);
     out

@@ -7,3 +7,4 @@ pub mod dungeons;
 pub mod living;
 pub mod looks;
 pub mod story;
+pub mod tile_looks;

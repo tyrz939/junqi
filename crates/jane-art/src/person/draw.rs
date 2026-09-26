@@ -160,7 +160,7 @@ fn finish(c: &mut Canvas, d: &Dress) {
     }
     c.despike();
     c.ao_contact(Rect::new(CX - 7, AY - 1, 14, 4), 0);
-    c.outline_sel();
+    c.outline();
     for r in [d.coat, d.front, d.legs, d.hat, d.boots, d.pack, d.skin, d.hair] {
         c.declutter(r);
     }

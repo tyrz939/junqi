@@ -16,10 +16,10 @@ use jane_core::blueprint::TriggerMode;
 use jane_core::grid::{Cell, Rect};
 use jane_core::ids::*;
 use jane_core::num::{Fx, Milli, Permille, Q16, Tick};
-use jane_core::{Angle, Tile};
+use jane_core::{Angle, Material, Tile};
 
 /// The `use` lines the emitted source opens with.
-pub const PRELUDE: &str = "#[allow(unused_imports)]\nuse jane_core::action::*;\n#[allow(unused_imports)]\nuse jane_core::blueprint::TriggerMode;\n#[allow(unused_imports)]\nuse jane_core::grid::{Cell, Rect};\n#[allow(unused_imports)]\nuse jane_core::ids::*;\n#[allow(unused_imports)]\nuse jane_core::num::{Fx, Milli, Permille, Q16, Tick};\n#[allow(unused_imports)]\nuse jane_core::{Angle, Tile};\n#[allow(unused_imports)]\nuse jane_schema::model::*;\n";
+pub const PRELUDE: &str = "#[allow(unused_imports)]\nuse jane_core::action::*;\n#[allow(unused_imports)]\nuse jane_core::blueprint::TriggerMode;\n#[allow(unused_imports)]\nuse jane_core::grid::{Cell, Rect};\n#[allow(unused_imports)]\nuse jane_core::ids::*;\n#[allow(unused_imports)]\nuse jane_core::num::{Fx, Milli, Permille, Q16, Tick};\n#[allow(unused_imports)]\nuse jane_core::{Angle, Material, Tile};\n#[allow(unused_imports)]\nuse jane_schema::model::*;\n";
 
 /// A value that can write itself as a Rust expression of its own type.
 pub trait Emit {
@@ -164,7 +164,7 @@ macro_rules! emit_unit_enum {
         }
     )*};
 }
-emit_unit_enum!(ZoneId, School, Stat, Facing, CameraMode, Tile, TriggerMode);
+emit_unit_enum!(ZoneId, School, Stat, Facing, CameraMode, Tile, Material, TriggerMode);
 
 impl Emit for Cell {
     fn emit(&self, out: &mut String) {

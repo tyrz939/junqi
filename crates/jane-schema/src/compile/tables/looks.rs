@@ -133,6 +133,10 @@ fn unique<T: PartialEq>(v: &[T]) -> bool {
 pub fn compile(src: &Source, cx: &mut Ctx) -> &'static [(SpriteId, Look)] {
     let mut out = Vec::new();
     for (key, row) in src.table("looks", &mut cx.diag) {
+        // The terrain's looks are keyed by tile, not sprite: `tile_looks.rs` compiles them.
+        if row.file == "looks/tiles.json" || row.file.starts_with("looks/tiles/") {
+            continue;
+        }
         let at = format!("looks.{key}");
         let Some(sprite) = cx.sprites.get(&key) else {
             cx.diag.error(format!("{}: {at}", row.file), "no row names this sprite: a look no row uses");

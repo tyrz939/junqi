@@ -18,6 +18,7 @@ pub mod dungeons;
 pub mod living;
 pub mod looks;
 pub mod story;
+pub mod tile_looks;
 
 pub use chunks::*;
 pub use combat::*;
@@ -26,6 +27,7 @@ pub use dungeons::*;
 pub use living::*;
 pub use looks::*;
 pub use story::*;
+pub use tile_looks::*;
 
 model! {
     /// Everything content says, compiled.

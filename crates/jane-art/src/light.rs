@@ -44,7 +44,8 @@ pub struct Ground {
 /// blocks the sun (itself or the ground in the shadow of something taller) gets ambient only.
 pub fn light(c: &Canvas, sun: &Sun, ambient: [u16; 3], ground: Ground) -> Vec<[u8; 3]> {
     let l = sun.toward();
-    let march = March::new(c, sun);
+    let hf = Heights { w: c.w(), h: c.h(), z: c.heights() };
+    let march = March::new(&hf, sun);
     let mut out = Vec::with_capacity(c.albedo().len());
     for y in 0..c.h() {
         for x in 0..c.w() {
@@ -55,7 +56,7 @@ pub fn light(c: &Canvas, sun: &Sun, ambient: [u16; 3], ground: Ground) -> Vec<[u
             };
             let [nx, ny, nz] = decode(c.normal_at(x, y));
             let dot = (nx * l[0] + ny * l[1] + nz * l[2]) >> 15;
-            let lam = if dot <= 0 || march.blocked(c, x, y) { 0 } else { dot.min(UNIT) };
+            let lam = if dot <= 0 || march.blocked(&hf, x, y) { 0 } else { dot.min(UNIT) };
             let e = c.emissive_at(x, y);
             let glow = if e == Ix::CLEAR { [0; 3] } else { rgb(e) };
             let mut px = [0u8; 3];
@@ -68,6 +69,22 @@ pub fn light(c: &Canvas, sun: &Sun, ambient: [u16; 3], ground: Ground) -> Vec<[u
         }
     }
     out
+}
+
+/// A height field: px above the ground per pixel, row-major.
+struct Heights<'a> {
+    w: i32,
+    h: i32,
+    z: &'a [u8],
+}
+
+impl Heights<'_> {
+    fn at(&self, x: i32, y: i32) -> u8 {
+        if x < 0 || y < 0 || x >= self.w || y >= self.h {
+            return 0;
+        }
+        self.z[(y * self.w + x) as usize]
+    }
 }
 
 /// Light an upright sprite (a person: its height layer is each pixel's height above the feet on
@@ -156,10 +173,10 @@ struct March {
 }
 
 impl March {
-    fn new(c: &Canvas, sun: &Sun) -> March {
+    fn new(c: &Heights<'_>, sun: &Sun) -> March {
         let ce = cos_q15(sun.elevation).0;
         let se = sin_q15(sun.elevation).0;
-        let top = i32::from(c.heights().iter().copied().max().unwrap_or(0)) * 256;
+        let top = i32::from(c.z.iter().copied().max().unwrap_or(0)) * 256;
         // Overhead (within about 3°) casts nothing.
         let on = ce > 1700 && se > 0;
         let rise = if on { se * 256 / ce } else { 0 };
@@ -169,25 +186,130 @@ impl March {
 
     /// Whether something in the height field stands between `(x, y)` and the sun. A 1 px bias
     /// keeps a surface from shadowing itself on its own slope.
-    fn blocked(&self, c: &Canvas, x: i32, y: i32) -> bool {
+    fn blocked(&self, c: &Heights<'_>, x: i32, y: i32) -> bool {
         if !self.on {
             return false;
         }
         let (mut fx, mut fy) = (x * 256 + 128, y * 256 + 128);
-        let mut z = i32::from(c.height_at(x, y)) * 256 + 256;
+        let mut z = i32::from(c.at(x, y)) * 256 + 256;
         loop {
             fx += self.step[0];
             fy += self.step[1];
             z += self.rise;
             let (px, py) = (fx >> 8, fy >> 8);
-            if z > self.top || px < 0 || py < 0 || px >= c.w() || py >= c.h() {
+            if z > self.top || px < 0 || py < 0 || px >= c.w || py >= c.h {
                 return false;
             }
-            if i32::from(c.height_at(px, py)) * 256 > z {
+            if i32::from(c.at(px, py)) * 256 > z {
                 return true;
             }
         }
     }
+}
+
+/// A point light over a scene (PRESENTATION.md §1.7): a lamp, a window's spill, her lantern.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Point {
+    /// Where it hangs, scene px.
+    pub x: i32,
+    /// Where it hangs, scene px.
+    pub y: i32,
+    /// Its height above the ground, px.
+    pub z: i32,
+    /// Its colour per channel, 1/256ths.
+    pub colour: [u16; 3],
+    /// How far it reaches, px.
+    pub radius: i32,
+}
+
+/// A whole scene's layers, resolved albedo as `0xAARRGGBB` (alpha 0 is clear), for
+/// [`light_scene`]: a composed county window, a chunk.
+#[derive(Clone, Copy, Debug)]
+pub struct Scene<'a> {
+    /// Size in px.
+    pub w: i32,
+    /// Size in px.
+    pub h: i32,
+    /// Resolved albedo.
+    pub albedo: &'a [u32],
+    /// Normals.
+    pub normal: &'a [crate::canvas::Normal],
+    /// Emissive palette indices; 0 is none.
+    pub emissive: &'a [Ix],
+    /// Px above the ground.
+    pub height: &'a [u8],
+}
+
+/// Light a scene by `sun` over `ambient`, adding `points` with their falloff and N·L from their
+/// height (no shadows from points: that is the renderer's T1 row) and a faint haze of their
+/// colour in the air of the pool, and the emissive layer unlit after the multiply scaled by
+/// `glow` (0..=256: how dark it is, so windows shine at night and not at noon). The same kernel as
+/// [`light`], over resolved colour, carried in 1/4096ths so a pool's falloff shows no rings.
+pub fn light_scene(s: &Scene<'_>, sun: &Sun, ambient: [u16; 3], points: &[Point], glow: u16) -> Vec<[u8; 3]> {
+    /// The haze: this many 256ths of a lamp's colour, added where it falls, whatever it lands on.
+    const HAZE: i64 = 22;
+    /// How much of what a lamp lights it sees as grey, of 256: a warm lamp on green grass warms
+    /// it toward the lamp's colour instead of multiplying it into lime.
+    const WASH: i32 = 128;
+    let l = sun.toward();
+    let hf = Heights { w: s.w, h: s.h, z: s.height };
+    let march = March::new(&hf, sun);
+    let n = (s.w * s.h) as usize;
+    // Light per pixel per channel in 1/4096ths of full, and the haze in 1/16ths of a level.
+    let mut acc: Vec<[i32; 3]> = Vec::with_capacity(n);
+    let mut haze: Vec<[i32; 3]> = vec![[0; 3]; n];
+    let mut lamp: Vec<[i32; 3]> = vec![[0; 3]; n];
+    for y in 0..s.h {
+        for x in 0..s.w {
+            let i = (y * s.w + x) as usize;
+            let [nx, ny, nz] = decode(s.normal[i]);
+            let dot = (nx * l[0] + ny * l[1] + nz * l[2]) >> 15;
+            let lam = if dot <= 0 || march.blocked(&hf, x, y) { 0 } else { dot.min(UNIT) };
+            acc.push([0, 1, 2].map(|k| (i32::from(ambient[k]) + i32::from(sun.colour[k]) * lam / UNIT) * 16));
+        }
+    }
+    for p in points {
+        let r2 = p.radius * p.radius;
+        for y in (p.y - p.radius).max(0)..(p.y + p.radius + 1).min(s.h) {
+            for x in (p.x - p.radius).max(0)..(p.x + p.radius + 1).min(s.w) {
+                let (dx, dy) = (p.x - x, p.y - y);
+                let d2 = dx * dx + dy * dy;
+                if d2 >= r2 {
+                    continue;
+                }
+                let i = (y * s.w + x) as usize;
+                let dz = p.z - i32::from(s.height[i]);
+                let len = jane_core::num::isqrt((d2 + dz * dz) as u64).max(1) as i64;
+                let [nx, ny, nz] = decode(s.normal[i]);
+                // N·L in 1/4096ths.
+                let dot = (i64::from(nx * dx + ny * dy + nz * dz) * 4096 / (len * i64::from(UNIT))).clamp(0, 4096);
+                // (1 - d²/r²)² in 1/65536ths.
+                let t = i64::from(r2 - d2) * 65536 / i64::from(r2.max(1));
+                let f = t * t / 65536;
+                for k in 0..3 {
+                    let c = i64::from(p.colour[k]);
+                    lamp[i][k] += (c * 16 * f / 65536 * dot / 4096) as i32;
+                    haze[i][k] += (c * 16 * f / 65536 * HAZE / 256) as i32;
+                }
+            }
+        }
+    }
+    let mut out = Vec::with_capacity(n);
+    for i in 0..n {
+        let a = s.albedo[i];
+        let base = [(a >> 16) as u8, (a >> 8) as u8, a as u8];
+        let e = s.emissive[i];
+        let g = if e == Ix::CLEAR { [0; 3] } else { rgb(e) };
+        let luma = (299 * i32::from(base[0]) + 587 * i32::from(base[1]) + 114 * i32::from(base[2])) / 1000;
+        let mut px = [0u8; 3];
+        for k in 0..3 {
+            let washed = (i32::from(base[k]) * (256 - WASH) + luma * WASH) >> 8;
+            let v = (i32::from(base[k]) * acc[i][k] + washed * lamp[i][k]) >> 12;
+            px[k] = (v + haze[i][k] / 16 + i32::from(g[k]) * i32::from(glow) / 256).clamp(0, 255) as u8;
+        }
+        out.push(px);
+    }
+    out
 }
 
 /// The eight compass lights of `jane sheet light` at `elevation`, north first, clockwise, in

@@ -18,7 +18,7 @@ use jane_sim::view::View;
 use crate::atlas::{Atlas, RefId};
 use crate::backend::AtlasPages;
 use crate::camera::{Camera, alpha_256};
-use crate::chunks::ChunkCache;
+use crate::chunks::{ChunkCache, LRU, Need};
 use crate::drawlist::{DrawCmd, DrawList};
 use crate::frame::{
     CANVAS_H, CANVAS_W, CELL, CHUNK_PX, Caster, ChunkCmd, ChunkId, Depth, FX_TO_CANVAS, Flags, Frame, Light, LightKind,
@@ -27,6 +27,7 @@ use crate::frame::{
 use crate::light::{Sky, flicker, lantern_lit, sky};
 use crate::people::{self, People};
 use crate::stand_in::{self, StandIns, UnitKind};
+use crate::terrain::Terrain;
 
 /// A unit moving further than this in a tick (40 sim px, `Fx`) snaps instead of sliding: travel,
 /// a respawn, a hop.
@@ -36,6 +37,9 @@ const SNAP_FX: i64 = 40 * 256;
 const MARGIN_CELLS: i32 = 6;
 /// Canvas px round the view painted ahead, so a frame between two ticks never finds a hole.
 const CHUNK_AHEAD: i32 = 64;
+/// Chunks the terrain painter lands in a tick at most (§1.6): the rest show their swatches, or
+/// what they last had, until it reaches them. The tick a zone is entered paints all it shows.
+const LAND_PER_TICK: usize = 2;
 /// Canvas px round the view the draw list sorts over; things further out are culled.
 const SORT_MARGIN: i32 = 96;
 /// Ticks a hurt unit shows it, and the first ticks of them it flashes (§1.11).
@@ -122,6 +126,11 @@ pub struct Present {
     zone: Option<(ZoneId, u32)>,
     zone_cells: (u32, u32),
     chunks: ChunkCache,
+    terrain: Terrain,
+    /// This tick's chunks to paint, by priority (scratch).
+    wants: Vec<(u32, ChunkId, Need)>,
+    /// A zone was entered this tick.
+    entered: bool,
     units: Vec<UnitRec>,
     units_next: Vec<UnitRec>,
     hurt: Vec<u32>,
@@ -140,6 +149,7 @@ impl Present {
         let mut atlas = Atlas::with_layers(tier > Tier::T0);
         let stand = StandIns::build(&mut atlas);
         let people = People::build(&mut atlas);
+        let terrain = Terrain::build(&mut atlas, LRU);
         let mut frame = Frame::new(tier);
         let chunks = ChunkCache::reserved(&mut frame.layers, tier);
         Present {
@@ -153,6 +163,9 @@ impl Present {
             zone: None,
             zone_cells: (0, 0),
             chunks,
+            terrain,
+            wants: Vec::with_capacity(64),
+            entered: false,
             units: Vec::with_capacity(256),
             units_next: Vec::with_capacity(256),
             hurt: Vec::with_capacity(64),
@@ -190,6 +203,11 @@ impl Present {
         self.chunks.painted
     }
 
+    /// Of them, those the terrain painter landed (the rest were swatches standing in).
+    pub fn chunks_landed(&self) -> u32 {
+        self.chunks.landed
+    }
+
     /// Units and props kept this tick (in and round the view).
     pub fn seen(&self) -> (usize, usize) {
         (self.units.len(), self.props.len())
@@ -209,6 +227,8 @@ impl Present {
         if self.zone != Some(key) {
             self.zone = Some(key);
             self.chunks.drop_all();
+            self.terrain.zone(view);
+            self.entered = true;
             self.camera.reset();
             self.units.clear();
         }
@@ -216,7 +236,11 @@ impl Present {
         self.hurt.clear();
         for e in events_for(events, view.me()) {
             match e.kind {
-                EventKind::Tiles(r) => self.chunks.invalidate(r),
+                // A tile reaches a few cells round it in what the painter draws.
+                EventKind::Tiles(r) => {
+                    let g = jane_art::terrain::REACH;
+                    self.chunks.invalidate(Rect::new(r.x - g, r.y - g, r.w + 2 * g, r.h + 2 * g));
+                }
                 EventKind::Shake(n) => self.camera.shake(n),
                 EventKind::Camera { mode, rect } => {
                     self.camera.lock = match mode {
@@ -376,19 +400,44 @@ impl Present {
         lights.sort_unstable_by_key(|l| l.id);
     }
 
-    /// Paints every chunk under the view (and a little round it) that is not painted yet.
+    /// Paints the chunks under the view (and a little round it) that want it: at most
+    /// [`LAND_PER_TICK`] by the terrain painter, those on screen and nearest the middle first;
+    /// one with nothing to show yet takes its swatches meanwhile.
     fn paint_chunks(&mut self, view: &View<'_>) {
-        let Some((cx0, cy0, cx1, cy1)) =
-            self.chunk_range((self.camera.pos.0 >> FX_TO_CANVAS, self.camera.pos.1 >> FX_TO_CANVAS), CHUNK_AHEAD)
-        else {
+        let cam = (self.camera.pos.0 >> FX_TO_CANVAS, self.camera.pos.1 >> FX_TO_CANVAS);
+        let Some((cx0, cy0, cx1, cy1)) = self.chunk_range(cam, CHUNK_AHEAD) else {
             return;
         };
+        let (sx0, sy0, sx1, sy1) = self.chunk_range(cam, 0).unwrap_or((cx0, cy0, cx1, cy1));
+        let mid = (cam.0 + i32::from(self.canvas.0) / 2, cam.1 + i32::from(self.canvas.1) / 2);
         let (cells, outside, now) = (self.zone_cells, self.frame.clear, self.tick);
+        self.wants.clear();
+        let mut shown = 0;
         for cy in cy0..=cy1 {
             for cx in cx0..=cx1 {
                 let id = ChunkId { cx: cx as u16, cy: cy as u16 };
-                self.chunks.want(id, now, &mut self.frame.layers, |layers| {
-                    stand_in::paint_chunk(id, cells, outside, |x, y| view.tile(x, y), layers);
+                self.chunks.touch(id, now);
+                let need = self.chunks.need(id);
+                if need == Need::Nothing {
+                    continue;
+                }
+                let on = (sx0..=sx1).contains(&cx) && (sy0..=sy1).contains(&cy);
+                shown += usize::from(on);
+                let (dx, dy) = (cx * CHUNK_PX + CHUNK_PX / 2 - mid.0, cy * CHUNK_PX + CHUNK_PX / 2 - mid.1);
+                let d = (dx.unsigned_abs() + dy.unsigned_abs()).min(0x00ff_ffff);
+                self.wants.push((u32::from(!on) << 24 | d, id, need));
+            }
+        }
+        self.wants.sort_unstable_by_key(|w| (w.0, w.1.cy, w.1.cx));
+        let budget = if std::mem::take(&mut self.entered) { shown.max(LAND_PER_TICK) } else { LAND_PER_TICK };
+        let (chunks, terrain, layers) = (&mut self.chunks, &mut self.terrain, &mut self.frame.layers);
+        for (i, &(key, id, need)) in self.wants.iter().enumerate() {
+            if i < budget {
+                chunks.want(id, now, layers, false, |slot, l| terrain.paint(view, id, slot, outside, l));
+            } else if need == Need::Missing && key >> 24 == 0 {
+                chunks.want(id, now, layers, true, |slot, l| {
+                    terrain.swatched(slot);
+                    stand_in::paint_chunk(id, cells, outside, |x, y| view.tile(x, y), l);
                 });
             }
         }
@@ -472,6 +521,32 @@ impl Present {
             });
             let cmd = DrawCmd { y: foot, key: p.id, sprite: sprite(r, x, y, Flags::default()), caster };
             if p.flat { self.ground.push(cmd) } else { self.standing.push(cmd) }
+        }
+        // The chunks' trees, shrubs and stones, from the atlas, by their feet.
+        if let Some((cx0, cy0, cx1, cy1)) = self.chunk_range(cam, SORT_MARGIN) {
+            for cy in cy0..=cy1 {
+                for cx in cx0..=cx1 {
+                    let Some((slot, _)) = self.chunks.find(ChunkId { cx: cx as u16, cy: cy as u16 }) else {
+                        continue;
+                    };
+                    let (ox, oy) = (cx * CHUNK_PX - cam.0, cy * CHUNK_PX - cam.1);
+                    for (i, pl) in self.terrain.placed(slot).iter().enumerate() {
+                        let fl = self.terrain.flora(pl.sprite);
+                        let r = self.atlas.get(fl.look);
+                        let (fx, fy) = (ox + i32::from(pl.x), oy + i32::from(pl.y));
+                        let (x, y) = (fx - i32::from(r.ax), fy - i32::from(r.ay));
+                        if !on_canvas(x, y, r.src.w, r.src.h) {
+                            continue;
+                        }
+                        self.standing.push(DrawCmd {
+                            y: fy,
+                            key: 0x4000_0000 | u32::from(slot) << 10 | i as u32,
+                            sprite: sprite(r, x, y, Flags::default()),
+                            caster: Some(Caster { sprite: 0, foot: clamp16(fx, fy), height: r.height, depth: fl.depth }),
+                        });
+                    }
+                }
+            }
         }
         let lantern = lantern_lit(self.sky.ambient);
         let mut glows: [Option<Light>; 64] = [None; 64];

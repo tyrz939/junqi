@@ -71,6 +71,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
             let path = golden_path();
             std::fs::write(&path, demo::golden_file(&font)).map_err(|e| format!("{}: {e}", path.display()))?;
             println!("blessed {}", path.display());
+            crate::sheet_terrain::bless()?;
         }
         Some("layers") => {
             let (name, c) = sprite(args.get(1), args)?;
@@ -146,7 +147,10 @@ pub fn run(args: &[String]) -> Result<(), String> {
             }
         }
         Some("scene") => scene(args)?,
-        _ => return Err(format!("usage:\n{USAGE}")),
+        Some("terrain") => crate::sheet_terrain::terrain(args, &out, &font)?,
+        Some("flora") => crate::sheet_terrain::flora(&out, &font)?,
+        Some("county") => crate::sheet_terrain::county(args, &out, &font)?,
+        _ => return Err(format!("usage:\n{USAGE}\n{}", crate::sheet_terrain::USAGE)),
     }
     Ok(())
 }
