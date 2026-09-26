@@ -8,6 +8,8 @@
 
 use std::ops::Range;
 
+use jane_core::Angle;
+
 /// The canvas height in px, always (PRESENTATION.md, the canvas): 27 cells of 16.
 pub const CANVAS_H: u16 = 432;
 /// The canvas width at 16:9; a wider window widens the canvas at the same height.
@@ -64,6 +66,9 @@ pub enum Depth {
     Ui,
 }
 
+/// A colour, a channel a byte; 255 is full.
+pub type Rgb = [u8; 3];
+
 /// One pass, in draw order. Each is a `Features` row's worth of drawing (§1.3).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Pass {
@@ -71,19 +76,104 @@ pub enum Pass {
     Terrain { chunks: Span },
     /// Sprites of one depth, already in draw order (y-sorted for `Standing`): `Frame::sprites[cmds]`.
     Sprites { layer: Depth, cmds: Span },
-    /// The light pass. So far the ambient alone (`0xRRGGBB` per channel, 255 is full); the
-    /// point lights and casters land with the lightmap (PORT.md §7.1 step 5). Present only when
-    /// the ambient is below full: at 254 and up the multiply is a no-op and the pass is left out.
-    Lights { ambient: [u8; 3] },
+    /// Silhouette sun shadows (§1.3 `silhouettes`, T0 and T1): each caster's albedo mask sheared
+    /// along `sun` by its height and laid on the ground under the `Standing` pass, each shadowed
+    /// pixel multiplied by `shade` (the ambient's colour, never grey), its edge one dither step
+    /// soft. `Frame::casters[casters]`, in draw order.
+    Silhouettes { sun: Directional, shade: Rgb, casters: Span },
+    /// The light pass (§1.7). What is lit was decided by the view; each tier draws it its own way.
+    /// `ambient` is the flat light T0 multiplies by (255 is full; on T0 the pass is left out when
+    /// it would change nothing). `fill` is the light a surface gets from the sky alone, what a
+    /// shadow is lit by on T1 and T2 (blue by day, violet at dusk, the zone's own indoors); `sun`
+    /// is the sun or the moon, added on top where it is not shadowed; `points` are
+    /// `Frame::lights[points]`, `casters` are `Frame::casters[casters]`.
+    Lights { ambient: Rgb, fill: Rgb, sun: Option<Directional>, points: Span, casters: Span },
+    /// The grade and the bloom (§1.9), last before the UI: T2.
+    Post(Post),
 }
 
 impl Pass {
     /// The lowest tier that draws this pass as it stands (its `Features` row, §1.3).
     pub fn needs(&self) -> Tier {
         match self {
-            Pass::Terrain { .. } | Pass::Sprites { .. } | Pass::Lights { .. } => Tier::T0,
+            Pass::Terrain { .. } | Pass::Sprites { .. } | Pass::Lights { .. } | Pass::Silhouettes { .. } => Tier::T0,
+            Pass::Post(_) => Tier::T2,
         }
     }
+}
+
+/// The sun or the moon: one directional light whose angle follows the clock (§1.7).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Directional {
+    /// Where the light is, seen across the ground from a lit thing: 0 east, a quarter turn
+    /// south (jane-core's [`Angle`], clockwise with y down). Shadows point the other way.
+    pub azimuth: Angle,
+    /// Above the horizon: 0 grazes the ground, a quarter turn (16384) is overhead.
+    pub elevation: Angle,
+    /// Its colour on a surface square to it.
+    pub colour: Rgb,
+    /// How soft its shadows are: the light's angular radius (jane-core `Angle` units). A
+    /// penumbra widens by this much for every px it lies from what casts it.
+    pub spread: u16,
+}
+
+/// A point light's shape.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LightKind {
+    Point,
+    /// A cone along `dir` (across the ground), `cone` its half-angle: a sentry's eye.
+    Spot {
+        dir: Angle,
+        cone: Angle,
+    },
+}
+
+/// A light (§1.7), from the view: a prop the sim says is lit, a unit's glow, her lantern.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Light {
+    /// Where it stands on the ground, canvas px (the camera taken off). It shines from
+    /// `height` px above that, so it is seen at `(pos.0, pos.1 - height)`.
+    pub pos: (i32, i32),
+    /// Its height above the ground, px (a lamp's glass, a lantern at her hip).
+    pub height: u8,
+    /// Its colour at the centre, the flicker applied.
+    pub colour: Rgb,
+    /// Where it reaches nothing, canvas px.
+    pub radius: u16,
+    /// The size of the glowing thing, px: a penumbra widens with it.
+    pub size: u8,
+    /// Throws shadows from the casters (T1: the nearest 8; T2: the nearest 32).
+    pub casts: bool,
+    pub kind: LightKind,
+}
+
+/// A thing that throws a shadow: a unit or a prop standing (§1.7 occluders). Wall runs and
+/// canopy cast from the terrain's height layer on T2.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Caster {
+    /// The sprite that draws it: `Frame::sprites[sprite]`. Its albedo is the silhouette.
+    pub sprite: u32,
+    /// Its ground point, canvas px: a unit's feet, the middle of a prop's front edge.
+    pub foot: (i16, i16),
+    /// How tall it stands, px.
+    pub height: u8,
+    /// How deep it is across the ground, px: a person is thin, a crate is its footprint.
+    pub depth: u8,
+}
+
+/// The grade and the bloom (§1.9): a row per region by hour.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Post {
+    /// Multiplies the lit frame (255 is none).
+    pub tint: Rgb,
+    /// Added to the darkest tones: the colour the shadows lean to.
+    pub lift: Rgb,
+    /// 128 is as lit; 0 is grey, 255 twice as rich.
+    pub saturation: u8,
+    /// How much the emissive and the brightest light bloom, 0..255.
+    pub bloom: u8,
+    /// Exposure before the tone curve, 128 is 1.
+    pub exposure: u8,
 }
 
 /// How a sprite is coloured as it is blitted.
@@ -144,12 +234,35 @@ pub struct ChunkCmd {
     pub slot: u16,
 }
 
-/// A painted chunk, `CHUNK_PX` square. `soft` reads the albedo alone (§1.6); the normal,
-/// emissive and height layers land with the chunk painter.
+/// A painted chunk, `CHUNK_PX` square, four layers (§1.6). `soft` reads the albedo alone, and a
+/// T0 presenter leaves the other three empty; T1 and T2 get all four.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ChunkLayers {
     /// `0xAARRGGBB`, resolved through the CLUT as it was painted (a chunk is never tinted).
     pub albedo: Vec<u32>,
+    /// Tangent-space `[nx, ny]`, 128 is 0 (`jane_art::canvas::Normal`): `+x` east, `+y` south.
+    pub normal: Vec<[u8; 2]>,
+    /// `0xAARRGGBB` resolved like the albedo; 0 where nothing glows.
+    pub emissive: Vec<u32>,
+    /// Px above the ground (a wall's face rises to its height, a roof is its height).
+    pub height: Vec<u8>,
+}
+
+impl ChunkLayers {
+    /// A chunk's layers: the albedo alone at T0, all four above it.
+    pub fn new(tier: Tier) -> ChunkLayers {
+        let n = (CHUNK_PX * CHUNK_PX) as usize;
+        if tier == Tier::T0 {
+            ChunkLayers { albedo: vec![0; n], ..ChunkLayers::default() }
+        } else {
+            ChunkLayers { albedo: vec![0; n], normal: vec![[128, 128]; n], emissive: vec![0; n], height: vec![0; n] }
+        }
+    }
+
+    /// Whether the normal, emissive and height layers are carried.
+    pub fn lit(&self) -> bool {
+        !self.height.is_empty()
+    }
 }
 
 /// One frame's draw, in pass order.
@@ -170,6 +283,10 @@ pub struct Frame {
     pub sprites: Vec<SpriteCmd>,
     /// The presenter's painted chunks by slot (what `ChunkCmd::slot` names).
     pub layers: Vec<ChunkLayers>,
+    /// Lights in view and in reach of it (`Pass::Lights::points`).
+    pub lights: Vec<Light>,
+    /// Things that throw shadows (`Pass::Lights::casters`, `Pass::Silhouettes::casters`).
+    pub casters: Vec<Caster>,
 }
 
 impl Frame {
@@ -184,6 +301,8 @@ impl Frame {
             chunks: Vec::with_capacity(64),
             sprites: Vec::with_capacity(4096),
             layers: Vec::new(),
+            lights: Vec::with_capacity(256),
+            casters: Vec::with_capacity(1024),
         }
     }
 
@@ -193,6 +312,14 @@ impl Frame {
 
     pub fn sprites_in(&self, s: Span) -> &[SpriteCmd] {
         &self.sprites[s.range()]
+    }
+
+    pub fn lights_in(&self, s: Span) -> &[Light] {
+        &self.lights[s.range()]
+    }
+
+    pub fn casters_in(&self, s: Span) -> &[Caster] {
+        &self.casters[s.range()]
     }
 
     /// The layers a chunk command draws.

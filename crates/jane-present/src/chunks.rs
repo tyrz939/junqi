@@ -5,7 +5,7 @@
 
 use jane_core::Rect;
 
-use crate::frame::{CHUNK_CELLS, CHUNK_PX, ChunkId, ChunkLayers};
+use crate::frame::{CHUNK_CELLS, ChunkId, ChunkLayers, Tier};
 
 /// Chunks kept at most.
 pub const LRU: usize = 48;
@@ -20,21 +20,28 @@ struct Slot {
     stale: bool,
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub struct ChunkCache {
     slots: Vec<Slot>,
+    /// What a slot's layers are made for: the albedo alone at T0, all four above.
+    tier: Tier,
     next_gen: u32,
     /// Chunks painted since New Game (a test reads it).
     pub painted: u32,
 }
 
 impl ChunkCache {
-    /// A cache with all [`LRU`] slots' layers made now (256 KB each on `soft`, 12 MB in all),
-    /// so walking into new ground never allocates.
-    pub fn reserved(layers: &mut Vec<ChunkLayers>) -> ChunkCache {
+    /// An empty cache whose slots are made as they are first wanted.
+    pub fn new(tier: Tier) -> ChunkCache {
+        ChunkCache { slots: Vec::new(), tier, next_gen: 0, painted: 0 }
+    }
+
+    /// A cache with all [`LRU`] slots' layers made now (256 KB each on `soft`, 12 MB in all; 704
+    /// KB each with the four layers of T1 and T2), so walking into new ground never allocates.
+    pub fn reserved(layers: &mut Vec<ChunkLayers>, tier: Tier) -> ChunkCache {
         layers.clear();
-        layers.extend((0..LRU).map(|_| ChunkLayers { albedo: vec![0; (CHUNK_PX * CHUNK_PX) as usize] }));
-        ChunkCache { slots: vec![Slot::default(); LRU], ..ChunkCache::default() }
+        layers.extend((0..LRU).map(|_| ChunkLayers::new(tier)));
+        ChunkCache { slots: vec![Slot::default(); LRU], ..ChunkCache::new(tier) }
     }
 
     /// The slot holding `id`, painted and fresh.
@@ -65,7 +72,7 @@ impl ChunkCache {
     /// Makes sure `id` is painted and fresh, painting it into `layers` with `paint` if not;
     /// `now` stamps it as wanted. A new slot is taken while there are fewer than [`LRU`], then
     /// the least recently wanted one is reused.
-    pub fn want(&mut self, id: ChunkId, now: u32, layers: &mut Vec<ChunkLayers>, paint: impl FnOnce(&mut [u32])) {
+    pub fn want(&mut self, id: ChunkId, now: u32, layers: &mut Vec<ChunkLayers>, paint: impl FnOnce(&mut ChunkLayers)) {
         if let Some(i) = self.slots.iter().position(|s| s.id == Some(id)) {
             let s = &mut self.slots[i];
             s.used = now;
@@ -79,7 +86,7 @@ impl ChunkCache {
             free
         } else if self.slots.len() < LRU {
             self.slots.push(Slot::default());
-            layers.push(ChunkLayers { albedo: vec![0; (CHUNK_PX * CHUNK_PX) as usize] });
+            layers.push(ChunkLayers::new(self.tier));
             self.slots.len() - 1
         } else {
             // Least recently wanted; ties to the lowest slot.
@@ -94,9 +101,9 @@ impl ChunkCache {
         id: ChunkId,
         now: u32,
         layers: &mut [ChunkLayers],
-        paint: impl FnOnce(&mut [u32]),
+        paint: impl FnOnce(&mut ChunkLayers),
     ) {
-        paint(&mut layers[i].albedo);
+        paint(&mut layers[i]);
         self.next_gen = self.next_gen.wrapping_add(1);
         self.slots[i] = Slot { id: Some(id), generation: self.next_gen, used: now, stale: false };
         self.painted += 1;
@@ -113,8 +120,8 @@ mod tests {
 
     #[test]
     fn a_chunk_is_painted_once_then_again_when_its_tiles_change() {
-        let (mut c, mut layers) = (ChunkCache::default(), Vec::new());
-        c.want(id(1, 1), 0, &mut layers, |px| px.fill(7));
+        let (mut c, mut layers) = (ChunkCache::new(Tier::T0), Vec::new());
+        c.want(id(1, 1), 0, &mut layers, |l| l.albedo.fill(7));
         c.want(id(1, 1), 1, &mut layers, |_| panic!("painted twice"));
         let (slot, generation) = c.find(id(1, 1)).unwrap();
         assert_eq!(layers[usize::from(slot)].albedo[0], 7);
@@ -124,7 +131,7 @@ mod tests {
         // One changed inside it: repainted under a new generation.
         c.invalidate(Rect::new(20, 20, 1, 1));
         assert_eq!(c.find(id(1, 1)), None);
-        c.want(id(1, 1), 2, &mut layers, |px| px.fill(9));
+        c.want(id(1, 1), 2, &mut layers, |l| l.albedo.fill(9));
         let (slot2, gen2) = c.find(id(1, 1)).unwrap();
         assert_eq!(slot2, slot);
         assert_ne!(gen2, generation);
@@ -133,7 +140,7 @@ mod tests {
 
     #[test]
     fn it_keeps_48_and_reuses_the_least_recently_wanted() {
-        let (mut c, mut layers) = (ChunkCache::default(), Vec::new());
+        let (mut c, mut layers) = (ChunkCache::new(Tier::T0), Vec::new());
         for i in 0..LRU as u16 {
             c.want(id(i, 0), u32::from(i), &mut layers, |_| {});
         }
@@ -148,7 +155,7 @@ mod tests {
 
     #[test]
     fn a_zone_change_drops_every_chunk_and_keeps_the_memory() {
-        let (mut c, mut layers) = (ChunkCache::default(), Vec::new());
+        let (mut c, mut layers) = (ChunkCache::new(Tier::T0), Vec::new());
         for i in 0..5 {
             c.want(id(i, 0), 0, &mut layers, |_| {});
         }

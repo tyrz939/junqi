@@ -2,14 +2,15 @@
 //! ran; `draw(alpha)` pure in the tick and `alpha`.
 //!
 //! `tick` reads the `View` and this tick's events into the presenter's own records (units with
-//! their last two positions and timers, props near the view, the camera, the chunks under it,
-//! the ambient); `draw` turns those records into a `Frame` at `alpha` and reads nothing else.
+//! their last two positions and timers, props near the view, the lights the view says are lit
+//! in reach of it, the camera, the chunks under it, the sky); `draw` turns those records into a
+//! `Frame` at `alpha` and reads nothing else.
 //! Neither reads `GameState`, and neither writes anything but the presenter.
 
 use jane_core::action::{CameraMode, Facing};
 use jane_core::num::CELL_SHIFT;
 use jane_core::{Rect, ZoneId};
-use jane_data::{Controller, Faction};
+use jane_data::{Controller, Faction, Region};
 use jane_sim::event::{Event, EventKind, events_for};
 use jane_sim::ids::PropIx;
 use jane_sim::view::View;
@@ -20,10 +21,10 @@ use crate::camera::{Camera, alpha_256};
 use crate::chunks::ChunkCache;
 use crate::drawlist::{DrawCmd, DrawList};
 use crate::frame::{
-    CANVAS_H, CANVAS_W, CELL, CHUNK_PX, ChunkCmd, ChunkId, Depth, FX_TO_CANVAS, Flags, Frame, Pass, Span, SpriteCmd,
-    Tier, Tint,
+    CANVAS_H, CANVAS_W, CELL, CHUNK_PX, Caster, ChunkCmd, ChunkId, Depth, FX_TO_CANVAS, Flags, Frame, Light, LightKind,
+    Pass, Rgb, Span, SpriteCmd, Tier, Tint,
 };
-use crate::light::ambient;
+use crate::light::{Sky, flicker, lantern_lit, sky};
 use crate::stand_in::{self, StandIns, UnitKind};
 
 /// A unit moving further than this in a tick (40 sim px, `Fx`) snaps instead of sliding: travel,
@@ -39,6 +40,23 @@ const SORT_MARGIN: i32 = 96;
 /// Ticks a hurt unit shows it, and the first ticks of them it flashes (§1.11).
 const HURT_TICKS: u32 = 8;
 const FLASH_TICKS: u32 = 4;
+/// Cells past the view whose lights are read: 208 canvas px, the light reach (§1.7).
+const LIGHT_CELLS: i32 = 13;
+/// Her lantern (§1.7): its reach, canvas px, and its warm colour.
+const LANTERN_RADIUS: u16 = 136;
+const LANTERN: Rgb = [255, 190, 116];
+/// How many steps a second a flame's flicker walks (§1.7).
+const FLICKER_RATE: u32 = 10;
+
+/// Lights on screen at most, and how many of them throw shadows, by tier (§1.3 `max_lights`,
+/// §1.7: T1 the nearest 8, T2 the nearest 32).
+pub fn max_lights(tier: Tier) -> (usize, usize) {
+    match tier {
+        Tier::T0 => (16, 0),
+        Tier::T1 => (32, 8),
+        Tier::T2 => (128, 32),
+    }
+}
 
 /// A unit as the presenter keeps it between ticks.
 #[derive(Clone, Copy, Debug)]
@@ -53,6 +71,9 @@ struct UnitRec {
     look: RefId,
     mirror: bool,
     dead: bool,
+    me: bool,
+    /// Its glow: radius canvas px and colour.
+    glow: Option<(u16, Rgb)>,
 }
 
 /// A prop near the view, this tick.
@@ -66,6 +87,21 @@ struct PropRec {
     h: i32,
     look: RefId,
     flat: bool,
+}
+
+/// A prop light the view says is showing, this tick.
+#[derive(Clone, Copy, Debug)]
+struct LightRec {
+    id: u32,
+    /// Its ground point in the zone, canvas px.
+    x: i32,
+    y: i32,
+    height: u8,
+    colour: Rgb,
+    radius: u16,
+    size: u8,
+    /// Permille it dips as it flickers.
+    dip: i16,
 }
 
 /// The presenter: its own state, never the sim's.
@@ -88,16 +124,18 @@ pub struct Present {
     prop_scratch: Vec<PropIx>,
     standing: DrawList,
     ground: DrawList,
-    ambient: [u8; 3],
+    lights: Vec<LightRec>,
+    light_scratch: Vec<PropIx>,
+    sky: Sky,
 }
 
 impl Present {
     /// A presenter at `tier`, its atlas built.
     pub fn new(tier: Tier) -> Present {
-        let mut atlas = Atlas::new();
+        let mut atlas = Atlas::with_layers(tier > Tier::T0);
         let stand = StandIns::build(&mut atlas);
         let mut frame = Frame::new(tier);
-        let chunks = ChunkCache::reserved(&mut frame.layers);
+        let chunks = ChunkCache::reserved(&mut frame.layers, tier);
         Present {
             atlas,
             stand,
@@ -115,8 +153,15 @@ impl Present {
             prop_scratch: Vec::with_capacity(1024),
             standing: DrawList::default(),
             ground: DrawList::default(),
-            ambient: [255; 3],
+            lights: Vec::with_capacity(256),
+            light_scratch: Vec::with_capacity(1024),
+            sky: sky(12 * 7200, 0, false, 1000, Region::Lowfields),
         }
+    }
+
+    /// The sky as of the last tick.
+    pub fn sky(&self) -> &Sky {
+        &self.sky
     }
 
     /// The pages every backend uploads at boot.
@@ -181,8 +226,10 @@ impl Present {
         let area = self.area();
         self.read_units(view, area);
         self.read_props(view, area);
+        self.read_lights(view, area);
         self.paint_chunks(view);
-        self.ambient = ambient(view.clock().0, view.indoor(), view.ambient().0);
+        let (clock, day) = view.clock();
+        self.sky = sky(clock, day, view.indoor(), view.ambient().0, view.region());
     }
 
     /// The cells the view covers this tick, with the margin.
@@ -222,6 +269,13 @@ impl Present {
                 look: self.stand.unit(kind),
                 mirror: u.facing == Facing::West,
                 dead: !u.alive,
+                me: u.id == me,
+                glow: jane_data::catalog()
+                    .combat
+                    .unit(u.def)
+                    .glow
+                    .filter(|_| u.alive)
+                    .map(|g| ((g.radius.0 >> FX_TO_CANVAS).clamp(0, 1024) as u16, rgb(g.color))),
             });
         }
         self.units_next.sort_unstable_by_key(|r| r.id);
@@ -256,6 +310,44 @@ impl Present {
         props.sort_unstable_by_key(|p| p.id);
     }
 
+    /// The prop lights the view says are showing, in reach of the view (THE rule, `View::light_showing`).
+    fn read_lights(&mut self, view: &View<'_>, area: Rect) {
+        let cat = jane_data::catalog();
+        let reach =
+            Rect::new(area.x - LIGHT_CELLS, area.y - LIGHT_CELLS, area.w + 2 * LIGHT_CELLS, area.h + 2 * LIGHT_CELLS);
+        let (lights, stand, atlas) = (&mut self.lights, &self.stand, &self.atlas);
+        lights.clear();
+        view.for_props_in(reach, &mut self.light_scratch, |p| {
+            let Some(l) = view.light_showing(p) else { return };
+            let d = cat.story.prop(p.def);
+            let (x, y) = (i32::from(p.cell.x) * CELL, i32::from(p.cell.y) * CELL);
+            let (w, h) = (i32::from(d.w) * CELL, i32::from(d.h) * CELL);
+            // Where the flame is: a building's lit windows on its front, low; a thing on the
+            // floor just above it; a lamp at its glass; a fire or a stove at its heart.
+            let (gx, gy, height, size) = if d.w >= 3 || d.h >= 3 {
+                (x + w / 2, y + h + 4, 16, 12)
+            } else if d.flat {
+                (x + w / 2, y + h / 2, 4, 6)
+            } else if d.w == 1 && d.h == 1 {
+                let r = atlas.get(stand.prop(d.w, d.h, d.flat, true));
+                (x + w / 2, y + h - 3, (i32::from(r.height) * 11 / 16).clamp(8, 60), 6)
+            } else {
+                (x + w / 2, y + h / 2, 12, 12)
+            };
+            lights.push(LightRec {
+                id: p.id.get(),
+                x: gx,
+                y: gy,
+                height: height as u8,
+                colour: rgb(l.color),
+                radius: (l.radius.0 >> FX_TO_CANVAS).clamp(0, 2048) as u16,
+                size: size as u8,
+                dip: l.flicker.0,
+            });
+        });
+        lights.sort_unstable_by_key(|l| l.id);
+    }
+
     /// Paints every chunk under the view (and a little round it) that is not painted yet.
     fn paint_chunks(&mut self, view: &View<'_>) {
         let Some((cx0, cy0, cx1, cy1)) =
@@ -267,8 +359,8 @@ impl Present {
         for cy in cy0..=cy1 {
             for cx in cx0..=cx1 {
                 let id = ChunkId { cx: cx as u16, cy: cy as u16 };
-                self.chunks.want(id, now, &mut self.frame.layers, |px| {
-                    stand_in::paint_chunk(id, cells, outside, |x, y| view.tile(x, y), px);
+                self.chunks.want(id, now, &mut self.frame.layers, |layers| {
+                    stand_in::paint_chunk(id, cells, outside, |x, y| view.tile(x, y), layers);
                 });
             }
         }
@@ -302,6 +394,8 @@ impl Present {
         f.passes.clear();
         f.chunks.clear();
         f.sprites.clear();
+        f.lights.clear();
+        f.casters.clear();
         if self.zone.is_none() {
             return &self.frame;
         }
@@ -341,9 +435,19 @@ impl Present {
             if !on_canvas(x, y, r.src.w, r.src.h) {
                 continue;
             }
-            let cmd = DrawCmd { y: p.y + p.h - cam.1, key: p.id, sprite: sprite(r, x, y, Flags::default()) };
+            let foot = p.y + p.h - cam.1;
+            let caster = (!p.flat).then(|| Caster {
+                sprite: 0,
+                foot: clamp16(x + i32::from(r.src.w) / 2, foot),
+                height: r.src.h.min(255) as u8,
+                depth: (p.h / 4).clamp(4, 12) as u8,
+            });
+            let cmd = DrawCmd { y: foot, key: p.id, sprite: sprite(r, x, y, Flags::default()), caster };
             if p.flat { self.ground.push(cmd) } else { self.standing.push(cmd) }
         }
+        let lantern = lantern_lit(self.sky.ambient);
+        let mut glows: [Option<Light>; 64] = [None; 64];
+        let mut n_glows = 0;
         for u in &self.units {
             let (dx, dy) = (i64::from(u.cur.0 - u.prev.0), i64::from(u.cur.1 - u.prev.1));
             let (fx, fy) = if dx * dx + dy * dy > SNAP_FX * SNAP_FX {
@@ -352,6 +456,33 @@ impl Present {
                 (u.prev.0 + ((dx * a) >> 8) as i32, u.prev.1 + ((dy * a) >> 8) as i32)
             };
             let (sx, sy) = ((fx >> FX_TO_CANVAS) - cam.0, (fy >> FX_TO_CANVAS) - cam.1);
+            // Her lantern, held at her side the way she faces; a creature's glow at its heart.
+            if u.me && lantern && n_glows < glows.len() {
+                let side = if u.mirror { -9 } else { 9 };
+                let k = flicker(self.tick, u.id, 80, FLICKER_RATE);
+                glows[n_glows] = Some(Light {
+                    pos: (sx + side, sy + 3),
+                    height: 20,
+                    colour: scale(LANTERN, k),
+                    radius: LANTERN_RADIUS,
+                    size: 3,
+                    casts: true,
+                    kind: LightKind::Point,
+                });
+                n_glows += 1;
+            }
+            if let Some((radius, colour)) = u.glow.filter(|_| n_glows < glows.len()) {
+                glows[n_glows] = Some(Light {
+                    pos: (sx, sy),
+                    height: 14,
+                    colour,
+                    radius,
+                    size: 8,
+                    casts: false,
+                    kind: LightKind::Point,
+                });
+                n_glows += 1;
+            }
             let r = self.atlas.get(u.look);
             // The walk frame, as far as a stand-in can walk: a one-px bob.
             let bob = i32::from((u.anim / 9) & 1 == 1);
@@ -366,26 +497,106 @@ impl Present {
             } else {
                 Tint::None
             };
+            let caster = (!u.dead).then(|| Caster {
+                sprite: 0,
+                foot: clamp16(sx, sy),
+                height: r.ay.clamp(1, 255) as u8,
+                depth: 5,
+            });
             self.standing.push(DrawCmd {
                 y: sy,
                 key: 0x8000_0000 | u.id,
                 sprite: sprite(r, x, y, Flags { mirror: u.mirror, tint }),
+                caster,
             });
         }
         let rows = (ch + 2 * SORT_MARGIN) as u32;
         let f = &mut self.frame;
-        for (list, layer) in [(&mut self.ground, Depth::Ground), (&mut self.standing, Depth::Standing)] {
-            let start = f.sprites.len();
-            f.sprites.extend(list.sort(-SORT_MARGIN, rows).iter().map(|c| c.sprite));
-            f.passes.push(Pass::Sprites { layer, cmds: Span::since(start, f.sprites.len()) });
+        let g0 = f.sprites.len();
+        f.sprites.extend(self.ground.sort(-SORT_MARGIN, rows).iter().map(|c| c.sprite));
+        let ground = Span::since(g0, f.sprites.len());
+        let s0 = f.sprites.len();
+        for c in self.standing.sort(-SORT_MARGIN, rows) {
+            if let Some(k) = c.caster {
+                f.casters.push(Caster { sprite: f.sprites.len() as u32, ..k });
+            }
+            f.sprites.push(c.sprite);
         }
+        let standing = Span::since(s0, f.sprites.len());
+        let casters = Span::since(0, f.casters.len());
 
-        // The light pass: the ambient, left out when it would change nothing.
-        if self.ambient.iter().any(|&c| c < 254) {
-            f.passes.push(Pass::Lights { ambient: self.ambient });
+        // The lights: every prop light the view says shows, the glows and her lantern, those
+        // whose reach touches the canvas, the nearest first up to the tier's count.
+        for l in &self.lights {
+            let (x, y) = (l.x - cam.0, l.y - cam.1);
+            let r = i32::from(l.radius);
+            if x + r < 0 || y - i32::from(l.height) - r > ch || x - r > cw || y + r < 0 {
+                continue;
+            }
+            let k = flicker(self.tick, l.id, l.dip, FLICKER_RATE);
+            f.lights.push(Light {
+                pos: (x, y),
+                height: l.height,
+                colour: scale(l.colour, k),
+                radius: l.radius,
+                size: l.size,
+                casts: true,
+                kind: LightKind::Point,
+            });
+        }
+        f.lights.extend(glows[..n_glows].iter().flatten());
+        let (most, casting) = max_lights(f.tier);
+        if f.lights.len() > most || f.lights.iter().filter(|l| l.casts).count() > casting {
+            let mid = (cw / 2, ch / 2);
+            let d2 = |l: &Light| {
+                let (dx, dy) = (i64::from(l.pos.0 - mid.0), i64::from(l.pos.1 - mid.1));
+                dx * dx + dy * dy
+            };
+            f.lights.sort_by_key(|l| d2(l));
+            f.lights.truncate(most);
+            let mut left = casting;
+            for l in &mut f.lights {
+                if l.casts {
+                    l.casts = left > 0;
+                    left = left.saturating_sub(1);
+                }
+            }
+        }
+        let points = Span::since(0, f.lights.len());
+
+        let sky = &self.sky;
+        f.passes.push(Pass::Sprites { layer: Depth::Ground, cmds: ground });
+        // Silhouette sun shadows under the standing things, where the tier has no shadow maps.
+        if f.tier <= Tier::T1
+            && let Some(sun) = sky.sun
+            && casters.len > 0
+        {
+            f.passes.push(Pass::Silhouettes { sun, shade: sky.shade, casters });
+        }
+        f.passes.push(Pass::Sprites { layer: Depth::Standing, cmds: standing });
+        // The light pass: on T0 left out when the multiply would change nothing (day is free).
+        if f.tier > Tier::T0 || sky.ambient.iter().any(|&c| c < 254) {
+            f.passes.push(Pass::Lights { ambient: sky.ambient, fill: sky.fill, sun: sky.sun, points, casters });
+        }
+        if f.tier >= Tier::T2 {
+            f.passes.push(Pass::Post(sky.post));
         }
         &self.frame
     }
+}
+
+/// `0xRRGGBB` as bytes.
+fn rgb(c: u32) -> Rgb {
+    [(c >> 16) as u8, (c >> 8) as u8, c as u8]
+}
+
+/// A colour at `k` of 255.
+fn scale(c: Rgb, k: u8) -> Rgb {
+    c.map(|v| ((u32::from(v) * (u32::from(k) + 1)) >> 8) as u8)
+}
+
+fn clamp16(x: i32, y: i32) -> (i16, i16) {
+    (x.clamp(i32::from(i16::MIN), i32::from(i16::MAX)) as i16, y.clamp(i32::from(i16::MIN), i32::from(i16::MAX)) as i16)
 }
 
 fn sprite(r: &crate::atlas::SpriteRef, x: i32, y: i32, flags: Flags) -> SpriteCmd {
