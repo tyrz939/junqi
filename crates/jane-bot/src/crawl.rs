@@ -329,6 +329,16 @@ impl Crawl {
             }
         }
         self.look(v);
+        // A dungeon done with what the story needs from it (`tactics/`): out.
+        if self.stage == Stage::Explore && crate::tactics::museum::done(v) {
+            self.stage = Stage::Leave;
+            self.task = None;
+            notes.push(Mark::Note("what the story needs is in the bag: leaving".into()));
+        }
+        // A boss room's own play (`tactics/`), before the general fight.
+        if let Some(a) = crate::tactics::museum::fight(v, cx, &self.reach) {
+            return a;
+        }
         if let Some(id) = fight::threat(v, cx) {
             if let Some(a) = fight::engage(v, cx, id) {
                 return a;
@@ -548,6 +558,10 @@ impl Crawl {
                 return Some((Task::Use(UseProp::new(p)), Try::Rest(p)));
             }
         }
+        // What the dungeon's own idea puts first (`tactics/`).
+        if let Some((t, what)) = crate::tactics::museum::first(v, reach).filter(|(_, w)| self.fresh(*w, sig)) {
+            return Some((t, what));
+        }
         // 1. Lying about.
         for d in v.drops() {
             if reach.near(d.pos, 1) {
@@ -661,6 +675,10 @@ impl Crawl {
             if let Some((x, y)) = self.frontier(v) {
                 let t = Task::Walk { to: Vec2::centre(x, y), near: jane_core::Fx::from_px(6) };
                 return Some((t, Try::Explore(x, y)));
+            }
+            // Nothing in the general order: what the dungeon's own idea asks (`tactics/`).
+            if let Some((t, what)) = crate::tactics::museum::idle(v, reach).filter(|(_, w)| self.fresh(*w, sig)) {
+                return Some((t, what));
             }
         }
         best.map(|(_, _, what, t)| (t, what))

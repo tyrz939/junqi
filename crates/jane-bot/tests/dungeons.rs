@@ -87,7 +87,7 @@ fn the_gold_mine() {
 
 #[test]
 fn the_museum() {
-    play(ZoneId::Museum, false);
+    play(ZoneId::Museum, true);
 }
 
 #[test]
