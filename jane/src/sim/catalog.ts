@@ -272,7 +272,8 @@ export type TriggerDef = {
 };
 
 /** Something the whole county does at an hour of the day: the bell at nine. */
-export type ClockDef = { hour: number; actions: ActionList };
+/** `minute`: a ten-minute mark (the early bell's 20:50); left out, the hour. */
+export type ClockDef = { hour: number; minute?: number; actions: ActionList };
 
 /** `mark`: where in the county New Game stands her. The station; tests move it to Julie's gate. */
 export type StartDef = { items: Stack[]; bar: BarSlot[]; quests: string[]; mark: string };
@@ -601,6 +602,7 @@ export function validateCatalog(c: Catalog): string[] {
   }
   c.clock.forEach((row, n) => {
     need(row.hour >= 0 && row.hour < 24, `clock[${n}]: hour out of range`);
+    need(row.minute === undefined || (row.minute >= 0 && row.minute < 60 && row.minute % 10 === 0), `clock[${n}]: minute is a ten-minute mark`);
     checkActions(`clock[${n}]`, row.actions);
   });
   for (const s of c.start.items) need(s.item in c.items, `start: unknown item "${s.item}"`);

@@ -122,6 +122,7 @@ fn condition(cx: &Ctx<'_>, c: Condition) -> bool {
         Condition::SpeakerKnows(s) => crate::living::speaker_knows(cx, s),
         // A door's hours' rule, on the clock everyone shares.
         Condition::Hours { from, to } => jane_core::action::hour_within(cx.world.hour() as u8, from, to),
+        Condition::Weekday(d) => cx.world.weekday() == d,
     }
 }
 
@@ -230,6 +231,18 @@ pub fn run_action(cx: &mut Ctx<'_>, a: &Action, subject: Subject) {
             p.on = on.unwrap_or(!p.on);
             let id = p.id;
             cx.emit(EventKind::Prop { prop: id, change: PropChange::Switch });
+        }
+        // A run of lamps is a row of its own: every one of them here, in prop order.
+        Action::SwitchAll { def, on } => {
+            for ix in 0..cx.zone.props.len() {
+                let p = &mut cx.zone.props[ix];
+                if p.def != def {
+                    continue;
+                }
+                p.on = on.unwrap_or(!p.on);
+                let id = p.id;
+                cx.emit(EventKind::Prop { prop: id, change: PropChange::Switch });
+            }
         }
         Action::Spawn { key, def, at } => {
             let key = cx.sym(key);

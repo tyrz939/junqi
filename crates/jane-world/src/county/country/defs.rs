@@ -49,7 +49,7 @@ fn talk(cat: &jane_data::Catalog, id: &str) -> Option<DialogueId> {
 table! {
     /// The props.
     Props: PropDefId = prop, "prop" {
-        lamp_post, lamp_run, relay_box, fingerpost, milestone, signpost, herb, rock,
+        lamp_post, lamp_run, relay_box, fingerpost, milestone, signpost, sign, herb, rock,
         wayside_shrine, flowers, well, well_head, trough, log, cart_wreck, road_cart, crate_ = "crate", barrel,
         bones, chest, haystack, hay_cart, beehive, cottage_thatch, cottage_timber, cottage_slate,
         cottage_tile, cottage_empty, flowerbed, hen_coop, crop, washing_line, woodpile, farmhouse,

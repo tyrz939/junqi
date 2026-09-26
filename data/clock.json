@@ -1,4 +1,20 @@
 [
-  { "hour": 21, "actions": [{ "do": "toast", "text": "A school bell, a long way off. Nine o'clock." }] },
+  {
+    "hour": 21,
+    "actions": [
+      {
+        "do": "if",
+        "when": [{ "if": "flag", "flag": "omen:early_bell" }],
+        "then": [
+          {
+            "do": "if",
+            "when": [{ "if": "weekday", "day": "tuesday", "not": true }],
+            "then": [{ "do": "toast", "text": "A school bell, a long way off. Nine o'clock." }]
+          }
+        ],
+        "else": [{ "do": "toast", "text": "A school bell, a long way off. Nine o'clock." }]
+      }
+    ]
+  },
   { "hour": 6, "actions": [{ "do": "toast", "text": "The bell again. It is only morning." }] }
 ]

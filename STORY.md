@@ -85,7 +85,8 @@ Claims the world makes, some true per seed (`PLAN.md` §5). Each must be fair: i
 - The scarecrow in the top field was not there yesterday. *(If true: it is not there tomorrow either, and it is closer.)*
 - The Headmaster still rings the bell at nine. *(If true: everything in the mine walks to where it was at nine.)*
 - Nobody has drowned in the lake. *(If true: nothing in the lake is a person.)*
-- The train does not always stop.
+- The train does not always stop. *(If true: one Sunday in three it runs through.)*
+- The bell goes early. *(If true: on Tuesdays it rings before nine.)*
 
 ## 7. Choices for John
 

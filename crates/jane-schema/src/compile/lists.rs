@@ -139,6 +139,12 @@ pub enum RawAction {
         def: String,
         item: String,
     },
+    /// `{ "do": "switchAll", "def": "lamp_east", "on": false }`: every prop of a row in the zone.
+    #[serde(rename = "switchAll")]
+    SwitchAll {
+        def: String,
+        on: Option<bool>,
+    },
     /// `{ "do": "nightLock", "prop", "says", "hours"?: [from, to], "keyed"?: bool }`.
     #[serde(rename = "nightLock")]
     NightLock {
@@ -231,6 +237,25 @@ pub enum RawCond {
         #[serde(default)]
         not: bool,
     },
+    /// `{"if": "weekday", "day": "tuesday"}`.
+    Weekday {
+        day: RawWeekday,
+        #[serde(default)]
+        not: bool,
+    },
+}
+
+/// A day of the week as content writes it.
+#[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum RawWeekday {
+    Sunday,
+    Monday,
+    Tuesday,
+    Wednesday,
+    Thursday,
+    Friday,
+    Saturday,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq)]
@@ -399,6 +424,7 @@ pub fn action(cx: &mut Ctx, at: &str, a: &RawAction) -> Option<Action> {
         RawAction::Talk { tree } => Action::Talk(cx.dialogue(at, tree)?),
         RawAction::Throw { item } => Action::Throw(cx.item(at, item)?),
         RawAction::Place { def, item } => Action::Place { prop: cx.prop(at, def)?, item: cx.item(at, item)? },
+        RawAction::SwitchAll { def, on } => Action::SwitchAll { def: cx.prop(at, def)?, on: *on },
         RawAction::NightLock { prop, says, hours, keyed } => {
             let [from, to] = hours.unwrap_or([jane_core::NightLock::BELL.0, jane_core::NightLock::BELL.1]);
             cx.diag.need(from < 24 && to < 24 && from != to, at, "nightLock: two different hours, 0 to 23");
@@ -505,6 +531,7 @@ pub fn cond(cx: &mut Ctx, at: &str, c: &RawCond) -> Option<Cond> {
             );
             (*not, Condition::Hours { from: *from, to: *to })
         }
+        RawCond::Weekday { day, not } => (*not, Condition::Weekday(*day as u8)),
     };
     Some(Cond { not, c })
 }

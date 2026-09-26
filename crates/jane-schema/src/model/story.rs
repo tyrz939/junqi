@@ -300,6 +300,9 @@ model! {
     pub struct ClockDef {
         /// 0..=23.
         pub hour: u8,
+        /// 0, 10, 20, 30, 40 or 50: a ten-minute mark, which the clock step and a bed's night
+        /// both work (content leaves it out for the hour).
+        pub minute: u8,
         pub actions: ListRef,
     }
 }
@@ -407,10 +410,10 @@ impl Story {
         all.iter().enumerate().filter(move |(_, t)| t.zone == zone).map(|(i, t)| (TriggerId(i as u16), t))
     }
 
-    /// The clock rows for an hour, in row order.
-    pub fn clock_at(&self, hour: u8) -> impl Iterator<Item = &'static ClockDef> {
+    /// The clock rows for an hour and a minute, in row order.
+    pub fn clock_at(&self, hour: u8, minute: u8) -> impl Iterator<Item = &'static ClockDef> {
         let all: &'static [ClockDef] = self.clock;
-        all.iter().filter(move |c| c.hour == hour)
+        all.iter().filter(move |c| c.hour == hour && c.minute == minute)
     }
 
     /// A row id by its content id, by a scan: for tools and tests, never the hot path.

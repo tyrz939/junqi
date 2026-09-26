@@ -49,6 +49,7 @@ pub fn compile(src: &Source, cx: &mut Ctx) -> model::County {
     for (n, s) in stories.defs.iter().enumerate() {
         story_ix[s.id.index()] = n as u16;
     }
+    let furnishing = furnishing(src, cx, &sites.defs);
     let county = model::County {
         zones: leak(zones),
         promised,
@@ -62,7 +63,7 @@ pub fn compile(src: &Source, cx: &mut Ctx) -> model::County {
         placements: leak(placements),
         stories: leak(stories.defs),
         story_ix: leak(story_ix),
-        furnishing: furnishing(src, cx),
+        furnishing,
     };
     once_each(cx, &county);
     county
@@ -81,17 +82,29 @@ struct RawByRegion {
 }
 
 #[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
+struct RawEastRoad {
+    to: String,
+    bridge: String,
+    lamp: String,
+    bridge_lamp: String,
+    notice: String,
+    toll_board: String,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields, rename_all = "camelCase")]
 struct RawFurnishing {
     herbs: RawByRegion,
     chests: RawByRegion,
     orchard: String,
+    east_road: Option<RawEastRoad>,
 }
 
 /// `tuning/country.json`: the herbs, the chests' goods and the orchards' fruit, each an item. A
 /// catalog without the file (a test's fixture) has none.
-fn furnishing(src: &Source, cx: &mut Ctx) -> model::Furnishing {
-    let mut out = model::Furnishing { herbs: [&[]; 3], chests: [&[]; 3], orchard: None };
+fn furnishing(src: &Source, cx: &mut Ctx, sites: &[SiteDef]) -> model::Furnishing {
+    let mut out = model::Furnishing { herbs: [&[]; 3], chests: [&[]; 3], orchard: None, east_road: None };
     let Some(v) = src.file(COUNTRY) else { return out };
     let row = Row { file: COUNTRY.to_owned(), value: v.clone() };
     let Some(raw) = typed::<RawFurnishing>(&row, "country", &mut cx.diag) else { return out };
@@ -106,6 +119,19 @@ fn furnishing(src: &Source, cx: &mut Ctx) -> model::Furnishing {
     out.herbs = by_region("herbs", &raw.herbs);
     out.chests = by_region("chests", &raw.chests);
     out.orchard = cx.item(&format!("{COUNTRY}: orchard"), &raw.orchard);
+    if let Some(e) = &raw.east_road {
+        let at = format!("{COUNTRY}: eastRoad");
+        let to = sites.iter().position(|s| s.id == e.to);
+        cx.diag.need(to.is_some(), &at, format!("no site \"{}\"", e.to));
+        let (lamp, bridge_lamp) = (cx.prop(&at, &e.lamp), cx.prop(&at, &e.bridge_lamp));
+        let (notice, toll_board) = (cx.dialogue(&at, &e.notice), cx.dialogue(&at, &e.toll_board));
+        let bridge = cx.name(&e.bridge);
+        if let (Some(to), Some(lamp), Some(bridge_lamp), Some(notice), Some(toll_board)) =
+            (to, lamp, bridge_lamp, notice, toll_board)
+        {
+            out.east_road = Some(model::EastRoad { to: to as u8, bridge, lamp, bridge_lamp, notice, toll_board });
+        }
+    }
     out
 }
 

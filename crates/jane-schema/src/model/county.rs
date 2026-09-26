@@ -720,6 +720,8 @@ model_enum! {
         Path,
         /// A door's prop and mark.
         Door,
+        /// The country builder's own: the east road's bridge (`tuning/country.json`).
+        Country,
     }
 }
 
@@ -776,6 +778,27 @@ model! {
         pub herbs: [&'static [ItemId]; 3],
         pub chests: [&'static [ItemId]; 3],
         pub orchard: Option<ItemId>,
+        /// The east road and what stands on it (`None` in a test's fixture).
+        pub east_road: Option<EastRoad>,
+    }
+}
+
+model! {
+    /// The east road (STORY.md §6, WORLD.md §7.3; `tuning/country.json` `eastRoad`): the road
+    /// from Castle over the river to site `to`. Its lamps are a row of their own, `lamp`, stood
+    /// switched on, so a clock row can put the whole run out (`switchAll`, "the lamps on the east
+    /// road go out at ten"); across the road from its first lamp stands `notice`. Its river
+    /// bridge (its longest crossing) is the rect `bridge`, with a `bridge_lamp` at each end and
+    /// the `toll_board` at its town end ("the bridge counts who crosses"). The country builder
+    /// provides the rect (`ProvidedBy::Country`).
+    pub struct EastRoad {
+        /// A site's row.
+        pub to: u8,
+        pub bridge: NameId,
+        pub lamp: PropDefId,
+        pub bridge_lamp: PropDefId,
+        pub notice: DialogueId,
+        pub toll_board: DialogueId,
     }
 }
 
@@ -863,6 +886,9 @@ impl County {
             if let Some(r) = p.rect {
                 out.push(county(NameKind::Rect, r.name, by));
             }
+        }
+        if let Some(e) = self.furnishing.east_road {
+            out.push(county(NameKind::Rect, e.bridge, ProvidedBy::Country));
         }
         for s in self.stories {
             out.push(county(NameKind::Rect, s.place_name, ProvidedBy::Story));

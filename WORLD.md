@@ -34,15 +34,16 @@ One game hour is two real minutes. A day is 48 real minutes; the night is 18 of 
 | 17:00 | 0 | She steps off the Sunday train. Sunset begins |
 | 18:00 | 2 | Church bell, evensong. The town only; it is not *the* bell |
 | 18:30 | 3 | Lamps come on where lamps work. The School's window is already lit |
+| 20:50 | 7.7 | Tuesdays, the bell *if that omen is true* (`omen:early_bell`): the same bell, ten minutes early, and not again at nine. The night keeps its hour |
 | 21:00 | 8 | **The bell.** Night. `nightLock` doors shut. The dog is not on the step. Night creatures are up |
-| 22:00 | 10 | The east road lamps go out *if that omen is true* (*proposed*: the lamps are not keyed yet, and no omen row claims it) |
+| 22:00 | 10 | The east road's lamps go out *if that omen is true* (`omen:east_lamps`: the road from Castle over the river to the Museum, whose lamps are a row of their own, `lamp_east`; lit again for the evening at 18:00). The bridge's two lamps and the Museum's are not the run |
 | 05:00 | 24 | First light. Fen mist thickest. The mine's door, if barred (`omen:mine_no_exit`), is open again |
 | 06:00 | 26 | **The bell again.** Day. Doors open. The dog is on the step. Night creatures go back to the rough ground |
 | 07:00 | 28 | Milk round. Farms turn out |
 | 12:00 | 38 | Noon: the statue in the lake faces the way it faces by day |
 | 16:00 | 46 | Second post. The last safe hour to start a long walk |
 
-**Rule: the bell is heard in every zone, including dungeons, at nine and at six.** It is the one signal the whole county shares, and the one clock text may rely on.
+**Rule: the bell is heard in every zone, including dungeons, at nine and at six.** It is the one signal the whole county shares, and the one clock text may rely on, give or take the early bell: on a seed where Mrs Fenn is right it rings at ten to nine on a Tuesday, and the night still comes at nine. The train's whistle on a Sunday at five is heard the same way, everywhere. **Clock rows keep an hour and a minute on a ten-minute mark, and a weekday may be asked** (`clock.json`'s `minute`, the `weekday` condition; day 0 of the engine, WORLD's day 1, is a Sunday).
 
 **Rule: a bed sleeps the clock to 06:00 and no other hour,** and only two seats written to say otherwise sleep to another: the School's far bed (its card: woken at the bell) and the bench on the Museum's steps (until ten, when the doors open). A fire rests but does not sleep. Nothing else moves the clock. **The night she sleeps is lived:** the weather turns on every hour of it, the ground wets and dries, the patches refill every ten minutes, what was due to stand up stands up, and what the county was going to do it does, exactly as if she had sat up all night by the bed. Only nobody walks about while she sleeps (`ARCHITECTURE.md` §4.6.f).
 
@@ -70,11 +71,11 @@ Days count from arrival. Arrival is a Sunday, day 1.
 | ---: | --- |
 | 1, Sunday | Arrival at 17:00. Julie's bed unslept. The trunk on the platform |
 | 2, Monday | The first morning. The blanket line. The town hears of "the girl off the Sunday train" (§7) |
-| 3, Tuesday | Mrs Fenn's day: the bell goes early *if that omen is true* (20:50; *proposed*: the clock has no minutes and no days yet). The sweeper finds salt again |
+| 3, Tuesday | Mrs Fenn's day: the bell goes early *if that omen is true* (20:50, every Tuesday, `omen:early_bell`). The sweeper finds salt again |
 | 4, Wednesday | Market. The farmer in Castle. Whatever she has done by now is known at the Arms |
 | 7, Saturday | The town shuts early. Mr Cobb does not sit out |
-| 8, Sunday | **The train.** 17:00. The Lost Property dates fall due. The Sunday sacks at the post office. The ending offers the train |
-| 15, 22, ... | Every Sunday, the train. "It does not always stop" is an omen: when true, it runs through one Sunday in three (*proposed*: no train runs yet) |
+| 8, Sunday | **The train.** 17:00: a whistle as it comes in and another as it goes, and the Sunday sacks on the platform until Monday morning. The Lost Property dates fall due. The ending offers the train |
+| 15, 22, ... | Every Sunday, the train. "Does not always stop" (pencilled on the timetable at the Halt) is an omen: when true (`omen:train_through`), it runs through one Sunday in three, the first after she came (day 8) and every third after (29, 50, ...): one whistle, and no sacks |
 
 **Rule: nothing in the calendar is required by the spine.** A day-keyed event is texture, a rumour trigger, or an omen's payoff. A player who sleeps through everything loses nothing she needs.
 
@@ -103,7 +104,7 @@ The town is a set chunk: the square (fountain, memorial, Mr Tolly's bench, the p
 | The Milkman | The dairy yard, Back Lane | Round 07:00 to 09:00: High Street, the square, Pound Lane to the south gate | The round, in order | No. 7's three bottles (always: the bottles are placed). Which doors took milk (from day 2) |
 | Miss Dray | Over the post office | The counter 09:00 to 17:00; the second post at 16:00 | Counter to the post box | The three mis-numbered letters. The Sunday sacks (day 8) |
 | Mrs Tace | Top of Church Lane | Her step, mornings; the churchyard, afternoons | Step to the churchyard gate | The School's window, "always the same one lit" (always: a fixed light) |
-| Mrs Fenn | High Street | Her door, afternoons | None | "In before the lamps." The bell going early on Tuesday (she says it from day 4 on every seed; *proposed*: that it happened on a third, when the early bell is built) |
+| Mrs Fenn | High Street | Her door, afternoons | None | "In before the lamps." The bell going early on Tuesday (she says it from day 4 on every seed; it rang at ten to nine on the Tuesdays of a third of seeds, `omen:early_bell`) |
 | Tilly | Pound Lane | The square by day; in after tea | Home to the fountain | Sixpence in the churchyard. After: "he faces the hill" (the cat is placed facing north) |
 | Mr Tolly | High Street | His bench in the square, 09:00 to dusk | Door to bench | The memorial's last name, cut sharper (always) |
 | Dr Vane | The Doctor's, Pound Lane | Never opens | None | Nothing. The surgery notice does the telling |
@@ -186,7 +187,7 @@ The town is a set chunk: the square (fountain, memorial, Mr Tolly's bench, the p
 | | Glasshouse Row (3) | Flowers x5, spiders | Flowers open | |
 | | Drowned Lane (4) | Soldiers x4 *on the road* | Soldiers x6 | |
 | | Mother's Garden (4) | Flowers, the statue | Flowers, the statue turned | |
-| | Still Pool (4) | Nothing on the bank | Something that is not a person *if the lake omen is true*; a person if not (*proposed*) | |
+| | Still Pool (4) | Nothing on the bank | On the lake's bank by the statue: something that is not a person *if the lake omen is true* (`omen:nobody_drowned`; it fights); a man wet to the collar if not, who says nobody ever drowned in it | |
 | Works | Cinder Walk (3) | Crows, one soldier at each dead signal | The night shift walks the road (§4.4) | |
 | | Chapel Rise (5) | Skeletons, tomb guards | Same, more; the four markers' keepers | |
 | | Sidings (5) | The pay clerk, soldiers | Same | |
@@ -389,7 +390,7 @@ A story row declares `spreads: { to: [person], after: <days> }`. From the tick t
 
 ### 7.3 Omens per seed
 
-About a third of omens are true per seed (`PLAN.md` §5), rolled at New Game from the world stream, one roll per row of `data/omens.json` in row order, with constraints (no two lethal ones of a region stacked; none between the station and Julie's, where no row claims anything; a few per region is the rows' job). *Built:* three Lowfields omens, each true on about a third of seeds: the scarecrow closer (C2, C3), no exit from the mine some nights (the front door barred from nine to five, the adit the way out), and the white roses after dark (a soldier in Julie's cellar's study). The Waters' and the Works' omens, the east lamps, the early bell and the train are still *proposed*. The county then *does* what a true omen says at the hour it says. People's lines are the same either way (Mrs Fenn checked her clock and then checked the clock, on every seed from day 4). Confirmation is by observation only, through a consequence that names the claim; contradiction is the same: the county fails to do the thing, and the journal records *seen: the lamps burned all night*.
+About a third of omens are true per seed (`PLAN.md` §5), rolled at New Game from the world stream, one roll per row of `data/omens.json` in row order, with constraints (no two lethal ones of a region stacked; none between the station and Julie's, where no row claims anything; a few per region is the rows' job). *Built:* eight omens, each true on about a third of seeds, at least two a region, in this row order (the first three were shipped first, so adding the rest moved none of their rolls). The Lowfields: the scarecrow closer (C2, C3); no exit from the mine some nights (the front door barred from nine to five, the adit the way out); the white roses after dark (lethal: a soldier in Julie's cellar's study). The Waters: the east road's lamps out at ten (the lighting notice by its first lamp says so; the run is its own lamp row); the bridge counts who crosses (the toll board at the east bridge; the third time she steps onto it in a night its two lamps go out together until the evening, which costs light and nothing else); nobody has drowned in the lake (lethal; the council's notice by the statue; the first time she comes near, the lake's night figure is decided: something that is not a person, or a man who is wet to the collar). The Works: the early bell (Tuesdays at ten to nine; Mrs Fenn, Mr Treloar and the others say it on every seed); the train that does not always stop (one Sunday in three, one whistle and no sacks). The train's is the railway's, heard from anywhere and seen at the Halt a week after she came, never on the first walk; nothing else true stands between the station and Julie's. The Headmaster's bell in the mine is still *proposed*. The county then *does* what a true omen says at the hour it says. People's lines are the same either way (Mrs Fenn checked her clock and then checked the clock, on every seed from day 4). Confirmation is by observation only, through a consequence that names the claim; contradiction is the same: the county fails to do the thing, and the journal records *seen: the lamps burned all night*.
 
 ### 7.4 The long-running context
 

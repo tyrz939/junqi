@@ -1,0 +1,38 @@
+{
+  "bridge_count": {
+    "zone": "county", "rect": "east_bridge", "mode": "enter", "once": false,
+    "when": [{ "if": "flag", "flag": "omen:bridge_counts" }, { "if": "night" }],
+    "actions": [
+      { "do": "flag", "flag": "bridge_crossings", "add": 1 },
+      {
+        "do": "if",
+        "when": [{ "if": "flag", "flag": "bridge_crossings", "eq": 3 }],
+        "then": [
+          { "do": "switchAll", "def": "lamp_east_bridge", "on": false },
+          { "do": "toast", "text": "The lamps at both ends of the bridge go out together." }
+        ]
+      }
+    ]
+  },
+  "halt_sacks_in": {
+    "zone": "county", "rect": "halt_approach", "mode": "enter", "once": false,
+    "when": [{ "if": "flag", "flag": "sunday_sacks" }],
+    "actions": [{ "do": "show", "prop": "sunday_sacks" }]
+  },
+  "halt_sacks_out": {
+    "zone": "county", "rect": "halt_approach", "mode": "enter", "once": false,
+    "when": [{ "if": "flag", "flag": "sunday_sacks", "not": true }],
+    "actions": [{ "do": "hide", "prop": "sunday_sacks" }]
+  },
+  "lake_figure": {
+    "zone": "county", "rect": "lake_wide", "mode": "enter", "once": true,
+    "actions": [
+      {
+        "do": "if",
+        "when": [{ "if": "flag", "flag": "omen:nobody_drowned" }],
+        "then": [{ "do": "spawn", "unit": "lake_figure", "def": "lake_shape", "at": "lake_bank" }],
+        "else": [{ "do": "spawn", "unit": "lake_figure", "def": "lake_man", "at": "lake_bank" }]
+      }
+    ]
+  }
+}

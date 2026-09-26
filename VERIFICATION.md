@@ -91,7 +91,7 @@ Every number is per region and per seed and is printed as a table with its band 
 | Key and lock depth | every key at most 2 rooms off the crit path; every locked thing seen before its key by a tease (C10) | §2.6 |
 | Hub choices | from every hub, at least 3 distinct quest directions open at once | new |
 | Dead-end payoff | every dead end longer than a screen ends in a jar, a page, a chest, a sign or a view of a site | new |
-| Omens | about a third true per seed; ≥ 2 per region; no two lethal ones stacked; none true on the first walk (built: the roll, its rate and the lethal rule, `omens.rs`; three Lowfields rows so far) | §5 |
+| Omens | about a third true per seed; ≥ 2 per region; no two lethal ones stacked; none true on the first walk (built: the roll, its rate and the lethal rule, `omens.rs`; eight rows, at least two a region, each with a test on and off) | §5 |
 
 **Rule:** a structure metric is measured on the built blueprint, never on a playthrough. If it needs a player, it belongs in L4.
 

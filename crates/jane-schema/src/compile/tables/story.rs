@@ -602,6 +602,8 @@ fn triggers(src: &Source, cx: &mut Ctx) -> &'static [TriggerDef] {
 #[serde(deny_unknown_fields)]
 struct RawClock {
     hour: u8,
+    #[serde(default)]
+    minute: u8,
     actions: Vec<RawAction>,
 }
 
@@ -645,6 +647,7 @@ fn clock(src: &Source, cx: &mut Ctx) -> &'static [ClockDef] {
         let at = format!("clock[{n}]");
         let Some(r) = typed::<RawClock>(row, &at, &mut cx.diag) else { continue };
         cx.diag.need(r.hour < 24, &at, "hour out of range");
+        cx.diag.need(r.minute < 60 && r.minute % 10 == 0, &at, "minute is a ten-minute mark, 0 to 50");
         let actions = list(cx, &at, &r.actions);
         let mut found = Vec::new();
         actor_verbs(cx, actions, &mut found);
@@ -652,7 +655,7 @@ fn clock(src: &Source, cx: &mut Ctx) -> &'static [ClockDef] {
             cx.diag
                 .error(&at, format!("\"{v}\" needs a player, and a clock row runs with none (ARCHITECTURE.md §5.2)"));
         }
-        out.push(ClockDef { hour: r.hour, actions });
+        out.push(ClockDef { hour: r.hour, minute: r.minute, actions });
     }
     leak(out)
 }
@@ -893,7 +896,7 @@ mod tests {
 
         assert_eq!(s.triggers[0].zone, jane_core::ZoneId::County);
         assert_eq!(s.triggers[0].trigger.mode, TriggerMode::Enter);
-        assert_eq!(s.clock_at(21).count(), 1);
+        assert_eq!(s.clock_at(21, 0).count(), 1);
         assert_eq!(s.start.bar[0], Some(BarSlot::Spell(jane_core::SpellId(0))));
         assert_eq!(s.start.bar[6], Some(BarSlot::Item(jane_core::ItemId(0))));
         assert_eq!(s.start.quests, &[QuestId(0)]);

@@ -253,6 +253,12 @@ pub enum Action {
     },
     /// A door is answered at every hour from now on, whatever its row said.
     NightUnlock(Key),
+    /// Every prop of row `def` in the zone switched (`on`, or each flipped): a run of lamps
+    /// the county builder stands as a row of its own (the east road's, `lamp_east`).
+    SwitchAll {
+        def: PropDefId,
+        on: Option<bool>,
+    },
 }
 
 impl Action {
@@ -280,6 +286,7 @@ impl Action {
                 | Action::Lock(_)
                 | Action::Unlock(_)
                 | Action::Switch { .. }
+                | Action::SwitchAll { .. }
                 | Action::Spawn { .. }
                 | Action::Despawn(_)
                 | Action::Fill { .. }
@@ -340,6 +347,8 @@ pub enum Condition {
         from: u8,
         to: u8,
     },
+    /// The day of the week, 0 Sunday to 6 Saturday: New Game is a Sunday (`GameState::weekday`).
+    Weekday(u8),
 }
 
 /// A condition, or its negation.

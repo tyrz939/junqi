@@ -10,5 +10,27 @@
     "lightWhenOn": true,
     "light": { "radius": 96, "color": "#f6cd40", "flicker": 0.05 },
     "prompt": "Look"
+  },
+  "lamp_east": {
+    "name": "Lamp Post",
+    "sprite": "lamp_post",
+    "w": 1,
+    "h": 1,
+    "solid": true,
+    "blockLos": false,
+    "nightOnly": true,
+    "lightWhenOn": true,
+    "light": { "radius": 96, "color": "#f6cd40", "flicker": 0.05 }
+  },
+  "lamp_east_bridge": {
+    "name": "Lamp Post",
+    "sprite": "lamp_post",
+    "w": 1,
+    "h": 1,
+    "solid": true,
+    "blockLos": false,
+    "nightOnly": true,
+    "lightWhenOn": true,
+    "light": { "radius": 96, "color": "#f6cd40", "flicker": 0.05 }
   }
 }

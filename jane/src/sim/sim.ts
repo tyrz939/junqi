@@ -428,10 +428,11 @@ export class Sim implements World {
       s.clock = 0;
       s.day++;
     }
-    if (s.clock % TICKS_PER_HOUR === 0) {
-      const hour = s.clock / TICKS_PER_HOUR;
+    if (s.clock % (TICKS_PER_HOUR / 6) === 0) {
+      const hour = Math.floor(s.clock / TICKS_PER_HOUR);
+      const minute = ((s.clock % TICKS_PER_HOUR) * 60) / TICKS_PER_HOUR;
       for (const row of this.catalog.clock) {
-        if (row.hour === hour) this.party.each((w, p) => runActions(w, row.actions, p.unitId));
+        if (row.hour === hour && (row.minute ?? 0) === minute) this.party.each((w, p) => runActions(w, row.actions, p.unitId));
       }
     }
 

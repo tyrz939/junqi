@@ -319,7 +319,7 @@ The station chain opens the region and closes it: its first quest is done on the
 - **Patches:** `tollhouse_reach` 2 (the way in), `eel_beds` 3, `glasshouse_row` 3, **`drowned_lane` 4** (on the road: here the road is the danger and the detour is the safe way, which inverts the Lowfields), **`mothers_garden` 4**, **`still_pool` 4**.
 - **Small places:** `jetty`, `boat`, `greenhouse`, `statue`, `pump`, `well`, `cottage`, `stones`.
 - **Growth:** three jars, three pages from quests; verbs Explosion and Grow come from the spine and reopen the Lowfields (the adit on Quarry Steps; a dry bed at Sallow Bottom).
-- **Omens carried:** the bridge counts who crosses; nobody has drowned in the lake; do not pick the white roses after dark.
+- **Omens carried:** the bridge counts who crosses; nobody has drowned in the lake; the lamps on the east road go out at ten (built, `data/omens.json`; the white roses are the Lowfields' row, though Sallow Bottom's water grows them too).
 
 ## 2.4 The Works (base threat 4 to 5). Outline only
 
@@ -329,7 +329,7 @@ The station chain opens the region and closes it: its first quest is done on the
 - **Patches:** `cinder_walk` 3 (the way in), **`chapel_rise` 5**, **`sidings` 5**, **`cooling_yard` 5**, **`slag_mere` 5**, **`bellfield` 6** (the last field before the School).
 - **Small places:** `signal`, `wagon`, `hut`, `pipe_end`, `pump`, `shrine`, `cart`, `camp`.
 - **Growth:** the largest jars and pages; Electric and Fire reopen earlier regions. Two quests here send her back to the Lowfields with new verbs.
-- **Omens carried:** the Headmaster still rings the bell at nine; the train does not always stop; the lamps on the east road go out at ten.
+- **Omens carried:** the bell goes early (Tuesdays); the train does not always stop (both built); the Headmaster still rings the bell at nine (*proposed*).
 - **Tone ceiling** (`STORY.md` 7.5): the children are never enemies and never shown. Any quest touching the School is about registers, coats on pegs and a bell.
 
 ## 2.5 The whole game

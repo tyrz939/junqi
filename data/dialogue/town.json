@@ -1090,7 +1090,7 @@
   "timetable": {
     "speaker": "Timetable",
     "start": [{ "node": "a" }],
-    "nodes": { "a": { "lines": ["SUNDAY: arr. 17.00, dep. 17.02. MONDAY TO SATURDAY: no service. The Sunday line has been underlined twice in pencil."] } }
+    "nodes": { "a": { "lines": ["SUNDAY: arr. 17.00, dep. 17.02. MONDAY TO SATURDAY: no service. The Sunday line has been underlined twice in pencil.", "Under it, in the same pencil: does not always stop."] } }
   },
   "barn_door": {
     "speaker": "The Barn",

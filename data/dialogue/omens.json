@@ -1,0 +1,47 @@
+{
+  "east_lighting": {
+    "speaker": "Notice",
+    "start": [{ "node": "read" }],
+    "nodes": {
+      "read": {
+        "lines": [
+          "STREET LIGHTING. These lamps are switched off at 22.00 to save the county money.",
+          "Residents are advised that this has always been the case."
+        ]
+      }
+    }
+  },
+  "toll_board": {
+    "speaker": "Toll Board",
+    "start": [{ "node": "read" }],
+    "nodes": {
+      "read": {
+        "lines": [
+          "CASTLE BRIDGE. No toll is taken here now. The keeper is not employed.",
+          "The bridge counts who crosses."
+        ]
+      }
+    }
+  },
+  "lake_notice": {
+    "speaker": "Notice",
+    "start": [{ "node": "read" }],
+    "nodes": {
+      "read": {
+        "lines": ["CASTLE RURAL DISTRICT COUNCIL. NO BATHING.", "Painted underneath, smaller: Nobody has drowned in this lake."]
+      }
+    }
+  },
+  "lake_man": {
+    "speaker": "A Man on the Bank",
+    "start": [{ "node": "a" }],
+    "nodes": {
+      "a": {
+        "lines": [
+          "He is wet to the collar and he is watching the water, not you.",
+          "\"It's only a lake,\" he says. \"Nobody's ever drowned in it. I'd know.\""
+        ]
+      }
+    }
+  }
+}

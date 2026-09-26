@@ -20,5 +20,41 @@
     "lethal": true,
     "sets": "omen:roses_after_dark",
     "claim": "Please do not pick the white roses after dark."
+  },
+  {
+    "id": "east_lamps",
+    "chance": 333,
+    "region": "waters",
+    "sets": "omen:east_lamps",
+    "claim": "STREET LIGHTING. These lamps are switched off at 22.00 to save the county money."
+  },
+  {
+    "id": "early_bell",
+    "chance": 333,
+    "region": "works",
+    "sets": "omen:early_bell",
+    "claim": "Has the bell been going early for you? It went before nine on Tuesday."
+  },
+  {
+    "id": "train_through",
+    "chance": 333,
+    "region": "works",
+    "sets": "omen:train_through",
+    "claim": "SUNDAY: arr. 17.00, dep. 17.02. Under it, in pencil: does not always stop."
+  },
+  {
+    "id": "bridge_counts",
+    "chance": 333,
+    "region": "waters",
+    "sets": "omen:bridge_counts",
+    "claim": "CASTLE BRIDGE. No toll is taken here now. The bridge counts who crosses."
+  },
+  {
+    "id": "nobody_drowned",
+    "chance": 333,
+    "region": "waters",
+    "lethal": true,
+    "sets": "omen:nobody_drowned",
+    "claim": "NO BATHING. Nobody has drowned in this lake."
   }
 ]

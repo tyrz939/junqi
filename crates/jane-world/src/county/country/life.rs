@@ -167,7 +167,9 @@ pub fn gaps(c: &mut County<'_>) {
     let (gw, gh) = (c.k.w() / SCREEN_W, c.k.h() / SCREEN_H);
     let mut has = Grid::new(gw as u32, gh as u32, false);
     let d = defs();
-    let minor = [d.p.herb, d.p.rock, d.p.lamp_post, d.p.lamp_run];
+    let east = jane_data::catalog().county.furnishing.east_road;
+    let east_lamps = east.map_or([d.p.lamp_post; 2], |e| [e.lamp, e.bridge_lamp]);
+    let minor = [d.p.herb, d.p.rock, d.p.lamp_post, d.p.lamp_run, east_lamps[0], east_lamps[1]];
     let bp = c.k.blueprint();
     let cells =
         bp.props.iter().filter(|p| !minor.contains(&p.def)).map(|p| p.cell).chain(bp.units.iter().map(|u| u.cell));

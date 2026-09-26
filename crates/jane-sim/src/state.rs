@@ -164,6 +164,12 @@ impl GameState {
         self.clock / crate::tuning::TICKS_PER_HOUR
     }
 
+    /// The day of the week, 0 Sunday to 6 Saturday: `day` counts from 0 at New Game, a Sunday
+    /// (WORLD.md §2.3's day 1).
+    pub fn weekday(&self) -> u8 {
+        (self.day % 7) as u8
+    }
+
     /// 21:00 to 06:00.
     pub fn is_night(&self) -> bool {
         let h = self.hour();

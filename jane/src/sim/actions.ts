@@ -345,6 +345,8 @@ function conditionHolds(w: World, c: Condition): boolean {
       const u = w.rt.unitsByKey.get(c.unit);
       return u ? !u.alive : (w.state.flags[`dead:${c.unit}`] ?? 0) !== 0;
     }
+    case "weekday":
+      return ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"][w.state.day % 7] === c.day;
     case "hours": {
       const hour = Math.floor(w.state.clock / TICKS_PER_HOUR);
       if (c.from < c.to) return hour >= c.from && hour < c.to;

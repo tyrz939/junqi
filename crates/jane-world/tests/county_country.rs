@@ -278,8 +278,15 @@ fn lamps_line_the_lit_roads(sk: &Skeleton, c: &County<'_>, s: &mut Survey) {
     let cat = jane_data::catalog();
     let bp = c.k.blueprint();
     let lamp = cat.story.prop_id("lamp_post").expect("a lamp row");
-    let lamps: Vec<(i32, i32)> =
-        bp.props.iter().filter(|p| p.def == lamp).map(|p| (i32::from(p.cell.x), i32::from(p.cell.y))).collect();
+    // The east road's lamps are rows of their own (`tuning/country.json`), and lamps all the same.
+    let east = cat.county.furnishing.east_road.map_or([lamp; 2], |e| [e.lamp, e.bridge_lamp]);
+    let lamps_of = [lamp, east[0], east[1]];
+    let lamps: Vec<(i32, i32)> = bp
+        .props
+        .iter()
+        .filter(|p| lamps_of.contains(&p.def))
+        .map(|p| (i32::from(p.cell.x), i32::from(p.cell.y)))
+        .collect();
     s.lamps = lamps.len() as u32;
     for n in 0..sk.roads.len() {
         let (line, lit) = (&c.lines[n], &c.lit[n]);

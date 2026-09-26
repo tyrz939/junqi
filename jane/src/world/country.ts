@@ -538,13 +538,20 @@ function lampBeside(c: Ctx, line: readonly Pt[], i: number, side: number, apart:
   return false;
 }
 
-/** A lamp at each end of a bridge, on the road's lamp side. Bridges are lit whatever the road is. */
+/**
+ * A lamp at each end of a bridge, on the road's lamp side. Bridges are lit whatever the road is.
+ * The east road's river bridge (the road to the Museum; its longest crossing) is the rect
+ * `east_bridge`, which the bridge omen's trigger counts on (the Rust build: `tuning/country.json`
+ * `eastRoad`, with its own lamp rows and notices; this build keeps only the rect, and no omen).
+ */
 function bridges(c: Ctx): void {
   const k = c.k;
   const kw = k.w;
   for (let n = 0; n < roadLines(c); n++) {
     const line = c.lines[n];
     let wet = false;
+    let from = 0;
+    let best: [number, number] | null = null;
     for (let i = 0; i < line.length; i++) {
       const [x, y] = line[i];
       const now = c.before[y * kw + x] === Tile.Water;
@@ -553,7 +560,16 @@ function bridges(c: Ctx): void {
         const at = now ? Math.max(0, i - 4) : Math.min(line.length - 1, i + 3);
         lampBeside(c, line, at, 1, 6);
         wet = now;
+        if (now) from = i;
+        else if (!best || i - from > best[1] - best[0]) best = [from, i];
       }
+    }
+    if (best && c.sk.roads[n].to === "museum" && !k.rects["east_bridge"]) {
+      const pts = line.slice(best[0], best[1]);
+      const xs = pts.map((p) => p[0]);
+      const ys = pts.map((p) => p[1]);
+      const [x0, y0] = [Math.min(...xs) - 3, Math.min(...ys) - 3];
+      k.rect("east_bridge", { cx: x0, cy: y0, w: Math.max(...xs) + 4 - x0, h: Math.max(...ys) + 4 - y0 });
     }
   }
 }

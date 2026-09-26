@@ -398,7 +398,7 @@ mod tests {
             placements: &[],
             stories: &[],
             story_ix: &[],
-            furnishing: crate::model::Furnishing { herbs: [&[]; 3], chests: [&[]; 3], orchard: None },
+            furnishing: crate::model::Furnishing { herbs: [&[]; 3], chests: [&[]; 3], orchard: None, east_road: None },
         };
         let living = compile(&src, &mut cx, &county);
         (living, cx)

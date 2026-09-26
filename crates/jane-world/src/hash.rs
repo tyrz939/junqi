@@ -430,6 +430,7 @@ enum Verb {
     Place,
     NightLock,
     NightUnlock,
+    SwitchAll,
 }
 
 impl Feed for Action {
@@ -598,6 +599,11 @@ impl Feed for Action {
                 h.u8(Verb::NightUnlock as u8);
                 k.feed(h);
             }
+            Action::SwitchAll { def, on } => {
+                h.u8(Verb::SwitchAll as u8);
+                h.u16(def.0);
+                on.feed(h);
+            }
             Action::Shake(s) => {
                 h.u8(Verb::Shake as u8);
                 h.u8(s);
@@ -735,6 +741,10 @@ impl Feed for Cond {
                 h.u8(11);
                 h.u8(from);
                 h.u8(to);
+            }
+            Condition::Weekday(d) => {
+                h.u8(12);
+                h.u8(d);
             }
         }
     }

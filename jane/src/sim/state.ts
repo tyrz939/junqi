@@ -360,4 +360,6 @@ export type Condition = (
   | { if: "dead"; unit: string }
   /** The hour is `from` up to `to`, wrapping midnight (the Museum's bench; a door's `nightHours` rule). */
   | { if: "hours"; from: number; to: number }
+  /** The day of the week: New Game (day 0) is a Sunday. */
+  | { if: "weekday"; day: "sunday" | "monday" | "tuesday" | "wednesday" | "thursday" | "friday" | "saturday" }
 ) & { not?: boolean };

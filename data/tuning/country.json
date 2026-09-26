@@ -9,5 +9,13 @@
     "waters": ["small_water", "white_water_cap", "honeylace_lily"],
     "works": ["coal", "iron", "small_water"]
   },
-  "orchard": "apple"
+  "orchard": "apple",
+  "eastRoad": {
+    "to": "museum",
+    "bridge": "east_bridge",
+    "lamp": "lamp_east",
+    "bridgeLamp": "lamp_east_bridge",
+    "notice": "east_lighting",
+    "tollBoard": "toll_board"
+  }
 }

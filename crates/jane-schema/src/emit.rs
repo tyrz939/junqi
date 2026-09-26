@@ -354,6 +354,9 @@ impl Emit for Condition {
             Condition::Hours { from, to } => {
                 let _ = write!(out, "Condition::Hours {{ from: {from}, to: {to} }}");
             }
+            Condition::Weekday(d) => {
+                let _ = write!(out, "Condition::Weekday({d})");
+            }
         }
     }
 }
@@ -454,6 +457,9 @@ impl Emit for Action {
             Action::Throw(i) => one(out, "Throw", i),
             Action::Place { prop, item } => {
                 Fields::open(out, "Action::Place").f("prop", prop).f("item", item).close();
+            }
+            Action::SwitchAll { def, on } => {
+                Fields::open(out, "Action::SwitchAll").f("def", def).f("on", on).close();
             }
             Action::NightLock { prop, lock } => {
                 Fields::open(out, "Action::NightLock").f("prop", prop).f("lock", lock).close();

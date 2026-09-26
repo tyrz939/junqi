@@ -439,16 +439,18 @@ impl Sim {
             // every region, then every area's ecology (§4.4, `living.rs`).
             self.world_rolls(clock % TICKS_PER_HOUR == 0);
         }
-        if clock % TICKS_PER_HOUR == 0 {
+        if clock % ECOLOGY_EVERY == 0 {
             let hour = (clock / TICKS_PER_HOUR) as u8;
+            let minute = (clock % TICKS_PER_HOUR * 60 / TICKS_PER_HOUR) as u8;
             // Clock rows run once, with no actor, in the county (the rows name county things);
             // what they say is heard by the whole party. The county's runtime is made for them if
-            // nobody is there, and dropped again at step 15.
+            // nobody is there, and dropped again at step 15. A row keeps an hour and a minute on
+            // a ten-minute mark (the early bell's 20:50), which a bed's night works too.
             let cat = jane_data::catalog();
-            if cat.story.clock_at(hour).next().is_some() {
+            if cat.story.clock_at(hour, minute).next().is_some() {
                 let snap = PartySnap::of(&self.state);
                 self.with_ctx(ZoneId::County, None, &snap, true, |cx| {
-                    for row in cat.story.clock_at(hour) {
+                    for row in cat.story.clock_at(hour, minute) {
                         run_actions(cx, row.actions, Subject::None);
                     }
                 });

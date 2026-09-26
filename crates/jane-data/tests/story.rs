@@ -217,7 +217,7 @@ fn the_stoop_hands_in_the_letter() {
 #[test]
 fn the_bell_rings_for_nobody() {
     let c = catalog();
-    assert!(c.story.clock_at(21).count() >= 1 && c.story.clock_at(6).count() >= 1);
+    assert!(c.story.clock_at(21, 0).count() >= 1 && c.story.clock_at(6, 0).count() >= 1);
     for row in c.story.clock {
         assert!(row.hour < 24);
         each_action(c, row.actions, &mut |a| assert!(!a.needs_actor(), "clock at {}: {a:?}", row.hour));

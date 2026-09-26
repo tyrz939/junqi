@@ -4,14 +4,14 @@
 //! dice: where a road runs decides all of it.
 
 use jane_core::action::Action;
-use jane_core::{Grid, Key, Tile};
+use jane_core::{DialogueId, Grid, Key, PropDefId, Rect, Tile};
 
 use super::defs::defs;
 use super::{County, Normal, macro_of, near_chunk, step_milli};
 use crate::county::centre;
 use crate::kit::js_round;
 use crate::skeleton::roads::{FAR, road_distances};
-use crate::skeleton::{PlacedSite, ROAD, SKEL_H, SKEL_W};
+use crate::skeleton::{PlacedSite, ROAD, RoadEnd, SKEL_H, SKEL_W};
 
 /// Lamps along a lit road, cells apart. *Tuning.*
 pub const LAMP_STEP: i64 = 22;
@@ -73,9 +73,55 @@ fn lamp_free(c: &County<'_>, x: i32, y: i32, apart: i32) -> bool {
     })
 }
 
+/// The east road (`county.furnishing.east_road`, from `tuning/country.json`) and its index in the
+/// skeleton's roads: the road that runs to its site.
+fn east_road(c: &County<'_>) -> Option<(usize, jane_data::EastRoad)> {
+    let e = jane_data::catalog().county.furnishing.east_road?;
+    let n = c.sk.roads.iter().position(|r| r.to == RoadEnd::Site(u16::from(e.to)))?;
+    Some((n, e))
+}
+
+/// A notice that answers with `tree`, labelled `label`, beside point `i` of `line` on `side`,
+/// three to six cells out, on open ground. True if it went down.
+fn notice_beside(c: &mut County<'_>, line: &[(i32, i32)], i: usize, side: i32, tree: DialogueId, label: &str) -> bool {
+    let nrm = Normal::of(line, i);
+    for off in LAMP_OFF..LAMP_OFF + 4 {
+        let (x, y) = nrm.cells(line[i], off * side);
+        if near_chunk(c, x, y, 2) || !placeable(c, x, y, 2, 1) {
+            continue;
+        }
+        let label = c.k.text(label);
+        let p = c.k.prop(None, defs().p.sign, x, y);
+        p.talk = Some(tree);
+        p.label = Some(label);
+        return true;
+    }
+    false
+}
+
+/// The nearest plain lamp within eight cells of `at` becomes a lamp of row `def`, switched on.
+fn bridge_lamp_near(c: &mut County<'_>, at: (i32, i32), def: PropDefId) {
+    let plain = defs().p.lamp_post;
+    let d2 = |p: &jane_core::blueprint::PropSpawn| {
+        let (dx, dy) = (i32::from(p.cell.x) - at.0, i32::from(p.cell.y) - at.1);
+        dx * dx + dy * dy
+    };
+    let near = c.k.props_mut().iter_mut().filter(|p| p.def == plain && d2(p) <= 64).min_by_key(|p| (d2(p), p.cell));
+    if let Some(p) = near {
+        p.def = def;
+        p.on = true;
+    }
+}
+
 /// A lamp beside the road at point `i` of `line`, on `side` (1: the right of travel), three to five
 /// cells off the centre line; none nearer than `apart` to another. True if one went down.
 fn lamp_beside(c: &mut County<'_>, line: &[(i32, i32)], i: usize, side: i32, apart: i32) -> bool {
+    lamp_of(c, line, i, side, apart, defs().p.lamp_post)
+}
+
+/// [`lamp_beside`] with a row of its own: a lamp row lit only while switched on (`lightWhenOn`,
+/// the east road's) is stood switched on.
+fn lamp_of(c: &mut County<'_>, line: &[(i32, i32)], i: usize, side: i32, apart: i32, def: PropDefId) -> bool {
     let nrm = Normal::of(line, i);
     for off in [LAMP_OFF, LAMP_OFF + 1, LAMP_OFF + 2] {
         let (x, y) = nrm.cells(line[i], off * side);
@@ -90,7 +136,8 @@ fn lamp_beside(c: &mut County<'_>, line: &[(i32, i32)], i: usize, side: i32, apa
         if !lamp_free(c, x, y, apart) {
             return false;
         }
-        c.k.prop(None, defs().p.lamp_post, x, y);
+        let lit_when_on = jane_data::catalog().story.prop(def).light_when_on;
+        c.k.prop(None, def, x, y).on = lit_when_on;
         c.country.lamp_at.push((x, y));
         return true;
     }
@@ -98,18 +145,58 @@ fn lamp_beside(c: &mut County<'_>, line: &[(i32, i32)], i: usize, side: i32, apa
 }
 
 /// A lamp at each end of a bridge, on the road's lamp side. Bridges are lit whatever the road is.
+/// The east road's river bridge (its longest crossing) is the rect its row names, its two lamps
+/// are its `bridge_lamp` row, and its toll board stands at the town end, across the road.
 pub fn bridges(c: &mut County<'_>) {
+    let east = east_road(c);
     for n in 0..c.sk.roads.len() {
         let line = c.lines[n].clone();
         let before = c.before.as_ref().expect("the roads stage keeps the ground before them");
         let wet: Vec<bool> = line.iter().map(|&(x, y)| before.read(x, y, Tile::Void) == Tile::Water).collect();
-        let mut was = false;
-        for (i, &now) in wet.iter().enumerate() {
-            if now != was {
-                // The last dry point before the water, or the first one after it.
-                let at = if now { i.saturating_sub(4) } else { (i + 3).min(line.len() - 1) };
-                lamp_beside(c, &line, at, 1, 6);
-                was = now;
+        // Each crossing as (its first wet point, the first dry point after it or the line's end).
+        let mut crossings: Vec<(usize, usize)> = Vec::new();
+        let mut from = None;
+        for (i, &now) in wet.iter().chain(std::iter::once(&false)).enumerate() {
+            match (now, from) {
+                (true, None) => from = Some(i),
+                (false, Some(f)) => {
+                    crossings.push((f, i));
+                    from = None;
+                }
+                _ => {}
+            }
+        }
+        let river = east.filter(|&(e, _)| e == n).and_then(|(_, e)| {
+            let longest = crossings.iter().enumerate().max_by_key(|&(k, &(a, b))| (b - a, std::cmp::Reverse(k)));
+            longest.map(|(k, _)| (k, e))
+        });
+        for (k, &(a, b)) in crossings.iter().enumerate() {
+            let this = river.filter(|&(r, _)| r == k).map(|(_, e)| e);
+            let def = this.map_or(defs().p.lamp_post, |e| e.bridge_lamp);
+            // The last dry point before the water, and the first one after it (none when the
+            // road ends in the water).
+            let before_at = a.saturating_sub(4);
+            let after_at = (b < line.len()).then(|| (b + 3).min(line.len() - 1));
+            for at in std::iter::once(before_at).chain(after_at) {
+                if !lamp_of(c, &line, at, 1, 6, def) && this.is_some() {
+                    // Another road's lamp already stands at this end of the bridge (roads share
+                    // their crossings): it is the bridge's lamp all the same.
+                    bridge_lamp_near(c, line[at], def);
+                }
+            }
+            if let Some(e) = this {
+                let (x0, y0, x1, y1) =
+                    line[a..b].iter().fold((i32::MAX, i32::MAX, i32::MIN, i32::MIN), |r, &(x, y)| {
+                        (r.0.min(x), r.1.min(y), r.2.max(x), r.3.max(y))
+                    });
+                c.k.rect(Key::Name(e.bridge), Rect::new(x0, y0, x1 - x0 + 1, y1 - y0 + 1).grow(3));
+                // At the town end, across the road; else a little further back toward the town.
+                let _ = [-1, 1].iter().any(|&side| {
+                    (0..8).any(|d| {
+                        d * 2 <= before_at
+                            && notice_beside(c, &line, before_at - d * 2, side, e.toll_board, "A toll board")
+                    })
+                });
             }
         }
     }
@@ -276,9 +363,13 @@ fn read_sign(c: &mut County<'_>, def: jane_core::PropDefId, x: i32, y: i32, labe
 /// Lamps along every lit stretch: one side of each road (its right), an even step, set off the
 /// verge.
 pub fn lamps(c: &mut County<'_>) {
+    let east = east_road(c);
     for n in 0..c.sk.roads.len() {
         let line = c.lines[n].clone();
         let lit = c.lit[n].clone();
+        let this = east.filter(|&(e, _)| e == n).map(|(_, e)| e);
+        let def = this.map_or(defs().p.lamp_post, |e| e.lamp);
+        let mut stood = Vec::new();
         let mut walked = 0;
         // The first lamp six tenths of a step in.
         let mut next = LAMP_STEP * 600;
@@ -287,9 +378,17 @@ pub fn lamps(c: &mut County<'_>) {
             if walked < next || !lit.get(i).copied().unwrap_or(false) {
                 continue;
             }
-            if lamp_beside(c, &line, i, 1, (LAMP_STEP - 6) as i32) {
+            if lamp_of(c, &line, i, 1, (LAMP_STEP - 6) as i32, def) {
                 next = walked + LAMP_STEP * 1000;
+                stood.push(i);
             }
+        }
+        // The east road's lighting notice: across the road from its first lamp, else from the
+        // next that has room, else beside one.
+        if let Some(e) = this {
+            let _ = [-1, 1]
+                .iter()
+                .any(|&side| stood.iter().any(|&i| notice_beside(c, &line, i, side, e.notice, "A notice")));
         }
     }
 }

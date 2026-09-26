@@ -1,0 +1,18 @@
+[
+  {
+    "key": "sunday_sacks",
+    "at": { "mark": "lost_property", "within": 10 },
+    "prop": { "def": "town_sacks", "hidden": true, "label": "The Sunday sacks" }
+  },
+  {
+    "key": "lake_notice",
+    "at": { "site": "lake_statue", "within": 14 },
+    "prop": { "def": "sign", "talk": "lake_notice", "label": "A council notice" }
+  },
+  {
+    "key": "lake_bank",
+    "at": { "site": "lake_statue", "within": 12 },
+    "mark": "lake_bank",
+    "rect": { "name": "lake_wide", "w": 160, "h": 160 }
+  }
+]

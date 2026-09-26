@@ -1,0 +1,12 @@
+{
+  "lake_man": {
+    "name": "A Man on the Bank", "faction": "friendly", "controller": "npc", "strength": 30, "spirit": 3,
+    "walk": 0.3, "run": 0.8, "aggro": 0, "leash": 0, "bounds": 1, "book": [], "respawn": 0, "autoRegen": true,
+    "loot": [], "sprite": "villager_woodcutter", "talk": "lake_man", "nightOnly": true
+  },
+  "lake_shape": {
+    "name": "Something on the Bank", "faction": "undead", "controller": "ai", "strength": 22, "spirit": 1,
+    "walk": 0.35, "run": 0.9, "aggro": 14, "leash": 40, "bounds": 1, "book": ["melee"], "respawn": 0,
+    "autoRegen": true, "loot": [], "sprite": "lurker", "nightOnly": true
+  }
+}

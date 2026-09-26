@@ -1,0 +1,55 @@
+[
+  {
+    "hour": 20,
+    "minute": 50,
+    "actions": [
+      {
+        "do": "if",
+        "when": [{ "if": "flag", "flag": "omen:early_bell" }, { "if": "weekday", "day": "tuesday" }],
+        "then": [{ "do": "toast", "text": "A school bell, a long way off. Nine o'clock." }]
+      }
+    ]
+  },
+  {
+    "hour": 22,
+    "actions": [
+      { "do": "if", "when": [{ "if": "flag", "flag": "omen:east_lamps" }], "then": [{ "do": "switchAll", "def": "lamp_east", "on": false }] }
+    ]
+  },
+  {
+    "hour": 6,
+    "actions": [
+      { "do": "flag", "flag": "bridge_crossings", "value": 0 },
+      { "do": "flag", "flag": "sunday_sacks", "value": 0 }
+    ]
+  },
+  {
+    "hour": 18,
+    "actions": [
+      { "do": "if", "when": [{ "if": "flag", "flag": "omen:east_lamps" }], "then": [{ "do": "switchAll", "def": "lamp_east", "on": true }] },
+      { "do": "if", "when": [{ "if": "flag", "flag": "omen:bridge_counts" }], "then": [{ "do": "switchAll", "def": "lamp_east_bridge", "on": true }] }
+    ]
+  },
+  {
+    "hour": 17,
+    "actions": [
+      {
+        "do": "if",
+        "when": [{ "if": "weekday", "day": "sunday" }],
+        "then": [
+          { "do": "flag", "flag": "train_sundays", "add": 1 },
+          {
+            "do": "if",
+            "when": [{ "if": "flag", "flag": "omen:train_through" }, { "if": "flag", "flag": "train_sundays", "eq": 1 }],
+            "then": [{ "do": "toast", "text": "A train whistle, a long way off." }],
+            "else": [
+              { "do": "toast", "text": "A train whistle, a long way off. A while after, another." },
+              { "do": "flag", "flag": "sunday_sacks", "value": 1 }
+            ]
+          },
+          { "do": "if", "when": [{ "if": "flag", "flag": "train_sundays", "min": 3 }], "then": [{ "do": "flag", "flag": "train_sundays", "value": 0 }] }
+        ]
+      }
+    ]
+  }
+]
