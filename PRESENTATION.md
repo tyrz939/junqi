@@ -59,29 +59,40 @@ jane-render-soft/src/  fb, blit, lightmap, mist, upscale, readback  |  gl2/src/ 
 
 ### 1.1 The Frame
 
-`present.draw(alpha)` fills one `Frame` a frame, into reused buffers, and hands a reference to the backend. Nothing in it names a texture, a shader or a pixel format.
+`present.draw(alpha, canvas)` fills one `Frame` a frame, into reused buffers, and hands a reference to the backend. Nothing in it names a texture, a shader or a pixel format.
+
+The `Frame` owns one flat `Vec` per kind of command, and a pass names a `Span` (start, len) of one of them rather than holding a slice of its own: one allocation per list for the life of the presenter, and no lifetime on the `Frame`. The painted terrain chunks travel in the `Frame` too (`layers`, the chunk cache's slots), so a backend reads everything it draws from the frame it is handed.
 
 ```
-pub struct Frame<'a> { tier: Tier, canvas: (u16, u16), camera: (i32, i32) /* canvas px, interpolated */, passes: &'a [Pass<'a>], post: Post }
-pub enum Pass<'a> {
-  Sky { bands: &[Band], stars: &[Star], moon: Option<Moon> },
-  Parallax { layer: Depth, factor: Q8, sprites: &[SpriteCmd] },                     // far landmark, far treeline
-  Terrain { chunks: &[ChunkCmd { id: ChunkId, gen: u32, x, y, layers: &ChunkLayers }] },
-  Sprites { layer: Depth, cmds: &[SpriteCmd] },                                        // already y-sorted
-  Lights { ambient: Rgb, sun: Option<Directional>, points: &[Light], casters: &[Caster] },
-  Fog { volumes: &[FogVolume { rect, density: u8, colour: Rgb, drift: (i16, i16) }] },
-  Weather { kind: Clear | Mist | Rain | Storm, intensity: u8, wind: i8 },
-  Particles { parts: &[ParticleCmd] },
-  Ui { cmds: &[UiCmd] },
+pub struct Frame { tier: Tier, canvas: (u16, u16), camera: (i32, i32) /* the view's top-left in the zone, canvas px, interpolated */,
+                   clear: u32, passes: Vec<Pass>, chunks: Vec<ChunkCmd>, sprites: Vec<SpriteCmd>, layers: Vec<ChunkLayers> }
+pub struct Span { start: u32, len: u32 }                      // frame.chunks_in(s), frame.sprites_in(s)
+pub enum Pass {                                                // landed (P6 steps 1 and 2)
+  Terrain { chunks: Span },                                    // ChunkCmd { id: ChunkId { cx, cy }, generation: u32, x, y: i32, slot: u16 }
+  Sprites { layer: Depth, cmds: Span },                        // already in draw order; Standing is y-sorted
+  Lights { ambient: [u8; 3] },                                 // the ambient alone until the lightmap (PORT.md §7.1 step 5)
 }
-pub struct SpriteCmd { page: u8, src: Rect, x: i16, y: i16, flags: Flags { mirror, tint: None | Flash(u8) | Ghost(u8) }, height_px: u8 }
-pub struct Light { pos: (i32, i32), height: u8, colour: Rgb, radius: u16, falloff: Falloff, casts: bool, kind: Point | Spot { dir: Angle, cone: u8 } }
-pub struct Caster { segs: &[Seg], height: u8 }                                          // footprint edges at ground
-pub struct Post { grade: GradeId /* region x hour */, tint: Rgb, bloom: u8, exposure: u8 }
+pub struct SpriteCmd { page: u8, src: Src { x, y, w, h: u16 }, x: i16, y: i16, flags: Flags { mirror, tint: None | Flash(u8) | Ghost(u8) }, height_px: u8 }
+pub struct ChunkLayers { albedo: Vec<u32> }                    // resolved; normal, emissive and height land with the chunk painter
 pub enum Depth { Sky, FarLandmark, FarTreeline, Ground, Standing, Canopy, NearFog, Weather, Ui }
 ```
 
-Passes are in draw order and a backend draws them in that order; a backend below the tier a pass needs draws what its `Features` row says (§1.3), never something of its own. The `Vec`s inside are reserved once and cleared, never dropped: no allocation after the second frame (asserted in §1.12).
+Every command is in canvas coordinates already (the camera taken off); `camera` is there for parallax. The passes still to come keep the same shape, a `Span` into a list the `Frame` owns (`points: Span` into `lights`, `casters: Span`, `parts: Span`, `cmds: Span` into `ui`), or plain values:
+
+```
+  Sky { bands: Span, stars: Span, moon: Option<Moon> },
+  Parallax { layer: Depth, factor: Q8, sprites: Span },                                // far landmark, far treeline
+  Lights { ambient: Rgb, sun: Option<Directional>, points: Span, casters: Span },
+  Fog { volumes: Span /* FogVolume { rect, density: u8, colour: Rgb, drift: (i16, i16) } */ },
+  Weather { kind: Clear | Mist | Rain | Storm, intensity: u8, wind: i8 },
+  Particles { parts: Span },
+  Ui { cmds: Span },
+pub struct Light { pos: (i32, i32), height: u8, colour: Rgb, radius: u16, falloff: Falloff, casts: bool, kind: Point | Spot { dir: Angle, cone: u8 } }
+pub struct Caster { segs: Span, height: u8 }                                           // footprint edges at ground
+pub struct Post { grade: GradeId /* region x hour */, tint: Rgb, bloom: u8, exposure: u8 }
+```
+
+Passes are in draw order and a backend draws them in that order; `Pass::needs()` is the tier its `Features` row asks, and a backend below the tier a pass needs draws what its `Features` row says (§1.3), never something of its own. The `Vec`s inside are reserved once and cleared, never dropped: no allocation after the second frame (§1.12).
 
 ### 1.2 The Backend trait
 
@@ -138,15 +149,17 @@ Every visual feature is a row. A row names the tier it needs, its default per ti
 | Buffer | Format | Size at 768 x 432 | Why |
 | --- | --- | --- | --- |
 | `soft` framebuffer | `u32` `0xAARRGGBB`, one `Vec<u32>` | 1.3 MB (332 KB at half res) | linear sweeps; SDL streaming texture takes it as is; the light pass is a per-channel multiply |
-| Albedo pages | 8-bit indices into one CLUT `[u32; 256]`, 2048 x 2048 | ~3 MB, one page, two at most (`ART.md`, the pipeline section) | one lookup; coat swaps, ghosts and dead ramps are free; on the GPU the CLUT is a 256 x 1 texture read in the shader |
-| Normal, emissive, height pages | RG8 tangent-space; 8-bit emissive index (0 is dark); 8-bit height; the albedo's layout | 4 bytes a texel together | generated by `jane-art` from the shape primitives a look used, never painted; lamps, lit windows, orbs and spells glow unlit; height gives shadow length and water (a person is 40, a barrel its `rise`) |
+| Albedo pages | 16-bit master-palette indices (`jane_art::palette::Ix`) into one CLUT `[u32; 1024]`, 2048 x 2048 | 8 MB a page; the whole set ~19 MB, the only pages `soft` holds (`ART.md`, the pipeline section) | one lookup; coat swaps, ghosts and dead ramps are free; on the GPU the CLUT is a 1024 x 1 texture and an albedo texel is two bytes (`LUMINANCE_ALPHA` on GLES 2), the index `lo + 256 * hi` |
+| Normal, emissive, height pages | RG8 tangent-space; 16-bit emissive index (an `Ix`, 0 is dark); 8-bit height; the albedo's layout | 5 bytes a texel together | generated by `jane-art` from the shape primitives a look used, never painted; lamps, lit windows, orbs and spells glow unlit; height gives shadow length and water (a person is 40, a barrel its `rise`) |
 | Terrain chunks | four layers, 256 x 256 px | 512 KB a chunk on a GPU, 256 KB on `soft`; LRU 48 | the ground is the biggest draw (§1.6) |
 | `soft` light buffer | `[u16; 3]` per cell at 1/4 resolution (192 x 108) | 124 KB | §1.7 |
 | T1 light and shadow targets | RGB8 at 1/2 resolution; one 8-bit shadow mask | 400 KB and 83 KB | §1.7 |
 | Mist tile | 8-bit alpha 256 x 256 | 64 KB | §1.9 |
 | UI panels | `u32`, cached by `(w, h, style)` | small | `ART.md`, the chrome section |
 
-CLUT index 0 is clear, index 1 is the contact shadow (`dst x 0.7`); every other index is opaque. There is no per-pixel alpha in an albedo sprite: index 1 or a checker stands in for it. On a GPU the four pages of one layout are bound together, so one sprite quad reads all four in one fragment shader; on `soft` the normal, emissive and height pages are never uploaded.
+**Why 16-bit.** The master palette outgrew 256 entries at `ART.md` §8 step 1 (27 fixed and 40 ramps of 8 is 347; the ceiling is 1024, `ART.md` §2.7). A CLUT per page of 256 would work only while every page's sprites used 254 colours between them, and a coat swap would become a remap per page; a `u16` index is one table for every page, costs one more byte a texel, and keeps the CLUT (4 KB) in L1 on `soft`.
+
+CLUT index 0 is clear, index 1 is the contact shadow (`dst x 0.75`, by shifts); every other index is opaque. There is no per-pixel alpha in an albedo sprite: index 1 or a checker stands in for it. On a GPU the four pages of one layout are bound together, so one sprite quad reads all four in one fragment shader; on `soft` the normal, emissive and height pages are never uploaded.
 
 **Sprite blit on `soft`.**
 
@@ -173,13 +186,15 @@ The pass order of `ENGINE.md` §9 with the atmosphere layers between:
 | upscale and present | | 0.6 ms | 1.5 ms |
 | **total** | | **~9 ms; budget 12 ms** | **~14 ms; 30 fps or half res** |
 
-**Draw list without allocation.** `DrawCmd { y, key, kind, a, b }` in a `Vec` reserved to 4096 once; a counting sort on `y` into canvas-row and strip-height buckets, ties broken by `key` (the id): linear, stable, no allocation. The sorted list is the `Sprites { Standing }` pass as it stands; no backend sorts.
+**Draw list without allocation.** `DrawCmd { y, key, sprite: SpriteCmd }` in a `Vec` reserved to 4096 once; a counting sort on `y` (the feet, canvas px) into one bucket per canvas row over the view and 96 px round it (anything further is culled before it is pushed), then each bucket put in `key` order by insertion, since a row holds a handful: linear, no allocation, and the same order for the same set however it was pushed. `key` is a prop's id, or a unit's id with the top bit set, so on one row a prop draws under the unit standing at its foot. The sorted list is the `Sprites { Standing }` pass as it stands; flat props go through a second list into `Sprites { Ground }`; no backend sorts.
 
 ### 1.6 Terrain chunks
 
 `ChunkCache` as `ENGINE.md` §9 describes, at 2x: 16 x 16 cells painted by `jane_art::terrain::paint_chunk` into 256 x 256 px, LRU 48, invalidated per rect on `Event::Tiles(rect)`, dropped whole on zone change. A chunk is four layers (albedo resolved through the CLUT as it is painted, since a chunk is never tinted; normal; emissive; height) plus its strips (88 rows with 32-px margins, for y-sorting tall tiles against units) and its water cells. A backend caches by `(id, gen)` and uploads on a miss; `soft` keeps only the albedo.
 
 About 8 ms a chunk on a Pi 3 and 4 ms on a Pi 4 at 2x, so chunks are painted on the worker thread `jane-app` owns (the loading-screen thread), one ahead in the camera's heading, and a frame never waits: a chunk not yet painted draws its region's flat ground swatch for the frames it takes. At most two land in one frame.
+
+**As built (P6 step 2).** Until the painter lands, `jane_present::stand_in::paint_chunk` paints each cell as its tile's flat swatch, on the presenter's thread in `tick()`, every chunk under the view and 64 px round it (a swatch chunk is a fill, not 8 ms). The 48 slots' layers are made when the presenter is (12 MB on `soft`) and live in the `Frame`'s `layers`, so walking into new ground never allocates; a `ChunkCmd` names its slot and its `generation`, which is bumped by every paint.
 
 ### 1.7 Lighting and shadows
 
@@ -235,6 +250,8 @@ The camera advances **per tick** in sim units: `cam += (target - cam) * 0.18`, s
 
 Units: `snapshot()` before each sim tick into a flat `Vec<(UnitId, Fx, Fx)>` sorted by id; a frame lerps the current position against the snapshot; a jump over 40 sim px snaps (travel, respawn, a hop). Moving props the same way. `View::units_in` already hands back `prev_pos` and `moved`, so the snapshot is one copy. Parallax layers take the interpolated camera times their factor.
 
+**As built.** The camera is integer, in `Fx`: the follow is `(target - cam) * 46 >> 8` (0.18), the shake decays by `220 >> 8` (0.86) and wobbles from a 16-step sine table by tick, so two machines at the same tick frame the same view. The target puts her middle (feet less 10 sim px) at the canvas centre; a lock holds a room whole with 24 sim px round it, or keeps her inside it with that pad when it is bigger than the view. The snapshot is the presenter's own: each tick a unit's position becomes the next tick's `prev` (a unit not seen before takes the view's `prev_pos`), so a tick in which the sim did not run leaves everything still instead of replaying the last step. `tick()` frames for the canvas of the last `draw` (`Present::set_canvas` before the first).
+
 ### 1.11 Fixed-tick presentation
 
 `present.tick()` runs once per accumulated tick whether or not the sim ran (pause, dialogue, menus), so toasts fade and cursors blink while the world is frozen; `present.draw(alpha)` is pure. A 144 Hz display, a 30 fps Pi 3 and a T2 desktop show the same animation at the same speed.
@@ -284,7 +301,7 @@ Pentium 4: `-C target-cpu=pentium4`, no `u64` in an inner loop; where SDL has no
 | 7 | `half_res` (T0 only) | half the frame | the 2x detail |
 | 8 | `frame_skip = 1`: draw every other tick, 30 fps | half the frame | last resort; the sim still steps at 60 and the catch-up cap in `jane-app` still holds |
 
-**Measurement.** `FrameStats` per pass (sky, parallax, chunks, water, list, fx, shadows, light, fog, weather, grade, ui, upscale); F2 prints p50 and p99 over 120 frames, the backend, the tier and the rows in force. `jane bench --save <slot> --frames 600 [--night] [--wide] [--backend b] [--tier t]` runs the same loop headless and prints the table per tier it can reach on the machine, plus **pixels written per frame** on `soft`. CI asserts the deterministic proxies on every target through `soft`: pixels ≤ 6 x canvas area at night, draw list ≤ 1500 in town, lights in the `Frame` ≤ the tier's `max_lights`, casters ≤ 256, chunks landed per frame ≤ 2, and no allocation after the second frame (a counting allocator in the test).
+**Measurement.** `FrameStats` per pass (sky, parallax, chunks, water, list, fx, shadows, light, fog, weather, grade, ui, upscale); F2 prints p50 and p99 over 120 frames, the backend, the tier and the rows in force. `jane bench --save <slot> --frames 600 [--night] [--wide] [--backend b] [--tier t]` runs the same loop headless and prints the table per tier it can reach on the machine, plus **pixels written per frame** on `soft`. CI asserts the deterministic proxies on every target through `soft`: pixels ≤ 6 x canvas area at night, draw list ≤ 1500 in town, lights in the `Frame` ≤ the tier's `max_lights`, casters ≤ 256, chunks landed per frame ≤ 2, and no allocation after the second frame (a counting allocator in the test; a `#[global_allocator]` is an `unsafe impl`, which the workspace's `unsafe_code = "forbid"` refuses in tests too, so until the one-exception crate of `PORT.md` §3.4 exists the in-tree test holds every `Frame` list and the framebuffer to its address and capacity, and the counting allocator runs out of tree: 0 allocations in `tick` + `draw` + `soft` over 2400 frames after the second, idle, walking and idle, on 2026-09-27).
 
 **Rule:** a number in these tables is replaced by a measured one at P6 and enforced at P9; a guess never gates.
 
@@ -482,7 +499,7 @@ All are `jane-cli` subcommands drawing through `jane-render-soft` into an unshow
 | `jane sheet county <seed> [--night] [--layer l]` | the skeleton card at 1x |
 | `jane sheet county <seed> --full [--at mark] [--radius cells]` | the real chunk painter over a window of the county, all four layers side by side |
 | `jane sheet dungeon <id> <seed>` | the dungeon's floor with names |
-| `jane sheet scene --save <slot> [--tick n] [--night] [--tier t] [--backend b]` | one whole frame, headless, lighting, atmosphere and UI included; at T0 through `soft` it is the frame CI attaches; at T1 or T2 locally it is the frame the owner reviews |
+| `jane sheet scene --save <slot> [--tick n] [--night] [--tier t] [--backend b]` | one whole frame, headless, lighting, atmosphere and UI included; at T0 through `soft` it is the frame CI attaches; at T1 or T2 locally it is the frame the owner reviews. **As built** (no save slots yet): `jane sheet scene [--seed n] [--minutes m \| --ticks t] [--model reader\|rusher] [--night \| --hour h] [--wide] [--out file.png \| dir]` plays the seed from New Game with a player model as `jane play` does, the presenter ticking beside it every frame, sets the clock if asked, and writes one T0 frame (768 x 432, or 1008 x 432 with `--wide`) to `sheets/` |
 | `jane film --save <slot> --ticks N --out dir/ [--every k] [--tier t] [--backend b]` | N ticks from a save, one frame per tick at `alpha = 1`, a PNG per frame (or every k-th), the `FrameStats` table beside them; through `soft` at T0 on CI, any backend locally. The same tool over a trace range (`--trace`, `--from`, `--to`, `--clips`) is the film clip of `VERIFICATION.md` L7. Frames and scene sheets are how a lamp coming on at 18:30, a shadow swinging with the sun or the rain starting is looked at, not asserted |
 | `jane sheet fx <spell>` | the effect's parts over 60 ticks, one column per tick, with its lights |
 | `jane sheet units\|props\|icons\|flora\|chrome\|font`, `unit <id>`, `title` | `ART.md`, the pipeline section; a unit sheet shows all four layers |
