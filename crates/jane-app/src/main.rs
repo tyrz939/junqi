@@ -5,17 +5,29 @@
 
 mod devices;
 mod game;
+mod handle;
 mod screen;
 mod shot;
 
 use std::process::ExitCode;
 
-pub const USAGE: &str = "jane-app [--seed N] [--name NAME] [--scale K] [--ticks N] [--shot PATH]
+pub const USAGE: &str =
+    "jane-app [--seed N] [--name NAME] [--scale K] [--backend auto|soft|wgpu] [--ticks N] [--shot PATH]
   --seed N      the county (default: from the clock; printed at start)
   --name NAME   the heroine's name (default Jane)
   --scale K     the window starts at K x 768 x 432 (default 2, or 1 where 2 does not fit)
+  --backend B   auto (default: wgpu at T2 where an adapter can draw it, else soft), soft (T0), wgpu (T2)
   --ticks N     run N ticks, then exit (tests, automation)
   --shot PATH   write the canvas as a PNG on exit; F12 writes PATH-0001.png and on";
+
+/// Which backend draws (PRESENTATION.md §1.3).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum BackendChoice {
+    /// wgpu where it can, else soft.
+    Auto,
+    Soft,
+    Wgpu,
+}
 
 /// What the command line asked for.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -25,10 +37,18 @@ pub struct Args {
     pub scale: Option<u32>,
     pub ticks: Option<u64>,
     pub shot: Option<String>,
+    pub backend: BackendChoice,
 }
 
 fn parse(args: &[String], clock_seed: u32) -> Result<Args, String> {
-    let mut out = Args { seed: clock_seed, name: "Jane".into(), scale: None, ticks: None, shot: None };
+    let mut out = Args {
+        seed: clock_seed,
+        name: "Jane".into(),
+        scale: None,
+        ticks: None,
+        shot: None,
+        backend: BackendChoice::Auto,
+    };
     let mut it = args.iter();
     while let Some(a) = it.next() {
         let mut value = || it.next().ok_or_else(|| format!("{a}: needs a value"));
@@ -39,6 +59,14 @@ fn parse(args: &[String], clock_seed: u32) -> Result<Args, String> {
             "--scale" => out.scale = Some(u32::try_from(num(value()?)?).map_err(|_| format!("{a}: too big"))?),
             "--ticks" => out.ticks = Some(num(value()?)?),
             "--shot" => out.shot = Some(value()?.clone()),
+            "--backend" => {
+                out.backend = match value()?.as_str() {
+                    "auto" => BackendChoice::Auto,
+                    "soft" => BackendChoice::Soft,
+                    "wgpu" => BackendChoice::Wgpu,
+                    b => return Err(format!("--backend: auto, soft or wgpu, not {b}")),
+                }
+            }
             _ => return Err(format!("unknown argument {a}")),
         }
     }
@@ -86,7 +114,8 @@ mod tests {
 
     #[test]
     fn arguments() {
-        let got = parse(&a("--seed 7 --name Tess --ticks 300 --shot sheets/app.png --scale 3"), 1).unwrap();
+        let got =
+            parse(&a("--seed 7 --name Tess --ticks 300 --shot sheets/app.png --scale 3 --backend wgpu"), 1).unwrap();
         assert_eq!(
             got,
             Args {
@@ -94,7 +123,8 @@ mod tests {
                 name: "Tess".into(),
                 scale: Some(3),
                 ticks: Some(300),
-                shot: Some("sheets/app.png".into())
+                shot: Some("sheets/app.png".into()),
+                backend: BackendChoice::Wgpu,
             }
         );
         let d = parse(&[], 99).unwrap();
@@ -102,5 +132,7 @@ mod tests {
         assert!(parse(&a("--seed"), 1).is_err());
         assert!(parse(&a("--seed x"), 1).is_err());
         assert!(parse(&a("--wat"), 1).is_err());
+        assert!(parse(&a("--backend gl9"), 1).is_err());
+        assert_eq!(d.backend, BackendChoice::Auto);
     }
 }

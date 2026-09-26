@@ -1,7 +1,8 @@
 //! The loop (PRESENTATION.md §1.11; ARCHITECTURE.md §4): events into devices once a frame, the
 //! devices into one `InputFrame` and some `Command`s, then as many fixed 60 Hz ticks as the
 //! clock has accumulated (the sim steps unless paused; the presenter ticks regardless), then one
-//! frame drawn at `alpha` between the last tick and the next.
+//! frame drawn at `alpha` between the last tick and the next, through the backend the probe picked
+//! (PRESENTATION.md §1.3): `wgpu` at T2 where an adapter can draw it, else `soft` at T0.
 
 use std::fmt::Write as _;
 use std::time::{Duration, Instant};
@@ -9,17 +10,19 @@ use std::time::{Duration, Instant};
 use jane_present::input::{
     Context, Edge, GameAction, Input, Mode, UiAction, canvas_size, canvas_to_world, pick, world_to_canvas,
 };
-use jane_present::{Backend, Present, Tier};
+use jane_present::{Backend, Present};
 use jane_render_soft::Soft;
+use jane_render_wgpu::Wgpu;
 use jane_sim::event::Event;
 use jane_sim::input::{Command, InputFrame, StampedCommand, StepInput};
 use jane_sim::tuning::MAX_PLAYERS;
 use jane_sim::{Blueprints, Seat, Sim};
 
-use crate::Args;
 use crate::devices::{Devices, Happened};
+use crate::handle::SdlWindow;
 use crate::screen::{self, Target};
 use crate::shot;
+use crate::{Args, BackendChoice};
 
 /// A tick is `1/60` s; the accumulator counts nanoseconds times 60, so a tick is exactly 1e9.
 const TICK: u64 = 1_000_000_000;
@@ -41,6 +44,103 @@ struct Stats {
     draw_time: Duration,
 }
 
+/// Where a frame goes: a backend and the window it shows in.
+trait Screen {
+    fn backend(&mut self) -> &mut dyn Backend;
+    fn window_mut(&mut self) -> &mut sdl2::video::Window;
+    /// The window's size in px.
+    fn size(&self) -> (u32, u32);
+    /// The window was resized.
+    fn resized(&mut self, _win: (u32, u32)) {}
+    /// Shows the frame the backend last drew.
+    fn show(&mut self, win: (u32, u32)) -> Result<(), String>;
+    /// `soft`, or `wgpu, Vulkan, <adapter>`: the title bar.
+    fn describe(&self) -> String;
+}
+
+/// T0: `soft` into a streaming texture on an SDL renderer, nearest upscale.
+struct SoftScreen<'a> {
+    canvas: sdl2::render::WindowCanvas,
+    target: Target<'a>,
+    soft: Soft,
+}
+
+impl Screen for SoftScreen<'_> {
+    fn backend(&mut self) -> &mut dyn Backend {
+        &mut self.soft
+    }
+
+    fn window_mut(&mut self) -> &mut sdl2::video::Window {
+        self.canvas.window_mut()
+    }
+
+    fn size(&self) -> (u32, u32) {
+        self.canvas.window().size()
+    }
+
+    fn show(&mut self, win: (u32, u32)) -> Result<(), String> {
+        let (px, w, h) = self.soft.pixels();
+        self.target.upload(px, w, h)?;
+        self.canvas.clear();
+        self.target.blit(&mut self.canvas, win)?;
+        self.canvas.present();
+        Ok(())
+    }
+
+    fn describe(&self) -> String {
+        "soft".into()
+    }
+}
+
+/// T2: `wgpu` on the window's own surface, sharp bilinear upscale.
+struct GpuScreen {
+    window: sdl2::video::Window,
+    wgpu: Box<Wgpu>,
+}
+
+impl Screen for GpuScreen {
+    fn backend(&mut self) -> &mut dyn Backend {
+        self.wgpu.as_mut()
+    }
+
+    fn window_mut(&mut self) -> &mut sdl2::video::Window {
+        &mut self.window
+    }
+
+    fn size(&self) -> (u32, u32) {
+        self.window.size()
+    }
+
+    fn resized(&mut self, win: (u32, u32)) {
+        self.wgpu.resize(win);
+    }
+
+    fn show(&mut self, _win: (u32, u32)) -> Result<(), String> {
+        self.wgpu.present()
+    }
+
+    fn describe(&self) -> String {
+        self.wgpu.describe().to_owned()
+    }
+}
+
+/// The probe (§1.3): `wgpu` at T2 when asked or when `auto` finds an adapter that can draw it,
+/// else `soft`. `Err` only when `wgpu` was asked for by name and cannot be had.
+fn probe(choice: BackendChoice, window: &sdl2::video::Window) -> Result<Option<Wgpu>, String> {
+    if choice == BackendChoice::Soft {
+        return Ok(None);
+    }
+    let target = wgpu::SurfaceTarget::from(SdlWindow::new(window));
+    match Wgpu::for_window(target, window.size(), true) {
+        Ok(w) => Ok(Some(w)),
+        Err(e) if choice == BackendChoice::Wgpu => Err(format!("--backend wgpu: {e}")),
+        Err(e) => {
+            println!("jane-app: no T2 ({e}); drawing with soft");
+            Ok(None)
+        }
+    }
+}
+
 pub fn run(args: &Args) -> Result<(), String> {
     // Real pixels on a scaled desktop, so 2x is 2x and the nearest upscale stays square.
     sdl2::hint::set("SDL_WINDOWS_DPI_AWARENESS", "permonitorv2");
@@ -50,27 +150,51 @@ pub fn run(args: &Args) -> Result<(), String> {
     let pads = sdl.game_controller().ok();
     let usable = video.display_usable_bounds(0).ok().map(|r| (r.width(), r.height()));
     let k = screen::start_scale(usable, args.scale);
-    let mut canvas = screen::open(&video, "Jane", k)?;
+    let window = screen::open(&video, "Jane", k)?;
     // SDL starts with text input on; the console turns it on when it opens.
     video.text_input().stop();
     let mut pump = sdl.event_pump()?;
+    match probe(args.backend, &window)? {
+        Some(wgpu) => {
+            println!("jane-app: {}", wgpu.describe());
+            play(args, &mut pump, pads, &mut GpuScreen { window, wgpu: Box::new(wgpu) })
+        }
+        None => {
+            let mut canvas = screen::canvas(window)?;
+            screen::clear(&mut canvas, LOADING);
+            let tc = canvas.texture_creator();
+            println!("jane-app: soft");
+            play(args, &mut pump, pads, &mut SoftScreen { canvas, target: Target::new(&tc), soft: Soft::new() })
+        }
+    }
+}
 
+/// Writes the canvas the backend last drew to `path` as a PNG.
+fn save_shot(screen: &mut dyn Screen, px: &mut Vec<u32>, path: &str) -> Result<(u16, u16), String> {
+    let (w, h) = screen.backend().read_back(px);
+    shot::write(path, px, w, h)?;
+    Ok((w, h))
+}
+
+fn play(
+    args: &Args,
+    pump: &mut sdl2::EventPump,
+    pads: Option<sdl2::GameControllerSubsystem>,
+    screen: &mut dyn Screen,
+) -> Result<(), String> {
     // New Game: the county before the loop, with the window already a colour and not a frozen
     // white rect. A real loading screen that draws the skeleton is P6's.
-    screen::clear(&mut canvas, LOADING);
-    let _ = canvas.window_mut().set_title(&format!("Jane: seed {}, building the county", args.seed));
+    let _ = screen.window_mut().set_title(&format!("Jane: seed {}, building the county", args.seed));
     pump.pump_events();
     let t0 = Instant::now();
     let bps = Blueprints::build(args.seed).map_err(|e| format!("seed {}: {e}", args.seed))?;
     let mut sim = Sim::new_game_with(bps, &args.name);
     println!("jane-app: seed {}: the county built in {} ms", args.seed, t0.elapsed().as_millis());
 
-    let mut present = Present::new(Tier::T0);
-    let mut soft = Soft::new();
-    soft.upload_atlas(present.atlas());
-    let tc = canvas.texture_creator();
-    let mut target = Target::new(&tc);
-    let mut win = canvas.window().size();
+    let mut present = Present::new(screen.backend().caps().tier);
+    screen.backend().upload_atlas(present.atlas());
+    let describe = screen.describe();
+    let mut win = screen.size();
     let mut devices = Devices::new(pads, win.1);
     let mut input = Input::new();
     let mut canvas_px = canvas_size(win.0, win.1);
@@ -84,6 +208,7 @@ pub fn run(args: &Args) -> Result<(), String> {
     let mut ticks: u64 = 0;
     let mut dropped: u64 = 0;
     let mut shots = 0;
+    let mut shot_px: Vec<u32> = Vec::new();
     let mut stats = Stats::default();
     let mut acc: u64 = 0;
     let mut last = Instant::now();
@@ -94,7 +219,8 @@ pub fn run(args: &Args) -> Result<(), String> {
             match devices.event(&e) {
                 Happened::Quit => break 'run,
                 Happened::Resized => {
-                    win = canvas.window().size();
+                    win = screen.size();
+                    screen.resized(win);
                     devices.set_window_height(win.1);
                     canvas_px = canvas_size(win.0, win.1);
                 }
@@ -102,7 +228,6 @@ pub fn run(args: &Args) -> Result<(), String> {
             }
         }
         devices.poll_pad();
-
         // The devices, once a frame: one held frame for every tick of it, and the presses.
         let mode = if paused { Mode::Ui } else { Mode::Play };
         let feet = sim
@@ -135,9 +260,8 @@ pub fn run(args: &Args) -> Result<(), String> {
                 Edge::Ui(UiAction::Shot) => {
                     shots += 1;
                     let path = shot::numbered(args.shot.as_deref().unwrap_or("jane-shot.png"), shots);
-                    let (px, w, h) = soft.pixels();
-                    match shot::write(&path, px, w, h) {
-                        Ok(()) => println!("jane-app: shot {path}"),
+                    match save_shot(screen, &mut shot_px, &path) {
+                        Ok(_) => println!("jane-app: shot {path}"),
                         Err(e) => eprintln!("jane-app: shot: {e}"),
                     }
                     continue;
@@ -189,16 +313,12 @@ pub fn run(args: &Args) -> Result<(), String> {
         let alpha = (acc * 256 / TICK).min(255) as u8;
         let frame = present.draw(alpha, canvas_px);
         camera = frame.camera;
-        soft.draw(frame);
-        let (px, w, h) = soft.pixels();
-        target.upload(px, w, h)?;
-        canvas.clear();
-        target.blit(&mut canvas, win)?;
-        // The draw, not the wait for vsync that present() does.
+        screen.backend().draw(frame);
+        // The draw, not the upload and the wait for vsync that show() does.
         stats.draw_time += t.elapsed();
-        canvas.present();
+        screen.show(win)?;
         stats.frames += 1;
-        title(&mut canvas, &mut stats, args.seed, paused, dropped);
+        title(screen, &describe, &mut stats, args.seed, paused, dropped);
         if done {
             break;
         }
@@ -209,8 +329,7 @@ pub fn run(args: &Args) -> Result<(), String> {
     }
 
     if let Some(path) = &args.shot {
-        let (px, w, h) = soft.pixels();
-        shot::write(path, px, w, h)?;
+        let (w, h) = save_shot(screen, &mut shot_px, path)?;
         println!("jane-app: shot {path} ({w} x {h})");
     }
     println!(
@@ -222,8 +341,9 @@ pub fn run(args: &Args) -> Result<(), String> {
     Ok(())
 }
 
-/// Once a second: frames a second and the average tick and draw, until the F2 overlay exists.
-fn title(canvas: &mut sdl2::render::WindowCanvas, s: &mut Stats, seed: u32, paused: bool, dropped: u64) {
+/// Once a second: the backend, frames a second, the average tick and draw, and the backend's own
+/// frame times where it keeps them (§1.12), until the F2 overlay exists.
+fn title(screen: &mut dyn Screen, describe: &str, s: &mut Stats, seed: u32, paused: bool, dropped: u64) {
     let since = *s.since.get_or_insert_with(Instant::now);
     let el = since.elapsed();
     if el < Duration::from_secs(1) {
@@ -232,16 +352,25 @@ fn title(canvas: &mut sdl2::render::WindowCanvas, s: &mut Stats, seed: u32, paus
     let per = |d: Duration, n: u32| d.as_micros() / u128::from(n.max(1));
     let fps = u128::from(s.frames) * 1000 / el.as_millis().max(1);
     let mut t = format!(
-        "Jane: seed {seed}, {fps} fps, tick {} us, draw {} us",
+        "Jane: seed {seed}, {describe}, {fps} fps, tick {} us, draw {} us",
         per(s.tick_time, s.ticks),
         per(s.draw_time, s.frames)
     );
+    if let Some(f) = screen.backend().stats().filter(|f| f.frames > 0) {
+        let _ = write!(
+            t,
+            ", {} p50 {:.2} ms p99 {:.2} ms",
+            if f.gpu_clock { "gpu" } else { "frame" },
+            f64::from(f.p50_us) / 1000.0,
+            f64::from(f.p99_us) / 1000.0
+        );
+    }
     if dropped > 0 {
         let _ = write!(t, ", {dropped} ticks dropped");
     }
     if paused {
         t += ", paused";
     }
-    let _ = canvas.window_mut().set_title(&t);
+    let _ = screen.window_mut().set_title(&t);
     *s = Stats { since: Some(Instant::now()), ..Stats::default() };
 }
