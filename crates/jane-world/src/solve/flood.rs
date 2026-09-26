@@ -168,12 +168,7 @@ impl Layers {
         let word = |k: usize| {
             let base = k << 6;
             let end = (base + 64).min(n);
-            let (se, bl) = (&seen[base..end], &blocked[base..end]);
-            let mut m = 0u64;
-            for j in 0..end - base {
-                m |= u64::from(se[j] | bl[j] == 0) << j;
-            }
-            m & !solid[k]
+            clear_bytes(&seen[base..end], &blocked[base..end]) & !solid[k]
         };
         fill_words(w, h, &starts, word, &mut self.reach);
         self.floods += 1;
@@ -196,6 +191,32 @@ impl Layers {
         self.reached[s] = true;
         true
     }
+}
+
+/// Bit `j` set where byte `j` of `a` and of `b` are both zero, for up to 64 bytes (bits past
+/// the end clear). Eight bytes at a time: each byte squeezed to whether it is non-zero, then the
+/// eight gathered into one byte by a multiply (the exponents it adds never meet, so nothing
+/// carries into the top byte).
+fn clear_bytes(a: &[u8], b: &[u8]) -> u64 {
+    const LOW: u64 = 0x0101_0101_0101_0101;
+    const GATHER: u64 = 0x0102_0408_1020_4080;
+    let n = a.len().min(b.len());
+    let mut m = 0u64;
+    let mut c = 0;
+    while c + 8 <= n {
+        let x = u64::from_le_bytes(a[c..c + 8].try_into().unwrap_or_default())
+            | u64::from_le_bytes(b[c..c + 8].try_into().unwrap_or_default());
+        let mut y = x | (x >> 4);
+        y |= y >> 2;
+        y |= y >> 1;
+        let set = (y & LOW).wrapping_mul(GATHER) >> 56;
+        m |= (!set & 0xff) << c;
+        c += 8;
+    }
+    for j in c..n {
+        m |= u64::from(a[j] | b[j] == 0) << j;
+    }
+    m
 }
 
 impl Solve<'_> {
@@ -364,6 +385,25 @@ mod tests {
         assert!(l.touches(0, (4, -1, 6, 0)));
         assert!(!l.touches_any((2, 0, 2, 1)));
         assert_eq!(l.floods, 2);
+    }
+
+    #[test]
+    fn clear_bytes_marks_the_cells_both_leave_at_zero() {
+        let mut rng = jane_core::Sfc32::seeded(11, 0);
+        for round in 0..400 {
+            let n = if round < 256 { 64 } else { rng.below(65) as usize };
+            let byte = |rng: &mut jane_core::Sfc32| if rng.below(3) == 0 { rng.below(256) as u8 } else { 0 };
+            let mut a: Vec<u8> = (0..n).map(|_| byte(&mut rng)).collect();
+            let b: Vec<u8> = (0..n).map(|_| byte(&mut rng)).collect();
+            if round < 256 {
+                // Every pattern of eight in the first word, as the solver writes them (0 or 1).
+                for (j, v) in a.iter_mut().take(8).enumerate() {
+                    *v = u8::from(round >> j & 1 != 0);
+                }
+            }
+            let want = (0..n).fold(0u64, |m, j| m | u64::from(a[j] | b[j] == 0) << j);
+            assert_eq!(clear_bytes(&a, &b), want, "round {round}");
+        }
     }
 
     #[test]
