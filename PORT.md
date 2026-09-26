@@ -124,7 +124,7 @@ The plan for the native rewrite. Pair with `PLAN.md` (the game), `ARCHITECTURE.m
 
 | Crate | Where | Why |
 | --- | --- | --- |
-| `serde`, `serde_json` | `jane-schema` only | The schema is serde structs |
+| `serde`, `serde_json` | `jane-schema`; `serde` alone also in `sim` and behind `jane-core`'s optional `serde` feature (only the sim turns it on) | The schema is serde structs; the save and the hash are one serde encoding of the state (`ARCHITECTURE.md` §3.5), whose core types derive it |
 | `postcard` | `sim` (save), `net` (wire) | Compact, canonical, integer-friendly |
 | `lz4_flex` | `sim` (save frame) | A busy county's save is ~150 KB compressed (`ARCHITECTURE.md` §3.5) |
 | `xxhash-rust` (xxh3) | `sim` (state hash), `schema` (content hash) | One hash for saves, desync checks and the content pin (`ARCHITECTURE.md` §3.6) |
