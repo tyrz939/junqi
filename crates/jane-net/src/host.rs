@@ -41,6 +41,8 @@ const BEAT_MS: u64 = 500;
 const HANDSHAKE_MS: u64 = 60_000;
 /// A welcome not answered with input in this long is sent again (it was lost).
 const REWELCOME_MS: u64 = 1_000;
+/// A desync's explanation is waited for this long before the guest is resynced without it.
+const DUMP_MS: u64 = 5_000;
 
 #[derive(Clone, Debug)]
 pub struct HostConfig {
@@ -150,8 +152,8 @@ struct Conn {
     ack_moved: u64,
     resent: u64,
     last_sent: u64,
-    /// A desync being explained: the hash point and the guest's hash.
-    desync: Option<(u32, u64)>,
+    /// A desync being explained: the hash point, the guest's hash, and when it was found.
+    desync: Option<(u32, u64, u64)>,
 }
 
 #[derive(Debug)]
@@ -378,6 +380,14 @@ impl Host {
                         let _ = c.link.send(wire::encode(&Msg::Beat));
                         c.last_sent = now;
                     }
+                    // A desync whose explanation never came (lost, or a guest that cannot say):
+                    // put her back on the timeline all the same.
+                    if c.desync.is_some_and(|(_, _, found)| now.saturating_sub(found) >= DUMP_MS) {
+                        c.desync = None;
+                        if self.cfg.resync {
+                            c.state = State::Joining { resync: true };
+                        }
+                    }
                 }
                 State::Hello | State::Accepted if now.saturating_sub(c.since) >= HANDSHAKE_MS => {
                     c.link.close();
@@ -549,7 +559,7 @@ impl Host {
         if self.conns[i].desync.is_some() {
             return;
         }
-        self.conns[i].desync = Some((frame, hash));
+        self.conns[i].desync = Some((frame, hash, now));
         if let (Some(dir), Some(save)) = (&self.cfg.desync_dir, self.book.save_at(frame)) {
             let _ = std::fs::write(dir.join(format!("desync-{frame}-host.save")), save);
         }
@@ -557,7 +567,7 @@ impl Host {
     }
 
     fn on_dump(&mut self, i: usize, frame: u32, trail_from: u32, trail: &[u64], save: &[u8], now: u64) {
-        let Some((at, guest)) = self.conns[i].desync.take() else { return };
+        let Some((at, guest, _)) = self.conns[i].desync.take() else { return };
         if at != frame {
             return;
         }
