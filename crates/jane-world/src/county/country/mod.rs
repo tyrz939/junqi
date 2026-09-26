@@ -30,7 +30,12 @@
 //! - the Kit's footprints come from the catalog (`put` never names a size);
 //! - the story quota's shuffle is Fisher-Yates proper (the TypeScript's `roll(i + 1)` could swap
 //!   past the end of the list);
-//! - `FOLK_VARIANTS` was empty, so `variant` is the def itself.
+//! - `FOLK_VARIANTS` was empty, so `variant` is the def itself;
+//! - a lamp, a milestone or a relay box treats a bridge's planks as road, and a lane never paints
+//!   inside a set place's box;
+//! - a relay run's head is its first point clear of the set places, and a box or a dead lamp may
+//!   stand east or west of a road that runs north and south (five seeds in 64 had no relay run);
+//! - an empty screen with no room for a clearing gets flowers on any open cell.
 //!
 //! The tables that were constants in the TypeScript are Rust `const`s here, marked *tuning*: they
 //! move to `data/tuning/country.json` with PORT.md §6.g.
@@ -444,13 +449,14 @@ pub fn hostile(c: &mut County<'_>, def: UnitDefId, x: i32, y: i32, patrol: Vec<W
     true
 }
 
-/// A lane of worn dirt from a place's front to the nearest road, downhill on the distance field.
-/// A roadside fence gets a gate where the lane meets it.
-pub fn lane(c: &mut County<'_>, x: i32, y: i32, width: i32) {
+/// The way from `(x, y)` down the distance field to the nearest road or footpath, as the cells of
+/// its centre line in order (a joint twice): thirty steps of the 4-cell grid at most, straight steps
+/// before diagonal ones, stopping two cells short of the line.
+pub fn downhill(field: &Grid<u8>, x: i32, y: i32) -> Vec<(i32, i32)> {
     let (mut bx, mut by) = (x.div_euclid(DB), y.div_euclid(DB));
     let (mut px, mut py) = (x, y);
-    let field = &c.country.d_road;
     let (dw, dh) = (field.w() as i32, field.h() as i32);
+    let mut out = Vec::new();
     for _ in 0..30 {
         let here = field.read(bx, by, FAR);
         if here <= 2 {
@@ -476,27 +482,36 @@ pub fn lane(c: &mut County<'_>, x: i32, y: i32, width: i32) {
         for s in 0..=n {
             let lx = px + js_round(i64::from((tx - px) * s), i64::from(n.max(1))) as i32;
             let ly = py + js_round(i64::from((ty - py) * s), i64::from(n.max(1))) as i32;
-            for j in 0..width {
-                for i in 0..width {
-                    let (cx, cy) = (lx + i, ly + j);
-                    if in_box(c, cx, cy) {
-                        continue;
-                    }
-                    let t = c.k.get(cx, cy);
-                    if t == Tile::Fence && dist(field, cx, cy) <= 6 {
-                        c.k.set(cx, cy, Tile::Dirt);
-                        continue;
-                    }
-                    // Over growth and open grass only; claimed ground is crossed only where it is
-                    // still grass (a road's margin).
-                    if !soft(t) || (c.k.is_claimed(cx, cy) && !matches!(t, Tile::Grass | Tile::GrassTall)) {
-                        continue;
-                    }
-                    c.k.set(cx, cy, Tile::Dirt);
-                }
-            }
+            out.push((lx, ly));
         }
         (px, py, bx, by) = (tx, ty, nx, ny);
+    }
+    out
+}
+
+/// A lane of worn dirt `width` wide from a place's front to the nearest road, down the distance
+/// field ([`downhill`]). A roadside fence gets a gate where the lane meets it.
+pub fn lane(c: &mut County<'_>, x: i32, y: i32, width: i32) {
+    for (lx, ly) in downhill(&c.country.d_road, x, y) {
+        for j in 0..width {
+            for i in 0..width {
+                let (cx, cy) = (lx + i, ly + j);
+                if in_box(c, cx, cy) {
+                    continue;
+                }
+                let t = c.k.get(cx, cy);
+                if t == Tile::Fence && dist(&c.country.d_road, cx, cy) <= 6 {
+                    c.k.set(cx, cy, Tile::Dirt);
+                    continue;
+                }
+                // Over growth and open grass only; claimed ground is crossed only where it is
+                // still grass (a road's margin).
+                if !soft(t) || (c.k.is_claimed(cx, cy) && !matches!(t, Tile::Grass | Tile::GrassTall)) {
+                    continue;
+                }
+                c.k.set(cx, cy, Tile::Dirt);
+            }
+        }
     }
 }
 

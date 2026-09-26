@@ -144,7 +144,8 @@ pub struct Options {
     /// Flood from this mark instead of the zone's entrance.
     pub entry: Option<Key>,
     /// The blueprint is a PIECE of a zone (one room, stamped alone by the template harness), so a
-    /// list naming something in another room is expected, not a broken row.
+    /// list naming something in another room is expected, not a broken row; so is a door to a
+    /// mark of another room; and the catalog's trigger rows for the zone are not the piece's.
     pub fragment: bool,
     /// Keep which flood first reached each cell ([`super::BuildInfo::first_seen`]): two bytes a
     /// cell, so the county does not ask for it.

@@ -5,42 +5,29 @@
 //! where they can carry a key, a dialogue tree and loot, and a clearing round its mark and a rect
 //! of its name. Each small place is dressed on dice of its own, named for where it stands.
 //!
-//! The order in the county (`county.ts`): [`small_places`] (dressing, signposts, the needed
-//! places' rects), then the `pois` placement rows, then [`claim_small_places`], then the `areas`
-//! placement rows, then the country's places. The placement rows are the placements stage's; the
-//! country stage claims the small places again before it builds (claims are idempotent), so the
-//! country never builds over one whichever way the rows land.
+//! The order in the county (`county.ts`): `claim_pois` decides at `place_chunks` which small
+//! place each `poi` placement row gets and re-kinds it; [`small_places`] dresses them (and the
+//! signposts, and the needed places' rects); `place_pois` puts the rows down and claims each small
+//! place's ground; then `place_areas`, then the country's places.
 //!
 //! Where this parts from the TypeScript: a prop's footprint is the catalog's (the TypeScript
-//! passed 2 x 2 for barrels, crates and carts, whatever their row said).
+//! passed 2 x 2 for barrels, crates and carts, whatever their row said); nothing here paints
+//! inside a set place's box, and an outskirt grows nothing solid on claimed ground; a needed
+//! place's way out breaks crag (and, for one standing in water, decks the water) down to the
+//! nearest road, and its mark moves to the nearest open cell when its own is wet or solid. The
+//! TypeScript left those three to the county's re-roll.
 
 use jane_core::action::{Action, Facing};
 use jane_core::num::{Permille, isqrt};
 use jane_core::tile::F_SOLID;
-use jane_core::{Key, NameId, PropDefId, Rect, Sfc32, Tile};
+use jane_core::{Key, PropDefId, Rect, Sfc32, Tile};
 
 use super::country::defs::defs;
 use super::country::roads::{compass, distance_words};
-use super::country::{ellipse_within, in_box};
+use super::country::{downhill, ellipse_within, in_box};
+use super::placements::PoiSpot;
 use super::{County, centre};
-use crate::skeleton::Skeleton;
 use crate::steps::Step;
-
-/// A small place where it stands: its kind (`None`: a bare spot the story needs, a lamp post will
-/// stand there), and the anchor row it is, if the story needs it. The placements stage may turn a
-/// rolled one into the kind a row needs (`claimPois`) before it is dressed.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct PoiSpot {
-    pub x: i32,
-    pub y: i32,
-    pub kind: Option<NameId>,
-    pub anchor: Option<u8>,
-}
-
-/// The skeleton's small places, in its order, at the centres of their macro cells.
-pub fn poi_spots(sk: &Skeleton) -> Vec<PoiSpot> {
-    sk.pois.iter().map(|p| PoiSpot { x: centre(p.mx), y: centre(p.my), kind: p.kind, anchor: p.anchor }).collect()
-}
 
 /// A small place's mark: the anchor's id, or `poi_<n>` for the `n`th of the list.
 pub fn poi_key(c: &mut County<'_>, p: &PoiSpot, n: usize) -> Key {
@@ -68,13 +55,6 @@ pub fn small_places(c: &mut County<'_>) {
         if c.k.blueprint().marks.contains_key(&key) {
             c.k.rect(key, Rect::new(p.x - 6, p.y - 4, 13, 11));
         }
-    }
-}
-
-/// Every small place's ground claimed, so nothing of the country's is built over it.
-pub fn claim_small_places(c: &mut County<'_>) {
-    for p in &c.pois {
-        c.k.claim(Rect::new(p.x - 7, p.y - 6, 15, 13));
     }
 }
 
@@ -246,8 +226,49 @@ fn small_place(c: &mut County<'_>, rng: &mut Sfc32, p: &PoiSpot, name: Key) {
     // thicket near the well".
     if !rolled {
         clear_round(c, x, y + 3);
+        way_out(c, x, y + 3);
     }
-    c.k.mark(name, x, y + 3, Some(Facing::South));
+    let (mx, my) = if rolled { (x, y + 3) } else { stand(c, x, y + 3) };
+    c.k.mark(name, mx, my, Some(Facing::South));
+}
+
+/// A needed place's way out: down the distance field to the nearest road or footpath, a crag in
+/// the way is broken to dirt three cells wide, and where the place itself stands in water (a
+/// marsh the land stage drew as pools), the water on the way is decked in planks. The cut through
+/// the wood at the end of the build goes through trees, scrub and rubble but never rock or water:
+/// a lamp post the story needs stood in a pocket of crag on a seed in thirty, and a cottage in the
+/// Sallow's pools on another. The TypeScript re-rolled those counties.
+fn way_out(c: &mut County<'_>, x: i32, y: i32) {
+    let planks = c.k.get(x, y) == Tile::Water;
+    for (lx, ly) in downhill(&c.country.d_road, x, y) {
+        for (cx, cy) in Rect::new(lx - 1, ly - 1, 3, 3).cells() {
+            if in_box(c, cx, cy) {
+                continue;
+            }
+            match c.k.get(cx, cy) {
+                Tile::Cliff => c.k.set(cx, cy, Tile::Dirt),
+                Tile::Water if planks => c.k.set(cx, cy, Tile::Boardwalk),
+                _ => {}
+            }
+        }
+    }
+}
+
+/// Where a needed place's mark stands: three cells south of its middle, or, where that is water or
+/// solid (a cottage on a river bank), the nearest open cell to it, ring by ring out to four. The
+/// TypeScript set the mark in the river and re-rolled the county.
+fn stand(c: &County<'_>, x: i32, y: i32) -> (i32, i32) {
+    let open = |x: i32, y: i32| !c.k.solid(x, y) && !in_box(c, x, y);
+    for r in 0..=4i32 {
+        for oy in -r..=r {
+            for ox in -r..=r {
+                if ox.abs().max(oy.abs()) == r && open(x + ox, y + oy) {
+                    return (x + ox, y + oy);
+                }
+            }
+        }
+    }
+    (x, y)
 }
 
 /// Open ground round a needed place's mark (`clearing` in `county.ts`): trees, bushes, outcrops
@@ -340,7 +361,15 @@ impl Small<'_, '_> {
                 continue;
             }
             let k = &self.c.k;
-            if blocks && (k.solid(cx - 1, cy) || k.solid(cx + 1, cy) || k.solid(cx, cy - 1) || k.solid(cx, cy + 1)) {
+            // Nor on claimed ground: a thing a placement row set down stands there, or a road's
+            // margin. (The TypeScript grew a bush under a stake in the allotments.)
+            if blocks
+                && (k.is_claimed(cx, cy)
+                    || k.solid(cx - 1, cy)
+                    || k.solid(cx + 1, cy)
+                    || k.solid(cx, cy - 1)
+                    || k.solid(cx, cy + 1))
+            {
                 continue;
             }
             self.c.k.set(cx, cy, t);

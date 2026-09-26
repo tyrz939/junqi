@@ -80,12 +80,17 @@ impl<'a> Solve<'a> {
             errors.push(SolveError::UnknownUnitDef { unit: u.key, def: u.def });
         }
 
-        // The catalog's trigger rows for this zone, then the blueprint's own: the sim's merge.
-        let mut trigger_rows: Vec<TriggerRow> = cat
-            .story
-            .triggers_in(bp.zone)
-            .map(|(id, t)| TriggerRow { name: TriggerName::Catalog(id), t: t.trigger, fired: false })
-            .collect();
+        // The catalog's trigger rows for this zone, then the blueprint's own: the sim's merge. A
+        // fragment is not its zone (the TypeScript's harness renamed it `<zone>_room`): the story's
+        // rows for the zone look for rects of rooms that are not here, and are not its rows.
+        let mut trigger_rows: Vec<TriggerRow> = if opts.fragment {
+            Vec::new()
+        } else {
+            cat.story
+                .triggers_in(bp.zone)
+                .map(|(id, t)| TriggerRow { name: TriggerName::Catalog(id), t: t.trigger, fired: false })
+                .collect()
+        };
         for (&k, &t) in &bp.triggers {
             if cat.story.trigger_id(name_of(bp, k)).is_some() {
                 errors.push(SolveError::TriggerClash(k));
@@ -131,7 +136,8 @@ impl<'a> Solve<'a> {
             if let Some(tree) = p.talk.filter(|t| t.index() >= cat.story.dialogue.len()) {
                 errors.push(SolveError::UnknownDialogue { prop: p.key, tree });
             }
-            if let Some(d) = p.to.filter(|d| d.zone == bp.zone && !bp.marks.contains_key(&d.mark)) {
+            // In a fragment a door to another room of the zone leads out of the piece: not an error.
+            if let Some(d) = p.to.filter(|d| !opts.fragment && d.zone == bp.zone && !bp.marks.contains_key(&d.mark)) {
                 errors.push(SolveError::DoorToNoMark { prop: p.key, mark: d.mark });
             }
         }

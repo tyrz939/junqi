@@ -308,7 +308,9 @@ fn signs_read(sk: &Skeleton, c: &County<'_>, first_prop: usize, s: &mut Survey) 
     let names: Vec<String> = sk.sites.iter().map(|x| cat.text(x.def.name).to_uppercase()).collect();
     let id = |d: &str| cat.story.prop_id(d).expect("a prop row");
     let (finger, sign, mile) = (id("fingerpost"), id("signpost"), id("milestone"));
-    for p in &bp.props[first_prop..] {
+    // The builder's own signs, named by where they stand; a placement row's sign says what its
+    // row says.
+    for p in bp.props[first_prop..].iter().filter(|p| matches!(p.key, Key::Local(_))) {
         let what = if p.def == finger {
             "fingerpost"
         } else if p.def == sign {
@@ -359,7 +361,8 @@ fn nothing_on_a_road_or_in_a_box(_: &Skeleton, c: &County<'_>, first_prop: usize
     let bp = c.k.blueprint();
     let in_box =
         |x: i32, y: i32| c.chunks.iter().find(|ch| ch.bounds.contains(x, y)).map(jane_world::county::Chunk::id);
-    for p in &bp.props[first_prop..] {
+    // What the builder put down, named by where it stands: a placement row stands where its row says.
+    for p in bp.props[first_prop..].iter().filter(|p| matches!(p.key, Key::Local(_))) {
         let row = cat.story.prop(p.def);
         let (x0, y0) = (i32::from(p.cell.x), i32::from(p.cell.y));
         for y in y0..y0 + i32::from(row.h) {
@@ -374,7 +377,7 @@ fn nothing_on_a_road_or_in_a_box(_: &Skeleton, c: &County<'_>, first_prop: usize
             }
         }
     }
-    for u in &bp.units[first_unit..] {
+    for u in bp.units[first_unit..].iter().filter(|u| matches!(u.key, Key::Local(_))) {
         let (x, y) = (i32::from(u.cell.x), i32::from(u.cell.y));
         let id = cat.combat.unit(u.def).id;
         if bp.tiles.read(x, y, Tile::Void).flags() & F_SOLID != 0 {
@@ -390,7 +393,8 @@ fn nothing_on_a_road_or_in_a_box(_: &Skeleton, c: &County<'_>, first_prop: usize
 /// plays at the threat of the ground it stands on.
 fn the_first_walk_is_safe(sk: &Skeleton, c: &County<'_>, s: &mut Survey) {
     let bp = c.k.blueprint();
-    for u in bp.units.iter().filter(|u| u.phase > 0) {
+    // The ground's own, named by where they stand: a placement row's unit is its row's business.
+    for u in bp.units.iter().filter(|u| u.phase > 0 && matches!(u.key, Key::Local(_))) {
         let (x, y) = (i32::from(u.cell.x), i32::from(u.cell.y));
         let t = sk.threat.read(x >> 4, y >> 4, 0);
         if t == 0 || u.phase != t {

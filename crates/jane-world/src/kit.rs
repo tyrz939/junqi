@@ -386,15 +386,30 @@ impl Kit {
         self.bp.props.last_mut().expect("just pushed")
     }
 
-    /// The props placed so far, to finish a row after the fact (a signpost's words, a relay box's
-    /// switch once its lamps stand).
+    /// Keep only the props `keep` says to.
+    pub fn retain_props(&mut self, keep: impl FnMut(&PropSpawn) -> bool) {
+        self.bp.props.retain(keep);
+    }
+
+    /// The props placed so far, to change a field on one (an `edit` row, a thing moved beside
+    /// another). A prop moved this way claims its new footprint through [`Kit::claim`].
     pub fn props_mut(&mut self) -> &mut [PropSpawn] {
         &mut self.bp.props
     }
 
-    /// Keep only the props `keep` says to.
-    pub fn retain_props(&mut self, keep: impl FnMut(&PropSpawn) -> bool) {
-        self.bp.props.retain(keep);
+    /// The units placed so far, to change a field on one.
+    pub fn units_mut(&mut self) -> &mut [UnitSpawn] {
+        &mut self.bp.units
+    }
+
+    /// Keep only the units `keep` says to.
+    pub fn retain_units(&mut self, keep: impl FnMut(&UnitSpawn) -> bool) {
+        self.bp.units.retain(keep);
+    }
+
+    /// Keep only the marks `keep` says to, in their order.
+    pub fn retain_marks(&mut self, mut keep: impl FnMut(&Key, &Mark) -> bool) {
+        self.bp.marks.retain(|k, m| keep(k, m));
     }
 
     /// A unit at `(x, y)`, keyed `key` or by where it stands. Its cell is claimed.
