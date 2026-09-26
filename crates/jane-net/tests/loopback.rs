@@ -119,6 +119,29 @@ fn a_stalled_seat_is_shown_then_dropped_after_ten_seconds() {
 }
 
 #[test]
+fn two_who_knock_while_the_table_waits_sit_in_two_seats() {
+    let mut t = Table::new(HostConfig::default(), Policy::bot(Model::Rusher));
+    let a = t.knock(35, Policy::Idle);
+    t.seated(a);
+    t.run(60);
+    t.peers[a].frozen = true;
+    t.run(60);
+    assert!(t.host.stall().is_some());
+    // Both are welcomed while the table cannot step: one join a bundle, each in her own seat.
+    let b = t.knock(36, Policy::bot(Model::Reader));
+    let c = t.knock(37, Policy::bot(Model::Rusher));
+    t.run(11 * 60);
+    assert!(t.notes.iter().any(|n| matches!(n, Note::Dropped { .. })));
+    let (sb, sc) = (t.seated(b), t.seated(c));
+    assert_ne!(sb, sc);
+    t.run(600);
+    assert_eq!(t.host.sim().state().party_size(), 3);
+    assert_eq!(t.host.checks().bad, 0, "{:?}", t.desyncs());
+    t.peers.remove(a);
+    t.same_hash();
+}
+
+#[test]
 fn the_wait_toggle_waits_however_long() {
     let cfg = HostConfig { wait: true, ..HostConfig::default() };
     let mut t = Table::new(cfg, Policy::bot(Model::Rusher));

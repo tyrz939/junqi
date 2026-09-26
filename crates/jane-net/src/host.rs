@@ -615,7 +615,8 @@ impl Host {
     fn welcome(&mut self, f: u32, now: u64) {
         // A seat getting up in this bundle may be the one a returning guest wants back.
         let leaving = self.inject.iter().any(|(_, c)| matches!(c, Command::Leave));
-        let mut joined = false;
+        // One join a bundle: a second would be seated by a prediction that did not know of the first.
+        let mut joined = self.inject.iter().any(|(s, _)| s.is_none());
         for i in 0..self.conns.len() {
             let State::Joining { resync } = self.conns[i].state else { continue };
             if resync {
