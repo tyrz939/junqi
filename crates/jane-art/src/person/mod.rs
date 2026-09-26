@@ -21,7 +21,7 @@ use jane_core::hash::fnv1a;
 use jane_data::{EmitRole, PersonLook, Skin};
 
 pub use build::{Proportions, of as proportions};
-pub use pose::{BREATHE, Facing, LIVING, Pose, WALK_DOWN, WALK_SIDE, WALK_UP};
+pub use pose::{BREATHE, FALLEN, Facing, LIVING, Pose, WALK_DOWN, WALK_SIDE, WALK_UP};
 
 use crate::canvas::Canvas;
 use crate::palette::{Ix, Ramp, Tone};
@@ -107,10 +107,13 @@ impl Dress {
         if self.look.head.hair != jane_data::Hair::Bald {
             out.push((Role::Hair, self.hair));
         }
-        if self.look.head.hat != jane_data::Hat::None {
+        if self.look.head.hat != jane_data::Hat::None || self.look.head.hat_ramp.is_some() {
             out.push((Role::Hat, self.hat));
         }
-        if self.look.body.front != jane_data::Front::None || self.look.body.coat == jane_data::Coat::Apron {
+        if self.look.body.front != jane_data::Front::None
+            || self.look.body.coat == jane_data::Coat::Apron
+            || self.look.extras.contains(&jane_data::Extra::Shawl)
+        {
             out.push((Role::Front, self.front));
         }
         out.push((Role::Boots, self.boots));
@@ -128,11 +131,17 @@ pub fn render(look: &PersonLook, seed: u32) -> Result<SpriteSet, String> {
     let p = proportions(look.build);
     let mut frames: Vec<(FrameId, Canvas)> =
         LIVING.iter().map(|&(id, facing, pose)| (id, draw::frame(&d, p, facing, pose))).collect();
-    let side = draw::frame(&d, p, Facing::Side, WALK_SIDE[0]);
-    // Dead2: the near arm flung out ahead of her, so it lies above the body.
-    let fling = draw::frame(&d, p, Facing::Side, Pose { arm: [7, 0], ..Pose::default() });
-    frames.push((FrameId::Dead, fallen::fallen(&side, seed)));
-    frames.push((FrameId::Dead2, fallen::fallen(&fling, seed ^ 1)));
+    // The dead: posed from the front (on her back, limbs thrown) and laid down.
+    for (k, id) in [FrameId::Dead, FrameId::Dead2].into_iter().enumerate() {
+        // A child's limbs are short and a stout body wide: flung as far, they would lie taller
+        // than they stood.
+        let mut pose = FALLEN[k];
+        if matches!(look.build, jane_data::Build::Child | jane_data::Build::Stout) {
+            pose.spread = pose.spread.map(|s| s / 2);
+        }
+        let body = draw::frame(&d, p, Facing::Down, pose);
+        frames.push((id, fallen::fallen(&body, seed ^ k as u32)));
+    }
     let mut emits = Vec::new();
     for e in look.emits {
         emits.push(match e {

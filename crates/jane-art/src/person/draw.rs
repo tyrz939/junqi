@@ -1,13 +1,22 @@
 //! The composer's parts (ART.md §2.1): legs, boots, coat, front, arms, skin, face, hair, hat,
 //! pack, in that order, for each facing, all read from one [`Rig`] so the frame table moves
-//! everything together. Bodies are `polygon_lit` and `ellipse_lit`, cloth hangs in fold lines, and every
-//! part writes its normals and relief as it goes (relief: what stands in front of what, which
-//! the outline reads for seams). Then [`finish`] gives each material its own few tones, lays the
-//! cast shades as clusters, draws the contact shadow, runs the selective outline and stands the
-//! frame up ([`Canvas::upright`]), which writes the true height of every pixel.
+//! everything together.
+//!
+//! Cloth is `polygon_cloth`: large calm areas of its base, a lit edge on the light's side and a
+//! clear shadow side, and then the painter's deliberate clusters: folds under the arms, at the
+//! waist and at the hem, lapels, collars, belts and buckles as shapes with their own light and
+//! shade. Faces are painted in four skin tones: the fringe's cast shadow on the brow, a cheek
+//! and jaw in shade on the side away from the light, a nose and a mouth, eyes with a lid and a
+//! glint. Builds and cuts change the silhouette: square or sloping shoulders, a belly, a
+//! fitted bodice over a flared skirt, a stoop.
+//!
+//! Every part writes its normals and relief as it goes (relief: what stands in front of what,
+//! which the outline reads for seams); [`finish`] cleans the clusters, lays the contact shadow,
+//! runs the selective outline and stands the frame up ([`Canvas::upright`]), which writes the
+//! true height of every pixel.
 
 use jane_core::grid::Rect;
-use jane_data::{Boots, Coat, Extra, Face, Front, Hat, Legs};
+use jane_data::{Boots, Build, Coat, Extra, Face, Front, Hat, Legs};
 
 use super::build::Proportions;
 use super::hair;
@@ -34,13 +43,13 @@ pub(crate) mod relief {
     pub const HAT: Z = Z::new(9, 12);
 }
 
-/// A material's own tones, by the tone the light gave it (darkest first): cloth and leather
-/// keep a light, a base and a mid (a shade for what the light never reaches), so shading falls in clusters and never in every band a curve makes.
+/// What the lit primitives' bands become in cloth, leather and hats: a shade, a base, a lift
+/// and a light, so what a curve makes falls in clusters.
 const CLOTH: [Tone; 8] =
-    [Tone::Shade, Tone::Shade, Tone::Mid, Tone::Base, Tone::Base, Tone::Base, Tone::Light, Tone::Light];
-/// Skin: the same four a step lighter at the top, never its darkest (sel-out draws that).
+    [Tone::Shade, Tone::Shade, Tone::Shade, Tone::Base, Tone::Base, Tone::Lift, Tone::Light, Tone::Light];
+/// Skin's four: shade, mid, base, lift.
 const SKIN: [Tone; 8] =
-    [Tone::Mid, Tone::Base, Tone::Base, Tone::Base, Tone::Base, Tone::Lift, Tone::Light, Tone::Light];
+    [Tone::Shade, Tone::Shade, Tone::Mid, Tone::Base, Tone::Base, Tone::Lift, Tone::Lift, Tone::Lift];
 
 /// A symmetric span of width `w` about the centre line: `(first, last)` column.
 const fn span(w: i32) -> (i32, i32) {
@@ -51,6 +60,7 @@ const fn span(w: i32) -> (i32, i32) {
 pub(crate) struct Rig {
     pub p: Proportions,
     pub pose: Pose,
+    pub build: Build,
     /// The skull's box.
     pub skull: Rect,
     /// The shoulders' top row.
@@ -69,7 +79,9 @@ pub(crate) struct Rig {
 }
 
 impl Rig {
-    fn new(p: Proportions, pose: Pose, coat: Coat, facing: Facing, stoop: bool) -> Rig {
+    fn new(p: Proportions, pose: Pose, d: &Dress, facing: Facing) -> Rig {
+        let coat = d.look.body.coat;
+        let stoop = d.look.extras.contains(&Extra::Stoop);
         let breathe = i32::from(pose.breathe);
         // A stoop carries the shoulders a px forward and down and the head a px further.
         let (bent, sunk) = (i32::from(stoop && facing == Facing::Side), i32::from(stoop));
@@ -85,10 +97,10 @@ impl Rig {
         };
         let hem = (p.hip_y() + pose.lag.0 + hang).min(AY - 2);
         let trail = (pose.lag.1 + bent - lean, pose.lag.0 - pose.bob);
-        Rig { p, pose, skull, top, waist: (top + hip) / 2 + 1, hip, hem, lean, trail }
+        Rig { p, pose, build: d.look.build, skull, top, waist: (top + hip) / 2 + 1, hip, hem, lean, trail }
     }
 
-    /// The eyes' first row.
+    /// The eyes' first row (their lids are the row above).
     pub fn eye_y(&self) -> i32 {
         self.skull.y + self.skull.h / 2
     }
@@ -97,12 +109,35 @@ impl Rig {
     pub fn brow_y(&self) -> i32 {
         self.eye_y() - 2
     }
+
+    /// Square shoulders (broad) or sloping ones.
+    fn square(&self) -> bool {
+        self.build == Build::Broad
+    }
+
+    /// A sleeve's width.
+    fn arm_w(&self) -> i32 {
+        if self.build == Build::Broad { 5 } else { 4 }
+    }
+
+    /// The neck's width: a pencil on a girl, a post on a smith.
+    fn neck_w(&self) -> i32 {
+        match self.build {
+            Build::Broad | Build::Stout => 6,
+            Build::Slim | Build::Child => 4,
+        }
+    }
+
+    /// The body's depth seen from the side: narrower than its breadth.
+    fn side_w(&self) -> i32 {
+        (self.p.shoulder_w - 2).max(8)
+    }
 }
 
 /// One living frame of a person, finished.
 pub fn frame(d: &Dress, p: Proportions, facing: Facing, pose: Pose) -> Canvas {
     let mut c = Canvas::new(super::W, super::H);
-    let r = Rig::new(p, pose, d.look.body.coat, facing, d.look.extras.contains(&Extra::Stoop));
+    let r = Rig::new(p, pose, d, facing);
     match facing {
         Facing::Down => down(&mut c, d, &r),
         Facing::Up => up(&mut c, d, &r),
@@ -112,8 +147,8 @@ pub fn frame(d: &Dress, p: Proportions, facing: Facing, pose: Pose) -> Canvas {
     c
 }
 
-/// Every material to its own tones, skin never in a checker, the contact shadow under the feet,
-/// the selective outline (seams by relief), then each pixel's true height.
+/// Every material to its own tones, skin never in a checker, the clusters cleaned, the contact
+/// shadow under the feet, the selective outline (seams by relief), then each pixel's true height.
 fn finish(c: &mut Canvas, d: &Dress) {
     for r in [d.coat, d.front, d.legs, d.hat, d.boots, d.pack] {
         c.retone(r, CLOTH);
@@ -134,55 +169,39 @@ fn finish(c: &mut Canvas, d: &Dress) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Facing the viewer
+// Shared painting
 
-fn down(c: &mut Canvas, d: &Dress, r: &Rig) {
-    hair::back_down(c, d, r);
-    for i in 0..2 {
-        let x0 = if i == 0 { CX - 5 } else { CX + 1 };
-        let foot = AY + r.pose.leg[i] - r.pose.lift[i];
-        leg_front(c, d, r, x0, foot);
-    }
-    coat_front(c, d, r, true);
-    front_down(c, d, r);
-    arms_front(c, d, r);
-    neck(c, d, r);
-    head(c, d, r, false);
-    face_down(c, d, r);
-    hair::front_down(c, d, r);
-    hat_down(c, d, r);
-}
-
-fn arms_front(c: &mut Canvas, d: &Dress, r: &Rig) {
-    let (s0, s1) = span(r.p.shoulder_w);
-    for i in 0..2 {
-        let hand = r.p.arm_y + r.pose.bob - i32::from(r.pose.breathe) + r.p.arm_l - 1 + r.pose.arm[i];
-        let x0 = if i == 0 { s0 - 3 } else { s1 };
-        arm_front(c, d, r, x0, hand, i == 0);
+/// Hem folds: `n` creases rising `len` rows from the hem across `x0..=x1`, each a line of the
+/// cloth's shade with its lit ridge a px to the left; the set sways a px with the walk.
+fn hem_folds(c: &mut Canvas, ramp: Ramp, x0: i32, x1: i32, hem: i32, len: i32, phase: u16) {
+    let sway = i32::from(phase >= 32768);
+    let w = x1 - x0 + 1;
+    let n = if w >= 16 { 3 } else { 2 };
+    for k in 0..n {
+        let x = x0 + (k + 1) * w / (n + 1) + sway;
+        let l = if k == n / 2 { len } else { len - 1 };
+        for y in hem - l..hem {
+            c.tint(x, y, ramp, Tone::Shade);
+            if y > hem - l {
+                c.tint(x - 1, y, ramp, Tone::Lift);
+            }
+        }
     }
 }
 
-/// A leg and its boot seen from the front or behind, 4 px wide from `x0`, the sole on `foot`.
-fn leg_front(c: &mut Canvas, d: &Dress, r: &Rig, x0: i32, foot: i32) {
-    let boot_h = boot_rows(d);
-    let legs = leg_ramp(d);
-    let top = r.hip - 1;
-    let bot = foot - boot_h;
-    if bot >= top {
-        c.polygon_lit(&[(x0, top), (x0 + 3, top), (x0 + 3, bot), (x0, bot)], legs, 70, relief::LEG);
-    }
-    if d.look.body.legs == Legs::Pyjamas {
-        c.folds(Rect::new(x0, top, 4, bot - top + 1), legs, 2, 0);
-    }
-    let ramp = if d.look.body.boots == Boots::Bare { d.skin } else { d.boots };
-    c.rect_round(Rect::new(x0, foot - boot_h + 1, 4, boot_h), ramp, 1, 1, relief::BOOT);
+/// A belt across `x0..=x1` on row `y`: two rows of leather lit on top, and a brass buckle.
+fn belt(c: &mut Canvas, x0: i32, x1: i32, y: i32, buckle: i32, z: u8) {
+    c.fill_rect(Rect::new(x0, y, x1 - x0 + 1, 1), Ramp::Leather.at(Tone::Light), z);
+    c.fill_rect(Rect::new(x0, y + 1, x1 - x0 + 1, 1), Ramp::Leather.at(Tone::Base), z);
+    c.fill_rect(Rect::new(buckle, y, 2, 2), Ramp::Brass.at(Tone::Base), z + 1);
+    c.dot(buckle, y, Ramp::Brass.at(Tone::High), z + 1);
 }
 
-fn boot_rows(d: &Dress) -> i32 {
-    match d.look.body.boots {
-        Boots::Boots => 3,
-        Boots::Shoes | Boots::Bare => 2,
-    }
+/// A skin mitt of a hand, 4 x 3 from `(x, y)`, with its shadow px at the bottom right.
+fn hand(c: &mut Canvas, d: &Dress, x: i32, y: i32, z: u8) {
+    c.ellipse(Rect::new(x, y, 4, 3), d.skin.at(Tone::Base), z);
+    c.dot(x + 1, y, d.skin.at(Tone::Lift), z);
+    c.dot(x + 2, y + 1, d.skin.at(Tone::Mid), z);
 }
 
 /// The legs' ramp: bare legs are skin; under a skirt, stockings in the legs' ramp.
@@ -193,92 +212,220 @@ fn leg_ramp(d: &Dress) -> Ramp {
     }
 }
 
-/// A skirt below a coat too short to cover the knee: from the hip to three rows under it.
-fn skirt(c: &mut Canvas, d: &Dress, r: &Rig, x0: i32, x1: i32) {
-    if d.look.body.legs == Legs::Skirt && r.hem < r.hip + 3 {
-        let b = r.hip + 3 + r.trail.1;
-        c.polygon_lit(&[(x0, r.hip - 2), (x1, r.hip - 2), (x1 + 1, b), (x0 - 1, b)], d.legs, 80, relief::LEG);
-        fold_lines(c, d.legs, x0 - 1, x1 + 1, b, 2, r.pose.phase);
+fn boot_rows(d: &Dress) -> i32 {
+    match d.look.body.boots {
+        Boots::Boots => 3,
+        Boots::Shoes | Boots::Bare => 2,
     }
 }
 
-/// The neck's width: a pencil on a girl, a post on a smith.
-fn neck_w(r: &Rig) -> i32 {
-    if r.p.shoulder_w >= 14 { 6 } else { 4 }
-}
-
-/// The body's depth seen from the side: narrower than its breadth.
-fn side_w(r: &Rig) -> i32 {
-    (r.p.shoulder_w - 2).max(8)
-}
-
-/// Fold lines on a skirt or a coat's tail: a crease every few px across `x0..=x1`, each a
-/// pixel of the ramp's shade rising `len` rows from the hem, the middle ones longest; the set
-/// sways a pixel with the walk's phase.
-fn fold_lines(c: &mut Canvas, ramp: Ramp, x0: i32, x1: i32, hem: i32, len: i32, phase: u16) {
-    let sway = i32::from(phase >= 32768);
-    let w = x1 - x0 + 1;
-    let n = (w / 4).max(1);
-    for k in 0..n {
-        let x = x0 + (k + 1) * w / (n + 1) + sway - 1;
-        let l = if k == 0 || k == n - 1 { len - 1 } else { len };
-        for y in hem - l..hem {
-            c.tint(x, y, ramp, Tone::Shade);
-        }
-    }
-}
-
+/// How far a cut flares at the hem each side, px: a dress's skirt is a trapezoid.
 fn flare(coat: Coat) -> i32 {
     match coat {
-        Coat::Dress | Coat::Apron | Coat::Gown | Coat::Nightdress => 2,
+        Coat::Dress | Coat::Apron => 3,
+        Coat::Gown | Coat::Nightdress => 2,
         Coat::Overcoat | Coat::Coat | Coat::Smock => 1,
         _ => 0,
     }
 }
 
-/// The coat from the front (or behind): shoulders, waist and a hem by the coat's cut, lit as an
-/// upright body, with folds below the waist, the head's shade on the collar and the cut's
-/// details facing the viewer.
+/// A dress, an apron's dress or a gown: a fitted bodice over a skirt.
+fn skirted(coat: Coat) -> bool {
+    matches!(coat, Coat::Dress | Coat::Apron | Coat::Gown | Coat::Nightdress)
+}
+
+/// The eyes: each two px square and dark, a lid line three px wide over it, and a glint in its
+/// top corner on the light's side.
+fn eyes(c: &mut Canvas, d: &Dress, xs: &[(i32, bool)], ey: i32, z: u8) {
+    let iris = if d.eye_emits { d.eye } else { Ramp::Leather.at(Tone::Deep) };
+    for &(x, outward_left) in xs {
+        let lid = if outward_left { x - 1 } else { x };
+        c.hline(lid, lid + 2, ey - 1, Ix::SEAM, z);
+        c.set_emitting(d.eye_emits);
+        c.fill_rect(Rect::new(x, ey, 2, 2), iris, z);
+        c.set_emitting(false);
+        if !d.eye_emits {
+            c.dot(x, ey, palette::letter('w').unwrap_or(Ix::BEVEL_LIGHT), z);
+        }
+    }
+}
+
+/// The face's four skin tones over the skull box `s`, facing the viewer: base, the fringe's
+/// shadow on the brow, the cheek and jaw on the far side in shade, a lift on the near cheek.
+fn face_tones(c: &mut Canvas, d: &Dress, r: &Rig) {
+    let s = r.skull;
+    let (ey, brow) = (r.eye_y(), r.brow_y());
+    let skin = d.skin;
+    for y in s.y..s.bottom() {
+        for x in s.x..s.right() {
+            let shade = y == brow + 1
+                || (y == brow + 2 && x >= CX + 2)
+                || (x >= s.right() - 3 && y >= ey - 1)
+                || (y >= s.bottom() - 2 && x >= CX);
+            let t = if shade {
+                Tone::Mid
+            } else if (x == s.x + 2 || x == s.x + 3) && (y == ey + 2 || y == ey + 3) && !(x == s.x + 3 && y == ey + 3) {
+                Tone::Lift
+            } else {
+                Tone::Base
+            };
+            c.tint(x, y, skin, t);
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
+// Facing the viewer
+
+fn down(c: &mut Canvas, d: &Dress, r: &Rig) {
+    hair::back_down(c, d, r);
+    legs_front(c, d, r);
+    coat_front(c, d, r, true);
+    front_down(c, d, r);
+    arms_front(c, d, r);
+    neck(c, d, r);
+    head(c, d, r, false);
+    face_down(c, d, r);
+    hair::front_down(c, d, r);
+    hat_down(c, d, r);
+    if d.look.extras.contains(&Extra::Shawl) {
+        shawl(c, d, r, true);
+    }
+}
+
+fn legs_front(c: &mut Canvas, d: &Dress, r: &Rig) {
+    for i in 0..2 {
+        let x0 = if i == 0 { CX - 5 } else { CX + 1 };
+        let out = if i == 0 { -r.pose.splay[i] } else { r.pose.splay[i] };
+        let foot = AY + r.pose.leg[i] - r.pose.lift[i];
+        leg_front(c, d, r, x0, out, foot);
+    }
+}
+
+/// A leg and its boot seen from the front or behind, 4 px wide from `x0` at the hip, its foot
+/// `out` px further out, the sole on `foot`.
+fn leg_front(c: &mut Canvas, d: &Dress, r: &Rig, x0: i32, out: i32, foot: i32) {
+    let boot_h = boot_rows(d);
+    let legs = leg_ramp(d);
+    let top = r.hip - 1;
+    let bot = foot - boot_h;
+    if bot >= top {
+        c.polygon_cloth(&[(x0, top), (x0 + 3, top), (x0 + 3 + out, bot), (x0 + out, bot)], legs, 70, relief::LEG);
+    }
+    if d.look.body.legs == Legs::Pyjamas {
+        c.folds(Rect::new(x0 + out.min(0), top, 4 + out.abs(), bot - top + 1), legs, 2, 0);
+    }
+    let ramp = if d.look.body.boots == Boots::Bare { d.skin } else { d.boots };
+    c.rect_round(Rect::new(x0 + out, foot - boot_h + 1, 4, boot_h), ramp, 1, 1, relief::BOOT);
+}
+
+/// A skirt below a coat too short to cover the knee: a trapezoid from the hip.
+fn skirt(c: &mut Canvas, d: &Dress, r: &Rig, x0: i32, x1: i32) {
+    if d.look.body.legs == Legs::Skirt && r.hem < r.hip + 3 {
+        let b = r.hip + 3 + r.trail.1;
+        c.polygon_cloth(&[(x0, r.hip - 2), (x1, r.hip - 2), (x1 + 2, b), (x0 - 2, b)], d.legs, 80, relief::LEG);
+        hem_folds(c, d.legs, x0 - 2, x1 + 2, b, 3, r.pose.phase);
+    }
+}
+
+/// The coat from the front (or behind): the build's shoulders, the cut's waist and hem, calm
+/// cloth, and the cut's details facing the viewer.
 fn coat_front(c: &mut Canvas, d: &Dress, r: &Rig, facing_us: bool) {
-    let (s0, s1) = span(r.p.shoulder_w);
-    let (w0, w1) = span(r.p.waist_w);
     let coat = d.look.body.coat;
-    let (h0, h1) = span(r.p.hip_w + 2 * flare(coat));
-    let (t, wy, hem) = (r.top, r.waist, r.hem);
+    let (s0, s1) = span(r.p.shoulder_w);
+    let (t, wy) = (r.top, r.waist);
+    let spread = i32::from(r.pose.spread != [0, 0]);
+    let fl = flare(coat) + spread;
+    let hem = r.hem;
+    let (h0, h1) = span(r.p.hip_w + 2 * fl);
     let (k0, k1) = span(r.p.hip_w);
     skirt(c, d, r, k0, k1);
-    let pts = [(s0 + 1, t), (s1 - 1, t), (s1, t + 1), (w1, wy), (h1, hem), (h0, hem), (w0, wy), (s0, t + 1)];
-    c.polygon_lit(&pts, d.coat, 80, relief::COAT);
-    fold_lines(c, d.coat, h0, h1, hem, (hem - wy - 1).min(4), r.pose.phase);
+    // A fitted bodice is narrower at the waist than the build.
+    let waist_w = if skirted(coat) { r.p.waist_w - 2 } else { r.p.waist_w };
+    let (w0, w1) = span(waist_w);
+    let mut pts: Vec<(i32, i32)> = Vec::with_capacity(12);
+    if r.square() {
+        pts.extend([(s0, t), (s1, t)]);
+    } else {
+        pts.extend([(s0 + 2, t), (s1 - 2, t), (s1, t + 2)]);
+    }
+    pts.extend([(w1, wy), (h1, hem), (h0, hem), (w0, wy)]);
+    if !r.square() {
+        pts.push((s0, t + 2));
+    }
+    c.polygon_cloth(&pts, d.coat, 80, relief::COAT);
+    let z = relief::COAT.hi;
+    let (shade, lift, light) = (d.coat.at(Tone::Shade), d.coat.at(Tone::Lift), d.coat.at(Tone::Light));
+    // Folds under the arms: where the sleeve meets the body.
+    for y in t + 2..t + 5 {
+        c.tint(s0 + 1, y, d.coat, Tone::Shade);
+        c.tint(s1 - 1, y, d.coat, Tone::Shade);
+    }
     // The head's shade on the shoulders under it.
-    c.shade(Rect::new(CX - 5, t - 2, 10, 5), d.coat, 1);
-    let deep = d.coat.at(Tone::Shade);
+    c.shade(Rect::new(CX - 4, t - 2, 8, 4), d.coat, 1);
+    if hem - wy > 3 {
+        hem_folds(c, d.coat, h0 + 1, h1 - 1, hem, (hem - wy - 2).min(5), r.pose.phase);
+    }
+    if !facing_us {
+        if matches!(coat, Coat::Coat | Coat::Canvas) {
+            belt(c, w0, w1, wy, CX - 1, z + 1);
+        }
+        // The back seam, and a vent in a long coat.
+        if matches!(coat, Coat::Overcoat | Coat::Coat) {
+            c.vline(CX - 1, wy + 2, hem - 1, shade, z);
+        }
+        return;
+    }
     match coat {
-        Coat::Coat | Coat::Overcoat | Coat::Jacket | Coat::Cardigan | Coat::Canvas if facing_us => {
-            // Lapels to the fastening, the opening below it, a belt on a coat.
-            c.line((CX - 4, t), (CX - 1, t + 4), deep, 1, relief::COAT.hi);
-            c.line((CX + 3, t), (CX, t + 4), deep, 1, relief::COAT.hi);
-            c.vline(CX, t + 5, hem - 1, deep, relief::COAT.hi);
-            for k in 0..2 {
-                c.dot(CX - 1, t + 5 + 2 * k, Ramp::Brass.at(Tone::Light), relief::COAT.hi + 1);
+        Coat::Coat | Coat::Overcoat | Coat::Jacket | Coat::Canvas => {
+            // Lapels: the near one lit, the far one in shade; the opening under them.
+            let deep = if coat == Coat::Overcoat { 6 } else { 4 };
+            c.polyline_fill(&[(CX - 4, t), (CX - 1, t), (CX - 1, t + deep)], lift, z + 1);
+            c.polyline_fill(&[(CX, t), (CX + 3, t), (CX, t + deep)], shade, z + 1);
+            c.vline(CX, t + deep, hem - 1, shade, z);
+            c.vline(CX - 1, t + deep + 1, hem - 1, light, z);
+            let buttons: &[i32] = if coat == Coat::Overcoat { &[CX - 3, CX + 2] } else { &[CX - 2] };
+            for &bx in buttons {
+                for k in 0..2 {
+                    c.dot(bx, t + deep + 1 + 3 * k, Ramp::Brass.at(Tone::Light), z + 2);
+                }
             }
             if coat == Coat::Coat {
-                c.rect_round(Rect::new(w0, wy, w1 - w0 + 1, 2), Ramp::Leather, 1, 0, Z::flat(relief::COAT.hi + 1));
+                belt(c, w0, w1, wy, CX - 1, z + 2);
+            }
+            if coat == Coat::Jacket {
+                // Pocket flaps.
+                for x in [w0 + 1, CX + 2] {
+                    c.hline(x, x + 2, r.hip - 2, shade, z + 1);
+                }
             }
         }
-        Coat::Coat | Coat::Overcoat => {
-            if coat == Coat::Coat {
-                c.rect_round(Rect::new(w0, wy, w1 - w0 + 1, 2), Ramp::Leather, 1, 0, Z::flat(relief::COAT.hi + 1));
+        Coat::Cardigan => {
+            // Open down the front, the front showing; a line of buttons on the near edge.
+            c.polyline_fill(
+                &[(CX - 2, t), (CX + 1, t), (CX + 1, hem - 1), (CX - 2, hem - 1)],
+                d.front.at(Tone::Base),
+                z + 1,
+            );
+            c.vline(CX + 2, t, hem - 1, shade, z + 1);
+            for k in 0..3 {
+                c.dot(CX - 3, t + 2 + 2 * k, Ramp::Brass.at(Tone::Light), z + 2);
             }
-            c.vline(CX - 1, wy + 2, hem - 1, deep, relief::COAT.hi);
         }
         Coat::Smock => {
-            c.hline(s0 + 2, s1 - 2, t + 3, deep, relief::COAT.hi);
+            // A yoke across the chest, gathered under it.
+            c.hline(s0 + 2, s1 - 2, t + 3, shade, z);
+            c.hline(s0 + 2, s1 - 2, t + 2, lift, z);
+            for x in [CX - 3, CX, CX + 3] {
+                c.vline(x, t + 4, t + 5, shade, z);
+            }
         }
         Coat::Dress | Coat::Apron | Coat::Gown | Coat::Nightdress => {
-            c.hline(w0, w1, wy, deep, relief::COAT.hi);
+            // A round neck; the waist seam, lit on its upper lip.
+            c.hline(w0, w1, wy, shade, z);
+            c.hline(w0, CX - 1, wy - 1, lift, z);
+            c.hline(CX - 2, CX + 1, t, shade, z);
         }
-        _ => {}
     }
 }
 
@@ -290,8 +437,9 @@ fn front_down(c: &mut Canvas, d: &Dress, r: &Rig) {
         Front::Scarf => {
             // A wrap round the neck and a tail over the chest, swinging a frame behind.
             c.rect_round(Rect::new(CX - 5, t - 2, 10, 4), f, 1, 2, Z::new(relief::FRONT, relief::FRONT + 1));
+            c.hline(CX - 4, CX + 3, t, f.at(Tone::Shade), relief::FRONT + 1);
             let (sx, sy) = (i32::from(r.pose.phase >= 32768), -r.trail.1);
-            c.polygon_lit(
+            c.polygon_cloth(
                 &[(CX + 1, t + 1), (CX + 3, t + 1), (CX + 3 + sx, t + 6 + sy), (CX + 1 + sx, t + 7 + sy)],
                 f,
                 60,
@@ -305,8 +453,9 @@ fn front_down(c: &mut Canvas, d: &Dress, r: &Rig) {
                 f.at(Tone::Light),
                 relief::FRONT,
             );
+            c.dot(CX, t, f.at(Tone::Shade), relief::FRONT);
             if d.look.body.front == Front::Tie {
-                c.polygon_lit(
+                c.polygon_cloth(
                     &[(CX - 1, t), (CX, t), (CX, t + 5), (CX - 1, t + 5)],
                     Ramp::ClothRed,
                     40,
@@ -315,14 +464,24 @@ fn front_down(c: &mut Canvas, d: &Dress, r: &Rig) {
             }
         }
         Front::Waistcoat => {
-            c.polygon_lit(
-                &[(CX - 3, t), (CX + 2, t), (CX + 2, r.waist + 1), (CX - 3, r.waist + 1)],
+            // A vest: two panels to a point below the waist, a V at the neck.
+            c.polygon_cloth(
+                &[
+                    (CX - 4, t),
+                    (CX - 1, t + 3),
+                    (CX, t + 3),
+                    (CX + 3, t),
+                    (CX + 3, r.waist + 1),
+                    (CX, r.waist + 3),
+                    (CX - 1, r.waist + 3),
+                    (CX - 4, r.waist + 1),
+                ],
                 f,
                 60,
                 Z::flat(relief::FRONT),
             );
             for k in 0..3 {
-                c.dot(CX - 1, t + 1 + 2 * k, Ramp::Brass.at(Tone::Light), relief::FRONT + 1);
+                c.dot(CX - 1, t + 4 + 2 * k, Ramp::Brass.at(Tone::Light), relief::FRONT + 1);
             }
         }
         Front::Braces => {
@@ -338,57 +497,96 @@ fn front_down(c: &mut Canvas, d: &Dress, r: &Rig) {
     }
 }
 
+/// An apron: a bib on the chest, a panel from the waist that widens to its hem, the ties at the
+/// waist and the neck strap.
 fn apron_down(c: &mut Canvas, f: Ramp, r: &Rig) {
     let (t, wy, hem) = (r.top, r.waist, r.hem);
-    c.polygon_lit(
-        &[(CX - 3, t + 1), (CX + 2, t + 1), (CX + 2, wy), (CX + 4, hem - 1), (CX - 5, hem - 1), (CX - 3, wy)],
-        f,
-        50,
-        Z::flat(relief::FRONT),
-    );
-    c.hline(CX - 4, CX + 3, wy, f.at(Tone::Shade), relief::FRONT + 1);
+    let z = relief::FRONT;
+    c.polygon_cloth(&[(CX - 3, t + 2), (CX + 2, t + 2), (CX + 2, wy), (CX - 3, wy)], f, 50, Z::flat(z));
+    c.polygon_cloth(&[(CX - 4, wy), (CX + 3, wy), (CX + 5, hem - 1), (CX - 6, hem - 1)], f, 50, Z::flat(z));
+    c.hline(CX - 5, CX + 4, wy, f.at(Tone::Shade), z + 1);
+    for x in [CX - 3, CX + 2] {
+        c.vline(x, t, t + 1, f.at(Tone::Shade), z);
+    }
+    c.vline(CX, wy + 2, hem - 2, f.at(Tone::Shade), z + 1);
 }
 
-/// An arm from the front: a sleeve 4 px wide from the shoulder to the wrist, then a mitt of a
-/// hand. `outer_left`: the arm on the screen's left.
-fn arm_front(c: &mut Canvas, d: &Dress, r: &Rig, x0: i32, hand: i32, outer_left: bool) {
+/// The shawl's wool: the hat's ramp when she wears no hat but names one, else the front's.
+fn shawl_ramp(d: &Dress) -> Ramp {
+    if d.look.head.hat == Hat::None && d.look.head.hat_ramp.is_some() { d.hat } else { d.front }
+}
+
+/// A shawl over the shoulders, down to a point at the back or over the chest.
+fn shawl(c: &mut Canvas, d: &Dress, r: &Rig, facing_us: bool) {
+    let (s0, s1) = span(r.p.shoulder_w + 6);
+    let t = r.top - 1;
+    let point = if facing_us { r.waist } else { r.waist + 2 };
+    let w = shawl_ramp(d);
+    c.polygon_cloth(
+        &[
+            (s0 + 2, t),
+            (s1 - 2, t),
+            (s1, t + 3),
+            (s1 - 1, t + 5),
+            (CX, point),
+            (CX - 1, point),
+            (s0 + 1, t + 5),
+            (s0, t + 3),
+        ],
+        w,
+        90,
+        Z::flat(relief::FRONT + 2),
+    );
+    for x in [CX - 4, CX + 3] {
+        c.vline(x, t + 3, point - 3, w.at(Tone::Shade), relief::FRONT + 2);
+    }
+}
+
+fn arms_front(c: &mut Canvas, d: &Dress, r: &Rig) {
+    let (s0, s1) = span(r.p.shoulder_w);
+    let aw = r.arm_w();
+    for i in 0..2 {
+        let spread = r.pose.spread[i];
+        let hand_y = r.p.arm_y + r.pose.bob - i32::from(r.pose.breathe) + r.p.arm_l - 1 + r.pose.arm[i] - spread / 2;
+        let (x0, out) = if i == 0 { (s0 - aw + 1, -spread) } else { (s1, spread) };
+        arm_front(c, d, r, x0, out, hand_y, i == 0);
+    }
+}
+
+/// An arm from the front: a sleeve `arm_w` px wide from the shoulder to the wrist, lit on its
+/// light side, a cuff, then a mitt of a hand. `out` swings the hand outward; `outer_left`: the
+/// arm on the screen's left.
+fn arm_front(c: &mut Canvas, d: &Dress, r: &Rig, x0: i32, out: i32, hand_y: i32, outer_left: bool) {
+    let aw = r.arm_w();
     let top = r.p.arm_y + r.pose.bob - i32::from(r.pose.breathe);
-    let wrist = hand - 3;
+    let wrist = hand_y - 3;
     // The sleeve leans out from the shoulder: its top a pixel toward the body.
     let a = if outer_left { x0 + 1 } else { x0 - 1 };
-    c.polygon_lit(&[(a, top), (a + 3, top), (x0 + 3, wrist), (x0, wrist)], d.coat, 80, relief::ARM);
-    c.hline(x0, x0 + 3, wrist, d.coat.at(Tone::Shade), relief::ARM.hi);
-    c.ellipse(Rect::new(x0, wrist + 1, 4, 4), d.skin.at(Tone::Base), relief::ARM.hi);
+    let (bx, z) = (x0 + out, relief::ARM);
+    c.polygon_cloth(&[(a, top), (a + aw - 1, top), (bx + aw - 1, wrist), (bx, wrist)], d.coat, 80, z);
+    // The cuff, turned back and catching the light.
+    c.hline(bx, bx + aw - 1, wrist, d.coat.at(Tone::Light), z.hi);
+    c.dot(bx + aw - 1, wrist, d.coat.at(Tone::Shade), z.hi);
+    hand(c, d, bx + (aw - 4) / 2, wrist + 1, z.hi);
 }
 
 fn neck(c: &mut Canvas, d: &Dress, r: &Rig) {
     let y = r.skull.bottom() - 2;
-    let h = neck_w(r) / 2;
-    c.polygon_lit(&[(CX - h, y), (CX + h - 1, y), (CX + h - 1, r.top), (CX - h, r.top)], d.skin, 60, Z::new(1, 2));
+    let h = r.neck_w() / 2;
+    c.polygon_cloth(&[(CX - h, y), (CX + h - 1, y), (CX + h - 1, r.top), (CX - h, r.top)], d.skin, 60, Z::new(1, 2));
     // Under the chin.
     c.shade(Rect::new(CX - h - 1, y, 2 * h + 2, 5), d.skin, 2);
-}
-
-/// The eyes, each two px square with a glint in its top-left, the light's side.
-fn eyes(c: &mut Canvas, d: &Dress, xs: &[i32], ey: i32, z: u8) {
-    c.set_emitting(d.eye_emits);
-    for &x in xs {
-        c.fill_rect(Rect::new(x, ey, 2, 2), d.eye, z);
-        if !d.eye_emits {
-            c.dot(x, ey, palette::letter('w').unwrap_or(Ix::BEVEL_LIGHT), z);
-        }
-    }
-    c.set_emitting(false);
 }
 
 fn face_down(c: &mut Canvas, d: &Dress, r: &Rig) {
     let ey = r.eye_y();
     let z = relief::SKULL.lo;
-    // The fringe's shade across the brow.
-    c.shade(Rect::new(r.skull.x + 1, r.brow_y() - 2, r.skull.w - 2, 4), d.skin, 1);
-    eyes(c, d, &[CX - 5, CX + 3], ey, z);
-    // A small mouth (skin's deep, which the skin's own tones make its mid).
-    c.hline(CX - 1, CX, ey + 4, d.skin.at(Tone::Deep), z);
+    face_tones(c, d, r);
+    eyes(c, d, &[(CX - 5, true), (CX + 3, false)], ey, z);
+    // The nose: its shadow on the far side; the mouth under it.
+    c.vline(CX, ey + 2, ey + 3, d.skin.at(Tone::Mid), z);
+    c.dot(CX - 1, ey + 3, d.skin.at(Tone::Lift), z);
+    c.hline(CX - 1, CX, ey + 5, d.skin.at(Tone::Shade), z);
     match d.look.head.face {
         Face::Glasses => {
             for x in [CX - 6, CX + 2] {
@@ -399,17 +597,17 @@ fn face_down(c: &mut Canvas, d: &Dress, r: &Rig) {
         }
         Face::Beard => {
             let s = r.skull;
-            c.polygon_lit(
+            c.polygon_cloth(
                 &[(CX - 5, ey + 3), (CX + 4, ey + 3), (CX + 3, s.bottom()), (CX - 4, s.bottom())],
                 d.hair,
                 90,
                 Z::flat(z),
             );
-            c.hline(CX - 1, CX, ey + 3, d.skin.at(Tone::Deep), z + 1);
+            c.hline(CX - 1, CX, ey + 4, d.skin.at(Tone::Shade), z + 1);
             hair::tame(c, d.hair, Tone::Shade, Tone::Lift);
         }
         Face::Grim => {
-            c.hline(CX - 2, CX + 1, ey + 4, d.skin.at(Tone::Deep), z);
+            c.hline(CX - 2, CX + 1, ey + 5, d.skin.at(Tone::Shade), z);
             c.hline(CX - 6, CX - 3, ey - 1, d.hair.at(Tone::Deep), z);
             c.hline(CX + 2, CX + 5, ey - 1, d.hair.at(Tone::Deep), z);
         }
@@ -417,8 +615,8 @@ fn face_down(c: &mut Canvas, d: &Dress, r: &Rig) {
     }
 }
 
-/// The head: a lit skull and, under it, a flat jaw a little squarer than an egg (forward of the
-/// skull's middle in profile), so a face sits on its neck and not on a stalk.
+/// The head: a lit skull and, under it, a jaw a little squarer than an egg (in profile forward
+/// of the skull's middle, the back of the skull rounding over the nape).
 fn head(c: &mut Canvas, d: &Dress, r: &Rig, profile: bool) {
     let s = r.skull;
     c.ellipse_lit(s, d.skin, relief::SKULL);
@@ -457,11 +655,8 @@ fn hat_down(c: &mut Canvas, d: &Dress, r: &Rig) {
         }
         Hat::Brim | Hat::Panama => {
             c.ellipse_lit(Rect::new(s.x + 1, s.y - 5, s.w - 2, 8), h, z);
-            if d.look.head.hat == Hat::Panama {
-                c.hline(s.x + 1, s.right() - 2, s.y + 1, d.coat.at(Tone::Shade), z.hi);
-            } else {
-                c.hline(s.x + 1, s.right() - 2, s.y + 1, h.at(Tone::Shade), z.hi);
-            }
+            let band = if d.look.head.hat == Hat::Panama { d.coat } else { h };
+            c.hline(s.x + 1, s.right() - 2, s.y + 1, band.at(Tone::Shade), z.hi);
             c.ellipse_lit(Rect::new(s.x - 4, s.y + 1, s.w + 8, 4), h, Z::new(z.hi, z.hi + 1));
             c.shade(Rect::new(s.x, s.y + 3, s.w, 4), d.skin, 1);
         }
@@ -498,11 +693,7 @@ fn hat_down(c: &mut Canvas, d: &Dress, r: &Rig) {
 // From behind
 
 fn up(c: &mut Canvas, d: &Dress, r: &Rig) {
-    for i in 0..2 {
-        let x0 = if i == 0 { CX - 5 } else { CX + 1 };
-        let foot = AY + r.pose.leg[i] - r.pose.lift[i];
-        leg_front(c, d, r, x0, foot);
-    }
+    legs_front(c, d, r);
     coat_front(c, d, r, false);
     if d.look.body.pack {
         let t = r.top;
@@ -522,17 +713,9 @@ fn up(c: &mut Canvas, d: &Dress, r: &Rig) {
             // From behind: no badge, no peak.
             let s = r.skull;
             let brow = r.brow_y();
+            let peaked = i32::from(d.look.head.hat == Hat::Peaked);
             c.set_clip(Some(Rect::new(0, 0, 32, brow - 1)));
-            c.ellipse_lit(
-                Rect::new(
-                    s.x - i32::from(d.look.head.hat == Hat::Peaked),
-                    s.y - 7,
-                    s.w + 2 * i32::from(d.look.head.hat == Hat::Peaked),
-                    14,
-                ),
-                d.hat,
-                relief::HAT,
-            );
+            c.ellipse_lit(Rect::new(s.x - peaked, s.y - 7, s.w + 2 * peaked, 14), d.hat, relief::HAT);
             c.set_clip(None);
             c.rect_round(
                 Rect::new(s.x - 1, brow - 2, s.w + 2, 2),
@@ -544,6 +727,9 @@ fn up(c: &mut Canvas, d: &Dress, r: &Rig) {
         }
         _ => hat_down(c, d, r),
     }
+    if d.look.extras.contains(&Extra::Shawl) {
+        shawl(c, d, r, false);
+    }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -553,7 +739,7 @@ fn side(c: &mut Canvas, d: &Dress, r: &Rig) {
     let t = r.top;
     let shoulder = (CX - 1 + r.lean, r.p.arm_y + r.pose.bob - i32::from(r.pose.breathe));
     // The far arm and leg, behind everything.
-    arm_side(c, d, r, shoulder, r.pose.arm[1], relief::FAR);
+    arm_side(c, d, r, shoulder, r.pose.arm[1], true);
     leg_side(c, d, r, r.pose.leg[1], r.pose.lift[1], true);
     hair::back_side(c, d, r);
     if d.look.body.pack {
@@ -570,7 +756,16 @@ fn side(c: &mut Canvas, d: &Dress, r: &Rig) {
     face_side(c, d, r);
     hair::side(c, d, r);
     hat_side(c, d, r);
-    arm_side(c, d, r, shoulder, r.pose.arm[0], relief::ARM);
+    if d.look.extras.contains(&Extra::Shawl) {
+        let (x0, x1) = (CX - r.side_w() / 2 - 2 + r.lean, CX + r.side_w() / 2 + 1 + r.lean);
+        c.polygon_cloth(
+            &[(x0 + 2, t - 1), (x1 - 1, t - 1), (x1 + 1, t + 4), (x0 - 1, r.waist + 1), (x0, t + 2)],
+            shawl_ramp(d),
+            90,
+            Z::flat(relief::FRONT + 2),
+        );
+    }
+    arm_side(c, d, r, shoulder, r.pose.arm[0], false);
 }
 
 /// A leg seen from the side, hip to foot, the boot pointing east.
@@ -582,7 +777,7 @@ fn leg_side(c: &mut Canvas, d: &Dress, r: &Rig, swing: i32, lift: i32, far: bool
     let rows = boot_rows(d);
     let top = r.hip - 1;
     let z = if far { relief::FAR } else { relief::LEG };
-    c.polygon_lit(&[(hx, top), (hx + 3, top), (fx + 3, foot - rows), (fx, foot - rows)], legs, 70, z);
+    c.polygon_cloth(&[(hx, top), (hx + 3, top), (fx + 3, foot - rows), (fx, foot - rows)], legs, 70, z);
     let boot = if d.look.body.boots == Boots::Bare { d.skin } else { d.boots };
     c.rect_round(Rect::new(fx, foot - rows + 1, 5, rows), boot, 1, 1, if far { relief::FAR } else { relief::BOOT });
     if far {
@@ -593,39 +788,55 @@ fn leg_side(c: &mut Canvas, d: &Dress, r: &Rig, swing: i32, lift: i32, far: bool
 }
 
 fn coat_side(c: &mut Canvas, d: &Dress, r: &Rig) {
-    let w = side_w(r);
+    let coat = d.look.body.coat;
+    let w = r.side_w();
     let x0 = CX - w / 2 - 1;
     let x1 = x0 + w - 1;
-    let fl = flare(d.look.body.coat);
+    let fl = flare(coat);
     let (t, wy, hem, l) = (r.top, r.waist, r.hem, r.lean);
     // The hem swings behind the walker a frame late.
     let tr = r.trail.0.min(0);
     skirt(c, d, r, x0, x1);
+    // The front of the body: a chest on the broad, a belly on the stout, a bust over a bodice.
+    let (chest, belly) = match r.build {
+        Build::Broad => (1, 0),
+        Build::Stout => (0, 3),
+        _ if skirted(coat) => (1, -1),
+        _ => (0, 0),
+    };
     let pts = [
         (x0 + 2 + l, t),
         (x1 - 2 + l, t),
         (x1 + l, t + 2),
-        (x1, wy),
+        (x1 + chest + l, t + 4),
+        (x1 + belly, wy),
         (x1 + fl + tr, hem),
         (x0 - fl + tr, hem),
         (x0, wy),
         (x0 + l, t + 2),
     ];
-    c.polygon_lit(&pts, d.coat, 80, relief::COAT);
-    fold_lines(c, d.coat, x0 - fl + tr, x1 + fl + tr, hem, (hem - wy - 1).min(4), r.pose.phase);
-    c.shade(Rect::new(CX - 3 + l, t - 2, 8, 5), d.coat, 1);
-    if matches!(d.look.body.coat, Coat::Dress | Coat::Apron | Coat::Gown | Coat::Nightdress) {
-        c.hline(x0, x1, wy, d.coat.at(Tone::Shade), relief::COAT.hi);
+    c.polygon_cloth(&pts, d.coat, 80, relief::COAT);
+    if hem - wy > 3 {
+        hem_folds(c, d.coat, x0 - fl + tr + 1, x1 + fl + tr - 1, hem, (hem - wy - 2).min(5), r.pose.phase);
     }
-    if d.look.body.coat == Coat::Coat {
-        c.rect_round(Rect::new(x0, wy, w, 2), Ramp::Leather, 1, 0, Z::flat(relief::COAT.hi + 1));
+    c.shade(Rect::new(CX - 3 + l, t - 2, 8, 4), d.coat, 1);
+    let z = relief::COAT.hi;
+    if skirted(coat) {
+        c.hline(x0, x1 + belly, wy, d.coat.at(Tone::Shade), z);
+    }
+    if matches!(coat, Coat::Coat | Coat::Overcoat | Coat::Jacket | Coat::Canvas) {
+        // The lapel along the front edge, lit.
+        c.vline(x1 - 1 + l, t + 1, t + 4, d.coat.at(Tone::Lift), z + 1);
+    }
+    if matches!(coat, Coat::Coat | Coat::Canvas) {
+        belt(c, x0, x1 + belly, wy, x1 + belly - 2, z + 2);
     }
 }
 
 fn front_side(c: &mut Canvas, d: &Dress, r: &Rig) {
     let f = d.front;
     let t = r.top;
-    let w = side_w(r);
+    let w = r.side_w();
     let x1 = CX - w / 2 - 1 + w - 1 + r.lean;
     match d.look.body.front {
         Front::Scarf => {
@@ -633,7 +844,7 @@ fn front_side(c: &mut Canvas, d: &Dress, r: &Rig) {
             // The tail streams back a frame behind the lean.
             let sx = r.trail.0.min(0) - i32::from(r.pose.lean > 0);
             let sy = -r.trail.1;
-            c.polygon_lit(
+            c.polygon_cloth(
                 &[(x1 - 1, t + 1), (x1 + 1, t + 1), (x1 + 1 + sx, t + 6 + sy), (x1 - 1 + sx, t + 6 + sy)],
                 f,
                 60,
@@ -641,7 +852,7 @@ fn front_side(c: &mut Canvas, d: &Dress, r: &Rig) {
             );
         }
         Front::Shirt | Front::Tie | Front::Waistcoat => {
-            c.polygon_lit(&[(x1 - 2, t), (x1, t), (x1, t + 4), (x1 - 1, t + 4)], f, 40, Z::flat(relief::FRONT));
+            c.polygon_cloth(&[(x1 - 2, t), (x1, t), (x1, t + 4), (x1 - 1, t + 4)], f, 40, Z::flat(relief::FRONT));
         }
         Front::Braces => c.vline(CX + r.lean, t, r.hip - 1, f.at(Tone::Base), relief::FRONT),
         Front::Apron => apron_side(c, f, r, x1),
@@ -653,38 +864,58 @@ fn front_side(c: &mut Canvas, d: &Dress, r: &Rig) {
 }
 
 fn apron_side(c: &mut Canvas, f: Ramp, r: &Rig, x1: i32) {
-    c.polygon_lit(
-        &[(x1 - 1, r.top + 1), (x1, r.top + 1), (x1 + 1 - r.lean, r.hem - 1), (x1 - 2 - r.lean, r.hem - 1)],
+    let belly = if r.build == Build::Stout { 3 } else { 0 };
+    c.polygon_cloth(
+        &[
+            (x1 - 1, r.top + 2),
+            (x1, r.top + 2),
+            (x1 + belly, r.waist),
+            (x1 + 2 - r.lean, r.hem - 1),
+            (x1 - 2 - r.lean, r.hem - 1),
+        ],
         f,
         30,
         Z::flat(relief::FRONT),
     );
-    c.hline(CX - 3, x1 - r.lean, r.waist, f.at(Tone::Shade), relief::FRONT + 1);
+    c.hline(CX - 3, x1 + belly - r.lean, r.waist, f.at(Tone::Shade), relief::FRONT + 1);
 }
 
-/// An arm from the side: shoulder to hand, the hand `swing` px along the facing.
-fn arm_side(c: &mut Canvas, d: &Dress, r: &Rig, shoulder: (i32, i32), swing: i32, z: Z) {
+/// An arm from the side: the upper arm from the shoulder to an elbow, the forearm on to the
+/// hand, `swing` px along the facing; the elbow's crease in shade and a cuff at the wrist.
+fn arm_side(c: &mut Canvas, d: &Dress, r: &Rig, shoulder: (i32, i32), swing: i32, far: bool) {
     let (sx, sy) = shoulder;
-    let hand = (sx + swing, sy + r.p.arm_l - 4);
-    c.polygon_lit(&[(sx - 1, sy), (sx + 2, sy), (hand.0 + 2, hand.1), (hand.0 - 1, hand.1)], d.coat, 80, z);
-    c.hline(hand.0 - 1, hand.0 + 2, hand.1, d.coat.at(Tone::Shade), z.hi);
-    c.ellipse(Rect::new(hand.0 - 1, hand.1, 4, 4), d.skin.at(Tone::Base), z.hi);
-    if z == relief::FAR {
-        c.shade(Rect::new(hand.0 - 3, sy, 8, hand.1 - sy + 4), d.coat, 1);
+    let z = if far { relief::FAR } else { relief::ARM };
+    let hand_y = sy + r.p.arm_l - 4;
+    let elbow = (sx + swing / 3 - i32::from(swing > 1), sy + (hand_y - sy) / 2);
+    let hx = sx + swing;
+    c.polygon_cloth(&[(sx - 1, sy), (sx + 2, sy), (elbow.0 + 2, elbow.1), (elbow.0 - 1, elbow.1)], d.coat, 80, z);
+    c.polygon_cloth(
+        &[(elbow.0 - 1, elbow.1), (elbow.0 + 2, elbow.1), (hx + 2, hand_y), (hx - 1, hand_y)],
+        d.coat,
+        80,
+        z,
+    );
+    c.dot(elbow.0 - 1, elbow.1, d.coat.at(Tone::Shade), z.hi);
+    c.hline(hx - 1, hx + 2, hand_y, d.coat.at(Tone::Light), z.hi);
+    hand(c, d, hx - 1, hand_y + 1, z.hi);
+    if far {
+        c.shade(Rect::new(hx - 3, sy, 8, hand_y - sy + 4), d.coat, 1);
+        c.shade(Rect::new(hx - 3, hand_y, 8, 5), d.skin, 1);
     }
 }
 
 fn neck_side(c: &mut Canvas, d: &Dress, r: &Rig) {
     let y = r.skull.bottom() - 2;
-    let l = r.lean;
-    let w = neck_w(r);
-    c.polygon_lit(
+    // The neck leaves the skull behind the jaw, not under its middle.
+    let l = r.lean - 2;
+    let w = r.neck_w();
+    c.polygon_cloth(
         &[(CX - 1 + l, y), (CX + w - 2 + l, y), (CX + w - 2 + l, r.top), (CX - 1 + l, r.top)],
         d.skin,
         60,
         Z::new(1, 2),
     );
-    c.shade(Rect::new(CX - 2 + l, y, 6, 5), d.skin, 2);
+    c.shade(Rect::new(CX - 2 + l, y, w + 2, 5), d.skin, 2);
 }
 
 fn face_side(c: &mut Canvas, d: &Dress, r: &Rig) {
@@ -692,12 +923,27 @@ fn face_side(c: &mut Canvas, d: &Dress, r: &Rig) {
     let ey = r.eye_y();
     let z = relief::SKULL.lo;
     let fx = s.right() - 4;
-    c.shade(Rect::new(s.x + 3, r.brow_y() - 2, s.w - 3, 4), d.skin, 1);
-    eyes(c, d, &[fx], ey, z);
-    // The nose, two px past the skull; a cheek; the mouth's corner.
-    c.vline(s.right(), ey + 2, ey + 3, d.skin.at(Tone::Base), z);
-    c.hline(fx - 2, fx - 1, ey + 2, d.skin.at(Tone::Mid), z);
-    c.dot(s.right() - 2, ey + 4, d.skin.at(Tone::Deep), z);
+    let skin = d.skin;
+    // The face in profile: the brow in the fringe's shade, a lit cheek, the jaw and the back of
+    // the face toward the ear in shade.
+    for y in s.y..s.bottom() {
+        for x in s.x..=s.right() {
+            let shade = (y == r.brow_y() + 1 && x >= s.x + 4) || y >= s.bottom() - 2 || (x <= s.x + 5 && y >= ey);
+            let t = if shade {
+                Tone::Mid
+            } else if (x == fx - 2 || x == fx - 1) && y == ey + 2 {
+                Tone::Lift
+            } else {
+                Tone::Base
+            };
+            c.tint(x, y, skin, t);
+        }
+    }
+    eyes(c, d, &[(fx, false)], ey, z);
+    // The nose, two px past the skull with its shadow under it; the mouth's corner.
+    c.vline(s.right(), ey + 2, ey + 3, skin.at(Tone::Base), z);
+    c.dot(s.right() - 1, ey + 4, skin.at(Tone::Mid), z);
+    c.dot(s.right() - 2, ey + 5, skin.at(Tone::Shade), z);
     match d.look.head.face {
         Face::Glasses => {
             c.hline(fx - 1, fx + 2, ey - 1, Ramp::Iron.at(Tone::Shade), z);
@@ -705,7 +951,7 @@ fn face_side(c: &mut Canvas, d: &Dress, r: &Rig) {
             c.hline(s.x + 6, fx - 2, ey, Ramp::Iron.at(Tone::Shade), z);
         }
         Face::Beard => {
-            c.polygon_lit(
+            c.polygon_cloth(
                 &[(fx - 3, ey + 3), (s.right() - 1, ey + 3), (s.right() - 2, s.bottom()), (fx - 3, s.bottom())],
                 d.hair,
                 90,

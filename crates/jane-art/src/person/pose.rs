@@ -37,11 +37,22 @@ pub struct Pose {
     pub breathe: bool,
     /// The `folds` phase.
     pub phase: u16,
+    /// Hands flung out from the body, px outward (and half that up): a body fallen (`down`).
+    pub spread: [i32; 2],
+    /// Feet splayed out from the body, px outward (`down`).
+    pub splay: [i32; 2],
 }
 
 const fn pose(bob: i32, arm: [i32; 2], leg: [i32; 2], lift: [i32; 2], lean: i32) -> Pose {
-    Pose { bob, arm, leg, lift, lean, lag: (0, 0), breathe: false, phase: 0 }
+    Pose { bob, arm, leg, lift, lean, lag: (0, 0), breathe: false, phase: 0, spread: [0, 0], splay: [0, 0] }
 }
+
+/// The fallen, before they are laid down (ART.md §4.1): seen from above on her back, one arm
+/// flung out, the other bent at her side, a knee drawn up and the other leg out.
+pub const FALLEN: [Pose; 2] = [
+    Pose { spread: [4, 1], splay: [1, 2], lift: [2, 0], ..pose(0, [0, 0], [0, 0], [0, 0], 0) },
+    Pose { spread: [1, 4], splay: [2, 0], lift: [0, 3], ..pose(0, [0, 0], [0, 0], [0, 0], 0) },
+];
 
 /// A cycle with each frame's lag taken from the frame before it (the last before the first),
 /// and the folds' phase a sixth of a turn a frame.

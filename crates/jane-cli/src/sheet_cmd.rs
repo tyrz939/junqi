@@ -19,6 +19,8 @@ pub const USAGE: &str = "  sheet layers <what> [--frame F] [--out DIR]
                                       a look's frames, every cycle, seat and variant, and the dead
   sheet close <id> [frame ...] [--scale N] [--out DIR]
                                       a few frames of a look up close (down, side, up at 8x)
+  sheet silhouettes <id> ... [--out DIR]
+                                      looks' standing frames filled black, then as drawn
   sheet units [--out DIR]             every look standing and dead, at 1x and 2x
   sheet person --grid [--out DIR]     every build by every hair and coat
   sheet all [--out DIR]               every sheet above, for every sprite
@@ -109,6 +111,13 @@ pub fn run(args: &[String]) -> Result<(), String> {
             let scale =
                 args.iter().position(|a| a == "--scale").and_then(|i| args.get(i + 1)?.parse().ok()).unwrap_or(8);
             write(&out, &format!("close-{what}"), &sheet_person::closeup(&sets[0], &ids, &font, scale))?;
+        }
+        Some("silhouettes") => {
+            let mut sets = Vec::new();
+            for name in args[1..].iter().take_while(|a| !a.starts_with("--")) {
+                sets.extend(looks::render(name)?.into_iter().filter(|r| r.seat == 0 && r.variant == 0));
+            }
+            write(&out, "silhouettes", &sheet_person::silhouettes(&sets, &font))?;
         }
         Some("units") => write(&out, "units", &sheet_person::units(&looks::all()?, &font))?,
         Some("person") if args.iter().any(|a| a == "--grid") => {

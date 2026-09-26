@@ -782,6 +782,20 @@ impl Canvas {
     /// [`Canvas::ellipse_lit`]. Height runs from `z.lo` on the bottom row to `z.hi` on the top,
     /// 1 px more down the middle. Bodies, limbs, skirts, trunks.
     pub fn polygon_lit(&mut self, pts: &[(i32, i32)], ramp: Ramp, curve: i32, z: Z) {
+        self.polygon_shaded(pts, ramp, curve, z, None);
+    }
+
+    /// [`Canvas::polygon_lit`]'s shape, normals and height, with cloth's three calm tones
+    /// instead of the light's bands: along each row, the light's side (the first two px) is
+    /// `light`, the far side (the last three tenths, two px at least) is `shade`, and the rest
+    /// is `base`; the second row, where a shoulder turns up to the light, is `lift` but for its
+    /// shaded end. Large quiet areas, a lit edge and a clear shadow side: what the painter adds
+    /// (folds, seams, a belt) reads against them.
+    pub fn polygon_cloth(&mut self, pts: &[(i32, i32)], ramp: Ramp, curve: i32, z: Z) {
+        self.polygon_shaded(pts, ramp, curve, z, Some(()));
+    }
+
+    fn polygon_shaded(&mut self, pts: &[(i32, i32)], ramp: Ramp, curve: i32, z: Z, cloth: Option<()>) {
         let mut mask = Canvas::new(self.w, self.h);
         mask.polyline_fill(pts, Ix::INK, 1);
         self.begin();
@@ -835,7 +849,22 @@ impl Canvas {
                     let u = if width <= 0 { 0 } else { ((2 * px - centre) * curve / width).clamp(-curve, curve) };
                     let n = normal(u, ny);
                     let [nx, nyy, nz] = decode(n);
-                    let tone = Tone::ALL[band(lambert([nx, nyy, nz]))];
+                    let tone = if cloth.is_some() {
+                        let (i, j) = (px - xl, xr - px);
+                        let dark = (span * 3 / 10).max(2);
+                        let lit = if span >= 6 { 2 } else { 1 };
+                        if j < dark && span >= 3 {
+                            Tone::Shade
+                        } else if i < lit {
+                            Tone::Light
+                        } else if y == y0 + 1 {
+                            Tone::Lift
+                        } else {
+                            Tone::Base
+                        }
+                    } else {
+                        Tone::ALL[band(lambert([nx, nyy, nz]))]
+                    };
                     let bump = u8::from(span >= 4 && 2 * (px - xl) >= span / 2 && 2 * (px - xl) < span + span / 2);
                     self.put(px, y, ramp.at(tone), n, zr.saturating_add(bump));
                 }
