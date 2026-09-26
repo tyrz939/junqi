@@ -16,6 +16,7 @@
 //! 4. **Bloom** on what glows, a chain of halvings and a tent back up.
 //! 5. **Grade** per region and hour into the canvas, which `read_back` reads and `present`
 //!    upscales to the window by sharp bilinear.
+//! 6. **Ui**: the frame's `UiCmd`s over the graded canvas, unlit (`ui.rs`).
 
 // Canvas sizes, px counts and timestamp deltas become f32 and f64 for the GPU: all far below
 // the 2^23 a float holds exactly.
@@ -23,6 +24,7 @@
 
 mod gpu;
 pub mod prep;
+mod ui;
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU8, Ordering};
@@ -339,6 +341,9 @@ struct Targets {
     levels: Vec<wgpu::TextureView>,
     canvas_tex: wgpu::Texture,
     canvas_view: wgpu::TextureView,
+    /// The canvas as plain bytes (not sRGB): the Ui pass blends as soft does, in the stored
+    /// bytes, so a translucent panel reads the same on both.
+    canvas_raw: wgpu::TextureView,
     lights: wgpu::Buffer,
     tiles: wgpu::Buffer,
     tile_lights: wgpu::Buffer,
@@ -486,6 +491,8 @@ pub struct Wgpu {
     times: FrameTimes,
     frames: u32,
     describe: String,
+    /// The `Ui` pass (PRESENTATION.md §3.1).
+    ui: ui::UiPass,
 }
 
 impl Wgpu {
@@ -550,6 +557,7 @@ impl Wgpu {
         let chunk_buf = instance_buffer(device, "chunks", 128 * 16);
         let describe = format!("wgpu, {}", gpu.describe());
         let times = FrameTimes::new(stamps.is_some());
+        let ui = ui::UiPass::new(device, &gpu.queue);
         Wgpu {
             gpu,
             pipes,
@@ -569,6 +577,7 @@ impl Wgpu {
             times,
             frames: 0,
             describe,
+            ui,
         }
     }
 
@@ -711,8 +720,19 @@ impl Wgpu {
         let sizes: Vec<(u32, u32)> = (1..=BLOOM_LEVELS).map(|k| ((w >> k).max(1), (h >> k).max(1))).collect();
         let levels: Vec<wgpu::TextureView> =
             sizes.iter().map(|&(lw, lh)| view(texture(d, "bloom", (lw, lh, 1), HDR, rt))).collect();
-        let canvas_tex = texture(d, "canvas", (w, h, 1), ALBEDO, rt | wgpu::TextureUsages::COPY_SRC);
+        let canvas_tex = d.create_texture(&wgpu::TextureDescriptor {
+            label: Some("canvas"),
+            size: wgpu::Extent3d { width: w.max(1), height: h.max(1), depth_or_array_layers: 1 },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: ALBEDO,
+            usage: rt | wgpu::TextureUsages::COPY_SRC,
+            view_formats: &[ui::RAW],
+        });
         let canvas_view = canvas_tex.create_view(&wgpu::TextureViewDescriptor::default());
+        let canvas_raw =
+            canvas_tex.create_view(&wgpu::TextureViewDescriptor { format: Some(ui::RAW), ..Default::default() });
         let tiles_n = u64::from(w.div_ceil(TILE) * h.div_ceil(TILE));
         let storage = |label: &str, size: u64| {
             d.create_buffer(&wgpu::BufferDescriptor {
@@ -786,6 +806,7 @@ impl Wgpu {
             levels,
             canvas_tex,
             canvas_view,
+            canvas_raw,
             lights,
             tiles,
             tile_lights,
@@ -943,6 +964,9 @@ impl Backend for Wgpu {
             emissive: array_view(&emissive),
             height: array_view(&height),
         });
+        if let Some(a) = &self.atlas {
+            self.ui.atlas(&self.gpu.device, &a.albedo, &a.clut);
+        }
         self.gbuf_group();
     }
 
@@ -1111,6 +1135,7 @@ impl Backend for Wgpu {
         fullscreen(&mut enc, "grade", &t.canvas_view, clear, &self.pipes.grade, &t.grade, end);
         // The dispatch, the light, the bloom's halvings and tents, the grade.
         calls += 1 + 1 + (2 * BLOOM_LEVELS as u32 - 1) + 1;
+        calls += self.ui.encode(d, q, &mut enc, &t.canvas_raw, frame, canvas);
         if let Some(s) = stamps {
             s.resolve(&mut enc);
         }
