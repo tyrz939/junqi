@@ -19,12 +19,13 @@ fn the_header_reads_without_the_body() {
     assert_eq!(h.summary.zone, ZoneId::County);
     assert_eq!((h.summary.day, h.summary.hour), (0, 17));
     assert!(h.summary.hp.0 > 0 && h.summary.hp == h.summary.max_hp);
-    // The seed rebuilds the terrain, so tiles are never saved; but every unit and prop is saved
-    // whole, even untouched. With the county furnished (two thousand creatures, thousands of
-    // props) a fresh save is about 360 KB. ARCHITECTURE.md §3.5 budgets ~150 KB for a busy county:
-    // saving units and props as deltas from their blueprint spawn is the P4 follow-up that gets
-    // there. Until then this bound only catches a regression.
-    assert!(bytes.len() < 512 * 1024, "{} bytes", bytes.len());
+    // The seed rebuilds the terrain, so tiles are never saved; and a unit or prop still as its
+    // blueprint row made it is not saved either, nor the names the blueprints made (`save::Form`).
+    // So a fresh New Game saves her, the few woken round her and a few numbers: 347 bytes on this
+    // seed, where saving every unit and prop whole (with the county furnished, three thousand
+    // creatures and ten thousand props) made about 360 KB. ARCHITECTURE.md §3.5 budgets ~150 KB for
+    // a busy county; the bot's sessions hold what play adds (`jane-bot/tests/save_form.rs`).
+    assert!(bytes.len() < 2 * 1024, "{} bytes", bytes.len());
 }
 
 #[test]
@@ -36,7 +37,7 @@ fn garbage_and_foreign_saves_are_refused_without_a_panic() {
     // Another version.
     let mut v = bytes.clone();
     v[8] = v[8].wrapping_add(1);
-    assert!(matches!(decode_state(&v), Err(SaveError::Version(_) | SaveError::Decode(_))));
+    assert!(matches!(decode_state(&v, &common::bps()), Err(SaveError::Version(_) | SaveError::Decode(_))));
     // Other content: the header's hash is the pin.
     let (mut h, body) = read_header(&bytes).unwrap();
     h.content_hash ^= 1;
@@ -45,7 +46,7 @@ fn garbage_and_foreign_saves_are_refused_without_a_panic() {
     other.extend_from_slice(&(head.len() as u32).to_le_bytes());
     other.extend_from_slice(&head);
     other.extend_from_slice(body);
-    assert!(matches!(decode_state(&other), Err(SaveError::ContentDrift { .. })));
+    assert!(matches!(decode_state(&other, &common::bps()), Err(SaveError::ContentDrift { .. })));
 }
 
 #[test]

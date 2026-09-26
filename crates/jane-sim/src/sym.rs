@@ -73,6 +73,12 @@ impl SymTable {
         if i < self.base.len() { self.base[i] } else { self.tail.get(i - self.base.len()).map_or("?", String::as_str) }
     }
 
+    /// Whether `s` is what `name` interns to. A tail name is never a catalog name, so past the
+    /// catalog this is one string compare (the save asks it of every spawn it hashes).
+    pub fn is(&self, s: Sym, name: &str) -> bool {
+        if (s.0 as usize) < self.base.len() { self.find(name) == Some(s) } else { self.name(s) == name }
+    }
+
     /// Names beyond the catalog's.
     pub fn tail(&self) -> &[String] {
         &self.tail

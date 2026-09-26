@@ -137,7 +137,8 @@ PlayerState { seat, who, unit: UnitId, zone, last_mark: NameId, respawn_at: Opti
   travel: Option<TravelRequest>, connected, parked: Option<Box<Unit>>,
   assist: Option<Assisted { unit: UnitId, until: Tick }> /* the sticky unit, §5.4 */ }
 
-ZoneState { id, rng: Sfc32 /* this zone's combat, loot and fan dice */, units: Vec<Unit>, props: Vec<Prop>, drops, projectiles, grounds,
+ZoneState { id, rng: Sfc32 /* this zone's combat, loot and fan dice */, spawned: SpawnBase { unit, prop, tick } /* how its spawns were numbered, and when: what the save compares with, §3.5 */,
+  units: Vec<Unit>, props: Vec<Prop>, drops, projectiles, grounds,
   triggers: TriggerBits { fired: BitVec, inside: BitVec }, tile_deltas: BTreeMap<CellIx, Tile> /* compacted */,
   fog: Box<[u32]> /* fixed size */, pending_fill: Vec<Fill>, sleeping_due: Vec<(Tick, UnitId)>,
   wetness: [u8; 3] /* the rain ramps, one per region, §4.6 */, pressure: Vec<u16> /* per area, in the blueprint's area order, §4.6 */,
@@ -181,15 +182,25 @@ The client turns move and aim into `(Angle, magnitude)` with whatever arithmetic
 
 ### 3.5 Save
 
-serde + `postcard` (varints, canonical) + an `lz4_flex` block, its size prepended (the block format: the frame format's checksum would pull in a second hash crate). Layout: `JANE`, a `u32` header length, the postcard header (`save_version: u16`, `content_hash: u64`, `build`, and a summary: zone, day, hour, hp, max hp) readable without decoding the body, then the body. Core types serialize through `jane-core`'s `serde` feature, which only the sim turns on; a `Tile` is saved as its id. About 150 KB compressed for a busy county.
+serde + `postcard` (varints, canonical) + an `lz4_flex` block, its size prepended (the block format: the frame format's checksum would pull in a second hash crate). Layout: `JANE`, a `u32` header length, the postcard header (`save_version: u16`, `content_hash: u64`, `build`, and a summary: zone, day, hour, hp, max hp) readable without decoding the body, then the body. Core types serialize through `jane-core`'s `serde` feature, which only the sim turns on; a `Tile` is saved as its id.
 
-**Content pin.** Same `content_hash`: load. Different: a typed `SaveMigration` chain if one exists, else **refuse** in release. In dev, `--allow-content-drift` remaps the `Sym` tail by string and drops gone ids with a report. Migrations are Rust functions over typed previous structs, kept twelve months. `Sym` tails are stored as strings (readable, a few KB).
+**The body is the state as it differs from what its seed builds** (`save::Form`). `GameState` and `ZoneState` are not `Serialize`: the form borrows the state and the seed's blueprints and is the only way either is encoded, so nothing encodes the state another way by mistake. It is the state's fields in the state's order, destructured whole both ways (a field added to the state that the form forgets does not compile), but for what the blueprints rebuild:
+
+- **Tiles**: `tile_deltas` only, as ever.
+- **Units and props** (`Spawns`): `ZoneState.spawned` records how the zone numbered its blueprint's spawns and when (row `i` became unit `unit + 1 + i` and prop `prop + 1 + i`, at `tick`), and `zone::spawn_unit` and `zone::spawn_prop` are the only makers of a spawn, at New Game and on a load alike. A spawn still exactly as its row made it is not stored; one changed in any field is stored whole (a field-level delta was not worth its code: what play touches is a few hundred rows); a row whose spawn is gone (despawned, or walked off to another zone) is a tombstone, its row index; one made at runtime (a consequence's, the console's, a seat's body) or come from elsewhere is stored whole. Decoding rebuilds every row neither removed nor stored and merges the stored in by id, so ids, order and everything a roll iterates come back exactly; a form that contradicts itself (a row both removed and stored, ids out of order) is refused (`SaveError::Malformed`).
+- **The name tail** (`SymRun`): the names a zone's `local_names` appended to the tail when it was made are stored as that zone; a name interned at runtime is stored as its string.
+
+**Canonical.** The form is a function of the state and the blueprints alone (the runs chosen greedily in zone order, the spawns compared field for field), so a state reached by playing and the same state reached by loading encode to the same bytes, and `decode(save(s)) == s` field for field (`jane-bot/tests/save_form.rs` holds this over bot sessions: New Game, the story with props used and looted, a crawl's dead, an ecology respawn, a consequence's tombstones and spawns, a zone left and entered again, a parked guest).
+
+**Size.** A fresh New Game is under 2 KB (it was ~360 KB with every spawn whole); five minutes of the story 7 to 11 KB; a crawl of the cellar ~1.5 KB. What grows it is what play touches: every unit the ring has woken is stored (its `awake` bit is state), and a woken unit stays changed. The ~150 KB budget for a busy county stands.
+
+**Content pin.** Same `content_hash`: load. Different: a typed `SaveMigration` chain if one exists, else **refuse** in release. In dev, `--allow-content-drift` remaps the `Sym` tail by string and drops gone ids with a report. Migrations are Rust functions over typed previous structs, kept twelve months. `Sym` tails are stored as strings (readable) where they are not a blueprint's own. A save leans on the seed's blueprints for its spawns as it already did for its tiles and its props' rows, so worldgen that builds a seed differently breaks its saves; the blueprint hash fixtures (§8) are what keep that from happening unnoticed.
 
 `from_save` closes the world, parks every seat but 0, rebuilds blueprints and runtimes for live zones, derives the props' awake bits from the saved `ring_key`, and neither runs the ring nor steps: the saved key may lag a seat by a block (the ring runs before movement), and the next step re-runs it exactly where the unbroken game would, so a solo save continues as if never saved. Slots are owned by `jane-app` and `jane serve`; the sim only encodes bytes.
 
 ### 3.6 Hash
 
-`Sim::hash() -> u64` is xxh3-64 of the postcard encoding streamed into the hasher: the same schema as the save, so saved and hashed cannot drift. `zone_hashes() -> [u64; ZONE_COUNT]` hashes each zone's encoding alone (a second pass, asked only after a mismatch) for desync localisation. Under 1 ms on a Pi 3, taken once a second.
+`Sim::hash() -> u64` is xxh3-64 of the save's body, the postcard encoding of the `Form` (§3.5), streamed into the hasher without building the bytes: the same schema as the save, so saved and hashed cannot drift, and because the form is canonical a loaded state hashes as the state it was saved from. `zone_hashes() -> [u64; ZONE_COUNT]` hashes each zone's `ZoneForm` alone (a second pass, asked only after a mismatch) for desync localisation. Most of the work is comparing each spawn with its row rebuilt (x86_64, a furnished county: ~0.5 ms, where hashing every spawn whole was ~1.2 ms); taken once a second, and every `HASH_EVERY` ticks on a tape. Under 1 ms on a Pi 3 is the target.
 
 ### 3.7 Journal and known facts
 
@@ -508,7 +519,7 @@ CLI: `jane replay verify | record | diff | trace`, `jane hash --seed N --frames 
 
 **Worldgen.** About 50 ms on x86_64 and about 0.5 s on a Pi 3 per county including validation (PORT §9.4 has the gates). **New Game builds all 13 zones up front** on an app thread behind a loading screen that shows the skeleton as it lands; the sim is handed finished blueprints and never builds mid-play. A blueprint disk cache (`~/.cache/jane/<content_hash>/<seed>-<zone>.bp`) is deferred to P9 and built only if the Pi misses its gate.
 
-**Hash and save.** About 1 ms per MB.
+**Hash and save.** About 1 ms per MB of body, which is now kilobytes (§3.5); the hash's cost is comparing each spawn with its row (§3.6).
 
 ## 10. Smells fixed / kept
 

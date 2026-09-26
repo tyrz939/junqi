@@ -1,6 +1,7 @@
 //! The authoritative state (ARCHITECTURE.md §3.2, §3.3): everything that can change a future
-//! tick, and nothing else. It is saved and hashed as one postcard encoding (§3.5, §3.6); what is
-//! derived from it lives in [`crate::runtime::ZoneRuntime`] and is rebuilt, never saved.
+//! tick, and nothing else. It is saved and hashed as one postcard encoding, the state as it
+//! differs from what its seed builds ([`crate::save::Form`], §3.5, §3.6); what is derived from it
+//! lives in [`crate::runtime::ZoneRuntime`] and is rebuilt, never saved.
 //!
 //! Iteration order is array order or `BTreeMap` order. No `usize` is stored.
 //!
@@ -32,7 +33,9 @@ use crate::tuning::{BAG_SLOTS, BAR_SLOTS, CRAFT_INPUTS};
 /// `Consequence` fact; `wetness`, `pressure`, `consequences_done` and `rumours` written).
 /// 6: a zone's rain ramp is one per region (`wetness: [u8; 3]`: the county is under three
 /// skies); the ecology steps every ten game minutes; a bed's night moves the tick too.
-pub const SAVE_VERSION: u16 = 7;
+/// 8: a zone's units and props are saved as what differs from its blueprint's spawn
+/// (`ZoneState::spawned`, `save::Form`), and the name tail as runs of blueprint locals.
+pub const SAVE_VERSION: u16 = 8;
 
 /// A fixed-size bit set (trigger bits, consequences done).
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -86,7 +89,9 @@ pub enum FlagKey {
 
 // --- the world ---------------------------------------------------------------------------
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+/// Not `Serialize`: the save and the hash encode it through [`crate::save::Form`], which needs
+/// the blueprints (§3.5), so nothing can encode it another way by mistake.
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct GameState {
     pub version: u16,
     pub seed: u32,
@@ -450,11 +455,16 @@ pub struct Assisted {
 
 // --- a zone ------------------------------------------------------------------------------
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+/// Not `Serialize`, as [`GameState`]: `save::ZoneForm` is its encoding.
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct ZoneState {
     pub id: ZoneId,
     /// This zone's combat, loot and fan dice (§4.4).
     pub rng: Sfc32,
+    /// How its blueprint's spawns were numbered, and when they were made: what the save
+    /// compares units and props with (§3.5). Set once, when the zone is made; nothing reads it
+    /// in a step.
+    pub spawned: SpawnBase,
     /// Ascending id: spawn appends, an arrival inserts in place, despawn removes in place.
     pub units: Vec<Unit>,
     /// Ascending id, never removed.
@@ -487,6 +497,19 @@ pub struct ZoneState {
     /// (kept up by combat or an order) can outlast the reason it woke until the ring runs
     /// again, so a rebuilt runtime that forgot it would run the ring when the live one did not.
     pub ring_key: RingKey,
+}
+
+/// A zone's spawns as it was made (`zone::create_zone_state`): blueprint unit row `i` became
+/// unit `unit + 1 + i` and prop row `i` prop `prop + 1 + i`, all at `tick`. With the blueprint
+/// and the names, that rebuilds every spawn exactly as it was first made (`zone::spawn_unit`,
+/// `zone::spawn_prop`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SpawnBase {
+    /// The unit counter before the first spawn took its id.
+    pub unit: u32,
+    /// The prop counter before the first spawn took its id.
+    pub prop: u32,
+    pub tick: Tick,
 }
 
 /// Per seat, the ring block it stood in (`None`: not in this zone).
