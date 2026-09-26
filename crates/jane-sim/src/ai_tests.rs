@@ -373,6 +373,7 @@ fn a_gathered_field_is_the_light_rule() {
             on,
             loot: LootState::AsSpawned,
             under_done: false,
+            night: crate::state::NightState::AsSpawned,
         });
     };
     put("brazier", 20, 20, true);

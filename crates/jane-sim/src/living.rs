@@ -49,7 +49,7 @@
 //! **Consequences.** A row fires once per save, ever: its bit in `consequences_done` is the
 //! proof. It writes the journal's `Consequence` fact (and `Confirmed` or `Contradicted` for the
 //! claim it names), says `EventKind::Consequence` to everyone, and runs its edits (world verbs,
-//! `Lock` and `Unlock` among them) in its zone with no actor, now if the zone is live, else as
+//! `Lock`, `Unlock` and a door's hours among them) in its zone with no actor, now if the zone is live, else as
 //! soon as it is (`consequences_owed`, landed in step 2 and on arrival in step 14), so a zone
 //! nobody was in when it fired has it when she comes.
 //!

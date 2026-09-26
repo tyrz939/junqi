@@ -25,9 +25,9 @@ use crate::compile::lists::{self, RawAction, RawCond};
 use crate::compile::source::{Row, Source, typed};
 use crate::model::{
     self, After, AnchorDef, AnchorWhere, Apart, AreaDef, AreaWhere, Contract, DistBy, DistRule, DoorAt, DoorDef, Edge,
-    Hides, NameKind, NamePool, NearAnchor, PathDef, PlaceAt, PlaceKind, PlacedRect, PlacedUnit, PlacementDef, PoiDef,
-    PoiWhere, PropEdit, PropTemplate, ProvidedBy, Region, Rim, RuinKind, SiteBand, SiteDef, SiteWhere, SolveStateDef,
-    Spreads, StoryDef, StoryNear, Terrain, Via, ZoneDef, ZoneKind,
+    Hides, NameKind, NamePool, NearAnchor, NightLockDef, PathDef, PlaceAt, PlaceKind, PlacedRect, PlacedUnit,
+    PlacementDef, PoiDef, PoiWhere, PropEdit, PropTemplate, ProvidedBy, Region, Rim, RuinKind, SiteBand, SiteDef,
+    SiteWhere, SolveStateDef, Spreads, StoryDef, StoryNear, Terrain, Via, ZoneDef, ZoneKind,
 };
 
 pub fn compile(src: &Source, cx: &mut Ctx) -> model::County {
@@ -144,6 +144,22 @@ fn row_ids(cx: &mut Ctx, table: &str, rows: &[Row], field: &str) -> Vec<String> 
 }
 
 /// English, interned, held to VOICE.md's mechanical rules: no en or em dash, nobody's name baked in.
+/// A row's `nightLock` and `nightHours` (the bell's night when left out): hours 0..=23, not the
+/// same hour twice, and never hours without the line.
+pub(crate) fn night_lock(cx: &mut Ctx, at: &str, says: Option<&str>, hours: Option<[u8; 2]>) -> Option<NightLockDef> {
+    let Some(says) = says else {
+        cx.diag.need(hours.is_none(), at, "nightHours without a nightLock line");
+        return None;
+    };
+    let [from, to] = hours.unwrap_or([jane_core::NightLock::BELL.0, jane_core::NightLock::BELL.1]);
+    cx.diag.need(
+        from < 24 && to < 24 && from != to,
+        at,
+        format!("nightHours [{from}, {to}]: two different hours, 0 to 23"),
+    );
+    Some(NightLockDef { says: say(cx, at, says), from, to })
+}
+
 fn say(cx: &mut Ctx, at: &str, s: &str) -> jane_core::TextId {
     cx.diag.need(!s.contains(['\u{2013}', '\u{2014}']), at, format!("an en or em dash in \"{s}\" (VOICE.md)"));
     cx.diag.need(!s.contains("Jane"), at, format!("\"Jane\" is baked into \"{s}\"; the player names her"));
@@ -764,6 +780,7 @@ struct RawDoor {
     label: String,
     key_tag: Option<String>,
     night_lock: Option<String>,
+    night_hours: Option<[u8; 2]>,
     mark: Option<String>,
     #[serde(default)]
     from_below: bool,
@@ -831,7 +848,7 @@ fn doors(src: &Source, cx: &mut Ctx, zones: &[ZoneDef], sites: &Keyed<SiteDef>) 
             def,
             label: say(cx, &at, &r.label),
             key_tag: r.key_tag.as_deref().map(|t| name(cx, &at, t)),
-            night_lock: r.night_lock.as_deref().map(|t| say(cx, &at, t)),
+            night_lock: night_lock(cx, &at, r.night_lock.as_deref(), r.night_hours),
             mark: r.mark.as_deref().map(|m| name(cx, &at, m)),
             to,
         });
@@ -1243,6 +1260,7 @@ struct RawProp {
     talk: Option<String>,
     label: Option<String>,
     night_lock: Option<String>,
+    night_hours: Option<[u8; 2]>,
 }
 
 #[derive(Deserialize)]
@@ -1259,6 +1277,7 @@ struct RawEdit {
     talk: Option<String>,
     label: Option<String>,
     night_lock: Option<String>,
+    night_hours: Option<[u8; 2]>,
 }
 
 #[derive(Deserialize)]
@@ -1318,7 +1337,7 @@ fn prop_template(cx: &mut Ctx, at: &str, p: &RawProp) -> Option<PropTemplate> {
         needs: stacks(cx, &format!("{at}.needs"), &p.needs),
         talk: p.talk.as_deref().and_then(|t| cx.dialogue(at, t)),
         label: p.label.as_deref().map(|t| say(cx, at, t)),
-        night_lock: p.night_lock.as_deref().map(|t| say(cx, at, t)),
+        night_lock: night_lock(cx, at, p.night_lock.as_deref(), p.night_hours),
     })
 }
 
@@ -1335,7 +1354,7 @@ fn prop_edit(cx: &mut Ctx, at: &str, e: &RawEdit, asks_slot: bool) -> PropEdit {
         use_list: lists::list(cx, &format!("{at}.use"), e.use_list.as_deref()),
         talk: e.talk.as_deref().and_then(|t| cx.dialogue(at, t)),
         label: e.label.as_deref().map(|t| say(cx, at, t)),
-        night_lock: e.night_lock.as_deref().map(|t| say(cx, at, t)),
+        night_lock: night_lock(cx, at, e.night_lock.as_deref(), e.night_hours),
     };
     let empty = PropEdit {
         key: None,

@@ -9,7 +9,7 @@ mod common;
 
 use jane_core::action::{Facing, FlagOp, FlagTest};
 use jane_core::blueprint::TriggerMode;
-use jane_core::{Action, Angle, Cond, Condition, FlagKey, Rect, Stack, TextRef, Tile, ZoneId};
+use jane_core::{Action, Angle, Cond, Condition, FlagKey, NightLock, Rect, Stack, TextRef, Tile, ZoneId};
 use jane_sim::event::{EventKind, PropChange, ToastKind};
 use jane_sim::input::DevOp;
 use jane_sim::interact::{FocusRef, Verb};
@@ -182,7 +182,7 @@ fn a_door_marked_for_it_is_not_answered_after_dark() {
     let mut r = Room::new(false);
     let says = r.bp.push_text("Nobody comes to the door after dark.".into());
     r.door("shop", 10, 15, ZoneId::House, "front");
-    r.bp.props.last_mut().unwrap().night_lock = Some(says);
+    r.bp.props.last_mut().unwrap().night_lock = Some(NightLock { says, from: 21, to: 6, keyed: false });
     let mut s = r.build();
     place(&mut s, 9, 17, Facing::East);
     cmd(&mut s, Command::Dev(DevOp::Time { hour: 22 }));
@@ -198,6 +198,61 @@ fn a_door_marked_for_it_is_not_answered_after_dark() {
     cmd(&mut s, Command::Use);
     idle(&mut s, 1);
     assert_eq!(zone_of(&s), ZoneId::House);
+}
+
+/// A door keeps its own hours (a Museum's), and a verb can change them for good: a night lock
+/// she holds the key to lets her in and nobody else; a night unlock answers at every hour. The
+/// hours are state, through a save.
+#[test]
+fn a_door_keeps_its_own_hours_and_a_verb_sets_a_night_lock_she_holds() {
+    let mut r = Room::new(false);
+    let says = r.bp.push_text("Open ten to four.".into());
+    r.door("museum", 10, 15, ZoneId::House, "front");
+    r.bp.props.last_mut().unwrap().night_lock = Some(NightLock { says, from: 16, to: 10, keyed: false });
+    let shut = r.bp.push_text("Locked for the night. Julie's key opens it.".into());
+    let door = r.door("julies", 30, 15, ZoneId::House, "front");
+    let tag = r.key("auntie_house");
+    r.bp.props.last_mut().unwrap().key_tag = Some(tag);
+    let lock =
+        r.list(vec![Action::NightLock { prop: door, lock: NightLock { says: shut, from: 21, to: 6, keyed: true } }]);
+    r.prop("lock_lever", "lever", 20, 10, |s| s.use_list = Some(lock));
+    let open = r.list(vec![Action::NightUnlock(door)]);
+    r.prop("open_lever", "lever", 24, 10, |s| s.use_list = Some(open));
+    let mut s = r.build();
+    let verb = |s: &Sim| s.view(Seat(0)).unwrap().focus().map(|f| f.verb);
+    // Its own hours: shut from four in the afternoon, open from ten; the bell has nothing to do with it.
+    place(&mut s, 9, 17, Facing::East);
+    for (hour, shut) in [(9, true), (10, false), (15, false), (16, true), (22, true), (3, true)] {
+        cmd(&mut s, Command::Dev(DevOp::Time { hour }));
+        assert_eq!(verb(&s) == Some(Verb::TryTheDoor), shut, "{hour}:00");
+    }
+    // Julie's door has no hours until the lever gives it the bell's, keyed to her key.
+    place(&mut s, 29, 17, Facing::East);
+    cmd(&mut s, Command::Dev(DevOp::Time { hour: 22 }));
+    assert_ne!(verb(&s), Some(Verb::TryTheDoor));
+    place(&mut s, 19, 10, Facing::East);
+    cmd(&mut s, Command::Use);
+    let s2 = Sim::from_save_with(&s.save(), s.blueprints().clone()).expect("it loads");
+    for mut s in [s, s2] {
+        place(&mut s, 29, 17, Facing::East);
+        events(&mut s);
+        cmd(&mut s, Command::Use);
+        assert!(toasts(&events(&mut s)).contains(&ToastKind::NightLock(shut)), "no key: not answered");
+        idle(&mut s, 1);
+        assert_eq!(zone_of(&s), ZoneId::County);
+        cmd(&mut s, Command::Dev(DevOp::Time { hour: 10 }));
+        assert_ne!(verb(&s), Some(Verb::TryTheDoor), "by day, anyone");
+        cmd(&mut s, Command::Dev(DevOp::Time { hour: 22 }));
+        cmd(&mut s, Command::Dev(DevOp::Give { item: item("key_auntie_house"), qty: 1 }));
+        assert_ne!(verb(&s), Some(Verb::TryTheDoor), "her key: answered");
+        // The other lever answers it at every hour, key or none.
+        place(&mut s, 23, 10, Facing::East);
+        cmd(&mut s, Command::Use);
+        let key = s.state().players[0].bag.iter().position(|x| x.is_some_and(|x| x.item == item("key_auntie_house")));
+        s.state_mut().players[0].bag[key.unwrap()] = None;
+        place(&mut s, 29, 17, Facing::East);
+        assert_ne!(verb(&s), Some(Verb::TryTheDoor), "open at every hour");
+    }
 }
 
 // --- push, pull, carry, under ----------------------------------------------------------------

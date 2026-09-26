@@ -136,6 +136,7 @@ struct RawExtra {
     talk: Option<String>,
     label: Option<String>,
     night_lock: Option<String>,
+    night_hours: Option<[u8; 2]>,
 }
 
 /// English, interned, held to VOICE.md's mechanical rules.
@@ -213,7 +214,7 @@ fn prop(
         needs: stacks(cx, &format!("{at}.needs"), &raw.needs),
         talk: raw.talk.as_deref().and_then(|t| cx.dialogue(at, t)),
         label: raw.label.as_deref().map(|t| say(cx, at, t)),
-        night_lock: raw.night_lock.as_deref().map(|t| say(cx, at, t)),
+        night_lock: crate::compile::tables::county::night_lock(cx, at, raw.night_lock.as_deref(), raw.night_hours),
     };
     Some((t, to))
 }

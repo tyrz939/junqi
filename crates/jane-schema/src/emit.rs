@@ -10,7 +10,7 @@ use std::fmt::Write;
 
 use jane_core::action::{
     Action, CameraMode, Cond, Condition, CondsRef, Facing, FactKey, FlagKey, FlagOp, FlagTest, Heal, ListRef, NamesRef,
-    School, Stack, Stat, TextRef, Thing,
+    NightLock, School, Stack, Stat, TextRef, Thing,
 };
 use jane_core::blueprint::TriggerMode;
 use jane_core::grid::{Cell, Rect};
@@ -220,6 +220,14 @@ impl Emit for TextRef {
                 let _ = write!(out, "TextRef::Local({i})");
             }
         }
+    }
+}
+
+impl Emit for NightLock {
+    fn emit(&self, out: &mut String) {
+        out.push_str("NightLock { says: ");
+        self.says.emit(out);
+        let _ = write!(out, ", from: {}, to: {}, keyed: {} }}", self.from, self.to, self.keyed);
     }
 }
 
@@ -444,6 +452,10 @@ impl Emit for Action {
             Action::Place { prop, item } => {
                 Fields::open(out, "Action::Place").f("prop", prop).f("item", item).close();
             }
+            Action::NightLock { prop, lock } => {
+                Fields::open(out, "Action::NightLock").f("prop", prop).f("lock", lock).close();
+            }
+            Action::NightUnlock(k) => one(out, "NightUnlock", k),
             Action::Shake(n) => one(out, "Shake", n),
             Action::Camera { mode, rect } => {
                 Fields::open(out, "Action::Camera").f("mode", mode).f("rect", rect).close();

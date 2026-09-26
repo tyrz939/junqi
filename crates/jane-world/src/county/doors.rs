@@ -46,7 +46,7 @@ pub fn set_doors(c: &mut County<'_>) {
         p.key_tag = d.key_tag.map(Key::Name);
         p.to = d.to.map(|m| Door { zone: d.zone, mark: Key::Name(m) });
         p.label = Some(TextRef::Text(d.label));
-        p.night_lock = d.night_lock.map(TextRef::Text);
+        p.night_lock = d.night_lock.map(jane_data::NightLockDef::lock);
         if let Some(m) = d.mark {
             c.k.mark(Key::Name(m), x, y + h, Some(Facing::South));
         }

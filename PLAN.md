@@ -154,7 +154,7 @@ That makes exploring the dangerous pocket the *way you get strong enough for the
 
 **The world tells you; the interface does not** *(decided: threat is felt only)*. No level numbers, no skulls, no name colours. **An enemy's health is never a number**: a bar over its head and in the target frame, nothing more (built: the target frame's figures are gone; Jane's own vitals keep theirs). Threat is signs and rumours (omens), what the dog says, carrion, the colour of the mist, enemies visible from the road, and lamps. A player who walks into the Top Field on the first night was warned, and the warning might even have been false.
 
-**Doors at night are a creative choice, door by door** *(decided)*. There is no curfew rule. A prop row may carry `nightLock`, and then it is locked from nine to six: the shop, yes; the church, never; the pub, only on some seeds (that one is an omen). Each locked door should mean something about who is behind it.
+**Doors at night are a creative choice, door by door** *(decided)*. There is no curfew rule. A prop row may carry `nightLock`, and then it is locked from nine to six (or at its own `nightHours`); a consequence may set or lift one for good: the shop, yes; the church, never; the pub, only on some seeds (that one is an omen). Each locked door should mean something about who is behind it.
 
 **Testable, so it stays true:** threat is a field the seed viewer can paint; the solver checks the upgrade rule above; a test checks that the walk from the station to Julie's house never crosses threat above 1 by day, and that every region has at least one fire inside threat ≤ its base.
 

@@ -147,6 +147,7 @@ pub fn place(cx: &mut Ctx<'_>, who: Option<UnitId>, def: PropDefId, item: ItemId
                 on: false,
                 loot,
                 under_done: false,
+                night: crate::state::NightState::AsSpawned,
             });
             let ix = (cx.zone.props.len() - 1) as PropIx;
             cx.rt.add_prop(cx.zone, ix);

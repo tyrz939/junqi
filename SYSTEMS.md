@@ -204,7 +204,7 @@ idle (regen, patrol, bait, aggro+LOS every 10 ticks)
 | Verb | Bar |
 | --- | --- |
 | Zone travel by named mark; refuses while carrying | **IN** — S, D |
-| Doors that are not answered after dark: `nightLock` on the placed prop, a line said instead of opening, outside doors only so nobody is shut in | **IN** — T. No door in the county carries it yet; it is a choice made door by door |
+| Doors that are not answered after dark: `nightLock` on the placed prop, a line said instead of opening, outside doors only so nobody is shut in; its own `nightHours` if not the bell's; set or lifted for good by a verb (`nightLock`, `nightUnlock`, world verbs), keyed so a key that fits opens it | **IN** — T. The Museum's front door (until nine); Julie's door once the kitchen is seen |
 | Locked door + key tag; gates (solid while locked) | **IN** — D |
 | Chest loot once; keeps what did not fit | **IN** — D |
 | Push / pull: hold USE 30 ticks, 20 energy, one cell | **IN** (push) — V: a bot holds USE against a barrel and it moves one cell / **SHAPE** (pull) |

@@ -118,6 +118,35 @@ pub enum CameraMode {
     Lock,
 }
 
+/// A door not answered at some hours: what it says instead, and the hours it is shut, `from`
+/// up to `to` on the clock, wrapping midnight (content leaves them out for the bell's night, 21
+/// to 6). `keyed`: whoever holds a key that fits the door's `keyTag` is answered all the same
+/// (Julie's door, once the house is hers).
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct NightLock {
+    pub says: TextRef,
+    pub from: u8,
+    pub to: u8,
+    pub keyed: bool,
+}
+
+impl NightLock {
+    /// The hours the bell keeps: shut from nine to six.
+    pub const BELL: (u8, u8) = (21, 6);
+
+    /// Is the door shut at `hour` (0..=23)? `from == to` is never.
+    pub const fn shut_at(&self, hour: u8) -> bool {
+        if self.from < self.to {
+            hour >= self.from && hour < self.to
+        } else if self.from > self.to {
+            hour >= self.from || hour < self.to
+        } else {
+            false
+        }
+    }
+}
+
 /// A stack of items.
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -211,6 +240,13 @@ pub enum Action {
         prop: PropDefId,
         item: ItemId,
     },
+    /// A door is not answered at these hours from now on, whatever its row said.
+    NightLock {
+        prop: Key,
+        lock: NightLock,
+    },
+    /// A door is answered at every hour from now on, whatever its row said.
+    NightUnlock(Key),
 }
 
 impl Action {
@@ -233,6 +269,8 @@ impl Action {
             self,
             Action::Show(_)
                 | Action::Hide(_)
+                | Action::NightLock { .. }
+                | Action::NightUnlock(_)
                 | Action::Lock(_)
                 | Action::Unlock(_)
                 | Action::Switch { .. }

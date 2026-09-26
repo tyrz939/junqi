@@ -129,6 +129,7 @@ fn put_prop(s: &mut Sim, def: &str, x: u16, y: u16, on: bool) -> jane_sim::PropI
         on,
         loot: jane_sim::state::LootState::AsSpawned,
         under_done: false,
+        night: jane_sim::state::NightState::AsSpawned,
     });
     s.rebuild_runtimes();
     id

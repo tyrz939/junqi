@@ -10,7 +10,7 @@
 
 use indexmap::IndexMap;
 
-use crate::action::{Action, Cond, CondsRef, Facing, ListRef, NamesRef, Stack, TextRef};
+use crate::action::{Action, Cond, CondsRef, Facing, ListRef, NamesRef, NightLock, Stack, TextRef};
 use crate::grid::{Cell, Grid, Rect};
 use crate::ids::{DialogueId, Key, PropDefId, StoryId, UnitDefId, ZoneId};
 use crate::num::{Permille, Tick};
@@ -69,8 +69,8 @@ pub struct PropSpawn {
     pub needs: Vec<Stack>,
     pub talk: Option<DialogueId>,
     pub label: Option<TextRef>,
-    /// This door does not open after dark, and this is what it says instead.
-    pub night_lock: Option<TextRef>,
+    /// This door is not answered at some hours, and this is what it says instead.
+    pub night_lock: Option<NightLock>,
     /// The hidden prop this one lies on, shown when this one is pushed off it...
     pub under: Option<Key>,
     /// ...and only while these hold.

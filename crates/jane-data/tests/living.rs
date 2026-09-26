@@ -64,11 +64,14 @@ fn consequences_change_the_world() {
     let thinned = &c.living.consequences[0];
     assert_eq!(thinned.on, Condition::QuestDone(c.story.quest_id("rats_in_the_sheds").unwrap()));
     assert!(c.list(thinned.edits).contains(&Action::Despawn(Key::Name(name("rat_allotment_4")))));
-    // Julie's Kitchen (WORLD.md §6): the house is hers; its door is locked behind her, and her
-    // key opens it.
+    // Julie's Kitchen (WORLD.md §6): the house is hers; its door is night-locked, the bell's hours,
+    // and her key opens it.
     let kept = &c.living.consequences[1];
     assert_eq!(kept.on, Condition::QuestDone(c.story.quest_id("see_the_kitchen").unwrap()));
-    assert_eq!((kept.zone, c.list(kept.edits)), (ZoneId::County, &[Action::Lock(Key::Name(name("house_door")))][..]));
+    assert_eq!(kept.zone, ZoneId::County);
+    let [Action::NightLock { prop, lock }] = c.list(kept.edits) else { panic!("one night lock") };
+    assert_eq!(*prop, Key::Name(name("house_door")));
+    assert!(lock.keyed && (lock.from, lock.to) == (21, 6));
     let quiet = &c.living.consequences[2];
     assert_eq!(quiet.on, Condition::Dead(Key::Name(name("iron_knuckles"))));
     assert_eq!(quiet.zone, ZoneId::County, "it fires in the mine and lands on the mine road");

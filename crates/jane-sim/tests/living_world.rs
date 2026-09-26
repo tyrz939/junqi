@@ -16,9 +16,11 @@ use jane_core::action::{Facing, School};
 use jane_core::num::{CELL_FX, dist_sq};
 use jane_core::{Action, Key, Milli, Sfc32, Tick, Vec2, ZoneId};
 use jane_data::{Region, ScheduleSlot, catalog};
+use jane_sim::event::ToastKind;
+use jane_sim::interact::Verb;
 use jane_sim::living::{ScheduleWhere, region_at, region_ix};
 use jane_sim::save::hash_of;
-use jane_sim::state::{FactKey, FlagKey, Source, WeatherKind, WeatherState};
+use jane_sim::state::{FactKey, FlagKey, NightState, Source, WeatherKind, WeatherState};
 use jane_sim::{Blueprints, Command, DevOp, EventKind, Hit, Seat, Sim, StepInput, UnitId};
 
 const HOUR: u32 = 7200;
@@ -568,20 +570,20 @@ fn a_schedule_obeys_the_watcher_box() {
     assert!(arrived, "he reached his seat");
 }
 
-/// Decision 4 (§4.6.d): a consequence may lock a door. Julie's Kitchen done while she is in the
-/// house: the county is nobody's, so the lock waits; she walks out and the door behind her is
-/// locked; her key (bound, not used up) opens it and she goes back in.
+/// Decision 4 (§4.6.d), WORLD.md §6: Julie's Kitchen done while she is in the house puts a night
+/// lock she holds on Julie's door. The county is nobody's, so it waits; she walks out and it is
+/// there, through a save. At night the door answers only a key that fits it (hers is bound, never
+/// used up); by day it answers anyone; and the door out of the house never shuts her in.
 #[test]
-fn a_consequence_locks_a_door_where_nobody_is_and_her_key_opens_it() {
+fn a_consequence_night_locks_a_door_where_nobody_is_and_her_key_opens_it() {
     let cat = catalog();
     let id = cat.living.consequence_id("house_kept").unwrap();
     let key = cat.combat.item_id("key_auntie_house").unwrap();
     let mut s = new_game();
-    cmd(&mut s, Command::Dev(DevOp::Give { item: key, qty: 1 }));
     let door = prop(&s, "house_door").id;
-    let locked = |s: &Sim| {
+    let night = |s: &Sim| {
         let z = s.state().zone(ZoneId::County).unwrap();
-        z.props[z.prop_ix(door).unwrap() as usize].locked
+        z.props[z.prop_ix(door).unwrap() as usize].night
     };
     let ix = s.state().zone(ZoneId::County).unwrap().prop_ix(door).unwrap() as usize;
     s.state_mut().zone_mut(ZoneId::County).unwrap().props[ix].locked = false;
@@ -592,28 +594,44 @@ fn a_consequence_locks_a_door_where_nobody_is_and_her_key_opens_it() {
     idle(&mut s, 1);
     assert!(s.drain_events().iter().any(|e| e.kind == EventKind::Consequence(id)));
     assert_eq!(s.state().consequences_owed, [(ZoneId::County, id)], "nobody is in the county");
-    assert!(!locked(&s), "not yet: the county is not live");
+    assert_eq!(night(&s), NightState::AsSpawned, "not yet: the county is not live");
     let mut t = Sim::from_save_with(&s.save(), bps()).expect("loads");
     tp(&mut t, ZoneId::County);
-    assert!(locked(&t), "locked behind her the moment she is out");
+    let NightState::Locked(lock) = night(&t) else { panic!("night-locked the moment she is out") };
+    assert!(lock.keyed && (lock.from, lock.to) == (21, 6), "the bell's hours, and her key");
     assert!(t.state().consequences_owed.is_empty());
     let d = prop(&t, "house_door");
     let def = catalog().story.prop(d.def);
-    place(&mut t, i32::from(d.cell.x) + i32::from(def.w) / 2, i32::from(d.cell.y) + i32::from(def.h), Facing::North);
+    let front = (i32::from(d.cell.x) + i32::from(def.w) / 2, i32::from(d.cell.y) + i32::from(def.h));
+    let verb = |t: &Sim| t.view(Seat(0)).unwrap().focus().map(|f| f.verb);
+    place(&mut t, front.0, front.1, Facing::North);
+    // No key, after the bell: not answered. By day: answered.
+    cmd(&mut t, Command::Dev(DevOp::Time { hour: 22 }));
     idle(&mut t, 2);
+    assert_eq!(verb(&t), Some(Verb::TryTheDoor));
     t.drain_events();
     cmd(&mut t, Command::Use);
-    let ev = t.drain_events().to_vec();
-    assert!(ev.iter().any(|e| e.kind == EventKind::Toast(jane_sim::event::ToastKind::UnlockedWith(key))), "{ev:?}");
-    assert!(!locked(&t));
-    assert_eq!(holds(&t, "key_auntie_house"), 1, "a bound key is not used up");
+    assert!(t.drain_events().iter().any(|e| matches!(e.kind, EventKind::Toast(ToastKind::NightLock(_)))));
+    idle(&mut t, 2);
+    assert_eq!(zone_of(&t), ZoneId::County);
+    cmd(&mut t, Command::Dev(DevOp::Time { hour: 10 }));
+    assert_ne!(verb(&t), Some(Verb::TryTheDoor), "by day, anyone");
+    // Her key, after the bell: in, and the key is still hers.
+    cmd(&mut t, Command::Dev(DevOp::Time { hour: 22 }));
+    cmd(&mut t, Command::Dev(DevOp::Give { item: key, qty: 1 }));
+    assert_ne!(verb(&t), Some(Verb::TryTheDoor));
     cmd(&mut t, Command::Use);
     idle(&mut t, 2);
     assert_eq!(zone_of(&t), ZoneId::House);
-    // Once, ever: the county never locks it again.
-    tp(&mut t, ZoneId::County);
-    idle(&mut t, 3);
-    assert!(!locked(&t));
+    assert_eq!(holds(&t, "key_auntie_house"), 1, "a bound key is not used up");
+    // Never shut in: the way out answers at night, key or none.
+    let key_slot = t.state().players[0].bag.iter().position(|x| x.is_some_and(|x| x.item == key)).unwrap();
+    t.state_mut().players[0].bag[key_slot] = None;
+    assert!(walk_to_prop(&mut t, "front_door"));
+    assert_ne!(verb(&t), Some(Verb::TryTheDoor));
+    cmd(&mut t, Command::Use);
+    idle(&mut t, 2);
+    assert_eq!(zone_of(&t), ZoneId::County);
 }
 
 // --- a bed's night (decision 3) --------------------------------------------------------------

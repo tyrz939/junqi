@@ -24,7 +24,7 @@ mod trig_table;
 
 pub use indexmap;
 
-pub use action::{Action, Cond, Condition, CondsRef, FlagKey, ListRef, NamesRef, Stack, TextRef};
+pub use action::{Action, Cond, Condition, CondsRef, FlagKey, ListRef, NamesRef, NightLock, Stack, TextRef};
 pub use angle::Angle;
 pub use blueprint::{Blueprint, RegionMap};
 pub use grid::{Cell, CellIx, Grid, Rect};
