@@ -217,22 +217,127 @@ impl PersonLook {
     }
 }
 
+model_enum! {
+    /// A creature's body plan (ART.md §2.2): each has its own box, anchor and gait.
+    #[cfg_attr(feature = "compile", derive(serde::Deserialize), serde(rename_all = "snake_case"))]
+    pub enum Plan { QuadrupedMid, QuadrupedSmall, Bird }
+}
+
+model_enum! {
+    /// Which animal a plan draws: the anatomy (proportions, head, how it sits and how it dies).
+    #[cfg_attr(feature = "compile", derive(serde::Deserialize), serde(rename_all = "snake_case"))]
+    pub enum Anatomy { Dog, Sheep, Cat, Rat, Rabbit, Fox, Hen, Crow }
+}
+
+model_enum! {
+    /// A creature's ears. `flop_one`: one up and one folded, a dog who has heard it all before.
+    #[cfg_attr(feature = "compile", derive(serde::Deserialize), serde(rename_all = "snake_case"))]
+    pub enum Ears { Flop, FlopOne, Prick, Round, Tall, Side, None }
+}
+
+model_enum! {
+    /// A creature's tail.
+    #[cfg_attr(feature = "compile", derive(serde::Deserialize), serde(rename_all = "snake_case"))]
+    pub enum Tail { Plume, Long, Thin, Puff, Stub, Brush, Fan, None }
+}
+
+model_enum! {
+    /// Markings over the body's colour, in the `mark` and `belly` ramps.
+    #[cfg_attr(feature = "compile", derive(serde::Deserialize), serde(rename_all = "snake_case"))]
+    pub enum Marking { TanPoints, Blaze, Grizzle, Socks, Tabby, Mask, TipWhite, DarkFace }
+}
+
+model! {
+    /// A creature's ramps: the pelt or plumage, its underside, its markings.
+    pub struct CreatureRamps {
+        pub body: &'static str,
+        pub belly: Option<&'static str>,
+        pub mark: Option<&'static str>,
+    }
+}
+
+model! {
+    /// A creature (ART.md §2.2): a plan, an anatomy, and its features.
+    pub struct CreatureLook {
+        pub plan: Plan,
+        pub anatomy: Anatomy,
+        pub ramps: CreatureRamps,
+        pub ears: Ears,
+        pub tail: Tail,
+        pub markings: &'static [Marking],
+        /// A collar's ramp, with a brass tag.
+        pub collar: Option<&'static str>,
+        pub emits: &'static [EmitRole],
+    }
+}
+
+model_enum! {
+    /// A prop's family (ART.md §2.3): one routine each, its shapes by name.
+    #[cfg_attr(feature = "compile", derive(serde::Deserialize), serde(rename_all = "snake_case"))]
+    pub enum PropFamily {
+        Container, Furniture, Sign, Lamp, Machine, Barrier, Vegetation, Debris, SmallThing, Ritual, Structure,
+    }
+}
+
+model_enum! {
+    /// A prop's drawn states: `base` at rest, `on` lit or thrown, `open` with its lid up.
+    #[cfg_attr(feature = "compile", derive(serde::Deserialize), serde(rename_all = "snake_case"))]
+    pub enum PropState { Base, On, Open }
+}
+
+model_enum! {
+    /// Where a lamp or a sign is fixed: on a post or the floor, or on a wall facing its way.
+    #[cfg_attr(feature = "compile", derive(serde::Deserialize), serde(rename_all = "snake_case"))]
+    pub enum Mount { Floor, Post, WallN, WallE, WallS, WallW }
+}
+
+model! {
+    /// A prop's materials, as ramps: its body, its trim (bands, a frame), and an accent.
+    pub struct PropMaterials {
+        pub body: &'static str,
+        pub trim: Option<&'static str>,
+        pub accent: Option<&'static str>,
+    }
+}
+
+model! {
+    /// A prop (ART.md §2.3): a family's shape at the size of the footprint its rows give.
+    pub struct PropLook {
+        pub family: PropFamily,
+        /// The family's shape, by name (`"barrel"`); `jane-art` knows the names.
+        pub shape: &'static str,
+        /// How far it stands above its footprint, px: what its heights top out at.
+        pub rise: u8,
+        pub materials: PropMaterials,
+        pub states: &'static [PropState],
+        /// `base_2` and `base_3`: up to two more renders at the next seeds.
+        pub vary: u8,
+        pub mount: Mount,
+        /// Rows of illegible writing on a sign.
+        pub text_rows: u8,
+        pub emits: &'static [EmitRole],
+    }
+}
+
 /// A look: what a sprite id is drawn as. One variant per generator family as the families land
-/// (ART.md §8); today, people.
+/// (ART.md §8): people, creatures and props.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Look {
     Person(PersonLook),
+    Creature(CreatureLook),
+    Prop(PropLook),
 }
 
 impl crate::emit::Emit for Look {
     fn emit(&self, out: &mut String) {
-        match self {
-            Look::Person(p) => {
-                out.push_str("Look::Person(");
-                p.emit(out);
-                out.push(')');
-            }
-        }
+        let (name, inner): (&str, &dyn crate::emit::Emit) = match self {
+            Look::Person(p) => ("Look::Person(", p),
+            Look::Creature(c) => ("Look::Creature(", c),
+            Look::Prop(p) => ("Look::Prop(", p),
+        };
+        out.push_str(name);
+        inner.emit(out);
+        out.push(')');
     }
 }
 

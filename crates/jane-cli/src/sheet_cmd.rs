@@ -7,7 +7,7 @@
 use std::path::{Path, PathBuf};
 
 use jane_art::sheet::{self, Image};
-use jane_art::{Font, demo, looks, person, sheet_person};
+use jane_art::{Font, demo, looks, sheet_person};
 
 pub const USAGE: &str = "  sheet layers <what> [--frame F] [--out DIR]
                                       a sprite's albedo, normal, emissive and height at 4x
@@ -46,19 +46,24 @@ fn write(out: &Path, name: &str, img: &Image) -> Result<(), String> {
     Ok(())
 }
 
-/// A demo sprite, or a frame of a look (`--frame`, `down` when not given).
-fn sprite(what: Option<&String>, args: &[String]) -> Result<(String, jane_art::Canvas), String> {
+/// A demo sprite, or a frame of a look (`--frame`, `down` when not given; `base` for a prop),
+/// and the row its feet stand on.
+fn sprite(what: Option<&String>, args: &[String]) -> Result<(String, jane_art::Canvas, i32), String> {
     let what = what.ok_or_else(|| format!("name a sprite: {}, or a look", demo::NAMES.join(", ")))?;
     if let Some(c) = demo::sprite(what) {
-        return Ok((what.clone(), c));
+        let foot = c.h() - 1;
+        return Ok((what.clone(), c, foot));
     }
-    let frame = args.iter().position(|a| a == "--frame").and_then(|i| args.get(i + 1)).map_or("down", |s| s);
-    let id = person::frame_ids()
-        .find(|f| f.name() == frame)
-        .ok_or_else(|| format!("no frame \"{frame}\"; try down, side_1, up_b, dead"))?;
     let sets = looks::render(what).map_err(|e| format!("{e}; the demo sprites are {}", demo::NAMES.join(", ")))?;
-    let c = sets.first().and_then(|r| r.set.frame(id)).ok_or("no such frame")?.clone();
-    Ok((format!("{what}-{frame}"), c))
+    let first = sets.first().ok_or("no sets")?;
+    let default = first.set.frames.first().map_or("down", |(f, _)| f.name());
+    let frame = args.iter().position(|a| a == "--frame").and_then(|i| args.get(i + 1)).map_or(default, |s| s);
+    let id = jane_art::sprite::FrameId::by_name(frame)
+        .ok_or_else(|| format!("no frame \"{frame}\"; try down, side_1, up_b, dead, idle, base, on"))?;
+    let c = first.set.frame(id).ok_or("no such frame")?.clone();
+    // A unit stands on its anchor; a prop on the canvas's last row.
+    let foot = if first.set.ax == 0 { c.h() - 1 } else { first.set.ay };
+    Ok((format!("{what}-{frame}"), c, foot))
 }
 
 pub fn run(args: &[String]) -> Result<(), String> {
@@ -73,16 +78,16 @@ pub fn run(args: &[String]) -> Result<(), String> {
             println!("blessed {}", path.display());
         }
         Some("layers") => {
-            let (name, c) = sprite(args.get(1), args)?;
+            let (name, c, _) = sprite(args.get(1), args)?;
             write(&out, &format!("layers-{name}"), &sheet::layers(&c, &name, &font))?;
         }
         Some("light") => {
-            let (name, c) = sprite(args.get(1), args)?;
+            let (name, c, foot) = sprite(args.get(1), args)?;
             let suffix = if night { "-night" } else { "" };
             let img = if demo::sprite(args[1].as_str()).is_some() {
                 sheet::lit(&c, &name, &font, night)
             } else {
-                sheet::lit_upright(&c, &name, &font, night, person::AY)
+                sheet::lit_upright(&c, &name, &font, night, foot)
             };
             write(&out, &format!("light-{name}{suffix}"), &img)?;
         }
@@ -106,7 +111,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
                 use jane_art::sprite::FrameId;
                 vec![FrameId::Down, FrameId::Side, FrameId::Up]
             } else {
-                names.iter().filter_map(|n| person::frame_ids().find(|f| f.name() == n.as_str())).collect()
+                names.iter().filter_map(|n| jane_art::sprite::FrameId::by_name(n)).collect()
             };
             let scale =
                 args.iter().position(|a| a == "--scale").and_then(|i| args.get(i + 1)?.parse().ok()).unwrap_or(8);
@@ -119,9 +124,16 @@ pub fn run(args: &[String]) -> Result<(), String> {
             }
             write(&out, "silhouettes", &sheet_person::silhouettes(&sets, &font))?;
         }
-        Some("units") => write(&out, "units", &sheet_person::units(&looks::all()?, &font))?,
+        Some("units") => {
+            let mut sets = looks::family(looks::Family::Person)?;
+            sets.extend(looks::family(looks::Family::Creature)?);
+            write(&out, "units", &sheet_person::units(&sets, &font))?;
+        }
+        Some("creatures") => {
+            write(&out, "creatures", &sheet_person::units(&looks::family(looks::Family::Creature)?, &font))?;
+        }
         Some("person") if args.iter().any(|a| a == "--grid") => {
-            let (_, jane_data::Look::Person(base)) = looks::find("jane").ok_or("no look for jane")?;
+            let Some((_, jane_data::Look::Person(base))) = looks::find("jane") else { return Err("no look for jane".into()) };
             write(&out, "person-grid", &sheet_person::grid(base, &font)?)?;
         }
         Some("font") => write(&out, "font", &sheet::font_sheet(&font))?,

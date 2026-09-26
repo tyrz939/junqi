@@ -147,7 +147,8 @@ pub fn golden_file(font: &Font) -> String {
     match crate::looks::all() {
         Ok(sets) => {
             for r in sets {
-                let _ = writeln!(s, "unit:{} {:08x}", r.key(), r.set.hash());
+                let prop = crate::looks::find(r.name).is_some_and(|(_, l)| matches!(l, jane_data::Look::Prop(_)));
+                let _ = writeln!(s, "{}:{} {:08x}", if prop { "prop" } else { "unit" }, r.key(), r.set.hash());
             }
         }
         Err(e) => {

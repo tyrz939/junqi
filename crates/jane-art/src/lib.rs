@@ -10,10 +10,12 @@
 
 pub mod canvas;
 pub mod chrome;
+pub mod creature;
 pub mod demo;
 pub mod font;
 pub mod hash;
 pub mod hue;
+pub mod kit;
 pub mod light;
 pub mod looks;
 pub mod palette;

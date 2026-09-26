@@ -18,15 +18,114 @@ use serde::Deserialize;
 use crate::compile::ctx::{Ctx, leak, leak_str};
 use crate::compile::source::{Source, typed};
 use crate::model::{
-    Boots, Build, Coat, EmitRole, Extra, Face, Front, Hair, Hat, HeldItem, Legs, Look, PersonBody, PersonHead,
-    PersonLook, PersonVary, Skin,
+    Anatomy, Boots, Build, Coat, CreatureLook, CreatureRamps, Ears, EmitRole, Extra, Face, Front, Hair, Hat, HeldItem,
+    Legs, Look, Marking, Mount, PersonBody, PersonHead, PersonLook, PersonVary, Plan, PropFamily, PropLook,
+    PropMaterials, PropState, Skin, Tail,
 };
 use jane_core::ids::SpriteId;
 
 #[derive(Deserialize)]
 #[serde(tag = "family", rename_all = "snake_case")]
 enum RawLook {
-    Person(RawPerson),
+    Person(Box<RawPerson>),
+    Creature(RawCreature),
+    Container(RawProp),
+    Furniture(RawProp),
+    Sign(RawProp),
+    Lamp(RawProp),
+    Machine(RawProp),
+    Barrier(RawProp),
+    Vegetation(RawProp),
+    Debris(RawProp),
+    SmallThing(RawProp),
+    Ritual(RawProp),
+    Structure(RawProp),
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawCreature {
+    plan: Plan,
+    anatomy: Anatomy,
+    ramps: RawCreatureRamps,
+    #[serde(default)]
+    features: RawFeatures,
+    #[serde(default)]
+    emits: Vec<EmitRole>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawCreatureRamps {
+    body: String,
+    #[serde(default)]
+    belly: Option<String>,
+    #[serde(default)]
+    mark: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawFeatures {
+    #[serde(default = "no_ears")]
+    ears: Ears,
+    #[serde(default = "no_tail")]
+    tail: Tail,
+    #[serde(default)]
+    markings: Vec<Marking>,
+    #[serde(default)]
+    collar: Option<String>,
+}
+
+impl Default for RawFeatures {
+    fn default() -> Self {
+        RawFeatures { ears: Ears::None, tail: Tail::None, markings: Vec::new(), collar: None }
+    }
+}
+
+fn no_ears() -> Ears {
+    Ears::None
+}
+fn no_tail() -> Tail {
+    Tail::None
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawProp {
+    shape: String,
+    rise: u8,
+    materials: RawMaterials,
+    #[serde(default = "base_only")]
+    states: Vec<PropState>,
+    #[serde(default = "one")]
+    vary: u8,
+    #[serde(default = "floor")]
+    mount: Mount,
+    #[serde(default)]
+    text_rows: u8,
+    #[serde(default)]
+    emits: Vec<EmitRole>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawMaterials {
+    body: String,
+    #[serde(default)]
+    trim: Option<String>,
+    #[serde(default)]
+    accent: Option<String>,
+}
+
+fn base_only() -> Vec<PropState> {
+    vec![PropState::Base]
+}
+fn one() -> u8 {
+    1
+}
+fn floor() -> Mount {
+    Mount::Floor
 }
 
 #[derive(Deserialize)]
@@ -138,7 +237,71 @@ pub fn compile(src: &Source, cx: &mut Ctx) -> &'static [(SpriteId, Look)] {
             cx.diag.error(format!("{}: {at}", row.file), "no row names this sprite: a look no row uses");
             continue;
         };
-        let Some(RawLook::Person(p)) = typed::<RawLook>(&row, &at, &mut cx.diag) else { continue };
+        let Some(raw) = typed::<RawLook>(&row, &at, &mut cx.diag) else { continue };
+        let look = match raw {
+            RawLook::Person(p) => person(*p, &at, cx),
+            RawLook::Creature(c) => creature(&c),
+            RawLook::Container(p) => prop(PropFamily::Container, &p, &at, cx),
+            RawLook::Furniture(p) => prop(PropFamily::Furniture, &p, &at, cx),
+            RawLook::Sign(p) => prop(PropFamily::Sign, &p, &at, cx),
+            RawLook::Lamp(p) => prop(PropFamily::Lamp, &p, &at, cx),
+            RawLook::Machine(p) => prop(PropFamily::Machine, &p, &at, cx),
+            RawLook::Barrier(p) => prop(PropFamily::Barrier, &p, &at, cx),
+            RawLook::Vegetation(p) => prop(PropFamily::Vegetation, &p, &at, cx),
+            RawLook::Debris(p) => prop(PropFamily::Debris, &p, &at, cx),
+            RawLook::SmallThing(p) => prop(PropFamily::SmallThing, &p, &at, cx),
+            RawLook::Ritual(p) => prop(PropFamily::Ritual, &p, &at, cx),
+            RawLook::Structure(p) => prop(PropFamily::Structure, &p, &at, cx),
+        };
+        out.push((SpriteId(sprite as u16), look));
+    }
+    leak(out)
+}
+
+fn opt(s: Option<&str>) -> Option<&'static str> {
+    s.map(leak_str)
+}
+
+fn creature(c: &RawCreature) -> Look {
+    Look::Creature(CreatureLook {
+        plan: c.plan,
+        anatomy: c.anatomy,
+        ramps: CreatureRamps {
+            body: leak_str(&c.ramps.body),
+            belly: opt(c.ramps.belly.as_deref()),
+            mark: opt(c.ramps.mark.as_deref()),
+        },
+        ears: c.features.ears,
+        tail: c.features.tail,
+        markings: leak(c.features.markings.clone()),
+        collar: opt(c.features.collar.as_deref()),
+        emits: leak(c.emits.clone()),
+    })
+}
+
+fn prop(family: PropFamily, p: &RawProp, at: &str, cx: &mut Ctx) -> Look {
+    cx.diag.need((1..=3).contains(&p.vary), at, "vary is 1 to 3 renders (base, base_2, base_3)");
+    cx.diag.need(p.states.contains(&PropState::Base), at, "a prop always draws its base state");
+    cx.diag.need(unique(&p.states), at, "a state is listed twice");
+    Look::Prop(PropLook {
+        family,
+        shape: leak_str(&p.shape),
+        rise: p.rise,
+        materials: PropMaterials {
+            body: leak_str(&p.materials.body),
+            trim: opt(p.materials.trim.as_deref()),
+            accent: opt(p.materials.accent.as_deref()),
+        },
+        states: leak(p.states.clone()),
+        vary: p.vary,
+        mount: p.mount,
+        text_rows: p.text_rows,
+        emits: leak(p.emits.clone()),
+    })
+}
+
+fn person(p: RawPerson, at: &str, cx: &mut Ctx) -> Look {
+    {
         let v = &p.vary;
         let lists_unique = unique(&v.hair)
             && unique(&v.hair_ramp)
@@ -147,16 +310,16 @@ pub fn compile(src: &Source, cx: &mut Ctx) -> &'static [(SpriteId, Look)] {
             && unique(&v.coat_ramp)
             && unique(&v.front_ramp)
             && unique(&v.legs_ramp);
-        cx.diag.need(lists_unique, &at, "a vary list repeats a value");
+        cx.diag.need(lists_unique, at, "a vary list repeats a value");
         let held = p.held.map_or(HeldItem::None, |h| h.item);
         cx.diag.need(
             !p.emits.contains(&EmitRole::Held) || held != HeldItem::None,
-            &at,
+            at,
             "emits \"held\" with nothing in the hand",
         );
         cx.diag.need(
             !p.emits.contains(&EmitRole::Glass) || p.head.face == Face::Glasses,
-            &at,
+            at,
             "emits \"glass\" with no glasses",
         );
         let look = PersonLook {
@@ -195,10 +358,9 @@ pub fn compile(src: &Source, cx: &mut Ctx) -> &'static [(SpriteId, Look)] {
             },
         };
         let n = look.vary.count();
-        cx.diag.need(n <= MAX_VARIANTS, &at, format!("vary makes {n} variants; at most {MAX_VARIANTS}"));
-        out.push((SpriteId(sprite as u16), Look::Person(look)));
+        cx.diag.need(n <= MAX_VARIANTS, at, format!("vary makes {n} variants; at most {MAX_VARIANTS}"));
+        Look::Person(look)
     }
-    leak(out)
 }
 
 #[cfg(test)]
