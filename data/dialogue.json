@@ -2,7 +2,11 @@
   "dog": {
     "speaker": "Julie's Dog",
     "start": [
+      { "when": [{ "if": "questReady", "quest": "the_school" }], "node": "school_done" },
       { "when": [{ "if": "questReady", "quest": "the_burial" }], "node": "burial_done" },
+      { "when": [{ "if": "questReady", "quest": "the_factory" }], "node": "factory_done" },
+      { "when": [{ "if": "questReady", "quest": "the_forest" }], "node": "forest_done" },
+      { "when": [{ "if": "questReady", "quest": "the_museum" }], "node": "museum_done" },
       { "when": [{ "if": "questReady", "quest": "the_mine" }], "node": "mine_done" },
       { "when": [{ "if": "questReady", "quest": "rats_below" }], "node": "rats_done" },
       { "when": [{ "if": "questReady", "quest": "stock_the_bench" }], "node": "bench_done" },
@@ -12,8 +16,12 @@
       { "when": [{ "if": "questDone", "quest": "defeat_skeleton", "not": true }], "node": "intro" },
       { "when": [{ "if": "questDone", "quest": "number_fourteen" }, { "if": "flag", "flag": "said_fourteen" }, { "if": "flag", "flag": "dog_heard_lamps", "not": true }], "node": "lamps_counted_f" },
       { "when": [{ "if": "questDone", "quest": "number_fourteen" }, { "if": "flag", "flag": "dog_heard_lamps", "not": true }], "node": "lamps_counted" },
-      { "when": [{ "if": "questDone", "quest": "the_burial" }], "node": "epilogue" },
-      { "when": [{ "if": "questDone", "quest": "the_mine" }, { "if": "flag", "flag": "offered_burial", "not": true }], "node": "offer_burial" },
+      { "when": [{ "if": "questDone", "quest": "the_school" }], "node": "epilogue" },
+      { "when": [{ "if": "questDone", "quest": "the_burial" }, { "if": "flag", "flag": "offered_school", "not": true }], "node": "offer_school" },
+      { "when": [{ "if": "questDone", "quest": "the_factory" }, { "if": "flag", "flag": "offered_burial", "not": true }], "node": "offer_burial" },
+      { "when": [{ "if": "questDone", "quest": "the_forest" }, { "if": "flag", "flag": "offered_factory", "not": true }], "node": "offer_factory" },
+      { "when": [{ "if": "questDone", "quest": "the_museum" }, { "if": "flag", "flag": "offered_forest", "not": true }], "node": "offer_forest" },
+      { "when": [{ "if": "questDone", "quest": "the_mine" }, { "if": "flag", "flag": "offered_museum", "not": true }], "node": "offer_museum" },
       { "when": [{ "if": "questDone", "quest": "rats_below" }, { "if": "flag", "flag": "offered_mine", "not": true }], "node": "offer_mine" },
       { "when": [{ "if": "questDone", "quest": "see_the_kitchen" }, { "if": "flag", "flag": "offered_rats", "not": true }], "node": "offer_rats" },
       { "when": [{ "if": "flag", "flag": "dog_pokes", "min": 9 }], "node": "poke_loop" },
@@ -97,7 +105,7 @@
         ]
       },
       "rats_done": {
-        "lines": ["Three. Keep them.", "Water and snakeroot makes Stranglethorn. Stranglethorn and meat makes a last meal. The small snakes in the burial cannot be fought. They can be fed."],
+        "lines": ["Three. Keep them.", "Meat keeps, where it is going. You will not need it for a while, and I will tell you when you do."],
         "options": [{ "label": "Understood", "actions": [{ "do": "handin", "quest": "rats_below" }] }]
       },
       "offer_mine": {
@@ -115,19 +123,96 @@
         "lines": ["You smell like rust and old gold. Good.", "Eat something."],
         "options": [{ "label": "Here", "actions": [{ "do": "handin", "quest": "the_mine" }] }]
       },
+      "offer_museum": {
+        "lines": [
+          "That brass key came out of the vault. It is the Museum's, across the river from Castle, on the road over the bridge. Open until nine.",
+          "One wing has had its name painted over. It said MAGIC. You will want to see what they kept under the paint."
+        ],
+        "options": [
+          { "label": "I'll go", "actions": [{ "do": "quest", "quest": "the_museum" }, { "do": "flag", "flag": "offered_museum" }] },
+          { "label": "Not yet" }
+        ]
+      },
+      "museum_done": {
+        "lines": [
+          "Plaster in your hair. You found the wing.",
+          "The old families took a little of the gold, for the bench, and left the rest in the hill. That was the whole of the arrangement. Then somebody bought the hill."
+        ],
+        "options": [{ "label": "Here", "actions": [{ "do": "handin", "quest": "the_museum" }] }]
+      },
+      "offer_forest": {
+        "lines": [
+          "The green tag is for the gate of Butterfly Forest. The road to it goes past the ruined library, and the library comes first.",
+          "There is one page left in there worth reading. Nothing in that forest will grow for you until you have read it."
+        ],
+        "options": [
+          { "label": "I'll go", "actions": [{ "do": "quest", "quest": "the_forest" }, { "do": "flag", "flag": "offered_forest" }] },
+          { "label": "Not yet" }
+        ]
+      },
+      "forest_done": {
+        "lines": [
+          "You were counted out. Good. Not everybody is.",
+          "The cases on his wall had trades on them. Those were county people, the ones who were still well when the nights got long. They were sent where it was still a garden."
+        ],
+        "options": [
+          { "label": "Who sent them?", "goto": "forest_who" },
+          { "label": "Here", "actions": [{ "do": "handin", "quest": "the_forest" }] }
+        ]
+      },
+      "forest_who": {
+        "lines": ["I did.", "She did. It was the kindest place she had, and it was a garden then."],
+        "options": [{ "label": "Here", "actions": [{ "do": "handin", "quest": "the_forest" }] }]
+      },
+      "offer_factory": {
+        "lines": [
+          "The Works are past the graveyard. The Factory is the Company's, and the Company kept a key there to a door of its own.",
+          "There is a grate at the edge of Castle. The pipes under it run to the Works, dry most days. It is a better road than the one the night shift walks."
+        ],
+        "options": [
+          { "label": "I'll go", "actions": [{ "do": "quest", "quest": "the_factory" }, { "do": "flag", "flag": "offered_factory" }] },
+          { "label": "Not yet" }
+        ]
+      },
+      "factory_done": {
+        "lines": ["You smell of hot wire.", "Keep that key on you. It is the Company's own, and it opens one door in the county."],
+        "options": [{ "label": "Here", "actions": [{ "do": "handin", "quest": "the_factory" }] }]
+      },
       "offer_burial": {
-        "lines": ["The burial is past Castle, off the graveyard road: the one that goes north, toward the School. Do not go as far as the School. A footpath from the graveyard goes to a stone that says DO NOT. Cold, dark, foggy. Lots of death in there.", "The torches down there are blue and they only wake for cold. What burns is in the garden. The big snake keeps its own room and never stops moving. Hit the tail if you cannot reach the head."],
+        "lines": [
+          "The burial is past Castle, off the graveyard road: the one that goes north, toward the School. Do not go as far as the School. A footpath from the graveyard goes to a stone that says DO NOT, and the Company's key unlocks the stair under it.",
+          "The meat from under the house: soak it in Stranglethorn, water and snakeroot, at a bench. The small snakes down there cannot be fought. They can be fed.",
+          "The torches down there are blue and they only wake for cold. What burns is in the garden. The big snake keeps its own room and never stops moving. Hit the tail if you cannot reach the head.",
+          "Whatever is under that stone was buried with the county's gold, all of it, cast into one ball. Bring the ball up."
+        ],
         "options": [
           { "label": "I'll go", "actions": [{ "do": "quest", "quest": "the_burial" }, { "do": "flag", "flag": "offered_burial" }] },
           { "label": "Not yet" }
         ]
       },
       "burial_done": {
-        "lines": ["It is quiet under the yard for the first time since she left.", "She is not dead, {name}. I would know. There is a museum across the river with a wing marked MAGIC, and you are holding the key to it."],
+        "lines": ["You found him, then. Gnox Goldskin, with his arms round it.", "She is not dead, {name}. I would know."],
         "options": [{ "label": "Then I keep walking", "actions": [{ "do": "handin", "quest": "the_burial" }] }]
       },
+      "offer_school": {
+        "lines": [
+          "The stair behind him goes up, not out. It comes up in the School. The key on the caretaker's bin opens the front doors from outside.",
+          "That window has been lit since before you came, and somebody up there rings the bell at nine. Go and see who. Take the ball."
+        ],
+        "options": [
+          { "label": "I'll go up", "actions": [{ "do": "quest", "quest": "the_school" }, { "do": "flag", "flag": "offered_school" }] },
+          { "label": "Not yet" }
+        ]
+      },
+      "school_done": {
+        "lines": [
+          "You went up, and you came down again. Not everybody has.",
+          "She held it over the county for as long as anyone could have. Longer. What happens to the ball now is yours to say."
+        ],
+        "options": [{ "label": "Here", "actions": [{ "do": "handin", "quest": "the_school" }] }]
+      },
       "epilogue": {
-        "lines": ["Sunday's train is a week away. The county still turns. Walk."]
+        "lines": ["There is a train on Sunday. The county still turns. Walk."]
       },
       "stoneskin_done": {
         "lines": [
@@ -184,7 +269,7 @@
     "nodes": {
       "first": {
         "lines": [
-          "{name} - if you are reading this I am late, not lost.",
+          "{name}, if you are reading this I am late, not lost.",
           "The bench is set. Gold dust, a vial of water, a pansy from the pantry chest. Make it before you go down any stairs.",
           "The hatches are only the cellar. The orb by the stove is cold on purpose. Touch it. You will not be surprised for long. - J"
         ],
@@ -203,6 +288,30 @@
         "lines": [
           "THE OTHER WAY OUT. The keys are in the chest at the first stair: the hatch chalked KEYS, by the stove.",
           "Under it, smaller: a cellar with one way out is a mistake you make once. - J"
+        ]
+      }
+    }
+  },
+  "study_desk": {
+    "speaker": "The Study Desk",
+    "start": [{ "node": "look" }],
+    "nodes": {
+      "look": {
+        "lines": [
+          "Nothing on the desk. The dust is even all over it but for one clean ring, the size of the stand the orb sits on in the kitchen.",
+          "The ring is sharp at the edge. Whatever stood here was taken away since the last time anyone dusted, and nobody has dusted since."
+        ]
+      }
+    }
+  },
+  "dogs_bowl": {
+    "speaker": "The Dog's Bowl",
+    "start": [{ "node": "look" }],
+    "nodes": {
+      "look": {
+        "lines": [
+          "A tin bowl by the step, licked clean. The label on its side is in the same hand as the letter.",
+          "DOG. Twice a day. It will tell you if you forget."
         ]
       }
     }
@@ -232,17 +341,17 @@
   "sign_mine": {
     "speaker": "Sign",
     "start": [{ "node": "read" }],
-    "nodes": { "read": { "lines": ["GOLDSKIN MINING Co. - CLOSED. No entry. No exit either, some nights."] } }
+    "nodes": { "read": { "lines": ["GOLDSKIN MINING Co. CLOSED. No entry. No exit either, some nights."] } }
   },
   "sign_burial": {
     "speaker": "Standing Stone",
     "start": [{ "node": "read" }],
-    "nodes": { "read": { "lines": ["DO NOT. Underneath, smaller, scratched later: the snake keeps the ball. leave it."] } }
+    "nodes": { "read": { "lines": ["DO NOT. Underneath, smaller, scratched later: he took the ball down with him. leave it there."] } }
   },
   "sign_town": {
     "speaker": "Sign",
     "start": [{ "node": "read" }],
-    "nodes": { "read": { "lines": ["CASTLE. Train: Sunday. Museum, factory and school across the river. Bridge out."] } }
+    "nodes": { "read": { "lines": ["CASTLE HALT. Trains Sundays only. For Castle, the station road and then the Castle road.", "The station road is lit from half past six. Passengers are asked to keep to it, whichever way they are walking."] } }
   },
   "bed": {
     "speaker": "Bed",

@@ -1,7 +1,7 @@
 {
   "the_letter": {
     "name": "A Letter from Julie",
-    "description": "The letter looked a hundred years old. Auntie Julie - a woman you were told you had, and never met - asked you to Castle for your birthday. Twelve hours on the Sunday train. No signal since the tunnel.\n\nThe map in the letter is one road from Castle Halt. It ends at a house and a dog.",
+    "description": "The letter looked a hundred years old. Auntie Julie, a woman you were told you had and never met, asked you to Castle for your birthday. Twelve hours on the Sunday train. No signal since the tunnel.\n\nThe map in the letter is one road from Castle Halt. It ends at a house and a dog.",
     "completion": "The stoop is real. Julie is not on it. The dog has been waiting.",
     "returnTo": "the step of Julie's house",
     "requirements": [{ "type": "location", "target": "stoop", "qty": 1, "text": "Auntie Julie's house, at the end of the station road" }],
@@ -11,7 +11,7 @@
     "name": "The Thing in the Yard",
     "description": "The dog wants the walking bones off Julie's fence line. It will not say why a key is waiting until they stay down.",
     "completion": "The skeleton will not get up again today. The dog has decided you are allowed a key.",
-    "returnTo": "the dog, on Julie's step",
+    "returnTo": "the dog, on Julie's step, by day",
     "requirements": [{ "type": "kill", "target": "skeleton", "qty": 1, "text": "The bones walking Julie's fence line" }],
     "rewards": [{ "do": "give", "item": "key_auntie_house" }, { "do": "quest", "quest": "see_the_kitchen" }]
   },
@@ -27,23 +27,23 @@
     "name": "Dust, Water, Pansy",
     "description": "Julie's note says the bench is set for one potion and that you should make it before you go down any stairs. Gold dust, a vial of water, a pansy from the pantry chest. Stand at the bench and open your bags. The dog will want to know.",
     "completion": "It fizzes blue. You made that. The dog is not surprised.",
-    "returnTo": "the dog, on Julie's step",
+    "returnTo": "the dog, on Julie's step, by day",
     "requirements": [{ "type": "acquire", "target": "potion_manashield", "qty": 1, "text": "A Manashield potion, made at the bench in Julie's kitchen" }],
     "rewards": [{ "do": "give", "item": "small_water", "qty": 4 }, { "do": "give", "item": "gold_dust", "qty": 2 }]
   },
   "rats_below": {
-    "name": "What Snakes Eat",
+    "name": "Under the House",
     "description": "There are rats in the cellar under Julie's kitchen, down either hatch. The dog wants three pieces of meat and will not say what for.",
-    "completion": "Soak it in Stranglethorn - water and snakeroot - at the bench. Throw it where a burial snake can smell it. Do not stand near.",
-    "returnTo": "the dog, on Julie's step",
+    "completion": "Three pieces, wrapped in a page of the parish news. The dog did not want them. It wants you to keep them.",
+    "returnTo": "the dog, on Julie's step, by day",
     "requirements": [{ "type": "acquire", "target": "rat_meat", "qty": 3, "text": "Rat meat, from the rats in Julie's cellar" }],
     "rewards": [{ "do": "give", "item": "savage_snakeroot", "qty": 2 }, { "do": "give", "item": "small_water", "qty": 2 }]
   },
   "the_mine": {
-    "name": "Gnox Goldskin's Mine",
+    "name": "The Gold Mine",
     "description": "The Gold Mine is at the end of the mine road out of Castle; its mouth is the one with the lamp. The Headmaster keeps the vault key. Something called Iron Knuckles keeps everything else. Broken things down there want Repair, and Repair wants wood and iron.",
-    "completion": "The mine is quiet. Whatever Julie dug there, she stopped digging.",
-    "returnTo": "the dog, on Julie's step",
+    "completion": "The mine is quiet. Goldskin dug it, and the dead went on digging after him. They have stopped. The vault held a brass key tagged MAGIC.",
+    "returnTo": "the dog, on Julie's step, by day",
     "requirements": [
       { "type": "location", "target": "mine", "qty": 1, "text": "The Gold Mine, at the end of the mine road" },
       { "type": "kill", "target": "headmaster", "qty": 1, "text": "The Headmaster, down the gold mine" },
@@ -51,16 +51,62 @@
     ],
     "rewards": [{ "do": "give", "item": "apple", "qty": 5 }, { "do": "give", "item": "potion_stoneskin", "qty": 2 }]
   },
+  "the_museum": {
+    "name": "The Museum",
+    "description": "The Museum is across the river from Castle, on the road over the bridge, and the brass key from the mine's vault opens its front door. Open until nine. One wing has had its name painted over. The dog wants you to see what was kept in it.",
+    "completion": "You went into the wing that was painted over. The case that was not on the plan held a council key on a green tag.",
+    "returnTo": "the dog, on Julie's step, by day",
+    "requirements": [
+      { "type": "location", "target": "museum", "qty": 1, "text": "The Museum, across the river from Castle" },
+      { "type": "location", "target": "attendant_down", "qty": 1, "text": "The Attendant, in the painted-over wing of the Museum" }
+    ],
+    "rewards": [{ "do": "give", "item": "gold_dust", "qty": 2 }, { "do": "give", "item": "potion_manashield", "qty": 1 }]
+  },
+  "the_forest": {
+    "name": "Butterfly Forest",
+    "description": "The key on the green tag opens the gate of Butterfly Forest, on the road past the ruined library. The dog says to read the library's last page before the gate: nothing in that forest grows for anyone who has not. The forest is open from sunrise to sunset, and visitors are counted in and out.",
+    "completion": "Eleven glass cases on the Collector's wall, labelled with trades and not species. You were counted in, and you were counted out.",
+    "returnTo": "the dog, on Julie's step, by day",
+    "requirements": [
+      { "type": "location", "target": "library", "qty": 1, "text": "The ruined library, on the road past the Museum" },
+      { "type": "location", "target": "forest", "qty": 1, "text": "The gate of Butterfly Forest, past the ruined library" },
+      { "type": "location", "target": "emperor_down", "qty": 1, "text": "The Emperor, at the stone in Butterfly Forest" }
+    ],
+    "rewards": [{ "do": "give", "item": "apple", "qty": 5 }, { "do": "give", "item": "potion_stoneskin", "qty": 1 }]
+  },
+  "the_factory": {
+    "name": "The Factory",
+    "description": "The Factory is the Company's, in the Works past the graveyard. The pipes under Castle run there, dry most days, from a grate at the edge of the town. The Company kept a key in the Factory to one door of its own, and the dog wants it.",
+    "completion": "The Foreman is down and the roller door is open onto the yard. His locker held a key stamped G.M.Co., tagged for the stone on the graveyard footpath.",
+    "returnTo": "the dog, on Julie's step, by day",
+    "requirements": [
+      { "type": "location", "target": "pipes", "qty": 1, "text": "The pipes, down the grate at the edge of Castle" },
+      { "type": "location", "target": "factory", "qty": 1, "text": "The Factory, in the Works" },
+      { "type": "location", "target": "foreman_down", "qty": 1, "text": "The Foreman, in the Factory's assembly hall" }
+    ],
+    "rewards": [{ "do": "give", "item": "small_water", "qty": 4 }, { "do": "give", "item": "potion_stoneskin", "qty": 1 }]
+  },
   "the_burial": {
-    "name": "The Snake Below",
-    "description": "The burial chamber is past Castle, off the graveyard road: a footpath from the graveyard ends at a standing stone that says DO NOT. Cold, dark, foggy. Light the blue torches. Find what burns in the garden. Do not fight the small snakes; feed them.",
-    "completion": "The snake is still. Julie was never in its mouth. The county still turns.",
-    "returnTo": "the dog, on Julie's step",
+    "name": "Under the Stone",
+    "description": "The Burial Chamber is past Castle, off the graveyard road: a footpath from the graveyard ends at a standing stone that says DO NOT, and the Company's key unlocks the stair under it. Cold, dark, foggy. The torches wake for cold. Feed the small snakes; do not fight them. What is buried there was buried with a ball of gold, and the dog wants it brought up.",
+    "completion": "The Ball was in his box, at the foot of a stair that goes up and not out. It is heavier than it looks.",
+    "returnTo": "the dog, on Julie's step, by day",
     "requirements": [
       { "type": "location", "target": "burial", "qty": 1, "text": "The standing stone, on the footpath from the graveyard" },
-      { "type": "location", "target": "burial_garden", "qty": 1, "text": "The garden, inside the burial chamber" },
-      { "type": "kill", "target": "burial_snake", "qty": 1, "text": "The big snake, in its own room in the burial chamber" }
+      { "type": "location", "target": "burial_garden", "qty": 1, "text": "The garden, inside the Burial Chamber" },
+      { "type": "acquire", "target": "the_ball", "qty": 1, "text": "The Ball, in the Burial Chamber" }
     ],
-    "rewards": [{ "do": "give", "item": "light_stone", "qty": 1 }, { "do": "flag", "flag": "spine_done" }]
+    "rewards": [{ "do": "give", "item": "light_stone", "qty": 1 }]
+  },
+  "the_school": {
+    "name": "The School",
+    "description": "The School is on the hill north of Castle: the one lit window. The stair out of the Burial Chamber comes up in its boiler room, and the key on the caretaker's bin opens the front doors from outside. The bell is rung from the tower. The dog wants to know who rings it.",
+    "completion": "You went up the tower. The register in the top room is marked up to this morning, and the last name in it is yours.",
+    "returnTo": "the dog, on Julie's step, by day",
+    "requirements": [
+      { "type": "location", "target": "school", "qty": 1, "text": "The School, on the hill north of Castle" },
+      { "type": "location", "target": "ringer_down", "qty": 1, "text": "Whoever rings the bell, in the School's tower" }
+    ],
+    "rewards": [{ "do": "flag", "flag": "spine_done" }]
   }
 }

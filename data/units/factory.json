@@ -31,6 +31,7 @@
     "sprite": "factory_foreman", "boss": true, "sight": "lit",
     "onDeath": [
       { "do": "flag", "flag": "factory_cleared" },
+      { "do": "location", "name": "foreman_down" },
       { "do": "toast", "text": "The plate comes off him in one piece. The gantries go quiet, and the lamps stay on." }
     ],
     "phases": [

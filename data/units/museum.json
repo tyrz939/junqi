@@ -29,6 +29,7 @@
     "sprite": "museum_attendant", "boss": true,
     "onDeath": [
       { "do": "flag", "flag": "museum_cleared" },
+      { "do": "location", "name": "attendant_down" },
       { "do": "toast", "text": "The keys go down on the tiles. The hall lights come up on their own." }
     ],
     "phases": [

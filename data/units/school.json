@@ -80,6 +80,7 @@
     ],
     "onDeath": [
       { "do": "flag", "flag": "school_cleared" },
+      { "do": "location", "name": "ringer_down" },
       { "do": "despawn", "unit": "school_belfry_shade_1" },
       { "do": "despawn", "unit": "school_belfry_shade_2" },
       { "do": "despawn", "unit": "school_belfry_shade_3" },

@@ -22,6 +22,6 @@
       { "do": "spawn", "unit": "mine_watcher", "def": "folk_old", "at": "company_notice" },
       { "do": "flag", "flag": "mine_quiet", "value": 1 }
     ],
-    "contradicts": "GOLDSKIN MINING Co. - CLOSED. No entry. No exit either, some nights."
+    "contradicts": "GOLDSKIN MINING Co. CLOSED. No entry. No exit either, some nights."
   }
 ]
