@@ -18,6 +18,7 @@ use jane_present::input::{
 };
 use jane_present::text;
 use jane_present::ui::Ui;
+use jane_present::ui::console::{self as term, Console, LineKind};
 use jane_present::ui::core::{AppIntent, UiInput, UiOut};
 use jane_present::ui::dialogue::{self, DialogueBox};
 use jane_present::ui::hud::{self, HudCtx};
@@ -132,6 +133,8 @@ struct App<'a> {
     /// outlives a close.
     win: WindowState,
     win_open: bool,
+    /// The terminal (backquote).
+    console: Console,
 }
 
 /// The sim as the bot's host, keeping what it drains for the presenter too.
@@ -216,6 +219,7 @@ pub fn run(
         bot_until_talk: false,
         win: WindowState::default(),
         win_open: false,
+        console: Console::default(),
     };
     app.read_slots();
     if args.new {
@@ -456,7 +460,7 @@ pub fn save_shot(screen: &mut dyn Screen, px: &mut Vec<u32>, path: &str) -> Resu
 impl App<'_> {
     /// Who has the keyboard.
     fn mode(&self, typing: bool) -> Mode {
-        if typing {
+        if typing || self.console.open {
             return Mode::Text;
         }
         match self.scene {
@@ -595,7 +599,9 @@ impl App<'_> {
                     }
                 }
                 UiAction::Cancel => {
-                    if self.ui.popover_open() || self.title.naming {
+                    if self.console.open {
+                        self.console.open = false;
+                    } else if self.ui.popover_open() || self.title.naming {
                         actions.push(a);
                     } else if !self.menus.is_empty() {
                         self.menus.pop();
@@ -631,6 +637,7 @@ impl App<'_> {
                         self.speed.held = true;
                     }
                 }
+                UiAction::Console => self.console.toggle(self.ticks as u32),
                 UiAction::Bags => self.window_key(0),
                 UiAction::Book => self.window_key(1),
                 UiAction::Quests => self.window_key(2),
@@ -692,6 +699,7 @@ impl App<'_> {
                     self.menu_state = MenuState::default();
                 }
             }
+            AppIntent::Console(line) => self.console_line(&line),
             AppIntent::OpenWindow(tab) => self.window_key(usize::from(tab)),
             AppIntent::CloseWindow => self.win_open = false,
             AppIntent::Back => {
@@ -860,9 +868,53 @@ impl App<'_> {
                 }
             }
         }
+        if self.console.open {
+            self.ui.interactive = true;
+            term::draw(&mut self.ui, &mut self.console);
+        }
         if self.perf_level > 0 || self.world_dbg.on {
             self.ui.interactive = false;
             self.overlays(stats);
+        }
+    }
+
+    /// A line from the terminal, run.
+    fn console_line(&mut self, line: &str) {
+        for r in crate::console::run(line, self.sim.as_deref()) {
+            match r {
+                crate::console::Run::Command(c) => {
+                    self.command(c);
+                    self.console.say("done", LineKind::Good);
+                }
+                crate::console::Run::Say(s, k) => self.console.say(&s, k),
+                crate::console::Run::Save(n) => {
+                    // The terminal saves anywhere: it is a dev's tool.
+                    if let Some(sim) = &self.sim {
+                        match saves::write(&self.dirs, n, &sim.save()) {
+                            Ok(()) => self.console.say(&format!("saved to slot {}", n + 1), LineKind::Good),
+                            Err(e) => self.console.say(&e, LineKind::Error),
+                        }
+                        self.read_slots();
+                    }
+                }
+                crate::console::Run::Load(n) => self.load(n),
+                crate::console::Run::Speed(q) => {
+                    self.speed.quarters = q;
+                    self.speed.held = false;
+                }
+                crate::console::Run::Hold => self.speed.held = true,
+                crate::console::Run::Step => {
+                    self.speed.held = true;
+                    self.speed.step = true;
+                }
+                crate::console::Run::Title => {
+                    self.menus.clear();
+                    self.sim = None;
+                    self.scene = Scene::Title;
+                    self.read_slots();
+                }
+                crate::console::Run::Clear => self.console.clear(),
+            }
         }
     }
 
