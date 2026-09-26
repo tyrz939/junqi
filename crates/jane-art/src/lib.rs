@@ -11,11 +11,13 @@
 pub mod canvas;
 pub mod chrome;
 pub mod demo;
+pub mod flora;
 pub mod font;
 pub mod hash;
 pub mod light;
 pub mod palette;
 pub mod sheet;
+pub mod terrain;
 
 pub use canvas::{Canvas, Z};
 pub use font::{Face, Font, Style};

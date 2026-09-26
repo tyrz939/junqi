@@ -1,0 +1,628 @@
+//! Flora (ART.md §2.6): the things that stand up out of the ground and are drawn bigger than their
+//! one sim cell, the way a 2D Zelda draws them: broadleaf trees, conifers, dead trees, shrubs,
+//! stone piles and boulders. The sim cell stays one cell; the sprite stands on it with its crown
+//! over the neighbours, and the chunk painter stamps it into the chunk's strips so it y-sorts with
+//! units (PRESENTATION.md §1.6).
+//!
+//! A crown is layered leaf masses: a darker back layer, the main ring and a front layer, each mass
+//! a lit sphere with a crescent of shade under it where the mass in front overlaps it, the whole
+//! lit from the top-left with a dark core under it; leaves are clusters of two or three px, lit
+//! on the lit side and dark on the shadow side, and the silhouette is ragged with leaf tips and
+//! notches, never a lollipop disc (ART.md §3.1). Normals are the masses' spheres and height is
+//! px above the foot, so the lit tiers see the crown as a volume. Seeded by stable numbers, never
+//! the sim's dice; integer only.
+//!
+//! Units: px at 16 a cell. A sprite's foot `(ax, ay)` is the pixel that stands on the cell's
+//! bottom-centre; its height layer is px above that foot.
+
+use jane_core::angle::{Angle, cos_q15, sin_q15};
+use jane_core::grid::Rect;
+use jane_core::num::isqrt;
+
+use crate::canvas::{BAKE_LIGHT, Canvas, UNIT, Z, normal};
+use crate::hash::{below, h32};
+use crate::palette::{Ix, Ramp, Tone, letter};
+
+/// Hash salt: flora shapes.
+const SALT: u32 = 0x464c_4f52;
+
+/// A flora sprite and its foot.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Sprite {
+    /// All four layers.
+    pub canvas: Canvas,
+    /// The foot's x, px from the left.
+    pub ax: i32,
+    /// The foot's y, px from the top.
+    pub ay: i32,
+}
+
+/// A stream of hashed numbers from one seed.
+struct Dice {
+    seed: u32,
+    n: u32,
+}
+
+impl Dice {
+    fn new(seed: u32) -> Dice {
+        Dice { seed, n: 0 }
+    }
+
+    fn next(&mut self) -> u32 {
+        self.n += 1;
+        h32(self.seed, self.n, SALT)
+    }
+
+    /// `lo..=hi`.
+    fn range(&mut self, lo: i32, hi: i32) -> i32 {
+        lo + below(self.next(), (hi - lo + 1).max(1) as u32) as i32
+    }
+}
+
+/// A tone from a shading value in 1/127ths: lit high, dark low.
+fn shade_tone(v: i32) -> Tone {
+    match v {
+        v if v > 80 => Tone::High,
+        v if v > 52 => Tone::Light,
+        v if v > 24 => Tone::Lift,
+        v if v > -4 => Tone::Base,
+        v if v > -36 => Tone::Mid,
+        v if v > -66 => Tone::Shade,
+        _ => Tone::Deep,
+    }
+}
+
+/// One leaf mass: centre and radius in 1/8 px, and how far back it sits (darker the further).
+#[derive(Clone, Copy)]
+struct Puff {
+    x: i32,
+    y: i32,
+    r: i32,
+    back: i32,
+}
+
+/// A crown of leaf masses inside the ellipse centred `(cx8, cy8)` with radii `(rx8, ry8)`, all in
+/// 1/8 px: a back layer across its top, `n` masses round the middle, and a front layer low in the
+/// middle. Each pixel belongs to the front-most mass over it and takes its tone from where it sits
+/// in that mass (a lit sphere, a crescent of shade under it), in the whole crown (lit at the top
+/// and left, a dark core under it) and how far back the mass is. Then leaves: clusters of two or
+/// three px, lit on the lit side, dark on the shadow side, some reaching past the silhouette, and
+/// notches bitten out of it. `grow` is the masses' size in 1/16ths.
+#[allow(clippy::too_many_arguments)]
+fn crown(
+    c: &mut Canvas,
+    (cx8, cy8): (i32, i32),
+    (rx8, ry8): (i32, i32),
+    n: i32,
+    ramp: Ramp,
+    d: &mut Dice,
+    foot_y: i32,
+    grow: i32,
+) {
+    let small = rx8.min(ry8);
+    let mut puffs: Vec<Puff> = Vec::new();
+    // The back layer: small masses along the crown's top, drawn first and darker.
+    for i in 0..=(n / 2) {
+        let t = i * 2 * 16384 / (n / 2 + 1).max(1) + 49152 - 16384 + d.range(-1500, 1500);
+        let a = Angle(t as u16);
+        let (ca, sa) = (cos_q15(a).0, sin_q15(a).0);
+        puffs.push(Puff {
+            x: cx8 + ((ca * rx8) >> 15) * 62 / 100,
+            y: cy8 + ((sa * ry8) >> 15) * 70 / 100,
+            r: small * (34 + d.range(0, 10)) / 100 * grow / 16,
+            back: 2,
+        });
+    }
+    // The main ring and the central mass.
+    puffs.push(Puff { x: cx8 - rx8 / 10, y: cy8 - ry8 * 15 / 100, r: small * 58 / 100 * grow / 16, back: 1 });
+    let a0 = d.range(0, 65535);
+    for i in 0..n {
+        let a = Angle((a0 + i * 65536 / n + d.range(-2600, 2600)) as u16);
+        let k = 55 + d.range(0, 12);
+        let (ca, sa) = (cos_q15(a).0, sin_q15(a).0);
+        puffs.push(Puff {
+            x: cx8 + ((ca * rx8) >> 15) * k / 100,
+            y: cy8 + ((sa * ry8) >> 15) * k / 100,
+            r: small * (38 + d.range(0, 12)) / 100 * grow / 16,
+            back: 1,
+        });
+    }
+    // The front layer: two or three masses low in the middle, in front of everything.
+    for _ in 0..2 + d.range(0, 1) {
+        puffs.push(Puff {
+            x: cx8 + d.range(-rx8 * 4 / 10, rx8 * 4 / 10),
+            y: cy8 + ry8 * (25 + d.range(0, 15)) / 100,
+            r: small * (30 + d.range(0, 8)) / 100 * grow / 16,
+            back: 0,
+        });
+    }
+    // Back to front, then top to bottom within a layer; ties by index, a total key.
+    let mut order: Vec<usize> = (0..puffs.len()).collect();
+    order.sort_by_key(|&i| (-puffs[i].back, puffs[i].y, i));
+    let (w, h) = (c.w(), c.h());
+    let mut owner = vec![-1i32; (w * h) as usize];
+    for &i in &order {
+        let q = puffs[i];
+        for y in ((q.y - q.r) >> 3) - 1..=((q.y + q.r) >> 3) + 1 {
+            for x in ((q.x - q.r) >> 3) - 1..=((q.x + q.r) >> 3) + 1 {
+                if x < 0 || y < 0 || x >= w || y >= h {
+                    continue;
+                }
+                let (dx, dy) = (x * 8 + 4 - q.x, y * 8 + 4 - q.y);
+                if dx * dx + dy * dy <= q.r * q.r {
+                    owner[(y * w + x) as usize] = i as i32;
+                }
+            }
+        }
+    }
+    let seed = d.next();
+    let mut vals = vec![0i32; (w * h) as usize];
+    for y in 0..h {
+        for x in 0..w {
+            let i = owner[(y * w + x) as usize];
+            if i < 0 {
+                continue;
+            }
+            let q = puffs[i as usize];
+            let r = q.r.max(1);
+            let (lx, ly) = ((x * 8 + 4 - q.x) * UNIT / r, (y * 8 + 4 - q.y) * UNIT / r);
+            let s = (lx * lx + ly * ly).min(UNIT * UNIT);
+            let nz = isqrt((UNIT * UNIT - s) as u64) as i32;
+            let lam = (lx * BAKE_LIGHT[0] + ly * BAKE_LIGHT[1] + nz * BAKE_LIGHT[2]) / UNIT;
+            let (gx, gy) = ((x * 8 + 4 - cx8) * UNIT / rx8.max(1), (y * 8 + 4 - cy8) * UNIT / ry8.max(1));
+            let global = -gy * 36 / 100 - gx * 15 / 100;
+            // The dark core: under the middle of the crown, where no light gets in.
+            let core = {
+                let (dx, dy) = (gx, gy - UNIT * 35 / 100);
+                let dd = dx * dx + dy * dy * 2;
+                if dd < UNIT * UNIT / 5 {
+                    -28
+                } else if dd < UNIT * UNIT * 2 / 5 {
+                    -12
+                } else {
+                    0
+                }
+            };
+            let jitter = below(h32((x >> 1) as u32, (y >> 1) as u32, seed), 11) as i32 - 5;
+            let mut v = lam * 62 / 100 + global + core - q.back * 20 + jitter + 2;
+            // The crescent under each mass is what makes a crown read as masses and not a disc.
+            if s > UNIT * UNIT * 64 / 100 && ly > UNIT / 6 {
+                v -= 58;
+            }
+            vals[(y * w + x) as usize] = v;
+            let z = (foot_y - y).max(1) + nz * r / (UNIT * 16);
+            c.put(x, y, ramp.at(shade_tone(v)), normal(lx, ly), z.clamp(1, 255) as u8);
+        }
+    }
+    // Leaves: a jittered 3 px lattice over the crown; each point, by hash, a cluster lit on the
+    // lit side or dark on the shadow side; at the silhouette a tip reaching out or a notch.
+    let inside = |x: i32, y: i32| x >= 0 && y >= 0 && x < w && y < h && owner[(y * w + x) as usize] >= 0;
+    let lseed = d.next();
+    for gy in 0..=(h / 3) {
+        for gx in 0..=(w / 3) {
+            let hl = h32(gx as u32, gy as u32, lseed);
+            let (x, y) = (gx * 3 + (hl % 3) as i32, gy * 3 + ((hl >> 2) % 3) as i32);
+            let edge =
+                inside(x, y) && [(1, 0), (-1, 0), (0, 1), (0, -1)].iter().any(|&(dx, dy)| !inside(x + dx, y + dy));
+            if !inside(x, y) {
+                continue;
+            }
+            let v = vals[(y * w + x) as usize];
+            let base = shade_tone(v);
+            let z = c.height_at(x, y);
+            if edge {
+                // Out along the outward side: a tip on the lit side of the crown, a notch below.
+                let (ox, oy) = [(1, 0), (-1, 0), (0, 1), (0, -1)]
+                    .iter()
+                    .copied()
+                    .find(|&(dx, dy)| !inside(x + dx, y + dy))
+                    .unwrap_or((0, -1));
+                match (hl >> 5) % 4 {
+                    0 | 1 if oy <= 0 => {
+                        let t = base.step(i32::from(ox + oy < 0));
+                        c.put(x + ox, y + oy, ramp.at(t), normal(ox * 80, oy * 80), z);
+                        if (hl >> 8) & 1 == 0 {
+                            c.put(
+                                x + ox + oy.abs() * ox.signum(),
+                                y + oy - ox.abs(),
+                                ramp.at(t),
+                                normal(ox * 80, oy * 80),
+                                z,
+                            );
+                        }
+                    }
+                    2 if oy >= 0 && v < 0 => c.clear_px(x, y),
+                    _ => {}
+                }
+                continue;
+            }
+            if (hl >> 5) % 3 != 0 {
+                continue;
+            }
+            // Lit leaves on the lit side of a mass, dark ones in its shade; calm in between.
+            let lam = {
+                let [nx, ny, nz] = crate::canvas::decode(c.normal_at(x, y));
+                (nx * BAKE_LIGHT[0] + ny * BAKE_LIGHT[1] + nz * BAKE_LIGHT[2]) / UNIT
+            };
+            let (t, cells): (Tone, &[(i32, i32)]) = if lam > 40 && v > 0 {
+                (base.step(1 + i32::from(v > 40)), &[(0, 0), (1, 0), (0, 1)])
+            } else if v < -30 && lam < 0 {
+                (base.step(-1), &[(0, 0), (1, 1)])
+            } else {
+                continue;
+            };
+            for &(dx, dy) in cells {
+                if inside(x + dx, y + dy) {
+                    let n = c.normal_at(x + dx, y + dy);
+                    c.put(x + dx, y + dy, ramp.at(t), n, z.saturating_add(1));
+                }
+            }
+        }
+    }
+}
+
+/// A trunk from row `top` to row `bottom` (its foot), `w` px wide round column `cx`, flaring
+/// into roots over its bottom four rows; lit on the left with a cylinder's normals, bark in grain
+/// runs down it, the crown's shade on its top rows, and two limbs forking up into the crown.
+fn trunk(c: &mut Canvas, cx: i32, top: i32, bottom: i32, w: i32, bark: Ramp, seed: u32) {
+    let half = w / 2;
+    for y in top..=bottom {
+        let flare = ((y - (bottom - 4)).max(0) * 3 + 1) / 2;
+        let (x0, x1) = (cx - half - flare, cx + (w - half) + flare);
+        for x in x0..x1 {
+            let lx = ((2 * (x - x0) + 1 - (x1 - x0)) * UNIT / (x1 - x0).max(1)).clamp(-UNIT, UNIT);
+            let mut tone = if lx < -60 {
+                Tone::Light
+            } else if lx < -20 {
+                Tone::Lift
+            } else if lx < 30 {
+                Tone::Base
+            } else if lx < 80 {
+                Tone::Mid
+            } else {
+                Tone::Shade
+            };
+            // Grain: runs of 3 to 7 px down a column, darker or lighter.
+            let run = h32(x as u32, (y + (h32(x as u32, 1, seed) % 7) as i32).div_euclid(7) as u32, seed);
+            if run % 4 == 0 {
+                tone = tone.step(-1);
+            } else if run % 9 == 1 && lx < 20 {
+                tone = tone.step(1);
+            }
+            if y < top + 5 {
+                tone = tone.step(if y < top + 3 { -2 } else { -1 });
+            }
+            // A root: a lit bump each side of the flare.
+            if flare > 0 && (x == x0 || x == x1 - 1) && y == bottom {
+                tone = Tone::Mid;
+            }
+            c.put(x, y, bark.at(tone), normal(lx * 9 / 10, 0), (bottom - y + 1).max(1) as u8);
+        }
+    }
+    for side in [-1, 1] {
+        let (mut x, mut y) = (cx + side * (half - 1), top + 2);
+        for i in 0..6 {
+            c.put(
+                x,
+                y,
+                bark.at(if side < 0 { Tone::Lift } else { Tone::Mid }),
+                normal(side * 60, -40),
+                (bottom - y + 1) as u8,
+            );
+            c.put(x + side, y, bark.at(Tone::Shade), normal(side * 60, -40), (bottom - y + 1) as u8);
+            y -= 1;
+            x += side * i32::from(i % 2 == 1);
+        }
+    }
+}
+
+/// A broadleaf. Large: 64 x 80; medium: 48 x 64. Foot: the trunk's bottom centre.
+pub fn broadleaf(seed: u32, large: bool, leaf: Ramp, bark: Ramp) -> Sprite {
+    let mut d = Dice::new(seed);
+    let (w, h) = if large { (64, 80) } else { (48, 64) };
+    let mut c = Canvas::new(w, h);
+    let (ax, ay) = (w / 2, h - 2);
+    trunk(&mut c, ax, if large { 42 } else { 32 }, ay, if large { 10 } else { 8 }, bark, d.next());
+    let cx8 = ax * 8 + d.range(-12, 12);
+    let (cy, rx, ry, n) = if large { (28, 27, 24, 9) } else { (22, 20, 18, 7) };
+    crown(&mut c, (cx8, cy * 8), (rx * 8, ry * 8), n, leaf, &mut d, ay, 16);
+    c.outline();
+    Sprite { canvas: c, ax, ay }
+}
+
+/// A conifer: stacked drooping tiers on a short trunk, each tier's skirt ragged with needle
+/// tips, lit on its left and dark on its right. 44 x 84.
+pub fn pine(seed: u32, needle: Ramp, bark: Ramp) -> Sprite {
+    let mut d = Dice::new(seed);
+    let (w, h) = (44, 84);
+    let mut c = Canvas::new(w, h);
+    let (ax, ay) = (w / 2, h - 2);
+    trunk(&mut c, ax, 62, ay, 6, bark, d.next());
+    let seed2 = d.next();
+    let tiers = [(2, 18, 8), (13, 20, 11), (25, 21, 14), (38, 22, 17), (50, 21, 20)];
+    for (k, (top, tall, hm)) in tiers.into_iter().enumerate() {
+        let hm = hm + d.range(-1, 1);
+        for yy in 0..tall {
+            let y = top + yy;
+            let t = yy + 1;
+            // An eased half-width: quick at the tip, slower toward the tier's skirt.
+            let half = hm * t * (2 * tall - t) / (tall * tall);
+            let f = t * UNIT / tall;
+            for x in (ax - half - 1)..=(ax + half) {
+                let lx = (2 * (x - ax) + 1) * UNIT / (2 * half.max(1));
+                // The skirt: needle tips hang below the tier's edge in 2 px teeth.
+                let edge = lx.abs() > UNIT * 85 / 100;
+                let tooth = h32((x >> 1) as u32, k as u32, seed2) % 3;
+                if edge && yy > tall - 4 && tooth == 0 {
+                    continue;
+                }
+                if lx.abs() > UNIT && !(yy > tall - 3 && tooth == 1) {
+                    continue;
+                }
+                let droop = if f > UNIT * 82 / 100 { 60 } else { 0 };
+                let jitter = below(h32((x >> 1) as u32, (y >> 1) as u32, seed2), 13) as i32 - 6;
+                let v = -lx * 6 / 10 + (UNIT - f) * 4 / 10 - droop + jitter - 16 - k as i32 * 4;
+                let n = normal(lx * 8 / 10, 30 + f * 50 / UNIT);
+                c.put(x, y, needle.at(shade_tone(v)), n, (ay - y).clamp(1, 255) as u8);
+            }
+        }
+        // Needle clusters: short strokes slanting down and out, lit on the left half.
+        for s in 0..hm {
+            let hs = h32(s as u32, k as u32, seed2 ^ 0x77);
+            let yy = 4 + below(hs, (tall - 6).max(1) as u32) as i32;
+            let half = hm * (yy + 1) * (2 * tall - yy - 1) / (tall * tall);
+            if half < 2 {
+                continue;
+            }
+            let x = ax - half + 1 + below(hs >> 8, (2 * half - 2).max(1) as u32) as i32;
+            let side = if x < ax { -1 } else { 1 };
+            let t = if side < 0 { Tone::Light } else { Tone::Shade };
+            for i in 0..2 {
+                let (px, py) = (x + side * i, top + yy + i);
+                if c.get(px, py).is_opaque() {
+                    let z = c.height_at(px, py);
+                    c.put(px, py, needle.at(t), normal(side * 60, 40), z);
+                }
+            }
+        }
+    }
+    c.outline();
+    Sprite { canvas: c, ax, ay }
+}
+
+/// A dead tree: a grey trunk and a few bare limbs. 44 x 68.
+pub fn dead_tree(seed: u32, wood: Ramp) -> Sprite {
+    let mut d = Dice::new(seed);
+    let (w, h) = (44, 68);
+    let mut c = Canvas::new(w, h);
+    let (ax, ay) = (w / 2, h - 2);
+    trunk(&mut c, ax, 14, ay, 6, wood, d.next());
+    // Limbs: a walk up and out, the first steps thick.
+    let mut limbs: Vec<(i32, i32, i32, i32, i32)> =
+        vec![(ax - 2, 30, -1, 7, 2), (ax + 2, 24, 1, 7, 2), (ax, 16, 0, 6, 2), (ax - 2, 42, -1, 4, 1)];
+    let mut k = 0;
+    while k < limbs.len() && k < 12 {
+        let (x0, y0, dir, len, pen) = limbs[k];
+        let (mut fx, mut fy) = (x0 * 8, y0 * 8);
+        let lean = if dir == 0 { d.range(-4, 4) } else { dir * 8 };
+        for i in 0..len {
+            let (px, py) = (fx >> 3, fy >> 3);
+            fx += lean * d.range(7, 13) / 10;
+            fy -= d.range(5, 11);
+            let p = if i < 3 { pen } else { 1 };
+            let tone = if i < 2 { Tone::Base } else { Tone::Lift };
+            c.line((px, py), (fx >> 3, fy >> 3), wood.at(tone), p, (ay - (fy >> 3)).clamp(1, 255) as u8);
+            if i > 2 && limbs.len() < 12 && d.range(0, 3) == 0 {
+                limbs.push((fx >> 3, fy >> 3, -dir.signum(), 3, 1));
+            }
+        }
+        k += 1;
+    }
+    c.outline();
+    Sprite { canvas: c, ax, ay }
+}
+
+/// A shrub on one cell, a little wider than it: 28 x 26, its foot a px below the cell. Berries are
+/// a few red beads, each lit on top.
+pub fn bush(seed: u32, ramp: Ramp, berries: bool) -> Sprite {
+    let mut d = Dice::new(seed);
+    let (w, h) = (28, 26);
+    let mut c = Canvas::new(w, h);
+    let (ax, ay) = (14, 24);
+    let cx8 = ax * 8 + d.range(-4, 4);
+    crown(&mut c, (cx8, 13 * 8), (11 * 8, 10 * 8), 5, ramp, &mut d, ay, 20);
+    if berries {
+        let (red, dark) = (letter('r').unwrap_or(Ix::INK), letter('R').unwrap_or(Ix::INK));
+        for _ in 0..5 {
+            let (x, y) = (d.range(6, 20), d.range(5, 16));
+            if c.get(x, y).is_opaque() && c.get(x, y + 1).is_opaque() {
+                let z = c.height_at(x, y).saturating_add(1);
+                c.dot(x, y, red, z);
+                c.dot(x, y + 1, dark, z);
+            }
+        }
+    }
+    c.outline();
+    Sprite { canvas: c, ax, ay }
+}
+
+/// A pile of two or three stones on one cell: 26 x 22, each stone lit on its top, a crack in one.
+pub fn rocks(seed: u32, stone: Ramp) -> Sprite {
+    let mut d = Dice::new(seed);
+    let (w, h) = (26, 22);
+    let mut c = Canvas::new(w, h);
+    let (ax, ay) = (13, 20);
+    let mut stones = vec![Rect::new(3 + d.range(0, 3), 8, 14, 12), Rect::new(12 + d.range(0, 2), 10, 12, 10)];
+    if d.range(0, 9) < 6 {
+        stones.push(Rect::new(8 + d.range(0, 4), 3, 10, 9));
+    }
+    stones.sort_by_key(|r| (r.y, r.x));
+    for r in stones {
+        let top = (ay - r.y).clamp(2, 255) as u8;
+        c.soft_ellipse(r, stone, Z::new(1, top));
+    }
+    c.outline();
+    Sprite { canvas: c, ax, ay }
+}
+
+/// A boulder, standing on one cell and overhanging it: 34 x 30, with a crack and a patch of moss
+/// on its lit shoulder.
+pub fn boulder(seed: u32, stone: Ramp) -> Sprite {
+    let mut d = Dice::new(seed);
+    let (w, h) = (34, 30);
+    let mut c = Canvas::new(w, h);
+    let (ax, ay) = (17, 28);
+    c.soft_ellipse(Rect::new(2 + d.range(-1, 1), 4, 30, 25), stone, Z::new(1, 22));
+    // A crack wandering down from the crown, lit on its left lip.
+    let mut x = 13 + d.range(0, 8);
+    for y in 7..18 {
+        if c.get(x, y).is_opaque() && c.get(x - 1, y).is_opaque() {
+            let z = c.height_at(x, y);
+            c.dot(x, y, stone.at(Tone::Deep), z);
+            c.dot(x - 1, y, stone.at(Tone::Light), z);
+        }
+        x += d.range(-1, 1);
+    }
+    // Moss on the lit shoulder, in clumps.
+    for _ in 0..4 {
+        let (mx, my) = (d.range(6, 14), d.range(6, 11));
+        for (dx, dy, t) in [(0, 0, Tone::Lift), (1, 0, Tone::Base), (0, 1, Tone::Mid), (1, 1, Tone::Shade)] {
+            if c.get(mx + dx, my + dy).is_opaque() {
+                let z = c.height_at(mx + dx, my + dy);
+                c.dot(mx + dx, my + dy, Ramp::Marsh.at(t), z);
+            }
+        }
+    }
+    c.outline();
+    Sprite { canvas: c, ax, ay }
+}
+
+/// The ramps a bank is drawn in: from the tree, pine, bush, dead tree and rubble looks.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Ramps {
+    /// An ordinary wood's leaf; the olive and the dark wet-wood greens go beside it.
+    pub leaf: Ramp,
+    /// Trunks.
+    pub bark: Ramp,
+    /// Conifers.
+    pub needle: Ramp,
+    /// Shrubs.
+    pub shrub: Ramp,
+    /// Dead trees.
+    pub dead: Ramp,
+    /// Stone piles and boulders.
+    pub stone: Ramp,
+}
+
+impl Default for Ramps {
+    fn default() -> Ramps {
+        Ramps {
+            leaf: Ramp::Leaf,
+            bark: Ramp::Bark,
+            needle: Ramp::Needle,
+            shrub: Ramp::Shrub,
+            dead: Ramp::Deadwood,
+            stone: Ramp::Stone,
+        }
+    }
+}
+
+/// Every flora sprite the chunk painter stamps, built once: 43 of them (ART.md §2).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Bank {
+    /// Large broadleaves by leaf (ordinary, olive, wet), four of each.
+    pub large: [[Sprite; 4]; 3],
+    /// Medium broadleaves by leaf, three of each.
+    pub medium: [[Sprite; 3]; 3],
+    /// Conifers.
+    pub pines: [Sprite; 3],
+    /// Dead trees.
+    pub dead: [Sprite; 2],
+    /// Shrubs by leaf (ordinary, olive), four of each.
+    pub bushes: [[Sprite; 4]; 2],
+    /// Shrubs in berry.
+    pub berry: [Sprite; 2],
+    /// Stone piles.
+    pub rocks: [Sprite; 4],
+    /// Boulders.
+    pub boulders: [Sprite; 3],
+}
+
+impl Bank {
+    /// Build every sprite from `r`.
+    pub fn new(r: Ramps) -> Bank {
+        let leaves = [r.leaf, Ramp::LeafOlive, Ramp::LeafDeep];
+        let shrubs = [r.shrub, Ramp::LeafOlive];
+        Bank {
+            large: std::array::from_fn(|p| {
+                std::array::from_fn(|i| broadleaf(1000 + p as u32 * 37 + i as u32 * 101, true, leaves[p], r.bark))
+            }),
+            medium: std::array::from_fn(|p| {
+                std::array::from_fn(|i| broadleaf(5000 + p as u32 * 41 + i as u32 * 97, false, leaves[p], r.bark))
+            }),
+            pines: std::array::from_fn(|i| pine(9000 + i as u32 * 53, r.needle, r.bark)),
+            dead: std::array::from_fn(|i| dead_tree(12000 + i as u32 * 71, r.dead)),
+            bushes: std::array::from_fn(|p| {
+                std::array::from_fn(|i| bush(15000 + p as u32 * 13 + i as u32 * 29, shrubs[p], false))
+            }),
+            berry: std::array::from_fn(|i| bush(17000 + i as u32 * 31, r.shrub, true)),
+            rocks: std::array::from_fn(|i| rocks(19000 + i as u32 * 43, r.stone)),
+            boulders: std::array::from_fn(|i| boulder(21000 + i as u32 * 59, r.stone)),
+        }
+    }
+
+    /// Every sprite with a name, in bank order: for sheets and goldens.
+    pub fn all(&self) -> Vec<(String, &Sprite)> {
+        let mut out: Vec<(String, &Sprite)> = Vec::new();
+        let leaf = ["leaf", "olive", "wet"];
+        for (p, row) in self.large.iter().enumerate() {
+            out.extend(row.iter().enumerate().map(|(i, s)| (format!("tree_large_{}_{i}", leaf[p]), s)));
+        }
+        for (p, row) in self.medium.iter().enumerate() {
+            out.extend(row.iter().enumerate().map(|(i, s)| (format!("tree_medium_{}_{i}", leaf[p]), s)));
+        }
+        out.extend(self.pines.iter().enumerate().map(|(i, s)| (format!("pine_{i}"), s)));
+        out.extend(self.dead.iter().enumerate().map(|(i, s)| (format!("dead_tree_{i}"), s)));
+        for (p, row) in self.bushes.iter().enumerate() {
+            out.extend(row.iter().enumerate().map(|(i, s)| (format!("bush_{}_{i}", leaf[p]), s)));
+        }
+        out.extend(self.berry.iter().enumerate().map(|(i, s)| (format!("bush_berry_{i}"), s)));
+        out.extend(self.rocks.iter().enumerate().map(|(i, s)| (format!("rocks_{i}"), s)));
+        out.extend(self.boulders.iter().enumerate().map(|(i, s)| (format!("boulder_{i}"), s)));
+        out
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_bank_is_forty_three_valid_sprites_with_their_feet_inside() {
+        let b = Bank::new(Ramps::default());
+        let all = b.all();
+        assert_eq!(all.len(), 43);
+        for (name, s) in &all {
+            s.canvas.validate().unwrap_or_else(|e| panic!("{name}: {e}"));
+            assert!(s.ax >= 0 && s.ax < s.canvas.w() && s.ay >= 0 && s.ay < s.canvas.h(), "{name}");
+            let near = (-2..=2).any(|dx| (0..=4).any(|dy| s.canvas.get(s.ax + dx, s.ay - dy).is_opaque()));
+            assert!(near, "{name}: it stands on its foot");
+        }
+        assert_eq!(b, Bank::new(Ramps::default()), "same ramps, same bytes");
+    }
+
+    #[test]
+    fn a_crown_is_lit_from_the_top_left_and_dark_in_its_core() {
+        let s = broadleaf(1, true, Ramp::Leaf, Ramp::Bark);
+        let tone = |x, y| Ramp::of(s.canvas.get(x, y)).map_or(0, |(_, t)| t as i32);
+        let (mut tl, mut br) = (0, 0);
+        for y in 10..22 {
+            for x in 12..26 {
+                tl += tone(x, y);
+                br += tone(x + 26, y + 18);
+            }
+        }
+        assert!(tl > br, "top-left {tl}, bottom-right {br}");
+        assert!(s.canvas.height_at(32, 10) > s.canvas.height_at(32, 70));
+    }
+}

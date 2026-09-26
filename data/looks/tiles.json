@@ -1,11 +1,11 @@
 {
   "void": { "group": "wall", "ramp": "void", "pattern": "void", "wallLike": true },
 
-  "grass": { "group": "ground", "rise": 6, "ramp": "turf", "pattern": "turf", "detail": 6, "wild": true },
-  "grown_path": { "group": "ground", "inherit": "grass", "rise": 6, "ramp": "turf", "pattern": "turf", "detail": 6, "wild": true },
+  "grass": { "group": "ground", "rise": 4, "ramp": "turf", "pattern": "turf", "detail": 6, "wild": true },
+  "grown_path": { "group": "ground", "inherit": "grass", "rise": 4, "ramp": "turf", "pattern": "turf", "detail": 6, "wild": true },
   "dirt": { "group": "ground", "rise": 2, "ramp": "earth", "pattern": "earth", "detail": 5, "wet": 1, "wild": true },
   "sand": { "group": "ground", "rise": 2, "ramp": "sand", "pattern": "sand", "detail": 4, "wet": 1, "wild": true },
-  "moss": { "group": "ground", "rise": 4, "ramp": "marsh", "pattern": "marsh", "detail": 5, "wet": 1, "wild": true },
+  "moss": { "group": "ground", "rise": 3, "ramp": "marsh", "pattern": "marsh", "detail": 5, "wet": 1, "wild": true },
   "dry_bed": { "group": "ground", "rise": 2, "ramp": "mud", "pattern": "cracked", "detail": 4, "wet": 1, "wild": true },
   "garden": { "group": "ground", "rise": 2, "ramp": "soil", "pattern": "soil", "accent": "crop", "detail": 8, "wet": 1, "wild": true },
   "crops": { "group": "ground", "inherit": "garden", "rise": 2, "ramp": "crop", "accent": "soil", "pattern": "crops", "detail": 8, "wet": 1 },
