@@ -8,7 +8,8 @@
 //! - A prop draws the demo sprite nearest its size, at 1x or half size; a prop with a light
 //!   draws the `lamp`.
 //!
-//! All of it is drawn by `jane-present`, never by `jane-art`.
+//! All of it is drawn by `jane-present`, never by `jane-art`. [`tile_rgb`] outlives the rest:
+//! `jane view` and `jane play --snap` colour their maps with it, so it moves when this goes.
 
 use jane_art::demo;
 use jane_art::palette::{Ix, Ramp};
