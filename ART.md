@@ -309,6 +309,27 @@ Tests: every weather kind and every area has an entry that draws pixels; every s
 | No pure black, no pure white | Palette |
 | Region palettes: the Lowfields are warm greens and plaster; the Waters blue-greens, reed and slate; the Works slag greys and brick | `RegionStyle { ground, wall, roof, lamp, sky, mist }` rows |
 
+### 3.1 Craft: the bar (2026-09-27)
+
+The owner's bar: the art stands out as impressive and beautiful among the best human-made pixel art games (Sea of Stars, Eastward, CrossCode, Hyper Light Drifter), not merely competent. Every generator is held to these, by test where a test can tell and by the art-director review below where it cannot.
+
+| Rule | Held by |
+| --- | --- |
+| **Ramps shift hue.** Shadows step cool (blue, violet), highlights step warm (yellow, peach); saturation peaks in the midtones and falls at both ends. Skin shadows go rose or violet, never grey-brown; grass runs deep blue-green to sunlit yellow-green, never one hue | Palette test on each ramp's hue direction and saturation arc |
+| **Clusters, not noise.** Texture is deliberate clusters of 2 px or more (tufts, pebbles, grain runs, courses) with a lit edge and a shadow edge; calm areas are left calm. No per-pixel speckle on any surface | Orphan-pixel count per sprite and tile (eyes, studs and glints excepted) |
+| **No pillow shading, no banding.** Light comes from a direction; tone steps never run parallel to an outline | Review; a banding check where one proves reliable |
+| **Pixel-perfect lines.** No doubled corners on an outline; slopes keep to 1:1, 2:1, 1:2 and their steady multiples | Jaggy check on outlines |
+| **The grid never shows.** Ground carries low-frequency colour variation over many cells, organic transitions with a 1 to 2 px rim, and hashed clustered decals; at no zoom can a cell boundary be seen | Review on `jane sheet county --full` |
+| **Shadows are coloured.** Contact AO and cast shadows are a cool tinted darkening of what lies under them, never grey, black or a checker | Review; the AO index's ramp |
+| **Depth everywhere.** AO at the base of walls, fences, props and trunks and in inside corners; lit top edges on walls and cliffs; water banded by depth with a lit shore | Review; the height layer |
+| **Night is beautiful, not dark.** Unlit ground shifts to deep blue-violet and keeps readable value; lamp pools are warm with a falloff that reads as light | Review on the night sheets |
+| **Appeal at 32 x 40.** Readable faces with a glint in the eye, hair with a highlight band and strand clusters, silhouettes that say who someone is before colour does; townsfolk are different people, not recolours | Silhouette-distinct test; review |
+| **Motion with weight.** Anticipation, bob and lean in the walk; secondary motion (hair, hem, scarf) a frame behind the body | Review on `jane sheet unit` |
+
+**Outline, open (2026-09-27).** The rule above (every edge pixel `k`, never coloured) is under review against a **selective outline**: an edge pixel takes the darkest tone of the adjacent material's ramp, darkest below and away from the light, broken or lightened on lit edges, with `k` kept only where the ground needs the contrast. Both stay behind a switch until the owner picks from an A/B sheet (`sheets/person-outline-ab.png`); the loser is then deleted and this row rewritten. Likewise four walk frames against six.
+
+**The art-director review.** Every generator iteration ends in its sheets viewed at 1x and at 3 to 4x, a written critique (what reads, what is muddy, where the grid shows, what looks amateur), and the worst item fixed next. A family is done when every sprite in it would be defended beside the references at the same scale; the critique of its final sheets goes in the commit or the report that lands it.
+
 **Seat colours.** `jane@1`, `jane@2`, `jane@3` are `Look::Swap` of the coat roles and nothing else (decided: seats are coat-only, hair and skin stay). Any sprite swaps by role the same way, which replaces the TS build's ~50 swap sprites. A swap touches the albedo only; normals, emissive and height are shared. Each swap gets its own atlas entry and its own corpse.
 
 **Per-instance variation** (decided: in, kept). A person or creature row may carry bounded variants:
