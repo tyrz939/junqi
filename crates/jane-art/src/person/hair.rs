@@ -184,8 +184,8 @@ pub fn whole_up(c: &mut Canvas, d: &Dress, r: &Rig) {
             let mut l = Canvas::new(W, H);
             l.polygon_lit(
                 &[
-                    (s.x, r.eye_y() - 1),
-                    (s.right() - 1, r.eye_y() - 1),
+                    (s.x, r.eye_y() + 1),
+                    (s.right() - 1, r.eye_y() + 1),
                     (s.right() - 2, s.bottom() - 2),
                     (s.x + 1, s.bottom() - 2),
                 ],
@@ -273,7 +273,8 @@ pub fn side(c: &mut Canvas, d: &Dress, r: &Rig) {
     let brow = r.brow_y();
     let mut l = Canvas::new(W, H);
     if style == Hair::Bald {
-        l.ellipse_lit(Rect::new(s.x + 1, r.eye_y() - 2, 5, 5), hair, z);
+        // What is left: round the back of the head, behind the ear.
+        l.ellipse_lit(Rect::new(s.x - 1, r.eye_y() - 1, 5, 6), hair, z);
         lay(c, l, d);
         ear(c, d, r);
         return;
@@ -312,5 +313,5 @@ pub fn side(c: &mut Canvas, d: &Dress, r: &Rig) {
 
 fn ear(c: &mut Canvas, d: &Dress, r: &Rig) {
     let s = r.skull;
-    c.ellipse_lit(Rect::new(s.x + 5, r.eye_y(), 3, 4), d.skin, Z::new(relief::HAIR.lo, relief::HAIR.hi));
+    c.ellipse_lit(Rect::new(s.x + 4, r.eye_y(), 3, 4), d.skin, Z::new(relief::HAIR.lo, relief::HAIR.hi));
 }

@@ -75,9 +75,9 @@ model_enum! {
 }
 
 model_enum! {
-    /// Something extra; any number.
+    /// Something extra; any number. `stoop`: an old back, the head carried low and forward.
     #[cfg_attr(feature = "compile", derive(serde::Deserialize), serde(rename_all = "snake_case"))]
-    pub enum Extra { WatchChain, BellAnkle, Shawl, Seated, Wet }
+    pub enum Extra { WatchChain, BellAnkle, Shawl, Seated, Wet, Stoop }
 }
 
 model_enum! {

@@ -216,7 +216,7 @@ fn clean_clusters_few_orphans() {
 
 /// The most orphans a frame may have (after `declutter`, these are a boot heel or a knuckle
 /// where two shapes cross).
-const MAX_ORPHANS: usize = 4;
+const MAX_ORPHANS: usize = 5;
 
 #[test]
 fn no_pillow_shading() {

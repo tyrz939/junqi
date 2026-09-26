@@ -7,7 +7,7 @@
 //! frame up ([`Canvas::upright`]), which writes the true height of every pixel.
 
 use jane_core::grid::Rect;
-use jane_data::{Boots, Coat, Face, Front, Hat, Legs};
+use jane_data::{Boots, Coat, Extra, Face, Front, Hat, Legs};
 
 use super::build::Proportions;
 use super::hair;
@@ -69,11 +69,13 @@ pub(crate) struct Rig {
 }
 
 impl Rig {
-    fn new(p: Proportions, pose: Pose, coat: Coat, facing: Facing) -> Rig {
+    fn new(p: Proportions, pose: Pose, coat: Coat, facing: Facing, stoop: bool) -> Rig {
         let breathe = i32::from(pose.breathe);
-        let lean = if facing == Facing::Side { pose.lean } else { 0 };
-        let (hy, top) = (pose.bob - breathe, p.shoulder_y() + pose.bob - breathe);
-        let skull = Rect::new(CX - (p.head_w - 2) / 2 + lean, p.skull_y() + hy, p.head_w - 2, p.skull_h());
+        // A stoop carries the shoulders a px forward and down and the head a px further.
+        let (bent, sunk) = (i32::from(stoop && facing == Facing::Side), i32::from(stoop));
+        let lean = if facing == Facing::Side { pose.lean + bent } else { 0 };
+        let (hy, top) = (pose.bob - breathe + sunk, p.shoulder_y() + pose.bob - breathe + sunk);
+        let skull = Rect::new(CX - (p.head_w - 2) / 2 + lean + bent, p.skull_y() + hy, p.head_w - 2, p.skull_h());
         let hip = p.hip_y() + pose.bob;
         let hang = match coat {
             Coat::Jacket | Coat::Cardigan => -1,
@@ -82,7 +84,7 @@ impl Rig {
             Coat::Gown | Coat::Nightdress => AY - 2 - p.hip_y(),
         };
         let hem = (p.hip_y() + pose.lag.0 + hang).min(AY - 2);
-        let trail = (pose.lag.1 - lean, pose.lag.0 - pose.bob);
+        let trail = (pose.lag.1 + bent - lean, pose.lag.0 - pose.bob);
         Rig { p, pose, skull, top, waist: (top + hip) / 2 + 1, hip, hem, lean, trail }
     }
 
@@ -100,7 +102,7 @@ impl Rig {
 /// One living frame of a person, finished.
 pub fn frame(d: &Dress, p: Proportions, facing: Facing, pose: Pose) -> Canvas {
     let mut c = Canvas::new(super::W, super::H);
-    let r = Rig::new(p, pose, d.look.body.coat, facing);
+    let r = Rig::new(p, pose, d.look.body.coat, facing, d.look.extras.contains(&Extra::Stoop));
     match facing {
         Facing::Down => down(&mut c, d, &r),
         Facing::Up => up(&mut c, d, &r),
@@ -127,6 +129,7 @@ fn finish(c: &mut Canvas, d: &Dress) {
     for r in [d.coat, d.front, d.legs, d.hat, d.boots, d.pack, d.skin, d.hair] {
         c.declutter(r);
     }
+    c.unchecker(d.skin);
     c.upright(AY);
 }
 
@@ -144,7 +147,7 @@ fn down(c: &mut Canvas, d: &Dress, r: &Rig) {
     front_down(c, d, r);
     arms_front(c, d, r);
     neck(c, d, r);
-    c.ellipse_lit(r.skull, d.skin, relief::SKULL);
+    head(c, d, r, false);
     face_down(c, d, r);
     hair::front_down(c, d, r);
     hat_down(c, d, r);
@@ -414,6 +417,16 @@ fn face_down(c: &mut Canvas, d: &Dress, r: &Rig) {
     }
 }
 
+/// The head: a lit skull and, under it, a jaw a little squarer than an egg (forward of the
+/// skull's middle in profile), so a face sits on its neck and not on a stalk.
+fn head(c: &mut Canvas, d: &Dress, r: &Rig, profile: bool) {
+    let s = r.skull;
+    c.ellipse_lit(s, d.skin, relief::SKULL);
+    let ey = r.eye_y();
+    let (x0, x1) = if profile { (s.x + 4, s.right() - 1) } else { (s.x + 1, s.right() - 2) };
+    c.polygon_lit(&[(x0, ey), (x1, ey), (x1 - 1, s.bottom() - 1), (x0 + 1, s.bottom() - 1)], d.skin, 70, relief::SKULL);
+}
+
 pub(crate) fn hides_hair(d: &Dress) -> bool {
     matches!(d.look.head.hat, Hat::Scarf | Hat::Helmet | Hat::Diving | Hat::Veil)
 }
@@ -549,7 +562,7 @@ fn side(c: &mut Canvas, d: &Dress, r: &Rig) {
         c.line((CX + 1 + r.lean, t), (CX - 3, r.waist), d.pack.at(Tone::Base), 1, relief::FRONT);
     }
     neck_side(c, d, r);
-    c.ellipse_lit(r.skull, d.skin, relief::SKULL);
+    head(c, d, r, true);
     face_side(c, d, r);
     hair::side(c, d, r);
     hat_side(c, d, r);
