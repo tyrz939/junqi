@@ -245,7 +245,7 @@ pub fn bench(bps: Blueprints, o: &Opts, frames: u32, output: (u32, u32)) -> Resu
 
 /// The backend a bench drives, and how a frame ends on it.
 enum Bench {
-    Soft(Soft),
+    Soft(Box<Soft>),
     #[cfg(feature = "gpu")]
     Wgpu(Box<jane_render_wgpu::Wgpu>),
 }
@@ -255,7 +255,7 @@ impl Bench {
     fn new(which: Which, output: (u32, u32)) -> Result<Bench, String> {
         let _ = output;
         match which {
-            Which::Soft => Ok(Bench::Soft(Soft::new())),
+            Which::Soft => Ok(Bench::Soft(Box::new(Soft::new()))),
             #[cfg(feature = "gpu")]
             Which::Wgpu => Ok(Bench::Wgpu(Box::new(jane_render_wgpu::Wgpu::headless_output(output)?))),
             #[cfg(not(feature = "gpu"))]
@@ -265,7 +265,7 @@ impl Bench {
 
     fn backend(&mut self) -> &mut dyn Backend {
         match self {
-            Bench::Soft(s) => s,
+            Bench::Soft(s) => s.as_mut(),
             #[cfg(feature = "gpu")]
             Bench::Wgpu(g) => g.as_mut(),
         }

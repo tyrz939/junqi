@@ -338,8 +338,18 @@ fn frames(args: &[String]) -> Result<(), String> {
     if let Some(s) = r.stats {
         println!(
             "  {} {}",
-            if s.gpu_clock { "GPU clock, gbuffer to grade" } else { "backend draw (its own)     " },
+            if s.gpu_clock { "GPU clock, whole frame      " } else { "backend's own clock, whole  " },
             us((s.p50_us, s.p99_us))
+        );
+        for p in jane_present::StatPass::ALL {
+            let i = p as usize;
+            if s.pass_p99_us[i] > 0 {
+                println!("    {:<26} {}", p.name(), us((s.pass_p50_us[i], s.pass_p99_us[i])));
+            }
+        }
+        println!(
+            "  last frame: {} draw calls, {} lights, {} casters, {} px written",
+            s.draw_calls, s.lights, s.casters, s.pixels_written
         );
     }
     Ok(())

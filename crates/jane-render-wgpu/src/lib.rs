@@ -29,7 +29,7 @@ use std::sync::atomic::{AtomicU8, Ordering};
 use std::time::Instant;
 
 use jane_present::frame::{CHUNK_PX, ChunkLayers};
-use jane_present::{AO_TINT, AtlasPages, Backend, CLUT_LEN, Caps, Frame, FrameStats, FrameTimes, Tier};
+use jane_present::{AO_TINT, AtlasPages, Backend, CLUT_LEN, Caps, Frame, FrameStats, FrameTimes, StatPass, Tier};
 
 use crate::gpu::{B, Gpu, array_view, group, layout, texture, write_layer};
 use crate::prep::{GUARD, Kind, MAX_LIGHTS, Prep, TILE, TILE_CAP};
@@ -353,7 +353,8 @@ struct Targets {
     upscale_step: wgpu::Buffer,
 }
 
-/// Frame times from timestamp queries, read a frame late so a frame never waits for them.
+/// Timestamp queries at pass boundaries, read a frame or two late so a frame never waits for
+/// them.
 #[derive(Debug)]
 struct Stamps {
     set: wgpu::QuerySet,
@@ -362,6 +363,86 @@ struct Stamps {
     /// 0 idle, 1 mapping, 2 mapped.
     state: Arc<AtomicU8>,
     period_ns: f32,
+    count: u32,
+}
+
+/// The frame's timestamps: the chunks, the list, the height field, the light, bloom to grade,
+/// each a begin and an end.
+const FRAME_STAMPS: u32 = 10;
+
+impl Stamps {
+    fn new(gpu: &Gpu, label: &str, count: u32) -> Stamps {
+        let d = &gpu.device;
+        let size = u64::from(count) * 8;
+        Stamps {
+            set: d.create_query_set(&wgpu::QuerySetDescriptor {
+                label: Some(label),
+                ty: wgpu::QueryType::Timestamp,
+                count,
+            }),
+            resolve: d.create_buffer(&wgpu::BufferDescriptor {
+                label: Some(label),
+                size,
+                usage: wgpu::BufferUsages::QUERY_RESOLVE | wgpu::BufferUsages::COPY_SRC,
+                mapped_at_creation: false,
+            }),
+            read: d.create_buffer(&wgpu::BufferDescriptor {
+                label: Some(label),
+                size,
+                usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            }),
+            state: Arc::new(AtomicU8::new(0)),
+            period_ns: gpu.queue.get_timestamp_period(),
+            count,
+        }
+    }
+
+    /// Free to be written this frame (the last reading has been taken).
+    fn idle(&self) -> bool {
+        self.state.load(Ordering::Acquire) == 0
+    }
+
+    /// The pass's timestamp writes: `begin` and `end` query indices.
+    fn writes(&self, begin: Option<u32>, end: Option<u32>) -> wgpu::RenderPassTimestampWrites<'_> {
+        wgpu::RenderPassTimestampWrites {
+            query_set: &self.set,
+            beginning_of_pass_write_index: begin,
+            end_of_pass_write_index: end,
+        }
+    }
+
+    /// Resolves the queries into the read buffer (before the submit).
+    fn resolve(&self, enc: &mut wgpu::CommandEncoder) {
+        enc.resolve_query_set(&self.set, 0..self.count, &self.resolve, 0);
+        enc.copy_buffer_to_buffer(&self.resolve, 0, &self.read, 0, u64::from(self.count) * 8);
+    }
+
+    /// Maps the read buffer (after the submit).
+    fn map(&self) {
+        self.state.store(1, Ordering::Release);
+        let state = self.state.clone();
+        self.read.map_async(wgpu::MapMode::Read, .., move |r| {
+            state.store(if r.is_ok() { 2 } else { 0 }, Ordering::Release);
+        });
+    }
+
+    /// The readings in microseconds from the first, if they are in: `out[k]` for query `k`.
+    fn take(&self, out: &mut [u32]) -> bool {
+        if self.state.load(Ordering::Acquire) != 2 {
+            return false;
+        }
+        if let Ok(m) = self.read.slice(..).get_mapped_range() {
+            let tick = |k: usize| u64::from_le_bytes(m[k * 8..k * 8 + 8].try_into().unwrap_or([0; 8]));
+            let t0 = tick(0);
+            for (k, o) in out.iter_mut().enumerate().take(self.count as usize) {
+                *o = (tick(k).saturating_sub(t0) as f64 * f64::from(self.period_ns) / 1000.0) as u32;
+            }
+        }
+        self.read.unmap();
+        self.state.store(0, Ordering::Release);
+        true
+    }
 }
 
 /// Where `present` upscales the canvas to.
@@ -398,6 +479,10 @@ pub struct Wgpu {
     chunk_buf: wgpu::Buffer,
     window: Option<Window>,
     stamps: Option<Stamps>,
+    /// The upscale's own timestamps, in `present`.
+    present_stamps: Option<Stamps>,
+    /// The last upscale's time, microseconds.
+    upscale_us: u32,
     times: FrameTimes,
     frames: u32,
     describe: String,
@@ -459,27 +544,8 @@ impl Wgpu {
             held: vec![None; CHUNK_SLOTS as usize],
             scratch: Vec::new(),
         };
-        let stamps = gpu.timestamps.then(|| Stamps {
-            set: device.create_query_set(&wgpu::QuerySetDescriptor {
-                label: Some("frame"),
-                ty: wgpu::QueryType::Timestamp,
-                count: 2,
-            }),
-            resolve: device.create_buffer(&wgpu::BufferDescriptor {
-                label: Some("stamps"),
-                size: 16,
-                usage: wgpu::BufferUsages::QUERY_RESOLVE | wgpu::BufferUsages::COPY_SRC,
-                mapped_at_creation: false,
-            }),
-            read: device.create_buffer(&wgpu::BufferDescriptor {
-                label: Some("stamps read"),
-                size: 16,
-                usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
-                mapped_at_creation: false,
-            }),
-            state: Arc::new(AtomicU8::new(0)),
-            period_ns: gpu.queue.get_timestamp_period(),
-        });
+        let stamps = gpu.timestamps.then(|| Stamps::new(&gpu, "frame stamps", FRAME_STAMPS));
+        let present_stamps = gpu.timestamps.then(|| Stamps::new(&gpu, "upscale stamps", 2));
         let sprite_buf = instance_buffer(device, "sprites", 4096 * 48);
         let chunk_buf = instance_buffer(device, "chunks", 128 * 16);
         let describe = format!("wgpu, {}", gpu.describe());
@@ -498,6 +564,8 @@ impl Wgpu {
             chunk_buf,
             window,
             stamps,
+            present_stamps,
+            upscale_us: 0,
             times,
             frames: 0,
             describe,
@@ -521,9 +589,17 @@ impl Wgpu {
     /// Shows the last canvas drawn in the window: scaled so its height fills the window's, by
     /// sharp bilinear (nearest where the scale is whole).
     pub fn present(&mut self) -> Result<(), String> {
+        let t0 = Instant::now();
+        if let Some(s) = &self.present_stamps {
+            let mut us = [0u32; 2];
+            if s.take(&mut us) {
+                self.upscale_us = us[1];
+            }
+        }
         let (Some(win), Some(t), Some(pipe)) = (&mut self.window, &self.targets, &self.pipes.upscale) else {
             return Ok(());
         };
+        let stamps = self.present_stamps.as_ref().filter(|s| s.idle());
         let size = win.size();
         let frame = match win {
             Window::Surface { surface, config } => match surface.get_current_texture() {
@@ -564,7 +640,7 @@ impl Wgpu {
                     },
                 })],
                 depth_stencil_attachment: None,
-                timestamp_writes: None,
+                timestamp_writes: stamps.map(|s| s.writes(Some(0), Some(1))),
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
@@ -573,7 +649,16 @@ impl Wgpu {
             pass.set_bind_group(1, &t.upscale.1, &[]);
             pass.draw(0..3, 0..1);
         }
+        if let Some(s) = stamps {
+            s.resolve(&mut enc);
+        }
         self.gpu.queue.submit([enc.finish()]);
+        if let Some(s) = stamps {
+            s.map();
+        } else if self.present_stamps.is_none() {
+            // No GPU clock: the CPU's encode and submit.
+            self.upscale_us = t0.elapsed().as_micros() as u32;
+        }
         if let Some(f) = frame {
             self.gpu.queue.present(f);
         }
@@ -740,28 +825,23 @@ impl Wgpu {
         }
     }
 
-    /// Reads last frame's timestamps if they are in.
+    /// Reads a past frame's timestamps if they are in, per pass (§1.12).
     fn collect_stamps(&mut self) {
         let Some(s) = &self.stamps else { return };
         let _ = self.gpu.device.poll(wgpu::PollType::Poll);
-        if s.state.load(Ordering::Acquire) != 2 {
+        let mut at = [0u32; FRAME_STAMPS as usize];
+        if !s.take(&mut at) {
             return;
         }
-        let ticks = {
-            let m = s.read.slice(..).get_mapped_range();
-            match m {
-                Ok(m) => {
-                    let a = u64::from_le_bytes(m[0..8].try_into().unwrap_or([0; 8]));
-                    let b = u64::from_le_bytes(m[8..16].try_into().unwrap_or([0; 8]));
-                    b.saturating_sub(a)
-                }
-                Err(_) => 0,
-            }
-        };
-        s.read.unmap();
-        s.state.store(0, Ordering::Release);
-        let us = (ticks as f64 * f64::from(s.period_ns) / 1000.0) as u32;
-        self.times.push(us);
+        let span = |a: usize, b: usize| at[b].saturating_sub(at[a]);
+        let mut pass = [0u32; StatPass::COUNT];
+        pass[StatPass::Chunks as usize] = span(0, 1);
+        pass[StatPass::List as usize] = span(2, 3);
+        pass[StatPass::Shadows as usize] = span(4, 5);
+        pass[StatPass::Light as usize] = span(6, 7);
+        pass[StatPass::Grade as usize] = span(8, 9);
+        pass[StatPass::Upscale as usize] = self.upscale_us;
+        self.times.push_passes(at[9] + self.upscale_us, pass);
     }
 }
 
@@ -902,7 +982,8 @@ impl Backend for Wgpu {
             &prep.tile_lights[..prep.tile_lights.len().min(t.tile_lights.size() as usize)],
         );
 
-        let stamps = self.stamps.as_ref().filter(|s| s.state.load(Ordering::Acquire) == 0);
+        let stamps = self.stamps.as_ref().filter(|s| s.idle());
+        let mut calls = 0u32;
         let mut enc = d.create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some("frame") });
         let [cr, cg, cb] = prep.clear;
         let attach = |view, colour: wgpu::Color| {
@@ -915,18 +996,14 @@ impl Backend for Wgpu {
         };
         {
             let mut pass = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
-                label: Some("gbuffer"),
+                label: Some("gbuffer chunks"),
                 color_attachments: &[
                     attach(&t.galb, wgpu::Color { r: cr, g: cg, b: cb, a: 1.0 }),
                     attach(&t.gnh, wgpu::Color { r: 128.0 / 255.0, g: 128.0 / 255.0, b: 0.0, a: 0.0 }),
                     attach(&t.gem, wgpu::Color::BLACK),
                 ],
                 depth_stencil_attachment: None,
-                timestamp_writes: stamps.map(|s| wgpu::RenderPassTimestampWrites {
-                    query_set: &s.set,
-                    beginning_of_pass_write_index: Some(0),
-                    end_of_pass_write_index: None,
-                }),
+                timestamp_writes: stamps.map(|s| s.writes(Some(0), Some(1))),
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
@@ -935,7 +1012,27 @@ impl Backend for Wgpu {
                 pass.set_pipeline(&self.pipes.chunk);
                 pass.set_vertex_buffer(0, self.chunk_buf.slice(..));
                 pass.draw(0..4, 0..prep.n_chunks);
+                calls += 1;
             }
+        }
+        {
+            let keep = |view| {
+                Some(wgpu::RenderPassColorAttachment {
+                    view,
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations { load: wgpu::LoadOp::Load, store: wgpu::StoreOp::Store },
+                })
+            };
+            let mut pass = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("gbuffer list"),
+                color_attachments: &[keep(&t.galb), keep(&t.gnh), keep(&t.gem)],
+                depth_stencil_attachment: None,
+                timestamp_writes: stamps.map(|s| s.writes(Some(2), Some(3))),
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            pass.set_bind_group(0, gbuf_bg, &[]);
             if prep.n_sprites > 0 {
                 pass.set_vertex_buffer(0, self.sprite_buf.slice(..));
                 for dr in &prep.draws {
@@ -945,6 +1042,7 @@ impl Backend for Wgpu {
                         Kind::Ghost => &self.pipes.ghost,
                     });
                     pass.draw(0..4, dr.range.clone());
+                    calls += 1;
                 }
             }
         }
@@ -952,7 +1050,11 @@ impl Backend for Wgpu {
         {
             let mut pass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor {
                 label: Some("height field"),
-                timestamp_writes: None,
+                timestamp_writes: stamps.map(|s| wgpu::ComputePassTimestampWrites {
+                    query_set: &s.set,
+                    beginning_of_pass_write_index: Some(4),
+                    end_of_pass_write_index: Some(5),
+                }),
             });
             pass.set_pipeline(&self.pipes.scatter);
             pass.set_bind_group(0, &t.scatter_bg, &[]);
@@ -963,7 +1065,7 @@ impl Backend for Wgpu {
                 label: Some("light"),
                 color_attachments: &[attach(&t.hdr, wgpu::Color::BLACK), attach(&t.bsrc, wgpu::Color::BLACK)],
                 depth_stencil_attachment: None,
-                timestamp_writes: None,
+                timestamp_writes: stamps.map(|s| s.writes(Some(6), Some(7))),
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
@@ -998,32 +1100,30 @@ impl Backend for Wgpu {
         };
         let clear = wgpu::LoadOp::Clear(wgpu::Color::BLACK);
         for (k, g) in t.down.iter().enumerate() {
-            fullscreen(&mut enc, "bloom down", &t.levels[k], clear, &self.pipes.down, g, None);
+            let begin = stamps.filter(|_| k == 0).map(|s| s.writes(Some(8), None));
+            fullscreen(&mut enc, "bloom down", &t.levels[k], clear, &self.pipes.down, g, begin);
         }
         for (i, g) in t.up.iter().enumerate() {
             let dst = BLOOM_LEVELS - 2 - i;
             fullscreen(&mut enc, "bloom up", &t.levels[dst], wgpu::LoadOp::Load, &self.pipes.up, g, None);
         }
-        let end = stamps.map(|s| wgpu::RenderPassTimestampWrites {
-            query_set: &s.set,
-            beginning_of_pass_write_index: None,
-            end_of_pass_write_index: Some(1),
-        });
+        let end = stamps.map(|s| s.writes(None, Some(9)));
         fullscreen(&mut enc, "grade", &t.canvas_view, clear, &self.pipes.grade, &t.grade, end);
+        // The dispatch, the light, the bloom's halvings and tents, the grade.
+        calls += 1 + 1 + (2 * BLOOM_LEVELS as u32 - 1) + 1;
         if let Some(s) = stamps {
-            enc.resolve_query_set(&s.set, 0..2, &s.resolve, 0);
-            enc.copy_buffer_to_buffer(&s.resolve, 0, &s.read, 0, 16);
+            s.resolve(&mut enc);
         }
         q.submit([enc.finish()]);
         if let Some(s) = stamps {
-            s.state.store(1, Ordering::Release);
-            let state = s.state.clone();
-            s.read.map_async(wgpu::MapMode::Read, .., move |r| {
-                state.store(if r.is_ok() { 2 } else { 0 }, Ordering::Release);
-            });
-        } else {
-            self.times.push(t0.elapsed().as_micros() as u32);
+            s.map();
+        } else if self.stamps.is_none() {
+            // No GPU clock: the CPU's encode and submit, whole.
+            let mut pass = [0u32; StatPass::COUNT];
+            pass[StatPass::Upscale as usize] = self.upscale_us;
+            self.times.push_passes(t0.elapsed().as_micros() as u32 + self.upscale_us, pass);
         }
+        self.times.set_counts(calls, prep.n_lights, frame.casters.len() as u32, 0);
     }
 
     fn read_back(&mut self, out: &mut Vec<u32>) -> (u16, u16) {
