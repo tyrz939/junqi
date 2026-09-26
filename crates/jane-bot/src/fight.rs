@@ -192,8 +192,15 @@ pub fn reachable(cx: &Ctx, id: UnitId, frame: u32) -> bool {
 
 /// The enemy to deal with now: the nearest one fighting her, else the one hunted.
 pub fn threat(v: &View<'_>, cx: &mut Ctx) -> Option<UnitId> {
-    if let Some(u) = enemies(v).into_iter().find(|u| on_me(v, u) && fightable(u)) {
-        return Some(u.id);
+    let on: Vec<&Unit> = enemies(v).into_iter().filter(|u| on_me(v, u) && fightable(u)).collect();
+    if let Some(&nearest) = on.first() {
+        // With a crowd on her, one at a time: the one she is hitting while it is still at her,
+        // else the weakest within reach of her (a blow spread over four kills none of them).
+        let me = v.body();
+        let reach = i64::from(2 * CELL_FX);
+        let held = on.iter().find(|u| Some(u.id) == cx.fight.target && gap(me, u) <= reach);
+        let weakest = on.iter().filter(|u| gap(me, u) <= reach).min_by_key(|u| (u.hp, u.id));
+        return Some(held.or(weakest).unwrap_or(&nearest).id);
     }
     let now = v.frame();
     match cx.fight.hunt.and_then(|t| v.unit(t)).filter(|u| u.alive && reachable(cx, u.id, now)) {
@@ -241,7 +248,7 @@ pub fn engage(v: &View<'_>, cx: &mut Ctx, id: UnitId) -> Option<Act> {
     let d = dist(me.pos, t.pos);
     let dir = jane_core::angle::iatan2(t.pos.y.0 - me.pos.y.0, t.pos.x.0 - me.pos.x.0);
     // Low with nothing to eat: back off (it may leash), and let the plan find a fire.
-    if hp_permille(me) < FLEE_BELOW && cx.fight.fleeing == 0 && food(v).is_none() {
+    if hp_permille(me) < FLEE_BELOW && cx.fight.fleeing == 0 && !has_food(v) {
         cx.fight.fleeing = 180;
         cx.fight.fled += 1;
         cx.fight.hunt = None;
