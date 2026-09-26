@@ -12,8 +12,9 @@
 use std::sync::mpsc::{Receiver, channel};
 use std::time::{Duration, Instant};
 
+use jane_core::ZoneId;
 use jane_present::input::{
-    Context, Edge, GameAction, Input, KeySet, Mode, UiAction, canvas_size, canvas_to_world, pick, world_to_canvas,
+    Context, Edge, GameAction, Input, KeySet, Mode, UiAction, canvas_size, canvas_to_world, pick, sc, world_to_canvas,
 };
 use jane_present::text;
 use jane_present::ui::Ui;
@@ -22,7 +23,9 @@ use jane_present::ui::dialogue::{self, DialogueBox};
 use jane_present::ui::hud::{self, HudCtx};
 use jane_present::ui::loading::{self, Card, LoadingState};
 use jane_present::ui::menus::{self, MenuState, PauseInfo, SlotMode, SlotRow};
+use jane_present::ui::perf::{self, FrameInfo, PerfLog, PerfView, SimInfo, TopLine};
 use jane_present::ui::title::{self, TitleInfo, TitleState};
+use jane_present::ui::world::{self, WorldDebug};
 use jane_present::view::ViewBuffers;
 use jane_present::{Frame, Present};
 use jane_sim::event::Event;
@@ -107,6 +110,19 @@ struct App<'a> {
     /// The slot the game last saved to or loaded from: quick save's.
     slot: Option<u8>,
     shots: u32,
+    /// F2: 0 off, 1 compact, 2 full.
+    perf_level: u8,
+    perf: PerfLog,
+    /// This frame's stages so far, µs: sim, present, build, backend, wait.
+    stages: [u32; 5],
+    /// F3.
+    world_dbg: WorldDebug,
+    /// The state hash and the tick it was taken on (it is dear: every half second while shown).
+    hash: (u64, u64),
+    /// The path searches as of the last frame, for the per-tick rate.
+    paths: (u64, u64, u64),
+    started: Instant,
+    backend_name: String,
 }
 
 pub fn run(
@@ -154,6 +170,14 @@ pub fn run(
         note: None,
         slot_rows: Vec::new(),
         shots: 0,
+        perf_level: 0,
+        perf: PerfLog::default(),
+        stages: [0; 5],
+        world_dbg: WorldDebug::default(),
+        hash: (0, u64::MAX),
+        paths: (0, 0, 0),
+        started: Instant::now(),
+        backend_name: describe.clone(),
     };
     app.read_slots();
     if args.new {
@@ -245,6 +269,15 @@ pub fn run(
         if mode == Mode::Play && pressed && app.ui.wants_pointer() {
             devices.state.mouse.pressed &= !1;
         }
+        // While F3 is up, 1 to 9 toggle its layers and press no bar slot.
+        if app.world_dbg.on && mode == Mode::Play {
+            for k in 0..9u16 {
+                if devices.state.pressed.has(sc::N1 + k) {
+                    app.world_dbg.toggle(usize::from(k));
+                    devices.state.pressed.set(sc::N1 + k, false);
+                }
+            }
+        }
         let feet =
             app.sim.as_ref().and_then(|s| s.view(ME)).map(|v| world_to_canvas(v.body().pos, app.camera)).filter(
                 |&(x, y)| (0.0..f32::from(canvas_px.0)).contains(&x) && (0.0..f32::from(canvas_px.1)).contains(&y),
@@ -285,6 +318,7 @@ pub fn run(
             due = cap;
         }
         let t_ticks = Instant::now();
+        app.stages = [0; 5];
         for _ in 0..due {
             events.clear();
             app.tick(held, &mut events);
@@ -302,13 +336,20 @@ pub fn run(
         } else {
             blank(app.present.frame_mut(), canvas_px);
         }
+        let stats = screen.backend().stats();
         app.ui.begin(ui_input, app.present.ticks().max(app.ticks as u32), canvas_px);
-        app.draw_ui();
+        app.draw_ui(stats);
         typing = app.ui.typing;
         app.ui.finish(app.present.frame_mut());
+        app.stages[2] = t_draw.elapsed().as_micros() as u32;
+        let t_backend = Instant::now();
         screen.backend().draw(app.present.frame());
+        app.stages[3] = t_backend.elapsed().as_micros() as u32;
         let draw_time = t_draw.elapsed();
+        let t_wait = Instant::now();
         screen.show(win)?;
+        app.stages[4] = t_wait.elapsed().as_micros() as u32;
+        app.perf.frame(app.stages, app.started.elapsed().as_millis() as u64, app.ticks);
         for out in std::mem::take(&mut app.ui.out) {
             match out {
                 UiOut::Command(c) => app.command(c),
@@ -432,14 +473,20 @@ impl App<'_> {
                     let mut frames = [InputFrame::IDLE; MAX_PLAYERS];
                     frames[ME.index()] = held;
                     self.pending.sort_by_key(|c| (c.seat, c.seq));
+                    let t = Instant::now();
                     sim.step(&StepInput { frames, commands: &self.pending });
+                    let us = t.elapsed().as_micros() as u32;
                     self.pending.clear();
                     events.extend_from_slice(sim.drain_events());
+                    self.stages[0] += us;
+                    self.perf.tick(us, events.len());
                     self.speed.step = false;
                 }
+                let t = Instant::now();
                 if let Some(v) = sim.view(ME) {
                     self.present.tick(&v, events);
                     self.bufs.tick(&v, events);
+                    self.stages[1] += t.elapsed().as_micros() as u32;
                     if events.iter().any(|e| matches!(e.kind, jane_sim::EventKind::Rest)) {
                         self.autosave();
                     }
@@ -514,6 +561,8 @@ impl App<'_> {
                         self.speed.held = true;
                     }
                 }
+                UiAction::Debug => self.perf_level = (self.perf_level + 1) % 3,
+                UiAction::Grid => self.world_dbg.on = !self.world_dbg.on,
                 UiAction::Slow => self.speed.quarters = if self.speed.quarters == 1 { 4 } else { 1 },
                 UiAction::Fast => self.speed.quarters = if self.speed.quarters == 16 { 4 } else { 16 },
                 _ => actions.push(a),
@@ -671,7 +720,7 @@ impl App<'_> {
     }
 
     /// The UI's layers, bottom to top; only the top one answers.
-    fn draw_ui(&mut self) {
+    fn draw_ui(&mut self, stats: Option<jane_present::FrameStats>) {
         let pad = self.input.pad_active();
         let cx = HudCtx { bindings: &self.input.bindings, pad, window_open: false };
         match &mut self.scene {
@@ -685,6 +734,12 @@ impl App<'_> {
                 loading::draw(&mut self.ui, st);
             }
             Scene::Play => {
+                if self.world_dbg.on
+                    && let Some(v) = self.sim.as_ref().and_then(|s| s.view(ME))
+                {
+                    self.ui.interactive = false;
+                    world::draw(&mut self.ui, &mut self.world_dbg, &v, &self.present, self.present.frame());
+                }
                 let top_is_hud = self.menus.is_empty() && self.bufs.dialogue.is_none();
                 self.ui.interactive = top_is_hud;
                 hud::draw(&mut self.ui, &self.bufs, cx);
@@ -724,5 +779,85 @@ impl App<'_> {
                 }
             }
         }
+        if self.perf_level > 0 || self.world_dbg.on {
+            self.ui.interactive = false;
+            self.overlays(stats);
+        }
+    }
+
+    /// F2 and the top line.
+    fn overlays(&mut self, stats: Option<jane_present::FrameStats>) {
+        let (seed, zone, tick, clock) = match &self.sim {
+            Some(s) => {
+                let st = s.state();
+                let mut c = String::new();
+                text::clock(st.clock, &mut c);
+                (st.seed, self.bufs.hud.zone.map_or("-", ZoneId::name), st.tick.0, format!("day {} {c}", st.day + 1))
+            }
+            None => (0, "-", 0, String::new()),
+        };
+        if let Some(s) = &self.sim
+            && self.ticks.wrapping_sub(self.hash.1) >= 30
+        {
+            self.hash = (s.hash(), self.ticks);
+        }
+        let speed = match (self.speed.held, self.speed.quarters) {
+            (true, _) => "held: F6 steps",
+            (false, 1) => "x0.25",
+            (false, 16) => "x4",
+            _ => "",
+        };
+        let top = TopLine { seed, zone, tick, clock: &clock, hash: self.hash.0, speed };
+        perf::top_line(&mut self.ui, &top);
+        if self.perf_level == 0 {
+            return;
+        }
+        let mut sim_info = SimInfo::default();
+        if let Some(s) = &self.sim {
+            for z in s.state().zones.iter().flatten() {
+                sim_info.units_total += z.units.len() as u32;
+                sim_info.units_awake += z.units.iter().filter(|u| u.awake).count() as u32;
+            }
+            let p = s.path_stats();
+            let ticks = self.ticks.saturating_sub(self.paths.2).max(1);
+            let searches = p.searches.saturating_sub(self.paths.0);
+            sim_info.path_searches_per_tick = (searches / ticks) as u32;
+            sim_info.path_nodes_per_search = (p.expanded.saturating_sub(self.paths.1) / searches.max(1)) as u32;
+            if ticks >= 60 {
+                self.paths = (p.searches, p.expanded, self.ticks);
+            }
+        }
+        let f = self.present.frame();
+        let mut passes = [None; 8];
+        for (i, p) in f.passes.iter().take(8).enumerate() {
+            passes[i] = Some(match p {
+                jane_present::Pass::Terrain { .. } => "terrain",
+                jane_present::Pass::Sprites { .. } => "sprites",
+                jane_present::Pass::Silhouettes { .. } => "silhouettes",
+                jane_present::Pass::Lights { .. } => "lights",
+                jane_present::Pass::Post(_) => "post",
+            });
+        }
+        let frame = FrameInfo {
+            sprites: f.sprites.len() as u32,
+            lights: f.lights.len() as u32,
+            casters: f.casters.len() as u32,
+            chunks_live: f.chunks.len() as u32,
+            chunks_painted: self.present.chunks_painted(),
+            ui_cmds: self.ui.cmds.len() as u32,
+            atlas_pages: self.present.atlas().pages.len() as u32,
+            passes,
+        };
+        let v = PerfView {
+            log: &self.perf,
+            backend: stats,
+            backend_name: &self.backend_name,
+            tier: f.tier,
+            dropped: self.dropped,
+            sim: sim_info,
+            frame,
+            top,
+        };
+        perf::draw(&mut self.ui, self.perf_level, &v);
     }
 }

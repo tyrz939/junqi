@@ -289,10 +289,12 @@ impl ViewBuffers {
                 EventKind::Damage { unit, from: Some(from), .. } => {
                     if from == me_unit && v.unit(unit).is_some_and(|u| u.faction != jane_data::Faction::Friendly) {
                         self.fighting = Some((unit, now));
-                    } else if unit == me_unit && v.unit(from).is_some_and(|u| u.faction != jane_data::Faction::Friendly)
-                        && self.fighting.is_none_or(|(_, t)| now.saturating_sub(t) > 120) {
-                            self.fighting = Some((from, now));
-                        }
+                    } else if unit == me_unit
+                        && v.unit(from).is_some_and(|u| u.faction != jane_data::Faction::Friendly)
+                        && self.fighting.is_none_or(|(_, t)| now.saturating_sub(t) > 120)
+                    {
+                        self.fighting = Some((from, now));
+                    }
                 }
                 _ => {}
             }
@@ -415,12 +417,10 @@ impl ViewBuffers {
         // The prompt.
         h.prompt = v.focus().map(|f| {
             let label = match f.target {
-                FocusRef::Prop(pid) => v
-                    .prop(pid)
-                    .map_or("", |p| {
-                        let d = cat.story.prop(p.def);
-                        v.prop_spawn(p).and_then(|s| s.label).map_or(text::text(d.name), |l| v.text(l))
-                    }),
+                FocusRef::Prop(pid) => v.prop(pid).map_or("", |p| {
+                    let d = cat.story.prop(p.def);
+                    v.prop_spawn(p).and_then(|s| s.label).map_or(text::text(d.name), |l| v.text(l))
+                }),
                 FocusRef::Unit(uid) => v.unit(uid).map_or("", |u| text::text(cat.combat.unit(u.def).name)),
                 FocusRef::Drop(did) => {
                     v.drops().iter().find(|d| d.id == did).map_or("", |d| text::text(cat.combat.item(d.item).name))
@@ -540,12 +540,10 @@ impl ViewBuffers {
             let speaker = match (tree_speaker, d.speaker) {
                 (Some(s), _) => s,
                 (None, Speaker::Unit(u)) => v.unit(u).map_or("", |u| text::text(cat.combat.unit(u.def).name)),
-                (None, Speaker::Prop(p)) => v
-                    .prop(p)
-                    .map_or("", |p| {
-                        let def = cat.story.prop(p.def);
-                        v.prop_spawn(p).and_then(|s| s.label).map_or(text::text(def.name), |l| v.text(l))
-                    }),
+                (None, Speaker::Prop(p)) => v.prop(p).map_or("", |p| {
+                    let def = cat.story.prop(p.def);
+                    v.prop_spawn(p).and_then(|s| s.label).map_or(text::text(def.name), |l| v.text(l))
+                }),
                 (None, Speaker::None) => "",
             };
             text::expand(speaker, heroine, seed, &mut out.speaker);

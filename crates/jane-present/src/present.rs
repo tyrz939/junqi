@@ -210,6 +210,16 @@ impl Present {
         &self.camera
     }
 
+    /// A chunk's slot and generation in the cache, if it is painted and fresh (the F3 view).
+    pub fn chunk(&self, id: ChunkId) -> Option<(u16, u32)> {
+        self.chunks.find(id)
+    }
+
+    /// The zone's size in cells, as of the last tick.
+    pub fn zone_cells(&self) -> (u32, u32) {
+        self.zone_cells
+    }
+
     /// Chunks painted so far (each paint is a new `(id, generation)`).
     pub fn chunks_painted(&self) -> u32 {
         self.chunks.painted

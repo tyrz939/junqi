@@ -666,7 +666,7 @@ impl Ui {
             PanelStyle::Window => (style::panel_top(), style::panel_bottom(), style::PANEL_A),
             PanelStyle::Tip => (jane_art::Ramp::UiPanel.at(jane_art::Tone::Base), style::panel_top(), 240),
             PanelStyle::Debug => {
-                (jane_art::Ramp::UiSlot.at(jane_art::Tone::Mid), jane_art::Ramp::UiSlot.at(jane_art::Tone::Shade), 214)
+                (jane_art::Ramp::UiSlot.at(jane_art::Tone::Mid), jane_art::Ramp::UiSlot.at(jane_art::Tone::Shade), 242)
             }
         };
         // The body: a two-tone vertical gradient in bands (a calm fill, never a dither).
