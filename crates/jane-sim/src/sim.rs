@@ -254,10 +254,14 @@ impl Sim {
         self.rts[z.index()] = Some(Box::new(rt));
     }
 
-    /// Drop the runtimes of zones nobody is in (step 15).
+    /// Drop the runtimes of zones nobody is in (step 15), all but the county's: the clock rows
+    /// run there every hour whoever is out (the lamps, the bell), and she comes back to it
+    /// from every door, so building its runtime again each time (tens of milliseconds for 2 km
+    /// square) was a stall a frame could not hide. Kept or made again, a runtime is the same
+    /// to every later tick (§8 `runtime_rebuild_is_invisible`).
     pub(crate) fn drop_empty(&mut self) {
         for z in ZoneId::ALL {
-            if self.rts[z.index()].is_some() && !self.state.is_live(z) {
+            if z != ZoneId::County && self.rts[z.index()].is_some() && !self.state.is_live(z) {
                 self.rts[z.index()] = None;
             }
         }
@@ -374,7 +378,7 @@ impl Sim {
     /// 13 zone ops      spawn, despawn, wake; the zone goes back; world ops drain
     /// 14 travel        seat order
     ///    sleep         a bed chosen after step 0 (a trigger, a clock row); each seat's sky told
-    /// 15 drop          runtimes of zones nobody is in
+    /// 15 drop          runtimes of zones nobody is in (the county's is kept)
     /// ```
     pub fn step(&mut self, input: &StepInput<'_>) -> Stepped {
         let mut m = SimMetrics { frame: self.state.frame, ..SimMetrics::default() };
