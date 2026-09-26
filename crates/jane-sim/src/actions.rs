@@ -3,7 +3,8 @@
 //! match is exhaustive, so a new verb is a compile error here.
 //!
 //! This unit handles the world verbs the clock and travel need: `Flag`, `Toast`, `Show`, `Hide`,
-//! `Lock`, `Unlock`, `Switch`, `Spawn`, `Despawn`, `Location`, `If`, `Travel`. Every other verb
+//! `Lock`, `Unlock`, `Switch`, `Spawn`, `Despawn`, `Location`, `If`, `Travel`; combat's
+//! (`Learn`, `Strike`, `Status`, `Heal`) are in `combat.rs`. Every other verb
 //! is a documented no-op until its owner lands (each arm says whose). Player-scoped verbs do
 //! nothing with `actor == None`. A name that does not resolve is a no-op plus
 //! `EventKind::Missing`.
@@ -191,6 +192,13 @@ pub fn run_action(cx: &mut Ctx<'_>, a: &Action, subject: Subject) {
             let mark = cx.sym(mark);
             request_travel(cx, TravelRequest { zone, mark, at: None });
         }
+        // The combat unit's (combat.rs).
+        Action::Learn(spell) => crate::combat::learn_verb(cx, spell),
+        Action::Strike { rect, amount, school, effect, hits_friends } => {
+            crate::combat::strike_verb(cx, rect, amount, school, effect, hits_friends, subject);
+        }
+        Action::Status(effect) => crate::combat::status_verb(cx, effect, subject),
+        Action::Heal(heal) => crate::combat::heal_verb(cx, heal, subject),
         // Later units' verbs, no-ops until they land.
         // The quests unit:
         Action::Quest(_)
@@ -209,11 +217,6 @@ pub fn run_action(cx: &mut Ctx<'_>, a: &Action, subject: Subject) {
         | Action::Give(_)
         | Action::Take(_)
         | Action::Throw(_)
-        // the combat unit:
-        | Action::Learn(_)
-        | Action::Strike { .. }
-        | Action::Status(_)
-        | Action::Heal(_)
         // the dialogue unit:
         | Action::Talk(_) => {}
     }

@@ -24,7 +24,7 @@ use crate::sym::SymTable;
 use crate::tuning::{BAG_SLOTS, BAR_SLOTS, CRAFT_INPUTS};
 
 /// The save and hash schema's version. Bumped by any change to a type in this module.
-pub const SAVE_VERSION: u16 = 1;
+pub const SAVE_VERSION: u16 = 2;
 
 /// A fixed-size bit set (trigger bits, consequences done).
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -373,18 +373,26 @@ pub struct Drop {
     pub born: Tick,
 }
 
-/// A bolt in flight. The combat unit owns its final shape.
+/// A bolt in flight (`combat.ts Projectile`). It flies straight and never homes; its blow was
+/// rolled when it was cast.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Projectile {
     pub id: ProjId,
     pub spell: SpellId,
     pub from: Option<UnitId>,
-    pub target: Option<UnitId>,
+    /// The caster's side when it was cast: whom it may hit, whoever the caster is by now.
+    #[serde(with = "codec::faction")]
+    pub faction: Faction,
     pub pos: Vec2,
+    /// Per tick, fixed at the cast (`along(heading, speed)`), so the line is exact.
+    pub vel: Vec2,
     pub heading: Angle,
     /// Range left.
     pub left: jane_core::Fx,
     pub born: Tick,
+    /// The blow it carries, whole points.
+    pub hit: Milli,
+    pub crit: bool,
 }
 
 /// A pool on the ground. The combat unit owns its final shape.
@@ -413,10 +421,12 @@ pub enum CombatState {
 
 /// One unit. Player, dog, skeleton and snake are the same shape with a different controller.
 ///
-/// Live in this unit: `id key def controller faction pos facing strength spirit hp mp energy
-/// energy_locked alive stop_until synced home awake hidden carrying hold`. Present and inert
-/// until their owners land: `gcd_until cooldowns item_cooldowns target combat patrol patrol_at
-/// dwell_until order path statuses died_at phase snake` (combat, ai, snake, status units).
+/// Live in the foundation: `id key def controller faction pos facing strength spirit hp mp energy
+/// energy_locked alive stop_until synced home awake hidden carrying hold`. Live in combat
+/// (`combat`, `status`, `flush`, `life`): `gcd_until cooldowns target combat statuses died_at
+/// phase`, and `hp` changes only in the flush (and `life`: regen, respawn, revive). Present and
+/// inert until their owners land: `item_cooldowns patrol patrol_at dwell_until order path snake`
+/// (inventory, ai and snake units).
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Unit {
     pub id: UnitId,

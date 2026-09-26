@@ -15,6 +15,10 @@
 //! | [`path`], [`los`], [`units`], [`ring`], [`fog`] | feet, sight, movement, the load ring, fog |
 //! | [`input`], [`event`] | frames, commands, events |
 //! | [`ctx`], [`actions`] | the context every system takes; the verb runner |
+//! | [`combat`], [`assist`] | the cast pipeline, the combat verbs and the console's; aim assist |
+//! | [`flight`], [`status`], [`flush`] | steps 8, 9 and 10: bolts and pools, statuses, the flush (death, phases) |
+//! | [`life`], [`loot`] | regen, respawn and waking; drops |
+//! | [`hooks`] | combat's calls into the interact, inventory, quests, triggers and living-world units |
 //! | [`sim`], `seats`, `travel` | the scheduler, seats and commands, travel |
 //! | [`save`] | save, load and the hash |
 //! | [`view`] | what a seat sees |
@@ -22,15 +26,24 @@
 #![deny(clippy::float_arithmetic, clippy::float_cmp)]
 
 pub mod actions;
+pub mod assist;
 pub mod bag;
 pub mod blueprints;
 pub mod codec;
+pub mod combat;
+#[cfg(test)]
+mod combat_tests;
 pub mod ctx;
 pub mod event;
+pub mod flight;
+pub mod flush;
 pub mod fog;
 pub mod grid;
+pub mod hooks;
 pub mod ids;
 pub mod input;
+pub mod life;
+pub mod loot;
 pub mod los;
 pub mod path;
 pub mod ring;
@@ -39,6 +52,7 @@ pub mod save;
 mod seats;
 pub mod sim;
 pub mod state;
+pub mod status;
 pub mod sym;
 mod travel;
 pub mod tuning;
@@ -47,7 +61,8 @@ pub mod view;
 pub mod zone;
 
 pub use blueprints::Blueprints;
-pub use event::{Event, EventKind};
+pub use combat::Hit;
+pub use event::{Event, EventKind, SpellError};
 pub use ids::{ClientToken, DropId, GroundId, ProjId, PropId, Seat, UnitId};
 pub use input::{AssistProfile, Command, DevOp, InputFrame, StampedCommand, StepInput, Stepped};
 pub use save::{Header, SaveError, Summary};

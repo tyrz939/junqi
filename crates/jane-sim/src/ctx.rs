@@ -80,6 +80,16 @@ pub struct Scratch {
     pub path: PathScratch,
     pub props: Vec<PropIx>,
     pub units: Vec<UnitId>,
+    /// Blows waiting for their zone's flush (step 10), per zone, in the order they were dealt.
+    /// Empty between steps: what a step deals, the step lands (`combat::Hit`).
+    pub hits: [Vec<crate::combat::Hit>; ZONE_COUNT],
+    /// The flush's own buffers: the pass being landed, and who it lands on.
+    pub flushing: Vec<crate::combat::Hit>,
+    pub hit_ids: Vec<UnitId>,
+    /// Combat's searches through `unit_blocks` (victims, splash, pulses, assist).
+    pub near: Vec<UnitId>,
+    /// Corpses due to stand up this tick.
+    pub due: Vec<UnitId>,
 }
 
 pub struct Ctx<'a> {

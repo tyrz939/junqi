@@ -2,12 +2,13 @@
 //! frame from this and nothing else. This is the first slice: the seat, the ground and who
 //! stands on it, and the clock. The rest of §11 lands with the systems it reads.
 
-use jane_core::{Rect, Tile, Vec2, ZoneId};
+use jane_core::{Angle, Rect, SpellId, Tile, Vec2, ZoneId};
 
 use crate::ids::{Seat, UnitId};
+use crate::input::InputFrame;
 use crate::runtime::ZoneRuntime;
 use crate::sim::Sim;
-use crate::state::{GameState, PlayerState, Prop, Unit, ZoneState};
+use crate::state::{Drop, GameState, Ground, PlayerState, Projectile, Prop, Unit, ZoneState};
 
 /// A unit as drawn.
 #[derive(Clone, Copy, Debug)]
@@ -115,6 +116,47 @@ impl<'a> View<'a> {
             let d = cat.story.prop(p.def);
             !p.hidden && Rect::new(i32::from(p.cell.x), i32::from(p.cell.y), i32::from(d.w), i32::from(d.h)).overlaps(r)
         })
+    }
+}
+
+impl<'a> View<'a> {
+    /// Bolts in flight here, in the order they were cast.
+    pub fn projectiles(&self) -> &'a [Projectile] {
+        &self.zone.projectiles
+    }
+
+    /// Pools on the ground here.
+    pub fn grounds(&self) -> &'a [Ground] {
+        &self.zone.grounds
+    }
+
+    /// Stacks on the ground here.
+    pub fn drops(&self) -> &'a [Drop] {
+        &self.zone.drops
+    }
+
+    /// Where a cast of `spell` along `frame`'s aim would go, assist resolved as the sim will
+    /// resolve it (ARCHITECTURE.md §5.4): the reticle draws this. `None` when the frame has no
+    /// aim (she casts along her facing). Derived and never stored: the sticky unit is read, not
+    /// set. The presentation passes the frame it is about to send and the spell on the bar.
+    pub fn assisted_aim(&self, frame: &InputFrame, spell: SpellId) -> Option<Angle> {
+        let raw = frame.aim?;
+        let me = self.me();
+        let Some(body) = self.zone.unit(me.unit) else { return Some(raw) };
+        let def = jane_data::catalog().combat.spell(spell);
+        let mut near = Vec::new();
+        let (a, _) = crate::assist::pick(
+            self.zone,
+            self.rt,
+            self.state.tick,
+            body,
+            me.assist,
+            def,
+            raw,
+            frame.assist,
+            &mut near,
+        );
+        Some(a)
     }
 }
 

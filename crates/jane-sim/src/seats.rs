@@ -7,7 +7,7 @@ use crate::bag::bag_add;
 use crate::ctx::{PartySnap, forget_unit};
 use crate::event::{Event, EventKind, ToastKind};
 use crate::ids::{ClientToken, Seat};
-use crate::input::{Command, DevOp, StampedCommand};
+use crate::input::{Command, DevOp, InputFrame, StampedCommand};
 use crate::ring::{Watchers, step_ring};
 use crate::sim::{Sim, stamp_seats_fog};
 use crate::state::{FlagKey, PlayerState, QuestProgress, Stats, TravelRequest, Unit};
@@ -15,8 +15,9 @@ use crate::tuning::{ARRIVAL_RADIUS, BAR_SLOTS, MAX_PLAYERS, TICKS_PER_HOUR};
 use crate::units::{max_hp, max_mp, new_unit};
 
 impl Sim {
-    /// Apply one command (step 0).
-    pub(crate) fn command(&mut self, c: &StampedCommand) {
+    /// Apply one command (step 0). A cast reads its seat's frame: the raw aim and the assist
+    /// profile of this frame, so the aim is in the record.
+    pub(crate) fn command(&mut self, c: &StampedCommand, frames: &[InputFrame; MAX_PLAYERS]) {
         let seat = match (c.seat, c.cmd) {
             (None, Command::Join { who }) => {
                 self.join(who);
@@ -55,13 +56,18 @@ impl Sim {
             // The dialogue unit runs whatever closing a node runs; the box closes here.
             Command::CloseDialogue => p.dialogue = None,
             Command::Dev(op) => self.dev(seat, op),
+            Command::Bar { slot, on } => {
+                let frame = frames[seat.index()];
+                self.in_seat_ctx(seat, |cx| crate::combat::bar_command(cx, seat, slot, on, frame));
+            }
+            Command::Cast { spell, on } => {
+                let frame = frames[seat.index()];
+                self.in_seat_ctx(seat, |cx| crate::combat::player_cast(cx, seat, spell, on, frame));
+            }
             // A seated join is nobody's; the rest are later units', no-ops until they land.
             Command::Join { .. }
             // the interact unit:
             | Command::Use
-            // the combat and aim-assist units:
-            | Command::Bar { .. }
-            | Command::Cast { .. }
             // the inventory unit:
             | Command::Item(_)
             | Command::BagMove { .. }
@@ -86,15 +92,39 @@ impl Sim {
             DevOp::Flag { flag, value } => {
                 self.state.flags.insert(FlagKey::Named(flag), value);
             }
-            // The inventory, combat and quests units.
-            DevOp::Give { .. }
-            | DevOp::Hp(_)
-            | DevOp::Mp(_)
-            | DevOp::Learn(_)
-            | DevOp::Quest(_)
-            | DevOp::Kill
-            | DevOp::Spawn(_) => {}
+            DevOp::Hp(v) => self.in_seat_ctx(seat, |cx| {
+                let now = cx.world.tick;
+                if let Some(u) = cx.actor_unit().and_then(|b| cx.zone.unit_mut(b)) {
+                    crate::life::dev_hp(u, v, now);
+                }
+            }),
+            DevOp::Mp(v) => self.in_seat_ctx(seat, |cx| {
+                let now = cx.world.tick;
+                if let Some(u) = cx.actor_unit().and_then(|b| cx.zone.unit_mut(b)) {
+                    crate::life::dev_mp(u, v, now);
+                }
+            }),
+            DevOp::Learn(spell) => self.in_seat_ctx(seat, |cx| crate::combat::learn_verb(cx, spell)),
+            DevOp::Kill => self.in_seat_ctx(seat, |cx| {
+                if let Some(b) = cx.actor_unit() {
+                    crate::combat::dev_kill(cx, b);
+                }
+            }),
+            DevOp::Spawn(def) => self.in_seat_ctx(seat, |cx| {
+                if let Some(b) = cx.actor_unit() {
+                    crate::combat::dev_spawn(cx, b, def);
+                }
+            }),
+            // The inventory and quests units.
+            DevOp::Give { .. } | DevOp::Quest(_) => {}
         }
+    }
+
+    /// Run `f` in the seat's zone, acting as her.
+    fn in_seat_ctx(&mut self, seat: Seat, f: impl FnOnce(&mut crate::ctx::Ctx<'_>)) {
+        let zone = self.state.players[seat.index()].zone;
+        let snap = PartySnap::of(&self.state);
+        self.with_ctx(zone, Some(seat), &snap, false, f);
     }
 
     /// Where anyone who sits down appears: the party's last bed or fire, else where the story

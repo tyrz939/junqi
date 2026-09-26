@@ -3,7 +3,7 @@
 //! here until `data/tuning/sim.json` lands and `TUNING` carries them (§6 "Tuning").
 
 use jane_core::num::{CELL_FX, FX_ONE, TICK_RATE};
-use jane_core::{Fx, Milli, Tick};
+use jane_core::{Angle, Fx, Milli, Permille, Tick};
 
 /// Up to four seats share a world (PLATFORM.md).
 pub const MAX_PLAYERS: usize = 4;
@@ -72,3 +72,84 @@ pub const fn ticks(secs: u32) -> Tick {
 pub const fn px(p: i32) -> Fx {
     Fx(p * FX_ONE)
 }
+
+// --- combat (`constants.ts`, `combat.ts`, `loot.ts`) -----------------------------------------
+
+/// The global cooldown: 1.5 s.
+pub const GCD: Tick = Tick(90);
+/// One hit in twenty lands double, unless a status says otherwise (`critOneIn`).
+pub const CRIT_ONE_IN: u32 = 20;
+/// Idle regen: a whole bar in 300 ticks (`max / 300` per tick, floored in milli-points).
+pub const REGEN_DIVISOR: i32 = 300;
+/// What each of the party deals and takes, by how many are connected (1 to 4), in permille.
+/// Healing is never scaled. Together is a little better than alone; alone in a party of four
+/// is 38 %.
+pub const PARTY_DEALT: [Permille; MAX_PLAYERS] = [Permille(1000), Permille(620), Permille(460), Permille(380)];
+pub const PARTY_TAKEN: [Permille; MAX_PLAYERS] = [Permille(1000), Permille(1150), Permille(1300), Permille(1450)];
+/// A drop on the ground ages out after five minutes (2020's `obj_drop_parent`), unless the story
+/// needs it or it is bound.
+pub const DROP_LIFE: Tick = Tick(18_000);
+/// Loot fans out on a 3-wide grid this far apart, so stacked drops are each visible.
+pub const LOOT_SPREAD_FX: i32 = 6 * FX_ONE;
+/// How close to a prop's middle a bolt must end to switch on a prop that answers its school,
+/// when the spell's row says nothing (`interact.ts SCHOOL_TOUCH`).
+pub const SCHOOL_TOUCH_FX: Fx = Fx(14 * FX_ONE);
+/// A bolt starts this far along its line from the caster's feet.
+pub const BOLT_START_FX: Fx = Fx(4 * FX_ONE);
+/// A friendly spell cast with no cursor lands on the friend nearest the aim line, if she stands
+/// closer to it than this (`combat.ts ALLY_AIM_SLACK`, 16 px: generous, she is moving).
+pub const ALLY_AIM_SLACK_FX: i64 = 17 * FX_ONE as i64;
+/// Melee prefers what it faces: something more than half a cell behind loses every tie to what
+/// is in front (`combat.ts`, a 1000 m penalty).
+pub const MELEE_BEHIND_FX: i64 = 1000 * CELL_FX as i64;
+/// `Dev(Kill)`: everything hostile she can see within this box (25 m, roughly the screen).
+pub const DEV_KILL_REACH_FX: i32 = 200 * FX_ONE;
+/// `Dev(Kill)` hits for this much; nothing in the game has a million points.
+pub const DEV_KILL_HIT: Milli = Milli(1_000_000_000);
+/// `Dev(Spawn)`: this many cells east of her, on the nearest free cell within this radius.
+pub const DEV_SPAWN_OFFSET: i32 = 3;
+pub const DEV_SPAWN_RADIUS: i32 = 6;
+/// Nearest-free-cell radius for a creature standing up again at home.
+pub const RESPAWN_RADIUS: i32 = 6;
+/// Nearest-free-cell radius for a seat waking at her mark.
+pub const REVIVE_RADIUS: i32 = 8;
+/// A snake's body is hit-tested at every this-many trail points (`snake.ts HITBOX_EVERY`).
+pub const SNAKE_HITBOX_EVERY: usize = 8;
+
+// --- aim assist (ARCHITECTURE.md §5.4, §12) ---------------------------------------------------
+
+/// One aim-assist profile. `Pad` is wider than `Mouse` on every field; `Off` is raw.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Assist {
+    /// Half-angle about the raw aim inside which a hostile unit is a candidate.
+    pub cone: Angle,
+    /// Within this of the best candidate's bearing, the cast takes the bearing exactly.
+    pub snap: Angle,
+    /// Otherwise the raw aim moves this much of the way toward it.
+    pub magnet: Permille,
+    /// How long the chosen unit stays sticky (`PlayerState.assist`).
+    pub sticky_ticks: Tick,
+    /// The sticky unit stays a candidate this much outside the cone.
+    pub slack: Angle,
+}
+
+pub const ASSIST_PAD: Assist = Assist {
+    cone: Angle::from_degrees(20),
+    snap: Angle::from_degrees(4),
+    magnet: Permille(350),
+    sticky_ticks: Tick(30),
+    slack: Angle::from_degrees(5),
+};
+
+pub const ASSIST_MOUSE: Assist = Assist {
+    cone: Angle::from_degrees(8),
+    snap: Angle::from_degrees(2),
+    magnet: Permille(200),
+    sticky_ticks: Tick(30),
+    slack: Angle::from_degrees(2),
+};
+
+/// Score bonuses, as angles taken off a candidate's distance from the raw aim: the caster's own
+/// target, and (smaller) the sticky unit.
+pub const ASSIST_TARGET_BONUS: i32 = Angle::from_degrees(2).0 as i32;
+pub const ASSIST_STICKY_BONUS: i32 = Angle::from_degrees(1).0 as i32;

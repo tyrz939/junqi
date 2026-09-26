@@ -111,18 +111,23 @@ pub enum DevOp {
 
 /// A discrete action, addressed to a seat.
 ///
-/// Handled in this unit: `Join`, `Leave`, `Open`, `Bind`, `Unbind`, `BarSwap`,
-/// `CloseDialogue`, `Dev(God | Tp | Time | Flag)`. The rest are no-ops until their owners land
-/// (interact: `Use`; combat and aim assist: `Bar`, `Cast`; inventory: `Item`, `Bag*`,
-/// `Craft*`, `Dev(Give)`; dialogue: `Advance`, `Choose`; the others' `Dev` rows).
+/// Handled: `Join`, `Leave`, `Open`, `Bind`, `Unbind`, `BarSwap`, `CloseDialogue`,
+/// `Dev(God | Tp | Time | Flag)` (seats); `Bar`, `Cast`, `Dev(Hp | Mp | Learn | Kill | Spawn)`
+/// (combat). The rest are no-ops until their owners land (interact: `Use`; inventory: `Item`,
+/// `Bag*`, `Craft*`, `Dev(Give)`, a bar slot holding an item; dialogue: `Advance`, `Choose`;
+/// quests: `Dev(Quest)`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Command {
     Use,
-    /// `on`: the unit under the cursor when it was pressed; friendly spells read it.
+    /// A bar slot pressed. `on` as for `Cast`.
     Bar {
         slot: u8,
         on: Option<UnitId>,
     },
+    /// Cast along this frame's aim (assisted by its profile, ARCHITECTURE.md §5.4). `on` is
+    /// what a friendly spell reads: with a cursor, the unit under it when it was pressed, and
+    /// the caster's own body for "over nobody"; `None` only without a cursor (a pad), when a
+    /// friendly spell lands on the friend nearest the aim line.
     Cast {
         spell: SpellId,
         on: Option<UnitId>,

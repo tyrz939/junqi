@@ -95,7 +95,9 @@ along(a: Angle, s: Fx) -> Vec2
 
 **Rule:** angles are the only direction. There is no `normalize`. The table is 4096 entries because the finest turn in the game (the snake, 4.8° per tick) is fifty times coarser than 0.088°.
 
-**Constants as integers.** Energy sprint, carry and regen 500, 250 and 500 milli per tick, max 100 000, push 20 000. Mp regen `+= Milli(spirit)` per tick (exact). Idle regen `max_milli / 300`. `PARTY_DEALT` and `PARTY_TAKEN` as `[Permille; 4]`. `PHASE_SCALE` as `[u8; 7]`. Night: `aggro * (10 + 4 * dark) / 10`, `leash * (10 + 6 * dark) / 10`. Effect speed, resist, lifesteal, mana shield, `hpBelow` and loot chance all `Permille`. Crit is `rng.below(one_in) == 0`. `heal` splits into `heal` (`Milli`) and `heal_pct` (`Permille`) at the schema. `rollPower` was already integer. Speeds in px per tick become `Fx` at compile (2 → 512, .55 → 141, 1.2 → 307); metres become `Fx` (× 2048); fan degrees become `Angle`. `BODY_HALF_FX = 768`. Light reach is `r * r * 4 / 9` in Fx². `focusOf` penalties are `Fx` with one `isqrt` per candidate inside USE reach.
+**Constants as integers.** Energy sprint, carry and regen 500, 250 and 500 milli per tick, max 100 000, push 20 000. Mp regen `+= Milli(spirit)` per tick (exact). Idle regen `max_milli / 300`. `PARTY_DEALT` and `PARTY_TAKEN` as `[Permille; 4]`. `PHASE_SCALE` as `[u8; 7]`. Night: `aggro * (10 + 4 * dark) / 10`, `leash * (10 + 6 * dark) / 10`. Effect speed, resist, lifesteal, mana shield, `hpBelow` and loot chance all `Permille`. Crit is `rng.below(one_in) == 0`. `heal` splits into `heal` (`Milli`) and `heal_pct` (`Permille`) at the schema. Idle regen is floored to the milli-point per tick, so a bar fills in a little over 300 ticks.
+
+**Power rolls** (`SpellPower { stat, div, var_div, flat }`, `div` and `var_div` in thousandths). A spell's blow is whole points, as the TS's was (`makeHit` rounded): the fixed part `stat / div` is floored to a milli-point (`stat * 10^6 / div` milli); the random part is `irandom(floor(stat * 1000 / var_div))` whole points (GameMaker's `irandom` floors its bound); `flat` is added; a crit doubles the sum; the sum is rounded half up to a whole point (`div_round(m, 1000) * 1000`). Per blow the zone stream draws the power roll, then the crit roll. A pool's pulse rounds its roll the same way, without a crit. In the flush, damage is `blow * resist * party / 10^6` in milli (floored), less a mana shield (`absorbed = min(dmg, mp * 1000 / shield)`, the mp it costs floored), then rounded half up to a whole point; a splash is the blow over `div`, and lifesteal the damage times its permille, each rounded to a whole point; a heal lands exactly (only what is missing). Speeds in px per tick become `Fx` at compile (2 → 512, .55 → 141, 1.2 → 307); metres become `Fx` (× 2048); fan degrees become `Angle`. `BODY_HALF_FX = 768`. Light reach is `r * r * 4 / 9` in Fx². `focusOf` penalties are `Fx` with one `isqrt` per candidate inside USE reach.
 
 **RNG.** `next_u32`, `below(n)` (Lemire multiply-shift; `n == 0` gives 0), `irandom`, `chance(Permille)`, `pick`. `seeded(seed, stream)` is a splitmix32 spread plus 12 warm-ups. Worldgen draws through `dice()` (PORT §6.a). `rngFloat` is gone.
 
@@ -150,7 +152,7 @@ Prop { id, key, def, spawn: Option<u16> /* index into Blueprint.props: keyTag, t
   cell, solid, hidden, locked, used, on, loot: LootState, under_done }
 ```
 
-**Left the unit:** `anim`, `animTick`, `hx`, `hy` become events plus `View::moved_this_tick` and `SnakeBody.heading`. `book` becomes derived `book_of(u)` (def plus growth for players; the phase book for AI). `bag` moves to `PlayerState.bag` ("bags are hers"; `hasItem` and `acquire` read any seat from any zone). `incoming` becomes runtime scratch. `respawn`, `deadFor`, `gcd`, `stop`, cooldown decrements and `thinkOffset` become absolute ticks; `think_offset = (id * 0x9E37) % 10`, no RNG draw at spawn. Props no longer copy lists; the blueprint is rebuilt on load from `(seed, zone)`.
+**Left the unit:** `anim`, `animTick`, `hx`, `hy` become events plus `View::moved_this_tick` and `SnakeBody.heading`. `book` becomes derived `book_of(u)` (def plus growth for players; the phase book for AI). `bag` moves to `PlayerState.bag` ("bags are hers"; `hasItem` and `acquire` read any seat from any zone). `incoming` becomes runtime scratch (`Scratch.hits`, one queue per zone of `Hit { to, amount, school, from, crit, status }`, empty between steps). `respawn`, `deadFor`, `gcd`, `stop`, cooldown decrements and `thinkOffset` become absolute ticks; `think_offset = (id * 0x9E37) % 10`, no RNG draw at spawn. Props no longer copy lists; the blueprint is rebuilt on load from `(seed, zone)`.
 
 ### 3.3 Authoritative vs derived
 
@@ -256,15 +258,19 @@ impl Sim {
  3 presence      every 30 ticks: schedule slots resolved by the clock (dayOnly / nightOnly are two-slot schedules); hide, show
                  and jump only outside 120 x 80 px of a watcher, walk by order inside it (§4.6.a)
  4 ring          on block change of any seat here: the union square; sleep and wake units and props
- 5 catch-up      units that woke this tick: regen, status pulses, phase reset (§4.3)
- 6 players       seat order: input, sprint and carry energy, hold-to-push, movement
+ 5 catch-up      every awake unit's regen paid to now (a unit that woke this tick catches up; phase reset with it);
+                 its missed status pulses land at step 9 as one hit (§4.3)
+ 6 players       seat order: a dead seat wakes at respawn_at; input, sprint and carry energy, hold-to-push, movement
+                 (stun and the statuses' speed product apply)
  7 controllers   over the awake_units snapshot: ai | snake | npc (order or patrol); stunned skip
  8 projectiles   fly; first sight-blocking cell or enemy body through unit_blocks; splash; school touch. Grounds pulse through unit_blocks
  9 statuses      awake living: pulses into hits
-10 flush x2      the ONLY place hp changes: party permille, god, mana shield, lifesteal (the second pass lands it),
-                 first-hit aggro, phases, death → loot, quest hooks, onDeath
+10 flush x2      the ONLY place a blow changes hp: party permille, god, mana shield, lifesteal (the second pass lands it),
+                 first-hit aggro, phases, death → loot, quest hooks, onDeath. Passes run until the queue is empty
+                 (two in practice; a third only when a list run by a death or phase in the second strikes again)
 11 triggers      enter / while for the first living seat in the rect; plates every 6 ticks (actor None)
-12 housekeeping  drops expire, pending fills, prop flag re-stamp of dirty rects, fog every 10
+12 housekeeping  drops expire, corpses due on sleeping_due stand up, pending fills, prop flag re-stamp of dirty rects,
+                 fog every 10
 13 zone ops      apply ZoneOps: spawn (append), despawn (remove + forget_unit), wake; put the zone back; drain WorldOps
 14 travel        seat order: remove, forget_unit, place, ring force, fog, presence
 15 drop          runtimes of zones with nobody connected
@@ -276,14 +282,16 @@ The same order as `sim.ts` with four corrections: commands inside the step; cloc
 - **`forget_unit`** is the one function that clears everyone's target, drops combat to leash, and vacates occupancy and `unit_blocks`. Kill, despawn, travel and leave all call it; the TS had four copies.
 - **`WorldOps`**: `PayRewards { quest, list }` (once per connected seat in her zone, actor her), `Teach`, `Grow` (patches every body, parked included), `Announce(Event)`. Drained in order after the zone is put back.
 - **Party queries** read `PartySnap`, one tick stale, which is unobservable.
+- **Hits** are queued per zone in `Sim.scratch` and land at that zone's step 10 of the same step: a pass lands each target's blows in the order dealt, targets in ascending id, and what a pass raises waits for the next pass (the TS let a blow raised on a later unit land in the same pass). The queue is empty between steps, so it is neither saved nor hashed; a blow dealt in a step that does not run (the console while she reads alone) or on a zone that did not tick (its last seat left this frame) is dropped.
+- **Combat's seams** into other units' systems are the named functions of `jane_sim::hooks` (world spells, school touch, a bar item, quest kills, death bookkeeping, ecology on respawn, waking: what she carried, lock-ins).
 
 ### 4.3 Clocks without a sleeper pass
 
 | Clock | Was | Is |
 | --- | --- | --- |
 | gcd, stop, cooldowns, dwell, order budget | decremented per tick | `*_until: Tick`, read at use |
-| mp regen, idle regen | per tick, every unit | `synced: Tick` + `pay_regen(u, tick)`: elapsed × spirit, idle `max / 300 × elapsed`, clamp. Called for awake units each tick, for a sleeper on wake, and by anything reading `mp`. Sleepers are idle by definition, so the catch-up equals the per-tick sum |
-| statuses | per tick | `until`, `next_pulse`; missed pulses queued as one hit on wake |
+| mp regen, idle regen | per tick, every unit | `synced: Tick` + `pay_regen(u, tick)`: elapsed × spirit, idle `max / 300 × elapsed`, clamp. Called for awake units each tick (step 5), for a sleeper on wake, and by anything reading or writing `mp` or `hp` (a cast, an effect's mana, the flush). Idle is an AI with its row's `auto_regen` while idle, any AI while leashing, never one under orders; the AI controller does not regen itself. Sleepers are idle by definition, so the catch-up equals the per-tick sum |
+| statuses | per tick | `until`, `next_pulse`; active while `until > tick`; missed pulses queued as one hit on wake |
 | respawn | per tick, every corpse | `sleeping_due` sorted `(tick, id)`; housekeeping pops `<= tick` |
 | player respawn | counter | `respawn_at` |
 | drops | age | `born` |
@@ -372,12 +380,13 @@ Aim assist lives in the sim, so the pad and the mouse play the same game and a r
 ```
 struct Assist { cone: Angle /* half-angle */, snap: Angle, magnet: Permille, sticky_ticks: Tick, slack: Angle }   // one per profile, TUNING.assist[profile]
 
-fn assisted_aim(cx, seat, spell, raw: Angle) -> Angle
-  // Off: raw. Otherwise:
-  // candidates: hostile units, alive, awake, unhidden, within the spell's range of the caster, inside cone about raw
+fn assisted_aim(cx, seat, spell, raw: Angle, profile) -> Angle
+  // Off, or a spell that does not hurt what it is aimed at (anything but a bolt or a melee, and any heal): raw. Otherwise:
+  // candidates: hostile units (to the caster's side; never an npc), alive, awake, unhidden, within the spell's reach of
+  //   the caster between bodies (a melee's range; a bolt's range plus the caster's body), inside cone about raw
   //   (the sticky unit from PlayerState.assist is a candidate inside cone + slack while until >= tick)
-  // score: Angle::diff(raw, bearing) as an integer, minus a small bonus for unit.target and a smaller one for the sticky unit;
-  //   ties by unit id
+  // score: |Angle::diff(raw, bearing)| as an integer, minus a small bonus for unit.target (2°) and a smaller one for the
+  //   sticky unit (1°); ties by unit id
   // best within snap: take its bearing
   // else: raw moved toward it by magnet permille of the difference (mul_div_floor)
   // none: raw. The chosen unit becomes PlayerState.assist { unit, until: tick + sticky_ticks }
@@ -385,9 +394,9 @@ fn assisted_aim(cx, seat, spell, raw: Angle) -> Angle
 
 `Angle::diff(a, b) -> i32` is the signed shortest turn, computed in `i32` and reduced to `-32 768..32 768`, with no wrapping op. Bearings come from `iatan2`; candidates come from `unit_blocks` inside the spell's range, so the search is the same box the victim search already walks.
 
-The result is exposed as `View::assisted_aim(seat) -> Option<Angle>` (§11), computed from the current frame's raw aim and the spell on the bar, so the reticle can draw where the bolt would go; it is derived and never stored. The tuning rows are `data/tuning/sim.json` under `assist`, one row per profile, degrees and permille at the schema, `Angle` and `Permille` compiled; `Pad` is wider than `Mouse` on every field and `Off` is raw (§12 has the defaults).
+The result is exposed as `View::assisted_aim(frame, spell) -> Option<Angle>` (§11; the `View` is already one seat's), computed from the frame the presentation is about to send and the spell on the bar, so the reticle can draw where the bolt would go; it reads the sticky unit and never sets it, and it is derived and never stored. `None` when the frame has no aim. The tuning rows are `data/tuning/sim.json` under `assist`, one row per profile, degrees and permille at the schema, `Angle` and `Permille` compiled; `Pad` is wider than `Mouse` on every field and `Off` is raw (§12 has the defaults).
 
-**Rule:** assist never targets a friend, a prop or a corpse. Heals keep the mouse-over rule and ignore assist entirely.
+**Rule:** assist never targets a friend, a prop or a corpse. Heals keep the mouse-over rule and ignore assist entirely. The mouse-over rule reads `Cast { on }`: with a cursor, the unit under it (the caster's own body for "over nobody"), and a friend there takes the heal or the cast fails and says why; `on: None` means no cursor (a pad), and a friendly spell lands on the friend nearest the aim line within 16 px of it, else on the caster.
 
 **Rule:** the raw aim and the profile are the recorded input; the assisted angle is what `Cast` uses and what the replay reproduces. A frame never carries an assisted angle, and `Sim.aims` stays gone.
 
@@ -496,7 +505,7 @@ struct View<'a>   // one seat, her zone, read only
   hud() -> Hud { hp, max_hp, mp, max_mp, energy, statuses, target: Option<(UnitId, Permille)> }
   dialogue() -> Option<DialogueView { speaker, lines: &[TextId], line, options: &[TextId], awaiting_choice }>
   quests() -> impl Iterator<QuestView { id, counts }>, near_bench(), near_rest(), craft_output(), book(), marks(), rects(), debug()
-  assisted_aim(seat) -> Option<Angle>                                          // §5.4; the reticle draws it, the sim casts along it
+  assisted_aim(frame, spell) -> Option<Angle>                                  // §5.4; the reticle draws it, the sim casts along it
   journal() -> impl Iterator<&JournalEntry>, known(fact: FactKey) -> Option<&Known>   // §3.7; the log and the map read these
   weather() -> &WeatherState, wetness() -> u8                                   // §4.6; presentation's mist and puddles, no rule
   schedule_state(unit) -> Option<ScheduleState { slot, where: Mark(NameId) | Inside(PropId) | Walking(Cell) }>   // so a door can say who is in
@@ -504,7 +513,8 @@ struct View<'a>   // one seat, her zone, read only
 struct Event { to: Option<Seat>, in_zone: Option<ZoneId>, kind: EventKind }
 
 enum EventKind { Toast(ToastKind), Damage { unit, from, at, amount, school, crit, absorbed }, Heal, Death { unit, def, at }, Respawn,
-  Cast { unit, spell, at }, CastFailed { why: SpellError }, Impact { spell, school, at }, Swing, Status { unit, effect, on }, Loot, Learn,
+  Cast { unit, spell, at }, CastFailed { unit, spell, why: SpellError }, Impact { spell, school, at }, Swing { unit, at, facing },
+  Status { unit, effect, on }, Loot, Learn(SpellId),
   Quest { quest, change }, Zone { zone, first }, Shake, Camera, Tiles(CellRect), Prop { prop, change }, Bag, Dialogue, PlayerDied, Rest,
   Sfx { kind, at }, Party { connected }, Journal(JournalKind), Weather { kind }, Consequence(ConsequenceId) }
 
@@ -512,6 +522,9 @@ enum ToastKind { Text(TextId), QuestGiven, QuestDone, KillProgress { quest, req,
   NothingToRepair, NothingGrowsWithoutLight, NothingGrows, Locked { prop }, UnlockedWith(ItemId), NightLock(TextId), WokeAtRest, WokeAtDoor,
   PartyChanged, LeftWhatMattered, PutDownFirst, ShouldKeep, NotHurt, FitsALock, ItShifts, NoRoom, NightWaits, Stronger, WordsStay,
   Learned(SpellId), Under { top, label }, SpellError(SpellError) }
+
+enum SpellError { CastUnsuccessful, YouAreDead, OnCooldown, OnGcd, TooFar, NoTarget, NotEnoughMp, NotEnoughEnergy, NotInLos,
+  NotValidTarget }   // a toast only for those worth saying: not the GCD, a cooldown or a plain failure
 ```
 
 Routing is the TS rule: personal kinds carry `to`; zone-local kinds carry `in_zone`; party-wide kinds carry neither. `events_for(seat)` filters. Strings come from `TEXT[id]`, expanded by `jane-present::text::expand(s, heroine, seed)`.
