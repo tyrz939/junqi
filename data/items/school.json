@@ -1,4 +1,8 @@
 {
+  "key_school": {
+    "name": "School Door Key", "icon": "item_key_brass", "maxStack": 1, "usable": false, "cooldown": 1, "opens": "school",
+    "description": "On a loop of string with the coal tally. The label says FRONT DOORS, and under it, CARETAKER ONLY. The front doors have been bolted from inside for a long time."
+  },
   "key_tower": {
     "name": "Tower Key", "icon": "item_key_iron", "maxStack": 1, "usable": false, "cooldown": 1, "opens": "school_tower",
     "description": "One key off a ring of forty. The fob says TOWER, and under it, in the same hand, DO NOT LEND."

@@ -121,11 +121,12 @@ describe("the generated burial chamber", () => {
     expect(Buffer.from(other.tiles).equals(Buffer.from(bp.tiles))).toBe(true);
   });
 
-  it("the stair up is a locked door, and it leads into the School only once the School is built", () => {
+  it("the stair up is the way into the School, and it leads there only once the School is built", () => {
     // A door into a zone that does not exist is a crash rather than a mystery, so the zone file
-    // takes the destination off until the School lands. It is locked with no keyhole either way.
+    // takes the destination off until the School lands. The door has no lock: the room it stands
+    // in opens when Goldskin is down, and that is the only way to it.
     const stair = burial(31).props.find((p) => p.key === "stair_up")!;
-    expect(stair.locked).toBe(true);
+    expect(stair.locked ?? false).toBe(false);
     expect(stair.keyTag).toBeUndefined();
     expect(stair.to).toEqual(hasZone("school") ? { zone: "school", mark: "boiler" } : undefined);
   });
@@ -489,14 +490,14 @@ describe("a solo bot in the generated burial chamber", () => {
       expect(sim.state.flags.burial_cleared).toBe(1);
       expect(prop("gate_wizard").locked).toBe(false);
 
-      // The Ball, the big jar, and a stair that goes up and is locked.
+      // The Ball, the big jar, and a stair that goes up, into the School's boiler room.
       const before = p.strength;
       useProp(sim, "burial_big_jar");
       expect(p.strength).toBe(before + 14);
       useProp(sim, "ball_chest");
       expect(bagCount(p, "the_ball")).toBe(1);
-      useProp(sim, "stair_up");
-      expect(prop("stair_up").locked, "nothing opens the boiler room yet").toBe(true);
+      expect(prop("stair_up").locked ?? false, "the stair up is open once he is down").toBe(false);
+      expect(prop("stair_up").to).toEqual(hasZone("school") ? { zone: "school", mark: "boiler" } : undefined);
       expect(sim.me.zone).toBe("burial");
       // The way back: the stair comes out at the fire.
       expect(prop("gate_back").locked).toBe(false);

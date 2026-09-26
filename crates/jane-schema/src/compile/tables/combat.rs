@@ -144,6 +144,7 @@ struct RawSpell {
     radius: Option<Num>,
     duration: Option<Num>,
     pulse: Option<Num>,
+    delay: Option<Num>,
     world: Option<WorldSpell>,
     /// Ticks, as written.
     stop: Option<u32>,
@@ -212,12 +213,13 @@ fn spell(cx: &mut Ctx, at: &str, id: &str, r: &RawSpell) -> SpellDef {
             radius: conv(cx, at, "radius", r.radius.unwrap_or(zero).fx_metres()),
             duration: conv(cx, at, "duration", r.duration.unwrap_or(zero).ticks()),
             pulse: r.pulse.map_or(Tick(30), |p| conv(cx, at, "pulse", p.ticks())),
+            delay: r.delay.map_or(Tick(1), |d| Tick(conv(cx, at, "delay", d.ticks()).0.max(1))),
         })
     } else {
         cx.diag.need(
-            r.radius.is_none() && r.duration.is_none() && r.pulse.is_none(),
+            r.radius.is_none() && r.duration.is_none() && r.pulse.is_none() && r.delay.is_none(),
             at,
-            "radius, duration and pulse are a ground spell's",
+            "radius, duration, pulse and delay are a ground spell's",
         );
         None
     };
@@ -898,7 +900,10 @@ mod tests {
 
         // catalog.ts: a ground radius in metres, a lifetime in seconds; combat.ts pulses every 30 ticks by default.
         let pool = c.spell(SpellId(1));
-        assert_eq!(pool.ground, Some(GroundPool { radius: Fx(3072), duration: Tick(150), pulse: Tick(30) }));
+        assert_eq!(
+            pool.ground,
+            Some(GroundPool { radius: Fx(3072), duration: Tick(150), pulse: Tick(30), delay: Tick(1) })
+        );
         assert_eq!(pool.count, 1);
         assert_eq!(pool.fan, Angle(0));
 

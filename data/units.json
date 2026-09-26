@@ -81,7 +81,7 @@
   },
   "headmaster": {
     "name": "The Headmaster", "faction": "undead", "controller": "ai", "strength": 60, "spirit": 1,
-    "walk": 0.4, "run": 0.8, "aggro": 10, "leash": 30, "bounds": 1, "book": ["melee_stun", "melee_fast"],
+    "walk": 0.4, "run": 0.8, "aggro": 10, "leash": 30, "bounds": 1, "book": ["hand_bell", "melee_fast"],
     "respawn": 0, "autoRegen": true, "loot": [{ "item": "key_mine_vault", "qty": 1, "chance": 1 }], "sprite": "miniboss", "boss": true
   },
   "iron_knuckles": {

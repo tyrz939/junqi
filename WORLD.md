@@ -195,6 +195,8 @@ The town is a set chunk: the square (fountain, memorial, Mr Tolly's bench, the p
 | | Bellfield (6) | Nothing by day | Everything the School lets out | |
 | All | Hubs (0) | Cats, hens, the sweeper's robin | Cats. The ginger cat walks the square at any hour | |
 
+**Rule: by day the Lowfields' own ground leaves her be.** Between six and the bell a creature of the county's on threat-1 ground (the first row above) starts no fight with her; it finishes one she starts. After the bell, and everywhere harder by day, nothing is wary (`PLAN.md` §2.6, *Day*).
+
 **Rule: a kill quest's patch holds N+1 of its target within five cells of the patch's centre by day, and refills within ten game minutes of being allowed to** (`QUESTS.md` K8). That is `cap` N+1, a `hold` line one kill never reaches (so the N she was asked for come back on their own clock, `respawn`), and an ecology that looks at a held patch every ten game minutes: once the pressure is under the line, whatever was due stands up at the next ten-minute mark. `recover` is a rate per ten minutes, not a timer per corpse; a patch cleared to the last is quieter for hours.
 
 ### 4.2 Prey and predators

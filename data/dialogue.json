@@ -195,6 +195,18 @@
       }
     }
   },
+  "cellar_other_way": {
+    "speaker": "Note by the Iron Door",
+    "start": [{ "node": "read" }],
+    "nodes": {
+      "read": {
+        "lines": [
+          "THE OTHER WAY OUT. The keys are in the chest at the first stair: the hatch chalked KEYS, by the stove.",
+          "Under it, smaller: a cellar with one way out is a mistake you make once. - J"
+        ]
+      }
+    }
+  },
   "orb_ice": {
     "speaker": "Ice Orb",
     "start": [{ "when": [{ "if": "knows", "spell": "icebolt" }], "node": "spent" }, { "node": "touch" }],

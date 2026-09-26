@@ -1,8 +1,10 @@
 //! PORT.md §7 P4's gate: the bot plays every dungeon on three seeds (`dungeons.test.ts`, played
 //! rather than scripted): set down at the dungeon's county door by the console with the kit a
 //! player would carry there (`crawl::setup`: its given verbs and keys, the county door's key,
-//! apples and two potions, ten in the morning), it goes in, works the dungeon's locks, chests,
-//! plates and verbs, fights what it meets, the boss last, and walks out.
+//! the growth the dungeons and errands before it offer (`crawl::growth_before`), apples and three
+//! potions, ten in the morning; inside, where the other way in arrives, when the door's key is
+//! found inside), it goes in, works the dungeon's locks, chests, plates and verbs, fights what it
+//! meets, the boss last, and walks out.
 //!
 //! What each run came to is printed, one row per seed: when it got in, the bosses it put down,
 //! when it got out, how often it died, and where it stopped and why. A dungeon the crawl cannot

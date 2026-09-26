@@ -40,7 +40,7 @@ pub fn story(seed: u32, model: Model, frames: u32) -> (Recorder, Bot) {
 /// A crawl of dungeon `z` from its door with the kit a player would carry there, recorded.
 pub fn crawl(seed: u32, model: Model, z: ZoneId, frames: u32) -> (Recorder, Bot) {
     let sim = new_game(seed);
-    let setup = jane_bot::crawl::setup(sim.blueprint(ZoneId::County), sim.blueprint(z));
+    let setup = jane_bot::crawl::setup(sim.blueprints(), z);
     let mut rec = Recorder::new(sim);
     let mut bot = Bot::new(model, Plan::Crawl(Crawl::new(z)));
     bot.setup = setup;

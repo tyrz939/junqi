@@ -312,15 +312,20 @@ fn no_self_lockout_grow_every_hedge_seed_shut_and_the_forest_can_still_be_finish
 }
 
 #[test]
-fn the_burials_stair_up_is_a_locked_door_into_the_school_and_everywhere_is_the_whole_zone() {
+fn the_burials_stair_up_is_the_way_into_the_school_behind_goldskin_and_everywhere_is_the_whole_zone() {
     let b = build(ZoneId::Burial, 31);
     let bp = &b.blueprint;
     // All thirteen zones exist statically (PORT.md §6.l), so the stair always leads into the
-    // School's boiler room; it is locked with no keyhole either way.
+    // School's boiler room (DUNGEONS.md §3.6: the School's entrance). It has no lock: the room it
+    // stands in opens when Goldskin is down, and not before.
     let stair = bp.props.iter().find(|p| p.key == key(bp, "stair_up")).expect("the stair up");
-    assert!(stair.locked);
+    assert!(!stair.locked);
     assert_eq!(stair.key_tag, None);
     assert_eq!(stair.to, Some(Door { zone: ZoneId::School, mark: key(bp, "boiler") }));
+    let at = Rect::new(i32::from(stair.cell.x), i32::from(stair.cell.y), 1, 1);
+    let (whole, alive) = ablated(&b, Grant::Flag(FlagKey::Named(key(bp, "burial_cleared"))));
+    assert!(whole.ok() && whole.info.reached_rect(at.grow(1)), "{}", lines(&b, &whole));
+    assert!(!alive.info.reached_rect(at.grow(1)), "the stair while he stands");
     // The story's own trigger rows say `everywhere`; the generator calls the whole map `<zone>_all`.
     let whole = Rect::new(0, 0, bp.w() as i32, bp.h() as i32);
     assert_eq!(bp.rects.get(&key(bp, "everywhere")), Some(&whole));
