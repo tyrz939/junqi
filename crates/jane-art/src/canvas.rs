@@ -44,6 +44,10 @@ const N4: [(i32, i32); 4] = [(1, 0), (-1, 0), (0, 1), (0, -1)];
 /// The rise in px at which a later part standing above an earlier one gets a `K` seam.
 const SEAM_RISE: u8 = 2;
 
+/// A `deep` brighter than this (Rec. 601 luma in thousandths) would not stand off a mid ground,
+/// so the selective outline keeps `k` there.
+pub const SELOUT_INK_LUMA: u32 = 72_000;
+
 /// Encode `nx, ny` (in 1/127ths, so `-127..=127`) as a [`Normal`], pulled back onto the unit
 /// disc if they fall outside it.
 pub fn normal(nx: i32, ny: i32) -> Normal {
@@ -783,6 +787,26 @@ impl Canvas {
         self.begin();
         let (y0, y1) = (pts.iter().map(|p| p.1).min().unwrap_or(0), pts.iter().map(|p| p.1).max().unwrap_or(0));
         let rows = (y1 - y0).max(1);
+        // Each row's one span (doubled centre, width), where the row has exactly one: the bands
+        // follow the three rows' mean, so they run as straight as the shape does and never
+        // fray where a row steps in or out a pixel.
+        let spans: Vec<Option<(i32, i32)>> = (0..self.h)
+            .map(|y| {
+                let cols: Vec<i32> = (0..self.w).filter(|&x| mask.get(x, y).is_opaque()).collect();
+                let (a, b) = (*cols.first()?, *cols.last()?);
+                (b - a + 1 == cols.len() as i32).then_some((a + b, b - a))
+            })
+            .collect();
+        let smooth = |y: i32| -> Option<(i32, i32)> {
+            let own = spans.get(y as usize).copied().flatten()?;
+            let near: Vec<(i32, i32)> = [y - 1, y, y + 1]
+                .iter()
+                .filter_map(|&k| usize::try_from(k).ok().and_then(|k| spans.get(k).copied().flatten()))
+                .collect();
+            let n = near.len() as i32;
+            let (c, w) = near.iter().fold((0, 0), |(c, w), s| (c + s.0, w + s.1));
+            Some(if n > 0 { ((c + n / 2) / n, (w + n / 2) / n) } else { own })
+        };
         for y in y0.max(0)..=y1.min(self.h - 1) {
             let ny = if y == y0 {
                 -70
@@ -806,8 +830,9 @@ impl Canvas {
                 }
                 let xr = x - 1;
                 let span = xr - xl + 1;
+                let (centre, width) = smooth(y).unwrap_or((xl + xr, xr - xl));
                 for px in xl..=xr {
-                    let u = if span <= 1 { 0 } else { (2 * (px - xl) - (span - 1)) * curve / (span - 1) };
+                    let u = if width <= 0 { 0 } else { ((2 * px - centre) * curve / width).clamp(-curve, curve) };
                     let n = normal(u, ny);
                     let [nx, nyy, nz] = decode(n);
                     let tone = Tone::ALL[band(lambert([nx, nyy, nz]))];
@@ -858,17 +883,212 @@ impl Canvas {
         }
     }
 
+    /// The selective outline (sel-out), run last in place of [`Canvas::outline`]: an edge takes
+    /// its own material's dark instead of `k`. Where a drawn pixel meets clear below it or to its
+    /// right (away from the top-left light) it becomes its ramp's `deep`; where it meets clear
+    /// only above or to its left (the lit edges) it goes two tones darker than itself and no
+    /// darker than `shade`, so the line lightens and breaks where the light falls. `k` stays
+    /// where the ground needs it: under a light material whose `deep` would not stand off a
+    /// mid ground (luma over [`SELOUT_INK_LUMA`]), on the soles, and on anything not in a ramp.
+    /// Interior seams are the upper part's own ramp two tones down (`K` off a ramp). Normals and
+    /// heights stay; outlined pixels stop emitting.
+    pub fn outline_sel(&mut self) {
+        let mut out = self.albedo.clone();
+        let (bottom, _) = (0..self.h).rev().fold((0, false), |(b, found), y| {
+            if found || !(0..self.w).any(|x| self.get(x, y).is_opaque()) { (b, found) } else { (y, true) }
+        });
+        for y in 0..self.h {
+            for x in 0..self.w {
+                let i = (y * self.w + x) as usize;
+                let ix = self.albedo[i];
+                if !ix.is_opaque() {
+                    continue;
+                }
+                let open = |dx: i32, dy: i32| !self.get(x + dx, y + dy).is_opaque();
+                let away = open(1, 0) || open(0, 1);
+                let lit = open(-1, 0) || open(0, -1);
+                let seam = N4.iter().any(|&(dx, dy)| {
+                    let j = ((y + dy) * self.w + x + dx) as usize;
+                    self.idx(x + dx, y + dy).is_some()
+                        && self.parts[j] < self.parts[i]
+                        && self.height[i] >= self.height[j].saturating_add(SEAM_RISE)
+                });
+                let ramp = Ramp::of(ix);
+                out[i] = match ramp {
+                    _ if !(away || lit || seam) => ix,
+                    None => {
+                        if away || lit {
+                            Ix::INK
+                        } else {
+                            Ix::SEAM
+                        }
+                    }
+                    Some((r, t)) => {
+                        if away {
+                            let deep = r.at(Tone::Deep);
+                            let sole = open(0, 1) && y >= bottom - 1;
+                            if sole || crate::palette::luma(deep) > SELOUT_INK_LUMA { Ix::INK } else { deep }
+                        } else {
+                            let down = t.step(-2);
+                            r.at(if down < Tone::Shade { Tone::Shade } else { down })
+                        }
+                    }
+                };
+                if out[i] != ix {
+                    self.emissive[i] = Ix::CLEAR;
+                }
+            }
+        }
+        self.albedo = out;
+    }
+
     /// Stand an upright sprite up: every drawn pixel's height becomes its row's height above the
-    /// feet on row `ay` (5 px for every 4 rows, so a head 32 rows up stands 40 px), plus the
-    /// relief its primitive gave it (a dome's rise, a limb in front of a coat). Run before
-    /// [`Canvas::outline`], which finds seams by height.
+    /// feet on row `ay`, 5 px for every 4 rows, so a head 32 rows up stands 40 px and the height
+    /// field is the true one a sun or a lamp casts from, pixel by pixel. What the primitives drew
+    /// until now was relief (what stands in front of what), which the outline reads for seams:
+    /// run [`Canvas::outline`] first.
     pub fn upright(&mut self, ay: i32) {
         for y in 0..self.h {
-            let row = ((ay - y).max(0) * 5 / 4) as u8;
+            let row = ((ay - y).max(0) * 5 / 4).clamp(1, 255) as u8;
             for x in 0..self.w {
                 let i = (y * self.w + x) as usize;
                 if self.albedo[i].is_opaque() {
-                    self.height[i] = self.height[i].saturating_add(row).max(1);
+                    self.height[i] = row;
+                }
+            }
+        }
+    }
+
+    /// A body lying down: every drawn pixel's height becomes its distance in from the silhouette
+    /// (chessboard, the edge 1) up to `max`, a dome over the shape as thick as the shape is
+    /// wide, so its cast shadow is a sliver with a soft top.
+    pub fn dome_heights(&mut self, max: u8) {
+        let mut d: Vec<u8> = self.albedo.iter().map(|a| if a.is_opaque() { u8::MAX } else { 0 }).collect();
+        for _ in 0..max {
+            let prev = d.clone();
+            for y in 0..self.h {
+                for x in 0..self.w {
+                    let i = (y * self.w + x) as usize;
+                    if prev[i] == 0 {
+                        continue;
+                    }
+                    let mut m = u8::MAX;
+                    for dy in -1..=1 {
+                        for dx in -1..=1 {
+                            let v = self.idx(x + dx, y + dy).map_or(0, |j| prev[j]);
+                            m = m.min(v);
+                        }
+                    }
+                    d[i] = m.saturating_add(1).min(d[i]);
+                }
+            }
+        }
+        for (h, (a, v)) in self.height.iter_mut().zip(self.albedo.iter().zip(d)) {
+            if a.is_opaque() {
+                *h = v.clamp(1, max);
+            }
+        }
+    }
+
+    /// A cast shade (or, with negative `steps`, a lift) as one cluster: every pixel of `ramp` in
+    /// the ellipse filling `r` goes `steps` tones darker. The shadow of a hat brim on a brow, of
+    /// a chin on a collar, of a fringe on a forehead. Albedo only.
+    pub fn shade(&mut self, r: Rect, ramp: Ramp, steps: i32) {
+        for y in r.y..r.bottom() {
+            for x in r.x..r.right() {
+                if sphere_at(r, x, y).is_none() {
+                    continue;
+                }
+                if let Some((rr, t)) = Ramp::of(self.get(x, y)) {
+                    if rr == ramp {
+                        self.recolour(x, y, ramp.at(t.step(-steps)));
+                    }
+                }
+            }
+        }
+    }
+
+    /// Recolour pixel `(x, y)` to `ramp`'s `tone` if it is drawn in `ramp` now: a highlight
+    /// band laid along a curve, a strand, a glint on what is already there. Albedo only.
+    pub fn tint(&mut self, x: i32, y: i32, ramp: Ramp, tone: Tone) {
+        if matches!(Ramp::of(self.get(x, y)), Some((r, _)) if r == ramp) {
+            self.recolour(x, y, ramp.at(tone));
+        }
+    }
+
+    /// Clean clusters: a pixel of `ramp` whose tone none of its eight neighbours shares, with at
+    /// least two neighbours in `ramp`, takes the tone most of those neighbours have (the
+    /// nearer to its own on a tie). A band edge that frays across a row, a fold that ends in a
+    /// fleck: gone, and the shading reads in clusters of two px or more. Edge pixels (the
+    /// outline's) are left alone. Albedo only.
+    pub fn declutter(&mut self, ramp: Ramp) {
+        let tone_of = |c: &Canvas, x: i32, y: i32| Ramp::of(c.get(x, y)).filter(|(r, _)| *r == ramp).map(|(_, t)| t);
+        let mut fix = Vec::new();
+        for y in 0..self.h {
+            for x in 0..self.w {
+                let Some(t) = tone_of(self, x, y) else { continue };
+                if N4.iter().any(|&(dx, dy)| !self.get(x + dx, y + dy).is_opaque()) {
+                    continue;
+                }
+                let mut count = [0u8; 8];
+                let (mut same, mut kin) = (false, 0);
+                for dy in -1..=1 {
+                    for dx in -1..=1 {
+                        if (dx, dy) == (0, 0) {
+                            continue;
+                        }
+                        if let Some(u) = tone_of(self, x + dx, y + dy) {
+                            kin += 1;
+                            same |= u == t;
+                            count[u as usize] += 1;
+                        }
+                    }
+                }
+                if same || kin < 2 {
+                    continue;
+                }
+                let best = (0..8).max_by_key(|&k| (count[k], -(k as i32 - t as i32).abs())).map_or(t, |k| Tone::ALL[k]);
+                fix.push((x, y, best));
+            }
+        }
+        for (x, y, t) in fix {
+            self.recolour(x, y, ramp.at(t));
+        }
+    }
+
+    /// Take off every spike: a drawn pixel with nothing drawn on three of its four sides is a
+    /// jaggy where two shapes' edges met badly, and goes, until none is left. Run before the
+    /// outline, so the line follows the clean edge.
+    pub fn despike(&mut self) {
+        loop {
+            let mut gone = Vec::new();
+            for y in 0..self.h {
+                for x in 0..self.w {
+                    if !self.get(x, y).is_opaque() {
+                        continue;
+                    }
+                    let open = N4.iter().filter(|&&(dx, dy)| !self.get(x + dx, y + dy).is_opaque()).count();
+                    if open >= 3 {
+                        gone.push((x, y));
+                    }
+                }
+            }
+            if gone.is_empty() {
+                return;
+            }
+            for (x, y) in gone {
+                self.clear_px(x, y);
+            }
+        }
+    }
+
+    /// Put each tone of `ramp` to `map[tone]`: a material's own few tones, so shading falls in
+    /// clusters and not in every band the light makes. Albedo only.
+    pub fn retone(&mut self, ramp: Ramp, map: [Tone; 8]) {
+        for a in &mut self.albedo {
+            if let Some((r, t)) = Ramp::of(*a) {
+                if r == ramp {
+                    *a = ramp.at(map[t as usize]);
                 }
             }
         }
@@ -1208,13 +1428,42 @@ mod tests {
     }
 
     #[test]
-    fn upright_adds_each_rows_height() {
+    fn upright_writes_each_rows_true_height() {
         let mut c = Canvas::new(4, 40);
         c.fill_rect(Rect::new(0, 4, 4, 33), Ix::SEAM, 2);
         c.upright(36);
-        assert_eq!(c.height_at(1, 36), 2);
-        assert_eq!(c.height_at(1, 4), 42);
+        assert_eq!(c.height_at(1, 36), 1, "the soles stand on the ground");
+        assert_eq!(c.height_at(1, 20), 20);
+        assert_eq!(c.height_at(1, 4), 40, "a head 32 rows up stands 40 px");
         c.validate().unwrap();
+    }
+
+    #[test]
+    fn a_lying_body_domes_as_thick_as_it_is_wide() {
+        let mut c = Canvas::new(20, 10);
+        c.fill_rect(Rect::new(2, 2, 16, 6), Ix::SEAM, 30);
+        c.dome_heights(4);
+        assert_eq!(c.height_at(2, 4), 1, "the edge");
+        assert_eq!(c.height_at(9, 4), 3, "three in from the edge");
+        assert!(c.heights().iter().all(|&h| h <= 4));
+        c.validate().unwrap();
+    }
+
+    #[test]
+    fn the_selective_outline_draws_edges_in_their_own_dark() {
+        let mut c = Canvas::new(12, 12);
+        c.fill_rect(Rect::new(2, 2, 8, 8), Ramp::ClothPlum.at(Tone::Light), 3);
+        c.fill_rect(Rect::new(2, 11, 8, 1), Ramp::ClothPlum.at(Tone::Base), 3);
+        c.outline_sel();
+        assert_eq!(c.get(5, 2), Ramp::ClothPlum.at(Tone::Base), "a lit top edge: two tones down");
+        assert_eq!(c.get(9, 5), Ramp::ClothPlum.at(Tone::Deep), "the side away from the light");
+        assert_eq!(c.get(5, 11), Ix::INK, "the soles keep k");
+        assert_eq!(c.get(5, 5), Ramp::ClothPlum.at(Tone::Light), "inside is untouched");
+        let mut pale = Canvas::new(6, 6);
+        pale.fill_rect(Rect::new(1, 1, 4, 3), Ramp::ClothLinen.at(Tone::Base), 3);
+        pale.fill_rect(Rect::new(0, 5, 6, 1), Ix::SEAM, 1);
+        pale.outline_sel();
+        assert_eq!(pale.get(4, 2), Ix::INK, "a pale deep would not stand off the ground");
     }
 
     #[test]
