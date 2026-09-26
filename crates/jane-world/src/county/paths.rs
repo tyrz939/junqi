@@ -42,12 +42,16 @@ pub fn clearing(c: &mut County<'_>, x: i32, y: i32) {
     }
 }
 
-/// Marks and fingerposts at every footpath's two ends.
+/// Marks and fingerposts at every footpath's two ends. Every end's mark first, then the posts: a
+/// path that leaves a place and comes back to it (the nurse's prints, out from the car and back)
+/// has its two ends a few cells apart, and a post set down beside the first once stood on the
+/// second's mark. A mark claims the ring round it, so no post is set there now.
 pub fn path_ends(c: &mut County<'_>) {
     let cat = jane_data::catalog();
     let fingerpost = cat.story.prop_id("fingerpost").expect("a fingerpost row");
     let label = c.k.text("A fingerpost");
     let footpaths = c.footpaths.clone();
+    let mut posts = Vec::new();
     for fp in footpaths {
         let row = &cat.county.paths[fp.row];
         let line = &c.lines[fp.line];
@@ -65,23 +69,25 @@ pub fn path_ends(c: &mut County<'_>) {
             c.k.mark(Key::Name(name), x, y, Some(Facing::South));
             // A path end the quests already furnish (their own post or sign, saying more) gets no
             // second post from here: two fingerposts and a sign at one stile is clutter.
-            if cat.county.placements.iter().any(|p| p.at == PlaceAt::Mark(name)) {
+            if !cat.county.placements.iter().any(|p| p.at == PlaceAt::Mark(name)) {
+                posts.push(((x, y), toward, metres));
+            }
+        }
+    }
+    for ((x, y), toward, metres) in posts {
+        let Some(there) = c.sk.sites.get(usize::from(toward)) else { continue };
+        let words = format!("FOOTPATH. {}, {}.", cat.text(there.def.name).to_uppercase(), distance_words(metres));
+        // Beside the stile, not on it.
+        for (ox, oy) in [(2, -1), (-3, -1), (2, 1), (-3, 1)] {
+            if !c.k.fits(x + ox, y + oy, 2, 1, 0) {
                 continue;
             }
-            let Some(there) = c.sk.sites.get(usize::from(toward)) else { continue };
-            let words = format!("FOOTPATH. {}, {}.", cat.text(there.def.name).to_uppercase(), distance_words(metres));
-            // Beside the stile, not on it.
-            for (ox, oy) in [(2, -1), (-3, -1), (2, 1), (-3, 1)] {
-                if !c.k.fits(x + ox, y + oy, 2, 1, 0) {
-                    continue;
-                }
-                let words = c.k.text(&words);
-                let read = c.k.list(vec![Action::Read(words)]);
-                let p = c.k.prop(None, fingerpost, x + ox, y + oy);
-                p.label = Some(label);
-                p.use_list = Some(read);
-                break;
-            }
+            let words = c.k.text(&words);
+            let read = c.k.list(vec![Action::Read(words)]);
+            let p = c.k.prop(None, fingerpost, x + ox, y + oy);
+            p.label = Some(label);
+            p.use_list = Some(read);
+            break;
         }
     }
 }

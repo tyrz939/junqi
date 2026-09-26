@@ -234,10 +234,11 @@ fn small_place(c: &mut County<'_>, rng: &mut Sfc32, p: &PoiSpot, name: Key) {
 
 /// A needed place's way out: down the distance field to the nearest road or footpath, a crag in
 /// the way is broken to dirt three cells wide, and where the place itself stands in water (a
-/// marsh the land stage drew as pools), the water on the way is decked in planks. The cut through
-/// the wood at the end of the build goes through trees, scrub and rubble but never rock or water:
-/// a lamp post the story needs stood in a pocket of crag on a seed in thirty, and a cottage in the
-/// Sallow's pools on another. The TypeScript re-rolled those counties.
+/// marsh the land stage drew as pools), the water on the way is decked in planks. A lamp post the
+/// story needs stood in a pocket of crag on a seed in thirty, and a cottage in the Sallow's pools
+/// on another; the TypeScript re-rolled those counties. Broken here, before the rows go down, the
+/// place's things find open ground about it; the cut at the end of the build
+/// (`finish::cut_through`) breaks crag too, for whatever is still shut in, but never decks water.
 fn way_out(c: &mut County<'_>, x: i32, y: i32) {
     let planks = c.k.get(x, y) == Tile::Water;
     for (lx, ly) in downhill(&c.country.d_road, x, y) {

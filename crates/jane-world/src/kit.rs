@@ -14,10 +14,12 @@
 //!   and prop footprints from the catalog's prop rows rather than a table built at run time.
 
 use jane_core::action::{Action, Facing, ListRef, TextRef};
-use jane_core::blueprint::{Mark, PropSpawn, UnitSpawn, Waypoint};
+use jane_core::blueprint::{Mark, PropSpawn, StoryPlace, UnitSpawn, Waypoint};
 use jane_core::num::{Permille, div_floor};
 use jane_core::tile::F_SOLID;
-use jane_core::{Blueprint, Cell, Grid, Key, Lookup, Material, PropDefId, Rect, Sfc32, Tile, UnitDefId, ZoneId};
+use jane_core::{
+    Blueprint, Cell, Grid, Key, Lookup, Material, PropDefId, Rect, Sfc32, StoryId, Tile, UnitDefId, ZoneId,
+};
 
 use crate::steps::{Step, dice};
 
@@ -374,6 +376,11 @@ impl Kit {
     /// A named area.
     pub fn rect(&mut self, name: Key, r: Rect) {
         self.bp.rects.insert(name, r);
+    }
+
+    /// Where a story landed on this seed, or why it found no place (the county only).
+    pub fn story(&mut self, id: StoryId, place: StoryPlace) {
+        self.bp.stories.insert(id, place);
     }
 
     /// A prop at `(x, y)`, keyed `key` or by where it stands. Its footprint (the catalog's `w x h`)

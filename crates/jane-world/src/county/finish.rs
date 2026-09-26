@@ -5,7 +5,7 @@
 use jane_core::action::Stack;
 use jane_core::grid::DIRS4;
 use jane_core::search::{Conn, Reach, flood};
-use jane_core::{Key, Tile};
+use jane_core::{Key, Rect, Tile};
 
 use super::County;
 use crate::kit::Kit;
@@ -68,9 +68,14 @@ pub fn scatter(c: &mut County<'_>) {
     }
 }
 
-/// Growth an axe clears, and rubble a barrow shifts; never water, a wall or a fence.
+/// Growth an axe clears, rubble a barrow shifts, and crag a pick breaks; never water, a wall or a
+/// fence. The crag is the county's answer to a needed place the land drew inside a mass of cliff
+/// (a lamp post the story needs, on a seed in thirty): the small places stage breaks a way out for
+/// it down to the road (`small::way_out`), and this breaks one for anything named that is still
+/// shut in at the end, rather than the skeleton keeping every needed place off ground that only the
+/// county's painter knows is crag.
 fn cuttable(t: Tile) -> bool {
-    matches!(t, Tile::Tree | Tile::DeadTree | Tile::Bush | Tile::Hedge | Tile::Rubble)
+    matches!(t, Tile::Tree | Tile::DeadTree | Tile::Bush | Tile::Hedge | Tile::Rubble | Tile::Cliff)
 }
 
 /// Whether a mark is a rolled small place's (`poi_<n>`): those are dropped when cut off, not cut to.
@@ -84,12 +89,37 @@ fn start(k: &Kit) -> Option<(i32, i32)> {
     k.blueprint().marks.get(&Key::Name(s)).map(|m| (i32::from(m.cell.x), i32::from(m.cell.y)))
 }
 
-/// Every cell a walker reaches from the platform, four ways over ground that does not stop feet,
-/// by cell index (`y * w + x`); `None` for a county with no `start`.
-fn from_start(k: &Kit) -> Option<Vec<bool>> {
+/// Cells under a prop that stops her feet as the solver judges it (`blocks_feet`): solid, neither
+/// pushed nor carried, and not hidden. A gate is left open: whether she holds its key is the
+/// solver's question, and nothing an axe does answers it. By cell index (`y * w + x`).
+pub fn blocked_by_props(k: &Kit) -> Vec<bool> {
+    let cat = jane_data::catalog();
+    let (w, h) = (k.w(), k.h());
+    let mut blocked = vec![false; (w * h) as usize];
+    for p in &k.blueprint().props {
+        let d = cat.story.prop(p.def);
+        if p.hidden || d.gate || !d.solid || d.push || d.carry {
+            continue;
+        }
+        let r = Rect::new(i32::from(p.cell.x), i32::from(p.cell.y), i32::from(d.w), i32::from(d.h));
+        if let Some(r) = r.intersect(Rect::new(0, 0, w, h)) {
+            for (x, y) in r.cells() {
+                blocked[(y * w + x) as usize] = true;
+            }
+        }
+    }
+    blocked
+}
+
+/// Every cell a walker reaches from the platform, four ways over ground that does not stop feet
+/// and round every prop that does ([`blocked_by_props`]): the solver's flood before any key is
+/// found. By cell index (`y * w + x`); `None` for a county with no `start`.
+fn from_start(k: &Kit, blocked: &[bool]) -> Option<Vec<bool>> {
     let s = start(k)?;
+    let w = k.w();
     let mut reach = Reach::new();
-    flood(k.w() as u32, k.h() as u32, &[s], Conn::Four, u32::MAX, |x, y| !k.solid(x, y), &mut reach);
+    let open = |x: i32, y: i32| !k.solid(x, y) && !blocked[(y * w + x) as usize];
+    flood(k.w() as u32, k.h() as u32, &[s], Conn::Four, u32::MAX, open, &mut reach);
     let mut seen = vec![false; (k.w() * k.h()) as usize];
     for c in reach.order() {
         seen[c.0 as usize] = true;
@@ -97,39 +127,78 @@ fn from_start(k: &Kit) -> Option<Vec<bool>> {
     Some(seen)
 }
 
+/// What [`cut_through`] makes sure she can reach: a cell to stand on (a mark's, a unit's), or a
+/// thing's footprint, which she reaches from any cell round it (the solver's ring: the footprint
+/// grown by one).
+#[derive(Clone, Copy, Debug)]
+enum Target {
+    Cell(i32, i32),
+    Thing(Rect),
+}
+
 /// A named place (a story's ruin, a cottage the quests send her to) that the wood has closed round
 /// is not lost: somebody cut a way to it. Flood from the platform; for each named mark the flood
 /// never reached, in the order the marks were made, find the shortest way out to ground it did
-/// reach, through trees, scrub and hedge and rubble but never water, a wall or a fence, and clear
+/// reach, through trees, scrub, hedge, rubble and crag but never water, a wall or a fence, and clear
 /// that way to a trodden path. Then the same for every thing content named (a placement row's rat,
 /// its parcel), units then props, in the order they were placed: the TypeScript cut only to marks,
 /// and a rat spread into a field its hedges had closed was dropped as out of reach and the county
 /// thrown away. No dice. What the flood reached at the end is left in `County::reached`.
+///
+/// The flood is the solver's: a prop that stops her feet stops it ([`blocked_by_props`]), and a
+/// thing is reached when a cell round it is. The TypeScript flooded the ground alone, so a small
+/// place whose cold campfire closed the one gap into its pocket of crag was kept here and then
+/// failed the solver, and the county was thrown away for a place nobody needed.
 pub fn cut_through(c: &mut County<'_>) {
     let k = &mut c.k;
     let (w, h) = (k.w(), k.h());
-    let Some(mut seen) = from_start(k) else { return };
+    let blocked = blocked_by_props(k);
+    let Some(mut seen) = from_start(k, &blocked) else { return };
     let ix = |x: i32, y: i32| (y * w + x) as usize;
+    let cat = jane_data::catalog();
     let bp = k.blueprint();
     let at = |cell: jane_core::Cell| (i32::from(cell.x), i32::from(cell.y));
     let named = |key: Key| matches!(key, Key::Name(_));
-    let targets: Vec<(i32, i32)> = bp
+    let targets: Vec<Target> = bp
         .marks
         .iter()
         .filter(|(key, _)| !rolled_poi(k, **key))
         .map(|(_, m)| at(m.cell))
         .chain(bp.units.iter().filter(|u| named(u.key)).map(|u| at(u.cell)))
-        .chain(bp.props.iter().filter(|p| named(p.key) && !p.hidden).map(|p| at(p.cell)))
+        .map(|(x, y)| Target::Cell(x, y))
+        .chain(bp.props.iter().filter(|p| named(p.key) && !p.hidden).map(|p| {
+            let d = cat.story.prop(p.def);
+            Target::Thing(Rect::new(at(p.cell).0, at(p.cell).1, i32::from(d.w), i32::from(d.h)))
+        }))
         .collect();
     let mut out = Reach::new();
-    for (mx, my) in targets {
-        if !k.inside(mx, my) || seen[ix(mx, my)] || k.solid(mx, my) {
-            continue;
-        }
+    for t in targets {
+        let open = |k: &Kit, x: i32, y: i32| k.inside(x, y) && !k.solid(x, y) && !blocked[ix(x, y)];
+        // Where the way out starts: the cell itself, or the open cells round the thing.
+        let starts: Vec<(i32, i32)> = match t {
+            Target::Cell(x, y) => {
+                if !open(k, x, y) || seen[ix(x, y)] {
+                    continue;
+                }
+                vec![(x, y)]
+            }
+            Target::Thing(r) => {
+                let ring: Vec<(i32, i32)> =
+                    r.grow(1).cells().filter(|&(x, y)| !r.contains(x, y) && k.inside(x, y)).collect();
+                if ring.iter().any(|&(x, y)| seen[ix(x, y)]) {
+                    continue;
+                }
+                let ring: Vec<(i32, i32)> = ring.into_iter().filter(|&(x, y)| open(k, x, y)).collect();
+                if ring.is_empty() {
+                    continue;
+                }
+                ring
+            }
+        };
         // Breadth first out from it, over open ground and anything an axe can clear, to the
         // first cell of the reached country.
-        let passable = |x: i32, y: i32| !k.solid(x, y) || cuttable(k.get(x, y));
-        flood(w as u32, h as u32, &[(mx, my)], Conn::Four, CUT_BUDGET, passable, &mut out);
+        let passable = |x: i32, y: i32| (!k.solid(x, y) || cuttable(k.get(x, y))) && !blocked[ix(x, y)];
+        flood(w as u32, h as u32, &starts, Conn::Four, CUT_BUDGET, passable, &mut out);
         let Some(found) = out
             .order()
             .iter()
@@ -149,15 +218,8 @@ pub fn cut_through(c: &mut County<'_>) {
             (x, y, d) = (x + dx, y + dy, d - 1);
         }
         // Its ground is the reached country's now.
-        flood(
-            w as u32,
-            h as u32,
-            &[(mx, my)],
-            Conn::Four,
-            u32::MAX,
-            |x, y| !k.solid(x, y) && !seen[ix(x, y)],
-            &mut out,
-        );
+        let fresh = |x: i32, y: i32| !k.solid(x, y) && !blocked[ix(x, y)] && !seen[ix(x, y)];
+        flood(w as u32, h as u32, &starts, Conn::Four, u32::MAX, fresh, &mut out);
         for c in out.order() {
             seen[c.0 as usize] = true;
         }
@@ -171,7 +233,7 @@ pub fn cut_through(c: &mut County<'_>) {
 /// are left for the solver to judge: if one of those is cut off the county is wrong and is re-rolled,
 /// not quietly trimmed. Reads the flood `cut_through` left, if the ground has not changed since.
 pub fn drop_unreachable(c: &mut County<'_>) {
-    let Some(seen) = c.reached.take().or_else(|| from_start(&c.k)) else { return };
+    let Some(seen) = c.reached.take().or_else(|| from_start(&c.k, &blocked_by_props(&c.k))) else { return };
     let w = c.k.w();
     let reached = |cell: jane_core::Cell| seen[(i32::from(cell.y) * w + i32::from(cell.x)) as usize];
     let poi: Vec<Key> = c.k.blueprint().marks.keys().copied().filter(|&key| rolled_poi(&c.k, key)).collect();

@@ -310,7 +310,20 @@ fn signs_read(sk: &Skeleton, c: &County<'_>, first_prop: usize, s: &mut Survey) 
     let (finger, sign, mile) = (id("fingerpost"), id("signpost"), id("milestone"));
     // The builder's own signs, named by where they stand; a placement row's sign says what its
     // row says.
+    // A story's footpath's post names the story's place (`county::stories`).
+    let places: Vec<String> =
+        cat.county.stories.iter().map(|x| jane_world::names::story_name(sk.seed, x.id).to_uppercase()).collect();
     for p in bp.props[first_prop..].iter().filter(|p| matches!(p.key, Key::Local(_))) {
+        if c.k.local_name(p.key).is_some_and(|n| n.starts_with("story_post_")) {
+            let text = words(bp, p.use_list).unwrap_or_default();
+            let ok = text.strip_prefix("FOOTPATH. ").and_then(|t| t.strip_suffix('.')).is_some_and(|t| {
+                t.rsplit_once(", ").is_some_and(|(n, d)| places.iter().any(|m| m == n) && is_distance(d))
+            });
+            if !ok {
+                s.bad.push(format!("seed {}: a story's fingerpost reads {text:?}", s.seed));
+            }
+            continue;
+        }
         let what = if p.def == finger {
             "fingerpost"
         } else if p.def == sign {
