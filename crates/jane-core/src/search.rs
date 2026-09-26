@@ -445,6 +445,10 @@ pub struct PathQuery {
     pub cut_corners: bool,
 }
 
+/// Bits of a heap key that hold the node: `f` is at most `2 * u32::MAX`, 33 bits, above them.
+const NODE_BITS: u32 = 31;
+const NODE_MASK: u64 = (1 << NODE_BITS) - 1;
+
 /// Windowed A* on a grid. All scratch lives in a fixed window centred on the start, so memory is
 /// constant whatever the zone's size; "clearing" between searches is a generation bump.
 #[derive(Debug)]
@@ -455,7 +459,8 @@ pub struct Astar {
     from: Vec<u32>,
     stamp: Vec<u32>,
     closed: Vec<u32>,
-    heap: BinaryHeap<Reverse<(u64, u32)>>,
+    /// `(f << NODE_BITS) | node`: one number orders as `(f, node)` does, and compares faster.
+    heap: BinaryHeap<Reverse<u64>>,
     generation: u32,
     /// Nodes expanded, summed over searches.
     pub expanded: u64,
@@ -465,6 +470,7 @@ impl Astar {
     /// Scratch for a `ww x wh` window (the sim uses 256 x 256).
     pub fn new(ww: u32, wh: u32) -> Self {
         let n = (ww as usize) * (wh as usize);
+        assert!(n as u64 <= NODE_MASK + 1, "an A* window of {ww} x {wh} is too large");
         Self {
             ww,
             wh,
@@ -482,7 +488,8 @@ impl Astar {
     /// between adjacent cells (both in grid coordinates), or `None` when it cannot be taken;
     /// a diagonal step is offered only after both orthogonal steps are `Some` (no corner
     /// cutting). `heuristic(cell)` must not overestimate. The path, without the start, is
-    /// written to `out` in grid coordinates.
+    /// written to `out` in grid coordinates. `step` is not asked about a step into a cell the
+    /// search has closed, unless a diagonal's corner rule needs the answer.
     pub fn find(
         &mut self,
         q: &PathQuery,
@@ -541,12 +548,13 @@ impl Astar {
         self.from[start as usize] = u32::MAX;
         self.stamp[start as usize] = gen_;
         let h0 = heuristic((sx, sy));
-        self.heap.push(Reverse((u64::from(h0), start)));
+        self.heap.push(Reverse(u64::from(h0) << NODE_BITS | u64::from(start)));
         let mut best = start;
         let mut best_h = h0;
         let mut expanded = 0u32;
 
-        while let Some(Reverse((_, node))) = self.heap.pop() {
+        while let Some(Reverse(key)) = self.heap.pop() {
+            let node = (key & NODE_MASK) as u32;
             if self.closed[node as usize] == gen_ {
                 continue;
             }
@@ -570,8 +578,14 @@ impl Astar {
             let mut straight_ok = [false; 4];
             for (d, &(dx, dy)) in DIRS8.iter().enumerate() {
                 let (cx, cy) = (nx + dx, ny + dy);
+                let inside = window.contains(cx, cy);
+                // A closed cell is never entered again: its step is not asked, unless a diagonal
+                // waits on whether it could be taken.
+                if inside && (d >= 4 || q.cut_corners) && self.closed[local(cx, cy) as usize] == gen_ {
+                    continue;
+                }
                 let cost = if d < 4 {
-                    let c = if window.contains(cx, cy) { step((nx, ny), (cx, cy)) } else { None };
+                    let c = if inside { step((nx, ny), (cx, cy)) } else { None };
                     straight_ok[d] = c.is_some();
                     c
                 } else {
@@ -582,7 +596,7 @@ impl Astar {
                         6 => (2, 3),
                         _ => (0, 3),
                     };
-                    if (q.cut_corners || (straight_ok[a] && straight_ok[b])) && window.contains(cx, cy) {
+                    if (q.cut_corners || (straight_ok[a] && straight_ok[b])) && inside {
                         step((nx, ny), (cx, cy))
                     } else {
                         None
@@ -603,7 +617,8 @@ impl Astar {
                 self.g[next as usize] = g;
                 self.from[next as usize] = node;
                 self.stamp[next as usize] = gen_;
-                self.heap.push(Reverse((u64::from(g) + u64::from(heuristic((cx, cy))), next)));
+                let f = u64::from(g) + u64::from(heuristic((cx, cy)));
+                self.heap.push(Reverse(f << NODE_BITS | u64::from(next)));
             }
         }
         self.expanded += u64::from(expanded);
