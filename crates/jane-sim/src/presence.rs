@@ -15,7 +15,7 @@
 //!
 //! **Rule: nothing teleports inside the watcher box.** Nothing vanishes, appears or jumps while
 //! a seat in the zone stands within 120 x 80 px of it (of where it is, and for a jump, of where
-//! it lands). A unit going to its mark while watched is given an order and walks there; one
+//! it lands). Nothing stands up in view either: every respawn asks [`stands_up_unseen`] first. A unit going to its mark while watched is given an order and walks there; one
 //! nobody sees is moved and re-stamped in place. Something hidden or shown while watched simply
 //! waits for the next look. A unit shown where something solid now stands comes back on the
 //! nearest free cell.
@@ -27,6 +27,7 @@ use jane_core::Vec2;
 use jane_data::{Controller, ScheduleSlot, UnitDef};
 
 use crate::ctx::Ctx;
+use crate::ids::UnitId;
 use crate::state::GameState;
 use crate::tuning::{ORDER_ARRIVED_FX, PRESENCE_EVERY, PRESENCE_NUDGE_RADIUS, WATCH_X_FX, WATCH_Y_FX};
 use crate::units::def_of;
@@ -116,6 +117,20 @@ pub fn put(cx: &mut Ctx<'_>, i: usize, slot: ScheduleSlot, arriving: bool) {
             }
         }
     }
+}
+
+/// May a corpse due stand up now, unseen? Not while a seat stands within the watcher box of
+/// where it lies or of the home it stands up at: it is put back on `sleeping_due` a presence beat
+/// later, and tries again then (the rule of this module, for every respawn).
+pub fn stands_up_unseen(cx: &mut Ctx<'_>, unit: UnitId) -> bool {
+    let Some(u) = cx.zone.unit(unit) else { return true };
+    if !watched(cx, u.pos) && !watched(cx, u.home) {
+        return true;
+    }
+    let at = cx.world.tick.after(jane_core::Tick(PRESENCE_EVERY));
+    let ix = cx.zone.sleeping_due.partition_point(|&e| e < (at, unit));
+    cx.zone.sleeping_due.insert(ix, (at, unit));
+    false
 }
 
 /// Is a seat in this zone standing within the watcher box of `at`?

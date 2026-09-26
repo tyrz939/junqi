@@ -59,7 +59,7 @@ fn the_patches_have_their_populations() {
 fn consequences_change_the_world() {
     let c = catalog();
     let ids: Vec<&str> = c.living.consequences.iter().map(|r| r.id).collect();
-    assert_eq!(ids, ["allotments_thinned", "mine_quiet"]);
+    assert_eq!(ids, ["allotments_thinned", "mine_quiet", "yard_clear"]);
     let thinned = &c.living.consequences[0];
     assert_eq!(thinned.on, Condition::QuestDone(c.story.quest_id("rats_in_the_sheds").unwrap()));
     assert!(c.list(thinned.edits).contains(&Action::Despawn(Key::Name(name("rat_allotment_4")))));
@@ -69,6 +69,10 @@ fn consequences_change_the_world() {
     assert!(c.list(quiet.edits).iter().any(|a| matches!(a, Action::Spawn { .. })));
     let said = c.text(quiet.contradicts.expect("the sign's claim"));
     assert!(said.starts_with("GOLDSKIN MINING Co."), "{said}");
+    // The Thing in the Yard: the fence line clear for good (WORLD.md §6).
+    let yard = &c.living.consequences[2];
+    assert_eq!(yard.on, Condition::QuestDone(c.story.quest_id("defeat_skeleton").unwrap()));
+    assert_eq!(c.list(yard.edits), [Action::Despawn(Key::Name(name("yard_skeleton")))]);
 }
 
 /// A story that spreads, a door that hears, and the line that tells it.

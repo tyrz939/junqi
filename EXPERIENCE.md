@@ -73,7 +73,7 @@ Times are **real minutes after New Game**, then the clock. One game hour is two 
 - **Sees / hears / can do.** "Down. Good. The house key was always for you." The key. "There is a bed. Sleep in it. If you die out there you wake in the last place you rested." **E** on the door twice: unlock, enter. The banner: Julie's House.
 - **Knows.** There is a bed; death costs a walk; the key is hers. The journal: Julie's Kitchen is the next step, and the dog is where to come back to. **Does not:** that the dog is about to leave.
 - **Meanwhile.** Doors barring along every road. The Tenant standing up at Plot 9.
-- **Checks.** `[L4:the house key and the kitchen by 8 min, Reader]` `[L6:the key paid to everyone, once]` `[L6:the door takes the key and becomes a nightLock she holds]` `[L5:knows: the reward line and the returnTo]`
+- **Checks.** `[L4:the house key and the kitchen by 8 min, Reader]` `[L6:the key paid to everyone, once]` `[L6:consequences: the yard skeleton gone at hand-in, for good]` `[L6:the door takes the key and becomes a nightLock she holds]` `[L5:knows: the reward line and the returnTo]`
 - **Varies.** The Explorer, back from Castle after nine, finds the skeleton walking and the step empty: she can put the bones down; she cannot hand them in until six; the house is locked; the platform fire is her rest.
 
 ### 7:00 to 10:00 · 20:30 to 22:00 · The kitchen, and the bell

@@ -10,7 +10,7 @@
   "defeat_skeleton": {
     "name": "The Thing in the Yard",
     "description": "The dog wants the walking bones off Julie's fence line. It will not say why a key is waiting until they stay down.",
-    "completion": "The skeleton will not get up again today. The dog has decided you are allowed a key.",
+    "completion": "The skeleton will not get up again. The dog has decided you are allowed a key.",
     "returnTo": "the dog, on Julie's step",
     "requirements": [{ "type": "kill", "target": "skeleton", "qty": 1, "text": "The bones walking Julie's fence line" }],
     "rewards": [{ "do": "give", "item": "key_auntie_house" }, { "do": "quest", "quest": "see_the_kitchen" }]

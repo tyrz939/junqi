@@ -343,10 +343,21 @@ fn a_kill_drops_loot_and_the_corpse_stands_up_on_schedule() {
     steps(&mut s, 1);
     assert_eq!(s.state().zone(Z).unwrap().drops.len(), usize::from(story));
 
-    // Ten minutes, fast-forwarded: it stands up at home, whole.
+    // Ten minutes, fast-forwarded: not while she stands over it (nothing stands up in view)...
     s.state_mut().zone_mut(Z).unwrap().sleeping_due[0].0 = s.state().tick.after(Tick(3));
-    s.drain_events();
     steps(&mut s, 3);
+    assert!(!unit(&s, rat).alive, "she is watching where it lies");
+    let due = s.state().zone(Z).unwrap().sleeping_due[0];
+    assert_eq!(due, (s.state().tick.after(Tick(jane_sim::tuning::PRESENCE_EVERY)), rat), "a beat later");
+    // ...and nor when she stands over its home instead.
+    let body = me(&s);
+    edit(&mut s, body, |u| u.pos = Vec2::centre(22, 21));
+    steps(&mut s, jane_sim::tuning::PRESENCE_EVERY);
+    assert!(!unit(&s, rat).alive, "she is watching its home");
+    // Out of sight of both, it stands up at home, whole.
+    edit(&mut s, body, |u| u.pos = Vec2::centre(15, 32));
+    s.drain_events();
+    steps(&mut s, jane_sim::tuning::PRESENCE_EVERY);
     let r = unit(&s, rat);
     assert!(r.alive && r.hp == max_hp(r) && r.pos == Vec2::centre(20, 20) && r.died_at.is_none());
     assert!(!s.state().flags.contains_key(&FlagKey::Dead(key)));

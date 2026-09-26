@@ -18,5 +18,10 @@
       { "do": "flag", "flag": "mine_quiet", "value": 1 }
     ],
     "contradicts": "GOLDSKIN MINING Co. - CLOSED. No entry. No exit either, some nights."
+  },
+  {
+    "id": "yard_clear",
+    "on": { "if": "questDone", "quest": "defeat_skeleton" },
+    "edits": [{ "do": "despawn", "unit": "yard_skeleton" }]
   }
 ]

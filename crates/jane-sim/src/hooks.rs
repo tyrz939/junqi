@@ -9,7 +9,7 @@
 //! | [`use_item`] | inventory (`inventory.ts useItem`) | `Command::Bar` on an item slot |
 //! | [`quest_kill`] | quests (`quests.ts onUnitKilled`) | a kill by one of the party (step 10) |
 //! | [`unit_died`] | journal, living world (§3.7, §4.6.c) | every creature's death (step 10) |
-//! | [`respawn_allowed`] | living world (§4.6.c ecology) | a corpse due to stand up (step 12) |
+//! | [`respawn_allowed`] | presence (§4.6.a), living world (§4.6.c ecology) | a corpse due to stand up (step 12) |
 //! | [`put_down_dead`] | interact (`sim.ts revivePlayer`, `moveProp`) | a seat waking (step 6) |
 //! | [`reset_lock_ins`] | triggers (`sim.ts revivePlayer`, trigger `reset`) | a seat waking (step 6) |
 
@@ -73,11 +73,13 @@ pub fn unit_died(cx: &mut Ctx<'_>, unit: UnitId, _slayer: Option<Seat>) {
     crate::living::on_kill(cx, unit);
 }
 
-/// May this corpse stand up now? The ecology says no while its def is at its area's `cap` or the
+/// May this corpse stand up now? Not in view: a seat inside the watcher box of where it lies or
+/// of its home puts it back a presence beat (`presence::stands_up_unseen`, WORLD.md "nothing
+/// stands up in view"). Then the ecology says no while its def is at its area's `cap` or the
 /// pressure is at the row's `hold` line, and pushes it back onto `sleeping_due` at the next hour
 /// itself (`living::may_stand`).
 pub fn respawn_allowed(cx: &mut Ctx<'_>, unit: UnitId) -> bool {
-    crate::living::may_stand(cx, unit)
+    crate::presence::stands_up_unseen(cx, unit) && crate::living::may_stand(cx, unit)
 }
 
 /// A seat wakes: what her body carried when she fell stays where she fell, on the nearest free

@@ -576,6 +576,8 @@ fn apply_zone_ops(cx: &mut Ctx<'_>) {
     for i in 0..cx.ops.despawn.len() {
         let id = cx.ops.despawn[i];
         forget_unit(cx.zone, cx.rt, cx.party, id);
+        // Gone for good: a corpse despawned never stands up again.
+        cx.zone.sleeping_due.retain(|&(_, due)| due != id);
         if let Some(u) = cx.zone.remove_unit(id) {
             cx.rt.remove_unit(&u);
             cx.events.push(Event { to: None, in_zone: Some(cx.zone.id), kind: EventKind::Despawned { unit: id } });

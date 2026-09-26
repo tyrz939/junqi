@@ -70,6 +70,13 @@ fn letter_dog_key_kitchen_note_chest_bench_orb() {
     assert!(quest_done(&s, "defeat_skeleton"));
     assert_eq!(holds(&s, "key_auntie_house"), 1);
     assert!(quest_active(&s, "see_the_kitchen"), "the reward list gives the next quest");
+    // "The skeleton will not get up again": the hand-in's consequence takes it off the county
+    // for good (WORLD.md §6), not onto a ten-minute clock.
+    idle(&mut s, 1);
+    let yard = sym(&s, "yard_skeleton");
+    let zs = s.state().zone(ZoneId::County).unwrap();
+    assert!(zs.units.iter().all(|u| u.key != Some(yard)), "the yard skeleton is gone");
+    assert!(zs.sleeping_due.iter().all(|&(_, id)| id != bones.id));
 
     // Unlock, then enter.
     assert!(walk_to_prop(&mut s, "house_door"));
