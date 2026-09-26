@@ -7,7 +7,7 @@
 //! person::seed(sprite_name)  -> u32           the stable seed of a sprite id
 //! ```
 //!
-//! Frames (ART.md §4): `Down, Down1, Down2, Down3, DownB`, the same for `Up` and `Side`, then
+//! Frames (ART.md §4): `Down, Down1 .. Down5, DownB`, the same for `Up` and `Side`, then
 //! `Dead` and `Dead2` (§4.1, [`fallen`]). West is `Side` mirrored at draw time; a mirrored
 //! normal has its `nx` flipped by the blit.
 
@@ -122,15 +122,15 @@ impl Dress {
 }
 
 /// Render every frame of `look` (its `vary` already resolved: [`PersonLook::variant`]). `seed`
-/// is the sprite's stable id ([`seed`]); it places the hair's strokes.
+/// is the sprite's stable id ([`seed`]); it sizes the fallen's pool.
 pub fn render(look: &PersonLook, seed: u32) -> Result<SpriteSet, String> {
     let d = Dress::new(look)?;
     let p = proportions(look.build);
     let mut frames: Vec<(FrameId, Canvas)> =
-        LIVING.iter().map(|&(id, facing, pose)| (id, draw::frame(&d, p, facing, pose, seed))).collect();
-    let side = draw::frame(&d, p, Facing::Side, WALK_SIDE[0], seed);
+        LIVING.iter().map(|&(id, facing, pose)| (id, draw::frame(&d, p, facing, pose))).collect();
+    let side = draw::frame(&d, p, Facing::Side, WALK_SIDE[0]);
     // Dead2: the near arm flung out ahead of her, so it lies above the body.
-    let fling = draw::frame(&d, p, Facing::Side, Pose { arm: [7, 0], ..Pose::default() }, seed);
+    let fling = draw::frame(&d, p, Facing::Side, Pose { arm: [7, 0], ..Pose::default() });
     frames.push((FrameId::Dead, fallen::fallen(&side, seed)));
     frames.push((FrameId::Dead2, fallen::fallen(&fling, seed ^ 1)));
     let mut emits = Vec::new();

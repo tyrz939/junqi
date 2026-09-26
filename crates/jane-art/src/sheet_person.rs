@@ -27,12 +27,12 @@ fn draw(img: &mut Image, c: &Canvas, x: u32, y: u32, s: u32) {
     put_albedo(img, c, x, y, s);
 }
 
-/// The rows of `jane sheet unit`: the down, up and side cycles (four walk frames and the
+/// The rows of `jane sheet unit`: the down, up and side cycles (six walk frames and the
 /// breathe) and the dead frames.
 const ROWS: [&[FrameId]; 4] = [
-    &[FrameId::Down, FrameId::Down1, FrameId::Down2, FrameId::Down3, FrameId::DownB],
-    &[FrameId::Up, FrameId::Up1, FrameId::Up2, FrameId::Up3, FrameId::UpB],
-    &[FrameId::Side, FrameId::Side1, FrameId::Side2, FrameId::Side3, FrameId::SideB],
+    &[FrameId::Down, FrameId::Down1, FrameId::Down2, FrameId::Down3, FrameId::Down4, FrameId::Down5, FrameId::DownB],
+    &[FrameId::Up, FrameId::Up1, FrameId::Up2, FrameId::Up3, FrameId::Up4, FrameId::Up5, FrameId::UpB],
+    &[FrameId::Side, FrameId::Side1, FrameId::Side2, FrameId::Side3, FrameId::Side4, FrameId::Side5, FrameId::SideB],
     &[FrameId::Dead, FrameId::Dead2],
 ];
 
@@ -42,7 +42,7 @@ const ROWS: [&[FrameId]; 4] = [
 pub fn unit(sets: &[Rendered], font: &Font, scale: u32) -> Image {
     let s = scale.max(1);
     let (fw, fh) = (person::W as u32, person::H as u32);
-    let cols = 5u32;
+    let cols = 7u32;
     let cell = (fw * s + PAD, fh * s + 14 + PAD);
     let strip_h = fh + 20;
     let block_h = 20 + strip_h + ROWS.len() as u32 * cell.1;
@@ -160,4 +160,23 @@ pub fn grid(base: &PersonLook, font: &Font) -> Result<Image, String> {
         }
     }
     Ok(img)
+}
+
+/// `jane sheet close <id> [frame ...]`: a few frames of one set side by side at `scale`, with
+/// the 1x frames under them: the art director's loupe.
+pub fn closeup(r: &Rendered, ids: &[FrameId], font: &Font, scale: u32) -> Image {
+    let s = scale.max(1);
+    let (fw, fh) = (person::W as u32, person::H as u32);
+    let n = ids.len().max(1) as u32;
+    let mut img =
+        Image::new(PAD + n * (fw * s + PAD), PAD + 20 + fh * s + PAD + fh + 2 * PAD, [BG[0], BG[1], BG[2], 255]);
+    label(&mut img, font, PAD, PAD, &r.key(), Face::Small, TEXT);
+    for (k, id) in ids.iter().enumerate() {
+        let Some(c) = r.set.frame(*id) else { continue };
+        let x = PAD + k as u32 * (fw * s + PAD);
+        draw(&mut img, c, x, PAD + 20, s);
+        draw(&mut img, c, x, PAD + 20 + fh * s + PAD, 1);
+        label(&mut img, font, x + fw + 6, PAD + 20 + fh * s + PAD, id.name(), Face::Fine, DIM);
+    }
+    img
 }

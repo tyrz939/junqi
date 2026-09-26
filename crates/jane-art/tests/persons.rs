@@ -7,7 +7,7 @@ use std::sync::OnceLock;
 
 use jane_art::Canvas;
 use jane_art::looks::{self, Rendered};
-use jane_art::palette::{self, Ix, Ramp};
+use jane_art::palette::{self, Ix, Ramp, Tone};
 use jane_art::person::{self, AX, AY, H, W};
 use jane_art::sprite::{FrameId, Role};
 use jane_data::{Controller, Look, catalog};
@@ -135,8 +135,166 @@ fn layers_hold_the_contract_and_only_declared_roles_emit() {
     }
 }
 
+/// Where a drawn pixel meets clear: `(below or right, above or left)`.
+fn open_sides(c: &Canvas, x: i32, y: i32) -> (bool, bool) {
+    let open = |dx: i32, dy: i32| !c.get(x + dx, y + dy).is_opaque();
+    (open(1, 0) || open(0, 1), open(-1, 0) || open(0, -1))
+}
+
 #[test]
-fn outline_closed() {
+fn outline_closed_and_selective() {
+    // Every drawn pixel meeting clear is a line: `k`, or its material's own dark. Away from the
+    // light (below, right) the line is the ramp's deep or `k`; on the lit side it is no lighter
+    // than the ramp's base (ART.md §3, sel-out). A dead frame keeps the lines it stood up with.
+    for r in all() {
+        for (f, c) in frames(r) {
+            for y in 0..c.h() {
+                for x in 0..c.w() {
+                    let ix = c.get(x, y);
+                    let (away, lit) = open_sides(c, x, y);
+                    if !ix.is_opaque() || !(away || lit) || ix == Ix::INK || palette::is_pallid(ix) || f.is_dead() {
+                        continue;
+                    }
+                    let Some((_, t)) = Ramp::of(ix) else {
+                        panic!("{} {f:?}: ({x}, {y}) is an edge in {ix:?}, neither k nor a ramp's", r.key())
+                    };
+                    if away {
+                        assert_eq!(t, Tone::Deep, "{} {f:?}: ({x}, {y}) faces away from the light in {t:?}", r.key());
+                    } else {
+                        assert!(t <= Tone::Base, "{} {f:?}: ({x}, {y}) a lit edge in {t:?}", r.key());
+                    }
+                }
+            }
+        }
+    }
+}
+
+/// Orphans: pixels of the sprite's own materials (its roles' ramps) whose colour none of
+/// their eight neighbours shares, not counting the outline. Eyes, glints, buttons and buckles
+/// are studs, not shading, and are not counted.
+fn orphans(r: &Rendered, c: &Canvas) -> Vec<(i32, i32)> {
+    let mine: Vec<Ramp> = r.set.roles.iter().map(|(_, ramp)| *ramp).collect();
+    let mut out = Vec::new();
+    for y in 0..c.h() {
+        for x in 0..c.w() {
+            let ix = c.get(x, y);
+            if !Ramp::of(ix).is_some_and(|(ramp, _)| mine.contains(&ramp)) {
+                continue;
+            }
+            let (away, lit) = open_sides(c, x, y);
+            if away || lit {
+                continue;
+            }
+            let alone = (-1..=1).all(|dy| (-1..=1).all(|dx| (dx, dy) == (0, 0) || c.get(x + dx, y + dy) != ix));
+            if alone {
+                out.push((x, y));
+            }
+        }
+    }
+    out
+}
+
+#[test]
+fn clean_clusters_few_orphans() {
+    // Shading in clusters of two or more: an orphan is a buckle, a button, a nose tip or a
+    // mistake, and a frame has a few of the first three at most.
+    let mut worst = (0, String::new());
+    for r in bases() {
+        for (f, c) in frames(r) {
+            if f.is_dead() {
+                continue;
+            }
+            let n = orphans(r, c).len();
+            if n > worst.0 {
+                worst = (n, format!("{} {f:?}: {:?}", r.key(), orphans(r, c)));
+            }
+        }
+    }
+    println!("most orphans: {} ({})", worst.0, worst.1);
+    assert!(worst.0 <= MAX_ORPHANS, "{} orphans in {}", worst.0, worst.1);
+}
+
+/// The most orphans a frame may have (after `declutter`, these are a boot heel or a knuckle
+/// where two shapes cross).
+const MAX_ORPHANS: usize = 4;
+
+#[test]
+fn no_pillow_shading() {
+    // The light comes from the left. Take every run of one material across a row that is at
+    // least five px long and has the outline at both ends: one px in from each end, the left
+    // must be no darker than the right. Pillow shading (dark all round, light in the middle)
+    // fails a run as often as it passes one; a sprite may have one run in four against it (a
+    // parting, a fold line, a strap one px in from an edge).
+    let mut failures = Vec::new();
+    for r in bases() {
+        for f in [FrameId::Down, FrameId::Side, FrameId::Up] {
+            let c = r.set.frame(f).unwrap();
+            let (mut runs, mut against) = (0, 0);
+            for y in 0..c.h() {
+                let mut x = 0;
+                while x < c.w() {
+                    let Some((ramp, _)) = Ramp::of(c.get(x, y)) else {
+                        x += 1;
+                        continue;
+                    };
+                    let start = x;
+                    while x < c.w() && Ramp::of(c.get(x, y)).is_some_and(|(r, _)| r == ramp) {
+                        x += 1;
+                    }
+                    let end = x - 1;
+                    let lined = |px: i32| !c.get(px, y).is_opaque() || c.get(px, y) == Ix::INK;
+                    if end - start >= 4 && lined(start - 1) && lined(end + 1) {
+                        runs += 1;
+                        let (l, rr) = (palette::luma(c.get(start + 1, y)), palette::luma(c.get(end - 1, y)));
+                        against += usize::from(l < rr);
+                    }
+                }
+            }
+            if against * 4 > runs {
+                failures.push(format!("{} {f:?}: {against} of {runs}", r.key()));
+            }
+        }
+    }
+    assert!(failures.is_empty(), "lit from the right: {failures:?}");
+}
+
+/// Spikes: drawn pixels with clear on three sides.
+fn spikes(c: &Canvas) -> Vec<(i32, i32)> {
+    let mut out = Vec::new();
+    for y in 0..c.h() {
+        for x in 0..c.w() {
+            let open = [(1, 0), (-1, 0), (0, 1), (0, -1)]
+                .iter()
+                .filter(|&&(dx, dy)| !c.get(x + dx, y + dy).is_opaque())
+                .count();
+            if c.get(x, y).is_opaque() && open >= 3 {
+                out.push((x, y));
+            }
+        }
+    }
+    out
+}
+
+#[test]
+fn no_spikes_on_the_silhouette() {
+    // A drawn pixel with clear on three sides is a jaggy (`despike` takes them off; the nose
+    // in profile is two px tall so that it stays).
+    let mut bad = Vec::new();
+    for r in bases() {
+        for (f, c) in frames(r) {
+            let n = spikes(c).len();
+            if n > 0 && !f.is_dead() {
+                bad.push(format!("{} {f:?} {:?}", r.key(), spikes(c)));
+            }
+        }
+    }
+    assert!(bad.is_empty(), "spikes:\n{}", bad.join("\n"));
+}
+
+#[test]
+fn heights_are_true() {
+    // The height layer is what a sun or a lamp casts from: a standing frame's pixel stands its
+    // row's height above the feet (the head 40), a lying one no more than its thickness.
     for r in all() {
         for (f, c) in frames(r) {
             for y in 0..c.h() {
@@ -144,12 +302,18 @@ fn outline_closed() {
                     if !c.get(x, y).is_opaque() {
                         continue;
                     }
-                    let edge =
-                        [(1, 0), (-1, 0), (0, 1), (0, -1)].iter().any(|&(dx, dy)| !c.get(x + dx, y + dy).is_opaque());
-                    assert!(!edge || c.get(x, y) == Ix::INK, "{} {f:?}: ({x}, {y}) meets clear uninked", r.key());
+                    let h = i32::from(c.height_at(x, y));
+                    if f.is_dead() {
+                        assert!((1..=5).contains(&h), "{} {f:?}: ({x}, {y}) lies {h} high", r.key());
+                    } else {
+                        assert_eq!(h, ((AY - y) * 5 / 4).max(1), "{} {f:?}: ({x}, {y})", r.key());
+                    }
                 }
             }
         }
+        let (_, top, _, _) = drawn(r.set.frame(FrameId::Down).unwrap());
+        let head = i32::from(r.set.frame(FrameId::Down).unwrap().heights().iter().copied().max().unwrap());
+        assert!((30..=46).contains(&head), "{}: the head stands {head} (top row {top})", r.key());
     }
 }
 
@@ -237,9 +401,25 @@ fn silhouette_distinct() {
 fn walk_frames_are_distinct_poses() {
     for r in bases() {
         let ids = [
-            [FrameId::Down, FrameId::Down1, FrameId::Down2, FrameId::Down3, FrameId::DownB],
-            [FrameId::Up, FrameId::Up1, FrameId::Up2, FrameId::Up3, FrameId::UpB],
-            [FrameId::Side, FrameId::Side1, FrameId::Side2, FrameId::Side3, FrameId::SideB],
+            [
+                FrameId::Down,
+                FrameId::Down1,
+                FrameId::Down2,
+                FrameId::Down3,
+                FrameId::Down4,
+                FrameId::Down5,
+                FrameId::DownB,
+            ],
+            [FrameId::Up, FrameId::Up1, FrameId::Up2, FrameId::Up3, FrameId::Up4, FrameId::Up5, FrameId::UpB],
+            [
+                FrameId::Side,
+                FrameId::Side1,
+                FrameId::Side2,
+                FrameId::Side3,
+                FrameId::Side4,
+                FrameId::Side5,
+                FrameId::SideB,
+            ],
         ];
         for cycle in ids {
             for (i, a) in cycle.iter().enumerate() {
@@ -267,7 +447,6 @@ fn dead_frames_lie_down() {
             let live =
                 c.albedo().iter().filter(|a| Ramp::of(**a).is_some_and(|(r, _)| palette::PALLID.contains(&r))).count();
             assert_eq!(live, 0, "{} {f:?}: a person's ramp shows unpallid", r.key());
-            assert!(c.heights().iter().all(|&h| h <= 12), "{} {f:?}: a body lying down stands tall", r.key());
         }
         assert_ne!(r.set.frame(FrameId::Dead), r.set.frame(FrameId::Dead2), "{}", r.key());
     }

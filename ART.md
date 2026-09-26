@@ -56,7 +56,8 @@ pub fn render(look: &Look, seed: u32) -> SpriteSet
 
 pub struct SpriteSet { w: u8, h: u8, ax: u8, ay: u8, frames: FrameMap, roles: RoleMap, emits: RoleSet }
 pub struct Frame { albedo: Vec<u8>, normal: Vec<[u8; 2]>, emissive: Vec<u8>, height: Vec<u8> }   // all w * h
-pub enum FrameId { Down, Down1, Down2, Down3, DownB, Up, Up1, Up2, Up3, UpB, Side, Side1, Side2, Side3, SideB,
+pub enum FrameId { Down, Down1, Down2, Down3, Down4, Down5, DownB, Up, Up1, Up2, Up3, Up4, Up5, UpB,
+                   Side, Side1, Side2, Side3, Side4, Side5, SideB,
                    Atk1, Atk2, Atk3, Cast1, Cast2, Cast3, Hurt, Dead, Dead2, Base, Base2, Base3, On, Open }
 pub struct RoleMap([Role; 256])               // albedo index -> Hair | Skin | Coat | CoatShade | Legs | Boots | Glass | Eye | ... | None
 pub enum Look {
@@ -145,7 +146,9 @@ A sprite has all four at one size, always. The font and the chrome carry albedo 
 | `emits` | eye, glass, held | Which roles may write the emissive layer; anything else is a test failure |
 | `ghost` | true, false | Ramps go to mist and the figure is a 50 % checker; height halves so its shadow is faint. No alpha anywhere in a sprite |
 
-Composition order: legs, boots, coat, front, arms, skin, face, hair, hat, held, extras (long hair behind the head, the far arm and leg, and on `side` the pack are drawn first, and the near arm last). Bodies, limbs and skirts are `polygon_lit`, heads `ellipse_lit` (skin is never dithered, so never `soft_ellipse`, and `unchecker` takes out a band edge that falls in a checker), cloth is `folds`, hair is drawn on a layer of its own with its tones held between `deep` and `lift` and a few `strokes(hair)`, then stamped as one part so one head of hair never seams against itself. Every one of them writes its normals and its relief as it goes: relief is what stands in front of what (a sleeve two px proud of the coat), `outline()` finds seams by relief alone, and `upright(ay)` then adds each row's height above the feet (5 px a 4 rows, so the head stands 40). `ao_contact` runs under the feet; `Canvas::outline()` is never typed by a generator.
+Composition order: legs, boots, coat, front, arms, skin, face, hair, hat, held, extras (long hair behind the head, the far arm and leg, and on `side` the pack are drawn first, and the near arm last). Bodies, limbs and skirts are `polygon_lit` (its bands follow a three-row mean of the shape's span, so they run straight), heads `ellipse_lit` (skin is never dithered, so never `soft_ellipse`), cloth hangs in fold lines that sway with the walk, hair is drawn on a layer of its own, held to three tones, given a two-row highlight band arcing over the crown on the light's side and two or three strand lines, then stamped as one part so one head of hair never seams against itself. Cast shades are laid as clusters with `shade` (a fringe on a brow, a brim on a face, a chin on a neck, a head on a collar, the far limbs in the near ones' shade). Eyes are two px square with a one-px glint in the top-left; hands are a flat 2 x 2 mitt inside their line.
+
+Every part writes its normals and its relief as it goes: relief is what stands in front of what (a sleeve two px proud of the coat). Then one finishing pass, in this order: `retone` gives each material its own few tones (cloth a light, a base and a mid, a shade where the light never reaches; skin a light, a base and a rose mid), `unchecker` and `declutter` leave the shading in clusters of two px or more, `despike` takes off any pixel with clear on three sides, `ao_contact` lays the contact shadow as a solid ellipse, `outline_sel` draws the selective outline with seams by relief, `declutter` runs again inside the line, and `upright(ay)` writes each pixel's true height above the feet (5 px a 4 rows: the head stands 40, the shoulders about 19, a hem about 7), the field a sun or a lamp casts from. No generator types an outline or a height.
 
 The build table as built (px, 32 x 40, feet on row 36): `slim` head_y 4, head_w 16, shoulder_w 12, waist_w 10, hip_w 12, leg_h 7, arm_y 22, arm_l 9. The skull is `head_w - 2` wide and 13 tall two rows under head_y, the neck two rows, the hip `36 - leg_h`. `child` (the town's four), `broad` and `stout` are first drafts in the same table; only `slim` is tuned.
 
@@ -180,7 +183,8 @@ fill_rect  rect_lit  rect_bevel  rect_round  ellipse  ellipse_lit  soft_ellipse 
 gradient(rect, ramp, dir, dither)   folds(rect, ramp, period, phase)   strokes(rect, ramp, kind: fur | feather | grass | hair, density, seed)
 grain(rect, material: wood | iron | stone, seed)   courses(rect, material, seed)   ao_contact(rect, spread)
 stamp  outline  shadow_ellipse  mirror_x  rotate_ccw  crop  shorten_to  remap  checker
-polygon_lit(pts, ramp, curve, z)   set_clip(rect)   upright(ay)   unchecker(ramp)   scale_heights   quench   bounds
+polygon_lit(pts, ramp, curve, z)   set_clip(rect)   shade(rect, ramp, steps)   tint(x, y, ramp, tone)   retone(ramp, map)
+unchecker(ramp)   declutter(ramp)   despike   outline_sel   upright(ay)   dome_heights(max)   scale_heights   quench   bounds
 ```
 
 | Primitive | Albedo | Normal | Height |
@@ -268,7 +272,7 @@ Flora: the 43 generators port onto `Canvas` at the new scale, their tone tables 
 
 ### 2.7 Materials
 
-A ramp is six to eight tones in luminance order, `deep, shade, base, light, high, glint` and up to two half-steps for dither pairs; a generator asks by role and never by index. Groups:
+A ramp is six to eight tones in luminance order, `deep, shade, base, light, high, glint` and up to two half-steps for dither pairs; a generator asks by role and never by index. The people's ramps (skin, hair, cloth, leather, the pool: `hue::shadow_hue` lists them) are hue-shifted: each tone's lightness steps from the key, its hue turns toward a cool one in shadow (violet-blue; rose for skin, never grey-brown) and a warm one in light (yellow; peach for skin), and its saturation peaks in the midtones and falls at both ends; a grey takes a cool tint in shadow and a warm one in light. A palette test holds each of them to that. The other families' ramps keep the step-1 straight mix until their owners move them over. Index 1, the contact shadow, is a cool multiply (`palette::AO_TINT`, blue held up more than red) and the blit softens its crisp mask by how much of each pixel's 3 x 3 it covers (`palette::ao`), so a shadow has a soft edge and no dither. Groups:
 
 | Group | Count | Notes |
 | --- | --- | --- |
@@ -346,8 +350,8 @@ Every frame after `Down` is derived, so a look is written once. The composer kee
 | --- | --- |
 | `up` | The skull's skin and face become hair (or the hat's back); eyes go; front and buttons become coat; the pack is drawn |
 | `side` (east) | Columns left of the skull centre become hair; one eye; one nose pixel outside the skull; the torso is 12 wide; the near arm over the coat, the far arm behind. West is mirrored at draw time, and a held item declares its `hand` so the mirror puts it right; a mirrored normal has its `nx` flipped by the blit |
-| walk `_1 _2 _3` with the standing frame first | the four poses of a walk cycle, bob in px down the screen: stand (the standing frame, both feet down: a pass), `_1` stride (near foot 3 px forward, far 3 back, bob +1), `_2` pass (feet together, the far foot lifted 2, bob 0), `_3` stride (far foot forward, bob +1); seen from the front a stride is the forward foot a pixel lower and the back one lifted a pixel. Arms swing against the legs; `folds` phase advances a quarter a frame. (Corrected 2026-09-27: the first draft's four were half a cycle, contact to up, with the sign of the bob muddled) |
-| breathe `_b` | the chest and shoulders 1 px up, the head 1 px up, the coat's folds phase a half turn; the renderer alternates it with the standing frame every 40 ticks |
+| walk `_1 .. _5` with the standing frame first | six frames a cycle (decided 2026-09-27: six read with weight where four read stiff), bob in px down the screen: stand (both feet down: a pass), `_1` contact (near foot 3 px out ahead, far 3 behind, leaning in a px), `_2` down (the weight onto it, bob +1, the far heel up), `_3` pass (feet together, the far foot lifted 2), `_4` contact and `_5` down on the other foot. Seen from the front a contact is the forward foot a pixel lower, and the down lifts the back foot. Arms swing against the legs. What hangs loose (hair ends, a hem, a scarf's tail, a skirt) reads the previous frame's bob and lean, so it lags a frame behind the body; the fold lines sway with the phase, a sixth of a turn a frame |
+| breathe `_b` | the chest and shoulders 1 px up, the head 1 px up, the hem where it hung, the folds a half turn on; the renderer alternates it with the standing frame every 40 ticks |
 | `atk_1..3` | wind-up (lean back 2, held thing raised), strike (lean forward 3, arm extended, the held thing at full reach), recover (lean 1); per facing |
 | `cast_1..3` | hands together, hands out with a school-coloured emissive glow between them, hands down; per facing |
 | `hurt` | the standing frame leant back 2 with the head down 1 and the eyes closed; the renderer flashes it |
@@ -360,7 +364,7 @@ Creatures read the same table shape with their plan's own cycle: a trot moves di
 
 | Style | Who | How |
 | --- | --- | --- |
-| `fallen` | every Person | `side` rotated a quarter turn anticlockwise, repeated columns removed to 28 wide at most, dropped to `ay - 2`, pallor applied, a pool at 38 % from the head; `Dead2` is the same with the near arm flung ahead of her (so it lies above the body), picked by unit id. Height falls to a seventh, the body's thickness, so its cast shadow is a sliver |
+| `fallen` | every Person | `side` rotated a quarter turn anticlockwise, repeated columns removed to 28 wide at most, dropped to `ay - 2`, pallor applied, a pool at 38 % from the head; `Dead2` is the same with the near arm flung ahead of her (so it lies above the body), picked by unit id. Height becomes the body's thickness, a dome over the lying shape at most 5 px (`dome_heights`), so its cast shadow is a sliver |
 | `topple`, `legs_up` | plants; small quadrupeds and birds | on the stem; on the back |
 | `scrap` | machines and armour | 8 x 8 plates in two courses |
 | `melt`, `wisp` | waxwork; shade | |
@@ -419,7 +423,9 @@ PNG through a 60-line encoder in `jane-art::sheet` (stored deflate, crc32, adler
 | determinism and goldens | `render` twice gives equal bytes in all four layers; every sprite's FNV hash equals `tests/golden.txt`; the hashes are equal across the CI targets |
 | layers | every sprite has all four layers at one size; every normal decodes to unit length within 2 of 255; emissive is non-zero only on declared roles; height ≥ 1 on every opaque pixel and 0 on clear |
 | lit sphere | a generated `soft_ellipse` lit from eight directions through the integer light pass: the brightest quarter of its pixels lies in the light's half of the disc for every direction, and the eight results are pairwise distinct |
-| outline closed | every drawn pixel meeting clear is `k`; no coloured pixel touches index 0 |
+| outline closed | every drawn pixel meeting clear is a line: `k`, or (sel-out) its material's own dark: `deep` where it faces away from the light (below, right), no lighter than `base` on the lit side; no coloured pixel touches index 0 |
+| clean clusters | in a person frame at most 4 orphans (a pixel of the sprite's own materials that no neighbour shares, inside the line; eyes, glints, buttons and buckles are studs and do not count); no pixel with clear on three sides (the profile's nose is two px so it is not one); pillow shading fails: across every row, a run of one material at least five px long with the line at both ends is no darker one px in on the left than on the right, in at least three runs of four |
+| true heights | a standing frame's every pixel stands its row's height above the feet (`(ay - y) * 5 / 4`, at least 1): the head 40, a hat to 46; a lying one is at most 5, its thickness |
 | colour budget | the §3 caps per family, `k` and `K` aside, over a sprite's living frames and again over its dead frames (which are in pallid twins); no 2 x 2 checker of two skin tones in any person frame |
 | silhouette distinct | any two sprites of a family, standing: the XOR of their masks is at least 6 % of the union, or (one cut in other cloth: a swap, a variant, two neighbours dressed alike) at least 6 % of the union is recoloured and the recoloured pixels differ by 24 of 255 a channel on average |
 | contrast | §3, per hostile unit row against every spawning zone's floor swatch |

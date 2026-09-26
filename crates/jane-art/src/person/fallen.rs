@@ -8,7 +8,7 @@ use jane_core::grid::Rect;
 
 use super::{AX, AY, H, W};
 use crate::canvas::Canvas;
-use crate::palette::{Ix, Ramp, pallor};
+use crate::palette::{Ix, Ramp, Tone, pallor};
 
 /// The longest a fallen body lies, px.
 pub const MAX_LEN: i32 = 28;
@@ -27,19 +27,23 @@ pub fn fallen(side: &Canvas, seed: u32) -> Canvas {
     lying.shorten_to(MAX_LEN);
     lying.remap(pallor);
     lying.quench();
-    lying.scale_heights(1, 7);
+    lying.dome_heights(5);
     let Some(b) = lying.bounds() else { return Canvas::new(W, H) };
     // Where the body goes: centred on the anchor, its lowest row on ay - 2.
     let (x, y) = (AX - b.w / 2 - b.x, AY - 2 - (b.bottom() - 1));
     let mut out = Canvas::new(W, H);
-    // The pool: under the body, 38 % of the way from the head, a little to the ground side.
+    // The pool: under the body, 38 % of the way from the head, spreading toward the viewer;
+    // lined in its own dark, then the body laid over it with the lines it stood up with.
     let px = AX - b.w / 2 + b.w * 38 / 100;
-    let pw = 10 + (seed & 3) as i32;
-    let pool = Rect::new(px - pw / 2, AY - 3, pw, 5);
-    out.ellipse(pool, Ramp::Pool.at(crate::palette::Tone::Shade), 1);
-    out.ellipse(Rect::new(pool.x + 2, pool.y + 1, pool.w - 4, 3), Ramp::Pool.at(crate::palette::Tone::Deep), 1);
-    out.ao_contact(Rect::new(AX - b.w / 2 - 1, AY - 4, b.w + 2, 4), 2);
+    let pw = 14 + (seed & 3) as i32;
+    let pool = Rect::new(px - pw / 2, AY - 7, pw, 9);
+    out.ellipse_lit(pool, Ramp::Pool, crate::canvas::Z::flat(1));
+    out.retone(
+        Ramp::Pool,
+        [Tone::Deep, Tone::Shade, Tone::Shade, Tone::Mid, Tone::Mid, Tone::Base, Tone::Base, Tone::Base],
+    );
+    out.outline_sel();
+    out.ao_contact(Rect::new(AX - b.w / 2 - 1, AY - 4, b.w + 2, 4), 0);
     out.stamp(&lying, x, y);
-    out.outline();
     out
 }

@@ -16,6 +16,8 @@ pub const USAGE: &str = "  sheet layers <what> [--frame F] [--out DIR]
                                       every glyph in every face; the chrome pieces; the palette ramps
   sheet unit <id> [--seat N] [--out DIR]
                                       a look's frames, every cycle, seat and variant, and the dead
+  sheet close <id> [frame ...] [--scale N] [--out DIR]
+                                      a few frames of a look up close (down, side, up at 8x)
   sheet units [--out DIR]             every look standing and dead, at 1x and 2x
   sheet person --grid [--out DIR]     every build by every hair and coat
   sheet all [--out DIR]               every sheet above, for every sprite
@@ -81,6 +83,20 @@ pub fn run(args: &[String]) -> Result<(), String> {
                 args.iter().position(|a| a == "--scale").and_then(|i| args.get(i + 1)?.parse().ok()).unwrap_or(4);
             let suffix = seat.map_or(String::new(), |s| format!("-seat{s}"));
             write(&out, &format!("unit-{what}{suffix}"), &sheet_person::unit(&sets, &font, scale))?;
+        }
+        Some("close") => {
+            let what = args.get(1).ok_or("name a look")?;
+            let sets = looks::render(what)?;
+            let names: Vec<&String> = args[2..].iter().take_while(|a| !a.starts_with("--")).collect();
+            let ids: Vec<jane_art::sprite::FrameId> = if names.is_empty() {
+                use jane_art::sprite::FrameId;
+                vec![FrameId::Down, FrameId::Side, FrameId::Up]
+            } else {
+                names.iter().filter_map(|n| person::frame_ids().find(|f| f.name() == n.as_str())).collect()
+            };
+            let scale =
+                args.iter().position(|a| a == "--scale").and_then(|i| args.get(i + 1)?.parse().ok()).unwrap_or(8);
+            write(&out, &format!("close-{what}"), &sheet_person::closeup(&sets[0], &ids, &font, scale))?;
         }
         Some("units") => write(&out, "units", &sheet_person::units(&looks::all()?, &font))?,
         Some("person") if args.iter().any(|a| a == "--grid") => {

@@ -10,8 +10,8 @@ use crate::palette::{Ix, Ramp};
 
 /// A frame of a sprite (ART.md §1). The TS build's names keep their meaning: `Down` is the
 /// standing frame facing the viewer, `Base` a prop at rest, `Open` over `On` over `Base` the
-/// renderer's pick. Walks are four frames with the standing frame first (`Down, Down1, Down2,
-/// Down3`), and `DownB` is the breathe; `Side` faces east and west is the east frame mirrored
+/// renderer's pick. Walks are six frames with the standing frame first (`Down, Down1 ..
+/// Down5`), and `DownB` is the breathe; `Side` faces east and west is the east frame mirrored
 /// at draw time.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[allow(missing_docs)]
@@ -20,16 +20,22 @@ pub enum FrameId {
     Down1,
     Down2,
     Down3,
+    Down4,
+    Down5,
     DownB,
     Up,
     Up1,
     Up2,
     Up3,
+    Up4,
+    Up5,
     UpB,
     Side,
     Side1,
     Side2,
     Side3,
+    Side4,
+    Side5,
     SideB,
     Atk1,
     Atk2,
@@ -55,16 +61,22 @@ impl FrameId {
             FrameId::Down1 => "down_1",
             FrameId::Down2 => "down_2",
             FrameId::Down3 => "down_3",
+            FrameId::Down4 => "down_4",
+            FrameId::Down5 => "down_5",
             FrameId::DownB => "down_b",
             FrameId::Up => "up",
             FrameId::Up1 => "up_1",
             FrameId::Up2 => "up_2",
             FrameId::Up3 => "up_3",
+            FrameId::Up4 => "up_4",
+            FrameId::Up5 => "up_5",
             FrameId::UpB => "up_b",
             FrameId::Side => "side",
             FrameId::Side1 => "side_1",
             FrameId::Side2 => "side_2",
             FrameId::Side3 => "side_3",
+            FrameId::Side4 => "side_4",
+            FrameId::Side5 => "side_5",
             FrameId::SideB => "side_b",
             FrameId::Atk1 => "atk_1",
             FrameId::Atk2 => "atk_2",
