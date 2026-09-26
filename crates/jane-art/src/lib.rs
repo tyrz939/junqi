@@ -13,9 +13,14 @@ pub mod chrome;
 pub mod demo;
 pub mod font;
 pub mod hash;
+pub mod hue;
 pub mod light;
+pub mod looks;
 pub mod palette;
+pub mod person;
 pub mod sheet;
+pub mod sheet_person;
+pub mod sprite;
 
 pub use canvas::{Canvas, Z};
 pub use font::{Face, Font, Style};
