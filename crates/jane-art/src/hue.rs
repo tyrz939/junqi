@@ -39,6 +39,12 @@ pub const fn shadow_hue(r: Ramp) -> Option<i32> {
         | Ramp::ClothLinen
         | Ramp::Leather
         | Ramp::Pool => Some(COOL),
+        // The kit's and the creatures' own materials (ART.md §8 steps 4 and 5): woods, metals,
+        // glass and bone. The terrain's (stone, slate, brick, plaster, oak, bark, the greens)
+        // are its painter's to shift.
+        Ramp::WoodDark | Ramp::WoodPale | Ramp::Iron | Ramp::Brass | Ramp::Copper | Ramp::Glass | Ramp::Bone => {
+            Some(COOL)
+        }
         _ => None,
     }
 }
