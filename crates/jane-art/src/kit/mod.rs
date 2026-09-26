@@ -16,6 +16,7 @@
 mod barrier;
 mod container;
 mod furniture;
+mod growing;
 mod lamp;
 pub(crate) mod parts;
 mod ritual;
@@ -168,6 +169,7 @@ fn draw(c: &mut Canvas, k: &Kit, state: State) -> Result<Stand, String> {
         PropFamily::Ritual => ritual::draw(c, k, state).ok_or_else(unknown),
         PropFamily::Furniture => furniture::draw(c, k, state).ok_or_else(unknown),
         PropFamily::Structure => structure::draw(c, k, state).ok_or_else(unknown),
+        PropFamily::Vegetation | PropFamily::Debris => growing::draw(c, k, state).ok_or_else(unknown),
         _ => Err(unknown()),
     }
 }
