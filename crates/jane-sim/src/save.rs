@@ -254,6 +254,23 @@ impl Sim {
         Ok(Self::from_state(state, bps))
     }
 
+    /// A lockstep snapshot (ARCHITECTURE.md §7): the save's bytes of a live world, loaded as the
+    /// world it was, over blueprints already built for its seed. Unlike [`from_save`](Self::from_save),
+    /// which loads the host's world (closed, every guest parked), nothing is changed: every seat
+    /// stays where it sat and the world as open as it was, so the joiner's sim is the host's at
+    /// that frame (`decode(save(s)) == s`; its hash is the host's). The runtimes of live zones are
+    /// rebuilt, which no later step can see (§8 `runtime_rebuild_is_invisible`).
+    pub fn from_snapshot_with(bytes: &[u8], bps: Blueprints) -> Result<Sim, SaveError> {
+        let state = decode_state(bytes, &bps)?;
+        let mut sim = Sim::adopt(state, bps);
+        for z in ZoneId::ALL {
+            if sim.state.is_live(z) {
+                sim.ensure_runtime(z);
+            }
+        }
+        Ok(sim)
+    }
+
     /// A save is the host's world (§3.5): it loads closed, every seat but the host's is parked
     /// (her body waits with what she owned), and the runtimes of live zones are rebuilt, the
     /// props' awake bits derived from the saved ring key. The ring itself does not run here: the
