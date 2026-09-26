@@ -19,7 +19,8 @@ use jane_present::input::{
 use jane_present::text;
 use jane_present::ui::Ui;
 use jane_present::ui::console::{self as term, Console, LineKind};
-use jane_present::ui::core::{AppIntent, UiInput, UiOut};
+use jane_present::ui::controls::{self, ControlsInfo, ControlsState};
+use jane_present::ui::core::{AppIntent, PadPress, UiInput, UiOut};
 use jane_present::ui::dialogue::{self, DialogueBox};
 use jane_present::ui::hud::{self, HudCtx};
 use jane_present::ui::loading::{self, Card, LoadingState};
@@ -71,6 +72,7 @@ enum Menu {
     Slots(SlotMode),
     /// A question the app asked: quit to title and lose what is unsaved.
     ConfirmTitle,
+    Controls,
 }
 
 /// How fast the world runs (F7, F8) and whether it is held for stepping (F6).
@@ -135,6 +137,7 @@ struct App<'a> {
     win_open: bool,
     /// The terminal (backquote).
     console: Console,
+    controls: ControlsState,
 }
 
 /// The sim as the bot's host, keeping what it drains for the presenter too.
@@ -220,7 +223,10 @@ pub fn run(
         win: WindowState::default(),
         win_open: false,
         console: Console::default(),
+        controls: ControlsState::default(),
     };
+    app.input.bindings = app.config.bindings();
+    app.input.assist = app.config.assist();
     app.read_slots();
     if args.new {
         app.new_game(args.name.clone(), args.seed);
@@ -236,6 +242,7 @@ pub fn run(
     let mut acc: u64 = 0;
     let mut last = Instant::now();
     let mut held_left = false;
+    let mut pad_was = (0u32, false, false);
     let mut title_clock = (Instant::now(), 0u32, Duration::ZERO, Duration::ZERO, 0u32);
     let mut typing = false;
     // Script presses to let go of next frame.
@@ -334,6 +341,11 @@ pub fn run(
         let keys: KeySet = devices.state.pressed;
         let wheel = devices.state.mouse.wheel;
         let right = devices.state.mouse.was_pressed(jane_present::input::MouseButton::Right);
+        let middle = devices.state.mouse.was_pressed(jane_present::input::MouseButton::Middle);
+        let pad_now = devices.state.pad.map_or((0, false, false), |p| (p.held, p.axes[4] > 16_384, p.axes[5] > 16_384));
+        let pad_pressed =
+            PadPress { buttons: pad_now.0 & !pad_was.0, lt: pad_now.1 && !pad_was.1, rt: pad_now.2 && !pad_was.2 };
+        pad_was = pad_now;
         devices.state.end_sample();
         edges.extend(app.input.drain());
         let mut actions = Vec::new();
@@ -346,6 +358,8 @@ pub fn run(
             pressed,
             released,
             right_pressed: right,
+            middle_pressed: middle,
+            pad_pressed,
             wheel,
             actions,
             typed: std::mem::take(&mut typed),
@@ -460,7 +474,7 @@ pub fn save_shot(screen: &mut dyn Screen, px: &mut Vec<u32>, path: &str) -> Resu
 impl App<'_> {
     /// Who has the keyboard.
     fn mode(&self, typing: bool) -> Mode {
-        if typing || self.console.open {
+        if typing || self.console.open || self.controls.capture.is_some() {
             return Mode::Text;
         }
         match self.scene {
@@ -601,7 +615,7 @@ impl App<'_> {
                 UiAction::Cancel => {
                     if self.console.open {
                         self.console.open = false;
-                    } else if self.ui.popover_open() || self.title.naming {
+                    } else if self.controls.capture.is_some() || self.ui.popover_open() || self.title.naming {
                         actions.push(a);
                     } else if !self.menus.is_empty() {
                         self.menus.pop();
@@ -693,6 +707,10 @@ impl App<'_> {
             }
             AppIntent::Quit => self.quit = true,
             AppIntent::Resume => self.menus.clear(),
+            AppIntent::Controls => {
+                self.menus.push(Menu::Controls);
+                self.controls = ControlsState::default();
+            }
             AppIntent::Pause => {
                 if self.menus.is_empty() {
                     self.menus.push(Menu::Pause);
@@ -854,6 +872,27 @@ impl App<'_> {
                     menus::pause(&mut self.ui, &mut self.menu_state, &info);
                 }
                 Menu::Slots(mode) => menus::slots(&mut self.ui, &mut self.menu_state, mode, &self.slot_rows),
+                Menu::Controls => {
+                    let backend = self.config.backend.clone().unwrap_or_else(|| "auto".into());
+                    let info = ControlsInfo { assist: self.input.assist, backend: &backend };
+                    let out = controls::draw(&mut self.ui, &mut self.controls, &mut self.input.bindings, info);
+                    let mut save = out.bindings;
+                    if out.bindings {
+                        self.config.set_bindings(&self.input.bindings);
+                    }
+                    if let Some(a) = out.assist {
+                        self.input.assist = a;
+                        self.config.set_assist(a);
+                        save = true;
+                    }
+                    if let Some(b) = out.backend {
+                        self.config.backend = Some(b.to_owned());
+                        save = true;
+                    }
+                    if save && let Err(e) = self.config.save(&self.dirs) {
+                        eprintln!("jane-app: {e}");
+                    }
+                }
                 Menu::ConfirmTitle => {
                     if let Some(yes) = menus::confirm(&mut self.ui, &mut self.menu_state, "Quit to the title?") {
                         self.menus.pop();

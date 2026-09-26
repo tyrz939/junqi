@@ -14,5 +14,9 @@ jane-sim.workspace = true
 jane-world.workspace = true
 jane-art.workspace = true
 
+[build-dependencies]
+# build.rs reads data/bindings.json (PORT.md §5): the default bindings are data, checked at build.
+serde_json.workspace = true
+
 [lints]
 workspace = true

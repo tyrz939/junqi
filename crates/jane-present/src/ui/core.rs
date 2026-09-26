@@ -51,6 +51,10 @@ pub struct UiInput {
     pub released: bool,
     /// The secondary button went down.
     pub right_pressed: bool,
+    /// The middle button went down.
+    pub middle_pressed: bool,
+    /// Pad buttons and triggers that went down (press-to-rebind reads them).
+    pub pad_pressed: PadPress,
     /// Wheel notches, up positive.
     pub wheel: i32,
     /// Navigation presses, in order (a pad or the keyboard in a screen).
@@ -67,6 +71,15 @@ impl UiInput {
     pub fn has(&self, a: UiAction) -> bool {
         self.actions.contains(&a)
     }
+}
+
+/// Pad inputs that went down this frame.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct PadPress {
+    /// By [`crate::input::pad`] bit.
+    pub buttons: u32,
+    pub lt: bool,
+    pub rt: bool,
 }
 
 /// How a run of text is drawn.

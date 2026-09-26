@@ -123,7 +123,14 @@ pub fn run(args: &Args) -> Result<(), String> {
     let text_in = video.text_input();
     text_in.stop();
     let mut pump = sdl.event_pump()?;
-    match probe(args.backend, &window)? {
+    // The command line's backend, else the one the Controls screen chose last time.
+    let saved = crate::config::Config::load(&crate::saves::Dirs::find(args.data_dir.as_deref())).backend;
+    let choice = match (args.backend, saved.as_deref()) {
+        (BackendChoice::Auto, Some("soft")) => BackendChoice::Soft,
+        (BackendChoice::Auto, Some("wgpu")) => BackendChoice::Wgpu,
+        (b, _) => b,
+    };
+    match probe(choice, &window)? {
         Some(wgpu) => {
             println!("jane-app: {}", wgpu.describe());
             crate::app::run(args, &mut pump, pads, &text_in, &mut GpuScreen { window, wgpu: Box::new(wgpu) })

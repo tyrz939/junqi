@@ -18,6 +18,8 @@ pub mod chunks;
 pub mod drawlist;
 pub mod frame;
 pub mod input;
+/// The names bindings use in data and in `config.json` (shared with build.rs).
+pub mod input_names;
 pub mod light;
 pub mod people;
 pub mod present;

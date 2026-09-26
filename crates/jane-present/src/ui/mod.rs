@@ -6,6 +6,7 @@
 pub mod art;
 pub mod cmd;
 pub mod console;
+pub mod controls;
 pub mod core;
 pub mod dialogue;
 pub mod hud;

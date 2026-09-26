@@ -7,9 +7,9 @@
 //! aim are quantised to `(Angle, magnitude)` before they become an `InputFrame`, and the raw aim
 //! goes out unbent (the sim does the assist, ARCHITECTURE.md §5.4).
 //!
-//! Bindings are the const [`BINDINGS`] table for now. `data/bindings.json`, compiled in with the
-//! rest of the content, and the per-user overrides in `config.json` replace it at P7; the table
-//! has the shape the data will have (`Binding { action, keys: [Scancode; 2], mouse, pad }`).
+//! Bindings are data: `data/bindings.json`, compiled in by this crate's build script into
+//! [`BINDINGS`] (an unknown name is a build error), with the player's overrides from
+//! `config.json` laid over them into the [`Bindings`] in force.
 
 use jane_core::angle::iatan2;
 use jane_core::{Angle, Fx, Rect, Vec2};
@@ -288,99 +288,17 @@ pub struct Binding {
     pub pad: Option<PadInput>,
 }
 
-const fn row(action: Action, keys: [u16; 2], mouse: Option<MouseButton>, pad: Option<PadInput>) -> Binding {
-    Binding { action, keys, mouse, pad }
-}
-
-#[allow(clippy::unnecessary_wraps)] // the table's `pad` column is an Option; this fills it
-const fn btn(b: u8) -> Option<PadInput> {
-    Some(PadInput::Button(b))
-}
-
-/// The bindings (README's Controls table; the pad column is the 2020 layout). Stands in for
-/// `data/bindings.json` until P7 compiles that in.
-pub const BINDINGS: &[Binding] = &[
-    row(Action::Up, [sc::W, sc::UP], None, btn(pad::DPAD_UP)),
-    row(Action::Down, [sc::S, sc::DOWN], None, btn(pad::DPAD_DOWN)),
-    row(Action::Left, [sc::A, sc::LEFT], None, btn(pad::DPAD_LEFT)),
-    row(Action::Right, [sc::D, sc::RIGHT], None, btn(pad::DPAD_RIGHT)),
-    row(Action::Sprint, [sc::LSHIFT, sc::RSHIFT], None, Some(PadInput::RightTrigger)),
-    row(Action::Use, [sc::E, sc::F], None, btn(pad::B)),
-    row(Action::Bar(0), [sc::N1, sc::SPACE], Some(MouseButton::Left), btn(pad::A)),
-    row(Action::Bar(1), [sc::N1 + 1, 0], None, btn(pad::X)),
-    row(Action::Bar(2), [sc::N1 + 2, 0], None, btn(pad::Y)),
-    row(Action::Bar(3), [sc::N1 + 3, 0], None, btn(pad::LB)),
-    row(Action::Bar(4), [sc::N1 + 4, 0], None, btn(pad::RB)),
-    row(Action::Bar(5), [sc::N1 + 5, 0], None, None),
-    row(Action::Bar(6), [sc::N1 + 6, 0], None, None),
-    row(Action::Bar(7), [sc::N1 + 7, 0], None, None),
-    row(Action::Bags, [sc::TAB, sc::I], None, btn(pad::BACK)),
-    row(Action::Book, [sc::K, 0], None, None),
-    row(Action::Quests, [sc::J, 0], None, None),
-    row(Action::Map, [sc::M, 0], None, None),
-    row(Action::Pause, [sc::ESCAPE, 0], None, btn(pad::START)),
-    row(Action::QuickSave, [sc::F5, 0], None, None),
-    row(Action::QuickLoad, [sc::F9, 0], None, None),
-    row(Action::Console, [sc::GRAVE, 0], None, None),
-    row(Action::Debug, [sc::F2, 0], None, None),
-    row(Action::Grid, [sc::F3, 0], None, None),
-    row(Action::Shot, [sc::F12, 0], None, None),
-    row(Action::Step, [sc::F6, 0], None, None),
-    row(Action::Slow, [sc::F7, 0], None, None),
-    row(Action::Fast, [sc::F8, 0], None, None),
-];
+// `BINDINGS` (the rows of `data/bindings.json`), `ACTIONS`, `PADS` and `MICE` (every name the
+// data and `config.json` may use), compiled by build.rs.
+include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 
 /// A scancode's name as a key cap shows it (`E`, `Space`, `F5`); `?` for one with no name.
 pub fn key_name(code: u16) -> &'static str {
-    const LETTERS: [&str; 26] = [
-        "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V",
-        "W", "X", "Y", "Z",
-    ];
-    const DIGITS: [&str; 10] = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"];
-    const FKEYS: [&str; 12] = ["F1", "F2", "F3", "F4", "F5", "F6", "F7", "F8", "F9", "F10", "F11", "F12"];
-    match code {
-        4..=29 => LETTERS[usize::from(code - 4)],
-        30..=39 => DIGITS[usize::from(code - 30)],
-        58..=69 => FKEYS[usize::from(code - 58)],
-        40 | 88 => "Enter",
-        41 => "Esc",
-        42 => "Back",
-        43 => "Tab",
-        44 => "Space",
-        45 => "-",
-        46 => "=",
-        47 => "[",
-        48 => "]",
-        49 => "\\",
-        51 => ";",
-        52 => "'",
-        53 => "`",
-        54 => ",",
-        55 => ".",
-        56 => "/",
-        57 => "Caps",
-        73 => "Ins",
-        74 => "Home",
-        75 => "PgUp",
-        76 => "Del",
-        77 => "End",
-        78 => "PgDn",
-        79 => "→",
-        80 => "←",
-        81 => "↓",
-        82 => "↑",
-        224 => "Ctrl",
-        225 => "Shift",
-        226 => "Alt",
-        228 => "RCtrl",
-        229 => "RShift",
-        230 => "AltGr",
-        _ => "?",
-    }
+    crate::input_names::KEY_NAMES.iter().find(|k| k.1 == code).map_or("?", |k| k.0)
 }
 
-/// The scancode a cap name names (`key_name`'s inverse, any case; `Escape`, `Return`, `Up` and the
-/// like are taken too).
+/// The scancode a cap name names (`key_name`'s inverse, any case; `Escape`, `Return`, `Up` and
+/// the like are taken too).
 pub fn key_code(name: &str) -> Option<u16> {
     let alias = match name.to_ascii_lowercase().as_str() {
         "escape" => Some(sc::ESCAPE),
@@ -395,42 +313,42 @@ pub fn key_code(name: &str) -> Option<u16> {
         "lctrl" => Some(sc::LCTRL),
         _ => None,
     };
-    if alias.is_some() {
-        return alias;
-    }
-    (1..KEYS as u16).find(|&c| key_name(c) != "?" && key_name(c).eq_ignore_ascii_case(name))
+    alias.or_else(|| crate::input_names::KEY_NAMES.iter().find(|k| k.0.eq_ignore_ascii_case(name)).map(|k| k.1))
 }
 
 /// A pad input's name as a hint shows it.
 pub fn pad_name(p: PadInput) -> &'static str {
-    match p {
-        PadInput::Button(pad::A) => "A",
-        PadInput::Button(pad::B) => "B",
-        PadInput::Button(pad::X) => "X",
-        PadInput::Button(pad::Y) => "Y",
-        PadInput::Button(pad::LB) => "LB",
-        PadInput::Button(pad::RB) => "RB",
-        PadInput::Button(pad::BACK) => "View",
-        PadInput::Button(pad::START) => "Menu",
-        PadInput::Button(pad::DPAD_UP) => "D↑",
-        PadInput::Button(pad::DPAD_DOWN) => "D↓",
-        PadInput::Button(pad::DPAD_LEFT) => "D←",
-        PadInput::Button(pad::DPAD_RIGHT) => "D→",
-        PadInput::Button(pad::LSTICK) => "LS",
-        PadInput::Button(pad::RSTICK) => "RS",
-        PadInput::Button(_) => "?",
-        PadInput::LeftTrigger => "LT",
-        PadInput::RightTrigger => "RT",
-    }
+    PADS.iter().find(|x| x.1 == p).map_or("?", |x| x.0)
+}
+
+/// The pad input a name names.
+pub fn pad_input(name: &str) -> Option<PadInput> {
+    PADS.iter().find(|x| x.0.eq_ignore_ascii_case(name)).map(|x| x.1)
 }
 
 /// A mouse button's name.
 pub fn mouse_name(b: MouseButton) -> &'static str {
-    match b {
-        MouseButton::Left => "Left click",
-        MouseButton::Middle => "Middle click",
-        MouseButton::Right => "Right click",
-    }
+    MICE.iter().find(|x| x.1 == b).map_or("?", |x| x.0)
+}
+
+/// The mouse button a name names.
+pub fn mouse_button(name: &str) -> Option<MouseButton> {
+    MICE.iter().find(|x| x.0.eq_ignore_ascii_case(name)).map(|x| x.1)
+}
+
+/// An action's data name (`"use"`, `"bar3"`).
+pub fn action_name(a: Action) -> &'static str {
+    ACTIONS.iter().find(|x| x.1 == a).map_or("?", |x| x.0)
+}
+
+/// An action's label on the Controls screen.
+pub fn action_label(a: Action) -> &'static str {
+    ACTIONS.iter().find(|x| x.1 == a).map_or("?", |x| x.2)
+}
+
+/// The action a data name names.
+pub fn action(name: &str) -> Option<Action> {
+    ACTIONS.iter().find(|x| x.0 == name).map(|x| x.1)
 }
 
 /// The bindings in force (PRESENTATION.md §4): one row per action, the compiled table with the
