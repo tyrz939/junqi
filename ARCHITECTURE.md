@@ -394,6 +394,8 @@ fn assisted_aim(cx, seat, spell, raw: Angle, profile) -> Angle
   //   (the sticky unit from PlayerState.assist is a candidate inside cone + slack while until >= tick)
   // score: |Angle::diff(raw, bearing)| as an integer, minus a small bonus for unit.target (2°) and a smaller one for the
   //   sticky unit (1°); ties by unit id
+  // a bolt whose raw line passes within the spell's touch of a prop it would switch (shown, not on, answering its school),
+  //   no further along than its flight plus touch and nearer the caster than the best: raw, nothing made sticky
   // best within snap: take its bearing
   // else: raw moved toward it by magnet permille of the difference (mul_div_floor)
   // none: raw. The chosen unit becomes PlayerState.assist { unit, until: tick + sticky_ticks }
