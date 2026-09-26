@@ -1,6 +1,6 @@
 {
   "id": "pipes",
-  "name": "The Castle Pipes",
+  "name": "The Pipes",
   "phase": 3,
   "tiles": { "floor": "PipeFloor", "wall": "PipeWall", "alt": ["DryBed"] },
   "indoor": true,

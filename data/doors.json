@@ -11,7 +11,7 @@
     "zone": "library",
     "chunk": "library",
     "key": "library_door",
-    "label": "The library"
+    "label": "The Ruined Library"
   },
   {
     "zone": "forest",
@@ -38,7 +38,7 @@
     "near": "town",
     "def": "manhole",
     "key": "pipes_grate",
-    "label": "A grate in the road",
+    "label": "The grate to the pipes",
     "mark": "pipes_mouth"
   },
   {

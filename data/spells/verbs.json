@@ -13,7 +13,7 @@
     "world": "grow", "stop": 30
   },
   "spark": {
-    "name": "Spark", "description": "A quick spark. It wakes dead sockets and stops a machine for half a second. It does not stop anything else.", "icon": "spell_shock",
+    "name": "Electric", "description": "A quick spark. It wakes dead sockets and stops a machine for half a second. It does not stop anything else.", "icon": "spell_shock",
     "kind": "bolt", "school": "shock", "mp": 12, "energy": 0, "range": 12, "cooldown": 1.5,
     "gcdImmune": false, "needsTarget": false, "needsEnemy": true, "needsLos": true, "anim": "cast",
     "power": { "stat": "spirit", "div": 1.5, "varDiv": 4 }, "speed": 7, "effect": "jolted", "stop": 20, "glow": 24

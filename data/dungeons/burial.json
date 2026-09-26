@@ -1,6 +1,6 @@
 {
   "id": "burial",
-  "name": "Burial Chamber",
+  "name": "The Burial Chamber",
   "phase": 5,
   "tiles": { "floor": "TempleFloor", "wall": "TempleWall", "alt": [] },
   "indoor": true,

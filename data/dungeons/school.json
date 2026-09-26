@@ -1,6 +1,6 @@
 {
   "id": "school",
-  "name": "Castle School",
+  "name": "The School",
   "phase": 6,
   "tiles": {
     "floor": "SchoolFloor",

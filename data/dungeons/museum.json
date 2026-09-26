@@ -1,6 +1,6 @@
 {
   "id": "museum",
-  "name": "Castle Museum",
+  "name": "The Museum",
   "phase": 2,
   "tiles": { "floor": "MuseumFloor", "wall": "MuseumWall", "alt": [] },
   "indoor": true,
