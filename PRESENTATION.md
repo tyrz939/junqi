@@ -146,7 +146,7 @@ Every visual feature is a row. A row names the tier it needs, its default per ti
 | Mist tile | 8-bit alpha 256 x 256 | 64 KB | §1.9 |
 | UI panels | `u32`, cached by `(w, h, style)` | small | `ART.md`, the chrome section |
 
-CLUT index 0 is clear, index 1 is the contact shadow (`dst x 0.7`); every other index is opaque. There is no per-pixel alpha in an albedo sprite: index 1 or a checker stands in for it. On a GPU the four pages of one layout are bound together, so one sprite quad reads all four in one fragment shader; on `soft` the normal, emissive and height pages are never uploaded.
+CLUT index 0 is clear, index 1 is the contact shadow, a cool multiply of what is under it (`jane_art::palette::AO_TINT`, about `dst x (0.65, 0.67, 0.80)`), softened at its edge by how much of each pixel's 3 x 3 the index-1 mask covers (`palette::ao`; `ART.md` §2.7); every other index is opaque. There is no per-pixel alpha in an albedo sprite: index 1 or a checker stands in for it. On a GPU the four pages of one layout are bound together, so one sprite quad reads all four in one fragment shader; on `soft` the normal, emissive and height pages are never uploaded.
 
 **Sprite blit on `soft`.**
 

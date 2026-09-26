@@ -308,7 +308,7 @@ pub const fn is_pallid(ix: Ix) -> bool {
     ix.0 >= PALLID_BASE && (ix.0 as usize) < LEN
 }
 
-/// A key colour made pallid: greyed by 20 % toward its own luma, then darkened by 14 %.
+/// A colour made pallid: greyed by 20 % toward its own luma, then darkened by 14 %.
 const fn pallid_key(c: u32) -> u32 {
     let [r, g, b] = split(c);
     let l = (299 * r as u32 + 587 * g as u32 + 114 * b as u32) / 1000;
@@ -334,6 +334,18 @@ const fn mix(a: [u8; 3], b: [u8; 3], t: i32) -> [u8; 3] {
     out
 }
 
+/// Tone `k` of `ramp` on `key`: hue-shifted for the ramps [`crate::hue`] lists, else the
+/// step-1 mix toward [`SHADOW_TINT`] and [`LIGHT_TINT`].
+const fn ramp_tone(ramp: Ramp, key: [u8; 3], k: usize, dark: [u8; 3], light: [u8; 3]) -> [u8; 3] {
+    match crate::hue::shadow_hue(ramp) {
+        Some(cool) => crate::hue::tone(key, k, cool, crate::hue::light_hue(ramp)),
+        None => {
+            let m = TONE_MIX[k];
+            if m < 0 { mix(key, dark, -m) } else { mix(key, light, m) }
+        }
+    }
+}
+
 const fn build() -> [[u8; 3]; LEN] {
     let mut t = [[0u8; 3]; LEN];
     // Index 0 is never shown; index 1 is shown only as a darkening. Both hold k so that the
@@ -351,21 +363,20 @@ const fn build() -> [[u8; 3]; LEN] {
         let key = split(Ramp::KEYS[r]);
         let mut k = 0;
         while k < 8 {
-            let m = TONE_MIX[k];
-            let c = if m < 0 { mix(key, dark, -m) } else { mix(key, light, m) };
-            t[RAMP_BASE as usize + r * 8 + k] = c;
+            t[RAMP_BASE as usize + r * 8 + k] = ramp_tone(Ramp::ALL[r], key, k, dark, light);
             k += 1;
         }
         r += 1;
     }
     let mut p = 0;
     while p < PALLID.len() {
-        let key = split(pallid_key(Ramp::KEYS[PALLID[p] as usize]));
+        // Each live tone made pallid, so the twin keeps its ramp's hue shift.
+        let live = RAMP_BASE as usize + PALLID[p] as usize * 8;
         let mut k = 0;
         while k < 8 {
-            let m = TONE_MIX[k];
-            let c = if m < 0 { mix(key, dark, -m) } else { mix(key, light, m) };
-            t[PALLID_BASE as usize + p * 8 + k] = c;
+            let [r, g, b] = t[live + k];
+            let c = (r as u32) << 16 | (g as u32) << 8 | b as u32;
+            t[PALLID_BASE as usize + p * 8 + k] = split(pallid_key(c));
             k += 1;
         }
         p += 1;
@@ -391,6 +402,34 @@ pub fn alpha(ix: Ix) -> u8 {
         Some((Ramp::UiVeil, _)) => 77,
         _ => 255,
     }
+}
+
+/// The contact shadow's multiply per channel in 1/256ths: a cool darkening, blue held up more
+/// than red, so a shadow on grass reads as shade and not as grey.
+pub const AO_TINT: [u16; 3] = [166, 172, 206];
+
+/// The contact shadow over `under`, `cover` of 9 strong: index 1's pixels are a crisp mask, and
+/// the blit softens it by how much of each pixel's 3 x 3 the mask covers (a pixel just outside
+/// the mask takes a little of it), so the shadow has a soft edge and no dither.
+pub fn ao(under: [u8; 3], cover: u32) -> [u8; 3] {
+    let cover = cover.min(9);
+    let mut out = under;
+    for (k, v) in out.iter_mut().enumerate() {
+        let f = 256 - (256 - u32::from(AO_TINT[k])) * cover / 9;
+        *v = (u32::from(*v) * f / 256) as u8;
+    }
+    out
+}
+
+/// How much of the 3 x 3 round `(x, y)` a canvas's contact shadow covers, 0 to 9.
+pub fn ao_cover(c: &crate::Canvas, x: i32, y: i32) -> u32 {
+    let mut n = 0;
+    for dy in -1..=1 {
+        for dx in -1..=1 {
+            n += u32::from(c.get(x + dx, y + dy) == Ix::AO);
+        }
+    }
+    n
 }
 
 /// Rec. 601 luma of `ix` in 0..=255000 (thousandths), for luminance order and contrast tests.
@@ -435,6 +474,47 @@ mod tests {
         }
         assert_eq!(pallor(Ix::INK), Ix::INK);
         assert_eq!(pallor(Ramp::Iron.at(Tone::Base)), Ramp::Iron.at(Tone::Mid));
+    }
+
+    /// The owner's rule for the people's ramps: shadows lean cool, lights lean warm, and the
+    /// chroma peaks in the midtones.
+    #[test]
+    fn hue_shifted_ramps_lean_cool_in_shadow_and_warm_in_light() {
+        use crate::hue::{hsl, light_hue, shadow_hue};
+        let dist = |a: i32, b: i32| {
+            let d = (a - b).rem_euclid(3600);
+            d.min(3600 - d)
+        };
+        let chroma = |c: [u8; 3]| i32::from(*c.iter().max().unwrap()) - i32::from(*c.iter().min().unwrap());
+        for &r in Ramp::ALL {
+            let Some(cool) = shadow_hue(r) else { continue };
+            let warm = light_hue(r);
+            let at = |t: Tone| rgb(r.at(t));
+            let (hb, sb, _) = hsl(at(Tone::Base));
+            let (hd, _, _) = hsl(at(Tone::Deep));
+            let (hg, _, _) = hsl(at(Tone::High));
+            if sb >= 90 {
+                assert!(
+                    dist(hd, cool) < dist(hb, cool) || dist(hb, cool) <= 100,
+                    "{}: deep does not lean cool",
+                    r.name()
+                );
+                assert!(
+                    dist(hg, warm) < dist(hb, warm) || dist(hb, warm) <= 100,
+                    "{}: high does not lean warm",
+                    r.name()
+                );
+            } else {
+                // A grey takes a cool tint in shadow and a warm one in light.
+                assert!(dist(hd, cool) <= 300 && dist(hg, warm) <= 300, "{}: an untinted grey", r.name());
+            }
+            let mid = [Tone::Mid, Tone::Base, Tone::Lift, Tone::Light].iter().map(|&t| chroma(at(t))).max().unwrap();
+            assert!(
+                chroma(at(Tone::Deep)) <= mid && chroma(at(Tone::Glint)) <= mid,
+                "{}: chroma peaks at an end",
+                r.name()
+            );
+        }
     }
 
     #[test]

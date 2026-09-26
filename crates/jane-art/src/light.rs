@@ -50,8 +50,7 @@ pub fn light(c: &Canvas, sun: &Sun, ambient: [u16; 3], ground: Ground) -> Vec<[u
         for x in 0..c.w() {
             let ix = c.get(x, y);
             let base = match ix {
-                Ix::CLEAR => rgb(ground.ix),
-                Ix::AO => rgb(ground.ix).map(|v| (u32::from(v) * 179 / 256) as u8),
+                Ix::CLEAR | Ix::AO => crate::palette::ao(rgb(ground.ix), crate::palette::ao_cover(c, x, y)),
                 _ => rgb(ix),
             };
             let [nx, ny, nz] = decode(c.normal_at(x, y));

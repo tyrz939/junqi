@@ -212,10 +212,12 @@ pub fn put_albedo(img: &mut Image, c: &Canvas, x: u32, y: u32, s: u32) {
             for d in 0..s * s {
                 let (px, py) = (x + cx as u32 * s + d % s, y + cy as u32 * s + d / s);
                 match ix {
-                    Ix::CLEAR => {}
-                    Ix::AO => {
-                        let p = img.get(px, py);
-                        img.set(px, py, rgba(darken([p[0], p[1], p[2]])));
+                    Ix::CLEAR | Ix::AO => {
+                        let cover = palette::ao_cover(c, cx, cy);
+                        if cover > 0 {
+                            let p = img.get(px, py);
+                            img.set(px, py, rgba(palette::ao([p[0], p[1], p[2]], cover)));
+                        }
                     }
                     _ => img.blend(px, py, palette::rgb(ix), palette::alpha(ix)),
                 }
