@@ -65,7 +65,16 @@ cargo jane hash --seed 7 --frames 600                    # a new game stepped, a
 cargo jane sheet light sphere                            # art sheets: layers, light, font, chrome, palette
 ```
 
-Still to come (`PORT.md` §7): the game itself (`cargo run --release -p jane-app`), bots playing seeds (`jane play`, `dossier`), the LAN host (`jane serve`).
+The game, in a window (`PORT.md` §7.1: the window comes before the art, so today the scene is a clear colour until the scene and the soft backend land):
+
+```bash
+cargo run --release -p jane-app -- --seed 7               # no --seed: one from the clock, printed at start
+cargo run --release -p jane-app -- --seed 7 --ticks 300 --shot sheets/app.png   # five seconds, then the canvas as a PNG
+```
+
+WASD or arrows walk, Shift sprints, E or F uses (hold to push), 1–8 press the bar (Space and left click are slot 1; the mouse aims), right mouse held walks toward the cursor, Esc pauses, F12 writes the canvas to a PNG. A pad works in the 2020 layout. Tab, M, `` ` ``, F2 and F3 are bound and do nothing yet: their screens are P7's. The window starts at 1536 x 864 (768 x 432 where that does not fit) and resizes; the picture is always 432 canvas pixels tall, and a wider window shows more county. The title bar shows frames a second and the tick and draw times. `--scale K` starts it at another multiple, `--name` names her.
+
+Still to come (`PORT.md` §7): bots playing seeds (`jane play`, `dossier`), the LAN host (`jane serve`).
 
 Targets: `x86_64` Linux and Windows, `i686` (SSE2, Pentium 4 era), `aarch64` and `armv7` Linux (Raspberry Pi); Windows 7 and XP later through their own toolchains. One dedicated build per target. Rendering picks a backend at boot: `wgpu` on a modern GPU, `gl2` on anything with an OpenGL 2.1 driver (a 2006 PC, every Pi), `soft` when there is nothing. `PORT.md` §3, `PRESENTATION.md` §1.
 
