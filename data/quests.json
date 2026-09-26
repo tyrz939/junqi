@@ -53,7 +53,7 @@
   },
   "the_museum": {
     "name": "The Museum",
-    "description": "The Museum is across the river from Castle, on the road over the bridge, and the brass key from the mine's vault opens its front door. Open until nine. One wing has had its name painted over. The dog wants you to see what was kept in it.",
+    "description": "The Museum is across the river from Castle, on the road over the bridge. It is open ten to four, and the brass key from the mine's vault opens its front door. One wing has had its name painted over. The dog wants you to see what was kept in it.",
     "completion": "You went into the wing that was painted over. The case that was not on the plan held a council key on a green tag.",
     "returnTo": "the dog, on Julie's step, by day",
     "requirements": [

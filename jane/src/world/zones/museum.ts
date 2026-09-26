@@ -1,4 +1,4 @@
-// The Museum. Limestone, four wings off a round hall, opening hours until the bell.
+// The Museum. Limestone, four wings off a round hall, opening hours ten to four.
 //
 // One breaker, two buildings (DUNGEONS.md 3.2). With the lights on it is a museum: the
 // exhibits are solid props on their plinths and one of them stands in the door of the stores.
