@@ -617,10 +617,15 @@ impl Crawl {
         }
         // 6. Plates that are up, and something to push onto one.
         if best.as_ref().is_none_or(|b| b.0 > 6) {
+            // What already holds a plate down stays where it is (else two barrels and two plates
+            // are pushed back and forth for ever).
+            let holding = |t: &Prop| {
+                v.props().any(|q| cat.story.prop(q.def).plate && q.on && prop_rect(q).overlaps(prop_rect(t)))
+            };
             for plate in v.props().filter(|p| !p.hidden && cat.story.prop(p.def).plate && !p.on && reach.beside(p)) {
                 for thing in v.props().filter(|p| {
                     let d = cat.story.prop(p.def);
-                    !p.hidden && d.push && p.solid && reach.beside(p)
+                    !p.hidden && d.push && p.solid && reach.beside(p) && !holding(p)
                 }) {
                     let what = Try::Push(thing.id, plate.id);
                     if !self.fresh(what, sig) {
@@ -640,9 +645,12 @@ impl Crawl {
             }
         }
         // 7. Whatever hostile she can reach; bosses last. One she saw and has walked away from
-        // (it sleeps out of her sight) is walked back to.
+        // (it sleeps out of her sight) is walked back to. With the dungeon's boss down, what is
+        // left (and what has come back since) is walked past: it is fought only when it comes at
+        // her.
+        let cleared = boss_of(self.zone).is_some_and(|b| self.bosses.iter().any(|&(d, _)| d == b));
         for u in sense::enemies(v) {
-            if !fight::fightable(u) || !reach.point(u.pos) {
+            if !fight::fightable(u) || !reach.point(u.pos) || cleared {
                 continue;
             }
             let boss = cat.combat.unit(u.def).boss;
@@ -650,7 +658,7 @@ impl Crawl {
         }
         for (&def, seen) in &cx.seen_foes {
             let d = cat.combat.unit(def);
-            if d.bait.is_some() {
+            if d.bait.is_some() || cleared {
                 continue;
             }
             for (&id, &(z, pos)) in seen {
@@ -659,6 +667,13 @@ impl Crawl {
                 }
                 let t = Task::Walk { to: pos, near: jane_core::Fx::from_px(12) };
                 offer(if d.boss { 9 } else { 7 }, dist(at, pos) + i64::from(4 * CELL_FX), Try::Fight(id), t, &mut best);
+            }
+        }
+        // A boss is met mended: with nothing left but the boss, a bed or a stove she can reach
+        // first, when she is hurt.
+        if best.as_ref().is_some_and(|b| b.0 == 9) && sense::hp_permille(v.body()) < 850 {
+            if let Some(p) = self.rest_in_reach(v).filter(|p| self.tried.get(&Try::Rest(*p)).is_none_or(|t| t.1 < 20)) {
+                return Some((Task::Use(UseProp::new(p)), Try::Rest(p)));
             }
         }
         // 10. Ground she has not seen (what sleeps out of sight wakes as she comes).
