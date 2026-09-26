@@ -36,6 +36,29 @@ fn four_seats_hold_one_hash_for_thousands_of_ticks() {
 }
 
 #[test]
+fn a_session_hosted_from_new_game_is_a_tape_that_replays_to_every_hash() {
+    let mut t = Table::new(HostConfig::default(), Policy::bot(Model::Rusher));
+    assert!(t.host.record());
+    let a = t.knock(81, Policy::bot(Model::Reader));
+    t.seated(a);
+    t.run(900);
+    let b = t.knock(82, Policy::bot(Model::Rusher));
+    t.seated(b);
+    t.run(900);
+    t.peers.remove(a);
+    t.run(1200);
+    let tape = t.host.take_tape().expect("recorded from New Game");
+    assert_eq!(tape.frames, t.host.sim().state().frame);
+    assert_eq!(tape.final_hash(), Some(t.host.sim().hash()));
+    assert!(tape.runs.iter().any(|r| r.commands.iter().any(|c| matches!(c.cmd, jane_sim::Command::Join { .. }))));
+    // Its bytes, re-simulated offline from New Game, land on every hash the host saw.
+    let back = jane_sim::replay::Tape::decode(&tape.encode()).unwrap();
+    let v = jane_sim::replay::verify_tape(&back, bps()).unwrap_or_else(|e| panic!("{e}"));
+    assert_eq!(v.final_hash, t.host.sim().hash());
+    println!("{} frames, {} runs, {} hashes, {} bytes", v.frames, back.runs.len(), v.hashes, tape.encode().len());
+}
+
+#[test]
 fn a_desync_is_found_at_its_hash_point_and_named() {
     let mut t = Table::new(HostConfig::default(), Policy::bot(Model::Rusher));
     let a = t.knock(21, Policy::bot(Model::Reader));

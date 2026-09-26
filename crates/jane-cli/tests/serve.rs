@@ -15,8 +15,10 @@ fn free_port() -> u16 {
 fn serve_and_two_headless_guests_hold_one_hash() {
     let exe = env!("CARGO_BIN_EXE_jane");
     let port = free_port().to_string();
+    let tape = std::env::temp_dir().join(format!("jane-serve-{}.jrp", std::process::id()));
     let host = Command::new(exe)
-        .args(["serve", "--seed", "3", "--port", &port, "--ticks", "900", "--every", "2"])
+        .args(["serve", "--seed", "3", "--port", &port, "--ticks", "900", "--every", "2", "--record"])
+        .arg(&tape)
         .stdout(Stdio::piped())
         .spawn()
         .expect("jane serve starts");
@@ -50,4 +52,10 @@ fn serve_and_two_headless_guests_hold_one_hash() {
     assert!(agreed >= 16, "{checks}");
     assert_eq!(finals[0], finals[1], "both guests end on one hash");
     assert!(host_out.contains(&format!("hash {}", finals[0])), "the host's hash at that frame too: {}", finals[0]);
+    // The session was a tape: re-simulated offline, it lands on every hash the host saw.
+    let v = Command::new(exe).args(["replay", "verify"]).arg(&tape).output().unwrap();
+    let said = String::from_utf8_lossy(&v.stdout).to_string() + &String::from_utf8_lossy(&v.stderr);
+    println!("{said}");
+    assert!(v.status.success(), "{said}");
+    let _ = std::fs::remove_file(&tape);
 }

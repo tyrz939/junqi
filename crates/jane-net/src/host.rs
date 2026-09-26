@@ -179,6 +179,7 @@ pub struct Host {
     notes: Vec<Note>,
     checks: Checks,
     rested: bool,
+    tape: Option<crate::record::SessionTape>,
 }
 
 impl Host {
@@ -218,6 +219,7 @@ impl Host {
             notes: Vec::new(),
             checks: Checks::default(),
             rested: false,
+            tape: None,
         }
     }
 
@@ -283,6 +285,18 @@ impl Host {
 
     /// Whether anyone at the table rested since the last call: the world lives on the host's
     /// machine, so a guest's rest saves it (PLATFORM.md §2).
+    /// Record the session as a `.jrp` tape from here; only a new game not yet stepped can be
+    /// (a tape begins at New Game). Whether recording began.
+    pub fn record(&mut self) -> bool {
+        self.tape = crate::record::SessionTape::new(&self.sim);
+        self.tape.is_some()
+    }
+
+    /// The tape so far, finished with the state's hash, and recording stops.
+    pub fn take_tape(&mut self) -> Option<jane_sim::replay::Tape> {
+        self.tape.take().map(|t| t.finish(&self.sim))
+    }
+
     pub fn take_rested(&mut self) -> bool {
         std::mem::take(&mut self.rested)
     }
@@ -721,6 +735,9 @@ impl Host {
         self.inject.clear();
         let b = Bundle { frame: f, frames, cmds };
         let out = step(&mut self.sim, &b);
+        if let Some(t) = &mut self.tape {
+            t.stepped(&b, out, &self.sim);
+        }
         self.events.clear();
         self.events.extend_from_slice(self.sim.drain_events());
         if self.events.iter().any(|e| e.kind == EventKind::Rest) {

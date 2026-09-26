@@ -16,6 +16,7 @@
 //! | [`host`] | seats, pacing, bundles, stalls, hash checks, desync reports, welcomes |
 //! | [`guest`] | hello, build, welcome, step what the host sends, send this seat's input |
 //! | [`book`] | the recent past each peer keeps: bundles, hashes, saves; re-simulation |
+//! | [`record`] | a session hosted from New Game as a `.jrp` tape |
 //! | [`discovery`] | UDP broadcast `JANE?` / `JANE!` |
 //! | [`session`] | what the app plays through: local, hosting or joined |
 
@@ -26,6 +27,7 @@ pub mod discovery;
 pub mod guest;
 pub mod host;
 pub mod link;
+pub mod record;
 pub mod session;
 pub mod wire;
 

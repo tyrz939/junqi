@@ -18,15 +18,18 @@ use jane_net::{GuestConfig, Host, HostConfig, Phase, Session};
 use jane_sim::{ClientToken, Command, Sim};
 
 pub const USAGE: &str = "  serve [--seed N | --save PATH] [--name NAME] [--port P] [--seats N] [--delay D] [--wait]
-        [--ticks N] [--every S]       host a world headless on the LAN (nobody here plays); one status line
+        [--ticks N] [--every S] [--record TAPE]
+                                      host a world headless on the LAN (nobody here plays); one status line
                                       (tick, seats, hash) every S seconds (default 5); --save is loaded if
-                                      there and written whenever anyone rests and at the end
+                                      there and written whenever anyone rests and at the end; --record writes
+                                      a new game's session as a .jrp (`jane replay verify` re-simulates it)
   join ADDR[:PORT] [--model reader|rusher|idle] [--token N] [--ticks N] [--every S]
                                       a headless guest played by a bot model; the same status line";
 
 struct Opts {
     seed: u32,
     save: Option<PathBuf>,
+    record: Option<PathBuf>,
     name: String,
     port: u16,
     seats: u8,
@@ -43,6 +46,7 @@ fn opts(args: &[String], join: bool) -> Result<Opts, String> {
     let mut o = Opts {
         seed: 1,
         save: None,
+        record: None,
         name: "Jane".into(),
         port: jane_net::wire::DEFAULT_PORT,
         seats: 4,
@@ -61,6 +65,7 @@ fn opts(args: &[String], join: bool) -> Result<Opts, String> {
         match a.as_str() {
             "--seed" => o.seed = u32::try_from(num(value()?)?).map_err(|_| format!("{a}: too big"))?,
             "--save" => o.save = Some(PathBuf::from(value()?)),
+            "--record" => o.record = Some(PathBuf::from(value()?)),
             "--name" => o.name.clone_from(value()?),
             "--port" => o.port = u16::try_from(num(value()?)?).map_err(|_| format!("{a}: not a port"))?,
             "--seats" => o.seats = num(value()?)?.clamp(1, 4) as u8,
@@ -126,6 +131,9 @@ pub fn serve(args: &[String]) -> Result<(), String> {
     };
     let l = TcpListen::bind(o.port).map_err(|e| format!("port {}: {e}", o.port))?;
     let mut host = Host::new(sim, cfg, Box::new(l)).with_port(o.port);
+    if o.record.is_some() && !host.record() {
+        return Err("--record: only a new game is recorded (a tape begins at New Game)".into());
+    }
     match jane_net::discovery::Beacon::bind(o.port) {
         Ok(b) => host = host.with_beacon(b),
         Err(e) => log(&format!("jane serve: no discovery on udp {}: {e}", o.port)),
@@ -172,6 +180,12 @@ pub fn serve(args: &[String]) -> Result<(), String> {
     log(&status(&host, ticks));
     let c = host.checks();
     log(&format!("jane serve: hash checks with guests: {} agreed, {} differed, last at frame {}", c.ok, c.bad, c.last));
+    if let (Some(p), Some(tape)) = (&o.record, host.take_tape()) {
+        match std::fs::write(p, tape.encode()) {
+            Ok(()) => log(&format!("jane serve: the session, {} frames, is the tape {}", tape.frames, p.display())),
+            Err(e) => log(&format!("jane serve: tape {}: {e}", p.display())),
+        }
+    }
     if let Some(p) = &o.save {
         write_save(p, host.sim());
     }
