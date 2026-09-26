@@ -432,6 +432,29 @@ model! {
         /// Derived: what the story cannot go on without (anything that `opens`, anything a quest
         /// asks the party to acquire). Never ages out on the ground; handed on when its holder leaves.
         pub story: bool,
+        /// Derived: another can be had after she destroys this one, because something gives it
+        /// again and again or the county has it lying about everywhere:
+        ///
+        /// - a unit that stands up again drops it (a loot row with a chance, on a unit whose row
+        ///   has a `respawn` or that an ecology population names);
+        /// - a recipe makes it, from inputs that are all replaceable;
+        /// - a trade gives it: a catalog list that takes something and gives this in return and
+        ///   neither starts a quest, hands one in nor sets a flag (so it can be asked again), when
+        ///   what it takes is replaceable;
+        /// - the county's own furnishing holds it (`tuning/country.json`: the herbs it scatters,
+        ///   its roadside chests, its orchards; hundreds a seed).
+        ///
+        /// A chest, a quest reward, a gift in a conversation, a boss's drop: once each, so not
+        /// these. Worked to a fixed point after every group is compiled. Destroy refuses what is
+        /// `bound`, what `opens`, and what is not replaceable.
+        pub replaceable: bool,
+    }
+}
+
+impl ItemDef {
+    /// Destroy refuses it: bound, a key (anything that `opens`), or nothing gives another.
+    pub const fn kept(&self) -> bool {
+        self.bound || self.opens.is_some() || !self.replaceable
     }
 }
 

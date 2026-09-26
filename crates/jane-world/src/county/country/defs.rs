@@ -1,10 +1,10 @@
-//! Every prop, unit, dialogue and item the country furnishers name, looked up in the catalog once
+//! Every prop, unit and dialogue the country furnishers name, looked up in the catalog once
 //! (the scans `prop_id` and friends do are for tools, never a hot path). A name the catalog lacks
 //! is a content error the county tests catch on their first seed.
 
 use std::sync::OnceLock;
 
-use jane_core::{DialogueId, ItemId, PropDefId, UnitDefId};
+use jane_core::{DialogueId, PropDefId, UnitDefId};
 
 macro_rules! table {
     (@id $f:ident) => {
@@ -46,10 +46,6 @@ fn talk(cat: &jane_data::Catalog, id: &str) -> Option<DialogueId> {
     cat.story.dialogue_id(id)
 }
 
-fn item(cat: &jane_data::Catalog, id: &str) -> Option<ItemId> {
-    cat.combat.item_id(id)
-}
-
 table! {
     /// The props.
     Props: PropDefId = prop, "prop" {
@@ -82,26 +78,19 @@ table! {
     }
 }
 
-table! {
-    /// What a chest or a tree holds.
-    Items: ItemId = item, "item" {
-        apple, small_water, wood, white_water_cap, honeylace_lily, coal, iron,
-    }
-}
-
-/// All four tables.
+/// The three tables. What a chest or a tree holds is data (`tuning/country.json`, the catalog's
+/// `county.furnishing`), read where it is placed.
 #[derive(Debug)]
 pub struct Defs {
     pub p: Props,
     pub u: Units,
     pub t: Talks,
-    pub i: Items,
 }
 
 /// The tables, looked up on first use.
 pub fn defs() -> &'static Defs {
     static DEFS: OnceLock<Defs> = OnceLock::new();
-    DEFS.get_or_init(|| Defs { p: Props::load(), u: Units::load(), t: Talks::load(), i: Items::load() })
+    DEFS.get_or_init(|| Defs { p: Props::load(), u: Units::load(), t: Talks::load() })
 }
 
 impl Defs {

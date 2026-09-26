@@ -754,6 +754,8 @@ fn items(src: &Source, cx: &mut Ctx) -> &'static [ItemDef] {
             opens: r.opens.as_deref().map(|o| cx.name(o)),
             bound: r.bound,
             story: r.opens.is_some() || acquired.iter().any(|a| a == id),
+            // Worked once every group is compiled (`late_replaceable`).
+            replaceable: false,
         };
         let i = cx.ids.items.get(id).map_or(0, usize::from);
         out[i] = Some(def);
@@ -761,6 +763,77 @@ fn items(src: &Source, cx: &mut Ctx) -> &'static [ItemDef] {
     // A row that failed to type leaves a hole; the diagnostics already say why, and no catalog
     // is produced, so the hole is never read.
     leak(out.into_iter().map(|d| d.unwrap_or_else(placeholder_item)).collect())
+}
+
+/// Every item's `replaceable` (the rule is on [`ItemDef::replaceable`]), worked once every group
+/// is compiled: the units' respawns and loot, the recipes, every list in the catalog (a trade is
+/// one), the ecology's populations and the county's furnishing. To a fixed point, because a recipe
+/// or a trade makes something replaceable only once what it takes is.
+pub fn late_replaceable(
+    cx: &Ctx,
+    combat: &model::Combat,
+    living: &model::Living,
+    county: &model::County,
+) -> &'static [ItemDef] {
+    let named: Vec<UnitDefId> = living.ecology.iter().flat_map(|e| e.populations.iter().map(|p| p.unit)).collect();
+    let furnished: Vec<ItemId> = county.furnishing.items().collect();
+    replaceable(&cx.lists, combat, &named, &furnished)
+}
+
+/// [`late_replaceable`] over its parts: every catalog list, the ecology's populations, the
+/// county's furnishing.
+fn replaceable(
+    lists: &[Vec<jane_core::action::Action>],
+    combat: &model::Combat,
+    named: &[UnitDefId],
+    furnished: &[ItemId],
+) -> &'static [ItemDef] {
+    use jane_core::action::Action;
+    let mut can = vec![false; combat.items.len()];
+    let set = |i: ItemId, can: &mut Vec<bool>| -> bool {
+        let slot = &mut can[i.index()];
+        let was = *slot;
+        *slot = true;
+        !was
+    };
+    for &i in furnished {
+        set(i, &mut can);
+    }
+    for (n, u) in combat.units.iter().enumerate() {
+        let again = u.respawn.0 > 0 || named.contains(&UnitDefId(n as u16));
+        for l in u.loot.iter().filter(|l| again && l.chance.0 > 0) {
+            set(l.item, &mut can);
+        }
+    }
+    // A trade: takes something, gives something, and leaves nothing behind that stops it being
+    // asked again (no quest started or handed in, no flag set).
+    let mut trades: Vec<(Vec<ItemId>, Vec<ItemId>)> = Vec::new();
+    for list in lists {
+        let takes: Vec<ItemId> =
+            list.iter().filter_map(|a| if let Action::Take(s) = a { Some(s.item) } else { None }).collect();
+        let gives: Vec<ItemId> =
+            list.iter().filter_map(|a| if let Action::Give(s) = a { Some(s.item) } else { None }).collect();
+        let once = list.iter().any(|a| matches!(a, Action::Quest(_) | Action::HandIn(_) | Action::Flag { .. }));
+        if !takes.is_empty() && !gives.is_empty() && !once {
+            trades.push((takes, gives));
+        }
+    }
+    let makes = combat.recipes.iter().map(|r| (r.inputs.to_vec(), vec![r.output])).chain(trades);
+    let makes: Vec<(Vec<ItemId>, Vec<ItemId>)> = makes.collect();
+    loop {
+        let mut more = false;
+        for (from, to) in &makes {
+            if from.iter().all(|i| can[i.index()]) {
+                for &o in to {
+                    more |= set(o, &mut can);
+                }
+            }
+        }
+        if !more {
+            break;
+        }
+    }
+    leak(combat.items.iter().zip(can).map(|(d, replaceable)| ItemDef { replaceable, ..*d }).collect())
 }
 
 fn placeholder_item() -> ItemDef {
@@ -777,6 +850,7 @@ fn placeholder_item() -> ItemDef {
         opens: None,
         bound: false,
         story: false,
+        replaceable: false,
     }
 }
 
@@ -874,6 +948,45 @@ mod tests {
     /// Some error names `at` and says `msg`.
     fn has(errs: &[String], at: &str, msg: &str) -> bool {
         errs.iter().any(|e| e.contains(&format!("{at}:")) && e.contains(msg))
+    }
+
+    /// `ItemDef::replaceable`: a respawning unit's drop, a recipe or a trade over what can be had
+    /// again, the county's furnishing; never a boss's drop, a gift that sets a flag, or what is
+    /// made from a one-off.
+    #[test]
+    fn what_can_be_had_again() {
+        use jane_core::action::{FlagKey, FlagOp};
+        let (c, _) = good();
+        let names = ["meat", "gold", "stew", "pie", "gift", "herb", "ring", "patch"];
+        let items: Vec<ItemDef> = names.iter().map(|&id| ItemDef { id, ..placeholder_item() }).collect();
+        let i = |n: &str| ItemId(names.iter().position(|x| *x == n).unwrap() as u16);
+        let drop = |item: ItemId| leak(vec![LootRoll { item, qty: 1, chance: Permille(400) }]);
+        let units = vec![
+            UnitDef { respawn: Tick(600), loot: drop(i("meat")), ..c.units[0] },
+            UnitDef { respawn: Tick(0), loot: drop(i("gold")), ..c.units[0] },
+            // Stands up only because a patch's population names it.
+            UnitDef { respawn: Tick(0), loot: drop(i("patch")), ..c.units[0] },
+        ];
+        let recipes = vec![
+            RecipeDef { inputs: leak(vec![i("meat")]), output: i("stew"), qty: 1 },
+            RecipeDef { inputs: leak(vec![i("gold")]), output: i("ring"), qty: 1 },
+        ];
+        let combat = model::Combat { items: leak(items), units: leak(units), recipes: leak(recipes), ..c };
+        let stack = |n: &str| jane_core::action::Stack { item: i(n), qty: 1 };
+        let lists = vec![
+            // A trade: stew for a pie, as often as she likes.
+            vec![Action::Take(stack("stew")), Action::Give(stack("pie"))],
+            // A gift that remembers it was given.
+            vec![
+                Action::Take(stack("meat")),
+                Action::Give(stack("gift")),
+                Action::Flag { key: FlagKey::Named(jane_core::Key::Name(jane_core::NameId(0))), op: FlagOp::Set(1) },
+            ],
+        ];
+        let out = replaceable(&lists, &combat, &[UnitDefId(2)], &[i("herb")]);
+        let got: Vec<&str> = out.iter().filter(|d| d.replaceable).map(|d| d.id).collect();
+        assert_eq!(got, ["meat", "stew", "pie", "herb", "patch"]);
+        assert!(out[i("gold").index()].kept() && out[i("ring").index()].kept() && !out[i("pie").index()].kept());
     }
 
     #[test]

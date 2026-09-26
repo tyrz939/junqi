@@ -62,9 +62,51 @@ pub fn compile(src: &Source, cx: &mut Ctx) -> model::County {
         placements: leak(placements),
         stories: leak(stories.defs),
         story_ix: leak(story_ix),
+        furnishing: furnishing(src, cx),
     };
     once_each(cx, &county);
     county
+}
+
+// --- the country's furnishing ----------------------------------------------------------------
+
+const COUNTRY: &str = "tuning/country.json";
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawByRegion {
+    lowfields: Vec<String>,
+    waters: Vec<String>,
+    works: Vec<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawFurnishing {
+    herbs: RawByRegion,
+    chests: RawByRegion,
+    orchard: String,
+}
+
+/// `tuning/country.json`: the herbs, the chests' goods and the orchards' fruit, each an item. A
+/// catalog without the file (a test's fixture) has none.
+fn furnishing(src: &Source, cx: &mut Ctx) -> model::Furnishing {
+    let mut out = model::Furnishing { herbs: [&[]; 3], chests: [&[]; 3], orchard: None };
+    let Some(v) = src.file(COUNTRY) else { return out };
+    let row = Row { file: COUNTRY.to_owned(), value: v.clone() };
+    let Some(raw) = typed::<RawFurnishing>(&row, "country", &mut cx.diag) else { return out };
+    let mut by_region = |what: &str, r: &RawByRegion| -> [&'static [jane_core::ItemId]; 3] {
+        let one = |cx: &mut Ctx, region: &str, names: &[String]| -> &'static [jane_core::ItemId] {
+            let at = format!("{COUNTRY}: {what}.{region}");
+            cx.diag.need(!names.is_empty(), &at, "a region with nothing in it");
+            leak(names.iter().filter_map(|n| cx.item(&at, n)).collect())
+        };
+        [one(cx, "lowfields", &r.lowfields), one(cx, "waters", &r.waters), one(cx, "works", &r.works)]
+    };
+    out.herbs = by_region("herbs", &raw.herbs);
+    out.chests = by_region("chests", &raw.chests);
+    out.orchard = cx.item(&format!("{COUNTRY}: orchard"), &raw.orchard);
+    out
 }
 
 // --- shared ----------------------------------------------------------------------------------

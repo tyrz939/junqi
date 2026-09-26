@@ -50,6 +50,8 @@ pub fn build_source(src: &Source) -> Built {
     combat.units = tables::combat::late_schedules(src, &mut cx, combat.units);
     county.stories = tables::county::late_spreads(src, &mut cx, county.stories);
     let living = tables::living::compile(src, &mut cx, &county);
+    // What another can be had of, once everything that gives one is known.
+    combat.items = tables::combat::late_replaceable(&cx, &combat, &living, &county);
     check_limits(&mut cx);
 
     let mut catalog = Catalog {

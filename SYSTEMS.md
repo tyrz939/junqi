@@ -158,7 +158,7 @@ The pipeline is the product: validate → spawn a kind → pay only if valid →
 | Crafting needs a bench in reach | **SHAPE** |
 | Ground drops live in zone state (survive travel and saves); story drops never expire | **IN** — D: keys looted from drops |
 | Rewards that do not fit land at your feet | **IN** — S: "never loses a reward when the bag is full" |
-| Bound items and story items (keys, anything a quest asks for) refuse destroy; nothing drops from the bag | **SHAPE** |
+| Destroy refuses what is bound, every key (anything that `opens`), and anything that cannot be had again (`ItemDef.replaceable`, compiled: a respawning unit's drop, a recipe or a trade over replaceable inputs, or the country's herbs, chests and orchards; `tuning/country.json`). An apple or wood goes; a key, a quest's one glove, the gold bar do not. Rust only: the TypeScript refuses bound items alone. Nothing drops from the bag | **SHAPE** |
 | Hunger / warmth | **NEVER** — JaneCraft, not Jane. The 2026 version was inert |
 
 ## 5. Quests / dialogue

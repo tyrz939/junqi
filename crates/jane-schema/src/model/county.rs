@@ -13,7 +13,9 @@
 use std::fmt::Write;
 
 use jane_core::action::{CondsRef, Facing, FlagKey, ListRef, Stack};
-use jane_core::ids::{DialogueId, DungeonId, NameId, PropDefId, QuestId, SpellId, StoryId, TextId, UnitDefId, ZoneId};
+use jane_core::ids::{
+    DialogueId, DungeonId, ItemId, NameId, PropDefId, QuestId, SpellId, StoryId, TextId, UnitDefId, ZoneId,
+};
 use jane_core::num::Tick;
 
 use crate::emit::Emit;
@@ -760,6 +762,27 @@ model! {
         pub stories: &'static [StoryDef],
         /// `StoryId` to its index in `stories`.
         pub story_ix: &'static [u16],
+        pub furnishing: Furnishing,
+    }
+}
+
+model! {
+    /// What the open country has lying about (`data/tuning/country.json`): the herbs the county
+    /// scatters, what its roadside chests hold and what its orchards bear, by region in region
+    /// order. The county builder reads it (`jane_world::county::finish::scatter`,
+    /// `country::furnish`), and an item's `replaceable` flag counts it: there are hundreds of each
+    /// a seed.
+    pub struct Furnishing {
+        pub herbs: [&'static [ItemId]; 3],
+        pub chests: [&'static [ItemId]; 3],
+        pub orchard: Option<ItemId>,
+    }
+}
+
+impl Furnishing {
+    /// Everything it holds, herbs first: each item as often as it is named.
+    pub fn items(&self) -> impl Iterator<Item = ItemId> + '_ {
+        self.herbs.iter().chain(&self.chests).flat_map(|l| l.iter().copied()).chain(self.orchard)
     }
 }
 

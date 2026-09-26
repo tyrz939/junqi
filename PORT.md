@@ -302,7 +302,7 @@ The streams test carries.
 
 ### 6.g Tuning to data
 
-`data/tuning/skeleton.json`, `county.json`, `country.json`, `dungeon.json`, `chunks.json` (and `sim.json` for the sim's tables, `ARCHITECTURE.md` §6): every constant the audit listed, integers or `Q16`. Builders take `&Tuning`; the static is the default; the streams test flips a value in memory. Structural constants (`CELL`, `TICK_RATE`, `RING_BLOCK`, `PATH_WINDOW`, `MAX_PLAYERS`) stay Rust `const`.
+`data/tuning/skeleton.json`, `county.json`, `country.json`, `dungeon.json`, `chunks.json` (and `sim.json` for the sim's tables, `ARCHITECTURE.md` §6): every constant the audit listed, integers or `Q16`. Builders take `&Tuning`; the static is the default; the streams test flips a value in memory. *So far:* `chunks.json`, `sim.json`, and `country.json`'s item lists (the herbs the county scatters, what its roadside chests hold and its orchards bear, by region: the catalog's `county.furnishing`, which an item's `replaceable` flag also counts). Structural constants (`CELL`, `TICK_RATE`, `RING_BLOCK`, `PATH_WINDOW`, `MAX_PLAYERS`) stay Rust `const`.
 
 ### 6.h Camera size in one place
 

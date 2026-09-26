@@ -839,40 +839,63 @@ fn items_ask_for_the_cooldowns_and_say_why_not() {
     );
 }
 
+/// Destroy lets go of what can be had again and keeps the rest: a bound thing, every key, and
+/// anything nothing gives a second of (`ItemDef::replaceable`).
 #[test]
-fn bags_merge_and_swap_and_a_bound_or_story_thing_is_never_destroyed() {
+fn bags_merge_and_swap_and_only_what_can_be_had_again_is_destroyed() {
     let mut s = common::new_game();
     let bag = |s: &Sim| s.state().players[0].bag.clone();
-    let letter = bag(&s).iter().position(|x| x.is_some_and(|x| x.item == item("julies_letter"))).unwrap() as u8;
+    let slot_of = |s: &Sim, it: jane_core::ItemId| -> u8 {
+        bag(s).iter().position(|x| x.is_some_and(|x| x.item == it)).unwrap() as u8
+    };
+    let letter = slot_of(&s, item("julies_letter"));
     events(&mut s);
     cmd(&mut s, Command::BagDestroy { slot: letter });
     assert!(toasts(&events(&mut s)).contains(&ToastKind::ShouldKeep));
     assert_eq!(holds(&s, "julies_letter"), 1);
-    let apple = bag(&s).iter().position(|x| x.is_some_and(|x| x.item == item("apple"))).unwrap() as u8;
+    let apple = slot_of(&s, item("apple"));
     cmd(&mut s, Command::BagMove { from: apple, to: 20 });
     assert_eq!(bag(&s)[20].map(|x| x.item), Some(item("apple")));
     assert_eq!(bag(&s)[usize::from(apple)], None);
     cmd(&mut s, Command::Dev(DevOp::Give { item: item("apple"), qty: 2 }));
     let first = bag(&s).iter().position(|x| x.is_some_and(|x| x.item == item("apple"))).unwrap();
     assert_eq!(first, 20, "a gift tops up the stack it has");
-    // An apple is a story thing (a quest asks for one): kept. Gold is not: gone.
+    // An apple (a quest asks for one, so a story thing) can be had again: the county's chests
+    // and orchards hold them, and the gardener trades one for rat meat. Gone.
+    let cat = jane_data::catalog();
+    assert!(cat.combat.item(item("apple")).story && cat.combat.item(item("apple")).replaceable);
     cmd(&mut s, Command::BagDestroy { slot: 20 });
-    assert_eq!(holds(&s, "apple"), 5);
-    assert!(!jane_data::catalog().combat.item(item("gold_bar")).story);
-    cmd(&mut s, Command::Dev(DevOp::Give { item: item("gold_bar"), qty: 2 }));
-    let gold = bag(&s).iter().position(|x| x.is_some_and(|x| x.item == item("gold_bar"))).unwrap() as u8;
-    cmd(&mut s, Command::BagDestroy { slot: gold });
-    assert_eq!(holds(&s, "gold_bar"), 0);
-    // A story key is not bound, and is kept all the same: nothing gives a second.
-    for key in ["key_forest", "key_tower", "key_mine_boss", "key_burial"] {
-        let def = jane_data::catalog().combat.item(item(key));
-        assert!(!def.bound && def.story, "{key}: a story item, not a bound one");
-        cmd(&mut s, Command::Dev(DevOp::Give { item: item(key), qty: 1 }));
-        let slot = bag(&s).iter().position(|x| x.is_some_and(|x| x.item == item(key))).unwrap() as u8;
+    assert_eq!(holds(&s, "apple"), 0);
+    // Wood, from any roadside chest in the Lowfields: gone too.
+    cmd(&mut s, Command::Dev(DevOp::Give { item: item("wood"), qty: 2 }));
+    let wood = slot_of(&s, item("wood"));
+    cmd(&mut s, Command::BagDestroy { slot: wood });
+    assert_eq!(holds(&s, "wood"), 0);
+    // Every key is kept, bound or not. Each is taken back out of the bag by hand after, so the
+    // next has room.
+    for (n, def) in cat.combat.items.iter().enumerate().filter(|(_, d)| d.opens.is_some()) {
+        let key = jane_core::ItemId(n as u16);
+        let before = holds(&s, def.id);
+        cmd(&mut s, Command::Dev(DevOp::Give { item: key, qty: 1 }));
+        let slot = slot_of(&s, key);
         events(&mut s);
         cmd(&mut s, Command::BagDestroy { slot });
-        assert!(toasts(&events(&mut s)).contains(&ToastKind::ShouldKeep), "{key}");
-        assert_eq!(holds(&s, key), 1, "{key} is kept");
+        assert!(toasts(&events(&mut s)).contains(&ToastKind::ShouldKeep), "{}", def.id);
+        assert_eq!(holds(&s, def.id), before + 1, "{} is kept", def.id);
+        if before == 0 {
+            s.state_mut().players[0].bag[usize::from(slot)] = None;
+        }
+    }
+    // One-offs: the glove on the well wall (the one lost-property quest's), and the Company's
+    // gold bar, which only Iron Knuckles carries.
+    for one in ["lost_glove", "gold_bar"] {
+        assert!(!cat.combat.item(item(one)).replaceable, "{one}");
+        cmd(&mut s, Command::Dev(DevOp::Give { item: item(one), qty: 1 }));
+        let slot = slot_of(&s, item(one));
+        events(&mut s);
+        cmd(&mut s, Command::BagDestroy { slot });
+        assert!(toasts(&events(&mut s)).contains(&ToastKind::ShouldKeep), "{one}");
+        assert_eq!(holds(&s, one), 1, "{one} is kept");
     }
 }
 
@@ -966,7 +989,7 @@ fn never_loses_a_reward_when_the_bag_is_full() {
     let cat = jane_data::catalog();
     let mut s = common::new_game();
     for _ in 0..40 {
-        cmd(&mut s, Command::Dev(DevOp::Give { item: item("gold_bar"), qty: 16 }));
+        cmd(&mut s, Command::Dev(DevOp::Give { item: item("wood"), qty: 16 }));
     }
     assert!(s.state().players[0].bag.iter().all(Option::is_some));
     let drops = s.state().zone(ZoneId::County).unwrap().drops.len();
@@ -985,7 +1008,7 @@ fn never_loses_a_reward_when_the_bag_is_full() {
     assert_eq!(z.drops.len(), drops + 1);
     assert_eq!(z.drops.last().unwrap().item, item("key_auntie_house"));
     // Picked up again once there is room.
-    let slot = s.state().players[0].bag.iter().position(|x| x.is_some_and(|x| x.item == item("gold_bar"))).unwrap();
+    let slot = s.state().players[0].bag.iter().position(|x| x.is_some_and(|x| x.item == item("wood"))).unwrap();
     cmd(&mut s, Command::BagDestroy { slot: slot as u8 });
     assert_eq!(s.view(Seat(0)).unwrap().focus().map(|f| f.verb), Some(Verb::Take(item("key_auntie_house"))));
     cmd(&mut s, Command::Use);

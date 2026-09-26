@@ -38,7 +38,8 @@
 //! - an empty screen with no room for a clearing gets flowers on any open cell.
 //!
 //! The tables that were constants in the TypeScript are Rust `const`s here, marked *tuning*: they
-//! move to `data/tuning/country.json` with PORT.md §6.g.
+//! move to `data/tuning/country.json` with PORT.md §6.g. What a chest and an orchard hold is there
+//! already (the catalog's `county.furnishing`, which an item's `replaceable` flag counts).
 
 pub mod defs;
 pub mod furnish;

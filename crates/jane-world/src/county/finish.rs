@@ -19,9 +19,6 @@ const HERBS: u32 = 700;
 const ROCKS: u32 = 260;
 /// Scatter keeps this far in from the county's edge.
 const SCATTER_EDGE: i32 = 10;
-const FIELD_HERBS: &[&str] = &["pansy", "nasturtium", "honeylace_lily", "hemshade_root"];
-const WATER_HERBS: &[&str] = &["white_water_cap", "white_water_rose", "honeylace_lily", "night_lich_moss"];
-const WORKS_HERBS: &[&str] = &["night_lich_moss", "savage_snakeroot", "hemshade_root"];
 /// Cells a way cut out to the reached country may search: a few dozen cells of thicket, never a
 /// search of half the county.
 const CUT_BUDGET: u32 = 400_000;
@@ -38,10 +35,8 @@ pub fn scatter(c: &mut County<'_>) {
     let cat = jane_data::catalog();
     let herb = cat.story.prop_id("herb").expect("a herb row");
     let rock = cat.story.prop_id("rock").expect("a rock row");
-    let items = |names: &[&str]| -> Vec<jane_core::ItemId> {
-        names.iter().map(|n| cat.combat.item_id(n).unwrap_or_else(|| panic!("no item {n}"))).collect()
-    };
-    let (field, water, works) = (items(FIELD_HERBS), items(WATER_HERBS), items(WORKS_HERBS));
+    // By region, from `tuning/country.json` (what an item's `replaceable` flag counts too).
+    let [field, water, works] = cat.county.furnishing.herbs;
     let (x1, y1) = (c.k.w() - SCATTER_EDGE - 1, c.k.h() - SCATTER_EDGE - 1);
     let mut rng = c.k.dice(Step::CountyHerbs, 0, 0);
     for _ in 0..HERBS {
@@ -52,9 +47,9 @@ pub fn scatter(c: &mut County<'_>) {
             continue;
         }
         let herbs = match c.sk.region_at(x >> 4, y >> 4) {
-            Region::Lowfields => &field,
-            Region::Waters => &water,
-            Region::Works => &works,
+            Region::Lowfields => field,
+            Region::Waters => water,
+            Region::Works => works,
         };
         let item = herbs[((u64::from(pick) * herbs.len() as u64) >> 32) as usize];
         c.k.prop(None, herb, x, y).loot = vec![Stack { item, qty: 1 }];

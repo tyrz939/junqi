@@ -3,10 +3,13 @@
 //! keyed by sorted inputs. Everything here runs inside a zone's context for one seat; the
 //! slot arithmetic is `bag.rs`.
 //!
-//! - **Bound items** (keys the story is using, Julie's letter) refuse to be destroyed.
-//! - **Story items** (anything that opens a lock, anything a quest asks her to bring) refuse to
-//!   be destroyed too, are handed on when their holder leaves (`seats.rs`) and never age out.
-//!   There is no dropping from the bag, so destroying is the one way a thing leaves it unasked.
+//! - **Bound items** (keys the story is using, Julie's letter) refuse to be destroyed, and so do
+//!   keys (anything that opens a lock) and anything that cannot be had again
+//!   (`ItemDef::replaceable`, worked out at build). There is no dropping from the bag, so
+//!   destroying is the one way a thing leaves it unasked.
+//! - **Story items** (anything that opens a lock, anything a quest asks her to bring) are handed
+//!   on when their holder leaves (`seats.rs`) and never age out on the ground: what the party's
+//!   story needs held now, a rat's meat for a count as much as a key.
 //! - **Using an item** needs the global cooldown clear and its own cooldown; it starts both and
 //!   roots her for half a second. Keys are never used from the bag: doors ask for them
 //!   (`interact.rs`), one path for every key.
@@ -101,14 +104,16 @@ pub fn move_slot(cx: &mut Ctx<'_>, seat: Seat, from: u8, to: u8) {
     }
 }
 
-/// Drag out of the window. A bound item refuses, and so does a story item: the keys the
-/// dungeons and the tales open with, the things a quest asks for. Without one of them the story
-/// cannot go on, and nothing gives a second.
+/// Drag out of the window. A bound item refuses, and so does a key (anything that opens a lock)
+/// and anything nothing gives a second of (`ItemDef::replaceable`: no unit that stands up again
+/// drops it, no recipe or trade makes it from what can be had again, the country does not have
+/// it lying about). An apple, wood, a rat's meat go; the tower key and a quest's one lost glove
+/// do not.
 pub fn destroy(cx: &mut Ctx<'_>, seat: Seat, slot: u8) -> bool {
     let Some(p) = cx.world.players.get_mut(seat.index()) else { return false };
     let Some(s) = p.bag.get(usize::from(slot)).copied().flatten() else { return false };
     let def = cx.cat.combat.item(s.item);
-    if def.bound || def.story {
+    if def.kept() {
         cx.emit(EventKind::Toast(ToastKind::ShouldKeep));
         return false;
     }

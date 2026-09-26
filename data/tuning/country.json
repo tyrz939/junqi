@@ -1,0 +1,13 @@
+{
+  "herbs": {
+    "lowfields": ["pansy", "nasturtium", "honeylace_lily", "hemshade_root"],
+    "waters": ["white_water_cap", "white_water_rose", "honeylace_lily", "night_lich_moss"],
+    "works": ["night_lich_moss", "savage_snakeroot", "hemshade_root"]
+  },
+  "chests": {
+    "lowfields": ["apple", "small_water", "wood"],
+    "waters": ["small_water", "white_water_cap", "honeylace_lily"],
+    "works": ["coal", "iron", "small_water"]
+  },
+  "orchard": "apple"
+}

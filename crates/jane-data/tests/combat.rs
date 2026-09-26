@@ -207,3 +207,27 @@ fn the_apple_heals_a_quarter() {
     let apple = k.item(k.item_id("apple").unwrap());
     assert_eq!(list(apple.use_list), &[Action::Heal(Heal::Pct(Permille(250)))]);
 }
+
+/// What can be had again (`ItemDef::replaceable`), on the real data: the county's furnishing, a
+/// respawning unit's drop, a recipe and a trade over those; never a one-off. Printed: what
+/// destroy keeps.
+#[test]
+fn what_can_be_had_again_and_what_destroy_keeps() {
+    let k = &c().combat;
+    let is = |id: &str| k.item(k.item_id(id).unwrap_or_else(|| panic!("no item {id}"))).replaceable;
+    // Lying about the county (herbs, chests, orchards).
+    for id in ["apple", "wood", "small_water", "pansy", "white_water_rose", "coal", "iron"] {
+        assert!(is(id), "{id}: the country has it lying about");
+    }
+    // Dropped by what stands up again: rats (rat meat), quarrymen (rock).
+    assert!(is("rat_meat") && is("rock"));
+    // Made from those: stone from rock, Stone Skin from stone, water and a rose, poisoned meat.
+    assert!(is("stone") && is("potion_stoneskin") && is("poisoned_rat_meat"));
+    // Once each: a boss's drop, what is made only from it, a quest's one thing, a tale's.
+    for id in ["gold_bar", "gold_dust", "lost_glove", "net", "tale_lamp_oil"] {
+        assert!(!is(id), "{id}: nothing gives a second");
+    }
+    assert!(k.items.iter().filter(|d| d.opens.is_some()).all(jane_data::ItemDef::kept), "every key is kept");
+    let kept: Vec<&str> = k.items.iter().filter(|d| d.kept()).map(|d| d.id).collect();
+    println!("destroy keeps {} of {} items: {}", kept.len(), k.items.len(), kept.join(", "));
+}

@@ -320,7 +320,7 @@ The `budget` test's 3 000 corpses still stand up on schedule, for a `Vec` pop in
 
 ### 4.5 Seats
 
-`Join` chooses the arrival (the party's `rest`, else the county start), reuses a parked body by token, else creates one with the start kit into `PlayerState.bag` and bar, and catches growth up. `Leave` puts the carried prop down, calls `forget_unit`, parks the body, and hands story items (`ItemDef.story`, compiled: anything with `opens` or an `acquire` target) to the lowest connected seat, overflow at her feet. `Open` is seat 0 only. Every change emits `Event::Party { connected }`.
+`Join` chooses the arrival (the party's `rest`, else the county start), reuses a parked body by token, else creates one with the start kit into `PlayerState.bag` and bar, and catches growth up. `Leave` puts the carried prop down, calls `forget_unit`, parks the body, and hands story items (`ItemDef.story`, compiled: anything with `opens` or an `acquire` target) to the lowest connected seat, overflow at her feet: what the party's story needs held now, a rat's meat for a count as much as a key. That is not destroy's notion (`inventory::destroy` keeps what is bound, what `opens`, and what is not `ItemDef.replaceable`, what cannot be had again): a guest leaving with the party's count would stop a quest whatever the county could give later, while a potion nothing gives twice is hers to keep or drink. `Open` is seat 0 only. Every change emits `Event::Party { connected }`.
 
 ### 4.6 Schedules, weather, ecology, consequence
 

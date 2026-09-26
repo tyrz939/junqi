@@ -37,13 +37,13 @@ fn holding(c: &mut County<'_>, def: PropDefId, x: i32, y: i32, loot: Vec<Stack>)
 
 /// What a chest out here holds: something of its region's, one to three of it.
 fn loot(c: &County<'_>, rng: &mut Sfc32, x: i32, y: i32) -> Vec<Stack> {
-    let i = &defs().i;
+    let [low, waters, works] = jane_data::catalog().county.furnishing.chests;
     let items = match ground(c.sk, x, y).region {
-        Region::Lowfields => [i.apple, i.small_water, i.wood],
-        Region::Waters => [i.small_water, i.white_water_cap, i.honeylace_lily],
-        Region::Works => [i.coal, i.iron, i.small_water],
+        Region::Lowfields => low,
+        Region::Waters => waters,
+        Region::Works => works,
     };
-    let item = pick(rng, &items);
+    let item = pick(rng, items);
     vec![Stack { item, qty: 1 + rng.irandom(2) as u16 }]
 }
 
@@ -382,7 +382,11 @@ fn orchard(c: &mut County<'_>, rng: &mut Sfc32, d: &Defs, x0: i32, y0: i32) {
     for j in 0..3 {
         for i in 0..4 {
             let picked = chance(rng, 500);
-            let loot = if picked { Vec::new() } else { vec![Stack { item: d.i.apple, qty: 1 }] };
+            let fruit = jane_data::catalog().county.furnishing.orchard;
+            let loot = match fruit.filter(|_| !picked) {
+                Some(item) => vec![Stack { item, qty: 1 }],
+                None => Vec::new(),
+            };
             holding(c, d.p.apple_tree, x0 + 2 + i * 5, y0 + 2 + j * 5, loot);
         }
     }
