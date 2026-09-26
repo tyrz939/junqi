@@ -128,7 +128,9 @@ fn respawn(cx: &mut Ctx<'_>, id: UnitId) {
 
 /// A dead seat's `respawn_at` has come (step 6). Death is harsh on purpose: she wakes at the
 /// party's last bed or fire, however far that is (another zone: travel at step 14, like every
-/// other zone change); before anyone has rested, at the door she came in by.
+/// other zone change). New Game makes the Halt fire the party's (`Sim::first_rest`), so before
+/// anyone has rested she wakes there, never at a door she has walked through since; the door
+/// she came in by is the fallback only for a county with no fire.
 pub fn revive_player(cx: &mut Ctx<'_>, seat: Seat) {
     let now = cx.world.tick;
     let p = &mut cx.world.players[seat.index()];

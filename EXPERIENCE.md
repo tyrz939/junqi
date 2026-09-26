@@ -63,9 +63,9 @@ Times are **real minutes after New Game**, then the clock. One game hour is two 
 ### 5:00 to 6:30 · 19:30 to 20:15 · The yard skeleton
 
 - **Sees / hears / can do.** One skeleton, phase 1, walking the fence. Melee only. A bar over its head and no number. She wins in a few swings; she can lose.
-- **Knows.** What a swing costs and what a hit costs. **Does not:** that dying now wakes her at the platform: the door she came in by, before any rest.
+- **Knows.** What a swing costs and what a hit costs. **Does not:** that dying now wakes her at the Halt fire on the platform: the party's fire from New Game, until she rests somewhere else.
 - **Meanwhile.** Nothing else in the yard. Nothing comes through the fence.
-- **Checks.** `[L4:first_fight is the yard skeleton inside Julie's fence]` `[L1:one skeleton inside the fence, none within a screen outside it]` `[L6:wake at the start before the first rest]` `[L5:enemy health is never a number]`
+- **Checks.** `[L4:first_fight is the yard skeleton inside Julie's fence]` `[L1:one skeleton inside the fence, none within a screen outside it]` `[L6:wake at the Halt fire before the first rest]` `[L5:enemy health is never a number]`
 - **Varies.** The Co-op pair fights it at 62% each: §3.
 
 ### 6:00 to 7:30 · 20:00 to 20:45 · The key
@@ -146,11 +146,11 @@ Times are **real minutes after New Game**, then the clock. One game hour is two 
 
 A second seat joins at real minute 5, while seat 1 stands at the stoop.
 
-- **Sees / hears / can do.** The guest appears at the party's last fire. Nobody has rested, so that is the door the party came in by: **the platform at Castle Halt**, 17:15 by the clock, the same sunset. A toast to both: the head count has changed. She has the same name and a different coat. She walks the same road, alone, at 62%: still threat 1, still nothing on it. Seat 1 reads the dog's offer while the world runs; nothing pauses. The skeleton is fought together at 124%, or by one at 62%.
+- **Sees / hears / can do.** The guest appears at the party's last fire. Nobody has rested, so that is the fire the party started by: **the Halt fire on the platform at Castle Halt**, 17:15 by the clock, the same sunset. A toast to both: the head count has changed. She has the same name and a different coat. She walks the same road, alone, at 62%: still threat 1, still nothing on it. Seat 1 reads the dog's offer while the world runs; nothing pauses. The skeleton is fought together at 124%, or by one at 62%.
 - **Knows.** The journal is the world's: the guest opens it and sees the letter done and the bones offered. **Does not:** the guest has no pansy: bags are hers. One potion is made, by one of them; the orb teaches both.
 - **Meanwhile.** The same lamps at real minute 3 for the host; the guest arrives after them. The same bell at real minute 8 for both. The dog leaves for both.
-- **Checks.** `[L6:a joiner arrives at the party's rest point, the start before the first rest]` `[L6:the penalty by head count, everywhere, never on healing]` `[L6:quests, flags, growth and the rest point are the world's; bags are the seat's]` `[L6:the key paid to both]` `[L5:the journal reads the same from either seat]` `[L4:the pair together survives the yard; split, each is warned]`
-- **Varies.** If the guest rests at the platform fire before the host sleeps, the party's rest point is the platform, and whoever dies in the yard walks back from there. The bed sleeps the clock only when both are resting. A guest leaving hands the house key to the host.
+- **Checks.** `[L6:a joiner arrives at the party's rest point, the Halt fire before the first rest]` `[L6:the penalty by head count, everywhere, never on healing]` `[L6:quests, flags, growth and the rest point are the world's; bags are the seat's]` `[L6:the key paid to both]` `[L5:the journal reads the same from either seat]` `[L4:the pair together survives the yard; split, each is warned]`
+- **Varies.** Until one of them rests somewhere else, the party's rest point is the Halt fire, and whoever dies in the yard walks back from there. The bed sleeps the clock only when both are resting. A guest leaving hands the house key to the host.
 
 ---
 

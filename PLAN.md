@@ -114,7 +114,7 @@ Whole game: three regions, six dungeons, 50–60 quests, roughly 15–25 hours. 
 ### 2.5 Harshness
 
 - No fast travel. No map markers beyond what Jane has seen or been told.
-- **Beds and fires** *(decided, built)*: the game saves only within reach of a bed or a fire, resting at one is the save, and dying wakes you at the last one you used, however far that is. A bed can also sleep the clock to morning. Before the first rest you wake at the door you came in by. Placing fires is therefore level design: the distance between two fires is the length of a run.
+- **Beds and fires** *(decided, built)*: the game saves only within reach of a bed or a fire, resting at one is the save, and dying wakes you at the last one you used, however far that is. A bed can also sleep the clock to morning. Before the first rest you wake at the Halt fire, the party's from New Game: never resting is never the better plan. Placing fires is therefore level design: the distance between two fires is the length of a run.
 - Bags are 24 slots and stay 24.
 
 ### 2.6 Danger: how difficulty is laid out
