@@ -259,7 +259,7 @@ The last attempt (`ZONE_ATTEMPTS - 1`) stamps the mission's hand-placed `fallbac
 | **Butterfly Forest** | 3 | Grow (given) | The first outdoor dungeon. No doors and not one key: light is the lock and a living thing is the key. Grow blooms a bud (whose `use` `send`s a butterfly to it), bridges a stream, and **closes** a hedge gap |
 | **The pipes** | 3 | none | The approach to the Works. One valve, two runs, and exactly one of them open at a time. What lasts is four manholes, each dead until its ladder is mended from below and then a way into the county for good |
 | **The Factory** | 4 | Electric (found) | Light is how the machines see you. Crossed once in the dark to the vent drop, the Charge Hand and Julie's orb wired into the generator; then again with every lamp awake |
-| **Castle School** | 6 | none: it examines all six | The building follows its timetable. The bell rope toggles lessons and break and six classroom doors follow it; each wing ends at a clock she stops, and six clocks and the Caretaker's key open the tower |
+| **The School** | 6 | none: it examines all six | The building follows its timetable. The bell rope toggles lessons and break and six classroom doors follow it; each wing ends at a clock she stops, and six clocks and the Caretaker's key open the tower |
 | **Burial Chamber** | 5 | Fire (found) | Cold light shows what is there; warm light keeps it off. Four corners in the player's own order, shades that will not step into a brazier's light, a great torch pushed one cell at a time like a moving safe room, and Goldskin, gilded until fire softens him |
 
 Three things the later ones taught the engine, each written down because the next author would hit it too:

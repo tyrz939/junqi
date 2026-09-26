@@ -200,7 +200,7 @@ The generator returns an ordinary `Blueprint` through `Kit`, so `buildZone`, the
 // data/dungeons/<id>.json : one per dungeon. Authored. The generator never edits it.
 type DungeonDef = {
   id: ZoneId;                         // "mine"
-  name: string;                       // "Goldskin Mine"
+  name: string;                       // "The Gold Mine"
   phase: 1 | 2 | 3 | 4 | 5 | 6;       // DESIGN-2020 3.1. Becomes UnitSpawn.phase on every unit
   tiles: { floor: Tile; wall: Tile; alt: Tile[] };
   indoor: boolean;
@@ -437,7 +437,7 @@ The existing flood stays. It gains inputs and the generator adds checks around i
 | `while` triggers fire only when their `when` holds: a `flag` must have been set by a fired list, a `dead` unit must have been reached or spawned by a fired trigger | Today `burial_torches` fires whether or not the torches can be reached |
 | A `to` that points into the same zone is a one-way edge | Drops, vents, way-ins |
 | Stateful flood: nodes are (cell, state) for the def's `states`. A move keeps the state. A reached lever that controls a state adds an edge to the other state **at the lever's own cell**. Keys and opened gates are monotone as now | Two-state buildings. Starting the other state's flood at the lever, not at the entrance, is what makes it sound: you are where you stood when you pulled it |
-| `give` and chest loot of materials counted as now; `needs` of **any** verb prop, not only Repair | Grow and Spark sinks |
+| `give` and chest loot of materials counted as now; `needs` of **any** verb prop, not only Repair | Grow and Electric sinks |
 
 **Generator checks:**
 
@@ -607,7 +607,7 @@ corridor -key basement `iron_door_b`-> room B -> stair_b
 **Changes proposed, all small.**
 
 1. One **small jar** in the storage room, beside the wood. The player learns what a jar is at home, before any dungeon asks her to go looking for them.
-2. The study's desk gets an examine line about the ring in the dust. It pays off in the Factory (section 3.4). No mechanism.
+2. The study's desk gets an examine line about the ring in the dust. It pays off in the Factory (section 3.4). No mechanism. *Built 26 September 2026:* `study_desk` ("Nothing on the desk. The dust is even all over it but for one clean ring, the size of the stand the orb sits on in the kitchen.").
 3. Three things that later verbs open: a cracked wall behind the rose alcove (Explosion: a leaf page), a dry planter in the alcove (Grow: the roses come back for good, so Stone Skin becomes renewable), a cold hearth in room B (Fire: a second rest point under the house).
 
 **Enemies.** `rat` x4. No boss. **Rest:** Julie's bed upstairs. **Night:** nothing changes, unless the rose omen is true that seed (`STORY.md` section 6: pick a white rose after dark, here or at Sallow Bottom, and "something in the cellar notices": the rose remembers it, `rose_after_dark`, and the next time she is in the cellar one `rose_soldier`, a soldier who stays down, stands at the study's mark `cellar_study`, never on the stairs). **Co-op:** two stairs mean two people can come down at both ends and meet in the middle; either iron door can be opened from either side. **Risk:** none new.
@@ -677,7 +677,7 @@ The Headmaster brought the school down here when the nights got longer, because 
 
 ### 3.2 The Museum (phase 2): Explosion
 
-**Fiction.** The Castle Museum is limestone, with four wings off a round hall: SCIENCE, ARTS, HISTORY, and one whose name has been painted over in council cream. The floor plan by the cloakroom still shows it. It is open until nine, like the rest of the county. A notice from the Attendant asks visitors not to touch the exhibits, and adds that the exhibits have been asked the same.
+**Fiction.** The Museum is limestone, with four wings off a round hall: SCIENCE, ARTS, HISTORY, and one whose name has been painted over in council cream. The floor plan by the cloakroom still shows it. It is open until nine, like the rest of the county. A notice from the Attendant asks visitors not to touch the exhibits, and adds that the exhibits have been asked the same.
 
 With the lights on it is a museum. The armour stands on its plinths, the fox is in its case, the waxwork miner in the Goldskin gallery holds up his lamp. The lights are on one breaker in the maintenance room. When they go off the plinths are empty, and you can hear where the exhibits have got to. When they come back everything is in its place. The dents stay.
 
@@ -848,7 +848,7 @@ order node        kind      holds                                               
 9     press_hall  puzzle    haulers, call boxes, a weak wall. Spark a call box: the hauler walks through the wall  0.8
 10    office      bosskey   the foreman's office: key_foreman, the rest of the diary, a leaf page               0
 11    assembly    boss      the Foreman                                                                        boss
-12    roller_door reward    big jar, key_burial. A socket opens the roller door to the yard for good: the shortcut
+12    roller_door reward    big jar, key_stone (the Company's key to the Burial's stair). A socket opens the roller door to the yard for good
 -     stores      side      behind a shutter that needs power and a hall that needs dark: fuse one hall, not the other. Small jar
 -     roof_vent   side      a second way in from the yard, by a vine root (Grow). Joins at lockers
 ```
@@ -878,7 +878,7 @@ A lit lamp cannot answer a bolt (`schoolTouch` skips props that are `on`), which
 
 **What Electric re-opens.** **Dead lamp runs, for good** (`PLAN.md` section 2.6): each failing run on the east and north roads has a relay box at its head; one spark and the run stays lit every night after, the road keeps its -1 threat, and the walk home is changed for the rest of the game. This is the largest single reward in the design and it is the verb, not loot. Also: the signal at Castle Halt (the Closed Line). The Museum's breaker, which now holds through the night. The moth's lamp in the Forest.
 
-**Keys and rewards.** Plain keys x2, `key_foreman`, `key_burial`. Big jar. Small jars x2. Leaf pages x2. The diary (three notices, each one fact short). **Rest:** the time office; the works canteen outside (`sites.json`). **Shortcut:** the roller door. **The cellar study** pays off here: the stand is the same stand.
+**Keys and rewards.** Plain keys x2, `key_foreman`, `key_stone` ("The Company's Key", tagged in the foreman's hand for the stone on the graveyard footpath: the only key to the Burial's county stair, so the Factory comes before the Burial). Big jar. Small jars x2. Leaf pages x2. The diary (three notices, each one fact short). **Rest:** the time office; the works canteen outside (`sites.json`). **Shortcut:** the roller door. **The cellar study** pays off here: the stand is the same stand.
 
 **At night.** Indoors, so the halls do not change. The yard does: the Cooling Yard is threat 5 past the Factory's own ring (the approach is never harder than the Factory's rooms, phase 4), and after dark in the Works whatever stands in it notices her from further off and follows her further, so arriving by the pipes is the sensible way after nine, and the roller door opens onto something she may not want to walk out into. **Omen:** "The day shift clocks off at six. If true: at six the haulers walk to the time office and stand there until seven." An hour a day when the press hall is empty and the rest room is not.
 
@@ -941,7 +941,7 @@ Every name in today's `CONTRACTS.burial` is kept. What is built (cold torches, t
 
 **What Fire re-opens.** Bramble over lane mouths. **Cold hearths**: unlit fires all over the county, each of which becomes a rest point for good once lit. In a game where the distance between two fires is the length of a run (`PLAN.md` section 2.5), this is Fire's equal to Electric's lamps. The Forest's seed tree. The moth's lamp.
 
-**Keys and rewards.** `key_snake`, `key_snake_boss` (built). Four corner flags. Big jar (Goldskin) and four half-jars (+7) from the corners. Leaf pages x3. The Ball (story item, bound). **Rest:** the fire in the start hall, which is the right depth for all four corners because it is the hub. **Shortcuts:** the four return gates.
+**Keys and rewards.** The county stair (`burial_door`) is locked with `burial_gate`, and only the Factory's `key_stone` fits it; the Glasshouse Key (`key_burial`) is inside, on its hook by the beds, and opens the glasshouse. `key_snake`, `key_snake_boss` (built). Four corner flags. Big jar (Goldskin) and four half-jars (+7) from the corners. Leaf pages x3. The Ball (story item, bound). **Rest:** the fire in the start hall, which is the right depth for all four corners because it is the hub. **Shortcuts:** the four return gates.
 
 **At night.** Indoors. But the stair is off the road and not visible from it (`sites.json`), at threat 5 with +2 at night in the Works. Getting there is the night's part of this dungeon. **Omen:** "Somebody tends the soldier's grave. If true: fresh flowers each morning, and between three and four at night a `friendly` unit stands in the parade ground who will not speak and leaves if approached."
 
@@ -953,7 +953,7 @@ Every name in today's `CONTRACTS.burial` is kept. What is built (cold torches, t
 
 ### 3.6 The School (phase 6): the end
 
-**Fiction.** Castle School stands on the crown of the hill with one window lit. It can be seen from the station platform and from most other places, and nobody in town looks at it. The bell rings at nine. The timetable is posted inside the front door and is kept up to date.
+**Fiction.** The School stands on the crown of the hill with one window lit. It can be seen from the station platform and from most other places, and nobody in town looks at it. The bell rings at nine. The timetable is posted inside the front door and is kept up to date.
 
 The building follows the timetable. At the bell, rooms that were open are closed, and corridors go somewhere else. Lessons are still set: Woodwork, Chemistry, Botany, Physics, Domestic Science, and one period marked only with a snowflake. The register in the top room has every name in the county in it, in one hand. The last name is {name}, and the ink is not dry.
 

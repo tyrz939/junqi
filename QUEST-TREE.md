@@ -19,7 +19,7 @@ There are no markers, no pins and no arrows (`PLAN.md` 2.5). Everything she has 
 | **Use prompt** (above the bar) | What USE will do, **and now the name of the thing**: `[E] Read: The parish board`, `[E] Pick up: A red glove`, `[E] Knock: The farmhouse door` | `ui/hud.ts`, the prop's `label` |
 | **Dialogue** | The giver's offer, its "wait" line if she asks again (the directions, repeated), its hand-in line | `data/dialogue*` |
 | **Signs** | Anything she can read at a place: well plates, fingerposts, notices, notes | trees on placed props |
-| **Zone banner** | The name of a place she has gone into: "Julie's House", "Goldskin Mine", "Burial Chamber" | the zone's name |
+| **Zone banner** | The name of a place she has gone into: "Julie's House", "The Gold Mine", "The Burial Chamber" | the zone's name |
 | **Toasts** | `Quest: <name>`, kill counts `Rats...: 4/6`, `Done: <name>` | `sim/quests.ts` |
 
 Two of these are new with this document: the **`returnTo` line** (before, "ready" never said who to go back to) and the **label in the use prompt** (before, a prop's label was only ever shown in "X is locked"; she could stand at the carter's cart and not be told it was the carter's cart).
@@ -104,8 +104,10 @@ Not changed, on purpose: no quest text uses a compass bearing or a distance in m
 NEW GAME (the platform, Castle Halt)
  |
  +-- [spine] A Letter from Julie --(stoop)--> The Thing in the Yard --(key)--> Julie's Kitchen
- |        --> Dust, Water, Pansy (note on the table) --> What Snakes Eat (dog)
- |        --> Gnox Goldskin's Mine (dog) --> The Snake Below (dog) --> [the Waters]
+ |        --> Dust, Water, Pansy (note on the table) --> Under the House (dog)
+ |        --> The Gold Mine (dog) --(the brass key)--> The Museum (dog) --(the green tag)-->
+ |        Butterfly Forest (dog) --> The Factory (dog) --(the Company's key)--> Under the Stone (dog)
+ |        --(the stair up)--> The School (dog) --> the epilogue
  |
  +-- A Lost Property (book on the platform) --> A Left Luggage --> A To Be Collected
  |                                                ^
@@ -132,7 +134,7 @@ Chains are independent; only the order inside a chain is fixed. Walks below: **s
 
 | Step | Where | She is thinking | Could confuse | Verdict |
 | --- | --- | --- | --- | --- |
-| "Auntie Julie's house, at the end of the station road" | The stoop; the station road leaves the platform and ends at Julie's gate (41 steps from where the trigger sits, 800 to 1,400 m from the platform) | "One road out of the station. Follow it." The letter says the map ends at a house and a dog | Nothing: the station has one road, and the glove and hat of Lost Property lie beside it | OK |
+| "Auntie Julie's house, at the end of the station road" | The stoop; the station road leaves the platform and ends at Julie's gate (41 steps from where the trigger sits, 520 to 850 m from the platform) | "One road out of the station. Follow it." The letter says the map ends at a house and a dog | Nothing: the station has one road, and the glove and hat of Lost Property lie beside it | OK |
 
 ### The Thing in the Yard
 - **Unlocked by:** talking to the dog on the step (intro). **Giver / hand-in:** the dog, Julie's step. **Pays:** the house key; opens Julie's Kitchen.
@@ -148,35 +150,73 @@ Chains are independent; only the order inside a chain is fixed. Walks below: **s
 | --- | --- | --- | --- | --- |
 
 ### Dust, Water, Pansy
-- **Unlocked by:** reading the note on the kitchen table. **Hand-in:** the dog ("The dog will want to know"; returnTo "the dog, on Julie's step").
+- **Unlocked by:** reading the note on the kitchen table. **Hand-in:** the dog ("The dog will want to know"; returnTo "the dog, on Julie's step, by day").
 
 | Step | Where | Thinking | Confuse | Verdict |
 | --- | --- | --- | --- | --- |
 | "A Manashield potion, made at the bench in Julie's kitchen" | The bench, in the kitchen; the pansy is in the pantry chest (the note says so) | "Bench, bags open, three things" | Was "Small Manashield Potion" with no place, and the hand-in (the dog) was named nowhere | Fixed (A2, D2) |
 
-### What Snakes Eat
-- **Unlocked by:** the dog, after the kitchen. **Hand-in:** the dog.
+### Under the House
+- **Unlocked by:** the dog, after the kitchen. **Hand-in:** the dog. **Pays:** snakeroot x2, water x2. The dog does not say what the meat is for ("Meat keeps, where it is going"); it says so when it offers the Burial, where the meat is used. (Was "What Snakes Eat", which said what the dog would not.)
 
 | "Rat meat, from the rats in Julie's cellar" | The cellar, down either hatch in the kitchen (banner "Julie's Cellar") | "Under the house. The hatches." | Was "Rat Meat", and the description said "and in the mine", which is 2,000 steps off | Fixed (A2) |
 | --- | --- | --- | --- | --- |
 
-### Gnox Goldskin's Mine
-- **Unlocked by:** the dog, after the rats. **Hand-in:** the dog. **Tier:** far (2,479 / 1,919 steps).
+**From here the dog gives every spine quest and takes every one back, by day** (`returnTo` "the dog, on Julie's step, by day": it is not on the step from the bell to six). Each hand-in names the next place and hands over, or has already handed over, the key to it. The order is `STORY.md` §4's and `PLAN.md` §2.2's; until 26 September the data kept the reference build's mine, then Burial, then the end. **A boss step is a place**: the boss's death marks where she stood (`attendant_down`, `emperor_down`, `foreman_down`, `ringer_down`, from its `onDeath`), so a boss put down before the dog asked still counts, as a place visited early does. A kill step would count only once the quest was in the log, and a boss does not stand up twice. Walks below are from the dog, seed 3 / seed 2026, to the county door the step is behind.
+
+### The Gold Mine
+- **Unlocked by:** the dog, after the rats (`offer_mine`). **Hand-in:** the dog. **Pays:** apples x5, Stone Skin x2. **Leads on:** the vault's brass key, tagged MAGIC (`key_museum`); the dog's next offer is the Museum. **Tier:** far (924 / 915).
 
 | Step | Where | Thinking | Confuse | Verdict |
 | --- | --- | --- | --- | --- |
 | "The Gold Mine, at the end of the mine road" | Through Castle, out along the mine road to its end; the mouth has a lamp and the GOLDSKIN MINING Co. sign | "Mine road, out of Castle, to the end" | **Was wrong**: "the mine mouth in the yard". She would have searched the yard | Fixed |
-| "The Headmaster, down the gold mine" | Inside (banner "Goldskin Mine") | "Deeper in" | Was a bare name | Fixed (A2) |
+| "The Headmaster, down the gold mine" | Inside (banner "The Gold Mine") | "Deeper in" | Was a bare name | Fixed (A2) |
 | "Iron Knuckles, down the gold mine" | Inside | | Was a bare name | Fixed (A2) |
 
-### The Snake Below
-- **Unlocked by:** the dog, after the mine. **Hand-in:** the dog. **Tier:** far (1,487 / 1,663 steps).
+### The Museum
+- **Unlocked by:** the dog, after the mine (`offer_museum`: "That brass key came out of the vault. It is the Museum's, across the river from Castle, on the road over the bridge. It is open ten to four." / "One wing has had its name painted over. It said MAGIC."). **Hand-in:** the dog ("The old families took a little of the gold, for the bench, and left the rest in the hill."). **Pays:** gold dust x2, Manashield x1. **Leads on:** the case that is not on the plan holds the key on the green tag (`key_forest`). **Tier:** far (1,503 / 1,397).
 
 | Step | Where | Thinking | Confuse | Verdict |
 | --- | --- | --- | --- | --- |
-| "The standing stone, on the footpath from the graveyard" | Through Castle, the graveyard road; the graveyard sign says the footpath behind it "is used"; the path ends at a stone that says DO NOT and the way down | "Graveyard, the path behind it, the stone" | **Was wrong**: "the other stair". There is no other stair; she would have searched the cellar | Fixed |
-| "The garden, inside the burial chamber" | Inside (banner "Burial Chamber") | | Was "Find the garden" | Fixed |
-| "The big snake, in its own room in the burial chamber" | Inside | | Was "The Snake" | Fixed |
+| "The Museum, across the river from Castle" | The Museum's road leaves Castle and crosses the river; the door (THE MUSEUM) takes the brass key; banner "The Museum" | "Over the river, the building with the key" | Shut after four; the door says so ("Open ten to four") | OK |
+| "The Attendant, in the painted-over wing of the Museum" | Behind the bricked arch (Explosion, from the Shot-Firer); the rotunda | "The floor plan's painted-over end" | A place, not a kill: his death marks it | OK |
+
+### Butterfly Forest
+- **Unlocked by:** the dog, after the Museum (`offer_forest`: "The green tag is for the gate of Butterfly Forest. The road to it goes past the ruined library, and the library comes first."). **Hand-in:** the dog, who slips once when asked who sent the county's well to the forest ("I did." / "She did. It was the kindest place she had, and it was a garden then.": `STORY.md` §3's once-an-act slip, under pressure). **Pays:** apples x5, Stone Skin x1. **Tier:** far (2,280 at most; seed 3: 1,977).
+
+| Step | Where | Thinking | Confuse | Verdict |
+| --- | --- | --- | --- | --- |
+| "The ruined library, on the road past the Museum" | The library's road leaves the Museum's; banner "The Ruined Library"; the last page teaches Grow | "Past the Museum" | Nothing | OK |
+| "The gate of Butterfly Forest, past the ruined library" | The forest's road leaves the library's; the council sign; the green-tagged key | "The garden that is a wood now" | Without Grow nothing in it opens: the dog says read the page first | OK |
+| "The Emperor, at the stone in Butterfly Forest" | The summoning stone, five butterflies in | | A place his death marks | OK |
+
+### The Factory
+- **Unlocked by:** the dog, after the forest (`offer_factory`: "The Works are past the graveyard. The Factory is the Company's, and the Company kept a key there to a door of its own." / "There is a grate at the edge of Castle. The pipes under it run to the Works, dry most days."). **Hand-in:** the dog ("Keep that key on you. It is the Company's own, and it opens one door in the county."). **Pays:** water x4, Stone Skin x1. **Leads on:** the foreman's own locker holds the Company's Key (`key_stone`), the only key to the Burial's stair. **Tier:** far (1,812 / 1,746).
+
+| Step | Where | Thinking | Confuse | Verdict |
+| --- | --- | --- | --- | --- |
+| "The pipes, down the grate at the edge of Castle" | The grate stands beside the town (`doors.json`, "The grate to the pipes"); banner "The Pipes" | "Under the town" | Not "in the road": the grate is set beside the town, not in a street | OK |
+| "The Factory, in the Works" | Up a manhole by the Factory, or the road past the graveyard; banner "The Factory" | | | OK |
+| "The Foreman, in the Factory's assembly hall" | Past the generator (Electric, from the orb) | | A place his death marks | OK |
+
+### Under the Stone
+- **Unlocked by:** the dog, after the Factory (`offer_burial`: the graveyard road "that goes north, toward the School. Do not go as far as the School"; the Company's key "unlocks the stair under it"; the rats' meat soaked in Stranglethorn for the small snakes; "Whatever is under that stone was buried with the county's gold, all of it, cast into one ball. Bring the ball up."). **Hand-in:** the dog ("You found him, then. Gnox Goldskin, with his arms round it." / "She is not dead, {name}. I would know."). **Pays:** a light stone. **Tier:** far (2,006 / 874).
+- **The stair is locked** (`burial_door`, key tag `burial_gate`) until the Factory's key: the Burial is phase 5, and the county no longer lets a mine-level heroine down it. The Glasshouse Key (`key_burial`) is inside, on its hook by the beds, and opens the glasshouse. (Was "The Snake Below", which asked for the snake: one corner of four, and the Ball was never in its keeping.)
+
+| Step | Where | Thinking | Confuse | Verdict |
+| --- | --- | --- | --- | --- |
+| "The standing stone, on the footpath from the graveyard" | Through Castle, the graveyard road; the graveyard sign says the footpath behind it "is used"; the path ends at a stone that says DO NOT and the stair | "Graveyard, the path behind it, the stone" | **Was wrong**: "the other stair". There is no other stair | Fixed |
+| "The garden, inside the Burial Chamber" | Inside (banner "The Burial Chamber"): Fire, from the gardener's page | | Was "Find the garden" | Fixed |
+| "The Ball, in the Burial Chamber" | His box, at the foot of the stair up, behind Goldskin | "What the dog wants brought up" | The stone's scratched line says he took it down with him, which is where it is | OK |
+
+### The School
+- **Unlocked by:** the dog, after the Burial (`offer_school`: "The stair behind him goes up, not out. It comes up in the School. The key on the caretaker's bin opens the front doors from outside."). **Hand-in:** the dog ("She held it over the county for as long as anyone could have. Longer. What happens to the ball now is yours to say."). **Pays:** the flag `spine_done`; after it the dog says only the epilogue ("There is a train on Sunday. The county still turns. Walk."). **Tier:** far (1,697 / 1,504, to the School's county door).
+- She may be up the stair before the dog asks: the School's steps are places, and count.
+
+| Step | Where | Thinking | Confuse | Verdict |
+| --- | --- | --- | --- | --- |
+| "The School, on the hill north of Castle" | Up the Burial's stair into the boiler room, or the front doors from the Bellfield once she has the key; the hall | "The lit window" | Nothing: it has been in sight since the platform | OK |
+| "Whoever rings the bell, in the School's tower" | Six lessons and the Caretaker's tower key, then the belfry | | Nobody names the ringer (`STORY.md`'s open question) | OK |
 
 ---
 
@@ -313,7 +353,7 @@ The red glove's name tape (it says SCHOOL and nothing else) was already there, a
 - **Sites off the road are found by exploring.** The car in the wood and Pell's stone are givers nobody sends her to. That is intended (`QUESTS.md` K22), but a lay-by signpost is the only hint to the car. B2's roadside signposts at forks would help; a fork sign naming "the wood road" is the natural next step.
 - **"The road by Sallow Bottom", "the road under Quarry Steps"** name a road by a place, not by its ends. They are true (each cottage is the roadside spot nearest its patch), but the audit only proves the cottage is near the patch, not that the road is obvious. Fingerposts at forks naming patches would close this.
 - **Any rat counts** for Rats in the Sheds, and any skeleton for The Thing in the Yard. Harmless (the text now says where), but a kill step tied to a place wants its own unit row, as the pumpkins and quarrymen have.
-- **The mine and burial interiors** are audited only as "inside the zone". Their own layouts are the dungeon tests' business.
+- **The dungeon interiors** (the mine to the School) are audited only as "inside the zone", by the county door the step is behind. Their own layouts are the dungeon tests' business.
 
 ## 9. Needs from other owners
 

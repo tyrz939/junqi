@@ -104,7 +104,7 @@ What to leave: jump scares, body horror, cruelty shown on screen, radio static a
 
 | Before | After | Why |
 | --- | --- | --- |
-| Mr Cobb: "Too early for inside. Mrs Garland opens the door at six." | "I sit out here till six. Mrs Garland likes the yard kept, and I like to see who comes up the street." | The Arms door opens all day. A townsperson's small claim must be true, or the player learns to stop listening |
+| Mr Cobb: "Too early for inside. Mrs Garland opens the door at six." | "I sit out here till the bell. Mrs Garland likes the yard kept, and I like to see who comes up the street." (It said "till six" until his schedule kept him out till nine.) | The Arms door opens all day. A townsperson's small claim must be true, or the player learns to stop listening |
 | The Milkman: "If you're walking out, keep the School at your back and you'll come to the Halt road." | "No. 7 hasn't taken theirs in all week. Three bottles on the step. You don't stop for one house, though." | The first was only true on some seeds. The second is true on all of them, and No. 7 is a few steps up his round with the bottles on its step |
 | Mrs Tace: "You can see the window from my step." | "You can see its window from the top of Church Lane. It's always the same one lit." | Her step faces south, away from the School. The top of Church Lane is the north edge of town |
 | No. 3, Pound Lane: "\"We're not in,\" someone says. Then, more quietly: \"Not to you.\"" | "\"We don't open after the bell, and not much before it,\" a man says. \"No offence meant. Try the Arms, on the square.\"" | The same closed door, but frightened instead of sinister, polite, and it sends her somewhere real |

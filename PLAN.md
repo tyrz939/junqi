@@ -65,7 +65,7 @@ Regions are a design idea (theme, enemy families, music later), not a technical 
 
 **The School looms.** It stands on the highest ground, north of the town, and is visible from the station platform on the first evening: a lit window at the top of the map that is never not there. Its bell is the county's clock (it already rings at nine in the live build). The whole game is a walk toward something you could see from the start. The renderer needs a far-landmark layer for this (a silhouette and a light drawn against the sky edge when the School is north of the view); that is part of M2.
 
-This moves the Burial Chamber from Julie's yard (where 2020's room put it, and where the live build has it) to the east, fifth, where 2020's design put it. Its current content is kept and re-tuned to phase 5; the other three corners and the wizard are added then.
+This moves the Burial Chamber from Julie's yard (where 2020's room put it, and where the reference build has it) to the Works, fifth, where 2020's design put it. Its content was kept and re-tuned to phase 5, and the other three corners and the wizard added (`DUNGEONS.md` §3.5). The dog offers it after the Factory, whose locker holds the only key to its stair, and its stair up is the way into the School (`QUEST-TREE.md` §5).
 
 **New Game starts at the station**, 17:00, as `Story.docx` has it. Julie's house is a one to two minute walk (520 to 850 m) by a lamp-lit road: long enough to see the sun go down and read the first sign, short enough that nobody quits. (The previous README said "do not start a map trek". With this direction the trek *is* the game; the first one is just short.)
 
