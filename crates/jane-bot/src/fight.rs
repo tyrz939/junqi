@@ -175,6 +175,41 @@ pub fn eat(v: &View<'_>) -> Option<Command> {
     food(v).map(Command::Item)
 }
 
+/// Milli-points a second a unit's best melee does, as its rows say (the fixed part and half the
+/// random).
+fn melee_rate(u: &Unit) -> i64 {
+    let cat = jane_data::catalog();
+    cat.combat
+        .unit(u.def)
+        .book
+        .iter()
+        .map(|&s| cat.combat.spell(s))
+        .filter(|s| s.kind == SpellKind::Melee)
+        .filter_map(|s| {
+            let p = s.power.as_ref()?;
+            let stat = i64::from(match p.stat {
+                jane_core::action::Stat::Strength => u.strength,
+                jane_core::action::Stat::Spirit => u.spirit,
+            });
+            let hit = stat * 1_000_000 / i64::from(p.div.max(1))
+                + stat * 1000 / i64::from(p.var_div.max(1)) * 1000 / 2
+                + i64::from(p.flat.0);
+            Some(hit * 60 / i64::from(s.cooldown.0.max(1)))
+        })
+        .max()
+        .unwrap_or(0)
+}
+
+/// Would she put down everything on her before it put her down, blow for blow as the rows say
+/// (with a third to spare)?
+pub fn would_win(v: &View<'_>) -> bool {
+    let me = v.body();
+    let on: Vec<&Unit> = enemies(v).into_iter().filter(|u| on_me(v, u)).collect();
+    let (hp, rate) = on.iter().fold((0i64, 0i64), |(h, r), u| (h + i64::from(u.hp.0), r + melee_rate(u)));
+    let mine = melee_rate(me);
+    mine > 0 && hp * rate * 3 < i64::from(me.hp.0) * mine * 2
+}
+
 /// A unit a bot fights or feeds, never both: a row with a bait is fed.
 pub fn fightable(u: &Unit) -> bool {
     jane_data::catalog().combat.unit(u.def).bait.is_none()
@@ -247,8 +282,10 @@ pub fn engage(v: &View<'_>, cx: &mut Ctx, id: UnitId) -> Option<Act> {
     let cat = jane_data::catalog();
     let d = dist(me.pos, t.pos);
     let dir = jane_core::angle::iatan2(t.pos.y.0 - me.pos.y.0, t.pos.x.0 - me.pos.x.0);
-    // Low with nothing to eat: back off (it may leash), and let the plan find a fire.
-    if hp_permille(me) < FLEE_BELOW && cx.fight.fleeing == 0 && !has_food(v) {
+    // Low with nothing to eat: back off (it may leash), and let the plan find a fire. Not from
+    // what she would put down first, trading blows as the rows say (a skeleton between her and
+    // the fire is walked through, not fled from for ever).
+    if hp_permille(me) < FLEE_BELOW && cx.fight.fleeing == 0 && !has_food(v) && !would_win(v) {
         cx.fight.fleeing = 180;
         cx.fight.fled += 1;
         cx.fight.hunt = None;
