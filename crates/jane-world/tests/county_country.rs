@@ -33,6 +33,8 @@ use jane_world::county::country::{FIRST_CLEAR, Kind, dist};
 use jane_world::county::{County, STAGES, build_county_on, county_skeleton};
 use jane_world::skeleton::{MACRO, ROAD, SKEL_H, SKEL_W, Skeleton, Water};
 
+/// Cells from a road's line that count as its edge, where the night shift walks.
+const NIGHT_EDGE: u8 = 16;
 const SW: i32 = VIEW_W_CELLS as i32;
 const SH: i32 = VIEW_H_CELLS as i32;
 const MINOR: [&str; 4] = ["herb", "rock", "lamp_post", "lamp_run"];
@@ -64,6 +66,9 @@ struct Survey {
     wild: [u32; 7],
     road_macros: u32,
     on_road: u32,
+    /// The night shift (`nightOnly` rows): all of it, and what stands at a road's edge.
+    night: u32,
+    night_edge: u32,
     missing: Vec<&'static str>,
     kinds: Vec<(Kind, u32)>,
     bad: Vec<String>,
@@ -170,7 +175,22 @@ fn measure(sk: &Skeleton, c: &County<'_>, s: &mut Survey) {
     let alive = |u: &&jane_core::blueprint::UnitSpawn| {
         u.phase == 0 || reach.dist(i32::from(u.cell.x), i32::from(u.cell.y)) != UNREACHED
     };
-    for u in bp.units.iter().filter(alive) {
+    // The night shift is not in the world from six to nine: it fills no screen by day, and it is
+    // counted on its own (`after_the_bell_the_night_shift_is_out`).
+    let by_day =
+        |u: &&jane_core::blueprint::UnitSpawn| !(cat.combat.unit(u.def).night_only && matches!(u.key, Key::Local(_)));
+    for u in bp.units.iter().filter(alive).filter(|u| !by_day(u)) {
+        s.night += 1;
+        let (x, y) = (i32::from(u.cell.x), i32::from(u.cell.y));
+        if dist(&c.country.d_road, x, y) <= NIGHT_EDGE {
+            s.night_edge += 1;
+        }
+        let def = cat.combat.unit(u.def);
+        if !def.shuns_light {
+            s.bad.push(format!("seed {}: a {} out at night that walks into the lamps", s.seed, def.id));
+        }
+    }
+    for u in bp.units.iter().filter(alive).filter(by_day) {
         let (x, y) = (i32::from(u.cell.x), i32::from(u.cell.y));
         let (sx, sy) = screen(x, y);
         things.set(sx, sy, things.read(sx, sy, 0) + 1);
@@ -248,7 +268,7 @@ fn measure(sk: &Skeleton, c: &County<'_>, s: &mut Survey) {
             }
         }
     }
-    for u in bp.units.iter().filter(|u| u.phase > 0).filter(alive) {
+    for u in bp.units.iter().filter(|u| u.phase > 0).filter(alive).filter(by_day) {
         s.wild[usize::from(u.phase.min(6))] += 1;
         let (mx, my) = ((i32::from(u.cell.x) >> 4).min(SKEL_W - 1), (i32::from(u.cell.y) >> 4).min(SKEL_H - 1));
         if sk.road.read(mx, my, 0) & ROAD != 0 {
@@ -556,6 +576,24 @@ fn nothing_stands_on_a_road_or_in_a_box() {
 fn nothing_bites_near_the_first_walk_or_in_a_haven() {
     for what in ["from the first walk", "phase"] {
         assert_clean(what);
+    }
+}
+
+/// After the bell (WORLD.md §4.3): on every seed the night shift is out on the unlit roads' edges
+/// and the rough ground, and nowhere by day; every one of it shuns the lamps, so a lit road is
+/// the safe line; none of it is near the first walk (`nothing_bites_near_the_first_walk...`
+/// holds it to that with the rest).
+#[test]
+fn after_the_bell_the_night_shift_is_out() {
+    assert_clean("walks into the lamps");
+    let rows: Vec<String> =
+        surveys().iter().map(|s| format!("{:>11}{:>7}{:>7}", s.seed, s.night, s.night_edge)).collect();
+    println!("{:>11}{:>7}{:>7}\n{}", "seed", "night", "edge", rows.join("\n"));
+    for s in surveys() {
+        assert!(s.night >= 40, "seed {}: {} out after the bell", s.seed, s.night);
+        assert!(s.night_edge >= 5, "seed {}: {} of {} at a road's edge", s.seed, s.night_edge, s.night);
+        let wild: u32 = s.wild.iter().sum();
+        assert!(10 * s.night < 3 * wild, "seed {}: {} at night against {wild} by day", s.seed, s.night);
     }
 }
 
