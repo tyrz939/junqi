@@ -10,7 +10,7 @@ This is the third build. The first (Phaser, 2026) is archived in `archive/phaser
 
 ## Where it stands (2026-09-26)
 
-**The Rust build is under way: P0 to P3 of `PORT.md` are built, P4 (the sim) is being built, P5 (art) has begun.** Nothing draws in a window yet; everything below runs headless and is proven by tests. The TypeScript build in `jane/` is frozen and deprecated (2026-09-27): nothing in it is kept up to date, and it goes to the archive at P10.
+**The Rust build is under way: P0 to P3 of `PORT.md` are built, P4 (the sim) is being built, P5 (art) has begun, and the game plays in a window with its whole UI (P6 and P7, window first).** Everything else runs headless and is proven by tests. The TypeScript build in `jane/` is frozen and deprecated (2026-09-27): nothing in it is kept up to date, and it goes to the archive at P10.
 
 | Phase | State |
 | --- | --- |
@@ -20,7 +20,8 @@ This is the third build. The first (Phaser, 2026) is archived in `archive/phaser
 | P3 dungeons, interiors | Done. Eight generated dungeons through the solver and checks C1 to C12 (fallback 0 of 1000), 109 templates proven alone, the four interiors; `jane gen --hash` and the x86_64 hash fixture |
 | P4 sim | Foundation (state, runtime, path, movement, ring, seats, travel, save, hash, View) and combat (casting, bolts, statuses, the flush, loot, aim assist) done; interaction, quests, dialogue, triggers, the journal, AI and the snake in progress; the bot next |
 | P5 art | Step 1 done: palette, the four-layer canvas and its primitives, the stroke font, chrome, a lit-sphere sheet |
-| P6 scene, soft backend, window | Next, window first (`PORT.md` §7.1): beside P5, flat swatches and demo sprites standing in until the art lands, with the dialogue box, prompt and vitals pulled forward from P7 |
+| P6 scene, soft backend, window | Under way, window first (`PORT.md` §7.1): the window, the loop, the scene and its people, soft and wgpu backends |
+| P7 UI and input | Built ahead of its gate (2026-09-27): title, loading card, HUD, dialogue, pause, save slots, the Bag / Book / Log / Map window with drag and drop, the terminal, Controls with press-to-rebind, the F2 and F3 overlays; `data/bindings.json` compiled in. A pad and the assist are wired and untested by hand |
 | P6b onward | Not started |
 
 | Doc | What it decides |
@@ -65,14 +66,21 @@ cargo jane hash --seed 7 --frames 600                    # a new game stepped, a
 cargo jane sheet light sphere                            # art sheets: layers, light, font, chrome, palette
 ```
 
-The game, in a window (`PORT.md` §7.1: the window comes before the art, so today the scene is a clear colour until the scene and the soft backend land):
+The game, in a window:
 
 ```bash
-cargo run --release -p jane-app -- --seed 7               # no --seed: one from the clock, printed at start
-cargo run --release -p jane-app -- --seed 7 --ticks 300 --shot sheets/app.png   # five seconds, then the canvas as a PNG
+cargo run --release -p jane-app                          # the title: New Game (her name), Continue, Load, Controls, Quit
+cargo run --release -p jane-app -- --new --seed 7        # straight into New Game on seed 7, no title
+cargo run --release -p jane-app -- --backend soft        # T0; the default is wgpu where an adapter can draw it
+cargo run --release -p jane-app -- --new --seed 7 --ticks 600 --shot sheets/app.png    # ten seconds, then the canvas as a PNG
+cargo run --release -p jane-app -- --new --seed 7 --ticks 900 \
+    --script "tick 200 key Tab; tick 260 shot sheets/bag.png; tick 270 key M; tick 400 shot sheets/map.png"
+cargo run --release -p jane-app -- --new --seed 7 --bot reader   # jane-bot's reader plays the seat; the UI shows it
 ```
 
-WASD or arrows walk, Shift sprints, E or F uses (hold to push), 1–8 press the bar (Space and left click are slot 1; the mouse aims), right mouse held walks toward the cursor, Esc pauses, F12 writes the canvas to a PNG. A pad works in the 2020 layout. Tab, M, `` ` ``, F2 and F3 are bound and do nothing yet: their screens are P7's. The window starts at 1536 x 864 (768 x 432 where that does not fit) and resizes; the picture is always 432 canvas pixels tall, and a wider window shows more county. The title bar shows frames a second and the tick and draw times. `--scale K` starts it at another multiple, `--name` names her.
+The title builds nothing; New Game builds the thirteen zones on a thread while the loading card draws the county's skeleton forming. `--script` feeds inputs at ticks (`key`, `down`, `up`, `click`, `rclick`, `move`, `type`, `shot`, and `bot reader`, `bot talk`, `bot off`; `jane-app --help` has the grammar), which is how every screen is shot without hands. The window starts at 1536 x 864 (768 x 432 where that does not fit) and resizes; the picture is always 432 canvas pixels tall, and a wider window shows more county. `--scale K` starts it at another multiple, `--name` names her, `--data-dir` puts saves somewhere else.
+
+**Saves and config.** Three slots, `slot1.jane` to `slot3.jane`, and `config.json` (the name last used, the backend, the aim assist, the bindings that differ from `data/bindings.json`, each slot's seed) live in `%APPDATA%\Jane` on Windows, `~/Library/Application Support/Jane` on a Mac and `$XDG_DATA_HOME/jane` elsewhere; beside the exe instead when a file called `portable` sits there. The pause menu saves only within reach of a bed or a fire; resting at one saves by itself to the slot last used.
 
 Still to come (`PORT.md` §7): bots playing seeds (`jane play`, `dossier`), the LAN host (`jane serve`).
 
@@ -101,13 +109,20 @@ Things worth knowing: Repair costs what the thing is made of. A pressure plate s
 | Use / talk; hold to push, hold and back away to pull | E or F | B |
 | Bar slot 1 | Space, left click, 1 | A |
 | Bar slots 2–5 / 6–8 | 2–5 / 6–8 | X, Y, LB, RB |
-| Bags / spellbook / quests / map | I or Tab / K / J / M | View |
-| Pause, back | Esc | Menu |
+| Bag / book / log / map (one window, four tabs) | I or Tab / K / J / M, or the HUD's buttons | View; LB and RB change tab |
+| In the window | Drag to move, to the bar, to the bench, or off to destroy; right click for Use, Put on the bar, Destroy | Stick moves the ring, A picks up and puts down |
+| Dialogue | E, Space, Enter or a click goes on (a press mid-line shows the rest); 1 and 2, or up, down and E, choose | B goes on |
+| Pause, back | Esc | Menu, B |
 | Save / load | F5 / F9, **only within reach of a bed or a fire**. Resting at one (E) saves by itself | |
-| Console | `` ` `` — type `help` | |
-| Debug overlay / path grid | F2 / F3 | |
+| Terminal | `` ` `` — type `help`; Tab completes, up and down walk the history | |
+| Perf overlay | F2: off, compact, full (the frame by stage, the passes, the sim, the hitches) | |
+| World overlay | F3; then 1–9 toggle its layers, and the pointer inspects a tile, unit or prop | |
+| Hold and step the world / quarter speed / four times | F6 (again: one tick) / F7 / F8 | |
+| Screenshot | F12 | |
 
-Console rows worth knowing: `give apple 5`, `god`, `tp county yard_gate` (skip the walk), `tp county town_square`, `tp burial entry`, `time 22`, `kill`, `speed 4`, `hash`, `replay verify`. For co-op before there is a network: `open`, `join`, `party`, `leave 2`. The Rust build keeps every row (`PRESENTATION.md` §3.2) and makes bindings data.
+Every binding is data (`data/bindings.json`) and every one can be changed on the Controls screen (from the title or the pause menu): pick a cell, press the new key, button or pad input; a clash shows in red and is never refused. Changes go to `config.json`.
+
+Terminal rows: `help`, `give <item> [qty]`, `god [on|off]`, `tp <zone> [mark]`, `time <hour>`, `hp <n>`, `mp <n>`, `learn <spell>`, `quest <quest>`, `flag <name> <value>`, `kill`, `spawn <unit>`, `save [1-3]`, `load [1-3]`, `seed`, `hash`, `pos`, `inst`, `speed 0.25|1|4|hold|step`, `ver`, `title`, `party`, `open`, `close`, `clear`. Anything that changes the world goes to the sim as a `Command::Dev`, so a replay replays it. `join` and `leave` wait for the network (P8).
 
 ## This repo
 

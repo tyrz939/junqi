@@ -351,134 +351,119 @@ Tests: every spell and effect row has an entry with the parts its kind needs; ev
 
 ## 3. UI
 
-Immediate mode into the `Ui` pass at 1x on the canvas. **The design grid is the canvas** (768 x 432 at 16:9, wider on a wider window; never a second layer at another scale): the Small face is the stroke font at 2x cell, 12 x 18, which gives 64 columns by 24 rows at 16:9, and widgets anchor to edges, so a wider window spreads the HUD and leaves a centred window centred. Head is 24 x 36, Title 30 x 48 (`ART.md`, the font section).
+Immediate mode into the `Ui` pass at 1x on the canvas. **The design grid is the canvas** (768 x 432 at 16:9, wider on a wider window; never a second layer at another scale): the Small face is the stroke font at 2x cell, 12 x 18, which gives 64 columns by 24 rows at 16:9, and widgets anchor to edges, so a wider window spreads the HUD and leaves a centred window centred. Head is 18 x 27, Title 30 x 45 (`ART.md`, the font section). Dense text (lists, tooltips, the tracker, the terminal, the overlays) is the Fine face, 8 x 12.
+
+**Built 2026-09-27** (the whole of this section; what differs from the first design is said where it differs). Everything lives in `jane-present::ui` (`core`, `cmd`, `art`, `icons`, `style`, `hud`, `dialogue`, `menus`, `window`, `map`, `title`, `loading`, `console`, `controls`, `perf`, `world`), `jane-present::view` and `::text`, and in `jane-app` (`app.rs` the scenes and the loop, `saves.rs`, `config.rs`, `console.rs` the terminal's rows, `script.rs`).
 
 ### 3.1 Core
 
+**The `Ui` pass** is a list in the `Frame`, `Frame::ui: Vec<UiCmd>`, drawn after every pass (after `Post` on T2), unlit, never graded, bloomed or fogged, plus `Frame::ui_images: Vec<UiImage>`, the UI's run-time pictures by slot. The contract every backend keeps is the module doc of `jane-present::ui::cmd`:
+
 ```
-pub struct Ui { atlas, font, input: UiInput, focus: Focus, hot: WidgetId, active: WidgetId,
-                drops: Vec<(Rect, DropTarget)>, drag: Option<Drag>, tooltip: Option<Tip>, tick: u32, cmds: Vec<UiCmd> }
-impl Ui {
-  fn begin(&mut self, input: &UiInput, tick: u32); fn end(&mut self) -> (&[UiOut], &[UiCmd]);
-  fn panel(&mut self, r: Rect, style: PanelStyle); fn label(&mut self, x, y, text: &str, style: Style);
-  fn wrapped(&mut self, r: Rect, text: &str, cols: u8) -> u8 /* lines */;
-  fn button(&mut self, id, r, label) -> bool;
-  fn slot(&mut self, id, r, view: &SlotView, target: DropTarget) -> SlotOut;
-  fn bar(&mut self, r, frac: u8, lag: u8, ramp: RampId);
-  fn chip(&mut self, r, icon: SpriteId, count: u16);
-  fn list(&mut self, id, r, rows: usize, row_h) -> ListOut;
-  fn text_field(&mut self, id, r, buf: &mut FixedStr<16>) -> FieldOut;
-  fn popover(&mut self, id, at: (i16, i16), items: &[TextId]) -> Option<usize>;
+enum UiCmd {
+  Fill   { dst: Rect, argb: u32 },                                        // one colour, blended by its alpha
+  Sprite { page: u8, src: Src, dst: Rect, ink: u16, alpha: u8, mirror: bool }, // atlas texels through the CLUT; ink != 0 recolours every opaque texel
+  Image  { slot: u16, src: Src, dst: Rect, alpha: u8 },                    // Frame::ui_images[slot], 0xAARRGGBB, its own alpha times `alpha`
+  Clip(Rect),                                                              // a scissor for every later command
 }
-enum UiOut { Command(jane_sim::Command), Intent(AppIntent) }
-enum AppIntent { NewGame { name: FixedStr<16> }, Continue, Load(u8), Save(u8), ToTitle, Quit, Resume, Rebind(Binding), Assist(AssistProfile), Backend(BackendChoice), Host, Join(Addr), Console(ConsoleLine) }
+struct UiImage { generation: u32, w: u16, h: u16, argb: Vec<u32> }         // a backend re-uploads on a new (slot, generation)
 ```
 
-`WidgetId = h32(file_line_hash, index)`. The app drains `UiOut` each frame: a `Command` goes to the session (local or lockstep), an `Intent` to the app. **The UI never calls into the sim.** Layers, top one eats input: debug, terminal, title, pause, window, dialogue, HUD and world. Text wraps greedily on spaces; a dialogue line's unrevealed tail is laid out invisibly so the box never reflows as it types. `UiCmd`s are panel, glyph and sprite draws in canvas px; every backend draws them the same way, unlit, above every other pass.
+Rects are canvas px (`i16`). Texel 0 is clear, texel 1 (the contact shadow) darkens to three quarters, any other texel is its CLUT colour. A sprite whose `dst` differs from its `src` stretches nearest by integer division (`src.x + dx * src.w / dst.w`). Blending is `under + (colour - under) * a / 255` **in the stored sRGB bytes**; `soft` is the reference (`jane-render-soft/src/ui.rs`), and `wgpu` matches it by drawing through a plain (non-sRGB) view of the canvas (`jane-render-wgpu/src/ui.rs`, `shaders/ui.wgsl`, checked by a headless read-back test). `gl2` draws nothing of it yet.
+
+**The UI page.** Every glyph of the four faces (regular and bold, packed as one-bit masks drawn with an ink), the cooldown sweeps (48 steps, 36 and 20 px), the marks (arrow, reticle, hand, sun, moon, the pad's buttons, diamond, skull, lock and a few glyphs) and the item, spell and status icons are packed at boot into one atlas page the presenter appends last (`ui::art`, `Present::ui_art`), so a backend that uploads `Present::atlas()` has it. The icons are **stand-ins** drawn from their names by `ui::icons` (a brass key, a red flask, a frost medallion) until `ART.md` §2.5's icon family lands; nothing else knows.
+
+**Chrome** is composed of fills, not generated canvases, so a panel of any size costs a handful of commands: a banded two-tone body (`ui_panel` mid to shade, 90 % to 96 %), a `k` rim with its corners cut, a lit inner top edge and a shaded bottom, gold studs and a gold hairline on a window. Colours are palette indices throughout (`ui::style`: text, quiet, dim, gold, and good, warn and bad for the overlays), so the chrome shifts hue as the world does.
+
+```
+pub struct Ui { art, input: UiInput, tick, canvas, interactive, nav, cmds, out, hot, active, drops, drag, tooltip, popover, images, reticle, … }
+impl Ui {
+  fn begin(&mut self, input: UiInput, tick: u32, canvas: (u16, u16)); fn finish(&mut self, frame: &mut Frame);
+  fn panel(r, PanelStyle /* Hud | Window | Tip | Debug */); fn text(x, y, &str, Ink) -> x; fn wrapped(r, &str, Ink) -> lines;
+  fn wrapped_reveal(r, &str, Ink, shown) -> lines;       // the whole text laid out; only `shown` chars drawn
+  fn button(id, r, label, ButtonKind /* Menu | Chip | Tab */, enabled, focused) -> bool;
+  fn slot(id, r, &SlotView, drag: Option<DragPayload>, target: DropTarget, focused) -> SlotOut;
+  fn bar(r, frac, lag, Ramp); fn well(r, lit); fn rule(x0, x1, y, Ix); fn focus_ring(r);
+  fn text_field(r, &mut String, max, Ink) -> FieldOut; fn popover(id, &[&str]) -> Option<usize>; fn tip(id, r, |s| …);
+  fn image_mut(slot, w, h) -> &mut UiImage; fn command(Command); fn intent(AppIntent); fn take_drop() -> Option<(DragPayload, DropTarget)>;
+}
+enum UiOut { Command(jane_sim::Command), Intent(AppIntent) }
+enum AppIntent { NewGame { name }, Continue, Load(u8), Save(u8), LoadMenu, SaveMenu, ToTitle, Quit, Resume, Pause, Controls, Back,
+                 Rebind { row, col }, ResetBindings, Assist(AssistProfile), Console(String), OpenWindow(u8), CloseWindow }
+```
+
+`WidgetId = wid(name, index)` (FNV-1a). `UiInput` is device-free (pointer, the primary button held, pressed and released, right and middle presses, the wheel, the navigation presses, typed text, keys and pad inputs pressed this frame, whether the pad was last); the app fills it, a test fills it by hand. The app drains `UiOut` each frame: a `Command` goes to the session stamped like any press, an `Intent` to the app. **The UI never calls into the sim.** Layers, bottom to top: F3's world overlay, HUD, dialogue, window, the menus (pause, slots, confirm, Controls), the terminal, F2 and the top line; the app sets `Ui::interactive` for the top one only. The pointer over any panel drawn this frame or the last is the UI's (`wants_pointer`): a press there never reaches the world. Text wraps greedily on spaces (an explicit newline breaks); a dialogue line's unrevealed tail is laid out invisibly so the box never reflows as it types. The OS cursor is hidden and the UI draws its own: the reticle in play (§4), a pixel arrow over the UI, a hand while dragging.
 
 ### 3.2 Widget list
 
 | Screen | Holds |
 | --- | --- |
-| Title | The chrome scene (`ART.md`, the chrome section) at the canvas size, drawn through the `Sky` and `FarLandmark` passes so the School's window flickers and its silhouette sits in the lake on T2. New Game (name field, 16 characters, `clean_name` before `Join`), Continue, Load, Controls, Host, Join, Quit |
-| Loading | New Game builds all 13 zones up front (`PORT.md` §9.4: under 5 s on a Pi 3, under half a second on a modern x86-64), on a thread the app owns, and the screen shows the skeleton forming: land, then river and lake, then roads and rail, then sites, lamps and patches, then one mark per zone as its blueprint lands, drawn with the same card painter as `jane view` (§6) at 2x, a stage name in Small face beneath. Continue and Load show the same screen while the county is rebuilt from seed and deltas. Input is ignored until the last zone; there is no cancel |
-| Load, Continue | Three slot rows from the app's save summaries (zone, day, hour, hp, when), read from the save header without decoding (`ARCHITECTURE.md` §3.5). An unreadable slot is an empty slot |
-| Controls | One row per action: label, key, mouse, pad. Press-to-rebind captures the next press; conflicts are shown in `R`, never refused; Reset restores `data/bindings.json`. An Aim Assist row (Off, Pad, Mouse) per seat. A Video row: backend (auto, soft, gl2, wgpu), integer window on T0, and one toggle per `Features` row the tier has |
-| Pause | Resume, Save (enabled only when `MeView.can_save`, in reach of a bed or a fire), Load, Controls, Quit to Title. Solo it freezes the sim through the app; with company nothing freezes (`ENGINE.md` §4) |
-| HUD | Vitals top-left (hp, mp, energy bars with damage lag); up to 8 status chips with a conic sweep; target or boss frame top-centre; zone name, clock, day and a sun or moon top-right; quest tracker of at most 4 lines on the right; the prompt above the bar (`[E] Read: Notice`, key or pad glyph from the bindings table); Bag, Book, Quests, Map and Menu buttons, pointer only; the zone banner; the death veil with the respawn count; toasts; the 8-slot bar with cooldown and GCD sweeps, a fail flash and slot labels; the reticle at the assisted aim (§4) |
-| Window | Tabs: Inventory (8 x 3 bag, the craft strip when `at_bench`, the stats card), Spellbook, Quests, Map (§3.5). Centred 640 x 380; the stats card drops below the bag on a narrow canvas. Pauses the sim solo, never with company |
-| Popover | Use, Move, Destroy on a slot; destroying outside the bag asks once |
-| Tooltip | After 20 ticks under the pointer or the focus ring; 40-column wrap; name, count, what it does |
-| Dialogue | Speaker name, the line revealed at 3 characters a tick, at most 2 options, a "more" glyph when a line continues, device hints for advance and choose |
-| Terminal | Backquote; the top third; a ring of 400 lines and a history of 100; tab completion over the console rows of `ENGINE.md` §12; every line becomes `AppIntent::Console`, and every mutation it can cause is a `Command::Dev` (`ARCHITECTURE.md` §1) |
-| Host, Join | Host: slot, open or closed, seats, input delay. Join: the broadcast list plus an address field; refused joins show both content hashes (`ARCHITECTURE.md` §7). P8 |
-| Debug | F2: fps, frame p50 and p99 per pass, backend and tier, the `Features` rows in force, tick µs, awake and total units, live and built chunks, lights and casters in the `Frame`, path searches, dropped ticks, state hash. F3: solid cells, occupancy, unit paths, trigger rects, caster segments, the load ring |
+| Title | **As built** (a departure recorded here): the backdrop is painted once per canvas size into a UI image, not drawn through the `Sky` and `FarLandmark` passes: the night sky in dithered bands from indigo to a low ember glow, stars, the moon with a halo, the far treeline, the School on its hill (block, wing, bell tower with an open arch, two rows of lit windows), its light drawn down the lake in broken streaks, reeds on the near bank. Over it each frame: one window flickering, mist bands drifting at their own speeds, fireflies pulsing. JANE in the Title face, bold, gold lit from above in three bands with a `k` outline and shadow; "The bell rings at nine" under a gold rule. New Game opens a name field (16 characters, `clean_name`) with Begin and Back; Continue and Load are live only when a slot holds a save. Host and Join wait for P8 |
+| Loading | New Game builds on a thread the app owns; the loader first sends the skeleton (`jane_world::skeleton::skeleton(seed)`), which becomes a card at 2x (land by biome and height, river and lake, roads (lit ones gold) and rail, small places, patches as dotted rings, sites as diamonds, dungeon mouths red), each layer swept in top to bottom under a lamp-coloured line, 20 ticks a stage, then one mark per zone; the stage's name in the Small face and five stage dots beneath. Play starts when the build is done and the stages have shown (about two seconds). Load and Continue show the same card when `config.json` knows the slot's seed (written with the save); else the card is blank and the stages still run. Input is ignored; there is no cancel |
+| Load, Save | Three wells from the slots' headers without decoding (`jane_sim::save::read_header`): the zone, "Day 3, 21:00", "HP 34 of 40", how long ago, and "latest" on the newest. Empty or unreadable is "Empty". Loading an empty slot is not offered; saving over a full one is one pick |
+| Controls | One row per action (28, scrolled): the label, two keys, the mouse button, the pad input. Pick a cell and press: a key for the key columns, a button for the mouse, a pad input for the pad; Backspace clears; Esc keeps it. A clash shows in red with who else has it, never refused. Reset all restores `data/bindings.json`. Beneath: the aim assist (Auto, Off, Pad, Mouse) and the backend (auto, soft, wgpu, taking effect on the next start). All kept in `config.json`. Not built: the integer-window toggle and the per-`Features` toggles (no `Features` table exists yet) |
+| Pause | Resume, Save (live only when `MeView.can_save`, and saying so beneath: "Save by a bed or a fire"), Load, Controls, Quit to Title (which asks). The world dims under it. Solo it holds the sim (the app stops stepping it); with company nothing would hold (not reachable before P8) |
+| HUD | Vitals top-left: her name, hp as numbers, hp, mp and energy bars (a lit lip, a shaded foot, quarter ticks) with a damage-lag tail in the bar's own pale tone that holds 30 ticks and falls, the hp bar pulsing under a quarter; up to 8 status chips under the plate with their sweep, a red underline on the harmful. The target frame top-centre while she and a hostile trade blows (600 ticks), a skull on a boss. The zone's name (the county by region: The Lowfields, The Waters, The Works), the clock, the day and a sun or moon top-right, with the hour as a mark along the plate's foot. The tracker: the first four quests, each at its first unfinished step ("Back to …" in gold when ready), on a dark band with a gold edge. The prompt above the bar: the Use key's cap (or the pad's button) from the bindings table, then "Verb: Label", "(hold to push)" when it also moves. Bag, Book, Log, Map and Menu chips bottom-left, pointer only. The zone banner in the Head face with gold rules growing out of it, fading, "Night" beneath after dark. The death veil: a cold violet wash deepening to the edges, "{name} fell", "Waking in N" with a skull. Toasts above the prompt: up to three, 180 ticks, rising in and fading out, the same words merged with "x2", gold for a gain, red for a refusal. The 8-slot bar: 36 px wells, the icon, the stack count, the key or pad label, the cooldown as a dark conic sweep and the GCD as a pale one, a gold flash on a cast and a red one on a refusal. Under an open window the plates it covers step aside; the bar stays, as a place to drop |
+| Window | One panel, 640 x 350 (**not 380**: the bar below stays visible and a drop target), four tabs: **Bag** (the 8 x 3 bag; the craft strip, three inputs, the output and Make, when `at_bench`, else a line saying a bench is wanted; the stats card: strength, spirit, health and mana of their maxes, the day, falls, and a tally), **Book** (what she casts: her row's own book and what the party has learned, each draggable to the bar, its key shown when bound; the lit one whole on the right), **Log** (the quests, active then done, ◆ ready and ✓ done; the lit one's text and its steps with their counts), **Map** (§3.5). The tab is called Log, not Quests: `VOICE.md` rule 8. Holds the world solo |
+| Popover | On a bag slot (right click, or a press on a pad): Use (when usable), Put on the bar, Destroy. Destroy asks once |
+| Tooltip | After 20 ticks under the pointer; 40 columns; the name in gold, then what it costs, when it can be used again and what it does |
+| Dialogue | Speaker on a plate over the box's top edge; the line revealed at 3 characters a tick; at most 2 options with their number caps, lit by pointer or keys; ▼ bobbing while another line follows, ■ at the last; the device's hint ("E Next", "E Close", "1, 2 or E Choose"). A press mid-line shows the rest; the next sends `Advance`, an option `Choose` (what `jane-bot` sends), at most one command a line |
+| Terminal | Backquote; slides over the top third; a ring of 400 lines (long ones wrapped), a history of 100 (up, down), page keys and the wheel scroll, Tab completes a row and then its argument (items, spells, units, quests, zones). Every line becomes `AppIntent::Console`; `jane-app/src/console.rs` runs it, and every mutation is a `Command::Dev` (`ARCHITECTURE.md` §1). The rows are `ENGINE.md` §12's less `join` and `leave` (P8) and `replay` (headless: `jane replay`), plus `clear` |
+| Host, Join | P8. Not built |
+| Debug | **F2** cycles off, compact, full. Compact, bottom right: fps, the last frame's ms, p50 and p99 over 120 frames, the sim's tick µs, tier and backend, dropped ticks; the border amber near the 16.7 ms budget and red over it. Full, top right: the last 240 frames as stacked bars by stage (sim step, presenter tick, frame and UI build, backend draw, the wait for the display) with budget lines at 16.7 and 8.3 ms and a red tick over each hitch; the sim's tick graph with p50, p99 and max; the per-pass table (sky, parallax, chunks, water, list, fx, shadows, light, fog, weather, grade, ui, upscale: p50 and p99 from `Backend::stats`, the GPU's clock where it has one, "-" where a backend does not split a pass); units awake of all, path searches a tick and nodes each, events a tick, and the per-phase times of `Sim::metrics()` ("n/a" until the sim has it); the frame's list, lights, casters, chunks live and painted, UI commands, atlas pages, draw calls and px written; the last hitches over 20 ms with the stage that dominated and their tick; the passes in force. **F3** draws over the world, under the UI: solid, prop-solid, water, sight-blocking and occupied cells; chunk borders with their generation and slot; units with id, row and state, their path, their target, aggro and leash rings; triggers and plates with their names and whether fired; lights with their reach and height, casters, the sun's way; unseen fog blocks; named rects; props with id, row and state; the zone's edge and the camera's lock. While it is up 1–9 toggle the layers (the legend says which are on), and the pointer over a unit, prop or tile opens its fields. Either shows a top line: seed, zone, tick, the clock, the state hash (taken every half second). **F6** holds the world, and steps it one tick a press while held; **F7** a quarter speed, **F8** four times; the sim stays deterministic, only the ticks a frame change |
 
 ### 3.3 Focus and navigation
 
-```
-struct Focus { region: Bag | Craft | Bar | List | None, index: u8 }
-impl Focus { fn move_cursor(dir); fn home(); fn cycle_tab(); fn cursor_target() -> DropTarget }
-```
-
-The last device used decides whether the focus ring is drawn and which hints show; the UI-mode key map swap of the TS input layer carries (a window open turns move keys into cursor keys and USE into confirm). `DragPayload` (a bag slot, a spell, a bar slot) meets `DropTarget` (bag, craft, bar, bar background, window, outside).
+Each screen keeps its own focus (a menu's row, the bag's slot, the book's and the log's line, the Controls cell). The last device decides whether the ring is drawn (`Ui::nav`: a pad, or the keys in a screen) and which hints show; a menu's lit row shows whatever the device, since its rows follow the pointer. The UI-mode key map swap of the TS input layer carries: with a screen up the move keys are cursor keys, Use and Enter confirm, Esc and the pad's B go back, LB and RB change tab.
 
 ### 3.4 Drag and drop
 
 ```
-struct Drag { payload: DragPayload, origin: DropTarget, start: (i16, i16), moved: bool, ghost: SpriteId }
+struct Drag { payload: DragPayload /* Bag | Craft | Bar | Spell */, origin: DropTarget, start: (i32, i32), moved: bool, ghost: Option<SpriteId> }
+enum DropTarget { Bag(u8), Craft(u8), Bar(u8), BarBackground, Window, Outside }
 ```
 
-Arm on pointer down; start once the pointer has moved 4 canvas px; the ghost follows at 70 %; every widget pushes its `(rect, DropTarget)` in the frame; the last hit under the pointer wins on release; outside the window asks to destroy; the result is one `bagMove`, `craftPut` or `barSet` command. On a pad, confirm picks up and confirm puts down at `cursor_target`. Right click, or a second tap, opens the popover.
+Arm on press over a slot that holds something; start once the pointer has moved 4 canvas px; the ghost follows at 70 %; every widget pushes its `(rect, DropTarget)` in the frame and the last hit of the previous frame's under the pointer wins on release; a press and release without the move is a click. The result is one command: `BagMove`, `CraftPut`, `Bind` (bag or book to the bar), `BarSwap`, `Unbind` (the bar off itself), `CraftClear`; a bag thing dropped outside every panel asks "Destroy the …?" and sends `BagDestroy`. On keys or a pad, confirm picks a bag slot up and confirm puts it down where the ring is. Right click, or a press on a pad, opens the popover.
 
 ### 3.5 Map tab
 
-The chart algorithm of the TS map tab carries whole, on `u32` buffers. Outdoors 1 chart px = 4 x 4 cells (the 2000 x 2000 county is 500 x 500); weighted inks (ground 1, water 2.5, road and rail 4, roofs 6, a solid prop's area counting as roof at 20 cells and over); a 3 x 3 majority on ground inks; woods stippled; roads, water and roofs never smoothed away. Indoors the commonest tile per block. Ink colours are the `MapInk` rows of the palette (`ART.md`, the chrome section).
+The chart algorithm of the TS map tab carries whole, on `u32` buffers (`ui::map`). Outdoors 1 chart px = 4 x 4 cells (the 2000 x 2000 county is 500 x 500); weighted inks (ground 1, water 2.5, road and rail 4, roofs 6, a solid prop of 20 cells and over counting as roof by its area); a 3 x 3 majority on ground inks; woods stippled; roads, water and roofs never smoothed away. Indoors the commonest tile per block, greyed and warmed onto a coarse ramp. Ink colours are palette ramps (grass, cloth green, reed, moss, mustard, plaster, stone, water, brick; `MapInk` rows are not yet in the palette).
 
-`MapChart { terrain, composed, seen }` per zone. `terrain` is painted once per zone from the blueprint; `composed` is recomposed only when the fog bits change (checked every 30 ticks): unseen ground is a four-step smoke of two-octave value noise, dithered; unseen indoors is nothing. Zoom `[fit, 1, 2, 3, 4, 6]`, nearest-neighbour blit, drag or stick to pan, `0` to recentre, the School's mark, a blinking dot for her and one per seat. The map is a `UiCmd` like any panel and is never lit.
+`MapChart { terrain, seen, composed }` per zone, painted once per zone from the view's tiles and props; the seen quarters are read every 30 ticks (`View::seen`, one look per chart px outdoors, where a fog block holds four) and `composed` is recomposed only when they changed: unseen ground is a four-step smoke of two-octave value noise, its border two dithered steps of thinning haze; unseen indoors is nothing. Zoom fit, 1, 2, 3, 4, 6 by the wheel or +/-, nearest; drag or the arrow keys pan; 0 recentres on her. The School's mark is a gold star at the mark whose name holds "school"; she is a gold dot that blinks. The chart is a `UiCmd::Image` and never lit.
 
 ### 3.6 The view buffers
 
-`jane_sim::view::View` (`ARCHITECTURE.md` §11) is the sim's contract: one seat, her zone, read only, with the rules the sim also uses (`light_showing`, `focus`, `near_bench`, `craft_output`, `hud`, `assisted_aim`) behind it. `jane-present` walks it once per frame and fills buffers the app owns:
+`jane_sim::view::View` (`ARCHITECTURE.md` §11) is the sim's contract. `jane-present::view::ViewBuffers` is walked from it once a **tick** (not a frame: the toasts of every tick land, and a held world still fades them), with that tick's events, into what the HUD, the dialogue box and the window draw:
 
 ```
-fn build(view: &jane_sim::view::View, events: &[Event], out: &mut ViewBuffers)
+pub struct ViewBuffers { tick, seed, heroine: String, me: MeView, hud: HudView, window: WindowView, dialogue: Option<DialogueView> }
+MeView { dead, respawn_ticks, can_save /* View::near_rest */, at_bench /* View::near_bench */, frozen, the_end }
+HudView { hp, mp, en: Gauge { now, max, frac, lag }, statuses: Vec<StatusChip>, target: Option<TargetFrame>, zone, zone_name,
+          clock: String, clock_ticks, day, night, tracker: Vec<QuestLine>, prompt: Option<Prompt { verb, label, hold }>,
+          bar: [SlotData; 8], banner: Option<(&str, since)>, toasts: Vec<Toast { text, tone, born, count }>, party }
+WindowView { bag: Vec<SlotData> /* 24 */, craft: [SlotData; 3], craft_out /* View::craft_output */, at_bench, stats: StatsCard,
+             book: Vec<SpellRow { id, bound }>, quests: Vec<QuestRow { title, body, steps, ready, done }> }
+DialogueView { speaker, text /* expanded */, options, choosing, more, key /* a new key restarts the reveal */ }
 ```
 
-The `Vec`s inside are reserved on the first frame and cleared, never dropped, after it: **no allocation after the first frame** (asserted by the counting allocator of §1.12). No reference into `GameState` survives the call; strings are `&'static str` from `NAMES` and `TEXT` or small fixed buffers; the only thing that leaves the UI is a `Command`.
+The scene's share (units, props, lights, the sky) is the presenter's own records (§1.11), not a `SceneView`. Strings and vectors are cleared and refilled, not dropped; a new toast is the one allocation of a steady frame. No reference into `GameState` survives the call; the only thing that leaves the UI is a `Command`. `View` gained read-only accessors for it: `text(TextRef)` (a zone's generated words), `party()`, `seen(cx, cy)` and `fog_block()`.
 
-```
-pub struct ViewBuffers { tick: u32, seed: u32, zone: ZoneView, me: MeView, hud: HudView, window: WindowView,
-                         dialogue: Option<DialogueView>, scene: SceneView }
-ZoneView { id: ZoneId, name: &'static str, w_cells, h_cells: u16, indoor: bool, ambient: u8, rects: &[NamedRect],
-           areas: &[AreaView { rect, ambient: Option<AmbientRow>, fog: Option<FogRow>, grade: GradeId }],
-           weather: Clear | Mist | Rain | Storm, grid: GridRef /* read-only tiles and flags */, fog: FogRef }
-MeView { unit_id, seat: u8, x, y: Fx, facing, dead: bool, respawn_ticks: u32, can_save: bool, at_bench: bool,
-         clock_ticks: u32 /* since midnight */, day: u16, night: bool, aim: Option<Angle> /* View::assisted_aim */ }
-HudView { hp, hp_max, mp, mp_max, en, en_max: Milli,
-          statuses: [Option<StatusChip { icon, ticks_left, total }>; 8],
-          target: Option<TargetFrame { name, hp_frac: u8, boss: bool }>, boss: bool,
-          zone_name: &'static str, clock_text: FixedStr<8>,
-          tracker: [Option<QuestLine { title, progress_text, ready }>; 4],
-          prompt: Option<Prompt { verb: Verb, label: &'static str }>,
-          bar: [BarSlotView { icon, count, cooldown_frac, gcd_frac: u8, usable: bool, source }; 8],
-          banner: Option<TextId>, toasts: [Option<Toast { kind: ToastKind, until }>; 3], party_size: u8 }
-WindowView { bag: [SlotView { icon, count, name, usable }; 24],
-             craft: CraftView { inputs: [SlotView; 3], output: Option<SlotView>, enabled: bool },
-             stats: StatsCard, book: Vec<SpellRow { id, name, icon, cost, range, cooldown_text, bound_slot }>,
-             quests: Vec<QuestRow { id, title, state, lines }>,
-             map: MapSource { zone, step, buildings, seen_version } }
-DialogueView { speaker: &'static str, text: &str /* expanded */, options: [Option<&str>; 2], choosing: bool, more: bool }
-SceneView { units: Vec<UnitView { id, x, y: Fx, prev_x, prev_y, facing, sprite: SpriteId, variant: u8,
-                                  anim_ticks: u32, action: Idle | Walk | Attack(t) | Cast(t) | Dead,
-                                  hp_frac: u8, hostile: bool, friend_seat: Option<u8>, statuses, glow: Option<Light>,
-                                  carrying: Option<SpriteId>, is_me: bool, height: u8 }>,
-            snake: Option<SnakeView { head, trail }>,
-            props: Vec<PropView { id, sprite, x, y, frame: u8 /* open > on > base, base2, base3 by id hash */,
-                                  flat: bool, light: Option<Light>, loot_icon: Option<SpriteId>, height: u8 }>,
-            drops: Vec<DropView>, projectiles: Vec<BoltView { id, x, y, vx, vy, spell }>,
-            grounds: Vec<GroundView { spell, x, y, r, ticks_left, total }>,
-            walls: Vec<Seg> /* caster segments of the chunks in reach */,
-            camera_lock: Option<Rect>, hover_friend: Option<UnitId>, lights_ambient: [u8; 3], sun: Directional }
-```
-
-`UnitView.variant` is the bounded folk variation of `ART.md` (the style rules): `h32(unit.id, 0, VARY) % n` over a row's `vary` set, `n ≤ 4`, materialised at boot; a seat's coat swap is separate and is the only thing that tells seats apart. `props` covers only the 16-cell blocks under the canvas plus 208 canvas px, the light reach; `walls` the same. `MeView.clock_ticks` is ticks since midnight; the clock text, the sun or moon glyph and the sun's angle are worked out here, not in the sim. `weather` is read from the view, which reads `WORLD.md`'s weather state; the presenter never rolls weather.
-
-**Rule:** a rule the sim reads (what is lit, what USE would do, whether she may save, where the assisted aim points) is read through `View`, never re-derived in `jane-present`. The view is tested in the sim's suite; the buffers are tested here for shape only.
+**Rule:** a rule the sim reads (what is lit, what USE would do, whether she may save, the bench, what the craft row makes, where the assisted aim points) is read through `View`, never re-derived in `jane-present`. The view is tested in the sim's suite; the buffers are tested here for shape and timing (the lag holds then falls, toasts merge and age, a cooldown rounds up, a new game reads).
 
 ### 3.7 Text
 
-The sim has no English (`ARCHITECTURE.md` §0). `jane-data` compiles every string in the content into `TEXT: [&str; N]` indexed by `TextId`; `jane-present::text` owns it and everything done to it.
+The sim has no English (`ARCHITECTURE.md` §0). `jane-present::text` owns every string the UI adds and everything done to content's:
 
 ```
-fn expand(s: &str, heroine: &str, seed: u32, out: &mut FixedStr<256>)   // {name} → heroine; {place:kind} → jane_world::names::story_name(seed, kind)
-fn toast(kind: &ToastKind, heroine, seed) -> &str                        // one row per ToastKind variant
-fn spell_error(e: SpellError) -> &'static str
-fn verb(v: Verb) -> &'static str                                          // Enter, Unlock, Open, PickUp, Craft, Read, Use, HoldToPush, Take, Talk, PutDown, Custom(TextId)
-fn clean_name(raw: &str) -> FixedStr<16>                                  // before Join
+fn expand(s: &str, heroine: &str, seed: u32, out: &mut String)   // {name} → heroine; {place:<story>} → jane_world::names::story_name(seed, id)
+fn say(v: &View, r: TextRef, out)                                // a content or a zone's own text, expanded
+fn toast(v: &View, kind: &ToastKind, out) -> Tone                // one row per ToastKind: Plain, Good or Refused
+fn spell_error(e: SpellError) -> Option<&str>                    // None for the quiet ones (GCD, cooldown)
+fn verb(v: Verb) -> &str                                         // Enter, Try the door, Unlock, Open, Pick up, Craft, Read, Use, Hold to push, Take, Talk, Put down, Custom(TextId)
+fn zone_name(zone, region) -> &str; fn clock(ticks, out); fn span(ticks, out); fn clean_name(raw) -> String
 ```
 
-Toasts arrive as `Event::Toast(ToastKind)`; the table here turns `KillProgress { quest, req, n, of }` into "Rats 3 of 5" and `Needs { item, qty }` into "Needs wood x2". Numbers are formatted by integer helpers; nothing here calls a float formatter. **Rule:** a `ToastKind` variant or a `TextId` without a row is a build error, not a blank toast.
+`KillProgress` reads "Rats 3 of 5"; `Needs` reads "Needs wood x2"; the words are written to `VOICE.md` (plain, first person where she speaks: "My bag is full", "I should keep that"). Numbers are formatted by integer helpers; nothing here calls a float formatter. **Rule:** a `ToastKind`, `Verb` or `SpellError` variant without a row is a build error: every match is exhaustive.
 
 ## 4. Input
 
@@ -490,13 +475,13 @@ enum AssistProfile { Off, Pad, Mouse }
 enum Edge { Ui(UiAction), Game(GameAction) }                                                                                     // queued on press
 ```
 
-**Aim assist lives in the sim** (`ARCHITECTURE.md` §5), not here, so it is deterministic and replays: the client sends the raw aim and the profile, and the sim's tuning rows per profile set the cone, the magnetism and the stickiness (the partial assist of a console FPS: a pull toward a hostile inside the cone, a hold on the one it has, never a snap). This section says only that. The reticle draws the assisted aim the view reports, `View::assisted_aim(seat)`, carried as `MeView.aim`, so what she sees is where the bolt goes and the reticle is never a frame ahead of the sim. The profile is a Controls row per seat (`AppIntent::Assist`), defaulting to `Pad` when the last device was a pad and `Off` for a mouse, and a change is a `Command`, so every seat and every replay knows it.
+**Aim assist lives in the sim** (`ARCHITECTURE.md` §5), not here, so it is deterministic and replays: the client sends the raw aim and the profile, and the sim's tuning rows per profile set the cone, the magnetism and the stickiness. The reticle draws the assisted aim the view reports: the app asks `View::assisted_aim(frame, spell)` for the frame it is about to send and the first spell on her bar, and draws the reticle along it at the cursor's distance from her chest, with a faint dot at the cursor itself when the assist has pulled away from it; what she sees is where the bolt goes. The profile is a Controls row (`None`, the default, is `Pad` while the pad aims and `Off` for a mouse).
 
-Move and aim vectors are turned into `(Angle, magnitude)` with floats here and quantised; the sim never normalises. Keyboard by `Scancode`; mouse from window px to canvas px through the window's `s`, aim from the chest (12 canvas px above the feet); right button held walks toward the cursor with strength `dist / 64`, the 2020 virtual stick; left button is bar slot 1 unless a widget is hot; wheel zooms the map or scrolls a list. `SDL_GameController` with the standard mapping: left stick or D-pad move, right stick aim, A X Y LB RB bar 1 to 5, B use, RT sprint, View bags, Menu pause. Text entry through `SDL_StartTextInput`; the held set is cleared while text is captured. The reticle is drawn and the OS cursor hidden while the mouse aims.
+Move and aim vectors are turned into `(Angle, magnitude)` with floats here and quantised; the sim never normalises. Keyboard by `Scancode`; mouse from window px to canvas px through the window's `s`, aim from the chest (12 canvas px above the feet); right button held walks toward the cursor with strength `dist / 64`, the 2020 virtual stick; left button is bar slot 1 unless the pointer is over the UI; the wheel zooms the map, scrolls the terminal and the Controls list. `SDL_GameController` with the standard mapping: left stick or D-pad move, right stick aim, A X Y LB RB bar 1 to 5, B use, RT sprint, View bags, Menu pause. Text entry through `SDL_StartTextInput` while a text field or the terminal has the keyboard (`Mode::Text`: only Esc and backquote act). The OS cursor is hidden; the UI draws the pointer.
 
-**Bindings are data.** `data/bindings.json` is compiled in with the rest of the content (`ARCHITECTURE.md` §6): `Binding { action, keys: [Scancode; 2], mouse: Option<Button>, pad: Option<PadInput> }`. User overrides live in `config.json` beside the saves, one row per changed action, applied over the compiled table at boot. The Controls screen rebinds by press-capture; conflicts are shown, not refused; the prompt's glyphs and every hint read the same table, so a rebound key is never shown wrong.
+**Bindings are data.** `data/bindings.json` (one row per action: `{ "action": "use", "keys": ["E", "F"], "mouse": null, "pad": "B" }`) is compiled in by **`jane-present`'s build script** against one table of names (`src/input_names.rs`: actions with their Controls labels, key caps to scancodes, pad inputs, mouse buttons), which `config.json`'s overrides read too; an unknown name or an action without a row is a build error. It is presentation, not content, so it sits outside `jane-data`'s catalog and its content hash (decided 2026-09-27). User overrides live in `config.json` beside the saves, one row per changed action with only the changed columns (`"none"` unbinds a pad or mouse column), applied over the compiled table at boot into the `Bindings` in force (`Input::bindings`). The Controls screen rebinds by press-capture; conflicts are shown, not refused; the prompt's glyph, the bar's labels and every hint read the same table, so a rebound key is never shown wrong. F6, F7 and F8 (hold and step, a quarter, four times) are rows like any other.
 
-**Rule:** `jane-present` never sees an SDL type. The app hands it `DeviceState { keys: BitSet<512>, mouse, pad }` and reads back `InputFrame` and `Edge`s; the same struct is what a test fills.
+**Rule:** `jane-present` never sees an SDL type. The app hands it `DeviceState { keys: BitSet<512>, mouse, pad }` and a `UiInput`, and reads back `InputFrame`, `Edge`s and `UiOut`s; the same structs are what a test fills.
 
 **Rule:** nothing in `input` bends an aim. The raw angle leaves this crate; the sim bends it; the view reports where it went.
 
@@ -554,4 +539,10 @@ Each is a one-line edit if the owner flips it before P6.
 | Atlas cache | Allowed on disk under the save directory, keyed by build hash, all four layers together; written, never shipped | boot |
 | Build order | Window first (`PORT.md` §7.1): §1 on `soft` and a window before the art is done; chunks as flat swatches (§1.6) and step-1 demo sprites stand in; the prompt, vitals and dialogue box of §3.2 come with P6, the rest of §3 with P7 | §1.6, §3.2 |
 | New Game | All 13 zones built up front behind the loading screen; no zone is built on first entry | §3.2 |
-| Audio and bindings | `NullBus` ships and procedural audio is outlined for `PLAN.md` M8 only; `data/bindings.json` compiled in, overrides in `config.json` beside the saves | §4, §5 |
+| Audio and bindings | `NullBus` ships and procedural audio is outlined for `PLAN.md` M8 only; `data/bindings.json` compiled in by `jane-present`'s build script (outside the content hash), overrides in `config.json` beside the saves | §4, §5 |
+| Saves and config | Slot files and `config.json` in `%APPDATA%\Jane`, `~/Library/Application Support/Jane` or `$XDG_DATA_HOME/jane`; beside the exe when a file called `portable` is there; `--data-dir` overrides | §3.2 |
+| The window's height | 350, not 380: the HUD's bar stays visible below it as a drop target | §3.2 |
+| The quest tab's name | Log (`VOICE.md` rule 8: no "quest" in the game's words) | §3.2 |
+| The title | A backdrop painted once into a UI image with what moves drawn over it each frame, not the `Sky` and `FarLandmark` passes; the passes can take it over when §2.8's parallax lands | §3.2 |
+| UI pointer | The OS cursor hidden; the UI draws the arrow, the hand and the reticle | §3.1, §4 |
+| Stand-in icons | Drawn from the icon's name in `jane-present::ui::icons` until `ART.md` §2.5 lands | §3.1 |
