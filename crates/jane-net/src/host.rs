@@ -274,6 +274,11 @@ impl Host {
         self.checks
     }
 
+    /// The state hash at the last hash point: `(frame, hash)`.
+    pub fn last_hash(&self) -> Option<(u32, u64)> {
+        self.book.last_hash()
+    }
+
     /// Whether anyone at the table rested since the last call: the world lives on the host's
     /// machine, so a guest's rest saves it (PLATFORM.md §2).
     pub fn take_rested(&mut self) -> bool {

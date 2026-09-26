@@ -158,6 +158,11 @@ impl Guest {
         self.stall
     }
 
+    /// The state hash at the last hash point: `(frame, hash)`.
+    pub fn last_hash(&self) -> Option<(u32, u64)> {
+        self.book.last_hash()
+    }
+
     pub fn drain_reports(&mut self) -> Vec<Report> {
         std::mem::take(&mut self.reports)
     }

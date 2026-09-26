@@ -61,6 +61,11 @@ impl Book {
         Some((frame, h))
     }
 
+    /// The last hash point: `(frame, hash)`.
+    pub fn last_hash(&self) -> Option<(u32, u64)> {
+        self.hashes.back().copied()
+    }
+
     pub fn hash_at(&self, frame: u32) -> Option<u64> {
         self.hashes.iter().find(|h| h.0 == frame).map(|h| h.1)
     }
