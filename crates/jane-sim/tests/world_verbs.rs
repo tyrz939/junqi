@@ -785,7 +785,7 @@ fn items_ask_for_the_cooldowns_and_say_why_not() {
 }
 
 #[test]
-fn bags_merge_and_swap_and_a_bound_thing_is_never_destroyed() {
+fn bags_merge_and_swap_and_a_bound_or_story_thing_is_never_destroyed() {
     let mut s = common::new_game();
     let bag = |s: &Sim| s.state().players[0].bag.clone();
     let letter = bag(&s).iter().position(|x| x.is_some_and(|x| x.item == item("julies_letter"))).unwrap() as u8;
@@ -800,8 +800,25 @@ fn bags_merge_and_swap_and_a_bound_thing_is_never_destroyed() {
     cmd(&mut s, Command::Dev(DevOp::Give { item: item("apple"), qty: 2 }));
     let first = bag(&s).iter().position(|x| x.is_some_and(|x| x.item == item("apple"))).unwrap();
     assert_eq!(first, 20, "a gift tops up the stack it has");
+    // An apple is a story thing (a quest asks for one): kept. Gold is not: gone.
     cmd(&mut s, Command::BagDestroy { slot: 20 });
-    assert_eq!(holds(&s, "apple"), 0);
+    assert_eq!(holds(&s, "apple"), 5);
+    assert!(!jane_data::catalog().combat.item(item("gold_bar")).story);
+    cmd(&mut s, Command::Dev(DevOp::Give { item: item("gold_bar"), qty: 2 }));
+    let gold = bag(&s).iter().position(|x| x.is_some_and(|x| x.item == item("gold_bar"))).unwrap() as u8;
+    cmd(&mut s, Command::BagDestroy { slot: gold });
+    assert_eq!(holds(&s, "gold_bar"), 0);
+    // A story key is not bound, and is kept all the same: nothing gives a second.
+    for key in ["key_forest", "key_tower", "key_mine_boss", "key_burial"] {
+        let def = jane_data::catalog().combat.item(item(key));
+        assert!(!def.bound && def.story, "{key}: a story item, not a bound one");
+        cmd(&mut s, Command::Dev(DevOp::Give { item: item(key), qty: 1 }));
+        let slot = bag(&s).iter().position(|x| x.is_some_and(|x| x.item == item(key))).unwrap() as u8;
+        events(&mut s);
+        cmd(&mut s, Command::BagDestroy { slot });
+        assert!(toasts(&events(&mut s)).contains(&ToastKind::ShouldKeep), "{key}");
+        assert_eq!(holds(&s, key), 1, "{key} is kept");
+    }
 }
 
 #[test]
@@ -875,8 +892,8 @@ fn never_loses_a_reward_when_the_bag_is_full() {
     assert_eq!(z.drops.len(), drops + 1);
     assert_eq!(z.drops.last().unwrap().item, item("key_auntie_house"));
     // Picked up again once there is room.
-    let slot = 0;
-    cmd(&mut s, Command::BagDestroy { slot });
+    let slot = s.state().players[0].bag.iter().position(|x| x.is_some_and(|x| x.item == item("gold_bar"))).unwrap();
+    cmd(&mut s, Command::BagDestroy { slot: slot as u8 });
     assert_eq!(s.view(Seat(0)).unwrap().focus().map(|f| f.verb), Some(Verb::Take(item("key_auntie_house"))));
     cmd(&mut s, Command::Use);
     assert_eq!(holds(&s, "key_auntie_house"), 1);

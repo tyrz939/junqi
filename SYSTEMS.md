@@ -156,7 +156,7 @@ The pipeline is the product: validate → spawn a kind → pay only if valid →
 | Crafting needs a bench in reach | **SHAPE** |
 | Ground drops live in zone state (survive travel and saves); story drops never expire | **IN** — D: keys looted from drops |
 | Rewards that do not fit land at your feet | **IN** — S: "never loses a reward when the bag is full" |
-| Bound items refuse destroy | **SHAPE** |
+| Bound items and story items (keys, anything a quest asks for) refuse destroy; nothing drops from the bag | **SHAPE** |
 | Hunger / warmth | **NEVER** — JaneCraft, not Jane. The 2026 version was inert |
 
 ## 5. Quests / dialogue
