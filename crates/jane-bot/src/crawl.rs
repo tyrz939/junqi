@@ -104,6 +104,8 @@ pub struct Crawl {
     pub stuck: Option<String>,
     /// Why each failed try failed, the last time (for a debugging dump).
     pub failures: BTreeMap<Try, String>,
+    /// The Gold Mine's hoists over Iron Knuckles (`tactics/mine.rs`).
+    pub mine: crate::tactics::mine::Mine,
 }
 
 /// The cells she can walk to from where she stands (flood over `View::flags`).
@@ -244,6 +246,7 @@ impl Crawl {
             seen_w: 0,
             stuck: None,
             failures: BTreeMap::new(),
+            mine: crate::tactics::mine::Mine::default(),
         }
     }
 
@@ -329,6 +332,10 @@ impl Crawl {
             }
         }
         self.look(v);
+        // The Gold Mine: Iron Knuckles is fought under the hoists (DUNGEONS.md §3.1).
+        if let Some(a) = self.mine.think(v, cx) {
+            return a;
+        }
         if let Some(id) = fight::threat(v, cx) {
             if let Some(a) = fight::engage(v, cx, id) {
                 return a;
