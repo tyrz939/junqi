@@ -392,7 +392,7 @@
       { "node": "offer" }
     ],
     "nodes": {
-      "news_bell": {"lines": ["No bell last night. I stood by the window at nine anyway, and looked over at the telephone. It didn't ring either."], "actions": [{"do": "flag", "flag": "said_bell_mr_dunn"}]},
+      "news_bell": {"lines": ["No bell last night. At nine I sat by my door with my coat on, in case. Nothing rang."], "actions": [{"do": "flag", "flag": "said_bell_mr_dunn"}]},
       "offer": {
         "lines": [
           "I'm waiting for a call. My brother said he'd ring on the hour.",
@@ -493,7 +493,7 @@
     ],
     "nodes": {
       "news_bell": {"lines": ["No bell last night. We sat in the Arms and looked at each other till it was light. Nobody said anything. It isn't a thing you say."], "actions": [{"do": "flag", "flag": "said_bell_mr_cobb"}]},
-      "news_mine": {"lines": ["You came back down the mine road, didn't you. I've not seen anybody come down it on their own two feet since the Company shut it."], "actions": [{"do": "flag", "flag": "said_mine_mr_cobb"}]},
+      "news_mine": {"lines": ["You came back in off the mine road, didn't you. I like to see who comes up the street, and I've not seen anybody come in off that road on their own two feet since the Company shut."], "actions": [{"do": "flag", "flag": "said_mine_mr_cobb"}]},
       "first": { "lines": ["I sit out here till the bell. Mrs Garland likes the yard kept, and I like to see who comes up the street."], "actions": [{ "do": "flag", "flag": "talked_mr_cobb", "value": 1 }] },
       "again": { "lines": ["After nine she'll let you in, but she likes you to stay till it's light. Most do. I've never walked home in the dark, and I don't mean to start."], "actions": [{ "do": "flag", "flag": "talked_mr_cobb", "value": 2 }] },
       "third": { "lines": ["A sheet came over the rails into this yard this morning, off somebody's line. There wasn't a breath of wind. I left it where it lay."], "actions": [{ "do": "flag", "flag": "talked_mr_cobb", "value": 3 }] },
@@ -760,6 +760,7 @@
       { "when": [{ "if": "questDone", "quest": "paid_to_sunday" }], "node": "after" },
       { "when": [{ "if": "questActive", "quest": "paid_to_sunday" }], "node": "wait" },
       { "when": [{ "if": "questDone", "quest": "two_loaves" }], "node": "offer" },
+      { "when": [{ "if": "flag", "flag": "talked_milkman", "min": 2 }], "node": "third" },
       { "when": [{ "if": "flag", "flag": "talked_milkman" }], "node": "again" },
       { "node": "first" }
     ],
@@ -768,7 +769,8 @@
       "news_mine": {"lines": ["Mr Cobb had it in the Arms yard that you'd been up at the mine. He had it twice, to be sure I'd heard.", "It'll go round with the milk now. Everything does."], "actions": [{"do": "flag", "flag": "said_mine_milkman"}]},
       "news_sheds": {"lines": ["They're saying at the dairy yard that somebody's seen to the rats at the allotment sheds. The farmer says the hens will lay now.", "The farmer says a good many things."], "actions": [{"do": "flag", "flag": "said_sheds_milkman"}]},
       "first": { "lines": ["I'm round from seven, and the milk's on every step by nine. I don't knock. Some houses take it in and some don't, and I leave it anyway."], "actions": [{ "do": "flag", "flag": "talked_milkman" }] },
-      "again": { "lines": ["No. 7 hasn't taken theirs in all week. Three bottles on the step. You don't stop for one house, though. Not on a round."] },
+      "again": { "lines": ["No. 7 hasn't taken theirs in all week. Three bottles on the step. You don't stop for one house, though. Not on a round."], "actions": [{ "do": "flag", "flag": "talked_milkman", "value": 2 }] },
+      "third": { "lines": ["Nobody on this round has gone anywhere. They're just not up yet, some of them."] },
       "offer": {
         "lines": [
           "You took Mrs Oddie's loaf down to No. 7? Then you've seen the bottles.",
@@ -1116,7 +1118,7 @@
     "start": [{"when": [{"if": "flag", "flag": "nine_silent"}, {"if": "flag", "flag": "said_bell_vicar", "not": true}], "node": "news_bell"}, {"when": [{"if": "speakerKnows", "news": "burial_quiet"}, {"if": "flag", "flag": "said_burial_vicar", "not": true}], "node": "news_burial"}, {"when": [{"if": "flag", "flag": "talked_vicar"}], "node": "again"}, {"node": "first"}],
     "nodes": {
       "news_bell": {"lines": ["Nothing rang at nine last night. I found I had been waiting for it, so as not to answer it."], "actions": [{"do": "flag", "flag": "said_bell_vicar"}]},
-      "news_burial": {"lines": ["I went round the graveyard at first light, as I do, and I could see where I was putting my feet. There has been a fog on that ground at first light every day since I came.", "Goldskin. The parish buried him. I wrote it in the book myself, and I have not said it since."], "actions": [{"do": "flag", "flag": "said_burial_vicar"}]},
+      "news_burial": {"lines": ["From the church door you can see up the graveyard road. There has been a fog on that ground every morning since I came. There isn't now.", "Goldskin. The parish buried him. I wrote it in the book myself, and I have not said it since."], "actions": [{"do": "flag", "flag": "said_burial_vicar"}]},
       "first": { "lines": ["The church is open. It is always open. Nobody has come in since the bell, so you are very welcome."], "actions": [{ "do": "flag", "flag": "talked_vicar" }] },
       "again": { "lines": ["I ring for evensong at six. Something else rings at nine. I've stopped answering it."] }
     }

@@ -108,7 +108,8 @@ NEW GAME (the platform, Castle Halt)
  |        --> End of Term (dog) --(the brass key)--> Painted Over (dog) --(the green tag)-->
  |        Counted Out (dog; back at the Museum's steps) --(the Night Watchman's Key)--> Not Relieved
  |        (back at the graveyard gate) --(the Chairman's Key)--> Under the Stone (graveyard gate)
- |        --(Julie's Other Key, the stair up)--> The Bell at Nine (top of Church Lane) --> the epilogue
+ |        --(Julie's Other Key, the stair up)--> The Bell at Nine (top of Church Lane)
+ |        --> Yours to Say (the study desk | the mine's vault | Castle Halt on a Sunday) --> the end
  |
  +-- A Lost Property (book on the platform) --> A Left Luggage --> A To Be Collected
  |                                                ^
@@ -177,7 +178,7 @@ Chains are independent; only the order inside a chain is fixed. Walks below: **s
 ("Out" is from wherever the dog gave it; "back" from the county door she comes out of. Counted Out is out to the forest gate; The Bell at Nine back from the School's front doors.) Each hand-in names the next place and hands over, or has already handed over, the key to it. The order is `STORY.md` §4's and `PLAN.md` §2.2's; until 26 September the data kept the reference build's mine, then Burial, then the end. **A boss step is a place**: the boss's death marks where she stood (`attendant_down`, `emperor_down`, `foreman_down`, `ringer_down`, from its `onDeath`), so a boss put down before the dog asked still counts, as a place visited early does. A kill step would count only once the quest was in the log, and a boss does not stand up twice. Walks below are from the dog, seed 3 / seed 2026, to the county door the step is behind.
 
 ### End of Term (the Gold Mine)
-- **Unlocked by:** the dog, after the rats (`offer_mine`). **Hand-in:** the dog. **Pays:** apples x5, Stone Skin x2. **Leads on:** the vault's brass key, tagged MAGIC (`key_museum`); the dog's next offer is the Museum. **Tier:** far (924 / 915).
+- **Unlocked by:** the dog, after the rats (`offer_mine`). **Hand-in:** the dog ("He kept the register to the end, then. Forty-one, all present. He took them down because the bell said in, and in is where he kept them."); the Headmaster's register, when he falls, is countersigned A. NOONE. **Pays:** apples x5, Stone Skin x2. **Leads on:** the vault's brass key, tagged MAGIC (`key_museum`); the dog's next offer is the Museum. **Tier:** far (924 / 915).
 
 | Step | Where | Thinking | Confuse | Verdict |
 | --- | --- | --- | --- | --- |
@@ -186,7 +187,7 @@ Chains are independent; only the order inside a chain is fixed. Walks below: **s
 | "Iron Knuckles, down the gold mine" | Inside | | Was a bare name | Fixed (A2) |
 
 ### Painted Over (the Museum)
-- **Unlocked by:** the dog, after the mine (`offer_museum`: "That brass key came out of the vault. It is the Museum's, across the river from Castle, on the road over the bridge. It is open ten to four." / "One wing has had its name painted over. It said MAGIC."). **Hand-in:** the dog ("The old families took a little of the gold, for the bench, and left the rest in the hill."). **Pays:** gold dust x2, Manashield x1. **Leads on:** the case that is not on the plan holds the key on the green tag (`key_forest`). **Tier:** far (1,503 / 1,397).
+- **Unlocked by:** the dog, after the mine (`offer_museum`: "That brass key came out of the vault. It is the Museum's, across the river from Castle, on the road over the bridge. It is open ten to four." / "One wing has had its name painted over. It said MAGIC."). **Hand-in:** the dog ("The old families took a little of the gold, for the bench, and left the rest in the hill." / "He built the School on the hill with what came out of it, and the town sent its children up there gladly. It was a good school. That was the worst of it."). The portrait's second plate says the same: ON THE OPENING OF THE COMPANY SCHOOL. **Pays:** gold dust x2, Manashield x1. **Leads on:** the case that is not on the plan holds the key on the green tag (`key_forest`). **Tier:** far (1,503 / 1,397).
 
 | Step | Where | Thinking | Confuse | Verdict |
 | --- | --- | --- | --- | --- |
@@ -203,7 +204,7 @@ Chains are independent; only the order inside a chain is fixed. Walks below: **s
 | "The Emperor, at the stone in Butterfly Forest" | The summoning stone, five butterflies in | | A place his death marks | OK |
 
 ### Not Relieved (the pipes and the Factory)
-- **Unlocked by:** the dog, after the forest (`offer_factory`: "The key in that case was the Works' night watchman's. It opens the wicket in the Works wall, and the Company's grate at the edge of Castle." / "I will wait at the graveyard gate from six till the bell."). The Night Watchman's Key (`key_works`) is in the Collector's case marked NIGHT WATCHMAN. **Hand-in:** the dog, at the graveyard gate ("Keep that key on you. It is the Chairman's own, and it opens one door in the county."). **The doors:** the grate takes only the watchman's key; the Works' wicket takes it by day and is opened for the night shift at nine, the one way round, at the worst hour. **Pays:** water x4, Stone Skin x1. **Leads on:** the foreman's own locker holds the Chairman's Key (`key_stone`), the only key to the Burial's stair. **Tier:** far (1,812 / 1,746).
+- **Unlocked by:** the dog, after the forest (`offer_factory`: "The key in that case was the Works' night watchman's. It opens the wicket in the Works wall, and the Company's grate at the edge of Castle." / "I will wait at the graveyard gate from six till the bell."). The Night Watchman's Key (`key_works`) is in the Collector's case marked NIGHT WATCHMAN. **Hand-in:** the dog, at the graveyard gate ("The stand that orb was on came out of the study under the house. Somebody carried it all the way to the Works the winter before you came, and wired it in, so that it would be there." / "Keep that key on you. It is the Chairman's own, and it opens one door in the county."). The foreman's diary, lit, holds his returned letter, corrected in a hand she knows from a letter. **The doors:** the grate takes only the watchman's key; the Works' wicket takes it by day and is opened for the night shift at nine, the one way round, at the worst hour. **Pays:** water x4, Stone Skin x1. **Leads on:** the foreman's own locker holds the Chairman's Key (`key_stone`), the only key to the Burial's stair. **Tier:** far (1,812 / 1,746).
 
 | Step | Where | Thinking | Confuse | Verdict |
 | --- | --- | --- | --- | --- |
@@ -212,7 +213,7 @@ Chains are independent; only the order inside a chain is fixed. Walks below: **s
 | "The Foreman, in the Factory's assembly hall" | Past the generator (Electric, from the orb) | | A place his death marks | OK |
 
 ### Under the Stone
-- **Unlocked by:** the dog, after the Factory (`offer_burial`: the graveyard road "that goes north, toward the School. Do not go as far as the School"; the Chairman's key "unlocks the stair under it"; the rats' meat soaked in Stranglethorn for the small snakes; "Whatever is under that stone was buried with the county's gold, all of it, cast into one ball. Bring the ball up."). **Hand-in:** the dog, at the graveyard gate from six till the bell ("You found him, then. Gnox Goldskin, with his arms round it." / "She is not dead, {name}. I would know."). **Pays:** a light stone. **Tier:** far (2,006 / 874).
+- **Unlocked by:** the dog, after the Factory (`offer_burial`: the graveyard road "that goes north, toward the School. Do not go as far as the School"; the Chairman's Key "unlocks the stair under it"; the rats' meat soaked in Stranglethorn for the small snakes; "Whatever is under that stone was buried with the county's gold, all of it, cast into one ball. Bring the ball up."). **Hand-in:** the dog, at the graveyard gate from six till the bell ("You found him, then. Gnox Goldskin, with his arms round it." / "The stone says leave it there. That was her hand, and it was right when it was written. It is not right now." / "She is not dead, {name}. I would know."). Read again after, the Hoar Stone's scratches are in the hand of the letter. **Pays:** a light stone. **Tier:** far (2,006 / 874).
 - **The stair is locked** (`burial_door`, key tag `burial_gate`) until the Factory's Chairman's Key: the Burial is phase 5, and the county no longer lets a mine-level heroine down it. The stair up to the School is locked too, from below, with Julie's Other Key, which the dog gives with the School. The Glasshouse Key (`key_burial`) is inside, on its hook by the beds, and opens the glasshouse. (Was "The Snake Below", which asked for the snake: one corner of four, and the Ball was never in its keeping.)
 
 | Step | Where | Thinking | Confuse | Verdict |
@@ -222,13 +223,22 @@ Chains are independent; only the order inside a chain is fixed. Walks below: **s
 | "The Ball, in the Burial Chamber" | His box, at the foot of the stair up, behind Goldskin | "What the dog wants brought up" | The stone's scratched line says he took it down with him, which is where it is | OK |
 
 ### The Bell at Nine (the School)
-- **Unlocked by:** the dog, after the Burial (`offer_school`: "The stair behind him goes up, not out. It comes up in the School, and the door at the foot of it is locked. This was on her ring, with the house key."; it gives Julie's Other Key, `key_stair`; "I will be at the top of Church Lane from the bell till noon"). **Hand-in:** the dog, at the top of Church Lane, six till noon, who names the ringer: Amos Noone, the Company's timekeeper (`STORY.md` §8): "She held it over the county for as long as anyone could have. Longer. What happens to the ball now is yours to say."). **Pays:** the flag `spine_done`; after it the dog says only the epilogue ("There is a train on Sunday. The county still turns. Walk."). **Tier:** far (1,697 / 1,504, to the School's county door).
+- **Unlocked by:** the dog, after the Burial (`offer_school`: "The stair behind him goes up, not out. It comes up in the School, and the door at the foot of it is locked. This was on her ring, with the house key."; it gives Julie's Other Key, `key_stair`; "I will be at the top of Church Lane from the bell till noon"). **Hand-in:** the dog, at the top of Church Lane, six till noon, who names the ringer: Amos Noone, the Company's timekeeper (`STORY.md` §8): "She held it over the county for as long as anyone could have. Longer. What happens to the ball now is yours to say."). **Pays:** the flag `spine_done`, and in the same breath Yours to Say (below). **Tier:** far (1,697 / 1,504, to the School's county door).
 - She cannot be up the stair before the dog asks: the stair up is locked to Julie's key, and the front doors' key is inside. The School is the one place with no way round.
 
 | Step | Where | Thinking | Confuse | Verdict |
 | --- | --- | --- | --- | --- |
 | "The School, on the hill north of Castle" | Up the Burial's stair into the boiler room, or the front doors from the Bellfield once she has the key; the hall | "The lit window" | Nothing: it has been in sight since the platform | OK |
 | "Whoever rings the bell, in the School's tower" | Six lessons and the Caretaker's tower key, then the belfry | | The completion names him: Amos Noone, Timekeeper | OK |
+
+### Yours to Say (the choice)
+- **Unlocked by:** the dog, handing The Bell at Nine in ("Say what?"): it names the three places the Ball can go and will not say which (`the_three`); asked "What would she do?" it slips, the second and last time in the game ("I held it." / "She held it."). Asked again later it says "The ring, the hill or the train. I have said all I am going to say about it." **Hand-in:** the act itself, at one of three places; each takes the Ball, sets `the_end` and plays its last page (`STORY.md` §10). **Pays:** nothing. The game closes. **Tier:** far (the Ball from the Burial to the nearest of the three: the audit's walk).
+
+| Step | Where | Thinking | Confuse | Verdict |
+| --- | --- | --- | --- | --- |
+| "The Ball, from the Burial Chamber, until you set it down" | In her bag since Under the Stone. The description names the three: the ring in the dust on the study desk under Julie's house (the cellar); the hollow at the back of the Gold Mine's vault (the seam, read since the mine); Castle Halt on a Sunday, the name board ("Trains stop by request") and the platform at five | "The study, the mine, or the train" | That there is a right one. Nothing says so | OK |
+
+The three acts: at the study desk, "Set the ball in the ring and sit down"; at the seam, "Put the ball back in the hill"; at Castle Halt, signal at the name board from six on a Sunday morning till five, be on the platform when the train stands (17:00 to 17:10, `train_in`, only on a Sunday it stops), and "Leave the ball on the bench and get on", or step back and keep the choice. `crates/jane-sim/tests/endings.rs` plays all three and the step back.
 
 ---
 
