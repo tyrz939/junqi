@@ -568,9 +568,11 @@ impl Crawl {
                     let presses = if door.is_some() || def.gate { 1 } else { 2 };
                     offer(3, d, Try::Prop(p.id), Task::Use(UseProp { presses, ..UseProp::new(p.id) }), &mut best);
                 }
-                continue;
-            }
-            if !p.used && !s.loot.is_empty() {
+                // A locked thing that answers a verb (a cracked case) is opened by the verb.
+                if def.answers.is_none() {
+                    continue;
+                }
+            } else if !p.used && !s.loot.is_empty() {
                 offer(2, d, Try::Prop(p.id), Task::Use(UseProp::new(p.id)), &mut best);
                 continue;
             }
@@ -747,7 +749,7 @@ fn bolt_at(v: &View<'_>, reach: &Reach, p: &Prop, spell: SpellId) -> Option<Task
                 continue;
             }
             let at = Vec2::centre(x, y);
-            if !v.sight(at, c) {
+            if !v.sight(at, face_of(p, at)) {
                 continue;
             }
             let d = dist(me, at);
@@ -761,6 +763,14 @@ fn bolt_at(v: &View<'_>, reach: &Reach, p: &Prop, spell: SpellId) -> Option<Task
     }
     let (_, from) = best?;
     Some(Task::Aim { spell, from, at: c, t: 0 })
+}
+
+/// The point just outside a prop's footprint nearest `at`: what she must see to hit it (a prop
+/// that blocks sight, an arch or a case, hides its own middle).
+fn face_of(p: &Prop, at: Vec2) -> Vec2 {
+    let r = prop_rect(p);
+    let clamp = |v: i32, lo: i32, hi: i32| v.clamp(lo * CELL_FX - 1, hi * CELL_FX);
+    Vec2::new(jane_core::Fx(clamp(at.x.0, r.x, r.right())), jane_core::Fx(clamp(at.y.0, r.y, r.bottom())))
 }
 
 /// The origins a pushable passes through to cover the plate, pushed only (each push needs a
