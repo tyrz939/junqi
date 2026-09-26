@@ -8,6 +8,8 @@ The plan for the native rewrite. Pair with `PLAN.md` (the game), `ARCHITECTURE.m
 
 **Rule:** not a 1:1 port. Algorithms and content contracts carry. Architecture is fixed where the audit found it wrong. Seeds do not match the TypeScript and nothing is kept compatible with it.
 
+**Rule (2026-09-27):** the TypeScript build is frozen and deprecated. Nothing in `jane/` is changed, fixed or kept in step with `/data`, the docs or the Rust from here; a `/data` change that breaks it stands. It is read for method where a doc points at it, and moved to the archive at P10.
+
 **Rule:** this is a plan; a claim that something runs is a bug in this file until a phase gate (§7) says otherwise. *(2026-09-26: P0's workspace and CI exist, P1 is under way, P2's skeleton (land, sites, roads, rail, patches, lamps, small places, anchors, threat, checks) is ported; README's "Where it stands" is the record.)*
 
 ## 1. What is decided
@@ -368,7 +370,7 @@ Stages 1-9 and 10-16 are two independent worktree tracks once `core` exists.
 | **P4** Sim and bot | `ARCHITECTURE.md`'s sim including the journal (§3.7), aim assist (§5.4), schedules, weather, ecology, consequences and rumour (§4.6); `jane-bot` with the first two player models (Reader, Rusher); `jane replay verify`; `Sim::metrics()` | sim, bot, cli | ~8 per sim module; bot 1; living-world rows 1 | Carry `sim`, `engine`, `replay`, `coop`, `verbs2`, `rest`, `dungeon-verbs`, `budget`; bot plays the first five minutes and every dungeon on 3 seeds; save/load hash-equal; replay hash-equal; `bot-hash-<target>.txt` equal across targets (`ARCHITECTURE.md` §8 `cross_target_hash`); assist replays exactly; tick µs recorded | ~7k → ~9k |
 | **P4b** Verification stack | `VERIFICATION.md` L3 to L7: all player models, the `Trace`, experience metrics and the first bands, truth and cohesion audits over the journal, living-world audits, dossiers; `jane play`, `sweep`, `dossier`, `audit`; the `play` CI job; `EXPERIENCE.md`'s first hour tagged and passing | bot, sim, cli | models 2; metrics 1; audits 2; dossier 1 | The first-hour claims in `EXPERIENCE.md` pass on 64 seeds x all models; the sweep report is a CI artefact; a deliberately broken quest text fails L4 legibility by name | new ~4k |
 | **P5** Art | `ART.md` generators, looks, font, chrome, weather; four layers per sprite; 4-frame cycles; `jane sheet` incl. `layers` and `light`; `vary` variants | art, cli | 4-6 per family; layers 1; weather 1 | Every look renders with all four layers; sheets on CI; owner redlines; no sprite without a look and no look unused; ≤ 4 variants per `vary`; every look built into atlases inside its §9.4 row (`ART.md` §5) | new ~6-8k |
-| **P6** Scene and the soft backend, playable solo | `PRESENTATION.md` §1 in `jane-present` (the `Frame`, camera, fx, `Features`) and `jane-render-soft`; `jane-app`; `jane film`; New Game builds all 13 zones behind a loading screen that draws the skeleton | present, render-soft, app | scene 2; soft 2; app 1 | The owner plays the first hour at T0; frame ms recorded against §9.4; `jane film` produces the L7 clips; lints hold | ~3.5k → ~4k; soft ~2k; app ~1k |
+| **P6** Scene and the soft backend, playable solo | `PRESENTATION.md` §1 in `jane-present` (the `Frame`, camera, fx, `Features`) and `jane-render-soft`; `jane-app`; `jane film`; New Game builds all 13 zones behind a loading screen that draws the skeleton; the P7 slice of §7.1 (keyboard move, use and bar; the prompt, the vitals, the dialogue box) | present, render-soft, app | scene 2; soft 2; app 1; slice 1 | The owner plays the first hour at T0; frame ms recorded against §9.4; `jane film` produces the L7 clips; lints hold | ~3.5k → ~4k; soft ~2k; app ~1k |
 | **P6b** T1: `gl2`, lights, shadows, atmosphere | `jane-render-gl2`; normal-mapped lighting, hard shadows, fog volumes, parallax, weather, sharp-bilinear upscale; the `Features` ladder; a Pi 4 and an ancient PC on the desk | render-gl2, present | shaders 1; shadows 1; atmosphere 1; Pi bring-up 1 | 60 fps on a Pi 4 and on the ancient PC at 768 x 432, night, town, per §9.4; the same `Frame` draws on T0 and T1 with only `Features`-row differences (a pixel diff of the albedo pass is empty) | new ~3k |
 | **P6c** T2: `wgpu` and post | `jane-render-wgpu`; soft shadows, many lights, bloom, grading, water reflection | render-wgpu | 2 | 60 fps at 4K output on a modern PC with headroom; T1 and T2 agree on everything but the T2 rows; owner signs the look off against `ART.md` §3 on the same 24 seeds as the sheets | new ~2.5k |
 | **P7** UI and input | `PRESENTATION.md` §3-4 in `jane-present::ui` and `::input`; `bindings.json`; keyboard, mouse, pad; Controls screen; the assist profile flag | present (ui, input), app | 3-4 | Every README console row works; owner plays with a pad and with a mouse, assist on and off; UI has no sim writes except `Command`s | ~3.5k → ~3.5k |
@@ -376,11 +378,28 @@ Stages 1-9 and 10-16 are two independent worktree tracks once `core` exists.
 | **P9** Targets and perf | Pi 4 aarch64 and armv7 on hardware (Pi 3 recorded); i686 Linux/Windows on an ancient PC; Win 7; XP if it builds; thresholds enforced per class and tier | app, backends, cli | 1 per target; 1 profiling per backend | §9.4 thresholds green in all three classes at their tier; 60 fps by the `Features` ladder, 30 fps is not a pass; RSS under ceiling | fixes |
 | **P10** Archive | `jane/` → `archive/web-remake-2026/`; banners; SYSTEMS.md rows re-marked | docs | 1 | `git grep jane/src` in root docs finds only archive notes | 0 |
 
-**Rule:** a phase is not entered until the previous gate is green on CI. Two tracks at once only where the table says (P2 and P3 after P1; P4b beside P5; P5 beside P3/P4; P6b and P6c after P6, in either order).
+**Rule:** a phase is not entered until the previous gate is green on CI. Two tracks at once only where the table says (P2 and P3 after P1; P4b beside P5; P5 beside P3/P4; P6 beside P5, window first, §7.1; P6b and P6c after P6, in either order).
 
 **Rule:** P4 does not start content. The bot tests are the content until P6; from P4b the `EXPERIENCE.md` claims are the content's specification and grow with every phase.
 
 **Rule:** a degrade flag (a `Features` row: shadows, soft shadows, fog volumes, bilinear light, post, half-res) is a documented tuning row with its tier, never a hidden `cfg`. The gate in P9 says which rows were on in each class.
+
+### 7.1 Window first (decided 2026-09-27)
+
+P6 enters beside P5, not after it. On 2026-09-27 P5 stands at `ART.md` §8 step 1 (palette, canvas, font, chrome, the lit sphere); waiting for steps 2 and 3 would keep the game headless for a phase. So the window comes first and the art replaces what stands in for it as each step lands.
+
+| Step | Work | Seen by |
+| --- | --- | --- |
+| 1 | `jane-present`: `Frame` and `Pass`, the camera with tick interpolation, the counting-sort draw list, `tick()` and `draw(alpha)`, fed by `View` | headless tests |
+| 2 | `jane-render-soft`: framebuffer, CLUT blit, chunks as flat swatches, nearest upscale, `read_back`; `jane sheet scene` | a PNG of a real frame |
+| 3 | `jane-app`: SDL2 window, the fixed 60-tick loop, keyboard to `InputFrame`, the `soft` backend | the owner walks the county |
+| 4 | The P7 slice: keyboard move, use and bar slots; the prompt, the vitals, the dialogue box; the rest of P7 stays P7 | quests are played |
+| 5 | The T0 lightmap and the chunk painter | night is night |
+| beside 1 to 5 | `ART.md` §8 steps 2 and 3 (person, terrain), then on in order | the placeholders go |
+
+**Stand-ins while art is missing.** A chunk with no painter draws its region's flat ground swatch (`PRESENTATION.md` §1.6 already allows it for the frames a chunk takes to paint). A unit or prop with no look draws the nearest step-1 demo sprite of its size. Both are drawn by `jane-present`, never by `jane-art`, and both go when the step that replaces them lands; `ART.md`'s rule that a row without a look is a build error applies from the P5 gate, not before.
+
+**SDL2 on a Windows or Linux x86 desk** is the `sdl2` crate's `bundled` and `static-link` features (§12), which build SDL from source and need CMake on the path; the Pi keeps the distro package.
 
 ## 8. Agent parallelisation
 
@@ -465,7 +484,7 @@ Each is a one-line edit to flip before P0 starts.
 
 | Default | |
 | --- | --- |
-| SDL2 on the Pi | Distro package; x86 targets use the `sdl2` crate's `bundled` feature |
+| SDL2 on the Pi | Distro package; x86 targets use the `sdl2` crate's `bundled` and `static-link` features (CMake on the build machine, no DLL beside the exe) |
 | `armv7` | Cortex-A7 (Pi 2, and Pi 3/4 on a 32-bit OS); armv6 (Pi 1, Zero) out |
 | Legacy Windows | Windows 7 before XP; XP is never a gate |
 | `.chunk` files | Pure grids plus a `fill` table; no procedural ops |

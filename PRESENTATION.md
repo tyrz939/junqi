@@ -512,5 +512,6 @@ Each is a one-line edit if the owner flips it before P6.
 | Aim assist | In the sim; `InputFrame.assist` carries the profile (Off, Pad, Mouse); the reticle draws `View::assisted_aim` | §4 |
 | Verification | `jane sheet scene` and `jane film` through `soft` on CI, any backend locally; artefacts, never asserted; `jane bench` per tier | §6 |
 | Atlas cache | Allowed on disk under the save directory, keyed by build hash, all four layers together; written, never shipped | boot |
+| Build order | Window first (`PORT.md` §7.1): §1 on `soft` and a window before the art is done; chunks as flat swatches (§1.6) and step-1 demo sprites stand in; the prompt, vitals and dialogue box of §3.2 come with P6, the rest of §3 with P7 | §1.6, §3.2 |
 | New Game | All 13 zones built up front behind the loading screen; no zone is built on first entry | §3.2 |
 | Audio and bindings | `NullBus` ships and procedural audio is outlined for `PLAN.md` M8 only; `data/bindings.json` compiled in, overrides in `config.json` beside the saves | §4, §5 |

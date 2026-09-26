@@ -10,7 +10,7 @@ This is the third build. The first (Phaser, 2026) is archived in `archive/phaser
 
 ## Where it stands (2026-09-26)
 
-**The Rust build is under way: P0 to P3 of `PORT.md` are built, P4 (the sim) is being built, P5 (art) has begun.** Nothing draws in a window yet; everything below runs headless and is proven by tests. The TypeScript build in `jane/` runs and is the reference until P10 archives it.
+**The Rust build is under way: P0 to P3 of `PORT.md` are built, P4 (the sim) is being built, P5 (art) has begun.** Nothing draws in a window yet; everything below runs headless and is proven by tests. The TypeScript build in `jane/` is frozen and deprecated (2026-09-27): nothing in it is kept up to date, and it goes to the archive at P10.
 
 | Phase | State |
 | --- | --- |
@@ -20,7 +20,8 @@ This is the third build. The first (Phaser, 2026) is archived in `archive/phaser
 | P3 dungeons, interiors | Done. Eight generated dungeons through the solver and checks C1 to C12 (fallback 0 of 1000), 109 templates proven alone, the four interiors; `jane gen --hash` and the x86_64 hash fixture |
 | P4 sim | Foundation (state, runtime, path, movement, ring, seats, travel, save, hash, View) and combat (casting, bolts, statuses, the flush, loot, aim assist) done; interaction, quests, dialogue, triggers, the journal, AI and the snake in progress; the bot next |
 | P5 art | Step 1 done: palette, the four-layer canvas and its primitives, the stroke font, chrome, a lit-sphere sheet |
-| P6 onward | Not started |
+| P6 scene, soft backend, window | Next, window first (`PORT.md` §7.1): beside P5, flat swatches and demo sprites standing in until the art lands, with the dialogue box, prompt and vitals pulled forward from P7 |
+| P6b onward | Not started |
 
 | Doc | What it decides |
 | --- | --- |
@@ -47,6 +48,8 @@ npm run build    # type-check + production bundle (~280 kB, no runtime dependenc
 Art is source code (palette-character grids rasterised at boot). The repo ships no image, font or audio file, and the Rust build will ship none either: there it is all generated.
 
 ## Run the native build (Rust)
+
+Needs the pinned toolchain (`rust-toolchain.toml`; rustup installs it on first use) and, from P6, CMake on the path to build SDL2.
 
 What runs today (all headless; `cargo jane` is an alias for `cargo run -q -p jane-cli --`):
 
@@ -101,7 +104,7 @@ Console rows worth knowing: `give apple 5`, `god`, `tp county yard_gate` (skip t
 
 | | |
 | --- | --- |
-| `jane/` | The TypeScript reference build. Vite + TypeScript, zero runtime dependencies. Archived at P10 |
+| `jane/` | The TypeScript build, frozen and deprecated since 2026-09-27; not kept in step with `/data` or the docs. Archived at P10 |
 | `PORT.md`, `ARCHITECTURE.md`, `ART.md`, `PRESENTATION.md`, `WORLD.md`, `EXPERIENCE.md`, `VERIFICATION.md` | The Rust build, as designed |
 | `PLAN.md` | Where the game is going: a ten-minute seeded county, three regions, generated dungeons with fixed challenges, signs that are true a third of the time |
 | `PLATFORM.md` | How people will play: LAN co-op by deterministic lockstep. §3 and §4 are the web era and void |
