@@ -307,6 +307,16 @@ impl<'a> View<'a> {
         spawn_of(self.bp, p)
     }
 
+    /// A string a row or this zone's generator wrote: the words of a thing read, a label, a
+    /// toast (`TextRef::Local` is her zone's blueprint's). Empty for a local text that is not
+    /// there.
+    pub fn text(&self, r: TextRef) -> &'a str {
+        match r {
+            TextRef::Text(t) => jane_data::catalog().text(t),
+            TextRef::Local(_) => self.bp.text(r).unwrap_or(""),
+        }
+    }
+
     /// A prop by id in her zone.
     pub fn prop(&self, id: crate::ids::PropId) -> Option<&'a Prop> {
         self.zone.prop_ix(id).map(|i| &self.zone.props[i as usize])
@@ -334,6 +344,11 @@ impl<'a> View<'a> {
             talking = p.dialogue.is_some();
         }
         n == 1 && talking
+    }
+
+    /// Seats sitting down now: the party penalty's head count (the HUD shows it).
+    pub fn party(&self) -> u8 {
+        self.state.connected().count() as u8
     }
 
     /// 21:00 to 06:00.

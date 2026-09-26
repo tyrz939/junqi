@@ -344,8 +344,11 @@ dependencies = [
  "jane-render-soft",
  "jane-render-wgpu",
  "jane-sim",
+ "jane-world",
  "raw-window-handle",
  "sdl2",
+ "serde",
+ "serde_json",
  "wgpu",
 ]
 
