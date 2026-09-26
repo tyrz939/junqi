@@ -93,6 +93,19 @@ pub enum Note {
     Resynced { seat: Seat },
 }
 
+impl std::fmt::Display for Note {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Note::Joined { seat, token } => write!(f, "seat {} sat down (token {token:x})", seat.0),
+            Note::Left { seat } => write!(f, "seat {} got up", seat.0),
+            Note::Dropped { seat } => write!(f, "seat {} dropped: its input stopped coming", seat.0),
+            Note::Refused { peer, why } => write!(f, "refused {peer}: {why:?}"),
+            Note::Desync(r) => write!(f, "{r}"),
+            Note::Resynced { seat } => write!(f, "seat {} was sent the world again", seat.0),
+        }
+    }
+}
+
 /// The table waits.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct StallView {

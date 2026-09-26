@@ -49,6 +49,9 @@ pub struct Status {
     pub ended: Option<String>,
     /// The last desync reported.
     pub desync: Option<Report>,
+    /// What happened at the table since the last call (a host's: who sat down, got up, was
+    /// dropped, was refused).
+    pub notes: Vec<crate::host::Note>,
 }
 
 impl Session {
@@ -203,11 +206,12 @@ impl Session {
         match self {
             Session::Local(_) => Status { role: "alone", seats, ..Status::default() },
             Session::Host(h) => {
-                let desync = h.drain_notes().into_iter().rev().find_map(|n| match n {
-                    crate::host::Note::Desync(r) => Some(r),
+                let notes = h.drain_notes();
+                let desync = notes.iter().rev().find_map(|n| match n {
+                    crate::host::Note::Desync(r) => Some(r.clone()),
                     _ => None,
                 });
-                Status { role: "hosting", seats, stall: h.stall(), desync, ..Status::default() }
+                Status { role: "hosting", seats, stall: h.stall(), desync, notes, ..Status::default() }
             }
             Session::Guest(g) => {
                 let (joining, ended) = match g.phase() {
@@ -219,7 +223,7 @@ impl Session {
                     Phase::Ended(why) => (None, Some(why.clone())),
                 };
                 let desync = g.drain_reports().pop();
-                Status { role: "joined", seats, stall: g.stall(), joining, ended, desync }
+                Status { role: "joined", seats, stall: g.stall(), joining, ended, desync, notes: Vec::new() }
             }
         }
     }

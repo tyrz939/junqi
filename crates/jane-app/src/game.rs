@@ -295,7 +295,12 @@ fn title(
     if let Some(end) = st.ended {
         let _ = write!(t, ", {end}");
     }
-    if let Some(r) = st.desync {
+    // Who sat down, got up or was dropped; a desync's report among them (a toast, once the HUD
+    // has one).
+    for n in &st.notes {
+        println!("jane-app: {n}");
+    }
+    if let (Some(r), true) = (st.desync, st.notes.is_empty()) {
         eprintln!("jane-app: {r}");
     }
     let _ = canvas.window_mut().set_title(&t);

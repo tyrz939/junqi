@@ -12,7 +12,6 @@ use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use jane_bot::{Act, Bot, Model};
-use jane_net::host::Note;
 use jane_net::link::TcpListen;
 use jane_net::{GuestConfig, Host, HostConfig, Phase, Session};
 use jane_sim::{ClientToken, Command, Sim};
@@ -163,7 +162,7 @@ pub fn serve(args: &[String]) -> Result<(), String> {
         }
         host.poll(now);
         for n in host.drain_notes() {
-            log(&format!("jane serve: {}", note(&n)));
+            log(&format!("jane serve: {n}"));
         }
         let frame = host.sim().state().frame;
         if now >= said + o.every * 1000 {
@@ -217,17 +216,6 @@ fn status(host: &Host, ticks: u64) -> String {
         );
     }
     line
-}
-
-fn note(n: &Note) -> String {
-    match n {
-        Note::Joined { seat, token } => format!("seat {} sat down (token {token:x})", seat.0),
-        Note::Left { seat } => format!("seat {} got up", seat.0),
-        Note::Dropped { seat } => format!("seat {} dropped: its input stopped for 10 s", seat.0),
-        Note::Refused { peer, why } => format!("refused {peer}: {why:?}"),
-        Note::Desync(r) => r.to_string(),
-        Note::Resynced { seat } => format!("seat {} sent the world again", seat.0),
-    }
 }
 
 fn write_save(p: &std::path::Path, sim: &Sim) {
