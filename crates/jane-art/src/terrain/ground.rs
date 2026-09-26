@@ -506,7 +506,7 @@ fn tuft(p: &mut Painter, x: i32, y: i32, g: u8, r: Ramp, n: i32, h: u32, z: i32,
             } else {
                 Tone::Mid
             };
-            p.s.ly.put(bx, by, r.at(tone), normal(lean * 40, -40), z + 1 + i / 2);
+            p.s.ly.put(bx, by, r.at(tone), normal(lean * 40, -40), z + 1);
         }
     }
     // The shade at its root.

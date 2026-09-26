@@ -285,7 +285,9 @@ fn tall_tuft(p: &mut Painter, x: i32, y: i32, r: Ramp, n: i32, h: u32, z: i32) {
             } else {
                 Tone::Base
             };
-            p.s.ly.put(bx, by, r.at(tone), normal(lean * 30, -40), z + 1 + i / 3);
+            // Low in the height layer and near upright: a clump is too fine to throw a shadow of
+            // its own or turn from the light, which at a low sun smeared it into dark scribbles.
+            p.s.ly.put(bx, by, r.at(tone), normal(lean * 30, -10), z + 1 + i / 6);
         }
     }
     for dx in -2..=2 {
