@@ -11,7 +11,7 @@ use std::collections::VecDeque;
 
 use jane_core::Tile;
 use jane_core::grid::Grid;
-use jane_core::search::{Fill, fill};
+use jane_core::search::{Fill, fill_words};
 use jane_core::tile::F_SOLID;
 
 use super::model::{MAX_LAYERS, Solve};
@@ -33,6 +33,15 @@ pub(crate) struct Layers {
     /// The pass that first reached each cell, or -1: only when traced.
     pub first_seen: Option<Vec<i16>>,
     reach: Fill,
+    /// Solid terrain, a bit a cell (`y * w + x`): the zone's tiles never change in a solve.
+    solid: Vec<u64>,
+    /// What `blocked` of the layer last restamped was before it (the restamp's scratch).
+    before: Vec<u8>,
+    /// The props that last restamp stamped, by index, and those the one before it stamped.
+    stamped: Vec<usize>,
+    stamped_before: Vec<usize>,
+    /// With one layer: the seeds of the last pass's flood, and whether it reached anything.
+    last: Option<(Vec<(i32, i32)>, bool)>,
     pub floods: u32,
     pub visited: u64,
 }
@@ -50,6 +59,11 @@ impl Layers {
             reached: [false; MAX_LAYERS],
             first_seen: trace.then(|| vec![-1; n]),
             reach: Fill::new(),
+            solid: Vec::new(),
+            before: Vec::new(),
+            stamped: Vec::new(),
+            stamped_before: Vec::new(),
+            last: None,
             floods: 0,
             visited: 0,
         }
@@ -72,16 +86,23 @@ impl Layers {
         if self.count == 1 { self.seen[0][i] != 0 } else { self.any[i] != 0 }
     }
 
+    /// Is any cell of the inclusive box `(x0, y0, x1, y1)` set in `g`? Outside the zone is not.
+    fn any_in(&self, g: &[u8], (x0, y0, x1, y1): (i32, i32, i32, i32)) -> bool {
+        let (x0, x1) = (x0.max(0), x1.min(self.w as i32 - 1));
+        if x0 > x1 {
+            return false;
+        }
+        (y0.max(0)..=y1.min(self.h as i32 - 1)).any(|y| g[self.ix(x0, y)..=self.ix(x1, y)].iter().any(|&c| c != 0))
+    }
+
     /// Is any cell of the inclusive box `(x0, y0, x1, y1)` reached in layer `s`?
-    pub fn touches(&self, s: usize, (x0, y0, x1, y1): (i32, i32, i32, i32)) -> bool {
-        let seen = &self.seen[s];
-        (y0.max(0)..=y1.min(self.h as i32 - 1))
-            .any(|y| (x0.max(0)..=x1.min(self.w as i32 - 1)).any(|x| seen[self.ix(x, y)] != 0))
+    pub fn touches(&self, s: usize, b: (i32, i32, i32, i32)) -> bool {
+        self.any_in(&self.seen[s], b)
     }
 
     /// Is any cell of the inclusive box reached in any layer?
-    pub fn touches_any(&self, (x0, y0, x1, y1): (i32, i32, i32, i32)) -> bool {
-        (y0..=y1).any(|y| (x0..=x1).any(|x| self.seen_any(x, y)))
+    pub fn touches_any(&self, b: (i32, i32, i32, i32)) -> bool {
+        self.any_in(if self.count == 1 { &self.seen[0] } else { &self.any }, b)
     }
 
     pub fn count_any(&self) -> u32 {
@@ -97,16 +118,35 @@ impl Layers {
     /// anything new.
     pub fn flood(&mut self, tiles: &Grid<Tile>, s: usize, seeds: &[(i32, i32)], pass: u16) -> bool {
         let (w, h) = (self.w, self.h);
-        let terrain = tiles.as_slice();
-        let seen = &self.seen[s];
-        let blocked = &self.blocked[s];
-        let open = |i: usize| seen[i] == 0 && blocked[i] == 0 && terrain[i].flags() & F_SOLID == 0;
+        let n = w as usize * h as usize;
+        if self.solid.is_empty() {
+            let terrain = tiles.as_slice();
+            self.solid = (0..n.div_ceil(64))
+                .map(|k| {
+                    let cells = &terrain[k << 6..((k + 1) << 6).min(n)];
+                    cells.iter().enumerate().fold(0, |m, (j, t)| m | u64::from(t.flags() & F_SOLID != 0) << j)
+                })
+                .collect();
+        }
+        let (seen, blocked, solid) = (&self.seen[s], &self.blocked[s], &self.solid);
+        let open = |i: usize| seen[i] == 0 && blocked[i] == 0 && solid[i >> 6] >> (i & 63) & 1 == 0;
         let starts: Vec<(i32, i32)> =
             seeds.iter().copied().filter(|&(x, y)| self.inside(x, y) && open(self.ix(x, y))).collect();
         if starts.is_empty() {
             return false;
         }
-        fill(w, h, &starts, open, &mut self.reach);
+        // Sixty-four cells at a time: neither reached nor blocked (bytes), and not solid (bits).
+        let word = |k: usize| {
+            let base = k << 6;
+            let end = (base + 64).min(n);
+            let (se, bl) = (&seen[base..end], &blocked[base..end]);
+            let mut m = 0u64;
+            for j in 0..end - base {
+                m |= u64::from(se[j] | bl[j] == 0) << j;
+            }
+            m & !solid[k]
+        };
+        fill_words(w, h, &starts, word, &mut self.reach);
         self.floods += 1;
         self.visited += u64::from(self.reach.count());
         let (seen, any, first) = (&mut self.seen[s], &mut self.any, &mut self.first_seen);
@@ -133,8 +173,11 @@ impl Solve<'_> {
     /// Stamp what blocks feet in layer `s`: a gate that is locked or kept shut there, and any
     /// solid prop that cannot be pushed or carried, unless it is hidden there.
     pub(crate) fn restamp(&mut self, s: usize) {
-        let mut blocked = std::mem::take(&mut self.layers.blocked[s]);
-        blocked.fill(0);
+        let mut blocked = std::mem::take(&mut self.layers.before);
+        blocked.clear();
+        blocked.resize(self.layers.blocked[s].len(), 0);
+        let mut stamped = std::mem::take(&mut self.layers.stamped_before);
+        stamped.clear();
         for (i, p) in self.bp.props.iter().enumerate() {
             let def = self.def(i);
             if self.hidden_in(i, s) {
@@ -144,6 +187,7 @@ impl Solve<'_> {
             if !shut {
                 continue;
             }
+            stamped.push(i);
             for y in i32::from(p.cell.y)..i32::from(p.cell.y) + i32::from(def.h) {
                 for x in i32::from(p.cell.x)..i32::from(p.cell.x) + i32::from(def.w) {
                     if self.layers.inside(x, y) {
@@ -152,15 +196,34 @@ impl Solve<'_> {
                 }
             }
         }
-        self.layers.blocked[s] = blocked;
+        self.layers.before = std::mem::replace(&mut self.layers.blocked[s], blocked);
+        self.layers.stamped_before = std::mem::replace(&mut self.layers.stamped, stamped);
+    }
+
+    /// The cells of prop `i` inside the zone, by index.
+    fn footprint(&self, i: usize) -> impl Iterator<Item = usize> + '_ {
+        let p = &self.bp.props[i];
+        let def = self.def(i);
+        let r = jane_core::Rect::new(i32::from(p.cell.x), i32::from(p.cell.y), i32::from(def.w), i32::from(def.h));
+        r.cells().filter(|&(x, y)| self.layers.inside(x, y)).map(|(x, y)| self.layers.ix(x, y))
     }
 
     /// One pass's flood: from the entrance and every same-zone door taken so far, in the layer she
     /// took it in; and from every control she can work, into the layer it leads to, starting AT
     /// the control.
+    ///
+    /// With one layer (no states), a pass after a gate opened usually only unblocked cells: when
+    /// every cell blocked now was blocked last pass and every seed of last pass is a seed still,
+    /// what this pass reaches is what the last reached and what that opens onto, so the layer
+    /// floods on from the cells just unblocked beside it instead of again from the start
+    /// ([`Self::flood_on`]). Anything else (a prop shown in the way) floods from the start.
     pub(crate) fn flood_all(&mut self) {
         let count = self.layers.count;
         self.layers.reached = [false; MAX_LAYERS];
+        if count == 1 && self.flood_on() {
+            self.reached_cells = self.layers.count_any();
+            return;
+        }
         for s in 0..count {
             if self.states.governed[s].is_some() {
                 self.restamp(s);
@@ -175,13 +238,70 @@ impl Solve<'_> {
                 seeds[s].push((i32::from(m.cell.x), i32::from(m.cell.y)));
             }
         }
+        let first = (count == 1).then(|| seeds[0].clone());
         let mut dirty: VecDeque<usize> = (0..count).filter(|&s| !seeds[s].is_empty()).collect();
         while let Some(s) = dirty.pop_front() {
             let from = std::mem::take(&mut seeds[s]);
             self.layers.flood(&self.bp.tiles, s, &from, self.pass);
             states::edges(self, s, &mut seeds, &mut dirty);
         }
+        self.layers.last = first.map(|f| (f, self.layers.reached[0]));
         self.reached_cells = self.layers.count_any();
+    }
+
+    /// One layer's pass flooded on from the last, if it can be: true when done. The last pass
+    /// reached every cell its seeds joined over ground open then; with the seeds kept and nothing
+    /// newly blocked, every cell this pass reaches beyond those is joined to them through a cell
+    /// that has just been unblocked, beside one reached, so flooding from those (and from any new
+    /// seed) reaches exactly what a flood from the start would.
+    fn flood_on(&mut self) -> bool {
+        let Some((last, reached)) = self.layers.last.take() else { return false };
+        let mut seeds = vec![self.entry];
+        seeds.extend(
+            self.hops
+                .iter()
+                .filter_map(|&(mark, _)| self.bp.marks.get(&mark))
+                .map(|m| (i32::from(m.cell.x), i32::from(m.cell.y))),
+        );
+        if !last.iter().all(|c| seeds.contains(c)) {
+            return false;
+        }
+        self.restamp(0);
+        // A cell blocked now and not before is under a prop stamped now and not before; one
+        // unblocked now, under a prop stamped before and not now.
+        let l = &self.layers;
+        let (now, was) = (&l.stamped, &l.stamped_before);
+        let newly = now.iter().filter(|i| was.binary_search(i).is_err());
+        let gone: Vec<usize> = was.iter().copied().filter(|i| now.binary_search(i).is_err()).collect();
+        if newly.flat_map(|&i| self.footprint(i)).any(|c| l.before[c] == 0) {
+            // Something stands in the way that did not: from the start, as `flood_all` does.
+            self.layers.seen[0].fill(0);
+            self.layers.last = None;
+            let from = seeds.clone();
+            self.layers.flood(&self.bp.tiles, 0, &from, self.pass);
+            self.layers.last = Some((seeds, self.layers.reached[0]));
+            return true;
+        }
+        let (w, h) = (l.w as i32, l.h as i32);
+        let seen = &l.seen[0];
+        let mut from = seeds.clone();
+        for i in gone.into_iter().flat_map(|p| self.footprint(p)) {
+            if l.blocked[0][i] != 0 || seen[i] != 0 {
+                continue;
+            }
+            let (x, y) = (i as i32 % w, i as i32 / w);
+            let beside = (x > 0 && seen[i - 1] != 0)
+                || (x + 1 < w && seen[i + 1] != 0)
+                || (y > 0 && seen[i - w as usize] != 0)
+                || (y + 1 < h && seen[i + w as usize] != 0);
+            if beside {
+                from.push((x, y));
+            }
+        }
+        let grew = self.layers.flood(&self.bp.tiles, 0, &from, self.pass);
+        self.layers.reached[0] = reached || grew;
+        self.layers.last = Some((seeds, self.layers.reached[0]));
+        true
     }
 }
 

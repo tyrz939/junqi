@@ -18,8 +18,7 @@ pub fn run(s: &mut Solve<'_>) -> Changed {
             continue;
         }
         let Some(&r) = s.bp.rects.get(&row.t.rect) else { continue };
-        let inside = r.cells().any(|(x, y)| s.layers.seen_any(x, y));
-        if !inside {
+        if r.w <= 0 || r.h <= 0 || !s.layers.touches_any((r.x, r.y, r.right() - 1, r.bottom() - 1)) {
             continue;
         }
         match row.t.mode {
