@@ -195,7 +195,7 @@ The town is a set chunk: the square (fountain, memorial, Mr Tolly's bench, the p
 | | Bellfield (6) | Nothing by day | Everything the School lets out | |
 | All | Hubs (0) | Cats, hens, the sweeper's robin | Cats. The ginger cat walks the square at any hour | |
 
-**Rule: a kill quest's patch holds N+1 of its target within five cells of the patch's centre by day, and refills within ten game minutes of being allowed to** (`QUESTS.md` K8). That is `cap` N+1, a `hold` line one kill never reaches (so the N she was asked for come back on their own clock, `respawn`), and an ecology that looks at a held patch every ten game minutes: once the pressure is under the line, whatever was due stands up at the next ten-minute mark. `recover` is a rate per ten minutes, not a timer per corpse; a patch cleared to the last is quieter for hours.
+**Rule: a kill quest's patch holds N+1 of its target within five cells of the patch's centre by day, and refills within ten game minutes of being allowed to** (`QUESTS.md` K8). That is `cap` N+1, a `hold` line one kill never reaches (so each of the N she was asked for stands up again at the next ten-minute mark after it falls, out of her sight; a unit's own `respawn` is only for creatures no patch's row names), and an ecology that looks at a held patch every ten game minutes: once the pressure is under the line, whatever was due stands up at the next ten-minute mark. `recover` is a rate per ten minutes, not a timer per corpse; a patch cleared to the last is quieter for hours.
 
 ### 4.2 Prey and predators
 
@@ -242,7 +242,7 @@ One thing per region walks a road at night, announced by a sign first (`QUESTS.m
 
 ### 4.5 Recovery
 
-**Rule: nothing respawns on a timer. Populations recover toward `cap` at a `recover` rate per area, every ten game minutes, and the rate is a row.** A patch she cleared is quieter for a day; a patch whose reason she removed (the rats' food, the camp's fire, the shift relieved) stays cleared through a consequence (§6). Bosses and named creatures never return (`respawn: 0`). Nothing stands up in view.
+**Rule: nothing respawns on a timer. Populations recover toward `cap` at a `recover` rate per area, every ten game minutes, and the rate is a row.** A creature a patch's row names stands up at the next ten-minute mark after it falls, when the ecology looks, if the patch is under its line; one no row names yet keeps its row's `respawn` until its patch is written. A patch she cleared is quieter for a day; a patch whose reason she removed (the rats' food, the camp's fire, the shift relieved) stays cleared through a consequence (§6). Bosses and named creatures never return (`respawn: 0`). Nothing stands up in view.
 
 ---
 
@@ -514,7 +514,7 @@ Shapes follow `ARCHITECTURE.md` §4.6; this table says what each row must hold f
 | §2.3 calendar | L6, L1 | Day-keyed rows fire on their day; no spine quest depends on any |
 | §3 people | L6 schedules | Every person at their slot each hour, walking the route between; the route is on road or path |
 | §3 people | L5 claims | Every `tells` line names only things placed within a screen of the speaker or true everywhere |
-| §4 ecology | L6 ecology, havens | Counts at 06:00 and 21:00 match the rows within one; kill N and N+1 stand again on their own clock; a held patch refills within ten game minutes of falling under its line; nothing leaked crosses a hub fence or the first walk |
+| §4 ecology | L6 ecology, havens | Counts at 06:00 and 21:00 match the rows within one; kill one and it stands again at the next ten-minute mark it is not watched; a held patch refills within ten game minutes of falling under its line; nothing leaked crosses a hub fence or the first walk |
 | §4.3 night | L6 presence | At 21:00 every night-only unit is up within a game hour; by 07:00 none remain; none hide or show in view |
 | §5 weather | L6 weather | Same kind for the same seed, day and hour on every replay; no storm on the first walk; mist never hides a lit lamp inside its reach; no kind removes a rest point, key, road or target |
 | §5.3 atmosphere | L1, L6 | Every layer's key resolves on every seed; no layer covers a hub fire; every quest landmark under a layer is visible from its road |

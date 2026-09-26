@@ -300,19 +300,20 @@ fn wetness_douses_a_fire_exactly_at_the_threshold() {
     assert!(s.view(Seat(0)).unwrap().light_showing(&fire).is_some(), "the storm is over another region");
 }
 
-/// §4.6.c, decision 2: one kill does not hold a patch back, so the rat stands up on its own
-/// clock; clear the allotments and the rats wait past their clock, every ten game minutes taking
-/// pressure off and looking at them again, and stand up again on a mark once the patch is under
-/// its line.
+/// §4.6.c, decision 2: one kill does not hold a patch back, so the rat stands up at the next
+/// ten-minute mark, when the ecology looks (QUESTS.md K8), and, if she is watching where it lies
+/// or its home, at the first mark she is not; clear the allotments and the rats wait, every ten
+/// game minutes taking pressure off and looking at them again, and stand up again on a mark once
+/// the patch is under its line.
 #[test]
 fn hunting_thins_an_area_and_time_refills_it() {
     let cat = catalog();
     let rat = cat.combat.unit_id("rat").unwrap();
-    let respawn = cat.combat.unit(rat).respawn;
     let eco = cat.living.ecology_of(cat.name_id("allotments").unwrap()).unwrap();
     let pop = eco.population(rat).unwrap();
+    let next_mark = |s: &Sim| s.state().tick.after(Tick(MARK - s.state().clock % MARK));
 
-    // One rat.
+    // One rat: back at the next mark, not after its row's `respawn`.
     let mut s = new_game();
     let a = area_ix(&s, "allotments");
     let rats = county_unit_ids(&s, "rat_allotment_");
@@ -320,12 +321,38 @@ fn hunting_thins_an_area_and_time_refills_it() {
     kill(&mut s, ZoneId::County, rats[0]);
     s.step(&StepInput::IDLE);
     assert!(!alive(&s, rats[0]));
-    let died = s.state().tick;
     assert_eq!(s.state().zone(ZoneId::County).unwrap().pressure[a], pop.weight);
-    while s.state().tick < died.after(respawn) {
+    let mark = next_mark(&s);
+    assert_eq!(s.state().zone(ZoneId::County).unwrap().sleeping_due, [(mark, rats[0])]);
+    while s.state().tick < mark {
+        assert!(!alive(&s, rats[0]));
         s.step(&StepInput::IDLE);
     }
-    assert!(alive(&s, rats[0]), "one kill: back on its own clock");
+    assert!(alive(&s, rats[0]), "one kill: back at the next ten-minute mark");
+
+    // Watched where it lies: not at that mark, but the first one she is not looking.
+    let mut s = new_game();
+    let at = s.state().zone(ZoneId::County).unwrap().unit(rats[0]).unwrap().pos;
+    let (x, y) = at.cell();
+    place(&mut s, x + 2, y, Facing::West);
+    kill(&mut s, ZoneId::County, rats[0]);
+    s.step(&StepInput::IDLE);
+    let mark = next_mark(&s);
+    while s.state().tick <= mark {
+        s.step(&StepInput::IDLE);
+    }
+    assert!(!alive(&s, rats[0]), "nothing stands up in view");
+    let again = s.state().zone(ZoneId::County).unwrap().sleeping_due.iter().find(|e| e.1 == rats[0]).unwrap().0;
+    assert_eq!(again, mark.after(Tick(MARK)), "looked at again at the next mark");
+    let home = s.state().zone(ZoneId::County).unwrap().unit(rats[0]).unwrap().home;
+    let far = (at.x.0.max(home.x.0) / CELL_FX) + 20;
+    let rt = s.runtime(ZoneId::County).unwrap();
+    let (fx, fy) = rt.grid.nearest_free(far, y, 12, None).expect("somewhere out of sight");
+    place(&mut s, fx, fy, Facing::East);
+    while s.state().tick < again {
+        s.step(&StepInput::IDLE);
+    }
+    assert!(alive(&s, rats[0]), "back at the first mark she was not looking");
 
     // All four.
     let mut s = new_game();
@@ -335,10 +362,11 @@ fn hunting_thins_an_area_and_time_refills_it() {
     s.step(&StepInput::IDLE);
     let died = s.state().tick;
     assert_eq!(s.state().zone(ZoneId::County).unwrap().pressure[a], 4 * pop.weight);
-    while s.state().tick <= died.after(respawn) {
+    let mark = next_mark(&s);
+    while s.state().tick <= mark {
         s.step(&StepInput::IDLE);
     }
-    assert!(rats.iter().all(|&r| !alive(&s, r)), "the patch is held back past the rats' own clock");
+    assert!(rats.iter().all(|&r| !alive(&s, r)), "the patch is held back past the first mark");
     let now = s.state().tick;
     let due = &s.state().zone(ZoneId::County).unwrap().sleeping_due;
     for &r in &rats {
@@ -370,7 +398,7 @@ fn hunting_thins_an_area_and_time_refills_it() {
     }
     let back_at = back_at.expect("the patch refills");
     assert!(rats.iter().all(|&r| alive(&s, r)), "all four back");
-    assert!(back_at.0 - died.0 > respawn.0 + HOUR, "quieter than one kill");
+    assert!(back_at.0 - died.0 > 6 * HOUR, "quieter for hours than one kill");
 }
 
 /// §4.6.d: a consequence fires once, ever, writes the journal and says so to everyone; one whose

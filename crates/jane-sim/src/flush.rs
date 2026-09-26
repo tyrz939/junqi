@@ -232,7 +232,7 @@ pub fn kill_unit(cx: &mut Ctx<'_>, id: UnitId, killer: Option<UnitId>) {
     }
     crate::loot::roll_loot(cx, def_id, pos);
     if def.respawn.0 > 0 {
-        let due = (now.after(def.respawn), id);
+        let due = (crate::hooks::respawn_at(cx, id, now.after(def.respawn)), id);
         let at = cx.zone.sleeping_due.partition_point(|&e| e < due);
         cx.zone.sleeping_due.insert(at, due);
     }

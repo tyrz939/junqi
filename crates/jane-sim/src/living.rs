@@ -38,6 +38,8 @@
 //! **Ecology.** A kill of a unit whose home is in an area raises the area's pressure by its
 //! population row's `weight` ([`on_kill`], from `hooks::unit_died`); every ten game minutes the
 //! ecology roll lowers every area's pressure by its `recover`, give or take half, floor 0. A
+//! patch's creature is due to stand up at the next ten-minute mark after it dies, not after its
+//! row's `respawn` ([`patch_mark`], from `hooks::respawn_at`); anything else keeps its row's. A
 //! corpse due to stand up ([`may_stand`], from `hooks::respawn_allowed`) stands only while fewer
 //! than `cap` of its row stand in the area and the pressure is under `hold`; otherwise it is put
 //! back on `sleeping_due` at the next ten-minute mark ([`next_mark`]), where step 2 has just
@@ -454,6 +456,13 @@ fn population_of(cx: &Ctx<'_>, unit: UnitId) -> Option<(usize, &'static jane_dat
     let Key::Name(n) = cx.bp.areas[a].name else { return None };
     let pop = cx.cat.living.ecology_of(n)?.population(u.def)?;
     Some((a, pop))
+}
+
+/// The next ten-minute mark, if this unit is one of a patch's populations (its home in an
+/// area whose ecology row names its def): when a corpse of it is due (`hooks::respawn_at`), and
+/// when one held back is looked at again, by the ecology or by the watcher box.
+pub fn patch_mark(cx: &Ctx<'_>, unit: UnitId) -> Option<Tick> {
+    population_of(cx, unit).map(|_| next_mark(cx.world))
 }
 
 /// A creature died: its area's pressure rises by its row's weight.

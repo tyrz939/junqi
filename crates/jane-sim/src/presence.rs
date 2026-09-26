@@ -120,14 +120,16 @@ pub fn put(cx: &mut Ctx<'_>, i: usize, slot: ScheduleSlot, arriving: bool) {
 }
 
 /// May a corpse due stand up now, unseen? Not while a seat stands within the watcher box of
-/// where it lies or of the home it stands up at: it is put back on `sleeping_due` a presence beat
-/// later, and tries again then (the rule of this module, for every respawn).
+/// where it lies or of the home it stands up at: it is put back on `sleeping_due` and tries
+/// again a presence beat later, or, one of a patch's, at the next ten-minute mark, when the
+/// ecology looks (the rule of this module, for every respawn).
 pub fn stands_up_unseen(cx: &mut Ctx<'_>, unit: UnitId) -> bool {
     let Some(u) = cx.zone.unit(unit) else { return true };
     if !watched(cx, u.pos) && !watched(cx, u.home) {
         return true;
     }
-    let at = cx.world.tick.after(jane_core::Tick(PRESENCE_EVERY));
+    let beat = cx.world.tick.after(jane_core::Tick(PRESENCE_EVERY));
+    let at = crate::living::patch_mark(cx, unit).unwrap_or(beat);
     let ix = cx.zone.sleeping_due.partition_point(|&e| e < (at, unit));
     cx.zone.sleeping_due.insert(ix, (at, unit));
     false

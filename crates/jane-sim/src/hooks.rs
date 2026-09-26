@@ -9,12 +9,13 @@
 //! | [`use_item`] | inventory (`inventory.ts useItem`) | `Command::Bar` on an item slot |
 //! | [`quest_kill`] | quests (`quests.ts onUnitKilled`) | a kill by one of the party (step 10) |
 //! | [`unit_died`] | journal, living world (§3.7, §4.6.c) | every creature's death (step 10) |
+//! | [`respawn_at`] | living world (§4.6.c ecology) | a creature that stands up again dies (step 10) |
 //! | [`respawn_allowed`] | presence (§4.6.a), living world (§4.6.c ecology) | a corpse due to stand up (step 12) |
 //! | [`put_down_dead`] | interact (`sim.ts revivePlayer`, `moveProp`) | a seat waking (step 6) |
 //! | [`reset_lock_ins`] | triggers (`sim.ts revivePlayer`, trigger `reset`) | a seat waking (step 6) |
 
 use jane_core::action::School;
-use jane_core::{Cell, Fx, ItemId, UnitDefId, Vec2};
+use jane_core::{Cell, Fx, ItemId, Tick, UnitDefId, Vec2};
 use jane_data::WorldSpell;
 
 use crate::ctx::Ctx;
@@ -71,6 +72,13 @@ pub fn unit_died(cx: &mut Ctx<'_>, unit: UnitId, _slayer: Option<Seat>) {
         journal::learn(cx, FactKey::Person(k), Source::Dead);
     }
     crate::living::on_kill(cx, unit);
+}
+
+/// When a creature that stands up again is due: one of a patch's populations at the next
+/// ten-minute mark, when the ecology looks at its patch (`living::patch_mark`); anything else at
+/// `by_row`, its row's `respawn` after now.
+pub fn respawn_at(cx: &Ctx<'_>, unit: UnitId, by_row: Tick) -> Tick {
+    crate::living::patch_mark(cx, unit).unwrap_or(by_row)
 }
 
 /// May this corpse stand up now? Not in view: a seat inside the watcher box of where it lies or
