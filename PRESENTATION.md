@@ -160,7 +160,7 @@ Every visual feature is a row. A row names the tier it needs, its default per ti
 
 **Why 16-bit.** The master palette outgrew 256 entries at `ART.md` §8 step 1 (27 fixed and 40 ramps of 8 is 347; the ceiling is 1024, `ART.md` §2.7). A CLUT per page of 256 would work only while every page's sprites used 254 colours between them, and a coat swap would become a remap per page; a `u16` index is one table for every page, costs one more byte a texel, and keeps the CLUT (4 KB) in L1 on `soft`.
 
-CLUT index 0 is clear, index 1 is the contact shadow (`dst x 0.75`, by shifts); every other index is opaque. There is no per-pixel alpha in an albedo sprite: index 1 or a checker stands in for it. On a GPU the four pages of one layout are bound together, so one sprite quad reads all four in one fragment shader; on `soft` the normal, emissive and height pages are never uploaded.
+CLUT index 0 is clear, index 1 is the contact shadow, a cool multiply of what is under it (`jane_art::palette::AO_TINT`, about `dst x (0.65, 0.67, 0.80)`), softened at its edge by how much of each pixel's 3 x 3 the index-1 mask covers (`palette::ao`; `ART.md` §2.7); every other index is opaque. There is no per-pixel alpha in an albedo sprite: index 1 or a checker stands in for it. On a GPU the four pages of one layout are bound together, so one sprite quad reads all four in one fragment shader; on `soft` the normal, emissive and height pages are never uploaded.
 
 **Sprite blit on `soft`.**
 

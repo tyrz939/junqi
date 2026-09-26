@@ -16,6 +16,7 @@ pub mod combat;
 pub mod county;
 pub mod dungeons;
 pub mod living;
+pub mod looks;
 pub mod story;
 
 pub use chunks::*;
@@ -23,6 +24,7 @@ pub use combat::*;
 pub use county::*;
 pub use dungeons::*;
 pub use living::*;
+pub use looks::*;
 pub use story::*;
 
 model! {

@@ -212,10 +212,12 @@ pub fn put_albedo(img: &mut Image, c: &Canvas, x: u32, y: u32, s: u32) {
             for d in 0..s * s {
                 let (px, py) = (x + cx as u32 * s + d % s, y + cy as u32 * s + d / s);
                 match ix {
-                    Ix::CLEAR => {}
-                    Ix::AO => {
-                        let p = img.get(px, py);
-                        img.set(px, py, rgba(darken([p[0], p[1], p[2]])));
+                    Ix::CLEAR | Ix::AO => {
+                        let cover = palette::ao_cover(c, cx, cy);
+                        if cover > 0 {
+                            let p = img.get(px, py);
+                            img.set(px, py, rgba(palette::ao([p[0], p[1], p[2]], cover)));
+                        }
                     }
                     _ => img.blend(px, py, palette::rgb(ix), palette::alpha(ix)),
                 }
@@ -276,6 +278,16 @@ pub fn layers(c: &Canvas, name: &str, font: &Font) -> Image {
 /// from overhead through [`light::light`], with the shadows its height casts; a 3 x 3 grid at
 /// 3x with overhead in the middle. `night` drops the ambient so emissive parts show.
 pub fn lit(c: &Canvas, name: &str, font: &Font, night: bool) -> Image {
+    lit_with(c, name, font, night, None)
+}
+
+/// [`lit`] for an upright sprite standing on row `ay` (a person): its shadow is its silhouette
+/// cast from the feet ([`light::light_upright`]), as a renderer draws it.
+pub fn lit_upright(c: &Canvas, name: &str, font: &Font, night: bool, ay: i32) -> Image {
+    lit_with(c, name, font, night, Some(ay))
+}
+
+fn lit_with(c: &Canvas, name: &str, font: &Font, night: bool, upright: Option<i32>) -> Image {
     const S: u32 = 3;
     // Grid position and name of each sun: N, NE, E, SE, S, SW, W, NW, overhead.
     const AT: [(u32, u32, &str); 9] = [
@@ -304,7 +316,10 @@ pub fn lit(c: &Canvas, name: &str, font: &Font, night: bool) -> Image {
     let title = format!("light: {name}, eight points at 30 deg and overhead, {when}");
     label(&mut img, font, PAD, PAD, &title, Face::Small, TEXT);
     for (sun, (gx, gy, name)) in suns.iter().zip(AT) {
-        let px = light::light(&stage, sun, ambient, ground);
+        let px = match upright {
+            Some(ay) => light::light_upright(&stage, ay + pad, sun, ambient, ground),
+            None => light::light(&stage, sun, ambient, ground),
+        };
         let (x0, y0) = (PAD + gx * (pw + PAD), top + gy * (ph + 14 + PAD));
         for (i, rgb) in px.iter().enumerate() {
             put_px(&mut img, x0, y0, i as i32 % stage.w(), i as i32 / stage.w(), S, *rgb);
