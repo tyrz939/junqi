@@ -1,6 +1,7 @@
 //! Light that means something to the sim (`sim/light.ts`). A lamp is safety in the county, a
 //! sentry's eye in the Factory, what keeps the dead off in the Burial and where things grow in
-//! Butterfly Forest; all of them ask one question: is this point lit?
+//! Butterfly Forest; all of them ask one question: is this point lit? Grow asks a narrower one,
+//! is it lit from the sky ([`grows_at`]): a lamp or a light stone does not fool a seed.
 //!
 //! - **Props only.** Her glow, a bolt in flight and a bat's lamp are presentation.
 //! - **One rule.** [`light_showing`] is THE rule for whether a prop's light is on; `View` hands
@@ -68,6 +69,20 @@ pub fn max_light_radius() -> Fx {
 /// Does a showing prop light cover the point? `warm_only` leaves out lights marked `cold` (the
 /// Burial's blue torches show what is there and keep nothing off).
 pub fn lit_at(zone: &ZoneState, rt: &ZoneRuntime, clock: u32, at: Vec2, warm_only: bool) -> bool {
+    lit_by(zone, rt, clock, at, |l| !(warm_only && l.cold))
+}
+
+/// Will something grow at the point? Only in the sky's light: the sun, in the county (the one
+/// zone under the open sky; the Forest's canopy lets it down only in its beams) while the lamps
+/// are out, 06:30 to 18:30 (when a glade's `dayOnly` beam shows too); else a showing prop light
+/// marked `sky` (a sunbeam, a moonbeam, the library's roof). A lamp, a fire, a torch, a light
+/// stone set down, a bloomed bud's glow: none of them.
+pub fn grows_at(zone: &ZoneState, rt: &ZoneRuntime, clock: u32, at: Vec2) -> bool {
+    (zone.id == jane_core::ZoneId::County && !lamps_lit(clock)) || lit_by(zone, rt, clock, at, |l| l.sky)
+}
+
+/// Does a showing prop light that `counts` cover the point?
+fn lit_by(zone: &ZoneState, rt: &ZoneRuntime, clock: u32, at: Vec2, counts: impl Fn(&Light) -> bool) -> bool {
     let reach = max_light_radius();
     if reach.0 <= 0 {
         return false;
@@ -80,10 +95,7 @@ pub fn lit_at(zone: &ZoneState, rt: &ZoneRuntime, clock: u32, at: Vec2, warm_onl
         let p = &zone.props[ix as usize];
         let def = cat.story.prop(p.def);
         let Some(light) = light_showing(def, p, lamps, prop_wetness(zone, rt, p)) else { return false };
-        if warm_only && light.cold {
-            return false;
-        }
-        dist_sq(prop_centre(def, p), at) <= reach_sq(light.radius)
+        counts(light) && dist_sq(prop_centre(def, p), at) <= reach_sq(light.radius)
     })
 }
 

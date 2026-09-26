@@ -110,7 +110,7 @@
   "fire_stone": { "name": "Fire Stone", "icon": "item_fire_stone", "maxStack": 16, "usable": false, "cooldown": 60, "description": "Warm to hold. Lights wood." },
   "light_stone": {
     "name": "Light Stone", "icon": "item_light_stone", "maxStack": 16, "usable": true, "cooldown": 1,
-    "description": "Throws a circle of light, like a torch that never learned about fire.",
+    "description": "Throws a circle of light, like a torch that never learned about fire. Seeds are not fooled by it.",
     "use": [{ "do": "place", "def": "light_stone_down", "item": "light_stone" }]
   },
   "night_view_glass": { "name": "Night View Glass", "icon": "item_glass", "maxStack": 16, "usable": false, "cooldown": 60, "description": "See in the dark. Not yet." },

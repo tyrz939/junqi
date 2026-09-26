@@ -56,6 +56,11 @@ model! {
         /// Shows what is there and keeps nothing off (the Burial's blue torches): a unit that
         /// shuns light walks straight through it, and it never counts as warm.
         pub cold: bool,
+        /// Light that comes down from the sky: a glade's sunbeam or moonbeam, a dry bank in the
+        /// sun, the library's hole in the roof. Grow works in it and in no other prop's light (a
+        /// lamp, a fire, a torch, a light stone, a bloomed bud); out in the county the sun itself
+        /// counts by day (`jane_sim::light::grows_at`).
+        pub sky: bool,
     }
 }
 

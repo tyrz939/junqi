@@ -214,7 +214,7 @@ idle (regen, patrol, bait, aggro+LOS every 10 ticks; by day on the county's gent
 | Carry / put down in front, never on your own cell | **SHAPE** |
 | Pressure plate held by a unit **or a pushable**; `release` re-locks | **IN** — D: mine |
 | Repair: world-kind spell, prop `answers: "repair"`, consumes `needs`, refuses without | **IN** — D: mine |
-| Grow: world-kind spell, prop `answers: "grow"`, and only in light (`litAt`); in the dark it costs nothing and says so | **IN** — X |
+| Grow: world-kind spell, prop `answers: "grow"`, and only in the sky's light (`light::grows_at`: the sun in the county by day, or a prop light marked `sky`: the glades' sunbeams and moonbeams, the banks, the library's roof; never a lamp, a fire, a torch, a bloomed bud or the light stone); otherwise it costs nothing and says so. Rust only: the TypeScript still takes any light | **IN** — X |
 | School touch: frost wakes `torch_blue` | **IN** — D: burial |
 | Learn-spell prop (a dialogue tree with a `learn` action) | **IN** — S golden path |
 | Lever / toggle (`use` list, `on` state) | **IN** — N: the hoist lever, hidden until its hoist is mended, pulled once |

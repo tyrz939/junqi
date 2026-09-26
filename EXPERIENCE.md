@@ -176,7 +176,7 @@ Headers and key claims; later passes expand each to the §2 format.
 
 ### The ruined library and Butterfly Forest · hours 5 to 7 · Grow
 
-- **Sees / hears / can do.** The library's portico (a fire), the returns box, the stacks, Julie's margins, the last page: Grow. The forest: no doors, a ring of glades, things grow where the light comes down, eight butterflies. The Amulet.
+- **Sees / hears / can do.** The library's portico (a fire), the returns box, the stacks, Julie's margins, the last page: Grow. The forest: no doors, a ring of glades, things grow where the light comes down (the sun or the moon, never a lamp: the light stone lights her way and fools no seed), eight butterflies. The Amulet.
 - **Knows after.** Where the well were sent, and that they are not coming back.
 - **Meanwhile.** Rare herbs in Julie's garden if W7 is done. The butterflies gone from the forest road after.
 - **Checks.** `[L1:library 380 to 1000 m from the museum; the forest 260 to 950 m from the library]` `[L6:the canopy light layer keyed to the forest]` `[L6:consequences: the butterflies leave the road at hand-in]` `[L5:cohesion: the margins are Julie's hand, the same as the letter]`

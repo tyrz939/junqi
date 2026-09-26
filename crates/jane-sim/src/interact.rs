@@ -28,7 +28,7 @@ use crate::dialogue;
 use crate::event::{EventKind, PropChange, SfxKind, ToastKind};
 use crate::ids::{DropId, PropId, PropIx, Seat, UnitId};
 use crate::inventory;
-use crate::light::{lit_at, prop_centre};
+use crate::light::{grows_at, prop_centre};
 use crate::runtime::ZoneRuntime;
 use crate::state::{GameState, LootState, NightState, Prop, Speaker, TravelRequest, Unit, ZoneState};
 use crate::tuning::{
@@ -726,7 +726,7 @@ pub fn world_spell_target(cx: &mut Ctx<'_>, caster: UnitId, verb: WorldSpell) ->
         if d > best_d {
             continue;
         }
-        if verb == WorldSpell::Grow && !lit_at(cx.zone, cx.rt, cx.world.clock, prop_centre(def, p), false) {
+        if verb == WorldSpell::Grow && !grows_at(cx.zone, cx.rt, cx.world.clock, prop_centre(def, p)) {
             shaded = true;
             continue;
         }

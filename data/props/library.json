@@ -1,5 +1,5 @@
 {
   "page_grow": { "name": "The Last Book", "sprite": "page_grow", "w": 2, "h": 2, "solid": true, "blockLos": false, "once": true, "prompt": "Read" },
   "library_planter": { "name": "Dry Planter", "sprite": "library_planter", "w": 2, "h": 2, "solid": true, "blockLos": false, "answers": "grow" },
-  "library_beam": { "name": "Hole in the Roof", "sprite": "library_beam", "w": 2, "h": 2, "solid": false, "blockLos": false, "flat": true, "light": { "radius": 76, "color": "#f4ecc8", "flicker": 0 } }
+  "library_beam": { "name": "Hole in the Roof", "sprite": "library_beam", "w": 2, "h": 2, "solid": false, "blockLos": false, "flat": true, "light": { "radius": 76, "color": "#f4ecc8", "flicker": 0, "sky": true } }
 }

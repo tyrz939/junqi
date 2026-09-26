@@ -92,6 +92,8 @@ struct RawLight {
     flicker: Num,
     #[serde(default)]
     cold: bool,
+    #[serde(default)]
+    sky: bool,
 }
 
 #[derive(Deserialize)]
@@ -163,7 +165,7 @@ fn light(cx: &mut Ctx, at: &str, l: &RawLight) -> Option<Light> {
     let color = color(&l.color).map_err(|e| cx.diag.error(&at, e)).ok()?;
     let flicker = l.flicker.permille().map_err(|e| cx.diag.error(&at, e)).ok()?;
     cx.diag.need((0..=1000).contains(&flicker.0), &at, "flicker is a fraction of full brightness, 0..1");
-    Some(Light { radius, color, flicker, cold: l.cold })
+    Some(Light { radius, color, flicker, cold: l.cold, sky: l.sky })
 }
 
 fn props(src: &Source, cx: &mut Ctx) -> &'static [PropDef] {

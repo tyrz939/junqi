@@ -27,7 +27,8 @@ use crate::tuning::SPAWN_RADIUS;
 use crate::{interact, inventory, journal, quests, triggers};
 
 /// A `World` spell (Repair, Grow) does its verb to the prop in front of `caster`: the nearest
-/// unused one within 2 m that answers it (Grow passes over anything standing in the dark), paying
+/// unused one within 2 m that answers it (Grow passes over anything the sky's light does not
+/// reach: `light::grows_at`), paying
 /// what the prop `needs` from her bag, then marking it used and on and running its `use` list.
 /// Returns whether it found something to do; `false` makes the cast fail and cost nothing, and
 /// says why ("Nothing here to repair", "Nothing grows without light", "Needs 2x Rock").
@@ -220,8 +221,10 @@ mod tests {
         assert!(toasts(&mut s).contains(&ToastKind::NothingToRepair));
     }
 
+    /// Grow wants the sky's light: at night a light stone set down beside the bud (warm light, a
+    /// shade would keep off it) is not enough, and it says why; a moonbeam over it is.
     #[test]
-    fn nothing_grows_in_the_dark_and_in_the_light_the_buds_list_runs() {
+    fn nothing_grows_by_a_light_stone_and_in_a_moonbeam_the_buds_list_runs() {
         let mut s = room(|bp| {
             let grown = bp.local("grown");
             let list = bp.push_list(vec![Action::Flag { key: ContentFlag::Named(grown), op: FlagOp::Set(1) }]);
@@ -229,20 +232,54 @@ mod tests {
             let mut p = spawn(k, "bud", 8, 16);
             p.use_list = Some(list);
             bp.props.push(p);
-            let t = bp.local("torch");
-            let mut torch = spawn(t, "torch", 9, 18);
-            torch.hidden = true;
-            bp.props.push(torch);
+            let stone = bp.local("stone");
+            bp.props.push(spawn(stone, "light_stone_down", 9, 17));
+            let m = bp.local("moon");
+            let mut moon = spawn(m, "forest_moonbeam", 8, 17);
+            moon.hidden = true;
+            bp.props.push(moon);
         });
+        s.state.clock = 23 * crate::tuning::TICKS_PER_HOUR;
         s.drain_events();
+        let bud_at = jane_core::Vec2::centre(8, 16);
+        let lit = in_ctx(&mut s, |cx, _| crate::light::lit_at(cx.zone, cx.rt, cx.world.clock, bud_at, true));
+        assert!(lit, "the stone's warm light is over the bud");
         assert!(!in_ctx(&mut s, |cx, me| world_verb(cx, me, WorldSpell::Grow)));
         assert!(toasts(&mut s).contains(&ToastKind::NothingGrowsWithoutLight));
         assert_eq!(flag(&s, "grown"), 0);
-        // A torch lit beside it.
-        s.state.zone_mut(ZoneId::County).unwrap().props[1].hidden = false;
+        // The moon comes down on it.
+        s.state.zone_mut(ZoneId::County).unwrap().props[2].hidden = false;
         assert!(in_ctx(&mut s, |cx, me| world_verb(cx, me, WorldSpell::Grow)));
         assert_eq!(flag(&s, "grown"), 1);
         assert!(s.state.zone(ZoneId::County).unwrap().props[0].on, "it is on, and its own light shows");
+    }
+
+    /// Out in the county the sun counts while it is up (the lamps out), with no beam at all; after
+    /// the lamps are lit, a torch beside the bud is no sun.
+    #[test]
+    fn in_the_county_the_sun_grows_things_by_day_and_a_torch_does_not_by_night() {
+        let build = || {
+            room(|bp| {
+                let grown = bp.local("grown");
+                let list = bp.push_list(vec![Action::Flag { key: ContentFlag::Named(grown), op: FlagOp::Set(1) }]);
+                let k = bp.local("bud");
+                let mut p = spawn(k, "bud", 8, 16);
+                p.use_list = Some(list);
+                bp.props.push(p);
+                let t = bp.local("torch");
+                bp.props.push(spawn(t, "torch", 9, 18));
+            })
+        };
+        for (hour, grows) in [(12, true), (7, true), (20, false), (2, false)] {
+            let mut s = build();
+            s.state.clock = hour * crate::tuning::TICKS_PER_HOUR;
+            s.drain_events();
+            assert_eq!(in_ctx(&mut s, |cx, me| world_verb(cx, me, WorldSpell::Grow)), grows, "at {hour}:00");
+            assert_eq!(flag(&s, "grown"), i32::from(grows), "at {hour}:00");
+            if !grows {
+                assert!(toasts(&mut s).contains(&ToastKind::NothingGrowsWithoutLight), "at {hour}:00");
+            }
+        }
     }
 
     #[test]
