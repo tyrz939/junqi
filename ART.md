@@ -43,7 +43,7 @@ Decided 2026-09-26: modern pixel art, considerably above the SNES, nostalgic for
 | A prop | `w * 16` wide | never overhangs its footprint |
 | An icon | 32 x 32 in the bag, 16 x 16 as a chip | |
 | A tile | painted at 16 px a cell | sub-cell detail: blades, pebbles, grain, slate courses at 2 px |
-| Layers per sprite and tile | four: albedo, normal, emissive, height (§1.1); walks are four frames (§4) | |
+| Layers per sprite and tile | four: albedo, normal, emissive, height (§1.1); walks are six frames (§4, decided 2026-09-27) | |
 
 Still **zero hand-drawn sprites** (§1). The generators get richer primitives instead (§2.3), and every one of them knows the shape it drew well enough to light it.
 
@@ -299,7 +299,7 @@ Tests: every weather kind and every area has an entry that draws pixels; every s
 | Rule | Enforced by |
 | --- | --- |
 | One palette table; everything else is indices | Crate design |
-| Outline: every drawn pixel that meets clear is `k` (1 screen px, half a sim unit); interior seams are `K`; an outline is never coloured | `outline()` runs last; test "outline closed" |
+| Outline: **selective** (decided 2026-09-27). Every drawn pixel that meets clear is an outline pixel (1 screen px, half a sim unit) in the darkest tone of the adjacent material's own ramp, darkest below and away from the light, broken or lightened on lit top-left edges; `k` only where the ground needs the contrast; interior seams are the material's dark tone, `K` only between unlike materials | `outline()` runs last; test "outline closed" |
 | Light from the top-left in the albedo as a base; dynamic light on top through the normals, so a sprite reads right both with the light pass off (day) and on (night, a lamp) | the lit primitives are the only fills for bodies; test "lit sphere" |
 | Contact: AO baked in albedo as index 1 under a thing, plus the cast shadow the light pass draws from height | Index 1 reserved; height on every opaque pixel |
 | Colour budget: person ≤ 48, creature ≤ 40, prop ≤ 64, icon ≤ 24, building ≤ 96, `k` and `K` excluded | Test |
@@ -326,7 +326,9 @@ The owner's bar: the art stands out as impressive and beautiful among the best h
 | **Appeal at 32 x 40.** Readable faces with a glint in the eye, hair with a highlight band and strand clusters, silhouettes that say who someone is before colour does; townsfolk are different people, not recolours | Silhouette-distinct test; review |
 | **Motion with weight.** Anticipation, bob and lean in the walk; secondary motion (hair, hem, scarf) a frame behind the body | Review on `jane sheet unit` |
 
-**Outline, open (2026-09-27).** The rule above (every edge pixel `k`, never coloured) is under review against a **selective outline**: an edge pixel takes the darkest tone of the adjacent material's ramp, darkest below and away from the light, broken or lightened on lit edges, with `k` kept only where the ground needs the contrast. Both stay behind a switch until the owner picks from an A/B sheet (`sheets/person-outline-ab.png`); the loser is then deleted and this row rewritten. Likewise four walk frames against six.
+**Decided 2026-09-27: whichever reads better wins.** The owner's rule for every look choice from here: the visually better option is the default, not the cheaper or the older one. Applied first to the outline (selective, above, over the all-`k` outline) and the walk (six frames, over four).
+
+**Shadows are a showpiece**, not a necessity. Every opaque pixel's height is true to its shape (a head at 40, shoulders and a hem thinner, a wall its wall height, a canopy its crown), because the lit tiers cast from it: long soft sun shadows at dusk that swing with the clock, lamp shadows that fan out from every post, penumbrae that widen with distance, all tinted by the ambient (blue by day, violet at dusk) and never grey. Contact AO is a soft cool ellipse, never a checker.
 
 **The art-director review.** Every generator iteration ends in its sheets viewed at 1x and at 3 to 4x, a written critique (what reads, what is muddy, where the grid shows, what looks amateur), and the worst item fixed next. A family is done when every sprite in it would be defended beside the references at the same scale; the critique of its final sheets goes in the commit or the report that lands it.
 
@@ -472,7 +474,7 @@ Tests: glyphs are pairwise distinct (XOR at least 3 px on the 1x lattice); every
 Each step ends with something on screen or on a sheet, and with its acceptance tests green.
 
 1. `palette`, `canvas` at 16 px a cell with the four-layer pipeline and its primitives, `hash`, `font` (Fine and Small at least), `chrome`; `jane sheet layers` and `jane sheet light`. The title and the menus draw; a lit sphere sheet is the first artefact.
-2. Person `slim`, the frame tables, the four-frame walk and the breathe, the derivations, `fallen`, the seat swaps. Looks for Jane and the townsfolk.
+2. Person `slim`, the frame tables, the six-frame walk and the breathe, the derivations, `fallen`, the seat swaps. Looks for Jane and the townsfolk.
 3. Terrain and flora ported; `TileStyle` rows with height, normal and wetness. The county draws, and draws lit at night.
 4. Creature `quadruped_mid`, `quadruped_small`, `bird` with their gaits; Person `bone` skin. The first five minutes have their cast.
 5. The kit in first-walk order: `sign`, `lamp` (emissive), `barrier`, `container`, `ritual`, `furniture`, `structure`. The house, the cellar and the mine dress.

@@ -131,6 +131,7 @@ Every visual feature is a row. A row names the tier it needs, its default per ti
 | Hard cast shadows from shadow geometry | T1 | no | on, 8 casting lights | on | `shadows` |
 | Soft shadows, penumbra by distance | T2 | no | no | on | `soft_shadows` |
 | Sun and moon as a directional caster | T1 | ambient only | on | on | `sun_shadows` |
+| Silhouette sun shadows: each unit's and prop's albedo mask sheared along the sun by its height, tinted by the ambient, soft-edged by one dither step (decided 2026-09-27: shadows are a showpiece on every tier) | T0 | on | on | replaced by soft shadow maps | `silhouettes` |
 | Light count on screen | | 16 | 32 | 128 | `max_lights` |
 | Fog volumes per area | T0 | one drift tile | layered, drifting | layered, drifting | `fog` |
 | God rays through canopy | T2 | no | no | on | `god_rays` |
