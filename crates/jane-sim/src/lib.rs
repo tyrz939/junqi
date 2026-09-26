@@ -15,6 +15,9 @@
 //! | [`path`], [`los`], [`units`], [`ring`], [`fog`] | feet, sight, movement, the load ring, fog |
 //! | [`input`], [`event`] | frames, commands, events |
 //! | [`ctx`], [`actions`] | the context every system takes; the verb runner |
+//! | [`interact`], [`inventory`], [`bag`], [`dialogue`], [`quests`] | USE and the world verbs; bags, items and crafting; conversations; the quest log |
+//! | [`triggers`], [`under`], [`clear`], [`light`], [`orders`], [`verbs`] | triggers and plates; things under things; nothing solid lands on a unit; the light rule; `Send`; rest and growth |
+//! | [`journal`], [`hooks`] | what is known (§3.7); where combat reaches the world verbs |
 //! | [`sim`], `seats`, `travel` | the scheduler, seats and commands, travel |
 //! | [`save`] | save, load and the hash |
 //! | [`view`] | what a seat sees |
@@ -24,15 +27,24 @@
 pub mod actions;
 pub mod bag;
 pub mod blueprints;
+pub mod clear;
 pub mod codec;
 pub mod ctx;
+pub mod dialogue;
 pub mod event;
 pub mod fog;
 pub mod grid;
+pub mod hooks;
 pub mod ids;
 pub mod input;
+pub mod interact;
+pub mod inventory;
+pub mod journal;
+pub mod light;
 pub mod los;
+pub mod orders;
 pub mod path;
+pub mod quests;
 pub mod ring;
 pub mod runtime;
 pub mod save;
@@ -41,8 +53,11 @@ pub mod sim;
 pub mod state;
 pub mod sym;
 mod travel;
+pub mod triggers;
 pub mod tuning;
+pub mod under;
 pub mod units;
+pub mod verbs;
 pub mod view;
 pub mod zone;
 

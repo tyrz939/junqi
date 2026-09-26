@@ -19,7 +19,8 @@ use crate::tuning::MAX_PLAYERS;
 pub struct PartySnap {
     pub size: u8,
     pub bodies: [Option<(ZoneId, UnitId, Vec2)>; MAX_PLAYERS],
-    /// Within reach of a bed or a fire. The interact unit fills it; false until then.
+    /// Within reach of a bed or a fire. Unfilled: `Rest { until }` asks it live of every seat
+    /// (`verbs::everyone_resting`), as the TS did.
     pub resting: [bool; MAX_PLAYERS],
 }
 
@@ -58,11 +59,11 @@ impl ZoneOps {
 /// Cross-zone work, drained in order after the zone is put back (§4.2).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum WorldOp {
-    /// Once per connected seat in her zone, actor her. The quests unit's.
+    /// Once per connected seat in her zone, actor her (`quests::hand_in`).
     PayRewards { quest: jane_core::QuestId, list: jane_core::ListRef },
-    /// The spell is the world's; every body learns it. The combat unit's.
+    /// The spell is the world's; every bar learns it (`verbs::teach`).
     Teach(jane_core::SpellId),
-    /// Patches every body, parked included. The interact unit's.
+    /// Patches every body, parked included (`verbs::grow`).
     Grow { stat: jane_core::action::Stat, amount: i16 },
     /// An event for the whole party.
     Announce(EventKind),
@@ -80,6 +81,10 @@ pub struct Scratch {
     pub path: PathScratch,
     pub props: Vec<PropIx>,
     pub units: Vec<UnitId>,
+    /// A second prop buffer, for a search inside a loop over `props` (focus, world spells).
+    pub props_b: Vec<PropIx>,
+    /// Cells: the nudge search's queue (`clear.rs`).
+    pub cells: Vec<(i32, i32)>,
 }
 
 pub struct Ctx<'a> {

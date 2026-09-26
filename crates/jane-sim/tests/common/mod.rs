@@ -8,6 +8,9 @@ use std::sync::OnceLock;
 use jane_core::{Angle, Sfc32, ZoneId};
 use jane_sim::{Blueprints, ClientToken, Command, DevOp, InputFrame, Seat, Sim, StampedCommand, StepInput};
 
+pub mod bot;
+pub mod room;
+
 pub const SEED: u32 = 7;
 
 /// The blueprints of [`SEED`], built once.

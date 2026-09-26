@@ -195,10 +195,11 @@ The player's long-running context is engine state, not a presentation cache. The
 Journal { entries: Vec<JournalEntry>,                       // a ring of the last N per kind (§12), oldest overwritten
           known: BTreeMap<FactKey, Known { since: Tick, how: Source }> }
 
-JournalEntry { tick: Tick, kind: JournalKind, subject: Subject /* Sym | NameId */, zone: ZoneId, at: Cell }
+JournalEntry { tick: Tick, fact: FactKey, how: Source /* what it is known by from now */, zone: ZoneId, at: Cell }
+                                                    // kind() = fact.kind(): one entry per change to `known`
 
-enum FactKey { Place(NameId), Person(NameId), Thing(ItemId | PropDefId), Claim(TextId),
-               Route(NameId, NameId) /* from, to */, Danger(NameId) /* area */, Rumour(StoryId) }
+enum FactKey { Place(Sym), Person(Sym), Thing(ItemId | PropDefId), Claim(TextId),   // content writes NameId; a Sym
+               Route(Sym, Sym) /* from, to */, Danger(Sym) /* area */, Rumour(StoryId) }   // is a NameId below NAMES.len()
 
 enum Source { Seen, Visited, Named,          // Place
               Met, Talked, Dead,             // Person
@@ -211,9 +212,9 @@ enum Source { Seen, Visited, Named,          // Place
 
 | | |
 | --- | --- |
-| **Writers** | `Location` (Place Visited, Named); `Zone { first }` (Place Seen); a dialogue line's `tells` field (Person Talked, Claim Told, Rumour Heard); sign `Read` (Claim Read); a kill (Person Dead, Danger AttackedIn); a chest or a pick-up (Thing Held); `Travel` and the road walked between two named places (Route Walked); the first hit taken in an area and leaving it under aggro (Danger AttackedIn, Fled); a `Consequence` firing (§4.6) that confirms or contradicts a `Claim` |
+| **Writers** | `Location` (Place Visited); arriving in a zone (Place Seen, the zone's name); a dialogue line's `tells` field as the line is shown (Place Named, Person Talked, Thing Seen, Claim Told, Route and Danger Told, Rumour Heard); talking to a unit with a key (Person Met); sign `Read` of a content text (Claim Read); a kill (Person Dead through `hooks::on_kill`; Danger AttackedIn once areas reach the blueprint); a chest, a pick-up, a reward or a craft (Thing Held); `Travel` and a door (Route Walked, from the mark she came in by to the mark she arrives at); the first hit taken in an area and leaving it under aggro (Danger AttackedIn, Fled); a `Consequence` firing (§4.6) that confirms or contradicts a `Claim` |
 | **Readers** | `Condition::Knows { fact: FactKey }` and `Condition::Heard { claim: TextId }` (§5), so a line can say "you have seen the mill" or "you were told the bridge was out"; the quest legibility checks in `VERIFICATION.md`; the quest log's own text (`View::journal()`, `View::known(fact)`, §11); the map, which draws a named place only once it is `Known` |
-| **Upgrade** | A stronger `Source` for the same key replaces a weaker one (`Seen` → `Visited` → `Named`); `since` keeps the first tick. `Confirmed` and `Contradicted` replace `Told` and `Read` and are final |
+| **Upgrade** | A stronger `Source` for the same key replaces a weaker one (`Seen` → `Visited` → `Named`; `Met` → `Talked` → `Dead`; `Seen` → `Held`; `AttackedIn` → `Fled`; `Read` and `Told` are equal); `since` keeps the first tick. `Confirmed` and `Contradicted` replace `Told` and `Read` and are final |
 
 **Rule:** the journal is append-only and bounded: a ring of the last N entries per kind (§12) plus the `known` map. It is authoritative, saved and hashed. Text is never stored, only ids; `Claim(TextId)` is the line, and presentation expands it.
 
