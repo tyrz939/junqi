@@ -40,11 +40,16 @@ pub fn build(root: &Path) -> Built {
 pub fn build_source(src: &Source) -> Built {
     let mut cx = Ctx::default();
     cx.ids = Ids::collect(src, &mut cx.diag);
-    let combat = tables::combat::compile(src, &mut cx);
+    let mut combat = tables::combat::compile(src, &mut cx);
     let story = tables::story::compile(src, &mut cx);
-    let county = tables::county::compile(src, &mut cx);
+    let mut county = tables::county::compile(src, &mut cx);
     let dungeons = tables::dungeons::compile(src, &mut cx);
     let chunks = tables::chunks::compile(src, &mut cx, &story, &county, &dungeons);
+    // What names people and places by the hour comes last, so nothing it names moves a name
+    // the groups above interned: the unit rows' hours, the stories' listeners, the living world.
+    combat.units = tables::combat::late_schedules(src, &mut cx, combat.units);
+    county.stories = tables::county::late_spreads(src, &mut cx, county.stories);
+    let living = tables::living::compile(src, &mut cx, &county);
     check_limits(&mut cx);
 
     let mut catalog = Catalog {
@@ -60,6 +65,7 @@ pub fn build_source(src: &Source) -> Built {
         county,
         dungeons,
         chunks,
+        living,
     };
     integrate::check(&catalog, &mut cx.diag);
     catalog.content_hash = content_hash(&catalog);

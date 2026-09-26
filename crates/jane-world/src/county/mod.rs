@@ -49,9 +49,9 @@ pub mod small;
 pub mod stories;
 pub mod tale_ground;
 
-use jane_core::blueprint::ZONE_ATTEMPTS;
+use jane_core::blueprint::{Area, ZONE_ATTEMPTS};
 use jane_core::num::Permille;
-use jane_core::{Blueprint, Grid, NameId, Rect, Tile, ZoneId};
+use jane_core::{Blueprint, Grid, Key, NameId, Rect, Tile, ZoneId};
 
 pub use self::chunks::Chunk;
 use self::placements::{PoiSpot, Stage, apply_placements, claim_pois};
@@ -134,9 +134,24 @@ impl<'a> County<'a> {
         }
     }
 
-    /// The finished blueprint.
+    /// The finished blueprint, with the skeleton's patches as placed: each a square of its radius
+    /// about its centre (the ecology's areas, ARCHITECTURE.md §4.6.c).
     pub fn done(self) -> Blueprint {
-        self.k.done("Castle", false, Permille::ONE)
+        let areas = self
+            .sk
+            .areas
+            .iter()
+            .map(|a| {
+                let r = i32::from(a.def.radius);
+                Area {
+                    name: Key::Name(a.def.id),
+                    rect: Rect::new(centre(a.mx) - r, centre(a.my) - r, 2 * r + 1, 2 * r + 1),
+                }
+            })
+            .collect();
+        let mut bp = self.k.done("Castle", false, Permille::ONE);
+        bp.areas = areas;
+        bp
     }
 }
 

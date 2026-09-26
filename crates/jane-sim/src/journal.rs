@@ -25,7 +25,6 @@ use jane_core::{Cell, ItemId, ZoneId};
 use crate::ctx::Ctx;
 use crate::event::{Event, EventKind};
 use crate::state::{FactKey, GameState, JournalEntry, Known, Source};
-use crate::tuning::JOURNAL_RING;
 
 /// Would `how` change what is known of `fact`?
 pub fn improves(state: &GameState, fact: FactKey, how: Source) -> bool {
@@ -63,7 +62,7 @@ pub fn record(
             }
         }
     }
-    if of_kind >= JOURNAL_RING {
+    if of_kind >= crate::tuning::journal_ring() {
         if let Some(i) = oldest {
             j.entries.remove(i);
         }

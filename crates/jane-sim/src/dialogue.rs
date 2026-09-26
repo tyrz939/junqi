@@ -87,7 +87,17 @@ fn shown(cx: &mut Ctx<'_>) {
 pub fn start(cx: &mut Ctx<'_>, tree: DialogueId, speaker: Speaker) -> bool {
     let Some(seat) = cx.actor else { return false };
     let t = cx.cat.story.dialogue(tree);
+    // The start rules are asked with the conversation already open, so a rule can ask what the
+    // speaker has heard (`SpeakerKnows`); none holding, it closes again.
+    let before = cx.world.players[seat.index()].dialogue.replace(Dialogue {
+        tree: Some(tree),
+        node: 0,
+        line: 0,
+        speaker,
+        read: None,
+    });
     let Some(entry) = t.start.iter().find(|s| s.when.is_none_or(|w| conditions_met(cx, conds(cx, w)))) else {
+        cx.world.players[seat.index()].dialogue = before;
         return false;
     };
     let node = entry.node;

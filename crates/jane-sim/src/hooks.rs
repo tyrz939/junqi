@@ -64,22 +64,20 @@ pub fn quest_kill(cx: &mut Ctx<'_>, _seat: Seat, def: UnitDefId) {
 }
 
 /// A creature (not a seat's body) died, killed by `slayer` if one of the party: a named one is
-/// known dead (§3.7). The journal's `Danger AttackedIn` and the ecology's pressure wait on areas
-/// in the blueprint and the living-world unit.
+/// known dead (§3.7), and the area its home lies in feels the hunt (§4.6.c, `living::on_kill`).
+/// The journal's `Danger AttackedIn` waits on a rule for when a hit counts as in an area.
 pub fn unit_died(cx: &mut Ctx<'_>, unit: UnitId, _slayer: Option<Seat>) {
     if let Some(k) = cx.zone.unit(unit).and_then(|u| u.key) {
         journal::learn(cx, FactKey::Person(k), Source::Dead);
     }
+    crate::living::on_kill(cx, unit);
 }
 
 /// May this corpse stand up now? The ecology says no while its def is at its area's `cap` or the
-/// pressure is over the row's `hold` line, and pushes it back onto `sleeping_due` at the next
-/// hour itself.
-///
-/// Placeholder (the living-world unit's): always.
+/// pressure is at the row's `hold` line, and pushes it back onto `sleeping_due` at the next hour
+/// itself (`living::may_stand`).
 pub fn respawn_allowed(cx: &mut Ctx<'_>, unit: UnitId) -> bool {
-    let _ = (cx, unit);
-    true
+    crate::living::may_stand(cx, unit)
 }
 
 /// A seat wakes: what her body carried when she fell stays where she fell, on the nearest free

@@ -1,0 +1,35 @@
+[
+  {
+    "region": "lowfields",
+    "zones": ["county", "house", "cellar", "mine", "arms", "church"],
+    "bands": [
+      { "season": "autumn", "from": 6, "to": 12, "clear": 700, "mist": 100, "rain": 200, "storm": 0 },
+      { "season": "autumn", "from": 12, "to": 19, "clear": 800, "mist": 0, "rain": 200, "storm": 0 },
+      { "season": "autumn", "from": 19, "to": 21, "clear": 600, "mist": 200, "rain": 200, "storm": 0 },
+      { "season": "autumn", "from": 21, "to": 6, "clear": 500, "mist": 300, "rain": 200, "storm": 0 }
+    ],
+    "last": { "clear": [2, 5], "mist": [1, 3], "rain": [1, 3], "storm": [1, 2] }
+  },
+  {
+    "region": "waters",
+    "zones": ["forest", "library", "museum"],
+    "bands": [
+      { "season": "autumn", "from": 6, "to": 12, "clear": 300, "mist": 500, "rain": 200, "storm": 0 },
+      { "season": "autumn", "from": 12, "to": 19, "clear": 600, "mist": 200, "rain": 200, "storm": 0 },
+      { "season": "autumn", "from": 19, "to": 21, "clear": 300, "mist": 400, "rain": 200, "storm": 100 },
+      { "season": "autumn", "from": 21, "to": 6, "clear": 100, "mist": 600, "rain": 200, "storm": 100 }
+    ],
+    "last": { "clear": [1, 4], "mist": [2, 5], "rain": [1, 3], "storm": [1, 2] }
+  },
+  {
+    "region": "works",
+    "zones": ["burial", "factory", "pipes", "school"],
+    "bands": [
+      { "season": "autumn", "from": 6, "to": 12, "clear": 600, "mist": 200, "rain": 200, "storm": 0 },
+      { "season": "autumn", "from": 12, "to": 19, "clear": 700, "mist": 100, "rain": 200, "storm": 0 },
+      { "season": "autumn", "from": 19, "to": 21, "clear": 500, "mist": 200, "rain": 200, "storm": 100 },
+      { "season": "autumn", "from": 21, "to": 6, "clear": 400, "mist": 200, "rain": 200, "storm": 200 }
+    ],
+    "last": { "clear": [2, 4], "mist": [1, 3], "rain": [1, 3], "storm": [1, 2] }
+  }
+]

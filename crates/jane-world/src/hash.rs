@@ -25,7 +25,7 @@ const FNV64_OFFSET: u64 = 0xcbf2_9ce4_8422_2325;
 const FNV64_PRIME: u64 = 0x0000_0100_0000_01b3;
 
 /// Bump when the byte layout below changes, so an old fixture cannot match by accident.
-pub const LAYOUT: u32 = 1;
+pub const LAYOUT: u32 = 2;
 
 /// FNV-1a 64 over bytes written little-endian.
 #[derive(Clone, Copy, Debug)]
@@ -730,6 +730,7 @@ impl Feed for Blueprint {
             name_lists,
             texts,
             local_names,
+            areas,
         } = self;
         h.u32(LAYOUT);
         h.u8(*zone as u8);
@@ -774,6 +775,11 @@ impl Feed for Blueprint {
         name_lists.feed(h);
         texts.feed(h);
         local_names.feed(h);
+        h.count(areas.len());
+        for a in areas {
+            a.name.feed(h);
+            a.rect.feed(h);
+        }
     }
 }
 

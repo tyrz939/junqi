@@ -17,7 +17,8 @@ use crate::compile::lists::{self, RawAction, RawSchool, RawStat};
 use crate::compile::source::{Source, typed};
 use crate::model::{
     self, BoltSplash, BossPhase, BySchool, CastAnim, Controller, EffectDef, EffectPulse, Faction, GroundPool, ItemDef,
-    LootRoll, OnMelee, RecipeDef, SnakeBody, SpellDef, SpellKind, SpellPower, UnitDef, UnitGlow, UnitSight, WorldSpell,
+    LootRoll, OnMelee, RecipeDef, ScheduleRow, ScheduleSlot, SnakeBody, SpellDef, SpellKind, SpellPower, UnitDef,
+    UnitGlow, UnitSight, WorldSpell,
 };
 
 pub fn compile(src: &Source, cx: &mut Ctx) -> model::Combat {
@@ -463,6 +464,86 @@ struct RawUnit {
     hunts: Vec<String>,
     #[serde(default)]
     flees: Vec<String>,
+    #[serde(default)]
+    schedule: Vec<RawSlot>,
+}
+
+/// One row of a unit's hours (ARCHITECTURE.md §4.6.a): `{"from": 9, "to": 21, "mark": "arms_front"}`,
+/// or `"inside": "<prop>"`, `"patrol": true`, `"absent": true`.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawSlot {
+    from: u8,
+    to: u8,
+    mark: Option<String>,
+    inside: Option<String>,
+    #[serde(default)]
+    patrol: bool,
+    #[serde(default)]
+    absent: bool,
+}
+
+/// The unit rows' hours, compiled after every group that names a mark or a prop (the chunks):
+/// interning a mark's name with the units would move every name interned after it, and with them
+/// every blueprint's keys (`compile::build_source` calls this after the chunks).
+pub fn late_schedules(src: &Source, cx: &mut Ctx, units: &'static [UnitDef]) -> &'static [UnitDef] {
+    let rows = src.table("units", &mut crate::compile::diag::Diagnostics::default());
+    let mut out = units.to_vec();
+    for (id, row) in &rows {
+        let Ok(r) = serde_json::from_value::<RawUnit>(row.value.clone()) else { continue };
+        let (Some(i), false) = (cx.ids.units.get(id), r.schedule.is_empty()) else { continue };
+        if let Some(def) = out.get_mut(usize::from(i)) {
+            def.schedule = schedule(cx, &format!("{}: units.{id}", row.file), &r);
+        }
+    }
+    leak(out)
+}
+
+/// A schedule: every hour of the day in exactly one row, each row exactly one slot; never with
+/// `dayOnly` or `nightOnly`, which are its shorthand.
+fn schedule(cx: &mut Ctx, at: &str, r: &RawUnit) -> &'static [ScheduleRow] {
+    if r.schedule.is_empty() {
+        return &[];
+    }
+    let at = format!("{at}.schedule");
+    cx.diag.need(!r.day_only && !r.night_only, &at, "a schedule says the hours itself: no dayOnly or nightOnly");
+    let mut hours = [0u8; 24];
+    let mut out = Vec::with_capacity(r.schedule.len());
+    for (n, s) in r.schedule.iter().enumerate() {
+        let at = format!("{at}[{n}]");
+        if s.from >= 24 || s.to >= 24 {
+            cx.diag.error(&at, "hours are 0..=23");
+            continue;
+        }
+        let given = usize::from(s.mark.is_some())
+            + usize::from(s.inside.is_some())
+            + usize::from(s.patrol)
+            + usize::from(s.absent);
+        cx.diag.need(given == 1, &at, "a slot is exactly one of mark, inside, patrol, absent");
+        let slot = if let Some(m) = &s.mark {
+            ScheduleSlot::Mark(cx.name(m))
+        } else if let Some(p) = &s.inside {
+            ScheduleSlot::Inside(cx.name(p))
+        } else if s.patrol {
+            ScheduleSlot::Patrol
+        } else {
+            ScheduleSlot::Absent
+        };
+        for (h, n) in hours.iter_mut().enumerate() {
+            if model::in_span(h as u8, s.from, s.to) {
+                *n += 1;
+            }
+        }
+        out.push(ScheduleRow { hour_from: s.from, hour_to: s.to, slot });
+    }
+    for (h, n) in hours.iter().enumerate() {
+        match n {
+            1 => {}
+            0 => cx.diag.error(&at, format!("{h:02}:00 is in no row: every hour needs a slot (WORLD.md §10.2)")),
+            _ => cx.diag.error(&at, format!("{h:02}:00 is in {n} rows")),
+        }
+    }
+    leak(out)
 }
 
 fn units(src: &Source, cx: &mut Ctx) -> &'static [UnitDef] {
@@ -600,6 +681,7 @@ fn unit(cx: &mut Ctx, at: &str, id: &str, r: &RawUnit) -> UnitDef {
         phases: leak(phases),
         sight: r.sight.unwrap_or(UnitSight::Any),
         shuns_light: r.shuns_light,
+        // Named by `late_schedules`, once the chunks have named the marks and doors.
         schedule: &[],
         hunts: unit_refs(cx, &format!("{at}.hunts"), &r.hunts),
         flees: unit_refs(cx, &format!("{at}.flees"), &r.flees),
@@ -993,5 +1075,49 @@ mod tests {
         assert_eq!(rgb("#ffd07"), None);
         assert_eq!(thousandths(Num::from_int(64)), Ok(64000));
         assert!(thousandths(Num::from_int(-1)).is_err());
+    }
+
+    /// ARCHITECTURE.md §4.6.a: a row's hours cover the day once, each a single slot, and never
+    /// beside `dayOnly` / `nightOnly`; the names are interned only in the late pass.
+    #[test]
+    fn schedules_cover_the_day_once() {
+        let person = |extra: &str| {
+            format!(
+                r#"{{"cobb": {{"name": "Mr Cobb", "faction": "friendly", "controller": "npc", "strength": 10, "spirit": 1,
+                  "walk": 0.35, "run": 0.7, "aggro": 0, "leash": 0, "book": [], "respawn": 0, "autoRegen": true,
+                  "loot": [], "sprite": "s", {extra}}}}}"#
+            )
+        };
+        let late = |extra: &str| {
+            let units = person(extra);
+            let src = Source::from_files(&[("units.json", &units)]).unwrap();
+            let mut cx = Ctx::default();
+            cx.ids = Ids::collect(&src, &mut cx.diag);
+            let c = compile(&src, &mut cx);
+            assert!(c.units[0].schedule.is_empty(), "nothing named before the late pass");
+            let names = cx.names.len();
+            let units = late_schedules(&src, &mut cx, c.units);
+            (units[0].schedule, names, cx)
+        };
+        let ok = r#""schedule": [{"from": 21, "to": 6, "inside": "arms_door"}, {"from": 6, "to": 9, "mark": "yard"},
+                     {"from": 9, "to": 21, "patrol": true}]"#;
+        let (rows, before, cx) = late(ok);
+        assert!(cx.diag.is_ok(), "{}", cx.diag);
+        assert_eq!(before, 0);
+        assert_eq!(rows.len(), 3);
+        assert_eq!(rows[0].slot, ScheduleSlot::Inside(jane_core::ids::NameId(0)));
+        assert_eq!(rows[1].slot, ScheduleSlot::Mark(jane_core::ids::NameId(1)));
+        assert_eq!((rows[2].hour_from, rows[2].hour_to, rows[2].slot), (9, 21, ScheduleSlot::Patrol));
+
+        let gap = r#""schedule": [{"from": 6, "to": 21, "patrol": true}, {"from": 22, "to": 6, "absent": true}]"#;
+        assert!(has(&errors(&late(gap).2), "units.cobb.schedule", "21:00 is in no row"));
+        let twice = r#""schedule": [{"from": 0, "to": 0, "patrol": true}, {"from": 22, "to": 6, "absent": true}]"#;
+        assert!(has(&errors(&late(twice).2), "units.cobb.schedule", "22:00 is in 2 rows"));
+        let two = r#""schedule": [{"from": 0, "to": 0, "patrol": true, "absent": true}]"#;
+        assert!(has(&errors(&late(two).2), "units.cobb.schedule[0]", "exactly one of mark, inside, patrol, absent"));
+        let hour = r#""schedule": [{"from": 0, "to": 24, "patrol": true}]"#;
+        assert!(has(&errors(&late(hour).2), "units.cobb.schedule[0]", "hours are 0..=23"));
+        let sugar = r#""dayOnly": true, "schedule": [{"from": 0, "to": 0, "patrol": true}]"#;
+        assert!(has(&errors(&late(sugar).2), "units.cobb.schedule", "no dayOnly or nightOnly"));
     }
 }

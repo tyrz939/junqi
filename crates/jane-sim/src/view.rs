@@ -225,7 +225,7 @@ impl<'a> View<'a> {
 
     /// THE light rule, shared with the sim (`light.rs`).
     pub fn light_showing(&self, p: &Prop) -> Option<&'static Light> {
-        crate::light::light_showing(jane_data::catalog().story.prop(p.def), p, self.lamps_lit())
+        crate::light::light_showing(jane_data::catalog().story.prop(p.def), p, self.lamps_lit(), self.zone.wetness)
     }
 
     pub fn lamps_lit(&self) -> bool {
@@ -284,4 +284,29 @@ impl<'a> View<'a> {
 
 fn prev_pos(rt: &ZoneRuntime, id: UnitId) -> Option<Vec2> {
     rt.prev_pos.binary_search_by_key(&id, |&(u, _)| u).ok().map(|i| rt.prev_pos[i].1)
+}
+
+/// The living world as presentation reads it (ARCHITECTURE.md §4.6, §11): the sky, the puddles,
+/// where a scheduled person is. None of it changes state.
+impl<'a> View<'a> {
+    /// The sky over her zone's region (`living.rs`): presentation's mist, rain and storm.
+    pub fn weather(&self) -> &'a crate::state::WeatherState {
+        crate::living::weather_in(self.state, self.zone.id)
+    }
+
+    /// The sky over any region (the map's weather column, a far view).
+    pub fn weather_of(&self, region: jane_data::Region) -> &'a crate::state::WeatherState {
+        &self.state.weather[crate::living::region_ix(region)]
+    }
+
+    /// Her zone's rain ramp, 0..=255: puddles, the sound of it. The sim reads it for the douse rule.
+    pub fn wetness(&self) -> u8 {
+        self.zone.wetness
+    }
+
+    /// Where a scheduled unit of her zone is and why (a door can say who is behind it); `None`
+    /// for a unit with no hours.
+    pub fn schedule_state(&self, unit: UnitId) -> Option<crate::living::ScheduleState> {
+        crate::living::schedule_state(self.state, self.zone, self.rt, unit)
+    }
 }

@@ -25,7 +25,7 @@
   "torch": { "name": "Torch", "sprite": "torch", "w": 1, "h": 1, "solid": false, "blockLos": false, "light": {"radius": 64, "color": "#e1c080", "flicker": 0.2} },
   "torch_blue": { "name": "Cold Torch", "sprite": "torch_blue", "w": 1, "h": 1, "solid": false, "blockLos": false, "answers": "frost", "lightWhenOn": true, "light": {"radius": 76, "color": "#6aa8ff", "flicker": 0.2, "cold": true} },
   "lamp_post": { "name": "Lamp Post", "sprite": "lamp_post", "w": 1, "h": 1, "solid": true, "blockLos": false, "nightOnly": true, "light": {"radius": 96, "color": "#f6cd40", "flicker": 0.05} },
-  "campfire": { "name": "Campfire", "sprite": "campfire", "w": 2, "h": 2, "solid": true, "blockLos": false, "light": {"radius": 84, "color": "#ff9040", "flicker": 0.3}, "rest": true, "prompt": "Rest" },
+  "campfire": { "name": "Campfire", "sprite": "campfire", "w": 2, "h": 2, "solid": true, "blockLos": false, "light": {"radius": 84, "color": "#ff9040", "flicker": 0.3}, "douse": 160, "rest": true, "prompt": "Rest" },
   "lever": { "name": "Lever", "sprite": "lever", "w": 1, "h": 1, "solid": true, "blockLos": false, "prompt": "Pull" },
   "plate": { "name": "Pressure Plate", "sprite": "plate", "w": 2, "h": 2, "solid": false, "blockLos": false, "flat": true, "plate": true },
   "broken_steps": { "name": "Broken Steps", "sprite": "broken_steps", "w": 3, "h": 2, "solid": true, "blockLos": false, "answers": "repair" },

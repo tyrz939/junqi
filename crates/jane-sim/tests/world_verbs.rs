@@ -531,19 +531,19 @@ fn the_journal_ring_drops_the_oldest_of_a_kind_only() {
     let mut ev = Vec::new();
     let at = jane_core::Cell::new(0, 0);
     jane_sim::journal::record(st, &mut ev, FactKey::Claim(jane_core::TextId(0)), Source::Told, ZoneId::County, at);
-    for i in 0..jane_sim::tuning::JOURNAL_RING + 5 {
+    for i in 0..jane_sim::tuning::journal_ring() + 5 {
         let fact = FactKey::Person(jane_core::Sym(10_000 + i));
         jane_sim::journal::record(st, &mut ev, fact, Source::Met, ZoneId::County, at);
     }
     let people = st.journal.entries.iter().filter(|e| e.kind() == jane_sim::state::JournalKind::Person).count();
-    assert_eq!(people as u32, jane_sim::tuning::JOURNAL_RING);
+    assert_eq!(people as u32, jane_sim::tuning::journal_ring());
     assert!(
         st.journal.entries.iter().any(|e| e.fact == FactKey::Claim(jane_core::TextId(0))),
         "another kind keeps its own"
     );
     assert_eq!(
         st.journal.known.len() as u32,
-        jane_sim::tuning::JOURNAL_RING + 5 + 1 + 1,
+        jane_sim::tuning::journal_ring() + 5 + 1 + 1,
         "the known map is not a ring"
     );
 }

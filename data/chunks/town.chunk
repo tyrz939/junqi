@@ -358,7 +358,7 @@ y prop crate
 z prop door_talk door_cross_9 {"talk": "door_cross_9", "label": "No. 9, Cross Lane"}
 0 prop town_woodpile
 1 prop door_talk door_pound_1 {"talk": "door_pound_1", "label": "No. 1, Pound Lane"}
-2 prop door_talk door_pound_3 {"talk": "door_pound_3", "label": "No. 3, Pound Lane"}
+2 prop door_talk door_pound_3 {"talk": "door_pound_3_heard", "label": "No. 3, Pound Lane"}
 3 prop door_talk doctors_door {"talk": "doctors_door", "label": "The Doctor's"}
 4 prop town_sign_doctor sign_doctor {"talk": "sign_doctor"}
 5 prop door_talk door_pound_7 {"talk": "door_pound_7", "label": "No. 7, Pound Lane"}

@@ -8,7 +8,13 @@
     ],
     "quests": [
       "ames_spectacles"
-    ]
+    ],
+    "spreads": {
+      "to": [
+        "door_pound_3"
+      ],
+      "after": 1440
+    }
   },
   {
     "id": "tull",

@@ -12,8 +12,8 @@
 use std::collections::BTreeMap;
 
 use jane_core::{
-    Angle, Cell, CellIx, DialogueId, EffectId, ItemId, ListRef, Milli, NameId, PropDefId, QuestId, Sfc32, SpellId,
-    Stack, StoryId, Sym, TextRef, Tick, Tile, UnitDefId, Vec2, ZONE_COUNT, ZoneId,
+    Angle, Cell, CellIx, ConsequenceId, DialogueId, EffectId, ItemId, ListRef, Milli, NameId, PropDefId, QuestId,
+    Sfc32, SpellId, Stack, StoryId, Sym, TextRef, Tick, Tile, UnitDefId, Vec2, ZONE_COUNT, ZoneId,
 };
 use jane_data::{BarSlot, Controller, Faction};
 use serde::{Deserialize, Serialize};
@@ -28,7 +28,9 @@ use crate::tuning::{BAG_SLOTS, BAR_SLOTS, CRAFT_INPUTS};
 /// 2: a projectile's faction, velocity and blow (combat). 3: the journal (`Journal`'s entries
 /// and known facts). 4: the controllers' fields live (`patrol_at`, `dwell_until`, `order`, `path`,
 /// `snake`; a path let go keeps its box with no goal, and the snake's `phase_tick` is a count).
-pub const SAVE_VERSION: u16 = 4;
+/// 5: the living world lives (a sky per region, the consequences owed a zone, the journal's
+/// `Consequence` fact; `wetness`, `pressure`, `consequences_done` and `rumours` written).
+pub const SAVE_VERSION: u16 = 5;
 
 /// A fixed-size bit set (trigger bits, consequences done).
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -98,8 +100,8 @@ pub struct GameState {
     /// Whether anyone else may sit down. A save always loads closed.
     pub open: bool,
     pub next: Counters,
-    /// The world stream: weather and ecology, drawn once an hour in a fixed order (§4.4). Nothing
-    /// in this unit draws from it.
+    /// The world stream: weather and ecology, drawn once an hour in a fixed order (§4.4,
+    /// `living.rs`). Nothing else draws from it.
     pub rng: Sfc32,
     /// In seat order; at most four. A seat is never removed: a leaver's body is parked.
     pub players: Vec<PlayerState>,
@@ -113,13 +115,19 @@ pub struct GameState {
     pub syms: SymTable,
     /// What is known (§3.7, `journal.rs`).
     pub journal: Journal,
-    /// Owned by the living-world unit (§4.6.b). `Clear` at New Game.
-    pub weather: WeatherState,
-    /// One bit per `ConsequenceId`. Owned by the living-world unit (§4.6.d).
+    /// The sky over each region, in region order (§4.6.b, `living.rs`). `Clear` at New Game.
+    pub weather: [WeatherState; REGIONS],
+    /// One bit per `ConsequenceId`: set when it fires, so it fires once per save, ever (§4.6.d).
     pub consequences_done: Bits,
-    /// Pending rumours by person and story. Owned by the living-world unit (§4.6.e).
+    /// Consequences fired whose edits wait for their zone to be live, in the order they fired.
+    pub consequences_owed: Vec<(ZoneId, ConsequenceId)>,
+    /// Who hears of which story, from when (§4.6.e): written when one of the story's quests is
+    /// first handed in, at that tick plus the row's `after`. A person keyed by a content name.
     pub rumours: BTreeMap<(NameId, StoryId), Tick>,
 }
+
+/// The three regions under their own skies (`jane_data::Region` order).
+pub const REGIONS: usize = 3;
 
 impl GameState {
     pub fn zone(&self, z: ZoneId) -> Option<&ZoneState> {
@@ -214,6 +222,8 @@ pub enum FactKey {
     /// An area.
     Danger(Sym),
     Rumour(StoryId),
+    /// Something the county did for good (§4.6.d), seen.
+    Consequence(ConsequenceId),
 }
 
 impl FactKey {
@@ -226,6 +236,7 @@ impl FactKey {
             FactKey::Route(..) => JournalKind::Route,
             FactKey::Danger(_) => JournalKind::Danger,
             FactKey::Rumour(_) => JournalKind::Rumour,
+            FactKey::Consequence(_) => JournalKind::Consequence,
         }
     }
 }
@@ -240,7 +251,7 @@ pub enum JournalKind {
     Route,
     Danger,
     Rumour,
-    /// A consequence fired (§4.6.d; the living-world unit writes it).
+    /// A consequence fired (§4.6.d, `living.rs`).
     Consequence,
 }
 
@@ -321,7 +332,8 @@ impl JournalEntry {
     }
 }
 
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+/// What a region's sky is doing (content's `Sky`, WORLD.md §5.1).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
 pub enum WeatherKind {
     #[default]
     Clear,
@@ -330,6 +342,23 @@ pub enum WeatherKind {
     Storm,
 }
 
+impl WeatherKind {
+    pub const fn of(s: jane_data::Sky) -> Self {
+        match s {
+            jane_data::Sky::Clear => WeatherKind::Clear,
+            jane_data::Sky::Mist => WeatherKind::Mist,
+            jane_data::Sky::Rain => WeatherKind::Rain,
+            jane_data::Sky::Storm => WeatherKind::Storm,
+        }
+    }
+
+    /// Rain and storm wet the ground.
+    pub const fn wets(self) -> bool {
+        matches!(self, WeatherKind::Rain | WeatherKind::Storm)
+    }
+}
+
+/// A region's sky: what it is doing, since when, and until when it holds whatever is drawn.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WeatherState {
     pub kind: WeatherKind,
@@ -438,9 +467,9 @@ pub struct ZoneState {
     pub pending_fill: Vec<Fill>,
     /// Corpses to stand up, sorted `(tick, id)`. Owned by the combat unit.
     pub sleeping_due: Vec<(Tick, UnitId)>,
-    /// The rain ramp (§4.6.b). Owned by the living-world unit.
+    /// The rain ramp (§4.6.b, `living.rs`): 0 dry, 255 soaked; a fire goes out at its `douse`.
     pub wetness: u8,
-    /// Per area, in the blueprint's area order (§4.6.c). Owned by the living-world unit.
+    /// Per area, in the blueprint's area order (§4.6.c, `living.rs`): what hunting has taken.
     pub pressure: Vec<u16>,
     /// The block every seat here stood in when the ring last ran; `None` before it ever ran.
     /// Authoritative: whether the ring runs next tick depends on it, and a unit's `awake` bit

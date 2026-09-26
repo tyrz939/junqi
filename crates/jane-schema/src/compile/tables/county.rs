@@ -907,6 +907,27 @@ struct RawStory {
     spreads: Option<RawSpreads>,
 }
 
+/// The people each story spreads to (ARCHITECTURE.md §4.6.e), named once every group that
+/// provides a person has interned its names (`compile::build_source` calls it after the chunks).
+pub fn late_spreads(src: &Source, cx: &mut Ctx, stories: &'static [StoryDef]) -> &'static [StoryDef] {
+    #[derive(Deserialize)]
+    struct Heard {
+        id: String,
+        spreads: Option<RawSpreads>,
+    }
+    let rows = src.list("stories", &mut Diagnostics::default());
+    let mut out = stories.to_vec();
+    for row in &rows {
+        let Ok(h) = serde_json::from_value::<Heard>(row.value.clone()) else { continue };
+        let (Some(sp), Some(def)) = (h.spreads, out.iter_mut().find(|d| d.key == h.id)) else { continue };
+        let at = format!("{}: stories.{}.spreads", row.file, h.id);
+        if let Some(d) = def.spreads.as_mut() {
+            d.to = leak(sp.to.iter().map(|t| name(cx, &at, t)).collect());
+        }
+    }
+    leak(out)
+}
+
 struct Stories {
     defs: Vec<StoryDef>,
     /// Each story's content id, by position in `defs`.
@@ -971,7 +992,9 @@ fn stories(src: &Source, cx: &mut Ctx) -> Stories {
         let spreads = r.spreads.as_ref().map(|s| {
             let after = s.after.ticks().map_err(|e| cx.diag.error(&at, e)).unwrap_or_default();
             cx.diag.need(!s.to.is_empty(), &at, "spreads to nobody");
-            Spreads { to: leak(s.to.iter().map(|t| name(cx, &at, t)).collect()), after }
+            // Who hears is named by `late_spreads`, after the chunks have named everyone: interning
+            // a name here would move every name after it.
+            Spreads { to: &[], after }
         });
         let def = StoryDef {
             id,

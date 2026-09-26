@@ -619,7 +619,7 @@ impl LitField {
         rt.props.any_in(x0 - pad, y0 - pad, x1 + pad, y1 + pad, |ix| {
             let p = &zone.props[ix as usize];
             let def = cat.story.prop(p.def);
-            if let Some(l) = crate::light::light_showing(def, p, lamps) {
+            if let Some(l) = crate::light::light_showing(def, p, lamps, zone.wetness) {
                 if !(warm_only && l.cold) {
                     lights.push((prop_centre(def, p), reach_sq(l.radius)));
                 }

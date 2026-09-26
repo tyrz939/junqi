@@ -184,8 +184,9 @@ fn eight_to_twelve_tales_with_names_of_their_own_across_the_three_regions() {
     }
     regions.sort();
     assert_eq!(regions, [Region::Lowfields, Region::Waters, Region::Works]);
-    // No story spreads yet: the field is there for ARCHITECTURE.md §4.6.e and empty in data.
-    assert!(c.stories.iter().all(|s| s.spreads.is_none()));
+    // One story spreads so far (ARCHITECTURE.md §4.6.e; `tests/living.rs` has the row).
+    let spreads: Vec<&str> = c.stories.iter().filter(|s| s.spreads.is_some()).map(|s| s.key).collect();
+    assert_eq!(spreads, ["ames"]);
 }
 
 /// stories.test.ts "every name a seed could paint on a board is its own": every kind has a pool,

@@ -34,7 +34,7 @@ pub fn empty_zone_state(bp: &Blueprint, seed: u32) -> ZoneState {
         pending_fill: Vec::new(),
         sleeping_due: Vec::new(),
         wetness: 0,
-        pressure: Vec::new(),
+        pressure: vec![0; bp.areas.len()],
         ring_key: None,
     }
 }

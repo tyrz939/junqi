@@ -118,8 +118,8 @@ fn condition(cx: &Ctx<'_>, c: Condition) -> bool {
         }
         Condition::Knows(f) => journal::knows(cx.world, fact_key(cx, f)),
         Condition::Heard(t) => journal::heard(cx.world, t),
-        // The living-world unit (§4.6.e): false outside a conversation until it lands.
-        Condition::SpeakerKnows(_) => false,
+        // Whoever she is talking to has heard of it by now (§4.6.e); false outside a conversation.
+        Condition::SpeakerKnows(s) => crate::living::speaker_knows(cx, s),
     }
 }
 
