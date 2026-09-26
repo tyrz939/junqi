@@ -175,6 +175,41 @@ pub fn eat(v: &View<'_>) -> Option<Command> {
     food(v).map(Command::Item)
 }
 
+/// Milli-points a second a unit's best melee does, as its rows say (the fixed part and half the
+/// random).
+fn melee_rate(u: &Unit) -> i64 {
+    let cat = jane_data::catalog();
+    cat.combat
+        .unit(u.def)
+        .book
+        .iter()
+        .map(|&s| cat.combat.spell(s))
+        .filter(|s| s.kind == SpellKind::Melee)
+        .filter_map(|s| {
+            let p = s.power.as_ref()?;
+            let stat = i64::from(match p.stat {
+                jane_core::action::Stat::Strength => u.strength,
+                jane_core::action::Stat::Spirit => u.spirit,
+            });
+            let hit = stat * 1_000_000 / i64::from(p.div.max(1))
+                + stat * 1000 / i64::from(p.var_div.max(1)) * 1000 / 2
+                + i64::from(p.flat.0);
+            Some(hit * 60 / i64::from(s.cooldown.0.max(1)))
+        })
+        .max()
+        .unwrap_or(0)
+}
+
+/// Would she put down everything on her before it put her down, blow for blow as the rows say
+/// (with a third to spare)?
+pub fn would_win(v: &View<'_>) -> bool {
+    let me = v.body();
+    let on: Vec<&Unit> = enemies(v).into_iter().filter(|u| on_me(v, u)).collect();
+    let (hp, rate) = on.iter().fold((0i64, 0i64), |(h, r), u| (h + i64::from(u.hp.0), r + melee_rate(u)));
+    let mine = melee_rate(me);
+    mine > 0 && hp * rate * 3 < i64::from(me.hp.0) * mine * 2
+}
+
 /// A unit a bot fights or feeds, never both: a row with a bait is fed.
 pub fn fightable(u: &Unit) -> bool {
     jane_data::catalog().combat.unit(u.def).bait.is_none()
@@ -192,8 +227,15 @@ pub fn reachable(cx: &Ctx, id: UnitId, frame: u32) -> bool {
 
 /// The enemy to deal with now: the nearest one fighting her, else the one hunted.
 pub fn threat(v: &View<'_>, cx: &mut Ctx) -> Option<UnitId> {
-    if let Some(u) = enemies(v).into_iter().find(|u| on_me(v, u) && fightable(u)) {
-        return Some(u.id);
+    let on: Vec<&Unit> = enemies(v).into_iter().filter(|u| on_me(v, u) && fightable(u)).collect();
+    if let Some(&nearest) = on.first() {
+        // With a crowd on her, one at a time: the one she is hitting while it is still at her,
+        // else the weakest within reach of her (a blow spread over four kills none of them).
+        let me = v.body();
+        let reach = i64::from(2 * CELL_FX);
+        let held = on.iter().find(|u| Some(u.id) == cx.fight.target && gap(me, u) <= reach);
+        let weakest = on.iter().filter(|u| gap(me, u) <= reach).min_by_key(|u| (u.hp, u.id));
+        return Some(held.or(weakest).unwrap_or(&nearest).id);
     }
     let now = v.frame();
     match cx.fight.hunt.and_then(|t| v.unit(t)).filter(|u| u.alive && reachable(cx, u.id, now)) {
@@ -240,8 +282,10 @@ pub fn engage(v: &View<'_>, cx: &mut Ctx, id: UnitId) -> Option<Act> {
     let cat = jane_data::catalog();
     let d = dist(me.pos, t.pos);
     let dir = jane_core::angle::iatan2(t.pos.y.0 - me.pos.y.0, t.pos.x.0 - me.pos.x.0);
-    // Low with nothing to eat: back off (it may leash), and let the plan find a fire.
-    if hp_permille(me) < FLEE_BELOW && cx.fight.fleeing == 0 && food(v).is_none() {
+    // Low with nothing to eat: back off (it may leash), and let the plan find a fire. Not from
+    // what she would put down first, trading blows as the rows say (a skeleton between her and
+    // the fire is walked through, not fled from for ever).
+    if hp_permille(me) < FLEE_BELOW && cx.fight.fleeing == 0 && !has_food(v) && !would_win(v) {
         cx.fight.fleeing = 180;
         cx.fight.fled += 1;
         cx.fight.hunt = None;
