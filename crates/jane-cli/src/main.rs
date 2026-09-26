@@ -10,6 +10,7 @@ mod gen_cmd;
 mod hash_cmd;
 mod play;
 mod sheet_cmd;
+mod snap;
 mod view;
 
 const USAGE: &str = "usage: jane <command> [options]

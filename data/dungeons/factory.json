@@ -1,6 +1,6 @@
 {
   "id": "factory",
-  "name": "Goldskin Works",
+  "name": "The Factory",
   "phase": 4,
   "tiles": { "floor": "WorksFloor", "wall": "WorksWall", "alt": [] },
   "indoor": true,
@@ -297,7 +297,7 @@
       "id": "roller_door", "kind": "reward", "order": 11, "critical": true, "pool": "factory.roller_door", "heat": 0,
       "holds": [
         { "socket": "jar:big", "prop": "jar_big" },
-        { "socket": "chest:main", "prop": "boss_chest", "loot": [{ "item": "key_burial", "qty": 1 }, { "item": "gold_bar", "qty": 4 }], "label": "The foreman's own locker" },
+        { "socket": "chest:main", "prop": "boss_chest", "loot": [{ "item": "key_stone", "qty": 1 }, { "item": "gold_bar", "qty": 4 }], "label": "The foreman's own locker" },
         {
           "socket": "verbprop:socket", "prop": "socket_dead", "label": "The roller door socket",
           "use": [
@@ -312,7 +312,7 @@
         { "from": "chest:main", "as": "factory_reward_chest", "what": "prop" },
         { "from": "verbprop:socket", "as": "factory_roller_socket", "what": "prop" }
       ],
-      "demands": ["spark"], "grants": [{ "key": "burial" }, { "flag": "factory_roller_open" }]
+      "demands": ["spark"], "grants": [{ "key": "burial_gate" }, { "flag": "factory_roller_open" }]
     },
     {
       "id": "stores", "kind": "side", "order": 3, "critical": false, "pool": "factory.stores", "heat": 0.4,

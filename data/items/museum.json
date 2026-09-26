@@ -1,7 +1,7 @@
 {
   "key_toilets": {
     "name": "Conveniences Key", "icon": "item_key_brass", "maxStack": 1, "usable": false, "cooldown": 1, "opens": "museum_toilets",
-    "description": "Castle Museum. A brass tag reads CONVENIENCES. The tag is worn smooth on one side and new on the other."
+    "description": "A brass tag reads MUSEUM on one side and CONVENIENCES on the other. The first side is worn smooth and the second is new."
   },
   "key_maintenance": {
     "name": "Maintenance Key", "icon": "item_key_iron", "maxStack": 1, "usable": false, "cooldown": 1, "opens": "museum_maintenance",

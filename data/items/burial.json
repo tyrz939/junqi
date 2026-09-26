@@ -4,8 +4,13 @@
     "opens": "burial",
     "description": "Kept on a hook by the beds. The gardener locked up every night and nobody could say who for."
   },
+  "key_stone": {
+    "name": "The Company's Key", "icon": "item_key_blue", "maxStack": 1, "usable": false, "cooldown": 1, "bound": true,
+    "opens": "burial_gate",
+    "description": "Stamped G.M.Co. The tag is in the foreman's hand: THE STONE ON THE GRAVEYARD FOOTPATH. HIS, NOT OURS."
+  },
   "the_ball": {
     "name": "The Ball", "icon": "item_ball", "maxStack": 1, "usable": false, "cooldown": 1, "bound": true,
-    "description": "A rubber ball, chewed at one side. It was in his hands and it is not old."
+    "description": "The county's gold, cast into one sphere the size of a fist. It is warm, and it was in his hands."
   }
 }

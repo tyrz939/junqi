@@ -1,6 +1,6 @@
 {
   "id": "mine",
-  "name": "Goldskin Mine",
+  "name": "The Gold Mine",
   "phase": 1,
   "tiles": { "floor": "CaveFloor", "wall": "CaveWall", "alt": [] },
   "indoor": true,

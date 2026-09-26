@@ -55,7 +55,7 @@ describe("Castle is a town at Zelda scale", () => {
     }
   }, LONG);
 
-  it("the Halt is a halt: platform, shelter, name board, ticket window, lamps and a traveller, in a box a screen and a half across", () => {
+  it("the Halt is a halt: platform, shelter, name board, ticket window and lamps, nobody on it, in a box a screen and a half across", () => {
     for (const seed of SEEDS) {
       const bp = buildZone("county", seed);
       const halt = near(bp, "start", 36, 20);
@@ -63,7 +63,9 @@ describe("Castle is a town at Zelda scale", () => {
         expect(halt.props.some((p) => p.def === def), `${seed}: ${def} at the Halt`).toBe(true);
       }
       expect(halt.props.filter((p) => p.def === "lamp_post").length).toBeGreaterThanOrEqual(3);
-      expect(halt.units.some((u) => u.key === "traveller")).toBe(true);
+      // WORLD.md §3.2: the Halt is never given a person. The woman with the case waits in Castle, by the post office.
+      expect(halt.units.some((u) => u.def.startsWith("town_")), `${seed}: a person at the Halt`).toBe(false);
+      expect(near(bp, "post_office", 12, 8).units.some((u) => u.key === "traveller"), `${seed}: the traveller by the post office`).toBe(true);
       const plat = bp.rects.platform;
       expect(plat.w * plat.h, "the platform is a platform, not a parade ground").toBeLessThanOrEqual(260);
     }

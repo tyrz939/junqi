@@ -1,0 +1,26 @@
+{
+  "into_museum": {
+    "zone": "museum", "rect": "museum_entry", "once": true,
+    "actions": [{ "do": "location", "name": "museum" }]
+  },
+  "into_library": {
+    "zone": "library", "rect": "library_entry", "once": true,
+    "actions": [{ "do": "location", "name": "library" }]
+  },
+  "into_forest": {
+    "zone": "forest", "rect": "forest_gate", "once": true,
+    "actions": [{ "do": "location", "name": "forest" }]
+  },
+  "into_pipes": {
+    "zone": "pipes", "rect": "pipes_entry", "once": true,
+    "actions": [{ "do": "location", "name": "pipes" }]
+  },
+  "into_factory": {
+    "zone": "factory", "rect": "factory_entry", "once": true,
+    "actions": [{ "do": "location", "name": "factory" }]
+  },
+  "into_school": {
+    "zone": "school", "rect": "school_hall", "once": true,
+    "actions": [{ "do": "location", "name": "school" }]
+  }
+}

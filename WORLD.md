@@ -95,23 +95,30 @@ Where a person stands is a place the generator guarantees (a site, an anchor, a 
 
 The town is a set chunk: the square (fountain, memorial, Mr Tolly's bench, the parish board, the fire), High Street, Church Lane up to the church and churchyard, Cross Lane (the Forge), Back Lane (the orchard behind), Pound Lane (the Doctor's, No. 7 with the milk), the Castle Arms, Castle Stores, the post office, the green behind Pound Lane. The names are the dialogue rows' names; the streets are the chunk's.
 
-| Who | Home | By day | Route | Tells (true when) |
+| Who | Home (their `Inside` slot after the bell) | By day | Route | Tells (true when) |
 | --- | --- | --- | --- | --- |
-| Mr Cobb | High Street | Seat outside the Arms, 09:00 to 18:00 | Door to the Arms yard | Who came up the street and when. "Mrs Garland likes the yard kept" (always) |
-| Mrs Garland | The Castle Arms | Behind the bar, all hours; door open till it is light | None | Who has been in. Ernest Dunn's whereabouts (from day 2) |
-| Mr Dunn (Ernest) | Should be No. 9, Cross Lane | The Arms, since the spring | The Arms to the square after dark, ringing | "The night of the bell" (a date the town shares, §8) |
-| Mrs Crewe | Cross Lane | Her step, facing the Arms door | None | Where she stands and why (always) |
-| The Milkman | The dairy yard, Back Lane | Round 07:00 to 09:00: High Street, the square, Pound Lane to the south gate | The round, in order | No. 7's three bottles (always: the bottles are placed). Which doors took milk (from day 2) |
-| Miss Dray | Over the post office | The counter 09:00 to 17:00; the second post at 16:00 | Counter to the post box | The three mis-numbered letters. The Sunday sacks (day 8) |
-| Mrs Tace | Top of Church Lane | Her step, mornings; the churchyard, afternoons | Step to the churchyard gate | The School's window, "always the same one lit" (always: a fixed light) |
-| Mrs Fenn | High Street | Her door, afternoons | None | "In before the lamps." The bell going early on Tuesday (she says it from day 4 on every seed; it rang at ten to nine on the Tuesdays of a third of seeds, `omen:early_bell`) |
-| Tilly | Pound Lane | The square by day; in after tea | Home to the fountain | Sixpence in the churchyard. After: "he faces the hill" (the cat is placed facing north) |
-| Mr Tolly | High Street | His bench in the square, 09:00 to dusk | Door to bench | The memorial's last name, cut sharper (always) |
-| Dr Vane | The Doctor's, Pound Lane | Never opens | None | Nothing. The surgery notice does the telling |
-| Miss Orme | Pound Lane | The bench by the Doctor's, 13:00 to 15:00 | Door to bench | Which lane's sign has paint under it |
+| Mr Cobb | The Castle Arms, till it is light | The Arms yard from six; his seat outside the Arms from nine to the bell | The yard to his seat, on foot | "I sit out here till the bell. Mrs Garland likes the yard kept" (always). "After nine she'll let you in, but she likes you to stay till it's light. Most do" |
+| Mrs Garland | The Castle Arms | Behind the bar, all hours; door open till it is light | None | Who has been in. Ernest Dunn's whereabouts |
+| Mr Dunn (Walter) | No. 9, Pound Lane | By the telephone box on the square, waiting for his brother to ring on the hour; after the Back Room, watching the Arms door | None | His brother Ernest is chapel and has never been in a public house (the telephone says otherwise) |
+| Ernest Dunn | The Arms' back room, since the spring, "the night of the bell" (a date the town shares, §8) | Never seen. His tray comes back empty | None | Through Mrs Garland and his brother. "He's been ringing me from across the square" |
+| Mrs Crewe | No. 2, Cross Lane | Her seed stall | None | Julie had "the lot" off her (pansies, nasturtiums, lilies) and never said what for |
+| The Milkman | No. 4, Back Lane, by the dairy yard | His round, High Street, the square, Pound Lane, walked all day (*proposed*: 07:00 to 09:00 only, as he says) | The round, in order | No. 7's three bottles (always: the bottles are placed). Which doors took milk (from day 2) |
+| Miss Dray | The post office | Outside it, waiting for the second post at four | None | The three mis-numbered letters. The Sunday sacks (day 8) |
+| Mrs Tace | No. 6, Cross Lane: the door on the latch "for somebody else" | Her step | None | The School's window, "always the same one lit", from the top of Church Lane (always: a fixed light) |
+| Mrs Fenn | No. 1, Back Lane, where a clock strikes the quarter twice | Her door | None | "In before the lamps." The bell going early on Tuesday, checked against her kitchen clock (she says it from day 4 on every seed; it rang at ten to nine on the Tuesdays of a third of seeds, `omen:early_bell`) |
+| Tilly | No. 1, Pound Lane | The square | Home to the fountain | Sixpence in the churchyard. After: at the lamps he sits in her window facing the hill; by day he sits by the fountain with his back to it (`sixpence_home`) |
+| Mr Tolly | No. 3, High Street | His bench in the square | Door to bench | The memorial's last name, cut sharper (always) |
+| Dr Vane | The Doctor's, Pound Lane | Out in the lane by his door; the surgery never opens | None | Nobody has been ill since the spring. He fills a vial from the tap |
+| Miss Orme | No. 3, Pound Lane, next door to the Doctor's | The bench by the Doctor's with Mr Lyle, 13:00 to 19:00 ("since lunch"; he walks her home at the lamps) | Door to bench | What Mr Lyle says about the bell, and that she has heard both |
+| Mr Lyle | A room at the Arms | Beside Miss Orme, 13:00 to 19:00 | The Arms to the bench | By report, through Miss Orme: "the bell at nine is the church." Wrong, checkably: the church rings at six, for evensong |
 | Mr Hale | Over the Forge, Cross Lane | The Forge door, open a crack | None | Robert. HALE, R. on the memorial (the name is cut) |
-| Mr Lyle | Church Lane | The church door, 17:30 to 18:30 | Door to church | "The bell at nine is the church." Wrong, checkably: the church rings at six |
-| Mrs Hobb, Mrs Marsh, Mrs Oddie, Mrs Wick, Mrs Bex, Mr Ennis, Mr Ince, Mr Pound, Mr Quill, Mr Sallis, Nell, Dot, Robin, A Woman with a Case | Their numbered doors | Doors and steps by day; in by nine | Door to the square and back | One true thing and one false thing each (`STORY.md` §5). The sweeper's salt. The street "takes longer" after four |
+| The constable, Mr Ince | The Castle Arms, after the bell | The constable walks the High Street end to end; Mr Ince reads Sunday's paper | The street | A hundred and twelve paces, then more. The piece on page four about the east road's lamps |
+| Mrs Hobb, Mrs Marsh, Mrs Oddie, Mrs Wick, Mrs Bex, Mr Pound, Mr Sallis, the sweeper, Nell, Dot, Robin | Their doors: Mrs Hobb No. 7 and Mr Sallis No. 1, High Street (the orchard behind, and the card IN THE GARDEN); Mrs Marsh No. 5, High Street (ROUND AT THE LINE); Mrs Oddie No. 3, Mrs Wick No. 5 and Mrs Bex No. 6, Back Lane; Mr Pound over Castle Stores; the sweeper and Dot No. 13, Pound Lane; Nell and Robin No. 9, Cross Lane (the two voices and their mum) | Doors, steps, stalls and the square by day; in by nine | Door to the square and back | One true thing and one false thing each (`STORY.md` §5). The sweeper's salt. The street "takes longer" after four |
+| A Woman with a Case | A room at the Arms, since Sunday | By the post office, where the letters go on Sunday's train | None | On the Sunday she came, whether the train has been; from the first morning, "Is it Sunday?" and "I have been here since Sunday. It has not been Sunday since" (a clock row counts mornings) |
+| Mr Quill, Mr Ennis | The Castle Arms, all hours | The tap room | None | The Arms' regulars |
+| The ginger cat | Nowhere: it keeps no hours | Cross Lane along the south side of the square, lamp to lamp, sitting at each end as long as it sat last time | End to end | Its line is its route (the chunk's waypoints: 34 to 69, 900 and 600 ticks) |
+
+*Shipped 26 September 2026:* every townsperson above has a schedule row, `Inside` their door after the bell (the dog alone is `Absent`); the rest of each row's hours are the living world's later work. No door's knock line says anything its tenant contradicts. The Halt has nobody (§3.2): the woman with the case waits in Castle.
 
 **The doors.** A numbered door is a person even when nobody is named: `No. 3, Pound Lane` has a knock line by day, another after the bell, a `nightLock`, and an `Inside` slot that says who is behind it.
 
@@ -315,9 +322,8 @@ All *proposed* unless `QUESTS.md` already states the consequence.
 | --- | --- | --- |
 | The Thing in the Yard | The fence line clear; skeletons never spawn inside Julie's fence again | The yard |
 | Julie's Kitchen | The house is a hub: threat 0, `nightLock` on the door with her key. *Shipped:* `house_kept`, the door night-locked once she has seen the kitchen: from nine to six it answers only a key that fits it, and hers is bound (the door out never locks, so nobody is shut in) | The door |
-| Dust, Water, Pansy; What Snakes Eat | The bench lit; the cellar's rats at two for good; the roses grow back | The kitchen, the cellar |
-| Gnox Goldskin's Mine | The Company notice overpainted OPEN; the mine's skeletons stop walking the road; the town hears (§7) | The mine road; the Arms |
-| The Snake Below | The graveyard's ground fog gone; the four markers' keepers up | Chapel Rise |
+| Dust, Water, Pansy; Under the House | The bench lit; the cellar's rats at two for good; the roses grow back | The kitchen, the cellar |
+| The Gold Mine | The Company notice overpainted OPEN; the mine's skeletons stop walking the road; the town hears (§7) | The mine road; the Arms |
 | A1, A2 Lost Property, Left Luggage | Three lines filled; the shelf open, one article gone; the trunk stands open | The platform |
 | A3 To Be Collected | Parcel taken: the platform lamp never lights again. Left: the crate empty at six | The platform, every night |
 | B1, B2 The allotments | Rats at four, not eight; the hens lay; Plot 9 dug over, the stake gone, "Plot 9 is let" | The allotments, the farm |
@@ -343,8 +349,8 @@ All *proposed* unless `QUESTS.md` already states the consequence.
 | K13 No. 14, Again | The dead run lit for good, threat -1 at night on that road, permanently; a new post where 14 stood | The Lowfields |
 | K14 The Adit | The rock gone; the adit open | Quarry Steps |
 | Tales 1 to 9 | As `QUEST-TREE.md` §10 states per branch: the hives in black or a honey jar; the chair or a second plate; the boots gone or new planks; the red lamp or the green | Each tale's place, every day after |
-| The Museum; the Forest; the Factory | The wing's lights stay on, seen from the bridge at night; the butterflies gone from the road; the Factory dark for good, the Works darker after the bell, not safer | The Waters, the Works |
-| The Burial | The ground right again; Goldskin said by name in the town | Chapel Rise; the Arms |
+| The Museum; Butterfly Forest; the Factory (the spine, `QUEST-TREE.md` §5) | The wing's lights stay on, seen from the bridge at night; the butterflies gone from the road; the Factory dark for good, the Works darker after the bell, not safer | The Waters, the Works |
+| Under the Stone (the Burial) | The ground right again; the graveyard's ground fog gone; the four markers' keepers up; Goldskin said by name in the town | The graveyard, Chapel Rise; the Arms |
 | The School | The ending chosen. §9 |
 
 **Rule: a consequence is a set of world edits that runs once and lands in every zone it names, never a flag alone.** A quest whose only consequence is a flag fails the cohesion test.
@@ -456,16 +462,16 @@ Cross-region references that must agree. Each row is an L5 cohesion check: the s
 | 4 The Burial | The Burial Chamber | Fire | "Goldskin" said aloud in the town for the first time | The ground fog gone; the four corners quiet |
 | 5 The School | The School | Everything | The bell's meaning. The choice | The ending |
 
-*The reference build has the Burial second, after the mine; `PLAN.md` §2.2 moves it fifth. The acts follow the plan.*
+*The reference build had the Burial second, after the mine, and the data kept that order until 26 September 2026; `PLAN.md` §2.2 moves it fifth, and the data now follows the plan: the dog offers each act's place in this order (`QUEST-TREE.md` §5), and the Burial's stair stays locked until the Factory's key.*
 
 ### 9.2 What each act boundary leaves in the journal
 
 | Boundary | Facts (read or seen) | Quests | People |
 | --- | --- | --- | --- |
 | After 0 | Julie expected her; the bell is at nine; the dog is not on the step after nine; the map "was right"; the mine is at the end of the mine road out of Castle | The mine offered | The dog |
-| After 1 | The Headmaster keeps a register in the mine; the Company shipped gold; the Museum is across the river | The Museum offered | The Cranes; the carter, by his note |
-| After 2 | What the gold was for (the MAGIC wing); where the well were sent; Grow, from the last page | The pipes offered | The reedcutters; the tollkeeper's tally |
-| After 3 | The Works ran on the same gold; the foreman's diary; the four markers | The Burial offered, via the graveyard footpath | The canteen hatch; the Voyseys |
+| After 1 | The Headmaster keeps a register in the mine; the Company shipped gold; the Museum is across the river; the vault's brass key is the Museum's | The Museum offered | The Cranes; the carter, by his note |
+| After 2 | What the gold was for (the MAGIC wing); where the well were sent; Grow, from the last page | The Factory offered, by the pipes | The reedcutters; the tollkeeper's tally; the dog, one slip |
+| After 3 | The Works ran on the same gold; the foreman's diary; the four markers; the Company's key opens the stair under the stone | The Burial offered, via the graveyard footpath | The canteen hatch; the Voyseys |
 | After 4 | Goldskin is the wizard; the Ball; the shield was Julie's | The School offered | Nobody new. The town says his name |
 | After 5 | The choice made | None | The dog, or not |
 

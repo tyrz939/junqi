@@ -192,7 +192,7 @@ fn put_px(img: &mut Image, x0: u32, y0: u32, cx: i32, cy: i32, s: u32, rgb: [u8;
 }
 
 /// Write `text` in `face` at `(x, y)` in image px, in `rgb`.
-fn label(img: &mut Image, font: &Font, x: u32, y: u32, text: &str, face: Face, rgb: [u8; 3]) {
+pub fn label(img: &mut Image, font: &Font, x: u32, y: u32, text: &str, face: Face, rgb: [u8; 3]) {
     let run = crate::demo::text_run(font, text, Style::plain(face, Ix::INK));
     for cy in 0..run.h() {
         for cx in 0..run.w() {

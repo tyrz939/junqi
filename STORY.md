@@ -42,6 +42,12 @@ This costs nothing to build, fits the uncertainty the game is made of, and pays 
 - "She is not dead, {name}. I would know." "She would have done it herself, once." "Do not ask how I know" (about waking where you last rested).
 - Sleeping in Julie's bed: "When you open your eyes the blanket has been pulled up." The bed "has been made, recently and badly, by someone without the hands for it."
 - If you keep bothering it, it tells you it counted the lamps going out, and that the number is different if you count.
+- Everyone else in Castle is somewhere at night: behind a door of their own, or at the Arms till it is light (`WORLD.md` §2.2). The dog is the only one who is simply not there.
+- A tin bowl by the stoop, labelled in the hand of the letter: "DOG. Twice a day. It will tell you if you forget."
+- In the cellar study, a clean ring in the dust of the desk, the size of the stand the kitchen orb sits on; the Factory's orb stands on the same stand.
+- The slip for the Waters: asked who sent the county's well to the forest, it says "I did." and then "She did. It was the kindest place she had, and it was a garden then."
+
+**Who sends her where [decided in the build, 26 September 2026].** The dog gives every step of the spine, by day, and each hand-in names the next place and the key she already holds for it: the mine's vault holds the Museum's brass key; the Museum's case, the green-tagged forest key; the Factory's locker, the Company's key to the stair under the stone; the stair behind Goldskin comes up in the School. It never names Goldskin as the thing under the stone before she has seen him ("whatever is under that stone was buried with the county's gold"), and after, it does.
 
 **Rules for writing it:** the dog never says "I", "me" or "my" about anything Julie did, and never says "she" about anything it could only know by having been her. It slips about once per act, and only under pressure. Nobody else in Castle has ever seen Julie and the dog together, and nobody remarks on it.
 
@@ -52,9 +58,9 @@ This costs nothing to build, fits the uncertainty the game is made of, and pays 
 | Arrival | Station → the lamp road → Julie's house | Walk. Read signs. Be home before dark | The map is nearly right |
 | 1 | Julie's house and cellar | Melee, craft, Icebolt ("cold on purpose") | Julie expected her. Julie is not here. She is a witch |
 | 2 | **The Gold Mine** (Lowfields) | Repair, plates, keys; the Headmaster; Iron Knuckles | What Goldskin took. Where the children went. The Museum key |
-| 3 | **The Museum** (the Waters) | Light switches, a key shuffle, a door Repair mends | The old families' wing marked MAGIC: what the gold was for. The forest key |
-| 4 | **Butterfly Forest** | Grow; Explosion; eight butterflies, no doors | Where the well were sent. They are still there, and they are not coming back. The Amulet |
-| 5 | **Pipes → the Factory** (the Works) | Electric: store it, release it, turn the machines | Goldskin's works ran on the same gold. The foreman's diary **[2020]** |
+| 3 | **The Museum** (the Waters) | Light switches, a key shuffle, a door Repair mends; Explosion (the Shot-Firer's glove) | The old families' wing marked MAGIC: what the gold was for. The forest key |
+| 4 | **The ruined library → Butterfly Forest** | Grow (the library's last page); eight butterflies, no doors | Where the well were sent. They are still there, and they are not coming back. The Amulet |
+| 5 | **Pipes → the Factory** (the Works) | Electric: store it, release it, turn the machines | Goldskin's works ran on the same gold. The foreman's diary **[2020]**. The Company's key to the stair under the stone |
 | 6 | **The Burial Chamber** | Fire (the gardener's last page), bait, the four corners | Goldskin, and the Ball |
 | 7 | **The School** on the hill | Everything | The bell. What the Ball is for now. The choice |
 

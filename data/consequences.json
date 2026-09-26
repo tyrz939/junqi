@@ -23,7 +23,7 @@
       { "do": "nightUnlock", "prop": "mine_door" },
       { "do": "flag", "flag": "mine_quiet", "value": 1 }
     ],
-    "contradicts": "GOLDSKIN MINING Co. - CLOSED. No entry. No exit either, some nights."
+    "contradicts": "GOLDSKIN MINING Co. CLOSED. No entry. No exit either, some nights."
   },
   {
     "id": "yard_clear",

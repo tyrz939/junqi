@@ -150,6 +150,12 @@ export type UnitDef = {
   dayOnlyAfter?: string;
   /** The mirror: not there between 06:00 and 21:00. Never seen arriving or leaving. */
   nightOnly?: boolean;
+  /**
+   * Where it is by the hour (WORLD.md §3): one slot per span, `from` up to `to`, wrapping midnight.
+   * This build keeps only in or out: `inside` and `absent` are away, `mark` and `patrol` are here
+   * (the Rust build also walks a unit to its mark).
+   */
+  schedule?: { from: number; to: number; mark?: string; inside?: string; patrol?: boolean; absent?: boolean }[];
   /** Item id this unit cannot resist: while idle it walks to a drop of it and dies there. */
   bait?: string;
   /** Snake controller only: body segment count and spacing in px. */

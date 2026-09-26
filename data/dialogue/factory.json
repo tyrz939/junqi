@@ -1,11 +1,11 @@
 {
   "notice_factory": {
-    "speaker": "Works Plan",
+    "speaker": "Factory Plan",
     "start": [{ "node": "read" }],
     "nodes": {
       "read": {
         "lines": [
-          "GOLDSKIN MINING Co. WORKS. Loading bay, lockers and No. 1 line off this door. Time office off the line. Press hall and assembly beyond it.",
+          "GOLDSKIN MINING Co. FACTORY. Loading bay, lockers and No. 1 line off this door. Time office off the line. Press hall and assembly beyond it.",
           "The lamp runs are marked in red. All but one of them has been crossed out, and the crossings out are in the same hand as the plan."
         ]
       }

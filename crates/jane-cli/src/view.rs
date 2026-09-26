@@ -290,7 +290,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
 // --- the county in cells -------------------------------------------------------------------
 
 /// A tile's colour on the county sheet.
-fn tile_rgb(t: jane_core::Tile) -> [u8; 3] {
+pub fn tile_rgb(t: jane_core::Tile) -> [u8; 3] {
     use jane_core::Tile as T;
     match t {
         T::Void => [0, 0, 0],

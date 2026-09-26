@@ -27,6 +27,7 @@
     ],
     "onDeath": [
       { "do": "flag", "flag": "forest_cleared" },
+      { "do": "location", "name": "emperor_down" },
       { "do": "toast", "text": "The Emperor comes down on the grass and does not fold its wings." }
     ]
   }

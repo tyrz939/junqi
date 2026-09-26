@@ -542,9 +542,12 @@ fn a_schedule_obeys_the_watcher_box() {
     idle(&mut s, 30);
     let door = prop(&s, "arms_door").id;
     assert_eq!(state(&s, cobb).at, ScheduleWhere::Inside(door), "behind the Arms door");
-    // The dog's shorthand: a dayOnly row is `Absent` after the bell, and Tilly went in unseen.
+    // Tilly went in unseen, behind her own door: after the bell only the dog is `Absent`
+    // (WORLD.md §2.2), and the rest of the town is somewhere a slot names.
     let t = state(&s, tilly);
-    assert_eq!((t.slot, t.at), (ScheduleSlot::Absent, ScheduleWhere::Away));
+    let home = prop(&s, "door_pound_1").id;
+    let pound_1 = catalog().name_id("door_pound_1").unwrap();
+    assert_eq!((t.slot, t.at), (ScheduleSlot::Inside(pound_1), ScheduleWhere::Inside(home)));
 
     // 06:00, her standing where he would come out: he waits inside.
     let yard_cell = mark(&s, "arms_yard");

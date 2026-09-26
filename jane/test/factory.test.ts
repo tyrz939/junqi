@@ -362,12 +362,12 @@ describe("a solo bot in the generated works", () => {
       expect(prop("factory_gate_assembly").locked).toBe(false);
       expect(wayIn.hidden).toBe(true);
 
-      // The roller door: the big jar, the Glasshouse key, and the yard open for good.
+      // The roller door: the big jar, the Company's key to the Burial Chamber's stair, and the yard open for good.
       const strength = p.strength;
       useProp(sim, "factory_big_jar");
       expect(p.strength).toBeGreaterThan(strength);
       useProp(sim, "factory_reward_chest");
-      expect(bagCount(p, "key_burial")).toBe(1);
+      expect(bagCount(p, "key_stone")).toBe(1);
       spark(sim, "factory_roller_socket");
       expect(sim.state.flags.factory_roller_open).toBe(1);
       expect(prop("factory_roller_door").locked).toBe(false);

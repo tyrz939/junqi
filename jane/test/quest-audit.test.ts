@@ -105,7 +105,11 @@ const TIER: Record<string, { tier: Tier; why?: string }> = {
   if_found: { tier: "far", why: "the Long Hedge back to Castle Halt: the breadcrumb west" },
   stood_down: { tier: "near" },
   the_mine: { tier: "far", why: "Julie's yard to the mine at the end of the mine road" },
+  the_museum: { tier: "far", why: "Julie's yard, through Castle and over the river by the Museum's road" },
+  the_forest: { tier: "far", why: "the Waters' far end: Castle, the Museum's road, the library, the forest gate" },
+  the_factory: { tier: "far", why: "Julie's yard, through Castle and past the graveyard into the Works" },
   the_burial: { tier: "far", why: "Julie's yard to the graveyard road, the far side of Castle" },
+  the_school: { tier: "far", why: "the crown of the hill, the far end of the county from the station" },
 };
 
 /** Kill counts: more standing than asked (QUESTS.md K8), so the last one is never a wait. */
@@ -201,6 +205,13 @@ const LANDMARKS: Landmark[] = [
   { phrase: /standing stone/i, ref: { site: "burial" }, says: /do not/i },
   { phrase: /burial chamber/i, ref: { zone: "burial" }, says: /burial chamber/i },
   { phrase: /graveyard/i, ref: { site: "graveyard" }, says: /graveyard|grave/i },
+  // The spine past the mine: each dungeon is named by its banner, which she reads going in.
+  { phrase: /\bthe museum\b/i, ref: { zone: "museum" }, says: /museum/i },
+  { phrase: /ruined library/i, ref: { zone: "library" }, says: /library/i },
+  { phrase: /butterfly forest/i, ref: { zone: "forest" }, says: /butterfly forest/i },
+  { phrase: /\bthe pipes\b/i, ref: { zone: "pipes" }, says: /pipes/i },
+  { phrase: /\bthe factory\b/i, ref: { zone: "factory" }, says: /factory/i },
+  { phrase: /\bthe school\b/i, ref: { zone: "school" }, says: /school/i },
 ];
 
 /**

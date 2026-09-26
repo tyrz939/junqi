@@ -334,7 +334,7 @@ The station chain opens the region and closes it: its first quest is done on the
 
 ## 2.5 The whole game
 
-Forty-eight side quests: 19 in the Lowfields, 15 in the Waters, 14 in the Works. With the spine (seven rows live in `quests.json`, about five to come, one per remaining dungeon) the log tops out at sixty, inside `PLAN.md` 2.4.
+Forty-eight side quests: 19 in the Lowfields, 15 in the Waters, 14 in the Works. With the spine (eleven rows in `quests.json`: the first hour, then one per dungeon from the mine to the School) the log tops out at fifty-nine, inside `PLAN.md` 2.4.
 
 Type: K kill, A acquire, L location. Threat is by day; add 1 at night outside lamplight (2 in the Works).
 
@@ -414,7 +414,7 @@ Type: K kill, A acquire, L location. Threat is by day; add 1 at night outside la
 > Where the build differs from the text below, and why:
 >
 > 1. **`plot_nine` asks for a `location`, not a `kill`.** The Tenant's death fires `location plot_tenant_down`. A kill only counts while the quest is in the log and he does not return, so putting him down before reading the notice would have made the quest impossible for good (checklist 18). The text is unchanged.
-> 2. **The dog's two lamp rows sit above `epilogue`**, and so above the three `offer_` rows, not below them. `epilogue` answers unconditionally once the Burial is done; below it the line would never be heard by anyone who finished the spine first. They are still below every `questReady` row, `waiting` and `intro`, above the poke chain, and shown once.
+> 2. **The dog's two lamp rows sit above `epilogue`**, and so above the `offer_` rows, not below them. `epilogue` answers unconditionally once the spine is done (the School, since 26 September; it was the Burial); below it the line would never be heard by anyone who finished the spine first. They are still below every `questReady` row, `waiting` and `intro`, above the poke chain, and shown once.
 > 3. **`before_the_bell` does not wait for `see_the_kitchen`.** The tree in ASKS C has no such row, and adding one needs a line of text for a book that will not open yet. One row and one line, if wanted.
 > 4. **Rects are wider.** `hedge_stile_town` and `hedge_stile_farm` are 27 x 27, not 9 x 9: a rect is centred on its fingerpost, which may stand up to twelve cells from the end of the path, and the rect has to hold the path. `scarecrow_top_wide` is 240 x 220 centred on `scarecrow_top`, not 120 x 90 centred between the two: the twin is an anchor 32 to 70 m off, not exactly 40, and a row cannot centre a rect between two anchors. The test holds both scarecrows more than 24 cells across and 14 down inside it.
 > 5. **The cold brazier and the lit one stand side by side**, a few cells apart, not on the same cells. Only a chunk's slot can put two props on one cell.

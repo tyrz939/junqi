@@ -1,0 +1,3 @@
+[
+  { "hour": 6, "actions": [{ "do": "flag", "flag": "mornings", "add": 1 }] }
+]
