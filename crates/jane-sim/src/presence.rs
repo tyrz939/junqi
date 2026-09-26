@@ -1,7 +1,10 @@
 //! Step 3, presence (ARCHITECTURE.md §4.6.a; `sim.ts stepDayOnly`). Every [`PRESENCE_EVERY`]
 //! ticks, and on arrival in a zone, each unit with somewhere to be by the hour is put there.
 //!
-//! **The slot.** A row's `schedule` names a [`ScheduleSlot`] per span of hours. `day_only` and
+//! **The slot.** A row's `schedule` names a [`ScheduleSlot`] per span of hours. A row may carry
+//! a `when` (while a quest is in the log, or once it is handed in): those are looked at first,
+//! and the plain rows cover the rest of the day. A person's hours move a few minutes from day to
+//! day ([`own_hour`], the row's `vary`), never across a bell. `day_only` and
 //! `night_only` are two-slot schedules, not special cases: `day_only` is `Patrol` from 06:00 to
 //! 21:00 and `Absent` the rest (only once its `day_only_after` quest is done, if it names one:
 //! the dog keeps Julie's hours only after the key is given), `night_only` the other way round.
@@ -23,21 +26,83 @@
 //! Seats' bodies are never scheduled, and a snake (a mover of its own) is shown and hidden but
 //! never sent.
 
-use jane_core::Vec2;
-use jane_data::{Controller, ScheduleSlot, UnitDef};
+use jane_core::{Vec2, ZoneId};
+use jane_data::{Controller, ScheduleRow, ScheduleSlot, ScheduleWhen, UnitDef};
+use jane_world::steps::Step;
 
 use crate::ctx::Ctx;
 use crate::ids::UnitId;
-use crate::state::GameState;
-use crate::tuning::{ORDER_ARRIVED_FX, PRESENCE_EVERY, PRESENCE_NUDGE_RADIUS, WATCH_X_FX, WATCH_Y_FX};
+use crate::state::{GameState, Unit};
+use crate::tuning::{
+    NIGHT_END_HOUR, NIGHT_START_HOUR, ORDER_ARRIVED_FX, PRESENCE_EVERY, PRESENCE_NUDGE_RADIUS, TICKS_PER_DAY,
+    TICKS_PER_HOUR, WATCH_X_FX, WATCH_Y_FX,
+};
 use crate::units::def_of;
 
-/// The slot a row puts a unit in now, or `None` when it has no schedule (always present) or its
-/// schedule does not say (it stays as it is).
+/// The slot a row puts a unit in now, at the hours as written, or `None` when it has no schedule
+/// (always present) or its schedule does not say (it stays as it is). A person's own hours for
+/// the day are [`slot_of_unit`]'s.
 pub fn slot_of(def: &UnitDef, world: &GameState) -> Option<ScheduleSlot> {
+    slot_at(def, world, world.hour() as u8)
+}
+
+/// The slot this unit is in now: its row's, at its own hour of the day ([`own_hour`]).
+pub fn slot_of_unit(u: &Unit, world: &GameState) -> Option<ScheduleSlot> {
+    let def = def_of(u);
+    slot_at(def, world, own_hour(def, world))
+}
+
+/// The schedule row that holds at `hour`: the first override (`while`, `after`) whose hours and
+/// whose quest hold, else the plain row for the hour (the compiler puts the overrides first).
+pub fn row_at<'a>(def: &'a UnitDef, world: &GameState, hour: u8) -> Option<&'a ScheduleRow> {
+    def.schedule.iter().find(|r| in_hours(hour, r.hour_from, r.hour_to) && when_holds(r.when, world))
+}
+
+/// Does a row's `when` hold in this world?
+pub fn when_holds(when: Option<ScheduleWhen>, world: &GameState) -> bool {
+    match when {
+        None => true,
+        Some(ScheduleWhen::While(q)) => world.quests.active.iter().any(|p| p.quest == q),
+        Some(ScheduleWhen::After(q)) => world.quests.done.contains(&q),
+    }
+}
+
+/// Clock ticks in a minute.
+const TICKS_PER_MINUTE: u32 = TICKS_PER_HOUR / 60;
+
+/// How many minutes a person's hours are moved today, `-vary..=vary` in fives: one draw from the
+/// person's own dice for the day (`Step::SimHours`, keyed by the row's `vary_key`: its id, or the
+/// id of the one it keeps hours with), so every seat and every load of the same save agrees, and
+/// nothing is kept for it.
+pub fn hours_offset(seed: u32, vary_key: u32, day: u32, vary: u8) -> i32 {
+    let fives = u32::from(vary / 5);
+    let mut dice = jane_world::steps::dice(seed, ZoneId::County, Step::SimHours, 0, vary_key as i32, day as i32);
+    dice.below(fives * 2 + 1) as i32 * 5 - i32::from(vary)
+}
+
+/// The hour of the day by this person's clock today: the world's, moved by [`hours_offset`] when
+/// the row varies. Never across a bell: from nine to six everyone keeps the world's hour, and a
+/// moved hour that would fall in the night is the day's last or first.
+pub fn own_hour(def: &UnitDef, world: &GameState) -> u8 {
     let hour = world.hour() as u8;
+    if def.vary == 0 || world.is_night() {
+        return hour;
+    }
+    let off = hours_offset(world.seed, def.vary_key, world.day, def.vary);
+    let back = off.unsigned_abs() * TICKS_PER_MINUTE;
+    let clock = if off >= 0 {
+        (world.clock + TICKS_PER_DAY - back) % TICKS_PER_DAY
+    } else {
+        (world.clock + back) % TICKS_PER_DAY
+    };
+    ((clock / TICKS_PER_HOUR) as u8).clamp(NIGHT_END_HOUR as u8, NIGHT_START_HOUR as u8 - 1)
+}
+
+/// The slot at `hour`: the schedule's, else the `day_only` / `night_only` shorthand (by the
+/// world's own night, which no person's hours move).
+fn slot_at(def: &UnitDef, world: &GameState, hour: u8) -> Option<ScheduleSlot> {
     if !def.schedule.is_empty() {
-        return def.schedule.iter().find(|r| in_hours(hour, r.hour_from, r.hour_to)).map(|r| r.slot);
+        return row_at(def, world, hour).map(|r| r.slot);
     }
     let night = world.is_night();
     if def.day_only {
@@ -74,7 +139,7 @@ pub fn step_presence(cx: &mut Ctx<'_>) {
 pub fn presence(cx: &mut Ctx<'_>, arriving: bool) {
     for i in 0..cx.zone.units.len() {
         let u = &cx.zone.units[i];
-        let Some(slot) = slot_of(def_of(u), cx.world) else { continue };
+        let Some(slot) = slot_of_unit(u, cx.world) else { continue };
         if u.controller == Controller::Player || cx.party.seat_of(u.id).is_some() {
             continue;
         }
@@ -100,7 +165,13 @@ pub fn put(cx: &mut Ctx<'_>, i: usize, slot: ScheduleSlot, arriving: bool) {
             }
         }
         ScheduleSlot::Mark(n) => {
-            let Some(m) = cx.rt.mark(crate::sym::of_name(n)) else { return };
+            // A mark this zone does not have (a row played on a test field): shown where it is.
+            let Some(m) = cx.rt.mark(crate::sym::of_name(n)) else {
+                if hidden && !seen(cx, pos) {
+                    show(cx, i, pos);
+                }
+                return;
+            };
             let to = Vec2::centre(i32::from(m.cell.x), i32::from(m.cell.y));
             let there = jane_core::num::dist_sq(pos, to) <= i64::from(ORDER_ARRIVED_FX).pow(2);
             let (seen_here, seen_there) = (seen(cx, pos), seen(cx, to));

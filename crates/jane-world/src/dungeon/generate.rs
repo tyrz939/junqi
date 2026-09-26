@@ -980,6 +980,7 @@ impl Gen<'_> {
                 let zone_to = hd.to.map(|t| Door { zone: t.zone, mark: Key::Name(t.mark) });
                 let p = self.k.prop(key, def, px, py, s.w, s.h);
                 p.locked = hd.locked || guarded;
+                p.key_tag = hd.key_tag.map(Key::Name);
                 p.hidden = hd.hidden;
                 p.on = hd.on.unwrap_or(false);
                 p.loot = hd.loot.map(<[_]>::to_vec).unwrap_or_default();

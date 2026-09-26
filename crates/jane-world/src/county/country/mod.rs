@@ -282,12 +282,14 @@ pub fn furnish_places(c: &mut County<'_>) {
     places::places(c);
 }
 
-/// Wildlife, wanderers, and something small on every screen still empty.
+/// Wildlife, wanderers, and something small on every screen still empty; then what stands up
+/// after the bell, which fills no screen by day.
 pub fn furnish_life(c: &mut County<'_>) {
     ready(c);
     life::wildlife(c);
     life::wanderers(c);
     life::gaps(c);
+    life::night_shift(c);
 }
 
 // --- small building tools ------------------------------------------------------------------

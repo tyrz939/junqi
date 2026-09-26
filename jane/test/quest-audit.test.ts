@@ -396,6 +396,18 @@ function world(seed: number): World {
       note({ zone, cx: r.cx + Math.floor(r.w / 2), cy: r.cy + Math.floor(r.h / 2), id: `rect:${tr.rect}(${tid})`, text: "", hidden: false, time }, flatten(tr.actions), time);
     }
   }
+  // Someone who meets her elsewhere while a quest is in her log (units.json: a schedule row with
+  // `while` and a `mark`; the dog on the Museum's steps, at the graveyard gate, at the top of Church
+  // Lane) takes it back there too: the mark is a hand-in, speaking with the unit's own words.
+  const county = bps.county;
+  for (const def of Object.values(c.units)) {
+    for (const r of def.schedule ?? []) {
+      const m = r.while && r.mark ? county?.marks[r.mark] : undefined;
+      if (!m || !r.while) continue;
+      const text = [def.name, treeText(c, def.talk, seed)].join(" ");
+      add(`handin:${r.while}`, { zone: "county", cx: m.cx, cy: m.cy, id: `mark:${r.mark}`, text, hidden: false, time: undefined });
+    }
+  }
   // The start, and quests that pay out in quests or things: the giver of the next is whoever took the last.
   const startMark = bps.county?.marks[c.start.mark];
   const start: Thing = { zone: "county", cx: startMark?.cx ?? 0, cy: startMark?.cy ?? 0, id: "start", text: "", hidden: false, time: undefined };

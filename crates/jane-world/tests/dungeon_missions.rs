@@ -316,11 +316,13 @@ fn the_burials_stair_up_is_the_way_into_the_school_behind_goldskin_and_everywher
     let b = build(ZoneId::Burial, 31);
     let bp = &b.blueprint;
     // All thirteen zones exist statically (PORT.md §6.l), so the stair always leads into the
-    // School's boiler room (DUNGEONS.md §3.6: the School's entrance). It has no lock: the room it
-    // stands in opens when Goldskin is down, and not before.
+    // School's boiler room (DUNGEONS.md §3.6: the School's entrance). The room it stands in opens
+    // when Goldskin is down, and not before; the stair itself is locked to Julie's Other Key, which
+    // the dog gives with the School (the mission's `givenKeys`), so she goes up when she is sent.
     let stair = bp.props.iter().find(|p| p.key == key(bp, "stair_up")).expect("the stair up");
-    assert!(!stair.locked);
-    assert_eq!(stair.key_tag, None);
+    assert!(stair.locked);
+    let tag = jane_data::catalog().name_id("school_stair").expect("the tag");
+    assert_eq!(stair.key_tag, Some(jane_core::Key::Name(tag)));
     assert_eq!(stair.to, Some(Door { zone: ZoneId::School, mark: key(bp, "boiler") }));
     let at = Rect::new(i32::from(stair.cell.x), i32::from(stair.cell.y), 1, 1);
     let (whole, alive) = ablated(&b, Grant::Flag(FlagKey::Named(key(bp, "burial_cleared"))));

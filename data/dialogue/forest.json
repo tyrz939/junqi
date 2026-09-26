@@ -16,6 +16,7 @@
     "speaker": "Glass Cases",
     "start": [
       { "when": [{ "if": "flag", "flag": "forest_butterflies", "min": 8 }, { "if": "flag", "flag": "forest_amulet", "not": true }], "node": "full" },
+      { "when": [{ "if": "dead", "unit": "collector" }, { "if": "flag", "flag": "took_watchmans_key", "not": true }], "node": "watchman" },
       { "when": [{ "if": "dead", "unit": "collector" }], "node": "after" },
       { "node": "before" }
     ],
@@ -26,8 +27,15 @@
           "Ten of them have something in them."
         ]
       },
+      "watchman": {
+        "lines": [
+          "The eleventh label is blank. The case is open, and there is a pin in it with nothing on the pin.",
+          "The case labelled NIGHT WATCHMAN has no wings in it. Pinned through the hole of a brass tally stamped G.M.Co. there is a key, and you take it."
+        ],
+        "actions": [{ "do": "give", "item": "key_works" }, { "do": "flag", "flag": "took_watchmans_key" }]
+      },
       "after": {
-        "lines": ["The eleventh label is blank. The case is open, and there is a pin in it with nothing on the pin."]
+        "lines": ["The eleventh label is blank. The case is open, and there is a pin in it with nothing on the pin. The case labelled NIGHT WATCHMAN is empty now."]
       },
       "full": {
         "lines": ["Eight of yours, set in the order the labels were written. The blank one is the one that fits them."],

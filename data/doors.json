@@ -12,7 +12,8 @@
     "zone": "library",
     "chunk": "library",
     "key": "library_door",
-    "label": "The Ruined Library"
+    "label": "The Ruined Library",
+    "keyTag": "forest"
   },
   {
     "zone": "forest",
@@ -25,7 +26,11 @@
     "zone": "factory",
     "chunk": "factory",
     "key": "factory_door",
-    "label": "The Factory"
+    "label": "The Factory",
+    "keyTag": "works",
+    "keyed": true,
+    "nightLock": "THE WORKS. WICKET. The wicket is opened for the night shift at nine. Day men by the gate key.",
+    "nightHours": [6, 21]
   },
   {
     "zone": "school",
@@ -39,7 +44,8 @@
     "near": "town",
     "def": "manhole",
     "key": "pipes_grate",
-    "label": "The grate to the pipes",
+    "label": "The Company's grate, to the pipes",
+    "keyTag": "works",
     "mark": "pipes_mouth"
   },
   {

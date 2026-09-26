@@ -176,6 +176,12 @@ pub fn check_mission(file: &str, m: &RawMission, lib: &Library, fx: &Facts, diag
         if !ids.insert(&n.id) {
             err(&p, format!("node \"{}\" is defined twice", n.id));
         }
+        // A holding locked to a key tag is locked to a key from outside: the mission gives it.
+        for h in &n.holds {
+            if let Some(t) = h.key_tag.as_ref().filter(|t| !m.given_keys.contains(t)) {
+                err(&p, format!("node \"{}\": {} is locked to \"{t}\", which givenKeys does not name", n.id, h.socket));
+            }
+        }
         // A thing that answers a verb and holds loot must be locked with no key.
         for h in &n.holds {
             let (Some(_), Some(prop)) = (&h.loot, &h.prop) else { continue };
@@ -405,6 +411,7 @@ fn check_node(m: &RawMission, n: &RawNode, lib: &Library, fx: &Facts, err: &mut 
                 || h.use_list.is_some()
                 || h.release.is_some()
                 || h.locked.is_some()
+                || h.key_tag.is_some()
                 || h.hidden.is_some()
                 || h.on.is_some()
                 || h.label.is_some()

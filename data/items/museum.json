@@ -17,6 +17,6 @@
   },
   "key_forest": {
     "name": "Forest Gate Key", "icon": "item_key_gold", "maxStack": 1, "usable": false, "cooldown": 1, "opens": "forest",
-    "description": "A council key on a green tag: BUTTERFLY FOREST, GATE. Visitors are counted in and counted out."
+    "description": "A council key on a green tag: CASTLE LENDING LIBRARY, AND BUTTERFLY FOREST, GATE. Visitors are counted in and counted out."
   }
 }

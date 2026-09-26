@@ -257,7 +257,7 @@ fn doors_stand(sk: &Skeleton, c: &County<'_>, bad: &mut Vec<String>) {
             continue;
         };
         let (x, y) = (i32::from(p.cell.x), i32::from(p.cell.y));
-        if p.def != d.def || p.locked != d.key_tag.is_some() {
+        if p.def != d.def || p.locked != (d.key_tag.is_some() && !d.keyed) {
             bad.push(format!("seed {s}: {name} is not as its row says"));
         }
         match (d.to, p.to) {

@@ -29,7 +29,7 @@
     ]
   },
   "ringer": {
-    "name": "The Ringer", "faction": "undead", "controller": "ai",
+    "name": "The Timekeeper", "faction": "undead", "controller": "ai",
     "strength": 125, "spirit": 120, "walk": 0.3, "run": 0.7, "aggro": 16, "leash": 70, "bounds": 1.5,
     "book": ["melee_stun", "snake_ring", "icebolt_ai"], "respawn": 0, "autoRegen": true, "loot": [],
     "sprite": "school_ringer", "boss": true,

@@ -1,4 +1,16 @@
 {
+  "library_notice": {
+    "speaker": "Council Notice",
+    "start": [{ "node": "read" }],
+    "nodes": {
+      "read": {
+        "lines": [
+          "CASTLE LENDING LIBRARY. CLOSED BY ORDER OF THE COUNCIL.",
+          "The key is kept with the key to the forest gate, on the council's green tag. Enquiries to the Museum."
+        ]
+      }
+    }
+  },
   "notice_library": {
     "speaker": "Notice",
     "start": [{ "node": "read" }],

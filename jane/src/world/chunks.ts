@@ -145,6 +145,7 @@ export const julieYard: Build = (k, ox, oy) => {
   // Just inside the west gate: where the old small county began. Tests and the console still use it.
   L.mark("yard_gate", 3, gateY, 0);
   L.u("dog", "dog", doorX + 4, hy + hh + 2);
+  L.mark("dogs_step", doorX + 4, hy + hh + 1, 1);
   // The dog's bowl, labelled in the hand of the letter (STORY.md §3).
   L.p("dog_bowl", doorX + 5, hy + hh + 3, { key: "dogs_bowl", talk: "dogs_bowl", label: "The dog's bowl" });
   L.p("lamp_post", doorX - 3, hy + hh);
@@ -363,6 +364,8 @@ export const town: Build = (k, ox, oy) => {
   // The top of Church Lane, by the north gate: the one lane in town whose name is painted out.
   L.p("sign", 50, 3, { key: "sign_church_lane", talk: "sign_church_lane" });
   L.mark("church_lane_top", 48, 4, 0);
+  // Where the dog waits for her on the mornings the School is in her log (units.json).
+  L.mark("dog_church_lane", 50, 5, 2);
   // An orchard where No. 7 would have been.
   for (const [x, y] of [
     [87, 1],
@@ -715,6 +718,8 @@ export const graveyard: Build = (k, ox, oy) => {
   k.fill(box.cx, my - 2, 1, 5, Tile.Cobble);
   k.fill(box.cx + box.w - 1, my - 2, 1, 5, Tile.Cobble);
   k.mark("graveyard_gate", box.cx + 3, my, 0);
+  // Where the dog waits from six till the bell while the Works and the Burial are in her log.
+  k.mark("dog_graveyard", box.cx + 3, my + 4, 0);
   // Stones in rows, the way a parish lays them out, and lamps at both gates.
   for (let x = box.cx + 5; x < box.cx + box.w - 5; x += 3) {
     k.prop({ def: "town_headstone", cx: x, cy: box.cy + 2, talk: "headstone" }, 1, 1);
@@ -903,6 +908,7 @@ function landmark(id: string, w: number, h: number, ground: Tile, wall: Tile, ma
     k.fill(bx, box.cy + 1, bw, bh, wall);
     const doorX = box.cx + Math.floor(w / 2) - 1;
     k.mark(`${id}_mouth`, box.cx + Math.floor(w / 2), box.cy + bh + 4, 1);
+    if (id === "museum") k.mark("dog_museum", box.cx + Math.floor(w / 2) + 4, box.cy + bh + 3, 1);
     // A way up to the face, so whatever door is set into it can be walked to.
     k.fill(doorX, box.cy + bh + 1, 2, 4, Tile.Dirt);
     // Lamps either side of the way up, and a bench to look at it from, where there is room.

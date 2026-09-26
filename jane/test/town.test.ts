@@ -221,6 +221,8 @@ describe("Castle's errands, walked", () => {
     sim.command({ t: "dev", dev: { op: "give", item: "pansy", qty: 2 } });
     idle(sim, 1);
     const water = bagCount(sim.player, "small_water");
+    // Dr Vane is in the lane in the afternoons (units/town.json: out from twelve), as his door says.
+    sim.command({ t: "dev", dev: { op: "time", hour: 14 } });
     tp(sim, "doctor");
     ask(sim, "dr_vane", "a", [0]);
     expect(bagCount(sim.player, "small_empty_vial")).toBe(0);
@@ -353,6 +355,8 @@ describe("Castle's small stories, walked", () => {
 
   it("No. 7, Pound Lane, two deep: Mrs Oddie's loaf on the step, then the Milkman's bottles inside the door", () => {
     const sim = newSim(SEEDS[1]);
+    // The Milkman is on his round from seven to nine, as he says; Mrs Oddie's stall is out from seven.
+    sim.command({ t: "dev", dev: { op: "time", hour: 8 } });
     tp(sim, "town_square");
     ask(sim, "mrs_oddie", "offer", [0]);
     expect(bagCount(sim.player, "town_loaf")).toBe(1);

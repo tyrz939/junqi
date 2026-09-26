@@ -848,7 +848,7 @@ order node        kind      holds                                               
 9     press_hall  puzzle    haulers, call boxes, a weak wall. Spark a call box: the hauler walks through the wall  0.8
 10    office      bosskey   the foreman's office: key_foreman, the rest of the diary, a leaf page               0
 11    assembly    boss      the Foreman                                                                        boss
-12    roller_door reward    big jar, key_stone (the Company's key to the Burial's stair). A socket opens the roller door to the yard for good
+12    roller_door reward    big jar, key_stone (the Chairman's Key to the Burial's stair, under the Hoar Stone). A socket opens the roller door to the yard for good
 -     stores      side      behind a shutter that needs power and a hall that needs dark: fuse one hall, not the other. Small jar
 -     roof_vent   side      a second way in from the yard, by a vine root (Grow). Joins at lockers
 ```
@@ -878,7 +878,7 @@ A lit lamp cannot answer a bolt (`schoolTouch` skips props that are `on`), which
 
 **What Electric re-opens.** **Dead lamp runs, for good** (`PLAN.md` section 2.6): each failing run on the east and north roads has a relay box at its head; one spark and the run stays lit every night after, the road keeps its -1 threat, and the walk home is changed for the rest of the game. This is the largest single reward in the design and it is the verb, not loot. Also: the signal at Castle Halt (the Closed Line). The Museum's breaker, which now holds through the night. The moth's lamp in the Forest.
 
-**Keys and rewards.** Plain keys x2, `key_foreman`, `key_stone` ("The Company's Key", tagged in the foreman's hand for the stone on the graveyard footpath: the only key to the Burial's county stair, so the Factory comes before the Burial). Big jar. Small jars x2. Leaf pages x2. The diary (three notices, each one fact short). **Rest:** the time office; the works canteen outside (`sites.json`). **Shortcut:** the roller door. **The cellar study** pays off here: the stand is the same stand.
+**Keys and rewards.** Plain keys x2, `key_foreman`, `key_stone` ("The Chairman's Key", tagged in the foreman's hand for the Hoar Stone on the graveyard footpath: the only key to the Burial's county stair, so the Factory comes before the Burial). Big jar. Small jars x2. Leaf pages x2. The diary (three notices, each one fact short). **Rest:** the time office; the works canteen outside (`sites.json`). **Shortcut:** the roller door. **The cellar study** pays off here: the stand is the same stand.
 
 **At night.** Indoors, so the halls do not change. The yard does: the Cooling Yard is threat 5 past the Factory's own ring (the approach is never harder than the Factory's rooms, phase 4), and after dark in the Works whatever stands in it notices her from further off and follows her further, so arriving by the pipes is the sensible way after nine, and the roller door opens onto something she may not want to walk out into. **Omen:** "The day shift clocks off at six. If true: at six the haulers walk to the time office and stand there until seven." An hour a day when the press hall is empty and the rest room is not.
 
@@ -982,7 +982,7 @@ order node         kind      holds                                              
 3e    domestic     puzzle    Fire: cold ranges that are braziers; shades in the pantry. Break only                       0.9
 3f    ice_house    puzzle    Icebolt: cold torches in the yard's ice house show the floor that is there. Break only         0.7
 4     caretaker    miniboss  the Caretaker, in the corridors at night only. Carries the tower key                        1.2
-5     tower        boss      `while` six lesson flags and the tower key. The top room. The Ringer                        boss
+5     tower        boss      `while` six lesson flags and the tower key. The top room. The Timekeeper                      boss
 6     top_room     reward    the register. The lit window. The choice (`STORY.md` section 4) is made here or carried out of here
 -     staff_room   side      leaf page. Night only
 -     lost_property side     small jars x2. Break only
@@ -996,13 +996,13 @@ Each lesson ends at a classroom clock that she stops (a `once` prop: `flag lesso
 
 **Mini-boss: the Caretaker.** By analogy `skeleton_clerk` at boss scale: he carries every key, walks a long loop of the night corridors with a lamp, and is heard (keys) before he is seen (K24). He does not fight to the death: at half health he puts out his lamp and walks away into the dark, and must be found again. He tests Electric and Fire at once: lit corridors show him, and he cannot put out a brazier.
 
-**Boss: the Ringer.** 5,000 HP. **Question for John:** who or what rings the bell is `STORY.md`'s open question, and this document does not answer it. The name is a placeholder and the fight is written so that the answer can change without the fight changing. The belfry is round. The bell tolls on a fixed count, every twenty seconds, and each toll does two things: a ring of bolts outward from the centre (the snake's `snake_ring`, at scale), and the room changes face, day to night to day (`onEnter` cannot do this; it is a timer, so the Ringer takes the snake's route: a small custom clock in its controller, which would be a second exception to the one-custom-mover rule and needs agreeing). By day the Ringer can be hurt and the floor is plain. By night it cannot be seen outside cold light, shades stand at the edge of warm light, dead sockets want sparking to keep two lamps burning, and buds in the moonbeam from the one window bloom into cover that stops the next ring. Every verb has one job. None is required; each makes one toll survivable.
+**Boss: the Timekeeper** (`ringer`). 5,000 HP. Amos Noone, the Goldskin Mining Co.'s timekeeper, who rings the county in at nine and out at six (`STORY.md` §8). The fight was written so that the answer could change without the fight changing, and it has not changed. The belfry is round. The bell tolls on a fixed count, every twenty seconds, and each toll does two things: a ring of bolts outward from the centre (the snake's `snake_ring`, at scale), and the room changes face, day to night to day (`onEnter` cannot do this; it is a timer, so the Timekeeper takes the snake's route: a small custom clock in its controller, which would be a second exception to the one-custom-mover rule and needs agreeing). By day the Timekeeper can be hurt and the floor is plain. By night it cannot be seen outside cold light, shades stand at the edge of warm light, dead sockets want sparking to keep two lamps burning, and buds in the moonbeam from the one window bloom into cover that stops the next ring. Every verb has one job. None is required; each makes one toll survivable.
 
 **Rewards.** Big jar, and the ending. **Rest:** the sick bay. **Shortcut:** the front doors, opened from inside (`key_school`, on the caretaker's bin in the boiler room; the county's `school_door` takes it), onto the Bellfield (threat 6) and the road down.
 
 **With 2 to 4 players.** The timetable splits parties by temptation: three lessons are open at once and the hall is between them. The corridors during lessons are why that is a bad idea and why break is the time to move. The belfry gives every player a verb to mind.
 
-**What could go wrong.** Four state layers times a 6 x 5 lattice is still under a million flood cells, but C1's ablations multiply it: run ablations on the room graph, not on cells. A party asleep in the sick bay while one member is elsewhere cannot turn the clock, by the existing rule; the label on the bed should say so in voice. The Ringer's clock is custom code and needs the snake's level of test.
+**What could go wrong.** Four state layers times a 6 x 5 lattice is still under a million flood cells, but C1's ablations multiply it: run ablations on the room graph, not on cells. A party asleep in the sick bay while one member is elsewhere cannot turn the clock, by the existing rule; the label on the bed should say so in voice. The Timekeeper's clock is custom code and needs the snake's level of test.
 
 ---
 
@@ -1153,7 +1153,7 @@ Short, and each one is used by more than one dungeon unless it says otherwise.
 | E15 | A zone's build seed may take a salt from a flag; that zone's state is dropped on exit; the salt is saved | The Closed Line only. Skip if that dungeon is cut |
 | E16 | The generator and the solver extensions of section 2 | Not sim code: `src/world/` only |
 
-`SYSTEMS.md` permits one custom mover, the snake. The Ringer's toll clock would be a second exception and needs John's leave. Everything else above is a row or a verb.
+`SYSTEMS.md` permits one custom mover, the snake. The Timekeeper's toll clock would be a second exception and needs John's leave. Everything else above is a row or a verb.
 
 ### 4.8 Build order
 

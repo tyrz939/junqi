@@ -33,6 +33,18 @@ const WANDER_HALF: usize = 20;
 const WANDER_OFF: i32 = 12;
 /// A wanderer's dwell at each end of its beat, in ticks. *Tuning.*
 const WANDER_DWELL: i32 = 240;
+/// The night shift on the roads: the first this far along a road that is not the first walk, then
+/// every 260 to 400 points; each walks 16 points either side of its spot, 12 cells off the line
+/// (the field edge beside the road, as a wanderer walks). *Tuning.*
+const NIGHT_FROM: usize = 40;
+const NIGHT_EVERY: usize = 260;
+const NIGHT_JITTER: i32 = 140;
+const NIGHT_HALF: usize = 16;
+const NIGHT_OFF: i32 = 12;
+const NIGHT_DWELL: i32 = 180;
+/// The night shift on the rough ground: the chance a macro cell of each threat has one, permille.
+/// Nothing under threat 3: the Lowfields' gentle ground is left to the road edges. *Tuning.*
+pub const NIGHT_WILD: [i16; 7] = [0, 0, 0, 25, 35, 45, 55];
 
 /// One kind of creature, and the biomes it keeps to (none: any).
 type Wild = (fn(&super::defs::Units) -> UnitDefId, &'static [Biome]);
@@ -157,6 +169,77 @@ fn wander(c: &mut County<'_>, rng: &mut Sfc32, line: &[(i32, i32)], i: usize) {
         return;
     }
     let beat = vec![waypoint(p0.0, p0.1, WANDER_DWELL), waypoint(p1.0, p1.1, WANDER_DWELL)];
+    hostile(c, def, p0.0, p0.1, beat);
+}
+
+/// After the bell (WORLD.md §4.3): the night shift. On a road that is not the first walk, every
+/// [`NIGHT_EVERY`] points or so, one stands at the edge of the road and walks it a little either
+/// way; on the rough ground (threat 3 and over) a macro cell has one at [`NIGHT_WILD`] permille.
+/// They are `nightOnly` rows (presence keeps them out of the world from six to nine) and they shun
+/// warm light, so a lamp is the edge of where they go. They are the ground's own, placed as the
+/// day's are: never in a haven, never near the first walk, never at a set place's gate, at the
+/// threat of the ground they stand on. Each road and each macro cell throws its own dice.
+pub fn night_shift(c: &mut County<'_>) {
+    for n in 0..c.sk.roads.len() {
+        if c.country.first_lines[n] {
+            continue;
+        }
+        let line = c.lines[n].clone();
+        let mut rng = c.k.dice(Step::CountyNight, super::places::road_key(c.sk, n), -1);
+        let mut i = NIGHT_FROM + rng.irandom(NIGHT_JITTER) as usize;
+        while i + NIGHT_FROM < line.len() {
+            night_edge(c, &mut rng, &line, i);
+            i += NIGHT_EVERY + rng.irandom(NIGHT_JITTER) as usize;
+        }
+    }
+    let sk = c.sk;
+    for my in 1..SKEL_H - 1 {
+        for mx in 1..SKEL_W - 1 {
+            let threat = sk.threat.read(mx, my, 0);
+            let chance = NIGHT_WILD[usize::from(threat.min(6))];
+            if chance == 0 || sk.terrain.water.read(mx, my, crate::skeleton::Water::Dry) != crate::skeleton::Water::Dry
+            {
+                continue;
+            }
+            let mut rng = c.k.dice(Step::CountyNight, -1, my * SKEL_W + mx);
+            if !rng.chance(Permille(chance)) {
+                continue;
+            }
+            let Some((x, y)) = c.k.spot(&mut rng, Rect::new(mx * MACRO, my * MACRO, MACRO, MACRO), 1, 1, 1, 8) else {
+                continue;
+            };
+            if near_chunk(c, x, y, 40) {
+                continue;
+            }
+            let def = night_def(c, x, y);
+            hostile(c, def, x, y, Vec::new());
+        }
+    }
+}
+
+/// The night's row for the ground under `(x, y)`: the Works' own in the Works, else the bones.
+fn night_def(c: &County<'_>, x: i32, y: i32) -> UnitDefId {
+    let u = &defs().u;
+    if ground(c.sk, x, y).region == Region::Works { u.night_soldier } else { u.night_skeleton }
+}
+
+/// One of the night shift at point `i` of a road: at the road's edge, walking a stretch of it.
+fn night_edge(c: &mut County<'_>, rng: &mut Sfc32, line: &[(i32, i32)], i: usize) {
+    let (x, y) = line[i];
+    if near_chunk(c, x, y, 40) || dist(&c.country.d_first, x, y) < FIRST_CLEAR + 20 {
+        return;
+    }
+    let side = if rng.chance(Permille(500)) { 1 } else { -1 };
+    let nrm = super::Normal::of(line, i);
+    let a = line[i.saturating_sub(NIGHT_HALF)];
+    let b = line[(i + NIGHT_HALF).min(line.len() - 1)];
+    let p0 = nrm.cells(a, NIGHT_OFF * side);
+    let p1 = nrm.cells(b, NIGHT_OFF * side);
+    if c.k.solid(p0.0, p0.1) || c.k.solid(p1.0, p1.1) {
+        return;
+    }
+    let def = night_def(c, p0.0, p0.1);
+    let beat = vec![waypoint(p0.0, p0.1, NIGHT_DWELL), waypoint(p1.0, p1.1, NIGHT_DWELL)];
     hostile(c, def, p0.0, p0.1, beat);
 }
 

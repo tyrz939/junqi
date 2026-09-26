@@ -17,8 +17,8 @@ use crate::compile::lists::{self, RawAction, RawSchool, RawStat};
 use crate::compile::source::{Source, typed};
 use crate::model::{
     self, BoltSplash, BossPhase, BySchool, CastAnim, Controller, EffectDef, EffectPulse, Faction, GroundPool, ItemDef,
-    LootRoll, OnMelee, RecipeDef, ScheduleRow, ScheduleSlot, SnakeBody, SpellDef, SpellKind, SpellPower, UnitDef,
-    UnitGlow, UnitSight, WorldSpell,
+    LootRoll, OnMelee, RecipeDef, ScheduleRow, ScheduleSlot, ScheduleWhen, SnakeBody, SpellDef, SpellKind, SpellPower,
+    UnitDef, UnitGlow, UnitSight, WorldSpell,
 };
 
 pub fn compile(src: &Source, cx: &mut Ctx) -> model::Combat {
@@ -468,10 +468,14 @@ struct RawUnit {
     flees: Vec<String>,
     #[serde(default)]
     schedule: Vec<RawSlot>,
+    #[serde(default)]
+    vary: u8,
+    vary_with: Option<String>,
 }
 
 /// One row of a unit's hours (ARCHITECTURE.md §4.6.a): `{"from": 9, "to": 21, "mark": "arms_front"}`,
-/// or `"inside": "<prop>"`, `"patrol": true`, `"absent": true`.
+/// or `"inside": "<prop>"`, `"patrol": true`, `"absent": true`; `"while": "<quest>"` (only while it
+/// is in the log) or `"after": "<quest>"` (only once it is handed in) makes it an override.
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RawSlot {
@@ -483,6 +487,36 @@ struct RawSlot {
     patrol: bool,
     #[serde(default)]
     absent: bool,
+    #[serde(rename = "while")]
+    during: Option<String>,
+    after: Option<String>,
+}
+
+/// The most a person's hours may move either way, in minutes: under the half hour, so "at the
+/// lamps" and "since lunch" stay true whatever the day draws (WORLD.md §3.1).
+pub const MAX_VARY: u8 = 25;
+
+/// A unit's `vary`: a multiple of five, at most [`MAX_VARY`], and only with a schedule to move.
+fn vary(cx: &mut Ctx, at: &str, r: &RawUnit) -> u8 {
+    let at = format!("{at}.vary");
+    cx.diag.need(r.vary <= MAX_VARY && r.vary % 5 == 0, &at, format!("minutes in fives, 0 to {MAX_VARY}"));
+    cx.diag.need(r.vary == 0 || !r.schedule.is_empty(), &at, "vary with no schedule to move");
+    r.vary.min(MAX_VARY) / 5 * 5
+}
+
+/// Whose dice a unit's hours draw from: its own id's, or `varyWith`'s (a unit row that exists).
+fn vary_key(cx: &mut Ctx, at: &str, id: &str, r: &RawUnit) -> u32 {
+    let with = match &r.vary_with {
+        Some(w) => {
+            let at = format!("{at}.varyWith");
+            cx.diag.need(r.vary > 0, &at, "varyWith and no vary");
+            cx.diag.need(cx.ids.units.get(w).is_some(), &at, format!("no unit {w}"));
+            w.as_str()
+        }
+        None => id,
+    };
+    // FNV-1a, 32 bits: stable whatever else the content adds.
+    with.bytes().fold(0x811c_9dc5u32, |h, b| (h ^ u32::from(b)).wrapping_mul(0x0100_0193))
 }
 
 /// The unit rows' hours, compiled after every group that names a mark or a prop (the chunks):
@@ -501,8 +535,9 @@ pub fn late_schedules(src: &Source, cx: &mut Ctx, units: &'static [UnitDef]) -> 
     leak(out)
 }
 
-/// A schedule: every hour of the day in exactly one row, each row exactly one slot; never with
-/// `dayOnly` or `nightOnly`, which are its shorthand.
+/// A schedule: every hour of the day in exactly one row without a `while` or `after`, each row
+/// exactly one slot; never with `dayOnly` or `nightOnly`, which are its shorthand. A row with a
+/// `while` or `after` is an override, looked at first, and covers what it covers.
 fn schedule(cx: &mut Ctx, at: &str, r: &RawUnit) -> &'static [ScheduleRow] {
     if r.schedule.is_empty() {
         return &[];
@@ -531,13 +566,23 @@ fn schedule(cx: &mut Ctx, at: &str, r: &RawUnit) -> &'static [ScheduleRow] {
         } else {
             ScheduleSlot::Absent
         };
-        for (h, n) in hours.iter_mut().enumerate() {
-            if model::in_span(h as u8, s.from, s.to) {
-                *n += 1;
+        cx.diag.need(s.during.is_none() || s.after.is_none(), &at, "a row is while one quest or after one, not both");
+        let when = match (&s.during, &s.after) {
+            (Some(q), _) => cx.quest(&format!("{at}.while"), q).map(ScheduleWhen::While),
+            (None, Some(q)) => cx.quest(&format!("{at}.after"), q).map(ScheduleWhen::After),
+            (None, None) => None,
+        };
+        if s.during.is_none() && s.after.is_none() {
+            for (h, n) in hours.iter_mut().enumerate() {
+                if model::in_span(h as u8, s.from, s.to) {
+                    *n += 1;
+                }
             }
         }
-        out.push(ScheduleRow { hour_from: s.from, hour_to: s.to, slot });
+        out.push(ScheduleRow { hour_from: s.from, hour_to: s.to, slot, when });
     }
+    // The overrides are looked at first, in the order written; the plain rows after them.
+    out.sort_by_key(|r| r.when.is_none());
     for (h, n) in hours.iter().enumerate() {
         match n {
             1 => {}
@@ -685,6 +730,8 @@ fn unit(cx: &mut Ctx, at: &str, id: &str, r: &RawUnit) -> UnitDef {
         shuns_light: r.shuns_light,
         // Named by `late_schedules`, once the chunks have named the marks and doors.
         schedule: &[],
+        vary: vary(cx, at, r),
+        vary_key: vary_key(cx, at, id, r),
         hunts: unit_refs(cx, &format!("{at}.hunts"), &r.hunts),
         flees: unit_refs(cx, &format!("{at}.flees"), &r.flees),
     }

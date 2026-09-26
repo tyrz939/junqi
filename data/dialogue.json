@@ -142,8 +142,9 @@
       },
       "offer_forest": {
         "lines": [
-          "The green tag is for the gate of Butterfly Forest. The road to it goes past the ruined library, and the library comes first.",
-          "There is one page left in there worth reading. Nothing in that forest will grow for you until you have read it."
+          "The green tag is for the ruined library and the gate of Butterfly Forest. The road to both goes past the Museum, and the library comes first.",
+          "There is one page left in there worth reading. Nothing in that forest will grow for you until you have read it.",
+          "When you come out, I will be on the Museum's steps from four till the bell. It is nearer than this step."
         ],
         "options": [
           { "label": "I'll go", "actions": [{ "do": "quest", "quest": "the_forest" }, { "do": "flag", "flag": "offered_forest" }] },
@@ -166,8 +167,9 @@
       },
       "offer_factory": {
         "lines": [
-          "The Works are past the graveyard. The Factory is the Company's, and the Company kept a key there to a door of its own.",
-          "There is a grate at the edge of Castle. The pipes under it run to the Works, dry most days. It is a better road than the one the night shift walks."
+          "The key in that case was the Works' night watchman's. It opens the wicket in the Works wall, and the Company's grate at the edge of Castle.",
+          "The pipes under the grate run to the Works, dry most days. It is a better road than the one the night shift walks. The Factory is the Company's, and the Company kept a key there to a door of its own.",
+          "I will wait at the graveyard gate from six till the bell."
         ],
         "options": [
           { "label": "I'll go", "actions": [{ "do": "quest", "quest": "the_factory" }, { "do": "flag", "flag": "offered_factory" }] },
@@ -175,15 +177,15 @@
         ]
       },
       "factory_done": {
-        "lines": ["You smell of hot wire.", "Keep that key on you. It is the Company's own, and it opens one door in the county."],
+        "lines": ["You smell of hot wire.", "Keep that key on you. It is the Chairman's own, and it opens one door in the county."],
         "options": [{ "label": "Here", "actions": [{ "do": "handin", "quest": "the_factory" }] }]
       },
       "offer_burial": {
         "lines": [
-          "The burial is past Castle, off the graveyard road: the one that goes north, toward the School. Do not go as far as the School. A footpath from the graveyard goes to a stone that says DO NOT, and the Company's key unlocks the stair under it.",
+          "The burial is past Castle, off the graveyard road: the one that goes north, toward the School. Do not go as far as the School. A footpath from the graveyard goes to the Hoar Stone, the one that says DO NOT, and the Chairman's key unlocks the stair under it.",
           "The meat from under the house: soak it in Stranglethorn, water and snakeroot, at a bench. The small snakes down there cannot be fought. They can be fed.",
           "The torches down there are blue and they only wake for cold. What burns is in the garden. The big snake keeps its own room and never stops moving. Hit the tail if you cannot reach the head.",
-          "Whatever is under that stone was buried with the county's gold, all of it, cast into one ball. Bring the ball up."
+          "Whatever is under that stone was buried with the county's gold, all of it, cast into one ball. Bring the ball up. I will be at the graveyard gate again, from six till the bell."
         ],
         "options": [
           { "label": "I'll go", "actions": [{ "do": "quest", "quest": "the_burial" }, { "do": "flag", "flag": "offered_burial" }] },
@@ -196,17 +198,19 @@
       },
       "offer_school": {
         "lines": [
-          "The stair behind him goes up, not out. It comes up in the School. The key on the caretaker's bin opens the front doors from outside.",
-          "That window has been lit since before you came, and somebody up there rings the bell at nine. Go and see who. Take the ball."
+          "The stair behind him goes up, not out. It comes up in the School, and the door at the foot of it is locked. This was on her ring, with the house key. The key on the caretaker's bin opens the front doors from outside.",
+          "That window has been lit since before you came, and somebody up there rings the bell at nine. Go and see who. Take the ball.",
+          "Come down in the morning. I will be at the top of Church Lane from the bell till noon, where the town can see the window and does not look at it."
         ],
         "options": [
-          { "label": "I'll go up", "actions": [{ "do": "quest", "quest": "the_school" }, { "do": "flag", "flag": "offered_school" }] },
+          { "label": "I'll go up", "actions": [{ "do": "quest", "quest": "the_school" }, { "do": "flag", "flag": "offered_school" }, { "do": "give", "item": "key_stair" }] },
           { "label": "Not yet" }
         ]
       },
       "school_done": {
         "lines": [
           "You went up, and you came down again. Not everybody has.",
+          "Amos Noone kept the Company's time, and when the nights got long he kept the county's. Somebody had to tell it when to be in.",
           "She held it over the county for as long as anyone could have. Longer. What happens to the ball now is yours to say."
         ],
         "options": [{ "label": "Here", "actions": [{ "do": "handin", "quest": "the_school" }] }]
@@ -346,7 +350,7 @@
   "sign_burial": {
     "speaker": "Standing Stone",
     "start": [{ "node": "read" }],
-    "nodes": { "read": { "lines": ["DO NOT. Underneath, smaller, scratched later: he took the ball down with him. leave it there."] } }
+    "nodes": { "read": { "lines": ["THE HOAR STONE. DO NOT. Underneath, smaller, scratched later: he took the ball down with him. leave it there."] } }
   },
   "sign_town": {
     "speaker": "Sign",

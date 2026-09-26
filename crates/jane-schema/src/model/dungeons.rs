@@ -456,6 +456,9 @@ model! {
         pub use_list: Option<ListRef>,
         pub release: Option<ListRef>,
         pub locked: bool,
+        /// Locked to this key tag (a key the story hands over from outside the zone, which the
+        /// mission's `given_keys` then names).
+        pub key_tag: Option<NameId>,
         pub hidden: bool,
         /// Built switched on or off; `None` is the prop row's default.
         pub on: Option<bool>,
