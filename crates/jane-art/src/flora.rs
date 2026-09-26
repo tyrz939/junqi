@@ -15,7 +15,7 @@
 //! Units: px at 16 a cell. A sprite's foot `(ax, ay)` is the pixel that stands on the cell's
 //! bottom-centre; its height layer is px above that foot.
 
-use jane_core::angle::{Angle, cos_q15, sin_q15};
+use jane_core::angle::{Angle, cos_q15, iatan2, sin_q15};
 use jane_core::grid::Rect;
 use jane_core::num::isqrt;
 
@@ -72,22 +72,45 @@ fn shade_tone(v: i32) -> Tone {
     }
 }
 
-/// One leaf mass: centre and radius in 1/8 px, and how far back it sits (darker the further).
+/// One leaf mass: centre and radius in 1/8 px, how far back it sits (darker the further), and its
+/// lobes: `lobes` bumps round its edge, `phase` where the first one is, so a mass's outline is a
+/// scallop of leaf clusters and not a circle.
 #[derive(Clone, Copy)]
 struct Puff {
     x: i32,
     y: i32,
     r: i32,
     back: i32,
+    lobes: i32,
+    phase: i32,
 }
 
+impl Puff {
+    /// A mass with lobes by `d`.
+    fn lobed(x: i32, y: i32, r: i32, back: i32, d: &mut Dice) -> Puff {
+        Puff { x, y, r, back, lobes: d.range(5, 7), phase: d.range(0, 65535) }
+    }
+
+    /// The mass's radius toward `(dx, dy)` (1/8 px), its lobes in it.
+    fn reach(&self, dx: i32, dy: i32) -> i32 {
+        let a = i32::from(iatan2(dy, dx).0);
+        let bump = sin_q15(Angle((a * self.lobes + self.phase) as u16)).0;
+        self.r + ((self.r * LOBE / 100 * bump) >> 15)
+    }
+}
+
+/// How deep a mass's lobes are, per cent of its radius.
+const LOBE: i32 = 11;
+
 /// A crown of leaf masses inside the ellipse centred `(cx8, cy8)` with radii `(rx8, ry8)`, all in
-/// 1/8 px: a back layer across its top, `n` masses round the middle, and a front layer low in the
-/// middle. Each pixel belongs to the front-most mass over it and takes its tone from where it sits
-/// in that mass (a lit sphere, a crescent of shade under it), in the whole crown (lit at the top
-/// and left, a dark core under it) and how far back the mass is. Then leaves: clusters of two or
-/// three px, lit on the lit side, dark on the shadow side, some reaching past the silhouette, and
-/// notches bitten out of it. `grow` is the masses' size in 1/16ths.
+/// 1/8 px: a back layer across its top, `n` masses round the middle of mixed sizes and uneven
+/// spacing (a big mass beside a small one, a gap where a limb shows), and a front layer low in
+/// it. Each pixel belongs to the front-most mass over it and takes its tone from where it sits in
+/// that mass (a lit sphere, a crescent of shade under it), in the whole crown (lit at the top and
+/// left, a dark core under it) and how far back the mass is. Each mass in front of the back layer
+/// has a lit band along its upper-left edge following its lobes, the way a painter lights a
+/// clump; dark leaf clusters lie in the shade; the silhouette gets leaf tips and notches. `grow` is
+/// the masses' size in 1/16ths.
 #[allow(clippy::too_many_arguments)]
 fn crown(
     c: &mut Canvas,
@@ -103,38 +126,49 @@ fn crown(
     let mut puffs: Vec<Puff> = Vec::new();
     // The back layer: small masses along the crown's top, drawn first and darker.
     for i in 0..=(n / 2) {
-        let t = i * 2 * 16384 / (n / 2 + 1).max(1) + 49152 - 16384 + d.range(-1500, 1500);
+        let t = i * 2 * 16384 / (n / 2 + 1).max(1) + 49152 - 16384 + d.range(-2400, 2400);
         let a = Angle(t as u16);
         let (ca, sa) = (cos_q15(a).0, sin_q15(a).0);
-        puffs.push(Puff {
-            x: cx8 + ((ca * rx8) >> 15) * 62 / 100,
-            y: cy8 + ((sa * ry8) >> 15) * 70 / 100,
-            r: small * (34 + d.range(0, 10)) / 100 * grow / 16,
-            back: 2,
-        });
+        let p = Puff::lobed(
+            cx8 + ((ca * rx8) >> 15) * 62 / 100,
+            cy8 + ((sa * ry8) >> 15) * 70 / 100,
+            small * (30 + d.range(0, 14)) / 100 * grow / 16,
+            2,
+            d,
+        );
+        puffs.push(p);
     }
-    // The main ring and the central mass.
-    puffs.push(Puff { x: cx8 - rx8 / 10, y: cy8 - ry8 * 15 / 100, r: small * 58 / 100 * grow / 16, back: 1 });
+    // The main masses: one big one off the middle toward the light, then the ring, its masses
+    // big and small by turns and spaced unevenly, pushed out or pulled in.
+    let p = Puff::lobed(cx8 - rx8 / 8 + d.range(-4, 4), cy8 - ry8 * 18 / 100, small * 56 / 100 * grow / 16, 1, d);
+    puffs.push(p);
     let a0 = d.range(0, 65535);
+    let big = d.range(0, 1);
     for i in 0..n {
-        let a = Angle((a0 + i * 65536 / n + d.range(-2600, 2600)) as u16);
-        let k = 55 + d.range(0, 12);
+        let a = Angle((a0 + i * 65536 / n + d.range(-5200, 5200)) as u16);
+        let k = 50 + d.range(0, 22);
+        let size = if i % 2 == big { 42 + d.range(0, 12) } else { 30 + d.range(0, 8) };
         let (ca, sa) = (cos_q15(a).0, sin_q15(a).0);
-        puffs.push(Puff {
-            x: cx8 + ((ca * rx8) >> 15) * k / 100,
-            y: cy8 + ((sa * ry8) >> 15) * k / 100,
-            r: small * (38 + d.range(0, 12)) / 100 * grow / 16,
-            back: 1,
-        });
+        let p = Puff::lobed(
+            cx8 + ((ca * rx8) >> 15) * k / 100,
+            cy8 + ((sa * ry8) >> 15) * k / 100,
+            small * size / 100 * grow / 16,
+            1,
+            d,
+        );
+        puffs.push(p);
     }
-    // The front layer: two or three masses low in the middle, in front of everything.
-    for _ in 0..2 + d.range(0, 1) {
-        puffs.push(Puff {
-            x: cx8 + d.range(-rx8 * 4 / 10, rx8 * 4 / 10),
-            y: cy8 + ry8 * (25 + d.range(0, 15)) / 100,
-            r: small * (30 + d.range(0, 8)) / 100 * grow / 16,
-            back: 0,
-        });
+    // The front layer: two or three masses low in it, in front of everything, off the middle.
+    let side = if d.range(0, 1) == 0 { -1 } else { 1 };
+    for j in 0..2 + d.range(0, 1) {
+        let p = Puff::lobed(
+            cx8 + side * (j * 2 - 1) * rx8 * d.range(12, 36) / 100,
+            cy8 + ry8 * (22 + d.range(0, 18)) / 100,
+            small * (28 + d.range(0, 10)) / 100 * grow / 16,
+            0,
+            d,
+        );
+        puffs.push(p);
     }
     // Back to front, then top to bottom within a layer; ties by index, a total key.
     let mut order: Vec<usize> = (0..puffs.len()).collect();
@@ -143,13 +177,15 @@ fn crown(
     let mut owner = vec![-1i32; (w * h) as usize];
     for &i in &order {
         let q = puffs[i];
-        for y in ((q.y - q.r) >> 3) - 1..=((q.y + q.r) >> 3) + 1 {
-            for x in ((q.x - q.r) >> 3) - 1..=((q.x + q.r) >> 3) + 1 {
+        let reach = q.r * (100 + LOBE) / 100;
+        for y in ((q.y - reach) >> 3) - 1..=((q.y + reach) >> 3) + 1 {
+            for x in ((q.x - reach) >> 3) - 1..=((q.x + reach) >> 3) + 1 {
                 if x < 0 || y < 0 || x >= w || y >= h {
                     continue;
                 }
                 let (dx, dy) = (x * 8 + 4 - q.x, y * 8 + 4 - q.y);
-                if dx * dx + dy * dy <= q.r * q.r {
+                let r = q.reach(dx, dy);
+                if dx * dx + dy * dy <= r * r {
                     owner[(y * w + x) as usize] = i as i32;
                 }
             }
@@ -164,13 +200,14 @@ fn crown(
                 continue;
             }
             let q = puffs[i as usize];
-            let r = q.r.max(1);
-            let (lx, ly) = ((x * 8 + 4 - q.x) * UNIT / r, (y * 8 + 4 - q.y) * UNIT / r);
+            let (dx, dy) = (x * 8 + 4 - q.x, y * 8 + 4 - q.y);
+            let r = q.reach(dx, dy).max(1);
+            let (lx, ly) = (dx * UNIT / r, dy * UNIT / r);
             let s = (lx * lx + ly * ly).min(UNIT * UNIT);
             let nz = isqrt((UNIT * UNIT - s) as u64) as i32;
             let lam = (lx * BAKE_LIGHT[0] + ly * BAKE_LIGHT[1] + nz * BAKE_LIGHT[2]) / UNIT;
             let (gx, gy) = ((x * 8 + 4 - cx8) * UNIT / rx8.max(1), (y * 8 + 4 - cy8) * UNIT / ry8.max(1));
-            let global = -gy * 50 / 100 - gx * 22 / 100;
+            let global = -gy * 40 / 100 - gx * 22 / 100;
             // The dark core: under the middle of the crown, where no light gets in.
             let core = {
                 let (dx, dy) = (gx, gy - UNIT * 35 / 100);
@@ -183,11 +220,17 @@ fn crown(
                     0
                 }
             };
-            let jitter = below(h32((x >> 1) as u32, (y >> 1) as u32, seed), 11) as i32 - 5;
+            let jitter = below(h32((x >> 1) as u32, (y >> 1) as u32, seed), 9) as i32 - 4;
             let mut v = lam * 42 / 100 + global + core - q.back * 18 + jitter + 4;
             // The crescent under each mass is what makes a crown read as masses and not a disc.
             if s > UNIT * UNIT * 64 / 100 && ly > UNIT / 6 {
                 v -= 40;
+            }
+            // The lit band: along the mass's upper-left edge, inside its lobes, where the crown
+            // is not in its own shade.
+            let toward = -(lx * 6 + ly * 8) / 10;
+            if q.back < 2 && s > UNIT * UNIT * 30 / 100 && s < UNIT * UNIT * 82 / 100 && toward > UNIT * 45 / 100 {
+                v += if v > 10 { 16 } else { 10 };
             }
             vals[(y * w + x) as usize] = v;
             let z = (foot_y - y).max(1) + nz * r / (UNIT * 16);
@@ -203,19 +246,18 @@ fn crown(
             );
         }
     }
-    // Leaves: a jittered 3 px lattice over the crown; each point, by hash, a cluster lit on the
-    // lit side or dark on the shadow side; at the silhouette a tip reaching out or a notch.
+    // Leaves: a jittered 3 px lattice over the crown; at the silhouette a tip reaching out on the
+    // lit side or a notch below; inside, a dark cluster here and there in the shade.
     let inside = |x: i32, y: i32| x >= 0 && y >= 0 && x < w && y < h && owner[(y * w + x) as usize] >= 0;
     let lseed = d.next();
     for gy in 0..=(h / 3) {
         for gx in 0..=(w / 3) {
             let hl = h32(gx as u32, gy as u32, lseed);
             let (x, y) = (gx * 3 + (hl % 3) as i32, gy * 3 + ((hl >> 2) % 3) as i32);
-            let edge =
-                inside(x, y) && [(1, 0), (-1, 0), (0, 1), (0, -1)].iter().any(|&(dx, dy)| !inside(x + dx, y + dy));
             if !inside(x, y) {
                 continue;
             }
+            let edge = [(1, 0), (-1, 0), (0, 1), (0, -1)].iter().any(|&(dx, dy)| !inside(x + dx, y + dy));
             let v = vals[(y * w + x) as usize];
             let base = shade_tone(v);
             let z = c.height_at(x, y);
@@ -245,25 +287,21 @@ fn crown(
                 }
                 continue;
             }
-            if (hl >> 5) % 3 != 0 {
+            if (hl >> 5) % 4 != 0 || v >= -30 {
                 continue;
             }
-            // Lit leaves on the lit side of a mass, dark ones in its shade; calm in between.
+            // Dark leaves in a mass's shade.
             let lam = {
                 let [nx, ny, nz] = crate::canvas::decode(c.normal_at(x, y));
                 (nx * BAKE_LIGHT[0] + ny * BAKE_LIGHT[1] + nz * BAKE_LIGHT[2]) / UNIT
             };
-            let (t, cells): (Tone, &[(i32, i32)]) = if lam > 40 && v > 0 {
-                (base.step(1 + i32::from(v > 40)), &[(0, 0), (1, 0), (0, 1)])
-            } else if v < -30 && lam < 0 {
-                (base.step(-1), &[(0, 0), (1, 1)])
-            } else {
+            if lam >= 0 {
                 continue;
-            };
-            for &(dx, dy) in cells {
+            }
+            for (dx, dy) in [(0, 0), (1, 1)] {
                 if inside(x + dx, y + dy) {
                     let n = c.normal_at(x + dx, y + dy);
-                    c.put(x + dx, y + dy, ramp.at(t), n, z.saturating_add(1));
+                    c.put(x + dx, y + dy, ramp.at(base.step(-1)), n, z.saturating_add(1));
                 }
             }
         }
@@ -333,14 +371,16 @@ pub fn broadleaf(seed: u32, large: bool, leaf: Ramp, bark: Ramp) -> Sprite {
     let (ax, ay) = (w / 2, h - 2);
     trunk(&mut c, ax, if large { 42 } else { 32 }, ay, if large { 10 } else { 8 }, bark, d.next());
     let cx8 = ax * 8 + d.range(-12, 12);
-    let (cy, rx, ry, n) = if large { (28, 27, 24, 9) } else { (22, 20, 18, 7) };
+    let (cy, rx, ry, n) = if large { (31, 27, 24, 9) } else { (24, 20, 18, 7) };
     crown(&mut c, (cx8, cy * 8), (rx * 8, ry * 8), n, leaf, &mut d, ay, 16);
     c.outline();
     Sprite { canvas: c, ax, ay }
 }
 
-/// A conifer: stacked drooping tiers on a short trunk, each tier's skirt ragged with needle
-/// tips, lit on its left and dark on its right. 44 x 84.
+/// A conifer: drooping tiers on a short trunk, none the same: each leans a px or so off the
+/// stem, is wider on one side than the other, and has a ragged edge of branch ends that hang at
+/// its skirt; the top is a thin leader. Lit on its left and dark on its right, the skirt of each
+/// tier in the shade of the one above. 44 x 84.
 pub fn pine(seed: u32, needle: Ramp, bark: Ramp) -> Sprite {
     let mut d = Dice::new(seed);
     let (w, h) = (44, 84);
@@ -348,19 +388,32 @@ pub fn pine(seed: u32, needle: Ramp, bark: Ramp) -> Sprite {
     let (ax, ay) = (w / 2, h - 2);
     trunk(&mut c, ax, 62, ay, 6, bark, d.next());
     let seed2 = d.next();
-    let tiers = [(2, 18, 8), (13, 20, 11), (25, 21, 14), (38, 22, 17), (50, 21, 20)];
+    let tiers = [(3, 17, 7), (12, 20, 11), (24, 21, 14), (36, 22, 17), (49, 22, 20)];
     for (k, (top, tall, hm)) in tiers.into_iter().enumerate() {
+        let top = top + d.range(-1, 1);
         let hm = hm + d.range(-1, 1);
+        // Off the stem a little, and wider one side than the other.
+        let lean = if k == 0 { 0 } else { d.range(-1, 1) };
+        let (wl, wr) = (100 + d.range(-12, 12), 100 + d.range(-12, 12));
         for yy in 0..tall {
             let y = top + yy;
             let t = yy + 1;
             // An eased half-width: quick at the tip, slower toward the tier's skirt.
             let half = hm * t * (2 * tall - t) / (tall * tall);
             let f = t * UNIT / tall;
-            for x in (ax - half - 1)..=(ax + half) {
-                let lx = (2 * (x - ax) + 1) * UNIT / (2 * half.max(1));
+            // Branch ends: every other row pair a jag in or out, more toward the skirt.
+            let jag = |side: u32| {
+                let hj = h32((y >> 1) as u32, (k as u32) << 1 | side, seed2);
+                let n = below(hj, 3) as i32 - 1;
+                if yy > tall / 3 { n } else { n.min(0) }
+            };
+            let (l, r) = (half * wl / 100 + jag(0), half * wr / 100 + jag(1));
+            let mid = ax + lean * yy / tall;
+            for x in (mid - l - 1)..=(mid + r) {
+                let span = if x < mid { l } else { r }.max(1);
+                let lx = ((2 * (x - mid) + 1) * UNIT / (2 * span)).clamp(-UNIT - 1, UNIT + 1);
                 // The skirt: needle tips hang below the tier's edge in 2 px teeth.
-                let edge = lx.abs() > UNIT * 85 / 100;
+                let edge = lx.abs() > UNIT * 80 / 100;
                 let tooth = h32((x >> 1) as u32, k as u32, seed2) % 3;
                 if edge && yy > tall - 4 && tooth == 0 {
                     continue;
@@ -368,7 +421,7 @@ pub fn pine(seed: u32, needle: Ramp, bark: Ramp) -> Sprite {
                 if lx.abs() > UNIT && !(yy > tall - 3 && tooth == 1) {
                     continue;
                 }
-                let droop = if f > UNIT * 82 / 100 { 60 } else { 0 };
+                let droop = if f > UNIT * 80 / 100 { 56 } else { 0 };
                 let jitter = below(h32((x >> 1) as u32, (y >> 1) as u32, seed2), 13) as i32 - 6;
                 let v = -lx * 6 / 10 + (UNIT - f) * 4 / 10 - droop + jitter - 16 - k as i32 * 4;
                 let n = normal(lx * 8 / 10, 30 + f * 50 / UNIT);
@@ -394,6 +447,10 @@ pub fn pine(seed: u32, needle: Ramp, bark: Ramp) -> Sprite {
                 }
             }
         }
+    }
+    // The leader: a thin spike above the top tier.
+    for y in 0..4 {
+        c.put(ax, y, needle.at(if y < 2 { Tone::Mid } else { Tone::Base }), normal(0, -40), (ay - y) as u8);
     }
     c.outline();
     Sprite { canvas: c, ax, ay }
