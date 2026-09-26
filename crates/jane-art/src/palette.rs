@@ -189,6 +189,30 @@ ramps! {
     Reed "reed" 0xb0a062,
     Water "water" 0x3a76a6,
     Sky "sky" 0x7aaee0,
+    // People (ART.md §2.1, §8 step 2): hair, the seat coats, cloth, leather, the pool under the
+    // fallen. Appended, so the indices above them never move.
+    HairBrown "hair_brown" 0x6a4a30,
+    HairGrey "hair_grey" 0xa09c98,
+    HairWhite "hair_white" 0xd4d0c8,
+    HairRed "hair_red" 0xa0482c,
+    HairBlack "hair_black" 0x34283a,
+    /// Seat 2's coat.
+    ClothTeal "cloth_teal" 0x2f7f8c,
+    /// Seat 3's coat.
+    ClothMoss "cloth_moss" 0x6b8a3a,
+    /// Seat 4's coat.
+    ClothOchre "cloth_ochre" 0xb8752e,
+    ClothNavy "cloth_navy" 0x34406a,
+    ClothBlack "cloth_black" 0x363440,
+    ClothTweed "cloth_tweed" 0x7a6a4a,
+    ClothRose "cloth_rose" 0xa8606a,
+    ClothCream "cloth_cream" 0xd0c4a8,
+    ClothSky "cloth_sky" 0x5a86a8,
+    ClothBrick "cloth_brick" 0x9a5038,
+    ClothLinen "cloth_linen" 0xe4dccc,
+    Leather "leather" 0x5e3e2a,
+    /// The pool under a fallen person: muted, never bright red.
+    Pool "pool" 0x5a2c30,
 }
 
 impl Ramp {
@@ -215,9 +239,84 @@ impl Ramp {
     }
 }
 
+/// The ramps that have a pallid twin for dead frames (ART.md §4.1): what a person is made of.
+/// Their twins follow the ramps, in this order; [`pallor`] maps a tone to its twin's.
+pub const PALLID: [Ramp; 29] = [
+    Ramp::Skin,
+    Ramp::SkinPale,
+    Ramp::SkinDark,
+    Ramp::HairDark,
+    Ramp::HairFair,
+    Ramp::HairBrown,
+    Ramp::HairGrey,
+    Ramp::HairWhite,
+    Ramp::HairRed,
+    Ramp::HairBlack,
+    Ramp::ClothPlum,
+    Ramp::ClothMustard,
+    Ramp::ClothBrown,
+    Ramp::ClothGrey,
+    Ramp::ClothRed,
+    Ramp::ClothBlue,
+    Ramp::ClothGreen,
+    Ramp::ClothTeal,
+    Ramp::ClothMoss,
+    Ramp::ClothOchre,
+    Ramp::ClothNavy,
+    Ramp::ClothBlack,
+    Ramp::ClothTweed,
+    Ramp::ClothRose,
+    Ramp::ClothCream,
+    Ramp::ClothSky,
+    Ramp::ClothBrick,
+    Ramp::ClothLinen,
+    Ramp::Leather,
+];
+
+/// Where the pallid twins start in the table.
+pub const PALLID_BASE: u16 = RAMP_BASE + Ramp::KEYS.len() as u16 * RAMP_LEN;
+
 /// Entries in the master palette. At most 1024 (ART.md §2.7), checked at compile time.
-pub const LEN: usize = RAMP_BASE as usize + Ramp::KEYS.len() * RAMP_LEN as usize;
+pub const LEN: usize = PALLID_BASE as usize + PALLID.len() * RAMP_LEN as usize;
 const _: () = assert!(LEN <= 1024, "the master palette is at most 1024 entries");
+
+/// The position of `r` among the pallid ramps, if it has a twin.
+const fn pallid_slot(r: Ramp) -> Option<usize> {
+    let mut i = 0;
+    while i < PALLID.len() {
+        if PALLID[i] as u16 == r as u16 {
+            return Some(i);
+        }
+        i += 1;
+    }
+    None
+}
+
+/// The pallor of a dead frame (ART.md §4.1): a ramp tone goes to its pallid twin's (20 % greyer,
+/// 14 % darker); a ramp without a twin goes a tone darker; everything else (`k`, `K`, the base
+/// colours) stays.
+pub const fn pallor(ix: Ix) -> Ix {
+    let Some((r, t)) = Ramp::of(ix) else { return ix };
+    match pallid_slot(r) {
+        Some(k) => Ix(PALLID_BASE + k as u16 * RAMP_LEN + t as u16),
+        None => r.at(t.step(-1)),
+    }
+}
+
+/// Whether `ix` is a pallid twin's tone.
+pub const fn is_pallid(ix: Ix) -> bool {
+    ix.0 >= PALLID_BASE && (ix.0 as usize) < LEN
+}
+
+/// A key colour made pallid: greyed by 20 % toward its own luma, then darkened by 14 %.
+const fn pallid_key(c: u32) -> u32 {
+    let [r, g, b] = split(c);
+    let l = (299 * r as u32 + 587 * g as u32 + 114 * b as u32) / 1000;
+    let rr = (r as u32 * 800 + l * 200) / 1000 * 860 / 1000;
+    let gg = (g as u32 * 800 + l * 200) / 1000 * 860 / 1000;
+    let bb = (b as u32 * 800 + l * 200) / 1000 * 860 / 1000;
+    (rr << 16) | (gg << 8) | bb
+}
 
 const fn split(c: u32) -> [u8; 3] {
     [(c >> 16) as u8, (c >> 8) as u8, c as u8]
@@ -258,6 +357,18 @@ const fn build() -> [[u8; 3]; LEN] {
             k += 1;
         }
         r += 1;
+    }
+    let mut p = 0;
+    while p < PALLID.len() {
+        let key = split(pallid_key(Ramp::KEYS[PALLID[p] as usize]));
+        let mut k = 0;
+        while k < 8 {
+            let m = TONE_MIX[k];
+            let c = if m < 0 { mix(key, dark, -m) } else { mix(key, light, m) };
+            t[PALLID_BASE as usize + p * 8 + k] = c;
+            k += 1;
+        }
+        p += 1;
     }
     t
 }
@@ -309,6 +420,21 @@ mod tests {
             let l: Vec<u32> = Tone::ALL.iter().map(|&t| luma(r.at(t))).collect();
             assert!(l.windows(2).all(|w| w[0] < w[1]), "{} is out of order: {l:?}", r.name());
         }
+    }
+
+    #[test]
+    fn pallor_greys_and_darkens_every_person_ramp() {
+        for &r in &PALLID {
+            for t in Tone::ALL {
+                let d = pallor(r.at(t));
+                assert!(is_pallid(d), "{} has no twin", r.name());
+                assert!(luma(d) < luma(r.at(t)), "{} {t:?} is not darker dead", r.name());
+            }
+            let l: Vec<u32> = Tone::ALL.iter().map(|&t| luma(pallor(r.at(t)))).collect();
+            assert!(l.windows(2).all(|w| w[0] < w[1]), "{}'s twin is out of order", r.name());
+        }
+        assert_eq!(pallor(Ix::INK), Ix::INK);
+        assert_eq!(pallor(Ramp::Iron.at(Tone::Base)), Ramp::Iron.at(Tone::Mid));
     }
 
     #[test]

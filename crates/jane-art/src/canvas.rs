@@ -14,6 +14,7 @@
 //! screen), `+z` out of the ground toward the sky. A mirrored sprite flips `nx`
 //! ([`Canvas::mirror_x`]); the blit does the same for a frame drawn mirrored.
 
+use jane_core::angle::{Angle, cos_q15, sin_q15};
 use jane_core::grid::Rect;
 use jane_core::hash::Fnv;
 use jane_core::num::isqrt;
@@ -190,6 +191,7 @@ pub struct Canvas {
     emissive: Vec<Ix>,
     height: Vec<u8>,
     parts: Vec<u16>,
+    clip: Option<Rect>,
 }
 
 impl Canvas {
@@ -207,7 +209,14 @@ impl Canvas {
             emissive: vec![Ix::CLEAR; n],
             height: vec![0; n],
             parts: vec![0; n],
+            clip: None,
         }
+    }
+
+    /// Limit every later write to `r` (or lift the limit with `None`): a hair cap cut at the
+    /// brow, a skirt cut at the hem. Reading is never clipped.
+    pub fn set_clip(&mut self, r: Option<Rect>) {
+        self.clip = r;
     }
 
     /// A clear canvas `cw x ch` cells in size (16 px a cell).
@@ -308,6 +317,9 @@ impl Canvas {
     /// Write one pixel's four layers. Clear and AO are not surfaces: height 0, normal flat.
     pub(crate) fn put(&mut self, x: i32, y: i32, ix: Ix, n: Normal, z: u8) {
         let Some(i) = self.idx(x, y) else { return };
+        if self.clip.is_some_and(|c| !c.contains(x, y)) {
+            return;
+        }
         self.albedo[i] = ix;
         self.parts[i] = if ix.is_opaque() { self.part } else { 0 };
         if self.flat || !ix.is_opaque() {
@@ -756,6 +768,221 @@ impl Canvas {
     }
 }
 
+/// Primitives the people composer brought (ART.md §2.1, §4.1, §8 step 2): upright lit bodies,
+/// cloth folds, and the whole-canvas moves of the dead frames and the seat swaps.
+impl Canvas {
+    /// The closed polygon through `pts` filled (as [`Canvas::polyline_fill`]) and shaded as an
+    /// upright cylinder: along each row, the normal turns from `-curve` (1/127ths of `nx`) at the
+    /// span's left edge to `+curve` at its right, and the top two rows and the bottom row tilt up
+    /// and down as a rounded end. Tones are bands of `ramp` by the lambert term, as
+    /// [`Canvas::ellipse_lit`]. Height runs from `z.lo` on the bottom row to `z.hi` on the top,
+    /// 1 px more down the middle. Bodies, limbs, skirts, trunks.
+    pub fn polygon_lit(&mut self, pts: &[(i32, i32)], ramp: Ramp, curve: i32, z: Z) {
+        let mut mask = Canvas::new(self.w, self.h);
+        mask.polyline_fill(pts, Ix::INK, 1);
+        self.begin();
+        let (y0, y1) = (pts.iter().map(|p| p.1).min().unwrap_or(0), pts.iter().map(|p| p.1).max().unwrap_or(0));
+        let rows = (y1 - y0).max(1);
+        for y in y0.max(0)..=y1.min(self.h - 1) {
+            let ny = if y == y0 {
+                -70
+            } else if y == y0 + 1 {
+                -35
+            } else if y == y1 && y1 - y0 > 3 {
+                40
+            } else {
+                0
+            };
+            let zr = z.at(y1 - y, rows);
+            let mut x = 0;
+            while x < self.w {
+                if !mask.get(x, y).is_opaque() {
+                    x += 1;
+                    continue;
+                }
+                let xl = x;
+                while x < self.w && mask.get(x, y).is_opaque() {
+                    x += 1;
+                }
+                let xr = x - 1;
+                let span = xr - xl + 1;
+                for px in xl..=xr {
+                    let u = if span <= 1 { 0 } else { (2 * (px - xl) - (span - 1)) * curve / (span - 1) };
+                    let n = normal(u, ny);
+                    let [nx, nyy, nz] = decode(n);
+                    let tone = Tone::ALL[band(lambert([nx, nyy, nz]))];
+                    let bump = u8::from(span >= 4 && 2 * (px - xl) >= span / 2 && 2 * (px - xl) < span + span / 2);
+                    self.put(px, y, ramp.at(tone), n, zr.saturating_add(bump));
+                }
+            }
+        }
+    }
+
+    /// Cloth folds over what is drawn in `ramp` inside `r`: vertical bands a period of `period`
+    /// px, the sine at `phase` (a quarter turn is 16384) on `r`'s left column. Where the sine is
+    /// low the cloth goes a tone darker, where it peaks a tone lighter; the normal leans with the
+    /// band's slope. Albedo and normal only; height unchanged.
+    pub fn folds(&mut self, r: Rect, ramp: Ramp, period: i32, phase: u16) {
+        let period = period.max(2);
+        for y in r.y..r.bottom() {
+            for x in r.x..r.right() {
+                let Some(i) = self.idx(x, y) else { continue };
+                let Some((rr, t)) = Ramp::of(self.albedo[i]) else { continue };
+                if rr != ramp {
+                    continue;
+                }
+                let a = i32::from(phase) + (x - r.x) * 65536 / period;
+                let s = sin_q15(Angle(a as u16)).0;
+                let c = cos_q15(Angle(a as u16)).0;
+                let step = i32::from(s > 27000) - i32::from(s < -22000);
+                self.albedo[i] = ramp.at(t.step(step));
+                if !self.flat {
+                    let [nx, ny, _] = decode(self.normal[i]);
+                    self.normal[i] = normal(nx + (c >> 10), ny);
+                    self.emissive[i] = if self.emitting { self.albedo[i] } else { Ix::CLEAR };
+                }
+            }
+        }
+    }
+
+    /// Replace every albedo index by `f` of it (a seat's coat, a dead frame's pallor, a ghost's
+    /// mist): albedo only; normals, heights and emissive stay. Clear and AO never change.
+    pub fn remap(&mut self, f: impl Fn(Ix) -> Ix) {
+        for a in &mut self.albedo {
+            if a.is_opaque() {
+                let b = f(*a);
+                if b.is_opaque() {
+                    *a = b;
+                }
+            }
+        }
+    }
+
+    /// Stand an upright sprite up: every drawn pixel's height becomes its row's height above the
+    /// feet on row `ay` (5 px for every 4 rows, so a head 32 rows up stands 40 px), plus the
+    /// relief its primitive gave it (a dome's rise, a limb in front of a coat). Run before
+    /// [`Canvas::outline`], which finds seams by height.
+    pub fn upright(&mut self, ay: i32) {
+        for y in 0..self.h {
+            let row = ((ay - y).max(0) * 5 / 4) as u8;
+            for x in 0..self.w {
+                let i = (y * self.w + x) as usize;
+                if self.albedo[i].is_opaque() {
+                    self.height[i] = self.height[i].saturating_add(row).max(1);
+                }
+            }
+        }
+    }
+
+    /// Take the checker out of `ramp`: wherever a 2 x 2 block holds two of its tones in a
+    /// checker (a band edge falling across a pixel grid), the lighter pair takes the darker tone.
+    /// Albedo only. Skin is never dithered (ART.md §3).
+    pub fn unchecker(&mut self, ramp: Ramp) {
+        for y in 0..self.h - 1 {
+            for x in 0..self.w - 1 {
+                let (a, b, c, d) = (self.get(x, y), self.get(x + 1, y), self.get(x, y + 1), self.get(x + 1, y + 1));
+                let of = |i: Ix| Ramp::of(i).filter(|(r, _)| *r == ramp).map(|(_, t)| t);
+                let (Some(ta), Some(tb)) = (of(a), of(b)) else { continue };
+                if a == d && b == c && ta != tb {
+                    let (dark, light) =
+                        if ta < tb { (a, [(x + 1, y), (x, y + 1)]) } else { (b, [(x, y), (x + 1, y + 1)]) };
+                    for (px, py) in light {
+                        self.recolour(px, py, dark);
+                    }
+                }
+            }
+        }
+    }
+
+    /// Stop emitting everywhere: a dead frame never emits (ART.md §4.1).
+    pub fn quench(&mut self) {
+        self.emissive.fill(Ix::CLEAR);
+    }
+
+    /// The canvas turned a quarter anticlockwise (`w x h` becomes `h x w`), all four layers;
+    /// normals turn with it, so what faced east faces north.
+    pub fn rotate_ccw(&self) -> Canvas {
+        let mut out = Canvas { flat: self.flat, ..Canvas::new(self.h, self.w) };
+        for y in 0..self.h {
+            for x in 0..self.w {
+                let (i, j) = ((y * self.w + x) as usize, ((self.w - 1 - x) * self.h + y) as usize);
+                out.albedo[j] = self.albedo[i];
+                out.emissive[j] = self.emissive[i];
+                out.height[j] = self.height[i];
+                out.parts[j] = self.parts[i];
+                let [nx, ny, _] = decode(self.normal[i]);
+                out.normal[j] = if self.normal[i] == FLAT { FLAT } else { normal(ny, -nx) };
+            }
+        }
+        out
+    }
+
+    /// Remove columns that repeat the column to their left, from the middle outward, until the
+    /// drawn width is at most `max_w` or no column repeats; what is right of a removed column
+    /// moves left. The width of the canvas stays.
+    pub fn shorten_to(&mut self, max_w: i32) {
+        let drawn = |c: &Canvas| {
+            let cols: Vec<i32> = (0..c.w).filter(|&x| (0..c.h).any(|y| c.get(x, y) != Ix::CLEAR)).collect();
+            cols.first().zip(cols.last()).map_or(0, |(a, b)| b - a + 1)
+        };
+        while drawn(self) > max_w {
+            let same = |c: &Canvas, x: i32| {
+                (0..c.h).all(|y| {
+                    let (i, j) = ((y * c.w + x) as usize, (y * c.w + x - 1) as usize);
+                    c.albedo[i] == c.albedo[j] && c.height[i] == c.height[j]
+                }) && (0..c.h).any(|y| c.get(x, y) != Ix::CLEAR)
+            };
+            let mid = self.w / 2;
+            let pick = (0..self.w)
+                .map(|d| if d % 2 == 0 { mid + d / 2 } else { mid - 1 - d / 2 })
+                .find(|&x| x >= 1 && x < self.w && same(self, x));
+            let Some(x0) = pick else { return };
+            for y in 0..self.h {
+                for x in x0..self.w {
+                    let i = (y * self.w + x) as usize;
+                    if x + 1 < self.w {
+                        let j = i + 1;
+                        self.albedo[i] = self.albedo[j];
+                        self.normal[i] = self.normal[j];
+                        self.emissive[i] = self.emissive[j];
+                        self.height[i] = self.height[j];
+                        self.parts[i] = self.parts[j];
+                    } else {
+                        self.albedo[i] = Ix::CLEAR;
+                        self.normal[i] = FLAT;
+                        self.emissive[i] = Ix::CLEAR;
+                        self.height[i] = 0;
+                        self.parts[i] = 0;
+                    }
+                }
+            }
+        }
+    }
+
+    /// Scale every height by `num / den`, keeping drawn pixels at least 1 (a body lying down, a
+    /// ghost's faint shadow).
+    pub fn scale_heights(&mut self, num: i32, den: i32) {
+        for (h, a) in self.height.iter_mut().zip(&self.albedo) {
+            if a.is_opaque() {
+                *h = ((i32::from(*h) * num / den.max(1)).clamp(1, 255)) as u8;
+            }
+        }
+    }
+
+    /// The drawn box: the smallest rect holding every pixel that is not clear (AO counts).
+    pub fn bounds(&self) -> Option<Rect> {
+        let mut b: Option<(i32, i32, i32, i32)> = None;
+        for y in 0..self.h {
+            for x in 0..self.w {
+                if self.get(x, y) != Ix::CLEAR {
+                    b = Some(b.map_or((x, y, x, y), |(a, c, d, e)| (a.min(x), c.min(y), d.max(x), e.max(y))));
+                }
+            }
+        }
+        b.map(|(x0, y0, x1, y1)| Rect::new(x0, y0, x1 - x0 + 1, y1 - y0 + 1))
+    }
+}
+
 /// The lambert term of a normal (1/127ths) against [`BAKE_LIGHT`].
 fn lambert(n: [i32; 3]) -> i32 {
     (n[0] * BAKE_LIGHT[0] + n[1] * BAKE_LIGHT[1] + n[2] * BAKE_LIGHT[2]) / UNIT
@@ -826,6 +1053,8 @@ fn bevel_at(r: Rect, rad: i32, x: i32, y: i32) -> Option<(i32, [i32; 2])> {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeSet;
+
     use super::*;
 
     #[test]
@@ -921,5 +1150,83 @@ mod tests {
         assert_eq!(pen(2).count(), 4);
         assert_eq!(pen(3).count(), 5);
         assert_eq!(pen(4).count(), 12);
+    }
+
+    #[test]
+    fn an_upright_body_turns_across_each_row_and_rises_up_it() {
+        let mut c = Canvas::new(16, 20);
+        c.polygon_lit(&[(3, 2), (12, 2), (13, 17), (2, 17)], Ramp::ClothPlum, 90, Z::new(2, 6));
+        let [lx, _, _] = decode(c.normal_at(3, 10));
+        let [rx, _, _] = decode(c.normal_at(12, 10));
+        assert!(lx < -60 && rx > 60, "{lx} {rx}");
+        assert!(decode(c.normal_at(7, 2))[1] < 0, "the top row tilts up");
+        assert!(c.height_at(7, 3) > c.height_at(7, 16));
+        let tone = |x, y| Ramp::of(c.get(x, y)).map(|(_, t)| t as i32).unwrap();
+        assert!(tone(4, 10) > tone(12, 10), "lit from the left");
+        c.validate().unwrap();
+    }
+
+    #[test]
+    fn folds_band_the_cloth_and_touch_nothing_else() {
+        let mut c = Canvas::new(16, 8);
+        c.fill_rect(Rect::new(0, 0, 16, 8), Ramp::ClothGrey.at(Tone::Base), 3);
+        c.fill_rect(Rect::new(0, 0, 16, 2), Ramp::Leather.at(Tone::Base), 3);
+        c.folds(Rect::new(0, 0, 16, 8), Ramp::ClothGrey, 4, 0);
+        let row: BTreeSet<Ix> = (0..16).map(|x| c.get(x, 5)).collect();
+        assert!(row.len() >= 2, "bands across the row");
+        assert!((0..16).all(|x| c.get(x, 0) == Ramp::Leather.at(Tone::Base)), "another ramp is left alone");
+        assert_eq!(c.height_at(3, 5), 3);
+        c.validate().unwrap();
+    }
+
+    #[test]
+    fn a_clip_limits_writes() {
+        let mut c = Canvas::new(8, 8);
+        c.set_clip(Some(Rect::new(0, 0, 8, 4)));
+        c.fill_rect(Rect::new(0, 0, 8, 8), Ix::SEAM, 1);
+        c.set_clip(None);
+        assert_eq!(c.get(3, 3), Ix::SEAM);
+        assert_eq!(c.get(3, 4), Ix::CLEAR);
+    }
+
+    #[test]
+    fn rotating_turns_the_normals_and_shortening_drops_repeats() {
+        let mut c = Canvas::new(6, 10);
+        c.rect_bevel(Rect::new(1, 1, 4, 8), Ramp::Stone, 1, Z::new(1, 3));
+        let r = c.rotate_ccw();
+        assert_eq!((r.w(), r.h()), (10, 6));
+        // What faced east (the right bevel) now faces north.
+        let [nx, ny, _] = decode(c.normal_at(4, 4));
+        let [rx, ry, _] = decode(r.normal_at(4, 1));
+        assert_eq!((nx, ny), (-ry, rx));
+        r.validate().unwrap();
+        let mut s = r.clone();
+        s.shorten_to(5);
+        let b = s.bounds().unwrap();
+        assert!(b.w <= 5 && b.w >= 4, "{b:?}");
+        s.validate().unwrap();
+    }
+
+    #[test]
+    fn upright_adds_each_rows_height() {
+        let mut c = Canvas::new(4, 40);
+        c.fill_rect(Rect::new(0, 4, 4, 33), Ix::SEAM, 2);
+        c.upright(36);
+        assert_eq!(c.height_at(1, 36), 2);
+        assert_eq!(c.height_at(1, 4), 42);
+        c.validate().unwrap();
+    }
+
+    #[test]
+    fn uncheckering_takes_the_checker_out_of_one_ramp() {
+        let mut c = Canvas::new(4, 4);
+        for (x, y) in [(0, 0), (1, 1), (2, 0), (3, 1)] {
+            c.dot(x, y, Ramp::Skin.at(Tone::Base), 2);
+        }
+        for (x, y) in [(1, 0), (0, 1), (3, 0), (2, 1)] {
+            c.dot(x, y, Ramp::Skin.at(Tone::Shade), 2);
+        }
+        c.unchecker(Ramp::Skin);
+        assert!((0..4).all(|x| c.get(x, 0) == Ramp::Skin.at(Tone::Shade) && c.get(x, 1) == Ramp::Skin.at(Tone::Shade)));
     }
 }

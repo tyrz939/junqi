@@ -25,6 +25,8 @@ pub mod salt {
     pub const VARY: u32 = 0x5641_5259;
     /// Demo sprites on the step-1 sheets.
     pub const DEMO: u32 = 0x4445_4d4f;
+    /// The people composer: hair strokes, the fallen's pool.
+    pub const PERSON: u32 = 0x5045_5253;
 }
 
 #[cfg(test)]
