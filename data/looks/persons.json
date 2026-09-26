@@ -142,5 +142,10 @@
     "body": { "coat": "jacket", "coat_ramp": "cloth_red", "front": "apron", "legs": "trousers", "legs_ramp": "cloth_brown", "boots": "shoes" } },
   "villager_farmer": { "family": "person", "build": "broad",
     "head": { "hair": "short", "hair_ramp": "hair_black", "hat": "brim", "hat_ramp": "reed" },
-    "body": { "coat": "smock", "coat_ramp": "cloth_brick", "front": "shirt", "legs": "trousers", "legs_ramp": "cloth_green", "boots": "boots" } }
+    "body": { "coat": "smock", "coat_ramp": "cloth_brick", "front": "shirt", "legs": "trousers", "legs_ramp": "cloth_green", "boots": "boots" } },
+
+  "skeleton": { "family": "person", "build": "slim",
+    "head": { "hair": "bald", "hair_ramp": "hair_grey", "skin": "bone", "face": "none" },
+    "body": { "coat": "coat", "coat_ramp": "cloth_tweed", "legs": "bare", "legs_ramp": "cloth_tweed", "boots": "bare" },
+    "emits": ["eye"] }
 }

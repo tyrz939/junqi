@@ -25,7 +25,9 @@ use crate::frame::{
     Pass, Rgb, Span, SpriteCmd, Tier, Tint,
 };
 use crate::light::{Sky, flicker, lantern_lit, sky};
+use crate::creatures::{self, Creatures};
 use crate::people::{self, People};
+use crate::props::{self, Props};
 use crate::stand_in::{self, StandIns, UnitKind};
 use crate::terrain::Terrain;
 
@@ -81,6 +83,12 @@ struct UnitRec {
     glow: Option<(u16, Rgb)>,
     /// The unit's person look in [`People`], when its sprite has one; else `look` stands in.
     person: Option<u16>,
+    /// The unit's creature look in [`Creatures`], when its sprite has one.
+    creature: Option<u16>,
+    /// Ticks stood still (a creature sits, grazes or pecks after a while), and the tick it last
+    /// struck (its attack's three beats).
+    still: u32,
+    struck: Option<u32>,
     facing: Facing,
 }
 
@@ -120,6 +128,9 @@ pub struct Present {
     ui_art: crate::ui::UiArt,
     stand: StandIns,
     people: People,
+    creatures: Creatures,
+    /// The prop kit's looks.
+    kit: Props,
     frame: Frame,
     tick: u32,
     /// The canvas the last frame was drawn for; the camera frames for it.
@@ -136,6 +147,8 @@ pub struct Present {
     units: Vec<UnitRec>,
     units_next: Vec<UnitRec>,
     hurt: Vec<u32>,
+    /// Units that struck (cast) this tick.
+    struck: Vec<u32>,
     props: Vec<PropRec>,
     prop_scratch: Vec<PropIx>,
     standing: DrawList,
@@ -151,6 +164,8 @@ impl Present {
         let mut atlas = Atlas::with_layers(tier > Tier::T0);
         let stand = StandIns::build(&mut atlas);
         let people = People::build(&mut atlas);
+        let creatures = Creatures::build(&mut atlas);
+        let kit = Props::build(&mut atlas);
         let terrain = Terrain::build(&mut atlas, LRU);
         // The UI's page goes last, so no world sprite moves when it grows (PRESENTATION.md §3.1).
         let (ui_art, mut ui_page) = crate::ui::UiArt::build(atlas.pages.pages.len() as u8);
@@ -166,6 +181,8 @@ impl Present {
             ui_art,
             stand,
             people,
+            creatures,
+            kit,
             frame,
             tick: 0,
             canvas: (CANVAS_W, CANVAS_H),
@@ -179,6 +196,7 @@ impl Present {
             units: Vec::with_capacity(256),
             units_next: Vec::with_capacity(256),
             hurt: Vec::with_capacity(64),
+            struck: Vec::with_capacity(64),
             props: Vec::with_capacity(1024),
             prop_scratch: Vec::with_capacity(1024),
             standing: DrawList::default(),
@@ -269,6 +287,7 @@ impl Present {
         }
         self.zone_cells = view.size();
         self.hurt.clear();
+        self.struck.clear();
         for e in events_for(events, view.me()) {
             match e.kind {
                 // A tile reaches a few cells round it in what the painter draws.
@@ -284,6 +303,7 @@ impl Present {
                     };
                 }
                 EventKind::Damage { unit, .. } => self.hurt.push(unit.get()),
+                EventKind::Cast { unit, .. } => self.struck.push(unit.get()),
                 _ => {}
             }
         }
@@ -356,6 +376,9 @@ impl Present {
                     .filter(|_| u.alive)
                     .map(|g| ((g.radius.0 >> FX_TO_CANVAS).clamp(0, 1024) as u16, rgb(g.color))),
                 person,
+                creature: person.map_or_else(|| self.creatures.set(cat.combat.unit(u.def).sprite), |_| None),
+                still: if prev == cur { old.map_or(0, |o| o.still.saturating_add(1)) } else { 0 },
+                struck: old.and_then(|o| o.struck),
                 facing: u.facing,
             });
         }
@@ -366,11 +389,16 @@ impl Present {
                 self.units[i].hurt_until = self.tick + HURT_TICKS;
             }
         }
+        for &id in &self.struck {
+            if let Ok(i) = self.units.binary_search_by_key(&id, |r| r.id) {
+                self.units[i].struck = Some(self.tick);
+            }
+        }
     }
 
     fn read_props(&mut self, view: &View<'_>, area: Rect) {
         let cat = jane_data::catalog();
-        let (props, stand) = (&mut self.props, &self.stand);
+        let (props, stand, kit) = (&mut self.props, &self.stand, &self.kit);
         props.clear();
         view.for_props_in(area, &mut self.prop_scratch, |p| {
             let d = cat.story.prop(p.def);
@@ -378,17 +406,24 @@ impl Present {
             if d.gate && !p.solid {
                 return;
             }
+            // Its look from the kit, in its state (a lamp alight, a chest looted), else its
+            // stand-in.
+            let lit = d.light.is_some() && view.light_showing(p).is_some();
+            let state = props::State {
+                on: p.on || lit,
+                open: p.used || !matches!(p.loot, jane_sim::state::LootState::AsSpawned),
+            };
             props.push(PropRec {
                 id: p.id.get(),
                 x: i32::from(p.cell.x) * CELL,
                 y: i32::from(p.cell.y) * CELL,
                 w: i32::from(d.w) * CELL,
                 h: i32::from(d.h) * CELL,
-                look: {
+                look: kit.look(d.sprite, p.id.get(), state).unwrap_or_else(|| {
                     let look = stand.prop(d.w, d.h, d.flat, d.light.is_some());
                     // A lamp the view says is out has dark glass.
-                    if d.light.is_some() && view.light_showing(p).is_none() { stand.unlit(look) } else { look }
-                },
+                    if d.light.is_some() && !lit { stand.unlit(look) } else { look }
+                }),
                 flat: d.flat,
             });
         });
@@ -400,7 +435,7 @@ impl Present {
         let cat = jane_data::catalog();
         let reach =
             Rect::new(area.x - LIGHT_CELLS, area.y - LIGHT_CELLS, area.w + 2 * LIGHT_CELLS, area.h + 2 * LIGHT_CELLS);
-        let (lights, stand, atlas) = (&mut self.lights, &self.stand, &self.atlas);
+        let (lights, stand, atlas, kit) = (&mut self.lights, &self.stand, &self.atlas, &self.kit);
         lights.clear();
         view.for_props_in(reach, &mut self.light_scratch, |p| {
             let Some(l) = view.light_showing(p) else { return };
@@ -410,7 +445,8 @@ impl Present {
             // Where the flame is: a building's lit windows on its front, low; a thing on the
             // floor just above it; else where its sprite glows, standing on its foot (the row
             // its sprite stands on, as it is drawn: bottom-centred on the footprint).
-            let look = stand.prop(d.w, d.h, d.flat, true);
+            let on = props::State { on: true, open: false };
+            let look = kit.look(d.sprite, p.id.get(), on).unwrap_or_else(|| stand.prop(d.w, d.h, d.flat, true));
             let r = atlas.get(look);
             let (gx, gy, height, size) = if d.w >= 3 || d.h >= 3 {
                 (x + w / 2, y + h + 4, 16, 12)
@@ -418,7 +454,8 @@ impl Present {
                 (x + w / 2, y + h / 2, 4, 6)
             } else {
                 let foot = y + h - i32::from(r.src.h) + i32::from(r.ay);
-                let glass = stand.glass(look).map_or(i32::from(r.height) * 2 / 3, i32::from);
+                // A kit lamp shines from its lit glass; a stand-in from its demo glass.
+                let glass = kit.glass(d.sprite).or_else(|| stand.glass(look)).map_or(i32::from(r.height) * 2 / 3, i32::from);
                 (x + w / 2, foot, glass.clamp(4, 60), if d.w == 1 { 6 } else { 10 })
             };
             lights.push(LightRec {
@@ -623,20 +660,35 @@ impl Present {
             }
             // A person shows its walk, breathe or dead frame (ART.md §4); a stand-in walks with
             // a one-px bob.
-            let (look, mirror, bob) = match u.person {
-                Some(set) => {
+            let (look, mirror, bob) = match (u.person, u.creature) {
+                (Some(set), _) => {
                     let pose = people::Pose { facing: u.facing, anim: u.anim, tick: self.tick, dead: u.dead, id: u.id };
                     let (look, mirror) = self.people.frame(set, pose);
                     (look, mirror, 0)
                 }
-                None => (u.look, u.mirror, i32::from((u.anim / 9) & 1 == 1)),
+                // A creature trots, sits a while after it stops, and strikes in three beats.
+                (None, Some(set)) => {
+                    let attack = u.struck.map(|t| self.tick.wrapping_sub(t)).filter(|&t| t < 3 * creatures::ATTACK_TICKS);
+                    let pose = creatures::Pose {
+                        facing: u.facing,
+                        anim: u.anim,
+                        still: u.still,
+                        tick: self.tick,
+                        dead: u.dead,
+                        attack,
+                        id: u.id,
+                    };
+                    let (look, mirror) = self.creatures.frame(set, pose);
+                    (look, mirror, 0)
+                }
+                (None, None) => (u.look, u.mirror, i32::from((u.anim / 9) & 1 == 1)),
             };
             let r = self.atlas.get(look);
             let (x, y) = (sx - i32::from(r.ax), sy - i32::from(r.ay) - bob);
             if !on_canvas(x, y, r.src.w, r.src.h) {
                 continue;
             }
-            let tint = if u.dead && u.person.is_some() {
+            let tint = if u.dead && (u.person.is_some() || u.creature.is_some()) {
                 Tint::None
             } else if u.dead {
                 Tint::Ghost(160)
