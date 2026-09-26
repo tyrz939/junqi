@@ -16,6 +16,7 @@ jane-present.workspace = true
 jane-render-soft.workspace = true
 jane-render-gl2.workspace = true
 jane-render-wgpu.workspace = true
+sdl2.workspace = true
 
 [lints]
 workspace = true

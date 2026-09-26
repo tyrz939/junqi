@@ -20,3 +20,8 @@ rustflags = ["-C", "target-cpu=cortex-a7", "-C", "target-feature=+neon,+vfp4"]
 
 [alias]
 jane = "run -q -p jane-cli --"
+
+# SDL2 from source (sdl2 `bundled`, PORT.md §7.1): its CMakeLists predates CMake 4, which refuses a
+# minimum below 3.5 unless told to accept one.
+[env]
+CMAKE_POLICY_VERSION_MINIMUM = "3.5"
