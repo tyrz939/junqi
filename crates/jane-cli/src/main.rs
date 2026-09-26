@@ -7,6 +7,7 @@ use std::time::Instant;
 #[path = "gen.rs"]
 mod gen_cmd;
 mod hash_cmd;
+mod play;
 mod sheet_cmd;
 mod view;
 
@@ -27,6 +28,7 @@ commands:
 {GEN}
 {SHEET}
 {HASH}
+  play --model reader|rusher --seed N | replay verify|record|diff   a player model plays; tapes (`jane play --help`)
   help                                this text";
 
 fn usage() -> String {
@@ -58,6 +60,7 @@ fn main() -> ExitCode {
                 ExitCode::FAILURE
             }
         },
+        Some(c @ ("play" | "replay")) => play::main(c, &args[1..]),
         Some("sheet") => match sheet_cmd::run(&args[1..]) {
             Ok(()) => ExitCode::SUCCESS,
             Err(e) => {
