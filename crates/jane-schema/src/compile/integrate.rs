@@ -176,6 +176,17 @@ pub fn check(c: &Catalog, diag: &mut Diagnostics) {
             flags_written.insert(s.flag);
         }
     }
+    // An omen sets its flag at New Game, on the seeds it is true; one nobody reads is a claim the
+    // county never makes good.
+    for o in c.story.omens {
+        let key = FlagKey::Named(Key::Name(o.flag));
+        flags_written.insert(key);
+        diag.need(
+            flags_read.contains(&key),
+            format!("omens.{}", o.id),
+            "nothing reads the flag: the claim would never come true",
+        );
+    }
 
     living(c, &provided, &flags_written, diag);
 
@@ -203,8 +214,9 @@ pub fn check(c: &Catalog, diag: &mut Diagnostics) {
         FlagKey::Dead(k) => name(k).map(|n| format!("dead:{}", c.name(n))),
     };
     let unset: Vec<String> = flags_read.difference(&flags_written).filter_map(|&k| flag_name(k)).collect();
+    // PORT.md §12: a warning until P1's triage, an error since (every read has a write).
     if !unset.is_empty() {
-        diag.warn("flags", format!("{} flag(s) read but never set: {}", unset.len(), unset.join(", ")));
+        diag.error("flags", format!("{} flag(s) read but never set: {}", unset.len(), unset.join(", ")));
     }
 }
 

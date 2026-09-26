@@ -213,7 +213,7 @@ Base + fragments sorted by path, as now. Duplicate id = error. Row order is data
 
 | Check | Now | Port |
 | --- | --- | --- |
-| Cross-file ids | partly catalog, partly solver, partly tests; `returnTo` untyped; `{place:}` unknown left verbatim | All resolved to `u16` at build; unknown = error; `returnTo` typed; flags: every read has a write and vice versa (a read with no write is a warning until P1 triage is done, then an error) |
+| Cross-file ids | partly catalog, partly solver, partly tests; `returnTo` untyped; `{place:}` unknown left verbatim | All resolved to `u16` at build; unknown = error; `returnTo` typed; flags: every read has a write and vice versa (a read with no write is an error: it was a warning until P1's triage, which found one, the scarecrow omen, now set by `data/omens.json`) |
 | Names | none | Providers (`ARCHITECTURE.md` §5): every `NameId` a list, condition or quest uses must be declared by a zone contract in `zones.json`, a mission `bind`, a derived `zone_node_socket`, a placement row, an anchor or area id, a `.chunk` export or a story slot. Zone-scoped lists find the provider in that zone |
 | Zone contract names | `CONTRACTS` mutated at import | Static per zone (`zones.json` rows + mission `binds` + placement promises), emitted as `static CONTRACT_<ZONE>`; every referenced name must be in some contract. Per-seed keeping is the runtime solver's job |
 | Doors | `hasZone` gate, dead `icehouse` | Every `to.zone` is one of 13; dead row removed in P1 |
@@ -478,7 +478,7 @@ Each is a one-line edit to flip before P0 starts.
 | `Sym` tails in saves | Strings, not hashes |
 | Stall | A seat is dropped after 10 s; the host has a "wait" toggle |
 | Blueprint disk cache | Deferred to P9; written only if the Pi misses the New Game row in §9.4 |
-| A flag read but never set | Warning until P1 triage, then a build error |
+| A flag read but never set | A build error (a warning until P1's triage; the omens now set theirs, `data/omens.json`) |
 | Canvas | 768 x 432 internal, 16 screen px per cell, people 32 x 40; the sim cell stays 8 units = 1 m (`ART.md` §1) |
 | Backends and tiers | `soft` T0 always; `gl2` T1 through `glow` at GLSL 1.20 / ES 1.00; `wgpu` T2; probed at boot, overridable in `config.json`; `soft` is the pixel-diff reference for the albedo pass |
 | Sprite layers | Albedo, normal, emissive, height from every generator; the `soft` backend ignores normal and height |

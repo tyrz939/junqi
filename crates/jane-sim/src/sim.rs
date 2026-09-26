@@ -66,7 +66,7 @@ impl Sim {
     /// The same over blueprints already built (tests, benches and peers share one set).
     pub fn new_game_with(bps: Blueprints, name: &str) -> Sim {
         let seed = bps.seed();
-        let state = GameState {
+        let mut state = GameState {
             version: SAVE_VERSION,
             seed,
             frame: 0,
@@ -90,6 +90,8 @@ impl Sim {
             consequences_owed: Vec::new(),
             rumours: BTreeMap::new(),
         };
+        // The world stream's first draws: which of the county's claims are true (omens.rs).
+        crate::omens::roll_omens(&mut state);
         let mut sim = Self::adopt(state, bps);
         sim.join(crate::ids::ClientToken::HOST);
         sim.state.rest = sim.first_rest();

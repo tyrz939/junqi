@@ -142,9 +142,10 @@ fn zone_order_does_not_move_rolls() {
     assert_eq!(a.state().weather, b.state().weather);
     let pa = &a.state().zone(ZoneId::County).unwrap().pressure;
     assert_eq!(pa, &b.state().zone(ZoneId::County).unwrap().pressure);
-    // And it did draw: exactly each mark's draws, every mark, visited or not.
+    // And it did draw: the omens at New Game, then exactly each mark's draws, every mark, visited
+    // or not.
     let mut fresh = Sfc32::seeded(SEED, 1);
-    for _ in 0..4 * draws_an_hour() {
+    for _ in 0..catalog().story.omens.len() as u32 + 4 * draws_an_hour() {
         fresh.next_u32();
     }
     assert_eq!(a.state().rng, fresh);
@@ -156,6 +157,10 @@ fn zone_order_does_not_move_rolls() {
 fn weather_rolls_on_the_hour_and_holds_until_it_is_due() {
     let mut s = new_game();
     let mut fresh = Sfc32::seeded(SEED, 1);
+    // New Game's own draws: one an omen (omens.rs).
+    for _ in 0..catalog().story.omens.len() {
+        fresh.next_u32();
+    }
     let clear = Tick(u32::from(catalog().living.tuning.clear_hours) * HOUR);
     let mut changes = 0;
     let mut kinds = std::collections::BTreeSet::new();

@@ -37,8 +37,9 @@ pub fn compile(src: &Source, cx: &mut Ctx) -> model::Story {
     let triggers = triggers(src, cx);
     let clock = clock(src, cx);
     let start = start(src, cx);
+    let omens = omens(src, cx);
     quests_given_and_handed_in(src, cx, &start);
-    model::Story { props, quests, dialogue, triggers, clock, start }
+    model::Story { props, quests, dialogue, triggers, clock, start, omens }
 }
 
 /// Rows indexed by their table's ids. A row that failed to type leaves a hole, the diagnostics
@@ -655,6 +656,56 @@ fn clock(src: &Source, cx: &mut Ctx) -> &'static [ClockDef] {
 }
 
 // ---------------------------------------------------------------------------------------------
+// The omens
+
+#[derive(Clone, Copy, Deserialize)]
+#[serde(rename_all = "lowercase")]
+enum RawOmenRegion {
+    Lowfields,
+    Waters,
+    Works,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawOmen {
+    id: String,
+    /// Out of 1000.
+    chance: u16,
+    region: RawOmenRegion,
+    #[serde(default)]
+    lethal: bool,
+    /// The flag it sets: `omen:<id>`.
+    sets: String,
+    claim: String,
+}
+
+/// `data/omens.json`, in row order: an id once, a chance of 1 to 1000, a flag `omen:<id>` set by
+/// no other row. That something reads the flag (an omen nobody acts on is a claim the county
+/// never makes good) needs every list: `integrate.rs`.
+fn omens(src: &Source, cx: &mut Ctx) -> &'static [model::OmenDef] {
+    let rows = src.list("omens", &mut cx.diag);
+    let mut out: Vec<model::OmenDef> = Vec::with_capacity(rows.len());
+    for (n, row) in rows.iter().enumerate() {
+        let at = format!("{}: omens[{n}]", row.file);
+        let Some(r) = typed::<RawOmen>(row, &at, &mut cx.diag) else { continue };
+        cx.diag.need(!r.id.is_empty(), &at, "id is empty");
+        cx.diag.need(out.iter().all(|o| o.id != r.id), &at, format!("\"{}\" is defined twice", r.id));
+        cx.diag.need((1..=1000).contains(&r.chance), &at, format!("chance {} is not 1 to 1000", r.chance));
+        cx.diag.need(r.sets == format!("omen:{}", r.id), &at, format!("an omen sets omen:{}, not {}", r.id, r.sets));
+        let region = match r.region {
+            RawOmenRegion::Lowfields => model::Region::Lowfields,
+            RawOmenRegion::Waters => model::Region::Waters,
+            RawOmenRegion::Works => model::Region::Works,
+        };
+        let flag = cx.name(&r.sets);
+        let claim = cx.text(&r.claim);
+        out.push(model::OmenDef { id: leak_str(&r.id), chance: r.chance, region, lethal: r.lethal, flag, claim });
+    }
+    leak(out)
+}
+
+// ---------------------------------------------------------------------------------------------
 // The start
 
 #[derive(Deserialize)]
@@ -771,6 +822,32 @@ mod tests {
 
     fn has_error(cx: &Ctx, needle: &str) -> bool {
         cx.diag.errors.iter().any(|d| d.to_string().contains(needle))
+    }
+
+    /// `omens.json`: row order kept, a chance out of 1000, the flag it sets `omen:<id>`, an id once.
+    #[test]
+    fn omens_keep_their_order_and_set_their_own_flag() {
+        let ok = r#"[
+          {"id": "b_later", "chance": 333, "region": "works", "sets": "omen:b_later", "claim": "It rings twice."},
+          {"id": "a_first", "chance": 1000, "region": "lowfields", "lethal": true, "sets": "omen:a_first", "claim": "No exit."}
+        ]"#;
+        let (s, cx) = build(&[("omens.json", ok)]);
+        assert!(errors(&cx).is_empty(), "{:?}", errors(&cx));
+        let ids: Vec<&str> = s.omens.iter().map(|o| o.id).collect();
+        assert_eq!(ids, ["b_later", "a_first"], "rolled in row order, so kept in it");
+        assert!(s.omens[1].lethal && s.omens[1].chance == 1000 && s.omens[1].region == model::Region::Lowfields);
+        for (bad, why) in [
+            (r#"[{"id": "x", "chance": 0, "region": "works", "sets": "omen:x", "claim": "c"}]"#, "not 1 to 1000"),
+            (r#"[{"id": "x", "chance": 1001, "region": "works", "sets": "omen:x", "claim": "c"}]"#, "not 1 to 1000"),
+            (r#"[{"id": "x", "chance": 5, "region": "works", "sets": "x", "claim": "c"}]"#, "sets omen:x"),
+            (
+                r#"[{"id": "x", "chance": 5, "region": "works", "sets": "omen:x", "claim": "c"}, {"id": "x", "chance": 5, "region": "works", "sets": "omen:x", "claim": "c"}]"#,
+                "defined twice",
+            ),
+        ] {
+            let (_, cx) = build(&[("omens.json", bad)]);
+            assert!(has_error(&cx, why), "{bad}: {:?}", errors(&cx));
+        }
     }
 
     #[test]

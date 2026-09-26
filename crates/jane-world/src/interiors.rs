@@ -15,7 +15,7 @@
 //! any other (`fruit_bowl`, `rat_chest`) is made for the blueprint, and nothing nobody named
 //! (`house_shelf_3`) is named by a count, as the TypeScript's kit did.
 
-use jane_core::action::{Facing, Stack};
+use jane_core::action::{Action, Cond, Condition, Facing, FlagKey, FlagOp, FlagTest, Stack};
 use jane_core::blueprint::{Door, PropSpawn, ZONE_ATTEMPTS};
 use jane_core::num::Permille;
 use jane_core::{Blueprint, Key, PropDefId, Rect, Tile, ZoneId};
@@ -104,6 +104,18 @@ impl Hand {
     fn talker(&mut self, key: &str, def: &str, x: i32, y: i32, tree: &str) {
         let talk = catalog().story.dialogue_id(tree).unwrap_or_else(|| panic!("no dialogue {tree:?}"));
         self.prop(Some(key), def, x, y).talk = Some(talk);
+    }
+
+    /// What gathering a white rose does, the same as Sallow Bottom's (`data/placements`): after
+    /// dark, on a seed the rose omen is true, it is remembered (`rose_after_dark`).
+    fn picked_after_dark(&mut self) -> jane_core::ListRef {
+        let (omen, flag) = (self.key("omen:roses_after_dark"), self.key("rose_after_dark"));
+        let when = self.k.conds(vec![
+            Cond { not: false, c: Condition::Night },
+            Cond { not: false, c: Condition::Flag { key: FlagKey::Named(omen), test: FlagTest::NonZero } },
+        ]);
+        let then = self.k.list(vec![Action::Flag { key: FlagKey::Named(flag), op: FlagOp::Set(1) }]);
+        self.k.list(vec![Action::If { when, then, els: None }])
     }
 
     /// A prop with `loot` in it.
@@ -288,15 +300,21 @@ pub fn build_cellar(seed: u32, attempt: u8) -> Blueprint {
     b.prop(None, "shelf", study.x + 10, study.y);
     let mut rng = dice(&b, Cellar::LoneRat);
     b.rat_in(&mut rng, study);
+    // Where something stands if a white rose was picked after dark on a seed the rose omen is true
+    // (`data/omens.json`, `data/triggers/lowfields.json`): the study, never the stairs.
+    b.mark("cellar_study", study.x + 8, study.y + 10, Facing::South);
 
     // Rose alcove south of the corridor. White Water Rose goes into Stone Skin.
     let alcove = Rect::new(40, 40, 12, 8);
     b.k.fill(alcove, Tile::Garden);
     let mut rng = dice(&b, Cellar::Roses);
     let bed = Rect::new(alcove.x + 1, alcove.y + 2, alcove.w - 2, alcove.h - 3);
+    let picked = b.picked_after_dark();
     for _ in 0..3 {
         if let Some((x, y)) = b.k.spot(&mut rng, bed, 1, 1, 0, SPOT_TRIES) {
-            b.chest(None, "rose", x, y, &[("white_water_rose", 1)]);
+            let rose = b.prop(None, "rose", x, y);
+            rose.loot = vec![stack("white_water_rose", 1)];
+            rose.use_list = Some(picked);
         }
     }
 

@@ -31,6 +31,11 @@
     "when": [{ "if": "night" }, { "if": "flag", "flag": "omen:scarecrow_closer" }],
     "actions": [{ "do": "hide", "prop": "scarecrow_top" }, { "do": "show", "prop": "scarecrow_top_near" }]
   },
+  "rose_soldier": {
+    "zone": "cellar", "rect": "cellar", "mode": "while", "once": true,
+    "when": [{ "if": "flag", "flag": "rose_after_dark" }],
+    "actions": [{ "do": "spawn", "unit": "rose_soldier", "def": "rose_soldier", "at": "cellar_study" }]
+  },
   "scarecrow_day": {
     "zone": "county", "rect": "scarecrow_top_wide", "mode": "enter", "once": false,
     "when": [{ "if": "night", "not": true }],

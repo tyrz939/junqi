@@ -88,7 +88,7 @@ Times are **real minutes after New Game**, then the clock. One game hour is two 
 
 - **Sees / hears / can do.** Down either hatch. Room A: a chest with two iron keys, barrels to push. An iron door that takes one. A corridor: the rat room (four rats, a chest with a plain key), the potion room with a bench, the study with a clean ring in the dust, the rose alcove (white roses, gatherable), the storage gate (the plain key: wood x4, iron x4, a small jar *proposed*). A second iron door, room B, the other stair. She can fight, push, unlock, gather, craft, read the desk.
 - **Knows.** Rat meat x3 (the dog's next ask is not given yet; the meat counts when it is). One kind of iron key opens either door and is spent. **Does not:** what the ring in the dust was. What the roses are for after dark.
-- **Meanwhile.** 22:00: the east road's lamps go out *if that omen is true*. Mr Pollard walks to the Dole Stone. The Arms lit. Mr Dunn ringing from across the square.
+- **Meanwhile.** 22:00: the east road's lamps go out *if that omen is true* (*proposed*). Mr Pollard walks to the Dole Stone. The Arms lit. Mr Dunn ringing from across the square.
 - **Checks.** `[L1:the cellar's mission graph as DUNGEONS.md 3.0; a way out from either door]` `[L4:the rats and the meat by 20 min, at most one death, Reader]` `[L6:ecology: rats x4 in the cellar, recovery per WORLD.md 4.5]` `[L5:omen: the rose omen true at the seeded rate; when true, one soldier in the study on a rose picked after dark, and the solver proves the stair]` `[L5:claim behind: the wood and iron in the locked storage room]`
 - **Varies.** The Rusher skips the storage room and regrets it at the mine's stair. The rose omen is true on about a third of seeds, and never from behind: the soldier is in the study, not the stair.
 
@@ -171,8 +171,8 @@ Headers and key claims; later passes expand each to the §2 format.
 - **Sees / hears / can do.** Across the river by the tollhouse bridge (the toll board, the omen). A hub and four wings, two states: lights on, a museum; lights off, empty plinths. The MAGIC wing. A portrait with the face scratched out. The forest key.
 - **Knows after.** What the gold was for. **Does not:** who scratched the portrait.
 - **Meanwhile.** Nobody in the Waters talks to the town. The wing's lights stay on after, seen from the bridge at night.
-- **Checks.** `[L1:museum across the river from town, 300 to 850 m by road]` `[L5:omen: the bridge counts; when true the third crossing of a night is different and survivable]` `[L6:consequences: the wing lit after]` `[L5:cohesion: the portrait is Goldskin's and no line says so]`
-- **Varies.** The bridge count. The Waters' mist weight after dark.
+- **Checks.** `[L1:museum across the river from town, 300 to 850 m by road]` `[L5:omen, proposed: the bridge counts; when true the third crossing of a night is different and survivable]` `[L6:consequences: the wing lit after]` `[L5:cohesion: the portrait is Goldskin's and no line says so]`
+- **Varies.** The bridge count (*proposed*). The Waters' mist weight after dark.
 
 ### The ruined library and Butterfly Forest · hours 5 to 7 · Grow
 

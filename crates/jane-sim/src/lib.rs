@@ -62,6 +62,7 @@ pub mod living;
 pub mod loot;
 pub mod los;
 pub mod npc;
+pub mod omens;
 pub mod path;
 pub mod presence;
 pub mod quests;
