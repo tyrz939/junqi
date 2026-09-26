@@ -181,7 +181,7 @@ serde + `postcard` (varints, canonical) + an `lz4_flex` block, its size prepende
 
 **Content pin.** Same `content_hash`: load. Different: a typed `SaveMigration` chain if one exists, else **refuse** in release. In dev, `--allow-content-drift` remaps the `Sym` tail by string and drops gone ids with a report. Migrations are Rust functions over typed previous structs, kept twelve months. `Sym` tails are stored as strings (readable, a few KB).
 
-`from_save` closes the world, parks every seat but 0, rebuilds blueprints and runtimes for live zones, runs the ring (without `force`: it runs where the seats left stand somewhere other than the saved `ring_key`, so a solo save continues exactly as if never saved), and does not step. Slots are owned by `jane-app` and `jane serve`; the sim only encodes bytes.
+`from_save` closes the world, parks every seat but 0, rebuilds blueprints and runtimes for live zones, derives the props' awake bits from the saved `ring_key`, and neither runs the ring nor steps: the saved key may lag a seat by a block (the ring runs before movement), and the next step re-runs it exactly where the unbroken game would, so a solo save continues as if never saved. Slots are owned by `jane-app` and `jane serve`; the sim only encodes bytes.
 
 ### 3.6 Hash
 
