@@ -34,6 +34,9 @@ pub struct Config {
     pub last_slot: Option<u8>,
     /// Bindings that differ from `data/bindings.json`.
     pub bindings: Vec<BindingRow>,
+    /// Each slot's seed as last written, so a load draws the county forming before the save
+    /// has been decoded (the save's header does not carry it).
+    pub slot_seeds: Vec<Option<u32>>,
 }
 
 /// A pad or mouse column's "nothing bound here".
@@ -103,6 +106,15 @@ impl Config {
             }
             .to_owned()
         });
+    }
+
+    /// Remembers slot `n` holds a game of `seed`.
+    pub fn set_slot_seed(&mut self, n: u8, seed: u32) {
+        let i = usize::from(n);
+        if self.slot_seeds.len() <= i {
+            self.slot_seeds.resize(i + 1, None);
+        }
+        self.slot_seeds[i] = Some(seed);
     }
 
     pub fn load(dirs: &Dirs) -> Config {

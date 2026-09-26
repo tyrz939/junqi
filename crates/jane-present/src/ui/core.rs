@@ -377,6 +377,11 @@ pub struct Ui {
     clip: Rect,
     /// The pointer as it was last frame, to see it move.
     last_pointer: Option<(i32, i32)>,
+    /// Where the reticle goes this frame (the assisted aim, §4), set by the app in play; the
+    /// pointer's own mark otherwise. The OS cursor is hidden and the UI draws its own.
+    pub reticle: Option<(i32, i32)>,
+    /// Draw the pointer's mark (the app hides the OS cursor).
+    pub draw_cursor: bool,
 }
 
 /// Ticks under the pointer before a tooltip shows (§3.2).
@@ -413,6 +418,8 @@ impl Ui {
             images: Vec::new(),
             clip: Rect::CANVAS,
             last_pointer: None,
+            reticle: None,
+            draw_cursor: false,
         }
     }
 
@@ -434,6 +441,7 @@ impl Ui {
         self.click = None;
         self.tip_want = None;
         self.clip = Rect::CANVAS;
+        self.reticle = None;
         let moved = self.input.pointer.is_some() && self.input.pointer != self.last_pointer;
         if !self.input.actions.is_empty() || self.input.pad {
             self.nav = true;
@@ -482,6 +490,7 @@ impl Ui {
             let src = self.art.icon(icon);
             self.sprite(src, Rect::new(p.0 - 16, p.1 - 16, 32, 32), 0, 179);
         }
+        self.draw_pointer();
         std::mem::swap(&mut frame.ui, &mut self.cmds);
         self.cmds.clear();
         if frame.ui_images.len() < self.images.len() {
@@ -492,6 +501,24 @@ impl Ui {
                 frame.ui_images[i].clone_from(img);
                 *dirty = false;
             }
+        }
+    }
+
+    /// The pointer's mark: the reticle at the assisted aim in play (with a faint dot where the
+    /// hand really is when the assist has pulled it), the arrow over the UI, the hand in a drag.
+    fn draw_pointer(&mut self) {
+        let Some(p) = self.input.pointer.filter(|_| self.draw_cursor) else { return };
+        self.set_clip(Rect::CANVAS);
+        let over_ui = self.wants_pointer();
+        match self.reticle {
+            Some(r) if !over_ui => {
+                if (r.0 - p.0).abs() + (r.1 - p.1).abs() > 3 {
+                    self.fill(Rect::new(p.0 - 1, p.1 - 1, 2, 2), argb(style::gold(), 120));
+                }
+                self.mark(Mark::Reticle, r.0 - 7, r.1 - 7, 255);
+            }
+            _ if self.drag.is_some_and(|d| d.moved) => self.mark(Mark::Hand, p.0 - 6, p.1 - 4, 255),
+            _ => self.mark(Mark::Arrow, p.0 - 1, p.1 - 1, 255),
         }
     }
 
@@ -741,7 +768,9 @@ impl Ui {
         let lw = iw * i32::from(lag.min(1000)) / 1000;
         let ih = i32::from(inner.h);
         if lw > fw {
-            self.fill(Rect::new(x + 1 + fw, y + 1, lw - fw, ih), argb(jane_art::Ramp::UiLag.at(Tone::Light), 230));
+            // The lag: a ghost of the bar in its own pale tone, so it reads as what was just lost.
+            self.fill(Rect::new(x + 1 + fw, y + 1, lw - fw, ih), argb(ramp.at(Tone::High), 150));
+            self.fill(Rect::new(x + 1 + fw, y + 1, lw - fw, 1), argb(jane_art::Ramp::UiLag.at(Tone::Light), 200));
         }
         if fw > 0 {
             // Bands down the fill: a bright lip, the body, a shaded foot.

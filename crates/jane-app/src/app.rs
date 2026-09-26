@@ -137,6 +137,8 @@ struct App<'a> {
     win_open: bool,
     /// The terminal (backquote).
     console: Console,
+    /// Where the reticle is drawn this frame.
+    reticle: Option<(i32, i32)>,
     controls: ControlsState,
 }
 
@@ -223,6 +225,7 @@ pub fn run(
         win: WindowState::default(),
         win_open: false,
         console: Console::default(),
+        reticle: None,
         controls: ControlsState::default(),
     };
     app.input.bindings = app.config.bindings();
@@ -338,6 +341,23 @@ pub fn run(
             );
         let held = app.input.sample(&devices.state, &Context { mode, feet });
         let cursor = devices.state.mouse.pos.filter(|_| app.input.aiming_with_mouse());
+        // The reticle: where the assist will send a bolt, at the cursor's distance from her chest.
+        app.reticle = None;
+        if mode == Mode::Play
+            && let (Some(c), Some(f), Some(aim)) = (cursor, feet, held.aim)
+            && let Some(v) = app.sim.as_ref().and_then(|s| s.view(ME))
+        {
+            let spell = v.me().bar.iter().find_map(|b| match b {
+                Some(jane_data::BarSlot::Spell(s)) => Some(*s),
+                _ => None,
+            });
+            let a = spell.and_then(|s| v.assisted_aim(&held, s)).unwrap_or(aim);
+            let chest = (f.0, f.1 - jane_present::input::CHEST_PX);
+            let d = ((c.0 - chest.0).powi(2) + (c.1 - chest.1).powi(2)).sqrt();
+            let k = f32::from(jane_core::angle::cos_q15(a).0 as i16) / 32768.0;
+            let s = f32::from(jane_core::angle::sin_q15(a).0 as i16) / 32768.0;
+            app.reticle = Some(((chest.0 + k * d) as i32, (chest.1 + s * d) as i32));
+        }
         let keys: KeySet = devices.state.pressed;
         let wheel = devices.state.mouse.wheel;
         let right = devices.state.mouse.was_pressed(jane_present::input::MouseButton::Right);
@@ -399,6 +419,8 @@ pub fn run(
         }
         let stats = screen.backend().stats();
         app.ui.begin(ui_input, app.present.ticks().max(app.ticks as u32), canvas_px);
+        app.ui.draw_cursor = true;
+        app.ui.reticle = app.reticle;
         app.draw_ui(stats);
         typing = app.ui.typing;
         app.ui.finish(app.present.frame_mut());
@@ -777,11 +799,26 @@ impl App<'_> {
             }
         };
         let (tx, rx) = channel();
+        let seed = self.config.slot_seeds.get(usize::from(n)).copied().flatten();
         std::thread::spawn(move || {
-            let sim = Sim::from_save(&bytes).map(Box::new).map_err(|e| format!("slot {}: {e:?}", n + 1));
-            let _ = tx.send(Loaded::Sim(sim));
+            // With the seed known the county forms on the card while it is rebuilt; a seed
+            // remembered wrong falls back to the save's own.
+            let sim = match seed {
+                Some(seed) => {
+                    if let Ok(s) = jane_world::skeleton::skeleton(seed) {
+                        let _ = tx.send(Loaded::Card(Box::new(Card::from_skeleton(&s))));
+                    }
+                    Blueprints::build(seed)
+                        .ok()
+                        .and_then(|bps| Sim::from_save_with(&bytes, bps).ok())
+                        .map_or_else(|| Sim::from_save(&bytes), Ok)
+                }
+                None => Sim::from_save(&bytes),
+            };
+            let _ = tx.send(Loaded::Sim(sim.map(Box::new).map_err(|e| format!("slot {}: {e:?}", n + 1))));
         });
-        let st = LoadingState { card: None, since: self.ticks as u32, built: false, seed: 0, verb: "Load" };
+        let st =
+            LoadingState { card: None, since: self.ticks as u32, built: false, seed: seed.unwrap_or(0), verb: "Load" };
         self.scene = Scene::Loading { rx, st, sim: None, slot: Some(n) };
         self.sim = None;
         self.menus.clear();
@@ -799,6 +836,7 @@ impl App<'_> {
             Ok(()) => {
                 self.slot = Some(n);
                 self.config.last_slot = Some(n);
+                self.config.set_slot_seed(n, sim.state().seed);
                 let _ = self.config.save(&self.dirs);
                 self.bufs.push_toast(&format!("Saved to slot {}", n + 1), jane_present::text::Tone::Good);
                 self.read_slots();
@@ -813,6 +851,9 @@ impl App<'_> {
         let n = self.slot.unwrap_or(0);
         if saves::write(&self.dirs, n, &sim.save()).is_ok() {
             self.slot = Some(n);
+            let seed = sim.state().seed;
+            self.config.set_slot_seed(n, seed);
+            let _ = self.config.save(&self.dirs);
         }
     }
 
@@ -930,7 +971,11 @@ impl App<'_> {
                     // The terminal saves anywhere: it is a dev's tool.
                     if let Some(sim) = &self.sim {
                         match saves::write(&self.dirs, n, &sim.save()) {
-                            Ok(()) => self.console.say(&format!("saved to slot {}", n + 1), LineKind::Good),
+                            Ok(()) => {
+                                self.config.set_slot_seed(n, sim.state().seed);
+                                let _ = self.config.save(&self.dirs);
+                                self.console.say(&format!("saved to slot {}", n + 1), LineKind::Good);
+                            }
                             Err(e) => self.console.say(&e, LineKind::Error),
                         }
                         self.read_slots();

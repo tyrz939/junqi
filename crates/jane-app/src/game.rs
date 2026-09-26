@@ -122,6 +122,8 @@ pub fn run(args: &Args) -> Result<(), String> {
     // SDL starts with text input on; the console turns it on when it opens.
     let text_in = video.text_input();
     text_in.stop();
+    // The UI draws its own pointer: the arrow, the hand, the reticle at the assisted aim.
+    sdl.mouse().show_cursor(false);
     let mut pump = sdl.event_pump()?;
     // The command line's backend, else the one the Controls screen chose last time.
     let saved = crate::config::Config::load(&crate::saves::Dirs::find(args.data_dir.as_deref())).backend;
