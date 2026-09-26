@@ -458,27 +458,50 @@ The result is exposed as `View::assisted_aim(frame, spell) -> Option<Angle>` (§
 
 ## 7. Lockstep networking (`jane-net`)
 
+**Built (P8, 2026-09-27).** `crates/jane-net`: `wire` (messages), `link` (transports), `host`, `guest`, `book` (the recent past each peer keeps), `discovery`, `session` (what the app plays through). No `unsafe`, no async runtime: non-blocking `std::net` sockets polled from the caller's loop, and wall time passed in as milliseconds, never read inside the crate, so the tests drive the clock.
+
+**Decided 2026-09-27 (owner): LAN only for now, player-hosted, and a transport trait for later expansion.** One player's game hosts (`jane-app --host`, playing seat 0) and the others join it; that is the primary path. `jane serve` is the same host playing nobody, kept for a Pi and never allowed to shape the design. Internet play, a relay or NAT traversal can come later as another `Link` without touching the lockstep logic.
+
 | Decision | Choice | Why |
 | --- | --- | --- |
-| Transport | **TCP**, `TCP_NODELAY`, length-prefixed postcard frames | Lockstep needs every input in order or it stalls anyway; on a LAN loss is nil; a UDP reliability layer is 500 lines that only pay over the internet, which is out of scope |
-| Topology | Star: the host relays and paces; everyone simulates | One place decides that a frame is complete; the host may be `jane serve` on a Pi, no SDL |
-| Discovery | UDP broadcast on 7777: `JANE?` → `JANE! { name, seats_used, frame, content_hash }`; join by IP too | |
-| Input delay | `D = 3` frames (50 ms), host-configurable 2..6 | Below perception under a 90-tick GCD |
-| Pacing | The host emits `Bundle(f)` when every seat's `Input(f)` has arrived; a client steps on `Bundle`. Missing for more than 500 ms: `Stall { seat }` to all. Missing for 10 s: the host injects `Leave`, unless the host's **wait** toggle is on, in which case the session waits | No prediction, no rollback; a slow peer stalls friends on a LAN, which is correct |
-| Hash | Every 60 frames each peer sends `Hash { frame, h }`; a mismatch is `Desync { frame, seat, zone_hashes }`; every peer writes `desync-<frame>-<seat>.save`; the host offers `Resync` (snapshot the odd one back in) | `jane replay diff` localises the field |
-| Late join | `Hello { proto, content_hash, build, token }` → `Welcome { seat, snapshot at frame F, delay }`; the host buffers bundles from `F + 1` until `Ready`; `Join` is stamped `F + D` | The snapshot is a save at a step boundary |
-| Content check | `content_hash` and `build` must match or the join is refused, showing both | |
-| Host migration | Out of scope; the session ends, guests' bodies are parked in the host's save | |
-| Local play | The same `Session` over `Transport::Local` | One code path |
+| Transport | **TCP**, `TCP_NODELAY`, a `u32` little-endian length before each postcard frame, behind `trait Link { send, recv, flush, peer, close }` and `trait Listener { accept }` (`TcpLink`, `TcpListen`; `MemLink` in one process; `Lossy<L>` for tests) | On a LAN loss is nil; the protocol above tolerates loss and reordering anyway (below), so a UDP or relay `Link` needs no reliability layer of its own |
+| Topology | Star: the host paces and relays; everyone simulates | One place decides that a frame is complete |
+| Versioning | `PROTO = 1`; `Hello` and `Refuse` are variants 0 and 1 and their layouts never change, so any version can say who it is and be told why not | |
+| Content and build | `Hello { proto, content_hash, build, token }`; `build` is the package version and the commit (`jane-net/build.rs`). Any mismatch: `Refuse { why, proto, content_hash, build }`, and the joiner shows both sides (`Refusal::explain`). The wire never remaps content: lockstep needs the same code and the same data. (A save's dev remap by name, §3.5, is a load's, not a join's) | |
+| Discovery | UDP broadcast on the host's port (7777): `JANE?` → `JANE!` + `Offer { name, port, seats_used, seats, frame, content_hash, proto, build }`; `Offer::joinable` greys out what this build cannot join. Join by address needs none of it | |
+| Input delay | `D = 3` frames (50 ms), host-configurable 2..=6. A peer's input sampled while it steps frame `f` is for frame `f + D`, the host's own included; a seat's input is needed from its `need_from` frame (idle before) | Below perception under a 90-tick GCD |
+| Pacing | The host makes `Bundle(f)` when every active seat's input for `f` has come: the four held frames, then the joins (seat `None`), then each seat's presses with the host's own `Leave` or `Open` after them, `seq` numbered per seat by the host, so `(seat, seq)` order holds by construction. It steps it, sends it, keeps it. A guest steps bundles as they come and catches up when behind (the app steps up to 5 extra a frame past a backlog of 2) | No prediction, no rollback |
+| Stall | A seat late 500 ms: `Stall { frame, seats, waited_ms, wait }` to everyone (the title bar says whom the table waits for), again every 500 ms, `seats: 0` when it moves. Late 10 s: the host drops her (`Bye(Dropped)`, a `Leave` in the next bundle) unless the host's **wait** toggle is on (`--wait`, `Host::set_wait`) | A slow peer stalls friends on a LAN, which is correct |
+| Loss | Idempotent both ways. Every `Inputs { epoch, ack, first, items }` carries all of a guest's input the host has not bundled (normally `D` frames) and the next bundle it lacks; the host resends from `ack` when it has not moved for 100 ms, and a guest too far behind for the bundles kept is sent the world again. `Hello` repeats every 500 ms, `Ready` every second, a welcome not answered with input in a second is sent again | So a lossy or reordering link loses nothing (tested through `Lossy`) |
+| Join | `Hello` → `Accept { seed, name, delay }` (the guest builds the county on a thread, or uses blueprints it has) → `Ready` → at the next step boundary `f` the host sends `Welcome { epoch, seat, frame: f, delay, need_from, snapshot }` (the save's bytes of the live state, loaded with `Sim::from_snapshot_with`, which unlike `from_save` parks nobody and closes nothing) and puts `Join { who }` in `Bundle(f)`. `Sim::seat_for(who)` names the seat before the step that gives it; one join per bundle, none in a bundle where someone gets up. `need_from = f + D + 30`: half a second to load and catch up before the table waits for her | The snapshot is a save at a step boundary; a join is a step like any other |
+| Rejoin | The same: a returning token gets her parked body and bags back (§4.5). A second connection with a token already seated replaces the first (`Bye(Replaced)`), which is how a guest whose machine vanished without a word comes back | |
+| Hash | Every peer hashes after the step that brings the frame to a multiple of 60 and keeps its save there (the last three), with the bundles since; guests send `Hash { frame, hash }`, the host counts agreement (`Host::checks`) | |
+| Desync | A mismatch at hash point `H`: the host writes `desync-H-host.save`, sends `DesyncFound`; the guest writes `desync-H-<seat>.save` and answers `DesyncDump { save at H, trail }`, the trail being the hash after every step from `H - 60` re-simulated from its own save through its own bundles. The host does the same with its own, and reports `Report { frame: H, seat, host, guest, first_step, parts }`: `first_step` the first step whose re-simulated hash differs (a broken build names its frame; `None` when neither re-simulation differs, the state was changed outside a step), `parts` from `replay::diff_states` of the two saves at `H`. Then it resyncs the guest (a welcome without a join) | `jane replay diff` on the two files goes further |
+| Headless host | `jane serve`: `plays: false`; seat 0 gets up in the first bundle and the first guest to join sits in it (joining as `ClientToken::HOST`), hers again when she returns while the server runs; after a restart the first to come takes it | Four seats on a headless host |
+| Pause | Solo-only (ENGINE.md §4): `Session::Local` does not step while paused; a lockstep session always steps, her stick idle while her menu is open | A table with company, or open to it, never stops for one person's menu |
+| Saving | The world lives on the host's machine: any seat's `Rest` sets `Host::take_rested`, and the app (`--save`) and `jane serve` write the host's world then and on exit. A guest never saves | PLATFORM.md §2 "a guest's rest saves" |
+| Host migration | Out of scope; the session ends (`Bye(HostClosed)`, or 10 s of silence), guests' bodies are parked in the host's save | |
 
 ```
-enum Msg { Hello, Welcome, Ready, Input { frame, frame_in: InputFrame, cmds }, Bundle { frame, frames: [InputFrame; 4], cmds: Vec<StampedCommand> },
-  Hash { frame, h }, Desync, Stall, Resync { snapshot, frame }, Bye }
-struct Session { role: Host | Guest, seat: Option<Seat>, sim: Sim, delay: u8, pending: BTreeMap<u32, Bundle>, .. }
-impl Session { fn push_local(frame_in, cmds); fn try_step() -> Option<Stepped>; fn poll() }
+enum Msg { Hello(Hello) /* 0, frozen */, Refuse(Refusal) /* 1, frozen */, Accept { seed, name, delay }, Ready,
+  Welcome { epoch, seat, frame, delay, need_from, snapshot }, Inputs { epoch, ack, first, items: Vec<Item { frame: InputFrame, cmds }> },
+  Bundle(Bundle { frame, frames: [InputFrame; 4], cmds: Vec<StampedCommand> }), Hash { frame, hash },
+  Stall { frame, seats, waited_ms, wait }, DesyncFound { frame }, DesyncDump { frame, trail_from, trail, save }, DesyncReport(Report),
+  Bye(Left | Dropped | HostClosed | Replaced), Beat }
+
+enum Session { Local, Host, Guest }
+impl Session {
+  fn local(Sim); fn host(Sim, HostConfig, port); fn open_to_lan(self, HostConfig, port); fn join(addr, GuestConfig, Option<Blueprints>, now)
+  fn poll(now); fn try_step(now, held: InputFrame, presses: &mut Vec<Command>, paused) -> Option<Stepped>   // presses taken only when it steps
+  fn sim() -> Option<&Sim>; fn seat() -> Option<Seat>; fn events() -> &[Event]; fn backlog(); fn status() -> Status; fn take_rested(); fn close()
+}
 ```
 
-A `Bundle` is a replay frame; a session log is a valid `.jrp`. `jane serve --slot 1 --open --seats 4 --delay 3 [--wait]`: loads or creates, listens, steps on bundles, saves on `Rest` and on `SIGTERM`, logs hashes and stalls, and prints one status line (tick, seats, hash). `PLATFORM.md` §4's relay is void; this section replaces it.
+A `Bundle` is a replay frame. A session is not yet written as a `.jrp` (a tape begins at New Game, and a hosted world may be a loaded save); `jane replay diff` works on the desync saves. `jane serve [--seed N | --save PATH] [--port P] [--seats N] [--delay D] [--wait] [--ticks N] [--every S]` loads or creates, listens, steps, saves on any `Rest` and at the end, logs joins, leaves, drops and desyncs, and prints one status line (tick, frame, seats, the hash at the last hash point, checks agreed out of taken). `jane join ADDR [--model reader|rusher|idle] [--token N]` is a headless guest played by a bot model, the same line. `PLATFORM.md` §4's relay is void; this section replaces it.
+
+**The co-op rules the session honours** (`PLATFORM.md` §2, §7; decided 2026-09-21), each held by a test through lockstep peers (`jane-net/tests/coop_rules.rs`): the penalty follows the connected head count on every peer as seats come and go (a blow of 10 lands as 10, 12, 13, 15 at one to four, and eases back as they leave); a key never leaves with a guest whose machine drops (it is the host's, on every machine); when the guests leave the world is plain single-player again (the solo blow, the table stepping alone); a guest's rest makes the host write its world, and the save loads with her parked and her fire the party's; whoever sits down next arrives at that fire; each sees only her own numbers (`View::is_my_number`) and every seat's coat is its own on every machine (`View::seat_of`).
+
+**Hooks for the menus** (`PRESENTATION.md` §3.1, §3.2; `jane-app/src/session.rs`): `AppIntent::Host` from the pause menu is `session.open_to_lan(cfg, port)` (a local session becomes a host with the same sim); from the title, `Session::host`. `AppIntent::Join(addr)` is `jane_app::session::join` (or `Session::join`, then draw while `status().joining` says what it is doing). The Join screen's list is `discovery::Finder` (`ask`, then `poll` each frame). The Host screen's wait toggle and door are `Host::set_wait` and `Host::set_open`. The command line reaches the same calls: `--host [--port P] [--seats N] [--delay D] [--wait]`, `--join ADDR[:PORT] [--token N]`.
 
 ## 8. Determinism verification
 

@@ -369,7 +369,7 @@ enum AppIntent { NewGame { name: FixedStr<16> }, Continue, Load(u8), Save(u8), T
 | Tooltip | After 20 ticks under the pointer or the focus ring; 40-column wrap; name, count, what it does |
 | Dialogue | Speaker name, the line revealed at 3 characters a tick, at most 2 options, a "more" glyph when a line continues, device hints for advance and choose |
 | Terminal | Backquote; the top third; a ring of 400 lines and a history of 100; tab completion over the console rows of `ENGINE.md` §12; every line becomes `AppIntent::Console`, and every mutation it can cause is a `Command::Dev` (`ARCHITECTURE.md` §1) |
-| Host, Join | Host: slot, open or closed, seats, input delay. Join: the broadcast list plus an address field; refused joins show both content hashes (`ARCHITECTURE.md` §7). P8 |
+| Host, Join | Host: slot, open or closed, seats, input delay, the wait toggle. Join: the broadcast list plus an address field; refused joins show both content hashes (`ARCHITECTURE.md` §7). P8. The calls behind them are built (`ARCHITECTURE.md` §7 "Hooks for the menus", `jane-app/src/session.rs`): `Session::open_to_lan` for "Open this world", `Session::host` and `session::join` from the title, `discovery::Finder` for the list, `Host::set_wait` and `set_open`, `Status` for what to show (whom the table waits for, a join's progress, why it ended). Until the screens land the command line is `--host` and `--join` |
 | Debug | F2: fps, frame p50 and p99 per pass, backend and tier, the `Features` rows in force, tick µs, awake and total units, live and built chunks, lights and casters in the `Frame`, path searches, dropped ticks, state hash. F3: solid cells, occupancy, unit paths, trigger rects, caster segments, the load ring |
 
 ### 3.3 Focus and navigation

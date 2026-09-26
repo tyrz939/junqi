@@ -74,7 +74,31 @@ cargo run --release -p jane-app -- --seed 7 --ticks 300 --shot sheets/app.png   
 
 WASD or arrows walk, Shift sprints, E or F uses (hold to push), 1–8 press the bar (Space and left click are slot 1; the mouse aims), right mouse held walks toward the cursor, Esc pauses, F12 writes the canvas to a PNG. A pad works in the 2020 layout. Tab, M, `` ` ``, F2 and F3 are bound and do nothing yet: their screens are P7's. The window starts at 1536 x 864 (768 x 432 where that does not fit) and resizes; the picture is always 432 canvas pixels tall, and a wider window shows more county. The title bar shows frames a second and the tick and draw times. `--scale K` starts it at another multiple, `--name` names her.
 
-Still to come (`PORT.md` §7): bots playing seeds (`jane play`, `dossier`), the LAN host (`jane serve`).
+Still to come (`PORT.md` §7): bots playing seeds (`jane play`, `dossier`).
+
+### Play together on a LAN
+
+Up to four, one world, on one network (`ARCHITECTURE.md` §7). One player hosts from her own game and plays in it; the others join her. Everyone runs the same build: a join from another build or other content is refused, and the refusal shows both.
+
+```bash
+# The host (seat 0). Others see the port in the title bar and the console.
+cargo run --release -p jane-app -- --seed 7 --host
+cargo run --release -p jane-app -- --host --save slot1.jsave    # host your current world; any seat's rest saves it
+# Everyone else: the host's address (her machine's LAN IP), port 7777 unless she chose another.
+cargo run --release -p jane-app -- --join 192.168.1.20
+cargo run --release -p jane-app -- --join 192.168.1.20:7800
+```
+
+The county comes from the host, so a joiner needs no seed. Each window plays its own seat and draws it in its own coat: plum, teal, moss, ochre. Newcomers and returners arrive at the party's last fire; a guest who drops and comes back gets her own body and bags (her token is kept in `%APPDATA%\Jane\client-token`, or `~/.config/jane/`; `--token N` sets one). Everyone is weaker for every player connected, wherever they stand, and it is ordinary single-player again when the guests leave. Pause stops the world only when you play alone. `--seats N` caps the table, `--delay D` sets the input delay (2 to 6 frames, default 3), `--wait` never drops a player whose input stalls (otherwise the table waits 10 s, saying for whom in the title bar, then gets her up).
+
+Headless, on a Pi or any machine nobody plays at:
+
+```bash
+cargo jane serve --seed 7 --save world.jsave --port 7777     # one status line: tick, seats, hash, hash checks agreed
+cargo jane join 127.0.0.1:7777 --model rusher                 # a bot plays a seat headless (soaks, tests)
+```
+
+On a headless host the first to join takes seat 0. Internet play is not supported: a LAN only, for now.
 
 Targets: `x86_64` Linux and Windows, `i686` (SSE2, Pentium 4 era), `aarch64` and `armv7` Linux (Raspberry Pi); Windows 7 and XP later through their own toolchains. One dedicated build per target. Rendering picks a backend at boot: `wgpu` on a modern GPU, `gl2` on anything with an OpenGL 2.1 driver (a 2006 PC, every Pi), `soft` when there is nothing. `PORT.md` §3, `PRESENTATION.md` §1.
 
