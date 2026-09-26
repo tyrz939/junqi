@@ -112,6 +112,7 @@ One `Unit` shape. `controller: player | ai | npc | snake`. Do not split Player /
 | Status list as `effects.json` rows read by every unit | **IN** — D (chilled, poisoned via play); catalog E |
 | First-hit aggro; aggro scan every 10 ticks, staggered without 2020's dead-counter bug | **IN** — S: "enemies chase a player who is standing still" |
 | Wary by day (Rust sim): in the county from six to the bell, a creature on threat-1 ground starts no fight with the party; struck, it fights; at the bell it looks again (`PLAN.md` §2.6 *Day*) | **IN** — `jane-sim` `tests/ai.rs` `by_day_the_gentlest_ground_leaves_her_be` |
+| A ground spell's `delay` (Rust sim): the pool lies seen before its first pulse, a tell (the Headmaster's hand-bell) | **IN** — `jane-sim` `tests/combat.rs` `a_ground_with_a_delay_is_seen_before_it_bites`; the bot's crawl steps out of it |
 | Respawn timer (ticks while asleep too); `respawn: 0` stays dead | **SHAPE** |
 | Player death: stand back up at the last arrival mark after 4 s; lock-ins reset | **IN** — D: "dying inside a lock-in re-opens the gate and re-arms the trap" |
 | Dialogue hook: unit row `talk` | **IN** — S golden path |

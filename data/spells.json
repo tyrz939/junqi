@@ -23,6 +23,13 @@
     "gcdImmune": true, "needsTarget": true, "needsEnemy": true, "needsLos": true, "anim": "attack",
     "power": { "stat": "strength", "div": 8, "varDiv": 32, "flat": 6 }, "effect": "stunned", "stop": 24
   },
+  "hand_bell": {
+    "name": "The Hand-Bell", "description": "He lifts it first, and gives you time to think about what you have done. Where it rings, whoever is still standing there stands still.", "icon": "spell_melee",
+    "kind": "ground", "school": "physical", "mp": 0, "energy": 0, "range": 1.5, "cooldown": 5,
+    "gcdImmune": true, "needsTarget": true, "needsEnemy": true, "needsLos": true, "anim": "cast",
+    "power": { "stat": "strength", "div": 8, "varDiv": 32, "flat": 6 }, "radius": 1.25, "delay": 0.75, "duration": 0.85, "pulse": 1,
+    "effect": "stunned", "stop": 48
+  },
   "root_lash": {
     "name": "Root", "description": "The root wall lashes anything that touches it.", "icon": "spell_nature",
     "kind": "melee", "school": "nature", "mp": 0, "energy": 0, "range": 0.25, "cooldown": 1,

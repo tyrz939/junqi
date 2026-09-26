@@ -6,7 +6,9 @@
 //! its plan sends it after (`hunt`); it walks past the rest, as a person keeping to the road
 //! does. Her health does not come back on its own (only a fire, a bed, food or a potion mends
 //! her), so a fight is paid for: below [`FLEE_BELOW`] with nothing to eat she backs off until
-//! nothing is on her, and the plan takes her to a fire.
+//! nothing is on her, and the plan takes her to a fire. A pool laid under her that has not
+//! bitten yet (the Headmaster's hand-bell, a lobbed charge) is a tell, and she steps out of it
+//! before anything else.
 
 use jane_core::num::CELL_FX;
 use jane_core::{Fx, ItemId, SpellId, Tick};
@@ -103,10 +105,11 @@ pub fn retreat_point(
 /// Running from something at `from`: to the retreat point, by the path there.
 fn away_from(v: &View<'_>, cx: &mut Ctx, from: jane_core::Vec2, tether: Option<(jane_core::Vec2, i64)>) -> InputFrame {
     let me = v.body().pos;
-    let far = cx
-        .fight
-        .retreat
-        .filter(|r| dist(*r, from) > dist(me, from) + i64::from(CELL_FX) && dist(*r, me) > i64::from(CELL_FX));
+    let far = cx.fight.retreat.filter(|r| {
+        dist(*r, from) > dist(me, from) + i64::from(CELL_FX)
+            && dist(*r, me) > i64::from(CELL_FX)
+            && tether.is_none_or(|(home, radius)| dist(*r, home) <= radius)
+    });
     let to = match far {
         Some(r) => r,
         None => match retreat_point(v, me, from, tether) {
@@ -124,6 +127,33 @@ fn away_from(v: &View<'_>, cx: &mut Ctx, from: jane_core::Vec2, tether: Option<(
             stick(me, to, true)
         }
     }
+}
+
+/// A hostile pool that has not bitten yet and has her in it (her body's edge inside its
+/// radius, with a cell to spare): where it lies.
+pub fn tell_under(v: &View<'_>) -> Option<jane_core::Vec2> {
+    let me = v.body();
+    let body = i64::from(jane_data::catalog().combat.unit(me.def).bounds.0);
+    let now = v.tick();
+    v.grounds()
+        .iter()
+        .filter(|g| g.faction != me.faction && g.next_pulse > now && g.until > now)
+        .find(|g| dist(g.pos, me.pos) <= i64::from(g.radius.0) + body + i64::from(CELL_FX))
+        .map(|g| g.pos)
+}
+
+/// Out of a pool before it lands: straight away from its middle, at a run.
+fn step_out(v: &View<'_>, cx: &mut Ctx, from: jane_core::Vec2) -> InputFrame {
+    let me = v.body().pos;
+    // Standing on its middle: any way will do; the way she faces is as good as any.
+    let from = if from == me {
+        let (dx, dy) = v.body().facing.delta();
+        jane_core::Vec2 { x: Fx(me.x.0 - dx * CELL_FX), y: Fx(me.y.0 - dy * CELL_FX) }
+    } else {
+        from
+    };
+    cx.fight.retreat = None;
+    stick(from, me, true)
 }
 
 /// Food she holds and may eat now.
@@ -201,6 +231,9 @@ pub fn engage(v: &View<'_>, cx: &mut Ctx, id: UnitId) -> Option<Act> {
         return None;
     }
     let now = v.tick();
+    if let Some(at) = tell_under(v) {
+        return Some(Act::hold(step_out(v, cx, at)));
+    }
     if let Some(c) = eat(v) {
         return Some(Act::press(c));
     }

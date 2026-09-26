@@ -654,7 +654,7 @@ The Headmaster brought the school down here when the nights got longer, because 
 
 **Enemies.** All existing rows: `rat`, `bat`, `skeleton`, `skeleton_clerk`, `headmaster`, `iron_knuckles`. Cost budget `baseHeat` 6.
 
-**Mini-boss: the Headmaster** (existing row: `melee_stun`, `melee_fast`). He tests the verb learned before this dungeon: Icebolt's chill (speed x0.6) is how a phase 1 player keeps him at arm's length, and his stun punishes standing still to cast. On death he unlocks the drawer (`onDeath: unlock hm_drawer`). The drawer is a 2 x 2 `once` prop that opens a dialogue tree, like the fire scroll:
+**Mini-boss: the Headmaster** (row: `hand_bell`, `melee_fast`). He tests the verb learned before this dungeon: Icebolt's chill (speed x0.6) is how a phase 1 player keeps him at arm's length, and his stun punishes standing still to cast. The stun has a tell: the **hand-bell** (the one on the desk) is a ground spell with a `delay`. He lifts it and stands with it raised (0.75 s); a ring of 1.25 m lies under her where she stood; when it rings, whoever is still inside it is stunned for two seconds and struck. She sees it, steps out, and has him standing still with his arm up: that is her opening. Stood still to cast inside it, she is his. On death he unlocks the drawer (`onDeath: unlock hm_drawer`). The drawer is a 2 x 2 `once` prop that opens a dialogue tree, like the fire scroll:
 
 > CONFISCATED. To be returned at the end of term.
 > A catapult. A tin of humbugs. One page, in handwriting you know from a letter: "Mending. It costs what the thing is made of. Wood for wood, iron for iron. It will not mend people. I have tried."

@@ -57,6 +57,7 @@ export const SPELL_FX: Record<string, SpellFx> = {
   melee: { cast: "swing", impact: "slash" },
   melee_fast: { cast: "swing", impact: "slash" },
   melee_stun: { cast: "swing", impact: "slash" },
+  hand_bell: { cast: "throw", impact: "none", ground: "dust" },
   root_lash: { cast: "none", impact: "lash" },
   spider_bite: { cast: "none", impact: "bite" },
   icebolt: { cast: "frost", bolt: "frost", impact: "frost" },
