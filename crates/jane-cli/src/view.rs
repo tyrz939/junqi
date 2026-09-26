@@ -289,58 +289,9 @@ pub fn run(args: &[String]) -> Result<(), String> {
 
 // --- the county in cells -------------------------------------------------------------------
 
-/// A tile's colour on the county sheet.
-pub fn tile_rgb(t: jane_core::Tile) -> [u8; 3] {
-    use jane_core::Tile as T;
-    match t {
-        T::Void => [0, 0, 0],
-        T::Grass => [118, 164, 84],
-        T::GrassTall => [92, 140, 66],
-        T::Dirt => [150, 122, 84],
-        T::Road => [96, 92, 90],
-        T::Water => [52, 96, 170],
-        T::Sand => [206, 190, 140],
-        T::Bush => [60, 110, 50],
-        T::Tree => [34, 84, 40],
-        T::Fence => [120, 84, 52],
-        T::HouseWall => [150, 110, 90],
-        T::HouseRoof => [130, 60, 50],
-        T::Floor | T::FloorWood => [170, 140, 100],
-        T::Wall | T::WallTop | T::StoneWall => [110, 106, 100],
-        T::Moss => [104, 140, 80],
-        T::DryBed => [160, 148, 110],
-        T::Garden => [120, 100, 60],
-        T::Rubble => [120, 110, 100],
-        T::Track => [70, 56, 44],
-        T::GrownPath => [130, 140, 90],
-        T::Cobble => [150, 146, 136],
-        T::Rail => [40, 40, 44],
-        T::Cliff => [96, 90, 84],
-        T::Hedge => [46, 96, 46],
-        T::Boardwalk => [176, 130, 70],
-        T::DeadTree => [90, 80, 60],
-        T::Glass => [170, 200, 220],
-        T::FlowerBed => [200, 120, 160],
-        T::Stepping => [140, 140, 150],
-        T::Crops => [190, 170, 80],
-        T::Ice => [210, 230, 240],
-        T::CaveFloor => [120, 108, 92],
-        T::CaveWall => [52, 46, 44],
-        T::TempleFloor => [176, 170, 156],
-        T::TempleWall => [70, 66, 80],
-        // The rest are dungeon tiles: walls dark, water blue, floors a stone grey.
-        _ => {
-            let f = t.flags();
-            if f & jane_core::tile::F_WATER != 0 {
-                [60, 100, 170]
-            } else if f & jane_core::tile::F_SOLID != 0 {
-                [64, 58, 62]
-            } else {
-                [140, 132, 118]
-            }
-        }
-    }
-}
+/// A tile's colour on the county sheet: the flat swatch the scene draws while there is no
+/// chunk painter (`jane_present::stand_in`).
+pub use jane_present::stand_in::tile_rgb;
 
 /// A pine: a tree drawn darker and bluer.
 const PINE_RGB: [u8; 3] = [24, 62, 44];

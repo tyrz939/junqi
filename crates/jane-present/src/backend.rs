@@ -11,9 +11,27 @@ pub struct Caps {
     pub has_readback: bool,
 }
 
-/// The atlas pages built at boot from `jane-art` (PRESENTATION.md §1.4), handed to a backend once.
-#[derive(Debug, Default)]
-pub struct AtlasPages {}
+/// Entries in the CLUT: the master palette's ceiling (ART.md §2.7).
+pub const CLUT_LEN: usize = 1024;
+
+/// One albedo page: `w * h` master-palette indices, row-major (PRESENTATION.md §1.4). Index 0
+/// is clear, 1 the contact shadow, every other index opaque.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Page {
+    pub w: u16,
+    pub h: u16,
+    pub albedo: Vec<u16>,
+}
+
+/// The atlas pages built at boot from `jane-art` (PRESENTATION.md §1.4), handed to a backend
+/// once, again on a CLUT change. Albedo only so far; the normal, emissive and height pages land
+/// with T1.
+#[derive(Clone, Debug, Default)]
+pub struct AtlasPages {
+    /// `0xAARRGGBB` per master-palette index, `CLUT_LEN` long; index 0 and 1 are never read.
+    pub clut: Vec<u32>,
+    pub pages: Vec<Page>,
+}
 
 /// A renderer of `Frame`s.
 pub trait Backend {

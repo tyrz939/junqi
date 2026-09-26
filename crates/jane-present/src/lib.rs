@@ -11,10 +11,18 @@
 //! backend.draw(frame);
 //! ```
 
+pub mod atlas;
 pub mod backend;
+pub mod camera;
+pub mod chunks;
+pub mod drawlist;
 pub mod frame;
+pub mod light;
 pub mod present;
+pub mod stand_in;
 
-pub use backend::{AtlasPages, Backend, Caps};
-pub use frame::{CANVAS_H, CANVAS_W, Frame, Tier};
+pub use backend::{AtlasPages, Backend, CLUT_LEN, Caps, Page};
+pub use frame::{
+    CANVAS_H, CANVAS_W, ChunkCmd, ChunkId, ChunkLayers, Depth, Flags, Frame, Pass, Span, SpriteCmd, Src, Tier, Tint,
+};
 pub use present::Present;
