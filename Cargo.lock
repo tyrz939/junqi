@@ -182,7 +182,9 @@ dependencies = [
 name = "jane-render-soft"
 version = "0.1.0"
 dependencies = [
+ "jane-core",
  "jane-present",
+ "jane-sim",
 ]
 
 [[package]]
