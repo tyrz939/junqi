@@ -403,6 +403,20 @@ P6 enters beside P5, not after it. On 2026-09-27 P5 stands at `ART.md` §8 step 
 
 **SDL2 on a Windows or Linux x86 desk** is the `sdl2` crate's `bundled` and `static-link` features (§12), which build SDL from source and need CMake on the path; the Pi keeps the distro package.
 
+### 7.2 P8 as built (2026-09-27)
+
+Built ahead of P7, so the menus' Host and Join are hooks and the command line until the UI unit lands (`ARCHITECTURE.md` §7 has the protocol and the hooks). Decided that day (owner): LAN only, player-hosted first (`jane-app --host` plays seat 0, others `--join`), `jane serve` secondary, the transport a trait.
+
+| Gate item | State |
+| --- | --- |
+| Hash every 60 frames | Done: every peer, with its last three saves kept for a desync's report (the hash point, the first step that differs when both re-simulate, the parts that differ) |
+| Stall and rejoin over loopback | Done, in tests with a driven clock: shown at 500 ms, dropped at 10 s, the wait toggle; a dropped guest back in her own seat with her bags, caught up to the host's hash |
+| Four seats, an hour without desync | On one machine, over TCP: `jane serve` (release) and four `jane join` processes, two Readers and two Rushers, 216 000 frames (an hour at 60 Hz, ~1 000 frames lost to stalls while the machine also built and tested): 14 398 hash checks agreed, 0 differed, no seat dropped, all five ending on one hash. Two machines not yet run |
+| A Pi hosting headless through `jane serve` | `jane serve` built and soaked on x86_64; not yet run on a Pi |
+| Measured | In one process (`jane-net/tests/loopback.rs`): four seats, 18 900 frames, 927 hash checks agreed. Two `jane-app` windows on one machine, host and guest: both at frame 1200 on one hash, 16 checks agreed, each drawing both players in their own coats. `jane serve` with two bot guests over localhost for five minutes: 18 000 frames, 598 checks agreed, 0 differed |
+
+Not built: internet play, NAT traversal and relays (LAN only, by decision); host migration; a session recorded from a loaded save (only New Game sessions are tapes); saving on `SIGTERM` (std has no signal handling; `jane serve` saves on every rest and at `--ticks`); the Host and Join screens (P7's UI unit).
+
 ## 8. Agent parallelisation
 
 | Rule | |
