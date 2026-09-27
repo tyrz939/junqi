@@ -37,12 +37,17 @@ use crate::canvas::Canvas;
 use crate::palette::{Ix, Ramp, Tone, pallor};
 use crate::sprite::{FrameId, Role, SpriteSet};
 
-/// Which way a frame faces. West is `Side` mirrored at draw time.
+/// Which way a frame faces. West is `Side` mirrored at draw time, and the two left diagonals
+/// are the right ones mirrored.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Facing {
     Down,
     Up,
     Side,
+    /// Toward the viewer and to the right (south-east): the three-quarter front.
+    DownRight,
+    /// Away and to the right (north-east): the three-quarter back.
+    UpRight,
 }
 
 /// What a frame shows: a walk beat, the breathe, the idle pair, hurt, an attack beat, dead.
@@ -113,6 +118,20 @@ pub fn frame_ids(attacks: bool) -> Vec<FrameId> {
         F::Side4,
         F::Side5,
         F::SideB,
+        F::DownRight,
+        F::DownRight1,
+        F::DownRight2,
+        F::DownRight3,
+        F::DownRight4,
+        F::DownRight5,
+        F::DownRightB,
+        F::UpRight,
+        F::UpRight1,
+        F::UpRight2,
+        F::UpRight3,
+        F::UpRight4,
+        F::UpRight5,
+        F::UpRightB,
         F::Idle,
         F::Idle2,
         F::Hurt,
@@ -149,6 +168,20 @@ fn beat_of(id: FrameId) -> (Facing, Beat) {
         F::Side4 => (Facing::Side, Beat::Walk(4)),
         F::Side5 => (Facing::Side, Beat::Walk(5)),
         F::SideB => (Facing::Side, Beat::Breathe),
+        F::DownRight => (Facing::DownRight, Beat::Walk(0)),
+        F::DownRight1 => (Facing::DownRight, Beat::Walk(1)),
+        F::DownRight2 => (Facing::DownRight, Beat::Walk(2)),
+        F::DownRight3 => (Facing::DownRight, Beat::Walk(3)),
+        F::DownRight4 => (Facing::DownRight, Beat::Walk(4)),
+        F::DownRight5 => (Facing::DownRight, Beat::Walk(5)),
+        F::DownRightB => (Facing::DownRight, Beat::Breathe),
+        F::UpRight => (Facing::UpRight, Beat::Walk(0)),
+        F::UpRight1 => (Facing::UpRight, Beat::Walk(1)),
+        F::UpRight2 => (Facing::UpRight, Beat::Walk(2)),
+        F::UpRight3 => (Facing::UpRight, Beat::Walk(3)),
+        F::UpRight4 => (Facing::UpRight, Beat::Walk(4)),
+        F::UpRight5 => (Facing::UpRight, Beat::Walk(5)),
+        F::UpRightB => (Facing::UpRight, Beat::Breathe),
         F::Idle => (Facing::Down, Beat::Idle(0)),
         F::Idle2 => (Facing::Down, Beat::Idle(1)),
         F::Hurt => (Facing::Side, Beat::Hurt),
