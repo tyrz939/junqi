@@ -132,6 +132,52 @@ pub fn hours_till_open(v: &View<'_>, z: jane_core::ZoneId) -> u8 {
     (0..24u8).find(|&h| doors.iter().any(|p| !shut_at(v, p, (hour + h) % 24))).unwrap_or(0)
 }
 
+/// Free bag slots below which she throws something out.
+pub const BAG_SPARE: usize = 2;
+
+/// A bag slot to empty when fewer than [`BAG_SPARE`] are free: of what destroy allows (found
+/// again somewhere, not bound, not a key) and no quest in the log wants, the least use: first
+/// what nothing is made from or mended with, then ingredients, then food and potions, then the
+/// wood and iron broken things want; the smaller stack first.
+pub fn junk_slot(v: &View<'_>) -> Option<u8> {
+    let cat = jane_data::catalog();
+    let bag = &v.me().bag;
+    if bag.iter().filter(|s| s.is_none()).count() >= BAG_SPARE {
+        return None;
+    }
+    let wanted: Vec<ItemId> = v
+        .quests()
+        .flat_map(|q| cat.story.quest(q.quest).requirements.iter())
+        .filter_map(|r| match r.target {
+            jane_data::ReqTarget::Acquire(i) => Some(i),
+            _ => None,
+        })
+        .collect();
+    let rank = |i: ItemId| -> u8 {
+        let d = cat.combat.item(i);
+        let mends = matches!(d.id, "wood" | "iron");
+        let ingredient = cat.combat.recipes.iter().any(|r| r.inputs.contains(&i));
+        if mends {
+            3
+        } else if d.usable {
+            2
+        } else if ingredient {
+            1
+        } else {
+            0
+        }
+    };
+    bag.iter()
+        .enumerate()
+        .filter_map(|(i, s)| s.map(|s| (i, s)))
+        .filter(|(_, s)| {
+            let d = cat.combat.item(s.item);
+            !d.kept() && !d.story && !wanted.contains(&s.item)
+        })
+        .min_by_key(|(i, s)| (rank(s.item), s.qty, *i))
+        .map(|(i, _)| i as u8)
+}
+
 pub fn holds(v: &View<'_>, item: ItemId) -> u32 {
     jane_sim::bag::bag_count(&v.me().bag[..], item)
 }

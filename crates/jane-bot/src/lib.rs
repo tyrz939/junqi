@@ -392,6 +392,13 @@ impl Bot {
             self.setup.remove(0);
             return Act::press(c);
         }
+        // A bag nearly full: something she can find again is thrown out, so a key or the thing
+        // a quest wants always has room.
+        if v.dialogue().is_none() {
+            if let Some(slot) = sense::junk_slot(v) {
+                return Act::press(Command::BagDestroy { slot });
+            }
+        }
         let mut notes = Vec::new();
         let act = match &mut self.plan {
             Plan::Story(s) => s.think(v, &mut self.ctx, &self.events, &mut notes),

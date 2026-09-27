@@ -231,6 +231,17 @@ impl Story {
                 (None, false) => Some(format!("the {} took too long", c.zone.name())),
                 (None, true) => None,
             };
+            // Turned away at its door by the hours ("Open ten to four"): back when it opens, no
+            // failure counted.
+            let wait = if c.entered.is_none() { sense::hours_till_open(v, c.zone) } else { 0 };
+            if wait > 0 && why.is_some() {
+                let until = v.frame() + u32::from(wait) * jane_sim::tuning::TICKS_PER_HOUR;
+                for s in std::iter::once(g).chain(Self::steps_in(v, c.zone)) {
+                    self.blocked.insert(s, until);
+                }
+                notes.push(Mark::Note(format!("the {} is shut for {wait} h", c.zone.name())));
+                return Act::idle();
+            }
             match why {
                 // Every step still open there waits with it, not only the one that sent her in.
                 Some(why) => {
