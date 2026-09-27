@@ -246,6 +246,22 @@ impl Story {
                 notes.push(Mark::Note(format!("the {} in the morning", zone.name())));
                 return Act::idle();
             }
+            // On the road to it, low with nothing to eat: the crawl waits while she mends at a
+            // fire (the county's own rule, below), and starts again from where she is.
+            let low = sense::hp_permille(v.body()) < fight::EAT_BELOW && !fight::has_food(v);
+            let rest_open = self.blocked.get(&Goal::Rest).is_none_or(|&until| until <= v.tick().0);
+            if low && v.zone() == ZoneId::County && c.entered.is_none() && rest_open {
+                self.dungeon = None;
+                self.task = None;
+                return Act::idle();
+            }
+            // Done in there with the night come on: she waits it out inside, by what she has
+            // cleared, rather than walk the county home in the dark (the road back from the
+            // forest killed her again and again; the dog is not about till six anyway).
+            let night = !(6..20).contains(&v.hour());
+            if night && v.zone() == c.zone && c.stage == crate::crawl::Stage::Leave && v.dialogue().is_none() {
+                return Act::idle();
+            }
             if !c.done() && c.frames < CRAWL_FRAMES {
                 let a = c.think(v, cx, events, notes);
                 if !c.done() {
