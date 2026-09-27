@@ -42,7 +42,7 @@
   "town_smoke_evening": {
     "rects": ["site_town"],
     "hours": [16, 19], "needs": ["clear", "mist", "storm"],
-    "colour": "#a89e96", "density": 170, "height": "full", "drift": [4, -1], "spread": 4
+    "colour": "#a6a8ac", "density": 70, "height": "full", "drift": [4, -1], "spread": 4
   },
   "mine_dust": {
     "zones": ["mine"],

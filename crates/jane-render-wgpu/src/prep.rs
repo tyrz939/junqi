@@ -138,6 +138,27 @@ fn lin3(c: [u8; 3]) -> [f32; 3] {
     c.map(linear)
 }
 
+/// How far the sky's lights (the fill, the sun, the afterglow) keep the chroma their bytes name
+/// rather than the power curve's, 0..1. Taken channel by channel through the curve, a dusk blue
+/// and a low sun's orange both come out far more saturated than the byte (a linear orange is a
+/// red), and the two meet on a lit face as mauve; T1 multiplies the bytes as they are. So their
+/// brightness goes through the curve and most of their hue does not (the art-director pass,
+/// 2026-09-27): a dusk reads gold where the sun is and blue where it is not.
+const SKY_CHROMA: f32 = 0.6;
+
+/// A light's byte colour as linear light, its luminance through the curve and its chroma
+/// [`SKY_CHROMA`] of the way to the byte's own.
+fn light3(c: [u8; 3]) -> [f32; 3] {
+    let s = c.map(|v| f32::from(v) / 255.0);
+    let luma = 0.2126 * s[0] + 0.7152 * s[1] + 0.0722 * s[2];
+    if luma <= 0.0 {
+        return [0.0; 3];
+    }
+    let k = ((luma + 0.055) / 1.055).powf(2.4).min(luma) / luma;
+    let l = lin3(c);
+    [0, 1, 2].map(|i| l[i] + (s[i] * k - l[i]) * SKY_CHROMA)
+}
+
 /// A jane-core angle (65536 a turn) in radians.
 fn rad(a: u16) -> f32 {
     f32::from(a) * std::f32::consts::TAU / 65536.0
@@ -256,9 +277,10 @@ impl Prep {
                         );
                         let [r, gg, b] = lin3(l.colour);
                         // Flame light leans warm: a yellow lamp reads as a lamp on green grass,
-                        // not as lime. A deep orange flame (a fire) is held up to a lamp's
+                        // not as lime; and not so far that its pool, fading into the blue of the
+                        // night, passes through mauve (the art-director pass, 2026-09-27). A deep orange flame (a fire) is held up to a lamp's
                         // brightness, or the grass it stands on would swallow its pool.
-                        let [r, gg, b] = [r, gg * 0.72, b * 0.55];
+                        let [r, gg, b] = [r, gg * 0.82, b * 0.6];
                         let luma = 0.2126 * r + 0.7152 * gg + 0.0722 * b;
                         let k = POINT_GAIN * (MIN_LUMA / luma.max(0.01)).clamp(1.0, 1.8);
                         let [r, gg, b] = [r * k, gg * k, b * k];
@@ -340,13 +362,13 @@ impl Prep {
         let g = GUARD as f32;
         f32s(&mut self.globals, &[(w + 2 * GUARD) as f32, (h + 2 * GUARD) as f32, w as f32, h as f32, g, hmax + 2.0]);
         u32s(&mut self.globals, &[self.n_lights, self.tiles_x]);
-        let [fr, fg, fb] = lin3(fill);
+        let [fr, fg, fb] = light3(fill);
         f32s(&mut self.globals, &[fr, fg, fb, 0.0]);
         match sun {
             Some(s) => {
                 let (az, el) = (rad(s.azimuth.0), rad(s.elevation.0));
                 f32s(&mut self.globals, &[el.cos() * az.cos(), el.cos() * az.sin(), el.sin(), 1.0]);
-                let [r, gg, b] = lin3(s.colour).map(|v| v * SUN_GAIN);
+                let [r, gg, b] = light3(s.colour).map(|v| v * SUN_GAIN);
                 let k = 1.0 / rad(s.spread.max(60)).tan();
                 f32s(&mut self.globals, &[r, gg, b, k]);
             }

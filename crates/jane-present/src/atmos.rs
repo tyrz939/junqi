@@ -549,7 +549,8 @@ impl Atmosphere {
             f.fog.push(FogVolume {
                 rect: (-64, -64, w + 64, h + 64),
                 edge: 1,
-                density: (glow * 22 / 255) as u8,
+                // Thin: every lamp in view haloes in it, and a thick one hazes the square pink.
+                density: (glow * 13 / 255) as u8,
                 colour,
                 top: 0,
             });
