@@ -41,23 +41,63 @@ fn throw(v: &View<'_>, reach: &Reach) -> Option<(Task, Try)> {
 }
 
 /// Before the crawl's general order: the lights back on once she has Explosion.
-pub fn first(v: &View<'_>, reach: &Reach) -> Option<(Task, Try)> {
+pub fn first(v: &View<'_>, cx: &crate::task::Ctx, reach: &Reach) -> Option<(Task, Try)> {
     if v.zone() != ZoneId::Museum {
         return None;
+    }
+    let verb = has_explosion(v);
+    // The verb before the stove: the Shot-Firer's page, once she has seen him go down (he guards
+    // it; it lets go when she stands in his room with him dead, so she walks up to it locked or
+    // not). A man out of her sight is not a man down.
+    let firer_down = jane_data::catalog().combat.unit_id("shot_firer").is_some_and(|d| {
+        sense::units_of(v, d).is_empty() && cx.seen_foes.get(&d).is_some_and(std::collections::BTreeMap::is_empty)
+    });
+    if !verb && firer_down {
+        if let Some(p) = sense::prop_named(v, "museum_page").filter(|p| !p.used && reach.beside(p)) {
+            return Some((Task::Use(UseProp::new(p.id)), Try::Prop(p.id)));
+        }
     }
     if let Some(r) = mend_first(v, reach) {
         return Some(r);
     }
-    if !has_explosion(v) {
+    // The stove once, the first time she can walk to it: it is where she will wake (the county's
+    // door is shut after four, and a woman who wakes at the Halt is not coming back in today).
+    if let Some(s) = stove(v, reach).filter(|s| !cx.used.contains_key(&(v.zone(), s.id))) {
+        return Some((Task::Use(UseProp::new(s.id)), Try::Rest(s.id)));
+    }
+    if !verb {
         return firer(v, reach);
+    }
+    if dark(v) {
+        return throw(v, reach);
     }
     if let Some(r) = clear_plinths(v, reach) {
         return Some(r);
     }
-    if !dark(v) {
-        return None;
+    the_way_in(v, reach)
+}
+
+/// Lit, with the verb: the way to the Attendant as the plan and the building give it, before
+/// the exhibits and the side cases (they keep): the armour in the stores' doorway, the locker
+/// with his key behind it, the painted-over arch. The rotunda's gate the crawl unlocks itself.
+fn the_way_in(v: &View<'_>, reach: &Reach) -> Option<(Task, Try)> {
+    let cat = jane_data::catalog();
+    let spell = cat.combat.spell_id("explosion")?;
+    let blast = |name: &str| -> Option<(Task, Try)> {
+        let p = sense::prop_named(v, name)?;
+        if v.body().mp < cat.combat.spell(spell).mp {
+            return None;
+        }
+        let (from, at) = blast_spot(v, reach, p, None)?;
+        Some((Task::Aim { spell, from, at, t: 0 }, Try::Cast(p.id)))
+    };
+    if let Some(r) = blast("museum_stores_armour") {
+        return Some(r);
     }
-    throw(v, reach)
+    if let Some(p) = sense::prop_named(v, "museum_attendant_key_chest").filter(|p| !p.used && reach.beside(p)) {
+        return Some((Task::Use(UseProp::new(p.id)), Try::Prop(p.id)));
+    }
+    blast("museum_arch")
 }
 
 /// The Shot-Firer, once she can walk to him: the verb is in his hand, and every door after it
@@ -187,8 +227,8 @@ fn clear_plinths(v: &View<'_>, reach: &Reach) -> Option<(Task, Try)> {
 /// finished by hand. This owns the whole fight while he is on her.
 ///
 /// The Shot-Firer is fought the same way without the room's parts: he walks slower than she does
-/// and lobs charges that lie two seconds before they burst, so she keeps her distance, steps out
-/// of what lands under her, and bolts him when the bolt is ready.
+/// and lobs charges, so she keeps her distance, steps out of what lands under her, and bolts him
+/// when the bolt is ready.
 pub fn fight(v: &View<'_>, cx: &mut crate::task::Ctx, reach: &Reach) -> Option<crate::Act> {
     use crate::nav::{Go, dist};
     use jane_sim::{Command, InputFrame};
@@ -199,12 +239,26 @@ pub fn fight(v: &View<'_>, cx: &mut crate::task::Ctx, reach: &Reach) -> Option<c
     let me = v.body();
     let rotunda = v.sym("museum_rotunda").and_then(|s| v.rect(s))?;
     let (x, y) = me.pos.cell();
-    let in_rotunda = |b: &jane_sim::Unit| rotunda.contains(x, y) || dist(me.pos, b.pos) <= i64::from(20 * CELL_FX);
-    let (boss, is_attendant) = match attendant(v).filter(|b| crate::fight::on_me(v, b) && in_rotunda(b)) {
+    // The Attendant anywhere near (a kite that strays from the rotunda must not become a flight:
+    // a man let go home mends); the Shot-Firer only where she can walk to him (he stands in
+    // combat with her from the far side of a locked door).
+    let near = |b: &jane_sim::Unit, r: i32| dist(me.pos, b.pos) <= i64::from(r * CELL_FX);
+    // Worn down by the building's small fry with the stove a walk away: to the stove, not into
+    // the apples (they are for the rotunda, where there is no fire).
+    let boss_on = sense::enemies(v).into_iter().any(|u| crate::fight::on_me(v, u) && cat.combat.unit(u.def).boss);
+    if !boss_on && sense::hp_permille(me) < crate::fight::EAT_BELOW && crate::fight::has_food(v) {
+        if let Some(s) = stove(v, reach).filter(|s| dist(me.pos, sense::prop_centre(s)) < i64::from(70 * CELL_FX)) {
+            return Some(use_now(v, cx, s));
+        }
+    }
+    let (boss, is_attendant) = match attendant(v)
+        .filter(|b| crate::fight::on_me(v, b) && (rotunda.contains(x, y) || near(b, 40)))
+    {
         Some(b) => (b, true),
         None => {
             let def = cat.combat.unit_id("shot_firer")?;
-            (sense::units_of(v, def).into_iter().find(|u| crate::fight::on_me(v, u))?, false)
+            let u = sense::units_of(v, def).into_iter().find(|u| crate::fight::on_me(v, u) && reach.point(u.pos))?;
+            (u, false)
         }
     };
     // A pool about to bite: the general fight steps out of it. Food sooner than the general
@@ -213,7 +267,9 @@ pub fn fight(v: &View<'_>, cx: &mut crate::task::Ctx, reach: &Reach) -> Option<c
     if crate::fight::tell_under(v).is_some() {
         return None;
     }
-    if sense::hp_permille(me) < 650 {
+    let is_boss = cat.combat.unit(boss.def).boss;
+    let eat_below = if is_attendant { 650 } else { crate::fight::EAT_BELOW };
+    if sense::hp_permille(me) < eat_below {
         if let Some(i) = crate::fight::food(v) {
             return Some(crate::Act::press(Command::Item(i)));
         }
@@ -221,9 +277,13 @@ pub fn fight(v: &View<'_>, cx: &mut crate::task::Ctx, reach: &Reach) -> Option<c
     let now = v.tick();
     let d = dist(me.pos, boss.pos);
     let aim = jane_core::angle::iatan2(boss.pos.y.0 - me.pos.y.0, boss.pos.x.0 - me.pos.x.0);
-    // What she brought for something strong: stone skin, then the rest.
-    if d < i64::from(12 * CELL_FX) && me.statuses.is_empty() {
-        for name in ["potion_stoneskin", "potion_lifesteal", "potion_manashield"] {
+    // What she brought for something strong: stone skin when he is close and she is hurt, life
+    // steal at the start. Not the mana shield: it pays his blows from the mana her bolts need.
+    let close_hurt = d < i64::from(5 * CELL_FX) && sense::hp_permille(me) < 750;
+    if is_boss && me.statuses.is_empty() && (close_hurt || d < i64::from(12 * CELL_FX)) {
+        let names: &[&str] =
+            if close_hurt || !is_attendant { &["potion_stoneskin", "potion_lifesteal"] } else { &["potion_lifesteal"] };
+        for &name in names {
             let p = sense::item(name);
             let ready = !me.item_cooldowns.iter().any(|&(c, until)| c == p && until > now);
             if sense::holds(v, p) > 0 && ready {
@@ -242,14 +302,14 @@ pub fn fight(v: &View<'_>, cx: &mut crate::task::Ctx, reach: &Reach) -> Option<c
     let bolt_ready = ice.filter(|&s| crate::fight::ready(me, s, now));
     let in_sight = v.sight(me.pos, boss.pos);
     // On his last legs: finish him, by bolt or by hand.
-    if boss.hp.0 < 60_000 {
+    let last_legs = boss.hp.0 < 60_000;
+    if last_legs {
         if let Some(s) = bolt_ready.filter(|_| in_sight) {
             return Some(crate::Act {
                 frame: InputFrame { aim: Some(aim), ..InputFrame::IDLE },
                 cmds: vec![Command::Cast { spell: s, on: Some(boss.id) }],
             });
         }
-        return None;
     }
     // Lit, armours standing: Explosion at one while it is ready and he is not on top of her.
     let close = d < i64::from(4 * CELL_FX);
@@ -288,13 +348,17 @@ pub fn fight(v: &View<'_>, cx: &mut crate::task::Ctx, reach: &Reach) -> Option<c
             cmds: vec![Command::Cast { spell: s, on: Some(boss.id) }],
         });
     }
-    // Between bolts: keep away, inside his leash; out of bolt range or sight, come back in.
-    if d > range * 2 / 3 || !in_sight {
-        cx.fight.retreat = None;
-        return match cx.nav.go(v, boss.pos, Fx(range as i32 / 2), false) {
+    // Between bolts: out of bolt range or sight, come back in (only as far as a bolt's reach:
+    // walking at him while he runs at her halves the gap twice as fast); far enough off, stand
+    // and let the mana come; nearer, keep away, inside his leash.
+    if d > range || !in_sight {
+        return match cx.nav.go(v, boss.pos, Fx(range as i32 * 3 / 4), false) {
             Go::Walk(f) => Some(crate::Act::hold(InputFrame { aim: Some(aim), ..f })),
             _ => Some(crate::Act::hold(crate::nav::stick(me.pos, boss.pos, false))),
         };
+    }
+    if d > i64::from(8 * CELL_FX) && !hold {
+        return Some(crate::Act::hold(InputFrame { aim: Some(aim), ..InputFrame::IDLE }));
     }
     let from = boss.pos;
     let leash = i64::from(def.leash.0);
@@ -336,7 +400,9 @@ fn kite_point(v: &View<'_>, me: Vec2, from: Vec2, tether: Option<(Vec2, i64)>) -
         }
         for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
             let n = (c.0 + dx, c.1 + dy);
-            if prev.contains_key(&n) || !walkable(v, n.0, n.1) || dist(Vec2::centre(n.0, n.1), from) < near {
+            // Inside three cells of him only going away from him (from under his feet, out).
+            let dn = dist(Vec2::centre(n.0, n.1), from);
+            if prev.contains_key(&n) || !walkable(v, n.0, n.1) || dn < near && dn <= dist(at, from) {
                 continue;
             }
             prev.insert(n, c);

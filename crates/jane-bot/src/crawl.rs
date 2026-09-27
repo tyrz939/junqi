@@ -559,7 +559,7 @@ impl Crawl {
             }
         }
         // What the dungeon's own idea puts first (`tactics/`).
-        if let Some((t, what)) = crate::tactics::museum::first(v, reach).filter(|(_, w)| self.fresh(*w, sig)) {
+        if let Some((t, what)) = crate::tactics::museum::first(v, cx, reach).filter(|(_, w)| self.fresh(*w, sig)) {
             return Some((t, what));
         }
         // 1. Lying about.
