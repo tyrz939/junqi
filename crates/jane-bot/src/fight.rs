@@ -246,6 +246,55 @@ pub fn max_hit(u: &Unit) -> i32 {
 }
 
 /// Something to eat, if she is low and can.
+/// Under fire from something with no feet that she is not fighting (a sentry by the fire she
+/// woke at, a cactus by the path): the nearest ground out of its reach or its sight, and the stick
+/// toward it. Stood still in its reach (waiting out the night, nothing left to choose), it shot
+/// her dead again and again where she woke.
+pub fn out_of_fire(v: &View<'_>, cx: &mut Ctx) -> Option<InputFrame> {
+    use std::collections::{BTreeSet, VecDeque};
+    let me = v.body();
+    let cat = jane_data::catalog();
+    let shooters: Vec<(jane_core::Vec2, i64)> = enemies(v)
+        .into_iter()
+        .filter(|u| on_me(v, u) && rooted(u) && reaches_her(v, u))
+        .map(|u| {
+            let far = jane_sim::combat::book_of(u).iter().map(|&s| i64::from(cat.combat.spell(s).range.0)).max().unwrap_or(0);
+            (u.pos, far + i64::from(2 * CELL_FX))
+        })
+        .collect();
+    if shooters.is_empty() {
+        return None;
+    }
+    let safe = |c: (i32, i32)| {
+        let at = jane_core::Vec2::centre(c.0, c.1);
+        shooters.iter().all(|&(p, r)| dist(at, p) > r || !v.sight(p, at))
+    };
+    let start = me.pos.cell();
+    let mut seen = BTreeSet::new();
+    let mut q = VecDeque::new();
+    seen.insert(start);
+    q.push_back((start, 0u32));
+    while let Some((c, steps)) = q.pop_front() {
+        if c != start && safe(c) {
+            let to = jane_core::Vec2::centre(c.0, c.1);
+            return Some(match cx.nav.go(v, to, Fx::from_px(4), true) {
+                Go::Walk(f) => f,
+                _ => stick(me.pos, to, true),
+            });
+        }
+        if steps >= 30 || seen.len() > 3000 {
+            continue;
+        }
+        for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+            let n = (c.0 + dx, c.1 + dy);
+            if crate::nav::walkable(v, n.0, n.1) && seen.insert(n) {
+                q.push_back((n, steps + 1));
+            }
+        }
+    }
+    None
+}
+
 pub fn eat(v: &View<'_>) -> Option<Command> {
     if hp_permille(v.body()) >= EAT_BELOW {
         return None;
@@ -525,10 +574,11 @@ pub fn engage(v: &View<'_>, cx: &mut Ctx, id: UnitId) -> Option<Act> {
             return Some(Act { frame: InputFrame { aim: Some(dir), ..InputFrame::IDLE }, cmds });
         }
     }
+    // (Up close too: a bolt point-blank is still twice her swing, and a swing does not wait on it.
+    // Stood toe to toe with three hundred mana unspent is how the School's guards killed her.)
     if def.kind == SpellKind::Bolt
         && knows(v, ice)
         && ready(me, ice, now)
-        && d > i64::from(3 * CELL_FX)
         && g <= i64::from(def.range.0) * 9 / 10
         && v.sight(me.pos, t.pos)
     {
