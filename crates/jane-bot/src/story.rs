@@ -302,6 +302,16 @@ impl Story {
             }
             return Act::idle();
         }
+        // Shut in with a dungeon's boss (a lock-in behind her, and the crawl given up or never
+        // begun: an explorer's chest in the arena): nothing but the fight lets her out, so the
+        // crawl, whatever was set aside. A fire she cannot walk to is no way out.
+        if dungeon(v.zone()) && crate::crawl::shut_in_with_boss(v) {
+            if let Some(&g) = Self::steps_in(v, v.zone()).first() {
+                self.task = None;
+                self.dungeon = Some((Box::new(crate::crawl::Crawl::new(v.zone())), g));
+                return Act::idle();
+            }
+        }
         // In a dungeon a quest step names: play it whole.
         let here = v.zone();
         if dungeon(here) && self.task.is_none() {
