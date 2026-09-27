@@ -18,7 +18,7 @@
   "emperor": {
     "name": "The Emperor", "faction": "undead", "controller": "ai",
     "strength": 120, "spirit": 30, "walk": 0.9, "run": 1.8, "aggro": 14, "leash": 60, "bounds": 1.25,
-    "book": ["swoop", "scale_dust"], "respawn": 0, "autoRegen": false,
+    "book": ["swoop", "scale_dust"], "respawn": 0, "autoRegen": false, "keepsWounds": true,
     "loot": [], "sprite": "emperor", "boss": true,
     "resist": { "nature": 0.4 },
     "glow": { "radius": 30, "color": "#e8e0ff" },
