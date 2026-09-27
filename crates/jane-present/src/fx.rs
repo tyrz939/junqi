@@ -95,6 +95,17 @@ impl Fx {
     }
 
     /// Parts alive: the effects' and the weather's.
+    /// The pool's size from the `max_particles` row, as it is now; what is over it goes, the
+    /// oldest first.
+    pub fn set_cap(&mut self, max_particles: u16) {
+        self.cap = usize::from(max_particles);
+        let (fx, weather) = (self.cap - self.cap / 3, self.cap / 3);
+        if self.parts.len() > fx {
+            self.parts.drain(..self.parts.len() - fx);
+        }
+        self.rain.truncate(weather);
+    }
+
     pub fn count(&self) -> (usize, usize) {
         (self.parts.len(), self.rain.len())
     }
@@ -219,7 +230,15 @@ impl Fx {
             let prev = self.heads.iter().find(|h| h.id == p.id.get()).map_or(cur, |h| h.cur);
             self.heads_next.push(Head { id: p.id.get(), prev, cur, bolt });
             let back = Angle(p.heading.0.wrapping_add(32768));
-            self.emit(&art::trail(bolt), (cur.0 / Q, cur.1 / Q), back);
+            // Shed along the tick's whole path, not at its end: a trail, not a string of beads.
+            for k in 0..3 {
+                let t = (k * 2 + 1) * 256 / 6;
+                let at = (prev.0 + (cur.0 - prev.0) * t / 256, prev.1 + (cur.1 - prev.1) * t / 256);
+                let jitter = (self.rng.range(-1, 1), self.rng.range(-1, 1));
+                if k == 0 || self.rng.below(2) == 0 {
+                    self.emit(&art::trail(bolt), (at.0 / Q + jitter.0, at.1 / Q + jitter.1), back);
+                }
+            }
         }
         std::mem::swap(&mut self.heads, &mut self.heads_next);
         // Pools on the ground: a burst when one appears.
@@ -414,6 +433,17 @@ impl Fx {
             let hue = art::hue(tint);
             let (x, y) = lerp(h.prev, h.cur, a);
             let (sx, sy) = (x - cam.0, y - cam.1 - 16);
+            // The head's own streak back along its flight: it moves.
+            let (tx, ty) = ((h.prev.0 - h.cur.0) * 3 / (2 * Q), (h.prev.1 - h.cur.1) * 3 / (2 * Q));
+            f.parts.push(Particle {
+                x: sx as i16,
+                y: sy as i16,
+                shape: PartShape::Streak { dx: tx.clamp(-40, 40) as i8, dy: ty.clamp(-40, 40) as i8 },
+                colour: self.lit(Role::Mid.of(hue), 255, Some(sky)),
+                alpha: 220,
+                glow: 255,
+                height: 16,
+            });
             for (shape, colour, alpha) in [
                 (PartShape::Glow { r }, Role::Mid.of(hue), 200),
                 (PartShape::Dot { size: 2 }, Role::Core.of(hue), 255),

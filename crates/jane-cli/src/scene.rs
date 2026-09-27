@@ -144,7 +144,23 @@ pub struct Opts {
     pub at: Option<String>,
     /// Hold the sky to this weather, the ground wet as after an hour of it (`--weather rain`).
     pub weather: Option<jane_present::WeatherKind>,
+    /// Cast this spell east after the rest, and draw the frame so many ticks later (`--cast icebolt:12`).
+    pub cast: Option<String>,
+    /// `Features` rows set by key (`--rows fog=off,god_rays=off`, PRESENTATION.md §1.3).
+    pub rows: Vec<(String, String)>,
     pub gl: GlOpts,
+}
+
+/// `--rows fog=off,god_rays=off`: `Features` rows by their `config.json` key.
+pub fn rows(arg: Option<&str>) -> Result<Vec<(String, String)>, String> {
+    let Some(a) = arg else { return Ok(Vec::new()) };
+    a.split(',')
+        .map(|kv| {
+            kv.split_once('=')
+                .map(|(k, v)| (k.trim().to_owned(), v.trim().to_owned()))
+                .ok_or_else(|| format!("--rows: key=value, not {kv}"))
+        })
+        .collect()
 }
 
 /// `--weather`'s word.
@@ -231,6 +247,11 @@ fn play(bps: Blueprints, o: &Opts, tier: Tier) -> Result<(Tap, Present, u32), St
         let wet = if matches!(k, jane_present::WeatherKind::Rain | jane_present::WeatherKind::Storm) { 255 } else { 0 };
         present.atmos_mut().force(Some((k, wet)));
     }
+    for (k, v) in &o.rows {
+        if !present.atmos_mut().features.set(tier, k, v) {
+            return Err(format!("--rows: no row {k}={v} (keys: {})", jane_present::Features::KEYS.join(", ")));
+        }
+    }
     present.set_canvas(o.canvas);
     let seat = Seat(0);
     let mut played = 0;
@@ -276,6 +297,27 @@ fn play(bps: Blueprints, o: &Opts, tier: Tier) -> Result<(Tap, Present, u32), St
             let v = host.sim.view(seat).ok_or("seat 0 is not in the world")?;
             present.tick(&v, &events);
         }
+    }
+    // `--cast SPELL[:TICKS]`: she learns it, has the mana, and casts it east; the frame is drawn
+    // TICKS later (12 by default: a bolt in flight).
+    if let Some(c) = &o.cast {
+        let (name, after) = c.split_once(':').map_or((c.as_str(), 12), |(s, t)| (s, t.parse().unwrap_or(12)));
+        let spell = jane_data::catalog().combat.spell_id(name).ok_or_else(|| format!("--cast: no spell \"{name}\""))?;
+        let dev = |seq: u16, op| StampedCommand { seat: Some(seat), seq, cmd: Command::Dev(op) };
+        let setup = [dev(u16::MAX - 3, DevOp::Learn(spell)), dev(u16::MAX - 2, DevOp::Mp(9999)), dev(u16::MAX - 4, DevOp::God(true))];
+        host.sim.step(&StepInput { frames: [InputFrame::IDLE; 4], commands: &setup });
+        let aim = InputFrame { aim: Some(jane_core::Angle::EAST), ..InputFrame::IDLE };
+        let cast = [StampedCommand { seat: Some(seat), seq: u16::MAX - 5, cmd: Command::Cast { spell, on: None } }];
+        host.sim.step(&StepInput { frames: [aim; 4], commands: &cast });
+        for _ in 0..after {
+            let events = host.sim.drain_events().to_vec();
+            let v = host.sim.view(seat).ok_or("seat 0 is not in the world")?;
+            present.tick(&v, &events);
+            host.sim.step(&StepInput { frames: [aim; 4], commands: &[] });
+        }
+        let events = host.sim.drain_events().to_vec();
+        let v = host.sim.view(seat).ok_or("seat 0 is not in the world")?;
+        present.tick(&v, &events);
     }
     Ok((host, present, played))
 }
@@ -469,6 +511,8 @@ mod tests {
             backend: Which::Soft,
             at: None,
             weather: None,
+            cast: None,
+            rows: Vec::new(),
             gl: GlOpts::default(),
         };
         let a = render(bps.clone(), &o).unwrap();

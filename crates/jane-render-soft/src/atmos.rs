@@ -91,7 +91,9 @@ pub fn shimmer(t: &mut Target<'_>, cells: &[WaterCmd], tick: u32) -> u64 {
 /// its colour over its rect, fading in over its edge.
 pub fn fog(t: &mut Target<'_>, vols: &[FogVolume], tile: &[u8], camera: (i32, i32), drift: (i16, i16)) -> u64 {
     let Some(v) = vols.iter().max_by_key(|v| v.density) else { return 0 };
-    if tile.len() != (MIST * MIST) as usize || v.density == 0 {
+    // Below this a fog is a tint T0 cannot afford to lay: it would cost the frame a full-screen
+    // blend for a change of a few levels.
+    if tile.len() != (MIST * MIST) as usize || v.density < 20 {
         return 0;
     }
     let (x0, y0) = (v.rect.0.max(0), v.rect.1.max(0));
@@ -102,19 +104,28 @@ pub fn fog(t: &mut Target<'_>, vols: &[FogVolume], tile: &[u8], camera: (i32, i3
     let c = pack(v.colour);
     let edge = i32::from(v.edge.max(1));
     let dens = u32::from(v.density);
+    // The tile's alpha to blend weight, once: a base of haze under the wisps, so thick fog is
+    // never holed.
+    let mut weight = [0u32; 256];
+    for (m, w) in weight.iter_mut().enumerate() {
+        *w = ((m as u32 / 2 + 64) * dens / 255).min(230);
+    }
+    let tx0 = (x0 + camera.0 - i32::from(drift.0)).rem_euclid(MIST);
     for y in y0..y1 {
         let ey = (y - v.rect.1).min(v.rect.3 - 1 - y).clamp(0, edge);
-        let ty = (y + camera.1 - i32::from(drift.1)).rem_euclid(MIST) * MIST;
-        let row = &mut t.px[(y * t.w) as usize..((y + 1) * t.w) as usize];
-        for x in x0..x1 {
-            let ex = (x - v.rect.0).min(v.rect.2 - 1 - x).clamp(0, edge);
-            let tx = (x + camera.0 - i32::from(drift.0)).rem_euclid(MIST);
-            let m = u32::from(tile[(ty + tx) as usize]);
-            let fade = (ex.min(ey) * 256 / edge) as u32;
-            // A base of haze under the tile's wisps, so thick fog is never holed.
-            let a = (m / 2 + 64) * dens / 255 * fade / 256;
-            let d = &mut row[x as usize];
-            *d = lerp(*d, c, a.min(230));
+        let ty = ((y + camera.1 - i32::from(drift.1)).rem_euclid(MIST) * MIST) as usize;
+        let mist = &tile[ty..ty + MIST as usize];
+        let row = &mut t.px[(y * t.w + x0) as usize..(y * t.w + x1) as usize];
+        let mut tx = tx0 as usize;
+        for (i, d) in row.iter_mut().enumerate() {
+            let x = x0 + i as i32;
+            let mut a = weight[usize::from(mist[tx])];
+            let ex = (x - v.rect.0).min(v.rect.2 - 1 - x);
+            if ex < edge || ey < edge {
+                a = a * (ex.min(ey).clamp(0, edge) * 256 / edge) as u32 / 256;
+            }
+            *d = lerp(*d, c, a);
+            tx = (tx + 1) & (MIST as usize - 1);
         }
     }
     ((x1 - x0) * (y1 - y0)) as u64

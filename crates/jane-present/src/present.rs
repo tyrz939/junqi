@@ -345,6 +345,7 @@ impl Present {
         self.fx.on_events(view, events);
         let (cw, ch) = (i32::from(self.canvas.0), i32::from(self.canvas.1));
         let cam = (self.camera.pos.0 >> FX_TO_CANVAS, self.camera.pos.1 >> FX_TO_CANVAS);
+        self.fx.set_cap(self.atmos.features.max_particles);
         self.fx.tick(view, &self.atmos, self.tick, (cam.0, cam.1, cw, ch));
     }
 
@@ -623,7 +624,7 @@ impl Present {
                 }
             }
             f.passes.push(Pass::Terrain { chunks: Span::since(0, f.chunks.len()) });
-            crate::atmos::water_pass(f);
+            crate::atmos::water_pass(f, self.atmos.features.water);
         }
 
         // Props and units, flat ones on the ground, the rest y-sorted with the units.

@@ -122,8 +122,9 @@ fn fs_fog(i: FullOut) -> @location(0) vec4<f32> {
         }
         let lit_air = seen / n2;
         // Only the contrast makes a shaft: fully lit or fully shaded air is just the air.
-        let shaft = clamp((lit_air - 0.35) * 1.6, 0.0, 1.0) * (1.0 - sun_at(px) * 0.6);
-        c += g.sun_col.rgb * shaft * g.skyinfo.z * (0.18 + g.weather.y * 0.4);
+        // A shaft shows against shade: over a px the sun does not reach, the air lit before it.
+        let shaft = clamp((lit_air - 0.35) * 1.6, 0.0, 1.0) * (1.0 - sun_at(px));
+        c += g.sun_col.rgb * shaft * g.skyinfo.z * (0.06 + g.weather.y * 0.45);
     }
     return vec4<f32>(c, 1.0);
 }

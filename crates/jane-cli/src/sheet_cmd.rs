@@ -223,6 +223,8 @@ fn scene(args: &[String]) -> Result<(), String> {
     let gl = crate::scene::GlOpts::parse(args)?;
     let at = flag("--at").map(str::to_owned);
     let weather = flag("--weather").map(crate::scene::weather).transpose()?;
+    let cast = flag("--cast").map(str::to_owned);
+    let rows = crate::scene::rows(flag("--rows"))?;
     let name = format!(
         "scene-{seed}-{ticks}{}{}{}-{}-{}",
         hour.map_or(String::new(), |h| format!("-h{h:02}{minute:02}")),
@@ -237,7 +239,7 @@ fn scene(args: &[String]) -> Result<(), String> {
         None => PathBuf::from("sheets").join(format!("{name}.png")),
     };
     let bps = jane_sim::Blueprints::build(seed).map_err(|e| format!("seed {seed}: {e}"))?;
-    let o = crate::scene::Opts { seed, ticks, model, hour, minute, canvas, backend, at, weather, gl };
+    let o = crate::scene::Opts { seed, ticks, model, hour, minute, canvas, backend, at, weather, cast, rows, gl };
     let shot = crate::scene::render(bps, &o)?;
     if let Some(dir) = path.parent().filter(|d| !d.as_os_str().is_empty()) {
         std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;

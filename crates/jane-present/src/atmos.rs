@@ -584,8 +584,11 @@ impl Atmosphere {
     }
 }
 
-/// The water cells of the chunks in view (`Water`), after the terrain.
-pub fn water_pass(f: &mut Frame) {
+/// The water cells of the chunks in view (`Water`), after the terrain, when the `water` row is on.
+pub fn water_pass(f: &mut Frame, on: bool) {
+    if !on {
+        return;
+    }
     let w0 = f.water.len();
     let (w, h) = (i32::from(f.canvas.0), i32::from(f.canvas.1));
     for c in &f.chunks {
