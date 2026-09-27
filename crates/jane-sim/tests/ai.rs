@@ -151,6 +151,36 @@ fn by_day_the_gentlest_ground_leaves_her_be() {
     assert_eq!(target(&s, night).1, Some(her));
 }
 
+/// Skeletons are wary on the county's gentlest ground by day, not dormant: in a dungeon, the Gold
+/// Mine included, one comes for her on sight at noon (the owner's first playtest met the yard's
+/// wary skeleton and asked; WORLD.md §*by day the Lowfields' own ground leaves her be*).
+#[test]
+fn a_skeleton_in_the_mine_comes_on_sight_by_day() {
+    let mut s = field();
+    hour(&mut s, 12);
+    cmd(&mut s, Some(0), Command::Dev(DevOp::Tp { zone: ZoneId::Mine, mark: start_sym() }));
+    steps(&mut s, 2);
+    let her = me(&s);
+    assert_eq!(zone_of(&s, her), ZoneId::Mine);
+    let at = unit(&s, her).pos;
+    let d = jane_data::catalog().combat.unit_id("skeleton").unwrap();
+    let st = s.state_mut();
+    let id = st.next.unit();
+    let mut u = jane_sim::units::new_unit(
+        id,
+        None,
+        d,
+        Vec2::new(at.x + Fx::from_px(40), at.y),
+        jane_core::action::Facing::West,
+        st.tick,
+    );
+    u.awake = true;
+    st.zone_mut(ZoneId::Mine).unwrap().insert_unit(u);
+    s.rebuild_runtimes();
+    steps(&mut s, 20);
+    assert_eq!(target(&s, id), (CombatState::Combat, Some(her)), "it saw her and came");
+}
+
 /// sim.test.ts "checks range before cooldown, so a cooling-down AI keeps walking": `TooFar`
 /// comes before `OnCooldown`, so a creature with its only blow cooling walks in anyway.
 #[test]

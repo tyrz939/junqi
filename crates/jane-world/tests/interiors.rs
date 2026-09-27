@@ -260,6 +260,33 @@ fn the_house_is_two_rooms_and_two_hatches() {
     }
 }
 
+/// Each hatch goes down on its own side: the west hatch to the stair in the cellar's west, the
+/// east hatch to the east (the owner's first playtest found them crossed), and each stair comes
+/// back up the hatch it went down.
+#[test]
+fn each_hatch_goes_down_on_its_own_side() {
+    for seed in 1..=common::seeds().min(8) {
+        let house = build_interior(ZoneId::House, seed).expect("the house");
+        let cellar = build_interior(ZoneId::Cellar, seed).expect("the cellar");
+        let mut downs: Vec<(u16, u16)> = ["hatch_a", "hatch_b"]
+            .iter()
+            .map(|h| {
+                let p = prop(&house, h);
+                let to = p.to.expect("a hatch leads down");
+                let stair = cellar
+                    .props
+                    .iter()
+                    .find(|s| s.to.is_some_and(|t| t.zone == ZoneId::House && t.mark == p.key))
+                    .expect("a stair back up to it");
+                assert_eq!(to.mark, stair.key, "seed {seed}: {h} arrives by the stair that returns to it");
+                (p.cell.x, stair.cell.x)
+            })
+            .collect();
+        downs.sort();
+        assert!(downs[0].1 < downs[1].1, "seed {seed}: the west hatch goes to the west stair: {downs:?}");
+    }
+}
+
 /// The judge judges: a house with its kitchen doorway bricked up is refused (the hatches, the orb
 /// and the pantry are out of reach of the front door), and so is a cellar with no iron key.
 #[test]

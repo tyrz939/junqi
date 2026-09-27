@@ -8,9 +8,9 @@
   "works_lamp": { "name": "Works Lamp", "sprite": "works_lamp", "w": 1, "h": 1, "solid": false, "blockLos": false, "flat": true, "lightWhenOn": true, "light": { "radius": 80, "color": "#f4e2b4", "flicker": 0.05 } },
   "weak_wall": { "name": "Patched Wall", "sprite": "weak_wall", "w": 3, "h": 2, "solid": true, "blockLos": true },
   "relay_box": { "name": "Relay Box", "sprite": "relay_box", "w": 1, "h": 1, "solid": true, "blockLos": true, "answers": "shock", "lightWhenOn": true, "light": { "radius": 32, "color": "#bfe4ff", "flicker": 0.2 } },
-  "orb_spark": { "name": "Electric Orb", "sprite": "orb_spark", "w": 2, "h": 2, "solid": true, "blockLos": false, "once": true, "prompt": "Touch", "light": { "radius": 52, "color": "#bfe4ff", "flicker": 0.2 } },
+  "orb_spark": { "name": "Electric Orb", "sprite": "orb_spark", "w": 2, "h": 2, "base": 1, "solid": true, "blockLos": false, "once": true, "prompt": "Touch", "light": { "radius": 52, "color": "#bfe4ff", "flicker": 0.2 } },
   "factory_shutter_h": { "name": "Roller Shutter", "sprite": "factory_shutter_h", "w": 3, "h": 1, "solid": true, "blockLos": true, "gate": true, "lockedSays": "is down" },
   "factory_shutter_v": { "name": "Roller Shutter", "sprite": "factory_shutter_v", "w": 1, "h": 3, "solid": true, "blockLos": true, "gate": true, "lockedSays": "is down" },
-  "factory_stove": { "name": "Time Office Stove", "sprite": "factory_stove", "w": 2, "h": 2, "solid": true, "blockLos": false, "rest": true, "prompt": "Rest", "light": { "radius": 60, "color": "#ff9040", "flicker": 0.25 } },
+  "factory_stove": { "name": "Time Office Stove", "sprite": "factory_stove", "w": 2, "h": 2, "base": 1, "solid": true, "blockLos": false, "rest": true, "prompt": "Rest", "light": { "radius": 60, "color": "#ff9040", "flicker": 0.25 } },
   "factory_rack": { "name": "Card Rack", "sprite": "factory_rack", "w": 3, "h": 1, "solid": true, "blockLos": false, "prompt": "Read" }
 }

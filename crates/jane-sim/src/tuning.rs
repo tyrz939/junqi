@@ -206,6 +206,9 @@ pub const ORDER_ARRIVED_FX: i32 = CELL_FX * 3 / 2;
 /// Lamp posts burn from 18:30 to 06:30 (`light.ts LAMPS_ON`, `LAMPS_OFF`), in clock ticks.
 pub const LAMPS_ON: u32 = TICKS_PER_HOUR * 37 / 2;
 pub const LAMPS_OFF: u32 = TICKS_PER_HOUR * 13 / 2;
+/// Each lamp comes on (and goes out) up to this long either side of those times, at its own
+/// minute (`light::lamp_lit`): thirty minutes in all, so a street lights one lamp at a time.
+pub const LAMP_STAGGER: u32 = TICKS_PER_HOUR / 4;
 /// The nudge search's most cells (`clear.ts NUDGE_CELLS`).
 pub const NUDGE_CELLS: u32 = 1500;
 /// A patrol plans at most this far in one go, in cells (`ai.ts patrol`, 200 m).

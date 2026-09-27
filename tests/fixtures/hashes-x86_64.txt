@@ -1,5 +1,5 @@
 # jane gen --zones all --seeds 1..16 --hash
-# content 755ddc212c75b780, blueprint hash layout 4
+# content 229a4365b31f7fc8, blueprint hash layout 4
 # zone seed hash (FNV-1a 64 over little-endian bytes)
 county 1 48a9ae0b9b882d50
 county 2 4e4251dd24df8257
@@ -17,22 +17,22 @@ county 13 97ba890a2d690599
 county 14 576d961b1976ec1f
 county 15 da2db8e585e618b4
 county 16 90ebcc0bc9a90d02
-house 1 0030d0e142a18565
-house 2 b4b5ee6fe8786e00
-house 3 4f22a2d6224403d6
-house 4 83f1227a944f27dc
-house 5 ff3dfe9117e08396
-house 6 0e8b3e7f220c920c
-house 7 a1e05af18ea1735f
-house 8 39ddb399b9da34d6
-house 9 e9924bdebe5677d7
-house 10 0fef21530ec60eb2
-house 11 0307ecd42ed29a64
-house 12 5a1b5414bfef544c
-house 13 e1bc2900c6c7399d
-house 14 e1993a25c09ff26f
-house 15 23ca17635488cecc
-house 16 4c4c7ae8c5ede750
+house 1 9d2c85e3f93709d7
+house 2 39061bb4bcde7792
+house 3 8508249bc263f9f8
+house 4 c2be4b3e745aa246
+house 5 4a1957eb57d78eb8
+house 6 a33578f9aa0cb536
+house 7 b380cf270c5ec089
+house 8 cc69f27633b6e0c8
+house 9 41f172e021aed9f1
+house 10 1618d065030360cc
+house 11 da3ada1c15833c8e
+house 12 20bb04a61724d626
+house 13 c275d34f3773e2ff
+house 14 d59c145292421f49
+house 15 cf10dd500c2807f6
+house 16 92b6b03e6d0a49e2
 cellar 1 9cba703677de11d6
 cellar 2 f26f2a90c2241bdc
 cellar 3 d626a5509e6cfe49

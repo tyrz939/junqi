@@ -92,6 +92,9 @@ pub struct Gl {
     /// Vertices and indices in the buffers bound for drawing, for [`Gl::draw_quads`]'s check.
     verts: usize,
     quads: usize,
+    /// The vertex buffer and attribute sizes last pointed at, so a run past what 16-bit indices
+    /// reach can point them again further along ([`Gl::draw_quads`]).
+    pointed: Option<(Buffer, [i32; 8], usize)>,
     /// The vertex bytes on their way to the driver.
     bytes: Vec<u8>,
     /// Not `Send`, not `Sync`: a context is current on one thread.
@@ -163,7 +166,7 @@ impl Gl {
             gl.disable(glow::CULL_FACE);
             gl.disable(glow::DITHER);
         }
-        Gl { gl, info, verts: 0, quads: 0, bytes: Vec::new(), _thread: PhantomData }
+        Gl { gl, info, verts: 0, quads: 0, pointed: None, bytes: Vec::new(), _thread: PhantomData }
     }
 
     /// A `w x h` texture of `format`, nearest or linear, clamped at its edges, contents undefined.
@@ -441,12 +444,22 @@ impl Gl {
     /// Points attribute `k` at `sizes[k]` floats of each of the `verts` vertices in buffer `b`
     /// (filled before by [`Gl::vertices`] with the same sizes), in order.
     pub fn point(&mut self, b: Buffer, sizes: &[i32], verts: usize) {
+        let mut kept = [0; 8];
+        let k = sizes.len().min(8);
+        kept[..k].copy_from_slice(&sizes[..k]);
+        self.pointed = Some((b, kept, k));
+        self.point_from(b, &kept[..k], 0);
+        self.verts = verts;
+    }
+
+    /// Points the attributes at buffer `b`'s vertices from vertex `first` on.
+    fn point_from(&self, b: Buffer, sizes: &[i32], first: usize) {
         let per: i32 = sizes.iter().sum();
         // SAFETY: attributes point into the bound buffer by offset, inside the stride.
         unsafe {
             self.gl.bind_buffer(glow::ARRAY_BUFFER, Some(b));
             let stride = per * 4;
-            let mut off = 0;
+            let mut off = first as i32 * stride;
             for k in 0..8u32 {
                 if let Some(&n) = sizes.get(k as usize) {
                     self.gl.enable_vertex_attrib_array(k);
@@ -457,7 +470,6 @@ impl Gl {
                 }
             }
         }
-        self.verts = verts;
     }
 
     /// Which channels drawing writes.
@@ -485,13 +497,37 @@ impl Gl {
 
     /// Draws quads `first..first + n` of the vertices last given (corners in the order top-left,
     /// top-right, bottom-left, bottom-right).
+    ///
+    /// The indices are 16-bit (GL 2.1 and GLES 2 have nothing wider everywhere), so they name
+    /// the first 16383 quads only. A run past them (a dusk street's shadow spans, thousands of
+    /// quads a light) is drawn a window at a time, the attributes pointed at the window's first
+    /// vertex, and pointed back at the start after.
     pub fn draw_quads(&self, first: usize, n: usize) {
         if n == 0 {
             return;
         }
-        assert!(first + n <= self.quads && (first + n) * 4 <= self.verts, "quads past the buffers");
-        // SAFETY: the indices read are inside the index buffer and name vertices inside the vertex
-        // buffer (checked above).
+        assert!(self.quads > 0 && (first + n) * 4 <= self.verts, "quads past the vertex buffer");
+        if first + n <= self.quads {
+            self.draw_elements(first, n);
+            return;
+        }
+        let (b, sizes, k) = self.pointed.expect("a draw past the index buffer with no vertex buffer pointed");
+        let sizes = &sizes[..k];
+        let (mut at, end) = (first, first + n);
+        while at < end {
+            let m = (end - at).min(self.quads);
+            self.point_from(b, sizes, at * 4);
+            self.draw_elements(0, m);
+            at += m;
+        }
+        self.point_from(b, sizes, 0);
+    }
+
+    /// Quads `first..first + n` of the index buffer, which holds them.
+    fn draw_elements(&self, first: usize, n: usize) {
+        assert!(first + n <= self.quads, "quads past the index buffer");
+        // SAFETY: the indices read are inside the index buffer (checked above) and name vertices
+        // inside the vertex buffer (`draw_quads`' check).
         unsafe {
             self.gl.draw_elements(glow::TRIANGLES, (n * 6) as i32, glow::UNSIGNED_SHORT, (first * 12) as i32);
         }

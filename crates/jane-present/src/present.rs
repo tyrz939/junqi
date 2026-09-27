@@ -63,6 +63,8 @@ const FLAME_HEIGHT: i32 = 28;
 const FLICKER_RATE: u32 = 10;
 /// A unit's draw key: its id with the top bit set (a prop's is its id).
 const UNIT_KEY: u32 = 0x8000_0000;
+/// A drop's key in the draw list and the prop list: its id with this bit, above every prop's.
+const DROP_KEY: u32 = 0x2000_0000;
 
 /// Canvas px round the canvas whose terrain throws its shadows in: T2's G-buffer guard band
 /// (`jane-render-wgpu`'s `GUARD`), so every tier casts from the same ground.
@@ -527,13 +529,20 @@ impl Present {
                 on: p.on || lit,
                 open: p.used || !matches!(p.loot, jane_sim::state::LootState::AsSpawned),
             };
+            // A thing left lying (a key, a glove) is drawn as what it holds, not as its row's
+            // sprite: Mrs Bettany's key was a note on the grass (the owner's first playtest).
+            let held = d
+                .shows_loot
+                .then(|| view.prop_loot(p).first())
+                .flatten()
+                .and_then(|s| kit.loot_look(cat.combat.item(s.item).icon));
             props.push(PropRec {
                 id: p.id.get(),
                 x: i32::from(p.cell.x) * CELL,
                 y: i32::from(p.cell.y) * CELL,
                 w: i32::from(d.w) * CELL,
                 h: i32::from(d.h) * CELL,
-                look: kit.look(d.sprite, p.id.get(), state).unwrap_or_else(|| {
+                look: held.or_else(|| kit.look(d.sprite, p.id.get(), state)).unwrap_or_else(|| {
                     let look = stand.prop(d.w, d.h, d.flat, d.light.is_some());
                     // A lamp the view says is out has dark glass.
                     if d.light.is_some() && !lit { stand.unlit(look) } else { look }
@@ -542,6 +551,23 @@ impl Present {
                 flush: false,
             });
         });
+        // What lies on the ground (a creature's loot where it fell) as its item, a cell's
+        // footprint round its point, on the ground under everything standing.
+        for d in view.drops() {
+            let (x, y) = (d.pos.x.0 >> FX_TO_CANVAS, d.pos.y.0 >> FX_TO_CANVAS);
+            let inside = area.contains(x.div_euclid(CELL), y.div_euclid(CELL));
+            let Some(look) = kit.loot_look(cat.combat.item(d.item).icon).filter(|_| inside) else { continue };
+            props.push(PropRec {
+                id: DROP_KEY | d.id.get(),
+                x: x - CELL / 2,
+                y: y - CELL / 2,
+                w: CELL,
+                h: CELL,
+                look,
+                flat: true,
+                flush: false,
+            });
+        }
         props.sort_unstable_by_key(|p| p.id);
     }
 
@@ -1192,5 +1218,86 @@ fn sprite(r: &crate::atlas::SpriteRef, x: i32, y: i32, flags: Flags) -> SpriteCm
         y: y.clamp(i32::from(i16::MIN), i32::from(i16::MAX)) as i16,
         flags,
         height_px: r.height,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use jane_sim::input::{InputFrame, StepInput};
+    use jane_sim::state::{LootState, NightState, Prop};
+    use jane_sim::{Seat, Sim};
+
+    use super::*;
+
+    /// A thing left lying is drawn as what it holds, and a drop as its item: Mrs Bettany's key
+    /// was a note on the grass (the owner's first playtest). Every key item has a ground look
+    /// that is not the note's, and the note comes back once the key is taken.
+    #[test]
+    fn a_key_on_the_ground_is_drawn_as_a_key() {
+        let cat = jane_data::catalog();
+        let mut sim = Sim::new_game(1, "Jane");
+        let mut p = Present::new(Tier::T0);
+        p.set_canvas((768, 432));
+        let step = |sim: &mut Sim, p: &mut Present| {
+            sim.step(&StepInput { frames: [InputFrame::IDLE; 4], commands: &[] });
+            let events = sim.drain_events().to_vec();
+            p.tick(&sim.view(Seat(0)).expect("seat 0 plays"), &events);
+        };
+        step(&mut sim, &mut p);
+        let (zone, (cx, cy)) = {
+            let v = sim.view(Seat(0)).expect("seat 0 plays");
+            (v.zone(), v.body().pos.cell())
+        };
+        let key = cat.combat.item_id("bettany_key").expect("Mrs Bettany's key");
+        let key_look = p.kit.loot_look(cat.combat.item(key).icon).expect("a key's ground look");
+        let lost = cat.story.prop_id("lost_thing").expect("the lost thing row");
+        let note = p.kit.look(cat.story.prop(lost).sprite, 1, props::State::default());
+        assert_ne!(Some(key_look), note, "a key is not a note");
+        for item in cat.combat.items.iter().filter(|i| i.id.starts_with("key_") || i.id.ends_with("_key")) {
+            let look = p.kit.loot_look(item.icon).unwrap_or_else(|| panic!("{}: no ground look", item.id));
+            assert_ne!(Some(look), note, "{} lies as a key", item.id);
+        }
+        // The lost thing, holding the key, two cells east of her; and a dropped key beyond it.
+        let st = sim.state_mut();
+        let id = st.next.prop();
+        let key_sym = st.syms.intern("test_lost_key");
+        st.zone_mut(zone).expect("her zone").props.push(Prop {
+            id,
+            key: key_sym,
+            def: lost,
+            spawn: None,
+            cell: jane_core::Cell::new(cx as u16 + 2, cy as u16),
+            solid: false,
+            hidden: false,
+            locked: false,
+            used: false,
+            on: false,
+            loot: LootState::Left(vec![jane_core::Stack { item: key, qty: 1 }]),
+            under_done: false,
+            night: NightState::AsSpawned,
+        });
+        let drop = st.next.drop();
+        let (born, pos) = (st.tick, jane_core::Vec2::centre(cx + 4, cy));
+        st.zone_mut(zone).expect("her zone").drops.push(jane_sim::state::Drop {
+            id: drop,
+            item: key,
+            qty: 1,
+            pos,
+            born,
+        });
+        sim.rebuild_runtimes();
+        step(&mut sim, &mut p);
+        let rec = |p: &Present, id: u32| p.props.iter().find(|r| r.id == id).map(|r| r.look);
+        assert_eq!(rec(&p, id.get()), Some(key_look), "the lost thing lies as the key it holds");
+        assert_eq!(rec(&p, DROP_KEY | drop.get()), Some(key_look), "the dropped key lies as a key");
+        // Taken: the lost thing is its own sprite again, and the drop is gone.
+        let zs = sim.state_mut().zone_mut(zone).expect("her zone");
+        let ix = zs.prop_ix(id).expect("the lost thing") as usize;
+        zs.props[ix].loot = LootState::Left(Vec::new());
+        zs.drops.clear();
+        sim.rebuild_runtimes();
+        step(&mut sim, &mut p);
+        assert_eq!(rec(&p, id.get()), note);
+        assert_eq!(rec(&p, DROP_KEY | drop.get()), None);
     }
 }

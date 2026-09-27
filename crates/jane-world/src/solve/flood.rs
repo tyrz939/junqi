@@ -238,11 +238,10 @@ impl Solve<'_> {
                 continue;
             }
             stamped.push(i);
-            for y in i32::from(p.cell.y)..i32::from(p.cell.y) + i32::from(def.h) {
-                for x in i32::from(p.cell.x)..i32::from(p.cell.x) + i32::from(def.w) {
-                    if self.layers.inside(x, y) {
-                        blocked[self.layers.ix(x, y)] = 1;
-                    }
+            // The front rows it stands on, as the sim stamps it (`PropDef::solid_rect`).
+            for (x, y) in def.solid_rect(i32::from(p.cell.x), i32::from(p.cell.y)).cells() {
+                if self.layers.inside(x, y) {
+                    blocked[self.layers.ix(x, y)] = 1;
                 }
             }
         }
@@ -250,11 +249,10 @@ impl Solve<'_> {
         self.layers.stamped_before = std::mem::replace(&mut self.layers.stamped, stamped);
     }
 
-    /// The cells of prop `i` inside the zone, by index.
+    /// The cells prop `i` blocks when stamped, inside the zone, by index.
     fn footprint(&self, i: usize) -> impl Iterator<Item = usize> + '_ {
         let p = &self.bp.props[i];
-        let def = self.def(i);
-        let r = jane_core::Rect::new(i32::from(p.cell.x), i32::from(p.cell.y), i32::from(def.w), i32::from(def.h));
+        let r = self.def(i).solid_rect(i32::from(p.cell.x), i32::from(p.cell.y));
         r.cells().filter(|&(x, y)| self.layers.inside(x, y)).map(|(x, y)| self.layers.ix(x, y))
     }
 

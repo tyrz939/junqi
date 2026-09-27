@@ -54,7 +54,8 @@ fn a_room_behind_a_locked_door_with_its_key_in_a_chest_is_solved() {
     assert_eq!(r.info.passes, 2);
     assert_eq!((r.info.first_seen_at(9, 1), r.info.first_seen_at(2, 2)), (Some(0), Some(1)));
     assert_eq!(r.info.layers, vec![0]);
-    assert_eq!(r.info.reached_cells, 11 * 3 - 4, "every floor cell but the chest's");
+    // A chest stands on its front row; its back row is floor she walks behind it (`base`).
+    assert_eq!(r.info.reached_cells, 11 * 3 - 2, "every floor cell but the chest's front row");
 }
 
 /// `world.test.ts` "the solver really rejects a sealed gate": the key behind the door it opens.

@@ -75,6 +75,17 @@ const RAIN_TOP: (i32, i32) = (110, 190);
 const RAIN_FALL: (i32, i32) = (150, 210);
 /// Canvas px round the view the rain falls in, so none is missing at an edge.
 const RAIN_MARGIN: i32 = 32;
+/// A drop glints once in this many ticks, and the glint lives this long, rising this fast (Q4
+/// px a tick): a gentle thing, a little more than one a second a drop.
+const GLINT_EVERY: u32 = 50;
+const GLINT_LIFE: u8 = 44;
+const GLINT_RISE: i32 = 3;
+/// Canvas px round the view a drop still glints in.
+const GLINT_MARGIN: i32 = 16;
+/// Gold: the halo, the bright core, and what both cool to.
+const GLINT_HALO: [u8; 3] = [255, 214, 120];
+const GLINT_CORE: [u8; 3] = [255, 250, 220];
+const GLINT_LATE: [u8; 3] = [240, 170, 80];
 
 impl Fx {
     /// A pool for `tier`, sized by its `max_particles`.
@@ -254,7 +265,54 @@ impl Fx {
             }
         }
         std::mem::swap(&mut self.grounds, &mut self.grounds_next);
+        self.glints(view, view_px);
         self.weather(view, atmos, view_px);
+    }
+
+    /// Loot glints (the owner's first playtest: WoW's sparkle on a corpse worth looting). What a
+    /// creature leaves is dropped where it fell, so a glint rises from every drop in the view now
+    /// and then, gold, glowing, drifting up a little and gone; taken, it stops. A corpse that
+    /// left nothing has nothing under it, and nothing glints.
+    fn glints(&mut self, view: &View<'_>, (vx, vy, vw, vh): (i32, i32, i32, i32)) {
+        let fx_cap = self.cap - self.cap / 3;
+        for d in view.drops() {
+            let (x, y) = (d.pos.x.0 >> FX_TO_CANVAS, d.pos.y.0 >> FX_TO_CANVAS);
+            if x < vx - GLINT_MARGIN
+                || y < vy - GLINT_MARGIN
+                || x > vx + vw + GLINT_MARGIN
+                || y > vy + vh + GLINT_MARGIN
+            {
+                continue;
+            }
+            // Each on its own beat, so a heap of loot twinkles rather than blinks.
+            let beat = jane_art::hash::h32(d.id.get(), 0, 0x676c_696e) % GLINT_EVERY;
+            if self.tick % GLINT_EVERY != beat || fx_cap == 0 {
+                continue;
+            }
+            let (ox, oy, oz) = (self.rng.range(-5, 5), self.rng.range(-3, 2), self.rng.range(2, 7));
+            for (shape, colour, glow) in [(Shape::Glow(4), GLINT_HALO, 180), (Shape::Dot(1), GLINT_CORE, 255)] {
+                if self.parts.len() >= fx_cap {
+                    self.parts.pop_front();
+                }
+                self.parts.push_back(Spark {
+                    x: (x + ox) * Q,
+                    y: (y + oy) * Q,
+                    z: oz * Q,
+                    vx: 0,
+                    vy: 0,
+                    vz: GLINT_RISE,
+                    age: 0,
+                    life: GLINT_LIFE,
+                    shape,
+                    colour,
+                    late: GLINT_LATE,
+                    glow,
+                    grav: 0,
+                    drag: 250,
+                    ground: false,
+                });
+            }
+        }
     }
 
     /// The rain: drops fall onto ground points in and round the view, leaning with the wind, and
