@@ -26,6 +26,7 @@ pub mod light;
 pub mod people;
 pub mod present;
 pub mod props;
+pub mod shadow;
 pub mod stand_in;
 pub mod terrain;
 pub mod text;

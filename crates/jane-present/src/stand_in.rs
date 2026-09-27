@@ -21,7 +21,7 @@ use jane_art::palette::{Ix, Ramp};
 use jane_core::Tile;
 
 use crate::atlas::{Atlas, RefId, Texel};
-use crate::frame::{CELL, CHUNK_CELLS, CHUNK_PX, ChunkId, ChunkLayers};
+use crate::frame::{CELL, CHUNK_CELLS, CHUNK_PX, ChunkId, ChunkLayers, height_of_rows};
 
 /// A tile's flat swatch (the colours `jane view` has drawn the county in since P2).
 pub fn tile_rgb(t: Tile) -> [u8; 3] {
@@ -89,7 +89,7 @@ pub fn paint_chunk(
 ) {
     let side = CHUNK_PX as usize;
     debug_assert_eq!(layers.albedo.len(), side * side);
-    let lit = layers.lit();
+    let (lit, heights) = (layers.lit(), layers.has_height());
     let inside = |cx: i32, cy: i32| cx >= 0 && cy >= 0 && cx < w as i32 && cy < h as i32;
     for j in 0..CHUNK_CELLS {
         for i in 0..CHUNK_CELLS {
@@ -105,7 +105,7 @@ pub fn paint_chunk(
                 let row = (j * CELL) as usize + y;
                 layers.albedo[row * side + x0..row * side + x0 + CELL as usize].fill(c);
             }
-            if !lit {
+            if !heights {
                 continue;
             }
             let t = |dx: i32, dy: i32| if inside(cx + dx, cy + dy) { tile(cx + dx, cy + dy) } else { Tile::Void };
@@ -113,16 +113,18 @@ pub fn paint_chunk(
                 for x in 0..CELL {
                     let k = ((j * CELL + y) as usize) * side + (i * CELL + x) as usize;
                     let (n, z) = if inside(cx, cy) { relief(&t, (cx, cy), x, y) } else { ([128, 128], 0) };
-                    layers.normal[k] = n;
                     layers.height[k] = z;
-                    layers.emissive[k] = 0;
+                    if lit {
+                        layers.normal[k] = n;
+                        layers.emissive[k] = 0;
+                    }
                 }
             }
         }
     }
 }
 
-/// How tall a wall's face stands, px: three cells.
+/// How tall a wall's face stands, rows: three cells (its height is `height_of_rows` of that).
 const WALL: i32 = 48;
 
 /// Stands up walls and faces.
@@ -147,10 +149,15 @@ fn relief(t: &impl Fn(i32, i32) -> Tile, (cx, cy): (i32, i32), x: i32, y: i32) -
     match here {
         _ if wall_like(here) => {
             // A wall is a face rising from the row it stands on: each px as high as it is above
-            // that row, up to WALL; past that, the wall's thickness seen from above, flat.
+            // that row (true px, `height_of_rows`), up to WALL rows; past that, the wall's
+            // thickness seen from above, flat.
             let below = (1..=8).take_while(|&k| wall_like(t(0, k))).count() as i32;
             let z = below * CELL + (CELL - y);
-            if z > WALL { (normal(0, -12), WALL as u8) } else { (normal(0, 96), z.max(1) as u8) }
+            if z > WALL {
+                (normal(0, -12), height_of_rows(WALL) as u8)
+            } else {
+                (normal(0, 96), height_of_rows(z).max(1) as u8)
+            }
         }
         T::HouseRoof => {
             // The run of roof in this column: pitched along it, the ridge in the middle.
@@ -162,7 +169,7 @@ fn relief(t: &impl Fn(i32, i32) -> Tile, (cx, cy): (i32, i32), x: i32, y: i32) -
             let off = (r - mid) * 127 / mid.max(1);
             // The eaves sit on the wall's face under the roof, the ridge 14 px above them.
             let wall = (1..=3).take_while(|&k| wall_like(t(0, down + k))).count() as i32;
-            let eaves = (wall * CELL).clamp(12, WALL);
+            let eaves = height_of_rows((wall * CELL).clamp(12, WALL));
             let rise = 14 - 14 * (r - mid).abs() / mid.max(1);
             (normal(0, off.clamp(-80, 80)), (eaves + rise) as u8)
         }
@@ -373,6 +380,8 @@ mod tests {
         paint_chunk(id, (16, 16), 0, tile, &mut t2);
         assert_eq!(t0.albedo, t2.albedo);
         assert!(!t0.lit() && t2.lit());
+        // T0 carries the heights too, the same: its silhouettes climb what T2's field stands.
+        assert_eq!(t0.height, t2.height);
         let z = |x: i32, y: i32| t2.height[(y * CHUNK_PX + x) as usize];
         // The wall's face rises from its foot; grass lies flat.
         assert!(z(3 * 16 + 8, 5 * 16 + 15) < z(3 * 16 + 8, 5 * 16 + 1));

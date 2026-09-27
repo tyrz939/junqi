@@ -101,7 +101,7 @@ impl Progs {
                 sh::RECT_VS,
                 sh::SILHOUETTE_FS,
                 &sh::RECT_ATTRS,
-                &["u_size", "u_mask", "u_snap", "u_k"],
+                &["u_size", "u_mask", "u_snap", "u_height", "u_k", "u_box"],
             )?,
             ambient: Prog::new(
                 gl,
@@ -635,6 +635,21 @@ impl Gl2 {
     /// Step 1: the albedo target.
     fn albedo(&mut self, t: &Targets, clear: u32) {
         let c = t.canvas;
+        // The silhouettes climb what the terrain raises: its heights into the normal target first
+        // (step 2 draws that target again from the start).
+        if self.prep.steps.iter().any(|s| matches!(s, Step::Silhouette { .. })) {
+            self.gl.target(Some(t.nh.fbo), c.0, c.1);
+            self.gl.clear([128.0 / 255.0, 128.0 / 255.0, 0.0, 0.0]);
+            self.gl.blend(Blend::Off);
+            if !self.prep.solid_chunks.is_empty() {
+                self.chunk_program(c, self.chunk_tex[1]);
+                for k in 0..self.prep.solid_chunks.len() {
+                    let r = self.prep.solid_chunks[k].clone();
+                    self.gl.draw_quads(r.start, r.len());
+                    self.calls += 1;
+                }
+            }
+        }
         self.gl.target(Some(t.alb.fbo), c.0, c.1);
         let [_, r, g, b] = clear.to_be_bytes().map(|v| f32::from(v) / 255.0);
         self.gl.clear([r, g, b, 1.0]);
@@ -681,8 +696,8 @@ impl Gl2 {
                     self.gl.draw_quads(quads.start, quads.len());
                     self.calls += 1;
                 }
-                Step::Silhouette { spans, apply, k } => {
-                    self.silhouette(t, spans.clone(), *apply, *k);
+                Step::Silhouette { spans, mask, apply, k } => {
+                    self.silhouette(t, spans.clone(), *mask, *apply, *k);
                     current = None;
                 }
             }
@@ -723,11 +738,13 @@ impl Gl2 {
     }
 
     /// The silhouettes: the spans into the mask, the largest kept, then the mask applied to the
-    /// albedo from a snapshot of it.
+    /// albedo from a snapshot of it, each px at the ground under it (the terrain's heights in the
+    /// normal target).
     fn silhouette(
         &mut self,
         t: &Targets,
         spans: std::ops::Range<usize>,
+        mask: (i32, i32, i32, i32),
         (x, y, w, h): (i32, i32, i32, i32),
         k: [f32; 3],
     ) {
@@ -739,7 +756,7 @@ impl Gl2 {
         let p = &self.progs.span;
         self.gl.use_program(p.p);
         self.gl.set_f(p.u("u_canvas"), &[c.0 as f32, c.1 as f32]);
-        self.gl.point(self.bufs.span, &sh::SPAN_SIZES, self.prep.span_v.len() / 3);
+        self.gl.point(self.bufs.span, &sh::SPAN_SIZES, self.prep.span_v.len() / 4);
         self.gl.blend(if self.gl.info.minmax { Blend::Max } else { Blend::Off });
         self.gl.draw_quads(spans.start, spans.len());
         self.calls += 1;
@@ -750,10 +767,13 @@ impl Gl2 {
         self.gl.blend(Blend::Off);
         self.gl.bind(0, t.sil.tex);
         self.gl.bind(1, t.snap);
+        self.gl.bind(2, t.nh.tex);
         self.gl.set_i(p.u("u_mask"), 0);
         self.gl.set_i(p.u("u_snap"), 1);
+        self.gl.set_i(p.u("u_height"), 2);
         self.gl.set_f(p.u("u_size"), &[c.0 as f32, c.1 as f32]);
         self.gl.set_f(p.u("u_k"), &k);
+        self.gl.set_f(p.u("u_box"), &[mask.0 as f32, mask.1 as f32, mask.2 as f32, mask.3 as f32]);
         self.rect(x as f32, y as f32, (x + w) as f32, (y + h) as f32);
     }
 
@@ -771,7 +791,7 @@ impl Gl2 {
                 }
                 self.gl.use_program(p.p);
                 self.gl.set_f(p.u("u_canvas"), &[c.0 as f32, c.1 as f32]);
-                self.gl.point(self.bufs.span, &sh::SPAN_SIZES, self.prep.span_v.len() / 3);
+                self.gl.point(self.bufs.span, &sh::SPAN_SIZES, self.prep.span_v.len() / 4);
                 self.gl.blend(if self.gl.info.minmax { Blend::Max } else { Blend::Off });
                 for (s, r) in draws.iter().filter(|(s, _)| slots.contains(s)) {
                     let ch = usize::from((s - 1) % 4);

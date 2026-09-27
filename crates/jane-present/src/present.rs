@@ -8,27 +8,28 @@
 //! Neither reads `GameState`, and neither writes anything but the presenter.
 
 use jane_core::action::{CameraMode, Facing};
+use jane_core::ids::SpellId;
 use jane_core::num::CELL_SHIFT;
 use jane_core::{Rect, ZoneId};
 use jane_data::{Controller, Faction, Region};
 use jane_sim::event::{Event, EventKind, events_for};
 use jane_sim::ids::PropIx;
 use jane_sim::view::View;
-use jane_core::ids::SpellId;
 
 use crate::atlas::{Atlas, RefId};
 use crate::backend::AtlasPages;
 use crate::camera::{Camera, alpha_256};
 use crate::chunks::{ChunkCache, LRU, Need};
+use crate::creatures::{self, Creatures};
 use crate::drawlist::{DrawCmd, DrawList};
 use crate::frame::{
     CANVAS_H, CANVAS_W, CELL, CHUNK_PX, Caster, ChunkCmd, ChunkId, Depth, FX_TO_CANVAS, Flags, Frame, Light, LightKind,
     Pass, Post, Rgb, Span, SpriteCmd, Tier, Tint, height_of_rows, rows_up,
 };
 use crate::light::{Sky, flicker, lantern_lit, sky};
-use crate::creatures::{self, Creatures};
 use crate::people::{self, People};
 use crate::props::{self, Props};
+use crate::shadow;
 use crate::stand_in::{self, StandIns, UnitKind};
 use crate::terrain::Terrain;
 
@@ -106,6 +107,9 @@ struct PropRec {
     h: i32,
     look: RefId,
     flat: bool,
+    /// Set into a wall's face (a door, a lamp on its bracket): drawn over the face and standing
+    /// on the face's foot, so it throws no shadow of its own (the wall throws it).
+    flush: bool,
 }
 
 /// A prop light the view says is showing, this tick.
@@ -323,7 +327,7 @@ impl Present {
         self.read_props(view, area);
         self.read_lights(view, area);
         self.paint_chunks(view);
-        self.off_walls();
+        self.against_walls();
         let (clock, day) = view.clock();
         self.sky = sky(clock, day, view.indoor(), view.ambient().0, view.region());
     }
@@ -436,6 +440,7 @@ impl Present {
                     if d.light.is_some() && !lit { stand.unlit(look) } else { look }
                 }),
                 flat: d.flat,
+                flush: false,
             });
         });
         props.sort_unstable_by_key(|p| p.id);
@@ -493,34 +498,38 @@ impl Present {
     /// stands on the wall's top) hangs from the wall's face instead: its ground point moves to
     /// the nearest open ground within a cell and a half, toward the viewer first, and two px
     /// clear of it. A light never shadows the wall it hangs on (PRESENTATION.md §1.7), and a
-    /// torch's pool lies on the floor it lights, not in the masonry. Only the lit tiers carry the
-    /// terrain's heights; T0 lights stay where they are.
-    fn off_walls(&mut self) {
+    /// torch's pool lies on the floor it lights, not in the masonry, on every tier.
+    ///
+    /// And a prop drawn over a wall's face and standing on the face's foot (a door, a sign on the
+    /// wall) is set into it: its px halfway and three quarters up stand on its own foot row as
+    /// the face's there do. It throws no shadow of its own, so a door never shadows the wall it
+    /// is set in.
+    fn against_walls(&mut self) {
         /// How far a light is looked for open ground, px.
         const REACH: i32 = 24;
         let (layers, chunks) = (&self.frame.layers, &self.chunks);
         let (zw, zh) = (self.zone_cells.0 as i32 * CELL, self.zone_cells.1 as i32 * CELL);
-        let mut last: Option<(ChunkId, Option<u16>)> = None;
+        let last: std::cell::Cell<Option<(ChunkId, Option<u16>)>> = std::cell::Cell::new(None);
         // The terrain's drawn height at zone px (x, y).
-        let mut drawn = |x: i32, y: i32| -> i32 {
+        let drawn = |x: i32, y: i32| -> i32 {
             if x < 0 || y < 0 || x >= zw || y >= zh {
                 return 0;
             }
             let id = ChunkId { cx: (x / CHUNK_PX) as u16, cy: (y / CHUNK_PX) as u16 };
-            let slot = match last {
+            let slot = match last.get() {
                 Some((k, s)) if k == id => s,
                 _ => {
                     let s = chunks.find(id).map(|f| f.0);
-                    last = Some((id, s));
+                    last.set(Some((id, s)));
                     s
                 }
             };
-            let Some(l) = slot.and_then(|s| layers.get(usize::from(s))).filter(|l| l.lit()) else { return 0 };
+            let Some(l) = slot.and_then(|s| layers.get(usize::from(s))).filter(|l| l.has_height()) else { return 0 };
             i32::from(l.height[((y % CHUNK_PX) * CHUNK_PX + x % CHUNK_PX) as usize])
         };
         // The height field there: the tallest terrain px standing on ground (x, y) (a px `h` up
         // stands `rows_up(h)` rows below it, its field two rows deep).
-        let mut field = |x: i32, y: i32| -> i32 {
+        let field = |x: i32, y: i32| -> i32 {
             let mut most = 0;
             for r in 0..=80 {
                 let h = drawn(x, y - r);
@@ -530,6 +539,18 @@ impl Present {
             }
             most
         };
+        let atlas = &self.atlas;
+        for p in &mut self.props {
+            let r = atlas.get(p.look);
+            let (cx, foot) = (p.x + p.w / 2, p.y + p.h - i32::from(r.src.h) + i32::from(r.ay));
+            let rows = i32::from(r.ay);
+            p.flush = !p.flat
+                && rows >= 8
+                && [rows / 2, rows * 3 / 4].into_iter().all(|up| {
+                    let h = drawn(cx, foot - up);
+                    h > shadow::GROUND && (rows_up(h) - up).abs() <= 1
+                });
+        }
         for l in &mut self.lights {
             if field(l.x, l.y) + 2 < i32::from(l.height) {
                 continue;
@@ -659,10 +680,10 @@ impl Present {
                 continue;
             }
             let foot = p.y + p.h - cam.1;
-            let caster = (!p.flat).then(|| Caster {
+            let caster = (!p.flat && !p.flush).then(|| Caster {
                 sprite: 0,
                 foot: clamp16(x + i32::from(r.src.w) / 2, y + i32::from(r.ay)),
-                height: r.src.h.min(255) as u8,
+                height: r.top.max(1),
                 depth: (p.h / 4).clamp(4, 12) as u8,
             });
             let cmd = DrawCmd { y: foot, key: p.id, sprite: sprite(r, x, y, Flags::default()), caster };
@@ -688,7 +709,12 @@ impl Present {
                             y: fy,
                             key: 0x4000_0000 | u32::from(slot) << 10 | i as u32,
                             sprite: sprite(r, x, y, Flags::default()),
-                            caster: Some(Caster { sprite: 0, foot: clamp16(fx, fy), height: r.height, depth: fl.depth }),
+                            caster: Some(Caster {
+                                sprite: 0,
+                                foot: clamp16(fx, fy),
+                                height: r.top.max(1),
+                                depth: fl.depth,
+                            }),
                         });
                     }
                 }
@@ -755,7 +781,15 @@ impl Present {
                             cast_glow = Some(jane_data::catalog().combat.spell(spell).school);
                         }
                     }
-                    let pose = people::Pose { facing: u.facing, anim: u.anim, tick: self.tick, dead: u.dead, id: u.id, act, hurt };
+                    let pose = people::Pose {
+                        facing: u.facing,
+                        anim: u.anim,
+                        tick: self.tick,
+                        dead: u.dead,
+                        id: u.id,
+                        act,
+                        hurt,
+                    };
                     let (look, mirror) = self.people.frame(set, pose);
                     (look, mirror, 0)
                 }
@@ -790,12 +824,7 @@ impl Present {
             } else {
                 Tint::None
             };
-            let caster = (!u.dead).then(|| Caster {
-                sprite: 0,
-                foot: clamp16(sx, sy),
-                height: r.ay.clamp(1, 255) as u8,
-                depth: 5,
-            });
+            let caster = (!u.dead).then(|| Caster { sprite: 0, foot: clamp16(sx, sy), height: r.top.max(1), depth: 5 });
             self.standing.push(DrawCmd {
                 y: sy,
                 key: UNIT_KEY | u.id,
@@ -819,7 +848,13 @@ impl Present {
                             y: qy,
                             key: UNIT_KEY | u.id,
                             sprite: sprite(r, x, y, Flags { mirror: false, tint: Tint::None }),
-                            caster: None,
+                            // Each coil throws its own shadow, footed where it lies.
+                            caster: (!u.dead).then(|| Caster {
+                                sprite: 0,
+                                foot: clamp16(qx, qy),
+                                height: r.top.max(1),
+                                depth: 4,
+                            }),
                         });
                     }
                 }
@@ -842,7 +877,10 @@ impl Present {
                     caster: None,
                 });
                 if n_glows < glows.len() {
-                    let c = jane_art::palette::rgb(jane_art::palette::Ramp::at(jane_art::fx::school_ramp(school), jane_art::palette::Tone::Light));
+                    let c = jane_art::palette::rgb(jane_art::palette::Ramp::at(
+                        jane_art::fx::school_ramp(school),
+                        jane_art::palette::Tone::Light,
+                    ));
                     glows[n_glows] = Some(Light {
                         pos: (sx + dx, sy),
                         height: (-dy).clamp(0, 255) as u8,
@@ -900,9 +938,7 @@ impl Present {
         // A light never shadows what holds it: each holder's key to its sprite, or none.
         let holders = &self.holders;
         for l in &mut f.lights {
-            l.holder = l.holder.and_then(|k| {
-                holders.binary_search_by_key(&k, |h| h.0).ok().map(|i| holders[i].1)
-            });
+            l.holder = l.holder.and_then(|k| holders.binary_search_by_key(&k, |h| h.0).ok().map(|i| holders[i].1));
         }
         let (most, casting) = max_lights(f.tier);
         if f.lights.len() > most || f.lights.iter().filter(|l| l.casts).count() > casting {

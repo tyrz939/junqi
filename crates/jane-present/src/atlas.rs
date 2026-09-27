@@ -20,6 +20,9 @@ pub struct SpriteRef {
     pub ay: i16,
     /// How tall the thing stands, px.
     pub height: u8,
+    /// The tallest drawn px in its height layer, true px: how tall it throws its shadow (a
+    /// garden bed seen from above is many rows tall on the screen and a hand high).
+    pub top: u8,
 }
 
 /// Index into [`Atlas::refs`].
@@ -143,10 +146,14 @@ impl Atlas {
                 page.height.resize(n, 0);
             }
         }
+        let mut top = 0u8;
         for y in 0..h {
             for x in 0..w {
                 let i = usize::from(sy + y) * usize::from(page.w) + usize::from(sx + x);
                 let t = px(i32::from(x), i32::from(y));
+                if t.albedo.is_opaque() {
+                    top = top.max(t.height);
+                }
                 page.albedo[i] = t.albedo.0;
                 if lit {
                     page.normal[i] = t.normal;
@@ -156,7 +163,14 @@ impl Atlas {
             }
         }
         self.shelf = (pi, sx + w, sy, sh);
-        self.refs.push(SpriteRef { page: pi as u8, src: Src { x: sx, y: sy, w, h }, ax: anchor.0, ay: anchor.1, height });
+        self.refs.push(SpriteRef {
+            page: pi as u8,
+            src: Src { x: sx, y: sy, w, h },
+            ax: anchor.0,
+            ay: anchor.1,
+            height,
+            top,
+        });
         (self.refs.len() - 1) as RefId
     }
 
