@@ -140,7 +140,7 @@ impl Rig {
     }
 
     /// The body's depth seen from the side: narrower than its breadth.
-    fn side_w(&self) -> i32 {
+    pub(crate) fn side_w(&self) -> i32 {
         (self.p.shoulder_w - 2).max(8)
     }
 }
@@ -154,14 +154,16 @@ pub fn frame(d: &Dress, p: Proportions, facing: Facing, pose: Pose) -> Canvas {
         Facing::Up => up(&mut c, d, &r),
         Facing::Side => side(&mut c, d, &r),
     }
+    super::special::extras(&mut c, d, &r);
+    super::special::wet(&mut c, d, &r);
     super::held::at_face(&mut c, d, &r);
-    finish(&mut c, d);
+    finish(&mut c, d, &r);
     c
 }
 
 /// Every material to its own tones, skin never in a checker, the clusters cleaned, the contact
 /// shadow under the feet, the selective outline (seams by relief), then each pixel's true height.
-fn finish(c: &mut Canvas, d: &Dress) {
+fn finish(c: &mut Canvas, d: &Dress, r: &Rig) {
     // A held lantern's light is light, not paint: it keeps its colour through the outline.
     let glow: Vec<(i32, i32, Ix)> = if d.look.held == jane_data::HeldItem::Lantern {
         (0..c.h())
@@ -174,23 +176,27 @@ fn finish(c: &mut Canvas, d: &Dress) {
     } else {
         Vec::new()
     };
-    for r in [d.coat, d.front, d.legs, d.hat, d.boots, d.pack] {
-        c.retone(r, CLOTH);
+    for m in [d.coat, d.front, d.legs, d.hat, d.boots, d.pack] {
+        c.retone(m, CLOTH);
     }
     c.retone(d.skin, SKIN);
     c.unchecker(d.skin);
-    for r in [d.coat, d.front, d.legs, d.hat, d.boots, d.pack, d.skin, d.hair] {
-        c.declutter(r);
+    for m in [d.coat, d.front, d.legs, d.hat, d.boots, d.pack, d.skin, d.hair] {
+        c.declutter(m);
     }
+    super::special::material(c, d, r);
     c.despike();
     c.ao_contact(Rect::new(CX - 7, AY - 1, 14, 4), 0);
     c.outline();
-    for r in [d.coat, d.front, d.legs, d.hat, d.boots, d.pack, d.skin, d.hair] {
-        c.declutter(r);
+    for m in [d.coat, d.front, d.legs, d.hat, d.boots, d.pack, d.skin, d.hair] {
+        c.declutter(m);
     }
     c.unchecker(d.skin);
     c.relight(&glow);
     c.upright(AY);
+    if d.look.ghost {
+        super::special::ghost(c, r);
+    }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -231,6 +237,7 @@ fn hand(c: &mut Canvas, d: &Dress, x: i32, y: i32, z: u8) {
     c.ellipse(Rect::new(x, y, 4, 3), d.skin.at(Tone::Base), z);
     c.dot(x + 1, y, d.skin.at(Tone::Lift), z);
     c.dot(x + 2, y + 1, d.skin.at(Tone::Mid), z);
+    super::special::knuckles(c, d, x, y, z);
 }
 
 /// The legs' ramp: bare legs are skin; under a skirt, stockings in the legs' ramp.
@@ -275,10 +282,14 @@ fn eyes(c: &mut Canvas, d: &Dress, shut: bool, xs: &[(i32, bool)], ey: i32, z: u
             continue;
         }
         c.hline(lid, lid + 2, ey - 1, Ix::SEAM, z);
-        c.set_emitting(d.eye_emits);
-        c.fill_rect(Rect::new(x, ey, 2, 2), iris, z);
-        c.set_emitting(false);
-        if !d.eye_emits {
+        if d.eye_emits {
+            // The dead's eyes: a dark eye and one pinpoint of light in it, toward the nose.
+            c.fill_rect(Rect::new(x, ey, 2, 2), Ramp::Leather.at(Tone::Deep), z);
+            c.set_emitting(true);
+            c.dot(if outward_left { x + 1 } else { x }, ey, iris, z);
+            c.set_emitting(false);
+        } else {
+            c.fill_rect(Rect::new(x, ey, 2, 2), iris, z);
             c.dot(x, ey, palette::letter('w').unwrap_or(Ix::BEVEL_LIGHT), z);
         }
     }
@@ -327,6 +338,8 @@ fn down(c: &mut Canvas, d: &Dress, r: &Rig) {
     head(c, d, r, false);
     if bone {
         super::bone::face_down(c, d, r);
+        // A skeleton keeps its hat: a soldier's helmet on a skull.
+        hat_down(c, d, r);
         return;
     }
     face_down(c, d, r);
@@ -733,9 +746,7 @@ fn hat_down(c: &mut Canvas, d: &Dress, r: &Rig) {
             face_down(c, d, r);
             c.ellipse_lit(Rect::new(CX - 2, s.bottom() - 2, 4, 3), h, Z::new(z.hi, z.hi + 1));
         }
-        Hat::Veil | Hat::Diving => {
-            c.ellipse_lit(Rect::new(s.x - 1, s.y - 3, s.w + 2, s.h + 2), h, z);
-        }
+        Hat::Veil | Hat::Diving => super::special::hood(c, d, r),
     }
 }
 
@@ -750,6 +761,7 @@ fn up(c: &mut Canvas, d: &Dress, r: &Rig) {
         arms_front(c, d, r);
         neck(c, d, r);
         super::bone::skull_back(c, d, r);
+        hat_down(c, d, r);
         return;
     }
     if d.look.body.pack {
@@ -1081,6 +1093,6 @@ fn hat_side(c: &mut Canvas, d: &Dress, r: &Rig) {
             c.set_clip(None);
             face_side(c, d, r);
         }
-        Hat::Veil | Hat::Diving => c.ellipse_lit(Rect::new(s.x - 1, s.y - 3, s.w + 2, s.h + 2), h, z),
+        Hat::Veil | Hat::Diving => super::special::hood(c, d, r),
     }
 }

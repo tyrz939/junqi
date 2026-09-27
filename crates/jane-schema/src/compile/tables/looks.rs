@@ -396,9 +396,9 @@ fn person(p: RawPerson, at: &str, cx: &mut Ctx) -> Look {
             "emits \"held\" with nothing in the hand",
         );
         cx.diag.need(
-            !p.emits.contains(&EmitRole::Glass) || p.head.face == Face::Glasses,
+            !p.emits.contains(&EmitRole::Glass) || p.head.face == Face::Glasses || p.head.hat == Hat::Diving,
             at,
-            "emits \"glass\" with no glasses",
+            "emits \"glass\" with no glasses and no diver's port",
         );
         let look = PersonLook {
             build: p.build,

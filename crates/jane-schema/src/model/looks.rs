@@ -33,9 +33,9 @@ model_enum! {
 
 model_enum! {
     /// The skin ramp; `bone`, `wax`, `stone` and `metal` are the skeleton, the waxwork, the
-    /// statue and the armour, and `none` with `ghost` is the shade.
+    /// statue and the armour, `none` with `ghost` is the shade, and `gilt` is Goldskin.
     #[cfg_attr(feature = "compile", derive(serde::Deserialize), serde(rename_all = "snake_case"))]
-    pub enum Skin { Skin, SkinPale, SkinDark, Bone, Wax, Stone, Metal, None }
+    pub enum Skin { Skin, SkinPale, SkinDark, Bone, Wax, Stone, Metal, None, Gilt }
 }
 
 model_enum! {
@@ -71,13 +71,14 @@ model_enum! {
 model_enum! {
     /// A thing in the hand; the composer owns the hand's position per frame.
     #[cfg_attr(feature = "compile", derive(serde::Deserialize), serde(rename_all = "snake_case"))]
-    pub enum HeldItem { None, Hammer, Pole, Suitcase, Dish, Bell, Lantern, Billhook, Broom, Book, Pipe }
+    pub enum HeldItem { None, Hammer, Pole, Suitcase, Dish, Bell, Lantern, Billhook, Broom, Book, Pipe, Net }
 }
 
 model_enum! {
-    /// Something extra; any number. `stoop`: an old back, the head carried low and forward.
+    /// Something extra; any number. `stoop`: an old back, the head carried low and forward;
+    /// `keys`: a ring of keys at the belt; `knuckles`: iron over the fists.
     #[cfg_attr(feature = "compile", derive(serde::Deserialize), serde(rename_all = "snake_case"))]
-    pub enum Extra { WatchChain, BellAnkle, Shawl, Seated, Wet, Stoop }
+    pub enum Extra { WatchChain, BellAnkle, Shawl, Seated, Wet, Stoop, Keys, Knuckles }
 }
 
 model_enum! {

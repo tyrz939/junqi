@@ -365,7 +365,7 @@ impl Canvas {
     }
 
     /// Change a drawn pixel's colour and nothing else.
-    fn recolour(&mut self, x: i32, y: i32, ix: Ix) {
+    pub(crate) fn recolour(&mut self, x: i32, y: i32, ix: Ix) {
         let Some(i) = self.idx(x, y) else { return };
         if self.albedo[i].is_opaque() {
             self.albedo[i] = ix;

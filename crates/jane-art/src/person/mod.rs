@@ -18,6 +18,7 @@ mod fallen;
 mod hair;
 mod held;
 mod pose;
+mod special;
 
 use jane_core::hash::fnv1a;
 use jane_data::{EmitRole, PersonLook, Skin};
@@ -100,6 +101,7 @@ impl Dress {
             Skin::Wax => Ramp::Plaster,
             Skin::Stone | Skin::None => Ramp::Stone,
             Skin::Metal => Ramp::Iron,
+            Skin::Gilt => Ramp::Brass,
         };
         let coat = ramp(b.coat_ramp)?;
         let eye_emits = look.emits.contains(&EmitRole::Eye);
@@ -162,7 +164,8 @@ pub fn render_fighting(look: &PersonLook, seed: u32, fight: Fight) -> Result<Spr
             pose.spread = pose.spread.map(|s| s / 2);
         }
         let body = draw::frame(&d, p, Facing::Down, pose);
-        frames.push((id, fallen::fallen(&body, seed ^ k as u32, d.skin != Ramp::Bone)));
+        // Only flesh bleeds: a skeleton, a waxwork, a statue, an armour and a shade lie dry.
+        frames.push((id, fallen::fallen(&body, seed ^ k as u32, matches!(d.skin, Ramp::Skin | Ramp::SkinPale | Ramp::SkinDark))));
     }
     for (id, facing, pose) in pose::fight(fight.attacks, fight.casts) {
         frames.push((id, draw::frame(&d, p, facing, pose)));

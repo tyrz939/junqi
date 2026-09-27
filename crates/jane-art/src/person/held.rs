@@ -48,6 +48,31 @@ pub(super) fn draw(c: &mut Canvas, d: &Dress, r: &Rig, hx: i32, hy: i32) {
             c.line((hx + 1, hy + 1), (tx, ty), wood.at(Tone::Light), 2, z);
             c.rect_bevel(Rect::new(tx - 3, ty - 2, 6, 3), Ramp::Iron, 1, Z::new(z, z + 1));
         }
+        HeldItem::Net => {
+            // A butterfly net: a cane held at a slope, a wire hoop at its tip, the gauze bag
+            // hanging from the hoop and swinging a px with the stride.
+            let (tx, ty) = if side { (hx + 8, hy - 20) } else { (hx - 2, hy - 22) };
+            c.line((hx + 1, hy + 2), (tx, ty + 3), wood.at(Tone::Light), 1, z);
+            // The hoop is a ring seen a little from above; the bag hangs from its near rim.
+            let (x, y) = (tx - 4, ty - 2);
+            let gauze = Ramp::ClothLinen;
+            let sway = i32::from(r.pose.phase >= 32768);
+            c.polyline_fill(
+                &[(x + 1, y + 3), (x + 7, y + 3), (x + 5 + sway, y + 9), (x + 3 + sway, y + 9)],
+                gauze.at(Tone::Base),
+                z - 1,
+            );
+            c.vline(x + 5 + sway, y + 5, y + 8, gauze.at(Tone::Shade), z - 1);
+            c.hline(x + 2, x + 6, y + 4, gauze.at(Tone::Light), z - 1);
+            let wire = Ramp::Iron.at(Tone::Light);
+            c.hline(x + 2, x + 6, y, wire, z);
+            c.hline(x + 2, x + 6, y + 3, wire, z);
+            c.vline(x, y + 1, y + 2, wire, z);
+            c.vline(x + 8, y + 1, y + 2, wire, z);
+            for (px, py) in [(x + 1, y), (x + 7, y), (x + 1, y + 3), (x + 7, y + 3)] {
+                c.dot(px, py, wire, z);
+            }
+        }
         HeldItem::Pole | HeldItem::Broom => {
             // A long pole held upright, its foot on the ground; a broom's head of bristles.
             let x = hx + 1;
