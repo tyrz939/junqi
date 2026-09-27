@@ -282,7 +282,7 @@ fn each_hatch_goes_down_on_its_own_side() {
                 (p.cell.x, stair.cell.x)
             })
             .collect();
-        downs.sort_unstable();
+        downs.sort();
         assert!(downs[0].1 < downs[1].1, "seed {seed}: the west hatch goes to the west stair: {downs:?}");
     }
 }
