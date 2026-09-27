@@ -307,6 +307,148 @@ pub(crate) fn draw(c: &mut Canvas, k: &Kit, state: State) -> Option<Stand> {
             c.line((x + tw / 2, top), (x + tw - 1, top - 2), k.trim.at(Tone::Base), 1, 9);
             Stand::Up(&[])
         }
+        "footbridge" => {
+            // A footbridge over a ditch, broken: planks across two stringers, the middle ones
+            // gone and one hanging, the handrail snapped.
+            let top = foot - 20;
+            ao(c, 1, w - 2, foot, 5);
+            for (i, x) in (2..w - 4).step_by(5).enumerate() {
+                if i == 3 || i == 4 {
+                    continue;
+                }
+                planks(c, Rect::new(x, top + 6, 4, 12), k.body, 1, false, true, k.seed ^ i as u32, 3);
+            }
+            c.line((17, top + 8), (20, top + 18), k.body.at(Tone::Shade), 3, 2);
+            for y in [top + 6, top + 16] {
+                c.hline(1, 14, y, k.trim.at(Tone::Base), 4);
+                c.hline(w - 15, w - 2, y, k.trim.at(Tone::Base), 4);
+            }
+            for x in [2, 13, w - 14, w - 3] {
+                post(c, x, top, top + 7, 2, k.trim, 5);
+            }
+            c.line((3, top), (13, top + 2), k.trim.at(Tone::Light), 1, 6);
+            c.line((w - 13, top), (w - 3, top), k.trim.at(Tone::Light), 1, 6);
+            Stand::Flat(8)
+        }
+        "planter" => {
+            // A dry planter: a stone trough of cracked earth and dead stems.
+            let (x, pw) = (2, w - 4);
+            ao(c, x, x + pw - 1, foot, 5);
+            let (top, _) = box3(c, x, pw, foot, 10, 10, k.body, None, 3);
+            c.retone(k.body, super::HARD);
+            c.fill_normal(Rect::new(top.x + 2, top.y + 2, top.w - 4, top.h - 3), Ramp::Bark.at(Tone::Mid), FLAT, 5);
+            c.line((top.x + 5, top.y + 3), (top.x + 9, top.y + 6), Ramp::Bark.at(Tone::Deep), 1, 5);
+            for (sx, sy) in [(top.x + 6, top.y + 4), (top.x + 14, top.y + 5), (top.x + 20, top.y + 3)] {
+                c.line((sx, sy), (sx + 1, sy - 9), Ramp::Reed.at(Tone::Mid), 1, 6);
+                c.dot(sx + 2, sy - 8, Ramp::Reed.at(Tone::Light), 6);
+            }
+            Stand::Tops([(top, lid_height(10)), (Rect::default(), 0)])
+        }
+        "bell" => {
+            // The School's bell in its timber frame: a bronze bell lit down one flank, its
+            // clapper under it, the headstock on the beam.
+            let top = foot - (h - 2).min(40);
+            ao(c, 1, w - 2, foot, 6);
+            for x in [2, w - 6] {
+                post(c, x, top, foot - 1, 4, k.trim, 3);
+            }
+            c.fill_normal(Rect::new(2, top, w - 4, 4), k.trim.at(Tone::Base), parts::south(), 4);
+            c.hline(2, w - 3, top, k.trim.at(Tone::Light), 4);
+            let cx = w / 2;
+            c.polygon_lit(&[(cx - 4, top + 5), (cx + 3, top + 5), (cx + 6, top + 18), (cx + 8, top + 21), (cx - 9, top + 21), (cx - 7, top + 18)], k.body, 110, Z::new(6, 9));
+            c.retone(k.body, super::HARD);
+            c.hline(cx - 9, cx + 8, top + 21, k.body.at(Tone::Shade), 9);
+            c.disc_lit(cx - 1, top + 23, 2, k.body, Z::flat(9));
+            Stand::Up(&[])
+        }
+        "rope" | "pole" => {
+            // A bell rope from the ceiling with its striped sally, or a plain pole in the ground.
+            let cx = w / 2;
+            let top = foot - (h - 2).min(40);
+            ao(c, cx - 3, cx + 2, foot, 3);
+            if k.look.shape == "rope" {
+                c.line((cx - 1, top), (cx - 1, foot - 3), k.body.at(Tone::Base), 2, 4);
+                c.vline(cx - 1, top, foot - 3, k.body.at(Tone::Light), 4);
+                c.polygon_lit(&[(cx - 3, foot - 18), (cx + 2, foot - 18), (cx + 2, foot - 8), (cx - 3, foot - 8)], k.accent, 90, Z::flat(5));
+                for y in [foot - 16, foot - 12] {
+                    c.hline(cx - 3, cx + 2, y, Ramp::ClothLinen.at(Tone::Base), 5);
+                }
+            } else {
+                post(c, cx - 1, top, foot - 1, 3, k.body, 4);
+            }
+            Stand::Up(&[])
+        }
+        "cage" => {
+            // Cage traps: two wire boxes stacked, a door propped on one.
+            let cx = w / 2;
+            ao(c, cx - 7, cx + 6, foot, 4);
+            for (y, x0) in [(foot - 7, cx - 7), (foot - 13, cx - 5)] {
+                let r = Rect::new(x0, y, 12, 6);
+                c.rect_bevel(r, k.body, 1, Z::new(3, 4));
+                c.fill_rect(Rect::new(r.x + 1, r.y + 1, r.w - 2, r.h - 2), Ramp::ClothBlack.at(Tone::Deep), 4);
+                for x in (r.x + 2..r.right() - 1).step_by(2) {
+                    c.vline(x, r.y + 1, r.bottom() - 2, k.body.at(Tone::Light), 5);
+                }
+            }
+            Stand::Up(&[])
+        }
+        "armour" => {
+            // A suit of armour on its stand (or on its rail): a helm with a slit, a breastplate
+            // lit on its left, tassets, greaves, sabatons on a plinth.
+            let edge_on = k.fh > k.fw;
+            let cx = w / 2;
+            let top = foot - (h - 2).min(42);
+            ao(c, cx - 7, cx + 6, foot, 5);
+            if !edge_on && k.fw >= 3 {
+                c.fill_normal(Rect::new(1, foot - 6, w - 2, 2), k.trim.at(Tone::Base), parts::south(), 2);
+                c.hline(1, w - 2, foot - 6, k.trim.at(Tone::Light), 2);
+            }
+            c.rect_bevel(Rect::new(cx - 6, foot - 4, 12, 4), k.trim, 1, Z::new(2, 3));
+            for x in [cx - 4, cx + 1] {
+                c.polygon_lit(&[(x, foot - 16), (x + 3, foot - 16), (x + 3, foot - 4), (x, foot - 4)], k.body, 90, Z::flat(4));
+            }
+            c.polygon_lit(&[(cx - 6, top + 11), (cx + 5, top + 11), (cx + 4, top + 22), (cx + 3, foot - 15), (cx - 4, foot - 15), (cx - 5, top + 22)], k.body, 110, Z::new(5, 8));
+            for x in [cx - 9, cx + 6] {
+                c.polygon_lit(&[(x, top + 11), (x + 3, top + 11), (x + 3, top + 22), (x, top + 22)], k.body, 90, Z::flat(7));
+                c.disc_lit(x + 1, top + 11, 2, k.body, Z::flat(9));
+            }
+            c.ellipse_lit(Rect::new(cx - 4, top, 8, 11), k.body, Z::new(8, 10));
+            c.retone(k.body, super::HARD);
+            c.hline(cx - 3, cx + 2, top + 5, Ix::SEAM, 11);
+            c.fill_rect(Rect::new(cx - 1, top - 3, 2, 3), k.accent.at(Tone::Base), 11);
+            Stand::Up(&[])
+        }
+        "figure" => {
+            // A waxwork on its plinth: a figure in a grey coat, too still, its face too pale.
+            let cx = w / 2;
+            let top = foot - (h - 2).min(40);
+            ao(c, cx - 8, cx + 7, foot, 5);
+            box3(c, cx - 9, 18, foot, 5, 6, k.trim, None, 2);
+            c.polygon_cloth(&[(cx - 5, top + 10), (cx + 4, top + 10), (cx + 6, foot - 8), (cx - 7, foot - 8)], k.accent, 80, Z::new(4, 6));
+            c.ellipse_lit(Rect::new(cx - 4, top, 8, 10), k.body, Z::new(6, 8));
+            c.dot(cx - 2, top + 5, Ix::SEAM, 9);
+            c.dot(cx + 1, top + 5, Ix::SEAM, 9);
+            c.retone(k.body, super::HARD);
+            Stand::Up(&[])
+        }
+        "mounted_fox" => {
+            // The fox, mounted: the museum's fox on a plinth with a brass plate.
+            ao(c, 2, w - 3, foot, 5);
+            let (top, front) = box3(c, 3, w - 6, foot, 8, 6, k.trim, Some((2, k.seed)), 2);
+            c.fill_rect(Rect::new(front.x + front.w / 2 - 3, front.y + 3, 6, 2), Ramp::Brass.at(Tone::Light), 3);
+            if let Some((id, jane_data::Look::Creature(fox))) = crate::looks::find("museum_fox") {
+                let _ = id;
+                let fox = jane_data::CreatureLook { emits: &[], ..*fox };
+                if let Ok(set) = crate::creature::render(&fox, crate::creature::seed("museum_fox"), false) {
+                    if let Some(f) = set.frame(crate::sprite::FrameId::Side) {
+                        let mut f = f.clone();
+                        f.remap(|ix| ix);
+                        c.stamp(&f, (w - f.w()) / 2, top.y + top.h / 2 - f.h() + 4);
+                    }
+                }
+            }
+            Stand::Up(&[])
+        }
         "hoist" => {
             // A mine's hoist frame: two legs, a head beam, a wheel and a hanging chain; broken,
             // the wheel off and the chain slack on the ground.

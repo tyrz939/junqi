@@ -384,6 +384,20 @@ impl<'a> View<'a> {
         u8::try_from(v).unwrap_or(0)
     }
 
+    /// A world flag by name, 0 when it was never set (or the name never interned): what the
+    /// presentation reads to hear the county (`bell_stopped` silences the bell at nine and six;
+    /// `omen:early_bell` rings it at ten to nine on a Tuesday). Read-only, like everything here.
+    pub fn flag(&self, name: &str) -> i32 {
+        let Some(s) = self.sym(name) else { return 0 };
+        self.state.flags.get(&crate::state::FlagKey::Named(s)).copied().unwrap_or(0)
+    }
+
+    /// The day of the week, 0 Sunday (`GameState::weekday`): the train's whistle and the early
+    /// bell keep to it.
+    pub fn weekday(&self) -> u8 {
+        self.state.weekday()
+    }
+
     /// The spells the world has learned (growth is the party's).
     pub fn learned(&self) -> &'a [SpellId] {
         &self.state.growth.spells
@@ -455,6 +469,24 @@ impl<'a> View<'a> {
     /// The sim's own sight line from `a` to `b` (what a bolt or a spell asking for sight needs).
     pub fn sight(&self, a: Vec2, b: Vec2) -> bool {
         crate::los::line_of_sight(&self.rt.grid, a, b)
+    }
+
+    /// The seat whose body `unit` is, if a connected seat's: her coat is the seat's, the one
+    /// thing that tells players apart (PLATFORM.md §2; PRESENTATION.md §3.6 `friend_seat`).
+    pub fn seat_of(&self, unit: UnitId) -> Option<Seat> {
+        self.state.players.iter().find(|p| p.connected && p.unit == unit).map(|p| p.seat)
+    }
+
+    /// Whether a damage or heal number is hers to see: she dealt it or took it (PLATFORM.md §2,
+    /// "numbers are yours"). A friend's fight shows its sparks, never her arithmetic. False for
+    /// any other kind.
+    pub fn is_my_number(&self, kind: &crate::event::EventKind) -> bool {
+        use crate::event::EventKind;
+        let me = self.me().unit;
+        match *kind {
+            EventKind::Damage { unit, from, .. } | EventKind::Heal { unit, from, .. } => unit == me || from == Some(me),
+            _ => false,
+        }
     }
 }
 

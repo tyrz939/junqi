@@ -22,7 +22,7 @@ use crate::chunks::{ChunkCache, LRU, Need};
 use crate::drawlist::{DrawCmd, DrawList};
 use crate::frame::{
     CANVAS_H, CANVAS_W, CELL, CHUNK_PX, Caster, ChunkCmd, ChunkId, Depth, FX_TO_CANVAS, Flags, Frame, Light, LightKind,
-    Pass, Rgb, Span, SpriteCmd, Tier, Tint,
+    Pass, Post, Rgb, Span, SpriteCmd, Tier, Tint,
 };
 use crate::atmos::Atmosphere;
 use crate::fx::Fx;
@@ -378,14 +378,11 @@ impl Present {
             } else {
                 UnitKind::Hostile
             };
-            // A seat's coat: hers by her seat; another player's, one of the other three, by id
-            // (the view names no other seat's body).
+            // A seat's coat: hers by her seat, another player's by his (the same coat on every
+            // machine at the table).
             let seat = match kind {
                 UnitKind::Me => my_seat,
-                UnitKind::Seat => {
-                    let s = 1 + (id % 3) as u8;
-                    if s == my_seat { 0 } else { s }
-                }
+                UnitKind::Seat => view.seat_of(u.id).map_or(0, |s| s.index() as u8),
                 _ => 0,
             };
             let person = self.people.set(cat.combat.unit(u.def).sprite, uv.variant, seat);
@@ -832,8 +829,12 @@ impl Present {
         self.fx.draw_ground(f, cam, alpha, sky);
         self.atmos.draw_fog(f, cam, sky);
         self.fx.draw_air(f, cam, alpha, sky);
+        // The grade (§1.3 `grade`): all of it at T2; at T1 the tint and the lift alone, and none
+        // of the exposure, saturation or bloom T1 does not draw.
         if f.tier >= Tier::T2 {
             f.passes.push(Pass::Post(sky.post));
+        } else if f.tier == Tier::T1 {
+            f.passes.push(Pass::Post(Post { tint: sky.post.tint, lift: sky.post.lift, ..Post::NONE }));
         }
         &self.frame
     }

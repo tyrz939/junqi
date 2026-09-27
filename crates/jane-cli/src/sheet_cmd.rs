@@ -26,14 +26,19 @@ pub const USAGE: &str = "  sheet layers <what> [--frame F] [--out DIR]
   sheet all [--out DIR]               every sheet above, for every sprite
   sheet list                          the sprites <what> can name
   sheet scene [--seed N] [--minutes M | --ticks T] [--model reader|rusher] [--night | --hour H[:MM]]
-              [--wide] [--backend soft|wgpu] [--at MARK] [--weather clear|mist|rain|storm]
-              [--out PATH.png | --out DIR]
+              [--wide] [--backend soft|gl2|wgpu] [--at MARK] [--weather clear|mist|rain|storm]
+              [--crop X,Y,W,H] [--zoom Z] [--out PATH.png | --out DIR]
                                       a model plays the seed from New Game (default 1 minute), then one
                                       frame is drawn headless through the presenter and soft (T0), or
-                                      wgpu (T2) with the gpu feature; --night sets the clock to 22:00
-                                      first; --at travels to a county mark first; --wide draws 21:9
+                                      gl2 (T1, a hidden window's GL context) or wgpu (T2) with the gpu
+                                      feature; --night sets the clock to 22:00 first; --at travels to a
+                                      county mark first; --weather holds the sky; --wide draws 21:9
+                                      (1008 x 432); --crop and --zoom write a close look; gl2 takes
+                                      bench frames' row flags
   sheet ui [screen ...] [--out DIR]   the UI in states play rarely shows at once (hud, dead, choice,
                                       tooltip, popover, drag, pause), headless through soft
+  sheet audio [--out DIR]             every sound effect, bed, song and scene as WAV, songs and scenes as
+                                      a waveform over a spectrogram (jane audio)
   sheet --bless                       rewrite crates/jane-art/tests/golden.txt from the current art";
 
 /// jane-art's golden file, from this crate's manifest.
@@ -150,7 +155,9 @@ pub fn run(args: &[String]) -> Result<(), String> {
             write(&out, "creatures", &sheet_person::units(&looks::family(looks::Family::Creature)?, &font))?;
         }
         Some("person") if args.iter().any(|a| a == "--grid") => {
-            let Some((_, jane_data::Look::Person(base))) = looks::find("jane") else { return Err("no look for jane".into()) };
+            let Some((_, jane_data::Look::Person(base))) = looks::find("jane") else {
+                return Err("no look for jane".into());
+            };
             write(&out, "person-grid", &sheet_person::grid(base, &font)?)?;
         }
         Some("font") => write(&out, "font", &sheet::font_sheet(&font))?,
@@ -175,6 +182,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
             }
         }
         Some("scene") => scene(args)?,
+        Some("audio") => crate::audio_cmd::sheet(&out)?,
         Some("terrain") => crate::sheet_terrain::terrain(args, &out, &font)?,
         Some("flora") => crate::sheet_terrain::flora(&out, &font)?,
         Some("county") => crate::sheet_terrain::county(args, &out, &font)?,
@@ -210,7 +218,9 @@ fn scene(args: &[String]) -> Result<(), String> {
         (false, None) => None,
     };
     let canvas = if args.iter().any(|a| a == "--wide") { (1008, 432) } else { (768, 432) };
-    let backend = crate::scene::Which::parse(flag("--backend").unwrap_or("soft")).ok_or("--backend: soft or wgpu")?;
+    let backend =
+        crate::scene::Which::parse(flag("--backend").unwrap_or("soft")).ok_or("--backend: soft, gl2 or wgpu")?;
+    let gl = crate::scene::GlOpts::parse(args)?;
     let at = flag("--at").map(str::to_owned);
     let weather = flag("--weather").map(crate::scene::weather).transpose()?;
     let name = format!(
@@ -227,7 +237,7 @@ fn scene(args: &[String]) -> Result<(), String> {
         None => PathBuf::from("sheets").join(format!("{name}.png")),
     };
     let bps = jane_sim::Blueprints::build(seed).map_err(|e| format!("seed {seed}: {e}"))?;
-    let o = crate::scene::Opts { seed, ticks, model, hour, minute, canvas, backend, at, weather };
+    let o = crate::scene::Opts { seed, ticks, model, hour, minute, canvas, backend, at, weather, gl };
     let shot = crate::scene::render(bps, &o)?;
     if let Some(dir) = path.parent().filter(|d| !d.as_os_str().is_empty()) {
         std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;

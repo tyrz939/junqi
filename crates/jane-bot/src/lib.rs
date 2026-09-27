@@ -319,6 +319,15 @@ impl Bot {
         out
     }
 
+    /// This frame's act for a seat whose steps are taken elsewhere (a lockstep peer, `jane-net`,
+    /// where what she presses now lands a few frames on): `events` are what the steps since the
+    /// last call emitted, `None` for a seat not yet sitting.
+    pub fn act(&mut self, v: Option<&View<'_>>, events: &[Event]) -> Act {
+        self.events.clear();
+        self.events.extend_from_slice(events);
+        v.map_or_else(Act::idle, |v| self.think(v))
+    }
+
     /// Play until the plan is done or `frames` have passed. Returns the frames played.
     pub fn play<H: Host>(&mut self, host: &mut H, frames: u32) -> u32 {
         for n in 0..frames {

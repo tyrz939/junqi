@@ -88,7 +88,8 @@ pub enum Pass {
     /// is the sun or the moon, added on top where it is not shadowed; `points` are
     /// `Frame::lights[points]`, `casters` are `Frame::casters[casters]`.
     Lights { ambient: Rgb, fill: Rgb, sun: Option<Directional>, points: Span, casters: Span },
-    /// The grade and the bloom (§1.9), last before the UI: T2.
+    /// The grade and the bloom (§1.9), last before the UI: all of it at T2; at T1 its tint and
+    /// lift alone (the other fields [`Post::NONE`]'s), which is what T1's `grade` row draws.
     Post(Post),
     /// The sky over the view (§1.9 `Sky`): bands by hour, stars, the moon. Seen where the view
     /// meets the zone's edge (`SkyLook::zone`) and, on T2, in every water cell's reflection.
@@ -147,6 +148,7 @@ impl Pass {
             | Pass::Weather(_)
             | Pass::Fog { .. }
             | Pass::Particles { .. } => Tier::T0,
+            Pass::Post(p) if p.saturation == 128 && p.bloom == 0 && p.exposure == 128 => Tier::T1,
             Pass::Post(_) | Pass::Rays { .. } => Tier::T2,
         }
     }
@@ -419,6 +421,11 @@ pub struct Post {
     pub bloom: u8,
     /// Exposure before the tone curve, 128 is 1.
     pub exposure: u8,
+}
+
+impl Post {
+    /// No grade at all: the tint and the lift a T1 frame carries are laid over this.
+    pub const NONE: Post = Post { tint: [255; 3], lift: [0; 3], saturation: 128, bloom: 0, exposure: 128 };
 }
 
 /// How a sprite is coloured as it is blitted.

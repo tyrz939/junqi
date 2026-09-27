@@ -92,31 +92,48 @@ pub struct PauseInfo<'a> {
     pub zone: &'a str,
     /// Anyone else sitting down: the world does not stop.
     pub company: bool,
+    /// The LAN row (P8): its words and whether it can be picked ("Open to LAN" alone; "Hosting
+    /// on port 7777" greyed while hosting; nothing when joined).
+    pub lan: Option<(&'a str, bool)>,
+    /// Joined to another's table: the world is the host's to save.
+    pub guest: bool,
 }
 
-/// The pause menu: Resume, Save, Load, Controls, Quit to Title.
+/// The pause menu: Resume, Save, Load, Open to LAN, Controls, Quit to Title.
 pub fn pause(ui: &mut Ui, st: &mut MenuState, info: &PauseInfo<'_>) {
     let (cw, ch) = ui.canvas;
     dim(ui, 150);
-    let (w, h) = (300, 268);
+    let extra = if info.lan.is_some() { 30 } else { 0 };
+    let (w, h) = (300, 268 + extra);
     let r = Rect::new((cw - w) / 2, (ch - h) / 2, w, h);
     ui.panel(r, PanelStyle::Window);
     let (x, y) = (i32::from(r.x), i32::from(r.y));
     heading(ui, cw / 2, y + 14, "Paused");
-    let labels = ["Resume", "Save", "Load", "Controls", "Quit to Title"];
-    let enabled = [true, info.can_save, true, true, true];
+    let mut labels = vec!["Resume", "Save", "Load"];
+    let mut enabled = vec![true, info.can_save, true];
+    if let Some((l, on)) = info.lan {
+        labels.push(l);
+        enabled.push(on);
+    }
+    labels.extend(["Controls", "Quit to Title"]);
+    enabled.extend([true, true]);
     let picked = rows(ui, st, "pause", Rect::new(x + 20, y + 52, w - 40, 0), 30, &labels, &enabled);
+    let lan = usize::from(info.lan.is_some());
     match picked {
         Some(0) => ui.intent(AppIntent::Resume),
         Some(1) => ui.intent(AppIntent::SaveMenu),
         Some(2) => ui.intent(AppIntent::LoadMenu),
-        Some(3) => ui.intent(AppIntent::Controls),
-        Some(4) => ui.intent(AppIntent::ToTitle),
+        Some(3) if lan == 1 => ui.intent(AppIntent::OpenToLan),
+        Some(k) if k == 3 + lan => ui.intent(AppIntent::Controls),
+        Some(k) if k == 4 + lan => ui.intent(AppIntent::ToTitle),
         _ => {}
     }
     // Why Save is grey, under the rows while it is.
     let foot = y + h - 44;
-    if info.can_save {
+    if info.guest {
+        let s = "The host's world: anyone's rest saves it there";
+        ui.text(cw / 2 - text_w(Face::Fine, s) / 2, foot, s, Ink::fine(style::quiet()).shadow());
+    } else if info.can_save {
         let s = "A bed or a fire is in reach";
         ui.text(cw / 2 - text_w(Face::Fine, s) / 2, foot, s, Ink::fine(style::good()).shadow());
     } else {
@@ -132,7 +149,7 @@ pub fn pause(ui: &mut Ui, st: &mut MenuState, info: &PauseInfo<'_>) {
     ui.text(cw / 2 - text_w(Face::Fine, &line) / 2, foot + 16, &line, Ink::fine(style::dim()).shadow());
     if info.company {
         let s = "The world does not stop with company";
-        ui.text(cw / 2 - text_w(Face::Fine, s) / 2, y + h + 6, s, Ink::fine(style::warn()).shadow());
+        ui.text(cw / 2 - text_w(Face::Fine, s) / 2, y - 16, s, Ink::fine(style::warn()).shadow());
     }
 }
 

@@ -35,27 +35,71 @@ pub(crate) fn draw(c: &mut Canvas, k: &Kit, state: State) -> Option<Stand> {
                     c.fill_rect(Rect::new(bx, lid.y, 2, lid.h), k.trim.at(Tone::Mid), 3);
                 }
             } else {
-                // The domed lid over the top: lit along its crown.
-                let mut m = Canvas::new(c.w(), c.h());
-                m.fill_rect(Rect::new(x, top.y - 3, bw, top.h + 3), Ix::INK, 1);
-                c.inflate(&m, k.body, 3, Z::new(5, 7));
-                c.retone(k.body, super::HARD);
-                for y in [top.y - 1, top.y + 2] {
-                    c.hline(x + 1, x + bw - 2, y, k.body.at(Tone::Shade), 6);
+                // The lid, a barrel vault overhanging the body a px each side: seen from above
+                // and in front, its crown catches the light in a band, its front turns down to
+                // the viewer, its ends turn away (the west lit, the east in shade); the staves
+                // run along it, the lip throws a line of shadow on the body under it.
+                let (lx, lw) = (x - 1, bw + 2);
+                let (ly, lip) = (top.y - 5, front.y + 1);
+                let lh = lip - ly;
+                for y in ly..lip {
+                    let t = (y - ly) * 100 / lh.max(1);
+                    let (tone, ny) = match t {
+                        0..=14 => (Tone::Base, -100),
+                        15..=39 => (Tone::Light, -60),
+                        40..=54 => (Tone::Lift, -10),
+                        55..=79 => (Tone::Base, 40),
+                        _ => (Tone::Mid, 80),
+                    };
+                    // Round the vault's back corners.
+                    let cut = if y == ly { 2 } else { i32::from(y == ly + 1) };
+                    for xx in lx + cut..lx + lw - cut {
+                        let end = if xx < lx + 2 { 1 } else if xx >= lx + lw - 2 { -2 } else { 0 };
+                        c.put(xx, y, k.body.at(tone.step(end)), crate::canvas::normal(end * -40, ny), 6);
+                    }
                 }
+                for y in [ly + lh * 3 / 10, ly + lh * 6 / 10] {
+                    c.hline(lx + 1, lx + lw - 2, y, k.body.at(Tone::Shade), 6);
+                }
+                c.hline(lx, lx + lw - 1, lip - 1, k.body.at(Tone::Deep), 6);
+                c.shade(Rect::new(x - 2, lip - 1, bw + 4, 3), k.body, 1);
                 for bx in bands {
-                    c.fill_rect(Rect::new(bx, top.y - 3, 2, top.h + 3), k.trim.at(Tone::Base), 7);
-                    c.vline(bx, top.y - 3, top.bottom() - 1, k.trim.at(Tone::Light), 7);
+                    for y in ly + 1..lip {
+                        let t = (y - ly) * 100 / lh.max(1);
+                        let tone = if (15..40).contains(&t) { Tone::High } else if t < 55 { Tone::Light } else { Tone::Base };
+                        c.put(bx, y, k.trim.at(tone), crate::canvas::normal(0, 0), 7);
+                        c.put(bx + 1, y, k.trim.at(tone.step(-1)), crate::canvas::normal(0, 0), 7);
+                    }
                 }
-                c.fill_rect(Rect::new(x + bw / 2 - 2, top.bottom() - 2, 4, 4), k.accent.at(Tone::Base), 8);
-                c.dot(x + bw / 2 - 2, top.bottom() - 2, k.accent.at(Tone::High), 8);
-                c.dot(x + bw / 2 - 1, top.bottom(), Ix::SEAM, 8);
+                // The hasp: a brass plate hanging from the lip over the body, a keyhole in it.
+                let hx = x + bw / 2 - 2;
+                c.fill_rect(Rect::new(hx, lip - 2, 4, 5), k.accent.at(Tone::Base), 8);
+                c.hline(hx, hx + 3, lip - 2, k.accent.at(Tone::High), 8);
+                c.vline(hx + 3, lip - 1, lip + 2, k.accent.at(Tone::Shade), 8);
+                c.dot(hx + 1, lip, Ix::SEAM, 8);
+                c.dot(hx + 1, lip + 1, Ix::SEAM, 8);
+                let _ = Z::flat(0);
             }
             for bx in bands {
                 c.fill_rect(Rect::new(bx, front.y, 2, front.h), k.trim.at(Tone::Mid), 4);
                 c.dot(bx, front.y + 2, k.trim.at(Tone::High), 4);
             }
             Stand::Tops([(Rect::new(x, 0, bw, front.y), lid_height(face)), (Rect::default(), 0)])
+        }
+        "drawer" => {
+            // A desk's drawer pulled out and set down: a box of dark wood, its brass pull, the
+            // papers inside.
+            let (x, dw) = (3, w - 6);
+            ao(c, x, x + dw - 1, foot, 5);
+            let (top, front) = box3(c, x, dw, foot, 8, 12, k.body, Some((2, k.seed)), 3);
+            c.fill_normal(Rect::new(top.x + 2, top.y + 2, top.w - 4, top.h - 3), k.body.at(Tone::Deep), crate::canvas::FLAT, 4);
+            for (i, px) in [(0, top.x + 4), (1, top.x + 10)] {
+                let r = Rect::new(px, top.y + 3 + i, 8, 6);
+                c.fill_normal(r, Ramp::ClothLinen.at(Tone::Light), crate::canvas::FLAT, 5);
+                parts::writing(c, Rect::new(r.x + 1, r.y + 1, r.w - 2, r.h - 2), 2, Ramp::Slate.at(Tone::Mid), k.seed ^ i as u32, 5);
+            }
+            c.fill_rect(Rect::new(front.x + dw / 2 - 2, front.y + 3, 4, 2), k.accent.at(Tone::Light), 5);
+            Stand::Tops([(top, lid_height(8)), (Rect::default(), 0)])
         }
         "crate" => {
             // A crate: planked faces in a frame of battens, a brace across the front.

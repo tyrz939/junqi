@@ -58,8 +58,6 @@ struct Anat {
     head_w: i32,
     head_h: i32,
     head_top: i32,
-    /// Facing the viewer: the top of the back, running away up the screen behind the head.
-    back: i32,
 }
 
 fn anat(a: Anatomy, plan: Plan) -> Anat {
@@ -71,9 +69,9 @@ fn anat(a: Anatomy, plan: Plan) -> Anat {
             rump: Rect::new(7, ay - 15, 9, 8),
             chest: Rect::new(14, ay - 16, 10, 9),
             belly: ay - 10,
-            skull: Rect::new(20, ay - 22, 8, 7),
-            muzzle: Rect::new(26, ay - 19, 4, 4),
-            eye: (24, ay - 20),
+            skull: Rect::new(19, ay - 22, 9, 8),
+            muzzle: Rect::new(25, ay - 18, 5, 4),
+            eye: (23, ay - 20),
             eye_w: 2,
             fore: 18,
             hind: 9,
@@ -84,7 +82,6 @@ fn anat(a: Anatomy, plan: Plan) -> Anat {
             head_w: 12,
             head_h: 9,
             head_top: ay - 22,
-            back: ay - 17,
         },
         Anatomy::Sheep => Anat {
             rump: Rect::new(5, ay - 13, 11, 10),
@@ -103,7 +100,6 @@ fn anat(a: Anatomy, plan: Plan) -> Anat {
             head_w: 8,
             head_h: 7,
             head_top: ay - 13,
-            back: ay - 18,
         },
         Anatomy::Cat => Anat {
             rump: Rect::new(5, ay - 9, 7, 6),
@@ -122,7 +118,6 @@ fn anat(a: Anatomy, plan: Plan) -> Anat {
             head_w: 8,
             head_h: 6,
             head_top: ay - 12,
-            back: ay - 13,
         },
         Anatomy::Rat => Anat {
             rump: Rect::new(6, ay - 8, 7, 6),
@@ -141,7 +136,6 @@ fn anat(a: Anatomy, plan: Plan) -> Anat {
             head_w: 6,
             head_h: 5,
             head_top: ay - 7,
-            back: ay - 8,
         },
         Anatomy::Rabbit => Anat {
             rump: Rect::new(5, ay - 10, 9, 9),
@@ -160,7 +154,6 @@ fn anat(a: Anatomy, plan: Plan) -> Anat {
             head_w: 7,
             head_h: 6,
             head_top: ay - 10,
-            back: ay - 11,
         },
         Anatomy::Fox => Anat {
             rump: Rect::new(5, ay - 10, 7, 6),
@@ -179,7 +172,6 @@ fn anat(a: Anatomy, plan: Plan) -> Anat {
             head_w: 9,
             head_h: 7,
             head_top: ay - 12,
-            back: ay - 13,
         },
         // Birds are the bird plan's; a stand-in so the table is total.
         Anatomy::Hen | Anatomy::Crow => anat(Anatomy::Cat, plan),
@@ -411,6 +403,11 @@ fn ear_side(c: &mut Canvas, k: &Coat, s: Rect, far: bool, lag: i32) {
     };
     let mut m = mask(c);
     match kind {
+        Ears::Prick if k.look.anatomy == Anatomy::Dog => {
+            // A working dog's ear stands but tips over at the top, toward the face: soft,
+            // never a Doberman's spike.
+            m.polyline_fill(&[(x - 1, y + 1), (x + 2, y + 1), (x + 2, y - 2), (x + 3, y - 1), (x + 1, y - 3 + lag), (x - 1, y - 1)], Ix::INK, 1);
+        }
         Ears::Prick => {
             let h = if k.look.plan == Plan::QuadrupedMid { 4 } else { 3 };
             m.polyline_fill(&[(x - 1, y + 1), (x + 2, y + 1), (x + lag, y - h)], Ix::INK, 1);
@@ -470,6 +467,17 @@ fn torso_side(c: &mut Canvas, k: &Coat, a: &Anat, bob: i32, breathe: bool, head:
         ];
         m.polyline_fill(&neck, Ix::INK, 1);
     }
+    if k.look.anatomy == Anatomy::Dog {
+        // A working dog's ruff: a full chest and throat, its edge in soft tufts, and the
+        // feathering along the back of the forelegs' tops and the belly.
+        m.ellipse(Rect::new(chest.right() - 6, chest.y - 4, 8, chest.h + 3), Ix::INK, 1);
+        for (tx, ty) in [(chest.right() + 1, chest.y + 1), (chest.right() + 1, chest.y + 4), (chest.right(), chest.bottom() - 1)] {
+            m.fill_rect(Rect::new(tx, ty, 1, 2), Ix::INK, 1);
+        }
+        for tx in (rump.x + 4..chest.x + 4).step_by(3) {
+            m.fill_rect(Rect::new(tx, a.belly + bob, 2, 1), Ix::INK, 1);
+        }
+    }
     let radius = if k.look.plan == Plan::QuadrupedMid { 4 } else { 3 };
     c.inflate(&m, k.body, radius, relief::BODY);
     s
@@ -500,13 +508,19 @@ fn head_side(c: &mut Canvas, k: &Coat, a: &Anat, s: Rect, p: &Pose) {
     // Painted on the face at its rim height, so no detail stands proud enough to take a seam.
     let z = relief::HEAD.lo;
     let (ex, ey) = (a.eye.0 + dx, a.eye.1 + dy);
-    // Tan points: the lips and the cheek under the eye, the bridge left dark.
+    // Tan points: the lips and the cheek under the eye, the bridge left dark. A blazed dog (a
+    // collie's tricolour) has a white muzzle instead, the tan only a spot on the cheek.
     if mz.w > 0 && muzzle_ramp(k) != skin {
-        c.dye_poly(
-            &[(ex - 1, ey + 2), (ex + 2, ey + 2), (mz.right() - 2, mz.y + 2), (mz.right() - 1, mz.bottom()), (ex - 1, mz.bottom())],
-            skin,
-            muzzle_ramp(k),
-        );
+        if k.look.markings.contains(&Marking::Blaze) && an == Anatomy::Dog {
+            c.dye_poly(&[(mz.x - 1, mz.y + 1), (mz.right(), mz.y), (mz.right(), mz.bottom()), (mz.x - 1, mz.bottom())], skin, k.belly);
+            c.dye_ellipse(Rect::new(ex - 1, ey + 2, 4, 3), skin, muzzle_ramp(k));
+        } else {
+            c.dye_poly(
+                &[(ex - 1, ey + 2), (ex + 2, ey + 2), (mz.right() - 2, mz.y + 2), (mz.right() - 1, mz.bottom()), (ex - 1, mz.bottom())],
+                skin,
+                muzzle_ramp(k),
+            );
+        }
     }
     if k.look.markings.contains(&Marking::Grizzle) && mz.w > 0 {
         // An old dog's grey chin.
@@ -641,7 +655,7 @@ fn pelt_side(c: &mut Canvas, k: &Coat, a: &Anat, p: &Pose) {
         let chest = a.chest;
         if k.look.markings.contains(&Marking::Blaze) {
             // A white shirt-front: the chest from the throat down, round at the front.
-            c.dye_ellipse(Rect::new(chest.right() - 6, chest.y + 2 + b - i32::from(p.breathe), 7, chest.h), k.body, k.belly);
+            c.dye_ellipse(Rect::new(chest.right() - 6, chest.y - 3 + b - i32::from(p.breathe), 9, chest.h + 4), k.body, k.belly);
         } else {
             let pts = [
                 (a.rump.x + 3, a.belly - 1 + b),
@@ -690,16 +704,26 @@ fn front(c: &mut Canvas, k: &Coat, a: &Anat, p: &Pose, facing_us: bool) {
     let an = k.look.anatomy;
     let legs = if an == Anatomy::Sheep || k.look.markings.contains(&Marking::Socks) { k.mark } else { k.body };
     let b = p.bob;
-    let bw = a.front_w;
-    let body_top = a.back + b - i32::from(p.breathe);
-    let leg_top = a.leg_top + b;
+    // Seen from above and in front (the 3/4 view), a beast walking toward us is short: its
+    // head low over its chest and forelegs, and its back running away up the screen behind the
+    // head, broader than the head. Walking away, the rump is nearest (lowest) and the head
+    // peeks over the shoulders at the top. The legs show two thirds of their length.
+    let fore = ((ay - a.leg_top) * 2 / 3).max(3);
+    let leg_top = ay - fore + b;
+    let head_top = if facing_us { ay - fore + 1 - a.head_h } else { a.head_top + (ay - a.leg_top - fore) + 2 };
+    let a = &Anat { head_top, ..*a };
+    let bw = a.front_w + 2;
+    let body_top = if facing_us { head_top + 2 - i32::from(an == Anatomy::Sheep) * 6 } else { head_top + a.head_h / 2 - i32::from(an == Anatomy::Sheep) * 4 }
+        + b
+        - i32::from(p.breathe);
     if !facing_us {
         // The head is beyond the back: the body will cover its lower half.
         head_back(c, k, a, b + p.head.1);
     }
     // Front and hind legs alternate: the near pair are the fore legs facing us, the hind away.
     let lw = a.leg_w;
-    let gap = if bw >= 12 { 2 } else { 1 };
+    // A sheep stands on four thin legs set wide under its fleece.
+    let gap = if an == Anatomy::Sheep { bw / 3 } else if bw >= 12 { 2 } else { 1 };
     let (l0, l1) = (ax - gap / 2 - lw - (gap % 2), ax + (gap + 1) / 2);
     // The far pair, peeking out wide and higher up the screen (further away).
     let far_y = ay - 2;
@@ -714,7 +738,7 @@ fn front(c: &mut Canvas, k: &Coat, a: &Anat, p: &Pose, facing_us: bool) {
     let mut m = mask(c);
     // Seen end on, the body is the chest (or the rump) over the legs, and the back running away
     // up the screen behind the head.
-    let bh = (leg_top + 3 - body_top).max(6);
+    let bh = (leg_top + 3 - body_top).max(6).min(ay - body_top);
     m.ellipse(Rect::new(ax - bw / 2, body_top, bw, bh), Ix::INK, 1);
     if an == Anatomy::Sheep {
         for (dx, dy) in [(-bw / 2 - 1, 2), (bw / 2 - 3, 2), (-3, -1)] {
@@ -773,7 +797,7 @@ fn tail_front(c: &mut Canvas, k: &Coat, a: &Anat, body_top: i32, wag: i32, behin
         }
         Tail::Brush => {
             if behind {
-                m.ellipse(Rect::new(ax + 3 + sw, body_top + 2, 5, 7), Ix::INK, 1);
+                m.ellipse(Rect::new(ax + 3 + sw, body_top - 3, 5, 7), Ix::INK, 1);
             } else {
                 m.ellipse(Rect::new(ax - 2 + sw, ay - 8, 5, 8), Ix::INK, 1);
             }
@@ -782,7 +806,7 @@ fn tail_front(c: &mut Canvas, k: &Coat, a: &Anat, body_top: i32, wag: i32, behin
             if behind {
                 return;
             }
-            m.polyline(&[(ax, ay - 3), (ax + sw, ay), (ax + 2 + sw, ay + 2)], Ix::INK, 1, 1);
+            m.polyline(&[(ax + 3, ay - 5), (ax + 4 + sw, ay - 3), (ax + 6 + sw, ay - 2)], Ix::INK, 1, 1);
         }
         Tail::Puff if !behind => m.ellipse(Rect::new(ax - 2, ay - 6, 4, 4), Ix::INK, 1),
         _ => return,
@@ -909,7 +933,7 @@ fn ears_front(c: &mut Canvas, k: &Coat, s: Rect, behind: bool, tilt: i32) {
         let up = i32::from(tilt != 0 && side == tilt.signum());
         match kind {
             Ears::Prick => {
-                let h = 4;
+                let h = 5;
                 let (a, b) = if side < 0 { (x - 1, x + 2) } else { (x - 2, x + 1) };
                 m.polyline_fill(&[(a, s.y + 2), (b, s.y + 2), (x + side, s.y + 2 - h - up)], Ix::INK, 1);
             }
@@ -1033,7 +1057,7 @@ fn idle(c: &mut Canvas, k: &Coat, a: &Anat, beat: u8) {
         }
         Anatomy::Sheep => {
             // Grazing: from the front, the head down to the grass, chewing on the second beat.
-            let p = Pose { head: (0, 4 + i32::from(beat == 1)), ..Pose::default() };
+            let p = Pose { head: (0, 1 + i32::from(beat == 1)), ..Pose::default() };
             front(c, k, a, &p, true);
         }
         Anatomy::Rabbit => {

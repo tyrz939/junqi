@@ -1,13 +1,14 @@
 //! The Controls screen (PRESENTATION.md §3.2, §4): one row per action with its two keys, its
 //! mouse button and its pad input. Press-to-rebind: pick a cell, press what it should be.
 //! Conflicts are shown (in red, with who else has it), never refused. Reset puts every row back
-//! to `data/bindings.json`. The aim assist and the backend are rows beneath; the app keeps all of
-//! it in `config.json`.
+//! to `data/bindings.json`. The aim assist, the backend and the volumes are rows beneath; the app
+//! keeps all of it in `config.json`.
 
 use jane_art::font::Face;
 use jane_art::palette::{Ramp, Tone};
 use jane_sim::input::AssistProfile;
 
+use crate::audio::Volumes;
 use crate::input::{
     ACTIONS, Action, BINDINGS, Bindings, MouseButton, PadInput, UiAction, action_label, key_name, mouse_name, pad_name,
     sc,
@@ -20,6 +21,8 @@ use crate::ui::style::{self, argb};
 /// Columns: key, key, mouse, pad.
 pub const COLS: [&str; 4] = ["Key", "Key", "Mouse", "Pad"];
 const ROW_H: i32 = 17;
+/// The volume row's height, with its labels above it.
+const VOLUME_ROW_H: i32 = 34;
 
 /// The screen's own state.
 #[derive(Clone, Debug, Default)]
@@ -29,8 +32,11 @@ pub struct ControlsState {
     /// A cell waiting for its press.
     pub capture: Option<(usize, u8)>,
     pub scroll: usize,
-    /// The row the keys light below the table: 0 the table, 1 assist, 2 backend, 3 reset, 4 back.
+    /// The row the keys light below the table: 0 the table, 1 assist, 2 backend, 3 volume,
+    /// 4 reset, 5 back.
     pub foot: u8,
+    /// The volume the keys turn on the volume row: 0 master, 1 music, 2 effects.
+    pub vol: u8,
 }
 
 /// What the screen shows beside the bindings.
@@ -40,6 +46,7 @@ pub struct ControlsInfo<'a> {
     pub assist: Option<AssistProfile>,
     /// `auto`, `soft` or `wgpu` (takes effect on the next start).
     pub backend: &'a str,
+    pub volumes: Volumes,
 }
 
 /// What the player changed this frame.
@@ -49,6 +56,8 @@ pub struct ControlsOut {
     pub bindings: bool,
     pub assist: Option<Option<AssistProfile>>,
     pub backend: Option<&'static str>,
+    /// The volumes changed: hear them now and save them.
+    pub volumes: Option<Volumes>,
 }
 
 fn cell_text(b: &Bindings, a: Action, col: u8) -> &'static str {
@@ -130,7 +139,7 @@ pub fn draw(ui: &mut Ui, st: &mut ControlsState, b: &mut Bindings, info: Control
         ui.text(col_x[i] + 4, ty, c, Ink::fine(style::gold()).shadow());
     }
     ui.text(x + 20, ty, "Action", Ink::fine(style::gold()).shadow());
-    let visible = ((h - 170) / ROW_H).max(4) as usize;
+    let visible = ((h - 170 - VOLUME_ROW_H) / ROW_H).max(4) as usize;
     let n = ACTIONS.len();
     // Keys: rows and columns, confirm to capture; the wheel scrolls.
     let capturing = st.capture.is_some();
@@ -140,7 +149,8 @@ pub fn draw(ui: &mut Ui, st: &mut ControlsState, b: &mut Bindings, info: Control
                 UiAction::Up if st.foot == 0 => st.row = st.row.saturating_sub(1),
                 UiAction::Up => st.foot -= 1,
                 UiAction::Down if st.foot == 0 && st.row + 1 < n => st.row += 1,
-                UiAction::Down => st.foot = (st.foot + 1).min(4),
+                UiAction::Down => st.foot = (st.foot + 1).min(5),
+                UiAction::Confirm if st.foot == 3 => st.vol = (st.vol + 1) % 3,
                 UiAction::Left if st.foot == 0 => st.col = st.col.saturating_sub(1),
                 UiAction::Right if st.foot == 0 => st.col = (st.col + 1).min(3),
                 UiAction::Confirm if st.foot == 0 => st.capture = Some((st.row, st.col)),
@@ -269,21 +279,23 @@ pub fn draw(ui: &mut Ui, st: &mut ControlsState, b: &mut Bindings, info: Control
         "Backend",
         Ink::small(if st.foot == 2 { style::text_bright() } else { style::text() }).shadow(),
     );
-    for (i, label) in ["auto", "soft", "wgpu"].iter().enumerate() {
+    for (i, label) in ["auto", "soft", "gl2", "wgpu"].iter().enumerate() {
         let br = Rect::new(x + 200 + i as i32 * 84, by, 78, 22);
         if ui.button(wid("backend", i as u32), br, label, ButtonKind::Tab { on: info.backend == *label }, true, false) {
             out.backend = Some(label);
         }
     }
-    ui.text(x + 200 + 3 * 84 + 6, by + 6, "next start", Ink::fine(style::quiet()).shadow());
-    let ry = by + lh + 6;
+    ui.text(x + 200 + 4 * 84 + 6, by + 6, "next start", Ink::fine(style::quiet()).shadow());
+    let vy = by + lh + VOLUME_ROW_H - lh;
+    out.volumes = crate::ui::volume::row(ui, x, vy, info.volumes, (st.foot == 3).then_some(st.vol));
+    let ry = vy + lh + 6;
     let reset = Rect::new(x + w / 2 - 170, ry, 160, 24);
     let back = Rect::new(x + w / 2 + 10, ry, 160, 24);
-    if ui.button(wid("controls-reset", 0), reset, "Reset all", ButtonKind::Menu, true, st.foot == 3) {
+    if ui.button(wid("controls-reset", 0), reset, "Reset all", ButtonKind::Menu, true, st.foot == 4) {
         b.rows = BINDINGS.to_vec();
         out.bindings = true;
     }
-    if ui.button(wid("controls-back", 0), back, "Back", ButtonKind::Menu, true, st.foot == 4) {
+    if ui.button(wid("controls-back", 0), back, "Back", ButtonKind::Menu, true, st.foot == 5) {
         ui.intent(AppIntent::Back);
     }
     out
@@ -301,7 +313,7 @@ mod tests {
         let mut ui = Ui::new(UiArt::build(1).0);
         let mut b = Bindings::default();
         let mut st = ControlsState::default();
-        let info = ControlsInfo { assist: None, backend: "auto" };
+        let info = ControlsInfo { assist: None, backend: "auto", volumes: Volumes::default() };
         // Row 0 (walk up), key 1: confirm to capture, then press E (Use's key).
         ui.begin(UiInput { actions: vec![UiAction::Confirm], ..UiInput::default() }, 1, (768, 432));
         draw(&mut ui, &mut st, &mut b, info);

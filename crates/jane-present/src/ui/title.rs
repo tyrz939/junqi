@@ -327,10 +327,10 @@ pub fn draw(ui: &mut Ui, st: &mut TitleState, info: TitleInfo) {
         return;
     }
     // The menu, on a quiet plate low on the left of the School.
-    let labels = ["New Game", "Continue", "Load", "Controls", "Quit"];
-    let enabled = [true, info.has_save, info.has_save, true, true];
+    let labels = ["New Game", "Continue", "Load", "Host", "Join", "Controls", "Quit"];
+    let enabled = [true, info.has_save, info.has_save, true, true, true, true];
     let w = 220;
-    let r = Rect::new(col - w / 2, ch * 42 / 100, w, 5 * 28 + 16);
+    let r = Rect::new(col - w / 2, ch * 38 / 100, w, labels.len() as i32 * 28 + 16);
     ui.fill(r, argb(Ramp::UiSlot.at(Tone::Deep), 110));
     ui.rule(i32::from(r.x), r.right(), i32::from(r.y), style::gold_deep());
     ui.rule(i32::from(r.x), r.right(), r.bottom() - 1, style::gold_deep());
@@ -350,8 +350,10 @@ pub fn draw(ui: &mut Ui, st: &mut TitleState, info: TitleInfo) {
         }
         Some(1) => ui.intent(AppIntent::Continue),
         Some(2) => ui.intent(AppIntent::LoadMenu),
-        Some(3) => ui.intent(AppIntent::Controls),
-        Some(4) => ui.intent(AppIntent::Quit),
+        Some(3) => ui.intent(AppIntent::HostMenu),
+        Some(4) => ui.intent(AppIntent::JoinMenu),
+        Some(5) => ui.intent(AppIntent::Controls),
+        Some(6) => ui.intent(AppIntent::Quit),
         _ => {}
     }
 }

@@ -1,0 +1,59 @@
+{
+  "name": "title",
+  "mood": "The theme: a slow D minor air on a felt piano over strings and a harp, falling from the fifth like the bell, lifting once into F and coming home unresolved",
+  "key": "D", "mode": "minor",
+  "step_ticks": 27, "bar": 8,
+  "gain": 0.76, "humanize_ms": 9,
+  "tracks": [
+    { "name": "melody", "inst": "felt_piano", "alt": ["celesta"], "kind": "melody", "octave": 5, "vel": 0.78, "pan": 0.12, "gate": 0.95 },
+    { "name": "echo", "inst": "celesta", "kind": "melody", "octave": 5, "vel": 0.42, "pan": -0.35 },
+    { "name": "pad", "inst": "strings", "alt": ["pad_warm"], "kind": "chord", "octave": 4, "vel": 0.55, "voices": 4, "gate": 1.0 },
+    { "name": "arp", "inst": "harp", "kind": "arp", "octave": 3, "vel": 0.42, "pan": -0.2 },
+    { "name": "bass", "inst": "bass_soft", "kind": "bass", "octave": 2, "vel": 0.45 }
+  ],
+  "sections": {
+    "I": { "bars": 2, "chords": "1 6",
+      "play": {
+        "pad": "x - - - - - - - | x - - - - - - -",
+        "arp": ["1 5 8 9 10 9 8 5 | 1 5 8 9 10 9 8 5", "1 5 8 5 10 5 8 5 | 1 5 8 5 10 5 8 5"],
+        "bass": "1 - - - - - - - | 1 - - - - - - -"
+      }
+    },
+    "A": { "bars": 4, "chords": "1 47 6 5",
+      "play": {
+        "melody": "1 . 5 . 6 - 5 . | 4 - 3 - 2 - - . | 3 . 1 . 7, - 1 . | 2 - - - - - . .",
+        "pad": "x - - - - - - - | x - - - - - - - | x - - - - - - - | x - - - - - - -",
+        "arp": ["1 5 8 9 10 9 8 5 | 1 5 8 9 10 9 8 5 | 1 5 8 9 10 9 8 5 | 1 5 8 9 10 9 8 5", "1 5 8 5 10 5 8 5 | 1 5 8 5 10 5 8 5 | 1 5 8 5 10 5 8 5 | 1 5 8 5 10 5 8 5"],
+        "bass": "1 - - - - - - - | 1 - - - - - 5, - | 1 - - - - - - - | 1 - - - - - - -"
+      }
+    },
+    "A2": { "bars": 4, "chords": "1 4 6/7 1",
+      "play": {
+        "melody": "1 . 5 . 6 - 5 . | 4 - 3 - 4 - 5 . | 6 . 5 . 4 - 3 . | 1 - - - - - . .",
+        "echo": ". . . . . . . . | . . . . . . . . | . . . . . . . . | . . 5 - 4 - 3 -",
+        "pad": "x - - - - - - - | x - - - - - - - | x - - - x - - - | x - - - - - - -",
+        "arp": "1 5 8 9 10 9 8 5 | 1 5 8 9 10 9 8 5 | 1 5 8 5 1 5 8 5 | 1 5 8 9 10 9 8 5",
+        "bass": "1 - - - - - - - | 1 - - - - - - - | 1 - - - 1 - - - | 1 - - - - - - -"
+      }
+    },
+    "B": { "bars": 4, "chords": "3 6 4 5M",
+      "play": {
+        "melody": "3 - 4 - 5 - - 3 | 8 - 7 - 6 - - . | 6 - 5 - 4 - 3 - | 2 - - - 5, - - .",
+        "echo": ". . . . . . . . | . . . . 3 - - . | . . . . . . . . | . . . . 2 - - .",
+        "pad": "x - - - - - - - | x - - - - - - - | x - - - - - - - | x - - - - - - -",
+        "arp": "1 5 8 5 10 5 8 5 | 1 5 8 5 10 5 8 5 | 1 5 8 5 10 5 8 5 | 1 5 8 5 10 5 8 5",
+        "bass": "1 - - - 5 - - - | 1 - - - 5 - - - | 1 - - - 5 - - - | 1 - - - 5 - - -"
+      }
+    },
+    "B2": { "bars": 4, "chords": "3 7 6 5M",
+      "play": {
+        "melody": "3 - 4 - 5 - - 8 | 7 - - 6 5 - - . | 6 - - 5 4 - 3 - | #7, - - - - - . .",
+        "echo": ". . . . . . 1 - | . . . . . . 3 - | . . . . . . 1 - | . . . . . . . .",
+        "pad": "x - - - - - - - | x - - - - - - - | x - - - - - - - | x - - - - - - -",
+        "arp": "1 5 8 9 10 9 8 5 | 1 5 8 9 10 9 8 5 | 1 5 8 9 10 9 8 5 | 1 5 8 5 10 5 8 5",
+        "bass": "1 - - - 5 - - - | 1 - - - 5 - - - | 1 - - - 5 - - - | 1 - - - - - 5, -"
+      }
+    }
+  },
+  "forms": ["I A A2 B B2 A2", "I A B A2 B2 A2"]
+}

@@ -38,9 +38,9 @@ struct Stuff {
 
 fn roof_ramp(r: Roofing) -> Ramp {
     match r {
-        Roofing::Thatch => Ramp::Reed,
+        Roofing::Thatch => Ramp::Thatch,
         Roofing::Slate => Ramp::Slate,
-        Roofing::Tile => Ramp::Brick,
+        Roofing::Tile => Ramp::RoofTile,
         Roofing::Tin => Ramp::Iron,
         Roofing::Reed => Ramp::HairFair,
     }
@@ -110,6 +110,18 @@ fn house(c: &mut Canvas, s: &Stuff, depth: i32, lit: bool) {
     openings(c, s, x0, x1, eave, foot, lit);
     back_slope(c, s, x0 - 2, x1 + 2, back, ridge);
     roof(c, s, x0 - 2, x1 + 2, ridge, eave + 2);
+    // The roof's ends: slate is gabled (a barge board down each end), and a cottage or a
+    // farmhouse turns a gable to the road over its door; thatch, reed, tile and tin are hipped
+    // (the ends slope back; thatch soft at its corners).
+    let thatched = matches!(look.roof, Roofing::Thatch | Roofing::Reed);
+    if look.roof == Roofing::Slate {
+        barges(c, s, x0 - 2, x1 + 2, back, eave + 2);
+        if matches!(look.style, HouseStyle::Cottage | HouseStyle::Farmhouse | HouseStyle::Inn) && !look.dormers {
+            front_gable(c, s, (x0 + x1) / 2 + door_offset(s), eave, ridge, lit);
+        }
+    } else {
+        hips(c, s, x0 - 2, x1 + 2, back, ridge, eave + 2, thatched);
+    }
     if look.dormers && look.storeys < 3 {
         for dx in [x0 + (x1 - x0) / 4, x0 + 3 * (x1 - x0) / 4] {
             dormer(c, s, dx, ridge + slope / 2, lit);
@@ -355,6 +367,99 @@ fn back_slope(c: &mut Canvas, s: &Stuff, x0: i32, x1: i32, top: i32, ridge: i32)
         }
     }
     c.hline(r.x, r.right() - 1, r.y, s.roof.at(Tone::Base), 8);
+}
+
+/// Hip the roof over `x0..=x1` (back eave row `back`, ridge `ridge`, front eave `eave`): each end
+/// a sloping face, a triangle from the eave's corners to the ridge's end, the west one lit and
+/// the east one in shade, its hip rafter a line; `soft` (thatch) rounds the top corners.
+#[allow(clippy::too_many_arguments)]
+fn hips(c: &mut Canvas, s: &Stuff, x0: i32, x1: i32, back: i32, ridge: i32, eave: i32, soft: bool) {
+    let ramp = s.roof;
+    let reach = ((x1 - x0) / 6).clamp(6, 20).min(ridge - back + (eave - ridge) / 2);
+    let inset = |y: i32| -> i32 {
+        let (d, span) = if y <= ridge { (y - back, ridge - back) } else { (eave - y, eave - ridge) };
+        reach * d.clamp(0, span.max(1)) / span.max(1)
+    };
+    for y in back..=eave {
+        let k = inset(y);
+        for x in x0..=x1 {
+            if !c.get(x, y).is_opaque() {
+                continue;
+            }
+            let (west, east) = (x < x0 + k, x > x1 - k);
+            if !(west || east) {
+                continue;
+            }
+            let edge = x == x0 + k - 1 || x == x1 - k + 1;
+            let t = match (west, edge, y > ridge) {
+                (true, true, _) => Tone::Light,
+                (true, false, true) => Tone::Lift,
+                (true, false, false) => Tone::Base,
+                (false, true, _) => Tone::Deep,
+                (false, false, true) => Tone::Mid,
+                (false, false, false) => Tone::Shade,
+            };
+            let n = normal(if west { -70 } else { 70 }, if y > ridge { 30 } else { -30 });
+            c.put(x, y, ramp.at(t), n, 9);
+        }
+    }
+    if soft {
+        // Thatch rounds over its corners: a quarter circle off each top corner.
+        let r = reach.min(8);
+        for dy in 0..r {
+            for dx in 0..r {
+                let (u, v) = (r - dx, r - dy);
+                if u * u + v * v > r * r {
+                    c.clear_px(x0 + dx, back + dy);
+                    c.clear_px(x1 - dx, back + dy);
+                }
+            }
+        }
+    }
+}
+
+/// Barge boards down a gabled roof's two ends, from the back eave to the front: a trim line
+/// lit on the west end and in shade on the east, a px proud of the roof.
+fn barges(c: &mut Canvas, s: &Stuff, x0: i32, x1: i32, back: i32, eave: i32) {
+    for y in back..=eave {
+        c.put(x0, y, s.trim.at(Tone::Light), normal(-60, 0), 10);
+        c.put(x0 + 1, y, s.trim.at(Tone::Base), normal(-30, 0), 10);
+        c.put(x1, y, s.trim.at(Tone::Shade), normal(60, 0), 10);
+        c.put(x1 - 1, y, s.trim.at(Tone::Mid), normal(30, 0), 10);
+    }
+}
+
+/// A gable turned to the road over the door at `cx`: its triangle of wall rising above the
+/// eave with a small window, its two roof slopes along its top edges, lit on the west and in
+/// shade on the east, a finial at its peak.
+fn front_gable(c: &mut Canvas, s: &Stuff, cx: i32, eave: i32, ridge: i32, lit: bool) {
+    let half = (eave - ridge + 2).clamp(9, 17);
+    let peak = eave - half;
+    let face = [(cx - half + 2, eave + 1), (cx + half - 3, eave + 1), (cx, peak + 2), (cx - 1, peak + 2)];
+    let mut m = Canvas::new(c.w(), c.h());
+    m.polyline_fill(&face, Ix::INK, 1);
+    for y in peak..=eave + 1 {
+        for x in cx - half..cx + half {
+            if m.get(x, y).is_opaque() {
+                c.put(x, y, s.wall.at(Tone::Base), parts::south(), 11);
+            }
+        }
+    }
+    if s.look.wall == Walling::Timber {
+        c.vline(cx - 1, peak + 3, eave, s.trim.at(Tone::Base), 11);
+    }
+    let win = Rect::new(cx - 3, eave - half / 2, 6, 6);
+    window(c, s, win, lit, 1);
+    // The two slopes: four px of roof along each upper edge, overhanging the eave by two, and a
+    // barge board of trim under each.
+    let (west, east) = ([Tone::High, Tone::Light, Tone::Lift, Tone::Base], [Tone::Base, Tone::Mid, Tone::Shade, Tone::Deep]);
+    for i in 0..4 {
+        c.line((cx - 1, peak - 1 + i), (cx - half - 2, eave + 1 + i), s.roof.at(west[i as usize]), 1, 12);
+        c.line((cx, peak - 1 + i), (cx + half + 1, eave + 1 + i), s.roof.at(east[i as usize]), 1, 12);
+    }
+    c.line((cx - 1, peak + 3), (cx - half + 1, eave + 1), s.trim.at(Tone::Light), 1, 12);
+    c.line((cx, peak + 3), (cx + half - 2, eave + 1), s.trim.at(Tone::Shade), 1, 12);
+    c.fill_normal(Rect::new(cx - 1, peak - 2, 2, 2), s.trim.at(Tone::Light), FLAT, 13);
 }
 
 /// A dormer on the roof's slope at `(cx, y)`: a little gabled face with its window.

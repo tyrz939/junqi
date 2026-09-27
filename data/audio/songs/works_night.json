@@ -1,0 +1,49 @@
+{
+  "name": "works_night",
+  "mood": "The night shift on Cinder Walk: C Phrygian, a heartbeat on the low drum, the Factory's lights humming in a dark pad, low strings rocking between C and D flat, iron struck somewhere in the dark",
+  "key": "C", "mode": "phrygian",
+  "step_ticks": 22, "bar": 8,
+  "gain": 0.78, "humanize_ms": 8,
+  "tracks": [
+    { "name": "heart", "inst": "drum_low", "kind": "drum", "vel": 0.55 },
+    { "name": "pad", "inst": "pad_dark", "kind": "chord", "octave": 3, "vel": 0.55, "voices": 3, "gate": 1.0 },
+    { "name": "line", "inst": "low_strings", "kind": "melody", "octave": 3, "vel": 0.55, "pan": -0.15, "gate": 1.0 },
+    { "name": "sub", "inst": "sub", "kind": "bass", "octave": 1, "vel": 0.35 },
+    { "name": "choir", "inst": "choir", "kind": "chord", "octave": 4, "vel": 0.36, "voices": 2, "pan": 0.3, "gate": 1.0 },
+    { "name": "iron", "inst": "anvil", "kind": "drift", "octave": 3, "vel": 0.34, "pan": -0.5,
+      "drift": { "pool": "1 2 5", "gap": [8, 20], "len": [1, 1] } }
+  ],
+  "sections": {
+    "A": { "bars": 8, "chords": "1 1 2 1 1 1 7 1",
+      "play": {
+        "heart": "X . . x . . . . | X . . x . . . . | X . . x . . . . | X . . x . . . . | X . . x . . . . | X . . x . . . . | X . . x . . . . | X . . x . . x .",
+        "pad": "x - - - - - - - | - - - - - - - - | x - - - - - - - | x - - - - - - - | - - - - - - - - | - - - - - - - - | x - - - - - - - | x - - - - - - -",
+        "line": [
+          "1 - - - - - - - | 2 - - - 1 - - - | 2 - - - - - - - | 1 - - - - - . . | 5 - - - 6 - - - | 5 - - - 2 - - - | 7, - - - - - - - | 1 - - - - - . .",
+          "1 - - - - - - - | 2 - - - 1 - - - | 2 - - - 3 - 2 - | 1 - - - - - . . | 3 - - - 2 - - - | 1 - - - 2 - - - | 7, - - - - - - - | 1 - - - - - . ."
+        ],
+        "sub": "1 - - - - - - - | 1 - - - - - - - | 1 - - - - - - - | 1 - - - - - - - | 1 - - - - - - - | 1 - - - - - - - | 1 - - - - - - - | 1 - - - - - - -",
+        "iron": "x x x x x x x x | x x x x x x x x | x x x x x x x x | x x x x x x x x | x x x x x x x x | x x x x x x x x | x x x x x x x x | x x x x x x x x"
+      }
+    },
+    "B": { "bars": 8, "chords": "6 6 2 2 4m 4m 2 1",
+      "play": {
+        "heart": "X . . x . . . . | X . . x . . . . | X . . x . . . . | X . . x . . x . | X . . x . . . . | X . . x . . . . | X . . x . . . . | X . . x . x x .",
+        "pad": "x - - - - - - - | - - - - - - - - | x - - - - - - - | - - - - - - - - | x - - - - - - - | - - - - - - - - | x - - - - - - - | x - - - - - - -",
+        "choir": "x - - - - - - - | - - - - - - - - | x - - - - - - - | - - - - - - - - | x - - - - - - - | - - - - - - - - | x - - - - - - - | x - - - - - - -",
+        "line": "6 - - - 5 - - - | 3 - - - - - - - | 2 - - - 4 - - - | 6 - - - - - - - | 4 - - - 3 - - - | 1 - - - - - - - | 2 - - - - - - - | 1 - - - - - . .",
+        "sub": "1 - - - - - - - | 1 - - - - - - - | 1 - - - - - - - | 1 - - - - - - - | 1 - - - - - - - | 1 - - - - - - - | 1 - - - - - - - | 1 - - - - - - -",
+        "iron": ". . . . . . . . | x x x x x x x x | . . . . . . . . | x x x x x x x x | . . . . . . . . | x x x x x x x x | . . . . . . . . | x x x x x x x x"
+      }
+    },
+    "Q": { "bars": 4, "chords": "1 1 2 1",
+      "play": {
+        "heart": "X . . x . . . . | . . . . . . . . | X . . x . . . . | . . . . . . . .",
+        "pad": "x - - - - - - - | - - - - - - - - | x - - - - - - - | x - - - - - - -",
+        "sub": "1 - - - - - - - | - - - - - - - - | 1 - - - - - - - | 1 - - - - - - -",
+        "iron": "x x x x x x x x | x x x x x x x x | x x x x x x x x | x x x x x x x x"
+      }
+    }
+  },
+  "forms": ["A B Q A", "Q A B A", "A Q B Q"]
+}

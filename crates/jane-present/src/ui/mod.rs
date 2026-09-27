@@ -11,12 +11,14 @@ pub mod core;
 pub mod dialogue;
 pub mod hud;
 pub mod icons;
+pub mod lan;
 pub mod loading;
 pub mod map;
 pub mod menus;
 pub mod perf;
 pub mod style;
 pub mod title;
+pub mod volume;
 pub mod window;
 pub mod world;
 

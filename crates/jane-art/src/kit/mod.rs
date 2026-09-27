@@ -18,6 +18,7 @@ mod container;
 mod furniture;
 mod growing;
 mod lamp;
+mod machine;
 pub(crate) mod parts;
 mod ritual;
 mod sign;
@@ -170,7 +171,7 @@ fn draw(c: &mut Canvas, k: &Kit, state: State) -> Result<Stand, String> {
         PropFamily::Furniture => furniture::draw(c, k, state).ok_or_else(unknown),
         PropFamily::Structure => structure::draw(c, k, state).ok_or_else(unknown),
         PropFamily::Vegetation | PropFamily::Debris => growing::draw(c, k, state).ok_or_else(unknown),
-        _ => Err(unknown()),
+        PropFamily::Machine | PropFamily::SmallThing => machine::draw(c, k, state).ok_or_else(unknown),
     }
 }
 
