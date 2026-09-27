@@ -86,6 +86,21 @@ pub(crate) fn draw(c: &mut Canvas, k: &Kit, state: State) -> Option<Stand> {
             }
             Stand::Tops([(Rect::new(x, 0, bw, front.y), lid_height(face)), (Rect::default(), 0)])
         }
+        "drawer" => {
+            // A desk's drawer pulled out and set down: a box of dark wood, its brass pull, the
+            // papers inside.
+            let (x, dw) = (3, w - 6);
+            ao(c, x, x + dw - 1, foot, 5);
+            let (top, front) = box3(c, x, dw, foot, 8, 12, k.body, Some((2, k.seed)), 3);
+            c.fill_normal(Rect::new(top.x + 2, top.y + 2, top.w - 4, top.h - 3), k.body.at(Tone::Deep), crate::canvas::FLAT, 4);
+            for (i, px) in [(0, top.x + 4), (1, top.x + 10)] {
+                let r = Rect::new(px, top.y + 3 + i, 8, 6);
+                c.fill_normal(r, Ramp::ClothLinen.at(Tone::Light), crate::canvas::FLAT, 5);
+                parts::writing(c, Rect::new(r.x + 1, r.y + 1, r.w - 2, r.h - 2), 2, Ramp::Slate.at(Tone::Mid), k.seed ^ i as u32, 5);
+            }
+            c.fill_rect(Rect::new(front.x + dw / 2 - 2, front.y + 3, 4, 2), k.accent.at(Tone::Light), 5);
+            Stand::Tops([(top, lid_height(8)), (Rect::default(), 0)])
+        }
         "crate" => {
             // A crate: planked faces in a frame of battens, a brace across the front.
             let (bw, face, depth) = ((w - 4).min(26), 14, 10);
