@@ -133,6 +133,9 @@ fn trace(p: vec3<f32>, l: vec3<f32>, max_t: f32, k: f32, t0: f32, max_step: f32)
     return r * r * (3.0 - 2.0 * r);
 }
 
+// How far across a side ray of `sun_disc` lies at the most, px.
+const SIDE_MAX: f32 = 1.5;
+
 // A texel's `(lo, hi)` at the texel under `q`, unfiltered: what a side ray of `sun_disc` reads.
 fn texel_at(q: vec2<f32>) -> vec2<f32> {
     let b = floor(q);
@@ -172,8 +175,11 @@ fn sun_disc(p: vec3<f32>, l: vec3<f32>, k: f32, t0: f32) -> f32 {
         } else {
             f = height_at(q);
         }
-        let a = texel_at(q + across * (side * t));
-        let b = texel_at(q - across * (side * t));
+        // A px and a half across at most: a crown's shadow a few rows thick keeps its umbra far
+        // out, and a side is feathered about as wide as T0's and T1's edge.
+        let off = across * min(side * t, SIDE_MAX);
+        let a = texel_at(q + off);
+        let b = texel_at(q - off);
         let clear = vec3<f32>(max(z - f.y, f.x - z), max(z - a.y, a.x - z), max(z - b.y, b.x - z));
         res = min(res, k * clear / t);
         if max(res.x, max(res.y, res.z)) <= 0.0 {
