@@ -37,6 +37,10 @@ pub struct Page {
     pub emissive: Vec<u16>,
     /// Px above the ground: a person's head is 40.
     pub height: Vec<u8>,
+    /// On a page built for `soft` alone (no emissive layer), what glows of it, sparse: each
+    /// glowing texel's index in the page and its emissive index, in packing order. T0's lit
+    /// windows and lamp glass (§1.3 `glow`); empty on a lit page, whose emissive layer says it.
+    pub glow: Vec<(u32, u16)>,
 }
 
 impl Page {

@@ -226,10 +226,17 @@ type Rung = (&'static str, fn(&mut jane_present::Features, jane_present::Tier));
 fn ladder(tier: jane_present::Tier) -> Vec<Rung> {
     use jane_present::Tier;
     let mut steps: Vec<Rung> = Vec::new();
-    if tier == Tier::T2 {
+    // Every tier blooms since 2026-09-27, and T1 and T2 draw light shafts; T0's lit windows go
+    // with its bloom (the glow is what the bloom is made of).
+    if tier > Tier::T0 {
         steps.push(("god_rays and bloom off", |f, t| {
             f.set(t, "god_rays", "off");
             f.set(t, "bloom", "off");
+        }));
+    } else {
+        steps.push(("bloom and glow off", |f, t| {
+            f.set(t, "bloom", "off");
+            f.set(t, "glow", "off");
         }));
     }
     steps.push(("max_lights halved, shadows to 4", |f, t| {

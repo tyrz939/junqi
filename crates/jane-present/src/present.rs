@@ -1054,10 +1054,11 @@ impl Present {
         self.atmos.draw_fog(f, cam, sky);
         self.fx.draw_air(f, cam, alpha, sky);
         // The grade (§1.3 `grade`): the same on every tier, so a frame from any of them is the
-        // same hour and mood; the bloom is T2's alone.
+        // same hour and mood, the bloom with it where the `bloom` row is on (every tier since
+        // 2026-09-27).
         // The `grade` row off leaves the lit frame as it is; the `bloom` row off, the glow.
         let post = if rows.grade { sky.post } else { Post { bloom: sky.post.bloom, ..Post::NONE } };
-        let post = Post { bloom: if rows.bloom && f.tier >= Tier::T2 { post.bloom } else { 0 }, ..post };
+        let post = Post { bloom: if rows.bloom { post.bloom } else { 0 }, ..post };
         // T0's flat light past 255 (T2's noon is brighter than the art as drawn) is exposure.
         let post = if f.tier == Tier::T0 {
             let e = u32::from(post.exposure) * u32::from(sky.t0_gain) / 256;

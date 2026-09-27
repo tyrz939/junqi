@@ -40,6 +40,7 @@ fn atlas(height: impl Fn(i32) -> u8) -> AtlasPages {
         normal: vec![[128, 200]; n],
         emissive: vec![0; n],
         height: vec![0; n],
+        glow: Vec::new(),
     };
     for y in 4..=AY {
         for x in 4..12 {
@@ -230,8 +231,15 @@ fn a_walls_shadow_is_straight_edged_and_its_face_takes_no_stairs() {
 /// height over its foot row `ay` (upright, as `Canvas::upright` stands a sprite).
 fn upright_atlas(w: u16, h: u16, ay: i32, shape: impl Fn(i32, i32) -> bool) -> AtlasPages {
     let n = usize::from(w) * usize::from(h);
-    let mut page =
-        Page { w, h, albedo: vec![0; n], normal: vec![[128, 200]; n], emissive: vec![0; n], height: vec![0; n] };
+    let mut page = Page {
+        w,
+        h,
+        albedo: vec![0; n],
+        normal: vec![[128, 200]; n],
+        emissive: vec![0; n],
+        height: vec![0; n],
+        glow: Vec::new(),
+    };
     for y in 0..i32::from(h) {
         for x in 0..i32::from(w) {
             if shape(x, y) {
