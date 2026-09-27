@@ -2,7 +2,7 @@
   "name": "lowfields_day",
   "mood": "The Lowfields by day, the town that was: a lilting G major in six-eight, a fingerpicked guitar and a flute singing the theme in the major, turning wistful through E minor",
   "key": "G", "mode": "major",
-  "step_ticks": 11, "bar": 6,
+  "step_ticks": 17, "bar": 6,
   "gain": 0.90, "humanize_ms": 10,
   "tracks": [
     { "name": "melody", "inst": "flute", "alt": ["clarinet"], "kind": "melody", "octave": 5, "vel": 0.72, "pan": 0.15, "gate": 0.92 },

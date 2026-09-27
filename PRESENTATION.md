@@ -1,10 +1,10 @@
 # Jane, Presentation
 
-How the native build is seen, heard and driven: the scene contract and the three render backends behind it, lighting and shadows, atmosphere, effects, the immediate-mode UI and its view buffers, input and rebinding, the audio hooks, and the viewer, sheet, film and bench tools. Pair with `ARCHITECTURE.md` (the engine; its §11 is the `View` and `Event` API this file consumes; its §5 is where aim assist lives), `ART.md` (every pixel this file draws is generated there, in four layers), `PORT.md` (phases P6, P7 and P9; the crate map in §4; the perf targets in §9.4, which the per-tier gates of §1.12 here refine), `WORLD.md` (the weather state the atmosphere reads), `VERIFICATION.md` (its L7, human review artefacts, is what `jane sheet scene` and `jane film` feed) and `ENGINE.md` §9 to §12 (the TS record of the renderer, input and UI that carry).
+How the native build is seen, heard and driven: the scene contract and the three render backends behind it, lighting and shadows, atmosphere, effects, the immediate-mode UI and its view buffers, input and rebinding, the audio (its hooks, the cue table, the synth and the score), and the viewer, sheet, film and bench tools. Pair with `ARCHITECTURE.md` (the engine; its §11 is the `View` and `Event` API this file consumes; its §5 is where aim assist lives), `ART.md` (every pixel this file draws is generated there, in four layers), `PORT.md` (phases P6, P7 and P9; the crate map in §4; the perf targets in §9.4, which the per-tier gates of §1.12 here refine), `WORLD.md` (the weather state the atmosphere reads), `VERIFICATION.md` (its L7, human review artefacts, is what `jane sheet scene` and `jane film` feed) and `ENGINE.md` §9 to §12 (the TS record of the renderer, input and UI that carry).
 
 **Changed 2026-09-26.** The single software renderer at 384 x 216 became one scene contract with three backends, a 768 x 432 canvas, four-layer sprites with normal-mapped lighting and cast shadows, atmosphere per area, and aim assist in the sim. The old software design is now the `soft` backend, not the game.
 
-Five crates.
+Six crates.
 
 | Crate | Kind | Holds | Depends on | GPU |
 | --- | --- | --- | --- | --- |
@@ -12,12 +12,14 @@ Five crates.
 | `jane-render-soft` | library | T0: CPU framebuffer, blit, multiply lightmap, mist tile, nearest upscale, read-back | `jane-present` | none |
 | `jane-render-gl2` | library | T1: OpenGL 2.1 / GLES 2.0 through `glow`; GLSL 1.20 / ES 1.00; shadow geometry; sharp bilinear | `jane-present`, `glow` | GL 2.1 or GLES 2 |
 | `jane-render-wgpu` | library | T2: Vulkan, DX12, Metal or GLES 3 through `wgpu`; WGSL; soft shadows, bloom, grading, water | `jane-present`, `wgpu` | Vulkan 1.1 class |
-| `jane-app` | binary | SDL2 window, the probe that picks a backend, audio device, the loop, save slots, `config.json` | the four above, `jane-sim`, `jane-net`, `sdl2` | picks one at boot |
+| `jane-audio` | library | every sound made in code: voices, patches rendered at boot, beds, the music sequencer, the mixer, WAV and analysis (§5) | `serde`, `serde_json` | none |
+| `jane-app` | binary | SDL2 window, the probe that picks a backend, audio device, the loop, save slots, `config.json` | the five above, `jane-sim`, `jane-net`, `sdl2` | picks one at boot |
 
 `jane view`, `jane sheet`, `jane film` and `jane bench` are `jane-cli` subcommands (§6) built on `jane-present` and `jane-render-soft` with no window; a `gpu` cargo feature, off by default, adds the other two backends for local use.
 
 ```
 jane-app → jane-render-{soft,gl2,wgpu} → jane-present → jane-art, jane-sim (View, Event), jane-world::names, jane-data (TEXT, NAMES)
+jane-app → jane-audio                      (the synth; jane-present never sees it, only its own AudioBus)
 
 jane-present/src/
   frame     Frame, Pass, the draw lists, Tier, the Features table (§1.1, §1.3)
@@ -34,7 +36,7 @@ jane-present/src/
   ui/       core, widgets, focus, drag, map, title, loading, console (§3)
   input     device → InputFrame + Edge queue; bindings; the assist profile (§4)
   text      TEXT[TextId], expand, toast and error tables (§3.7)
-  audio     AudioBus trait, cue table, NullBus (§5)
+  audio     AudioBus trait, MusicCue, SfxKind, Bed, the cue table (Soundtrack), place, NullBus (§5)
   bench     headless frame loop through any backend; pixel counting on soft (§1.12)
   film      jane film: N ticks from a save to PNG frames (§6)
 
@@ -489,17 +491,90 @@ Move and aim vectors are turned into `(Angle, magnitude)` with floats here and q
 
 **Rule:** nothing in `input` bends an aim. The raw angle leaves this crate; the sim bends it; the view reports where it went.
 
-## 5. Audio hooks
+## 5. Audio
+
+**Built 2026-09-27.** Every sound in the game is made by code: no audio file ships (`DESIGN-2020.md` §6), and no sample table in the source or the data holds more than 32 numbers (the art's "no grids" rule, heard). The palette is one voice throughout: soft FM, additive tables with a little unison, filtered noise and plucked strings under gentle envelopes, in one small shared room, never a raw chiptune beep unless the thing is meant to beep (the UI's ticks are soft wooden FM, not square waves). Three pieces:
 
 ```
-trait AudioBus { fn music(&mut self, cue: MusicCue); fn sfx(&mut self, kind: SfxKind, at: (Fx, Fx), listener: (Fx, Fx)); fn tick(&mut self) }
-enum MusicCue { Title, Zone(ZoneId, night: bool), Combat, Dead, Silence }
-struct NullBus;
+jane-present::audio   the hooks and the cue table: View + Event -> music cues, placed sounds, beds   (no samples)
+jane-audio            the synth: voices, patches rendered at boot, beds, the sequencer, the mixer    (no device)
+jane-app/src/audio.rs the SDL2 device: a callback at 48 kHz stereo running jane-audio's Engine      (the bus)
 ```
 
-The cue table lives in `jane-present::audio`: title on the title screen; `Zone` on entry and at the night boundary; a hostile in combat with her for 2 s → `Combat`, 6 s after the last → back to the zone cue; `Event::PlayerDied` → `Dead`. `Event::Sfx { kind, at }` passes through attenuated over 24 cells from the listener. Weather is an `Sfx` loop the cue table starts and stops from the view's weather state. `jane-app` owns the SDL audio device and implements the trait; `NullBus` is what `jane serve`, the tests and the first release use.
+### 5.1 The hooks
 
-Procedural audio is outlined for `PLAN.md` M8 only and nothing before it depends on it: `SfxPatch { wave, pitch: (start, end), decay_ms, duty, vibrato }` rendered into buffers at boot, music as a tick-driven sequencer over the same voices. No audio file ships (`DESIGN-2020.md` §6).
+```
+trait AudioBus { fn music(&mut self, cue: MusicCue); fn sfx(&mut self, kind: SfxKind, at: At, listener: At);
+                 fn bed(&mut self, bed: Bed, level: u8); fn tick(&mut self) }
+enum MusicCue { Title, Zone(ZoneId, Region, night: bool), Bell, Combat, Dead, Silence }
+struct NullBus;   // jane serve, the tests
+struct Soundtrack // the cue table: title(bus) on the title and loading screens, tick(view, events, bus) each play tick
+```
+
+`Zone` carries the region because the county is three places: a dungeon's cue normalises its region and night away (`MusicCue::zone`), so a dungeon's music does not change at nine. `bed` is the one addition to the outline: the loops are not sound effects, they are levels the bus fades to. The table reads the world through `Sense::of(view)`, a plain struct, so every rule is tested without a county (`audio.rs` tests); the view gained `flag(name)` and `weekday()`, read-only, for the bell (`jane-sim/src/view.rs`).
+
+**Music.** Title on the title and loading screens. The zone's cue on entry and at the night boundary. A hostile fighting her (in combat, targeting her, within 24 cells; or a blow either way) for **120 ticks** turns it to `Combat`; **360 ticks** after the last it turns back; a skirmish shorter than 2 s never turns it. `PlayerDied` (or her body down) is `Dead`, which plays once and leaves the silence until she wakes. While the bell strikes, `Bell`. `the_end` is `Silence`. The fades are a table (`fades`): into a fight 0.7 s out and 0.3 s in, out of one 2.5 s each way, a fall cuts in 0.3 s, the bell hushes over 2.5 s.
+
+**Effects.** Every `Event::Sfx`, swing, impact (by school), hurt, crit, heal, death, cast, failed cast, status, loot, quest given and done, learned spell, journal, rest, respawn, prop change (open, use, unlock, lock, switch) and door (a zone change) becomes an `SfxKind` at its place. `place(at, listener)` fades it over **24 cells** (the square of the remaining distance, so it reaches nothing smoothly), pans it by the offset across (full at 12 cells, 85 per cent wide) and sends more of it to the room the further it is. Her footsteps fall a stride apart (0.85 of a cell walked, sprint or walk) on the surface under her: grass (grass, garden, crops, moss, grown path), road (dirt, road, track, sand, rubble, rail), cobble (cobble, stepping stones and every stone floor), wood (floorboards, the boardwalk) and water, which is also soft ground whose wetness is at 150 or over (`WET_STEPS`), so a walk after rain splashes. An owl calls at night and a crow over the Lowfields by clear day, every 30 to 90 s, 10 to 18 cells off in a seeded direction; a storm thunders every 12 to 37 s. The UI makes a small sound for a screen opened or closed and a choice made, and a chime for a save.
+
+**Beds.** Rain from the view's weather (170, a storm 255) outdoors, on the roof indoors (150, 220) and not at all underground; wind by region (Works 95, Lowfields 70, Waters 55; a clear night +30, rain +50, a storm 235, mist 40); birds by the clock outside the Works (a dawn chorus 05 to 08, a quiet day, a full evening 17 to 21, a third of it in rain; the Forest too); crickets from 20:00 to 04:00 in the dry (fewer in the Works); the lake in the Waters; the hum in the Works (louder after nine), the Factory and the pipes; drips in the mine, the pipes, the cellar and the Burial; a fire in the Arms and at home; a clock at home and in the Library and Museum. Levels are 0 to 255 and every bed swells over about two seconds.
+
+### 5.2 The bell at nine
+
+The bell is a struck tower bell: eleven modes after the partials of an English church bell (the hum an octave under the strike note, the prime, the **minor-third tierce** that makes a bell sound sad, the quint, the nominal, and the high partials that make the clang), each a pair a few tenths of a hertz apart so it beats as a real bell hums, each dying at its own rate, hum longest; the strike note is D (146.8 Hz, the hum D2), the key of the title and of the bell's own cue. `jane sheet audio` draws it (`sheets/audio/sfx-bell_near.png`): the beating is the curved lines through the partials.
+
+It **strikes the hour**: nine strikes at 21:00 and six at 06:00, 2.5 s apart (a hand-rung bell, a stroke and the swing back), heard in every zone (`WORLD.md` §2.1). Across the open county it is `bell_far` (the high partials gone with the distance); indoors and underground it is `bell_within`, heard through walls and earth; where its ringer stands within hearing, it is `bell_near` from where he is. While it strikes, the music is `Bell`: a D minor hush six decibels under the matched loudness, a choir on the open fifth, the low strings answering with the bell's falling triad, and then the night's cue. A bed's sleep that jumps the clock past six still rings six on waking. On a Tuesday where `omen:early_bell` is true it rings at 20:50 and not again at nine. Once the Timekeeper is down (`bell_stopped`) it never rings again: at nine the music stops for eight seconds where the bell used to be, and at six nothing. **The ringer rings it** (`STORY.md` §8): in the School each of his phases is a strike of `bell_near` where he stands ("The bell goes"), and the School's own music tolls the same bell every other bar. The church at six (18:00, evensong) is a smaller, brighter bell, five quick strikes, heard only in the town (the Lowfields, the church, the Arms, the house); the Sunday train whistles at 17:02, a chord of three pipes a long way off, everywhere.
+
+### 5.3 The cues
+
+The score (`data/audio/songs`, 19 songs). All are matched to **-21 dBFS gated loudness** within 2 dB (`jane_audio::LOUDNESS`), so the player never reaches for the volume when the place changes; tempos are whole ticks a step, so the music keeps the game's clock. The theme's first phrase (up a fifth, lean on the sixth, fall to the second) runs through the whole county.
+
+| Cue | Song | Key, time | Instruments | Mood |
+| --- | --- | --- | --- | --- |
+| Title | `title` | D minor, 4/4, 67 bpm | felt piano (or celesta), celesta echo, strings, harp, soft bass | The theme: a slow air falling from the fifth like the bell, lifting once into F and coming home unresolved |
+| Lowfields by day | `lowfields_day` | G major, 6/8 | flute (or clarinet), fingerpicked guitar (or harp), warm pad, plucked bass, celesta | The town that was: the theme in the major, lilting, turning wistful through E minor |
+| Lowfields by night | `lowfields_night` | E minor, slow | felt piano alone, dark pad, bowed glass (or choir), low strings, a wandering harp | After the bell: the theme's first notes in the dark, and once a loop the Neapolitan F that does not belong |
+| Waters by day | `waters_day` | F Lydian | clarinet (or flute), flowing harp, glass, warm pad, celesta drops | Reeds and mist over still water, the raised fourth hanging in the air |
+| Waters by night | `waters_night` | F# minor, a crawl | choir humming, glass, drone, a far clarinet, harp drops | Fog, something on the far bank, a phrase that never finishes |
+| Works by day | `works_day` | C minor | harmonium hymn (or clarinet), staccato string wheel, low strings, frame drum, iron | The shift nobody comes to: a wheel turning, the works band's hymn |
+| Works by night | `works_night` | C Phrygian | low-drum heartbeat, dark pad, low strings rocking C to D flat, sub, choir, iron | The night shift on Cinder Walk |
+| House, Cellar | `home` | F major, 3/4 | felt piano, celesta (or small bell), piano waltz, strings, bass | Julie's lullaby: warm until the minor four turns it, a room someone is not in |
+| Arms | `arms` | D major, 3/4 | harmonium (or flute), guitar oom-pah, plucked bass, strings | The inn lit till it is light: a slow waltz a little out of its time |
+| Church | `church` | D minor, 4/4 hymn | organ, organ pedal, choir, treble organ | The hymn, closing each verse on a major chord it does not believe |
+| Mine, Pipes | `deep` | A minor | drone, dark pad, harp drips, far choir, low strings | Under the ground: a drone that does not change for a long time, water falling in the dark |
+| Burial | `burial` | E Phrygian dirge | low drum on the one, choir, low strings, small bell, drone | Goldskin's four favourites: a dirge leaning on the flat second |
+| Forest | `forest` | E Lydian | flute, celesta wings (or harp), choir, glass, bass | The coloured things singing about day and night: beautiful and slightly wrong |
+| Library, Museum | `halls` | B minor | harpsichord in two parts, warm pad, small bell | Cases and dust: an invention walking the circle of fifths, a little too careful |
+| Factory | `factory` | C minor | low drums limping, iron off the beat, staccato riff, low strings, sub, dark pad | A machine climbing to a leading note that never gets its tonic |
+| School | `school` | D minor, 3/4 | music box whose spring is going, the tower bell every other bar, choir, drone, celesta | Forty-one names marked present: a counting tune |
+| Combat | `combat` | D minor, 112 bpm | low drums in threes and twos, frame drum, brushes, staccato ostinato, low and high strings, dark pad, sub | Something has hold of her: the bell's falling triad over a run, pressing to the leading note |
+| Dead | `dead` (once) | D minor, slow | celesta, felt piano, strings, low strings | The theme's first phrase slowed and alone, stopping on the second degree as if it forgot the rest |
+| Bell | `bell` (once) | D minor | drone, dark pad, choir, low strings | The hush under the strikes, 6 dB under the others (`under` in its row) |
+
+**Seeded variation.** The county's seed picks each track's instrument from its alternatives and each song's form (the order of its sections) and patterns; every loop redraws its form and patterns from the seed and the loop's number, the notes marked `~` sound on some loops and not others, and a `drift` track (the night harps, the drips, the iron in the Works) wanders its chord's tones at seeded gaps. The same county always plays the same evening; another county another (`tests/music.rs`).
+
+### 5.4 The synth (`jane-audio`)
+
+Floats throughout (it is presentation, and nothing in it reads or feeds the sim); 48 kHz stereo, any rate the device gives.
+
+- **Voices.** Two-operator FM with a second modulator for the tine or chiff, each index falling on its own clock, louder notes brighter (felt piano, celesta, music box, bass, glass, tick). Additive tables: harmonic amplitudes summed into a single cycle at boot, one table per harmonic count so a high note never aliases, up to four unison voices spread in pitch and across the stereo, optional breath noise and formant bands (strings, pads, choir, flute, clarinet, organ, harmonium, drone). Karplus-Strong strings with an all-pass tuning the fraction of a sample and a comb for where the string is plucked (harp, guitar, harpsichord, plucked bass), in tune to within 6 cents. Struck modes as decaying complex phasors, pairs beating (the tower bell, a small bell, iron). A pitched drum (a sine falling from above its pitch, a noise click), tuned like a timpano to the song's tonic. Filtered noise (brushes). Each through a state-variable filter (Simper's) with key tracking, a velocity and envelope sweep and a slow wobble, and an ADSR whose attack is a raised curve and whose release starts from wherever the attack had got to, so no note clicks on or off.
+- **Sound effects** (`data/audio/sfx.json`, 50 patches): the outline's `SfxPatch { wave, pitch: (start, end), decay_ms, duty, vibrato }` grown into up to four layers, each a sine, triangle, band-limited saw or pulse, white or pink noise, FM, a plucked string or the tower bell, with an attack, a hold, a filter sweep, tremolo, a delay and a little figure of notes; rendered at boot into mono buffers (about 0.3 s for all of them), with up to four variants each a few cents apart so a walk is never the same step twice.
+- **Beds**: made live, each a small generator (decorrelated noise through moving filters, and grains: drops, chirps, drips, pops, ticks), so they never loop audibly.
+- **The sequencer** runs on ticks: a step is a whole number of ticks (a tick is 800 samples at 48 kHz), notes land on their sample with a few milliseconds of seeded humanising, chords are voiced near the track's octave so progressions move by the nearest step, and at most 48 voices sound at once (the oldest fades out in 8 ms).
+- **The mix**: music, effects and beds each with its volume (smoothed, square-law from the 0 to 100 settings), one shared reverb (an eight-line feedback delay network under a Householder matrix, 2.4 s, each line darkening as it dies, after a pre-delay and two diffusers), a DC blocker and a 4 ms look-ahead limiter at -0.6 dBFS.
+- **The pattern language** (`pattern.rs`): one token a step, like a tracker's column. Melody digits are degrees of the key; bass and arp digits are degrees above the chord's root (1, 3, 5, 7, 8), so an arpeggio follows the progression without being written again; `-` holds, `.` rests, `'` and `,` move an octave, `#` and `b` alter, `!` and `?` accent and soften, `~` is a maybe; chords are one token a bar (`b7`, `4m`, `5M7`, `1s4`, `6/7` for two in a bar). `build.rs` reads every file through the crate's own model and refuses the build on a pattern that does not fit its section, a missing instrument, or a list over its bound; the data sits outside the content hash, as `bindings.json` does.
+
+### 5.5 The device
+
+`jane-app` opens SDL2's audio (the `sdl2` crate's own subsystem, no other crate) at 48 kHz stereo with 1024-sample buffers and a callback that owns the `Engine`; the bus sends it commands over a channel, so neither side waits. With no device or no audio subsystem it prints one line and is silent; the game plays on. The volumes are `config.json`'s `volume` (`{ "master": 80, "music": 70, "sfx": 80 }`, 0 to 100; effects cover the beds) and a row on the Controls screen: minus, value and plus for each, in steps of ten; with the keys, the row's left and right turn the lit one and confirm moves to the next. `jane serve`, the tests and a headless run use `NullBus`.
+
+### 5.6 How it is checked
+
+Nobody on the build can hear, so it is judged by numbers (`jane-audio/src/analysis.rs`) and by eye:
+
+- `tests/music.rs`: every cue within 2 dB of its loudness, under the ceiling, no DC, **no clicks even 6 dB up** (a second difference far sharper than its neighbourhood's), heard in the key it was written in (a chroma against Krumhansl's key profiles; a mode may be heard as itself or its parent major or that major's relative minor), every note it played in its scale unless the pattern asked otherwise, every pitched instrument in tune at A3, every sound effect starting and ending at rest; a county's music the same every time and another's different; a cue change that fades to true silence. The first run found two real faults: letting go of a note in its attack stepped from the curve to the ramp (a click at every slow pad's chord change), and a low D's energy split between C# and Eb in too coarse a spectrum.
+- Unit tests beside each piece: the polynomial sine, the envelope's edges, the string's tuning, the limiter's ceiling, the reverb's decay, the bell's inharmonic partials, every bed's level, the pattern and chord grammar; and in `jane-present`, the cue table's timings (2 s, 6 s), the bell's nine and six, the early bell and the silent one, the ringer's strikes, the fall, the fades over 24 cells, the stride and the surfaces, and the beds by sky, hour and place.
+- `jane audio render <sfx:|bed:|inst:|song:|scene:name> [--png]` writes a WAV (and a waveform over a log-frequency spectrogram) under `sheets/audio/`; `jane audio check` prints each cue's loudness, peak, clicks and the key it is heard in against the key written, and the gain that would match it; `jane sheet audio` renders every patch, bed, song and three scenes (`nine`: dusk in the Lowfields, the bell and the night coming in; `six`; `combat`: a walk interrupted and given back).
 
 ## 6. Native viewer, sheets, film and bench
 
@@ -515,6 +590,7 @@ All are `jane-cli` subcommands drawing through `jane-render-soft` into an unshow
 | `jane film --save <slot> --ticks N --out dir/ [--every k] [--tier t] [--backend b]` | N ticks from a save, one frame per tick at `alpha = 1`, a PNG per frame (or every k-th), the `FrameStats` table beside them; through `soft` at T0 on CI, any backend locally. The same tool over a trace range (`--trace`, `--from`, `--to`, `--clips`) is the film clip of `VERIFICATION.md` L7. Frames and scene sheets are how a lamp coming on at 18:30, a shadow swinging with the sun or the rain starting is looked at, not asserted |
 | `jane sheet fx <spell>` | the effect's parts over 60 ticks, one column per tick, with its lights |
 | `jane sheet ui [screen ...]` | **Built 2026-09-27.** The UI headless through the presenter and `soft` in states play rarely shows at once: `hud` (a fight's chips, target, three toasts, a flash, the lag), `dead`, `choice`, `tooltip`, `popover`, `drag`, `pause`; PNGs to `sheets/`. The UI's review sheet, as `sheet scene` is the world's |
+| `jane sheet audio`, `jane audio render\|check\|list` | **Built 2026-09-27.** Every sound effect, bed, song and scene to WAV under `sheets/audio/`, songs and scenes drawn as a waveform over a spectrogram; `check` measures each cue (§5.6). The audio's review sheet |
 | `jane sheet units\|props\|icons\|flora\|chrome\|font`, `unit <id>`, `title` | `ART.md`, the pipeline section; a unit sheet shows all four layers |
 | `jane bench --save <slot> --frames 600 [--night] [--wide] [--backend b] [--tier t]` | §1.12; reports per tier the machine can reach. **As built**: `jane bench frames [--backend soft\|wgpu] [--frames n] [--seed n] [--ticks t] [--hour h] [--wide] [--output WxH]` plays to a frame, then times n there: the `Frame` built, the backend's draw, the whole frame to its last pixel at the output size (wgpu upscales to an offscreen target, 3840 x 2160 by default) and the `FrameStats` table |
 
@@ -544,7 +620,12 @@ Each is a one-line edit if the owner flips it before P6.
 | Atlas cache | Allowed on disk under the save directory, keyed by build hash, all four layers together; written, never shipped | boot |
 | Build order | Window first (`PORT.md` §7.1): §1 on `soft` and a window before the art is done; chunks as flat swatches (§1.6) and step-1 demo sprites stand in; the prompt, vitals and dialogue box of §3.2 come with P6, the rest of §3 with P7 | §1.6, §3.2 |
 | New Game | All 13 zones built up front behind the loading screen; no zone is built on first entry | §3.2 |
-| Audio and bindings | `NullBus` ships and procedural audio is outlined for `PLAN.md` M8 only; `data/bindings.json` compiled in by `jane-present`'s build script (outside the content hash), overrides in `config.json` beside the saves | §4, §5 |
+| Audio and bindings | *(Built 2026-09-27)* `jane-audio` makes every sound; `data/audio` and `data/bindings.json` are checked and compiled in by their crates' build scripts (outside the content hash); overrides and volumes in `config.json` beside the saves | §4, §5 |
+| The bell's count | It strikes the hour: nine at nine, six at six, 2.5 s apart; the church at six is a different, smaller bell | §5.2 |
+| `MusicCue::Zone` | Carries the region, since the county is three places; a dungeon's cue ignores region and hour | §5.1 |
+| Loudness | Every cue at -21 dBFS gated, within 2 dB; the bell's hush 6 dB under | §5.3 |
+| Volumes | Master 80, music 70, effects 80 (beds follow effects), square law; a row on the Controls screen, not a screen of its own | §5.5 |
+| Audio thread | SDL2's callback owning the engine, commands over a channel; floats; 1024-sample buffers | §5.5 |
 | Saves and config | Slot files and `config.json` in `%APPDATA%\Jane`, `~/Library/Application Support/Jane` or `$XDG_DATA_HOME/jane`; beside the exe when a file called `portable` is there; `--data-dir` overrides | §3.2 |
 | The window's height | 350, not 380: the HUD's bar stays visible below it as a drop target | §3.2 |
 | The quest tab's name | Log (`VOICE.md` rule 8: no "quest" in the game's words) | §3.2 |

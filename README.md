@@ -29,7 +29,7 @@ This is the third build. The first (Phaser, 2026) is archived in `archive/phaser
 | `PORT.md` | The port: repo layout, toolchain and targets, the crate map, the data pipeline, the worldgen port, phases P0 to P10 with gates, how agents work in parallel, tests, performance targets |
 | `ARCHITECTURE.md` | The Rust engine: fixed-point numerics, the state tree, the tick, verbs, the content compile, saves and hashes, lockstep networking |
 | `ART.md` | Art as a function: generator families emitting albedo, normal, emissive and height; the palette; derivation rules; the atlas; the font; contact sheets |
-| `PRESENTATION.md` | The scene and its three backends (software, OpenGL 2.1, Vulkan), normal-mapped lighting and shadows, atmosphere layers, effects, the UI, input, audio hooks, the native viewer |
+| `PRESENTATION.md` | The scene and its three backends (software, OpenGL 2.1, Vulkan), normal-mapped lighting and shadows, atmosphere layers, effects, the UI, input, the audio (the cue table, the synth, the score, the bell at nine), the native viewer |
 | `WORLD.md` | The living county: time, people and their hours, ecology, weather and atmosphere, consequence, rumour, global cohesion, the story spine |
 | `EXPERIENCE.md` | What happens, minute by minute for the first hour and hour by hour after, what she knows at each point, and which check holds each claim |
 | `VERIFICATION.md` | The proof of play: layers L0 to L7 from the data compile to player-model bots, experience metrics, truth and cohesion audits, dossiers and film per seed |
@@ -65,6 +65,11 @@ cargo jane gen --zones all --seeds 1..16 --hash          # every zone built and 
 cargo jane hash --seed 7 --frames 600                    # a new game stepped, and its state hash
 cargo jane sheet light sphere                            # art sheets: layers, light, font, chrome, palette
 cargo jane sheet ui                                      # the UI's screens headless: hud, dead, choice, tooltip, popover, drag, pause
+cargo jane audio list                                    # every sound effect, bed and song, each song's key and mood
+cargo jane audio render scene:nine --png                 # the bell at nine over dusk, as sheets/audio/scene-nine.wav and .png
+cargo jane audio render song:title                       # any song:, sfx:, bed:, inst: or scene: to a WAV under sheets/audio/
+cargo jane audio check                                   # each cue's loudness, peak, clicks and the key it is heard in
+cargo jane sheet audio                                   # every patch, bed, song and scene as WAV, songs drawn as spectrograms
 ```
 
 The game, in a window:
@@ -81,7 +86,7 @@ cargo run --release -p jane-app -- --new --seed 7 --bot reader   # jane-bot's re
 
 The title builds nothing; New Game builds the thirteen zones on a thread while the loading card draws the county's skeleton forming. `--script` feeds inputs at ticks (`key`, `down`, `up`, `click`, `rclick`, `move`, `type`, `shot`, and `bot reader`, `bot talk`, `bot off`; `jane-app --help` has the grammar), which is how every screen is shot without hands. The window starts at 1536 x 864 (768 x 432 where that does not fit) and resizes; the picture is always 432 canvas pixels tall, and a wider window shows more county. `--scale K` starts it at another multiple, `--name` names her, `--data-dir` puts saves somewhere else.
 
-**Saves and config.** Three slots, `slot1.jane` to `slot3.jane`, and `config.json` (the name last used, the backend, the aim assist, the bindings that differ from `data/bindings.json`, each slot's seed) live in `%APPDATA%\Jane` on Windows, `~/Library/Application Support/Jane` on a Mac and `$XDG_DATA_HOME/jane` elsewhere; beside the exe instead when a file called `portable` sits there. The pause menu saves only within reach of a bed or a fire; resting at one saves by itself to the slot last used.
+**Saves and config.** Three slots, `slot1.jane` to `slot3.jane`, and `config.json` (the name last used, the backend, the aim assist, the bindings that differ from `data/bindings.json`, each slot's seed, the volumes) live in `%APPDATA%\Jane` on Windows, `~/Library/Application Support/Jane` on a Mac and `$XDG_DATA_HOME/jane` elsewhere; beside the exe instead when a file called `portable` sits there. The pause menu saves only within reach of a bed or a fire; resting at one saves by itself to the slot last used.
 
 Still to come (`PORT.md` §7): bots playing seeds (`jane play`, `dossier`), the LAN host (`jane serve`).
 
@@ -122,6 +127,14 @@ Things worth knowing: Repair costs what the thing is made of. A pressure plate s
 | Screenshot | F12 | |
 
 Every binding is data (`data/bindings.json`) and every one can be changed on the Controls screen (from the title or the pause menu): pick a cell, press the new key, button or pad input; a clash shows in red and is never refused. Changes go to `config.json`.
+
+**Sound.** Everything you hear is made by code as it plays: no audio file ships (`PRESENTATION.md` §5). Three volumes, each 0 to 100: **master**, **music** and **effects** (the ambient beds, rain and wind and birds, follow effects). Set them on the Controls screen's Volume row (minus and plus, in tens; with the keys, go to the row, left and right turn the lit one, confirm moves to the next), or in `config.json`:
+
+```json
+"volume": { "master": 80, "music": 70, "sfx": 80 }
+```
+
+The defaults are those. A missing one keeps its default. With no sound device the game says so once on the console and plays silent.
 
 Terminal rows: `help`, `give <item> [qty]`, `god [on|off]`, `tp <zone> [mark]`, `time <hour>`, `hp <n>`, `mp <n>`, `learn <spell>`, `quest <quest>`, `flag <name> <value>`, `kill`, `spawn <unit>`, `save [1-3]`, `load [1-3]`, `seed`, `hash`, `pos`, `inst`, `speed 0.25|1|4|hold|step`, `ver`, `title`, `party`, `open`, `close`, `clear`. Anything that changes the world goes to the sim as a `Command::Dev`, so a replay replays it. `join` and `leave` wait for the network (P8).
 
