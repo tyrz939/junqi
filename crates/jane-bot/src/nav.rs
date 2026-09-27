@@ -73,6 +73,8 @@ pub struct Nav {
     waypoint: Option<(i32, i32)>,
     /// What the path in hand leads to: the goal, or a waypoint toward it.
     target: Option<(i32, i32)>,
+    /// Crossings of the block plan she could not make, toward this goal.
+    crossings_failed: u32,
     /// What a dungeon's tactic says a cell costs over its step, in tenths, and that she runs
     /// across it (the Factory's lit floor, where the sentries see her): `(zone, width, costs)`,
     /// for the zone it was set in. `None` everywhere else.
@@ -81,6 +83,8 @@ pub struct Nav {
 
 /// Cells (the larger of across and down) beyond which a goal is planned over blocks first.
 pub const FAR: i32 = WINDOW as i32 / 2 - 24;
+/// Crossings of the block plan that may fail toward one goal before it is no way.
+pub const MAX_CROSSINGS: u32 = 12;
 /// How far along the block plan a waypoint is taken, cells.
 pub const WAYPOINT_REACH: i32 = 110;
 
@@ -147,6 +151,7 @@ impl Nav {
             coarse: crate::coarse::Coarse::new(),
             waypoint: None,
             target: None,
+            crossings_failed: 0,
             toll: None,
         }
     }
@@ -161,6 +166,7 @@ impl Nav {
         self.path.clear();
         self.waypoint = None;
         self.target = None;
+        self.crossings_failed = 0;
         self.at = 0;
         self.goal = None;
         self.replan_in = 0;
@@ -272,11 +278,6 @@ impl Nav {
                 _ => {
                     let roads = self.roads && !v.indoor();
                     let w = self.coarse.waypoint(v, own, goal, roads, WAYPOINT_REACH).unwrap_or(goal);
-                    if self.waypoint != Some(w) {
-                        // A new waypoint on the plan is progress along it.
-                        self.fruitless = 0;
-                        self.best_dist = i64::MAX;
-                    }
                     self.waypoint = Some(w);
                     w
                 }
@@ -302,7 +303,13 @@ impl Nav {
             }
             if self.path.is_empty() {
                 if target != goal {
-                    // That crossing of the block plan cannot be made from here: round it.
+                    // That crossing of the block plan cannot be made from here: round it, a few
+                    // times (each is a plan over the whole zone's blocks), then no way.
+                    self.crossings_failed += 1;
+                    if self.crossings_failed > MAX_CROSSINGS {
+                        self.why = "the plan over blocks found no crossing that can be walked";
+                        return Go::NoWay;
+                    }
                     self.coarse.failed(own, target, v.frame());
                     self.waypoint = None;
                     self.target = None;

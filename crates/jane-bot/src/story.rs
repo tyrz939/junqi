@@ -58,6 +58,8 @@ pub enum Goal {
     Rest,
     /// Home before dark: the night slept away in Julie's bed.
     Sleep,
+    /// Ready for an act: a potion brewed at Julie's bench, or food picked up, before the dungeon.
+    Provision(ItemId),
     /// In a dungeon with the quest's thing out of reach: what the crawl would do next.
     Explore(crate::crawl::Try),
 }
@@ -100,6 +102,13 @@ pub struct Story {
     /// Nothing to do: the frame to look again.
     quiet_until: u32,
 }
+
+/// What she packs for an act, and how many of each: Stone Skin and a life-steal from the bench
+/// (the roses, stones and flowers she has picked up on the way), and food.
+const PROVISIONS: [(&str, u32); 3] = [("potion_stoneskin", 2), ("potion_lifesteal", 1), ("apple", 6)];
+
+/// Cells she will go for a provision: the bench, or food seen near.
+const PROVISION_REACH: i32 = 900;
 
 /// Frames between looks when there was nothing to do.
 const QUIET: u32 = 30;
@@ -422,6 +431,18 @@ impl Story {
         Act::idle()
     }
 
+    /// Is a step of a quest in the log to be played in a dungeon (an act ahead)?
+    fn act_ahead(&self, v: &View<'_>) -> bool {
+        let cat = jane_data::catalog();
+        v.quests().filter(|q| !q.ready).any(|q| {
+            let def = cat.story.quest(q.quest);
+            (0..def.requirements.len()).any(|i| {
+                q.count(i) < def.requirements[i].qty
+                    && zone_of_step(q.quest, i).is_some_and(|z| dungeon(z) && z != ZoneId::Cellar)
+            })
+        })
+    }
+
     /// An open quest step that `z` is the place for (its text names the dungeon), not set aside.
     fn step_in(&self, v: &View<'_>, z: ZoneId) -> Option<Goal> {
         Self::steps_in(v, z).into_iter().find(|&g| self.open(v, g))
@@ -516,6 +537,27 @@ impl Story {
             known.sort_by_key(|&(c, z, a)| (c, z, a.x.0, a.y.0));
             if let Some(&(_, z, a)) = known.first() {
                 return Some((Target::At(z, a), Goal::Rest));
+            }
+        }
+        // Before an act's dungeon: ready for it, as a player packs for a long walk (the potions
+        // the bench makes from what she carries, food she has seen lying about). Only out of
+        // doors or in the house, and only while a dungeon step is in the log.
+        if matches!(here, ZoneId::County | ZoneId::House) && self.act_ahead(v) {
+            for (name, want) in PROVISIONS {
+                let item = sense::item(name);
+                let g = Goal::Provision(item);
+                if holds(v, item) >= want || !self.open(v, g) {
+                    continue;
+                }
+                match get(v, cx, item, 0) {
+                    None | Some(Target::Fight(_)) => {}
+                    Some(t) => {
+                        let c = cost_of(&t);
+                        if c <= i64::from(PROVISION_REACH * CELL_FX) {
+                            return Some((t, g));
+                        }
+                    }
+                }
             }
         }
         // 1 and 2: the log. The nearest objective of any quest; one that someone is waiting
@@ -699,6 +741,7 @@ fn goal_name(v: &View<'_>, g: Goal) -> String {
         Goal::Talk(z, u) => format!("talk to {:?} in {}", u, z.name()),
         Goal::Rest => "rest at a fire or a bed".into(),
         Goal::Sleep => "home to sleep".into(),
+        Goal::Provision(i) => format!("provision {}", cat.combat.item(i).id),
         Goal::Explore(t) => format!("explore: {t:?}"),
         Goal::Look(z, p) => {
             let name = v.prop(p).filter(|_| v.zone() == z).map_or("?", |p| v.name(p.key));
