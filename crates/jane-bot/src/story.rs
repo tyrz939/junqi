@@ -79,7 +79,7 @@ enum Target {
 pub struct Story {
     task: Option<(Task, Goal)>,
     fails: BTreeMap<Goal, u32>,
-    /// Set aside until this frame.
+    /// Set aside until this tick (a night slept counts: the clock is what she waits on).
     blocked: BTreeMap<Goal, u32>,
     /// The goal last finished, and how often in a row it was chosen again at once.
     last: Option<Goal>,
@@ -216,6 +216,21 @@ impl Story {
         // A dungeon under way: the crawl plays it, in and out again.
         if let Some((c, g)) = &mut self.dungeon {
             let g = *g;
+            // Out of doors on the way to it and the night come on: home, and back in the
+            // morning (the county's night kills a walk that its day would not).
+            let outside = matches!(v.zone(), ZoneId::County | ZoneId::House) && c.zone != v.zone();
+            if outside && !(6..20).contains(&v.hour()) && has_home(v) && v.dialogue().is_none() {
+                let hours = u32::from((30 - v.hour()) % 24);
+                let until = v.tick().0 + hours * jane_sim::tuning::TICKS_PER_HOUR;
+                let zone = c.zone;
+                self.dungeon = None;
+                self.task = None;
+                for s in std::iter::once(g).chain(Self::steps_in(v, zone)) {
+                    self.blocked.insert(s, until);
+                }
+                notes.push(Mark::Note(format!("the {} in the morning", zone.name())));
+                return Act::idle();
+            }
             if !c.done() && c.frames < CRAWL_FRAMES {
                 let a = c.think(v, cx, events, notes);
                 if !c.done() {
@@ -235,7 +250,7 @@ impl Story {
             // failure counted.
             let wait = if c.entered.is_none() { sense::hours_till_open(v, c.zone) } else { 0 };
             if wait > 0 && why.is_some() {
-                let until = v.frame() + u32::from(wait) * jane_sim::tuning::TICKS_PER_HOUR;
+                let until = v.tick().0 + u32::from(wait) * jane_sim::tuning::TICKS_PER_HOUR;
                 for s in std::iter::once(g).chain(Self::steps_in(v, c.zone)) {
                     self.blocked.insert(s, until);
                 }
@@ -276,7 +291,7 @@ impl Story {
                 cx.nav.roads = true;
                 if let Some((_, g)) = self.task.take() {
                     notes.push(Mark::Stuck(format!("{}: died on the way", goal_name(v, g))));
-                    self.blocked.insert(g, v.frame() + 600);
+                    self.blocked.insert(g, v.tick().0 + 600);
                 }
             }
             self.task = None;
@@ -364,7 +379,7 @@ impl Story {
                         // Its door keeps hours ("Open ten to four"): come back when it is open.
                         let wait = sense::hours_till_open(v, z);
                         if wait > 0 {
-                            let until = v.frame() + u32::from(wait) * jane_sim::tuning::TICKS_PER_HOUR;
+                            let until = v.tick().0 + u32::from(wait) * jane_sim::tuning::TICKS_PER_HOUR;
                             self.blocked.insert(goal, until);
                             notes.push(Mark::Note(format!("the {} is shut for {wait} h", z.name())));
                             continue;
@@ -385,7 +400,7 @@ impl Story {
                     if self.idle == 600 {
                         notes.push(Mark::Stuck("nothing left to do".into()));
                     }
-                    if self.idle >= 600 && self.blocked.values().all(|&u| u <= v.frame()) {
+                    if self.idle >= 600 && self.blocked.values().all(|&u| u <= v.tick().0) {
                         self.done = true;
                     }
                     return Act::idle();
@@ -419,14 +434,14 @@ impl Story {
         let n = self.fails.entry(goal).or_insert(0);
         *n += 1;
         let wait = SET_ASIDE << (*n).min(6);
-        self.blocked.insert(goal, v.frame() + wait);
+        self.blocked.insert(goal, v.tick().0 + wait);
         if *n >= 2 {
             notes.push(Mark::Stuck(format!("{}: {why}", goal_name(v, goal))));
         }
     }
 
     fn open(&self, v: &View<'_>, g: Goal) -> bool {
-        self.blocked.get(&g).is_none_or(|&until| until <= v.frame())
+        self.blocked.get(&g).is_none_or(|&until| until <= v.tick().0)
     }
 
     fn choose(&mut self, v: &View<'_>, cx: &mut Ctx) -> Option<(Target, Goal)> {
@@ -505,7 +520,7 @@ impl Story {
                     match hand_in(v, cx, q.quest) {
                         // Whoever takes it back is not about: come back when they are.
                         Some(Target::Later(h)) => {
-                            self.blocked.insert(g, v.frame() + u32::from(h) * jane_sim::tuning::TICKS_PER_HOUR);
+                            self.blocked.insert(g, v.tick().0 + u32::from(h) * jane_sim::tuning::TICKS_PER_HOUR);
                         }
                         Some(t) => offer(near(cost_of(&t)), g, t, &mut best),
                         None => {}
