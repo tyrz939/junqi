@@ -189,7 +189,11 @@ fn fight(cx: &mut Ctx<'_>, id: UnitId, def: &UnitDef, run: Fx, shy: bool) {
     let leash = i64::from(def.leash.0) * i64::from(10 + NIGHT_LEASH * dark) / 10;
     let u = cx.zone.unit(id).expect("unit");
     let (pos, home) = (u.pos, u.home);
-    let too_far = distance(pos, home) > leash;
+    // A rooted thing (a flower, a cactus: no feet) never leaves its post, so no chase takes it
+    // past its leash: it lets go once she is half again its aggro from it, or it would hold her
+    // in its fight from across the zone for good.
+    let rooted_off = run.0 <= 0 && distance(tpos, home) > i64::from(def.aggro.0.max(CELL_FX)) * 3 / 2;
+    let too_far = distance(pos, home) > leash || rooted_off;
     // Light is how a sentry sees: a target that steps into the dark is a target it no longer has.
     let unseen = !too_far && def.sight == UnitSight::Lit && !lit_at(cx.zone, cx.rt, clock, tpos, false);
     // Warm light keeps a shade off: standing in it, it does nothing but leave.

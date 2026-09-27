@@ -257,6 +257,28 @@ fn an_idle_hunter_takes_what_it_hunts() {
     assert!(unit(&f.s, hen).hp < hp || !unit(&f.s, hen).alive, "and it goes for it");
 }
 
+/// A rooted thing (no feet: a cactus) holds her in its fight while she is near, and lets go
+/// once she is half again its aggro from it: no chase ever takes it past its leash, and it
+/// would otherwise hold her from anywhere in the zone.
+#[test]
+fn a_rooted_thing_lets_go_of_her_far_off() {
+    let mut f = field();
+    f.s.state.players[0].god = true;
+    let her = me(&f.s);
+    edit(&mut f.s, her, |u| u.pos = Vec2::centre(10, 10));
+    let cactus = spawn(&mut f.s, "cactus", 20, 10);
+    edit(&mut f.s, cactus, |u| {
+        u.combat = CombatState::Combat;
+        u.target = Some(her);
+    });
+    let row = jane_data::catalog().combat.unit(def_id("cactus"));
+    in_ctx(&mut f.s, None, |cx| tick_ai_with(cx, cactus, row));
+    assert_eq!(unit(&f.s, cactus).combat, CombatState::Combat, "ten cells off, it keeps her");
+    edit(&mut f.s, her, |u| u.pos = Vec2::centre(70, 50));
+    in_ctx(&mut f.s, None, |cx| tick_ai_with(cx, cactus, row));
+    assert_ne!(unit(&f.s, cactus).combat, CombatState::Combat, "across the field, it lets go");
+}
+
 /// §4.6.c `flees`: with a unit of a fled row inside its leash, it walks its leash away from it,
 /// and stops once it is clear.
 #[test]

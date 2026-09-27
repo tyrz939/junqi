@@ -351,15 +351,29 @@ impl Bot {
         let bag: Vec<String> =
             v.me().bag.iter().flatten().map(|s| format!("{}x{}", s.qty, cat.combat.item(s.item).id)).collect();
         let mut out = format!(
-            "at {:?} in the {}, clock {:?}; hp {}; bag: {}\n",
+            "at {:?} in the {}, clock {:?}; hp {}; mp {}; bag: {}\n",
             v.body().pos.cell(),
             v.zone().name(),
             v.clock(),
             v.body().hp.points(),
+            v.body().mp.points(),
             bag.join(" ")
         );
         let (x, y) = v.body().pos.cell();
         out.push_str(&ascii(v, jane_core::Rect::new(x, y, 1, 1), 8));
+        let f = &self.ctx.fight;
+        let unit = |id: Option<jane_sim::ids::UnitId>| {
+            id.and_then(|t| v.unit(t))
+                .map(|u| format!("{} at {:?} hp {}", cat.combat.unit(u.def).id, u.pos.cell(), u.hp.points()))
+        };
+        let _ = writeln!(
+            out,
+            "fight: target {:?} hunt {:?} fleeing {}; talking {}",
+            unit(f.target),
+            unit(f.hunt),
+            f.fleeing,
+            v.dialogue().is_some()
+        );
         match &self.plan {
             Plan::Story(s) => {
                 let _ = writeln!(out, "doing: {}", s.status());
@@ -368,8 +382,9 @@ impl Bot {
             Plan::Crawl(c) => {
                 let _ = write!(
                     out,
-                    "doing: {}\n{}\ntried: {:?}\nfailed: {:?}\n",
+                    "doing: {} ({})\n{}\ntried: {:?}\nfailed: {:?}\n",
                     c.status(),
+                    c.doing(v),
                     c.why_stuck(v),
                     c.tried_list(),
                     c.failures

@@ -59,6 +59,8 @@ pub struct Ctx {
     pub sleep: bool,
     /// The day she signalled the Sunday train at the name board.
     pub signalled: Option<u32>,
+    /// Butterfly Forest's tactic (`tactics::forest`).
+    pub forest: crate::tactics::forest::Forest,
 }
 
 /// What a prop was seen to do: enough to go back for it from another zone.
@@ -144,6 +146,7 @@ impl Ctx {
             ending: None,
             sleep: false,
             signalled: None,
+            forest: crate::tactics::forest::Forest::default(),
         }
     }
 

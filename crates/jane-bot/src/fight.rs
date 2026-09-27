@@ -106,7 +106,12 @@ pub fn retreat_point(
 }
 
 /// Running from something at `from`: to the retreat point, by the path there.
-fn away_from(v: &View<'_>, cx: &mut Ctx, from: jane_core::Vec2, tether: Option<(jane_core::Vec2, i64)>) -> InputFrame {
+pub fn away_from(
+    v: &View<'_>,
+    cx: &mut Ctx,
+    from: jane_core::Vec2,
+    tether: Option<(jane_core::Vec2, i64)>,
+) -> InputFrame {
     let me = v.body().pos;
     let far = cx.fight.retreat.filter(|r| {
         dist(*r, from) > dist(me, from) + i64::from(CELL_FX)
@@ -190,18 +195,31 @@ fn step_out(v: &View<'_>, cx: &mut Ctx, from: jane_core::Vec2) -> InputFrame {
             return stick(me, to, true);
         }
     }
+    // No way out in sight: the way round to the open ground farthest from its middle.
+    let (ax, ay) = (me.x.0 + (me.x.0 - from.x.0).signum() * CELL_FX, me.y.0 + (me.y.0 - from.y.0).signum() * CELL_FX);
+    let ahead = jane_core::Vec2 { x: Fx(ax), y: Fx(ay) }.cell();
+    if !crate::nav::walkable(v, ahead.0, ahead.1) {
+        if let Some(to) = retreat_point(v, me, from, None) {
+            if let Go::Walk(f) = cx.nav.go(v, to, Fx::from_px(3), true) {
+                return InputFrame { sprint: true, ..f };
+            }
+        }
+    }
     stick(from, me, true)
 }
 
-/// Food she holds and may eat now.
+/// Food she holds and may eat now (what a dungeon's tactic keeps back for its boss only when
+/// she is near the end).
 pub fn food(v: &View<'_>) -> Option<ItemId> {
     let me = v.body();
-    ["apple", "grape"].into_iter().map(sense::item).find(|&i| holds(v, i) > 0 && item_ready(me, i, v.tick()))
+    let keep = if hp_permille(me) < 250 { 0 } else { crate::tactics::forest::keep_food(v) };
+    ["apple", "grape"].into_iter().map(sense::item).find(|&i| holds(v, i) > keep && item_ready(me, i, v.tick()))
 }
 
-/// Does she hold anything to eat at all (ready or not)?
+/// Does she hold anything to eat at all (ready or not), past what is kept back for a boss?
 pub fn has_food(v: &View<'_>) -> bool {
-    ["apple", "grape"].into_iter().any(|n| holds(v, sense::item(n)) > 0)
+    let keep = crate::tactics::forest::keep_food(v);
+    ["apple", "grape"].into_iter().any(|n| holds(v, sense::item(n)) > keep)
 }
 
 /// The most one blow of `u`'s can take off her, in points: its row's book (and its phases'),
@@ -289,11 +307,35 @@ pub fn reachable(cx: &Ctx, id: UnitId, frame: u32) -> bool {
     cx.fight.unreachable.get(&id).is_none_or(|&until| until <= frame)
 }
 
-/// The enemy to deal with now: the nearest one fighting her, else the one hunted.
+/// Has it no feet (a cactus, a flower, a statue)?
+pub fn rooted(u: &Unit) -> bool {
+    let d = jane_data::catalog().combat.unit(u.def);
+    d.run.0 <= 0 && d.walk.0 <= 0
+}
+
+/// Can it hurt her from where it stands? A rooted thing only as far as its longest spell
+/// reaches; anything with feet, always.
+pub fn reaches_her(v: &View<'_>, u: &Unit) -> bool {
+    let cat = jane_data::catalog();
+    if !rooted(u) {
+        return true;
+    }
+    let far = jane_sim::combat::book_of(u).iter().map(|&s| i64::from(cat.combat.spell(s).range.0)).max().unwrap_or(0);
+    gap(v.body(), u) <= far + i64::from(CELL_FX)
+}
+
+/// The enemy to deal with now: the nearest one fighting her (and able to reach her), else the
+/// one hunted. Low with nothing to eat, a rooted thing is left where it stands (it cannot
+/// follow her to the fire; backing off from it only walks her back and forth in its reach).
 pub fn threat(v: &View<'_>, cx: &mut Ctx) -> Option<UnitId> {
-    // What sees only by light and is no boss is not fought unless hunted (tactics::works).
+    // What sees only by light and is no boss is not fought unless hunted (tactics::works); a
+    // thing with no feet is not fought from where it cannot reach, nor when she is low.
     let ignore = crate::tactics::works::ignore;
-    let on: Vec<&Unit> = enemies(v).into_iter().filter(|u| on_me(v, u) && fightable(u) && !ignore(u)).collect();
+    let low = hp_permille(v.body()) < FLEE_BELOW && food(v).is_none();
+    let on: Vec<&Unit> = enemies(v)
+        .into_iter()
+        .filter(|u| on_me(v, u) && fightable(u) && !ignore(u) && reaches_her(v, u) && !(low && rooted(u)))
+        .collect();
     if let Some(&nearest) = on.first() {
         // With a crowd on her, one at a time: the one she is hitting while it is still at her,
         // else the weakest within reach of her (a blow spread over four kills none of them).
@@ -356,6 +398,10 @@ pub fn engage(v: &View<'_>, cx: &mut Ctx, id: UnitId) -> Option<Act> {
     if let Some(a) = crate::tactics::works::engage(v, cx, id) {
         return a;
     }
+    // A boss fought the way its room is built to be fought (tactics/*.rs).
+    if let Some(a) = crate::tactics::forest::engage(v, cx, t) {
+        return Some(a);
+    }
     let cat = jane_data::catalog();
     let d = dist(me.pos, t.pos);
     let dir = jane_core::angle::iatan2(t.pos.y.0 - me.pos.y.0, t.pos.x.0 - me.pos.x.0);
@@ -383,7 +429,7 @@ pub fn engage(v: &View<'_>, cx: &mut Ctx, id: UnitId) -> Option<Act> {
     }
     if cx.fight.fleeing > 0 {
         cx.fight.fleeing -= 1;
-        if !on_me(v, t) {
+        if !on_me(v, t) || !reaches_her(v, t) {
             cx.fight.fleeing = 0;
             cx.fight.target = None;
             return None;
@@ -398,7 +444,18 @@ pub fn engage(v: &View<'_>, cx: &mut Ctx, id: UnitId) -> Option<Act> {
                 return Some(Act::hold(f));
             }
         }
-        return Some(Act::hold(away_from(v, cx, from, None)));
+        let frame = away_from(v, cx, from, None);
+        // Backing off with the mana for it: a bolt over her shoulder when one is ready (a thing
+        // that keeps after her is put down on the way, not led round the dungeon).
+        let ice = sense::spell("icebolt");
+        let reach = i64::from(cat.combat.spell(ice).range.0) * 9 / 10;
+        if knows(v, ice) && ready(me, ice, now) && gap(me, t) <= reach && v.sight(me.pos, t.pos) {
+            return Some(Act {
+                frame: InputFrame { aim: Some(dir), ..frame },
+                cmds: vec![Command::Cast { spell: ice, on: Some(id) }],
+            });
+        }
+        return Some(Act::hold(frame));
     }
     // The School: every bolt as it comes ready, and her ground held (`tactics::school`).
     if v.zone() == jane_core::ZoneId::School {
@@ -412,6 +469,21 @@ pub fn engage(v: &View<'_>, cx: &mut Ctx, id: UnitId) -> Option<Act> {
     // A bolt from range.
     let ice = sense::spell("icebolt");
     let def = cat.combat.spell(ice);
+    // A rooted thing (no feet: a cactus, a flower) is shot from where she stands while she has
+    // a bolt and the mana, never walked up to: up close all of a cactus's fan lands. Too near
+    // one that shoots, she steps back out; out of range or sight, she walks in until it is in
+    // both (a flower with only its teeth is walked up to and struck if it cannot be seen).
+    if rooted(t) && knows(v, ice) && me.mp >= def.mp {
+        let seen = v.sight(me.pos, t.pos);
+        let shoots = jane_sim::combat::book_of(t).iter().any(|&s| cat.combat.spell(s).range.0 > 2 * CELL_FX);
+        if seen && shoots && d <= i64::from(4 * CELL_FX) {
+            return Some(Act::hold(InputFrame { aim: Some(dir), ..away_from(v, cx, t.pos, None) }));
+        }
+        if seen && d > i64::from(3 * CELL_FX) && g <= i64::from(def.range.0) * 9 / 10 {
+            let cmds = if ready(me, ice, now) { vec![Command::Cast { spell: ice, on: Some(id) }] } else { Vec::new() };
+            return Some(Act { frame: InputFrame { aim: Some(dir), ..InputFrame::IDLE }, cmds });
+        }
+    }
     if def.kind == SpellKind::Bolt
         && knows(v, ice)
         && ready(me, ice, now)
@@ -428,8 +500,9 @@ pub fn engage(v: &View<'_>, cx: &mut Ctx, id: UnitId) -> Option<Act> {
     // while the mana lasts: she backs off between casts (it is slower than she is; the frost
     // slows it more), as a player with a bolt does.
     let strong = cat.combat.unit(t.def).boss || t.hp > me.hp;
-    // Against something strong, what she brought for it: stone skin, then the mana shield.
-    if strong && d < i64::from(12 * CELL_FX) {
+    // Against a boss, what she brought for it: stone skin, then the mana shield (a tough thing on
+    // the way is not what they were brought for).
+    if strong && cat.combat.unit(t.def).boss && d < i64::from(12 * CELL_FX) {
         for name in ["potion_stoneskin", "potion_lifesteal", "potion_manashield"] {
             let p = sense::item(name);
             if holds(v, p) > 0 && item_ready(me, p, now) && me.statuses.is_empty() {

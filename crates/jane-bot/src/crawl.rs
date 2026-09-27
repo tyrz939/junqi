@@ -57,6 +57,8 @@ pub enum Try {
     Cast(PropId),
     Push(PropId, PropId),
     Fight(UnitId),
+    /// Talk to someone (a butterfly, with the net: `tactics::forest`).
+    Talk(UnitId),
     Door(PropId),
     /// Through a door to or from the dungeon.
     Travel,
@@ -272,6 +274,20 @@ impl Crawl {
         format!("{:?} {:?}", self.stage, self.task)
     }
 
+    /// What the task in hand is about, by name and place (for a debugging line).
+    pub fn doing(&self, v: &View<'_>) -> String {
+        let cat = jane_data::catalog();
+        match self.task.as_ref().map(|(_, w)| *w) {
+            Some(Try::Prop(p) | Try::Cast(p) | Try::Door(p) | Try::Rest(p) | Try::Push(p, _)) => {
+                v.prop(p).map_or("?".into(), |p| format!("{} at {:?}", v.name(p.key), p.cell))
+            }
+            Some(Try::Fight(u) | Try::Talk(u)) => {
+                v.unit(u).map_or("?".into(), |u| format!("{} at {:?}", cat.combat.unit(u.def).id, u.pos.cell()))
+            }
+            w => format!("{w:?}"),
+        }
+    }
+
     fn stop(&mut self, why: String, notes: &mut Vec<Mark>) {
         notes.push(Mark::Stuck(why.clone()));
         self.stuck = Some(why);
@@ -375,12 +391,24 @@ impl Crawl {
             return a;
         }
         crate::tactics::works::observe(v, cx);
+        // What a dungeon's own idea has her notice each frame (tactics/*.rs).
+        crate::tactics::forest::look(v, cx);
         if let Some(id) = fight::threat(v, cx) {
             if let Some(a) = fight::engage(v, cx, id) {
                 return a;
             }
         }
         let sig = signature(v);
+        // A dungeon whose story is done (tactics/*.rs): out by a door, the rest left for later.
+        let down = boss_of(self.zone).is_some_and(|b| self.bosses.iter().any(|&(d, _)| d == b));
+        if self.stage == Stage::Explore && down {
+            self.reach.update(v, sig);
+            if crate::tactics::forest::done(v, &self.reach) {
+                self.stage = Stage::Leave;
+                self.task = None;
+                notes.push(Mark::Note("what the story wants is done: leaving".into()));
+            }
+        }
         // Low: whatever she was doing waits for a bed or a stove she can reach, and the apples
         // are kept for a fight; shut in with a boss there is none, and she eats and carries on.
         if sense::hp_permille(v.body()) < 500 {
@@ -649,7 +677,7 @@ impl Crawl {
             }
         }
         for p in v.props() {
-            if p.hidden || !reach.beside(p) {
+            if p.hidden || !reach.beside(p) || crate::tactics::forest::skip(v, p) {
                 continue;
             }
             let def = cat.story.prop(p.def);
@@ -708,6 +736,10 @@ impl Crawl {
             {
                 offer(4, d, Try::Prop(p.id), Task::Use(UseProp::new(p.id)), &mut best);
             }
+        }
+        // What a dungeon's own idea puts up (tactics/*.rs).
+        for (class, cost, what, t) in crate::tactics::forest::offers(v, cx, reach) {
+            offer(class, cost, what, t, &mut best);
         }
         // 6. Plates that are up, and something to push onto one.
         if best.as_ref().is_none_or(|b| b.0 > 6) {
@@ -837,7 +869,7 @@ impl Crawl {
         let to = match what {
             Try::Pickup(d) => v.drops().iter().find(|x| x.id == d).map(|x| x.pos),
             Try::Prop(p) | Try::Cast(p) | Try::Door(p) | Try::Push(p, _) => v.prop(p).map(sense::prop_centre),
-            Try::Fight(u) => v.unit(u).map(|u| u.pos),
+            Try::Fight(u) | Try::Talk(u) => v.unit(u).map(|u| u.pos),
             Try::Explore(x, y) => Some(Vec2::centre(x, y)),
             Try::Travel | Try::Rest(_) => None,
         };
@@ -894,6 +926,10 @@ impl Crawl {
                 );
             }
         }
+        for u in sense::talkers(v) {
+            let reach = if self.reach.near(u.pos, 2) { "" } else { " (out of reach)" };
+            let _ = write!(out, " talker {} at {:?}{reach};", cat.combat.unit(u.def).id, u.pos.cell());
+        }
         out
     }
 }
@@ -936,10 +972,12 @@ fn bolt_at(v: &View<'_>, reach: &Reach, p: &Prop, spell: SpellId) -> Option<Task
             let at = Vec2::centre(x, y);
             // Where the bolt ends, as the sim flies it: on the prop (a prop that stops shots, a
             // fuse box or a socket, is touched where the bolt stops on its face), or near enough
-            // its middle.
+            // its middle; or, for a thing that blocks sight and hides its own middle (a fallen
+            // rock), in sight of its near face.
             let end = bolt_end(v, at, jane_core::angle::bearing(at, c), spell);
             let (ex, ey) = end.cell();
-            if dist(end, c) > touch && !prop_rect(p).contains(ex, ey) {
+            let on_it = dist(end, c) <= touch || prop_rect(p).contains(ex, ey);
+            if !on_it && (v.sight(at, c) || !v.sight(at, face_toward(p, at))) {
                 continue;
             }
             let d = dist(me, at);
@@ -1010,6 +1048,26 @@ fn shot_stopped(v: &View<'_>, a: Vec2, b: Vec2) -> bool {
         }
     }
     false
+}
+
+/// The point of a prop's footprint nearest `at`, a quarter cell out toward it (in the free cell
+/// before its face).
+fn face_toward(p: &Prop, at: Vec2) -> Vec2 {
+    let r = prop_rect(p);
+    let q = CELL_FX / 4;
+    let clamp = |v: i32, lo: i32, hi: i32| {
+        if v < lo {
+            lo - q
+        } else if v > hi {
+            hi + q
+        } else {
+            v
+        }
+    };
+    Vec2::new(
+        jane_core::Fx(clamp(at.x.0, r.x * CELL_FX, r.right() * CELL_FX)),
+        jane_core::Fx(clamp(at.y.0, r.y * CELL_FX, r.bottom() * CELL_FX)),
+    )
 }
 
 /// The origins a pushable passes through to cover the plate, pushed only (each push needs a
