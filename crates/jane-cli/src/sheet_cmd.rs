@@ -26,11 +26,12 @@ pub const USAGE: &str = "  sheet layers <what> [--frame F] [--out DIR]
   sheet all [--out DIR]               every sheet above, for every sprite
   sheet list                          the sprites <what> can name
   sheet scene [--seed N] [--minutes M | --ticks T] [--model reader|rusher] [--night | --hour H[:MM]]
-              [--wide] [--backend soft|wgpu] [--out PATH.png | --out DIR]
+              [--wide] [--at ZONE[:MARK]] [--backend soft|wgpu] [--out PATH.png | --out DIR]
                                       a model plays the seed from New Game (default 1 minute), then one
                                       frame is drawn headless through the presenter and soft (T0), or
                                       wgpu (T2) with the gpu feature; --night sets the clock to 22:00
-                                      first; --wide draws 21:9 (1008 x 432)
+                                      first; --wide draws 21:9 (1008 x 432); --at travels to a zone's
+                                      mark (its way in by default) first, god on: a frame inside a dungeon
   sheet ui [screen ...] [--out DIR]   the UI in states play rarely shows at once (hud, dead, choice,
                                       tooltip, popover, drag, pause), headless through soft
   sheet --bless                       rewrite crates/jane-art/tests/golden.txt from the current art";
@@ -216,13 +217,23 @@ fn scene(args: &[String]) -> Result<(), String> {
         model.name(),
         backend.name()
     );
+    let bps = jane_sim::Blueprints::build(seed).map_err(|e| format!("seed {seed}: {e}"))?;
+    // `--at mine` or `--at mine:guard`: a frame inside a zone, arrived at by the console's tp.
+    let at = flag("--at").map(|a| match a.split_once(':') {
+        Some((z, m)) => (z.to_string(), Some(m.to_string())),
+        None => (a.to_string(), None),
+    });
+    let name = match &at {
+        Some((z, m)) => format!("{name}-{z}{}", m.as_deref().map_or(String::new(), |m| format!("-{m}"))),
+        None => name,
+    };
     let path = match flag("--out") {
         Some(p) if p.ends_with(".png") => PathBuf::from(p),
         Some(dir) => PathBuf::from(dir).join(format!("{name}.png")),
         None => PathBuf::from("sheets").join(format!("{name}.png")),
     };
-    let bps = jane_sim::Blueprints::build(seed).map_err(|e| format!("seed {seed}: {e}"))?;
-    let shot = crate::scene::render(bps, &crate::scene::Opts { seed, ticks, model, hour, minute, canvas, backend })?;
+    let shot =
+        crate::scene::render(bps, &crate::scene::Opts { seed, ticks, model, hour, minute, canvas, backend, at })?;
     if let Some(dir) = path.parent().filter(|d| !d.as_os_str().is_empty()) {
         std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     }

@@ -59,9 +59,9 @@ pub struct Atlas {
     lit: bool,
 }
 
-/// The width of a page as packed here. 2048 is the ceiling (ART.md §5); the stand-ins need far
-/// less and a page grows downward as it fills.
-const PAGE_W: u16 = 512;
+/// The width of a page as packed here: 2048, the ceiling (ART.md §5). At 512 the people's fight
+/// frames and every row's look grew the one page past 8192 rows, which wgpu will not take.
+const PAGE_W: u16 = 2048;
 
 impl Atlas {
     /// An empty atlas with the master palette as its CLUT, albedo only (for `soft`).

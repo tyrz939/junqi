@@ -69,6 +69,40 @@ pub struct Opts {
     pub minute: u8,
     pub canvas: (u16, u16),
     pub backend: Which,
+    /// After the play, travel to this zone (by name), at this named mark or the zone's way in,
+    /// with god on and the world let settle a second: a frame inside a dungeon.
+    pub at: Option<(String, Option<String>)>,
+}
+
+/// The mark `asked` in `zone`, or its way in (the console's `tp` rule): its first named mark
+/// among start, front, entry, a stair, a mouth, a gate. An unknown mark names the ones it has.
+fn mark_in(sim: &Sim, zone: jane_core::ids::ZoneId, asked: Option<&str>) -> Result<jane_core::Sym, String> {
+    let syms = &sim.state().syms;
+    let named: Vec<(&str, jane_core::Sym)> = sim
+        .blueprint(zone)
+        .marks
+        .keys()
+        .filter_map(|k| match *k {
+            jane_core::Key::Name(n) => {
+                let s = jane_sim::sym::of_name(n);
+                Some((syms.name(s), s))
+            }
+            jane_core::Key::Local(_) => None,
+        })
+        .collect();
+    if let Some(a) = asked {
+        return named.iter().find(|(n, _)| *n == a).map(|(_, s)| *s).ok_or_else(|| {
+            let mut all: Vec<&str> = named.iter().map(|(n, _)| *n).collect();
+            all.sort_unstable();
+            format!("{}: no mark {a}; it has {}", zone.name(), all.join(" "))
+        });
+    }
+    for want in ["start", "front", "entry", "stair_a", "mouth", "gate"] {
+        if let Some(s) = syms.find(want).filter(|s| named.iter().any(|(_, n)| n == s)) {
+            return Ok(s);
+        }
+    }
+    named.first().map(|(_, s)| *s).ok_or_else(|| format!("{} has no named mark", zone.name()))
 }
 
 /// The sim with this frame's events kept for the presenter: the bot drains the host, so the host
@@ -133,6 +167,21 @@ fn play(bps: Blueprints, o: &Opts, tier: Tier) -> Result<(Tap, Present, u32), St
         played += 1;
         let v = host.sim.view(seat).ok_or("seat 0 is not in the world")?;
         present.tick(&v, &host.events);
+    }
+    if let Some((zone, mark)) = &o.at {
+        let z = jane_core::ids::ZoneId::from_name(zone).ok_or_else(|| format!("--at: no zone {zone}"))?;
+        let mark = mark_in(&host.sim, z, mark.as_deref())?;
+        let cmds = [
+            StampedCommand { seat: Some(seat), seq: u16::MAX - 2, cmd: Command::Dev(DevOp::God(true)) },
+            StampedCommand { seat: Some(seat), seq: u16::MAX - 1, cmd: Command::Dev(DevOp::Tp { zone: z, mark }) },
+        ];
+        host.sim.step(&StepInput { frames: [InputFrame::IDLE; 4], commands: &cmds });
+        for _ in 0..60 {
+            let events = host.sim.drain_events().to_vec();
+            let v = host.sim.view(seat).ok_or("seat 0 is not in the world")?;
+            present.tick(&v, &events);
+            host.sim.step(&StepInput { frames: [InputFrame::IDLE; 4], commands: &[] });
+        }
     }
     if let Some(hour) = o.hour {
         let cmd = [StampedCommand { seat: Some(seat), seq: u16::MAX, cmd: Command::Dev(DevOp::Time { hour }) }];
@@ -309,6 +358,7 @@ mod tests {
             minute: 0,
             canvas: (768, 432),
             backend: Which::Soft,
+            at: None,
         };
         let a = render(bps.clone(), &o).unwrap();
         let b = render(bps, &o).unwrap();
