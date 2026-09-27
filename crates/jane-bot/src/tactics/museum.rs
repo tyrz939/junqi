@@ -1,16 +1,26 @@
-//! The Museum (DUNGEONS.md §3.2): see `mod.rs`.
+//! The Museum (DUNGEONS.md §3.2): see `mod.rs`. Three hooks in the crawl: [`first`] (before its
+//! general order), [`idle`] (when that order has nothing), [`fight`] (before the general fight),
+//! and [`done`] (out, with what the story needs).
 //!
-//! One breaker, two buildings. The crawl throws the breaker in Maintenance once as it throws any
-//! lever (the lights go out, the arts door opens, and the dark wing gives up the floor key that
-//! lets her at the Shot-Firer). What it cannot do on its own is throw it back: a lever used is
-//! used. The dark was for the verb; once she has Explosion she wants the building lit, where the
-//! exhibits stand still to be blown away and the power shutters are up (the stores). So:
+//! **One breaker, two buildings.** The crawl throws the breaker in Maintenance once as it throws
+//! any lever (the lights go out, the arts door opens, and the dark wing gives up the floor key
+//! that lets her at the Shot-Firer). What it cannot do on its own is throw it back: a lever used
+//! is used. The dark was for the verb; once she has Explosion she wants the building lit, where
+//! the exhibits stand still to be blown away and the power shutters are up (the stores). So,
+//! dark and knowing Explosion: back to the breaker before anything else; lit, not knowing it yet,
+//! with nothing else to do: to the breaker. Dark or lit is what she sees: the atrium's gallery
+//! lamps are out or on.
 //!
-//! - dark, and she knows Explosion: back to the breaker first, before anything else;
-//! - lit, not knowing it yet, and nothing else to do: to the breaker (the other state may open
-//!   what this one shuts).
+//! **The verb first.** The Shot-Firer is hunted once she can walk to him, not left for last as a
+//! boss, and his page is read as soon as she has seen him go down. Then, lit, the way in as the
+//! plan gives it: the stores' armour, the Attendant's locker behind it, the painted-over arch.
 //!
-//! Dark or lit is what she sees: the atrium's gallery lamps are out or on.
+//! **The stove.** A fire costs nothing but the walk: she rests there the first time she passes
+//! (it is where she wakes), when she is down to half, before the rotunda, and whenever the small
+//! fry have worn her down, so that the apples she was given all go into the rotunda, which has
+//! no fire.
+//!
+//! **The rotunda** is [`fight`]'s: see there.
 
 use crate::crawl::{Reach, Try};
 use crate::sense;
@@ -40,7 +50,7 @@ fn throw(v: &View<'_>, reach: &Reach) -> Option<(Task, Try)> {
     Some((Task::Use(UseProp::new(b.id)), Try::Prop(b.id)))
 }
 
-/// Before the crawl's general order: the lights back on once she has Explosion.
+/// Before the crawl's general order (see the module doc).
 pub fn first(v: &View<'_>, cx: &crate::task::Ctx, reach: &Reach) -> Option<(Task, Try)> {
     if v.zone() != ZoneId::Museum {
         return None;
@@ -246,8 +256,8 @@ pub fn fight(v: &View<'_>, cx: &mut crate::task::Ctx, reach: &Reach) -> Option<c
     // follow her to the stove, and it mends her all the same.
     let boss_on = sense::enemies(v).into_iter().any(|u| crate::fight::on_me(v, u) && cat.combat.unit(u.def).boss);
     if !boss_on && sense::hp_permille(me) < crate::fight::EAT_BELOW && crate::fight::has_food(v) {
-        if let Some(s) = stove(v, reach) {
-            return Some(use_now(v, cx, s));
+        if let Some(a) = stove(v, reach).and_then(|s| use_now(v, cx, s)) {
+            return Some(a);
         }
     }
     // The Attendant anywhere near (a kite that strays from the rotunda must not become a flight:
@@ -296,8 +306,8 @@ pub fn fight(v: &View<'_>, cx: &mut crate::task::Ctx, reach: &Reach) -> Option<c
     }
     // Dark: the breaker first.
     if is_attendant && sense::prop_named(v, "museum_rotunda_lamp_a").is_none() {
-        if let Some(b) = sense::prop_named(v, "museum_rotunda_breaker") {
-            return Some(use_now(v, cx, b));
+        if let Some(a) = sense::prop_named(v, "museum_rotunda_breaker").and_then(|b| use_now(v, cx, b)) {
+            return Some(a);
         }
     }
     let dazzled = cat.combat.effect_id("dazzled").is_some_and(|e| boss.statuses.iter().any(|s| s.effect == e));
@@ -427,19 +437,19 @@ fn kite_point(v: &View<'_>, me: Vec2, from: Vec2, tether: Option<(Vec2, i64)>) -
 }
 
 /// Walk up to a prop and press USE on it, a frame at a time and remembering nothing (a fight
-/// moves too much for a task).
-fn use_now(v: &View<'_>, cx: &mut crate::task::Ctx, p: &jane_sim::Prop) -> crate::Act {
+/// moves too much for a task); `None` when no side of it can be walked to.
+fn use_now(v: &View<'_>, cx: &mut crate::task::Ctx, p: &jane_sim::Prop) -> Option<crate::Act> {
     use crate::nav::Go;
     use jane_sim::interact::FocusRef;
     if v.focus().is_some_and(|f| f.target == FocusRef::Prop(p.id)) {
-        return crate::Act::press(jane_sim::Command::Use);
+        return Some(crate::Act::press(jane_sim::Command::Use));
     }
     for (at, face) in crate::task::sides(v, p, v.body().pos) {
         match cx.nav.go(v, at, jane_core::Fx::from_px(3), true) {
-            Go::Walk(f) => return crate::Act::hold(f),
-            Go::Arrived => return crate::Act::hold(crate::task::nudge(face)),
+            Go::Walk(f) => return Some(crate::Act::hold(f)),
+            Go::Arrived => return Some(crate::Act::hold(crate::task::nudge(face))),
             Go::NoWay => cx.nav.reset(),
         }
     }
-    crate::Act::idle()
+    None
 }
