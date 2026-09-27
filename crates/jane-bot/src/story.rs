@@ -111,7 +111,14 @@ pub struct Story {
 
 /// What she packs for an act, and how many of each: Stone Skin and a life-steal from the bench
 /// (the roses, stones and flowers she has picked up on the way), and food.
-const PROVISIONS: [(&str, u32); 3] = [("potion_stoneskin", 2), ("potion_lifesteal", 1), ("apple", 6)];
+const PROVISIONS: [(&str, u32); 3] = [("potion_stoneskin", 2), ("potion_lifesteal", 1), ("apple", APPLES_HELD)];
+
+/// The apples she carries when she can.
+const APPLES_HELD: u32 = 6;
+
+/// Short of food (under this many apples), she will go twice as far for more: a walk to a
+/// fire with none in her bag was the county's commonest death.
+const APPLES_SHORT: u32 = 3;
 
 /// What she brews for Under the Stone, and how many: the dog's bait for the small snakes ("Feed
 /// the small snakes; do not fight them"), rat meat soaked in Stranglethorn at a bench. There is
@@ -825,7 +832,9 @@ impl Story {
                         {
                             continue;
                         }
-                        if c <= i64::from(PROVISION_REACH * CELL_FX) {
+                        let short_of_food = name == "apple" && holds(v, item) < APPLES_SHORT;
+                        let reach = if short_of_food { 2 * PROVISION_REACH } else { PROVISION_REACH };
+                        if c <= i64::from(reach * CELL_FX) {
                             return Some((t, g));
                         }
                     }
@@ -1078,8 +1087,14 @@ fn curious(v: &View<'_>, model: Model, p: &jane_sim::Prop) -> bool {
     let teaches = sense::prop_does(v, p, &|a| matches!(a, Action::Learn(_) | Action::Grow { .. }));
     match model {
         // Indoors, a note that gives a quest is in the way; out on the road the Rusher keeps going.
+        // Food in a chest she passes, short of it: a rusher still eats (she walked the county's
+        // roads to a fire with no apple in her bag, and died on the way, again and again).
         Model::Rusher => {
-            teaches || (v.indoor() && sense::prop_does(v, p, &|a| matches!(a, Action::Quest(_) | Action::HandIn(_))))
+            let apple = sense::item("apple");
+            let food = !p.used && s.loot.iter().any(|l| l.item == apple) && holds(v, apple) < APPLES_HELD;
+            teaches
+                || food
+                || (v.indoor() && sense::prop_does(v, p, &|a| matches!(a, Action::Quest(_) | Action::HandIn(_))))
         }
         Model::Reader => {
             teaches
