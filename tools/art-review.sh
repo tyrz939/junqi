@@ -32,6 +32,7 @@ shot reed-camp --ticks 300 --at reed_camp_gate --hour 11
 shot works --ticks 300 --at canteen_gate --hour 14
 shot yard-dusk --ticks 300 --at house_front --hour 18:40
 shot town-rain-night --ticks 300 --at town_square --hour 22 --weather rain
+shot mist-dawn --ticks 300 --at reed_camp_gate --hour 6 --weather mist
 shot mine --ticks 300 --at mine:entry
 shot burial --ticks 300 --at burial:entry
 shot museum --ticks 300 --at museum:entry
