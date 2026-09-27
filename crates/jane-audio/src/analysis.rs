@@ -216,15 +216,16 @@ pub fn pitch(x: &[f32], sr: f32) -> Option<f32> {
     None
 }
 
-/// Energy per pitch class (C = 0) over the signal, from 55 Hz to 2 kHz.
+/// Energy per pitch class (C = 0) over the signal, from 100 Hz to 2 kHz: under 100 Hz a bin of
+/// a practical FFT is wider than a semitone, and a low D would be heard as C# and Eb.
 pub fn chroma(x: &[f32], sr: f32) -> [f32; 12] {
-    let n = 8192;
+    let n = 16_384;
     let spec = mean_spectrum(x, n);
     let bin = sr / n as f32;
     let mut c = [0.0f32; 12];
     for (i, m) in spec.iter().enumerate().skip(1) {
         let hz = i as f32 * bin;
-        if !(55.0..2000.0).contains(&hz) {
+        if !(100.0..2000.0).contains(&hz) {
             continue;
         }
         let midi = 69.0 + 12.0 * (hz / 440.0).log2();

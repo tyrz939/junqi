@@ -301,9 +301,12 @@ impl Player {
                     continue;
                 }
                 (Step::Hit { vel, .. }, _) => {
-                    // A drum hit at the instrument's own pitch.
+                    // A drum is tuned like a timpano: to the song's tonic, the one nearest the
+                    // instrument's own pitch, so the low end never argues with the key.
                     let hz = insts[self.inst[ti]].inst.hz;
-                    let midi = (69.0 + 12.0 * (hz / 440.0).log2()).round() as i32;
+                    let own = (69.0 + 12.0 * (hz / 440.0).log2()).round() as i32;
+                    let up = (data.tonic - own).rem_euclid(12);
+                    let midi = if up <= 6 { own + up } else { own + up - 12 };
                     (vec![midi], vel, false)
                 }
             };

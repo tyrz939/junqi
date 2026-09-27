@@ -1,0 +1,24 @@
+{
+  "name": "bell",
+  "mood": "The bell at nine: everything else goes quiet and a low D minor swells under the strikes, a choir on the open fifth, the low strings answering with the bell's own falling triad, and the night comes in after",
+  "key": "D", "mode": "minor",
+  "step_ticks": 30, "bar": 8,
+  "gain": 0.31, "humanize_ms": 10, "looped": false, "under": 6,
+  "tracks": [
+    { "name": "drone", "inst": "drone", "kind": "bass", "octave": 2, "vel": 0.6, "gate": 1.0 },
+    { "name": "pad", "inst": "pad_dark", "kind": "chord", "octave": 3, "vel": 0.5, "voices": 3, "gate": 1.0 },
+    { "name": "choir", "inst": "choir", "kind": "chord", "octave": 4, "vel": 0.46, "voices": 3, "pan": -0.2, "gate": 1.0 },
+    { "name": "answer", "inst": "low_strings", "kind": "melody", "octave": 3, "vel": 0.55, "pan": 0.2, "gate": 1.0 }
+  ],
+  "sections": {
+    "T": { "bars": 7, "chords": "1 1 1 6 4 5 1",
+      "play": {
+        "drone": "1 - - - - - - - | - - - - - - - - | - - - - - - - - | - - - - - - - - | - - - - - - - - | - - - - - - - - | - - - - - - . .",
+        "pad": "x - - - - - - - | - - - - - - - - | - - - - - - - - | x - - - - - - - | x - - - - - - - | x - - - - - - - | x - - - - - . .",
+        "choir": ". . . . . . . . | x - - - - - - - | - - - - - - - - | x - - - - - - - | x - - - - - - - | x - - - - - - - | x - - - - - . .",
+        "answer": ". . . . . . . . | . . . . . . . . | . . . . . . . . | 5 - - - - - - - | 3 - - - - - - - | 2 - - - - - - - | 1 - - - - - . ."
+      }
+    }
+  },
+  "forms": ["T"]
+}

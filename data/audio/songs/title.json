@@ -3,7 +3,7 @@
   "mood": "The theme: a slow D minor air on a felt piano over strings and a harp, falling from the fifth like the bell, lifting once into F and coming home unresolved",
   "key": "D", "mode": "minor",
   "step_ticks": 27, "bar": 8,
-  "gain": 1.0, "humanize_ms": 9,
+  "gain": 0.68, "humanize_ms": 9,
   "tracks": [
     { "name": "melody", "inst": "felt_piano", "alt": ["celesta"], "kind": "melody", "octave": 5, "vel": 0.78, "pan": 0.12, "gate": 0.95 },
     { "name": "echo", "inst": "celesta", "kind": "melody", "octave": 5, "vel": 0.42, "pan": -0.35 },

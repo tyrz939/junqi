@@ -64,6 +64,8 @@ pub struct Engine {
     now: u64,
     /// Log every note the next song plays (tests, `jane audio`).
     pub log_notes: bool,
+    /// The log of the last song that played through and was let go.
+    done_log: Option<Vec<crate::seq::NoteOn>>,
     bufs: Vec<Vec<f32>>,
 }
 
@@ -102,6 +104,7 @@ impl Engine {
             vol_want: [1.0; 3],
             now: 0,
             log_notes: false,
+            done_log: None,
             bufs: vec![vec![0.0; BLOCK]; 12],
         }
     }
@@ -134,7 +137,7 @@ impl Engine {
 
     /// The notes the current song has played, when `log_notes` was on as it started.
     pub fn note_log(&self) -> Option<&[crate::seq::NoteOn]> {
-        self.players.iter().rev().find(|p| p.target() > 0.0).and_then(|p| p.log.as_deref())
+        self.players.iter().rev().find(|p| p.target() > 0.0).and_then(|p| p.log.as_deref()).or(self.done_log.as_deref())
     }
 
     /// Whether the current song has played through (a song that does not loop).
@@ -229,6 +232,9 @@ impl Engine {
         // The music.
         for p in &mut self.players {
             p.render(&self.songs[p.song], &self.insts, self.now, self.sr, [ml, mr], [msl, msr]);
+        }
+        if let Some(p) = self.players.iter_mut().find(|p| p.finished() && p.log.is_some() && p.target() > 0.0) {
+            self.done_log = p.log.take();
         }
         self.players.retain(|p| !p.finished());
         // The effects.

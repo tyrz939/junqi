@@ -476,6 +476,10 @@ pub struct Song {
     pub looped: bool,
     #[serde(default)]
     pub humanize_ms: f32,
+    /// Decibels under the loudness every cue is matched to (`LOUDNESS`), for a cue that is meant
+    /// to sit under something else: the bell's hush under its strikes.
+    #[serde(default)]
+    pub under: f32,
     pub tracks: Vec<Track>,
     pub sections: BTreeMap<String, Section>,
     /// Orders of sections ("A A B A"); the county picks one, and each loop may pick again.

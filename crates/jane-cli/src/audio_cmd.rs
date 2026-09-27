@@ -220,11 +220,16 @@ fn report(what: &str, v: &[f32]) {
         analysis::clicks(&m, sr).len(),
         if what.starts_with("song:") { format!(", heard in {key}") } else { String::new() }
     );
+    if what.starts_with("song:") {
+        let c = analysis::chroma(&m, sr);
+        let top = c.iter().fold(1e-12f32, |a, b| a.max(*b));
+        let bars: Vec<String> = c.iter().enumerate().map(|(i, v)| format!("{}:{:.0}", NAMES[i], 9.0 * v / top)).collect();
+        println!("    chroma {}", bars.join(" "));
+    }
 }
 
-/// The bar every song is held to, and what `jane audio check` and the tests assert.
-pub const TARGET_LOUDNESS: f32 = -21.0;
-pub const LOUDNESS_TOLERANCE: f32 = 2.5;
+/// How far `jane audio check` lets a cue sit from its loudness (the tests hold it to 2 dB).
+pub const LOUDNESS_TOLERANCE: f32 = 2.0;
 
 fn check(seed: u32, secs: Option<f32>) -> Result<(), String> {
     let lib = jane_audio::library();
@@ -238,20 +243,23 @@ fn check(seed: u32, secs: Option<f32>) -> Result<(), String> {
         let clicks = analysis::clicks(&m, sr).len();
         let tonic = jane_audio::model::pitch_class(&s.key).unwrap_or(0);
         let keys = analysis::keys(&analysis::chroma(&m, sr));
-        // The key heard is the key written, or its relative (a modal tune is heard in either).
-        let rel = |t: i32, minor: bool| (tonic - t).rem_euclid(12) == if minor { 3 } else { 9 } || t == tonic;
-        let heard = keys.iter().take(3).any(|&(t, minor, _)| rel(t, minor));
-        let ok_loud = (loud - TARGET_LOUDNESS).abs() <= LOUDNESS_TOLERANCE;
+        let heard = keys.iter().take(3).any(|&(t, minor, _)| key_fits(tonic, s.mode, t, minor));
+        let want = jane_audio::LOUDNESS - s.under;
+        let ok_loud = (loud - want).abs() <= LOUDNESS_TOLERANCE;
         let ok = ok_loud && peak <= jane_audio::CEILING + 1e-4 && clicks == 0 && heard;
         if !ok {
             bad += 1;
         }
+        if clicks > 0 {
+            let at: Vec<String> = analysis::clicks(&m, sr).iter().take(4).map(|i| format!("{:.2} s", *i as f32 / sr)).collect();
+            println!("     {} clicks at {}", s.name, at.join(", "));
+        }
         println!(
-            "{} {:16} {:>5.1} dBFS (gain x{:.2} to hit {TARGET_LOUDNESS}), peak {:.1}, {clicks} click(s), key {} {}: heard {:?}",
+            "{} {:16} {:>5.1} dBFS (gain x{:.2} to hit {want}), peak {:.1}, {clicks} click(s), key {} {}: heard {:?}",
             if ok { "ok  " } else { "FAIL" },
             s.name,
             loud,
-            s.gain * jane_audio::dsp::db(TARGET_LOUDNESS - loud),
+            s.gain * jane_audio::dsp::db(want - loud),
             to_db(peak),
             s.key,
             s.mode.name(),
@@ -270,6 +278,24 @@ fn check(seed: u32, secs: Option<f32>) -> Result<(), String> {
         }
     }
     if bad > 0 { Err(format!("{bad} failure(s)")) } else { Ok(()) }
+}
+
+/// Whether a key heard (`t`, `minor`) fits a song written on `tonic` in `mode`: its own tonic, or
+/// the major scale its notes come from (a mode is heard as its parent major or that major's
+/// relative minor as often as as itself).
+pub fn key_fits(tonic: i32, mode: jane_audio::model::Mode, t: i32, minor: bool) -> bool {
+    use jane_audio::model::Mode;
+    let down = match mode {
+        Mode::Major => 0,
+        Mode::Dorian => 2,
+        Mode::Phrygian => 4,
+        Mode::Lydian => 5,
+        Mode::Mixolydian => 7,
+        Mode::Minor | Mode::Harmonic => 9,
+        Mode::Locrian => 11,
+    };
+    let parent = (tonic - down).rem_euclid(12);
+    t == tonic || (!minor && t == parent) || (minor && t == (parent + 9) % 12)
 }
 
 /// A waveform strip over a log-frequency spectrogram, `what` written in the corner.

@@ -121,9 +121,13 @@ impl Pink {
 #[derive(Clone, Copy, Debug)]
 pub struct Adsr {
     attack_step: f32,
+    /// How far through the attack, 0 to 1 (the level is a raised curve over it).
+    ramp: f32,
     decay: f32,
     sustain: f32,
     release: f32,
+    /// What the envelope puts out: a release starts from here, so letting go in the middle of
+    /// an attack does not step.
     pub level: f32,
     pub stage: Stage,
 }
@@ -147,6 +151,7 @@ impl Adsr {
             decay: fall_coef(d_ms, sr),
             sustain: s.clamp(0.0, 1.0),
             release: fall_coef(r_ms.max(MIN_EDGE_MS * 4.0), sr),
+            ramp: 0.0,
             level: 0.0,
             stage: Stage::Attack,
         }
@@ -169,13 +174,13 @@ impl Adsr {
         match self.stage {
             Stage::Attack => {
                 // A raised curve over the straight ramp: the first samples move gently.
-                self.level += self.attack_step;
-                if self.level >= 1.0 {
-                    self.level = 1.0;
+                self.ramp += self.attack_step;
+                if self.ramp >= 1.0 {
+                    self.ramp = 1.0;
                     self.stage = Stage::Decay;
                 }
-                let x = self.level;
-                return x * x * (3.0 - 2.0 * x);
+                let x = self.ramp;
+                self.level = x * x * (3.0 - 2.0 * x);
             }
             Stage::Decay => {
                 self.level = self.sustain + (self.level - self.sustain) * self.decay;
@@ -673,6 +678,21 @@ mod tests {
         assert_eq!(last, 0.0);
         // The shortest attack is 1.5 ms: no step over 1/72 of full scale in a sample.
         assert!(max_step < 1.6 / (MIN_EDGE_MS * 0.001 * sr), "{max_step}");
+    }
+
+    #[test]
+    fn letting_go_during_the_attack_does_not_step() {
+        let sr = 48_000.0;
+        let mut e = Adsr::new(1400.0, 900.0, 0.85, 2400.0, sr);
+        let mut last = 0.0f32;
+        for i in 0..48_000 {
+            if i == 40_000 {
+                e.release();
+            }
+            let v = e.tick();
+            assert!((v - last).abs() < 1e-3, "step of {} at {i}", v - last);
+            last = v;
+        }
     }
 
     #[test]

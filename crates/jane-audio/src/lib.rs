@@ -37,6 +37,11 @@ mod data {
 /// The sample rate the game asks the device for.
 pub const RATE: u32 = 48_000;
 
+/// The gated loudness every cue is matched to, dBFS (`analysis::loudness`): a player never
+/// reaches for the volume when the music changes. The songs' `gain`s are set to it, and
+/// `tests/music.rs` holds them there.
+pub const LOUDNESS: f32 = -21.0;
+
 /// Everything under `data/audio`, parsed once (build.rs has already checked it).
 pub fn library() -> &'static Library {
     static LIB: std::sync::OnceLock<Library> = std::sync::OnceLock::new();

@@ -1,0 +1,54 @@
+{
+  "name": "combat",
+  "mood": "Something has hold of her: D minor at a run, low drums in threes and twos, a staccato string ostinato, long low strings singing the bell's falling triad over it, pressing to the leading note and not letting go",
+  "key": "D", "mode": "minor",
+  "step_ticks": 8, "bar": 8,
+  "gain": 0.41, "humanize_ms": 3,
+  "tracks": [
+    { "name": "taiko", "inst": "drum_low", "kind": "drum", "vel": 0.8 },
+    { "name": "frame", "inst": "drum_frame", "kind": "drum", "vel": 0.5, "pan": 0.3 },
+    { "name": "ostinato", "inst": "staccato_strings", "kind": "arp", "octave": 3, "vel": 0.55, "pan": -0.2, "gate": 0.45 },
+    { "name": "line", "inst": "low_strings", "kind": "melody", "octave": 3, "vel": 0.62, "gate": 1.0 },
+    { "name": "high", "inst": "strings", "kind": "melody", "octave": 4, "vel": 0.44, "pan": 0.25, "gate": 1.0 },
+    { "name": "pad", "inst": "pad_dark", "kind": "chord", "octave": 3, "vel": 0.4, "voices": 3, "gate": 1.0 },
+    { "name": "sub", "inst": "sub", "kind": "bass", "octave": 1, "vel": 0.4 },
+    { "name": "air", "inst": "brush", "kind": "drum", "vel": 0.55, "pan": -0.35 }
+  ],
+  "sections": {
+    "A": { "bars": 8, "chords": "1 1 6 7 1 1 4 5M",
+      "play": {
+        "taiko": "X . . x . . x . | X . . x . x x . | X . . x . . x . | X . . x . x x . | X . . x . . x . | X . . x . x x . | X . . x . . x . | X . x x X . x x",
+        "frame": [
+          ". . o . . o . o | . . o . . o o o | . . o . . o . o | . . o . . o o o | . . o . . o . o | . . o . . o o o | . . o . . o . o | o o o o x x x x",
+          ". o . . o . . o | . o . . o . o o | . o . . o . . o | . o . . o . o o | . o . . o . . o | . o . . o . o o | . o . . o . . o | o o o o x x x x"
+        ],
+"air": ". x . x . x . x | . x . x . x . x | . x . x . x . x | . x . x . x x x | . x . x . x . x | . x . x . x . x | . x . x . x . x | x x x x x x x x",
+                "ostinato": "1 1 8 1 5 1 8 5 | 1 1 8 1 5 1 8 5 | 1 1 8 1 5 1 8 5 | 1 1 8 1 5 1 8 5 | 1 1 8 1 5 1 8 5 | 1 1 8 1 5 1 8 5 | 1 1 8 1 5 1 8 5 | 1 1 8 1 3 5 3 1",
+        "line": "5 - - - - - - - | 3 - - - - - - - | 1 - - - - - 2 - | 2 - - - - - - - | 5 - - - - - 6 - | 5 - - - - - - - | 4 - - - 3 - - - | #7, - - - - - - -",
+        "pad": "x - - - - - - - | - - - - - - - - | x - - - - - - - | x - - - - - - - | x - - - - - - - | - - - - - - - - | x - - - - - - - | x - - - - - - -",
+        "sub": "1 - - - - - - - | 1 - - - - - - - | 1 - - - - - - - | 1 - - - - - - - | 1 - - - - - - - | 1 - - - - - - - | 1 - - - - - - - | 1 - - - - - - -"
+      }
+    },
+    "B": { "bars": 8, "chords": "6 6 7 7 4 4 5M 5M",
+      "play": {
+        "taiko": "X . . x . . x . | X . . x . x x . | X . . x . . x . | X . . x . x x . | X . . x . . x . | X . . x . x x . | X . x x X . x x | X x x x X x X X",
+        "frame": ". . o . . o . o | . . o . . o o o | . . o . . o . o | . . o . . o o o | . . o . . o . o | . . o . . o o o | . . o . . o . o | o o o o x x x x",
+"air": "x x x x x x x x | . x . x . x . x | . x . x . x . x | . x . x . x x x | . x . x . x . x | . x . x . x . x | . x . x . x . x | x x x x x x x x",
+                "ostinato": "1 1 8 1 5 1 8 5 | 1 1 8 1 5 1 8 5 | 1 1 8 1 5 1 8 5 | 1 1 8 1 5 1 8 5 | 1 1 8 1 5 1 8 5 | 1 1 8 1 5 1 8 5 | 1 3 5 3 1 3 5 3 | 1 3 5 8 5 3 1 3",
+        "line": "6 - - - 5 - - - | 4 - - - 3 - - - | 2 - - - 3 - - - | 4 - - - 5 - - - | 4 - - - - - - - | 6 - - - 5 - - - | #7 - - - - - - - | 5 - - - - - - -",
+        "high": "6 - - - 5 - - - | 4 - - - 3 - - - | 2 - - - 3 - - - | 4 - - - 5 - - - | 4 - - - - - - - | 6 - - - 5 - - - | #7 - - - - - - - | 5 - - - - - - -",
+        "pad": "x - - - - - - - | - - - - - - - - | x - - - - - - - | - - - - - - - - | x - - - - - - - | - - - - - - - - | x - - - - - - - | - - - - - - - -",
+        "sub": "1 - - - - - - - | 1 - - - - - - - | 1 - - - - - - - | 1 - - - - - - - | 1 - - - - - - - | 1 - - - - - - - | 1 - - - - - - - | 1 - - - - - - -"
+      }
+    },
+    "C": { "bars": 4, "chords": "1 b2 1 5M",
+      "play": {
+        "taiko": "X . . x . . x . | X . . x . x x . | X . . x . . x . | X X x x X x X x",
+        "ostinato": "1 1 2 1 1 1 2 1 | 1 1 2 1 1 1 2 1 | 1 1 2 1 1 1 2 1 | 1 1 3 1 5 1 3 1",
+        "pad": "x - - - - - - - | x - - - - - - - | x - - - - - - - | x - - - - - - -",
+        "sub": "1 - - - - - - - | 1 - - - - - - - | 1 - - - - - - - | 1 - - - - - - -"
+      }
+    }
+  },
+  "forms": ["A B C A", "A C B A", "A B A C"]
+}
