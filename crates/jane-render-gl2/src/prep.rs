@@ -16,12 +16,36 @@
 
 use std::ops::Range;
 
-use jane_present::frame::CHUNK_PX;
+use jane_present::frame::{Atmos, CHUNK_PX, PartShape, Particle, SkyLook};
 use jane_present::shadow;
-use jane_present::{Caster, Directional, Frame, LightKind, Pass, Post, Rgb, Tint, height_of_rows};
+use jane_present::{Caster, Directional, Frame, LightKind, Pass, Post, Rgb, SpriteCmd, Tint, height_of_rows};
 
 use crate::gl::Blend;
 use crate::shaders::{LIGHT_SIZES, SPAN_SIZES, SPRITE_SIZES};
+
+/// Fog volumes T1 draws at most (the fog shader's arrays): the first eight the frame holds, the
+/// weather's mist and the evening's haze among them.
+pub const MAX_FOG: usize = 8;
+/// Shape quads a frame holds at most: the particle pool (2000 at T1), the stars and the moon, well
+/// inside the quad index buffer.
+const MAX_SHAPES: usize = 12_000;
+/// The moon's radius on the backdrop, px, and its halo's.
+const MOON_R: f32 = 7.0;
+const MOON_HALO: f32 = 20.0;
+/// Floats a shape quad takes.
+const SHAPE_QUAD: usize = 4 * 12;
+
+/// What is drawn over the composed canvas, in the frame's order (PRESENTATION.md §1.1's pass
+/// order: the particles below the light, the ground's, the fog, the air's).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum After {
+    /// Shape quads `quads` of `shape_v`. `lit`: the frame put them before its `Lights` pass (the
+    /// rain and the sparks that do not glow), so the light target lights them as it lights the
+    /// ground; else their colour is lit already (what glows, over the light).
+    Parts { quads: Range<usize>, lit: bool },
+    /// The fog volumes (`Prep::fog`).
+    Fog,
+}
 
 /// Chunk slots across the chunk atlas (8 x 6 slots of 256 px: 2048 x 1536).
 pub const SLOTS_ACROSS: u32 = 8;
@@ -56,10 +80,13 @@ pub struct Rows {
     pub half_light: bool,
     /// The exact albedo pass (see the module doc) or the fast one.
     pub exact: bool,
+    /// Water mirrors what stands above it (a search of up to 72 reads a water px); off, it
+    /// mirrors the sky alone. Off on tile GPUs, with the fast albedo.
+    pub reflect: bool,
 }
 
 impl Rows {
-    /// T1's column, with the light target full size and the exact albedo.
+    /// T1's column, with the light target full size, the exact albedo and the full reflection.
     pub const T1: Rows = Rows {
         normal_light: true,
         shadows: 8,
@@ -68,6 +95,7 @@ impl Rows {
         max_lights: 32,
         half_light: false,
         exact: true,
+        reflect: true,
     };
 }
 
@@ -160,6 +188,31 @@ pub struct Prep {
     /// The light pass's sky, if the frame has a light pass.
     pub sky: Option<Sky>,
     pub post: Option<Post>,
+    /// The Lights pass's flat light and sky light, display values (full where there is none).
+    pub ambient: Rgb,
+    pub fill: Rgb,
+    /// The sky backdrop (`Pass::Sky`), if the frame has one.
+    pub backdrop: Option<SkyLook>,
+    /// Water is in view (`Pass::Water`).
+    pub water: bool,
+    /// What the sky is doing (`Pass::Weather`).
+    pub atmos: Atmos,
+    /// Shape quads (particles, stars, the moon): pos, loc, shape, colour.
+    pub shape_v: Vec<f32>,
+    /// The backdrop's stars and moon, quads of `shape_v` drawn into the sky target.
+    pub sky_shapes: Range<usize>,
+    /// The far things on the backdrop, `SPRITE_SIZES` quads in the sky target's px.
+    pub far_v: Vec<f32>,
+    /// Runs of `far_v` by page, with their haze of 1.
+    pub far_draws: Vec<(u8, Range<usize>, f32)>,
+    /// The fog volumes, `MAX_FOG` at most: rects, colours (display, lit) with their density, and
+    /// `(edge, top, 0, 0)`, four floats each; and the mist tile's drift.
+    pub fog_rect: Vec<f32>,
+    pub fog_col: Vec<f32>,
+    pub fog_shape: Vec<f32>,
+    pub drift: (i16, i16),
+    /// What is drawn over the composed canvas, in order.
+    pub after: Vec<After>,
     /// Draw calls the albedo pass will issue (for the stats).
     pub casters: usize,
     depth: Vec<u8>,
@@ -230,6 +283,21 @@ impl Prep {
         self.n_lights = 0;
         self.sky = None;
         self.post = None;
+        self.ambient = [255; 3];
+        self.fill = [255; 3];
+        self.backdrop = None;
+        self.water = false;
+        self.atmos = Atmos::default();
+        self.shape_v.clear();
+        self.sky_shapes = 0..0;
+        self.far_v.clear();
+        self.far_draws.clear();
+        self.fog_rect.clear();
+        self.fog_col.clear();
+        self.fog_shape.clear();
+        self.drift = (0, 0);
+        self.after.clear();
+        let mut lit_seen = false;
         self.rows.clear();
         self.profiles.clear();
         self.profiles.resize(frame.casters.len(), None);
@@ -275,19 +343,134 @@ impl Prep {
                 }
                 Pass::Lights { ambient, fill, sun, points, casters } => {
                     self.sky = Some(sky(ambient, fill, sun));
+                    (self.ambient, self.fill) = (ambient, fill);
+                    lit_seen = true;
                     self.lights(frame, ambient, points.range(), casters.range(), pages, *rows);
                 }
                 Pass::Post(p) => self.post = Some(p),
-                // The atmosphere's passes (PRESENTATION.md §1.9, §2) are not drawn by gl2 yet:
-                // its rows (layered fog, particles, the shimmer and refraction, the wet
-                // specular) are the T1 gap §1.3 names.
-                Pass::Sky(_)
-                | Pass::Parallax { .. }
-                | Pass::Water { .. }
-                | Pass::Weather(_)
-                | Pass::Fog { .. }
-                | Pass::Rays { .. }
-                | Pass::Particles { .. } => {}
+                // The atmosphere (PRESENTATION.md §1.8, §1.9, §2): the backdrop into its own
+                // target, the water, the sky and the wet ground in the compose, the rest over it.
+                Pass::Sky(s) => self.backdrop_of(frame, s),
+                Pass::Parallax { factor, sprites, .. } => {
+                    // The farther, the hazier: the School at an eighth, the trees at a quarter.
+                    let haze = if factor <= 32 { 50.0 / 255.0 } else { 24.0 / 255.0 };
+                    self.far(frame.sprites_in(sprites), haze);
+                }
+                Pass::Water { .. } => self.water = true,
+                Pass::Weather(a) => self.atmos = a,
+                Pass::Fog { volumes, drift } => {
+                    self.drift = drift;
+                    let had = self.fog_rect.len();
+                    for v in frame.fog_in(volumes).iter().take(MAX_FOG - self.fog_rect.len() / 4) {
+                        let (x0, y0, x1, y1) = v.rect;
+                        push(&mut self.fog_rect, &[x0 as f32, y0 as f32, x1 as f32, y1 as f32]);
+                        let [r, g, b] = v.colour.map(|c| f32::from(c) / 255.0);
+                        push(&mut self.fog_col, &[r, g, b, f32::from(v.density) / 255.0]);
+                        push(&mut self.fog_shape, &[f32::from(v.edge.max(1)), f32::from(v.top), 0.0, 0.0]);
+                    }
+                    if self.fog_rect.len() > had && !self.after.contains(&After::Fog) {
+                        self.after.push(After::Fog);
+                    }
+                }
+                // T2's alone: never in a T1 frame (§1.3 `god_rays`).
+                Pass::Rays { .. } => {}
+                Pass::Particles { parts, .. } => {
+                    let first = self.shape_v.len() / SHAPE_QUAD;
+                    for p in frame.parts_in(parts) {
+                        self.particle(p);
+                    }
+                    let end = self.shape_v.len() / SHAPE_QUAD;
+                    if end > first {
+                        self.after.push(After::Parts { quads: first..end, lit: !lit_seen });
+                    }
+                }
+            }
+        }
+    }
+
+    /// One shape quad round `at`, from `lo` to `hi` px of it.
+    fn shape(&mut self, at: (f32, f32), lo: (f32, f32), hi: (f32, f32), shape: [f32; 4], col: [f32; 4]) {
+        if self.shape_v.len() / SHAPE_QUAD >= MAX_SHAPES {
+            return;
+        }
+        for (lx, ly) in [(lo.0, lo.1), (hi.0, lo.1), (lo.0, hi.1), (hi.0, hi.1)] {
+            push(&mut self.shape_v, &[at.0 + lx, at.1 + ly, lx, ly]);
+            push(&mut self.shape_v, &shape);
+            push(&mut self.shape_v, &col);
+        }
+    }
+
+    /// A particle's quad (T2's `vs_part`): a stroke's box round it and its tail, a square, a ring
+    /// squashed to half height, a soft disc.
+    fn particle(&mut self, p: &Particle) {
+        let at = (f32::from(p.x), f32::from(p.y));
+        let [r, g, b] = p.colour.map(|c| f32::from(c) / 255.0);
+        let col = [r, g, b, f32::from(p.alpha) / 255.0];
+        // What of it glows: a part under the light keeps that much of its own colour unlit (the
+        // rain's little light of its own).
+        let glow = f32::from(p.glow) / 255.0;
+        let (lo, hi, shape) = match p.shape {
+            PartShape::Streak { dx, dy } => {
+                let (tx, ty) = (f32::from(dx), f32::from(dy));
+                ((tx.min(0.0) - 1.0, ty.min(0.0) - 1.0), (tx.max(0.0) + 2.0, ty.max(0.0) + 2.0), [0.0, tx, ty, glow])
+            }
+            PartShape::Dot { size } => {
+                let s = f32::from(size.max(1));
+                ((0.0, 0.0), (s, s), [1.0, s, 0.0, glow])
+            }
+            PartShape::Ring { r } => {
+                let r = f32::from(r);
+                ((-r - 1.0, -r * 0.5 - 1.0), (r + 2.0, r * 0.5 + 2.0), [2.0, r, 0.0, glow])
+            }
+            PartShape::Glow { r } => {
+                let r = f32::from(r);
+                ((-r, -r), (r + 1.0, r + 1.0), [3.0, r, 0.0, glow])
+            }
+        };
+        self.shape(at, lo, hi, shape, col);
+    }
+
+    /// The backdrop: its stars and its moon as shapes in the sky target's px (x across, y up
+    /// from the horizon).
+    fn backdrop_of(&mut self, frame: &Frame, s: SkyLook) {
+        self.backdrop = Some(s);
+        let first = self.shape_v.len() / SHAPE_QUAD;
+        for st in &frame.stars[s.star_list.range()] {
+            let at = (f32::from(st.x), f32::from(st.up));
+            let a = f32::from(st.bright) / 255.0;
+            let size = if st.bright > 204 { 2.0 } else { 1.0 };
+            self.shape(at, (0.0, 0.0), (size, size), [1.0, size, 0.0, 0.0], [0.93, 0.94, 1.0, a]);
+        }
+        if let Some(m) = s.moon {
+            let at = (f32::from(m.x), f32::from(m.up));
+            let [r, g, b] = m.colour.map(|c| f32::from(c) / 255.0);
+            // A faint halo, then the disc in its phase.
+            let h = MOON_HALO;
+            self.shape(at, (-h, -h), (h + 1.0, h + 1.0), [3.0, h, 0.0, 0.0], [r, g, b, 0.16]);
+            let rr = MOON_R;
+            let phase = f32::from(m.phase % 16);
+            self.shape(at, (-rr, -rr), (rr + 1.0, rr + 1.0), [4.0, rr, phase, 0.0], [r, g, b, 1.0]);
+        }
+        self.sky_shapes = first..self.shape_v.len() / SHAPE_QUAD;
+    }
+
+    /// Far sprites on the backdrop: each flipped into the sky target, its top `-y` px up and its
+    /// row `sy` `-y - sy` up (T2's `vs_far`); runs by page.
+    fn far(&mut self, sprites: &[SpriteCmd], haze: f32) {
+        for s in sprites {
+            let first = self.far_v.len() / (4 * 12);
+            let (sx, sy, sw, sh) = (f32::from(s.src.x), f32::from(s.src.y), f32::from(s.src.w), f32::from(s.src.h));
+            let (x0, x1, top) = (f32::from(s.x), f32::from(s.x) + sw, -f32::from(s.y));
+            let rect = [sx, sy, sx + sw, sy + sh];
+            let info = [0.0, 0.0, 0.0, 2.0];
+            for (px, py, u, v) in [(x0, top, sx, sy), (x1, top, sx + sw, sy), (x0, top - sh, sx, sy + sh), (x1, top - sh, sx + sw, sy + sh)] {
+                push(&mut self.far_v, &[px, py, u, v]);
+                push(&mut self.far_v, &rect);
+                push(&mut self.far_v, &info);
+            }
+            match self.far_draws.last_mut() {
+                Some((page, r, h)) if *page == s.page && r.end == first && *h == haze => r.end = first + 1,
+                _ => self.far_draws.push((s.page, first..first + 1, haze)),
             }
         }
     }
@@ -651,6 +834,56 @@ mod tests {
                 Step::Sprites { page: 0, quads: 2..3, mode: 3.0, blend: Blend::Over },
             ]
         );
+    }
+
+    #[test]
+    fn the_atmosphere_is_drawn_over_the_canvas_in_the_frames_order() {
+        use jane_present::frame::{FogVolume, Moon, StarCmd};
+        let mut f = Frame::new(Tier::T1);
+        let part = |x, shape| Particle { x, y: 10, shape, colour: [200, 210, 255], alpha: 200, glow: 90, height: 0 };
+        f.stars.push(StarCmd { x: 5, up: 30, bright: 255 });
+        f.parts.extend([part(1, PartShape::Streak { dx: 2, dy: 9 }), part(2, PartShape::Ring { r: 3 })]);
+        f.parts.push(part(3, PartShape::Glow { r: 4 }));
+        f.fog.push(FogVolume { rect: (0, 0, 64, 64), edge: 8, density: 90, colour: [120, 130, 140], top: 0 });
+        f.sprites.push(sprite(0, Tint::None));
+        let sky = SkyLook {
+            zenith: [10, 12, 40],
+            horizon: [200, 120, 100],
+            glow: [255, 120, 60],
+            glow_x: 0,
+            glow_amount: 0,
+            stars: 255,
+            star_list: Span { start: 0, len: 1 },
+            moon: Some(Moon { x: 40, up: 90, phase: 8, colour: [230, 230, 210] }),
+            zone: (0, 0, 64, 64),
+            tick: 0,
+        };
+        f.passes.extend([
+            Pass::Sky(sky),
+            Pass::Parallax { layer: Depth::FarLandmark, factor: 32, sprites: Span { start: 0, len: 1 } },
+            Pass::Water { cells: Span::default() },
+            Pass::Particles { layer: Depth::Weather, parts: Span { start: 0, len: 2 } },
+            Pass::Lights { ambient: [60; 3], fill: [40; 3], sun: None, points: Span::default(), casters: Span::default() },
+            Pass::Fog { volumes: Span { start: 0, len: 1 }, drift: (3, 4) },
+            Pass::Particles { layer: Depth::Canopy, parts: Span { start: 2, len: 1 } },
+        ]);
+        let mut p = Prep::default();
+        p.build(&f, &[page()], &Rows::T1);
+        // The star, the moon's halo and its disc go to the backdrop; then the rain lit by the light
+        // target, the fog, and what glows over it.
+        assert_eq!(p.sky_shapes, 0..3);
+        assert_eq!(
+            p.after,
+            [After::Parts { quads: 3..5, lit: true }, After::Fog, After::Parts { quads: 5..6, lit: false }]
+        );
+        assert!(p.water && p.backdrop.is_some());
+        assert_eq!(p.far_draws, [(0, 0..1, 50.0 / 255.0)]);
+        assert_eq!((p.fog_rect.len(), p.drift), (4, (3, 4)));
+        // A stroke's quad holds it and its tail; the rain keeps its glow for its own light.
+        let v = &p.shape_v[3 * SHAPE_QUAD..];
+        assert_eq!(&v[..4], &[0.0, 9.0, -1.0, -1.0]);
+        assert_eq!(&v[3 * 12..3 * 12 + 4], &[5.0, 21.0, 4.0, 11.0]);
+        assert!((v[7] - 90.0 / 255.0).abs() < 1e-6);
     }
 
     #[test]
