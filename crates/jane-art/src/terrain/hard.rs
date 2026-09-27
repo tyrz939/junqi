@@ -1003,9 +1003,9 @@ fn rock_floor(p: &mut Painter, c: &Cell) {
         for x in 0..CELL {
             let (wx, wy) = c.w(x, y);
             let v = wear_at(p, wx, wy);
-            let t = if v < WEAR_DARK + 20 {
+            let t = if v < WEAR_DARK {
                 Tone::Mid
-            } else if v > WEAR_LIGHT - 20 {
+            } else if v > WEAR_LIGHT {
                 Tone::Lift
             } else {
                 Tone::Base
@@ -1013,7 +1013,8 @@ fn rock_floor(p: &mut Painter, c: &Cell) {
             put(p, c, x, y, r.at(t), FLAT, z);
         }
     }
-    for s in 0..(c.h & 3) as i32 {
+    // Now and then a stone, rarely two: a cell of three read as a floor of gravel speckle.
+    for s in 0..[0, 1, 1, 2][(c.h & 3) as usize] {
         let hs = h32(c.h, s as u32, 3);
         let (x, y) = (2 + below(hs, 11) as i32, 2 + below(hs.rotate_right(8), 11) as i32);
         put(p, c, x, y, r.at(Tone::Light), normal(-50, -50), z + 1);

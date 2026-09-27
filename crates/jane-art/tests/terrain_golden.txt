@@ -58,6 +58,6 @@ chunk/county/3_2 394b2469
 chunk/indoor/0_0 a3717f6b
 chunk/indoor/1_0 fcbf2f58
 chunk/indoor/2_0 a7c3cbb4
-chunk/indoor/0_1 50b9c47f
-chunk/indoor/1_1 3f2f6164
+chunk/indoor/0_1 a5248ef3
+chunk/indoor/1_1 57a6a890
 chunk/indoor/2_1 f91063be
