@@ -187,22 +187,25 @@ fn small(c: &mut Canvas, k: &Kit, on: bool) -> Option<Stand> {
     Some(match k.look.shape {
         // --- The scatter (a dungeon's floor marks and wall hangings, `scatter_*`) ---------------
         "stain" => {
-            // A stain soaked into the floor: overlapping blots of the body's dark, a wet sheen
-            // on one edge.
+            // A stain soaked into the floor: overlapping blots of the contact shade and nothing
+            // else (index 1, a cool multiply of whatever floor it lies on, so it darkens the
+            // flags or the rock under it and never reads as a hole cut in them, as blots of the
+            // body's darkest tones did: the art-director pass, 2026-09-27). The light pass puts
+            // any sheen on it where the floor itself shines.
             // Scaled to its footprint: a spill a cell across, a pool two.
             let (fw, fh) = (w, k.fh * 16);
-            let h = parts::hash(k.seed, 1, 90);
+            // Spread, so the next seed's blots are not this seed's shifted by one.
+            let seed = k.seed.wrapping_mul(0x9e37_79b1);
             for i in 0..3 + fw / 16 {
-                let hh = parts::hash(k.seed, i, 91);
+                let hh = parts::hash(seed, i, 91);
                 let (bw, bh) =
                     (fw * 3 / 8 + (hh >> 12) as i32 % (fw / 4).max(1), fh / 4 + (hh >> 16) as i32 % (fh / 6).max(1));
                 let (x, y) = (
                     2 + (hh % (fw - bw - 3).max(1) as u32) as i32,
                     foot - fh * 2 / 3 + ((hh >> 8) % (fh / 3).max(1) as u32) as i32,
                 );
-                c.ellipse(Rect::new(x, y, bw, bh), b.at(if i == 0 { Tone::Shade } else { Tone::Deep }), 1);
+                c.ellipse(Rect::new(x, y, bw, bh), Ix::AO, 0);
             }
-            c.fill_rect(Rect::new(4 + (h % (fw as u32 / 2)) as i32, foot - fh / 2, 2, 1), b.at(Tone::Light), 1);
             Stand::Flat(1)
         }
         "papers" => {

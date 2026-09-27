@@ -3,6 +3,7 @@
 
 pub mod atmos;
 pub mod blit;
+pub mod grade;
 pub mod lightmap;
 pub mod silhouette;
 pub mod ui;
@@ -140,9 +141,10 @@ impl Backend for Soft {
                 }
                 Pass::Particles { parts, .. } => written += atmos::particles(t, frame.parts_in(parts)),
                 // What the sky is doing reached T0 through the ambient already, and the rain is
-                // particles. Light shafts and the grade are T2's, which a T0 frame never holds
-                // (§1.3): soft draws nothing of its own.
-                Pass::Weather(_) | Pass::Rays { .. } | Pass::Post(_) => {}
+                // particles. Light shafts are T2's, which a T0 frame never holds (§1.3).
+                Pass::Weather(_) | Pass::Rays { .. } => {}
+                // The grade, as T2 draws it (§1.9): the tiers are one look.
+                Pass::Post(p) => written += grade::Grade::new(&p).apply(t),
                 Pass::Sprites { cmds, .. } => {
                     for s in frame.sprites_in(cmds) {
                         if let Some(page) = self.atlas.pages.get(usize::from(s.page)) {

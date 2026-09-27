@@ -2,7 +2,7 @@
   "fen_mist": {
     "areas": ["sallow_bottom", "eel_beds", "still_pool", "tollhouse_reach", "drowned_lane"], "rects": ["sallow_jetty", "site_reed_camp"],
     "hours": [19, 8], "needs": ["clear", "mist", "rain", "storm"],
-    "colour": "#dce6ec", "density": 520, "height": "ground", "top": 26, "drift": [5, 0], "spread": 6
+    "colour": "#dce6ec", "density": 520, "height": "ground", "top": 26, "drift": [5, 0], "spread": 16
   },
   "waters_dawn": {
     "regions": ["waters"],
@@ -42,7 +42,7 @@
   "town_smoke_evening": {
     "rects": ["site_town"],
     "hours": [16, 19], "needs": ["clear", "mist", "storm"],
-    "colour": "#a89e96", "density": 170, "height": "full", "drift": [4, -1], "spread": 4
+    "colour": "#a6a8ac", "density": 70, "height": "full", "drift": [4, -1], "spread": 4
   },
   "mine_dust": {
     "zones": ["mine"],

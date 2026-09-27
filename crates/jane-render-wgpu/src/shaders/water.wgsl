@@ -89,7 +89,7 @@ fn fs_water(i: FullOut) -> @location(0) vec4<f32> {
     // Deep water is dark and holds the reflection best; the shallows show their bed.
     let deep = clamp(depth / 12.0, 0.0, 1.0);
     let k = 0.55 + 0.3 * deep;
-    let tint = mix(vec3<f32>(0.85, 0.92, 0.95), vec3<f32>(0.62, 0.74, 0.82), deep);
+    let tint = mix(vec3<f32>(0.85, 0.92, 0.95), vec3<f32>(0.52, 0.66, 0.72), deep);
     // The surface: a row here and there catches the sky brighter, another lies in a trough,
     // wandering with the swell and quickened by the wind; the pixel-art water line.
     let crest = sin(wy * 0.83 + t * 0.05 + sin(wx * 0.045 + wy * 0.13) * 2.4);

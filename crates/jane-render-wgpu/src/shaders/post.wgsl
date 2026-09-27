@@ -77,10 +77,11 @@ fn fs_grade(i: FullOut) -> @location(0) vec4<f32> {
         let x = f32(px.x);
         let toward = clamp(1.0 - abs(x - g.horizon.w) / (g.canvas.x * 1.2), 0.0, 1.0);
         let k = g.glow.w * toward * toward;
-        let warm = g.glow.rgb / max(max(g.glow.r, g.glow.g), max(g.glow.b, 0.001));
-        c = c * mix(vec3<f32>(1.0), 0.8 + warm * 0.45, k * 0.55) + g.glow.rgb * k * 0.02;
+        let air = air_glow(g.glow.rgb);
+        let warm = air / max(max(air.r, air.g), max(air.b, 0.001));
+        c = c * mix(vec3<f32>(1.0), 0.8 + warm * 0.45, k * 0.55) + air * k * 0.02;
         let far = clamp(1.0 - f32(px.y) / g.canvas.y, 0.0, 1.0);
-        c = mix(c, (g.horizon.rgb + g.glow.rgb) * 0.25, far * far * g.glow.w * 0.07);
+        c = mix(c, (g.horizon.rgb + air) * 0.25, far * far * g.glow.w * 0.07);
     }
     c *= g.lift.w;
     c = vec3<f32>(shoulder(c.r), shoulder(c.g), shoulder(c.b));

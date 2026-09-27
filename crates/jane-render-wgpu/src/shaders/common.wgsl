@@ -87,6 +87,14 @@ fn rows_up(h: u32) -> u32 {
 // neither stands in the height field nor is lifted off the row it is drawn on.
 const GROUND: f32 = 4.5;
 
+// The afterglow as the air and the ground take it: its hue with the chroma the sky's byte names,
+// not the power curve's (a linear orange is a red, and a red over the blue fill is mauve), at the
+// glow's own brightness. What the sky backdrop paints stays the saturated glow.
+fn air_glow(c: vec3<f32>) -> vec3<f32> {
+    let m = max(max(c.r, c.g), max(c.b, 0.001));
+    return sqrt(c / m) * m;
+}
+
 // A full-canvas triangle.
 struct FullOut {
     @builtin(position) pos: vec4<f32>,
