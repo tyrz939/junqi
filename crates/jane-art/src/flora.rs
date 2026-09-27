@@ -19,7 +19,7 @@ use jane_core::angle::{Angle, cos_q15, iatan2, sin_q15};
 use jane_core::grid::Rect;
 use jane_core::num::isqrt;
 
-use crate::canvas::{BAKE_LIGHT, Canvas, UNIT, Z, normal};
+use crate::canvas::{BAKE_LIGHT, Canvas, UNIT, Z, height_of_rows, normal};
 use crate::hash::{below, h32};
 use crate::palette::{Ix, Ramp, Tone, letter};
 
@@ -363,6 +363,21 @@ fn trunk(c: &mut Canvas, cx: i32, top: i32, bottom: i32, w: i32, bark: Ramp, see
     }
 }
 
+/// Stands a plant's heights in the one projection (ART.md §1.1): its generators write a px `r`
+/// rows over the foot row `ay` as `r` px up, and what they add over that (a crown's dome, a leaf
+/// proud of its mass) stays on top of it; the px is `height_of_rows(r)` up, so its column lands
+/// on the foot in a lit tier's field and a crown floats over its trunk as high as it is drawn.
+fn stand(c: &mut Canvas, ay: i32) {
+    let (w, h) = (c.w(), c.h());
+    let old: Vec<i32> =
+        (0..h).flat_map(|y| (0..w).map(move |x| (x, y))).map(|(x, y)| i32::from(c.height_at(x, y))).collect();
+    c.heights_by(Rect::new(0, 0, w, h), |x, y| {
+        let rows = (ay - y).max(0);
+        let over = (old[(y * w + x) as usize] - rows).max(0);
+        height_of_rows(rows) + over
+    });
+}
+
 /// A broadleaf. Large: 64 x 80; medium: 48 x 64. Foot: the trunk's bottom centre.
 pub fn broadleaf(seed: u32, large: bool, leaf: Ramp, bark: Ramp) -> Sprite {
     let mut d = Dice::new(seed);
@@ -374,6 +389,7 @@ pub fn broadleaf(seed: u32, large: bool, leaf: Ramp, bark: Ramp) -> Sprite {
     let (cy, rx, ry, n) = if large { (31, 27, 24, 9) } else { (24, 20, 18, 7) };
     crown(&mut c, (cx8, cy * 8), (rx * 8, ry * 8), n, leaf, &mut d, ay, 16);
     c.outline();
+    stand(&mut c, ay);
     Sprite { canvas: c, ax, ay }
 }
 
@@ -453,6 +469,7 @@ pub fn pine(seed: u32, needle: Ramp, bark: Ramp) -> Sprite {
         c.put(ax, y, needle.at(if y < 2 { Tone::Mid } else { Tone::Base }), normal(0, -40), (ay - y) as u8);
     }
     c.outline();
+    stand(&mut c, ay);
     Sprite { canvas: c, ax, ay }
 }
 
@@ -485,6 +502,7 @@ pub fn dead_tree(seed: u32, wood: Ramp) -> Sprite {
         k += 1;
     }
     c.outline();
+    stand(&mut c, ay);
     Sprite { canvas: c, ax, ay }
 }
 
@@ -509,6 +527,7 @@ pub fn bush(seed: u32, ramp: Ramp, berries: bool) -> Sprite {
         }
     }
     c.outline();
+    stand(&mut c, ay);
     Sprite { canvas: c, ax, ay }
 }
 
@@ -690,5 +709,38 @@ mod tests {
         }
         assert!(tl > br, "top-left {tl}, bottom-right {br}");
         assert!(s.canvas.height_at(32, 10) > s.canvas.height_at(32, 70));
+    }
+
+    #[test]
+    fn a_plant_stands_in_the_one_projection() {
+        use crate::canvas::rows_up;
+        let plants = [
+            broadleaf(1, true, Ramp::Leaf, Ramp::Bark),
+            broadleaf(2, false, Ramp::Leaf, Ramp::Bark),
+            pine(1, Ramp::Leaf, Ramp::Bark),
+            dead_tree(1, Ramp::Bark),
+            bush(1, Ramp::Leaf, false),
+        ];
+        for s in plants {
+            for y in 0..s.ay {
+                for x in 0..s.canvas.w() {
+                    if !s.canvas.get(x, y).is_opaque() {
+                        continue;
+                    }
+                    // Its true height at least: a lit tier stands it on its foot row or, where a
+                    // crown bulges toward the viewer, a little in front, never behind.
+                    let h = i32::from(s.canvas.height_at(x, y));
+                    assert!(rows_up(h) >= s.ay - y, "({x}, {y}): {h} px up, {} rows over its foot", s.ay - y);
+                }
+            }
+        }
+        // A broadleaf's crown floats: the lowest px of a column clear of the trunk is well up.
+        let s = broadleaf(1, true, Ramp::Leaf, Ramp::Bark);
+        let low = (0..s.canvas.h()).rev().find(|&y| s.canvas.get(s.ax - 20, y).is_opaque()).unwrap_or(0);
+        assert!(
+            s.canvas.height_at(s.ax - 20, low) > 30,
+            "the crown's edge is {} up",
+            s.canvas.height_at(s.ax - 20, low)
+        );
     }
 }
