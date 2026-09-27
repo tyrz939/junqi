@@ -949,6 +949,14 @@ Every name in today's `CONTRACTS.burial` is kept. What is built (cold torches, t
 
 **What could go wrong.** `shunsLight` and A*: a shade whose goal is inside light must path to the nearest dark cell and wait, not thrash. The great torch pushed into a dead end is recoverable (pull exists), but the template keeps every great-torch hall free of 2-wide necks. A cold torch that `show`s a solid prop needs E12. The snake's line-of-sight reset must keep ignoring pillars after its room is rotated by the generator: its template is a set piece (K14), mirrored only.
 
+**Played through (September 2026).** What the headless player needed changed here, and why. Each is a change toward what this section says the dungeon is, found by the bot dying where a person would.
+
+- **The kit.** `givenVerbs` is what she carries by now (Icebolt, Repair, Explosion, Grow, Electric: `STORY.md` §4), not Icebolt alone. Fire is still the garden's. The bait is the dog's recipe (the cellar's rat meat soaked in Stranglethorn at a bench): the console brings one per small snake.
+- **The small snakes are fed.** They spit from forty cells and never chase. Their bait was smelt only as far as they notice her, so a throw had to land inside their notice from a spot outside it: a one-cell window at fourteen and a half cells. They now smell it from twice their aggro (`BAIT_NOSE_TIMES`), and go for it even when they have seen her. And one that had seen her never walked home (its run is 0), so it could never be fed again that life: it walks home now.
+- **The fires rest.** The vigil fire and the orchard's hearth fire had no `talk`, so using them did nothing: no rest, no waking there. Both now have one (`burial_vigil_fire`, `burial_orchard_fire`). The vigil is the hub's fire this section promises.
+- **The east hall's heat is 0.** Its own holds are two statues and two snakes, four things that shoot; the heat bought a third statue, a web spinner and a pumpkin on top, past §2.7's "no more than two ranged units in one room", in a room every trip south crosses twice. The statues stand up again ten seconds after she leaves, so the room is a toll, and the toll is now what the holds say.
+- **The corner bosses and Goldskin hit at boss scale.** The Flower, the Spider and Goldskin borrowed the cactus's spray, the root wall's lash, the spider's bite and web, the far spit and the AI icebolt, all written at `div 1` for rows of strength 8 or spirit 5. At boss strength and phase 5 each was a single blow of 350 to 900 against her 675. They now cast `data/spells/burial.json`'s copies at the snake's scale (`div 8`; Goldskin's globe `div 4`, his icebolt `div 6`), the same shapes, so each fight is the one the table above describes rather than a one-shot.
+
 ---
 
 ### 3.6 The School (phase 6): the end

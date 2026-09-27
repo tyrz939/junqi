@@ -1,0 +1,38 @@
+{
+  "flower_spray": {
+    "name": "Thorn Spray", "description": "Ten thorns in a cone, from something that was a flower bed.", "icon": "spell_nature",
+    "kind": "bolt", "school": "nature", "mp": 0, "energy": 0, "range": 15, "cooldown": 5,
+    "gcdImmune": false, "needsTarget": true, "needsEnemy": true, "needsLos": true, "anim": "cast",
+    "power": { "stat": "spirit", "div": 8, "varDiv": 32 }, "speed": 4, "count": 10, "fan": 45, "stop": 20
+  },
+  "flower_lash": {
+    "name": "Root", "description": "The bed lashes anything that stands on it.", "icon": "spell_nature",
+    "kind": "melee", "school": "nature", "mp": 0, "energy": 0, "range": 0.25, "cooldown": 1,
+    "gcdImmune": true, "needsTarget": true, "needsEnemy": true, "needsLos": false, "anim": "attack",
+    "power": { "stat": "strength", "div": 8, "varDiv": 32 }, "stop": 0
+  },
+  "queen_bite": {
+    "name": "Venomous Bite", "description": "A bite that keeps hurting for three seconds.", "icon": "spell_nature",
+    "kind": "melee", "school": "physical", "mp": 0, "energy": 0, "range": 0.25, "cooldown": 2,
+    "gcdImmune": true, "needsTarget": true, "needsEnemy": true, "needsLos": true, "anim": "attack",
+    "power": { "stat": "strength", "div": 8, "varDiv": 32 }, "effect": "spider_venom", "stop": 16
+  },
+  "queen_web": {
+    "name": "Webshot", "description": "Leaves a web where it lands. Webs slow you to a quarter speed.", "icon": "spell_web",
+    "kind": "ground", "school": "physical", "mp": 1, "energy": 0, "range": 15, "cooldown": 6,
+    "gcdImmune": false, "needsTarget": true, "needsEnemy": true, "needsLos": true, "anim": "cast",
+    "power": { "stat": "spirit", "div": 8, "varDiv": 32, "flat": 4 }, "radius": 1.5, "duration": 10, "pulse": 1, "effect": "webbed", "stop": 20
+  },
+  "gold_globe": {
+    "name": "Poison Globe", "description": "A slow globe of poison. Slow enough to walk around, if you are looking.", "icon": "spell_nature",
+    "kind": "bolt", "school": "nature", "mp": 0, "energy": 0, "range": 30, "cooldown": 2,
+    "gcdImmune": false, "needsTarget": true, "needsEnemy": true, "needsLos": true, "anim": "cast",
+    "power": { "stat": "spirit", "div": 4, "varDiv": 16 }, "speed": 2, "effect": "poisoned", "stop": 20, "glow": 20
+  },
+  "gold_icebolt": {
+    "name": "Icebolt", "description": "A bolt of frost. It was hers first.", "icon": "spell_frost",
+    "kind": "bolt", "school": "frost", "mp": 4, "energy": 0, "range": 15, "cooldown": 3,
+    "gcdImmune": false, "needsTarget": true, "needsEnemy": true, "needsLos": true, "anim": "cast",
+    "power": { "stat": "spirit", "div": 6, "varDiv": 24 }, "speed": 3, "effect": "chilled", "stop": 30, "glow": 28
+  }
+}
