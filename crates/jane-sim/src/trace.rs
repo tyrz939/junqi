@@ -37,8 +37,8 @@ use crate::state::{FactKey, JournalKind, Source};
 pub const MAGIC: [u8; 4] = *b"JTRC";
 pub const TRACE_VERSION: u16 = 1;
 /// The camera, cells (QUEST-TREE.md §1).
-pub const VIEW_W: i32 = 48;
-pub const VIEW_H: i32 = 27;
+pub const VIEW_W: i32 = jane_core::view::VIEW_W_CELLS as i32;
+pub const VIEW_H: i32 = jane_core::view::VIEW_H_CELLS as i32;
 /// Ticks between samples.
 pub const SAMPLE_EVERY: u32 = 60;
 /// Ticks between hashes.

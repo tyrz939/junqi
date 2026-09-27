@@ -36,6 +36,7 @@
 
 #![deny(clippy::float_arithmetic, clippy::float_cmp)]
 
+pub mod audit;
 pub mod coarse;
 pub mod console;
 pub mod crawl;
@@ -44,6 +45,7 @@ pub mod fight;
 pub mod fixture;
 pub mod lost;
 pub mod nav;
+pub mod pair;
 pub mod run;
 pub mod sense;
 pub mod story;

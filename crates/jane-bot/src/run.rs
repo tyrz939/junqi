@@ -89,6 +89,11 @@ impl Session {
     /// seat's session): decisions, sights and log lines.
     pub fn record(&mut self, sim: &Sim) {
         let frame = self.obs.frames().max(1);
+        self.record_at(sim, frame);
+    }
+
+    /// [`record`](Self::record) at a frame the caller counts (a lockstep peer's).
+    pub fn record_at(&mut self, sim: &Sim, frame: u32) {
         let tick = sim.state().tick.0;
         let seat = Some(self.bot.seat);
         while self.shown < self.bot.log.len() {
