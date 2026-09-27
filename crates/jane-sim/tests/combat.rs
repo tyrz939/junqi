@@ -283,9 +283,10 @@ fn a_boss_crosses_its_phases_once_each_and_starts_over_whole() {
     assert_eq!((unit(&s, other).phase, toasts(&ev)), (2, 2));
     assert_eq!(unit(&s, other).combat, jane_sim::state::CombatState::Idle, "poison pulls nobody's aggro");
 
-    // Let off, it mends, and the fight starts from the top.
+    // Let off, it mends, and the fight starts from the top (walking home: the Foreman does not
+    // mend standing at his post, `autoRegen: false`, so the dark is a window, DUNGEONS.md §3.4).
     edit(&mut s, boss, |u| {
-        u.combat = jane_sim::state::CombatState::Idle;
+        u.combat = jane_sim::state::CombatState::Leash;
         u.target = None;
         u.hp = Milli(max_hp(u).0 - 1000);
     });
