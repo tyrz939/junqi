@@ -287,6 +287,8 @@ pub struct Bot {
     pub deaths: Vec<Death>,
     /// What last hurt her (its row), for the next death's record.
     last_hurt: Option<jane_core::UnitDefId>,
+    /// The last few seconds, a line each half second, for the next death's record.
+    recent: std::collections::VecDeque<String>,
 }
 
 /// One death, recorded (for telling the bot's mistakes from the world's hardness).
@@ -305,6 +307,8 @@ pub struct Death {
     pub hour: u8,
     /// What the plan was doing (its own words, cut short).
     pub doing: String,
+    /// The seconds before, a line each half second: her health and mana, and what was near.
+    pub before: Vec<String>,
 }
 
 impl Death {
@@ -340,6 +344,7 @@ impl Bot {
             log: Vec::new(),
             deaths: Vec::new(),
             last_hurt: None,
+            recent: std::collections::VecDeque::new(),
             setup: Vec::new(),
         }
     }
@@ -389,6 +394,43 @@ impl Bot {
                 _ => {}
             }
         }
+        // The last few seconds, for a death's record.
+        if frame % 60 == 0 && v.body().alive {
+            let me = v.body();
+            let cat = jane_data::catalog();
+            let near: Vec<String> = sense::enemies(v)
+                .into_iter()
+                .filter(|u| nav::dist(u.pos, me.pos) < i64::from(10 * jane_core::num::CELL_FX))
+                .take(4)
+                .map(|u| {
+                    format!(
+                        "{}:{}@{}{}",
+                        cat.combat.unit(u.def).id,
+                        u.hp.points(),
+                        nav::dist(u.pos, me.pos) / i64::from(jane_core::num::CELL_FX),
+                        if fight::on_me(v, u) { "!" } else { "" }
+                    )
+                })
+                .collect();
+            if self.recent.len() >= 24 {
+                self.recent.pop_front();
+            }
+            let mut doing = match &self.plan {
+                Plan::Story(s) => s.status(),
+                Plan::Crawl(c) => c.status(),
+            };
+            doing.truncate(60);
+            self.recent.push_back(format!(
+                "{:02}:{:02} hp {} mp {} en {} {:?} [{}] {doing}",
+                tick / 3600,
+                tick / 60 % 60,
+                me.hp.points(),
+                me.mp.points(),
+                me.energy.points(),
+                me.pos.cell(),
+                near.join(" ")
+            ));
+        }
         if marks.contains(&Mark::Died) {
             let held = |n: &str| sense::holds(v, sense::item(n));
             let mut doing = match &self.plan {
@@ -406,6 +448,7 @@ impl Bot {
                 potions: (held("potion_stoneskin"), held("potion_lifesteal"), held("potion_manashield")),
                 hour: v.hour(),
                 doing,
+                before: self.recent.drain(..).collect(),
             });
         }
         for m in marks {

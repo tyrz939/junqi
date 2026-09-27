@@ -175,11 +175,16 @@ fn play(args: &[String], tape: Option<&str>) -> Result<(), String> {
         prof.print(played);
     }
     // Every death, and a count by where and to what.
-    if args.iter().any(|a| a == "--deaths") {
+    if args.iter().any(|a| a == "--deaths" || a == "--deaths-why") {
         let cat = jane_data::catalog();
         let mut by: std::collections::BTreeMap<(String, String), u32> = std::collections::BTreeMap::new();
         for d in &bot.deaths {
             println!("death {}", d.line());
+            if args.iter().any(|a| a == "--deaths-why") {
+                for l in &d.before {
+                    println!("      {l}");
+                }
+            }
             let who = d.by.map_or("?".to_owned(), |u| cat.combat.unit(u).id.to_owned());
             *by.entry((d.zone.name().to_owned(), who)).or_insert(0) += 1;
         }
