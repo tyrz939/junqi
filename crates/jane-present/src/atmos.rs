@@ -461,7 +461,9 @@ impl Atmosphere {
                 // two thirds of the way out.
                 let x = w / 2 + (sx - cx) * (w / 3) / north.max(1);
                 let cells = (north + (sx - cx).abs() / 2) / CELL;
-                let band = usize::from(cells < 1300) + usize::from(cells < 400);
+                // The bands step up early (the whole-frame pass): at the lake, halfway across the
+                // county, the School is the frame's landmark and its reflection must read.
+                let band = usize::from(cells < 2000) + usize::from(cells < 800);
                 let lit = if self.windows_lit() {
                     // One window steady, a second that comes and goes.
                     1 + usize::from(crate::light::flicker(self.tick, 0x5c48_4f4c, 900, 1) < 160)
