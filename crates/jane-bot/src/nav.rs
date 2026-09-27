@@ -261,7 +261,9 @@ impl Nav {
         // A goal beyond the window: toward a waypoint on the plan over blocks, the next one
         // once she is near it (or the path to it runs out).
         let cheb = |a: (i32, i32), b: (i32, i32)| (a.0 - b.0).abs().max((a.1 - b.1).abs());
-        let target = if cheb(own, goal) > FAR {
+        // Not in the Factory: it fits the window whole, and the plan over blocks does not see its
+        // gates, so she walked the top corridor back and forth between waypoints, never out.
+        let target = if cheb(own, goal) > FAR && v.zone() != ZoneId::Factory {
             match self.waypoint {
                 Some(w) if cheb(w, own) > 6 && self.at < self.path.len() => w,
                 _ => {
