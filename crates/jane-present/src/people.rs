@@ -254,10 +254,12 @@ mod tests {
         let (_, west) = people.frame(seats[0], pose(Facing::West, 0, 0));
         let (_, east) = people.frame(seats[0], pose(Facing::East, 0, 0));
         assert!(west && !east);
-        // A diagonal a look has no frames for is shown from the side, mirrored to the west.
-        let (r, m) = people.frame(seats[0], Pose { facing: Face8::SouthWest, ..pose(Facing::South, 0, 0) });
-        assert!(m);
-        let _ = r;
+        // The diagonals are her own frames, the west ones the east ones mirrored.
+        for (f, mirrored) in [(Face8::SouthEast, false), (Face8::SouthWest, true), (Face8::NorthWest, true)] {
+            let (r, m) = people.frame(seats[0], Pose { facing: f, ..pose(Facing::South, 0, 0) });
+            assert_eq!(m, mirrored, "{f:?}");
+            assert_ne!(r, people.frame(seats[0], pose(Facing::East, 0, 0)).0, "{f:?} has frames of its own");
+        }
         // A townsperson has no seats: any seat asks for the look as written.
         let grocer = jane_art::looks::find("town_grocer").unwrap().0;
         assert_eq!(people.set(grocer, 0, 2), people.set(grocer, 0, 0));

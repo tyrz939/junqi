@@ -9,6 +9,7 @@ use jane_core::grid::Rect;
 use jane_data::Hair;
 
 use super::draw::{CX, Rig, hides_hair, relief};
+use super::pose::Facing;
 use super::{Dress, H, W};
 use crate::canvas::{Canvas, Z};
 use crate::palette::{Ramp, Tone};
@@ -16,7 +17,7 @@ use crate::palette::{Ramp, Tone};
 /// Hair's own tones, by the tone the light gave it: a shade, a mid and a base; its light comes
 /// from the band laid on afterwards.
 const HAIR: [Tone; 8] =
-    [Tone::Shade, Tone::Shade, Tone::Mid, Tone::Base, Tone::Base, Tone::Base, Tone::Base, Tone::Base];
+    [Tone::Shade, Tone::Shade, Tone::Mid, Tone::Base, Tone::Base, Tone::Lift, Tone::Lift, Tone::Lift];
 
 fn long(d: &Dress) -> bool {
     matches!(d.look.head.hair, Hair::Long | Hair::Wet)
@@ -42,8 +43,20 @@ fn sheen(l: &mut Canvas, ramp: Ramp, x0: i32, x1: i32, top: i32) {
         }
         let dx = x - peak;
         let y = top + 2 + dx * dx / 9;
-        l.tint(x, y, ramp, Tone::Light);
+        // The band's core, where the light strikes square, is the hair's high tone: a lock's
+        // gloss, two px at the peak.
+        l.tint(x, y, ramp, if dx == 0 { Tone::High } else { Tone::Light });
         l.tint(x, y + 1, ramp, Tone::Lift);
+    }
+}
+
+/// Clear every third px of the row `y` across `x0..=x1` from `l` (offset by `phase`), so a hem
+/// of hair ends in points rather than a ruled line.
+fn points(l: &mut Canvas, x0: i32, x1: i32, y: i32, phase: i32) {
+    for x in x0..=x1 {
+        if (x + phase).rem_euclid(3) == 0 {
+            l.clear_px(x, y);
+        }
     }
 }
 
@@ -73,10 +86,27 @@ pub fn back_down(c: &mut Canvas, d: &Dress, r: &Rig) {
     }
     let s = r.skull;
     let mut l = Canvas::new(W, H);
-    let b = r.top + 3 + r.trail.1;
-    l.polygon_lit(&[(s.x, s.y + 5), (s.right() - 1, s.y + 5), (s.right(), b), (s.x - 1, b)], d.hair, 110, relief::FAR);
+    let b = r.top + 4 + r.trail.1;
+    // Three quarters on, it falls behind her back: toward the screen's left.
+    let k = -i32::from(r.facing == Facing::DownRight);
+    // It spreads over the shoulders as it falls, wider than the head at its ends (an A of
+    // hair, the silhouette's), and ends in points.
+    l.polygon_lit(
+        &[
+            (s.x + k, s.y + 5),
+            (s.right() - 1 + k, s.y + 5),
+            (s.right() + 1 + 2 * k, b - 2),
+            (s.right() + 1 + 2 * k, b),
+            (s.x - 2 + 2 * k, b),
+            (s.x - 2 + 2 * k, b - 2),
+        ],
+        d.hair,
+        110,
+        relief::FAR,
+    );
+    points(&mut l, s.x - 2 + 2 * k, s.right() + 1 + 2 * k, b, r.trail.0);
     l.retone(d.hair, HAIR);
-    l.shade(Rect::new(s.x - 1, s.y + 5, s.w + 2, b - s.y), d.hair, 1);
+    l.shade(Rect::new(s.x - 3, s.y + 5, s.w + 6, b - s.y + 1), d.hair, 1);
     c.stamp(&l, 0, 0);
 }
 
@@ -100,12 +130,18 @@ pub fn front_down(c: &mut Canvas, d: &Dress, r: &Rig) {
         return;
     }
     let cap_to = if style == Hair::Cropped { brow - 1 } else { brow };
+    // The crown stands a row over the skull's own curve: hair has volume.
+    let lift = i32::from(style != Hair::Cropped);
     l.set_clip(Some(Rect::new(0, 0, W, cap_to + 1)));
-    l.ellipse_lit(Rect::new(s.x - 1, s.y - 2, s.w + 2, s.h + 2), hair, z);
+    l.ellipse_lit(Rect::new(s.x - 1, s.y - 2 - lift, s.w + 2, s.h + 2 + lift), hair, z);
     l.set_clip(None);
-    let part = CX - 3;
+    // Three quarters on the parting turns with the face, and more of the head's near side
+    // (the screen's left) shows as hair: its lock is a px wider and the far one a px narrower.
+    let turned = r.facing == Facing::DownRight;
+    let part = CX - 3 + 2 * i32::from(turned);
     if style != Hair::Cropped {
-        // The fringe: a short tuft left of the parting, a longer sweep right of it.
+        // The fringe: a short tuft left of the parting, a longer sweep right of it that comes
+        // down over the brow in two points.
         l.polygon_lit(&[(s.x + 1, brow), (part - 1, brow), (s.x + 1, brow + 1)], hair, 60, z);
         l.polygon_lit(
             &[(part + 1, brow), (s.right() - 2, brow), (s.right() - 2, brow + 1), (CX + 3, brow + 1)],
@@ -113,6 +149,9 @@ pub fn front_down(c: &mut Canvas, d: &Dress, r: &Rig) {
             60,
             z,
         );
+        for x in [part + 2, part + 3] {
+            l.polyline_fill(&[(x, brow), (x, brow + 1)], hair.at(Tone::Base), z.lo);
+        }
     }
     let lock_to = match style {
         Hair::Long | Hair::Wet => r.top + 2 + r.trail.1,
@@ -120,23 +159,66 @@ pub fn front_down(c: &mut Canvas, d: &Dress, r: &Rig) {
         Hair::Cropped | Hair::Bald => r.eye_y() - 1,
     };
     let wide = if long(d) { 3 } else { 2 };
-    l.polygon_lit(
-        &[(s.x - 1, brow - 1), (s.x - 2 + wide, brow - 1), (s.x - 2 + wide, lock_to - 1), (s.x - 1, lock_to)],
-        hair,
-        100,
-        z,
-    );
-    l.polygon_lit(
-        &[
-            (s.right() + 1 - wide, brow - 1),
-            (s.right(), brow - 1),
-            (s.right(), lock_to),
-            (s.right() + 1 - wide, lock_to - 1),
-        ],
-        hair,
-        100,
-        z,
-    );
+    let (wl, wr) = if turned { (wide + 1, (wide - 1).max(1)) } else { (wide, wide) };
+    if long(d) {
+        // Long locks frame the face to the jaw, then spread out over the shoulders a px each
+        // side and end in points, the ends a frame behind the body.
+        let (jaw, sway) = (s.bottom() - 2, r.trail.0);
+        let (xl, xr) = (s.x - 2 + wl, s.right() + 1 - wr);
+        l.polygon_lit(
+            &[
+                (s.x - 1, brow - 1),
+                (xl, brow - 1),
+                (xl, jaw),
+                (xl - 1, lock_to - 1),
+                (xl - 1 + sway, lock_to),
+                (s.x - 2 + sway, lock_to),
+                (s.x - 2, jaw + 1),
+                (s.x - 1, jaw),
+            ],
+            hair,
+            100,
+            z,
+        );
+        // Turned three quarters, the far lock comes in under the cheek to meet the jaw.
+        let tuck = i32::from(turned);
+        l.polygon_lit(
+            &[
+                (xr, brow - 1),
+                (s.right(), brow - 1),
+                (s.right(), jaw),
+                (s.right() + 1, jaw + 1),
+                (s.right() + 1 + sway, lock_to),
+                (xr + 1 + sway, lock_to),
+                (xr + 1, lock_to - 1),
+                (xr - tuck, jaw + 1),
+                (xr - tuck, jaw - 2),
+                (xr, jaw - 3),
+            ],
+            hair,
+            100,
+            z,
+        );
+        points(&mut l, s.x - 2 + sway, s.right() + 1 + sway, lock_to, 1);
+    } else {
+        l.polygon_lit(
+            &[(s.x - 1, brow - 1), (s.x - 2 + wl, brow - 1), (s.x - 2 + wl, lock_to - 1), (s.x - 1, lock_to)],
+            hair,
+            100,
+            z,
+        );
+        l.polygon_lit(
+            &[
+                (s.right() + 1 - wr, brow - 1),
+                (s.right(), brow - 1),
+                (s.right(), lock_to),
+                (s.right() + 1 - wr, lock_to - 1),
+            ],
+            hair,
+            100,
+            z,
+        );
+    }
     match style {
         Hair::Bun => l.ellipse_lit(Rect::new(CX - 4, s.y - 5, 8, 6), hair, Z::new(z.hi, z.hi + 1)),
         Hair::Pigtails => {
@@ -155,8 +237,12 @@ pub fn front_down(c: &mut Canvas, d: &Dress, r: &Rig) {
         strand(&mut l, hair, (part, s.y + 1), (part, brow));
         strand(&mut l, hair, (part + 4, s.y), (part + 6, brow));
         if long(d) {
-            strand(&mut l, hair, (s.x, brow + 1), (s.x, lock_to - 2));
-            strand(&mut l, hair, (s.right() - 1, brow + 1), (s.right() - 1, lock_to - 2));
+            strand(&mut l, hair, (s.x, brow + 1), (s.x - 1, lock_to - 2));
+            strand(&mut l, hair, (s.right() - 1, brow + 1), (s.right(), lock_to - 2));
+            // A lit streak down the near lock, where it turns to the light.
+            for y in brow + 2..s.bottom() - 2 {
+                l.tint(s.x - 1, y, hair, if y < brow + 5 { Tone::Light } else { Tone::Lift });
+            }
         }
     }
     c.stamp(&l, 0, 0);
@@ -199,19 +285,24 @@ pub fn whole_up(c: &mut Canvas, d: &Dress, r: &Rig) {
     }
     let hair = d.hair;
     let z = relief::HAIR;
+    // Three quarters from behind: the back of the head turns toward the screen's left, and on
+    // the right a sliver of cheek and jaw shows past the hair.
+    let turned = r.facing == Facing::UpRight;
+    let k = -i32::from(turned);
+    let mid = CX + 2 * k;
     let mut l = Canvas::new(W, H);
-    l.ellipse_lit(Rect::new(s.x - 1, s.y - 2, s.w + 2, s.h + 3), hair, z);
+    l.ellipse_lit(Rect::new(s.x - 1, s.y - 2, s.w + 2 - i32::from(turned), s.h + 3), hair, z);
     let mut bottom = s.bottom() + 1;
     if long(d) {
         bottom = r.top + 3 + r.trail.1;
         l.polygon_lit(
             &[
-                (s.x, s.y + 5),
-                (s.right() - 1, s.y + 5),
-                (s.right() - 2, bottom - 1),
-                (CX, bottom),
-                (CX - 1, bottom),
-                (s.x + 1, bottom - 1),
+                (s.x + k, s.y + 5),
+                (s.right() - 1 + k, s.y + 5),
+                (s.right() - 2 + 2 * k, bottom - 1),
+                (mid, bottom),
+                (mid - 1, bottom),
+                (s.x + 1 + k, bottom - 1),
             ],
             hair,
             110,
@@ -230,11 +321,24 @@ pub fn whole_up(c: &mut Canvas, d: &Dress, r: &Rig) {
     l.retone(hair, HAIR);
     if style != Hair::Cropped {
         sheen(&mut l, hair, s.x - 1, s.right(), s.y - 2);
-        strand(&mut l, hair, (CX - 1, s.y + 1), (CX - 1, bottom - 1));
-        strand(&mut l, hair, (CX - 4, s.y + 3), (CX - 5, bottom - 2));
-        strand(&mut l, hair, (CX + 3, s.y + 3), (CX + 4, bottom - 2));
+        strand(&mut l, hair, (mid - 1, s.y + 1), (mid - 1, bottom - 1));
+        strand(&mut l, hair, (mid - 4, s.y + 3), (mid - 5, bottom - 2));
+        strand(&mut l, hair, (mid + 3, s.y + 3), (mid + 4, bottom - 2));
     }
     c.stamp(&l, 0, 0);
+    if turned {
+        // The cheek past the hair, from under the eye to the jaw: two px, one past long hair,
+        // lit on its edge toward the light, in shade toward the jaw.
+        let ey = r.eye_y();
+        let w = 2;
+        for y in ey + 1..s.bottom() - 1 {
+            let x1 = s.right() - 1 - i32::from(y >= s.bottom() - 3);
+            for x in x1 + 1 - w..=x1 {
+                let t = if y >= s.bottom() - 3 { Tone::Mid } else { Tone::Base };
+                c.fill_rect(Rect::new(x, y, 1, 1), d.skin.at(t), relief::SKULL.lo);
+            }
+        }
+    }
     if style == Hair::Curlers {
         for k in 0..3 {
             c.disc_lit(CX - 5 + 5 * k, s.y - 1, 1, Ramp::ClothLinen, Z::flat(z.hi + 2));

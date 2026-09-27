@@ -80,10 +80,11 @@ fn diving(c: &mut Canvas, d: &Dress, r: &Rig) {
         c.dot(x + 1, y + 1, glass.at(Tone::High), z.hi + 1);
         c.set_emitting(false);
     };
+    let cx = r.cx();
     match r.facing {
-        Facing::Down => {
-            port(c, CX - 3, ey - 2, 6);
-            for (x, y) in [(CX - 5, ey - 2), (CX + 4, ey - 2), (CX - 5, ey + 2), (CX + 4, ey + 2)] {
+        Facing::Down | Facing::DownRight => {
+            port(c, cx - 3, ey - 2, 6);
+            for (x, y) in [(cx - 5, ey - 2), (cx + 4, ey - 2), (cx - 5, ey + 2), (cx + 4, ey + 2)] {
                 c.dot(x, y, h.at(Tone::Deep), z.hi);
             }
         }
@@ -91,10 +92,10 @@ fn diving(c: &mut Canvas, d: &Dress, r: &Rig) {
             port(c, s.right() - 3, ey - 2, 4);
             port(c, s.x + 2, ey - 1, 3);
         }
-        Facing::Up => {
+        Facing::Up | Facing::UpRight => {
             // The air line's union at the back, and a valve on the crown.
-            c.disc_lit(CX - 1, ey + 1, 1, Ramp::Iron, Z::flat(z.hi + 1));
-            c.dot(CX - 1, ball.y, Ramp::Iron.at(Tone::Light), z.hi + 1);
+            c.disc_lit(cx - 1, ey + 1, 1, Ramp::Iron, Z::flat(z.hi + 1));
+            c.dot(cx - 1, ball.y, Ramp::Iron.at(Tone::Light), z.hi + 1);
         }
     }
 }
@@ -106,27 +107,28 @@ pub(super) fn extras(c: &mut Canvas, d: &Dress, r: &Rig) {
     let z = relief::FRONT + 2;
     let brass = Ramp::Brass;
     if x.contains(&Extra::WatchChain) {
+        let cx = r.cx();
         match r.facing {
-            Facing::Down => {
-                for (px, py) in [(CX - 1, wy - 1), (CX, wy), (CX + 1, wy), (CX + 2, wy), (CX + 3, wy - 1)] {
+            Facing::Down | Facing::DownRight => {
+                for (px, py) in [(cx - 1, wy - 1), (cx, wy), (cx + 1, wy), (cx + 2, wy), (cx + 3, wy - 1)] {
                     c.dot(px, py, brass.at(Tone::Light), z);
                 }
-                c.dot(CX + 1, wy, brass.at(Tone::High), z);
+                c.dot(cx + 1, wy, brass.at(Tone::High), z);
             }
             Facing::Side => {
                 let fx = CX + r.side_w() / 2 - 2 + r.lean;
                 c.dot(fx - 1, wy - 1, brass.at(Tone::Light), z);
                 c.dot(fx, wy, brass.at(Tone::High), z);
             }
-            Facing::Up => {}
+            Facing::Up | Facing::UpRight => {}
         }
     }
     if x.contains(&Extra::Keys) {
         // A ring on the belt and three keys hanging from it, a beat behind the stride.
         let kx = match r.facing {
-            Facing::Down => CX + 4,
+            Facing::Down | Facing::DownRight => CX + 4,
             Facing::Side => CX - 2 + r.lean,
-            Facing::Up => CX - 6,
+            Facing::Up | Facing::UpRight => CX - 6,
         };
         let ky = hip - 2;
         let iron = Ramp::Iron;
@@ -142,10 +144,7 @@ pub(super) fn extras(c: &mut Canvas, d: &Dress, r: &Rig) {
     if x.contains(&Extra::BellAnkle) {
         // A little brass bell tied at the near ankle: it goes where the leg goes.
         let rows = if d.look.body.boots == jane_data::Boots::Boots { 3 } else { 2 };
-        let (bx, foot) = match r.facing {
-            Facing::Side => (CX - 2 + r.pose.leg[0] + 4, AY - r.pose.lift[0]),
-            Facing::Down | Facing::Up => (CX - 6 - r.pose.splay[0], AY + r.pose.leg[0] - r.pose.lift[0]),
-        };
+        let (bx, foot) = r.near_foot();
         let by = foot - rows - 2;
         c.fill_rect(Rect::new(bx, by, 2, 2), brass.at(Tone::Base), relief::BOOT.hi + 1);
         c.dot(bx, by, brass.at(Tone::High), relief::BOOT.hi + 1);
@@ -199,7 +198,8 @@ fn score(c: &mut Canvas, ramp: Ramp, pts: &[(i32, i32)], tone: Tone, lip: Option
 pub(super) fn material(c: &mut Canvas, d: &Dress, r: &Rig) {
     let s = r.skull;
     let ey = r.eye_y();
-    let front = r.facing != Facing::Up;
+    let front = !r.facing.back();
+    let t = i32::from(r.facing == Facing::DownRight);
     if d.coat == Ramp::Iron || d.look.head.skin == Skin::Metal {
         // Plate: a lame every four rows, the gap in shade and the next plate's top edge in
         // lift, a rivet at the lit end of it.
@@ -220,7 +220,8 @@ pub(super) fn material(c: &mut Canvas, d: &Dress, r: &Rig) {
     if d.look.head.skin == Skin::Metal && front {
         // A closed helm: the sight a dark slit across the face (the eyes' light inside it) and
         // a lit ridge down its middle.
-        let (x0, x1) = if r.facing == Facing::Side { (s.right() - 6, s.right()) } else { (s.x + 1, s.right() - 2) };
+        let (x0, x1) =
+            if r.facing == Facing::Side { (s.right() - 6, s.right()) } else { (s.x + 1 + t, s.right() - 2 + t) };
         for y in [ey, ey + 1] {
             for x in x0..=x1 {
                 if c.emissive_at(x, y) == Ix::CLEAR {
@@ -228,7 +229,7 @@ pub(super) fn material(c: &mut Canvas, d: &Dress, r: &Rig) {
                 }
             }
         }
-        let rx = if r.facing == Facing::Side { s.right() - 1 } else { CX - 1 };
+        let rx = if r.facing == Facing::Side { s.right() - 1 } else { r.cx() - 1 };
         for y in ey + 2..s.bottom() {
             c.tint(rx, y, Ramp::Iron, Tone::Light);
         }
@@ -274,7 +275,7 @@ pub(super) fn material(c: &mut Canvas, d: &Dress, r: &Rig) {
             let w = Ramp::Plaster;
             if front {
                 let (fx, cx) =
-                    if r.facing == Facing::Side { (s.right() - 4, s.right() - 3) } else { (s.x + 3, s.x + 2) };
+                    if r.facing == Facing::Side { (s.right() - 4, s.right() - 3) } else { (s.x + 3 + t, s.x + 2 + t) };
                 c.tint(fx, s.y + 2, w, Tone::High);
                 c.tint(fx + 1, s.y + 2, w, Tone::High);
                 c.tint(cx, ey + 2, w, Tone::Glint);
@@ -340,7 +341,7 @@ pub(super) fn ghost(c: &mut Canvas, r: &Rig) {
 pub(super) fn seat(facing: Facing, pose: super::Pose) -> (Facing, super::Pose, i32) {
     let k = usize::from(pose.phase) * 6 / 65536;
     let (dy, lean) = if pose.breathe { (0, 0) } else { [(0, 0), (0, 1), (0, 2), (0, -1), (0, -2), (0, -3)][k % 6] };
-    let facing = if facing == Facing::Up { Facing::Up } else { Facing::Down };
+    let facing = if facing.back() { Facing::Up } else { Facing::Down };
     let p = super::Pose {
         bob: 2 + dy,
         arm: [0, 0],
