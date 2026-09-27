@@ -26,6 +26,8 @@ struct Set {
 #[derive(Clone, Debug, Default)]
 pub struct Props {
     sets: Vec<Set>,
+    /// Each item icon at ground scale, by icon.
+    loot: Vec<(SpriteId, RefId)>,
 }
 
 /// A prop's state as the frame pick reads it.
@@ -66,7 +68,26 @@ impl Props {
                 sets.push(set);
             }
         }
-        Props { sets }
+        // Every item's icon at ground scale (ART.md §2.3 `small_thing`: the icon at 16 x 16),
+        // standing on its canvas's last row: what a `shows_loot` prop and a drop are drawn as.
+        let cat = jane_data::catalog();
+        let mut icons: Vec<SpriteId> = cat.combat.items.iter().map(|i| i.icon).collect();
+        icons.sort_unstable();
+        icons.dedup();
+        let loot = icons
+            .into_iter()
+            .map(|id| {
+                let name = cat.sprites.get(usize::from(id.0)).copied().unwrap_or("");
+                let small = crate::ui::icons::half(&crate::ui::icons::icon(name));
+                (id, atlas.add_canvas(&small, (0, small.h() as i16), 1, |_, _, t| t))
+            })
+            .collect();
+        Props { sets, loot }
+    }
+
+    /// Item icon `icon` as a thing lying on the ground.
+    pub fn loot_look(&self, icon: SpriteId) -> Option<RefId> {
+        self.loot.binary_search_by_key(&icon, |e| e.0).ok().map(|i| self.loot[i].1)
     }
 
     fn find(&self, sprite: SpriteId) -> Option<&Set> {

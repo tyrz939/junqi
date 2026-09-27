@@ -313,6 +313,12 @@ impl<'a> View<'a> {
         spawn_of(self.bp, p)
     }
 
+    /// What a prop still holds for the taking (a chest, a lost thing on the ground); empty once
+    /// it is emptied or used. A `shows_loot` row is drawn as the first of it.
+    pub fn prop_loot(&self, p: &'a Prop) -> &'a [jane_core::Stack] {
+        if p.used { &[] } else { crate::interact::loot_of(self.bp, p) }
+    }
+
     /// A string a row or this zone's generator wrote: the words of a thing read, a label, a
     /// toast (`TextRef::Local` is her zone's blueprint's). Empty for a local text that is not
     /// there.
