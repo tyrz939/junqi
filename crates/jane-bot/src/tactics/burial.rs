@@ -236,6 +236,8 @@ pub struct Feed {
     pub hide: Option<Vec2>,
     /// How many she held before the throw.
     pub held: u32,
+    /// The piece she threw, once it is down.
+    pub meat: Option<jane_sim::ids::DropId>,
 }
 
 /// A job the Burial's tactics run as a crawl task.
@@ -323,7 +325,33 @@ pub fn best_bolt(v: &View<'_>, u: &Unit) -> Option<jane_core::SpellId> {
 
 fn feed(f: &mut Feed, v: &View<'_>, cx: &mut Ctx) -> Status {
     f.t += 1;
-    let Some(u) = v.unit(f.unit).filter(|u| u.alive) else { return Status::Done };
+    // Thrown, the piece is looked for until it is gone from where it fell (eaten: the one that
+    // ate it is dead of it, wherever it lies).
+    if f.stage >= 3 && f.meat.is_none() {
+        f.meat = v.drops().iter().filter(|d| d.item == f.bait).min_by_key(|d| (dist(d.pos, f.to), d.id)).map(|d| d.id);
+    }
+    let eaten = f.meat.is_some_and(|m| !v.drops().iter().any(|d| d.id == m));
+    let forget = |cx: &mut Ctx| {
+        if let Some(seen) = cx.seen_foes.values_mut().find(|s| s.contains_key(&f.unit)) {
+            seen.remove(&f.unit);
+        }
+    };
+    let Some(u) = v.unit(f.unit).filter(|u| u.alive) else {
+        // Dead where she can see it, or gone off out of her sight to the piece and the piece
+        // eaten: not kept off again. (Out of sight with the piece still lying, it is waited on.)
+        let dead = v.unit(f.unit).is_some_and(|u| !u.alive);
+        if dead || eaten {
+            forget(cx);
+            return Status::Done;
+        }
+        if f.stage < 3 {
+            return Status::Done;
+        }
+        if f.t > 60 * 12 {
+            return Status::Failed("it did not take the bait".into());
+        }
+        return Status::Act(Act::idle());
+    };
     if f.t > 60 * 60 {
         return Status::Failed("the feeding took too long".into());
     }
@@ -350,10 +378,11 @@ fn feed(f: &mut Feed, v: &View<'_>, cx: &mut Ctx) -> Status {
         }
         2 => {
             let n = holds(v, f.bait);
-            if n == 0 {
-                return Status::Failed("no bait left".into());
-            }
+            // (Thrown is asked first: her last piece thrown leaves none in her hand.)
             if f.held == 0 {
+                if n == 0 {
+                    return Status::Failed("no bait left".into());
+                }
                 f.held = n;
             }
             if n < f.held {
@@ -393,13 +422,9 @@ fn feed(f: &mut Feed, v: &View<'_>, cx: &mut Ctx) -> Status {
             }
         }
         _ => {
-            // Eaten (the meat is gone from where it fell): it is dead of it, wherever it lies, and
-            // not kept off again.
-            let lying = v.drops().iter().any(|d| d.item == f.bait && dist(d.pos, f.to) <= i64::from(3 * CELL_FX));
-            if !lying {
-                if let Some(seen) = cx.seen_foes.get_mut(&u.def) {
-                    seen.remove(&f.unit);
-                }
+            // Eaten and still standing: another ate it, or the bite lands next tick. Waited on a
+            // moment, then let be (the one fed may yet come to more).
+            if eaten && f.t > 60 {
                 return Status::Done;
             }
             // It eats within a few seconds of setting off, or it did not smell it.
@@ -534,7 +559,21 @@ fn feeds(v: &View<'_>, cx: &Ctx) -> Vec<(u8, i64, Try, Task)> {
     for u in &calm {
         let Some(bait) = cat.combat.unit(u.def).bait else { continue };
         let Some(Spot { path, at, face, dir, to }) = throw_spot(v, u, &safe) else { continue };
-        let job = Feed { unit: u.id, bait, path, step: 0, at, face, dir, to, stage: 0, t: 0, hide: None, held: 0 };
+        let job = Feed {
+            unit: u.id,
+            bait,
+            path,
+            step: 0,
+            at,
+            face,
+            dir,
+            to,
+            stage: 0,
+            t: 0,
+            hide: None,
+            held: 0,
+            meat: None,
+        };
         out.push((1, dist(me, u.pos), Try::Fight(u.id), Task::Burial(Job::Feed(job))));
     }
     out
@@ -1419,6 +1458,21 @@ pub fn not_yet(v: &View<'_>, t: &Task) -> bool {
 }
 
 /// Is `at` inside room `r`, clear of its walls?
+/// The snake, with her in its room: fought out, never fled. It goes home whole the moment it
+/// loses her, and its room's gates stay shut behind her with the key spent: fled at 95 health
+/// with it at 500, she stood outside for good (a fall at least opens them again).
+pub fn fought_out(v: &View<'_>, t: &Unit) -> bool {
+    v.zone() == jane_core::ZoneId::Burial
+        && jane_data::catalog().combat.unit(t.def).controller == jane_data::Controller::Snake
+        && room_of(v, t.home).is_some_and(|r| in_room(&r, v.body().pos))
+}
+
+/// Anywhere in `r`, its edge cells too.
+fn in_room(r: &jane_core::Rect, at: Vec2) -> bool {
+    let (x, y) = at.cell();
+    r.contains(x, y)
+}
+
 fn inside(r: &jane_core::Rect, at: Vec2) -> bool {
     let (x, y) = at.cell();
     r.x < x && x < r.right() - 1 && r.y < y && y < r.bottom() - 1
