@@ -16,13 +16,18 @@ use crate::lightmap::{LightMap, OWN};
 /// `(x0, y0, x1, y1)`, canvas px.
 type Rect = (i32, i32, i32, i32);
 
+/// A light that casts as the masks are built: its slot, its geometry, what holds it, and the
+/// box its mask was written in.
+type Casting = (usize, Lamp, Option<u32>, Option<Rect>);
+
 /// Rows over a mask's box a lifted receiver may stand and still take its shadow from inside it.
 const UP: i32 = rows_up(100) + FRONT;
 
-/// The masks, one a casting light, the canvas's size, and the box each was written in.
+/// The masks, a byte a casting light in each px, the canvas's size, and the box each was
+/// written in.
 #[derive(Debug, Default)]
 pub struct PointShadows {
-    reach: Vec<u8>,
+    reach: Vec<[u8; OWN]>,
     w: i32,
     h: i32,
     /// Per light that casts: its mask's slot, and the box written.
@@ -32,10 +37,10 @@ pub struct PointShadows {
 
 impl PointShadows {
     fn fit(&mut self, w: i32, h: i32) {
-        let n = (w * h) as usize * OWN;
+        let n = (w * h) as usize;
         if self.reach.len() != n {
             self.reach.clear();
-            self.reach.resize(n, 0);
+            self.reach.resize(n, [0; OWN]);
         }
         (self.w, self.h) = (w, h);
     }
@@ -54,28 +59,39 @@ impl PointShadows {
     ) -> bool {
         self.fit(w, h);
         self.lights.clear();
-        let mut rows = std::mem::take(&mut self.rows);
+        // The lights that cast and the lightmap keeps apart: slot, geometry, holder, box written.
+        let mut lamps: [Option<Casting>; OWN] = [None; OWN];
         for (li, l) in points.iter().enumerate() {
-            let Some(slot) = lm.own_slot(li) else { continue };
-            let lamp = Lamp::of(l);
-            let mut dirty = None;
-            let mask = &mut self.reach[slot * (w * h) as usize..(slot + 1) * (w * h) as usize];
-            for c in frame.casters_in(casters) {
-                // A light never shadows what holds it: her lantern's hand, a lamp's post.
-                if l.holder == Some(c.sprite) {
-                    continue;
-                }
-                let Some(s) = frame.sprites.get(c.sprite as usize) else { continue };
-                let Some(page) = pages.get(usize::from(s.page)) else { continue };
-                rows.clear();
-                shadow::rows(&page.albedo, page.w, s, i32::from(c.foot.1), &mut rows);
-                shadow::row_slabs(&rows, i32::from(s.x), c, &lamp, |q| slab(mask, (w, h), &q, &mut dirty));
+            if let Some(slot) = lm.own_slot(li) {
+                lamps[slot] = Some((slot, Lamp::of(l), l.holder, None));
             }
-            for b in frame.blocks_in(blocks) {
-                shadow::block_slabs(b, &lamp, |q| slab(mask, (w, h), &q, &mut dirty));
-            }
-            self.lights.push((slot, dirty));
         }
+        let mut rows = std::mem::take(&mut self.rows);
+        let mask = &mut self.reach;
+        // Each caster's rows once, for every light near enough for it to cast.
+        for c in frame.casters_in(casters) {
+            // A light never shadows what holds it: her lantern's hand, a lamp's post.
+            let near = |l: &Casting| l.2 != Some(c.sprite) && shadow::reaches(c, &l.1);
+            if !lamps.iter().flatten().any(near) {
+                continue;
+            }
+            let Some(s) = frame.sprites.get(c.sprite as usize) else { continue };
+            let Some(page) = pages.get(usize::from(s.page)) else { continue };
+            rows.clear();
+            shadow::rows(&page.albedo, page.w, s, i32::from(c.foot.1), &mut rows);
+            for l in lamps.iter_mut().flatten() {
+                if near(l) {
+                    let (slot, lamp, _, dirty) = l;
+                    shadow::row_slabs(&rows, i32::from(s.x), c, lamp, |q| slab(mask, *slot, (w, h), &q, dirty));
+                }
+            }
+        }
+        for b in frame.blocks_in(blocks) {
+            for (slot, lamp, _, dirty) in lamps.iter_mut().flatten() {
+                shadow::block_slabs(b, lamp, |q| slab(mask, *slot, (w, h), &q, dirty));
+            }
+        }
+        self.lights.extend(lamps.iter().flatten().map(|l| (l.0, l.3)));
         self.rows = rows;
         self.lights.iter().any(|l| l.1.is_some())
     }
@@ -86,7 +102,6 @@ impl PointShadows {
     /// than it; and clears the masks. Returns pixels written.
     pub fn apply(&mut self, t: &mut Target<'_>, lm: &LightMap, heights: &[u8]) -> u64 {
         let (w, h) = (self.w, self.h);
-        let n = (w * h) as usize;
         let Some((x0, y0, x1, y1)) = self
             .lights
             .iter()
@@ -95,23 +110,31 @@ impl PointShadows {
         else {
             return 0;
         };
+        let (x0, x1, y1) = (x0.max(0), x1.min(w), y1.min(h));
         let mut written = 0;
         let mut cached: Option<((i32, i32, u8), crate::lightmap::Corners)> = None;
-        for y in (y0 - UP).max(0)..y1.min(h) {
-            for x in x0.max(0)..x1.min(w) {
-                let i = (y * w + x) as usize;
+        for y in (y0 - UP).max(0)..y1 {
+            let row = (y * w) as usize;
+            for x in x0..x1 {
+                let i = row + x as usize;
                 let lift = heights.get(i).copied().unwrap_or(0);
-                let gy = if i32::from(lift) <= GROUND { y } else { y + rows_up(i32::from(lift)) + FRONT };
-                if gy < y0 || gy >= y1.min(h) {
+                let g = if i32::from(lift) <= GROUND {
+                    if y < y0 {
+                        continue;
+                    }
+                    i
+                } else {
+                    let gy = y + rows_up(i32::from(lift)) + FRONT;
+                    if gy < y0 || gy >= y1 {
+                        continue;
+                    }
+                    (gy * w + x) as usize
+                };
+                let m = self.reach[g];
+                if m == [0; OWN] {
                     continue;
                 }
-                let g = (gy * w + x) as usize;
-                let mut gone = 0u8;
-                for &(slot, dirty) in &self.lights {
-                    if dirty.is_some() && self.reach[slot * n + g] > lift {
-                        gone |= 1 << slot;
-                    }
-                }
+                let gone = m.iter().enumerate().fold(0u8, |a, (k, &r)| a | u8::from(r > lift) << k);
                 if gone == 0 {
                     continue;
                 }
@@ -127,12 +150,9 @@ impl PointShadows {
                 written += 1;
             }
         }
-        for &(slot, dirty) in &self.lights {
-            let Some((x0, y0, x1, y1)) = dirty else { continue };
-            for y in y0..y1 {
-                let a = slot * n + (y * w + x0) as usize;
-                self.reach[a..a + (x1 - x0) as usize].fill(0);
-            }
+        for y in y0.max(0)..y1 {
+            let a = (y * w + x0) as usize;
+            self.reach[a..a + (x1 - x0) as usize].fill([0; OWN]);
         }
         self.lights.clear();
         written
@@ -141,14 +161,14 @@ impl PointShadows {
 
 /// Rasterises slab `q` (two triangles, `a0 b0 a1` and `b0 b1 a1`) into `mask` (`w x h`), the
 /// highest reach kept, growing `dirty` by what it covers.
-fn slab(mask: &mut [u8], wh: (i32, i32), q: &Slab, dirty: &mut Option<(i32, i32, i32, i32)>) {
-    tri(mask, wh, [q.c[0], q.c[1], q.c[2]], dirty);
-    tri(mask, wh, [q.c[1], q.c[3], q.c[2]], dirty);
+fn slab(mask: &mut [[u8; OWN]], slot: usize, wh: (i32, i32), q: &Slab, dirty: &mut Option<Rect>) {
+    tri(mask, slot, wh, [q.c[0], q.c[1], q.c[2]], dirty);
+    tri(mask, slot, wh, [q.c[1], q.c[3], q.c[2]], dirty);
 }
 
 /// One triangle, its corners in [`SUB`] steps with their reach: each px whose middle is inside
 /// it takes the reach there (linear across it, as the GPU interpolates it on T1).
-fn tri(mask: &mut [u8], (w, h): (i32, i32), v: [(i32, i32, i32); 3], dirty: &mut Option<(i32, i32, i32, i32)>) {
+fn tri(mask: &mut [[u8; OWN]], slot: usize, (w, h): (i32, i32), v: [(i32, i32, i32); 3], dirty: &mut Option<Rect>) {
     let [(ax, ay, ar), (bx, by, br), (cx, cy, cr)] = v.map(|(x, y, r)| (i64::from(x), i64::from(y), i64::from(r)));
     let area = (bx - ax) * (cy - ay) - (cx - ax) * (by - ay);
     if area == 0 {
@@ -164,35 +184,47 @@ fn tri(mask: &mut [u8], (w, h): (i32, i32), v: [(i32, i32, i32); 3], dirty: &mut
     // Rows whose middle lies in `[lo, hi]`.
     let r0 = ((lo - half).div_euclid(sub) + i64::from((lo - half).rem_euclid(sub) != 0)).max(0);
     let r1 = (hi - half).div_euclid(sub).min(i64::from(h) - 1);
-    let edges = [((ax, ay), (bx, by)), ((bx, by), (cx, cy)), ((cx, cy), (ax, ay))];
+    if r0 > r1 {
+        return;
+    }
+    // Each edge's x at the first row's middle and its step a row, in 1/65536 of a sub-px: two
+    // divisions an edge, none a row.
+    let yc0 = r0 * sub + half;
+    let edges = [((ax, ay), (bx, by)), ((bx, by), (cx, cy)), ((cx, cy), (ax, ay))].map(|((px, py), (qx, qy))| {
+        if py == qy {
+            (py, qy, px.min(qx) << 16, px.max(qx) << 16, 0)
+        } else {
+            let x = (px << 16) + (qx - px) * (yc0 - py) * 65536 / (qy - py);
+            (py.min(qy), py.max(qy), x, x, (qx - px) * sub * 65536 / (qy - py))
+        }
+    });
+    // The reach in 1/65536 px at the middle of px `(col, row)`: `r00 + aq col + bq row`.
+    let r00 = (alpha * half + beta * half + gamma) * 65536 / area;
+    let (aq, bq) = (alpha * sub * 65536 / area, beta * sub * 65536 / area);
     for row in r0..=r1 {
         let yc = row * sub + half;
+        let k = row - r0;
         let (mut xl, mut xr) = (i64::MAX, i64::MIN);
-        for ((px, py), (qx, qy)) in edges {
-            if (py <= yc && yc <= qy || qy <= yc && yc <= py) && py != qy {
-                let x = px + (qx - px) * (yc - py) / (qy - py);
-                xl = xl.min(x);
-                xr = xr.max(x);
-            } else if py == qy && py == yc {
-                xl = xl.min(px.min(qx));
-                xr = xr.max(px.max(qx));
+        for &(lo, hi, a, b, step) in &edges {
+            if lo <= yc && yc <= hi {
+                xl = xl.min(a + step * k);
+                xr = xr.max(b + step * k);
             }
         }
         if xl > xr {
             continue;
         }
+        let (xl, xr) = (xl >> 16, xr >> 16);
         let c0 = ((xl - half).div_euclid(sub) + i64::from((xl - half).rem_euclid(sub) != 0)).max(0);
         let c1 = (xr - half).div_euclid(sub).min(i64::from(w) - 1);
         if c0 > c1 {
             continue;
         }
-        // The reach along the row in 1/65536 px: one division a row, then a step a px.
         let base = (row * i64::from(w)) as usize;
-        let mut r = (alpha * (c0 * sub + half) + beta * yc + gamma) * 65536 / area;
-        let step = alpha * sub * 65536 / area;
+        let mut r = r00 + aq * c0 + bq * row;
         for m in &mut mask[base + c0 as usize..=base + c1 as usize] {
-            *m = (*m).max((r >> 16).clamp(0, 255) as u8);
-            r += step;
+            m[slot] = m[slot].max((r >> 16).clamp(0, 255) as u8);
+            r += aq;
         }
         let (x0, x1, y) = (c0 as i32, c1 as i32 + 1, row as i32);
         *dirty = Some(match *dirty {
@@ -245,6 +277,6 @@ mod tests {
         // Well to the side of the wall's shadow, lit.
         assert_eq!(at(10, 100), 0xff80_8080);
         // And the masks are clear for the next frame.
-        assert!(ps.reach.iter().all(|&r| r == 0));
+        assert!(ps.reach.iter().all(|&r| r == [0; OWN]));
     }
 }

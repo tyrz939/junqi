@@ -48,6 +48,9 @@ pub struct LightMap {
     /// The pools of the first [`OWN`] casting lights, each on its own, and which light each is.
     own: Vec<[u16; 3]>,
     own_of: Vec<usize>,
+    /// Each cell's light as a reciprocal, `2^24 / light` per channel, for the share left in a
+    /// shadow (made with the kept-apart pools, only when a light casts).
+    recip: Vec<[u32; 3]>,
     w: i32,
     h: i32,
     rows: Vec<[u16; 3]>,
@@ -110,6 +113,11 @@ impl LightMap {
                 }
             }
         }
+        self.recip.clear();
+        if !self.own_of.is_empty() {
+            self.recip
+                .extend(self.cells.iter().map(|c| c.map(|v| if v == 0 { 0 } else { (1u32 << 24) / u32::from(v) })));
+        }
     }
 
     /// Where the casting light `li` (its index in the lights `build` was handed) is kept apart, if
@@ -137,8 +145,8 @@ impl LightMap {
                     t[ch] = t[ch].saturating_sub(u32::from(c[ch]));
                 }
             }
-            let all = self.cells[i];
-            [0, 1, 2].map(|k| if all[k] == 0 { 256 } else { t[k].min(CAP) * 256 / u32::from(all[k]) })
+            let r = self.recip[i];
+            [0, 1, 2].map(|k| ((u64::from(t[k].min(CAP)) * u64::from(r[k])) >> 16) as u32)
         };
         let (cx, cy) = (x / CELL, y / CELL);
         [at(cx, cy), at(cx, cy + 1), at(cx + 1, cy), at(cx + 1, cy + 1)]

@@ -347,12 +347,10 @@ fn slab(lamp: &Lamp, a: (i32, i32), b: (i32, i32), (za, zb): (i32, i32), top: i3
 /// the back of its footprint (the silhouettes' footprint, [`bands`]), projected from the light
 /// onto the ground. Nothing when its foot is well past the light's reach.
 pub fn row_slabs(rows: &[(i32, i32, i32)], x: i32, c: &Caster, lamp: &Lamp, mut emit: impl FnMut(Slab)) {
-    let (fx, fy) = (i32::from(c.foot.0) * SUB + SUB / 2, i32::from(c.foot.1) * SUB + SUB / 2);
-    let (dx, dy) = (i64::from(fx - lamp.x), i64::from(fy - lamp.y));
-    let near = i64::from((lamp.r + CAST_PAST) * SUB);
-    if dx * dx + dy * dy > near * near {
+    if !reaches(c, lamp) {
         return;
     }
+    let fy = i32::from(c.foot.1) * SUB + SUB / 2;
     let depth = i32::from(c.depth.max(2));
     let tall = i32::from(c.height).max(1);
     let up = |hv: i32| height_of_rows(hv).min(tall);
@@ -372,6 +370,15 @@ pub fn row_slabs(rows: &[(i32, i32, i32)], x: i32, c: &Caster, lamp: &Lamp, mut 
             emit(slab(lamp, (xa, by), (xb, by), (up(h0 - 1), up(h1)), top));
         }
     }
+}
+
+/// Whether caster `c`'s foot lies near enough `lamp` for it to throw any of its shadow
+/// ([`row_slabs`] throws none past it).
+pub fn reaches(c: &Caster, lamp: &Lamp) -> bool {
+    let (fx, fy) = (i32::from(c.foot.0) * SUB + SUB / 2, i32::from(c.foot.1) * SUB + SUB / 2);
+    let (dx, dy) = (i64::from(fx - lamp.x), i64::from(fy - lamp.y));
+    let near = i64::from((lamp.r + CAST_PAST) * SUB);
+    dx * dx + dy * dy <= near * near
 }
 
 /// Block `b`'s shadow from `lamp`: each of its sides turned away from the light a slab from the
