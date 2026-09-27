@@ -505,6 +505,7 @@ fn frames(args: &[String]) -> Result<(), String> {
         }),
         weather: flag("--weather").map(crate::scene::weather).transpose()?,
         cast: flag("--cast").map(str::to_owned),
+        spawn: flag("--spawn").map(str::to_owned),
         rows: crate::scene::rows(flag("--rows"))?,
         gl: crate::scene::GlOpts::parse(args)?,
     };
