@@ -336,6 +336,16 @@ impl Crawl {
         if let Some(a) = self.mine.think(v, cx) {
             return a;
         }
+        // A dungeon done with what the story needs from it (`tactics/`): out.
+        if self.stage == Stage::Explore && crate::tactics::museum::done(v) {
+            self.stage = Stage::Leave;
+            self.task = None;
+            notes.push(Mark::Note("what the story needs is in the bag: leaving".into()));
+        }
+        // A boss room's own play (`tactics/`), before the general fight.
+        if let Some(a) = crate::tactics::museum::fight(v, cx, &self.reach) {
+            return a;
+        }
         if let Some(id) = fight::threat(v, cx) {
             if let Some(a) = fight::engage(v, cx, id) {
                 return a;
@@ -555,6 +565,10 @@ impl Crawl {
                 return Some((Task::Use(UseProp::new(p)), Try::Rest(p)));
             }
         }
+        // What the dungeon's own idea puts first (`tactics/`).
+        if let Some((t, what)) = crate::tactics::museum::first(v, cx, reach).filter(|(_, w)| self.fresh(*w, sig)) {
+            return Some((t, what));
+        }
         // 1. Lying about.
         for d in v.drops() {
             if reach.near(d.pos, 1) {
@@ -575,9 +589,11 @@ impl Crawl {
                     let presses = if door.is_some() || def.gate { 1 } else { 2 };
                     offer(3, d, Try::Prop(p.id), Task::Use(UseProp { presses, ..UseProp::new(p.id) }), &mut best);
                 }
-                continue;
-            }
-            if !p.used && !s.loot.is_empty() {
+                // A locked thing that answers a verb (a cracked case) is opened by the verb.
+                if def.answers.is_none() {
+                    continue;
+                }
+            } else if !p.used && !s.loot.is_empty() {
                 offer(2, d, Try::Prop(p.id), Task::Use(UseProp::new(p.id)), &mut best);
                 continue;
             }
@@ -682,6 +698,10 @@ impl Crawl {
                 let t = Task::Walk { to: Vec2::centre(x, y), near: jane_core::Fx::from_px(6) };
                 return Some((t, Try::Explore(x, y)));
             }
+            // Nothing in the general order: what the dungeon's own idea asks (`tactics/`).
+            if let Some((t, what)) = crate::tactics::museum::idle(v, reach).filter(|(_, w)| self.fresh(*w, sig)) {
+                return Some((t, what));
+            }
         }
         best.map(|(_, _, what, t)| (t, what))
     }
@@ -769,7 +789,7 @@ fn bolt_at(v: &View<'_>, reach: &Reach, p: &Prop, spell: SpellId) -> Option<Task
                 continue;
             }
             let at = Vec2::centre(x, y);
-            if !v.sight(at, c) {
+            if !v.sight(at, face_of(p, at)) {
                 continue;
             }
             let d = dist(me, at);
@@ -783,6 +803,14 @@ fn bolt_at(v: &View<'_>, reach: &Reach, p: &Prop, spell: SpellId) -> Option<Task
     }
     let (_, from) = best?;
     Some(Task::Aim { spell, from, at: c, t: 0 })
+}
+
+/// The point just outside a prop's footprint nearest `at`: what she must see to hit it (a prop
+/// that blocks sight, an arch or a case, hides its own middle).
+fn face_of(p: &Prop, at: Vec2) -> Vec2 {
+    let r = prop_rect(p);
+    let clamp = |v: i32, lo: i32, hi: i32| v.clamp(lo * CELL_FX - 1, hi * CELL_FX);
+    Vec2::new(jane_core::Fx(clamp(at.x.0, r.x, r.right())), jane_core::Fx(clamp(at.y.0, r.y, r.bottom())))
 }
 
 /// The origins a pushable passes through to cover the plate, pushed only (each push needs a

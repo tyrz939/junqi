@@ -122,7 +122,7 @@ fn the_gold_mine_on_a_barred_night() {
 
 #[test]
 fn the_museum() {
-    play(ZoneId::Museum, false);
+    play(ZoneId::Museum, true);
 }
 
 #[test]

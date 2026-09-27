@@ -406,6 +406,13 @@ impl Task {
                     if let Some(s) = walk(cx, v, *from, Fx::from_px(2)) {
                         return s;
                     }
+                    // Wait out a cooldown (Explosion's is six seconds) rather than waste the
+                    // press; a cooldown ends, so this wait does.
+                    let me = v.body();
+                    let mp = jane_data::catalog().combat.spell(*spell).mp;
+                    if !crate::fight::ready(me, *spell, v.tick()) && me.mp >= mp {
+                        return Status::Act(Act::idle());
+                    }
                 }
                 *t += 1;
                 let me = v.body();

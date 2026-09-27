@@ -24,7 +24,7 @@
   },
   "attendant": {
     "name": "The Attendant", "faction": "undead", "controller": "ai",
-    "strength": 176, "spirit": 20, "walk": 0.4, "run": 0.75, "aggro": 12, "leash": 30, "bounds": 1.15,
+    "strength": 150, "spirit": 20, "walk": 0.4, "run": 0.75, "aggro": 12, "leash": 30, "bounds": 1.15,
     "book": ["melee_stun", "melee_fast"], "respawn": 0, "autoRegen": true, "loot": [],
     "sprite": "museum_attendant", "boss": true,
     "onDeath": [
