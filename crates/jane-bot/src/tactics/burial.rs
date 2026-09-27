@@ -74,21 +74,11 @@ fn watched(v: &View<'_>, not: UnitId, at: Vec2) -> bool {
     })
 }
 
-/// Can `u` walk straight to `to` with its whole body (its walker catches on a corner a line of
-/// sight goes past): the line from its middle and the lines either side of it, a body's width
-/// apart, are clear, and so is the ground about the bait.
+/// Can `u` get to the bait at `to`: it smells it only in its sight (`ai::seek_bait`), and walks
+/// to it by a path, so the line from its middle is clear and so is the ground about the bait.
 fn clear_walk(v: &View<'_>, u: &Unit, to: Vec2) -> bool {
-    let b = jane_data::catalog().combat.unit(u.def).bounds.0 as i64;
-    let (dx, dy) = (i64::from(to.x.0 - u.pos.x.0), i64::from(to.y.0 - u.pos.y.0));
-    let len = dist(u.pos, to).max(1);
-    let (px, py) = ((-dy * b / len) as i32, (dx * b / len) as i32);
-    let side = |s: i32| {
-        let a = Vec2::new(Fx(u.pos.x.0 + s * px), Fx(u.pos.y.0 + s * py));
-        let z = Vec2::new(Fx(to.x.0 + s * px), Fx(to.y.0 + s * py));
-        v.sight(a, z)
-    };
     let (tx, ty) = to.cell();
-    side(0) && side(1) && side(-1) && (-1..=1).all(|j| (-1..=1).all(|i| crate::nav::walkable(v, tx + i, ty + j)))
+    v.sight(u.pos, to) && (-1..=1).all(|j| (-1..=1).all(|i| crate::nav::walkable(v, tx + i, ty + j)))
 }
 
 const FACES: [(Facing, Angle); 4] = [
@@ -524,14 +514,7 @@ fn feeds(v: &View<'_>, cx: &Ctx) -> Vec<(u8, i64, Try, Task)> {
     let safe = SafeGround::flood(v, &keep_off(v, cx));
     for u in &calm {
         let Some(bait) = cat.combat.unit(u.def).bait else { continue };
-        // No spot out of its notice (it lies in the middle of the only way on, its door too
-        // narrow to throw through from outside): from inside it, over its own ground. It wakes
-        // and spits, and still cannot resist the meat.
-        let spot = throw_spot(v, u, &safe).or_else(|| {
-            let off: Vec<(Vec2, i64, u32)> = keep_off(v, cx).into_iter().filter(|&(o, _, _)| o != u.pos).collect();
-            throw_spot(v, u, &SafeGround::flood(v, &off))
-        });
-        let Some(Spot { path, at, face, dir, to }) = spot else { continue };
+        let Some(Spot { path, at, face, dir, to }) = throw_spot(v, u, &safe) else { continue };
         let job = Feed { unit: u.id, bait, path, step: 0, at, face, dir, to, stage: 0, t: 0, hide: None, held: 0 };
         out.push((1, dist(me, u.pos), Try::Fight(u.id), Task::Burial(Job::Feed(job))));
     }
@@ -798,9 +781,15 @@ pub fn fight(v: &View<'_>, cx: &mut Ctx, id: UnitId, task: Option<&Task>) -> Opt
         })
     });
     let gilded = gilded(v, t) && unlit && sense::hp_permille(t) > 100;
-    // What is rooted and stands up again is let shoot, and so is anything rooted while there is
-    // feeding to do: stopping for it is standing in its line longer.
-    if !mobile && (careful || let_be(t.def)) {
+    // What is rooted and stands up again is let shoot from beyond its reach, and so is anything
+    // rooted while there is feeding to do: stopping for it is standing in its line longer. Inside
+    // its reach, it is put down (it stays down while she is in its sight): walking on under a
+    // cactus's thorns is how she falls.
+    let inside_reach = {
+        let range = td.book.iter().map(|&s| cat.combat.spell(s).range.0).max().unwrap_or(0);
+        g <= i64::from(range)
+    };
+    if !mobile && (careful || let_be(t.def) && !inside_reach) {
         return Some(None);
     }
     // Otherwise something rooted to the spot is taken on alone where it can be: from ground in
@@ -997,6 +986,12 @@ pub fn keep_off(v: &View<'_>, cx: &Ctx) -> Vec<(Vec2, i64, u32)> {
                 None => out.push((pos, r, cost)),
             }
         }
+    }
+    // A keeper's room whose keeper is out of it (after her in the corridor) is not walked into,
+    // nor through: it shuts on whoever steps in, and the keeper would be shut outside for good.
+    for r in strayed_rooms(v) {
+        let c = Vec2::centre(r.x + r.w / 2, r.y + r.h / 2);
+        out.push((c, i64::from(r.w.max(r.h)) * i64::from(CELL_FX) / 2 + i64::from(CELL_FX), 0));
     }
     out
 }
@@ -1362,9 +1357,13 @@ pub fn not_yet(v: &View<'_>, t: &Task) -> bool {
             {
                 return true;
             }
-            // Nor the room at its door: the queen comes out to meet her in the web.
-            let near =
-                |u: &&&Unit| dist(u.home, at) <= i64::from(20 * CELL_FX) && dist(u.home, me) > i64::from(20 * CELL_FX);
+            // Nor the room at its door: the queen comes out to meet her in the web. (In its room
+            // already, with the door shut behind her, there is no fire to go back to.)
+            let near = |u: &&&Unit| {
+                dist(u.home, at) <= i64::from(20 * CELL_FX)
+                    && dist(u.home, me) > i64::from(20 * CELL_FX)
+                    && !room_of(v, u.home).is_some_and(|r| r.contains(me.cell().0, me.cell().1))
+            };
             if live.iter().filter(near).any(|u| cat.combat.unit(u.def).walk.0 > 0) {
                 return true;
             }

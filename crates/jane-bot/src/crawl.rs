@@ -342,12 +342,11 @@ impl Crawl {
             }
         }
         // The Burial: stood still getting nowhere (her task and a fight pulling two ways, a thing
-        // after her that cannot get round to her), the task is dropped and what is not at her
-        // elbow is let be a while (`tactics::burial::Watch`).
+        // after her that cannot get round to her), the task is chosen afresh and what is not at
+        // her elbow is let be a while (`tactics::burial::Watch`). Nothing is marked failed: the
+        // task was not what stopped her.
         if v.zone() == jane_core::ZoneId::Burial && self.watch.stalled(v) {
-            if let Some((_, w)) = self.task.take() {
-                self.failed(w, "stood still getting nowhere");
-            }
+            self.task = None;
         }
         let calm = v.zone() == jane_core::ZoneId::Burial && self.watch.calm(v);
         if let Some(id) = fight::threat(v, cx).filter(|&id| !calm || crate::tactics::burial::at_elbow(v, id)) {
