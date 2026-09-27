@@ -162,7 +162,7 @@ fn thing(p: &Painter, cx: i32, cy: i32, seed: u32) -> Option<Thing> {
         }
         P::Rubble => Some(Thing { pick: Pick::Rocks((h & 3) as usize), ox: 0, oy: 2, canopy: false }),
         P::Cliff if t == Tile::Cliff && p.s.surf[Painter::at(cx, cy)] != NONE => {
-            Some(Thing { pick: Pick::Boulder((h % 3) as usize), ox: 0, oy: 2, canopy: false })
+            Some(Thing { pick: Pick::Boulder((h % 6) as usize), ox: 0, oy: 2, canopy: false })
         }
         _ => None,
     }
@@ -763,7 +763,7 @@ mod tests {
         }
         picks.extend((0..2).map(Pick::Berry));
         picks.extend((0..4).map(Pick::Rocks));
-        picks.extend((0..3).map(Pick::Boulder));
+        picks.extend((0..6).map(Pick::Boulder));
         for pick in picks {
             assert!(std::ptr::eq(sprite(&b, pick), all[usize::from(pick.index())].1), "{pick:?}");
         }

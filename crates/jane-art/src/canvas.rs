@@ -355,7 +355,7 @@ impl Canvas {
     }
 
     /// Start a new draw call: pixels it writes form one part for seam finding.
-    fn begin(&mut self) {
+    pub(crate) fn begin(&mut self) {
         self.part = self.part.wrapping_add(1).max(1);
     }
 

@@ -24,6 +24,7 @@ pub mod light;
 pub mod looks;
 pub mod palette;
 pub mod person;
+pub mod rock;
 pub mod sheet;
 pub mod sheet_kit;
 pub mod sheet_person;
