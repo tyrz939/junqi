@@ -223,6 +223,10 @@ pub struct ChunkLayers {
     /// Per cell, row-major 16 x 16: how the tile takes rain (0 matt, 1 darkens, 2 darkens and
     /// shines), which the presenter's wetness byte scales (PRESENTATION.md §1.8).
     pub wet: [u8; (CHUNK_CELLS * CHUNK_CELLS) as usize],
+    /// Per px, its distance to land through water, 1..=16, or 0 on land: where the renderer
+    /// reflects and how deep it darkens (PRESENTATION.md §1.8). Not in [`Chunk::hash`]: it is
+    /// the surface map the albedo already shows.
+    pub water: Vec<u8>,
 }
 
 /// One row's standing things: a rect of a strip `CHUNK_PX + 2 * STRIP_MARGIN` wide and
@@ -336,6 +340,7 @@ impl Chunk {
                 emissive: vec![Ix::CLEAR; n],
                 height: vec![1; n],
                 wet: [0; (CHUNK_CELLS * CHUNK_CELLS) as usize],
+                water: vec![0; n],
             },
             strips: Vec::new(),
             n_strips: 0,
@@ -999,6 +1004,11 @@ impl Painter {
         l.normal.copy_from_slice(&ly.normal);
         l.emissive.copy_from_slice(&ly.emissive);
         l.height.copy_from_slice(&ly.height);
+        for y in 0..CHUNK_PX {
+            let row = &mut l.water[(y * CHUNK_PX) as usize..((y + 1) * CHUNK_PX) as usize];
+            let src = ((y + CELL) * MM + CELL) as usize;
+            row.copy_from_slice(&self.s.shore[src..src + CHUNK_PX as usize]);
+        }
         out.water.clear();
         for y in 0..CHUNK_CELLS {
             for x in 0..CHUNK_CELLS {
