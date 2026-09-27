@@ -3,6 +3,7 @@
 //! LUT[(d2 * 255) / r2]`, upsampled bilinear and multiplied into the frame, `dst = dst * L >> 8`
 //! (a light may take a pixel up to twice as bright). Integer only.
 
+use jane_core::angle::{cos_q15, sin_q15};
 use jane_present::{Light, Rgb};
 
 use crate::blit::Target;
@@ -86,6 +87,15 @@ impl LightMap {
             // Flame light leans warm, as on T2: a yellow lamp on green grass is not lime.
             let [cr, cg, cb] = l.colour.map(|c| (u32::from(c) * GAIN * dark / 220) >> 8);
             let col = [cr, cg * 13 / 16, cb * 10 / 16];
+            // A spot lights its cone alone (a sentry's eye, a lit window's spill), as on T1 and
+            // T2: a cell whose direction from the light is further round than its half-angle.
+            let cone = match l.kind {
+                jane_present::LightKind::Spot { dir, cone } => {
+                    let (c, sn, k) = (cos_q15(dir).0, sin_q15(dir).0, cos_q15(cone).0);
+                    Some((i64::from(c), i64::from(sn), i64::from(k)))
+                }
+                jane_present::LightKind::Point => None,
+            };
             let (x0, x1) = (((l.pos.0 - r) / CELL).max(0), ((l.pos.0 + r) / CELL + 1).min(self.w - 1));
             let (y0, y1) = (((l.pos.1 - r) / CELL).max(0), ((l.pos.1 + r) / CELL + 1).min(self.h - 1));
             for cy in y0..=y1 {
@@ -95,6 +105,12 @@ impl LightMap {
                     let d2 = (dx * dx + dy * dy) as u32;
                     if d2 >= r2 {
                         continue;
+                    }
+                    if let Some((c, sn, k)) = cone {
+                        let dot = i64::from(dx) * c + i64::from(dy) * sn;
+                        if dot < 0 && k >= 0 || dot * dot.abs() < k * k.abs() * i64::from(d2) {
+                            continue;
+                        }
                     }
                     let k = u32::from(LUT[(d2 * 255 / r2) as usize]);
                     let i = (cy * self.w + cx) as usize;
@@ -142,7 +158,8 @@ impl LightMap {
                 left &= left - 1;
                 let c = self.own[o * n + i];
                 for ch in 0..3 {
-                    t[ch] = t[ch].saturating_sub(u32::from(c[ch]));
+                    // Its umbra keeps a little of it (`shadow::LAMP_BOUNCE`).
+                    t[ch] = t[ch].saturating_sub((u32::from(c[ch]) * (256 - jane_present::shadow::LAMP_BOUNCE)) >> 8);
                 }
             }
             let r = self.recip[i];

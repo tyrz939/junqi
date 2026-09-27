@@ -658,7 +658,7 @@ impl Prep {
         if let Some(s) = frame.sprites.get(c.sprite as usize)
             && let Some(page) = pages.get(usize::from(s.page))
         {
-            shadow::rows(&page.albedo, page.w, s, i32::from(c.foot.1), &mut self.rows);
+            shadow::rows(&page.albedo, page.w, s, c, &mut self.rows);
         }
         let r = start..self.rows.len();
         if let Some(p) = self.profiles.get_mut(ci) {
@@ -947,7 +947,7 @@ mod tests {
             flags: Flags::default(),
             height_px: 10,
         });
-        f.casters.push(Caster { sprite: 0, foot: (50, 10), height: 10, depth: 2 });
+        f.casters.push(Caster { sprite: 0, foot: (50, 10), height: 10, depth: 2, ..Caster::default() });
         f.lights.push(jane_present::Light {
             pos: (10, 10),
             height: 6,

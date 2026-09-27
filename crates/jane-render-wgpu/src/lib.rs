@@ -192,7 +192,7 @@ impl Pipes {
                 B::TexArray,
             ],
         );
-        let scatter_layout = layout(device, "scatter", &[B::Uniform, B::Tex, B::ReadWrite, B::Uint]);
+        let scatter_layout = layout(device, "scatter", &[B::Uniform, B::Tex, B::ReadWrite, B::Uint, B::Tex]);
         let light_layout =
             layout(device, "light", &[B::Uniform, B::Tex, B::Tex, B::Tex, B::Read, B::Read, B::Read, B::Read, B::Uint]);
         let post_layout = layout(device, "post", &[B::Uniform, B::Tex, B::Sampler, B::Tex]);
@@ -819,7 +819,7 @@ impl Wgpu {
         let tile_lights = storage("tile lights", tiles_n * TILE_CAP as u64 * 4);
         let g = self.globals.as_entire_binding();
         let scatter_bg =
-            group(d, "scatter", &p.scatter_layout, &[g.clone(), r(&gnh), hmap.as_entire_binding(), r(&gid)]);
+            group(d, "scatter", &p.scatter_layout, &[g.clone(), r(&gnh), hmap.as_entire_binding(), r(&gid), r(&gem)]);
         let light_bg = group(
             d,
             "light",

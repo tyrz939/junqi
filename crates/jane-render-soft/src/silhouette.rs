@@ -68,7 +68,7 @@ impl Mask {
 pub fn cast(mask: &mut Mask, page: &Page, s: &SpriteCmd, c: &Caster, k: (i32, i32)) {
     let mut rows = std::mem::take(&mut mask.rows);
     rows.clear();
-    shadow::rows(&page.albedo, page.w, s, i32::from(c.foot.1), &mut rows);
+    shadow::rows(&page.albedo, page.w, s, c, &mut rows);
     shadow::bands(&rows, i32::from(s.x), c, k, |b| mask.band(b));
     mask.rows = rows;
 }
@@ -170,7 +170,7 @@ mod tests {
             flags: Flags::default(),
             height_px: 12,
         };
-        (page, s, Caster { sprite: 0, foot: (5, 10), height: 12, depth: 2 })
+        (page, s, Caster { sprite: 0, foot: (5, 10), height: 12, depth: 2, ..Caster::default() })
     }
 
     #[test]

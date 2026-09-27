@@ -19,6 +19,7 @@
 @group(0) @binding(1) var gnh: texture_2d<f32>;
 @group(0) @binding(2) var<storage, read_write> hmap: array<atomic<u32>>;
 @group(0) @binding(3) var gid: texture_2d<u32>;
+@group(0) @binding(4) var gem: texture_2d<f32>;
 
 // A run whose lowest px is this high or lower stands on the ground: the feet, a trunk's root.
 const FLOAT: f32 = 6.5;
@@ -107,6 +108,12 @@ fn scatter(@builtin(global_invocation_id) id: vec3<u32>) {
     // prop lying flat or set into a wall): the presenter decides what casts, and it casts
     // nothing here as on T0 and T1 (PRESENTATION.md §1.7).
     if who != 0u && depth == 0u {
+        return;
+    }
+    // What glows on a sprite (a flame, a lamp's lit glass, her lantern's) is light, not matter:
+    // it stands in no field, as T0 and T1 leave its rows out (`Caster::burn`). The terrain's lit
+    // windows are its walls, and stand.
+    if who != 0u && any(textureLoad(gem, vec2<i32>(id.xy), 0).rgb > vec3<f32>(0.0)) {
         return;
     }
     var d = max(depth, 1u);

@@ -29,6 +29,22 @@ struct Set {
     variant: u8,
     seat: u8,
     frames: Vec<(FrameId, RefId)>,
+    /// A player's look again with her lantern lit in her hand (ART.md §2.1 `held`, drawn by the
+    /// composer at the hand each frame puts where it is): each frame and where its glass glows,
+    /// `(column, row)` in the sprite, the middle of its emissive px.
+    lit: Vec<LitFrame>,
+}
+
+/// A frame of a look holding her lit lantern, and its glass's `(column, row)` in the sprite.
+type LitFrame = (FrameId, RefId, Option<(i16, i16)>);
+
+/// Her lantern in her hand this frame: the frame to draw, whether it is mirrored, and where on
+/// the canvas its glass glows, relative to the sprite's anchor (its feet): `(dx, rows up)`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Held {
+    pub look: RefId,
+    pub mirror: bool,
+    pub glass: (i32, i32),
 }
 
 /// Every person look, packed.
@@ -76,7 +92,15 @@ impl People {
             let frames: Vec<(FrameId, RefId)> =
                 r.set.frames.iter().map(|(f, c)| (*f, atlas.add_canvas(c, anchor, HEIGHT, |_, _, t| t))).collect();
             if ids.iter().all(|f| frames.iter().any(|(g, _)| g == f)) {
-                sets.push(Set { sprite: r.sprite, variant: r.variant, seat: r.seat, frames });
+                let lit = lantern(&r)
+                    .map(|set| {
+                        set.frames
+                            .iter()
+                            .map(|(f, c)| (*f, atlas.add_canvas(c, anchor, HEIGHT, |_, _, t| t), glass(c)))
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                sets.push(Set { sprite: r.sprite, variant: r.variant, seat: r.seat, frames, lit });
             }
         }
         let glows = jane_art::fx::SCHOOLS
@@ -108,6 +132,23 @@ impl People {
         let has_seat = self.sets.iter().any(|x| x.sprite == s && x.seat == seat);
         let seat = if has_seat { seat } else { 0 };
         self.sets.iter().position(|x| x.sprite == s && x.variant == v && x.seat == seat).map(|i| i as u16)
+    }
+
+    /// The frame set `set` shows for `pose` with her lantern lit in her hand, where the set has
+    /// it (a player's look), and where its glass is (§1.7: her lantern's light shines from it).
+    pub fn holding_lantern(&self, set: u16, pose: Pose, atlas: &Atlas) -> Option<Held> {
+        let s = &self.sets[usize::from(set)];
+        if s.lit.is_empty() || pose.dead {
+            return None;
+        }
+        let (plain, mirror) = self.frame(set, pose);
+        let k = s.frames.iter().position(|(_, r)| *r == plain)?;
+        let (_, look, glass) = *s.lit.iter().find(|(f, _, _)| *f == s.frames[k].0)?;
+        let r = atlas.get(look);
+        // The glass where the frame has it, else at her hip on her near side.
+        let (u, v) = glass.unwrap_or((r.ax + 6, r.ay - 14));
+        let u = if mirror { i32::from(r.src.w) - 1 - i32::from(u) } else { i32::from(u) };
+        Some(Held { look, mirror, glass: (u - i32::from(r.ax), i32::from(r.ay) - i32::from(v)) })
     }
 
     /// The frame set `set` shows for `pose`, and whether it is drawn mirrored (west).
@@ -142,6 +183,38 @@ impl People {
         );
         (r, side && !pose.dead && pose.facing == Facing::West)
     }
+}
+
+/// A player's look rendered again holding her lantern, lit (§1.7: her lantern shows when the
+/// flat light is low, and the one who carries it is seen carrying it): the look as written with
+/// `held` a lantern and the held thing glowing, her seat's coat, her fight frames. `None` for a
+/// look no player drives, or one whose hand is already full.
+fn lantern(r: &looks::Rendered) -> Option<jane_art::sprite::SpriteSet> {
+    use jane_data::{EmitRole, HeldItem, Look};
+    if !looks::has_seats(r.sprite) {
+        return None;
+    }
+    let Some((_, Look::Person(p))) = looks::find(r.name) else { return None };
+    let v = p.variant(usize::from(r.variant));
+    if v.held != HeldItem::None {
+        return None;
+    }
+    let held = jane_data::PersonLook { held: HeldItem::Lantern, emits: &[EmitRole::Held], ..v };
+    let set = person::render_fighting(&held, person::seed(r.name), looks::fight(r.sprite)).ok()?;
+    Some(person::seat(&set, usize::from(r.seat)))
+}
+
+/// The middle of what glows in a frame, `(column, row)`: a held lantern's glass.
+fn glass(c: &jane_art::Canvas) -> Option<(i16, i16)> {
+    let (mut n, mut sx, mut sy) = (0, 0, 0);
+    for y in 0..c.h() {
+        for x in 0..c.w() {
+            if c.emissive_at(x, y) != jane_art::palette::Ix::CLEAR {
+                (n, sx, sy) = (n + 1, sx + x, sy + y);
+            }
+        }
+    }
+    (n > 0).then(|| ((sx / n) as i16, (sy / n) as i16))
 }
 
 /// Which frame a person shows (ART.md §4, PRESENTATION §1.11): dead, one of the two dead

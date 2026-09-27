@@ -24,8 +24,9 @@ use crate::chunks::{ChunkCache, LRU, Need};
 use crate::creatures::{self, Creatures};
 use crate::drawlist::{DrawCmd, DrawList};
 use crate::frame::{
-    Block, CANVAS_H, CANVAS_W, CELL, CHUNK_PX, Caster, ChunkCmd, ChunkId, Depth, Directional, FX_TO_CANVAS, Features,
-    Flags, Frame, Light, LightKind, Pass, Post, Rgb, Span, SpriteCmd, Tier, Tint, height_of_rows, rows_up,
+    Block, CANVAS_H, CANVAS_W, CAST_MARGIN, CELL, CHUNK_PX, Caster, ChunkCmd, ChunkId, Depth, Directional,
+    FX_TO_CANVAS, Features, Flags, Frame, Light, LightKind, Pass, Post, Rgb, Span, SpriteCmd, Tier, Tint,
+    height_of_rows, rows_up,
 };
 use crate::fx::Fx;
 use crate::light::{Sky, flicker, lantern_lit, sky};
@@ -38,16 +39,18 @@ use crate::terrain::Terrain;
 /// A unit moving further than this in a tick (40 sim px, `Fx`) snaps instead of sliding: travel,
 /// a respawn, a hop.
 const SNAP_FX: i64 = 40 * 256;
-/// Cells round the view whose units and props are kept: a tall sprite standing below the view
-/// still reaches into it.
-const MARGIN_CELLS: i32 = 6;
-/// Canvas px round the view painted ahead, so a frame between two ticks never finds a hole.
-const CHUNK_AHEAD: i32 = 64;
+/// Cells round the view whose units and props are kept: whatever stands in the casting band
+/// ([`CAST_MARGIN`]), and a tall sprite standing below it that still reaches into it.
+const MARGIN_CELLS: i32 = (CAST_MARGIN + 96) / CELL;
+/// Canvas px round the view painted ahead, so a frame between two ticks never finds a hole, and
+/// the casting band's ground and the lights just past it stand on painted chunks.
+const CHUNK_AHEAD: i32 = CAST_MARGIN + 32;
 /// Chunks the terrain painter lands in a tick at most (§1.6): the rest show their swatches, or
 /// what they last had, until it reaches them. The tick a zone is entered paints all it shows.
 const LAND_PER_TICK: usize = 2;
-/// Canvas px round the view the draw list sorts over; things further out are culled.
-const SORT_MARGIN: i32 = 96;
+/// Canvas px round the view the draw list sorts over; things further out are culled: the casting
+/// band and the tallest thing standing below it.
+const SORT_MARGIN: i32 = CAST_MARGIN + 128;
 /// Ticks a hurt unit shows it, and the first ticks of them it flashes (§1.11).
 const HURT_TICKS: u32 = 8;
 const FLASH_TICKS: u32 = 4;
@@ -56,6 +59,14 @@ const LIGHT_CELLS: i32 = 13;
 /// Her lantern (§1.7): its reach, canvas px, and its warm colour.
 const LANTERN_RADIUS: u16 = 136;
 const LANTERN: Rgb = [255, 190, 116];
+/// How far a lit window's light reaches, canvas px: a small pool at the foot of its wall.
+const WINDOW_RADIUS: u16 = 64;
+/// Its spill's half-angle, round from straight out of the wall.
+const WINDOW_CONE: jane_core::Angle = jane_core::Angle((80 * 65536 / 360) as u16);
+/// The lowest her lantern shines from, px: hung at her knee it would only graze the ground.
+const LANTERN_LOW: i32 = 18;
+/// The most a unit's lights are raised by what it stands on, px (§1.7).
+const MAX_LIFT: i32 = 48;
 /// The lowest a standing prop light shines from, px: a low flame lights the ground round it.
 const FLAME_HEIGHT: i32 = 28;
 /// How many steps a second a flame's flicker walks (§1.7).
@@ -63,9 +74,9 @@ const FLICKER_RATE: u32 = 10;
 /// A unit's draw key: its id with the top bit set (a prop's is its id).
 const UNIT_KEY: u32 = 0x8000_0000;
 
-/// Canvas px round the canvas whose terrain throws its shadows in: T2's G-buffer guard band
-/// (`jane-render-wgpu`'s `GUARD`), so every tier casts from the same ground.
-pub const BLOCK_MARGIN: i32 = 64;
+/// Canvas px round the canvas whose terrain throws its shadows in: the casting band, T2's
+/// G-buffer guard band (`jane-render-wgpu`'s `GUARD`), so every tier casts from the same ground.
+pub const BLOCK_MARGIN: i32 = CAST_MARGIN;
 
 /// Which lights a frame draws and which of them cast (PRESENTATION.md §1.7), one rule for every
 /// tier: of the lights that may cast (`Light::casts` as they come: prop lights, her lantern, a
@@ -115,7 +126,8 @@ struct UnitRec {
     look: RefId,
     mirror: bool,
     dead: bool,
-    me: bool,
+    /// A player's unit, hers or another seat's: it carries a lantern at night.
+    player: bool,
     /// Its glow: radius canvas px and colour.
     glow: Option<(u16, Rgb)>,
     /// The unit's person look in [`People`], when its sprite has one; else `look` stands in.
@@ -460,7 +472,7 @@ impl Present {
                 look: self.stand.unit(kind),
                 mirror: u.facing == Facing::West,
                 dead: !u.alive,
-                me: u.id == me,
+                player: matches!(kind, UnitKind::Me | UnitKind::Seat),
                 glow: jane_data::catalog()
                     .combat
                     .unit(u.def)
@@ -747,8 +759,9 @@ impl Present {
         // The sky and the far things on its horizon, behind everything (§1.9).
         self.atmos.draw_back(&mut self.frame, cam, self.zone_cells, &self.atlas);
 
-        // Terrain: every painted chunk under the view.
-        if let Some((cx0, cy0, cx1, cy1)) = self.chunk_range(cam, 0) {
+        // Terrain: every painted chunk under the view and its casting band (the band's are
+        // clipped away on screen; T2's G-buffer stands them in its field).
+        if let Some((cx0, cy0, cx1, cy1)) = self.chunk_range(cam, CAST_MARGIN) {
             let f = &mut self.frame;
             for cy in cy0..=cy1 {
                 for cx in cx0..=cx1 {
@@ -775,20 +788,45 @@ impl Present {
         let (cw, ch) = (i32::from(canvas.0), i32::from(canvas.1));
         let on_canvas =
             |x: i32, y: i32, w: u16, h: u16| x + i32::from(w) > 0 && y + i32::from(h) > 0 && x < cw && y < ch;
+        // What stands in the casting band round the canvas is kept, if it casts: its shadow may
+        // lie on screen (§1.7). Drawn, it is clipped away.
+        let m = CAST_MARGIN;
+        let in_band =
+            |x: i32, y: i32, w: u16, h: u16| x + i32::from(w) > -m && y + i32::from(h) > -m && x < cw + m && y < ch + m;
         for p in &self.props {
             let r = self.atlas.get(p.look);
             // Bottom-centred on the footprint.
             let x = p.x + (p.w - i32::from(r.src.w)) / 2 - cam.0;
             let y = p.y + p.h - i32::from(r.src.h) - cam.1;
-            if !on_canvas(x, y, r.src.w, r.src.h) {
+            let casts = !p.flat && !p.flush;
+            if !(on_canvas(x, y, r.src.w, r.src.h) || casts && in_band(x, y, r.src.w, r.src.h)) {
                 continue;
             }
             let foot = p.y + p.h - cam.1;
-            let caster = (!p.flat && !p.flush).then(|| Caster {
-                sprite: 0,
-                foot: clamp16(x + i32::from(r.src.w) / 2, y + i32::from(r.ay)),
-                height: r.top.max(1),
-                depth: (p.h / 4).clamp(4, 12) as u8,
+            let caster = (!p.flat && !p.flush).then(|| {
+                // It stands on what is drawn (§1.7): a thing drawn over its footprint's front
+                // edge (a fire in the middle of its cell, a sign's post over its contact shadow)
+                // throws from its lowest drawn row, its heights less what they counted under it.
+                let (stand, sink) = if r.base >= 0 && r.base + 1 < r.ay {
+                    (r.base + 1, r.base_height.saturating_sub(1))
+                } else {
+                    (r.ay, 0)
+                };
+                // Its flame and its lit glass are light, not matter: they cast nothing.
+                let burn = if r.burn.0 >= 0 {
+                    let hv = |row: i16| (stand - row).clamp(1, 255) as u8;
+                    (hv(r.burn.1), hv(r.burn.0))
+                } else {
+                    (0, 0)
+                };
+                Caster {
+                    sprite: 0,
+                    foot: clamp16(x + i32::from(r.src.w) / 2, y + i32::from(stand)),
+                    height: r.top.saturating_sub(sink).max(1),
+                    depth: (p.h / 4).clamp(4, 12) as u8,
+                    sink,
+                    burn,
+                }
             });
             let cmd = DrawCmd { y: foot, key: p.id, sprite: sprite(r, x, y, Flags::default()), caster };
             if p.flat { self.ground.push(cmd) } else { self.standing.push(cmd) }
@@ -806,7 +844,7 @@ impl Present {
                         let r = self.atlas.get(fl.look);
                         let (fx, fy) = (ox + i32::from(pl.x), oy + i32::from(pl.y));
                         let (x, y) = (fx - i32::from(r.ax), fy - i32::from(r.ay));
-                        if !on_canvas(x, y, r.src.w, r.src.h) {
+                        if !in_band(x, y, r.src.w, r.src.h) {
                             continue;
                         }
                         self.standing.push(DrawCmd {
@@ -818,6 +856,7 @@ impl Present {
                                 foot: clamp16(fx, fy - i32::from(fl.lift)),
                                 height: r.top.max(1),
                                 depth: fl.depth,
+                                ..Caster::default()
                             }),
                         });
                     }
@@ -835,27 +874,21 @@ impl Present {
                 (u.prev.0 + ((dx * a) >> 8) as i32, u.prev.1 + ((dy * a) >> 8) as i32)
             };
             let (sx, sy) = ((fx >> FX_TO_CANVAS) - cam.0, (fy >> FX_TO_CANVAS) - cam.1);
-            // Her lantern, held at her side the way she faces; a creature's glow at its heart.
-            if u.me && lantern && n_glows < glows.len() {
-                let side = if u.mirror { -9 } else { 9 };
-                let k = flicker(self.tick, u.id, 80, FLICKER_RATE);
-                glows[n_glows] = Some(Light {
-                    pos: (sx + side, sy + 3),
-                    height: 20,
-                    colour: scale(LANTERN, k),
-                    radius: LANTERN_RADIUS,
-                    size: 5,
-                    casts: true,
-                    kind: LightKind::Point,
-                    // Her own: resolved to her sprite once the list is sorted.
-                    holder: Some(UNIT_KEY | u.id),
-                });
-                n_glows += 1;
-            }
+            // What she stands on, if the terrain raises it (a step, a dais): what she holds is
+            // that much higher, so its light is over the step, not in it (§1.7).
+            let lift = drawn_height(
+                &self.chunks,
+                &self.frame.layers,
+                self.zone_cells,
+                (fx >> FX_TO_CANVAS, fy >> FX_TO_CANVAS),
+            );
+            let lift = if lift > shadow::RELIEF { lift.min(MAX_LIFT) } else { 0 };
+            // A creature's glow at its heart.
             if let Some((radius, colour)) = u.glow.filter(|_| n_glows < glows.len()) {
+                let height = 14 + lift;
                 glows[n_glows] = Some(Light {
-                    pos: (sx, sy),
-                    height: 14,
+                    pos: (sx, sy + rows_up(lift)),
+                    height: height as u8,
                     colour,
                     radius,
                     size: 8,
@@ -868,6 +901,8 @@ impl Present {
             // A person shows its walk, breathe or dead frame (ART.md §4); a stand-in walks with
             // a one-px bob.
             let mut cast_glow = None;
+            // Where her lantern's glass is, from her feet, when she holds it: `(dx, rows up)`.
+            let mut glass: Option<((i32, i32), Facing)> = None;
             let (look, mirror, bob) = match (u.person, u.creature) {
                 (Some(set), _) => {
                     // A blow or a spell under way plays its three beats; a blow taken, its hurt.
@@ -894,8 +929,16 @@ impl Present {
                         act,
                         hurt,
                     };
-                    let (look, mirror) = self.people.frame(set, pose);
-                    (look, mirror, 0)
+                    // Her lantern, lit, in her hand, and its light from its glass (§1.7).
+                    let held =
+                        (u.player && lantern).then(|| self.people.holding_lantern(set, pose, &self.atlas)).flatten();
+                    if let Some(h) = held {
+                        glass = Some((h.glass, u.facing));
+                        (h.look, h.mirror, 0)
+                    } else {
+                        let (look, mirror) = self.people.frame(set, pose);
+                        (look, mirror, 0)
+                    }
                 }
                 // A creature trots, sits a while after it stops, and strikes in three beats.
                 (None, Some(set)) => {
@@ -915,9 +958,38 @@ impl Present {
                 }
                 (None, None) => (u.look, u.mirror, i32::from((u.anim / 9) & 1 == 1)),
             };
+            // A player without a person's look (a stand-in) holds it at her side.
+            if u.player && lantern && !u.dead && glass.is_none() && u.person.is_none() {
+                glass = Some(((if mirror { -9 } else { 9 }, 13), u.facing));
+            }
+            if let Some(((dx, up), facing)) = glass.filter(|_| n_glows < glows.len()) {
+                // It hangs in front of her facing the viewer, behind her facing away, at her side
+                // otherwise: its ground point is under its glass, and it shines from its glass's
+                // height, but never lower than a low flame's (`LANTERN_LOW`): a light at her
+                // knee only grazes the ground.
+                let ahead = match facing {
+                    Facing::South => 2,
+                    Facing::North => -2,
+                    Facing::East | Facing::West => 1,
+                };
+                let height = (height_of_rows((up + ahead).max(1)).max(LANTERN_LOW) + lift).clamp(1, 255);
+                let k = flicker(self.tick, u.id, 80, FLICKER_RATE);
+                glows[n_glows] = Some(Light {
+                    pos: (sx + dx, sy + ahead + rows_up(lift)),
+                    height: height as u8,
+                    colour: scale(LANTERN, k),
+                    radius: LANTERN_RADIUS,
+                    size: 3,
+                    casts: true,
+                    kind: LightKind::Point,
+                    // Hers: resolved to her sprite once the list is sorted.
+                    holder: Some(UNIT_KEY | u.id),
+                });
+                n_glows += 1;
+            }
             let r = self.atlas.get(look);
             let (x, y) = (sx - i32::from(r.ax), sy - i32::from(r.ay) - bob);
-            if !on_canvas(x, y, r.src.w, r.src.h) {
+            if !(on_canvas(x, y, r.src.w, r.src.h) || !u.dead && in_band(x, y, r.src.w, r.src.h)) {
                 continue;
             }
             let tint = if u.dead && (u.person.is_some() || u.creature.is_some()) {
@@ -929,7 +1001,13 @@ impl Present {
             } else {
                 Tint::None
             };
-            let caster = (!u.dead).then(|| Caster { sprite: 0, foot: clamp16(sx, sy), height: r.top.max(1), depth: 5 });
+            let caster = (!u.dead).then(|| Caster {
+                sprite: 0,
+                foot: clamp16(sx, sy),
+                height: r.top.max(1),
+                depth: 5,
+                ..Caster::default()
+            });
             self.standing.push(DrawCmd {
                 y: sy,
                 key: UNIT_KEY | u.id,
@@ -948,7 +1026,7 @@ impl Present {
                     let r = self.atlas.get(seg);
                     let (qx, qy) = ((px >> FX_TO_CANVAS) - cam.0, (py >> FX_TO_CANVAS) - cam.1);
                     let (x, y) = (qx - i32::from(r.ax), qy - i32::from(r.ay));
-                    if on_canvas(x, y, r.src.w, r.src.h) {
+                    if in_band(x, y, r.src.w, r.src.h) {
                         self.standing.push(DrawCmd {
                             y: qy,
                             key: UNIT_KEY | u.id,
@@ -959,6 +1037,7 @@ impl Present {
                                 foot: clamp16(qx, qy),
                                 height: r.top.max(1),
                                 depth: 4,
+                                ..Caster::default()
                             }),
                         });
                     }
@@ -1002,6 +1081,7 @@ impl Present {
         }
         let rows = (ch + 2 * SORT_MARGIN) as u32;
         let block_range = self.chunk_range(cam, BLOCK_MARGIN);
+        let window_range = self.chunk_range(cam, CAST_MARGIN);
         let f = &mut self.frame;
         let g0 = f.sprites.len();
         f.sprites.extend(self.ground.sort(-SORT_MARGIN, rows).iter().map(|c| c.sprite));
@@ -1069,6 +1149,41 @@ impl Present {
                 holder: Some(l.id),
             });
         }
+        // Each lit window of the terrain: a small warm pool on the ground in front of it, and
+        // what stands in it throws its shadow away from the window (§1.7). Low and short, they
+        // cast by the one nearest-first rule with every other light. Lit as her lantern is, when
+        // the flat light is low.
+        if lantern {
+            if let Some((cx0, cy0, cx1, cy1)) = window_range {
+                for cy in cy0..=cy1 {
+                    for cx in cx0..=cx1 {
+                        let Some((slot, _)) = self.chunks.find(ChunkId { cx: cx as u16, cy: cy as u16 }) else {
+                            continue;
+                        };
+                        let (ox, oy) = (cx * CHUNK_PX - cam.0, cy * CHUNK_PX - cam.1);
+                        for w in self.terrain.windows(slot) {
+                            let (x, y) = (ox + i32::from(w.x), oy + i32::from(w.y));
+                            let r = i32::from(WINDOW_RADIUS);
+                            if x + r < 0 || y - r - 64 > ch || x - r > cw || y + r < 0 {
+                                continue;
+                            }
+                            f.lights.push(Light {
+                                pos: (x, y),
+                                height: w.height,
+                                colour: w.colour.map(|c| (u32::from(c) * 7 / 8) as u8),
+                                radius: WINDOW_RADIUS,
+                                size: 5,
+                                casts: true,
+                                // Out of the window, not back onto its own wall: a spot turned
+                                // to the viewer, the face it is set in behind it.
+                                kind: LightKind::Spot { dir: jane_core::Angle::SOUTH, cone: WINDOW_CONE },
+                                holder: None,
+                            });
+                        }
+                    }
+                }
+            }
+        }
         f.lights.extend(glows[..n_glows].iter().flatten());
         // The effects' lights: a bolt lights the wall it passes (§2).
         self.fx.lights(f, cam, alpha);
@@ -1133,6 +1248,24 @@ impl Present {
         }
         &self.frame
     }
+}
+
+/// The terrain's drawn height at zone canvas px `(x, y)`, 0 where no chunk is painted.
+fn drawn_height(
+    chunks: &ChunkCache,
+    layers: &[crate::frame::ChunkLayers],
+    cells: (u32, u32),
+    (x, y): (i32, i32),
+) -> i32 {
+    let (zw, zh) = (cells.0 as i32 * CELL, cells.1 as i32 * CELL);
+    if x < 0 || y < 0 || x >= zw || y >= zh {
+        return 0;
+    }
+    let id = ChunkId { cx: (x / CHUNK_PX) as u16, cy: (y / CHUNK_PX) as u16 };
+    let Some(l) = chunks.find(id).and_then(|(s, _)| layers.get(usize::from(s))).filter(|l| l.has_height()) else {
+        return 0;
+    };
+    i32::from(l.height[((y % CHUNK_PX) * CHUNK_PX + x % CHUNK_PX) as usize])
 }
 
 /// `0xRRGGBB` as bytes.

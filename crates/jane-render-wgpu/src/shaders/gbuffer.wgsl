@@ -63,6 +63,10 @@ struct SpriteOut {
     @location(1) @interpolate(flat) src: vec4<u32>,
     // Page, flags (bit 0 mirror, bits 8..16 tint amount, bits 16..18 tint kind), depth px, id.
     @location(2) @interpolate(flat) info: vec4<u32>,
+    // How much its heights count under what is drawn (`Caster::sink`), px.
+    @location(3) @interpolate(flat) sink: u32,
+    // The rows it burns, first | last << 16 (`Caster::burn`): they stand in no field.
+    @location(4) @interpolate(flat) burn: u32,
 };
 
 @vertex
@@ -80,6 +84,8 @@ fn vs_sprite(
     o.local = corner * size;
     o.src = src;
     o.info = vec4<u32>(u32(dst.z), u32(dst.w), extra.x, extra.y);
+    o.sink = extra.z;
+    o.burn = extra.w;
     return o;
 }
 
@@ -115,7 +121,11 @@ fn fs_sprite(i: SpriteOut) -> GOut {
         // Mirrored: the normal's x flips about 128.
         n.x = 256.0 / 255.0 - n.x;
     }
-    let h = textureLoad(atlas_height, t, page, 0).r;
+    // It stands on what is drawn: its heights less what they counted under its lowest drawn px.
+    var h = textureLoad(atlas_height, t, page, 0).r;
+    if h > 0.0 {
+        h = max(h - f32(i.sink) / 255.0, 1.0 / 255.0);
+    }
     let e = textureLoad(atlas_emissive, t, page, 0).r;
     var ec = vec3<f32>(0.0);
     if e > 1u {
@@ -123,7 +133,10 @@ fn fs_sprite(i: SpriteOut) -> GOut {
     }
     var o: GOut;
     o.albedo = vec4<f32>(c, 1.0);
-    o.nh = vec4<f32>(n, h, f32(i.info.z) / 255.0);
+    // A row it burns (a flame, and the line round it) is light, not matter: no depth, no field.
+    let row = u32(floor(i.local.y));
+    let burns = row >= (i.burn & 0xffffu) && row <= (i.burn >> 16u);
+    o.nh = vec4<f32>(n, h, select(f32(i.info.z) / 255.0, 0.0, burns));
     o.emissive = vec4<f32>(ec, 1.0);
     o.id = i.info.w;
     return o;

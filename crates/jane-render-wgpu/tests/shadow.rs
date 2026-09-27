@@ -100,7 +100,13 @@ fn frame(layers: ChunkLayers, sprite: bool, sun: Option<Directional>, points: &[
             flags: Flags::default(),
             height_px: 45,
         });
-        f.casters.push(Caster { sprite: 0, foot: (FOOT.0 as i16, FOOT.1 as i16), height: 45, depth: 5 });
+        f.casters.push(Caster {
+            sprite: 0,
+            foot: (FOOT.0 as i16, FOOT.1 as i16),
+            height: 45,
+            depth: 5,
+            ..Caster::default()
+        });
         f.passes.push(Pass::Sprites { layer: Depth::Standing, cmds: Span { start: 0, len: 1 } });
     }
     f.lights.extend_from_slice(points);
@@ -269,7 +275,7 @@ fn stand(atlas: &AtlasPages, ay: i32, foot: (i32, i32), depth: u8, sun: Directio
         flags: Flags::default(),
         height_px: top,
     });
-    f.casters.push(Caster { sprite: 0, foot: (foot.0 as i16, foot.1 as i16), height: top, depth });
+    f.casters.push(Caster { sprite: 0, foot: (foot.0 as i16, foot.1 as i16), height: top, depth, ..Caster::default() });
     f.passes.clear();
     f.passes.push(Pass::Terrain { chunks: Span { start: 0, len: 1 } });
     f.passes.push(Pass::Sprites { layer: Depth::Standing, cmds: Span { start: 0, len: 1 } });
