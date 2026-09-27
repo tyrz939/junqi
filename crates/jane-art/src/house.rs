@@ -353,9 +353,33 @@ fn back_slope(c: &mut Canvas, s: &Stuff, x0: i32, x1: i32, top: i32, ridge: i32)
     let r = Rect::new(x0, top, x1 - x0 + 1, ridge - top);
     let thatch = matches!(s.look.roof, Roofing::Thatch | Roofing::Reed);
     parts::fill(c, r, s.roof.at(if thatch { Tone::Mid } else { Tone::Shade }), normal(0, -70), 8);
-    let pitch = if thatch { 5 } else { 3 };
-    for y in (r.y + 2..r.bottom()).step_by(pitch) {
-        c.hline(r.x, r.right() - 1, y, s.roof.at(if thatch { Tone::Shade } else { Tone::Deep }), 8);
+    if thatch {
+        for y in (r.y + 2..r.bottom()).step_by(5) {
+            c.hline(r.x, r.right() - 1, y, s.roof.at(Tone::Shade), 8);
+        }
+    } else {
+        // Slates, tiles or tin in the shade: the same courses as the front, their joints
+        // staggered, each course's lower edge catching the sky a tone up, one slate in five
+        // a tone of its own, so the back reads as laid and not as a flat band.
+        let tin = s.look.roof == Roofing::Tin;
+        let (pitch, len) = if s.look.roof == Roofing::Tile { (3, 4) } else { (3, 6) };
+        for y in r.y..r.bottom() {
+            let (row, course) = ((y - r.y) % pitch, (y - r.y) / pitch);
+            for x in r.x..r.right() {
+                let off = if course % 2 == 1 { len / 2 } else { 0 };
+                let slate = parts::hash(s.seed, (x - r.x + off) / len, course + 40);
+                let t = if tin {
+                    [Tone::Mid, Tone::Shade, Tone::Shade][((x - r.x) % 3) as usize]
+                } else if row == pitch - 1 || (x - r.x + off) % len == len - 1 {
+                    Tone::Deep
+                } else if row == 0 || slate % 5 == 0 {
+                    Tone::Mid
+                } else {
+                    Tone::Shade
+                };
+                c.put(x, y, s.roof.at(t), normal(0, -70), 8);
+            }
+        }
     }
     if thatch {
         // The straw's grain in the shade, a few streaks.
