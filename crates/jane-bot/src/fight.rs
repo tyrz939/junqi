@@ -53,7 +53,7 @@ pub fn ready(u: &Unit, s: SpellId, now: Tick) -> bool {
         && u.mp >= def.mp
 }
 
-fn item_ready(u: &Unit, i: ItemId, now: Tick) -> bool {
+pub fn item_ready(u: &Unit, i: ItemId, now: Tick) -> bool {
     !u.item_cooldowns.iter().any(|&(c, until)| c == i && until > now)
 }
 
@@ -103,7 +103,7 @@ pub fn retreat_point(
 }
 
 /// Running from something at `from`: to the retreat point, by the path there.
-fn away_from(v: &View<'_>, cx: &mut Ctx, from: jane_core::Vec2, tether: Option<(jane_core::Vec2, i64)>) -> InputFrame {
+pub fn away_from(v: &View<'_>, cx: &mut Ctx, from: jane_core::Vec2, tether: Option<(jane_core::Vec2, i64)>) -> InputFrame {
     let me = v.body().pos;
     let far = cx.fight.retreat.filter(|r| {
         dist(*r, from) > dist(me, from) + i64::from(CELL_FX)
@@ -185,6 +185,19 @@ pub fn on_me(v: &View<'_>, u: &Unit) -> bool {
     u.alive && u.combat == CombatState::Combat && u.target == Some(v.body().id)
 }
 
+/// Can it touch her from where it is? Something rooted to the spot (a statue, a cactus) that
+/// is still after her from beyond its longest reach is not a fight: running from it or back to
+/// it for ever is how a crawl stalls.
+pub fn can_reach(v: &View<'_>, u: &Unit) -> bool {
+    let cat = jane_data::catalog();
+    let d = cat.combat.unit(u.def);
+    if d.walk.0 > 0 || d.run.0 > 0 {
+        return true;
+    }
+    let range = d.book.iter().map(|&s| cat.combat.spell(s).range.0).max().unwrap_or(0);
+    gap(v.body(), u) <= i64::from(range) + i64::from(4 * CELL_FX)
+}
+
 /// Has she lately found no way to it?
 pub fn reachable(cx: &Ctx, id: UnitId, frame: u32) -> bool {
     cx.fight.unreachable.get(&id).is_none_or(|&until| until <= frame)
@@ -192,7 +205,7 @@ pub fn reachable(cx: &Ctx, id: UnitId, frame: u32) -> bool {
 
 /// The enemy to deal with now: the nearest one fighting her, else the one hunted.
 pub fn threat(v: &View<'_>, cx: &mut Ctx) -> Option<UnitId> {
-    if let Some(u) = enemies(v).into_iter().find(|u| on_me(v, u) && fightable(u)) {
+    if let Some(u) = enemies(v).into_iter().find(|u| on_me(v, u) && fightable(u) && can_reach(v, u)) {
         return Some(u.id);
     }
     let now = v.frame();

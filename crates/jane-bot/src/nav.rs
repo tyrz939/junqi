@@ -68,6 +68,11 @@ pub struct Nav {
     pub roads: bool,
     /// Why the last `NoWay` was said (for a debugging line).
     pub why: &'static str,
+    /// Ground she keeps off (a dungeon's tactic sets it: the Burial's small snakes, its statues):
+    /// circles, each only where its middle has sight of the cell, with what a step inside costs
+    /// over the step's own; 0 is never, save as the goal (and not kept to when she stands inside
+    /// one already). Forgotten with the zone.
+    pub keep_off: Vec<(Vec2, i64, u32)>,
 }
 
 /// What a step off the road costs a walker who keeps to roads, over the step's own cost.
@@ -130,6 +135,7 @@ impl Nav {
             plans: 0,
             roads: false,
             why: "",
+            keep_off: Vec::new(),
         }
     }
 
@@ -165,11 +171,20 @@ impl Nav {
         };
         let shun = &self.shun;
         let now = v.frame();
+        let off = &self.keep_off;
+        let seen_by = |c: Vec2, hard: bool| {
+            off.iter().filter(move |&&(o, r, k)| (k == 0) == hard && dist(o, c) <= r && v.sight(o, c)).map(|&(_, _, k)| k)
+        };
+        let hard = !off.is_empty() && seen_by(Vec2::centre(from.0, from.1), true).next().is_none();
         let step = |_: (i32, i32), (cx, cy): (i32, i32)| -> Option<u32> {
-            if (cx, cy) != goal && (!walkable(v, cx, cy) || shun.get(&(cx, cy)).is_some_and(|&t| t > now)) {
+            if (cx, cy) != goal
+                && (!walkable(v, cx, cy)
+                    || shun.get(&(cx, cy)).is_some_and(|&t| t > now)
+                    || hard && seen_by(Vec2::centre(cx, cy), true).next().is_some())
+            {
                 return None;
             }
-            Some(10)
+            Some(10 + if off.is_empty() { 0 } else { seen_by(Vec2::centre(cx, cy), false).sum::<u32>() })
         };
         // Diagonals cost 14: core's step is asked per neighbour, so the cost is settled here.
         let roads = self.roads && !v.indoor();
@@ -192,6 +207,7 @@ impl Nav {
         if self.zone != Some(v.zone()) {
             self.zone = Some(v.zone());
             self.shun.clear();
+            self.keep_off.clear();
             self.reset();
         }
         let pos = me.pos;

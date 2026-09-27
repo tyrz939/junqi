@@ -218,6 +218,8 @@ pub enum Task {
     Push(Push),
     /// Stand still.
     Wait(u32),
+    /// What the Burial asks beyond the crawl's order (`tactics::burial`).
+    Burial(crate::tactics::burial::Job),
 }
 
 /// Walking up to a prop, then pressing USE.
@@ -402,6 +404,7 @@ impl Task {
                 }
             }
             Task::Push(p) => push(p, v, cx),
+            Task::Burial(j) => j.tick(v, cx),
             Task::Wait(n) => {
                 if *n == 0 {
                     return Status::Done;
