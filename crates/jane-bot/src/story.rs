@@ -685,7 +685,14 @@ impl Story {
             if z == here && talkers(v).iter().any(|u| u.def == def) {
                 continue;
             }
-            let t = if z == here {
+            // Someone who keeps hours (the dog) is looked for where the hours put them now, not
+            // where she last saw them; not about now, later.
+            let t = if !cat.combat.unit(def).schedule.is_empty() {
+                match keeps_hours(v, def) {
+                    Some(Target::Later(_)) | None => continue,
+                    Some(t) => t,
+                }
+            } else if z == here {
                 Target::Task(Task::Walk { to: pos, near: Fx::from_px(10) })
             } else {
                 Target::At(z, pos)

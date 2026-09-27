@@ -527,7 +527,18 @@ fn use_prop(u: &mut UseProp, v: &View<'_>, cx: &mut Ctx) -> Status {
                 Status::Act(Act::press(Command::Use))
             }
             // A stack lying in the way: take it first.
-            Some(FocusRef::Drop(_)) => Status::Act(Act::press(Command::Use)),
+            // (With the bag full it will not be taken: then the next side, else she presses it
+            // for ever.)
+            Some(FocusRef::Drop(d)) if bag_takes(v, d) => Status::Act(Act::press(Command::Use)),
+            Some(FocusRef::Drop(_)) => {
+                u.side += 1;
+                u.stage = 0;
+                cx.nav.reset();
+                if u.side >= 4 {
+                    return Status::Failed("a stack she cannot carry lies in the way".into());
+                }
+                Status::Act(Act::idle())
+            }
             _ => {
                 // Something else is nearer, or she is not facing it: the next side.
                 u.side += 1;
@@ -552,6 +563,13 @@ fn use_prop(u: &mut UseProp, v: &View<'_>, cx: &mut Ctx) -> Status {
             Status::Done
         }
     }
+}
+
+/// Would her bag take this stack: a free slot, or a stack of the same thing with room?
+fn bag_takes(v: &View<'_>, d: DropId) -> bool {
+    let Some(drop) = v.drops().iter().find(|x| x.id == d) else { return false };
+    let max = jane_data::catalog().combat.item(drop.item).max_stack;
+    v.me().bag.iter().any(|s| s.is_none_or(|s| s.item == drop.item && s.qty < max))
 }
 
 /// Pushing a prop cell by cell.
