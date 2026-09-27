@@ -8,7 +8,47 @@ license.workspace = true
 publish.workspace = true
 
 [dependencies]
+# The sun's angle by jane-core's integer sine table, so a silhouette shears as it does on T0.
+jane-core.workspace = true
 jane-present.workspace = true
+# PORT.md §3.5: the GL 2.1 / GLES 2 bindings, and SDL2 for the context they draw through (the
+# game window's, or a hidden one's for sheets, tests and the bench).
+glow.workspace = true
+sdl2.workspace = true
 
-[lints]
-workspace = true
+[dev-dependencies]
+jane-sim.workspace = true
+jane-render-soft.workspace = true
+
+# The workspace's lints, with `unsafe_code` at `deny` instead of `forbid` (PORT.md §3.4, §4): every
+# glow call is an `unsafe fn`, so `src/gl.rs` alone allows it, wrapping the calls T1 makes in safe
+# functions. Cargo cannot override one inherited lint, so the table is the workspace's, copied.
+[lints.rust]
+unsafe_code = "deny"
+missing_debug_implementations = "warn"
+rust_2018_idioms = { level = "warn", priority = -1 }
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+cast_possible_truncation = "allow"
+cast_possible_wrap = "allow"
+cast_sign_loss = "allow"
+cast_lossless = "allow"
+doc_markdown = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+module_name_repetitions = "allow"
+must_use_candidate = "allow"
+similar_names = "allow"
+many_single_char_names = "allow"
+too_many_lines = "allow"
+struct_excessive_bools = "allow"
+unreadable_literal = "allow"
+return_self_not_must_use = "allow"
+wildcard_imports = "allow"
+single_match_else = "allow"
+case_sensitive_file_extension_comparisons = "allow"
+stable_sort_primitive = "allow"
+float_arithmetic = "allow"
+float_cmp = "allow"

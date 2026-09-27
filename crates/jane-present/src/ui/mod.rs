@@ -18,6 +18,7 @@ pub mod menus;
 pub mod perf;
 pub mod style;
 pub mod title;
+pub mod volume;
 pub mod window;
 pub mod world;
 

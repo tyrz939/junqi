@@ -23,7 +23,7 @@ use crate::chunks::{ChunkCache, LRU, Need};
 use crate::drawlist::{DrawCmd, DrawList};
 use crate::frame::{
     CANVAS_H, CANVAS_W, CELL, CHUNK_PX, Caster, ChunkCmd, ChunkId, Depth, FX_TO_CANVAS, Flags, Frame, Light, LightKind,
-    Pass, Rgb, Span, SpriteCmd, Tier, Tint,
+    Pass, Post, Rgb, Span, SpriteCmd, Tier, Tint,
 };
 use crate::light::{Sky, flicker, lantern_lit, sky};
 use crate::creatures::{self, Creatures};
@@ -853,8 +853,12 @@ impl Present {
         if f.tier > Tier::T0 || sky.ambient.iter().any(|&c| c < 254) {
             f.passes.push(Pass::Lights { ambient: sky.ambient, fill: sky.fill, sun: sky.sun, points, casters });
         }
+        // The grade (§1.3 `grade`): all of it at T2; at T1 the tint and the lift alone, and none
+        // of the exposure, saturation or bloom T1 does not draw.
         if f.tier >= Tier::T2 {
             f.passes.push(Pass::Post(sky.post));
+        } else if f.tier == Tier::T1 {
+            f.passes.push(Pass::Post(Post { tint: sky.post.tint, lift: sky.post.lift, ..Post::NONE }));
         }
         &self.frame
     }

@@ -2,6 +2,11 @@
 //! host there answers `JANE!` and an [`Offer`] (its name, the TCP port to dial, seats, frame,
 //! content hash, protocol and build), so the Join screen can list what is on the network and
 //! grey out what this build cannot join. Joining by address needs none of it.
+//!
+//! The discovery port is [`DISCOVERY_PORT`] whatever port a host plays on, so a host on 7800 is
+//! found by a joiner who knows nothing of 7800: the offer says where to dial. Only one process on
+//! a machine can listen there; a second host on the same machine answers on its own game port,
+//! which a finder asks as well when told it ([`Finder::also`]).
 
 use std::io;
 use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4, UdpSocket};
@@ -9,6 +14,8 @@ use std::net::{Ipv4Addr, SocketAddr, SocketAddrV4, UdpSocket};
 use serde::{Deserialize, Serialize};
 
 const ASK: &[u8] = b"JANE?";
+/// Where every host listens for askers (UDP), whatever port it plays on.
+pub const DISCOVERY_PORT: u16 = crate::wire::DEFAULT_PORT;
 const ANSWER: &[u8] = b"JANE!";
 
 /// What a host says of itself.
@@ -52,9 +59,22 @@ pub struct Beacon {
 impl Beacon {
     /// Listen for askers on `port` (UDP) on every interface.
     pub fn bind(port: u16) -> io::Result<Beacon> {
-        let sock = UdpSocket::bind(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, port))?;
-        sock.set_nonblocking(true)?;
-        Ok(Beacon { sock })
+        Self::bind_any(&[port])
+    }
+
+    /// Listen on the first of `ports` that is free (the discovery port, else the game's own).
+    pub fn bind_any(ports: &[u16]) -> io::Result<Beacon> {
+        let mut last = io::Error::other("no port to listen on");
+        for &port in ports {
+            match UdpSocket::bind(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, port)) {
+                Ok(sock) => {
+                    sock.set_nonblocking(true)?;
+                    return Ok(Beacon { sock });
+                }
+                Err(e) => last = e,
+            }
+        }
+        Err(last)
     }
 
     pub fn port(&self) -> u16 {
@@ -81,7 +101,7 @@ impl Beacon {
 #[derive(Debug)]
 pub struct Finder {
     sock: UdpSocket,
-    port: u16,
+    ports: Vec<u16>,
     found: Vec<Found>,
 }
 
@@ -91,13 +111,23 @@ impl Finder {
         let sock = UdpSocket::bind(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, 0))?;
         sock.set_broadcast(true)?;
         sock.set_nonblocking(true)?;
-        Ok(Finder { sock, port, found: Vec::new() })
+        Ok(Finder { sock, ports: vec![port], found: Vec::new() })
+    }
+
+    /// Ask on this port too (a second host on one machine answers on its game port).
+    pub fn also(mut self, port: u16) -> Finder {
+        if !self.ports.contains(&port) {
+            self.ports.push(port);
+        }
+        self
     }
 
     /// Ask the whole LAN, and this machine (a host on the same machine as the joiner).
     pub fn ask(&self) {
-        let _ = self.sock.send_to(ASK, SocketAddrV4::new(Ipv4Addr::BROADCAST, self.port));
-        let _ = self.sock.send_to(ASK, SocketAddrV4::new(Ipv4Addr::LOCALHOST, self.port));
+        for &port in &self.ports {
+            let _ = self.sock.send_to(ASK, SocketAddrV4::new(Ipv4Addr::BROADCAST, port));
+            let _ = self.sock.send_to(ASK, SocketAddrV4::new(Ipv4Addr::LOCALHOST, port));
+        }
     }
 
     /// Every host that has answered so far, one row per address, newest answer kept.

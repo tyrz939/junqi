@@ -192,6 +192,9 @@ pub struct Host {
     notes: Vec<Note>,
     checks: Checks,
     rested: bool,
+    /// Guests' hashes that came before the host's own for that frame was encoded: `(token,
+    /// frame, hash)`.
+    waiting: Vec<(u64, u32, u64)>,
     tape: Option<crate::record::SessionTape>,
 }
 
@@ -212,6 +215,9 @@ impl Host {
         } else if host_sat {
             inject.push((Some(Seat::HOST), Command::Leave));
         }
+        // The timeline begins from the world as it is (the replica loads the same, book.rs).
+        let mut book = Book::default();
+        book.start(sim.save(), sim.blueprints().clone());
         Host {
             own_next_in: f + u32::from(cfg.delay),
             sim,
@@ -224,7 +230,7 @@ impl Host {
             inject,
             owner: None,
             accepting: true,
-            book: Book::default(),
+            book,
             blocked: None,
             stall: None,
             stall_said: 0,
@@ -232,6 +238,7 @@ impl Host {
             notes: Vec::new(),
             checks: Checks::default(),
             rested: false,
+            waiting: Vec::new(),
             tape: None,
         }
     }
@@ -429,6 +436,10 @@ impl Host {
             }
         }
         self.conns.retain(|c| c.state != State::Closed);
+        // The host's own hash points as the replica finishes them; guests' that waited for them.
+        if !self.book.poll().is_empty() {
+            self.resolve_waiting(now);
+        }
         if let Some(b) = &mut self.beacon {
             let used = self.sim.state().party_size();
             b.answer(&crate::discovery::Offer {
@@ -588,8 +599,34 @@ impl Host {
         }
     }
 
+    /// Wait for the replica to finish every hash point it owes, and compare the guests' hashes
+    /// that waited for them (tests, which step faster than real time; `book.rs`).
+    pub fn settle(&mut self, now: u64) {
+        if !self.book.settle().is_empty() {
+            self.resolve_waiting(now);
+        }
+    }
+
+    fn resolve_waiting(&mut self, now: u64) {
+        for (token, frame, hash) in std::mem::take(&mut self.waiting) {
+            if let Some(i) = self.conns.iter().position(|c| c.token == token && c.state == State::Seated) {
+                self.on_hash(i, frame, hash, now);
+            }
+        }
+    }
+
     fn on_hash(&mut self, i: usize, frame: u32, hash: u64, now: u64) {
-        let Some(own) = self.book.hash_at(frame) else { return };
+        let Some(own) = self.book.hash_at(frame) else {
+            // Not encoded yet (the worker is a frame or two behind): ask again when it is.
+            // (The replica may lag the host by several hash points; a spot point may already be
+            // in. What waits more than a minute of frames is let go.)
+            let now_frame = self.sim.state().frame;
+            self.waiting.retain(|w| w.1 + 3600 > now_frame);
+            if frame + 3600 > now_frame && self.waiting.len() < 256 {
+                self.waiting.push((self.conns[i].token, frame, hash));
+            }
+            return;
+        };
         if own == hash {
             self.checks.ok += 1;
             self.checks.last = self.checks.last.max(frame);
@@ -613,6 +650,8 @@ impl Host {
         }
         let seat = self.conns[i].seat.unwrap_or(Seat(0));
         let bps = self.sim.blueprints().clone();
+        // The saves are the worker's: wait for what it has in hand.
+        self.book.settle();
         let first_step = if trail.is_empty() {
             None
         } else {

@@ -384,6 +384,20 @@ impl<'a> View<'a> {
         u8::try_from(v).unwrap_or(0)
     }
 
+    /// A world flag by name, 0 when it was never set (or the name never interned): what the
+    /// presentation reads to hear the county (`bell_stopped` silences the bell at nine and six;
+    /// `omen:early_bell` rings it at ten to nine on a Tuesday). Read-only, like everything here.
+    pub fn flag(&self, name: &str) -> i32 {
+        let Some(s) = self.sym(name) else { return 0 };
+        self.state.flags.get(&crate::state::FlagKey::Named(s)).copied().unwrap_or(0)
+    }
+
+    /// The day of the week, 0 Sunday (`GameState::weekday`): the train's whistle and the early
+    /// bell keep to it.
+    pub fn weekday(&self) -> u8 {
+        self.state.weekday()
+    }
+
     /// The spells the world has learned (growth is the party's).
     pub fn learned(&self) -> &'a [SpellId] {
         &self.state.growth.spells

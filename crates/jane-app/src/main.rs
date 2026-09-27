@@ -4,6 +4,7 @@
 //! No SDL type leaves this crate: `jane-present` sees a `DeviceState` and hands back a `Frame`.
 
 mod app;
+mod audio;
 mod config;
 mod console;
 mod devices;
@@ -17,13 +18,14 @@ mod shot;
 
 use std::process::ExitCode;
 
-pub const USAGE: &str = "jane-app [--new] [--seed N] [--name NAME] [--scale K] [--backend auto|soft|wgpu]
+pub const USAGE: &str = "jane-app [--new] [--seed N] [--name NAME] [--scale K] [--backend auto|soft|gl2|wgpu]
          [--ticks N] [--shot PATH] [--script STEPS] [--data-dir DIR]
   --new           skip the title: New Game at once (with --seed and --name)
   --seed N        the county New Game builds (default: from the clock)
   --name NAME     the heroine's name (default: the last one given, else Jane)
   --scale K       the window starts at K x 768 x 432 (default 2, or 1 where 2 does not fit)
-  --backend B     auto (default: wgpu at T2 where an adapter can draw it, else soft), soft (T0), wgpu (T2)
+  --backend B     auto (default: wgpu at T2 where an adapter can draw it, else gl2 at T1 where OpenGL 2.1
+                  or GLES 2 can, else soft), soft (T0), gl2 (T1), wgpu (T2)
   --ticks N       run N ticks (title included), then exit (tests, automation)
   --shot PATH     write the canvas as a PNG on exit; F12 writes PATH-0001.png and on
   --script STEPS  inputs at ticks: \"tick 60 key E; tick 90 click 384 200; tick 120 shot a.png\"
@@ -42,9 +44,10 @@ Playing together on a LAN (the title's Host and Join do the same; ARCHITECTURE.m
 /// Which backend draws (PRESENTATION.md §1.3).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BackendChoice {
-    /// wgpu where it can, else soft.
+    /// wgpu where it can, else gl2, else soft.
     Auto,
     Soft,
+    Gl2,
     Wgpu,
 }
 
@@ -141,8 +144,9 @@ fn parse(args: &[String], clock_seed: u32) -> Result<Args, String> {
                 out.backend = match value()?.as_str() {
                     "auto" => BackendChoice::Auto,
                     "soft" => BackendChoice::Soft,
+                    "gl2" => BackendChoice::Gl2,
                     "wgpu" => BackendChoice::Wgpu,
-                    b => return Err(format!("--backend: auto, soft or wgpu, not {b}")),
+                    b => return Err(format!("--backend: auto, soft, gl2 or wgpu, not {b}")),
                 }
             }
             _ => return Err(format!("unknown argument {a}")),
@@ -220,6 +224,7 @@ mod tests {
         assert!(parse(&a("--seed x"), 1).is_err());
         assert!(parse(&a("--wat"), 1).is_err());
         assert!(parse(&a("--backend gl9"), 1).is_err());
+        assert_eq!(parse(&a("--backend gl2"), 1).unwrap().backend, BackendChoice::Gl2);
         assert_eq!(d.backend, BackendChoice::Auto);
         // Playing together.
         assert!(!d.host && d.join.is_none() && d.port == 7777 && d.seats == 4 && d.delay == 3 && !d.wait);

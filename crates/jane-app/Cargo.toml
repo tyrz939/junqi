@@ -14,6 +14,8 @@ jane-sim.workspace = true
 jane-bot.workspace = true
 jane-net.workspace = true
 jane-present.workspace = true
+# The synth the sound device runs (PRESENTATION.md §5).
+jane-audio.workspace = true
 jane-art.workspace = true
 jane-world.workspace = true
 serde.workspace = true

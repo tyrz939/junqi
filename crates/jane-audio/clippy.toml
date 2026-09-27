@@ -1,0 +1,4 @@
+# Presentation crates: the general rules. The float-free crates carry their own clippy.toml (PORT.md §3.4).
+disallowed-methods = [
+  { path = "std::env::var", reason = "configuration is passed in, never read from the environment inside a library" },
+]

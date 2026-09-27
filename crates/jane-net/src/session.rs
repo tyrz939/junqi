@@ -61,17 +61,23 @@ impl Session {
         Session::Local(Box::new(Local { sim, seq: 0, events: Vec::new(), rested: false, extra: Vec::new() }))
     }
 
-    /// Host `sim` on the LAN: listen on `port` (TCP) and answer discovery on it (UDP).
+    /// Host `sim` on the LAN: listen on `port` (TCP), and answer discovery on the discovery
+    /// port (UDP 7777, whatever `port` is; the offer says where to dial).
     pub fn host(sim: Sim, cfg: HostConfig, port: u16) -> Result<Session, LinkError> {
-        Ok(Session::host_on(sim, cfg, TcpListen::bind(port)?))
+        Session::host_with_discovery(sim, cfg, port, crate::discovery::DISCOVERY_PORT)
     }
 
-    fn host_on(sim: Sim, cfg: HostConfig, l: TcpListen) -> Session {
+    /// The same, answering discovery on `discovery` (tests, and a LAN that wants another).
+    pub fn host_with_discovery(sim: Sim, cfg: HostConfig, port: u16, discovery: u16) -> Result<Session, LinkError> {
+        Ok(Session::host_on(sim, cfg, TcpListen::bind(port)?, discovery))
+    }
+
+    fn host_on(sim: Sim, cfg: HostConfig, l: TcpListen, discovery: u16) -> Session {
         let port = l.port();
         let mut host = Host::new(sim, cfg, Box::new(l)).with_port(port);
-        // A second host on one machine cannot answer discovery on the same port; joining it by
-        // address still works.
-        if let Ok(b) = crate::discovery::Beacon::bind(port) {
+        // A second host on one machine cannot answer on the discovery port: it answers on its
+        // game port, which a finder asks when told it; joining by address works either way.
+        if let Ok(b) = crate::discovery::Beacon::bind_any(&[discovery, port]) {
             host = host.with_beacon(b);
         }
         Session::Host(Box::new(host))
@@ -83,7 +89,7 @@ impl Session {
     pub fn open_to_lan(self, cfg: HostConfig, port: u16) -> Result<Session, (Session, LinkError)> {
         let Session::Local(l) = self else { return Ok(self) };
         match TcpListen::bind(port) {
-            Ok(listener) => Ok(Session::host_on(l.sim, cfg, listener)),
+            Ok(listener) => Ok(Session::host_on(l.sim, cfg, listener, crate::discovery::DISCOVERY_PORT)),
             Err(e) => Err((Session::Local(l), e)),
         }
     }

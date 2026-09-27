@@ -45,7 +45,7 @@ impl Soft {
 
 impl Backend for Soft {
     fn caps(&self) -> Caps {
-        Caps { tier: Tier::T0, max_lights: 16, has_readback: true, name: "soft" }
+        Caps { tier: Tier::T0, max_lights: 16, has_readback: true, max_texture: u32::MAX, name: "soft" }
     }
 
     /// Keeps the CLUT and the albedo; the normal, emissive and height pages are never read here.

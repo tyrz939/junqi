@@ -1,0 +1,41 @@
+{
+  "name": "halls",
+  "mood": "The Library and the Museum, cases and shelves and dust: a harpsichord's two-part invention in B minor walking the circle of fifths, a quiet pad under it, orderly and a little too careful, as if something in the room is counting",
+  "key": "B", "mode": "minor",
+  "step_ticks": 20, "bar": 8,
+  "gain": 3.22, "humanize_ms": 5,
+  "tracks": [
+    { "name": "right", "inst": "harpsichord", "kind": "melody", "octave": 4, "vel": 0.7, "pan": 0.2, "gate": 0.85 },
+    { "name": "left", "inst": "harpsichord", "kind": "bass", "octave": 2, "vel": 0.55, "pan": -0.2, "gate": 0.85 },
+    { "name": "pad", "inst": "pad_warm", "alt": ["strings"], "kind": "chord", "octave": 4, "vel": 0.24, "voices": 3, "gate": 1.0 },
+    { "name": "bell", "inst": "bell_small", "kind": "melody", "octave": 5, "vel": 0.24, "pan": -0.45 }
+  ],
+  "sections": {
+    "A": { "bars": 8, "chords": "1 4 7 3 6 4 5M 1",
+      "play": {
+        "right": [
+          "5 4 3 2 1 - 5 - | 4 5 6 5 4 - 3 2 | 2 3 4 3 2 - 7, - | 3 - 5 - 7 - - . | 6 7 8 7 6 - 3 - | 4 - 6 - 8 - 7 6 | 5 - #7 - 9 - 5 - | 8 - - - - - . .",
+          "5 4 3 2 1 - 5 - | 4 5 6 5 4 - 3 2 | 2 3 4 3 2 - 7, - | 3 4 5 6 7 - - . | 6 7 8 7 6 - 3 - | 4 5 6 5 4 - 3 2 | 5 - #7 - 9 - 5 - | 8 - - - - - . ."
+        ],
+        "left": "1 - 5 - 8 - 5 - | 1 - 5 - 8 - 5 - | 1 - 5 - 8 - 5 - | 1 - 5 - 8 - 5 - | 1 - 5 - 8 - 5 - | 1 - 5 - 8 - 5 - | 1 - 5 - 8 - 5 - | 1 - 5 - 1 - - .",
+        "pad": "x - - - - - - - | x - - - - - - - | x - - - - - - - | x - - - - - - - | x - - - - - - - | x - - - - - - - | x - - - - - - - | x - - - - - - -",
+        "bell": ". . . . . . . . | . . . . . . . . | . . . . . . . . | . . . . . . . . | . . . . . . . . | . . . . . . . . | . . . . . . . . | 1~ - - - - - - -"
+      }
+    },
+    "B": { "bars": 8, "chords": "3 7 3 7 6 4 5M 5M",
+      "play": {
+        "right": "3 - 5 - 7 - 5 - | 2 - 4 - 7, - 2 - | 5 6 7 6 5 - 3 - | 4 - 2 - 7, - - . | 6 5 6 7 8 - 6 - | 4 - 5 - 6 - 4 - | 5 - #7 - 9 - - . | #7 - - - 5 - - .",
+        "left": "1 - 5 - 8 - 5 - | 1 - 5 - 8 - 5 - | 1 - 5 - 8 - 5 - | 1 - 5 - 8 - 5 - | 1 - 5 - 8 - 5 - | 1 - 5 - 8 - 5 - | 1 - 5 - 8 - 5 - | 1 - 5 - 1 - - .",
+        "pad": "x - - - - - - - | x - - - - - - - | x - - - - - - - | x - - - - - - - | x - - - - - - - | x - - - - - - - | x - - - - - - - | - - - - - - - -"
+      }
+    },
+    "Q": { "bars": 4, "chords": "1 4 5M 1",
+      "play": {
+        "left": "1 - 5 - 8 - 5 - | 1 - 5 - 8 - 5 - | 1 - 5 - 8 - 5 - | 1 - 5 - 1 - - .",
+        "pad": "x - - - - - - - | x - - - - - - - | x - - - - - - - | x - - - - - - -",
+        "bell": ". . . . 5 - - - | . . . . . . . . | . . . . #7, - - - | . . . . . . . ."
+      }
+    }
+  },
+  "forms": ["A B Q A", "A Q B A", "Q A B"]
+}

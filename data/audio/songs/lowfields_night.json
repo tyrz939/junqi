@@ -1,0 +1,46 @@
+{
+  "name": "lowfields_night",
+  "mood": "The Lowfields after the bell: E minor, the theme's first notes on a felt piano left alone in the dark, a bowed-glass drone, a harp wandering, and once a loop the Neapolitan F that does not belong",
+  "key": "E", "mode": "minor",
+  "step_ticks": 20, "bar": 8,
+  "gain": 0.90, "humanize_ms": 14,
+  "tracks": [
+    { "name": "piano", "inst": "felt_piano", "kind": "melody", "octave": 4, "vel": 0.6, "pan": 0.1, "gate": 1.0 },
+    { "name": "drone", "inst": "pad_dark", "kind": "chord", "octave": 3, "vel": 0.5, "voices": 3, "gate": 1.0 },
+    { "name": "glass", "inst": "glass", "alt": ["choir"], "kind": "chord", "octave": 5, "vel": 0.36, "voices": 2, "pan": -0.3, "gate": 1.0 },
+    { "name": "low", "inst": "low_strings", "kind": "bass", "octave": 2, "vel": 0.42, "gate": 1.0 },
+    { "name": "drift", "inst": "harp", "alt": ["celesta"], "kind": "drift", "octave": 4, "vel": 0.3, "pan": 0.35,
+      "drift": { "pool": "1 3 5 8 9 10 12", "gap": [5, 16], "len": [2, 6] } }
+  ],
+  "sections": {
+    "N1": { "bars": 8, "chords": "1 1 6 6 4 4 5 5",
+      "play": {
+        "piano": [
+          "1 . . . 5 . . . | 6 - - - 5 - - - | . . . . . . . . | 3 - - - . . . . | 4 . . . 3 . . . | 2 - - - - - . . | . . . . . . . . | . . . . . . . .",
+          "1 . . . 5 . . . | 6 - - - 5 - 4 - | 3 - - - . . . . | . . . . . . . . | 4 . . . 3 . . . | 2 - - - - - . . | . . . . 1~ - - - | . . . . . . . ."
+        ],
+        "drone": "x - - - - - - - | - - - - - - - - | x - - - - - - - | - - - - - - - - | x - - - - - - - | - - - - - - - - | x - - - - - - - | - - - - - - - -",
+        "glass": ". . . . x - - - | - - - - - - - - | . . . . . . . . | . . . . . . . . | . . . . x - - - | - - - - - - - - | . . . . . . . . | . . . . . . . .",
+        "low": "1 - - - - - - - | - - - - - - - - | 1 - - - - - - - | - - - - - - - - | 1 - - - - - - - | - - - - - - - - | 1 - - - - - - - | - - - - - - . .",
+        "drift": "x x x x x x x x | x x x x x x x x | x x x x x x x x | x x x x x x x x | x x x x x x x x | x x x x x x x x | x x x x x x x x | x x x x x x x x"
+      }
+    },
+    "N2": { "bars": 8, "chords": "1 1 6 6 4 4 b2 b2",
+      "play": {
+        "piano": "5 . . . 3 . . . | 1 - - - - - . . | . . . . . . . . | 6 . 5 . 3 - - - | . . . . . . . . | 1 . . . 3 . . . | b2 - - - - - - - | . . . . . . . .",
+        "drone": "x - - - - - - - | - - - - - - - - | x - - - - - - - | - - - - - - - - | x - - - - - - - | - - - - - - - - | x - - - - - - - | - - - - - - - -",
+        "glass": ". . . . . . . . | . . . . . . . . | . . . . x - - - | - - - - - - - - | . . . . . . . . | . . . . . . . . | x - - - - - - - | - - - - - - - -",
+        "low": "1 - - - - - - - | - - - - - - - - | 1 - - - - - - - | - - - - - - - - | 1 - - - - - - - | - - - - - - - - | 1 - - - - - - - | - - - - - - . .",
+        "drift": ". . . . . . . . | x x x x x x x x | x x x x x x x x | x x x x x x x x | x x x x x x x x | x x x x x x x x | . . . . . . . . | . . . . x x x x"
+      }
+    },
+    "S": { "bars": 4, "chords": "1 1 6 6",
+      "play": {
+        "drone": "x - - - - - - - | - - - - - - - - | x - - - - - - - | - - - - - - - -",
+        "low": "1 - - - - - - - | - - - - - - - - | 1 - - - - - - - | - - - - - - . .",
+        "drift": "x x x x x x x x | x x x x x x x x | x x x x x x x x | x x x x x x x x"
+      }
+    }
+  },
+  "forms": ["N1 S N2 S", "N1 N2 S", "S N1 N2"]
+}

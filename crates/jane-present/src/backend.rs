@@ -9,6 +9,9 @@ pub struct Caps {
     pub tier: Tier,
     pub max_lights: u16,
     pub has_readback: bool,
+    /// The largest texture it takes, texels on a side (`soft`: `u32::MAX`, no limit). Every atlas
+    /// page is `atlas::PAGE_SIDE` or less, which T1 and T2 require.
+    pub max_texture: u32,
     /// `soft`, `gl2` or `wgpu`, and for a GPU the API under it: the title bar, F2, `jane bench`.
     pub name: &'static str,
 }

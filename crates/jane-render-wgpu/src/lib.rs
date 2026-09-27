@@ -906,7 +906,13 @@ fn nh(out: &mut Vec<u8>, l: &ChunkLayers) {
 
 impl Backend for Wgpu {
     fn caps(&self) -> Caps {
-        Caps { tier: Tier::T2, max_lights: MAX_LIGHTS as u16, has_readback: true, name: "wgpu" }
+        Caps {
+            tier: Tier::T2,
+            max_lights: MAX_LIGHTS as u16,
+            has_readback: true,
+            max_texture: self.gpu.device.limits().max_texture_dimension_2d,
+            name: "wgpu",
+        }
     }
 
     fn upload_atlas(&mut self, pages: &AtlasPages) {

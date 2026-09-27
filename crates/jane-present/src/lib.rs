@@ -12,6 +12,7 @@
 //! ```
 
 pub mod atlas;
+pub mod audio;
 pub mod backend;
 pub mod camera;
 pub mod chunks;

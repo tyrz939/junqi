@@ -54,14 +54,23 @@ impl Texel {
 pub struct Atlas {
     pub pages: AtlasPages,
     pub refs: Vec<SpriteRef>,
-    shelf: (u16, u16, u16),
+    /// The page being filled, and its shelf: x, y and height of the row being laid.
+    shelf: (usize, u16, u16, u16),
     /// Whether the normal, emissive and height layers are packed (T1 and up).
     lit: bool,
 }
 
-/// The width of a page as packed here: 2048, the ceiling (ART.md §5). At 512 the people's fight
-/// frames and every row's look grew the one page past 8192 rows, which wgpu will not take.
-const PAGE_W: u16 = 2048;
+/// The most texels a page has on a side: the largest texture every T1 and T2 machine takes (a
+/// Pi 2 or 3's VC4 under GLES 2; `gl2` refuses a context that cannot, so this is every backend's
+/// `Caps::max_texture` or less). Fixed, not the backend's cap, so the packing (and with it every
+/// `SpriteCmd` of a `Frame`) is the same on every machine and every tier: `soft` and `gl2` draw
+/// the same `Frame` (PRESENTATION.md §1.3), and the atlas is built before a backend exists.
+pub const PAGE_SIDE: u16 = 2048;
+
+/// The width of a page as packed here, and the most a page grows downward before the next is
+/// begun.
+const PAGE_W: u16 = PAGE_SIDE;
+const PAGE_H: u16 = PAGE_SIDE;
 
 impl Atlas {
     /// An empty atlas with the master palette as its CLUT, albedo only (for `soft`).
@@ -78,7 +87,7 @@ impl Atlas {
         Atlas {
             pages: AtlasPages { clut, pages: vec![Page { w: PAGE_W, ..Page::default() }] },
             refs: Vec::new(),
-            shelf: (0, 0, 0),
+            shelf: (0, 0, 0, 0),
             lit,
         }
     }
@@ -106,16 +115,24 @@ impl Atlas {
         height: u8,
         px: impl Fn(i32, i32) -> Texel,
     ) -> RefId {
-        assert!(w <= PAGE_W, "a sprite wider than a page");
-        let (mut sx, mut sy, mut sh) = self.shelf;
+        assert!(w <= PAGE_W && h <= PAGE_H, "a sprite larger than a page");
+        let (mut pi, mut sx, mut sy, mut sh) = self.shelf;
         if sx + w > PAGE_W {
             sx = 0;
             sy += sh;
             sh = 0;
         }
+        if sy + h > PAGE_H {
+            // This page is full: the next one, from its top.
+            pi += 1;
+            (sx, sy, sh) = (0, 0, 0);
+        }
+        if pi == self.pages.pages.len() {
+            self.pages.pages.push(Page { w: PAGE_W, ..Page::default() });
+        }
         sh = sh.max(h);
         let lit = self.lit;
-        let page = &mut self.pages.pages[0];
+        let page = &mut self.pages.pages[pi];
         if sy + h > page.h {
             page.h = sy + h;
             let n = usize::from(page.w) * usize::from(page.h);
@@ -138,8 +155,8 @@ impl Atlas {
                 }
             }
         }
-        self.shelf = (sx + w, sy, sh);
-        self.refs.push(SpriteRef { page: 0, src: Src { x: sx, y: sy, w, h }, ax: anchor.0, ay: anchor.1, height });
+        self.shelf = (pi, sx + w, sy, sh);
+        self.refs.push(SpriteRef { page: pi as u8, src: Src { x: sx, y: sy, w, h }, ax: anchor.0, ay: anchor.1, height });
         (self.refs.len() - 1) as RefId
     }
 
@@ -212,6 +229,40 @@ mod tests {
         for (i, &p) in ids.iter().enumerate() {
             for &q in &ids[i + 1..] {
                 let (p, q) = (a.get(p).src, a.get(q).src);
+                let apart = p.x + p.w <= q.x || q.x + q.w <= p.x || p.y + p.h <= q.y || q.y + q.h <= p.y;
+                assert!(apart, "{p:?} overlaps {q:?}");
+            }
+        }
+    }
+
+    /// Every page of the whole game's atlas, the UI's with it, is at most 2048 on a side, and
+    /// every sprite lies inside its own page: a Pi 2's VC4 can hold them all.
+    #[test]
+    fn everything_packs_under_a_2048_cap() {
+        let p = crate::Present::new(crate::Tier::T1);
+        let a = p.atlas();
+        for (k, page) in a.pages.iter().enumerate() {
+            assert!(page.w <= 2048 && page.h <= 2048, "page {k} is {} x {}", page.w, page.h);
+            assert_eq!(page.albedo.len(), usize::from(page.w) * usize::from(page.h));
+            assert!(page.lit(), "a T1 atlas carries four layers on page {k}");
+        }
+        // More than a page's worth forces a second, and nothing crosses a page's edge.
+        let mut at = Atlas::with_layers(false);
+        let ids: Vec<RefId> = (0..900).map(|i| at.add(200 + (i % 3) * 30, 90 + (i % 4) * 11, (0, 0), 1, |_, _| Ix(2))).collect();
+        assert!(at.pages.pages.len() > 2);
+        for &id in &ids {
+            let r = at.get(id);
+            let page = &at.pages.pages[usize::from(r.page)];
+            assert!(page.w <= PAGE_SIDE && page.h <= PAGE_SIDE);
+            assert!(r.src.x + r.src.w <= page.w && r.src.y + r.src.h <= page.h, "{r:?}");
+        }
+        for (i, &p) in ids.iter().enumerate() {
+            for &q in &ids[i + 1..] {
+                let (p, q) = (at.get(p), at.get(q));
+                if p.page != q.page {
+                    continue;
+                }
+                let (p, q) = (p.src, q.src);
                 let apart = p.x + p.w <= q.x || q.x + q.w <= p.x || p.y + p.h <= q.y || q.y + q.h <= p.y;
                 assert!(apart, "{p:?} overlaps {q:?}");
             }

@@ -1,7 +1,9 @@
 //! The window and the backend the probe picks (PRESENTATION.md §1.3): `wgpu` at T2 where an
-//! adapter can draw it, else `soft` at T0. The loop itself is `app.rs`.
+//! adapter can draw it, else `gl2` at T1 where an OpenGL 2.1 or GLES 2 context can, else `soft`
+//! at T0. The loop itself is `app.rs`.
 
 use jane_present::Backend;
+use jane_render_gl2::Gl2;
 use jane_render_soft::Soft;
 use jane_render_wgpu::Wgpu;
 
@@ -92,19 +94,84 @@ impl Screen for GpuScreen {
     }
 }
 
-/// The probe (§1.3): `wgpu` at T2 when asked or when `auto` finds an adapter that can draw it,
-/// else `soft`. `Err` only when `wgpu` was asked for by name and cannot be had.
-fn probe(choice: BackendChoice, window: &sdl2::video::Window) -> Result<Option<Wgpu>, String> {
-    if choice == BackendChoice::Soft {
-        return Ok(None);
+/// T1: `gl2` through an OpenGL 2.1 or GLES 2 context on the window, sharp bilinear upscale.
+struct GlScreen {
+    window: sdl2::video::Window,
+    gl2: Box<Gl2>,
+}
+
+impl Screen for GlScreen {
+    fn backend(&mut self) -> &mut dyn Backend {
+        self.gl2.as_mut()
     }
-    let target = wgpu::SurfaceTarget::from(SdlWindow::new(window));
-    match Wgpu::for_window(target, window.size(), true) {
-        Ok(w) => Ok(Some(w)),
-        Err(e) if choice == BackendChoice::Wgpu => Err(format!("--backend wgpu: {e}")),
+
+    fn window_mut(&mut self) -> &mut sdl2::video::Window {
+        &mut self.window
+    }
+
+    fn size(&self) -> (u32, u32) {
+        self.window.size()
+    }
+
+    fn show(&mut self, _win: (u32, u32)) -> Result<(), String> {
+        self.gl2.present()
+    }
+
+    fn describe(&self) -> String {
+        self.gl2.describe().to_owned()
+    }
+}
+
+/// What the probe picked, and the window it draws into.
+enum Picked {
+    Wgpu(sdl2::video::Window, Box<Wgpu>),
+    Gl2(sdl2::video::Window, Box<Gl2>),
+    Soft(sdl2::video::Window),
+}
+
+/// The probe (§1.3): `wgpu` at T2 when asked, or when `auto` finds an adapter that can draw it;
+/// else `gl2` at T1 when asked, or when `auto` can make an OpenGL 2.1 or GLES 2 context with
+/// framebuffer objects, eight texture units and the T1 shaders; else `soft`. `Err` only when a
+/// GPU backend was asked for by name and cannot be had.
+///
+/// A GL context wants a window made for OpenGL and wgpu's surface a plain one, so `auto` asks
+/// wgpu for an adapter first with no window at all, then opens the window the winner needs.
+fn probe(choice: BackendChoice, video: &sdl2::VideoSubsystem, k: u32) -> Result<Picked, String> {
+    if choice == BackendChoice::Soft {
+        return Ok(Picked::Soft(screen::open(video, "Jane", k, false)?));
+    }
+    let wgpu_first = match choice {
+        BackendChoice::Wgpu => true,
+        BackendChoice::Auto => match jane_render_wgpu::probe() {
+            Ok(_) => true,
+            Err(e) => {
+                println!("jane-app: no T2 ({e})");
+                false
+            }
+        },
+        BackendChoice::Soft | BackendChoice::Gl2 => false,
+    };
+    if wgpu_first {
+        let mut window = screen::open(video, "Jane", k, false)?;
+        let target = wgpu::SurfaceTarget::from(SdlWindow::new(&window));
+        match Wgpu::for_window(target, window.size(), true) {
+            Ok(w) => return Ok(Picked::Wgpu(window, Box::new(w))),
+            Err(e) if choice == BackendChoice::Wgpu => return Err(format!("--backend wgpu: {e}")),
+            Err(e) => {
+                // The window stays lent to wgpu's handle token; it goes out of sight for the GL one.
+                println!("jane-app: no T2 ({e})");
+                window.hide();
+            }
+        }
+    }
+    jane_render_gl2::attributes(video, false);
+    let window = screen::open(video, "Jane", k, true)?;
+    match Gl2::for_window(video, &window, jane_render_gl2::Api::Auto, true) {
+        Ok(g) => Ok(Picked::Gl2(window, Box::new(g))),
+        Err(e) if choice == BackendChoice::Gl2 => Err(format!("--backend gl2: {e}")),
         Err(e) => {
-            println!("jane-app: no T2 ({e}); drawing with soft");
-            Ok(None)
+            println!("jane-app: no T1 ({e}); drawing with soft");
+            Ok(Picked::Soft(window))
         }
     }
 }
@@ -118,26 +185,34 @@ pub fn run(args: &Args) -> Result<(), String> {
     let pads = sdl.game_controller().ok();
     let usable = video.display_usable_bounds(0).ok().map(|r| (r.width(), r.height()));
     let k = screen::start_scale(usable, args.scale);
-    let window = screen::open(&video, "Jane", k)?;
+    // The command line's backend, else the one the Controls screen chose last time.
+    let saved = crate::config::Config::load(&crate::saves::Dirs::find(args.data_dir.as_deref())).backend;
+    let choice = match (args.backend, saved.as_deref()) {
+        (BackendChoice::Auto, Some("soft")) => BackendChoice::Soft,
+        (BackendChoice::Auto, Some("gl2")) => BackendChoice::Gl2,
+        (BackendChoice::Auto, Some("wgpu")) => BackendChoice::Wgpu,
+        (b, _) => b,
+    };
+    let picked = probe(choice, &video, k)?;
     // SDL starts with text input on; the console turns it on when it opens.
     let text_in = video.text_input();
     text_in.stop();
     // The UI draws its own pointer: the arrow, the hand, the reticle at the assisted aim.
     sdl.mouse().show_cursor(false);
     let mut pump = sdl.event_pump()?;
-    // The command line's backend, else the one the Controls screen chose last time.
-    let saved = crate::config::Config::load(&crate::saves::Dirs::find(args.data_dir.as_deref())).backend;
-    let choice = match (args.backend, saved.as_deref()) {
-        (BackendChoice::Auto, Some("soft")) => BackendChoice::Soft,
-        (BackendChoice::Auto, Some("wgpu")) => BackendChoice::Wgpu,
-        (b, _) => b,
-    };
-    match probe(choice, &window)? {
-        Some(wgpu) => {
+    // The sound device, or silence without one (PRESENTATION.md §5).
+    let volumes = crate::config::Config::load(&crate::saves::Dirs::find(args.data_dir.as_deref())).volumes();
+    let sound = crate::audio::Sound::open(&sdl, volumes, args.seed);
+    match picked {
+        Picked::Wgpu(window, wgpu) => {
             println!("jane-app: {}", wgpu.describe());
-            crate::app::run(args, &mut pump, pads, &text_in, &mut GpuScreen { window, wgpu: Box::new(wgpu) })
+            crate::app::run(args, &mut pump, pads, &text_in, &mut GpuScreen { window, wgpu }, sound)
         }
-        None => {
+        Picked::Gl2(window, gl2) => {
+            println!("jane-app: {}", gl2.describe());
+            crate::app::run(args, &mut pump, pads, &text_in, &mut GlScreen { window, gl2 }, sound)
+        }
+        Picked::Soft(window) => {
             let mut canvas = screen::canvas(window)?;
             screen::clear(&mut canvas, LOADING);
             let tc = canvas.texture_creator();
@@ -148,6 +223,7 @@ pub fn run(args: &Args) -> Result<(), String> {
                 pads,
                 &text_in,
                 &mut SoftScreen { canvas, target: Target::new(&tc), soft: Soft::new() },
+                sound,
             )
         }
     }

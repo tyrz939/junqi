@@ -5,6 +5,7 @@
 use jane_present::input::{
     BINDINGS, Bindings, action, action_name, key_code, key_name, mouse_button, mouse_name, pad_input, pad_name,
 };
+use jane_present::audio::Volumes;
 use jane_sim::input::AssistProfile;
 use serde::{Deserialize, Serialize};
 
@@ -42,6 +43,25 @@ pub struct Config {
     pub client_token: Option<u64>,
     /// The address last joined, offered again on the Join screen.
     pub last_host: Option<String>,
+    /// Master, music and effects, 0 to 100 (PRESENTATION.md §5).
+    pub volume: VolumeRow,
+}
+
+/// `config.json`'s `volume`: `{ "master": 80, "music": 70, "sfx": 80 }`, each 0 to 100; a
+/// missing one takes its default.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct VolumeRow {
+    pub master: u8,
+    pub music: u8,
+    pub sfx: u8,
+}
+
+impl Default for VolumeRow {
+    fn default() -> VolumeRow {
+        let v = Volumes::default();
+        VolumeRow { master: v.master, music: v.music, sfx: v.sfx }
+    }
 }
 
 /// A pad or mouse column's "nothing bound here".
@@ -113,6 +133,16 @@ impl Config {
         });
     }
 
+    /// The volumes in force, each held to 0..=100.
+    pub fn volumes(&self) -> Volumes {
+        let v = self.volume;
+        Volumes { master: v.master.min(100), music: v.music.min(100), sfx: v.sfx.min(100) }
+    }
+
+    pub fn set_volumes(&mut self, v: Volumes) {
+        self.volume = VolumeRow { master: v.master, music: v.music, sfx: v.sfx };
+    }
+
     /// Remembers slot `n` holds a game of `seed`.
     pub fn set_slot_seed(&mut self, n: u8, seed: u32) {
         let i = usize::from(n);
@@ -180,5 +210,8 @@ mod tests {
         let partial: Config = serde_json::from_str(r#"{"name":"Ada"}"#).unwrap();
         assert_eq!(partial.name, "Ada");
         assert!(partial.bindings.is_empty());
+        assert_eq!(partial.volumes(), Volumes::default());
+        let quiet: Config = serde_json::from_str(r#"{"volume":{"music":20}}"#).unwrap();
+        assert_eq!(quiet.volumes(), Volumes { music: 20, ..Volumes::default() });
     }
 }

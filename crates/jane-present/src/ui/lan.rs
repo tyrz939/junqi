@@ -32,11 +32,13 @@ pub struct HostChoice {
     pub delay: u8,
     /// Wait for a stalled player however long (else she is got up after 10 s).
     pub wait: bool,
+    /// The port others dial (TCP); discovery finds it whatever it is.
+    pub port: u16,
 }
 
 impl Default for HostChoice {
     fn default() -> Self {
-        HostChoice { slot: None, open: true, seats: 4, delay: 3, wait: false }
+        HostChoice { slot: None, open: true, seats: 4, delay: 3, wait: false, port: 7777 }
     }
 }
 
@@ -45,6 +47,8 @@ impl Default for HostChoice {
 pub struct HostState {
     pub menu: MenuState,
     pub choice: HostChoice,
+    /// The port field as typed.
+    pub port_text: String,
 }
 
 /// What the Host screen shows beside its choices.
@@ -52,7 +56,7 @@ pub struct HostState {
 pub struct HostInfo<'a> {
     /// Each slot's line ("The Lowfields · Day 3, 21:00"), `None` for an empty slot.
     pub slots: &'a [Option<String>],
-    /// The port others dial.
+    /// The port the table was last offered on (the command line's), for the sheet.
     pub port: u16,
 }
 
@@ -130,7 +134,7 @@ fn step(ui: &Ui, st: MenuState, row: u8, at: usize, n: usize) -> Option<usize> {
 pub fn host(ui: &mut Ui, st: &mut HostState, info: &HostInfo<'_>) {
     let (cw, ch) = ui.canvas;
     dim(ui, 150);
-    let (w, h) = (600, 350);
+    let (w, h) = (600, 386);
     let r = Rect::new((cw - w) / 2, (ch - h) / 2, w, h);
     ui.panel(r, PanelStyle::Window);
     let (x, y) = (i32::from(r.x), i32::from(r.y));
@@ -138,8 +142,8 @@ pub fn host(ui: &mut Ui, st: &mut HostState, info: &HostInfo<'_>) {
     let sub = "You play; others on this network join you.";
     ui.text(cw / 2 - text_w(Face::Fine, sub) / 2, y + 40, sub, Ink::fine(style::quiet()).shadow());
 
-    // Rows 0..=4 choose; 5 hosts; 6 backs out.
-    let enabled = [true; 7];
+    // Rows 0..=4 choose, 5 is the port; 6 hosts; 7 backs out.
+    let enabled = [true; 8];
     st.menu.nav(ui, &enabled);
     let c = &mut st.choice;
     let (lx, cx) = (x + 28, x + 198);
@@ -203,24 +207,35 @@ pub fn host(ui: &mut Ui, st: &mut HostState, info: &HostInfo<'_>) {
     if let Some(k) = pick.or_else(|| step(ui, st.menu, 4, on, 2)) {
         c.wait = k == 1;
     }
-    ry += 42;
-    // Where others dial.
-    let port = format!("Others join this machine's address, port {}", info.port);
-    ui.rule(x + 28, x + w - 28, ry - 6, style::gold_deep());
-    ui.text(cw / 2 - text_w(Face::Fine, &port) / 2, ry + 2, &port, Ink::fine(style::text()).shadow());
+    ry += 36;
+    // The port: digits only; a bad one keeps the last good one and says so.
+    label(ui, lx, ry, "Port", st.menu.focus == 5);
+    let field = Rect::new(cx, ry - 2, 96, 26);
+    ui.text_field(field, &mut st.port_text, 5, Ink::small(style::text_bright()).shadow());
+    st.port_text.retain(|ch| ch.is_ascii_digit());
+    let good = st.port_text.parse::<u16>().ok().filter(|&p| p >= 1024);
+    if let Some(p) = good {
+        c.port = p;
+    }
+    let (say, ink) = match good {
+        Some(_) => ("Join finds it on any port".to_owned(), style::quiet()),
+        None => ("1024 to 65535".to_owned(), style::bad()),
+    };
+    ui.text(cx + 108, ry + 6, &say, Ink::fine(ink).shadow());
     // The verbs.
     let by = y + h - 40;
+    ui.rule(x + 28, x + w - 28, by - 12, style::gold_deep());
     let go = Rect::new(x + w / 2 - 170, by, 160, 26);
     let back = Rect::new(x + w / 2 + 10, by, 160, 26);
-    for (i, rr) in [(5u8, go), (6, back)] {
+    for (i, rr) in [(6u8, go), (7, back)] {
         if ui.hover(rr) && ui.input.pointer.is_some() {
             st.menu.focus = i;
         }
     }
-    if ui.button(wid("host-go", 0), go, "Host", ButtonKind::Menu, true, st.menu.focus == 5) {
+    if ui.button(wid("host-go", 0), go, "Host", ButtonKind::Menu, good.is_some(), st.menu.focus == 6) {
         ui.intent(AppIntent::Host(st.choice));
     }
-    if ui.button(wid("host-back", 0), back, "Back", ButtonKind::Menu, true, st.menu.focus == 6)
+    if ui.button(wid("host-back", 0), back, "Back", ButtonKind::Menu, true, st.menu.focus == 7)
         || (ui.interactive && ui.input.has(UiAction::Cancel))
     {
         ui.intent(AppIntent::Back);
@@ -405,7 +420,7 @@ mod tests {
     #[test]
     fn the_host_screen_hosts_what_was_chosen() {
         let mut ui = ui();
-        let mut st = HostState::default();
+        let mut st = HostState { port_text: "7777".into(), ..HostState::default() };
         // Down to the seats row, left twice: two seats.
         let acts = vec![UiAction::Down, UiAction::Down, UiAction::Left, UiAction::Left];
         ui.begin(UiInput { actions: acts, ..UiInput::default() }, 1, (768, 432));
@@ -416,10 +431,15 @@ mod tests {
         ui.begin(UiInput { actions: vec![UiAction::Right], ..UiInput::default() }, 2, (768, 432));
         host(&mut ui, &mut st, &HostInfo { slots: &[None, Some("The Lowfields".into()), None], port: 7777 });
         assert_eq!(st.choice.slot, None, "slot 1 is empty");
-        st.menu.focus = 5;
+        st.menu.focus = 6;
         ui.begin(UiInput { actions: vec![UiAction::Confirm], ..UiInput::default() }, 3, (768, 432));
         host(&mut ui, &mut st, &HostInfo { slots: &[None, None, None], port: 7777 });
         assert!(ui.out.contains(&UiOut::Intent(AppIntent::Host(HostChoice { seats: 2, ..HostChoice::default() }))));
+        // The port field: digits only, and what is typed is what is hosted on.
+        st.port_text.clear();
+        ui.begin(UiInput { typed: "78x01".into(), ..UiInput::default() }, 4, (768, 432));
+        host(&mut ui, &mut st, &HostInfo { slots: &[None, None, None], port: 7777 });
+        assert_eq!((st.port_text.as_str(), st.choice.port), ("7801", 7801));
     }
 
     #[test]

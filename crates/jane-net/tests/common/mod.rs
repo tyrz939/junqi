@@ -166,6 +166,12 @@ impl Table {
     pub fn tick(&mut self) {
         self.tick += 1;
         let now = self.now();
+        // The replicas that take hash points off the frame run in real time, and a test does
+        // not: wait for them, as a 60 Hz loop would never have to.
+        self.host.settle(now);
+        for p in self.peers.iter_mut().filter(|p| !p.frozen) {
+            p.g.settle();
+        }
         self.host.poll(now);
         for p in self.peers.iter_mut().filter(|p| !p.frozen) {
             p.g.poll(now);
@@ -234,11 +240,14 @@ impl Table {
             if p.frozen || p.g.phase() != &Phase::Playing {
                 continue;
             }
-            let now = self.tick * 1000 / 60;
+            let mut now = self.tick * 1000 / 60;
             for _ in 0..50 {
                 if p.g.sim().is_some_and(|s| s.state().frame == f) {
                     break;
                 }
+                // Time passes while the host stands still, so it resends what a lossy link lost.
+                now += 40;
+                self.host.poll(now);
                 p.g.poll(now);
                 let mut none = Vec::new();
                 p.g.try_step(now, Some((jane_sim::InputFrame::IDLE, &mut none)));

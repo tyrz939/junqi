@@ -95,6 +95,8 @@ pub struct PauseInfo<'a> {
     /// The LAN row (P8): its words and whether it can be picked ("Open to LAN" alone; "Hosting
     /// on port 7777" greyed while hosting; nothing when joined).
     pub lan: Option<(&'a str, bool)>,
+    /// Joined to another's table: the world is the host's to save.
+    pub guest: bool,
 }
 
 /// The pause menu: Resume, Save, Load, Open to LAN, Controls, Quit to Title.
@@ -128,7 +130,10 @@ pub fn pause(ui: &mut Ui, st: &mut MenuState, info: &PauseInfo<'_>) {
     }
     // Why Save is grey, under the rows while it is.
     let foot = y + h - 44;
-    if info.can_save {
+    if info.guest {
+        let s = "The host's world: anyone's rest saves it there";
+        ui.text(cw / 2 - text_w(Face::Fine, s) / 2, foot, s, Ink::fine(style::quiet()).shadow());
+    } else if info.can_save {
         let s = "A bed or a fire is in reach";
         ui.text(cw / 2 - text_w(Face::Fine, s) / 2, foot, s, Ink::fine(style::good()).shadow());
     } else {

@@ -63,7 +63,7 @@ If you cannot reuse it on a second floor of a second dungeon without opening `si
 | Zone floors | *(Corrected)* **did not exist.** `current_floor` is written in five places and read nowhere | — | **NEVER**, until a zone truly overlaps itself |
 | Lily-pad raft | bolt damage slides a pad over water; it becomes walkable (never west: a bug) | — | **LATER** |
 | Zone travel fade | 30 frames out, 30 in | instant | **LATER** |
-| Audio bus | *(Corrected)* **2020 is silent**: two `.ogg` files, the only play call commented out | silent | **LATER** |
+| Audio bus | *(Corrected)* **2020 is silent**: two `.ogg` files, the only play call commented out | silent | **Built in the Rust build** (2026-09-27, `PRESENTATION.md` §5) |
 | Touch layout | `TODO` | Pointer Events reach the UI; no on-screen sticks | **LATER** |
 | Hunger / warmth | never in jun7 (it is JaneCraft, the March 2020 pitch) | — | **NEVER** |
 
@@ -108,7 +108,7 @@ The row exists (any prop with a `use` list flips `on` and runs it). What is miss
 
 ## 3. Still missing: presentation
 
-- **Audio bus:** `zone | combat | title → track`, `event → sfx`. The sim already emits `sfx`, `cast`, `impact`, `swing`, `death`. Nothing listens.
+- **Audio bus:** `zone | combat | title → track`, `event → sfx`. *(Built in the Rust build, 2026-09-27: `jane-present::audio` listens to every one of them and `jane-audio` makes the sound, `PRESENTATION.md` §5. The TypeScript build stays silent.)*
 - **Animation:** attack, cast and hurt are offsets and flashes on the walk frames. A real table would add frame names, not code.
 - **Particles:** squares. An emitter table keyed by school is the 2020 shape (`ParticleList`, 7 types; every poison bolt reused the frost particles).
 - **Square room lights** (production board): a light row with a rect instead of a radius.

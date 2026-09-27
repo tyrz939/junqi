@@ -163,6 +163,13 @@ impl Guest {
         self.book.last_hash()
     }
 
+    /// Wait for the replica to finish every hash point it owes; they go at the next poll (tests,
+    /// which step faster than real time; `book.rs`).
+    pub fn settle(&mut self) {
+        let done = self.book.settle();
+        self.hashes.extend(done);
+    }
+
     pub fn drain_reports(&mut self) -> Vec<Report> {
         std::mem::take(&mut self.reports)
     }
@@ -244,6 +251,9 @@ impl Guest {
             }
             Phase::Ready if now.saturating_sub(self.said) >= READY_EVERY_MS => self.send(&Msg::Ready, now),
             Phase::Playing => {
+                // The hash points the worker has encoded since.
+                let done = self.book.poll();
+                self.hashes.extend(done);
                 for (frame, hash) in std::mem::take(&mut self.hashes) {
                     self.send(&Msg::Hash { frame, hash }, now);
                 }
@@ -297,7 +307,7 @@ impl Guest {
             }
             Msg::Welcome { epoch, seat, frame, delay, need_from, snapshot } if epoch > self.epoch => {
                 let Some(bps) = self.bps.clone() else { return };
-                match Sim::from_snapshot_with(&snapshot, bps) {
+                match Sim::from_snapshot_with(&snapshot, bps.clone()) {
                     Ok(sim) => {
                         debug_assert_eq!(sim.state().frame, frame);
                         self.sim = Some(sim);
@@ -306,7 +316,7 @@ impl Guest {
                         self.delay = delay;
                         self.next_in = self.next_in.max(need_from);
                         self.bundles = self.bundles.split_off(&frame);
-                        self.book.reset();
+                        self.book.start(snapshot, bps);
                         self.phase = Phase::Playing;
                         self.fresh = true;
                     }
@@ -337,6 +347,9 @@ impl Guest {
     /// hash after every step since the hash point before, re-simulated from our own save.
     fn dump(&mut self, frame: u32, now: u64) {
         let Some(bps) = self.bps.clone() else { return };
+        // The saves are the worker's: wait for what it has in hand.
+        let done = self.book.settle();
+        self.hashes.extend(done);
         let Some(save) = self.book.save_at(frame).map(<[u8]>::to_vec) else { return };
         let from = frame.saturating_sub(HASH_EVERY);
         let trail = self.book.trail(from, frame, &bps).unwrap_or_default();
@@ -359,9 +372,7 @@ impl Guest {
         let out = step(sim, &b);
         self.events.clear();
         self.events.extend_from_slice(sim.drain_events());
-        if let Some(h) = self.book.stepped(sim, b) {
-            self.hashes.push(h);
-        }
+        self.book.stepped(sim, b);
         if let (Some((held, presses)), Some(_)) = (local, self.seat) {
             while self.next_in <= f + u32::from(self.delay) {
                 self.outbox.insert(self.next_in, Item { frame: held, cmds: std::mem::take(presses) });

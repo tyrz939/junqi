@@ -36,13 +36,14 @@ pub const USAGE: &str = "  bench gen [--zones <all|dungeons|id,id..>] [--seeds A
                                       time worldgen stage by stage (skeleton, county stages, solver,
                                       each dungeon's build, solve and checks, New Game) against
                                       tools/perf/thresholds.json; --json prints that file's shape
-  bench frames [--backend soft|wgpu] [--frames N] [--seed N] [--ticks T] [--hour H] [--wide]
-               [--output WxH]
+  bench frames [--backend soft|gl2|wgpu] [--frames N] [--seed N] [--ticks T] [--hour H] [--wide]
+               [--output WxH] [gl2: --es --shadows N|off --half-light|--full-light --fast|--exact --flat]
                                       play to a frame (default: the town at 22:00 after 600 ticks), then
                                       time N frames there (default 600): the Frame built, the backend's
                                       draw, the whole frame to the last pixel at the output size
-                                      (wgpu: default 3840x2160, an offscreen 4K target), and the
-                                      GPU's own clock (PRESENTATION.md §1.12)";
+                                      (wgpu and gl2: default 3840x2160, an offscreen 4K target), and
+                                      the GPU's own clock (PRESENTATION.md §1.12); gl2's rows can be
+                                      turned down to stand in for old hardware";
 
 /// The rows PORT.md §9.4 gates, by metric name.
 const GATED: [&str; 4] = ["skeleton_attempt", "county_build_solve", "dungeon", "new_game"];
@@ -298,7 +299,7 @@ fn frames(args: &[String]) -> Result<(), String> {
     let num = |name: &str, d: u32| {
         flag(name).map_or(Ok(d), |s| s.parse::<u32>().map_err(|_| format!("{name}: not a number: {s}")))
     };
-    let backend = Which::parse(flag("--backend").unwrap_or("soft")).ok_or("--backend: soft or wgpu")?;
+    let backend = Which::parse(flag("--backend").unwrap_or("soft")).ok_or("--backend: soft, gl2 or wgpu")?;
     let seed = num("--seed", 1)?;
     let output = match flag("--output") {
         Some(s) => {
@@ -317,6 +318,7 @@ fn frames(args: &[String]) -> Result<(), String> {
         canvas,
         backend,
         at: None,
+        gl: crate::scene::GlOpts::parse(args)?,
     };
     let bps = jane_sim::Blueprints::build(seed).map_err(|e| format!("seed {seed}: {e}"))?;
     let n = num("--frames", 600)?;

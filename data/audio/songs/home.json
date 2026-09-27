@@ -1,0 +1,46 @@
+{
+  "name": "home",
+  "mood": "Julie's house and the cellar under it: a lullaby in F major and three-four on a felt piano with a celesta above, safe and warm until the minor four turns it, the way a room is warm and someone is not in it",
+  "key": "F", "mode": "major",
+  "step_ticks": 21, "bar": 6,
+  "gain": 0.91, "humanize_ms": 12,
+  "tracks": [
+    { "name": "melody", "inst": "felt_piano", "kind": "melody", "octave": 5, "vel": 0.66, "pan": 0.1, "gate": 1.0 },
+    { "name": "high", "inst": "celesta", "alt": ["bell_small"], "kind": "melody", "octave": 5, "vel": 0.34, "pan": -0.3 },
+    { "name": "waltz", "inst": "felt_piano", "kind": "arp", "octave": 3, "vel": 0.36, "pan": -0.1 },
+    { "name": "pad", "inst": "strings", "alt": ["pad_warm"], "kind": "chord", "octave": 4, "vel": 0.34, "voices": 3, "gate": 1.0 },
+    { "name": "bass", "inst": "bass_soft", "kind": "bass", "octave": 2, "vel": 0.36 }
+  ],
+  "sections": {
+    "A": { "bars": 8, "chords": "1 6 4 4m 1 2 5 1",
+      "play": {
+        "melody": [
+          "3 - - 2 - 1 | 6, - - - 1 - | 4 - - 5 - 6 | 5 - - - - . | 3 - - 2 - 1 | 2 - - 4 - 3 | 2 - - 5, - 7, | 1 - - - - .",
+          "3 - 2 - 1 - | 6, - - - 1 - | 4 - - 5 - 6 | 5 - - - - . | 3 - - 2 - 1 | 2 - - 4 - 3 | 2 - 1 - 7, - | 1 - - - - ."
+        ],
+        "waltz": "1 . 5 . 8 . | 1 . 5 . 8 . | 1 . 5 . 8 . | 1 . 5 . 8 . | 1 . 5 . 8 . | 1 . 5 . 8 . | 1 . 5 . 8 . | 1 . 5 . 8 .",
+        "pad": "x - - - - - | x - - - - - | x - - - - - | x - - - - - | x - - - - - | x - - - - - | x - - - - - | x - - - - -",
+        "bass": "1 - - - - - | 1 - - - - - | 1 - - - - - | 1 - - - - - | 1 - - - - - | 1 - - - - - | 1 - - - - - | 1 - - - - -",
+        "high": ". . . . . . | . . . . . . | . . . . . . | . . . 3 - - | . . . . . . | . . . . . . | . . . . . . | . . . 5 - -"
+      }
+    },
+    "B": { "bars": 8, "chords": "6 3 4 4m 1 5 1 1",
+      "play": {
+        "melody": "6 - - 5 - 6 | 5 - - 3 - - | 4 - - 6 - 8 | 8 - - - b6 - | 5 - - 3 - 1 | 2 - - - 7, - | 1 - - - - - | - - - . . .",
+        "waltz": "1 . 5 . 8 . | 1 . 5 . 8 . | 1 . 5 . 8 . | 1 . 5 . 8 . | 1 . 5 . 8 . | 1 . 5 . 8 . | 1 . 5 . 8 . | 1 . 5 . 8 .",
+        "pad": "x - - - - - | x - - - - - | x - - - - - | x - - - - - | x - - - - - | x - - - - - | x - - - - - | - - - - - -",
+        "bass": "1 - - - - - | 1 - - - - - | 1 - - - - - | 1 - - - - - | 1 - - - - - | 1 - - - - - | 1 - - - - - | 1 - - 5, - -",
+        "high": ". . . . . . | . . . . . . | . . . . . . | . . . b3~ - - | . . . . . . | . . . . . . | . . . 3 - - | . . . . . ."
+      }
+    },
+    "R": { "bars": 4, "chords": "1 4 1 4m",
+      "play": {
+        "waltz": "1 . 5 . 8 . | 1 . 5 . 8 . | 1 . 5 . 8 . | 1 . 5 . 8 .",
+        "pad": "x - - - - - | x - - - - - | x - - - - - | x - - - - -",
+        "bass": "1 - - - - - | 1 - - - - - | 1 - - - - - | 1 - - - - -",
+        "high": ". . . 5 - - | . . . . . . | . . . 3 - - | . . . . . ."
+      }
+    }
+  },
+  "forms": ["A B R A", "A A B R", "R A B A"]
+}

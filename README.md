@@ -22,14 +22,15 @@ This is the third build. The first (Phaser, 2026) is archived in `archive/phaser
 | P5 art | Step 1 done: palette, the four-layer canvas and its primitives, the stroke font, chrome, a lit-sphere sheet |
 | P6 scene, soft backend, window | Under way, window first (`PORT.md` §7.1): the window, the loop, the scene and its people, soft and wgpu backends |
 | P7 UI and input | Built ahead of its gate (2026-09-27): title, loading card, HUD, dialogue, pause, save slots, the Bag / Book / Log / Map window with drag and drop, the terminal, Controls with press-to-rebind, the F2 and F3 overlays; `data/bindings.json` compiled in. A pad and the assist are wired and untested by hand |
-| P6b onward | Not started |
+| P6b T1 | `gl2` built (2026-09-27): OpenGL 2.1 / GLES 2 through glow, its albedo `soft`'s to the byte, normal-mapped lamps with hard shadows, the silhouettes, sharp bilinear; fog, weather, water and particles wait for their passes; the Pi 4 and the ancient PC are not yet on the desk |
+| P6c onward | P6c (wgpu, T2) built; the rest not started |
 
 | Doc | What it decides |
 | --- | --- |
 | `PORT.md` | The port: repo layout, toolchain and targets, the crate map, the data pipeline, the worldgen port, phases P0 to P10 with gates, how agents work in parallel, tests, performance targets |
 | `ARCHITECTURE.md` | The Rust engine: fixed-point numerics, the state tree, the tick, verbs, the content compile, saves and hashes, lockstep networking |
 | `ART.md` | Art as a function: generator families emitting albedo, normal, emissive and height; the palette; derivation rules; the atlas; the font; contact sheets |
-| `PRESENTATION.md` | The scene and its three backends (software, OpenGL 2.1, Vulkan), normal-mapped lighting and shadows, atmosphere layers, effects, the UI, input, audio hooks, the native viewer |
+| `PRESENTATION.md` | The scene and its three backends (software, OpenGL 2.1, Vulkan), normal-mapped lighting and shadows, atmosphere layers, effects, the UI, input, the audio (the cue table, the synth, the score, the bell at nine), the native viewer |
 | `WORLD.md` | The living county: time, people and their hours, ecology, weather and atmosphere, consequence, rumour, global cohesion, the story spine |
 | `EXPERIENCE.md` | What happens, minute by minute for the first hour and hour by hour after, what she knows at each point, and which check holds each claim |
 | `VERIFICATION.md` | The proof of play: layers L0 to L7 from the data compile to player-model bots, experience metrics, truth and cohesion audits, dossiers and film per seed |
@@ -65,6 +66,13 @@ cargo jane gen --zones all --seeds 1..16 --hash          # every zone built and 
 cargo jane hash --seed 7 --frames 600                    # a new game stepped, and its state hash
 cargo jane sheet light sphere                            # art sheets: layers, light, font, chrome, palette
 cargo jane sheet ui                                      # the UI's screens headless: hud, dead, choice, tooltip, popover, drag, pause
+cargo run --release -p jane-cli --features gpu -- sheet scene --hour 22 --backend gl2   # one frame through T1 (soft, gl2 or wgpu)
+cargo run --release -p jane-cli --features gpu -- bench frames --backend gl2 --shadows off --half-light   # T1 frame times, rows turned down
+cargo jane audio list                                    # every sound effect, bed and song, each song's key and mood
+cargo jane audio render scene:nine --png                 # the bell at nine over dusk, as sheets/audio/scene-nine.wav and .png
+cargo jane audio render song:title                       # any song:, sfx:, bed:, inst: or scene: to a WAV under sheets/audio/
+cargo jane audio check                                   # each cue's loudness, peak, clicks and the key it is heard in
+cargo jane sheet audio                                   # every patch, bed, song and scene as WAV, songs drawn as spectrograms
 ```
 
 The game, in a window:
@@ -72,7 +80,8 @@ The game, in a window:
 ```bash
 cargo run --release -p jane-app                          # the title: New Game (her name), Continue, Load, Controls, Quit
 cargo run --release -p jane-app -- --new --seed 7        # straight into New Game on seed 7, no title
-cargo run --release -p jane-app -- --backend soft        # T0; the default is wgpu where an adapter can draw it
+cargo run --release -p jane-app -- --backend soft        # T0; the default is wgpu where an adapter can draw it, else gl2
+cargo run --release -p jane-app -- --backend gl2         # T1: OpenGL 2.1, else GLES 2 (a 2006 PC, every Pi)
 cargo run --release -p jane-app -- --new --seed 7 --ticks 600 --shot sheets/app.png    # ten seconds, then the canvas as a PNG
 cargo run --release -p jane-app -- --new --seed 7 --ticks 900 \
     --script "tick 200 key Tab; tick 260 shot sheets/bag.png; tick 270 key M; tick 400 shot sheets/map.png"
@@ -81,7 +90,7 @@ cargo run --release -p jane-app -- --new --seed 7 --bot reader   # jane-bot's re
 
 The title builds nothing; New Game builds the thirteen zones on a thread while the loading card draws the county's skeleton forming. `--script` feeds inputs at ticks (`key`, `down`, `up`, `click`, `rclick`, `move`, `type`, `shot`, and `bot reader`, `bot talk`, `bot off`; `jane-app --help` has the grammar), which is how every screen is shot without hands. The window starts at 1536 x 864 (768 x 432 where that does not fit) and resizes; the picture is always 432 canvas pixels tall, and a wider window shows more county. `--scale K` starts it at another multiple, `--name` names her, `--data-dir` puts saves somewhere else.
 
-**Saves and config.** Three slots, `slot1.jane` to `slot3.jane`, and `config.json` (the name last used, the backend, the aim assist, the bindings that differ from `data/bindings.json`, each slot's seed) live in `%APPDATA%\Jane` on Windows, `~/Library/Application Support/Jane` on a Mac and `$XDG_DATA_HOME/jane` elsewhere; beside the exe instead when a file called `portable` sits there. The pause menu saves only within reach of a bed or a fire; resting at one saves by itself to the slot last used.
+**Saves and config.** Three slots, `slot1.jane` to `slot3.jane`, and `config.json` (the name last used, the backend, the aim assist, the bindings that differ from `data/bindings.json`, each slot's seed, the volumes) live in `%APPDATA%\Jane` on Windows, `~/Library/Application Support/Jane` on a Mac and `$XDG_DATA_HOME/jane` elsewhere; beside the exe instead when a file called `portable` sits there. The pause menu saves only within reach of a bed or a fire; resting at one saves by itself to the slot last used.
 
 Still to come (`PORT.md` §7): bots playing seeds (`jane play`, `dossier`).
 
@@ -148,6 +157,14 @@ Things worth knowing: Repair costs what the thing is made of. A pressure plate s
 | Screenshot | F12 | |
 
 Every binding is data (`data/bindings.json`) and every one can be changed on the Controls screen (from the title or the pause menu): pick a cell, press the new key, button or pad input; a clash shows in red and is never refused. Changes go to `config.json`.
+
+**Sound.** Everything you hear is made by code as it plays: no audio file ships (`PRESENTATION.md` §5). Three volumes, each 0 to 100: **master**, **music** and **effects** (the ambient beds, rain and wind and birds, follow effects). Set them on the Controls screen's Volume row (minus and plus, in tens; with the keys, go to the row, left and right turn the lit one, confirm moves to the next), or in `config.json`:
+
+```json
+"volume": { "master": 80, "music": 70, "sfx": 80 }
+```
+
+The defaults are those. A missing one keeps its default. With no sound device the game says so once on the console and plays silent.
 
 Terminal rows: `help`, `give <item> [qty]`, `god [on|off]`, `tp <zone> [mark]`, `time <hour>`, `hp <n>`, `mp <n>`, `learn <spell>`, `quest <quest>`, `flag <name> <value>`, `kill`, `spawn <unit>`, `save [1-3]`, `load [1-3]`, `seed`, `hash`, `pos`, `inst`, `speed 0.25|1|4|hold|step`, `ver`, `title`, `party`, `open`, `close`, `clear`. Anything that changes the world goes to the sim as a `Command::Dev`, so a replay replays it. `join` and `leave` wait for the network (P8).
 
