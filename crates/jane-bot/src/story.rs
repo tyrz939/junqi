@@ -844,6 +844,7 @@ impl Story {
         // 1 and 2: the log. The nearest objective of any quest; one that someone is waiting
         // on (it goes back to a person, or to a place) counted at half its distance before
         // an errand for a book or a board.
+        let bag_tight = v.me().bag.iter().filter(|s| s.is_none()).count() < sense::BAG_SPARE;
         for q in v.quests() {
             let waited = someone_waits(q.quest);
             // Told how to end it, she goes and does it: Yours to Say before any errand.
@@ -865,6 +866,11 @@ impl Story {
                         Some(Target::Later(h)) => {
                             self.blocked.insert(g, v.tick().0 + u32::from(h) * jane_sim::tuning::TICKS_PER_HOUR);
                         }
+                        // A bag with no room to spare, and this hand-in takes things out of
+                        // it: first, before any dungeon (seed 2 walked into the School with a bag
+                        // of keys and gold and three lost things for the lost property box, and
+                        // had no slot for what the School gives).
+                        Some(t) if bag_tight && takes_from_bag(q.quest) => offer(0, g, t, &mut best),
                         Some(t) => offer(near(cost_of(&t)), g, t, &mut best),
                         None => {}
                     }
@@ -1140,6 +1146,12 @@ fn the_choice() -> Option<QuestId> {
 fn waits_for_sunday(v: &View<'_>, cx: &Ctx) -> bool {
     let ready = the_choice().is_some_and(|c| v.quests().any(|q| q.quest == c && q.ready));
     ready && cx.ending == Some(crate::Ending::Train) && !(v.weekday() == 0 && v.hour() < 17)
+}
+
+/// Does handing `q` in take things out of the bag (what it asked her to fetch)?
+fn takes_from_bag(q: QuestId) -> bool {
+    let cat = jane_data::catalog();
+    cat.story.quest(q).requirements.iter().any(|r| matches!(r.target, jane_data::ReqTarget::Acquire(_)))
 }
 
 /// Where Yours to Say is taken in (STORY.md §10): the thing that plays the ending she has chosen
