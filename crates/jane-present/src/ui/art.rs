@@ -174,9 +174,9 @@ impl UiArt {
         let mut icons_small = Vec::with_capacity(named.len());
         for id in named {
             let name = cat.sprites.get(usize::from(id.0)).copied().unwrap_or("");
-            let big = icons::icon(name);
+            let (big, small) = icons::both(name);
             icons.push((id, p.add_canvas(&big)));
-            icons_small.push((id, p.add_canvas(&icons::half(&big))));
+            icons_small.push((id, p.add_canvas(&small)));
         }
         let blank = icons::icon("");
         let icon_blank = p.add_canvas(&blank);

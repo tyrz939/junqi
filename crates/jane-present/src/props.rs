@@ -78,7 +78,7 @@ impl Props {
             .into_iter()
             .map(|id| {
                 let name = cat.sprites.get(usize::from(id.0)).copied().unwrap_or("");
-                let small = crate::ui::icons::half(&crate::ui::icons::icon(name));
+                let (_, small) = crate::ui::icons::both(name);
                 (id, atlas.add_canvas(&small, (0, small.h() as i16), 1, |_, _, t| t))
             })
             .collect();
