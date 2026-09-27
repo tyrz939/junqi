@@ -765,6 +765,15 @@ magic  -oneway opens_on museum_cleared-> atrium   shortcut: the fire door
 - *A guarded page lets go only in its room.* The Shot-Firer's glove unlocks when someone stands in the science room with him dead (the generated `<key>_free` trigger's rect is the node's room). He can be kited out of the room and killed in the corridor; the page then stays locked until she walks back in.
 - *Time.* The county door shuts at four, six game hours (twelve minutes) after the setup's ten o'clock; she is never shut in, but a death before she has rested at the stove wakes her at the Halt and the door will not let her back in. The bot rests at the stove the first time it passes. The slowest seed (4) is out at 18:12, which is what the long walks across a building 150 to 190 cells wide cost.
 
+**In the whole story, 27 September 2026.** The story brings her to the Museum weaker than the dungeon test's kit: 230 health and 180 mana (the mine's jars not all found) against 295 and 220, six apples, one life steal, no Stone Skin. At that the Attendant took her to within a tenth of him and no further, again and again, and after the fourth death the story's own play walked into the rotunda for its chest and stood shut in for the rest of the day. What now makes it (`jane play --seed N --ending hold`: the_museum handed in on seeds 1, 2, 3 and 7; `--from museum` on 1, 2, 3, 4, 5, 7 and 11, and the dungeon test's kit on 1 to 13, every one out by 13 minutes):
+
+- *The rotunda is a racetrack.* She kites round an ellipse about the plinths (sixteen cells by the room's height, inside his leash), through ground she reaches well before he could, never into the room's ends or out of its side doors. The ends were where every loss happened.
+- *The breaker is the relief, and it is on the loop.* His quarters throw the room dark (and with every plinth already blown, dark brings no armours); thrown back, it leaves him dazzled five seconds. The breaker is by his post at the top of the room, and the loop passes it: she throws it as she goes by. This is the room played as designed, and it is what turned a fight lost at a tenth into one won.
+- *The dark lasts as long as the arts wing.* The arts key in hand, she puts the lights back on: every exhibit that walked is a prop again for the Shot-Firer and the rest. The armours (slower than half her walk) are walked past, not hunted.
+- *Shut in with a boss, the story fights* (the crawl again, whatever was set aside): a fire she cannot walk to is no way out.
+
+Still hard, and meant to be: at the story's health one flurry with a stun in it is half of her, and a seed can take a dozen deaths (whole story seed 2: eleven) before the one that wins. Each death costs only the walk back from the stove.
+
 ---
 
 ### 3.3 Butterfly Forest (phase 3): Grow

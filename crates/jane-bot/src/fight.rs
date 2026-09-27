@@ -389,6 +389,11 @@ pub fn engage(v: &View<'_>, cx: &mut Ctx, id: UnitId) -> Option<Act> {
         cx.fight.t = 0;
         return None;
     };
+    // Let be a while ago, and not after her: still let be (a hunt taken up again at once started
+    // the three minutes over, for ever, at something out of sight she could not get to).
+    if !reachable(cx, id, v.frame()) && !on_me(v, t) {
+        return None;
+    }
     if cx.fight.target != Some(id) {
         cx.fight.target = Some(id);
         cx.fight.t = 0;
@@ -397,9 +402,10 @@ pub fn engage(v: &View<'_>, cx: &mut Ctx, id: UnitId) -> Option<Act> {
     cx.fight.t += 1;
     cx.foes.insert(id);
     if cx.fight.t > 60 * 180 {
-        // Three minutes on one thing: let it be.
+        // Three minutes on one thing: let it be, for five.
         cx.fight.target = None;
         cx.fight.hunt = None;
+        cx.fight.unreachable.insert(id, v.frame() + 60 * 300);
         return None;
     }
     let now = v.tick();

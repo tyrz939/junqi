@@ -324,7 +324,11 @@ impl Crawl {
                 let by = cx.fight.target.and_then(|t| v.unit(t)).map_or("?", |u| cat.combat.unit(u.def).id);
                 let doing = self.task.as_ref().map_or("nothing".to_owned(), |(_, w)| format!("{w:?}"));
                 let at = v.body().pos.cell();
-                self.deaths_at.push(format!("at {at:?} by {by} while {doing}"));
+                // Only a death in the dungeon counts against it (one on the road to it is the
+                // county's: a crow on the way is not the dungeon beating her).
+                if v.zone() == self.zone {
+                    self.deaths_at.push(format!("at {at:?} by {by} while {doing}"));
+                }
                 // What she died doing is a try that failed (it is not walked back into blind).
                 if let Some((_, what)) = self.task {
                     self.failed(what, &format!("she died doing it, by {by}"));
@@ -397,6 +401,10 @@ impl Crawl {
             notes.push(Mark::Note("what the story needs is in the bag: leaving".into()));
         }
         // A boss room's own play (`tactics/`), before the general fight.
+        // (The flood is looked at again first: a lock-in behind her changes the ground.)
+        if v.zone() == self.zone {
+            self.reach.update(v, signature(v));
+        }
         if let Some(a) = crate::tactics::museum::fight(v, cx, &self.reach) {
             return a;
         }
@@ -417,7 +425,12 @@ impl Crawl {
             self.task = None;
         }
         let calm = v.zone() == jane_core::ZoneId::Burial && self.watch.calm(v);
-        if let Some(id) = fight::threat(v, cx).filter(|&id| !calm || crate::tactics::burial::at_elbow(v, id)) {
+        // The Museum: the armours are walked past, not fought (tactics::museum::walk_past).
+        let doing = self.task.as_ref().map(|(_, w)| *w);
+        if let Some(id) = fight::threat(v, cx)
+            .filter(|&id| !calm || crate::tactics::burial::at_elbow(v, id))
+            .filter(|&id| !crate::tactics::museum::walk_past(v, id, doing))
+        {
             // The Burial: nothing is chased into the sight of a snake still to be fed.
             match (v.zone() == jane_core::ZoneId::Burial)
                 .then(|| crate::tactics::burial::fight(v, cx, id, self.task.as_ref().map(|(t, _)| t)))
@@ -861,6 +874,7 @@ impl Crawl {
                 || cleared
                 || !fight::reachable(cx, u.id, v.frame())
                 || crate::tactics::works::leave_be(v, u)
+                || crate::tactics::museum::leave_be(v, u.def)
             {
                 continue;
             }
@@ -886,6 +900,7 @@ impl Crawl {
                 // Butterfly Forest: a thing with no feet left behind stays there (a cactus across
                 // the forest is walked back to for nothing, and some cannot be walked to at all).
                 || v.zone() == ZoneId::Forest && d.run.0 <= 0 && d.walk.0 <= 0
+                || crate::tactics::museum::leave_be(v, def)
             {
                 continue;
             }
@@ -1027,6 +1042,18 @@ impl Crawl {
 fn turns_clock(v: &View<'_>, p: &Prop) -> bool {
     jane_data::catalog().story.prop(p.def).rest
         && sense::prop_does(v, p, &|a| matches!(a, jane_core::action::Action::Rest { until: Some(_) }))
+}
+
+/// Shut in with the zone's boss: it stands where she can walk, and no door out of the zone is
+/// where she can walk (a lock-in behind her). Nothing but the fight lets her out.
+pub fn shut_in_with_boss(v: &View<'_>) -> bool {
+    if !v.body().alive {
+        return false;
+    }
+    let Some(boss) = boss_of(v.zone()).and_then(|b| sense::units_of(v, b).into_iter().next()) else { return false };
+    let mut reach = Reach::default();
+    reach.update(v, 0);
+    reach.point(boss.pos) && !v.props().any(|p| door_of(v, p).is_some_and(|d| d.zone != v.zone()) && reach.beside(p))
 }
 
 /// The unit a dungeon's boss room holds (`None`: the cellar, the library and the pipes have none).
