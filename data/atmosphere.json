@@ -2,7 +2,7 @@
   "fen_mist": {
     "areas": ["sallow_bottom", "eel_beds", "still_pool", "tollhouse_reach", "drowned_lane"], "rects": ["sallow_jetty", "site_reed_camp"],
     "hours": [19, 8], "needs": ["clear", "mist", "rain", "storm"],
-    "colour": "#dce6ec", "density": 520, "height": "ground", "top": 26, "drift": [5, 0], "spread": 6
+    "colour": "#dce6ec", "density": 520, "height": "ground", "top": 26, "drift": [5, 0], "spread": 16
   },
   "waters_dawn": {
     "regions": ["waters"],

@@ -32,11 +32,11 @@ unit:butterfly cf84efd5
 unit:cactus 413c436e
 unit:crow 34b0db75
 unit:dog e6ee52d5
-unit:emperor 8b460500
+unit:emperor 79862fd6
 unit:flower 989b0a25
 unit:great_flower bac8fcf8
 unit:hen 1f7e3902
-unit:lurker 15340d46
+unit:lurker dbcb23a1
 unit:moth edd2d825
 unit:museum_fox cc0139d0
 unit:pumpkin 556d2b62

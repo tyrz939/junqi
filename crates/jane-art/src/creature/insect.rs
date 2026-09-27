@@ -331,6 +331,17 @@ pub(crate) fn draw(c: &mut Canvas, k: &Coat, facing: Facing, beat: Beat) {
                         ],
                     ),
                 };
+                // The Emperor's wings are its read (the whole-frame pass, 2026-09-27: from the side
+                // it was a grey body under two scraps): seen from the side they stand a quarter larger
+                // round where they join the body, so the raised pair shows its eyespots.
+                let grow = |o: Outline| -> Outline {
+                    if emperor {
+                        o.iter().map(|&(x, y)| (cx + (x - cx) * 5 / 4, cy + (y - cy) * 5 / 4)).collect()
+                    } else {
+                        o
+                    }
+                };
+                let (f, h) = (grow(f), grow(h));
                 let spot = (open < 2 && !far).then(|| (cx + dx, (f[1].1 + f[3].1) / 2));
                 let hspot = (open < 2 && !far && moth).then(|| ((h[1].0 + h[2].0) / 2 + 1, (h[1].1 + h[2].1) / 2));
                 wing(c, k, &h, hspot, spot_r, u, far, z);
