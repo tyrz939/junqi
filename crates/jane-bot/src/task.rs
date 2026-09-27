@@ -683,8 +683,19 @@ fn craft(inputs: &[ItemId], stage: &mut u8, t: &mut u32, v: &View<'_>) -> Status
         return Status::Act(Act::press(Command::CraftPut { bag: slot as u8, slot: i as u8 }));
     }
     if i == inputs.len() {
+        // Put in and nothing shows on the bench: the making is not one (or the puts did not
+        // take).
+        if v.craft_output().is_none() {
+            return Status::Failed("the bench makes nothing of it".into());
+        }
         *stage += 1;
         return Status::Act(Act::press(Command::CraftTake));
+    }
+    // Taken, and it is still on the bench: no room in the bag for it. "Done" here was a loop:
+    // the story chose the same making again at once, for ever (seed 3 stood at Julie's bench
+    // from minute 267 to the end, a full bag of what cannot be thrown out).
+    if v.craft_output().is_some() {
+        return Status::Failed("no room in the bag for what it makes".into());
     }
     Status::Done
 }
