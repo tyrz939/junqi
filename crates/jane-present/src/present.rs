@@ -24,6 +24,8 @@ use crate::frame::{
     CANVAS_H, CANVAS_W, CELL, CHUNK_PX, Caster, ChunkCmd, ChunkId, Depth, FX_TO_CANVAS, Flags, Frame, Light, LightKind,
     Pass, Rgb, Span, SpriteCmd, Tier, Tint,
 };
+use crate::atmos::Atmosphere;
+use crate::fx::Fx;
 use crate::light::{Sky, flicker, lantern_lit, sky};
 use crate::creatures::{self, Creatures};
 use crate::people::{self, People};
@@ -159,6 +161,9 @@ pub struct Present {
     lights: Vec<LightRec>,
     light_scratch: Vec<PropIx>,
     sky: Sky,
+    /// The weather, the fog and the sky (§1.9), and the effects (§2).
+    atmos: Atmosphere,
+    fx: Fx,
 }
 
 impl Present {
@@ -170,6 +175,8 @@ impl Present {
         let creatures = Creatures::build(&mut atlas);
         let kit = Props::build(&mut atlas);
         let terrain = Terrain::build(&mut atlas, LRU);
+        let atmos = Atmosphere::new(tier, &mut atlas);
+        let fx = Fx::new(tier, atmos.features.max_particles);
         // The UI's page goes last, so no world sprite moves when it grows (PRESENTATION.md §3.1).
         let (ui_art, mut ui_page) = crate::ui::UiArt::build(atlas.pages.pages.len() as u8);
         if atlas.lit() {
@@ -207,7 +214,20 @@ impl Present {
             lights: Vec::with_capacity(256),
             light_scratch: Vec::with_capacity(1024),
             sky: sky(12 * 7200, 0, false, 1000, Region::Lowfields),
+            atmos,
+            fx,
         }
+    }
+
+    /// The atmosphere (the weather, the fog, the sky): what F2 and the sheet tools read, and
+    /// where a sheet holds the weather (`Atmosphere::force`).
+    pub fn atmos_mut(&mut self) -> &mut Atmosphere {
+        &mut self.atmos
+    }
+
+    /// The effect pool's parts alive: the effects' and the weather's.
+    pub fn fx_count(&self) -> (usize, usize) {
+        self.fx.count()
     }
 
     /// The sky as of the last tick.
@@ -287,6 +307,8 @@ impl Present {
             self.entered = true;
             self.camera.reset();
             self.units.clear();
+            self.atmos.zone(view);
+            self.fx.zone(view);
         }
         self.zone_cells = view.size();
         self.hurt.clear();
@@ -319,6 +341,11 @@ impl Present {
         self.paint_chunks(view);
         let (clock, day) = view.clock();
         self.sky = sky(clock, day, view.indoor(), view.ambient().0, view.region());
+        self.atmos.tick(view, self.tick);
+        self.fx.on_events(view, events);
+        let (cw, ch) = (i32::from(self.canvas.0), i32::from(self.canvas.1));
+        let cam = (self.camera.pos.0 >> FX_TO_CANVAS, self.camera.pos.1 >> FX_TO_CANVAS);
+        self.fx.tick(view, &self.atmos, self.tick, (cam.0, cam.1, cw, ch));
     }
 
     /// The cells the view covers this tick, with the margin.
@@ -517,7 +544,7 @@ impl Present {
                 chunks.want(id, now, layers, false, |slot, l| terrain.paint(view, id, slot, outside, l));
             } else if need == Need::Missing && key >> 24 == 0 {
                 chunks.want(id, now, layers, true, |slot, l| {
-                    terrain.swatched(slot);
+                    terrain.swatched(slot, l);
                     stand_in::paint_chunk(id, cells, outside, |x, y| view.tile(x, y), l);
                 });
             }
@@ -557,6 +584,8 @@ impl Present {
         if self.zone.is_none() {
             return &self.frame;
         }
+        // The sky and the far things on its horizon, behind everything (§1.9).
+        self.atmos.draw_back(&mut self.frame, cam, self.zone_cells, &self.atlas);
 
         // Terrain: every painted chunk under the view.
         if let Some((cx0, cy0, cx1, cy1)) = self.chunk_range(cam, 0) {
@@ -576,6 +605,7 @@ impl Present {
                 }
             }
             f.passes.push(Pass::Terrain { chunks: Span::since(0, f.chunks.len()) });
+            crate::atmos::water_pass(f);
         }
 
         // Props and units, flat ones on the ground, the rest y-sorted with the units.
@@ -757,6 +787,8 @@ impl Present {
             });
         }
         f.lights.extend(glows[..n_glows].iter().flatten());
+        // The effects' lights: a bolt lights the wall it passes (§2).
+        self.fx.lights(f, cam, alpha);
         let (most, casting) = max_lights(f.tier);
         if f.lights.len() > most || f.lights.iter().filter(|l| l.casts).count() > casting {
             let mid = (cw / 2, ch / 2);
@@ -776,7 +808,8 @@ impl Present {
         }
         let points = Span::since(0, f.lights.len());
 
-        let sky = &self.sky;
+        // The sky as the weather has it: rain dims and cools, lightning flashes (§1.9).
+        let sky = &self.atmos.light(&self.sky);
         f.passes.push(Pass::Sprites { layer: Depth::Ground, cmds: ground });
         // Silhouette sun shadows under the standing things, where the tier has no shadow maps:
         // from a sun or a moon, not from the afterglow, a sky too broad to throw a silhouette.
@@ -787,10 +820,18 @@ impl Present {
             f.passes.push(Pass::Silhouettes { sun, shade: sky.shade, casters });
         }
         f.passes.push(Pass::Sprites { layer: Depth::Standing, cmds: standing });
+        f.passes.push(Pass::Weather(self.atmos.atmos()));
+        // Below T2 the parts that do not glow go under the light, so the lamps light the rain.
+        self.fx.draw_under_light(f, cam, alpha);
         // The light pass: on T0 left out when the multiply would change nothing (day is free).
         if f.tier > Tier::T0 || sky.ambient.iter().any(|&c| c < 254) {
             f.passes.push(Pass::Lights { ambient: sky.ambient, fill: sky.fill, sun: sky.sun, points, casters });
         }
+        // Over what is lit: the marks and splashes on the ground, the fog, the effects in the
+        // air, the rain.
+        self.fx.draw_ground(f, cam, alpha, sky);
+        self.atmos.draw_fog(f, cam, sky);
+        self.fx.draw_air(f, cam, alpha, sky);
         if f.tier >= Tier::T2 {
             f.passes.push(Pass::Post(sky.post));
         }

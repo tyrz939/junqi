@@ -1068,13 +1068,7 @@ impl App<'_> {
         let f = self.present.frame();
         let mut passes = [None; 8];
         for (i, p) in f.passes.iter().take(8).enumerate() {
-            passes[i] = Some(match p {
-                jane_present::Pass::Terrain { .. } => "terrain",
-                jane_present::Pass::Sprites { .. } => "sprites",
-                jane_present::Pass::Silhouettes { .. } => "silhouettes",
-                jane_present::Pass::Lights { .. } => "lights",
-                jane_present::Pass::Post(_) => "post",
-            });
+            passes[i] = Some(p.name());
         }
         let frame = FrameInfo {
             sprites: f.sprites.len() as u32,

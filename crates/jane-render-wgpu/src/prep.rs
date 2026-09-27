@@ -4,6 +4,7 @@
 
 use std::ops::Range;
 
+use jane_present::frame::{Atmos, PartShape, SkyLook};
 use jane_present::{Depth, Frame, LightKind, Pass, Post, Tint};
 
 /// Canvas px round the canvas the G-buffer and the height field cover, so a caster just off
@@ -67,13 +68,37 @@ pub struct Prep {
     pub tile_lights: Vec<u8>,
     pub tiles_x: u32,
     pub tiles_y: u32,
-    /// The globals uniform, 128 bytes.
+    /// The globals uniform, [`GLOBALS`] bytes.
     pub globals: Vec<u8>,
     /// The frame's clear, linear.
     pub clear: [f64; 3],
+    /// The sky's sprites (`SpriteIn`, the same layout), drawn onto the sky backdrop.
+    pub sky_sprites: Vec<u8>,
+    pub n_sky_sprites: u32,
+    /// The stars: `x, up, brightness, 0` as f32.
+    pub stars: Vec<u8>,
+    pub n_stars: u32,
+    /// Whether the frame has a sky pass, a water pass, fog, light shafts.
+    pub has_sky: bool,
+    pub has_water: bool,
+    pub n_fog: u32,
+    /// The light shafts' strength, 0 for none.
+    pub rays: u8,
+    /// `FogVolume` (3 x vec4): rect; colour and density; edge, top.
+    pub fog: Vec<u8>,
+    /// `PartIn` (3 x vec4): x, y, shape, a; b, c, height, glow; colour, alpha.
+    pub parts: Vec<u8>,
+    pub n_parts: u32,
+    /// The particle draws in order, by layer: ground, then canopy, then weather.
+    pub part_draws: Vec<(Depth, Range<u32>)>,
     depth: Vec<u8>,
     lists: Vec<Vec<u32>>,
 }
+
+/// The globals uniform's size, bytes.
+pub const GLOBALS: usize = 256;
+/// Fog volumes a frame draws at most.
+pub const MAX_FOG: usize = 16;
 
 fn u32s(out: &mut Vec<u8>, v: &[u32]) {
     for x in v {
@@ -123,6 +148,18 @@ impl Prep {
         self.n_chunks = 0;
         self.n_sprites = 0;
         self.n_lights = 0;
+        self.sky_sprites.clear();
+        self.n_sky_sprites = 0;
+        self.stars.clear();
+        self.n_stars = 0;
+        self.has_sky = false;
+        self.has_water = false;
+        self.n_fog = 0;
+        self.rays = 0;
+        self.fog.clear();
+        self.parts.clear();
+        self.n_parts = 0;
+        self.part_draws.clear();
         let c = frame.clear;
         self.clear = [(c >> 16) as u8, (c >> 8) as u8, c as u8].map(|v| f64::from(linear(v)));
 
@@ -138,6 +175,10 @@ impl Prep {
         let mut hmax = TERRAIN_TOP;
         let mut sky = None;
         let mut post = Post { tint: [255; 3], lift: [0; 3], saturation: 128, bloom: 0, exposure: 128 };
+        let mut backdrop: Option<SkyLook> = None;
+        let mut atmos = Atmos::default();
+        let mut drift = (0i16, 0i16);
+        let mut rays = 0u8;
         for pass in &frame.passes {
             match *pass {
                 Pass::Terrain { chunks } => {
@@ -219,6 +260,63 @@ impl Prep {
                     self.tile(frame);
                 }
                 Pass::Post(p) => post = p,
+                Pass::Sky(s) => {
+                    self.has_sky = true;
+                    backdrop = Some(s);
+                    for st in &frame.stars[s.star_list.range()] {
+                        f32s(&mut self.stars, &[f32::from(st.x), f32::from(st.up), f32::from(st.bright) / 255.0, 0.0]);
+                        self.n_stars += 1;
+                    }
+                }
+                Pass::Parallax { sprites, factor, .. } => {
+                    // The farther, the hazier: the School at an eighth, the trees at a quarter.
+                    let haze = if factor <= 32 { 70 } else { 30 };
+                    for s in frame.sprites_in(sprites) {
+                        u32s(
+                            &mut self.sky_sprites,
+                            &[u32::from(s.src.x), u32::from(s.src.y), u32::from(s.src.w), u32::from(s.src.h)],
+                        );
+                        i32s(&mut self.sky_sprites, &[i32::from(s.x), i32::from(s.y), i32::from(s.page), 0]);
+                        u32s(&mut self.sky_sprites, &[haze, 0, 0, 0]);
+                        self.n_sky_sprites += 1;
+                    }
+                }
+                Pass::Water { .. } => self.has_water = true,
+                Pass::Weather(a) => atmos = a,
+                Pass::Fog { volumes, drift: d } => {
+                    drift = d;
+                    for v in frame.fog_in(volumes).iter().take(MAX_FOG - self.n_fog as usize) {
+                        let (x0, y0, x1, y1) = v.rect;
+                        f32s(&mut self.fog, &[x0 as f32, y0 as f32, x1 as f32, y1 as f32]);
+                        let [r, gg, b] = lin3(v.colour);
+                        f32s(&mut self.fog, &[r, gg, b, f32::from(v.density) / 255.0]);
+                        f32s(&mut self.fog, &[f32::from(v.edge.max(1)), f32::from(v.top), 0.0, 0.0]);
+                        self.n_fog += 1;
+                    }
+                }
+                Pass::Rays { strength } => {
+                    rays = strength;
+                    self.rays = strength;
+                }
+                Pass::Particles { layer, parts } => {
+                    let first = self.n_parts;
+                    for p in frame.parts_in(parts) {
+                        let (shape, a, b, c) = match p.shape {
+                            PartShape::Streak { dx, dy } => (0.0, f32::from(dx), f32::from(dy), 0.0),
+                            PartShape::Dot { size } => (1.0, f32::from(size), 0.0, 0.0),
+                            PartShape::Ring { r } => (2.0, f32::from(r), 0.0, 0.0),
+                            PartShape::Glow { r } => (3.0, f32::from(r), 0.0, 0.0),
+                        };
+                        f32s(&mut self.parts, &[f32::from(p.x), f32::from(p.y), shape, a]);
+                        f32s(&mut self.parts, &[b, c, f32::from(p.height), f32::from(p.glow) / 255.0]);
+                        let [r, gg, bb] = lin3(p.colour);
+                        f32s(&mut self.parts, &[r, gg, bb, f32::from(p.alpha) / 255.0]);
+                        self.n_parts += 1;
+                    }
+                    if self.n_parts > first {
+                        self.part_draws.push((layer, first..self.n_parts));
+                    }
+                }
             }
         }
         if sky.is_none() {
@@ -250,7 +348,38 @@ impl Prep {
         let [lr, lg, lb] = post.lift.map(|c| f32::from(c) / 255.0);
         f32s(&mut self.globals, &[lr, lg, lb, f32::from(post.exposure) / 128.0]);
         f32s(&mut self.globals, &[f32::from(post.bloom) / 255.0 * 1.4, ticks as f32, EMISSIVE_GAIN, 0.0]);
-        debug_assert_eq!(self.globals.len(), 128);
+        // The weather and the sky (§1.8, §1.9).
+        let unit = |b: u8| f32::from(b) / 255.0;
+        f32s(&mut self.globals, &[unit(atmos.rain), unit(atmos.mist), unit(atmos.wet), unit(atmos.flash)]);
+        f32s(&mut self.globals, &[f32::from(atmos.wind), frame.tick as f32, f32::from(drift.0), f32::from(drift.1)]);
+        let s = backdrop.unwrap_or(SkyLook {
+            zenith: [0; 3],
+            horizon: [0; 3],
+            glow: [0; 3],
+            glow_x: 0,
+            glow_amount: 0,
+            stars: 0,
+            star_list: jane_present::Span::default(),
+            moon: None,
+            zone: (0, 0, 0, 0),
+            tick: 0,
+        });
+        let [zr, zg, zb] = lin3(s.zenith);
+        f32s(&mut self.globals, &[zr, zg, zb, unit(s.stars)]);
+        let [hr, hg, hb] = lin3(s.horizon);
+        f32s(&mut self.globals, &[hr, hg, hb, f32::from(s.glow_x)]);
+        let [gr, gg, gb] = lin3(s.glow);
+        f32s(&mut self.globals, &[gr, gg, gb, unit(s.glow_amount)]);
+        f32s(&mut self.globals, &[s.zone.1 as f32, f32::from(u8::from(self.has_sky)), unit(rays), self.n_fog as f32]);
+        f32s(
+            &mut self.globals,
+            &[frame.camera.0 as f32, frame.camera.1 as f32, f32::from(u8::from(self.has_water)), self.n_parts as f32],
+        );
+        f32s(&mut self.globals, &[s.zone.0 as f32, s.zone.2 as f32, s.zone.3 as f32, 0.0]);
+        debug_assert_eq!(self.globals.len(), GLOBALS);
+        if self.fog.is_empty() {
+            f32s(&mut self.fog, &[0.0; 12]);
+        }
     }
 
     /// The tiles: for each 32 x 32 tile of the canvas, the lights whose reach may touch a
@@ -333,7 +462,7 @@ mod tests {
         let got: Vec<(Kind, Range<u32>)> = p.draws.iter().map(|d| (d.kind, d.range.clone())).collect();
         assert_eq!(got, [(Kind::Contact, 0..4), (Kind::Opaque, 0..1), (Kind::Ghost, 1..2), (Kind::Opaque, 2..4)]);
         assert_eq!(p.sprites.len(), 4 * 48);
-        assert_eq!(p.globals.len(), 128);
+        assert_eq!(p.globals.len(), GLOBALS);
     }
 
     #[test]

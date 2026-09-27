@@ -32,6 +32,7 @@ struct Light {
 struct LitOut {
     @location(0) colour: vec4<f32>,
     @location(1) bloom: vec4<f32>,
+    @location(2) sun: vec4<f32>,
 };
 
 fn texel_height(x: i32, y: i32) -> f32 {
@@ -118,11 +119,28 @@ fn falloff(x: f32) -> f32 {
     return w * w / (1.0 + 4.0 * x * x);
 }
 
+// Toward the eye: the 3/4 camera looks down and north, so the eye is south and above.
+const EYE = vec3<f32>(0.0, 0.55, 0.835);
+
+// The ground's surface byte (PRESENTATION.md §1.8, `ChunkLayers::surface`), from the albedo's
+// alpha: 255 a thing standing, 254 beyond the zone, else `water * 4 + wet`.
+fn surface(a: f32) -> u32 {
+    return u32(round(a * 255.0));
+}
+
 @fragment
 fn fs_light(i: FullOut) -> LitOut {
     let px = vec2<i32>(floor(i.pos.xy));
     let q = px + vec2<i32>(i32(g.guard));
-    let alb = textureLoad(galb, q, 0).rgb;
+    let a4 = textureLoad(galb, q, 0);
+    let surf = surface(a4.a);
+    let ground = surf < 254u;
+    let water = select(0u, surf >> 2u, ground);
+    let wet_kind = select(0u, surf & 3u, ground && water == 0u);
+    // Wet ground is darker and richer, and shines where it is smooth (§1.8); water always does.
+    let wet = g.weather.z * select(0.0, select(0.55, 1.0, wet_kind == 2u), wet_kind > 0u);
+    let alb = a4.rgb * (1.0 - 0.4 * wet);
+    let shine = max(wet * select(0.35, 1.0, wet_kind == 2u), select(0.0, 0.9, water > 0u));
     let nh = textureLoad(gnh, q, 0);
     let em = textureLoad(gem, q, 0).rgb;
     let h = nh.b * 255.0;
@@ -141,13 +159,21 @@ fn fs_light(i: FullOut) -> LitOut {
     if h < 3.0 {
         light *= ground_ao(p);
     }
+    // What shines back: the lamps' glints and the sky's sheen on what is wet.
+    var spec = g.fill.rgb * shine * 0.18;
+    var sun_seen = 0.0;
     if g.sun_dir.w > 0.5 {
         let l = g.sun_dir.xyz;
         // The sun's colour is its light on flat ground: a face turned to a low sun catches up
         // to two and a half times that.
         let ndl = min(max(dot(n, l), 0.0) / max(l.z, 0.2), 2.5);
         if ndl > 0.0 {
-            light += g.sun_col.rgb * ndl * trace(p, l, 2000.0, g.sun_col.w, t0, 3.0);
+            sun_seen = trace(p, l, 2000.0, g.sun_col.w, t0, 3.0);
+            light += g.sun_col.rgb * ndl * sun_seen;
+            if shine > 0.0 {
+                let hv = normalize(l + EYE);
+                spec += g.sun_col.rgb * pow(max(dot(n, hv), 0.0), 48.0) * shine * sun_seen * 2.0;
+            }
         }
     }
     let tile = vec2<u32>(px) / 32u;
@@ -180,12 +206,22 @@ fn fs_light(i: FullOut) -> LitOut {
             sh = trace(p, l, dxy - stop, clamp(dxy / max(lt.col.w, 1.0), 2.0, 16.0), t0, 1.0);
         }
         light += lt.col.rgb * att * sh;
+        if shine > 0.0 {
+            // A wet road glints under a lamp: the lamp's reflection, long toward the eye.
+            let hv = normalize(l + EYE);
+            let s = pow(max(dot(n, hv), 0.0), 90.0) * falloff(dist / r);
+            spec += lt.col.rgb * s * sh * shine * 0.9;
+        }
     }
 
-    let lit = alb * light + em * g.misc.z;
+    // Lightning lights everything from the whole sky at once, for its two ticks.
+    light += vec3<f32>(0.55, 0.6, 0.8) * g.weather.w * g.weather.w;
+    let lit = alb * light + em * g.misc.z + spec;
     var o: LitOut;
     o.colour = vec4<f32>(lit, 1.0);
     // What blooms: the emissive, and a little of whatever is lit past white.
-    o.bloom = vec4<f32>(em * g.misc.z + max(lit - vec3<f32>(1.1), vec3<f32>(0.0)) * 0.25, 1.0);
+    o.bloom = vec4<f32>(em * g.misc.z + max(lit - vec3<f32>(1.1), vec3<f32>(0.0)) * 0.25 + spec * 0.35, 1.0);
+    // Whether the sun reaches this px: what the light shafts are made of.
+    o.sun = vec4<f32>(select(sun_seen, 0.0, g.sun_dir.w < 0.5), 0.0, 0.0, 1.0);
     return o;
 }

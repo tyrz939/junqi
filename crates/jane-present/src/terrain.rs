@@ -8,7 +8,7 @@ use jane_core::{Material, Tile};
 use jane_sim::view::View;
 
 use crate::atlas::{Atlas, RefId};
-use crate::frame::{CELL, CHUNK_CELLS, CHUNK_PX, ChunkId, ChunkLayers};
+use crate::frame::{CELL, CHUNK_CELLS, CHUNK_PX, ChunkId, ChunkLayers, SURFACE_OUTSIDE};
 
 /// A zone as the painter reads it: the view's tiles, the paint kept beside them.
 struct ViewTiles<'v, 'a> {
@@ -99,7 +99,16 @@ impl Terrain {
             for (e, &ix) in layers.emissive.iter_mut().zip(&c.emissive) {
                 *e = if ix.is_opaque() { terrain::pack(ix) } else { 0 };
             }
+            // What the ground is to the rain and the water (§1.8): the px's distance to land
+            // through water, and how its cell takes rain.
+            for (k, s) in layers.surface.iter_mut().enumerate() {
+                let (x, y) = (k as i32 % CHUNK_PX, k as i32 / CHUNK_PX);
+                let wet = c.wet[(y / CELL * CHUNK_CELLS + x / CELL) as usize].min(3);
+                *s = c.water[k].min(16) * 4 + wet;
+            }
         }
+        layers.water.clear();
+        layers.water.extend(self.chunk.water.iter().map(|w| (w.x, w.y, w.phase)));
         // Beyond the zone's edge: the frame's clear, flat.
         let (w, h) = src.size();
         let (x0, y0) = (cx * CHUNK_CELLS, cy * CHUNK_CELLS);
@@ -114,17 +123,22 @@ impl Terrain {
                     layers.normal[row + x_in..row + side].fill([128, 128]);
                     layers.height[row + x_in..row + side].fill(0);
                     layers.emissive[row + x_in..row + side].fill(0);
+                    layers.surface[row + x_in..row + side].fill(SURFACE_OUTSIDE);
                 }
             }
+            layers.water.retain(|&(x, y, _)| x0 + i32::from(x) < w && y0 + i32::from(y) < h);
         }
         let placed = &mut self.placed[usize::from(slot)];
         placed.clear();
         placed.extend_from_slice(&self.chunk.placed);
     }
 
-    /// A slot painted roughly: it stands nothing.
-    pub fn swatched(&mut self, slot: u16) {
+    /// A slot painted roughly: it stands nothing, and its ground is dry land until the painter
+    /// reaches it.
+    pub fn swatched(&mut self, slot: u16, layers: &mut ChunkLayers) {
         self.placed[usize::from(slot)].clear();
+        layers.surface.fill(0);
+        layers.water.clear();
     }
 
     /// What the chunk in `slot` stands: foot px in the chunk, and the sprite.

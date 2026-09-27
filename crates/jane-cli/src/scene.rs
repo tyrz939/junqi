@@ -71,6 +71,20 @@ pub struct Opts {
     pub backend: Which,
     /// After the play, travel to this mark of the county first (`--at lake_bank`).
     pub at: Option<String>,
+    /// Hold the sky to this weather, the ground wet as after an hour of it (`--weather rain`).
+    pub weather: Option<jane_present::WeatherKind>,
+}
+
+/// `--weather`'s word.
+pub fn weather(s: &str) -> Result<jane_present::WeatherKind, String> {
+    use jane_present::WeatherKind as W;
+    match s {
+        "clear" => Ok(W::Clear),
+        "mist" => Ok(W::Mist),
+        "rain" => Ok(W::Rain),
+        "storm" => Ok(W::Storm),
+        _ => Err(format!("--weather: clear, mist, rain or storm, not {s}")),
+    }
 }
 
 /// The sim with this frame's events kept for the presenter: the bot drains the host, so the host
@@ -116,6 +130,23 @@ impl Shot {
             self.px.iter().flat_map(|&c| [(c >> 16) as u8, (c >> 8) as u8, c as u8, (c >> 24) as u8]).collect();
         jane_art::sheet::png(u32::from(self.w), u32::from(self.h), &rgba)
     }
+
+    /// The rect `(x, y, w, h)` of the frame, each px drawn `zoom` px square: the art director's
+    /// close look at 3 or 4x (ART.md §3.1).
+    pub fn crop(&self, (x, y, w, h): (u16, u16, u16, u16), zoom: u16) -> Shot {
+        let (x, y) = (x.min(self.w.saturating_sub(1)), y.min(self.h.saturating_sub(1)));
+        let (w, h) = (w.min(self.w - x).max(1), h.min(self.h - y).max(1));
+        let z = zoom.clamp(1, 16);
+        let (ow, oh) = (w * z, h * z);
+        let mut px = Vec::with_capacity(usize::from(ow) * usize::from(oh));
+        for oy in 0..oh {
+            let sy = usize::from(y + oy / z);
+            for ox in 0..ow {
+                px.push(self.px[sy * usize::from(self.w) + usize::from(x + ox / z)]);
+            }
+        }
+        Shot { w: ow, h: oh, px, line: self.line.clone() }
+    }
 }
 
 /// Plays `o` from New Game on `bps` to the frame asked for: the host and a presenter at `tier`
@@ -124,6 +155,10 @@ fn play(bps: Blueprints, o: &Opts, tier: Tier) -> Result<(Tap, Present, u32), St
     let mut host = Tap { sim: Sim::new_game_with(bps, "Jane"), events: Vec::new() };
     let mut bot = Bot::story(o.model);
     let mut present = Present::new(tier);
+    if let Some(k) = o.weather {
+        let wet = if matches!(k, jane_present::WeatherKind::Rain | jane_present::WeatherKind::Storm) { 255 } else { 0 };
+        present.atmos_mut().force(Some((k, wet)));
+    }
     present.set_canvas(o.canvas);
     let seat = Seat(0);
     let mut played = 0;
@@ -177,7 +212,7 @@ pub fn render(bps: Blueprints, o: &Opts) -> Result<Shot, String> {
     let v = host.sim.view(seat).ok_or("seat 0 is not in the world")?;
     let (clock, day) = v.clock();
     let line = format!(
-        "{} seed {}: {played} ticks; {} day {day} {:02}:{:02}{}; {} units and {} props near; {} chunks painted; {}",
+        "{} seed {}: {played} ticks; {} day {day} {:02}:{:02}{}; {} units and {} props near; {} chunks painted; {} fx and {} weather parts; {}",
         o.model.name(),
         o.seed,
         v.zone().name(),
@@ -187,6 +222,8 @@ pub fn render(bps: Blueprints, o: &Opts) -> Result<Shot, String> {
         present.seen().0,
         present.seen().1,
         present.chunks_painted(),
+        present.fx_count().0,
+        present.fx_count().1,
         b.caps().name,
     );
     let frame = present.draw(255, o.canvas);
@@ -326,6 +363,7 @@ mod tests {
             canvas: (768, 432),
             backend: Which::Soft,
             at: None,
+            weather: None,
         };
         let a = render(bps.clone(), &o).unwrap();
         let b = render(bps, &o).unwrap();

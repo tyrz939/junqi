@@ -317,6 +317,7 @@ fn frames(args: &[String]) -> Result<(), String> {
         canvas,
         backend,
         at: flag("--at").map(str::to_owned),
+        weather: flag("--weather").map(crate::scene::weather).transpose()?,
     };
     let bps = jane_sim::Blueprints::build(seed).map_err(|e| format!("seed {seed}: {e}"))?;
     let n = num("--frames", 600)?;

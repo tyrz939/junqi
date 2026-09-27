@@ -69,10 +69,19 @@ fn a_town_night_has_every_pass_and_noon_needs_no_light() {
             Pass::Silhouettes { .. } => "silhouettes",
             Pass::Lights { .. } => "lights",
             Pass::Post(_) => "post",
+            Pass::Sky(_) => "sky",
+            Pass::Parallax { .. } => "far",
+            Pass::Water { .. } => "water",
+            Pass::Weather(_) => "weather",
+            Pass::Fog { .. } => "fog",
+            Pass::Rays { .. } => "rays",
+            Pass::Particles { .. } => "particles",
         })
         .collect();
-    // The moon is up at 22:00: its silhouettes lie under the standing things.
-    assert_eq!(kinds, ["terrain", "ground", "silhouettes", "standing", "lights"]);
+    // Out of doors the sky and its far things come first; the moon is up at 22:00, so its
+    // silhouettes lie under the standing things; the weather, clear on the first walk, before
+    // the light.
+    assert_eq!(kinds, ["sky", "far", "far", "terrain", "ground", "silhouettes", "standing", "weather", "lights"]);
     assert!(!f.chunks.is_empty() && !f.sprites.is_empty());
     let (_, mut noon) = at_hour(1, 12, Tier::T0);
     assert!(!noon.draw(255, CANVAS).passes.iter().any(|p| matches!(p, Pass::Lights { .. })));

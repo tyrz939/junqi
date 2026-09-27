@@ -122,7 +122,7 @@ pub fn layout(device: &wgpu::Device, label: &str, entries: &[B]) -> wgpu::BindGr
                 ),
                 B::Read | B::ReadWrite => (
                     if matches!(b, B::Read) {
-                        wgpu::ShaderStages::FRAGMENT | wgpu::ShaderStages::COMPUTE
+                        wgpu::ShaderStages::VERTEX_FRAGMENT | wgpu::ShaderStages::COMPUTE
                     } else {
                         wgpu::ShaderStages::COMPUTE
                     },

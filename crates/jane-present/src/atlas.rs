@@ -76,7 +76,7 @@ impl Atlas {
             clut[i] = 0xff00_0000 | u32::from(c[0]) << 16 | u32::from(c[1]) << 8 | u32::from(c[2]);
         }
         Atlas {
-            pages: AtlasPages { clut, pages: vec![Page { w: PAGE_W, ..Page::default() }] },
+            pages: AtlasPages { clut, pages: vec![Page { w: PAGE_W, ..Page::default() }], mist: Vec::new() },
             refs: Vec::new(),
             shelf: (0, 0, 0),
             lit,

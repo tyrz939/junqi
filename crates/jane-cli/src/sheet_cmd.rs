@@ -26,7 +26,8 @@ pub const USAGE: &str = "  sheet layers <what> [--frame F] [--out DIR]
   sheet all [--out DIR]               every sheet above, for every sprite
   sheet list                          the sprites <what> can name
   sheet scene [--seed N] [--minutes M | --ticks T] [--model reader|rusher] [--night | --hour H[:MM]]
-              [--wide] [--backend soft|wgpu] [--at MARK] [--out PATH.png | --out DIR]
+              [--wide] [--backend soft|wgpu] [--at MARK] [--weather clear|mist|rain|storm]
+              [--out PATH.png | --out DIR]
                                       a model plays the seed from New Game (default 1 minute), then one
                                       frame is drawn headless through the presenter and soft (T0), or
                                       wgpu (T2) with the gpu feature; --night sets the clock to 22:00
@@ -211,9 +212,12 @@ fn scene(args: &[String]) -> Result<(), String> {
     let canvas = if args.iter().any(|a| a == "--wide") { (1008, 432) } else { (768, 432) };
     let backend = crate::scene::Which::parse(flag("--backend").unwrap_or("soft")).ok_or("--backend: soft or wgpu")?;
     let at = flag("--at").map(str::to_owned);
+    let weather = flag("--weather").map(crate::scene::weather).transpose()?;
     let name = format!(
-        "scene-{seed}-{ticks}{}-{}-{}",
+        "scene-{seed}-{ticks}{}{}{}-{}-{}",
         hour.map_or(String::new(), |h| format!("-h{h:02}{minute:02}")),
+        at.as_ref().map_or(String::new(), |a| format!("-{a}")),
+        weather.map_or(String::new(), |w| format!("-{w:?}").to_lowercase()),
         model.name(),
         backend.name()
     );
@@ -223,11 +227,23 @@ fn scene(args: &[String]) -> Result<(), String> {
         None => PathBuf::from("sheets").join(format!("{name}.png")),
     };
     let bps = jane_sim::Blueprints::build(seed).map_err(|e| format!("seed {seed}: {e}"))?;
-    let o = crate::scene::Opts { seed, ticks, model, hour, minute, canvas, backend, at };
+    let o = crate::scene::Opts { seed, ticks, model, hour, minute, canvas, backend, at, weather };
     let shot = crate::scene::render(bps, &o)?;
     if let Some(dir) = path.parent().filter(|d| !d.as_os_str().is_empty()) {
         std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     }
+    // `--crop X,Y,W,H` and `--zoom Z`: a close look at part of the frame.
+    let shot = match (flag("--crop"), flag("--zoom")) {
+        (None, None) => shot,
+        (crop, zoom) => {
+            let r = crop.map_or(Ok((0, 0, shot.w, shot.h)), |c| {
+                let v: Vec<u16> = c.split(',').filter_map(|s| s.trim().parse().ok()).collect();
+                if v.len() == 4 { Ok((v[0], v[1], v[2], v[3])) } else { Err(format!("--crop X,Y,W,H, not {c}")) }
+            })?;
+            let z = zoom.map_or(Ok(3), |z| z.parse::<u16>().map_err(|_| format!("--zoom: not a number: {z}")))?;
+            shot.crop(r, z)
+        }
+    };
     std::fs::write(&path, shot.png()).map_err(|e| format!("{}: {e}", path.display()))?;
     println!(
         "{}

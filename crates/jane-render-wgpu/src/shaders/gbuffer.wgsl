@@ -45,7 +45,8 @@ fn vs_chunk(@builtin(vertex_index) vi: u32, @location(0) at: vec4<i32>) -> Chunk
 fn fs_chunk(i: ChunkOut) -> GOut {
     let t = vec2<i32>(floor(i.local));
     var o: GOut;
-    o.albedo = vec4<f32>(textureLoad(chunk_albedo, t, i.layer, 0).rgb, 1.0);
+    // Its alpha is the ground's surface byte: water, wetness, or the sky beyond the zone.
+    o.albedo = textureLoad(chunk_albedo, t, i.layer, 0);
     o.nh = textureLoad(chunk_nh, t, i.layer, 0);
     o.emissive = vec4<f32>(textureLoad(chunk_emissive, t, i.layer, 0).rgb, 1.0);
     return o;

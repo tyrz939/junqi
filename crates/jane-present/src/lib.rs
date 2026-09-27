@@ -12,12 +12,14 @@
 //! ```
 
 pub mod atlas;
+pub mod atmos;
 pub mod backend;
 pub mod camera;
 pub mod chunks;
 pub mod creatures;
 pub mod drawlist;
 pub mod frame;
+pub mod fx;
 pub mod input;
 /// The names bindings use in data and in `config.json` (shared with build.rs).
 pub mod input_names;
@@ -33,7 +35,9 @@ pub mod view;
 
 pub use backend::{AO_TINT, AtlasPages, Backend, CLUT_LEN, Caps, FrameStats, FrameTimes, Page, StatPass};
 pub use frame::{
-    CANVAS_H, CANVAS_W, Caster, ChunkCmd, ChunkId, ChunkLayers, Depth, Directional, Flags, Frame, Light, LightKind,
+    Atmos, CANVAS_H, CANVAS_W, Caster, ChunkCmd, ChunkId, ChunkLayers, Depth, Directional, Features, Flags, FogVolume,
+    StarCmd,
+    Frame, Light, LightKind, Moon, PartShape, Particle, SkyLook, WaterCmd, WeatherKind,
     Pass, Post, Rgb, Span, SpriteCmd, Src, Tier, Tint,
 };
 pub use present::Present;

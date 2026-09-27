@@ -50,6 +50,9 @@ pub struct AtlasPages {
     /// `0xAARRGGBB` per master-palette index, `CLUT_LEN` long; index 0 and 1 are never read.
     pub clut: Vec<u32>,
     pub pages: Vec<Page>,
+    /// The mist tile (§1.4, §1.9): 8-bit alpha, `jane_art::weather::MIST_SIDE` square, seamless;
+    /// what every tier's fog drifts. Empty until the presenter makes it.
+    pub mist: Vec<u8>,
 }
 
 /// The passes a frame's time is split into (§1.12's measurement, in its order). A backend

@@ -25,6 +25,24 @@ struct Globals {
     lift: vec4<f32>,
     // x: bloom strength, y: ticks, z: emissive gain, w: unused.
     misc: vec4<f32>,
+    // The weather (PRESENTATION.md §1.9): rain, mist, how wet the ground is, a lightning flash,
+    // each 0..1.
+    weather: vec4<f32>,
+    // x: the wind, px a tick; y: the presentation tick; zw: the mist tile's drift, px.
+    wind: vec4<f32>,
+    // The sky backdrop: the zenith (w: how many stars show), the horizon (w: the afterglow's
+    // canvas x), the afterglow (w: its strength), all linear.
+    zenith: vec4<f32>,
+    horizon: vec4<f32>,
+    glow: vec4<f32>,
+    // x: the zone's top edge on the canvas (the horizon), y: 1 if there is a sky, z: light shafts'
+    // strength, w: fog volumes.
+    skyinfo: vec4<f32>,
+    // xy: the camera (the view's top-left in the zone, canvas px), z: 1 if water is in view,
+    // w: particles.
+    cam: vec4<f32>,
+    // The zone's left, right and bottom edges on the canvas.
+    zone: vec4<f32>,
 };
 
 @group(0) @binding(0) var<uniform> g: Globals;

@@ -1,6 +1,7 @@
 //! T0 backend: the CPU rasteriser (PRESENTATION.md §1.2, §1.4). Integer pixel path, so its
 //! frames are byte-identical across targets.
 
+pub mod atmos;
 pub mod blit;
 pub mod lightmap;
 pub mod silhouette;
@@ -9,7 +10,8 @@ pub mod ui;
 use std::time::Instant;
 
 use jane_present::frame::CHUNK_PX;
-use jane_present::{AtlasPages, Backend, Caps, Frame, FrameStats, FrameTimes, Page, Pass, StatPass, Tier};
+use jane_present::frame::SkyLook;
+use jane_present::{AtlasPages, Backend, Caps, Depth, Frame, FrameStats, FrameTimes, Page, Pass, StatPass, Tier};
 
 use crate::blit::Target;
 use crate::lightmap::LightMap;
@@ -51,6 +53,7 @@ impl Backend for Soft {
     /// Keeps the CLUT and the albedo; the normal, emissive and height pages are never read here.
     fn upload_atlas(&mut self, pages: &AtlasPages) {
         self.atlas.clut.clone_from(&pages.clut);
+        self.atlas.mist.clone_from(&pages.mist);
         self.atlas.pages.clear();
         self.atlas.pages.extend(pages.pages.iter().map(|p| Page {
             w: p.w,
@@ -75,6 +78,9 @@ impl Backend for Soft {
         let mut written = n as u64;
         let t = &mut Target { px: &mut self.fb, w: i32::from(self.w), h: i32::from(self.h) };
         pass_us[StatPass::Sky as usize] = start.elapsed().as_micros() as u32;
+        // The sky, once drawn, keeps the terrain inside the zone (its chunks paint the frame's
+        // clear beyond the edge, where the sky is).
+        let mut sky: Option<SkyLook> = None;
         for pass in &frame.passes {
             let at = Instant::now();
             calls += 1;
@@ -83,16 +89,48 @@ impl Backend for Soft {
                 Pass::Sprites { .. } => StatPass::List,
                 Pass::Silhouettes { .. } => StatPass::Shadows,
                 Pass::Lights { .. } => StatPass::Light,
-                Pass::Post(_) => StatPass::Grade,
+                Pass::Post(_) | Pass::Rays { .. } => StatPass::Grade,
+                Pass::Sky(_) => StatPass::Sky,
+                Pass::Parallax { .. } => StatPass::Parallax,
+                Pass::Water { .. } => StatPass::Water,
+                Pass::Weather(_) | Pass::Particles { layer: Depth::Weather, .. } => StatPass::Weather,
+                Pass::Fog { .. } => StatPass::Fog,
+                Pass::Particles { .. } => StatPass::Fx,
             };
             match *pass {
                 Pass::Terrain { chunks } => {
+                    let top = sky.map_or(0, |s| s.zone.1.clamp(0, t.h));
+                    // Below the sky: the rows the zone covers.
+                    let n = (top * t.w) as usize;
+                    let mut ground = Target { px: &mut t.px[n..], w: t.w, h: t.h - top };
                     for c in frame.chunks_in(chunks) {
                         calls += 1;
-                        blit::chunk(t, &frame.layers_of(c).albedo, CHUNK_PX, c.x, c.y);
+                        blit::chunk(&mut ground, &frame.layers_of(c).albedo, CHUNK_PX, c.x, c.y - top);
                         written += (CHUNK_PX * CHUNK_PX) as u64;
                     }
                 }
+                Pass::Sky(s) => {
+                    sky = Some(s);
+                    written += atmos::sky(t, &s, &frame.stars[s.star_list.range()]);
+                }
+                Pass::Parallax { sprites, .. } => {
+                    if let Some(s) = &sky {
+                        for sp in frame.sprites_in(sprites) {
+                            if let Some(page) = self.atlas.pages.get(usize::from(sp.page)) {
+                                written += atmos::parallax(t, s, page, &self.atlas.clut, sp);
+                            }
+                        }
+                    }
+                }
+                Pass::Water { cells } => written += atmos::shimmer(t, frame.water_in(cells), frame.tick),
+                Pass::Fog { volumes, drift } => {
+                    written += atmos::fog(t, frame.fog_in(volumes), &self.atlas.mist, frame.camera, drift);
+                }
+                Pass::Particles { parts, .. } => written += atmos::particles(t, frame.parts_in(parts)),
+                // What the sky is doing reached T0 through the ambient already, and the rain is
+                // particles. Light shafts and the grade are T2's, which a T0 frame never holds
+                // (§1.3): soft draws nothing of its own.
+                Pass::Weather(_) | Pass::Rays { .. } | Pass::Post(_) => {}
                 Pass::Sprites { cmds, .. } => {
                     for s in frame.sprites_in(cmds) {
                         if let Some(page) = self.atlas.pages.get(usize::from(s.page)) {
@@ -125,8 +163,6 @@ impl Backend for Soft {
                         written += n as u64;
                     }
                 }
-                // A T2 pass: a T0 frame never holds one (§1.3), and soft draws nothing of its own.
-                Pass::Post(_) => {}
             }
             pass_us[stat as usize] += at.elapsed().as_micros() as u32;
         }

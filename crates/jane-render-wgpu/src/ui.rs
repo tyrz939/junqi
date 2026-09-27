@@ -264,7 +264,7 @@ mod tests {
         };
         let mut clut = vec![0xff00_0000; jane_present::CLUT_LEN];
         clut[5] = 0xffff_0000;
-        let pages = AtlasPages { clut, pages: vec![Page { w: 2, h: 1, albedo: vec![5, 0], ..Page::default() }] };
+        let pages = AtlasPages { clut, pages: vec![Page { w: 2, h: 1, albedo: vec![5, 0], ..Page::default() }], ..AtlasPages::default() };
         w.upload_atlas(&pages);
         let mut f = Frame::new(Tier::T2);
         f.canvas = (8, 4);
