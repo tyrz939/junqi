@@ -346,7 +346,9 @@ impl Prep {
         match sun {
             Some(s) => {
                 let (az, el) = (rad(s.azimuth.0), rad(s.elevation.0));
-                f32s(&mut self.globals, &[el.cos() * az.cos(), el.cos() * az.sin(), el.sin(), 1.0]);
+                // w: 1 and its shadow's strength over that (`light.wgsl`, the umbra).
+                let strength = f32::from(s.strength) / 255.0;
+                f32s(&mut self.globals, &[el.cos() * az.cos(), el.cos() * az.sin(), el.sin(), 1.0 + strength]);
                 let [r, gg, b] = lin3(s.colour).map(|v| v * SUN_GAIN);
                 let k = 1.0 / rad(s.spread.max(60)).tan();
                 f32s(&mut self.globals, &[r, gg, b, k]);

@@ -133,6 +133,60 @@ fn trace(p: vec3<f32>, l: vec3<f32>, max_t: f32, k: f32, t0: f32, max_step: f32)
     return r * r * (3.0 - 2.0 * r);
 }
 
+// A texel's `(lo, hi)` at the texel under `q`, unfiltered: what a side ray of `sun_disc` reads.
+fn texel_at(q: vec2<f32>) -> vec2<f32> {
+    let b = floor(q);
+    return texel(i32(b.x), i32(b.y));
+}
+
+// How much of the sun's disc reaches `p`: a ray toward its middle and one toward each side across
+// it, weighted 1 : 2 : 1, marched together. A ray's penumbra is how far it clears the field's top
+// or bottom, so on its own it softens a shadow's tip (the ray over a post's top) and not its sides
+// (a ray beside a post clears it by its whole height): the side rays, a third of the sun's radius
+// either side (`k` is 1 / tan of it), soften the sides too, widening with the distance from what
+// casts, and a thin post's shadow keeps its line near its root and fades far out, as a real one
+// does. Steps of 2 px at most, the middle ray's long step reading the tallest of 2 x 2 texels, so
+// it never walks past a post 2 px wide; the side rays read the texel under them.
+fn sun_disc(p: vec3<f32>, l: vec3<f32>, k: f32, t0: f32) -> f32 {
+    let lxy = length(l.xy);
+    if lxy < 0.0005 {
+        return 1.0;
+    }
+    let dir = l.xy / lxy;
+    let rise = l.z / lxy;
+    // Across the ray, and how far the side rays lie from it a px along.
+    let across = vec2<f32>(-dir.y, dir.x);
+    let side = 0.35 / k;
+    var res = vec3<f32>(1.0);
+    var t = t0;
+    var step = 1.0;
+    for (var i = 0; i < 160; i++) {
+        let z = p.z + 0.75 + rise * t;
+        if rise >= 0.0 && z > g.hmax {
+            break;
+        }
+        let q = p.xy + dir * t;
+        var f: vec2<f32>;
+        if step > 1.25 {
+            f = height_max(q);
+        } else {
+            f = height_at(q);
+        }
+        let a = texel_at(q + across * (side * t));
+        let b = texel_at(q - across * (side * t));
+        let clear = vec3<f32>(max(z - f.y, f.x - z), max(z - a.y, a.x - z), max(z - b.y, b.x - z));
+        res = min(res, k * clear / t);
+        if max(res.x, max(res.y, res.z)) <= 0.0 {
+            return 0.0;
+        }
+        step = clamp(t * 0.1, 1.0, 2.0);
+        t += step;
+    }
+    let r = clamp(res, vec3<f32>(0.0), vec3<f32>(1.0));
+    let s = r * r * (3.0 - 2.0 * r);
+    return (2.0 * s.x + s.y + s.z) * 0.25;
+}
+
 // The ground's own occlusion by what stands round it: the foot of a wall, a crate's skirt; not
 // what floats well over it.
 fn ground_ao(p: vec3<f32>) -> f32 {
@@ -183,17 +237,16 @@ fn fs_light(i: FullOut) -> LitOut {
     let nh = textureLoad(gnh, q, 0);
     let em = textureLoad(gem, q, 0).rgb;
     let h = nh.b * 255.0;
-    let depth = nh.a * 255.0;
     let nx = (nh.r * 255.0 - 128.0) / 127.0;
     let ny = (nh.g * 255.0 - 128.0) / 127.0;
     let n = vec3<f32>(nx, ny, sqrt(max(1.0 - nx * nx - ny * ny, 0.0)));
     // Where this pixel is: on the ground under it, `h` above. A standing thing's face is the
-    // front of its body, half its depth toward the viewer from the line it stands on, so its
-    // own body never shadows its face. The ground's own relief (a tuft, a cobble, 4 px and
-    // under) is the ground where it is drawn: moved down its few rows, every shadow on the
-    // grass would stand that far up the screen from what casts it.
+    // front of its body, just in front of the row it stands on (its depth is behind that row,
+    // `scatter.wgsl`), so its own body never shadows its face. The ground's own relief (a tuft,
+    // a cobble, 4 px and under) is the ground where it is drawn: moved down its few rows, every
+    // shadow on the grass would stand that far up the screen from what casts it.
     let lifted = h > GROUND;
-    let front = select(0.0, depth * 0.5 + 1.0, lifted);
+    let front = select(0.0, 2.0, lifted);
     let down = select(0.0, f32(rows_up(u32(h + 0.5))), lifted);
     let p = vec3<f32>(f32(q.x) + 0.5, f32(q.y) + 0.5 + down + front, h);
     skip_own = textureLoad(gid, q, 0).r;
@@ -215,7 +268,10 @@ fn fs_light(i: FullOut) -> LitOut {
         // to two and a half times that.
         let ndl = min(max(dot(n, l), 0.0) / max(l.z, 0.2), 2.5);
         if ndl > 0.0 {
-            sun_seen = trace(p, l, 2000.0, g.sun_col.w, t0, 3.0);
+            // The umbra takes `strength` of the sun (sun_dir.w - 1, `Directional::strength`): all
+            // of it under a high clear sun, less when it is low and its light is scattered,
+            // little under cloud.
+            sun_seen = 1.0 - (g.sun_dir.w - 1.0) * (1.0 - sun_disc(p, l, g.sun_col.w, t0));
             light += g.sun_col.rgb * ndl * sun_seen;
             if shine > 0.0 {
                 let hv = normalize(l + EYE);

@@ -218,9 +218,11 @@ void main() { gl_FragColor = vec4(v_val, v_val) / 255.0; }
 /// The silhouettes' mask applied to the albedo (`jane-render-soft::silhouette::apply`, bit for
 /// bit): a px takes the mask at the ground under it (the terrain's height from `u_height`, a px
 /// `h` up standing `rows_up(h)` rows lower; 4 px and under is the ground) where the shadow there
-/// reaches its height; a covered px toward `shade` by its strength, an edge px by five eighths of
-/// it, the ring just outside by three eighths on the dither's odd squares. `u_box` is the mask's
-/// box `(x0, y0, x1, y1)`: a px whose ground lies outside it takes nothing.
+/// reaches its height; a covered px toward `shade` by its strength, its edge feathered by
+/// `u_feather` px more than one dither step: a covered px `k` in from the edge by
+/// `8 - 3 (f + 2 - k) / (f + 1)` eighths, a px `k` outside by `3 (f + 2 - k) / (f + 1)` eighths
+/// where the 4 x 4 ordered dither is under `8 (f + 2 - k) / (f + 1)`. `u_box` is the mask's box
+/// `(x0, y0, x1, y1)`: a px whose ground lies outside it (and its feather) takes nothing.
 pub const SILHOUETTE_FS: &str = r"
 uniform sampler2D u_mask;
 uniform sampler2D u_snap;
@@ -228,35 +230,64 @@ uniform sampler2D u_height;
 uniform vec2 u_size;
 uniform vec3 u_k;
 uniform vec4 u_box;
+uniform float u_feather;
 float need;
 float m_at(vec2 p) {
     if (p.x < 0.0 || p.y < 0.0 || p.x >= u_size.x || p.y >= u_size.y) return 0.0;
     vec4 v = texture2D(u_mask, (p + 0.5) / u_size);
     return byte(v.g) >= need ? byte(v.r) : 0.0;
 }
+float b2(float x, float y) { return 2.0 * x + 3.0 * y - 4.0 * x * y; }
+float bayer(vec2 q) {
+    vec2 a = mod(q, 2.0);
+    vec2 c = mod(floor(q * 0.5), 2.0);
+    return 4.0 * b2(a.x, a.y) + b2(c.x, c.y);
+}
 void main() {
     vec2 q = floor(gl_FragCoord.xy);
     float h = byte(texture2D(u_height, (q + 0.5) / u_size).b);
     need = h > 4.5 ? h : 0.0;
     vec2 p = vec2(q.x, h > 4.5 ? q.y + fdiv(h * 4.0 + 4.0, 5.0) : q.y);
-    if (p.y > u_box.w || p.y < u_box.y - 1.0) discard;
+    float f = u_feather;
+    if (p.y > u_box.w + f || p.y < u_box.y - 1.0 - f) discard;
     float m = m_at(p);
-    float a = m_at(p + vec2(-1.0, 0.0));
-    float b = m_at(p + vec2(1.0, 0.0));
-    float c = m_at(p + vec2(0.0, -1.0));
-    float d = m_at(p + vec2(0.0, 1.0));
     float s;
     if (m > 0.5) {
-        s = min(min(a, b), min(c, d)) < 0.5 ? floor(m * 5.0 * 0.125) : m;
+        s = m;
+        for (int i = 1; i <= 4; i++) {
+            float k = float(i);
+            if (k > f + 1.0) break;
+            float a = m_at(p + vec2(-k, 0.0));
+            float b = m_at(p + vec2(k, 0.0));
+            float c = m_at(p + vec2(0.0, -k));
+            float d = m_at(p + vec2(0.0, k));
+            if (min(min(a, b), min(c, d)) < 0.5) {
+                s = floor(m * (8.0 - floor(3.0 * (f + 2.0 - k) / (f + 1.0) + 0.001)) * 0.125);
+                break;
+            }
+        }
     } else {
-        float most = max(max(a, b), max(c, d));
-        if (most < 0.5 || mod(q.x + q.y, 2.0) > 0.5) discard;
-        s = floor(most * 3.0 * 0.125);
+        float most = 0.0;
+        float kk = 0.0;
+        for (int i = 1; i <= 4; i++) {
+            float k = float(i);
+            if (k > f + 1.0) break;
+            float a = m_at(p + vec2(-k, 0.0));
+            float b = m_at(p + vec2(k, 0.0));
+            float c = m_at(p + vec2(0.0, -k));
+            float d = m_at(p + vec2(0.0, k));
+            most = max(max(a, b), max(c, d));
+            kk = k;
+            if (most > 0.5) break;
+        }
+        if (most < 0.5) discard;
+        if (bayer(q) >= floor(8.0 * (f + 2.0 - kk) / (f + 1.0) + 0.001)) discard;
+        s = floor(most * floor(3.0 * (f + 2.0 - kk) / (f + 1.0) + 0.001) * 0.125);
     }
     s = s + floor(s * (1.0 / 128.0));
     vec3 v = bytes3(texture2D(u_snap, (q + 0.5) / u_size).rgb);
-    vec3 f = 256.0 - floor(u_k * s * (1.0 / 256.0));
-    gl_FragColor = vec4(floor(v * f * (1.0 / 256.0)) / 255.0, 1.0);
+    vec3 fk = 256.0 - floor(u_k * s * (1.0 / 256.0));
+    gl_FragColor = vec4(floor(v * fk * (1.0 / 256.0)) / 255.0, 1.0);
 }
 ";
 

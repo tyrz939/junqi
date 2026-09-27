@@ -151,7 +151,13 @@ pub enum Step {
     Sprites { page: u8, quads: Range<usize>, mode: f32, blend: Blend },
     /// The silhouettes: span quads `spans` of `span_v` into the mask (its box `(x0, y0, x1, y1)`),
     /// then the mask applied over `(x, y, w, h)` with the shade's per-channel weights.
-    Silhouette { spans: Range<usize>, mask: (i32, i32, i32, i32), apply: (i32, i32, i32, i32), k: [f32; 3] },
+    Silhouette {
+        spans: Range<usize>,
+        mask: (i32, i32, i32, i32),
+        apply: (i32, i32, i32, i32),
+        k: [f32; 3],
+        feather: i32,
+    },
 }
 
 /// The sky of the light pass, in linear light.
@@ -648,13 +654,17 @@ impl Prep {
         let Some((x0, y0, x1, y1)) = dirty else { return };
         // The mask's box and the ring round it, and above it as high as a lifted receiver whose
         // ground lies inside it can stand.
-        let (ax0, ay0, ax1, ay1) = ((x0 - 1).max(0), (y0 - 1 - CLIMB).max(0), (x1 + 1).min(cw), (y1 + 1).min(ch));
+        // The edge feathered by the sun's spread (`shadow::feather`, soft's).
+        let f = shadow::feather(sun.spread);
+        let (ax0, ay0, ax1, ay1) =
+            ((x0 - 1 - f).max(0), (y0 - 1 - f - CLIMB).max(0), (x1 + 1 + f).min(cw), (y1 + 1 + f).min(ch));
         let k = shade.map(|c| f32::from(256 - u16::from(c) - u16::from(c >> 7)));
         self.steps.push(Step::Silhouette {
             spans: first..end,
             mask: (x0, y0, x1, y1),
             apply: (ax0, ay0, ax1 - ax0, ay1 - ay0),
             k,
+            feather: f,
         });
     }
 
@@ -733,8 +743,7 @@ impl Prep {
         }
         let far = r + SHADOW_PAST;
         let x = f32::from(s.x);
-        let depth = f32::from(c.depth.max(2));
-        let backs = [fy - (depth / 2.0).floor(), fy + depth - (depth / 2.0).floor()];
+        let depth = i32::from(c.depth.max(2));
         let prof = self.profile(frame, ci, pages);
         // Its top, true px: the ray over it is how high the shadow reaches.
         let tall = i32::from(c.height).max(1);
@@ -757,7 +766,11 @@ impl Prep {
             // The run's bottom and top as true px (a row `hv` above the foot is `5 hv / 4` up).
             let (za, zb) = (up(h0 - 1), up(h1));
             let (xa, xb) = (x + u0 as f32, x + u1 as f32 + 1.0);
-            for by in backs {
+            // Its footprint's front and back: the edge of its foot row and its depth behind it,
+            // no deeper than the run is wide (the silhouettes' and T2's field's,
+            // `jane_present::shadow::bands`).
+            let deep = depth.min(2 * ((u1 - u0) / 2) + 2) as f32;
+            for by in [fy + 0.5 - deep, fy + 0.5] {
                 let mut quad = [0.0f32; 16];
                 for (n, (px, z)) in [(xa, za), (xb, za), (xa, zb), (xb, zb)].into_iter().enumerate() {
                     let (dx, dy) = (px - lx, by - ly);

@@ -161,7 +161,13 @@ impl Backend for Soft {
                             silhouette::cast(&mut self.mask, page, s, c, k);
                         }
                     }
-                    written += silhouette::apply(t, &mut self.mask, shade, &self.heights);
+                    written += silhouette::apply(
+                        t,
+                        &mut self.mask,
+                        shade,
+                        &self.heights,
+                        jane_present::shadow::feather(sun.spread),
+                    );
                 }
                 // T0 lights by the lightmap (§1.7): the ambient, the sun's share already in it,
                 // and every point light's pool; by the ambient alone when no light shows.

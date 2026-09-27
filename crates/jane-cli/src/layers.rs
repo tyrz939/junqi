@@ -118,9 +118,9 @@ fn run_bottom(g: &Heights, x: usize, y: usize) -> i32 {
     0
 }
 
-/// The scatter as `scatter.wgsl` does it: each lifted px raised on `(x, y + rows_up(h))`, as deep
-/// as its depth and a px wider each side, the tallest kept as the top and the lowest run's
-/// bottom as the bottom. `(top, bottom)` per canvas px.
+/// The scatter as `scatter.wgsl` does it: each lifted px raised on `(x, y + rows_up(h))` and the
+/// rows of its depth behind it (no deeper than it is wide; the terrain a px wider each side), the
+/// tallest kept as the top and the lowest run's bottom as the bottom. `(top, bottom)` per canvas px.
 pub fn field(g: &Heights) -> (Vec<u8>, Vec<u8>) {
     let (w, h) = (g.w, g.rows);
     let mut top = vec![0u8; w * h];
@@ -132,9 +132,22 @@ pub fn field(g: &Heights) -> (Vec<u8>, Vec<u8>) {
                 continue;
             }
             let lo = if g.id[y * w + x] == 0 { 0 } else { run_bottom(g, x, y).min(i32::from(z)) as u8 };
-            let d = i32::from(g.depth[y * w + x].max(1));
-            let y0 = y as i32 + jane_present::rows_up(i32::from(z)) - d / 2;
-            for dx in -1..=1 {
+            let who = g.id[y * w + x];
+            let mut d = i32::from(g.depth[y * w + x].max(1));
+            if who != 0 {
+                // `scatter.wgsl`'s `footprint`: no deeper than it is wide, and round.
+                let same = |xx: i32| xx >= 0 && xx < w as i32 && g.id[y * w + xx as usize] == who;
+                let run = |dx: i32| (0..64u8).find(|&e| !same(x as i32 + dx * (i32::from(e) + 1))).unwrap_or(64);
+                let (l, r) = (run(-1), run(1));
+                let mid = d.min(2 * ((i32::from(l) + i32::from(r)) / 2) + 2);
+                let u = (f32::from(l.min(r)) + 0.5) / ((f32::from(l) + f32::from(r) + 1.0) * 0.5);
+                let round_off = (1.0 - (1.0 - u) * (1.0 - u)).max(0.0).sqrt();
+                let mid_f = f32::from(u8::try_from(mid).unwrap_or(u8::MAX));
+                d = ((mid_f * round_off).round() as i32).clamp(mid.min(2), mid);
+            }
+            let y0 = y as i32 + jane_present::rows_up(i32::from(z)) - (d - 1);
+            let spread = i32::from(g.id[y * w + x] == 0);
+            for dx in -spread..=spread {
                 let xx = x as i32 + dx;
                 if xx < 0 || xx >= w as i32 {
                     continue;

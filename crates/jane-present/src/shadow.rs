@@ -5,7 +5,8 @@
 //! A caster stands on its foot row. Each row of its silhouette `hv` rows above the foot is
 //! `height_of_rows(hv)` true px up (the 3/4 view's one projection, `rows_up`), so the sun lays it
 //! that height times the cotangent of its elevation away from the sun, stretched to meet the row
-//! above it and as thick as the caster is deep. Under the rows, a **foot**: an ellipse two px
+//! above it and as thick as the caster is deep, its depth behind the foot row (a sprite's lowest
+//! px is the front of what it stands on; T2's field stands it the same). Under the rows, a **foot**: an ellipse two px
 //! wider each side than the silhouette's lowest rows, drawn out a few px along the shadow, so the
 //! shadow is seen to grow out of the feet even where the body hides where it starts (in the 3/4
 //! view a shadow thrown up the screen runs behind the body that casts it).
@@ -18,7 +19,7 @@
 
 use jane_core::angle::{cos_q15, sin_q15};
 
-use crate::frame::{Caster, Directional, SpriteCmd, height_of_rows, rows_up};
+use crate::frame::{Caster, Directional, Rgb, SpriteCmd, height_of_rows, rows_up};
 
 /// The longest a shadow gets, in heights: a sun this low casts no further (8 x 256).
 pub const MAX_COT_Q8: i32 = 8 * 256;
@@ -47,10 +48,30 @@ pub fn shear(sun: &Directional) -> Option<(i32, i32)> {
     Some((-(ca * cot) >> 15, -(sa * cot) >> 15))
 }
 
-/// A gap in a row this wide or wider parts it into two runs: a lantern hung off its post, a hand
-/// held out from the body. A narrower one (a dithered edge, a notch between leaves) does not,
-/// as T2's field closes it (a px wider each side).
-pub const GAP: usize = 3;
+/// A gap in a row of 2 px or more parts it into two runs: a lantern hung off its post, a hand
+/// held out from the body. A single px (a dithered edge, a notch between leaves) does not: T2's
+/// field keeps a column's whole height, and closes it with the rows over and under.
+pub const GAP: usize = 2;
+
+/// How many px wider than its one dither step a silhouette's edge is feathered for a sun or
+/// moon of `spread` (`Directional::spread`): none under a high clear sun, one for the low sun of
+/// five o'clock or seven, two at the horizon, three under cloud. T2's penumbra widens with the
+/// spread and the distance from what casts; T0 and T1 widen the edge by this.
+pub fn feather(spread: u16) -> i32 {
+    let deg = |d: i32| d * 65536 / 360;
+    match i32::from(spread) {
+        s if s <= deg(2) => 0,
+        s if s <= deg(4) => 1,
+        s if s <= deg(6) => 2,
+        _ => 3,
+    }
+}
+
+/// A silhouette's multiplier `shade` laid at `strength` (of 255, `Directional::strength`): the
+/// whole of it under a high clear sun, lighter for a low one, faint under cloud.
+pub fn shade_at(shade: Rgb, strength: u8) -> Rgb {
+    shade.map(|c| (255 - (255 - u32::from(c)) * u32::from(strength) / 255) as u8)
+}
 
 /// A caster's rows, from the foot up: `(rows above the foot, first, last)` px from the sprite's
 /// left of each opaque run in the row, a row parted where it has a [`GAP`] (the contact shadow,
@@ -170,11 +191,14 @@ fn bands_of_rows(
         let (ax, bx) = ((h0 * kx) >> 8, (h1 * kx) >> 8);
         let (ay, by) = ((h0 * ky) >> 8, (h1 * ky) >> 8);
         let strength = 256 - (256 - TIP) * hv.min(top) / top;
+        // No deeper than it is wide (T2's field: its middle column's `2 inset + 2`): a post
+        // 2 px wide throws a shadow 2 px thick whichever way it falls.
+        let deep = depth.min(2 * ((u1 - u0) / 2) + 2);
         emit(Band {
             x0: x + u0 + ax.min(bx),
             x1: x + u1 + 1 + ax.max(bx),
-            y0: fy + ay.min(by) - depth / 2,
-            y1: fy + ay.max(by) + depth - depth / 2,
+            y0: fy + ay.min(by) - deep + 1,
+            y1: fy + ay.max(by) + 1,
             strength: strength.clamp(1, 255) as u8,
             reach: (htop - h0).clamp(1, 255) as u8,
         });
@@ -195,7 +219,7 @@ mod tests {
     use jane_core::Angle;
 
     fn sun(azimuth: Angle, deg: i32) -> Directional {
-        Directional { azimuth, elevation: Angle::from_degrees(deg), colour: [255; 3], spread: 0 }
+        Directional { azimuth, elevation: Angle::from_degrees(deg), colour: [255; 3], spread: 0, strength: 255 }
     }
 
     #[test]
@@ -352,8 +376,8 @@ mod tests {
         // A bat: a body 12 wide from row 30 to row 40, 20 rows over its anchor on row 56.
         let (bands, foot) = cast(|x, y| (30..=40).contains(&y) && (14..26).contains(&x));
         // Nothing under it: the nearest band is its lowest row's, 16 rows' height (20 px) times
-        // 1.19 away, less half its depth.
+        // 1.19 away (23 rows), its depth (6 rows) behind that.
         let near = bands.iter().map(|b| b.y0).min().unwrap();
-        assert!(near >= foot.1 + 20, "a shadow at its anchor: {near}");
+        assert!(near >= foot.1 + 18, "a shadow at its anchor: {near}");
     }
 }

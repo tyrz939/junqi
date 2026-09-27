@@ -24,8 +24,8 @@ use crate::chunks::{ChunkCache, LRU, Need};
 use crate::creatures::{self, Creatures};
 use crate::drawlist::{DrawCmd, DrawList};
 use crate::frame::{
-    CANVAS_H, CANVAS_W, CELL, CHUNK_PX, Caster, ChunkCmd, ChunkId, Depth, FX_TO_CANVAS, Features, Flags, Frame, Light,
-    LightKind, Pass, Post, Rgb, Span, SpriteCmd, Tier, Tint, height_of_rows, rows_up,
+    CANVAS_H, CANVAS_W, CELL, CHUNK_PX, Caster, ChunkCmd, ChunkId, Depth, Directional, FX_TO_CANVAS, Features, Flags,
+    Frame, Light, LightKind, Pass, Post, Rgb, Span, SpriteCmd, Tier, Tint, height_of_rows, rows_up,
 };
 use crate::fx::Fx;
 use crate::light::{Sky, flicker, lantern_lit, sky};
@@ -773,7 +773,7 @@ impl Present {
                             sprite: sprite(r, x, y, Flags::default()),
                             caster: Some(Caster {
                                 sprite: 0,
-                                foot: clamp16(fx, fy),
+                                foot: clamp16(fx, fy - i32::from(fl.lift)),
                                 height: r.top.max(1),
                                 depth: fl.depth,
                             }),
@@ -1034,10 +1034,11 @@ impl Present {
         // from a sun or a moon, not from the afterglow, a sky too broad to throw a silhouette.
         if f.tier <= Tier::T1
             && rows.silhouettes
-            && let Some(sun) = sky.sun.filter(|s| s.spread <= crate::light::SILHOUETTE_SPREAD)
+            && let Some(sun) = sky.sun.filter(Directional::silhouettes)
             && casters.len > 0
         {
-            f.passes.push(Pass::Silhouettes { sun, shade: sky.shade, casters });
+            let shade = shadow::shade_at(sky.shade, sun.strength);
+            f.passes.push(Pass::Silhouettes { sun, shade, casters });
         }
         f.passes.push(Pass::Sprites { layer: Depth::Standing, cmds: standing });
         f.passes.push(Pass::Weather(self.atmos.atmos()));

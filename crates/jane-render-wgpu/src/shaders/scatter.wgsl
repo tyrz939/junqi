@@ -3,7 +3,8 @@
 // four fifths as tall, `jane_present::rows_up`); it raises that ground point, and the rows its
 // depth covers round it, to its height (the tallest wins). An upright sprite's column lands on
 // its feet, so a person becomes a thin wall as tall as she is, shaped like her, standing on the
-// row she stands on; a wall's face lands on its foot and a roof on the house under it. Each
+// row she stands on and the rows of her depth behind it; a wall's face lands on its foot and a
+// roof on the house under it. Each
 // texel keeps whose it is (the G-buffer's id) under its height, `h << 16 | id`, so a trace can
 // skip the thing it starts on and the thing holding its light.
 //
@@ -56,6 +57,33 @@ fn run_bottom(x: i32, y: i32, h: f32, who: u32) -> f32 {
     return 0.0;
 }
 
+// How many of `who`'s px run on from `(x, y)` in the direction `dx`, counted to `most` at most.
+fn run_on(x: i32, y: i32, dx: i32, who: u32, most: i32) -> i32 {
+    let w = i32(g.full.x);
+    var e = 0;
+    for (; e < most; e++) {
+        let xx = x + dx * (e + 1);
+        if xx < 0 || xx >= w || textureLoad(gid, vec2<i32>(xx, y), 0).r != who {
+            break;
+        }
+    }
+    return e;
+}
+
+// How many rows deep a sprite px's footprint is, of its caster's depth `d`, from its foot row
+// back. A thing is taken to be no deeper than it is wide, and round: its row, `wide` px, is
+// `2 ((wide - 1) / 2) + 2` rows deep at most (the silhouettes' band, `shadow::bands`), and a
+// column toward the row's ends a half ellipse's depth there (2 rows at the least). So a post 2 px
+// wide stands 2 deep, and a bush's footprint rounds off behind its ends.
+fn footprint(x: i32, y: i32, who: u32, d: u32) -> u32 {
+    let l = run_on(x, y, -1, who, 64);
+    let r = run_on(x, y, 1, who, 64);
+    let mid = min(d, 2u * (u32(l + r) / 2u) + 2u);
+    let u = (f32(min(l, r)) + 0.5) / (f32(l + r + 1) * 0.5);
+    let round_off = sqrt(max(1.0 - (1.0 - u) * (1.0 - u), 0.0));
+    return clamp(u32(round(f32(mid) * round_off)), min(mid, 2u), mid);
+}
+
 @compute @workgroup_size(8, 8)
 fn scatter(@builtin(global_invocation_id) id: vec3<u32>) {
     let w = u32(g.full.x);
@@ -68,18 +96,23 @@ fn scatter(@builtin(global_invocation_id) id: vec3<u32>) {
     if f32(h) < GROUND {
         return;
     }
-    let d = max(u32(round(v.a * 255.0)), 1u);
+    var d = max(u32(round(v.a * 255.0)), 1u);
     let who = textureLoad(gid, vec2<i32>(id.xy), 0).r & 0xffffu;
     var lo = 0u;
     if who != 0u {
         lo = u32(round(run_bottom(i32(id.x), i32(id.y), f32(h), who)));
+        d = footprint(i32(id.x), i32(id.y), who, d);
     }
-    let y0 = i32(id.y + rows_up(h)) - i32(d / 2u);
+    // Its footprint is behind the row it stands on: a sprite's lowest px is the front of what it
+    // stands on, so the ground drawn in front of its foot is never inside it (a bush's footprint
+    // round its foot put the grass in front of it in its shadow, cut off square at its ends).
+    let y0 = i32(id.y + rows_up(h)) - i32(d - 1u);
     let packed = (h << 16u) | who;
     let n = w * hh;
-    // A px wider each side: a dithered or combed silhouette stands as one body, and a ray
-    // stepping past a thin post still finds it.
-    for (var dx = -1; dx <= 1; dx++) {
+    // A sprite stands as wide as it is drawn: a post 2 px wide throws a shadow 2 px wide, as on
+    // T0 and T1. The terrain a px wider each side, so a wall's end is never stepped past.
+    let spread = select(0, 1, who == 0u);
+    for (var dx = -spread; dx <= spread; dx++) {
         let x = i32(id.x) + dx;
         if x < 0 || x >= i32(w) {
             continue;

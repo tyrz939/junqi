@@ -15,7 +15,8 @@ struct Globals {
     tiles_x: u32,
     // The sky's own light, linear.
     fill: vec4<f32>,
-    // Toward the sun (x east, y south, z up), unit; w is 1 when there is a sun or moon.
+    // Toward the sun (x east, y south, z up), unit; w is 0 with no sun or moon, else 1 and its
+    // shadow's strength over that (1..2: how much of it an umbra takes away).
     sun_dir: vec4<f32>,
     // The sun's light on flat ground, linear; w is its penumbra factor, 1 / tan(its spread).
     sun_col: vec4<f32>,

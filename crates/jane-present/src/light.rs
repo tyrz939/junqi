@@ -63,9 +63,42 @@ const MOON_TOP: i32 = 38;
 /// The sun on flat ground high in the sky, and low, on the horizon's edge.
 const SUN_HIGH: [i32; 3] = [214, 204, 184];
 const SUN_LOW: [i32; 3] = [255, 176, 96];
-/// The broadest light that still throws a T0 silhouette (5 degrees): the sun and the moon do,
-/// the afterglow does not.
-pub const SILHOUETTE_SPREAD: u16 = (5 * 65536 / 360) as u16;
+/// The broadest sun that still throws light shafts on T2 (5 degrees, and a little): the sun in
+/// clear air and light mist does, the afterglow does not.
+pub const SHAFTS_SPREAD: u16 = (5 * 65536 / 360) as u16;
+
+/// A shadow at least this dark (of 255, [`Directional::strength`]) is laid as a silhouette on T0
+/// and T1: the sun and the moon in clear air and light weather; not the afterglow, nor a sun lost
+/// in cloud or mist, whose shadows on T2 are faint.
+pub const SILHOUETTE_STRENGTH: u8 = 112;
+/// The afterglow's shadow: faint.
+const GLOW_STRENGTH: u8 = 96;
+
+/// How soft the sun's or the moon's shadows are in clear air at `sin_el` (its elevation's sine,
+/// Q15): the light crosses more air the lower it is, and the air scatters it round what casts a
+/// shadow. One degree of spread high in the sky (crisp edges at noon), widening to five at the
+/// horizon; the same for the moon.
+pub fn spread(sin_el: i32) -> u16 {
+    let low = 20000 - sin_el.clamp(0, 20000);
+    (deg(1) + deg(4) * low / 20000) as u16
+}
+
+/// How dark the sun's or the moon's shadows are in clear air at `sin_el`: the whole of its light
+/// taken away high in the sky, a quarter less at the horizon, where the scattered light fills
+/// the umbra.
+pub fn strength(sin_el: i32) -> u8 {
+    let low = 20000 - sin_el.clamp(0, 20000);
+    (255 - 64 * low / 20000) as u8
+}
+
+/// The weather's part (`atmos::Atmos::light`): `cloud` (0..=65535, rain or mist) spreads the
+/// sun into the sky, its shadows widening by up to ten degrees and fading to half their strength
+/// (its colour, which the weather dims too, takes the rest of the contrast away).
+pub fn diffuse(sun: &mut Directional, cloud: u32) {
+    let cloud = cloud.min(65535);
+    sun.spread = sun.spread.saturating_add((deg(10) as u32 * cloud / 65535) as u16);
+    sun.strength = (u32::from(sun.strength) * (65535 - cloud / 2) / 65535) as u8;
+}
 
 /// The western sky after sunset on flat ground, and how long it glows.
 const AFTERGLOW: [i32; 3] = [96, 66, 104];
@@ -172,7 +205,8 @@ pub fn sky(clock: u32, day: u32, indoor: bool, permille: i16, region: Region) ->
             azimuth: az,
             elevation: el,
             colour: colour.map(|c| c.clamp(0, 255) as u8),
-            spread: deg(2) as u16 + (deg(3) * (20000 - s.min(20000)) / 20000) as u16,
+            spread: spread(s),
+            strength: strength(s),
         })
     } else if (SET..SET + GLOW).contains(&t) {
         // The afterglow: for three quarters of an hour after sunset the western sky is the
@@ -182,7 +216,10 @@ pub fn sky(clock: u32, day: u32, indoor: bool, permille: i16, region: Region) ->
             azimuth: Angle((deg(180) + deg(16) / 4) as u16),
             elevation: Angle(deg(10) as u16),
             colour: mix([0; 3], AFTERGLOW, left, GLOW).map(|c| c.clamp(0, 255) as u8),
+            // A glow over a broad band of sky: its shadows are faint, and too faint for a
+            // silhouette.
             spread: deg(7) as u16,
+            strength: GLOW_STRENGTH,
         })
     } else if let Some((az, el, s)) = arc(t, SET, RISE, MOON_TOP) {
         let phase = moon_phase(day);
@@ -191,7 +228,8 @@ pub fn sky(clock: u32, day: u32, indoor: bool, permille: i16, region: Region) ->
             azimuth: az,
             elevation: el,
             colour: colour.map(|c| c.clamp(0, 255) as u8),
-            spread: deg(3) as u16,
+            spread: spread(s),
+            strength: strength(s),
         })
     } else {
         None
@@ -202,7 +240,7 @@ pub fn sky(clock: u32, day: u32, indoor: bool, permille: i16, region: Region) ->
 
 /// A silhouette's multiplier: the fill's share of fill and sun, eased toward none so a shadow
 /// darkens by at most about half.
-fn shade(fill: Rgb, sun: Rgb) -> Rgb {
+pub fn shade(fill: Rgb, sun: Rgb) -> Rgb {
     [0, 1, 2].map(|k| {
         let (f, s) = (i32::from(fill[k]), i32::from(sun[k]));
         let share = f * 255 / (f + s).max(1);
@@ -275,6 +313,38 @@ mod tests {
         let five = ambient(17 * 7200, false, 1000);
         assert!(five[0] == 255 && five[2] < 255, "{five:?}");
         assert!(ambient(20 * 7200, false, 1000)[0] < five[0]);
+    }
+
+    #[test]
+    fn noon_shadows_are_crisp_and_dark_and_a_low_sun_softer_and_lighter() {
+        let at = |h: i32| sky((h * HOUR) as u32, 0, false, 1000, Region::Lowfields).sun.expect("the sun is up");
+        let (noon, five, seven) = (at(12), at(17), at(7));
+        for low in [five, seven] {
+            assert!(noon.spread < low.spread, "noon {} against {}", noon.spread, low.spread);
+            assert!(noon.strength > low.strength, "noon {} against {}", noon.strength, low.strength);
+            // T0 and T1 feather the low sun's edge wider.
+            assert!(crate::shadow::feather(noon.spread) < crate::shadow::feather(low.spread));
+        }
+        assert!(noon.spread <= deg(1) as u16 + 60 && noon.strength >= 250, "{noon:?}");
+        // The moon the same way, by its height.
+        let moon = sky(0, 0, false, 1000, Region::Lowfields).sun.expect("the moon is up at midnight");
+        let s = sin_q15(moon.elevation).0;
+        assert_eq!((moon.spread, moon.strength), (spread(s), strength(s)));
+        // Each lays a silhouette; the afterglow does not.
+        assert!(noon.silhouettes() && five.silhouettes() && moon.silhouettes());
+        let glow = sky((SET + HOUR / 4) as u32, 0, false, 1000, Region::Lowfields).sun.expect("the afterglow");
+        assert!(!glow.silhouettes());
+    }
+
+    #[test]
+    fn cloud_spreads_the_sun_and_fades_its_shadows() {
+        let noon = sky(12 * 7200, 0, false, 1000, Region::Lowfields).sun.expect("the sun");
+        let (mut rain, mut mist) = (noon, noon);
+        diffuse(&mut rain, 65535);
+        diffuse(&mut mist, 65535 * 3 / 8);
+        assert!(rain.strength < mist.strength && mist.strength < noon.strength, "{rain:?} {mist:?}");
+        assert!(rain.spread > mist.spread && mist.spread > noon.spread);
+        assert_eq!(crate::shadow::feather(rain.spread), 3);
     }
 
     #[test]

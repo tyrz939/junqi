@@ -78,6 +78,7 @@ fn five() -> Directional {
         elevation: Angle::from_degrees(16),
         colour: [255, 210, 160],
         spread: 400,
+        strength: 255,
     }
 }
 
@@ -164,9 +165,10 @@ fn a_sprite_never_darkens_itself_in_open_sun_and_its_shadow_grows_from_its_feet(
 fn a_light_never_shadows_the_one_who_holds_it() {
     let Some(mut b) = backend() else { return };
     let atlas = atlas(|y| height_of_rows(AY - y).max(1) as u8);
-    // Her lantern, at her west side, her hip high.
+    // Her lantern, at her west side, her hip high, over the rows her body stands on (her depth
+    // lies behind her foot row).
     let lantern = |holder| Light {
-        pos: (FOOT.0 - 9, FOOT.1 + 3),
+        pos: (FOOT.0 - 9, FOOT.1 - 2),
         height: 20,
         colour: [255, 190, 116],
         radius: 90,
@@ -276,7 +278,13 @@ fn stand(atlas: &AtlasPages, ay: i32, foot: (i32, i32), depth: u8, sun: Directio
 /// A sun in the north at 40 degrees: shadows run south, down the screen, in front of what
 /// casts them, so the whole of one is seen.
 fn north_sun() -> Directional {
-    Directional { azimuth: Angle::NORTH, elevation: Angle::from_degrees(40), colour: [255, 230, 200], spread: 300 }
+    Directional {
+        azimuth: Angle::NORTH,
+        elevation: Angle::from_degrees(40),
+        colour: [255, 230, 200],
+        spread: 300,
+        strength: 255,
+    }
 }
 
 /// How many px of canvas row `y` are in shadow: darker than four fifths of the open grass.
@@ -340,4 +348,64 @@ fn a_lanterns_shadow_hangs_apart_from_its_posts() {
     let y = foot.1 + 58;
     assert!((x0 + 21..x0 + 27).all(|x| dark(x, y)), "no shadow of the lantern where it lands");
     assert!((x0 + 14..x0 + 18).any(|x| !dark(x, y)), "the lantern's shadow runs into the post's");
+}
+
+/// A post `w` px wide and 48 rows tall (60 px), standing on `(128, 40)`.
+fn post(w: i32) -> (AtlasPages, i32, (i32, i32)) {
+    const AY: i32 = 50;
+    (
+        upright_atlas(24, 52, AY, |x, y| (2..=AY).contains(&y) && (12 - w / 2..12 - w / 2 + w).contains(&x)),
+        AY,
+        (128, 40),
+    )
+}
+
+#[test]
+fn a_thin_post_throws_a_thin_shadow() {
+    let Some(mut b) = backend() else { return };
+    let (atlas, ay, foot) = post(2);
+    let px = draw(&mut b, &atlas, &stand(&atlas, ay, foot, 4, north_sun()));
+    // Down the screen from its root: its 2 px and a px of penumbra each side at most.
+    for dy in 4..40 {
+        let n = dark_across(&px, foot.1 + dy);
+        assert!((1..=4).contains(&n), "{dy} rows south of the root: {n} px dark");
+    }
+}
+
+/// A post 12 px wide's shadow 40 rows south of it under a sun 40 degrees up in the north, with the
+/// spread and strength a clear sky gives a sun `deg` up (the shape stays the sun's at 40, so only
+/// the softness and the darkness change) and `cloud` over it: `(px of penumbra, the umbra's luma
+/// of the open grass's, per mille)`.
+fn softness(b: &mut Wgpu, deg: i32, cloud: u32) -> (usize, i32) {
+    let s = jane_core::angle::sin_q15(Angle::from_degrees(deg)).0;
+    let mut sun = Directional {
+        spread: jane_present::light::spread(s),
+        strength: jane_present::light::strength(s),
+        ..north_sun()
+    };
+    jane_present::light::diffuse(&mut sun, cloud);
+    let (atlas, ay, foot) = post(12);
+    let px = draw(b, &atlas, &stand(&atlas, ay, foot, 4, sun));
+    // Its umbra 30 rows down, and the rows of penumbra at its tip (70 rows down, where the ray
+    // clears its top) and across it 50 rows down.
+    let lit = luma(at(&px, 4, foot.1 + 30));
+    let umbra = luma(at(&px, foot.0, foot.1 + 30));
+    let drop = (lit - umbra).max(1);
+    let soft = |v: i32| v < lit - drop / 8 && v > umbra + drop / 8;
+    let tip = (foot.1 + 40..i32::from(H)).filter(|&y| soft(luma(at(&px, foot.0, y)))).count();
+    let side = (foot.0 - 16..foot.0 + 16).filter(|&x| soft(luma(at(&px, x, foot.1 + 50)))).count();
+    (tip + side, umbra * 1000 / lit.max(1))
+}
+
+#[test]
+fn a_noon_shadow_is_crisper_and_darker_than_five_oclocks_and_cloud_fades_it() {
+    let Some(mut b) = backend() else { return };
+    let (noon_edge, noon) = softness(&mut b, 46, 0);
+    let (five_edge, five) = softness(&mut b, 16, 0);
+    assert!(noon_edge < five_edge, "the penumbra at noon {noon_edge} px, at five {five_edge}");
+    assert!(noon < five, "the umbra at noon {noon} of the lit grass, at five {five}: no darker");
+    // Mist, then rain: fainter each.
+    let (_, mist) = softness(&mut b, 46, 65535 * 3 / 8);
+    let (_, rain) = softness(&mut b, 46, 65535);
+    assert!(noon < mist && mist < rain, "noon {noon}, in mist {mist}, in rain {rain}");
 }

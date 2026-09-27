@@ -531,8 +531,23 @@ pub struct Directional {
     /// Its colour on a surface square to it.
     pub colour: Rgb,
     /// How soft its shadows are: the light's angular radius (jane-core `Angle` units). A
-    /// penumbra widens by this much for every px it lies from what casts it.
+    /// penumbra widens by this much for every px it lies from what casts it. Small under a high
+    /// clear sun, wider as it sinks through more air, wide under cloud (`light::sky`,
+    /// `light::diffuse`); T0 and T1 feather a silhouette's edge by it (`shadow::feather`).
     pub spread: u16,
+    /// How dark its shadows are, of 255: the share of its light an umbra takes away (the rest is
+    /// the light the air scatters round what casts it). 255 under a high clear sun, lighter low,
+    /// faint under cloud. T2 lets `255 - strength` of it through the umbra; T0 and T1 lay the
+    /// silhouette at `strength` of the shade (`shadow::shade_at`).
+    pub strength: u8,
+}
+
+impl Directional {
+    /// Whether its shadow is dark and crisp enough for T0 and T1 to lay a silhouette: a sun or a
+    /// moon, not the afterglow's broad sky nor a sun lost in cloud.
+    pub fn silhouettes(&self) -> bool {
+        self.strength >= crate::light::SILHOUETTE_STRENGTH
+    }
 }
 
 /// A point light's shape.

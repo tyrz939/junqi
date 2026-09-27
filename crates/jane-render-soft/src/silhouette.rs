@@ -75,11 +75,15 @@ pub fn cast(mask: &mut Mask, page: &Page, s: &SpriteCmd, c: &Caster, k: (i32, i3
 
 /// Applies the mask to `t` and clears it. `heights` is the terrain's height under each px of `t`
 /// (empty: all ground). A px takes the mask at the ground under it (`shadow::ground_of`) where the
-/// shadow there reaches its height: a covered px goes toward `dst * shade` by its strength, a
-/// covered px on the shadow's edge by five eighths of it, and the ring of px just outside by three
-/// eighths where the ordered dither says: the edge is one dither step soft, and a post's thin
-/// shadow keeps its body. Returns pixels written.
-pub fn apply(t: &mut Target<'_>, mask: &mut Mask, shade: Rgb, heights: &[u8]) -> u64 {
+/// shadow there reaches its height: a covered px goes toward `dst * shade` by its strength, and
+/// its edge is `feather` px wider than one dither step (`shadow::feather`: 0 under a high clear
+/// sun, more as it sinks or clouds over). A covered px `k` px in from the edge (along a row or a
+/// column, `k` up to `feather + 1`) takes `8 - 3 (feather + 2 - k) / (feather + 1)` eighths of
+/// it, and a px `k` px outside takes `3 (feather + 2 - k) / (feather + 1)` eighths where the 4 x 4
+/// ordered dither is under `8 (feather + 2 - k) / (feather + 1)`: with no feather, five eighths
+/// on the edge and three on the odd squares of the ring outside, one dither step soft, and a
+/// post's thin shadow keeps its body. Returns pixels written.
+pub fn apply(t: &mut Target<'_>, mask: &mut Mask, shade: Rgb, heights: &[u8], feather: i32) -> u64 {
     let Some((x0, y0, x1, y1)) = mask.dirty.take() else { return 0 };
     let (w, h) = (mask.w, mask.h);
     let (px, reach) = (&mask.px, &mask.reach);
@@ -90,25 +94,33 @@ pub fn apply(t: &mut Target<'_>, mask: &mut Mask, shade: Rgb, heights: &[u8]) ->
         let i = (y * w + x) as usize;
         if reach[i] >= need { i32::from(px[i]) } else { 0 }
     };
+    let f = feather.clamp(0, 3);
     let mut n = 0;
     let [sr, sg, sb] = shade.map(|c| 256 - i32::from(c) - i32::from(c >> 7));
-    for y in (y0 - 1 - UP).max(0)..(y1 + 1).min(h) {
-        for x in (x0 - 1).max(0)..(x1 + 1).min(w) {
+    for y in (y0 - 1 - f - UP).max(0)..(y1 + 1 + f).min(h) {
+        for x in (x0 - 1 - f).max(0)..(x1 + 1 + f).min(w) {
             let lift = heights.get((y * t.w + x) as usize).copied().unwrap_or(0);
             let (gy, need) = shadow::ground_of(y, lift);
-            if gy > y1 || gy < y0 - 1 {
+            if gy > y1 + f || gy < y0 - 1 - f {
                 continue;
             }
             let m = at(x, gy, need);
-            let near = [(x - 1, gy), (x + 1, gy), (x, gy - 1), (x, gy + 1)].map(|(a, b)| at(a, b, need));
+            let ring = |k: i32| [(x - k, gy), (x + k, gy), (x, gy - k), (x, gy + k)].map(|(a, b)| at(a, b, need));
             let s = if m > 0 {
-                if near.contains(&0) { m * 5 / 8 } else { m }
+                match (1..=f + 1).find(|&k| ring(k).contains(&0)) {
+                    Some(k) => m * (8 - 3 * (f + 2 - k) / (f + 1)) / 8,
+                    None => m,
+                }
             } else {
-                let most = near.into_iter().max().unwrap_or(0);
-                if most == 0 || BAYER4[(y & 3) as usize][(x & 3) as usize] >= 8 {
+                let Some((k, most)) =
+                    (1..=f + 1).find_map(|k| Some((k, ring(k).into_iter().max().unwrap_or(0))).filter(|v| v.1 > 0))
+                else {
+                    continue;
+                };
+                if i32::from(BAYER4[(y & 3) as usize][(x & 3) as usize]) >= 8 * (f + 2 - k) / (f + 1) {
                     continue;
                 }
-                most * 3 / 8
+                most * (3 * (f + 2 - k) / (f + 1)) / 8
             };
             let s = s + (s >> 7);
             let d = &mut t.px[(y * t.w + x) as usize];
@@ -138,7 +150,7 @@ mod tests {
     use jane_present::{Directional, Flags, Src};
 
     fn sun(azimuth: Angle, deg: i32) -> Directional {
-        Directional { azimuth, elevation: Angle::from_degrees(deg), colour: [255; 3], spread: 0 }
+        Directional { azimuth, elevation: Angle::from_degrees(deg), colour: [255; 3], spread: 0, strength: 255 }
     }
 
     /// A 2 x 10 post of index 2 standing on row 10 of a 40 x 20 canvas.
@@ -166,7 +178,7 @@ mod tests {
         cast(&mut mask, &page, &s, &c, k);
         let mut px = vec![0xff80_8080u32; 800];
         let mut t = Target { px: &mut px, w: 40, h: 20 };
-        let n = apply(&mut t, &mut mask, [128, 128, 200], &[]);
+        let n = apply(&mut t, &mut mask, [128, 128, 200], &[], 0);
         assert!(n > 20, "{n}");
         // East of the post on its foot row is shadowed, and bluer than it is red; well west is not.
         let east = px[10 * 40 + 14];
@@ -186,13 +198,41 @@ mod tests {
         mask.band(Band { x0: 2, x1: 18, y0: 2, y1: 18, strength: 200, reach: 50 });
         let mut px = vec![0xff80_8080u32; 400];
         let mut t = Target { px: &mut px, w: 20, h: 20 };
-        apply(&mut t, &mut mask, [128, 128, 200], &[]);
+        apply(&mut t, &mut mask, [128, 128, 200], &[], 0);
         // Every px inside the edge is shaded, whatever the dither says there.
         for y in 3..17 {
             for x in 3..17 {
                 assert_ne!(px[y * 20 + x], 0xff80_8080, "({x}, {y}) left unshaded");
             }
         }
+    }
+
+    /// A band 16 px square laid under a clear sun `deg` degrees up: how many px of row 10 are
+    /// shaded at all but less than the band's middle (its soft edge), and how red the middle
+    /// still is.
+    fn edge_and_depth(deg: i32) -> (usize, u32) {
+        let s = jane_core::angle::sin_q15(Angle::from_degrees(deg)).0;
+        let (spread, strength) = (jane_present::light::spread(s), jane_present::light::strength(s));
+        let sun = Directional { spread, strength, ..sun(Angle::WEST, deg) };
+        let mut mask = Mask::default();
+        mask.fit(40, 20);
+        mask.band(Band { x0: 12, x1: 28, y0: 2, y1: 18, strength: 255, reach: 50 });
+        let mut px = vec![0xff80_8080u32; 800];
+        let mut t = Target { px: &mut px, w: 40, h: 20 };
+        let shade = shadow::shade_at([128, 128, 200], sun.strength);
+        apply(&mut t, &mut mask, shade, &[], shadow::feather(sun.spread));
+        let row: Vec<u32> = (0..40).map(|x| px[10 * 40 + x] >> 16 & 0xff).collect();
+        let middle = row[20];
+        (row.iter().filter(|&&r| r != 0x80 && r != middle).count(), middle)
+    }
+
+    #[test]
+    fn a_noon_shadow_is_crisper_and_darker_than_five_oclocks() {
+        // The sun at noon is 46 degrees up, at five 16.
+        let (noon_edge, noon) = edge_and_depth(46);
+        let (five_edge, five) = edge_and_depth(16);
+        assert!(noon_edge < five_edge, "the edge at noon {noon_edge} px, at five {five_edge}");
+        assert!(noon < five, "the middle at noon {noon}, at five {five}: no darker");
     }
 
     #[test]
@@ -212,7 +252,7 @@ mod tests {
         mask.band(Band { x0: 5, x1: 10, y0: 5, y1: 12, strength: 200, reach: 8 });
         let mut px = vec![0xff80_8080u32; (w * h) as usize];
         let mut t = Target { px: &mut px, w, h };
-        apply(&mut t, &mut mask, [128, 128, 200], &heights);
+        apply(&mut t, &mut mask, [128, 128, 200], &heights, 0);
         let dark = |x: i32, y: i32| px[(y * w + x) as usize] != 0xff80_8080;
         // Up the face over the columns it covers, as high as 8 px (the face's rows 4 and more
         // are 7 px and less; row 3 is 8 px; row 2 is 10 px and stays lit).

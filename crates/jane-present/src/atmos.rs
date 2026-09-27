@@ -319,7 +319,7 @@ impl Atmosphere {
         if let Some(sun) = &mut s.sun {
             let keep = 65535 - (cloud * 7 / 8);
             sun.colour = sun.colour.map(|c| (u32::from(c) * keep / 65535) as u8);
-            sun.spread = sun.spread.saturating_add((cloud / 2048) as u16 * 40);
+            crate::light::diffuse(sun, cloud);
         }
         let dark = 256 - r * 72 / 65535;
         s.ambient = scale(s.ambient, dark);
@@ -332,7 +332,9 @@ impl Atmosphere {
         s.fill = scale(s.fill, 256 - r * 50 / 65535);
         // Mist lifts the shadows: the light comes from everywhere.
         s.fill = mix(s.fill, scale(s.ambient, 220), m / 3);
-        s.shade = mix(s.shade, [250, 250, 255], cloud / 2);
+        // A silhouette's shade from the light as the weather leaves it, as T2's shadow is: the
+        // dimmer the sun against the sky, the fainter (its strength, `light::diffuse`, the rest).
+        s.shade = crate::light::shade(s.fill, s.sun.map_or([0; 3], |sun| sun.colour));
         // The grade: rain cools and greys, mist pales.
         let p = &mut s.post;
         p.saturation =
@@ -587,7 +589,7 @@ impl Atmosphere {
             && self.tier == Tier::T2
             && !self.indoor
             && matches!(self.kind, WeatherKind::Clear | WeatherKind::Mist)
-            && let Some(sun) = sky.sun.filter(|s| s.spread <= crate::light::SILHOUETTE_SPREAD + 200)
+            && let Some(sun) = sky.sun.filter(|s| s.spread <= crate::light::SHAFTS_SPREAD + 200)
         {
             let el = u32::from(sun.elevation.0);
             let low = 30 * 65536 / 360;
