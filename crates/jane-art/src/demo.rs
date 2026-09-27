@@ -147,7 +147,12 @@ pub fn golden_file(font: &Font) -> String {
     match crate::looks::all() {
         Ok(sets) => {
             for r in sets {
-                let _ = writeln!(s, "unit:{} {:08x}", r.key(), r.set.hash());
+                let kind = match crate::looks::find(r.name).map(|(_, l)| l) {
+                    Some(jane_data::Look::Prop(_) | jane_data::Look::Building(_)) => "prop",
+                    Some(jane_data::Look::Icon(_)) => "icon",
+                    _ => "unit",
+                };
+                let _ = writeln!(s, "{kind}:{} {:08x}", r.key(), r.set.hash());
             }
         }
         Err(e) => {

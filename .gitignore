@@ -17,3 +17,6 @@ Thumbs.db
 
 # Agent worktrees
 /.claude/worktrees/
+
+# Milestone screenshots, kept locally (the repo ships no image files)
+/progress/

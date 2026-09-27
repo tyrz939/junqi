@@ -121,10 +121,16 @@ impl Source {
 
     /// A keyed table: `<table>.json` (an object of rows) merged with `<table>/*.json`.
     pub fn table(&self, table: &str, diag: &mut Diagnostics) -> IndexMap<String, Row> {
+        self.table_of(table, |_| true, diag)
+    }
+
+    /// [`Source::table`] over the files `keep` accepts: two keyspaces sharing a directory (the
+    /// sprites' looks and the tiles' looks under `looks/`) each merged on its own.
+    pub fn table_of(&self, table: &str, keep: impl Fn(&str) -> bool, diag: &mut Diagnostics) -> IndexMap<String, Row> {
         let mut out: IndexMap<String, Row> = IndexMap::new();
         let base = format!("{table}.json");
         let parts = self.files.get(&base).map(|v| (base.as_str(), v)).into_iter().chain(self.files_in(table));
-        for (file, v) in parts {
+        for (file, v) in parts.filter(|(f, _)| keep(f)) {
             let Some(obj) = v.as_object() else {
                 diag.error(file, format!("{table}: expected an object of rows"));
                 continue;

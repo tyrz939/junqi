@@ -138,6 +138,12 @@ impl<'a> View<'a> {
         self.rt.grid.tile_at(cx, cy)
     }
 
+    /// The zone's render-only paint over its tiles, in paint order (a roof's slate, a wood's
+    /// pines; PORT.md §6.i). The presentation reads it; nothing in the sim does.
+    pub fn paint(&self) -> &'a [(Rect, jane_core::Material)] {
+        &self.bp.paint
+    }
+
     pub fn flags(&self, cx: i32, cy: i32) -> u8 {
         self.rt.grid.flags_at(cx, cy)
     }
@@ -307,6 +313,16 @@ impl<'a> View<'a> {
         spawn_of(self.bp, p)
     }
 
+    /// A string a row or this zone's generator wrote: the words of a thing read, a label, a
+    /// toast (`TextRef::Local` is her zone's blueprint's). Empty for a local text that is not
+    /// there.
+    pub fn text(&self, r: TextRef) -> &'a str {
+        match r {
+            TextRef::Text(t) => jane_data::catalog().text(t),
+            TextRef::Local(_) => self.bp.text(r).unwrap_or(""),
+        }
+    }
+
     /// A prop by id in her zone.
     pub fn prop(&self, id: crate::ids::PropId) -> Option<&'a Prop> {
         self.zone.prop_ix(id).map(|i| &self.zone.props[i as usize])
@@ -334,6 +350,24 @@ impl<'a> View<'a> {
             talking = p.dialogue.is_some();
         }
         n == 1 && talking
+    }
+
+    /// Whether the party has seen cell `(cx, cy)` of this zone (the fog's seen-bits, `fog.rs`):
+    /// what the map charts and the debug view shades.
+    pub fn seen(&self, cx: i32, cy: i32) -> bool {
+        let g = self.rt.fog;
+        let n = g.cells as i32;
+        crate::fog::fog_seen(&self.zone.fog, g, cx.div_euclid(n), cy.div_euclid(n))
+    }
+
+    /// Cells on a side of one fog block here (2 indoors, 8 out).
+    pub fn fog_block(&self) -> u32 {
+        self.rt.fog.cells
+    }
+
+    /// Seats sitting down now: the party penalty's head count (the HUD shows it).
+    pub fn party(&self) -> u8 {
+        self.state.connected().count() as u8
     }
 
     /// 21:00 to 06:00.

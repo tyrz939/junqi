@@ -23,7 +23,7 @@ struct Globals {
     tint: vec4<f32>,
     // Grade: lift (w: exposure).
     lift: vec4<f32>,
-    // x: bloom strength, y: ticks, z: emissive gain, w: the contact shadow's strength.
+    // x: bloom strength, y: ticks, z: emissive gain, w: unused.
     misc: vec4<f32>,
 };
 

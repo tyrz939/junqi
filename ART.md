@@ -2,7 +2,7 @@
 
 How every pixel in the native build is made. Pair with `PRESENTATION.md` (what draws it, lights it and lays out the UI), `ARCHITECTURE.md` (the engine, and the `View` presentation reads, its §11), `PORT.md` (the plan: P5 is the art phase, §6.i is where render-only tiles leave the sim) and `PLAN.md` §6 (the art gaps the web build left).
 
-**Status:** §8 steps 1 and 2 are built: the palette, canvas, font, chrome and light pass, and the Person composer with its looks (`data/looks/persons.json`: Jane and her seats, the town, the country folk, the villagers). The rest is design. The TS build's generators (`jane/src/art/`) are the reference for method until P5 lands and `jane/` is archived at P10; they are not the reference for the look, which moved up on 2026-09-26 (§0).
+**Status:** §8 steps 1, 2 and 3 are built: the palette, canvas, font, chrome and light pass; the Person composer with its looks (`data/looks/persons.json`: Jane and her seats, the town, the country folk, the villagers); and terrain and flora (`data/looks/tiles.json`, `jane_art::terrain`, `jane_art::flora`). Step 4 is built (2026-09-27): the creature plans `quadruped_mid`, `quadruped_small` and `bird` with the county's twelve animals, Julie the dog first (`data/looks/creatures.json`), and the Person `bone` skin (the skeleton). Step 5 is built: the prop kit's seven first-walk families and the first of vegetation and debris: with the buildings, 192 of the 267 prop sprites have a look (`data/looks/props.json`); the station, the lamp road, Julie's yard, house and cellar, and the mine dress. Of step 6 the building painter (`data/looks/buildings.json`, §2.4) and the icons at 32 and 16 (`data/looks/icons.json`, §2.5) are built; the fx tables and the people's attack and cast cycles are not. The presenter draws all of it (`jane-present`: `people`, `creatures`, `props`). The rest is design. The TS build's generators (`jane/src/art/`) are the reference for method until P5 lands and `jane/` is archived at P10; they are not the reference for the look, which moved up on 2026-09-26 (§0).
 
 Crate `jane-art`: depends on `jane-core` and `jane-data` only. No SDL. **No floats**: it sits in the lint table of the deterministic crates (PORT §3.4), so a sheet hashes the same on every target. Sphere shading, bevel normals and gradients come from integer tables. No allocation after boot beyond the atlas pages. Runs headless in tests.
 
@@ -16,9 +16,9 @@ jane-art/
   canvas    the one four-layer pixel canvas at 16 px a cell, and every drawing primitive
   hash      h32 salts over jane-core's FNV-1a and mix32
   font      stroke glyphs rasterised at boot; Fine, Small, Head and Title faces
-  person    the people composer and its frame tables
-  creature  body plans and their gaits
-  kit       the prop kit, twelve families
+  person    the people composer and its frame tables; bone, the skeleton
+  creature  body plans and their gaits: quad (dog, sheep, cat, rat, rabbit, fox), bird (hen, crow)
+  kit       the prop kit: parts, sign, lamp, barrier, container, ritual, furniture, structure, growing
   house     the building painter
   icon      icon classes, ramps, overlays
   flora     trees, bushes, reeds, crops, canopy strips
@@ -83,6 +83,14 @@ SpriteSet::frame(FrameId) -> Option<&Canvas>;  SpriteSet::swap(Role, Ramp) -> Sp
 
 `RoleMap` became `roles: Vec<(Role, Ramp)>`: every role is drawn in a ramp of its own, so a swap by role is a remap of that ramp's tones (and, in a dead frame, of their pallid twins).
 
+As built through step 6: `Look` is `Person | Creature | Prop | Building` (`jane-schema::model::looks`), each family in its own file under `data/looks/`; `looks::family(Family)` renders one family, and the golden keys are `unit:` for people and creatures and `prop:` for props and buildings. `FrameId` gained `Idle` and `Idle2` (a creature's idle pair, §2.2) and `Role` gained `Fur`, `Belly`, `Mark` (creatures) and `Body`, `Trim`, `Flame` (props), all appended so no older hash moved.
+
+```rust
+jane_art::creature::render(&CreatureLook, seed, attacks) -> Result<SpriteSet, String>
+jane_art::kit::render(&PropLook, sprite, seed) -> Result<SpriteSet, String>    // footprint from the prop rows
+jane_art::house::render(&HouseLook, sprite, seed) -> Result<SpriteSet, String>
+```
+
 | Rule | Why |
 | --- | --- |
 | **No pixel grids in source.** A test greps `jane-art` for three or more consecutive string literals of eight or more characters drawn from `[.a-zA-Z0-9#]` and fails on any. A second greps for `include_bytes!` and for any integer array literal over 32 elements outside `palette`, `hash` and the named lookup tables of `canvas` (Bayer, sphere normals, sine, falloff), which the test lists by name. No exception list beyond those names. No per-pixel literal art of any size, in any encoding | Mechanical, so it cannot erode; a 32 x 40 grid is as tempting as a 16 x 20 one was |
@@ -136,7 +144,7 @@ A sprite has all four at one size, always. The font and the chrome carry albedo 
 | `build` | slim, broad, child, stout | A per-build table of eight numbers: head y, head w, shoulder w, waist w, hip w, leg h, arm y, arm l. Every other axis and every frame table reads it |
 | `hair` | short, cropped, long, bun, pigtails, bald, curlers, wet | `hair_ramp` from the hair group; drawn as `strokes(hair)` over a `soft_ellipse` skull, so it has volume and a highlight |
 | `hat` | none, cap, brim, peaked, helmet, scarf, veil, cloche, panama, diving | Drawn over hair; `up` shows its back; a brim casts a small shadow on the face by height. `hat_ramp` names its cloth (the coat's when left out). `veil` and `diving` are placeholders until the tales' step |
-| `skin` | skin, skin_pale, skin_dark, bone, wax, stone, metal, none | `bone` is the skeleton, `wax` the waxwork, `stone` the statue, `metal` the armour; `none` with `ghost` is the shade. Skin is never dithered |
+| `skin` | skin, skin_pale, skin_dark, bone, wax, stone, metal, none | `bone` is the skeleton, `wax` the waxwork, `stone` the statue, `metal` the armour; `none` with `ghost` is the shade. Skin is never dithered. **`bone` as built** (`person::bone`, step 4): the undead are townsfolk who were outside when the county changed its mind, so the skeleton wears what is left of a coat. The head is carved into a skull (the jaw narrower than the cheekbones), with sockets in `K` and a pinpoint of ember in each when the look emits its eyes, a nasal hollow and a row of teeth over the jaw's line; no hair. The neck is two px of vertebrae, a hand three px of knuckles, a bare leg a two-px shin with a knee's knob. The coat's hem is torn into tongues by hash, open in front on a ribcage (a lit sternum, ribs in shade lines), torn at the back over the spine. A fallen skeleton lies without a pool |
 | `face` | plain, glasses, beard, grim, none | Two eye pixels of `Eye` role, a nose shadow, a mouth line; `glasses` is two `k` rings with a `glint` |
 | `coat` | coat, dress, gown, apron, smock, jacket, nightdress, overcoat, canvas, cardigan | `coat_ramp`; `folds` gives cloth its shade bands; the seat swap replaces this role only (§3) |
 | `front` | none, apron, shirt, waistcoat, scarf, tie, braces | `front_ramp`; goes to coat on `up` |
@@ -173,6 +181,31 @@ The build table as built (px, 32 x 40, feet on row 36): `slim` head_y 4, head_w 
 | `machine` | 32 x 40; 48 x 48 | hauler, sentry | Boxy iron in `rect_bevel` with `grain(iron)`, a rivet course, a glass eye that emits on `On`, tracks or legs. `Dead` is scrap | four-frame track or leg cycle; a piston |
 
 Every plan emits `Down .. Down3`, `Up .. Up3`, `Side .. Side3`, a breathe frame per facing, `Atk1..3` if it attacks, `Hurt`, `Dead`. A plan that beats wings or slithers emits its own cycle under the walk names, so the renderer's frame table is one table.
+
+**As built (step 4, 2026-09-27).** Three plans and eight anatomies; the rest of the table is step 7's.
+
+```json
+"dog": { "family": "creature", "plan": "quadruped_mid", "anatomy": "dog",
+  "ramps": { "body": "cloth_black", "belly": "hair_white", "mark": "hair_fair" },
+  "features": { "ears": "flop_one", "tail": "plume", "markings": ["tan_points", "blaze", "grizzle", "tip_white"],
+                "collar": "cloth_brick" } }
+```
+
+| Axis | Values | Notes |
+| --- | --- | --- |
+| `plan` | quadruped_mid (32 x 28, feet on 16, 24), quadruped_small (24 x 20 on 12, 16), bird (20 x 20 on 10, 16) | The mid box is 28 tall, not 24 (decided): Julie's pricked ear and her sitting head need the rows |
+| `anatomy` | dog, sheep, cat, rat, rabbit, fox, hen, crow | The build on the plan's rig: a torso of a rump and a chest joined at the waist, a neck, a skull and a muzzle, leg columns, where the tail roots; and facing the viewer, the back's line, the head's box and the body's breadth (`quad::anat`) |
+| `ears` | flop, flop_one, prick, round, tall, side, none | `flop_one`: one up, one folded, a dog who has heard it all before |
+| `tail` | plume, long, thin, puff, stub, brush, fan, none | A thin tail (the rat's) is bare skin |
+| `markings` | tan_points, blaze, grizzle, socks, tabby, mask, tip_white, dark_face | Dyed over the shading (`Canvas::dye`), so a marking turns with the body |
+| `collar` | a ramp | A collar and a brass tag |
+| `ramps` | body, belly, mark | Fur is drawn in the hair and cloth ramps the people already have (hue-shifted, with pallid twins): no new ramp was needed, and the master palette keeps its room for the terrain's |
+
+Every part is a silhouette filled as one soft volume (`Canvas::inflate`, a chamfer distance field turned into normals and a dome of height), the far legs a px behind the near ones and a tone into the body's shade, then the painter's clusters: a lit topline, a belly or a bib, markings, a face (eyes two px with a glint in their top corner, a nose in `k` with its light, tan brows over the eyes), a flank's tufts. A pelt is retoned by how dark its key is (`fur_map`): a black dog is held low so it reads black with a sheen and never goes grey; white fur keeps its shade light.
+
+Frames: the six-frame walk and a breathe per facing (decided: six, as the people's, over four: a trot reads with weight in six, and the frame table is one table), the idle pair `Idle, Idle2` facing the viewer, `Hurt`, `Atk1..3` for what fights (a unit drawn as the sprite that is not friendly and has a spell book), `Dead`. The gait is a trot, the diagonal pairs together (near fore with far hind), stand, contact, down, pass, contact, down, the tail swinging a beat behind; a hen's step bobs her head forward. The idle pair: a dog or a cat **sits** (the haunches wide, the forelegs straight, the chest up) and on the second beat tilts its head a px and sweeps its tail; a sheep grazes, a rabbit sits up, a hen pecks, a crow cocks its head. Dead is the plan's own pose: a dog, a sheep or a fox on its side, a small beast on its back, a bird feet up; pallid, never emitting, at most 4 px thick.
+
+**Julie.** The dog is Julie (STORY.md §3): dry, patient, never cute, and the heart of the game, so she is drawn to be loved at a glance. A black-and-tan working dog with a white blaze and bib, tan brows over dark eyes with a glint (the brows are what let a dog's face speak), one ear up and one folded, a grey chin (she is old), a white tail tip that flags when she wags, and a faded red collar with a brass tag (she keeps the key). When she stands still she sits and looks at you, and tilts her head. `tests/creatures.rs::julie_is_herself` holds these.
 
 ### 2.3 Prop kit
 
@@ -225,6 +258,21 @@ unchecker(ramp)   declutter(ramp)   despike   outline_sel   upright(ay)   dome_h
 
 **Rule:** every routine ends `ao_contact; outline`. Width is `w * 16` by construction, so a prop can never overhang its footprint; `rise` is its height in screen px and is what the height layer tops out at. `vary: n` renders `seed + 1` and `seed + 2` for `base2` and `base3`; the renderer picks by the prop's id hash, as in the TS build.
 
+**As built (step 5, 2026-09-27).**
+
+```json
+"lamp_post": { "family": "lamp", "shape": "post", "rise": 40,
+  "materials": { "body": "iron", "trim": "brass" }, "states": ["base", "on"], "emits": ["glass"] }
+```
+
+- **The footprint comes from the prop rows**, not the look: every row naming the sprite must agree (`kit::footprint`, an error otherwise). The canvas is `w * 16` wide and `h * 16 + rise` tall; `rise` is how far the drawing stands above the footprint's back edge. The anchor is `(0, h * 16 - ...)` as §1 says; the presenter packs a prop on its foot row, as the stand-ins were.
+- **Fields:** `family`, `shape` (the family's shape by name; an unknown one is a render error and a red test), `rise`, `materials` (`body`, `trim`, `accent` ramps), `states` (`base` always; `on`, `open`), `vary` (1 to 3), `mount` (`floor`, `post`, `wall_n/e/s/w`: where a wall lamp hangs), `text_rows`, `emits` (`glass`).
+- **Families built:** `sign` (post, hanging, fingerpost, name_board, notice, timetable, milestone, gravestone, headstone, standing_stone, memorial, chalk, note), `lamp` (post, gas, sconce, cage, miner, torch, brazier, great_torch, fire, signal; a cold flame takes the accent's ramp), `barrier` (door, gate and a gate edge-on, shutter, boards, drywall, crack, web, rails, sleepers, roots), `container` (chest, trunk, crate, barrel, sack, jar, churn, coffin, tin, bowl, bottles, mug, parcel), `ritual` (hatch, stairs, way_in, plate, lever, orb, manhole, ladder, summon_stone, shrine), `furniture` (table, workbench, desk, counter, altar, shelf, cabinet, case, bed, stove, bench, pew, chair, pegs, register, plinth), `structure` (well, trough, fountain, pillar, chimney, coop, woodpile, washing_line, cart, minecart, trolley, anvil, bale, pillar_box, phone_box, ticket_window, shelter, stall, pump, beehive, scarecrow, tent, hoist), and the first of `vegetation` and `debris` (apple_tree, dry_tree, stump, log, flowers, flowerbed, herb, rose, crop; boulder, rock, rubble, rockface, heap, bones). `machine` and `small_thing` are step 7's.
+- **Parts** (`kit::parts`), so every family lays a material one way: `planks` (a lit leading edge, a seam in shade, two short grain streaks a board, a knot in one in four), `post`, `blocks` (coursed stone, joints staggered, a lit top edge, a chip), `band` (iron with rivets), `glass` (cool and dark with a streak of sky unlit; warm, emitting and brightest in its core lit), `flame`, `writing`, `box3` (a face and a top in the 3/4 view).
+- **Heights:** a face stands up row by row from the foot as a person's rows do (`upright`), a top is flat at its face's height (`lid`), a thing lying on the ground is capped at a few px (`cap_heights`).
+- **Decided: what glows is light and is not lined.** A lamp's glass, a flame, a lit window keep their colour through the clean-up and the outline (a candle's flame is five px and a line would eat it). Silk (a web) is the one thing drawn unlined and undespiked: a thread a px wide.
+- **New canvas primitives** (additive): `inflate` (any mask as a soft volume), `dye`, `dye_ellipse`, `dye_poly` (a marking under the shading), `lid`, `cap_heights`, `heights_by` (a roof landing on its house), `face`, `fill_normal`, `remap_emitting`, `relight`, `has`.
+
 ### 2.4 Building painter
 
 `house(HouseLook, lit)` as in the TS build, plus:
@@ -239,6 +287,17 @@ unchecker(ramp)   declutter(ramp)   despike   outline_sel   upright(ay)   dome_h
 
 Walls, roofs and chimneys use `courses` at 2-px slate and brick, with `grain(stone)` on a footing; the roof's normal is its pitch, the wall's is flat with mortar grooves; height is the wall height and the roof rises from it. Windows are `glass` role pixels so `lit` swaps them to the lit ramp at night and writes them to the emissive layer, warm and a little uneven by a hashed offset per window.
 
+**As built (step 6, 2026-09-27).** `Look::Building(HouseLook)` in `data/looks/buildings.json`:
+
+```json
+"cottage_thatch": { "family": "building", "style": "cottage", "roof": "thatch", "wall": "plaster",
+  "rise": 4, "porch": true, "lit": true }
+```
+
+`style` (cottage, farmhouse, barn, inn, shed, hut, steeple), `storeys` (1 to 3), `roof` (thatch, slate, tile, tin, reed), `wall` (plaster, timber, stone, brick, board, reed), `dormers`, `porch`, `lean_to`, `boarded`, `silhouette`, `rise` (above the walls: a chimney's room), `door` and `trim` ramps, `lit`. The canvas is the footprint wide and the footprint plus the walls plus `rise` tall: the front wall (a storey 28 px, a barn's 36, a shed's 22) stands on the footprint's front edge and the roof covers the footprint over it, its front slope (three fifths) in its courses facing the sun, its back slope beyond in shade, the ridge capped, a brick chimney on it. Plaster weathers in long soft stains over a stone footing; timber framing is beams over it; thatch is laid in lipped courses with its reed in short streaks and a pegged ridge. Frames: `base` (windows dark, reflecting) and `on` for a lit building (windows warm, one in five dark: a room nobody is in). Heights: the wall upright from the foot; the roof `heights_by` from the eave's height to the ridge's, so it lands on the house under it.
+
+**Decided: who owns a building.** A building that is a prop (the county's cottages, the farmhouse, the barn, the inn, a shed, the reed hut, the steeple: a footprint the sim collides) is a sprite drawn here, which the renderer y-sorts, so she walks behind its roof and in front of its wall. A building made of tiles (`HouseWall`, `HouseRoof`: the town's terraces, Julie's house) is the terrain painter's (§2.6). They share materials by ramp and one language of courses, so a cottage and a tiled house stand in one street without a seam in style; the terrain's roofs and walls are painted by the chunk painter's own routines (`terrain::hard`, on its `Painter`, not the `Canvas`), so the building painter keeps its own courses for now; when a shared `Canvas::courses` lands, both move onto it (not done at the merge of 2026-09-27: not a quick change).
+
 ### 2.5 Icon
 
 ```json
@@ -247,32 +306,35 @@ Walls, roofs and chimneys use `courses` at 2-px slate and brick, with `grain(sto
 
 Classes: flask and vial, key, bar, orb, stone and gem, herb, food (round, loaf, cut, pot), tool, garment, paper, misc, spell (a school disc with a mark), status (a ring with a mark). Every icon: drawn once at 32 x 32 with a dark slot, a 1-px `k` outline, a soft light from the top-left and at most 24 indices; the 16 x 16 chip is a second render at the small size, never a downscale. A glass or orb icon emits so the bar glows a little at night.
 
+**As built (step 6, 2026-09-27).** `Look::Icon(IconLook)` in `data/looks/icons.json`, all 91 icons the items, spells and effects name: `class` (44 of them, from flask to tortoise, spell and status), `ramp`, `trim` (a flask's glass, a key's ring, a status's rim; a default by class), `mark` (flame, frost, leaf, bolt, burst, fist, hammer, web, skull, shield, drop, star, thorn, heart), `glow`. `jane_art::icon` lays every shape out on a 32-unit grid and places it at the size it draws, so the 16 chip is its own render; a line is two px at the least (a one-px diagonal is a row of spikes). Rendered as two sets: variant 0 the icon at 32, variant 1 the chip at 16. Two changes from the plan above: **the slot is the chrome's** (`chrome::slot` draws it under the icon; an icon carries only its object), and **the outline is selective** like everything else (decided 2026-09-27), not all `k`. `jane sheet icons` draws them on the slot; `tests/icons.rs` holds coverage, the two sizes, the 24-colour budget and glow. The UI packs and draws them (not yet wired).
+
 ### 2.6 Terrain and flora
 
-The TS painter carries as an algorithm at 16 px a cell: chamfered material edges, autotile, roofs, cliffs, fences, the water shimmer list and the canopy strips. Its seven tables become **one `TileStyle` row per tile** in `data/looks/tiles.json`:
+The TS painter carries as an algorithm at 16 px a cell: chamfered material edges, autotile, roofs, cliffs, fences, the water shimmer list and the canopy strips. Its seven tables become **one `TileStyle` row per tile** (and one per render-only material) in `data/looks/tiles.json`, keyed by the tile's name in snake case, fields in camel case like every table; `jane-schema` compiles them into `TILE_LOOKS` (`jane_data::tile_looks()`), a static beside `LOOKS` and the catalog and like them out of the content hash (an art edit never refuses a save), a tile or material with no row is a build error, and a `jane-art` test resolves every ramp name. **As built** (§8 step 3):
 
 | Field | Meaning |
 | --- | --- |
-| `group` | ground, water, wall, roof, flora, made; what it autotiles against |
-| `inherit` | the tile whose ground shows under a chamfered edge |
-| `height` | 0 flat, 1 raised (cliff and wall faces are drawn), 2 canopy (a strip above the y-sort); with `rise` in px for the height layer |
-| `swatch` | the material ramp and the per-cell hash pattern (`courses` for made things, `strokes(grass)` and pebble scatter for ground, `grain(plank)` for boards) |
-| `detail` | the sub-cell table: blade density, pebble count, slate course pitch, furrow spacing, all at 2 px |
+| `group` | ground, water, wall, roof, flora, made. Ground and water chamfer against each other; wall and roof have painters with faces, ridges and eaves; flora stands on the ground its neighbours lend it; made is a floor with a painter of its own per cell |
+| `inherit` | for flora, the ground under it when no neighbour lends one; for ground, the tile it is drawn as (a grown path is grass, crops lie on garden) |
+| `height`, `rise` | flat, raised (a face is drawn below its top) or canopy (a crown in the strips); `rise` in px: a ground's standing over lower ground (grass 4 over earth 2 over road 1 over water 0, which orders the rims), a wall's or roof's top, a crown's top |
+| `ramp`, `accent`, `pattern` | the swatch: its material ramp, a second ramp (bark under leaf, timber on plaster), and the painter (turf, earth, gravel, setts, water, cliff, plaster, brick, roof tile, slate, thatch, slabs, boards, rail, hedge, tuft, flowers, tree, pine, fence, stone wall, and the rest; the schema's enum is the list) |
+| `detail` | the sub-cell table's one number, by pattern: a density out of 16, a course pitch or a slab size in px |
 | `normal` | flat, cliff (the face's slope), wall, roof (pitch by facing), water (flat; the renderer ripples it) |
 | `wet` | how the tile takes rain: 0 grass and thatch stay matt, 1 earth darkens, 2 stone and plank darken and reflect the sky |
-| `wall_like`, `raised` | draws a face below its top and blocks the chamfer; its top is drawn one course up, so what stands behind it is hidden |
-| `map_colour` | the ink for the map chart (PRESENTATION, the map tab) |
-| `ink` | the swatch's dark line for fences, rails and furrows |
+| `wallLike` | out of doors a wide block of it is a building's roof; its face shows where its south is open (walls, cliffs, the void) |
+| `wild` | wild ground the speckle filter may redraw as its surroundings, and whose edges wander |
+
+The map ink and the swatch's dark line are not fields: they are the ramp's base and deep tones.
 
 **Render-only tiles leave the sim** (PORT §6.i). `RoofSlate`, `RoofThatch`, `BrickWall` and `Pine` are not sim tiles: a variant comes from (1) the biome and cell hash, read from the skeleton the blueprint carries, and (2) `Blueprint.paint: Vec<(Rect, Material)>`, written by the chunk stamper where an authored place wants a particular roof or wall. Kept as sim tiles with a reason: Glass, StoneWall, DeadTree, Hedge, Boardwalk, Stepping, Crops, FlowerBed.
 
-`paint_chunk(grid, cx, cy, &mut ChunkLayers, &mut Strips)` paints 16 x 16 cells into the renderer's chunk at 256 x 256 px (PRESENTATION, terrain chunks): `ChunkLayers { albedo: [u32; 256 * 256], normal: [[u8; 2]; 256 * 256], height: [u8; 256 * 256], wet: [u8; 16 * 16] }`. It is the one place indices meet RGB outside the palette module: a chunk is blitted whole and never tinted, so the albedo is resolved through the table as it is painted; the other layers stay raw for the light pass. Water cells keep a caustic phase per cell so the shimmer of §2.8 lines up across a chunk seam.
+`terrain::paint_chunk(&mut Painter, &impl TileSource, seed, cx, cy, &mut Chunk)` paints 16 x 16 cells into the renderer's chunk at 256 x 256 px (PRESENTATION, terrain chunks). `TileSource` is `size`, `tile(x, y)`, and optionally `material(x, y)` (the blueprint's paint) and `outdoor`, so the renderer's `View` and the sheet tool both feed it and `jane-art` never sees the sim. A `Chunk` holds `ChunkLayers { albedo: Vec<u32> /* 0xFFRRGGBB */, normal: Vec<[u8; 2]>, emissive: Vec<Ix> /* lit windows */, height: Vec<u8>, wet: [u8; 16 * 16] }`, its strips (one per cell row with standing things, cropped from the 88-row, 32-px-margin strip to what is drawn, each with albedo, normal, height and a mask of clear, solid and canopy for the ghost pass, dappled light and god rays), its water cells with a shimmer phase from the world cell so the shimmer of §2.8 lines up across a seam, and its caster segments (wall runs merged per straight edge, fences along their run, a square round each trunk). It is the one place indices meet RGB outside the palette module: a chunk is blitted whole and never tinted, so the albedo is resolved through the table as it is painted; the other layers stay raw for the light pass (the emissive layer too: palette indices). A chunk is a pure function of the tiles within `REACH` (4) cells of it, their paint and the seed; `chunks_touched(rect)` is what a `Tiles(rect)` event invalidates. The `Painter` holds the styles, the flora bank and all scratch: nothing is allocated once it and the `Chunk` have painted one. Its `Standing` says how the standing things are handed over: `Strips` (the default, what the sheets draw) stamps them into the strips and lists the flora in `placed` too; `Placed` (what `jane-present` uses) lists the flora only, for a renderer that draws them from its atlas and sorts them one by one, and paints fences and low walls into the ground layers with the walls, the rows either side of the chunk included so a fence's top is never cut at a seam. `PaintMap` is `Blueprint.paint` a byte a cell, for a `TileSource` over a view that hands over the rects (`View::paint`).
 
-Flora: the 43 generators port onto `Canvas` at the new scale, their tone tables become ramps, leaves become `strokes(grass)` over a `soft_ellipse` crown so a tree is a lit volume rather than a flat blob, and a canopy tree emits its strip (88 rows with 32-px margins) for the ghost pass.
+Flora: the 43 generators port onto `Canvas` at the new scale, their tone tables become ramps, and a crown is layered leaf masses (a darker back layer, the main ring, a front layer) each a lit sphere with a crescent of shade under it, the whole lit from the top-left with a dark core, leaves as 2 to 3 px clusters lit on the lit side and dark on the shadow side, and a ragged silhouette of leaf tips and notches; the normals are the crown's dome with each mass's sphere over it, so a tree lights as one volume. A canopy tree is stamped into its row's strip for the ghost pass.
 
 ### 2.7 Materials
 
-A ramp is six to eight tones in luminance order, `deep, shade, base, light, high, glint` and up to two half-steps for dither pairs; a generator asks by role and never by index. The people's ramps (skin, hair, cloth, leather, the pool: `hue::shadow_hue` lists them) are hue-shifted: each tone's lightness steps from the key, its hue turns toward a cool one in shadow (violet-blue; rose for skin, never grey-brown) and a warm one in light (yellow; peach for skin), and its saturation peaks in the midtones and falls at both ends; a grey takes a cool tint in shadow and a warm one in light. A palette test holds each of them to that. The other families' ramps keep the step-1 straight mix until their owners move them over. Index 1, the contact shadow, is a cool multiply (`palette::AO_TINT`, blue held up more than red) and the blit softens its crisp mask by how much of each pixel's 3 x 3 it covers (`palette::ao`), so a shadow has a soft edge and no dither. Groups:
+A ramp is six to eight tones in luminance order, `deep, shade, base, light, high, glint` and up to two half-steps for dither pairs; a generator asks by role and never by index. The people's ramps (skin, hair, cloth, leather, the pool: `hue::shadow_hue` lists them) are hue-shifted: each tone's lightness steps from the key, its hue turns toward a cool one in shadow (violet-blue; rose for skin, never grey-brown) and a warm one in light (yellow; peach for skin), and its saturation peaks in the midtones and falls at both ends; a grey takes a cool tint in shadow and a warm one in light. A palette test holds each of them to that. The kit's and the creatures' own materials (wood_dark, wood_pale, iron, brass, copper, glass, bone) shift the same way from step 5, listed in `hue::shadow_hue` beside the terrain's; only `stone` keeps the straight mix (the lit-sphere test's ramp). Steps 4 to 6 added **no ramp** (a creature's fur is drawn in the hair and cloth ramps, which already shift and have pallid twins): with the terrain's 37 the master palette is 1011 entries, under the 1024 cap. Index 1, the contact shadow, is a cool multiply (`palette::AO_TINT`, blue held up more than red) and the blit softens its crisp mask by how much of each pixel's 3 x 3 it covers (`palette::ao`), so a shadow has a soft edge and no dither. Groups:
 
 | Group | Count | Notes |
 | --- | --- | --- |
@@ -424,11 +486,12 @@ Six muted pool pairs (step 2 has the one people need, `pool`). `pallor` darkens 
 | Command | Draws |
 | --- | --- |
 | `jane sheet units`, `props`, `icons`, `flora`, `chrome`, `font` | a family, every row, 1x and 4x on its real background, day-lit |
+| `jane sheet creatures`, `props [--only a,b]`, `buildings` | as built: the creatures standing, from behind, in profile, sitting and dead; the kit and the buildings in every frame, what glows shown at night |
 | `jane sheet unit <id>` | all frames of every cycle, every seat, every variant, the corpse, on a 4x grid, each set with a 1x strip and its west frames mirrored; `--seat N` and `--scale N` narrow and zoom it |
 | `jane sheet light <id>` | the sprite lit from eight directions and from above, with the cast shadow, through the same integer light pass the renderer uses |
 | `jane sheet layers <id>` | albedo, normal (as a colour ramp), emissive and height side by side at 4x; for a look, `--frame side_1` picks the frame (`down` by default), as for `light` |
 | `jane sheet person --grid`, `palette` | every build by every hair and coat; the table and the ramps in luminance order |
-| `jane sheet terrain` | every tile in every autotile context, dry and wet |
+| `jane sheet terrain [--tile name] [--sample]` | every tile in its sixteen neighbour contexts, dry over wet, a sheet a group; `--sample`: a made-up county and interior holding every tile, dry, by day and by night. `jane sheet flora`: the bank with its normals and heights. `jane sheet county <seed> --full [--at mark or x,y] [--radius cells] [--zoom z]`: the chunk painter over a built county, its layers side by side, its albedo, and lit at five in the afternoon and at night, with the paint time a chunk. Terrain goldens: `tests/terrain_golden.txt` |
 | `jane sheet weather <kind>` | the kind's masks and sprites, and sixty ticks of its motion over a plain ground |
 | `jane sheet parallax` | every hour keyframe's sky, treeline, School and cloud, in a strip |
 | `jane sheet title` | the title scene |
@@ -500,10 +563,10 @@ Each step ends with something on screen or on a sheet, and with its acceptance t
 
 1. `palette`, `canvas` at 16 px a cell with the four-layer pipeline and its primitives, `hash`, `font` (Fine and Small at least), `chrome`; `jane sheet layers` and `jane sheet light`. The title and the menus draw; a lit sphere sheet is the first artefact.
 2. Person `slim`, the frame tables, the six-frame walk and the breathe, the derivations, `fallen`, the seat swaps. Looks for Jane and the townsfolk.
-3. Terrain and flora ported; `TileStyle` rows with height, normal and wetness. The county draws, and draws lit at night.
-4. Creature `quadruped_mid`, `quadruped_small`, `bird` with their gaits; Person `bone` skin. The first five minutes have their cast.
-5. The kit in first-walk order: `sign`, `lamp` (emissive), `barrier`, `container`, `ritual`, `furniture`, `structure`. The house, the cellar and the mine dress.
-6. Building extensions with emitting windows, the icon classes at 32 and 16, the fx tables with their emissive parts, the attack and cast cycles.
+3. Terrain and flora ported; `TileStyle` rows with height, normal and wetness. The county draws, and draws lit at night. **Landed 2026-09-27** (`jane_art::terrain`, `jane_art::flora`; about 1.5 to 2 ms a chunk on a desktop, release).
+4. Creature `quadruped_mid`, `quadruped_small`, `bird` with their gaits; Person `bone` skin. The first five minutes have their cast. **Built** (2026-09-27): twelve animals and the skeleton; the creatures' attack cycle with them.
+5. The kit in first-walk order: `sign`, `lamp` (emissive), `barrier`, `container`, `ritual`, `furniture`, `structure`. The house, the cellar and the mine dress. **Built**, with the first of vegetation and debris; `machine` and `small_thing` wait for step 7, and 75 prop sprites (the museum's exhibits, the factory's boards and sockets, the tales' small things, the forest's banks) still draw a stand-in.
+6. Building extensions with emitting windows, the icon classes at 32 and 16, the fx tables with their emissive parts, the attack and cast cycles. **The buildings and the icons are built**; the fx tables and the people's attack and cast cycles are not, and the UI does not yet draw the icons.
 7. The remaining plans, held things, the rest of the kit, Head and Title faces. Every dungeon dresses.
 8. The title scene, `vary`, the region ramps.
 9. `weather`: mist, fog, rain, storm, snow, motes, fireflies, smoke, caustics, cloud shadow, god rays; the parallax layers; `jane sheet weather` and `parallax`. The county breathes.

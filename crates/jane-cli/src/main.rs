@@ -12,7 +12,9 @@ mod play;
 mod scene;
 mod serve;
 mod sheet_cmd;
+mod sheet_terrain;
 mod snap;
+mod ui_sheet;
 mod view;
 
 const USAGE: &str = "usage: jane <command> [options]

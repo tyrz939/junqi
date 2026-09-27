@@ -76,6 +76,14 @@ pub(crate) struct Rig {
     /// How far what hangs loose trails the body: `(dx, dy)`, the previous frame's lean and bob
     /// less this frame's.
     pub trail: (i32, i32),
+    /// A skeleton: the bone skin, drawn as bones (ART.md §2.1).
+    pub bone: bool,
+}
+
+/// Whether `d` is a skeleton: the `bone` skin draws a skull, ribs and bones, not a face and
+/// limbs.
+pub(crate) fn bony(d: &Dress) -> bool {
+    d.skin == Ramp::Bone
 }
 
 impl Rig {
@@ -97,7 +105,7 @@ impl Rig {
         };
         let hem = (p.hip_y() + pose.lag.0 + hang).min(AY - 2);
         let trail = (pose.lag.1 + bent - lean, pose.lag.0 - pose.bob);
-        Rig { p, pose, build: d.look.build, skull, top, waist: (top + hip) / 2 + 1, hip, hem, lean, trail }
+        Rig { p, pose, build: d.look.build, skull, top, waist: (top + hip) / 2 + 1, hip, hem, lean, trail, bone: bony(d) }
     }
 
     /// The eyes' first row (their lids are the row above).
@@ -123,6 +131,7 @@ impl Rig {
     /// The neck's width: a pencil on a girl, a post on a smith.
     fn neck_w(&self) -> i32 {
         match self.build {
+            _ if self.bone => 2,
             Build::Broad | Build::Stout => 6,
             Build::Slim | Build::Child => 4,
         }
@@ -160,7 +169,7 @@ fn finish(c: &mut Canvas, d: &Dress) {
     }
     c.despike();
     c.ao_contact(Rect::new(CX - 7, AY - 1, 14, 4), 0);
-    c.outline_sel();
+    c.outline();
     for r in [d.coat, d.front, d.legs, d.hat, d.boots, d.pack, d.skin, d.hair] {
         c.declutter(r);
     }
@@ -199,6 +208,10 @@ fn belt(c: &mut Canvas, x0: i32, x1: i32, y: i32, buckle: i32, z: u8) {
 
 /// A skin mitt of a hand, 4 x 3 from `(x, y)`, with its shadow px at the bottom right.
 fn hand(c: &mut Canvas, d: &Dress, x: i32, y: i32, z: u8) {
+    if bony(d) {
+        super::bone::hand(c, d, x, y, z);
+        return;
+    }
     c.ellipse(Rect::new(x, y, 4, 3), d.skin.at(Tone::Base), z);
     c.dot(x + 1, y, d.skin.at(Tone::Lift), z);
     c.dot(x + 2, y + 1, d.skin.at(Tone::Mid), z);
@@ -278,13 +291,23 @@ fn face_tones(c: &mut Canvas, d: &Dress, r: &Rig) {
 // Facing the viewer
 
 fn down(c: &mut Canvas, d: &Dress, r: &Rig) {
-    hair::back_down(c, d, r);
+    let bone = bony(d);
+    if !bone {
+        hair::back_down(c, d, r);
+    }
     legs_front(c, d, r);
     coat_front(c, d, r, true);
+    if bone {
+        super::bone::rags(c, d, r, true);
+    }
     front_down(c, d, r);
     arms_front(c, d, r);
     neck(c, d, r);
     head(c, d, r, false);
+    if bone {
+        super::bone::face_down(c, d, r);
+        return;
+    }
     face_down(c, d, r);
     hair::front_down(c, d, r);
     hat_down(c, d, r);
@@ -309,7 +332,10 @@ fn leg_front(c: &mut Canvas, d: &Dress, r: &Rig, x0: i32, out: i32, foot: i32) {
     let legs = leg_ramp(d);
     let top = r.hip - 1;
     let bot = foot - boot_h;
-    if bot >= top {
+    if bony(d) && d.look.body.legs == Legs::Bare {
+        // A shin bone, two px, with the knee's knob.
+        super::bone::shin(c, d, x0 + 1, top, x0 + 1 + out, bot, relief::LEG);
+    } else if bot >= top {
         c.polygon_cloth(&[(x0, top), (x0 + 3, top), (x0 + 3 + out, bot), (x0 + out, bot)], legs, 70, relief::LEG);
     }
     if d.look.body.legs == Legs::Pyjamas {
@@ -695,6 +721,13 @@ fn hat_down(c: &mut Canvas, d: &Dress, r: &Rig) {
 fn up(c: &mut Canvas, d: &Dress, r: &Rig) {
     legs_front(c, d, r);
     coat_front(c, d, r, false);
+    if bony(d) {
+        super::bone::rags(c, d, r, false);
+        arms_front(c, d, r);
+        neck(c, d, r);
+        super::bone::skull_back(c, d, r);
+        return;
+    }
     if d.look.body.pack {
         let t = r.top;
         c.rect_round(Rect::new(CX - 5, t + 2, 10, 8), d.pack, 1, 2, relief::PACK);
@@ -741,20 +774,30 @@ fn side(c: &mut Canvas, d: &Dress, r: &Rig) {
     // The far arm and leg, behind everything.
     arm_side(c, d, r, shoulder, r.pose.arm[1], true);
     leg_side(c, d, r, r.pose.leg[1], r.pose.lift[1], true);
-    hair::back_side(c, d, r);
+    let bone = bony(d);
+    if !bone {
+        hair::back_side(c, d, r);
+    }
     if d.look.body.pack {
         c.rect_round(Rect::new(CX - 11 + r.lean, t + 1, 6, 8), d.pack, 1, 2, relief::FAR);
     }
     leg_side(c, d, r, r.pose.leg[0], r.pose.lift[0], false);
     coat_side(c, d, r);
+    if bone {
+        super::bone::rags_side(c, d, r);
+    }
     front_side(c, d, r);
     if d.look.body.pack {
         c.line((CX + 1 + r.lean, t), (CX - 3, r.waist), d.pack.at(Tone::Base), 1, relief::FRONT);
     }
     neck_side(c, d, r);
     head(c, d, r, true);
-    face_side(c, d, r);
-    hair::side(c, d, r);
+    if bone {
+        super::bone::face_side(c, d, r);
+    } else {
+        face_side(c, d, r);
+        hair::side(c, d, r);
+    }
     hat_side(c, d, r);
     if d.look.extras.contains(&Extra::Shawl) {
         let (x0, x1) = (CX - r.side_w() / 2 - 2 + r.lean, CX + r.side_w() / 2 + 1 + r.lean);
@@ -777,7 +820,11 @@ fn leg_side(c: &mut Canvas, d: &Dress, r: &Rig, swing: i32, lift: i32, far: bool
     let rows = boot_rows(d);
     let top = r.hip - 1;
     let z = if far { relief::FAR } else { relief::LEG };
-    c.polygon_cloth(&[(hx, top), (hx + 3, top), (fx + 3, foot - rows), (fx, foot - rows)], legs, 70, z);
+    if bony(d) && d.look.body.legs == Legs::Bare {
+        super::bone::shin(c, d, hx + 1, top, fx + 1, foot - rows, z);
+    } else {
+        c.polygon_cloth(&[(hx, top), (hx + 3, top), (fx + 3, foot - rows), (fx, foot - rows)], legs, 70, z);
+    }
     let boot = if d.look.body.boots == Boots::Bare { d.skin } else { d.boots };
     c.rect_round(Rect::new(fx, foot - rows + 1, 5, rows), boot, 1, 1, if far { relief::FAR } else { relief::BOOT });
     if far {

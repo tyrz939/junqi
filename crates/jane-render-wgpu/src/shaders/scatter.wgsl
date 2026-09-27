@@ -21,10 +21,18 @@ fn scatter(@builtin(global_invocation_id) id: vec3<u32>) {
     }
     let d = max(u32(round(v.a * 255.0)), 1u);
     let y0 = i32(id.y + h) - i32(d / 2u);
-    for (var k = 0u; k < d; k++) {
-        let y = y0 + i32(k);
-        if y >= 0 && y < i32(hh) {
-            atomicMax(&hmap[u32(y) * w + id.x], h);
+    // A px wider each side: a dithered or combed silhouette stands as one body, and a ray
+    // stepping past a thin post still finds it.
+    for (var dx = -1; dx <= 1; dx++) {
+        let x = i32(id.x) + dx;
+        if x < 0 || x >= i32(w) {
+            continue;
+        }
+        for (var k = 0u; k < d; k++) {
+            let y = y0 + i32(k);
+            if y >= 0 && y < i32(hh) {
+                atomicMax(&hmap[u32(y) * w + u32(x)], h);
+            }
         }
     }
 }

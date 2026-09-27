@@ -14,7 +14,7 @@ use crate::palette::{Ix, Ramp, Tone, pallor};
 pub const MAX_LEN: i32 = 28;
 
 /// The dead frame made from `side`, a finished frame of the body in the fallen pose (32 x 40).
-pub fn fallen(side: &Canvas, seed: u32) -> Canvas {
+pub fn fallen(side: &Canvas, seed: u32, pool: bool) -> Canvas {
     let mut stood = side.clone();
     for y in 0..stood.h() {
         for x in 0..stood.w() {
@@ -26,6 +26,11 @@ pub fn fallen(side: &Canvas, seed: u32) -> Canvas {
     let mut lying = stood.rotate_ccw();
     lying.shorten_to(MAX_LEN);
     lying.remap(pallor);
+    if !pool {
+        // Bone has no pallid twin and goes a tone down; the shin's two tones must not cross
+        // into a checker as it turns.
+        lying.unchecker(Ramp::Bone);
+    }
     lying.quench();
     lying.dome_heights(5);
     let Some(b) = lying.bounds() else { return Canvas::new(W, H) };
@@ -38,13 +43,16 @@ pub fn fallen(side: &Canvas, seed: u32) -> Canvas {
     let pw = 14 + (seed & 3) as i32;
     // Under the body's middle row, spreading a little further toward the viewer than away.
     let mid = y + b.y + b.h / 2;
-    let pool = Rect::new(px - pw / 2, mid - 3, pw, (AY + 1 - (mid - 3)).max(9));
-    out.ellipse_lit(pool, Ramp::Pool, crate::canvas::Z::flat(1));
-    out.retone(
-        Ramp::Pool,
-        [Tone::Deep, Tone::Shade, Tone::Shade, Tone::Mid, Tone::Mid, Tone::Base, Tone::Base, Tone::Base],
-    );
-    out.outline_sel();
+    // A skeleton has nothing left to bleed.
+    if pool {
+        let pool = Rect::new(px - pw / 2, mid - 3, pw, (AY + 1 - (mid - 3)).max(9));
+        out.ellipse_lit(pool, Ramp::Pool, crate::canvas::Z::flat(1));
+        out.retone(
+            Ramp::Pool,
+            [Tone::Deep, Tone::Shade, Tone::Shade, Tone::Mid, Tone::Mid, Tone::Base, Tone::Base, Tone::Base],
+        );
+        out.outline();
+    }
     out.ao_contact(Rect::new(AX - b.w / 2 - 1, AY - 4, b.w + 2, 4), 0);
     out.stamp(&lying, x, y);
     out

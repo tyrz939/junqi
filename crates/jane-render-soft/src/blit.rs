@@ -1,7 +1,7 @@
 //! The pixel path (PRESENTATION.md §1.4): integer only, scalar code that autovectorises, no
 //! intrinsics, no floats, so a frame is the same bytes on every target.
 
-use jane_present::{Flags, Page, Src, Tint};
+use jane_present::{AO_TINT, Flags, Page, Src, Tint};
 
 /// A `u32` canvas, `0xAARRGGBB`, row-major.
 #[derive(Debug)]
@@ -11,10 +11,17 @@ pub struct Target<'a> {
     pub h: i32,
 }
 
-/// The contact shadow (index 1): each channel to 3/4, by shifts. Alpha stays.
+/// The contact shadow (index 1) at `cover` of 9 (how much of the texel's 3 x 3 the index-1 mask
+/// covers): each channel toward `AO_TINT` of itself, a cool darkening with a soft edge
+/// (`jane_art::palette::ao`, which this matches bit for bit). Alpha stays.
 #[inline]
-pub fn shadow(d: u32) -> u32 {
-    d - ((d >> 2) & 0x003f_3f3f)
+pub fn shadow(d: u32, cover: u32) -> u32 {
+    let cover = cover.min(9);
+    let ch = |shift: u32, k: usize| {
+        let f = 256 - (256 - u32::from(AO_TINT[k])) * cover / 9;
+        (((d >> shift) & 0xff) * f / 256) << shift
+    };
+    (d & 0xff00_0000) | ch(16, 0) | ch(8, 1) | ch(0, 2)
 }
 
 /// `x` toward `y` by `a` of 256, two multiplies on packed channel pairs. Opaque out.
@@ -33,7 +40,8 @@ fn weight(a: u8) -> u32 {
 }
 
 /// Blits `src` of `page` with its top-left at `(x, y)`: index 0 skipped, index 1 darkens what is
-/// under it, every other index its CLUT colour, tinted. A mirrored sprite walks its source
+/// under it by how much of its 3 x 3 the contact shadow covers (so a clear texel beside one takes
+/// a little of it), every other index its CLUT colour, tinted. A mirrored sprite walks its source
 /// columns backwards. Clipped to the target.
 pub fn sprite(t: &mut Target<'_>, page: &Page, clut: &[u32], src: Src, x: i32, y: i32, flags: Flags) {
     let (sw, sh) = (i32::from(src.w), i32::from(src.h));
@@ -43,18 +51,37 @@ pub fn sprite(t: &mut Target<'_>, page: &Page, clut: &[u32], src: Src, x: i32, y
         return;
     }
     let pw = usize::from(page.w);
+    let row = |r: i32| -> &[u16] {
+        let sy = usize::from(src.y) + r as usize;
+        &page.albedo[sy * pw + usize::from(src.x)..sy * pw + usize::from(src.x) + sw as usize]
+    };
+    // Whether source row r holds any contact shadow: only rows next to one need the 3 x 3.
+    let has_ao = |r: i32| r >= 0 && r < sh && row(r).contains(&1);
     for dy in y0..y1 {
-        let sy = usize::from(src.y) + (dy - y) as usize;
-        let srow = &page.albedo[sy * pw + usize::from(src.x)..sy * pw + usize::from(src.x) + sw as usize];
+        let r = dy - y;
+        let srow = row(r);
+        let near_ao = has_ao(r - 1) || has_ao(r) || has_ao(r + 1);
         let drow = &mut t.px[(dy * t.w) as usize..((dy + 1) * t.w) as usize];
         for dx in x0..x1 {
             let col = dx - x;
-            let sx = if flags.mirror { sw - 1 - col } else { col } as usize;
-            let i = srow[sx];
+            let sx = if flags.mirror { sw - 1 - col } else { col };
+            let i = srow[sx as usize];
             let d = &mut drow[dx as usize];
             match i {
-                0 => {}
-                1 => *d = shadow(*d),
+                0 | 1 => {
+                    if near_ao {
+                        let mut cover = 0;
+                        for yy in (r - 1).max(0)..=(r + 1).min(sh - 1) {
+                            let rr = row(yy);
+                            for xx in (sx - 1).max(0)..=(sx + 1).min(sw - 1) {
+                                cover += u32::from(rr[xx as usize] == 1);
+                            }
+                        }
+                        if cover > 0 {
+                            *d = shadow(*d, cover);
+                        }
+                    }
+                }
                 _ => {
                     let c = clut[usize::from(i)];
                     *d = match flags.tint {
@@ -123,17 +150,22 @@ mod tests {
     }
 
     #[test]
-    fn clear_skips_shadow_darkens_to_three_quarters_and_colour_is_the_clut() {
+    fn the_contact_shadow_is_cool_and_soft_edged_and_colour_is_the_clut() {
         let px = blit(Flags::default());
-        assert_eq!(px, [GREY, GREY, 0xff60_6060, RED, 0xff20_20c0, GREY]);
-        // Three quarters of each channel, alpha kept.
-        assert_eq!(shadow(0xff_ff_80_04), 0xff_c0_60_03);
+        // The shadow texel and the clear texel beside it each see one shadow texel in their 3 x 3.
+        let s1 = shadow(GREY, 1);
+        assert_eq!(px, [GREY, s1, s1, RED, 0xff20_20c0, GREY]);
+        assert!(s1 < GREY && s1 & 0xff > (s1 >> 16) & 0xff);
+        // Full cover is AO_TINT of each channel, blue held up most; alpha kept.
+        assert_eq!(shadow(GREY, 9), 0xff53_5667);
+        assert_eq!(shadow(GREY, 0), GREY);
     }
 
     #[test]
     fn a_mirrored_sprite_walks_its_columns_backwards() {
         let px = blit(Flags { mirror: true, tint: Tint::None });
-        assert_eq!(px, [GREY, 0xff20_20c0, RED, 0xff60_6060, GREY, GREY]);
+        let s1 = shadow(GREY, 1);
+        assert_eq!(px, [GREY, 0xff20_20c0, RED, s1, s1, GREY]);
     }
 
     #[test]
@@ -146,7 +178,7 @@ mod tests {
         let px = blit(Flags { mirror: false, tint: Tint::Ghost(128) });
         // Half the red over the grey; the shadow still darkens; clear still skips.
         assert_eq!(px[3], lerp(GREY, RED, 129));
-        assert_eq!((px[1], px[2]), (GREY, 0xff60_6060));
+        assert_eq!((px[1], px[2]), (shadow(GREY, 1), shadow(GREY, 1)));
         let px = blit(Flags { mirror: false, tint: Tint::Ghost(0) });
         assert_eq!(px[3], GREY);
     }

@@ -7,9 +7,9 @@
 //! aim are quantised to `(Angle, magnitude)` before they become an `InputFrame`, and the raw aim
 //! goes out unbent (the sim does the assist, ARCHITECTURE.md §5.4).
 //!
-//! Bindings are the const [`BINDINGS`] table for now. `data/bindings.json`, compiled in with the
-//! rest of the content, and the per-user overrides in `config.json` replace it at P7; the table
-//! has the shape the data will have (`Binding { action, keys: [Scancode; 2], mouse, pad }`).
+//! Bindings are data: `data/bindings.json`, compiled in by this crate's build script into
+//! [`BINDINGS`] (an unknown name is a build error), with the player's overrides from
+//! `config.json` laid over them into the [`Bindings`] in force.
 
 use jane_core::angle::iatan2;
 use jane_core::{Angle, Fx, Rect, Vec2};
@@ -36,22 +36,33 @@ pub mod sc {
     pub const N1: u16 = 30;
     pub const RETURN: u16 = 40;
     pub const ESCAPE: u16 = 41;
+    pub const BACKSPACE: u16 = 42;
     pub const TAB: u16 = 43;
     pub const SPACE: u16 = 44;
+    pub const N0: u16 = 39;
     /// The key left of `1` on a US board.
     pub const GRAVE: u16 = 53;
     /// `F1`; `F2` to `F12` follow.
     pub const F1: u16 = 58;
     pub const F2: u16 = 59;
     pub const F3: u16 = 60;
+    pub const F4: u16 = 61;
     pub const F5: u16 = 62;
+    pub const F6: u16 = 63;
+    pub const F7: u16 = 64;
+    pub const F8: u16 = 65;
     pub const F9: u16 = 66;
     pub const F12: u16 = 69;
+    pub const HOME: u16 = 74;
+    pub const PAGEUP: u16 = 75;
+    pub const END: u16 = 77;
+    pub const PAGEDOWN: u16 = 78;
     pub const RIGHT: u16 = 79;
     pub const LEFT: u16 = 80;
     pub const DOWN: u16 = 81;
     pub const UP: u16 = 82;
     pub const KP_ENTER: u16 = 88;
+    pub const LCTRL: u16 = 224;
     pub const LSHIFT: u16 = 225;
     pub const RSHIFT: u16 = 229;
 }
@@ -252,6 +263,12 @@ pub enum Action {
     Grid,
     /// The canvas to a PNG.
     Shot,
+    /// While the world is held still (F6), one tick of it.
+    Step,
+    /// A quarter speed, or back.
+    Slow,
+    /// Four times speed, or back.
+    Fast,
 }
 
 /// A pad input a binding can name.
@@ -271,44 +288,119 @@ pub struct Binding {
     pub pad: Option<PadInput>,
 }
 
-const fn row(action: Action, keys: [u16; 2], mouse: Option<MouseButton>, pad: Option<PadInput>) -> Binding {
-    Binding { action, keys, mouse, pad }
+// `BINDINGS` (the rows of `data/bindings.json`), `ACTIONS`, `PADS` and `MICE` (every name the
+// data and `config.json` may use), compiled by build.rs.
+include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
+
+/// A scancode's name as a key cap shows it (`E`, `Space`, `F5`); `?` for one with no name.
+pub fn key_name(code: u16) -> &'static str {
+    crate::input_names::KEY_NAMES.iter().find(|k| k.1 == code).map_or("?", |k| k.0)
 }
 
-#[allow(clippy::unnecessary_wraps)] // the table's `pad` column is an Option; this fills it
-const fn btn(b: u8) -> Option<PadInput> {
-    Some(PadInput::Button(b))
+/// The scancode a cap name names (`key_name`'s inverse, any case; `Escape`, `Return`, `Up` and
+/// the like are taken too).
+pub fn key_code(name: &str) -> Option<u16> {
+    let alias = match name.to_ascii_lowercase().as_str() {
+        "escape" => Some(sc::ESCAPE),
+        "return" => Some(sc::RETURN),
+        "backspace" => Some(sc::BACKSPACE),
+        "up" => Some(sc::UP),
+        "down" => Some(sc::DOWN),
+        "left" => Some(sc::LEFT),
+        "right" => Some(sc::RIGHT),
+        "grave" | "backquote" => Some(sc::GRAVE),
+        "lshift" => Some(sc::LSHIFT),
+        "lctrl" => Some(sc::LCTRL),
+        _ => None,
+    };
+    alias.or_else(|| crate::input_names::KEY_NAMES.iter().find(|k| k.0.eq_ignore_ascii_case(name)).map(|k| k.1))
 }
 
-/// The bindings (README's Controls table; the pad column is the 2020 layout). Stands in for
-/// `data/bindings.json` until P7 compiles that in.
-pub const BINDINGS: &[Binding] = &[
-    row(Action::Up, [sc::W, sc::UP], None, btn(pad::DPAD_UP)),
-    row(Action::Down, [sc::S, sc::DOWN], None, btn(pad::DPAD_DOWN)),
-    row(Action::Left, [sc::A, sc::LEFT], None, btn(pad::DPAD_LEFT)),
-    row(Action::Right, [sc::D, sc::RIGHT], None, btn(pad::DPAD_RIGHT)),
-    row(Action::Sprint, [sc::LSHIFT, sc::RSHIFT], None, Some(PadInput::RightTrigger)),
-    row(Action::Use, [sc::E, sc::F], None, btn(pad::B)),
-    row(Action::Bar(0), [sc::N1, sc::SPACE], Some(MouseButton::Left), btn(pad::A)),
-    row(Action::Bar(1), [sc::N1 + 1, 0], None, btn(pad::X)),
-    row(Action::Bar(2), [sc::N1 + 2, 0], None, btn(pad::Y)),
-    row(Action::Bar(3), [sc::N1 + 3, 0], None, btn(pad::LB)),
-    row(Action::Bar(4), [sc::N1 + 4, 0], None, btn(pad::RB)),
-    row(Action::Bar(5), [sc::N1 + 5, 0], None, None),
-    row(Action::Bar(6), [sc::N1 + 6, 0], None, None),
-    row(Action::Bar(7), [sc::N1 + 7, 0], None, None),
-    row(Action::Bags, [sc::TAB, sc::I], None, btn(pad::BACK)),
-    row(Action::Book, [sc::K, 0], None, None),
-    row(Action::Quests, [sc::J, 0], None, None),
-    row(Action::Map, [sc::M, 0], None, None),
-    row(Action::Pause, [sc::ESCAPE, 0], None, btn(pad::START)),
-    row(Action::QuickSave, [sc::F5, 0], None, None),
-    row(Action::QuickLoad, [sc::F9, 0], None, None),
-    row(Action::Console, [sc::GRAVE, 0], None, None),
-    row(Action::Debug, [sc::F2, 0], None, None),
-    row(Action::Grid, [sc::F3, 0], None, None),
-    row(Action::Shot, [sc::F12, 0], None, None),
-];
+/// A pad input's name as a hint shows it.
+pub fn pad_name(p: PadInput) -> &'static str {
+    PADS.iter().find(|x| x.1 == p).map_or("?", |x| x.0)
+}
+
+/// The pad input a name names.
+pub fn pad_input(name: &str) -> Option<PadInput> {
+    PADS.iter().find(|x| x.0.eq_ignore_ascii_case(name)).map(|x| x.1)
+}
+
+/// A mouse button's name.
+pub fn mouse_name(b: MouseButton) -> &'static str {
+    MICE.iter().find(|x| x.1 == b).map_or("?", |x| x.0)
+}
+
+/// The mouse button a name names.
+pub fn mouse_button(name: &str) -> Option<MouseButton> {
+    MICE.iter().find(|x| x.0.eq_ignore_ascii_case(name)).map(|x| x.1)
+}
+
+/// An action's data name (`"use"`, `"bar3"`).
+pub fn action_name(a: Action) -> &'static str {
+    ACTIONS.iter().find(|x| x.1 == a).map_or("?", |x| x.0)
+}
+
+/// An action's label on the Controls screen.
+pub fn action_label(a: Action) -> &'static str {
+    ACTIONS.iter().find(|x| x.1 == a).map_or("?", |x| x.2)
+}
+
+/// The action a data name names.
+pub fn action(name: &str) -> Option<Action> {
+    ACTIONS.iter().find(|x| x.0 == name).map(|x| x.1)
+}
+
+/// The bindings in force (PRESENTATION.md §4): one row per action, the compiled table with the
+/// player's overrides from `config.json` laid over it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Bindings {
+    pub rows: Vec<Binding>,
+}
+
+impl Default for Bindings {
+    fn default() -> Bindings {
+        Bindings { rows: BINDINGS.to_vec() }
+    }
+}
+
+impl Bindings {
+    /// The row for `a`.
+    pub fn row(&self, a: Action) -> Option<&Binding> {
+        self.rows.iter().find(|b| b.action == a)
+    }
+
+    /// The first key bound to `a`, as its cap shows it.
+    pub fn key(&self, a: Action) -> &'static str {
+        self.row(a).and_then(|b| b.keys.iter().find(|&&k| k != 0)).map_or("?", |&k| key_name(k))
+    }
+
+    /// The pad input bound to `a`, if any.
+    pub fn pad(&self, a: Action) -> Option<PadInput> {
+        self.row(a).and_then(|b| b.pad)
+    }
+
+    /// Every other action bound to the same key, button or pad input as `(a, col)` (col 0 and 1
+    /// the keys, 2 the mouse, 3 the pad): conflicts are shown, never refused.
+    pub fn conflicts(&self, a: Action, col: u8) -> impl Iterator<Item = Action> + '_ {
+        let me = self.row(a).copied();
+        self.rows
+            .iter()
+            .filter(move |b| b.action != a)
+            .filter(move |b| {
+                let Some(m) = me else { return false };
+                match col {
+                    0 | 1 => {
+                        let k = m.keys[usize::from(col)];
+                        k != 0 && b.keys.contains(&k)
+                    }
+                    2 => m.mouse.is_some() && b.mouse == m.mouse,
+                    _ => m.pad.is_some() && b.pad == m.pad,
+                }
+            })
+            .map(|b| b.action)
+    }
+}
 
 /// What the UI and the app hear.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -333,6 +425,9 @@ pub enum UiAction {
     Shot,
     QuickSave,
     QuickLoad,
+    Step,
+    Slow,
+    Fast,
 }
 
 /// What becomes a sim `Command` (the app stamps it).
@@ -396,6 +491,8 @@ pub struct Input {
     pad_last: bool,
     /// The Controls row's assist profile; `None`: `Pad` while the pad aims, `Off` for a mouse.
     pub assist: Option<AssistProfile>,
+    /// The table in force: the compiled rows with the player's overrides over them.
+    pub bindings: Bindings,
 }
 
 impl Input {
@@ -415,7 +512,8 @@ impl Input {
         if ctx.mode != Mode::Play {
             return InputFrame { assist: self.profile(), ..InputFrame::IDLE };
         }
-        let held = |a: Action| is_held(dev, a);
+        let rows = &self.bindings.rows;
+        let held = |a: Action| is_held(rows, dev, a);
         let (mut mx, mut my) = (0.0f32, 0.0f32);
         if held(Action::Left) {
             mx -= 1.0;
@@ -506,7 +604,7 @@ impl Input {
                 }
                 continue;
             }
-            for b in BINDINGS.iter().filter(|b| code != 0 && b.keys.contains(&code)) {
+            for b in self.bindings.rows.iter().filter(|b| code != 0 && b.keys.contains(&code)) {
                 if let Some(e) = edge_for(b.action, mode, false) {
                     self.edges.push(e);
                 }
@@ -524,7 +622,7 @@ impl Input {
             if mode != Mode::Play {
                 continue;
             }
-            for row in BINDINGS.iter().filter(|r| r.mouse == Some(b)) {
+            for row in self.bindings.rows.iter().filter(|r| r.mouse == Some(b)) {
                 if let Some(e) = edge_for(row.action, mode, false) {
                     self.edges.push(e);
                 }
@@ -550,7 +648,7 @@ impl Input {
         if rose != 0 || rt_rose || lt_rose || moved {
             self.pad_last = true;
         }
-        for row in BINDINGS {
+        for row in &self.bindings.rows {
             let fired = match row.pad {
                 Some(PadInput::Button(b)) => rose & (1 << b) != 0,
                 Some(PadInput::RightTrigger) => rt_rose,
@@ -565,8 +663,8 @@ impl Input {
 }
 
 /// Whether a binding's action is held on any device.
-fn is_held(dev: &DeviceState, a: Action) -> bool {
-    BINDINGS.iter().filter(|b| b.action == a).any(|b| {
+fn is_held(rows: &[Binding], dev: &DeviceState, a: Action) -> bool {
+    rows.iter().filter(|b| b.action == a).any(|b| {
         b.keys.iter().any(|&k| k != 0 && dev.keys.has(k))
             || b.mouse.is_some_and(|m| dev.mouse.is_held(m))
             || match (b.pad, &dev.pad) {
@@ -589,6 +687,9 @@ fn edge_for(a: Action, mode: Mode, from_pad: bool) -> Option<Edge> {
         Action::Shot => Some(UiAction::Shot),
         Action::QuickSave => Some(UiAction::QuickSave),
         Action::QuickLoad => Some(UiAction::QuickLoad),
+        Action::Step => Some(UiAction::Step),
+        Action::Slow => Some(UiAction::Slow),
+        Action::Fast => Some(UiAction::Fast),
         Action::Bags => Some(UiAction::Bags),
         Action::Book => Some(UiAction::Book),
         Action::Quests => Some(UiAction::Quests),
