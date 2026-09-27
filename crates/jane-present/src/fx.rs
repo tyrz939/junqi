@@ -8,6 +8,8 @@
 //! reseeded per zone from `h32(seed, zone)`, so the same fight looks the same twice and nothing
 //! here touches the sim's.
 
+use std::collections::VecDeque;
+
 use jane_art::fx::{self as art, Lcg, Recipe, Role, Shape, Spark};
 use jane_core::Angle;
 use jane_core::action::Facing;
@@ -54,7 +56,7 @@ struct Head {
 pub struct Fx {
     tier: Tier,
     cap: usize,
-    parts: Vec<Spark>,
+    parts: VecDeque<Spark>,
     rain: Vec<Spark>,
     rng: Lcg,
     glows: Vec<Glow>,
@@ -81,7 +83,7 @@ impl Fx {
         Fx {
             tier,
             cap,
-            parts: Vec::with_capacity(cap - cap / 3),
+            parts: VecDeque::with_capacity(cap - cap / 3),
             rain: Vec::with_capacity(cap / 3),
             rng: Lcg(1),
             glows: Vec::with_capacity(64),
@@ -121,23 +123,19 @@ impl Fx {
         self.rng = Lcg(jane_art::hash::h32(view.seed(), view.zone() as u32, 0x6678_6678));
     }
 
-    fn push(&mut self, s: Spark) {
-        let fx_cap = self.cap - self.cap / 3;
-        if self.parts.len() >= fx_cap {
-            // Overflow drops the oldest.
-            self.parts.remove(0);
-        }
-        self.parts.push(s);
-    }
-
     fn emit(&mut self, r: &Recipe, at: (i32, i32), dir: Angle) {
-        let mut rng = self.rng;
-        let mut out = Vec::new();
-        art::emit(r, at, dir, &mut rng, &mut |s| out.push(s));
-        self.rng = rng;
-        for s in out {
-            self.push(s);
-        }
+        let fx_cap = self.cap - self.cap / 3;
+        let parts = &mut self.parts;
+        art::emit(r, at, dir, &mut self.rng, &mut |s| {
+            if fx_cap == 0 {
+                return;
+            }
+            if parts.len() >= fx_cap {
+                // Overflow drops the oldest.
+                parts.pop_front();
+            }
+            parts.push_back(s);
+        });
         if let Some(l) = r.light {
             let colour = l.role.of(art::hue(r.tint));
             self.glows.push(Glow { x: at.0, y: at.1, z: l.z, colour, radius: l.radius, ticks: l.ticks, left: l.ticks });

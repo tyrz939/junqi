@@ -74,10 +74,24 @@ fn both_modes_match(mut gl: Gl2) {
             let mut albedo = Vec::new();
             let (w, h) = gl.read_albedo(&mut albedo);
             assert_eq!((w, h), CANVAS);
-            // soft draws the same frame without its light pass: its albedo pass alone.
+            // soft draws the same frame without its light pass: its albedo pass alone. The
+            // atmosphere's passes go too, since gl2 does not draw them yet (PRESENTATION.md §1.3).
             let f = p.frame_mut();
-            let lights: Vec<Pass> = f.passes.iter().copied().filter(|q| matches!(q, Pass::Lights { .. })).collect();
-            f.passes.retain(|q| !matches!(q, Pass::Lights { .. }));
+            let off = |q: &Pass| {
+                matches!(
+                    q,
+                    Pass::Lights { .. }
+                        | Pass::Sky(_)
+                        | Pass::Parallax { .. }
+                        | Pass::Water { .. }
+                        | Pass::Weather(_)
+                        | Pass::Fog { .. }
+                        | Pass::Rays { .. }
+                        | Pass::Particles { .. }
+                )
+            };
+            let lights: Vec<Pass> = f.passes.iter().copied().filter(|q| off(q)).collect();
+            f.passes.retain(|q| !off(q));
             soft.draw(p.frame());
             p.frame_mut().passes.extend(lights);
             let (px, sw, sh) = soft.pixels();

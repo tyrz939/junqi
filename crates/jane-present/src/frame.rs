@@ -591,8 +591,8 @@ impl Frame {
             ui: Vec::with_capacity(4096),
             ui_images: Vec::new(),
             water: Vec::with_capacity(1024),
-            fog: Vec::with_capacity(16),
-            parts: Vec::with_capacity(usize::from(Features::of(tier).max_particles) + 64),
+            fog: Vec::with_capacity(32),
+            parts: Vec::with_capacity(usize::from(Features::of(tier).max_particles) + 256),
             stars: Vec::with_capacity(128),
             tick: 0,
         }

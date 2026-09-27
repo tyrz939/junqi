@@ -517,7 +517,13 @@ impl Present {
                 y: gy,
                 height: height as u8,
                 colour: rgb(l.color),
-                radius: (l.radius.0 >> FX_TO_CANVAS).clamp(0, 2048) as u16,
+                // An open flame (a fire, a brazier: a light that dips a fifth or more) throws its pool
+                // half again as far as its row says the sentries see it: the eye sees a fire's glow
+                // well past where it lights a face. Presentation only; `light_showing` is unchanged.
+                radius: {
+                    let r = (l.radius.0 >> FX_TO_CANVAS).clamp(0, 2048);
+                    (if l.flicker.0 >= 200 { r * 3 / 2 } else { r }) as u16
+                },
                 size: size as u8,
                 // Its own prop throws no shadow on it: a post, a fire's flames and logs.
                 clear: if d.flat { 0 } else if d.w >= 3 || d.h >= 3 { 10 } else { (w.max(h) / 2 + 6).min(40) as u8 },

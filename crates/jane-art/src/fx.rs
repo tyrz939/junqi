@@ -474,7 +474,7 @@ pub fn trail(b: Bolt) -> Recipe {
         Bolt::Fire => Recipe {
             tint: Tint::Fire,
             emits: &[
-                Emit { n: 2, role: Role::Core, late: Some(Role::Deep), speed: (2, 8), grav: 2, life: (10, 16), glow: 220, ..E },
+                Emit { n: 2, role: Role::Core, late: Some(Role::Deep), speed: (2, 8), grav: 2, life: (12, 20), glow: 220, shape: Shape::Dot(3), ..E },
                 Emit { n: 1, role: Role::Smoke, shape: Shape::Dot(3), grav: 2, life: (18, 26), ..E },
             ],
             light: None,
@@ -502,11 +502,11 @@ pub fn trail(b: Bolt) -> Recipe {
 pub fn head(b: Bolt) -> (Tint, u8, Option<FxLight>) {
     let l = |radius, role| Some(FxLight { radius, role, ticks: 1, z: 16 });
     match b {
-        Bolt::Frost => (Tint::Frost, 5, l(96, Role::Mid)),
-        Bolt::Fire => (Tint::Fire, 6, l(128, Role::Mid)),
-        Bolt::Venom => (Tint::Venom, 5, l(64, Role::Mid)),
+        Bolt::Frost => (Tint::Frost, 8, l(120, Role::Mid)),
+        Bolt::Fire => (Tint::Fire, 9, l(168, Role::Mid)),
+        Bolt::Venom => (Tint::Venom, 7, l(80, Role::Mid)),
         Bolt::Needle => (Tint::Needle, 2, None),
-        Bolt::Spark => (Tint::Spark, 5, l(110, Role::Core)),
+        Bolt::Spark => (Tint::Spark, 7, l(140, Role::Core)),
         Bolt::Charge => (Tint::Blast, 4, l(56, Role::Mid)),
     }
 }
