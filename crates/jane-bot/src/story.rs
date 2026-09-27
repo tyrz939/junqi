@@ -99,6 +99,9 @@ pub struct Story {
     /// A dungeon that killed her over and over, let be until this tick (and how often): not
     /// cleared when she wakes whole, as a set-aside is (`died_out`).
     died_out: BTreeMap<ZoneId, (u32, u32, i32)>,
+    /// A goal that got her killed on the way to it, how often, and the tick it waits till: not
+    /// cleared when she wakes whole (`died_for`).
+    killed_on: BTreeMap<Goal, (u32, u32)>,
     /// A dungeon a quest step sends her into, played whole by a crawl (in by its door, through
     /// its locks and verbs to its boss, and out), and the step it is for.
     dungeon: Option<(Box<crate::crawl::Crawl>, Goal)>,
@@ -355,7 +358,12 @@ impl Story {
             return Act::idle();
         }
         // Beaten out of this dungeon a while: out of it, unless shut in (then the fight is the way).
-        if v.body().alive && dungeon(v.zone()) && self.task.is_none() && self.beaten_out(v) && !crate::crawl::shut_in_with_boss(v) {
+        if v.body().alive
+            && dungeon(v.zone())
+            && self.task.is_none()
+            && self.beaten_out(v)
+            && !crate::crawl::shut_in_with_boss(v)
+        {
             if let Some(t) = route(v, cx, ZoneId::County) {
                 self.task = Some((t, Goal::Explore(crate::crawl::Try::Travel)));
                 return Act::idle();
@@ -391,10 +399,7 @@ impl Story {
                 cx.nav.roads = true;
                 if let Some((_, g)) = self.task.take() {
                     notes.push(Mark::Stuck(format!("{}: died on the way", goal_name(v, g))));
-                    // What she only wanted (a provision, a fire to mend at: there are others,
-                    // and later) waits hours after it killed her; the log's steps a moment.
-                    let hours = if matches!(g, Goal::Provision(_) | Goal::Rest) { 3 } else { 0 };
-                    self.blocked.insert(g, v.tick().0 + 600 + hours * jane_sim::tuning::TICKS_PER_HOUR);
+                    self.died_for(v, g);
                 }
             }
             self.task = None;
@@ -576,8 +581,31 @@ impl Story {
         }
     }
 
+    /// She died on her way to `g`. What she only wanted (a provision, a fire to mend at: there
+    /// are others, and later) waits hours; the log's steps a moment the first time. Killed on the
+    /// way to the same thing again, it waits longer each time (an hour, three, eight): the same
+    /// walk past the same camp is the same death, and waking whole used to wipe the set-aside,
+    /// so she walked straight back out into it (three deaths in two minutes at the Burial's
+    /// mouth). Home to bed is not let be: the night has nowhere else.
+    fn died_for(&mut self, v: &View<'_>, g: Goal) {
+        let now = v.tick().0;
+        let base = if matches!(g, Goal::Provision(_) | Goal::Rest) { 3 } else { 0 };
+        let e = self.killed_on.entry(g).or_insert((0, 0));
+        // Last killed on it long ago (a day): counted afresh.
+        if e.1 + 24 * jane_sim::tuning::TICKS_PER_HOUR < now {
+            e.0 = 0;
+        }
+        e.0 += 1;
+        let more = if g == Goal::Sleep { 0 } else { [0, 1, 3, 8][(e.0 as usize - 1).min(3)] };
+        e.1 = now + 600 + (base + more) * jane_sim::tuning::TICKS_PER_HOUR;
+        self.blocked.insert(g, e.1);
+    }
+
     fn open(&self, v: &View<'_>, g: Goal) -> bool {
         let now = v.tick().0;
+        if self.killed_on.get(&g).is_some_and(|&(_, until)| until > now) {
+            return false;
+        }
         let zone = match g {
             Goal::Step(q, i) => zone_of_step(q, usize::from(i)),
             Goal::Look(z, _) => Some(z),
