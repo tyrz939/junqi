@@ -1,0 +1,52 @@
+{
+  "fen_mist": {
+    "areas": ["sallow_bottom", "eel_beds", "still_pool", "tollhouse_reach", "drowned_lane"], "rects": ["sallow_jetty", "site_reed_camp"],
+    "hours": [19, 8], "needs": ["clear", "mist", "rain", "storm"],
+    "colour": "#dce6ec", "density": 520, "height": "ground", "top": 26, "drift": [5, 0], "spread": 6
+  },
+  "waters_dawn": {
+    "regions": ["waters"],
+    "hours": [4, 9], "needs": ["clear", "mist"],
+    "colour": "#eadcd8", "density": 300, "height": "full", "drift": [3, 0]
+  },
+  "lake_haze": {
+    "rects": ["site_lake_statue", "lake_wide"],
+    "hours": [5, 9], "needs": ["clear"],
+    "colour": "#f0e6dc", "density": 280, "height": "full", "drift": [2, 0], "spread": 8
+  },
+  "works_smoke": {
+    "areas": ["cooling_yard", "sidings", "slag_mere", "cinder_walk"], "rects": ["site_factory", "site_canteen"],
+    "hours": [0, 0], "needs": ["clear", "mist", "rain", "storm"],
+    "colour": "#8c7e70", "density": 460, "height": "full", "drift": [7, 1], "spread": 12
+  },
+  "works_haze": {
+    "regions": ["works"],
+    "hours": [0, 0], "needs": ["clear", "mist", "rain", "storm"],
+    "colour": "#9a8c7e", "density": 160, "height": "full", "drift": [6, 0]
+  },
+  "ground_fog": {
+    "areas": ["chapel_rise"], "rects": ["site_graveyard"],
+    "hours": [21, 6], "needs": ["clear", "mist", "rain"],
+    "colour": "#b4bac6", "density": 560, "height": "ground", "top": 14, "drift": [1, 0], "spread": 4
+  },
+  "hill_cloud": {
+    "areas": ["bellfield"], "rects": ["site_school"],
+    "hours": [21, 6], "needs": ["clear", "mist", "rain", "storm"],
+    "colour": "#a6aec0", "density": 480, "height": "full", "drift": [3, 1], "spread": 8
+  },
+  "town_smoke_morning": {
+    "rects": ["site_town"],
+    "hours": [6, 9], "needs": ["clear", "mist", "storm"],
+    "colour": "#b0a89e", "density": 150, "height": "full", "drift": [4, -1], "spread": 4
+  },
+  "town_smoke_evening": {
+    "rects": ["site_town"],
+    "hours": [16, 19], "needs": ["clear", "mist", "storm"],
+    "colour": "#a89e96", "density": 170, "height": "full", "drift": [4, -1], "spread": 4
+  },
+  "mine_dust": {
+    "zones": ["mine"],
+    "hours": [0, 0], "needs": ["clear", "mist", "rain", "storm"],
+    "colour": "#8a7c68", "density": 180, "height": "full", "drift": [1, 0]
+  }
+}

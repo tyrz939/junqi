@@ -11,6 +11,7 @@ use jane_core::ids::Key;
 
 use crate::model;
 
+pub mod atmosphere;
 pub mod chunks;
 pub mod combat;
 pub mod county;
@@ -20,6 +21,7 @@ pub mod looks;
 pub mod story;
 pub mod tile_looks;
 
+pub use atmosphere::*;
 pub use chunks::*;
 pub use combat::*;
 pub use county::*;

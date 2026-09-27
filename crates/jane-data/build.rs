@@ -19,5 +19,6 @@ fn main() {
     let mut src = jane_schema::compile::codegen(catalog);
     src.push_str(&jane_schema::compile::codegen_looks(built.looks));
     src.push_str(&jane_schema::compile::codegen_tile_looks(built.tile_looks));
+    src.push_str(&jane_schema::compile::codegen_atmosphere(built.atmosphere));
     std::fs::write(&out, src).expect("write catalog.rs");
 }

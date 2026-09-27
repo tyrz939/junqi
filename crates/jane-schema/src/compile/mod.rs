@@ -14,7 +14,7 @@ pub mod tables;
 use std::path::Path;
 
 use crate::emit::{Emit, PRELUDE};
-use crate::model::{Catalog, Looks, TileLooks};
+use crate::model::{Atmosphere, Catalog, Looks, TileLooks};
 use ctx::{Ctx, Ids, leak, leak_str};
 use diag::Diagnostics;
 use source::Source;
@@ -28,6 +28,8 @@ pub struct Built {
     pub looks: Looks,
     /// The terrain's looks (`data/looks/tiles.json`), a static of their own for the same reason.
     pub tile_looks: TileLooks,
+    /// The atmosphere's layers (`data/atmosphere.json`), presentation only: a static of its own.
+    pub atmosphere: Atmosphere,
     pub diag: Diagnostics,
 }
 
@@ -43,6 +45,7 @@ pub fn build(root: &Path) -> Built {
         catalog: if ok { built.catalog } else { None },
         looks: if ok { built.looks } else { &[] },
         tile_looks: if ok { built.tile_looks } else { TileLooks::EMPTY },
+        atmosphere: if ok { built.atmosphere } else { Atmosphere::EMPTY },
         diag,
     }
 }
@@ -66,6 +69,7 @@ pub fn build_source(src: &Source) -> Built {
     check_limits(&mut cx);
     let looks = tables::looks::compile(src, &mut cx);
     let tile_looks = tables::tile_looks::compile(src, &mut cx);
+    let atmosphere = tables::atmosphere::compile(src, &mut cx);
 
     let mut catalog = Catalog {
         content_hash: 0,
@@ -89,6 +93,7 @@ pub fn build_source(src: &Source) -> Built {
         catalog: ok.then(|| &*Box::leak(Box::new(catalog))),
         looks: if ok { looks } else { &[] },
         tile_looks: if ok { tile_looks } else { TileLooks::EMPTY },
+        atmosphere: if ok { atmosphere } else { Atmosphere::EMPTY },
         diag: cx.diag,
     }
 }
@@ -143,6 +148,14 @@ pub fn codegen(c: &Catalog) -> String {
     out.push_str(PRELUDE);
     out.push_str("\npub static CATALOG: Catalog = ");
     c.emit(&mut out);
+    out.push_str(";\n");
+    out
+}
+
+/// The Rust source of `pub static ATMOSPHERE`, which follows the tile looks in the same file.
+pub fn codegen_atmosphere(a: Atmosphere) -> String {
+    let mut out = String::from("\npub static ATMOSPHERE: Atmosphere = ");
+    a.emit(&mut out);
     out.push_str(";\n");
     out
 }

@@ -421,6 +421,13 @@ impl<'a> View<'a> {
         self.bp.rects.iter().map(move |(&k, &r)| (crate::sym::of_key(k, locals), r))
     }
 
+    /// The skeleton's patches of this zone as placed (the county's; none elsewhere), each with its
+    /// name, in the skeleton's order: what the atmosphere's fog volumes key to (WORLD.md §5.3).
+    pub fn areas(&self) -> impl Iterator<Item = (Sym, Rect)> + 'a {
+        let locals: &'a [Sym] = &self.rt.locals;
+        self.bp.areas.iter().map(move |a| (crate::sym::of_key(a.name, locals), a.rect))
+    }
+
     /// This zone's merged trigger table in the order its bits index, each with whether it fired.
     pub fn triggers(&self) -> impl Iterator<Item = (&'a ZoneTrigger, bool)> + 'a {
         let zone = self.zone;
