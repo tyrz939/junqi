@@ -44,6 +44,7 @@
           { "do": "switch", "prop": "school_belfry_cold_b", "on": false },
           { "do": "show", "prop": "school_belfry_bud_a" },
           { "do": "show", "prop": "school_belfry_bud_b" },
+          { "do": "ring", "strikes": 1 },
           { "do": "shake", "amount": 3 },
           { "do": "toast", "text": "The bell goes. Every lamp in the belfry goes out with it, and the window is the only light left." }
         ]
@@ -57,6 +58,7 @@
           { "do": "switch", "prop": "school_belfry_cold_b", "on": false },
           { "do": "hide", "prop": "school_belfry_bud_a" },
           { "do": "hide", "prop": "school_belfry_bud_b" },
+          { "do": "ring", "strikes": 1 },
           { "do": "shake", "amount": 3 },
           { "do": "toast", "text": "The bell goes again and it is the middle of the afternoon. The floor is dry and the lamps are up." }
         ]
@@ -73,6 +75,7 @@
           { "do": "spawn", "unit": "school_belfry_shade_1", "def": "shade", "at": "school_belfry_shade_a" },
           { "do": "spawn", "unit": "school_belfry_shade_2", "def": "shade", "at": "school_belfry_shade_b" },
           { "do": "spawn", "unit": "school_belfry_shade_3", "def": "shade", "at": "school_belfry_shade_c" },
+          { "do": "ring", "strikes": 1 },
           { "do": "shake", "amount": 4 },
           { "do": "toast", "text": "The bell goes a third time. Three men in Company overalls are standing at the edge of the light, and none of them came up the stair." }
         ]

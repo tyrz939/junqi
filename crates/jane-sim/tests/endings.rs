@@ -373,8 +373,9 @@ fn the_bell_stops_when_the_timekeeper_falls_and_the_town_hears_the_silence() {
     s.state_mut().clock = 21 * TICKS_PER_HOUR - 2;
     s.drain_events();
     idle(&mut s, 4);
-    let toasts: Vec<String> = s
-        .drain_events()
+    let ev = s.drain_events().to_vec();
+    assert!(!ev.iter().any(|e| matches!(e.kind, EventKind::Bell { .. })), "no bell is rung at all");
+    let toasts: Vec<String> = ev
         .iter()
         .filter_map(|e| match e.kind {
             EventKind::Toast(jane_sim::event::ToastKind::Text(jane_core::TextRef::Text(t))) => {

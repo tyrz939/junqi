@@ -225,6 +225,15 @@ pub enum Action {
     Talk(DialogueId),
     Throw(ItemId),
     Shake(u8),
+    /// A bell rung `strikes` times (STORY.md §8): the School's bell at nine and at six, its
+    /// early Tuesday, the Timekeeper's rope, or (`church`) the church at six for evensong.
+    /// `from` is where it hangs, a unit, prop or mark of the zone the list runs in; `None`, the
+    /// list's subject. Presentation: it says so (an event) and changes nothing.
+    Ring {
+        strikes: u8,
+        from: Option<Key>,
+        church: bool,
+    },
     Camera {
         mode: CameraMode,
         rect: Option<Key>,

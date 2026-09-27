@@ -226,6 +226,14 @@ pub enum EventKind {
     },
     /// The screen shakes for whoever it is sent to (1 to 4).
     Shake(u8),
+    /// A bell rung (`Action::Ring`): `strikes` strokes, from where it hangs (`None`: heard
+    /// from nowhere in particular); `church` for the church's smaller bell, not the School's.
+    /// A clock row's is said to the whole party wherever they are; a ringer's to his zone.
+    Bell {
+        strikes: u8,
+        at: Option<(jane_core::ZoneId, Vec2)>,
+        church: bool,
+    },
     Sfx {
         kind: SfxKind,
         at: Vec2,

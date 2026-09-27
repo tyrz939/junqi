@@ -117,6 +117,12 @@ pub enum RawAction {
     Shake {
         amount: u8,
     },
+    Ring {
+        strikes: u8,
+        from: Option<String>,
+        #[serde(default)]
+        church: bool,
+    },
     Camera {
         mode: RawCameraMode,
         rect: Option<String>,
@@ -439,6 +445,10 @@ pub fn action(cx: &mut Ctx, at: &str, a: &RawAction) -> Option<Action> {
         }
         RawAction::NightUnlock { prop } => Action::NightUnlock(nonempty(cx, at, "prop", prop)),
         RawAction::Shake { amount } => Action::Shake(*amount),
+        RawAction::Ring { strikes, from, church } => {
+            cx.diag.need(*strikes > 0, at, "ring: strikes must be at least one");
+            Action::Ring { strikes: *strikes, from: from.as_deref().map(|r| cx.key(r)), church: *church }
+        }
         RawAction::Camera { mode, rect } => {
             let mode = match mode {
                 RawCameraMode::Follow => CameraMode::Follow,

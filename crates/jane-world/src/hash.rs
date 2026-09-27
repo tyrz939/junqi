@@ -431,6 +431,7 @@ enum Verb {
     NightLock,
     NightUnlock,
     SwitchAll,
+    Ring,
 }
 
 impl Feed for Action {
@@ -607,6 +608,12 @@ impl Feed for Action {
             Action::Shake(s) => {
                 h.u8(Verb::Shake as u8);
                 h.u8(s);
+            }
+            Action::Ring { strikes, from, church } => {
+                h.u8(Verb::Ring as u8);
+                h.u8(strikes);
+                from.feed(h);
+                h.u8(u8::from(church));
             }
             Action::Camera { mode, rect } => {
                 h.u8(Verb::Camera as u8);
