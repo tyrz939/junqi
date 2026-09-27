@@ -26,6 +26,7 @@ use jane_core::num::CELL_FX;
 use jane_core::{Angle, Fx, ItemId, Vec2};
 use jane_sim::ids::UnitId;
 use jane_sim::state::CombatState;
+use jane_data::SpellKind;
 use jane_sim::{Command, InputFrame, Unit, View};
 
 use crate::Act;
@@ -372,7 +373,7 @@ fn feed(f: &mut Feed, v: &View<'_>, cx: &mut Ctx) -> Status {
 
 /// What the Burial offers the crawl beyond its order, as (class, cost, try, task): each
 /// creature that is fed rather than fought, while it is calm and she has its bait.
-pub fn offers(v: &View<'_>, cx: &Ctx, reach: &Reach) -> Vec<(u8, i64, Try, Task)> {
+pub fn offers(v: &View<'_>, cx: &Ctx, reach: &Reach, downed: &[(jane_core::UnitDefId, u32)]) -> Vec<(u8, i64, Try, Task)> {
     let cat = jane_data::catalog();
     let me = v.body().pos;
     let mut out = Vec::new();
@@ -388,6 +389,22 @@ pub fn offers(v: &View<'_>, cx: &Ctx, reach: &Reach) -> Vec<(u8, i64, Try, Task)
         let sat = cx.used.contains_key(&(v.zone(), p.id));
         if !sat || hurt {
             out.push((0, sense::to_prop(p, me), Try::Tactic(p.id.get()), Task::Use(crate::task::UseProp::new(p.id))));
+        }
+    }
+    // The seal in the hall: "Four names are cut into it. It will not turn yet." Turned again
+    // once she has put down four keepers of this place (the notice names the four corners), while
+    // the wizard's door behind it is still shut.
+    let keepers = {
+        let mut k: Vec<jane_core::UnitDefId> =
+            downed.iter().map(|&(d, _)| d).filter(|&d| Some(d) != crate::crawl::boss_of(v.zone())).collect();
+        k.sort();
+        k.dedup();
+        k.len()
+    };
+    let shut = sense::prop_named(v, "gate_wizard").is_some_and(|g| g.locked);
+    if keepers >= 4 && shut {
+        if let Some(seal) = sense::prop_named(v, "wizard_seal").filter(|p| reach.beside(p)) {
+            out.push((1, sense::to_prop(seal, me), Try::Tactic(seal.id.get()), Task::Use(crate::task::UseProp::new(seal.id))));
         }
     }
     // What stands rooted over something and does not stand up again (the garden's flower over
@@ -537,7 +554,9 @@ pub fn fight(v: &View<'_>, cx: &mut Ctx, id: UnitId, task: Option<&Task>) -> Opt
     let g = gap(me, t);
     cx.fight.target = Some(id);
     cx.foes.insert(id);
-    if td.boss && g < i64::from(14 * CELL_FX) && me.statuses.is_empty() {
+    // What she brought, against a keeper, one at a time (poison or frost on her is no reason not).
+    let helped = me.statuses.iter().any(|st| !cat.combat.effect(st.effect).harmful && st.until > now);
+    if td.boss && g < i64::from(14 * CELL_FX) && !helped {
         for name in ["potion_stoneskin", "potion_lifesteal", "potion_manashield"] {
             let p = sense::item(name);
             if holds(v, p) > 0 && item_ready(me, p, now) {
@@ -546,6 +565,34 @@ pub fn fight(v: &View<'_>, cx: &mut Ctx, id: UnitId, task: Option<&Task>) -> Opt
         }
     }
     let mobile = td.walk.0 > 0 || td.run.0 > 0;
+    // A keeper that swings is got away from before it is at her elbow and before anything is
+    // cast, whatever else she is fighting: a cast holds her still for half a second, and what
+    // they swing stuns.
+    let elbow = sense::enemies(v).into_iter().find(|u| {
+        let d = cat.combat.unit(u.def);
+        u.alive
+            && d.boss
+            && (d.walk.0 > 0 || d.run.0 > 0)
+            && d.book.iter().any(|&s| cat.combat.spell(s).kind == SpellKind::Melee)
+            && gap(me, u) < i64::from(5 * CELL_FX)
+    });
+    if let Some(k) = elbow {
+        let kd = cat.combat.unit(k.def);
+        let leash = i64::from(kd.leash.0);
+        let tether = (leash > 0).then_some((k.home, leash * 2 / 3));
+        let room = room_of(v, k.home).filter(|_| kd.controller == jane_data::Controller::Snake);
+        if let Some(f) = retreat(v, cx, k.pos, tether, room) {
+            return Some(Some(Act::hold(InputFrame { aim: Some(dir), ..f })));
+        }
+    }
+    // Proof against everything she has (Goldskin's gilding), with a fire to light in its room
+    // that softens what stands in it: the fire first (DUNGEONS.md §3.5: "Fire literally opens
+    // him").
+    if let Some(a) = soften(v, t) {
+        return Some(Some(a));
+    }
+    // Until then a bolt at him is a fifth of a bolt: the mana is kept for when the fire is on him.
+    let gilded = gilded(v, t);
     // What is rooted and stands up again is let shoot, and so is anything rooted while there is
     // feeding to do: stopping for it is standing in its line longer.
     if !mobile && (careful || let_be(t.def)) {
@@ -570,7 +617,7 @@ pub fn fight(v: &View<'_>, cx: &mut Ctx, id: UnitId, task: Option<&Task>) -> Opt
             None => {}
         }
     }
-    if shot_clear(v, me.pos, t.pos) {
+    if !gilded && shot_clear(v, me.pos, t.pos) {
         if let Some(bolt) = best_bolt(v, t) {
             return Some(Some(Act { frame: aim, cmds: vec![Command::Cast { spell: bolt, on: Some(id) }] }));
         }
@@ -628,6 +675,7 @@ fn retreat(
     let price = |c: Vec2| {
         off.iter().filter(|&&(o, r, k)| k > 0 && dist(o, c) <= r && v.sight(o, c)).map(|&(_, _, k)| i64::from(k)).sum::<i64>()
     };
+    let strayed = strayed_rooms(v);
     let start = me.cell();
     let mut seen = BTreeSet::new();
     let mut q = VecDeque::new();
@@ -637,9 +685,14 @@ fn retreat(
     while let Some((c, steps)) = q.pop_front() {
         let at = Vec2::centre(c.0, c.1);
         let inside = tether.is_none_or(|(home, r)| dist(at, home) <= r)
-            && room.is_none_or(|r| r.x < c.0 && c.0 < r.right() - 1 && r.y < c.1 && c.1 < r.bottom() - 1);
+            && room.is_none_or(|r| r.x < c.0 && c.0 < r.right() - 1 && r.y < c.1 && c.1 < r.bottom() - 1)
+            && !strayed.iter().any(|r| r.contains(c.0, c.1));
         if inside && steps > 0 {
-            let score = dist(at, from) - i64::from(steps) * i64::from(CELL_FX) / 3 - price(at) * i64::from(CELL_FX) / 4;
+            // Open ground over a corner: backed into one, she is caught (what is kited is slow,
+            // but it is between her and every way out).
+            let open = (-3..=3).flat_map(|j| (-3..=3).map(move |i| (i, j))).filter(|&(i, j)| crate::nav::walkable(v, c.0 + i, c.1 + j)).count();
+            let score = dist(at, from) - i64::from(steps) * i64::from(CELL_FX) / 3 - price(at) * i64::from(CELL_FX) / 4
+                + open as i64 * i64::from(CELL_FX) / 4;
             if best.is_none_or(|b| (score, c) > b) {
                 best = Some((score, c));
             }
@@ -861,7 +914,7 @@ pub fn let_be(def: jane_core::UnitDefId) -> bool {
         && d.respawn.0 > 0
         && !d.boss
         && d.bait.is_none()
-        && d.book.iter().all(|&s| cat.combat.spell(s).kind == jane_data::SpellKind::Bolt)
+        && d.book.iter().all(|&s| cat.combat.spell(s).kind == SpellKind::Bolt)
 }
 
 /// Will a bolt from `a` fly to `b`? Walls stop it as they stop sight, and so does anything solid
@@ -915,6 +968,14 @@ pub fn not_yet(v: &View<'_>, t: &Task) -> bool {
             return true;
         }
     }
+    // A keeper that has come out after her is not followed back into its room: the room shuts
+    // on whoever walks in, and it would be shut outside.
+    if let Some(at) = task_point(v, t) {
+        let (x, y) = at.cell();
+        if strayed_rooms(v).iter().any(|r| r.contains(x, y)) {
+            return true;
+        }
+    }
     if sense::knows(v, sense::spell("fireball")) {
         return false;
     }
@@ -933,4 +994,61 @@ fn room_of(v: &View<'_>, at: Vec2) -> Option<jane_core::Rect> {
         .map(|(_, r)| r)
         .filter(|r| r.contains(x, y) && (r.w as u32) < w && (r.h as u32) < h)
         .min_by_key(|r| (i64::from(r.w) * i64::from(r.h), r.x, r.y))
+}
+
+/// The rooms whose keeper is out of them (after her, in the corridor): not to be backed into.
+fn strayed_rooms(v: &View<'_>) -> Vec<jane_core::Rect> {
+    let cat = jane_data::catalog();
+    let me = v.body().pos.cell();
+    sense::enemies(v)
+        .into_iter()
+        .filter(|u| u.alive && cat.combat.unit(u.def).boss)
+        .filter_map(|u| {
+            let r = room_of(v, u.home)?;
+            let (x, y) = u.pos.cell();
+            (!r.contains(x, y) && !r.contains(me.0, me.1)).then_some(r)
+        })
+        .collect()
+}
+
+/// Does `t` turn aside most of every bolt she has (four fifths or more), as it stands now?
+fn gilded(v: &View<'_>, t: &Unit) -> bool {
+    let cat = jane_data::catalog();
+    let now = v.tick();
+    ["icebolt", "fireball", "spark"]
+        .map(|n| cat.combat.spell(sense::spell(n)).school)
+        .iter()
+        .all(|&s| jane_sim::status::resist_factor(t, s, now) <= 200)
+}
+
+/// A fireball at an unlit brazier in `t`'s room when `t` turns aside most of what she has:
+/// the brazier's use (read off its row, as its label and look would tell a player) softens
+/// what stands in the room, and a softened thing takes everything.
+fn soften(v: &View<'_>, t: &Unit) -> Option<Act> {
+    let cat = jane_data::catalog();
+    let fire = sense::spell("fireball");
+    let me = v.body();
+    let now = v.tick();
+    if !sense::knows(v, fire) || !crate::fight::ready(me, fire, now) {
+        return None;
+    }
+    if !gilded(v, t) {
+        return None;
+    }
+    let room = room_of(v, t.home)?;
+    let range = i64::from(cat.combat.spell(fire).range.0) * 9 / 10;
+    let brazier = v
+        .props()
+        .filter(|p| {
+            let d = cat.story.prop(p.def);
+            d.answers == Some(jane_data::Answers::Fire) && !p.on && room.contains(i32::from(p.cell.x), i32::from(p.cell.y))
+        })
+        .filter(|p| {
+            let c = sense::prop_centre(p);
+            dist(me.pos, c) <= range && (shot_clear(v, me.pos, c) || crate::crawl::first_seen_is(v, me.pos, c, p))
+        })
+        .min_by_key(|p| (dist(me.pos, sense::prop_centre(p)), p.id))?;
+    let c = sense::prop_centre(brazier);
+    let dir = jane_core::angle::iatan2(c.y.0 - me.pos.y.0, c.x.0 - me.pos.x.0);
+    Some(Act { frame: InputFrame { aim: Some(dir), ..InputFrame::IDLE }, cmds: vec![Command::Cast { spell: fire, on: None }] })
 }

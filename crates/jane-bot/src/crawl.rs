@@ -682,7 +682,7 @@ impl Crawl {
         }
         // The Burial's tactics (feeding what is fed, not fought): `tactics::burial`.
         if v.zone() == jane_core::ZoneId::Burial {
-            for (class, cost, what, t) in crate::tactics::burial::offers(v, cx, reach) {
+            for (class, cost, what, t) in crate::tactics::burial::offers(v, cx, reach, &self.bosses) {
                 offer(class, cost, what, t, &mut best);
             }
         }
@@ -779,7 +779,7 @@ fn bolt_at(v: &View<'_>, reach: &Reach, p: &Prop, spell: SpellId) -> Option<Task
                 continue;
             }
             let at = Vec2::centre(x, y);
-            if !v.sight(at, c) {
+            if !v.sight(at, c) && !first_seen_is(v, at, c, p) {
                 continue;
             }
             let d = dist(me, at);
@@ -793,6 +793,25 @@ fn bolt_at(v: &View<'_>, reach: &Reach, p: &Prop, spell: SpellId) -> Option<Task
     }
     let (_, from) = best?;
     Some(Task::Aim { spell, from, at: c, t: 0 })
+}
+
+/// Is the first thing that stops sight on the way from `a` to `b` the prop itself (a web across
+/// a passage blocks sight, and it is what the bolt is for)? A quarter cell at a time.
+pub fn first_seen_is(v: &View<'_>, a: Vec2, b: Vec2, p: &Prop) -> bool {
+    let r = prop_rect(p);
+    let n = (dist(a, b) / i64::from(CELL_FX / 4)).max(1);
+    let start = a.cell();
+    for i in 1..=n {
+        let q = Vec2::new(
+            jane_core::Fx(a.x.0 + ((i64::from(b.x.0 - a.x.0) * i) / n) as i32),
+            jane_core::Fx(a.y.0 + ((i64::from(b.y.0 - a.y.0) * i) / n) as i32),
+        );
+        let (x, y) = q.cell();
+        if (x, y) != start && v.flags(x, y) & jane_core::tile::BLOCK_SIGHT != 0 {
+            return r.contains(x, y);
+        }
+    }
+    false
 }
 
 /// The origins a pushable passes through to cover the plate, pushed only (each push needs a
