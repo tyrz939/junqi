@@ -20,3 +20,4 @@ Thumbs.db
 
 # Milestone screenshots, kept locally (the repo ships no image files)
 /progress/
+/dist/
