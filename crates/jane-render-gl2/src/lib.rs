@@ -960,7 +960,13 @@ fn argb_bytes(out: &mut Vec<u8>, px: &[u32]) {
 
 impl Backend for Gl2 {
     fn caps(&self) -> Caps {
-        Caps { tier: Tier::T1, max_lights: self.rows.max_lights, has_readback: true, name: "gl2" }
+        Caps {
+            tier: Tier::T1,
+            max_lights: self.rows.max_lights,
+            has_readback: true,
+            max_texture: self.gl.info.max_texture.max(0) as u32,
+            name: "gl2",
+        }
     }
 
     /// Also forgets which chunks the GPU holds: a new presenter (a new game) numbers its chunk
