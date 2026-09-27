@@ -1305,6 +1305,15 @@ pub fn not_yet(v: &View<'_>, t: &Task) -> bool {
             }
         }
     }
+    // Meat she threw is the small snake's: it is not picked up again while something that eats
+    // it lives.
+    if let Task::Pickup { drop, .. } = t {
+        if let Some(d) = v.drops().iter().find(|d| d.id == *drop) {
+            if sense::enemies(v).into_iter().any(|u| u.alive && cat.combat.unit(u.def).bait == Some(d.item)) {
+                return true;
+            }
+        }
+    }
     // A plain thing (the rats' meat) left in a room she has walked out of is not walked back
     // for: the room has filled again behind her.
     if let Task::Pickup { drop, .. } = t {
