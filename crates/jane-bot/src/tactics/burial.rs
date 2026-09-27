@@ -823,7 +823,7 @@ pub fn fight(v: &View<'_>, cx: &mut Ctx, id: UnitId, task: Option<&Task>) -> Opt
         // (Only while she is inside it: out past it already, the way back is past the keeper.)
         let tether = (leash > 0).then_some((k.home, leash * 2 / 3)).filter(|&(h, r)| dist(me.pos, h) <= r);
         let room = room_of(v, k.home).filter(|r| kd.controller == jane_data::Controller::Snake && inside(r, me.pos));
-        if let Some(f) = retreat(v, cx, k.pos, tether, room) {
+        if let Some(f) = retreat(v, cx, k.pos, tether, room, slips_past(k.def)) {
             return Some(Some(Act::hold(InputFrame { aim: Some(dir), ..f })));
         }
     }
@@ -896,7 +896,7 @@ pub fn fight(v: &View<'_>, cx: &mut Ctx, id: UnitId, task: Option<&Task>) -> Opt
             .then(|| room_of(v, t.home))
             .flatten()
             .filter(|r| inside(r, me.pos));
-        if let Some(f) = retreat(v, cx, t.pos, tether, room) {
+        if let Some(f) = retreat(v, cx, t.pos, tether, room, slips_past(t.def)) {
             return Some(Some(Act::hold(InputFrame { aim: Some(dir), ..f })));
         }
     }
@@ -949,6 +949,17 @@ pub fn fight(v: &View<'_>, cx: &mut Ctx, id: UnitId, task: Option<&Task>) -> Opt
     Some(Some(Act::hold(aim)))
 }
 
+/// A keeper that walks and throws as well as swings (Goldskin), whose blow reaches no further
+/// than a quarter cell: slipped past rather than stood against in a corner.
+fn slips_past(def: jane_core::UnitDefId) -> bool {
+    let cat = jane_data::catalog();
+    let d = cat.combat.unit(def);
+    d.boss
+        && d.controller != jane_data::Controller::Snake
+        && (d.walk.0 > 0 || d.run.0 > 0)
+        && d.book.iter().any(|&s| cat.combat.spell(s).kind == SpellKind::Bolt)
+}
+
 /// Backing off from `from`: to the cell within a short walk that is farthest from it, over
 /// ground no calm snake can see and, where it can, out of what is rooted's line, kept inside
 /// `tether` (its home and leash, shrunk). A stick toward it.
@@ -958,6 +969,7 @@ fn retreat(
     from: Vec2,
     tether: Option<(Vec2, i64)>,
     room: Option<jane_core::Rect>,
+    slip: bool,
 ) -> Option<InputFrame> {
     let me = v.body().pos;
     let off = cx.nav.keep_off.clone();
@@ -1005,9 +1017,12 @@ fn retreat(
     }
     let (_, c) = best?;
     let to = Vec2::centre(c.0, c.1);
+    // (Past one that only reaches a quarter cell beyond its own bulk she slips, at three times
+    // its pace, by any way not straight at it: stood in a corner, Goldskin took all of her.)
+    let cone = if slip { 5_000 } else { 11_000 };
     match cx.nav.go(v, to, Fx::from_px(3), true) {
         // Cornered, the way out is past it: no backing off through it (she fights instead).
-        Go::Walk(f) if f.mv_dir.diff(jane_core::angle::iatan2(from.y.0 - me.y.0, from.x.0 - me.x.0)).abs() < 11_000 => {
+        Go::Walk(f) if f.mv_dir.diff(jane_core::angle::iatan2(from.y.0 - me.y.0, from.x.0 - me.x.0)).abs() < cone => {
             None
         }
         Go::Walk(f) => Some(InputFrame { sprint: true, ..f }),
