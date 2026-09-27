@@ -75,24 +75,45 @@ impl AtmosPipes {
             step_mode: wgpu::VertexStepMode::Instance,
             attributes: &STAR_ATTRS,
         };
-        let star =
-            render_pipeline(device, "stars", &[&sky_layout], &sm, "vs_star", "fs_star", &[star_buf], true, &[target(
-                HDR,
-                Some(ADD),
-            )]);
+        let star = render_pipeline(
+            device,
+            "stars",
+            &[&sky_layout],
+            &sm,
+            "vs_star",
+            "fs_star",
+            &[star_buf],
+            true,
+            &[target(HDR, Some(ADD))],
+        );
         let sprite_buf = wgpu::VertexBufferLayout {
             array_stride: 48,
             step_mode: wgpu::VertexStepMode::Instance,
             attributes: &SPRITE_ATTRS,
         };
-        let far =
-            render_pipeline(device, "far", &[&sky_layout], &sm, "vs_far", "fs_far", &[sprite_buf], true, &[target(
-                HDR, None,
-            )]);
+        let far = render_pipeline(
+            device,
+            "far",
+            &[&sky_layout],
+            &sm,
+            "vs_far",
+            "fs_far",
+            &[sprite_buf],
+            true,
+            &[target(HDR, None)],
+        );
         let wm = module(device, "water", WATER);
-        let water = render_pipeline(device, "water", &[&water_layout], &wm, "vs_full", "fs_water", &[], false, &[
-            target(HDR, None),
-        ]);
+        let water = render_pipeline(
+            device,
+            "water",
+            &[&water_layout],
+            &wm,
+            "vs_full",
+            "fs_water",
+            &[],
+            false,
+            &[target(HDR, None)],
+        );
         let fm = module(device, "fog", FOG);
         let fog =
             render_pipeline(device, "fog", &[&fog_layout], &fm, "vs_full", "fs_fog", &[], false, &[target(HDR, None)]);
@@ -102,10 +123,17 @@ impl AtmosPipes {
             step_mode: wgpu::VertexStepMode::Instance,
             attributes: &PART_ATTRS,
         };
-        let part = render_pipeline(device, "particles", &[&part_layout], &pm, "vs_part", "fs_part", &[part_buf], true, &[
-            target(HDR, Some(OVER)),
-            target(HDR, Some(ADD)),
-        ]);
+        let part = render_pipeline(
+            device,
+            "particles",
+            &[&part_layout],
+            &pm,
+            "vs_part",
+            "fs_part",
+            &[part_buf],
+            true,
+            &[target(HDR, Some(OVER)), target(HDR, Some(ADD))],
+        );
         let repeat = device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("repeat"),
             address_mode_u: wgpu::AddressMode::Repeat,

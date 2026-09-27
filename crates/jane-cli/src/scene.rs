@@ -355,6 +355,32 @@ pub fn render(bps: Blueprints, o: &Opts) -> Result<Shot, String> {
     Ok(Shot { w, h, px, line })
 }
 
+/// `jane sheet scene --film N[:EVERY]` (PRESENTATION.md §6, `jane film` in small): plays to the
+/// frame `o` asks for, then `n` more ticks with the world idle, drawing every `every`-th at
+/// `alpha = 1`: the rain falling, a mist drifting, a lightning strike, a bolt in flight. Each
+/// shot is handed to `out` with its tick.
+pub fn film(bps: Blueprints, o: &Opts, n: u32, every: u32, mut out: impl FnMut(u32, &Shot) -> Result<(), String>) -> Result<(), String> {
+    let mut b = backend(o.backend, o.gl)?;
+    let (mut host, mut present, _) = play(bps, o, o.backend.tier())?;
+    b.upload_atlas(present.atlas());
+    let seat = Seat(0);
+    let mut px = Vec::new();
+    for k in 0..n {
+        host.sim.step(&StepInput { frames: [InputFrame::IDLE; 4], commands: &[] });
+        let events = host.sim.drain_events().to_vec();
+        let v = host.sim.view(seat).ok_or("seat 0 is not in the world")?;
+        present.tick(&v, &events);
+        if k % every.max(1) != 0 {
+            continue;
+        }
+        let frame = present.draw(255, o.canvas);
+        b.draw(frame);
+        let (w, h) = b.read_back(&mut px);
+        out(k, &Shot { w, h, px: px.clone(), line: String::new() })?;
+    }
+    Ok(())
+}
+
 /// What `jane bench frames` measured.
 #[derive(Debug)]
 pub struct FrameBench {

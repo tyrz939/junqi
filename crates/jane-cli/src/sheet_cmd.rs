@@ -240,6 +240,23 @@ fn scene(args: &[String]) -> Result<(), String> {
     };
     let bps = jane_sim::Blueprints::build(seed).map_err(|e| format!("seed {seed}: {e}"))?;
     let o = crate::scene::Opts { seed, ticks, model, hour, minute, canvas, backend, at, weather, cast, rows, gl };
+    // `--film N[:EVERY]`: N ticks more, every EVERY-th a frame, `<name>-<tick>.png` beside the path.
+    if let Some(f) = flag("--film") {
+        let (n, every) = f.split_once(':').map_or((f, "1"), |p| p);
+        let n: u32 = n.parse().map_err(|_| format!("--film N[:EVERY], not {f}"))?;
+        let every: u32 = every.parse().map_err(|_| format!("--film N[:EVERY], not {f}"))?;
+        let dir = path.parent().map(std::path::Path::to_path_buf).unwrap_or_default();
+        let stem = path.file_stem().map_or_else(|| name.clone(), |s| s.to_string_lossy().into_owned());
+        std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+        return crate::scene::film(bps, &o, n, every, |k, shot| {
+            let p = dir.join(format!("{stem}-{k:03}.png"));
+            std::fs::write(&p, shot.png()).map_err(|e| format!("{}: {e}", p.display()))?;
+            // The frame's mean brightness beside it: a flash, a lamp coming on, found by eye.
+            let luma: u64 = shot.px.iter().map(|&c| u64::from((c >> 16) & 0xff) + u64::from((c >> 8) & 0xff) + u64::from(c & 0xff)).sum();
+            println!("{} mean {}", p.display(), luma / (3 * shot.px.len().max(1) as u64));
+            Ok(())
+        });
+    }
     let shot = crate::scene::render(bps, &o)?;
     if let Some(dir) = path.parent().filter(|d| !d.as_os_str().is_empty()) {
         std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;

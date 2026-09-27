@@ -392,12 +392,44 @@ impl Recipe {
         let emits: &'static [Emit] = match n {
             0 => &[],
             6 => &[
-                Emit { n: 4, from: From::Gather(18), role: Role::Mid, glow: 200, life: (16, 20), shape: Shape::Dot(2), ..E },
-                Emit { n: 2, from: From::Gather(14), role: Role::Core, glow: 255, life: (14, 18), shape: Shape::Dot(2), ..E },
+                Emit {
+                    n: 4,
+                    from: From::Gather(18),
+                    role: Role::Mid,
+                    glow: 200,
+                    life: (16, 20),
+                    shape: Shape::Dot(2),
+                    ..E
+                },
+                Emit {
+                    n: 2,
+                    from: From::Gather(14),
+                    role: Role::Core,
+                    glow: 255,
+                    life: (14, 18),
+                    shape: Shape::Dot(2),
+                    ..E
+                },
             ],
             _ => &[
-                Emit { n: 6, from: From::Gather(20), role: Role::Mid, glow: 200, life: (16, 22), shape: Shape::Dot(2), ..E },
-                Emit { n: 3, from: From::Gather(14), role: Role::Core, glow: 255, life: (14, 18), shape: Shape::Dot(2), ..E },
+                Emit {
+                    n: 6,
+                    from: From::Gather(20),
+                    role: Role::Mid,
+                    glow: 200,
+                    life: (16, 22),
+                    shape: Shape::Dot(2),
+                    ..E
+                },
+                Emit {
+                    n: 3,
+                    from: From::Gather(14),
+                    role: Role::Core,
+                    glow: 255,
+                    life: (14, 18),
+                    shape: Shape::Dot(2),
+                    ..E
+                },
                 Emit { n: 1, shape: Shape::Glow(6), role: Role::Mid, glow: 255, life: (18, 18), ..E },
             ],
         };
@@ -414,7 +446,16 @@ pub fn cast(c: Cast) -> Recipe {
         Cast::Spark => Recipe {
             tint: Tint::Spark,
             emits: &[
-                Emit { n: 6, shape: Shape::Streak, role: Role::Core, speed: (24, 40), glow: 255, life: (4, 7), drag: 200, ..E },
+                Emit {
+                    n: 6,
+                    shape: Shape::Streak,
+                    role: Role::Core,
+                    speed: (24, 40),
+                    glow: 255,
+                    life: (4, 7),
+                    drag: 200,
+                    ..E
+                },
                 Emit { n: 1, shape: Shape::Glow(7), role: Role::Mid, glow: 255, life: (10, 10), ..E },
             ],
             light: Some(FxLight { radius: 72, role: Role::Mid, ticks: 10, z: 18 }),
@@ -435,17 +476,55 @@ pub fn cast(c: Cast) -> Recipe {
         Cast::Repair => Recipe {
             tint: Tint::Repair,
             emits: &[
-                Emit { n: 9, role: Role::Core, speed: (10, 22), rise: 10, grav: -2, life: (10, 18), glow: 160, z: 8, ..E },
+                Emit {
+                    n: 9,
+                    role: Role::Core,
+                    speed: (10, 22),
+                    rise: 10,
+                    grav: -2,
+                    life: (10, 18),
+                    glow: 160,
+                    z: 8,
+                    ..E
+                },
                 Emit { n: 4, role: Role::Deep, speed: (6, 12), rise: 6, grav: -2, life: (14, 20), z: 8, ..E },
-                Emit { n: 2, shape: Shape::Streak, role: Role::Core, speed: (30, 40), glow: 255, life: (4, 6), z: 8, ..E },
+                Emit {
+                    n: 2,
+                    shape: Shape::Streak,
+                    role: Role::Core,
+                    speed: (30, 40),
+                    glow: 255,
+                    life: (4, 6),
+                    z: 8,
+                    ..E
+                },
             ],
             light: Some(FxLight { radius: 36, role: Role::Core, ticks: 8, z: 8 }),
         },
         Cast::Grow => Recipe {
             tint: Tint::Leaf,
             emits: &[
-                Emit { n: 12, from: From::Scatter(24, 6), role: Role::Mid, rise: 6, grav: 0, drag: 252, life: (26, 40), z: 0, ..E },
-                Emit { n: 4, from: From::Scatter(18, 4), role: Role::Core, rise: 8, life: (30, 40), glow: 120, z: 0, ..E },
+                Emit {
+                    n: 12,
+                    from: From::Scatter(24, 6),
+                    role: Role::Mid,
+                    rise: 6,
+                    grav: 0,
+                    drag: 252,
+                    life: (26, 40),
+                    z: 0,
+                    ..E
+                },
+                Emit {
+                    n: 4,
+                    from: From::Scatter(18, 4),
+                    role: Role::Core,
+                    rise: 8,
+                    life: (30, 40),
+                    glow: 120,
+                    z: 0,
+                    ..E
+                },
                 Emit { n: 5, from: From::Scatter(20, 4), role: Role::Deep, life: (60, 70), ground: true, z: 0, ..E },
             ],
             light: None,
@@ -458,7 +537,17 @@ pub fn cast(c: Cast) -> Recipe {
 pub fn swing() -> Recipe {
     Recipe {
         tint: Tint::Pale,
-        emits: &[Emit { n: 7, shape: Shape::Streak, role: Role::Core, speed: (26, 34), spread: 90, drag: 150, life: (6, 7), glow: 60, ..E }],
+        emits: &[Emit {
+            n: 7,
+            shape: Shape::Streak,
+            role: Role::Core,
+            speed: (26, 34),
+            spread: 90,
+            drag: 150,
+            life: (6, 7),
+            glow: 60,
+            ..E
+        }],
         light: None,
     }
 }
@@ -468,31 +557,78 @@ pub fn trail(b: Bolt) -> Recipe {
     match b {
         Bolt::Frost => Recipe {
             tint: Tint::Frost,
-            emits: &[Emit { n: 2, role: Role::Mid, speed: (2, 6), life: (10, 16), glow: 170, grav: -1, shape: Shape::Dot(2), ..E }],
+            emits: &[Emit {
+                n: 2,
+                role: Role::Mid,
+                speed: (2, 6),
+                life: (10, 16),
+                glow: 170,
+                grav: -1,
+                shape: Shape::Dot(2),
+                ..E
+            }],
             light: None,
         },
         Bolt::Fire => Recipe {
             tint: Tint::Fire,
             emits: &[
-                Emit { n: 2, role: Role::Core, late: Some(Role::Deep), speed: (2, 8), grav: 2, life: (12, 20), glow: 220, shape: Shape::Dot(3), ..E },
+                Emit {
+                    n: 2,
+                    role: Role::Core,
+                    late: Some(Role::Deep),
+                    speed: (2, 8),
+                    grav: 2,
+                    life: (12, 20),
+                    glow: 220,
+                    shape: Shape::Dot(3),
+                    ..E
+                },
                 Emit { n: 1, role: Role::Smoke, shape: Shape::Dot(3), grav: 2, life: (18, 26), ..E },
             ],
             light: None,
         },
         Bolt::Venom => Recipe {
             tint: Tint::Venom,
-            emits: &[Emit { n: 1, role: Role::Mid, late: Some(Role::Deep), speed: (0, 4), grav: -3, life: (12, 18), glow: 90, ..E }],
+            emits: &[Emit {
+                n: 1,
+                role: Role::Mid,
+                late: Some(Role::Deep),
+                speed: (0, 4),
+                grav: -3,
+                life: (12, 18),
+                glow: 90,
+                ..E
+            }],
             light: None,
         },
-        Bolt::Needle => Recipe { tint: Tint::Needle, emits: &[Emit { n: 1, role: Role::Deep, life: (5, 7), ..E }], light: None },
+        Bolt::Needle => {
+            Recipe { tint: Tint::Needle, emits: &[Emit { n: 1, role: Role::Deep, life: (5, 7), ..E }], light: None }
+        }
         Bolt::Spark => Recipe {
             tint: Tint::Spark,
-            emits: &[Emit { n: 2, shape: Shape::Streak, role: Role::Core, speed: (16, 34), life: (3, 5), glow: 255, ..E }],
+            emits: &[Emit {
+                n: 2,
+                shape: Shape::Streak,
+                role: Role::Core,
+                speed: (16, 34),
+                life: (3, 5),
+                glow: 255,
+                ..E
+            }],
             light: None,
         },
         Bolt::Charge => Recipe {
             tint: Tint::Blast,
-            emits: &[Emit { n: 1, role: Role::Core, late: Some(Role::Smoke), speed: (2, 6), grav: 1, life: (12, 18), glow: 200, ..E }],
+            emits: &[Emit {
+                n: 1,
+                role: Role::Core,
+                late: Some(Role::Smoke),
+                speed: (2, 6),
+                grav: 1,
+                life: (12, 18),
+                glow: 200,
+                ..E
+            }],
             light: None,
         },
     }
@@ -518,8 +654,27 @@ pub fn impact(i: Impact) -> Recipe {
         Impact::Frost => Recipe {
             tint: Tint::Frost,
             emits: &[
-                Emit { n: 8, role: Role::Core, speed: (18, 26), rise: 8, grav: -2, drag: 220, life: (16, 20), glow: 150, ..E },
-                Emit { n: 1, shape: Shape::Ring(3, 20), role: Role::Mid, life: (14, 14), glow: 120, z: 0, ground: true, ..E },
+                Emit {
+                    n: 8,
+                    role: Role::Core,
+                    speed: (18, 26),
+                    rise: 8,
+                    grav: -2,
+                    drag: 220,
+                    life: (16, 20),
+                    glow: 150,
+                    ..E
+                },
+                Emit {
+                    n: 1,
+                    shape: Shape::Ring(3, 20),
+                    role: Role::Mid,
+                    life: (14, 14),
+                    glow: 120,
+                    z: 0,
+                    ground: true,
+                    ..E
+                },
                 Emit { n: 6, from: From::Scatter(24, 8), role: Role::Core, life: (50, 70), ground: true, z: 0, ..E },
             ],
             light: light(88, 16),
@@ -527,7 +682,18 @@ pub fn impact(i: Impact) -> Recipe {
         Impact::Fire => Recipe {
             tint: Tint::Fire,
             emits: &[
-                Emit { n: 10, role: Role::Core, late: Some(Role::Deep), speed: (12, 28), rise: 10, grav: 1, drag: 215, life: (14, 24), glow: 230, ..E },
+                Emit {
+                    n: 10,
+                    role: Role::Core,
+                    late: Some(Role::Deep),
+                    speed: (12, 28),
+                    rise: 10,
+                    grav: 1,
+                    drag: 215,
+                    life: (14, 24),
+                    glow: 230,
+                    ..E
+                },
                 Emit { n: 4, shape: Shape::Dot(3), role: Role::Smoke, speed: (4, 8), grav: 2, life: (30, 44), ..E },
                 Emit { n: 1, shape: Shape::Glow(10), role: Role::Mid, life: (10, 10), glow: 255, ..E },
                 Emit { n: 3, from: From::Scatter(14, 6), role: Role::Deep, life: (70, 90), ground: true, z: 0, ..E },
@@ -537,7 +703,17 @@ pub fn impact(i: Impact) -> Recipe {
         Impact::Venom => Recipe {
             tint: Tint::Venom,
             emits: &[
-                Emit { n: 8, role: Role::Mid, late: Some(Role::Deep), speed: (10, 20), rise: 12, grav: -3, life: (14, 22), glow: 60, ..E },
+                Emit {
+                    n: 8,
+                    role: Role::Mid,
+                    late: Some(Role::Deep),
+                    speed: (10, 20),
+                    rise: 12,
+                    grav: -3,
+                    life: (14, 22),
+                    glow: 60,
+                    ..E
+                },
                 Emit { n: 1, shape: Shape::Ring(2, 14), role: Role::Deep, life: (16, 16), z: 0, ground: true, ..E },
                 Emit { n: 5, from: From::Scatter(16, 6), role: Role::Deep, life: (60, 80), ground: true, z: 0, ..E },
             ],
@@ -545,34 +721,110 @@ pub fn impact(i: Impact) -> Recipe {
         },
         Impact::Needle => Recipe {
             tint: Tint::Needle,
-            emits: &[Emit { n: 5, shape: Shape::Streak, role: Role::Core, speed: (16, 26), rise: 4, grav: -2, life: (6, 10), ..E }],
+            emits: &[Emit {
+                n: 5,
+                shape: Shape::Streak,
+                role: Role::Core,
+                speed: (16, 26),
+                rise: 4,
+                grav: -2,
+                life: (6, 10),
+                ..E
+            }],
             light: None,
         },
         Impact::Spark => Recipe {
             tint: Tint::Spark,
             emits: &[
-                Emit { n: 10, shape: Shape::Streak, role: Role::Core, speed: (24, 44), rise: 6, grav: -2, drag: 210, life: (5, 10), glow: 255, ..E },
+                Emit {
+                    n: 10,
+                    shape: Shape::Streak,
+                    role: Role::Core,
+                    speed: (24, 44),
+                    rise: 6,
+                    grav: -2,
+                    drag: 210,
+                    life: (5, 10),
+                    glow: 255,
+                    ..E
+                },
                 Emit { n: 1, shape: Shape::Glow(9), role: Role::Mid, life: (8, 8), glow: 255, ..E },
-                Emit { n: 1, shape: Shape::Ring(2, 16), role: Role::Core, life: (8, 8), glow: 200, z: 0, ground: true, ..E },
+                Emit {
+                    n: 1,
+                    shape: Shape::Ring(2, 16),
+                    role: Role::Core,
+                    life: (8, 8),
+                    glow: 200,
+                    z: 0,
+                    ground: true,
+                    ..E
+                },
             ],
             light: light(120, 10),
         },
         Impact::Blast => Recipe {
             tint: Tint::Blast,
             emits: &[
-                Emit { n: 1, shape: Shape::Ring(6, 56), role: Role::Core, life: (14, 14), glow: 220, z: 0, ground: true, ..E },
+                Emit {
+                    n: 1,
+                    shape: Shape::Ring(6, 56),
+                    role: Role::Core,
+                    life: (14, 14),
+                    glow: 220,
+                    z: 0,
+                    ground: true,
+                    ..E
+                },
                 Emit { n: 1, shape: Shape::Glow(22), role: Role::Mid, life: (12, 12), glow: 255, ..E },
-                Emit { n: 16, role: Role::Core, late: Some(Role::Deep), speed: (20, 44), rise: 16, grav: -2, drag: 225, life: (16, 28), glow: 200, ..E },
-                Emit { n: 8, role: Role::Deep, shape: Shape::Dot(2), speed: (18, 36), rise: 22, grav: -3, life: (20, 30), ..E },
+                Emit {
+                    n: 16,
+                    role: Role::Core,
+                    late: Some(Role::Deep),
+                    speed: (20, 44),
+                    rise: 16,
+                    grav: -2,
+                    drag: 225,
+                    life: (16, 28),
+                    glow: 200,
+                    ..E
+                },
+                Emit {
+                    n: 8,
+                    role: Role::Deep,
+                    shape: Shape::Dot(2),
+                    speed: (18, 36),
+                    rise: 22,
+                    grav: -3,
+                    life: (20, 30),
+                    ..E
+                },
                 Emit { n: 6, shape: Shape::Dot(4), role: Role::Smoke, speed: (6, 14), grav: 2, life: (40, 60), ..E },
-                Emit { n: 8, from: From::Scatter(40, 20), role: Role::Smoke, life: (90, 120), ground: true, z: 0, shape: Shape::Dot(3), ..E },
+                Emit {
+                    n: 8,
+                    from: From::Scatter(40, 20),
+                    role: Role::Smoke,
+                    life: (90, 120),
+                    ground: true,
+                    z: 0,
+                    shape: Shape::Dot(3),
+                    ..E
+                },
             ],
             light: light(180, 26),
         },
         Impact::Slash => Recipe {
             tint: Tint::Pale,
             emits: &[
-                Emit { n: 4, shape: Shape::Streak, role: Role::Core, speed: (20, 30), spread: 64, life: (4, 6), glow: 80, ..E },
+                Emit {
+                    n: 4,
+                    shape: Shape::Streak,
+                    role: Role::Core,
+                    speed: (20, 30),
+                    spread: 64,
+                    life: (4, 6),
+                    glow: 80,
+                    ..E
+                },
                 Emit { n: 3, role: Role::Deep, speed: (8, 16), rise: 8, grav: -3, life: (10, 14), ..E },
             ],
             light: None,
@@ -612,19 +864,48 @@ pub fn ground(g: GroundFx) -> Recipe {
             tint: Tint::Web,
             emits: &[
                 Emit { n: 1, shape: Shape::Ring(4, 22), role: Role::Mid, life: (12, 12), z: 0, ground: true, ..E },
-                Emit { n: 14, from: From::Scatter(36, 18), role: Role::Core, life: (90, 120), z: 0, ground: true, shape: Shape::Dot(1), ..E },
+                Emit {
+                    n: 14,
+                    from: From::Scatter(36, 18),
+                    role: Role::Core,
+                    life: (90, 120),
+                    z: 0,
+                    ground: true,
+                    shape: Shape::Dot(1),
+                    ..E
+                },
             ],
             light: None,
         },
         GroundFx::Net => Recipe {
             tint: Tint::Needle,
-            emits: &[Emit { n: 16, from: From::Scatter(32, 16), role: Role::Deep, life: (90, 120), z: 0, ground: true, shape: Shape::Dot(2), ..E }],
+            emits: &[Emit {
+                n: 16,
+                from: From::Scatter(32, 16),
+                role: Role::Deep,
+                life: (90, 120),
+                z: 0,
+                ground: true,
+                shape: Shape::Dot(2),
+                ..E
+            }],
             light: None,
         },
         GroundFx::Dust => Recipe {
             tint: Tint::Dust,
             emits: &[
-                Emit { n: 14, from: From::Scatter(36, 18), role: Role::Mid, rise: 4, grav: 0, drag: 250, life: (40, 70), shape: Shape::Dot(3), z: 4, ..E },
+                Emit {
+                    n: 14,
+                    from: From::Scatter(36, 18),
+                    role: Role::Mid,
+                    rise: 4,
+                    grav: 0,
+                    drag: 250,
+                    life: (40, 70),
+                    shape: Shape::Dot(3),
+                    z: 4,
+                    ..E
+                },
                 Emit { n: 6, from: From::Scatter(28, 14), role: Role::Core, rise: 3, life: (30, 50), z: 8, ..E },
             ],
             light: None,
@@ -644,33 +925,255 @@ pub fn ground(g: GroundFx) -> Recipe {
 pub fn wear(s: Status) -> (Recipe, u8) {
     let r = |tint, emits, light| Recipe { tint, emits, light };
     match s {
-        Status::Frost => (r(Tint::Frost, &[Emit { n: 1, from: From::Scatter(18, 10), role: Role::Core, rise: -2, life: (18, 26), glow: 120, z: 24, ..E }], None), 8),
+        Status::Frost => (
+            r(
+                Tint::Frost,
+                &[Emit {
+                    n: 1,
+                    from: From::Scatter(18, 10),
+                    role: Role::Core,
+                    rise: -2,
+                    life: (18, 26),
+                    glow: 120,
+                    z: 24,
+                    ..E
+                }],
+                None,
+            ),
+            8,
+        ),
         Status::Burning => (
             r(
                 Tint::Fire,
                 &[
-                    Emit { n: 2, from: From::Scatter(14, 6), role: Role::Core, late: Some(Role::Deep), rise: 10, grav: 1, life: (14, 22), glow: 230, z: 10, ..E },
-                    Emit { n: 1, role: Role::Smoke, shape: Shape::Dot(3), rise: 8, grav: 1, life: (26, 34), z: 30, ..E },
+                    Emit {
+                        n: 2,
+                        from: From::Scatter(14, 6),
+                        role: Role::Core,
+                        late: Some(Role::Deep),
+                        rise: 10,
+                        grav: 1,
+                        life: (14, 22),
+                        glow: 230,
+                        z: 10,
+                        ..E
+                    },
+                    Emit {
+                        n: 1,
+                        role: Role::Smoke,
+                        shape: Shape::Dot(3),
+                        rise: 8,
+                        grav: 1,
+                        life: (26, 34),
+                        z: 30,
+                        ..E
+                    },
                 ],
                 Some(FxLight { radius: 64, role: Role::Mid, ticks: 6, z: 20 }),
             ),
             5,
         ),
-        Status::Poison => (r(Tint::Venom, &[Emit { n: 1, from: From::Scatter(16, 6), role: Role::Mid, rise: 6, life: (20, 28), glow: 60, z: 20, ..E }], None), 10),
-        Status::Stars => (r(Tint::Gold, &[Emit { n: 1, from: From::Gather(12), role: Role::Core, life: (20, 20), glow: 200, z: 44, ..E }], None), 7),
-        Status::Web => (r(Tint::Web, &[Emit { n: 2, from: From::Scatter(16, 12), role: Role::Core, life: (10, 14), z: 14, shape: Shape::Dot(1), ..E }], None), 6),
-        Status::Dust => (r(Tint::Dust, &[Emit { n: 1, from: From::Scatter(18, 8), role: Role::Mid, rise: 2, life: (24, 30), z: 30, ..E }], None), 8),
-        Status::Jolt => (r(Tint::Spark, &[Emit { n: 2, shape: Shape::Streak, role: Role::Core, speed: (16, 30), life: (3, 5), glow: 255, z: 24, ..E }], Some(FxLight { radius: 40, role: Role::Mid, ticks: 4, z: 20 })), 9),
-        Status::Shield => (r(Tint::Shield, &[Emit { n: 1, shape: Shape::Ring(14, 16), role: Role::Mid, life: (14, 14), glow: 140, z: 0, ground: true, ..E }], None), 14),
-        Status::Drain => (r(Tint::Drain, &[Emit { n: 1, from: From::Gather(16), role: Role::Mid, life: (18, 18), glow: 150, z: 20, ..E }], None), 9),
-        Status::Glint => (r(Tint::Gold, &[Emit { n: 1, from: From::Scatter(18, 20), role: Role::Core, life: (8, 10), glow: 255, z: 20, shape: Shape::Dot(1), ..E }], None), 12),
-        Status::Stone => (r(Tint::Stone, &[Emit { n: 1, from: From::Scatter(18, 6), role: Role::Deep, rise: -4, grav: -2, life: (10, 14), z: 30, ..E }], None), 12),
-        Status::EmberHands => (r(Tint::Fire, &[Emit { n: 1, role: Role::Core, late: Some(Role::Deep), rise: 8, grav: 1, life: (12, 18), glow: 230, z: 18, ..E }], Some(FxLight { radius: 44, role: Role::Mid, ticks: 6, z: 18 })), 6),
-        Status::FrostHands => (r(Tint::Frost, &[Emit { n: 1, role: Role::Core, rise: -2, life: (14, 18), glow: 160, z: 18, ..E }], None), 7),
-        Status::SparkHands => (r(Tint::Spark, &[Emit { n: 1, shape: Shape::Streak, role: Role::Core, speed: (14, 24), life: (3, 5), glow: 255, z: 18, ..E }], Some(FxLight { radius: 36, role: Role::Core, ticks: 4, z: 18 })), 8),
-        Status::ThornHands => (r(Tint::Leaf, &[Emit { n: 1, role: Role::Deep, rise: 4, life: (14, 18), z: 18, ..E }], None), 9),
-        Status::Softened => (r(Tint::Dust, &[Emit { n: 1, from: From::Scatter(16, 8), role: Role::Deep, rise: -3, grav: -1, life: (14, 20), z: 30, ..E }], None), 10),
-        Status::Instant => (r(Tint::Shield, &[Emit { n: 4, from: From::Scatter(16, 6), role: Role::Core, rise: 12, life: (16, 22), glow: 200, z: 8, ..E }], None), 255),
+        Status::Poison => (
+            r(
+                Tint::Venom,
+                &[Emit {
+                    n: 1,
+                    from: From::Scatter(16, 6),
+                    role: Role::Mid,
+                    rise: 6,
+                    life: (20, 28),
+                    glow: 60,
+                    z: 20,
+                    ..E
+                }],
+                None,
+            ),
+            10,
+        ),
+        Status::Stars => (
+            r(
+                Tint::Gold,
+                &[Emit { n: 1, from: From::Gather(12), role: Role::Core, life: (20, 20), glow: 200, z: 44, ..E }],
+                None,
+            ),
+            7,
+        ),
+        Status::Web => (
+            r(
+                Tint::Web,
+                &[Emit {
+                    n: 2,
+                    from: From::Scatter(16, 12),
+                    role: Role::Core,
+                    life: (10, 14),
+                    z: 14,
+                    shape: Shape::Dot(1),
+                    ..E
+                }],
+                None,
+            ),
+            6,
+        ),
+        Status::Dust => (
+            r(
+                Tint::Dust,
+                &[Emit { n: 1, from: From::Scatter(18, 8), role: Role::Mid, rise: 2, life: (24, 30), z: 30, ..E }],
+                None,
+            ),
+            8,
+        ),
+        Status::Jolt => (
+            r(
+                Tint::Spark,
+                &[Emit {
+                    n: 2,
+                    shape: Shape::Streak,
+                    role: Role::Core,
+                    speed: (16, 30),
+                    life: (3, 5),
+                    glow: 255,
+                    z: 24,
+                    ..E
+                }],
+                Some(FxLight { radius: 40, role: Role::Mid, ticks: 4, z: 20 }),
+            ),
+            9,
+        ),
+        Status::Shield => (
+            r(
+                Tint::Shield,
+                &[Emit {
+                    n: 1,
+                    shape: Shape::Ring(14, 16),
+                    role: Role::Mid,
+                    life: (14, 14),
+                    glow: 140,
+                    z: 0,
+                    ground: true,
+                    ..E
+                }],
+                None,
+            ),
+            14,
+        ),
+        Status::Drain => (
+            r(
+                Tint::Drain,
+                &[Emit { n: 1, from: From::Gather(16), role: Role::Mid, life: (18, 18), glow: 150, z: 20, ..E }],
+                None,
+            ),
+            9,
+        ),
+        Status::Glint => (
+            r(
+                Tint::Gold,
+                &[Emit {
+                    n: 1,
+                    from: From::Scatter(18, 20),
+                    role: Role::Core,
+                    life: (8, 10),
+                    glow: 255,
+                    z: 20,
+                    shape: Shape::Dot(1),
+                    ..E
+                }],
+                None,
+            ),
+            12,
+        ),
+        Status::Stone => (
+            r(
+                Tint::Stone,
+                &[Emit {
+                    n: 1,
+                    from: From::Scatter(18, 6),
+                    role: Role::Deep,
+                    rise: -4,
+                    grav: -2,
+                    life: (10, 14),
+                    z: 30,
+                    ..E
+                }],
+                None,
+            ),
+            12,
+        ),
+        Status::EmberHands => (
+            r(
+                Tint::Fire,
+                &[Emit {
+                    n: 1,
+                    role: Role::Core,
+                    late: Some(Role::Deep),
+                    rise: 8,
+                    grav: 1,
+                    life: (12, 18),
+                    glow: 230,
+                    z: 18,
+                    ..E
+                }],
+                Some(FxLight { radius: 44, role: Role::Mid, ticks: 6, z: 18 }),
+            ),
+            6,
+        ),
+        Status::FrostHands => (
+            r(Tint::Frost, &[Emit { n: 1, role: Role::Core, rise: -2, life: (14, 18), glow: 160, z: 18, ..E }], None),
+            7,
+        ),
+        Status::SparkHands => (
+            r(
+                Tint::Spark,
+                &[Emit {
+                    n: 1,
+                    shape: Shape::Streak,
+                    role: Role::Core,
+                    speed: (14, 24),
+                    life: (3, 5),
+                    glow: 255,
+                    z: 18,
+                    ..E
+                }],
+                Some(FxLight { radius: 36, role: Role::Core, ticks: 4, z: 18 }),
+            ),
+            8,
+        ),
+        Status::ThornHands => {
+            (r(Tint::Leaf, &[Emit { n: 1, role: Role::Deep, rise: 4, life: (14, 18), z: 18, ..E }], None), 9)
+        }
+        Status::Softened => (
+            r(
+                Tint::Dust,
+                &[Emit {
+                    n: 1,
+                    from: From::Scatter(16, 8),
+                    role: Role::Deep,
+                    rise: -3,
+                    grav: -1,
+                    life: (14, 20),
+                    z: 30,
+                    ..E
+                }],
+                None,
+            ),
+            10,
+        ),
+        Status::Instant => (
+            r(
+                Tint::Shield,
+                &[Emit {
+                    n: 4,
+                    from: From::Scatter(16, 6),
+                    role: Role::Core,
+                    rise: 12,
+                    life: (16, 22),
+                    glow: 200,
+                    z: 8,
+                    ..E
+                }],
+                None,
+            ),
+            255,
+        ),
     }
 }
 
@@ -679,7 +1182,18 @@ pub fn death() -> Recipe {
     Recipe {
         tint: Tint::Dust,
         emits: &[
-            Emit { n: 6, from: From::Scatter(20, 8), role: Role::Mid, rise: 8, grav: 0, drag: 250, life: (26, 40), shape: Shape::Dot(3), z: 4, ..E },
+            Emit {
+                n: 6,
+                from: From::Scatter(20, 8),
+                role: Role::Mid,
+                rise: 8,
+                grav: 0,
+                drag: 250,
+                life: (26, 40),
+                shape: Shape::Dot(3),
+                z: 4,
+                ..E
+            },
             Emit { n: 4, from: From::Scatter(24, 10), role: Role::Deep, life: (40, 60), z: 0, ground: true, ..E },
         ],
         light: None,
@@ -839,7 +1353,9 @@ pub fn rasterise(sparks: &[Spark], px: &mut [u32], w: i32, h: i32, (ox, oy): (i3
                     }
                 }
             }
-            Shape::Streak => crate::canvas::bresenham(x, y, x - s.vx * 2 / 16, y - (s.vy - s.vz) * 2 / 16, |a, b| put(a, b, c)),
+            Shape::Streak => {
+                crate::canvas::bresenham(x, y, x - s.vx * 2 / 16, y - (s.vy - s.vz) * 2 / 16, |a, b| put(a, b, c))
+            }
             Shape::Ring(r0, r1) => {
                 let r = i32::from(r0) + (i32::from(r1) - i32::from(r0)) * i32::from(s.age) / i32::from(s.life.max(1));
                 for k in 0..32 {

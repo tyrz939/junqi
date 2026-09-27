@@ -43,7 +43,8 @@ impl SkyArt {
         let foot = |c: &jane_art::Canvas| (0, c.h() as i16);
         let mut add = |c: jane_art::Canvas| atlas.add_canvas(&c, foot(&c), 1, |_, _, t| t);
         let school = [0u8, 1, 2].map(|band| [0u8, 1, 2].map(|lit| add(weather::school(band, lit))));
-        let treeline = [Region::Lowfields, Region::Waters, Region::Works].map(|r| add(weather::treeline(r, 0x7472_6565)));
+        let treeline =
+            [Region::Lowfields, Region::Waters, Region::Works].map(|r| add(weather::treeline(r, 0x7472_6565)));
         let moon = [0u8, 1, 2, 3, 4, 5, 6, 7].map(|p| add(weather::moon(p)));
         SkyArt { school, treeline, moon }
     }
@@ -148,9 +149,9 @@ impl Atmosphere {
         self.zone = Some(zone);
         self.rng = Lcg(jane_art::hash::h32(view.seed(), zone as u32, 0x6174_6d6f));
         self.school = if zone == ZoneId::County {
-            view.sym("school_mouth").and_then(|s| view.mark(s)).map(|m| {
-                (i32::from(m.cell.x) * CELL + CELL / 2, i32::from(m.cell.y) * CELL)
-            })
+            view.sym("school_mouth")
+                .and_then(|s| view.mark(s))
+                .map(|m| (i32::from(m.cell.x) * CELL + CELL / 2, i32::from(m.cell.y) * CELL))
         } else {
             None
         };
@@ -232,7 +233,8 @@ impl Atmosphere {
         self.tick = tick;
         self.read(view);
         let (rain, mist) = self.targets();
-        let ease = |v: &mut u32, to: u32| *v = if *v < to { (*v + EASE).min(to) } else { v.saturating_sub(EASE).max(to) };
+        let ease =
+            |v: &mut u32, to: u32| *v = if *v < to { (*v + EASE).min(to) } else { v.saturating_sub(EASE).max(to) };
         ease(&mut self.rain, rain);
         ease(&mut self.mist, mist);
         let hour = (self.clock / HOUR) as u8;
@@ -333,7 +335,8 @@ impl Atmosphere {
         s.shade = mix(s.shade, [250, 250, 255], cloud / 2);
         // The grade: rain cools and greys, mist pales.
         let p = &mut s.post;
-        p.saturation = (i32::from(p.saturation) - (r * 26 / 65535) as i32 - (m * 22 / 65535) as i32).clamp(60, 255) as u8;
+        p.saturation =
+            (i32::from(p.saturation) - (r * 26 / 65535) as i32 - (m * 22 / 65535) as i32).clamp(60, 255) as u8;
         p.tint = mix(p.tint, [226, 238, 255], r * 3 / 4);
         p.lift = mix(p.lift, scale(weather::mist_colour(self.region), 40), m / 2);
         let flash = u32::from(self.flash());
@@ -444,7 +447,11 @@ impl Atmosphere {
         let s0 = f.sprites.len();
         if let Some(m) = look.moon {
             let r = atlas.get(self.art.moon[usize::from(m.phase % 8)]);
-            f.sprites.push(sprite(self.art.moon[usize::from(m.phase % 8)], i32::from(m.x) - i32::from(r.src.w) / 2, -i32::from(m.up)));
+            f.sprites.push(sprite(
+                self.art.moon[usize::from(m.phase % 8)],
+                i32::from(m.x) - i32::from(r.src.w) / 2,
+                -i32::from(m.up),
+            ));
         }
         if let Some((sx, sy)) = self.school {
             let (cx, cy) = (cam.0 + w / 2, cam.1 + h / 2);
@@ -480,7 +487,11 @@ impl Atmosphere {
             f.sprites.push(sprite(tree, x, -i32::from(r.src.h)));
             x += tw;
         }
-        f.passes.push(Pass::Parallax { layer: Depth::FarTreeline, factor: 64, sprites: Span::since(s1, f.sprites.len()) });
+        f.passes.push(Pass::Parallax {
+            layer: Depth::FarTreeline,
+            factor: 64,
+            sprites: Span::since(s1, f.sprites.len()),
+        });
     }
 
     /// The School's windows are lit from when the lamps come on (18:30) until six.
@@ -549,7 +560,9 @@ impl Atmosphere {
             let spread = i32::from(v.layer.spread) * CELL;
             let rect = match v.rect {
                 None => (-64, -64, w + 64, h + 64),
-                Some((x0, y0, x1, y1)) => (x0 - cam.0 - spread, y0 - cam.1 - spread, x1 - cam.0 + spread, y1 - cam.1 + spread),
+                Some((x0, y0, x1, y1)) => {
+                    (x0 - cam.0 - spread, y0 - cam.1 - spread, x1 - cam.0 + spread, y1 - cam.1 + spread)
+                }
             };
             if rect.2 < 0 || rect.3 < 0 || rect.0 > w || rect.1 > h || density == 0 {
                 continue;
@@ -563,7 +576,8 @@ impl Atmosphere {
             });
         }
         if f.fog.len() > f0 {
-            let drift = ((self.drift.0 >> 4).rem_euclid(1 << 15) as i16, (self.drift.1 >> 4).rem_euclid(1 << 15) as i16);
+            let drift =
+                ((self.drift.0 >> 4).rem_euclid(1 << 15) as i16, (self.drift.1 >> 4).rem_euclid(1 << 15) as i16);
             f.passes.push(Pass::Fog { volumes: Span::since(f0, f.fog.len()), drift });
         }
         // Light shafts: through what stands against a low sun, in clear air or mist (§1.9).

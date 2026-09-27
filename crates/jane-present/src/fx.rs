@@ -182,7 +182,9 @@ impl Fx {
                             self.emit(&r, px(u.pos), Angle::NORTH);
                         }
                     } else if on {
-                        if !self.worn.iter().any(|w| w.unit == unit.get() && w.effect == effect.0) && self.worn.len() < 64 {
+                        if !self.worn.iter().any(|w| w.unit == unit.get() && w.effect == effect.0)
+                            && self.worn.len() < 64
+                        {
                             self.worn.push(Worn { unit: unit.get(), effect: effect.0, look, every });
                         }
                     } else {
@@ -442,10 +444,9 @@ impl Fx {
                 glow: 255,
                 height: 16,
             });
-            for (shape, colour, alpha) in [
-                (PartShape::Glow { r }, Role::Mid.of(hue), 200),
-                (PartShape::Dot { size: 2 }, Role::Core.of(hue), 255),
-            ] {
+            for (shape, colour, alpha) in
+                [(PartShape::Glow { r }, Role::Mid.of(hue), 200), (PartShape::Dot { size: 2 }, Role::Core.of(hue), 255)]
+            {
                 let off = i32::from(matches!(shape, PartShape::Dot { .. }));
                 f.parts.push(Particle {
                     x: (sx - off) as i16,

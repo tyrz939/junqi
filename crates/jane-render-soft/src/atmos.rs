@@ -236,7 +236,11 @@ mod tests {
         let p = |x, y, shape| Particle { x, y, shape, colour: [255, 255, 255], alpha: 255, glow: 0, height: 0 };
         let n = particles(
             &mut t,
-            &[p(16, 16, PartShape::Ring { r: 5 }), p(2, 2, PartShape::Streak { dx: -8, dy: -12 }), p(31, 31, PartShape::Glow { r: 4 })],
+            &[
+                p(16, 16, PartShape::Ring { r: 5 }),
+                p(2, 2, PartShape::Streak { dx: -8, dy: -12 }),
+                p(31, 31, PartShape::Glow { r: 4 }),
+            ],
         );
         assert!(n > 20);
         assert_eq!(px[16 * 32 + 16], 0xff00_0000, "a ring is hollow");
