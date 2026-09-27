@@ -92,7 +92,7 @@ fn the_museum() {
 
 #[test]
 fn butterfly_forest() {
-    play(ZoneId::Forest, false);
+    play(ZoneId::Forest, true);
 }
 
 #[test]

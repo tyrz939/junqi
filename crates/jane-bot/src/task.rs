@@ -53,6 +53,8 @@ pub struct Ctx {
     pub notes: BTreeMap<ZoneId, Vec<PropNote>>,
     /// Enemies she has seen standing, by def: where each was last seen (forgotten once seen down).
     pub seen_foes: BTreeMap<jane_core::UnitDefId, BTreeMap<UnitId, (ZoneId, Vec2)>>,
+    /// Butterfly Forest's tactic (`tactics::forest`).
+    pub forest: crate::tactics::forest::Forest,
 }
 
 /// What a prop was seen to do: enough to go back for it from another zone.
@@ -120,6 +122,7 @@ impl Ctx {
             frames: 0,
             notes: BTreeMap::new(),
             seen_foes: BTreeMap::new(),
+            forest: crate::tactics::forest::Forest::default(),
         }
     }
 

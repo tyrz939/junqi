@@ -51,6 +51,8 @@ pub enum Try {
     Cast(PropId),
     Push(PropId, PropId),
     Fight(UnitId),
+    /// Talk to someone (a butterfly, with the net: `tactics::forest`).
+    Talk(UnitId),
     Door(PropId),
     /// Through a door to or from the dungeon.
     Travel,
@@ -267,7 +269,7 @@ impl Crawl {
             Some(Try::Prop(p) | Try::Cast(p) | Try::Door(p) | Try::Rest(p) | Try::Push(p, _)) => {
                 v.prop(p).map_or("?".into(), |p| format!("{} at {:?}", v.name(p.key), p.cell))
             }
-            Some(Try::Fight(u)) => {
+            Some(Try::Fight(u) | Try::Talk(u)) => {
                 v.unit(u).map_or("?".into(), |u| format!("{} at {:?}", cat.combat.unit(u.def).id, u.pos.cell()))
             }
             w => format!("{w:?}"),
@@ -343,6 +345,8 @@ impl Crawl {
             }
         }
         self.look(v);
+        // What a dungeon's own idea has her notice each frame (tactics/*.rs).
+        crate::tactics::forest::look(v, cx);
         if let Some(id) = fight::threat(v, cx) {
             if let Some(a) = fight::engage(v, cx, id) {
                 return a;
@@ -352,6 +356,16 @@ impl Crawl {
             return Act::press(c);
         }
         let sig = signature(v);
+        // A dungeon whose story is done (tactics/*.rs): out by a door, the rest left for later.
+        let down = boss_of(self.zone).is_some_and(|b| self.bosses.iter().any(|&(d, _)| d == b));
+        if self.stage == Stage::Explore && down {
+            self.reach.update(v, sig);
+            if crate::tactics::forest::done(v, &self.reach) {
+                self.stage = Stage::Leave;
+                self.task = None;
+                notes.push(Mark::Note("what the story wants is done: leaving".into()));
+            }
+        }
         // Low with nothing to eat: whatever she was doing waits for a bed or a stove.
         // Low with nothing to eat: whatever she was doing waits for a bed or a stove she can
         // reach (shut in with a boss, there is none, and she carries on).
@@ -569,7 +583,7 @@ impl Crawl {
             }
         }
         for p in v.props() {
-            if p.hidden || !reach.beside(p) {
+            if p.hidden || !reach.beside(p) || crate::tactics::forest::skip(v, p) {
                 continue;
             }
             let def = cat.story.prop(p.def);
@@ -621,6 +635,10 @@ impl Crawl {
             {
                 offer(4, d, Try::Prop(p.id), Task::Use(UseProp::new(p.id)), &mut best);
             }
+        }
+        // What a dungeon's own idea puts up (tactics/*.rs).
+        for (class, cost, what, t) in crate::tactics::forest::offers(v, cx, reach) {
+            offer(class, cost, what, t, &mut best);
         }
         // 6. Plates that are up, and something to push onto one.
         if best.as_ref().is_none_or(|b| b.0 > 6) {

@@ -172,15 +172,18 @@ fn step_out(v: &View<'_>, cx: &mut Ctx, from: jane_core::Vec2) -> InputFrame {
     stick(from, me, true)
 }
 
-/// Food she holds and may eat now.
+/// Food she holds and may eat now (what a dungeon's tactic keeps back for its boss only when
+/// she is near the end).
 pub fn food(v: &View<'_>) -> Option<ItemId> {
     let me = v.body();
-    ["apple", "grape"].into_iter().map(sense::item).find(|&i| holds(v, i) > 0 && item_ready(me, i, v.tick()))
+    let keep = if hp_permille(me) < 250 { 0 } else { crate::tactics::forest::keep_food(v) };
+    ["apple", "grape"].into_iter().map(sense::item).find(|&i| holds(v, i) > keep && item_ready(me, i, v.tick()))
 }
 
-/// Does she hold anything to eat at all (ready or not)?
+/// Does she hold anything to eat at all (ready or not), past what is kept back for a boss?
 pub fn has_food(v: &View<'_>) -> bool {
-    ["apple", "grape"].into_iter().any(|n| holds(v, sense::item(n)) > 0)
+    let keep = crate::tactics::forest::keep_food(v);
+    ["apple", "grape"].into_iter().any(|n| holds(v, sense::item(n)) > keep)
 }
 
 /// Something to eat, if she is low and can.
@@ -274,6 +277,10 @@ pub fn engage(v: &View<'_>, cx: &mut Ctx, id: UnitId) -> Option<Act> {
     }
     if let Some(c) = eat(v) {
         return Some(Act::press(c));
+    }
+    // A boss fought the way its room is built to be fought (tactics/*.rs).
+    if let Some(a) = crate::tactics::forest::engage(v, cx, t) {
+        return Some(a);
     }
     let cat = jane_data::catalog();
     let d = dist(me.pos, t.pos);
