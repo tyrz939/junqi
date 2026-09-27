@@ -165,6 +165,15 @@ mod tests {
         let (east, m) = c.frame(set, pose(Facing::East, 0, 0));
         let (west, mw) = c.frame(set, pose(Facing::West, 0, 0));
         assert!(!m && mw && east == west);
+        // The diagonals are her own frames, the west ones the east ones mirrored.
+        let side = c.frame(set, pose(Facing::East, 0, 0)).0;
+        let diag = |f: Face8| c.frame(set, Pose { facing: f, ..pose(Facing::South, 0, 0) });
+        let (se, mse) = diag(Face8::SouthEast);
+        let (sw, msw) = diag(Face8::SouthWest);
+        let (ne, mne) = diag(Face8::NorthEast);
+        let (nw, mnw) = diag(Face8::NorthWest);
+        assert!(se != side && ne != side && se != ne, "the dog has diagonals of her own");
+        assert!(se == sw && ne == nw && !mse && msw && !mne && mnw, "the west diagonals mirror the east");
         let (sit, ms) = c.frame(set, pose(Facing::West, 0, IDLE_AFTER));
         assert!(!ms, "she sits facing you, never mirrored");
         let r = atlas.get(sit);

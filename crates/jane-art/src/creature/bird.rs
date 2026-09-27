@@ -90,6 +90,127 @@ pub(crate) fn draw(c: &mut Canvas, k: &Coat, facing: Facing, beat: Beat) {
         (Facing::Side, _) => side(c, k, &p),
         (Facing::Down, _) => front(c, k, &p, true, 0),
         (Facing::Up, _) => front(c, k, &p, false, 0),
+        (Facing::DownRight, _) => three_quarter(c, k, &p, true),
+        (Facing::UpRight, _) => three_quarter(c, k, &p, false),
+    }
+}
+
+/// Turned a quarter toward the viewer (`toward`: down and to the right) or away (up and to the
+/// right). Toward: the tail behind up the screen, the breast toward us, the near wing on the
+/// left, the head forward and low with the near eye and the beak pointing down to the right.
+/// Away: the tail nearest, fanned over the back (a hen's) or down (a crow's), the near wing on
+/// the right, the head beyond with its right eye and the beak's point past the cheek. The far
+/// foot stands over and up the screen from the near one. West is this mirrored.
+fn three_quarter(c: &mut Canvas, k: &Coat, p: &Pose, toward: bool) {
+    let (_, _, ax, ay) = super::size(k.look.plan);
+    let hen = k.look.anatomy == Anatomy::Hen;
+    let b = p.bob;
+    let beak = horn(k);
+    // Its feet: the far one over and a row up the screen.
+    let (near_x, far_x) = if toward { (ax - 2, ax + 1) } else { (ax, ax - 3) };
+    let reach = |r: i32| r * 2 / 3;
+    let dip = |r: i32| if toward { r / 2 } else { -(r / 2) };
+    leg(c, beak, far_x, ay - 5 + b, reach(p.reach[1]), (p.lift[1] - dip(p.reach[1])).max(0) + 1, ay, relief::FAR);
+    c.shade(Rect::new(far_x - 2, ay - 6, 7, 6), beak, 1);
+    let body = if hen { Rect::new(ax - 5, 5 + b, 9, 8) } else { Rect::new(ax - 5, 6 + b, 9, 7) };
+    let f = p.flick;
+    let mut m = mask(c);
+    if toward {
+        // The tail behind, up the screen and to the left.
+        if hen {
+            m.polyline_fill(
+                &[(ax - 3, body.y + 3), (ax - 7, 2 + b - f), (ax - 5, 1 + b - f), (ax - 2, 2 + b), (ax, body.y + 2)],
+                Ix::INK,
+                1,
+            );
+        } else {
+            m.polyline_fill(
+                &[(ax - 3, body.y + 3), (ax - 8, body.y + 1 + f), (ax - 8, body.y + 3 + f), (ax - 2, body.y + 5)],
+                Ix::INK,
+                1,
+            );
+        }
+    }
+    m.ellipse(body, Ix::INK, 1);
+    // The breast, fuller toward the facing.
+    m.ellipse(Rect::new(body.x + 3, body.y + if toward { 1 } else { -1 }, 6, 7), Ix::INK, 1);
+    // The neck up to the head: toward, the head forward and low; away, beyond and higher.
+    let (hx, hy) = if toward {
+        (ax - 1 + p.head.0, 2 + b + p.head.1 + i32::from(!hen))
+    } else {
+        (ax + p.head.0, 1 + b + p.head.1 + i32::from(!hen))
+    };
+    m.polyline_fill(&[(body.x + 4, body.y + 2), (hx, hy + 3), (hx + 4, hy + 4), (body.x + 7, body.y + 4)], Ix::INK, 1);
+    if !toward {
+        // The tail nearest us: a hen's fan over the back, a crow's wedge down to the left.
+        if hen {
+            m.polyline_fill(
+                &[(ax - 4, body.y + 5), (ax - 6, 2 + b - f), (ax - 3, 1 + b - f), (ax - 1, body.y + 3)],
+                Ix::INK,
+                1,
+            );
+        } else {
+            m.polyline_fill(
+                &[(ax - 3, body.bottom() - 2), (ax - 7, ay - 2 + f), (ax - 5, ay - 1 + f), (ax - 1, body.bottom() - 1)],
+                Ix::INK,
+                1,
+            );
+        }
+    }
+    c.inflate(&m, k.body, 3, relief::BODY);
+    if toward && k.belly != k.body {
+        c.dye_ellipse(Rect::new(body.x + 3, body.y + 2, 6, body.h - 1), k.body, k.belly);
+    }
+    // The near wing folded along the flank; its primaries a darker edge trailing back.
+    let mut w = mask(c);
+    let wx = if toward { body.x } else { body.x + 3 };
+    w.ellipse(Rect::new(wx, body.y + 2, 6, 5), Ix::INK, 1);
+    if toward {
+        w.polyline_fill(&[(wx, body.y + 4), (wx - 2, body.y + 3), (wx + 1, body.y + 6)], Ix::INK, 1);
+    } else {
+        w.polyline_fill(&[(wx + 1, body.y + 5), (wx - 1, body.y + 7), (wx + 3, body.y + 6)], Ix::INK, 1);
+    }
+    c.inflate(&w, k.mark, 2, relief::WING);
+    c.strokes(Rect::new(wx, body.y + 3, 6, 4), k.mark, StrokeKind::Feather, 10, h32(k.seed, 6, salt::STROKES));
+    c.hline(wx, wx + 3, body.y + 6, k.mark.at(Tone::Shade), relief::WING.hi);
+    // The near foot.
+    leg(c, beak, near_x, body.bottom() - 1, reach(p.reach[0]), (p.lift[0] - dip(p.reach[0])).max(0), ay, relief::WING);
+    // The head.
+    let mut h = mask(c);
+    h.ellipse(Rect::new(hx, hy, 5, 5), Ix::INK, 1);
+    c.inflate(&h, k.body, 2, relief::HEAD);
+    let z = relief::HEAD.lo;
+    let long = i32::from(!hen);
+    if toward {
+        // The beak points down and to the right, the near eye on the left of the face.
+        c.fill_rect(Rect::new(hx + 4, hy + 2, 2 + long, 1), beak.at(Tone::Light), z);
+        c.fill_rect(Rect::new(hx + 3, hy + 3 + i32::from(p.open), 2 + long, 1), beak.at(Tone::Shade), z);
+    } else {
+        // The beak's point past the cheek.
+        c.fill_rect(Rect::new(hx + 5, hy + 1, 1 + long, 1), beak.at(Tone::Light), z);
+        c.dot(hx + 5, hy + 2 + i32::from(p.open), beak.at(Tone::Shade), z);
+    }
+    if hen {
+        let red = Ramp::ClothRed;
+        let mut cm = mask(c);
+        cm.fill_rect(Rect::new(hx + 1, hy - 1, 3, 2), Ix::INK, 1);
+        cm.fill_rect(Rect::new(hx + 1, hy - 2, 2, 1), Ix::INK, 1);
+        cm.fill_rect(Rect::new(hx + 3, hy - 3, 2, 2), Ix::INK, 1);
+        c.inflate(&cm, red, 1, Z::flat(z + 1));
+        if toward {
+            c.fill_rect(Rect::new(hx + 3, hy + 4, 2, 2), red.at(Tone::Base), z + 1);
+            c.dot(hx + 4, hy + 5, red.at(Tone::Shade), z + 1);
+        }
+    }
+    let (ex, ey) = if toward { (hx + 1, hy + 1) } else { (hx + 3, hy + 1) };
+    if p.shut {
+        c.dot(ex, ey + 1, k.body.at(Tone::Deep), z);
+    } else if hen {
+        c.dot(ex, ey, Ramp::ClothMustard.at(Tone::High), z);
+        c.dot(ex, ey + 1, Ix::INK, z);
+    } else {
+        c.dot(ex, ey + 1, Ix::INK, z);
+        c.dot(ex, ey, Ramp::HairGrey.at(Tone::High), z);
     }
 }
 

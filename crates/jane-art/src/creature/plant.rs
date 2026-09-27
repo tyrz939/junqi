@@ -54,6 +54,22 @@ pub(crate) fn draw(c: &mut Canvas, k: &Coat, facing: Facing, beat: Beat) {
     }
 }
 
+/// How a plant's face and parts come round on the diagonals: 1 turned down and to the right
+/// (the face toward the right), -1 up and to the right (the back seen, the parts swung the
+/// other way), 0 not turned.
+fn turn_of(facing: Facing) -> i32 {
+    match facing {
+        Facing::DownRight => 1,
+        Facing::UpRight => -1,
+        _ => 0,
+    }
+}
+
+/// Whether the face shows: toward the viewer, from the side, and turned toward the viewer.
+fn shows_face(facing: Facing) -> bool {
+    matches!(facing, Facing::Down | Facing::Side | Facing::DownRight)
+}
+
 /// Roots spread at the foot, shuffling.
 fn roots(c: &mut Canvas, k: &Coat, ax: i32, ay: i32, spread: i32, shuffle: i32) {
     let root = Ramp::Bark;
@@ -77,9 +93,17 @@ fn eyes_glow(c: &mut Canvas, k: &Coat, pts: &[(i32, i32)], z: u8) {
 
 fn cactus(c: &mut Canvas, k: &Coat, facing: Facing, (sway, bob, shuffle, lean, open): (i32, i32, i32, i32, bool)) {
     let (_, _, ax, ay) = super::size_of(k.look.plan, k.look.anatomy);
+    let t = turn_of(facing);
     roots(c, k, ax, ay, 7, shuffle);
     let top = ay - 30 + bob;
     let x = ax + sway + lean;
+    // Turned, the arm on the far side of the turn swings behind, foreshortened: the right arm
+    // facing down and to the right, the left one facing up and to the right.
+    let (lk, rk) = match t {
+        1 => (10, 6),
+        -1 => (6, 10),
+        _ => (10, 10),
+    };
     let mut m = Canvas::new(c.w(), c.h());
     m.polyline_fill(
         &[(ax - 5, ay - 2), (ax + 4, ay - 2), (x + 5, top + 5), (x + 3, top), (x - 4, top), (x - 6, top + 5)],
@@ -88,33 +112,25 @@ fn cactus(c: &mut Canvas, k: &Coat, facing: Facing, (sway, bob, shuffle, lean, o
     );
     // The arms: out and up.
     let (ly, ry) = (ay - 17 + bob, ay - 21 + bob);
+    let (l, r) = (|d: i32| ax - 5 - (d - 5) * lk / 10, |d: i32| ax + 4 + (d - 4) * rk / 10);
     m.polyline_fill(
-        &[
-            (ax - 5, ly),
-            (ax - 10, ly),
-            (ax - 12 + sway, ly - 8),
-            (ax - 9 + sway, ly - 9),
-            (ax - 8, ly - 3),
-            (ax - 5, ly - 3),
-        ],
+        &[(ax - 5, ly), (l(10), ly), (l(12) + sway, ly - 8), (l(9) + sway, ly - 9), (l(8), ly - 3), (ax - 5, ly - 3)],
         Ix::INK,
         1,
     );
     m.polyline_fill(
-        &[
-            (ax + 4, ry),
-            (ax + 9, ry),
-            (ax + 11 + sway, ry - 7),
-            (ax + 8 + sway, ry - 8),
-            (ax + 7, ry - 3),
-            (ax + 4, ry - 3),
-        ],
+        &[(ax + 4, ry), (r(9), ry), (r(11) + sway, ry - 7), (r(8) + sway, ry - 8), (r(7), ry - 3), (ax + 4, ry - 3)],
         Ix::INK,
         1,
     );
     c.inflate(&m, k.body, 3, relief::BODY);
-    // Ribs down the column, spines lit along them.
-    for dx in [-3, 0, 3] {
+    if t != 0 {
+        // The arm swung behind stands in the column's shade.
+        let (sx, w) = if t > 0 { (ax + 4, 8) } else { (ax - 12, 8) };
+        c.shade(Rect::new(sx, ry.min(ly) - 10, w, 14), k.body, 1);
+    }
+    // Ribs down the column, spines lit along them; turned, they come round with it.
+    for dx in [-3 + t, t, 3 + t] {
         for y in (top + 3..ay - 3).step_by(1) {
             let t = (y - top) as i64;
             let rx = ax + dx + ((x - ax) as i64 * (ay as i64 - y as i64) / (ay as i64 - top as i64).max(1)) as i32;
@@ -127,10 +143,19 @@ fn cactus(c: &mut Canvas, k: &Coat, facing: Facing, (sway, bob, shuffle, lean, o
     // The bloom on its crown.
     c.disc_lit(x, top, 2, k.mark, Z::flat(relief::HEAD.lo));
     c.dot(x, top, k.belly.at(Tone::Light), relief::HEAD.lo);
-    if facing != Facing::Up {
+    if shows_face(facing) {
         let fy = top + 9;
-        let fx = if facing == Facing::Side { x + 1 } else { x - 3 };
-        let eyes: &[(i32, i32)] = if facing == Facing::Side { &[(fx + 2, fy)] } else { &[(fx, fy), (fx + 4, fy)] };
+        let fx = match facing {
+            Facing::Side => x + 1,
+            Facing::DownRight => x - 1,
+            _ => x - 3,
+        };
+        let eyes: &[(i32, i32)] = match facing {
+            Facing::Side => &[(fx + 2, fy)],
+            // Turned, the far eye closes up on the near.
+            Facing::DownRight => &[(fx, fy), (fx + 3, fy)],
+            _ => &[(fx, fy), (fx + 4, fy)],
+        };
         eyes_glow(c, k, eyes, relief::BODY.hi + 1);
         let mw = if open { 3 } else { 1 };
         c.fill_rect(
@@ -149,6 +174,7 @@ fn cactus(c: &mut Canvas, k: &Coat, facing: Facing, (sway, bob, shuffle, lean, o
 fn flower(c: &mut Canvas, k: &Coat, facing: Facing, (sway, bob, shuffle, lean, open): (i32, i32, i32, i32, bool)) {
     let great = k.look.anatomy == Anatomy::GreatFlower;
     let (_, _, ax, ay) = super::size_of(k.look.plan, k.look.anatomy);
+    let t = turn_of(facing);
     let s = if great { 3 } else { 2 };
     let sc = |v: i32| v * s / 2;
     roots(c, k, ax, ay, sc(8), shuffle);
@@ -162,8 +188,11 @@ fn flower(c: &mut Canvas, k: &Coat, facing: Facing, (sway, bob, shuffle, lean, o
     for side in [-1, 1] {
         let ly = ay - sc(8) - i32::from(side > 0) * sc(4);
         let mut m = Canvas::new(c.w(), c.h());
-        let tip = (ax + side * sc(10) - sway, ly - sc(4) + i32::from(side < 0) * sc(1));
-        m.polyline_fill(&[(ax, ly), (ax + side * sc(5), ly - sc(3)), tip, (ax + side * sc(6), ly)], Ix::INK, 1);
+        // Turned, the leaf on the far side of the turn is foreshortened.
+        let reach = if t != 0 && side == t { 6 } else { 10 };
+        let tip = (ax + side * sc(reach) - sway, ly - sc(4) + i32::from(side < 0) * sc(1));
+        let mid = |v: i32| side * sc(v) * reach / 10;
+        m.polyline_fill(&[(ax, ly), (ax + mid(5), ly - sc(3)), tip, (ax + mid(6), ly)], Ix::INK, 1);
         c.inflate(&m, stem, 2, relief::STEM);
         c.line((ax, ly), tip, stem.at(Tone::Shade), 1, relief::STEM.hi);
         if great {
@@ -190,7 +219,14 @@ fn flower(c: &mut Canvas, k: &Coat, facing: Facing, (sway, bob, shuffle, lean, o
         for i in 0..petals {
             // A petal: an ellipse out from the centre, spaced round (by a table: no floats).
             let (dx, dy) = ring_at(i, petals, r);
-            let (dx, dy) = if side_on { (dx / 3, dy) } else { (dx, dy * 3 / 4) };
+            // Turned, the bloom is seen at a slant: narrower, its face toward the turn.
+            let (dx, dy) = if side_on {
+                (dx / 3, dy)
+            } else if t != 0 {
+                (dx * 2 / 3 + t * sc(1), dy * 3 / 4)
+            } else {
+                (dx, dy * 3 / 4)
+            };
             let mut m = Canvas::new(c.w(), c.h());
             let pw = sc(4);
             m.ellipse(Rect::new(hx + dx - pw / 2, hy + dy - pw / 2, pw, pw), Ix::INK, 1);
@@ -198,13 +234,12 @@ fn flower(c: &mut Canvas, k: &Coat, facing: Facing, (sway, bob, shuffle, lean, o
             c.inflate(&m, ramp, 2, Z::new(z.lo + ring as u8, z.hi + ring as u8));
         }
     }
-    if facing == Facing::Up {
-        c.disc_lit(hx, hy, sc(2), stem, Z::flat(z.hi + 2));
-    } else {
-        // The mouth: dark, ringed with teeth; open wider when it bites.
-        let mw = sc(if open { 6 } else { 4 });
+    if shows_face(facing) {
+        // The mouth: dark, ringed with teeth; open wider when it bites. Turned, narrower and
+        // toward the turn.
+        let mw = sc(if open { 6 } else { 4 }) - i32::from(t != 0) * sc(1);
         let mh = sc(if open { 5 } else { 3 });
-        let mouth = Rect::new(hx - mw / 2 + i32::from(side_on) * sc(2), hy - mh / 2, mw, mh);
+        let mouth = Rect::new(hx - mw / 2 + i32::from(side_on) * sc(2) + t * sc(2), hy - mh / 2, mw, mh);
         c.ellipse(mouth, k.body.at(Tone::Deep), z.hi + 2);
         let teeth = Ramp::Bone;
         for x in (mouth.x + 1..mouth.right() - 1).step_by(2) {
@@ -213,9 +248,12 @@ fn flower(c: &mut Canvas, k: &Coat, facing: Facing, (sway, bob, shuffle, lean, o
         }
         if k.eye_emits {
             c.set_emitting(true);
-            c.dot(hx, hy, Ramp::Ember.at(Tone::High), z.hi + 2);
+            c.dot(hx + t * sc(2), hy, Ramp::Ember.at(Tone::High), z.hi + 2);
             c.set_emitting(false);
         }
+    } else {
+        // The back of the bloom: its green calyx, swung the other way when turned.
+        c.disc_lit(hx - t * sc(1), hy, sc(2), stem, Z::flat(z.hi + 2));
     }
 }
 
@@ -248,20 +286,22 @@ fn pumpkin(c: &mut Canvas, k: &Coat, facing: Facing, (sway, bob, shuffle, lean, 
     // It hops on its tendrils: up on the walk's passing beats.
     roots(c, k, ax, ay, 8, shuffle);
     let hop = bob * 2;
+    let t = turn_of(facing);
     let g = Rect::new(ax - 9 + sway + lean, ay - 18 - hop, 18, 14);
     let mut m = Canvas::new(c.w(), c.h());
     m.ellipse(g, Ix::INK, 1);
     c.inflate(&m, k.body, 4, relief::BODY);
     // Ribs.
+    // Turned, the ribs come round with it: bunched toward the far side of the turn.
     for dx in [-5, -2, 2, 5] {
-        let x = g.x + g.w / 2 + dx;
+        let x = g.x + g.w / 2 + dx + if dx * t > 0 { t } else { t * 2 };
         for y in g.y + 2..g.bottom() - 2 {
             c.tint(x, y, k.body, Tone::Shade);
         }
         c.tint(x - 1, g.y + 3, k.body, Tone::Light);
     }
     // The stem and a curled vine on top.
-    let (sx, sy) = (g.x + g.w / 2, g.y);
+    let (sx, sy) = (g.x + g.w / 2 - t, g.y);
     c.fill_rect(Rect::new(sx - 1, sy - 4, 3, 5), Ramp::WoodDark.at(Tone::Base), relief::HEAD.lo);
     c.vline(sx - 1, sy - 4, sy, Ramp::WoodDark.at(Tone::Light), relief::HEAD.lo);
     c.polyline(
@@ -270,17 +310,38 @@ fn pumpkin(c: &mut Canvas, k: &Coat, facing: Facing, (sway, bob, shuffle, lean, 
         1,
         relief::HEAD.lo,
     );
-    if facing == Facing::Up {
+    if !shows_face(facing) {
+        if t < 0 {
+            // From behind and to the right, the carved mouth's glow shows at the edge.
+            let z = relief::BODY.hi + 1;
+            for y in [g.y + 9, g.y + 10] {
+                c.put(g.right() - 2, y, Ramp::Ember.at(Tone::Shade), crate::canvas::FLAT, z);
+            }
+        }
         return;
     }
     // The carved face: two triangles for eyes, a jagged mouth, lit from inside.
     let z = relief::BODY.hi + 1;
-    let fx = g.x + g.w / 2 + if facing == Facing::Side { 3 } else { 0 };
+    let fx = g.x
+        + g.w / 2
+        + match facing {
+            Facing::Side => 3,
+            Facing::DownRight => 2,
+            _ => 0,
+        };
     let ey = g.y + 4;
-    let eyes: &[(i32, i32)] = if facing == Facing::Side { &[(fx + 1, ey)] } else { &[(fx - 4, ey), (fx + 2, ey)] };
+    let eyes: &[(i32, i32)] = match facing {
+        Facing::Side => &[(fx + 1, ey)],
+        Facing::DownRight => &[(fx - 4, ey), (fx + 1, ey)],
+        _ => &[(fx - 4, ey), (fx + 2, ey)],
+    };
     eyes_glow(c, k, eyes, z);
     let my = g.y + 9 + i32::from(open);
-    let (m0, m1) = if facing == Facing::Side { (fx, fx + 4) } else { (fx - 4, fx + 3) };
+    let (m0, m1) = match facing {
+        Facing::Side => (fx, fx + 4),
+        Facing::DownRight => (fx - 4, fx + 2),
+        _ => (fx - 4, fx + 3),
+    };
     for x in m0..=m1 {
         let tooth = (x - m0) % 3 == 1;
         c.put(x, my, Ramp::Ember.at(if tooth { Tone::Base } else { Tone::Shade }), crate::canvas::FLAT, z);

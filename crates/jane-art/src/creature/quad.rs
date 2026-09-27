@@ -247,6 +247,8 @@ pub(crate) fn draw(c: &mut Canvas, k: &Coat, facing: Facing, beat: Beat) {
         (Facing::Side, _) => side(c, k, &a, &p),
         (Facing::Down, _) => front(c, k, &a, &p, true),
         (Facing::Up, _) => front(c, k, &a, &p, false),
+        (Facing::DownRight, _) => three_quarter(c, k, &a, &p, true),
+        (Facing::UpRight, _) => three_quarter(c, k, &a, &p, false),
     }
 }
 
@@ -888,7 +890,16 @@ fn tail_front(c: &mut Canvas, k: &Coat, a: &Anat, body_top: i32, wag: i32, behin
 /// The head facing the viewer: the skull, the muzzle under the eyes, the ears; `tilt` leans it
 /// a px (the idle's second beat).
 fn head_front(c: &mut Canvas, k: &Coat, a: &Anat, b: i32, shut: bool, mouth: bool, tilt: i32) {
+    head_face(c, k, a, b, shut, mouth, tilt, 0, 0);
+}
+
+/// [`head_front`] with the head moved `hx` px and turned `turn` px toward the right (the
+/// three-quarter face): the muzzle comes round twice as far as the eyes and past the skull's
+/// edge, the far eye closes up on the bridge, the blaze and the nose go with the muzzle.
+#[allow(clippy::too_many_arguments)]
+fn head_face(c: &mut Canvas, k: &Coat, a: &Anat, b: i32, shut: bool, mouth: bool, tilt: i32, hx: i32, turn: i32) {
     let (_, _, ax, _) = super::size(k.look.plan);
+    let ax = ax + hx;
     let an = k.look.anatomy;
     let (hw, hh) = (a.head_w, a.head_h);
     let top = a.head_top + b;
@@ -905,27 +916,39 @@ fn head_front(c: &mut Canvas, k: &Coat, a: &Anat, b: i32, shut: bool, mouth: boo
         Anatomy::Rat => (3, 2),
         _ => (4, 2),
     };
-    let mz = Rect::new(ax - mw / 2 + tilt, s.bottom() - mh + 1, mw, mh);
+    // Turned, the muzzle comes round past the cheek and a px lower (nearer).
+    let mt = 2 * turn;
+    let mz = Rect::new(ax - mw / 2 + tilt + mt, s.bottom() - mh + 1 + i32::from(turn > 0), mw, mh);
     m.ellipse(mz, Ix::INK, 1);
+    if turn > 0 {
+        // The bridge of the nose, from the brow down to the muzzle.
+        m.fill_rect(Rect::new(ax + turn - 1 + tilt, s.y + hh / 3, mw / 2 + turn, mz.y - s.y - hh / 3 + 1), Ix::INK, 1);
+    }
     c.inflate(&m, skin, 3, relief::HEAD);
+    // The cheek away from us is in shade: the face turns from the light's side.
+    if turn > 0 {
+        c.shade(Rect::new(s.x, s.y + hh / 2, turn + 1, hh / 2 + 1), skin, 1);
+    }
     // Painted on the face at its rim height, so no detail stands proud enough to take a seam.
     let z = relief::HEAD.lo;
     let ew = a.eye_w;
     // The eyes sit just above the muzzle.
     let ey = (mz.y - ew).min(s.y + hh / 2 - 1);
     let t = tilt;
+    // Turned, both eyes come round, the far one less (it closes up on the bridge).
+    let (et0, et1) = (turn, turn - turn / 2);
     if muzzle_ramp(k) != skin {
         // Tan cheeks, and a tan dot over each eye: the brows that make a dog's face speak.
         c.dye_ellipse(mz, skin, muzzle_ramp(k));
-        c.dot(ax - 4 + t, ey - 1, k.mark.at(Tone::Light), z);
-        c.dot(ax + 3 + t, ey - 1, k.mark.at(Tone::Base), z);
+        c.dot(ax - 4 + t + et0, ey - 1, k.mark.at(Tone::Light), z);
+        c.dot(ax + 3 + t + et1, ey - 1, k.mark.at(Tone::Base), z);
     }
     if k.look.markings.contains(&Marking::Blaze) && an == Anatomy::Dog {
         // The white stripe down the middle of the face from the brow, widening over the muzzle
         // to the nose.
         let mut d = mask(c);
-        d.fill_rect(Rect::new(ax - 1 + t, s.y + 1, 2, mz.y - s.y - 1), Ix::INK, 1);
-        d.fill_rect(Rect::new(ax - 2 + t, mz.y - 1, 4, 3), Ix::INK, 1);
+        d.fill_rect(Rect::new(ax - 1 + t + turn, s.y + 1, 2, mz.y - s.y - 1), Ix::INK, 1);
+        d.fill_rect(Rect::new(ax - 2 + t + mt, mz.y - 1, 4, 3), Ix::INK, 1);
         c.dye(&d, skin, k.belly);
         c.dye(&d, muzzle_ramp(k), k.belly);
     }
@@ -940,7 +963,7 @@ fn head_front(c: &mut Canvas, k: &Coat, a: &Anat, b: i32, shut: bool, mouth: boo
     }
     if k.look.markings.contains(&Marking::Tabby) {
         for x in [ax - 2, ax, ax + 2] {
-            c.tint(x + tilt, s.y + 1, k.body, Tone::Shade);
+            c.tint(x + tilt + turn, s.y + 1, k.body, Tone::Shade);
         }
     }
     // Eyes: set wide in a small face, close in a long one.
@@ -948,27 +971,31 @@ fn head_front(c: &mut Canvas, k: &Coat, a: &Anat, b: i32, shut: bool, mouth: boo
         Anatomy::Dog | Anatomy::Sheep | Anatomy::Rabbit => 3,
         _ => 2,
     };
-    for x in [ax - spread - ew + 1 + tilt, ax + spread - 1 + tilt] {
+    for x in [ax - spread - ew + 1 + tilt + et0, ax + spread - 1 + tilt + et1] {
         eye(c, k, x, ey, ew, shut, z);
         if an == Anatomy::Cat && !shut {
             c.fill_rect(Rect::new(x, ey, 1, 1), Ramp::ClothMustard.at(Tone::Light), z);
         }
     }
     // The nose at the muzzle's top; the mouth under it.
+    let nx = ax + tilt + mt;
     match an {
         Anatomy::Dog | Anatomy::Fox => {
             let ny = mz.y + i32::from(mz.h >= 4);
-            c.fill_rect(Rect::new(ax - 1 + tilt, ny, 2, 2), Ix::INK, z);
-            c.dot(ax - 1 + tilt, ny, Ramp::ClothBlack.at(Tone::Light), z);
+            c.fill_rect(Rect::new(nx - 1 + turn / 2, ny, 2, 2), Ix::INK, z);
+            c.dot(nx - 1 + turn / 2, ny, Ramp::ClothBlack.at(Tone::Light), z);
             if mouth {
-                c.hline(ax - 1 + tilt, ax + tilt, mz.bottom(), Ramp::Skin.at(Tone::Shade), z);
+                c.hline(nx - 1, nx, mz.bottom(), Ramp::Skin.at(Tone::Shade), z);
+            } else if turn > 0 {
+                // Turned, the line of the mouth shows along the muzzle's near side.
+                c.hline(mz.x + 1, nx - 1, mz.bottom() - 1, skin.at(Tone::Deep), z);
             }
         }
         Anatomy::Cat | Anatomy::Rabbit | Anatomy::Rat => {
-            c.dot(ax - 1 + tilt, mz.y, Ramp::Skin.at(Tone::Mid), z);
-            c.dot(ax + tilt, mz.y, Ramp::Skin.at(Tone::Mid), z);
+            c.dot(nx - 1 + turn / 2, mz.y, Ramp::Skin.at(Tone::Mid), z);
+            c.dot(nx + turn / 2, mz.y, Ramp::Skin.at(Tone::Mid), z);
         }
-        Anatomy::Sheep => c.hline(ax - 1, ax, mz.bottom() - 1, skin.at(Tone::Deep), z),
+        Anatomy::Sheep => c.hline(nx - 1, nx, mz.bottom() - 1, skin.at(Tone::Deep), z),
         _ => {}
     }
     ears_front(c, k, s, false, tilt);
@@ -1051,13 +1078,42 @@ fn ears_front(c: &mut Canvas, k: &Coat, s: Rect, behind: bool, tilt: i32) {
 
 /// The head from behind: the back of the skull and the ears.
 fn head_back(c: &mut Canvas, k: &Coat, a: &Anat, b: i32) {
+    head_back_at(c, k, a, b, 0, false);
+}
+
+/// [`head_back`] moved `hx` px; `turned`: seen from behind and to the right, the muzzle's end
+/// shows past the cheek, the nose's tip on it, and the cheek on that side catches the light.
+fn head_back_at(c: &mut Canvas, k: &Coat, a: &Anat, b: i32, hx: i32, turned: bool) {
     let (_, _, ax, _) = super::size(k.look.plan);
-    let s = Rect::new(ax - a.head_w / 2, a.head_top + b, a.head_w, a.head_h - 1);
+    let s = Rect::new(ax + hx - a.head_w / 2, a.head_top + b, a.head_w, a.head_h - 1);
     ears_front(c, k, s, true, 0);
     let mut m = mask(c);
     m.ellipse(s, Ix::INK, 1);
+    let an = k.look.anatomy;
+    let snout = if turned {
+        let (mw, mh) = match an {
+            Anatomy::Dog | Anatomy::Sheep => (5, 4),
+            Anatomy::Fox | Anatomy::Rat => (4, 3),
+            _ => (3, 3),
+        };
+        let r = Rect::new(s.right() - mw + 2, s.y + s.h / 2 - 1, mw, mh);
+        m.ellipse(r, Ix::INK, 1);
+        Some(r)
+    } else {
+        None
+    };
     let skin = if k.look.markings.contains(&Marking::DarkFace) { k.mark } else { k.body };
     c.inflate(&m, skin, 3, relief::HEAD);
+    if let Some(r) = snout {
+        if muzzle_ramp(k) != skin || (k.look.markings.contains(&Marking::Blaze) && an == Anatomy::Dog) {
+            let to =
+                if k.look.markings.contains(&Marking::Blaze) && an == Anatomy::Dog { k.belly } else { muzzle_ramp(k) };
+            c.dye_ellipse(Rect::new(r.x + 1, r.y, r.w, r.h), skin, to);
+        }
+        if matches!(an, Anatomy::Dog | Anatomy::Fox | Anatomy::Rat) {
+            c.dot(r.right() - 1, r.y + 1, Ix::INK, relief::HEAD.lo);
+        }
+    }
     ears_front(c, k, s, false, 0);
 }
 
@@ -1071,6 +1127,324 @@ fn collar_front(c: &mut Canvas, k: &Coat, a: &Anat, b: i32) {
     c.dot(ax - 4, y, ramp.at(Tone::Light), z);
     c.fill_rect(Rect::new(ax - 1, y + 1, 2, 2), Ramp::Brass.at(Tone::Base), z + 1);
     c.dot(ax - 1, y + 1, Ramp::Brass.at(Tone::High), z + 1);
+}
+
+// -------------------------------------------------------------------------------------------
+// Three-quarter: facing down and to the right (toward the viewer) or up and to the right
+
+/// The side rig turned a quarter toward the viewer or away (ART.md §2.2): every x along the
+/// body foreshortened to seven tenths about the middle of the legs, and every point sheared
+/// down the screen (toward: the head and chest nearest, lowest) by half how far forward of that
+/// middle it is, or up it (away: the rump nearest) by a third (a steeper slant read as a beast
+/// rearing); then all of it lifted so the lowest foot stands on the anchor's row.
+#[derive(Clone, Copy, Debug)]
+struct Turn {
+    ax: i32,
+    mid: i32,
+    s: i32,
+    den: i32,
+    yoff: i32,
+}
+
+impl Turn {
+    fn new(a: &Anat, ax: i32, toward: bool, small: bool) -> Turn {
+        let mid = (a.hind + a.fore + a.leg_w) / 2;
+        // A small beast's box is shallow: its slant is gentler.
+        let (s, den) = match (toward, small) {
+            (true, false) => (1, 2),
+            (false, false) => (-1, 3),
+            (true, true) => (1, 3),
+            (false, true) => (-1, 4),
+        };
+        let mut t = Turn { ax, mid, s, den, yoff: 0 };
+        t.yoff = -t.slant(a.fore).max(t.slant(a.hind));
+        t
+    }
+
+    /// How far down the screen `x` along the body stands, rounded half away from zero.
+    fn slant(&self, x: i32) -> i32 {
+        let v = self.s * (x - self.mid);
+        if v >= 0 { (2 * v + self.den) / (2 * self.den) } else { -((self.den - 2 * v) / (2 * self.den)) }
+    }
+
+    fn x(&self, x: i32) -> i32 {
+        let d = (x - self.mid) * 7;
+        self.ax + if d >= 0 { (d + 5) / 10 } else { -((5 - d) / 10) }
+    }
+
+    fn y(&self, x: i32, y: i32) -> i32 {
+        y + self.slant(x) + self.yoff
+    }
+
+    fn pt(&self, (x, y): (i32, i32)) -> (i32, i32) {
+        (self.x(x), self.y(x, y))
+    }
+
+    /// A mass turned: its centre carried, its length foreshortened to `k` tenths (a rump or a
+    /// chest seen at a slant is rounder than in profile).
+    fn mass(&self, r: Rect, k: i32) -> Rect {
+        let (cx, cy) = self.pt((r.x + r.w / 2, r.y + r.h / 2));
+        let w = (r.w * k / 10).max(3);
+        Rect::new(cx - w / 2, cy - r.h / 2, w, r.h)
+    }
+}
+
+/// The leg `i` (near fore, far fore, near hind, far hind) turned: its top on the body, its foot
+/// on its own patch of ground (further up the screen the further back it stands), `off` px over
+/// for the far pair.
+#[allow(clippy::too_many_arguments)]
+fn leg_turned(c: &mut Canvas, k: &Coat, a: &Anat, t: &Turn, p: &Pose, i: usize, ramp: Ramp, off: (i32, i32), ay: i32) {
+    let hind = i >= 2;
+    let far = i % 2 == 1;
+    let x = if hind { a.hind } else { a.fore } - i32::from(far);
+    let top = a.leg_top + p.bob;
+    let (x0, top0) = t.pt((x, top));
+    let reach = t.x(x + p.reach[i]) - t.x(x);
+    // Each foot on its own patch of ground, read at its hip: a stride moves it along, not off it.
+    let ground = t.y(x, ay) + off.1;
+    let w = if hind && k.look.anatomy == Anatomy::Rabbit && !far { a.leg_w + 1 } else { a.leg_w };
+    let z = if far { relief::FAR } else { relief::LEG };
+    // The leg keeps its length: it stands from its top to its own ground.
+    let top0 = top0 + off.1;
+    leg_side(c, ramp, x0 + off.0, top0, w, reach, p.lift[i], hind, ground, z);
+    let (fx, fy) = (x0 + off.0 + reach, ground - p.lift[i]);
+    if hind && k.look.anatomy == Anatomy::Rabbit && !far {
+        c.rect_round(Rect::new(fx - 1, fy - 1, 4, 2), k.body, 1, 1, relief::LEG);
+    }
+    if k.look.markings.contains(&Marking::TanPoints) {
+        c.dye_poly(&[(fx - 1, fy - 2), (fx + w + 1, fy - 2), (fx + w + 1, fy + 1), (fx - 1, fy + 1)], ramp, k.mark);
+    }
+    if far {
+        c.shade(Rect::new(fx - 2, top0 - 1, w + 5, fy - top0 + 3), ramp, 1);
+    }
+}
+
+/// A beast turned toward the viewer (`toward`: down and to the right) or away (up and to the
+/// right): the side rig foreshortened and sheared ([`Turn`]), the far legs over and up from the
+/// near ones and in the body's shade, a three-quarter face ([`head_face`]) or the back of the
+/// head with the muzzle's end showing past the cheek ([`head_back_at`]). West is this mirrored.
+fn three_quarter(c: &mut Canvas, k: &Coat, a: &Anat, p: &Pose, toward: bool) {
+    let (_, _, ax, ay) = super::size(k.look.plan);
+    let an = k.look.anatomy;
+    let mid_plan = k.look.plan == Plan::QuadrupedMid;
+    let mut t = Turn::new(a, ax, toward, !mid_plan);
+    let reachk = if mid_plan { 2 } else { 1 };
+    // The lowest foot this beat stands on the anchor's row: when the nearest foot is lifted,
+    // the body comes down a little onto the others.
+    let planted = (0..4)
+        .map(|i| {
+            let x = if i >= 2 { a.hind } else { a.fore } - i32::from(i % 2 == 1);
+            t.y(x, ay) - if i % 2 == 1 { reachk } else { 0 } - p.lift[i]
+        })
+        .max();
+    if let Some(g) = planted {
+        t.yoff += ay - g;
+    }
+    // The far pair stands over and up the screen from the near: the far side is to the
+    // north-east facing south-east, to the north-west facing north-east.
+    let off = if toward { (reachk, -reachk) } else { (-reachk, -reachk) };
+    let legs = if an == Anatomy::Sheep { k.mark } else { k.body };
+    let leg_ramp = |i: usize| -> Ramp {
+        if k.look.markings.contains(&Marking::Socks) {
+            k.mark
+        } else if i >= 2 && an == Anatomy::Rabbit {
+            k.body
+        } else {
+            legs
+        }
+    };
+    let b = p.bob;
+    let lift = i32::from(p.breathe);
+    let rump = t.mass(Rect::new(a.rump.x, a.rump.y + b, a.rump.w, a.rump.h), 8);
+    let chest = t.mass(Rect::new(a.chest.x, a.chest.y + b - lift, a.chest.w, a.chest.h + lift), 8);
+    // The head: the skull's middle carried, the front view's head box on it; away, kept on the
+    // canvas (it peeks past the shoulder, carried a little low).
+    let (scx, scy) = t.pt((a.skull.x + a.skull.w / 2, a.skull.y + a.skull.h / 2 + b));
+    // Turned toward us the head is the front view's a size down (the front view's head sits
+    // on a body seen end on; here the body shows its length too), carried up on the neck.
+    let (hw, hh) = match (toward, mid_plan) {
+        (true, true) => (a.head_w - 2, a.head_h - 1),
+        _ => (a.head_w - 1, a.head_h),
+    };
+    // Whatever stands on the head (a pricked ear, a rabbit's) stays on the canvas.
+    let ears_up = match k.look.ears {
+        Ears::Tall => 9,
+        Ears::Prick | Ears::FlopOne => 4,
+        Ears::Round => 3,
+        _ => 1,
+    };
+    // A small beast's head sits forward and low of its little body, so the body shows behind.
+    let small_fwd = i32::from(!mid_plan && toward);
+    let head_top = if toward { scy - hh / 2 - 1 + small_fwd } else { scy - hh / 2 + 2 }.max(ears_up);
+    let hx = scx - ax + if toward { small_fwd } else { 1 };
+    let fa = Anat { head_top, head_w: hw, ..*a };
+    if toward {
+        // The tail behind, off the rump up the screen.
+        let (tx, ty) = t.pt((a.tail.0, a.tail.1 + b));
+        tail_side(c, k, (tx, ty), p.wag);
+    } else {
+        // Away: the head beyond the shoulders, the neck and back to come over its lower half.
+        head_back_at(c, k, &fa, p.head.1, hx, true);
+    }
+    // The far legs.
+    for i in [3, 1] {
+        leg_turned(c, k, a, &t, p, i, leg_ramp(i), off, ay);
+    }
+    // The body: the rump and the chest joined at a slant, the neck up to the head.
+    if an == Anatomy::Sheep {
+        fleece_turned(c, k, rump, chest);
+    } else {
+        let mut m = mask(c);
+        m.ellipse(rump, Ix::INK, 1);
+        m.ellipse(chest, Ix::INK, 1);
+        let (r0, c0) = ((rump.x + rump.w / 2, rump.y + 1), (chest.x + chest.w / 2, chest.y + 1));
+        let (r1, c1) = ((rump.x + rump.w / 2, rump.bottom() - 2), (chest.x + chest.w / 2, chest.bottom() - 2));
+        m.polyline_fill(&[r0, c0, c1, r1], Ix::INK, 1);
+        // The neck from the chest's top up under the head.
+        let hs = Rect::new(ax + hx - hw / 2, head_top + p.head.1, hw, hh);
+        let neck = [
+            (chest.x + 1, chest.y + 2),
+            (hs.x + 2, hs.y + hh / 2),
+            (hs.right() - 3, hs.y + hh / 2),
+            (chest.right() - 1, chest.y + chest.h / 2),
+        ];
+        m.polyline_fill(&neck, Ix::INK, 1);
+        if an == Anatomy::Dog && toward {
+            // Her ruff: full at the throat under the chin, in tufts at its edge.
+            m.ellipse(Rect::new(chest.x, chest.y - 3, chest.w + 2, chest.h + 1), Ix::INK, 1);
+            for (tx, ty) in [(chest.x - 1, chest.y + 2), (chest.right() + 1, chest.y + 1), (chest.right(), chest.y + 4)]
+            {
+                m.fill_rect(Rect::new(tx, ty, 1, 2), Ix::INK, 1);
+            }
+        }
+        if an == Anatomy::Dog {
+            // The feathering along the belly, a tuft a few px.
+            let (bx0, by0) = t.pt((a.rump.x + 4, a.belly + b));
+            let (bx1, by1) = t.pt((a.chest.x + 3, a.belly + b));
+            let n = ((bx1 - bx0) / 3).max(1);
+            for j in 0..n {
+                let (fx, fy) = (bx0 + j * 3, by0 + (by1 - by0) * j / n);
+                m.fill_rect(Rect::new(fx, fy, 2, 1), Ix::INK, 1);
+            }
+        }
+        let radius = if mid_plan { 4 } else { 3 };
+        c.inflate(&m, k.body, radius, relief::BODY);
+        let hs = Rect::new(ax + hx - hw / 2, head_top + p.head.1, hw, hh);
+        pelt_turned(c, k, a, &t, p, rump, chest, hs, toward);
+    }
+    // The near legs.
+    for i in [2, 0] {
+        leg_turned(c, k, a, &t, p, i, leg_ramp(i), (0, 0), ay);
+    }
+    if toward {
+        head_face(c, k, &fa, p.head.1, p.shut, p.mouth, 0, hx, if mid_plan { 2 } else { 1 });
+        if let Some(ramp) = k.collar {
+            // The collar under her chin, the tag at its lowest, on the near side of the throat.
+            let s = Rect::new(ax + hx - hw / 2, head_top + p.head.1, hw, hh);
+            let (y, x0, x1) = (s.bottom(), s.x + 3, s.right() - 2);
+            let z = relief::HEAD.lo;
+            c.hline(x0, x1, y, ramp.at(Tone::Base), z);
+            c.hline(x0 + 1, x1 - 1, y + 1, ramp.at(Tone::Shade), z);
+            c.dot(x0, y, ramp.at(Tone::Light), z);
+            let tx = (x0 + x1) / 2;
+            c.fill_rect(Rect::new(tx, y + 1, 2, 2), Ramp::Brass.at(Tone::Base), z + 1);
+            c.dot(tx, y + 1, Ramp::Brass.at(Tone::High), z + 1);
+        }
+    } else {
+        // The tail over the rump, nearest to us.
+        let (tx, ty) = t.pt((a.tail.0 + 1, a.tail.1 + b));
+        tail_side(c, k, (tx, ty), p.wag);
+        if let Some(ramp) = k.collar {
+            // The collar round the back of the neck where it meets the head.
+            let s = Rect::new(ax + hx - hw / 2, head_top + p.head.1, hw, hh);
+            let y = s.bottom() - 2;
+            c.hline(s.x + 2, s.right() - 3, y, ramp.at(Tone::Base), relief::HEAD.hi);
+            c.dot(s.x + 2, y, ramp.at(Tone::Light), relief::HEAD.hi);
+        }
+    }
+}
+
+/// A turned body's painted clusters: the bib or the belly's colour, a tabby's stripes, the
+/// flank's tufts.
+#[allow(clippy::too_many_arguments)]
+fn pelt_turned(
+    c: &mut Canvas,
+    k: &Coat,
+    a: &Anat,
+    t: &Turn,
+    p: &Pose,
+    rump: Rect,
+    chest: Rect,
+    head: Rect,
+    toward: bool,
+) {
+    let b = p.bob;
+    if k.belly != k.body {
+        if k.look.markings.contains(&Marking::Blaze) {
+            if toward {
+                // The white shirt-front from the throat down the chest, under her chin, toward
+                // us.
+                let (x, y) = (head.x + head.w / 2 - 2, head.bottom() - 3);
+                c.dye_ellipse(Rect::new(x, y, 7, (chest.bottom() - y).max(4)), k.body, k.belly);
+            } else {
+                // From behind only the edge of it shows, along the chest's near side.
+                c.dye_ellipse(Rect::new(chest.right() - 3, chest.y + 2, 4, chest.h - 2), k.body, k.belly);
+            }
+        } else {
+            let pts = [
+                t.pt((a.rump.x + 3, a.belly - 1 + b)),
+                t.pt((a.chest.right() - 1, a.chest.bottom() - 3 + b)),
+                t.pt((a.chest.right(), a.chest.bottom() + b)),
+                t.pt((a.rump.x + 3, a.belly + 1 + b)),
+            ];
+            c.dye_poly(&pts, k.body, k.belly);
+            if toward {
+                // The throat and chest's pale front, toward us under the chin.
+                c.dye_ellipse(Rect::new(chest.x + chest.w / 2, chest.y, chest.w / 2 + 1, chest.h - 1), k.body, k.belly);
+            }
+        }
+    }
+    if k.look.markings.contains(&Marking::Tabby) {
+        // Stripes over the back, each a two-px band.
+        for i in 0..3 {
+            let x = rump.x + 1 + i * 2;
+            let y = rump.y + 1 + if toward { 0 } else { i };
+            for d in 0..3 {
+                c.tint(x, y + d, k.body, Tone::Shade);
+                c.tint(x + 1, y + d + 1, k.body, Tone::Shade);
+            }
+        }
+    }
+    if k.look.plan == Plan::QuadrupedMid {
+        let r = Rect::new(rump.x + 1, rump.bottom() - 4, (chest.x - rump.x).max(4), 3);
+        c.strokes(r, k.body, StrokeKind::Fur, 5, h32(k.seed, 2, salt::STROKES));
+    }
+}
+
+/// A sheep's fleece turned: four balls of wool from the rump to the chest along the slant and a
+/// fifth over the middle, each with its curls.
+fn fleece_turned(c: &mut Canvas, k: &Coat, rump: Rect, chest: Rect) {
+    let (r0, c0) = ((rump.x + rump.w / 2, rump.y + rump.h / 2), (chest.x + chest.w / 2, chest.y + chest.h / 2));
+    let (bw, bh) = (rump.w * 3 / 4 + 1, rump.h * 3 / 4 + 1);
+    let mut m = mask(c);
+    let mut balls = Vec::with_capacity(5);
+    for i in 0..4 {
+        let (x, y) = (r0.0 + (c0.0 - r0.0) * i / 3, r0.1 + (c0.1 - r0.1) * i / 3);
+        balls.push(Rect::new(x - bw / 2, y - bh / 2 + i32::from(i % 2 == 1), bw, bh));
+    }
+    balls.push(Rect::new((r0.0 + c0.0) / 2 - bw / 2, (r0.1 + c0.1) / 2 - bh / 2 - 2, bw + 1, bh - 1));
+    for b in &balls {
+        m.ellipse(*b, Ix::INK, 1);
+    }
+    c.inflate(&m, k.body, 3, relief::BODY);
+    for (i, b) in balls.iter().enumerate() {
+        let h = h32(k.seed, 20 + i as u32, salt::STROKES);
+        let (cx, cy) = (b.x + b.w / 2 - 1 + (h & 1) as i32, b.y + 1 + (h >> 1 & 1) as i32);
+        c.tint(cx, cy, k.body, Tone::High);
+        c.tint(cx + 1, cy, k.body, Tone::Light);
+        c.tint(cx, cy + 1, k.body, Tone::Light);
+        c.tint(cx + 1, cy + 2, k.body, Tone::Mid);
+    }
 }
 
 // -------------------------------------------------------------------------------------------

@@ -53,6 +53,118 @@ pub(crate) fn draw(c: &mut Canvas, k: &Coat, facing: Facing, beat: Beat) {
     match facing {
         Facing::Side => side(c, k, ax, ay, phase, lift, open, flare, lunge),
         Facing::Down | Facing::Up => top(c, k, ax, ay, facing == Facing::Down, phase, lift, open, flare, lunge),
+        Facing::DownRight | Facing::UpRight => {
+            turned(c, k, ax, ay, facing == Facing::DownRight, phase, lift, open, flare, lunge);
+        }
+    }
+}
+
+/// Turned an eighth (the diagonals): the head down and to the right (`toward`) or up and to the
+/// right, the body running back the other way in its S (the wave across the line of it), the
+/// near legs splayed toward us and the far ones over the back in shade, the gills streaming.
+/// Toward, the face: both eyes, the far one closer to the snout, the mouth's line along it.
+/// Away, the back of the head and the eye on its right.
+#[allow(clippy::too_many_arguments)]
+fn turned(
+    c: &mut Canvas,
+    k: &Coat,
+    ax: i32,
+    ay: i32,
+    toward: bool,
+    phase: i32,
+    lift: i32,
+    open: bool,
+    flare: bool,
+    lunge: i32,
+) {
+    // The line of the body from the head: back up (toward) or down (away) the screen and to the
+    // left; across it (the wave) is (1, 1) facing down and (1, -1) facing up.
+    let back = if toward { (-2, -2) } else { (-2, 2) };
+    let across = if toward { (1, -1) } else { (1, 1) };
+    let (hx, hy) = if toward { (ax + 9 + lunge, ay - 4 - lift) } else { (ax + 8 + lunge, ay - 19 - lift) };
+    let pts: Vec<(i32, i32, i32)> = (0..9)
+        .map(|i| {
+            let w = wave(i, phase);
+            let x = hx + back.0 * i + across.0 * w;
+            // Away, the tail is nearest and lowest: the body rides so its tip keeps the ground.
+            let ride = if toward { 0 } else { across.1 * wave(8, phase) };
+            let y = hy + back.1 * i + across.1 * w - ride + if i < 2 && !toward { lift } else { 0 };
+            (x, y, [3, 3, 3, 3, 3, 2, 2, 1, 1][i as usize])
+        })
+        .collect();
+    // The far legs, over the back and in its shade.
+    let far = if toward { (1, -1) } else { (-1, -1) };
+    let near = (-far.0, -far.1);
+    for (li, i) in [(0, 1), (1, 5)] {
+        let (x, y, g) = pts[i as usize];
+        let reach = if (phase + li) % 2 == 0 { 2 } else { -1 };
+        let foot = (x + far.0 * (g + 4) + reach, (y + far.1 * (g + 2) + reach * back.1.signum() / 2).min(ay - 1));
+        leg(c, k, (x + far.0 * g, y + far.1), foot, true);
+    }
+    let mut m = Canvas::new(c.w(), c.h());
+    for w in pts.windows(2) {
+        m.line((w[0].0, w[0].1), (w[1].0, w[1].1), Ix::INK, 2 * w[0].2, 1);
+    }
+    // The tail's fin along the last of it.
+    let (tx, ty, _) = pts[8];
+    let (fx, fy, _) = pts[6];
+    m.polyline_fill(
+        &[(fx, fy - 2), (tx + back.0, ty + back.1 - 1), (tx + back.0, ty + back.1 + 1), (fx, fy + 2)],
+        Ix::INK,
+        1,
+    );
+    // The head: flat and wide, turned with the body.
+    m.ellipse(Rect::new(hx - 4, hy - 3, 9, 6), Ix::INK, 1);
+    c.inflate(&m, k.body, 2, relief::BODY);
+    let r = k.body;
+    let zb = relief::BODY.hi;
+    // The ridge of the back lit, a mottle now and then.
+    for (i, &(x, y, g)) in pts.iter().enumerate().skip(1).take(7) {
+        c.fill_rect(Rect::new(x - 1, y - 1, 2, 1), r.at(Tone::Light), zb);
+        if g >= 2 {
+            c.dot(x + 1, y + 1, r.at(Tone::Mid), zb);
+        }
+        if i % 3 == 1 {
+            c.fill_rect(Rect::new(x - 2, y, 2, 2), r.at(Tone::Mid), zb);
+        }
+    }
+    if toward && k.belly != k.body {
+        // The paler flank toward us along the underside.
+        for w in pts.windows(2).take(6) {
+            c.dye_poly(
+                &[
+                    (w[0].0 - 1, w[0].1 + 1),
+                    (w[1].0 - 1, w[1].1 + 1),
+                    (w[1].0 - 2, w[1].1 + w[1].2),
+                    (w[0].0 - 2, w[0].1 + w[0].2),
+                ],
+                k.body,
+                k.belly,
+            );
+        }
+    }
+    // The near legs, splayed toward us.
+    for (li, i) in [(1, 1), (0, 5)] {
+        let (x, y, g) = pts[i as usize];
+        let reach = if (phase + li) % 2 == 0 { 2 } else { -1 };
+        let foot = (x + near.0 * (g + 3) + reach, (y + near.1 * (g + 3)).min(ay - 1));
+        leg(c, k, (x + near.0 * (g - 1), y + near.1 * (g - 1)), foot, false);
+    }
+    let z = relief::HEAD.hi;
+    let gdir = if toward { (-1, -1) } else { (-1, 1) };
+    gills(c, k, hx - 4, hy - 1, gdir, flare, z);
+    gills(c, k, hx + 2, hy - 3, (gdir.0, -1), flare, z);
+    if toward {
+        eye(c, k, hx - 2, hy - 1, z);
+        eye(c, k, hx + 3, hy - 2, z);
+        if open {
+            c.polyline_fill(&[(hx - 2, hy + 1), (hx + 4, hy), (hx + 3, hy + 3)], Ramp::ClothRose.at(Tone::Base), z);
+            c.hline(hx - 1, hx + 3, hy + 1, Ramp::Bone.at(Tone::Light), z);
+        } else {
+            c.line((hx - 3, hy + 1), (hx + 4, hy), k.body.at(Tone::Deep), 1, z);
+        }
+    } else {
+        eye(c, k, hx + 4, hy - 1, z);
     }
 }
 
