@@ -393,7 +393,7 @@ P6 enters beside P5, not after it. On 2026-09-27 P5 stands at `ART.md` §8 step 
 | 1 | `jane-present`: `Frame` and `Pass`, the camera with tick interpolation, the counting-sort draw list, `tick()` and `draw(alpha)`, fed by `View` | headless tests |
 | 2 | `jane-render-soft`: framebuffer, CLUT blit, chunks as flat swatches, nearest upscale, `read_back`; `jane sheet scene` | a PNG of a real frame |
 | 3 | `jane-app`: SDL2 window, the fixed 60-tick loop, keyboard to `InputFrame`, the `soft` backend | the owner walks the county |
-| 4 | The P7 slice: keyboard move, use and bar slots; the prompt, the vitals, the dialogue box; the rest of P7 stays P7 | quests are played |
+| 4 | The P7 slice: keyboard move, use and bar slots; the prompt, the vitals, the dialogue box. **Done 2026-09-27, and most of the rest of P7 with it** (`PRESENTATION.md` §3 as built: title, loading, HUD, window, menus, terminal, Controls, F2 and F3; P7's gate, the owner playing with a pad and a mouse, is still to come) | quests are played |
 | 5 | The T0 lightmap and the chunk painter | night is night |
 | beside 1 to 5 | `ART.md` §8 steps 2 and 3 (person, terrain), then on in order | the placeholders go |
 | 6 | The art-director pass over whole frames (town at dusk, a field edge, the lakeshore, a wood): palette, outline and shading tuned across every family at once (`ART.md` §3.1) | frames that hold up beside the references |

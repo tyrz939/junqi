@@ -287,6 +287,11 @@ pub struct Frame {
     pub lights: Vec<Light>,
     /// Things that throw shadows (`Pass::Lights::casters`, `Pass::Silhouettes::casters`).
     pub casters: Vec<Caster>,
+    /// The `Ui` pass (PRESENTATION.md §3.1): drawn after every pass above, unlit, in order.
+    /// Filled by `ui::Ui::finish`; the contract is `ui::cmd`'s module doc.
+    pub ui: Vec<crate::ui::UiCmd>,
+    /// The UI's run-time pictures by slot (`UiCmd::Image`); they persist across frames.
+    pub ui_images: Vec<crate::ui::UiImage>,
 }
 
 impl Frame {
@@ -303,6 +308,8 @@ impl Frame {
             layers: Vec::new(),
             lights: Vec::with_capacity(256),
             casters: Vec::with_capacity(1024),
+            ui: Vec::with_capacity(4096),
+            ui_images: Vec::new(),
         }
     }
 
