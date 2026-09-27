@@ -1,8 +1,10 @@
 #!/bin/sh
 # The art director's whole-frame review set (PORT.md §7.1 step 6, ART.md §3.1): every family in
 # one frame, at the hours and places the look is judged by. `tools/art-review.sh [dir] [backend]`
-# renders the set on one backend (wgpu by default, T2, the owner's desk); `soft` renders the few
-# the T0 floor is checked on. Re-run it before and after a pass and compare the two directories.
+# renders the set on one backend (wgpu by default, T2, the owner's desk, the reference look);
+# `all` renders it on soft, gl2 and wgpu into dir/soft, dir/gl2 and dir/wgpu, so the three tiers
+# can be laid side by side (`tools/ad-contact.py OUT T0=dir/soft T1=dir/gl2 T2=dir/wgpu`).
+# Re-run it before and after a pass and compare the directories.
 set -e
 out=${1:-sheets/art-review}
 be=${2:-wgpu}
@@ -15,11 +17,8 @@ shot() {
   $jane sheet scene --backend "$be" "$@" --out "$out/$name.png" > /dev/null
   echo "$out/$name.png"
 }
-if [ "$be" = soft ]; then
-  shot town-1840 --ticks 300 --at town_square --hour 18:40
-  shot town-2200 --ticks 300 --at town_square --hour 22
-  shot lake-dusk --ticks 300 --at reed_camp_gate --hour 18:40
-  shot mine --ticks 300 --at mine:entry
+if [ "$be" = all ]; then
+  for b in soft gl2 wgpu; do "$0" "$out/$b" "$b"; done
   exit 0
 fi
 shot town-1700 --ticks 300 --at town_square --hour 17

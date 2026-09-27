@@ -18,24 +18,30 @@ const HOUR: i32 = 7200;
 /// The least light a zone indoors has, of 255.
 const INDOOR_FLOOR: i32 = 70;
 
-const NIGHT: [i32; 3] = [48, 68, 118];
-const DAWN: [i32; 3] = [230, 190, 190];
-const DAY: [i32; 3] = [255, 255, 255];
-const SUNSET: [i32; 3] = [255, 200, 140];
-// Dusk is blue with the gold gone out of it, never mauve: an orange sunset mixed toward a violet
-// dusk passes through rose on the way (the art-director pass, 2026-09-27).
-const DUSK: [i32; 3] = [122, 122, 176];
+const NIGHT: [i32; 3] = [80, 104, 140];
 
-/// `(tick of the day, colour)`: linear between them (the TS build's keys, so 17:00 when she
-/// steps off the train lands in the sunset).
-const KEYS: [(i32, [i32; 3]); 9] = [
+/// `(tick of the day, colour)`: the flat light by the clock, linear between keys, 255 the art as
+/// drawn and more past it. T2 is the reference look (decided 2026-09-27: the tiers are one game
+/// at a glance), and these are what T2's fill and sun give flat ground on average, measured off
+/// the review set with the grade off (`tools/art-review.sh`: the yard and the square, T0's
+/// median against T2's per channel), the day's kept warm rather than the measured mauve (a flat
+/// light has no blue shade beside a gold lit side to read against). T0 multiplies by them (past
+/// 255 through its grade's exposure, `t0_gain`); T1 scales its fill and sun to their luma.
+const KEYS: [(i32, [i32; 3]); 14] = [
     (0, NIGHT),
-    (HOUR * 9 / 2, NIGHT),
-    (HOUR * 6, DAWN),
-    (HOUR * 15 / 2, DAY),
-    (HOUR * 33 / 2, DAY),
-    (HOUR * 18, SUNSET),
-    (HOUR * 39 / 2, DUSK),
+    (HOUR * 9 / 2, [76, 98, 136]),
+    (HOUR * 6, [214, 168, 200]),
+    (HOUR * 15 / 2, [268, 248, 240]),
+    // Noon is white, so a T0 frame at midday needs no light pass (day is free) and only its
+    // exposure: T2's noon is about an eighth brighter than the art as drawn.
+    (HOUR * 12, [292, 292, 292]),
+    (HOUR * 33 / 2, [270, 240, 222]),
+    (HOUR * 17, [256, 222, 200]),
+    (HOUR * 35 / 2, [240, 204, 180]),
+    (HOUR * 18, [184, 160, 170]),
+    (HOUR * 37 / 2, [163, 140, 160]),
+    (HOUR * 75 / 4, [150, 132, 160]),
+    (HOUR * 39 / 2, [104, 108, 155]),
     (HOUR * 21, NIGHT),
     (HOUR * 24, NIGHT),
 ];
@@ -91,6 +97,8 @@ pub struct Sky {
     pub shade: Rgb,
     /// The grade of the region at this hour.
     pub post: Post,
+    /// T0's light past `ambient`, Q8 (256 none): its grade's exposure takes it ([`t0_gain`]).
+    pub t0_gain: u16,
 }
 
 /// The ambient per channel (255 is full light) at `clock` ticks since midnight; indoors, the
@@ -102,20 +110,38 @@ pub fn ambient(clock: u32, indoor: bool, permille: i16) -> [u8; 3] {
         let v = INDOOR_FLOOR + i32::from(permille.clamp(0, 1000)) * (255 - INDOOR_FLOOR) / 1000;
         return [(v - v / 10) as u8, (v - v / 20) as u8, v as u8];
     }
-    keyed(&KEYS, clock)
+    // Past 255 the light's hue stays here and its surplus is T0's exposure (`t0_gain`).
+    let c = keyed_wide(&KEYS, clock);
+    let top = c.iter().copied().max().unwrap_or(0).max(255);
+    c.map(|v| (v * 255 / top).clamp(0, 255) as u8)
+}
+
+/// How much brighter than [`ambient`] T0's flat light is, Q8 (256 is none): the keys past 255
+/// (T2's noon is brighter than the art as drawn), which T0's grade takes as exposure.
+pub fn t0_gain(clock: u32, indoor: bool) -> u32 {
+    if indoor {
+        return 256;
+    }
+    let top = keyed_wide(&KEYS, clock).iter().copied().max().unwrap_or(0).max(255);
+    (top * 256 / 255) as u32
+}
+
+/// A keyframe table at `clock`, linear between keys, clamped to a byte.
+fn keyed(keys: &[(i32, [i32; 3])], clock: u32) -> [u8; 3] {
+    keyed_wide(keys, clock).map(|c| c.clamp(0, 255) as u8)
 }
 
 /// A keyframe table at `clock`, linear between keys.
-fn keyed(keys: &[(i32, [i32; 3])], clock: u32) -> [u8; 3] {
+fn keyed_wide(keys: &[(i32, [i32; 3])], clock: u32) -> [i32; 3] {
     let t = (clock % (24 * HOUR as u32)) as i32;
     for w in keys.windows(2) {
         let ((t0, c0), (t1, c1)) = (w[0], w[1]);
         if t >= t0 && t <= t1 {
             let span = (t1 - t0).max(1);
-            return [0, 1, 2].map(|k| (c0[k] + (c1[k] - c0[k]) * (t - t0) / span).clamp(0, 255) as u8);
+            return [0, 1, 2].map(|k| c0[k] + (c1[k] - c0[k]) * (t - t0) / span);
         }
     }
-    keys[0].1.map(|c| c.clamp(0, 255) as u8)
+    keys[0].1
 }
 
 /// Whole degrees as an [`Angle`] (a turn is 65536).
@@ -165,7 +191,7 @@ pub fn sky(clock: u32, day: u32, indoor: bool, permille: i16, region: Region) ->
         // Indoors the zone's light fills the room; the lamps and the fire do the rest.
         let fill = [r / 2 + r / 8, g / 2 + g / 8, b / 2 + b / 4];
         let post = Post { tint: [255, 250, 240], lift: [6, 8, 18], saturation: 136, bloom: 150, exposure: 136 };
-        return Sky { ambient: flat, fill, sun: None, shade: [150, 150, 190], post };
+        return Sky { ambient: flat, fill, sun: None, shade: [150, 150, 190], post, t0_gain: 256 };
     }
     let t = (clock % (24 * HOUR as u32)) as i32;
     let fill = keyed(&FILL_KEYS, clock);
@@ -202,7 +228,7 @@ pub fn sky(clock: u32, day: u32, indoor: bool, permille: i16, region: Region) ->
         None
     };
     let shade = shade(fill, sun.map_or([0; 3], |s| s.colour));
-    Sky { ambient: flat, fill, sun, shade, post: grade(region, t) }
+    Sky { ambient: flat, fill, sun, shade, post: grade(region, t), t0_gain: t0_gain(clock, false) as u16 }
 }
 
 /// A silhouette's multiplier: the fill's share of fill and sun, eased toward none so a shadow
@@ -277,12 +303,14 @@ mod tests {
     #[test]
     fn noon_is_full_and_midnight_is_dark_and_blue() {
         assert_eq!(ambient(12 * 7200, false, 1000), [255; 3]);
+        // T2's noon is brighter than the art as drawn: T0 takes the rest as exposure.
+        assert!(t0_gain(12 * 7200, false) > 280 && t0_gain(0, false) == 256);
         let n = ambient(0, false, 1000);
         assert!(n[2] > n[0] && n[0] < 100, "{n:?}");
         assert_eq!(ambient(23 * 7200, false, 1000), n);
         // 17:00 is on the way to sunset; 20:00 is on the way to night.
         let five = ambient(17 * 7200, false, 1000);
-        assert!(five[0] == 255 && five[2] < 255, "{five:?}");
+        assert!(five[0] == 255 && five[2] < 230, "{five:?}");
         assert!(ambient(20 * 7200, false, 1000)[0] < five[0]);
     }
 

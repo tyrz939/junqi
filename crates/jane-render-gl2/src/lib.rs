@@ -143,6 +143,7 @@ impl Progs {
                     "u_sky",
                     "u_tint",
                     "u_lift",
+                    "u_grade",
                     "u_egain",
                     "u_info",
                     "u_weather",
@@ -163,7 +164,7 @@ impl Progs {
                 sh::SHAPE_VS,
                 &graded(sh::SHAPE_FS),
                 &sh::SHAPE_ATTRS,
-                &["u_canvas", "u_light", "u_lit", "u_tint", "u_lift"],
+                &["u_canvas", "u_light", "u_lit", "u_tint", "u_lift", "u_grade"],
             )?,
             fog: Prog::new(
                 gl,
@@ -183,6 +184,7 @@ impl Progs {
                     "u_base",
                     "u_tint",
                     "u_lift",
+                    "u_grade",
                 ],
             )?,
             ui: Prog::new(
@@ -954,11 +956,16 @@ impl Gl2 {
         }
     }
 
-    /// The frame's T1 grade: its tint and lift (none without a `Post` pass).
-    fn grade(&self) -> ([f32; 3], [f32; 3]) {
+    /// The frame's T1 grade: its tint, its lift, and its exposure and saturation (none without a
+    /// `Post` pass), as T2 reads them.
+    fn grade(&self) -> ([f32; 3], [f32; 3], [f32; 2]) {
         match self.prep.post {
-            Some(post) => (post.tint.map(|v| f32::from(v) / 255.0), post.lift.map(|v| f32::from(v) / 255.0)),
-            None => ([1.0; 3], [0.0; 3]),
+            Some(post) => (
+                post.tint.map(|v| f32::from(v) / 255.0),
+                post.lift.map(|v| f32::from(v) / 255.0),
+                [f32::from(post.exposure) / 128.0, f32::from(post.saturation) / 128.0],
+            ),
+            None => ([1.0; 3], [0.0; 3], [1.0; 2]),
         }
     }
 
@@ -995,6 +1002,7 @@ impl Gl2 {
             self.gl.set_f(p.u("u_lit"), &[0.0]);
             self.gl.set_f(p.u("u_tint"), &[1.0; 3]);
             self.gl.set_f(p.u("u_lift"), &[0.0; 3]);
+            self.gl.set_f(p.u("u_grade"), &[1.0; 2]);
             self.gl.point(self.bufs.shape, &sh::SHAPE_SIZES, self.prep.shape_v.len() / 12);
             self.gl.blend(Blend::Over);
             self.gl.draw_quads(quads.start, quads.len());
@@ -1038,9 +1046,10 @@ impl Gl2 {
             self.gl.set_i(p.u(name), unit as i32);
         }
         self.gl.set_f(p.u("u_size"), &[c.0 as f32, c.1 as f32]);
-        let (tint, lift) = self.grade();
+        let (tint, lift, terms) = self.grade();
         self.gl.set_f(p.u("u_tint"), &tint);
         self.gl.set_f(p.u("u_lift"), &lift);
+        self.gl.set_f(p.u("u_grade"), &terms);
         self.gl.set_f(p.u("u_egain"), &[EMISSIVE_GAIN]);
         let (top, sky) = self.prep.backdrop.map_or((0.0, 0.0), |s| (s.zone.1 as f32, 1.0));
         let reflect = if self.rows.reflect { 1.0 } else { 0.0 };
@@ -1063,7 +1072,7 @@ impl Gl2 {
         }
         let c = t.canvas;
         self.gl.target(Some(t.out.fbo), c.0, c.1);
-        let (tint, lift) = self.grade();
+        let (tint, lift, terms) = self.grade();
         let steps = std::mem::take(&mut self.prep.after);
         for step in &steps {
             match step {
@@ -1076,6 +1085,7 @@ impl Gl2 {
                     self.gl.set_f(p.u("u_lit"), &[if *lit { 1.0 } else { 0.0 }]);
                     self.gl.set_f(p.u("u_tint"), &tint);
                     self.gl.set_f(p.u("u_lift"), &lift);
+                    self.gl.set_f(p.u("u_grade"), &terms);
                     self.gl.point(self.bufs.shape, &sh::SHAPE_SIZES, self.prep.shape_v.len() / 12);
                     self.gl.blend(Blend::Over);
                     self.gl.draw_quads(quads.start, quads.len());
@@ -1102,6 +1112,7 @@ impl Gl2 {
                     self.gl.set_f(p.u("u_base"), &self.prep.ambient.map(|v| f32::from(v) / 255.0));
                     self.gl.set_f(p.u("u_tint"), &tint);
                     self.gl.set_f(p.u("u_lift"), &lift);
+                    self.gl.set_f(p.u("u_grade"), &terms);
                     self.gl.blend(Blend::Over);
                     self.rect(0.0, 0.0, c.0 as f32, c.1 as f32);
                 }

@@ -403,16 +403,24 @@ void main() {
 }
 ";
 
-/// T1's grade (the frame's `Post`: its tint and lift), for every program that writes the canvas:
-/// the compose, and the fog and particles laid over it, each graded as it is drawn (a blend of
-/// two graded colours is the graded blend for the tint, and near it for the lift).
+/// T1's grade (the frame's `Post` but its bloom), for every program that writes the canvas: the
+/// compose, and the fog and particles laid over it, each graded as it is drawn. T2's terms in
+/// T2's order, in linear light (a display value squared, near enough, and its root back): the
+/// exposure, the soft shoulder, the saturation (`u_grade`), the tint and the coloured lift, so a
+/// T1 frame is T2's hour and mood (decided 2026-09-27: the tiers are one look).
 pub const GRADE: &str = r"
 uniform vec3 u_tint;
 uniform vec3 u_lift;
+uniform vec2 u_grade;
 vec3 grade(vec3 c) {
-    c = clamp(c, 0.0, 1.0) * u_tint;
-    c += u_lift * (1.0 - c) * (1.0 - c);
-    return clamp(c, 0.0, 1.0);
+    c = clamp(c, 0.0, 1.0);
+    vec3 l = c * c * u_grade.x;
+    vec3 over = max(l - 0.78, 0.0);
+    l = min(l, 0.78) + 0.22 * (1.0 - exp(-over / 0.22));
+    float y = dot(l, vec3(0.2126, 0.7152, 0.0722));
+    l = max(mix(vec3(y), l, u_grade.y), 0.0) * u_tint;
+    l += u_lift * (1.0 - l) * (1.0 - l);
+    return sqrt(clamp(l, 0.0, 1.0));
 }
 ";
 
