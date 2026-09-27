@@ -366,7 +366,7 @@
   "lights": { "prop": "museum_wall_lamp", "every": 9, "corridor": 14, "state": { "var": "lights", "is": "lit" } },
   "dress": {
     "pile": { "props": ["crate", "barrel"], "chance": 0.5 },
-    "pillar": { "props": ["pillar"], "chance": 1 },
+    "pillar": { "props": ["column"], "chance": 1 },
     "case": { "props": ["museum_case"], "chance": 1 },
     "shelf": { "props": ["shelf"], "chance": 1 },
     "bench": { "props": ["table"], "chance": 1 }

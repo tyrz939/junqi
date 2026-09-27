@@ -237,7 +237,7 @@
   "lights": { "prop": "caged_bulb", "every": 10, "corridor": 14 },
   "dress": {
     "pile": { "props": ["crate", "barrel"], "chance": 0.5 },
-    "pillar": { "props": ["pillar"], "chance": 1 },
+    "pillar": { "props": ["brick_pier"], "chance": 1 },
     "shelf": { "props": ["shelf"], "chance": 1 }
   },
   "fallback": [

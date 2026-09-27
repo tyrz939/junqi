@@ -203,8 +203,8 @@
   },
   "lights": { "prop": "mine_lamp", "every": 9, "corridor": 14 },
   "dress": {
-    "pile": { "props": ["barrel", "crate"], "chance": 0.5 },
-    "pillar": { "props": ["pillar"], "chance": 1 },
+    "pile": { "props": ["barrel", "crate", "ore_tub"], "chance": 0.5 },
+    "pillar": { "props": ["pit_prop"], "chance": 1 },
     "shelf": { "props": ["shelf"], "chance": 1 },
     "desk": { "props": ["table"], "chance": 1 },
     "cot": { "props": ["bed"], "chance": 1 }

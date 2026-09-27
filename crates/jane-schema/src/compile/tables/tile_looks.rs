@@ -118,6 +118,16 @@ enum RawPattern {
     Rubble,
     Fence,
     StoneWall,
+    Timbered,
+    Crypt,
+    Ironwork,
+    Panelled,
+    Pipework,
+    Wainscot,
+    Parquet,
+    Plates,
+    Flags,
+    Grating,
 }
 
 #[derive(Deserialize)]
@@ -217,6 +227,16 @@ fn pattern(p: RawPattern) -> TilePattern {
         R::Rubble => P::Rubble,
         R::Fence => P::Fence,
         R::StoneWall => P::StoneWall,
+        R::Timbered => P::Timbered,
+        R::Crypt => P::Crypt,
+        R::Ironwork => P::Ironwork,
+        R::Panelled => P::Panelled,
+        R::Pipework => P::Pipework,
+        R::Wainscot => P::Wainscot,
+        R::Parquet => P::Parquet,
+        R::Plates => P::Plates,
+        R::Flags => P::Flags,
+        R::Grating => P::Grating,
     }
 }
 

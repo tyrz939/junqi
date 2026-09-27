@@ -32,6 +32,7 @@
 mod field;
 mod ground;
 mod hard;
+mod interior;
 pub mod sheet;
 mod standing;
 mod style;

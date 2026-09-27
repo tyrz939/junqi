@@ -1,7 +1,9 @@
 //! `structure` (ART.md §2.3): anything too small to be a building and too big to be furniture.
 //! Shapes: `well`, `trough`, `fountain`, `pillar`, `chimney`, `coop`, `woodpile`,
 //! `washing_line`, `cart`, `minecart`, `trolley`, `anvil`, `bale`, `pillar_box`, `phone_box`,
-//! `ticket_window`, `shelter`, `stall`, `pump`, `beehive`, `scarecrow`, `tent`, `hoist`.
+//! `ticket_window`, `shelter`, `stall`, `pump`, `beehive`, `scarecrow`, `tent`, `hoist`; and
+//! the dungeons' own columns (§8 step 7): `pit_prop` (the mine), `crypt_pillar` (the Burial),
+//! `iron_column` (the Factory), `brick_pier` (the Pipes), `column` (the Museum).
 
 use jane_core::grid::Rect;
 
@@ -74,6 +76,116 @@ pub(crate) fn draw(c: &mut Canvas, k: &Kit, state: State) -> Option<Stand> {
                 c.vline(x, top + 6, foot - 6, k.body.at(Tone::Mid), 6);
             }
             c.rect_bevel(Rect::new(cx - 8, top, 16, 5), k.body, 1, Z::new(6, 7));
+            Stand::Up(&[])
+        }
+        "pit_prop" => {
+            // A mine's timber set: a squared post under a head tree, wedged tight, an iron dog
+            // across it, footing stones either side.
+            let cx = w / 2;
+            let top = foot - (h - 2).min(44);
+            ao(c, cx - 9, cx + 8, foot, 6);
+            c.polygon_lit(&[(cx - 4, top + 6), (cx + 3, top + 6), (cx + 3, foot - 1), (cx - 4, foot - 1)], k.body, 100, Z::new(4, 6));
+            c.retone(k.body, super::HARD);
+            for (x, y0, y1) in [(cx - 2, top + 10, top + 22), (cx, top + 24, foot - 6), (cx + 1, top + 12, top + 17)] {
+                c.vline(x, y0, y1, k.body.at(Tone::Mid), 6);
+            }
+            c.dot(cx - 1, top + 28, k.body.at(Tone::Deep), 6);
+            c.rect_bevel(Rect::new(cx - 11, top + 1, 22, 5), k.body, 1, Z::new(6, 8));
+            c.polyline_fill(&[(cx - 4, top + 6), (cx + 3, top + 6), (cx + 1, top + 8), (cx - 2, top + 8)], k.body.at(Tone::Light), 8);
+            c.hline(cx - 5, cx + 4, top + 13, k.trim.at(Tone::Light), 7);
+            c.hline(cx - 5, cx + 4, top + 14, k.trim.at(Tone::Shade), 7);
+            for x in [cx - 8, cx + 6] {
+                c.disc_lit(x, foot - 2, 2, Ramp::Rock, Z::new(2, 3));
+            }
+            Stand::Up(&[])
+        }
+        "crypt_pillar" => {
+            // A squat pier of great blocks under a moulded cap, a niche cut in its face with a
+            // skull in it, and a candle's stub guttered on the ledge.
+            let cx = w / 2;
+            let top = foot - (h - 2).min(40);
+            ao(c, cx - 9, cx + 8, foot, 6);
+            blocks(c, Rect::new(cx - 7, top + 5, 14, foot - top - 8), k.body, 5, 7, false, k.seed, 4);
+            c.rect_bevel(Rect::new(cx - 9, foot - 4, 18, 4), k.body, 1, Z::new(2, 4));
+            c.rect_bevel(Rect::new(cx - 9, top, 18, 5), k.body, 1, Z::new(6, 7));
+            let n = Rect::new(cx - 3, top + 12, 6, 8);
+            c.fill_normal(n, k.body.at(Tone::Deep), parts::south(), 5);
+            c.dot(n.x, n.y, k.body.at(Tone::Base), 5);
+            c.dot(n.right() - 1, n.y, k.body.at(Tone::Base), 5);
+            c.hline(n.x - 1, n.right(), n.bottom(), k.body.at(Tone::Light), 6);
+            c.fill_rect(Rect::new(cx - 2, n.bottom() - 4, 4, 3), k.accent.at(Tone::Light), 6);
+            c.dot(cx - 1, n.bottom() - 3, Ix::SEAM, 6);
+            c.dot(cx + 1, n.bottom() - 3, Ix::SEAM, 6);
+            c.hline(cx - 1, cx, n.bottom() - 2, k.accent.at(Tone::Shade), 6);
+            c.fill_rect(Rect::new(cx + 5, top - 3, 2, 3), Ramp::ClothLinen.at(Tone::Light), 8);
+            c.vline(cx + 5, top, top + 2, Ramp::ClothLinen.at(Tone::High), 8);
+            c.dot(cx + 6, top - 4, Ix::SEAM, 8);
+            Stand::Up(&[])
+        }
+        "iron_column" => {
+            // A cast-iron column: flanged, on a bolted base plate, knee braces up to a riveted
+            // beam end, a band of the works' paint and a rust run under a joint.
+            let cx = w / 2;
+            let top = foot - (h - 2).min(44);
+            ao(c, cx - 8, cx + 7, foot, 6);
+            c.rect_bevel(Rect::new(cx - 7, foot - 4, 14, 4), k.body, 1, Z::new(2, 3));
+            c.polygon_lit(&[(cx - 3, top + 5), (cx + 2, top + 5), (cx + 2, foot - 4), (cx - 3, foot - 4)], k.body, 110, Z::new(4, 6));
+            c.retone(k.body, super::HARD);
+            c.vline(cx - 4, top + 7, foot - 5, k.body.at(Tone::Light), 6);
+            c.vline(cx + 3, top + 7, foot - 5, k.body.at(Tone::Shade), 6);
+            c.polyline_fill(&[(cx - 10, top + 3), (cx + 9, top + 3), (cx + 3, top + 10), (cx - 4, top + 10)], k.body.at(Tone::Base), 7);
+            c.hline(cx - 10, cx + 9, top + 3, k.body.at(Tone::Light), 7);
+            c.rect_bevel(Rect::new(cx - 11, top - 1, 22, 4), k.body, 1, Z::new(7, 8));
+            for x in [cx - 8, cx - 3, cx + 2, cx + 7] {
+                c.dot(x, top, k.body.at(Tone::High), 8);
+            }
+            for x in [cx - 6, cx + 5] {
+                c.dot(x, foot - 3, k.body.at(Tone::High), 4);
+            }
+            let band = foot - 14;
+            c.fill_rect(Rect::new(cx - 4, band, 8, 3), k.accent.at(Tone::Base), 7);
+            c.hline(cx - 4, cx + 3, band, k.accent.at(Tone::Light), 7);
+            c.vline(cx + 1, top + 11, top + 20, Ramp::Copper.at(Tone::Shade), 7);
+            c.vline(cx + 1, top + 11, top + 13, Ramp::Copper.at(Tone::Base), 7);
+            Stand::Up(&[])
+        }
+        "brick_pier" => {
+            // A brick pier in a culvert: a stone cap and footing, the damp risen a hand up it,
+            // moss at its foot.
+            let cx = w / 2;
+            let top = foot - (h - 2).min(40);
+            ao(c, cx - 8, cx + 7, foot, 6);
+            blocks(c, Rect::new(cx - 7, top + 5, 14, foot - top - 8), k.body, 3, 6, false, k.seed, 4);
+            c.shade(Rect::new(cx - 7, foot - 14, 14, 11), k.body, 1);
+            c.rect_bevel(Rect::new(cx - 8, foot - 4, 16, 4), k.trim, 1, Z::new(2, 4));
+            c.rect_bevel(Rect::new(cx - 9, top, 18, 5), k.trim, 1, Z::new(6, 7));
+            for (x, y) in [(cx - 8, foot - 5), (cx - 7, foot - 6), (cx + 5, foot - 5), (cx + 6, foot - 5)] {
+                c.dot(x, y, Ramp::Marsh.at(Tone::Base), 5);
+            }
+            c.dot(cx - 7, foot - 5, Ramp::Marsh.at(Tone::Light), 5);
+            Stand::Up(&[])
+        }
+        "column" => {
+            // A limestone column: fluted, on a square plinth and a torus, under a capital
+            // with its volutes and an abacus.
+            let cx = w / 2;
+            let top = foot - (h - 2).min(46);
+            ao(c, cx - 9, cx + 8, foot, 6);
+            c.rect_bevel(Rect::new(cx - 9, foot - 4, 18, 4), k.body, 1, Z::new(2, 3));
+            c.ellipse_lit(Rect::new(cx - 7, foot - 7, 14, 4), k.body, Z::new(3, 4));
+            c.polygon_lit(&[(cx - 5, top + 8), (cx + 4, top + 8), (cx + 4, foot - 6), (cx - 5, foot - 6)], k.body, 120, Z::new(4, 6));
+            c.retone(k.body, super::HARD);
+            for x in [cx - 3, cx - 1, cx + 1, cx + 3] {
+                c.vline(x, top + 9, foot - 7, k.body.at(Tone::Mid), 6);
+            }
+            c.vline(cx - 4, top + 9, foot - 7, k.body.at(Tone::Light), 6);
+            c.rect_bevel(Rect::new(cx - 7, top + 4, 14, 4), k.body, 1, Z::new(6, 7));
+            for x in [cx - 7, cx + 6] {
+                c.disc_lit(x, top + 6, 2, k.body, Z::flat(8));
+                c.dot(x, top + 6, k.body.at(Tone::Shade), 8);
+            }
+            c.rect_bevel(Rect::new(cx - 9, top, 18, 4), k.body, 1, Z::new(7, 8));
+            c.retone(k.body, super::HARD);
             Stand::Up(&[])
         }
         "chimney" => {

@@ -1847,9 +1847,7 @@
   "lights": { "prop": "gas_lamp", "every": 9, "corridor": 14 },
   "dress": {
     "desk": {
-      "props": [
-        "table"
-      ],
+      "props": ["school_desk"],
       "chance": 1
     },
     "pile": {
@@ -1866,9 +1864,7 @@
       "chance": 1
     },
     "shelf": {
-      "props": [
-        "shelf"
-      ],
+      "props": ["bookcase"],
       "chance": 1
     }
   },
