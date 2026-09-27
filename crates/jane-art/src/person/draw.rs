@@ -1347,6 +1347,16 @@ fn face_side(c: &mut Canvas, d: &Dress, r: &Rig) {
     let z = relief::SKULL.lo;
     let fx = s.right() - 4;
     let skin = d.skin;
+    // The profile's line, row by row down from the brow: the forehead, the nose a px proud of
+    // it for two rows (the face under it filled, so the nose stands on something and survives
+    // the despike), the upper lip back under it, the mouth a px further in, the chin.
+    let face_x = s.right() - 1;
+    for (dy, reach) in [(-2, 0), (-1, 0), (0, 0), (1, 0), (2, 1), (3, 1), (4, 0), (5, -1), (6, -1)] {
+        let y = ey + dy;
+        if y < s.bottom() {
+            c.hline(face_x - 3, face_x + reach, y, skin.at(Tone::Base), relief::SKULL.lo);
+        }
+    }
     // The face in profile: the brow in the fringe's shade, a lit cheek, the jaw and the back of
     // the face toward the ear in shade.
     for y in s.y..s.bottom() {
