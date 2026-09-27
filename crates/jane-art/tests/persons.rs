@@ -67,20 +67,13 @@ fn coverage_jane_and_the_townsfolk_have_looks() {
     assert!(missing.is_empty(), "sprites with no look: {missing:?}");
 }
 
-/// The unit sprites that are beasts, plants and things with no look yet: every other unit
-/// sprite is a person or a drawn creature and has one (§8 step 7).
-const UNDRAWN_BEASTS: [&str; 12] = [
-    "bat", "butterfly", "cactus", "emperor", "flower", "great_flower", "lurker", "moth", "pumpkin", "snake",
-    "spider", "spider_queen",
-];
-
 #[test]
-fn coverage_every_unit_sprite_but_the_undrawn_beasts_has_a_look() {
+fn coverage_every_unit_sprite_has_a_look() {
     let c = catalog();
     let mut missing = BTreeSet::new();
     for u in c.combat.units {
         let name = c.sprites[usize::from(u.sprite.0)];
-        if looks::find(name).is_none() && !UNDRAWN_BEASTS.contains(&name) {
+        if looks::find(name).is_none() {
             missing.insert(name);
         }
     }

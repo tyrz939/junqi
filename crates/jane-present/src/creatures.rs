@@ -28,6 +28,8 @@ struct Set {
 #[derive(Clone, Debug, Default)]
 pub struct Creatures {
     sets: Vec<Set>,
+    /// A serpent's body along its trail: its segments, largest (at the neck) first.
+    segments: Vec<(SpriteId, Vec<RefId>)>,
 }
 
 /// What a creature is doing this tick, as the frame pick needs it.
@@ -58,7 +60,28 @@ impl Creatures {
             let frames = r.set.frames.iter().map(|(f, c)| (*f, atlas.add_canvas(c, anchor, height, |_, _, t| t))).collect();
             sets.push(Set { sprite: r.sprite, frames });
         }
-        Creatures { sets }
+        let mut segments = Vec::new();
+        for (sprite, look) in jane_data::looks() {
+            let jane_data::Look::Creature(l) = look else { continue };
+            if l.plan != jane_data::Plan::SerpentHead {
+                continue;
+            }
+            let seed = jane_art::creature::seed(looks::name_of(*sprite));
+            if let Ok(segs) = jane_art::creature::snake_segments(l, seed) {
+                let refs = segs
+                    .iter()
+                    .map(|c| atlas.add_canvas(c, ((c.w() / 2) as i16, (c.h() - 2) as i16), c.h().clamp(1, 255) as u8, |_, _, t| t))
+                    .collect();
+                segments.push((*sprite, refs));
+            }
+        }
+        Creatures { sets, segments }
+    }
+
+    /// The body segments of set `set`, if it is a serpent: largest first.
+    pub fn segments(&self, set: u16) -> Option<&[RefId]> {
+        let s = self.sets.get(usize::from(set))?.sprite;
+        self.segments.iter().find(|(x, _)| *x == s).map(|(_, r)| r.as_slice())
     }
 
     /// The set for sprite `s`, if it is a creature's.

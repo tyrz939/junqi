@@ -147,6 +147,8 @@ pub struct Present {
     entered: bool,
     units: Vec<UnitRec>,
     units_next: Vec<UnitRec>,
+    /// Each serpent's trail this tick, `Fx`, newest first (its body is drawn along it).
+    trails: Vec<(u32, Vec<(i32, i32)>)>,
     hurt: Vec<u32>,
     /// Units that struck (cast) this tick.
     struck: Vec<(u32, SpellId)>,
@@ -196,6 +198,7 @@ impl Present {
             entered: false,
             units: Vec::with_capacity(256),
             units_next: Vec::with_capacity(256),
+            trails: Vec::new(),
             hurt: Vec::with_capacity(64),
             struck: Vec::with_capacity(64),
             props: Vec::with_capacity(1024),
@@ -331,9 +334,13 @@ impl Present {
         let my_seat = view.seat().index() as u8;
         let cat = jane_data::catalog();
         self.units_next.clear();
+        self.trails.clear();
         for uv in view.units_in(area) {
             let u = uv.unit;
             let id = u.id.get();
+            if let Some(s) = u.snake.as_deref().filter(|_| u.alive) {
+                self.trails.push((id, s.trail.iter().map(|p| (p.x.0, p.y.0)).collect()));
+            }
             let cur = (u.pos.x.0, u.pos.y.0);
             let old = self.units.binary_search_by_key(&id, |r| r.id).ok().map(|i| self.units[i]);
             // Last tick's position as this presenter drew it; a newcomer from the view's.
@@ -723,6 +730,28 @@ impl Present {
                 sprite: sprite(r, x, y, Flags { mirror, tint }),
                 caster,
             });
+            // A serpent's body along its trail, tail first, a segment at every point, each
+            // standing where it lies so it sorts among what is round it.
+            if let (Some(t), Some(segs)) = (
+                self.trails.iter().find(|(id, _)| *id == u.id).map(|(_, t)| t),
+                u.creature.and_then(|s| self.creatures.segments(s)),
+            ) {
+                let n = t.len().max(1);
+                for (k, &(px, py)) in t.iter().enumerate().skip(2).rev() {
+                    let seg = segs[(k * segs.len() / n).min(segs.len() - 1)];
+                    let r = self.atlas.get(seg);
+                    let (qx, qy) = ((px >> FX_TO_CANVAS) - cam.0, (py >> FX_TO_CANVAS) - cam.1);
+                    let (x, y) = (qx - i32::from(r.ax), qy - i32::from(r.ay));
+                    if on_canvas(x, y, r.src.w, r.src.h) {
+                        self.standing.push(DrawCmd {
+                            y: qy,
+                            key: 0x8000_0000 | u.id,
+                            sprite: sprite(r, x, y, Flags { mirror: false, tint: Tint::None }),
+                            caster: None,
+                        });
+                    }
+                }
+            }
             if let Some(school) = cast_glow {
                 // The light gathered between her hands: in front of her facing the viewer or to
                 // the side, behind her facing away; it lights what is round it.

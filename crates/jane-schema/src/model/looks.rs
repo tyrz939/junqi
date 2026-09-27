@@ -221,13 +221,16 @@ impl PersonLook {
 model_enum! {
     /// A creature's body plan (ART.md §2.2): each has its own box, anchor and gait.
     #[cfg_attr(feature = "compile", derive(serde::Deserialize), serde(rename_all = "snake_case"))]
-    pub enum Plan { QuadrupedMid, QuadrupedSmall, Bird }
+    pub enum Plan { QuadrupedMid, QuadrupedSmall, Bird, FlyerInsect, FlyerBat, Arachnid, SerpentHead, Plant }
 }
 
 model_enum! {
     /// Which animal a plan draws: the anatomy (proportions, head, how it sits and how it dies).
     #[cfg_attr(feature = "compile", derive(serde::Deserialize), serde(rename_all = "snake_case"))]
-    pub enum Anatomy { Dog, Sheep, Cat, Rat, Rabbit, Fox, Hen, Crow }
+    pub enum Anatomy {
+        Dog, Sheep, Cat, Rat, Rabbit, Fox, Hen, Crow, Butterfly, Moth, Emperor, Bat, Spider, Queen, Lurker, Snake,
+        Cactus, Flower, GreatFlower, Pumpkin,
+    }
 }
 
 model_enum! {

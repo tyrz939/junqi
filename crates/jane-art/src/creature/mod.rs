@@ -5,6 +5,9 @@
 //! creature::render(look, seed, attacks) -> SpriteSet   every frame the plan promises
 //! creature::frame_ids(attacks)          -> [FrameId]   in order
 //! creature::size(plan)                  -> (w, h, ax, ay)
+//! creature::size_of(plan, anatomy)      -> (w, h, ax, ay)   the XL rows (the Emperor, the queen,
+//!                                                            the great flower) are larger
+//! creature::snake_segments(look, seed)  -> [Canvas]         the snake's body along its trail
 //! ```
 //!
 //! Frames: the six-frame walk and a breathe for each facing (`Down .. Down5, DownB`, the same
@@ -17,11 +20,15 @@
 //! over the shading, a glint in the eye), and [`finish`] cleans the clusters, lays the contact
 //! shadow, runs the selective outline and stands the frame up, as the people's does.
 
+mod arachnid;
 mod bird;
+mod flyer;
+mod plant;
 mod quad;
+mod serpent;
 
 use jane_core::grid::Rect;
-use jane_data::{CreatureLook, EmitRole, Plan};
+use jane_data::{Anatomy, CreatureLook, EmitRole, Plan};
 
 use crate::canvas::Canvas;
 use crate::palette::{Ix, Ramp, Tone, pallor};
@@ -51,9 +58,28 @@ pub(crate) enum Beat {
 pub const fn size(plan: Plan) -> (i32, i32, i32, i32) {
     match plan {
         Plan::QuadrupedMid => (32, 28, 16, 24),
-        Plan::QuadrupedSmall => (24, 20, 12, 16),
+        Plan::QuadrupedSmall | Plan::FlyerInsect => (24, 20, 12, 16),
         Plan::Bird => (20, 20, 10, 16),
+        Plan::FlyerBat => (32, 24, 16, 20),
+        Plan::Arachnid | Plan::SerpentHead => (32, 32, 16, 28),
+        Plan::Plant => (32, 40, 16, 36),
     }
+}
+
+/// The box and anchor of `plan` drawn as `anatomy`: the XL rows of ART.md §2.2 (the Emperor
+/// 48 x 40, the queen 48 x 48, the great flower 48 x 56), else the plan's.
+pub const fn size_of(plan: Plan, anatomy: Anatomy) -> (i32, i32, i32, i32) {
+    match anatomy {
+        Anatomy::Emperor => (48, 40, 24, 36),
+        Anatomy::Queen => (48, 48, 24, 44),
+        Anatomy::GreatFlower => (48, 56, 24, 52),
+        _ => size(plan),
+    }
+}
+
+/// Whether `plan` hovers: its body four rows over its anchor, where its shadow lies.
+pub const fn hovers(plan: Plan) -> bool {
+    matches!(plan, Plan::FlyerInsect | Plan::FlyerBat)
 }
 
 /// Every frame a creature promises, in order; the attack cycle only if it fights.
@@ -186,6 +212,12 @@ pub(crate) fn extra_ramps(a: jane_data::Anatomy) -> &'static [Ramp] {
         A::Hen => &[Ramp::ClothRed, Ramp::ClothMustard],
         A::Crow => &[Ramp::HairGrey],
         A::Rat | A::Rabbit | A::Cat | A::Dog | A::Fox | A::Sheep => &[Ramp::Skin],
+        A::Butterfly | A::Moth | A::Emperor | A::Bat | A::Spider | A::Lurker => &[],
+        A::Queen => &[Ramp::Bone],
+        A::Snake => &[Ramp::ClothRose, Ramp::ClothRed, Ramp::Bone],
+        A::Cactus => &[Ramp::Bark],
+        A::Flower | A::GreatFlower => &[Ramp::Leaf, Ramp::Bark, Ramp::Bone],
+        A::Pumpkin => &[Ramp::Bark, Ramp::WoodDark, Ramp::Leaf],
     }
 }
 
@@ -193,7 +225,7 @@ pub(crate) fn extra_ramps(a: jane_data::Anatomy) -> &'static [Ramp] {
 /// this sprite fights, so it has the attack cycle.
 pub fn render(look: &CreatureLook, seed: u32, attacks: bool) -> Result<SpriteSet, String> {
     let coat = Coat::new(look, seed)?;
-    let (w, h, ax, ay) = size(look.plan);
+    let (w, h, ax, ay) = size_of(look.plan, look.anatomy);
     let mut frames = Vec::new();
     for id in frame_ids(attacks) {
         let (facing, beat) = beat_of(id);
@@ -201,6 +233,10 @@ pub fn render(look: &CreatureLook, seed: u32, attacks: bool) -> Result<SpriteSet
         match look.plan {
             Plan::QuadrupedMid | Plan::QuadrupedSmall => quad::draw(&mut c, &coat, facing, beat),
             Plan::Bird => bird::draw(&mut c, &coat, facing, beat),
+            Plan::FlyerInsect | Plan::FlyerBat => flyer::draw(&mut c, &coat, facing, beat),
+            Plan::Arachnid => arachnid::draw(&mut c, &coat, facing, beat),
+            Plan::SerpentHead => serpent::draw(&mut c, &coat, facing, beat),
+            Plan::Plant => plant::draw(&mut c, &coat, facing, beat),
         }
         if beat == Beat::Dead {
             finish_dead(&mut c, &coat, ax, ay);
@@ -245,7 +281,7 @@ fn finish(c: &mut Canvas, coat: &Coat, ax: i32, ay: i32) {
         c.declutter(r);
     }
     c.despike();
-    let (w, _, _, _) = size(coat.look.plan);
+    let (w, _, _, _) = size_of(coat.look.plan, coat.look.anatomy);
     let spread = w / 2 - 2;
     c.ao_contact(Rect::new(ax - spread, ay - 1, 2 * spread, 4), 0);
     c.outline();
@@ -263,13 +299,32 @@ fn finish_dead(c: &mut Canvas, coat: &Coat, ax: i32, ay: i32) {
         c.declutter(r);
     }
     c.despike();
-    let (w, _, _, _) = size(coat.look.plan);
+    let (w, _, _, _) = size_of(coat.look.plan, coat.look.anatomy);
     let spread = w / 2 - 1;
     c.ao_contact(Rect::new(ax - spread, ay - 2, 2 * spread, 4), 0);
     c.outline();
     c.remap(pallor);
     c.quench();
     c.dome_heights(4);
+}
+
+/// The snake's body for the presenter to lay along its trail, the largest (at the neck) first:
+/// each a lit sphere of scales, finished as a frame is, standing on its bottom row.
+pub fn snake_segments(look: &CreatureLook, seed: u32) -> Result<Vec<Canvas>, String> {
+    let coat = Coat::new(look, seed)?;
+    Ok(serpent::segments(&coat)
+        .into_iter()
+        .map(|mut c| {
+            for &r in &coat.ramps() {
+                c.retone(r, fur_map(r));
+                c.declutter(r);
+            }
+            c.outline();
+            let h = c.h();
+            c.upright(h - 1);
+            c
+        })
+        .collect())
 }
 
 /// The stable seed of a sprite id (the people's: FNV-1a of its name).
