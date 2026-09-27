@@ -369,7 +369,7 @@ fn play(bps: Blueprints, o: &Opts, tier: Tier) -> Result<(Tap, Present, u32), St
         };
         // A generated dungeon's room by its node (`--at mine:store`), or any rect by its name: she
         // arrives at the open cell nearest its middle, by way of the zone's way in.
-        let room = mark.as_deref().and_then(|m| room_in(&host.sim, z, m));
+        let room = mark.and_then(|m| room_in(&host.sim, z, m));
         let mark = mark_in(&host.sim, z, if room.is_some() { None } else { mark })?;
         let cmds = [
             StampedCommand { seat: Some(seat), seq: u16::MAX - 2, cmd: Command::Dev(DevOp::God(true)) },
