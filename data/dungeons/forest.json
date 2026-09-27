@@ -1410,6 +1410,30 @@
       "chance": 0.4
     }
   },
+  "sets": {
+    "pieces": {
+      "fallen_tree": {"against": "wall", "mirror": true, "parts": [["set_fallen_tree", 0, 0], ["set_mushrooms", 2, 2], ["scatter_leaves", 5, 2], ["scatter_drift", 0, 2], ["stump", 7, 1]]},
+      "stump_ring": {"against": "wall", "mirror": true, "parts": [["stump", 0, 1], ["stump", 2, 0], ["stump", 4, 1], ["stump", 2, 2], ["set_mushrooms", 2, 1], ["scatter_leaves", 1, 0]]},
+      "woodpile": {"against": "n", "mirror": true, "parts": [["town_woodpile", 0, 0], ["town_woodpile", 3, 0], ["log", 0, 1], ["log", 2, 1], ["stump", 5, 1], ["scatter_drift", 4, 2]]},
+      "toadstools": {"against": "free", "mirror": true, "parts": [["set_mushrooms", 0, 0], ["set_mushrooms", 2, 1], ["set_mushrooms", 1, 2], ["set_mushrooms", 4, 0], ["scatter_leaves", 3, 1], ["scatter_drift", 3, 2]]},
+      "stump": {"against": "wall", "mirror": true, "parts": [["stump", 0, 0], ["set_mushrooms", 1, 0], ["scatter_leaves", 0, 1]]},
+      "log": {"against": "wall", "mirror": true, "parts": [["log", 0, 0], ["scatter_leaves", 2, 0], ["set_mushrooms", 0, 1]]}
+    },
+    "rooms": {
+      "gate": {"most": 7, "take": ["fallen_tree", "stump_ring", "toadstools", "woodpile", "fallen_tree", "toadstools", "stump", "log", "stump", "log"]},
+      "first_glade": {"most": 7, "take": ["fallen_tree", "stump_ring", "toadstools", "woodpile", "fallen_tree", "toadstools", "stump", "log", "stump", "log"]},
+      "hearth": {"most": 7, "take": ["fallen_tree", "stump_ring", "toadstools", "woodpile", "fallen_tree", "toadstools", "stump", "log", "stump", "log"]},
+      "rock": {"most": 7, "take": ["fallen_tree", "stump_ring", "toadstools", "woodpile", "fallen_tree", "toadstools", "stump", "log", "stump", "log"]},
+      "runner": {"most": 7, "take": ["fallen_tree", "stump_ring", "toadstools", "woodpile", "fallen_tree", "toadstools", "stump", "log", "stump", "log"]},
+      "island": {"most": 7, "take": ["fallen_tree", "stump_ring", "toadstools", "woodpile", "fallen_tree", "toadstools", "stump", "log", "stump", "log"]},
+      "guarded": {"most": 7, "take": ["fallen_tree", "stump_ring", "toadstools", "woodpile", "fallen_tree", "toadstools", "stump", "log", "stump", "log"]},
+      "hollow": {"most": 7, "take": ["fallen_tree", "stump_ring", "toadstools", "woodpile", "fallen_tree", "toadstools", "stump", "log", "stump", "log"]},
+      "reward": {"most": 7, "take": ["fallen_tree", "stump_ring", "toadstools", "woodpile", "fallen_tree", "toadstools", "stump", "log", "stump", "log"]},
+      "seed_tree": {"most": 7, "take": ["fallen_tree", "stump_ring", "toadstools", "woodpile", "fallen_tree", "toadstools", "stump", "log", "stump", "log"]},
+      "lamp_glade": {"most": 7, "take": ["fallen_tree", "stump_ring", "toadstools", "woodpile", "fallen_tree", "toadstools", "stump", "log", "stump", "log"]},
+      "ring": {"most": 14, "take": ["fallen_tree", "stump_ring", "toadstools", "woodpile", "fallen_tree", "stump_ring", "toadstools", "woodpile", "fallen_tree", "stump", "log", "stump", "log", "stump", "log"]}
+    }
+  },
   "fallback": [
     {
       "node": "gate",

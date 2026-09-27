@@ -228,6 +228,53 @@ impl Hud {
     }
 }
 
+/// The open cell nearest the middle of a rect of `zone` named `<zone>_<asked>_room` (a generated
+/// dungeon's room by its node) or `asked`, if there is one and `asked` is no mark.
+fn room_in(sim: &Sim, zone: jane_core::ids::ZoneId, asked: &str) -> Option<jane_core::num::Vec2> {
+    let bp = sim.blueprint(zone);
+    let syms = &sim.state().syms;
+    let name_of = |k: &jane_core::Key| match *k {
+        jane_core::Key::Name(n) => Some(syms.name(jane_sim::sym::of_name(n)).to_owned()),
+        jane_core::Key::Local(_) => None,
+    };
+    if bp.marks.keys().any(|k| name_of(k).as_deref() == Some(asked)) {
+        return None;
+    }
+    // A node's floor is its template's first rect, under whatever name the mission bound it to.
+    let props = jane_data::catalog();
+    let floors: Vec<jane_core::Key> = props
+        .dungeons
+        .mission_of(zone)
+        .and_then(|m| m.nodes.iter().find(|n| n.id == asked))
+        .map(|n| n.names.iter().filter_map(|t| t.rects.first()).map(|&r| jane_core::Key::Name(r)).collect())
+        .unwrap_or_default();
+    let r = bp
+        .rects
+        .iter()
+        .find(|(k, _)| floors.contains(k))
+        .or_else(|| bp.rects.iter().find(|(k, _)| name_of(k).as_deref() == Some(asked)))?
+        .1;
+    let blocked = |x: i32, y: i32| {
+        bp.tiles.get(x, y).is_none_or(|t| t.flags() & jane_core::tile::F_SOLID != 0)
+            || bp.props.iter().any(|p| {
+                let d = props.story.prop(p.def);
+                let (px, py) = (i32::from(p.cell.x), i32::from(p.cell.y));
+                d.solid && x >= px && y >= py && x < px + i32::from(d.w) && y < py + i32::from(d.h)
+            })
+    };
+    let (cx, cy) = (r.x + r.w / 2, r.y + r.h / 2);
+    let mut best: Option<(i32, i32, i32)> = None;
+    for y in r.y..r.y + r.h {
+        for x in r.x..r.x + r.w {
+            let d = (x - cx).abs() + (y - cy).abs();
+            if !blocked(x, y) && best.is_none_or(|b| d < b.0) {
+                best = Some((d, x, y));
+            }
+        }
+    }
+    best.map(|(_, x, y)| jane_core::num::Vec2::centre(x, y))
+}
+
 /// The mark `asked` in `zone`, or its way in (the console's `tp` rule): its first named mark
 /// among start, front, entry, a stair, a mouth, a gate. An unknown mark names the ones it has.
 fn mark_in(sim: &Sim, zone: jane_core::ids::ZoneId, asked: Option<&str>) -> Result<jane_core::Sym, String> {
@@ -381,12 +428,20 @@ fn play(bps: Blueprints, o: &Opts, tier: Tier) -> Result<(Tap, Present, u32), St
             None if mark.is_none() => (jane_core::ids::ZoneId::County, Some(zone.as_str())),
             None => return Err(format!("--at: no zone {zone}")),
         };
-        let mark = mark_in(&host.sim, z, mark)?;
+        // A generated dungeon's room by its node (`--at mine:store`), or any rect by its name: she
+        // arrives at the open cell nearest its middle, by way of the zone's way in.
+        let room = mark.and_then(|m| room_in(&host.sim, z, m));
+        let mark = mark_in(&host.sim, z, if room.is_some() { None } else { mark })?;
         let cmds = [
             StampedCommand { seat: Some(seat), seq: u16::MAX - 2, cmd: Command::Dev(DevOp::God(true)) },
             StampedCommand { seat: Some(seat), seq: u16::MAX - 1, cmd: Command::Dev(DevOp::Tp { zone: z, mark }) },
         ];
         host.sim.step(&StepInput { frames: [InputFrame::IDLE; 4], commands: &cmds });
+        if let Some(at) = room {
+            let req = jane_sim::state::TravelRequest { zone: z, mark, at: Some(at) };
+            host.sim.state_mut().players[0].travel = Some(req);
+            host.sim.step(&StepInput { frames: [InputFrame::IDLE; 4], commands: &[] });
+        }
         for _ in 0..60 {
             let events = host.sim.drain_events().to_vec();
             let v = host.sim.view(seat).ok_or("seat 0 is not in the world")?;

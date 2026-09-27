@@ -21,6 +21,7 @@ mod lamp;
 mod machine;
 pub(crate) mod parts;
 mod ritual;
+mod set;
 mod sign;
 mod structure;
 
@@ -175,17 +176,19 @@ pub(crate) enum Stand {
 
 fn draw(c: &mut Canvas, k: &Kit, state: State) -> Result<Stand, String> {
     let unknown = || format!("no {:?} shape \"{}\"", k.look.family, k.look.shape);
-    match k.look.family {
-        PropFamily::Sign => sign::draw(c, k, state).ok_or_else(unknown),
-        PropFamily::Lamp => lamp::draw(c, k, state).ok_or_else(unknown),
-        PropFamily::Barrier => barrier::draw(c, k, state).ok_or_else(unknown),
-        PropFamily::Container => container::draw(c, k, state).ok_or_else(unknown),
-        PropFamily::Ritual => ritual::draw(c, k, state).ok_or_else(unknown),
-        PropFamily::Furniture => furniture::draw(c, k, state).ok_or_else(unknown),
-        PropFamily::Structure => structure::draw(c, k, state).ok_or_else(unknown),
-        PropFamily::Vegetation | PropFamily::Debris => growing::draw(c, k, state).ok_or_else(unknown),
-        PropFamily::Machine | PropFamily::SmallThing => machine::draw(c, k, state).ok_or_else(unknown),
-    }
+    let own = match k.look.family {
+        PropFamily::Sign => sign::draw(c, k, state),
+        PropFamily::Lamp => lamp::draw(c, k, state),
+        PropFamily::Barrier => barrier::draw(c, k, state),
+        PropFamily::Container => container::draw(c, k, state),
+        PropFamily::Ritual => ritual::draw(c, k, state),
+        PropFamily::Furniture => furniture::draw(c, k, state),
+        PropFamily::Structure => structure::draw(c, k, state),
+        PropFamily::Vegetation | PropFamily::Debris => growing::draw(c, k, state),
+        PropFamily::Machine | PropFamily::SmallThing => machine::draw(c, k, state),
+    };
+    // A dungeon's set pieces (`set.rs`) are drawn under whichever family their look names.
+    own.or_else(|| set::draw(c, k, state)).ok_or_else(unknown)
 }
 
 /// What the lit primitives' bands become in wood, stone and metal: a shade, a mid, a base, a

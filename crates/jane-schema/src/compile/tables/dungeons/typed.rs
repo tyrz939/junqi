@@ -13,9 +13,9 @@ use crate::compile::lists;
 use crate::model::{
     self, MissionBind, MissionBudget, MissionContract, MissionDef, MissionDoorTo, MissionDress, MissionEdge,
     MissionEdgeKind, MissionGate, MissionGrant, MissionHolding, MissionLights, MissionLockinSpawn, MissionName,
-    MissionNode, MissionNodeKind, MissionNodeNames, MissionPatrol, MissionPlacement, MissionProp, MissionState,
-    MissionTrigger, RoomBlock, RoomDoor, RoomMark, RoomPool, RoomRect, RoomShape, RoomSocket, RoomTemplate,
-    RoomTileChar, RoomTurn,
+    MissionNode, MissionNodeKind, MissionNodeNames, MissionPatrol, MissionPlacement, MissionProp, MissionSetPart,
+    MissionSetPiece, MissionSetRoom, MissionState, MissionTrigger, RoomBlock, RoomDoor, RoomMark, RoomPool, RoomRect,
+    RoomShape, RoomSocket, RoomTemplate, RoomTileChar, RoomTurn, SetAgainst,
 };
 
 use super::check::{node_lists, walk_conds, walk_names};
@@ -559,6 +559,59 @@ pub fn mission(
             chance: permille(cx, &at(&format!("dress.{name}")), d.chance),
         })
         .collect();
+    let set_names: Vec<&String> = m.sets.pieces.keys().collect();
+    let sets: Vec<MissionSetPiece> = m
+        .sets
+        .pieces
+        .iter()
+        .map(|(name, p)| {
+            let at = at(&format!("sets.pieces.{name}"));
+            let parts: Vec<MissionSetPart> = p
+                .parts
+                .iter()
+                .filter_map(|(pr, x, y)| cx.prop(&at, pr).map(|prop| MissionSetPart { prop, x: *x, y: *y }))
+                .collect();
+            let (mut w, mut h) = (0i64, 0i64);
+            for (pr, x, y) in &p.parts {
+                let f = fx.prop(pr).cloned().unwrap_or_default();
+                w = w.max(i64::from(*x) + f.w);
+                h = h.max(i64::from(*y) + f.h);
+            }
+            let against = match p.against.as_str() {
+                "n" => SetAgainst::N,
+                "s" => SetAgainst::S,
+                "side" => SetAgainst::Side,
+                "corner" => SetAgainst::Corner,
+                "wall" => SetAgainst::Wall,
+                _ => SetAgainst::Free,
+            };
+            MissionSetPiece {
+                name: leak_str(name),
+                against,
+                mirror: p.mirror,
+                w: u8::try_from(w).unwrap_or(u8::MAX),
+                h: u8::try_from(h).unwrap_or(u8::MAX),
+                parts: leak(parts),
+            }
+        })
+        .collect();
+    let set_rooms: Vec<MissionSetRoom> = m
+        .sets
+        .rooms
+        .iter()
+        .filter_map(|(node, r)| {
+            Some(MissionSetRoom {
+                node: u8::try_from(m.nodes.iter().position(|n| &n.id == node)?).ok()?,
+                most: r.most,
+                take: leak(
+                    r.take
+                        .iter()
+                        .filter_map(|t| set_names.iter().position(|n| *n == t).and_then(|i| u8::try_from(i).ok()))
+                        .collect(),
+                ),
+            })
+        })
+        .collect();
     let lights = m.lights.as_ref().map(|l| {
         let rows = fx.family(&l.prop).unwrap_or_else(|| ["n", "e", "s", "w"].map(|s| format!("{}_{s}", l.prop)));
         let ids: Vec<PropDefId> = rows.iter().map(|r| cx.prop(&at("lights.prop"), r).unwrap_or_default()).collect();
@@ -626,6 +679,8 @@ pub fn mission(
         edges: leak(edges),
         budget,
         dress: leak(dress),
+        sets: leak(sets),
+        set_rooms: leak(set_rooms),
         lights,
         fallback: leak(fallback),
         all_rect,

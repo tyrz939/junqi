@@ -94,7 +94,7 @@ Enter the Gungeon picks one of a few hand-drawn flow graphs per floor, each "des
 
 **K14. Set pieces are pasted in whole.**
 Diablo generates its labyrinths but pastes quest rooms in verbatim, one per level, and scatters small pre-made patches by pattern match ([BorisTheBrave on Diablo](https://www.boristhebrave.com/2019/07/14/dungeon-generation-in-diablo-1/)).
-**So in this game:** arenas, the Headmaster's office and the snake's room are set pieces: one template, no variants, mirrored at most. Dressing (barrel piles, torch runs) is the scatter, and `Kit` already has it.
+**So in this game:** arenas, the Headmaster's office and the snake's room are set pieces: one template, no variants, mirrored at most. Dressing (barrel piles, torch runs) is the scatter, and `Kit` already has it. *(Built 2026-09-28:)* rooms are also furnished with small authored set pieces of props (a workbench under its rack, a heap against a wall, desks in rows), pasted whole where the room has space and proven never to cost a check (§2.10).
 
 **K15. What breaks, and the defence against each.**
 
@@ -405,7 +405,8 @@ buildDungeon(def, seed, attempt):
                              sight -> a 1-wide run of a see-through solid tile (Rail, Fence, Glass, Water)
                              oneway -> a way_in prop, or a gate unlocked by `flag`
   5. fill     holdings into sockets; units with phase = def.phase; enemy mix per node (2.7);
-              dressing from the dungeon's table (Kit.pile, Kit.torchRun)
+              dressing from the dungeon's table (Kit.pile, Kit.torchRun);
+              then the set pieces (2.10), then the scatter
   6. name     bound things get their contract name; everything else `${zone}_${node}_${socket}_${n}`
   7. emit     Blueprint + generated triggers (lock-ins, state gates)
 ```
@@ -559,6 +560,57 @@ One layout, as the generator would place it on a 4 x 4 lattice. Another seed mir
 ```
 
 First completion, as C8 walks it: entry, plate, entry, store, entry, guard, entry, store, core, first aid, core, office, core, gallery, (track, plate, entry: the loop is now open), core, arena, nook, gallery, adit. The hub is crossed five times and is different each time (K21). About 1,100 cells of walking, inside a band of 900 to 1,400.
+
+### 2.10 Set pieces: rooms furnished, not scattered *(built 2026-09-28)*
+
+A room of 27 x 19 cells with a chest, a spawn and a scatter of stains reads as a large empty floor, and the owner said so ("the world felt empty"; the bar is Zelda-dense rooms, ART.md §3.1). The art director's note was that a few larger set pieces per room would do more than a higher scatter rate: a rug under a table, heaps against walls, a workbench with its tools, a collapsed shelf, a crate stack. That is what this is.
+
+**A set piece is a small authored arrangement of props, stood whole.** It is data, in each mission's `sets` block (`data/dungeons/<id>.json`), beside `dress`:
+
+```json
+"sets": {
+  "pieces": {
+    "workshop": { "against": "n", "mirror": true, "parts": [["set_workbench", 0, 0], ["set_tool_rack", 3, 0], ["set_bin", 3, 1], ["set_stool", 1, 2], ["set_crates", 6, 0]] },
+    "class":    { "against": "free", "parts": [["school_desk", 0, 0], ["school_desk", 4, 0], ["school_desk", 0, 3], ["school_desk", 4, 3]] }
+  },
+  "rooms": {
+    "guard": { "most": 8, "take": ["workshop", "pick_wall", "spoil_bank", "..."] }
+  }
+}
+```
+
+- `parts` are `[prop row, x, y]` in cells from the piece's corner. Parts may overlap: a rug is a walk-over part and the table stands on it. What is **solid and what is walk-over is the prop row's own `solid`**, so it cannot drift: rugs, runners, spilt books, toadstools, stains and bones are walked over; everything else is walked round.
+- `against`: `n` (its back row flush to a north wall: furniture that faces the room), `s`, `side` (flush to the west wall, laid out mirrored against the east), `corner` (a north corner), `wall` (any of the four), `free` (standing in the room with clear floor all round it). `mirror: true` lets a piece be laid out either way round.
+- `rooms`: per node, up to `most` of `take`, the first tried first and the rest in a seeded order (`DunDress`, `b` = 2, so no other dice move). A name may be listed twice.
+
+**The build refuses** (`jane-schema`, `check_sets`): a part that is not a prop row; a part that is not inert (anything that pushes, carries, lights, blocks sight, is a gate or a plate, has a prompt, a bench, a bed, a `use`); a piece larger than 12 x 9; a room that is no node; a piece that does not exist; `most` of more than are listed.
+
+**Where a piece may stand** is found by the generator, not authored in the templates (decided: the 100-odd `.room` files keep their contracts untouched, and the pieces go wherever the room has space this seed, so the same pool reads differently on different seeds). It runs after the mission, the templates and the lamps, and before the scatter (`dungeon/sets.rs`):
+
+1. Every part lies on the dungeon's own floor tile (never a garden bed, water, track or dry bed), on a cell nothing has claimed, outside any rect a `fill` will ever change, and outside the threshold of each door the room uses (three cells each way of the doorway).
+2. A solid part keeps a cell from anything a player uses (two from a thing a spell wakes: a bolt stops at a solid prop), a cell from a unit, a mark and the room's own middle cell (the one C8 and C9 walk between), stays out of the five-cell lane from each door in to the middle of the room, and stays off the ground between a plate and what is pushed or carried onto it (their box, grown by three).
+3. **The worn paths stay clear.** From each door the room uses, the shortest walk (on the room as it was before any piece) to every other door, to everything she uses, to every unit and mark and to the room's middle is found, and no solid part stands on it or beside it. A piece never makes a walk longer, and the room reads as furniture with its paths worn clear between it.
+4. **The room stays whole.** Every cell she could reach from a door before the piece, she still can; and every cell outside the piece's own box that a body two cells wide could reach, one still can. So a piece never leaves a one-cell gap, the thing the solver's flood would walk and a person would not.
+5. **The fight keeps its floor.** An arena (a boss's or a keeper's room, or one a lock-in seals) takes no pieces at all: it is a set piece of its own (K14). A room with any heat takes only pieces that stand against a wall; a piece that stands out in the floor (desks in rows, a vitrine gallery, a lathe island, pews, a stump ring) goes only where nothing is fought, unless nothing in it stands up (toadstools, a runner). A room with a thing to push that no plate waits for (the Burial's great torch, pushed where she likes) is left to it.
+
+**Proof.** Everything a check reads is untouched by construction, and a test holds it: `jane-world/tests/dungeon_sets.rs` builds every attempt of every dungeon on 12 seeds (64 on the soak, `DUNGEON_SEEDS=64`) with and without its set pieces and asserts the solver and C1 to C12 give the same verdict (`build_mission_bare`), and that every part stands inside its room on open floor, and that at least four in five furnished rooms took a piece. Two rules above came out of that test: a lamp the mission hangs on a wall to be used (the School's physics lamp) is kept clear like anything used, and the room's middle cell is kept open.
+
+**What the bots said, and what changed (decided, 2026-09-28).** The checks were never at risk; the bots were. With the first, denser placement (pieces anywhere the floor was free, arenas furnished) the dungeon crawl (`jane-bot` `dungeons`, three seeds a dungeon) failed nine runs in thirty: slower walks put the Forest's Reader into the night, fights among furniture went worse (a solid prop stops a bolt, hers and theirs), and in the Burial's rat room she could no longer bait a rat. Per the brief, the placement was fixed and the bot left alone: rules 3 and 5 above, the Forest's solid pieces moved to its hedges, and the rat room left bare. The crawl finishes all thirty runs again and the whole story still ends on every seed the bots try (`jane-bot` `story`, seeds 1 to 5).
+
+**Per dungeon, per room: a character, not clutter.** Each room lists the pieces its institution would have had, and a few small fillers of the same kind (a pair of crates, a case and a bust, a stump) close the gaps. Rooms left bare on purpose: every arena (the Mine's office and pit, the Museum's science wing and magic room, the Forest's hut and stone, the Factory's generator hall and assembly, the Burial's lock-in, snake, nursery, parade and vault, the School's corridor and tower); the Museum's natural history room and the Mine's nook (a plate and push puzzle, and a room too small for its thresholds); the Burial's garden, orchard and glasshouse (their floor is their planting), its dark hall (the great torch's) and its rat room (above). The Mine's classroom and pay desk pieces stay in its table for the office, which as an arena takes none today; that is the first thing to revisit if the owner wants the Headmaster's room furnished (it would need the bot's fight there proven again).
+
+| Dungeon | Pieces (solid unless marked *walk-over*) | Rooms |
+| --- | --- | --- |
+| Gold Mine | store corner (crate stacks, a crate pile, an ore tub, sacks), spoil bank (two rock heaps, an ore tub, *stones and rubble*), pick wall (two tool racks, crates, a tub, a stool), timber yard (three woodpiles, sleepers), cart stop (a minecart and tubs), workshop (a workbench, its rack and bin, a stool, crates), pay desk (*a rug*, a desk, a chair, crates), the Headmaster's class (four school desks in rows), miners' rest (benches, a stool, *tools on the wall*), first-aid table; fillers: crate pair, tub pair, cart | the store is crates, the core a working hub, the gallery spoil and timber, the first-aid room its table |
+| Museum | gallery row (four vitrines behind two rope lines), bust hall (four busts on the wall, ropes), bench island (*a rug*, a bench, two busts), vitrine pair, packing (crates, *spilt books*, broken chairs), science (two laboratory benches, a globe, stools), workshop, drums, fallen shelves (*books*), *runner*; fillers: case and bust, busts, crates | the atrium and the wings are galleries, the stores and maintenance are packing and tools |
+| Butterfly Forest | a fallen tree (its root plate, moss, a sawn end, *toadstools and leaves*), a stump ring, a woodpile, *a toadstool patch*; fillers: stump, log | every glade that is not an arena, the ring most; what stands up keeps to the hedges |
+| The pipes | sandbag wall, pipe store (racked pipe, a drum), brick fall (two brick heaps, *rubble and silt*), stores (crates, a drum, sandbags), valve bench, *damp* (*toadstools, pools, silt*); fillers: drum, sandbag, crates | the runs are fallen brick and sandbags, the junction and valve house are stores |
+| The Factory | lathe line (three lathes and their stools, *cogs*), lathe island, drum store, scrap pile (two scrap heaps), bench row (two workbenches, a rack, a bin), pallets, pipe rack, office desk (*a rug*, a desk, a chair, *books*), benches; fillers: drums, crates, a lathe | the line and the press hall are machine shops (their lathes at the walls: both are fought in), the yard and loading bay pallets and drums, the offices desks |
+| The Burial Chamber | altar (the altar between two candlestands, *candle ends*), tomb row (three tombs, candlestands), open tomb (its lid pushed off, *bones*), ossuary (two bone heaps, urns), urn row, pews (six in three rows), coffins; fillers: urns, a coffin, a tomb | the hall and the vigil are chapels, the side rooms ossuaries and tombs |
+| The School | class (six desks in rows), small class, teacher (a blackboard, a desk, a chair, a globe), library wall (bookcases and a globe), laboratory (two benches, four stools), woodwork (two benches, a rack), shavings (a heap of broken chairs), staff room (*a rug*, a table, chairs), lost property (crates, a fallen shelf, *books*), benches, kitchen table; fillers: desk pair, crates, a bookcase | each lesson its own: desks in the hall, benches in chemistry and physics, the woodwork shop, the lost property room |
+| Library | reading table (*a rug*, a table, chairs), fallen shelves, a wall of cases, a globe between cases, freestanding stacks (two rows of bookcases) ; fillers: bookcase, table, *books* | the stacks are stacks |
+
+The new props are `data/props/sets.json` (`set_*`) and their looks `data/looks/sets.json`, drawn by `jane_art::kit::set` (ART.md §2.3). Every room of every dungeon, before and after, is `tools/setpieces.sh` (`jane sheet scene --at ZONE:NODE`).
 
 ---
 

@@ -599,6 +599,54 @@ fn check_edges(m: &RawMission, lib: &Library, fx: &Facts, err: &mut impl FnMut(&
     }
 }
 
+/// Where a set piece may stand (`MissionSetPiece::against`).
+pub const SET_AGAINST: [&str; 6] = ["n", "s", "side", "corner", "wall", "free"];
+
+/// The set pieces (DUNGEONS.md §2.10): parts that are prop rows and inert, a piece no bigger
+/// than a quarter of a small room, rooms that are nodes taking pieces that exist.
+fn check_sets(m: &RawMission, fx: &Facts, err: &mut impl FnMut(&str, String)) {
+    for (name, p) in &m.sets.pieces {
+        let at = format!("sets.pieces.{name}");
+        if !SET_AGAINST.contains(&p.against.as_str()) {
+            err(&at, format!("against \"{}\": one of {}", p.against, SET_AGAINST.join(", ")));
+        }
+        if p.parts.is_empty() {
+            err(&at, "has no parts".into());
+        }
+        let (mut w, mut h) = (0, 0);
+        for (pr, x, y) in &p.parts {
+            match fx.prop(pr) {
+                None => err(&at, format!("\"{pr}\" is not a prop row")),
+                Some(f) if !f.inert => err(
+                    &at,
+                    format!("\"{pr}\" is not inert dressing (it pushes, carries, lights, blocks sight or is used)"),
+                ),
+                Some(f) => {
+                    w = w.max(i64::from(*x) + f.w);
+                    h = h.max(i64::from(*y) + f.h);
+                }
+            }
+        }
+        if w > 12 || h > 9 {
+            err(&at, format!("is {w} x {h} cells; a set piece is at most 12 x 9"));
+        }
+    }
+    for (node, r) in &m.sets.rooms {
+        let at = format!("sets.rooms.{node}");
+        if !m.nodes.iter().any(|n| &n.id == node) {
+            err(&at, format!("no node \"{node}\""));
+        }
+        if r.take.is_empty() || r.most == 0 || usize::from(r.most) > r.take.len() {
+            err(&at, format!("takes {} of {} pieces", r.most, r.take.len()));
+        }
+        for t in &r.take {
+            if !m.sets.pieces.contains_key(t) {
+                err(&at, format!("no set piece \"{t}\""));
+            }
+        }
+    }
+}
+
 /// The budget, the dress rows, the lights, the tiles.
 fn check_rest(m: &RawMission, fx: &Facts, err: &mut impl FnMut(&str, String)) {
     let b = &m.budget;
@@ -636,6 +684,7 @@ fn check_rest(m: &RawMission, fx: &Facts, err: &mut impl FnMut(&str, String)) {
             }
         }
     }
+    check_sets(m, fx, err);
     if let Some(l) = &m.lights {
         if fx.family(&l.prop).is_none() {
             err("lights.prop", format!("\"{}\" is not a lamp family (rows _n, _e, _s and _w)", l.prop));

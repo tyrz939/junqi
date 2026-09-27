@@ -26,6 +26,9 @@ pub struct RawMission {
     pub edges: Vec<RawEdge>,
     pub budget: RawBudget,
     pub dress: BTreeMap<String, RawDress>,
+    /// Set pieces and the rooms that take them (DUNGEONS.md §2.10).
+    #[serde(default)]
+    pub sets: RawSets,
     pub lights: Option<RawLights>,
     pub fallback: Vec<RawPlacement>,
 }
@@ -313,6 +316,34 @@ pub struct RawBudget {
 pub struct RawDress {
     pub props: Vec<String>,
     pub chance: Num,
+}
+
+/// `"sets": { "pieces": { name: piece }, "rooms": { node: room } }`.
+#[derive(Clone, Debug, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RawSets {
+    #[serde(default)]
+    pub pieces: BTreeMap<String, RawSetPiece>,
+    #[serde(default)]
+    pub rooms: BTreeMap<String, RawSetRoom>,
+}
+
+/// A set piece: where it stands and its parts, each `[prop, x, y]` in cells from its corner.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RawSetPiece {
+    pub against: String,
+    #[serde(default)]
+    pub mirror: bool,
+    pub parts: Vec<(String, u8, u8)>,
+}
+
+/// A room's set pieces: up to `most` of `take`, the first tried first.
+#[derive(Clone, Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct RawSetRoom {
+    pub most: u8,
+    pub take: Vec<String>,
 }
 
 #[derive(Clone, Debug, Deserialize)]

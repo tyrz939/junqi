@@ -373,6 +373,34 @@
     "shelf": { "props": ["shelf"], "chance": 1 },
     "bench": { "props": ["table"], "chance": 1 }
   },
+  "sets": {
+    "pieces": {
+      "gallery_row": {"against": "free", "parts": [["museum_case", 0, 0], ["museum_case", 3, 0], ["museum_case", 6, 0], ["museum_case", 9, 0], ["set_stanchions", 1, 2], ["set_stanchions", 7, 2]]},
+      "bust_hall": {"against": "n", "parts": [["set_bust", 0, 0], ["set_bust", 3, 0], ["set_bust", 6, 0], ["set_bust", 9, 0], ["set_stanchions", 1, 1], ["set_stanchions", 6, 1]]},
+      "bench_island": {"against": "free", "mirror": true, "parts": [["set_rug_blue", 0, 0], ["set_bench", 0, 1], ["set_bust", 5, 0], ["set_bust", 5, 2]]},
+      "vitrine_pair": {"against": "n", "parts": [["museum_case", 0, 0], ["museum_case", 3, 0], ["set_stanchions", 0, 2], ["set_stanchions", 3, 2]]},
+      "packing": {"against": "wall", "mirror": true, "parts": [["set_crate_pile", 0, 0], ["set_crates", 3, 0], ["set_crates", 5, 0], ["set_books", 0, 2], ["set_heap_wood", 3, 2]]},
+      "science": {"against": "n", "mirror": true, "parts": [["set_lab_bench", 0, 0], ["set_globe", 4, 0], ["set_lab_bench", 5, 0], ["set_stool", 1, 2], ["set_stool", 6, 2]]},
+      "workshop": {"against": "n", "mirror": true, "parts": [["set_workbench", 0, 0], ["set_tool_rack", 3, 0], ["set_bin", 3, 1], ["drums", 6, 0]]},
+      "drums": {"against": "wall", "mirror": true, "parts": [["drums", 0, 0], ["drums", 2, 0], ["drums", 1, 2], ["scatter_oilpool", 3, 2]]},
+      "fallen": {"against": "wall", "mirror": true, "parts": [["set_shelf_fallen", 0, 0], ["set_shelf_fallen", 3, 0], ["set_books", 0, 2], ["set_books", 2, 2], ["set_books", 4, 2]]},
+      "runner": {"against": "free", "parts": [["set_runner", 0, 0]]},
+      "case": {"against": "free", "mirror": true, "parts": [["museum_case", 0, 0], ["set_bust", 2, 0]]},
+      "bust": {"against": "n", "mirror": true, "parts": [["set_bust", 0, 0], ["set_bust", 2, 0]]},
+      "crate_pair": {"against": "wall", "mirror": true, "parts": [["set_crates", 0, 0], ["set_books", 2, 1]]}
+    },
+    "rooms": {
+      "entry": {"most": 7, "take": ["bust_hall", "bench_island", "runner", "vitrine_pair", "case", "bust", "crate_pair", "case", "bust", "crate_pair"]},
+      "atrium": {"most": 15, "take": ["gallery_row", "bust_hall", "bench_island", "vitrine_pair", "gallery_row", "runner", "bench_island", "vitrine_pair", "bust_hall", "runner", "case", "bust", "crate_pair", "case", "bust", "crate_pair", "case", "bust", "crate_pair"]},
+      "history": {"most": 8, "take": ["vitrine_pair", "gallery_row", "bust_hall", "fallen", "bench_island", "runner", "case", "bust", "crate_pair", "case", "bust", "crate_pair"]},
+      "toilets": {"most": 5, "take": ["packing", "drums", "fallen", "case", "bust", "crate_pair", "case", "bust", "crate_pair"]},
+      "cloakroom": {"most": 6, "take": ["bench_island", "packing", "runner", "fallen", "case", "bust", "crate_pair", "case", "bust", "crate_pair"]},
+      "maintenance": {"most": 8, "take": ["workshop", "drums", "packing", "packing", "fallen", "drums", "case", "bust", "crate_pair", "case", "bust", "crate_pair"]},
+      "arts": {"most": 8, "take": ["bust_hall", "bench_island", "gallery_row", "runner", "vitrine_pair", "case", "bust", "crate_pair", "case", "bust", "crate_pair"]},
+      "stores": {"most": 8, "take": ["packing", "packing", "fallen", "drums", "packing", "workshop", "case", "bust", "crate_pair", "case", "bust", "crate_pair"]},
+      "magic_case": {"most": 5, "take": ["vitrine_pair", "runner", "bust_hall", "case", "bust", "crate_pair", "case", "bust", "crate_pair"]}
+    }
+  },
   "fallback": [
     { "node": "entry", "template": "museum.entry.a", "bay": [0, 0], "turn": 180, "mirror": true },
     { "node": "atrium", "template": "museum.atrium.a", "bay": [1, 1], "turn": 0, "mirror": false },

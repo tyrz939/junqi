@@ -445,6 +445,30 @@
     "pillar": { "props": ["crypt_pillar"], "chance": 1 },
     "cot": { "props": ["tomb"], "chance": 1 }
   },
+  "sets": {
+    "pieces": {
+      "altar": {"against": "n", "parts": [["set_candlestand", 0, 0], ["set_altar", 1, 0], ["set_candlestand", 5, 0], ["scatter_candles", 2, 2], ["scatter_candles", 3, 2]]},
+      "tomb_row": {"against": "n", "parts": [["tomb", 0, 0], ["set_candlestand", 2, 0], ["tomb", 3, 0], ["set_candlestand", 5, 0], ["tomb", 6, 0]]},
+      "open_tomb": {"against": "wall", "mirror": true, "parts": [["set_tomb_open", 0, 0], ["bones", 2, 1], ["scatter_bonepile", 2, 2], ["set_candlestand", 3, 0]]},
+      "ossuary": {"against": "wall", "mirror": true, "parts": [["set_heap_bones", 0, 0], ["set_heap_bones", 3, 0], ["urns", 6, 0], ["bones", 1, 2], ["scatter_bonepile", 4, 2]]},
+      "urn_row": {"against": "n", "parts": [["urns", 0, 0], ["set_candlestand", 2, 0], ["urns", 3, 0], ["set_candlestand", 5, 0], ["urns", 6, 0]]},
+      "pews": {"against": "free", "parts": [["town_pew", 0, 0], ["town_pew", 5, 0], ["town_pew", 0, 2], ["town_pew", 5, 2], ["town_pew", 0, 4], ["town_pew", 5, 4]]},
+      "coffins": {"against": "wall", "mirror": true, "parts": [["coffin", 0, 0], ["coffin", 3, 0], ["coffin", 6, 0], ["scatter_candles", 2, 1], ["scatter_candles", 5, 2]]},
+      "urns": {"against": "wall", "mirror": true, "parts": [["urns", 0, 0], ["set_candlestand", 2, 0]]},
+      "coffin": {"against": "wall", "mirror": true, "parts": [["coffin", 0, 0], ["scatter_candles", 2, 1]]},
+      "tomb": {"against": "free", "mirror": true, "parts": [["tomb", 0, 0], ["scatter_candles", 2, 2]]}
+    },
+    "rooms": {
+      "entry": {"most": 7, "take": ["urn_row", "ossuary", "coffins", "open_tomb", "urns", "coffin", "tomb", "urns", "coffin", "tomb"]},
+      "hall": {"most": 14, "take": ["altar", "pews", "tomb_row", "ossuary", "urn_row", "coffins", "open_tomb", "tomb_row", "ossuary", "urns", "coffin", "tomb", "urns", "coffin", "tomb", "urns", "coffin", "tomb"]},
+      "alcove": {"most": 6, "take": ["ossuary", "open_tomb", "coffins", "urns", "coffin", "tomb", "urns", "coffin", "tomb"]},
+      "lockin": {"most": 7, "take": ["open_tomb", "tomb_row", "coffins", "open_tomb", "urns", "coffin", "tomb", "urns", "coffin", "tomb"]},
+      "east": {"most": 7, "take": ["tomb_row", "urn_row", "open_tomb", "coffins", "urns", "coffin", "tomb", "urns", "coffin", "tomb"]},
+      "vigil": {"most": 6, "take": ["altar", "pews", "urn_row", "urns", "coffin", "tomb", "urns", "coffin", "tomb"]},
+      "web": {"most": 7, "take": ["ossuary", "coffins", "open_tomb", "ossuary", "urns", "coffin", "tomb", "urns", "coffin", "tomb"]},
+      "stair": {"most": 6, "take": ["urn_row", "ossuary", "coffins", "urns", "coffin", "tomb", "urns", "coffin", "tomb"]}
+    }
+  },
   "fallback": [
     { "node": "entry", "template": "burial.entry.a", "bay": [0, 0], "turn": 180, "mirror": true },
     { "node": "hall", "template": "burial.hall.a", "bay": [0, 1], "turn": 0, "mirror": false },
