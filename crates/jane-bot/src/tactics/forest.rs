@@ -502,6 +502,22 @@ pub fn engage(v: &View<'_>, cx: &mut Ctx, e: &Unit) -> Option<Act> {
         }
         return Some(stand_up(v, cx, e, 0));
     }
+    // Out of its glade (it chased her out, or walks home after she fell), with her at its edge
+    // about to go in: she does not go in before it, for the glade shuts behind her and would
+    // shut it out, and then there is no fight to finish and no way out. Walking home, it is let
+    // go in first; coming for her, it is fought on the doorstep.
+    if let Some(r) = arena(v) {
+        let (ex, ey) = e.pos.cell();
+        let (mx, my) = me.pos.cell();
+        let doorstep = Rect::new(r.x - 4, r.y - 4, r.w + 8, r.h + 8);
+        if !r.contains(ex, ey) && !r.contains(mx, my) && doorstep.contains(mx, my) {
+            if e.combat == jane_sim::state::CombatState::Leash {
+                cx.fight.hunt = None;
+                return Some(Act::idle());
+            }
+            return Some(stand_up(v, cx, e, 0));
+        }
+    }
     // Out of the dust: it hangs a while and bites every second she stands in it.
     let body = i64::from(cat.combat.unit(me.def).bounds.0);
     if let Some(g) = v
