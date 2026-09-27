@@ -123,11 +123,15 @@ fn determinism_twice_is_the_same_bytes() {
 fn layers_hold_the_contract_and_only_declared_roles_emit() {
     for r in all() {
         let eyes = r.set.emits.contains(&Role::Eye);
+        let held = r.set.emits.contains(&Role::Held);
         for (f, c) in frames(r) {
             c.validate().unwrap_or_else(|e| panic!("{} {f:?}: {e}", r.key()));
             let lit = c.emissive().iter().filter(|&&e| e != Ix::CLEAR).count();
-            if f.is_dead() || !eyes {
+            if f.is_dead() || !(eyes || held) {
                 assert_eq!(lit, 0, "{} {f:?}: emits with nothing declared", r.key());
+            } else if held {
+                // A lantern's glass: a handful of px, never the whole figure.
+                assert!(lit <= 24, "{} {f:?}: only the eyes and the lantern emit ({lit})", r.key());
             } else {
                 assert!(lit <= 2, "{} {f:?}: only the eyes emit", r.key());
             }

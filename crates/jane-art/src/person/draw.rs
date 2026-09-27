@@ -78,6 +78,8 @@ pub(crate) struct Rig {
     pub trail: (i32, i32),
     /// A skeleton: the bone skin, drawn as bones (ART.md §2.1).
     pub bone: bool,
+    /// Which way the frame faces.
+    pub facing: Facing,
 }
 
 /// Whether `d` is a skeleton: the `bone` skin draws a skull, ribs and bones, not a face and
@@ -105,7 +107,7 @@ impl Rig {
         };
         let hem = (p.hip_y() + pose.lag.0 + hang).min(AY - 2);
         let trail = (pose.lag.1 + bent - lean, pose.lag.0 - pose.bob);
-        Rig { p, pose, build: d.look.build, skull, top, waist: (top + hip) / 2 + 1, hip, hem, lean, trail, bone: bony(d) }
+        Rig { p, pose, build: d.look.build, skull, top, waist: (top + hip) / 2 + 1, hip, hem, lean, trail, bone: bony(d), facing }
     }
 
     /// The eyes' first row (their lids are the row above).
@@ -152,6 +154,7 @@ pub fn frame(d: &Dress, p: Proportions, facing: Facing, pose: Pose) -> Canvas {
         Facing::Up => up(&mut c, d, &r),
         Facing::Side => side(&mut c, d, &r),
     }
+    super::held::at_face(&mut c, d, &r);
     finish(&mut c, d);
     c
 }
@@ -159,6 +162,18 @@ pub fn frame(d: &Dress, p: Proportions, facing: Facing, pose: Pose) -> Canvas {
 /// Every material to its own tones, skin never in a checker, the clusters cleaned, the contact
 /// shadow under the feet, the selective outline (seams by relief), then each pixel's true height.
 fn finish(c: &mut Canvas, d: &Dress) {
+    // A held lantern's light is light, not paint: it keeps its colour through the outline.
+    let glow: Vec<(i32, i32, Ix)> = if d.look.held == jane_data::HeldItem::Lantern {
+        (0..c.h())
+            .flat_map(|y| (0..c.w()).map(move |x| (x, y)))
+            .filter_map(|(x, y)| {
+                let e = c.emissive_at(x, y);
+                (e != Ix::CLEAR).then_some((x, y, e))
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
     for r in [d.coat, d.front, d.legs, d.hat, d.boots, d.pack] {
         c.retone(r, CLOTH);
     }
@@ -174,6 +189,7 @@ fn finish(c: &mut Canvas, d: &Dress) {
         c.declutter(r);
     }
     c.unchecker(d.skin);
+    c.relight(&glow);
     c.upright(AY);
 }
 
@@ -599,6 +615,9 @@ fn arm_front(c: &mut Canvas, d: &Dress, r: &Rig, x0: i32, out: i32, hand_y: i32,
     c.hline(bx, bx + aw - 1, wrist, d.coat.at(Tone::Light), z.hi);
     c.dot(bx + aw - 1, wrist, d.coat.at(Tone::Shade), z.hi);
     hand(c, d, bx + (aw - 4) / 2, wrist + 1, z.hi);
+    if outer_left {
+        super::held::draw(c, d, r, bx + (aw - 4) / 2, wrist + 1);
+    }
 }
 
 fn neck(c: &mut Canvas, d: &Dress, r: &Rig) {
@@ -950,6 +969,9 @@ fn arm_side(c: &mut Canvas, d: &Dress, r: &Rig, shoulder: (i32, i32), swing: i32
     c.dot(elbow.0 - 1, elbow.1, d.coat.at(Tone::Shade), z.hi);
     c.hline(hx - 1, hx + 2, hand_y, d.coat.at(Tone::Light), z.hi);
     hand(c, d, hx - 1, hand_y + 1, z.hi);
+    if !far {
+        super::held::draw(c, d, r, hx - 1, hand_y + 1);
+    }
     if far {
         c.shade(Rect::new(hx - 3, sy, 8, hand_y - sy + 4), d.coat, 1);
         c.shade(Rect::new(hx - 3, hand_y, 8, 5), d.skin, 1);

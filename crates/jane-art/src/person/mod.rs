@@ -16,6 +16,7 @@ mod build;
 mod draw;
 mod fallen;
 mod hair;
+mod held;
 mod pose;
 
 use jane_core::hash::fnv1a;
