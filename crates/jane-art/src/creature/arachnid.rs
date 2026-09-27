@@ -57,18 +57,28 @@ fn eye_ix(k: &Coat) -> Ix {
 type Leg = (i32, i32, (i32, i32), (i32, i32), (i32, i32));
 
 fn leg(c: &mut Canvas, k: &Coat, hip: (i32, i32), knee: (i32, i32), foot: (i32, i32), w: i32, z: Z) {
-    // A spider's legs are its belly's brown, so they read against its black body.
-    let r = if k.look.anatomy == Anatomy::Spider { k.belly } else { k.body };
+    // Jointed and lit: the thigh dark with its upper edge catching the light in the belly's
+    // colour (a black spider's legs sheen brown, the queen's plum), a bright knee, the shin in
+    // shade with a band, a pale claw. Every stroke two px or side-touching, so none is taken for
+    // a spike.
+    let (r, hl) = (k.body, k.belly);
     c.line(hip, knee, r.at(Tone::Base), w, z.lo);
-    c.line((hip.0, hip.1 - 1), (knee.0, knee.1 - 1), r.at(Tone::Light), 1, z.hi);
-    // Two px: a line of one is a run of spikes the finish would take off.
+    super::insect::stair(c, (hip.0, hip.1 - 1), (knee.0, knee.1 - 1), hl.at(Tone::Light), z.hi);
     c.line(knee, foot, r.at(Tone::Shade), 2, z.lo);
-    c.dot(knee.0, knee.1, r.at(Tone::Lift), z.hi);
-    if k.belly != k.body {
-        // Banded legs: a ring of the belly's colour below each knee.
-        let (mx, my) = ((knee.0 * 2 + foot.0) / 3, (knee.1 * 2 + foot.1) / 3);
-        c.dot(mx, my, k.belly.at(Tone::Base), z.hi);
-    }
+    let (mx, my) = ((knee.0 * 2 + foot.0) / 3, (knee.1 * 2 + foot.1) / 3);
+    c.fill_rect(Rect::new(mx, my, 2, 1), hl.at(Tone::Base), z.hi);
+    c.fill_rect(Rect::new(knee.0 - 1, knee.1 - 1, 2, 2), hl.at(Tone::Light), z.hi);
+    c.dot(knee.0 - 1, knee.1 - 1, hl.at(Tone::High), z.hi);
+    c.dot(foot.0, foot.1, hl.at(Tone::Light), z.hi);
+}
+
+/// A gloss on a round body part: a bright cluster in its upper left and a glint in it.
+fn gloss(c: &mut Canvas, k: &Coat, r: Rect, z: u8) {
+    let (x, y) = (r.x + r.w / 4, r.y + r.h / 5);
+    let big = r.w >= 12;
+    c.fill_rect(Rect::new(x, y, if big { 4 } else { 3 }, 2), k.body.at(Tone::Light), z);
+    c.fill_rect(Rect::new(x + 1, y, if big { 2 } else { 1 }, 1), k.body.at(Tone::High), z);
+    c.dot(x, y, k.body.at(Tone::Glint), z);
 }
 
 pub(crate) fn draw(c: &mut Canvas, k: &Coat, facing: Facing, beat: Beat) {
@@ -94,17 +104,13 @@ fn mark(c: &mut Canvas, k: &Coat, ab: Rect, toward_us: bool) {
         }
         c.strokes(ab, k.body, StrokeKind::Fur, 14, h32(k.seed, 9, salt::STROKES));
     } else {
-        // Chevrons down the back, pointing to the head.
-        let n = (ab.h / 3).max(2);
-        for i in 0..n {
-            let y = if toward_us { ab.y + 2 + i * 3 } else { ab.bottom() - 3 - i * 3 };
-            let d = if toward_us { 1 } else { -1 };
-            for dx in 0..3 - i.min(2) {
-                c.tint(mid - 1 - dx, y - d * dx, k.body, Tone::Deep);
-                c.tint(mid + dx, y - d * dx, k.body, Tone::Deep);
-            }
-            c.dye_ellipse(Rect::new(mid - 1, y - 1, 2, 2), k.body, k.mark);
-        }
+        // An hourglass in the mark's red down the middle of the back: two triangles tip to tip.
+        let cy = ab.y + ab.h / 2;
+        let hh = (ab.h / 3).max(3);
+        let hw = (ab.w / 5).max(2);
+        c.dye_poly(&[(mid - hw, cy - hh), (mid + hw - 1, cy - hh), (mid, cy), (mid - 1, cy)], k.body, k.mark);
+        c.dye_poly(&[(mid - 1, cy), (mid, cy), (mid + hw - 1, cy + hh), (mid - hw, cy + hh)], k.body, k.mark);
+        let _ = toward_us;
     }
 }
 
@@ -172,9 +178,11 @@ fn top(c: &mut Canvas, k: &Coat, beat: Beat, toward_us: bool) {
     m.ellipse(ab, Ix::INK, 1);
     c.inflate(&m, k.body, sc(3), relief::BODY);
     mark(c, k, ab, toward_us);
+    gloss(c, k, ab, relief::BODY.hi);
     let mut h = Canvas::new(c.w(), c.h());
     h.ellipse(ceph, Ix::INK, 1);
     c.inflate(&h, k.body, sc(2), Z::new(relief::BODY.lo + 1, relief::BODY.hi + 1));
+    gloss(c, k, ceph, relief::BODY.hi + 1);
     for &(_, _, hip, knee, foot) in legs.iter().filter(|l| !back(l.1)) {
         leg(c, k, hip, knee, foot, lw, relief::LEG);
     }
@@ -183,13 +191,16 @@ fn top(c: &mut Canvas, k: &Coat, beat: Beat, toward_us: bool) {
         let ey = ceph.bottom() - sc(3);
         let z = relief::LEG.hi;
         c.set_emitting(k.eye_emits);
-        let eyes: &[(i32, i32)] = match k.look.anatomy {
-            Anatomy::Queen => &[(-3, 0), (-1, -1), (1, -1), (3, 0), (-2, 2), (0, 1), (2, 2), (0, -2)],
-            Anatomy::Lurker => &[(-1, 0), (1, 0)],
-            _ => &[(-2, 0), (-1, -1), (1, -1), (2, 0)],
+        // Two big eyes in front, 2 x 2, and the small ones in a ring over them.
+        for dx in [-2, 1] {
+            c.fill_rect(Rect::new(ax + dx, ey, 2, 2), eye_ix(k), z);
+        }
+        let small: &[(i32, i32)] = match k.look.anatomy {
+            Anatomy::Queen => &[(-4, -1), (-3, -3), (-1, -3), (2, -3), (4, -3), (5, -1)],
+            _ => &[(-3, -2), (-1, -2), (2, -2), (4, -2)],
         };
-        for &(dx, dy) in eyes {
-            c.dot(ax + dx - i32::from(dx > 0), ey + dy, eye_ix(k), z);
+        for &(dx, dy) in small {
+            c.dot(ax + dx - 1, ey + dy + 1, eye_ix(k), z);
         }
         c.set_emitting(false);
         let fang = if k.look.anatomy == Anatomy::Queen { Ramp::Bone } else { k.body };
@@ -242,6 +253,8 @@ fn side(c: &mut Canvas, k: &Coat, beat: Beat) {
     m.ellipse(ceph, Ix::INK, 1);
     c.inflate(&m, k.body, sc(3), relief::BODY);
     mark(c, k, ab, false);
+    gloss(c, k, ab, relief::BODY.hi);
+    gloss(c, k, ceph, relief::BODY.hi);
     draw_legs(c, false);
     let z = relief::LEG.hi;
     c.set_emitting(k.eye_emits);
@@ -254,25 +267,25 @@ fn side(c: &mut Canvas, k: &Coat, beat: Beat) {
     c.line((ceph.right() - 1, ceph.bottom() - sc(2)), (ceph.right() + i32::from(beat == Beat::Attack(1)), ceph.bottom()), fang.at(Tone::Light), 1, z);
 }
 
-/// On its back, the legs curled up over it.
+/// On its back: the belly up in its own colour, the legs drawn in over it in hooks, pair by
+/// pair, the way a dead spider's close.
 fn dead(c: &mut Canvas, k: &Coat) {
     let u = unit(k);
     let sc = |v: i32| v * u / 2;
     let (_, _, ax, ay) = super::size_of(k.look.plan, k.look.anatomy);
-    let body = Rect::new(ax - sc(7), ay - sc(6), sc(14), sc(6));
-    for i in 0..4 {
-        for side in [-1, 1] {
-            let hip = (ax + side * sc(2 + i), ay - sc(5));
-            let knee = (ax + side * sc(4 + i * 2), ay - sc(10));
-            let foot = (ax + side * sc(2 + i), ay - sc(12));
-            c.line(hip, knee, k.body.at(Tone::Base), 2, 3);
-            c.line(knee, foot, k.body.at(Tone::Shade), 2, 3);
-        }
-    }
+    let body = Rect::new(ax - sc(6), ay - sc(6), sc(12), sc(6));
     let mut m = Canvas::new(c.w(), c.h());
     m.ellipse(body, Ix::INK, 1);
     c.inflate(&m, k.body, sc(2), Z::new(2, 4));
-    if k.belly != k.body {
-        c.dye_ellipse(Rect::new(body.x + sc(2), body.y + 1, body.w - sc(4), body.h - 2), k.body, k.belly);
+    c.dye_ellipse(Rect::new(body.x + sc(2), body.y + 1, body.w - sc(4), body.h - 2), k.body, k.belly);
+    for i in 0..4 {
+        for side in [-1, 1] {
+            let hip = (ax + side * sc(2 + i), body.y + sc(1));
+            let knee = (ax + side * sc(4 + i), body.y - sc(3 + i % 2 * 2));
+            let claw = (ax + side * sc(2 + i / 2), knee.1 - sc(2));
+            super::insect::stair(c, hip, knee, k.belly.at(Tone::Base), 5);
+            super::insect::stair(c, knee, claw, k.body.at(Tone::Light), 5);
+            c.dot(knee.0, knee.1, k.belly.at(Tone::Light), 5);
+        }
     }
 }

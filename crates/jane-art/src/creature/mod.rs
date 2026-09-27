@@ -22,7 +22,9 @@
 
 mod arachnid;
 mod bird;
+mod crawler;
 mod flyer;
+mod insect;
 mod plant;
 mod quad;
 mod serpent;
@@ -63,14 +65,17 @@ pub const fn size(plan: Plan) -> (i32, i32, i32, i32) {
         Plan::FlyerBat => (32, 24, 16, 20),
         Plan::Arachnid | Plan::SerpentHead => (32, 32, 16, 28),
         Plan::Plant => (32, 40, 16, 36),
+        Plan::Crawler => (40, 32, 20, 28),
     }
 }
 
 /// The box and anchor of `plan` drawn as `anatomy`: the XL rows of ART.md §2.2 (the Emperor
-/// 48 x 40, the queen 48 x 48, the great flower 48 x 56), else the plan's.
+/// 56 x 56, the queen 48 x 48, the great flower 48 x 56; a butterfly or a moth 36 x 36, drawn
+/// at one and a half times so it reads at 1x), else the plan's.
 pub const fn size_of(plan: Plan, anatomy: Anatomy) -> (i32, i32, i32, i32) {
     match anatomy {
-        Anatomy::Emperor => (48, 40, 24, 36),
+        Anatomy::Butterfly | Anatomy::Moth => (36, 36, 18, 32),
+        Anatomy::Emperor => (56, 56, 28, 52),
         Anatomy::Queen => (48, 48, 24, 44),
         Anatomy::GreatFlower => (48, 56, 24, 52),
         _ => size(plan),
@@ -212,7 +217,8 @@ pub(crate) fn extra_ramps(a: jane_data::Anatomy) -> &'static [Ramp] {
         A::Hen => &[Ramp::ClothRed, Ramp::ClothMustard],
         A::Crow => &[Ramp::HairGrey],
         A::Rat | A::Rabbit | A::Cat | A::Dog | A::Fox | A::Sheep => &[Ramp::Skin],
-        A::Butterfly | A::Moth | A::Emperor | A::Bat | A::Spider | A::Lurker => &[],
+        A::Butterfly | A::Moth | A::Emperor | A::Bat | A::Spider => &[],
+        A::Lurker => &[Ramp::ClothRose, Ramp::Bone],
         A::Queen => &[Ramp::Bone],
         A::Snake => &[Ramp::ClothRose, Ramp::ClothRed, Ramp::Bone],
         A::Cactus => &[Ramp::Bark],
@@ -237,6 +243,7 @@ pub fn render(look: &CreatureLook, seed: u32, attacks: bool) -> Result<SpriteSet
             Plan::Arachnid => arachnid::draw(&mut c, &coat, facing, beat),
             Plan::SerpentHead => serpent::draw(&mut c, &coat, facing, beat),
             Plan::Plant => plant::draw(&mut c, &coat, facing, beat),
+            Plan::Crawler => crawler::draw(&mut c, &coat, facing, beat),
         }
         if beat == Beat::Dead {
             finish_dead(&mut c, &coat, ax, ay);

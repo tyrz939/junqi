@@ -120,7 +120,9 @@ fn geometry_the_silhouette_rules_hold() {
         let Some((_, Look::Person(p))) = looks::find(r.name) else { unreachable!() };
         let c = r.set.frame(FrameId::Down).unwrap();
         let pr = person::proportions(p.build);
-        if p.head.hat == jane_data::Hat::None && p.head.hair != jane_data::Hair::Pigtails {
+        // In a rocking chair the chair's back posts stand either side of her head: not her head.
+        let seated = p.extras.contains(&jane_data::Extra::Seated);
+        if p.head.hat == jane_data::Hat::None && p.head.hair != jane_data::Hair::Pigtails && !seated {
             for y in pr.skull_y()..pr.chin_y() {
                 let w = (0..32).filter(|&x| c.get(x, y).is_opaque()).count();
                 assert!(w <= 16 || y >= pr.chin_y() - 2, "{}: the head is {w} wide on row {y}", r.key());

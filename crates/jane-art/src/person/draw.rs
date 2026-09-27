@@ -148,11 +148,27 @@ impl Rig {
 /// One living frame of a person, finished.
 pub fn frame(d: &Dress, p: Proportions, facing: Facing, pose: Pose) -> Canvas {
     let mut c = Canvas::new(super::W, super::H);
+    // Seated in her rocking chair: she faces out of it (or is its back, from behind), lower by a
+    // chair's seat, and the walk's beats rock it.
+    let seated = d.look.extras.contains(&Extra::Seated);
+    let (facing, pose, lean) = if seated { super::special::seat(facing, pose) } else { (facing, pose, 0) };
     let r = Rig::new(p, pose, d, facing);
+    if seated {
+        super::special::chair_rockers(&mut c);
+        if facing == Facing::Down {
+            super::special::chair_back(&mut c, &r, lean);
+        }
+    }
     match facing {
         Facing::Down => down(&mut c, d, &r),
         Facing::Up => up(&mut c, d, &r),
         Facing::Side => side(&mut c, d, &r),
+    }
+    if seated {
+        if facing == Facing::Up {
+            super::special::chair_back(&mut c, &r, lean);
+        }
+        super::special::chair_front(&mut c, d, &r, facing == Facing::Down);
     }
     super::special::extras(&mut c, d, &r);
     super::special::wet(&mut c, d, &r);

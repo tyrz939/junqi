@@ -191,7 +191,7 @@
   "tale_wakes": { "family": "person", "build": "stout",
     "head": { "hair": "bun", "hair_ramp": "hair_white", "skin": "skin_pale", "face": "glasses" },
     "body": { "coat": "dress", "coat_ramp": "cloth_plum", "front_ramp": "cloth_ochre", "legs": "skirt", "legs_ramp": "cloth_black", "boots": "shoes" },
-    "extras": ["shawl", "stoop"] },
+    "extras": ["shawl", "seated"] },
   "tale_voysey": { "family": "person", "build": "slim",
     "head": { "hair": "short", "hair_ramp": "hair_grey", "hat": "peaked", "hat_ramp": "cloth_black", "face": "beard" },
     "body": { "coat": "jacket", "coat_ramp": "cloth_navy", "front": "waistcoat", "front_ramp": "cloth_black", "legs": "trousers", "legs_ramp": "cloth_navy", "boots": "boots" },

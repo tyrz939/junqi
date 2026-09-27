@@ -221,7 +221,7 @@ impl PersonLook {
 model_enum! {
     /// A creature's body plan (ART.md §2.2): each has its own box, anchor and gait.
     #[cfg_attr(feature = "compile", derive(serde::Deserialize), serde(rename_all = "snake_case"))]
-    pub enum Plan { QuadrupedMid, QuadrupedSmall, Bird, FlyerInsect, FlyerBat, Arachnid, SerpentHead, Plant }
+    pub enum Plan { QuadrupedMid, QuadrupedSmall, Bird, FlyerInsect, FlyerBat, Arachnid, SerpentHead, Plant, Crawler }
 }
 
 model_enum! {

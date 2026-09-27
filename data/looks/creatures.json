@@ -51,8 +51,8 @@
     "ramps": { "body": "hair_black", "belly": "hair_brown", "mark": "cloth_red" }, "emits": ["eye"] },
   "spider_queen": { "family": "creature", "plan": "arachnid", "anatomy": "queen",
     "ramps": { "body": "cloth_black", "belly": "cloth_plum", "mark": "bone" }, "emits": ["eye"] },
-  "lurker": { "family": "creature", "plan": "arachnid", "anatomy": "lurker",
-    "ramps": { "body": "hair_grey", "belly": "cloth_linen" }, "emits": ["eye"] },
+  "lurker": { "family": "creature", "plan": "crawler", "anatomy": "lurker",
+    "ramps": { "body": "skin_pale", "belly": "cloth_linen", "mark": "bloom" }, "emits": ["eye"] },
 
   "snake": { "family": "creature", "plan": "serpent_head", "anatomy": "snake",
     "ramps": { "body": "marsh", "belly": "cloth_cream", "mark": "hair_black" }, "emits": ["eye"] },

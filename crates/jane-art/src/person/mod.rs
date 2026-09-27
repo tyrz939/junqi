@@ -163,7 +163,9 @@ pub fn render_fighting(look: &PersonLook, seed: u32, fight: Fight) -> Result<Spr
         if matches!(look.build, jane_data::Build::Child | jane_data::Build::Stout) {
             pose.spread = pose.spread.map(|s| s / 2);
         }
-        let body = draw::frame(&d, p, Facing::Down, pose);
+        // The dead are out of any chair: the fallen pose is drawn standing.
+        let standing = Dress { look: PersonLook { extras: unseated(look.extras), ..d.look }, ..d };
+        let body = draw::frame(&standing, p, Facing::Down, pose);
         // Only flesh bleeds: a skeleton, a waxwork, a statue, an armour and a shade lie dry.
         frames.push((id, fallen::fallen(&body, seed ^ k as u32, matches!(d.skin, Ramp::Skin | Ramp::SkinPale | Ramp::SkinDark))));
     }
@@ -179,6 +181,15 @@ pub fn render_fighting(look: &PersonLook, seed: u32, fight: Fight) -> Result<Spr
         });
     }
     Ok(SpriteSet { w: W, h: H, ax: AX, ay: AY, frames, roles: d.roles(), emits })
+}
+
+/// `extras` without `seated` (a slice made once at boot for a seated look, else the same one).
+fn unseated(extras: &'static [jane_data::Extra]) -> &'static [jane_data::Extra] {
+    if extras.contains(&jane_data::Extra::Seated) {
+        Box::leak(extras.iter().copied().filter(|&e| e != jane_data::Extra::Seated).collect::<Vec<_>>().into_boxed_slice())
+    } else {
+        extras
+    }
 }
 
 /// Seat `seat`'s set (ART.md §3): seat 0 is `set` itself; seats 1 to 3 swap the coat role to

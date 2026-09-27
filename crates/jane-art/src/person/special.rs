@@ -315,3 +315,74 @@ pub(super) fn ghost(c: &mut Canvas, r: &Rig) {
     }
     c.scale_heights(1, 2);
 }
+
+/// A seated person's frame (`extras: seated`): facing out of the chair (from the side too: she
+/// turns in it to look), or its back; the body a seat lower, the feet together, the hands in
+/// the lap. The walk's beat rocks the chair: `(pose, the back's lean)`.
+pub(super) fn seat(facing: Facing, pose: super::Pose) -> (Facing, super::Pose, i32) {
+    let k = usize::from(pose.phase) * 6 / 65536;
+    let (dy, lean) = if pose.breathe { (0, 0) } else { [(0, 0), (0, 1), (0, 2), (0, -1), (0, -2), (0, -3)][k % 6] };
+    let facing = if facing == Facing::Up { Facing::Up } else { Facing::Down };
+    let p = super::Pose {
+        bob: 2 + dy,
+        arm: [0, 0],
+        leg: [0, 0],
+        lift: [0, 0],
+        lean: 0,
+        splay: [0, 0],
+        raise: [3, 3],
+        ..pose
+    };
+    (facing, p, lean)
+}
+
+/// The rocking chair's back: two posts, a curved top rail, spindles between, the back leaning
+/// with the rock. Behind her facing the viewer; over her from behind.
+pub(super) fn chair_back(c: &mut Canvas, r: &Rig, lean: i32) {
+    let wood = Ramp::WoodDark;
+    let top = r.top - 9;
+    let seat = r.hip + 1;
+    let z = Z::new(1, 3);
+    for x in [CX - 9, CX + 7] {
+        c.line((x + lean, top), (x, seat), wood.at(Tone::Base), 2, z.hi);
+        c.dot(x + lean, top, wood.at(Tone::Light), z.hi);
+    }
+    // The top rail, bowed: its ends a px lower than its middle.
+    c.line((CX - 9 + lean, top + 1), (CX - 3 + lean, top - 1), wood.at(Tone::Light), 2, z.hi);
+    c.line((CX - 3 + lean, top - 1), (CX + 2 + lean, top - 1), wood.at(Tone::Light), 2, z.hi);
+    c.line((CX + 2 + lean, top - 1), (CX + 8 + lean, top + 1), wood.at(Tone::Base), 2, z.hi);
+    for x in [CX - 5, CX - 2, CX + 1, CX + 4] {
+        c.line((x + lean, top + 1), (x, seat), wood.at(Tone::Shade), 1, z.lo);
+        c.dot(x + lean, top + 2, wood.at(Tone::Base), z.lo);
+    }
+}
+
+/// The rockers: a bow along the floor under the chair, rising at the ends; drawn before her, so
+/// her feet stand in front of them.
+pub(super) fn chair_rockers(c: &mut Canvas) {
+    let rock = Ramp::WoodDark;
+    c.line((CX - 12, AY - 5), (CX - 9, AY - 3), rock.at(Tone::Base), 2, relief::FAR.lo);
+    c.line((CX - 9, AY - 3), (CX + 8, AY - 3), rock.at(Tone::Base), 2, relief::FAR.lo);
+    c.line((CX + 8, AY - 3), (CX + 11, AY - 5), rock.at(Tone::Base), 2, relief::FAR.lo);
+    c.hline(CX - 9, CX + 8, AY - 3, rock.at(Tone::Light), relief::FAR.lo);
+}
+
+/// The chair's arms either side of her and its front legs; facing the viewer, the knitting in
+/// her lap: two needles and a ball of the wool.
+pub(super) fn chair_front(c: &mut Canvas, d: &Dress, r: &Rig, facing_us: bool) {
+    let wood = Ramp::WoodDark;
+    let z = relief::ARM.hi + 1;
+    let arm_y = r.waist + 1;
+    for (x, lit) in [(CX - 11, true), (CX + 9, false)] {
+        c.fill_rect(Rect::new(x, arm_y, 3, 2), wood.at(if lit { Tone::Light } else { Tone::Base }), z);
+        c.line((x + 1, arm_y + 2), (x + 1, AY - 4), wood.at(Tone::Shade), 2, z);
+    }
+    if facing_us {
+        // The knitting: a ball of wool in the lap and the needles crossed over it.
+        let (kx, ky) = (CX + 2, r.hip - 1);
+        let _ = d;
+        c.disc_lit(kx, ky, 2, Ramp::ClothRose, Z::flat(relief::FRONT + 3));
+        c.line((kx - 5, ky - 3), (kx - 1, ky + 1), Ramp::Iron.at(Tone::Light), 1, relief::FRONT + 4);
+        c.line((kx - 5, ky + 1), (kx - 1, ky - 3), Ramp::Iron.at(Tone::Light), 1, relief::FRONT + 4);
+    }
+}
