@@ -431,7 +431,7 @@ pub fn threat(v: &View<'_>, cx: &mut Ctx) -> Option<UnitId> {
     // What sees only by light and is no boss is not fought unless hunted (tactics::works); a
     // thing with no feet is not fought from where it cannot reach, nor when she is low.
     let ignore = crate::tactics::works::ignore;
-    let low = hp_permille(v.body()) < FLEE_BELOW && food(v).is_none();
+    let low = hp_permille(v.body()) < cx.flee_below() && food(v).is_none();
     let on: Vec<&Unit> = enemies(v)
         .into_iter()
         .filter(|u| on_me(v, u) && fightable(u) && !ignore(u) && reaches_her_here(v, u) && !(low && rooted(u)))
@@ -516,14 +516,15 @@ pub fn engage(v: &View<'_>, cx: &mut Ctx, id: UnitId) -> Option<Act> {
     // the fire is walked through, not fled from for ever), nor from what could not put her down
     // in three blows (a rat between her and the fire followed her back and forth all day).
     // Mended since (an apple, a fire): the flight is over.
-    if hp_permille(me) >= 2 * FLEE_BELOW {
+    let flee = cx.flee_below();
+    if hp_permille(me) >= 2 * flee {
         cx.fight.fleeing = 0;
     }
     // The School: what she cannot walk away from is fought out (`tactics::school::stands`).
     let kited = v.zone() == jane_core::ZoneId::School && crate::tactics::school::stands(v, t)
         || crate::tactics::burial::fought_out(v, t);
     let dangerous = i64::from(max_hit(t)) * 3 >= i64::from(me.hp.points());
-    if hp_permille(me) < FLEE_BELOW && cx.fight.fleeing == 0 && !has_food(v) && !would_win(v) && !kited && dangerous {
+    if hp_permille(me) < flee && cx.fight.fleeing == 0 && !has_food(v) && !would_win(v) && !kited && dangerous {
         cx.fight.fleeing = 180;
         cx.fight.fled += 1;
         cx.fight.hunt = None;

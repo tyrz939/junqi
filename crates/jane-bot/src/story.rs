@@ -62,6 +62,10 @@ pub enum Goal {
     Provision(ItemId),
     /// In a dungeon with the quest's thing out of reach: what the crawl would do next.
     Explore(crate::crawl::Try),
+    /// The Lost, looking for step `.1` of a quest from its words (255: whoever takes it back).
+    Search(QuestId, u8),
+    /// The Explorer, to the map's edge: the fog block it makes for.
+    Frontier(i32, i32),
 }
 
 /// Where an objective is, resolved against what she can see and remembers.
@@ -107,7 +111,40 @@ pub struct Story {
     dungeon: Option<(Box<crate::crawl::Crawl>, Goal)>,
     /// Nothing to do: the frame to look again.
     quiet_until: u32,
+    /// The Lost's and the Explorer's looking.
+    pub looking: Looking,
 }
+
+/// What the Lost has spent looking for each step, and what she gave up on; where the Lost and
+/// the Explorer found no way.
+#[derive(Debug, Default)]
+pub struct Looking {
+    /// Frames spent looking for each step (255: the hand-in).
+    pub frames: BTreeMap<(QuestId, u8), u32>,
+    /// Steps looked for past [`crate::lost::SEARCH_BUDGET`]: from then she is told.
+    pub gave_up: std::collections::BTreeSet<(QuestId, u8)>,
+    /// Steps found after looking (logged once).
+    pub found: std::collections::BTreeSet<(QuestId, u8)>,
+    /// Road frontier blocks with no way to them.
+    pub bad_road: std::collections::BTreeSet<(i32, i32)>,
+    /// Fog blocks with no way to them.
+    pub bad_fog: std::collections::BTreeSet<(i32, i32)>,
+    /// Each step's landmark words (the words do not change on a seed).
+    pub words: BTreeMap<(QuestId, u8), Vec<String>>,
+}
+
+/// Cells a quest's thing may be from the Explorer for it to go and do it (quests are incidental).
+const EXPLORER_NEAR: i32 = 48;
+
+/// What a search's walk costs over its distance, cells: what she knows comes first, and so does
+/// reading what she passes (a sign may name the place).
+const SEARCH_EXTRA: i32 = 120;
+
+/// A landmark the words name costs less than a road not walked.
+const LANDMARK_EXTRA: i32 = 40;
+
+/// What a walk to the map's edge costs over its distance, cells (the Explorer).
+const FRONTIER_EXTRA: i32 = 30;
 
 /// What she packs for an act, and how many of each: Stone Skin and a life-steal from the bench
 /// (the roses, stones and flowers she has picked up on the way), and food.
@@ -219,6 +256,11 @@ impl Story {
         self.done
     }
 
+    /// The objective in hand (a dungeon's step while its crawl plays it).
+    pub fn objective(&self) -> Option<Goal> {
+        self.dungeon.as_ref().map(|(_, g)| *g).or(self.task.as_ref().map(|(_, g)| *g))
+    }
+
     /// What it is doing, for a debugging line.
     pub fn status(&self) -> String {
         if let Some((c, g)) = &self.dungeon {
@@ -253,6 +295,26 @@ impl Story {
                             i,
                             step(v, cx, q.quest, i, r.target)
                         );
+                        if cx.model.has_eyes_only() {
+                            let want = crate::lost::landmark_words(v, q.quest, Some(i));
+                            let lm = crate::lost::landmark(v, &cx.eyes, &want);
+                            let lm_name = lm.and_then(|c| {
+                                cx.eyes
+                                    .props
+                                    .iter()
+                                    .find(|(k, pc)| k.0 == v.zone() && **pc == c)
+                                    .and_then(|(k, _)| v.prop(k.1))
+                                    .map(|p| crate::lost::prop_words(v, p).join(" "))
+                            });
+                            let _ = writeln!(
+                                out,
+                                "    lost: words {want:?}; landmark {lm:?} {lm_name:?}; looked {} frames; seen {} props, {} checked, road ends {:?}",
+                                self.looking.frames.get(&(q.quest, i as u8)).copied().unwrap_or(0),
+                                cx.eyes.props.len(),
+                                cx.eyes.checked.len(),
+                                cx.eyes.frontier.values().map(|v| v.0).collect::<Vec<_>>()
+                            );
+                        }
                     }
                 }
             }
@@ -412,6 +474,25 @@ impl Story {
             self.task = None;
             return Act::idle();
         }
+        // The Lost: every twenty minutes, her own map and her objective go; the log's words and
+        // what she sees again are what she has.
+        if cx.model.has_eyes_only() && cx.frames % crate::lost::FORGET_EVERY == 0 {
+            cx.eyes = crate::lost::Eyes::default();
+            if !dungeon(v.zone()) {
+                self.task = None;
+            }
+            notes.push(Mark::Note("lost: forgot her own map".into()));
+        }
+        // Looking for a step from the words: past the budget she is told where it is.
+        if let Some((_, Goal::Search(q, i))) = &self.task {
+            let key = (*q, *i);
+            let n = self.looking.frames.entry(key).or_insert(0);
+            *n += 1;
+            if *n >= crate::lost::SEARCH_BUDGET && self.looking.gave_up.insert(key) {
+                notes.push(Mark::Note(format!("lost: gave up looking for {} (told where)", search_name(key))));
+                self.task = None;
+            }
+        }
         // Out of doors, what she would lose to, trading blows as the rows say, is not fought: she
         // goes on her way at a run (most of what walks the county's roads is slower than her, and
         // goes home past its leash). What she was sent after is fought, and so is anything that
@@ -450,7 +531,8 @@ impl Story {
                 // (Nor is a thing made at the bench: brewing the snakes' bait is a walk to the
                 // bench and four makings, and it was set aside half made as "reached, and it did
                 // not count".)
-                let waiting = matches!(task, Task::Wait(_) | Task::Craft { .. });
+                let waiting = matches!(task, Task::Wait(_) | Task::Craft { .. })
+                    || matches!(goal, Goal::Search(..) | Goal::Frontier(..));
                 match task.tick(v, cx) {
                     Status::Act(a) => return a,
                     Status::Done => {
@@ -469,6 +551,23 @@ impl Story {
                     Status::Failed(why) => {
                         if let Some((Task::Use(u), Goal::Rest)) = &self.task {
                             self.bad_fires.insert(u.prop);
+                        }
+                        // No way to where she was looking: somewhere else next time.
+                        if let Some((Task::Walk { to, .. }, Goal::Search(..) | Goal::Frontier(..))) = &self.task {
+                            let c = to.cell();
+                            self.looking.bad_road.insert(crate::lost::block_of(c));
+                            self.looking.bad_fog.insert(crate::lost::fog_block_of(v, c));
+                            let z = v.zone();
+                            let near: Vec<_> = cx
+                                .eyes
+                                .props
+                                .iter()
+                                .filter(|((pz, _), pc)| *pz == z && (pc.0 - c.0).abs() <= 4 && (pc.1 - c.1).abs() <= 4)
+                                .map(|(&k, _)| k)
+                                .collect();
+                            cx.eyes.checked.extend(near);
+                            self.task = None;
+                            continue;
                         }
                         self.task = None;
                         if let (Goal::Explore(t), Some(ex)) = (goal, self.explorer.as_mut()) {
@@ -618,6 +717,7 @@ impl Story {
         }
         let zone = match g {
             Goal::Step(q, i) => zone_of_step(q, usize::from(i)),
+            Goal::Search(q, i) if i != 255 => zone_of_step(q, usize::from(i)),
             Goal::Look(z, _) => Some(z),
             Goal::Explore(_) => Some(v.zone()),
             _ => None,
@@ -875,8 +975,15 @@ impl Story {
                         // it: first, before any dungeon (seed 2 walked into the School with a bag
                         // of keys and gold and three lost things for the lost property box, and
                         // had no slot for what the School gives).
-                        Some(t) if bag_tight && takes_from_bag(q.quest) => offer(0, g, t, &mut best),
-                        Some(t) => offer(near(cost_of(&t)), g, t, &mut best),
+                        Some(t) => {
+                            let tight = bag_tight && takes_from_bag(q.quest);
+                            if let Some((extra, t, g)) = self.as_lost(v, cx, q.quest, None, t, g) {
+                                let c = if tight && extra == 0 { 0 } else { near(cost_of(&t)) + extra };
+                                if Self::explorer_takes(cx, c) {
+                                    offer(c, g, t, &mut best);
+                                }
+                            }
+                        }
                         None => {}
                     }
                 }
@@ -899,7 +1006,9 @@ impl Story {
                 if dungeon_ahead.is_some_and(|a| zone.is_some_and(|z| z != a)) {
                     continue;
                 }
-                if let Some(t) = step(v, cx, q.quest, i, r.target) {
+                if let Some((extra, t, g)) =
+                    step(v, cx, q.quest, i, r.target).and_then(|t| self.as_lost(v, cx, q.quest, Some(i), t, g))
+                {
                     if dungeon_ahead.is_none() {
                         dungeon_ahead = zone;
                     }
@@ -914,7 +1023,10 @@ impl Story {
                         }
                         _ => false,
                     };
-                    offer(if open_now { 0 } else { near(cost_of(&t)) }, g, t, &mut best);
+                    let c = if open_now && extra == 0 { 0 } else { near(cost_of(&t)) + extra };
+                    if Self::explorer_takes(cx, c) {
+                        offer(c, g, t, &mut best);
+                    }
                 }
             }
         }
@@ -929,7 +1041,7 @@ impl Story {
             }
             let tree = cat.combat.unit(u.def).talk.expect("a talker");
             let story = tree_has(v, tree, &|a| matches!(a, Action::Quest(_) | Action::HandIn(_)));
-            if cx.model == Model::Rusher && !story {
+            if cx.model.base() == Model::Rusher && !story {
                 continue;
             }
             // The Reader stops for anyone near its way; anyone who can give or take back a
@@ -941,7 +1053,7 @@ impl Story {
             offer(d, g, Target::Task(Task::talk(u.id)), &mut best);
         }
         // What she passes: things to read or open.
-        let reach = i64::from(if cx.model == Model::Reader { 20 } else { 12 } * CELL_FX);
+        let reach = i64::from(if cx.model.base() == Model::Reader { 20 } else { 12 } * CELL_FX);
         // Out of doors nothing past reach is taken, so that is asked first, and cheaply: the
         // county has thousands of props, and this runs every frame she has nothing in hand.
         let indoor = v.indoor();
@@ -954,7 +1066,7 @@ impl Story {
                 continue;
             }
             let d = to_prop(p, at);
-            if !curious(v, cx.model, p) {
+            if !curious(v, cx.model.base(), p) {
                 continue;
             }
             // What teaches is worth crossing the zone for; the rest only when passing.
@@ -1005,13 +1117,33 @@ impl Story {
             };
             offer(i64::from(300 * CELL_FX), g, t, &mut best);
         }
-        // The Reader sits down at a fire it passes after a fight or two.
-        if cx.model == Model::Reader && hp < 750 && self.open(v, Goal::Rest) {
-            if let Some(p) = fire.filter(|p| to_prop(p, at) < i64::from(30 * CELL_FX)) {
+        // The Reader sits down at a fire it passes after a fight or two; the Cautious at every
+        // fire it passes hurt at all.
+        let sit = match cx.model {
+            Model::Reader | Model::Lost => Some((750, 30)),
+            Model::Cautious => Some((950, 40)),
+            Model::Rusher | Model::Explorer => None,
+        };
+        if let Some((below, within)) = sit.filter(|&(below, _)| hp < below && self.open(v, Goal::Rest)) {
+            let _ = below;
+            if let Some(p) = fire.filter(|p| to_prop(p, at) < i64::from(within * CELL_FX)) {
                 offer(
                     to_prop(p, at) + i64::from(8 * CELL_FX),
                     Goal::Rest,
                     Target::Task(Task::Use(UseProp::new(p.id))),
+                    &mut best,
+                );
+            }
+        }
+        // The Explorer: the nearest ground not yet seen, unless something is nearer.
+        if cx.model == Model::Explorer && here == ZoneId::County {
+            if let Some(c) = crate::lost::fog_frontier(v, 80, &self.looking.bad_fog, &cx.nav.dangers(here)) {
+                let to = Vec2::centre(c.0, c.1);
+                let (bx, by) = crate::lost::fog_block_of(v, c);
+                offer(
+                    dist(at, to) + i64::from(FRONTIER_EXTRA * CELL_FX),
+                    Goal::Frontier(bx, by),
+                    Target::Task(Task::Walk { to, near: Fx(3 * CELL_FX) }),
                     &mut best,
                 );
             }
@@ -1069,6 +1201,12 @@ impl Story {
             }
             self.explorer = Some(ex);
         }
+        // The Explorer with nothing here: back out to the county's edge.
+        if cx.model == Model::Explorer && pick.is_none() && here != ZoneId::County {
+            if let Some(t) = route(v, cx, ZoneId::County) {
+                return Some((Target::Task(t), Goal::Frontier(-1, -1)));
+            }
+        }
         if let Some((_, Goal::Talk(z, u), t)) = &pick {
             cx.talked.insert((*z, *u), log);
             if let Target::Task(Task::Talk { unit, .. }) = t {
@@ -1081,6 +1219,78 @@ impl Story {
     }
 }
 
+impl Story {
+    /// The Explorer goes after a quest's thing only when it is near (quests are incidental).
+    fn explorer_takes(cx: &Ctx, cost: i64) -> bool {
+        cx.model != Model::Explorer || cost <= i64::from(EXPLORER_NEAR * CELL_FX)
+    }
+
+    /// The Lost's view of a target the Reader's reading of the log found (step `i` of `q`, or its
+    /// hand-in): the target itself once it has been on screen (or when she has looked past the
+    /// budget and been told); until then where she would look for it, from the words, as a
+    /// search: a landmark they name, a road not walked, the map's edge. With the extra cost over
+    /// the walk's distance. `None`: nowhere left to look.
+    fn as_lost(
+        &mut self,
+        v: &View<'_>,
+        cx: &Ctx,
+        q: QuestId,
+        i: Option<usize>,
+        t: Target,
+        g: Goal,
+    ) -> Option<(i64, Target, Goal)> {
+        let key = (q, i.map_or(255, |i| i as u8));
+        if !cx.model.has_eyes_only() || v.zone() != ZoneId::County || self.looking.gave_up.contains(&key) {
+            return Some((0, t, g));
+        }
+        if known(v, cx, &t) {
+            if self.looking.frames.get(&key).is_some_and(|&n| n > 0) {
+                self.looking.found.insert(key);
+            }
+            return Some((0, t, g));
+        }
+        let want = self.looking.words.entry(key).or_insert_with(|| crate::lost::landmark_words(v, q, i)).clone();
+        let at = v.body().pos.cell();
+        let dangers = cx.nav.dangers(v.zone());
+        let (extra, c) = crate::lost::landmark(v, &cx.eyes, &want)
+            .and_then(|c| crate::nav::nearest_walkable(v, c.0, c.1, 4))
+            .map(|c| (LANDMARK_EXTRA, c))
+            .or_else(|| cx.eyes.road_frontier(at, &self.looking.bad_road, &dangers).map(|c| (SEARCH_EXTRA, c)))
+            .or_else(|| crate::lost::fog_frontier(v, 60, &self.looking.bad_fog, &dangers).map(|c| (SEARCH_EXTRA, c)))?;
+        let to = Vec2::centre(c.0, c.1);
+        Some((
+            i64::from(extra * CELL_FX),
+            Target::Task(Task::Walk { to, near: Fx(3 * CELL_FX) }),
+            Goal::Search(key.0, key.1),
+        ))
+    }
+}
+
+/// Has the Lost had this target on screen (or, for a door into a dungeon, seen the door)?
+fn known(v: &View<'_>, cx: &Ctx, t: &Target) -> bool {
+    let z = v.zone();
+    match t {
+        Target::Task(Task::Use(u)) => cx.eyes.props.contains_key(&(z, u.prop)),
+        Target::Task(Task::Talk { unit, .. }) | Target::Fight(unit) => cx.eyes.units.contains_key(&(z, *unit)),
+        Target::Task(Task::Pickup { drop, .. }) => {
+            let cam = jane_sim::trace::camera(v.body().pos.cell());
+            v.drops().iter().find(|d| d.id == *drop).is_some_and(|d| {
+                let (x, y) = d.pos.cell();
+                cam.contains(x, y)
+            })
+        }
+        Target::Task(Task::Walk { to, .. }) => cx.eyes.looked_at(z, to.cell()),
+        Target::Zone(y) | Target::At(y, _) => !dungeon(*y) || cx.eyes.doors.contains(y) || cx.visited.contains(y),
+        _ => true,
+    }
+}
+
+/// A search's step, in words.
+pub fn search_name((q, i): (QuestId, u8)) -> String {
+    let id = jane_data::catalog().story.quest(q).id;
+    if i == 255 { format!("{id} hand-in") } else { format!("{id} step {}", i + 1) }
+}
+
 fn goal_name(v: &View<'_>, g: Goal) -> String {
     let cat = jane_data::catalog();
     match g {
@@ -1091,6 +1301,8 @@ fn goal_name(v: &View<'_>, g: Goal) -> String {
         Goal::Sleep => "home to sleep".into(),
         Goal::Provision(i) => format!("provision {}", cat.combat.item(i).id),
         Goal::Explore(t) => format!("explore: {t:?}"),
+        Goal::Search(q, i) => format!("look for {}", search_name((q, i))),
+        Goal::Frontier(x, y) => format!("the map's edge at {x},{y}"),
         Goal::Look(z, p) => {
             let name = v.prop(p).filter(|_| v.zone() == z).map_or("?", |p| v.name(p.key));
             format!("look at {name} in {}", z.name())
@@ -1118,7 +1330,7 @@ fn curious(v: &View<'_>, model: Model, p: &jane_sim::Prop) -> bool {
                 || food
                 || (v.indoor() && sense::prop_does(v, p, &|a| matches!(a, Action::Quest(_) | Action::HandIn(_))))
         }
-        Model::Reader => {
+        Model::Reader | Model::Explorer | Model::Cautious | Model::Lost => {
             teaches
                 || s.talk.is_some()
                 || (!p.used && !s.loot.is_empty())

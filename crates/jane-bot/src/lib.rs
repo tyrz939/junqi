@@ -39,9 +39,12 @@
 pub mod coarse;
 pub mod console;
 pub mod crawl;
+pub mod experience;
 pub mod fight;
 pub mod fixture;
+pub mod lost;
 pub mod nav;
+pub mod run;
 pub mod sense;
 pub mod story;
 pub mod tactics;
@@ -62,13 +65,27 @@ pub enum Model {
     Reader,
     /// The spine only, in straight lines, sprinting on cooldown.
     Rusher,
+    /// The frontier over the fog: the nearest ground not yet seen, reading and opening what it
+    /// passes and fighting what comes at it; quests only when their thing is near.
+    Explorer,
+    /// The Reader, careful: backs off at half her health, sits at every fire she passes hurt.
+    Cautious,
+    /// The Reader with no markers: what a step names is used only once it has been on screen,
+    /// and found from the words and the world until then ([`lost`]).
+    Lost,
 }
 
 impl Model {
+    /// Every model, in the sweep's order.
+    pub const ALL: [Model; 5] = [Model::Reader, Model::Rusher, Model::Explorer, Model::Cautious, Model::Lost];
+
     pub fn parse(s: &str) -> Option<Model> {
         match s {
             "reader" => Some(Model::Reader),
             "rusher" => Some(Model::Rusher),
+            "explorer" => Some(Model::Explorer),
+            "cautious" => Some(Model::Cautious),
+            "lost" => Some(Model::Lost),
             _ => None,
         }
     }
@@ -77,12 +94,34 @@ impl Model {
         match self {
             Model::Reader => "reader",
             Model::Rusher => "rusher",
+            Model::Explorer => "explorer",
+            Model::Cautious => "cautious",
+            Model::Lost => "lost",
         }
     }
 
     /// Runs whenever there is energy to (the Reader walks unless it is going far).
     pub const fn sprints(self) -> bool {
         matches!(self, Model::Rusher)
+    }
+
+    /// The story's shared rules this model plays by: the Rusher's, or the Reader's (every other
+    /// model is the Reader with one thing changed).
+    pub const fn base(self) -> Model {
+        match self {
+            Model::Rusher => Model::Rusher,
+            _ => Model::Reader,
+        }
+    }
+
+    /// Keeps to the roads out of doors unless the text sends it off them.
+    pub const fn keeps_to_roads(self) -> bool {
+        matches!(self, Model::Reader | Model::Cautious | Model::Lost)
+    }
+
+    /// Knows only what has been on screen ([`lost::Eyes`]).
+    pub const fn has_eyes_only(self) -> bool {
+        matches!(self, Model::Lost)
     }
 }
 
@@ -352,6 +391,11 @@ impl Bot {
     /// The story from New Game.
     pub fn story(model: Model) -> Bot {
         Bot::new(model, Plan::Story(story::Story::new()))
+    }
+
+    /// What the last step emitted (all of it; the bot reads its own seat's).
+    pub fn events(&self) -> &[Event] {
+        &self.events
     }
 
     /// Has the plan finished (or given up)?

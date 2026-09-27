@@ -66,6 +66,8 @@ pub struct Ctx {
     pub signalled: Option<u32>,
     /// Butterfly Forest's tactic (`tactics::forest`).
     pub forest: crate::tactics::forest::Forest,
+    /// What has been on screen (the Lost's whole knowledge of where things are).
+    pub eyes: crate::lost::Eyes,
 }
 
 /// How long a dungeon's death spot is let be: two game hours.
@@ -136,7 +138,7 @@ impl Ctx {
     pub fn new(model: Model) -> Ctx {
         Ctx {
             model,
-            nav: Nav::keeping_to_roads(model == Model::Reader),
+            nav: Nav::keeping_to_roads(model.keeps_to_roads()),
             fight: crate::fight::Fight::default(),
             talk: crate::talk::Talk::default(),
             used: BTreeMap::new(),
@@ -157,7 +159,14 @@ impl Ctx {
             run: false,
             signalled: None,
             forest: crate::tactics::forest::Forest::default(),
+            eyes: crate::lost::Eyes::default(),
         }
+    }
+
+    /// The health, permille, under which she backs off a fight she is losing: the Cautious at
+    /// half, everyone else at a third ([`crate::fight::FLEE_BELOW`]).
+    pub fn flee_below(&self) -> i32 {
+        if self.model == Model::Cautious { 500 } else { crate::fight::FLEE_BELOW }
     }
 
     /// Did she fall within `r` cells of `at` in zone `z`, in the last [`FELL_FOR`] ticks? What
@@ -225,6 +234,9 @@ impl Ctx {
                 .map(|p| PropNote::of(v, p))
                 .collect();
             self.notes.insert(v.zone(), notes);
+        }
+        if self.frames % 30 == 1 && self.model.has_eyes_only() {
+            self.eyes.look(v);
         }
         if self.frames % 30 == 1 {
             for u in crate::sense::talkers(v) {
