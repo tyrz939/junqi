@@ -22,7 +22,8 @@ This is the third build. The first (Phaser, 2026) is archived in `archive/phaser
 | P5 art | Step 1 done: palette, the four-layer canvas and its primitives, the stroke font, chrome, a lit-sphere sheet |
 | P6 scene, soft backend, window | Under way, window first (`PORT.md` §7.1): the window, the loop, the scene and its people, soft and wgpu backends |
 | P7 UI and input | Built ahead of its gate (2026-09-27): title, loading card, HUD, dialogue, pause, save slots, the Bag / Book / Log / Map window with drag and drop, the terminal, Controls with press-to-rebind, the F2 and F3 overlays; `data/bindings.json` compiled in. A pad and the assist are wired and untested by hand |
-| P6b onward | Not started |
+| P6b T1 | `gl2` built (2026-09-27): OpenGL 2.1 / GLES 2 through glow, its albedo `soft`'s to the byte, normal-mapped lamps with hard shadows, the silhouettes, sharp bilinear; fog, weather, water and particles wait for their passes; the Pi 4 and the ancient PC are not yet on the desk |
+| P6c onward | P6c (wgpu, T2) built; the rest not started |
 
 | Doc | What it decides |
 | --- | --- |
@@ -65,6 +66,8 @@ cargo jane gen --zones all --seeds 1..16 --hash          # every zone built and 
 cargo jane hash --seed 7 --frames 600                    # a new game stepped, and its state hash
 cargo jane sheet light sphere                            # art sheets: layers, light, font, chrome, palette
 cargo jane sheet ui                                      # the UI's screens headless: hud, dead, choice, tooltip, popover, drag, pause
+cargo run --release -p jane-cli --features gpu -- sheet scene --hour 22 --backend gl2   # one frame through T1 (soft, gl2 or wgpu)
+cargo run --release -p jane-cli --features gpu -- bench frames --backend gl2 --shadows off --half-light   # T1 frame times, rows turned down
 ```
 
 The game, in a window:
@@ -72,7 +75,8 @@ The game, in a window:
 ```bash
 cargo run --release -p jane-app                          # the title: New Game (her name), Continue, Load, Controls, Quit
 cargo run --release -p jane-app -- --new --seed 7        # straight into New Game on seed 7, no title
-cargo run --release -p jane-app -- --backend soft        # T0; the default is wgpu where an adapter can draw it
+cargo run --release -p jane-app -- --backend soft        # T0; the default is wgpu where an adapter can draw it, else gl2
+cargo run --release -p jane-app -- --backend gl2         # T1: OpenGL 2.1, else GLES 2 (a 2006 PC, every Pi)
 cargo run --release -p jane-app -- --new --seed 7 --ticks 600 --shot sheets/app.png    # ten seconds, then the canvas as a PNG
 cargo run --release -p jane-app -- --new --seed 7 --ticks 900 \
     --script "tick 200 key Tab; tick 260 shot sheets/bag.png; tick 270 key M; tick 400 shot sheets/map.png"
