@@ -25,6 +25,20 @@ use crate::palette::{Ix, Ramp, Tone};
 /// Screen pixels per sim cell (ART.md §0).
 pub const CELL_PX: i32 = 16;
 
+/// The 3/4 view's one projection (ART.md §1.1): a height is true px above the ground, and a thing
+/// `h` px up is drawn four fifths of that many rows above the ground point it stands on, rounded
+/// up. An upright pixel `r` rows above its feet stands [`height_of_rows`]`(r)` px up, and
+/// `rows_up` of that is `r` again, so a person's every column lands on her feet and a wall's face
+/// on its foot. Every lit tier's shadow reads the height layer through this.
+pub const fn rows_up(h: i32) -> i32 {
+    (h * 4 + 4) / 5
+}
+
+/// The true height of what stands `rows` rows up the screen: five px for every four rows.
+pub const fn height_of_rows(rows: i32) -> i32 {
+    rows * 5 / 4
+}
+
 /// A tangent-space normal: `[nx, ny]`, each `128 + 127 * component` for a component in
 /// `-1..=1`; `nz` is the remainder, `sqrt(1 - nx² - ny²)`.
 pub type Normal = [u8; 2];
@@ -973,7 +987,7 @@ impl Canvas {
     /// run [`Canvas::outline`] first.
     pub fn upright(&mut self, ay: i32) {
         for y in 0..self.h {
-            let row = ((ay - y).max(0) * 5 / 4).clamp(1, 255) as u8;
+            let row = height_of_rows((ay - y).max(0)).clamp(1, 255) as u8;
             for x in 0..self.w {
                 let i = (y * self.w + x) as usize;
                 if self.albedo[i].is_opaque() {
