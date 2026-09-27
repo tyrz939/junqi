@@ -23,6 +23,8 @@ pub enum Cmd {
     Bed { bed: Bed, level: f32 },
     /// Master, music and effects, 0 to 1.
     Volume { master: f32, music: f32, sfx: f32 },
+    /// A new county: the music's choices are drawn from its seed from the next cue on.
+    Seed(u32),
 }
 
 /// A sound effect playing.
@@ -200,6 +202,7 @@ impl Engine {
                     b.target = level.clamp(0.0, 1.0);
                 }
             }
+            Cmd::Seed(seed) => self.seed = seed,
             Cmd::Volume { master, music, sfx } => {
                 self.vol_want = [master.clamp(0.0, 1.0), music.clamp(0.0, 1.0), sfx.clamp(0.0, 1.0)];
             }

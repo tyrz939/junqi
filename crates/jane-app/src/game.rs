@@ -126,7 +126,10 @@ pub fn run(args: &Args) -> Result<(), String> {
     sdl.mouse().show_cursor(false);
     let mut pump = sdl.event_pump()?;
     // The command line's backend, else the one the Controls screen chose last time.
-    let saved = crate::config::Config::load(&crate::saves::Dirs::find(args.data_dir.as_deref())).backend;
+    let config = crate::config::Config::load(&crate::saves::Dirs::find(args.data_dir.as_deref()));
+    let saved = config.backend.clone();
+    // The sound device, or silence without one (PRESENTATION.md §5).
+    let sound = crate::audio::Sound::open(&sdl, config.volumes(), args.seed);
     let choice = match (args.backend, saved.as_deref()) {
         (BackendChoice::Auto, Some("soft")) => BackendChoice::Soft,
         (BackendChoice::Auto, Some("wgpu")) => BackendChoice::Wgpu,
@@ -135,7 +138,7 @@ pub fn run(args: &Args) -> Result<(), String> {
     match probe(choice, &window)? {
         Some(wgpu) => {
             println!("jane-app: {}", wgpu.describe());
-            crate::app::run(args, &mut pump, pads, &text_in, &mut GpuScreen { window, wgpu: Box::new(wgpu) })
+            crate::app::run(args, &mut pump, pads, &text_in, &mut GpuScreen { window, wgpu: Box::new(wgpu) }, sound)
         }
         None => {
             let mut canvas = screen::canvas(window)?;
@@ -148,6 +151,7 @@ pub fn run(args: &Args) -> Result<(), String> {
                 pads,
                 &text_in,
                 &mut SoftScreen { canvas, target: Target::new(&tc), soft: Soft::new() },
+                sound,
             )
         }
     }

@@ -140,6 +140,9 @@ struct App<'a> {
     /// Where the reticle is drawn this frame.
     reticle: Option<(i32, i32)>,
     controls: ControlsState,
+    /// The sound device and the cue table that drives it (PRESENTATION.md §5).
+    sound: crate::audio::Sound,
+    soundtrack: jane_present::audio::Soundtrack,
 }
 
 /// The sim as the bot's host, keeping what it drains for the presenter too.
@@ -173,6 +176,7 @@ pub fn run(
     pads: Option<sdl2::GameControllerSubsystem>,
     text_in: &sdl2::keyboard::TextInputUtil,
     screen: &mut dyn Screen,
+    sound: crate::audio::Sound,
 ) -> Result<(), String> {
     let dirs = Dirs::find(args.data_dir.as_deref());
     let config = Config::load(&dirs);
@@ -227,6 +231,8 @@ pub fn run(
         console: Console::default(),
         reticle: None,
         controls: ControlsState::default(),
+        sound,
+        soundtrack: jane_present::audio::Soundtrack::new(),
     };
     app.input.bindings = app.config.bindings();
     app.input.assist = app.config.assist();
@@ -529,8 +535,9 @@ impl App<'_> {
 
     fn tick(&mut self, held: InputFrame, events: &mut Vec<Event>) {
         match &mut self.scene {
-            Scene::Title => {}
+            Scene::Title => self.soundtrack.title(&mut self.sound),
             Scene::Loading { rx, st, sim, slot } => {
+                self.soundtrack.title(&mut self.sound);
                 while let Ok(m) = rx.try_recv() {
                     match m {
                         Loaded::Card(c) => {
@@ -552,6 +559,9 @@ impl App<'_> {
                 if st.done(self.ticks as u32) && sim.is_some() {
                     let loaded_slot = *slot;
                     self.sim = sim.take();
+                    if let Some(s) = &self.sim {
+                        self.sound.set_seed(s.state().seed);
+                    }
                     self.scene = Scene::Play;
                     self.bufs = ViewBuffers::new();
                     self.dialogue.reset();
@@ -586,6 +596,7 @@ impl App<'_> {
                 if let Some(v) = sim.view(ME) {
                     self.present.tick(&v, events);
                     self.bufs.tick(&v, events);
+                    self.soundtrack.tick(&v, events, &mut self.sound);
                     self.stages[1] += t.elapsed().as_micros() as u32;
                     if self.bot_until_talk && self.bufs.dialogue.is_some() {
                         self.bot = None;
@@ -696,6 +707,9 @@ impl App<'_> {
     }
 
     fn intent(&mut self, i: AppIntent) {
+        if let Some(k) = crate::audio::intent_sound(&i) {
+            self.soundtrack.ui(k, &mut self.sound);
+        }
         match i {
             AppIntent::NewGame { name } => {
                 self.config.name.clone_from(&name);
@@ -839,6 +853,7 @@ impl App<'_> {
                 self.config.set_slot_seed(n, sim.state().seed);
                 let _ = self.config.save(&self.dirs);
                 self.bufs.push_toast(&format!("Saved to slot {}", n + 1), jane_present::text::Tone::Good);
+                self.soundtrack.ui(jane_present::audio::SfxKind::Save, &mut self.sound);
                 self.read_slots();
             }
             Err(e) => self.say(&e),
@@ -915,7 +930,7 @@ impl App<'_> {
                 Menu::Slots(mode) => menus::slots(&mut self.ui, &mut self.menu_state, mode, &self.slot_rows),
                 Menu::Controls => {
                     let backend = self.config.backend.clone().unwrap_or_else(|| "auto".into());
-                    let info = ControlsInfo { assist: self.input.assist, backend: &backend };
+                    let info = ControlsInfo { assist: self.input.assist, backend: &backend, volumes: self.config.volumes() };
                     let out = controls::draw(&mut self.ui, &mut self.controls, &mut self.input.bindings, info);
                     let mut save = out.bindings;
                     if out.bindings {
@@ -928,6 +943,11 @@ impl App<'_> {
                     }
                     if let Some(b) = out.backend {
                         self.config.backend = Some(b.to_owned());
+                        save = true;
+                    }
+                    if let Some(v) = out.volumes {
+                        self.config.set_volumes(v);
+                        self.sound.set_volume(v);
                         save = true;
                     }
                     if save && let Err(e) = self.config.save(&self.dirs) {

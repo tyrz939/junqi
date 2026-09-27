@@ -336,6 +336,7 @@ name = "jane-app"
 version = "0.1.0"
 dependencies = [
  "jane-art",
+ "jane-audio",
  "jane-bot",
  "jane-core",
  "jane-data",

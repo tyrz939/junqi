@@ -4,6 +4,7 @@
 //! No SDL type leaves this crate: `jane-present` sees a `DeviceState` and hands back a `Frame`.
 
 mod app;
+mod audio;
 mod config;
 mod console;
 mod devices;
