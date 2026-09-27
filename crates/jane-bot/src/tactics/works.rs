@@ -366,7 +366,13 @@ fn kite(v: &View<'_>, cx: &mut Ctx, t: &Unit, bolts: &[SpellId]) -> Act {
             return Act::press(Command::Item(p));
         }
     }
-    if d >= i64::from(CELL_FX) * 9 / 2 {
+    // Far enough that the cast's stop does not let it reach her: its reach (both bodies and a
+    // melee's), and what it closes at its pace (slowed or not) while she stands, and a cell.
+    let row = cat.combat.unit(t.def);
+    let reach = i64::from(row.bounds.0) + i64::from(cat.combat.unit(me.def).bounds.0) + i64::from(CELL_FX) / 2;
+    let pace = i64::from(row.run.0) * i64::from(jane_sim::status::speed_factor(t, now)) / 1000;
+    let stop = bolts.iter().map(|&s| i64::from(cat.combat.spell(s).stop.0)).max().unwrap_or(30);
+    if d >= reach + pace * stop + i64::from(CELL_FX) {
         if let Some(a) = bolt(v, t, bolts) {
             return a;
         }

@@ -290,8 +290,11 @@ pub fn engage(v: &View<'_>, cx: &mut Ctx, id: UnitId) -> Option<Act> {
     let cat = jane_data::catalog();
     let d = dist(me.pos, t.pos);
     let dir = jane_core::angle::iatan2(t.pos.y.0 - me.pos.y.0, t.pos.x.0 - me.pos.x.0);
-    // Low with nothing to eat: back off (it may leash), and let the plan find a fire.
-    if hp_permille(me) < FLEE_BELOW && cx.fight.fleeing == 0 && food(v).is_none() {
+    // Low with nothing to eat: back off (it may leash), and let the plan find a fire. Not from
+    // what could not put her down in three blows: a rat between her and the fire followed her
+    // back and forth all day.
+    let dangerous = i64::from(max_hit(t)) * 3 >= i64::from(me.hp.points());
+    if hp_permille(me) < FLEE_BELOW && cx.fight.fleeing == 0 && food(v).is_none() && dangerous {
         cx.fight.fleeing = 180;
         cx.fight.fled += 1;
         cx.fight.hunt = None;

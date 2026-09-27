@@ -340,6 +340,7 @@ impl Crawl {
                 if crate::tactics::works::done(v, &self.reach, self.zone, won) {
                     self.stage = Stage::Leave;
                     self.task = None;
+                    cx.fight.hunt = None;
                     notes.push(Mark::Note("what the story wants is in hand: leaving".into()));
                 }
             }
@@ -356,12 +357,19 @@ impl Crawl {
         // are kept for a fight; shut in with a boss there is none, and she eats and carries on.
         if sense::hp_permille(v.body()) < 500 {
             self.reach.update(v, sig);
-            if self.rest_in_reach(v).is_none() {
-                if let Some(c) = fight::eat(v) {
-                    return Act::press(c);
+            match self.rest_in_reach(v) {
+                None => {
+                    if let Some(c) = fight::eat(v) {
+                        return Act::press(c);
+                    }
                 }
-            } else if self.task.as_ref().is_some_and(|(_, w)| !matches!(w, Try::Rest(_))) {
-                self.task = None;
+                // Walking out too: the way out is no shorter for being walked half dead.
+                Some(p) if self.task.as_ref().is_none_or(|(_, w)| !matches!(w, Try::Rest(_))) => {
+                    self.task = Some((Task::Use(UseProp::new(p)), Try::Rest(p)));
+                    // What she was hunting waits too (else the fight walks her back to it).
+                    cx.fight.hunt = None;
+                }
+                Some(_) => {}
             }
         }
         for _ in 0..4 {
