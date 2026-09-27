@@ -6,7 +6,10 @@
 //!
 //! What a player carries at each act is what the story gave her by then (`STORY.md` §4): each
 //! dungeon's key to the next place, each verb, the growth the places before it offer
-//! ([`crate::crawl::growth_before`]), and food.
+//! (the dungeons' jars and pages, not the county's errands: the story bot does few of those),
+//! and what she packs at the bench before an act (`story.rs` provisions): six apples, a
+//! life-steal, a Manashield, no Stone Skin. It is the story's kit, leaner than a dungeon test's
+//! ([`crate::crawl::setup`]), so a dungeon that finishes from here finishes in the story.
 
 use jane_core::ZoneId;
 use jane_sim::input::DevOp;
@@ -131,7 +134,7 @@ pub fn start_at(sim: &mut Sim, act: &str) -> Result<Vec<Command>, String> {
         sim.state_mut().quests.active.push(jane_sim::state::QuestProgress { quest: id, counts });
     }
     let mut out = vec![Command::Dev(DevOp::Time { hour: 10 })];
-    let (strength, spirit) = crate::crawl::growth_before(sim.blueprints(), a.zone);
+    let (strength, spirit) = dungeon_growth_before(sim.blueprints(), a.zone);
     for (stat, amount) in [(jane_core::action::Stat::Strength, strength), (jane_core::action::Stat::Spirit, spirit)] {
         if amount > 0 {
             out.push(Command::Dev(DevOp::Grow { stat, amount: amount.min(i32::from(i16::MAX)) as i16 }));
@@ -150,7 +153,8 @@ pub fn start_at(sim: &mut Sim, act: &str) -> Result<Vec<Command>, String> {
             }
         }
     }
-    for &(i, qty) in items.iter().chain(&[("key_auntie_house", 1), ("apple", 8), ("potion_stoneskin", 2)]) {
+    let packed = [("key_auntie_house", 1), ("apple", 6), ("potion_lifesteal", 1), ("potion_manashield", 1)];
+    for &(i, qty) in items.iter().chain(&packed) {
         out.push(Command::Dev(DevOp::Give { item: item(i), qty }));
     }
     for (i, qty) in crate::crawl::materials_before(sim.blueprints(), a.zone) {
@@ -159,4 +163,13 @@ pub fn start_at(sim: &mut Sim, act: &str) -> Result<Vec<Command>, String> {
     let step = cat.name_id("dogs_step").ok_or("no mark dogs_step")?;
     out.push(Command::Dev(DevOp::Tp { zone: ZoneId::County, mark: jane_sim::sym::of_name(step) }));
     Ok(out)
+}
+
+/// The growth the dungeons before `z` (in [`crate::crawl::ORDER`]) hold, and nothing else.
+fn dungeon_growth_before(bps: &jane_sim::Blueprints, z: ZoneId) -> crate::crawl::Growth {
+    let at = crate::crawl::ORDER.iter().position(|&o| o == z).unwrap_or(0);
+    crate::crawl::ORDER[..at].iter().fold((0, 0), |(s, p), &d| {
+        let (ds, dp) = crate::crawl::growth_in(bps.get(d));
+        (s + ds, p + dp)
+    })
 }
