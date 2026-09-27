@@ -116,6 +116,8 @@ model! {
         pub boots_ramp: Option<&'static str>,
         /// A pack on the back: drawn on `up`, a strap on `side`.
         pub pack: bool,
+        /// A bedroll strapped across the top of the pack (ART.md §2.1): a traveller's.
+        pub roll: bool,
     }
 }
 

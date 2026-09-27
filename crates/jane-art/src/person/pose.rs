@@ -119,7 +119,7 @@ pub const WALK_SIDE: [Pose; 6] = cycle([
     pose(0, [0, 0], [0, 0], [0, 0], 0),
     pose(0, [-4, 4], [4, -4], [0, 0], 1),
     pose(1, [-3, 3], [3, -3], [0, 1], 1),
-    pose(0, [0, 0], [0, 0], [0, 2], 0),
+    pose(0, [1, -1], [0, 0], [0, 2], 0),
     pose(0, [4, -4], [-4, 4], [0, 0], 1),
     pose(1, [3, -3], [-3, 3], [1, 0], 1),
 ]);
@@ -128,21 +128,21 @@ pub const WALK_SIDE: [Pose; 6] = cycle([
 /// the hand on the forward foot's side swung back (up), the weight coming down after contact.
 pub const WALK_DOWN: [Pose; 6] = cycle([
     pose(0, [0, 0], [0, 0], [0, 0], 0),
-    pose(0, [-1, 1], [1, 0], [0, 0], 0),
-    pose(1, [-1, 1], [1, 0], [0, 1], 0),
+    pose(0, [-2, 2], [1, 0], [0, 0], 0),
+    pose(1, [-1, 1], [1, 0], [0, 2], 0),
     pose(0, [0, 0], [0, 0], [0, 1], 0),
-    pose(0, [1, -1], [0, 1], [0, 0], 0),
-    pose(1, [1, -1], [0, 1], [1, 0], 0),
+    pose(0, [2, -2], [0, 1], [0, 0], 0),
+    pose(1, [1, -1], [0, 1], [2, 0], 0),
 ]);
 
 /// The walk seen from behind: the forward foot goes up the screen.
 pub const WALK_UP: [Pose; 6] = cycle([
     pose(0, [0, 0], [0, 0], [0, 0], 0),
-    pose(0, [1, -1], [-1, 0], [0, 0], 0),
-    pose(1, [1, -1], [-1, 0], [0, 1], 0),
+    pose(0, [2, -2], [-1, 0], [0, 0], 0),
+    pose(1, [1, -1], [-1, 0], [0, 2], 0),
     pose(0, [0, 0], [0, 0], [0, 1], 0),
-    pose(0, [-1, 1], [0, -1], [0, 0], 0),
-    pose(1, [-1, 1], [0, -1], [1, 0], 0),
+    pose(0, [-2, 2], [0, -1], [0, 0], 0),
+    pose(1, [-1, 1], [0, -1], [2, 0], 0),
 ]);
 
 /// The walk on a diagonal: the side's table, its swings read along the diagonal (a stride of

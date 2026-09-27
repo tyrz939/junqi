@@ -251,12 +251,12 @@ fn finish(c: &mut Canvas, d: &Dress, r: &Rig) {
     } else {
         Vec::new()
     };
-    for m in [d.coat, d.front, d.legs, d.hat, d.boots, d.pack] {
+    for m in [d.coat, d.front, d.legs, d.hat, d.boots, d.pack, ROLL, STRIPE] {
         c.retone(m, CLOTH);
     }
     c.retone(d.skin, SKIN);
     c.unchecker(d.skin);
-    for m in [d.coat, d.front, d.legs, d.hat, d.boots, d.pack, d.skin, d.hair] {
+    for m in [d.coat, d.front, d.legs, d.hat, d.boots, d.pack, ROLL, d.skin, d.hair] {
         c.declutter(m);
     }
     super::special::material(c, d, r);
@@ -280,18 +280,21 @@ fn finish(c: &mut Canvas, d: &Dress, r: &Rig) {
 // ---------------------------------------------------------------------------------------------
 // Shared painting
 
-/// Hem folds: `n` creases rising `len` rows from the hem across `x0..=x1`, each a line of the
-/// cloth's shade with its lit ridge a px to the left; the set sways a px with the walk.
+/// Hem folds: `n` creases rising from the hem across `x0..=x1`, each a short line of the
+/// cloth's shade with its lit ridge a px to the left on its lower rows: the middle one `len`
+/// rows at most three, the others a row shorter, so the cloth above them stays calm and a
+/// long skirt never reads as pinstripe. The set sways a px with the walk.
 fn hem_folds(c: &mut Canvas, ramp: Ramp, x0: i32, x1: i32, hem: i32, len: i32, phase: u16) {
     let sway = i32::from(phase >= 32768);
     let w = x1 - x0 + 1;
-    let n = if w >= 16 { 3 } else { 2 };
+    let n = if w >= 18 { 3 } else { 2 };
+    let len = len.min(3);
     for k in 0..n {
         let x = x0 + (k + 1) * w / (n + 1) + sway;
-        let l = if k == n / 2 { len } else { len - 1 };
+        let l = if n == 3 && k == 1 { len } else { len - 1 };
         for y in hem - l..hem {
             c.tint(x, y, ramp, Tone::Shade);
-            if y > hem - l {
+            if y >= hem - 2 {
                 c.tint(x - 1, y, ramp, Tone::Lift);
             }
         }
@@ -306,15 +309,17 @@ fn belt(c: &mut Canvas, x0: i32, x1: i32, y: i32, buckle: i32, z: u8) {
     c.dot(buckle, y, Ramp::Brass.at(Tone::High), z + 1);
 }
 
-/// A skin mitt of a hand, 4 x 3 from `(x, y)`, with its shadow px at the bottom right.
+/// A skin mitt of a hand, 4 x 4 from `(x, y)` with its corners off, lit in its top left and
+/// with its shadow px at the bottom right: big enough that the outline leaves it a heart of
+/// skin, so it reads as a hand and not as a dark knot.
 fn hand(c: &mut Canvas, d: &Dress, x: i32, y: i32, z: u8) {
     if bony(d) {
         super::bone::hand(c, d, x, y, z);
         return;
     }
-    c.ellipse(Rect::new(x, y, 4, 3), d.skin.at(Tone::Base), z);
-    c.dot(x + 1, y, d.skin.at(Tone::Lift), z);
-    c.dot(x + 2, y + 1, d.skin.at(Tone::Mid), z);
+    c.ellipse(Rect::new(x, y, 4, 4), d.skin.at(Tone::Base), z);
+    c.dot(x + 1, y + 1, d.skin.at(Tone::Lift), z);
+    c.dot(x + 2, y + 2, d.skin.at(Tone::Mid), z);
     super::special::knuckles(c, d, x, y, z);
 }
 
@@ -398,17 +403,72 @@ fn face_tones(c: &mut Canvas, d: &Dress, r: &Rig) {
 }
 
 // ---------------------------------------------------------------------------------------------
+// The pack
+
+/// The blanket rolled and strapped over a pack: a traveller's, and from behind or the side
+/// the silhouette's. Cream wool with a red stripe near each end.
+pub(crate) const ROLL: Ramp = Ramp::ClothCream;
+/// The blanket's stripes.
+pub(crate) const STRIPE: Ramp = Ramp::ClothRed;
+
+/// The bedroll lying across her back, seen from behind or in front: a roll `w` px long from
+/// `x0`, its top on row `y`, lit along its top, its ends in shade, a red stripe near each end
+/// and two leather straps round it. From in front it is not drawn: its ends past her
+/// shoulders read as pegs, and her arms raised to cast tangled with them.
+fn bedroll_across(c: &mut Canvas, x0: i32, y: i32, w: i32, z: Z) {
+    c.rect_round(Rect::new(x0, y, w, 4), ROLL, 1, 2, z);
+    c.hline(x0 + 2, x0 + w - 3, y + 1, ROLL.at(Tone::Light), z.hi);
+    for x in [x0, x0 + w - 1] {
+        c.vline(x, y + 1, y + 2, ROLL.at(Tone::Shade), z.hi);
+    }
+    // The stripes two px in, each two px wide so it stays a stripe where only its end shows.
+    for x in [x0 + 2, x0 + w - 4] {
+        c.fill_rect(Rect::new(x, y, 2, 4), STRIPE.at(Tone::Base), z.hi + 1);
+    }
+    for x in [x0 + 5, x0 + w - 6] {
+        c.vline(x, y, y + 3, Ramp::Leather.at(Tone::Shade), z.hi + 1);
+    }
+}
+
+/// The bedroll's end seen from the side: a disc of wool six px across and five high, its
+/// spiral a dark curl in it, a strap round it.
+fn bedroll_end(c: &mut Canvas, x: i32, y: i32, z: Z) {
+    c.ellipse_lit(Rect::new(x, y, 6, 5), ROLL, z);
+    c.hline(x + 2, x + 3, y + 1, ROLL.at(Tone::Shade), z.hi);
+    c.dot(x + 1, y + 2, ROLL.at(Tone::Shade), z.hi);
+    c.dot(x + 3, y + 2, ROLL.at(Tone::Deep), z.hi);
+    c.hline(x + 2, x + 3, y + 3, ROLL.at(Tone::Shade), z.hi);
+    c.dot(x + 4, y + 2, STRIPE.at(Tone::Base), z.hi);
+}
+
+/// A rucksack seen from behind, its middle on `px`: the body, a flap lit along its top edge,
+/// two straps down it with brass buckles, and the bedroll across its top.
+fn rucksack_back(c: &mut Canvas, d: &Dress, px: i32, t: i32) {
+    let z = relief::PACK;
+    c.rect_round(Rect::new(px - 5, t + 2, 10, 9), d.pack, 1, 2, z);
+    c.rect_round(Rect::new(px - 5, t + 2, 10, 4), d.pack, 1, 1, Z::new(z.hi, z.hi + 1));
+    c.hline(px - 4, px + 3, t + 5, d.pack.at(Tone::Shade), z.hi + 1);
+    for x in [px - 3, px + 2] {
+        c.vline(x, t + 4, t + 9, d.pack.at(Tone::Shade), z.hi + 1);
+        c.dot(x, t + 7, Ramp::Brass.at(Tone::Light), z.hi + 2);
+    }
+    if d.look.body.roll {
+        bedroll_across(c, px - 10, t - 1, 20, Z::new(z.hi, z.hi + 1));
+    }
+}
+
+// ---------------------------------------------------------------------------------------------
 // Facing the viewer
 
 fn down(c: &mut Canvas, d: &Dress, r: &Rig) {
     let bone = bony(d);
+    let t = r.top;
     if !bone {
         hair::back_down(c, d, r);
     }
     if r.facing == Facing::DownRight {
         // Three quarters on: the pack peeks past her near side, the far arm behind her.
         if d.look.body.pack && !bone {
-            let t = r.top;
             c.rect_round(Rect::new(CX - 10, t + 1, 5, 9), d.pack, 1, 2, relief::FAR);
             c.shade(Rect::new(CX - 10, t + 1, 5, 9), d.pack, 1);
         }
@@ -416,6 +476,15 @@ fn down(c: &mut Canvas, d: &Dress, r: &Rig) {
     }
     legs_front(c, d, r);
     coat_front(c, d, r, true);
+    if d.look.body.pack && !bone {
+        // Its straps over her shoulders.
+        let (s0, s1) = span(r.p.shoulder_w);
+        let turn = r.turn();
+        for x in [s0 + 2 + turn / 2, s1 - 2 + turn] {
+            c.vline(x, t, t + 6, d.pack.at(Tone::Base), relief::FRONT);
+            c.dot(x, t + 1, d.pack.at(Tone::Light), relief::FRONT);
+        }
+    }
     if bone {
         super::bone::rags(c, d, r, true);
     }
@@ -541,7 +610,7 @@ fn coat_front(c: &mut Canvas, d: &Dress, r: &Rig, facing_us: bool) {
     }
     if !facing_us {
         if matches!(coat, Coat::Coat | Coat::Canvas) {
-            belt(c, w0, w1, wy, cx - 1, z + 1);
+            belt(c, w0, w1, wy, cx - 1, z);
         }
         // The back seam, and a vent in a long coat.
         if matches!(coat, Coat::Overcoat | Coat::Coat) {
@@ -564,7 +633,7 @@ fn coat_front(c: &mut Canvas, d: &Dress, r: &Rig, facing_us: bool) {
                 }
             }
             if coat == Coat::Coat {
-                belt(c, w0, w1, wy, cx - 1, z + 2);
+                belt(c, w0, w1, wy, cx - 1, z);
             }
             if coat == Coat::Jacket {
                 // Pocket flaps.
@@ -897,7 +966,7 @@ fn face_down(c: &mut Canvas, d: &Dress, r: &Rig) {
     c.hline(CX - 1, CX, ey + 5, d.skin.at(Tone::Lift), z);
     match d.look.head.face {
         Face::Glasses => {
-            for x in [CX - 6, CX + 2] {
+            for x in [CX - 5, CX + 1] {
                 c.hline(x, x + 3, ey - 1, Ramp::Iron.at(Tone::Shade), z);
                 c.vline(x, ey, ey + 1, Ramp::Glass.at(Tone::Light), z);
                 c.vline(x + 3, ey, ey + 1, Ramp::Glass.at(Tone::High), z);
@@ -916,8 +985,8 @@ fn face_down(c: &mut Canvas, d: &Dress, r: &Rig) {
         }
         Face::Grim => {
             c.hline(CX - 2, CX + 1, ey + 5, d.skin.at(Tone::Shade), z);
-            c.hline(CX - 6, CX - 3, ey - 1, d.hair.at(Tone::Deep), z);
-            c.hline(CX + 2, CX + 5, ey - 1, d.hair.at(Tone::Deep), z);
+            c.hline(CX - 5, CX - 2, ey - 1, d.hair.at(Tone::Deep), z);
+            c.hline(CX + 1, CX + 4, ey - 1, d.hair.at(Tone::Deep), z);
         }
         Face::Plain | Face::None => {}
     }
@@ -1018,15 +1087,13 @@ fn up(c: &mut Canvas, d: &Dress, r: &Rig) {
         hat_down(c, d, r);
         return;
     }
-    if d.look.body.pack {
-        let (t, px) = (r.top, r.cx());
-        c.rect_round(Rect::new(px - 5, t + 2, 10, 8), d.pack, 1, 2, relief::PACK);
-        c.rect_round(Rect::new(px - 5, t + 2, 10, 3), d.pack, 1, 1, Z::new(relief::PACK.hi, relief::PACK.hi + 1));
-        c.dot(px - 1, t + 5, Ramp::Brass.at(Tone::Light), relief::PACK.hi + 1);
-    }
     arms_front(c, d, r);
     neck(c, d, r);
     hair::whole_up(c, d, r);
+    // The pack over the hair: long hair lies under its straps.
+    if d.look.body.pack {
+        rucksack_back(c, d, r.cx(), r.top);
+    }
     match d.look.head.hat {
         Hat::Scarf => {
             let s = r.skull;
@@ -1069,7 +1136,13 @@ fn side(c: &mut Canvas, d: &Dress, r: &Rig) {
         hair::back_side(c, d, r);
     }
     if d.look.body.pack {
-        c.rect_round(Rect::new(CX - 11 + r.lean, t + 1, 6, 8), d.pack, 1, 2, relief::FAR);
+        let px = CX - 11 + r.lean;
+        c.rect_round(Rect::new(px, t + 1, 6, 9), d.pack, 1, 2, relief::FAR);
+        c.rect_round(Rect::new(px, t + 1, 6, 4), d.pack, 1, 1, Z::new(relief::FAR.hi, relief::FAR.hi + 1));
+        c.dot(px + 1, t + 6, Ramp::Brass.at(Tone::Light), relief::FAR.hi + 1);
+        if d.look.body.roll {
+            bedroll_end(c, px, t - 3, Z::new(relief::FAR.hi, relief::FAR.hi + 1));
+        }
     }
     leg_side(c, d, r, r.pose.leg[0], r.pose.lift[0], false);
     coat_side(c, d, r);
@@ -1176,7 +1249,7 @@ fn coat_side(c: &mut Canvas, d: &Dress, r: &Rig) {
         c.vline(x1 - 1 + l, t + 1, t + 4, d.coat.at(Tone::Lift), z + 1);
     }
     if matches!(coat, Coat::Coat | Coat::Canvas) {
-        belt(c, x0, x1 + belly, wy, x1 + belly - 2, z + 2);
+        belt(c, x0, x1 + belly, wy, x1 + belly - 2, z);
     }
 }
 

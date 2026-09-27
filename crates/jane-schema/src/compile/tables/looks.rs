@@ -237,6 +237,8 @@ struct RawBody {
     boots_ramp: Option<String>,
     #[serde(default)]
     pack: bool,
+    #[serde(default)]
+    roll: bool,
 }
 
 fn no_front() -> Front {
@@ -420,6 +422,7 @@ fn person(p: RawPerson, at: &str, cx: &mut Ctx) -> Look {
                 boots: p.body.boots,
                 boots_ramp: p.body.boots_ramp.as_deref().map(leak_str),
                 pack: p.body.pack,
+                roll: p.body.roll,
             },
             held,
             extras: leak(p.extras.clone()),
@@ -506,6 +509,7 @@ mod tests {
                 boots: Boots::Boots,
                 boots_ramp: None,
                 pack: false,
+                roll: false,
             },
             held: HeldItem::None,
             extras: &[],
