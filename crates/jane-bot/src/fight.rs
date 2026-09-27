@@ -258,7 +258,8 @@ pub fn out_of_fire(v: &View<'_>, cx: &mut Ctx) -> Option<InputFrame> {
         .into_iter()
         .filter(|u| on_me(v, u) && rooted(u) && reaches_her(v, u))
         .map(|u| {
-            let far = jane_sim::combat::book_of(u).iter().map(|&s| i64::from(cat.combat.spell(s).range.0)).max().unwrap_or(0);
+            let far =
+                jane_sim::combat::book_of(u).iter().map(|&s| i64::from(cat.combat.spell(s).range.0)).max().unwrap_or(0);
             (u.pos, far + i64::from(2 * CELL_FX))
         })
         .collect();
@@ -270,6 +271,11 @@ pub fn out_of_fire(v: &View<'_>, cx: &mut Ctx) -> Option<InputFrame> {
         shooters.iter().all(|&(p, r)| dist(at, p) > r || !v.sight(p, at))
     };
     let start = me.pos.cell();
+    // Out of its line already (in its reach, behind a wall): nowhere to step to. (Stepped to the
+    // next safe cell regardless, she went from one to the next for the rest of the day.)
+    if safe(start) {
+        return None;
+    }
     let mut seen = BTreeSet::new();
     let mut q = VecDeque::new();
     seen.insert(start);
@@ -510,7 +516,8 @@ pub fn engage(v: &View<'_>, cx: &mut Ctx, id: UnitId) -> Option<Act> {
         cx.fight.fleeing = 0;
     }
     // The School: what she cannot walk away from is fought out (`tactics::school::stands`).
-    let kited = v.zone() == jane_core::ZoneId::School && crate::tactics::school::stands(v, t);
+    let kited = v.zone() == jane_core::ZoneId::School && crate::tactics::school::stands(v, t)
+        || crate::tactics::burial::fought_out(v, t);
     let dangerous = i64::from(max_hit(t)) * 3 >= i64::from(me.hp.points());
     if hp_permille(me) < FLEE_BELOW && cx.fight.fleeing == 0 && !has_food(v) && !would_win(v) && !kited && dangerous {
         cx.fight.fleeing = 180;
