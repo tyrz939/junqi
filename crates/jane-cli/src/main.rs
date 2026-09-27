@@ -11,12 +11,14 @@ mod bench_sim;
 mod gen_cmd;
 mod hash_cmd;
 mod layers;
+mod pair;
 mod play;
 mod scene;
 mod serve;
 mod sheet_cmd;
 mod sheet_terrain;
 mod snap;
+mod sweep;
 mod ui_sheet;
 mod view;
 
@@ -40,7 +42,9 @@ commands:
 {AUDIO}
 {HASH}
 {SERVE}
-  play --model reader|rusher --seed N | replay verify|record|diff   a player model plays; tapes (`jane play --help`)
+  play --model reader|rusher|explorer|cautious|lost --seed N | replay verify|record|diff
+                                      a player model plays; tapes and traces (`jane play --help`)
+{SWEEP}
   help                                this text";
 
 fn usage() -> String {
@@ -51,6 +55,7 @@ fn usage() -> String {
         .replace("{HASH}", hash_cmd::USAGE)
         .replace("{SERVE}", serve::USAGE)
         .replace("{AUDIO}", audio_cmd::USAGE)
+        .replace("{SWEEP}", sweep::USAGE)
 }
 
 fn main() -> ExitCode {
@@ -86,6 +91,23 @@ fn main() -> ExitCode {
             }
         },
         Some(c @ ("play" | "replay")) => play::main(c, &args[1..]),
+        Some(c @ ("sweep" | "dossier")) => {
+            let r = if c == "sweep" { sweep::sweep(&args[1..]) } else { sweep::dossier(&args[1..]) };
+            match r {
+                Ok(()) => ExitCode::SUCCESS,
+                Err(e) => {
+                    eprintln!("jane {c}: {e}");
+                    ExitCode::FAILURE
+                }
+            }
+        }
+        Some("audit") => match sweep::audit(&args[1..]) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(e) => {
+                eprintln!("jane audit: {e}");
+                ExitCode::FAILURE
+            }
+        },
         Some(c @ ("serve" | "join" | "find")) => {
             let r = match c {
                 "serve" => serve::serve(&args[1..]),

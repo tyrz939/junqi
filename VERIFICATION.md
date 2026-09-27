@@ -4,7 +4,7 @@ The verification stack for the Rust build. Pair with `EXPERIENCE.md` (what happe
 
 Written 26 September 2026 from the owner's direction: *"verification layers of gameplay itself probably need to go 10-100x deeper to nail a truly fun generated game. The world needs to breathe and live and be cohesive in a global context. The whole experience needs to be distilled into highly detailed documents and carefully verified against what will actually happen in the game world. Gameplay and the player's long-running context of what's happening is very much key."*
 
-**Rule:** nothing below exists yet. This is the design of what the Rust build's tests, bots and tools prove. A claim that a layer runs is a bug in this file until `PORT.md` §7's gate for it is green.
+**Rule:** this is the design of what the Rust build's tests, bots and tools prove, and only what is marked **Built**, with its date and where it lives, exists. A claim that a layer runs is a bug in this file until `PORT.md` §7's gate for it is green. Built so far: the six player models of L3 (not every rule of each), the trace (§3.1), L4's metrics from it, L5's audit of the quest words and the omens against the built world, `jane sweep`, `jane dossier` and `jane audit` (§3.2), §4.1's bands as a test, and §4.3.
 
 ---
 
@@ -120,6 +120,17 @@ Common rules:
 
 **Rule:** a model may be dumber than a person. It may not be better informed.
 
+**Built (28 September 2026)**, `jane_bot::Model` (`crates/jane-bot/src/lib.rs`, `story.rs`, `lost.rs`, `pair.rs`; the pair's table in `crates/jane-cli/src/pair.rs`). Each new model is the Reader with one thing changed, so the Reader's and the Rusher's decisions are untouched (the bot-session fixture holds). Decided without the owner, and so written down: where a model departs from the table above, it is here.
+
+| Model | As built | Not built yet |
+| --- | --- | --- |
+| Explorer | Walks to the nearest fog block not yet charted that borders charted ground (`lost::fog_frontier`), at a 30-cell handicap so whatever is within reach comes first; reads, opens and fights as the Reader; a quest's thing only within 48 cells; the county only (from a house or dungeon it walks back out) | It stays out of doors at night with no bed of its own: its deaths are the night's |
+| Cautious | Backs off a fight she is losing at half her health, not a third (`Ctx::flee_below`); sits at any fire within 40 cells when under 95 %; sleeps at Julie's bed every night once the house is open, as the Reader does | "Never enters a pocket whose threat it has felt without a new verb": the Reader's tolls on the ground where she died stand in for it |
+| Lost | Knows *where* a thing is only once it has been inside the 48 × 27 camera (`lost::Eyes`): a quest's thing, a person, a creature, a trigger's ground, a door into a dungeon. Until then she looks from the step's words: the thing she has had on screen whose name, label or lettering shares most words with them (a well for "at the well on the station road"), not yet stood by; then the newest road leaving the screen toward ground never on it (she follows a road to its end before turning back to a fork); then the edge of the map; never within 64 cells of where she died. **Twenty minutes looking for one step and she is told** (the Reader's reading takes over): that is the step failing "from the text alone". Every twenty minutes she forgets her screen memory and her objective, and recalls from the journal what stands where each entry was learned (a sign read, a book, a person met) | In a dungeon she plays the Reader's crawl (a dungeon's legibility is C1 to C12's). Fires and beds she finds as the Reader does |
+| Co-op pair | Host and guest over `jane-net`'s in-memory links, lockstep, the party's penalty. *Together*: a Reader leads (seat 0); seat 1 keeps within 8 cells of her, through the door she took, and otherwise plays as the Reader beside her. *Split*: a Reader and a Rusher, each on its own | Healing (no heal is on her bar); regrouping at the fire after a death; a lock-in followed into |
+
+All models still see the whole zone for fighting, doors (the Lost's looking aside), fires and beds; the lint that holds `jane-bot` to `View` is P4b's.
+
 ### L4 Experience metrics from traces
 
 Computed from `.jtr` files, per seed and model, printed as tables with bands per model. Times are real minutes at 60 ticks a second; walking is at 6 cells a second on foot (`QUEST-TREE.md` §1).
@@ -142,6 +153,21 @@ Computed from `.jtr` files, per seed and model, printed as tables with bands per
 A failure names the seed, the model, the tick, the metric and its band, and a `jane film` clip (§3) of the thirty seconds round it.
 
 **Rule:** every L4 metric is defined on the trace alone. Anyone with the `.jtr` and this table can recompute it.
+
+**Built (28 September 2026)**, `jane_bot::experience::measure(trace, seat)`, printed by `jane play --trace` and gathered by `jane sweep`:
+
+| Metric | As built |
+| --- | --- |
+| Time to each goal | Each quest's given, ready and done, in real minutes (frames: a night slept is not play) |
+| Time to first sighting | For each step (and each "Back to ..."), from its quest given to the first `Sight`: the harness knows where the thing is and writes when it first stands on her screen; the model does not know it |
+| Time not knowing what to do | Frames alive with no objective, and frames on a search objective (the Lost looking from the words), by hour |
+| Backtracking | Cells walked into an 8-cell block walked in the previous ten minutes, not on the way to a hand-in, over cells walked |
+| Deaths | Each with what last hurt her, the zone, the region, the cell and the frame: by cause and by hour of play |
+| Empty walks | The owner's "the world feels empty", held against `PLAN.md` §2.4 (something visible every 20 to 30 s; a deliberate empty stretch at most two minutes). Runs of 30 s or more walking out of doors (not talking, not fighting) **over ground the map had not charted** (three walking seconds charting nothing end a run: nothing is new on ground walked before, and the first sweep's "emptiest walks" were bots pacing old ground), measured two ways: **nothing new** on screen (no prop with a verb, no creature or person, no patch's edge not seen before), and **no new landmark** (nothing a person would remember the walk by: a thing with words or a label, a door, a fire, a bed, a bench, a person who talks, a patch's edge; herbs, rocks and rabbits do not count). The row above's nothing-to-see (nothing at all on screen) is marked *bare*. Not for a pair: the map is the party's |
+| Night exposure | Samples out of doors at night outside any light, before the first morning |
+| Walk to play, pacing, journal size | Samples walking over samples talking or fighting; kills, loot and quest changes by hour; journal writes by kind |
+
+Not built: time lost as "walking away from every objective", legibility against the audit's walk budgets (the TS audit's walks are not in the Rust build), resource curves as a table, co-op split-penalty fights (deaths apart are counted), film clips.
 
 ### L5 Truth and cohesion
 
@@ -175,6 +201,16 @@ The TS `truth.test.ts` proves a dozen hand-listed claims on three seeds (the key
 **What she knows.** The journal is the reference for "what the player knows". A dialogue line, a quest step or a sign that assumes knowledge is checked two ways: statically, every path through the dialogue and quest graph to that line passes a write of the names it uses (a line may introduce a name; then it is the write); and on every trace, at the tick the line was shown, its names were in that seat's journal. A line that assumes what she cannot have been told fails, naming the line and the missing entry. `VOICE.md` Rule 5 is checked the same way in reverse: no journal write ever records whether an omen was true.
 
 **Rule:** a new line that says where or how many or when gets a `claim`, or is written so it cannot be wrong (`QUEST-TREE.md` §2).
+
+**Built (28 September 2026)**, before the claims registry: `jane_bot::audit` reads the English, `jane audit --seed N` prints it, `tests/audit.rs` holds it on seeds 1 to 3 and the sweep reports seeds 1 to 8. For every quest step and every "Back to ...":
+
+- **Where the thing is**: every instance of what completes it on the seed (things holding it, a trigger's rect or a thing that marks the place, units that must fall or that talk it done, whoever takes it back and the marks their hours put them at), in the county or in the dungeon or house the words name;
+- **What the words name**: every phrase after a preposition, held against what the county built and a person can see: a prop's name and label, a door's zone, the speaker and the capitals of what a sign says ("CASTLE HALT"), a story place's name, a patch, a site's ground. Not the layout's rects and marks, which nobody sees: an anchor a quest names counts only when something stands at it (the 2026 web build's bug). A name (a capital word) is answered only by something called that; a kind ("the well") by anything of the kind;
+- **Reach** by preposition: by, at, beside 10 cells (the truth test's 3, plus a prop's size and a placement's spread); in, on, inside 40; near 48 (A3's two half-screens); from, past, up, along 150 (a route leads from it); a named place's edge allowed 16. A way ("the station road", "the farm track") wants a road or path within 12 cells;
+- **Verdicts**: ok; FAR (built, but not within reach); UNBUILT (nothing in the county is called that); OFF-ROAD (more than a half-screen from any road or path, and so is the landmark named: C1); UNPOSTED (a place's own name the words use is built, but written on nothing she can see within 48 cells of the thing: A3); NOTHING (no instance on the seed). Each step also says whether a place's name it uses is written anywhere away from the place by a road (`pointed`: a fingerpost, a board naming where a way goes), which is how the Reader of L3 finds a name it does not know. `tests/audit.rs` enforces no NOTHING and no UNBUILT on seeds 1 to 3, and that it catches a well taken away from the glove; FAR and OFF-ROAD are recorded (§4.4);
+- **Omens**: which are true per seed (`jane_sim::omens::is_true`, marked only in the tools), where each claim's key sentence is posted or said, and never two lethal of a region.
+
+Not built: claims as data, the knowledge check, the cohesion table.
 
 ### L6 Living-world audits
 
@@ -228,6 +264,8 @@ Footer  { ticks, records, metrics: [(MetricId, i32)] }
 
 **Rule:** a trace is a pure function of `(content_hash, seed, model, seats, hours)`. Two runs differ or the build is wrong; every target must produce the same bytes.
 
+**Built (28 September 2026)**, `jane_sim::trace` (the format and the `Observer`) and `jane_bot::run::Session` (a model's side). The observer holds only `&Sim` after each step, so a traced run steps and hashes as an untraced one (`tests/trace.rs`, which also holds that the same session writes the same bytes and that L4 recomputes from them). As built, against the sketch above: `Pos` is written on each zone change and the cell rides in every `Sample`; `Event` is the subset a metric reads (`trace::Ev`: zone, quest changes, hurt with the row of what hurt her, kills, deaths with the region, rest, learn, loot, consequences, the School's bell); a `Journal` record carries its words, not a `TextId`; a `Decision` carries the words it acts on (the step's text, the "Back to ..."), not a journal index; `Sight` is new (a step's thing first on screen, and how far from her); a `Sample` counts what is new on screen as well as what is there, and how much of the map was charted since the last; the footer's metrics are left to whoever reads the trace. Not sampled: the threat under her (it is the skeleton's, not the View's).
+
 ### 3.2 Commands (`jane-cli`)
 
 | Command | Does |
@@ -244,6 +282,17 @@ Footer  { ticks, records, metrics: [(MetricId, i32)] }
 | `jane metrics --seed N` | L2 tables for one seed |
 
 All headless, no SDL, in `jane-cli`, so a Pi can run a sweep overnight.
+
+**Built (28 September 2026)**, as they are called now:
+
+| Command | Does |
+| --- | --- |
+| `jane play --model reader\|rusher\|explorer\|cautious\|lost --seed N --minutes M --trace OUT.jtr` | One model, one seed, from New Game; writes the trace and prints its L4 table (`--l4` prints the table alone) |
+| `jane sweep --seeds 1..8 --models all [--minutes 2400] [--short 120] [--out DIR]` | Every model (the five and `pair:together`, `pair:split`) on every seed, in parallel; the story models to an ending or `--minutes`, the Explorer and the pairs `--short`; each trace to `target/sweep/`, and the report to `DIR/README.md` (default `sheets/sweep/`): the quests the Lost could not find, ranked, with L5's verdict and why; the emptiest walks; deaths by killer, place and hour; every run's L4 row; §4.1's rows per seed; L5's findings and the omens; the pairs. `--report-only` writes the report again from the traces, playing nothing (L4 is a function of the trace) |
+| `jane dossier <seed> [--models reader,lost] [--minutes M]` | One seed's walkthrough to `sheets/dossier/seed-N/README.md`: the omens (true or not, marked only here), each model's L4 table, timeline, deaths, what it looked for and for how long, a `--snap` picture every 30 minutes and whenever the Lost gives up, and the seed's L5 findings |
+| `jane audit --seed N [--all] [--quest ID]` | L5 on the built world: the steps whose words do not hold (or every step), and the omens; `--quest` reads one quest's steps phrase by phrase |
+
+Not built: `film`, `audit cohesion`, `audit world`, `audit experience`, `metrics`; a sweep's exit code on a band (the bands are the test's, §4.1).
 
 ---
 

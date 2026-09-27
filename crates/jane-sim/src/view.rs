@@ -483,6 +483,17 @@ impl<'a> View<'a> {
         self.state.players.iter().find(|p| p.connected && p.unit == unit).map(|p| p.seat)
     }
 
+    /// The rest of the party sitting down: each seat, the zone her body is in and where it
+    /// stands (the map's and the party frame's "where is she"; a follower walks to her).
+    pub fn friends(&self) -> impl Iterator<Item = (Seat, ZoneId, Vec2)> + 'a {
+        let state = self.state;
+        let me = self.seat;
+        state.players.iter().filter(move |p| p.connected && p.seat != me).filter_map(move |p| {
+            let u = state.zone(p.zone)?.unit(p.unit)?;
+            Some((p.seat, p.zone, u.pos))
+        })
+    }
+
     /// Whether a damage or heal number is hers to see: she dealt it or took it (PLATFORM.md §2,
     /// "numbers are yours"). A friend's fight shows its sparks, never her arithmetic. False for
     /// any other kind.

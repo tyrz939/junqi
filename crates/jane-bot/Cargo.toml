@@ -11,6 +11,8 @@ publish.workspace = true
 jane-core.workspace = true
 jane-data.workspace = true
 jane-sim.workspace = true
+# A story place's name on a seed (`{place:...}` in a quest's words), for the Lost and the audit.
+jane-world.workspace = true
 
 [lints]
 workspace = true
