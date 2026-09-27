@@ -135,9 +135,17 @@ pub fn tell_under(v: &View<'_>) -> Option<jane_core::Vec2> {
     let me = v.body();
     let body = i64::from(jane_data::catalog().combat.unit(me.def).bounds.0);
     let now = v.tick();
+    let cat = jane_data::catalog();
+    // Not bitten yet: its next pulse is still its first (the cast's `delay` after it was laid).
+    // A web that bites every second is always between pulses, and is no tell.
+    let fresh = |g: &jane_sim::state::Ground| {
+        cat.combat.spell(g.spell).ground.is_some_and(|p| {
+            p.delay.0 > 1 && g.until.0.saturating_sub(g.next_pulse.0) >= p.duration.0.saturating_sub(p.delay.0)
+        })
+    };
     v.grounds()
         .iter()
-        .filter(|g| g.faction != me.faction && g.next_pulse > now && g.until > now)
+        .filter(|g| g.faction != me.faction && g.next_pulse > now && g.until > now && fresh(g))
         .find(|g| dist(g.pos, me.pos) <= i64::from(g.radius.0) + body + i64::from(CELL_FX))
         .map(|g| g.pos)
 }
@@ -193,6 +201,10 @@ pub fn has_food(v: &View<'_>) -> bool {
 /// Something to eat, if she is low and can.
 pub fn eat(v: &View<'_>) -> Option<Command> {
     if hp_permille(v.body()) >= EAT_BELOW {
+        return None;
+    }
+    // The School: the apples are kept for the Timekeeper (`tactics::school::may_eat`).
+    if v.zone() == jane_core::ZoneId::School && !crate::tactics::school::may_eat(v) {
         return None;
     }
     food(v).map(Command::Item)
@@ -307,8 +319,14 @@ pub fn engage(v: &View<'_>, cx: &mut Ctx, id: UnitId) -> Option<Act> {
     let dir = jane_core::angle::iatan2(t.pos.y.0 - me.pos.y.0, t.pos.x.0 - me.pos.x.0);
     // Low with nothing to eat: back off (it may leash), and let the plan find a fire. Not from
     // what she would put down first, trading blows as the rows say (a skeleton between her and
-    // the fire is walked through, not fled from for ever).
-    if hp_permille(me) < FLEE_BELOW && cx.fight.fleeing == 0 && !has_food(v) && !would_win(v) {
+    // the fire is walked through, not fled from for ever). Mended since (an apple, a fire): the
+    // flight is over.
+    if hp_permille(me) >= 2 * FLEE_BELOW {
+        cx.fight.fleeing = 0;
+    }
+    // The School: what she cannot walk away from is fought out (`tactics::school::stands`).
+    let kited = v.zone() == jane_core::ZoneId::School && crate::tactics::school::stands(v, t);
+    if hp_permille(me) < FLEE_BELOW && cx.fight.fleeing == 0 && !has_food(v) && !would_win(v) && !kited {
         cx.fight.fleeing = 180;
         cx.fight.fled += 1;
         cx.fight.hunt = None;
@@ -321,7 +339,22 @@ pub fn engage(v: &View<'_>, cx: &mut Ctx, id: UnitId) -> Option<Act> {
             return None;
         }
         let from = t.pos;
+        // The School: back to the sick bay fire, and sit down by it (`tactics::school`).
+        if v.zone() == jane_core::ZoneId::School {
+            if let Some(c) = crate::tactics::school::at_home(v) {
+                return Some(Act::press(c));
+            }
+            if let Some(f) = crate::tactics::school::run_home(v, cx) {
+                return Some(Act::hold(f));
+            }
+        }
         return Some(Act::hold(away_from(v, cx, from, None)));
+    }
+    // The School: every bolt as it comes ready, and her ground held (`tactics::school`).
+    if v.zone() == jane_core::ZoneId::School {
+        if let Some(a) = crate::tactics::school::strike(v, cx, id) {
+            return a;
+        }
     }
     let melee = sense::spell("melee_player");
     let range = i64::from(cat.combat.spell(melee).range.0);

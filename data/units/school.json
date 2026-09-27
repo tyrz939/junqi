@@ -30,13 +30,13 @@
   },
   "ringer": {
     "name": "The Timekeeper", "faction": "undead", "controller": "ai",
-    "strength": 125, "spirit": 120, "walk": 0.3, "run": 0.7, "aggro": 16, "leash": 70, "bounds": 1.5,
-    "book": ["melee_stun", "snake_ring", "icebolt_ai"], "respawn": 0, "autoRegen": true, "loot": [],
+    "strength": 75, "spirit": 120, "walk": 0.3, "run": 0.7, "aggro": 16, "leash": 70, "bounds": 1.5,
+    "book": ["school_toll", "melee_stun", "melee"], "respawn": 0, "autoRegen": true, "loot": [],
     "sprite": "school_ringer", "boss": true,
-    "resist": { "physical": 0.5, "frost": 0.35, "fire": 0.35, "nature": 0.35, "blast": 0.35, "shock": 0.35 },
+    "resist": { "physical": 0.5, "frost": 0.15, "fire": 0.15, "nature": 0.15, "blast": 0.15, "shock": 0.15 },
     "phases": [
       {
-        "hpBelow": 0.75, "book": ["melee_stun", "snake_ring", "icebolt_ai"], "run": 0.8,
+        "hpBelow": 0.75, "book": ["school_toll", "melee_stun", "melee"], "run": 0.8,
         "onEnter": [
           { "do": "switch", "prop": "school_belfry_brazier_a", "on": false },
           { "do": "switch", "prop": "school_belfry_brazier_b", "on": false },
@@ -49,7 +49,7 @@
         ]
       },
       {
-        "hpBelow": 0.5, "book": ["melee_stun", "snake_ring", "icebolt_ai"], "run": 0.9,
+        "hpBelow": 0.5, "book": ["school_toll", "melee_stun", "melee"], "run": 0.9,
         "onEnter": [
           { "do": "switch", "prop": "school_belfry_brazier_a", "on": true },
           { "do": "switch", "prop": "school_belfry_brazier_b", "on": true },
@@ -62,7 +62,7 @@
         ]
       },
       {
-        "hpBelow": 0.25, "book": ["melee_stun", "snake_ring", "icebolt_ai"], "run": 1,
+        "hpBelow": 0.25, "book": ["school_toll", "melee_stun", "melee"], "run": 1,
         "onEnter": [
           { "do": "switch", "prop": "school_belfry_brazier_a", "on": false },
           { "do": "switch", "prop": "school_belfry_brazier_b", "on": false },

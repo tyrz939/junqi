@@ -402,17 +402,23 @@ impl Task {
                 }
             }
             Task::Aim { spell, from, at, t } => {
-                if *t == 0 {
-                    if let Some(s) = walk(cx, v, *from, Fx::from_px(2)) {
-                        return s;
+                // Waiting frames are counted above `WAITED` (a bolt pressed unready is not thrown).
+                const WAITED: u32 = 1 << 16;
+                if *t == 0 || *t >= WAITED {
+                    if *t == 0 {
+                        if let Some(s) = walk(cx, v, *from, Fx::from_px(2)) {
+                            return s;
+                        }
                     }
-                    // Wait out a cooldown (Explosion's is six seconds) rather than waste the
-                    // press; a cooldown ends, so this wait does.
-                    let me = v.body();
-                    let mp = jane_data::catalog().combat.spell(*spell).mp;
-                    if !crate::fight::ready(me, *spell, v.tick()) && me.mp >= mp {
+                    // Wait out a cooldown, or the mana for it, ten seconds at most.
+                    if !crate::fight::ready(v.body(), *spell, v.tick()) {
+                        *t = (*t).max(WAITED) + 1;
+                        if *t > WAITED + 600 {
+                            return Status::Failed("the bolt was never ready".into());
+                        }
                         return Status::Act(Act::idle());
                     }
+                    *t = 0;
                 }
                 *t += 1;
                 let me = v.body();
