@@ -6,6 +6,7 @@ use std::time::Instant;
 
 mod audio_cmd;
 mod bench;
+mod bench_sim;
 #[path = "gen.rs"]
 mod gen_cmd;
 mod hash_cmd;
@@ -45,7 +46,7 @@ commands:
 fn usage() -> String {
     USAGE
         .replace("{GEN}", gen_cmd::USAGE)
-        .replace("{BENCH}", &format!("{}{}", bench::USAGE, bench::USAGE_TUNE))
+        .replace("{BENCH}", &format!("{}{}{}", bench::USAGE, bench_sim::USAGE, bench::USAGE_TUNE))
         .replace("{SHEET}", sheet_cmd::USAGE)
         .replace("{HASH}", hash_cmd::USAGE)
         .replace("{SERVE}", serve::USAGE)
