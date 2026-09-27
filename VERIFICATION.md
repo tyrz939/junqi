@@ -307,7 +307,22 @@ Clock: New Game at 17:00; a game hour is two real minutes; lamps at 18:30 (three
 | A story is a tape | Reader | the run's tape replays to every hash and ends on the run's own | L3 |
 | The three endings from the choice | Reader | from Yours to Say (the console's start), each where STORY.md §10 puts it, closing the game with its `the_end` and taking the Ball; the train on a Sunday it stops | L3 |
 
-**Where it stands (27 September 2026, `worktree-agent-ae995c5da38174afe`).** Every dungeon finishes under the dungeon test on seeds 1 to 3 (`tests/dungeons.rs`, all ten rows, the School in forty game minutes and the Burial in an hour), and every act finishes from the console (`--from ACT`) on most of seeds 1 to 5, 7 and 11. From New Game, `jane play --model reader --minutes 2400 --ending hold`: seed 3 holds the shield at 798 minutes of the log's clock (117 deaths); seeds 1, 2, 4, 5 and 7 finish the mine, the Museum, the forest and the Factory (by 182 to 293 minutes, seed 1 at 705) and then stay in the Burial, whose keepers and small packs kill the story's Reader hundreds of times: she arrives at 420 to 590 health against the 610 and more of the console's kit, because the growth the kit counts (every jar and page in the blueprints) is more than the story's crawls reach. From the School on (`--from school`) the Reader ends the game on seeds 1, 2, 3 and 7, each of the three endings (`the_three_endings_are_played_from_the_choice`). So the band below holds for seed 3 and not yet for 1, 2, 4 and 5: the Burial in a whole story is the gap.
+**Where it stands (28 September 2026, `worktree-agent-ae995c5da38174afe`).** The band holds: `the_reader_reaches_an_ending_on_seeds_1_to_5` passes (seed 1 holds the shield, 2 and 5 put the Ball back in the hill, 3 takes the Sunday train, 4 holds the shield; all twelve spine quests on every seed, the town's six notices fired). From New Game, `jane play --minutes 2400 --deaths`, both models end the game on seeds 1 to 5 and 7: the Reader holding the shield at 321 to 560 minutes of the log's clock with 7 to 33 deaths a run, the Rusher putting the Ball back at 222 to 427 minutes with 10 to 32. The Burial, the wall a day earlier (40 to 204 deaths a run, never finished), now costs 1 to 6 deaths a seed. Every dungeon finishes under the dungeon test (the Burial also on seeds 4, 5, 7 and 11), and every act from the console.
+
+What the deaths were, and what they are now (`--deaths` records the zone, the cell, the killer, her most health, her apples and potions, the hour and what she was doing):
+
+| Seed | Before (27 Sept, `d1a6bcb`) | Now | Most of them now |
+| --- | --- | --- | --- |
+| 1 | 137+ by minute 1811, locked out of the Burial | 11, holds the shield at 511 | the Burial's Soldier and cactus, 2 each |
+| 2 | 194, beaten in the Burial (spiders 57, lurkers 53, the snake 31) | 7, at 366 | the Ringer 4 |
+| 3 | 117, held the shield at 798 (the School's guards 54, the Ringer 24) | 33, at 560 | the county's wall spiders 7, the Ringer 7, the Museum's attendant 6 |
+| 4 | 40, then idle from minute 294 to the end | 24, at 472 | the Museum's attendant 8 |
+| 5 | 108, beaten in the Burial (lurkers 51, cactus 32) | 14, at 377 | the county 7 |
+| 7 | 204, beaten in the Burial (spiders 146) | 11, at 322 | the Ringer 3 |
+
+Nearly all of it was the bot, not the world: she came to the Burial with one bait, not two (the "reached, and it did not count" rule set the brewing aside, and a full bag threw the makings out), so the second lurker kept its chest, the glasshouse key and the ways round shut; she ate her apples on the trash and met the Spider with none, or kept every apple and fell in the rat room with thirteen; she stood in Goldskin's corner; she stepped from one safe cell to the next out of a cactus's fire for hours. And three loops that looked like play: a craft whose output could not come off the bench counted as made; two plans over the county's blocks walked her back and forth for thirty hours; the Seam's near side was across a wall, so she went out of the Mine and in again every tick. The Burial's numbers were not softened (DUNGEONS.md §3.5 says why each is fair).
+
+What is left: most deaths out of doors are with no apple in the bag (the county's apples do not come again, and the pantry holds none: a renewable food is a content decision, not taken here); the Museum's attendant and the School's Ringer are the dearest keepers now; a bag fills with what destroy refuses (the keys of places done, twenty gold bars), and only a hand-in empties it.
 
 The whole-story runs are `#[ignore]`d for their length (a minute or more of release time a seed): CI runs `cargo test --release -p jane-bot --test story -- --ignored`. The three endings from the choice run always.
 
