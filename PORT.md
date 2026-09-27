@@ -449,6 +449,8 @@ Three machine classes, each a gate at its tier. Ancient PC means an SSE2 CPU of 
 | RSS in play | < 256 MB | < 128 MB | < 192 MB |
 | Binary (app with its backends) | < 24 MB | < 12 MB | < 16 MB |
 
+Measured on the modern desk, 27 September 2026 (`jane play --profile`, a Reader's story run on seeds 1 and 7, two game hours, release): the tick's median 1.3 to 2 µs and p99 30 to 38 µs, units awake about 10 of 400 to 2 300; the slowest step under 0.4 ms (a controller's search). Before the county's runtime was kept when nobody is in it, a clock row run while she was indoors built it for one step and dropped it again, 29 ms, and walking back out of any door built it again, 41 ms: stalls a frame cannot hide (`Sim::drop_empty`). The bot's own think is 4 to 5 µs a frame.
+
 Recorded, not gated: T0 `soft` on the Pentium 4 (60 fps at 384 x 216 or 30 at 768 x 432, the multiply lightmap only) and a Pi 3 at T1 with shadows off. i686 takes the ancient PC column; armv7 takes the Pi 4 column with 20 % slack. Enforced from P9; recorded before.
 
 **Rule:** 60 fps holds in every class at its tier, at night in the town. If the frame row fails, the `Features` ladder (`PRESENTATION.md` §1.12) is walked in order: soft shadows to hard; then post off; then fog volumes to one layer; then shadows off; then bilinear light to flat steps; then half-res. 30 fps is never a pass. The P9 gate records which rows were on in each class.
