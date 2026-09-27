@@ -260,6 +260,20 @@ impl Crawl {
         format!("{:?} {:?}", self.stage, self.task)
     }
 
+    /// What the task in hand is about, by name and place (for a debugging line).
+    pub fn doing(&self, v: &View<'_>) -> String {
+        let cat = jane_data::catalog();
+        match self.task.as_ref().map(|(_, w)| *w) {
+            Some(Try::Prop(p) | Try::Cast(p) | Try::Door(p) | Try::Rest(p) | Try::Push(p, _)) => {
+                v.prop(p).map_or("?".into(), |p| format!("{} at {:?}", v.name(p.key), p.cell))
+            }
+            Some(Try::Fight(u)) => {
+                v.unit(u).map_or("?".into(), |u| format!("{} at {:?}", cat.combat.unit(u.def).id, u.pos.cell()))
+            }
+            w => format!("{w:?}"),
+        }
+    }
+
     fn stop(&mut self, why: String, notes: &mut Vec<Mark>) {
         notes.push(Mark::Stuck(why.clone()));
         self.stuck = Some(why);
@@ -719,6 +733,10 @@ impl Crawl {
                 );
             }
         }
+        for u in sense::talkers(v) {
+            let reach = if self.reach.near(u.pos, 2) { "" } else { " (out of reach)" };
+            let _ = write!(out, " talker {} at {:?}{reach};", cat.combat.unit(u.def).id, u.pos.cell());
+        }
         out
     }
 }
@@ -747,7 +765,9 @@ fn bolt_at(v: &View<'_>, reach: &Reach, p: &Prop, spell: SpellId) -> Option<Task
                 continue;
             }
             let at = Vec2::centre(x, y);
-            if !v.sight(at, c) {
+            // Sight to its near face, not its middle: a thing that blocks sight (a fallen rock)
+            // hides its own middle, and a bolt stopped at its face still touches it.
+            if !v.sight(at, face_toward(p, at)) {
                 continue;
             }
             let d = dist(me, at);
@@ -761,6 +781,26 @@ fn bolt_at(v: &View<'_>, reach: &Reach, p: &Prop, spell: SpellId) -> Option<Task
     }
     let (_, from) = best?;
     Some(Task::Aim { spell, from, at: c, t: 0 })
+}
+
+/// The point of a prop's footprint nearest `at`, a quarter cell out toward it (in the free cell
+/// before its face).
+fn face_toward(p: &Prop, at: Vec2) -> Vec2 {
+    let r = prop_rect(p);
+    let q = CELL_FX / 4;
+    let clamp = |v: i32, lo: i32, hi: i32| {
+        if v < lo {
+            lo - q
+        } else if v > hi {
+            hi + q
+        } else {
+            v
+        }
+    };
+    Vec2::new(
+        jane_core::Fx(clamp(at.x.0, r.x * CELL_FX, r.right() * CELL_FX)),
+        jane_core::Fx(clamp(at.y.0, r.y * CELL_FX, r.bottom() * CELL_FX)),
+    )
 }
 
 /// The origins a pushable passes through to cover the plate, pushed only (each push needs a
