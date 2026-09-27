@@ -27,7 +27,7 @@ use jane_present::ui::hud::{self, HudCtx};
 use jane_present::ui::lan::{self as lan_ui, HostChoice, HostInfo, JoinInfo};
 use jane_present::ui::loading::{self, Card, LoadingState};
 use jane_present::ui::menus::{self, MenuState, PauseInfo, SlotMode, SlotRow};
-use jane_present::ui::perf::{self, FrameInfo, PerfLog, PerfView, SimInfo, TopLine};
+use jane_present::ui::perf::{self, FrameInfo, PerfLog, PerfView, SimTally, TopLine};
 use jane_present::ui::title::{self, TitleInfo, TitleState};
 use jane_present::ui::window::{self, WindowState};
 use jane_present::ui::world::{self, WorldDebug};
@@ -141,8 +141,8 @@ struct App<'a> {
     world_dbg: WorldDebug,
     /// The state hash and the tick it was taken on (it is dear: every half second while shown).
     hash: (u64, u64),
-    /// The path searches as of the last frame, for the per-tick rate.
-    paths: (u64, u64, u64),
+    /// `Sim::metrics()` over the steps, for F2.
+    tally: SimTally,
     started: Instant,
     backend_name: String,
     /// A headless player on the seat (`--bot`, a script's `bot`): it plays, the UI shows it.
@@ -167,6 +167,24 @@ struct App<'a> {
     /// The sound device and the cue table that drives it (PRESENTATION.md §5).
     sound: crate::audio::Sound,
     soundtrack: jane_present::audio::Soundtrack,
+}
+
+/// The wall clock lent to the sim for `Sim::metrics`' phase times: nanoseconds since its first
+/// read. Presentation only: the sim reads it to fill the metrics and never to move, so each
+/// machine at a table lends its own and the hashes still agree (`jane-sim/tests/metrics.rs`).
+fn wall_ns() -> u64 {
+    static START: std::sync::OnceLock<Instant> = std::sync::OnceLock::new();
+    u64::try_from(START.get_or_init(Instant::now).elapsed().as_nanos()).unwrap_or(u64::MAX)
+}
+
+/// Lend a guest's world the wall clock: it comes with the host's welcome (and again with a
+/// resync), after the session opened. A local or hosted world was lent it in `open_session`.
+fn lend_wall_clock(s: &mut Session) {
+    if let Session::Guest(g) = s
+        && let Some(sim) = g.sim_mut()
+    {
+        sim.set_wall_clock(Some(wall_ns));
+    }
 }
 
 /// The world, if there is one.
@@ -233,7 +251,7 @@ pub fn run(
         stages: [0; 5],
         world_dbg: WorldDebug::default(),
         hash: (0, u64::MAX),
-        paths: (0, 0, 0),
+        tally: SimTally::default(),
         started: Instant::now(),
         backend_name: describe.clone(),
         bot: args.bot.as_deref().and_then(jane_bot::Model::parse).map(jane_bot::Bot::story),
@@ -639,6 +657,7 @@ impl App<'_> {
                 let now = self.started.elapsed().as_millis() as u64;
                 let me = me_of(self.session.as_ref());
                 let Some(session) = self.session.as_mut() else { return };
+                lend_wall_clock(session);
                 if !(paused && session.pauses()) {
                     let t = Instant::now();
                     // A guest behind the host steps what it has in hand to catch up.
@@ -659,13 +678,16 @@ impl App<'_> {
                             break;
                         }
                         events.extend_from_slice(session.events());
+                        if let Some(sim) = session.sim() {
+                            self.tally.add(&sim.metrics());
+                        }
                         self.bot_heard.clear();
                         self.bot_heard.extend_from_slice(session.events());
                         self.speed.step = false;
                     }
                     let us = t.elapsed().as_micros() as u32;
                     self.stages[0] += us;
-                    self.perf.tick(us, events.len());
+                    self.perf.tick(us);
                 }
                 let rested = session.take_rested();
                 // Alone and held, the music steps back; with company the world goes on, and so
@@ -1030,7 +1052,8 @@ impl App<'_> {
 
     /// The session a built or loaded world is played through: alone, or hosted on the LAN.
     /// A port that cannot be listened on leaves her alone, saying why.
-    fn open_session(&mut self, sim: Sim, host: Option<HostChoice>) -> Session {
+    fn open_session(&mut self, mut sim: Sim, host: Option<HostChoice>) -> Session {
+        sim.set_wall_clock(Some(wall_ns));
         let Some(choice) = host else { return Session::local(sim) };
         let cfg = crate::lan::host_config(&sim.state().name, choice);
         let local = Session::local(sim);
@@ -1063,6 +1086,7 @@ impl App<'_> {
         self.menus.clear();
         self.pending.clear();
         self.bot_heard.clear();
+        self.tally = SimTally::default();
         self.lan.seats = 0;
         self.lan.stall = None;
         if let Some(Session::Host(_)) = &self.session {
@@ -1406,21 +1430,7 @@ impl App<'_> {
         if self.perf_level == 0 {
             return;
         }
-        let mut sim_info = SimInfo::default();
-        if let Some(s) = sim_of(self.session.as_ref()) {
-            for z in s.state().zones.iter().flatten() {
-                sim_info.units_total += z.units.len() as u32;
-                sim_info.units_awake += z.units.iter().filter(|u| u.awake).count() as u32;
-            }
-            let p = s.path_stats();
-            let ticks = self.ticks.saturating_sub(self.paths.2).max(1);
-            let searches = p.searches.saturating_sub(self.paths.0);
-            sim_info.path_searches_per_tick = (searches / ticks) as u32;
-            sim_info.path_nodes_per_search = (p.expanded.saturating_sub(self.paths.1) / searches.max(1)) as u32;
-            if ticks >= 60 {
-                self.paths = (p.searches, p.expanded, self.ticks);
-            }
-        }
+        let sim_info = self.tally.info();
         let f = self.present.frame();
         let mut passes = [None; 8];
         for (i, p) in f.passes.iter().take(8).enumerate() {

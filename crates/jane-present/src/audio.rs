@@ -5,11 +5,12 @@
 //!
 //! - **Music**: the title on the title screen; the zone's cue on entry (each region of the county
 //!   by day and by night, each dungeon its own); `Combat` once a hostile has been at her for 2 s,
-//!   back to the zone 6 s after the last; `Dead` when she falls; `Bell` while the bell at nine (or
-//!   six) strikes, then the hour's cue; `Silence` at the end, and for the nine that has no bell.
+//!   back to the zone 6 s after the last; `Dead` when she falls; `Bell` while the School's bell
+//!   strikes the hour, then the hour's cue; `Silence` at the end, and for the nine that has no bell.
 //! - **Effects**: every sound event, placed over 24 cells from the listener and panned
-//!   ([`place`]); her footsteps by the ground under her; the bell struck by its ringer, the
-//!   church at six, the Sunday train.
+//!   ([`place`]); her footsteps by the ground under her; every bell the sim rings
+//!   (`EventKind::Bell`: the School's at nine and six, the early one, the Timekeeper's rope, the
+//!   church at evensong), a strike at a time; the Sunday train.
 //! - **Beds**: rain and wind from the view's weather, birds at dusk, crickets at night, the lake
 //!   in the Waters, the hum in the Works, drips underground, a fire in the Arms, a clock indoors.
 //!
@@ -160,13 +161,13 @@ pub enum SfxKind {
     Thunder,
     Owl,
     Crow,
-    /// The bell at nine, across the county.
+    /// The School's bell, across the county.
     BellFar,
-    /// The bell heard through walls and earth.
+    /// The School's bell heard through walls and earth.
     BellWithin,
-    /// The bell in the belfry, where its ringer is.
+    /// The School's bell where it hangs, or where its ringer pulls it, within hearing.
     BellNear,
-    /// The church at six: a smaller bell, not *the* bell.
+    /// The church's: a smaller bell, not *the* bell.
     ChurchBell,
     TrainWhistle,
     /// Julie's dog (`STORY.md` §3): a bark, a whine as it goes for the night, panting beside her.
@@ -502,10 +503,9 @@ pub struct Sense {
     pub surface: Option<Surface>,
     /// A hostile is fighting her.
     pub hostile: bool,
+    /// The School's bell has stopped: the one flag the table reads for the bell, since the nine
+    /// it leaves silent is marked by no event.
     pub bell_stopped: bool,
-    pub early_bell: bool,
-    /// The bell's ringer, when he is here: where he stands and which of his phases.
-    pub ringer: Option<(At, u8)>,
     pub the_end: bool,
     pub seed: u32,
     /// How near a lit fire is (0 none, 255 beside it): a campfire, a brazier or a stove within
@@ -557,9 +557,7 @@ impl Sense {
         let r = HEARING_CELLS as i32;
         let area = jane_core::Rect::new(cx - r, cy - r, 2 * r, 2 * r);
         let mut hostile = false;
-        let mut ringer = None;
         let units = &jane_data::catalog().combat.units;
-        let ringer_def = units.iter().position(|u| u.id == "ringer");
         let dog_def = units.iter().position(|u| u.id == "dog");
         let mut dog = None;
         let mut fighting: Vec<At> = Vec::new();
@@ -571,9 +569,6 @@ impl Sense {
             }
             if angry {
                 fighting.push(at(u.pos));
-            }
-            if u.alive && Some(u.def.index()) == ringer_def {
-                ringer = Some((at(u.pos), u.phase));
             }
             if u.alive && Some(u.def.index()) == dog_def {
                 dog = Some(at(u.pos));
@@ -606,8 +601,6 @@ impl Sense {
             surface,
             hostile,
             bell_stopped: view.flag("bell_stopped") != 0,
-            early_bell: view.flag("omen:early_bell") != 0,
-            ringer,
             the_end: view.the_end() != 0,
             seed: view.seed(),
             fire,
@@ -644,12 +637,21 @@ const NO_BELL: u32 = 480;
 /// step lands on a frame where a foot comes down, whatever her speed.
 pub const STEP_TICKS: u32 = crate::people::WALK_TICKS * 3;
 
-/// A bell being rung, a strike at a time.
+/// A bell being rung (`EventKind::Bell`), a strike at a time: where it hangs, which bell, the
+/// strikes left and the ticks to the next.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct Toll {
+    hangs: Option<(ZoneId, At)>,
     church: bool,
     left: u8,
     wait: u32,
+}
+
+impl Toll {
+    /// Ticks between this bell's strikes.
+    const fn spacing(&self) -> u32 {
+        if self.church { CHURCH_TICKS } else { STRIKE_TICKS }
+    }
 }
 
 /// The cue table: all the state the sound of the game keeps between ticks.
@@ -661,14 +663,14 @@ pub struct Soundtrack {
     fighting: bool,
     dead: bool,
     last_abs: Option<u64>,
-    toll: Option<Toll>,
+    /// The bells ringing now: an hour's toll and a ringer's stroke can overlap.
+    tolls: Vec<Toll>,
     hush: u32,
     no_bell: u32,
     /// Ticks she has been walking without a stop.
     walking: u32,
     last_pos: Option<At>,
     beds: [u8; 10],
-    ringer_phase: Option<u8>,
     zone: Option<ZoneId>,
     /// The dog as last heard, whether she was beside it, and ticks before it pants or barks again.
     dog: Option<At>,
@@ -682,11 +684,9 @@ pub struct Soundtrack {
     pub ticks: u32,
 }
 
-/// The four clock times the county's sounds keep.
+/// The two clock times the table keeps itself: the nine a stopped bell leaves silent (no event
+/// marks it), and the Sunday train. When a bell rings is the sim's (`data/clock.json`).
 const NINE: u32 = 21 * TICKS_PER_HOUR;
-const EARLY: u32 = NINE - TICKS_PER_HOUR / 6;
-const SIX: u32 = 6 * TICKS_PER_HOUR;
-const EVENSONG: u32 = 18 * TICKS_PER_HOUR;
 const TRAIN: u32 = 17 * TICKS_PER_HOUR + TICKS_PER_HOUR / 30;
 
 /// The latest day on which clock time `at` fell in `(prev, now]`, if it did.
@@ -696,6 +696,27 @@ fn crossed(prev: u64, now: u64, at: u32) -> Option<u64> {
     (d0..=d1).rev().find(|d| {
         let t = d * day + u64::from(at);
         prev < t && t <= now
+    })
+}
+
+/// Which bell she hears for one strike, and from where. The church's small bell where it hangs if
+/// she is near it, else anywhere in the town (the church, the Arms, the house, the Lowfields),
+/// else not at all. The School's where it hangs (or its ringer pulls it) within hearing; through
+/// the walls or the earth anywhere but the open county; else across the county.
+fn bell_heard(hangs: Option<(ZoneId, At)>, church: bool, s: &Sense) -> Option<(SfxKind, At)> {
+    let near = hangs.filter(|&(z, p)| z == s.zone && place(p, s.pos).is_some_and(|q| q.gain > 0.02)).map(|h| h.1);
+    if church {
+        let town = matches!(s.zone, ZoneId::Church | ZoneId::Arms | ZoneId::House)
+            || (s.zone == ZoneId::County && s.region == Region::Lowfields);
+        return match near {
+            Some(p) => Some((SfxKind::ChurchBell, p)),
+            None => town.then_some((SfxKind::ChurchBell, s.pos)),
+        };
+    }
+    Some(match near {
+        Some(p) => (SfxKind::BellNear, p),
+        None if s.indoor || s.zone != ZoneId::County => (SfxKind::BellWithin, s.pos),
+        None => (SfxKind::BellFar, s.pos),
     })
 }
 
@@ -713,7 +734,7 @@ impl Soundtrack {
         self.last_abs = None;
         self.last_pos = None;
         self.zone = None;
-        self.toll = None;
+        self.tolls.clear();
         self.dead = false;
         self.fighting = false;
         self.ticks = self.ticks.wrapping_add(1);
@@ -801,6 +822,9 @@ impl Soundtrack {
                 EventKind::Journal(_) => bus.sfx(SfxKind::Journal, me, me),
                 EventKind::Rest => bus.sfx(SfxKind::Rest, me, me),
                 EventKind::Weather { kind: WeatherKind::Storm, .. } => self.thunder = self.thunder.min(40),
+                EventKind::Bell { strikes, at: hangs, church } => {
+                    self.ring(strikes, hangs.map(|(z, p)| (z, at(p))), church);
+                }
                 EventKind::Prop { prop, change } => {
                     let k = match change {
                         PropChange::Open => SfxKind::Open,
@@ -894,72 +918,34 @@ impl Soundtrack {
         self.beds[bed.index()]
     }
 
-    /// The bells, the church and the train, by the clock; the ringer's own strikes.
+    /// The train by the clock, the nine a stopped bell leaves, and the bells rung, a strike at a
+    /// time.
     fn clock(&mut self, s: &Sense, bus: &mut dyn AudioBus) {
         if let Some(prev) = self.last_abs.filter(|&p| p < s.abs) {
-            let weekday = |d: u64| (d % 7) as u8;
-            // Ten to nine on a Tuesday, where Mrs Fenn is right.
-            if let Some(d) = crossed(prev, s.abs, EARLY)
-                && weekday(d) == 2
-                && s.early_bell
-                && !s.bell_stopped
-            {
-                self.ring(false, 9);
-            }
-            if let Some(d) = crossed(prev, s.abs, NINE) {
-                if s.bell_stopped {
-                    // "Nine o'clock. No bell." The music stops to listen for it.
-                    self.no_bell = NO_BELL;
-                } else if !(weekday(d) == 2 && s.early_bell) {
-                    self.ring(false, 9);
-                }
-            }
-            if crossed(prev, s.abs, SIX).is_some() && !s.bell_stopped {
-                self.ring(false, 6);
-            }
-            let town = matches!(s.zone, ZoneId::Church | ZoneId::Arms | ZoneId::House)
-                || (s.zone == ZoneId::County && s.region == Region::Lowfields);
-            if crossed(prev, s.abs, EVENSONG).is_some() && town && self.toll.is_none() {
-                self.toll = Some(Toll { church: true, left: 5, wait: 0 });
+            // "Nine o'clock. No bell." The music stops to listen for it: the one bell rule kept
+            // here, since a bell that is not rung sends no event. A sleep through nine is not it.
+            if s.bell_stopped && s.abs - prev < u64::from(TICKS_PER_HOUR) && crossed(prev, s.abs, NINE).is_some() {
+                self.no_bell = NO_BELL;
             }
             if let Some(d) = crossed(prev, s.abs, TRAIN)
-                && weekday(d) == 0
+                && d % 7 == 0
             {
                 bus.sfx(SfxKind::TrainWhistle, s.pos, s.pos);
             }
         }
         self.last_abs = Some(s.abs);
-        // The ringer's own bell: each of his phases is a strike, where he is.
-        if let Some((pos, phase)) = s.ringer {
-            if self.ringer_phase.is_some_and(|p| phase > p) {
-                bus.sfx(SfxKind::BellNear, pos, s.pos);
-            }
-            self.ringer_phase = Some(phase);
-        } else {
-            self.ringer_phase = None;
-        }
-        // The toll, a strike at a time: from the ringer where he stands and she can hear him,
-        // through the walls anywhere but the open county, else across it.
-        if let Some(mut t) = self.toll {
+        for t in &mut self.tolls {
             if t.wait == 0 {
-                let near = s.ringer.filter(|(p, _)| place(*p, s.pos).is_some_and(|q| q.gain > 0.02));
-                let (kind, pos) = if t.church {
-                    (SfxKind::ChurchBell, s.pos)
-                } else if let Some((p, _)) = near {
-                    (SfxKind::BellNear, p)
-                } else if s.indoor || s.zone != ZoneId::County {
-                    (SfxKind::BellWithin, s.pos)
-                } else {
-                    (SfxKind::BellFar, s.pos)
-                };
-                bus.sfx(kind, pos, s.pos);
+                if let Some((kind, pos)) = bell_heard(t.hangs, t.church, s) {
+                    bus.sfx(kind, pos, s.pos);
+                }
                 t.left -= 1;
-                t.wait = if t.church { CHURCH_TICKS } else { STRIKE_TICKS };
+                t.wait = t.spacing() - 1;
             } else {
                 t.wait -= 1;
             }
-            self.toll = (t.left > 0).then_some(t);
         }
+        self.tolls.retain(|t| t.left > 0);
     }
 
     /// Julie's dog: a bark when it comes out in the morning or something fights near it, a whine
@@ -992,9 +978,18 @@ impl Soundtrack {
         self.dog = s.dog;
     }
 
-    fn ring(&mut self, church: bool, strikes: u8) {
-        self.toll = Some(Toll { church, left: strikes, wait: 0 });
-        self.hush = u32::from(strikes) * STRIKE_TICKS + BELL_TAIL;
+    /// A bell the sim rang (`EventKind::Bell`): its strikes from this tick on. The School's bell
+    /// striking an hour hushes the music under it and while the last stroke rings out; a single
+    /// stroke (the Timekeeper's rope, in a fight) and the church do not.
+    fn ring(&mut self, strikes: u8, hangs: Option<(ZoneId, At)>, church: bool) {
+        if strikes == 0 {
+            return;
+        }
+        let t = Toll { hangs, church, left: strikes, wait: 0 };
+        if !church && strikes > 1 {
+            self.hush = self.hush.max(u32::from(strikes) * t.spacing() + BELL_TAIL);
+        }
+        self.tolls.push(t);
     }
 
     /// Her steps, in time with the walk cycle, on what is under her: the first as she steps
@@ -1209,8 +1204,6 @@ mod tests {
             surface: Some(Surface::Grass),
             hostile: false,
             bell_stopped: false,
-            early_bell: false,
-            ringer: None,
             the_end: false,
             seed: 5,
             fire: 0,
@@ -1261,8 +1254,28 @@ mod tests {
         assert_ne!(t.cue(), Some(MusicCue::Combat));
     }
 
+    /// The School's door on the hill, where the clock rows hang the bell, far from `sense()`.
+    const DOOR: (ZoneId, Vec2) = (ZoneId::County, Vec2 { x: Fx(400 * CELL_FX), y: Fx(40 * CELL_FX) });
+
+    /// A bell the sim rang: a clock row's (to the whole party) or, with `zone`, a ringer's.
+    fn bell(strikes: u8, at: Option<(ZoneId, Vec2)>, church: bool, zone: Option<ZoneId>) -> Event {
+        Event { to: None, in_zone: zone, kind: EventKind::Bell { strikes, at, church } }
+    }
+
+    /// Steps `n` ticks from `s`, the first with `first`'s events, and counts the strikes of `kind`.
+    fn strikes_of(t: &mut Soundtrack, s: &mut Sense, first: &[Event], n: u32, kind: SfxKind, bus: &mut Heard) -> usize {
+        let mut count = 0;
+        for i in 0..n {
+            bus.sfx.clear();
+            t.step(s, if i == 0 { first } else { &[] }, &none, bus);
+            count += bus.sfx.iter().filter(|(k, _)| *k == kind).count();
+            s.abs += 1;
+        }
+        count
+    }
+
     #[test]
-    fn the_bell_strikes_nine_at_nine_under_its_hush_then_the_night() {
+    fn the_bell_strikes_what_the_sim_rings_under_its_hush_then_the_night() {
         let mut t = Soundtrack::new();
         let mut bus = Heard::default();
         let mut s = sense();
@@ -1270,36 +1283,43 @@ mod tests {
         t.step(&s, &[], &none, &mut bus);
         s.abs += 1;
         s.night = true;
+        // Nine o'clock with no event: no bell, and the music goes on.
+        bus.sfx.clear();
+        t.step(&s, &[], &none, &mut bus);
+        assert!(bus.sfx.is_empty() && t.cue() != Some(MusicCue::Bell), "the clock alone rings nothing");
+        let nine = [bell(9, Some(DOOR), false, None)];
         let mut strikes = 0;
         for i in 0..(9 * STRIKE_TICKS + BELL_TAIL + 10) {
             bus.sfx.clear();
-            t.step(&s, &[], &none, &mut bus);
-            strikes += bus.sfx.iter().filter(|(k, _)| *k == SfxKind::BellFar).count();
+            t.step(&s, if i == 0 { &nine } else { &[] }, &none, &mut bus);
+            let here = bus.sfx.iter().filter(|(k, _)| *k == SfxKind::BellFar).count();
+            if here > 0 {
+                assert_eq!(i % STRIKE_TICKS, 0, "a strike every {STRIKE_TICKS} ticks");
+            }
+            strikes += here;
             if i == 5 {
                 assert_eq!(t.cue(), Some(MusicCue::Bell));
             }
             s.abs += 1;
         }
-        assert_eq!(strikes, 9, "one strike an hour, nine of them");
+        assert_eq!(strikes, 9, "the strikes the event says, heard across the county");
         assert_eq!(t.cue(), Some(MusicCue::Zone(ZoneId::County, Region::Lowfields, true)));
-        // Six in the morning, six strikes; a sleep that jumps the clock past six still rings it.
+        // Six in the morning: six.
         let mut t = Soundtrack::new();
         let mut s = sense();
-        s.abs = u64::from(22 * TICKS_PER_HOUR);
-        t.step(&s, &[], &none, &mut bus);
-        s.abs = u64::from(TICKS_PER_DAY + SIX);
-        let mut strikes = 0;
-        for _ in 0..(7 * STRIKE_TICKS) {
-            bus.sfx.clear();
-            t.step(&s, &[], &none, &mut bus);
-            strikes += bus.sfx.iter().filter(|(k, _)| *k == SfxKind::BellFar).count();
-            s.abs += 1;
-        }
-        assert_eq!(strikes, 6);
+        s.abs = u64::from(6 * TICKS_PER_HOUR);
+        let six = [bell(6, Some(DOOR), false, None)];
+        assert_eq!(strikes_of(&mut t, &mut s, &six, 7 * STRIKE_TICKS, SfxKind::BellFar, &mut bus), 6);
+        // Beside the School's door, the bell is where it hangs.
+        let mut t = Soundtrack::new();
+        let mut s = sense();
+        s.pos = (Fx(DOOR.1.x.0 + 3 * CELL_FX), DOOR.1.y);
+        t.step(&s, &six, &none, &mut bus);
+        assert!(bus.sfx.contains(&(SfxKind::BellNear, (DOOR.1.x, DOOR.1.y))));
     }
 
     #[test]
-    fn a_stopped_bell_is_a_silence_and_an_early_bell_rings_at_ten_to_on_tuesdays() {
+    fn a_stopped_bell_is_a_silence_at_nine_and_the_church_is_its_own_small_bell() {
         let mut bus = Heard::default();
         let mut t = Soundtrack::new();
         let mut s = sense();
@@ -1308,24 +1328,43 @@ mod tests {
         t.step(&s, &[], &none, &mut bus);
         s.abs += 1;
         t.step(&s, &[], &none, &mut bus);
-        assert_eq!(t.cue(), Some(MusicCue::Silence));
+        assert_eq!(t.cue(), Some(MusicCue::Silence), "nine o'clock, no bell");
         assert!(!bus.sfx.iter().any(|(k, _)| matches!(k, SfxKind::BellFar)));
-        // Day 2 is a Tuesday; the omen is true.
+        for _ in 0..NO_BELL {
+            s.abs += 1;
+            t.step(&s, &[], &none, &mut bus);
+        }
+        assert_ne!(t.cue(), Some(MusicCue::Silence), "the silence lasts {NO_BELL} ticks");
+        // A sleep through nine wakes to no silence.
+        let mut t = Soundtrack::new();
+        s.abs = u64::from(20 * TICKS_PER_HOUR);
+        t.step(&s, &[], &none, &mut bus);
+        s.abs = u64::from(TICKS_PER_DAY + 6 * TICKS_PER_HOUR);
+        t.step(&s, &[], &none, &mut bus);
+        assert_ne!(t.cue(), Some(MusicCue::Silence));
+        // Evensong: the church's five, quicker, over the town's music, not under a hush.
         let mut t = Soundtrack::new();
         let mut s = sense();
-        s.early_bell = true;
-        let tuesday = 2 * u64::from(TICKS_PER_DAY);
-        s.abs = tuesday + u64::from(EARLY) - 1;
-        t.step(&s, &[], &none, &mut bus);
-        bus.sfx.clear();
-        let mut strikes = 0;
-        for _ in 0..(u64::from(TICKS_PER_HOUR / 6) + 1 + u64::from(9 * STRIKE_TICKS)) {
-            s.abs += 1;
+        let church_door = (ZoneId::County, Vec2 { x: Fx(300 * CELL_FX), y: Fx(300 * CELL_FX) });
+        let five = [bell(5, Some(church_door), true, None)];
+        let mut heard = 0;
+        for i in 0..(5 * CHURCH_TICKS + 10) {
             bus.sfx.clear();
-            t.step(&s, &[], &none, &mut bus);
-            strikes += bus.sfx.iter().filter(|(k, _)| *k == SfxKind::BellFar).count();
+            t.step(&s, if i == 0 { &five } else { &[] }, &none, &mut bus);
+            let here = bus.sfx.iter().filter(|(k, _)| *k == SfxKind::ChurchBell).count();
+            if here > 0 {
+                assert_eq!(i % CHURCH_TICKS, 0);
+            }
+            heard += here;
+            assert_ne!(t.cue(), Some(MusicCue::Bell));
+            s.abs += 1;
         }
-        assert_eq!(strikes, 9, "rung once, early, and not again at nine");
+        assert_eq!(heard, 5);
+        assert!(!bus.sfx.iter().any(|(k, _)| matches!(k, SfxKind::BellFar | SfxKind::BellNear)));
+        // Out of town (the Waters), the church is not heard.
+        let mut t = Soundtrack::new();
+        s.region = Region::Waters;
+        assert_eq!(strikes_of(&mut t, &mut s, &five, 5 * CHURCH_TICKS, SfxKind::ChurchBell, &mut bus), 0);
     }
 
     #[test]
@@ -1335,23 +1374,53 @@ mod tests {
         let mut s = sense();
         s.zone = ZoneId::School;
         s.indoor = true;
-        let belfry = (Fx(104 * CELL_FX), Fx(98 * CELL_FX));
-        s.ringer = Some((belfry, 0));
+        let belfry = Vec2 { x: Fx(104 * CELL_FX), y: Fx(98 * CELL_FX) };
+        let rope = [bell(1, Some((ZoneId::School, belfry)), false, Some(ZoneId::School))];
+        t.step(&s, &rope, &none, &mut bus);
+        assert!(bus.sfx.contains(&(SfxKind::BellNear, (belfry.x, belfry.y))));
+        assert_ne!(t.cue(), Some(MusicCue::Bell), "one stroke in a fight does not hush it");
+        // Far across the School, the same stroke comes through its walls.
+        s.pos = (Fx(10 * CELL_FX), Fx(10 * CELL_FX));
+        bus.sfx.clear();
+        t.step(&s, &rope, &none, &mut bus);
+        assert_eq!(bus.sfx, vec![(SfxKind::BellWithin, s.pos)]);
+        // His zone's stroke is not heard in the county.
+        let mut t = Soundtrack::new();
+        let mut s = sense();
         t.step(&s, &[], &none, &mut bus);
-        s.ringer = Some((belfry, 1));
-        t.step(&s, &[], &none, &mut bus);
-        assert!(bus.sfx.contains(&(SfxKind::BellNear, belfry)));
+        bus.sfx.clear();
+        t.step(&s, &rope, &none, &mut bus);
+        assert!(bus.sfx.is_empty());
+        // A stroke of his during the hour's toll leaves the toll whole.
+        let mut t = Soundtrack::new();
+        s.zone = ZoneId::School;
+        s.indoor = true;
+        let both = [bell(9, Some(DOOR), false, None), rope[0]];
+        let mut n = 0;
+        for i in 0..(9 * STRIKE_TICKS + 5) {
+            bus.sfx.clear();
+            let ev: &[Event] = match i {
+                0 => &both[..1],
+                40 => &both[1..],
+                _ => &[],
+            };
+            t.step(&s, ev, &none, &mut bus);
+            n += bus.sfx.iter().filter(|(k, _)| matches!(k, SfxKind::BellWithin | SfxKind::BellNear)).count();
+            s.abs += 1;
+        }
+        assert_eq!(n, 10, "nine for the hour and his one");
         // In the mine at nine the bell comes through the earth.
         let mut t = Soundtrack::new();
         let mut s = sense();
         s.zone = ZoneId::Mine;
         s.indoor = true;
-        s.abs = u64::from(NINE) - 1;
-        t.step(&s, &[], &none, &mut bus);
-        bus.sfx.clear();
-        s.abs += 1;
-        t.step(&s, &[], &none, &mut bus);
-        assert!(bus.sfx.iter().any(|(k, _)| *k == SfxKind::BellWithin));
+        let nine = [bell(9, Some(DOOR), false, None)];
+        assert_eq!(strikes_of(&mut t, &mut s, &nine, 2, SfxKind::BellWithin, &mut bus), 1);
+        // A bell from nowhere in particular is heard across the county, or through the walls.
+        let mut t = Soundtrack::new();
+        let mut s = sense();
+        let anywhere = [bell(3, None, false, None)];
+        assert_eq!(strikes_of(&mut t, &mut s, &anywhere, 3 * STRIKE_TICKS, SfxKind::BellFar, &mut bus), 3);
     }
 
     #[test]
