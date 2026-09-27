@@ -171,10 +171,10 @@
           "socket": "verbprop:ladder", "prop": "ladder_broken", "needs": [{ "item": "iron", "qty": 1 }], "label": "A ladder with no rungs",
           "use": [
             { "do": "show", "prop": "@prop:manhole" },
-            { "do": "toast", "text": "The rungs go back in. The cover above lifts into the Works yard and stays lifted." }
+            { "do": "toast", "text": "The rungs go back in. The cover above lifts into the Factory's yard, inside the wall, and stays lifted." }
           ]
         },
-        { "socket": "prop:manhole", "prop": "manhole", "hidden": true, "to": { "zone": "county", "mark": "manhole_4" }, "label": "A manhole" }
+        { "socket": "prop:manhole", "prop": "manhole", "hidden": true, "to": { "zone": "factory", "mark": "entry" }, "label": "A manhole, up into the Factory" }
       ],
       "binds": [
         { "from": "lever:main", "as": "pipes_outfall_gear", "what": "prop" },
