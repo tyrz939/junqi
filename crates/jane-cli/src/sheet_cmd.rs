@@ -19,6 +19,8 @@ pub const USAGE: &str = "  sheet layers <what> [--frame F] [--out DIR]
                                       a look's frames, every cycle, seat and variant, and the dead
   sheet close <id> [frame ...] [--scale N] [--out DIR]
                                       a few frames of a look up close (down, side, up at 8x)
+  sheet facings <id> ... [--scale N] [--out DIR]
+                                      looks in their eight facings, standing and mid-walk (west mirrored)
   sheet silhouettes <id> ... [--out DIR]
                                       looks' standing frames filled black, then as drawn
   sheet units [--out DIR]             every look standing and dead, at 1x and 2x
@@ -132,6 +134,15 @@ pub fn run(args: &[String]) -> Result<(), String> {
             let scale =
                 args.iter().position(|a| a == "--scale").and_then(|i| args.get(i + 1)?.parse().ok()).unwrap_or(8);
             write(&out, &format!("close-{what}"), &sheet_person::closeup(&sets[0], &ids, &font, scale))?;
+        }
+        Some("facings") => {
+            let mut sets = Vec::new();
+            for name in args[1..].iter().take_while(|a| !a.starts_with("--")) {
+                sets.extend(looks::render(name)?.into_iter().filter(|r| r.seat == 0 && r.variant == 0));
+            }
+            let scale =
+                args.iter().position(|a| a == "--scale").and_then(|i| args.get(i + 1)?.parse().ok()).unwrap_or(3);
+            write(&out, "facings", &sheet_person::facings(&sets, &font, scale))?;
         }
         Some("silhouettes") => {
             let mut sets = Vec::new();

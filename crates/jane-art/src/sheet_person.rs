@@ -29,13 +29,91 @@ fn draw(img: &mut Image, c: &Canvas, x: u32, y: u32, s: u32) {
 
 /// The rows of `jane sheet unit`: the down, up and side cycles (six walk frames and the
 /// breathe), the dead frames, and a creature's idle pair, hurt and attack.
-const ROWS: [&[FrameId]; 5] = [
-    &[FrameId::Down, FrameId::Down1, FrameId::Down2, FrameId::Down3, FrameId::Down4, FrameId::Down5, FrameId::DownB],
-    &[FrameId::Up, FrameId::Up1, FrameId::Up2, FrameId::Up3, FrameId::Up4, FrameId::Up5, FrameId::UpB],
-    &[FrameId::Side, FrameId::Side1, FrameId::Side2, FrameId::Side3, FrameId::Side4, FrameId::Side5, FrameId::SideB],
-    &[FrameId::Dead, FrameId::Dead2],
-    &[FrameId::Idle, FrameId::Idle2, FrameId::Hurt, FrameId::Atk1, FrameId::Atk2, FrameId::Atk3],
-];
+const ROWS: [&[FrameId]; 12] = {
+    use FrameId as F;
+    [
+        &[F::Down, F::Down1, F::Down2, F::Down3, F::Down4, F::Down5, F::DownB],
+        &[F::DownRight, F::DownRight1, F::DownRight2, F::DownRight3, F::DownRight4, F::DownRight5, F::DownRightB],
+        &[F::Side, F::Side1, F::Side2, F::Side3, F::Side4, F::Side5, F::SideB],
+        &[F::UpRight, F::UpRight1, F::UpRight2, F::UpRight3, F::UpRight4, F::UpRight5, F::UpRightB],
+        &[F::Up, F::Up1, F::Up2, F::Up3, F::Up4, F::Up5, F::UpB],
+        &[F::Dead, F::Dead2],
+        &[F::Idle, F::Idle2, F::Hurt, F::Atk1, F::Atk2, F::Atk3],
+        &[F::HurtDown, F::AtkDown1, F::AtkDown2, F::AtkDown3, F::CastDown1, F::CastDown2, F::CastDown3],
+        &[
+            F::HurtDownRight,
+            F::AtkDownRight1,
+            F::AtkDownRight2,
+            F::AtkDownRight3,
+            F::CastDownRight1,
+            F::CastDownRight2,
+            F::CastDownRight3,
+        ],
+        &[F::Cast1, F::Cast2, F::Cast3],
+        &[
+            F::HurtUpRight,
+            F::AtkUpRight1,
+            F::AtkUpRight2,
+            F::AtkUpRight3,
+            F::CastUpRight1,
+            F::CastUpRight2,
+            F::CastUpRight3,
+        ],
+        &[F::HurtUp, F::AtkUp1, F::AtkUp2, F::AtkUp3, F::CastUp1, F::CastUp2, F::CastUp3],
+    ]
+};
+
+/// The eight facings in turn round the compass from facing the viewer, each as the frames it is
+/// drawn from (standing, the walk's first contact) and whether they are mirrored: the west ones
+/// are the east ones mirrored, as the presenter draws them.
+pub const COMPASS: [(&str, [FrameId; 2], bool); 8] = {
+    use FrameId as F;
+    [
+        ("s", [F::Down, F::Down1], false),
+        ("se", [F::DownRight, F::DownRight1], false),
+        ("e", [F::Side, F::Side1], false),
+        ("ne", [F::UpRight, F::UpRight1], false),
+        ("n", [F::Up, F::Up1], false),
+        ("nw", [F::UpRight, F::UpRight1], true),
+        ("w", [F::Side, F::Side1], true),
+        ("sw", [F::DownRight, F::DownRight1], true),
+    ]
+};
+
+/// `jane sheet facings <id> ...`: each look in its eight facings, standing and at the walk's
+/// first contact, at `scale`, with the same at 1x beside them. A facing a look has no frame for
+/// is left blank (the presenter shows it from the side).
+pub fn facings(sets: &[Rendered], font: &Font, scale: u32) -> Image {
+    let s = scale.max(1);
+    let fw = sets.iter().map(|r| r.set.w as u32).max().unwrap_or(person::W as u32);
+    let fh = sets.iter().map(|r| r.set.h as u32).max().unwrap_or(person::H as u32);
+    let cell_w = fw * s + 4;
+    let row_h = fh * s + 4;
+    let block_h = 16 + 2 * row_h + 12 + PAD;
+    let x1 = PAD * 3 + 8 * cell_w;
+    let mut img =
+        Image::new(x1 + 8 * (fw + 2) + PAD, PAD + sets.len() as u32 * block_h + PAD, [BG[0], BG[1], BG[2], 255]);
+    for (k, r) in sets.iter().enumerate() {
+        let y0 = PAD + k as u32 * block_h;
+        label(&mut img, font, PAD, y0, &r.key(), Face::Small, TEXT);
+        let (w, h) = (r.set.w as u32, r.set.h as u32);
+        for (col, (name, ids, mirror)) in COMPASS.iter().enumerate() {
+            let x = PAD + col as u32 * cell_w;
+            label(&mut img, font, x + 2, y0 + 16 + 2 * row_h, name, Face::Fine, DIM);
+            for (row, id) in ids.iter().enumerate() {
+                let Some(c) = r.set.frame(*id) else { continue };
+                let mut m = c.clone();
+                if *mirror {
+                    m.mirror_x();
+                }
+                let y = y0 + 16 + row as u32 * row_h;
+                draw(&mut img, &m, x + (fw - w) * s / 2, y + (fh - h) * s, s);
+                draw(&mut img, &m, x1 + col as u32 * (fw + 2), y + (fh - h), 1);
+            }
+        }
+    }
+    img
+}
 
 /// `jane sheet unit <id>`: every set the sprite renders to (each variant, each seat), each as a
 /// 1x strip of every frame with the west frames mirrored beside it, then the cycles at 4x.
