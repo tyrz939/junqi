@@ -1451,7 +1451,11 @@ pub fn grows_of(
 pub fn growth_in(bp: &jane_core::Blueprint) -> Growth {
     let cat = jane_data::catalog();
     let mut out = (0, 0);
+    let later = rooms_for_later(bp);
     for p in &bp.props {
+        if later.iter().any(|r| r.contains(i32::from(p.cell.x), i32::from(p.cell.y))) {
+            continue;
+        }
         if let Some(u) = p.use_list {
             grows(Some(bp), list_of(Some(bp), u), &mut out);
         }
@@ -1462,6 +1466,26 @@ pub fn growth_in(bp: &jane_core::Blueprint) -> Growth {
         }
     }
     out
+}
+
+/// The rooms of a dungeon that ask a verb she does not have by the time she is done with it
+/// (neither known on arrival, `givenVerbs`, nor granted by a room of the place): Butterfly
+/// Forest's seed tree wants the Fireball the Burial gives, its lamp glade the Factory's spark.
+/// They are for coming back to, and what they hold is not counted as found on the story's way
+/// (DUNGEONS.md §3, "Growth on the story's path").
+pub fn rooms_for_later(bp: &jane_core::Blueprint) -> Vec<jane_core::Rect> {
+    let cat = jane_data::catalog();
+    let Some(m) = cat.dungeons.mission_of(bp.zone) else { return Vec::new() };
+    let granted = |s: &jane_core::SpellId| {
+        m.given_verbs.contains(s)
+            || m.nodes.iter().any(|n| n.grants.iter().any(|g| matches!(g, jane_data::MissionGrant::Verb(v) if v == s)))
+    };
+    m.nodes
+        .iter()
+        .filter(|n| !n.demands.iter().all(granted))
+        .flat_map(|n| n.names.iter().flat_map(|t| t.rects.iter()))
+        .filter_map(|&r| bp.rects.get(&jane_core::Key::Name(r)).copied())
+        .collect()
 }
 
 /// The growth a player has found by the time she reaches `z` (PLAN.md §2.6: "growth comes from

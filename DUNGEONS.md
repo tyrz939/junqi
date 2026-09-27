@@ -580,6 +580,24 @@ In the order the story reaches them. Each sits at one balance phase (`DESIGN-202
 
 **Growth.** `PLAN.md` wants 150 HP to 1,000 over the game, about half from bosses. Strength 30 to 200 is +170. Proposed: a boss's **big jar** gives +14 Strength (70 HP), a **small jar** +2 (10 HP). Six big jars are +84; forty-odd small jars across dungeons and county are the rest. **Gold-leaf pages** do the same for Spirit: a mini-boss or vault page +6, a small page +2. Numbers are John's to tune; the counts per dungeon below make the curve hit the 2020 table at each dungeon's door. A naming note: the growth action in the working tree is `{ do: "grow" }`, and the spell is also `grow` (`world: "grow"`). They live in different unions and do not collide, but one of them will be misread in a row some day. Renaming the action `found` or the spell `bloom` before either ships would be cheap.
 
+**Growth on the story's path (27 September 2026).** The console's kit for a dungeon, and the Burial's tuning with it, count every jar and page in the dungeons before it as found (610 HP at the Burial's door). The whole-story Reader came to the Burial with 410 to 480 (seeds 2, 3 and 7). `jane play --growth` lists every finding before the Burial and whether she took it. There were three reasons for the gap, and none of them was that the design was wrong about what a thorough player finds:
+
+- *She left before she had them.* Each dungeon's tactic says when the story has what it wants from the place (the Museum's verb and key, the Forest's key, the Factory's stair key), and she walked out then. The Factory's big jar behind the roller door, the office's jar and page, the Forest's reward glade, the Museum's history page and stores jar were all left on their shelves.
+- *A jar she broke off for was never gone back to.* A try at a jar or a page cut short (she was hurt and went to the stove, a fight came to her) was counted as a try and not offered again until something else changed.
+- *What was behind something was left behind it.* This covered the Museum's cubicle door (Repair, with the coat locker's wood), the cracked case in the science wing (Explosion), the natural history plinths (two crates) and the Forest's fallen rock (Explosion).
+
+**Decision: the bot plays like a thorough player, and the design stands, with one exception.** A dungeon is not done while a jar or a page she can see is still to be had. If she can reach it, she takes it. If it is behind something, she does what can be done near it (within sixteen cells: a push onto a plate, a door, ground not yet walked), and uses any verb whose thing shows, unlocks or clears something away (`Crawl::growth_left`). A try at a jar or a page that was broken off is taken up again. The one exception is a room that asks for a verb she does not yet have when she is done with the place, and that verb has to come from a later dungeon. That room is for coming back to, and the kit no longer counts what it holds as found (`crawl::rooms_for_later`). These are Butterfly Forest's seed tree, which wants the Burial's Fireball, and its lamp glade, which wants the Factory's spark: four Strength, or 20 HP. The kit at the Burial's door is 590 now, not 610. The Burial is fair at 590 or it is tuned to 590, never to less. A player who goes back to the forest with Fire and Electric has the 20 HP over.
+
+With that, the whole story reaches the Burial with the following, and sooner too, because the dungeon walked once is not walked again:
+
+| Seed | Max HP before | Max HP after | Found before the Burial (after) | Burial given (before → after) |
+| --- | ---: | ---: | --- | --- |
+| 2 | 410 | 590 | everything | 234 → 266 min |
+| 3 | 480 | 570 | all but two small jars | 243 → 236 min |
+| 7 | 480 | 590 | everything | 285 → 220 min |
+
+What is still missed now and then is two Strength at a time. On seed 3 the Forest's hollow jar and the pipes' east jar are missed. On seed 2 the pipes' silt jar is missed in a crawl from the door. The Factory's stores jar is lost for good if the line fuse is sparked first: "The stores shutter comes down with it and stays down". That is a player's mistake to make, and it is left as it is.
+
 **Conventions.** "Existing row" means the row is in `units.json` today. "By analogy" names the existing row a new one should copy before its numbers are tuned. Every unit is spawned at the dungeon's phase.
 
 ---

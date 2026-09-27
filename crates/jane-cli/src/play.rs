@@ -237,10 +237,14 @@ fn growth_report(sim: &Sim) -> String {
         jane_core::Key::Local(i) => bp.local_names.get(i as usize).cloned().unwrap_or_default(),
     };
     let (mut all, mut got) = ((0, 0), (0, 0));
-    for &z in &jane_bot::crawl::ORDER {
+    // The dungeons the story walks before the Burial.
+    let before = jane_bot::crawl::ORDER.iter().take_while(|&&z| z != jane_core::ZoneId::Burial);
+    for &z in before {
         let bp = sim.blueprints().get(z);
         let zs = st.zones[z.index()].as_deref();
+        let later = jane_bot::crawl::rooms_for_later(bp);
         for (i, p) in bp.props.iter().enumerate() {
+            let for_later = later.iter().any(|r| r.contains(i32::from(p.cell.x), i32::from(p.cell.y)));
             for (stat, amount, id) in jane_bot::crawl::grows_of(bp, p) {
                 let sym = match id {
                     jane_core::Key::Name(n) => Some(jane_sim::sym::of_name(n)),
@@ -249,13 +253,12 @@ fn growth_report(sim: &Sim) -> String {
                 let found = sym.is_some_and(|y| g.found.contains(&y));
                 let str_ = stat == jane_core::action::Stat::Strength;
                 let a = i32::from(amount);
-                if str_ {
-                    all.0 += a
-                } else {
-                    all.1 += a
+                let (all_, got_) = if str_ { (&mut all.0, &mut got.0) } else { (&mut all.1, &mut got.1) };
+                if !for_later {
+                    *all_ += a;
                 }
                 if found {
-                    if str_ { got.0 += a } else { got.1 += a }
+                    *got_ += a;
                 }
                 let rooms: Vec<String> = bp
                     .rects
@@ -270,7 +273,13 @@ fn growth_report(sim: &Sim) -> String {
                 let _ = writeln!(
                     s,
                     "  {} {:<8} {:<16} {:<8} {}{} at ({},{}) in {:?}: {}",
-                    if found { "got " } else { "MISS" },
+                    if found {
+                        "got "
+                    } else if for_later {
+                        "LATE"
+                    } else {
+                        "MISS"
+                    },
                     z.name(),
                     cat.story.prop(p.def).id,
                     key_name(bp, p.key),
@@ -284,7 +293,11 @@ fn growth_report(sim: &Sim) -> String {
             }
         }
     }
-    let _ = writeln!(s, "  dungeons: strength {}/{} spirit {}/{}", got.0, all.0, got.1, all.1);
+    let _ = writeln!(
+        s,
+        "  before the Burial: strength {}/{} spirit {}/{} (LATE: behind a verb had only later, not counted)",
+        got.0, all.0, got.1, all.1
+    );
     s
 }
 
