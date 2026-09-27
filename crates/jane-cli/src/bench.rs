@@ -316,6 +316,7 @@ fn frames(args: &[String]) -> Result<(), String> {
         minute: 0,
         canvas,
         backend,
+        at: flag("--at").map(str::to_owned),
     };
     let bps = jane_sim::Blueprints::build(seed).map_err(|e| format!("seed {seed}: {e}"))?;
     let n = num("--frames", 600)?;

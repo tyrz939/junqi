@@ -69,6 +69,8 @@ pub struct Opts {
     pub minute: u8,
     pub canvas: (u16, u16),
     pub backend: Which,
+    /// After the play, travel to this mark of the county first (`--at lake_bank`).
+    pub at: Option<String>,
 }
 
 /// The sim with this frame's events kept for the presenter: the bot drains the host, so the host
@@ -133,6 +135,20 @@ fn play(bps: Blueprints, o: &Opts, tier: Tier) -> Result<(Tap, Present, u32), St
         played += 1;
         let v = host.sim.view(seat).ok_or("seat 0 is not in the world")?;
         present.tick(&v, &host.events);
+    }
+    if let Some(at) = &o.at {
+        let v = host.sim.view(seat).ok_or("seat 0 is not in the world")?;
+        let mark = v.sym(at).ok_or_else(|| format!("--at: no mark \"{at}\""))?;
+        let tp = DevOp::Tp { zone: jane_core::ZoneId::County, mark };
+        let cmd = [StampedCommand { seat: Some(seat), seq: u16::MAX - 1, cmd: Command::Dev(tp) }];
+        host.sim.step(&StepInput { frames: [InputFrame::IDLE; 4], commands: &cmd });
+        // The travel lands at the end of the step; a few idle ticks settle the camera on her.
+        for _ in 0..90 {
+            let events = host.sim.drain_events().to_vec();
+            let v = host.sim.view(seat).ok_or("seat 0 is not in the world")?;
+            present.tick(&v, &events);
+            host.sim.step(&StepInput { frames: [InputFrame::IDLE; 4], commands: &[] });
+        }
     }
     if let Some(hour) = o.hour {
         let cmd = [StampedCommand { seat: Some(seat), seq: u16::MAX, cmd: Command::Dev(DevOp::Time { hour }) }];
@@ -309,6 +325,7 @@ mod tests {
             minute: 0,
             canvas: (768, 432),
             backend: Which::Soft,
+            at: None,
         };
         let a = render(bps.clone(), &o).unwrap();
         let b = render(bps, &o).unwrap();
