@@ -6,7 +6,7 @@
       {
         "do": "if",
         "when": [{ "if": "flag", "flag": "omen:early_bell" }, { "if": "weekday", "day": "tuesday" }, { "if": "flag", "flag": "bell_stopped", "not": true }],
-        "then": [{ "do": "toast", "text": "A school bell, a long way off. Nine o'clock." }]
+        "then": [{ "do": "ring", "strikes": 9, "from": "school_door" }, { "do": "toast", "text": "A school bell, a long way off. Nine o'clock." }]
       }
     ]
   },

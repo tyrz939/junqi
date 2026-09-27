@@ -53,6 +53,17 @@ pub struct Ctx {
     pub notes: BTreeMap<ZoneId, Vec<PropNote>>,
     /// Enemies she has seen standing, by def: where each was last seen (forgotten once seen down).
     pub seen_foes: BTreeMap<jane_core::UnitDefId, BTreeMap<UnitId, (ZoneId, Vec2)>>,
+    /// Which of the three endings she chooses at Yours to Say, if told (the choice policy).
+    pub ending: Option<crate::Ending>,
+    /// She wants the night (or the day) slept away at the next bed: waiting for a Sunday.
+    pub sleep: bool,
+    /// Out of doors, something is after her she would lose to: she runs on her way (sprints),
+    /// not fights (the story sets it each frame).
+    pub run: bool,
+    /// The day she signalled the Sunday train at the name board.
+    pub signalled: Option<u32>,
+    /// Butterfly Forest's tactic (`tactics::forest`).
+    pub forest: crate::tactics::forest::Forest,
 }
 
 /// What a prop was seen to do: enough to go back for it from another zone.
@@ -70,6 +81,12 @@ pub struct PropNote {
     /// A bed or a fire.
     pub rest: bool,
     pub door: Option<ZoneId>,
+    /// Which ending it plays, when it is one of the three (`the_end`).
+    pub ending: Option<u8>,
+    /// It signals the Sunday train.
+    pub signals: bool,
+    /// A bed that sleeps the night away.
+    pub sleeps: bool,
 }
 
 impl PropNote {
@@ -85,12 +102,21 @@ impl PropNote {
             bench: jane_data::catalog().story.prop(p.def).bench,
             rest: jane_data::catalog().story.prop(p.def).rest,
             door: crate::sense::door_of(v, p).map(|d| d.zone),
+            ending: None,
+            signals: false,
+            sleeps: false,
         };
         crate::sense::visit_prop(v, p, &mut |a| match *a {
             Action::HandIn(q) => n.hands_in.push(q),
             Action::Quest(q) => n.gives.push(q),
             Action::Location(jane_core::Key::Name(name)) => n.places.push(name),
-            _ => {}
+            Action::Rest { until: Some(_), .. } => n.sleeps = true,
+            _ => {
+                if let Some(e) = crate::sense::sets_the_end(a) {
+                    n.ending = Some(e);
+                }
+                n.signals |= crate::sense::signals_train(a);
+            }
         });
         if !p.used {
             if let Some(s) = v.prop_spawn(p) {
@@ -120,6 +146,11 @@ impl Ctx {
             frames: 0,
             notes: BTreeMap::new(),
             seen_foes: BTreeMap::new(),
+            ending: None,
+            sleep: false,
+            run: false,
+            signalled: None,
+            forest: crate::tactics::forest::Forest::default(),
         }
     }
 
@@ -144,6 +175,10 @@ impl Ctx {
                 }
                 EventKind::Damage { unit, from: Some(f), .. } if f == me => {
                     self.foes.insert(unit);
+                }
+                // Out of doors, where she fell is somewhere to go round next time.
+                EventKind::PlayerDied if v.zone() == ZoneId::County => {
+                    self.nav.died_at(ZoneId::County, v.body().pos.cell());
                 }
                 _ => {}
             }
@@ -190,7 +225,7 @@ impl Ctx {
     }
 
     pub fn sprint(&self) -> bool {
-        self.model.sprints()
+        self.model.sprints() || self.run
     }
 }
 
@@ -218,6 +253,8 @@ pub enum Task {
     Push(Push),
     /// Stand still.
     Wait(u32),
+    /// What the Burial asks beyond the crawl's order (`tactics::burial`).
+    Burial(crate::tactics::burial::Job),
 }
 
 /// Walking up to a prop, then pressing USE.
@@ -280,7 +317,13 @@ fn walk(cx: &mut Ctx, v: &View<'_>, to: Vec2, near: Fx) -> Option<Status> {
     match cx.nav.go(v, to, near, cx.sprint()) {
         Go::Walk(f) => Some(Status::Act(Act::hold(f))),
         Go::Arrived => None,
-        Go::NoWay => Some(Status::Failed(format!("no way to {},{}", to.x.0 / CELL_FX, to.y.0 / CELL_FX))),
+        Go::NoWay => Some(Status::Failed(format!(
+            "no way to {},{} from {:?}: {}",
+            to.x.0 / CELL_FX,
+            to.y.0 / CELL_FX,
+            v.body().pos.cell(),
+            cx.nav.why
+        ))),
     }
 }
 
@@ -335,7 +378,8 @@ impl Task {
                             *near = sides(v, p, v.body().pos);
                         }
                         let Some(&(at, face)) = near.get(*side as usize) else {
-                            return Status::Failed("no side to stand at".into());
+                            let tried: Vec<(i32, i32)> = near.iter().map(|(a, _)| a.cell()).collect();
+                            return Status::Failed(format!("no side to stand at (tried {tried:?})"));
                         };
                         match cx.nav.go(v, at, Fx::from_px(3), cx.sprint()) {
                             Go::Walk(f) => Status::Act(Act::hold(f)),
@@ -371,10 +415,23 @@ impl Task {
                 }
             }
             Task::Aim { spell, from, at, t } => {
-                if *t == 0 {
-                    if let Some(s) = walk(cx, v, *from, Fx::from_px(2)) {
-                        return s;
+                // Waiting frames are counted above `WAITED` (a bolt pressed unready is not thrown).
+                const WAITED: u32 = 1 << 16;
+                if *t == 0 || *t >= WAITED {
+                    if *t == 0 {
+                        if let Some(s) = walk(cx, v, *from, Fx::from_px(2)) {
+                            return s;
+                        }
                     }
+                    // Wait out a cooldown, or the mana for it, ten seconds at most.
+                    if !crate::fight::ready(v.body(), *spell, v.tick()) {
+                        *t = (*t).max(WAITED) + 1;
+                        if *t > WAITED + 600 {
+                            return Status::Failed("the bolt was never ready".into());
+                        }
+                        return Status::Act(Act::idle());
+                    }
+                    *t = 0;
                 }
                 *t += 1;
                 let me = v.body();
@@ -395,6 +452,7 @@ impl Task {
                 }
             }
             Task::Push(p) => push(p, v, cx),
+            Task::Burial(j) => j.tick(v, cx),
             Task::Wait(n) => {
                 if *n == 0 {
                     return Status::Done;
@@ -427,7 +485,10 @@ fn use_prop(u: &mut UseProp, v: &View<'_>, cx: &mut Ctx) -> Status {
                 u.sides = sides(v, p, me);
             }
             let Some(&(at, _)) = u.sides.get(u.side as usize) else {
-                return Status::Failed(format!("no side of it to stand at (tried {})", u.side));
+                return Status::Failed(format!(
+                    "no side of it to stand at (tried {}; the last: {})",
+                    u.side, cx.nav.why
+                ));
             };
             match cx.nav.go(v, at, Fx::from_px(3), cx.sprint()) {
                 Go::Walk(f) => Status::Act(Act::hold(f)),
@@ -474,7 +535,18 @@ fn use_prop(u: &mut UseProp, v: &View<'_>, cx: &mut Ctx) -> Status {
                 Status::Act(Act::press(Command::Use))
             }
             // A stack lying in the way: take it first.
-            Some(FocusRef::Drop(_)) => Status::Act(Act::press(Command::Use)),
+            // (With the bag full it will not be taken: then the next side, else she presses it
+            // for ever.)
+            Some(FocusRef::Drop(d)) if bag_takes(v, d) => Status::Act(Act::press(Command::Use)),
+            Some(FocusRef::Drop(_)) => {
+                u.side += 1;
+                u.stage = 0;
+                cx.nav.reset();
+                if u.side >= 4 {
+                    return Status::Failed("a stack she cannot carry lies in the way".into());
+                }
+                Status::Act(Act::idle())
+            }
             _ => {
                 // Something else is nearer, or she is not facing it: the next side.
                 u.side += 1;
@@ -499,6 +571,13 @@ fn use_prop(u: &mut UseProp, v: &View<'_>, cx: &mut Ctx) -> Status {
             Status::Done
         }
     }
+}
+
+/// Would her bag take this stack: a free slot, or a stack of the same thing with room?
+fn bag_takes(v: &View<'_>, d: DropId) -> bool {
+    let Some(drop) = v.drops().iter().find(|x| x.id == d) else { return false };
+    let max = jane_data::catalog().combat.item(drop.item).max_stack;
+    v.me().bag.iter().any(|s| s.is_none_or(|s| s.item == drop.item && s.qty < max))
 }
 
 /// Pushing a prop cell by cell.

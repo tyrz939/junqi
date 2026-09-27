@@ -120,6 +120,7 @@ All five decided, 26 September 2026; §10 and §11 are what the fourth and the n
 - **The register** in the top room is his time book: the cloth says REGISTER, the spine under it says G.M.Co. TIME BOOK, every page is signed A. NOONE, TIMEKEEPER, and nobody is absent. The last line is {name}: she is on the books now. The Headmaster's register in the mine is countersigned by the same hand.
 - **The night of the bell**: Mr Tace went up the hill for Peter; Robert Hale went out without his cap; the Headmaster took the children down the mine. Against DUNN, E. the time book says *9 o'c., the night of the bell*, and no time out.
 - **The pun is the point.** "Who rings the bell?" Noone. The vicar has "stopped answering it"; Mr Lyle says it is the church; the dog says only "Go and see who".
+- **The bell is rung, not described** (built 27 September 2026): every stroke the county hears is one action, `ring { strikes, from, church }`, and one event, `Bell { strikes, at, church }`, which the sound of the game listens for. Nine at nine and six at six from the School on the hill (`data/clock.json`); nine at ten to nine on a Tuesday when the omen is true (`data/clock/omens.json`); one at each of the Timekeeper's phases, from the rope in his hands (`data/units/school.json`); and five from the church at six in the evening, for evensong, which is not the same bell (Miss Orme). Once `bell_stopped` is set the School's bell rings nothing, and the church goes on.
 - **The fight** keeps its mechanics (`DUNGEONS.md` §3.6); the unit is The Timekeeper, the toasts are his bell, and the three that stand at the edge of the light are men in Company overalls. When he falls "the rope goes slack and stays slack", and **the bell stops** (§11): at nine, "Nine o'clock. No bell.", and the night comes all the same.
 
 ## 9. The names
@@ -175,6 +176,16 @@ What she does reaches the people who would hear it first, when they would hear i
 | **The ending** | §10 | | The dog: at the Halt the Sunday she signals; gone for good with the night |
 | *Side*: the allotment sheds (`allotments_thinned`) | The sheds' rats at four, not eight | The Milkman (the dairy yard), 12 h; Mrs Bex, 24 h | |
 | *Side*: Mr Ames's spectacles (story `ames`) | | No. 3, Pound Lane, 12 h | |
+
+## 11a. What playing it through changed (27 September 2026)
+
+Playing the spine end to end with the headless Reader (`VERIFICATION.md` §4.3) found places where the rows and this account disagreed, or the story left a gap. Each was settled in the story's favour:
+
+- **The green-tagged key is kept.** The council key opens the ruined library and then the forest gate (§3's "each hand-in names the next place and the key she already holds"); it was spent on the library door and the forest could not be opened. It is bound now, as every key the dog sends her on with is.
+- **The pipes come up inside the Works.** Not Relieved says she goes down the grate and "up into the Factory"; the outfall's manhole let her out in the night shift's yard instead. It leads to the Factory's own entry now (`data/doors.json`, `data/dungeons/pipes.json`).
+- **The bell is rung** (§8): the action and event every stroke of the School's bell and the church's go through.
+- **The bosses fight as `DUNGEONS.md` describes them.** Where a row had drifted from its design (the Attendant's, the Foreman's and the Timekeeper's health; the Shot-Firer's charge that burned without a tell; the Collector's net that felled rather than snared; the Emperor's buds, its feeding and its healing on the way home; the Burial's keepers borrowing spells at full strength; the School's heat) it was brought back, and `DUNGEONS.md` §3 says which and why under each dungeon.
+- **What the dog keeps from Under the House.** The rat meat is hers to keep ("It wants you to keep them"), and the Stranglethorn it pays for is the Burial's bait: the Reader brews it at the bench before the Burial.
 
 ## 12. One revelation an act, and the threads
 

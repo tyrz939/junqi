@@ -5,8 +5,9 @@
 //! from where she stands (closed gates and locked doors are solid props, so they bound it) and
 //! takes the first thing it can do there, in this order, nearest first within a kind:
 //!
-//! 0. mend at a bed or a stove, when low with nothing to eat;
-//! 1. pick up what is lying about;
+//! 0. mend at a bed or a stove when low (the apples are kept for fights);
+//! 1. rest at the dungeon's rest room the first time she can walk to it (a death then wakes her
+//!    inside); pick up what is lying about;
 //! 2. open a chest (a locked one only with a key whose tag fits);
 //! 3. unlock a door or gate with a key that fits;
 //! 4. read what can be read, use what can be used (a lever, a page, a drawer);
@@ -17,6 +18,11 @@
 //!    last, class 9);
 //! 8. go through a door that leads elsewhere in the dungeon;
 //! 10. walk to the nearest ground she has not been near (what sleeps out of sight wakes).
+//!
+//! Hurt, she mends where she can before a hop through a door within the dungeon (it may not
+//! come back) and before going near a boss. A dungeon's tactic ([`crate::tactics`]) may hold
+//! her fire, put a boss earlier, name guards to hunt, and say when the story has what it wants
+//! from the place (she walks out then).
 //!
 //! Each thing tried is remembered with a signature of what she holds and how the zone stands;
 //! it is tried again only once that has changed (a key found, a gate opened); a fight is taken
@@ -51,11 +57,16 @@ pub enum Try {
     Cast(PropId),
     Push(PropId, PropId),
     Fight(UnitId),
+    /// Talk to someone (a butterfly, with the net: `tactics::forest`).
+    Talk(UnitId),
     Door(PropId),
     /// Through a door to or from the dungeon.
     Travel,
     /// Mend at a bed or a stove.
     Rest(PropId),
+    /// What a dungeon's tactic asks (`tactics/*.rs`), by its own number: the tactic decides
+    /// when it is offered again.
+    Tactic(u32),
     /// Walk to ground she has not seen.
     Explore(i32, i32),
 }
@@ -102,11 +113,22 @@ pub struct Crawl {
     seen_w: u32,
     /// Why it stopped short, when it did.
     pub stuck: Option<String>,
+    /// Why each failed try failed, the last time (for a debugging dump).
+    pub failures: BTreeMap<Try, String>,
+    /// The Gold Mine's hoists over Iron Knuckles (`tactics/mine.rs`).
+    pub mine: crate::tactics::mine::Mine,
+    /// The School's tactic (the rope, the beds: `tactics::school`).
+    school: crate::tactics::school::School,
+    /// The Burial: whether she has stood still getting nowhere (`tactics::burial::Watch`).
+    watch: crate::tactics::burial::Watch,
+    /// Out, when done, by a door into this dungeon if one is to hand, not to the county (the
+    /// story sets it: the pipes' outfall, up into the Factory the quest goes to next).
+    pub leave_to: Option<ZoneId>,
 }
 
 /// The cells she can walk to from where she stands (flood over `View::flags`).
 #[derive(Debug, Default)]
-struct Reach {
+pub struct Reach {
     w: u32,
     h: u32,
     seen: Vec<bool>,
@@ -144,7 +166,7 @@ impl Reach {
         }
     }
 
-    fn get(&self, x: i32, y: i32) -> bool {
+    pub fn get(&self, x: i32, y: i32) -> bool {
         x >= 0
             && y >= 0
             && (x as u32) < self.w
@@ -152,19 +174,19 @@ impl Reach {
             && self.seen[(y as u32 * self.w + x as u32) as usize]
     }
 
-    fn point(&self, p: Vec2) -> bool {
+    pub fn point(&self, p: Vec2) -> bool {
         let (x, y) = p.cell();
         self.get(x, y)
     }
 
     /// Within `r` cells of a cell she can stand in (a stack is taken from a little way off).
-    fn near(&self, p: Vec2, r: i32) -> bool {
+    pub fn near(&self, p: Vec2, r: i32) -> bool {
         let (x, y) = p.cell();
         (-r..=r).any(|dy| (-r..=r).any(|dx| self.get(x + dx, y + dy)))
     }
 
     /// A cell beside the prop's footprint she can stand in.
-    fn beside(&self, p: &Prop) -> bool {
+    pub fn beside(&self, p: &Prop) -> bool {
         let r = prop_rect(p);
         (r.x - 1..=r.right()).any(|x| self.get(x, r.y - 1) || self.get(x, r.bottom()))
             || (r.y..r.bottom()).any(|y| self.get(r.x - 1, y) || self.get(r.right(), y))
@@ -180,7 +202,11 @@ fn signature(v: &View<'_>) -> u64 {
     }
     mix(v.learned().len() as u64);
     for p in v.props() {
-        mix(u64::from(p.locked) | u64::from(p.solid) << 1 | u64::from(p.used) << 2 | u64::from(p.on) << 3);
+        mix(u64::from(p.locked)
+            | u64::from(p.solid) << 1
+            | u64::from(p.used) << 2
+            | u64::from(p.on) << 3
+            | u64::from(p.hidden) << 4);
         mix(u64::from(p.cell.x) << 16 | u64::from(p.cell.y));
     }
     mix(v.props().count() as u64);
@@ -237,6 +263,11 @@ impl Crawl {
             seen: Vec::new(),
             seen_w: 0,
             stuck: None,
+            failures: BTreeMap::new(),
+            mine: crate::tactics::mine::Mine::default(),
+            school: crate::tactics::school::School::default(),
+            watch: crate::tactics::burial::Watch::default(),
+            leave_to: None,
         }
     }
 
@@ -253,6 +284,20 @@ impl Crawl {
         format!("{:?} {:?}", self.stage, self.task)
     }
 
+    /// What the task in hand is about, by name and place (for a debugging line).
+    pub fn doing(&self, v: &View<'_>) -> String {
+        let cat = jane_data::catalog();
+        match self.task.as_ref().map(|(_, w)| *w) {
+            Some(Try::Prop(p) | Try::Cast(p) | Try::Door(p) | Try::Rest(p) | Try::Push(p, _)) => {
+                v.prop(p).map_or("?".into(), |p| format!("{} at {:?}", v.name(p.key), p.cell))
+            }
+            Some(Try::Fight(u) | Try::Talk(u)) => {
+                v.unit(u).map_or("?".into(), |u| format!("{} at {:?}", cat.combat.unit(u.def).id, u.pos.cell()))
+            }
+            w => format!("{w:?}"),
+        }
+    }
+
     fn stop(&mut self, why: String, notes: &mut Vec<Mark>) {
         notes.push(Mark::Stuck(why.clone()));
         self.stuck = Some(why);
@@ -261,6 +306,7 @@ impl Crawl {
 
     pub fn think(&mut self, v: &View<'_>, cx: &mut Ctx, events: &[jane_sim::Event], notes: &mut Vec<Mark>) -> Act {
         self.frames += 1;
+        cx.run = false;
         for e in events {
             if let EventKind::Death { def, .. } = e.kind {
                 if jane_data::catalog().combat.unit(def).boss && v.zone() == self.zone {
@@ -279,8 +325,20 @@ impl Crawl {
                 let by = cx.fight.target.and_then(|t| v.unit(t)).map_or("?", |u| cat.combat.unit(u.def).id);
                 let doing = self.task.as_ref().map_or("nothing".to_owned(), |(_, w)| format!("{w:?}"));
                 let at = v.body().pos.cell();
-                self.deaths_at.push(format!("at {at:?} by {by} while {doing}"));
+                // Only a death in the dungeon counts against it (one on the road to it is the
+                // county's: a crow on the way is not the dungeon beating her).
+                if v.zone() == self.zone {
+                    self.deaths_at.push(format!("at {at:?} by {by} while {doing}"));
+                }
+                // What she died doing is a try that failed (it is not walked back into blind).
+                if let Some((_, what)) = self.task {
+                    self.failed(what, &format!("she died doing it, by {by}"));
+                }
                 self.task = None;
+                // She wakes whole: whatever she was backing off from is not after her now (a
+                // flight left counting would run her from the next thing she meets).
+                cx.fight.fleeing = 0;
+                cx.fight.retreat = None;
                 if self.deaths_at.len() >= MAX_DEATHS {
                     let why = format!(
                         "died {} times in the {}: {}",
@@ -319,22 +377,151 @@ impl Crawl {
                     self.task = None;
                     return Act::idle();
                 }
+                // The Factory: what the story wants from it is in hand (tactics::works).
+                let won = boss_of(self.zone).is_some_and(|b| self.bosses.iter().any(|&(d, _)| d == b));
+                if won {
+                    self.reach.update(v, signature(v));
+                }
+                if crate::tactics::works::done(v, &self.reach, self.zone, won) {
+                    self.stage = Stage::Leave;
+                    self.task = None;
+                    cx.fight.hunt = None;
+                    notes.push(Mark::Note("what the story wants is in hand: leaving".into()));
+                }
             }
         }
         self.look(v);
-        if let Some(id) = fight::threat(v, cx) {
-            if let Some(a) = fight::engage(v, cx, id) {
+        // The Gold Mine: Iron Knuckles is fought under the hoists (DUNGEONS.md §3.1).
+        if let Some(a) = self.mine.think(v, cx) {
+            return a;
+        }
+        // A dungeon done with what the story needs from it (`tactics/`): out.
+        if self.stage == Stage::Explore && crate::tactics::museum::done(v) {
+            self.stage = Stage::Leave;
+            self.task = None;
+            notes.push(Mark::Note("what the story needs is in the bag: leaving".into()));
+        }
+        // A boss room's own play (`tactics/`), before the general fight.
+        // (The flood is looked at again first: a lock-in behind her changes the ground.)
+        if v.zone() == self.zone {
+            self.reach.update(v, signature(v));
+        }
+        if let Some(a) = crate::tactics::museum::fight(v, cx, &self.reach) {
+            return a;
+        }
+        crate::tactics::works::observe(v, cx);
+        // What a dungeon's own idea has her notice each frame (tactics/*.rs).
+        crate::tactics::forest::look(v, cx);
+        // The Burial: where her feet keep off, and out of the sight of a small snake she woke.
+        if v.zone() == jane_core::ZoneId::Burial {
+            if let Some(a) = crate::tactics::burial::before(v, cx) {
                 return a;
             }
         }
-        if let Some(c) = fight::eat(v) {
-            return Act::press(c);
+        // The Burial: stood still getting nowhere (her task and a fight pulling two ways, a thing
+        // after her that cannot get round to her), the task is chosen afresh and what is not at
+        // her elbow is let be a while (`tactics::burial::Watch`). Nothing is marked failed: the
+        // task was not what stopped her.
+        if v.zone() == jane_core::ZoneId::Burial && self.watch.stalled(v) {
+            self.task = None;
+        }
+        let calm = v.zone() == jane_core::ZoneId::Burial && self.watch.calm(v);
+        // The Museum: the armours are walked past, not fought (tactics::museum::walk_past).
+        let doing = self.task.as_ref().map(|(_, w)| *w);
+        if let Some(id) = fight::threat(v, cx)
+            .filter(|&id| !calm || crate::tactics::burial::at_elbow(v, id))
+            .filter(|&id| !crate::tactics::museum::walk_past(v, id, doing))
+        {
+            // The Burial: nothing is chased into the sight of a snake still to be fed.
+            match (v.zone() == jane_core::ZoneId::Burial)
+                .then(|| crate::tactics::burial::fight(v, cx, id, self.task.as_ref().map(|(t, _)| t)))
+                .flatten()
+            {
+                Some(Some(a)) => return a,
+                Some(None) => {}
+                None => {
+                    if let Some(a) = fight::engage(v, cx, id) {
+                        return a;
+                    }
+                }
+            }
+        }
+        if v.zone() == jane_core::ZoneId::Burial {
+            if let Some(c) = fight::eat(v) {
+                return Act::press(c);
+            }
         }
         let sig = signature(v);
-        // Low with nothing to eat: whatever she was doing waits for a bed or a stove.
-        let low = sense::hp_permille(v.body()) < 500 && !fight::has_food(v);
-        if low && self.task.as_ref().is_some_and(|(_, w)| !matches!(w, Try::Rest(_))) {
+        // A dungeon shut for the night (tactics/*.rs): the night waited out by its fire (the
+        // county's night is worse), and not counted as the crawl's time.
+        if self.stage == Stage::Explore && !matches!(self.task, Some((_, Try::Rest(_)))) {
+            self.reach.update(v, sig);
+            if let Some(a) = crate::tactics::forest::night(v, cx, &self.reach) {
+                self.frames = self.frames.saturating_sub(1);
+                self.task = None;
+                return a;
+            }
+        }
+        // A dungeon whose story is done (tactics/*.rs): out by a door, the rest left for later.
+        let down = boss_of(self.zone).is_some_and(|b| self.bosses.iter().any(|&(d, _)| d == b));
+        if self.stage == Stage::Explore && down {
+            self.reach.update(v, sig);
+            if crate::tactics::forest::done(v, &self.reach) {
+                self.stage = Stage::Leave;
+                self.task = None;
+                notes.push(Mark::Note("what the story wants is done: leaving".into()));
+            }
+        }
+        // Low: whatever she was doing waits for a bed or a stove she can reach, and the apples
+        // are kept for a fight; shut in with a boss there is none, and she eats and carries on.
+        if sense::hp_permille(v.body()) < 500 {
+            self.reach.update(v, sig);
+            match self.rest_in_reach(v) {
+                None => {
+                    if let Some(c) = fight::eat(v) {
+                        return Act::press(c);
+                    }
+                }
+                // Walking out too: the way out is no shorter for being walked half dead.
+                Some(p) if self.task.as_ref().is_none_or(|(_, w)| !matches!(w, Try::Rest(_))) => {
+                    self.task = Some((Task::Use(UseProp::new(p)), Try::Rest(p)));
+                    // What she was hunting waits too (else the fight walks her back to it).
+                    cx.fight.hunt = None;
+                }
+                Some(_) => {}
+            }
+        }
+        // The School keeps its apples: hurt, she breaks off for the sick bay fire all the same.
+        if v.zone() == ZoneId::School && self.task.as_ref().is_some_and(|(_, w)| !matches!(w, Try::Rest(_))) {
+            self.reach.update(v, sig);
+            if crate::tactics::school::breaks_off(v, &self.reach) {
+                // Broken off, not failed: worth another go once she is whole.
+                if let Some((_, what)) = self.task.take() {
+                    if let Some(e) = self.tried.get_mut(&what) {
+                        e.0 = 0;
+                    }
+                }
+            }
+        }
+        // The Burial is done with once its keeper is down and his box is in her bag (`tactics::burial`).
+        if v.zone() == jane_core::ZoneId::Burial
+            && self.stage == Stage::Explore
+            && crate::tactics::burial::done(v, &self.bosses)
+        {
+            self.stage = Stage::Leave;
             self.task = None;
+            notes.push(Mark::Note("what she came down for is in her bag: leaving".into()));
+        }
+        // The Burial's tactics cut in on whatever she was doing (something to feed in view).
+        if v.zone() == jane_core::ZoneId::Burial && self.task.is_some() && self.frames % 15 == 0 {
+            let cut = self
+                .task
+                .as_ref()
+                .map(|(t, w)| crate::tactics::burial::cuts_in(v, cx, &self.reach, t, *w))
+                .unwrap_or_default();
+            if cut.into_iter().any(|w| self.fresh(w, sig)) {
+                self.task = None;
+            }
         }
         for _ in 0..4 {
             if let Some((t, what)) = &mut self.task {
@@ -342,9 +529,10 @@ impl Crawl {
                 match t.tick(v, cx) {
                     Status::Act(a) => return a,
                     Status::Done => self.task = None,
-                    Status::Failed(_) => {
+                    Status::Failed(why) => {
                         self.task = None;
                         self.tried.entry(what).or_insert((sig, 0)).1 += 2;
+                        self.failures.insert(what, why);
                         // Ground she cannot get to is as good as seen.
                         if let Try::Explore(x, y) = what {
                             self.mark_seen(v, x, y);
@@ -353,7 +541,12 @@ impl Crawl {
                 }
             }
             if self.stage == Stage::Leave {
-                match story::route(v, cx, jane_core::ZoneId::County) {
+                self.reach.update(v, sig);
+                let reach = &self.reach;
+                let next = self.leave_to.filter(|&z| {
+                    sense::doors_to(v, z).iter().any(|p| !p.hidden && sense::can_open(v, p) && reach.beside(p))
+                });
+                match story::route(v, cx, next.unwrap_or(jane_core::ZoneId::County)) {
                     Some(t) => {
                         self.task = Some((t, Try::Travel));
                         continue;
@@ -396,8 +589,12 @@ impl Crawl {
         if let Some(a) = talk::answer(v, cx) {
             return a;
         }
+        // On the county road to it, what she would lose to is run past (`fight::outrun`).
+        cx.run = false;
         if let Some(id) = fight::threat(v, cx) {
-            if let Some(a) = fight::engage(v, cx, id) {
+            if self.task.is_some() && fight::outrun(v, cx, id) {
+                cx.run = true;
+            } else if let Some(a) = fight::engage(v, cx, id) {
                 return a;
             }
         }
@@ -495,7 +692,8 @@ impl Crawl {
     }
 
     /// A failed try counts double.
-    pub fn failed(&mut self, what: Try) {
+    pub fn failed(&mut self, what: Try, why: &str) {
+        self.failures.insert(what, why.to_owned());
         self.tried.entry(what).or_insert((0, 0)).1 += 2;
     }
 
@@ -507,37 +705,63 @@ impl Crawl {
 
     fn fresh(&self, what: Try, sig: u64) -> bool {
         match (what, self.tried.get(&what)) {
-            (_, None) => true,
+            (Try::Tactic(_), _) | (_, None) => true,
             // A fight is taken up again whenever she is ready to (it may have healed; so has she).
             (Try::Fight(_), Some(&(_, n))) => n < 12,
             (_, Some(&(s, n))) => s != sig && n < 6,
         }
     }
 
-    fn choose(&self, v: &View<'_>, cx: &Ctx, sig: u64) -> Option<(Task, Try)> {
+    fn choose(&mut self, v: &View<'_>, cx: &Ctx, sig: u64) -> Option<(Task, Try)> {
+        // The School: the sick bay fire first; the rope and the beds when nothing else is left.
+        if v.zone() == ZoneId::School {
+            let mut s = std::mem::take(&mut self.school);
+            if s.take_woke() {
+                self.tried.retain(|w, _| !matches!(w, Try::Cast(_) | Try::Prop(_) | Try::Pickup(_)));
+            }
+            let down = boss_of(self.zone).is_some_and(|b| self.bosses.iter().any(|&(d, _)| d == b));
+            let t = crate::tactics::school::first(&mut s, v, cx, &self.reach, &|w| self.fresh(w, sig), down)
+                .or_else(|| self.choose_any(v, cx, sig))
+                .or_else(|| crate::tactics::school::last(&mut s, v, &self.reach));
+            self.school = s;
+            return t;
+        }
+        self.choose_any(v, cx, sig)
+    }
+
+    fn choose_any(&self, v: &View<'_>, cx: &Ctx, sig: u64) -> Option<(Task, Try)> {
         let cat = jane_data::catalog();
         let at = v.body().pos;
         let reach = &self.reach;
         let near_prop = |p: &Prop| sense::to_prop(p, at);
         let mut best: Option<(u8, i64, Try, Task)> = None;
         let offer = |class: u8, cost: i64, what: Try, t: Task, best: &mut Option<(u8, i64, Try, Task)>| {
-            if !self.fresh(what, sig) {
+            // The Burial: a corner is not gone into before she has what it asks (`tactics::burial`).
+            if !self.fresh(what, sig) || v.zone() == jane_core::ZoneId::Burial && crate::tactics::burial::not_yet(v, &t)
+            {
                 return;
             }
             if best.as_ref().is_none_or(|(c, k, w, _)| (class, cost, what) < (*c, *k, *w)) {
                 *best = Some((class, cost, what, t));
             }
         };
-        // 0. Low, with nothing to eat: a bed or a stove she can reach.
-        if sense::hp_permille(v.body()) < 500 && !fight::has_food(v) {
-            if let Some(p) = v
-                .props()
-                .filter(|p| {
-                    cat.story.prop(p.def).rest && reach.beside(p) && v.prop_spawn(p).is_some_and(|s| s.talk.is_some())
-                })
-                .min_by_key(|p| (near_prop(p), p.id))
-            {
-                return Some((Task::Use(UseProp::new(p.id)), Try::Rest(p.id)));
+        // 0. Low: a bed or a stove she can reach (the apples are for a fight).
+        if sense::hp_permille(v.body()) < 500 {
+            if let Some(p) = self.rest_in_reach(v) {
+                return Some((Task::Use(UseProp::new(p)), Try::Rest(p)));
+            }
+        }
+        // What the dungeon's own idea puts first (`tactics/`).
+        if let Some((t, what)) = crate::tactics::museum::first(v, cx, reach).filter(|(_, w)| self.fresh(*w, sig)) {
+            return Some((t, what));
+        }
+        // 1. The dungeon's rest room, the first time she can walk to it: a death then wakes her
+        // inside, not out on the county road (the pipes' and the Factory's walks back in were
+        // what killed her).
+        if let Some(p) = self.rest_in_reach(v) {
+            if !self.tried.contains_key(&Try::Rest(p)) {
+                let d = v.prop(p).map_or(0, near_prop);
+                offer(1, d, Try::Rest(p), Task::Use(UseProp::new(p)), &mut best);
             }
         }
         // 1. Lying about.
@@ -547,7 +771,7 @@ impl Crawl {
             }
         }
         for p in v.props() {
-            if !reach.beside(p) {
+            if p.hidden || !reach.beside(p) || crate::tactics::forest::skip(v, p) {
                 continue;
             }
             let def = cat.story.prop(p.def);
@@ -560,9 +784,11 @@ impl Crawl {
                     let presses = if door.is_some() || def.gate { 1 } else { 2 };
                     offer(3, d, Try::Prop(p.id), Task::Use(UseProp { presses, ..UseProp::new(p.id) }), &mut best);
                 }
-                continue;
-            }
-            if !p.used && !s.loot.is_empty() {
+                // A locked thing that answers a verb (a cracked case) is opened by the verb.
+                if def.answers.is_none() {
+                    continue;
+                }
+            } else if !p.used && !s.loot.is_empty() {
                 offer(2, d, Try::Prop(p.id), Task::Use(UseProp::new(p.id)), &mut best);
                 continue;
             }
@@ -575,6 +801,10 @@ impl Crawl {
                             offer(5, d, Try::Cast(p.id), Task::cast(verb, p.id), &mut best);
                         }
                     } else if let Some(bolt) = a.school().and_then(|sc| bolt_of(v, sc)) {
+                        // The Factory: a floor grid, a fuse by the Foreman, wait (tactics::works).
+                        if crate::tactics::works::hold_fire(v, p) {
+                            continue;
+                        }
                         if let Some(t) = bolt_at(v, reach, p, bolt) {
                             offer(5, d, Try::Cast(p.id), t, &mut best);
                         }
@@ -595,17 +825,27 @@ impl Crawl {
                 && (s.talk.is_some() || s.use_list.is_some())
                 && !def.plate
                 && !def.bench
+                && !turns_clock(v, p)
                 && !cx.used.contains_key(&(v.zone(), p.id))
             {
                 offer(4, d, Try::Prop(p.id), Task::Use(UseProp::new(p.id)), &mut best);
             }
         }
+        // What a dungeon's own idea puts up (tactics/*.rs).
+        for (class, cost, what, t) in crate::tactics::forest::offers(v, cx, reach) {
+            offer(class, cost, what, t, &mut best);
+        }
         // 6. Plates that are up, and something to push onto one.
         if best.as_ref().is_none_or(|b| b.0 > 6) {
-            for plate in v.props().filter(|p| cat.story.prop(p.def).plate && !p.on && reach.beside(p)) {
+            // What already holds a plate down stays where it is (else two barrels and two plates
+            // are pushed back and forth for ever).
+            let holding = |t: &Prop| {
+                v.props().any(|q| cat.story.prop(q.def).plate && q.on && prop_rect(q).overlaps(prop_rect(t)))
+            };
+            for plate in v.props().filter(|p| !p.hidden && cat.story.prop(p.def).plate && !p.on && reach.beside(p)) {
                 for thing in v.props().filter(|p| {
                     let d = cat.story.prop(p.def);
-                    d.push && p.solid && reach.beside(p)
+                    !p.hidden && d.push && p.solid && reach.beside(p) && !holding(p)
                 }) {
                     let what = Try::Push(thing.id, plate.id);
                     if !self.fresh(what, sig) {
@@ -624,18 +864,49 @@ impl Crawl {
                 }
             }
         }
-        // 7. Whatever hostile she can reach; bosses last. One she saw and has walked away from
-        // (it sleeps out of her sight) is walked back to.
+        // 7. Whatever hostile she can reach; bosses last (the Factory's Foreman as soon as she
+        // has the verb for him: tactics::works). One she saw and has walked away from (it sleeps
+        // out of her sight) is walked back to. With the dungeon's boss down, what is left (and
+        // what has come back since) is walked past: it is fought only when it comes at her.
+        let burial = v.zone() == jane_core::ZoneId::Burial;
+        let cleared = boss_of(self.zone).is_some_and(|b| self.bosses.iter().any(|&(d, _)| d == b));
         for u in sense::enemies(v) {
-            if !fight::fightable(u) || !reach.point(u.pos) {
+            // One her feet (or her patience) lately found no way to waits its time; in the
+            // Factory, what sees only by light is left be unless it has her (tactics::works).
+            if !fight::fightable(u)
+                || !reach.point(u.pos)
+                || burial && crate::tactics::burial::not_hunted(u.def)
+                || cleared
+                || !fight::reachable(cx, u.id, v.frame())
+                || crate::tactics::works::leave_be(v, u)
+                || crate::tactics::museum::leave_be(v, u.def)
+            {
+                continue;
+            }
+            // The School hunts only what the story needs down (`tactics::school::hunts`).
+            if v.zone() == ZoneId::School && !crate::tactics::school::hunts(u.def) {
                 continue;
             }
             let boss = cat.combat.unit(u.def).boss;
-            offer(if boss { 9 } else { 7 }, dist(at, u.pos), Try::Fight(u.id), Task::Hunt(u.id), &mut best);
+            let class = if boss { crate::tactics::works::boss_class(v, u.def) } else { 7 };
+            offer(class, dist(at, u.pos), Try::Fight(u.id), Task::Hunt(u.id), &mut best);
+        }
+        // The Factory: a guard that sees only by light, over a locked thing (tactics::works).
+        for (id, pos) in crate::tactics::works::guards(v, reach) {
+            offer(7, dist(at, pos), Try::Fight(id), Task::Hunt(id), &mut best);
         }
         for (&def, seen) in &cx.seen_foes {
             let d = cat.combat.unit(def);
-            if d.bait.is_some() {
+            if d.bait.is_some()
+                || cleared
+                || burial && crate::tactics::burial::not_hunted(def)
+                || (d.sight == jane_data::UnitSight::Lit && !d.boss)
+                || v.zone() == ZoneId::School && !crate::tactics::school::hunts(def)
+                // Butterfly Forest: a thing with no feet left behind stays there (a cactus across
+                // the forest is walked back to for nothing, and some cannot be walked to at all).
+                || v.zone() == ZoneId::Forest && d.run.0 <= 0 && d.walk.0 <= 0
+                || crate::tactics::museum::leave_be(v, def)
+            {
                 continue;
             }
             for (&id, &(z, pos)) in seen {
@@ -643,17 +914,84 @@ impl Crawl {
                     continue;
                 }
                 let t = Task::Walk { to: pos, near: jane_core::Fx::from_px(12) };
-                offer(if d.boss { 9 } else { 7 }, dist(at, pos) + i64::from(4 * CELL_FX), Try::Fight(id), t, &mut best);
+                let class = if d.boss { crate::tactics::works::boss_class(v, def) } else { 7 };
+                offer(class, dist(at, pos) + i64::from(4 * CELL_FX), Try::Fight(id), t, &mut best);
             }
         }
-        // 10. Ground she has not seen (what sleeps out of sight wakes as she comes).
-        if best.is_none() {
+        // A boss is met mended: with nothing left but the boss, a bed or a stove she can reach
+        // first, when she is hurt.
+        if best.as_ref().is_some_and(|b| b.0 == 9) && sense::hp_permille(v.body()) < 850 {
+            if let Some(p) = self.rest_in_reach(v).filter(|p| self.tried.get(&Try::Rest(*p)).is_none_or(|t| t.1 < 20)) {
+                return Some((Task::Use(UseProp::new(p)), Try::Rest(p)));
+            }
+        }
+        // The Burial's tactics (feeding what is fed, not fought): `tactics::burial`.
+        if v.zone() == jane_core::ZoneId::Burial {
+            for (class, cost, what, t) in crate::tactics::burial::offers(v, cx, reach, &self.bosses) {
+                offer(class, cost, what, t, &mut best);
+            }
+        }
+        // 10. Ground she has not seen (what sleeps out of sight wakes as she comes). Not in the
+        // School: what sleeps there is better left asleep (`tactics::school`).
+        if best.is_none() && v.zone() != ZoneId::School {
             if let Some((x, y)) = self.frontier(v) {
                 let t = Task::Walk { to: Vec2::centre(x, y), near: jane_core::Fx::from_px(6) };
                 return Some((t, Try::Explore(x, y)));
             }
+            // Nothing in the general order: what the dungeon's own idea asks (`tactics/`).
+            if let Some((t, what)) = crate::tactics::museum::idle(v, reach).filter(|(_, w)| self.fresh(*w, sig)) {
+                return Some((t, what));
+            }
+        }
+        // A hop within the dungeon may not come back (the Factory's vent drops into the
+        // generator hall), and a boss is met whole (the Charge Hand takes most of her in one
+        // grip): hurt, she mends first where she can.
+        let hurt = sense::hp_permille(v.body()) < 900;
+        if hurt && best.as_ref().is_some_and(|b| b.0 == 8 || Self::near_boss(v, cx, b.2)) {
+            if let Some(p) = self.rest_in_reach(v).filter(|&p| self.tried.get(&Try::Rest(p)).is_none_or(|t| t.1 < 30)) {
+                return Some((Task::Use(UseProp::new(p)), Try::Rest(p)));
+            }
         }
         best.map(|(_, _, what, t)| (t, what))
+    }
+
+    /// The nearest bed or stove she can walk to, as of the last flood.
+    fn rest_in_reach(&self, v: &View<'_>) -> Option<PropId> {
+        let cat = jane_data::catalog();
+        let at = v.body().pos;
+        v.props()
+            .filter(|p| {
+                !p.hidden
+                    && cat.story.prop(p.def).rest
+                    && !turns_clock(v, p)
+                    && self.reach.beside(p)
+                    && v.prop_spawn(p).is_some_and(|s| s.talk.is_some())
+            })
+            .min_by_key(|p| (sense::to_prop(p, at), p.id))
+            .map(|p| p.id)
+    }
+
+    /// Does this try take her within twenty cells of a boss standing here (seen, or last seen)?
+    fn near_boss(v: &View<'_>, cx: &Ctx, what: Try) -> bool {
+        let cat = jane_data::catalog();
+        let to = match what {
+            Try::Pickup(d) => v.drops().iter().find(|x| x.id == d).map(|x| x.pos),
+            Try::Prop(p) | Try::Cast(p) | Try::Door(p) | Try::Push(p, _) => v.prop(p).map(sense::prop_centre),
+            Try::Fight(u) | Try::Talk(u) => v.unit(u).map(|u| u.pos),
+            Try::Explore(x, y) => Some(Vec2::centre(x, y)),
+            Try::Travel | Try::Rest(_) | Try::Tactic(_) => None,
+        };
+        let Some(to) = to else { return false };
+        let r = i64::from(20 * CELL_FX);
+        let seen = sense::enemies(v).into_iter().filter(|u| cat.combat.unit(u.def).boss).map(|u| u.pos);
+        let known = cx
+            .seen_foes
+            .iter()
+            .filter(|(d, _)| cat.combat.unit(**d).boss)
+            .flat_map(|(_, m)| m.values())
+            .filter(|(z, _)| *z == v.zone())
+            .map(|&(_, p)| p);
+        seen.chain(known).any(|b| dist(b, to) <= r)
     }
 
     /// Everything that stood in the way, for the log.
@@ -662,7 +1000,7 @@ impl Crawl {
         let cat_boss = boss_of(self.zone).map_or("none", |b| jane_data::catalog().combat.unit(b).id);
         let mut out =
             format!("nothing left to try in the {} (its boss: {cat_boss}; down: {:?});", self.zone.name(), self.bosses);
-        for p in v.props() {
+        for p in v.props().filter(|p| !p.hidden) {
             let def = cat.story.prop(p.def);
             let Some(s) = v.prop_spawn(p) else { continue };
             let seen = if self.reach.beside(p) { "reachable" } else { "out of reach" };
@@ -678,6 +1016,9 @@ impl Crawl {
                 let needs: Vec<_> =
                     s.needs.iter().map(|n| format!("{}x{}", n.qty, cat.combat.item(n.item).id)).collect();
                 let _ = write!(out, " {} answers {:?} (needs {:?});", v.name(p.key), def.answers, needs);
+                if self.failures.contains_key(&Try::Cast(p.id)) {
+                    let _ = write!(out, "\n{}", crate::ascii(v, prop_rect(p), 4));
+                }
             }
         }
         for u in sense::enemies(v) {
@@ -693,8 +1034,31 @@ impl Crawl {
                 );
             }
         }
+        for u in sense::talkers(v) {
+            let reach = if self.reach.near(u.pos, 2) { "" } else { " (out of reach)" };
+            let _ = write!(out, " talker {} at {:?}{reach};", cat.combat.unit(u.def).id, u.pos.cell());
+        }
         out
     }
+}
+
+/// A bed that sleeps the world forward to an hour (`rest` with `until`): never lain on in passing
+/// or to mend (the night it passes stands the dead up again); a dungeon's tactic says when.
+fn turns_clock(v: &View<'_>, p: &Prop) -> bool {
+    jane_data::catalog().story.prop(p.def).rest
+        && sense::prop_does(v, p, &|a| matches!(a, jane_core::action::Action::Rest { until: Some(_) }))
+}
+
+/// Shut in with the zone's boss: it stands where she can walk, and no door out of the zone is
+/// where she can walk (a lock-in behind her). Nothing but the fight lets her out.
+pub fn shut_in_with_boss(v: &View<'_>) -> bool {
+    if !v.body().alive {
+        return false;
+    }
+    let Some(boss) = boss_of(v.zone()).and_then(|b| sense::units_of(v, b).into_iter().next()) else { return false };
+    let mut reach = Reach::default();
+    reach.update(v, 0);
+    reach.point(boss.pos) && !v.props().any(|p| door_of(v, p).is_some_and(|d| d.zone != v.zone()) && reach.beside(p))
 }
 
 /// The unit a dungeon's boss room holds (`None`: the cellar, the library and the pipes have none).
@@ -713,15 +1077,31 @@ fn bolt_at(v: &View<'_>, reach: &Reach, p: &Prop, spell: SpellId) -> Option<Task
     let c = sense::prop_centre(p);
     let (px, py) = c.cell();
     let me = v.body().pos;
+    let s = jane_data::catalog().combat.spell(spell);
+    // A bolt switches what it ends beside: a prop that stops it (a brazier, a fuse board) where
+    // it hits, a torch standing in the open only where its flight runs out, or against the wall
+    // behind it. From each place she could stand, where would this bolt end?
+    let touch = i64::from(s.touch.unwrap_or(jane_core::Fx::from_px(14)).0) - 2 * 256;
     let mut best: Option<(i64, Vec2)> = None;
-    for r in 2..=6 {
+    for r in 2..=22 {
         for (dx, dy) in [(0, r), (0, -r), (r, 0), (-r, 0), (r, r), (-r, r), (r, -r), (-r, -r)] {
             let (x, y) = (px + dx, py + dy);
             if !reach.get(x, y) {
                 continue;
             }
             let at = Vec2::centre(x, y);
-            if !v.sight(at, c) {
+            // Where the bolt ends, as the sim flies it: on the prop (a prop that stops shots, a
+            // fuse box or a socket, is touched where the bolt stops on its face), or near enough
+            // its middle; or, for a thing that blocks sight and hides its own middle (a fallen
+            // rock, a web across a passage), in sight of its near face, or it the first thing
+            // seen that way, and within the bolt's flight (from farther it falls short).
+            let end = bolt_end(v, at, jane_core::angle::bearing(at, c), spell);
+            let (ex, ey) = end.cell();
+            let on_it = dist(end, c) <= touch || prop_rect(p).contains(ex, ey);
+            let face = face_toward(p, at);
+            let in_range = dist(at, face) <= i64::from(s.range.0);
+            let hidden = !v.sight(at, c) && in_range && (v.sight(at, face) || first_seen_is(v, at, c, p));
+            if !on_it && !hidden {
                 continue;
             }
             let d = dist(me, at);
@@ -729,12 +1109,108 @@ fn bolt_at(v: &View<'_>, reach: &Reach, p: &Prop, spell: SpellId) -> Option<Task
                 best = Some((d, at));
             }
         }
-        if best.is_some() {
-            break;
-        }
     }
     let (_, from) = best?;
     Some(Task::Aim { spell, from, at: c, t: 0 })
+}
+
+/// Where a bolt of `spell` thrown from `from` along `heading` ends, as the sim flies it
+/// (`flight.rs`): it starts a little ahead of her feet, moves its speed a tick, dies on the first
+/// move into a cell that stops a shot, or once it has flown its range and two of her bodies.
+fn bolt_end(v: &View<'_>, from: Vec2, heading: jane_core::Angle, spell: SpellId) -> Vec2 {
+    let cat = jane_data::catalog();
+    let s = cat.combat.spell(spell);
+    let speed = s.speed.unwrap_or(jane_core::Fx::from_px(2));
+    let mut left = i64::from(s.range.0) + 2 * i64::from(cat.combat.unit(v.body().def).bounds.0);
+    let vel = jane_core::angle::along(heading, speed);
+    let mut pos = from + jane_core::angle::along(heading, jane_core::Fx::from_px(4));
+    for _ in 0..400 {
+        let to = pos + vel;
+        if shot_stopped(v, pos, to) {
+            return to;
+        }
+        pos = to;
+        left -= i64::from(speed.0.max(1));
+        if left <= 0 {
+            break;
+        }
+    }
+    pos
+}
+
+/// Does a move from `a` to `b` enter a cell that stops a shot (the sim's grid walk,
+/// `los::first_blocked_cell`, over the flags the view shows)?
+fn shot_stopped(v: &View<'_>, a: Vec2, b: Vec2) -> bool {
+    let cell = i64::from(CELL_FX);
+    let (x0, y0) = (i64::from(a.x.0), i64::from(a.y.0));
+    let (dx, dy) = (i64::from(b.x.0) - x0, i64::from(b.y.0) - y0);
+    let (mut cx, mut cy) = a.cell();
+    let (tx, ty) = b.cell();
+    let (sx, sy) = (if dx > 0 { 1 } else { -1 }, if dy > 0 { 1 } else { -1 });
+    let (adx, ady) = (dx.abs(), dy.abs());
+    let mut nx = if dx > 0 { (i64::from(cx) + 1) * cell - x0 } else { x0 - i64::from(cx) * cell };
+    let mut ny = if dy > 0 { (i64::from(cy) + 1) * cell - y0 } else { y0 - i64::from(cy) * cell };
+    let mut steps = (tx - cx).abs() + (ty - cy).abs();
+    while steps > 0 {
+        steps -= 1;
+        let x_first = if dx == 0 {
+            false
+        } else if dy == 0 {
+            true
+        } else {
+            nx * ady < ny * adx
+        };
+        if x_first {
+            nx += cell;
+            cx += sx;
+        } else {
+            ny += cell;
+            cy += sy;
+        }
+        if v.flags(cx, cy) & jane_core::tile::BLOCK_SHOT != 0 {
+            return true;
+        }
+    }
+    false
+}
+
+/// Is the first thing that stops sight on the way from `a` to `b` the prop itself (a web across
+/// a passage blocks sight, and it is what the bolt is for)? A quarter cell at a time.
+pub fn first_seen_is(v: &View<'_>, a: Vec2, b: Vec2, p: &Prop) -> bool {
+    let r = prop_rect(p);
+    let n = (dist(a, b) / i64::from(CELL_FX / 4)).max(1);
+    let start = a.cell();
+    for i in 1..=n {
+        let q = Vec2::new(
+            jane_core::Fx(a.x.0 + ((i64::from(b.x.0 - a.x.0) * i) / n) as i32),
+            jane_core::Fx(a.y.0 + ((i64::from(b.y.0 - a.y.0) * i) / n) as i32),
+        );
+        let (x, y) = q.cell();
+        if (x, y) != start && v.flags(x, y) & jane_core::tile::BLOCK_SIGHT != 0 {
+            return r.contains(x, y);
+        }
+    }
+    false
+}
+
+/// The point of a prop's footprint nearest `at`, a quarter cell out toward it (in the free cell
+/// before its face).
+fn face_toward(p: &Prop, at: Vec2) -> Vec2 {
+    let r = prop_rect(p);
+    let q = CELL_FX / 4;
+    let clamp = |v: i32, lo: i32, hi: i32| {
+        if v < lo {
+            lo - q
+        } else if v > hi {
+            hi + q
+        } else {
+            v
+        }
+    };
+    Vec2::new(
+        jane_core::Fx(clamp(at.x.0, r.x * CELL_FX, r.right() * CELL_FX)),
+        jane_core::Fx(clamp(at.y.0, r.y * CELL_FX, r.bottom() * CELL_FX)),
+    )
 }
 
 /// The origins a pushable passes through to cover the plate, pushed only (each push needs a
@@ -950,6 +1426,17 @@ pub fn setup(bps: &jane_sim::Blueprints, z: ZoneId) -> Vec<jane_sim::Command> {
         }
     }
     for (item, qty) in materials_before(bps, z) {
+        out.push(Command::Dev(DevOp::Give { item, qty }));
+    }
+    // The bait for what in there is fed rather than fought (the dog: "The small snakes down
+    // there cannot be fought. They can be fed."), made at the bench before she goes: one each.
+    let mut baits: BTreeMap<ItemId, u16> = BTreeMap::new();
+    for u in &dungeon.units {
+        if let Some(b) = cat.combat.unit(u.def).bait {
+            *baits.entry(b).or_default() += 1;
+        }
+    }
+    for (item, qty) in baits {
         out.push(Command::Dev(DevOp::Give { item, qty }));
     }
     out.push(Command::Dev(DevOp::Give { item: sense::item("apple"), qty: 8 }));

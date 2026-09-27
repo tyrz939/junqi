@@ -74,14 +74,5 @@
     "label": "A manhole cover",
     "mark": "manhole_3",
     "fromBelow": true
-  },
-  {
-    "zone": "pipes",
-    "near": "factory",
-    "def": "manhole",
-    "key": "manhole_cover_4",
-    "label": "A manhole cover",
-    "mark": "manhole_4",
-    "fromBelow": true
   }
 ]

@@ -1,0 +1,8 @@
+{
+  "school_toll": {
+    "name": "The Bell", "description": "The bell goes on the count, every twenty seconds, and what is in the belfry goes outward from it.",
+    "icon": "spell_nature", "kind": "bolt", "school": "nature", "mp": 0, "energy": 0, "range": 40, "cooldown": 20,
+    "gcdImmune": false, "needsTarget": true, "needsEnemy": true, "needsLos": false, "anim": "cast",
+    "power": { "stat": "spirit", "div": 10, "varDiv": 32 }, "speed": 2, "count": 15, "fan": 360, "stop": 0, "glow": 16
+  }
+}

@@ -21,6 +21,7 @@
 //! | [`interact`], [`inventory`], [`bag`], [`dialogue`], [`quests`] | USE and the world verbs; bags, items and crafting; conversations; the quest log |
 //! | [`triggers`], [`under`], [`clear`], [`light`], [`verbs`] | triggers and plates; things under things; nothing solid lands on a unit; the light rule; rest and growth |
 //! | [`journal`] | what is known (§3.7) |
+//! | [`metrics`] | what the last step cost, for an overlay and a profiler (never state) |
 //! | [`living`] | the living world (§4.6): the sky, the rain ramp, ecology, consequences, rumours |
 //! | [`hooks`] | combat's calls into the interact, inventory, quests, triggers, journal and living-world units |
 //! | [`ai`], [`snake`], [`npc`], [`presence`] | step 7's controllers (the AI loop, the snake, orders and npcs), step 3's schedules |
@@ -60,6 +61,7 @@ pub mod life;
 pub mod light;
 pub mod living;
 pub mod loot;
+pub mod metrics;
 pub mod los;
 pub mod npc;
 pub mod omens;
@@ -90,6 +92,7 @@ pub use combat::Hit;
 pub use event::{Event, EventKind, SpellError};
 pub use ids::{ClientToken, DropId, GroundId, ProjId, PropId, Seat, UnitId};
 pub use input::{AssistProfile, Command, DevOp, InputFrame, StampedCommand, StepInput, Stepped};
+pub use metrics::{Phase, SimMetrics, WallClock};
 pub use save::{Header, SaveError, Snapshot, Summary};
 pub use sim::Sim;
 pub use state::{GameState, PlayerState, Prop, Unit, ZoneState};

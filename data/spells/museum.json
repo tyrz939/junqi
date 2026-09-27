@@ -1,10 +1,10 @@
 {
   "charge_lob": {
-    "name": "Charge", "description": "A shot-firer's charge, lobbed underarm and left to burn where it lands.",
+    "name": "Charge", "description": "A shot-firer's charge, lobbed underarm. It lies where it lands for a count of two, then goes.",
     "icon": "spell_blast", "kind": "ground", "school": "blast",
     "mp": 0, "energy": 0, "range": 9, "cooldown": 4,
     "gcdImmune": false, "needsTarget": true, "needsEnemy": true, "needsLos": true, "anim": "cast",
-    "power": { "stat": "spirit", "div": 2.5, "varDiv": 8 },
-    "radius": 1.5, "duration": 2.5, "pulse": 0.5, "stop": 24
+    "power": { "stat": "spirit", "div": 1.25, "varDiv": 4 },
+    "radius": 1.5, "delay": 2, "duration": 2.2, "pulse": 1, "stop": 24
   }
 }

@@ -165,6 +165,17 @@ pub const SPELLS: &[(&str, SpellFx)] = &[
     ("spark", sf(Cast::Spark, Some(Bolt::Spark), Impact::Spark, None)),
     ("spark_ai", sf(Cast::Spark, Some(Bolt::Spark), Impact::Spark, None)),
     ("melee_shock", sf(Cast::Swing, None, Impact::ShockGrip, None)),
+    // The bosses' own copies of the spells they borrowed (the dungeon bots' tuning, 27 Sept):
+    // drawn as what they copy.
+    ("swoop", sf(Cast::Swing, None, Impact::Slash, None)),
+    ("school_toll", sf(Cast::Venom, Some(Bolt::Venom), Impact::Venom, None)),
+    ("flower_spray", sf(Cast::None, Some(Bolt::Needle), Impact::Needle, None)),
+    ("flower_lash", sf(Cast::None, None, Impact::Lash, None)),
+    ("queen_bite", sf(Cast::None, None, Impact::Bite, None)),
+    ("queen_web", sf(Cast::Throw, None, Impact::None, Some(GroundFx::Web))),
+    ("gold_globe", sf(Cast::Venom, Some(Bolt::Venom), Impact::Venom, None)),
+    ("gold_ring", sf(Cast::Venom, Some(Bolt::Venom), Impact::Venom, None)),
+    ("gold_icebolt", sf(Cast::Frost, Some(Bolt::Frost), Impact::Frost, None)),
 ];
 
 /// Every effect row's entry, by content id (`data/effects*.json`).
@@ -189,6 +200,7 @@ pub const STATUSES: &[(&str, Status)] = &[
     ("jolted", Status::Jolt),
     ("dusted", Status::Dust),
     ("softened", Status::Softened),
+    ("feeding", Status::Stars),
 ];
 
 /// A spell's entry by its content id.

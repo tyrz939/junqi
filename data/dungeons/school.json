@@ -347,6 +347,7 @@
         {
           "socket": "prop:hearth",
           "prop": "campfire",
+          "talk": "school_grate",
           "label": "The grate"
         },
         {
@@ -1834,7 +1835,7 @@
       0.22
     ],
     "restToBossCells": 420,
-    "baseHeat": 12,
+    "baseHeat": 8,
     "enemies": {
       "bat": 1,
       "wall_spider": 2,

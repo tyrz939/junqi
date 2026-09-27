@@ -30,13 +30,13 @@
   },
   "ringer": {
     "name": "The Timekeeper", "faction": "undead", "controller": "ai",
-    "strength": 125, "spirit": 120, "walk": 0.3, "run": 0.7, "aggro": 16, "leash": 70, "bounds": 1.5,
-    "book": ["melee_stun", "snake_ring", "icebolt_ai"], "respawn": 0, "autoRegen": true, "loot": [],
+    "strength": 75, "spirit": 120, "walk": 0.3, "run": 0.7, "aggro": 16, "leash": 70, "bounds": 1.5,
+    "book": ["school_toll", "melee_stun", "melee"], "respawn": 0, "autoRegen": true, "loot": [],
     "sprite": "school_ringer", "boss": true,
-    "resist": { "physical": 0.5, "frost": 0.35, "fire": 0.35, "nature": 0.35, "blast": 0.35, "shock": 0.35 },
+    "resist": { "physical": 0.5, "frost": 0.15, "fire": 0.15, "nature": 0.15, "blast": 0.15, "shock": 0.15 },
     "phases": [
       {
-        "hpBelow": 0.75, "book": ["melee_stun", "snake_ring", "icebolt_ai"], "run": 0.8,
+        "hpBelow": 0.75, "book": ["school_toll", "melee_stun", "melee"], "run": 0.8,
         "onEnter": [
           { "do": "switch", "prop": "school_belfry_brazier_a", "on": false },
           { "do": "switch", "prop": "school_belfry_brazier_b", "on": false },
@@ -44,12 +44,13 @@
           { "do": "switch", "prop": "school_belfry_cold_b", "on": false },
           { "do": "show", "prop": "school_belfry_bud_a" },
           { "do": "show", "prop": "school_belfry_bud_b" },
+          { "do": "ring", "strikes": 1 },
           { "do": "shake", "amount": 3 },
           { "do": "toast", "text": "The bell goes. Every lamp in the belfry goes out with it, and the window is the only light left." }
         ]
       },
       {
-        "hpBelow": 0.5, "book": ["melee_stun", "snake_ring", "icebolt_ai"], "run": 0.9,
+        "hpBelow": 0.5, "book": ["school_toll", "melee_stun", "melee"], "run": 0.9,
         "onEnter": [
           { "do": "switch", "prop": "school_belfry_brazier_a", "on": true },
           { "do": "switch", "prop": "school_belfry_brazier_b", "on": true },
@@ -57,12 +58,13 @@
           { "do": "switch", "prop": "school_belfry_cold_b", "on": false },
           { "do": "hide", "prop": "school_belfry_bud_a" },
           { "do": "hide", "prop": "school_belfry_bud_b" },
+          { "do": "ring", "strikes": 1 },
           { "do": "shake", "amount": 3 },
           { "do": "toast", "text": "The bell goes again and it is the middle of the afternoon. The floor is dry and the lamps are up." }
         ]
       },
       {
-        "hpBelow": 0.25, "book": ["melee_stun", "snake_ring", "icebolt_ai"], "run": 1,
+        "hpBelow": 0.25, "book": ["school_toll", "melee_stun", "melee"], "run": 1,
         "onEnter": [
           { "do": "switch", "prop": "school_belfry_brazier_a", "on": false },
           { "do": "switch", "prop": "school_belfry_brazier_b", "on": false },
@@ -73,6 +75,7 @@
           { "do": "spawn", "unit": "school_belfry_shade_1", "def": "shade", "at": "school_belfry_shade_a" },
           { "do": "spawn", "unit": "school_belfry_shade_2", "def": "shade", "at": "school_belfry_shade_b" },
           { "do": "spawn", "unit": "school_belfry_shade_3", "def": "shade", "at": "school_belfry_shade_c" },
+          { "do": "ring", "strikes": 1 },
           { "do": "shake", "amount": 4 },
           { "do": "toast", "text": "The bell goes a third time. Three men in Company overalls are standing at the edge of the light, and none of them came up the stair." }
         ]

@@ -24,7 +24,9 @@
 //! | [`fight`] | the bar: melee, bolts, an apple when low, backing off |
 //! | [`talk`] | a conversation: which line to take |
 //! | [`story`] | the quest log read as objectives (the Reader and the Rusher) |
+//! | [`console`] | a story test's setup: a new game put at the start of an act |
 //! | [`crawl`] | a dungeon: keys, locks, plates, verbs, the boss, the way out |
+//! | [`tactics`] | what each dungeon and boss asks beyond the crawl's general order |
 //! | [`fixture`] | the bot-session hash fixture (`bot-hash-<target>.txt`) |
 //!
 //! Two player models (VERIFICATION.md §2 L3; P4b adds the rest): the **Reader** takes every
@@ -34,14 +36,19 @@
 
 #![deny(clippy::float_arithmetic, clippy::float_cmp)]
 
+pub mod coarse;
+pub mod console;
 pub mod crawl;
 pub mod fight;
 pub mod fixture;
 pub mod nav;
 pub mod sense;
 pub mod story;
+pub mod tactics;
 pub mod talk;
 pub mod task;
+
+use std::fmt::Write as _;
 
 use jane_core::{QuestId, SpellId, ZoneId};
 use jane_sim::event::{EventKind, QuestChange};
@@ -76,6 +83,47 @@ impl Model {
     /// Runs whenever there is energy to (the Reader walks unless it is going far).
     pub const fn sprints(self) -> bool {
         matches!(self, Model::Rusher)
+    }
+}
+
+/// Which of the three endings a bot chooses at Yours to Say (STORY.md §10): the choice policy
+/// that makes each reachable in a test. Without one it carries the Ball to the nearest of the
+/// three.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Ending {
+    /// The ring on the study desk under Julie's house (`the_end` 1).
+    Hold,
+    /// The seam at the back of the Gold Mine's vault (`the_end` 2).
+    Hill,
+    /// The Sunday train at Castle Halt (`the_end` 3).
+    Train,
+}
+
+impl Ending {
+    pub fn parse(s: &str) -> Option<Ending> {
+        match s {
+            "hold" | "a" | "1" => Some(Ending::Hold),
+            "hill" | "b" | "2" => Some(Ending::Hill),
+            "train" | "c" | "3" => Some(Ending::Train),
+            _ => None,
+        }
+    }
+
+    pub const fn name(self) -> &'static str {
+        match self {
+            Ending::Hold => "hold",
+            Ending::Hill => "hill",
+            Ending::Train => "train",
+        }
+    }
+
+    /// The world's `the_end` for it.
+    pub const fn the_end(self) -> u8 {
+        match self {
+            Ending::Hold => 1,
+            Ending::Hill => 2,
+            Ending::Train => 3,
+        }
     }
 }
 
@@ -144,6 +192,30 @@ impl Milestone {
     }
 }
 
+/// The ground about a rect as text, for a debugging dump: `#` a cell feet cannot cross, `.` one
+/// they can, a prop's footprint by the first letter of its key (upper case when solid), `@` her.
+pub fn ascii(v: &View<'_>, r: jane_core::Rect, pad: i32) -> String {
+    let me = v.body().pos.cell();
+    let mut out = String::new();
+    for y in r.y - pad..r.bottom() + pad {
+        for x in r.x - pad..r.right() + pad {
+            let c = if (x, y) == me {
+                '@'
+            } else if let Some(p) = v.props().find(|p| !p.hidden && sense::prop_rect(p).contains(x, y)) {
+                let ch = v.name(p.key).chars().next().unwrap_or('?');
+                if p.solid { ch.to_ascii_uppercase() } else { ch.to_ascii_lowercase() }
+            } else if nav::walkable(v, x, y) {
+                '.'
+            } else {
+                '#'
+            };
+            out.push(c);
+        }
+        out.push('\n');
+    }
+    out
+}
+
 /// What a bot plays on: a sim, or a sim being recorded.
 pub trait Host {
     fn view(&self, seat: Seat) -> Option<View<'_>>;
@@ -188,8 +260,9 @@ impl Host for Recorder {
     }
 }
 
-/// The plan a bot follows.
+/// The plan a bot follows. One per bot, made once: the crawl's size is no cost worth a box.
 #[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
 pub enum Plan {
     /// The quest log (the Reader's and the Rusher's first hour).
     Story(story::Story),
@@ -273,6 +346,55 @@ impl Bot {
         }
     }
 
+    /// What it holds, what it is doing and what stands in its way, for a debugging dump.
+    pub fn explain(&self, v: &View<'_>) -> String {
+        let cat = jane_data::catalog();
+        let bag: Vec<String> =
+            v.me().bag.iter().flatten().map(|s| format!("{}x{}", s.qty, cat.combat.item(s.item).id)).collect();
+        let mut out = format!(
+            "at {:?} in the {}, clock {:?}; hp {}; mp {}; bag: {}\n",
+            v.body().pos.cell(),
+            v.zone().name(),
+            v.clock(),
+            v.body().hp.points(),
+            v.body().mp.points(),
+            bag.join(" ")
+        );
+        let (x, y) = v.body().pos.cell();
+        out.push_str(&ascii(v, jane_core::Rect::new(x, y, 1, 1), 8));
+        let f = &self.ctx.fight;
+        let unit = |id: Option<jane_sim::ids::UnitId>| {
+            id.and_then(|t| v.unit(t))
+                .map(|u| format!("{} at {:?} hp {}", cat.combat.unit(u.def).id, u.pos.cell(), u.hp.points()))
+        };
+        let _ = writeln!(
+            out,
+            "fight: target {:?} hunt {:?} fleeing {}; talking {}",
+            unit(f.target),
+            unit(f.hunt),
+            f.fleeing,
+            v.dialogue().is_some()
+        );
+        match &self.plan {
+            Plan::Story(s) => {
+                let _ = writeln!(out, "doing: {}", s.status());
+                out.push_str(&s.explain(v, &self.ctx));
+            }
+            Plan::Crawl(c) => {
+                let _ = write!(
+                    out,
+                    "doing: {} ({})\n{}\ntried: {:?}\nfailed: {:?}\n",
+                    c.status(),
+                    c.doing(v),
+                    c.why_stuck(v),
+                    c.tried_list(),
+                    c.failures
+                );
+            }
+        }
+        out
+    }
+
     /// Log a plan's milestone.
     pub fn note(&mut self, v: &View<'_>, mark: Mark) {
         self.log.push(Milestone { tick: v.tick().0, frame: v.frame(), zone: v.zone(), mark });
@@ -286,9 +408,16 @@ impl Bot {
             self.setup.remove(0);
             return Act::press(c);
         }
+        // A bag nearly full: something she can find again is thrown out, so a key or the thing
+        // a quest wants always has room.
+        if v.dialogue().is_none() {
+            if let Some(slot) = sense::junk_slot(v) {
+                return Act::press(Command::BagDestroy { slot });
+            }
+        }
         let mut notes = Vec::new();
         let act = match &mut self.plan {
-            Plan::Story(s) => s.think(v, &mut self.ctx, &mut notes),
+            Plan::Story(s) => s.think(v, &mut self.ctx, &self.events, &mut notes),
             Plan::Crawl(c) => c.think(v, &mut self.ctx, &self.events, &mut notes),
         };
         for m in notes {

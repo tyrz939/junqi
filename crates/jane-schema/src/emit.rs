@@ -467,6 +467,9 @@ impl Emit for Action {
             }
             Action::NightUnlock(k) => one(out, "NightUnlock", k),
             Action::Shake(n) => one(out, "Shake", n),
+            Action::Ring { strikes, from, church } => {
+                Fields::open(out, "Action::Ring").f("strikes", strikes).f("from", from).f("church", church).close();
+            }
             Action::Camera { mode, rect } => {
                 Fields::open(out, "Action::Camera").f("mode", mode).f("rect", rect).close();
             }

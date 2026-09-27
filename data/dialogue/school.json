@@ -61,6 +61,19 @@
       }
     }
   },
+  "school_grate": {
+    "speaker": "The Grate",
+    "start": [{ "node": "fire" }],
+    "nodes": {
+      "fire": {
+        "lines": [
+          "The sick bay fire is banked up and going. The scuttle beside it is full, and nobody has been in to fill it.",
+          "Nothing comes in here. If it goes badly out there, this is where you will wake."
+        ],
+        "actions": [{ "do": "rest" }]
+      }
+    }
+  },
   "school_bed_bell": {
     "speaker": "The Far Bed",
     "start": [{ "node": "bed" }],

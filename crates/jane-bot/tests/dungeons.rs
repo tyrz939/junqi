@@ -10,8 +10,8 @@
 //! when it got out, how often it died, and where it stopped and why. A dungeon the crawl cannot
 //! finish is a finding about the bot or the game, reported here as it stands, not hidden: the
 //! test holds every run to getting in and to ending in a known state (out, or stopped with a
-//! reason), and the two dungeons without a boss that it finishes (the cellar, the library) to
-//! finishing.
+//! reason), and the dungeons it finishes to finishing (all of them: the School in forty minutes,
+//! the Burial in an hour).
 
 mod common;
 
@@ -22,12 +22,26 @@ use jane_core::ZoneId;
 
 /// Twenty game minutes a dungeon.
 const FRAMES: u32 = 20 * MINUTE;
+/// The School, forty: six lessons round a timetable, a night slept to the bell for the
+/// Caretaker's key, often a second for the glasshouse, and a boss she kites, each on foot across
+/// the biggest building in the county from the one fire that mends her (DUNGEONS.md §3.6).
+const SCHOOL_FRAMES: u32 = 40 * MINUTE;
+
+/// The Burial, an hour: it is five keepers deep, four of them shut in with her, and each sends
+/// her back to a fire first (DUNGEONS.md §3.5, "Played through"). Its three runs finish in
+/// thirty-five to forty-five.
+const BURIAL_FRAMES: u32 = 60 * MINUTE;
 
 fn play(z: ZoneId, must_finish: bool) {
     let cat = jane_data::catalog();
     let mut problems = Vec::new();
+    let frames = match z {
+        ZoneId::Burial => BURIAL_FRAMES,
+        ZoneId::School => SCHOOL_FRAMES,
+        _ => FRAMES,
+    };
     for seed in SEEDS {
-        let (rec, bot) = common::crawl(seed, Model::Reader, z, FRAMES);
+        let (rec, bot) = common::crawl(seed, Model::Reader, z, frames);
         let Plan::Crawl(c) = &bot.plan else { unreachable!() };
         let bosses: Vec<String> =
             c.bosses.iter().map(|&(d, t)| format!("{} {}", cat.combat.unit(d).id, clock(Some(t)))).collect();
@@ -82,35 +96,71 @@ fn the_library() {
 
 #[test]
 fn the_gold_mine() {
-    play(ZoneId::Mine, false);
+    play(ZoneId::Mine, true);
+}
+
+/// "No exit, some nights" (DUNGEONS.md §3.1): with the omen true and in at eight in the evening,
+/// the front door is barred from nine while Iron Knuckles stands, and the crawl works on through
+/// the night. It still finishes and walks out by a door (the adit, or the front door unbarred
+/// once he is down): the omen costs a night, never the run.
+#[test]
+fn the_gold_mine_on_a_barred_night() {
+    use jane_bot::crawl::Crawl;
+    use jane_bot::{Bot, Plan};
+    use jane_sim::{Command, DevOp, Seat};
+    for seed in SEEDS {
+        let sim = new_game(seed);
+        let omen = sim.view(Seat(0)).and_then(|v| v.sym("omen:mine_no_exit")).expect("the omen's flag");
+        let mut setup = crawl::setup(sim.blueprints(), ZoneId::Mine);
+        setup.insert(0, Command::Dev(DevOp::Flag { flag: omen, value: 1 }));
+        for c in &mut setup {
+            if let Command::Dev(DevOp::Time { hour }) = c {
+                *hour = 20;
+            }
+        }
+        let mut rec = jane_sim::replay::Recorder::new(sim);
+        let mut bot = Bot::new(Model::Reader, Plan::Crawl(Crawl::new(ZoneId::Mine)));
+        bot.setup = setup;
+        bot.play(&mut rec, FRAMES);
+        let Plan::Crawl(c) = &bot.plan else { unreachable!() };
+        let hour = rec.sim().view(Seat(0)).map(|v| v.hour());
+        println!(
+            "mine at night seed {seed}: in {} | bosses {} | out {} (hour {hour:?}) | {}",
+            clock(c.entered),
+            c.bosses.len(),
+            clock(c.left),
+            c.stuck.as_deref().unwrap_or("")
+        );
+        assert!(c.left.is_some(), "seed {seed}: did not get out on a barred night: {:?}", c.stuck);
+    }
 }
 
 #[test]
 fn the_museum() {
-    play(ZoneId::Museum, false);
+    play(ZoneId::Museum, true);
 }
 
 #[test]
 fn butterfly_forest() {
-    play(ZoneId::Forest, false);
+    play(ZoneId::Forest, true);
 }
 
 #[test]
 fn the_pipes() {
-    play(ZoneId::Pipes, false);
+    play(ZoneId::Pipes, true);
 }
 
 #[test]
 fn the_factory() {
-    play(ZoneId::Factory, false);
+    play(ZoneId::Factory, true);
 }
 
 #[test]
 fn the_burial_chamber() {
-    play(ZoneId::Burial, false);
+    play(ZoneId::Burial, true);
 }
 
 #[test]
 fn the_school() {
-    play(ZoneId::School, false);
+    play(ZoneId::School, true);
 }

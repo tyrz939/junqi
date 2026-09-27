@@ -6,7 +6,8 @@
 //! pays everything since in one step. Step 5 pays every awake unit every tick; a sleeper is paid
 //! when it wakes, and anything that reads or writes mp or hp pays first. Per tick a living unit
 //! gains `spirit` milli-mp (the TS's `spirit / 1000` a step, exact), and an idle AI (its row's
-//! `auto_regen` while idle, any AI while leashing, never under orders) gains `max / 300` hp and
+//! `auto_regen` while idle, any AI while leashing but one whose row `keeps_wounds`, never
+//! under orders) gains `max / 300` hp and
 //! mp, floored (a snake out of its fight gains the hp only, `snake.ts`); the sums are the
 //! per-tick sums because every rate is fixed between writes and clamping a sum of gains equals
 //! clamping each. Sleepers are idle by definition. The controllers do not regen: step 5 does it
@@ -29,7 +30,10 @@ fn idle_regen(u: &Unit) -> bool {
     u.controller == Controller::Ai
         && u.order.is_none()
         && match u.combat {
-            CombatState::Leash => true,
+            // A row that keeps its wounds (`keepsWounds`: the Emperor) does not mend going home
+            // either: what she did to it before she fell is still done when she comes back
+            // (DUNGEONS.md §3.3: its fight "cannot be lost to running out of buds").
+            CombatState::Leash => !def_of(u).keeps_wounds,
             CombatState::Idle => def_of(u).auto_regen,
             CombatState::Combat => false,
         }

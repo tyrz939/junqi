@@ -836,6 +836,18 @@
                   "prop": "@verbprop:bud5"
                 },
                 {
+                  "do": "show",
+                  "prop": "@verbprop:bud6"
+                },
+                {
+                  "do": "show",
+                  "prop": "@verbprop:bud7"
+                },
+                {
+                  "do": "show",
+                  "prop": "@verbprop:bud8"
+                },
+                {
                   "do": "toast",
                   "text": "They go up off your hands all at once and the whole glade comes into bud under them."
                 }
@@ -866,7 +878,7 @@
               "then": [
                 {
                   "do": "status",
-                  "effect": "staggered"
+                  "effect": "feeding"
                 },
                 {
                   "do": "toast",
@@ -893,7 +905,7 @@
               "then": [
                 {
                   "do": "status",
-                  "effect": "staggered"
+                  "effect": "feeding"
                 }
               ]
             }
@@ -916,7 +928,7 @@
               "then": [
                 {
                   "do": "status",
-                  "effect": "staggered"
+                  "effect": "feeding"
                 }
               ]
             }
@@ -939,7 +951,7 @@
               "then": [
                 {
                   "do": "status",
-                  "effect": "staggered"
+                  "effect": "feeding"
                 }
               ]
             }
@@ -962,7 +974,76 @@
               "then": [
                 {
                   "do": "status",
-                  "effect": "staggered"
+                  "effect": "feeding"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "socket": "verbprop:bud6",
+          "prop": "bud",
+          "hidden": true,
+          "use": [
+            {
+              "do": "switch",
+              "prop": "@self",
+              "on": true
+            },
+            {
+              "do": "send",
+              "unit": "@boss:main",
+              "to": "@bud6",
+              "then": [
+                {
+                  "do": "status",
+                  "effect": "feeding"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "socket": "verbprop:bud7",
+          "prop": "bud",
+          "hidden": true,
+          "use": [
+            {
+              "do": "switch",
+              "prop": "@self",
+              "on": true
+            },
+            {
+              "do": "send",
+              "unit": "@boss:main",
+              "to": "@bud7",
+              "then": [
+                {
+                  "do": "status",
+                  "effect": "feeding"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "socket": "verbprop:bud8",
+          "prop": "bud",
+          "hidden": true,
+          "use": [
+            {
+              "do": "switch",
+              "prop": "@self",
+              "on": true
+            },
+            {
+              "do": "send",
+              "unit": "@boss:main",
+              "to": "@bud8",
+              "then": [
+                {
+                  "do": "status",
+                  "effect": "feeding"
                 }
               ]
             }
@@ -986,6 +1067,18 @@
         },
         {
           "socket": "prop:moon_b",
+          "prop": "forest_moonbeam"
+        },
+        {
+          "socket": "prop:beam_d",
+          "prop": "forest_sunbeam"
+        },
+        {
+          "socket": "prop:beam_e",
+          "prop": "forest_sunbeam"
+        },
+        {
+          "socket": "prop:moon_c",
           "prop": "forest_moonbeam"
         }
       ],

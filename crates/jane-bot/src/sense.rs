@@ -86,6 +86,129 @@ pub fn doors_to<'a>(v: &View<'a>, z: jane_core::ZoneId) -> Vec<&'a Prop> {
     out
 }
 
+/// A catalog flag's key, by name.
+fn named_flag(name: &str) -> Option<jane_core::action::FlagKey> {
+    jane_data::catalog().name_id(name).map(|n| jane_core::action::FlagKey::Named(jane_core::Key::Name(n)))
+}
+
+/// Does this action end the game, and which way (`the_end` 1 hold, 2 hill, 3 train)?
+pub fn sets_the_end(a: &Action) -> Option<u8> {
+    match *a {
+        Action::Flag { key, op: jane_core::action::FlagOp::Set(n) } if Some(key) == named_flag("the_end") && n > 0 => {
+            Some(n as u8)
+        }
+        _ => None,
+    }
+}
+
+/// Does this action signal the Sunday train (the name board's line)?
+pub fn signals_train(a: &Action) -> bool {
+    matches!(*a, Action::Flag { key, op: jane_core::action::FlagOp::Set(n) }
+        if Some(key) == named_flag("train_signalled") && n != 0)
+}
+
+/// Can she open it: it is not locked, or she holds a key whose tag fits.
+pub fn can_open(v: &View<'_>, p: &Prop) -> bool {
+    !p.locked || keyed_for(v, p)
+}
+
+/// The hours a door keeps now, as the sim reads them (`interact::night_lock_of`): a verb's, else
+/// its row's. What its notice says ("Open ten to four").
+pub fn night_lock(v: &View<'_>, p: &Prop) -> Option<jane_core::NightLock> {
+    use jane_sim::state::NightState;
+    match p.night {
+        NightState::AsSpawned => v.prop_spawn(p).and_then(|s| s.night_lock),
+        NightState::Locked(l) => Some(l),
+        NightState::Open => None,
+    }
+}
+
+/// Is this door shut to her at `hour` (inside its hours, and not a keyed lock she holds the key
+/// to)?
+pub fn shut_at(v: &View<'_>, p: &Prop, hour: u8) -> bool {
+    night_lock(v, p).is_some_and(|l| l.shut_at(hour) && !(l.keyed && keyed_for(v, p)))
+}
+
+/// Does she hold a key whose tag fits this prop's lock?
+pub fn keyed_for(v: &View<'_>, p: &Prop) -> bool {
+    let cat = jane_data::catalog();
+    let Some(jane_core::Key::Name(tag)) = v.prop_spawn(p).and_then(|s| s.key_tag) else { return false };
+    v.me().bag.iter().flatten().any(|s| cat.combat.item(s.item).opens == Some(tag))
+}
+
+/// Hours until some door here into `z` is answered, when every one is shut now (0: one is open
+/// now, or there is none here to wait for).
+pub fn hours_till_open(v: &View<'_>, z: jane_core::ZoneId) -> u8 {
+    let doors = doors_to(v, z);
+    let hour = v.hour();
+    // A dungeon that keeps hours of its own (Butterfly Forest's sign: `tactics::forest`).
+    let own = |h: u8| crate::tactics::forest::shut_hour(z, h);
+    (0..24u8)
+        .find(|&h| {
+            let at = (hour + h) % 24;
+            (doors.is_empty() || doors.iter().any(|p| !shut_at(v, p, at))) && !own(at)
+        })
+        .unwrap_or(0)
+}
+
+/// Free bag slots below which she throws something out.
+pub const BAG_SPARE: usize = 2;
+
+/// A bag slot to empty when fewer than [`BAG_SPARE`] are free: of what destroy allows (found
+/// again somewhere, not bound, not a key) and no quest in the log wants, the least use: first
+/// what nothing is made from or mended with, then ingredients, then food and potions, then the
+/// wood and iron broken things want; the smaller stack first.
+pub fn junk_slot(v: &View<'_>) -> Option<u8> {
+    let cat = jane_data::catalog();
+    let bag = &v.me().bag;
+    if bag.iter().filter(|s| s.is_none()).count() >= BAG_SPARE {
+        return None;
+    }
+    let wanted: Vec<ItemId> = v
+        .quests()
+        .flat_map(|q| cat.story.quest(q.quest).requirements.iter())
+        .filter_map(|r| match r.target {
+            jane_data::ReqTarget::Acquire(i) => Some(i),
+            _ => None,
+        })
+        .collect();
+    let rank = |i: ItemId| -> u8 {
+        let d = cat.combat.item(i);
+        let mends = matches!(d.id, "wood" | "iron");
+        let ingredient = cat.combat.recipes.iter().any(|r| r.inputs.contains(&i));
+        if mends {
+            3
+        } else if d.usable {
+            2
+        } else {
+            u8::from(ingredient)
+        }
+    };
+    // A second stack of something she has a full one of (the rats' meat, wood, apples by the
+    // score) goes first, story or not: what the story wants of it, the full stack still holds.
+    // A bag of things destroy refuses and the story names otherwise never has room again, and
+    // a key in a chest (the Burial's scaled door) stays in the chest.
+    let full = |i: ItemId| {
+        let max = u32::from(cat.combat.item(i).max_stack);
+        bag.iter().flatten().any(|s| s.item == i && u32::from(s.qty) >= max)
+    };
+    let stacks = |i: ItemId| bag.iter().flatten().filter(|s| s.item == i).count();
+    bag.iter()
+        .enumerate()
+        .filter_map(|(i, s)| s.map(|s| (i, s)))
+        .filter(|(_, s)| {
+            let d = cat.combat.item(s.item);
+            let spare = stacks(s.item) > 1 && full(s.item);
+            !d.kept() && (!d.story && !wanted.contains(&s.item) || spare)
+        })
+        .min_by_key(|(i, s)| {
+            let d = cat.combat.item(s.item);
+            let spare = stacks(s.item) > 1 && full(s.item) && s.qty < d.max_stack;
+            (!spare, rank(s.item), s.qty, *i)
+        })
+        .map(|(i, _)| i as u8)
+}
+
 pub fn holds(v: &View<'_>, item: ItemId) -> u32 {
     jane_sim::bag::bag_count(&v.me().bag[..], item)
 }

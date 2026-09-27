@@ -1,5 +1,9 @@
 [
   {
+    "hour": 18,
+    "actions": [{ "do": "ring", "strikes": 5, "from": "church_door", "church": true }]
+  },
+  {
     "hour": 21,
     "actions": [
       {
@@ -14,10 +18,10 @@
               {
                 "do": "if",
                 "when": [{ "if": "weekday", "day": "tuesday", "not": true }],
-                "then": [{ "do": "toast", "text": "A school bell, a long way off. Nine o'clock." }]
+                "then": [{ "do": "ring", "strikes": 9, "from": "school_door" }, { "do": "toast", "text": "A school bell, a long way off. Nine o'clock." }]
               }
             ],
-            "else": [{ "do": "toast", "text": "A school bell, a long way off. Nine o'clock." }]
+            "else": [{ "do": "ring", "strikes": 9, "from": "school_door" }, { "do": "toast", "text": "A school bell, a long way off. Nine o'clock." }]
           }
         ]
       }
@@ -30,7 +34,7 @@
         "do": "if",
         "when": [{ "if": "flag", "flag": "bell_stopped" }],
         "then": [{ "do": "toast", "text": "Six o'clock, and no bell. It is morning all the same." }],
-        "else": [{ "do": "toast", "text": "The bell again. It is only morning." }]
+        "else": [{ "do": "ring", "strikes": 6, "from": "school_door" }, { "do": "toast", "text": "The bell again. It is only morning." }]
       }
     ]
   }

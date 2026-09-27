@@ -20,6 +20,10 @@ pub const PATH_WINDOW: u32 = 256;
 pub const PATH_BUDGET: u32 = 6000;
 pub const PATHS_PER_TICK: u8 = 4;
 pub const REPATH_TICKS: u32 = 20;
+/// Doublings of `REPATH_TICKS` a walker waits after searches toward one goal keep failing, and
+/// before a partial path toward a fixed goal is planned again unwalked: 20 << 5, about ten
+/// seconds.
+pub const REPATH_BACKOFF_MAX: u16 = 5;
 const STRAIGHT: u32 = 10;
 const DIAGONAL: u32 = 14;
 

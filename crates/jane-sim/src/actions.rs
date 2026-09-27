@@ -136,6 +136,19 @@ fn prop(cx: &mut Ctx<'_>, k: jane_core::Key) -> Option<PropIx> {
     p
 }
 
+/// Where a bell named `s` hangs in this zone: a unit by that name (its ringer), a prop's middle,
+/// or a mark. `None` (heard from nowhere in particular) when the zone has none of them.
+fn ring_at(cx: &Ctx<'_>, s: jane_core::Sym) -> Option<jane_core::Vec2> {
+    if let Some(u) = cx.rt.unit_names.get(&s).and_then(|&id| cx.zone.unit(id)) {
+        return Some(u.pos);
+    }
+    if let Some(&ix) = cx.rt.names.get(&s) {
+        let p = &cx.zone.props[ix as usize];
+        return Some(crate::light::prop_centre(cx.cat.story.prop(p.def), p));
+    }
+    cx.rt.mark(s).map(|m| jane_core::Vec2::centre(i32::from(m.cell.x), i32::from(m.cell.y)))
+}
+
 /// The unit a verb lands on: the subject if it is a unit here, else the actor's body.
 fn subject_unit(cx: &Ctx<'_>, subject: Subject) -> Option<crate::ids::UnitId> {
     match subject {
@@ -305,6 +318,20 @@ pub fn run_action(cx: &mut Ctx<'_>, a: &Action, subject: Subject) {
             verbs::place(cx, who, prop, item);
         }
         Action::Shake(n) => cx.emit(EventKind::Shake(n)),
+        Action::Ring { strikes, from, church } => {
+            let at = match from {
+                Some(k) => {
+                    let s = cx.sym(k);
+                    ring_at(cx, s)
+                }
+                None => match subject {
+                    Subject::Unit(u) => cx.zone.unit(u).map(|u| u.pos),
+                    _ => None,
+                },
+            };
+            let at = at.map(|p| (cx.zone.id, p));
+            cx.emit(EventKind::Bell { strikes, at, church });
+        }
         Action::Camera { mode, rect } => {
             let rect = rect.map(|r| cx.sym(r));
             cx.emit(EventKind::Camera { mode, rect });

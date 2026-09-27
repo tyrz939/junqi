@@ -187,6 +187,21 @@ fn says(events: &[jane_sim::Event], text: &str) -> usize {
         .count()
 }
 
+/// The School's bell rung in `events` (`EventKind::Bell`, the audio's cue): strike counts.
+fn bells(events: &[jane_sim::Event]) -> Vec<u8> {
+    events
+        .iter()
+        .filter_map(|e| match e.kind {
+            EventKind::Bell { strikes, church: false, at } => {
+                assert!(at.is_some_and(|(z, _)| z == ZoneId::County), "the bell hangs on the hill: {at:?}");
+                assert!(e.to.is_none() && e.in_zone.is_none(), "heard by the whole party, wherever they are");
+                Some(strikes)
+            }
+            _ => None,
+        })
+        .collect()
+}
+
 fn flag(s: &Sim, name: &str) -> i32 {
     s.state().syms.find(name).and_then(|k| s.state().flags.get(&FlagKey::Named(k)).copied()).unwrap_or(0)
 }
@@ -233,12 +248,35 @@ fn the_bell_goes_early_on_tuesdays_some_weeks() {
             let early = true_here && tuesday;
             let at_ten_to = cross(&mut s, day, 20, 50);
             assert_eq!(says(&at_ten_to, BELL), usize::from(early), "20:50 day {day}, omen {true_here}");
+            assert_eq!(bells(&at_ten_to), if early { vec![9] } else { vec![] }, "the bell rung at 20:50");
             assert!(!s.state().is_night(), "the night keeps its hour");
             let at_nine = cross(&mut s, day, 21, 0);
             assert_eq!(says(&at_nine, BELL), usize::from(!early), "21:00 day {day}, omen {true_here}");
+            assert_eq!(bells(&at_nine), if early { vec![] } else { vec![9] }, "the bell rung at nine");
             assert!(s.state().is_night());
         }
     }
+}
+
+/// The School's bell lets the county out at six (six strikes), and the church rings five for
+/// evensong at six in the evening: not the same bell (Miss Orme).
+#[test]
+fn the_bell_rings_out_at_six_and_the_church_rings_for_evensong() {
+    let mut s = common::new_game();
+    assert_eq!(bells(&cross(&mut s, 1, 6, 0)), vec![6]);
+    let ev = cross(&mut s, 1, 18, 0);
+    assert!(bells(&ev).is_empty());
+    let church: Vec<u8> = ev
+        .iter()
+        .filter_map(|e| match e.kind {
+            EventKind::Bell { strikes, church: true, at } => {
+                assert!(at.is_some(), "the church's bell hangs at the church");
+                Some(strikes)
+            }
+            _ => None,
+        })
+        .collect();
+    assert_eq!(church, vec![5]);
 }
 
 /// "Does not always stop": the Sunday train whistles twice when it stops (it comes in, and goes)

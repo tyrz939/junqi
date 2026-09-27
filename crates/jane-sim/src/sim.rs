@@ -14,6 +14,7 @@ use crate::ctx::{Ctx, PartySnap, Scratch, WorldOp, WorldOps, ZoneOps, forget_uni
 use crate::event::{Event, EventKind};
 use crate::fog::stamp_fog;
 use crate::ids::Seat;
+use crate::metrics::{Laps, Phase, SimMetrics, WallClock};
 use crate::input::{InputFrame, StepInput, Stepped};
 use crate::ring::{Watchers, step_ring, wake_props};
 use crate::runtime::{ZoneRuntime, find_locals};
@@ -51,6 +52,10 @@ pub struct Sim {
     /// The region and sky over each seat as the last step left it, for `EventKind::Weather`
     /// (`living::Sim::say_skies`). Derived: made again from the state on a load.
     pub(crate) skies: [Option<(jane_data::Region, crate::state::WeatherKind)>; MAX_PLAYERS],
+    /// What the last step cost (`metrics.rs`): never state, never saved or hashed.
+    metrics: SimMetrics,
+    /// The presentation's wall clock, for [`SimMetrics`]' times; `None` keeps them 0.
+    wall: Option<WallClock>,
 }
 
 impl Sim {
@@ -137,6 +142,8 @@ impl Sim {
             start_sym: crate::sym::of_name(cat.name_id("start").expect("the catalog names \"start\"")),
             jane: cat.combat.unit_id("jane").expect("units.json has \"jane\""),
             everyone: false,
+            metrics: SimMetrics::default(),
+            wall: None,
         }
     }
 
@@ -178,6 +185,19 @@ impl Sim {
                 crate::life::pay_regen(u, now);
             }
         }
+    }
+
+    /// What the last step cost: wall time per phase (with a clock lent by
+    /// [`set_wall_clock`](Self::set_wall_clock)), units awake, paths searched, events said.
+    /// Presentation only: nothing in the state reads it.
+    pub fn metrics(&self) -> SimMetrics {
+        self.metrics
+    }
+
+    /// Lend the sim a wall clock for [`metrics`](Self::metrics)' times (`None`: times read 0).
+    /// It is read only to fill the metrics, never by anything that moves the state.
+    pub fn set_wall_clock(&mut self, clock: Option<WallClock>) {
+        self.wall = clock;
     }
 
     /// The path finder's counters (derived; reset by a runtime rebuild).
@@ -234,10 +254,14 @@ impl Sim {
         self.rts[z.index()] = Some(Box::new(rt));
     }
 
-    /// Drop the runtimes of zones nobody is in (step 15).
+    /// Drop the runtimes of zones nobody is in (step 15), all but the county's: the clock rows
+    /// run there every hour whoever is out (the lamps, the bell), and she comes back to it
+    /// from every door, so building its runtime again each time (tens of milliseconds for 2 km
+    /// square) was a stall a frame could not hide. Kept or made again, a runtime is the same
+    /// to every later tick (§8 `runtime_rebuild_is_invisible`).
     pub(crate) fn drop_empty(&mut self) {
         for z in ZoneId::ALL {
-            if self.rts[z.index()].is_some() && !self.state.is_live(z) {
+            if z != ZoneId::County && self.rts[z.index()].is_some() && !self.state.is_live(z) {
                 self.rts[z.index()] = None;
             }
         }
@@ -354,9 +378,13 @@ impl Sim {
     /// 13 zone ops      spawn, despawn, wake; the zone goes back; world ops drain
     /// 14 travel        seat order
     ///    sleep         a bed chosen after step 0 (a trigger, a clock row); each seat's sky told
-    /// 15 drop          runtimes of zones nobody is in
+    /// 15 drop          runtimes of zones nobody is in (the county's is kept)
     /// ```
     pub fn step(&mut self, input: &StepInput<'_>) -> Stepped {
+        let mut m = SimMetrics { frame: self.state.frame, ..SimMetrics::default() };
+        let mut laps = Laps::start(self.wall);
+        let events0 = self.events.len();
+        let paths0 = self.scratch.path.stats;
         // 0
         debug_assert!(input.commands.is_sorted_by_key(|c| (c.seat, c.seq)), "commands in (seat, seq) order");
         for c in input.commands {
@@ -365,6 +393,7 @@ impl Sim {
         // A bed chosen: the night passes before anything else moves (alone at a bed's
         // conversation, this is a frozen step: the night passes all the same).
         self.run_sleep();
+        laps.lap(&mut m, Phase::Commands);
         // 1
         if self.frozen() {
             self.say_skies();
@@ -372,15 +401,20 @@ impl Sim {
             // does not land it.
             self.clear_hits();
             self.drop_empty();
+            laps.lap(&mut m, Phase::Drop);
             self.state.frame += 1;
+            self.finish_metrics(m, &laps, events0, paths0);
             return Stepped { ran: false };
         }
+        m.ran = true;
         // 2
         self.step_clock();
+        laps.lap(&mut m, Phase::Clock);
         let snap = PartySnap::of(&self.state);
         for z in ZoneId::ALL {
             if self.state.is_live(z) {
-                self.step_zone(z, input, &snap);
+                self.step_zone(z, input, &snap, &mut m, &mut laps);
+                m.zones_live += 1;
             }
         }
         // 14
@@ -390,6 +424,7 @@ impl Sim {
                 self.perform_travel(Seat(seat as u8));
             }
         }
+        laps.lap(&mut m, Phase::Travel);
         // A bed chosen after the commands; then what each seat's sky is now.
         self.run_sleep();
         self.say_skies();
@@ -398,8 +433,29 @@ impl Sim {
         // A blow queued on a zone that did not tick this step (its last seat left it this frame)
         // is dropped with the room: the queue is empty between steps.
         self.clear_hits();
+        laps.lap(&mut m, Phase::Drop);
         self.state.frame += 1;
+        self.finish_metrics(m, &laps, events0, paths0);
         Stepped { ran: true }
+    }
+
+    /// The counts read off the runtimes after a step, and the whole step's time.
+    fn finish_metrics(&mut self, mut m: SimMetrics, laps: &Laps, events0: usize, paths0: crate::path::PathStats) {
+        for z in ZoneId::ALL {
+            if !self.state.is_live(z) {
+                continue;
+            }
+            if let (Some(rt), Some(zs)) = (self.rts[z.index()].as_deref(), self.state.zones[z.index()].as_deref()) {
+                m.units_awake += rt.awake_units.len() as u32;
+                m.units_total += zs.units.len() as u32;
+            }
+        }
+        let now = self.scratch.path.stats;
+        m.path_searches = now.searches.saturating_sub(paths0.searches).min(u64::from(u32::MAX)) as u32;
+        m.path_expanded = now.expanded.saturating_sub(paths0.expanded).min(u64::from(u32::MAX)) as u32;
+        m.events = self.events.len().saturating_sub(events0) as u32;
+        m.step_ns = laps.total();
+        self.metrics = m;
     }
 
     fn clear_hits(&mut self) {
@@ -461,17 +517,26 @@ impl Sim {
         self.step_living()
     }
 
-    fn step_zone(&mut self, z: ZoneId, input: &StepInput<'_>, snap: &PartySnap) {
+    fn step_zone(
+        &mut self,
+        z: ZoneId,
+        input: &StepInput<'_>,
+        snap: &PartySnap,
+        m: &mut SimMetrics,
+        laps: &mut Laps,
+    ) {
         let everyone = self.everyone;
         self.with_ctx(z, None, snap, false, |cx| {
             cx.rt.paths_this_tick = 0;
             // 3 presence: schedules (dayOnly and nightOnly are two-slot schedules); nothing
             // appears, vanishes or jumps inside a watcher's box.
             crate::presence::step_presence(cx);
+            laps.lap(m, Phase::Presence);
 
             // 4 ring
             let w = Watchers::of(cx.world, z, cx.zone);
             step_ring(cx.zone, cx.rt, &w, false, &mut cx.scratch.props);
+            laps.lap(m, Phase::Ring);
 
             // 5 catch-up: every awake unit's regen paid to now (a unit that woke this tick
             // catches up here, its phase reset with it); its missed pulses land at step 9.
@@ -483,6 +548,7 @@ impl Sim {
             } else {
                 crate::life::pay_awake(cx);
             }
+            laps.lap(m, Phase::CatchUp);
 
             // Where everything awake stood before anyone moved (View's `prev_pos`).
             cx.rt.prev_pos.clear();
@@ -501,20 +567,26 @@ impl Sim {
                     cx.actor = None;
                 }
             }
+            laps.lap(m, Phase::Players);
 
             // 7 controllers, over the awake_units snapshot: ai | snake | npc; stunned skip.
             crate::ai::step_controllers(cx, everyone);
+            laps.lap(m, Phase::Controllers);
 
             // 8 projectiles and grounds
             crate::flight::step_projectiles(cx);
             crate::flight::step_grounds(cx);
+            laps.lap(m, Phase::Projectiles);
             // 9 statuses
             crate::status::step_statuses(cx);
+            laps.lap(m, Phase::Statuses);
             // 10 flush: the only place a blow changes hp
             crate::flush::flush(cx);
+            laps.lap(m, Phase::Flush);
 
             // 11 triggers, and plates every 6 ticks
             triggers::step_triggers(cx);
+            laps.lap(m, Phase::Triggers);
 
             // 12 housekeeping: drops expire, corpses due stand up; prop flags are re-stamped over
             // what changed; the fills still owed land if their rect is clear; fog every 10.
@@ -525,8 +597,10 @@ impl Sim {
             if cx.world.tick.0 % FOG_EVERY == 0 {
                 stamp_seats_fog(cx);
             }
+            laps.lap(m, Phase::Housekeeping);
         });
         // 13: `with_ctx` applied the zone ops and put the zone back.
+        laps.lap(m, Phase::ZoneOps);
     }
 }
 

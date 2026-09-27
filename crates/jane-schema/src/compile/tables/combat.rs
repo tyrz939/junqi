@@ -442,6 +442,8 @@ struct RawUnit {
     book: Vec<String>,
     respawn: Num,
     auto_regen: bool,
+    #[serde(default)]
+    keeps_wounds: bool,
     loot: Vec<RawLoot>,
     resist: Option<RawBySchool>,
     sprite: String,
@@ -717,6 +719,7 @@ fn unit(cx: &mut Ctx, at: &str, id: &str, r: &RawUnit) -> UnitDef {
         book: book(cx, &format!("{at}.book"), &r.book),
         respawn: conv(cx, at, "respawn", r.respawn.ticks()),
         auto_regen: r.auto_regen,
+        keeps_wounds: r.keeps_wounds,
         loot: leak(loot),
         resist: r.resist.as_ref().map_or([Permille::ZERO; 7], |b| b.compile(cx, at, Permille::ZERO)),
         sprite: cx.sprite(&r.sprite),

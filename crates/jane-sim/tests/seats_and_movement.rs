@@ -181,13 +181,16 @@ fn travel_takes_her_through_and_drops_the_empty_zone() {
     let v = s.view(Seat(0)).unwrap();
     assert_eq!(v.zone(), ZoneId::House);
     assert!(v.indoor());
-    assert!(s.runtime(ZoneId::County).is_none(), "nobody is in the county");
+    // Nobody is in the county, and its runtime is kept all the same (the clock rows run there
+    // whoever is out; building it again was a stall).
+    assert!(s.runtime(ZoneId::County).is_some(), "the county's runtime is kept");
     assert!(s.state().zone(ZoneId::County).unwrap().unit(s.state().players[0].unit).is_none());
     let ev = s.drain_events().to_vec();
     assert!(ev.iter().any(|e| e.kind == EventKind::Zone { zone: ZoneId::House, first: true }));
     cmd(&mut s, Some(0), Command::Dev(DevOp::Tp { zone: ZoneId::County, mark: start }));
     assert_eq!(s.view(Seat(0)).unwrap().zone(), ZoneId::County);
     assert!(s.drain_events().iter().any(|e| e.kind == EventKind::Zone { zone: ZoneId::County, first: false }));
+    assert!(s.runtime(ZoneId::House).is_none(), "nobody is in the house: its runtime is dropped");
     // Arrived at the mark: the field's start.
     assert_eq!(body(&s, 0).pos, Vec2::centre(10, 10));
     assert_eq!(s.state().players[0].last_mark, start);

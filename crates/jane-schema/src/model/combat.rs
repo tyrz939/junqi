@@ -405,6 +405,8 @@ model! {
         /// `Tick` (content writes seconds). 0 = never.
         pub respawn: Tick,
         pub auto_regen: bool,
+        /// Does not mend walking home either (leashing): wounds last past her death (the Emperor).
+        pub keeps_wounds: bool,
         pub loot: &'static [LootRoll],
         /// Incoming damage reduction per school, `Permille`: the damage is multiplied by
         /// `1000 - resist` (0: none, 1000: immune, below 0: weak). A school left out is 0.

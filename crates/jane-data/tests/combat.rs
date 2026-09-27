@@ -27,8 +27,8 @@ fn list(r: Option<ListRef>) -> &'static [Action] {
 #[test]
 fn every_table_is_there_in_id_order() {
     let k = &c().combat;
-    assert_eq!(k.spells.len(), 24);
-    assert_eq!(k.effects.len(), 20);
+    assert_eq!(k.spells.len(), 33);
+    assert_eq!(k.effects.len(), 21);
     assert_eq!(k.units.len(), 155);
     for ids in [
         k.spells.iter().map(|s| s.id).collect::<Vec<_>>(),
@@ -200,7 +200,8 @@ fn the_factory_machines() {
 }
 
 /// school.test.ts: the Caretaker is a night-only mini-boss who carries the tower key, and the
-/// Ringer is 5,000 HP at phase 6 with three phases that each do something.
+/// Ringer is 3,000 HP at phase 6 (DUNGEONS.md §3.6, as played) with three phases that each do
+/// something, and tolls on the count.
 #[test]
 fn the_school_bosses() {
     let k = &c().combat;
@@ -209,7 +210,8 @@ fn the_school_bosses() {
     let key = k.item_id("key_tower").unwrap();
     assert!(care.loot.iter().any(|l| l.item == key && l.qty == 1 && l.chance == Permille::ONE));
     let ringer = unit("ringer");
-    assert_eq!(u32::from(ringer.strength) * 5 * 8, 5000);
+    assert_eq!(u32::from(ringer.strength) * 5 * 8, 3000);
+    assert!(ringer.book.iter().any(|&s| k.spell(s).id == "school_toll"));
     assert_eq!(ringer.phases.len(), 3);
     for p in ringer.phases {
         assert!(!list(p.on_enter).is_empty());

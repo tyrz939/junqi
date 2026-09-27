@@ -294,6 +294,25 @@ Clock: New Game at 17:00; a game hour is two real minutes; lamps at 18:30 (three
 | Every jar and page reachable solo | Reader | 100 % on the Explorer's full walk | L3 |
 | A dead end pays | Explorer | every dead end over a screen long yields something | L2 |
 
+### 4.3 The whole story, on every seed
+
+*Built 27 September 2026* (`crates/jane-bot/tests/story.rs`). The Reader from New Game through every act of the spine to the ending its choice policy names (`Ctx::ending`; `jane play --ending hold|hill|train`), the three in turn over the seeds.
+
+| Claim | Model | Band | Layer |
+| --- | --- | --- | --- |
+| The ending it chose is reached | Reader | seeds 1 to 5; each of the three on at least one seed; inside ten game hours of play (nights slept are not play) | L3 |
+| Every act of the spine is done | Reader | the twelve quests from A Letter from Julie to Yours to Say | L3 |
+| Nothing the spine needs stays set aside | Reader | a step set aside (`STUCK: <quest> step n`) is done within 90 game minutes | L3 |
+| The town notices each act | all seeds | STORY.md §11's rows have fired by the end: `mine_quiet`, `wing_lit`, `forest_quiet`, `works_dark`, `burial_quiet`, `bell_stopped` | L6 |
+| A story is a tape | Reader | the run's tape replays to every hash and ends on the run's own | L3 |
+| The three endings from the choice | Reader | from Yours to Say (the console's start), each where STORY.md §10 puts it, closing the game with its `the_end` and taking the Ball; the train on a Sunday it stops | L3 |
+
+**Where it stands (27 September 2026, `worktree-agent-ae995c5da38174afe`).** Every dungeon finishes under the dungeon test on seeds 1 to 3 (`tests/dungeons.rs`, all ten rows, the School in forty game minutes and the Burial in an hour), and every act finishes from the console (`--from ACT`) on most of seeds 1 to 5, 7 and 11. From New Game, `jane play --model reader --minutes 2400 --ending hold`: seed 3 holds the shield at 798 minutes of the log's clock (117 deaths); seeds 1, 2, 4, 5 and 7 finish the mine, the Museum, the forest and the Factory (by 182 to 293 minutes, seed 1 at 705) and then stay in the Burial, whose keepers and small packs kill the story's Reader hundreds of times: she arrives at 420 to 590 health against the 610 and more of the console's kit, because the growth the kit counts (every jar and page in the blueprints) is more than the story's crawls reach. From the School on (`--from school`) the Reader ends the game on seeds 1, 2, 3 and 7, each of the three endings (`the_three_endings_are_played_from_the_choice`). So the band below holds for seed 3 and not yet for 1, 2, 4 and 5: the Burial in a whole story is the gap.
+
+The whole-story runs are `#[ignore]`d for their length (a minute or more of release time a seed): CI runs `cargo test --release -p jane-bot --test story -- --ignored`. The three endings from the choice run always.
+
+How the story bot plays it (`crates/jane-bot/src/story.rs`): a quest step in a dungeon is played whole by the crawl (in by its door, through its locks and verbs to its boss, out again); a door that keeps hours is come back to when it opens; out of doors from eight in the evening she goes home to Julie's bed and sleeps till six (the first thing the county teaches); whoever takes a quest back and keeps hours is looked for where the hours put them; a door shut from outside is gone round by the zone she has seen a door from, or the one the log names; a far goal is planned over 16-cell blocks first (`coarse.rs`); a bag nearly full throws out what can be found again. To look at an act without playing the ones before, `jane play --from ACT[+]` puts a new game at it (for looking, never a tape), and `--explain`, `--profile` and `--show-prop KEY` say what the bot holds, where the time goes and what the ground round a prop is.
+
 ---
 
 ## 5. `EXPERIENCE.md` and this file
