@@ -74,8 +74,7 @@ fn sentry(u: &Unit) -> bool {
 /// Is the point in a warm prop light, by the sim's rule (two thirds of the radius)?
 pub fn lit(v: &View<'_>, at: Vec2) -> bool {
     v.props().any(|p| {
-        v.light_showing(p)
-            .is_some_and(|l| !l.cold && dist_sq(sense::prop_centre(p), at) <= reach_sq(l.radius))
+        v.light_showing(p).is_some_and(|l| !l.cold && dist_sq(sense::prop_centre(p), at) <= reach_sq(l.radius))
     })
 }
 
@@ -423,14 +422,19 @@ fn grid(v: &View<'_>, t: &Unit) -> Option<Act> {
     let range = i64::from(cat.combat.spell(spark).range.0) * 9 / 10;
     let (tx, ty) = t.pos.cell();
     v.props()
-        .filter(|p| !p.hidden && !p.on && cat.story.prop(p.def).answers.and_then(Answers::school) == Some(School::Shock))
+        .filter(|p| {
+            !p.hidden && !p.on && cat.story.prop(p.def).answers.and_then(Answers::school) == Some(School::Shock)
+        })
         .filter(|p| strike_rect(v, p).is_some_and(|r| r.contains(tx, ty)))
         .map(|p| (p, face(p, me.pos)))
         .find(|&(_, f)| dist(me.pos, f) <= range && v.sight(me.pos, f))
         .map(|(p, _)| {
             let c = sense::prop_centre(p);
             let dir = iatan2(c.y.0 - me.pos.y.0, c.x.0 - me.pos.x.0);
-            Act { frame: InputFrame { aim: Some(dir), ..InputFrame::IDLE }, cmds: vec![Command::Cast { spell: spark, on: None }] }
+            Act {
+                frame: InputFrame { aim: Some(dir), ..InputFrame::IDLE },
+                cmds: vec![Command::Cast { spell: spark, on: None }],
+            }
         })
 }
 
@@ -440,6 +444,10 @@ fn grid(v: &View<'_>, t: &Unit) -> Option<Act> {
 /// cells of it (the assembly's: lit or dark is the fight's to have, not the crawl's).
 pub fn hold_fire(v: &View<'_>, p: &jane_sim::Prop) -> bool {
     let cat = jane_data::catalog();
+    // The Factory's rule only: the Burial's braziers strike too, and are the crawl's to light.
+    if v.zone() != ZoneId::Factory {
+        return false;
+    }
     let Some(list) = v.prop_spawn(p).and_then(|s| s.use_list) else { return false };
     let enemies = sense::enemies(v);
     // A trap is the fight's to spring, on the boss standing in it ([`grid`]), not the crawl's.
