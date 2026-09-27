@@ -107,6 +107,8 @@ pub struct Crawl {
     pub stuck: Option<String>,
     /// Why each failed try failed, the last time (for a debugging dump).
     pub failures: BTreeMap<Try, String>,
+    /// The Burial: whether she has stood still getting nowhere (`tactics::burial::Watch`).
+    watch: crate::tactics::burial::Watch,
 }
 
 /// The cells she can walk to from where she stands (flood over `View::flags`).
@@ -247,6 +249,7 @@ impl Crawl {
             seen_w: 0,
             stuck: None,
             failures: BTreeMap::new(),
+            watch: crate::tactics::burial::Watch::default(),
         }
     }
 
@@ -338,9 +341,21 @@ impl Crawl {
                 return a;
             }
         }
-        if let Some(id) = fight::threat(v, cx) {
+        // The Burial: stood still getting nowhere (her task and a fight pulling two ways, a thing
+        // after her that cannot get round to her), the task is dropped and what is not at her
+        // elbow is let be a while (`tactics::burial::Watch`).
+        if v.zone() == jane_core::ZoneId::Burial && self.watch.stalled(v) {
+            if let Some((_, w)) = self.task.take() {
+                self.failed(w, "stood still getting nowhere");
+            }
+        }
+        let calm = v.zone() == jane_core::ZoneId::Burial && self.watch.calm(v);
+        if let Some(id) = fight::threat(v, cx).filter(|&id| !calm || crate::tactics::burial::at_elbow(v, id)) {
             // The Burial: nothing is chased into the sight of a snake still to be fed.
-            match (v.zone() == jane_core::ZoneId::Burial).then(|| crate::tactics::burial::fight(v, cx, id, self.task.as_ref().map(|(t, _)| t))).flatten() {
+            match (v.zone() == jane_core::ZoneId::Burial)
+                .then(|| crate::tactics::burial::fight(v, cx, id, self.task.as_ref().map(|(t, _)| t)))
+                .flatten()
+            {
                 Some(Some(a)) => return a,
                 Some(None) => {}
                 None => {
@@ -364,9 +379,22 @@ impl Crawl {
                 self.task = None;
             }
         }
+        // The Burial is done with once its keeper is down and his box is in her bag (`tactics::burial`).
+        if v.zone() == jane_core::ZoneId::Burial
+            && self.stage == Stage::Explore
+            && crate::tactics::burial::done(v, &self.bosses)
+        {
+            self.stage = Stage::Leave;
+            self.task = None;
+            notes.push(Mark::Note("what she came down for is in her bag: leaving".into()));
+        }
         // The Burial's tactics cut in on whatever she was doing (something to feed in view).
         if v.zone() == jane_core::ZoneId::Burial && self.task.is_some() && self.frames % 15 == 0 {
-            let cut = self.task.as_ref().map(|(t, w)| crate::tactics::burial::cuts_in(v, cx, t, *w)).unwrap_or_default();
+            let cut = self
+                .task
+                .as_ref()
+                .map(|(t, w)| crate::tactics::burial::cuts_in(v, cx, &self.reach, t, *w))
+                .unwrap_or_default();
             if cut.into_iter().any(|w| self.fresh(w, sig)) {
                 self.task = None;
             }
@@ -559,7 +587,8 @@ impl Crawl {
         let mut best: Option<(u8, i64, Try, Task)> = None;
         let offer = |class: u8, cost: i64, what: Try, t: Task, best: &mut Option<(u8, i64, Try, Task)>| {
             // The Burial: a corner is not gone into before she has what it asks (`tactics::burial`).
-            if !self.fresh(what, sig) || v.zone() == jane_core::ZoneId::Burial && crate::tactics::burial::not_yet(v, &t) {
+            if !self.fresh(what, sig) || v.zone() == jane_core::ZoneId::Burial && crate::tactics::burial::not_yet(v, &t)
+            {
                 return;
             }
             if best.as_ref().is_none_or(|(c, k, w, _)| (class, cost, what) < (*c, *k, *w)) {
@@ -660,8 +689,8 @@ impl Crawl {
         // (it sleeps out of her sight) is walked back to.
         let burial = v.zone() == jane_core::ZoneId::Burial;
         for u in sense::enemies(v) {
-            // The Burial: what is rooted and stands up again is walked past (`tactics::burial`).
-            if !fight::fightable(u) || !reach.point(u.pos) || burial && crate::tactics::burial::let_be(u.def) {
+            // The Burial: what stands up again is not gone looking for (`tactics::burial`).
+            if !fight::fightable(u) || !reach.point(u.pos) || burial && crate::tactics::burial::not_hunted(u.def) {
                 continue;
             }
             let boss = cat.combat.unit(u.def).boss;
@@ -669,7 +698,7 @@ impl Crawl {
         }
         for (&def, seen) in &cx.seen_foes {
             let d = cat.combat.unit(def);
-            if d.bait.is_some() || burial && crate::tactics::burial::let_be(def) {
+            if d.bait.is_some() || burial && crate::tactics::burial::not_hunted(def) {
                 continue;
             }
             for (&id, &(z, pos)) in seen {

@@ -15,18 +15,26 @@
 //!   from what walks; what is rooted and stands up again once she has gone (the statues, the
 //!   cactus) is walked past, not fought (`let_be`); the snake is kept to its room, or it goes
 //!   home whole.
+//!   The burst (Explosion) goes at a crowd; the queen's web is got out of before it takes hold.
+//!   Something rooted is taken on from ground where nothing else rooted reaches her, or let be;
+//!   something that walks comes to her, or is let be (only a keeper that throws is gone to).
 //! - **What comes first** (`not_yet`, `offers`): a corner's keeper before anything else in its
-//!   room; the garden's flower before the rest of the garden (the scroll is under it); and not
-//!   the glasshouse before the scroll has taught her Fire.
+//!   room; the garden's flower before the rest of the garden (the scroll is under it); not the
+//!   glasshouse before the scroll has taught her Fire; not a keeper's room (or the ground before
+//!   one that walks) short of breath: the fire first (`ready`). Drops of plain things left in
+//!   rooms she has walked out of, and torches that only give light, are not walked back for.
+//! - **Getting nowhere** (`Watch`): fifteen seconds standing still with nothing about her going
+//!   down, the crawl drops her task and she lets be what is not at her elbow a while.
+//! - **Done** (`done`): Goldskin down and the ball in her bag, she leaves by the way she came.
 
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use jane_core::action::Facing;
 use jane_core::num::CELL_FX;
 use jane_core::{Angle, Fx, ItemId, Vec2};
+use jane_data::SpellKind;
 use jane_sim::ids::UnitId;
 use jane_sim::state::CombatState;
-use jane_data::SpellKind;
 use jane_sim::{Command, InputFrame, Unit, View};
 
 use crate::Act;
@@ -83,8 +91,12 @@ fn clear_walk(v: &View<'_>, u: &Unit, to: Vec2) -> bool {
     side(0) && side(1) && side(-1) && (-1..=1).all(|j| (-1..=1).all(|i| crate::nav::walkable(v, tx + i, ty + j)))
 }
 
-const FACES: [(Facing, Angle); 4] =
-    [(Facing::East, Angle::EAST), (Facing::South, Angle::SOUTH), (Facing::West, Angle::WEST), (Facing::North, Angle::NORTH)];
+const FACES: [(Facing, Angle); 4] = [
+    (Facing::East, Angle::EAST),
+    (Facing::South, Angle::SOUTH),
+    (Facing::West, Angle::WEST),
+    (Facing::North, Angle::NORTH),
+];
 
 /// Where to stand and which way to face to throw `u` its bait: a cell she can walk to without
 /// waking it, with the bait's landing point (three cells ahead) in its sight, under its nose and
@@ -157,7 +169,7 @@ impl SafeGround {
         q.push_back(start);
         while let Some(c) = q.pop_front() {
             let n0 = steps[&c].1;
-            if steps.len() > 12_000 {
+            if steps.len() > 60_000 {
                 break;
             }
             for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
@@ -267,6 +279,12 @@ fn walk_safe(path: &[(i32, i32)], step: &mut usize, at: Vec2, v: &View<'_>, cx: 
             Some(Status::Act(Act::idle()))
         }
         Go::Arrived => None,
+        // Her feet will not plan through the snake's notice (the way in when there is no other):
+        // the way is walked cell by cell as it was laid.
+        Go::NoWay if *step < path.len() => {
+            let next = path[(*step + 1).min(path.len() - 1)];
+            Some(Status::Act(Act::hold(crate::nav::stick(me, Vec2::centre(next.0, next.1), false))))
+        }
         Go::NoWay => Some(Status::Failed("no safe way there".into())),
     }
 }
@@ -277,13 +295,36 @@ pub fn best_bolt(v: &View<'_>, u: &Unit) -> Option<jane_core::SpellId> {
     let cat = jane_data::catalog();
     let me = v.body();
     let now = v.tick();
+    let near = |s: jane_core::SpellId| crate::fight::gap(me, u) <= i64::from(cat.combat.spell(s).range.0) * 9 / 10;
+    // The burst ("Everything near the burst takes all of it"): at a crowd (something else inside
+    // its reach of the one she aims at), or at a rooted keeper while she has mana to spare. It hits
+    // harder than either bolt and never her, and waits six seconds between.
+    let burst = sense::spell("explosion");
+    let bd = cat.combat.spell(burst);
+    let crowd = bd.splash.is_some_and(|sp| {
+        sense::enemies(v)
+            .into_iter()
+            .any(|o| o.id != u.id && o.alive && crate::fight::gap(o, u) <= i64::from(sp.radius.0))
+    });
+    let spare = i64::from(me.mp.0) * 2 > i64::from(jane_sim::units::max_mp(me).0);
+    // (Not at a keeper that walks: the frost's slow is what keeps it off her.)
+    let kd = cat.combat.unit(u.def);
+    let keeper = kd.boss && kd.walk.0 == 0 && kd.run.0 == 0;
+    if sense::knows(v, burst)
+        && crate::fight::ready(me, burst, now)
+        && near(burst)
+        && (crowd || keeper && spare)
+        && jane_sim::status::resist_factor(u, bd.school, now) >= 500
+    {
+        return Some(burst);
+    }
     // What gets through of each (its row and its statuses: softened lets fire in), and the
     // cheaper on a tie.
     ["icebolt", "fireball"]
         .into_iter()
         .map(sense::spell)
         .filter(|&s| sense::knows(v, s) && crate::fight::ready(me, s, now))
-        .filter(|&s| crate::fight::gap(me, u) <= i64::from(cat.combat.spell(s).range.0) * 9 / 10)
+        .filter(|&s| near(s))
         .max_by_key(|&s| {
             let d = cat.combat.spell(s);
             (jane_sim::status::resist_factor(u, d.school, now), -i64::from(d.mp.0))
@@ -373,14 +414,22 @@ fn feed(f: &mut Feed, v: &View<'_>, cx: &mut Ctx) -> Status {
 
 /// What the Burial offers the crawl beyond its order, as (class, cost, try, task): each
 /// creature that is fed rather than fought, while it is calm and she has its bait.
-pub fn offers(v: &View<'_>, cx: &Ctx, reach: &Reach, downed: &[(jane_core::UnitDefId, u32)]) -> Vec<(u8, i64, Try, Task)> {
+pub fn offers(
+    v: &View<'_>,
+    cx: &Ctx,
+    reach: &Reach,
+    downed: &[(jane_core::UnitDefId, u32)],
+) -> Vec<(u8, i64, Try, Task)> {
     let cat = jane_data::catalog();
     let me = v.body().pos;
     let mut out = Vec::new();
     // The fire down here: sat at as soon as she can get to it, so a fall wakes her beside it
     // and not at the Halt (the fire's own words: "If it goes badly out there, this is where you
     // will wake"), and again whenever she is hurt and nothing is on her.
-    let hurt = sense::hp_permille(v.body()) < 500;
+    // Not worn but not whole either, the fire waits until everything else she can do is done:
+    // what is left then is a keeper's room, and those are not walked into short (`not_yet`).
+    let hurt = worn(v);
+    let short = !ready(v);
     for p in v.props() {
         let d = cat.story.prop(p.def);
         if p.hidden || !d.rest || !reach.beside(p) || v.prop_spawn(p).is_none_or(|s| s.talk.is_none()) {
@@ -389,6 +438,8 @@ pub fn offers(v: &View<'_>, cx: &Ctx, reach: &Reach, downed: &[(jane_core::UnitD
         let sat = cx.used.contains_key(&(v.zone(), p.id));
         if !sat || hurt {
             out.push((0, sense::to_prop(p, me), Try::Tactic(p.id.get()), Task::Use(crate::task::UseProp::new(p.id))));
+        } else if short {
+            out.push((9, sense::to_prop(p, me), Try::Tactic(p.id.get()), Task::Use(crate::task::UseProp::new(p.id))));
         }
     }
     // The seal in the hall: "Four names are cut into it. It will not turn yet." Turned again
@@ -404,16 +455,51 @@ pub fn offers(v: &View<'_>, cx: &Ctx, reach: &Reach, downed: &[(jane_core::UnitD
     let shut = sense::prop_named(v, "gate_wizard").is_some_and(|g| g.locked);
     if keepers >= 4 && shut {
         if let Some(seal) = sense::prop_named(v, "wizard_seal").filter(|p| reach.beside(p)) {
-            out.push((1, sense::to_prop(seal, me), Try::Tactic(seal.id.get()), Task::Use(crate::task::UseProp::new(seal.id))));
+            out.push((
+                1,
+                sense::to_prop(seal, me),
+                Try::Tactic(seal.id.get()),
+                Task::Use(crate::task::UseProp::new(seal.id)),
+            ));
         }
+    }
+    // A chest locked with no keyhole (the lock-in's ornate chest: "Quiet. The ornate chest
+    // clicks.") opens for whoever stands in its room when the room is done with her: she goes
+    // and stands by it, and what the room has for her comes then.
+    for p in v.props() {
+        let Some(s) = v.prop_spawn(p) else { continue };
+        if p.hidden || !p.locked || s.key_tag.is_some() || s.loot.is_empty() || !door_of_none(v, p) || !reach.beside(p)
+        {
+            continue;
+        }
+        let at = sense::prop_centre(p);
+        out.push((4, sense::to_prop(p, me), Try::Prop(p.id), Task::Walk { to: at, near: Fx::from_px(24) }));
     }
     // What stands rooted over something and does not stand up again (the garden's flower over
     // the scroll): put down before the rest of the room is looked at, from as far as her bolt
     // carries (it cannot reach her there).
+    let shut: Vec<Vec2> = v
+        .props()
+        .filter(|p| {
+            p.locked && door_of_none(v, p) && v.prop_spawn(p).is_some_and(|s| s.talk.is_some() || !s.loot.is_empty())
+        })
+        .map(sense::prop_centre)
+        .collect();
     for u in sense::enemies(v) {
         let d = cat.combat.unit(u.def);
         let rooted = d.walk.0 == 0 && d.run.0 == 0;
-        if u.alive && rooted && d.respawn.0 == 0 && !d.boss && d.bait.is_none() && reach.near(u.pos, 16) {
+        let guards = shut.iter().any(|&c| dist(c, u.pos) <= i64::from(8 * CELL_FX));
+        // (Only once she is in its room: from outside, the glass or a shut gate takes the bolts.)
+        let with_her = room_of(v, me).is_some_and(|r| r.contains(u.pos.cell().0, u.pos.cell().1));
+        if u.alive
+            && rooted
+            && guards
+            && with_her
+            && d.respawn.0 == 0
+            && !d.boss
+            && d.bait.is_none()
+            && reach.near(u.pos, 16)
+        {
             out.push((3, dist(me, u.pos), Try::Fight(u.id), Task::Hunt(u.id)));
         }
     }
@@ -438,7 +524,14 @@ fn feeds(v: &View<'_>, cx: &Ctx) -> Vec<(u8, i64, Try, Task)> {
     let safe = SafeGround::flood(v, &keep_off(v, cx));
     for u in &calm {
         let Some(bait) = cat.combat.unit(u.def).bait else { continue };
-        let Some(Spot { path, at, face, dir, to }) = throw_spot(v, u, &safe) else { continue };
+        // No spot out of its notice (it lies in the middle of the only way on, its door too
+        // narrow to throw through from outside): from inside it, over its own ground. It wakes
+        // and spits, and still cannot resist the meat.
+        let spot = throw_spot(v, u, &safe).or_else(|| {
+            let off: Vec<(Vec2, i64, u32)> = keep_off(v, cx).into_iter().filter(|&(o, _, _)| o != u.pos).collect();
+            throw_spot(v, u, &SafeGround::flood(v, &off))
+        });
+        let Some(Spot { path, at, face, dir, to }) = spot else { continue };
         let job = Feed { unit: u.id, bait, path, step: 0, at, face, dir, to, stage: 0, t: 0, hide: None, held: 0 };
         out.push((1, dist(me, u.pos), Try::Fight(u.id), Task::Burial(Job::Feed(job))));
     }
@@ -448,20 +541,109 @@ fn feeds(v: &View<'_>, cx: &Ctx) -> Vec<(u8, i64, Try, Task)> {
 /// What the Burial asks that comes before the task she is on (a creature to feed has come into
 /// her view, calm, and she has its bait and a place to throw it from): the tries, for the crawl
 /// to weigh as it weighs its own (one tried too often is not cut in for).
-pub fn cuts_in(v: &View<'_>, cx: &Ctx, task: &Task, what: Try) -> Vec<Try> {
+///
+/// Hurt, with nothing on her, the fire comes before whatever she was walking to: the next
+/// thing down here may be a keeper's room that shuts behind her.
+pub fn cuts_in(v: &View<'_>, cx: &Ctx, reach: &Reach, task: &Task, what: Try) -> Vec<Try> {
     if matches!(task, Task::Burial(_)) || matches!(what, Try::Tactic(_)) {
         return Vec::new();
     }
-    feeds(v, cx).into_iter().map(|(_, _, w, _)| w).collect()
+    let mut out: Vec<Try> = feeds(v, cx).into_iter().map(|(_, _, w, _)| w).collect();
+    let calm = !sense::enemies(v).into_iter().any(|u| crate::fight::on_me(v, u) && crate::fight::can_reach(v, u));
+    if calm && worn(v) {
+        let cat = jane_data::catalog();
+        out.extend(
+            v.props()
+                .filter(|p| !p.hidden && cat.story.prop(p.def).rest && reach.beside(p))
+                .filter(|p| v.prop_spawn(p).is_some_and(|s| s.talk.is_some()))
+                .map(|p| Try::Tactic(p.id.get())),
+        );
+    }
+    out
+}
+
+/// Worn enough to go back to a fire when nothing is on her: down to three quarters of her
+/// health, or two fifths of her mana. Every room left down here is a fight, most of them shut behind
+/// her, and a fall costs the walk back and the keeper whole again; the fire costs only the walk.
+fn worn(v: &View<'_>) -> bool {
+    let me = v.body();
+    let mp_max = jane_sim::units::max_mp(me).0.max(1);
+    sense::hp_permille(me) < 750 || i64::from(me.mp.0) * 1000 / i64::from(mp_max) < 400
+}
+
+/// Whether she is getting anywhere: she has moved three cells, or something about her has lost
+/// health, within the last fifteen seconds. Standing still with nothing going down is her task
+/// and a fight pulling two ways (a thing after her through a wall, a keeper at the end of its
+/// leash); then the crawl drops the task and she lets be for fifteen seconds whatever is not at
+/// her elbow.
+#[derive(Debug, Default)]
+pub struct Watch {
+    anchor: Option<Vec2>,
+    since: u32,
+    hp: i64,
+    calm_until: u32,
+}
+
+impl Watch {
+    /// Fifteen seconds without getting anywhere (once each time).
+    pub fn stalled(&mut self, v: &View<'_>) -> bool {
+        const STALL: u32 = 15 * 60;
+        let me = v.body();
+        let f = v.frame();
+        let near: i64 = sense::enemies(v)
+            .into_iter()
+            .filter(|u| u.alive && dist(u.pos, me.pos) <= i64::from(16 * CELL_FX))
+            .map(|u| i64::from(u.hp.0))
+            .sum();
+        let moved = self.anchor.is_none_or(|a| dist(a, me.pos) > i64::from(3 * CELL_FX));
+        let hurt = near < self.hp;
+        self.hp = near;
+        if moved || hurt || !me.alive || v.dialogue().is_some() {
+            self.anchor = Some(me.pos);
+            self.since = f;
+            return false;
+        }
+        if f.saturating_sub(self.since) < STALL {
+            return false;
+        }
+        self.since = f;
+        self.calm_until = f + STALL;
+        true
+    }
+
+    /// Letting be what is not at her elbow, after a stall.
+    pub fn calm(&self, v: &View<'_>) -> bool {
+        v.frame() < self.calm_until
+    }
+}
+
+/// Is `id` at her elbow (inside three cells)?
+pub fn at_elbow(v: &View<'_>, id: UnitId) -> bool {
+    v.unit(id).is_some_and(|u| crate::fight::gap(v.body(), u) < i64::from(3 * CELL_FX))
+}
+
+/// Done down here: Goldskin is down and what his box held (the ball) is in her bag. The rest of
+/// the Burial fills again behind her; nothing in it is worth the walk.
+pub fn done(v: &View<'_>, downed: &[(jane_core::UnitDefId, u32)]) -> bool {
+    let boss = crate::crawl::boss_of(v.zone());
+    boss.is_some_and(|b| downed.iter().any(|&(d, _)| d == b)) && holds(v, sense::item("the_ball")) > 0
+}
+
+/// Whole enough to walk into a keeper's room: nine tenths of her health and four fifths of her
+/// mana. The room shuts behind her and the keeper does not tire; what she brings in is all she
+/// has.
+fn ready(v: &View<'_>) -> bool {
+    let me = v.body();
+    let mp_max = jane_sim::units::max_mp(me).0.max(1);
+    sense::hp_permille(me) >= 900 && i64::from(me.mp.0) * 1000 / i64::from(mp_max) >= 800
 }
 
 /// Is there a small snake here still to feed (alive, and she has its bait)? One she saw and has
 /// walked away from (it sleeps out of her sight) is remembered.
 fn feeding(v: &View<'_>, cx: &Ctx) -> bool {
     let cat = jane_data::catalog();
-    let awake = sense::enemies(v).into_iter().any(|u| {
-        cat.combat.unit(u.def).bait.is_some_and(|b| holds(v, b) > 0) && u.alive
-    });
+    let awake =
+        sense::enemies(v).into_iter().any(|u| cat.combat.unit(u.def).bait.is_some_and(|b| holds(v, b) > 0) && u.alive);
     awake
         || cx.seen_foes.iter().any(|(&def, seen)| {
             cat.combat.unit(def).bait.is_some_and(|b| holds(v, b) > 0)
@@ -533,19 +715,30 @@ pub fn fight(v: &View<'_>, cx: &mut Ctx, id: UnitId, task: Option<&Task>) -> Opt
             }
         }
     }
-    // What is thrown at her is stepped out of first; then a pool laid under her (the ordinary
-    // fight steps out of that).
-    if let Some(f) = dodge(v, &cx.nav.keep_off) {
-        return Some(Some(Act::hold(f)));
-    }
-    if crate::fight::tell_under(v).is_some() {
-        return None;
+    let cat = jane_data::catalog();
+    let me = v.body();
+    // Held (a web, a stun) she cannot get away: stepping aside or backing off at a quarter pace is
+    // standing still under the bites. She fights from where she is.
+    let held = me.statuses.iter().any(|st| st.until > v.tick() && cat.combat.effect(st.effect).speed.0 < 500);
+    // A pool laid by her (the queen's web) is got out of before it takes hold, away from it and
+    // from the keeper on her: standing in it is standing still under the bites for as long as
+    // it lasts. Once it has her she fights from where she is. Then what is thrown at her is
+    // stepped out of.
+    if !held {
+        if let Some(f) = out_of_pool(v, &cx.nav.keep_off) {
+            return Some(Some(Act::hold(f)));
+        }
+        if let Some(f) = dodge(v, &cx.nav.keep_off) {
+            return Some(Some(Act::hold(f)));
+        }
+        // With nothing at her elbow the ordinary fight steps out of a pool.
+        if crate::fight::tell_under(v).is_some() {
+            return None;
+        }
     }
     if let Some(c) = crate::fight::eat(v) {
         return Some(Some(Act::press(c)));
     }
-    let cat = jane_data::catalog();
-    let me = v.body();
     let t = v.unit(id).filter(|t| t.alive)?;
     let now = v.tick();
     let td = cat.combat.unit(t.def);
@@ -555,9 +748,11 @@ pub fn fight(v: &View<'_>, cx: &mut Ctx, id: UnitId, task: Option<&Task>) -> Opt
     cx.fight.target = Some(id);
     cx.foes.insert(id);
     // What she brought, against a keeper, one at a time (poison or frost on her is no reason not).
+    // Not the mana shield: it pays for every bite out of the mana her bolts are, and a keeper
+    // down here outlasts what she carries of that.
     let helped = me.statuses.iter().any(|st| !cat.combat.effect(st.effect).harmful && st.until > now);
     if td.boss && g < i64::from(14 * CELL_FX) && !helped {
-        for name in ["potion_stoneskin", "potion_lifesteal", "potion_manashield"] {
+        for name in ["potion_stoneskin", "potion_lifesteal"] {
             let p = sense::item(name);
             if holds(v, p) > 0 && item_ready(me, p, now) {
                 return Some(Some(Act::press(Command::Item(p))));
@@ -576,11 +771,12 @@ pub fn fight(v: &View<'_>, cx: &mut Ctx, id: UnitId, task: Option<&Task>) -> Opt
             && d.book.iter().any(|&s| cat.combat.spell(s).kind == SpellKind::Melee)
             && gap(me, u) < i64::from(5 * CELL_FX)
     });
-    if let Some(k) = elbow {
+    if let Some(k) = elbow.filter(|_| !held) {
         let kd = cat.combat.unit(k.def);
         let leash = i64::from(kd.leash.0);
-        let tether = (leash > 0).then_some((k.home, leash * 2 / 3));
-        let room = room_of(v, k.home).filter(|_| kd.controller == jane_data::Controller::Snake);
+        // (Only while she is inside it: out past it already, the way back is past the keeper.)
+        let tether = (leash > 0).then_some((k.home, leash * 2 / 3)).filter(|&(h, r)| dist(me.pos, h) <= r);
+        let room = room_of(v, k.home).filter(|r| kd.controller == jane_data::Controller::Snake && inside(r, me.pos));
         if let Some(f) = retreat(v, cx, k.pos, tether, room) {
             return Some(Some(Act::hold(InputFrame { aim: Some(dir), ..f })));
         }
@@ -591,8 +787,17 @@ pub fn fight(v: &View<'_>, cx: &mut Ctx, id: UnitId, task: Option<&Task>) -> Opt
     if let Some(a) = soften(v, t) {
         return Some(Some(a));
     }
-    // Until then a bolt at him is a fifth of a bolt: the mana is kept for when the fire is on him.
-    let gilded = gilded(v, t);
+    // Until then a bolt at him is a fifth of a bolt: the mana is kept for when the fire is on him,
+    // while there is a fire in his room left to light. With every one burning (he puts them out
+    // as he turns), or with him nearly down, a fifth is better than none.
+    let unlit = room_of(v, t.home).is_some_and(|r| {
+        v.props().any(|p| {
+            cat.story.prop(p.def).answers == Some(jane_data::Answers::Fire)
+                && !p.on
+                && r.contains(i32::from(p.cell.x), i32::from(p.cell.y))
+        })
+    });
+    let gilded = gilded(v, t) && unlit && sense::hp_permille(t) > 100;
     // What is rooted and stands up again is let shoot, and so is anything rooted while there is
     // feeding to do: stopping for it is standing in its line longer.
     if !mobile && (careful || let_be(t.def)) {
@@ -616,29 +821,54 @@ pub fn fight(v: &View<'_>, cx: &mut Ctx, id: UnitId, task: Option<&Task>) -> Opt
             }
             None => {}
         }
+        // No such ground, and no clear shot from here: it is let be. Walking at something rooted
+        // is standing longer in its line (and a nook it sits in may have no way to it at all).
+        if !shot_clear(v, me.pos, t.pos) || g > i64::from(cat.combat.spell(sense::spell("icebolt")).range.0) * 9 / 10 {
+            return Some(None);
+        }
     }
-    if !gilded && shot_clear(v, me.pos, t.pos) {
+    // (At her elbow the bolt is out of her hand and into it before any wall: its middle line is
+    // enough.)
+    let close = g < i64::from(2 * CELL_FX) && v.sight(me.pos, t.pos);
+    if !gilded && (close || shot_clear(v, me.pos, t.pos)) {
         if let Some(bolt) = best_bolt(v, t) {
             return Some(Some(Act { frame: aim, cmds: vec![Command::Cast { spell: bolt, on: Some(id) }] }));
         }
     }
     if mobile && g < i64::from(6 * CELL_FX) {
         let leash = i64::from(td.leash.0);
-        let tether = (leash > 0).then_some((t.home, leash * 2 / 3));
+        let tether = (leash > 0).then_some((t.home, leash * 2 / 3)).filter(|&(h, r)| dist(me.pos, h) <= r);
         // The snake loses her the moment a wall stands between them, and goes home whole: its
         // room is kept to (the room it was met in, as the map shows it).
-        let room = (td.controller == jane_data::Controller::Snake).then(|| room_of(v, t.home)).flatten();
+        let room = (td.controller == jane_data::Controller::Snake)
+            .then(|| room_of(v, t.home))
+            .flatten()
+            .filter(|r| inside(r, me.pos));
         if let Some(f) = retreat(v, cx, t.pos, tether, room) {
             return Some(Some(Act::hold(InputFrame { aim: Some(dir), ..f })));
         }
     }
     let melee = sense::spell("melee_player");
     if g <= i64::from(cat.combat.spell(melee).range.0) {
-        let cmds =
-            if crate::fight::ready(me, melee, now) { vec![Command::Cast { spell: melee, on: Some(id) }] } else { Vec::new() };
+        let cmds = if crate::fight::ready(me, melee, now) {
+            vec![Command::Cast { spell: melee, on: Some(id) }]
+        } else {
+            Vec::new()
+        };
         return Some(Some(Act { frame: aim, cmds }));
     }
     if careful {
+        // What is not after her (a keeper she is sent to, in its room) is gone to by the
+        // ordinary road, which keeps off every calm snake's sight; waiting for it is for ever.
+        if !crate::fight::on_me(v, t) {
+            return Some(None);
+        }
+        // At her elbow and nowhere to go: whatever she has, from where she stands.
+        if g < i64::from(2 * CELL_FX) {
+            if let Some(bolt) = best_bolt(v, t) {
+                return Some(Some(Act { frame: aim, cmds: vec![Command::Cast { spell: bolt, on: Some(id) }] }));
+            }
+        }
         if !covered(v, me.pos) {
             if let Some(c) = cover(v) {
                 if let Go::Walk(f) = cx.nav.go(v, c, Fx::from_px(3), true) {
@@ -649,9 +879,17 @@ pub fn fight(v: &View<'_>, cx: &mut Ctx, id: UnitId, task: Option<&Task>) -> Opt
         return Some(Some(Act::hold(aim)));
     }
     let reach = i64::from(cat.combat.spell(sense::spell("icebolt")).range.0) * 8 / 10;
-    if g > reach || !shot_clear(v, me.pos, t.pos) {
-        let near = if g > reach { reach } else { i64::from(3 * CELL_FX) };
-        return match cx.nav.go(v, t.pos, Fx(near as i32), true) {
+    // What walks comes to her if it can: only a keeper that throws from out of her reach is gone
+    // to (Goldskin keeps his distance). Inside her reach with no clear shot, or something after
+    // her that cannot get round to her, is not gone round to: her feet and her task (or her
+    // backing off) pulling two ways is standing still for good.
+    let throws = td.book.iter().any(|&s| cat.combat.spell(s).kind == SpellKind::Bolt);
+    let go_to = if g > reach { td.boss && throws } else { shot_clear(v, me.pos, t.pos) };
+    if !go_to {
+        return Some(None);
+    }
+    if g > reach {
+        return match cx.nav.go(v, t.pos, Fx(reach as i32), true) {
             Go::Walk(f) => Some(Some(Act::hold(InputFrame { aim: Some(dir), ..f }))),
             _ => None,
         };
@@ -673,7 +911,10 @@ fn retreat(
     let off = cx.nav.keep_off.clone();
     let banned = |c: Vec2| off.iter().any(|&(o, r, k)| k == 0 && dist(o, c) <= r && v.sight(o, c));
     let price = |c: Vec2| {
-        off.iter().filter(|&&(o, r, k)| k > 0 && dist(o, c) <= r && v.sight(o, c)).map(|&(_, _, k)| i64::from(k)).sum::<i64>()
+        off.iter()
+            .filter(|&&(o, r, k)| k > 0 && dist(o, c) <= r && v.sight(o, c))
+            .map(|&(_, _, k)| i64::from(k))
+            .sum::<i64>()
     };
     let strayed = strayed_rooms(v);
     let start = me.cell();
@@ -690,9 +931,12 @@ fn retreat(
         if inside && steps > 0 {
             // Open ground over a corner: backed into one, she is caught (what is kited is slow,
             // but it is between her and every way out).
-            let open = (-3..=3).flat_map(|j| (-3..=3).map(move |i| (i, j))).filter(|&(i, j)| crate::nav::walkable(v, c.0 + i, c.1 + j)).count();
+            let open = (-3..=3)
+                .flat_map(|j| (-3..=3).map(move |i| (i, j)))
+                .filter(|&(i, j)| crate::nav::walkable(v, c.0 + i, c.1 + j))
+                .count();
             let score = dist(at, from) - i64::from(steps) * i64::from(CELL_FX) / 3 - price(at) * i64::from(CELL_FX) / 4
-                + open as i64 * i64::from(CELL_FX) / 4;
+                + open as i64 * i64::from(CELL_FX) / 2;
             if best.is_none_or(|b| (score, c) > b) {
                 best = Some((score, c));
             }
@@ -710,6 +954,10 @@ fn retreat(
     let (_, c) = best?;
     let to = Vec2::centre(c.0, c.1);
     match cx.nav.go(v, to, Fx::from_px(3), true) {
+        // Cornered, the way out is past it: no backing off through it (she fights instead).
+        Go::Walk(f) if f.mv_dir.diff(jane_core::angle::iatan2(from.y.0 - me.y.0, from.x.0 - me.x.0)).abs() < 11_000 => {
+            None
+        }
         Go::Walk(f) => Some(InputFrame { sprint: true, ..f }),
         _ => None,
     }
@@ -775,6 +1023,11 @@ fn dodge(v: &View<'_>, off: &[(Vec2, i64, u32)]) -> Option<InputFrame> {
         if !(3..=70).contains(&t) {
             continue;
         }
+        // It falls short of her (its range runs out first): nothing to step from.
+        let speed = i64::from(jane_core::num::isqrt(v2 as u64));
+        if speed * t > i64::from(p.left.0) + speed + body {
+            continue;
+        }
         // Where it passes her, and how near.
         let (cx, cy) = (rx - vx * t, ry - vy * t);
         let miss = i64::from(jane_core::num::isqrt((cx * cx + cy * cy) as u64));
@@ -791,7 +1044,9 @@ fn dodge(v: &View<'_>, off: &[(Vec2, i64, u32)]) -> Option<InputFrame> {
                 Fx(me.pos.y.0 + (sy * 2 * i64::from(CELL_FX) / len) as i32),
             );
             let (tx, ty) = to.cell();
-            (crate::nav::walkable(v, tx, ty) && !off.iter().any(|&(o, r, k)| k == 0 && dist(o, to) <= r && v.sight(o, to))).then(|| InputFrame { sprint: true, ..crate::nav::stick(me.pos, to, true) })
+            (crate::nav::walkable(v, tx, ty)
+                && !off.iter().any(|&(o, r, k)| k == 0 && dist(o, to) <= r && v.sight(o, to)))
+            .then(|| InputFrame { sprint: true, ..crate::nav::stick(me.pos, to, true) })
         };
         let Some(f) = step(px, py).or_else(|| step(-px, -py)) else { continue };
         if soonest.as_ref().is_none_or(|s| t < s.0) {
@@ -799,6 +1054,56 @@ fn dodge(v: &View<'_>, off: &[(Vec2, i64, u32)]) -> Option<InputFrame> {
         }
     }
     soonest.map(|(_, f)| f)
+}
+
+/// Out of a pool of theirs she is in (or at the edge of) while a keeper that walks is on her:
+/// of the eight ways two and a half cells off with open floor all the way (nobody standing in
+/// it), the one farthest from its middle and from the keeper (none open: she fights from where
+/// she is).
+fn out_of_pool(v: &View<'_>, off: &[(Vec2, i64, u32)]) -> Option<InputFrame> {
+    let me = v.body();
+    let body = i64::from(jane_data::catalog().combat.unit(me.def).bounds.0);
+    let now = v.tick();
+    let pool = v
+        .grounds()
+        .iter()
+        .filter(|g| g.faction != me.faction && g.until > now)
+        .find(|g| dist(g.pos, me.pos) <= i64::from(g.radius.0) + body + i64::from(CELL_FX))?
+        .pos;
+    // Only with a keeper that walks on her, near: a pool is only worth the steps when the bites
+    // are what it holds her for (the web spinners' webs, laid all over, are walked through, and
+    // what is small is put down from where she stands).
+    let cat = jane_data::catalog();
+    let foe = sense::enemies(v)
+        .into_iter()
+        .find(|u| {
+            let d = cat.combat.unit(u.def);
+            u.alive
+                && d.boss
+                && crate::fight::on_me(v, u)
+                && (d.walk.0 > 0 || d.run.0 > 0)
+                && crate::fight::gap(me, u) < i64::from(6 * CELL_FX)
+        })?
+        .pos;
+    let step = Fx(5 * CELL_FX / 2);
+    (0..8u16)
+        .filter_map(|i| {
+            let a = Angle(i * 8192);
+            let to = me.pos + jane_core::angle::along(a, step);
+            // Every half cell of the way walkable (not through the wall to the corridor beyond).
+            let clear = (1..=5).all(|k| {
+                let p = me.pos + jane_core::angle::along(a, Fx(k * CELL_FX / 2));
+                let (x, y) = p.cell();
+                crate::nav::walkable(v, x, y)
+                    && !v.units_in(sense::everywhere(v)).map(|w| w.unit).any(|w| {
+                        w.alive && w.id != me.id && dist(w.pos, p) < body + i64::from(cat.combat.unit(w.def).bounds.0)
+                    })
+            });
+            let ok = clear && !off.iter().any(|&(o, r, k)| k == 0 && dist(o, to) <= r && v.sight(o, to));
+            ok.then(|| (dist(to, pool) + dist(to, foe), i, to))
+        })
+        .max_by_key(|&(score, i, _)| (score, std::cmp::Reverse(i)))
+        .map(|(_, _, to)| InputFrame { sprint: true, ..crate::nav::stick(me.pos, to, true) })
 }
 
 /// Each frame in the Burial, before anything else: the ground her feet keep off is brought up
@@ -815,7 +1120,9 @@ pub fn before(v: &View<'_>, cx: &mut Ctx) -> Option<Act> {
     let woke: Vec<&Unit> = sense::enemies(v)
         .into_iter()
         .filter(|u| {
-            cat.combat.unit(u.def).bait.is_some_and(|b| holds(v, b) == 0) && crate::fight::on_me(v, u) && v.sight(u.pos, me)
+            cat.combat.unit(u.def).bait.is_some_and(|b| holds(v, b) == 0)
+                && crate::fight::on_me(v, u)
+                && v.sight(u.pos, me)
         })
         .collect();
     if woke.is_empty() {
@@ -856,18 +1163,7 @@ pub fn before(v: &View<'_>, cx: &mut Ctx) -> Option<Act> {
 fn clean_spot(v: &View<'_>, cx: &Ctx, t: &Unit) -> Option<Vec2> {
     let cat = jane_data::catalog();
     let reach = i64::from(cat.combat.spell(sense::spell("icebolt")).range.0) * 8 / 10;
-    let shooters: Vec<(Vec2, i64)> = sense::enemies(v)
-        .into_iter()
-        .filter(|u| u.alive && u.id != t.id)
-        .filter_map(|u| {
-            let d = cat.combat.unit(u.def);
-            if d.walk.0 > 0 || d.run.0 > 0 || d.bait.is_some() {
-                return None;
-            }
-            let range = d.book.iter().map(|&s| cat.combat.spell(s).range.0).max().unwrap_or(0);
-            Some((u.pos, i64::from(range) + i64::from(2 * CELL_FX)))
-        })
-        .collect();
+    let shooters = shooters(v, t);
     let off = &cx.nav.keep_off;
     let good = |at: Vec2| {
         dist(at, t.pos) <= reach
@@ -902,6 +1198,30 @@ fn clean_spot(v: &View<'_>, cx: &Ctx, t: &Unit) -> Option<Vec2> {
     None
 }
 
+/// The other rooted things that shoot, and how far (for `clean_spot`).
+fn shooters(v: &View<'_>, t: &Unit) -> Vec<(Vec2, i64)> {
+    let cat = jane_data::catalog();
+    sense::enemies(v)
+        .into_iter()
+        .filter(|u| u.alive && u.id != t.id)
+        .filter_map(|u| {
+            let d = cat.combat.unit(u.def);
+            if d.walk.0 > 0 || d.run.0 > 0 || d.bait.is_some() {
+                return None;
+            }
+            let range = d.book.iter().map(|&s| cat.combat.spell(s).range.0).max().unwrap_or(0);
+            Some((u.pos, i64::from(range) + i64::from(2 * CELL_FX)))
+        })
+        .collect()
+}
+
+/// Not gone looking for down here: whatever stands up again ten seconds after she has gone (all
+/// but the keepers). It is fought when it comes at her; hunting it is a round that never ends.
+pub fn not_hunted(def: jane_core::UnitDefId) -> bool {
+    let d = jane_data::catalog().combat.unit(def);
+    d.respawn.0 > 0 && !d.boss
+}
+
 /// Not worth a fight down here: something rooted to the spot that stands up again once she is
 /// out of its sight and only throws what can be stepped out of (the statues' poison, the
 /// cactus's needles). It is walked past, round its line where there is a way round
@@ -921,19 +1241,28 @@ pub fn let_be(def: jane_core::UnitDefId) -> bool {
 /// standing in the way (a crate, a coffin, a chest: `BLOCK_SHOT`), which sight goes over. The
 /// line is walked a quarter cell at a time.
 pub fn shot_clear(v: &View<'_>, a: Vec2, b: Vec2) -> bool {
-    let d = dist(a, b);
+    let d = dist(a, b).max(1);
     let step = i64::from(CELL_FX) / 4;
     let n = (d / step).max(1);
     let start = a.cell();
     let end = b.cell();
-    (1..n).all(|i| {
-        let p = Vec2::new(
-            Fx(a.x.0 + ((i64::from(b.x.0 - a.x.0) * i) / n) as i32),
-            Fx(a.y.0 + ((i64::from(b.y.0 - a.y.0) * i) / n) as i32),
-        );
-        let c = p.cell();
-        c == start || c == end || v.flags(c.0, c.1) & jane_core::tile::BLOCK_SHOT == 0
+    // The bolt has a body: the line either side of its middle, a quarter cell off, is walked too.
+    let (px, py) = ((-i64::from(b.y.0 - a.y.0) * step / d) as i32, (i64::from(b.x.0 - a.x.0) * step / d) as i32);
+    [-1, 0, 1].into_iter().all(|side| {
+        (1..n).all(|i| {
+            let p = Vec2::new(
+                Fx(a.x.0 + ((i64::from(b.x.0 - a.x.0) * i) / n) as i32 + side * px),
+                Fx(a.y.0 + ((i64::from(b.y.0 - a.y.0) * i) / n) as i32 + side * py),
+            );
+            let c = p.cell();
+            c == start || c == end || v.flags(c.0, c.1) & jane_core::tile::BLOCK_SHOT == 0
+        })
     })
+}
+
+/// Not a door (a locked thing that is a way somewhere is a gate, not a thing guarded).
+fn door_of_none(v: &View<'_>, p: &jane_sim::Prop) -> bool {
+    sense::door_of(v, p).is_none() && !jane_data::catalog().story.prop(p.def).gate
 }
 
 /// Where a task would take her (for `not_yet`).
@@ -961,12 +1290,55 @@ pub fn not_yet(v: &View<'_>, t: &Task) -> bool {
     let cat = jane_data::catalog();
     let me = v.body().pos;
     let keeper = sense::enemies(v).into_iter().find(|u| {
-        u.alive && cat.combat.unit(u.def).boss && room_of(v, u.home).is_some_and(|r| r.contains(me.cell().0, me.cell().1))
+        u.alive
+            && cat.combat.unit(u.def).boss
+            && room_of(v, u.home).is_some_and(|r| r.contains(me.cell().0, me.cell().1))
     });
     if let Some(k) = keeper {
         if !matches!(t, Task::Hunt(id) if *id == k.id) {
             return true;
         }
+    }
+    // Something rooted is not gone after from outside its room: from a doorway the gate or the
+    // glass takes the bolts, and rooted, it is in nobody's way but its own room's.
+    if let Task::Hunt(id) = t {
+        if let Some(u) = v.unit(*id) {
+            let d = cat.combat.unit(u.def);
+            let (x, y) = u.pos.cell();
+            if d.walk.0 == 0 && d.run.0 == 0 && !d.boss && !room_of(v, me).is_some_and(|r| r.contains(x, y)) {
+                return true;
+            }
+        }
+    }
+    // A plain thing (the rats' meat) left in a room she has walked out of is not walked back
+    // for: the room has filled again behind her.
+    if let Task::Pickup { drop, .. } = t {
+        if let Some(d) = v.drops().iter().find(|d| d.id == *drop) {
+            let def = cat.combat.item(d.item);
+            let plain = !def.story && !def.usable && def.opens.is_none();
+            let here = room_of(v, me).is_some_and(|r| r.contains(d.pos.cell().0, d.pos.cell().1))
+                || dist(me, d.pos) <= i64::from(8 * CELL_FX);
+            if plain && !here {
+                return true;
+            }
+        }
+    }
+    // A torch that only gives light (nothing written on it, nothing it does) is not lit: the
+    // walk to it is through rooms that fill again.
+    let lamp = |p: &jane_sim::Prop| {
+        let d = cat.story.prop(p.def);
+        d.light.is_some()
+            && !d.gate
+            && sense::door_of(v, p).is_none()
+            && v.prop_spawn(p).is_some_and(|s| s.use_list.is_none() && s.talk.is_none())
+    };
+    let lit = match t {
+        Task::Aim { at, .. } => v.props().any(|p| lamp(p) && dist(sense::prop_centre(p), *at) <= i64::from(CELL_FX)),
+        Task::WorldCast { prop, .. } => v.prop(*prop).is_some_and(lamp),
+        _ => false,
+    };
+    if lit {
+        return true;
     }
     // A keeper that has come out after her is not followed back into its room: the room shuts
     // on whoever walks in, and it would be shut outside.
@@ -976,14 +1348,43 @@ pub fn not_yet(v: &View<'_>, t: &Task) -> bool {
             return true;
         }
     }
+    // A keeper's room is not walked into short of breath (`ready`), nor the ground before a
+    // keeper that walks: the fire first.
+    if !ready(v) {
+        if let Some(at) = task_point(v, t) {
+            let (x, y) = at.cell();
+            let live: Vec<&Unit> =
+                sense::enemies(v).into_iter().filter(|u| u.alive && cat.combat.unit(u.def).boss).collect();
+            if live
+                .iter()
+                .filter_map(|u| room_of(v, u.home))
+                .any(|r| r.contains(x, y) && !r.contains(me.cell().0, me.cell().1))
+            {
+                return true;
+            }
+            // Nor the room at its door: the queen comes out to meet her in the web.
+            let near =
+                |u: &&&Unit| dist(u.home, at) <= i64::from(20 * CELL_FX) && dist(u.home, me) > i64::from(20 * CELL_FX);
+            if live.iter().filter(near).any(|u| cat.combat.unit(u.def).walk.0 > 0) {
+                return true;
+            }
+        }
+    }
     if sense::knows(v, sense::spell("fireball")) {
         return false;
     }
     let Some(at) = task_point(v, t) else { return false };
     let (x, y) = at.cell();
     let inside = |name: &str| v.sym(name).and_then(|s| v.rect(s)).is_some_and(|r| r.contains(x, y));
-    let door = sense::prop_named(v, "gate_glasshouse").is_some_and(|g| crate::sense::to_prop(g, at) <= i64::from(2 * CELL_FX));
+    let door =
+        sense::prop_named(v, "gate_glasshouse").is_some_and(|g| crate::sense::to_prop(g, at) <= i64::from(2 * CELL_FX));
     inside("burial_glasshouse") || door
+}
+
+/// Is `at` inside room `r`, clear of its walls?
+fn inside(r: &jane_core::Rect, at: Vec2) -> bool {
+    let (x, y) = at.cell();
+    r.x < x && x < r.right() - 1 && r.y < y && y < r.bottom() - 1
 }
 
 /// The smallest named room rect holding `at` (the map's rooms, as a player reads them).
@@ -1041,7 +1442,9 @@ fn soften(v: &View<'_>, t: &Unit) -> Option<Act> {
         .props()
         .filter(|p| {
             let d = cat.story.prop(p.def);
-            d.answers == Some(jane_data::Answers::Fire) && !p.on && room.contains(i32::from(p.cell.x), i32::from(p.cell.y))
+            d.answers == Some(jane_data::Answers::Fire)
+                && !p.on
+                && room.contains(i32::from(p.cell.x), i32::from(p.cell.y))
         })
         .filter(|p| {
             let c = sense::prop_centre(p);
@@ -1050,5 +1453,8 @@ fn soften(v: &View<'_>, t: &Unit) -> Option<Act> {
         .min_by_key(|p| (dist(me.pos, sense::prop_centre(p)), p.id))?;
     let c = sense::prop_centre(brazier);
     let dir = jane_core::angle::iatan2(c.y.0 - me.pos.y.0, c.x.0 - me.pos.x.0);
-    Some(Act { frame: InputFrame { aim: Some(dir), ..InputFrame::IDLE }, cmds: vec![Command::Cast { spell: fire, on: None }] })
+    Some(Act {
+        frame: InputFrame { aim: Some(dir), ..InputFrame::IDLE },
+        cmds: vec![Command::Cast { spell: fire, on: None }],
+    })
 }
