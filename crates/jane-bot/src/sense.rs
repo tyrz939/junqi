@@ -161,10 +161,8 @@ pub fn junk_slot(v: &View<'_>) -> Option<u8> {
             3
         } else if d.usable {
             2
-        } else if ingredient {
-            1
         } else {
-            0
+            u8::from(ingredient)
         }
     };
     bag.iter()
