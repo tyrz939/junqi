@@ -977,7 +977,9 @@ fn bolt_at(v: &View<'_>, reach: &Reach, p: &Prop, spell: SpellId) -> Option<Task
             let end = bolt_end(v, at, jane_core::angle::bearing(at, c), spell);
             let (ex, ey) = end.cell();
             let on_it = dist(end, c) <= touch || prop_rect(p).contains(ex, ey);
-            if !on_it && (v.sight(at, c) || !v.sight(at, face_toward(p, at))) {
+            // (The face in sight, and within the bolt's flight: from farther it falls short.)
+            let face = face_toward(p, at);
+            if !on_it && (v.sight(at, c) || !v.sight(at, face) || dist(at, face) > i64::from(s.range.0)) {
                 continue;
             }
             let d = dist(me, at);
