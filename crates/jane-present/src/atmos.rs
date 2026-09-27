@@ -518,7 +518,7 @@ impl Atmosphere {
         }
         let (w, h) = (i32::from(f.canvas.0), i32::from(f.canvas.1));
         let lit = |c: Rgb| -> Rgb {
-            if self.tier >= Tier::T2 {
+            if self.tier >= Tier::T1 {
                 c
             } else {
                 // The fog glows a little of its own at night, so a fogged night is not black.
@@ -541,7 +541,7 @@ impl Atmosphere {
         let glow = self.afterglow_clear();
         if glow > 0 && !self.indoor && self.features.fog {
             let c = weather::sky(self.clock).glow;
-            let colour = if self.tier >= Tier::T2 {
+            let colour = if self.tier >= Tier::T1 {
                 // A warm dust in the air: under a violet sky and a gold afterglow it reads amber,
                 // where a cool one went magenta.
                 [236, 214, 184]
@@ -587,7 +587,7 @@ impl Atmosphere {
         }
         // Light shafts: through what stands against a low sun, in clear air or mist (§1.9).
         if self.features.god_rays
-            && self.tier == Tier::T2
+            && self.tier >= Tier::T1
             && !self.indoor
             && matches!(self.kind, WeatherKind::Clear | WeatherKind::Mist)
             && let Some(sun) = sky.sun.filter(|s| s.spread <= crate::light::SILHOUETTE_SPREAD + 200)

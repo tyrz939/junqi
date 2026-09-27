@@ -58,9 +58,10 @@ const SHADOW_PAST: f32 = 24.0;
 /// Rows over the silhouette mask's box a lifted receiver may stand and still take its shadow
 /// from inside it (`jane-render-soft::silhouette`'s, the same).
 const CLIMB: i32 = jane_present::rows_up(100);
-/// How much of a lamp's colour lights its pool, over the dark (soft's `GAIN`, a little more:
-/// N dot L takes some back on the ground's edges).
-const POINT_GAIN: f32 = 0.8;
+/// T2's point light: how much brighter it is than its colour byte says, in linear light, and the
+/// least a light's luminance is held to before that gain (`jane-render-wgpu`'s prep).
+const POINT_GAIN: f32 = 3.0;
+const MIN_LUMA: f32 = 0.42;
 
 /// The Features rows T1 reads (PRESENTATION.md §1.3), with their T1 defaults, and the backend's
 /// own two settings. A row off draws the row below it, never nothing.
@@ -160,6 +161,8 @@ pub struct Sky {
     pub fill: [f32; 3],
     /// Toward the sun (x east, y south, z up), and its colour on flat ground.
     pub sun: Option<([f32; 3], [f32; 3])>,
+    /// The air's light, T2's (not exposed to `ambient`): what lights the fog.
+    pub air: [f32; 3],
 }
 
 /// Everything one frame draws, reused frame to frame.
@@ -213,6 +216,8 @@ pub struct Prep {
     pub drift: (i16, i16),
     /// What is drawn over the composed canvas, in order.
     pub after: Vec<After>,
+    /// The light shafts' strength (`Pass::Rays`), 0 with none.
+    pub rays: u8,
     /// Draw calls the albedo pass will issue (for the stats).
     pub casters: usize,
     depth: Vec<u8>,
@@ -275,7 +280,29 @@ pub fn sky(ambient: Rgb, fill: Rgb, sun: Option<Directional>) -> Sky {
     let lit: [f32; 3] = std::array::from_fn(|c| fill[c] + sun.map_or(0.0, |(_, col)| col[c]) * flat);
     let l = luma(lit);
     let k = if l > 1e-4 { (luma(ambient.map(linear)) / l).clamp(0.25, 2.0) } else { 1.0 };
-    Sky { fill: fill.map(|v| v * k), sun: sun.map(|(d, col)| (d, col.map(|v| v * k))) }
+    // The air's light as T2's fog takes it (`fog.wgsl`): the fill, and the sun at T2's gain.
+    let air = std::array::from_fn(|c| fill[c] * 1.15 + sun.map_or(0.0, |(_, col)| col[c]) * SUN_GAIN * 0.45);
+    Sky { fill: fill.map(|v| v * k), sun: sun.map(|(d, col)| (d, col.map(|v| v * k))), air }
+}
+
+/// T2's sun: its light on flat ground is its colour byte times this (`jane-render-wgpu`'s prep).
+pub const SUN_GAIN: f32 = 1.6;
+
+/// Linear light as a display value (the sRGB curve, as the light pass writes it).
+pub fn srgb(c: f32) -> f32 {
+    if c <= 0.003_130_8 { c * 12.92 } else { 1.055 * c.powf(1.0 / 2.4) - 0.055 }
+}
+
+impl Sky {
+    /// What the light pass writes on flat ground, as the compose reads it: the display value
+    /// (`AMBIENT_FS`'s) squared, the linear light T1 multiplies by.
+    pub fn flat(&self) -> [f32; 3] {
+        let sun = self.sun.map_or([0.0; 3], |(d, col)| {
+            let ndl = (d[2].max(0.0) / d[2].max(0.2)).min(2.5);
+            col.map(|v| v * (1.0 + (ndl - 1.0) * 0.6))
+        });
+        std::array::from_fn(|c| srgb(self.fill[c] + sun[c]).powi(2))
+    }
 }
 
 /// Whether two `(x0, y0, x1, y1)` rects share a px.
@@ -312,6 +339,7 @@ impl Prep {
         self.fog_shape.clear();
         self.drift = (0, 0);
         self.after.clear();
+        self.rays = 0;
         let mut lit_seen = false;
         self.rows.clear();
         self.profiles.clear();
@@ -360,7 +388,7 @@ impl Prep {
                     self.sky = Some(sky(ambient, fill, sun));
                     (self.ambient, self.fill) = (ambient, fill);
                     lit_seen = true;
-                    self.lights(frame, ambient, points.range(), casters.range(), pages, *rows);
+                    self.lights(frame, points.range(), casters.range(), pages, *rows);
                 }
                 Pass::Post(p) => self.post = Some(p),
                 // The atmosphere (PRESENTATION.md §1.8, §1.9, §2): the backdrop into its own
@@ -387,8 +415,8 @@ impl Prep {
                         self.after.push(After::Fog);
                     }
                 }
-                // T2's alone: never in a T1 frame (§1.3 `god_rays`).
-                Pass::Rays { .. } => {}
+                // Light shafts (§1.3 `god_rays`): drawn over the canvas with the bloom.
+                Pass::Rays { strength } => self.rays = strength,
                 Pass::Particles { parts, .. } => {
                     let first = self.shape_v.len() / SHAPE_QUAD;
                     for p in frame.parts_in(parts) {
@@ -674,19 +702,7 @@ impl Prep {
     }
 
     /// The point lights' quads, and the shadow geometry of the ones that cast.
-    fn lights(
-        &mut self,
-        frame: &Frame,
-        ambient: Rgb,
-        points: Range<usize>,
-        casters: Range<usize>,
-        pages: &[PageCpu],
-        rows: Rows,
-    ) {
-        // A pool shows against the dark: by day a little, at night all of it (soft's rule).
-        let avg = ambient.iter().map(|&c| u32::from(c)).sum::<u32>() / 3;
-        // Soft's rule (`lightmap.rs`): the night's flat light is T2's now, not the old dimmer one.
-        let dark = (330u32.saturating_sub(avg)).min(220) as f32 / 220.0;
+    fn lights(&mut self, frame: &Frame, points: Range<usize>, casters: Range<usize>, pages: &[PageCpu], rows: Rows) {
         let mut slot = 0u8;
         for li in points.take(usize::from(rows.max_lights)) {
             let l = frame.lights[li];
@@ -712,15 +728,15 @@ impl Prep {
                     mask = f32::from(slot);
                 }
             }
-            let g = POINT_GAIN * dark;
             // T2's lamp (`jane-render-wgpu`'s prep): its byte's hue as T2 lights with it, leant
-            // warm as T2 leans it (a yellow lamp on green grass is not lime), at the byte's own
-            // brightness, so the pool is T2's colour.
-            let luma = |c: [f32; 3]| 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
-            let byte = l.colour.map(|c| f32::from(c) / 255.0);
-            let hue = light3(l.colour);
-            let k = luma(byte) / luma(hue).max(1e-4) * g;
-            let col = [hue[0] * k, hue[1] * k * 0.82, hue[2] * k * 0.6, 0.0];
+            // warm (a yellow lamp on green grass is not lime), a deep orange flame held up to a
+            // lamp's brightness, at T2's gain, in linear light: the shader adds it to the sky's
+            // light as T2 sums them.
+            let [cr, cg, cb] = light3(l.colour);
+            let [cr, cg, cb] = [cr, cg * 0.82, cb * 0.6];
+            let luma = 0.2126 * cr + 0.7152 * cg + 0.0722 * cb;
+            let k = POINT_GAIN * (MIN_LUMA / luma.max(0.01)).clamp(1.0, 1.8);
+            let col = [cr * k, cg * k, cb * k, 0.0];
             let spot = match l.kind {
                 LightKind::Point => [0.0, 0.0, -2.0, mask],
                 LightKind::Spot { dir, cone } => [rad(dir.0).cos(), rad(dir.0).sin(), rad(cone.0).cos(), mask],

@@ -241,7 +241,7 @@ mod tests {
         )
         .unwrap();
         let t1 = c.features(Tier::T1);
-        assert!(!t1.fog && t1.shadows == 4 && !t1.bloom, "bloom is T2's, held off at T1");
+        assert!(!t1.fog && t1.shadows == 4 && t1.bloom && !t1.god_rays, "T1 blooms; god_rays off from the file");
         assert_eq!(t1.max_particles, Features::of(Tier::T1).max_particles, "a count is held to the tier's");
         let t2 = c.features(Tier::T2);
         assert!(t2.bloom && !t2.god_rays && t2.shadows == 4);

@@ -93,9 +93,10 @@ pub enum Pass {
     /// is the sun or the moon, added on top where it is not shadowed; `points` are
     /// `Frame::lights[points]`, `casters` are `Frame::casters[casters]`.
     Lights { ambient: Rgb, fill: Rgb, sun: Option<Directional>, points: Span, casters: Span },
-    /// The grade and the bloom (§1.9), last before the UI: all of it at T2; below T2 the grade
-    /// with no bloom (exposure, saturation, tint and lift, drawn as T2 draws them; the tiers
-    /// are one look, decided 2026-09-27).
+    /// The grade and the bloom (§1.9), last before the UI, on every tier: exposure, saturation,
+    /// tint and lift drawn as T2 draws them (the tiers are one look, decided 2026-09-27), and the
+    /// bloom where the tier's `bloom` row is on (T2 and T1 by their chains, T0 a quarter-size blur
+    /// of what glows).
     Post(Post),
     /// The sky over the view (§1.9 `Sky`): bands by hour, stars, the moon. Seen where the view
     /// meets the zone's edge (`SkyLook::zone`) and, on T2, in every water cell's reflection.
@@ -153,9 +154,9 @@ impl Pass {
             | Pass::Water { .. }
             | Pass::Weather(_)
             | Pass::Fog { .. }
-            | Pass::Particles { .. } => Tier::T0,
-            Pass::Post(p) if p.bloom == 0 => Tier::T0,
-            Pass::Post(_) | Pass::Rays { .. } => Tier::T2,
+            | Pass::Particles { .. }
+            | Pass::Post(_) => Tier::T0,
+            Pass::Rays { .. } => Tier::T1,
         }
     }
 }
@@ -284,6 +285,12 @@ pub struct Particle {
     pub height: u8,
 }
 
+/// T1's particle pool (§1.3 `max_particles`): the rain a third of it, as T2's. Raised from 2000
+/// on 2026-09-27 so a wet night on a Pi reads as T2's rain (one quad a drop).
+pub const T1_PARTICLES: u16 = 6000;
+/// Whether T0 blooms by default (§1.3 `bloom`): a quarter-size blur of what glows.
+pub const T0_BLOOM: bool = true;
+
 /// The visual features (§1.3): a row each, with the tier it needs and its `config.json` key
 /// under `present`. `Features::of(tier)` is each tier's default; a row set above its tier's
 /// reach is held to what the tier draws. The presenter reads the rows that change what a frame
@@ -299,10 +306,14 @@ pub struct Features {
     pub silhouettes: bool,
     /// `max_lights`: point lights drawn at most (16, 32, 128).
     pub max_lights: u16,
-    /// `bloom`: the emissive's bloom (T2).
+    /// `bloom`: what glows blooms (T2 and T1: a chain of halvings; T0: a quarter-size blur of
+    /// the emissive, 2026-09-27).
     pub bloom: bool,
-    /// `grade`: the grade per region and hour (exposure, saturation, tint and lift on every tier;
-    /// the bloom is T2's own row).
+    /// `glow`: T0's emissive, lamp glass and lit windows added unlit over the lightmap (T1 and T2
+    /// always draw it; off, T0's glass is its albedo, lit like the rest).
+    pub glow: bool,
+    /// `grade`: the grade per region and hour (exposure, saturation, tint and lift, and the dusk's
+    /// afterglow, on every tier; the bloom is its own row).
     pub grade: bool,
     /// `sharp`: sharp bilinear to the window (T1, T2); off, nearest.
     pub sharp: bool,
@@ -316,7 +327,7 @@ pub struct Features {
     pub water: bool,
     /// `wet`: the wet ground's darkening and specular (T1 and T2).
     pub wet: bool,
-    /// `god_rays`: light shafts (T2).
+    /// `god_rays`: light shafts (T2; T1 from the silhouettes' mask, 2026-09-27).
     pub god_rays: bool,
     /// `sky`: the sky, the far landmark and the far treeline.
     pub sky: bool,
@@ -340,7 +351,7 @@ const fn row(key: &'static str, label: &'static str) -> FeatureRow {
 /// Every row a player can turn, in the Controls screen's order; `Features::rows` keeps the ones a
 /// tier has. `soft_shadows` and `sun_shadows` are not among them: T2's traced shadows are its
 /// only ones, and T1's sun is its silhouettes. `half_res` is not built.
-const ROWS: [FeatureRow; 15] = [
+const ROWS: [FeatureRow; 16] = [
     row("normal_light", "Lit relief"),
     row("shadows", "Lamp shadows"),
     row("silhouettes", "Sun shadows"),
@@ -352,6 +363,7 @@ const ROWS: [FeatureRow; 15] = [
     row("god_rays", "Light shafts"),
     row("sky", "Sky"),
     row("bloom", "Bloom"),
+    row("glow", "Lit windows"),
     row("grade", "Grade"),
     row("max_particles", "Particles"),
     row("sharp", "Sharp upscale"),
@@ -360,7 +372,7 @@ const ROWS: [FeatureRow; 15] = [
 
 impl Features {
     /// The rows' keys, in the order `jane bench` and F2 print them and `config.json` holds them.
-    pub const KEYS: [&'static str; 15] = [
+    pub const KEYS: [&'static str; 16] = [
         "normal_light",
         "shadows",
         "silhouettes",
@@ -372,6 +384,7 @@ impl Features {
         "god_rays",
         "sky",
         "bloom",
+        "glow",
         "grade",
         "max_particles",
         "sharp",
@@ -393,7 +406,8 @@ impl Features {
                 Tier::T1 => 32,
                 Tier::T2 => 128,
             },
-            bloom: matches!(tier, Tier::T2),
+            bloom: T0_BLOOM || !matches!(tier, Tier::T0),
+            glow: true,
             grade: true,
             sharp: !matches!(tier, Tier::T0),
             frame_skip: false,
@@ -401,11 +415,11 @@ impl Features {
             fog: true,
             water: true,
             wet: !matches!(tier, Tier::T0),
-            god_rays: matches!(tier, Tier::T2),
+            god_rays: !matches!(tier, Tier::T0),
             sky: true,
             max_particles: match tier {
                 Tier::T0 => 900,
-                Tier::T1 => 2000,
+                Tier::T1 => T1_PARTICLES,
                 Tier::T2 => 8000,
             },
         }
@@ -430,7 +444,8 @@ impl Features {
         match (key, on) {
             ("normal_light", Some(v)) => self.normal_light = v && tier > Tier::T0,
             ("silhouettes", Some(v)) => self.silhouettes = v && tier < Tier::T2,
-            ("bloom", Some(v)) => self.bloom = v && tier == Tier::T2,
+            ("bloom", Some(v)) => self.bloom = v,
+            ("glow", Some(v)) => self.glow = v || tier > Tier::T0,
             ("grade", Some(v)) => self.grade = v,
             ("sharp", Some(v)) => self.sharp = v && tier > Tier::T0,
             ("frame_skip", Some(v)) => self.frame_skip = v,
@@ -438,7 +453,7 @@ impl Features {
             ("fog", Some(v)) => self.fog = v,
             ("water", Some(v)) => self.water = v,
             ("wet", Some(v)) => self.wet = v && tier > Tier::T0,
-            ("god_rays", Some(v)) => self.god_rays = v && tier == Tier::T2,
+            ("god_rays", Some(v)) => self.god_rays = v && tier > Tier::T0,
             ("sky", Some(v)) => self.sky = v,
             ("shadows", _) => match count(u16::from(top.shadows)) {
                 Some(n) => self.shadows = n as u8,
@@ -467,6 +482,7 @@ impl Features {
             "silhouettes" => b(self.silhouettes),
             "max_lights" => Some(self.max_lights.to_string()),
             "bloom" => b(self.bloom),
+            "glow" => b(self.glow),
             "grade" => b(self.grade),
             "sharp" => b(self.sharp),
             "frame_skip" => b(self.frame_skip),
@@ -486,9 +502,9 @@ impl Features {
     pub fn rows(tier: Tier) -> impl Iterator<Item = FeatureRow> {
         ROWS.into_iter().filter(move |r| match r.key {
             "normal_light" | "sharp" | "wet" => tier == Tier::T1 || (tier == Tier::T2 && r.key != "normal_light"),
-            "shadows" => tier > Tier::T0,
+            "shadows" | "god_rays" => tier > Tier::T0,
             "silhouettes" => tier < Tier::T2,
-            "god_rays" | "bloom" => tier == Tier::T2,
+            "glow" => tier == Tier::T0,
             _ => true,
         })
     }
