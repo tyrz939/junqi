@@ -100,6 +100,54 @@ pub(crate) fn draw(c: &mut Canvas, k: &Kit, state: State) -> Option<Stand> {
             }
             Stand::Up(&[])
         }
+        "bulb" => {
+            // A lamp set in the floor: an iron ring, a glass dome in it, warm when it is lit.
+            let cx = w / 2;
+            let r = Rect::new(cx - 5, foot - 9, 10, 7);
+            c.ellipse(Rect::new(r.x - 1, r.y + 2, r.w + 2, r.h - 1), k.body.at(Tone::Shade), 1);
+            if lit {
+                c.set_emitting(true);
+                c.ellipse_lit(Rect::new(r.x + 1, r.y, r.w - 2, r.h - 1), k.accent, Z::new(2, 3));
+                c.set_emitting(false);
+            } else {
+                c.ellipse(Rect::new(r.x + 1, r.y, r.w - 2, r.h - 1), Ramp::Glass.at(Tone::Shade), 2);
+                c.dot(r.x + 3, r.y + 1, Ramp::Glass.at(Tone::Light), 2);
+            }
+            Stand::Flat(3)
+        }
+        "beam" => {
+            // Light falling through a gap onto the floor: a soft pool with motes in it, in the
+            // accent (warm sun or cold moon). By day off-light it is only the floor's dust.
+            let r = Rect::new(2, foot - (k.fh * 16) + 3, w - 4, k.fh * 16 - 5);
+            if lit {
+                // The pool thins toward its edge by an ordered dither (a soft edge, not a
+                // texture): the floor shows through where the light is faint.
+                c.set_emitting(true);
+                let (cx2, cy2) = (2 * r.x + r.w, 2 * r.y + r.h);
+                for y in r.y..r.bottom() {
+                    for x in r.x..r.right() {
+                        let (dx, dy) = ((2 * x + 1 - cx2) * 16 / r.w, (2 * y + 1 - cy2) * 16 / r.h);
+                        let d = dx * dx + dy * dy;
+                        if d > 256 {
+                            continue;
+                        }
+                        let density = 16 - d / 16;
+                        if density > i32::from(crate::canvas::bayer(x, y)) {
+                            let t = if d < 64 { Tone::High } else if d < 150 { Tone::Light } else { Tone::Base };
+                            c.fill_rect(Rect::new(x, y, 1, 1), k.accent.at(t), 1);
+                        }
+                    }
+                }
+                c.set_emitting(false);
+            } else {
+                for i in 0..4 {
+                    let hh = super::parts::hash(k.seed, i, 81);
+                    let (x, y) = (r.x + 3 + (hh % (r.w - 6) as u32) as i32, r.y + 3 + ((hh >> 8) % (r.h - 6) as u32) as i32);
+                    c.fill_rect(Rect::new(x, y, 2, 2), Ramp::Stone.at(Tone::Light), 1);
+                }
+            }
+            Stand::Flat(1)
+        }
         "signal" => {
             // A railway signal: a post and a round lamp with its lens, red or green by accent.
             let cx = w / 2;

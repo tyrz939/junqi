@@ -82,7 +82,8 @@ fn coverage_the_first_walk_dresses_and_every_look_draws_its_frames() {
     let names: BTreeSet<&str> = catalog().story.props.iter().map(|p| catalog().sprites[usize::from(p.sprite.0)]).collect();
     let dressed = names.iter().filter(|n| looks::find(n).is_some()).count();
     println!("{dressed} of {} prop sprites dressed", names.len());
-    assert!(dressed * 10 >= names.len() * 5, "at least half the kit");
+    let bare: Vec<&&str> = names.iter().filter(|n| looks::find(n).is_none()).collect();
+    assert!(bare.is_empty(), "prop sprites with no look (they would draw a stand-in): {bare:?}");
 }
 
 #[test]

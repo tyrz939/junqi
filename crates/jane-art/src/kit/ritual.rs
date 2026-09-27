@@ -13,6 +13,58 @@ pub(crate) fn draw(c: &mut Canvas, k: &Kit, state: State) -> Option<Stand> {
     let on = state == State::On;
     let (w, h, foot) = (k.w, k.h, k.foot());
     Some(match k.look.shape {
+        "mouth" => {
+            // A way into the hill: a timbered adit (or a stone arch over a stair), the dark
+            // going in, a light kept inside that glows when it is lit.
+            let (x0, x1) = (2, w - 3);
+            let top = foot - (h - 3).min(40);
+            ao(c, x0 - 1, x1 + 1, foot, 6);
+            // The hill round it.
+            let mut m = Canvas::new(c.w(), c.h());
+            m.polyline_fill(&[(0, foot), (0, top + 12), (w / 4, top + 3), (3 * w / 4, top + 1), (w - 1, top + 10), (w - 1, foot)], Ix::INK, 1);
+            c.inflate(&m, k.body, 6, Z::new(2, 10));
+            c.retone(k.body, super::HARD);
+            let door = Rect::new(w / 2 - 12, foot - 24, 24, 24);
+            c.fill_normal(door, Ramp::ClothBlack.at(Tone::Deep), super::parts::south(), 11);
+            if on {
+                c.set_emitting(true);
+                c.ellipse(Rect::new(door.x + 6, door.bottom() - 9, 12, 7), k.accent.at(Tone::Base), 11);
+                c.ellipse(Rect::new(door.x + 9, door.bottom() - 7, 6, 4), k.accent.at(Tone::Light), 11);
+                c.set_emitting(false);
+            }
+            if k.trim == Ramp::WoodDark || k.trim == Ramp::WoodOak {
+                for x in [door.x - 2, door.right()] {
+                    post(c, x, door.y - 2, foot - 1, 3, k.trim, 12);
+                }
+                c.fill_normal(Rect::new(door.x - 3, door.y - 4, door.w + 6, 4), k.trim.at(Tone::Base), super::parts::south(), 13);
+                c.hline(door.x - 3, door.right() + 2, door.y - 4, k.trim.at(Tone::Light), 13);
+            } else {
+                for i in 0..9 {
+                    let a = jane_core::angle::Angle((32768 + i * 4096) as u16);
+                    let (s, co) = (jane_core::angle::sin_q15(a).0, jane_core::angle::cos_q15(a).0);
+                    let (bx, by) = (w / 2 + ((co * 14) >> 15), door.y + 10 + ((s * 13) >> 15));
+                    c.rect_bevel(Rect::new(bx - 2, by - 2, 5, 4), k.trim, 1, Z::new(12, 13));
+                }
+            }
+            Stand::Up(&[])
+        }
+        "broken_steps" => {
+            // Stone steps going down, broken: a slab fallen across them, rubble on the treads.
+            let r = Rect::new(4, foot - 26, w - 8, 25);
+            let n = 5;
+            for i in 0..n {
+                let y = r.y + i * r.h / n;
+                let t = Tone::ALL[(5 - i).clamp(1, 5) as usize];
+                c.fill_normal(Rect::new(r.x, y, r.w, r.h / n), k.body.at(t), normal(0, -60), 1);
+                c.hline(r.x, r.right() - 1, y, k.body.at(t.step(1)), 1);
+            }
+            c.ellipse_lit(Rect::new(r.x + 4, r.y + 8, 18, 8), k.body, Z::new(3, 6));
+            for (x, y) in [(r.x + 26, r.y + 14), (r.x + 12, r.y + 20), (r.right() - 8, r.y + 4)] {
+                c.ellipse_lit(Rect::new(x, y, 6, 4), k.body, Z::new(2, 4));
+            }
+            c.retone(k.body, super::HARD);
+            Stand::Flat(6)
+        }
         "hatch" => {
             // A cellar hatch in the floor: two planked leaves in an iron frame, a ring to lift.
             let r = Rect::new(3, foot - (h - 4).min(24), w - 6, (h - 4).min(24));

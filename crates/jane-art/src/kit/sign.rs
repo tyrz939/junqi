@@ -137,10 +137,28 @@ pub(crate) fn draw(c: &mut Canvas, k: &Kit, state: State) -> Option<Stand> {
             writing(c, Rect::new(sx + 2, top + 10, sw - 4, foot - 14 - top - 10), rows.max(4), k.body.at(Tone::Deep), k.seed, 7);
             Stand::Up(&[])
         }
+        "portrait" => {
+            // A portrait in a gilt frame on an easel: a figure in black, the face scratched out.
+            let cx = w / 2;
+            ao(c, cx - 8, cx + 7, foot, 4);
+            for (x0, x1) in [(cx - 7, cx - 10), (cx + 6, cx + 9)] {
+                c.line((x0, foot - 26), (x1, foot - 1), k.trim.at(Tone::Base), 2, 3);
+            }
+            let r = Rect::new(cx - 9, foot - 30, 18, 20);
+            c.rect_bevel(r, k.accent, 2, Z::new(5, 7));
+            let canvas = Rect::new(r.x + 2, r.y + 2, r.w - 4, r.h - 4);
+            c.fill_normal(canvas, Ramp::ClothGreen.at(Tone::Shade), parts::south(), 6);
+            c.polygon_cloth(&[(cx - 4, canvas.y + 9), (cx + 3, canvas.y + 9), (cx + 5, canvas.bottom() - 1), (cx - 6, canvas.bottom() - 1)], Ramp::ClothBlack, 60, Z::flat(7));
+            c.ellipse(Rect::new(cx - 3, canvas.y + 2, 6, 7), Ramp::Skin.at(Tone::Mid), 7);
+            for i in 0..3 {
+                c.line((cx - 3 + i, canvas.y + 2), (cx + 1 + i, canvas.y + 8), Ramp::ClothLinen.at(Tone::Light), 1, 8);
+            }
+            Stand::Up(&[])
+        }
         "chalk" => {
-            // Chalk on the flags: a mark and an arrow, rubbed.
+            // Chalk on the flags: a mark and an arrow, rubbed (or pencil, in the accent).
             let y = foot - 7;
-            let chalk = Ramp::HairWhite.at(Tone::Light);
+            let chalk = if k.look.materials.accent.is_some() { k.accent.at(Tone::Base) } else { Ramp::HairWhite.at(Tone::Light) };
             c.line((3, y + 3), (8, y - 1), chalk, 2, 1);
             c.line((8, y - 1), (12, y + 3), chalk, 2, 1);
             c.line((4, y + 5), (11, y + 5), Ramp::HairWhite.at(Tone::Base), 2, 1);
