@@ -159,6 +159,9 @@ pub struct Opts {
     pub weather: Option<jane_present::WeatherKind>,
     /// Cast this spell east after the rest, and draw the frame so many ticks later (`--cast icebolt:12`).
     pub cast: Option<String>,
+    /// With `--cast`: first put this unit (by its catalog name) a few cells east of her, the
+    /// console's `spawn`, so the bolt has a body to hit (`--spawn skeleton`).
+    pub spawn: Option<String>,
     /// `Features` rows set by key (`--rows fog=off,god_rays=off`, PRESENTATION.md §1.3).
     pub rows: Vec<(String, String)>,
     pub gl: GlOpts,
@@ -353,6 +356,11 @@ fn play(bps: Blueprints, o: &Opts, tier: Tier) -> Result<(Tap, Present, u32), St
         let dev = |seq: u16, op| StampedCommand { seat: Some(seat), seq, cmd: Command::Dev(op) };
         let setup = [dev(u16::MAX - 3, DevOp::Learn(spell)), dev(u16::MAX - 2, DevOp::Mp(9999)), dev(u16::MAX - 4, DevOp::God(true))];
         host.sim.step(&StepInput { frames: [InputFrame::IDLE; 4], commands: &setup });
+        if let Some(u) = &o.spawn {
+            let def = jane_data::catalog().combat.unit_id(u).ok_or_else(|| format!("--spawn: no unit \"{u}\""))?;
+            let spawn = [dev(u16::MAX - 6, DevOp::Spawn(def))];
+            host.sim.step(&StepInput { frames: [InputFrame::IDLE; 4], commands: &spawn });
+        }
         let aim = InputFrame { aim: Some(jane_core::Angle::EAST), ..InputFrame::IDLE };
         let cast = [StampedCommand { seat: Some(seat), seq: u16::MAX - 5, cmd: Command::Cast { spell, on: None } }];
         host.sim.step(&StepInput { frames: [aim; 4], commands: &cast });
@@ -591,6 +599,7 @@ mod tests {
             at: None,
             weather: None,
             cast: None,
+            spawn: None,
             rows: Vec::new(),
             gl: GlOpts::default(),
         };
