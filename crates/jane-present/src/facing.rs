@@ -106,7 +106,15 @@ impl Face8 {
         };
         let best = Face8::ALL.into_iter().max_by_key(|&f| dot(f)).unwrap_or(self);
         if !best.agrees(sim) {
-            return self.settle(sim);
+            // At right angles to the sim's facing she is sliding along a wall she walks into
+            // on the diagonal (the sim keeps the axis she pressed first): she faces between
+            // the two. Anything further round (knocked back) leaves her as she stood.
+            let s = Face8::of(sim).index();
+            return match (best.index() + 8 - s) % 8 {
+                2 => Face8::ALL[(s + 1) % 8],
+                6 => Face8::ALL[(s + 7) % 8],
+                _ => self.settle(sim),
+            };
         }
         let worth = |f: Face8| if f == self { dot(f) * STAY / 1000 } else { dot(f) };
         Face8::ALL.into_iter().filter(|f| f.agrees(sim)).max_by_key(|&f| worth(f)).unwrap_or(best)
@@ -136,6 +144,14 @@ mod tests {
         assert_eq!(Face8::SouthEast.moving(dx, dy, Facing::East), Face8::SouthEast);
         // Well past it she turns.
         assert_eq!(Face8::East.moving(1000, 700, Facing::East), Face8::SouthEast);
+    }
+
+    #[test]
+    fn sliding_along_a_wall_on_the_diagonal_faces_the_diagonal() {
+        // She presses up and to the left into a wall on her left; the sim faces west, she
+        // slides north.
+        assert_eq!(Face8::SouthWest.moving(0, -30, Facing::West), Face8::NorthWest);
+        assert_eq!(Face8::East.moving(0, 30, Facing::East), Face8::SouthEast);
     }
 
     #[test]
