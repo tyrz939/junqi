@@ -38,6 +38,11 @@ pub struct Config {
     /// Each slot's seed as last written, so a load draws the county forming before the save
     /// has been decoded (the save's header does not carry it).
     pub slot_seeds: Vec<Option<u32>>,
+    /// Who this machine is to a host (never shown): a returning guest gets her own body and
+    /// bags back by it (PLATFORM.md §8). Made on the first join.
+    pub client_token: Option<u64>,
+    /// The address last joined, offered again on the Join screen.
+    pub last_host: Option<String>,
     /// Master, music and effects, 0 to 100 (PRESENTATION.md §5).
     pub volume: VolumeRow,
 }

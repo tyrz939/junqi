@@ -390,6 +390,7 @@ dependencies = [
  "jane-data",
  "jane-net",
  "jane-present",
+ "jane-render-gl2",
  "jane-render-soft",
  "jane-render-wgpu",
  "jane-schema",
@@ -417,8 +418,12 @@ dependencies = [
 name = "jane-net"
 version = "0.1.0"
 dependencies = [
+ "jane-bot",
  "jane-core",
+ "jane-data",
  "jane-sim",
+ "postcard",
+ "serde",
 ]
 
 [[package]]
@@ -437,7 +442,12 @@ dependencies = [
 name = "jane-render-gl2"
 version = "0.1.0"
 dependencies = [
+ "glow",
+ "jane-core",
  "jane-present",
+ "jane-render-soft",
+ "jane-sim",
+ "sdl2",
 ]
 
 [[package]]

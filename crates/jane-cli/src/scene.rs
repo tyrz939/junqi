@@ -1,6 +1,6 @@
 //! `jane sheet scene` (PRESENTATION.md §6): one whole frame, headless. A player model plays a
 //! seed from New Game as `jane play` does, the presenter ticks beside it every frame, and at the
-//! chosen point one frame is drawn through `soft` (or, with the `gpu` feature, `wgpu`) and
+//! chosen point one frame is drawn through `soft` (or, with the `gpu` feature, `gl2` or `wgpu`) and
 //! written as a PNG. `jane bench frames` plays to the same point and times frames there.
 
 use std::time::Instant;
@@ -15,6 +15,7 @@ use jane_sim::{Blueprints, Command, Event, InputFrame, Seat, Sim, StampedCommand
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Which {
     Soft,
+    Gl2,
     Wgpu,
 }
 
@@ -22,6 +23,7 @@ impl Which {
     pub fn parse(s: &str) -> Option<Which> {
         match s {
             "soft" | "t0" => Some(Which::Soft),
+            "gl2" | "t1" => Some(Which::Gl2),
             "wgpu" | "t2" => Some(Which::Wgpu),
             _ => None,
         }
@@ -31,6 +33,7 @@ impl Which {
     pub fn tier(self) -> Tier {
         match self {
             Which::Soft => Tier::T0,
+            Which::Gl2 => Tier::T1,
             Which::Wgpu => Tier::T2,
         }
     }
@@ -38,21 +41,89 @@ impl Which {
     pub fn name(self) -> &'static str {
         match self {
             Which::Soft => "t0",
+            Which::Gl2 => "t1",
             Which::Wgpu => "t2",
         }
     }
 }
 
+/// `gl2`'s settings from the command line (PRESENTATION.md §1.3's rows, and the context's API):
+/// each `None` keeps what the backend chose for the machine.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct GlOpts {
+    /// Ask for OpenGL ES 2.0 (what the Pi runs) instead of OpenGL 2.1.
+    pub es: bool,
+    /// Point lights that cast (`shadows`; 0 is the row off).
+    pub shadows: Option<u8>,
+    /// The light target at half the canvas each way.
+    pub half_light: Option<bool>,
+    /// The exact albedo pass, or the fast one.
+    pub exact: Option<bool>,
+    /// `normal_light`.
+    pub normals: Option<bool>,
+}
+
+impl GlOpts {
+    /// Reads `--es`, `--shadows N|off`, `--half-light`, `--full-light`, `--fast`, `--exact`, `--flat`.
+    pub fn parse(args: &[String]) -> Result<GlOpts, String> {
+        let has = |f: &str| args.iter().any(|a| a == f);
+        let shadows = match args.iter().position(|a| a == "--shadows").and_then(|i| args.get(i + 1)) {
+            Some(v) if v == "off" => Some(0),
+            Some(v) => Some(v.parse::<u8>().map_err(|_| format!("--shadows: a count or off, not {v}"))?),
+            None => None,
+        };
+        let pick = |on: &str, off: &str| {
+            if has(on) {
+                Some(true)
+            } else if has(off) {
+                Some(false)
+            } else {
+                None
+            }
+        };
+        Ok(GlOpts {
+            es: has("--es"),
+            shadows,
+            half_light: pick("--half-light", "--full-light"),
+            exact: pick("--exact", "--fast"),
+            normals: if has("--flat") { Some(false) } else { None },
+        })
+    }
+
+    #[cfg(feature = "gpu")]
+    fn apply(self, g: &mut jane_render_gl2::Gl2) {
+        let mut r = g.rows();
+        r.shadows = self.shadows.unwrap_or(r.shadows);
+        r.half_light = self.half_light.unwrap_or(r.half_light);
+        r.exact = self.exact.unwrap_or(r.exact);
+        r.normal_light = self.normals.unwrap_or(r.normal_light);
+        g.set_rows(r);
+    }
+
+    #[cfg(feature = "gpu")]
+    fn api(self) -> jane_render_gl2::Api {
+        if self.es { jane_render_gl2::Api::Es } else { jane_render_gl2::Api::Auto }
+    }
+}
+
 /// The backend, headless.
-pub fn backend(which: Which) -> Result<Box<dyn Backend>, String> {
+pub fn backend(which: Which, gl: GlOpts) -> Result<Box<dyn Backend>, String> {
+    let _ = gl;
     match which {
         Which::Soft => Ok(Box::new(Soft::new())),
         #[cfg(feature = "gpu")]
+        Which::Gl2 => {
+            let mut g = jane_render_gl2::Gl2::headless(gl.api())?;
+            gl.apply(&mut g);
+            Ok(Box::new(g))
+        }
+        #[cfg(feature = "gpu")]
         Which::Wgpu => Ok(Box::new(jane_render_wgpu::Wgpu::headless()?)),
         #[cfg(not(feature = "gpu"))]
-        Which::Wgpu => {
-            Err("wgpu: this jane was built without the gpu feature (cargo build -p jane-cli --features gpu)".into())
-        }
+        Which::Gl2 | Which::Wgpu => Err(format!(
+            "{}: this jane was built without the gpu feature (cargo build -p jane-cli --features gpu)",
+            which.name()
+        )),
     }
 }
 
@@ -69,6 +140,7 @@ pub struct Opts {
     pub minute: u8,
     pub canvas: (u16, u16),
     pub backend: Which,
+    pub gl: GlOpts,
 }
 
 /// The sim with this frame's events kept for the presenter: the bot drains the host, so the host
@@ -154,7 +226,7 @@ fn play(bps: Blueprints, o: &Opts, tier: Tier) -> Result<(Tap, Present, u32), St
 
 /// Plays `o` from New Game on `bps` and draws one frame.
 pub fn render(bps: Blueprints, o: &Opts) -> Result<Shot, String> {
-    let mut b = backend(o.backend)?;
+    let mut b = backend(o.backend, o.gl)?;
     let (host, mut present, played) = play(bps, o, o.backend.tier())?;
     b.upload_atlas(present.atlas());
     let seat = Seat(0);
@@ -212,7 +284,7 @@ pub fn bench(bps: Blueprints, o: &Opts, frames: u32, output: (u32, u32)) -> Resu
     let (mut host, mut present, _) = play(bps, o, o.backend.tier())?;
     let seat = Seat(0);
     let (mut build, mut submit, mut whole) = (Vec::new(), Vec::new(), Vec::new());
-    let mut b = Bench::new(o.backend, output)?;
+    let mut b = Bench::new(o.backend, output, o.gl)?;
     b.backend().upload_atlas(present.atlas());
     for k in 0..frames + 30 {
         host.sim.step(&StepInput { frames: [InputFrame::IDLE; 4], commands: &[] });
@@ -247,25 +319,35 @@ pub fn bench(bps: Blueprints, o: &Opts, frames: u32, output: (u32, u32)) -> Resu
 enum Bench {
     Soft(Box<Soft>),
     #[cfg(feature = "gpu")]
+    Gl2(Box<jane_render_gl2::Gl2>),
+    #[cfg(feature = "gpu")]
     Wgpu(Box<jane_render_wgpu::Wgpu>),
 }
 
 impl Bench {
     #[cfg_attr(not(feature = "gpu"), allow(clippy::unnecessary_wraps))]
-    fn new(which: Which, output: (u32, u32)) -> Result<Bench, String> {
+    fn new(which: Which, output: (u32, u32), gl: GlOpts) -> Result<Bench, String> {
         let _ = output;
         match which {
             Which::Soft => Ok(Bench::Soft(Box::new(Soft::new()))),
             #[cfg(feature = "gpu")]
+            Which::Gl2 => {
+                let mut g = jane_render_gl2::Gl2::headless_output(gl.api(), output)?;
+                gl.apply(&mut g);
+                Ok(Bench::Gl2(Box::new(g)))
+            }
+            #[cfg(feature = "gpu")]
             Which::Wgpu => Ok(Bench::Wgpu(Box::new(jane_render_wgpu::Wgpu::headless_output(output)?))),
             #[cfg(not(feature = "gpu"))]
-            Which::Wgpu => Err(backend(which).err().unwrap_or_default()),
+            Which::Gl2 | Which::Wgpu => Err(backend(which, gl).err().unwrap_or_default()),
         }
     }
 
     fn backend(&mut self) -> &mut dyn Backend {
         match self {
             Bench::Soft(s) => s.as_mut(),
+            #[cfg(feature = "gpu")]
+            Bench::Gl2(g) => g.as_mut(),
             #[cfg(feature = "gpu")]
             Bench::Wgpu(g) => g.as_mut(),
         }
@@ -276,6 +358,12 @@ impl Bench {
     fn finish(&mut self) -> Result<(), String> {
         match self {
             Bench::Soft(_) => Ok(()),
+            #[cfg(feature = "gpu")]
+            Bench::Gl2(g) => {
+                g.present()?;
+                g.finish();
+                Ok(())
+            }
             #[cfg(feature = "gpu")]
             Bench::Wgpu(g) => {
                 g.present()?;
@@ -288,6 +376,18 @@ impl Bench {
     fn describe(&self) -> String {
         match self {
             Bench::Soft(_) => "soft".into(),
+            #[cfg(feature = "gpu")]
+            Bench::Gl2(g) => {
+                let r = g.rows();
+                format!(
+                    "{}; shadows {}, light target {}, albedo {}, normals {}",
+                    g.describe(),
+                    r.shadows,
+                    if r.half_light { "half" } else { "full" },
+                    if r.exact { "exact" } else { "fast" },
+                    if r.normal_light { "on" } else { "off" }
+                )
+            }
             #[cfg(feature = "gpu")]
             Bench::Wgpu(g) => g.describe().to_owned(),
         }
@@ -309,6 +409,7 @@ mod tests {
             minute: 0,
             canvas: (768, 432),
             backend: Which::Soft,
+            gl: GlOpts::default(),
         };
         let a = render(bps.clone(), &o).unwrap();
         let b = render(bps, &o).unwrap();

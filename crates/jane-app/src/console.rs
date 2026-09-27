@@ -24,6 +24,8 @@ pub enum Run {
     Step,
     Title,
     Clear,
+    /// A command for another seat, or a sitting-down (`None`): `join` and `leave` (the host's).
+    Seat(Option<Seat>, Command),
 }
 
 fn err(s: impl Into<String>) -> Vec<Run> {
@@ -58,8 +60,8 @@ fn mark_in(sim: &Sim, zone: ZoneId, asked: Option<&str>) -> Option<jane_core::Sy
     named.first().copied()
 }
 
-/// Runs one line against `sim` (her seat's), returning what to do and say.
-pub fn run(line: &str, sim: Option<&Sim>) -> Vec<Run> {
+/// Runs one line against `sim` from seat `me`, returning what to do and say.
+pub fn run(line: &str, sim: Option<&Sim>, me: Seat) -> Vec<Run> {
     let words: Vec<&str> = line.split_whitespace().collect();
     let Some((&cmd, args)) = words.split_first() else { return Vec::new() };
     let cat = jane_data::catalog();
@@ -100,7 +102,7 @@ pub fn run(line: &str, sim: Option<&Sim>) -> Vec<Run> {
         _ => {}
     }
     let Some(sim) = sim else { return err("no world yet: start a game") };
-    let Some(v) = sim.view(Seat(0)) else { return err("no seat") };
+    let Some(v) = sim.view(me) else { return err("no seat") };
     match cmd {
         "give" => {
             let Some(name) = args.first() else { return err("give <item> [qty]") };
@@ -167,6 +169,22 @@ pub fn run(line: &str, sim: Option<&Sim>) -> Vec<Run> {
         "party" => say(format!("{} sitting down", v.party())),
         "open" => vec![Run::Command(Command::Open(true)), Run::Say("open: others may sit down".into(), LineKind::Good)],
         "close" => vec![Run::Command(Command::Open(false)), Run::Say("closed".into(), LineKind::Good)],
+        // An idle body sits down (the host's world must be open): the penalty felt before
+        // anyone else has come (PLATFORM.md §2). A token names her, to sit her back down later.
+        "join" => {
+            let who = args.first().and_then(|t| t.parse::<u64>().ok()).unwrap_or(1000 + u64::from(v.party()));
+            if !sim.state().open {
+                return err("the world is closed: open first");
+            }
+            vec![
+                Run::Seat(None, Command::Join { who: jane_sim::ClientToken(who) }),
+                Run::Say(format!("token {who} sits down"), LineKind::Good),
+            ]
+        }
+        "leave" => match num(0) {
+            Some(s) if (1..4).contains(&s) => vec![Run::Seat(Some(Seat(s as u8)), Command::Leave)],
+            _ => err("leave <seat 1-3>: she gets up (a guest's seat is hung up on)"),
+        },
         _ => err(format!("{cmd}? type help")),
     }
 }
@@ -179,11 +197,11 @@ mod tests {
     fn every_row_answers_and_mutations_are_dev_commands() {
         let sim = Sim::new_game(7, "Tess");
         for (row, _) in ROWS {
-            let out = run(row, Some(&sim));
+            let out = run(row, Some(&sim), Seat(0));
             assert!(!out.is_empty() || row == "kill", "{row} says nothing");
         }
         let item = jane_data::catalog().combat.items[0];
-        let got = run(&format!("give {} 3", item.id), Some(&sim));
+        let got = run(&format!("give {} 3", item.id), Some(&sim), Seat(0));
         assert_eq!(
             got,
             vec![Run::Command(Command::Dev(DevOp::Give {
@@ -192,15 +210,18 @@ mod tests {
             }))]
         );
         assert!(matches!(
-            run("tp house", Some(&sim)).as_slice(),
+            run("tp house", Some(&sim), Seat(0)).as_slice(),
             [Run::Command(Command::Dev(DevOp::Tp { zone: ZoneId::House, .. }))]
         ));
         assert!(matches!(
-            run("time 22", Some(&sim)).as_slice(),
+            run("time 22", Some(&sim), Seat(0)).as_slice(),
             [Run::Command(Command::Dev(DevOp::Time { hour: 22 }))]
         ));
-        assert!(matches!(run("give nothing_at_all", Some(&sim)).as_slice(), [Run::Say(_, LineKind::Error)]));
-        assert_eq!(run("save 2", None), vec![Run::Save(1)]);
-        assert!(matches!(run("pos", None).as_slice(), [Run::Say(_, LineKind::Error)]));
+        assert!(matches!(run("give nothing_at_all", Some(&sim), Seat(0)).as_slice(), [Run::Say(_, LineKind::Error)]));
+        assert_eq!(run("save 2", None, Seat(0)), vec![Run::Save(1)]);
+        assert!(matches!(run("pos", None, Seat(0)).as_slice(), [Run::Say(_, LineKind::Error)]));
+        // join and leave are the host's, for other seats.
+        assert!(matches!(run("join", Some(&sim), Seat(0)).as_slice(), [Run::Say(_, LineKind::Error)]), "closed");
+        assert_eq!(run("leave 2", Some(&sim), Seat(0)), vec![Run::Seat(Some(Seat(2)), Command::Leave)]);
     }
 }

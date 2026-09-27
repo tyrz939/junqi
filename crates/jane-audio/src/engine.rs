@@ -25,6 +25,9 @@ pub enum Cmd {
     Volume { master: f32, music: f32, sfx: f32 },
     /// A new county: the music's choices are drawn from its seed from the next cue on.
     Seed(u32),
+    /// The music and the beds to this share of their level (1 as set; the world held, less),
+    /// over a quarter of a second. Effects are never ducked.
+    Duck(f32),
 }
 
 /// A sound effect playing.
@@ -63,6 +66,8 @@ pub struct Engine {
     dc: [DcBlock; 2],
     vol: [f32; 3],
     vol_want: [f32; 3],
+    duck: f32,
+    duck_want: f32,
     now: u64,
     /// Log every note the next song plays (tests, `jane audio`).
     pub log_notes: bool,
@@ -104,6 +109,8 @@ impl Engine {
             dc: [DcBlock::new(sr), DcBlock::new(sr)],
             vol: [1.0; 3],
             vol_want: [1.0; 3],
+            duck: 1.0,
+            duck_want: 1.0,
             now: 0,
             log_notes: false,
             done_log: None,
@@ -203,6 +210,7 @@ impl Engine {
                 }
             }
             Cmd::Seed(seed) => self.seed = seed,
+            Cmd::Duck(d) => self.duck_want = d.clamp(0.0, 1.0),
             Cmd::Volume { master, music, sfx } => {
                 self.vol_want = [master.clamp(0.0, 1.0), music.clamp(0.0, 1.0), sfx.clamp(0.0, 1.0)];
             }
@@ -265,16 +273,20 @@ impl Engine {
         }
         // Volumes move over a block, never jump.
         let prev = self.vol;
+        let prev_duck = self.duck;
         for i in 0..3 {
             self.vol[i] += (self.vol_want[i] - self.vol[i]) * 0.05;
         }
+        self.duck += (self.duck_want - self.duck) * (n as f32 / (0.25 * self.sr)).min(1.0);
         for k in 0..n {
             let t = k as f32 / n as f32;
             let v = |i: usize| prev[i] + (self.vol[i] - prev[i]) * t;
-            let (vm, vmu, vs) = (v(0), v(1), v(2));
-            let (wl, wr) = self.reverb.run(msl[k] * vmu + (fsl[k] + asl[k]) * vs, msr[k] * vmu + (fsr[k] + asr[k]) * vs);
-            let l = (ml[k] * vmu + (fl[k] + al[k]) * vs + wl) * vm;
-            let r = (mr[k] * vmu + (fr[k] + ar[k]) * vs + wr) * vm;
+            let d = prev_duck + (self.duck - prev_duck) * t;
+            let (vm, vmu, vs) = (v(0), v(1) * d, v(2));
+            let va = vs * d;
+            let (wl, wr) = self.reverb.run(msl[k] * vmu + fsl[k] * vs + asl[k] * va, msr[k] * vmu + fsr[k] * vs + asr[k] * va);
+            let l = (ml[k] * vmu + fl[k] * vs + al[k] * va + wl) * vm;
+            let r = (mr[k] * vmu + fr[k] * vs + ar[k] * va + wr) * vm;
             let (l, r) = (self.dc[0].run(l), self.dc[1].run(r));
             let (l, r) = self.limiter.run(l, r);
             out[2 * k] = l;

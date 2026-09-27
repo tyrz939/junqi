@@ -9,7 +9,14 @@ publish.workspace = true
 
 [dependencies]
 jane-core.workspace = true
+jane-data.workspace = true
 jane-sim.workspace = true
+# The wire (PORT.md §3.5): postcard, the same canonical encoding as the save, derived by serde.
+postcard.workspace = true
+serde.workspace = true
+
+[dev-dependencies]
+jane-bot.workspace = true
 
 [lints]
 workspace = true

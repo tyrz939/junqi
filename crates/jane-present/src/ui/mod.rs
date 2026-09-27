@@ -11,6 +11,7 @@ pub mod core;
 pub mod dialogue;
 pub mod hud;
 pub mod icons;
+pub mod lan;
 pub mod loading;
 pub mod map;
 pub mod menus;

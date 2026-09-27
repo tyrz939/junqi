@@ -10,7 +10,9 @@ use jane_present::text::Tone;
 use jane_present::ui::core::{DragPayload, UiInput};
 use jane_present::ui::dialogue::{self, DialogueBox};
 use jane_present::ui::hud::{self, HudCtx};
+use jane_present::ui::lan::{self, HostInfo, HostState, JoinInfo, JoinState, LanRow};
 use jane_present::ui::menus::{self, MenuState, PauseInfo};
+use jane_present::ui::title::{self, TitleInfo, TitleState};
 use jane_present::ui::window::{self, WindowState};
 use jane_present::ui::{Ui, UiOut};
 use jane_present::view::{DialogueView, StatusChip, TargetFrame, ViewBuffers};
@@ -21,7 +23,8 @@ use jane_sim::tuning::MAX_PLAYERS;
 use jane_sim::{Seat, Sim};
 
 /// The screens, by name.
-pub const SCREENS: [&str; 7] = ["hud", "dead", "choice", "tooltip", "popover", "drag", "pause"];
+pub const SCREENS: [&str; 10] =
+    ["hud", "dead", "choice", "tooltip", "popover", "drag", "pause", "host", "join", "table"];
 
 struct Rig {
     sim: Sim,
@@ -218,13 +221,68 @@ pub fn run(dir: &Path, names: &[String]) -> Result<(), String> {
     }
     if want("pause") {
         let mut st = MenuState::default();
-        let info = PauseInfo { can_save: true, when: "Day 1, 18:42", zone: "The Lowfields", company: false };
+        let info = PauseInfo {
+            can_save: true,
+            when: "Day 1, 18:42",
+            zone: "The Lowfields",
+            company: false,
+            lan: Some(("Open to LAN", true)),
+            guest: false,
+        };
         rig.frame(at((384, 180)), 5000, |ui, _, _| {
             hud::draw(ui, &b, cx);
             ui.interactive = true;
             menus::pause(ui, &mut st, &info);
         });
         rig.write(dir, "pause")?;
+    }
+    // Playing together (P8): the title's Host and Join, and the table on the HUD.
+    let slots = [Some("The Lowfields · Day 2, 21:00".to_owned()), None, Some("Julie's house · Day 5, 08:00".into())];
+    if want("host") {
+        let mut t = TitleState { name: "Tess".into(), ..TitleState::default() };
+        let mut st = HostState { port_text: "7777".into(), ..HostState::default() };
+        st.choice.slot = Some(0);
+        st.choice.seats = 3;
+        for k in 0..2 {
+            rig.frame(at((330, 262)), 6000 + k, |ui, _, _| {
+                ui.interactive = false;
+                title::draw(ui, &mut t, TitleInfo { has_save: true });
+                ui.interactive = true;
+                lan::host(ui, &mut st, &HostInfo { slots: &slots, port: 7777 });
+            });
+        }
+        rig.write(dir, "host")?;
+    }
+    if want("join") {
+        let mut t = TitleState::default();
+        let mut st = JoinState { addr: "192.168.1.20".into(), ..JoinState::default() };
+        let found = [
+            LanRow { name: "Tess's world".into(), addr: "192.168.1.20:7777".into(), seats: "2 of 4".into(), ok: true },
+            LanRow {
+                name: "Jane's world (served)".into(),
+                addr: "192.168.1.31:7777".into(),
+                seats: "1 of 4".into(),
+                ok: true,
+            },
+            LanRow { name: "Mo's world".into(), addr: "192.168.1.44:7777".into(), seats: "4 of 4".into(), ok: false },
+        ];
+        let refused = "Refused: the host's content is a3516ef3a75d37a1, this build's is a3516ef3a75de90c: both must run the same data";
+        let info = JoinInfo { found: &found, status: Some((refused, true)), joining: false };
+        rig.frame(at((300, 150)), 7000, |ui, _, _| {
+            ui.interactive = false;
+            title::draw(ui, &mut t, TitleInfo { has_save: true });
+            ui.interactive = true;
+            lan::join(ui, &mut st, &info);
+        });
+        rig.write(dir, "join")?;
+    }
+    if want("table") {
+        rig.frame(UiInput::default(), 8000, |ui, b, _| {
+            hud::draw(ui, b, cx);
+            lan::table(ui, 0b0111, 1, false, true);
+            lan::stall(ui, 0b0100, 3400, false);
+        });
+        rig.write(dir, "table")?;
     }
     Ok(())
 }

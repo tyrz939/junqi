@@ -180,6 +180,19 @@
     { "wave": "square", "pitch": [659.26, 642], "duty": 0.42, "attack_ms": 220, "hold_ms": 860, "decay_ms": 700, "gain": 0.6, "filter": { "kind": "lp", "cutoff": [1700, 1200], "q": 0.8 } },
     { "wave": "pink", "pitch": [1500, 1500], "attack_ms": 150, "hold_ms": 900, "decay_ms": 600, "gain": 0.12, "filter": { "kind": "bp", "cutoff": [1600, 1200], "q": 1.2 } }
   ]},
+  { "name": "dog_bark", "peak": 0.42, "variants": 3, "send": 0.35, "layers": [
+    { "wave": "saw", "pitch": [520, 360], "attack_ms": 6, "decay_ms": 150, "notes": [0, -1], "every_ms": 260, "filter": { "kind": "bp", "cutoff": [1300, 800], "q": 1.3 } },
+    { "wave": "pink", "pitch": [900, 900], "attack_ms": 4, "decay_ms": 110, "gain": 0.5, "notes": [0, 0], "every_ms": 260, "filter": { "kind": "bp", "cutoff": [1500, 700], "q": 1.0 } },
+    { "wave": "sine", "pitch": [240, 150], "attack_ms": 4, "decay_ms": 110, "gain": 0.4, "notes": [0, -1], "every_ms": 260 }
+  ]},
+  { "name": "dog_whine", "peak": 0.26, "send": 0.35, "layers": [
+    { "wave": "tri", "pitch": [880, 1180], "pitch_ms": 420, "attack_ms": 60, "hold_ms": 250, "decay_ms": 380, "vibrato": [6.5, 0.4], "filter": { "kind": "lp", "cutoff": [2400, 1600], "q": 0.8 } },
+    { "wave": "pink", "pitch": [1400, 1400], "attack_ms": 60, "hold_ms": 200, "decay_ms": 300, "gain": 0.12, "filter": { "kind": "bp", "cutoff": [1400, 1800], "q": 2.0 } }
+  ]},
+  { "name": "dog_pant", "peak": 0.2, "variants": 2, "send": 0.12, "layers": [
+    { "wave": "pink", "pitch": [1800, 1800], "attack_ms": 25, "hold_ms": 40, "decay_ms": 110, "notes": [0, 0, 0, 0, 0, 0], "every_ms": 190, "filter": { "kind": "bp", "cutoff": [1900, 1500], "q": 1.4 } },
+    { "wave": "pink", "pitch": [900, 900], "attack_ms": 25, "hold_ms": 30, "decay_ms": 90, "delay_ms": 95, "gain": 0.6, "notes": [0, 0, 0, 0, 0, 0], "every_ms": 190, "filter": { "kind": "bp", "cutoff": [1000, 800], "q": 1.4 } }
+  ]},
   { "name": "ui_move", "peak": 0.1, "send": 0.05, "layers": [
     { "wave": "fm", "pitch": [1250, 1250], "ratio": 2.0, "duty": 0.8, "attack_ms": 1, "decay_ms": 45 }
   ]},

@@ -13,6 +13,7 @@ use std::sync::mpsc::{Receiver, channel};
 use std::time::{Duration, Instant};
 
 use jane_core::ZoneId;
+use jane_net::Session;
 use jane_present::input::{
     Context, Edge, GameAction, Input, KeySet, Mode, UiAction, canvas_size, canvas_to_world, pick, sc, world_to_canvas,
 };
@@ -23,6 +24,7 @@ use jane_present::ui::controls::{self, ControlsInfo, ControlsState};
 use jane_present::ui::core::{AppIntent, PadPress, UiInput, UiOut};
 use jane_present::ui::dialogue::{self, DialogueBox};
 use jane_present::ui::hud::{self, HudCtx};
+use jane_present::ui::lan::{self as lan_ui, HostChoice, HostInfo, JoinInfo};
 use jane_present::ui::loading::{self, Card, LoadingState};
 use jane_present::ui::menus::{self, MenuState, PauseInfo, SlotMode, SlotRow};
 use jane_present::ui::perf::{self, FrameInfo, PerfLog, PerfView, SimInfo, TopLine};
@@ -32,13 +34,13 @@ use jane_present::ui::world::{self, WorldDebug};
 use jane_present::view::ViewBuffers;
 use jane_present::{Frame, Present};
 use jane_sim::event::Event;
-use jane_sim::input::{Command, InputFrame, StampedCommand, StepInput};
-use jane_sim::tuning::MAX_PLAYERS;
+use jane_sim::input::{Command, InputFrame};
 use jane_sim::{Blueprints, Seat, Sim};
 
 use crate::config::Config;
 use crate::devices::{Devices, Happened};
 use crate::game::Screen;
+use crate::lan::Lan;
 use crate::saves::{self, Dirs, SLOTS};
 use crate::script::{Script, Step};
 use crate::{Args, shot};
@@ -47,8 +49,8 @@ use crate::{Args, shot};
 const TICK: u64 = 1_000_000_000;
 /// At most this many ticks a frame (at 1x); beyond it the time is dropped (and counted).
 const MAX_CATCH_UP: u64 = 5;
-/// The seat this window plays.
-const ME: Seat = Seat(0);
+/// A guest this many frames behind the host steps more than one a tick to catch up.
+const BEHIND: u32 = 2;
 /// The clear behind the title and the loading screen.
 const DARK: u32 = 0xff10_1014;
 
@@ -61,7 +63,14 @@ enum Loaded {
 /// Where the player is.
 enum Scene {
     Title,
-    Loading { rx: Receiver<Loaded>, st: LoadingState, sim: Option<Box<Sim>>, slot: Option<u8> },
+    /// `host`: the world opens to the LAN once built (the title's Host).
+    Loading {
+        rx: Receiver<Loaded>,
+        st: LoadingState,
+        sim: Option<Box<Sim>>,
+        slot: Option<u8>,
+        host: Option<HostChoice>,
+    },
     Play,
 }
 
@@ -73,6 +82,9 @@ enum Menu {
     /// A question the app asked: quit to title and lose what is unsaved.
     ConfirmTitle,
     Controls,
+    /// The title's Host and Join (P8).
+    Host,
+    Join,
 }
 
 /// How fast the world runs (F7, F8) and whether it is held for stepping (F6).
@@ -94,13 +106,14 @@ struct App<'a> {
     bufs: ViewBuffers,
     input: Input,
     scene: Scene,
-    sim: Option<Box<Sim>>,
+    /// The world and how it is stepped: alone, hosting or joined (`jane_net::Session`).
+    session: Option<Session>,
     title: TitleState,
     menus: Vec<Menu>,
     menu_state: MenuState,
     dialogue: DialogueBox,
-    pending: Vec<StampedCommand>,
-    seq: u16,
+    /// This seat's presses, for the next step.
+    pending: Vec<Command>,
     camera: (i32, i32),
     speed: Speed,
     /// Presenter ticks since the app started (title included): what scripts count.
@@ -140,34 +153,23 @@ struct App<'a> {
     /// Where the reticle is drawn this frame.
     reticle: Option<(i32, i32)>,
     controls: ControlsState,
+    /// Playing together: the Host and Join screens, a join under way, the table.
+    lan: Lan,
+    /// What the bot heard of the steps since it last acted.
+    bot_heard: Vec<Event>,
     /// The sound device and the cue table that drives it (PRESENTATION.md §5).
     sound: crate::audio::Sound,
     soundtrack: jane_present::audio::Soundtrack,
 }
 
-/// The sim as the bot's host, keeping what it drains for the presenter too.
-struct Rec<'a> {
-    sim: &'a mut Sim,
-    events: &'a mut Vec<Event>,
+/// The world, if there is one.
+fn sim_of(s: Option<&Session>) -> Option<&Sim> {
+    s.and_then(Session::sim)
 }
 
-impl jane_bot::Host for Rec<'_> {
-    fn view(&self, seat: Seat) -> Option<jane_sim::View<'_>> {
-        self.sim.view(seat)
-    }
-
-    fn step(&mut self, input: &StepInput<'_>) -> jane_sim::Stepped {
-        self.sim.step(input)
-    }
-
-    fn drain_events(&mut self) -> &[Event] {
-        self.events.extend_from_slice(self.sim.drain_events());
-        self.events
-    }
-
-    fn sim(&self) -> &Sim {
-        self.sim
-    }
+/// The seat this window plays: seat 0 alone or hosting, the seat the host gave when joined.
+fn me_of(s: Option<&Session>) -> Seat {
+    s.and_then(Session::seat).unwrap_or(Seat::HOST)
 }
 
 pub fn run(
@@ -202,12 +204,11 @@ pub fn run(
         bufs: ViewBuffers::new(),
         input: Input::new(),
         scene: Scene::Title,
-        sim: None,
+        session: None,
         menus: Vec::new(),
         menu_state: MenuState::default(),
         dialogue: DialogueBox::default(),
         pending: Vec::new(),
-        seq: 0,
         camera: (0, 0),
         speed: Speed { quarters: 4, held: false, step: false },
         ticks: 0,
@@ -231,6 +232,8 @@ pub fn run(
         console: Console::default(),
         reticle: None,
         controls: ControlsState::default(),
+        lan: Lan::new(args.port),
+        bot_heard: Vec::new(),
         sound,
         soundtrack: jane_present::audio::Soundtrack::new(),
     };
@@ -238,7 +241,18 @@ pub fn run(
     app.input.assist = app.config.assist();
     app.read_slots();
     if args.new {
-        app.new_game(args.name.clone(), args.seed);
+        let host = args.host.then_some(HostChoice {
+            slot: None,
+            open: true,
+            seats: args.seats,
+            delay: args.delay,
+            wait: args.wait,
+            port: args.port,
+        });
+        app.new_game(args.name.clone(), args.seed, host);
+    } else if let Some(addr) = &args.join {
+        app.intent(AppIntent::JoinMenu);
+        app.intent(AppIntent::Join(addr.clone()));
     }
     let mut script = match &args.script {
         Some(s) => Some(Script::parse(s)?),
@@ -341,17 +355,17 @@ pub fn run(
                 }
             }
         }
-        let feet =
-            app.sim.as_ref().and_then(|s| s.view(ME)).map(|v| world_to_canvas(v.body().pos, app.camera)).filter(
-                |&(x, y)| (0.0..f32::from(canvas_px.0)).contains(&x) && (0.0..f32::from(canvas_px.1)).contains(&y),
-            );
+        let feet = sim_of(app.session.as_ref())
+            .and_then(|s| s.view(me_of(app.session.as_ref())))
+            .map(|v| world_to_canvas(v.body().pos, app.camera))
+            .filter(|&(x, y)| (0.0..f32::from(canvas_px.0)).contains(&x) && (0.0..f32::from(canvas_px.1)).contains(&y));
         let held = app.input.sample(&devices.state, &Context { mode, feet });
         let cursor = devices.state.mouse.pos.filter(|_| app.input.aiming_with_mouse());
         // The reticle: where the assist will send a bolt, at the cursor's distance from her chest.
         app.reticle = None;
         if mode == Mode::Play
             && let (Some(c), Some(f), Some(aim)) = (cursor, feet, held.aim)
-            && let Some(v) = app.sim.as_ref().and_then(|s| s.view(ME))
+            && let Some(v) = sim_of(app.session.as_ref()).and_then(|s| s.view(me_of(app.session.as_ref())))
         {
             let spell = v.me().bar.iter().find_map(|b| match b {
                 Some(jane_data::BarSlot::Spell(s)) => Some(*s),
@@ -406,6 +420,8 @@ pub fn run(
         }
         let t_ticks = Instant::now();
         app.stages = [0; 5];
+        // The network, before the ticks and after: what came, and what is due to go.
+        app.net();
         for _ in 0..due {
             events.clear();
             app.tick(held, &mut events);
@@ -413,12 +429,14 @@ pub fn run(
             app.ticks += 1;
             title_clock.4 += 1;
         }
+        app.net();
+        app.table_news();
         let tick_time = t_ticks.elapsed();
 
         // One frame at alpha: the world, then the UI over it.
         let t_draw = Instant::now();
         let alpha = (acc * 256 / TICK).min(255) as u8;
-        if matches!(app.scene, Scene::Play) && app.sim.is_some() {
+        if matches!(app.scene, Scene::Play) && sim_of(app.session.as_ref()).is_some() {
             app.camera = app.present.draw(alpha, canvas_px).camera;
         } else {
             blank(app.present.frame_mut(), canvas_px);
@@ -472,7 +490,7 @@ pub fn run(
         let (w, h) = save_shot(screen, &mut shot_px, path)?;
         println!("jane-app: shot {path} ({w} x {h})");
     }
-    if let Some(sim) = &app.sim {
+    if let Some(sim) = sim_of(app.session.as_ref()) {
         println!(
             "jane-app: seed {}: {} ticks, {} dropped, frame {}, hash {:016x}",
             sim.state().seed,
@@ -482,6 +500,11 @@ pub fn run(
             sim.hash()
         );
     }
+    if let Some(Session::Host(h)) = &app.session {
+        let c = h.checks();
+        println!("jane-app: hash checks with guests: {} agreed, {} differed, last at frame {}", c.ok, c.bad, c.last);
+    }
+    app.end_session();
     Ok(())
 }
 
@@ -536,7 +559,7 @@ impl App<'_> {
     fn tick(&mut self, held: InputFrame, events: &mut Vec<Event>) {
         match &mut self.scene {
             Scene::Title => self.soundtrack.title(&mut self.sound),
-            Scene::Loading { rx, st, sim, slot } => {
+            Scene::Loading { rx, st, sim, slot, host } => {
                 self.soundtrack.title(&mut self.sound);
                 while let Ok(m) = rx.try_recv() {
                     match m {
@@ -556,44 +579,58 @@ impl App<'_> {
                         }
                     }
                 }
-                if st.done(self.ticks as u32) && sim.is_some() {
-                    let loaded_slot = *slot;
-                    self.sim = sim.take();
-                    if let Some(s) = &self.sim {
-                        self.sound.set_seed(s.state().seed);
-                    }
-                    self.scene = Scene::Play;
-                    self.bufs = ViewBuffers::new();
-                    self.dialogue.reset();
-                    self.menus.clear();
-                    self.pending.clear();
+                if st.done(self.ticks as u32)
+                    && let Some(s) = sim.take()
+                {
+                    let (loaded_slot, host) = (*slot, *host);
+                    let session = self.open_session(*s, host);
+                    self.begin_play(session);
                     if loaded_slot.is_some() {
                         self.slot = loaded_slot;
                     }
                 }
             }
             Scene::Play => {
-                let held_still = self.world_held();
-                let Some(sim) = self.sim.as_mut() else { return };
-                if !held_still {
+                // Alone, a menu or F6 holds the world; with company (or open to it) nothing
+                // holds, and her stick is idle while her menu is up (ENGINE.md §4).
+                let paused = self.world_held();
+                let now = self.started.elapsed().as_millis() as u64;
+                let me = me_of(self.session.as_ref());
+                let Some(session) = self.session.as_mut() else { return };
+                if !(paused && session.pauses()) {
                     let t = Instant::now();
-                    if let Some(bot) = &mut self.bot {
-                        bot.step(&mut Rec { sim, events });
-                    } else {
-                        let mut frames = [InputFrame::IDLE; MAX_PLAYERS];
-                        frames[ME.index()] = held;
-                        self.pending.sort_by_key(|c| (c.seat, c.seq));
-                        sim.step(&StepInput { frames, commands: &self.pending });
-                        events.extend_from_slice(sim.drain_events());
+                    // A guest behind the host steps what it has in hand to catch up.
+                    let mut budget = 1 + session.backlog().saturating_sub(BEHIND).min(5);
+                    while budget > 0 {
+                        budget -= 1;
+                        let frame = match &mut self.bot {
+                            Some(bot) => {
+                                bot.seat = me;
+                                let v = session.sim().and_then(|s| s.view(me));
+                                let act = bot.act(v.as_ref(), &self.bot_heard);
+                                self.pending.extend(act.cmds);
+                                act.frame
+                            }
+                            None => held,
+                        };
+                        if session.try_step(now, frame, &mut self.pending, paused).is_none() {
+                            break;
+                        }
+                        events.extend_from_slice(session.events());
+                        self.bot_heard.clear();
+                        self.bot_heard.extend_from_slice(session.events());
+                        self.speed.step = false;
                     }
                     let us = t.elapsed().as_micros() as u32;
-                    self.pending.clear();
                     self.stages[0] += us;
                     self.perf.tick(us, events.len());
-                    self.speed.step = false;
                 }
+                let rested = session.take_rested();
+                // Alone and held, the music steps back; with company the world goes on, and so
+                // does its sound (PRESENTATION.md §5.5).
+                self.sound.set_held(paused && session.pauses());
                 let t = Instant::now();
-                if let Some(v) = sim.view(ME) {
+                if let Some(v) = session.sim().and_then(|s| s.view(me)) {
                     self.present.tick(&v, events);
                     self.bufs.tick(&v, events);
                     self.soundtrack.tick(&v, events, &mut self.sound);
@@ -602,9 +639,11 @@ impl App<'_> {
                         self.bot = None;
                         self.bot_until_talk = false;
                     }
-                    if events.iter().any(|e| matches!(e.kind, jane_sim::EventKind::Rest)) {
-                        self.autosave();
-                    }
+                }
+                // Anyone at the table rested: the world is written where it lives (a guest's
+                // rest saves the host's world; a guest writes nothing).
+                if rested {
+                    self.autosave();
                 }
             }
         }
@@ -629,9 +668,8 @@ impl App<'_> {
                     GameAction::Bar(slot) => Command::Bar {
                         slot,
                         on: cursor.and_then(|c| {
-                            self.sim
-                                .as_ref()
-                                .and_then(|s| s.view(ME))
+                            sim_of(self.session.as_ref())
+                                .and_then(|s| s.view(me_of(self.session.as_ref())))
                                 .map(|v| pick(&v, canvas_to_world(c, self.camera)))
                         }),
                     },
@@ -674,9 +712,11 @@ impl App<'_> {
                 UiAction::QuickSave => self.save_to(self.slot.unwrap_or(0)),
                 UiAction::QuickLoad => {
                     if let Some(n) = self.slot.or_else(|| saves::latest(&self.dirs)) {
-                        self.load(n);
+                        self.load(n, None);
                     }
                 }
+                // Speed and stepping are a lone player's: a table keeps the host's time.
+                UiAction::Step | UiAction::Slow | UiAction::Fast if !self.alone() => {}
                 UiAction::Step => {
                     if self.speed.held {
                         self.speed.step = true;
@@ -693,17 +733,24 @@ impl App<'_> {
                 UiAction::Grid => self.world_dbg.on = !self.world_dbg.on,
                 UiAction::Slow => self.speed.quarters = if self.speed.quarters == 1 { 4 } else { 1 },
                 UiAction::Fast => self.speed.quarters = if self.speed.quarters == 16 { 4 } else { 16 },
-                _ => actions.push(a),
+                _ => {
+                    // A step through a menu is heard; in play the same keys walk.
+                    if matches!(a, UiAction::Up | UiAction::Down | UiAction::Left | UiAction::Right)
+                        && self.mode(false) != Mode::Play
+                    {
+                        self.soundtrack.ui(jane_present::audio::SfxKind::UiMove, &mut self.sound);
+                    }
+                    actions.push(a);
+                }
             },
         }
     }
 
     fn command(&mut self, cmd: Command) {
-        if self.sim.is_none() {
+        if sim_of(self.session.as_ref()).is_none() {
             return;
         }
-        self.seq = self.seq.wrapping_add(1);
-        self.pending.push(StampedCommand { seat: Some(ME), seq: self.seq, cmd });
+        self.pending.push(cmd);
     }
 
     fn intent(&mut self, i: AppIntent) {
@@ -715,14 +762,14 @@ impl App<'_> {
                 self.config.name.clone_from(&name);
                 let _ = self.config.save(&self.dirs);
                 let seed = if self.args.seed_given { self.args.seed } else { crate::clock_seed() };
-                self.new_game(name, seed);
+                self.new_game(name, seed, None);
             }
             AppIntent::Continue => {
                 if let Some(n) = saves::latest(&self.dirs) {
-                    self.load(n);
+                    self.load(n, None);
                 }
             }
-            AppIntent::Load(n) => self.load(n),
+            AppIntent::Load(n) => self.load(n, None),
             AppIntent::Save(n) => {
                 self.save_to(n);
                 self.menus.retain(|m| !matches!(m, Menu::Slots(_)));
@@ -757,9 +804,55 @@ impl App<'_> {
             AppIntent::OpenWindow(tab) => self.window_key(usize::from(tab)),
             AppIntent::CloseWindow => self.win_open = false,
             AppIntent::Back => {
+                if self.menus.last() == Some(&Menu::Join) {
+                    if self.lan.joining.is_some() {
+                        // Back while knocking is Cancel; the screen stays.
+                        self.lan.cancel_join();
+                        self.lan.status = Some(("Cancelled".to_owned(), false));
+                        return;
+                    }
+                    self.lan.close_finder();
+                }
                 self.menus.pop();
                 self.menu_state = MenuState::default();
             }
+            AppIntent::HostMenu => {
+                self.read_slots();
+                self.lan.host_form.choice.seats = self.args.seats;
+                self.lan.host_form.choice.delay = self.args.delay;
+                self.lan.host_form.choice.wait = self.args.wait;
+                self.lan.host_form.choice.port = self.lan.port;
+                self.lan.host_form.port_text = self.lan.port.to_string();
+                self.menus.push(Menu::Host);
+            }
+            AppIntent::JoinMenu => {
+                self.lan.open_finder(self.config.last_host.as_deref());
+                self.menus.push(Menu::Join);
+            }
+            AppIntent::Host(choice) => {
+                self.menus.clear();
+                self.lan.port = choice.port;
+                match choice.slot {
+                    Some(n) => self.load(n, Some(choice)),
+                    None => {
+                        let name = if self.title.name.trim().is_empty() {
+                            self.args.name.clone()
+                        } else {
+                            self.title.name.clone()
+                        };
+                        let seed = if self.args.seed_given { self.args.seed } else { crate::clock_seed() };
+                        self.new_game(name, seed, Some(choice));
+                    }
+                }
+            }
+            AppIntent::Join(addr) => {
+                let token = crate::lan::token(self.args.token, &mut self.config, &self.dirs);
+                self.config.last_host = Some(addr.clone());
+                let _ = self.config.save(&self.dirs);
+                let now = self.started.elapsed().as_millis() as u64;
+                self.lan.start_join(&addr, token, now);
+            }
+            AppIntent::OpenToLan => self.open_to_lan(),
             _ => {}
         }
     }
@@ -785,7 +878,8 @@ impl App<'_> {
     }
 
     /// New Game: the county built on a thread while the loading screen draws its skeleton.
-    fn new_game(&mut self, name: String, seed: u32) {
+    /// `host`: the world is opened to the LAN once built (the title's Host).
+    fn new_game(&mut self, name: String, seed: u32, host: Option<HostChoice>) {
         let (tx, rx) = channel();
         std::thread::spawn(move || {
             if let Ok(s) = jane_world::skeleton::skeleton(seed) {
@@ -799,12 +893,13 @@ impl App<'_> {
             let _ = tx.send(Loaded::Sim(sim));
         });
         let st = LoadingState { card: None, since: self.ticks as u32, built: false, seed, verb: "New Game" };
-        self.scene = Scene::Loading { rx, st, sim: None, slot: None };
-        self.sim = None;
+        self.end_session();
+        self.scene = Scene::Loading { rx, st, sim: None, slot: None, host };
     }
 
     /// Load slot `n`: the county rebuilt from its seed on a thread, the save's deltas over it.
-    fn load(&mut self, n: u8) {
+    /// `host`: the loaded world is opened to the LAN (the title's Host on a slot).
+    fn load(&mut self, n: u8, host: Option<HostChoice>) {
         let bytes = match saves::read(&self.dirs, n) {
             Ok(b) => b,
             Err(e) => {
@@ -833,24 +928,29 @@ impl App<'_> {
         });
         let st =
             LoadingState { card: None, since: self.ticks as u32, built: false, seed: seed.unwrap_or(0), verb: "Load" };
-        self.scene = Scene::Loading { rx, st, sim: None, slot: Some(n) };
-        self.sim = None;
+        self.end_session();
+        self.scene = Scene::Loading { rx, st, sim: None, slot: Some(n), host };
         self.menus.clear();
         self.config.last_slot = Some(n);
         let _ = self.config.save(&self.dirs);
     }
 
     fn save_to(&mut self, n: u8) {
-        let Some(sim) = &self.sim else { return };
+        if matches!(self.session, Some(Session::Guest(_))) {
+            self.bufs.push_toast("The world is the host's to save", jane_present::text::Tone::Refused);
+            return;
+        }
+        let Some(sim) = sim_of(self.session.as_ref()) else { return };
         if !self.bufs.me.can_save {
             self.bufs.push_toast("I can only save by a bed or a fire", jane_present::text::Tone::Refused);
             return;
         }
-        match saves::write(&self.dirs, n, &sim.save()) {
+        let (bytes, seed) = (sim.save(), sim.state().seed);
+        match saves::write(&self.dirs, n, &bytes) {
             Ok(()) => {
                 self.slot = Some(n);
                 self.config.last_slot = Some(n);
-                self.config.set_slot_seed(n, sim.state().seed);
+                self.config.set_slot_seed(n, seed);
                 let _ = self.config.save(&self.dirs);
                 self.bufs.push_toast(&format!("Saved to slot {}", n + 1), jane_present::text::Tone::Good);
                 self.soundtrack.ui(jane_present::audio::SfxKind::Save, &mut self.sound);
@@ -862,11 +962,13 @@ impl App<'_> {
 
     /// She rested: the game writes the slot it last used (§3.2 `Event::Rest`).
     fn autosave(&mut self) {
-        let Some(sim) = &self.sim else { return };
+        if matches!(self.session, Some(Session::Guest(_))) {
+            return;
+        }
+        let Some((bytes, seed)) = sim_of(self.session.as_ref()).map(|s| (s.save(), s.state().seed)) else { return };
         let n = self.slot.unwrap_or(0);
-        if saves::write(&self.dirs, n, &sim.save()).is_ok() {
+        if saves::write(&self.dirs, n, &bytes).is_ok() {
             self.slot = Some(n);
-            let seed = sim.state().seed;
             self.config.set_slot_seed(n, seed);
             let _ = self.config.save(&self.dirs);
         }
@@ -875,6 +977,156 @@ impl App<'_> {
     fn say(&mut self, s: &str) {
         eprintln!("jane-app: {s}");
         self.bufs.push_toast(s, jane_present::text::Tone::Refused);
+    }
+
+    // --- playing together (ARCHITECTURE.md §7) ---------------------------------------------
+
+    /// Alone: pause holds the world, and the speed keys work.
+    fn alone(&self) -> bool {
+        self.session.as_ref().is_none_or(Session::pauses)
+    }
+
+    /// The session a built or loaded world is played through: alone, or hosted on the LAN.
+    /// A port that cannot be listened on leaves her alone, saying why.
+    fn open_session(&mut self, sim: Sim, host: Option<HostChoice>) -> Session {
+        let Some(choice) = host else { return Session::local(sim) };
+        let cfg = crate::lan::host_config(&sim.state().name, choice);
+        let local = Session::local(sim);
+        match local.open_to_lan(cfg, self.lan.port) {
+            Ok(mut s) => {
+                if let Session::Host(h) = &mut s {
+                    h.set_open(choice.open);
+                }
+                println!("jane-app: hosting on port {}", self.lan.port);
+                s
+            }
+            Err((s, e)) => {
+                self.say(&format!("Could not host on port {}: {e}", self.lan.port));
+                s
+            }
+        }
+    }
+
+    /// Into play with `session`: the buffers fresh, the menus gone.
+    fn begin_play(&mut self, session: Session) {
+        self.end_session();
+        // The county's music is the county's seed's, on every machine at the table.
+        if let Some(sim) = session.sim() {
+            self.sound.set_seed(sim.state().seed);
+        }
+        self.session = Some(session);
+        self.scene = Scene::Play;
+        self.bufs = ViewBuffers::new();
+        self.dialogue.reset();
+        self.menus.clear();
+        self.pending.clear();
+        self.bot_heard.clear();
+        self.lan.seats = 0;
+        self.lan.stall = None;
+        if let Some(Session::Host(_)) = &self.session {
+            let s = format!("Open to the LAN on port {}", self.lan.port);
+            self.bufs.push_toast(&s, jane_present::text::Tone::Good);
+        }
+    }
+
+    /// Leave the table (a guest says goodbye, a host closes it) and drop the world.
+    fn end_session(&mut self) {
+        if let Some(mut s) = self.session.take() {
+            s.close();
+            // Let the goodbye go before the socket is dropped.
+            s.poll(self.started.elapsed().as_millis() as u64);
+        }
+        self.lan.stall = None;
+    }
+
+    /// The pause menu's "Open to LAN": the world she is playing alone becomes the host's.
+    fn open_to_lan(&mut self) {
+        if !matches!(self.session, Some(Session::Local(_))) {
+            return;
+        }
+        let Some(s) = self.session.take() else { return };
+        let choice = HostChoice {
+            seats: self.args.seats,
+            delay: self.args.delay,
+            wait: self.args.wait,
+            ..HostChoice::default()
+        };
+        let name = s.sim().map_or_else(|| self.args.name.clone(), |x| x.state().name.clone());
+        match s.open_to_lan(crate::lan::host_config(&name, choice), self.lan.port) {
+            Ok(s) => {
+                self.session = Some(s);
+                self.lan.seats = 0;
+                self.menus.clear();
+                let line = format!("Open to the LAN on port {}", self.lan.port);
+                println!("jane-app: {line}");
+                self.bufs.push_toast(&line, jane_present::text::Tone::Good);
+            }
+            Err((s, e)) => {
+                self.session = Some(s);
+                self.say(&format!("Could not host on port {}: {e}", self.lan.port));
+            }
+        }
+    }
+
+    /// The network, once or twice a frame: the session's traffic, the Join screen's list and a
+    /// join under way (into play when the host welcomes it).
+    fn net(&mut self) {
+        let now = self.started.elapsed().as_millis() as u64;
+        if let Some(s) = &mut self.session {
+            s.poll(now);
+        }
+        if self.menus.contains(&Menu::Join) {
+            self.lan.poll_finder(self.ticks);
+        }
+        if let Some(s) = self.lan.poll_join(now) {
+            let seat = s.seat().map_or(0, |x| x.0);
+            println!("jane-app: joined in seat {seat}");
+            self.lan.close_finder();
+            self.begin_play(s);
+        }
+    }
+
+    /// What the table's changes say: the coats that sat down and got up, whom it waits for, a
+    /// desync's report, and a host that went.
+    fn table_news(&mut self) {
+        let Some(s) = &mut self.session else { return };
+        if s.pauses() {
+            self.lan.stall = None;
+            return;
+        }
+        let st = s.status();
+        self.lan.stall = st.stall;
+        let mut says = Vec::new();
+        if let Some(sim) = s.sim() {
+            self.lan.seat_changes(sim, |line, good| says.push((line, good)));
+        }
+        for (line, good) in says {
+            let tone = if good { jane_present::text::Tone::Good } else { jane_present::text::Tone::Plain };
+            self.bufs.push_toast(&line, tone);
+        }
+        for n in &st.notes {
+            match n {
+                jane_net::Note::Dropped { .. } | jane_net::Note::Refused { .. } | jane_net::Note::Desync(_) => {
+                    println!("jane-app: {n}");
+                    self.console.say(&n.to_string(), LineKind::Out);
+                }
+                _ => {}
+            }
+        }
+        if let Some(r) = &st.desync {
+            self.bufs.push_toast("Our worlds parted; the host set them right", jane_present::text::Tone::Refused);
+            eprintln!("jane-app: {r}");
+            self.console.say(&r.to_string(), LineKind::Error);
+        }
+        if let Some(why) = st.ended {
+            // The host went: the table is gone, and so is her world (it was the host's).
+            self.end_session();
+            self.scene = Scene::Title;
+            self.menus.clear();
+            self.read_slots();
+            self.note = Some((why.clone(), self.ticks as u32));
+            self.say(&format!("The table is gone: {why}"));
+        }
     }
 
     /// The UI's layers, bottom to top; only the top one answers.
@@ -893,7 +1145,7 @@ impl App<'_> {
             }
             Scene::Play => {
                 if self.world_dbg.on
-                    && let Some(v) = self.sim.as_ref().and_then(|s| s.view(ME))
+                    && let Some(v) = sim_of(self.session.as_ref()).and_then(|s| s.view(me_of(self.session.as_ref())))
                 {
                     self.ui.interactive = false;
                     world::draw(&mut self.ui, &mut self.world_dbg, &v, &self.present, self.present.frame());
@@ -901,9 +1153,21 @@ impl App<'_> {
                 let top_is_hud = self.menus.is_empty() && self.bufs.dialogue.is_none();
                 self.ui.interactive = top_is_hud;
                 hud::draw(&mut self.ui, &self.bufs, cx);
+                // At a table: who sits at it, and whom it waits for.
+                if let Some(sess) = self.session.as_ref().filter(|s| !s.pauses()) {
+                    let me = me_of(self.session.as_ref());
+                    let hosting = matches!(sess, Session::Host(_));
+                    let chips = !self.bufs.hud.statuses.is_empty();
+                    if !self.win_open {
+                        lan_ui::table(&mut self.ui, self.lan.seats, me.0, hosting, chips);
+                    }
+                    if let Some(st) = self.lan.stall {
+                        lan_ui::stall(&mut self.ui, st.seats, st.waited_ms, st.wait);
+                    }
+                }
                 if self.win_open && self.bufs.dialogue.is_none() {
                     self.ui.interactive = self.menus.is_empty();
-                    let v = self.sim.as_ref().and_then(|s| s.view(ME));
+                    let v = sim_of(self.session.as_ref()).and_then(|s| s.view(me_of(self.session.as_ref())));
                     window::draw(&mut self.ui, &mut self.win, &self.bufs, v.as_ref(), cx);
                 }
                 if let Some(d) = &self.bufs.dialogue {
@@ -920,14 +1184,44 @@ impl App<'_> {
             self.ui.interactive = k + 1 == n;
             match m {
                 Menu::Pause => {
-                    let (clock, day) = self.sim.as_ref().map_or((0, 0), |s| (s.state().clock, s.state().day));
+                    let (clock, day) =
+                        sim_of(self.session.as_ref()).map_or((0, 0), |s| (s.state().clock, s.state().day));
                     let mut when = format!("Day {}, ", day + 1);
                     text::clock(clock, &mut when);
                     let zone = self.bufs.hud.zone_name;
-                    let info = PauseInfo { can_save: self.bufs.me.can_save, when: &when, zone, company: false };
+                    // Alone, "Open to LAN"; hosting, where others dial; joined, nothing.
+                    let lan = match &self.session {
+                        Some(Session::Local(_)) => Some(("Open to LAN".to_owned(), true)),
+                        Some(Session::Host(h)) => Some((format!("Hosting on port {}", h.port()), false)),
+                        // The door, the saves and who may sit are the host's.
+                        Some(Session::Guest(_)) => Some(("The host keeps this table".to_owned(), false)),
+                        None => None,
+                    };
+                    let guest = matches!(self.session, Some(Session::Guest(_)));
+                    let info = PauseInfo {
+                        can_save: self.bufs.me.can_save && !guest,
+                        when: &when,
+                        zone,
+                        // Only with someone else actually sitting at the table.
+                        company: !self.alone()
+                            && sim_of(self.session.as_ref()).is_some_and(|s| s.state().party_size() > 1),
+                        lan: lan.as_ref().map(|(l, on)| (l.as_str(), *on)),
+                        guest,
+                    };
                     menus::pause(&mut self.ui, &mut self.menu_state, &info);
                 }
                 Menu::Slots(mode) => menus::slots(&mut self.ui, &mut self.menu_state, mode, &self.slot_rows),
+                Menu::Host => {
+                    let slots: Vec<Option<String>> =
+                        self.slot_rows.iter().map(|r| (!r.empty).then(|| format!("{} · {}", r.zone, r.when))).collect();
+                    let info = HostInfo { slots: &slots, port: self.lan.port };
+                    lan_ui::host(&mut self.ui, &mut self.lan.host_form, &info);
+                }
+                Menu::Join => {
+                    let status = self.lan.status.as_ref().map(|(s, bad)| (s.as_str(), *bad));
+                    let info = JoinInfo { found: &self.lan.found, status, joining: self.lan.joining.is_some() };
+                    lan_ui::join(&mut self.ui, &mut self.lan.join_form, &info);
+                }
                 Menu::Controls => {
                     let backend = self.config.backend.clone().unwrap_or_else(|| "auto".into());
                     let info = ControlsInfo { assist: self.input.assist, backend: &backend, volumes: self.config.volumes() };
@@ -959,7 +1253,7 @@ impl App<'_> {
                         self.menus.pop();
                         if yes {
                             self.menus.clear();
-                            self.sim = None;
+                            self.end_session();
                             self.scene = Scene::Title;
                             self.title.naming = false;
                             self.read_slots();
@@ -980,7 +1274,8 @@ impl App<'_> {
 
     /// A line from the terminal, run.
     fn console_line(&mut self, line: &str) {
-        for r in crate::console::run(line, self.sim.as_deref()) {
+        let me = me_of(self.session.as_ref());
+        for r in crate::console::run(line, sim_of(self.session.as_ref()), me) {
             match r {
                 crate::console::Run::Command(c) => {
                     self.command(c);
@@ -989,10 +1284,10 @@ impl App<'_> {
                 crate::console::Run::Say(s, k) => self.console.say(&s, k),
                 crate::console::Run::Save(n) => {
                     // The terminal saves anywhere: it is a dev's tool.
-                    if let Some(sim) = &self.sim {
-                        match saves::write(&self.dirs, n, &sim.save()) {
+                    if let Some((bytes, seed)) = sim_of(self.session.as_ref()).map(|s| (s.save(), s.state().seed)) {
+                        match saves::write(&self.dirs, n, &bytes) {
                             Ok(()) => {
-                                self.config.set_slot_seed(n, sim.state().seed);
+                                self.config.set_slot_seed(n, seed);
                                 let _ = self.config.save(&self.dirs);
                                 self.console.say(&format!("saved to slot {}", n + 1), LineKind::Good);
                             }
@@ -1001,7 +1296,14 @@ impl App<'_> {
                         self.read_slots();
                     }
                 }
-                crate::console::Run::Load(n) => self.load(n),
+                crate::console::Run::Load(n) => self.load(n, None),
+                crate::console::Run::Seat(seat, cmd) => {
+                    let r = self.session.as_mut().map_or(Err("no world yet"), |s| s.inject(seat, cmd));
+                    match r {
+                        Ok(()) => self.console.say("done", LineKind::Good),
+                        Err(e) => self.console.say(e, LineKind::Error),
+                    }
+                }
                 crate::console::Run::Speed(q) => {
                     self.speed.quarters = q;
                     self.speed.held = false;
@@ -1013,7 +1315,7 @@ impl App<'_> {
                 }
                 crate::console::Run::Title => {
                     self.menus.clear();
-                    self.sim = None;
+                    self.end_session();
                     self.scene = Scene::Title;
                     self.read_slots();
                 }
@@ -1024,7 +1326,7 @@ impl App<'_> {
 
     /// F2 and the top line.
     fn overlays(&mut self, stats: Option<jane_present::FrameStats>) {
-        let (seed, zone, tick, clock) = match &self.sim {
+        let (seed, zone, tick, clock) = match sim_of(self.session.as_ref()) {
             Some(s) => {
                 let st = s.state();
                 let mut c = String::new();
@@ -1033,7 +1335,7 @@ impl App<'_> {
             }
             None => (0, "-", 0, String::new()),
         };
-        if let Some(s) = &self.sim
+        if let Some(s) = sim_of(self.session.as_ref())
             && self.ticks.wrapping_sub(self.hash.1) >= 30
         {
             self.hash = (s.hash(), self.ticks);
@@ -1050,7 +1352,7 @@ impl App<'_> {
             return;
         }
         let mut sim_info = SimInfo::default();
-        if let Some(s) = &self.sim {
+        if let Some(s) = sim_of(self.session.as_ref()) {
             for z in s.state().zones.iter().flatten() {
                 sim_info.units_total += z.units.len() as u32;
                 sim_info.units_awake += z.units.iter().filter(|u| u.awake).count() as u32;

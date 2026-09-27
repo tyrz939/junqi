@@ -23,12 +23,13 @@ jane-art.workspace = true
 jane-present.workspace = true
 jane-audio.workspace = true
 jane-render-soft.workspace = true
+jane-render-gl2 = { workspace = true, optional = true }
 jane-render-wgpu = { workspace = true, optional = true }
 
 [features]
-# PRESENTATION.md §6: the GPU backends for local use (`--backend wgpu`), off by default so CI and a
-# Pi host build with no GPU stack.
-gpu = ["dep:jane-render-wgpu"]
+# PRESENTATION.md §6: the GPU backends for local use (`--backend gl2|wgpu`), off by default so CI and a
+# Pi host build with no GPU stack (gl2 brings SDL2 for its hidden window's context).
+gpu = ["dep:jane-render-gl2", "dep:jane-render-wgpu"]
 
 [lints]
 workspace = true

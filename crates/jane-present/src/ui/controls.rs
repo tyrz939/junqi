@@ -279,13 +279,13 @@ pub fn draw(ui: &mut Ui, st: &mut ControlsState, b: &mut Bindings, info: Control
         "Backend",
         Ink::small(if st.foot == 2 { style::text_bright() } else { style::text() }).shadow(),
     );
-    for (i, label) in ["auto", "soft", "wgpu"].iter().enumerate() {
+    for (i, label) in ["auto", "soft", "gl2", "wgpu"].iter().enumerate() {
         let br = Rect::new(x + 200 + i as i32 * 84, by, 78, 22);
         if ui.button(wid("backend", i as u32), br, label, ButtonKind::Tab { on: info.backend == *label }, true, false) {
             out.backend = Some(label);
         }
     }
-    ui.text(x + 200 + 3 * 84 + 6, by + 6, "next start", Ink::fine(style::quiet()).shadow());
+    ui.text(x + 200 + 4 * 84 + 6, by + 6, "next start", Ink::fine(style::quiet()).shadow());
     let vy = by + lh + VOLUME_ROW_H - lh;
     out.volumes = crate::ui::volume::row(ui, x, vy, info.volumes, (st.foot == 3).then_some(st.vol));
     let ry = vy + lh + 6;

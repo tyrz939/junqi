@@ -189,9 +189,12 @@ Worth knowing before it is built, because each is a creative call:
 | Chest loot | First come. Decided |
 | Healing others | Mouse-over: the friend under the cursor, else yourself. Pad: along the right stick |
 | Opening a game | Any single-player world can be opened to co-op and goes back to normal, with no penalty, when the guests leave |
+| Who hosts | *(2026-09-27)* A player's own game: she hosts and plays seat 0, the others join her. A headless host (`jane serve`) is the secondary path, for a Pi. LAN only for now; the transport is a trait so internet play, a relay or NAT traversal can be added later without touching the lockstep logic (`ARCHITECTURE.md` §7) |
+
+**As built (P8, 2026-09-27).** The Rust session honours every row above, and a test plays each rule the network touches through lockstep peers (`crates/jane-net/tests/coop_rules.rs`): the penalty by head count as seats connect and disconnect, keys surviving a disconnect, the world single-player again when the guests leave, a guest's rest writing the save on the host, arrival at the party's fire, numbers and coats per seat.
 
 ## 8. Still to decide, when the network step comes
 
-1. **Where Host / Join live in the UI**: the title screen for Join; the pause menu for "Open this world".
-2. **A guest's client token**: random, kept in her browser's storage. Clearing site data makes her a new arrival with the starting kit; her old body stays parked in the save. Acceptable on a LAN among friends.
+1. **Where Host / Join live in the UI**: the title screen for Join; the pause menu for "Open this world". *(Built: the title has Host and Join, the pause menu Open to LAN; `PRESENTATION.md` §3.2.)*
+2. **A guest's client token**: random, kept beside the saves (`%APPDATA%\Jane\client-token` on Windows, `~/.config/jane/client-token` elsewhere; `--token N` overrides). Deleting it makes her a new arrival with the starting kit; her old body stays parked in the save. Acceptable on a LAN among friends. *(Decided 2026-09-27.)*
 

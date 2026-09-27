@@ -19,7 +19,7 @@ pub const RING: usize = 400;
 pub const HISTORY: usize = 100;
 
 /// The console's rows (ENGINE.md §12), with what each takes, for `help` and completion.
-pub const ROWS: [(&str, &str); 26] = [
+pub const ROWS: [(&str, &str); 28] = [
     ("help", "this list"),
     ("give", "<item> [qty]"),
     ("god", "[on|off]"),
@@ -45,6 +45,8 @@ pub const ROWS: [(&str, &str); 26] = [
     ("party", "who is sitting down"),
     ("open", "let others sit down"),
     ("close", "stop letting them"),
+    ("join", "[token] an idle body sits down (open first)"),
+    ("leave", "<seat> she gets up"),
     ("clear", "empty the screen"),
 ];
 

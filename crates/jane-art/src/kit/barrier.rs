@@ -32,6 +32,88 @@ pub(crate) fn draw(c: &mut Canvas, k: &Kit, state: State) -> Option<Stand> {
             c.fill_normal(Rect::new(x - 2, foot - 2, dw + 4, 2), k.trim.at(Tone::Light), FLAT, 2);
             Stand::Up(&[])
         }
+        "door_broken" => {
+            // A door off one hinge, hanging askew in its frame, the dark behind it.
+            let (dw, dh) = ((w - 10).min(20), (h - 6).min(30));
+            let x = (w - dw) / 2;
+            let top = foot - 2 - dh;
+            ao(c, x - 3, x + dw + 2, foot, 4);
+            c.rect_bevel(Rect::new(x - 3, top - 3, dw + 6, dh + 4), k.trim, 2, Z::new(3, 5));
+            c.fill_normal(Rect::new(x, top, dw, dh), Ramp::ClothBlack.at(Tone::Deep), parts::south(), 5);
+            let pts = [(x + 1, top + 1), (x + dw - 4, top + 4), (x + dw - 2, foot - 2), (x + 3, foot - 4)];
+            let mut m = Canvas::new(c.w(), c.h());
+            m.polyline_fill(&pts, Ix::INK, 1);
+            c.inflate(&m, k.body, 2, Z::new(6, 7));
+            c.retone(k.body, super::HARD);
+            for y in [top + 8, top + 17] {
+                c.line((x + 2, y), (x + dw - 3, y + 2), k.body.at(Tone::Shade), 1, 8);
+            }
+            c.line((x + 6, top + 10), (x + 9, top + 15), Ix::SEAM, 1, 8);
+            Stand::Up(&[])
+        }
+        "barn_doors" => {
+            // A barn's great doors: two planked leaves with their braces in a Z, strap hinges,
+            // the gap where they meet dark.
+            let top = foot - (h - 4).min(40);
+            ao(c, 1, w - 2, foot, 6);
+            c.rect_bevel(Rect::new(1, top - 3, w - 2, foot - top + 3), k.trim, 2, Z::new(3, 5));
+            for (x0, x1) in [(4, w / 2 - 1), (w / 2 + 1, w - 5)] {
+                let r = Rect::new(x0, top, x1 - x0 + 1, foot - top - 1);
+                planks(c, r, k.body, (r.w / 4).max(3), false, false, k.seed ^ x0 as u32, 6);
+                for y in [r.y + 2, r.bottom() - 4] {
+                    c.fill_rect(Rect::new(r.x, y, r.w, 2), k.body.at(Tone::Light), 7);
+                }
+                c.line((r.x + 1, r.bottom() - 3), (r.right() - 2, r.y + 3), k.body.at(Tone::Light), 2, 7);
+            }
+            c.vline(w / 2, top, foot - 2, Ramp::ClothBlack.at(Tone::Deep), 7);
+            Stand::Up(&[])
+        }
+        "arch" => {
+            // An arch bricked up: a stone arch in the wall, the bricks laid in it newer and
+            // redder than the stone round them.
+            let top = foot - (h - 3).min(34);
+            ao(c, 1, w - 2, foot, 6);
+            blocks(c, Rect::new(0, top, w, foot - top + 1), k.body, 4, 8, false, k.seed, 3);
+            let (ax0, ax1) = (w / 2 - 12, w / 2 + 11);
+            let mut m = Canvas::new(c.w(), c.h());
+            m.fill_rect(Rect::new(ax0, top + 12, ax1 - ax0 + 1, foot - top - 12), Ix::INK, 1);
+            m.ellipse(Rect::new(ax0, top + 2, ax1 - ax0 + 1, 22), Ix::INK, 1);
+            for y in 0..c.h() {
+                for x in 0..c.w() {
+                    if m.get(x, y).is_opaque() {
+                        let course = (y - top) / 3;
+                        let off = if course % 2 == 0 { 0 } else { 3 };
+                        let t = if (y - top) % 3 == 2 || (x + off) % 6 == 5 { Tone::Shade } else if (y - top) % 3 == 0 { Tone::Light } else { Tone::Base };
+                        c.put(x, y, k.accent.at(t), parts::south(), 4);
+                    }
+                }
+            }
+            for i in 0..9 {
+                let a = jane_core::angle::Angle((32768 + i * 4096) as u16);
+                let (s, co) = (jane_core::angle::sin_q15(a).0, jane_core::angle::cos_q15(a).0);
+                let (bx, by) = (w / 2 + ((co * 13) >> 15), top + 13 + ((s * 11) >> 15));
+                c.rect_bevel(Rect::new(bx - 2, by - 2, 5, 4), k.body, 1, Z::new(5, 6));
+            }
+            Stand::Up(&[])
+        }
+        "broken_rails" => {
+            // A length of track, broken: a rail bent up out of its chairs, sleepers split, a gap.
+            let (y0, y1) = (foot - 20, foot - 4);
+            for x in (1..w - 2).step_by(6) {
+                let split = parts::hash(k.seed, x, 90) % 3 == 0;
+                c.fill_normal(Rect::new(x, y0, 3, y1 - y0 + 1), k.body.at(Tone::Base), FLAT, 1);
+                c.vline(x, y0, y1, k.body.at(Tone::Light), 1);
+                if split {
+                    c.vline(x + 1, y0 + 4, y1 - 3, k.body.at(Tone::Deep), 1);
+                }
+            }
+            c.fill_normal(Rect::new(0, y0 + 3, w / 2 - 4, 2), k.trim.at(Tone::Mid), FLAT, 2);
+            c.hline(0, w / 2 - 5, y0 + 3, k.trim.at(Tone::High), 2);
+            c.line((w / 2 + 2, y0 + 3), (w - 1, y0 - 4), k.trim.at(Tone::Light), 2, 6);
+            c.fill_normal(Rect::new(0, y1 - 4, w, 2), k.trim.at(Tone::Mid), FLAT, 2);
+            c.hline(0, w - 1, y1 - 4, k.trim.at(Tone::High), 2);
+            Stand::Up(&[])
+        }
         "gate" if edge_on => {
             // A gate seen along its length: its top rail running up the footprint between two
             // posts, the rails below it stacked into a lit edge and a shaded one.

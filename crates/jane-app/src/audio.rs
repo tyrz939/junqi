@@ -38,6 +38,7 @@ pub struct Sound {
     /// Each `Bed`'s bed, by its place in `Bed::ALL`.
     beds: Vec<Option<jane_audio::Bed>>,
     cue: Option<MusicCue>,
+    held: bool,
 }
 
 impl std::fmt::Debug for Sound {
@@ -63,7 +64,7 @@ impl Sound {
     /// No device: every ask is dropped.
     pub fn silent() -> Sound {
         let (sfx, beds) = tables();
-        Sound { device: None, tx: None, sfx, beds, cue: None }
+        Sound { device: None, tx: None, sfx, beds, cue: None, held: false }
     }
 
     /// Opens the default playback device at 48 kHz stereo, or falls back to silence with a line
@@ -120,6 +121,15 @@ impl Sound {
         self.send(Cmd::Volume { master, music, sfx });
     }
 
+    /// The world held still (alone, a menu up): the music and the beds step back until it goes
+    /// on. With company the world is never held, so this is never set.
+    pub fn set_held(&mut self, held: bool) {
+        if held != self.held {
+            self.held = held;
+            self.send(Cmd::Duck(if held { 0.35 } else { 1.0 }));
+        }
+    }
+
     /// A new county: its music from the next cue.
     pub fn set_seed(&mut self, seed: u32) {
         self.send(Cmd::Seed(seed));
@@ -153,9 +163,19 @@ impl AudioBus for Sound {
 pub fn intent_sound(i: &jane_present::ui::core::AppIntent) -> Option<SfxKind> {
     use jane_present::ui::core::AppIntent as I;
     Some(match i {
-        I::Pause | I::Controls | I::LoadMenu | I::SaveMenu | I::OpenWindow(_) => SfxKind::UiOpen,
+        I::Pause | I::Controls | I::LoadMenu | I::SaveMenu | I::OpenWindow(_) | I::HostMenu | I::JoinMenu => {
+            SfxKind::UiOpen
+        }
         I::Back | I::Resume | I::CloseWindow => SfxKind::UiClose,
-        I::NewGame { .. } | I::Continue | I::Load(_) | I::ToTitle | I::Assist(_) | I::ResetBindings => SfxKind::UiConfirm,
+        I::NewGame { .. }
+        | I::Continue
+        | I::Load(_)
+        | I::ToTitle
+        | I::Assist(_)
+        | I::ResetBindings
+        | I::Host(_)
+        | I::Join(_)
+        | I::OpenToLan => SfxKind::UiConfirm,
         _ => return None,
     })
 }

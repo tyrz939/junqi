@@ -165,6 +165,10 @@ pub enum SfxKind {
     /// The church at six: a smaller bell, not *the* bell.
     ChurchBell,
     TrainWhistle,
+    /// Julie's dog (`STORY.md` §3): a bark, a whine as it goes for the night, panting beside her.
+    DogBark,
+    DogWhine,
+    DogPant,
     UiMove,
     UiConfirm,
     UiBack,
@@ -173,7 +177,7 @@ pub enum SfxKind {
 }
 
 impl SfxKind {
-    pub const ALL: [SfxKind; 50] = [
+    pub const ALL: [SfxKind; 53] = [
         SfxKind::StepGrass,
         SfxKind::StepRoad,
         SfxKind::StepCobble,
@@ -219,6 +223,9 @@ impl SfxKind {
         SfxKind::BellNear,
         SfxKind::ChurchBell,
         SfxKind::TrainWhistle,
+        SfxKind::DogBark,
+        SfxKind::DogWhine,
+        SfxKind::DogPant,
         SfxKind::UiMove,
         SfxKind::UiConfirm,
         SfxKind::UiBack,
@@ -274,6 +281,9 @@ impl SfxKind {
             SfxKind::BellNear => "bell_near",
             SfxKind::ChurchBell => "church_bell",
             SfxKind::TrainWhistle => "train_whistle",
+            SfxKind::DogBark => "dog_bark",
+            SfxKind::DogWhine => "dog_whine",
+            SfxKind::DogPant => "dog_pant",
             SfxKind::UiMove => "ui_move",
             SfxKind::UiConfirm => "ui_confirm",
             SfxKind::UiBack => "ui_back",
@@ -481,6 +491,10 @@ pub struct Sense {
     /// How near a lit fire is (0 none, 255 beside it): a campfire, a brazier or a stove within
     /// [`FIRE_CELLS`], doused ones not.
     pub fire: u8,
+    /// The dog, where it stands, if it is out and within hearing; and whether something hostile
+    /// is fighting within six cells of it.
+    pub dog: Option<At>,
+    pub dog_alarmed: bool,
 }
 
 /// How far a fire's crackle carries, in cells.
@@ -493,6 +507,13 @@ pub fn is_fire(def_id: &str) -> bool {
 
 fn at(v: Vec2) -> At {
     (v.x, v.y)
+}
+
+/// Cells between two places.
+fn cells(a: At, b: At) -> f32 {
+    let dx = (a.0.0 - b.0.0) as f32 / CELL_FX as f32;
+    let dy = (a.1.0 - b.1.0) as f32 / CELL_FX as f32;
+    (dx * dx + dy * dy).sqrt()
 }
 
 impl Sense {
@@ -516,16 +537,28 @@ impl Sense {
         let area = jane_core::Rect::new(cx - r, cy - r, 2 * r, 2 * r);
         let mut hostile = false;
         let mut ringer = None;
-        let ringer_def = jane_data::catalog().combat.units.iter().position(|u| u.id == "ringer");
+        let units = &jane_data::catalog().combat.units;
+        let ringer_def = units.iter().position(|u| u.id == "ringer");
+        let dog_def = units.iter().position(|u| u.id == "dog");
+        let mut dog = None;
+        let mut fighting: Vec<At> = Vec::new();
         for u in view.units_in(area) {
             let u = u.unit;
-            if u.alive && u.faction != Faction::Friendly && u.target == Some(me) && u.combat == CombatState::Combat {
+            let angry = u.alive && u.faction != Faction::Friendly && u.combat == CombatState::Combat;
+            if angry && u.target == Some(me) {
                 hostile = true;
+            }
+            if angry {
+                fighting.push(at(u.pos));
             }
             if u.alive && Some(u.def.index()) == ringer_def {
                 ringer = Some((at(u.pos), u.phase));
             }
+            if u.alive && Some(u.def.index()) == dog_def {
+                dog = Some(at(u.pos));
+            }
         }
+        let dog_alarmed = dog.is_some_and(|d| fighting.iter().any(|f| cells(*f, d) < 6.0));
         let mut fire = 0u8;
         let near = jane_core::Rect::new(cx - FIRE_CELLS, cy - FIRE_CELLS, 2 * FIRE_CELLS, 2 * FIRE_CELLS);
         for p in view.props_in(near) {
@@ -557,6 +590,8 @@ impl Sense {
             the_end: view.the_end() != 0,
             seed: view.seed(),
             fire,
+            dog,
+            dog_alarmed,
         }
     }
 
@@ -579,6 +614,9 @@ pub const STRIKE_TICKS: u32 = 150;
 const CHURCH_TICKS: u32 = 84;
 /// Ticks the bell's hush lasts after its last strike, while the last one rings out.
 const BELL_TAIL: u32 = 300;
+/// Ticks between the dog's barks, and between its panting at her side.
+const DOG_BARK_TICKS: u32 = 300;
+const DOG_PANT_TICKS: u32 = 1200;
 /// Ticks of silence where the nine o'clock bell used to be.
 const NO_BELL: u32 = 480;
 /// Ticks of walking between footfalls: half the walk cycle (six frames of `WALK_TICKS`), so each
@@ -611,6 +649,11 @@ pub struct Soundtrack {
     beds: [u8; 10],
     ringer_phase: Option<u8>,
     zone: Option<ZoneId>,
+    /// The dog as last heard, whether she was beside it, and ticks before it pants or barks again.
+    dog: Option<At>,
+    by_dog: bool,
+    dog_pant: u32,
+    dog_bark: u32,
     /// Ticks to the next owl, crow or thunder, and the draw that sets them.
     wild: u32,
     thunder: u32,
@@ -751,11 +794,13 @@ impl Soundtrack {
             }
         }
         // A door: into another zone.
+        let same_zone = self.zone == Some(s.zone);
         if self.zone.is_some_and(|z| z != s.zone) {
             bus.sfx(SfxKind::Door, me, me);
             self.last_pos = None;
         }
         self.zone = Some(s.zone);
+        self.the_dog(s, same_zone, bus);
         if !s.alive {
             self.dead = true;
         } else if self.dead && s.alive {
@@ -892,6 +937,36 @@ impl Soundtrack {
             }
             self.toll = (t.left > 0).then_some(t);
         }
+    }
+
+    /// Julie's dog: a bark when it comes out in the morning or something fights near it, a whine
+    /// when it goes for the night while she is near, and panting when she comes to its side.
+    fn the_dog(&mut self, s: &Sense, same_zone: bool, bus: &mut dyn AudioBus) {
+        self.dog_pant = self.dog_pant.saturating_sub(1);
+        self.dog_bark = self.dog_bark.saturating_sub(1);
+        match (self.dog, s.dog) {
+            (None, Some(d)) if same_zone && self.ticks > 2 => {
+                bus.sfx(SfxKind::DogBark, d, s.pos);
+                self.dog_bark = DOG_BARK_TICKS;
+            }
+            (Some(d), None) if same_zone && s.alive && cells(d, s.pos) < 12.0 => bus.sfx(SfxKind::DogWhine, d, s.pos),
+            _ => {}
+        }
+        if let Some(d) = s.dog {
+            if s.dog_alarmed && self.dog_bark == 0 {
+                bus.sfx(SfxKind::DogBark, d, s.pos);
+                self.dog_bark = DOG_BARK_TICKS;
+            }
+            let by = cells(d, s.pos) < 3.0;
+            if by && !self.by_dog && self.dog_pant == 0 {
+                bus.sfx(SfxKind::DogPant, d, s.pos);
+                self.dog_pant = DOG_PANT_TICKS;
+            }
+            self.by_dog = by;
+        } else {
+            self.by_dog = false;
+        }
+        self.dog = s.dog;
     }
 
     fn ring(&mut self, church: bool, strikes: u8) {
@@ -1116,6 +1191,8 @@ mod tests {
             the_end: false,
             seed: 5,
             fire: 0,
+            dog: None,
+            dog_alarmed: false,
         }
     }
 
@@ -1268,6 +1345,32 @@ mod tests {
         s.alive = true;
         t.step(&s, &[], &none, &mut bus);
         assert_eq!(t.cue(), Some(MusicCue::Zone(ZoneId::County, Region::Lowfields, false)));
+    }
+
+    #[test]
+    fn the_dog_barks_in_the_morning_pants_at_her_side_and_whines_at_night() {
+        let mut bus = Heard::default();
+        let mut t = Soundtrack::new();
+        let mut s = sense();
+        for _ in 0..3 {
+            t.step(&s, &[], &none, &mut bus);
+        }
+        let step = (Fx(s.pos.0.0 + 5 * CELL_FX), s.pos.1);
+        s.dog = Some(step);
+        t.step(&s, &[], &none, &mut bus);
+        assert!(bus.sfx.contains(&(SfxKind::DogBark, step)), "out on the step: a bark");
+        s.dog = Some((Fx(s.pos.0.0 + CELL_FX), s.pos.1));
+        t.step(&s, &[], &none, &mut bus);
+        assert!(bus.sfx.iter().any(|(k, _)| *k == SfxKind::DogPant));
+        let pants = |b: &Heard| b.sfx.iter().filter(|(k, _)| *k == SfxKind::DogPant).count();
+        s.dog = Some(step);
+        t.step(&s, &[], &none, &mut bus);
+        s.dog = Some((Fx(s.pos.0.0 + CELL_FX), s.pos.1));
+        t.step(&s, &[], &none, &mut bus);
+        assert_eq!(pants(&bus), 1, "not again so soon");
+        s.dog = None;
+        t.step(&s, &[], &none, &mut bus);
+        assert!(bus.sfx.iter().any(|(k, _)| *k == SfxKind::DogWhine), "gone for the night");
     }
 
     #[test]
