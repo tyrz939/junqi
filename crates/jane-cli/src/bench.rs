@@ -321,6 +321,7 @@ fn tune(args: &[String]) -> Result<(), String> {
             }),
             weather: flag("--weather").map(crate::scene::weather).transpose()?,
             cast: None,
+            spawn: None,
             rows: Features::KEYS.iter().filter_map(|k| rows.get(k).map(|v| ((*k).to_owned(), v))).collect(),
             gl: crate::scene::GlOpts::default(),
         };

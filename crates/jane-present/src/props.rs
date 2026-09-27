@@ -160,14 +160,19 @@ mod tests {
         let mut atlas = Atlas::with_layers(true);
         let p = Props::build(&mut atlas);
         let sprite = |n: &str| jane_art::looks::find(n).unwrap().0;
-        for name in ["scatter_chains", "scatter_tools", "scatter_cobweb", "scatter_frame", "scatter_poster", "scatter_moss"] {
+        for name in
+            ["scatter_chains", "scatter_tools", "scatter_cobweb", "scatter_frame", "scatter_poster", "scatter_moss"]
+        {
             let id = p.look(sprite(name), 1, State::default()).unwrap();
             let r = *atlas.get(id);
             assert_eq!(i32::from(r.ay), i32::from(r.src.h) - 16, "{name} stands on its cell's back edge");
             let feet = feet(&atlas, id);
             assert!(!feet.is_empty(), "{name} rises up the face");
             assert!(feet.iter().all(|&f| f == i32::from(r.ay)), "{name}: every lifted px on the face's foot: {feet:?}");
-            assert!(i32::from(r.top) <= crate::height_of_rows(i32::from(r.ay)), "{name} is no taller than the face behind it");
+            assert!(
+                i32::from(r.top) <= crate::height_of_rows(i32::from(r.ay)),
+                "{name} is no taller than the face behind it"
+            );
         }
         // A thing standing on the floor still stands on its footprint's front edge (its lid lies
         // behind it, on the crate).

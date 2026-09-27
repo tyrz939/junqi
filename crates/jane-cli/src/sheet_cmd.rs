@@ -255,7 +255,8 @@ fn scene(args: &[String]) -> Result<(), String> {
         None => PathBuf::from("sheets").join(format!("{name}.png")),
     };
     let bps = jane_sim::Blueprints::build(seed).map_err(|e| format!("seed {seed}: {e}"))?;
-    let o = crate::scene::Opts { seed, ticks, model, hour, minute, canvas, backend, at, weather, cast, spawn, rows, gl };
+    let o =
+        crate::scene::Opts { seed, ticks, model, hour, minute, canvas, backend, at, weather, cast, spawn, rows, gl };
     // `--film N[:EVERY]`: N ticks more, every EVERY-th a frame, `<name>-<tick>.png` beside the path.
     if let Some(f) = flag("--film") {
         let (n, every) = f.split_once(':').map_or((f, "1"), |p| p);
