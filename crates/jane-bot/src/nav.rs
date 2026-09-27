@@ -84,6 +84,23 @@ pub struct Nav {
     /// over the step's own; 0 is never, save as the goal (and not kept to when she stands inside
     /// one already). Forgotten with the zone.
     pub keep_off: Vec<(Vec2, i64, u32)>,
+    /// Where she has died out of doors, by zone (cells), the latest last: a step within
+    /// [`DANGER_R`] of one costs [`DANGER_TOLL`] more, and the plan over blocks goes round (a
+    /// player remembers where the spiders were, and the road the night shift walks). A spot
+    /// she dies at again is not added twice; the oldest are forgotten past [`DANGER_KEPT`].
+    pub danger: Vec<(ZoneId, (i32, i32))>,
+}
+
+/// Cells about a place she died that her feet would rather not cross.
+pub const DANGER_R: i32 = 12;
+/// What a step there costs over the step's own, in tenths (a straight step is 10).
+pub const DANGER_TOLL: u32 = 60;
+/// Places remembered.
+pub const DANGER_KEPT: usize = 64;
+
+/// Is the cell within [`DANGER_R`] of one of `spots`?
+pub fn near_danger(spots: &[(i32, i32)], (x, y): (i32, i32), r: i32) -> bool {
+    spots.iter().any(|&(dx, dy)| (dx - x) * (dx - x) + (dy - y) * (dy - y) <= r * r)
 }
 
 /// Cells (the larger of across and down) beyond which a goal is planned over blocks first.
@@ -159,6 +176,7 @@ impl Nav {
             crossings_failed: 0,
             toll: None,
             keep_off: Vec::new(),
+            danger: Vec::new(),
         }
     }
 
@@ -179,6 +197,25 @@ impl Nav {
         self.still = 0;
         self.fruitless = 0;
         self.best_dist = i64::MAX;
+    }
+
+    /// The places she died in zone `z`.
+    pub fn dangers(&self, z: ZoneId) -> Vec<(i32, i32)> {
+        self.danger.iter().filter(|d| d.0 == z).map(|d| d.1).collect()
+    }
+
+    /// She died here: remember it (not twice within a few cells).
+    pub fn died_at(&mut self, z: ZoneId, at: (i32, i32)) {
+        if near_danger(&self.dangers(z), at, 4) {
+            return;
+        }
+        if self.danger.len() >= DANGER_KEPT {
+            self.danger.remove(0);
+        }
+        self.danger.push((z, at));
+        // A plan made before is a plan through it.
+        self.path.clear();
+        self.at = 0;
     }
 
     fn plan(&mut self, v: &View<'_>, from: (i32, i32), goal: (i32, i32)) -> bool {
@@ -217,10 +254,12 @@ impl Nav {
         // Diagonals cost 14: core's step is asked per neighbour, so the cost is settled here.
         let roads = self.roads && !v.indoor();
         let toll = self.toll.as_ref().filter(|t| t.0 == v.zone());
+        let danger = self.dangers(v.zone());
         let step14 = |a: (i32, i32), b: (i32, i32)| {
             step(a, b).map(|c| {
                 let c = if a.0 != b.0 && a.1 != b.1 { 14 } else { c };
                 let c = c + toll.map_or(0, |t| toll_at(t, b));
+                let c = if near_danger(&danger, b, DANGER_R) { c + DANGER_TOLL } else { c };
                 if roads && !road(v.tile(b.0, b.1)) { c + OFF_ROAD } else { c }
             })
         };
@@ -295,7 +334,8 @@ impl Nav {
                 Some(w) if cheb(w, own) > 6 && self.at < self.path.len() => w,
                 _ => {
                     let roads = self.roads && !v.indoor();
-                    let w = self.coarse.waypoint(v, own, goal, roads, WAYPOINT_REACH).unwrap_or(goal);
+                    let danger = self.dangers(v.zone());
+                    let w = self.coarse.waypoint(v, own, goal, roads, WAYPOINT_REACH, &danger).unwrap_or(goal);
                     self.waypoint = Some(w);
                     w
                 }

@@ -136,6 +136,7 @@ impl Coarse {
         goal: (i32, i32),
         roads: bool,
         reach: i32,
+        danger: &[(i32, i32)],
     ) -> Option<(i32, i32)> {
         if self.zone != Some(v.zone()) || v.frame() >= self.made + REBUILD {
             self.build(v);
@@ -162,7 +163,11 @@ impl Coarse {
                 if !this.joins(a, b, now) {
                     return None;
                 }
-                Some(if roads && this.road[this.ix(b.0, b.1)] { 7 } else { 10 })
+                let base = if roads && this.road[this.ix(b.0, b.1)] { 7 } else { 10 };
+                // A block by a place she died is gone round if the way round is not long.
+                let mid = (b.0 * BLOCK + BLOCK / 2, b.1 * BLOCK + BLOCK / 2);
+                let risky = crate::nav::near_danger(danger, mid, crate::nav::DANGER_R + BLOCK / 2);
+                Some(if risky { base + 60 } else { base })
             };
             // The octile heuristic in tenths overestimates road steps at 7: scale it down.
             let h = octile_to(gb);

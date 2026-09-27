@@ -292,6 +292,25 @@ pub fn would_win(v: &View<'_>) -> bool {
     mine > 0 && hp * rate * 3 < i64::from(me.hp.0) * mine * 2
 }
 
+/// Out of doors, on her way, is `id` better run from than fought? Not what she was sent after;
+/// only when she would lose the trade of blows with everything on her ([`would_win`]); and
+/// only while she can get away: it is slower than her walk, or she has the legs for a sprint.
+pub fn outrun(v: &View<'_>, cx: &Ctx, id: UnitId) -> bool {
+    if v.zone() != jane_core::ZoneId::County || cx.fight.hunt == Some(id) || would_win(v) {
+        return false;
+    }
+    let Some(t) = v.unit(id) else { return false };
+    // A thing with no feet is not outrun: it shoots, and its webs hold her in its reach.
+    if rooted(t) {
+        return false;
+    }
+    let me = v.body();
+    let cat = jane_data::catalog();
+    let theirs = cat.combat.unit(t.def).run.0.max(cat.combat.unit(t.def).walk.0);
+    let mine = cat.combat.unit(me.def).walk.0;
+    theirs < mine || me.energy.0 >= jane_sim::tuning::ENERGY_MAX.0 / 5
+}
+
 /// A unit a bot fights or feeds, never both: a row with a bait is fed.
 pub fn fightable(u: &Unit) -> bool {
     jane_data::catalog().combat.unit(u.def).bait.is_none()

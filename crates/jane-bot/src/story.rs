@@ -112,8 +112,15 @@ const PROVISIONS: [(&str, u32); 3] = [("potion_stoneskin", 2), ("potion_lifestea
 /// no bench inside, so it is made before she goes down; two, for the two in the east hall.
 const BAIT: (&str, u32) = ("poisoned_rat_meat", 2);
 
-/// Cells she will go for a provision: the bench, or food seen near.
-const PROVISION_REACH: i32 = 900;
+/// Cells she will go for a provision: the bench, or food seen near (not across the county: a
+/// long walk for an apple was a walk through the ruffians, and she mostly packs at home).
+const PROVISION_REACH: i32 = 300;
+
+/// Cells from Julie's door within which she walks home for the night.
+const HOME_NEAR: i32 = 220;
+
+/// Cells to a fire she would sit the night out by instead (and at most half the way home).
+const FIRE_NEAR: i32 = 160;
 
 /// Frames between looks when there was nothing to do.
 const QUIET: u32 = 30;
@@ -274,7 +281,7 @@ impl Story {
             }
             // On the road to it, low with nothing to eat: the crawl waits while she mends at a
             // fire (the county's own rule, below), and starts again from where she is.
-            let low = sense::hp_permille(v.body()) < fight::EAT_BELOW && !fight::has_food(v);
+            let low = low_out_of_doors(v);
             let rest_open = self.blocked.get(&Goal::Rest).is_none_or(|&until| until <= v.tick().0);
             if low && v.zone() == ZoneId::County && c.entered.is_none() && rest_open {
                 self.dungeon = None;
@@ -359,14 +366,24 @@ impl Story {
                 cx.nav.roads = true;
                 if let Some((_, g)) = self.task.take() {
                     notes.push(Mark::Stuck(format!("{}: died on the way", goal_name(v, g))));
-                    self.blocked.insert(g, v.tick().0 + 600);
+                    // What she only wanted (a provision, a fire to mend at: there are others,
+                    // and later) waits hours after it killed her; the log's steps a moment.
+                    let hours = if matches!(g, Goal::Provision(_) | Goal::Rest) { 3 } else { 0 };
+                    self.blocked.insert(g, v.tick().0 + 600 + hours * jane_sim::tuning::TICKS_PER_HOUR);
                 }
             }
             self.task = None;
             return Act::idle();
         }
+        // Out of doors, what she would lose to, trading blows as the rows say, is not fought: she
+        // goes on her way at a run (most of what walks the county's roads is slower than her, and
+        // goes home past its leash). What she was sent after is fought, and so is anything that
+        // has her cornered with no legs left in her.
+        cx.run = false;
         if let Some(id) = fight::threat(v, cx) {
-            if let Some(a) = fight::engage(v, cx, id) {
+            if self.runs_from(v, cx, id) {
+                cx.run = true;
+            } else if let Some(a) = fight::engage(v, cx, id) {
                 return a;
             }
         }
@@ -374,7 +391,7 @@ impl Story {
             return Act::press(c);
         }
         // Low with nothing to eat: whatever she was doing waits for a fire.
-        let low = sense::hp_permille(v.body()) < fight::EAT_BELOW && !fight::has_food(v);
+        let low = low_out_of_doors(v);
         if low && self.open(v, Goal::Rest) && self.task.as_ref().is_some_and(|(_, g)| *g != Goal::Rest) {
             self.task = None;
         }
@@ -530,6 +547,50 @@ impl Story {
         self.blocked.get(&g).is_none_or(|&until| until <= v.tick().0)
     }
 
+    /// Run from `id` rather than fight it: out of doors, on her way somewhere (a task in hand), not
+    /// sent after it, and losing the trade of blows with everything on her; with the energy to
+    /// run, or it slower than her walk.
+    fn runs_from(&self, v: &View<'_>, cx: &Ctx, id: UnitId) -> bool {
+        self.task.is_some() && fight::outrun(v, cx, id)
+    }
+
+    /// Night out of doors, far from Julie's: the night is sat out by the nearest fire instead
+    /// (rested at, then waited by), not walked home through (the county's night killed her on
+    /// the way, and woke her by the same far fire to try again). `None`: home is near enough,
+    /// or no fire is much nearer than it.
+    fn night_by_a_fire(&self, v: &View<'_>, cx: &Ctx) -> Option<Target> {
+        if v.zone() != ZoneId::County {
+            return None;
+        }
+        let cat = jane_data::catalog();
+        let at = v.body().pos;
+        let home = doors_to(v, ZoneId::House).first().map_or(i64::MAX, |p| to_prop(p, at));
+        if home <= i64::from(HOME_NEAR * CELL_FX) {
+            return None;
+        }
+        let fire = v
+            .props()
+            .filter(|p| {
+                !p.hidden
+                    && cat.story.prop(p.def).rest
+                    && v.prop_spawn(p).is_some_and(|s| s.talk.is_some())
+                    && !self.bad_fires.contains(&p.id)
+            })
+            .min_by_key(|p| {
+                (to_prop(p, at) + danger_on_way(&cx.nav.dangers(ZoneId::County), at, sense::prop_centre(p)), p.id)
+            })?;
+        let d = to_prop(fire, at);
+        if d > (home / 2).min(i64::from(FIRE_NEAR * CELL_FX)) {
+            return None;
+        }
+        let whole = v.body().hp >= jane_sim::units::max_hp(v.body());
+        Some(if d <= i64::from(3 * CELL_FX) && whole {
+            Target::Task(Task::Wait(600))
+        } else {
+            Target::Task(Task::Use(UseProp::new(fire.id)))
+        })
+    }
+
     fn choose(&mut self, v: &View<'_>, cx: &mut Ctx) -> Option<(Target, Goal)> {
         let cat = jane_data::catalog();
         // Home before dark (the first thing the county teaches): out of doors from eight in the
@@ -538,6 +599,9 @@ impl Story {
         let home = night && matches!(v.zone(), ZoneId::County | ZoneId::House) && has_home(v);
         cx.sleep = waits_for_sunday(v, cx) || home;
         if home && self.open(v, Goal::Sleep) {
+            if let Some(t) = self.night_by_a_fire(v, cx) {
+                return Some((t, Goal::Sleep));
+            }
             return Some((bed(v, cx), Goal::Sleep));
         }
         let here = v.zone();
@@ -568,6 +632,9 @@ impl Story {
         // 0: low, with nothing to eat: a fire or a bed first.
         // Or a fire close by and a fight or two behind her: sit down while it is on the way.
         let hp = sense::hp_permille(v.body());
+        // The nearest fire, by the way there: every place she died on it costs as much again
+        // as the straight line (a fire past a camp is not the near one).
+        let danger = cx.nav.dangers(here);
         let fire = v
             .props()
             .filter(|p| {
@@ -575,8 +642,8 @@ impl Story {
                     && v.prop_spawn(p).is_some_and(|s| s.talk.is_some())
                     && !self.bad_fires.contains(&p.id)
             })
-            .min_by_key(|p| (to_prop(p, at), p.id));
-        let low = hp < fight::EAT_BELOW && !fight::has_food(v);
+            .min_by_key(|p| (to_prop(p, at) + danger_on_way(&danger, at, sense::prop_centre(p)), p.id));
+        let low = low_out_of_doors(v);
         if low && self.open(v, Goal::Rest) {
             if let Some(p) = fire {
                 return Some((Target::Task(Task::Use(UseProp::new(p.id))), Goal::Rest));
@@ -613,7 +680,7 @@ impl Story {
         // the bench makes from what she carries, food she has seen lying about). Only out of
         // doors or in the house, and only while a dungeon step is in the log. (With the bait
         // still to brew, no potion: every one of them wants the water it needs.)
-        if matches!(here, ZoneId::County | ZoneId::House) && Self::act_ahead(v) {
+        if matches!(here, ZoneId::County | ZoneId::House) && !night && hp >= COUNTY_LOW && Self::act_ahead(v) {
             for (name, want) in PROVISIONS {
                 let item = sense::item(name);
                 let g = Goal::Provision(item);
@@ -624,6 +691,13 @@ impl Story {
                     None | Some(Target::Fight(_)) => {}
                     Some(t) => {
                         let c = cost_of(&t);
+                        // Not where she has died: a chest by a camp is not worth another life.
+                        let danger = cx.nav.dangers(here);
+                        if target_point(v, &t)
+                            .is_some_and(|p| crate::nav::near_danger(&danger, p.cell(), 2 * crate::nav::DANGER_R))
+                        {
+                            continue;
+                        }
                         if c <= i64::from(PROVISION_REACH * CELL_FX) {
                             return Some((t, g));
                         }
@@ -740,6 +814,15 @@ impl Story {
             let teaches = sense::prop_does(v, p, &|a| matches!(a, Action::Learn(_) | Action::Grow { .. }));
             if d > reach && !(teaches && indoor) {
                 continue;
+            }
+            // Out of doors, not what something hostile stands by (a den is looked at from the
+            // road) nor where she has died; what makes her stronger is worth the fight.
+            if here == ZoneId::County && !teaches {
+                let c = sense::prop_centre(p);
+                let guarded = sense::enemies(v).iter().any(|u| dist(u.pos, c) <= i64::from(10 * CELL_FX));
+                if guarded || crate::nav::near_danger(&cx.nav.dangers(here), c.cell(), crate::nav::DANGER_R) {
+                    continue;
+                }
             }
             offer(d + i64::from(6 * CELL_FX), g, Target::Task(Task::Use(UseProp::new(p.id))), &mut best);
         }
@@ -973,6 +1056,62 @@ fn train(v: &View<'_>, cx: &Ctx) -> Option<Target> {
     }
     // Not the day: Julie's bed, and the night slept away.
     Some(bed(v, cx))
+}
+
+/// Low with nothing to eat, so that what she was doing waits for a fire. Out of doors that is
+/// under three fifths: the county's roads are long and what is on them hits hard, and a walk
+/// begun at half her health was a walk that did not end (the fire is free, and near).
+fn low_out_of_doors(v: &View<'_>) -> bool {
+    let cat = jane_data::catalog();
+    let at = v.body().pos;
+    // Only with a fire near: a long walk to one is a walk through what hurt her.
+    let fire_near = || {
+        v.props().any(|p| {
+            !p.hidden
+                && cat.story.prop(p.def).rest
+                && v.prop_spawn(p).is_some_and(|s| s.talk.is_some())
+                && to_prop(p, at) <= i64::from(FIRE_NEAR * CELL_FX)
+        })
+    };
+    let line = if v.zone() == ZoneId::County && fire_near() { COUNTY_LOW } else { fight::EAT_BELOW };
+    sense::hp_permille(v.body()) < line && !fight::has_food(v)
+}
+
+/// The line under which she mends before walking on, out of doors, permille.
+const COUNTY_LOW: i32 = 600;
+
+/// What the places she died near the straight way from `a` to `b` add to its length: each one
+/// within twice [`crate::nav::DANGER_R`] of the line, as much again as the line.
+fn danger_on_way(spots: &[(i32, i32)], a: Vec2, b: Vec2) -> i64 {
+    let len = dist(a, b);
+    let r = i64::from(2 * crate::nav::DANGER_R * CELL_FX);
+    let (ax, ay, bx, by) = (i64::from(a.x.0), i64::from(a.y.0), i64::from(b.x.0), i64::from(b.y.0));
+    let (dx, dy) = (bx - ax, by - ay);
+    let l2 = (dx * dx + dy * dy).max(1);
+    spots
+        .iter()
+        .filter(|&&(x, y)| {
+            let p = Vec2::centre(x, y);
+            let (px, py) = (i64::from(p.x.0) - ax, i64::from(p.y.0) - ay);
+            // The nearest point of the segment, in thousandths along it.
+            let t = ((px * dx + py * dy) * 1000 / l2).clamp(0, 1000);
+            let (nx, ny) = (ax + dx * t / 1000, ay + dy * t / 1000);
+            let (ex, ey) = (i64::from(p.x.0) - nx, i64::from(p.y.0) - ny);
+            ex * ex + ey * ey <= r * r
+        })
+        .count() as i64
+        * len
+}
+
+/// Where a target in this zone is, when it is a place here.
+fn target_point(v: &View<'_>, t: &Target) -> Option<Vec2> {
+    match t {
+        Target::Task(Task::Use(u)) => v.prop(u.prop).map(sense::prop_centre),
+        Target::Task(Task::Walk { to, .. }) => Some(*to),
+        Target::Task(Task::Pickup { drop, .. }) => v.drops().iter().find(|d| d.id == *drop).map(|d| d.pos),
+        Target::Task(Task::Talk { unit, .. }) | Target::Fight(unit) => v.unit(*unit).map(|u| u.pos),
+        _ => None,
+    }
 }
 
 /// Has she been let into Julie's house (the kitchen stood in)?

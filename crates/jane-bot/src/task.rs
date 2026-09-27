@@ -57,6 +57,9 @@ pub struct Ctx {
     pub ending: Option<crate::Ending>,
     /// She wants the night (or the day) slept away at the next bed: waiting for a Sunday.
     pub sleep: bool,
+    /// Out of doors, something is after her she would lose to: she runs on her way (sprints),
+    /// not fights (the story sets it each frame).
+    pub run: bool,
     /// The day she signalled the Sunday train at the name board.
     pub signalled: Option<u32>,
     /// Butterfly Forest's tactic (`tactics::forest`).
@@ -145,6 +148,7 @@ impl Ctx {
             seen_foes: BTreeMap::new(),
             ending: None,
             sleep: false,
+            run: false,
             signalled: None,
             forest: crate::tactics::forest::Forest::default(),
         }
@@ -171,6 +175,10 @@ impl Ctx {
                 }
                 EventKind::Damage { unit, from: Some(f), .. } if f == me => {
                     self.foes.insert(unit);
+                }
+                // Out of doors, where she fell is somewhere to go round next time.
+                EventKind::PlayerDied if v.zone() == ZoneId::County => {
+                    self.nav.died_at(ZoneId::County, v.body().pos.cell());
                 }
                 _ => {}
             }
@@ -217,7 +225,7 @@ impl Ctx {
     }
 
     pub fn sprint(&self) -> bool {
-        self.model.sprints()
+        self.model.sprints() || self.run
     }
 }
 

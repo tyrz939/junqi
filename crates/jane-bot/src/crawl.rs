@@ -306,6 +306,7 @@ impl Crawl {
 
     pub fn think(&mut self, v: &View<'_>, cx: &mut Ctx, events: &[jane_sim::Event], notes: &mut Vec<Mark>) -> Act {
         self.frames += 1;
+        cx.run = false;
         for e in events {
             if let EventKind::Death { def, .. } = e.kind {
                 if jane_data::catalog().combat.unit(def).boss && v.zone() == self.zone {
@@ -588,8 +589,12 @@ impl Crawl {
         if let Some(a) = talk::answer(v, cx) {
             return a;
         }
+        // On the county road to it, what she would lose to is run past (`fight::outrun`).
+        cx.run = false;
         if let Some(id) = fight::threat(v, cx) {
-            if let Some(a) = fight::engage(v, cx, id) {
+            if self.task.is_some() && fight::outrun(v, cx, id) {
+                cx.run = true;
+            } else if let Some(a) = fight::engage(v, cx, id) {
                 return a;
             }
         }
