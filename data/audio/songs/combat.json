@@ -3,15 +3,15 @@
   "mood": "Something has hold of her: D minor at a run, low drums in threes and twos, a staccato string ostinato, long low strings singing the bell's falling triad over it, pressing to the leading note and not letting go",
   "key": "D", "mode": "minor",
   "step_ticks": 8, "bar": 8,
-  "gain": 0.41, "humanize_ms": 3,
+  "gain": 0.91, "humanize_ms": 3,
   "tracks": [
-    { "name": "taiko", "inst": "drum_low", "kind": "drum", "vel": 0.8 },
+    { "name": "taiko", "inst": "drum_low", "kind": "drum", "vel": 0.62 },
     { "name": "frame", "inst": "drum_frame", "kind": "drum", "vel": 0.5, "pan": 0.3 },
     { "name": "ostinato", "inst": "staccato_strings", "kind": "arp", "octave": 3, "vel": 0.55, "pan": -0.2, "gate": 0.45 },
     { "name": "line", "inst": "low_strings", "kind": "melody", "octave": 3, "vel": 0.62, "gate": 1.0 },
     { "name": "high", "inst": "strings", "kind": "melody", "octave": 4, "vel": 0.44, "pan": 0.25, "gate": 1.0 },
     { "name": "pad", "inst": "pad_dark", "kind": "chord", "octave": 3, "vel": 0.4, "voices": 3, "gate": 1.0 },
-    { "name": "sub", "inst": "sub", "kind": "bass", "octave": 1, "vel": 0.4 },
+    { "name": "sub", "inst": "sub", "kind": "bass", "octave": 1, "vel": 0.25 },
     { "name": "air", "inst": "brush", "kind": "drum", "vel": 0.55, "pan": -0.35 }
   ],
   "sections": {

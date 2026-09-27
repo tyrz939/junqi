@@ -3,12 +3,12 @@
   "mood": "The night shift on Cinder Walk: C Phrygian, a heartbeat on the low drum, the Factory's lights humming in a dark pad, low strings rocking between C and D flat, iron struck somewhere in the dark",
   "key": "C", "mode": "phrygian",
   "step_ticks": 22, "bar": 8,
-  "gain": 0.59, "humanize_ms": 8,
+  "gain": 0.78, "humanize_ms": 8,
   "tracks": [
-    { "name": "heart", "inst": "drum_low", "kind": "drum", "vel": 0.7 },
+    { "name": "heart", "inst": "drum_low", "kind": "drum", "vel": 0.55 },
     { "name": "pad", "inst": "pad_dark", "kind": "chord", "octave": 3, "vel": 0.55, "voices": 3, "gate": 1.0 },
     { "name": "line", "inst": "low_strings", "kind": "melody", "octave": 3, "vel": 0.55, "pan": -0.15, "gate": 1.0 },
-    { "name": "sub", "inst": "sub", "kind": "bass", "octave": 1, "vel": 0.55 },
+    { "name": "sub", "inst": "sub", "kind": "bass", "octave": 1, "vel": 0.35 },
     { "name": "choir", "inst": "choir", "kind": "chord", "octave": 4, "vel": 0.36, "voices": 2, "pan": 0.3, "gate": 1.0 },
     { "name": "iron", "inst": "anvil", "kind": "drift", "octave": 3, "vel": 0.34, "pan": -0.5,
       "drift": { "pool": "1 2 5", "gap": [8, 20], "len": [1, 1] } }

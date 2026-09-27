@@ -3,13 +3,13 @@
   "mood": "Inside the Factory, whatever it made from the gold: a C minor machine, low drums in a limping pattern, iron on the off-beats, a staccato riff, and long low strings above it all climbing to a leading note that never gets its tonic",
   "key": "C", "mode": "minor",
   "step_ticks": 17, "bar": 8,
-  "gain": 0.68, "humanize_ms": 4,
+  "gain": 1.21, "humanize_ms": 4,
   "tracks": [
-    { "name": "drums", "inst": "drum_low", "kind": "drum", "vel": 0.62 },
+    { "name": "drums", "inst": "drum_low", "kind": "drum", "vel": 0.48 },
     { "name": "iron", "inst": "anvil", "kind": "drum", "vel": 0.36, "pan": 0.4 },
     { "name": "riff", "inst": "staccato_strings", "kind": "arp", "octave": 3, "vel": 0.5, "pan": -0.25, "gate": 0.5 },
     { "name": "line", "inst": "low_strings", "kind": "melody", "octave": 4, "vel": 0.5, "pan": 0.1, "gate": 1.0 },
-    { "name": "sub", "inst": "sub", "kind": "bass", "octave": 1, "vel": 0.5 },
+    { "name": "sub", "inst": "sub", "kind": "bass", "octave": 1, "vel": 0.3 },
     { "name": "pad", "inst": "pad_dark", "kind": "chord", "octave": 3, "vel": 0.38, "voices": 3, "gate": 1.0 }
   ],
   "sections": {

@@ -557,7 +557,7 @@ impl Reverb {
         const MS: [f32; 8] = [31.1, 37.3, 41.9, 47.3, 53.1, 59.9, 67.3, 73.1];
         let lines: Vec<Delay> = MS.iter().map(|m| Delay::new((m * size * 0.001 * sr) as usize)).collect();
         let gains = lines.iter().map(|d| 0.001f32.powf(d.buf.len() as f32 / (t60 * sr))).collect();
-        let damp = (0..8).map(|_| OnePole::new(5200.0, sr)).collect();
+        let damp = (0..8).map(|_| OnePole::new(6500.0, sr)).collect();
         Reverb {
             pre: Delay::new((0.018 * sr) as usize),
             diff: [AllPass::new((0.0071 * sr) as usize, 0.62), AllPass::new((0.0113 * sr) as usize, 0.58)],
@@ -565,7 +565,7 @@ impl Reverb {
             gains,
             damp,
             hp: [DcBlock::new(sr), DcBlock::new(sr)],
-            tone: [OnePole::new(7000.0, sr), OnePole::new(7000.0, sr)],
+            tone: [OnePole::new(9500.0, sr), OnePole::new(9500.0, sr)],
         }
     }
 

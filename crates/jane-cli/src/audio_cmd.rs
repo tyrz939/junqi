@@ -353,6 +353,11 @@ fn report(what: &str, v: &[f32]) {
         analysis::clicks(&m, sr).len(),
         if what.starts_with("song:") { format!(", heard in {key}") } else { String::new() }
     );
+    if what.starts_with("song:") || what.starts_with("play:") || what.starts_with("scene:") {
+        let (b, centroid) = analysis::balance(&m, sr);
+        let pct: Vec<String> = b.iter().map(|x| format!("{:.1}", 100.0 * x)).collect();
+        println!("    balance: centroid {centroid:.0} Hz; power under 150, 500, 2k, 5k, 10k Hz and above, %: {}", pct.join(" "));
+    }
     if what.starts_with("song:") {
         let c = analysis::chroma(&m, sr);
         let top = c.iter().fold(1e-12f32, |a, b| a.max(*b));

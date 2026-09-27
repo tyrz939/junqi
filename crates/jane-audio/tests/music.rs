@@ -110,6 +110,12 @@ fn every_cue_is_matched_clean_and_in_its_key() {
         if h.notes.is_empty() {
             bad.push(format!("{}: played nothing", h.name));
         }
+        // Not drowned in its own low end: under 70 per cent of the power below 150 Hz (a mix
+        // that is all drum and drone has nothing left for the tune once it is matched).
+        let (bands, _) = analysis::balance(&h.mono, sr);
+        if bands[0] > 0.70 {
+            bad.push(format!("{}: {:.0}% of its power under 150 Hz", h.name, 100.0 * bands[0]));
+        }
     }
     assert!(bad.is_empty(), "\n  {}", bad.join("\n  "));
 }

@@ -3,13 +3,13 @@
   "mood": "The Waters by day, reeds and mist over still water: F Lydian, its raised fourth hanging in the air, a harp flowing in eighths, a clarinet's reedy line and glass above, drifting into D minor",
   "key": "F", "mode": "lydian",
   "step_ticks": 24, "bar": 8,
-  "gain": 0.78, "humanize_ms": 10,
+  "gain": 0.86, "humanize_ms": 10,
   "tracks": [
     { "name": "melody", "inst": "clarinet", "alt": ["flute"], "kind": "melody", "octave": 4, "vel": 0.7, "pan": 0.1, "gate": 0.95 },
     { "name": "harp", "inst": "harp", "kind": "arp", "octave": 3, "vel": 0.46, "pan": -0.2 },
     { "name": "glass", "inst": "glass", "kind": "chord", "octave": 5, "vel": 0.32, "voices": 3, "pan": 0.3, "gate": 1.0 },
     { "name": "pad", "inst": "pad_warm", "kind": "chord", "octave": 3, "vel": 0.38, "voices": 3, "gate": 1.0 },
-    { "name": "bass", "inst": "bass_soft", "kind": "bass", "octave": 2, "vel": 0.55 },
+    { "name": "bass", "inst": "bass_soft", "kind": "bass", "octave": 2, "vel": 0.4 },
     { "name": "drops", "inst": "celesta", "kind": "drift", "octave": 5, "vel": 0.26, "pan": -0.45,
       "drift": { "pool": "1 5 8 9 12", "gap": [6, 20], "len": [2, 4] } }
   ],

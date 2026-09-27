@@ -3,7 +3,7 @@
   "mood": "The Library and the Museum, cases and shelves and dust: a harpsichord's two-part invention in B minor walking the circle of fifths, a quiet pad under it, orderly and a little too careful, as if something in the room is counting",
   "key": "B", "mode": "minor",
   "step_ticks": 20, "bar": 8,
-  "gain": 3.59, "humanize_ms": 5,
+  "gain": 3.22, "humanize_ms": 5,
   "tracks": [
     { "name": "right", "inst": "harpsichord", "kind": "melody", "octave": 4, "vel": 0.7, "pan": 0.2, "gate": 0.85 },
     { "name": "left", "inst": "harpsichord", "kind": "bass", "octave": 2, "vel": 0.55, "pan": -0.2, "gate": 0.85 },

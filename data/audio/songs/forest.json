@@ -3,13 +3,13 @@
   "mood": "Butterfly Forest, where the coloured things sing about day and night: E Lydian, a celesta turning like wings in the canopy light, a choir with no words, a flute carrying their song, beautiful and slightly wrong",
   "key": "E", "mode": "lydian",
   "step_ticks": 24, "bar": 8,
-  "gain": 0.75, "humanize_ms": 8,
+  "gain": 0.80, "humanize_ms": 8,
   "tracks": [
     { "name": "song", "inst": "flute", "kind": "melody", "octave": 5, "vel": 0.66, "pan": 0.1, "gate": 0.95 },
     { "name": "wings", "inst": "celesta", "alt": ["harp"], "kind": "arp", "octave": 4, "vel": 0.38, "pan": -0.3 },
     { "name": "choir", "inst": "choir", "kind": "chord", "octave": 4, "vel": 0.42, "voices": 3, "pan": 0.2, "gate": 1.0 },
     { "name": "glass", "inst": "glass", "kind": "chord", "octave": 5, "vel": 0.24, "voices": 2, "pan": 0.45, "gate": 1.0 },
-    { "name": "bass", "inst": "bass_soft", "kind": "bass", "octave": 2, "vel": 0.45 }
+    { "name": "bass", "inst": "bass_soft", "kind": "bass", "octave": 2, "vel": 0.32 }
   ],
   "sections": {
     "I": { "bars": 2, "chords": "1 2",

@@ -216,6 +216,31 @@ pub fn pitch(x: &[f32], sr: f32) -> Option<f32> {
     None
 }
 
+/// The edges of the bands [`balance`] splits a mix into, in Hz: sub and bass, low mids, mids,
+/// presence, brilliance, air.
+pub const BANDS: [f32; 7] = [0.0, 150.0, 500.0, 2000.0, 5000.0, 10_000.0, 24_000.0];
+
+/// The share of the signal's power in each of [`BANDS`] (they sum to 1), and its spectral
+/// centroid in Hz: how dark or bright, how muddy or thin a mix is.
+pub fn balance(x: &[f32], sr: f32) -> ([f32; 6], f32) {
+    let n = 4096;
+    let spec = mean_spectrum(x, n);
+    let bin = sr / n as f32;
+    let mut bands = [0.0f64; 6];
+    let (mut num, mut den) = (0.0f64, 0.0f64);
+    for (k, m) in spec.iter().enumerate() {
+        let hz = k as f32 * bin;
+        let p = f64::from(*m) * f64::from(*m);
+        num += p * f64::from(hz);
+        den += p;
+        if let Some(b) = (0..6).find(|&b| hz >= BANDS[b] && hz < BANDS[b + 1]) {
+            bands[b] += p;
+        }
+    }
+    let total = bands.iter().sum::<f64>().max(1e-30);
+    (bands.map(|b| (b / total) as f32), (num / den.max(1e-30)) as f32)
+}
+
 /// Energy per pitch class (C = 0) over the signal, from 100 Hz to 2 kHz: under 100 Hz a bin of
 /// a practical FFT is wider than a semitone, and a low D would be heard as C# and Eb.
 pub fn chroma(x: &[f32], sr: f32) -> [f32; 12] {
