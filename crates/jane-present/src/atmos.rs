@@ -540,14 +540,16 @@ impl Atmosphere {
         if glow > 0 && !self.indoor && self.features.fog {
             let c = weather::sky(self.clock).glow;
             let colour = if self.tier >= Tier::T2 {
-                weather::mist_colour(self.region)
+                // A warm dust in the air: under a violet sky and a gold afterglow it reads amber,
+                // where a cool one went magenta.
+                [236, 214, 184]
             } else {
                 [0, 1, 2].map(|k| ((u32::from(c[k]) * 3 + u32::from(sky.ambient[k])) / 4 * 3 / 4) as u8)
             };
             f.fog.push(FogVolume {
                 rect: (-64, -64, w + 64, h + 64),
                 edge: 1,
-                density: (glow * 26 / 255) as u8,
+                density: (glow * 22 / 255) as u8,
                 colour,
                 top: 0,
             });

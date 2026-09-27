@@ -88,7 +88,7 @@ fn fs_fog(i: FullOut) -> @location(0) vec4<f32> {
         // Lit by the sky and by the lamps it stands in: haloes.
         // The air takes the sky's light: the fill, the sun's share, and at dusk and dawn the
         // afterglow, so a fog at sunset is rose and a dawn mist is pale gold.
-        var light = g.fill.rgb * 1.15 + g.sun_col.rgb * 0.45 + g.glow.rgb * g.glow.w * 0.45;
+        var light = g.fill.rgb * 1.15 + g.sun_col.rgb * 0.45 + g.glow.rgb * g.glow.w * 0.8;
         let tile = vec2<u32>(px) / 32u;
         let tr = tiles[tile.y * g.tiles_x + tile.x];
         let p = vec3<f32>(f32(q.x) + 0.5, f32(q.y) + 0.5 + h, 18.0);
