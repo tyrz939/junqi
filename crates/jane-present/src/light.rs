@@ -84,8 +84,10 @@ pub const SHAFTS_SPREAD: u16 = (5 * 65536 / 360) as u16;
 /// a fainter one come. (Until then T0 and T1 dropped every silhouette under 112, where T2 kept a
 /// faint one.)
 pub const FAINTEST: u8 = 24;
-/// The afterglow's shadow: faint.
-const GLOW_STRENGTH: u8 = 96;
+/// The afterglow's shadow at its most: faint. And how high over the west it stands, degrees: a
+/// band of sky, not a sun on the horizon, so its shadows are two heights long, not six.
+const GLOW_STRENGTH: u8 = 88;
+const GLOW_ELEVATION: i32 = 26;
 
 /// How soft the sun's or the moon's shadows are in clear air at `sin_el` (its elevation's sine,
 /// Q15): the light crosses more air the lower it is, and the air scatters it round what casts a
@@ -96,13 +98,43 @@ pub fn spread(sin_el: i32) -> u16 {
     (deg(1) + deg(4) * low / 20000) as u16
 }
 
-/// How dark the sun's or the moon's shadows are in clear air at `sin_el`: the whole of its light
-/// taken away high in the sky, a quarter less at the horizon, where the scattered light fills
-/// the umbra.
+/// How dark the sun's or the moon's shadows are in clear air at `sin_el`: [`STRENGTH_HIGH`] of
+/// its light taken away from 30 degrees up (the sky's own blue and the ground's bounce always
+/// fill an umbra a little), falling to [`STRENGTH_LOW`] at 12 degrees, then fading to nothing
+/// by 3 degrees, as the sun's light thins into the haze on the horizon: a shadow grows long as
+/// the sun sinks and fades out before it gets absurd, and the dusk hands over to the afterglow.
+/// (Decided 2026-09-28, the owner's first playtest: the umbra was the whole sun's at noon, which
+/// read harsh on T2, and a shadow at 18:20 was eight heights long and as dark as five o'clock's.)
 pub fn strength(sin_el: i32) -> u8 {
-    let low = 20000 - sin_el.clamp(0, 20000);
-    (255 - 64 * low / 20000) as u8
+    // sin 30, 12 and 3 degrees, Q15.
+    const HIGH: i32 = 16384;
+    const LOW: i32 = 6813;
+    const GONE: i32 = 1715;
+    let s = sin_el.clamp(0, 32768);
+    let (hi, lo) = (i32::from(STRENGTH_HIGH), i32::from(STRENGTH_LOW));
+    let v = if s >= HIGH {
+        hi
+    } else if s >= LOW {
+        lo + (hi - lo) * (s - LOW) / (HIGH - LOW)
+    } else if s > GONE {
+        // Eased in, so it slips away rather than stopping.
+        let t = (s - GONE) * 256 / (LOW - GONE);
+        lo * t * t / (256 * 256)
+    } else {
+        0
+    };
+    v.clamp(0, 255) as u8
 }
+
+/// The sun's or the moon's umbra high in the sky and at 12 degrees, of 255 ([`strength`]).
+pub const STRENGTH_HIGH: u8 = 224;
+pub const STRENGTH_LOW: u8 = 176;
+
+/// The lowest the sun or the moon stands as a shadow's light, [`Angle`] units: 14 degrees, where
+/// a shadow is four heights long ([`crate::shadow::MAX_COT_Q8`]). A body under it (the last hour
+/// before sunset, the moon rising) keeps its colour and its fading strength and lights and
+/// shadows as if it stood at this height, on every tier, since each reads its elevation.
+pub const LOWEST: u16 = (14 * 65536 / 360 + 1) as u16;
 
 /// The weather's part (`atmos::Atmos::light`): `cloud` (0..=65535, rain or mist) spreads the
 /// sun into the sky, its shadows widening by up to ten degrees and fading to half their strength
@@ -239,29 +271,32 @@ pub fn sky(clock: u32, day: u32, indoor: bool, permille: i16, region: Region) ->
         let colour = mix([0; 3], colour, s, 3400);
         Some(Directional {
             azimuth: az,
-            elevation: el,
+            elevation: Angle(el.0.max(LOWEST)),
             colour: colour.map(|c| c.clamp(0, 255) as u8),
             spread: spread(s),
             strength: strength(s),
         })
     } else if (SET..SET + GLOW).contains(&t) {
         // The afterglow: for three quarters of an hour after sunset the western sky is the
-        // brightest thing in it, a low amber light from where the sun went down, fading.
-        let left = SET + GLOW - t;
+        // brightest thing in it, a low amber light from where the sun went down, fading. Its
+        // shadows rise out of nothing as the sun's fade (the sun's are gone by 3 degrees) and
+        // fade with its light; a broad glow high over the west, so they are short and soft.
+        let (into, left) = (t - SET, SET + GLOW - t);
+        let rise = (into * 4).min(left * 4 / 3).min(GLOW);
         Some(Directional {
             azimuth: Angle((deg(180) + deg(16) / 4) as u16),
-            elevation: Angle(deg(10) as u16),
+            elevation: Angle(deg(GLOW_ELEVATION) as u16),
             colour: mix([0; 3], AFTERGLOW, left, GLOW).map(|c| c.clamp(0, 255) as u8),
             // A glow over a broad band of sky: its shadows are faint and wide.
             spread: deg(7) as u16,
-            strength: GLOW_STRENGTH,
+            strength: (i32::from(GLOW_STRENGTH) * rise / GLOW) as u8,
         })
     } else if let Some((az, el, s)) = arc(t, SET, RISE, MOON_TOP) {
         let phase = moon_phase(day);
         let colour = mix([0; 3], MOON.map(|c| (c * phase) >> 8), s, 6000);
         Some(Directional {
             azimuth: az,
-            elevation: el,
+            elevation: Angle(el.0.max(LOWEST)),
             colour: colour.map(|c| c.clamp(0, 255) as u8),
             spread: spread(s),
             strength: strength(s),
@@ -366,7 +401,7 @@ mod tests {
             // T0 and T1 feather the low sun's edge wider.
             assert!(crate::shadow::feather(noon.spread) < crate::shadow::feather(low.spread));
         }
-        assert!(noon.spread <= deg(1) as u16 + 60 && noon.strength >= 250, "{noon:?}");
+        assert!(noon.spread <= deg(1) as u16 + 60 && noon.strength == STRENGTH_HIGH, "{noon:?}");
         // The moon the same way, by its height.
         let moon = sky(0, 0, false, 1000, Region::Lowfields).sun.expect("the moon is up at midnight");
         let s = sin_q15(moon.elevation).0;
@@ -377,6 +412,27 @@ mod tests {
         assert!(glow.casts() && glow.strength < five.strength && crate::shadow::feather(glow.spread) == 3);
         diffuse(&mut glow, 65535);
         assert!(glow.casts(), "the faintest sky the weather makes still casts: {glow:?}");
+    }
+
+    #[test]
+    fn a_sinking_suns_shadows_grow_no_longer_than_four_heights_and_fade_out_before_sunset() {
+        let at = |m: i32| sky((17 * HOUR + m * 120) as u32, 0, false, 1000, Region::Lowfields).sun.expect("the sun");
+        // Strength never rises as the sun sinks, and is gone by the last minutes.
+        let mut last = 255;
+        for m in (0..=88).step_by(4) {
+            let s = at(m);
+            assert!(s.strength <= last, "17:{m:02}: {} after {last}", s.strength);
+            last = s.strength;
+            // Held at 14 degrees for its shadows: at most four heights long on every tier.
+            assert!(s.elevation.0 >= LOWEST, "17:{m:02}: {s:?}");
+            let (kx, ky) = crate::shadow::shear(&s).unwrap();
+            assert!(kx.abs().max(ky.abs()) <= crate::shadow::MAX_COT_Q8, "17:{m:02}: {kx} {ky}");
+        }
+        assert!(at(0).strength >= 170, "five o'clock's shadows are strong: {}", at(0).strength);
+        assert!(!at(86).casts(), "a sun on the horizon still casts: {:?}", at(86));
+        // The afterglow takes over from nothing, peaks faint, and fades with its light.
+        let glow = |m: i32| sky((SET + m * 120) as u32, 0, false, 1000, Region::Lowfields).sun.unwrap().strength;
+        assert!(glow(0) < FAINTEST && glow(12) > glow(1) && glow(12) <= GLOW_STRENGTH && glow(44) < glow(12));
     }
 
     #[test]

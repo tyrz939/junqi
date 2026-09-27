@@ -7,9 +7,12 @@ use std::ops::Range;
 use jane_present::frame::{Atmos, PartShape, SkyLook};
 use jane_present::{Depth, Frame, LightKind, Pass, Post, Tint};
 
-/// Canvas px round the canvas the G-buffer and the height field cover, so a caster just off
-/// screen still casts in.
-pub const GUARD: u32 = 64;
+/// Canvas px round the canvas the G-buffer and the height field cover, so a caster off screen
+/// still casts in: the presenter's casting band (`jane_present::frame::CAST_MARGIN`), whose
+/// casters and chunks the frame carries.
+pub const GUARD: u32 = jane_present::frame::CAST_MARGIN as u32;
+/// A sprite that burns no rows (`SpriteIn`'s last word).
+pub const NO_BURN: u32 = 0xffff;
 /// Light tiles are this many canvas px square.
 pub const TILE: u32 = 32;
 /// Lights a tile lists at most.
@@ -55,7 +58,8 @@ pub struct Prep {
     pub n_chunks: u32,
     /// `(slot, generation)` of every chunk drawn, to upload the ones the GPU does not hold.
     pub chunk_slots: Vec<(u16, u32)>,
-    /// `SpriteIn`: src (4 x u32), dst (x, y, page, flags as i32), extra (depth, id, 0, 0): its id
+    /// `SpriteIn`: src (4 x u32), dst (x, y, page, flags as i32), extra (depth, id, sink, the rows
+    /// it burns: first | last << 16, top-down, [`NO_BURN`] none): its id
     /// is its index in the frame plus one, what the G-buffer's id target and the height field
     /// carry (0 is the terrain).
     pub sprites: Vec<u8>,
@@ -95,7 +99,8 @@ pub struct Prep {
     pub part_draws: Vec<(Depth, Range<u32>)>,
     /// Draw the sun's term alone (`Wgpu::show_sun`).
     pub show_sun: bool,
-    depth: Vec<u8>,
+    /// Each sprite's caster's depth and sink (`Caster::sink`).
+    depth: Vec<(u8, u8, u32)>,
     lists: Vec<Vec<u32>>,
 }
 
@@ -198,10 +203,18 @@ impl Prep {
         // Each sprite's depth across the ground: its caster's, else 0, which stands nothing in the
         // height field (a sprite the frame does not list as a caster casts on no tier).
         self.depth.clear();
-        self.depth.resize(frame.sprites.len(), 0);
+        self.depth.resize(frame.sprites.len(), (0, 0, NO_BURN));
         for c in &frame.casters {
+            let Some(s) = frame.sprites.get(c.sprite as usize) else { continue };
+            // The rows it burns, as its sprite's rows from the top (`Caster::burn`).
+            let burn = if c.burn.0 > 0 {
+                let row = |hv: u8| (i32::from(c.foot.1) - i32::from(hv) - i32::from(s.y)).clamp(0, 0xffff) as u32;
+                row(c.burn.1) | row(c.burn.0) << 16
+            } else {
+                NO_BURN
+            };
             if let Some(d) = self.depth.get_mut(c.sprite as usize) {
-                *d = c.depth.max(1);
+                *d = (c.depth.max(1), c.sink, burn);
             }
         }
 
@@ -230,14 +243,15 @@ impl Prep {
                             Tint::Ghost(a) => (2, u32::from(a)),
                         };
                         let flags = u32::from(s.flags.mirror) | a << 8 | kind << 16;
-                        let depth = self.depth.get(cmds.start as usize + k).copied().unwrap_or(2);
+                        let (depth, sink, burn) =
+                            self.depth.get(cmds.start as usize + k).copied().unwrap_or((2, 0, NO_BURN));
                         u32s(
                             &mut self.sprites,
                             &[u32::from(s.src.x), u32::from(s.src.y), u32::from(s.src.w), u32::from(s.src.h)],
                         );
                         i32s(&mut self.sprites, &[i32::from(s.x), i32::from(s.y), i32::from(s.page), flags as i32]);
                         let id = sprite_id(cmds.start as usize + k);
-                        u32s(&mut self.sprites, &[u32::from(depth), id, 0, 0]);
+                        u32s(&mut self.sprites, &[u32::from(depth), id, u32::from(sink), burn]);
                         if layer == Depth::Standing {
                             hmax = hmax.max(f32::from(s.height_px));
                         }

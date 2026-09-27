@@ -43,11 +43,11 @@ flora/rocks_3 9028e1b2
 flora/boulder_0 42ff7c1c
 flora/boulder_1 0101918b
 flora/boulder_2 ab9af2aa
-chunk/county/0_0 35758cc0
+chunk/county/0_0 4167ffd4
 chunk/county/1_0 9062aac4
 chunk/county/2_0 57128c75
 chunk/county/3_0 0f2e4aea
-chunk/county/0_1 7777eb28
+chunk/county/0_1 df181172
 chunk/county/1_1 f0c9973e
 chunk/county/2_1 b10838d2
 chunk/county/3_1 c4d9325a

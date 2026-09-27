@@ -78,7 +78,7 @@ impl PointShadows {
             let Some(s) = frame.sprites.get(c.sprite as usize) else { continue };
             let Some(page) = pages.get(usize::from(s.page)) else { continue };
             rows.clear();
-            shadow::rows(&page.albedo, page.w, s, i32::from(c.foot.1), &mut rows);
+            shadow::rows(&page.albedo, page.w, s, c, &mut rows);
             for l in lamps.iter_mut().flatten() {
                 if near(l) {
                     let (slot, lamp, _, dirty) = l;

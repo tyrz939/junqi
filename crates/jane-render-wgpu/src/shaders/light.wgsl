@@ -210,6 +210,13 @@ fn ground_ao(p: vec3<f32>) -> f32 {
     return 1.0 - occ * 0.09;
 }
 
+// How near the one holding a light is lit from, of its radius (a hand's length).
+const HELD_REACH: f32 = 0.3;
+// How much of a lamp's light its umbra keeps (the pool's bounce), and the sharpest its penumbra
+// gets (the light's distance over its size is held under this): soft, not a stencil's edge.
+const LAMP_BOUNCE: f32 = 0.12;
+const PEN_K: f32 = 10.0;
+
 // A windowed inverse square: 1 at the light, 0 at its radius, never a hard rim.
 fn falloff(x: f32) -> f32 {
     let w = clamp(1.0 - x * x, 0.0, 1.0);
@@ -313,8 +320,16 @@ fn fs_light(i: FullOut) -> LitOut {
         var sh = 1.0;
         if lt.spot.w > 0.5 {
             skip_holder = u32(lt.spot.w + 0.5) - 1u;
-            let dxy = length(v.xy);
-            sh = trace(p, l, dxy - (lt.col.w + 3.0), clamp(dxy / max(lt.col.w, 1.0), 2.0, 16.0), t0, 1.0);
+            if skip_holder != 0u && skip_own == skip_holder {
+                // The one holding a light (her lantern in her hand) is lit by it as from a hand's
+                // length, never burnt white by it a px away, and never shadowed by it.
+                att = falloff(max(dist, r * HELD_REACH) / r) * ndl;
+            } else {
+                let dxy = length(v.xy);
+                sh = trace(p, l, dxy - (lt.col.w + 3.0), clamp(dxy / max(lt.col.w, 1.0), 2.0, PEN_K), t0, 1.0);
+                // A lamp's umbra keeps a little of its light: its pool bounces into its shadows.
+                sh = LAMP_BOUNCE + (1.0 - LAMP_BOUNCE) * sh;
+            }
         }
         light += lt.col.rgb * att * sh;
         if shine > 0.0 {

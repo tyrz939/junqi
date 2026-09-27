@@ -413,7 +413,8 @@ void main() {
         float c = mod(slot - 1.0, 4.0);
         float z = byte(c < 0.5 ? m.r : (c < 1.5 ? m.g : (c < 2.5 ? m.b : m.a)));
         if (h + 0.5 < z) {
-            k = 0.0;
+            // Its umbra keeps a little of it (`shadow::LAMP_BOUNCE`, 31 of 256).
+            k *= 0.121;
             g = 0.0;
         }
     }
