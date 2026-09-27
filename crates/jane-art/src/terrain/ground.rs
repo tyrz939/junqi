@@ -21,6 +21,9 @@ use crate::palette::{Ix, Ramp, Tone, letter};
 const PATCH_SHIFT: u32 = 6;
 const FINE_SHIFT: u32 = 4;
 const LUSH_SHIFT: u32 = 8;
+/// Where a meadow turns to its darker tone: low, so a dark patch is a rare hollow, not the
+/// camouflage of one in three (the 18:40 critique, 2026-09-27).
+const TURF_DARK: i32 = -30;
 
 pub(super) fn paint(p: &mut Painter, x0: i32, y0: i32, seed: u32) {
     p.s.ly.clear();
@@ -96,8 +99,8 @@ fn base(p: &mut Painter, wx0: i32, wy0: i32, seed: u32) {
                     r = Ramp::TurfDry;
                     (patch_tone(v, m, -1000, 236), FLAT)
                 }
-                P::Turf if drift > -12 => (patch_tone(v, m, 24, 224).step(1).min(Tone::Lift), FLAT),
-                P::Turf => (patch_tone(v, m, 24, 224), FLAT),
+                P::Turf if drift > -12 => (patch_tone(v, m, TURF_DARK, 224).step(1).min(Tone::Lift), FLAT),
+                P::Turf => (patch_tone(v, m, TURF_DARK, 224), FLAT),
                 _ => (patch_tone(v, m, 18, 188), FLAT),
             };
             p.s.ly.put(x, y, r.at(tone), n, z);

@@ -69,6 +69,18 @@ fn fs_grade(i: FullOut) -> @location(0) vec4<f32> {
     let px = vec2<i32>(floor(i.pos.xy));
     var c = textureLoad(src, px, 0).rgb;
     c += textureSample(bloom, smp, i.uv).rgb * g.misc.x;
+    // The afterglow across the frame at dusk and dawn (§1.9): the side toward where the sun
+    // went down (came up) warmer and a little lighter, fading across the view; and the far
+    // (top) edge of the view a little toward the horizon's colour, the air between.
+    if g.glow.w > 0.0 {
+        let x = f32(px.x);
+        let toward = clamp(1.0 - abs(x - g.horizon.w) / (g.canvas.x * 1.2), 0.0, 1.0);
+        let k = g.glow.w * toward * toward;
+        let warm = g.glow.rgb / max(max(g.glow.r, g.glow.g), max(g.glow.b, 0.001));
+        c = c * mix(vec3<f32>(1.0), 0.8 + warm * 0.45, k * 0.55) + g.glow.rgb * k * 0.02;
+        let far = clamp(1.0 - f32(px.y) / g.canvas.y, 0.0, 1.0);
+        c = mix(c, g.horizon.rgb * 0.5, far * far * g.glow.w * 0.12);
+    }
     c *= g.lift.w;
     c = vec3<f32>(shoulder(c.r), shoulder(c.g), shoulder(c.b));
     let luma = dot(c, vec3<f32>(0.2126, 0.7152, 0.0722));

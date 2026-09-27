@@ -357,10 +357,8 @@ impl Atmosphere {
         };
         let t = self.clock % (24 * HOUR);
         // The afterglow: in the west (left) round sunset, in the east at dawn.
-        let (glow_x, peak, width) =
-            if t >= 12 * HOUR { (canvas_w / 5, HOUR * 75 / 4, HOUR * 3 / 2) } else { (canvas_w * 4 / 5, HOUR * 23 / 4, HOUR) };
-        let off = t.abs_diff(peak);
-        let glow_amount = if off < width { 255 - off * 255 / width } else { 0 };
+        let glow_x = if t >= 12 * HOUR { canvas_w / 5 } else { canvas_w * 4 / 5 };
+        let glow_amount = self.afterglow_clear();
         // Stars from half past eight to five, fading at the edges; cloud hides them.
         let night_from = HOUR * 41 / 2;
         let night_to = HOUR * 5;
@@ -491,6 +489,14 @@ impl Atmosphere {
         !(HOUR * 6..HOUR * 37 / 2).contains(&t)
     }
 
+    /// How strong the afterglow is by the clock alone, 0..=255: round sunset and round dawn.
+    fn afterglow_clear(&self) -> u32 {
+        let t = self.clock % (24 * HOUR);
+        let (peak, width) = if t >= 12 * HOUR { (HOUR * 75 / 4, HOUR * 3 / 2) } else { (HOUR * 23 / 4, HOUR) };
+        let off = t.abs_diff(peak);
+        if off < width { 255 - off * 255 / width } else { 0 }
+    }
+
     /// The fog volumes in view and the light shafts (`Fog`, `Rays`), after the lights. `sky` is
     /// the frame's lit sky: below T2 a fog's colour is lit by it here, since the tier cannot.
     pub fn draw_fog(&self, f: &mut Frame, cam: (i32, i32), sky: &Sky) {
@@ -514,6 +520,24 @@ impl Atmosphere {
                 edge: 1,
                 density: d,
                 colour: lit(weather::mist_colour(self.region)),
+                top: 0,
+            });
+        }
+        // The evening's haze (and the morning's): the low sun's light held in the air over the
+        // whole view, thin, lit by the afterglow on T2, so the far edge of a dusk frame is rose.
+        let glow = self.afterglow_clear();
+        if glow > 0 && !self.indoor && self.features.fog {
+            let c = weather::sky(self.clock).glow;
+            let colour = if self.tier >= Tier::T2 {
+                weather::mist_colour(self.region)
+            } else {
+                [0, 1, 2].map(|k| ((u32::from(c[k]) * 3 + u32::from(sky.ambient[k])) / 4 * 3 / 4) as u8)
+            };
+            f.fog.push(FogVolume {
+                rect: (-64, -64, w + 64, h + 64),
+                edge: 1,
+                density: (glow * 26 / 255) as u8,
+                colour,
                 top: 0,
             });
         }
