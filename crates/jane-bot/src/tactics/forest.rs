@@ -111,7 +111,8 @@ pub fn skip(v: &View<'_>, p: &Prop) -> bool {
     if !here(v) {
         return false;
     }
-    let short = caught(v) < ASKS;
+    // The glade is not opened so late that the sunbeams go out halfway through the fight.
+    let short = caught(v) < ASKS || v.hour() >= 18 || v.lamps_lit();
     match def_id(p) {
         // Every bud is the forest's own business: a glade's (`offers`, when she has the net to
         // keep what comes to it) and the Emperor's (`engage`).
@@ -254,6 +255,42 @@ pub fn keep_food(v: &View<'_>) -> u32 {
     }
     let boss = crate::crawl::boss_of(ZoneId::Forest);
     if sense::enemies(v).iter().any(|u| Some(u.def) == boss && fight::on_me(v, u)) { 0 } else { 4 }
+}
+
+/// Is the forest shut for her (the sign: "Open from sunrise to sunset")? From the hour the
+/// sunbeams go out and the lamps come on nothing grows in the glades and the butterflies go to
+/// roost; unless the Emperor is on her (that fight is finished where it is), the night is
+/// waited out by the hearth, mended there when hurt: the frame to hold, `None` while it is open.
+pub fn night(v: &View<'_>, cx: &mut Ctx, reach: &Reach) -> Option<Act> {
+    if !here(v) || !v.lamps_lit() {
+        return None;
+    }
+    let boss = crate::crawl::boss_of(ZoneId::Forest);
+    if sense::enemies(v).iter().any(|u| Some(u.def) == boss && fight::on_me(v, u)) {
+        return None;
+    }
+    let cat = jane_data::catalog();
+    let at = v.body().pos;
+    let Some(fire) = v
+        .props()
+        .filter(|p| cat.story.prop(p.def).rest && reach.beside(p) && v.prop_spawn(p).is_some_and(|s| s.talk.is_some()))
+        .min_by_key(|p| (sense::to_prop(p, at), p.id))
+    else {
+        return Some(Act::idle());
+    };
+    if sense::to_prop(fire, at) <= i64::from(3 * CELL_FX) {
+        return Some(Act::idle());
+    }
+    Some(match cx.nav.go(v, prop_centre(fire), Fx(2 * CELL_FX), false) {
+        Go::Walk(f) => Act::hold(f),
+        _ => Act::idle(),
+    })
+}
+
+/// Is the forest not worth setting out for at `hour`? It is open from sunrise to sunset, and
+/// what it asks takes most of a day: from seven till six in the evening.
+pub fn shut_hour(z: ZoneId, hour: u8) -> bool {
+    z == ZoneId::Forest && !(7..18).contains(&hour)
 }
 
 /// With the Emperor down, is what the story wants of the forest done? The Night Watchman's Key

@@ -129,7 +129,14 @@ pub fn keyed_for(v: &View<'_>, p: &Prop) -> bool {
 pub fn hours_till_open(v: &View<'_>, z: jane_core::ZoneId) -> u8 {
     let doors = doors_to(v, z);
     let hour = v.hour();
-    (0..24u8).find(|&h| doors.iter().any(|p| !shut_at(v, p, (hour + h) % 24))).unwrap_or(0)
+    // A dungeon that keeps hours of its own (Butterfly Forest's sign: `tactics::forest`).
+    let own = |h: u8| crate::tactics::forest::shut_hour(z, h);
+    (0..24u8)
+        .find(|&h| {
+            let at = (hour + h) % 24;
+            (doors.is_empty() || doors.iter().any(|p| !shut_at(v, p, at))) && !own(at)
+        })
+        .unwrap_or(0)
 }
 
 /// Free bag slots below which she throws something out.

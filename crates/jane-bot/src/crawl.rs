@@ -434,6 +434,16 @@ impl Crawl {
             }
         }
         let sig = signature(v);
+        // A dungeon shut for the night (tactics/*.rs): the night waited out by its fire (the
+        // county's night is worse), and not counted as the crawl's time.
+        if self.stage == Stage::Explore && !matches!(self.task, Some((_, Try::Rest(_)))) {
+            self.reach.update(v, sig);
+            if let Some(a) = crate::tactics::forest::night(v, cx, &self.reach) {
+                self.frames = self.frames.saturating_sub(1);
+                self.task = None;
+                return a;
+            }
+        }
         // A dungeon whose story is done (tactics/*.rs): out by a door, the rest left for later.
         let down = boss_of(self.zone).is_some_and(|b| self.bosses.iter().any(|&(d, _)| d == b));
         if self.stage == Stage::Explore && down {
