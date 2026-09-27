@@ -567,7 +567,15 @@ impl Story {
             let waited = someone_waits(q.quest);
             // Told how to end it, she goes and does it: Yours to Say before any errand.
             let decided = cx.ending.is_some() && Some(q.quest) == the_choice();
-            let near = |c: i64| if decided { 0 } else if waited { c / 2 } else { c };
+            let near = |c: i64| {
+                if decided {
+                    0
+                } else if waited {
+                    c / 2
+                } else {
+                    c
+                }
+            };
             let g = Goal::HandIn(q.quest);
             if q.ready {
                 if self.open(v, g) {

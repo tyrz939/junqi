@@ -239,10 +239,7 @@ impl Mine {
                     return Act::hold(crate::task::nudge(p.face));
                 }
                 let rect = levers.iter().find(|l| l.prop.id == p.lever).map(|l| l.rect);
-                if !staggered
-                    && crate::fight::gap(v.body(), k) < CELL
-                    && rect.is_some_and(|r| !in_rect(k, r))
-                {
+                if !staggered && crate::fight::gap(v.body(), k) < CELL && rect.is_some_and(|r| !in_rect(k, r)) {
                     p.missed += 1;
                 }
                 if p.missed <= 20 {

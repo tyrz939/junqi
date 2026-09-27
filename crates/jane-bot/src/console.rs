@@ -70,7 +70,14 @@ const ACTS: [Act; 7] = [
         name: "school",
         zone: ZoneId::School,
         done: &["the_mine", "the_museum", "the_forest", "the_factory", "the_burial"],
-        offered: &["offered_rats", "offered_mine", "offered_museum", "offered_forest", "offered_factory", "offered_burial"],
+        offered: &[
+            "offered_rats",
+            "offered_mine",
+            "offered_museum",
+            "offered_forest",
+            "offered_factory",
+            "offered_burial",
+        ],
         items: &[("the_ball", 1)],
         verbs: &["icebolt", "repair", "explosion", "grow", "spark", "fireball"],
     },
@@ -159,6 +166,22 @@ pub fn start_at(sim: &mut Sim, act: &str) -> Result<Vec<Command>, String> {
     }
     for (i, qty) in crate::crawl::materials_before(sim.blueprints(), a.zone) {
         out.push(Command::Dev(DevOp::Give { item: i, qty }));
+    }
+    // The School is come to up the stair behind Goldskin, which a console cannot open without
+    // playing the Burial: the act starts where the stair comes up, with The Bell at Nine given
+    // and Julie's Other Key in her bag, as the dog would have given them.
+    if name == "school" && !played {
+        sim.state_mut().flags.insert(
+            FlagKey::Named(jane_sim::sym::of_name(cat.name_id("offered_school").ok_or("no name offered_school")?)),
+            1,
+        );
+        out.push(Command::Dev(DevOp::Give { item: item("key_stair"), qty: 1 }));
+        let q = cat.story.quest_id("the_school").ok_or("no quest the_school")?;
+        out.push(Command::Dev(DevOp::Quest(q)));
+        if let Some(n) = cat.name_id("entry") {
+            out.push(Command::Dev(DevOp::Tp { zone: ZoneId::School, mark: jane_sim::sym::of_name(n) }));
+            return Ok(out);
+        }
     }
     let step = cat.name_id("dogs_step").ok_or("no mark dogs_step")?;
     out.push(Command::Dev(DevOp::Tp { zone: ZoneId::County, mark: jane_sim::sym::of_name(step) }));

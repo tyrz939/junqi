@@ -416,13 +416,7 @@ pub fn engage(v: &View<'_>, cx: &mut Ctx, id: UnitId) -> Option<Act> {
     // The School: what she cannot walk away from is fought out (`tactics::school::stands`).
     let kited = v.zone() == jane_core::ZoneId::School && crate::tactics::school::stands(v, t);
     let dangerous = i64::from(max_hit(t)) * 3 >= i64::from(me.hp.points());
-    if hp_permille(me) < FLEE_BELOW
-        && cx.fight.fleeing == 0
-        && !has_food(v)
-        && !would_win(v)
-        && !kited
-        && dangerous
-    {
+    if hp_permille(me) < FLEE_BELOW && cx.fight.fleeing == 0 && !has_food(v) && !would_win(v) && !kited && dangerous {
         cx.fight.fleeing = 180;
         cx.fight.fled += 1;
         cx.fight.hunt = None;

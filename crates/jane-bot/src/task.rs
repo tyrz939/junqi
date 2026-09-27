@@ -474,7 +474,10 @@ fn use_prop(u: &mut UseProp, v: &View<'_>, cx: &mut Ctx) -> Status {
                 u.sides = sides(v, p, me);
             }
             let Some(&(at, _)) = u.sides.get(u.side as usize) else {
-                return Status::Failed(format!("no side of it to stand at (tried {}; the last: {})", u.side, cx.nav.why));
+                return Status::Failed(format!(
+                    "no side of it to stand at (tried {}; the last: {})",
+                    u.side, cx.nav.why
+                ));
             };
             match cx.nav.go(v, at, Fx::from_px(3), cx.sprint()) {
                 Go::Walk(f) => Status::Act(Act::hold(f)),
