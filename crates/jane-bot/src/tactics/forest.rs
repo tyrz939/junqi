@@ -94,6 +94,14 @@ fn stone<'a>(v: &View<'a>) -> Option<&'a Prop> {
 /// says, and it says it in trades").
 const ASKS: u32 = 5;
 
+/// Whole enough for the Emperor's glade (its hedge closes behind her, and there is no fire in
+/// it): nine tenths of her health and four fifths of her mana.
+fn whole(v: &View<'_>) -> bool {
+    let me = v.body();
+    let mp = i64::from(jane_sim::units::max_mp(me).0.max(1));
+    sense::hp_permille(me) >= 900 && i64::from(me.mp.0) * 10 >= mp * 8
+}
+
 /// Is the point in the sky's light (a showing sunbeam or moonbeam, or a bank in the sun)? What
 /// she sees: the beam is on the grass or it is not.
 fn sky_lit(v: &View<'_>, p: &Prop) -> bool {
@@ -112,7 +120,7 @@ pub fn skip(v: &View<'_>, p: &Prop) -> bool {
         return false;
     }
     // The glade is not opened so late that the sunbeams go out halfway through the fight.
-    let short = caught(v) < ASKS || v.hour() >= 18 || v.lamps_lit();
+    let short = caught(v) < ASKS || v.hour() >= 18 || v.lamps_lit() || !whole(v);
     match def_id(p) {
         // Every bud is the forest's own business: a glade's (`offers`, when she has the net to
         // keep what comes to it) and the Emperor's (`engage`).
@@ -171,7 +179,7 @@ pub fn offers(v: &View<'_>, cx: &Ctx, reach: &Reach) -> Vec<(u8, i64, Try, Task)
         // The hearth the first time she can reach it (a death wakes her where she last slept,
         // and the county's road back to the gate is long); whole again before the glade.
         let first = !cx.used.contains_key(&(v.zone(), r.id));
-        if first || caught(v) >= ASKS && sense::hp_permille(v.body()) < 900 {
+        if first || caught(v) >= ASKS && !whole(v) {
             out.push((u8::from(first), sense::to_prop(r, at), Try::Rest(r.id), Task::Use(UseProp::new(r.id))));
         }
     }
@@ -238,7 +246,8 @@ pub fn look(v: &View<'_>, cx: &mut Ctx) {
         .map(|(_, k)| k)
         .collect();
     cx.forest.gone.extend(gone);
-    if cx.fight.hunt.is_some() || !v.props().any(|p| boss_bud(v, p)) {
+    // (Whole, though: hurt, she mends first, and a fight she comes to half dead is lost.)
+    if cx.fight.hunt.is_some() || !v.props().any(|p| boss_bud(v, p)) || !whole(v) {
         return;
     }
     let boss = crate::crawl::boss_of(ZoneId::Forest);
@@ -402,7 +411,20 @@ fn shoot(v: &View<'_>, cx: &mut Ctx, e: &Unit, reserve: i32, off: i32) -> Act {
             None => Act::hold(InputFrame { aim: Some(dir), ..frame }),
         };
     }
-    bolt(v, e, reserve, &["icebolt"]).unwrap_or_else(|| Act::hold(InputFrame { aim: Some(dir), ..InputFrame::IDLE }))
+    if let Some(a) = bolt(v, e, reserve, &["icebolt"]) {
+        return a;
+    }
+    // Out of her Icebolt's reach or sight (left across the glade after a death, say): in again.
+    let ice = sense::spell("icebolt");
+    let far = fight::gap(me, e) > i64::from(jane_data::catalog().combat.spell(ice).range.0) * 9 / 10;
+    if far || !v.sight(me.pos, e.pos) {
+        let frame = match cx.nav.go(v, e.pos, Fx(off * CELL_FX), false) {
+            Go::Walk(f) => f,
+            _ => stick(me.pos, e.pos, false),
+        };
+        return Act::hold(InputFrame { aim: Some(dir), ..frame });
+    }
+    Act::hold(InputFrame { aim: Some(dir), ..InputFrame::IDLE })
 }
 
 /// One frame of the job in hand (a bud grown, the stone opened); `None` when there is none or it
@@ -456,7 +478,28 @@ pub fn engage(v: &View<'_>, cx: &mut Ctx, e: &Unit) -> Option<Act> {
     }
     if crate::crawl::boss_of(ZoneId::Forest) != Some(e.def) {
         // The Collector throws his net from twelve metres: backing off from him is only being
-        // netted further off. He is stood up to, with everything she has.
+        // netted further off. He is stood up to, with everything she has: without Stone Skin the
+        // Life Steal she carries, and an apple as soon as she is down a third (she does not wait
+        // for the last of it, as on the road).
+        let skin_held = holds(v, skin) > 0 || skinned;
+        let steal = sense::item("potion_lifesteal");
+        let stealing = cat
+            .combat
+            .effect_id("lifesteal")
+            .is_some_and(|s| me.statuses.iter().any(|x| x.effect == s && x.until > now));
+        if !skin_held
+            && !stealing
+            && dist(me.pos, e.pos) < i64::from(12 * CELL_FX)
+            && holds(v, steal) > 0
+            && !me.item_cooldowns.iter().any(|&(c, until)| c == steal && until > now)
+        {
+            return Some(Act::press(Command::Item(steal)));
+        }
+        if sense::hp_permille(me) < 660 {
+            if let Some(f) = fight::food(v) {
+                return Some(Act::press(Command::Item(f)));
+            }
+        }
         return Some(stand_up(v, cx, e, 0));
     }
     // Out of the dust: it hangs a while and bites every second she stands in it.

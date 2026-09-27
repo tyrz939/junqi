@@ -874,6 +874,9 @@ impl Crawl {
                 || burial && crate::tactics::burial::not_hunted(def)
                 || (d.sight == jane_data::UnitSight::Lit && !d.boss)
                 || v.zone() == ZoneId::School && !crate::tactics::school::hunts(def)
+                // Butterfly Forest: a thing with no feet left behind stays there (a cactus across
+                // the forest is walked back to for nothing, and some cannot be walked to at all).
+                || v.zone() == ZoneId::Forest && d.run.0 <= 0 && d.walk.0 <= 0
             {
                 continue;
             }
