@@ -6,8 +6,10 @@
 //! **Full** adds the frame-time graph (the last 240 frames as stacked bars by stage: sim step,
 //! presenter tick, frame build and UI, backend draw, the wait for the display; budget lines at
 //! 16.7 and 8.3 ms), a second graph of the sim's tick, the per-pass table from the backend's own
-//! clock (`Backend::stats`), the sim's numbers, the presenter's and the backend's counts, the
-//! last eight hitches over 20 ms with the stage that dominated each, and the passes in force.
+//! clock (`Backend::stats`), the sim's numbers (`Sim::metrics`, a second's means: units awake,
+//! paths, events, and the step's time in eight groups of its phases), the presenter's and the
+//! backend's counts, the last eight hitches over 20 ms with the stage that dominated each, and the
+//! passes in force.
 //!
 //! The app measures; this file keeps the rings and draws. Nothing here allocates per frame
 //! after the first.
@@ -16,6 +18,8 @@ use std::fmt::Write as _;
 
 use jane_art::font::Face;
 use jane_art::palette::{Ix, Ramp, Tone};
+use jane_sim::metrics::PHASES;
+use jane_sim::{Phase, SimMetrics};
 
 use crate::backend::{FrameStats, StatPass};
 use crate::frame::Tier;
@@ -48,8 +52,6 @@ pub struct PerfLog {
     n_frames: usize,
     ticks: Box<[u32; FRAMES]>,
     n_ticks: usize,
-    /// Events the sim emitted, per tick, over the same window.
-    events: Box<[u16; FRAMES]>,
     hitches: [Hitch; 8],
     n_hitches: usize,
     /// Frames a second, as last counted.
@@ -65,7 +67,6 @@ impl Default for PerfLog {
             n_frames: 0,
             ticks: Box::new([0; FRAMES]),
             n_ticks: 0,
-            events: Box::new([0; FRAMES]),
             hitches: [Hitch::default(); 8],
             n_hitches: 0,
             fps: 0,
@@ -107,10 +108,9 @@ impl PerfLog {
         }
     }
 
-    /// One sim tick: its time, µs, and the events it emitted.
-    pub fn tick(&mut self, us: u32, events: usize) {
+    /// One frame's sim ticks: their time, µs.
+    pub fn tick(&mut self, us: u32) {
         self.ticks[self.n_ticks % FRAMES] = us;
-        self.events[self.n_ticks % FRAMES] = events.min(usize::from(u16::MAX)) as u16;
         self.n_ticks += 1;
     }
 
@@ -144,15 +144,6 @@ impl PerfLog {
         (percentile(v, 50), percentile(v, 99), v.iter().copied().max().unwrap_or(0))
     }
 
-    /// Events a tick, the mean over the window.
-    pub fn events_per_tick(&self) -> u32 {
-        let n = self.n_ticks.min(FRAMES);
-        if n == 0 {
-            return 0;
-        }
-        (self.events[..n].iter().map(|&e| u32::from(e)).sum::<u32>()) / n as u32
-    }
-
     /// The hitches kept, newest first.
     pub fn hitches(&self) -> impl Iterator<Item = &Hitch> {
         let k = self.n_hitches.min(8);
@@ -167,8 +158,87 @@ pub struct SimInfo {
     pub units_total: u32,
     pub path_searches_per_tick: u32,
     pub path_nodes_per_search: u32,
-    /// Per-phase µs from `Sim::metrics()`, when the sim reports them.
+    pub events_per_tick: u32,
+    /// The whole step, µs (0 without a wall clock).
+    pub step_us: u32,
+    /// Per-phase µs from `Sim::metrics()`, grouped by [`PHASE_SLOTS`], when the sim has a wall
+    /// clock to time them by.
     pub phases: Option<[(&'static str, u32); 8]>,
+}
+
+/// The overlay's eight rows of the step's fifteen phases (`jane_sim::Phase`): each a name and the
+/// phases it sums. The commands (phase 0) go with the clock, the head of the step.
+pub const PHASE_SLOTS: [(&str, &[Phase]); 8] = [
+    ("clock", &[Phase::Commands, Phase::Clock]),
+    ("presence", &[Phase::Presence, Phase::Ring]),
+    ("players", &[Phase::CatchUp, Phase::Players]),
+    ("control", &[Phase::Controllers]),
+    ("combat", &[Phase::Projectiles, Phase::Statuses, Phase::Flush]),
+    ("triggers", &[Phase::Triggers]),
+    ("housekeep", &[Phase::Housekeeping]),
+    ("ops/drop", &[Phase::ZoneOps, Phase::Travel, Phase::Drop]),
+];
+
+/// Ticks of `Sim::metrics()` the overlay means over: a second.
+const TALLY_TICKS: u32 = 60;
+
+/// `Sim::metrics()` step by step, meant over a second for the overlay: one step's numbers
+/// jitter too much to read. The units are the last step's. Presentation only, like the metrics.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct SimTally {
+    last: SimMetrics,
+    n: u32,
+    step_ns: u64,
+    phase_ns: [u64; PHASES],
+    searches: u64,
+    expanded: u64,
+    events: u64,
+    /// The last full second's means, once there has been one.
+    shown: Option<SimInfo>,
+}
+
+impl SimTally {
+    /// One step's metrics.
+    pub fn add(&mut self, m: &SimMetrics) {
+        self.last = *m;
+        self.n += 1;
+        self.step_ns += u64::from(m.step_ns);
+        for (sum, &t) in self.phase_ns.iter_mut().zip(&m.phase_ns) {
+            *sum += u64::from(t);
+        }
+        self.searches += u64::from(m.path_searches);
+        self.expanded += u64::from(m.path_expanded);
+        self.events += u64::from(m.events);
+        if self.n >= TALLY_TICKS {
+            self.shown = Some(self.mean());
+            *self = SimTally { last: self.last, shown: self.shown, ..SimTally::default() };
+        }
+    }
+
+    /// The means over the steps summed so far.
+    fn mean(&self) -> SimInfo {
+        let n = u64::from(self.n.max(1));
+        let us = |ns: u64| (ns / n / 1000) as u32;
+        let phases = (self.step_ns > 0)
+            .then(|| PHASE_SLOTS.map(|(name, ph)| (name, us(ph.iter().map(|p| self.phase_ns[p.index()]).sum()))));
+        SimInfo {
+            path_searches_per_tick: (self.searches / n) as u32,
+            path_nodes_per_search: (self.expanded / self.searches.max(1)) as u32,
+            events_per_tick: (self.events / n) as u32,
+            step_us: us(self.step_ns),
+            phases,
+            ..SimInfo::default()
+        }
+    }
+
+    /// What the overlay shows: the last second's means (the steps so far before there is one)
+    /// and the last step's units.
+    pub fn info(&self) -> SimInfo {
+        let mut i = self.shown.unwrap_or_else(|| self.mean());
+        i.units_awake = self.last.units_awake;
+        i.units_total = self.last.units_total;
+        i
+    }
 }
 
 /// The presenter's and the frame's counts.
@@ -253,6 +323,31 @@ pub fn top_line(ui: &mut Ui, t: &TopLine<'_>) {
         ui.fill(Rect::new(cw - w - 12, 1, w + 8, 11), argb(style::warn(), 220));
         ui.text(cw - w - 8, 1, t.speed, Ink::fine(style::INK));
     }
+}
+
+/// The passes in force as lines of at most `cols` characters, each handed to `out`.
+fn wrap_passes(f: &FrameInfo, cols: usize, line: &mut String, out: &mut dyn FnMut(&str)) {
+    line.clear();
+    line.push_str(" passes");
+    for p in f.passes.iter().flatten() {
+        if line.len() + 1 + p.len() > cols {
+            out(line);
+            line.clear();
+            line.push_str("       ");
+        }
+        line.push(' ');
+        line.push_str(p);
+    }
+    out(line);
+}
+
+/// The rows the full view's sim column takes: the sim's (four, and the phases' four or one), the
+/// frame's, the passes' and the hitches'.
+fn sim_rows(v: &PerfView<'_>, cols: usize, line: &mut String) -> i32 {
+    let mut n = 4 + if v.sim.phases.is_some() { 4 } else { 1 };
+    n += 4 + i32::from(v.backend.is_some());
+    wrap_passes(&v.frame, cols, line, &mut |_| n += 1);
+    n + 1 + (v.log.hitches().take(4).count() as i32).max(1)
 }
 
 /// Draws F2 at `level` (1 compact, 2 full).
@@ -379,8 +474,10 @@ pub fn draw(ui: &mut Ui, level: u8, v: &PerfView<'_>) {
     // Per pass: the backend's own clock.
     let ty = sy + sh + 4;
     let tw = gw + w + 6;
-    let rows = StatPass::COUNT as i32;
-    let th = 20 + rows * lh + 6;
+    let cwid = tw - 200;
+    let cols = ((cwid - 16) / crate::ui::core::advance(Face::Fine)) as usize;
+    // Tall enough for the pass table and for the sim's column beside it, whichever is longer.
+    let th = (StatPass::COUNT as i32 * lh + 26).max(sim_rows(v, cols, &mut line) * lh + 8);
     let tx = gx;
     ui.panel(Rect::new(tx, ty, 194, th), PanelStyle::Debug);
     let clock = match v.backend {
@@ -407,14 +504,15 @@ pub fn draw(ui: &mut Ui, level: u8, v: &PerfView<'_>) {
 
     // The sim, the frame, the hitches.
     let cx = tx + 200;
-    let cwid = tw - 200;
     ui.panel(Rect::new(cx, ty, cwid, th), PanelStyle::Debug);
     let mut row = 0;
     let mut put = |ui: &mut Ui, s: &str, ink: Ix| {
         ui.text(cx + 8, ty + 4 + row * lh, s, Ink::fine(ink).shadow());
         row += 1;
     };
-    put(ui, "sim", style::gold());
+    line.clear();
+    let _ = write!(line, "sim  step {} us  (phases, us)", v.sim.step_us);
+    put(ui, if v.sim.phases.is_some() { &line } else { "sim" }, style::gold());
     line.clear();
     let _ = write!(line, " units {} awake of {}", v.sim.units_awake, v.sim.units_total);
     put(ui, &line, style::text());
@@ -422,17 +520,20 @@ pub fn draw(ui: &mut Ui, level: u8, v: &PerfView<'_>) {
     let _ = write!(line, " paths {}/tick, {} nodes each", v.sim.path_searches_per_tick, v.sim.path_nodes_per_search);
     put(ui, &line, style::text());
     line.clear();
-    let _ = write!(line, " events {}/tick", v.log.events_per_tick());
+    let _ = write!(line, " events {}/tick", v.sim.events_per_tick);
     put(ui, &line, style::text());
     match v.sim.phases {
+        // Two to a row, in the step's order down the left and then the right.
         Some(ph) => {
-            for (name, us) in ph.iter().filter(|p| !p.0.is_empty()) {
+            for k in 0..4 {
                 line.clear();
-                let _ = write!(line, "  {name:<10} {us} us");
+                for (name, us) in [ph[k], ph[k + 4]] {
+                    let _ = write!(line, "  {name:<9}{us:>4}");
+                }
                 put(ui, &line, style::quiet());
             }
         }
-        None => put(ui, " phases n/a (Sim::metrics)", style::dim()),
+        None => put(ui, " phases n/a (no wall clock)", style::dim()),
     }
     put(ui, "frame", style::gold());
     let f = &v.frame;
@@ -454,19 +555,7 @@ pub fn draw(ui: &mut Ui, level: u8, v: &PerfView<'_>) {
         }
         put(ui, &line, style::text());
     }
-    line.clear();
-    line.push_str(" passes");
-    let cols = ((cwid - 16) / crate::ui::core::advance(Face::Fine)) as usize;
-    for p in f.passes.iter().flatten() {
-        if line.len() + 1 + p.len() > cols {
-            put(ui, &line, style::quiet());
-            line.clear();
-            line.push_str("       ");
-        }
-        line.push(' ');
-        line.push_str(p);
-    }
-    put(ui, &line, style::quiet());
+    wrap_passes(f, cols, &mut line, &mut |s| put(ui, s, style::quiet()));
     put(ui, "hitches over 20 ms", style::gold());
     let mut any = false;
     for hch in v.log.hitches().take(4) {
@@ -491,7 +580,7 @@ mod tests {
         for i in 0..300u32 {
             let slow = if i == 250 { 30_000 } else { 0 };
             log.frame([1000, 500, 800 + slow, 2000, 12_000], u64::from(i) * 16, u64::from(i));
-            log.tick(900 + i, 3);
+            log.tick(900 + i);
         }
         let (p50, p99, last) = log.frame_times();
         assert_eq!(last, 16_300);
@@ -503,7 +592,44 @@ mod tests {
         let (tp50, _, tmax) = log.tick_times();
         assert_eq!(tmax, 900 + 299);
         assert!(tp50 > 900 + 60);
-        assert_eq!(log.events_per_tick(), 3);
         assert!(log.fps > 0);
+    }
+
+    #[test]
+    fn the_tally_means_a_second_of_metrics_into_the_eight_rows() {
+        assert_eq!(PHASE_SLOTS.iter().map(|s| s.1.len()).sum::<usize>(), PHASES, "every phase in one row");
+        let mut seen = [false; PHASES];
+        for (_, ph) in PHASE_SLOTS {
+            for p in ph {
+                assert!(!seen[p.index()], "{} twice", p.name());
+                seen[p.index()] = true;
+            }
+        }
+        let mut t = SimTally::default();
+        assert_eq!(t.info().phases, None);
+        let mut m = SimMetrics {
+            units_awake: 5,
+            units_total: 9,
+            path_searches: 2,
+            path_expanded: 40,
+            events: 3,
+            ..SimMetrics::default()
+        };
+        t.add(&m);
+        let i = t.info();
+        assert_eq!((i.units_awake, i.units_total, i.path_searches_per_tick, i.path_nodes_per_search), (5, 9, 2, 20));
+        assert_eq!((i.events_per_tick, i.phases), (3, None), "no clock, no times");
+        m.step_ns = 150_000;
+        m.phase_ns[Phase::Controllers.index()] = 100_000;
+        m.phase_ns[Phase::Statuses.index()] = 20_000;
+        m.phase_ns[Phase::Flush.index()] = 10_000;
+        let mut t = SimTally::default();
+        for _ in 0..TALLY_TICKS {
+            t.add(&m);
+        }
+        let ph = t.info().phases.expect("timed");
+        assert_eq!(ph[3], ("control", 100));
+        assert_eq!(ph[4], ("combat", 30));
+        assert_eq!(t.info().step_us, 150);
     }
 }
