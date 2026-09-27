@@ -792,7 +792,9 @@ impl Story {
             if brew && holds(v, sense::item("rat_meat")) > 0 && self.open(v, g) {
                 if let Some(t) = get(v, cx, bait, 0) {
                     let home_near = here == ZoneId::House
-                        || doors_to(v, ZoneId::House).first().is_some_and(|p| to_prop(p, at) <= i64::from(PROVISION_REACH * CELL_FX));
+                        || doors_to(v, ZoneId::House)
+                            .first()
+                            .is_some_and(|p| to_prop(p, at) <= i64::from(PROVISION_REACH * CELL_FX));
                     if burial_ahead || home_near || cost_of(&t) <= i64::from(PROVISION_REACH * CELL_FX) {
                         return Some((t, g));
                     }
@@ -818,7 +820,10 @@ impl Story {
             for (name, want) in PROVISIONS {
                 let item = sense::item(name);
                 let g = Goal::Provision(item);
-                if holds(v, item) >= want || !self.open(v, g) || (burial_ahead && short || keep_water) && name.starts_with("potion_") {
+                if holds(v, item) >= want
+                    || !self.open(v, g)
+                    || (burial_ahead && short || keep_water) && name.starts_with("potion_")
+                {
                     continue;
                 }
                 match get(v, cx, item, 0) {

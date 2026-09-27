@@ -164,9 +164,9 @@ impl Ctx {
     /// killed her there is likely there still (a guard, a pair of them, a sentry by a fire), and
     /// walking straight back in from where she woke is how one death became fifty.
     pub fn fell_near(&self, z: ZoneId, at: (i32, i32), r: i32, now: u32) -> bool {
-        self.fell.iter().any(|&(fz, c, t)| {
-            fz == z && now < t + FELL_FOR && (c.0 - at.0).abs() <= r && (c.1 - at.1).abs() <= r
-        })
+        self.fell
+            .iter()
+            .any(|&(fz, c, t)| fz == z && now < t + FELL_FOR && (c.0 - at.0).abs() <= r && (c.1 - at.1).abs() <= r)
     }
 
     /// Was `id` someone she fought?
