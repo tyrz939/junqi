@@ -30,6 +30,11 @@ pub const REPLAN: u32 = 120;
 pub const STUCK: u32 = 24;
 /// Frames without getting nearer the goal before giving up on it.
 pub const HOPELESS: u32 = 60 * 20;
+/// Frames without getting [`LOST_BY`] cells nearer the goal, however many steps along a path she
+/// takes, before giving up on it: two plans that each look like progress can walk her back and
+/// forth between them for ever (seed 4 paced ten cells of the county for thirty hours).
+pub const LOST: u32 = 60 * 180;
+const LOST_BY: i32 = 8;
 
 /// What a frame of walking came to.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -56,6 +61,9 @@ pub struct Nav {
     /// Frames since she was last nearer the goal than ever before (by a cell).
     fruitless: u32,
     best_dist: i64,
+    /// Frames since she was last [`LOST_BY`] cells nearer the goal (`LOST`), and that distance.
+    lost: u32,
+    lost_best: i64,
     /// Cells shunned for a while (stuck against something the flags do not show: someone
     /// standing in a doorway), with the frame they may be tried again.
     shun: BTreeMap<(i32, i32), u32>,
@@ -165,6 +173,8 @@ impl Nav {
             still: 0,
             fruitless: 0,
             best_dist: i64::MAX,
+            lost: 0,
+            lost_best: i64::MAX,
             shun: BTreeMap::new(),
             frames: 0,
             plans: 0,
@@ -197,6 +207,8 @@ impl Nav {
         self.still = 0;
         self.fruitless = 0;
         self.best_dist = i64::MAX;
+        self.lost = 0;
+        self.lost_best = i64::MAX;
     }
 
     /// The places she died in zone `z`.
@@ -309,6 +321,16 @@ impl Nav {
             }
             self.still = 0;
             self.replan_in = 0;
+        }
+        if d + i64::from(LOST_BY * CELL_FX) < self.lost_best {
+            self.lost_best = d;
+            self.lost = 0;
+        } else {
+            self.lost += 1;
+            if self.lost > LOST {
+                self.why = "no nearer in three minutes, walking back and forth";
+                return Go::NoWay;
+            }
         }
         if d + i64::from(CELL_FX) < self.best_dist {
             self.best_dist = d;
