@@ -172,6 +172,15 @@ pub fn idle(v: &View<'_>, reach: &Reach) -> Option<(Task, Try)> {
     throw(v, reach)
 }
 
+/// Not hunted in the Museum: what is slower than half her walk and no boss (the armours). Nothing
+/// the story needs is behind one, and one takes a minute and a stove to put down; it is walked
+/// past ([`walk_past`]).
+pub fn leave_be(v: &View<'_>, def: jane_core::UnitDefId) -> bool {
+    let cat = jane_data::catalog();
+    let d = cat.combat.unit(def);
+    v.zone() == ZoneId::Museum && !d.boss && i64::from(d.run.0) * 2 < i64::from(cat.combat.unit(v.body().def).walk.0)
+}
+
 /// Everything on her is slower than half her walk (the armours: "Armours walk slowly and hit
 /// hard", DUNGEONS.md §3.2), and she was not sent after it: she walks on about her business and
 /// lets them follow. Stood toe to toe, an armour stuns her and takes a minute to put down, and
@@ -314,7 +323,8 @@ pub fn fight(v: &View<'_>, cx: &mut crate::task::Ctx, reach: &Reach) -> Option<c
     // ate its apples on the armours lost the Attendant with him nearly down); the small fry
     // follow her to the stove, and it mends her all the same.
     let boss_on = sense::enemies(v).into_iter().any(|u| crate::fight::on_me(v, u) && cat.combat.unit(u.def).boss);
-    if !boss_on && sense::hp_permille(me) < crate::fight::EAT_BELOW && crate::fight::has_food(v) {
+    let apples = sense::holds(v, sense::item("apple"));
+    if !boss_on && sense::hp_permille(me) < crate::fight::EAT_BELOW && apples > 0 && apples <= 11 {
         if let Some(a) = stove(v, reach).and_then(|s| use_now(v, cx, s)) {
             return Some(a);
         }
@@ -366,21 +376,48 @@ pub fn fight(v: &View<'_>, cx: &mut crate::task::Ctx, reach: &Reach) -> Option<c
             }
         }
     }
-    // Dark, with armours off their plinths and walking: the breaker first (it freezes them). Dark
-    // with every plinth already blown, the lights are nothing to her: the breaker is by his post.
-    let walking = cat
-        .combat
-        .unit_id("armour")
-        .is_some_and(|a| sense::units_of(v, a).iter().any(|u| rotunda.contains(u.pos.cell().0, u.pos.cell().1)));
-    if is_attendant && walking && sense::prop_named(v, "museum_rotunda_lamp_a").is_none() {
-        if let Some(a) = sense::prop_named(v, "museum_rotunda_breaker").and_then(|b| use_now(v, cx, b)) {
-            return Some(a);
+    // Dark: the rotunda's breaker thrown back freezes whatever armours walk and leaves him
+    // dazzled where he stands for five seconds (DUNGEONS.md §3.2: "Throw it back"). With armours
+    // walking, it comes first; with none, it is thrown when it is hers to reach: at her elbow as
+    // the loop takes her past it, or nearer her than him with him well off.
+    let rotunda_dark = sense::prop_named(v, "museum_rotunda_lamp_a").is_none();
+    if is_attendant && rotunda_dark {
+        if let Some(b) = sense::prop_named(v, "museum_rotunda_breaker") {
+            let walking = cat.combat.unit_id("armour").is_some_and(|a| {
+                sense::units_of(v, a).iter().any(|u| rotunda.contains(u.pos.cell().0, u.pos.cell().1))
+            });
+            let at = sense::prop_centre(b);
+            let mine = dist(me.pos, at);
+            let focused = v.focus().is_some_and(|f| f.target == jane_sim::interact::FocusRef::Prop(b.id));
+            if focused {
+                return Some(crate::Act::press(Command::Use));
+            }
+            let clear = d > i64::from(6 * CELL_FX) && mine * 3 < dist(boss.pos, at) * 2;
+            if walking || mine < i64::from(3 * CELL_FX) || clear {
+                if let Some(a) = use_now(v, cx, b) {
+                    return Some(a);
+                }
+            }
         }
     }
     let dazzled = cat.combat.effect_id("dazzled").is_some_and(|e| boss.statuses.iter().any(|s| s.effect == e));
     let ice = cat.combat.spell_id("icebolt").filter(|&s| sense::knows(v, s));
     let bolt_ready = ice.filter(|&s| crate::fight::ready(me, s, now));
     let in_sight = v.sight(me.pos, boss.pos);
+    // Something small in at her heels (a fox, a bat come in by a side door) with him well off:
+    // put it down first; kited round the room it bites all the way.
+    if d > i64::from(6 * CELL_FX) {
+        let add = sense::enemies(v).into_iter().find(|u| {
+            u.id != boss.id
+                && crate::fight::on_me(v, u)
+                && crate::fight::fightable(u)
+                && !cat.combat.unit(u.def).boss
+                && crate::fight::gap(me, u) < i64::from(2 * CELL_FX)
+        });
+        if let Some(a) = add.and_then(|u| crate::fight::engage(v, cx, u.id)) {
+            return Some(a);
+        }
+    }
     // On his last legs: finish him, by bolt or by hand.
     let last_legs = boss.hp.0 < 60_000;
     if last_legs {
@@ -442,6 +479,10 @@ pub fn fight(v: &View<'_>, cx: &mut crate::task::Ctx, reach: &Reach) -> Option<c
                 return Some(crate::Act::hold(InputFrame { aim: Some(aim), ..f }));
             }
         }
+        // There, and the line still not clear from where her feet are: a step in toward him.
+        if !is_attendant {
+            return Some(crate::Act::hold(InputFrame { aim: Some(aim), ..crate::nav::stick(me.pos, boss.pos, false) }));
+        }
     }
     if d > range || !in_sight && d > i64::from(10 * CELL_FX) {
         return match cx.nav.go(v, boss.pos, Fx(range as i32 * 3 / 4), false) {
@@ -449,7 +490,7 @@ pub fn fight(v: &View<'_>, cx: &mut crate::task::Ctx, reach: &Reach) -> Option<c
             _ => Some(crate::Act::hold(crate::nav::stick(me.pos, boss.pos, false))),
         };
     }
-    if d > i64::from(8 * CELL_FX) && !hold {
+    if d > i64::from(8 * CELL_FX) && !hold && in_sight {
         return Some(crate::Act::hold(InputFrame { aim: Some(aim), ..InputFrame::IDLE }));
     }
     let from = boss.pos;
