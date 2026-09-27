@@ -14,6 +14,7 @@ use jane_data::{Controller, Faction, Region};
 use jane_sim::event::{Event, EventKind, events_for};
 use jane_sim::ids::PropIx;
 use jane_sim::view::View;
+use jane_core::ids::SpellId;
 
 use crate::atlas::{Atlas, RefId};
 use crate::backend::AtlasPages;
@@ -88,7 +89,7 @@ struct UnitRec {
     /// Ticks stood still (a creature sits, grazes or pecks after a while), and the tick it last
     /// struck (its attack's three beats).
     still: u32,
-    struck: Option<u32>,
+    struck: Option<(u32, SpellId)>,
     facing: Facing,
 }
 
@@ -148,7 +149,7 @@ pub struct Present {
     units_next: Vec<UnitRec>,
     hurt: Vec<u32>,
     /// Units that struck (cast) this tick.
-    struck: Vec<u32>,
+    struck: Vec<(u32, SpellId)>,
     props: Vec<PropRec>,
     prop_scratch: Vec<PropIx>,
     standing: DrawList,
@@ -303,7 +304,7 @@ impl Present {
                     };
                 }
                 EventKind::Damage { unit, .. } => self.hurt.push(unit.get()),
-                EventKind::Cast { unit, .. } => self.struck.push(unit.get()),
+                EventKind::Cast { unit, spell, .. } => self.struck.push((unit.get(), spell)),
                 _ => {}
             }
         }
@@ -389,9 +390,9 @@ impl Present {
                 self.units[i].hurt_until = self.tick + HURT_TICKS;
             }
         }
-        for &id in &self.struck {
+        for &(id, spell) in &self.struck {
             if let Ok(i) = self.units.binary_search_by_key(&id, |r| r.id) {
-                self.units[i].struck = Some(self.tick);
+                self.units[i].struck = Some((self.tick, spell));
             }
         }
     }
@@ -660,15 +661,31 @@ impl Present {
             }
             // A person shows its walk, breathe or dead frame (ART.md §4); a stand-in walks with
             // a one-px bob.
+            let mut cast_glow = None;
             let (look, mirror, bob) = match (u.person, u.creature) {
                 (Some(set), _) => {
-                    let pose = people::Pose { facing: u.facing, anim: u.anim, tick: self.tick, dead: u.dead, id: u.id };
+                    // A blow or a spell under way plays its three beats; a blow taken, its hurt.
+                    let act = u.struck.and_then(|(t, spell)| {
+                        let t = self.tick.wrapping_sub(t);
+                        (t < 3 * people::ACT_TICKS).then(|| match jane_data::catalog().combat.spell(spell).anim {
+                            jane_data::CastAnim::Cast => people::Act::Cast(t),
+                            _ => people::Act::Attack(t),
+                        })
+                    });
+                    let hurt = self.tick < u.hurt_until;
+                    // Hands out on the cast's second beat: the school's light between them.
+                    if let (Some(people::Act::Cast(t)), Some((_, spell))) = (act, u.struck) {
+                        if t / people::ACT_TICKS == 1 && !u.dead {
+                            cast_glow = Some(jane_data::catalog().combat.spell(spell).school);
+                        }
+                    }
+                    let pose = people::Pose { facing: u.facing, anim: u.anim, tick: self.tick, dead: u.dead, id: u.id, act, hurt };
                     let (look, mirror) = self.people.frame(set, pose);
                     (look, mirror, 0)
                 }
                 // A creature trots, sits a while after it stops, and strikes in three beats.
                 (None, Some(set)) => {
-                    let attack = u.struck.map(|t| self.tick.wrapping_sub(t)).filter(|&t| t < 3 * creatures::ATTACK_TICKS);
+                    let attack = u.struck.map(|(t, _)| self.tick.wrapping_sub(t)).filter(|&t| t < 3 * creatures::ATTACK_TICKS);
                     let pose = creatures::Pose {
                         facing: u.facing,
                         anim: u.anim,
@@ -709,6 +726,37 @@ impl Present {
                 sprite: sprite(r, x, y, Flags { mirror, tint }),
                 caster,
             });
+            if let Some(school) = cast_glow {
+                // The light gathered between her hands: in front of her facing the viewer or to
+                // the side, behind her facing away; it lights what is round it.
+                let (dx, dy, ahead) = match u.facing {
+                    Facing::East => (9, -21, 1),
+                    Facing::West => (-9, -21, 1),
+                    Facing::South => (0, -18, 1),
+                    Facing::North => (0, -19, -1),
+                };
+                let g = self.atlas.get(self.people.glow(school));
+                let (gx, gy) = (sx + dx - i32::from(g.src.w) / 2, sy + dy - i32::from(g.src.h) / 2);
+                self.standing.push(DrawCmd {
+                    y: sy + ahead,
+                    key: 0x4000_0000 | u.id,
+                    sprite: sprite(g, gx, gy, Flags::default()),
+                    caster: None,
+                });
+                if n_glows < glows.len() {
+                    let c = jane_art::palette::rgb(jane_art::palette::Ramp::at(jane_art::fx::school_ramp(school), jane_art::palette::Tone::Light));
+                    glows[n_glows] = Some(Light {
+                        pos: (sx + dx, sy),
+                        height: (-dy).clamp(0, 255) as u8,
+                        colour: c,
+                        radius: 64,
+                        size: 4,
+                        casts: false,
+                        kind: LightKind::Point,
+                    });
+                    n_glows += 1;
+                }
+            }
         }
         let rows = (ch + 2 * SORT_MARGIN) as u32;
         let f = &mut self.frame;

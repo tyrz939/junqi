@@ -47,6 +47,21 @@ pub fn frame_ids() -> impl Iterator<Item = FrameId> {
     LIVING.iter().map(|(f, _, _)| *f).chain([FrameId::Dead, FrameId::Dead2])
 }
 
+/// Every frame a person that attacks or casts promises: [`frame_ids`], then its attack, cast
+/// and hurt frames (ART.md §4).
+pub fn frame_ids_for(fight: Fight) -> Vec<FrameId> {
+    frame_ids().chain(pose::fight(fight.attacks, fight.casts).into_iter().map(|(f, _, _)| f)).collect()
+}
+
+/// What a person does besides walk: strike, cast (either brings the hurt frames).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Fight {
+    /// It has a spell whose animation is an attack.
+    pub attacks: bool,
+    /// It has a spell whose animation is a cast.
+    pub casts: bool,
+}
+
 /// The stable seed of a sprite id: FNV-1a of its name, so it never moves when rows are added.
 pub fn seed(sprite: &str) -> u32 {
     fnv1a(sprite.as_bytes())
@@ -128,6 +143,11 @@ impl Dress {
 /// Render every frame of `look` (its `vary` already resolved: [`PersonLook::variant`]). `seed`
 /// is the sprite's stable id ([`seed`]); it sizes the fallen's pool.
 pub fn render(look: &PersonLook, seed: u32) -> Result<SpriteSet, String> {
+    render_fighting(look, seed, Fight::default())
+}
+
+/// [`render`] with the attack, cast and hurt frames `fight` asks for.
+pub fn render_fighting(look: &PersonLook, seed: u32, fight: Fight) -> Result<SpriteSet, String> {
     let d = Dress::new(look)?;
     let p = proportions(look.build);
     let mut frames: Vec<(FrameId, Canvas)> =
@@ -142,6 +162,9 @@ pub fn render(look: &PersonLook, seed: u32) -> Result<SpriteSet, String> {
         }
         let body = draw::frame(&d, p, Facing::Down, pose);
         frames.push((id, fallen::fallen(&body, seed ^ k as u32, d.skin != Ramp::Bone)));
+    }
+    for (id, facing, pose) in pose::fight(fight.attacks, fight.casts) {
+        frames.push((id, draw::frame(&d, p, facing, pose)));
     }
     let mut emits = Vec::new();
     for e in look.emits {

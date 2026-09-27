@@ -18,20 +18,34 @@ pub const BREATHE_TICKS: u32 = 40;
 /// How tall a person stands, px (the head: `ART.md` §1.1).
 const HEIGHT: u8 = 40;
 
-/// One rendered set's frames in the atlas, in `person::frame_ids()` order.
+/// Ticks each beat of an attack or a cast shows: wind-up, strike, recover.
+pub const ACT_TICKS: u32 = 5;
+
+/// One rendered set's frames in the atlas: the walk, the breathe and the dead of every person,
+/// and the attack, cast and hurt frames of one that fights.
 #[derive(Clone, Debug)]
 struct Set {
     sprite: SpriteId,
     variant: u8,
     seat: u8,
-    frames: Vec<RefId>,
+    frames: Vec<(FrameId, RefId)>,
 }
 
 /// Every person look, packed.
 #[derive(Clone, Debug, Default)]
 pub struct People {
     sets: Vec<Set>,
-    ids: Vec<FrameId>,
+    /// A cast's light between the hands, a school each (`jane_art::fx::SCHOOLS` order).
+    glows: Vec<RefId>,
+}
+
+/// What a unit is doing with its hands this tick.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Act {
+    /// A blow, this many ticks in.
+    Attack(u32),
+    /// A spell, this many ticks in.
+    Cast(u32),
 }
 
 /// What a unit is showing this tick, as the people's frame pick needs it.
@@ -45,6 +59,10 @@ pub struct Pose {
     pub dead: bool,
     /// The unit's id (which of the two dead frames; a breathe out of step with its neighbours).
     pub id: u32,
+    /// A blow or a spell under way.
+    pub act: Option<Act>,
+    /// A blow just taken.
+    pub hurt: bool,
 }
 
 impl People {
@@ -55,16 +73,26 @@ impl People {
         let mut sets = Vec::new();
         for r in looks::family(looks::Family::Person).unwrap_or_default() {
             let anchor = (r.set.ax as i16, r.set.ay as i16);
-            let frames = ids
-                .iter()
-                .filter_map(|&f| r.set.frame(f))
-                .map(|c| atlas.add_canvas(c, anchor, HEIGHT, |_, _, t| t))
-                .collect::<Vec<_>>();
-            if frames.len() == ids.len() {
+            let frames: Vec<(FrameId, RefId)> =
+                r.set.frames.iter().map(|(f, c)| (*f, atlas.add_canvas(c, anchor, HEIGHT, |_, _, t| t))).collect();
+            if ids.iter().all(|f| frames.iter().any(|(g, _)| g == f)) {
                 sets.push(Set { sprite: r.sprite, variant: r.variant, seat: r.seat, frames });
             }
         }
-        People { sets, ids }
+        let glows = jane_art::fx::SCHOOLS
+            .iter()
+            .map(|&s| {
+                let c = jane_art::fx::cast_glow(s);
+                atlas.add_canvas(&c, (0, c.h() as i16), 2, |_, _, t| t)
+            })
+            .collect();
+        People { sets, glows }
+    }
+
+    /// The light a cast of `school` gathers between the hands.
+    pub fn glow(&self, school: jane_core::action::School) -> RefId {
+        let k = jane_art::fx::SCHOOLS.iter().position(|&s| s == school).unwrap_or(0);
+        self.glows[k]
     }
 
     /// Whether sprite `s` has a look here.
@@ -84,10 +112,19 @@ impl People {
 
     /// The frame set `set` shows for `pose`, and whether it is drawn mirrored (west).
     pub fn frame(&self, set: u16, pose: Pose) -> (RefId, bool) {
-        let id = pick(pose);
         let s = &self.sets[usize::from(set)];
-        let k = self.ids.iter().position(|&f| f == id).unwrap_or(0);
-        (s.frames[k], !pose.dead && pose.facing == Facing::West)
+        let at = |f: FrameId| s.frames.iter().find(|(g, _)| *g == f).map(|(_, r)| *r);
+        // A fight frame the look does not have falls back to the plain pick.
+        let id = pick(pose);
+        let (id, r) = match at(id) {
+            Some(r) => (id, r),
+            None => {
+                let plain = pick(Pose { act: None, hurt: false, ..pose });
+                (plain, at(plain).unwrap_or(s.frames[0].1))
+            }
+        };
+        let side = !matches!(id, FrameId::AtkDown1 | FrameId::AtkDown2 | FrameId::AtkDown3 | FrameId::AtkUp1 | FrameId::AtkUp2 | FrameId::AtkUp3 | FrameId::CastDown1 | FrameId::CastDown2 | FrameId::CastDown3 | FrameId::CastUp1 | FrameId::CastUp2 | FrameId::CastUp3 | FrameId::HurtDown | FrameId::HurtUp);
+        (r, side && !pose.dead && pose.facing == Facing::West)
     }
 }
 
@@ -98,6 +135,18 @@ pub fn pick(p: Pose) -> FrameId {
     use FrameId as F;
     if p.dead {
         return if p.id & 1 == 0 { F::Dead } else { F::Dead2 };
+    }
+    let beat = |t: u32| (t / ACT_TICKS).min(2) as usize;
+    let (atk, cast, hurt) = match p.facing {
+        Facing::South => ([F::AtkDown1, F::AtkDown2, F::AtkDown3], [F::CastDown1, F::CastDown2, F::CastDown3], F::HurtDown),
+        Facing::North => ([F::AtkUp1, F::AtkUp2, F::AtkUp3], [F::CastUp1, F::CastUp2, F::CastUp3], F::HurtUp),
+        Facing::East | Facing::West => ([F::Atk1, F::Atk2, F::Atk3], [F::Cast1, F::Cast2, F::Cast3], F::Hurt),
+    };
+    match p.act {
+        Some(Act::Attack(t)) => return atk[beat(t)],
+        Some(Act::Cast(t)) => return cast[beat(t)],
+        None if p.hurt => return hurt,
+        None => {}
     }
     let cycle = match p.facing {
         Facing::South => [F::Down, F::Down1, F::Down2, F::Down3, F::Down4, F::Down5, F::DownB],
@@ -119,7 +168,27 @@ mod tests {
     use super::*;
 
     fn pose(facing: Facing, anim: u32, tick: u32) -> Pose {
-        Pose { facing, anim, tick, dead: false, id: 0 }
+        Pose { facing, anim, tick, dead: false, id: 0, act: None, hurt: false }
+    }
+
+    #[test]
+    fn blows_and_spells_play_three_beats_per_facing_and_a_hurt_shows() {
+        let p = |facing, act, hurt| pick(Pose { act, hurt, ..pose(facing, 3, 0) });
+        assert_eq!(p(Facing::East, Some(Act::Attack(0)), false), FrameId::Atk1);
+        assert_eq!(p(Facing::South, Some(Act::Attack(ACT_TICKS)), false), FrameId::AtkDown2);
+        assert_eq!(p(Facing::North, Some(Act::Cast(2 * ACT_TICKS)), false), FrameId::CastUp3);
+        assert_eq!(p(Facing::West, Some(Act::Cast(ACT_TICKS)), false), FrameId::Cast2);
+        assert_eq!(p(Facing::South, None, true), FrameId::HurtDown);
+        // A townsperson has no fight frames: the plain pick stands in.
+        let mut atlas = Atlas::new();
+        let people = People::build(&mut atlas);
+        let grocer = jane_art::looks::find("town_grocer").unwrap().0;
+        let set = people.set(grocer, 0, 0).unwrap();
+        let hurt = Pose { hurt: true, ..pose(Facing::South, 0, 0) };
+        assert_eq!(people.frame(set, hurt), people.frame(set, pose(Facing::South, 0, 0)));
+        let jane = jane_art::looks::find("jane").unwrap().0;
+        let js = people.set(jane, 0, 0).unwrap();
+        assert_ne!(people.frame(js, Pose { act: Some(Act::Attack(ACT_TICKS)), ..pose(Facing::East, 0, 0) }).0, people.frame(js, pose(Facing::East, 0, 0)).0);
     }
 
     #[test]

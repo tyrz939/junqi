@@ -229,11 +229,11 @@ unit:folk_reedcutter 94043690
 unit:folk_wife 0f8d2700
 unit:folk_woman 41bf15e9
 unit:folk_woodcutter 5f09a620
-unit:jane f49afeca
-unit:jane@1 c9cb0046
-unit:jane@2 251f9fdf
-unit:jane@3 c9178e86
-unit:skeleton 1140436c
+unit:jane 9e4eb373
+unit:jane@1 f7ebbea3
+unit:jane@2 3bf92b3b
+unit:jane@3 2cd841b8
+unit:skeleton 0480afc1
 unit:town_baker 19b21182
 unit:town_caller cc5e4d8a
 unit:town_constable 6b2742f1

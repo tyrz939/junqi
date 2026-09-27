@@ -249,10 +249,15 @@ fn skirted(coat: Coat) -> bool {
 
 /// The eyes: each two px square and dark, a lid line three px wide over it, and a glint in its
 /// top corner on the light's side.
-fn eyes(c: &mut Canvas, d: &Dress, xs: &[(i32, bool)], ey: i32, z: u8) {
+fn eyes(c: &mut Canvas, d: &Dress, shut: bool, xs: &[(i32, bool)], ey: i32, z: u8) {
     let iris = if d.eye_emits { d.eye } else { Ramp::Leather.at(Tone::Deep) };
     for &(x, outward_left) in xs {
         let lid = if outward_left { x - 1 } else { x };
+        if shut {
+            // Screwed shut: the lid pressed down to a line where the eye was.
+            c.hline(lid, lid + 2, ey + 1, Ix::SEAM, z);
+            continue;
+        }
         c.hline(lid, lid + 2, ey - 1, Ix::SEAM, z);
         c.set_emitting(d.eye_emits);
         c.fill_rect(Rect::new(x, ey, 2, 2), iris, z);
@@ -573,7 +578,7 @@ fn arms_front(c: &mut Canvas, d: &Dress, r: &Rig) {
     let aw = r.arm_w();
     for i in 0..2 {
         let spread = r.pose.spread[i];
-        let hand_y = r.p.arm_y + r.pose.bob - i32::from(r.pose.breathe) + r.p.arm_l - 1 + r.pose.arm[i] - spread / 2;
+        let hand_y = r.p.arm_y + r.pose.bob - i32::from(r.pose.breathe) + r.p.arm_l - 1 + r.pose.arm[i] - spread / 2 - r.pose.raise[i];
         let (x0, out) = if i == 0 { (s0 - aw + 1, -spread) } else { (s1, spread) };
         arm_front(c, d, r, x0, out, hand_y, i == 0);
     }
@@ -608,7 +613,7 @@ fn face_down(c: &mut Canvas, d: &Dress, r: &Rig) {
     let ey = r.eye_y();
     let z = relief::SKULL.lo;
     face_tones(c, d, r);
-    eyes(c, d, &[(CX - 5, true), (CX + 3, false)], ey, z);
+    eyes(c, d, r.pose.shut, &[(CX - 5, true), (CX + 3, false)], ey, z);
     // The nose: its shadow on the far side; the mouth under it.
     c.vline(CX, ey + 2, ey + 3, d.skin.at(Tone::Mid), z);
     c.dot(CX - 1, ey + 3, d.skin.at(Tone::Lift), z);
@@ -932,7 +937,7 @@ fn apron_side(c: &mut Canvas, f: Ramp, r: &Rig, x1: i32) {
 fn arm_side(c: &mut Canvas, d: &Dress, r: &Rig, shoulder: (i32, i32), swing: i32, far: bool) {
     let (sx, sy) = shoulder;
     let z = if far { relief::FAR } else { relief::ARM };
-    let hand_y = sy + r.p.arm_l - 4;
+    let hand_y = sy + r.p.arm_l - 4 - r.pose.raise[usize::from(far)];
     let elbow = (sx + swing / 3 - i32::from(swing > 1), sy + (hand_y - sy) / 2);
     let hx = sx + swing;
     c.polygon_cloth(&[(sx - 1, sy), (sx + 2, sy), (elbow.0 + 2, elbow.1), (elbow.0 - 1, elbow.1)], d.coat, 80, z);
@@ -986,7 +991,7 @@ fn face_side(c: &mut Canvas, d: &Dress, r: &Rig) {
             c.tint(x, y, skin, t);
         }
     }
-    eyes(c, d, &[(fx, false)], ey, z);
+    eyes(c, d, r.pose.shut, &[(fx, false)], ey, z);
     // The nose, two px past the skull with its shadow under it; the mouth's corner.
     c.vline(s.right(), ey + 2, ey + 3, skin.at(Tone::Base), z);
     c.dot(s.right() - 1, ey + 4, skin.at(Tone::Mid), z);

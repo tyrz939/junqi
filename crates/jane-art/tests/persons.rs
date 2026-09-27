@@ -61,10 +61,10 @@ fn coverage_jane_and_the_townsfolk_have_looks() {
 
 #[test]
 fn coverage_every_look_renders_every_frame_it_promises() {
-    let want: Vec<FrameId> = person::frame_ids().collect();
+    let want = |r: &Rendered| person::frame_ids_for(looks::fight(r.sprite));
     for r in all() {
         let got: Vec<FrameId> = r.set.frames.iter().map(|(f, _)| *f).collect();
-        assert_eq!(got, want, "{}", r.key());
+        assert_eq!(got, want(r), "{}", r.key());
     }
     for (id, look) in jane_data::looks() {
         let Look::Person(p) = look else { continue };
@@ -475,7 +475,14 @@ fn seats_swap_the_coat_and_nothing_else() {
                     assert!(live(*p, coat) && live(*q, to), "{f:?}: a pixel not of the coat changed");
                 }
             }
-            assert!(changed > 20, "{f:?}: the coat did not change");
+            // Every coat pixel the frame shows changed (from behind, her hair and pack hide
+            // most of it; a cast seen from behind hides nearly all).
+            let shown = a
+                .albedo()
+                .iter()
+                .filter(|&&p| palette::Tone::ALL.iter().any(|&t| coat.at(t) == p || palette::pallor(coat.at(t)) == p))
+                .count();
+            assert!(changed == shown && (shown > 20 || f.name().contains("up")), "{f:?}: the coat did not change");
         }
     }
     // Only a player's sprite has seats.
