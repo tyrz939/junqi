@@ -90,7 +90,7 @@ pub use combat::Hit;
 pub use event::{Event, EventKind, SpellError};
 pub use ids::{ClientToken, DropId, GroundId, ProjId, PropId, Seat, UnitId};
 pub use input::{AssistProfile, Command, DevOp, InputFrame, StampedCommand, StepInput, Stepped};
-pub use save::{Header, SaveError, Summary};
+pub use save::{Header, SaveError, Snapshot, Summary};
 pub use sim::Sim;
 pub use state::{GameState, PlayerState, Prop, Unit, ZoneState};
 pub use view::View;

@@ -73,10 +73,13 @@ fn a_desync_is_found_at_its_hash_point_and_named() {
         let (z, u) = (p.zone, p.unit);
         sim.state_mut().zone_mut(z).unwrap().unit_mut(u).unwrap().hp.0 -= 1000;
     }
-    t.until(300, "the desync is reported", |t| !t.desyncs().is_empty());
+    t.until(900, "the desync is reported", |t| !t.desyncs().is_empty());
     let r = t.desyncs()[0].clone();
     println!("{r}");
-    assert_eq!(r.frame, at - 7 + HASH_EVERY, "found at the first hash point after the change");
+    // A change outside a step is invisible to the replica that takes most hash points off the
+    // frame (book.rs): the peer's own world is hashed at every spot point, and found there.
+    let spot = HASH_EVERY * jane_net::book::SPOT_EVERY;
+    assert_eq!(r.frame, (at / spot + 1) * spot, "found at the first spot point after the change");
     assert_eq!(r.seat, seat);
     assert_ne!(r.host, r.guest);
     // Re-simulated from their saves both sides agree: nothing a step did.
