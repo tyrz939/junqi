@@ -195,6 +195,6 @@ Worth knowing before it is built, because each is a creative call:
 
 ## 8. Still to decide, when the network step comes
 
-1. **Where Host / Join live in the UI**: the title screen for Join; the pause menu for "Open this world". *(The calls behind both exist, `ARCHITECTURE.md` §7 "Hooks for the menus"; the command line is `--host` and `--join` until the screens land.)*
+1. **Where Host / Join live in the UI**: the title screen for Join; the pause menu for "Open this world". *(Built: the title has Host and Join, the pause menu Open to LAN; `PRESENTATION.md` §3.2.)*
 2. **A guest's client token**: random, kept beside the saves (`%APPDATA%\Jane\client-token` on Windows, `~/.config/jane/client-token` elsewhere; `--token N` overrides). Deleting it makes her a new arrival with the starting kit; her old body stays parked in the save. Acceptable on a LAN among friends. *(Decided 2026-09-27.)*
 

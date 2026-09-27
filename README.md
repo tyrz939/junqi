@@ -87,18 +87,18 @@ Still to come (`PORT.md` §7): bots playing seeds (`jane play`, `dossier`).
 
 ### Play together on a LAN
 
-Up to four, one world, on one network (`ARCHITECTURE.md` §7). One player hosts from her own game and plays in it; the others join her. Everyone runs the same build: a join from another build or other content is refused, and the refusal shows both.
+Up to four, one world, on one network (`ARCHITECTURE.md` §7). One player hosts from her own game and plays in it; the others join her. Everyone runs the same build: a join from another build or other content is refused, and the refusal shows both content hashes.
+
+**From the menus.** The host picks **Host** on the title: a new world or one of her save slots, the door open or closed, two to four seats, the input delay, and whether to wait for a player who stalls; then Host. A world already being played alone opens from the pause menu's **Open to LAN**. Everyone else picks **Join**: the hosts on the network are listed, or type the host's address (her machine's LAN IP, `:port` if not 7777). The county comes from the host, so a joiner needs no seed.
+
+At the table each window plays its own seat and draws it in its own coat: plum, teal, moss, ochre; a plate under the vitals shows who sits there. Newcomers and returners arrive at the party's last fire; a guest who drops and comes back gets her own body and bags (her token is kept in `config.json`). Everyone is weaker for every player connected, wherever they stand, and it is ordinary single-player again when the guests leave. Pause stops the world only when you play alone. A player whose input stalls is waited for (a banner says whose coat and how long), and after 10 s gets up unless the host chose to wait. Anyone's rest saves the host's slot; a guest does not save.
+
+The same from the command line:
 
 ```bash
-# The host (seat 0). Others see the port in the title bar and the console.
-cargo run --release -p jane-app -- --seed 7 --host
-cargo run --release -p jane-app -- --host --save slot1.jsave    # host your current world; any seat's rest saves it
-# Everyone else: the host's address (her machine's LAN IP), port 7777 unless she chose another.
-cargo run --release -p jane-app -- --join 192.168.1.20
-cargo run --release -p jane-app -- --join 192.168.1.20:7800
+cargo run --release -p jane-app -- --seed 7 --host                 # New Game, open to the LAN (--port --seats --delay --wait)
+cargo run --release -p jane-app -- --join 192.168.1.20             # join at once (--port, or ADDR:PORT; --token N)
 ```
-
-The county comes from the host, so a joiner needs no seed. Each window plays its own seat and draws it in its own coat: plum, teal, moss, ochre. Newcomers and returners arrive at the party's last fire; a guest who drops and comes back gets her own body and bags (her token is kept in `%APPDATA%\Jane\client-token`, or `~/.config/jane/`; `--token N` sets one). Everyone is weaker for every player connected, wherever they stand, and it is ordinary single-player again when the guests leave. Pause stops the world only when you play alone. `--seats N` caps the table, `--delay D` sets the input delay (2 to 6 frames, default 3), `--wait` never drops a player whose input stalls (otherwise the table waits 10 s, saying for whom in the title bar, then gets her up).
 
 Headless, on a Pi or any machine nobody plays at:
 

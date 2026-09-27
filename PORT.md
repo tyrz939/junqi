@@ -405,7 +405,7 @@ P6 enters beside P5, not after it. On 2026-09-27 P5 stands at `ART.md` §8 step 
 
 ### 7.2 P8 as built (2026-09-27)
 
-Built ahead of P7, so the menus' Host and Join are hooks and the command line until the UI unit lands (`ARCHITECTURE.md` §7 has the protocol and the hooks). Decided that day (owner): LAN only, player-hosted first (`jane-app --host` plays seat 0, others `--join`), `jane serve` secondary, the transport a trait.
+Built beside P7 (`ARCHITECTURE.md` §7 has the protocol and the hooks). Decided that day (owner): LAN only, player-hosted first (`jane-app --host` plays seat 0, others `--join`), `jane serve` secondary, the transport a trait.
 
 | Gate item | State |
 | --- | --- |
@@ -415,7 +415,7 @@ Built ahead of P7, so the menus' Host and Join are hooks and the command line un
 | A Pi hosting headless through `jane serve` | `jane serve` built and soaked on x86_64; not yet run on a Pi |
 | Measured | In one process (`jane-net/tests/loopback.rs`): four seats, 18 900 frames, 927 hash checks agreed. Two `jane-app` windows on one machine, host and guest: both at frame 1200 on one hash, 16 checks agreed, each drawing both players in their own coats. `jane serve` with two bot guests over localhost for five minutes: 18 000 frames, 598 checks agreed, 0 differed |
 
-Not built: internet play, NAT traversal and relays (LAN only, by decision); host migration; a session recorded from a loaded save (only New Game sessions are tapes); saving on `SIGTERM` (std has no signal handling; `jane serve` saves on every rest and at `--ticks`); the Host and Join screens (P7's UI unit).
+Not built: internet play, NAT traversal and relays (LAN only, by decision); host migration; a session recorded from a loaded save (only New Game sessions are tapes); saving on `SIGTERM` (std has no signal handling; `jane serve` saves on every rest and at `--ticks`). The Host and Join screens, Open to LAN, the table plate, the stall banner and the terminal's `join` and `leave` were built on the UI unit's widgets after it merged (`PRESENTATION.md` §3.2); a scripted two-window run through the title's Host and Join held 25 hash checks, 0 differed.
 
 ## 8. Agent parallelisation
 
