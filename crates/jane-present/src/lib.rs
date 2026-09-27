@@ -37,7 +37,8 @@ pub mod view;
 
 pub use backend::{AO_TINT, AtlasPages, Backend, CLUT_LEN, Caps, FrameStats, FrameTimes, Page, StatPass};
 pub use frame::{
-    Atmos, CANVAS_H, CANVAS_W, Caster, ChunkCmd, ChunkId, ChunkLayers, Depth, Directional, Features, Flags, FogVolume,
+    Atmos, CANVAS_H, CANVAS_W, Caster, ChunkCmd, ChunkId, ChunkLayers, Depth, Directional, FeatureRow, Features, Flags,
+    FogVolume,
     StarCmd,
     Frame, Light, LightKind, Moon, PartShape, Particle, SkyLook, WaterCmd, WeatherKind,
     Pass, Post, Rgb, Span, SpriteCmd, Src, Tier, Tint, height_of_rows, rows_up,
