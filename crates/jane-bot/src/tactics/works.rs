@@ -186,8 +186,10 @@ pub fn engage(v: &View<'_>, cx: &mut Ctx, id: UnitId) -> Option<Option<Act>> {
     if cat.combat.unit(t.def).id != "charge_hand" {
         return None;
     }
-    // Frost first: it slows him, and he shrugs off shock.
-    Some(Some(kite(v, cx, t, &["icebolt", "spark"].map(sense::spell))))
+    // The Explosion when he is in its short reach (twice a bolt's blow: kited on frost alone
+    // he came back from nothing faster than she wore him down, and she died with half her mana),
+    // else frost: it slows him, and he shrugs off shock.
+    Some(Some(kite(v, cx, t, &["explosion", "icebolt", "spark"].map(sense::spell))))
 }
 
 /// What she is on, and for how long, for a fight this tactic has.
@@ -379,7 +381,10 @@ fn kite(v: &View<'_>, cx: &mut Ctx, t: &Unit, bolts: &[SpellId]) -> Act {
     let reach = i64::from(row.bounds.0) + i64::from(cat.combat.unit(me.def).bounds.0) + i64::from(CELL_FX) / 2;
     let pace = i64::from(row.run.0) * i64::from(jane_sim::status::speed_factor(t, now)) / 1000;
     let stop = bolts.iter().map(|&s| i64::from(cat.combat.spell(s).stop.0)).max().unwrap_or(30);
-    if d >= reach + pace * stop + i64::from(CELL_FX) {
+    // All but down (a twelfth of him left: two bolts), the next one is cast wherever he is: he
+    // mends while she backs off, and in the Factory's seed-3 runs she died with him at 1 to 200.
+    let finish = i64::from(t.hp.0) * 12 <= i64::from(jane_sim::units::max_hp(t).0);
+    if finish || d >= reach + pace * stop + i64::from(CELL_FX) {
         if let Some(a) = bolt(v, t, bolts) {
             return a;
         }
