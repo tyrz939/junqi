@@ -489,6 +489,14 @@ impl Story {
                 Some((other, goal)) => {
                     // A zone or a point elsewhere: the door that leads there.
                     let (Target::Zone(z) | Target::At(z, _)) = other else { unreachable!() };
+                    // Out of a dungeon into the county's night: the night is sat out by the
+                    // dungeon's own fire instead (out of the Butterfly Forest at ten at night, she
+                    // died on the road home a dozen times, woken each time by the forest's fire).
+                    if let Some(t) = self.night_in(v, z) {
+                        self.task = Some((t, Goal::Sleep));
+                        self.fled_at = cx.fight.fled;
+                        continue;
+                    }
                     // A quest step in a dungeon: the dungeon played whole, from its door.
                     if matches!(goal, Goal::Step(..)) && dungeon(z) {
                         // Its door keeps hours ("Open ten to four"): come back when it is open.
@@ -596,6 +604,29 @@ impl Story {
     /// run, or it slower than her walk.
     fn runs_from(&self, v: &View<'_>, cx: &Ctx, id: UnitId) -> bool {
         self.task.is_some() && fight::outrun(v, cx, id)
+    }
+
+    /// Night, in a dungeon, on her way out to `to` (by the county: not the house): the fire here
+    /// she can walk to, rested at, or waited by once she is whole. `None`: day, or no such fire.
+    fn night_in(&self, v: &View<'_>, to: ZoneId) -> Option<Task> {
+        let here = v.zone();
+        if (6..20).contains(&v.hour()) || !dungeon(here) || to == here || to == ZoneId::House {
+            return None;
+        }
+        let cat = jane_data::catalog();
+        let at = v.body().pos;
+        let mut reach = crate::crawl::Reach::default();
+        reach.update(v, 0);
+        let fire = v
+            .props()
+            .filter(|p| !p.hidden && cat.story.prop(p.def).rest && !self.bad_fires.contains(&p.id) && reach.beside(p))
+            .min_by_key(|p| (to_prop(p, at), p.id))?;
+        let whole = v.body().hp >= jane_sim::units::max_hp(v.body());
+        Some(if to_prop(fire, at) <= i64::from(3 * CELL_FX) && whole {
+            Task::Wait(600)
+        } else {
+            Task::Use(UseProp::new(fire.id))
+        })
     }
 
     /// Night out of doors, far from Julie's: the night is sat out by the nearest fire instead

@@ -151,7 +151,7 @@ pub struct Reach {
 }
 
 impl Reach {
-    fn update(&mut self, v: &View<'_>, sig: u64) {
+    pub(crate) fn update(&mut self, v: &View<'_>, sig: u64) {
         let (w, h) = v.size();
         let (x, y) = v.body().pos.cell();
         if self.zone == Some(v.zone()) && self.sig == sig && self.at + 30 > v.frame() && self.get(x, y) {
