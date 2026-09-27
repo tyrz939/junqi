@@ -9,7 +9,10 @@ use jane_core::{Grid, Rect, Sfc32, Tile, UnitDefId};
 use jane_data::Region;
 
 use super::defs::defs;
-use super::{County, FIRST_CLEAR, ROAD_CLEAR, clear, dist, folk, ground, hostile, near_chunk, put, room, waypoint};
+use super::{
+    County, FIRST_CLEAR, ROAD_CLEAR, WORKS_BACK, clear, dist, folk, ground, hostile, near_chunk, put, road_clear, room,
+    waypoint,
+};
 use crate::county::centre;
 use crate::skeleton::{Biome, MACRO, SKEL_H, SKEL_W};
 use crate::steps::Step;
@@ -42,6 +45,10 @@ const NIGHT_JITTER: i32 = 140;
 const NIGHT_HALF: usize = 16;
 const NIGHT_OFF: i32 = 12;
 const NIGHT_DWELL: i32 = 180;
+/// In the Works a wanderer's and the night shift's beat is this much further off the road (their
+/// eye is longer than the field edge is wide), and nothing that cannot walk is put to walk one.
+/// *Tuning.*
+const WORKS_OFF: i32 = WORKS_BACK as i32;
 /// The night shift on the rough ground: the chance a macro cell of each threat has one, permille.
 /// Nothing under threat 3: the Lowfields' gentle ground is left to the road edges. *Tuning.*
 pub const NIGHT_WILD: [i16; 7] = [0, 0, 0, 25, 35, 45, 55];
@@ -90,7 +97,8 @@ fn wild_here(region: Region, biome: Biome) -> Vec<UnitDefId> {
 }
 
 /// The ground's own creatures, macro cell by macro cell, each on the cell's own dice. Nothing in a
-/// haven, on water, within [`ROAD_CLEAR`] of a road or [`FIRST_CLEAR`] of the first walk.
+/// haven, on water, within [`road_clear`] of a road (further in the Works) or [`FIRST_CLEAR`] of
+/// the first walk.
 pub fn wildlife(c: &mut County<'_>) {
     let sk = c.sk;
     for my in 1..SKEL_H - 1 {
@@ -101,7 +109,9 @@ pub fn wildlife(c: &mut County<'_>) {
                 continue;
             }
             let (cx, cy) = (centre(mx), centre(my));
-            if dist(&c.country.d_road, cx, cy) < ROAD_CLEAR || dist(&c.country.d_first, cx, cy) < FIRST_CLEAR {
+            if dist(&c.country.d_road, cx, cy) < road_clear(sk.region_at(mx, my))
+                || dist(&c.country.d_first, cx, cy) < FIRST_CLEAR
+            {
                 continue;
             }
             let mut rng = c.k.dice(Step::CountyWild, mx, my);
@@ -125,7 +135,7 @@ fn wild_cell(c: &mut County<'_>, rng: &mut Sfc32, mx: i32, my: i32, threat: u8) 
     let def = *rng.pick(&here).expect("not empty");
     for _ in 0..company {
         let Some((x, y)) = c.k.spot(rng, Rect::new(mx * MACRO, my * MACRO, MACRO, MACRO), 1, 1, 1, 8) else { break };
-        if dist(&c.country.d_road, x, y) < ROAD_CLEAR {
+        if dist(&c.country.d_road, x, y) < road_clear(region) {
             break;
         }
         hostile(c, def, x, y, Vec::new());
@@ -157,14 +167,20 @@ fn wander(c: &mut County<'_>, rng: &mut Sfc32, line: &[(i32, i32)], i: usize) {
         return;
     }
     let g = ground(c.sk, x, y);
-    let pool = wild_here(g.region, g.biome);
+    let works = g.region == Region::Works;
+    let mut pool = wild_here(g.region, g.biome);
+    if works {
+        let cat = jane_data::catalog();
+        pool.retain(|&u| cat.combat.unit(u).walk.0 > 0);
+    }
     let Some(&def) = rng.pick(&pool) else { return };
     let side = if rng.chance(Permille(500)) { 1 } else { -1 };
+    let off = if works { WANDER_OFF + WORKS_OFF } else { WANDER_OFF };
     let nrm = super::Normal::of(line, i);
     let a = line[i.saturating_sub(WANDER_HALF)];
     let b = line[(i + WANDER_HALF).min(line.len() - 1)];
-    let p0 = nrm.cells(a, WANDER_OFF * side);
-    let p1 = nrm.cells(b, WANDER_OFF * side);
+    let p0 = nrm.cells(a, off * side);
+    let p1 = nrm.cells(b, off * side);
     if c.k.solid(p0.0, p0.1) || c.k.solid(p1.0, p1.1) {
         return;
     }
@@ -230,11 +246,12 @@ fn night_edge(c: &mut County<'_>, rng: &mut Sfc32, line: &[(i32, i32)], i: usize
         return;
     }
     let side = if rng.chance(Permille(500)) { 1 } else { -1 };
+    let off = if ground(c.sk, x, y).region == Region::Works { NIGHT_OFF + WORKS_OFF } else { NIGHT_OFF };
     let nrm = super::Normal::of(line, i);
     let a = line[i.saturating_sub(NIGHT_HALF)];
     let b = line[(i + NIGHT_HALF).min(line.len() - 1)];
-    let p0 = nrm.cells(a, NIGHT_OFF * side);
-    let p1 = nrm.cells(b, NIGHT_OFF * side);
+    let p0 = nrm.cells(a, off * side);
+    let p1 = nrm.cells(b, off * side);
     if c.k.solid(p0.0, p0.1) || c.k.solid(p1.0, p1.1) {
         return;
     }

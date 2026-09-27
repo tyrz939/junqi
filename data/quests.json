@@ -69,8 +69,8 @@
     "returnTo": "the dog, on the Museum's steps, from four till the bell",
     "requirements": [
       { "type": "location", "target": "library", "qty": 1, "text": "The ruined library, on the road past the Museum" },
-      { "type": "location", "target": "forest", "qty": 1, "text": "The gate of Butterfly Forest, past the ruined library" },
-      { "type": "location", "target": "emperor_down", "qty": 1, "text": "The Emperor, at the stone in Butterfly Forest" }
+      { "type": "location", "target": "forest", "qty": 1, "text": "The gate of Butterfly Forest, on the road past the ruined library" },
+      { "type": "location", "target": "emperor_down", "qty": 1, "text": "The Emperor, at the stone in Butterfly Forest, past the ruined library" }
     ],
     "rewards": [{ "do": "give", "item": "apple", "qty": 5 }, { "do": "give", "item": "potion_stoneskin", "qty": 1 }]
   },
@@ -81,7 +81,7 @@
     "returnTo": "the dog, at the graveyard gate, from six till the bell",
     "requirements": [
       { "type": "location", "target": "pipes", "qty": 1, "text": "The pipes, down the grate at the edge of Castle" },
-      { "type": "location", "target": "factory", "qty": 1, "text": "The Factory, in the Works" },
+      { "type": "location", "target": "factory", "qty": 1, "text": "The Factory, in the Works, on the road past the graveyard" },
       { "type": "location", "target": "foreman_down", "qty": 1, "text": "The Foreman, in the Factory's assembly hall" }
     ],
     "rewards": [{ "do": "give", "item": "small_water", "qty": 4 }, { "do": "give", "item": "potion_stoneskin", "qty": 1 }]
@@ -93,8 +93,8 @@
     "returnTo": "the dog, at the graveyard gate, from six till the bell",
     "requirements": [
       { "type": "location", "target": "burial", "qty": 1, "text": "The Hoar Stone, on the footpath from the graveyard" },
-      { "type": "location", "target": "burial_garden", "qty": 1, "text": "The garden, inside the Burial Chamber" },
-      { "type": "acquire", "target": "the_ball", "qty": 1, "text": "The Ball, in the Burial Chamber" }
+      { "type": "location", "target": "burial_garden", "qty": 1, "text": "The garden, inside the Burial Chamber, under the Hoar Stone" },
+      { "type": "acquire", "target": "the_ball", "qty": 1, "text": "The Ball, in the Burial Chamber, under the Hoar Stone" }
     ],
     "rewards": [{ "do": "give", "item": "light_stone", "qty": 1 }]
   },

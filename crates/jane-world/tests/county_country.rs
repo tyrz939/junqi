@@ -351,6 +351,17 @@ fn signs_read(sk: &Skeleton, c: &County<'_>, first_prop: usize, s: &mut Survey) 
             }
             continue;
         }
+        // A post to a place (`county::stories`): the place's name, which way, how far.
+        if c.k.local_name(p.key).is_some_and(|n| n.starts_with("place_post_")) {
+            let text = words(bp, p.use_list).unwrap_or_default();
+            let bits: Vec<&str> = text.strip_suffix('.').unwrap_or(&text).split(", ").collect();
+            let named = |n: &str| places.iter().chain(&names).any(|m| m == n);
+            let ok = bits.len() == 3 && named(bits[0]) && WINDS.contains(&bits[1]) && is_distance(bits[2]);
+            if !ok {
+                s.bad.push(format!("seed {}: a post to a place reads {text:?}", s.seed));
+            }
+            continue;
+        }
         let what = if p.def == finger {
             "fingerpost"
         } else if p.def == sign {

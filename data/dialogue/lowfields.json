@@ -761,7 +761,8 @@
       "farmer_wait_2": {
         "lines": [
           "After the bell. I will be up. I am always up.",
-          "I sit in the back kitchen, the side away from the School. You can see it from the front. I do not need to see it."
+          "I sit in the back kitchen, the side away from the School. You can see it from the front. I do not need to see it.",
+          "The scarecrow in the top field was not there yesterday. I put it up at the far end of the rim."
         ]
       },
       "farmer_in_2": {
@@ -2175,6 +2176,15 @@
         "lines": [
           "ALLOTMENTS. Castle Allotment Society. Members and their guests. Gates shut at dusk."
         ]
+      }
+    }
+  },
+  "pike_hedge_sign": {
+    "speaker": "Sign",
+    "start": [{ "node": "read" }],
+    "nodes": {
+      "read": {
+        "lines": ["THE LONG HEDGE. Parish boundary. Not to be cut back before September."]
       }
     }
   },

@@ -952,10 +952,10 @@
     "start": [{ "when": [{ "if": "questActive", "quest": "school_lane" }], "node": "read" }, { "node": "a" }],
     "nodes": {
       "read": {
-        "lines": ["CHURCH LANE. To the north gate. Where the paint has flaked, older letters show through underneath: SCHOOL LANE."],
+        "lines": ["CHURCH LANE. TO THE NORTH GATE. Where the paint has flaked, older letters show through underneath: SCHOOL LANE."],
         "actions": [{ "do": "location", "name": "lane_church" }]
       },
-      "a": { "lines": ["CHURCH LANE. To the north gate. Where the paint has flaked, older letters show through underneath: SCHOOL LANE."] }
+      "a": { "lines": ["CHURCH LANE. TO THE NORTH GATE. Where the paint has flaked, older letters show through underneath: SCHOOL LANE."] }
     }
   },
   "sign_post_office": {
