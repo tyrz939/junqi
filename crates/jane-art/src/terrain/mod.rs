@@ -33,6 +33,7 @@ mod field;
 mod ground;
 mod hard;
 mod interior;
+pub mod region;
 pub mod sheet;
 mod standing;
 mod style;
@@ -110,6 +111,11 @@ pub trait TileSource {
     fn outdoor(&self) -> bool {
         true
     }
+    /// The region under cell `(x, y)` (`jane_data::Region` order: 0 Lowfields, 1 Waters, 2
+    /// Works), whose ramps it is drawn in ([`region::REGIONS`]); the Lowfields' by default.
+    fn region(&self, _x: i32, _y: i32) -> u8 {
+        0
+    }
 }
 
 /// A zone's tiles and paint, owned: what a tool or a test paints from.
@@ -121,6 +127,8 @@ pub struct TileMap {
     pub paint: Grid<u8>,
     /// See [`TileSource::outdoor`].
     pub outdoor: bool,
+    /// See [`TileSource::region`]: the blueprint's region map (empty: the Lowfields).
+    pub regions: jane_core::blueprint::RegionMap,
 }
 
 const MATERIALS: [Material; 4] = [Material::RoofSlate, Material::RoofThatch, Material::BrickWall, Material::Pine];
@@ -175,7 +183,7 @@ impl TileMap {
     /// Tiles with no paint.
     pub fn new(tiles: Grid<Tile>, outdoor: bool) -> TileMap {
         let paint = Grid::new(tiles.w(), tiles.h(), 0);
-        TileMap { tiles, paint, outdoor }
+        TileMap { tiles, paint, outdoor, regions: jane_core::blueprint::RegionMap::default() }
     }
 
     /// A blueprint's tiles and paint.
@@ -184,6 +192,7 @@ impl TileMap {
         for &(r, mat) in &bp.paint {
             m.paint.fill_rect(r, code(mat));
         }
+        m.regions = bp.regions.clone();
         m
     }
 
@@ -205,6 +214,9 @@ impl TileSource for TileMap {
     }
     fn outdoor(&self) -> bool {
         self.outdoor
+    }
+    fn region(&self, x: i32, y: i32) -> u8 {
+        self.regions.region_at(x, y).unwrap_or(0)
     }
 }
 
@@ -497,6 +509,8 @@ struct Scratch {
     raw: Vec<Tile>,
     /// Their paint.
     mat: Vec<Option<Material>>,
+    /// Each cell's region (`TileSource::region`).
+    region: Vec<u8>,
     /// The tile each cell is drawn as: its surface for ground, the ground it borrows for a
     /// standing thing, itself for a hard tile.
     paint: Vec<Tile>,
@@ -590,6 +604,7 @@ impl Painter {
         let s = Scratch {
             raw: vec![Tile::Void; cells],
             mat: vec![None; cells],
+            region: vec![0; cells],
             paint: vec![Tile::Void; cells],
             surf: vec![NONE; cells],
             surf2: vec![NONE; cells],
@@ -668,6 +683,7 @@ impl Painter {
                 let k = Self::k(i, j);
                 self.s.raw[k] = src.tile(x, y);
                 self.s.mat[k] = src.material(x, y);
+                self.s.region[k] = src.region(x, y);
             }
         }
     }
@@ -994,8 +1010,12 @@ impl Painter {
     fn finish(&mut self, x0: i32, y0: i32, out: &mut Chunk) {
         let ly = &self.s.ly;
         let l = &mut out.layers;
-        for (dst, &ix) in l.albedo.iter_mut().zip(&ly.albedo) {
-            *dst = pack(ix);
+        // Each pixel in its cell's region's ramps (`region`); the Lowfields' as painted.
+        let regions = &self.s.region;
+        for (i, (dst, &ix)) in l.albedo.iter_mut().zip(&ly.albedo).enumerate() {
+            let (px, py) = (i as i32 % CHUNK_PX, i as i32 / CHUNK_PX);
+            let r = regions[Self::at(px / CELL, py / CELL)];
+            *dst = pack(if r == 0 { ix } else { region::tint(r, ix) });
         }
         l.normal.copy_from_slice(&ly.normal);
         l.emissive.copy_from_slice(&ly.emissive);

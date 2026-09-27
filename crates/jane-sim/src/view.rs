@@ -483,6 +483,11 @@ impl<'a> View<'a> {
         self.rt.region_at(x, y)
     }
 
+    /// The region under cell `(cx, cy)` of her zone: the ramps its ground is painted in.
+    pub fn region_at(&self, cx: i32, cy: i32) -> jane_data::Region {
+        self.rt.region_at(cx, cy)
+    }
+
     /// The sky over her: her region's (`living.rs`). Presentation's mist, rain and storm.
     pub fn weather(&self) -> &'a crate::state::WeatherState {
         &self.state.weather[crate::living::region_ix(self.region())]

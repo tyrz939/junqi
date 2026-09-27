@@ -30,6 +30,13 @@ impl TileSource for ViewTiles<'_, '_> {
     fn outdoor(&self) -> bool {
         !self.view.indoor()
     }
+    fn region(&self, x: i32, y: i32) -> u8 {
+        match self.view.region_at(x, y) {
+            jane_data::Region::Lowfields => 0,
+            jane_data::Region::Waters => 1,
+            jane_data::Region::Works => 2,
+        }
+    }
 }
 
 /// A flora sprite as the atlas holds it, with what its shadow is thrown as.
