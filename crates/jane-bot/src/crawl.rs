@@ -865,6 +865,7 @@ impl Crawl {
                 || cleared
                 || !fight::reachable(cx, u.id, v.frame())
                 || crate::tactics::works::leave_be(v, u)
+                || crate::tactics::museum::leave_be(v, u.def)
             {
                 continue;
             }
@@ -887,6 +888,7 @@ impl Crawl {
                 || burial && crate::tactics::burial::not_hunted(def)
                 || (d.sight == jane_data::UnitSight::Lit && !d.boss)
                 || v.zone() == ZoneId::School && !crate::tactics::school::hunts(def)
+                || crate::tactics::museum::leave_be(v, def)
             {
                 continue;
             }
