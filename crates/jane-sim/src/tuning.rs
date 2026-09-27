@@ -223,6 +223,9 @@ pub const CHASE_PATH_TIMES: i32 = 2;
 /// nature, from nobody (`ai.ts seekBait`).
 pub const BAIT_EAT_FX: i32 = 16 * FX_ONE;
 pub const BAIT_HIT: Milli = Milli(10_000_000);
+/// It smells its bait from this many times as far as it notices anyone (its aggro): the meat is
+/// thrown from outside its notice, or it could never be fed at all (DUNGEONS.md §3.5).
+pub const BAIT_NOSE_TIMES: i64 = 2;
 /// A walker whose way is blocked, or lit, plans again within this many ticks.
 pub const REPATH_SOON: Tick = Tick(4);
 /// The snake: its phase clock (`snake.ts SNAKE_FOLLOW_TICKS`, `SNAKE_SPIT_TICKS`), and a trail

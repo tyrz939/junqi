@@ -146,6 +146,10 @@ fn idle(cx: &mut Ctx<'_>, id: UnitId, def: &UnitDef, shy: bool) {
 }
 
 fn leash(cx: &mut Ctx<'_>, id: UnitId, def: &UnitDef, run: Fx, shy: bool) {
+    // A thing that never runs (the Burial's small snakes: they spit, they do not chase) walks
+    // home. At a run of nothing it stood leashing where the fight left it for good, and a thing
+    // leashing takes no bait.
+    let run = if run.0 > 0 { run } else { def.walk };
     let clock = cx.world.clock;
     let u = cx.zone.unit_mut(id).expect("unit");
     u.target = None;
@@ -203,6 +207,14 @@ fn fight(cx: &mut Ctx<'_>, id: UnitId, def: &UnitDef, run: Fx, shy: bool) {
     if now < u.stop_until {
         return;
     }
+    // A thing that cannot resist its bait cannot resist it with her in its sight either ("A
+    // burial snake that smells it will come, and will not leave"): the fight waits on the meat.
+    if let Some(item) = def.bait {
+        if seek_bait(cx, id, def, item) {
+            return;
+        }
+    }
+    let u = cx.zone.unit(id).expect("unit");
     let Some(spell) = pick_spell(u, now) else {
         approach(cx, id, tpos, run, leash, shy);
         return;
@@ -410,12 +422,13 @@ pub fn flee(cx: &mut Ctx<'_>, id: UnitId, def: &UnitDef, shy: bool) -> bool {
 }
 
 /// A row that cannot resist its bait (2020's burial snakes and poisoned rat meat): the first drop
-/// of it within aggro and in sight, walked to at a walk (never under half a pixel a tick), and
+/// of it within its nose (twice its aggro, `BAIT_NOSE_TIMES`) and in sight, walked to at a walk
+/// (never under half a pixel a tick), even with a fight on (DUNGEONS.md §3.5), and
 /// eaten within 16 px, which kills it at this step's flush. Returns whether it went for one.
 fn seek_bait(cx: &mut Ctx<'_>, id: UnitId, def: &UnitDef, item: jane_core::ItemId) -> bool {
     let Some(u) = cx.zone.unit(id) else { return false };
     let pos = u.pos;
-    let reach = i64::from(def.aggro.0);
+    let reach = i64::from(def.aggro.0) * crate::tuning::BAIT_NOSE_TIMES;
     for i in 0..cx.zone.drops.len() {
         let d = cx.zone.drops[i];
         if d.item != item {
