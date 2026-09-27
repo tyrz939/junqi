@@ -208,27 +208,24 @@ pub fn shear(sun: &Directional) -> Option<(i32, i32)> {
     Some((-(ca * cot) >> 15, -(sa * cot) >> 15))
 }
 
-/// The light pass's sky in linear light, exposed so flat ground takes T0's `ambient` (the
-/// clock's keyframes, the look the county was tuned to): the fill and the sun are scaled together
-/// per channel by `ambient / (fill + sun on flat ground)`, so what N dot L adds is relief, a face
-/// turned to the sun brighter and one turned away down to the fill, and never a second exposure.
-/// A low sun lights flat ground by its elevation's sine over 0.2 (the shader's floor).
+/// The light pass's sky in linear light, exposed so flat ground is as bright as T0's `ambient`
+/// (the clock's keyframes, the brightness the county was tuned to) but keeps the sky's own colour:
+/// the fill and the sun are scaled together by `luma(ambient) / luma(fill + sun on flat ground)`.
+/// So the dusk is the fill's violet, not the keyframes' orange, and what N dot L adds is relief,
+/// never a second exposure. A low sun lights flat ground by its elevation's sine over 0.2 (the
+/// shader's floor).
 pub fn sky(ambient: Rgb, fill: Rgb, sun: Option<Directional>) -> Sky {
+    let luma = |c: [f32; 3]| 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
     let fill = fill.map(linear);
     let sun = sun.map(|s| {
         let (az, el) = (rad(s.azimuth.0), rad(s.elevation.0));
         ([el.cos() * az.cos(), el.cos() * az.sin(), el.sin()], s.colour.map(linear))
     });
     let flat = sun.map_or(0.0, |(d, _)| (d[2].max(0.0) / d[2].max(0.2)).min(1.0));
-    let amb = ambient.map(linear);
-    let k: [f32; 3] = std::array::from_fn(|c| {
-        let lit = fill[c] + sun.map_or(0.0, |(_, col)| col[c]) * flat;
-        if lit > 1e-4 { (amb[c] / lit).clamp(0.25, 2.0) } else { 1.0 }
-    });
-    Sky {
-        fill: std::array::from_fn(|c| fill[c] * k[c]),
-        sun: sun.map(|(d, col)| (d, std::array::from_fn(|c| col[c] * k[c]))),
-    }
+    let lit: [f32; 3] = std::array::from_fn(|c| fill[c] + sun.map_or(0.0, |(_, col)| col[c]) * flat);
+    let l = luma(lit);
+    let k = if l > 1e-4 { (luma(ambient.map(linear)) / l).clamp(0.25, 2.0) } else { 1.0 };
+    Sky { fill: fill.map(|v| v * k), sun: sun.map(|(d, col)| (d, col.map(|v| v * k))) }
 }
 
 /// Whether two `(x0, y0, x1, y1)` rects share a px.
