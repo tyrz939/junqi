@@ -525,15 +525,13 @@ pub fn offers(
         let guards = shut.iter().any(|&c| dist(c, u.pos) <= i64::from(8 * CELL_FX));
         // (Only once she is in its room: from outside, the glass or a shut gate takes the bolts.)
         let with_her = room_of(v, me).is_some_and(|r| r.contains(u.pos.cell().0, u.pos.cell().1));
-        if u.alive
-            && rooted
-            && guards
-            && with_her
-            && d.respawn.0 == 0
-            && !d.boss
-            && d.bait.is_none()
-            && reach.near(u.pos, 16)
-        {
+        let guard = guards && d.respawn.0 == 0 && !d.boss && d.bait.is_none();
+        // And what sprays from the spot, in the room she is in (the rat room's cactuses): put
+        // down from the far edge of its reach before anything else in the room is gone to. Its
+        // fan thins with the distance; walked past close, a spray is half of her. It stays down
+        // while she is in its sight.
+        let sprayer = sprays(u.def) && let_be(u.def);
+        if u.alive && rooted && with_her && (guard || sprayer) && reach.near(u.pos, 16) {
             out.push((3, dist(me, u.pos), Try::Fight(u.id), Task::Hunt(u.id)));
         }
     }
@@ -1228,14 +1226,17 @@ fn clean_spot(v: &View<'_>, cx: &Ctx, t: &Unit) -> Option<Vec2> {
     let reach = i64::from(cat.combat.spell(sense::spell("icebolt")).range.0) * 8 / 10;
     let shooters = shooters(v, t);
     let off = &cx.nav.keep_off;
-    let good = |at: Vec2| {
-        dist(at, t.pos) <= reach
+    // A spray is stood back from, to where its fan has thinned (two thirds of her bolt's reach),
+    // if there is such ground; else the nearest.
+    let far = if sprays(t.def) { reach * 5 / 6 } else { 0 };
+    let good = |at: Vec2, far: i64| {
+        (far..=reach).contains(&dist(at, t.pos))
             && shot_clear(v, at, t.pos)
             && shooters.iter().all(|&(o, r)| dist(o, at) > r || !v.sight(o, at))
             && !off.iter().any(|&(o, r, k)| k == 0 && dist(o, at) <= r && v.sight(o, at))
     };
     let me = v.body().pos;
-    if good(me) {
+    if good(me, far) {
         return Some(me);
     }
     let start = me.cell();
@@ -1243,10 +1244,14 @@ fn clean_spot(v: &View<'_>, cx: &Ctx, t: &Unit) -> Option<Vec2> {
     let mut q = VecDeque::new();
     seen.insert(start);
     q.push_back((start, 0u32));
+    let mut near = None;
     while let Some((c, n)) = q.pop_front() {
         let at = Vec2::centre(c.0, c.1);
-        if n > 0 && good(at) {
+        if n > 0 && good(at, far) {
             return Some(at);
+        }
+        if near.is_none() && good(at, 0) {
+            near = Some(at);
         }
         if n >= 20 {
             continue;
@@ -1258,7 +1263,7 @@ fn clean_spot(v: &View<'_>, cx: &Ctx, t: &Unit) -> Option<Vec2> {
             }
         }
     }
-    None
+    near
 }
 
 /// The other rooted things that shoot, and how far (for `clean_spot`).
@@ -1283,6 +1288,15 @@ fn shooters(v: &View<'_>, t: &Unit) -> Vec<(Vec2, i64)> {
 pub fn not_hunted(def: jane_core::UnitDefId) -> bool {
     let d = jane_data::catalog().combat.unit(def);
     d.respawn.0 > 0 && !d.boss
+}
+
+/// Does it throw a fan of many (the cactus's needles)?
+fn sprays(def: jane_core::UnitDefId) -> bool {
+    let cat = jane_data::catalog();
+    cat.combat.unit(def).book.iter().any(|&s| {
+        let d = cat.combat.spell(s);
+        d.kind == SpellKind::Bolt && d.count > 1 && d.fan.0 != u16::MAX
+    })
 }
 
 /// Not worth a fight down here: something rooted to the spot that stands up again once she is
