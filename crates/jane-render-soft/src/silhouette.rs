@@ -190,9 +190,10 @@ mod tests {
         let east = px[10 * 40 + 14];
         assert!(east & 0xff > (east >> 16) & 0xff && east != 0xff80_8080, "{east:08x}");
         assert_eq!(px[10 * 40], 0xff80_8080);
-        // Right beside the foot, either side, the foot's shadow grounds it.
-        assert_ne!(px[11 * 40 + 3], 0xff80_8080);
-        assert_ne!(px[11 * 40 + 6], 0xff80_8080);
+        // The shadow starts at the foot (the post's own columns on its foot row), and no foot is
+        // laid under it (2026-09-28): two rows under the foot, beside it, the ground is as it was.
+        assert_ne!(px[10 * 40 + 5], 0xff80_8080);
+        assert_eq!(px[12 * 40 + 3], 0xff80_8080);
         // The mask is clear for the next frame.
         assert!(mask.px.iter().all(|&m| m == 0) && mask.reach.iter().all(|&m| m == 0) && mask.dirty.is_none());
     }
