@@ -291,7 +291,7 @@ fn draw(g: &mut G<'_>, look: &IconLook, ramp: Ramp, trim: Ramp) {
             }
         },
         IconClass::Tool | IconClass::Scissors | IconClass::Spanner | IconClass::Spoons => {
-            tool(g, look.class, ramp, trim)
+            tool(g, look.class, ramp, trim);
         }
         IconClass::Net => {
             for k in 0..5 {

@@ -786,7 +786,7 @@ impl Soundtrack {
                 EventKind::Death { unit, at: p, .. } if unit != s.me => bus.sfx(SfxKind::Death, at(p), me),
                 EventKind::Cast { at: p, .. } => bus.sfx(SfxKind::Cast, at(p), me),
                 EventKind::CastFailed { unit, why, .. } if unit == s.me && why.says() => {
-                    bus.sfx(SfxKind::CastFailed, me, me)
+                    bus.sfx(SfxKind::CastFailed, me, me);
                 }
                 EventKind::Status { unit, on: true, .. } if unit == s.me => bus.sfx(SfxKind::Status, me, me),
                 EventKind::Respawn { unit } if unit == s.me => {
