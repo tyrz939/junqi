@@ -393,6 +393,15 @@ fn feed(f: &mut Feed, v: &View<'_>, cx: &mut Ctx) -> Status {
             }
         }
         _ => {
+            // Eaten (the meat is gone from where it fell): it is dead of it, wherever it lies, and
+            // not kept off again.
+            let lying = v.drops().iter().any(|d| d.item == f.bait && dist(d.pos, f.to) <= i64::from(3 * CELL_FX));
+            if !lying {
+                if let Some(seen) = cx.seen_foes.get_mut(&u.def) {
+                    seen.remove(&f.unit);
+                }
+                return Status::Done;
+            }
             // It eats within a few seconds of setting off, or it did not smell it.
             if f.t > 60 * 12 {
                 return Status::Failed("it did not take the bait".into());
@@ -624,7 +633,7 @@ pub fn done(v: &View<'_>, downed: &[(jane_core::UnitDefId, u32)]) -> bool {
 
 /// Is this fire in the line of something rooted that shoots (a statue beside the orchard's
 /// hearth, on some seeds)? She would wake there under its fire after a fall, and fall again.
-fn shot_at(v: &View<'_>, cx: &Ctx, p: &jane_sim::Prop) -> bool {
+pub fn shot_at(v: &View<'_>, cx: &Ctx, p: &jane_sim::Prop) -> bool {
     let c = sense::prop_centre(p);
     keep_off(v, cx).iter().any(|&(o, r, k)| k > 0 && dist(o, c) <= r && v.sight(o, c))
 }
@@ -1003,9 +1012,6 @@ pub fn keep_off(v: &View<'_>, cx: &Ctx) -> Vec<(Vec2, i64, u32)> {
                 Some(u) if u.alive && fed && u.combat == CombatState::Combat => {}
                 Some(u) if u.alive => out.push((u.pos, r, cost)),
                 Some(_) => {}
-                // (One out of her sight is remembered only while she has its meat: without it,
-                // the one she remembers may be one that ate already and lies dead.)
-                None if baited && !fed => {}
                 None => out.push((pos, r, cost)),
             }
         }

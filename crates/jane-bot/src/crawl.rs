@@ -498,7 +498,7 @@ impl Crawl {
         // are kept for a fight; shut in with a boss there is none, and she eats and carries on.
         if sense::hp_permille(v.body()) < 500 {
             self.reach.update(v, sig);
-            match self.rest_in_reach(v) {
+            match self.rest_in_reach(v, cx) {
                 None => {
                     if let Some(c) = fight::eat(v) {
                         return Act::press(c);
@@ -825,7 +825,7 @@ impl Crawl {
         };
         // 0. Low: a bed or a stove she can reach (the apples are for a fight).
         if sense::hp_permille(v.body()) < 500 {
-            if let Some(p) = self.rest_in_reach(v).filter(|&p| keep(Try::Rest(p))) {
+            if let Some(p) = self.rest_in_reach(v, cx).filter(|&p| keep(Try::Rest(p))) {
                 return Some((Task::Use(UseProp::new(p)), Try::Rest(p)));
             }
         }
@@ -838,7 +838,7 @@ impl Crawl {
         // 1. The dungeon's rest room, the first time she can walk to it: a death then wakes her
         // inside, not out on the county road (the pipes' and the Factory's walks back in were
         // what killed her).
-        if let Some(p) = self.rest_in_reach(v) {
+        if let Some(p) = self.rest_in_reach(v, cx) {
             if !self.tried.contains_key(&Try::Rest(p)) {
                 let d = v.prop(p).map_or(0, near_prop);
                 offer(1, d, Try::Rest(p), Task::Use(UseProp::new(p)), &mut best);
@@ -1002,7 +1002,7 @@ impl Crawl {
         // first, when she is hurt.
         if best.as_ref().is_some_and(|b| b.0 == 9) && sense::hp_permille(v.body()) < 850 {
             if let Some(p) = self
-                .rest_in_reach(v)
+                .rest_in_reach(v, cx)
                 .filter(|p| keep(Try::Rest(*p)) && self.tried.get(&Try::Rest(*p)).is_none_or(|t| t.1 < 20))
             {
                 return Some((Task::Use(UseProp::new(p)), Try::Rest(p)));
@@ -1034,7 +1034,7 @@ impl Crawl {
         let hurt = sense::hp_permille(v.body()) < 900;
         if hurt && best.as_ref().is_some_and(|b| b.0 == 8 || Self::near_boss(v, cx, b.2)) {
             if let Some(p) = self
-                .rest_in_reach(v)
+                .rest_in_reach(v, cx)
                 .filter(|&p| keep(Try::Rest(p)) && self.tried.get(&Try::Rest(p)).is_none_or(|t| t.1 < 30))
             {
                 return Some((Task::Use(UseProp::new(p)), Try::Rest(p)));
@@ -1044,7 +1044,7 @@ impl Crawl {
     }
 
     /// The nearest bed or stove she can walk to, as of the last flood.
-    fn rest_in_reach(&self, v: &View<'_>) -> Option<PropId> {
+    fn rest_in_reach(&self, v: &View<'_>, cx: &Ctx) -> Option<PropId> {
         let cat = jane_data::catalog();
         let at = v.body().pos;
         v.props()
@@ -1054,6 +1054,8 @@ impl Crawl {
                     && !turns_clock(v, p)
                     && self.reach.beside(p)
                     && v.prop_spawn(p).is_some_and(|s| s.talk.is_some())
+                    // The Burial: not a fire in a statue's line (`tactics::burial::shot_at`).
+                    && !(v.zone() == ZoneId::Burial && crate::tactics::burial::shot_at(v, cx, p))
             })
             .min_by_key(|p| (sense::to_prop(p, at), p.id))
             .map(|p| p.id)
