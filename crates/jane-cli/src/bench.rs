@@ -245,11 +245,11 @@ fn ladder(tier: jane_present::Tier) -> Vec<Rung> {
         let four = f.shadows.min(4).to_string();
         f.set(t, "shadows", &four);
     }));
-    if tier > Tier::T0 {
-        steps.push(("shadows off", |f, t| {
-            f.set(t, "shadows", "off");
-        }));
-    }
+    // T0 throws its nearest lamps' shadows too since 2026-09-27: a CPU that misses its gate
+    // turns them off here, before the particles.
+    steps.push(("shadows off", |f, t| {
+        f.set(t, "shadows", "off");
+    }));
     steps.push(("max_particles halved", |f, t| {
         let half = (f.max_particles / 2).to_string();
         f.set(t, "max_particles", &half);
