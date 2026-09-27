@@ -1320,6 +1320,44 @@ fn list_of(bp: Option<&jane_core::Blueprint>, r: jane_core::ListRef) -> &[jane_c
     }
 }
 
+/// Every `grow` a prop of a blueprint gives (its `use` list, an `if` both ways, and the
+/// conversation it opens), as (stat, amount, the finding's id): for tools that ask which were found.
+pub fn grows_of(
+    bp: &jane_core::Blueprint,
+    p: &jane_core::blueprint::PropSpawn,
+) -> Vec<(jane_core::action::Stat, i16, jane_core::Key)> {
+    fn walk(
+        bp: &jane_core::Blueprint,
+        acts: &[jane_core::Action],
+        out: &mut Vec<(jane_core::action::Stat, i16, jane_core::Key)>,
+    ) {
+        use jane_core::action::Action;
+        for a in acts {
+            match *a {
+                Action::Grow { stat, amount, id } => out.push((stat, amount, id)),
+                Action::If { then, els, .. } => {
+                    walk(bp, list_of(Some(bp), then), out);
+                    if let Some(e) = els {
+                        walk(bp, list_of(Some(bp), e), out);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    let cat = jane_data::catalog();
+    let mut out = Vec::new();
+    if let Some(u) = p.use_list {
+        walk(bp, list_of(Some(bp), u), &mut out);
+    }
+    for n in p.talk.map(|t| cat.story.dialogue(t).nodes).unwrap_or_default() {
+        for a in n.actions.into_iter().chain(n.options.iter().filter_map(|o| o.actions)) {
+            walk(bp, cat.list(a), &mut out);
+        }
+    }
+    out
+}
+
 /// The growth on offer in a blueprint: every `grow` in its props' `use` lists and in the
 /// conversations its props open (jars, gold-leaf pages, the library's margins).
 pub fn growth_in(bp: &jane_core::Blueprint) -> Growth {
