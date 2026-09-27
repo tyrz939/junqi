@@ -14,8 +14,8 @@ use crate::ctx::{Ctx, PartySnap, Scratch, WorldOp, WorldOps, ZoneOps, forget_uni
 use crate::event::{Event, EventKind};
 use crate::fog::stamp_fog;
 use crate::ids::Seat;
-use crate::metrics::{Laps, Phase, SimMetrics, WallClock};
 use crate::input::{InputFrame, StepInput, Stepped};
+use crate::metrics::{Laps, Phase, SimMetrics, WallClock};
 use crate::ring::{Watchers, step_ring, wake_props};
 use crate::runtime::{ZoneRuntime, find_locals};
 use crate::state::{Bits, GameState, Growth, Journal, Quests, SAVE_VERSION};
@@ -517,14 +517,7 @@ impl Sim {
         self.step_living()
     }
 
-    fn step_zone(
-        &mut self,
-        z: ZoneId,
-        input: &StepInput<'_>,
-        snap: &PartySnap,
-        m: &mut SimMetrics,
-        laps: &mut Laps,
-    ) {
+    fn step_zone(&mut self, z: ZoneId, input: &StepInput<'_>, snap: &PartySnap, m: &mut SimMetrics, laps: &mut Laps) {
         let everyone = self.everyone;
         self.with_ctx(z, None, snap, false, |cx| {
             cx.rt.paths_this_tick = 0;

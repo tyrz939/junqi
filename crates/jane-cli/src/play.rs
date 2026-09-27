@@ -245,7 +245,8 @@ impl Profile {
     fn print(&mut self, frames: u32) {
         let n = u64::from(frames.max(1));
         self.steps.sort_unstable();
-        let pct = |p: usize| u64::from(self.steps.get(self.steps.len().saturating_sub(1) * p / 100).copied().unwrap_or(0));
+        let pct =
+            |p: usize| u64::from(self.steps.get(self.steps.len().saturating_sub(1) * p / 100).copied().unwrap_or(0));
         println!(
             "profile: {frames} frames; per frame {} us = sim {} us + bot {} us; sim median {} us, p99 {} us",
             ratio(self.frame_ns, n * 1000),

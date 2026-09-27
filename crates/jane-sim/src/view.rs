@@ -554,5 +554,4 @@ impl<'a> View<'a> {
     pub fn hour(&self) -> u8 {
         self.state.hour() as u8
     }
-
 }
