@@ -47,10 +47,18 @@ pub fn shear(sun: &Directional) -> Option<(i32, i32)> {
     Some((-(ca * cot) >> 15, -(sa * cot) >> 15))
 }
 
+/// A gap in a row this wide or wider parts it into two runs: a lantern hung off its post, a hand
+/// held out from the body. A narrower one (a dithered edge, a notch between leaves) does not,
+/// as T2's field closes it (a px wider each side).
+pub const GAP: usize = 3;
+
 /// A caster's rows, from the foot up: `(rows above the foot, first, last)` px from the sprite's
-/// left of each row's opaque run (the contact shadow, index 1, is not the silhouette), for the
-/// sprite `s` drawn from an atlas page's albedo `albedo`, `page_w` wide, standing on row
-/// `foot_y` of the canvas. Appended to `out`.
+/// left of each opaque run in the row, a row parted where it has a [`GAP`] (the contact shadow,
+/// index 1, is not the silhouette), for the sprite `s` drawn from an atlas page's albedo
+/// `albedo`, `page_w` wide, standing on row `foot_y` of the canvas. Appended to `out`. So a run
+/// that is not over another, lower one (a canopy past its trunk, a lamp's head past its post, a
+/// lantern on its bracket) lays its shadow only where its own height throws it, apart from the
+/// root's, as T2's field has it floating.
 pub fn rows(albedo: &[u16], page_w: u16, s: &SpriteCmd, foot_y: i32, out: &mut Vec<(i32, i32, i32)>) {
     let pw = usize::from(page_w);
     let sw = i32::from(s.src.w);
@@ -64,11 +72,28 @@ pub fn rows(albedo: &[u16], page_w: u16, s: &SpriteCmd, foot_y: i32, out: &mut V
         }
         let start = (usize::from(s.src.y) + v as usize) * pw + usize::from(s.src.x);
         let Some(row) = albedo.get(start..start + usize::from(s.src.w)) else { continue };
-        let Some(first) = row.iter().position(|&i| i > 1) else { continue };
-        let last = row.iter().rposition(|&i| i > 1).unwrap_or(first);
-        let (u0, u1) =
-            if s.flags.mirror { (sw - 1 - last as i32, sw - 1 - first as i32) } else { (first as i32, last as i32) };
-        out.push((hv, u0, u1));
+        let mut run: Option<(usize, usize)> = None;
+        let mut emit = |(first, last): (usize, usize)| {
+            let (u0, u1) = if s.flags.mirror {
+                (sw - 1 - last as i32, sw - 1 - first as i32)
+            } else {
+                (first as i32, last as i32)
+            };
+            out.push((hv, u0, u1));
+        };
+        for (u, _) in row.iter().enumerate().filter(|&(_, &i)| i > 1) {
+            run = match run {
+                Some((a, b)) if u - b <= GAP => Some((a, u)),
+                Some(r) => {
+                    emit(r);
+                    Some((u, u))
+                }
+                None => Some((u, u)),
+            };
+        }
+        if let Some(r) = run {
+            emit(r);
+        }
     }
 }
 
@@ -89,13 +114,16 @@ pub struct Band {
 pub fn bands(rows: &[(i32, i32, i32)], x: i32, c: &Caster, (kx, ky): (i32, i32), mut emit: impl FnMut(Band)) {
     let Some(&(top, _, _)) = rows.last() else { return };
     let fy = i32::from(c.foot.1);
-    let depth = i32::from(c.depth).max(2);
     // A row stands its rows' true height up, and no higher than the caster's tallest px.
     let tall = i32::from(c.height).max(1);
     let up = |hv: i32| height_of_rows(hv).min(tall);
-    let htop = up(top);
     // The foot: as wide as the lowest rows and two px more each side, under the feet, drawn out
-    // along the shadow as far as the feet's own shadow reaches.
+    // along the shadow as far as the feet's own shadow reaches. What stands on nothing (a bat
+    // in flight, a lantern hung over the ground) has none: its shadow is only where its height
+    // throws it.
+    if rows[0].0 > FOOT_ROWS {
+        return bands_of_rows(rows, x, c, (kx, ky), top, emit);
+    }
     let (lo, hi) = rows
         .iter()
         .take_while(|r| r.0 <= FOOT_ROWS)
@@ -119,6 +147,24 @@ pub fn bands(rows: &[(i32, i32, i32)], x: i32, c: &Caster, (kx, ky): (i32, i32),
             reach: FOOT_REACH,
         });
     }
+    bands_of_rows(rows, x, c, (kx, ky), top, emit);
+}
+
+/// The rows' bands of [`bands`], past the foot: each row its true height's shear away, stretched
+/// to meet the row above, as thick as the caster is deep.
+fn bands_of_rows(
+    rows: &[(i32, i32, i32)],
+    x: i32,
+    c: &Caster,
+    (kx, ky): (i32, i32),
+    top: i32,
+    mut emit: impl FnMut(Band),
+) {
+    let fy = i32::from(c.foot.1);
+    let depth = i32::from(c.depth).max(2);
+    let tall = i32::from(c.height).max(1);
+    let up = |hv: i32| height_of_rows(hv).min(tall);
+    let htop = up(top);
     for &(hv, u0, u1) in rows {
         let (h0, h1) = (up(hv), up(hv + 1));
         let (ax, bx) = ((h0 * kx) >> 8, (h1 * kx) >> 8);
@@ -223,5 +269,91 @@ mod tests {
         // A face 10 px up takes its shadow from the ground 8 rows under it, if it reaches 10.
         assert_eq!(ground_of(50, 10), (58, 10));
         assert_eq!(ground_of(50, 3), (50, 0));
+    }
+
+    /// A 40 x 58 sprite of index 2 where `shape` says, over a contact shadow row, its foot on
+    /// row 56, standing on canvas `(120, 100)`; and its bands in a sun in the north at 40
+    /// degrees, so its shadow runs down the screen.
+    fn cast(shape: impl Fn(i32, i32) -> bool) -> (Vec<Band>, (i32, i32)) {
+        let (w, h) = (40usize, 58usize);
+        let mut albedo = vec![0u16; w * h];
+        for y in 0..h {
+            for x in 0..w {
+                if shape(x as i32, y as i32) {
+                    albedo[y * w + x] = 2;
+                }
+            }
+        }
+        albedo[57 * w + 16..57 * w + 24].fill(1);
+        let foot = (120, 100);
+        let s = SpriteCmd {
+            page: 0,
+            src: Src { x: 0, y: 0, w: w as u16, h: h as u16 },
+            x: (foot.0 - 20) as i16,
+            y: (foot.1 - 56) as i16,
+            flags: Flags::default(),
+            height_px: 70,
+        };
+        let c = Caster { sprite: 0, foot: (foot.0 as i16, foot.1 as i16), height: 70, depth: 6 };
+        let mut r = Vec::new();
+        rows(&albedo, w as u16, &s, foot.1, &mut r);
+        let mut bands = Vec::new();
+        super::bands(&r, i32::from(s.x), &c, shear(&sun(Angle::NORTH, 40)).unwrap(), |b| bands.push(b));
+        (bands, foot)
+    }
+
+    fn covered(bands: &[Band], y: i32) -> Vec<i32> {
+        (0..400).filter(|&x| bands.iter().any(|b| b.x0 <= x && x < b.x1 && b.y0 <= y && y < b.y1)).collect()
+    }
+
+    #[test]
+    fn a_trees_shadow_is_its_trunks_at_the_root_and_its_crowns_further_out() {
+        // A crown 32 wide from row 4 to row 30 (33 px to 65 px up) on a trunk 4 wide.
+        let (bands, foot) =
+            cast(|x, y| ((4..=30).contains(&y) && (4..36).contains(&x)) || (y > 30 && (18..22).contains(&x)));
+        // cot 40 degrees is 1.19: the trunk's shadow is the 39 rows south of the foot, and near
+        // the root it is the trunk, its foot two px wider each side, and no wider.
+        for dy in 4..30 {
+            let n = covered(&bands, foot.1 + dy).len();
+            assert!((3..=8).contains(&n), "{dy} rows south of the root: {n} px, the crown's shadow stands on the root");
+        }
+        for dy in 50..70 {
+            let n = covered(&bands, foot.1 + dy).len();
+            assert!(n >= 32, "{dy} rows south of the root: {n} px, no crown's shadow");
+        }
+    }
+
+    #[test]
+    fn a_lantern_hung_off_its_post_throws_its_shadow_apart_from_the_posts() {
+        // A post 2 wide, an arm east along rows 8 and 9, a lantern 8 wide hanging from it, rows 10
+        // to 22, 8 px clear of the post.
+        let (bands, foot) = cast(|x, y| {
+            (y >= 8 && (10..12).contains(&x))
+                || ((8..=9).contains(&y) && (10..28).contains(&x))
+                || ((10..=22).contains(&y) && (20..28).contains(&x))
+        });
+        let x0 = foot.0 - 20;
+        // Near the root the post's alone; under where the lantern hangs, nothing.
+        for dy in 4..30 {
+            let c = covered(&bands, foot.1 + dy);
+            assert!(
+                !c.iter().any(|x| (x0 + 20..x0 + 28).contains(x)),
+                "{dy} rows south: the lantern's shadow is on the root: {c:?}"
+            );
+        }
+        // Further out the lantern's, and between it and the post's, the ground.
+        let c = covered(&bands, foot.1 + 58);
+        assert!((x0 + 20..x0 + 28).all(|x| c.contains(&x)), "no lantern's shadow: {c:?}");
+        assert!((x0 + 13..x0 + 19).any(|x| !c.contains(&x)), "the lantern's shadow runs into the post's: {c:?}");
+    }
+
+    #[test]
+    fn what_flies_has_no_foot() {
+        // A bat: a body 12 wide from row 30 to row 40, 20 rows over its anchor on row 56.
+        let (bands, foot) = cast(|x, y| (30..=40).contains(&y) && (14..26).contains(&x));
+        // Nothing under it: the nearest band is its lowest row's, 16 rows' height (20 px) times
+        // 1.19 away, less half its depth.
+        let near = bands.iter().map(|b| b.y0).min().unwrap();
+        assert!(near >= foot.1 + 20, "a shadow at its anchor: {near}");
     }
 }
