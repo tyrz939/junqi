@@ -98,7 +98,7 @@ fn geometry_a_prop_fills_its_footprint_wide_and_rises_above_it() {
             assert_eq!((c.w(), c.h()), (w, h), "{} {f:?}", r.key());
             // A stain is all contact shade: it darkens the floor it lies on and paints nothing.
             let drawn = if l.shape == "stain" {
-                c.albedo().iter().any(|&a| a == Ix::AO)
+                c.albedo().contains(&Ix::AO)
             } else {
                 c.albedo().iter().any(|a| a.is_opaque())
             };
