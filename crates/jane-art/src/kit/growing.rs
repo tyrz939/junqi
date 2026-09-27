@@ -109,7 +109,9 @@ pub(crate) fn draw(c: &mut Canvas, k: &Kit, state: State) -> Option<Stand> {
             Stand::Flat(4)
         }
         "boulder" | "rock" | "rubble" | "rockface" | "heap" => {
-            // Stones: each one soft volume, a crack or a chip on some, moss at the foot.
+            // Stones, each cut into faces by `rock::stone`: a lit top, sides facing out along
+            // their edges, a crack and moss on a big one; several lie back to front, a stone in
+            // front standing proud of the ones behind it.
             let n = match k.look.shape {
                 "rubble" => 6,
                 "heap" => 5,
@@ -117,34 +119,25 @@ pub(crate) fn draw(c: &mut Canvas, k: &Kit, state: State) -> Option<Stand> {
                 _ => 1,
             };
             ao(c, 1, w - 2, foot, 5);
-            for i in 0..n {
-                let hh = parts::hash(k.seed, i, 55);
-                // One stone: its breadth and its place a little different by the seed.
-                let (sw, sh) = if n == 1 {
-                    (w - 4 - 2 * (hh >> 1 & 1) as i32, (h - 4).min(w - 2) - 2 * (hh >> 2 & 1) as i32)
-                } else {
-                    (8 + (hh % 8) as i32, 7 + (hh >> 4 & 7) as i32)
-                };
-                let x = if n == 1 { 2 + (hh & 1) as i32 } else { 1 + ((hh >> 8) % (w - sw - 1).max(1) as u32) as i32 };
-                let y = foot - sh - if n == 1 { 0 } else { ((hh >> 12) % (h / 3).max(1) as u32) as i32 };
-                let mut m = Canvas::new(c.w(), c.h());
-                m.polyline_fill(
-                    &[
-                        (x + 2, y),
-                        (x + sw - 3, y + 1),
-                        (x + sw - 1, y + sh / 2),
-                        (x + sw - 2, y + sh - 1),
-                        (x + 1, y + sh - 1),
-                        (x, y + sh / 3),
-                    ],
-                    Ix::INK,
-                    1,
-                );
-                c.inflate(&m, k.body, (sw.min(sh) / 3).max(2), Z::new(2 + i as u8, 6 + i as u8));
-                c.retone(k.body, super::HARD);
-                if hh >> 16 & 1 == 0 {
-                    c.line((x + sw / 2, y + 2), (x + sw / 2 + 1, y + sh / 2), Ix::SEAM, 1, 7 + i as u8);
-                }
+            let mut stones: Vec<(Rect, u32)> = (0..n)
+                .map(|i| {
+                    let hh = parts::hash(k.seed, i, 55);
+                    let (sw, sh) = if n == 1 {
+                        (w - 3 - 2 * (hh >> 1 & 1) as i32, (h - 3).min(w - 4) - 2 * (hh >> 2 & 1) as i32)
+                    } else {
+                        (8 + (hh % 8) as i32, 7 + (hh >> 4 & 7) as i32)
+                    };
+                    let x =
+                        if n == 1 { 1 + (hh & 1) as i32 } else { 1 + ((hh >> 8) % (w - sw - 1).max(1) as u32) as i32 };
+                    let y = foot - sh - if n == 1 { 0 } else { ((hh >> 12) % (h / 3).max(1) as u32) as i32 };
+                    (Rect::new(x, y.max(0), sw, sh), hh)
+                })
+                .collect();
+            stones.sort_by_key(|(r, _)| (r.bottom(), r.x));
+            for (i, (r, hh)) in stones.into_iter().enumerate() {
+                let big = r.w >= 14;
+                let dress = crate::rock::Dress { moss: big && hh >> 20 & 1 == 0, crack: big, edges: big };
+                crate::rock::stone(c, r, k.body, hh, dress, 2 + 2 * i as u8);
             }
             Stand::Up(&[])
         }

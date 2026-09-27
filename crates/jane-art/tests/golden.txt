@@ -345,7 +345,7 @@ unit:villager_woodcutter ff3027f9
 unit:villager_woodcutter#1 c9f97e1b
 unit:villager_woodcutter#2 590844a6
 unit:villager_woodcutter#3 20a16806
-prop:adit_rock cd44fa19
+prop:adit_rock b61306d5
 prop:apple_tree 50d94871
 prop:barrel 66395efd
 prop:bed fa080172
@@ -353,7 +353,7 @@ prop:beehive 784ec324
 prop:bench a21f44c6
 prop:bones 37d56667
 prop:boss_chest 0f98770b
-prop:boulder 428d9d7d
+prop:boulder ec788ad4
 prop:brazier fa5d81f3
 prop:broken_cabinet 4afc864d
 prop:broken_hoist 74035e33
@@ -390,7 +390,7 @@ prop:fingerpost 37450846
 prop:flowerbed 47a9168b
 prop:flowers f57ce1e0
 prop:forest_cases 785806cf
-prop:forest_rockfall d9a153c4
+prop:forest_rockfall 0f5afc87
 prop:fruit_bowl d46ced88
 prop:gas_lamp_e 0ebc2b8e
 prop:gas_lamp_n 0f040d20
@@ -448,17 +448,17 @@ prop:pipes_penstock_v f18f5968
 prop:pipes_stove f1676d7f
 prop:plate 0dad9dab
 prop:pump 85dd0ddd
-prop:rock 341f0607
+prop:rock a28f58c7
 prop:root_wall 20b4000f
 prop:rose 2534e249
-prop:rubble 4aa67114
+prop:rubble 6765ed0b
 prop:scarecrow b6ff1196
 prop:school_pegs 1a3debb7
 prop:school_register b1828593
 prop:shelf 915a0e85
 prop:sickbay_bed_bell a8ed6f63
 prop:sign 61e40b1c
-prop:slag_heap 5d567637
+prop:slag_heap 986982d8
 prop:sleepers 28fe2f75
 prop:stairs df45a70a
 prop:standing_stone 1a2b2e7c
@@ -551,7 +551,7 @@ prop:forest_lamp_dead b27e200d
 prop:forest_moonbeam fd93b5a2
 prop:forest_sunbeam b7dfdf6e
 prop:fuse_box 59dd11b4
-prop:garden_stone eb3ca815
+prop:garden_stone b40b9b14
 prop:generator_cold 573ed8f0
 prop:grid_socket 06a460ef
 prop:hedge_seed 6a410c07
