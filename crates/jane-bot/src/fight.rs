@@ -53,8 +53,11 @@ pub fn ready(u: &Unit, s: SpellId, now: Tick) -> bool {
         && u.mp >= def.mp
 }
 
-fn item_ready(u: &Unit, i: ItemId, now: Tick) -> bool {
-    !u.item_cooldowns.iter().any(|&(c, until)| c == i && until > now)
+/// An item she may use now: off its cooldown, and off the global one (the sim refuses it on
+/// the GCD, and a press refused every frame is a frame she stood still for: she froze under the
+/// Foreman pressing stone skin after each bolt).
+pub fn item_ready(u: &Unit, i: ItemId, now: Tick) -> bool {
+    !u.item_cooldowns.iter().any(|&(c, until)| c == i && until > now) && u.gcd_until <= now
 }
 
 /// Body gap between two units (centre distance less both bodies), `Fx`.
@@ -129,15 +132,26 @@ fn away_from(v: &View<'_>, cx: &mut Ctx, from: jane_core::Vec2, tether: Option<(
     }
 }
 
-/// A hostile pool that has not bitten yet and has her in it (her body's edge inside its
-/// radius, with a cell to spare): where it lies.
+/// A hostile pool she should be out of (one that has not bitten yet; one that has, while her
+/// feet are her own) with her in it (her body's edge inside its radius, with a cell to spare):
+/// where it lies.
 pub fn tell_under(v: &View<'_>) -> Option<jane_core::Vec2> {
     let me = v.body();
     let body = i64::from(jane_data::catalog().combat.unit(me.def).bounds.0);
     let now = v.tick();
+    let cat = jane_data::catalog();
+    // Not bitten yet: its first pulse, a `delay` after the cast, is still to come. One that has
+    // bitten is walked out of only by feet that can: slowed in a web, stepping out of it for
+    // ever, she never ate or struck back while the spider webbed her again (the pipes).
+    let unbitten = |g: &jane_sim::state::Ground| {
+        cat.combat.spell(g.spell).ground.is_some_and(|p| {
+            p.delay.0 > 1 && g.until.0.saturating_sub(g.next_pulse.0) + 1 >= p.duration.0.saturating_sub(p.delay.0)
+        })
+    };
+    let free = jane_sim::status::speed_factor(me, now) >= 1000;
     v.grounds()
         .iter()
-        .filter(|g| g.faction != me.faction && g.next_pulse > now && g.until > now)
+        .filter(|g| g.faction != me.faction && g.next_pulse > now && g.until > now && (free || unbitten(g)))
         .find(|g| dist(g.pos, me.pos) <= i64::from(g.radius.0) + body + i64::from(CELL_FX))
         .map(|g| g.pos)
 }
@@ -167,6 +181,29 @@ pub fn has_food(v: &View<'_>) -> bool {
     ["apple", "grape"].into_iter().any(|n| holds(v, sense::item(n)) > 0)
 }
 
+/// The most one blow of `u`'s can take off her, in points: its row's book (and its phases'),
+/// each spell's power at its top roll, no crit. What its row says a player could read off it.
+pub fn max_hit(u: &Unit) -> i32 {
+    let cat = jane_data::catalog();
+    let def = cat.combat.unit(u.def);
+    let books = std::iter::once(def.book).chain(def.phases.iter().map(|p| p.book));
+    books
+        .flat_map(|b| b.iter())
+        .filter_map(|&s| cat.combat.spell(s).power)
+        .map(|p| {
+            let stat = i64::from(match p.stat {
+                jane_core::action::Stat::Strength => u.strength,
+                jane_core::action::Stat::Spirit => u.spirit,
+            });
+            let milli = stat * 1_000_000 / i64::from(p.div.max(1))
+                + stat * 1_000_000 / i64::from(p.var_div.max(1))
+                + i64::from(p.flat.0);
+            (milli / 1000) as i32
+        })
+        .max()
+        .unwrap_or(0)
+}
+
 /// Something to eat, if she is low and can.
 pub fn eat(v: &View<'_>) -> Option<Command> {
     if hp_permille(v.body()) >= EAT_BELOW {
@@ -192,7 +229,9 @@ pub fn reachable(cx: &Ctx, id: UnitId, frame: u32) -> bool {
 
 /// The enemy to deal with now: the nearest one fighting her, else the one hunted.
 pub fn threat(v: &View<'_>, cx: &mut Ctx) -> Option<UnitId> {
-    if let Some(u) = enemies(v).into_iter().find(|u| on_me(v, u) && fightable(u)) {
+    // What sees only by light and is no boss is not fought unless hunted (tactics::works).
+    let ignore = crate::tactics::works::ignore;
+    if let Some(u) = enemies(v).into_iter().find(|u| on_me(v, u) && fightable(u) && !ignore(u)) {
         return Some(u.id);
     }
     let now = v.frame();
@@ -236,6 +275,17 @@ pub fn engage(v: &View<'_>, cx: &mut Ctx, id: UnitId) -> Option<Act> {
     }
     if let Some(c) = eat(v) {
         return Some(Act::press(c));
+    }
+    // One blow of its could put her down: eat now, above the usual line (the Charge Hand's live
+    // hand takes over half of her at once).
+    if me.hp.points() <= max_hit(t) && me.hp < jane_sim::units::max_hp(me) {
+        if let Some(f) = food(v) {
+            return Some(Act::press(Command::Item(f)));
+        }
+    }
+    // The Factory's bosses are fought as their rooms ask (tactics::works).
+    if let Some(a) = crate::tactics::works::engage(v, cx, id) {
+        return a;
     }
     let cat = jane_data::catalog();
     let d = dist(me.pos, t.pos);

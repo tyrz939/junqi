@@ -5,8 +5,9 @@
 //! from where she stands (closed gates and locked doors are solid props, so they bound it) and
 //! takes the first thing it can do there, in this order, nearest first within a kind:
 //!
-//! 0. mend at a bed or a stove, when low with nothing to eat;
-//! 1. pick up what is lying about;
+//! 0. mend at a bed or a stove when low (the apples are kept for fights);
+//! 1. rest at the dungeon's rest room the first time she can walk to it (a death then wakes her
+//!    inside); pick up what is lying about;
 //! 2. open a chest (a locked one only with a key whose tag fits);
 //! 3. unlock a door or gate with a key that fits;
 //! 4. read what can be read, use what can be used (a lever, a page, a drawer);
@@ -17,6 +18,11 @@
 //!    last, class 9);
 //! 8. go through a door that leads elsewhere in the dungeon;
 //! 10. walk to the nearest ground she has not been near (what sleeps out of sight wakes).
+//!
+//! Hurt, she mends where she can before a hop through a door within the dungeon (it may not
+//! come back) and before going near a boss. A dungeon's tactic ([`crate::tactics`]) may hold
+//! her fire, put a boss earlier, name guards to hunt, and say when the story has what it wants
+//! from the place (she walks out then).
 //!
 //! Each thing tried is remembered with a signature of what she holds and how the zone stands;
 //! it is tried again only once that has changed (a key found, a gate opened); a fight is taken
@@ -326,25 +332,35 @@ impl Crawl {
                     self.task = None;
                     return Act::idle();
                 }
+                // The Factory: what the story wants from it is in hand (tactics::works).
+                let won = boss_of(self.zone).is_some_and(|b| self.bosses.iter().any(|&(d, _)| d == b));
+                if won {
+                    self.reach.update(v, signature(v));
+                }
+                if crate::tactics::works::done(v, &self.reach, self.zone, won) {
+                    self.stage = Stage::Leave;
+                    self.task = None;
+                    notes.push(Mark::Note("what the story wants is in hand: leaving".into()));
+                }
             }
         }
         self.look(v);
+        crate::tactics::works::observe(v, cx);
         if let Some(id) = fight::threat(v, cx) {
             if let Some(a) = fight::engage(v, cx, id) {
                 return a;
             }
         }
-        if let Some(c) = fight::eat(v) {
-            return Act::press(c);
-        }
         let sig = signature(v);
-        // Low with nothing to eat: whatever she was doing waits for a bed or a stove.
-        // Low with nothing to eat: whatever she was doing waits for a bed or a stove she can
-        // reach (shut in with a boss, there is none, and she carries on).
-        let low = sense::hp_permille(v.body()) < 500 && !fight::has_food(v);
-        if low && self.task.as_ref().is_some_and(|(_, w)| !matches!(w, Try::Rest(_))) {
+        // Low: whatever she was doing waits for a bed or a stove she can reach, and the apples
+        // are kept for a fight; shut in with a boss there is none, and she eats and carries on.
+        if sense::hp_permille(v.body()) < 500 {
             self.reach.update(v, sig);
-            if self.rest_in_reach(v).is_some() {
+            if self.rest_in_reach(v).is_none() {
+                if let Some(c) = fight::eat(v) {
+                    return Act::press(c);
+                }
+            } else if self.task.as_ref().is_some_and(|(_, w)| !matches!(w, Try::Rest(_))) {
                 self.task = None;
             }
         }
@@ -542,10 +558,19 @@ impl Crawl {
                 *best = Some((class, cost, what, t));
             }
         };
-        // 0. Low, with nothing to eat: a bed or a stove she can reach.
-        if sense::hp_permille(v.body()) < 500 && !fight::has_food(v) {
+        // 0. Low: a bed or a stove she can reach (the apples are for a fight).
+        if sense::hp_permille(v.body()) < 500 {
             if let Some(p) = self.rest_in_reach(v) {
                 return Some((Task::Use(UseProp::new(p)), Try::Rest(p)));
+            }
+        }
+        // 1. The dungeon's rest room, the first time she can walk to it: a death then wakes her
+        // inside, not out on the county road (the pipes' and the Factory's walks back in were
+        // what killed her).
+        if let Some(p) = self.rest_in_reach(v) {
+            if !self.tried.contains_key(&Try::Rest(p)) {
+                let d = v.prop(p).map_or(0, near_prop);
+                offer(1, d, Try::Rest(p), Task::Use(UseProp::new(p)), &mut best);
             }
         }
         // 1. Lying about.
@@ -583,6 +608,10 @@ impl Crawl {
                             offer(5, d, Try::Cast(p.id), Task::cast(verb, p.id), &mut best);
                         }
                     } else if let Some(bolt) = a.school().and_then(|sc| bolt_of(v, sc)) {
+                        // The Factory: a floor grid, a fuse by the Foreman, wait (tactics::works).
+                        if crate::tactics::works::hold_fire(v, p) {
+                            continue;
+                        }
                         if let Some(t) = bolt_at(v, reach, p, bolt) {
                             offer(5, d, Try::Cast(p.id), t, &mut best);
                         }
@@ -632,18 +661,25 @@ impl Crawl {
                 }
             }
         }
-        // 7. Whatever hostile she can reach; bosses last. One she saw and has walked away from
+        // 7. Whatever hostile she can reach; bosses last (the Factory's Foreman as soon as she
+        // has the verb for him: tactics::works). One she saw and has walked away from
         // (it sleeps out of her sight) is walked back to.
         for u in sense::enemies(v) {
-            if !fight::fightable(u) || !reach.point(u.pos) {
+            // The Factory: what sees only by light is left be unless it has her (tactics::works).
+            if !fight::fightable(u) || !reach.point(u.pos) || crate::tactics::works::leave_be(v, u) {
                 continue;
             }
             let boss = cat.combat.unit(u.def).boss;
-            offer(if boss { 9 } else { 7 }, dist(at, u.pos), Try::Fight(u.id), Task::Hunt(u.id), &mut best);
+            let class = if boss { crate::tactics::works::boss_class(v, u.def) } else { 7 };
+            offer(class, dist(at, u.pos), Try::Fight(u.id), Task::Hunt(u.id), &mut best);
+        }
+        // The Factory: a guard that sees only by light, over a locked thing (tactics::works).
+        for (id, pos) in crate::tactics::works::guards(v, reach) {
+            offer(7, dist(at, pos), Try::Fight(id), Task::Hunt(id), &mut best);
         }
         for (&def, seen) in &cx.seen_foes {
             let d = cat.combat.unit(def);
-            if d.bait.is_some() {
+            if d.bait.is_some() || (d.sight == jane_data::UnitSight::Lit && !d.boss) {
                 continue;
             }
             for (&id, &(z, pos)) in seen {
@@ -651,7 +687,8 @@ impl Crawl {
                     continue;
                 }
                 let t = Task::Walk { to: pos, near: jane_core::Fx::from_px(12) };
-                offer(if d.boss { 9 } else { 7 }, dist(at, pos) + i64::from(4 * CELL_FX), Try::Fight(id), t, &mut best);
+                let class = if d.boss { crate::tactics::works::boss_class(v, def) } else { 7 };
+                offer(class, dist(at, pos) + i64::from(4 * CELL_FX), Try::Fight(id), t, &mut best);
             }
         }
         // 10. Ground she has not seen (what sleeps out of sight wakes as she comes).
@@ -659,6 +696,15 @@ impl Crawl {
             if let Some((x, y)) = self.frontier(v) {
                 let t = Task::Walk { to: Vec2::centre(x, y), near: jane_core::Fx::from_px(6) };
                 return Some((t, Try::Explore(x, y)));
+            }
+        }
+        // A hop within the dungeon may not come back (the Factory's vent drops into the
+        // generator hall), and a boss is met whole (the Charge Hand takes most of her in one
+        // grip): hurt, she mends first where she can.
+        let hurt = sense::hp_permille(v.body()) < 900;
+        if hurt && best.as_ref().is_some_and(|b| b.0 == 8 || Self::near_boss(v, cx, b.2)) {
+            if let Some(p) = self.rest_in_reach(v).filter(|&p| self.tried.get(&Try::Rest(p)).is_none_or(|t| t.1 < 30)) {
+                return Some((Task::Use(UseProp::new(p)), Try::Rest(p)));
             }
         }
         best.map(|(_, _, what, t)| (t, what))
@@ -677,6 +723,29 @@ impl Crawl {
             })
             .min_by_key(|p| (sense::to_prop(p, at), p.id))
             .map(|p| p.id)
+    }
+
+    /// Does this try take her within twenty cells of a boss standing here (seen, or last seen)?
+    fn near_boss(v: &View<'_>, cx: &Ctx, what: Try) -> bool {
+        let cat = jane_data::catalog();
+        let to = match what {
+            Try::Pickup(d) => v.drops().iter().find(|x| x.id == d).map(|x| x.pos),
+            Try::Prop(p) | Try::Cast(p) | Try::Door(p) | Try::Push(p, _) => v.prop(p).map(sense::prop_centre),
+            Try::Fight(u) => v.unit(u).map(|u| u.pos),
+            Try::Explore(x, y) => Some(Vec2::centre(x, y)),
+            Try::Travel | Try::Rest(_) => None,
+        };
+        let Some(to) = to else { return false };
+        let r = i64::from(20 * CELL_FX);
+        let seen = sense::enemies(v).into_iter().filter(|u| cat.combat.unit(u.def).boss).map(|u| u.pos);
+        let known = cx
+            .seen_foes
+            .iter()
+            .filter(|(d, _)| cat.combat.unit(**d).boss)
+            .flat_map(|(_, m)| m.values())
+            .filter(|(z, _)| *z == v.zone())
+            .map(|&(_, p)| p);
+        seen.chain(known).any(|b| dist(b, to) <= r)
     }
 
     /// Everything that stood in the way, for the log.
@@ -747,7 +816,18 @@ fn bolt_at(v: &View<'_>, reach: &Reach, p: &Prop, spell: SpellId) -> Option<Task
                 continue;
             }
             let at = Vec2::centre(x, y);
-            if !v.sight(at, c) {
+            // A prop that blocks sight (a fuse box, a socket) hides its own middle: the bolt
+            // stops on its face and touches it there, so the face is what she must see.
+            let face = {
+                let (sx, sy) = (dx.signum(), dy.signum());
+                let (mut fx, mut fy) = (px, py);
+                while prop_rect(p).contains(fx, fy) {
+                    fx += sx;
+                    fy += sy;
+                }
+                Vec2::centre(fx, fy)
+            };
+            if !v.sight(at, c) && !v.sight(at, face) {
                 continue;
             }
             let d = dist(me, at);
