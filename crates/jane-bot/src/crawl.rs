@@ -121,6 +121,9 @@ pub struct Crawl {
     school: crate::tactics::school::School,
     /// The Burial: whether she has stood still getting nowhere (`tactics::burial::Watch`).
     watch: crate::tactics::burial::Watch,
+    /// Out, when done, by a door into this dungeon if one is to hand, not to the county (the
+    /// story sets it: the pipes' outfall, up into the Factory the quest goes to next).
+    pub leave_to: Option<ZoneId>,
 }
 
 /// The cells she can walk to from where she stands (flood over `View::flags`).
@@ -264,6 +267,7 @@ impl Crawl {
             mine: crate::tactics::mine::Mine::default(),
             school: crate::tactics::school::School::default(),
             watch: crate::tactics::burial::Watch::default(),
+            leave_to: None,
         }
     }
 
@@ -523,7 +527,12 @@ impl Crawl {
                 }
             }
             if self.stage == Stage::Leave {
-                match story::route(v, cx, jane_core::ZoneId::County) {
+                self.reach.update(v, sig);
+                let reach = &self.reach;
+                let next = self.leave_to.filter(|&z| {
+                    sense::doors_to(v, z).iter().any(|p| !p.hidden && sense::can_open(v, p) && reach.beside(p))
+                });
+                match story::route(v, cx, next.unwrap_or(jane_core::ZoneId::County)) {
                     Some(t) => {
                         self.task = Some((t, Try::Travel));
                         continue;

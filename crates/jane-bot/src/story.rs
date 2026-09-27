@@ -157,6 +157,23 @@ pub fn zone_in_text(text: &str) -> Option<ZoneId> {
     .map(|(_, z)| z)
 }
 
+/// The crawl for a quest step in dungeon `z`: out, when it is done, by a door into the dungeon
+/// the quest's next step is in if there is one to hand (the pipes' outfall, up into the Factory),
+/// else to the county.
+fn crawl_for(v: &View<'_>, z: ZoneId, g: Goal) -> crate::crawl::Crawl {
+    let mut c = crate::crawl::Crawl::new(z);
+    if let Goal::Step(q, i) = g {
+        let cat = jane_data::catalog();
+        let def = cat.story.quest(q);
+        let counts = v.quests().find(|x| x.quest == q);
+        c.leave_to = (usize::from(i) + 1..def.requirements.len())
+            .filter(|&j| counts.as_ref().is_none_or(|x| x.count(j) < def.requirements[j].qty))
+            .filter_map(|j| zone_of_step(q, j))
+            .find(|&n| n != z && dungeon(n));
+    }
+    c
+}
+
 /// The zone a quest's step names in its text, else the quest's description.
 fn zone_of_step(q: QuestId, i: usize) -> Option<ZoneId> {
     let cat = jane_data::catalog();
@@ -306,7 +323,7 @@ impl Story {
         let here = v.zone();
         if dungeon(here) && self.task.is_none() {
             if let Some(g) = self.step_in(v, here) {
-                self.dungeon = Some((Box::new(crate::crawl::Crawl::new(here)), g));
+                self.dungeon = Some((Box::new(crawl_for(v, here, g)), g));
                 return Act::idle();
             }
         }
@@ -420,7 +437,7 @@ impl Story {
                             notes.push(Mark::Note(format!("the {} is shut for {wait} h", z.name())));
                             continue;
                         }
-                        self.dungeon = Some((Box::new(crate::crawl::Crawl::new(z)), goal));
+                        self.dungeon = Some((Box::new(crawl_for(v, z, goal)), goal));
                         return Act::idle();
                     }
                     match route(v, cx, z) {
@@ -607,6 +624,10 @@ impl Story {
                 continue;
             }
             let def = cat.story.quest(q.quest);
+            // A dungeon step waits for an earlier one in another dungeon that is still to do
+            // and on offer: the log's way is walked in its order (Not Relieved: the pipes, then
+            // up through them into the Factory, not across the county to its wicket first).
+            let mut dungeon_ahead: Option<ZoneId> = None;
             for (i, r) in def.requirements.iter().enumerate() {
                 if q.count(i) >= r.qty {
                     continue;
@@ -615,7 +636,14 @@ impl Story {
                 if !self.open(v, g) {
                     continue;
                 }
+                let zone = zone_of_step(q.quest, i).filter(|&z| dungeon(z));
+                if dungeon_ahead.is_some_and(|a| zone.is_some_and(|z| z != a)) {
+                    continue;
+                }
                 if let Some(t) = step(v, cx, q.quest, i, r.target) {
+                    if dungeon_ahead.is_none() {
+                        dungeon_ahead = zone;
+                    }
                     // A dungeon that keeps hours and is open now (the Museum, ten to four): go
                     // while it is, before any errand.
                     let open_now = match t {
