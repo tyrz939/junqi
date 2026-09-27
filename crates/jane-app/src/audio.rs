@@ -39,6 +39,10 @@ pub struct Sound {
     beds: Vec<Option<jane_audio::Bed>>,
     cue: Option<MusicCue>,
     held: bool,
+    /// A lesson's hush: the music's and the beds' share, of 255.
+    hush: u8,
+    /// The share last sent to the engine.
+    sent: u8,
 }
 
 impl std::fmt::Debug for Sound {
@@ -64,7 +68,7 @@ impl Sound {
     /// No device: every ask is dropped.
     pub fn silent() -> Sound {
         let (sfx, beds) = tables();
-        Sound { device: None, tx: None, sfx, beds, cue: None, held: false }
+        Sound { device: None, tx: None, sfx, beds, cue: None, held: false, hush: 255, sent: 255 }
     }
 
     /// Opens the default playback device at 48 kHz stereo, or falls back to silence with a line
@@ -124,9 +128,17 @@ impl Sound {
     /// The world held still (alone, a menu up): the music and the beds step back until it goes
     /// on. With company the world is never held, so this is never set.
     pub fn set_held(&mut self, held: bool) {
-        if held != self.held {
-            self.held = held;
-            self.send(Cmd::Duck(if held { 0.35 } else { 1.0 }));
+        self.held = held;
+        self.send_duck();
+    }
+
+    /// The deeper of the held world's step back and a lesson's hush, sent when it moves.
+    fn send_duck(&mut self) {
+        // Of 255: the held world's 0.35, or the hush's share, whichever is deeper.
+        let share = if self.held { 89 } else { 255 }.min(self.hush);
+        if share.abs_diff(self.sent) >= 2 || (share == 255 && self.sent != 255) {
+            self.sent = share;
+            self.send(Cmd::Duck(f32::from(share) / 255.0));
         }
     }
 
@@ -158,6 +170,11 @@ impl AudioBus for Sound {
     }
 
     fn tick(&mut self) {}
+
+    fn duck(&mut self, share: u8) {
+        self.hush = share;
+        self.send_duck();
+    }
 }
 
 /// The little sound a menu makes for a pick: a screen opening or closing, a choice made.

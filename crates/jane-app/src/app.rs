@@ -25,6 +25,7 @@ use jane_present::ui::core::{AppIntent, PadPress, UiInput, UiOut};
 use jane_present::ui::dialogue::{self, DialogueBox};
 use jane_present::ui::hud::{self, HudCtx};
 use jane_present::ui::lan::{self as lan_ui, HostChoice, HostInfo, JoinInfo};
+use jane_present::ui::lesson as lesson_ui;
 use jane_present::ui::loading::{self, Card, LoadingState};
 use jane_present::ui::menus::{self, MenuState, PauseInfo, SlotMode, SlotRow};
 use jane_present::ui::perf::{self, FrameInfo, PerfLog, PerfView, SimTally, TopLine};
@@ -606,9 +607,13 @@ impl App<'_> {
         self.bufs.dialogue.is_some() && matches!(self.scene, Scene::Play)
     }
 
-    /// The world is held: a menu is up with nobody else here, or F6 holds it.
+    /// The world is held: a menu is up with nobody else here, or F6 holds it, or (alone) a
+    /// spell has just been learned and the world holds its breath (PRESENTATION.md §2.1).
     fn world_held(&self) -> bool {
-        !self.menus.is_empty() || self.win_open || (self.speed.held && !self.speed.step)
+        !self.menus.is_empty()
+            || self.win_open
+            || (self.speed.held && !self.speed.step)
+            || self.present.lessons().holds_world(self.alone())
     }
 
     /// Opens the window on `tab`, switches to it, or closes the window when it is already there.
@@ -708,6 +713,7 @@ impl App<'_> {
                     self.present.tick(&v, events);
                     self.bufs.tick(&v, events);
                     self.soundtrack.tick(&v, events, &mut self.sound);
+                    self.soundtrack.lesson(self.present.lessons(), &mut self.sound);
                     self.stages[1] += t.elapsed().as_micros() as u32;
                     if self.bot_until_talk && self.bufs.dialogue.is_some() {
                         self.bot = None;
@@ -1248,6 +1254,8 @@ impl App<'_> {
                 let top_is_hud = self.menus.is_empty() && self.bufs.dialogue.is_none();
                 self.ui.interactive = top_is_hud;
                 hud::draw(&mut self.ui, &self.bufs, cx);
+                // A spell learned, a jar or a page found: its card or its words (§3.2).
+                lesson_ui::draw(&mut self.ui, self.present.lessons(), &self.bufs, self.win_open);
                 // At a table: who sits at it, and whom it waits for.
                 if let Some(sess) = self.session.as_ref().filter(|s| !s.pauses()) {
                     let me = me_of(self.session.as_ref());

@@ -28,6 +28,7 @@ use crate::frame::{
     Flags, Frame, Light, LightKind, Pass, Post, Rgb, Span, SpriteCmd, Tier, Tint, height_of_rows, rows_up,
 };
 use crate::fx::Fx;
+use crate::lesson::{Her, Lessons};
 use crate::light::{Sky, flicker, lantern_lit, sky};
 use crate::people::{self, People};
 use crate::props::{self, Props};
@@ -203,6 +204,8 @@ pub struct Present {
     /// The weather, the fog and the sky (§1.9), and the effects (§2).
     atmos: Atmosphere,
     fx: Fx,
+    /// The moment a spell is learned, or a jar or a page found (§2.1).
+    lessons: Lessons,
 }
 
 impl Present {
@@ -257,7 +260,14 @@ impl Present {
             sky: sky(12 * 7200, 0, false, 1000, Region::Lowfields),
             atmos,
             fx,
+            lessons: Lessons::new(tier),
         }
+    }
+
+    /// The moment under way, and the gifts waiting (what the UI's card, the sound and the app's
+    /// hold read).
+    pub fn lessons(&self) -> &Lessons {
+        &self.lessons
     }
 
     /// The atmosphere (the weather, the fog, the sky): what F2 and the sheet tools read, and
@@ -368,6 +378,7 @@ impl Present {
             self.units.clear();
             self.atmos.zone(view);
             self.fx.zone(view);
+            self.lessons.zone(view);
         }
         self.zone_cells = view.size();
         self.hurt.clear();
@@ -403,6 +414,17 @@ impl Present {
         self.sky = sky(clock, day, view.indoor(), view.ambient().0, view.region());
         self.atmos.tick(view, self.tick);
         self.fx.on_events(view, events);
+        let me = view.me().unit.get();
+        let her = self.units.binary_search_by_key(&me, |r| r.id).ok().map(|i| {
+            let u = &self.units[i];
+            Her {
+                at: (u.cur.0 >> FX_TO_CANVAS, u.cur.1 >> FX_TO_CANVAS),
+                facing: u.facing,
+                walking: u.anim > 0,
+                alive: !u.dead,
+            }
+        });
+        self.lessons.tick(view, events, her);
         let (cw, ch) = (i32::from(self.canvas.0), i32::from(self.canvas.1));
         let cam = (self.camera.pos.0 >> FX_TO_CANVAS, self.camera.pos.1 >> FX_TO_CANVAS);
         self.fx.set_cap(self.atmos.features.max_particles);
@@ -827,6 +849,10 @@ impl Present {
         let lantern = lantern_lit(self.sky.ambient);
         let mut glows: [Option<Light>; 64] = [None; 64];
         let mut n_glows = 0;
+        // Her feet on the canvas at this alpha, and her draw key: where a lesson's light and
+        // motes gather.
+        let mut me_feet = None;
+        let me_key = self.units.iter().find(|u| u.me).map(|u| UNIT_KEY | u.id);
         for u in &self.units {
             let (dx, dy) = (i64::from(u.cur.0 - u.prev.0), i64::from(u.cur.1 - u.prev.1));
             let (fx, fy) = if dx * dx + dy * dy > SNAP_FX * SNAP_FX {
@@ -868,32 +894,37 @@ impl Present {
             // A person shows its walk, breathe or dead frame (ART.md §4); a stand-in walks with
             // a one-px bob.
             let mut cast_glow = None;
+            // A spell learned (§2.1): standing, she turns to us and holds her hands out.
+            let lesson = if u.me { self.lessons.pose() } else { None };
+            let facing = if lesson.is_some() { Facing::South } else { u.facing };
+            if u.me {
+                me_feet = Some((sx, sy));
+            }
             let (look, mirror, bob) = match (u.person, u.creature) {
                 (Some(set), _) => {
                     // A blow or a spell under way plays its three beats; a blow taken, its hurt.
-                    let act = u.struck.and_then(|(t, spell)| {
-                        let t = self.tick.wrapping_sub(t);
-                        (t < 3 * people::ACT_TICKS).then(|| match jane_data::catalog().combat.spell(spell).anim {
-                            jane_data::CastAnim::Cast => people::Act::Cast(t),
-                            _ => people::Act::Attack(t),
+                    let act = lesson.map(|(_, t)| people::Act::Cast(t)).or_else(|| {
+                        u.struck.and_then(|(t, spell)| {
+                            let t = self.tick.wrapping_sub(t);
+                            (t < 3 * people::ACT_TICKS).then(|| match jane_data::catalog().combat.spell(spell).anim {
+                                jane_data::CastAnim::Cast => people::Act::Cast(t),
+                                _ => people::Act::Attack(t),
+                            })
                         })
                     });
                     let hurt = self.tick < u.hurt_until;
                     // Hands out on the cast's second beat: the school's light between them.
-                    if let (Some(people::Act::Cast(t)), Some((_, spell))) = (act, u.struck) {
+                    if let Some((school, t)) = lesson {
+                        if t / people::ACT_TICKS == 1 {
+                            cast_glow = Some(school);
+                        }
+                    } else if let (Some(people::Act::Cast(t)), Some((_, spell))) = (act, u.struck) {
                         if t / people::ACT_TICKS == 1 && !u.dead {
                             cast_glow = Some(jane_data::catalog().combat.spell(spell).school);
                         }
                     }
-                    let pose = people::Pose {
-                        facing: u.facing,
-                        anim: u.anim,
-                        tick: self.tick,
-                        dead: u.dead,
-                        id: u.id,
-                        act,
-                        hurt,
-                    };
+                    let pose =
+                        people::Pose { facing, anim: u.anim, tick: self.tick, dead: u.dead, id: u.id, act, hurt };
                     let (look, mirror) = self.people.frame(set, pose);
                     (look, mirror, 0)
                 }
@@ -967,7 +998,7 @@ impl Present {
             if let Some(school) = cast_glow {
                 // The light gathered between her hands: in front of her facing the viewer or to
                 // the side, behind her facing away; it lights what is round it.
-                let (dx, dy, ahead) = match u.facing {
+                let (dx, dy, ahead) = match facing {
                     Facing::East => (9, -21, 1),
                     Facing::West => (-9, -21, 1),
                     Facing::South => (0, -18, 1),
@@ -1070,8 +1101,9 @@ impl Present {
             });
         }
         f.lights.extend(glows[..n_glows].iter().flatten());
-        // The effects' lights: a bolt lights the wall it passes (§2).
+        // The effects' lights: a bolt lights the wall it passes (§2); a lesson's between her hands.
         self.fx.lights(f, cam, alpha);
+        self.lessons.lights(f, me_feet, me_key);
         // A light never shadows what holds it: each holder's key to its sprite, or none.
         let holders = &self.holders;
         for l in &mut f.lights {
@@ -1115,6 +1147,7 @@ impl Present {
         self.fx.draw_ground(f, cam, alpha, sky);
         self.atmos.draw_fog(f, cam, sky);
         self.fx.draw_air(f, cam, alpha, sky);
+        self.lessons.draw(f, cam, alpha, me_feet);
         // The grade (§1.3 `grade`): the same on every tier, so a frame from any of them is the
         // same hour and mood, the bloom with it where the `bloom` row is on (every tier since
         // 2026-09-27).
@@ -1128,6 +1161,8 @@ impl Present {
         } else {
             post
         };
+        // A lesson's hush drains a little colour and light (§2.1).
+        let post = self.lessons.grade(post);
         if post != Post::NONE {
             f.passes.push(Pass::Post(post));
         }
