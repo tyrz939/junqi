@@ -64,6 +64,9 @@ pub enum Try {
     Travel,
     /// Mend at a bed or a stove.
     Rest(PropId),
+    /// What a dungeon's tactic asks (`tactics/*.rs`), by its own number: the tactic decides
+    /// when it is offered again.
+    Tactic(u32),
     /// Walk to ground she has not seen.
     Explore(i32, i32),
 }
@@ -116,6 +119,8 @@ pub struct Crawl {
     pub mine: crate::tactics::mine::Mine,
     /// The School's tactic (the rope, the beds: `tactics::school`).
     school: crate::tactics::school::School,
+    /// The Burial: whether she has stood still getting nowhere (`tactics::burial::Watch`).
+    watch: crate::tactics::burial::Watch,
 }
 
 /// The cells she can walk to from where she stands (flood over `View::flags`).
@@ -258,6 +263,7 @@ impl Crawl {
             failures: BTreeMap::new(),
             mine: crate::tactics::mine::Mine::default(),
             school: crate::tactics::school::School::default(),
+            watch: crate::tactics::burial::Watch::default(),
         }
     }
 
@@ -393,9 +399,38 @@ impl Crawl {
         crate::tactics::works::observe(v, cx);
         // What a dungeon's own idea has her notice each frame (tactics/*.rs).
         crate::tactics::forest::look(v, cx);
-        if let Some(id) = fight::threat(v, cx) {
-            if let Some(a) = fight::engage(v, cx, id) {
+        // The Burial: where her feet keep off, and out of the sight of a small snake she woke.
+        if v.zone() == jane_core::ZoneId::Burial {
+            if let Some(a) = crate::tactics::burial::before(v, cx) {
                 return a;
+            }
+        }
+        // The Burial: stood still getting nowhere (her task and a fight pulling two ways, a thing
+        // after her that cannot get round to her), the task is chosen afresh and what is not at
+        // her elbow is let be a while (`tactics::burial::Watch`). Nothing is marked failed: the
+        // task was not what stopped her.
+        if v.zone() == jane_core::ZoneId::Burial && self.watch.stalled(v) {
+            self.task = None;
+        }
+        let calm = v.zone() == jane_core::ZoneId::Burial && self.watch.calm(v);
+        if let Some(id) = fight::threat(v, cx).filter(|&id| !calm || crate::tactics::burial::at_elbow(v, id)) {
+            // The Burial: nothing is chased into the sight of a snake still to be fed.
+            match (v.zone() == jane_core::ZoneId::Burial)
+                .then(|| crate::tactics::burial::fight(v, cx, id, self.task.as_ref().map(|(t, _)| t)))
+                .flatten()
+            {
+                Some(Some(a)) => return a,
+                Some(None) => {}
+                None => {
+                    if let Some(a) = fight::engage(v, cx, id) {
+                        return a;
+                    }
+                }
+            }
+        }
+        if v.zone() == jane_core::ZoneId::Burial {
+            if let Some(c) = fight::eat(v) {
+                return Act::press(c);
             }
         }
         let sig = signature(v);
@@ -438,6 +473,26 @@ impl Crawl {
                         e.0 = 0;
                     }
                 }
+            }
+        }
+        // The Burial is done with once its keeper is down and his box is in her bag (`tactics::burial`).
+        if v.zone() == jane_core::ZoneId::Burial
+            && self.stage == Stage::Explore
+            && crate::tactics::burial::done(v, &self.bosses)
+        {
+            self.stage = Stage::Leave;
+            self.task = None;
+            notes.push(Mark::Note("what she came down for is in her bag: leaving".into()));
+        }
+        // The Burial's tactics cut in on whatever she was doing (something to feed in view).
+        if v.zone() == jane_core::ZoneId::Burial && self.task.is_some() && self.frames % 15 == 0 {
+            let cut = self
+                .task
+                .as_ref()
+                .map(|(t, w)| crate::tactics::burial::cuts_in(v, cx, &self.reach, t, *w))
+                .unwrap_or_default();
+            if cut.into_iter().any(|w| self.fresh(w, sig)) {
+                self.task = None;
             }
         }
         for _ in 0..4 {
@@ -613,7 +668,7 @@ impl Crawl {
 
     fn fresh(&self, what: Try, sig: u64) -> bool {
         match (what, self.tried.get(&what)) {
-            (_, None) => true,
+            (Try::Tactic(_), _) | (_, None) => true,
             // A fight is taken up again whenever she is ready to (it may have healed; so has she).
             (Try::Fight(_), Some(&(_, n))) => n < 12,
             (_, Some(&(s, n))) => s != sig && n < 6,
@@ -644,7 +699,9 @@ impl Crawl {
         let near_prop = |p: &Prop| sense::to_prop(p, at);
         let mut best: Option<(u8, i64, Try, Task)> = None;
         let offer = |class: u8, cost: i64, what: Try, t: Task, best: &mut Option<(u8, i64, Try, Task)>| {
-            if !self.fresh(what, sig) {
+            // The Burial: a corner is not gone into before she has what it asks (`tactics::burial`).
+            if !self.fresh(what, sig) || v.zone() == jane_core::ZoneId::Burial && crate::tactics::burial::not_yet(v, &t)
+            {
                 return;
             }
             if best.as_ref().is_none_or(|(c, k, w, _)| (class, cost, what) < (*c, *k, *w)) {
@@ -774,12 +831,14 @@ impl Crawl {
         // has the verb for him: tactics::works). One she saw and has walked away from (it sleeps
         // out of her sight) is walked back to. With the dungeon's boss down, what is left (and
         // what has come back since) is walked past: it is fought only when it comes at her.
+        let burial = v.zone() == jane_core::ZoneId::Burial;
         let cleared = boss_of(self.zone).is_some_and(|b| self.bosses.iter().any(|&(d, _)| d == b));
         for u in sense::enemies(v) {
             // One her feet (or her patience) lately found no way to waits its time; in the
             // Factory, what sees only by light is left be unless it has her (tactics::works).
             if !fight::fightable(u)
                 || !reach.point(u.pos)
+                || burial && crate::tactics::burial::not_hunted(u.def)
                 || cleared
                 || !fight::reachable(cx, u.id, v.frame())
                 || crate::tactics::works::leave_be(v, u)
@@ -802,6 +861,7 @@ impl Crawl {
             let d = cat.combat.unit(def);
             if d.bait.is_some()
                 || cleared
+                || burial && crate::tactics::burial::not_hunted(def)
                 || (d.sight == jane_data::UnitSight::Lit && !d.boss)
                 || v.zone() == ZoneId::School && !crate::tactics::school::hunts(def)
             {
@@ -821,6 +881,12 @@ impl Crawl {
         if best.as_ref().is_some_and(|b| b.0 == 9) && sense::hp_permille(v.body()) < 850 {
             if let Some(p) = self.rest_in_reach(v).filter(|p| self.tried.get(&Try::Rest(*p)).is_none_or(|t| t.1 < 20)) {
                 return Some((Task::Use(UseProp::new(p)), Try::Rest(p)));
+            }
+        }
+        // The Burial's tactics (feeding what is fed, not fought): `tactics::burial`.
+        if v.zone() == jane_core::ZoneId::Burial {
+            for (class, cost, what, t) in crate::tactics::burial::offers(v, cx, reach, &self.bosses) {
+                offer(class, cost, what, t, &mut best);
             }
         }
         // 10. Ground she has not seen (what sleeps out of sight wakes as she comes). Not in the
@@ -871,7 +937,7 @@ impl Crawl {
             Try::Prop(p) | Try::Cast(p) | Try::Door(p) | Try::Push(p, _) => v.prop(p).map(sense::prop_centre),
             Try::Fight(u) | Try::Talk(u) => v.unit(u).map(|u| u.pos),
             Try::Explore(x, y) => Some(Vec2::centre(x, y)),
-            Try::Travel | Try::Rest(_) => None,
+            Try::Travel | Try::Rest(_) | Try::Tactic(_) => None,
         };
         let Some(to) = to else { return false };
         let r = i64::from(20 * CELL_FX);
@@ -973,13 +1039,15 @@ fn bolt_at(v: &View<'_>, reach: &Reach, p: &Prop, spell: SpellId) -> Option<Task
             // Where the bolt ends, as the sim flies it: on the prop (a prop that stops shots, a
             // fuse box or a socket, is touched where the bolt stops on its face), or near enough
             // its middle; or, for a thing that blocks sight and hides its own middle (a fallen
-            // rock), in sight of its near face.
+            // rock, a web across a passage), in sight of its near face, or it the first thing
+            // seen that way, and within the bolt's flight (from farther it falls short).
             let end = bolt_end(v, at, jane_core::angle::bearing(at, c), spell);
             let (ex, ey) = end.cell();
             let on_it = dist(end, c) <= touch || prop_rect(p).contains(ex, ey);
-            // (The face in sight, and within the bolt's flight: from farther it falls short.)
             let face = face_toward(p, at);
-            if !on_it && (v.sight(at, c) || !v.sight(at, face) || dist(at, face) > i64::from(s.range.0)) {
+            let in_range = dist(at, face) <= i64::from(s.range.0);
+            let hidden = !v.sight(at, c) && in_range && (v.sight(at, face) || first_seen_is(v, at, c, p));
+            if !on_it && !hidden {
                 continue;
             }
             let d = dist(me, at);
@@ -1047,6 +1115,25 @@ fn shot_stopped(v: &View<'_>, a: Vec2, b: Vec2) -> bool {
         }
         if v.flags(cx, cy) & jane_core::tile::BLOCK_SHOT != 0 {
             return true;
+        }
+    }
+    false
+}
+
+/// Is the first thing that stops sight on the way from `a` to `b` the prop itself (a web across
+/// a passage blocks sight, and it is what the bolt is for)? A quarter cell at a time.
+pub fn first_seen_is(v: &View<'_>, a: Vec2, b: Vec2, p: &Prop) -> bool {
+    let r = prop_rect(p);
+    let n = (dist(a, b) / i64::from(CELL_FX / 4)).max(1);
+    let start = a.cell();
+    for i in 1..=n {
+        let q = Vec2::new(
+            jane_core::Fx(a.x.0 + ((i64::from(b.x.0 - a.x.0) * i) / n) as i32),
+            jane_core::Fx(a.y.0 + ((i64::from(b.y.0 - a.y.0) * i) / n) as i32),
+        );
+        let (x, y) = q.cell();
+        if (x, y) != start && v.flags(x, y) & jane_core::tile::BLOCK_SIGHT != 0 {
+            return r.contains(x, y);
         }
     }
     false
@@ -1285,6 +1372,17 @@ pub fn setup(bps: &jane_sim::Blueprints, z: ZoneId) -> Vec<jane_sim::Command> {
         }
     }
     for (item, qty) in materials_before(bps, z) {
+        out.push(Command::Dev(DevOp::Give { item, qty }));
+    }
+    // The bait for what in there is fed rather than fought (the dog: "The small snakes down
+    // there cannot be fought. They can be fed."), made at the bench before she goes: one each.
+    let mut baits: BTreeMap<ItemId, u16> = BTreeMap::new();
+    for u in &dungeon.units {
+        if let Some(b) = cat.combat.unit(u.def).bait {
+            *baits.entry(b).or_default() += 1;
+        }
+    }
+    for (item, qty) in baits {
         out.push(Command::Dev(DevOp::Give { item, qty }));
     }
     out.push(Command::Dev(DevOp::Give { item: sense::item("apple"), qty: 8 }));

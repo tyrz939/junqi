@@ -6,7 +6,7 @@
   "indoor": true,
   "ambient": 0.1,
   "lattice": { "cols": 6, "rows": 6 },
-  "givenVerbs": ["icebolt"],
+  "givenVerbs": ["icebolt", "repair", "explosion", "grow", "spark"],
   "givenKeys": ["school_stair"],
   "nodes": [
     {
@@ -158,7 +158,7 @@
       "demands": [], "grants": [{ "flag": "snake_down" }]
     },
     {
-      "id": "east", "kind": "puzzle", "order": 2, "critical": true, "pool": "burial.east", "heat": 0.6,
+      "id": "east", "kind": "puzzle", "order": 2, "critical": true, "pool": "burial.east", "heat": 0,
       "holds": [
         { "socket": "unit:lurker_a", "unit": "lurker" },
         { "socket": "unit:lurker_b", "unit": "lurker" },
@@ -206,7 +206,7 @@
     {
       "id": "vigil", "kind": "rest", "order": 5, "critical": true, "pool": "burial.vigil", "heat": 0,
       "holds": [
-        { "socket": "rest:fire", "prop": "campfire" },
+        { "socket": "rest:fire", "prop": "campfire", "talk": "burial_vigil_fire" },
         { "socket": "jar:main", "prop": "jar" }
       ],
       "binds": [
@@ -226,7 +226,7 @@
             { "do": "toast", "text": "It takes at once, as though it had been laid this morning." }
           ]
         },
-        { "socket": "rest:fire", "prop": "campfire", "hidden": true },
+        { "socket": "rest:fire", "prop": "campfire", "hidden": true, "talk": "burial_orchard_fire" },
         { "socket": "jar:main", "prop": "jar" },
         { "socket": "page:main", "prop": "leaf_page" }
       ],

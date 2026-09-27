@@ -260,8 +260,9 @@ impl Host for Recorder {
     }
 }
 
-/// The plan a bot follows.
+/// The plan a bot follows. One per bot, made once: the crawl's size is no cost worth a box.
 #[derive(Debug)]
+#[allow(clippy::large_enum_variant)]
 pub enum Plan {
     /// The quest log (the Reader's and the Rusher's first hour).
     Story(story::Story),

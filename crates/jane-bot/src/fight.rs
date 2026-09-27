@@ -302,6 +302,28 @@ pub fn on_me(v: &View<'_>, u: &Unit) -> bool {
     u.alive && u.combat == CombatState::Combat && u.target == Some(v.body().id)
 }
 
+/// Can it touch her from where it is? Something rooted to the spot (a statue, a cactus) that
+/// is still after her from beyond its longest reach is not a fight: running from it or back to
+/// it for ever is how a crawl stalls. What only bites reaches no further than a step past its
+/// bite (the garden's seedlings); what throws, a few cells past its throw.
+pub fn can_reach(v: &View<'_>, u: &Unit) -> bool {
+    let cat = jane_data::catalog();
+    let d = cat.combat.unit(u.def);
+    if d.walk.0 > 0 || d.run.0 > 0 {
+        return true;
+    }
+    let range = d.book.iter().map(|&s| cat.combat.spell(s).range.0).max().unwrap_or(0);
+    let bites = d.book.iter().all(|&s| cat.combat.spell(s).kind == SpellKind::Melee);
+    let margin = if bites { CELL_FX } else { 4 * CELL_FX };
+    gap(v.body(), u) <= i64::from(range) + i64::from(margin)
+}
+
+/// Can a rooted thing reach her from where it stands: the Burial's rule ([`can_reach`], a
+/// shooter four cells past its reach), else the forest's ([`reaches_her`], one cell).
+fn reaches_her_here(v: &View<'_>, u: &Unit) -> bool {
+    if v.zone() == jane_core::ZoneId::Burial { can_reach(v, u) } else { reaches_her(v, u) }
+}
+
 /// Has she lately found no way to it?
 pub fn reachable(cx: &Ctx, id: UnitId, frame: u32) -> bool {
     cx.fight.unreachable.get(&id).is_none_or(|&until| until <= frame)
@@ -334,7 +356,7 @@ pub fn threat(v: &View<'_>, cx: &mut Ctx) -> Option<UnitId> {
     let low = hp_permille(v.body()) < FLEE_BELOW && food(v).is_none();
     let on: Vec<&Unit> = enemies(v)
         .into_iter()
-        .filter(|u| on_me(v, u) && fightable(u) && !ignore(u) && reaches_her(v, u) && !(low && rooted(u)))
+        .filter(|u| on_me(v, u) && fightable(u) && !ignore(u) && reaches_her_here(v, u) && !(low && rooted(u)))
         .collect();
     if let Some(&nearest) = on.first() {
         // With a crowd on her, one at a time: the one she is hitting while it is still at her,

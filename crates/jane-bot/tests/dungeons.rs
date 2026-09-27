@@ -10,7 +10,8 @@
 //! when it got out, how often it died, and where it stopped and why. A dungeon the crawl cannot
 //! finish is a finding about the bot or the game, reported here as it stands, not hidden: the
 //! test holds every run to getting in and to ending in a known state (out, or stopped with a
-//! reason), and the dungeons it finishes (the cellar, the library, the Gold Mine) to finishing.
+//! reason), and the dungeons it finishes to finishing (all of them: the School in forty minutes,
+//! the Burial in an hour).
 
 mod common;
 
@@ -26,11 +27,20 @@ const FRAMES: u32 = 20 * MINUTE;
 /// the biggest building in the county from the one fire that mends her (DUNGEONS.md §3.6).
 const SCHOOL_FRAMES: u32 = 40 * MINUTE;
 
+/// The Burial, an hour: it is five keepers deep, four of them shut in with her, and each sends
+/// her back to a fire first (DUNGEONS.md §3.5, "Played through"). Its three runs finish in
+/// thirty-five to forty-five.
+const BURIAL_FRAMES: u32 = 60 * MINUTE;
+
 fn play(z: ZoneId, must_finish: bool) {
     let cat = jane_data::catalog();
     let mut problems = Vec::new();
+    let frames = match z {
+        ZoneId::Burial => BURIAL_FRAMES,
+        ZoneId::School => SCHOOL_FRAMES,
+        _ => FRAMES,
+    };
     for seed in SEEDS {
-        let frames = if z == ZoneId::School { SCHOOL_FRAMES } else { FRAMES };
         let (rec, bot) = common::crawl(seed, Model::Reader, z, frames);
         let Plan::Crawl(c) = &bot.plan else { unreachable!() };
         let bosses: Vec<String> =
@@ -147,7 +157,7 @@ fn the_factory() {
 
 #[test]
 fn the_burial_chamber() {
-    play(ZoneId::Burial, false);
+    play(ZoneId::Burial, true);
 }
 
 #[test]

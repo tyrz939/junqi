@@ -8,11 +8,11 @@
   "great_flower": {
     "name": "The Flower", "faction": "undead", "controller": "ai",
     "strength": 110, "spirit": 60, "walk": 0, "run": 0, "aggro": 16, "leash": 90, "bounds": 1.5,
-    "book": ["cactus_spray", "root_lash"], "respawn": 0, "autoRegen": true, "loot": [],
+    "book": ["flower_spray", "flower_lash"], "respawn": 0, "autoRegen": true, "loot": [],
     "sprite": "great_flower", "boss": true, "resist": { "nature": 0.8, "frost": 0.3 },
     "phases": [
       {
-        "hpBelow": 0.75, "book": ["cactus_spray", "root_lash"],
+        "hpBelow": 0.75, "book": ["flower_spray", "flower_lash"],
         "onEnter": [
           { "do": "spawn", "unit": "burial_seedling_a", "def": "flower", "at": "flower_seed_a" },
           { "do": "spawn", "unit": "burial_seedling_b", "def": "flower", "at": "flower_seed_b" },
@@ -20,7 +20,7 @@
         ]
       },
       {
-        "hpBelow": 0.4, "book": ["cactus_spray", "root_lash"],
+        "hpBelow": 0.4, "book": ["flower_spray", "flower_lash"],
         "onEnter": [
           { "do": "spawn", "unit": "burial_seedling_c", "def": "flower", "at": "flower_seed_c" },
           { "do": "spawn", "unit": "burial_seedling_d", "def": "flower", "at": "flower_seed_d" },
@@ -35,12 +35,12 @@
   },
   "spider_queen": {
     "name": "The Spider", "faction": "undead", "controller": "ai",
-    "strength": 100, "spirit": 50, "walk": 0.35, "run": 0.9, "aggro": 14, "leash": 60, "bounds": 1.25,
-    "book": ["spider_bite", "webshot"], "respawn": 0, "autoRegen": true, "loot": [],
+    "strength": 70, "spirit": 50, "walk": 0.35, "run": 0.9, "aggro": 14, "leash": 12, "bounds": 1.25,
+    "book": ["queen_bite", "queen_web"], "respawn": 0, "autoRegen": true, "loot": [],
     "sprite": "spider_queen", "boss": true, "resist": { "physical": 0.3 },
     "phases": [
       {
-        "hpBelow": 0.7, "book": ["spider_bite", "webshot"], "run": 1.1,
+        "hpBelow": 0.7, "book": ["queen_bite", "queen_web"], "run": 1.1,
         "onEnter": [
           { "do": "spawn", "unit": "burial_hatchling_a", "def": "spider", "at": "spider_egg_a" },
           { "do": "spawn", "unit": "burial_hatchling_b", "def": "spider", "at": "spider_egg_b" },
@@ -48,7 +48,7 @@
         ]
       },
       {
-        "hpBelow": 0.35, "book": ["spider_bite", "webshot"], "run": 1.3,
+        "hpBelow": 0.35, "book": ["queen_bite", "queen_web"], "run": 1.3,
         "onEnter": [
           { "do": "spawn", "unit": "burial_hatchling_c", "def": "spider", "at": "spider_egg_c" },
           { "do": "spawn", "unit": "burial_hatchling_d", "def": "spider", "at": "spider_egg_d" },
@@ -92,12 +92,12 @@
   "goldskin": {
     "name": "Gnox Goldskin", "faction": "undead", "controller": "ai",
     "strength": 134, "spirit": 150, "walk": 0.3, "run": 0.65, "aggro": 16, "leash": 50, "bounds": 1.25,
-    "book": ["melee_stun", "poisonbolt_far", "snake_ring", "icebolt_ai"],
+    "book": ["melee_stun", "gold_globe", "gold_ring", "gold_icebolt"],
     "respawn": 0, "autoRegen": true, "loot": [], "sprite": "goldskin", "boss": true,
     "resist": { "physical": 0.8, "frost": 0.8, "fire": 0.8, "nature": 0.8, "blast": 0.8, "shock": 0.8 },
     "phases": [
       {
-        "hpBelow": 0.75, "book": ["melee_stun", "poisonbolt_far", "icebolt_ai"],
+        "hpBelow": 0.75, "book": ["melee_stun", "gold_globe", "gold_icebolt"],
         "onEnter": [
           { "do": "switch", "prop": "vault_brazier_a", "on": false },
           { "do": "switch", "prop": "vault_brazier_b", "on": false },
@@ -108,7 +108,7 @@
         ]
       },
       {
-        "hpBelow": 0.5, "book": ["melee_stun", "snake_ring", "poisonbolt_far"],
+        "hpBelow": 0.5, "book": ["melee_stun", "gold_ring", "gold_globe"],
         "onEnter": [
           { "do": "switch", "prop": "vault_brazier_a", "on": false },
           { "do": "switch", "prop": "vault_brazier_b", "on": false },
@@ -120,7 +120,7 @@
         ]
       },
       {
-        "hpBelow": 0.25, "book": ["melee_stun", "snake_ring", "icebolt_ai", "poisonbolt_far"],
+        "hpBelow": 0.25, "book": ["melee_stun", "gold_ring", "gold_icebolt", "gold_globe"],
         "onEnter": [
           { "do": "switch", "prop": "vault_brazier_a", "on": false },
           { "do": "switch", "prop": "vault_brazier_b", "on": false },

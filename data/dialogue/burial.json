@@ -22,5 +22,31 @@
         ]
       }
     }
+  },
+  "burial_vigil_fire": {
+    "speaker": "Fire",
+    "start": [{ "node": "fire" }],
+    "nodes": {
+      "fire": {
+        "lines": [
+          "Somebody sat up with the dead here and kept a fire while they did it. It catches for you at once, and it is the only warm light down here.",
+          "Nothing comes near while it burns. If it goes badly out there, this is where you will wake."
+        ],
+        "actions": [{ "do": "rest" }]
+      }
+    }
+  },
+  "burial_orchard_fire": {
+    "speaker": "Fire",
+    "start": [{ "node": "fire" }],
+    "nodes": {
+      "fire": {
+        "lines": [
+          "The hearth burns as though it had been laid this morning. The dead trees stand back from it.",
+          "Nothing comes near while it burns. If it goes badly out there, this is where you will wake."
+        ],
+        "actions": [{ "do": "rest" }]
+      }
+    }
   }
 }
