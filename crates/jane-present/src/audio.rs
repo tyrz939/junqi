@@ -143,7 +143,27 @@ pub enum SfxKind {
     Loot,
     QuestGiven,
     QuestDone,
-    Learn,
+    /// A spell learned (`crate::lesson`, §5.1): a breath drawn in, then the theme's first notes
+    /// (up a fifth, lean on the sixth) in the school's key and voice over its chord.
+    LearnHeal,
+    LearnPhysical,
+    LearnFrost,
+    LearnFire,
+    LearnNature,
+    LearnBlast,
+    LearnShock,
+    /// The first spell she ever learns: a longer breath, then the theme's whole first phrase in
+    /// the school's key and voice, stopping on the second as the theme does.
+    FirstHeal,
+    FirstPhysical,
+    FirstFrost,
+    FirstFire,
+    FirstNature,
+    FirstBlast,
+    FirstShock,
+    /// A jar (strength) or a page (spirit): two notes, up a fifth.
+    GrowStrength,
+    GrowSpirit,
     Journal,
     Open,
     Use,
@@ -182,7 +202,36 @@ pub enum SfxKind {
 }
 
 impl SfxKind {
-    pub const ALL: [SfxKind; 53] = [
+    /// The sound a lesson's moment makes (`crate::lesson::Gift`): the school's cue, its first-spell
+    /// phrase, or a jar's or a page's two notes.
+    pub const fn of_gift(g: crate::lesson::Gift) -> SfxKind {
+        use crate::lesson::Gift;
+        use jane_core::action::Stat;
+        match g {
+            Gift::Spell { school, first: false, .. } => match school {
+                School::Heal => SfxKind::LearnHeal,
+                School::Physical => SfxKind::LearnPhysical,
+                School::Frost => SfxKind::LearnFrost,
+                School::Fire => SfxKind::LearnFire,
+                School::Nature => SfxKind::LearnNature,
+                School::Blast => SfxKind::LearnBlast,
+                School::Shock => SfxKind::LearnShock,
+            },
+            Gift::Spell { school, first: true, .. } => match school {
+                School::Heal => SfxKind::FirstHeal,
+                School::Physical => SfxKind::FirstPhysical,
+                School::Frost => SfxKind::FirstFrost,
+                School::Fire => SfxKind::FirstFire,
+                School::Nature => SfxKind::FirstNature,
+                School::Blast => SfxKind::FirstBlast,
+                School::Shock => SfxKind::FirstShock,
+            },
+            Gift::Growth(Stat::Strength) => SfxKind::GrowStrength,
+            Gift::Growth(Stat::Spirit) => SfxKind::GrowSpirit,
+        }
+    }
+
+    pub const ALL: [SfxKind; 68] = [
         SfxKind::StepGrass,
         SfxKind::StepRoad,
         SfxKind::StepCobble,
@@ -205,7 +254,22 @@ impl SfxKind {
         SfxKind::Loot,
         SfxKind::QuestGiven,
         SfxKind::QuestDone,
-        SfxKind::Learn,
+        SfxKind::LearnHeal,
+        SfxKind::LearnPhysical,
+        SfxKind::LearnFrost,
+        SfxKind::LearnFire,
+        SfxKind::LearnNature,
+        SfxKind::LearnBlast,
+        SfxKind::LearnShock,
+        SfxKind::FirstHeal,
+        SfxKind::FirstPhysical,
+        SfxKind::FirstFrost,
+        SfxKind::FirstFire,
+        SfxKind::FirstNature,
+        SfxKind::FirstBlast,
+        SfxKind::FirstShock,
+        SfxKind::GrowStrength,
+        SfxKind::GrowSpirit,
         SfxKind::Journal,
         SfxKind::Open,
         SfxKind::Use,
@@ -263,7 +327,22 @@ impl SfxKind {
             SfxKind::Loot => "loot",
             SfxKind::QuestGiven => "quest_given",
             SfxKind::QuestDone => "quest_done",
-            SfxKind::Learn => "learn",
+            SfxKind::LearnHeal => "learn_heal",
+            SfxKind::LearnPhysical => "learn_physical",
+            SfxKind::LearnFrost => "learn_frost",
+            SfxKind::LearnFire => "learn_fire",
+            SfxKind::LearnNature => "learn_nature",
+            SfxKind::LearnBlast => "learn_blast",
+            SfxKind::LearnShock => "learn_shock",
+            SfxKind::FirstHeal => "learn_first_heal",
+            SfxKind::FirstPhysical => "learn_first_physical",
+            SfxKind::FirstFrost => "learn_first_frost",
+            SfxKind::FirstFire => "learn_first_fire",
+            SfxKind::FirstNature => "learn_first_nature",
+            SfxKind::FirstBlast => "learn_first_blast",
+            SfxKind::FirstShock => "learn_first_shock",
+            SfxKind::GrowStrength => "grow_strength",
+            SfxKind::GrowSpirit => "grow_spirit",
             SfxKind::Journal => "journal",
             SfxKind::Open => "open",
             SfxKind::Use => "use",
@@ -358,6 +437,9 @@ pub trait AudioBus {
     fn bed(&mut self, bed: Bed, level: u8);
     /// Once a tick, after everything else.
     fn tick(&mut self);
+    /// The music and the beds to this share of their level, of 255 (a lesson's hush, §5.1);
+    /// 255 lets them back. Effects are never ducked. A bus that cannot duck ignores it.
+    fn duck(&mut self, _share: u8) {}
 }
 
 /// No sound at all.
@@ -738,7 +820,18 @@ impl Soundtrack {
         self.dead = false;
         self.fighting = false;
         self.ticks = self.ticks.wrapping_add(1);
+        bus.duck(255);
         bus.tick();
+    }
+
+    /// A lesson's moment (§5.1, `crate::lesson`): its sound as it begins, at the listener (it is
+    /// hers, wherever she stands), and the music and the beds stepped back under its hush. Each
+    /// machine at a table hears its own seat's.
+    pub fn lesson(&mut self, l: &crate::lesson::Lessons, bus: &mut dyn AudioBus) {
+        if let Some(g) = l.began() {
+            self.ui(SfxKind::of_gift(g), bus);
+        }
+        bus.duck(l.duck());
     }
 
     /// A sound of the UI: at the listener, unplaced.
@@ -818,7 +911,6 @@ impl Soundtrack {
                 EventKind::Loot { .. } => bus.sfx(SfxKind::Loot, me, me),
                 EventKind::Quest { change: QuestChange::Given, .. } => bus.sfx(SfxKind::QuestGiven, me, me),
                 EventKind::Quest { change: QuestChange::Done, .. } => bus.sfx(SfxKind::QuestDone, me, me),
-                EventKind::Learn(_) => bus.sfx(SfxKind::Learn, me, me),
                 EventKind::Journal(_) => bus.sfx(SfxKind::Journal, me, me),
                 EventKind::Rest => bus.sfx(SfxKind::Rest, me, me),
                 EventKind::Weather { kind: WeatherKind::Storm, .. } => self.thunder = self.thunder.min(40),

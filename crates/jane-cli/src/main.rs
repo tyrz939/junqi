@@ -17,6 +17,7 @@ mod serve;
 mod sheet_cmd;
 mod sheet_terrain;
 mod snap;
+mod strip;
 mod ui_sheet;
 mod view;
 

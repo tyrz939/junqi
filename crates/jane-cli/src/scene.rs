@@ -165,6 +165,67 @@ pub struct Opts {
     /// `Features` rows set by key (`--rows fog=off,god_rays=off`, PRESENTATION.md §1.3).
     pub rows: Vec<(String, String)>,
     pub gl: GlOpts,
+    /// A lesson's moment to look at (PRESENTATION.md §2.1, §3.2).
+    pub lesson: LessonOpts,
+}
+
+/// `--knows`, `--learn`, `--grow` and `--ui`: a spell learned (or a jar found) after the rest,
+/// its moment filmed with the HUD and its card drawn over the frame.
+#[derive(Clone, Debug, Default)]
+pub struct LessonOpts {
+    /// Spells she knows already, learned out of sight (the presenter never hears of them): so a
+    /// `--learn` after them is not her first.
+    pub knows: Vec<String>,
+    /// Spells learned after the rest, all in one tick (their moments queue).
+    pub learn: Vec<String>,
+    /// A jar or a page's moment (`strength` or `spirit`): the presenter is told of it as the
+    /// sim tells it of a finding; the sim is not touched.
+    pub grow: Option<jane_core::action::Stat>,
+    /// Draw the HUD and the lesson's card over the frame.
+    pub ui: bool,
+}
+
+impl LessonOpts {
+    /// Reads `--knows a,b`, `--learn a,b`, `--grow strength|spirit` and `--ui`.
+    pub fn parse(args: &[String]) -> Result<LessonOpts, String> {
+        let flag = |name: &str| args.iter().position(|a| a == name).and_then(|i| args.get(i + 1)).map(String::as_str);
+        let list = |name: &str| -> Vec<String> {
+            flag(name)
+                .map(|s| s.split(',').map(|x| x.trim().to_owned()).filter(|x| !x.is_empty()).collect())
+                .unwrap_or_default()
+        };
+        let grow = match flag("--grow") {
+            None => None,
+            Some("strength") => Some(jane_core::action::Stat::Strength),
+            Some("spirit") => Some(jane_core::action::Stat::Spirit),
+            Some(g) => return Err(format!("--grow: strength or spirit, not {g}")),
+        };
+        let (knows, learn) = (list("--knows"), list("--learn"));
+        let ui = args.iter().any(|a| a == "--ui") || !learn.is_empty() || grow.is_some();
+        Ok(LessonOpts { knows, learn, grow, ui })
+    }
+}
+
+/// The HUD and the lesson's card drawn over a scene's frame, from the buffers it keeps.
+struct Hud {
+    ui: jane_present::ui::Ui,
+    bufs: jane_present::view::ViewBuffers,
+}
+
+impl Hud {
+    fn new(present: &Present) -> Hud {
+        Hud { ui: jane_present::ui::Ui::new(present.ui_art().clone()), bufs: jane_present::view::ViewBuffers::new() }
+    }
+
+    /// Draws the HUD and the moment into the presenter's last frame.
+    fn draw(&mut self, present: &mut Present, canvas: (u16, u16)) {
+        let bind = jane_present::input::Bindings::default();
+        let cx = jane_present::ui::hud::HudCtx { bindings: &bind, pad: false, window_open: false };
+        self.ui.begin(jane_present::ui::core::UiInput::default(), self.bufs.tick, canvas);
+        jane_present::ui::hud::draw(&mut self.ui, &self.bufs, cx);
+        jane_present::ui::lesson::draw(&mut self.ui, present.lessons(), &self.bufs, false);
+        self.ui.finish(present.frame_mut());
+    }
 }
 
 /// The mark `asked` in `zone`, or its way in (the console's `tp` rule): its first named mark
@@ -378,14 +439,55 @@ fn play(bps: Blueprints, o: &Opts, tier: Tier) -> Result<(Tap, Present, u32), St
         let v = host.sim.view(seat).ok_or("seat 0 is not in the world")?;
         present.tick(&v, &events);
     }
+    // `--knows`: learned out of sight; `--learn`: learned now, the moments to come; `--grow`: a
+    // finding's word to the presenter alone.
+    let l = &o.lesson;
+    let spell = |name: &String| {
+        jane_data::catalog().combat.spell_id(name).ok_or_else(|| format!("--learn/--knows: no spell \"{name}\""))
+    };
+    let dev = |seq: u16, op| StampedCommand { seat: Some(seat), seq, cmd: Command::Dev(op) };
+    if !l.knows.is_empty() {
+        let cmds = l
+            .knows
+            .iter()
+            .enumerate()
+            .map(|(i, n)| Ok(dev(1000 + i as u16, DevOp::Learn(spell(n)?))))
+            .collect::<Result<Vec<_>, String>>()?;
+        host.sim.step(&StepInput { frames: [InputFrame::IDLE; 4], commands: &cmds });
+        host.sim.drain_events();
+    }
+    if !l.learn.is_empty() || l.grow.is_some() {
+        let mut cmds = vec![dev(1100, DevOp::God(true))];
+        for (i, n) in l.learn.iter().enumerate() {
+            cmds.push(dev(1101 + i as u16, DevOp::Learn(spell(n)?)));
+        }
+        host.sim.step(&StepInput { frames: [InputFrame::IDLE; 4], commands: &cmds });
+        let mut events = host.sim.drain_events().to_vec();
+        if let Some(stat) = l.grow {
+            let k = match stat {
+                jane_core::action::Stat::Strength => jane_sim::event::ToastKind::Stronger,
+                jane_core::action::Stat::Spirit => jane_sim::event::ToastKind::WordsStay,
+            };
+            events.push(Event { to: None, in_zone: None, kind: jane_sim::event::EventKind::Toast(k) });
+        }
+        host.events = events;
+    }
     Ok((host, present, played))
 }
 
 /// Plays `o` from New Game on `bps` and draws one frame.
 pub fn render(bps: Blueprints, o: &Opts) -> Result<Shot, String> {
     let mut b = backend(o.backend, o.gl)?;
-    let (host, mut present, played) = play(bps, o, o.backend.tier())?;
+    let (mut host, mut present, played) = play(bps, o, o.backend.tier())?;
     b.upload_atlas(present.atlas());
+    // With the HUD: a tick for its buffers (and for a lesson's events, heard now).
+    let mut hud = o.lesson.ui.then(|| Hud::new(&present));
+    if let Some(h) = &mut hud {
+        let events = std::mem::take(&mut host.events);
+        let v = host.sim.view(Seat(0)).ok_or("seat 0 is not in the world")?;
+        present.tick(&v, &events);
+        h.bufs.tick(&v, &events);
+    }
     // `--rows` the backend draws itself (`normal_light`, `sharp`): after gl2's own flags only when asked.
     if !o.rows.is_empty() {
         b.set_features(&present.features());
@@ -409,6 +511,9 @@ pub fn render(bps: Blueprints, o: &Opts) -> Result<Shot, String> {
         b.caps().name,
     );
     present.draw(255, o.canvas);
+    if let Some(h) = &mut hud {
+        h.draw(&mut present, o.canvas);
+    }
     let layers = o.gl.layers.then(|| {
         let g = crate::layers::heights(present.frame(), present.atlas());
         let (top, floor) = crate::layers::field(&g);
@@ -444,15 +549,26 @@ pub fn film(
     }
     let seat = Seat(0);
     let mut px = Vec::new();
+    // A lesson's events (`--learn`, `--grow`) are heard on the film's first tick.
+    let mut first = std::mem::take(&mut host.events);
+    let mut hud = o.lesson.ui.then(|| Hud::new(&present));
     for k in 0..n {
         host.sim.step(&StepInput { frames: [InputFrame::IDLE; 4], commands: &[] });
-        let events = host.sim.drain_events().to_vec();
+        let mut events = std::mem::take(&mut first);
+        events.extend_from_slice(host.sim.drain_events());
         let v = host.sim.view(seat).ok_or("seat 0 is not in the world")?;
         present.tick(&v, &events);
+        if let Some(h) = &mut hud {
+            h.bufs.tick(&v, &events);
+        }
         if k % every.max(1) != 0 {
             continue;
         }
-        let frame = present.draw(255, o.canvas);
+        present.draw(255, o.canvas);
+        if let Some(h) = &mut hud {
+            h.draw(&mut present, o.canvas);
+        }
+        let frame = present.frame();
         b.draw(frame);
         let (w, h) = b.read_back(&mut px);
         out(k, &Shot { w, h, px: px.clone(), line: String::new(), layers: None })?;
@@ -623,6 +739,7 @@ mod tests {
             spawn: None,
             rows: Vec::new(),
             gl: GlOpts::default(),
+            lesson: LessonOpts::default(),
         };
         let a = render(bps.clone(), &o).unwrap();
         let b = render(bps, &o).unwrap();

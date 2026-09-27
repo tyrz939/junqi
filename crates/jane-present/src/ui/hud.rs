@@ -50,6 +50,15 @@ pub fn bar_rect(canvas: (i32, i32)) -> Rect {
     Rect::new((canvas.0 - w) / 2, canvas.1 - SLOT - 18, w, SLOT + 12)
 }
 
+/// Bar slot `i`'s well on this canvas (a lesson's icon flies to it, `ui::lesson`).
+pub fn bar_slot(canvas: (i32, i32), i: usize) -> Rect {
+    let r = bar_rect(canvas);
+    Rect::new(i32::from(r.x) + 8 + i as i32 * (SLOT + GAP), i32::from(r.y) + 6, SLOT, SLOT)
+}
+
+/// The vitals' three gauges: health, mana, energy (a jar or a page glints the one it grew).
+pub const VITALS_GAUGES: [Rect; 3] = [Rect::new(16, 34, 196, 10), Rect::new(16, 47, 196, 7), Rect::new(16, 57, 196, 5)];
+
 /// Draws the HUD. Pointer presses on the bar and the chrome buttons become `UiOut`s.
 pub fn draw(ui: &mut Ui, b: &ViewBuffers, cx: HudCtx<'_>) {
     let (cw, ch) = ui.canvas;
@@ -82,9 +91,10 @@ fn vitals(ui: &mut Ui, b: &ViewBuffers) {
     // Her name, and the day's number beside it quietly.
     ui.text(x + 8, y + 5, &b.heroine, Ink::small(style::text_bright()).shadow());
     let low = h.hp.max > 0 && h.hp.frac < 250;
-    gauge_row(ui, Rect::new(x + 8, y + 26, w - 16, 10), &h.hp, Ramp::ClothRed, low);
-    gauge_row(ui, Rect::new(x + 8, y + 39, w - 16, 7), &h.mp, Ramp::ClothBlue, false);
-    gauge_row(ui, Rect::new(x + 8, y + 49, w - 16, 5), &h.en, Ramp::ClothMustard, false);
+    let [hp, mp, en] = VITALS_GAUGES;
+    gauge_row(ui, hp, &h.hp, Ramp::ClothRed, low);
+    gauge_row(ui, mp, &h.mp, Ramp::ClothBlue, false);
+    gauge_row(ui, en, &h.en, Ramp::ClothMustard, false);
     // HP as numbers at the name's right.
     let mut buf = [0u8; 12];
     let n = fmt_u32(h.hp.now.max(0) as u32, &mut buf).to_owned();

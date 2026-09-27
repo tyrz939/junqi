@@ -332,6 +332,7 @@ fn tune(args: &[String]) -> Result<(), String> {
             spawn: None,
             rows: Features::KEYS.iter().filter_map(|k| rows.get(k).map(|v| ((*k).to_owned(), v))).collect(),
             gl: crate::scene::GlOpts::default(),
+            lesson: crate::scene::LessonOpts::default(),
         };
         let bps = jane_sim::Blueprints::build(seed).map_err(|e| format!("seed {seed}: {e}"))?;
         Ok(bench(bps, &o, n, output)?.whole.1)
@@ -517,6 +518,7 @@ fn frames(args: &[String]) -> Result<(), String> {
         spawn: flag("--spawn").map(str::to_owned),
         rows: crate::scene::rows(flag("--rows"))?,
         gl: crate::scene::GlOpts::parse(args)?,
+        lesson: crate::scene::LessonOpts::default(),
     };
     let bps = jane_sim::Blueprints::build(seed).map_err(|e| format!("seed {seed}: {e}"))?;
     let n = num("--frames", 600)?;

@@ -10,7 +10,7 @@ use jane_core::ids::SpriteId;
 use jane_core::{ItemId, QuestId, SpellId, ZoneId};
 use jane_data::BarSlot;
 use jane_sim::View;
-use jane_sim::event::{Event, EventKind, events_for};
+use jane_sim::event::{Event, EventKind, ToastKind, events_for};
 use jane_sim::interact::{FocusRef, Verb};
 use jane_sim::state::Speaker;
 use jane_sim::tuning::{BAG_SLOTS, BAR_SLOTS, CRAFT_INPUTS, ENERGY_MAX, GCD};
@@ -257,6 +257,9 @@ impl ViewBuffers {
         }
         for e in events_for(events, v.me()) {
             match e.kind {
+                // A spell learned, a jar or a page found: the lesson's moment says it, not a toast
+                // (`crate::lesson`, §3.2).
+                EventKind::Toast(ToastKind::Learned(_) | ToastKind::Stronger | ToastKind::WordsStay) => {}
                 EventKind::Toast(k) => {
                     let mut s = std::mem::take(&mut self.scratch);
                     s.clear();
