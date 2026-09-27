@@ -27,13 +27,16 @@ pub const USAGE: &str = "  sheet layers <what> [--frame F] [--out DIR]
   sheet list                          the sprites <what> can name
   sheet scene [--seed N] [--minutes M | --ticks T] [--model reader|rusher] [--night | --hour H[:MM]]
               [--wide] [--at ZONE[:MARK]] [--backend soft|gl2|wgpu] [--out PATH.png | --out DIR]
+              [--layers] [--show-sun]
                                       a model plays the seed from New Game (default 1 minute), then one
                                       frame is drawn headless through the presenter and soft (T0), or
                                       gl2 (T1, a hidden window's GL context) or wgpu (T2) with the gpu
                                       feature; --night sets the clock to 22:00 first; --wide draws 21:9
                                       (1008 x 432); gl2 takes bench frames' row flags; --at travels to a
                                       zone's mark (its way in by default) first, god on: a frame inside a
-                                      dungeon
+                                      dungeon; --layers also writes the frame's heights and the T2
+                                      height field (a px h up stood rows_up(h) rows down), --show-sun
+                                      draws wgpu's sun term alone (red reached, green N dot L)
   sheet ui [screen ...] [--out DIR]   the UI in states play rarely shows at once (hud, dead, choice,
                                       tooltip, popover, drag, pause), headless through soft
   sheet audio [--out DIR]             every sound effect, bed, song and scene as WAV, songs and scenes as
@@ -247,6 +250,13 @@ fn scene(args: &[String]) -> Result<(), String> {
         std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     }
     std::fs::write(&path, shot.png()).map_err(|e| format!("{}: {e}", path.display()))?;
+    if let Some((height, field)) = &shot.layers {
+        for (what, png) in [("height", height), ("field", field)] {
+            let p = path.with_extension(format!("{what}.png"));
+            std::fs::write(&p, png).map_err(|e| format!("{}: {e}", p.display()))?;
+            println!("{}", p.display());
+        }
+    }
     println!(
         "{}
 {}",
