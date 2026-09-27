@@ -22,12 +22,17 @@ use jane_core::ZoneId;
 
 /// Twenty game minutes a dungeon.
 const FRAMES: u32 = 20 * MINUTE;
+/// The School, forty: six lessons round a timetable, a night slept to the bell for the
+/// Caretaker's key, often a second for the glasshouse, and a boss she kites, each on foot across
+/// the biggest building in the county from the one fire that mends her (DUNGEONS.md §3.6).
+const SCHOOL_FRAMES: u32 = 40 * MINUTE;
 
 fn play(z: ZoneId, must_finish: bool) {
     let cat = jane_data::catalog();
     let mut problems = Vec::new();
     for seed in SEEDS {
-        let (rec, bot) = common::crawl(seed, Model::Reader, z, FRAMES);
+        let frames = if z == ZoneId::School { SCHOOL_FRAMES } else { FRAMES };
+        let (rec, bot) = common::crawl(seed, Model::Reader, z, frames);
         let Plan::Crawl(c) = &bot.plan else { unreachable!() };
         let bosses: Vec<String> =
             c.bosses.iter().map(|&(d, t)| format!("{} {}", cat.combat.unit(d).id, clock(Some(t)))).collect();
@@ -112,5 +117,5 @@ fn the_burial_chamber() {
 
 #[test]
 fn the_school() {
-    play(ZoneId::School, false);
+    play(ZoneId::School, true);
 }

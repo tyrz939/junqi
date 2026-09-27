@@ -104,6 +104,8 @@ pub struct Crawl {
     pub stuck: Option<String>,
     /// Why each failed try failed, the last time (for a debugging dump).
     pub failures: BTreeMap<Try, String>,
+    /// The School's tactic (the rope, the beds: `tactics::school`).
+    school: crate::tactics::school::School,
 }
 
 /// The cells she can walk to from where she stands (flood over `View::flags`).
@@ -244,6 +246,7 @@ impl Crawl {
             seen_w: 0,
             stuck: None,
             failures: BTreeMap::new(),
+            school: crate::tactics::school::School::default(),
         }
     }
 
@@ -354,6 +357,18 @@ impl Crawl {
             self.reach.update(v, sig);
             if self.rest_in_reach(v).is_some() {
                 self.task = None;
+            }
+        }
+        // The School keeps its apples: hurt, she breaks off for the sick bay fire all the same.
+        if v.zone() == ZoneId::School && self.task.as_ref().is_some_and(|(_, w)| !matches!(w, Try::Rest(_))) {
+            self.reach.update(v, sig);
+            if crate::tactics::school::breaks_off(v, &self.reach) {
+                // Broken off, not failed: worth another go once she is whole.
+                if let Some((_, what)) = self.task.take() {
+                    if let Some(e) = self.tried.get_mut(&what) {
+                        e.0 = 0;
+                    }
+                }
             }
         }
         for _ in 0..4 {
@@ -536,7 +551,24 @@ impl Crawl {
         }
     }
 
-    fn choose(&self, v: &View<'_>, cx: &Ctx, sig: u64) -> Option<(Task, Try)> {
+    fn choose(&mut self, v: &View<'_>, cx: &Ctx, sig: u64) -> Option<(Task, Try)> {
+        // The School: the sick bay fire first; the rope and the beds when nothing else is left.
+        if v.zone() == ZoneId::School {
+            let mut s = std::mem::take(&mut self.school);
+            if s.take_woke() {
+                self.tried.retain(|w, _| !matches!(w, Try::Cast(_) | Try::Prop(_) | Try::Pickup(_)));
+            }
+            let down = boss_of(self.zone).is_some_and(|b| self.bosses.iter().any(|&(d, _)| d == b));
+            let t = crate::tactics::school::first(&mut s, v, cx, &self.reach, &|w| self.fresh(w, sig), down)
+                .or_else(|| self.choose_any(v, cx, sig))
+                .or_else(|| crate::tactics::school::last(&mut s, v, &self.reach));
+            self.school = s;
+            return t;
+        }
+        self.choose_any(v, cx, sig)
+    }
+
+    fn choose_any(&self, v: &View<'_>, cx: &Ctx, sig: u64) -> Option<(Task, Try)> {
         let cat = jane_data::catalog();
         let at = v.body().pos;
         let reach = &self.reach;
@@ -648,12 +680,16 @@ impl Crawl {
             if !fight::fightable(u) || !reach.point(u.pos) || !fight::reachable(cx, u.id, v.frame()) {
                 continue;
             }
+            // The School hunts only what the story needs down (`tactics::school::hunts`).
+            if v.zone() == ZoneId::School && !crate::tactics::school::hunts(u.def) {
+                continue;
+            }
             let boss = cat.combat.unit(u.def).boss;
             offer(if boss { 9 } else { 7 }, dist(at, u.pos), Try::Fight(u.id), Task::Hunt(u.id), &mut best);
         }
         for (&def, seen) in &cx.seen_foes {
             let d = cat.combat.unit(def);
-            if d.bait.is_some() {
+            if d.bait.is_some() || v.zone() == ZoneId::School && !crate::tactics::school::hunts(def) {
                 continue;
             }
             for (&id, &(z, pos)) in seen {
@@ -664,8 +700,9 @@ impl Crawl {
                 offer(if d.boss { 9 } else { 7 }, dist(at, pos) + i64::from(4 * CELL_FX), Try::Fight(id), t, &mut best);
             }
         }
-        // 10. Ground she has not seen (what sleeps out of sight wakes as she comes).
-        if best.is_none() {
+        // 10. Ground she has not seen (what sleeps out of sight wakes as she comes). Not in the
+        // School: what sleeps there is better left asleep (`tactics::school`).
+        if best.is_none() && v.zone() != ZoneId::School {
             if let Some((x, y)) = self.frontier(v) {
                 let t = Task::Walk { to: Vec2::centre(x, y), near: jane_core::Fx::from_px(6) };
                 return Some((t, Try::Explore(x, y)));

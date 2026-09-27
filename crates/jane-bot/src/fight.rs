@@ -180,6 +180,10 @@ pub fn eat(v: &View<'_>) -> Option<Command> {
     if hp_permille(v.body()) >= EAT_BELOW {
         return None;
     }
+    // The School: the apples are kept for the Timekeeper (`tactics::school::may_eat`).
+    if v.zone() == jane_core::ZoneId::School && !crate::tactics::school::may_eat(v) {
+        return None;
+    }
     food(v).map(Command::Item)
 }
 
@@ -253,7 +257,9 @@ pub fn engage(v: &View<'_>, cx: &mut Ctx, id: UnitId) -> Option<Act> {
     if hp_permille(me) >= 2 * FLEE_BELOW {
         cx.fight.fleeing = 0;
     }
-    if hp_permille(me) < FLEE_BELOW && cx.fight.fleeing == 0 && food(v).is_none() {
+    // The School: what she cannot walk away from is fought out (`tactics::school::stands`).
+    let kited = v.zone() == jane_core::ZoneId::School && crate::tactics::school::stands(v, t);
+    if hp_permille(me) < FLEE_BELOW && cx.fight.fleeing == 0 && food(v).is_none() && !kited {
         cx.fight.fleeing = 180;
         cx.fight.fled += 1;
         cx.fight.hunt = None;
@@ -266,7 +272,22 @@ pub fn engage(v: &View<'_>, cx: &mut Ctx, id: UnitId) -> Option<Act> {
             return None;
         }
         let from = t.pos;
+        // The School: back to the sick bay fire, and sit down by it (`tactics::school`).
+        if v.zone() == jane_core::ZoneId::School {
+            if let Some(c) = crate::tactics::school::at_home(v) {
+                return Some(Act::press(c));
+            }
+            if let Some(f) = crate::tactics::school::run_home(v, cx) {
+                return Some(Act::hold(f));
+            }
+        }
         return Some(Act::hold(away_from(v, cx, from, None)));
+    }
+    // The School: every bolt as it comes ready, and her ground held (`tactics::school`).
+    if v.zone() == jane_core::ZoneId::School {
+        if let Some(a) = crate::tactics::school::strike(v, cx, id) {
+            return a;
+        }
     }
     let melee = sense::spell("melee_player");
     let range = i64::from(cat.combat.spell(melee).range.0);
