@@ -592,14 +592,32 @@ impl Story {
                 return Some((Target::At(z, a), Goal::Rest));
             }
         }
+        // Under the Stone ahead of her, short of bait for its small snakes and holding what
+        // makes it (rat meat, and Stranglethorn or its root and water: the Burial's own cold
+        // chest holds the root and the water): brewed at the bench before anything else, and
+        // before the water goes into anything else. Without the makings she goes down for them.
+        let burial_ahead = v.quests().any(|q| !q.ready && cat.story.quest(q.quest).id == "the_burial");
+        let bait = sense::item(BAIT.0);
+        let short = burial_ahead && holds(v, bait) < BAIT.1;
+        if short && matches!(here, ZoneId::County | ZoneId::House | ZoneId::Cellar) {
+            let g = Goal::Provision(bait);
+            let brew = holds(v, sense::item("potion_stranglethorn")) > 0
+                || holds(v, sense::item("small_water")) > 0 && holds(v, sense::item("savage_snakeroot")) > 0;
+            if brew && holds(v, sense::item("rat_meat")) > 0 && self.open(v, g) {
+                if let Some(t) = get(v, cx, bait, 0) {
+                    return Some((t, g));
+                }
+            }
+        }
         // Before an act's dungeon: ready for it, as a player packs for a long walk (the potions
         // the bench makes from what she carries, food she has seen lying about). Only out of
-        // doors or in the house, and only while a dungeon step is in the log.
+        // doors or in the house, and only while a dungeon step is in the log. (With the bait
+        // still to brew, no potion: every one of them wants the water it needs.)
         if matches!(here, ZoneId::County | ZoneId::House) && Self::act_ahead(v) {
             for (name, want) in PROVISIONS {
                 let item = sense::item(name);
                 let g = Goal::Provision(item);
-                if holds(v, item) >= want || !self.open(v, g) {
+                if holds(v, item) >= want || !self.open(v, g) || short && name.starts_with("potion_") {
                     continue;
                 }
                 match get(v, cx, item, 0) {
@@ -610,20 +628,6 @@ impl Story {
                             return Some((t, g));
                         }
                     }
-                }
-            }
-        }
-        // Under the Stone ahead of her and no bait for its small snakes: brewed first, whatever
-        // it takes (the meat from the rats under the house, the root from where it grows). In
-        // the cellar too: that is where the rats are, and a bench.
-        let burial_ahead = v.quests().any(|q| !q.ready && cat.story.quest(q.quest).id == "the_burial");
-        if burial_ahead && matches!(here, ZoneId::County | ZoneId::House | ZoneId::Cellar) {
-            let (name, want) = BAIT;
-            let item = sense::item(name);
-            let g = Goal::Provision(item);
-            if holds(v, item) < want && self.open(v, g) {
-                if let Some(t) = get(v, cx, item, 0) {
-                    return Some((t, g));
                 }
             }
         }
