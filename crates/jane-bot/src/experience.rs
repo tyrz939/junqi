@@ -7,7 +7,7 @@
 //! | time to each goal | a quest's `Given`, `Ready` and `Done` events, in real minutes (frames) |
 //! | time to the first sighting of each step's target | the step's quest given, to its `Sight` |
 //! | time looking | the frames the model's objective was a search (the Lost) |
-//! | time not knowing what to do | the frames with no objective, alive |
+//! | time not knowing what to do | the samples with no objective, alive, not talking or fighting |
 //! | backtracking | cells walked over ground walked in the previous ten minutes, not on the way to a hand-in |
 //! | deaths by cause | `Died`: what last hurt her, the region, the hour of play |
 //! | empty walks | runs of samples walking out of doors (not talking, not fighting) with nothing new in view ([`EMPTY_SECS`] or more), and with nothing in view at all |
@@ -154,19 +154,14 @@ pub fn measure(t: &Trace, seat: u8) -> Experience {
     let mut first_morning = false;
     let mut been_night = false;
     let mut letter_done = false;
-    let mut alive = true;
     let close = |doing: &(String, Option<u16>, Option<u8>, u32),
                  until: u32,
                  x: &mut Experience,
-                 steps: &mut BTreeMap<(u16, u8), StepTimes>,
-                 alive: bool| {
+                 steps: &mut BTreeMap<(u16, u8), StepTimes>| {
         let (obj, q, i, since) = doing;
         let n = until.saturating_sub(*since);
         if n == 0 {
             return;
-        }
-        if obj == "none" && alive {
-            bump(&mut x.idle_by_hour, hour_of(*since), n);
         }
         if let Some(q) = q {
             let step = i.unwrap_or(255);
@@ -186,7 +181,7 @@ pub fn measure(t: &Trace, seat: u8) -> Experience {
         let f = r.frame;
         match &r.kind {
             Kind::Decision { objective, quest, step, .. } => {
-                close(&doing, f, &mut x, &mut steps, alive);
+                close(&doing, f, &mut x, &mut steps);
                 doing = (objective.clone(), *quest, *step, f);
             }
             Kind::Note(line) => {
@@ -256,7 +251,10 @@ pub fn measure(t: &Trace, seat: u8) -> Experience {
                 _ => {}
             },
             Kind::Sample(s) => {
-                alive = s.alive;
+                // Nothing to do: alive, not talking or fighting, and no objective.
+                if doing.0 == "none" && s.alive && !s.talking && !s.fighting {
+                    bump(&mut x.idle_by_hour, hour_of(f), jane_sim::trace::SAMPLE_EVERY);
+                }
                 bump(&mut x.new_by_hour, hour_of(f), u32::from(s.new_things));
                 let walking = s.moving && !s.talking && !s.fighting && s.alive;
                 if walking {
@@ -332,7 +330,7 @@ pub fn measure(t: &Trace, seat: u8) -> Experience {
             _ => {}
         }
     }
-    close(&doing, t.footer.frames, &mut x, &mut steps, alive);
+    close(&doing, t.footer.frames, &mut x, &mut steps);
     if let Some((mut st, bare)) = run.take() {
         if st.secs >= EMPTY_SECS {
             st.bare = bare;

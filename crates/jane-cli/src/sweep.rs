@@ -131,12 +131,13 @@ pub fn audit(args: &[String]) -> Result<(), String> {
 // `jane sweep` and `jane dossier`.
 
 pub const USAGE: &str = "  sweep [--seeds A..B] [--models all|reader,lost,...] [--minutes M] [--short M] [--threads N]
-        [--out DIR] [--traces DIR]
+        [--out DIR] [--traces DIR] [--report-only]
                                       every model on every seed, traced (VERIFICATION.md §3.2): L4 per run,
                                       L5 per seed, and a report ranking the quests the Lost could not find,
                                       the emptiest walks and the deaths (DIR/README.md, default sheets/sweep);
                                       --minutes: the story models' cap (default 2400, to the end); --short:
-                                      the Explorer's and the pairs' (default 120)
+                                      the Explorer's and the pairs' (default 120); --report-only: the report
+                                      again from the traces in --traces (default target/sweep), nothing played
   dossier <seed> [--models reader,lost] [--minutes M] [--out DIR]
                                       one seed's walkthrough (VERIFICATION.md L7): each model's timeline, its L4
                                       table, the seed's L5 audit and omens, and a few --snap pictures
@@ -326,13 +327,21 @@ pub fn sweep(args: &[String]) -> Result<(), String> {
     jobs.sort_by_key(|(s, m, min)| (std::cmp::Reverse(*min), m.starts_with("pair"), m.clone(), *s));
     eprintln!("sweep: {} runs on {threads} threads", jobs.len());
     let t0 = std::time::Instant::now();
-    let results = run_all(&jobs, threads, 0);
+    // The report again from the traces a sweep wrote (L4 is a function of them alone).
+    let report_only = args.iter().any(|a| a == "--report-only");
+    let results = if report_only {
+        jobs.iter().map(|(s, m, _)| from_trace(&traces, *s, m)).collect()
+    } else {
+        run_all(&jobs, threads, 0)
+    };
     let mut runs = Vec::new();
     for r in results {
         match r {
             Ok(r) => {
-                let name = format!("{}-{}.jtr", r.seed, r.model.replace(':', "-"));
-                std::fs::write(traces.join(&name), r.trace.encode()).map_err(|e| format!("{name}: {e}"))?;
+                if !report_only {
+                    let name = format!("{}-{}.jtr", r.seed, r.model.replace(':', "-"));
+                    std::fs::write(traces.join(&name), r.trace.encode()).map_err(|e| format!("{name}: {e}"))?;
+                }
                 runs.push(r);
             }
             Err(e) => return Err(e),
@@ -357,6 +366,48 @@ pub fn sweep(args: &[String]) -> Result<(), String> {
         traces.display()
     );
     Ok(())
+}
+
+/// A run as its trace has it: the experience of each seat, the model's log lines (its notes),
+/// and the ending if one was reached.
+fn from_trace(dir: &std::path::Path, seed: u32, model: &str) -> Result<Run, String> {
+    use jane_sim::trace::Kind;
+    let name = format!("{seed}-{}.jtr", model.replace(':', "-"));
+    let bytes = std::fs::read(dir.join(&name)).map_err(|e| format!("{name}: {e}"))?;
+    let trace = jane_sim::trace::Trace::decode(&bytes).map_err(|e| format!("{name}: {e}"))?;
+    let xs = (0..trace.header.seats).map(|s| jane_bot::experience::measure(&trace, s)).collect();
+    let log: Vec<String> = trace
+        .records
+        .iter()
+        .filter_map(|r| match &r.kind {
+            Kind::Note(l) => {
+                Some(if trace.header.seats > 1 { format!("seat {} {l}", r.seat.unwrap_or(0)) } else { l.clone() })
+            }
+            _ => None,
+        })
+        .collect();
+    let the_end = log.iter().find_map(|l| {
+        let e = l.split("the end: ").nth(1)?;
+        Some(if e.starts_with("held") {
+            1
+        } else if e.starts_with("put") {
+            2
+        } else {
+            3
+        })
+    });
+    Ok(Run {
+        seed,
+        model: model.to_owned(),
+        trace,
+        xs,
+        log,
+        deaths: Vec::new(),
+        the_end: the_end.unwrap_or(0),
+        ms: 0,
+        desyncs: 0,
+        snaps: Vec::new(),
+    })
 }
 
 fn model_ix(m: &str) -> usize {
