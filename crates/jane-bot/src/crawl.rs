@@ -473,6 +473,14 @@ impl Crawl {
                 return Act::press(c);
             }
         }
+        // Idle (about to wait out the night, or nothing chosen) under fire from something with no
+        // feet she is not fighting: out of its reach first (`fight::out_of_fire`).
+        if self.task.is_none() {
+            if let Some(f) = fight::out_of_fire(v, cx) {
+                self.task = None;
+                return Act::hold(f);
+            }
+        }
         let sig = signature(v);
         // A dungeon shut for the night (tactics/*.rs): the night waited out by its fire (the
         // county's night is worse), and not counted as the crawl's time.
@@ -819,6 +827,10 @@ impl Crawl {
             {
                 return;
             }
+            // Not where she fell a little while ago (a boss excepted: that fight is the dungeon).
+            if class < 9 && task_point(v, &t).is_some_and(|p| cx.fell_near(v.zone(), p.cell(), FELL_R, v.tick().0)) {
+                return;
+            }
             if best.as_ref().is_none_or(|(c, k, w, _)| (class, cost, what) < (*c, *k, *w)) {
                 *best = Some((class, cost, what, t));
             }
@@ -1148,7 +1160,14 @@ pub fn shut_in_with_boss(v: &View<'_>) -> bool {
     let Some(boss) = boss_of(v.zone()).and_then(|b| sense::units_of(v, b).into_iter().next()) else { return false };
     let mut reach = Reach::default();
     reach.update(v, 0);
-    reach.point(boss.pos) && !v.props().any(|p| door_of(v, p).is_some_and(|d| d.zone != v.zone()) && reach.beside(p))
+    // A fire or a bed she can walk to is a way to go on (the School's bolted front doors leave her
+    // no door out, and its sick bay is still hers): only the boss's own lock-in shuts her in.
+    let cat = jane_data::catalog();
+    reach.point(boss.pos)
+        && !v.props().any(|p| {
+            door_of(v, p).is_some_and(|d| d.zone != v.zone()) && reach.beside(p)
+                || !p.hidden && cat.story.prop(p.def).rest && reach.beside(p)
+        })
 }
 
 /// The unit a dungeon's boss room holds (`None`: the cellar, the library and the pipes have none).
@@ -1301,6 +1320,23 @@ fn face_toward(p: &Prop, at: Vec2) -> Vec2 {
         jane_core::Fx(clamp(at.x.0, r.x * CELL_FX, r.right() * CELL_FX)),
         jane_core::Fx(clamp(at.y.0, r.y * CELL_FX, r.bottom() * CELL_FX)),
     )
+}
+
+/// Cells about where she fell that the crawl lets be a while ([`crate::task::Ctx::fell_near`]).
+const FELL_R: i32 = 7;
+
+/// Where a task takes her: the prop, the drop, the unit, the point.
+fn task_point(v: &View<'_>, t: &Task) -> Option<Vec2> {
+    match t {
+        Task::Use(u) => v.prop(u.prop).map(sense::prop_centre),
+        Task::WorldCast { prop, .. } => v.prop(*prop).map(sense::prop_centre),
+        Task::Push(p) => v.prop(p.prop).map(sense::prop_centre),
+        Task::Pickup { drop, .. } => v.drops().iter().find(|d| d.id == *drop).map(|d| d.pos),
+        Task::Aim { at, .. } => Some(*at),
+        Task::Hunt(id) => v.unit(*id).map(|u| u.pos),
+        Task::Walk { to, .. } => Some(*to),
+        _ => None,
+    }
 }
 
 /// The origins a pushable passes through to cover the plate, pushed only (each push needs a

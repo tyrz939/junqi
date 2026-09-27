@@ -96,6 +96,9 @@ pub struct Story {
     fled_at: u32,
     /// Fires she could not get to (something guards the way).
     bad_fires: std::collections::BTreeSet<PropId>,
+    /// A dungeon that killed her over and over, let be until this tick (and how often): not
+    /// cleared when she wakes whole, as a set-aside is (`died_out`).
+    died_out: BTreeMap<ZoneId, (u32, u32, i32)>,
     /// A dungeon a quest step sends her into, played whole by a crawl (in by its door, through
     /// its locks and verbs to its boss, and out), and the step it is for.
     dungeon: Option<(Box<crate::crawl::Crawl>, Goal)>,
@@ -325,6 +328,21 @@ impl Story {
             match why {
                 // Every step still open there waits with it, not only the one that sent her in.
                 Some(why) => {
+                    // Beaten back by deaths: the dungeon waits hours, not a moment (a death
+                    // anywhere since used to clear the set-aside, and she walked straight back in
+                    // to the same guard, fifty times): an hour the first time. Beaten back
+                    // twice, it waits until she is stronger (her most health up by a
+                    // twentieth: a jar, a page) or a day: the same fight at the same strength is
+                    // the same deaths.
+                    if c.stuck.as_ref().is_some_and(|s| s.starts_with("died ")) {
+                        let most = jane_sim::units::max_hp(v.body()).points();
+                        let e = self.died_out.entry(c.zone).or_insert((0, 0, most));
+                        e.1 += 1;
+                        e.2 = most;
+                        let hours = if e.1 >= 2 { 24 } else { 1 };
+                        e.0 = v.tick().0 + hours * jane_sim::tuning::TICKS_PER_HOUR;
+                        notes.push(Mark::Note(format!("the {} again in {hours} h, or stronger", c.zone.name())));
+                    }
                     self.set_aside(v, g, &why, notes);
                     for s in Self::steps_in(v, c.zone) {
                         if s != g {
@@ -335,6 +353,13 @@ impl Story {
                 None => notes.push(Mark::Note(format!("done with the {}", c.zone.name()))),
             }
             return Act::idle();
+        }
+        // Beaten out of this dungeon a while: out of it, unless shut in (then the fight is the way).
+        if v.body().alive && dungeon(v.zone()) && self.task.is_none() && self.beaten_out(v) && !crate::crawl::shut_in_with_boss(v) {
+            if let Some(t) = route(v, cx, ZoneId::County) {
+                self.task = Some((t, Goal::Explore(crate::crawl::Try::Travel)));
+                return Act::idle();
+            }
         }
         // Shut in with a dungeon's boss (a lock-in behind her, and the crawl given up or never
         // begun: an explorer's chest in the arena): nothing but the fight lets her out, so the
@@ -544,7 +569,26 @@ impl Story {
     }
 
     fn open(&self, v: &View<'_>, g: Goal) -> bool {
-        self.blocked.get(&g).is_none_or(|&until| until <= v.tick().0)
+        let now = v.tick().0;
+        let zone = match g {
+            Goal::Step(q, i) => zone_of_step(q, usize::from(i)),
+            Goal::Look(z, _) => Some(z),
+            Goal::Explore(_) => Some(v.zone()),
+            _ => None,
+        };
+        let let_be = zone.and_then(|z| self.died_out.get(&z)).is_some_and(|&e| Self::let_be(v, e));
+        !let_be && self.blocked.get(&g).is_none_or(|&until| until <= now)
+    }
+
+    /// In a dungeon she was beaten out of (`died_out`), with no fight on: out to the county.
+    fn beaten_out(&self, v: &View<'_>) -> bool {
+        self.died_out.get(&v.zone()).is_some_and(|&e| Self::let_be(v, e))
+    }
+
+    /// A dungeon beaten out of (until, times, her most health then) still let be: before `until`,
+    /// unless she has grown a twentieth since.
+    fn let_be(v: &View<'_>, (until, _, most): (u32, u32, i32)) -> bool {
+        until > v.tick().0 && jane_sim::units::max_hp(v.body()).points() * 20 < most * 21
     }
 
     /// Run from `id` rather than fight it: out of doors, on her way somewhere (a task in hand), not
@@ -823,6 +867,10 @@ impl Story {
                 if guarded || crate::nav::near_danger(&cx.nav.dangers(here), c.cell(), crate::nav::DANGER_R) {
                     continue;
                 }
+            }
+            // In a dungeon, not where she fell a little while ago (`Ctx::fell_near`).
+            if here != ZoneId::County && cx.fell_near(here, sense::prop_centre(p).cell(), 7, v.tick().0) {
+                continue;
             }
             offer(d + i64::from(6 * CELL_FX), g, Target::Task(Task::Use(UseProp::new(p.id))), &mut best);
         }
