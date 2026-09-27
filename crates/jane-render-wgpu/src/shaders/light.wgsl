@@ -44,43 +44,58 @@ struct LitOut {
     @location(2) sun: vec4<f32>,
 };
 
-fn texel_height(x: i32, y: i32) -> f32 {
+// A texel's bottom where nothing stands: higher than anything.
+const OPEN: f32 = 4096.0;
+
+// A texel of the field: `(lo, hi)`, what stands there from `lo` px up to `hi` (lo 0: from the
+// ground; hi 0: nothing). What floats (a canopy, a lamp's head, a hand) a ray passes under.
+fn texel(x: i32, y: i32) -> vec2<f32> {
     let w = i32(g.full.x);
     if x < 0 || y < 0 || x >= w || y >= i32(g.full.y) {
-        return 0.0;
+        return vec2<f32>(OPEN, 0.0);
     }
-    let v = hmap[u32(y * w + x)];
+    let i = u32(y * w + x);
+    let v = hmap[i];
     let who = v & 0xffffu;
-    if who != 0u && (who == skip_own || who == skip_holder) {
-        return 0.0;
+    if v == 0u || (who != 0u && (who == skip_own || who == skip_holder)) {
+        return vec2<f32>(OPEN, 0.0);
     }
-    return f32(v >> 16u);
+    let lo = hmap[u32(w * i32(g.full.y)) + i];
+    return vec2<f32>(select(256.0 - f32(lo), 0.0, lo == 0u), f32(v >> 16u));
 }
 
-// The height field between texels, bilinear: an edge seen at a slant is a slope, not a stair,
-// so a penumbra has no steps in it.
-fn height_at(q: vec2<f32>) -> f32 {
+// The field between texels: its top bilinear, so an edge seen at a slant is a slope, not a
+// stair, and a penumbra has no steps in it; its bottom the lowest of the four that stand.
+fn height_at(q: vec2<f32>) -> vec2<f32> {
     let p = q - 0.5;
     let b = floor(p);
     let f = p - b;
     let x = i32(b.x);
     let y = i32(b.y);
-    let top = mix(texel_height(x, y), texel_height(x + 1, y), f.x);
-    let bottom = mix(texel_height(x, y + 1), texel_height(x + 1, y + 1), f.x);
-    return mix(top, bottom, f.y);
+    let a = texel(x, y);
+    let c = texel(x + 1, y);
+    let d = texel(x, y + 1);
+    let e = texel(x + 1, y + 1);
+    let top = mix(mix(a.y, c.y, f.x), mix(d.y, e.y, f.x), f.y);
+    return vec2<f32>(min(min(a.x, c.x), min(d.x, e.x)), top);
 }
 
-// The tallest of the four texels round `q`: what a long step samples, so a step of up to three
-// px never walks through a thin post it should have hit.
-fn height_max(q: vec2<f32>) -> f32 {
+// The tallest of the four texels round `q`, and the lowest bottom: what a long step samples, so
+// a step of up to three px never walks through a thin post it should have hit.
+fn height_max(q: vec2<f32>) -> vec2<f32> {
     let b = floor(q - 0.5);
     let x = i32(b.x);
     let y = i32(b.y);
-    return max(max(texel_height(x, y), texel_height(x + 1, y)), max(texel_height(x, y + 1), texel_height(x + 1, y + 1)));
+    let a = texel(x, y);
+    let c = texel(x + 1, y);
+    let d = texel(x, y + 1);
+    let e = texel(x + 1, y + 1);
+    return vec2<f32>(min(min(a.x, c.x), min(d.x, e.x)), max(max(a.y, c.y), max(d.y, e.y)));
 }
 
 // How much of a light toward `l` (unit, x east, y south, z up) reaches `p`, marching at most
-// `max_t` px across the ground from `t0`, with penumbra factor `k`.
+// `max_t` px across the ground from `t0`, with penumbra factor `k`. The ray's clearance at a
+// texel is how far it passes over the top or under the bottom.
 fn trace(p: vec3<f32>, l: vec3<f32>, max_t: f32, k: f32, t0: f32, max_step: f32) -> f32 {
     let lxy = length(l.xy);
     if lxy < 0.0005 {
@@ -100,8 +115,14 @@ fn trace(p: vec3<f32>, l: vec3<f32>, max_t: f32, k: f32, t0: f32, max_step: f32)
             break;
         }
         let q = p.xy + dir * t;
-        let hq = select(height_at(q), height_max(q), step > 1.25);
-        res = min(res, k * (z - hq) / t);
+        // A branch, not a `select`: a select reads both.
+        var f: vec2<f32>;
+        if step > 1.25 {
+            f = height_max(q);
+        } else {
+            f = height_at(q);
+        }
+        res = min(res, k * max(z - f.y, f.x - z) / t);
         if res <= 0.0 {
             return 0.0;
         }
@@ -112,7 +133,8 @@ fn trace(p: vec3<f32>, l: vec3<f32>, max_t: f32, k: f32, t0: f32, max_step: f32)
     return r * r * (3.0 - 2.0 * r);
 }
 
-// The ground's own occlusion by what stands round it: the foot of a wall, a crate's skirt.
+// The ground's own occlusion by what stands round it: the foot of a wall, a crate's skirt; not
+// what floats well over it.
 fn ground_ao(p: vec3<f32>) -> f32 {
     var occ = 0.0;
     let dirs = array<vec2<f32>, 8>(
@@ -121,7 +143,8 @@ fn ground_ao(p: vec3<f32>) -> f32 {
     );
     for (var i = 0; i < 8; i++) {
         let r = select(4.0, 10.0, i >= 4);
-        let hq = height_at(p.xy + dirs[i] * r);
+        let f = height_at(p.xy + dirs[i] * r);
+        let hq = select(0.0, f.y, f.x <= p.z + r);
         occ += clamp((hq - p.z) / (r * 2.0), 0.0, 1.0);
     }
     return 1.0 - occ * 0.09;

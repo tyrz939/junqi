@@ -410,9 +410,9 @@ pub fn render(bps: Blueprints, o: &Opts) -> Result<Shot, String> {
     );
     present.draw(255, o.canvas);
     let layers = o.gl.layers.then(|| {
-        let (hv, dv, w, h) = crate::layers::heights(present.frame(), present.atlas());
-        let f = crate::layers::field(&hv, &dv, w, h);
-        (crate::layers::png(&hv, w, h), crate::layers::png(&f, w, h))
+        let g = crate::layers::heights(present.frame(), present.atlas());
+        let (top, floor) = crate::layers::field(&g);
+        (crate::layers::png(&g.h, None, g.w, g.rows), crate::layers::png(&top, Some(&floor), g.w, g.rows))
     });
     let frame = present.frame();
     b.draw(frame);

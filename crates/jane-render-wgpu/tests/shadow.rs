@@ -223,3 +223,121 @@ fn a_walls_shadow_is_straight_edged_and_its_face_takes_no_stairs() {
     }
     assert!(edges[0] - edges[edges.len() - 1] >= 8, "the shadow's edge does not rise east: {edges:?}");
 }
+
+/// A sprite `w` x `h` whose px `(x, y)` is drawn where `shape` says, standing its row's true
+/// height over its foot row `ay` (upright, as `Canvas::upright` stands a sprite).
+fn upright_atlas(w: u16, h: u16, ay: i32, shape: impl Fn(i32, i32) -> bool) -> AtlasPages {
+    let n = usize::from(w) * usize::from(h);
+    let mut page =
+        Page { w, h, albedo: vec![0; n], normal: vec![[128, 200]; n], emissive: vec![0; n], height: vec![0; n] };
+    for y in 0..i32::from(h) {
+        for x in 0..i32::from(w) {
+            if shape(x, y) {
+                let i = y as usize * usize::from(w) + x as usize;
+                page.albedo[i] = 2;
+                page.height[i] = height_of_rows(ay - y).max(1) as u8;
+            }
+        }
+    }
+    let mut clut = vec![0xff00_0000; CLUT_LEN];
+    clut[2] = 0xffc0_8060;
+    AtlasPages { clut, pages: vec![page], mist: Vec::new() }
+}
+
+/// A frame of flat grass and the one sprite of `atlas`, its foot row `ay` on canvas `foot`, its
+/// middle column over the foot, lit by `sun` alone.
+fn stand(atlas: &AtlasPages, ay: i32, foot: (i32, i32), depth: u8, sun: Directional) -> Frame {
+    let p = &atlas.pages[0];
+    let top = p.height.iter().copied().max().unwrap_or(1);
+    let mut f = frame(ground(|_, _| None), false, None, &[]);
+    f.sprites.push(SpriteCmd {
+        page: 0,
+        src: Src { x: 0, y: 0, w: p.w, h: p.h },
+        x: (foot.0 - i32::from(p.w) / 2) as i16,
+        y: (foot.1 - ay) as i16,
+        flags: Flags::default(),
+        height_px: top,
+    });
+    f.casters.push(Caster { sprite: 0, foot: (foot.0 as i16, foot.1 as i16), height: top, depth });
+    f.passes.clear();
+    f.passes.push(Pass::Terrain { chunks: Span { start: 0, len: 1 } });
+    f.passes.push(Pass::Sprites { layer: Depth::Standing, cmds: Span { start: 0, len: 1 } });
+    f.passes.push(Pass::Lights {
+        ambient: [200; 3],
+        fill: [70, 78, 120],
+        sun: Some(sun),
+        points: Span { start: 0, len: 0 },
+        casters: Span { start: 0, len: 1 },
+    });
+    f.passes.push(Pass::Post(Post::NONE));
+    f
+}
+
+/// A sun in the north at 40 degrees: shadows run south, down the screen, in front of what
+/// casts them, so the whole of one is seen.
+fn north_sun() -> Directional {
+    Directional { azimuth: Angle::NORTH, elevation: Angle::from_degrees(40), colour: [255, 230, 200], spread: 300 }
+}
+
+/// How many px of canvas row `y` are in shadow: darker than four fifths of the open grass.
+fn dark_across(px: &[u32], y: i32) -> usize {
+    let lit = luma(at(px, 4, y));
+    (0..W as i32).filter(|&x| luma(at(px, x, y)) * 10 < lit * 8).count()
+}
+
+#[test]
+fn a_trees_shadow_is_its_trunks_at_the_root_and_its_crowns_further_out() {
+    // A crown 32 wide from row 4 to row 30, on a trunk 4 wide from row 31 to its foot on row 56:
+    // the crown floats 33 px to 65 px up.
+    const AY: i32 = 56;
+    let Some(mut b) = backend() else { return };
+    let tree = upright_atlas(40, 60, AY, |x, y| {
+        let crown = (4..=30).contains(&y) && (4..36).contains(&x);
+        let trunk = (31..=AY).contains(&y) && (18..22).contains(&x);
+        crown || trunk
+    });
+    let foot = (128, 62);
+    let px = draw(&mut b, &tree, &stand(&tree, AY, foot, 6, north_sun()));
+    // cot 40 degrees is 1.19: the trunk's shadow lies on the 39 rows south of its foot and the
+    // crown's from there to 77 rows. Near the root, a trunk and its penumbra; no wider.
+    for dy in 6..30 {
+        let n = dark_across(&px, foot.1 + dy);
+        assert!(n <= 4 + 2 + 4, "{dy} rows south of the root: {n} px dark, the crown's shadow stands on the root");
+        assert!(n >= 3, "{dy} rows south of the root: {n} px dark, the trunk throws nothing");
+    }
+    // Further out, the crown's width.
+    for dy in 50..70 {
+        let n = dark_across(&px, foot.1 + dy);
+        assert!(n >= 28, "{dy} rows south of the root: {n} px dark, no crown's shadow");
+    }
+}
+
+#[test]
+fn a_lanterns_shadow_hangs_apart_from_its_posts() {
+    // A post 2 wide from its foot on row 56 up to row 8, an arm out east along rows 8 and 9, and
+    // a lantern 8 wide hanging from it, rows 10 to 22 (43 px to 58 px up), 8 px clear of the post.
+    const AY: i32 = 56;
+    let Some(mut b) = backend() else { return };
+    let lamp = upright_atlas(40, 60, AY, |x, y| {
+        let post = (8..=AY).contains(&y) && (10..12).contains(&x);
+        let arm = (8..=9).contains(&y) && (10..28).contains(&x);
+        let lantern = (10..=22).contains(&y) && (20..28).contains(&x);
+        post || arm || lantern
+    });
+    let foot = (128, 62);
+    let px = draw(&mut b, &lamp, &stand(&lamp, AY, foot, 4, north_sun()));
+    let x0 = foot.0 - 20;
+    let lit = luma(at(&px, 4, foot.1 + 20));
+    let dark = |x: i32, y: i32| luma(at(&px, x, y)) * 10 < lit * 8;
+    // Near the root, only the post's thin shadow: the ground under where the lantern hangs is
+    // lit.
+    for dy in 6..30 {
+        let y = foot.1 + dy;
+        assert!(!(x0 + 21..x0 + 27).any(|x| dark(x, y)), "{dy} rows south: the lantern's shadow stands on the root");
+        assert!((x0 + 9..x0 + 13).any(|x| dark(x, y)), "{dy} rows south: the post throws nothing");
+    }
+    // Further out, the lantern's own shadow, the ground between it and the post's lit.
+    let y = foot.1 + 58;
+    assert!((x0 + 21..x0 + 27).all(|x| dark(x, y)), "no shadow of the lantern where it lands");
+    assert!((x0 + 14..x0 + 18).any(|x| !dark(x, y)), "the lantern's shadow runs into the post's");
+}

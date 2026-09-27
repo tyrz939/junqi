@@ -8,8 +8,9 @@
 //!    canvas and a guard band round it. Sprite albedo and emissive are 16-bit master-palette
 //!    indices looked up in a 1024-entry CLUT (§1.4).
 //! 2. **Height field**: a compute pass stands every lifted pixel on its ground point (a pixel
-//!    `h` up at `(x, y)` stands at `(x, y + h)`), the tallest winning, so the field seen from
-//!    above holds every roof, wall, post and person where it stands.
+//!    `h` up at `(x, y)` stands at `(x, y + rows_up(h))`), the tallest winning, so the field seen
+//!    from above holds every roof, wall, post and person where it stands. Each texel has a
+//!    bottom too: what floats (a canopy, a lamp's head, a hand) stands from its lowest px up.
 //! 3. **Light**: per canvas pixel the sky's fill, the sun or moon, and the point lights of its
 //!    32 x 32 tile, each by N dot L with the light's height as z and a soft shadow traced through
 //!    the height field (`shaders/light.wgsl`), emissive added unlit.
@@ -780,7 +781,9 @@ impl Wgpu {
         let gid = view(texture(d, "g id", (full.0, full.1, 1), ID, rt));
         let hmap = d.create_buffer(&wgpu::BufferDescriptor {
             label: Some("height field"),
-            size: u64::from(full.0) * u64::from(full.1) * 4,
+            // Two halves: each texel's top and whose (`h << 16 | id`), then its bottom
+            // (`256 - lo`, 0 where nothing floats).
+            size: u64::from(full.0) * u64::from(full.1) * 8,
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
