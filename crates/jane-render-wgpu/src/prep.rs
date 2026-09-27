@@ -52,7 +52,9 @@ pub struct Prep {
     pub n_chunks: u32,
     /// `(slot, generation)` of every chunk drawn, to upload the ones the GPU does not hold.
     pub chunk_slots: Vec<(u16, u32)>,
-    /// `SpriteIn`: src (4 x u32), dst (x, y, page, flags as i32), extra (depth, 0, 0, 0).
+    /// `SpriteIn`: src (4 x u32), dst (x, y, page, flags as i32), extra (depth, id, 0, 0): its id
+    /// is its index in the frame plus one, what the G-buffer's id target and the height field
+    /// carry (0 is the terrain).
     pub sprites: Vec<u8>,
     pub n_sprites: u32,
     /// The sprite draws, in order.
@@ -89,6 +91,12 @@ fn f32s(out: &mut Vec<u8>, v: &[f32]) {
     for x in v {
         out.extend_from_slice(&x.to_le_bytes());
     }
+}
+
+/// The G-buffer id of `Frame::sprites[i]`: one more than its index, held to the id target's 16
+/// bits (0 is the terrain).
+pub fn sprite_id(i: usize) -> u32 {
+    (i as u32 + 1).min(u32::from(u16::MAX))
 }
 
 /// An sRGB byte as linear light.
@@ -160,7 +168,8 @@ impl Prep {
                             &[u32::from(s.src.x), u32::from(s.src.y), u32::from(s.src.w), u32::from(s.src.h)],
                         );
                         i32s(&mut self.sprites, &[i32::from(s.x), i32::from(s.y), i32::from(s.page), flags as i32]);
-                        u32s(&mut self.sprites, &[u32::from(depth), 0, 0, 0]);
+                        let id = sprite_id(cmds.start as usize + k);
+                        u32s(&mut self.sprites, &[u32::from(depth), id, 0, 0]);
                         if layer == Depth::Standing {
                             hmax = hmax.max(f32::from(s.height_px));
                         }
@@ -205,7 +214,10 @@ impl Prep {
                         // not as lime.
                         let [r, gg, b] = [r * POINT_GAIN, gg * POINT_GAIN * 0.72, b * POINT_GAIN * 0.55];
                         f32s(&mut self.lights, &[r, gg, b, f32::from(l.size)]);
-                        f32s(&mut self.lights, &[dir.0, dir.1, cone, if l.casts { 1.0 } else { 0.0 }]);
+                        // w: 0 when it casts nothing, else one more than its holder's id (1: none),
+                        // so its trace skips what carries it.
+                        let casts = if l.casts { 1.0 + l.holder.map_or(0, |h| sprite_id(h as usize)) as f32 } else { 0.0 };
+                        f32s(&mut self.lights, &[dir.0, dir.1, cone, casts]);
                         self.n_lights += 1;
                     }
                     self.tile(frame);
@@ -339,6 +351,7 @@ mod tests {
             size: 4,
             casts: true,
             kind: LightKind::Point,
+            holder: None,
         });
         f.passes.push(Pass::Lights {
             ambient: [60; 3],

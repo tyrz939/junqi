@@ -23,6 +23,11 @@ pub const CHUNK_CELLS: i32 = 16;
 /// Canvas px on a side of a terrain chunk.
 pub const CHUNK_PX: i32 = CHUNK_CELLS * CELL;
 
+/// The 3/4 view's one projection (ART.md §1.1, PRESENTATION.md §1.7): heights are true px, a
+/// thing `h` px up is drawn `rows_up(h)` rows over its ground point (four fifths, rounded up).
+/// Every tier's shadow reads heights through this and nothing else.
+pub use jane_art::canvas::{height_of_rows, rows_up};
+
 /// The render tier a backend draws at (PRESENTATION.md §1.3).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Tier {
@@ -134,9 +139,9 @@ pub enum LightKind {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Light {
     /// Where it stands on the ground, canvas px (the camera taken off). It shines from
-    /// `height` px above that, so it is seen at `(pos.0, pos.1 - height)`.
+    /// `height` px above that, so it is seen at `(pos.0, pos.1 - rows_up(height))`.
     pub pos: (i32, i32),
-    /// Its height above the ground, px (a lamp's glass, a lantern at her hip).
+    /// Its height above the ground, true px (a lamp's glass, a lantern at her hip).
     pub height: u8,
     /// Its colour at the centre, the flicker applied.
     pub colour: Rgb,
@@ -147,6 +152,9 @@ pub struct Light {
     /// Throws shadows from the casters (T1: the nearest 8; T2: the nearest 32).
     pub casts: bool,
     pub kind: LightKind,
+    /// What carries it, `Frame::sprites[holder]`: a lamp's post, a torch's bracket, the one
+    /// holding a lantern. A light never shadows what holds it (PRESENTATION.md §1.7).
+    pub holder: Option<u32>,
 }
 
 /// A thing that throws a shadow: a unit or a prop standing (§1.7 occluders). Wall runs and

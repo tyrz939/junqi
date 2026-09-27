@@ -1,6 +1,6 @@
 // The G-buffer (PRESENTATION.md §1.7 T2): terrain chunks and sprites in pass order into three
-// targets, the albedo (linear), normal and height (nx, ny, height / 255, depth / 255) and the
-// emissive (linear). Sprites read four atlas layers in one fragment: albedo and emissive are
+// targets, the albedo (linear), normal and height (nx, ny, height / 255, depth / 255), the
+// emissive (linear) and whose each px is (a sprite's index in the frame plus one; 0 terrain). Sprites read four atlas layers in one fragment: albedo and emissive are
 // master-palette indices into the 1024-entry CLUT (PRESENTATION.md §1.4, "Why 16-bit").
 
 @group(0) @binding(1) var clut: texture_2d<f32>;
@@ -16,6 +16,7 @@ struct GOut {
     @location(0) albedo: vec4<f32>,
     @location(1) nh: vec4<f32>,
     @location(2) emissive: vec4<f32>,
+    @location(3) id: u32,
 };
 
 fn to_clip(p: vec2<f32>) -> vec4<f32> {
@@ -48,6 +49,7 @@ fn fs_chunk(i: ChunkOut) -> GOut {
     o.albedo = vec4<f32>(textureLoad(chunk_albedo, t, i.layer, 0).rgb, 1.0);
     o.nh = textureLoad(chunk_nh, t, i.layer, 0);
     o.emissive = vec4<f32>(textureLoad(chunk_emissive, t, i.layer, 0).rgb, 1.0);
+    o.id = 0u;
     return o;
 }
 
@@ -58,7 +60,7 @@ struct SpriteOut {
     @location(0) local: vec2<f32>,
     // Source rect x, y, w, h in the page.
     @location(1) @interpolate(flat) src: vec4<u32>,
-    // Page, flags (bit 0 mirror, bits 8..16 tint amount, bits 16..18 tint kind), depth px.
+    // Page, flags (bit 0 mirror, bits 8..16 tint amount, bits 16..18 tint kind), depth px, id.
     @location(2) @interpolate(flat) info: vec4<u32>,
 };
 
@@ -76,7 +78,7 @@ fn vs_sprite(
     o.pos = to_clip(p);
     o.local = corner * size;
     o.src = src;
-    o.info = vec4<u32>(u32(dst.z), u32(dst.w), extra.x, 0u);
+    o.info = vec4<u32>(u32(dst.z), u32(dst.w), extra.x, extra.y);
     return o;
 }
 
@@ -122,6 +124,7 @@ fn fs_sprite(i: SpriteOut) -> GOut {
     o.albedo = vec4<f32>(c, 1.0);
     o.nh = vec4<f32>(n, h, f32(i.info.z) / 255.0);
     o.emissive = vec4<f32>(ec, 1.0);
+    o.id = i.info.w;
     return o;
 }
 

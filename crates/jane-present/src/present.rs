@@ -23,7 +23,7 @@ use crate::chunks::{ChunkCache, LRU, Need};
 use crate::drawlist::{DrawCmd, DrawList};
 use crate::frame::{
     CANVAS_H, CANVAS_W, CELL, CHUNK_PX, Caster, ChunkCmd, ChunkId, Depth, FX_TO_CANVAS, Flags, Frame, Light, LightKind,
-    Pass, Post, Rgb, Span, SpriteCmd, Tier, Tint,
+    Pass, Post, Rgb, Span, SpriteCmd, Tier, Tint, height_of_rows, rows_up,
 };
 use crate::light::{Sky, flicker, lantern_lit, sky};
 use crate::creatures::{self, Creatures};
@@ -55,6 +55,8 @@ const LANTERN_RADIUS: u16 = 136;
 const LANTERN: Rgb = [255, 190, 116];
 /// How many steps a second a flame's flicker walks (§1.7).
 const FLICKER_RATE: u32 = 10;
+/// A unit's draw key: its id with the top bit set (a prop's is its id).
+const UNIT_KEY: u32 = 0x8000_0000;
 
 /// Lights on screen at most, and how many of them throw shadows, by tier (§1.3 `max_lights`,
 /// §1.7: T1 the nearest 8, T2 the nearest 32).
@@ -158,6 +160,8 @@ pub struct Present {
     ground: DrawList,
     lights: Vec<LightRec>,
     light_scratch: Vec<PropIx>,
+    /// This frame's standing casters by draw key, `(key, sprite)`, sorted: what holds a light.
+    holders: Vec<(u32, u32)>,
     sky: Sky,
 }
 
@@ -207,6 +211,7 @@ impl Present {
             ground: DrawList::default(),
             lights: Vec::with_capacity(256),
             light_scratch: Vec::with_capacity(1024),
+            holders: Vec::with_capacity(1024),
             sky: sky(12 * 7200, 0, false, 1000, Region::Lowfields),
         }
     }
@@ -318,6 +323,7 @@ impl Present {
         self.read_props(view, area);
         self.read_lights(view, area);
         self.paint_chunks(view);
+        self.off_walls();
         let (clock, day) = view.clock();
         self.sky = sky(clock, day, view.indoor(), view.ambient().0, view.region());
     }
@@ -459,9 +465,15 @@ impl Present {
                 (x + w / 2, y + h / 2, 4, 6)
             } else {
                 let foot = y + h - i32::from(r.src.h) + i32::from(r.ay);
-                // A kit lamp shines from its lit glass; a stand-in from its demo glass.
-                let glass = kit.glass(d.sprite).or_else(|| stand.glass(look)).map_or(i32::from(r.height) * 2 / 3, i32::from);
-                (x + w / 2, foot, glass.clamp(4, 60), if d.w == 1 { 6 } else { 10 })
+                // A kit lamp shines from its lit glass; a stand-in from its demo glass. The glass
+                // is counted in rows up from the canvas's foot; the light's height is true px
+                // over the sprite's own foot row (`rows_up`'s inverse).
+                let over_foot = i32::from(r.src.h) - i32::from(r.ay);
+                let glass = kit
+                    .glass(d.sprite)
+                    .or_else(|| stand.glass(look))
+                    .map_or(i32::from(r.height) * 2 / 3, |g| height_of_rows(i32::from(g) - over_foot));
+                (x + w / 2, foot, glass.clamp(4, 90), if d.w == 1 { 6 } else { 10 })
             };
             lights.push(LightRec {
                 id: p.id.get(),
@@ -475,6 +487,63 @@ impl Present {
             });
         });
         lights.sort_unstable_by_key(|l| l.id);
+    }
+
+    /// A light standing inside the terrain's height field (a torch hung on a wall, whose sprite
+    /// stands on the wall's top) hangs from the wall's face instead: its ground point moves to
+    /// the nearest open ground within a cell and a half, toward the viewer first, and two px
+    /// clear of it. A light never shadows the wall it hangs on (PRESENTATION.md §1.7), and a
+    /// torch's pool lies on the floor it lights, not in the masonry. Only the lit tiers carry the
+    /// terrain's heights; T0 lights stay where they are.
+    fn off_walls(&mut self) {
+        /// How far a light is looked for open ground, px.
+        const REACH: i32 = 24;
+        let (layers, chunks) = (&self.frame.layers, &self.chunks);
+        let (zw, zh) = (self.zone_cells.0 as i32 * CELL, self.zone_cells.1 as i32 * CELL);
+        let mut last: Option<(ChunkId, Option<u16>)> = None;
+        // The terrain's drawn height at zone px (x, y).
+        let mut drawn = |x: i32, y: i32| -> i32 {
+            if x < 0 || y < 0 || x >= zw || y >= zh {
+                return 0;
+            }
+            let id = ChunkId { cx: (x / CHUNK_PX) as u16, cy: (y / CHUNK_PX) as u16 };
+            let slot = match last {
+                Some((k, s)) if k == id => s,
+                _ => {
+                    let s = chunks.find(id).map(|f| f.0);
+                    last = Some((id, s));
+                    s
+                }
+            };
+            let Some(l) = slot.and_then(|s| layers.get(usize::from(s))).filter(|l| l.lit()) else { return 0 };
+            i32::from(l.height[((y % CHUNK_PX) * CHUNK_PX + x % CHUNK_PX) as usize])
+        };
+        // The height field there: the tallest terrain px standing on ground (x, y) (a px `h` up
+        // stands `rows_up(h)` rows below it, its field two rows deep).
+        let mut field = |x: i32, y: i32| -> i32 {
+            let mut most = 0;
+            for r in 0..=80 {
+                let h = drawn(x, y - r);
+                if h > 2 && (rows_up(h) == r || rows_up(h) == r + 1) {
+                    most = most.max(h);
+                }
+            }
+            most
+        };
+        for l in &mut self.lights {
+            if field(l.x, l.y) + 2 < i32::from(l.height) {
+                continue;
+            }
+            'out: for d in 1..=REACH {
+                for (dx, dy) in [(0, 1), (-1, 0), (1, 0), (0, -1)] {
+                    let (x, y) = (l.x + dx * d, l.y + dy * d);
+                    if field(x, y) <= 2 {
+                        (l.x, l.y) = (x + dx * 2, y + dy * 2);
+                        break 'out;
+                    }
+                }
+            }
+        }
     }
 
     /// Paints the chunks under the view (and a little round it) that want it: at most
@@ -648,6 +717,8 @@ impl Present {
                     size: 5,
                     casts: true,
                     kind: LightKind::Point,
+                    // Her own: resolved to her sprite once the list is sorted.
+                    holder: Some(UNIT_KEY | u.id),
                 });
                 n_glows += 1;
             }
@@ -660,6 +731,7 @@ impl Present {
                     size: 8,
                     casts: false,
                     kind: LightKind::Point,
+                    holder: Some(UNIT_KEY | u.id),
                 });
                 n_glows += 1;
             }
@@ -726,7 +798,7 @@ impl Present {
             });
             self.standing.push(DrawCmd {
                 y: sy,
-                key: 0x8000_0000 | u.id,
+                key: UNIT_KEY | u.id,
                 sprite: sprite(r, x, y, Flags { mirror, tint }),
                 caster,
             });
@@ -745,7 +817,7 @@ impl Present {
                     if on_canvas(x, y, r.src.w, r.src.h) {
                         self.standing.push(DrawCmd {
                             y: qy,
-                            key: 0x8000_0000 | u.id,
+                            key: UNIT_KEY | u.id,
                             sprite: sprite(r, x, y, Flags { mirror: false, tint: Tint::None }),
                             caster: None,
                         });
@@ -779,6 +851,7 @@ impl Present {
                         size: 4,
                         casts: false,
                         kind: LightKind::Point,
+                        holder: Some(UNIT_KEY | u.id),
                     });
                     n_glows += 1;
                 }
@@ -790,12 +863,15 @@ impl Present {
         f.sprites.extend(self.ground.sort(-SORT_MARGIN, rows).iter().map(|c| c.sprite));
         let ground = Span::since(g0, f.sprites.len());
         let s0 = f.sprites.len();
+        self.holders.clear();
         for c in self.standing.sort(-SORT_MARGIN, rows) {
             if let Some(k) = c.caster {
+                self.holders.push((c.key, f.sprites.len() as u32));
                 f.casters.push(Caster { sprite: f.sprites.len() as u32, ..k });
             }
             f.sprites.push(c.sprite);
         }
+        self.holders.sort_unstable();
         let standing = Span::since(s0, f.sprites.len());
         let casters = Span::since(0, f.casters.len());
 
@@ -816,9 +892,18 @@ impl Present {
                 size: l.size,
                 casts: true,
                 kind: LightKind::Point,
+                // The prop that carries it: its post, its bracket, its cage.
+                holder: Some(l.id),
             });
         }
         f.lights.extend(glows[..n_glows].iter().flatten());
+        // A light never shadows what holds it: each holder's key to its sprite, or none.
+        let holders = &self.holders;
+        for l in &mut f.lights {
+            l.holder = l.holder.and_then(|k| {
+                holders.binary_search_by_key(&k, |h| h.0).ok().map(|i| holders[i].1)
+            });
+        }
         let (most, casting) = max_lights(f.tier);
         if f.lights.len() > most || f.lights.iter().filter(|l| l.casts).count() > casting {
             let mid = (cw / 2, ch / 2);

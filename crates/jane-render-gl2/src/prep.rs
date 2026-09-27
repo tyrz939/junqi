@@ -701,6 +701,7 @@ mod tests {
             size: 4,
             casts: true,
             kind: LightKind::Point,
+            holder: None,
         });
         f.passes.push(Pass::Lights {
             ambient: [60; 3],

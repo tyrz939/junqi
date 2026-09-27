@@ -8,6 +8,9 @@
 // from the point, the light is `k * clearance / t` visible (k is the light's distance over its
 // size, or 1 / tan of the sun's spread): the penumbra widens with the distance from what casts
 // it, as a real one does, and a thin post's shadow is sharp at its foot and soft at its tip.
+// A trace never meets the thing it starts on (a sprite does not shadow itself: its own field is
+// a thin wall at its feet that a low sun would otherwise draw across its own body) nor the thing
+// holding its light (a lamp's post, a torch's bracket, her lantern's hand).
 
 @group(0) @binding(1) var galb: texture_2d<f32>;
 @group(0) @binding(2) var gnh: texture_2d<f32>;
@@ -28,6 +31,12 @@ struct Light {
 // Per 32 x 32 tile: (first, count) into `tile_lights`.
 @group(0) @binding(6) var<storage, read> tiles: array<vec2<u32>>;
 @group(0) @binding(7) var<storage, read> tile_lights: array<u32>;
+@group(0) @binding(8) var gid: texture_2d<u32>;
+
+// Whose field a trace passes through as if it were not there: the px's own thing and the light's
+// holder (0: nothing; the terrain is 0 and is never skipped).
+var<private> skip_own: u32;
+var<private> skip_holder: u32;
 
 struct LitOut {
     @location(0) colour: vec4<f32>,
@@ -39,7 +48,12 @@ fn texel_height(x: i32, y: i32) -> f32 {
     if x < 0 || y < 0 || x >= w || y >= i32(g.full.y) {
         return 0.0;
     }
-    return f32(hmap[u32(y * w + x)]);
+    let v = hmap[u32(y * w + x)];
+    let who = v & 0xffffu;
+    if who != 0u && (who == skip_own || who == skip_holder) {
+        return 0.0;
+    }
+    return f32(v >> 16u);
 }
 
 // The height field between texels, bilinear: an edge seen at a slant is a slope, not a stair,
@@ -134,7 +148,9 @@ fn fs_light(i: FullOut) -> LitOut {
     // front of its body, half its depth toward the viewer from the line it stands on, so its
     // own body never shadows its face.
     let front = select(0.0, depth * 0.5 + 1.0, h > 0.5);
-    let p = vec3<f32>(f32(q.x) + 0.5, f32(q.y) + 0.5 + h + front, h);
+    let p = vec3<f32>(f32(q.x) + 0.5, f32(q.y) + 0.5 + f32(rows_up(u32(h + 0.5))) + front, h);
+    skip_own = textureLoad(gid, q, 0).r;
+    skip_holder = 0u;
     let t0 = 1.0;
 
     var light = g.fill.rgb;
@@ -173,6 +189,7 @@ fn fs_light(i: FullOut) -> LitOut {
         }
         var sh = 1.0;
         if lt.spot.w > 0.5 {
+            skip_holder = u32(lt.spot.w + 0.5) - 1u;
             let dxy = length(v.xy);
             sh = trace(p, l, dxy - (lt.col.w + 3.0), clamp(dxy / max(lt.col.w, 1.0), 2.0, 16.0), t0, 1.0);
         }
