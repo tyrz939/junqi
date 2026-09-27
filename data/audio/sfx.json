@@ -174,7 +174,7 @@
   { "name": "church_bell", "peak": 0.32, "send": 0.55, "layers": [
     { "wave": "bell", "pitch": [392.0, 392.0], "decay_ms": 4200, "filter": { "kind": "lp", "cutoff": [3200, 2200], "q": 0.6 } }
   ]},
-  { "name": "train_whistle", "peak": 0.32, "send": 0.65, "layers": [
+  { "name": "train_whistle", "peak": 0.22, "send": 0.7, "layers": [
     { "wave": "square", "pitch": [440, 428], "duty": 0.42, "attack_ms": 180, "hold_ms": 900, "decay_ms": 700, "vibrato": [5.5, 0.05], "filter": { "kind": "lp", "cutoff": [1500, 1100], "q": 0.8 } },
     { "wave": "square", "pitch": [554.37, 540], "duty": 0.42, "attack_ms": 200, "hold_ms": 880, "decay_ms": 700, "gain": 0.8, "filter": { "kind": "lp", "cutoff": [1600, 1150], "q": 0.8 } },
     { "wave": "square", "pitch": [659.26, 642], "duty": 0.42, "attack_ms": 220, "hold_ms": 860, "decay_ms": 700, "gain": 0.6, "filter": { "kind": "lp", "cutoff": [1700, 1200], "q": 0.8 } },

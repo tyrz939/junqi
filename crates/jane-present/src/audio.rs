@@ -478,6 +478,17 @@ pub struct Sense {
     pub ringer: Option<(At, u8)>,
     pub the_end: bool,
     pub seed: u32,
+    /// How near a lit fire is (0 none, 255 beside it): a campfire, a brazier or a stove within
+    /// [`FIRE_CELLS`], doused ones not.
+    pub fire: u8,
+}
+
+/// How far a fire's crackle carries, in cells.
+pub const FIRE_CELLS: i32 = 8;
+
+/// Whether a prop is a fire the ear should find: a campfire, a brazier, a stove.
+pub fn is_fire(def_id: &str) -> bool {
+    (def_id.contains("fire") || def_id.contains("brazier") || def_id.contains("stove")) && !def_id.contains("scroll")
 }
 
 fn at(v: Vec2) -> At {
@@ -515,6 +526,18 @@ impl Sense {
                 ringer = Some((at(u.pos), u.phase));
             }
         }
+        let mut fire = 0u8;
+        let near = jane_core::Rect::new(cx - FIRE_CELLS, cy - FIRE_CELLS, 2 * FIRE_CELLS, 2 * FIRE_CELLS);
+        for p in view.props_in(near) {
+            let def = jane_data::catalog().story.prop(p.def);
+            if !is_fire(def.id) || view.light_showing(p).is_none() {
+                continue;
+            }
+            let fx = f32::from(p.cell.x) + f32::from(def.w) / 2.0 - (cx as f32 + 0.5);
+            let fy = f32::from(p.cell.y) + f32::from(def.h) / 2.0 - (cy as f32 + 0.5);
+            let near = (1.0 - (fx * fx + fy * fy).sqrt() / FIRE_CELLS as f32).max(0.0);
+            fire = fire.max((255.0 * near * near) as u8);
+        }
         Sense {
             seat: view.seat(),
             me,
@@ -533,6 +556,7 @@ impl Sense {
             ringer,
             the_end: view.the_end() != 0,
             seed: view.seed(),
+            fire,
         }
     }
 
@@ -1031,11 +1055,14 @@ pub fn bed_levels(s: &Sense) -> [u8; 10] {
         ZoneId::Burial => 90,
         _ => 0,
     };
-    l[Bed::Fire.index()] = match s.zone {
+    // The Arms' fire and the house's range, and any lit fire she stands near: a campfire, a
+    // brazier, a stove.
+    let hearth = match s.zone {
         ZoneId::Arms => 150,
         ZoneId::House => 60,
         _ => 0,
     };
+    l[Bed::Fire.index()] = hearth.max(s.fire);
     l[Bed::Clock.index()] = match s.zone {
         ZoneId::House => 110,
         ZoneId::Library | ZoneId::Museum => 140,
@@ -1088,6 +1115,7 @@ mod tests {
             ringer: None,
             the_end: false,
             seed: 5,
+            fire: 0,
         }
     }
 
@@ -1310,6 +1338,11 @@ mod tests {
         assert!(bed_levels(&s)[Bed::Lake.index()] > 0);
         s.region = Region::Works;
         assert!(bed_levels(&s)[Bed::Hum.index()] > 0);
+        // A campfire crackles as she comes to it.
+        s.fire = 220;
+        assert_eq!(bed_levels(&s)[Bed::Fire.index()], 220);
+        assert!(is_fire("campfire") && is_fire("museum_stove") && is_fire("brazier"));
+        assert!(!is_fire("scroll_fire") && !is_fire("lamp_post"));
     }
 
     #[test]
