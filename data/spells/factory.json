@@ -11,6 +11,6 @@
     "icon": "spell_shock", "kind": "melee", "school": "shock",
     "mp": 0, "energy": 0, "range": 0.25, "cooldown": 1.5,
     "gcdImmune": false, "needsTarget": true, "needsEnemy": true, "needsLos": true, "anim": "attack",
-    "power": { "stat": "strength", "div": 1.4, "varDiv": 5 }
+    "power": { "stat": "strength", "div": 4, "varDiv": 5 }
   }
 }

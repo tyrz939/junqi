@@ -73,6 +73,10 @@ pub struct Nav {
     waypoint: Option<(i32, i32)>,
     /// What the path in hand leads to: the goal, or a waypoint toward it.
     target: Option<(i32, i32)>,
+    /// What a dungeon's tactic says a cell costs over its step, in tenths, and that she runs
+    /// across it (the Factory's lit floor, where the sentries see her): `(zone, width, costs)`,
+    /// for the zone it was set in. `None` everywhere else.
+    pub toll: Option<(ZoneId, u32, Vec<u8>)>,
 }
 
 /// Cells (the larger of across and down) beyond which a goal is planned over blocks first.
@@ -143,6 +147,7 @@ impl Nav {
             coarse: crate::coarse::Coarse::new(),
             waypoint: None,
             target: None,
+            toll: None,
         }
     }
 
@@ -188,9 +193,11 @@ impl Nav {
         };
         // Diagonals cost 14: core's step is asked per neighbour, so the cost is settled here.
         let roads = self.roads && !v.indoor();
+        let toll = self.toll.as_ref().filter(|t| t.0 == v.zone());
         let step14 = |a: (i32, i32), b: (i32, i32)| {
             step(a, b).map(|c| {
                 let c = if a.0 != b.0 && a.1 != b.1 { 14 } else { c };
+                let c = c + toll.map_or(0, |t| toll_at(t, b));
                 if roads && !road(v.tile(b.0, b.1)) { c + OFF_ROAD } else { c }
             })
         };
@@ -314,11 +321,21 @@ impl Nav {
                 continue;
             }
             let far = d > i64::from(3 * CELL_FX);
-            return Go::Walk(stick(pos, c, sprint && far));
+            // Across a tolled cell (in a sentry's light) she runs.
+            let tolled = self.toll.as_ref().is_some_and(|t| t.0 == v.zone() && toll_at(t, own) > 0);
+            return Go::Walk(stick(pos, c, (sprint && far) || tolled));
         }
         self.replan_in = 0;
         Go::Walk(stick(pos, to, false))
     }
+}
+
+/// A toll's cost for a cell (0 off its grid).
+pub fn toll_at(t: &(ZoneId, u32, Vec<u8>), (x, y): (i32, i32)) -> u32 {
+    if x < 0 || y < 0 || x as u32 >= t.1 {
+        return 0;
+    }
+    t.2.get((y as u32 * t.1 + x as u32) as usize).map_or(0, |&c| u32::from(c))
 }
 
 /// Full tilt from `from` toward `to`.

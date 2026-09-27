@@ -137,12 +137,12 @@ fn butterfly_forest() {
 
 #[test]
 fn the_pipes() {
-    play(ZoneId::Pipes, false);
+    play(ZoneId::Pipes, true);
 }
 
 #[test]
 fn the_factory() {
-    play(ZoneId::Factory, false);
+    play(ZoneId::Factory, true);
 }
 
 #[test]

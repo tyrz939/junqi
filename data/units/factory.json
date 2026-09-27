@@ -25,8 +25,8 @@
   },
   "foreman": {
     "name": "The Foreman", "faction": "undead", "controller": "ai",
-    "strength": 300, "spirit": 60, "walk": 0.3, "run": 0.6, "aggro": 12, "leash": 40, "bounds": 1.25,
-    "book": ["melee_stun", "melee_fast"], "respawn": 0, "autoRegen": true, "loot": [],
+    "strength": 150, "spirit": 60, "walk": 0.3, "run": 0.6, "aggro": 12, "leash": 40, "bounds": 1.25,
+    "book": ["melee_stun", "melee_fast"], "respawn": 0, "autoRegen": false, "loot": [],
     "resist": { "physical": 0.7, "frost": 0.7, "fire": 0.7, "blast": 0.7, "shock": -0.5 },
     "sprite": "factory_foreman", "boss": true, "sight": "lit",
     "onDeath": [

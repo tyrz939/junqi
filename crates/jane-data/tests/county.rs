@@ -68,7 +68,7 @@ fn the_county_contract_is_the_story_s_names_and_what_placements_promise() {
 #[test]
 fn every_door_leads_into_a_real_zone() {
     let c = &cat().county;
-    assert!(c.doors.len() >= 10);
+    assert!(c.doors.len() >= 9);
     assert!(cat().name_id("icehouse_door").is_none(), "the dead icehouse row is gone");
     for d in c.doors {
         let key = cat().name(d.key);
@@ -82,7 +82,9 @@ fn every_door_leads_into_a_real_zone() {
     }
     let manholes: Vec<_> =
         c.doors.iter().filter(|d| d.to.is_none()).filter_map(|d| d.mark).map(|m| cat().name(m)).collect();
-    assert_eq!(manholes, ["manhole_1", "manhole_2", "manhole_3", "manhole_4"]);
+    // The fourth, the outfall's, comes up inside the Factory's wall, not in the county
+    // (DUNGEONS.md §3.4: the pipes run to the Works, and up into the Factory).
+    assert_eq!(manholes, ["manhole_1", "manhole_2", "manhole_3"]);
     for z in [ZoneId::Museum, ZoneId::Library, ZoneId::Forest, ZoneId::Factory, ZoneId::School, ZoneId::Pipes] {
         assert!(c.doors.iter().any(|d| d.zone == z && d.to.is_some()), "a way into {}", z.name());
     }

@@ -150,7 +150,10 @@ fn leash(cx: &mut Ctx<'_>, id: UnitId, def: &UnitDef, run: Fx, shy: bool) {
     let u = cx.zone.unit_mut(id).expect("unit");
     u.target = None;
     let (pos, home) = (u.pos, u.home);
-    if distance(pos, home) <= i64::from(run.0.max(LEASH_SNAP_FX)) {
+    // Home, or in home's own cell: a path from a cell to itself has no steps, so a walker a few
+    // pixels off its post inside that cell would lead on for ever, mending and deaf to her (the
+    // Foreman, back from a chase, stood two and a half pixels from his mark in Leash all day).
+    if distance(pos, home) <= i64::from(run.0.max(LEASH_SNAP_FX)) || pos.cell() == home.cell() {
         move_unit(cx.rt, u, home.x - pos.x, home.y - pos.y);
         u.combat = CombatState::Idle;
         clear_path(u);
