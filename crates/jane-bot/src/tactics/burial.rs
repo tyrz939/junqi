@@ -1486,7 +1486,18 @@ pub fn not_yet(v: &View<'_>, t: &Task) -> bool {
     inside("burial_glasshouse") || door
 }
 
-/// Is `at` inside room `r`, clear of its walls?
+/// May she eat now? Every room down here but a keeper's has the vigil fire behind it, and a
+/// keeper's room shuts behind her: the apples are for the keepers, unless she is nearly done
+/// for. (Eaten in the trash between, she met the Spider with none and fell with the Spider at a
+/// tenth of her health, three times on seed 1.)
+pub fn may_eat(v: &View<'_>) -> bool {
+    let cat = jane_data::catalog();
+    sense::hp_permille(v.body()) < 200
+        || sense::enemies(v)
+            .iter()
+            .any(|u| cat.combat.unit(u.def).boss && (crate::fight::on_me(v, u) || u.combat == CombatState::Combat))
+}
+
 /// The snake, with her in its room: fought out, never fled. It goes home whole the moment it
 /// loses her, and its room's gates stay shut behind her with the key spent: fled at 95 health
 /// with it at 500, she stood outside for good (a fall at least opens them again).
@@ -1502,6 +1513,7 @@ fn in_room(r: &jane_core::Rect, at: Vec2) -> bool {
     r.contains(x, y)
 }
 
+/// Is `at` inside room `r`, clear of its walls?
 fn inside(r: &jane_core::Rect, at: Vec2) -> bool {
     let (x, y) = at.cell();
     r.x < x && x < r.right() - 1 && r.y < y && y < r.bottom() - 1

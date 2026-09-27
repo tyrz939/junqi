@@ -309,6 +309,10 @@ pub fn eat(v: &View<'_>) -> Option<Command> {
     if v.zone() == jane_core::ZoneId::School && !crate::tactics::school::may_eat(v) {
         return None;
     }
+    // The Burial: for its keepers (`tactics::burial::may_eat`).
+    if v.zone() == jane_core::ZoneId::Burial && !crate::tactics::burial::may_eat(v) {
+        return None;
+    }
     food(v).map(Command::Item)
 }
 
