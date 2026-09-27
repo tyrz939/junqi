@@ -18,6 +18,8 @@ pub const MAX_LIGHTS: usize = 128;
 /// How much brighter a point light is than its colour byte says, in linear light: a lamp's pool
 /// is brighter than the dusk round it.
 const POINT_GAIN: f32 = 3.0;
+/// The least a point light's luminance is held to before its gain (a warm lamp's, about).
+const MIN_LUMA: f32 = 0.42;
 /// The emissive layer's gain: lamp glass and lit windows read as sources.
 const EMISSIVE_GAIN: f32 = 1.35;
 /// The sun's light on flat ground is its colour byte times this, in linear light: a low sun
@@ -202,10 +204,16 @@ impl Prep {
                         );
                         let [r, gg, b] = lin3(l.colour);
                         // Flame light leans warm: a yellow lamp reads as a lamp on green grass,
-                        // not as lime.
-                        let [r, gg, b] = [r * POINT_GAIN, gg * POINT_GAIN * 0.72, b * POINT_GAIN * 0.55];
+                        // not as lime. A deep orange flame (a fire) is held up to a lamp's
+                        // brightness, or the grass it stands on would swallow its pool.
+                        let [r, gg, b] = [r, gg * 0.72, b * 0.55];
+                        let luma = 0.2126 * r + 0.7152 * gg + 0.0722 * b;
+                        let k = POINT_GAIN * (MIN_LUMA / luma.max(0.01)).clamp(1.0, 1.8);
+                        let [r, gg, b] = [r * k, gg * k, b * k];
                         f32s(&mut self.lights, &[r, gg, b, f32::from(l.size)]);
-                        f32s(&mut self.lights, &[dir.0, dir.1, cone, if l.casts { 1.0 } else { 0.0 }]);
+                        // w: 0 if it casts nothing, else the px round it its own prop keeps clear.
+                        let casts = if l.casts { f32::from(l.clear.max(1)) } else { 0.0 };
+                        f32s(&mut self.lights, &[dir.0, dir.1, cone, casts]);
                         self.n_lights += 1;
                     }
                     self.tile(frame);
@@ -338,6 +346,7 @@ mod tests {
             radius: 20,
             size: 4,
             casts: true,
+            clear: 0,
             kind: LightKind::Point,
         });
         f.passes.push(Pass::Lights {

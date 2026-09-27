@@ -144,6 +144,9 @@ pub struct Light {
     pub size: u8,
     /// Throws shadows from the casters (T1: the nearest 8; T2: the nearest 32).
     pub casts: bool,
+    /// Px round its ground point that throw no shadow on it: the thing that holds it (a lamp's
+    /// own post, a fire's own flames and logs), so a light is never shadowed by its own prop.
+    pub clear: u8,
     pub kind: LightKind,
 }
 

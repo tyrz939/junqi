@@ -52,6 +52,8 @@ const LIGHT_CELLS: i32 = 13;
 /// Her lantern (§1.7): its reach, canvas px, and its warm colour.
 const LANTERN_RADIUS: u16 = 136;
 const LANTERN: Rgb = [255, 190, 116];
+/// The lowest a standing prop light shines from, px: a low flame lights the ground round it.
+const FLAME_HEIGHT: i32 = 28;
 /// How many steps a second a flame's flicker walks (§1.7).
 const FLICKER_RATE: u32 = 10;
 
@@ -116,6 +118,7 @@ struct LightRec {
     colour: Rgb,
     radius: u16,
     size: u8,
+    clear: u8,
     /// Permille it dips as it flickers.
     dip: i16,
 }
@@ -455,8 +458,12 @@ impl Present {
             } else {
                 let foot = y + h - i32::from(r.src.h) + i32::from(r.ay);
                 // A kit lamp shines from its lit glass; a stand-in from its demo glass.
-                let glass = kit.glass(d.sprite).or_else(|| stand.glass(look)).map_or(i32::from(r.height) * 2 / 3, i32::from);
-                (x + w / 2, foot, glass.clamp(4, 60), if d.w == 1 { 6 } else { 10 })
+                let glass =
+                    kit.glass(d.sprite).or_else(|| stand.glass(look)).map_or(i32::from(r.height) * 2 / 3, i32::from);
+                // A low flame (a fire, a stove, a lantern on the floor) lights from over its
+                // tongues, as its light does in the air round it: a light at its glass would
+                // only graze the ground and throw no pool.
+                (x + w / 2, foot, glass.clamp(FLAME_HEIGHT, 60), if d.w == 1 { 6 } else { 10 })
             };
             lights.push(LightRec {
                 id: p.id.get(),
@@ -466,6 +473,8 @@ impl Present {
                 colour: rgb(l.color),
                 radius: (l.radius.0 >> FX_TO_CANVAS).clamp(0, 2048) as u16,
                 size: size as u8,
+                // Its own prop throws no shadow on it: a post, a fire's flames and logs.
+                clear: if d.flat { 0 } else if d.w >= 3 || d.h >= 3 { 10 } else { (w.max(h) / 2 + 6).min(40) as u8 },
                 dip: l.flicker.0,
             });
         });
@@ -641,6 +650,7 @@ impl Present {
                     colour: scale(LANTERN, k),
                     radius: LANTERN_RADIUS,
                     size: 5,
+                    clear: 4,
                     casts: true,
                     kind: LightKind::Point,
                 });
@@ -653,6 +663,7 @@ impl Present {
                     colour,
                     radius,
                     size: 8,
+                    clear: 0,
                     casts: false,
                     kind: LightKind::Point,
                 });
@@ -740,6 +751,7 @@ impl Present {
                 colour: scale(l.colour, k),
                 radius: l.radius,
                 size: l.size,
+                clear: l.clear,
                 casts: true,
                 kind: LightKind::Point,
             });

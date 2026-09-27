@@ -20,7 +20,7 @@ struct Light {
     // Linear colour; w: the glowing thing's size, px.
     col: vec4<f32>,
     // A spot's direction across the ground and the cosine of its half-cone (below -1 for a
-    // point); w: 1 if it casts.
+    // point); w: 0 if it casts nothing, else the px round it that throw no shadow on it.
     spot: vec4<f32>,
 };
 
@@ -173,8 +173,11 @@ fn fs_light(i: FullOut) -> LitOut {
         }
         var sh = 1.0;
         if lt.spot.w > 0.5 {
+            // The march stops short of the light by its glowing size, or by the ground its own
+            // prop stands on, so a post never shadows its own lamp nor a fire its own flame.
             let dxy = length(v.xy);
-            sh = trace(p, l, dxy - (lt.col.w + 3.0), clamp(dxy / max(lt.col.w, 1.0), 2.0, 16.0), t0, 1.0);
+            let stop = max(lt.col.w + 3.0, lt.spot.w);
+            sh = trace(p, l, dxy - stop, clamp(dxy / max(lt.col.w, 1.0), 2.0, 16.0), t0, 1.0);
         }
         light += lt.col.rgb * att * sh;
     }

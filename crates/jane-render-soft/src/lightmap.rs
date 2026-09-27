@@ -122,6 +122,7 @@ mod tests {
             radius: 24,
             size: 4,
             casts: true,
+            clear: 0,
             kind: LightKind::Point,
         };
         m.build((96, 96), [64, 64, 128], &[lamp]);
