@@ -103,7 +103,7 @@ The shell never holds the whole sim. `sim.view(seat)` is a `PlayerView`: her bod
 
 Discrete actions are `Command`s (`use`, `bar`, `bagMove`, `craftTake`, `choose`, `dev`, …) applied between ticks. They also work while the world is frozen (bag open, dialogue), which keeps inventory and dialogue input inside the deterministic record. The console's cheats are commands too, so a session that used `god` still replays.
 
-**Pause is not a broadcast any more.** Nothing is told to pause; the scheduler simply is not called. Dialogue freezes the sim from inside (`sim.frozen`); windows and menus are the app's decision. **With more than one player connected nothing freezes at all**: she stands and reads, her bag is open, and the county carries on around her.
+**Pause is not a broadcast any more.** Nothing is told to pause; the scheduler simply is not called. Dialogue freezes the sim from inside (`sim.frozen`); windows and menus are the app's decision. **With more than one player connected nothing freezes at all**: she stands and reads, her bag is open, and the county carries on around her. Alone and held, a press still goes through: a move, a drop or a use in the bag steps the world one tick with her stick idle (`Session::try_step`), so the window shows the bag as it is that frame (the first playtest found it catching up only on close).
 
 ## 5. Space
 

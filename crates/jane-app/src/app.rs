@@ -660,7 +660,9 @@ impl App<'_> {
                 let me = me_of(self.session.as_ref());
                 let Some(session) = self.session.as_mut() else { return };
                 lend_wall_clock(session);
-                if !(paused && session.pauses()) {
+                // Held alone, a press (a move in the bag, a use) is still stepped, one tick with
+                // her stick idle, so the window shows it at once (`Session::try_step`).
+                if !(paused && session.pauses() && self.pending.is_empty()) {
                     let t = Instant::now();
                     // A guest behind the host steps what it has in hand to catch up.
                     let mut budget = 1 + session.backlog().saturating_sub(BEHIND).min(5);
