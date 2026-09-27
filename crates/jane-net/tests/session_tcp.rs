@@ -99,3 +99,50 @@ fn a_game_opened_to_the_lan_is_joined_over_tcp_and_both_step_one_world() {
     }
     assert_eq!(host.sim().unwrap().state().party_size(), 1, "she got up when she left");
 }
+
+#[test]
+fn a_host_on_any_port_is_found_on_the_discovery_port_and_its_offer_says_where_to_dial() {
+    // A discovery port of the test's own (7777 may be taken on this machine), a game port the
+    // system picks: the joiner knows nothing in advance but the discovery port.
+    let disc = std::net::UdpSocket::bind("0.0.0.0:0").unwrap().local_addr().unwrap().port();
+    let mut host =
+        Session::host_with_discovery(Sim::new_game_with(bps(), "Tess"), HostConfig::default(), 0, disc).unwrap();
+    let game = host.port().unwrap();
+    assert_ne!(game, disc);
+    let mut finder = jane_net::discovery::Finder::new(disc).unwrap();
+    let mut found = Vec::new();
+    for i in 0..400u64 {
+        if i % 20 == 0 {
+            finder.ask();
+        }
+        host.poll(i);
+        std::thread::sleep(std::time::Duration::from_millis(2));
+        found = finder.poll().to_vec();
+        if !found.is_empty() {
+            break;
+        }
+    }
+    assert!(!found.is_empty(), "the host answered");
+    for f in &found {
+        assert_eq!(f.addr.port(), game, "dial the game's port, not the discovery port");
+        assert!(f.offer.joinable());
+    }
+    // And the address it gives is one a guest can join.
+    let addr = format!("127.0.0.1:{}", found[0].addr.port());
+    let mut guest = Session::join(&addr, GuestConfig::new(ClientToken(31)), Some(bps()), 0).unwrap();
+    let mut presses: Vec<Command> = Vec::new();
+    for tick in 0..3000u64 {
+        let now = tick * 16;
+        host.poll(now);
+        guest.poll(now);
+        host.try_step(now, InputFrame::IDLE, &mut presses, false);
+        host.poll(now);
+        guest.poll(now);
+        while guest.backlog() > 0 && guest.try_step(now, InputFrame::IDLE, &mut presses, false).is_some() {}
+        if guest.seat().is_some() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_micros(200));
+    }
+    assert_eq!(guest.seat(), Some(Seat(1)));
+}
