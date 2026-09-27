@@ -118,6 +118,32 @@ fn both_modes_match(mut gl: Gl2) {
     }
     assert!(silhouettes, "some frame had the sun's silhouettes");
     the_atmosphere_is_drawn(&mut gl);
+    more_quads_than_the_indices_name(&mut gl);
+}
+
+/// The indices are 16-bit and name 16383 quads; a list longer than that (F2 and F3 up at dusk
+/// by Julie's step, the shadow spans and the UI both past it) is drawn whole, not a panic. The
+/// owner's first crash (September 2026).
+fn more_quads_than_the_indices_name(gl: &mut Gl2) {
+    use jane_present::ui::{Rect, UiCmd};
+    gl.set_rows(Rows::T1);
+    let mut p = at_hour(1, 12);
+    gl.upload_atlas(p.atlas());
+    p.draw(200, CANVAS);
+    let colour = |i: i32| 0xff00_0000 | (i as u32).wrapping_mul(2_654_435_761) & 0x00ff_ffff;
+    let w = i32::from(CANVAS.0);
+    let n = 40_000;
+    p.frame_mut().ui.clear();
+    for i in 0..n {
+        p.frame_mut().ui.push(UiCmd::Fill { dst: Rect::new(i % w, i / w, 1, 1), argb: colour(i) });
+    }
+    gl.draw(p.frame());
+    let mut out = Vec::new();
+    gl.read_back(&mut out);
+    for i in (0..n).step_by(97) {
+        let got = out[i as usize] & 0x00ff_ffff;
+        assert_eq!(got, colour(i) & 0x00ff_ffff, "fill {i} of {n} is drawn");
+    }
 }
 
 /// The atmosphere's passes on T1 (PRESENTATION.md §1.3): rain and mist at night draw, and leave
