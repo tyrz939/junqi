@@ -14,7 +14,7 @@ use jane_sim::{Blueprints, Seat, Sim, StepInput};
 
 pub const USAGE: &str = "  play --model reader|rusher --seed N [--minutes M] [--dungeon ZONE] [--tape OUT.jrp]
        [--snap OUT.png [--snap-every S]] [--ending hold|hill|train] [--profile]
-       [--explain] [--explain-every S] [--from ACT]
+       [--explain] [--explain-every S] [--from ACT] [--deaths]
                                       a player model plays a seed headless from New Game (or a dungeon from
                                       its door, the console setting up the kit): one line per milestone;
                                       --snap draws the world round her at the end (and every S seconds of
@@ -168,6 +168,22 @@ fn play(args: &[String], tape: Option<&str>) -> Result<(), String> {
     }
     if profile {
         prof.print(played);
+    }
+    // Every death, and a count by where and to what.
+    if args.iter().any(|a| a == "--deaths") {
+        let cat = jane_data::catalog();
+        let mut by: std::collections::BTreeMap<(String, String), u32> = std::collections::BTreeMap::new();
+        for d in &bot.deaths {
+            println!("death {}", d.line());
+            let who = d.by.map_or("?".to_owned(), |u| cat.combat.unit(u).id.to_owned());
+            *by.entry((d.zone.name().to_owned(), who)).or_insert(0) += 1;
+        }
+        let mut rows: Vec<_> = by.into_iter().collect();
+        rows.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+        println!("deaths: {} in all", bot.deaths.len());
+        for ((z, who), n) in rows {
+            println!("  {n:>4} {z:<8} {who}");
+        }
     }
     if args.iter().any(|a| a == "--explain") {
         println!("{}", bot.explain(&v));

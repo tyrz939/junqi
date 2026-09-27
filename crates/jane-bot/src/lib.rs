@@ -283,6 +283,49 @@ pub struct Bot {
     pub log: Vec<Milestone>,
     /// Console commands to send before playing (the tests' setup), one a frame.
     pub setup: Vec<Command>,
+    /// Every death, as it happened: where, to what, what she was doing and what she carried.
+    pub deaths: Vec<Death>,
+    /// What last hurt her (its row), for the next death's record.
+    last_hurt: Option<jane_core::UnitDefId>,
+}
+
+/// One death, recorded (for telling the bot's mistakes from the world's hardness).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Death {
+    pub tick: u32,
+    pub zone: ZoneId,
+    pub cell: (i32, i32),
+    /// What last hurt her (`None`: nothing seen to).
+    pub by: Option<jane_core::UnitDefId>,
+    pub max_hp: i32,
+    pub apples: u32,
+    /// Stone Skin, life-steal and Manashield potions held.
+    pub potions: (u32, u32, u32),
+    /// The hour of the day.
+    pub hour: u8,
+    /// What the plan was doing (its own words, cut short).
+    pub doing: String,
+}
+
+impl Death {
+    /// One line: `mm:ss zone cell by hp/max kit hour doing`.
+    pub fn line(&self) -> String {
+        let cat = jane_data::catalog();
+        let secs = self.tick / 60;
+        format!(
+            "{:02}:{:02} {:<8} {:?} by {} max {} apples {} potions {:?} at {:02}h: {}",
+            secs / 60,
+            secs % 60,
+            self.zone.name(),
+            self.cell,
+            self.by.map_or("?", |d| cat.combat.unit(d).id),
+            self.max_hp,
+            self.apples,
+            self.potions,
+            self.hour,
+            self.doing
+        )
+    }
 }
 
 impl Bot {
@@ -295,6 +338,8 @@ impl Bot {
             seq: 0,
             events: Vec::new(),
             log: Vec::new(),
+            deaths: Vec::new(),
+            last_hurt: None,
             setup: Vec::new(),
         }
     }
@@ -335,11 +380,33 @@ impl Bot {
                 EventKind::Quest { quest, change: QuestChange::Done } => marks.push(Mark::QuestDone(quest)),
                 EventKind::Learn(s) => marks.push(Mark::Learned(s)),
                 EventKind::PlayerDied => marks.push(Mark::Died),
+                EventKind::Damage { unit, from: Some(f), .. } if unit == me => {
+                    self.last_hurt = v.unit(f).map(|u| u.def).or(self.last_hurt);
+                }
                 EventKind::Death { unit, def, .. } if unit != me && self.ctx.fighting(unit) => {
                     marks.push(Mark::Killed(def));
                 }
                 _ => {}
             }
+        }
+        if marks.contains(&Mark::Died) {
+            let held = |n: &str| sense::holds(v, sense::item(n));
+            let mut doing = match &self.plan {
+                Plan::Story(s) => s.status(),
+                Plan::Crawl(c) => c.status(),
+            };
+            doing.truncate(90);
+            self.deaths.push(Death {
+                tick,
+                zone,
+                cell: v.body().pos.cell(),
+                by: self.last_hurt.take(),
+                max_hp: jane_sim::units::max_hp(v.body()).points(),
+                apples: held("apple"),
+                potions: (held("potion_stoneskin"), held("potion_lifesteal"), held("potion_manashield")),
+                hour: v.hour(),
+                doing,
+            });
         }
         for m in marks {
             self.log.push(Milestone { tick, frame, zone, mark: m });
