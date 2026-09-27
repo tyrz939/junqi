@@ -261,9 +261,11 @@ impl<'a> View<'a> {
     /// THE light rule, shared with the sim (`light.rs`).
     pub fn light_showing(&self, p: &Prop) -> Option<&'static Light> {
         let wet = crate::light::prop_wetness(self.zone, self.rt, p);
-        crate::light::light_showing(jane_data::catalog().story.prop(p.def), p, self.lamps_lit(), wet)
+        crate::light::light_showing(jane_data::catalog().story.prop(p.def), p, self.state.clock, wet)
     }
 
+    /// The county's night by its lamps, 18:30 to 06:30; each lamp keeps it a few minutes early
+    /// or late (`light::lamp_lit`, which [`Self::light_showing`] asks).
     pub fn lamps_lit(&self) -> bool {
         crate::light::lamps_lit(self.state.clock)
     }

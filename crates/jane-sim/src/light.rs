@@ -14,25 +14,40 @@
 //! A point counts as lit inside two thirds of the radius (`r * r * 4 / 9` in Fx², §2), where the
 //! radial sprite's long soft tail still looks lit.
 
+use jane_core::hash::mix32;
 use jane_core::num::{CELL_FX, dist_sq};
 use jane_core::{Fx, Vec2};
 use jane_data::{Light, PropDef};
 
 use crate::runtime::ZoneRuntime;
 use crate::state::{Prop, ZoneState};
-use crate::tuning::{LAMPS_OFF, LAMPS_ON};
+use crate::tuning::{LAMP_STAGGER, LAMPS_OFF, LAMPS_ON, TICKS_PER_DAY};
 
-/// Lamp posts burn from 18:30 to 06:30, as they did in 2020 (`clock` is ticks since midnight).
+/// Lamp posts burn from 18:30 to 06:30, as they did in 2020 (`clock` is ticks since midnight):
+/// the night as the county keeps it. Each lamp keeps it a little early or late ([`lamp_lit`]).
 pub const fn lamps_lit(clock: u32) -> bool {
     clock > LAMPS_ON || clock < LAMPS_OFF
 }
 
-/// Is this prop's light on? `lamps` is [`lamps_lit`], asked once by the caller; `wetness` is the
-/// rain ramp where the prop stands (ARCHITECTURE.md §4.6.b, [`prop_wetness`]): a light whose def
-/// has a `douse` is out while the ramp stands at or over it (an open fire in the rain; still a
-/// fire to rest at).
-pub fn light_showing(def: &'static PropDef, p: &Prop, lamps: bool, wetness: u8) -> Option<&'static Light> {
-    if p.hidden || !def.light_shows(p.on, lamps) || def.douse.is_some_and(|d| wetness >= d) {
+/// Is lamp `id` alight at `clock`? [`lamps_lit`] a little early or late for each: it comes on
+/// and goes out at its own minute within [`LAMP_STAGGER`] either side of the hour, the same
+/// minute every day, from a hash of its id (the owner's first playtest: "lights all come on at
+/// once"). What a sentry sees by and what is drawn lit are this, through [`light_showing`].
+pub const fn lamp_lit(clock: u32, id: u32) -> bool {
+    let off = mix32(id ^ 0x6c61_6d70) % (2 * LAMP_STAGGER);
+    lamps_lit((clock % TICKS_PER_DAY + TICKS_PER_DAY + LAMP_STAGGER - off) % TICKS_PER_DAY)
+}
+
+/// Is this prop's light on at `clock`? Its lamp hours are [`lamp_lit`]'s, by its id; `wetness`
+/// is the rain ramp where the prop stands (ARCHITECTURE.md §4.6.b, [`prop_wetness`]): a light
+/// whose def has a `douse` is out while the ramp stands at or over it (an open fire in the rain;
+/// still a fire to rest at).
+pub fn light_showing(def: &'static PropDef, p: &Prop, clock: u32, wetness: u8) -> Option<&'static Light> {
+    if p.hidden || def.light.is_none() {
+        return None;
+    }
+    let lamps = lamp_lit(clock, p.id.get());
+    if !def.light_shows(p.on, lamps) || def.douse.is_some_and(|d| wetness >= d) {
         return None;
     }
     def.light.as_ref()
@@ -88,13 +103,12 @@ fn lit_by(zone: &ZoneState, rt: &ZoneRuntime, clock: u32, at: Vec2, counts: impl
         return false;
     }
     let cat = jane_data::catalog();
-    let lamps = lamps_lit(clock);
     let (x0, y0) = (Fx(at.x.0 - reach.0).cell(), Fx(at.y.0 - reach.0).cell());
     let (x1, y1) = (Fx(at.x.0 + reach.0).cell(), Fx(at.y.0 + reach.0).cell());
     rt.props.any_in(x0, y0, x1, y1, |ix| {
         let p = &zone.props[ix as usize];
         let def = cat.story.prop(p.def);
-        let Some(light) = light_showing(def, p, lamps, prop_wetness(zone, rt, p)) else { return false };
+        let Some(light) = light_showing(def, p, clock, prop_wetness(zone, rt, p)) else { return false };
         counts(light) && dist_sq(prop_centre(def, p), at) <= reach_sq(light.radius)
     })
 }
@@ -112,6 +126,33 @@ mod tests {
         assert!(lamps_lit(0));
         assert!(lamps_lit(6 * TICKS_PER_HOUR + TICKS_PER_HOUR / 2 - 1));
         assert!(!lamps_lit(6 * TICKS_PER_HOUR + TICKS_PER_HOUR / 2));
+    }
+
+    /// The lamps come on one at a time over half an hour round half past six, each at its own
+    /// minute every evening, and go out so in the morning; the county's night is the same.
+    #[test]
+    fn each_lamp_comes_on_at_its_own_minute() {
+        let (on, off) = (18 * TICKS_PER_HOUR + TICKS_PER_HOUR / 2, 6 * TICKS_PER_HOUR + TICKS_PER_HOUR / 2);
+        let lamps = 1..=400u32;
+        // Its own minute: the first tick it is lit, per lamp.
+        let lit_from = |id: u32| (on - LAMP_STAGGER..=on + LAMP_STAGGER).find(|&c| lamp_lit(c, id)).unwrap();
+        let mut minutes: Vec<u32> = lamps.clone().map(|id| lit_from(id) / (TICKS_PER_HOUR / 60)).collect();
+        for id in lamps.clone() {
+            let from = lit_from(id);
+            assert!((on - LAMP_STAGGER..=on + LAMP_STAGGER).contains(&from), "lamp {id} at {from}");
+            assert!(!lamp_lit(from - 1, id) && lamp_lit(from + TICKS_PER_HOUR, id), "lamp {id} stays on");
+            // Every day the same.
+            assert_eq!(lamp_lit(from + TICKS_PER_DAY, id), lamp_lit(from, id));
+            // Out in the morning within the same half hour, and all day.
+            assert!(lamp_lit(off - LAMP_STAGGER - 1, id) && !lamp_lit(off + LAMP_STAGGER, id));
+            assert!(!lamp_lit(12 * TICKS_PER_HOUR, id) && lamp_lit(0, id));
+        }
+        minutes.sort();
+        minutes.dedup();
+        assert!(minutes.len() >= 25, "spread over the half hour: {} minutes of 30", minutes.len());
+        // Half past six: about half are lit.
+        let half = lamps.filter(|&id| lamp_lit(on, id)).count();
+        assert!((120..=280).contains(&half), "{half} of 400 lit at the hour");
     }
 
     #[test]
