@@ -25,6 +25,7 @@ mod bird;
 mod crawler;
 mod flyer;
 mod insect;
+pub(crate) use insect::stair;
 mod plant;
 mod quad;
 mod serpent;

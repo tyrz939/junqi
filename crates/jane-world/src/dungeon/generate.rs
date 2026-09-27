@@ -251,6 +251,9 @@ fn flag_is_set(flag: NameId, not: bool) -> Cond {
     Cond { not, c: Condition::Flag { key: FlagKey::Named(Key::Name(flag)), test: FlagTest::NonZero } }
 }
 
+/// A room as the scatter walks it: its node, its floor rect, its doors' centre cells.
+type ScatterRoom = (usize, Rect, Vec<(i32, i32)>);
+
 /// One candidate's build.
 struct Gen<'l> {
     m: &'static MissionDef,
@@ -1062,6 +1065,67 @@ impl Gen<'_> {
         }
     }
 
+    /// The scatter (DUNGEONS.md: "Dressing (barrel piles, torch runs) is the scatter"): after
+    /// everything the mission and the templates place, each room's open floor takes the
+    /// dungeon's floor marks (`dress.scatter_floor`: bones, stains, papers, leaves) and the cells
+    /// under its wall's face take its wall hangings (`dress.scatter_wall`: cobwebs, notices,
+    /// portraits, moss), each cell by the row's chance. Dressing only: a solid row is refused,
+    /// nothing stands within three cells of a doorway, nothing on a cell anything has claimed,
+    /// no two hangings within two cells of each other along a wall. Seeded per node
+    /// (`DunDress`, `b` = 1), so it moves nothing else the dice decide.
+    fn scatter(&mut self) {
+        let m = self.m;
+        let row = |name: &str| m.dress.iter().find(|d| d.name == name);
+        let (floor_row, wall_row) = (row("scatter_floor"), row("scatter_wall"));
+        if floor_row.is_none() && wall_row.is_none() {
+            return;
+        }
+        let rooms: Vec<ScatterRoom> = self
+            .info
+            .rooms
+            .iter()
+            .map(|r| {
+                let doors = r.shape.doors.iter().map(|d| (r.x + i32::from(d.x), r.y + i32::from(d.y))).collect();
+                (r.node, r.rect, doors)
+            })
+            .collect();
+        let mut n = 0;
+        for (node, rect, doors) in rooms {
+            let mut rng = dice(self.seed, self.zone, Step::DunDress, self.attempt, node as i32, 1);
+            let mut last_hung = (i32::MIN, i32::MIN);
+            for y in rect.y..rect.bottom() {
+                for x in rect.x..rect.right() {
+                    let t = self.k.get(x, y);
+                    if !(t == m.floor || m.alt.contains(&t)) || !self.k.fits(x, y, 1, 1) {
+                        continue;
+                    }
+                    if doors.iter().any(|&(dx, dy)| (x - dx).abs() <= 3 && (y - dy).abs() <= 3) {
+                        continue;
+                    }
+                    let hung = self.k.get(x, y - 1) == m.wall;
+                    let Some(r) = (if hung { wall_row } else { floor_row }) else { continue };
+                    if !rng.chance(r.chance) {
+                        continue;
+                    }
+                    let Some(&def) = rng.pick(r.props) else { continue };
+                    let d = catalog().story.prop(def);
+                    let (w, h) = (i32::from(d.w), i32::from(d.h));
+                    let clear = self.k.fits(x, y, w, h)
+                        && doors.iter().all(|&(dx, dy)| (x + w - 1 - dx).abs() > 3 || (y + h - 1 - dy).abs() > 3);
+                    if d.solid || !clear || (hung && last_hung.1 == y && x - last_hung.0 < 3) {
+                        continue;
+                    }
+                    let key = self.key_for(&format!("{}_scatter_{n}", m.id));
+                    n += 1;
+                    self.k.prop(key, def, x, y, w, h);
+                    if hung {
+                        last_hung = (x, y);
+                    }
+                }
+            }
+        }
+    }
+
     /// Heat (DUNGEONS.md §2.7): a node's enemy cost is its share of the dungeon's base heat,
     /// capped by what the template says the room can hold fairly, spent on the dungeon's own
     /// bestiary with a seeded mix. At most two to a spawn socket.
@@ -1209,6 +1273,7 @@ fn assemble(
         g.locks();
         g.lamps();
         g.fill();
+        g.scatter();
         g.zone_rects();
     }
     let mut info = g.info;

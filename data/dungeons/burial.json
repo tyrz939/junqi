@@ -438,6 +438,8 @@
   },
   "lights": { "prop": "cold_sconce", "every": 10, "corridor": 16 },
   "dress": {
+    "scatter_floor": { "props": ["bones", "scatter_candles", "scatter_bonepile", "scatter_rubble", "scatter_damp"], "chance": 0.09 },
+    "scatter_wall": { "props": ["scatter_cobweb", "scatter_cobweb", "scatter_chains"], "chance": 0.5 },
     "coldtorch": { "props": ["torch_blue"], "chance": 1 },
     "pile": { "props": ["urns", "barrel"], "chance": 0.5 },
     "pillar": { "props": ["crypt_pillar"], "chance": 1 },

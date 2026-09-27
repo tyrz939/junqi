@@ -9,7 +9,7 @@
 
 use jane_core::grid::Rect;
 
-use super::parts::{ao, band, box3, post};
+use super::parts::{self, ao, band, box3, post, writing};
 use super::{Kit, Stand, State};
 use crate::canvas::{Canvas, FLAT, Z};
 use crate::palette::{Ix, Ramp, Tone};
@@ -174,6 +174,212 @@ fn small(c: &mut Canvas, k: &Kit, on: bool) -> Option<Stand> {
         c.inflate(&m, ramp, rad, z);
     };
     Some(match k.look.shape {
+        // --- The scatter (a dungeon's floor marks and wall hangings, `scatter_*`) ---------------
+        "stain" => {
+            // A stain soaked into the floor: overlapping blots of the body's dark, a wet sheen
+            // on one edge.
+            // Scaled to its footprint: a spill a cell across, a pool two.
+            let (fw, fh) = (w, k.fh * 16);
+            let h = parts::hash(k.seed, 1, 90);
+            for i in 0..3 + fw / 16 {
+                let hh = parts::hash(k.seed, i, 91);
+                let (bw, bh) = (fw * 3 / 8 + (hh >> 12) as i32 % (fw / 4).max(1), fh / 4 + (hh >> 16) as i32 % (fh / 6).max(1));
+                let (x, y) = (2 + (hh % (fw - bw - 3).max(1) as u32) as i32, foot - fh * 2 / 3 + ((hh >> 8) % (fh / 3).max(1) as u32) as i32);
+                c.ellipse(Rect::new(x, y, bw, bh), b.at(if i == 0 { Tone::Shade } else { Tone::Deep }), 1);
+            }
+            c.fill_rect(Rect::new(4 + (h % (fw as u32 / 2)) as i32, foot - fh / 2, 2, 1), b.at(Tone::Light), 1);
+            Stand::Flat(1)
+        }
+        "papers" => {
+            // Loose sheets dropped on the floor, written on, one screwed into a ball.
+            for i in 0..2 {
+                let hh = parts::hash(k.seed, i, 92);
+                let (x, y) = (1 + i * 6 + (hh % 2) as i32, foot - 11 + (hh >> 4) as i32 % 3);
+                let lean = if hh & 1 == 0 { 1 } else { -1 };
+                c.polyline_fill(&[(x, y + 1), (x + 6, y), (x + 7 + lean, y + 7), (x + 1 + lean, y + 8)], Ramp::ClothLinen.at(Tone::Light), 2);
+                for r in 0..3 {
+                    c.hline(x + 2, x + 5, y + 2 + 2 * r, Ramp::ClothLinen.at(Tone::Mid), 2);
+                }
+                c.dot(x + 6, y, Ramp::ClothLinen.at(Tone::High), 2);
+            }
+            c.disc_lit(12, foot - 3, 1, Ramp::ClothLinen, Z::flat(3));
+            Stand::Flat(3)
+        }
+        "books" => {
+            // Books fallen from a shelf: two lying open-flat and one on its spine.
+            let spines = [Ramp::ClothRed, Ramp::ClothGreen, Ramp::ClothNavy, Ramp::Leather];
+            for i in 0..3 {
+                let hh = parts::hash(k.seed, i, 93);
+                let r = spines[(hh % 4) as usize];
+                let (x, y) = (1 + i * 4 + (hh >> 4) as i32 % 2, foot - 5 - i * 2 - (hh >> 6) as i32 % 2);
+                c.fill_rect(Rect::new(x, y, 6, 3), r.at(Tone::Base), 2 + i as u8);
+                c.hline(x, x + 5, y, r.at(Tone::Light), 2 + i as u8);
+                c.vline(x + 5, y + 1, y + 2, Ramp::ClothLinen.at(Tone::Light), 2 + i as u8);
+            }
+            Stand::Flat(4)
+        }
+        "shards" => {
+            // Broken glass from a case: splinters catching the light.
+            for i in 0..5 {
+                let hh = parts::hash(k.seed, i, 94);
+                let (x, y) = (2 + (hh % 11) as i32, foot - 9 + ((hh >> 8) % 7) as i32);
+                c.polyline_fill(&[(x, y), (x + 2, y + 1), (x, y + 2)], Ramp::Glass.at(Tone::Light), 1);
+                c.dot(x, y, Ramp::Glass.at(Tone::High), 1);
+            }
+            Stand::Flat(1)
+        }
+        "leaves" => {
+            // Leaves blown in or silt left by the water: small ovals in two or three colours.
+            let r = [b, k.accent, k.trim];
+            let (fw, fh) = (w, k.fh * 16);
+            for i in 0..(6 * fw * fh / 256) {
+                let hh = parts::hash(k.seed, i, 95);
+                let (x, y) = (1 + (hh % (fw - 4) as u32) as i32, foot - fh + 5 + ((hh >> 8) % (fh - 6) as u32) as i32);
+                let ramp = r[(hh >> 16) as usize % 3];
+                c.fill_rect(Rect::new(x, y, 3, 2), ramp.at(Tone::Base), 1);
+                c.dot(x, y, ramp.at(Tone::Light), 1);
+            }
+            Stand::Flat(1)
+        }
+        "cogs" => {
+            // A dropped cog and bolts, in oil.
+            c.ellipse(Rect::new(3, foot - 7, 10, 4), Ramp::ClothBlack.at(Tone::Shade), 1);
+            let (gx, gy) = (7, foot - 8);
+            c.disc_lit(gx, gy, 3, b, Z::flat(2));
+            for (dx, dy) in [(0, -4), (4, 0), (0, 4), (-4, 0), (3, -3), (3, 3), (-3, 3), (-3, -3)] {
+                c.dot(gx + dx, gy + dy, b.at(Tone::Base), 2);
+            }
+            c.dot(gx, gy, b.at(Tone::Deep), 3);
+            for (x, y) in [(12, foot - 4), (13, foot - 9)] {
+                c.fill_rect(Rect::new(x, y, 2, 1), b.at(Tone::Light), 2);
+            }
+            Stand::Flat(3)
+        }
+        "rug" => {
+            // A rug on the floor, worn: a field in the body's colour, a border in the accent,
+            // a pattern down its middle, fringes at the ends, a corner turned up.
+            let r = Rect::new(1, foot - k.fh * 16 + 5, w - 2, k.fh * 16 - 7);
+            c.fill_normal(r, b.at(Tone::Base), FLAT, 1);
+            c.shade(Rect::new(r.x + r.w / 2, r.y, r.w / 2, r.h), b, 1);
+            for (x0, y0, x1, y1) in [(r.x + 1, r.y + 1, r.right() - 2, r.y + 1), (r.x + 1, r.bottom() - 2, r.right() - 2, r.bottom() - 2)] {
+                c.hline(x0, x1, y0.min(y1), k.accent.at(Tone::Base), 1);
+            }
+            c.vline(r.x + 1, r.y + 1, r.bottom() - 2, k.accent.at(Tone::Base), 1);
+            c.vline(r.right() - 2, r.y + 1, r.bottom() - 2, k.accent.at(Tone::Shade), 1);
+            let cy = r.y + r.h / 2;
+            for x in (r.x + 4..r.right() - 4).step_by(4) {
+                c.fill_rect(Rect::new(x, cy - 1, 2, 2), k.accent.at(Tone::Light), 1);
+            }
+            for x in (r.x..r.right()).step_by(2) {
+                c.dot(x, r.y - 1, k.accent.at(Tone::Light), 1);
+                c.dot(x, r.bottom(), k.accent.at(Tone::Light), 1);
+            }
+            c.polyline_fill(&[(r.right() - 5, r.bottom() - 1), (r.right() - 1, r.bottom() - 1), (r.right() - 1, r.bottom() - 5)], b.at(Tone::Light), 2);
+            Stand::Flat(2)
+        }
+        "bonepile" => {
+            // Bones gone down in a heap: long bones crossed, ribs, a skull on top.
+            let bone = Ramp::Bone;
+            let (fw, fh) = (w, k.fh * 16);
+            for i in 0..(4 * fw / 16) {
+                let hh = parts::hash(k.seed, i, 98);
+                let (x, y) = (2 + (hh % (fw - 10) as u32) as i32, foot - fh / 2 + ((hh >> 8) % (fh / 3) as u32) as i32);
+                let (dx, dy) = if hh & 0x100 == 0 { (6, 2) } else { (5, -2) };
+                c.line((x, y), (x + dx, y + dy), bone.at(Tone::Light), 2, 2);
+                c.dot(x, y, bone.at(Tone::High), 2);
+                c.dot(x + dx, y + dy, bone.at(Tone::Base), 2);
+            }
+            let (sx, sy) = (fw / 2 - 3, foot - fh / 2 - 2);
+            c.ellipse_lit(Rect::new(sx, sy, 6, 5), bone, Z::flat(4));
+            c.dot(sx + 1, sy + 2, Ix::SEAM, 4);
+            c.dot(sx + 3, sy + 2, Ix::SEAM, 4);
+            c.hline(sx + 1, sx + 4, sy + 4, bone.at(Tone::Shade), 4);
+            Stand::Flat(4)
+        }
+        "chains" => {
+            // Chains down the wall from an iron ring, a hook at the end of one.
+            let iron = Ramp::Iron;
+            for (x, len) in [(5, 18), (10, 13)] {
+                c.fill_rect(Rect::new(x - 1, 1, 3, 2), iron.at(Tone::Light), 4);
+                for y in (3..3 + len).step_by(2) {
+                    let t = if (y / 2) % 2 == 0 { Tone::Light } else { Tone::Shade };
+                    c.fill_rect(Rect::new(x, y, 1 + (y / 2) % 2, 2), iron.at(t), 4);
+                }
+            }
+            c.line((10, 16), (12, 18), iron.at(Tone::Light), 2, 4);
+            Stand::Up(&[])
+        }
+        "cobweb" => {
+            // A web in the wall's corner over this cell: threads out from the corner, three
+            // arcs across them, a strand hanging.
+            let right = k.seed & 1 == 1;
+            let (ox, oy) = (if right { w - 1 } else { 0 }, 1);
+            let d = if right { -1 } else { 1 };
+            let silk = Ramp::HairWhite;
+            let ends = [(ox + d * 13, oy), (ox + d * 11, oy + 7), (ox + d * 6, oy + 12), (ox, oy + 14)];
+            for &e in &ends {
+                crate::creature::stair(c, (ox, oy), e, silk.at(Tone::Base), 4);
+            }
+            for r in [4, 8, 11] {
+                let pts: Vec<(i32, i32)> = ends.iter().map(|&(ex, ey)| (ox + (ex - ox) * r / 13, oy + (ey - oy) * r / 13)).collect();
+                for p in pts.windows(2) {
+                    crate::creature::stair(c, p[0], p[1], silk.at(Tone::Light), 4);
+                }
+            }
+            crate::creature::stair(c, ends[1], (ends[1].0, ends[1].1 + 8), silk.at(Tone::Mid), 4);
+            Stand::Up(&[])
+        }
+        "poster" => {
+            // A notice pinned on the wall over this cell: a sheet, curled at a corner, written
+            // on, a brass pin at the top.
+            let (x, y) = (3, 2);
+            let r = Rect::new(x, y, 10, 12);
+            c.fill_normal(r, b.at(Tone::Light), parts::south(), 3);
+            c.hline(r.x, r.right() - 1, r.y, b.at(Tone::High), 3);
+            writing(c, Rect::new(r.x + 2, r.y + 3, r.w - 4, r.h - 5), 4, k.accent.at(Tone::Deep), k.seed, 4);
+            c.fill_rect(Rect::new(r.right() - 3, r.bottom() - 3, 3, 3), b.at(Tone::Shade), 4);
+            c.dot(r.x + r.w / 2, r.y + 1, Ramp::Brass.at(Tone::Light), 5);
+            Stand::Up(&[])
+        }
+        "frame" => {
+            // A small portrait hung on the wall over this cell: a gilt frame, a dark ground,
+            // a pale face looking out.
+            let r = Rect::new(3, 1, 10, 13);
+            c.rect_bevel(r, Ramp::Brass, 1, Z::new(3, 4));
+            let inner = Rect::new(r.x + 2, r.y + 2, r.w - 4, r.h - 4);
+            c.fill_normal(inner, b.at(Tone::Shade), parts::south(), 4);
+            c.ellipse(Rect::new(inner.x + 2, inner.y + 1, 3, 4), Ramp::Skin.at(Tone::Mid), 5);
+            c.fill_rect(Rect::new(inner.x + 1, inner.bottom() - 3, 5, 3), Ramp::ClothBlack.at(Tone::Base), 5);
+            Stand::Up(&[])
+        }
+        "moss" => {
+            // Damp down the wall over this cell: a dark wet run, green along it, a green clump
+            // where it meets the floor.
+            for (x, t) in [(6, Tone::Deep), (7, Tone::Shade), (8, Tone::Deep)] {
+                c.vline(x, 2, 15, b.at(t), 3);
+            }
+            for i in 0..5 {
+                let hh = parts::hash(k.seed, i, 97);
+                let y = 3 + (hh % 11) as i32;
+                c.fill_rect(Rect::new(5 + (hh >> 8) as i32 % 3, y, 2, 2), k.accent.at(if i % 2 == 0 { Tone::Base } else { Tone::Light }), 4);
+            }
+            c.ellipse(Rect::new(3, foot - 5, 9, 4), k.accent.at(Tone::Base), 3);
+            c.hline(4, 10, foot - 5, k.accent.at(Tone::Light), 3);
+            Stand::Up(&[])
+        }
+        "tools" => {
+            // A pick and a shovel leant against the wall: their hafts up the face, the heads
+            // on the floor and at the top.
+            ao(c, 3, 12, foot, 3);
+            c.line((4, foot - 1), (7, 3), k.trim.at(Tone::Base), 2, 4);
+            c.line((7, 3), (4, 2), b.at(Tone::Light), 2, 5);
+            c.line((7, 3), (11, 5), b.at(Tone::Base), 2, 5);
+            c.line((11, foot - 3), (10, 6), k.trim.at(Tone::Light), 1, 4);
+            c.line((12, foot - 3), (11, 6), k.trim.at(Tone::Base), 1, 4);
+            c.fill_rect(Rect::new(9, foot - 5, 5, 4), b.at(Tone::Base), 5);
+            c.hline(9, 13, foot - 5, b.at(Tone::Light), 5);
+            Stand::Up(&[])
+        }
         "bedroll" => {
             // A bedroll: a blanket rolled, tied twice, lying on the ground.
             c.ao_contact(Rect::new(3, foot - 8, w - 6, 8), 1);
