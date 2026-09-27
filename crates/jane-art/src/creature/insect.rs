@@ -254,7 +254,7 @@ fn body_turned(c: &mut Canvas, k: &Coat, cx: i32, cy: i32, u: i32, head_down: bo
     let fat = i32::from(moth);
     // The body's line: toward the head, one px across for every px down (up).
     let dir = (1, if head_down { 1 } else { -1 });
-    let at = |d: i32| (cx + dir.0 * d * 7 / 10, cy + dir.1 * d * 6 / 10);
+    let at = |d: i32| (cx + dir.0 * d * 4 / 10, cy + dir.1 * d * 9 / 10);
     let mut m = Canvas::new(c.w(), c.h());
     let th = at(0);
     let tw = sc(2) + 1 + 2 * fat;
@@ -339,15 +339,17 @@ pub(crate) fn draw(c: &mut Canvas, k: &Coat, facing: Facing, beat: Beat) {
             let cy = ay - hover - sc(REACH_DOWN) - rise;
             let head_down = matches!(facing, Facing::Down | Facing::DownRight);
             let turned = matches!(facing, Facing::DownRight | Facing::UpRight);
-            // Turned, the whole of it swings an eighth on the ground: the body's line from
-            // straight down (up) the screen to down (up) and to the right, the wings with it.
+            // Turned, the whole of it swings on the ground toward the right, a quarter of a
+            // right angle and a little more (an eighth read as a tumble of edges): the body's
+            // line from straight down (up) the screen to down (up) and to the right, the wings
+            // with it.
             let tq = |x: i32, y: i32| -> (i32, i32) {
                 if !turned {
                     (x, y)
                 } else if head_down {
-                    ((x + y) * 7 / 10, (y - x) * 6 / 10)
+                    ((x * 9 + y * 4) / 10, (y * 9 - x * 4) / 10)
                 } else {
-                    ((x - y) * 7 / 10, (x + y) * 6 / 10)
+                    ((x * 9 - y * 4) / 10, (y * 9 + x * 4) / 10)
                 }
             };
             for side in [-1, 1] {
