@@ -47,8 +47,13 @@ use crate::{Args, shot};
 
 /// A tick is `1/60` s; the accumulator counts nanoseconds times 60, so a tick is exactly 1e9.
 const TICK: u64 = 1_000_000_000;
-/// At most this many ticks a frame (at 1x); beyond it the time is dropped (and counted).
-const MAX_CATCH_UP: u64 = 5;
+/// The most the clock may fall behind (at 1x), in ticks: a second. Beyond it the time is
+/// dropped (and counted). A slow frame (a present that blocks, an occluded window, a GPU asleep)
+/// never drops a tick: the ticks it owes run on the next frame, which is drawn once.
+const MAX_BEHIND: u64 = 60;
+/// Tick work one frame does at most before it draws: a sim slower than real time still shows,
+/// and what it owes waits for the next frame (then for the second's cap).
+const TICK_BUDGET: Duration = Duration::from_millis(50);
 /// A guest this many frames behind the host steps more than one a tick to catch up.
 const BEHIND: u32 = 2;
 /// The clear behind the title and the loading screen.
@@ -153,6 +158,8 @@ struct App<'a> {
     /// Where the reticle is drawn this frame.
     reticle: Option<(i32, i32)>,
     controls: ControlsState,
+    /// The Controls screen turned a `Features` row: the backend is told before the next draw.
+    features_changed: bool,
     /// Playing together: the Host and Join screens, a join under way, the table.
     lan: Lan,
     /// What the bot heard of the steps since it last acted.
@@ -184,6 +191,10 @@ pub fn run(
     let config = Config::load(&dirs);
     let mut present = Present::new(screen.backend().caps().tier);
     screen.backend().upload_atlas(present.atlas());
+    // The Features rows (PRESENTATION.md §1.3): the tier's own with config.json's laid over
+    // them; the presenter acts on most, the backend is handed the ones it draws itself.
+    present.set_features(config.features(present.frame().tier));
+    screen.backend().set_features(&present.features());
     let ui = Ui::new(present.ui_art().clone());
     let describe = screen.describe();
     let mut win = screen.size();
@@ -232,6 +243,7 @@ pub fn run(
         console: Console::default(),
         reticle: None,
         controls: ControlsState::default(),
+        features_changed: false,
         lan: Lan::new(args.port),
         bot_heard: Vec::new(),
         sound,
@@ -268,6 +280,8 @@ pub fn run(
     let mut pad_was = (0u32, false, false);
     let mut title_clock = (Instant::now(), 0u32, Duration::ZERO, Duration::ZERO, 0u32);
     let mut typing = false;
+    // The tick the backend last drew at (the `frame_skip` row).
+    let mut drawn_at: u64 = 0;
     // Script presses to let go of next frame.
     let mut release: Vec<u16> = Vec::new();
 
@@ -411,7 +425,7 @@ pub fn run(
         let now = Instant::now();
         acc += (now - last).as_nanos() as u64 * 60 * u64::from(app.speed.quarters) / 4;
         last = now;
-        let cap = MAX_CATCH_UP * u64::from(app.speed.quarters.max(4)) / 4;
+        let cap = MAX_BEHIND * u64::from(app.speed.quarters.max(4)) / 4;
         let mut due = acc / TICK;
         if due > cap {
             app.dropped += due - cap;
@@ -428,10 +442,19 @@ pub fn run(
             acc -= TICK;
             app.ticks += 1;
             title_clock.4 += 1;
+            if t_ticks.elapsed() >= TICK_BUDGET || args.ticks.is_some_and(|n| app.ticks >= n) {
+                break;
+            }
         }
         app.net();
         app.table_news();
         let tick_time = t_ticks.elapsed();
+        // A window nobody can see (minimised, hidden) is not drawn: the clock ticks on, and no
+        // present can hold the loop (PRESENTATION.md §1.11).
+        if !screen.visible() && args.ticks.is_none() {
+            std::thread::sleep(Duration::from_millis(4));
+            continue;
+        }
 
         // One frame at alpha: the world, then the UI over it.
         let t_draw = Instant::now();
@@ -449,12 +472,24 @@ pub fn run(
         typing = app.ui.typing;
         app.ui.finish(app.present.frame_mut());
         app.stages[2] = t_draw.elapsed().as_micros() as u32;
+        if app.features_changed {
+            screen.backend().set_features(&app.present.features());
+            app.features_changed = false;
+        }
+        // The `frame_skip` row (§1.12 step 8): the backend draws and shows every other tick, 30
+        // fps; the sim, the presenter and the UI still run every frame, so no press is lost.
+        let skip = app.present.features().frame_skip && app.ticks < drawn_at + 2 && args.ticks.is_none();
         let t_backend = Instant::now();
-        screen.backend().draw(app.present.frame());
+        if !skip {
+            screen.backend().draw(app.present.frame());
+            drawn_at = app.ticks;
+        }
         app.stages[3] = t_backend.elapsed().as_micros() as u32;
         let draw_time = t_draw.elapsed();
         let t_wait = Instant::now();
-        screen.show(win)?;
+        if !skip {
+            screen.show(win)?;
+        }
         app.stages[4] = t_wait.elapsed().as_micros() as u32;
         app.perf.frame(app.stages, app.started.elapsed().as_millis() as u64, app.ticks);
         for out in std::mem::take(&mut app.ui.out) {
@@ -482,7 +517,14 @@ pub fn run(
         if args.ticks.is_some_and(|n| app.ticks >= n) {
             break;
         }
-        if due == 0 && frame_start.elapsed() < Duration::from_millis(2) {
+        // A present that does not wait for the display (mailbox) is paced to its refresh here,
+        // so the GPU draws the frames that are shown and no more.
+        if let Some(every) = screen.frame_interval() {
+            let left = every.saturating_sub(frame_start.elapsed()).saturating_sub(Duration::from_micros(500));
+            if !left.is_zero() {
+                std::thread::sleep(left);
+            }
+        } else if due == 0 && frame_start.elapsed() < Duration::from_millis(2) {
             std::thread::sleep(Duration::from_millis(1));
         }
     }
@@ -1224,9 +1266,22 @@ impl App<'_> {
                 }
                 Menu::Controls => {
                     let backend = self.config.backend.clone().unwrap_or_else(|| "auto".into());
-                    let info = ControlsInfo { assist: self.input.assist, backend: &backend, volumes: self.config.volumes() };
+                    let info = ControlsInfo {
+                        assist: self.input.assist,
+                        backend: &backend,
+                        volumes: self.config.volumes(),
+                        rows: self.present.features(),
+                        tier: self.present.frame().tier,
+                    };
                     let out = controls::draw(&mut self.ui, &mut self.controls, &mut self.input.bindings, info);
                     let mut save = out.bindings;
+                    // A row turned: the presenter at once, the backend before the next draw.
+                    if let Some((rows, key)) = out.rows {
+                        self.present.set_features(rows);
+                        self.config.set_feature(self.present.frame().tier, &self.present.features(), key);
+                        self.features_changed = true;
+                        save = true;
+                    }
                     if out.bindings {
                         self.config.set_bindings(&self.input.bindings);
                     }
@@ -1369,13 +1424,7 @@ impl App<'_> {
         let f = self.present.frame();
         let mut passes = [None; 8];
         for (i, p) in f.passes.iter().take(8).enumerate() {
-            passes[i] = Some(match p {
-                jane_present::Pass::Terrain { .. } => "terrain",
-                jane_present::Pass::Sprites { .. } => "sprites",
-                jane_present::Pass::Silhouettes { .. } => "silhouettes",
-                jane_present::Pass::Lights { .. } => "lights",
-                jane_present::Pass::Post(_) => "post",
-            });
+            passes[i] = Some(p.name());
         }
         let frame = FrameInfo {
             sprites: f.sprites.len() as u32,

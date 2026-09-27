@@ -1,6 +1,7 @@
 //! `container` (ART.md §2.3): what holds things. `open` is the lid up (a chest looted, a crate
 //! prised). Shapes: `chest`, `trunk`, `crate`, `barrel`, `sack`, `jar`, `churn`, `coffin`,
-//! `tin`, `bowl`, `bottles`, `parcel`, `mug`.
+//! `tin`, `bowl`, `bottles`, `parcel`, `mug`; and the dungeons' own (§8 step 7): `urns` (the
+//! Burial), `drums` (the Factory), `ore_tub` (the mine).
 
 use jane_core::grid::Rect;
 
@@ -23,7 +24,12 @@ pub(crate) fn draw(c: &mut Canvas, k: &Kit, state: State) -> Option<Stand> {
             let bands = [x + 3, x + bw - 5];
             if open {
                 // The inside, dark, and the lid standing up behind it, its underside in shade.
-                c.fill_normal(Rect::new(top.x + 1, top.y + 1, top.w - 2, top.h - 1), k.body.at(Tone::Deep), crate::canvas::FLAT, 4);
+                c.fill_normal(
+                    Rect::new(top.x + 1, top.y + 1, top.w - 2, top.h - 1),
+                    k.body.at(Tone::Deep),
+                    crate::canvas::FLAT,
+                    4,
+                );
                 let lid = Rect::new(x, top.y - 9, bw, 9);
                 planks(c, lid, k.body, 3, true, false, k.seed ^ 3, 2);
                 c.hline(lid.x, lid.right() - 1, lid.bottom() - 1, k.body.at(Tone::Shade), 2);
@@ -54,7 +60,13 @@ pub(crate) fn draw(c: &mut Canvas, k: &Kit, state: State) -> Option<Stand> {
                     // Round the vault's back corners.
                     let cut = if y == ly { 2 } else { i32::from(y == ly + 1) };
                     for xx in lx + cut..lx + lw - cut {
-                        let end = if xx < lx + 2 { 1 } else if xx >= lx + lw - 2 { -2 } else { 0 };
+                        let end = if xx < lx + 2 {
+                            1
+                        } else if xx >= lx + lw - 2 {
+                            -2
+                        } else {
+                            0
+                        };
                         c.put(xx, y, k.body.at(tone.step(end)), crate::canvas::normal(end * -40, ny), 6);
                     }
                 }
@@ -66,7 +78,13 @@ pub(crate) fn draw(c: &mut Canvas, k: &Kit, state: State) -> Option<Stand> {
                 for bx in bands {
                     for y in ly + 1..lip {
                         let t = (y - ly) * 100 / lh.max(1);
-                        let tone = if (15..40).contains(&t) { Tone::High } else if t < 55 { Tone::Light } else { Tone::Base };
+                        let tone = if (15..40).contains(&t) {
+                            Tone::High
+                        } else if t < 55 {
+                            Tone::Light
+                        } else {
+                            Tone::Base
+                        };
                         c.put(bx, y, k.trim.at(tone), crate::canvas::normal(0, 0), 7);
                         c.put(bx + 1, y, k.trim.at(tone.step(-1)), crate::canvas::normal(0, 0), 7);
                     }
@@ -92,11 +110,23 @@ pub(crate) fn draw(c: &mut Canvas, k: &Kit, state: State) -> Option<Stand> {
             let (x, dw) = (3, w - 6);
             ao(c, x, x + dw - 1, foot, 5);
             let (top, front) = box3(c, x, dw, foot, 8, 12, k.body, Some((2, k.seed)), 3);
-            c.fill_normal(Rect::new(top.x + 2, top.y + 2, top.w - 4, top.h - 3), k.body.at(Tone::Deep), crate::canvas::FLAT, 4);
+            c.fill_normal(
+                Rect::new(top.x + 2, top.y + 2, top.w - 4, top.h - 3),
+                k.body.at(Tone::Deep),
+                crate::canvas::FLAT,
+                4,
+            );
             for (i, px) in [(0, top.x + 4), (1, top.x + 10)] {
                 let r = Rect::new(px, top.y + 3 + i, 8, 6);
                 c.fill_normal(r, Ramp::ClothLinen.at(Tone::Light), crate::canvas::FLAT, 5);
-                parts::writing(c, Rect::new(r.x + 1, r.y + 1, r.w - 2, r.h - 2), 2, Ramp::Slate.at(Tone::Mid), k.seed ^ i as u32, 5);
+                parts::writing(
+                    c,
+                    Rect::new(r.x + 1, r.y + 1, r.w - 2, r.h - 2),
+                    2,
+                    Ramp::Slate.at(Tone::Mid),
+                    k.seed ^ i as u32,
+                    5,
+                );
             }
             c.fill_rect(Rect::new(front.x + dw / 2 - 2, front.y + 3, 4, 2), k.accent.at(Tone::Light), 5);
             Stand::Tops([(top, lid_height(8)), (Rect::default(), 0)])
@@ -108,7 +138,12 @@ pub(crate) fn draw(c: &mut Canvas, k: &Kit, state: State) -> Option<Stand> {
             ao(c, x, x + bw - 1, foot, 5);
             let (top, front) = box3(c, x, bw, foot, face, depth, k.body, Some((4, k.seed)), 3);
             if open {
-                c.fill_normal(Rect::new(top.x + 2, top.y + 2, top.w - 4, top.h - 3), k.body.at(Tone::Deep), crate::canvas::FLAT, 5);
+                c.fill_normal(
+                    Rect::new(top.x + 2, top.y + 2, top.w - 4, top.h - 3),
+                    k.body.at(Tone::Deep),
+                    crate::canvas::FLAT,
+                    5,
+                );
                 c.hline(top.x + 2, top.right() - 3, top.y + 2, Ramp::Reed.at(Tone::Light), 5);
             }
             batten(c, k, top, true);
@@ -122,7 +157,19 @@ pub(crate) fn draw(c: &mut Canvas, k: &Kit, state: State) -> Option<Stand> {
             let x = (w - bw) / 2;
             let (h, top_y) = (18, foot - 18);
             ao(c, x, x + bw - 1, foot, 5);
-            c.polygon_lit(&[(x + 1, top_y + 3), (x + bw - 2, top_y + 3), (x + bw - 1, top_y + h / 2), (x + bw - 2, foot), (x + 1, foot), (x, top_y + h / 2)], k.body, 110, Z::new(2, 4));
+            c.polygon_lit(
+                &[
+                    (x + 1, top_y + 3),
+                    (x + bw - 2, top_y + 3),
+                    (x + bw - 1, top_y + h / 2),
+                    (x + bw - 2, foot),
+                    (x + 1, foot),
+                    (x, top_y + h / 2),
+                ],
+                k.body,
+                110,
+                Z::new(2, 4),
+            );
             c.retone(k.body, super::HARD);
             for sx in (x + 3..x + bw - 2).step_by(4) {
                 c.vline(sx, top_y + 4, foot - 1, k.body.at(Tone::Shade), 4);
@@ -182,13 +229,99 @@ pub(crate) fn draw(c: &mut Canvas, k: &Kit, state: State) -> Option<Stand> {
             // A milk churn: a tin body, a shoulder, a neck, a lid with its handle.
             let (x, bw) = (w / 2 - 5, 10);
             ao(c, x, x + bw - 1, foot, 4);
-            c.polygon_lit(&[(x, foot - 13), (x + bw - 1, foot - 13), (x + bw - 1, foot), (x, foot)], k.body, 100, Z::new(2, 4));
-            c.polygon_lit(&[(x + 1, foot - 16), (x + bw - 2, foot - 16), (x + bw - 1, foot - 13), (x, foot - 13)], k.body, 100, Z::flat(5));
-            c.polygon_lit(&[(x + 3, foot - 20), (x + bw - 4, foot - 20), (x + bw - 4, foot - 16), (x + 3, foot - 16)], k.body, 100, Z::flat(6));
+            c.polygon_lit(
+                &[(x, foot - 13), (x + bw - 1, foot - 13), (x + bw - 1, foot), (x, foot)],
+                k.body,
+                100,
+                Z::new(2, 4),
+            );
+            c.polygon_lit(
+                &[(x + 1, foot - 16), (x + bw - 2, foot - 16), (x + bw - 1, foot - 13), (x, foot - 13)],
+                k.body,
+                100,
+                Z::flat(5),
+            );
+            c.polygon_lit(
+                &[(x + 3, foot - 20), (x + bw - 4, foot - 20), (x + bw - 4, foot - 16), (x + 3, foot - 16)],
+                k.body,
+                100,
+                Z::flat(6),
+            );
             c.retone(k.body, super::HARD);
             band(c, x, x + bw - 1, foot - 10, k.body, 5);
             c.hline(x + 2, x + bw - 3, foot - 21, k.body.at(Tone::Light), 7);
             Stand::Up(&[])
+        }
+        "urns" => {
+            // Funerary urns on the floor, three sizes, lidded, and a skull fallen between them.
+            ao(c, 1, w - 2, foot, 5);
+            for (i, (x, bw, bh)) in [(2, 10, 14), (w - 12, 9, 11), (w / 2 - 4, 8, 17)].into_iter().enumerate() {
+                let y = foot - bh;
+                let mut m = Canvas::new(c.w(), c.h());
+                m.ellipse(Rect::new(x, y + 3, bw, bh - 3), Ix::INK, 1);
+                m.fill_rect(Rect::new(x + bw / 2 - 2, y, 4, 4), Ix::INK, 1);
+                c.inflate(&m, k.body, bw / 3, Z::new(2 + i as u8, 5 + i as u8));
+                c.retone(k.body, super::HARD);
+                c.fill_normal(
+                    Rect::new(x + bw / 2 - 3, y - 1, 6, 2),
+                    k.body.at(Tone::Light),
+                    crate::canvas::FLAT,
+                    6 + i as u8,
+                );
+                c.hline(x + 1, x + bw - 2, y + bh / 2 + 1, k.body.at(Tone::Shade), 6 + i as u8);
+            }
+            let s = (w / 2 + 3, foot - 4);
+            c.fill_rect(Rect::new(s.0, s.1, 4, 3), k.accent.at(Tone::Light), 8);
+            c.dot(s.0 + 1, s.1 + 1, Ix::SEAM, 8);
+            c.dot(s.0 + 3, s.1 + 1, Ix::SEAM, 8);
+            c.hline(s.0, s.0 + 3, s.1 + 3, k.accent.at(Tone::Shade), 8);
+            Stand::Up(&[])
+        }
+        "drums" => {
+            // Oil drums, two standing in the works' paint with their ribs and bungs, and the
+            // oil that has run from them.
+            c.ellipse(Rect::new(3, foot - 3, w - 6, 4), Ramp::Void.at(Tone::Deep), 1);
+            c.dot(8, foot - 2, Ramp::Sky.at(Tone::Shade), 1);
+            for (i, x) in [2, w / 2].into_iter().enumerate() {
+                let (dw, dh) = (w / 2 - 3, 18 - 2 * i as i32);
+                let y = foot - dh - i as i32;
+                ao(c, x, x + dw - 1, foot - i as i32, 4);
+                c.polygon_lit(
+                    &[(x, y + 2), (x + dw - 1, y + 2), (x + dw - 1, foot - i as i32), (x, foot - i as i32)],
+                    k.body,
+                    100,
+                    Z::new(2, 4),
+                );
+                c.retone(k.body, super::HARD);
+                for yy in [y + 6, y + 11] {
+                    c.hline(x, x + dw - 1, yy, k.body.at(Tone::Light), 5);
+                    c.hline(x, x + dw - 1, yy + 1, k.body.at(Tone::Shade), 5);
+                }
+                let head = Rect::new(x, y, dw, 4);
+                c.ellipse(head, k.trim.at(Tone::Light), 6);
+                c.ellipse(Rect::new(head.x + 1, head.y + 1, head.w - 2, 2), k.trim.at(Tone::Base), 6);
+                c.dot(x + dw - 4, y + 1, k.trim.at(Tone::Deep), 7);
+                c.vline(x + 3, y + 8, y + 10, k.trim.at(Tone::Shade), 5);
+            }
+            Stand::Up(&[])
+        }
+        "ore_tub" => {
+            // A tub of ore: an iron-bound box heaped with broken rock, gold in it.
+            let (x, tw) = (3, w - 6);
+            ao(c, x, x + tw - 1, foot, 5);
+            let (top, front) = box3(c, x, tw, foot, 10, 8, k.body, Some((3, k.seed)), 3);
+            for y in [front.y + 2, front.bottom() - 3] {
+                band(c, front.x, front.right() - 1, y, k.trim, 5);
+            }
+            for i in 0..7 {
+                let hsh = parts::hash(k.seed, i, 7);
+                let (rx, ry) = (top.x + 3 + (hsh % (top.w as u32 - 6)) as i32, top.y + 1 + (hsh >> 8) as i32 % 5);
+                c.disc_lit(rx, ry, 2, Ramp::Rock, Z::flat(6 + (i % 2) as u8));
+                if hsh % 3 == 0 {
+                    c.dot(rx - 1, ry - 1, k.accent.at(Tone::High), 8);
+                }
+            }
+            Stand::Tops([(top, lid_height(10)), (Rect::default(), 0)])
         }
         "coffin" => {
             // A coffin lid seen from above: the six-sided board, its planks lengthways, brass
@@ -244,10 +377,17 @@ pub(crate) fn draw(c: &mut Canvas, k: &Kit, state: State) -> Option<Stand> {
             // A wooden bowl heaped with apples.
             let (x, bw) = (w / 2 - 9, 18);
             ao(c, x, x + bw - 1, foot, 4);
-            c.polygon_lit(&[(x, foot - 7), (x + bw - 1, foot - 7), (x + bw - 4, foot - 1), (x + 3, foot - 1)], k.body, 100, Z::new(2, 4));
+            c.polygon_lit(
+                &[(x, foot - 7), (x + bw - 1, foot - 7), (x + bw - 4, foot - 1), (x + 3, foot - 1)],
+                k.body,
+                100,
+                Z::new(2, 4),
+            );
             c.retone(k.body, super::HARD);
             c.hline(x, x + bw - 1, foot - 7, k.body.at(Tone::Light), 5);
-            for (i, (ax, ay)) in [(x + 3, foot - 11), (x + 8, foot - 12), (x + 12, foot - 10), (x + 6, foot - 9)].into_iter().enumerate() {
+            for (i, (ax, ay)) in
+                [(x + 3, foot - 11), (x + 8, foot - 12), (x + 12, foot - 10), (x + 6, foot - 9)].into_iter().enumerate()
+            {
                 let ramp = if i % 3 == 1 { Ramp::Leaf } else { k.accent };
                 c.disc_lit(ax + 1, ay + 1, 2, ramp, Z::flat(6));
             }
@@ -266,7 +406,12 @@ pub(crate) fn draw(c: &mut Canvas, k: &Kit, state: State) -> Option<Stand> {
 fn batten(c: &mut Canvas, k: &Kit, r: Rect, top: bool) {
     let z = if top { 6 } else { 5 };
     let (lit, dark) = (k.trim.at(Tone::Light), k.trim.at(Tone::Shade));
-    c.fill_normal(Rect::new(r.x, r.y, r.w, 2), k.trim.at(Tone::Base), if top { crate::canvas::FLAT } else { parts::south() }, z);
+    c.fill_normal(
+        Rect::new(r.x, r.y, r.w, 2),
+        k.trim.at(Tone::Base),
+        if top { crate::canvas::FLAT } else { parts::south() },
+        z,
+    );
     c.hline(r.x, r.right() - 1, r.y, lit, z);
     c.fill_rect(Rect::new(r.x, r.bottom() - 2, r.w, 2), k.trim.at(Tone::Mid), z);
     c.fill_rect(Rect::new(r.x, r.y, 2, r.h), k.trim.at(Tone::Base), z);
@@ -282,14 +427,24 @@ fn small(c: &mut Canvas, k: &Kit) {
     c.ao_contact(Rect::new(cx - 5, foot - 3, 10, 4), 1);
     match k.look.shape {
         "mug" => {
-            c.polygon_lit(&[(cx - 3, foot - 7), (cx + 2, foot - 7), (cx + 2, foot - 1), (cx - 3, foot - 1)], k.body, 90, Z::new(2, 3));
+            c.polygon_lit(
+                &[(cx - 3, foot - 7), (cx + 2, foot - 7), (cx + 2, foot - 1), (cx - 3, foot - 1)],
+                k.body,
+                90,
+                Z::new(2, 3),
+            );
             c.hline(cx - 3, cx + 2, foot - 7, k.body.at(Tone::Light), 4);
             c.line((cx + 3, foot - 6), (cx + 4, foot - 3), k.body.at(Tone::Base), 1, 3);
         }
         "bottles" => {
             for (i, x) in [cx - 4, cx, cx + 3].into_iter().enumerate() {
                 let t = foot - 9 + (i as i32 % 2);
-                c.polygon_lit(&[(x - 1, t), (x + 1, t), (x + 1, foot - 1), (x - 1, foot - 1)], k.body, 100, Z::new(2, 4));
+                c.polygon_lit(
+                    &[(x - 1, t), (x + 1, t), (x + 1, foot - 1), (x - 1, foot - 1)],
+                    k.body,
+                    100,
+                    Z::new(2, 4),
+                );
                 c.fill_rect(Rect::new(x - 1, t - 2, 2, 2), k.accent.at(Tone::Light), 5);
             }
         }

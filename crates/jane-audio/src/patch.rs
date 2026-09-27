@@ -109,7 +109,8 @@ fn note(l: &Layer, sr: f32, k: f32, rng: &mut Rng, out: &mut [f32]) {
     let mut mphase = 0.0f32;
     let mut pink = Pink::default();
     let mut filt = l.filter.map(|f| (Svf::new(f.cutoff[0], f.q, sr), f));
-    let mut pluck = (l.wave == Wave::Pluck).then(|| Pluck::new(p0, sr, l.duty.clamp(0.0, 1.0), l.decay_ms * 0.001, 0.15, rng));
+    let mut pluck =
+        (l.wave == Wave::Pluck).then(|| Pluck::new(p0, sr, l.duty.clamp(0.0, 1.0), l.decay_ms * 0.001, 0.15, rng));
     let mut bell = (l.wave == Wave::Bell).then(|| Modal::new(p0, &TOWER_BELL, 0.8, sr, l.decay_ms / 6000.0));
     let mut decay = 1.0f32;
     let vib = l.vibrato;

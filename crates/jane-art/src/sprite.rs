@@ -56,6 +56,22 @@ pub enum FrameId {
     Idle,
     /// The idle pose's other beat: a head tilted, a tail swept, a nose to the ground.
     Idle2,
+    /// A person's attack, cast and hurt facing the viewer and away (ART.md §4); `Atk1 .. Atk3`,
+    /// `Cast1 .. Cast3` and `Hurt` are the side's (east; west mirrors).
+    AtkDown1,
+    AtkDown2,
+    AtkDown3,
+    AtkUp1,
+    AtkUp2,
+    AtkUp3,
+    CastDown1,
+    CastDown2,
+    CastDown3,
+    CastUp1,
+    CastUp2,
+    CastUp3,
+    HurtDown,
+    HurtUp,
 }
 
 impl FrameId {
@@ -99,11 +115,25 @@ impl FrameId {
             FrameId::Open => "open",
             FrameId::Idle => "idle",
             FrameId::Idle2 => "idle_2",
+            FrameId::AtkDown1 => "atk_down_1",
+            FrameId::AtkDown2 => "atk_down_2",
+            FrameId::AtkDown3 => "atk_down_3",
+            FrameId::AtkUp1 => "atk_up_1",
+            FrameId::AtkUp2 => "atk_up_2",
+            FrameId::AtkUp3 => "atk_up_3",
+            FrameId::CastDown1 => "cast_down_1",
+            FrameId::CastDown2 => "cast_down_2",
+            FrameId::CastDown3 => "cast_down_3",
+            FrameId::CastUp1 => "cast_up_1",
+            FrameId::CastUp2 => "cast_up_2",
+            FrameId::CastUp3 => "cast_up_3",
+            FrameId::HurtDown => "hurt_down",
+            FrameId::HurtUp => "hurt_up",
         }
     }
 
     /// Every frame, in order.
-    pub const ALL: [FrameId; 37] = {
+    pub const ALL: [FrameId; 51] = {
         use FrameId as F;
         [
             F::Down,
@@ -143,6 +173,20 @@ impl FrameId {
             F::Open,
             F::Idle,
             F::Idle2,
+            F::AtkDown1,
+            F::AtkDown2,
+            F::AtkDown3,
+            F::AtkUp1,
+            F::AtkUp2,
+            F::AtkUp3,
+            F::CastDown1,
+            F::CastDown2,
+            F::CastDown3,
+            F::CastUp1,
+            F::CastUp2,
+            F::CastUp3,
+            F::HurtDown,
+            F::HurtUp,
         ]
     };
 

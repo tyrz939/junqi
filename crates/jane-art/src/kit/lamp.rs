@@ -69,7 +69,17 @@ pub(crate) fn draw(c: &mut Canvas, k: &Kit, state: State) -> Option<Stand> {
                     c.line((x0, bowl_y + 4), (x1, foot - 1), k.trim.at(Tone::Shade), 1, 3);
                 }
             }
-            c.polygon_lit(&[(cx - bw / 2, bowl_y), (cx + bw / 2 - 1, bowl_y), (cx + bw / 2 - 3, bowl_y + 4), (cx - bw / 2 + 2, bowl_y + 4)], k.trim, 90, Z::flat(5));
+            c.polygon_lit(
+                &[
+                    (cx - bw / 2, bowl_y),
+                    (cx + bw / 2 - 1, bowl_y),
+                    (cx + bw / 2 - 3, bowl_y + 4),
+                    (cx - bw / 2 + 2, bowl_y + 4),
+                ],
+                k.trim,
+                90,
+                Z::flat(5),
+            );
             c.hline(cx - bw / 2, cx + bw / 2 - 1, bowl_y, k.trim.at(Tone::Light), 5);
             if lit {
                 embers(c, cx - bw / 2 + 2, bowl_y, bw - 4);
@@ -120,29 +130,40 @@ pub(crate) fn draw(c: &mut Canvas, k: &Kit, state: State) -> Option<Stand> {
             // accent (warm sun or cold moon). By day off-light it is only the floor's dust.
             let r = Rect::new(2, foot - (k.fh * 16) + 3, w - 4, k.fh * 16 - 5);
             if lit {
-                // The pool thins toward its edge by an ordered dither (a soft edge, not a
-                // texture): the floor shows through where the light is faint.
+                // The pool in three bands (a hot core, the light, its rim), the rim broken into
+                // two-px clusters toward its edge so it thins without a checker; the floor round
+                // it is lit by the light pass, not painted. Motes stand in the shaft over it.
                 c.set_emitting(true);
                 let (cx2, cy2) = (2 * r.x + r.w, 2 * r.y + r.h);
                 for y in r.y..r.bottom() {
                     for x in r.x..r.right() {
                         let (dx, dy) = ((2 * x + 1 - cx2) * 16 / r.w, (2 * y + 1 - cy2) * 16 / r.h);
                         let d = dx * dx + dy * dy;
-                        if d > 256 {
-                            continue;
-                        }
-                        let density = 16 - d / 16;
-                        if density > i32::from(crate::canvas::bayer(x, y)) {
-                            let t = if d < 64 { Tone::High } else if d < 150 { Tone::Light } else { Tone::Base };
+                        let keep = d < 170 || (d < 256 && super::parts::hash(k.seed, x / 2, y / 2 + 90) % 3 != 0);
+                        if keep {
+                            let t = if d < 50 {
+                                Tone::High
+                            } else if d < 150 {
+                                Tone::Light
+                            } else {
+                                Tone::Base
+                            };
                             c.fill_rect(Rect::new(x, y, 1, 1), k.accent.at(t), 1);
                         }
                     }
+                }
+                for i in 0..5 {
+                    let hh = super::parts::hash(k.seed, i, 82);
+                    let (x, y) =
+                        (r.x + 4 + (hh % (r.w - 8) as u32) as i32, r.y + 2 + ((hh >> 8) % (r.h - 6) as u32) as i32);
+                    c.fill_rect(Rect::new(x, y, 1, 2), k.accent.at(Tone::Glint), 2);
                 }
                 c.set_emitting(false);
             } else {
                 for i in 0..4 {
                     let hh = super::parts::hash(k.seed, i, 81);
-                    let (x, y) = (r.x + 3 + (hh % (r.w - 6) as u32) as i32, r.y + 3 + ((hh >> 8) % (r.h - 6) as u32) as i32);
+                    let (x, y) =
+                        (r.x + 3 + (hh % (r.w - 6) as u32) as i32, r.y + 3 + ((hh >> 8) % (r.h - 6) as u32) as i32);
                     c.fill_rect(Rect::new(x, y, 2, 2), Ramp::Stone.at(Tone::Light), 1);
                 }
             }

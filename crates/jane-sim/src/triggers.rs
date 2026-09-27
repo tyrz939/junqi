@@ -33,12 +33,41 @@ pub fn seat_in_rect(cx: &Ctx<'_>, r: Rect, except: Option<Seat>) -> Option<Seat>
     })
 }
 
+/// The living seats in the ctx's zone and the cells they stand on, in seat order: what
+/// [`seat_in_rect`] reads, gathered once for a pass over every row instead of once a row (the
+/// county has hundreds). Gathered again after a row runs its list, which may move or kill.
+#[derive(Clone, Copy)]
+struct Standing {
+    n: usize,
+    at: [(Seat, (i32, i32)); crate::tuning::MAX_PLAYERS],
+}
+
+impl Standing {
+    fn of(cx: &Ctx<'_>) -> Standing {
+        let z = cx.zone.id;
+        let mut s = Standing { n: 0, at: [(Seat(0), (0, 0)); crate::tuning::MAX_PLAYERS] };
+        for p in cx.world.players.iter().filter(|p| p.connected && p.zone == z) {
+            if let Some(u) = cx.zone.unit(p.unit).filter(|u| u.alive) {
+                s.at[s.n] = (p.seat, u.pos.cell());
+                s.n += 1;
+            }
+        }
+        s
+    }
+
+    /// [`seat_in_rect`] with no exception.
+    fn in_rect(&self, r: Rect) -> Option<Seat> {
+        self.at[..self.n].iter().find(|&&(_, (x, y))| r.contains(x, y)).map(|&(s, _)| s)
+    }
+}
+
 /// Step 11: every row of the zone's table, then the plates every 6 ticks.
 pub fn step_triggers(cx: &mut Ctx<'_>) {
+    let mut standing = Standing::of(cx);
     for i in 0..cx.rt.triggers.len() {
         let t = cx.rt.triggers[i];
         let Some(r) = cx.rt.rects.get(&t.rect).copied() else { continue };
-        let who = seat_in_rect(cx, r, None);
+        let who = standing.in_rect(r);
         let bits = &mut cx.zone.triggers;
         let (was_inside, fired) = (bits.inside.get(i as u32), bits.fired.get(i as u32));
         let inside = who.is_some();
@@ -55,6 +84,7 @@ pub fn step_triggers(cx: &mut Ctx<'_>) {
             cx.zone.triggers.fired.set(i as u32, true);
             let body = cx.actor_unit().map_or(Subject::None, Subject::Unit);
             run_actions(cx, t.trigger.actions, body);
+            standing = Standing::of(cx);
         }
         cx.actor = before;
     }
@@ -86,14 +116,52 @@ pub fn reset_on_death(cx: &mut Ctx<'_>, seat: Seat) {
     cx.actor = before;
 }
 
-fn plate_covered(cx: &mut Ctx<'_>, plate: PropIx) -> bool {
+/// The plates [`units_on_plates`] answers for at once, by their place in `ZoneRuntime::plates`;
+/// any past these are asked one by one.
+const PLATES_AT_ONCE: usize = 64;
+
+/// Which of the zone's first [`PLATES_AT_ONCE`] plates a living, unhidden unit stands on, a bit
+/// each: one pass over the zone's units for every plate, where a pass a plate cost the county
+/// thousands of units a plate every sixth tick (sleepers press a plate as well as anyone, so no
+/// index of the awake will do).
+fn units_on_plates(cx: &Ctx<'_>) -> u64 {
+    let cat = cx.cat;
+    let n = cx.rt.plates.len().min(PLATES_AT_ONCE);
+    let mut rects = [Rect::new(0, 0, 0, 0); PLATES_AT_ONCE];
+    let (mut x0, mut y0, mut x1, mut y1) = (i32::MAX, i32::MAX, i32::MIN, i32::MIN);
+    for (k, r) in rects.iter_mut().enumerate().take(n) {
+        let p = &cx.zone.props[cx.rt.plates[k] as usize];
+        *r = footprint(cat.story.prop(p.def), p);
+        (x0, y0, x1, y1) = (x0.min(r.x), y0.min(r.y), x1.max(r.right()), y1.max(r.bottom()));
+    }
+    let mut on = 0u64;
+    for u in &cx.zone.units {
+        let (x, y) = u.pos.cell();
+        if x < x0 || y < y0 || x >= x1 || y >= y1 || !u.alive || u.hidden {
+            continue;
+        }
+        for (k, r) in rects.iter().enumerate().take(n) {
+            if r.contains(x, y) {
+                on |= 1 << k;
+            }
+        }
+    }
+    on
+}
+
+/// Is the plate pressed? `units_on`: whether a unit stands on it, when [`units_on_plates`] has
+/// answered for it.
+fn plate_covered(cx: &mut Ctx<'_>, plate: PropIx, units_on: Option<bool>) -> bool {
     let cat = cx.cat;
     let p = &cx.zone.props[plate as usize];
     let r = footprint(cat.story.prop(p.def), p);
-    if cx.zone.units.iter().any(|u| {
-        let (x, y) = u.pos.cell();
-        u.alive && !u.hidden && r.contains(x, y)
-    }) {
+    let stood_on = units_on.unwrap_or_else(|| {
+        cx.zone.units.iter().any(|u| {
+            let (x, y) = u.pos.cell();
+            u.alive && !u.hidden && r.contains(x, y)
+        })
+    });
+    if stood_on {
         return true;
     }
     // A pushable or carryable prop on it, not in someone's arms (it keeps its old cell there).
@@ -113,6 +181,7 @@ fn plate_covered(cx: &mut Ctx<'_>, plate: PropIx) -> bool {
 fn step_plates(cx: &mut Ctx<'_>) {
     // A handful per zone, in id order. Plates far from everyone still answer: a barrel left on
     // one holds its gate open from the other side of the map.
+    let mut units_on = units_on_plates(cx);
     for i in 0..cx.rt.plates.len() {
         let ix = cx.rt.plates[i];
         let p = &cx.zone.props[ix as usize];
@@ -120,7 +189,7 @@ fn step_plates(cx: &mut Ctx<'_>) {
             continue;
         }
         let on = p.on;
-        let pressed = plate_covered(cx, ix);
+        let pressed = plate_covered(cx, ix, (i < PLATES_AT_ONCE).then(|| units_on >> i & 1 != 0));
         if pressed == on {
             continue;
         }
@@ -138,6 +207,8 @@ fn step_plates(cx: &mut Ctx<'_>) {
             let before = cx.actor.take();
             run_actions(cx, list, Subject::None);
             cx.actor = before;
+            // What it ran may have moved, raised or felled someone: ask again for the rest.
+            units_on = units_on_plates(cx);
         }
     }
 }

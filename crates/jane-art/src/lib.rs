@@ -14,6 +14,7 @@ pub mod creature;
 pub mod demo;
 pub mod flora;
 pub mod font;
+pub mod fx;
 pub mod hash;
 pub mod house;
 pub mod hue;
@@ -28,6 +29,7 @@ pub mod sheet_kit;
 pub mod sheet_person;
 pub mod sprite;
 pub mod terrain;
+pub mod weather;
 
 pub use canvas::{Canvas, Z};
 pub use font::{Face, Font, Style};

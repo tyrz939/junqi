@@ -3,12 +3,17 @@
 //! Conflicts are shown (in red, with who else has it), never refused. Reset puts every row back
 //! to `data/bindings.json`. The aim assist, the backend and the volumes are rows beneath; the app
 //! keeps all of it in `config.json`.
+//!
+//! A second page, Display (PRESENTATION.md §1.3), has a toggle for each `Features` row the tier
+//! draws (`Features::rows`): a switch flips, a count steps down by halves and back; each says
+//! whether it shows now or on the next start, and the backend is there too (next start).
 
 use jane_art::font::Face;
 use jane_art::palette::{Ramp, Tone};
 use jane_sim::input::AssistProfile;
 
 use crate::audio::Volumes;
+use crate::frame::{Features, Tier};
 use crate::input::{
     ACTIONS, Action, BINDINGS, Bindings, MouseButton, PadInput, UiAction, action_label, key_name, mouse_name, pad_name,
     sc,
@@ -37,6 +42,10 @@ pub struct ControlsState {
     pub foot: u8,
     /// The volume the keys turn on the volume row: 0 master, 1 music, 2 effects.
     pub vol: u8,
+    /// 0 the bindings, 1 Display (the `Features` rows).
+    pub page: u8,
+    /// The row the keys light on the Display page: the tier's rows, then the backend, then Back.
+    pub drow: usize,
 }
 
 /// What the screen shows beside the bindings.
@@ -47,6 +56,9 @@ pub struct ControlsInfo<'a> {
     /// `auto`, `soft` or `wgpu` (takes effect on the next start).
     pub backend: &'a str,
     pub volumes: Volumes,
+    /// The `Features` rows in force, and the tier drawing them.
+    pub rows: Features,
+    pub tier: Tier,
 }
 
 /// What the player changed this frame.
@@ -58,6 +70,97 @@ pub struct ControlsOut {
     pub backend: Option<&'static str>,
     /// The volumes changed: hear them now and save them.
     pub volumes: Option<Volumes>,
+    /// A `Features` row was turned: the rows now, and its key (to keep in `config.json`).
+    pub rows: Option<(Features, &'static str)>,
+}
+
+/// The Display page's row height.
+const DISPLAY_ROW_H: i32 = 20;
+
+/// A row's value as the page shows it.
+fn row_text(rows: &Features, key: &str) -> String {
+    match rows.get(key).as_deref() {
+        Some("on") => "On".to_owned(),
+        Some("off") => "Off".to_owned(),
+        Some("0") if key == "shadows" => "Off".to_owned(),
+        Some(n) => n.to_owned(),
+        None => String::new(),
+    }
+}
+
+/// The Display page: a toggle per row the tier draws, the backend, Back.
+fn display(ui: &mut Ui, st: &mut ControlsState, info: ControlsInfo<'_>, r: Rect, out: &mut ControlsOut) {
+    let (x, y, w) = (i32::from(r.x), i32::from(r.y), i32::from(r.w));
+    let rows: Vec<_> = Features::rows(info.tier).collect();
+    let n = rows.len();
+    // Keys: up and down the rows, then the backend, then Back; left or right turns one, and
+    // confirm presses the lit button (the row's own, or Back).
+    let turn = |st: &ControlsState, out: &mut ControlsOut, rows_now: &mut Features| {
+        if let Some(row) = rows.get(st.drow) {
+            rows_now.cycle(info.tier, row.key);
+            out.rows = Some((*rows_now, row.key));
+        }
+    };
+    let mut now = info.rows;
+    if ui.interactive {
+        for a in ui.input.actions.clone() {
+            match a {
+                UiAction::Up => st.drow = st.drow.saturating_sub(1),
+                UiAction::Down => st.drow = (st.drow + 1).min(n + 1),
+                UiAction::Left | UiAction::Right if st.drow < n => turn(st, out, &mut now),
+                _ => {}
+            }
+        }
+    }
+    let tier = match info.tier {
+        Tier::T0 => "T0, drawn by soft",
+        Tier::T1 => "T1, drawn by gl2",
+        Tier::T2 => "T2, drawn by wgpu",
+    };
+    let ty = y + 46;
+    ui.text(x + 20, ty, tier, Ink::fine(style::gold()).shadow());
+    ui.text(x + 330, ty, "Shows", Ink::fine(style::gold()).shadow());
+    for (k, row) in rows.iter().enumerate() {
+        let ry = ty + 16 + k as i32 * DISPLAY_ROW_H;
+        let lit = st.drow == k;
+        if k % 2 == 1 {
+            ui.fill(Rect::new(x + 12, ry - 2, w - 24, DISPLAY_ROW_H), argb(style::INK, 40));
+        }
+        ui.text(x + 20, ry + 3, row.label, Ink::small(if lit { style::text_bright() } else { style::text() }).shadow());
+        let br = Rect::new(x + 200, ry, 110, DISPLAY_ROW_H - 3);
+        let text = row_text(&now, row.key);
+        if ui.button(wid("feature", k as u32), br, &text, ButtonKind::Tab { on: lit }, true, lit) {
+            st.drow = k;
+            turn(st, out, &mut now);
+        }
+        let when = if row.live { "now" } else { "next start" };
+        ui.text(x + 330, ry + 3, when, Ink::fine(style::quiet()).shadow());
+    }
+    let by = ty + 16 + n as i32 * DISPLAY_ROW_H + 8;
+    ui.text(
+        x + 20,
+        by + 3,
+        "Backend",
+        Ink::small(if st.drow == n { style::text_bright() } else { style::text() }).shadow(),
+    );
+    for (i, label) in ["auto", "soft", "gl2", "wgpu"].iter().enumerate() {
+        let br = Rect::new(x + 200 + i as i32 * 84, by, 78, 22);
+        if ui.button(
+            wid("display-backend", i as u32),
+            br,
+            label,
+            ButtonKind::Tab { on: info.backend == *label },
+            true,
+            false,
+        ) {
+            out.backend = Some(label);
+        }
+    }
+    ui.text(x + 200 + 4 * 84 + 6, by + 6, "next start", Ink::fine(style::quiet()).shadow());
+    let back = Rect::new(x + w / 2 - 80, by + 34, 160, 24);
+    if ui.button(wid("controls-back", 1), back, "Back", ButtonKind::Menu, true, st.drow == n + 1) {
+        ui.intent(AppIntent::Back);
+    }
 }
 
 fn cell_text(b: &Bindings, a: Action, col: u8) -> &'static str {
@@ -131,6 +234,33 @@ pub fn draw(ui: &mut Ui, st: &mut ControlsState, b: &mut Bindings, info: Control
     ui.panel(r, PanelStyle::Window);
     let (x, y) = (i32::from(r.x), i32::from(r.y));
     heading(ui, cw / 2, y + 10, "Controls");
+    // The pages: the bindings and Display; the tab keys go between them.
+    let capturing = st.capture.is_some();
+    if ui.interactive && !capturing {
+        for a in ui.input.actions.clone() {
+            if matches!(a, UiAction::TabLeft | UiAction::TabRight) {
+                st.page ^= 1;
+            }
+        }
+    }
+    // Right of the heading's rule: the keys' page, then Display.
+    for (i, (label, tx, tw)) in [("Keys", 170, 60), ("Display", 104, 92)].into_iter().enumerate() {
+        let tr = Rect::new(x + w - tx, y + 12, tw, 20);
+        if ui.button(
+            wid("controls-page", i as u32),
+            tr,
+            label,
+            ButtonKind::Tab { on: st.page == i as u8 },
+            !capturing,
+            false,
+        ) {
+            st.page = i as u8;
+        }
+    }
+    if st.page == 1 {
+        display(ui, st, info, r, &mut out);
+        return out;
+    }
     // The table.
     let col_x = [x + 200, x + 290, x + 380, x + 500];
     let col_w = [84, 84, 114, 80];
@@ -142,7 +272,6 @@ pub fn draw(ui: &mut Ui, st: &mut ControlsState, b: &mut Bindings, info: Control
     let visible = ((h - 170 - VOLUME_ROW_H) / ROW_H).max(4) as usize;
     let n = ACTIONS.len();
     // Keys: rows and columns, confirm to capture; the wheel scrolls.
-    let capturing = st.capture.is_some();
     if ui.interactive && !capturing {
         for a in ui.input.actions.clone() {
             match a {
@@ -313,7 +442,13 @@ mod tests {
         let mut ui = Ui::new(UiArt::build(1).0);
         let mut b = Bindings::default();
         let mut st = ControlsState::default();
-        let info = ControlsInfo { assist: None, backend: "auto", volumes: Volumes::default() };
+        let info = ControlsInfo {
+            assist: None,
+            backend: "auto",
+            volumes: Volumes::default(),
+            rows: Features::of(Tier::T1),
+            tier: Tier::T1,
+        };
         // Row 0 (walk up), key 1: confirm to capture, then press E (Use's key).
         ui.begin(UiInput { actions: vec![UiAction::Confirm], ..UiInput::default() }, 1, (768, 432));
         draw(&mut ui, &mut st, &mut b, info);
@@ -328,5 +463,37 @@ mod tests {
         // Reset puts it back.
         b.rows = BINDINGS.to_vec();
         assert_eq!(b.row(Action::Up).unwrap().keys[0], sc::W);
+    }
+
+    #[test]
+    fn the_display_page_turns_the_rows_the_tier_draws() {
+        let mut ui = Ui::new(UiArt::build(1).0);
+        let mut b = Bindings::default();
+        let mut st = ControlsState::default();
+        let mut info = ControlsInfo {
+            assist: None,
+            backend: "auto",
+            volumes: Volumes::default(),
+            rows: Features::of(Tier::T1),
+            tier: Tier::T1,
+        };
+        // The tab key goes to Display; confirm turns its first row (T1's N dot L) off.
+        ui.begin(UiInput { actions: vec![UiAction::TabRight], ..UiInput::default() }, 1, (768, 432));
+        draw(&mut ui, &mut st, &mut b, info);
+        assert_eq!(st.page, 1);
+        ui.begin(UiInput { actions: vec![UiAction::Confirm], ..UiInput::default() }, 2, (768, 432));
+        let out = draw(&mut ui, &mut st, &mut b, info);
+        let (rows, key) = out.rows.expect("a row turned");
+        assert_eq!(key, "normal_light");
+        assert!(!rows.normal_light);
+        // Down to the lamp shadows: a count steps down by halves.
+        info.rows = rows;
+        ui.begin(UiInput { actions: vec![UiAction::Down, UiAction::Right], ..UiInput::default() }, 3, (768, 432));
+        let out = draw(&mut ui, &mut st, &mut b, info);
+        assert_eq!(out.rows.map(|(r, k)| (r.shadows, k)), Some((4, "shadows")));
+        // T0 has no N dot L and no lamp shadows to turn; T2 has no silhouettes.
+        let keys = |t| Features::rows(t).map(|r| r.key).collect::<Vec<_>>();
+        assert!(!keys(Tier::T0).contains(&"normal_light") && !keys(Tier::T0).contains(&"shadows"));
+        assert!(!keys(Tier::T2).contains(&"silhouettes") && keys(Tier::T2).contains(&"bloom"));
     }
 }

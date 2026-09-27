@@ -83,7 +83,7 @@ fn ms(ns: u64) -> String {
 }
 
 /// `"key": integer` pairs from the thresholds file: enough JSON for a flat file this tool writes.
-fn read_gates(text: &str) -> Vec<(String, u64)> {
+pub(crate) fn read_gates(text: &str) -> Vec<(String, u64)> {
     let mut out = Vec::new();
     let mut rest = text;
     while let Some(q) = rest.find('"') {
@@ -197,12 +197,203 @@ fn dungeon(b: &mut Bench, zone: ZoneId, seed: u32) {
     }
 }
 
+pub const USAGE_TUNE: &str = "
+  bench tune [--backend soft|gl2|wgpu] [--gate MS] [--frames N] [--output WxH] [--at ZONE[:MARK]]
+             [--weather W] [--hour H] [--config PATH | --write [--data-dir DIR]]
+                                      PRESENTATION.md §1.12's degrade ladder on this machine: time the
+                                      frame (default: the town at 22:00) with the tier's rows, and while
+                                      its p99 is over the tier's gate (T2 6 ms, T1 12, T0 25) turn the
+                                      next row down and time it again; then write the rows that differ
+                                      from the tier's own under present in config.json (--config PATH,
+                                      or --write: the game's own, beside the exe when it is portable,
+                                      else the user's data folder), or print them";
+
 pub fn run(args: &[String]) -> Result<(), String> {
     match args.first().map(String::as_str) {
         Some("gen") => gen_bench(&args[1..]),
         Some("frames") => frames(&args[1..]),
-        _ => Err(format!("usage:\n{USAGE}")),
+        Some("sim") => crate::bench_sim::run(&args[1..]),
+        Some("tune") => tune(&args[1..]),
+        _ => Err(format!("usage:\n{USAGE}{USAGE_TUNE}")),
     }
+}
+
+/// A step of the ladder: what it turns down, and how.
+type Rung = (&'static str, fn(&mut jane_present::Features, jane_present::Tier));
+
+/// The steps of §1.12's degrade ladder a tier can take, in order: each turns rows down from
+/// those in force. Step 3 (`fog` to one layer) and step 7 (`half_res`) are not built, and
+/// `frame_skip` (step 8), the last resort, is `tune`'s own last step.
+fn ladder(tier: jane_present::Tier) -> Vec<Rung> {
+    use jane_present::Tier;
+    let mut steps: Vec<Rung> = Vec::new();
+    // Every tier blooms since 2026-09-27, and T1 and T2 draw light shafts; T0's lit windows go
+    // with its bloom (the glow is what the bloom is made of).
+    if tier > Tier::T0 {
+        steps.push(("god_rays and bloom off", |f, t| {
+            f.set(t, "god_rays", "off");
+            f.set(t, "bloom", "off");
+        }));
+    } else {
+        steps.push(("bloom and glow off", |f, t| {
+            f.set(t, "bloom", "off");
+            f.set(t, "glow", "off");
+        }));
+    }
+    steps.push(("max_lights halved, shadows to 4", |f, t| {
+        let half = (f.max_lights / 2).max(1).to_string();
+        f.set(t, "max_lights", &half);
+        let four = f.shadows.min(4).to_string();
+        f.set(t, "shadows", &four);
+    }));
+    if tier > Tier::T0 {
+        steps.push(("shadows off", |f, t| {
+            f.set(t, "shadows", "off");
+        }));
+    }
+    steps.push(("max_particles halved", |f, t| {
+        let half = (f.max_particles / 2).to_string();
+        f.set(t, "max_particles", &half);
+    }));
+    if tier == Tier::T1 {
+        steps.push(("normal_light off", |f, t| {
+            f.set(t, "normal_light", "off");
+        }));
+    }
+    steps
+}
+
+/// The game's `config.json` (jane-app's `Dirs::find`): `--data-dir`, else beside the exe when a
+/// file called `portable` is there, else the user's data folder.
+fn game_config(data_dir: Option<&str>) -> std::path::PathBuf {
+    use std::path::{Path, PathBuf};
+    if let Some(d) = data_dir {
+        return PathBuf::from(d).join("config.json");
+    }
+    let beside = std::env::current_exe().ok().and_then(|p| p.parent().map(Path::to_path_buf));
+    if let Some(b) = beside.as_ref().filter(|b| b.join("portable").exists()) {
+        return b.join("config.json");
+    }
+    let home = |k: &str| std::env::var_os(k).map(PathBuf::from);
+    let root = if cfg!(windows) {
+        home("APPDATA").map(|p| p.join("Jane"))
+    } else if cfg!(target_os = "macos") {
+        home("HOME").map(|p| p.join("Library/Application Support/Jane"))
+    } else {
+        home("XDG_DATA_HOME").map(|p| p.join("jane")).or_else(|| home("HOME").map(|p| p.join(".local/share/jane")))
+    };
+    root.or(beside).unwrap_or_else(|| PathBuf::from(".")).join("config.json")
+}
+
+/// `jane bench tune` (PRESENTATION.md §1.12): the degrade ladder, measured, and the rows it ends
+/// on written as this machine's defaults.
+fn tune(args: &[String]) -> Result<(), String> {
+    use crate::scene::{Opts, Which, bench};
+    use jane_present::{Features, Tier};
+    let flag = |name: &str| args.iter().position(|a| a == name).and_then(|i| args.get(i + 1)).map(String::as_str);
+    let num = |name: &str, d: u32| {
+        flag(name).map_or(Ok(d), |s| s.parse::<u32>().map_err(|_| format!("{name}: not a number: {s}")))
+    };
+    let backend = Which::parse(flag("--backend").unwrap_or("soft")).ok_or("--backend: soft, gl2 or wgpu")?;
+    let tier = backend.tier();
+    let gate_us = match flag("--gate") {
+        Some(s) => (s.parse::<f64>().map_err(|_| format!("--gate: not a number of ms: {s}"))? * 1000.0) as u32,
+        None => match tier {
+            Tier::T2 => 6000,
+            Tier::T1 => 12_000,
+            Tier::T0 => 25_000,
+        },
+    };
+    let output = match flag("--output") {
+        Some(s) => {
+            let (w, h) = s.split_once('x').ok_or("--output: WxH")?;
+            (w.parse::<u32>().map_err(|_| "--output: WxH")?, h.parse::<u32>().map_err(|_| "--output: WxH")?)
+        }
+        None => (3840, 2160),
+    };
+    let seed = num("--seed", 1)?;
+    let n = num("--frames", 300)?;
+    let mut rows = Features::of(tier);
+    let time = |rows: &Features| -> Result<u32, String> {
+        let o = Opts {
+            seed,
+            ticks: 600,
+            model: jane_bot::Model::Reader,
+            hour: Some(u8::try_from(num("--hour", 22)? % 24).unwrap_or(22)),
+            minute: 0,
+            canvas: (768, 432),
+            backend,
+            at: flag("--at").map(|a| match a.split_once(':') {
+                Some((z, m)) => (z.to_string(), Some(m.to_string())),
+                None => (a.to_string(), None),
+            }),
+            weather: flag("--weather").map(crate::scene::weather).transpose()?,
+            cast: None,
+            spawn: None,
+            rows: Features::KEYS.iter().filter_map(|k| rows.get(k).map(|v| ((*k).to_owned(), v))).collect(),
+            gl: crate::scene::GlOpts::default(),
+        };
+        let bps = jane_sim::Blueprints::build(seed).map_err(|e| format!("seed {seed}: {e}"))?;
+        Ok(bench(bps, &o, n, output)?.whole.1)
+    };
+    let ms = |us: u32| f64::from(us) / 1000.0;
+    println!("{}: the gate is p99 < {:.2} ms", backend.name(), ms(gate_us));
+    let mut p99 = time(&rows)?;
+    println!("  {:<32} p99 {:>6.2} ms", "the tier's own rows", ms(p99));
+    for (what, step) in ladder(tier) {
+        if p99 < gate_us {
+            break;
+        }
+        let before = rows;
+        step(&mut rows, tier);
+        if rows == before {
+            continue;
+        }
+        p99 = time(&rows)?;
+        println!("  {what:<32} p99 {:>6.2} ms", ms(p99));
+    }
+    if p99 >= gate_us {
+        rows.set(tier, "frame_skip", "on");
+        println!("  still over: frame_skip on, the backend draws every other tick");
+    }
+    // The rows that differ from the tier's own, as config.json's `present` holds them.
+    let own = Features::of(tier);
+    let mut present = serde_json::Map::new();
+    for k in Features::KEYS {
+        if let Some(v) = rows.get(k).filter(|v| Some(v) != own.get(k).as_ref()) {
+            let value = v.parse::<u64>().map_or(serde_json::Value::String(v), serde_json::Value::from);
+            present.insert(k.to_owned(), value);
+        }
+    }
+    let path = match (flag("--config"), args.iter().any(|a| a == "--write")) {
+        (Some(p), _) => Some(std::path::PathBuf::from(p)),
+        (None, true) => Some(game_config(flag("--data-dir"))),
+        (None, false) => None,
+    };
+    let Some(path) = path else {
+        println!("present: {}", serde_json::Value::Object(present));
+        println!("(--config PATH or --write keeps these in config.json)");
+        return Ok(());
+    };
+    // Laid into the file's `present`, the ladder's rows set or cleared, everything else kept.
+    let mut doc: serde_json::Value = match std::fs::read_to_string(&path) {
+        Ok(s) => serde_json::from_str(&s).map_err(|e| format!("{}: {e}", path.display()))?,
+        Err(_) => serde_json::json!({}),
+    };
+    let obj = doc.as_object_mut().ok_or_else(|| format!("{}: not a JSON object", path.display()))?;
+    let slot = obj.entry("present").or_insert_with(|| serde_json::json!({}));
+    let into = slot.as_object_mut().ok_or_else(|| format!("{}: present is not an object", path.display()))?;
+    for k in Features::KEYS {
+        into.remove(k);
+    }
+    into.extend(present);
+    if let Some(dir) = path.parent().filter(|d| !d.as_os_str().is_empty()) {
+        std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    }
+    let text = serde_json::to_string_pretty(&doc).map_err(|e| e.to_string())?;
+    std::fs::write(&path, text).map_err(|e| format!("{}: {e}", path.display()))?;
+    println!("wrote present: {} to {}", doc["present"], path.display());
+    Ok(())
 }
 
 fn gen_bench(args: &[String]) -> Result<(), String> {
@@ -317,6 +508,14 @@ fn frames(args: &[String]) -> Result<(), String> {
         minute: 0,
         canvas,
         backend,
+        at: flag("--at").map(|a| match a.split_once(':') {
+            Some((z, m)) => (z.to_string(), Some(m.to_string())),
+            None => (a.to_string(), None),
+        }),
+        weather: flag("--weather").map(crate::scene::weather).transpose()?,
+        cast: flag("--cast").map(str::to_owned),
+        spawn: flag("--spawn").map(str::to_owned),
+        rows: crate::scene::rows(flag("--rows"))?,
         gl: crate::scene::GlOpts::parse(args)?,
     };
     let bps = jane_sim::Blueprints::build(seed).map_err(|e| format!("seed {seed}: {e}"))?;

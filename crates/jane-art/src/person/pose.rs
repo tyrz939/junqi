@@ -41,10 +41,27 @@ pub struct Pose {
     pub spread: [i32; 2],
     /// Feet splayed out from the body, px outward (`down`).
     pub splay: [i32; 2],
+    /// Hands raised, px up the screen: a blow wound up, a spell gathered.
+    pub raise: [i32; 2],
+    /// The eyes shut: a blow taken.
+    pub shut: bool,
 }
 
 const fn pose(bob: i32, arm: [i32; 2], leg: [i32; 2], lift: [i32; 2], lean: i32) -> Pose {
-    Pose { bob, arm, leg, lift, lean, lag: (0, 0), breathe: false, phase: 0, spread: [0, 0], splay: [0, 0] }
+    Pose {
+        bob,
+        arm,
+        leg,
+        lift,
+        lean,
+        lag: (0, 0),
+        breathe: false,
+        phase: 0,
+        spread: [0, 0],
+        splay: [0, 0],
+        raise: [0, 0],
+        shut: false,
+    }
 }
 
 /// The fallen, before they are laid down (ART.md §4.1): seen from above on her back, one arm
@@ -133,3 +150,81 @@ pub const LIVING: [(FrameId, Facing, Pose); 21] = [
     (FrameId::Side5, Facing::Side, WALK_SIDE[5]),
     (FrameId::SideB, Facing::Side, BREATHE),
 ];
+
+/// A pose from the standing frame with only these moved.
+const fn act(bob: i32, arm: [i32; 2], raise: [i32; 2], spread: [i32; 2], leg: [i32; 2], lean: i32, shut: bool) -> Pose {
+    Pose { spread, raise, shut, ..pose(bob, arm, leg, [0, 0], lean) }
+}
+
+/// The attack (ART.md §4): wind-up (lean back, the near hand raised), strike (lean in, the arm
+/// at full reach, the weight onto the front foot), recover. From the side (east); facing the
+/// viewer the near hand comes down across the body; from behind, the same seen from the back.
+pub const ATTACK_SIDE: [Pose; 3] = [
+    act(0, [-3, 1], [6, 0], [0, 0], [0, 0], -2, false),
+    act(1, [8, -2], [5, 0], [0, 0], [2, -2], 3, false),
+    act(0, [3, 0], [1, 0], [0, 0], [1, -1], 1, false),
+];
+/// The attack facing the viewer.
+pub const ATTACK_DOWN: [Pose; 3] = [
+    act(0, [0, 0], [8, 0], [2, 0], [0, 0], 0, false),
+    act(1, [3, -1], [2, 0], [-3, 0], [1, 0], 0, false),
+    act(0, [1, 0], [1, 0], [0, 0], [0, 0], 0, false),
+];
+/// The attack from behind.
+pub const ATTACK_UP: [Pose; 3] = [
+    act(0, [0, 0], [0, 8], [0, 2], [0, 0], 0, false),
+    act(1, [-1, 3], [0, 3], [0, -3], [0, -1], 0, false),
+    act(0, [0, 1], [0, 1], [0, 0], [0, 0], 0, false),
+];
+/// The cast (ART.md §4): hands together, hands out (the school's glow between them: the
+/// presenter's fx), hands down.
+pub const CAST_SIDE: [Pose; 3] = [
+    act(0, [3, 3], [5, 5], [0, 0], [0, 0], 0, false),
+    act(0, [6, 5], [6, 7], [0, 0], [1, -1], 1, false),
+    act(0, [1, 1], [1, 1], [0, 0], [0, 0], 0, false),
+];
+/// The cast facing the viewer.
+pub const CAST_DOWN: [Pose; 3] = [
+    act(0, [0, 0], [5, 5], [-2, -2], [0, 0], 0, false),
+    act(0, [0, 0], [7, 7], [1, 1], [0, 0], 0, false),
+    act(0, [0, 0], [1, 1], [0, 0], [0, 0], 0, false),
+];
+/// The cast from behind.
+pub const CAST_UP: [Pose; 3] = CAST_DOWN;
+/// Hurt (ART.md §4): leant back, the head down a px, the eyes shut.
+pub const HURT_SIDE: Pose = act(1, [-2, -3], [1, 1], [0, 0], [-1, 1], -2, true);
+/// Hurt facing the viewer or away.
+pub const HURT_DOWN: Pose = act(1, [0, 0], [2, 2], [1, 1], [0, 0], 0, true);
+
+/// The fight frames a person promises when it attacks, casts, or can be hurt, with their facing
+/// and pose.
+pub fn fight(attacks: bool, casts: bool) -> Vec<(FrameId, Facing, Pose)> {
+    use FrameId as F;
+    let mut v = Vec::new();
+    if attacks {
+        for (ids, facing, poses) in [
+            ([F::Atk1, F::Atk2, F::Atk3], Facing::Side, ATTACK_SIDE),
+            ([F::AtkDown1, F::AtkDown2, F::AtkDown3], Facing::Down, ATTACK_DOWN),
+            ([F::AtkUp1, F::AtkUp2, F::AtkUp3], Facing::Up, ATTACK_UP),
+        ] {
+            v.extend(ids.into_iter().zip(poses).map(|(f, p)| (f, facing, p)));
+        }
+    }
+    if casts {
+        for (ids, facing, poses) in [
+            ([F::Cast1, F::Cast2, F::Cast3], Facing::Side, CAST_SIDE),
+            ([F::CastDown1, F::CastDown2, F::CastDown3], Facing::Down, CAST_DOWN),
+            ([F::CastUp1, F::CastUp2, F::CastUp3], Facing::Up, CAST_UP),
+        ] {
+            v.extend(ids.into_iter().zip(poses).map(|(f, p)| (f, facing, p)));
+        }
+    }
+    if attacks || casts {
+        v.extend([
+            (F::Hurt, Facing::Side, HURT_SIDE),
+            (F::HurtDown, Facing::Down, HURT_DOWN),
+            (F::HurtUp, Facing::Up, HURT_DOWN),
+        ]);
+    }
+    v
+}

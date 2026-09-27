@@ -83,7 +83,13 @@ pub(crate) fn draw(c: &mut Canvas, k: &Kit, state: State) -> Option<Stand> {
                     if m.get(x, y).is_opaque() {
                         let course = (y - top) / 3;
                         let off = if course % 2 == 0 { 0 } else { 3 };
-                        let t = if (y - top) % 3 == 2 || (x + off) % 6 == 5 { Tone::Shade } else if (y - top) % 3 == 0 { Tone::Light } else { Tone::Base };
+                        let t = if (y - top) % 3 == 2 || (x + off) % 6 == 5 {
+                            Tone::Shade
+                        } else if (y - top) % 3 == 0 {
+                            Tone::Light
+                        } else {
+                            Tone::Base
+                        };
                         c.put(x, y, k.accent.at(t), parts::south(), 4);
                     }
                 }
@@ -123,7 +129,12 @@ pub(crate) fn draw(c: &mut Canvas, k: &Kit, state: State) -> Option<Stand> {
                 post(c, cx - 2, py - 18, py, 4, k.trim, 4);
                 c.fill_normal(Rect::new(cx - 2, py - 19, 4, 2), k.trim.at(Tone::Light), FLAT, 5);
             }
-            c.fill_normal(Rect::new(cx - 1, k.back() - 12, 2, foot - k.back() + 8), k.body.at(Tone::Base), crate::canvas::normal(-40, 0), 5);
+            c.fill_normal(
+                Rect::new(cx - 1, k.back() - 12, 2, foot - k.back() + 8),
+                k.body.at(Tone::Base),
+                crate::canvas::normal(-40, 0),
+                5,
+            );
             c.vline(cx - 1, k.back() - 12, foot - 6, k.body.at(Tone::Light), 6);
             c.vline(cx, k.back() - 12, foot - 6, k.body.at(Tone::Mid), 6);
             Stand::Up(&[])

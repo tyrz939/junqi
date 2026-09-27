@@ -99,6 +99,27 @@ pub fn attacks(id: SpriteId) -> bool {
     catalog().combat.units.iter().any(|u| u.sprite == id && u.faction != Faction::Friendly && !u.book.is_empty())
 }
 
+/// What the units drawn as `id` do in a fight: a spell animated as an attack, one animated as a
+/// cast (ART.md §4: the row promises only the cycles it uses).
+pub fn fight(id: SpriteId) -> person::Fight {
+    let cat = catalog();
+    let mut f = person::Fight::default();
+    for u in cat.combat.units.iter().filter(|u| u.sprite == id) {
+        // A player learns her spells as she goes: she strikes and casts from the start.
+        if u.controller == Controller::Player {
+            return person::Fight { attacks: true, casts: true };
+        }
+        for s in u.book {
+            match cat.combat.spell(*s).anim {
+                jane_data::CastAnim::Attack => f.attacks = true,
+                jane_data::CastAnim::Cast => f.casts = true,
+                _ => {}
+            }
+        }
+    }
+    f
+}
+
 /// Every set sprite `name` renders to: each variant, and for a player's sprite each seat.
 pub fn render(name: &str) -> Result<Vec<Rendered>, String> {
     let (id, look) = find(name).ok_or_else(|| format!("no look for \"{name}\""))?;
@@ -111,7 +132,8 @@ fn render_entry(id: SpriteId, look: &Look) -> Result<Vec<Rendered>, String> {
     match look {
         Look::Person(p) => {
             for v in 0..p.vary.count() {
-                let set = person::render(&p.variant(v), person::seed(name)).map_err(|e| format!("{name}: {e}"))?;
+                let set = person::render_fighting(&p.variant(v), person::seed(name), fight(id))
+                    .map_err(|e| format!("{name}: {e}"))?;
                 let seats = if has_seats(id) { 1 + person::SEAT_COATS.len() } else { 1 };
                 for seat in 0..seats {
                     let set = person::seat(&set, seat);

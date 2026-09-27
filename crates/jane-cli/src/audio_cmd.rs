@@ -39,7 +39,10 @@ pub fn run(args: &[String]) -> Result<(), String> {
         }
         Some("render") => {
             let what = args.get(1).ok_or("render what? sfx:<name>, bed:<name>, song:<name>, scene:nine")?;
-            let out = arg(args, "--out").map_or_else(|| PathBuf::from("sheets/audio").join(format!("{}.wav", what.replace(':', "-"))), PathBuf::from);
+            let out = arg(args, "--out").map_or_else(
+                || PathBuf::from("sheets/audio").join(format!("{}.wav", what.replace(':', "-"))),
+                PathBuf::from,
+            );
             let v = render(what, seed, secs, args)?;
             write_wav(&out, &v)?;
             if args.iter().any(|a| a == "--png") {
@@ -95,7 +98,15 @@ fn list() {
     println!("songs ({}):", lib.songs.len());
     for s in &lib.songs {
         let bpm = 1800.0 / s.step_ticks as f32;
-        println!("  {:16} {} {}, {:.0} eighths a minute{}: {}", s.name, s.key, s.mode.name(), bpm * 2.0, if s.looped { "" } else { ", once" }, s.mood);
+        println!(
+            "  {:16} {} {}, {:.0} eighths a minute{}: {}",
+            s.name,
+            s.key,
+            s.mode.name(),
+            bpm * 2.0,
+            if s.looped { "" } else { ", once" },
+            s.mood
+        );
     }
 }
 
@@ -158,18 +169,30 @@ fn scene(e: &mut Engine, name: &str, secs: Option<f32>) -> Result<Vec<f32>, Stri
     let total = match name {
         // Dusk in the Lowfields, then the bell at nine: nine strikes over its cue, and the night.
         "nine" | "six" => {
-            let (strikes, before, after) =
-                if name == "nine" { (9, "lowfields_day", "lowfields_night") } else { (6, "lowfields_night", "lowfields_day") };
+            let (strikes, before, after) = if name == "nine" {
+                (9, "lowfields_day", "lowfields_night")
+            } else {
+                (6, "lowfields_night", "lowfields_day")
+            };
             plan.push((0.0, Cmd::Music { song: Some(song(e, before)?), fade_out_ms: 0.0, fade_in_ms: 0.0 }));
             plan.push((0.0, Cmd::Bed { bed: if name == "nine" { Bed::Birds } else { Bed::Crickets }, level: 0.6 }));
             plan.push((8.0, Cmd::Music { song: Some(song(e, "bell")?), fade_out_ms: 2500.0, fade_in_ms: 1500.0 }));
             let bell = sfx(e, "bell_far")?;
             for k in 0..strikes {
-                plan.push((9.0 + k as f32 * crate::audio_cmd::STRIKE_SECS, Cmd::Sfx { id: bell, gain: 1.0, pan: 0.0, send: 0.0, rate: 1.0 }));
+                plan.push((
+                    9.0 + k as f32 * crate::audio_cmd::STRIKE_SECS,
+                    Cmd::Sfx { id: bell, gain: 1.0, pan: 0.0, send: 0.0, rate: 1.0 },
+                ));
             }
             let end = 9.0 + strikes as f32 * STRIKE_SECS + 5.0;
-            plan.push((end - 5.0, Cmd::Bed { bed: if name == "nine" { Bed::Birds } else { Bed::Crickets }, level: 0.0 }));
-            plan.push((end - 3.0, Cmd::Bed { bed: if name == "nine" { Bed::Crickets } else { Bed::Birds }, level: 0.6 }));
+            plan.push((
+                end - 5.0,
+                Cmd::Bed { bed: if name == "nine" { Bed::Birds } else { Bed::Crickets }, level: 0.0 },
+            ));
+            plan.push((
+                end - 3.0,
+                Cmd::Bed { bed: if name == "nine" { Bed::Crickets } else { Bed::Birds }, level: 0.6 },
+            ));
             plan.push((end, Cmd::Music { song: Some(song(e, after)?), fade_out_ms: 3000.0, fade_in_ms: 2000.0 }));
             end + 20.0
         }
@@ -185,7 +208,10 @@ fn scene(e: &mut Engine, name: &str, secs: Option<f32>) -> Result<Vec<f32>, Stri
                 plan.push((t, Cmd::Sfx { id: swing, gain: 0.8, pan: 0.1, send: 0.0, rate: 1.0 }));
                 plan.push((t + 0.15, Cmd::Sfx { id: hit, gain: 0.8, pan: -0.2, send: 0.0, rate: 1.0 }));
             }
-            plan.push((34.0, Cmd::Music { song: Some(song(e, "lowfields_night")?), fade_out_ms: 2500.0, fade_in_ms: 2500.0 }));
+            plan.push((
+                34.0,
+                Cmd::Music { song: Some(song(e, "lowfields_night")?), fade_out_ms: 2500.0, fade_in_ms: 2500.0 },
+            ));
             50.0
         }
         _ => return Err(format!("no scene {name}: nine, six or combat")),
@@ -244,8 +270,15 @@ impl jane_present::audio::AudioBus for EngineBus<'_> {
         self.e.handle(Cmd::Music { song, fade_out_ms: f32::from(out), fade_in_ms: f32::from(fade_in) });
     }
 
-    fn sfx(&mut self, kind: jane_present::audio::SfxKind, at: jane_present::audio::At, listener: jane_present::audio::At) {
-        let (Some(id), Some(p)) = (self.e.sfx_index(kind.name()), jane_present::audio::place(at, listener)) else { return };
+    fn sfx(
+        &mut self,
+        kind: jane_present::audio::SfxKind,
+        at: jane_present::audio::At,
+        listener: jane_present::audio::At,
+    ) {
+        let (Some(id), Some(p)) = (self.e.sfx_index(kind.name()), jane_present::audio::place(at, listener)) else {
+            return;
+        };
         self.e.handle(Cmd::Sfx { id, gain: p.gain, pan: p.pan, send: p.send, rate: 1.0 });
     }
 
@@ -262,10 +295,14 @@ impl jane_present::audio::AudioBus for EngineBus<'_> {
 /// of sound for each tick of the sim.
 fn play(seed: u32, secs: f32, args: &[String]) -> Result<Vec<f32>, String> {
     use jane_sim::input::{Command, DevOp, InputFrame, StampedCommand, StepInput};
-    let model = arg(args, "--model").map_or(Some(jane_bot::Model::Reader), jane_bot::Model::parse).ok_or("--model: reader or rusher")?;
+    let model = arg(args, "--model")
+        .map_or(Some(jane_bot::Model::Reader), jane_bot::Model::parse)
+        .ok_or("--model: reader or rusher")?;
     let warm = arg(args, "--warm").map_or(Ok(0), str::parse::<u32>).map_err(|e| format!("--warm: {e}"))?;
     let (hour, minute) = match arg(args, "--hour").unwrap_or("20:58").split_once(':') {
-        Some((h, m)) => (h.parse::<u8>().map_err(|e| format!("--hour: {e}"))?, m.parse::<u8>().map_err(|e| format!("--hour: {e}"))?),
+        Some((h, m)) => {
+            (h.parse::<u8>().map_err(|e| format!("--hour: {e}"))?, m.parse::<u8>().map_err(|e| format!("--hour: {e}"))?)
+        }
         None => (arg(args, "--hour").unwrap_or("20").parse::<u8>().map_err(|e| format!("--hour: {e}"))?, 0),
     };
     let bps = jane_sim::Blueprints::build(seed).map_err(|e| format!("seed {seed}: {e}"))?;
@@ -343,7 +380,9 @@ fn report(what: &str, v: &[f32]) {
     let m = analysis::mono(v);
     let sr = RATE as f32;
     let k = analysis::keys(&analysis::chroma(&m, sr));
-    let key = k.first().map_or(String::new(), |(t, minor, c)| format!("{} {} ({c:.2})", NAMES[*t as usize], if *minor { "minor" } else { "major" }));
+    let key = k.first().map_or(String::new(), |(t, minor, c)| {
+        format!("{} {} ({c:.2})", NAMES[*t as usize], if *minor { "minor" } else { "major" })
+    });
     println!(
         "  {what}: {:.1} s, peak {:.1} dBFS, loudness {:.1} dBFS, dc {:.4}, {} click(s){}",
         m.len() as f32 / sr,
@@ -356,12 +395,16 @@ fn report(what: &str, v: &[f32]) {
     if what.starts_with("song:") || what.starts_with("play:") || what.starts_with("scene:") {
         let (b, centroid) = analysis::balance(&m, sr);
         let pct: Vec<String> = b.iter().map(|x| format!("{:.1}", 100.0 * x)).collect();
-        println!("    balance: centroid {centroid:.0} Hz; power under 150, 500, 2k, 5k, 10k Hz and above, %: {}", pct.join(" "));
+        println!(
+            "    balance: centroid {centroid:.0} Hz; power under 150, 500, 2k, 5k, 10k Hz and above, %: {}",
+            pct.join(" ")
+        );
     }
     if what.starts_with("song:") {
         let c = analysis::chroma(&m, sr);
         let top = c.iter().fold(1e-12f32, |a, b| a.max(*b));
-        let bars: Vec<String> = c.iter().enumerate().map(|(i, v)| format!("{}:{:.0}", NAMES[i], 9.0 * v / top)).collect();
+        let bars: Vec<String> =
+            c.iter().enumerate().map(|(i, v)| format!("{}:{:.0}", NAMES[i], 9.0 * v / top)).collect();
         println!("    chroma {}", bars.join(" "));
     }
 }
@@ -389,7 +432,8 @@ fn check(seed: u32, secs: Option<f32>) -> Result<(), String> {
             bad += 1;
         }
         if clicks > 0 {
-            let at: Vec<String> = analysis::clicks(&m, sr).iter().take(4).map(|i| format!("{:.2} s", *i as f32 / sr)).collect();
+            let at: Vec<String> =
+                analysis::clicks(&m, sr).iter().take(4).map(|i| format!("{:.2} s", *i as f32 / sr)).collect();
             println!("     {} clicks at {}", s.name, at.join(", "));
         }
         println!(

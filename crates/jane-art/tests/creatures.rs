@@ -72,14 +72,22 @@ fn coverage_the_first_walks_animals_have_looks_and_every_frame() {
 fn geometry_each_plan_has_its_box_and_stands_on_its_anchor() {
     for r in all() {
         let Some((_, Look::Creature(l))) = looks::find(r.name) else { unreachable!() };
-        let (w, h, ax, ay) = creature::size(l.plan);
+        let (w, h, ax, ay) = creature::size_of(l.plan, l.anatomy);
         assert_eq!((r.set.w, r.set.h, r.set.ax, r.set.ay), (w, h, ax, ay), "{}", r.key());
         assert_eq!((ax, ay), (w / 2, h - 4), "{}: feet at (w / 2, h - 4)", r.key());
         for (f, c) in frames(r) {
             assert_eq!((c.w(), c.h()), (w, h), "{} {f:?}", r.key());
             let (x0, y0, x1, y1) = drawn(c);
             assert!(x0 >= 0 && y0 >= 0 && x1 < w && y1 < h, "{} {f:?}", r.key());
-            if matches!(f, FrameId::Down | FrameId::Up | FrameId::Side | FrameId::Idle) {
+            if creature::hovers(l.plan) {
+                // A flyer hovers over its anchor, where its shadow lies: never on it.
+                assert!(
+                    f.is_dead() || (ay - h / 2..=ay - 2).contains(&y1),
+                    "{} {f:?}: hovering {} over",
+                    r.key(),
+                    ay - y1
+                );
+            } else if matches!(f, FrameId::Down | FrameId::Up | FrameId::Side | FrameId::Idle) {
                 assert_eq!(y1, ay, "{} {f:?}: standing on the anchor row", r.key());
             } else if !f.is_dead() {
                 assert!((ay - 1..=ay + 1).contains(&y1), "{} {f:?}: off the ground by {}", r.key(), ay - y1);
@@ -258,7 +266,8 @@ fn dead_frames_lie_down() {
         let (_, y0, _, y1) = drawn(c);
         assert!(y1 - y0 < sy1 - sy0, "{}: {} tall lying, {} standing", r.key(), y1 - y0 + 1, sy1 - sy0 + 1);
         assert!(y1 >= r.set.ay - 2, "{}: floats, lowest row {y1}", r.key());
-        let live = c.albedo().iter().filter(|a| Ramp::of(**a).is_some_and(|(r, _)| palette::PALLID.contains(&r))).count();
+        let live =
+            c.albedo().iter().filter(|a| Ramp::of(**a).is_some_and(|(r, _)| palette::PALLID.contains(&r))).count();
         assert_eq!(live, 0, "{}: a ramp shows unpallid", r.key());
         assert!(c.emissive().iter().all(|&e| e == Ix::CLEAR), "{}: the dead never shine", r.key());
     }

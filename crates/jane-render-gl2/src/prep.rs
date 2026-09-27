@@ -16,12 +16,36 @@
 
 use std::ops::Range;
 
-use jane_core::angle::{cos_q15, sin_q15};
-use jane_present::frame::CHUNK_PX;
-use jane_present::{Caster, Directional, Frame, LightKind, Pass, Post, Rgb, SpriteCmd, Tint};
+use jane_present::frame::{Atmos, CHUNK_PX, PartShape, Particle, SkyLook};
+use jane_present::shadow;
+use jane_present::{Caster, Directional, Frame, LightKind, Pass, Post, Rgb, SpriteCmd, Tint, height_of_rows};
 
 use crate::gl::Blend;
 use crate::shaders::{LIGHT_SIZES, SPAN_SIZES, SPRITE_SIZES};
+
+/// Fog volumes T1 draws at most (the fog shader's arrays): the first eight the frame holds, the
+/// weather's mist and the evening's haze among them.
+pub const MAX_FOG: usize = 8;
+/// Shape quads a frame holds at most: the particle pool (2000 at T1), the stars and the moon, well
+/// inside the quad index buffer.
+const MAX_SHAPES: usize = 12_000;
+/// The moon's radius on the backdrop, px, and its halo's.
+const MOON_R: f32 = 7.0;
+const MOON_HALO: f32 = 20.0;
+/// Floats a shape quad takes.
+const SHAPE_QUAD: usize = 4 * 12;
+
+/// What is drawn over the composed canvas, in the frame's order (PRESENTATION.md §1.1's pass
+/// order: the particles below the light, the ground's, the fog, the air's).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum After {
+    /// Shape quads `quads` of `shape_v`. `lit`: the frame put them before its `Lights` pass (the
+    /// rain and the sparks that do not glow), so the light target lights them as it lights the
+    /// ground; else their colour is lit already (what glows, over the light).
+    Parts { quads: Range<usize>, lit: bool },
+    /// The fog volumes (`Prep::fog`).
+    Fog,
+}
 
 /// Chunk slots across the chunk atlas (8 x 6 slots of 256 px: 2048 x 1536).
 pub const SLOTS_ACROSS: u32 = 8;
@@ -31,11 +55,13 @@ pub const SLOT_ROWS: u32 = 6;
 const LIGHT_REACH_UP: i32 = 72;
 /// Point-light shadows reach this far past the light's radius, px, then stop.
 const SHADOW_PAST: f32 = 24.0;
-/// A caster whose foot is nearer a light than this, px, is the one holding it.
-const HOLDER: f32 = 14.0;
-/// How much of a lamp's colour lights its pool, over the dark (soft's `GAIN`, a little more:
-/// N dot L takes some back on the ground's edges).
-const POINT_GAIN: f32 = 0.95;
+/// Rows over the silhouette mask's box a lifted receiver may stand and still take its shadow
+/// from inside it (`jane-render-soft::silhouette`'s, the same).
+const CLIMB: i32 = jane_present::rows_up(100);
+/// T2's point light: how much brighter it is than its colour byte says, in linear light, and the
+/// least a light's luminance is held to before that gain (`jane-render-wgpu`'s prep).
+const POINT_GAIN: f32 = 3.0;
+const MIN_LUMA: f32 = 0.42;
 
 /// The Features rows T1 reads (PRESENTATION.md §1.3), with their T1 defaults, and the backend's
 /// own two settings. A row off draws the row below it, never nothing.
@@ -55,10 +81,13 @@ pub struct Rows {
     pub half_light: bool,
     /// The exact albedo pass (see the module doc) or the fast one.
     pub exact: bool,
+    /// Water mirrors what stands above it (a search of up to 72 reads a water px); off, it
+    /// mirrors the sky alone. Off on tile GPUs, with the fast albedo.
+    pub reflect: bool,
 }
 
 impl Rows {
-    /// T1's column, with the light target full size and the exact albedo.
+    /// T1's column, with the light target full size, the exact albedo and the full reflection.
     pub const T1: Rows = Rows {
         normal_light: true,
         shadows: 8,
@@ -67,6 +96,7 @@ impl Rows {
         max_lights: 32,
         half_light: false,
         exact: true,
+        reflect: true,
     };
 }
 
@@ -105,17 +135,6 @@ impl PageCpu {
         let (y0, y1) = (usize::from(s.y) / 8, (usize::from(s.y) + usize::from(s.h) - 1) / 8);
         (y0..=y1).any(|by| (x0..=x1).any(|bx| self.ao.get(by * self.bw + bx).copied().unwrap_or(false)))
     }
-
-    /// The first and last opaque column of row `v` of `s` (index above 1), if any.
-    fn extent(&self, s: &SpriteCmd, v: i32) -> Option<(i32, i32)> {
-        let pw = usize::from(self.w);
-        let start = (usize::from(s.src.y) + v as usize) * pw + usize::from(s.src.x);
-        let row = self.albedo.get(start..start + usize::from(s.src.w))?;
-        let first = row.iter().position(|&i| i > 1)?;
-        let last = row.iter().rposition(|&i| i > 1).unwrap_or(first);
-        let sw = i32::from(s.src.w);
-        Some(if s.flags.mirror { (sw - 1 - last as i32, sw - 1 - first as i32) } else { (first as i32, last as i32) })
-    }
 }
 
 /// One sprite of a pass as the albedo steps see it: its quad, its page, whether it reads what is
@@ -131,9 +150,15 @@ pub enum Step {
     Copy(i32, i32, i32, i32),
     /// Sprite quads `quads` of `sprite_v`, all of page `page`, in `mode` (the sprite shader's).
     Sprites { page: u8, quads: Range<usize>, mode: f32, blend: Blend },
-    /// The silhouettes: span quads `spans` of `span_v` into the mask, then the mask applied over
-    /// `(x, y, w, h)` with the shade's per-channel weights.
-    Silhouette { spans: Range<usize>, apply: (i32, i32, i32, i32), k: [f32; 3] },
+    /// The silhouettes: span quads `spans` of `span_v` into the mask (its box `(x0, y0, x1, y1)`),
+    /// then the mask applied over `(x, y, w, h)` with the shade's per-channel weights.
+    Silhouette {
+        spans: Range<usize>,
+        mask: (i32, i32, i32, i32),
+        apply: (i32, i32, i32, i32),
+        k: [f32; 3],
+        feather: i32,
+    },
 }
 
 /// The sky of the light pass, in linear light.
@@ -142,6 +167,8 @@ pub struct Sky {
     pub fill: [f32; 3],
     /// Toward the sun (x east, y south, z up), and its colour on flat ground.
     pub sun: Option<([f32; 3], [f32; 3])>,
+    /// The air's light, T2's (not exposed to `ambient`): what lights the fog.
+    pub air: [f32; 3],
 }
 
 /// Everything one frame draws, reused frame to frame.
@@ -159,7 +186,8 @@ pub struct Prep {
     /// draw (no ghosts: a ghost neither catches a height nor glows).
     pub solid_chunks: Vec<Range<usize>>,
     pub solid: Vec<(u8, Range<usize>)>,
-    /// Mask quads: pos, value (silhouettes, then the point lights' shadows).
+    /// Mask quads: pos, two values (silhouettes' strength and reach, then the point lights'
+    /// shadows' reach twice).
     pub span_v: Vec<f32>,
     /// Per shadow-casting light: its mask slot (1 to 8) and its quads in `span_v`.
     pub shadow_draws: Vec<(u8, Range<usize>)>,
@@ -169,6 +197,33 @@ pub struct Prep {
     /// The light pass's sky, if the frame has a light pass.
     pub sky: Option<Sky>,
     pub post: Option<Post>,
+    /// The Lights pass's flat light and sky light, display values (full where there is none).
+    pub ambient: Rgb,
+    pub fill: Rgb,
+    /// The sky backdrop (`Pass::Sky`), if the frame has one.
+    pub backdrop: Option<SkyLook>,
+    /// Water is in view (`Pass::Water`).
+    pub water: bool,
+    /// What the sky is doing (`Pass::Weather`).
+    pub atmos: Atmos,
+    /// Shape quads (particles, stars, the moon): pos, loc, shape, colour.
+    pub shape_v: Vec<f32>,
+    /// The backdrop's stars and moon, quads of `shape_v` drawn into the sky target.
+    pub sky_shapes: Range<usize>,
+    /// The far things on the backdrop, `SPRITE_SIZES` quads in the sky target's px.
+    pub far_v: Vec<f32>,
+    /// Runs of `far_v` by page, with their haze of 1.
+    pub far_draws: Vec<(u8, Range<usize>, f32)>,
+    /// The fog volumes, `MAX_FOG` at most: rects, colours (display, lit) with their density, and
+    /// `(edge, top, 0, 0)`, four floats each; and the mist tile's drift.
+    pub fog_rect: Vec<f32>,
+    pub fog_col: Vec<f32>,
+    pub fog_shape: Vec<f32>,
+    pub drift: (i16, i16),
+    /// What is drawn over the composed canvas, in order.
+    pub after: Vec<After>,
+    /// The light shafts' strength (`Pass::Rays`), 0 with none.
+    pub rays: u8,
     /// Draw calls the albedo pass will issue (for the stats).
     pub casters: usize,
     depth: Vec<u8>,
@@ -190,23 +245,29 @@ pub fn linear(c: u8) -> f32 {
     if v <= 0.04045 { v / 12.92 } else { ((v + 0.055) / 1.055).powf(2.4) }
 }
 
+/// A sky light's byte colour as linear light, its luminance through the curve and its chroma
+/// `SKY_CHROMA` of the way to the byte's own: T2's `light3` (`jane-render-wgpu`'s prep), so the
+/// fill's blue and the sun's gold are the hues T2 lights with, not the power curve's.
+fn light3(c: Rgb) -> [f32; 3] {
+    const SKY_CHROMA: f32 = 0.85;
+    let s = c.map(|v| f32::from(v) / 255.0);
+    let luma = 0.2126 * s[0] + 0.7152 * s[1] + 0.0722 * s[2];
+    if luma <= 0.0 {
+        return [0.0; 3];
+    }
+    let k = ((luma + 0.055) / 1.055).powf(2.4).min(luma) / luma;
+    let l = c.map(linear);
+    [0, 1, 2].map(|i| l[i] + (s[i] * k - l[i]) * SKY_CHROMA)
+}
+
 /// A jane-core angle (65536 a turn) in radians.
 fn rad(a: u16) -> f32 {
     f32::from(a) * std::f32::consts::TAU / 65536.0
 }
 
-/// The silhouettes' shear per px of height, Q8 (`jane-render-soft::silhouette::shear`): the same
-/// integer sun, so both tiers lay the same shadow.
-pub fn shear(sun: &Directional) -> Option<(i32, i32)> {
-    const MAX_COT_Q8: i32 = 8 * 256;
-    let (se, ce) = (sin_q15(sun.elevation).0, cos_q15(sun.elevation).0);
-    if se <= 0 {
-        return None;
-    }
-    let cot = (ce * 256 / se).min(MAX_COT_Q8);
-    let (ca, sa) = (cos_q15(sun.azimuth).0, sin_q15(sun.azimuth).0);
-    Some((-(ca * cot) >> 15, -(sa * cot) >> 15))
-}
+/// The silhouettes' shear per px of height, Q8: `soft`'s (`jane_present::shadow::shear`), the
+/// same integer sun, so both tiers lay the same shadow.
+pub use jane_present::shadow::shear;
 
 /// The light pass's sky in linear light, exposed so flat ground is as bright as T0's `ambient`
 /// (the clock's keyframes, the brightness the county was tuned to) but keeps the sky's own colour:
@@ -216,16 +277,38 @@ pub fn shear(sun: &Directional) -> Option<(i32, i32)> {
 /// shader's floor).
 pub fn sky(ambient: Rgb, fill: Rgb, sun: Option<Directional>) -> Sky {
     let luma = |c: [f32; 3]| 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
-    let fill = fill.map(linear);
+    let fill = light3(fill);
     let sun = sun.map(|s| {
         let (az, el) = (rad(s.azimuth.0), rad(s.elevation.0));
-        ([el.cos() * az.cos(), el.cos() * az.sin(), el.sin()], s.colour.map(linear))
+        ([el.cos() * az.cos(), el.cos() * az.sin(), el.sin()], light3(s.colour))
     });
     let flat = sun.map_or(0.0, |(d, _)| (d[2].max(0.0) / d[2].max(0.2)).min(1.0));
     let lit: [f32; 3] = std::array::from_fn(|c| fill[c] + sun.map_or(0.0, |(_, col)| col[c]) * flat);
     let l = luma(lit);
     let k = if l > 1e-4 { (luma(ambient.map(linear)) / l).clamp(0.25, 2.0) } else { 1.0 };
-    Sky { fill: fill.map(|v| v * k), sun: sun.map(|(d, col)| (d, col.map(|v| v * k))) }
+    // The air's light as T2's fog takes it (`fog.wgsl`): the fill, and the sun at T2's gain.
+    let air = std::array::from_fn(|c| fill[c] * 1.15 + sun.map_or(0.0, |(_, col)| col[c]) * SUN_GAIN * 0.45);
+    Sky { fill: fill.map(|v| v * k), sun: sun.map(|(d, col)| (d, col.map(|v| v * k))), air }
+}
+
+/// T2's sun: its light on flat ground is its colour byte times this (`jane-render-wgpu`'s prep).
+pub const SUN_GAIN: f32 = 1.6;
+
+/// Linear light as a display value (the sRGB curve, as the light pass writes it).
+pub fn srgb(c: f32) -> f32 {
+    if c <= 0.003_130_8 { c * 12.92 } else { 1.055 * c.powf(1.0 / 2.4) - 0.055 }
+}
+
+impl Sky {
+    /// What the light pass writes on flat ground, as the compose reads it: the display value
+    /// (`AMBIENT_FS`'s) squared, the linear light T1 multiplies by.
+    pub fn flat(&self) -> [f32; 3] {
+        let sun = self.sun.map_or([0.0; 3], |(d, col)| {
+            let ndl = (d[2].max(0.0) / d[2].max(0.2)).min(2.5);
+            col.map(|v| v * (1.0 + (ndl - 1.0) * 0.6))
+        });
+        std::array::from_fn(|c| srgb(self.fill[c] + sun[c]).powi(2))
+    }
 }
 
 /// Whether two `(x0, y0, x1, y1)` rects share a px.
@@ -248,6 +331,22 @@ impl Prep {
         self.n_lights = 0;
         self.sky = None;
         self.post = None;
+        self.ambient = [255; 3];
+        self.fill = [255; 3];
+        self.backdrop = None;
+        self.water = false;
+        self.atmos = Atmos::default();
+        self.shape_v.clear();
+        self.sky_shapes = 0..0;
+        self.far_v.clear();
+        self.far_draws.clear();
+        self.fog_rect.clear();
+        self.fog_col.clear();
+        self.fog_shape.clear();
+        self.drift = (0, 0);
+        self.after.clear();
+        self.rays = 0;
+        let mut lit_seen = false;
         self.rows.clear();
         self.profiles.clear();
         self.profiles.resize(frame.casters.len(), None);
@@ -293,9 +392,139 @@ impl Prep {
                 }
                 Pass::Lights { ambient, fill, sun, points, casters } => {
                     self.sky = Some(sky(ambient, fill, sun));
-                    self.lights(frame, ambient, points.range(), casters.range(), pages, *rows);
+                    (self.ambient, self.fill) = (ambient, fill);
+                    lit_seen = true;
+                    self.lights(frame, points.range(), casters.range(), pages, *rows);
                 }
                 Pass::Post(p) => self.post = Some(p),
+                // The atmosphere (PRESENTATION.md §1.8, §1.9, §2): the backdrop into its own
+                // target, the water, the sky and the wet ground in the compose, the rest over it.
+                Pass::Sky(s) => self.backdrop_of(frame, s),
+                Pass::Parallax { factor, sprites, .. } => {
+                    // The farther, the hazier: the School at an eighth, the trees at a quarter.
+                    let haze = if factor <= 32 { 50.0 / 255.0 } else { 24.0 / 255.0 };
+                    self.far(frame.sprites_in(sprites), haze);
+                }
+                Pass::Water { .. } => self.water = true,
+                Pass::Weather(a) => self.atmos = a,
+                Pass::Fog { volumes, drift } => {
+                    self.drift = drift;
+                    let had = self.fog_rect.len();
+                    for v in frame.fog_in(volumes).iter().take(MAX_FOG - self.fog_rect.len() / 4) {
+                        let (x0, y0, x1, y1) = v.rect;
+                        push(&mut self.fog_rect, &[x0 as f32, y0 as f32, x1 as f32, y1 as f32]);
+                        let [r, g, b] = v.colour.map(|c| f32::from(c) / 255.0);
+                        push(&mut self.fog_col, &[r, g, b, f32::from(v.density) / 255.0]);
+                        push(&mut self.fog_shape, &[f32::from(v.edge.max(1)), f32::from(v.top), 0.0, 0.0]);
+                    }
+                    if self.fog_rect.len() > had && !self.after.contains(&After::Fog) {
+                        self.after.push(After::Fog);
+                    }
+                }
+                // Light shafts (§1.3 `god_rays`): drawn over the canvas with the bloom.
+                Pass::Rays { strength } => self.rays = strength,
+                Pass::Particles { parts, .. } => {
+                    let first = self.shape_v.len() / SHAPE_QUAD;
+                    for p in frame.parts_in(parts) {
+                        self.particle(p);
+                    }
+                    let end = self.shape_v.len() / SHAPE_QUAD;
+                    if end > first {
+                        self.after.push(After::Parts { quads: first..end, lit: !lit_seen });
+                    }
+                }
+            }
+        }
+    }
+
+    /// One shape quad round `at`, from `lo` to `hi` px of it.
+    fn shape(&mut self, at: (f32, f32), lo: (f32, f32), hi: (f32, f32), shape: [f32; 4], col: [f32; 4]) {
+        if self.shape_v.len() / SHAPE_QUAD >= MAX_SHAPES {
+            return;
+        }
+        for (lx, ly) in [(lo.0, lo.1), (hi.0, lo.1), (lo.0, hi.1), (hi.0, hi.1)] {
+            push(&mut self.shape_v, &[at.0 + lx, at.1 + ly, lx, ly]);
+            push(&mut self.shape_v, &shape);
+            push(&mut self.shape_v, &col);
+        }
+    }
+
+    /// A particle's quad (T2's `vs_part`): a stroke's box round it and its tail, a square, a ring
+    /// squashed to half height, a soft disc.
+    fn particle(&mut self, p: &Particle) {
+        let at = (f32::from(p.x), f32::from(p.y));
+        let [r, g, b] = p.colour.map(|c| f32::from(c) / 255.0);
+        let col = [r, g, b, f32::from(p.alpha) / 255.0];
+        // What of it glows: a part under the light keeps that much of its own colour unlit (the
+        // rain's little light of its own).
+        let glow = f32::from(p.glow) / 255.0;
+        let (lo, hi, shape) = match p.shape {
+            PartShape::Streak { dx, dy } => {
+                let (tx, ty) = (f32::from(dx), f32::from(dy));
+                ((tx.min(0.0) - 1.0, ty.min(0.0) - 1.0), (tx.max(0.0) + 2.0, ty.max(0.0) + 2.0), [0.0, tx, ty, glow])
+            }
+            PartShape::Dot { size } => {
+                let s = f32::from(size.max(1));
+                ((0.0, 0.0), (s, s), [1.0, s, 0.0, glow])
+            }
+            PartShape::Ring { r } => {
+                let r = f32::from(r);
+                ((-r - 1.0, -r * 0.5 - 1.0), (r + 2.0, r * 0.5 + 2.0), [2.0, r, 0.0, glow])
+            }
+            PartShape::Glow { r } => {
+                let r = f32::from(r);
+                ((-r, -r), (r + 1.0, r + 1.0), [3.0, r, 0.0, glow])
+            }
+        };
+        self.shape(at, lo, hi, shape, col);
+    }
+
+    /// The backdrop: its stars and its moon as shapes in the sky target's px (x across, y up
+    /// from the horizon).
+    fn backdrop_of(&mut self, frame: &Frame, s: SkyLook) {
+        self.backdrop = Some(s);
+        let first = self.shape_v.len() / SHAPE_QUAD;
+        for st in &frame.stars[s.star_list.range()] {
+            let at = (f32::from(st.x), f32::from(st.up));
+            let a = f32::from(st.bright) / 255.0;
+            let size = if st.bright > 204 { 2.0 } else { 1.0 };
+            self.shape(at, (0.0, 0.0), (size, size), [1.0, size, 0.0, 0.0], [0.93, 0.94, 1.0, a]);
+        }
+        if let Some(m) = s.moon {
+            let at = (f32::from(m.x), f32::from(m.up));
+            let [r, g, b] = m.colour.map(|c| f32::from(c) / 255.0);
+            // A faint halo, then the disc in its phase.
+            let h = MOON_HALO;
+            self.shape(at, (-h, -h), (h + 1.0, h + 1.0), [3.0, h, 0.0, 0.0], [r, g, b, 0.16]);
+            let rr = MOON_R;
+            let phase = f32::from(m.phase % 16);
+            self.shape(at, (-rr, -rr), (rr + 1.0, rr + 1.0), [4.0, rr, phase, 0.0], [r, g, b, 1.0]);
+        }
+        self.sky_shapes = first..self.shape_v.len() / SHAPE_QUAD;
+    }
+
+    /// Far sprites on the backdrop: each flipped into the sky target, its top `-y` px up and its
+    /// row `sy` `-y - sy` up (T2's `vs_far`); runs by page.
+    fn far(&mut self, sprites: &[SpriteCmd], haze: f32) {
+        for s in sprites {
+            let first = self.far_v.len() / (4 * 12);
+            let (sx, sy, sw, sh) = (f32::from(s.src.x), f32::from(s.src.y), f32::from(s.src.w), f32::from(s.src.h));
+            let (x0, x1, top) = (f32::from(s.x), f32::from(s.x) + sw, -f32::from(s.y));
+            let rect = [sx, sy, sx + sw, sy + sh];
+            let info = [0.0, 0.0, 0.0, 2.0];
+            for (px, py, u, v) in [
+                (x0, top, sx, sy),
+                (x1, top, sx + sw, sy),
+                (x0, top - sh, sx, sy + sh),
+                (x1, top - sh, sx + sw, sy + sh),
+            ] {
+                push(&mut self.far_v, &[px, py, u, v]);
+                push(&mut self.far_v, &rect);
+                push(&mut self.far_v, &info);
+            }
+            match self.far_draws.last_mut() {
+                Some((page, r, h)) if *page == s.page && r.end == first && *h == haze => r.end = first + 1,
+                _ => self.far_draws.push((s.page, first..first + 1, haze)),
             }
         }
     }
@@ -422,19 +651,7 @@ impl Prep {
         if let Some(s) = frame.sprites.get(c.sprite as usize)
             && let Some(page) = pages.get(usize::from(s.page))
         {
-            let fy = i32::from(c.foot.1);
-            for v in (0..i32::from(s.src.h)).rev() {
-                let hv = fy - (i32::from(s.y) + v);
-                if hv <= 0 {
-                    continue;
-                }
-                if hv > 255 {
-                    break;
-                }
-                if let Some((u0, u1)) = page.extent(s, v) {
-                    self.rows.push((hv, u0, u1));
-                }
-            }
+            shadow::rows(&page.albedo, page.w, s, i32::from(c.foot.1), &mut self.rows);
         }
         let r = start..self.rows.len();
         if let Some(p) = self.profiles.get_mut(ci) {
@@ -454,56 +671,48 @@ impl Prep {
         pages: &[PageCpu],
         (cw, ch): (i32, i32),
     ) {
-        const TIP: i32 = 170;
-        let Some((kx, ky)) = shear(sun) else { return };
-        let first = self.span_v.len() / (4 * 3);
+        let Some(k) = shear(sun) else { return };
+        let first = self.span_v.len() / (4 * 4);
         let mut dirty: Option<(i32, i32, i32, i32)> = None;
         for ci in casters {
             let c: Caster = frame.casters[ci];
             let Some(s) = frame.sprites.get(c.sprite as usize) else { continue };
-            let x = i32::from(s.x);
-            let (fy, depth) = (i32::from(c.foot.1), i32::from(c.depth).max(2));
-            let height = i32::from(c.height).max(1);
             let prof = self.profile(frame, ci, pages);
-            for k in prof {
-                let (hv, u0, u1) = self.rows[k];
-                let (ax, bx) = ((hv * kx) >> 8, ((hv + 1) * kx) >> 8);
-                let (ay, by) = ((hv * ky) >> 8, ((hv + 1) * ky) >> 8);
-                let s8 = (256 - (256 - TIP) * hv.min(height) / height).clamp(1, 255);
-                let (x0, x1) = ((x + u0 + ax.min(bx)).max(0), (x + u1 + 1 + ax.max(bx)).min(cw));
-                let (y0, y1) = ((fy + ay.min(by) - depth / 2).max(0), (fy + ay.max(by) + depth - depth / 2).min(ch));
+            let (span_v, rows) = (&mut self.span_v, &self.rows[prof]);
+            shadow::bands(rows, i32::from(s.x), &c, k, |b| {
+                let (x0, x1, y0, y1) = (b.x0.max(0), b.x1.min(cw), b.y0.max(0), b.y1.min(ch));
                 if x0 >= x1 || y0 >= y1 {
-                    continue;
+                    return;
                 }
-                let v = s8 as f32;
-                let (a, b, c2, d) = (x0 as f32, y0 as f32, x1 as f32, y1 as f32);
-                push(&mut self.span_v, &[a, b, v, c2, b, v, a, d, v, c2, d, v]);
+                let (v, r) = (f32::from(b.strength), f32::from(b.reach));
+                let (a, bb, c2, d) = (x0 as f32, y0 as f32, x1 as f32, y1 as f32);
+                push(span_v, &[a, bb, v, r, c2, bb, v, r, a, d, v, r, c2, d, v, r]);
                 dirty = Some(match dirty {
                     None => (x0, y0, x1, y1),
-                    Some((p, q, r, t)) => (p.min(x0), q.min(y0), r.max(x1), t.max(y1)),
+                    Some((p, q, rr, t)) => (p.min(x0), q.min(y0), rr.max(x1), t.max(y1)),
                 });
-            }
+            });
         }
-        let end = self.span_v.len() / (4 * 3);
+        let end = self.span_v.len() / (4 * 4);
         let Some((x0, y0, x1, y1)) = dirty else { return };
-        let (ax0, ay0, ax1, ay1) = ((x0 - 1).max(0), (y0 - 1).max(0), (x1 + 1).min(cw), (y1 + 1).min(ch));
+        // The mask's box and the ring round it, and above it as high as a lifted receiver whose
+        // ground lies inside it can stand.
+        // The edge feathered by the sun's spread (`shadow::feather`, soft's).
+        let f = shadow::feather(sun.spread);
+        let (ax0, ay0, ax1, ay1) =
+            ((x0 - 1 - f).max(0), (y0 - 1 - f - CLIMB).max(0), (x1 + 1 + f).min(cw), (y1 + 1 + f).min(ch));
         let k = shade.map(|c| f32::from(256 - u16::from(c) - u16::from(c >> 7)));
-        self.steps.push(Step::Silhouette { spans: first..end, apply: (ax0, ay0, ax1 - ax0, ay1 - ay0), k });
+        self.steps.push(Step::Silhouette {
+            spans: first..end,
+            mask: (x0, y0, x1, y1),
+            apply: (ax0, ay0, ax1 - ax0, ay1 - ay0),
+            k,
+            feather: f,
+        });
     }
 
     /// The point lights' quads, and the shadow geometry of the ones that cast.
-    fn lights(
-        &mut self,
-        frame: &Frame,
-        ambient: Rgb,
-        points: Range<usize>,
-        casters: Range<usize>,
-        pages: &[PageCpu],
-        rows: Rows,
-    ) {
-        // A pool shows against the dark: by day a little, at night all of it (soft's rule).
-        let avg = ambient.iter().map(|&c| u32::from(c)).sum::<u32>() / 3;
-        let dark = (300u32.saturating_sub(avg)).min(220) as f32 / 220.0;
+    fn lights(&mut self, frame: &Frame, points: Range<usize>, casters: Range<usize>, pages: &[PageCpu], rows: Rows) {
         let mut slot = 0u8;
         for li in points.take(usize::from(rows.max_lights)) {
             let l = frame.lights[li];
@@ -516,20 +725,28 @@ impl Prep {
             let mut mask = 0.0;
             if l.casts && slot < rows.shadows.min(8) {
                 slot += 1;
-                let first = self.span_v.len() / (4 * 3);
+                let first = self.span_v.len() / (4 * 4);
                 for ci in casters.clone() {
-                    self.shadow(frame, ci, pages, (lx, ly, lh, r));
+                    // A light never shadows what holds it: her lantern's hand, a lamp's post.
+                    if l.holder != Some(frame.casters[ci].sprite) {
+                        self.shadow(frame, ci, pages, (lx, ly, lh, r));
+                    }
                 }
-                let end = self.span_v.len() / (4 * 3);
+                let end = self.span_v.len() / (4 * 4);
                 if end > first {
                     self.shadow_draws.push((slot, first..end));
                     mask = f32::from(slot);
                 }
             }
-            let g = POINT_GAIN * dark;
-            let [cr, cg, cb] = l.colour.map(|c| f32::from(c) / 255.0 * g);
-            // Flame light leans warm, as on T0 and T2: a yellow lamp on green grass is not lime.
-            let col = [cr, cg * 13.0 / 16.0, cb * 11.0 / 16.0, 0.0];
+            // T2's lamp (`jane-render-wgpu`'s prep): its byte's hue as T2 lights with it, leant
+            // warm (a yellow lamp on green grass is not lime), a deep orange flame held up to a
+            // lamp's brightness, at T2's gain, in linear light: the shader adds it to the sky's
+            // light as T2 sums them.
+            let [cr, cg, cb] = light3(l.colour);
+            let [cr, cg, cb] = [cr, cg * 0.82, cb * 0.6];
+            let luma = 0.2126 * cr + 0.7152 * cg + 0.0722 * cb;
+            let k = POINT_GAIN * (MIN_LUMA / luma.max(0.01)).clamp(1.0, 1.8);
+            let col = [cr * k, cg * k, cb * k, 0.0];
             let spot = match l.kind {
                 LightKind::Point => [0.0, 0.0, -2.0, mask],
                 LightKind::Spot { dir, cone } => [rad(dir.0).cos(), rad(dir.0).sin(), rad(cone.0).cos(), mask],
@@ -558,17 +775,17 @@ impl Prep {
         let Some(s) = frame.sprites.get(c.sprite as usize) else { return };
         let (fx, fy) = (f32::from(c.foot.0) + 0.5, f32::from(c.foot.1) + 0.5);
         let d = ((fx - lx).powi(2) + (fy - ly).powi(2)).sqrt();
-        // The one carrying the light (her lantern at her hip) throws no shadow of it: a lantern
-        // swings clear, and a wedge of her own body across the pool reads as a fault.
-        if d > r + 48.0 || d < HOLDER {
+        if d > r + 48.0 {
             return;
         }
         let far = r + SHADOW_PAST;
-        let top = f32::from(c.height.max(1));
         let x = f32::from(s.x);
-        let depth = f32::from(c.depth.max(2));
-        let backs = [fy - (depth / 2.0).floor(), fy + depth - (depth / 2.0).floor()];
+        let depth = i32::from(c.depth.max(2));
         let prof = self.profile(frame, ci, pages);
+        // Its top, true px: the ray over it is how high the shadow reaches.
+        let tall = i32::from(c.height).max(1);
+        let up = |hv: i32| height_of_rows(hv).min(tall) as f32;
+        let top = self.rows[prof.clone()].last().map_or(1.0, |r| up(r.0));
         // Runs of rows with the same extent, from the foot up: (from, to, first, last).
         let mut k = prof.start;
         while k < prof.end {
@@ -583,17 +800,22 @@ impl Prep {
             }
             let h1 = self.rows[j - 1].0 + 1;
             k = j;
-            let (za, zb) = ((h0 - 1) as f32, h1 as f32);
+            // The run's bottom and top as true px (a row `hv` above the foot is `5 hv / 4` up).
+            let (za, zb) = (up(h0 - 1), up(h1));
             let (xa, xb) = (x + u0 as f32, x + u1 as f32 + 1.0);
-            for by in backs {
-                let mut quad = [0.0f32; 12];
+            // Its footprint's front and back: the edge of its foot row and its depth behind it,
+            // no deeper than the run is wide (the silhouettes' and T2's field's,
+            // `jane_present::shadow::bands`).
+            let deep = depth.min(2 * ((u1 - u0) / 2) + 2) as f32;
+            for by in [fy + 0.5 - deep, fy + 0.5] {
+                let mut quad = [0.0f32; 16];
                 for (n, (px, z)) in [(xa, za), (xb, za), (xa, zb), (xb, zb)].into_iter().enumerate() {
                     let (dx, dy) = (px - lx, by - ly);
                     let dist = (dx * dx + dy * dy).sqrt().max(0.5);
                     let t = if z >= lh - 0.5 { far } else { (dist * lh / (lh - z)).min(far) };
                     let (gx, gy) = (lx + dx / dist * t, ly + dy / dist * t);
                     let reach = (lh + (top - lh) * t / dist).clamp(0.0, 255.0);
-                    quad[n * 3..n * 3 + 3].copy_from_slice(&[gx, gy, reach]);
+                    quad[n * 4..n * 4 + 4].copy_from_slice(&[gx, gy, reach, reach]);
                 }
                 push(&mut self.span_v, &quad);
             }
@@ -615,7 +837,7 @@ impl Prep {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use jane_present::{Depth, Flags, Span, Src, Tier};
+    use jane_present::{Depth, Flags, Span, SpriteCmd, Src, Tier};
 
     fn sprite(x: i16, tint: Tint) -> SpriteCmd {
         SpriteCmd {
@@ -670,6 +892,62 @@ mod tests {
     }
 
     #[test]
+    fn the_atmosphere_is_drawn_over_the_canvas_in_the_frames_order() {
+        use jane_present::frame::{FogVolume, Moon, StarCmd};
+        let mut f = Frame::new(Tier::T1);
+        let part = |x, shape| Particle { x, y: 10, shape, colour: [200, 210, 255], alpha: 200, glow: 90, height: 0 };
+        f.stars.push(StarCmd { x: 5, up: 30, bright: 255 });
+        f.parts.extend([part(1, PartShape::Streak { dx: 2, dy: 9 }), part(2, PartShape::Ring { r: 3 })]);
+        f.parts.push(part(3, PartShape::Glow { r: 4 }));
+        f.fog.push(FogVolume { rect: (0, 0, 64, 64), edge: 8, density: 90, colour: [120, 130, 140], top: 0 });
+        f.sprites.push(sprite(0, Tint::None));
+        let sky = SkyLook {
+            zenith: [10, 12, 40],
+            horizon: [200, 120, 100],
+            glow: [255, 120, 60],
+            glow_x: 0,
+            glow_amount: 0,
+            stars: 255,
+            star_list: Span { start: 0, len: 1 },
+            moon: Some(Moon { x: 40, up: 90, phase: 8, colour: [230, 230, 210] }),
+            zone: (0, 0, 64, 64),
+            tick: 0,
+        };
+        f.passes.extend([
+            Pass::Sky(sky),
+            Pass::Parallax { layer: Depth::FarLandmark, factor: 32, sprites: Span { start: 0, len: 1 } },
+            Pass::Water { cells: Span::default() },
+            Pass::Particles { layer: Depth::Weather, parts: Span { start: 0, len: 2 } },
+            Pass::Lights {
+                ambient: [60; 3],
+                fill: [40; 3],
+                sun: None,
+                points: Span::default(),
+                casters: Span::default(),
+            },
+            Pass::Fog { volumes: Span { start: 0, len: 1 }, drift: (3, 4) },
+            Pass::Particles { layer: Depth::Canopy, parts: Span { start: 2, len: 1 } },
+        ]);
+        let mut p = Prep::default();
+        p.build(&f, &[page()], &Rows::T1);
+        // The star, the moon's halo and its disc go to the backdrop; then the rain lit by the light
+        // target, the fog, and what glows over it.
+        assert_eq!(p.sky_shapes, 0..3);
+        assert_eq!(
+            p.after,
+            [After::Parts { quads: 3..5, lit: true }, After::Fog, After::Parts { quads: 5..6, lit: false }]
+        );
+        assert!(p.water && p.backdrop.is_some());
+        assert_eq!(p.far_draws, [(0, 0..1, 50.0 / 255.0)]);
+        assert_eq!((p.fog_rect.len(), p.drift), (4, (3, 4)));
+        // A stroke's quad holds it and its tail; the rain keeps its glow for its own light.
+        let v = &p.shape_v[3 * SHAPE_QUAD..];
+        assert_eq!(&v[..4], &[0.0, 9.0, -1.0, -1.0]);
+        assert_eq!(&v[3 * 12..3 * 12 + 4], &[5.0, 21.0, 4.0, 11.0]);
+        assert!((v[7] - 90.0 / 255.0).abs() < 1e-6);
+    }
+
+    #[test]
     fn a_page_knows_which_blocks_hold_the_contact_shadow() {
         let p = page();
         assert!(p.has_ao(Src { x: 0, y: 0, w: 8, h: 8 }));
@@ -701,6 +979,7 @@ mod tests {
             size: 4,
             casts: true,
             kind: LightKind::Point,
+            holder: None,
         });
         f.passes.push(Pass::Lights {
             ambient: [60; 3],
@@ -716,15 +995,19 @@ mod tests {
         assert_eq!(p.shadow_draws.len(), 1);
         // Every corner lies east of the post's foot and within the light's reach past its rim.
         let v = &p.span_v;
-        let xs: Vec<f32> = v.chunks_exact(3).map(|c| c[0]).collect();
+        let xs: Vec<f32> = v.chunks_exact(4).map(|c| c[0]).collect();
         assert!(xs.iter().all(|&x| (49.0..=10.5 + 124.0).contains(&x)), "{xs:?}");
         assert!(xs.iter().any(|&x| x > 120.0), "the top, above the lamp, reaches the rim");
         // The reach over the foot is the post's height; far out it rises past it.
-        let reach: Vec<f32> = v.chunks_exact(3).map(|c| c[2]).collect();
+        let reach: Vec<f32> = v.chunks_exact(4).map(|c| c[2]).collect();
         assert!(reach.iter().any(|&z| (z - 10.0).abs() < 1.0));
         assert!(reach.iter().all(|&z| z >= 9.0));
         // No shadows when the row is off.
         p.build(&f, &pages, &Rows { shadows: 0, ..Rows::T1 });
+        assert!(p.shadow_draws.is_empty() && p.span_v.is_empty());
+        // A light never shadows what holds it: the post holding the lamp throws nothing of it.
+        f.lights[0].holder = Some(0);
+        p.build(&f, &pages, &Rows::T1);
         assert!(p.shadow_draws.is_empty() && p.span_v.is_empty());
     }
 }

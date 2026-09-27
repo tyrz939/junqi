@@ -441,6 +441,13 @@ impl<'a> View<'a> {
         self.bp.rects.iter().map(move |(&k, &r)| (crate::sym::of_key(k, locals), r))
     }
 
+    /// The skeleton's patches of this zone as placed (the county's; none elsewhere), each with its
+    /// name, in the skeleton's order: what the atmosphere's fog volumes key to (WORLD.md §5.3).
+    pub fn areas(&self) -> impl Iterator<Item = (Sym, Rect)> + 'a {
+        let locals: &'a [Sym] = &self.rt.locals;
+        self.bp.areas.iter().map(move |a| (crate::sym::of_key(a.name, locals), a.rect))
+    }
+
     /// This zone's merged trigger table in the order its bits index, each with whether it fired.
     pub fn triggers(&self) -> impl Iterator<Item = (&'a ZoneTrigger, bool)> + 'a {
         let zone = self.zone;
@@ -501,6 +508,11 @@ impl<'a> View<'a> {
     pub fn region(&self) -> jane_data::Region {
         let (x, y) = self.body().pos.cell();
         self.rt.region_at(x, y)
+    }
+
+    /// The region under cell `(cx, cy)` of her zone: the ramps its ground is painted in.
+    pub fn region_at(&self, cx: i32, cy: i32) -> jane_data::Region {
+        self.rt.region_at(cx, cy)
     }
 
     /// The sky over her: her region's (`living.rs`). Presentation's mist, rain and storm.

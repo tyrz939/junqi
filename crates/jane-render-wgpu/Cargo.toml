@@ -10,6 +10,8 @@ publish.workspace = true
 
 [dependencies]
 jane-present.workspace = true
+# The mist tile's side (ART.md §2.8).
+jane-art.workspace = true
 wgpu.workspace = true
 
 [dev-dependencies]

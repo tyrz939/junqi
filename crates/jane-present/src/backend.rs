@@ -1,7 +1,7 @@
 //! The backend contract (PRESENTATION.md §1.2): a backend is a function of the `Frame` and its
 //! own caches. It reads no view, no event and no tuning row.
 
-use crate::frame::{Frame, Tier};
+use crate::frame::{Features, Frame, Tier};
 
 /// What a backend can do, reported once at boot.
 #[derive(Clone, Copy, Debug)]
@@ -37,6 +37,10 @@ pub struct Page {
     pub emissive: Vec<u16>,
     /// Px above the ground: a person's head is 40.
     pub height: Vec<u8>,
+    /// On a page built for `soft` alone (no emissive layer), what glows of it, sparse: each
+    /// glowing texel's index in the page and its emissive index, in packing order. T0's lit
+    /// windows and lamp glass (§1.3 `glow`); empty on a lit page, whose emissive layer says it.
+    pub glow: Vec<(u32, u16)>,
 }
 
 impl Page {
@@ -53,6 +57,9 @@ pub struct AtlasPages {
     /// `0xAARRGGBB` per master-palette index, `CLUT_LEN` long; index 0 and 1 are never read.
     pub clut: Vec<u32>,
     pub pages: Vec<Page>,
+    /// The mist tile (§1.4, §1.9): 8-bit alpha, `jane_art::weather::MIST_SIDE` square, seamless;
+    /// what every tier's fog drifts. Empty until the presenter makes it.
+    pub mist: Vec<u8>,
 }
 
 /// The passes a frame's time is split into (§1.12's measurement, in its order). A backend
@@ -161,6 +168,10 @@ pub trait Backend {
     fn stats(&self) -> Option<FrameStats> {
         None
     }
+    /// The `Features` rows in force (§1.3), whenever they change: a backend takes the ones it
+    /// draws itself (`normal_light`, `sharp`, and on T1 its casting and light counts); the
+    /// presenter has already acted on the rest in the `Frame`.
+    fn set_features(&mut self, _rows: &Features) {}
 }
 
 /// Frames a [`FrameTimes`] window holds.

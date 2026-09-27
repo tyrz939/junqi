@@ -12,7 +12,8 @@ struct Step {
     texel: vec2<f32>,
     // Upscale: output px per canvas px; the canvas's size in px.
     scale: f32,
-    pad: f32,
+    // Upscale: 1 draws nearest (the `sharp` row off).
+    nearest: f32,
 };
 
 @group(1) @binding(0) var<uniform> st: Step;
@@ -69,6 +70,19 @@ fn fs_grade(i: FullOut) -> @location(0) vec4<f32> {
     let px = vec2<i32>(floor(i.pos.xy));
     var c = textureLoad(src, px, 0).rgb;
     c += textureSample(bloom, smp, i.uv).rgb * g.misc.x;
+    // The afterglow across the frame at dusk and dawn (§1.9): the side toward where the sun
+    // went down (came up) warmer and a little lighter, fading across the view; and the far
+    // (top) edge of the view a little toward the horizon's colour, the air between.
+    if g.glow.w > 0.0 {
+        let x = f32(px.x);
+        let toward = clamp(1.0 - abs(x - g.horizon.w) / (g.canvas.x * 1.2), 0.0, 1.0);
+        let k = g.glow.w * toward * toward;
+        let air = air_glow(g.glow.rgb);
+        let warm = air / max(max(air.r, air.g), max(air.b, 0.001));
+        c = c * mix(vec3<f32>(1.0), 0.8 + warm * 0.45, k * 0.55) + air * k * 0.02;
+        let far = clamp(1.0 - f32(px.y) / g.canvas.y, 0.0, 1.0);
+        c = mix(c, (g.horizon.rgb + air) * 0.25, far * far * g.glow.w * 0.07);
+    }
     c *= g.lift.w;
     c = vec3<f32>(shoulder(c.r), shoulder(c.g), shoulder(c.b));
     let luma = dot(c, vec3<f32>(0.2126, 0.7152, 0.0722));
@@ -87,7 +101,7 @@ fn fs_upscale(i: FullOut) -> @location(0) vec4<f32> {
     let texel = i.pos.xy / st.scale;
     let base = floor(texel);
     let f = texel - base - 0.5;
-    let region = 0.5 - 0.5 / st.scale;
+    let region = select(0.5 - 0.5 / st.scale, 0.5, st.nearest > 0.5);
     let off = (f - clamp(f, vec2<f32>(-region), vec2<f32>(region))) * st.scale + 0.5;
     return textureSampleLevel(src, smp, (base + off) / size, 0.0);
 }

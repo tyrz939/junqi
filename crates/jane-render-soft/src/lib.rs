@@ -1,7 +1,10 @@
 //! T0 backend: the CPU rasteriser (PRESENTATION.md §1.2, §1.4). Integer pixel path, so its
 //! frames are byte-identical across targets.
 
+pub mod atmos;
 pub mod blit;
+pub mod glow;
+pub mod grade;
 pub mod lightmap;
 pub mod silhouette;
 pub mod ui;
@@ -9,9 +12,13 @@ pub mod ui;
 use std::time::Instant;
 
 use jane_present::frame::CHUNK_PX;
-use jane_present::{AtlasPages, Backend, Caps, Frame, FrameStats, FrameTimes, Page, Pass, StatPass, Tier};
+use jane_present::frame::SkyLook;
+use jane_present::{
+    AtlasPages, Backend, Caps, Depth, Features, Frame, FrameStats, FrameTimes, Page, Pass, StatPass, Tier,
+};
 
 use crate::blit::Target;
+use crate::glow::Glow;
 use crate::lightmap::LightMap;
 use crate::silhouette::Mask;
 
@@ -24,8 +31,18 @@ pub struct Soft {
     atlas: AtlasPages,
     /// The silhouette shadows' coverage, the canvas's size.
     mask: Mask,
+    /// The terrain's height under each canvas px, for the silhouettes to climb (only filled in a
+    /// frame that has them).
+    heights: Vec<u8>,
     /// The light buffer at a quarter of the canvas.
     lights: LightMap,
+    /// What glows this frame and the bloom's buffers (§1.3 `glow`, `bloom`).
+    glow: Glow,
+    /// Each page's glowing texels, sorted by index.
+    page_glow: Vec<Vec<(u32, u16)>>,
+    /// The `glow` row: lit windows and lamp glass added over the lightmap, and the bloom made of
+    /// them.
+    glow_on: bool,
     /// Pixels written by the last frame (the bench's proxy, §1.12).
     pub pixels_written: u64,
     /// The CPU's time per pass (§1.12); never read by the pixel path.
@@ -34,7 +51,7 @@ pub struct Soft {
 
 impl Soft {
     pub fn new() -> Soft {
-        Soft::default()
+        Soft { glow_on: Features::of(Tier::T0).glow, ..Soft::default() }
     }
 
     /// The last frame drawn: pixels, width, height.
@@ -51,6 +68,7 @@ impl Backend for Soft {
     /// Keeps the CLUT and the albedo; the normal, emissive and height pages are never read here.
     fn upload_atlas(&mut self, pages: &AtlasPages) {
         self.atlas.clut.clone_from(&pages.clut);
+        self.atlas.mist.clone_from(&pages.mist);
         self.atlas.pages.clear();
         self.atlas.pages.extend(pages.pages.iter().map(|p| Page {
             w: p.w,
@@ -58,6 +76,17 @@ impl Backend for Soft {
             albedo: p.albedo.clone(),
             ..Page::default()
         }));
+        self.page_glow.clear();
+        self.page_glow.extend(pages.pages.iter().map(|p| {
+            let mut g = p.glow.clone();
+            g.sort_unstable();
+            g
+        }));
+    }
+
+    /// The one row T0 draws itself: `glow` (the bloom comes in the frame's `Post`).
+    fn set_features(&mut self, f: &Features) {
+        self.glow_on = f.glow;
     }
 
     fn draw(&mut self, frame: &Frame) {
@@ -73,8 +102,19 @@ impl Backend for Soft {
             self.fb.resize(n, frame.clear);
         }
         let mut written = n as u64;
+        let climb = frame.passes.iter().any(|p| matches!(p, Pass::Silhouettes { .. }));
+        if climb {
+            self.heights.clear();
+            self.heights.resize(n, 0);
+        }
+        self.glow.clear();
+        // Whether the glow was added over the light (the bloom is made of it).
+        let mut glowed = false;
         let t = &mut Target { px: &mut self.fb, w: i32::from(self.w), h: i32::from(self.h) };
         pass_us[StatPass::Sky as usize] = start.elapsed().as_micros() as u32;
+        // The sky, once drawn, keeps the terrain inside the zone (its chunks paint the frame's
+        // clear beyond the edge, where the sky is).
+        let mut sky: Option<SkyLook> = None;
         for pass in &frame.passes {
             let at = Instant::now();
             calls += 1;
@@ -83,21 +123,74 @@ impl Backend for Soft {
                 Pass::Sprites { .. } => StatPass::List,
                 Pass::Silhouettes { .. } => StatPass::Shadows,
                 Pass::Lights { .. } => StatPass::Light,
-                Pass::Post(_) => StatPass::Grade,
+                Pass::Post(_) | Pass::Rays { .. } => StatPass::Grade,
+                Pass::Sky(_) => StatPass::Sky,
+                Pass::Parallax { .. } => StatPass::Parallax,
+                Pass::Water { .. } => StatPass::Water,
+                Pass::Weather(_) | Pass::Particles { layer: Depth::Weather, .. } => StatPass::Weather,
+                Pass::Fog { .. } => StatPass::Fog,
+                Pass::Particles { .. } => StatPass::Fx,
             };
             match *pass {
                 Pass::Terrain { chunks } => {
+                    let top = sky.map_or(0, |s| s.zone.1.clamp(0, t.h));
+                    // Below the sky: the rows the zone covers.
+                    let n = (top * t.w) as usize;
+                    let mut ground = Target { px: &mut t.px[n..], w: t.w, h: t.h - top };
                     for c in frame.chunks_in(chunks) {
                         calls += 1;
-                        blit::chunk(t, &frame.layers_of(c).albedo, CHUNK_PX, c.x, c.y);
+                        let l = frame.layers_of(c);
+                        blit::chunk(&mut ground, &l.albedo, CHUNK_PX, c.x, c.y - top);
+                        if climb && l.has_height() {
+                            blit::heights(&mut self.heights, (t.w, t.h), &l.height, CHUNK_PX, c.x, c.y);
+                        }
                         written += (CHUNK_PX * CHUNK_PX) as u64;
                     }
+                    if self.glow_on {
+                        for c in frame.chunks_in(chunks) {
+                            self.glow.chunk(t, &frame.layers_of(c).glow, CHUNK_PX, (c.x, c.y), top);
+                        }
+                    }
+                }
+                Pass::Sky(s) => {
+                    sky = Some(s);
+                    written += atmos::sky(t, &s, &frame.stars[s.star_list.range()]);
+                }
+                Pass::Parallax { sprites, .. } => {
+                    if let Some(s) = &sky {
+                        for sp in frame.sprites_in(sprites) {
+                            if let Some(page) = self.atlas.pages.get(usize::from(sp.page)) {
+                                written += atmos::parallax(t, s, page, &self.atlas.clut, sp);
+                            }
+                        }
+                    }
+                }
+                Pass::Water { cells } => written += atmos::shimmer(t, frame.water_in(cells), frame.tick),
+                Pass::Fog { volumes, drift } => {
+                    written += atmos::fog(t, frame.fog_in(volumes), &self.atlas.mist, frame.camera, drift);
+                }
+                Pass::Particles { parts, .. } => written += atmos::particles(t, frame.parts_in(parts)),
+                // What the sky is doing reached T0 through the ambient already, and the rain is
+                // particles. Light shafts are T2's, which a T0 frame never holds (§1.3).
+                Pass::Weather(_) | Pass::Rays { .. } => {}
+                // The bloom of what glows, then the grade with its afterglow, as T2 draws them
+                // (§1.9): the tiers are one look.
+                Pass::Post(p) => {
+                    if glowed && p.bloom > 0 {
+                        written += self.glow.bloom(t, u32::from(p.bloom) * 358 / 255);
+                    }
+                    written += grade::Grade::with_sky(&p, sky.as_ref(), frame.canvas).apply(t);
                 }
                 Pass::Sprites { cmds, .. } => {
                     for s in frame.sprites_in(cmds) {
                         if let Some(page) = self.atlas.pages.get(usize::from(s.page)) {
                             calls += 1;
                             blit::sprite(t, page, &self.atlas.clut, s.src, i32::from(s.x), i32::from(s.y), s.flags);
+                            if self.glow_on {
+                                let glow = &self.page_glow[usize::from(s.page)];
+                                let at = (i32::from(s.x), i32::from(s.y));
+                                self.glow.sprite(t, page, glow, &self.atlas.clut, s.src, at, s.flags);
+                            }
                             written += u64::from(s.src.w) * u64::from(s.src.h);
                         }
                     }
@@ -111,11 +204,21 @@ impl Backend for Soft {
                             silhouette::cast(&mut self.mask, page, s, c, k);
                         }
                     }
-                    written += silhouette::apply(t, &mut self.mask, shade);
+                    // A glowing px the shadow darkens still glows: checked before, taken after.
+                    self.glow.check(t);
+                    written += silhouette::apply(
+                        t,
+                        &mut self.mask,
+                        shade,
+                        &self.heights,
+                        jane_present::shadow::feather(sun.spread),
+                    );
+                    self.glow.refresh(t);
                 }
                 // T0 lights by the lightmap (§1.7): the ambient, the sun's share already in it,
                 // and every point light's pool; by the ambient alone when no light shows.
                 Pass::Lights { ambient, points, .. } => {
+                    self.glow.check(t);
                     let points = frame.lights_in(points);
                     if !points.is_empty() {
                         self.lights.build((t.w, t.h), ambient, points);
@@ -124,9 +227,12 @@ impl Backend for Soft {
                         blit::multiply(t, ambient);
                         written += n as u64;
                     }
+                    // Lamp glass and lit windows glow over the light (T2's emissive, unlit).
+                    if self.glow_on && self.glow.any() {
+                        written += self.glow.add(t);
+                        glowed = true;
+                    }
                 }
-                // A T2 pass: a T0 frame never holds one (§1.3), and soft draws nothing of its own.
-                Pass::Post(_) => {}
             }
             pass_us[stat as usize] += at.elapsed().as_micros() as u32;
         }

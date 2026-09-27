@@ -8,7 +8,7 @@ use jane_core::{Material, Tile};
 use jane_sim::view::View;
 
 use crate::atlas::{Atlas, RefId};
-use crate::frame::{CELL, CHUNK_CELLS, CHUNK_PX, ChunkId, ChunkLayers};
+use crate::frame::{CELL, CHUNK_CELLS, CHUNK_PX, ChunkId, ChunkLayers, SURFACE_OUTSIDE};
 
 /// A zone as the painter reads it: the view's tiles, the paint kept beside them.
 struct ViewTiles<'v, 'a> {
@@ -30,6 +30,18 @@ impl TileSource for ViewTiles<'_, '_> {
     fn outdoor(&self) -> bool {
         !self.view.indoor()
     }
+    fn region(&self, x: i32, y: i32) -> u8 {
+        // Only the county's ground takes its region's ramps: a dungeon (the forest's glades
+        // too) is built of its own stuff.
+        if self.view.zone() != jane_core::ids::ZoneId::County {
+            return 0;
+        }
+        match self.view.region_at(x, y) {
+            jane_data::Region::Lowfields => 0,
+            jane_data::Region::Waters => 1,
+            jane_data::Region::Works => 2,
+        }
+    }
 }
 
 /// A flora sprite as the atlas holds it, with what its shadow is thrown as.
@@ -38,6 +50,9 @@ pub struct Flora {
     pub look: RefId,
     /// How deep it is across the ground, px (a trunk is thin, a shrub is its spread).
     pub depth: u8,
+    /// How many rows over its foot the row it stands on is: its caster's foot, so every tier
+    /// throws its shadow from where its heights are counted.
+    pub lift: u8,
 }
 
 /// The painter, its scratch chunk, the zone's paint, and each slot's placements.
@@ -67,7 +82,10 @@ impl Terrain {
                 let look = atlas.add_canvas(&s.canvas, (s.ax as i16, s.ay as i16), h.clamp(1, 255) as u8, |_, _, t| t);
                 // A tree throws its shadow from its trunk; a shrub or a stone from its spread.
                 let depth = if name.contains("tree") || name.starts_with("pine") { 6 } else { w / 3 };
-                Flora { look, depth: depth.clamp(3, 16) as u8 }
+                // What it stands on, rows over its foot (a shrub's rim; its heights are counted
+                // from there, `jane_art::flora::base`).
+                let lift = (s.ay - jane_art::flora::base(&s.canvas, s.ay)).clamp(0, 255) as u8;
+                Flora { look, depth: depth.clamp(3, 16) as u8, lift }
             })
             .collect();
         Terrain {
@@ -93,13 +111,31 @@ impl Terrain {
         let c = &self.chunk.layers;
         layers.albedo.copy_from_slice(&c.albedo);
         let lit = layers.lit();
+        if layers.has_height() {
+            layers.height.copy_from_slice(&c.height);
+        }
+        layers.glow.clear();
+        if !lit {
+            // T0 keeps what glows sparse (§1.3 `glow`): its lit windows, up to the reserve.
+            let room = layers.glow.capacity();
+            let glowing = c.emissive.iter().enumerate().filter(|(_, ix)| ix.is_opaque());
+            layers.glow.extend(glowing.take(room).map(|(k, &ix)| (k as u16, terrain::pack(ix))));
+        }
         if lit {
             layers.normal.copy_from_slice(&c.normal);
-            layers.height.copy_from_slice(&c.height);
             for (e, &ix) in layers.emissive.iter_mut().zip(&c.emissive) {
                 *e = if ix.is_opaque() { terrain::pack(ix) } else { 0 };
             }
+            // What the ground is to the rain and the water (§1.8): the px's distance to land
+            // through water, and how its cell takes rain.
+            for (k, s) in layers.surface.iter_mut().enumerate() {
+                let (x, y) = (k as i32 % CHUNK_PX, k as i32 / CHUNK_PX);
+                let wet = c.wet[(y / CELL * CHUNK_CELLS + x / CELL) as usize].min(3);
+                *s = c.water[k].min(16) * 4 + wet;
+            }
         }
+        layers.water.clear();
+        layers.water.extend(self.chunk.water.iter().map(|w| (w.x, w.y, w.phase)));
         // Beyond the zone's edge: the frame's clear, flat.
         let (w, h) = src.size();
         let (x0, y0) = (cx * CHUNK_CELLS, cy * CHUNK_CELLS);
@@ -110,21 +146,33 @@ impl Terrain {
                 let inside_y = y0 + y / CELL < h;
                 let x_in = if inside_y { ((w - x0).clamp(0, CHUNK_CELLS) * CELL) as usize } else { 0 };
                 layers.albedo[row + x_in..row + side].fill(outside);
+                if layers.has_height() {
+                    layers.height[row + x_in..row + side].fill(0);
+                }
                 if lit {
                     layers.normal[row + x_in..row + side].fill([128, 128]);
-                    layers.height[row + x_in..row + side].fill(0);
                     layers.emissive[row + x_in..row + side].fill(0);
+                    layers.surface[row + x_in..row + side].fill(SURFACE_OUTSIDE);
                 }
             }
+            layers.water.retain(|&(x, y, _)| x0 + i32::from(x) < w && y0 + i32::from(y) < h);
+            layers.glow.retain(|&(k, _)| {
+                let (x, y) = (i32::from(k) % CHUNK_PX, i32::from(k) / CHUNK_PX);
+                x0 + x / CELL < w && y0 + y / CELL < h
+            });
         }
         let placed = &mut self.placed[usize::from(slot)];
         placed.clear();
         placed.extend_from_slice(&self.chunk.placed);
     }
 
-    /// A slot painted roughly: it stands nothing.
-    pub fn swatched(&mut self, slot: u16) {
+    /// A slot painted roughly: it stands nothing, and its ground is dry land until the painter
+    /// reaches it.
+    pub fn swatched(&mut self, slot: u16, layers: &mut ChunkLayers) {
         self.placed[usize::from(slot)].clear();
+        layers.surface.fill(0);
+        layers.water.clear();
+        layers.glow.clear();
     }
 
     /// What the chunk in `slot` stands: foot px in the chunk, and the sprite.

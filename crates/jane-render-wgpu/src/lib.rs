@@ -8,8 +8,9 @@
 //!    canvas and a guard band round it. Sprite albedo and emissive are 16-bit master-palette
 //!    indices looked up in a 1024-entry CLUT (§1.4).
 //! 2. **Height field**: a compute pass stands every lifted pixel on its ground point (a pixel
-//!    `h` up at `(x, y)` stands at `(x, y + h)`), the tallest winning, so the field seen from
-//!    above holds every roof, wall, post and person where it stands.
+//!    `h` up at `(x, y)` stands at `(x, y + rows_up(h))`), the tallest winning, so the field seen
+//!    from above holds every roof, wall, post and person where it stands. Each texel has a
+//!    bottom too: what floats (a canopy, a lamp's head, a hand) stands from its lowest px up.
 //! 3. **Light**: per canvas pixel the sky's fill, the sun or moon, and the point lights of its
 //!    32 x 32 tile, each by N dot L with the light's height as z and a soft shadow traced through
 //!    the height field (`shaders/light.wgsl`), emissive added unlit.
@@ -22,6 +23,7 @@
 // the 2^23 a float holds exactly.
 #![allow(clippy::cast_precision_loss)]
 
+mod atmos;
 mod gpu;
 pub mod prep;
 mod ui;
@@ -31,10 +33,12 @@ use std::sync::atomic::{AtomicU8, Ordering};
 use std::time::Instant;
 
 use jane_present::frame::{CHUNK_PX, ChunkLayers};
-use jane_present::{AO_TINT, AtlasPages, Backend, CLUT_LEN, Caps, Frame, FrameStats, FrameTimes, StatPass, Tier};
+use jane_present::{
+    AO_TINT, AtlasPages, Backend, CLUT_LEN, Caps, Features, Frame, FrameStats, FrameTimes, StatPass, Tier,
+};
 
 use crate::gpu::{B, Gpu, array_view, group, layout, texture, write_layer};
-use crate::prep::{GUARD, Kind, MAX_LIGHTS, Prep, TILE, TILE_CAP};
+use crate::prep::{GLOBALS, GUARD, Kind, MAX_FOG, MAX_LIGHTS, Prep, TILE, TILE_CAP};
 
 pub use crate::gpu::block_on;
 
@@ -52,6 +56,11 @@ const BLOOM_LEVELS: usize = 5;
 const ALBEDO: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
 const NH: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 const HDR: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
+/// Where the sun reaches, a px: what the light shafts are made of.
+const SUN: wgpu::TextureFormat = wgpu::TextureFormat::R8Unorm;
+/// Whose each G-buffer px is: the sprite's index in the frame plus one, 0 for the terrain. The
+/// height field carries it so a trace skips what it starts on and what holds its light.
+const ID: wgpu::TextureFormat = wgpu::TextureFormat::R16Uint;
 
 /// The pipelines and their layouts.
 #[derive(Debug)]
@@ -183,9 +192,9 @@ impl Pipes {
                 B::TexArray,
             ],
         );
-        let scatter_layout = layout(device, "scatter", &[B::Uniform, B::Tex, B::ReadWrite]);
+        let scatter_layout = layout(device, "scatter", &[B::Uniform, B::Tex, B::ReadWrite, B::Uint]);
         let light_layout =
-            layout(device, "light", &[B::Uniform, B::Tex, B::Tex, B::Tex, B::Read, B::Read, B::Read, B::Read]);
+            layout(device, "light", &[B::Uniform, B::Tex, B::Tex, B::Tex, B::Read, B::Read, B::Read, B::Read, B::Uint]);
         let post_layout = layout(device, "post", &[B::Uniform, B::Tex, B::Sampler, B::Tex]);
         let step_layout = layout(device, "step", &[B::Uniform]);
 
@@ -200,12 +209,17 @@ impl Pipes {
             step_mode: wgpu::VertexStepMode::Instance,
             attributes: &SPRITE_ATTRS,
         };
-        let three = [target(ALBEDO, None), target(NH, None), target(ALBEDO, None)];
+        let three = [target(ALBEDO, None), target(NH, None), target(ALBEDO, None), target(ID, None)];
         // The albedo alone: the other two attachments are there and left as they are.
         let masked =
             |format| Some(wgpu::ColorTargetState { format, blend: None, write_mask: wgpu::ColorWrites::empty() });
-        let over = [target(ALBEDO, Some(OVER)), masked(NH), masked(ALBEDO)];
-        let multiply = [target(ALBEDO, Some(MULTIPLY)), masked(NH), masked(ALBEDO)];
+        // The albedo's colour alone: its alpha is the ground's surface byte, which a ghost or a
+        // contact shadow over it leaves as it is.
+        let colour = |blend| {
+            Some(wgpu::ColorTargetState { format: ALBEDO, blend: Some(blend), write_mask: wgpu::ColorWrites::COLOR })
+        };
+        let over = [colour(OVER), masked(NH), masked(ALBEDO), masked(ID)];
+        let multiply = [colour(MULTIPLY), masked(NH), masked(ALBEDO), masked(ID)];
         let chunk =
             render_pipeline(device, "chunks", &[&gbuf_layout], &gm, "vs_chunk", "fs_chunk", &[chunk_buf], true, &three);
         let sprite = render_pipeline(
@@ -267,7 +281,7 @@ impl Pipes {
             "fs_light",
             &[],
             false,
-            &[target(HDR, None), target(HDR, None)],
+            &[target(HDR, None), target(HDR, None), target(SUN, None)],
         );
         let pm = module(device, "post", POST);
         let pl = [&post_layout, &step_layout];
@@ -335,6 +349,7 @@ struct Targets {
     galb: wgpu::TextureView,
     gnh: wgpu::TextureView,
     gem: wgpu::TextureView,
+    gid: wgpu::TextureView,
     hmap: wgpu::Buffer,
     hdr: wgpu::TextureView,
     bsrc: wgpu::TextureView,
@@ -353,9 +368,21 @@ struct Targets {
     down: Vec<(wgpu::BindGroup, wgpu::BindGroup)>,
     up: Vec<(wgpu::BindGroup, wgpu::BindGroup)>,
     grade: (wgpu::BindGroup, wgpu::BindGroup),
+    /// The grade reading the second HDR target, when no fog pass wrote back into the first.
+    grade_b: (wgpu::BindGroup, wgpu::BindGroup),
     /// The window's upscale: the canvas and the scale.
     upscale: (wgpu::BindGroup, wgpu::BindGroup),
     upscale_step: wgpu::Buffer,
+    /// The second HDR target (the water pass writes it, the fog pass reads it), where the sun
+    /// reaches, and the sky backdrop (`atmos.rs`).
+    hdr_b: wgpu::TextureView,
+    sun: wgpu::TextureView,
+    sky: wgpu::TextureView,
+    /// The sky pass's group, once the atlas is up.
+    sky_bg: Option<wgpu::BindGroup>,
+    water_bg: wgpu::BindGroup,
+    fog_bg: wgpu::BindGroup,
+    part_bg: wgpu::BindGroup,
 }
 
 /// Timestamp queries at pass boundaries, read a frame or two late so a frame never waits for
@@ -371,9 +398,10 @@ struct Stamps {
     count: u32,
 }
 
-/// The frame's timestamps: the chunks, the list, the height field, the light, bloom to grade,
-/// each a begin and an end.
-const FRAME_STAMPS: u32 = 10;
+/// The frame's timestamps, each a begin and an end: the sky, the chunks, the list, the height
+/// field, the light, the water, the particles on the ground, the fog, the particles in the air,
+/// the rain, bloom to grade.
+const FRAME_STAMPS: u32 = 22;
 
 impl Stamps {
     fn new(gpu: &Gpu, label: &str, count: u32) -> Stamps {
@@ -493,6 +521,13 @@ pub struct Wgpu {
     describe: String,
     /// The `Ui` pass (PRESENTATION.md §3.1).
     ui: ui::UiPass,
+    /// The atmosphere's pipelines (`atmos.rs`), and the mist tile the fog drifts.
+    atmos: atmos::AtmosPipes,
+    mist: wgpu::TextureView,
+    /// Whether the window asked for vsync (`for_window`).
+    vsync: bool,
+    /// The `sharp` row (§1.3): sharp bilinear to the window; off, nearest.
+    sharp: bool,
 }
 
 impl Wgpu {
@@ -515,11 +550,29 @@ impl Wgpu {
         if let Some(&f) = caps.formats.iter().find(|f| f.is_srgb()) {
             config.format = f;
         }
-        config.present_mode = if vsync { wgpu::PresentMode::AutoVsync } else { wgpu::PresentMode::AutoNoVsync };
+        config.present_mode = present_mode(&caps.present_modes, vsync);
         config.desired_maximum_frame_latency = 2;
         surface.configure(&gpu.device, &config);
         let format = config.format;
-        Ok(Wgpu::build(gpu, Some(Window::Surface { surface, config }), format))
+        let mut w = Wgpu::build(gpu, Some(Window::Surface { surface, config }), format);
+        w.describe = format!("{}, {:?}", w.describe, w.present_mode().unwrap_or(wgpu::PresentMode::Fifo));
+        w.vsync = vsync;
+        Ok(w)
+    }
+
+    /// How the window's frames are shown (`None` with no window).
+    pub fn present_mode(&self) -> Option<wgpu::PresentMode> {
+        match &self.window {
+            Some(Window::Surface { config, .. }) => Some(config.present_mode),
+            _ => None,
+        }
+    }
+
+    /// Whether the caller paces the frames: vsync was asked for, and the present does not wait
+    /// for the display itself (mailbox), so a loop that drew as fast as it could would draw
+    /// frames nobody sees.
+    pub fn paced_by_caller(&self) -> bool {
+        self.vsync && self.present_mode().is_some_and(|m| m == wgpu::PresentMode::Mailbox)
     }
 
     /// A backend with no window that still upscales every frame to `size` px (an offscreen
@@ -536,7 +589,7 @@ impl Wgpu {
         let pipes = Pipes::new(device, window.as_ref().map(|_| format));
         let globals = device.create_buffer(&wgpu::BufferDescriptor {
             label: Some("globals"),
-            size: 128,
+            size: GLOBALS as u64,
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -558,6 +611,10 @@ impl Wgpu {
         let describe = format!("wgpu, {}", gpu.describe());
         let times = FrameTimes::new(stamps.is_some());
         let ui = ui::UiPass::new(device, &gpu.queue);
+        let atmos = atmos::AtmosPipes::new(device);
+        let mist =
+            texture(device, "mist", (1, 1, 1), wgpu::TextureFormat::R8Unorm, wgpu::TextureUsages::TEXTURE_BINDING)
+                .create_view(&wgpu::TextureViewDescriptor::default());
         Wgpu {
             gpu,
             pipes,
@@ -578,10 +635,21 @@ impl Wgpu {
             frames: 0,
             describe,
             ui,
+            vsync: false,
+            atmos,
+            mist,
+            sharp: true,
         }
     }
 
     /// `wgpu, Vulkan, <adapter>`.
+    /// A debug view (PRESENTATION.md §1.7): the light pass draws the sun's term alone, red how
+    /// much of the sun reaches each px through the height field, green its N dot L, blue the
+    /// albedo, so a shadow's root and a self-shadow show plainly (`jane sheet scene --show-sun`).
+    pub fn show_sun(&mut self, on: bool) {
+        self.prep.show_sun = on;
+    }
+
     pub fn describe(&self) -> &str {
         &self.describe
     }
@@ -630,7 +698,8 @@ impl Wgpu {
         };
         let scale = size.1 as f32 / t.canvas.1 as f32;
         let mut step = Vec::with_capacity(16);
-        for v in [0.0f32, 0.0, scale, 0.0] {
+        // The last word: 1 draws nearest (the `sharp` row off).
+        for v in [0.0f32, 0.0, scale, if self.sharp { 0.0 } else { 1.0 }] {
             step.extend_from_slice(&v.to_le_bytes());
         }
         self.gpu.queue.write_buffer(&t.upscale_step, 0, &step);
@@ -709,9 +778,12 @@ impl Wgpu {
         let galb = view(texture(d, "g albedo", (full.0, full.1, 1), ALBEDO, rt));
         let gnh = view(texture(d, "g normal height", (full.0, full.1, 1), NH, rt));
         let gem = view(texture(d, "g emissive", (full.0, full.1, 1), ALBEDO, rt));
+        let gid = view(texture(d, "g id", (full.0, full.1, 1), ID, rt));
         let hmap = d.create_buffer(&wgpu::BufferDescriptor {
             label: Some("height field"),
-            size: u64::from(full.0) * u64::from(full.1) * 4,
+            // Two halves: each texel's top and whose (`h << 16 | id`), then its bottom
+            // (`256 - lo`, 0 where nothing floats).
+            size: u64::from(full.0) * u64::from(full.1) * 8,
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -746,7 +818,8 @@ impl Wgpu {
         let tiles = storage("tiles", tiles_n * 8);
         let tile_lights = storage("tile lights", tiles_n * TILE_CAP as u64 * 4);
         let g = self.globals.as_entire_binding();
-        let scatter_bg = group(d, "scatter", &p.scatter_layout, &[g.clone(), r(&gnh), hmap.as_entire_binding()]);
+        let scatter_bg =
+            group(d, "scatter", &p.scatter_layout, &[g.clone(), r(&gnh), hmap.as_entire_binding(), r(&gid)]);
         let light_bg = group(
             d,
             "light",
@@ -760,6 +833,7 @@ impl Wgpu {
                 lights.as_entire_binding(),
                 tiles.as_entire_binding(),
                 tile_lights.as_entire_binding(),
+                r(&gid),
             ],
         );
         let smp = wgpu::BindingResource::Sampler(&p.sampler);
@@ -794,12 +868,55 @@ impl Wgpu {
         let grade = (post("grade", &hdr, &levels[0]), stepg(&step("grade", (w, h), 1.0)));
         let upscale_step = step("upscale", (w, h), 1.0);
         let upscale = (post("upscale", &canvas_view, &self.dummy), stepg(&upscale_step));
+        // The atmosphere's targets and groups (`atmos.rs`).
+        let hdr_b = view(texture(d, "hdr b", (w, h, 1), HDR, rt));
+        let sun = view(texture(d, "sun seen", (w, h, 1), SUN, rt));
+        let sky = view(texture(d, "sky", (w, atmos::SKY_ROWS, 1), HDR, rt));
+        let grade_b = (post("grade b", &hdr_b, &levels[0]), stepg(&step("grade b", (w, h), 1.0)));
+        let a = &self.atmos;
+        let sky_bg = self
+            .atlas
+            .as_ref()
+            .map(|at| group(d, "sky", &a.sky_layout, &[g.clone(), r(&at.clut), r(&at.albedo), r(&at.emissive)]));
+        let water_bg = group(d, "water", &a.water_layout, &[g.clone(), r(&hdr), r(&gnh), r(&galb), r(&sky)]);
+        let fog_bg = group(
+            d,
+            "fog",
+            &a.fog_layout,
+            &[
+                g.clone(),
+                r(&hdr_b),
+                r(&gnh),
+                r(&self.mist),
+                wgpu::BindingResource::Sampler(&a.repeat),
+                a.volumes.as_entire_binding(),
+                lights.as_entire_binding(),
+                tiles.as_entire_binding(),
+                tile_lights.as_entire_binding(),
+                r(&sun),
+            ],
+        );
+        let part_bg = group(
+            d,
+            "particles",
+            &a.part_layout,
+            &[g.clone(), lights.as_entire_binding(), tiles.as_entire_binding(), tile_lights.as_entire_binding()],
+        );
         self.targets = Some(Targets {
+            grade_b,
+            hdr_b,
+            sun,
+            sky,
+            sky_bg,
+            water_bg,
+            fog_bg,
+            part_bg,
             canvas: (w, h),
             full,
             galb,
             gnh,
             gem,
+            gid,
             hmap,
             hdr,
             bsrc,
@@ -832,6 +949,14 @@ impl Wgpu {
             let q = &self.gpu.queue;
             let buf = &mut self.chunks.scratch;
             rgba(buf, &l.albedo);
+            // The albedo's alpha carries the surface byte (§1.8): water, wetness, the sky beyond.
+            if l.surface.len() == l.albedo.len() {
+                for (px, &s) in buf.chunks_exact_mut(4).zip(&l.surface) {
+                    px[3] = s;
+                }
+            } else {
+                buf.chunks_exact_mut(4).for_each(|px| px[3] = 0);
+            }
             write_layer(q, &self.chunks.albedo, u32::from(slot), (side, side), 4, buf);
             nh(buf, l);
             write_layer(q, &self.chunks.nh, u32::from(slot), (side, side), 4, buf);
@@ -856,14 +981,39 @@ impl Wgpu {
         }
         let span = |a: usize, b: usize| at[b].saturating_sub(at[a]);
         let mut pass = [0u32; StatPass::COUNT];
-        pass[StatPass::Chunks as usize] = span(0, 1);
-        pass[StatPass::List as usize] = span(2, 3);
-        pass[StatPass::Shadows as usize] = span(4, 5);
-        pass[StatPass::Light as usize] = span(6, 7);
-        pass[StatPass::Grade as usize] = span(8, 9);
+        pass[StatPass::Sky as usize] = span(0, 1);
+        pass[StatPass::Chunks as usize] = span(2, 3);
+        pass[StatPass::List as usize] = span(4, 5);
+        pass[StatPass::Shadows as usize] = span(6, 7);
+        pass[StatPass::Light as usize] = span(8, 9);
+        pass[StatPass::Water as usize] = span(10, 11);
+        pass[StatPass::Fx as usize] = span(12, 13) + span(16, 17);
+        pass[StatPass::Fog as usize] = span(14, 15);
+        pass[StatPass::Weather as usize] = span(18, 19);
+        pass[StatPass::Grade as usize] = span(20, 21);
         pass[StatPass::Upscale as usize] = self.upscale_us;
-        self.times.push_passes(at[9] + self.upscale_us, pass);
+        self.times.push_passes(at[21] + self.upscale_us, pass);
     }
+}
+
+/// How the window's frames are shown: with vsync, `Mailbox` where the surface offers it (a frame
+/// waits for no vblank, and the newest drawn is the one shown, so presenting never holds the
+/// loop), else `Fifo`, which every surface has; without, `Immediate`, else `Mailbox`, else `Fifo`.
+fn present_mode(offered: &[wgpu::PresentMode], vsync: bool) -> wgpu::PresentMode {
+    use wgpu::PresentMode::{Fifo, Immediate, Mailbox};
+    let order: &[wgpu::PresentMode] = if vsync { &[Mailbox, Fifo] } else { &[Immediate, Mailbox, Fifo] };
+    order.iter().copied().find(|m| offered.contains(m)).unwrap_or(Fifo)
+}
+
+/// An attachment drawn over, what is there kept.
+#[allow(clippy::unnecessary_wraps)]
+fn keep(view: &wgpu::TextureView) -> Option<wgpu::RenderPassColorAttachment<'_>> {
+    Some(wgpu::RenderPassColorAttachment {
+        view,
+        depth_slice: None,
+        resolve_target: None,
+        ops: wgpu::Operations { load: wgpu::LoadOp::Load, store: wgpu::StoreOp::Store },
+    })
 }
 
 /// A texture view as a binding.
@@ -974,6 +1124,15 @@ impl Backend for Wgpu {
             self.ui.atlas(&self.gpu.device, &a.albedo, &a.clut);
         }
         self.gbuf_group();
+        // The mist tile the fog drifts (§1.4), and a refit, since the sky's group reads the atlas.
+        let side = jane_art::weather::MIST_SIDE as u32;
+        if pages.mist.len() == (side * side) as usize {
+            let usage = wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST;
+            let t = texture(&self.gpu.device, "mist", (side, side, 1), wgpu::TextureFormat::R8Unorm, usage);
+            write_layer(&self.gpu.queue, &t, 0, (side, side), 1, &pages.mist);
+            self.mist = t.create_view(&wgpu::TextureViewDescriptor::default());
+        }
+        self.targets = None;
     }
 
     fn draw(&mut self, frame: &Frame) {
@@ -1011,6 +1170,8 @@ impl Backend for Wgpu {
             0,
             &prep.tile_lights[..prep.tile_lights.len().min(t.tile_lights.size() as usize)],
         );
+        self.atmos.upload(d, q, prep);
+        let a = &self.atmos;
 
         let stamps = self.stamps.as_ref().filter(|s| s.idle());
         let mut calls = 0u32;
@@ -1024,16 +1185,45 @@ impl Backend for Wgpu {
                 ops: wgpu::Operations { load: wgpu::LoadOp::Clear(colour), store: wgpu::StoreOp::Store },
             })
         };
+        // The sky backdrop (`atmos.rs`): the gradient, the stars, the far things.
+        {
+            let mut pass = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("sky"),
+                color_attachments: &[attach(&t.sky, wgpu::Color::BLACK)],
+                depth_stencil_attachment: None,
+                timestamp_writes: stamps.map(|s| s.writes(Some(0), Some(1))),
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            if let (true, Some(bg)) = (prep.has_sky, &t.sky_bg) {
+                pass.set_bind_group(0, bg, &[]);
+                pass.set_pipeline(&a.sky);
+                pass.draw(0..3, 0..1);
+                if prep.n_stars > 0 {
+                    pass.set_pipeline(&a.star);
+                    pass.set_vertex_buffer(0, a.stars.slice(..));
+                    pass.draw(0..4, 0..prep.n_stars);
+                }
+                if prep.n_sky_sprites > 0 {
+                    pass.set_pipeline(&a.far);
+                    pass.set_vertex_buffer(0, a.far_sprites.slice(..));
+                    pass.draw(0..4, 0..prep.n_sky_sprites);
+                }
+                calls += 3;
+            }
+        }
         {
             let mut pass = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("gbuffer chunks"),
                 color_attachments: &[
-                    attach(&t.galb, wgpu::Color { r: cr, g: cg, b: cb, a: 1.0 }),
+                    // Alpha 254: where nothing is drawn, the sky shows (the surface byte).
+                    attach(&t.galb, wgpu::Color { r: cr, g: cg, b: cb, a: 254.0 / 255.0 }),
                     attach(&t.gnh, wgpu::Color { r: 128.0 / 255.0, g: 128.0 / 255.0, b: 0.0, a: 0.0 }),
                     attach(&t.gem, wgpu::Color::BLACK),
+                    attach(&t.gid, wgpu::Color::TRANSPARENT),
                 ],
                 depth_stencil_attachment: None,
-                timestamp_writes: stamps.map(|s| s.writes(Some(0), Some(1))),
+                timestamp_writes: stamps.map(|s| s.writes(Some(2), Some(3))),
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
@@ -1046,19 +1236,11 @@ impl Backend for Wgpu {
             }
         }
         {
-            let keep = |view| {
-                Some(wgpu::RenderPassColorAttachment {
-                    view,
-                    depth_slice: None,
-                    resolve_target: None,
-                    ops: wgpu::Operations { load: wgpu::LoadOp::Load, store: wgpu::StoreOp::Store },
-                })
-            };
             let mut pass = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("gbuffer list"),
-                color_attachments: &[keep(&t.galb), keep(&t.gnh), keep(&t.gem)],
+                color_attachments: &[keep(&t.galb), keep(&t.gnh), keep(&t.gem), keep(&t.gid)],
                 depth_stencil_attachment: None,
-                timestamp_writes: stamps.map(|s| s.writes(Some(2), Some(3))),
+                timestamp_writes: stamps.map(|s| s.writes(Some(4), Some(5))),
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
@@ -1082,8 +1264,8 @@ impl Backend for Wgpu {
                 label: Some("height field"),
                 timestamp_writes: stamps.map(|s| wgpu::ComputePassTimestampWrites {
                     query_set: &s.set,
-                    beginning_of_pass_write_index: Some(4),
-                    end_of_pass_write_index: Some(5),
+                    beginning_of_pass_write_index: Some(6),
+                    end_of_pass_write_index: Some(7),
                 }),
             });
             pass.set_pipeline(&self.pipes.scatter);
@@ -1093,9 +1275,13 @@ impl Backend for Wgpu {
         {
             let mut pass = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("light"),
-                color_attachments: &[attach(&t.hdr, wgpu::Color::BLACK), attach(&t.bsrc, wgpu::Color::BLACK)],
+                color_attachments: &[
+                    attach(&t.hdr, wgpu::Color::BLACK),
+                    attach(&t.bsrc, wgpu::Color::BLACK),
+                    attach(&t.sun, wgpu::Color::BLACK),
+                ],
                 depth_stencil_attachment: None,
-                timestamp_writes: stamps.map(|s| s.writes(Some(6), Some(7))),
+                timestamp_writes: stamps.map(|s| s.writes(Some(8), Some(9))),
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
@@ -1103,6 +1289,73 @@ impl Backend for Wgpu {
             pass.set_bind_group(0, &t.light_bg, &[]);
             pass.draw(0..3, 0..1);
         }
+        // The water, reflecting (and the sky beyond the zone): the lit frame into the second
+        // HDR target.
+        {
+            let mut pass = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("water"),
+                color_attachments: &[attach(&t.hdr_b, wgpu::Color::BLACK)],
+                depth_stencil_attachment: None,
+                timestamp_writes: stamps.map(|s| s.writes(Some(10), Some(11))),
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            pass.set_pipeline(&a.water);
+            pass.set_bind_group(0, &t.water_bg, &[]);
+            pass.draw(0..3, 0..1);
+            calls += 1;
+        }
+        // The particles of `layer` over `view`, glowing into the bloom source.
+        let parts = |enc: &mut wgpu::CommandEncoder,
+                     view: &wgpu::TextureView,
+                     label: &str,
+                     layers: &[jane_present::Depth],
+                     stamp: (u32, u32)| {
+            let mut pass = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some(label),
+                color_attachments: &[keep(view), keep(&t.bsrc)],
+                depth_stencil_attachment: None,
+                timestamp_writes: stamps.map(|s| s.writes(Some(stamp.0), Some(stamp.1))),
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            let mut n = 0;
+            for (layer, range) in &prep.part_draws {
+                if layers.contains(layer) {
+                    if n == 0 {
+                        pass.set_pipeline(&a.part);
+                        pass.set_bind_group(0, &t.part_bg, &[]);
+                        pass.set_vertex_buffer(0, a.parts.slice(..));
+                    }
+                    pass.draw(0..4, range.clone());
+                    n += 1;
+                }
+            }
+            n
+        };
+        calls += parts(&mut enc, &t.hdr_b, "particles on the ground", &[jane_present::Depth::Ground], (12, 13));
+        // The fog and the light shafts, back into the first HDR target; with none, the frame
+        // stays in the second.
+        let fogged = prep.n_fog > 0 || prep.rays > 0;
+        {
+            let mut pass = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("fog"),
+                color_attachments: &[if fogged { attach(&t.hdr, wgpu::Color::BLACK) } else { keep(&t.hdr) }],
+                depth_stencil_attachment: None,
+                timestamp_writes: stamps.map(|s| s.writes(Some(14), Some(15))),
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            if fogged {
+                pass.set_pipeline(&a.fog);
+                pass.set_bind_group(0, &t.fog_bg, &[]);
+                pass.draw(0..3, 0..1);
+                calls += 1;
+            }
+        }
+        let last = if fogged { &t.hdr } else { &t.hdr_b };
+        calls += parts(&mut enc, last, "particles in the air", &[jane_present::Depth::Canopy], (16, 17));
+        calls += parts(&mut enc, last, "rain", &[jane_present::Depth::Weather], (18, 19));
         let fullscreen = |enc: &mut wgpu::CommandEncoder,
                           label: &str,
                           view: &wgpu::TextureView,
@@ -1130,15 +1383,16 @@ impl Backend for Wgpu {
         };
         let clear = wgpu::LoadOp::Clear(wgpu::Color::BLACK);
         for (k, g) in t.down.iter().enumerate() {
-            let begin = stamps.filter(|_| k == 0).map(|s| s.writes(Some(8), None));
+            let begin = stamps.filter(|_| k == 0).map(|s| s.writes(Some(20), None));
             fullscreen(&mut enc, "bloom down", &t.levels[k], clear, &self.pipes.down, g, begin);
         }
         for (i, g) in t.up.iter().enumerate() {
             let dst = BLOOM_LEVELS - 2 - i;
             fullscreen(&mut enc, "bloom up", &t.levels[dst], wgpu::LoadOp::Load, &self.pipes.up, g, None);
         }
-        let end = stamps.map(|s| s.writes(None, Some(9)));
-        fullscreen(&mut enc, "grade", &t.canvas_view, clear, &self.pipes.grade, &t.grade, end);
+        let end = stamps.map(|s| s.writes(None, Some(21)));
+        let grade = if fogged { &t.grade } else { &t.grade_b };
+        fullscreen(&mut enc, "grade", &t.canvas_view, clear, &self.pipes.grade, grade, end);
         // The dispatch, the light, the bloom's halvings and tents, the grade.
         calls += 1 + 1 + (2 * BLOOM_LEVELS as u32 - 1) + 1;
         calls += self.ui.encode(d, q, &mut enc, &t.canvas_raw, frame, canvas);
@@ -1207,6 +1461,12 @@ impl Backend for Wgpu {
 
     fn stats(&self) -> Option<FrameStats> {
         Some(self.times.stats())
+    }
+
+    /// The one row T2 draws itself (§1.3): the upscale. Its counts, bloom and grade the
+    /// presenter has already put in the `Frame`.
+    fn set_features(&mut self, f: &Features) {
+        self.sharp = f.sharp;
     }
 }
 

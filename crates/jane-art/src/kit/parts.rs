@@ -178,10 +178,17 @@ pub(crate) fn flame(c: &mut Canvas, x: i32, y: i32, h: i32, lean: i32, z: u8) {
     c.set_emitting(true);
     let w = (h / 2).max(2);
     let mut m = Canvas::new(c.w(), c.h());
-    m.polyline_fill(&[(x - w / 2, y), (x + (w - 1) / 2 + 1, y), (x + (w - 1) / 2, y - h / 2), (x + lean, y - h + 1)], Ix::INK, 1);
+    m.polyline_fill(
+        &[(x - w / 2, y), (x + (w - 1) / 2 + 1, y), (x + (w - 1) / 2, y - h / 2), (x + lean, y - h + 1)],
+        Ix::INK,
+        1,
+    );
     m.ellipse(Rect::new(x - w / 2, y - h / 2, w + 1, h / 2 + 1), Ix::INK, 1);
     c.inflate(&m, Ramp::Ember, 1, Z::flat(z));
-    c.retone(Ramp::Ember, [Tone::Mid, Tone::Base, Tone::Base, Tone::Light, Tone::Light, Tone::High, Tone::Glint, Tone::Glint]);
+    c.retone(
+        Ramp::Ember,
+        [Tone::Mid, Tone::Base, Tone::Base, Tone::Light, Tone::Light, Tone::High, Tone::Glint, Tone::Glint],
+    );
     if h >= 4 {
         c.fill_rect(Rect::new(x, y - h / 2, 1, h / 2), Ramp::GlassLit.at(Tone::Glint), z);
     }

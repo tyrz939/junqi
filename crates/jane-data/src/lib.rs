@@ -29,6 +29,12 @@ pub fn tile_looks() -> TileLooks {
     generated::TILE_LOOKS
 }
 
+/// The atmosphere's layers compiled into this build (`data/atmosphere.json`, WORLD.md §5.3):
+/// fog volumes by place, hour and sky. Presentation only, outside the content hash.
+pub fn atmosphere() -> Atmosphere {
+    generated::ATMOSPHERE
+}
+
 /// Compile a data dir at startup through the same code the build script ran (`dev-data`).
 /// A catalog reload needs a new game.
 #[cfg(feature = "dev-data")]

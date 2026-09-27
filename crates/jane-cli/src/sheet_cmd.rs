@@ -26,12 +26,22 @@ pub const USAGE: &str = "  sheet layers <what> [--frame F] [--out DIR]
   sheet all [--out DIR]               every sheet above, for every sprite
   sheet list                          the sprites <what> can name
   sheet scene [--seed N] [--minutes M | --ticks T] [--model reader|rusher] [--night | --hour H[:MM]]
-              [--wide] [--backend soft|gl2|wgpu] [--out PATH.png | --out DIR]
+              [--wide] [--backend soft|gl2|wgpu] [--at ZONE[:MARK] | --at MARK]
+              [--weather clear|mist|rain|storm] [--cast SPELL[:TICKS] [--spawn UNIT]] [--rows KEY=V,..]
+              [--film N[:EVERY]] [--crop X,Y,W,H] [--zoom Z] [--layers] [--show-sun]
+              [--out PATH.png | --out DIR]
                                       a model plays the seed from New Game (default 1 minute), then one
                                       frame is drawn headless through the presenter and soft (T0), or
                                       gl2 (T1, a hidden window's GL context) or wgpu (T2) with the gpu
-                                      feature; --night sets the clock to 22:00 first; --wide draws 21:9
-                                      (1008 x 432); gl2 takes bench frames' row flags
+                                      feature; --night sets the clock to 22:00 first; --at travels to a
+                                      zone's mark (its way in by default; a bare mark is the county's)
+                                      first, god on: a frame inside a dungeon; --weather holds the sky;
+                                      --cast casts east (--spawn puts a unit in its way); --rows sets Features rows; --film writes N more
+                                      ticks' frames; --wide draws 21:9 (1008 x 432); --crop and --zoom
+                                      write a close look; gl2 takes bench frames' row flags; --layers
+                                      also writes the frame's heights and the T2 height field (a px h up
+                                      stood rows_up(h) rows down), --show-sun draws wgpu's sun term
+                                      alone (red reached, green N dot L)
   sheet ui [screen ...] [--out DIR]   the UI in states play rarely shows at once (hud, dead, choice,
                                       tooltip, popover, drag, pause), headless through soft
   sheet audio [--out DIR]             every sound effect, bed, song and scene as WAV, songs and scenes as
@@ -218,24 +228,80 @@ fn scene(args: &[String]) -> Result<(), String> {
     let backend =
         crate::scene::Which::parse(flag("--backend").unwrap_or("soft")).ok_or("--backend: soft, gl2 or wgpu")?;
     let gl = crate::scene::GlOpts::parse(args)?;
+    let weather = flag("--weather").map(crate::scene::weather).transpose()?;
+    let cast = flag("--cast").map(str::to_owned);
+    let spawn = flag("--spawn").map(str::to_owned);
+    let rows = crate::scene::rows(flag("--rows"))?;
     let name = format!(
-        "scene-{seed}-{ticks}{}-{}-{}",
+        "scene-{seed}-{ticks}{}{}-{}-{}",
         hour.map_or(String::new(), |h| format!("-h{h:02}{minute:02}")),
+        weather.map_or(String::new(), |w| format!("-{w:?}").to_lowercase()),
         model.name(),
         backend.name()
     );
+    // `--at mine` or `--at mine:guard`: a frame inside a zone, arrived at by the console's tp;
+    // `--at lake_bank`, a name that is no zone, is a mark of the county.
+    let at = flag("--at").map(|a| match a.split_once(':') {
+        Some((z, m)) => (z.to_string(), Some(m.to_string())),
+        None => (a.to_string(), None),
+    });
+    let name = match &at {
+        Some((z, m)) => format!("{name}-{z}{}", m.as_deref().map_or(String::new(), |m| format!("-{m}"))),
+        None => name,
+    };
     let path = match flag("--out") {
         Some(p) if p.ends_with(".png") => PathBuf::from(p),
         Some(dir) => PathBuf::from(dir).join(format!("{name}.png")),
         None => PathBuf::from("sheets").join(format!("{name}.png")),
     };
     let bps = jane_sim::Blueprints::build(seed).map_err(|e| format!("seed {seed}: {e}"))?;
-    let shot =
-        crate::scene::render(bps, &crate::scene::Opts { seed, ticks, model, hour, minute, canvas, backend, gl })?;
+    let o =
+        crate::scene::Opts { seed, ticks, model, hour, minute, canvas, backend, at, weather, cast, spawn, rows, gl };
+    // `--film N[:EVERY]`: N ticks more, every EVERY-th a frame, `<name>-<tick>.png` beside the path.
+    if let Some(f) = flag("--film") {
+        let (n, every) = f.split_once(':').map_or((f, "1"), |p| p);
+        let n: u32 = n.parse().map_err(|_| format!("--film N[:EVERY], not {f}"))?;
+        let every: u32 = every.parse().map_err(|_| format!("--film N[:EVERY], not {f}"))?;
+        let dir = path.parent().map(std::path::Path::to_path_buf).unwrap_or_default();
+        let stem = path.file_stem().map_or_else(|| name.clone(), |s| s.to_string_lossy().into_owned());
+        std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+        return crate::scene::film(bps, &o, n, every, |k, shot| {
+            let p = dir.join(format!("{stem}-{k:03}.png"));
+            std::fs::write(&p, shot.png()).map_err(|e| format!("{}: {e}", p.display()))?;
+            // The frame's mean brightness beside it: a flash, a lamp coming on, found by eye.
+            let luma: u64 = shot
+                .px
+                .iter()
+                .map(|&c| u64::from((c >> 16) & 0xff) + u64::from((c >> 8) & 0xff) + u64::from(c & 0xff))
+                .sum();
+            println!("{} mean {}", p.display(), luma / (3 * shot.px.len().max(1) as u64));
+            Ok(())
+        });
+    }
+    let shot = crate::scene::render(bps, &o)?;
     if let Some(dir) = path.parent().filter(|d| !d.as_os_str().is_empty()) {
         std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     }
+    // `--crop X,Y,W,H` and `--zoom Z`: a close look at part of the frame.
+    let shot = match (flag("--crop"), flag("--zoom")) {
+        (None, None) => shot,
+        (crop, zoom) => {
+            let r = crop.map_or(Ok((0, 0, shot.w, shot.h)), |c| {
+                let v: Vec<u16> = c.split(',').filter_map(|s| s.trim().parse().ok()).collect();
+                if v.len() == 4 { Ok((v[0], v[1], v[2], v[3])) } else { Err(format!("--crop X,Y,W,H, not {c}")) }
+            })?;
+            let z = zoom.map_or(Ok(3), |z| z.parse::<u16>().map_err(|_| format!("--zoom: not a number: {z}")))?;
+            shot.crop(r, z)
+        }
+    };
     std::fs::write(&path, shot.png()).map_err(|e| format!("{}: {e}", path.display()))?;
+    if let Some((height, field)) = &shot.layers {
+        for (what, png) in [("height", height), ("field", field)] {
+            let p = path.with_extension(format!("{what}.png"));
+            std::fs::write(&p, png).map_err(|e| format!("{}: {e}", p.display()))?;
+            println!("{}", p.display());
+        }
+    }
     println!(
         "{}
 {}",

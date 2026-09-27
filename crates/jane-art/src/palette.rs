@@ -270,6 +270,8 @@ ramps! {
     Leather "leather" 0x5e3e2a,
     /// The pool under a fallen person: muted, never bright red.
     Pool "pool" 0x5a2c30,
+    /// The Works' grass: slag-grey with a little olive left in it (`terrain::region`).
+    TurfSlag "turf_slag" 0x6e7456,
 }
 
 impl Ramp {
@@ -462,8 +464,9 @@ pub fn alpha(ix: Ix) -> u8 {
 }
 
 /// The contact shadow's multiply per channel in 1/256ths: a cool darkening, blue held up more
-/// than red, so a shadow on grass reads as shade and not as grey.
-pub const AO_TINT: [u16; 3] = [166, 172, 206];
+/// than red, so a shadow on grass reads as shade and not as grey; deep enough (two fifths off the
+/// red at its core) that a thing reads as standing on the ground at 1x, not pasted over it.
+pub const AO_TINT: [u16; 3] = [150, 158, 198];
 
 /// The contact shadow over `under`, `cover` of 9 strong: index 1's pixels are a crisp mask, and
 /// the blit softens it by how much of each pixel's 3 x 3 the mask covers (a pixel just outside

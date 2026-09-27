@@ -11,6 +11,8 @@ publish.workspace = true
 # The sun's angle by jane-core's integer sine table, so a silhouette shears the same on every target.
 jane-core.workspace = true
 jane-present.workspace = true
+# The mist tile's side, the Bayer matrix and the stroke rasteriser: one of each (ART.md §1).
+jane-art.workspace = true
 
 [dev-dependencies]
 jane-sim.workspace = true

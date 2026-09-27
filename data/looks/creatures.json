@@ -37,5 +37,32 @@
     "features": { "tail": "fan" } },
   "crow": { "family": "creature", "plan": "bird", "anatomy": "crow",
     "ramps": { "body": "hair_black", "mark": "cloth_black" },
-    "features": { "tail": "fan" } }
+    "features": { "tail": "fan" } },
+  "butterfly": { "family": "creature", "plan": "flyer_insect", "anatomy": "butterfly",
+    "ramps": { "body": "cloth_black", "belly": "cloth_ochre", "mark": "cloth_navy" } },
+  "moth": { "family": "creature", "plan": "flyer_insect", "anatomy": "moth",
+    "ramps": { "body": "cloth_brown", "belly": "cloth_tweed", "mark": "hair_black" } },
+  "emperor": { "family": "creature", "plan": "flyer_insect", "anatomy": "emperor",
+    "ramps": { "body": "hair_grey", "belly": "hair_white", "mark": "cloth_plum" }, "emits": ["eye"] },
+  "bat": { "family": "creature", "plan": "flyer_bat", "anatomy": "bat",
+    "ramps": { "body": "hair_black", "belly": "leather" }, "emits": ["eye"] },
+
+  "spider": { "family": "creature", "plan": "arachnid", "anatomy": "spider",
+    "ramps": { "body": "hair_black", "belly": "hair_brown", "mark": "cloth_red" }, "emits": ["eye"] },
+  "spider_queen": { "family": "creature", "plan": "arachnid", "anatomy": "queen",
+    "ramps": { "body": "cloth_black", "belly": "cloth_plum", "mark": "bone" }, "emits": ["eye"] },
+  "lurker": { "family": "creature", "plan": "crawler", "anatomy": "lurker",
+    "ramps": { "body": "skin_pale", "belly": "cloth_linen", "mark": "bloom" }, "emits": ["eye"] },
+
+  "snake": { "family": "creature", "plan": "serpent_head", "anatomy": "snake",
+    "ramps": { "body": "marsh", "belly": "cloth_cream", "mark": "hair_black" }, "emits": ["eye"] },
+
+  "cactus": { "family": "creature", "plan": "plant", "anatomy": "cactus",
+    "ramps": { "body": "leaf_olive", "belly": "cloth_cream", "mark": "bloom" } },
+  "flower": { "family": "creature", "plan": "plant", "anatomy": "flower",
+    "ramps": { "body": "leaf", "belly": "cloth_plum", "mark": "bloom" } },
+  "great_flower": { "family": "creature", "plan": "plant", "anatomy": "great_flower",
+    "ramps": { "body": "leaf_deep", "belly": "bloom", "mark": "cloth_plum" }, "emits": ["eye"] },
+  "pumpkin": { "family": "creature", "plan": "plant", "anatomy": "pumpkin",
+    "ramps": { "body": "cloth_ochre", "belly": "cloth_mustard" }, "emits": ["eye"] }
 }

@@ -14,7 +14,7 @@ use jane_core::angle::iatan2;
 use jane_data::{TileGroup, TilePattern as P};
 
 use super::{CELL, CHUNK_CELLS, NONE, Painter, Style, TileSource, fast, salt};
-use crate::canvas::{FLAT, Normal, UNIT, normal};
+use crate::canvas::{FLAT, Normal, UNIT, height_of_rows, normal};
 use crate::hash::{below, h32};
 use crate::palette::{Ix, Ramp, Tone};
 
@@ -63,11 +63,23 @@ fn step(p: &mut Painter, c: &Cell, x: i32, y: i32, s: i32) {
     p.s.ly.step(c.px + x, c.py + y, s);
 }
 
-/// A face's height at row `y` of a face `rows` cells tall whose top is `top` px, the cell being
-/// `k` rows from the face's foot (0 is the bottom cell).
-fn face_z(top: i32, y: i32, k: i32, rows: i32) -> i32 {
-    let from_foot = k * CELL + (CELL - y);
-    (from_foot * top / (rows * CELL)).max(1)
+/// A face's height at row `y` of the cell `k` cells up from the face's foot (0 is the bottom
+/// cell): the rows above the foot as true px (`canvas::height_of_rows`), so the face stands
+/// upright on its foot in the lit tiers' height field (PRESENTATION.md §1.7) and a prop flush
+/// with it (a door, a lamp on its bracket) stands no prouder than it does.
+fn face_z(y: i32, k: i32) -> i32 {
+    height_of_rows(k * CELL + (CELL - y)).max(1)
+}
+
+/// A house's walls stand this many cells from the plinth to the eave (the county's houses and
+/// the Works' sheds): a roof, which cannot see down to them, starts that high.
+const STOREY: i32 = 3;
+
+/// The height of the top of a face `cells` cells tall: what stands behind it (the wall's top, the
+/// cliff's rock, the eave a roof starts from) is this high, so it lands on the ground behind the
+/// face's foot.
+const fn face_top(cells: i32) -> i32 {
+    height_of_rows(cells * CELL)
 }
 
 /// How many cells up (`dy = -1`) or down (`dy = 1`) the run of `same` goes from the cell, three
@@ -108,10 +120,14 @@ pub(super) fn paint(p: &mut Painter, src: &impl TileSource, x0: i32, y0: i32, se
             };
             match st.row.pattern {
                 P::Void => fill(p, &c, st.ramp.at(Tone::Deep), 1),
-                P::Block | P::Rock => wall(p, &c, outdoor),
+                P::Block | P::Rock | P::Timbered | P::Crypt | P::Ironwork | P::Panelled | P::Pipework | P::Wainscot => {
+                    wall(p, &c, outdoor);
+                }
+                P::Parquet | P::Plates | P::Flags | P::Grating => interior_floor(p, &c),
                 P::Cliff => cliff(p, &c),
                 P::RoofTile | P::Slate | P::Thatch => {
-                    roof(p, &c, st.ramp, st.row.pattern, |s| s.row.group == TileGroup::Roof, 0);
+                    // A house's roof starts from its walls' eave, a storey of wall up.
+                    roof(p, &c, st.ramp, st.row.pattern, |s| s.row.group == TileGroup::Roof, 0, face_top(STOREY));
                 }
                 P::Plaster | P::Brick => house_wall(p, &c, seed),
                 P::Hedge => hedge(p, &c),
@@ -198,19 +214,27 @@ fn wall(p: &mut Painter, c: &Cell, outdoor: bool) {
     let wl = |p: &Painter, dx: i32, dy: i32| nst(p, c, dx, dy).row.wall_like;
     let south_open = !wl(p, 0, 1);
     let thin = (!wl(p, -1, 0) && !wl(p, 1, 0)) || (!wl(p, 0, -1) && !wl(p, 0, 1));
-    let top = i32::from(c.st.row.rise);
+    // A wall's face is one cell: it and its top stand that high.
+    let top = face_top(1);
     let r = c.st.ramp;
-    if outdoor && !south_open && !thin && c.st.row.pattern == P::Block {
+    if outdoor
+        && !south_open
+        && !thin
+        && matches!(c.st.row.pattern, P::Block | P::Crypt | P::Ironwork | P::Panelled | P::Pipework | P::Wainscot)
+    {
         // The roof of a works, a library, a school: slate gone dark with soot.
-        roof(p, c, Ramp::Slate, P::Slate, |s| s.row.wall_like, -1);
+        roof(p, c, Ramp::Slate, P::Slate, |s| s.row.wall_like, -1, face_top(1));
         return;
     }
     if south_open {
         for y in 0..CELL {
             for x in 0..CELL {
                 let (wx, wy) = c.w(x, y);
-                let z = face_z(top, y, 0, 1);
-                let (ix, n) = if c.st.row.pattern == P::Rock {
+                let z = face_z(y, 0);
+                let (ix, n) = if let Some(f) = super::interior::face(c.st.row.pattern, r, c.st.accent, wx, wy, y) {
+                    // A dungeon's own walling (`interior`).
+                    f
+                } else if c.st.row.pattern == P::Rock {
                     rock_face(r, wx, wy)
                 } else {
                     // Courses of dressed stone, `detail` px tall with a px of mortar; each stone lit
@@ -250,12 +274,12 @@ fn wall(p: &mut Painter, c: &Cell, outdoor: bool) {
         }
         if !wl(p, -1, 0) {
             for y in 0..CELL {
-                put(p, c, 0, y, r.at(Tone::Deep), FLAT, face_z(top, y, 0, 1));
+                put(p, c, 0, y, r.at(Tone::Deep), FLAT, face_z(y, 0));
             }
         }
         if !wl(p, 1, 0) {
             for y in 0..CELL {
-                put(p, c, CELL - 1, y, r.at(Tone::Deep), FLAT, face_z(top, y, 0, 1));
+                put(p, c, CELL - 1, y, r.at(Tone::Deep), FLAT, face_z(y, 0));
             }
         }
         return;
@@ -296,7 +320,7 @@ fn wall(p: &mut Painter, c: &Cell, outdoor: bool) {
 
 /// Rough rock, ridged top to bottom: the column decides the ridge, so stacked cells line up; a
 /// ridge is lit on its left edge and shaded on its right, in runs of 2 or 3 px.
-fn rock_face(r: Ramp, wx: i32, wy: i32) -> (Ix, Normal) {
+pub(super) fn rock_face(r: Ramp, wx: i32, wy: i32) -> (Ix, Normal) {
     // Ridges of 3 to 6 px: a ridge's index and px within it, by blocks of 16 px split by hash.
     let block = wx.div_euclid(16);
     let lx = wx.rem_euclid(16);
@@ -342,7 +366,8 @@ fn cliff(p: &mut Painter, c: &Cell) {
         let t = nb(p, c, dx, dy);
         t != Tile::Cliff && !nst(p, c, dx, dy).row.wall_like
     };
-    let top = i32::from(c.st.row.rise);
+    // Its face is two cells: the rock on top stands that high.
+    let top = face_top(2);
     let (rtop, rface) = (c.st.ramp, c.st.accent.unwrap_or(c.st.ramp));
     let lower = open(p, 0, 1);
     let upper = !lower && nb(p, c, 0, 1) == Tile::Cliff && open(p, 0, 2);
@@ -352,7 +377,7 @@ fn cliff(p: &mut Painter, c: &Cell) {
             for x in 0..CELL {
                 let (wx, wy) = c.w(x, y);
                 let (ix, n) = rock_face(rface, wx, wy);
-                put(p, c, x, y, ix, n, face_z(top, y, k, 2));
+                put(p, c, x, y, ix, n, face_z(y, k));
             }
         }
         // The lip where the top breaks over into the face: not between the face's two rows.
@@ -374,12 +399,12 @@ fn cliff(p: &mut Painter, c: &Cell) {
         }
         if open(p, -1, 0) {
             for y in 0..CELL {
-                put(p, c, 0, y, rface.at(Tone::Deep), FLAT, face_z(top, y, k, 2));
+                put(p, c, 0, y, rface.at(Tone::Deep), FLAT, face_z(y, k));
             }
         }
         if open(p, 1, 0) {
             for y in 0..CELL {
-                put(p, c, CELL - 1, y, rface.at(Tone::Deep), FLAT, face_z(top, y, k, 2));
+                put(p, c, CELL - 1, y, rface.at(Tone::Deep), FLAT, face_z(y, k));
             }
         }
         return;
@@ -462,8 +487,10 @@ const RIDGE: i32 = 10;
 /// an eave along the bottom, a verge down each open side. `same` says what continues the roof;
 /// `shift` darkens it. The ridge's place is counted from the roof's north edge, a few cells at
 /// most, so every chunk agrees where it is.
-fn roof(p: &mut Painter, c: &Cell, r: Ramp, pat: P, same: impl Fn(&Style) -> bool + Copy, shift: i32) {
-    let top = i32::from(c.st.row.rise.max(28));
+fn roof(p: &mut Painter, c: &Cell, r: Ramp, pat: P, same: impl Fn(&Style) -> bool + Copy, shift: i32, eave_z: i32) {
+    // The ridge, sixteen px over the eave, which is as high as the walls under it: the roof
+    // lands on the house in the height field, the eave over the face's foot and the ridge behind.
+    let top = eave_z + 16;
     let up = run(p, c, -1, same);
     let eave = !same(&nst(p, c, 0, 1));
     let west = !same(&nst(p, c, -1, 0));
@@ -597,13 +624,12 @@ fn roof(p: &mut Painter, c: &Cell, r: Ramp, pat: P, same: impl Fn(&Style) -> boo
 /// every fourth cell of a long wall, lit at night more often than not.
 fn house_wall(p: &mut Painter, c: &Cell, seed: u32) {
     let is_wall = |s: &Style| matches!(s.row.pattern, P::Plaster | P::Brick);
-    let top = i32::from(c.st.row.rise);
     let r = c.st.ramp;
     let timber = c.st.accent.unwrap_or(Ramp::WoodDark);
     let brick = c.st.row.pattern == P::Brick;
     let (up, down) = (run(p, c, -1, is_wall), run(p, c, 1, is_wall));
     let rows = up + down + 1;
-    let z_at = |y: i32| face_z(top, y, down, rows);
+    let z_at = |y: i32| face_z(y, down);
     let (n, s, w, e) = (nst(p, c, 0, -1), nst(p, c, 0, 1), nst(p, c, -1, 0), nst(p, c, 1, 0));
     for y in 0..CELL {
         for x in 0..CELL {
@@ -796,7 +822,8 @@ fn isqrt_i(v: i32) -> i32 {
 /// the hedge's top, a shaded face where it drops south.
 fn hedge(p: &mut Painter, c: &Cell) {
     let same = |p: &Painter, dx: i32, dy: i32| nb(p, c, dx, dy) == Tile::Hedge;
-    let top = i32::from(c.st.row.rise);
+    // The face drops six rows where it is open to the south: the hedge stands that high.
+    let top = height_of_rows(6);
     let r = c.st.ramp;
     let south = !same(p, 0, 1);
     let face_from = if south { CELL - 6 } else { CELL };
@@ -821,7 +848,7 @@ fn hedge(p: &mut Painter, c: &Cell) {
             };
             if y >= face_from {
                 let t2 = if y - face_from > 3 { Tone::Deep } else { t.step(-2) };
-                put(p, c, x, y, r.at(t2), normal(0, FACE), (top * (CELL - y) / 6).max(1));
+                put(p, c, x, y, r.at(t2), normal(0, FACE), height_of_rows(CELL - y).max(1));
             } else {
                 put(p, c, x, y, r.at(t), normal((dx * 20).clamp(-60, 60), (dy * 20).clamp(-60, 60)), top);
             }
@@ -852,6 +879,18 @@ fn hedge(p: &mut Painter, c: &Cell) {
     }
 }
 
+/// Where a floor's broad wear darkens a stone a step (trodden, stained) and where it lightens one
+/// (scrubbed, bleached): both rare, so the wear reads as a few soft drifts over a calm floor and
+/// never as a camouflage of stains (the art-director pass, 2026-09-27).
+pub(super) const WEAR_DARK: i32 = 52;
+pub(super) const WEAR_LIGHT: i32 = 214;
+
+/// The floors' broad wear at world px `(wx, wy)`, 0..=255 about 128: the 64 px patches over the
+/// 16 px ones, meandered, so a worn drift spans many slabs rather than one cell.
+fn wear_at(p: &Painter, wx: i32, wy: i32) -> i32 {
+    (p.s.patch.at(wx, wy) * 2 + p.s.fine.at(wx, wy)) / 3 + (p.s.wob_x.at(wx, wy) - 128) / 4
+}
+
 /// Floor slabs `detail` px square, a joint round each, each slab a tone of its own, lit along
 /// its inner top and left and shaded along its bottom and right; a crack across one now and then.
 fn slabs(p: &mut Painter, c: &Cell) {
@@ -872,10 +911,10 @@ fn slabs(p: &mut Painter, c: &Cell) {
                 1 => Tone::Lift,
                 _ => Tone::Base,
             };
-            let wear = p.s.fine.at(wx, wy) + (p.s.wob_x.at(wx, wy) - 128) / 4;
-            let body = if wear < 70 {
+            let wear = wear_at(p, wx, wy);
+            let body = if wear < WEAR_DARK {
                 body.step(-1)
-            } else if wear > 196 {
+            } else if wear > WEAR_LIGHT {
                 body.step(1)
             } else {
                 body
@@ -940,17 +979,33 @@ fn boards(p: &mut Painter, c: &Cell) {
     }
 }
 
-/// A cave's rough floor: broad patches, a stone or two lit on top.
+/// A dungeon's own floor (`interior`): parquet, iron plate, flags with a ledger stone, wet
+/// flags with a grate, worn by the painter's wear field.
+fn interior_floor(p: &mut Painter, c: &Cell) {
+    let z = i32::from(c.st.row.rise).max(1);
+    for y in 0..CELL {
+        for x in 0..CELL {
+            let (wx, wy) = c.w(x, y);
+            let wear = wear_at(p, wx, wy);
+            if let Some((ix, n, dz)) = super::interior::floor(c.st.row.pattern, c.st.ramp, c.st.accent, wx, wy, wear) {
+                put(p, c, x, y, ix, n, z + dz);
+            }
+        }
+    }
+}
+
+/// A cave's rough floor: broad patches, a stone or two lit on top. The stones stand a px, no
+/// more: a lantern at her feet would stretch taller ones into a floor of spikes.
 fn rock_floor(p: &mut Painter, c: &Cell) {
     let z = i32::from(c.st.row.rise).max(1);
     let r = c.st.ramp;
     for y in 0..CELL {
         for x in 0..CELL {
             let (wx, wy) = c.w(x, y);
-            let v = (p.s.patch.at(wx, wy) * 2 + p.s.fine.at(wx, wy)) / 3 + (p.s.wob_x.at(wx, wy) - 128) / 4;
-            let t = if v < 100 {
+            let v = wear_at(p, wx, wy);
+            let t = if v < WEAR_DARK {
                 Tone::Mid
-            } else if v > 168 {
+            } else if v > WEAR_LIGHT {
                 Tone::Lift
             } else {
                 Tone::Base
@@ -958,11 +1013,12 @@ fn rock_floor(p: &mut Painter, c: &Cell) {
             put(p, c, x, y, r.at(t), FLAT, z);
         }
     }
-    for s in 0..(c.h & 3) as i32 {
+    // Now and then a stone, rarely two: a cell of three read as a floor of gravel speckle.
+    for s in 0..[0, 1, 1, 2][(c.h & 3) as usize] {
         let hs = h32(c.h, s as u32, 3);
         let (x, y) = (2 + below(hs, 11) as i32, 2 + below(hs.rotate_right(8), 11) as i32);
-        put(p, c, x, y, r.at(Tone::Light), normal(-50, -50), z + 2);
-        put(p, c, x + 1, y, r.at(Tone::Lift), normal(40, -40), z + 2);
+        put(p, c, x, y, r.at(Tone::Light), normal(-50, -50), z + 1);
+        put(p, c, x + 1, y, r.at(Tone::Lift), normal(40, -40), z + 1);
         put(p, c, x, y + 1, r.at(Tone::Mid), normal(-40, 40), z + 1);
         put(p, c, x + 1, y + 1, r.at(Tone::Shade), normal(50, 50), z + 1);
         step(p, c, x + 1, y + 2, -1);

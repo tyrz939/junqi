@@ -438,10 +438,12 @@
   },
   "lights": { "prop": "cold_sconce", "every": 10, "corridor": 16 },
   "dress": {
+    "scatter_floor": { "props": ["bones", "scatter_candles", "scatter_bonepile", "scatter_rubble", "scatter_damp"], "chance": 0.09 },
+    "scatter_wall": { "props": ["scatter_cobweb", "scatter_cobweb", "scatter_chains"], "chance": 0.5 },
     "coldtorch": { "props": ["torch_blue"], "chance": 1 },
-    "pile": { "props": ["barrel", "crate"], "chance": 0.5 },
-    "pillar": { "props": ["pillar"], "chance": 1 },
-    "cot": { "props": ["bed"], "chance": 1 }
+    "pile": { "props": ["urns", "barrel"], "chance": 0.5 },
+    "pillar": { "props": ["crypt_pillar"], "chance": 1 },
+    "cot": { "props": ["tomb"], "chance": 1 }
   },
   "fallback": [
     { "node": "entry", "template": "burial.entry.a", "bay": [0, 0], "turn": 180, "mirror": true },

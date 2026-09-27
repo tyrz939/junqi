@@ -34,10 +34,22 @@ pub fn rect_centre(r: Rect) -> Vec2 {
 
 /// From a point to a prop's footprint (0 inside), `Fx`.
 pub fn to_prop(p: &Prop, at: Vec2) -> i64 {
+    let (dx, dy) = prop_offset(p, at);
+    i64::from(jane_core::num::isqrt((dx * dx + dy * dy) as u64))
+}
+
+/// From a point to a prop's footprint along each axis (0 inside it on that axis), `Fx`.
+fn prop_offset(p: &Prop, at: Vec2) -> (i64, i64) {
     let r = prop_rect(p);
     let d = |v: i32, lo: i32, hi: i32| i64::from((lo - v).max(v - hi).max(0));
-    let (dx, dy) = (d(at.x.0, r.x * CELL_FX, r.right() * CELL_FX), d(at.y.0, r.y * CELL_FX, r.bottom() * CELL_FX));
-    i64::from(jane_core::num::isqrt((dx * dx + dy * dy) as u64))
+    (d(at.x.0, r.x * CELL_FX, r.right() * CELL_FX), d(at.y.0, r.y * CELL_FX, r.bottom() * CELL_FX))
+}
+
+/// Is the prop farther than `reach` along one axis alone, so that [`to_prop`] is surely past it?
+/// No square root: a scan over a zone's every prop asks this first. False says nothing.
+pub fn plainly_past(p: &Prop, at: Vec2, reach: i64) -> bool {
+    let (dx, dy) = prop_offset(p, at);
+    dx.max(dy) > reach
 }
 
 pub fn prop_by_key<'a>(v: &View<'a>, key: Sym) -> Option<&'a Prop> {

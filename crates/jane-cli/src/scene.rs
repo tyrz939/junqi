@@ -61,6 +61,11 @@ pub struct GlOpts {
     pub exact: Option<bool>,
     /// `normal_light`.
     pub normals: Option<bool>,
+    /// Debug (PRESENTATION.md §1.7): `--layers` writes the frame's terrain and sprite heights and
+    /// the T2 height field beside the shot; `--show-sun` draws wgpu's sun term alone (red: the
+    /// sun that reaches a px through the field, green: its N dot L, blue: the albedo).
+    pub layers: bool,
+    pub show_sun: bool,
 }
 
 impl GlOpts {
@@ -87,6 +92,8 @@ impl GlOpts {
             half_light: pick("--half-light", "--full-light"),
             exact: pick("--exact", "--fast"),
             normals: if has("--flat") { Some(false) } else { None },
+            layers: has("--layers"),
+            show_sun: has("--show-sun"),
         })
     }
 
@@ -118,7 +125,11 @@ pub fn backend(which: Which, gl: GlOpts) -> Result<Box<dyn Backend>, String> {
             Ok(Box::new(g))
         }
         #[cfg(feature = "gpu")]
-        Which::Wgpu => Ok(Box::new(jane_render_wgpu::Wgpu::headless()?)),
+        Which::Wgpu => {
+            let mut w = jane_render_wgpu::Wgpu::headless()?;
+            w.show_sun(gl.show_sun);
+            Ok(Box::new(w))
+        }
         #[cfg(not(feature = "gpu"))]
         Which::Gl2 | Which::Wgpu => Err(format!(
             "{}: this jane was built without the gpu feature (cargo build -p jane-cli --features gpu)",
@@ -140,7 +151,75 @@ pub struct Opts {
     pub minute: u8,
     pub canvas: (u16, u16),
     pub backend: Which,
+    /// After the play, travel to this zone (by name), at this named mark or the zone's way in,
+    /// with god on and the world let settle a second: a frame inside a dungeon. A name that is
+    /// no zone is a mark of the county (`--at lake_bank`).
+    pub at: Option<(String, Option<String>)>,
+    /// Hold the sky to this weather, the ground wet as after an hour of it (`--weather rain`).
+    pub weather: Option<jane_present::WeatherKind>,
+    /// Cast this spell east after the rest, and draw the frame so many ticks later (`--cast icebolt:12`).
+    pub cast: Option<String>,
+    /// With `--cast`: first put this unit (by its catalog name) a few cells east of her, the
+    /// console's `spawn`, so the bolt has a body to hit (`--spawn skeleton`).
+    pub spawn: Option<String>,
+    /// `Features` rows set by key (`--rows fog=off,god_rays=off`, PRESENTATION.md §1.3).
+    pub rows: Vec<(String, String)>,
     pub gl: GlOpts,
+}
+
+/// The mark `asked` in `zone`, or its way in (the console's `tp` rule): its first named mark
+/// among start, front, entry, a stair, a mouth, a gate. An unknown mark names the ones it has.
+fn mark_in(sim: &Sim, zone: jane_core::ids::ZoneId, asked: Option<&str>) -> Result<jane_core::Sym, String> {
+    let syms = &sim.state().syms;
+    let named: Vec<(&str, jane_core::Sym)> = sim
+        .blueprint(zone)
+        .marks
+        .keys()
+        .filter_map(|k| match *k {
+            jane_core::Key::Name(n) => {
+                let s = jane_sim::sym::of_name(n);
+                Some((syms.name(s), s))
+            }
+            jane_core::Key::Local(_) => None,
+        })
+        .collect();
+    if let Some(a) = asked {
+        return named.iter().find(|(n, _)| *n == a).map(|(_, s)| *s).ok_or_else(|| {
+            let mut all: Vec<&str> = named.iter().map(|(n, _)| *n).collect();
+            all.sort_unstable();
+            format!("{}: no mark {a}; it has {}", zone.name(), all.join(" "))
+        });
+    }
+    for want in ["start", "front", "entry", "stair_a", "mouth", "gate"] {
+        if let Some(s) = syms.find(want).filter(|s| named.iter().any(|(_, n)| n == s)) {
+            return Ok(s);
+        }
+    }
+    named.first().map(|(_, s)| *s).ok_or_else(|| format!("{} has no named mark", zone.name()))
+}
+
+/// `--rows fog=off,god_rays=off`: `Features` rows by their `config.json` key.
+pub fn rows(arg: Option<&str>) -> Result<Vec<(String, String)>, String> {
+    let Some(a) = arg else { return Ok(Vec::new()) };
+    a.split(',')
+        .map(|kv| {
+            kv.split_once('=')
+                .map(|(k, v)| (k.trim().to_owned(), v.trim().to_owned()))
+                .ok_or_else(|| format!("--rows: key=value, not {kv}"))
+        })
+        .collect()
+}
+
+/// `--weather`'s word.
+pub fn weather(s: &str) -> Result<jane_present::WeatherKind, String> {
+    use jane_present::WeatherKind as W;
+    match s {
+        "clear" => Ok(W::Clear),
+        "mist" => Ok(W::Mist),
+        "rain" => Ok(W::Rain),
+        "storm" => Ok(W::Storm),
+        _ => Err(format!("--weather: clear, mist, rain or storm, not {s}")),
+    }
 }
 
 /// The sim with this frame's events kept for the presenter: the bot drains the host, so the host
@@ -178,6 +257,8 @@ pub struct Shot {
     /// `0xAARRGGBB` rows.
     pub px: Vec<u32>,
     pub line: String,
+    /// With `--layers`: PNGs of the frame's heights and of the T2 height field.
+    pub layers: Option<(Vec<u8>, Vec<u8>)>,
 }
 
 impl Shot {
@@ -185,6 +266,23 @@ impl Shot {
         let rgba: Vec<u8> =
             self.px.iter().flat_map(|&c| [(c >> 16) as u8, (c >> 8) as u8, c as u8, (c >> 24) as u8]).collect();
         jane_art::sheet::png(u32::from(self.w), u32::from(self.h), &rgba)
+    }
+
+    /// The rect `(x, y, w, h)` of the frame, each px drawn `zoom` px square: the art director's
+    /// close look at 3 or 4x (ART.md §3.1).
+    pub fn crop(&self, (x, y, w, h): (u16, u16, u16, u16), zoom: u16) -> Shot {
+        let (x, y) = (x.min(self.w.saturating_sub(1)), y.min(self.h.saturating_sub(1)));
+        let (w, h) = (w.min(self.w - x).max(1), h.min(self.h - y).max(1));
+        let z = zoom.clamp(1, 16);
+        let (ow, oh) = (w * z, h * z);
+        let mut px = Vec::with_capacity(usize::from(ow) * usize::from(oh));
+        for oy in 0..oh {
+            let sy = usize::from(y + oy / z);
+            for ox in 0..ow {
+                px.push(self.px[sy * usize::from(self.w) + usize::from(x + ox / z)]);
+            }
+        }
+        Shot { w: ow, h: oh, px, line: self.line.clone(), layers: None }
     }
 }
 
@@ -194,6 +292,15 @@ fn play(bps: Blueprints, o: &Opts, tier: Tier) -> Result<(Tap, Present, u32), St
     let mut host = Tap { sim: Sim::new_game_with(bps, "Jane"), events: Vec::new() };
     let mut bot = Bot::story(o.model);
     let mut present = Present::new(tier);
+    if let Some(k) = o.weather {
+        let wet = if matches!(k, jane_present::WeatherKind::Rain | jane_present::WeatherKind::Storm) { 255 } else { 0 };
+        present.atmos_mut().force(Some((k, wet)));
+    }
+    for (k, v) in &o.rows {
+        if !present.atmos_mut().features.set(tier, k, v) {
+            return Err(format!("--rows: no row {k}={v} (keys: {})", jane_present::Features::KEYS.join(", ")));
+        }
+    }
     present.set_canvas(o.canvas);
     let seat = Seat(0);
     let mut played = 0;
@@ -205,6 +312,26 @@ fn play(bps: Blueprints, o: &Opts, tier: Tier) -> Result<(Tap, Present, u32), St
         played += 1;
         let v = host.sim.view(seat).ok_or("seat 0 is not in the world")?;
         present.tick(&v, &host.events);
+    }
+    if let Some((zone, mark)) = &o.at {
+        // A name that is no zone is a mark of the county.
+        let (z, mark) = match jane_core::ids::ZoneId::from_name(zone) {
+            Some(z) => (z, mark.as_deref()),
+            None if mark.is_none() => (jane_core::ids::ZoneId::County, Some(zone.as_str())),
+            None => return Err(format!("--at: no zone {zone}")),
+        };
+        let mark = mark_in(&host.sim, z, mark)?;
+        let cmds = [
+            StampedCommand { seat: Some(seat), seq: u16::MAX - 2, cmd: Command::Dev(DevOp::God(true)) },
+            StampedCommand { seat: Some(seat), seq: u16::MAX - 1, cmd: Command::Dev(DevOp::Tp { zone: z, mark }) },
+        ];
+        host.sim.step(&StepInput { frames: [InputFrame::IDLE; 4], commands: &cmds });
+        for _ in 0..60 {
+            let events = host.sim.drain_events().to_vec();
+            let v = host.sim.view(seat).ok_or("seat 0 is not in the world")?;
+            present.tick(&v, &events);
+            host.sim.step(&StepInput { frames: [InputFrame::IDLE; 4], commands: &[] });
+        }
     }
     if let Some(hour) = o.hour {
         let cmd = [StampedCommand { seat: Some(seat), seq: u16::MAX, cmd: Command::Dev(DevOp::Time { hour }) }];
@@ -221,6 +348,36 @@ fn play(bps: Blueprints, o: &Opts, tier: Tier) -> Result<(Tap, Present, u32), St
             present.tick(&v, &events);
         }
     }
+    // `--cast SPELL[:TICKS]`: she learns it, has the mana, and casts it east; the frame is drawn
+    // TICKS later (12 by default: a bolt in flight).
+    if let Some(c) = &o.cast {
+        let (name, after) = c.split_once(':').map_or((c.as_str(), 12), |(s, t)| (s, t.parse().unwrap_or(12)));
+        let spell = jane_data::catalog().combat.spell_id(name).ok_or_else(|| format!("--cast: no spell \"{name}\""))?;
+        let dev = |seq: u16, op| StampedCommand { seat: Some(seat), seq, cmd: Command::Dev(op) };
+        let setup = [
+            dev(u16::MAX - 3, DevOp::Learn(spell)),
+            dev(u16::MAX - 2, DevOp::Mp(9999)),
+            dev(u16::MAX - 4, DevOp::God(true)),
+        ];
+        host.sim.step(&StepInput { frames: [InputFrame::IDLE; 4], commands: &setup });
+        if let Some(u) = &o.spawn {
+            let def = jane_data::catalog().combat.unit_id(u).ok_or_else(|| format!("--spawn: no unit \"{u}\""))?;
+            let spawn = [dev(u16::MAX - 6, DevOp::Spawn(def))];
+            host.sim.step(&StepInput { frames: [InputFrame::IDLE; 4], commands: &spawn });
+        }
+        let aim = InputFrame { aim: Some(jane_core::Angle::EAST), ..InputFrame::IDLE };
+        let cast = [StampedCommand { seat: Some(seat), seq: u16::MAX - 5, cmd: Command::Cast { spell, on: None } }];
+        host.sim.step(&StepInput { frames: [aim; 4], commands: &cast });
+        for _ in 0..after {
+            let events = host.sim.drain_events().to_vec();
+            let v = host.sim.view(seat).ok_or("seat 0 is not in the world")?;
+            present.tick(&v, &events);
+            host.sim.step(&StepInput { frames: [aim; 4], commands: &[] });
+        }
+        let events = host.sim.drain_events().to_vec();
+        let v = host.sim.view(seat).ok_or("seat 0 is not in the world")?;
+        present.tick(&v, &events);
+    }
     Ok((host, present, played))
 }
 
@@ -229,11 +386,15 @@ pub fn render(bps: Blueprints, o: &Opts) -> Result<Shot, String> {
     let mut b = backend(o.backend, o.gl)?;
     let (host, mut present, played) = play(bps, o, o.backend.tier())?;
     b.upload_atlas(present.atlas());
+    // `--rows` the backend draws itself (`normal_light`, `sharp`): after gl2's own flags only when asked.
+    if !o.rows.is_empty() {
+        b.set_features(&present.features());
+    }
     let seat = Seat(0);
     let v = host.sim.view(seat).ok_or("seat 0 is not in the world")?;
     let (clock, day) = v.clock();
     let line = format!(
-        "{} seed {}: {played} ticks; {} day {day} {:02}:{:02}{}; {} units and {} props near; {} chunks painted; {}",
+        "{} seed {}: {played} ticks; {} day {day} {:02}:{:02}{}; {} units and {} props near; {} chunks painted; {} fx and {} weather parts; {}",
         o.model.name(),
         o.seed,
         v.zone().name(),
@@ -243,16 +404,60 @@ pub fn render(bps: Blueprints, o: &Opts) -> Result<Shot, String> {
         present.seen().0,
         present.seen().1,
         present.chunks_painted(),
+        present.fx_count().0,
+        present.fx_count().1,
         b.caps().name,
     );
-    let frame = present.draw(255, o.canvas);
+    present.draw(255, o.canvas);
+    let layers = o.gl.layers.then(|| {
+        let g = crate::layers::heights(present.frame(), present.atlas());
+        let (top, floor) = crate::layers::field(&g);
+        (crate::layers::png(&g.h, None, g.w, g.rows), crate::layers::png(&top, Some(&floor), g.w, g.rows))
+    });
+    let frame = present.frame();
     b.draw(frame);
     let mut px = Vec::new();
     let (w, h) = b.read_back(&mut px);
     if px.is_empty() {
         return Err(format!("{}: nothing read back", b.caps().name));
     }
-    Ok(Shot { w, h, px, line })
+    Ok(Shot { w, h, px, line, layers })
+}
+
+/// `jane sheet scene --film N[:EVERY]` (PRESENTATION.md §6, `jane film` in small): plays to the
+/// frame `o` asks for, then `n` more ticks with the world idle, drawing every `every`-th at
+/// `alpha = 1`: the rain falling, a mist drifting, a lightning strike, a bolt in flight. Each
+/// shot is handed to `out` with its tick.
+pub fn film(
+    bps: Blueprints,
+    o: &Opts,
+    n: u32,
+    every: u32,
+    mut out: impl FnMut(u32, &Shot) -> Result<(), String>,
+) -> Result<(), String> {
+    let mut b = backend(o.backend, o.gl)?;
+    let (mut host, mut present, _) = play(bps, o, o.backend.tier())?;
+    b.upload_atlas(present.atlas());
+    // `--rows` the backend draws itself (`normal_light`, `sharp`): after gl2's own flags only when asked.
+    if !o.rows.is_empty() {
+        b.set_features(&present.features());
+    }
+    let seat = Seat(0);
+    let mut px = Vec::new();
+    for k in 0..n {
+        host.sim.step(&StepInput { frames: [InputFrame::IDLE; 4], commands: &[] });
+        let events = host.sim.drain_events().to_vec();
+        let v = host.sim.view(seat).ok_or("seat 0 is not in the world")?;
+        present.tick(&v, &events);
+        if k % every.max(1) != 0 {
+            continue;
+        }
+        let frame = present.draw(255, o.canvas);
+        b.draw(frame);
+        let (w, h) = b.read_back(&mut px);
+        out(k, &Shot { w, h, px: px.clone(), line: String::new(), layers: None })?;
+    }
+    Ok(())
 }
 
 /// What `jane bench frames` measured.
@@ -286,6 +491,9 @@ pub fn bench(bps: Blueprints, o: &Opts, frames: u32, output: (u32, u32)) -> Resu
     let (mut build, mut submit, mut whole) = (Vec::new(), Vec::new(), Vec::new());
     let mut b = Bench::new(o.backend, output, o.gl)?;
     b.backend().upload_atlas(present.atlas());
+    if !o.rows.is_empty() {
+        b.backend().set_features(&present.features());
+    }
     for k in 0..frames + 30 {
         host.sim.step(&StepInput { frames: [InputFrame::IDLE; 4], commands: &[] });
         let events = host.sim.drain_events().to_vec();
@@ -409,6 +617,11 @@ mod tests {
             minute: 0,
             canvas: (768, 432),
             backend: Which::Soft,
+            at: None,
+            weather: None,
+            cast: None,
+            spawn: None,
+            rows: Vec::new(),
             gl: GlOpts::default(),
         };
         let a = render(bps.clone(), &o).unwrap();

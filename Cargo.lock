@@ -396,6 +396,7 @@ dependencies = [
  "jane-schema",
  "jane-sim",
  "jane-world",
+ "serde_json",
 ]
 
 [[package]]
@@ -454,6 +455,7 @@ dependencies = [
 name = "jane-render-soft"
 version = "0.1.0"
 dependencies = [
+ "jane-art",
  "jane-core",
  "jane-present",
  "jane-sim",
@@ -463,6 +465,7 @@ dependencies = [
 name = "jane-render-wgpu"
 version = "0.1.0"
 dependencies = [
+ "jane-art",
  "jane-core",
  "jane-present",
  "jane-sim",

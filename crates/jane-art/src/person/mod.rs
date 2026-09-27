@@ -16,7 +16,9 @@ mod build;
 mod draw;
 mod fallen;
 mod hair;
+mod held;
 mod pose;
+mod special;
 
 use jane_core::hash::fnv1a;
 use jane_data::{EmitRole, PersonLook, Skin};
@@ -45,6 +47,21 @@ pub const SEAT_COATS: [Ramp; 3] = [Ramp::ClothTeal, Ramp::ClothMoss, Ramp::Cloth
 /// Every frame a step-2 person promises, in order.
 pub fn frame_ids() -> impl Iterator<Item = FrameId> {
     LIVING.iter().map(|(f, _, _)| *f).chain([FrameId::Dead, FrameId::Dead2])
+}
+
+/// Every frame a person that attacks or casts promises: [`frame_ids`], then its attack, cast
+/// and hurt frames (ART.md §4).
+pub fn frame_ids_for(fight: Fight) -> Vec<FrameId> {
+    frame_ids().chain(pose::fight(fight.attacks, fight.casts).into_iter().map(|(f, _, _)| f)).collect()
+}
+
+/// What a person does besides walk: strike, cast (either brings the hurt frames).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Fight {
+    /// It has a spell whose animation is an attack.
+    pub attacks: bool,
+    /// It has a spell whose animation is a cast.
+    pub casts: bool,
 }
 
 /// The stable seed of a sprite id: FNV-1a of its name, so it never moves when rows are added.
@@ -84,6 +101,7 @@ impl Dress {
             Skin::Wax => Ramp::Plaster,
             Skin::Stone | Skin::None => Ramp::Stone,
             Skin::Metal => Ramp::Iron,
+            Skin::Gilt => Ramp::Brass,
         };
         let coat = ramp(b.coat_ramp)?;
         let eye_emits = look.emits.contains(&EmitRole::Eye);
@@ -128,6 +146,11 @@ impl Dress {
 /// Render every frame of `look` (its `vary` already resolved: [`PersonLook::variant`]). `seed`
 /// is the sprite's stable id ([`seed`]); it sizes the fallen's pool.
 pub fn render(look: &PersonLook, seed: u32) -> Result<SpriteSet, String> {
+    render_fighting(look, seed, Fight::default())
+}
+
+/// [`render`] with the attack, cast and hurt frames `fight` asks for.
+pub fn render_fighting(look: &PersonLook, seed: u32, fight: Fight) -> Result<SpriteSet, String> {
     let d = Dress::new(look)?;
     let p = proportions(look.build);
     let mut frames: Vec<(FrameId, Canvas)> =
@@ -140,8 +163,17 @@ pub fn render(look: &PersonLook, seed: u32) -> Result<SpriteSet, String> {
         if matches!(look.build, jane_data::Build::Child | jane_data::Build::Stout) {
             pose.spread = pose.spread.map(|s| s / 2);
         }
-        let body = draw::frame(&d, p, Facing::Down, pose);
-        frames.push((id, fallen::fallen(&body, seed ^ k as u32, d.skin != Ramp::Bone)));
+        // The dead are out of any chair: the fallen pose is drawn standing.
+        let standing = Dress { look: PersonLook { extras: unseated(look.extras), ..d.look }, ..d };
+        let body = draw::frame(&standing, p, Facing::Down, pose);
+        // Only flesh bleeds: a skeleton, a waxwork, a statue, an armour and a shade lie dry.
+        frames.push((
+            id,
+            fallen::fallen(&body, seed ^ k as u32, matches!(d.skin, Ramp::Skin | Ramp::SkinPale | Ramp::SkinDark)),
+        ));
+    }
+    for (id, facing, pose) in pose::fight(fight.attacks, fight.casts) {
+        frames.push((id, draw::frame(&d, p, facing, pose)));
     }
     let mut emits = Vec::new();
     for e in look.emits {
@@ -152,6 +184,17 @@ pub fn render(look: &PersonLook, seed: u32) -> Result<SpriteSet, String> {
         });
     }
     Ok(SpriteSet { w: W, h: H, ax: AX, ay: AY, frames, roles: d.roles(), emits })
+}
+
+/// `extras` without `seated` (a slice made once at boot for a seated look, else the same one).
+fn unseated(extras: &'static [jane_data::Extra]) -> &'static [jane_data::Extra] {
+    if extras.contains(&jane_data::Extra::Seated) {
+        Box::leak(
+            extras.iter().copied().filter(|&e| e != jane_data::Extra::Seated).collect::<Vec<_>>().into_boxed_slice(),
+        )
+    } else {
+        extras
+    }
 }
 
 /// Seat `seat`'s set (ART.md §3): seat 0 is `set` itself; seats 1 to 3 swap the coat role to

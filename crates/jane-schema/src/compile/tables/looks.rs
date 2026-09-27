@@ -19,8 +19,8 @@ use crate::compile::ctx::{Ctx, leak, leak_str};
 use crate::compile::source::{Source, typed};
 use crate::model::{
     Anatomy, Boots, Build, Coat, CreatureLook, CreatureRamps, Ears, EmitRole, Extra, Face, Front, Hair, Hat, HeldItem,
-    HouseLook, HouseStyle, IconClass, IconLook, IconMark, Legs, Look, Marking, Mount, PersonBody, PersonHead, PersonLook, PersonVary, Plan,
-    PropFamily, PropLook, PropMaterials, PropState, Roofing, Skin, Tail, Walling,
+    HouseLook, HouseStyle, IconClass, IconLook, IconMark, Legs, Look, Marking, Mount, PersonBody, PersonHead,
+    PersonLook, PersonVary, Plan, PropFamily, PropLook, PropMaterials, PropState, Roofing, Skin, Tail, Walling,
 };
 use jane_core::ids::SpriteId;
 
@@ -396,9 +396,9 @@ fn person(p: RawPerson, at: &str, cx: &mut Ctx) -> Look {
             "emits \"held\" with nothing in the hand",
         );
         cx.diag.need(
-            !p.emits.contains(&EmitRole::Glass) || p.head.face == Face::Glasses,
+            !p.emits.contains(&EmitRole::Glass) || p.head.face == Face::Glasses || p.head.hat == Hat::Diving,
             at,
-            "emits \"glass\" with no glasses",
+            "emits \"glass\" with no glasses and no diver's port",
         );
         let look = PersonLook {
             build: p.build,

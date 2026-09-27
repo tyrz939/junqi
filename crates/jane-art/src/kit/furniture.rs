@@ -1,6 +1,7 @@
 //! `furniture` (ART.md §2.3): what a room is furnished with. Shapes: `table`, `workbench`,
 //! `desk`, `counter`, `altar`, `shelf`, `cabinet`, `case`, `bed`, `stove`, `bench`, `pew`,
-//! `chair`, `pegs`, `register`, `plinth`. A stove's `on` is its firebox alight.
+//! `chair`, `pegs`, `register`, `plinth`; and the dungeons' own (§8 step 7): `bookcase` (the
+//! library), `school_desk` (the School), `tomb` (the Burial). A stove's `on` is its firebox alight.
 
 use jane_core::grid::Rect;
 
@@ -41,7 +42,12 @@ pub(crate) fn draw(c: &mut Canvas, k: &Kit, state: State) -> Option<Stand> {
                     // Tools and a vice: a hammer, a saw's blade, a jar of nails.
                     c.fill_rect(Rect::new(top.x + 3, top.y + 3, 6, 2), Ramp::Iron.at(Tone::Light), 6);
                     c.line((top.x + 5, top.y + 5), (top.x + 8, top.y + 8), k.trim.at(Tone::Base), 1, 6);
-                    c.fill_normal(Rect::new(top.right() - 8, top.y + 2, 5, 4), Ramp::Glass.at(Tone::Base), parts::south(), 6);
+                    c.fill_normal(
+                        Rect::new(top.right() - 8, top.y + 2, 5, 4),
+                        Ramp::Glass.at(Tone::Base),
+                        parts::south(),
+                        6,
+                    );
                     c.hline(top.right() - 8, top.right() - 4, top.y + 2, Ramp::Glass.at(Tone::Light), 6);
                     c.rect_bevel(Rect::new(top.x + tw / 2 - 3, top.bottom() - 4, 6, 4), Ramp::Iron, 1, Z::new(6, 7));
                 }
@@ -106,13 +112,127 @@ pub(crate) fn draw(c: &mut Canvas, k: &Kit, state: State) -> Option<Stand> {
             }
             Stand::Up(&[])
         }
+        "bookcase" => {
+            // A bookcase to the ceiling: a carcass under a cornice, every board full of spines
+            // of their own colours and heights, one leaning, a gap here and there.
+            let sh = (h - 3).min(34);
+            let r = Rect::new(1, foot - sh + 1, w - 2, sh);
+            ao(c, r.x, r.right() - 1, foot, 4);
+            c.fill_normal(r, k.body.at(Tone::Deep), parts::south(), 3);
+            c.fill_normal(Rect::new(r.x, r.y, 2, r.h), k.body.at(Tone::Base), parts::south(), 4);
+            c.fill_normal(Rect::new(r.right() - 2, r.y, 2, r.h), k.body.at(Tone::Mid), parts::south(), 4);
+            let spines = [
+                Ramp::ClothRed,
+                Ramp::ClothGreen,
+                Ramp::ClothNavy,
+                Ramp::ClothMustard,
+                Ramp::Leather,
+                Ramp::ClothBrick,
+                Ramp::ClothBlack,
+                Ramp::ClothTweed,
+            ];
+            let boards = (sh / 9).max(2);
+            let mut prev = r.y + 3;
+            for i in 1..=boards + 1 {
+                let y = if i > boards { r.bottom() - 2 } else { r.y + i * sh / (boards + 1) + 1 };
+                let mut x = r.x + 3;
+                let mut n = 0u32;
+                while x < r.right() - 3 {
+                    let hsh = parts::hash(k.seed, x, i);
+                    let bw = 1 + (hsh % 3) as i32;
+                    if hsh % 13 == 0 {
+                        x += 3;
+                        continue;
+                    }
+                    let tall = (y - prev - 1) - (hsh >> 4) as i32 % 3;
+                    let sp = spines[(hsh >> 8) as usize % spines.len()];
+                    let bw = bw.min(r.right() - 3 - x);
+                    if n == 4 && hsh % 3 == 0 && bw > 0 {
+                        c.line((x, y - 1), (x + 3, y - tall + 1), sp.at(Tone::Base), 2, 5);
+                        x += 4;
+                    } else {
+                        c.fill_normal(Rect::new(x, y - tall, bw, tall), sp.at(Tone::Base), parts::south(), 5);
+                        c.vline(x, y - tall, y - 1, sp.at(Tone::Light), 5);
+                        c.dot(x + bw - 1, y - tall + 2, Ramp::Brass.at(Tone::Light), 5);
+                        x += bw;
+                    }
+                    n += 1;
+                }
+                if i <= boards {
+                    c.fill_normal(Rect::new(r.x + 2, y, r.w - 4, 2), k.body.at(Tone::Light), parts::south(), 4);
+                }
+                prev = y + 2;
+            }
+            c.rect_bevel(Rect::new(r.x - 1, r.y - 1, r.w + 2, 4), k.body, 1, Z::new(5, 6));
+            Stand::Up(&[])
+        }
+        "school_desk" => {
+            // A double school desk: a sloped lid with two inkwells and a pen groove, on an
+            // iron frame, its bench in front; initials cut in the lid.
+            let (x, tw) = (3, w - 6);
+            ao(c, x, x + tw - 1, foot, 6);
+            for lx in [x + 2, x + tw - 5] {
+                post(c, lx, foot - 16, foot - 1, 2, k.trim, 2);
+            }
+            let (seat, _) = box3(c, x + 2, tw - 4, foot, 4, 4, k.body, Some((1, k.seed)), 3);
+            let (top, front) =
+                box3(c, x, tw, foot - 9, 7, (k.fh * 16 - 20).clamp(8, 14), k.body, Some((2, k.seed ^ 3)), 4);
+            c.hline(front.x, front.right() - 1, front.y, k.body.at(Tone::Deep), 5);
+            c.hline(top.x + 2, top.right() - 3, top.y + 2, k.body.at(Tone::Shade), 6);
+            for ix in [top.x + 5, top.right() - 7] {
+                c.fill_rect(Rect::new(ix, top.y + 1, 3, 2), k.accent.at(Tone::Light), 6);
+                c.dot(ix + 1, top.y + 1, Ix::SEAM, 7);
+            }
+            parts::writing(c, Rect::new(top.x + tw / 2 - 4, top.y + 5, 6, 2), 1, k.body.at(Tone::Shade), k.seed, 6);
+            Stand::Tops([(top, lid_height(16)), (seat, lid_height(4))])
+        }
+        "tomb" => {
+            // A chest tomb: a moulded lid over a panelled chest, the lid carved with a figure
+            // lying with its hands together, a quatrefoil on the chest's face.
+            let (x, tw) = (2, w - 4);
+            let depth = (k.fh * 16 - 14).clamp(10, 34);
+            ao(c, x, x + tw - 1, foot, 6);
+            let (top, front) = box3(c, x, tw, foot, 10, depth, k.body, None, 3);
+            c.retone(k.body, super::HARD);
+            c.rect_bevel(Rect::new(top.x - 1, top.y - 1, top.w + 2, top.h + 2), k.body, 1, Z::new(5, 6));
+            let cx = top.x + top.w / 2;
+            let fig = |c: &mut Canvas, dy: i32| {
+                c.ellipse_lit(Rect::new(cx - 3, top.y + 2 + dy, 6, 5), k.body, Z::flat(7));
+                c.polygon_lit(
+                    &[
+                        (cx - 4, top.y + 7 + dy),
+                        (cx + 3, top.y + 7 + dy),
+                        (cx + 2, top.bottom() - 3),
+                        (cx - 3, top.bottom() - 3),
+                    ],
+                    k.body,
+                    90,
+                    Z::flat(7),
+                );
+            };
+            fig(c, 0);
+            c.retone(k.body, super::HARD);
+            c.vline(cx, top.y + 10, top.y + 13, k.body.at(Tone::Shade), 8);
+            c.dot(cx - 1, top.y + 9, k.body.at(Tone::Light), 8);
+            let q = (cx - 3, front.y + 2);
+            for (dx, dy) in [(2, 0), (0, 2), (4, 2), (2, 4)] {
+                c.fill_rect(Rect::new(q.0 + dx, q.1 + dy, 2, 2), k.body.at(Tone::Shade), 4);
+            }
+            c.dot(q.0 + 2, q.1 + 2, k.accent.at(Tone::Light), 4);
+            Stand::Tops([(top, lid_height(10)), (Rect::default(), 0)])
+        }
         "case" => {
             // A glass case on a wooden stand: its panes reflecting, what is inside dim.
             let r = Rect::new(3, foot - 26, w - 6, 16);
             ao(c, 2, w - 3, foot, 5);
             box3(c, 2, w - 4, foot, 10, 4, k.body, Some((2, k.seed)), 3);
             glass(c, r, false, 6);
-            c.fill_normal(Rect::new(r.x + r.w / 2 - 3, r.bottom() - 6, 6, 5), k.accent.at(Tone::Base), parts::south(), 5);
+            c.fill_normal(
+                Rect::new(r.x + r.w / 2 - 3, r.bottom() - 6, 6, 5),
+                k.accent.at(Tone::Base),
+                parts::south(),
+                5,
+            );
             c.rect_bevel(Rect::new(r.x - 1, r.y - 2, r.w + 2, 3), k.body, 1, Z::new(7, 8));
             Stand::Up(&[])
         }
@@ -200,7 +320,12 @@ pub(crate) fn draw(c: &mut Canvas, k: &Kit, state: State) -> Option<Stand> {
             for (i, px) in (4..w - 3).step_by(6).enumerate() {
                 c.dot(px, r.y + 1, k.trim.at(Tone::High), 5);
                 let coat = [Ramp::ClothNavy, Ramp::ClothGrey, Ramp::ClothBrown][i % 3];
-                c.polygon_cloth(&[(px - 1, r.bottom()), (px + 1, r.bottom()), (px + 3, r.bottom() + 14), (px - 3, r.bottom() + 14)], coat, 60, Z::flat(5));
+                c.polygon_cloth(
+                    &[(px - 1, r.bottom()), (px + 1, r.bottom()), (px + 3, r.bottom() + 14), (px - 3, r.bottom() + 14)],
+                    coat,
+                    60,
+                    Z::flat(5),
+                );
             }
             Stand::Up(&[])
         }
@@ -239,7 +364,12 @@ fn wares(c: &mut Canvas, k: &Kit, x: i32, y: i32, w: i32, row: i32) {
                 let ramps = [Ramp::ClothRed, Ramp::ClothNavy, Ramp::ClothGreen, Ramp::ClothMustard];
                 for b in 0..3 {
                     let r = ramps[((hsh >> 4) as usize + b) % 4];
-                    c.fill_normal(Rect::new(at + b as i32 * 2, y - 5 + (b as i32 % 2), 2, 5 - (b as i32 % 2)), r.at(Tone::Base), parts::south(), 5);
+                    c.fill_normal(
+                        Rect::new(at + b as i32 * 2, y - 5 + (b as i32 % 2), 2, 5 - (b as i32 % 2)),
+                        r.at(Tone::Base),
+                        parts::south(),
+                        5,
+                    );
                     c.dot(at + b as i32 * 2, y - 5 + (b as i32 % 2), r.at(Tone::Light), 5);
                 }
                 at += 7;

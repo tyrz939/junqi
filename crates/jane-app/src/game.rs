@@ -26,6 +26,23 @@ pub trait Screen {
     fn show(&mut self, win: (u32, u32)) -> Result<(), String>;
     /// `soft`, or `wgpu, Vulkan, <adapter>`: the title bar.
     fn describe(&self) -> String;
+    /// Whether anyone can see the window: not minimised, not hidden.
+    fn visible(&mut self) -> bool {
+        use sdl2::sys::SDL_WindowFlags::{SDL_WINDOW_HIDDEN, SDL_WINDOW_MINIMIZED};
+        let flags = self.window_mut().window_flags();
+        flags & (SDL_WINDOW_HIDDEN as u32 | SDL_WINDOW_MINIMIZED as u32) == 0
+    }
+    /// How often a frame is shown, when the present does not wait for the display itself: the
+    /// loop paces its frames to it.
+    fn frame_interval(&mut self) -> Option<std::time::Duration> {
+        None
+    }
+}
+
+/// One refresh of the display the window is on (60 Hz if SDL cannot say).
+fn refresh(window: &sdl2::video::Window) -> std::time::Duration {
+    let hz = window.display_mode().map_or(60, |m| m.refresh_rate).clamp(24, 480);
+    std::time::Duration::from_micros(1_000_000 / hz as u64)
 }
 
 /// T0: `soft` into a streaming texture on an SDL renderer, nearest upscale.
@@ -91,6 +108,10 @@ impl Screen for GpuScreen {
 
     fn describe(&self) -> String {
         self.wgpu.describe().to_owned()
+    }
+
+    fn frame_interval(&mut self) -> Option<std::time::Duration> {
+        self.wgpu.paced_by_caller().then(|| refresh(&self.window))
     }
 }
 

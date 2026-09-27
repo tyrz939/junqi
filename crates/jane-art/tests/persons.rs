@@ -39,6 +39,14 @@ fn drawn(c: &Canvas) -> (i32, i32, i32, i32) {
     b
 }
 
+/// A shade (`ghost`, ART.md §2.1): it comes apart below the hip in a checker, stands on no
+/// feet, draws no closed line there, and stands half its height. The tests of a solid body
+/// skip it where those are the look, and [`a_shade_comes_apart_and_stands_half_height`] holds
+/// it to its own.
+fn ghost(r: &Rendered) -> bool {
+    matches!(looks::find(r.name), Some((_, Look::Person(p))) if p.ghost)
+}
+
 /// A creature, not a person: these unit sprites are step 4's (ART.md §8).
 fn is_creature(sprite: &str) -> bool {
     ["cat", "hen", "sheep"].iter().any(|k| sprite.contains(k))
@@ -60,11 +68,24 @@ fn coverage_jane_and_the_townsfolk_have_looks() {
 }
 
 #[test]
+fn coverage_every_unit_sprite_has_a_look() {
+    let c = catalog();
+    let mut missing = BTreeSet::new();
+    for u in c.combat.units {
+        let name = c.sprites[usize::from(u.sprite.0)];
+        if looks::find(name).is_none() {
+            missing.insert(name);
+        }
+    }
+    assert!(missing.is_empty(), "sprites with no look: {missing:?}");
+}
+
+#[test]
 fn coverage_every_look_renders_every_frame_it_promises() {
-    let want: Vec<FrameId> = person::frame_ids().collect();
+    let want = |r: &Rendered| person::frame_ids_for(looks::fight(r.sprite));
     for r in all() {
         let got: Vec<FrameId> = r.set.frames.iter().map(|(f, _)| *f).collect();
-        assert_eq!(got, want, "{}", r.key());
+        assert_eq!(got, want(r), "{}", r.key());
     }
     for (id, look) in jane_data::looks() {
         let Look::Person(p) = look else { continue };
@@ -99,13 +120,18 @@ fn geometry_the_silhouette_rules_hold() {
         let Some((_, Look::Person(p))) = looks::find(r.name) else { unreachable!() };
         let c = r.set.frame(FrameId::Down).unwrap();
         let pr = person::proportions(p.build);
-        if p.head.hat == jane_data::Hat::None && p.head.hair != jane_data::Hair::Pigtails {
+        // In a rocking chair the chair's back posts stand either side of her head: not her head.
+        let seated = p.extras.contains(&jane_data::Extra::Seated);
+        if p.head.hat == jane_data::Hat::None && p.head.hair != jane_data::Hair::Pigtails && !seated {
             for y in pr.skull_y()..pr.chin_y() {
                 let w = (0..32).filter(|&x| c.get(x, y).is_opaque()).count();
                 assert!(w <= 16 || y >= pr.chin_y() - 2, "{}: the head is {w} wide on row {y}", r.key());
             }
         }
         // The boots: each foot's bottom row is 4 px.
+        if ghost(r) {
+            continue;
+        }
         let row: Vec<i32> = (0..32).filter(|&x| c.get(x, AY).is_opaque()).collect();
         assert_eq!(row.len(), 8, "{}: two feet of four on the ground, got {row:?}", r.key());
     }
@@ -123,11 +149,16 @@ fn determinism_twice_is_the_same_bytes() {
 fn layers_hold_the_contract_and_only_declared_roles_emit() {
     for r in all() {
         let eyes = r.set.emits.contains(&Role::Eye);
+        // A lantern, or a diver's port lit from inside: a handful of px each.
+        let held = r.set.emits.contains(&Role::Held) || r.set.emits.contains(&Role::Glass);
         for (f, c) in frames(r) {
             c.validate().unwrap_or_else(|e| panic!("{} {f:?}: {e}", r.key()));
             let lit = c.emissive().iter().filter(|&&e| e != Ix::CLEAR).count();
-            if f.is_dead() || !eyes {
+            if f.is_dead() || !(eyes || held) {
                 assert_eq!(lit, 0, "{} {f:?}: emits with nothing declared", r.key());
+            } else if held {
+                // A lantern's glass: a handful of px, never the whole figure.
+                assert!(lit <= 24, "{} {f:?}: only the eyes and the lantern emit ({lit})", r.key());
             } else {
                 assert!(lit <= 2, "{} {f:?}: only the eyes emit", r.key());
             }
@@ -146,7 +177,7 @@ fn outline_closed_and_selective() {
     // Every drawn pixel meeting clear is a line: `k`, or its material's own dark. Away from the
     // light (below, right) the line is the ramp's deep or `k`; on the lit side it is no lighter
     // than the ramp's base (ART.md §3, sel-out). A dead frame keeps the lines it stood up with.
-    for r in all() {
+    for r in all().iter().filter(|r| !ghost(r)) {
         for (f, c) in frames(r) {
             for y in 0..c.h() {
                 for x in 0..c.w() {
@@ -280,7 +311,7 @@ fn no_spikes_on_the_silhouette() {
     // A drawn pixel with clear on three sides is a jaggy (`despike` takes them off; the nose
     // in profile is two px tall so that it stays).
     let mut bad = Vec::new();
-    for r in bases() {
+    for r in bases().filter(|r| !ghost(r)) {
         for (f, c) in frames(r) {
             let n = spikes(c).len();
             if n > 0 && !f.is_dead() {
@@ -296,6 +327,8 @@ fn heights_are_true() {
     // The height layer is what a sun or a lamp casts from: a standing frame's pixel stands its
     // row's height above the feet (the head 40), a lying one no more than its thickness.
     for r in all() {
+        // A shade stands half its height, so its shadow is faint.
+        let half = |h: i32| if ghost(r) { (h / 2).max(1) } else { h };
         for (f, c) in frames(r) {
             for y in 0..c.h() {
                 for x in 0..c.w() {
@@ -306,14 +339,14 @@ fn heights_are_true() {
                     if f.is_dead() {
                         assert!((1..=5).contains(&h), "{} {f:?}: ({x}, {y}) lies {h} high", r.key());
                     } else {
-                        assert_eq!(h, ((AY - y) * 5 / 4).max(1), "{} {f:?}: ({x}, {y})", r.key());
+                        assert_eq!(h, half(((AY - y) * 5 / 4).max(1)), "{} {f:?}: ({x}, {y})", r.key());
                     }
                 }
             }
         }
         let (_, top, _, _) = drawn(r.set.frame(FrameId::Down).unwrap());
         let head = i32::from(r.set.frame(FrameId::Down).unwrap().heights().iter().copied().max().unwrap());
-        assert!((30..=46).contains(&head), "{}: the head stands {head} (top row {top})", r.key());
+        assert!((half(30)..=half(46)).contains(&head), "{}: the head stands {head} (top row {top})", r.key());
     }
 }
 
@@ -475,7 +508,14 @@ fn seats_swap_the_coat_and_nothing_else() {
                     assert!(live(*p, coat) && live(*q, to), "{f:?}: a pixel not of the coat changed");
                 }
             }
-            assert!(changed > 20, "{f:?}: the coat did not change");
+            // Every coat pixel the frame shows changed (from behind, her hair and pack hide
+            // most of it; a cast seen from behind hides nearly all).
+            let shown = a
+                .albedo()
+                .iter()
+                .filter(|&&p| palette::Tone::ALL.iter().any(|&t| coat.at(t) == p || palette::pallor(coat.at(t)) == p))
+                .count();
+            assert!(changed == shown && (shown > 20 || f.name().contains("up")), "{f:?}: the coat did not change");
         }
     }
     // Only a player's sprite has seats.
@@ -492,4 +532,23 @@ fn a_mirrored_side_frame_faces_west() {
     let (w0, _, w1, _) = drawn(&west);
     assert_eq!((w0, w1), (31 - x1, 31 - x0));
     west.validate().unwrap();
+}
+
+#[test]
+fn a_shade_comes_apart_and_stands_half_height() {
+    // Above the hip a shade is whole; below it thins to a checker and then to nothing, so no
+    // row near the feet is as full as its chest, and it casts from half height. Its eyes stay lit.
+    let shades: Vec<&Rendered> = bases().filter(|r| ghost(r)).collect();
+    assert!(!shades.is_empty(), "the shade has a look");
+    for r in shades {
+        let c = r.set.frame(FrameId::Down).unwrap();
+        let row = |y: i32| (0..c.w()).filter(|&x| c.get(x, y).is_opaque()).count();
+        let chest = (12..24).map(row).max().unwrap_or(0);
+        assert!(chest >= 12, "{}: a chest", r.key());
+        assert!(row(AY) * 3 <= chest, "{}: the feet come apart ({} of {chest})", r.key(), row(AY));
+        assert!(!c.has(Ix::AO), "{}: a shade lays no contact shadow", r.key());
+        assert!(c.emissive().iter().any(|&e| e != Ix::CLEAR), "{}: its eyes are lit", r.key());
+        let top = i32::from(c.heights().iter().copied().max().unwrap());
+        assert!(top <= 23, "{}: half height ({top})", r.key());
+    }
 }

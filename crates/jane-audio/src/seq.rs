@@ -196,7 +196,12 @@ impl Player {
         self.choice = data
             .sections
             .iter()
-            .map(|s| s.pats.iter().map(|alts| if alts.len() > 1 { r.range(0, alts.len() as u32 - 1) as usize } else { 0 }).collect())
+            .map(|s| {
+                s.pats
+                    .iter()
+                    .map(|alts| if alts.len() > 1 { r.range(0, alts.len() as u32 - 1) as usize } else { 0 })
+                    .collect()
+            })
             .collect();
         self.rng = r;
     }
@@ -220,7 +225,15 @@ impl Player {
     }
 
     /// Renders `n` samples from sample `now` into the dry and send buffers.
-    pub fn render(&mut self, data: &SongData, insts: &[Prepared], now: u64, sr: f32, out: [&mut [f32]; 2], send: [&mut [f32]; 2]) {
+    pub fn render(
+        &mut self,
+        data: &SongData,
+        insts: &[Prepared],
+        now: u64,
+        sr: f32,
+        out: [&mut [f32]; 2],
+        send: [&mut [f32]; 2],
+    ) {
         let n = out[0].len();
         while !self.ended && self.next_at < now + n as u64 {
             let off = self.next_at.saturating_sub(now) as u32;
@@ -319,7 +332,18 @@ impl Player {
             for (j, &midi) in notes.iter().enumerate() {
                 let h = if hum > 0 { self.rng.range(0, hum) } else { 0 };
                 let v = track.vel * vel * (1.0 + 0.12 * (self.rng.f() - 0.5));
-                self.play(insts, ti as u16, self.inst[ti], midi, v, track.pan, off + h + strum * j as u32, gate, sr, chromatic);
+                self.play(
+                    insts,
+                    ti as u16,
+                    self.inst[ti],
+                    midi,
+                    v,
+                    track.pan,
+                    off + h + strum * j as u32,
+                    gate,
+                    sr,
+                    chromatic,
+                );
             }
         }
         self.step_in_sec += 1;
@@ -339,7 +363,19 @@ impl Player {
     }
 
     #[allow(clippy::too_many_arguments)]
-    fn play(&mut self, insts: &[Prepared], track: u16, inst: usize, midi: i32, vel: f32, pan: f32, delay: u32, gate: u32, sr: f32, chromatic: bool) {
+    fn play(
+        &mut self,
+        insts: &[Prepared],
+        track: u16,
+        inst: usize,
+        midi: i32,
+        vel: f32,
+        pan: f32,
+        delay: u32,
+        gate: u32,
+        sr: f32,
+        chromatic: bool,
+    ) {
         if let Some(log) = &mut self.log {
             log.push(NoteOn { track, midi, chromatic, at: self.next_at - self.started + u64::from(delay) });
         }

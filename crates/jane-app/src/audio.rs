@@ -147,7 +147,8 @@ impl AudioBus for Sound {
         let Some(id) = SfxKind::ALL.iter().position(|k| *k == kind).and_then(|i| self.sfx[i]) else { return };
         let Some(p) = place(at, listener) else { return };
         // Footsteps a few cents apart, so a walk is not a machine.
-        let rate = if kind.name().starts_with("step_") { 0.97 + 0.06 * (at.0.0.rem_euclid(97) as f32 / 97.0) } else { 1.0 };
+        let rate =
+            if kind.name().starts_with("step_") { 0.97 + 0.06 * (at.0.0.rem_euclid(97) as f32 / 97.0) } else { 1.0 };
         self.send(Cmd::Sfx { id, gain: p.gain, pan: p.pan, send: p.send, rate });
     }
 

@@ -20,6 +20,9 @@ pub struct SpriteRef {
     pub ay: i16,
     /// How tall the thing stands, px.
     pub height: u8,
+    /// The tallest drawn px in its height layer, true px: how tall it throws its shadow (a
+    /// garden bed seen from above is many rows tall on the screen and a hand high).
+    pub top: u8,
 }
 
 /// Index into [`Atlas::refs`].
@@ -85,7 +88,7 @@ impl Atlas {
             clut[i] = 0xff00_0000 | u32::from(c[0]) << 16 | u32::from(c[1]) << 8 | u32::from(c[2]);
         }
         Atlas {
-            pages: AtlasPages { clut, pages: vec![Page { w: PAGE_W, ..Page::default() }] },
+            pages: AtlasPages { clut, pages: vec![Page { w: PAGE_W, ..Page::default() }], mist: Vec::new() },
             refs: Vec::new(),
             shelf: (0, 0, 0, 0),
             lit,
@@ -143,20 +146,34 @@ impl Atlas {
                 page.height.resize(n, 0);
             }
         }
+        let mut top = 0u8;
         for y in 0..h {
             for x in 0..w {
                 let i = usize::from(sy + y) * usize::from(page.w) + usize::from(sx + x);
                 let t = px(i32::from(x), i32::from(y));
+                if t.albedo.is_opaque() {
+                    top = top.max(t.height);
+                }
                 page.albedo[i] = t.albedo.0;
                 if lit {
                     page.normal[i] = t.normal;
                     page.emissive[i] = t.emissive.0;
                     page.height[i] = t.height;
+                } else if t.albedo.is_opaque() && t.emissive.is_opaque() {
+                    // T0 keeps what glows sparse: a few texels a lamp, a window.
+                    page.glow.push((i as u32, t.emissive.0));
                 }
             }
         }
         self.shelf = (pi, sx + w, sy, sh);
-        self.refs.push(SpriteRef { page: pi as u8, src: Src { x: sx, y: sy, w, h }, ax: anchor.0, ay: anchor.1, height });
+        self.refs.push(SpriteRef {
+            page: pi as u8,
+            src: Src { x: sx, y: sy, w, h },
+            ax: anchor.0,
+            ay: anchor.1,
+            height,
+            top,
+        });
         (self.refs.len() - 1) as RefId
     }
 
@@ -248,7 +265,8 @@ mod tests {
         }
         // More than a page's worth forces a second, and nothing crosses a page's edge.
         let mut at = Atlas::with_layers(false);
-        let ids: Vec<RefId> = (0..900).map(|i| at.add(200 + (i % 3) * 30, 90 + (i % 4) * 11, (0, 0), 1, |_, _| Ix(2))).collect();
+        let ids: Vec<RefId> =
+            (0..900).map(|i| at.add(200 + (i % 3) * 30, 90 + (i % 4) * 11, (0, 0), 1, |_, _| Ix(2))).collect();
         assert!(at.pages.pages.len() > 2);
         for &id in &ids {
             let r = at.get(id);
@@ -287,6 +305,22 @@ mod tests {
                 assert_eq!(page.normal[i], lamp.normal_at(x as i32, y as i32));
             } else {
                 assert!(page.normal.is_empty() && page.emissive.is_empty() && page.height.is_empty());
+            }
+        }
+    }
+
+    /// T0's atlas has no emissive layer but keeps what glows sparse (§1.3 `glow`): lamp glass and
+    /// lit windows, each on an opaque texel.
+    #[test]
+    fn a_t0_atlas_keeps_what_glows_sparse() {
+        let p = crate::Present::new(crate::Tier::T0);
+        let pages = &p.atlas().pages;
+        let n: usize = pages.iter().map(|g| g.glow.len()).sum();
+        assert!(n > 100 && n < 200_000, "{n} glowing texels");
+        for g in pages {
+            assert!(!g.lit());
+            for &(i, e) in &g.glow {
+                assert!(e > 1 && g.albedo[i as usize] > 1);
             }
         }
     }

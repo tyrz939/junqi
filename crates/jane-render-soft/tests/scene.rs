@@ -69,10 +69,22 @@ fn a_town_night_has_every_pass_and_noon_needs_no_light() {
             Pass::Silhouettes { .. } => "silhouettes",
             Pass::Lights { .. } => "lights",
             Pass::Post(_) => "post",
+            Pass::Sky(_) => "sky",
+            Pass::Parallax { .. } => "far",
+            Pass::Water { .. } => "water",
+            Pass::Weather(_) => "weather",
+            Pass::Fog { .. } => "fog",
+            Pass::Rays { .. } => "rays",
+            Pass::Particles { .. } => "particles",
         })
         .collect();
-    // The moon is up at 22:00: its silhouettes lie under the standing things.
-    assert_eq!(kinds, ["terrain", "ground", "silhouettes", "standing", "lights"]);
+    // Out of doors the sky and its far things come first; the moon is up at 22:00, so its
+    // silhouettes lie under the standing things; the weather, clear on the first walk, before
+    // the light; the grade last (every tier draws it, 2026-09-27).
+    assert_eq!(
+        kinds,
+        ["sky", "far", "far", "terrain", "ground", "silhouettes", "standing", "weather", "lights", "post"]
+    );
     assert!(!f.chunks.is_empty() && !f.sprites.is_empty());
     let (_, mut noon) = at_hour(1, 12, Tier::T0);
     assert!(!noon.draw(255, CANVAS).passes.iter().any(|p| matches!(p, Pass::Lights { .. })));
@@ -90,7 +102,9 @@ fn night_is_darker_than_noon() {
             / px.len() as u64
     };
     let (noon, night) = (mean(12), mean(23));
-    assert!(night * 2 < noon, "noon {noon}, night {night}");
+    // T2 is the reference look, and its night keeps its value (ART.md §3.1, "night is
+    // beautiful, not dark"): about two thirds of noon's mean, lamps and all.
+    assert!(night * 4 < noon * 3, "noon {noon}, night {night}");
 }
 
 #[test]

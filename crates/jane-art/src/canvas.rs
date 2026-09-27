@@ -25,6 +25,20 @@ use crate::palette::{Ix, Ramp, Tone};
 /// Screen pixels per sim cell (ART.md §0).
 pub const CELL_PX: i32 = 16;
 
+/// The 3/4 view's one projection (ART.md §1.1): a height is true px above the ground, and a thing
+/// `h` px up is drawn four fifths of that many rows above the ground point it stands on, rounded
+/// up. An upright pixel `r` rows above its feet stands [`height_of_rows`]`(r)` px up, and
+/// `rows_up` of that is `r` again, so a person's every column lands on her feet and a wall's face
+/// on its foot. Every lit tier's shadow reads the height layer through this.
+pub const fn rows_up(h: i32) -> i32 {
+    (h * 4 + 4) / 5
+}
+
+/// The true height of what stands `rows` rows up the screen: five px for every four rows.
+pub const fn height_of_rows(rows: i32) -> i32 {
+    rows * 5 / 4
+}
+
 /// A tangent-space normal: `[nx, ny]`, each `128 + 127 * component` for a component in
 /// `-1..=1`; `nz` is the remainder, `sqrt(1 - nx² - ny²)`.
 pub type Normal = [u8; 2];
@@ -365,7 +379,7 @@ impl Canvas {
     }
 
     /// Change a drawn pixel's colour and nothing else.
-    fn recolour(&mut self, x: i32, y: i32, ix: Ix) {
+    pub(crate) fn recolour(&mut self, x: i32, y: i32, ix: Ix) {
         let Some(i) = self.idx(x, y) else { return };
         if self.albedo[i].is_opaque() {
             self.albedo[i] = ix;
@@ -973,7 +987,7 @@ impl Canvas {
     /// run [`Canvas::outline`] first.
     pub fn upright(&mut self, ay: i32) {
         for y in 0..self.h {
-            let row = ((ay - y).max(0) * 5 / 4).clamp(1, 255) as u8;
+            let row = height_of_rows((ay - y).max(0)).clamp(1, 255) as u8;
             for x in 0..self.w {
                 let i = (y * self.w + x) as usize;
                 if self.albedo[i].is_opaque() {
@@ -1256,7 +1270,8 @@ impl Canvas {
                 let len = isqrt((gx * gx + gy * gy) as u64) as i32;
                 // How far out from the flat middle this px is: 0 there, UNIT at the edge.
                 let u = ((r10 - dd + 5) * UNIT / r10).clamp(0, UNIT);
-                let (nx, ny) = if len == 0 || u == 0 { (0, 0) } else { (-gx * u * 7 / (8 * len), -gy * u * 7 / (8 * len)) };
+                let (nx, ny) =
+                    if len == 0 || u == 0 { (0, 0) } else { (-gx * u * 7 / (8 * len), -gy * u * 7 / (8 * len)) };
                 let n = normal(nx, ny);
                 let [a, b, c] = decode(n);
                 let tone = Tone::ALL[band(lambert([a, b, c]))];
@@ -1271,7 +1286,8 @@ impl Canvas {
     fn distance(&self) -> Vec<i32> {
         let (w, h) = (self.w, self.h);
         let mut d: Vec<i32> = self.albedo.iter().map(|a| if a.is_opaque() { i32::MAX / 2 } else { 0 }).collect();
-        let get = |d: &[i32], x: i32, y: i32| if x < 0 || y < 0 || x >= w || y >= h { 0 } else { d[(y * w + x) as usize] };
+        let get =
+            |d: &[i32], x: i32, y: i32| if x < 0 || y < 0 || x >= w || y >= h { 0 } else { d[(y * w + x) as usize] };
         for y in 0..h {
             for x in 0..w {
                 let i = (y * w + x) as usize;

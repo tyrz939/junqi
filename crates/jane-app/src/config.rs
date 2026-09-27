@@ -5,7 +5,10 @@
 use jane_present::input::{
     BINDINGS, Bindings, action, action_name, key_code, key_name, mouse_button, mouse_name, pad_input, pad_name,
 };
+use std::collections::BTreeMap;
+
 use jane_present::audio::Volumes;
+use jane_present::{Features, Tier};
 use jane_sim::input::AssistProfile;
 use serde::{Deserialize, Serialize};
 
@@ -45,6 +48,11 @@ pub struct Config {
     pub last_host: Option<String>,
     /// Master, music and effects, 0 to 100 (PRESENTATION.md §5).
     pub volume: VolumeRow,
+    /// The `Features` rows (PRESENTATION.md §1.3), one key per row: `"on"`, `"off"` (or `true`,
+    /// `false`), or a count for `shadows`, `max_lights` and `max_particles`. A row left out is
+    /// the tier's own; one the tier cannot draw is held to what it can. The Controls screen
+    /// writes the rows it turns, and `jane bench tune` the ladder's.
+    pub present: BTreeMap<String, serde_json::Value>,
 }
 
 /// `config.json`'s `volume`: `{ "master": 80, "music": 70, "sfx": 80 }`, each 0 to 100; a
@@ -143,6 +151,39 @@ impl Config {
         self.volume = VolumeRow { master: v.master, music: v.music, sfx: v.sfx };
     }
 
+    /// The rows in force at `tier`: its own with this config's `present` laid over them. A key
+    /// or value this build does not know is skipped with a line on stderr.
+    pub fn features(&self, tier: Tier) -> Features {
+        let mut f = Features::of(tier);
+        for (k, v) in &self.present {
+            let s = match v {
+                serde_json::Value::Bool(b) => if *b { "on" } else { "off" }.to_owned(),
+                serde_json::Value::Number(n) => n.to_string(),
+                serde_json::Value::String(s) => s.clone(),
+                other => other.to_string(),
+            };
+            if !f.set(tier, k, &s) {
+                eprintln!("jane-app: config.json: present.{k} = {s}: no such row or value");
+            }
+        }
+        f
+    }
+
+    /// Keeps row `key` of `f`: written when it differs from `tier`'s own, else left out, so a
+    /// row the player never turned follows the tier. The other rows are untouched.
+    pub fn set_feature(&mut self, tier: Tier, f: &Features, key: &str) {
+        let (now, own) = (f.get(key), Features::of(tier).get(key));
+        match now {
+            Some(v) if Some(&v) != own.as_ref() => {
+                let value = v.parse::<u64>().map_or(serde_json::Value::String(v), serde_json::Value::from);
+                self.present.insert(key.to_owned(), value);
+            }
+            _ => {
+                self.present.remove(key);
+            }
+        }
+    }
+
     /// Remembers slot `n` holds a game of `seed`.
     pub fn set_slot_seed(&mut self, n: u8, seed: u32) {
         let i = usize::from(n);
@@ -191,6 +232,33 @@ mod tests {
         let back: Config = serde_json::from_str(&s).unwrap();
         assert_eq!(back.bindings(), b);
         assert_eq!(Config::default().bindings(), Bindings::default());
+    }
+
+    #[test]
+    fn the_present_rows_lay_over_the_tiers_own_and_only_a_turned_row_is_written() {
+        let c: Config = serde_json::from_str(
+            r#"{"present":{"fog":"off","shadows":4,"bloom":true,"god_rays":false,"max_particles":"99999","nope":"on"}}"#,
+        )
+        .unwrap();
+        let t1 = c.features(Tier::T1);
+        assert!(!t1.fog && t1.shadows == 4 && t1.bloom && !t1.god_rays, "T1 blooms; god_rays off from the file");
+        assert_eq!(t1.max_particles, Features::of(Tier::T1).max_particles, "a count is held to the tier's");
+        let t2 = c.features(Tier::T2);
+        assert!(t2.bloom && !t2.god_rays && t2.shadows == 4);
+        // A row turned back to the tier's own leaves the file; a turned one is written.
+        let mut c = Config::default();
+        let mut f = Features::of(Tier::T1);
+        f.cycle(Tier::T1, "shadows");
+        c.set_feature(Tier::T1, &f, "shadows");
+        assert_eq!(c.present.get("shadows"), Some(&serde_json::Value::from(4u64)));
+        f.cycle(Tier::T1, "fog");
+        c.set_feature(Tier::T1, &f, "fog");
+        assert_eq!(c.present.get("fog"), Some(&serde_json::Value::from("off")));
+        f.cycle(Tier::T1, "fog");
+        c.set_feature(Tier::T1, &f, "fog");
+        assert!(!c.present.contains_key("fog"));
+        let back: Config = serde_json::from_str(&serde_json::to_string(&c).unwrap()).unwrap();
+        assert_eq!(back.features(Tier::T1), f);
     }
 
     #[test]
