@@ -489,6 +489,27 @@ impl Present {
                 // only graze the ground and throw no pool.
                 (x + w / 2, foot, glass.clamp(FLAME_HEIGHT, 60), if d.w == 1 { 6 } else { 10 })
             };
+            // A light hung on a wall (a torch, a miner's lamp) stands on the floor in front of the
+            // wall, as high again as it was moved: the same px on screen, and the wall it hangs
+            // on no longer stands between it and the room it lights.
+            let (gy, height) = {
+                let wall = |cy: i32| {
+                    let f = view.tile(gx.div_euclid(CELL), cy).flags();
+                    f & jane_core::tile::F_SOLID != 0 && f & jane_core::tile::F_BLOCK_LOS != 0
+                };
+                let mut cy = gy.div_euclid(CELL);
+                let mut steps = 0;
+                while wall(cy) && steps < 4 {
+                    cy += 1;
+                    steps += 1;
+                }
+                if steps > 0 && steps < 4 {
+                    let front = cy * CELL + 4;
+                    (front, (height + front - gy).clamp(4, 255))
+                } else {
+                    (gy, height)
+                }
+            };
             lights.push(LightRec {
                 id: p.id.get(),
                 x: gx,
@@ -677,7 +698,8 @@ impl Present {
                     colour: scale(LANTERN, k),
                     radius: LANTERN_RADIUS,
                     size: 5,
-                    clear: 4,
+                    // Her own body throws no shadow on her own lantern (a black arch behind her).
+                    clear: 26,
                     casts: true,
                     kind: LightKind::Point,
                 });

@@ -220,7 +220,10 @@ impl Atmosphere {
             return false;
         }
         let sky = self.kind as usize;
-        let here = v.rect.is_some() || v.layer.regions.contains(&self.region) || self.zone.is_some_and(|z| v.layer.zones.contains(&z));
+        // A region's layer hangs under its sky, so never indoors; a zone's fills the zone.
+        let here = v.rect.is_some()
+            || (!self.indoor && v.layer.regions.contains(&self.region))
+            || self.zone.is_some_and(|z| v.layer.zones.contains(&z));
         here && v.layer.shows(hour, sky)
     }
 

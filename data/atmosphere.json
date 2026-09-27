@@ -47,6 +47,6 @@
   "mine_dust": {
     "zones": ["mine"],
     "hours": [0, 0], "needs": ["clear", "mist", "rain", "storm"],
-    "colour": "#8a7c68", "density": 180, "height": "full", "drift": [1, 0]
+    "colour": "#8a7c68", "density": 60, "height": "full", "drift": [1, 0]
   }
 }

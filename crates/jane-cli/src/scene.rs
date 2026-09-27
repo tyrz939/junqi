@@ -245,8 +245,13 @@ fn play(bps: Blueprints, o: &Opts, tier: Tier) -> Result<(Tap, Present, u32), St
     }
     if let Some(at) = &o.at {
         let v = host.sim.view(seat).ok_or("seat 0 is not in the world")?;
-        let mark = v.sym(at).ok_or_else(|| format!("--at: no mark \"{at}\""))?;
-        let tp = DevOp::Tp { zone: jane_core::ZoneId::County, mark };
+        // `MARK` in the county, or `ZONE:MARK` (`mine:entry`).
+        let (zone, name) = match at.split_once(':') {
+            Some((z, m)) => (jane_core::ZoneId::from_name(z).ok_or_else(|| format!("--at: no zone \"{z}\""))?, m),
+            None => (jane_core::ZoneId::County, at.as_str()),
+        };
+        let mark = v.sym(name).ok_or_else(|| format!("--at: no mark \"{name}\""))?;
+        let tp = DevOp::Tp { zone, mark };
         let cmd = [StampedCommand { seat: Some(seat), seq: u16::MAX - 1, cmd: Command::Dev(tp) }];
         host.sim.step(&StepInput { frames: [InputFrame::IDLE; 4], commands: &cmd });
         // The travel lands at the end of the step; a few idle ticks settle the camera on her.

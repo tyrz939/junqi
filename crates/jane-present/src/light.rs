@@ -15,6 +15,9 @@ use crate::frame::{Directional, Post, Rgb};
 /// Ticks in an hour of the clock (60 ticks a second, 2 real minutes an hour).
 const HOUR: i32 = 7200;
 
+/// The least light a zone indoors has, of 255.
+const INDOOR_FLOOR: i32 = 70;
+
 const NIGHT: [i32; 3] = [58, 66, 116];
 const DAWN: [i32; 3] = [230, 190, 190];
 const DAY: [i32; 3] = [255, 255, 255];
@@ -89,7 +92,9 @@ pub struct Sky {
 /// zone's `permille` instead, a little blue.
 pub fn ambient(clock: u32, indoor: bool, permille: i16) -> [u8; 3] {
     if indoor {
-        let v = i32::from(permille.clamp(0, 1000)) * 255 / 1000;
+        // Dark is the mood and never black (ART.md §3.1): a zone's light runs from a floor of
+        // about a quarter up, so a mine at 160 permille is dim and still reads.
+        let v = INDOOR_FLOOR + i32::from(permille.clamp(0, 1000)) * (255 - INDOOR_FLOOR) / 1000;
         return [(v - v / 10) as u8, (v - v / 20) as u8, v as u8];
     }
     keyed(&KEYS, clock)
@@ -276,7 +281,7 @@ mod tests {
     fn indoors_is_the_zone_light() {
         assert_eq!(ambient(0, true, 1000), [230, 243, 255]);
         let dim = ambient(12 * 7200, true, 200);
-        assert!(dim[2] < 60, "{dim:?}");
+        assert!(dim[2] < 120 && dim[2] > 60, "dim and never black: {dim:?}");
         assert!(sky(12 * 7200, 0, true, 500, Region::Lowfields).sun.is_none());
     }
 
