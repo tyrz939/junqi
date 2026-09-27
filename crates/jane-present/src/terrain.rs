@@ -50,6 +50,9 @@ pub struct Flora {
     pub look: RefId,
     /// How deep it is across the ground, px (a trunk is thin, a shrub is its spread).
     pub depth: u8,
+    /// How many rows over its foot the row it stands on is: its caster's foot, so every tier
+    /// throws its shadow from where its heights are counted.
+    pub lift: u8,
 }
 
 /// The painter, its scratch chunk, the zone's paint, and each slot's placements.
@@ -79,7 +82,10 @@ impl Terrain {
                 let look = atlas.add_canvas(&s.canvas, (s.ax as i16, s.ay as i16), h.clamp(1, 255) as u8, |_, _, t| t);
                 // A tree throws its shadow from its trunk; a shrub or a stone from its spread.
                 let depth = if name.contains("tree") || name.starts_with("pine") { 6 } else { w / 3 };
-                Flora { look, depth: depth.clamp(3, 16) as u8 }
+                // What it stands on, rows over its foot (a shrub's rim; its heights are counted
+                // from there, `jane_art::flora::base`).
+                let lift = (s.ay - jane_art::flora::base(&s.canvas, s.ay)).clamp(0, 255) as u8;
+                Flora { look, depth: depth.clamp(3, 16) as u8, lift }
             })
             .collect();
         Terrain {

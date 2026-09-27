@@ -364,18 +364,27 @@ fn trunk(c: &mut Canvas, cx: i32, top: i32, bottom: i32, w: i32, bark: Ramp, see
 }
 
 /// Stands a plant's heights in the one projection (ART.md §1.1): its generators write a px `r`
-/// rows over the foot row `ay` as `r` px up, and what they add over that (a crown's dome, a leaf
-/// proud of its mass) stays on top of it; the px is `height_of_rows(r)` up, so its column lands
-/// on the foot in a lit tier's field and a crown floats over its trunk as high as it is drawn.
+/// rows over the foot row `ay` as about `r` px up (a crown's dome a few px over that); the px is
+/// `height_of_rows(r)` up, exactly, so its every column lands on the foot row in a lit tier's
+/// field and a crown floats over its trunk as high as it is drawn. The dome is not kept: it
+/// stood the middle of a crown, the part over the trunk, a few rows in front of the rest, where
+/// the trunk held it to the ground, and a low sun drew it as a streak beside the crown's shadow.
+/// A crown's depth is its caster's.
+///
+/// It stands on its lowest drawn row ([`base`]), which is the foot row `ay` for a tree (its
+/// trunk's root) and a little above it for a shrub (the crown's rim, over the contact shadow):
+/// a shrub counted from its foot hovered a few px over the ground in the lit tiers, and the
+/// ground drawn under its rim lay inside it, in its shadow.
 fn stand(c: &mut Canvas, ay: i32) {
     let (w, h) = (c.w(), c.h());
-    let old: Vec<i32> =
-        (0..h).flat_map(|y| (0..w).map(move |x| (x, y))).map(|(x, y)| i32::from(c.height_at(x, y))).collect();
-    c.heights_by(Rect::new(0, 0, w, h), |x, y| {
-        let rows = (ay - y).max(0);
-        let over = (old[(y * w + x) as usize] - rows).max(0);
-        height_of_rows(rows) + over
-    });
+    let b = base(c, ay);
+    c.heights_by(Rect::new(0, 0, w, h), |_, y| height_of_rows((b - y).max(0)));
+}
+
+/// The lowest row of `c` at or above `ay` with a drawn px (the contact shadow is not drawn): what
+/// a plant stands on.
+pub fn base(c: &Canvas, ay: i32) -> i32 {
+    (0..=ay.min(c.h() - 1)).rev().find(|&y| (0..c.w()).any(|x| c.get(x, y).is_opaque())).unwrap_or(ay)
 }
 
 /// A broadleaf. Large: 64 x 80; medium: 48 x 64. Foot: the trunk's bottom centre.
@@ -722,18 +731,23 @@ mod tests {
             bush(1, Ramp::Leaf, false),
         ];
         for s in plants {
-            for y in 0..s.ay {
+            // A tree stands on its foot row; a shrub on the rim of its crown, over its contact
+            // shadow.
+            let b = base(&s.canvas, s.ay);
+            assert!(b <= s.ay && b >= s.ay - 6, "{b} for a foot on {}", s.ay);
+            for y in 0..b {
                 for x in 0..s.canvas.w() {
                     if !s.canvas.get(x, y).is_opaque() {
                         continue;
                     }
-                    // Its true height at least: a lit tier stands it on its foot row or, where a
-                    // crown bulges toward the viewer, a little in front, never behind.
+                    // Exactly its rows' true height over what it stands on: a lit tier stands
+                    // every column of it on that row.
                     let h = i32::from(s.canvas.height_at(x, y));
-                    assert!(rows_up(h) >= s.ay - y, "({x}, {y}): {h} px up, {} rows over its foot", s.ay - y);
+                    assert_eq!(rows_up(h), b - y, "({x}, {y}): {h} px up, {} rows over its base", b - y);
                 }
             }
         }
+        assert_eq!(base(&broadleaf(1, true, Ramp::Leaf, Ramp::Bark).canvas, 78), 78);
         // A broadleaf's crown floats: the lowest px of a column clear of the trunk is well up.
         let s = broadleaf(1, true, Ramp::Leaf, Ramp::Bark);
         let low = (0..s.canvas.h()).rev().find(|&y| s.canvas.get(s.ax - 20, y).is_opaque()).unwrap_or(0);
