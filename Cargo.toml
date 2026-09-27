@@ -41,6 +41,9 @@ sdl2 = { version = "0.37", default-features = false, features = ["bundled", "sta
 # raw-window-handle. No web backend: the game is native.
 wgpu = { version = "30", default-features = false, features = ["std", "parking_lot", "dx12", "metal", "vulkan", "gles", "wgsl"] }
 raw-window-handle = "0.6"
+# jane-render-gl2 only (PORT.md §3.5, P6b): T1 draws through glow's OpenGL 2.1 / GLES 2.0 bindings (the
+# same crate wgpu's GL backend already builds), GLSL 1.20 / ES 1.00; no C code of its own.
+glow = "0.17"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

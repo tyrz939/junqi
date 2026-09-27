@@ -114,7 +114,7 @@ The plan for the native rewrite. Pair with `PLAN.md` (the game), `ARCHITECTURE.m
 
 | Crate group | Lints |
 | --- | --- |
-| all | `unsafe_code = "forbid"` (one exception, §4), `clippy::all`, pedantic where sane, `rust_2018_idioms`, `missing_debug_implementations` |
+| all | `unsafe_code = "forbid"` (the exceptions are §4's unsafe column; as built, one: `jane-render-gl2` is `deny` and its `src/gl.rs` alone allows it), `clippy::all`, pedantic where sane, `rust_2018_idioms`, `missing_debug_implementations` |
 | `core`, `schema`, `data`, `world`, `sim`, `net`, `bot`, `art` | `clippy::float_arithmetic = "deny"`, `clippy::float_cmp = "deny"`, `clippy::disallowed_types` (HashMap, HashSet, RandomState, Instant, rand; Rc, RefCell, `Arc<Mutex>` in `sim` and `world`), `clippy::disallowed_methods` (f32/f64 conversions, `sort_unstable*`, `std::env::var`) |
 | same eight | CI grep gate: `rg '\bf(32\|64)\b' crates/jane-{core,schema,data,world,sim,net,bot,art}/src` returns nothing, and so does `rg 'as f'` |
 
@@ -131,8 +131,8 @@ The plan for the native rewrite. Pair with `PLAN.md` (the game), `ARCHITECTURE.m
 | `lz4_flex` | `sim` (save frame) | A busy county's save is ~150 KB compressed (`ARCHITECTURE.md` §3.5) |
 | `xxhash-rust` (xxh3) | `sim` (state hash), `schema` (content hash) | One hash for saves, desync checks and the content pin (`ARCHITECTURE.md` §3.6) |
 | `indexmap` | `core` re-exports | Ordered maps |
-| `sdl2` | `app` only | Window, input, audio, present; the GL context for `gl2` and the window handle for `wgpu` |
-| `glow` | `jane-render-gl2` only | OpenGL 2.1 / GLES 2.0 bindings, no C code, the same crate on the Pi and a 2006 PC |
+| `sdl2` | `app`; `jane-render-gl2` (and so `jane-cli` behind its off-by-default `gpu` feature) | Window, input, audio, present; the GL context for `gl2` (made in `jane-render-gl2`, so the entry-point loader never crosses a crate boundary, and a hidden window's for `jane sheet` and `jane bench`) and the window handle for `wgpu` |
+| `glow` | `jane-render-gl2` only | OpenGL 2.1 / GLES 2.0 bindings, no C code, the same crate on the Pi and a 2006 PC (0.17, the version wgpu's GL backend already builds). Every call is an `unsafe fn`: see §4's unsafe column |
 | `wgpu` | `jane-render-wgpu` only | Vulkan, DX12, Metal and GLES 3 behind one API; the only large dependency in the workspace, and it never touches the eight float-free crates |
 | `raw-window-handle` | `app`, the two GPU backends | The window handle contract between SDL2 and the backends |
 
@@ -186,7 +186,7 @@ jane-cli <-- schema, world, sim, net, bot, art, present, render-soft     no SDL
 | `jane-art` | Procedural sprite, tile, font, icon, chrome and weather generators from `looks` rows, each emitting albedo, normal, emissive and height; palettes and ramps; atlas packing; contact sheets with its own PNG encoder (`ART.md`) | core, data | forbid | none (so sheets hash the same on every target) |
 | `jane-present` | The scene: builds the backend-agnostic `Frame` (passes and draw lists: terrain, sprite batches, lights and shadow casters, fog volumes, parallax layers, particles, post settings, UI) from `jane_sim::view::View` and presenter state (PRESENTATION.md §1); fx runtime, camera, immediate-mode ui, input mapping, `text` (English expansion of `TextId`, `{name}`, `{place:}`); the `Backend` trait and the `Features` tier table. Reads views and events, never writes state; emits `Command`s only. No SDL, no GPU; headless in tests | core, data, sim (view, events), world (names), art | forbid | allowed, discouraged |
 | `jane-render-soft` | T0 backend: CPU rasteriser into a `u32` framebuffer, half or full res, the multiply lightmap, no normals or shadows. Always builds; `jane sheet`, `jane film` and CI draw through it | present | deny, one measured `allow` for the blit loop if the Pentium 4 demands it | allowed |
-| `jane-render-gl2` | T1 backend: OpenGL 2.1 / GLES 2.0 through `glow`, GLSL 1.20 / ES 1.00; normal-mapped lights in a fragment shader, hard cast shadows by extruded occluder geometry, fog layers, particles, sharp-bilinear upscale | present, glow, raw-window-handle | deny (the GL calls are `glow`'s safe API) | allowed |
+| `jane-render-gl2` | T1 backend: OpenGL 2.1 / GLES 2.0 through `glow`, GLSL 1.20 / ES 1.00; normal-mapped lights in a fragment shader, hard cast shadows by extruded occluder geometry, fog layers, particles, sharp-bilinear upscale | present, core, glow, sdl2 | deny: `glow`'s calls are all `unsafe fn`, so `src/gl.rs` alone carries `#![allow(unsafe_code)]` and wraps the calls T1 makes in safe ones that check every length handed to the driver; the crate copies the workspace's lint table with `unsafe_code = "deny"` (Cargo cannot override one inherited lint). Decided 2026-09-27: GL from Rust has no safe path (SDL's loader returns raw pointers, and every binding crate's calls are unsafe), and this is the exception the column always allowed | allowed |
 | `jane-render-wgpu` | T2 backend: Vulkan / DX12 / Metal / GLES 3 through `wgpu`; everything T1 plus soft shadows, many lights, bloom, colour grading, water reflection, higher particle caps | present, wgpu, raw-window-handle | forbid | allowed |
 | `jane-app` | SDL2 binary: window, input events, audio device, loop, threads, save files, config; probes the GPU, picks the backend and tier (override in `config.json`), and hands the `Frame` to it | everything | forbid | allowed |
 | `jane-cli` | `jane gen`, `check`, `bench`, `replay verify|record|diff`, `sheet`, `view`, `serve`, `soak`, `hash`, `save inspect`, `world build`. `jane serve` is the headless lockstep host: no SDL, one status line (tick, seats, hash) | schema, world, sim, net, bot, art, present | forbid | allowed |
