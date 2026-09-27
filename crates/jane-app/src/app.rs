@@ -25,6 +25,7 @@ use jane_present::ui::core::{AppIntent, PadPress, UiInput, UiOut};
 use jane_present::ui::dialogue::{self, DialogueBox};
 use jane_present::ui::hud::{self, HudCtx};
 use jane_present::ui::lan::{self as lan_ui, HostChoice, HostInfo, JoinInfo};
+use jane_present::ui::lesson as lesson_ui;
 use jane_present::ui::loading::{self, Card, LoadingState};
 use jane_present::ui::menus::{self, MenuState, PauseInfo, SlotMode, SlotRow};
 use jane_present::ui::perf::{self, FrameInfo, PerfLog, PerfView, SimTally, TopLine};
@@ -61,6 +62,8 @@ const DARK: u32 = 0xff10_1014;
 
 /// What the loader thread says.
 enum Loaded {
+    /// A stage of the build has started (`jane_world::Report`).
+    Stage(&'static str),
     Card(Box<Card>),
     Sim(Result<Box<Sim>, String>),
 }
@@ -71,7 +74,7 @@ enum Scene {
     /// `host`: the world opens to the LAN once built (the title's Host).
     Loading {
         rx: Receiver<Loaded>,
-        st: LoadingState,
+        st: Box<LoadingState>,
         sim: Option<Box<Sim>>,
         slot: Option<u8>,
         host: Option<HostChoice>,
@@ -215,6 +218,7 @@ pub fn run(
     screen.backend().set_features(&present.features());
     let ui = Ui::new(present.ui_art().clone());
     let describe = screen.describe();
+    crate::crash::note_backend(&describe);
     let mut win = screen.size();
     let mut devices = Devices::new(pads, win.1);
     let mut canvas_px = canvas_size(win.0, win.1);
@@ -419,6 +423,12 @@ pub fn run(
             PadPress { buttons: pad_now.0 & !pad_was.0, lt: pad_now.1 && !pad_was.1, rt: pad_now.2 && !pad_was.2 };
         pad_was = pad_now;
         devices.state.end_sample();
+        // Any press once the county is built goes straight on to play.
+        if let Scene::Loading { st, .. } = &mut app.scene
+            && (!keys.is_empty() || pressed || right || pad_pressed.buttons != 0)
+        {
+            st.press();
+        }
         edges.extend(app.input.drain());
         let mut actions = Vec::new();
         for edge in edges.drain(..) {
@@ -459,6 +469,7 @@ pub fn run(
             app.tick(held, &mut events);
             acc -= TICK;
             app.ticks += 1;
+            crate::crash::note_tick(app.ticks);
             title_clock.4 += 1;
             if t_ticks.elapsed() >= TICK_BUDGET || args.ticks.is_some_and(|n| app.ticks >= n) {
                 break;
@@ -598,9 +609,13 @@ impl App<'_> {
         self.bufs.dialogue.is_some() && matches!(self.scene, Scene::Play)
     }
 
-    /// The world is held: a menu is up with nobody else here, or F6 holds it.
+    /// The world is held: a menu is up with nobody else here, or F6 holds it, or (alone) a
+    /// spell has just been learned and the world holds its breath (PRESENTATION.md §2.1).
     fn world_held(&self) -> bool {
-        !self.menus.is_empty() || self.win_open || (self.speed.held && !self.speed.step)
+        !self.menus.is_empty()
+            || self.win_open
+            || (self.speed.held && !self.speed.step)
+            || self.present.lessons().holds_world(self.alone())
     }
 
     /// Opens the window on `tab`, switches to it, or closes the window when it is already there.
@@ -623,13 +638,14 @@ impl App<'_> {
                 self.soundtrack.title(&mut self.sound);
                 while let Ok(m) = rx.try_recv() {
                     match m {
+                        Loaded::Stage(s) => st.stage(s),
                         Loaded::Card(c) => {
                             st.card = Some(*c);
                             st.since = self.ticks as u32;
                         }
                         Loaded::Sim(Ok(s)) => {
                             *sim = Some(s);
-                            st.built = true;
+                            st.finish();
                         }
                         Loaded::Sim(Err(e)) => {
                             eprintln!("jane-app: {e}");
@@ -639,6 +655,7 @@ impl App<'_> {
                         }
                     }
                 }
+                st.tick(self.ticks as u32);
                 if st.done(self.ticks as u32)
                     && let Some(s) = sim.take()
                 {
@@ -658,7 +675,9 @@ impl App<'_> {
                 let me = me_of(self.session.as_ref());
                 let Some(session) = self.session.as_mut() else { return };
                 lend_wall_clock(session);
-                if !(paused && session.pauses()) {
+                // Held alone, a press (a move in the bag, a use) is still stepped, one tick with
+                // her stick idle, so the window shows it at once (`Session::try_step`).
+                if !(paused && session.pauses() && self.pending.is_empty()) {
                     let t = Instant::now();
                     // A guest behind the host steps what it has in hand to catch up.
                     let mut budget = 1 + session.backlog().saturating_sub(BEHIND).min(5);
@@ -698,6 +717,7 @@ impl App<'_> {
                     self.present.tick(&v, events);
                     self.bufs.tick(&v, events);
                     self.soundtrack.tick(&v, events, &mut self.sound);
+                    self.soundtrack.lesson(self.present.lessons(), &mut self.sound);
                     self.stages[1] += t.elapsed().as_micros() as u32;
                     if self.bot_until_talk && self.bufs.dialogue.is_some() {
                         self.bot = None;
@@ -941,22 +961,33 @@ impl App<'_> {
             .collect();
     }
 
-    /// New Game: the county built on a thread while the loading screen draws its skeleton.
+    /// The loading screen `--loading` asked for: the scroll, or the developer's map.
+    fn loading_mode(&self) -> loading::Mode {
+        if self.args.loading_map { loading::Mode::Map } else { loading::Mode::Scroll }
+    }
+
+    /// New Game: the county built on a thread while the loading screen says each stage of it
+    /// (or, `--loading map`, draws its skeleton).
     /// `host`: the world is opened to the LAN once built (the title's Host).
     fn new_game(&mut self, name: String, seed: u32, host: Option<HostChoice>) {
         let (tx, rx) = channel();
+        let mode = self.loading_mode();
         std::thread::spawn(move || {
-            if let Ok(s) = jane_world::skeleton::skeleton(seed) {
+            if mode == loading::Mode::Map
+                && let Ok(s) = jane_world::skeleton::skeleton(seed)
+            {
                 let _ = tx.send(Loaded::Card(Box::new(Card::from_skeleton(&s))));
             }
             let t0 = Instant::now();
-            let sim = Blueprints::build(seed)
-                .map(|bps| Box::new(Sim::new_game_with(bps, &name)))
-                .map_err(|e| format!("seed {seed}: {e}"));
+            let sim = Blueprints::build_with(seed, &mut |s| {
+                let _ = tx.send(Loaded::Stage(s));
+            })
+            .map(|bps| Box::new(Sim::new_game_with(bps, &name)))
+            .map_err(|e| format!("seed {seed}: {e}"));
             println!("jane-app: seed {seed}: the county built in {} ms", t0.elapsed().as_millis());
             let _ = tx.send(Loaded::Sim(sim));
         });
-        let st = LoadingState { card: None, since: self.ticks as u32, built: false, seed, verb: "New Game" };
+        let st = Box::new(LoadingState::new(mode, seed, "New Game", self.ticks as u32));
         self.end_session();
         self.scene = Scene::Loading { rx, st, sim: None, slot: None, host };
     }
@@ -973,25 +1004,33 @@ impl App<'_> {
         };
         let (tx, rx) = channel();
         let seed = self.config.slot_seeds.get(usize::from(n)).copied().flatten();
+        let mode = self.loading_mode();
         std::thread::spawn(move || {
-            // With the seed known the county forms on the card while it is rebuilt; a seed
-            // remembered wrong falls back to the save's own.
+            // With the seed known the stages are said as the county is rebuilt (or it forms
+            // on the map card); a seed remembered wrong falls back to the save's own, and with
+            // none the save builds its own county, said as one stage.
             let sim = match seed {
                 Some(seed) => {
-                    if let Ok(s) = jane_world::skeleton::skeleton(seed) {
+                    if mode == loading::Mode::Map
+                        && let Ok(s) = jane_world::skeleton::skeleton(seed)
+                    {
                         let _ = tx.send(Loaded::Card(Box::new(Card::from_skeleton(&s))));
                     }
-                    Blueprints::build(seed)
-                        .ok()
-                        .and_then(|bps| Sim::from_save_with(&bytes, bps).ok())
-                        .map_or_else(|| Sim::from_save(&bytes), Ok)
+                    Blueprints::build_with(seed, &mut |s| {
+                        let _ = tx.send(Loaded::Stage(s));
+                    })
+                    .ok()
+                    .and_then(|bps| Sim::from_save_with(&bytes, bps).ok())
+                    .map_or_else(|| Sim::from_save(&bytes), Ok)
                 }
-                None => Sim::from_save(&bytes),
+                None => {
+                    let _ = tx.send(Loaded::Stage("skeleton"));
+                    Sim::from_save(&bytes)
+                }
             };
             let _ = tx.send(Loaded::Sim(sim.map(Box::new).map_err(|e| format!("slot {}: {e:?}", n + 1))));
         });
-        let st =
-            LoadingState { card: None, since: self.ticks as u32, built: false, seed: seed.unwrap_or(0), verb: "Load" };
+        let st = Box::new(LoadingState::new(mode, seed.unwrap_or(0), "Load", self.ticks as u32));
         self.end_session();
         self.scene = Scene::Loading { rx, st, sim: None, slot: Some(n), host };
         self.menus.clear();
@@ -1078,6 +1117,7 @@ impl App<'_> {
         // The county's music is the county's seed's, on every machine at the table.
         if let Some(sim) = session.sim() {
             self.sound.set_seed(sim.state().seed);
+            crate::crash::note_seed(sim.state().seed);
         }
         self.session = Some(session);
         self.scene = Scene::Play;
@@ -1219,6 +1259,8 @@ impl App<'_> {
                 let top_is_hud = self.menus.is_empty() && self.bufs.dialogue.is_none();
                 self.ui.interactive = top_is_hud;
                 hud::draw(&mut self.ui, &self.bufs, cx);
+                // A spell learned, a jar or a page found: its card or its words (§3.2).
+                lesson_ui::draw(&mut self.ui, self.present.lessons(), &self.bufs, self.win_open);
                 // At a table: who sits at it, and whom it waits for.
                 if let Some(sess) = self.session.as_ref().filter(|s| !s.pauses()) {
                     let me = me_of(self.session.as_ref());

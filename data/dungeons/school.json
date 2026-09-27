@@ -1871,6 +1871,40 @@
       "chance": 1
     }
   },
+  "sets": {
+    "pieces": {
+      "class": {"against": "free", "parts": [["school_desk", 0, 0], ["school_desk", 4, 0], ["school_desk", 8, 0], ["school_desk", 0, 3], ["school_desk", 4, 3], ["school_desk", 8, 3]]},
+      "class_small": {"against": "free", "parts": [["school_desk", 0, 0], ["school_desk", 4, 0], ["school_desk", 0, 3], ["school_desk", 4, 3]]},
+      "teacher": {"against": "n", "mirror": true, "parts": [["set_blackboard", 0, 0], ["set_desk", 3, 0], ["kitchen_chair", 4, 2], ["set_globe", 7, 0]]},
+      "library_wall": {"against": "n", "mirror": true, "parts": [["bookcase", 0, 0], ["bookcase", 3, 0], ["set_globe", 6, 0], ["bookcase", 7, 0]]},
+      "lab": {"against": "n", "mirror": true, "parts": [["set_lab_bench", 0, 0], ["set_lab_bench", 4, 0], ["set_stool", 0, 2], ["set_stool", 2, 2], ["set_stool", 4, 2], ["set_stool", 6, 2]]},
+      "woodwork": {"against": "n", "mirror": true, "parts": [["set_workbench", 0, 0], ["set_tool_rack", 3, 0], ["set_workbench", 6, 0], ["set_stool", 1, 2], ["set_stool", 7, 2]]},
+      "shavings": {"against": "wall", "mirror": true, "parts": [["set_heap_wood", 0, 0], ["set_crates", 3, 0], ["scatter_papers", 1, 2]]},
+      "staff": {"against": "free", "mirror": true, "parts": [["set_rug_blue", 0, 0], ["table", 0, 0], ["kitchen_chair", 3, 0], ["kitchen_chair", 1, 2]]},
+      "lost": {"against": "wall", "mirror": true, "parts": [["set_crate_pile", 0, 0], ["set_shelf_fallen", 3, 0], ["set_crates", 6, 0], ["set_books", 0, 2], ["set_books", 4, 2]]},
+      "benches": {"against": "n", "parts": [["set_bench", 0, 0], ["set_bench", 4, 0], ["set_bench", 8, 0]]},
+      "kitchen": {"against": "free", "mirror": true, "parts": [["set_rug", 0, 0], ["table", 0, 0], ["kitchen_chair", 0, 2], ["kitchen_chair", 2, 2], ["kitchen_chair", 3, 0]]},
+      "crates": {"against": "wall", "mirror": true, "parts": [["set_crates", 0, 0], ["set_crate_pile", 2, 0], ["set_crates", 5, 0]]},
+      "desk_pair": {"against": "free", "parts": [["school_desk", 0, 0], ["school_desk", 4, 0]]},
+      "crate_pair": {"against": "wall", "mirror": true, "parts": [["set_crates", 0, 0], ["set_books", 2, 1]]},
+      "bookcase": {"against": "n", "mirror": true, "parts": [["bookcase", 0, 0], ["set_books", 0, 1]]}
+    },
+    "rooms": {
+      "boiler": {"most": 7, "take": ["crates", "shavings", "crates", "lost", "desk_pair", "crate_pair", "bookcase", "desk_pair", "crate_pair", "bookcase"]},
+      "hall": {"most": 14, "take": ["benches", "benches", "library_wall", "teacher", "class", "class", "lost", "benches", "kitchen", "desk_pair", "crate_pair", "bookcase", "desk_pair", "crate_pair", "bookcase", "desk_pair", "crate_pair", "bookcase"]},
+      "sick_bay": {"most": 6, "take": ["kitchen", "library_wall", "staff", "desk_pair", "crate_pair", "bookcase", "desk_pair", "crate_pair", "bookcase"]},
+      "top_corridor": {"most": 7, "take": ["benches", "lost", "benches", "library_wall", "desk_pair", "crate_pair", "bookcase", "desk_pair", "crate_pair", "bookcase"]},
+      "woodwork": {"most": 7, "take": ["woodwork", "shavings", "class_small", "shavings", "desk_pair", "crate_pair", "bookcase", "desk_pair", "crate_pair", "bookcase"]},
+      "chemistry": {"most": 7, "take": ["lab", "lab", "library_wall", "class_small", "desk_pair", "crate_pair", "bookcase", "desk_pair", "crate_pair", "bookcase"]},
+      "botany": {"most": 7, "take": ["lab", "class_small", "library_wall", "crates", "desk_pair", "crate_pair", "bookcase", "desk_pair", "crate_pair", "bookcase"]},
+      "physics": {"most": 7, "take": ["teacher", "lab", "library_wall", "class_small", "desk_pair", "crate_pair", "bookcase", "desk_pair", "crate_pair", "bookcase"]},
+      "domestic": {"most": 7, "take": ["kitchen", "library_wall", "kitchen", "crates", "desk_pair", "crate_pair", "bookcase", "desk_pair", "crate_pair", "bookcase"]},
+      "ice_house": {"most": 5, "take": ["crates", "crates", "desk_pair", "crate_pair", "bookcase", "desk_pair", "crate_pair", "bookcase"]},
+      "top_room": {"most": 6, "take": ["teacher", "lost", "library_wall", "desk_pair", "crate_pair", "bookcase", "desk_pair", "crate_pair", "bookcase"]},
+      "staff_room": {"most": 7, "take": ["staff", "library_wall", "kitchen", "teacher", "desk_pair", "crate_pair", "bookcase", "desk_pair", "crate_pair", "bookcase"]},
+      "lost_property": {"most": 8, "take": ["lost", "lost", "crates", "lost", "crates", "desk_pair", "crate_pair", "bookcase", "desk_pair", "crate_pair", "bookcase"]}
+    }
+  },
   "fallback": [
     {
       "node": "boiler",

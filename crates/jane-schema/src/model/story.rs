@@ -79,6 +79,11 @@ model! {
         pub w: u8,
         /// Footprint height, cells (>= 1).
         pub h: u8,
+        /// The rows of the footprint that block, counted from its front (bottom) edge: 1 to `h`.
+        /// In the 3/4 view an upright thing (a tree, a chest, a stove) is drawn standing on the
+        /// front of its footprint with its top over the back rows, so she can step into them from
+        /// above and be drawn behind it (`solid_rect`). `h` when the row does not say.
+        pub base: u8,
         /// Blocks movement.
         pub solid: bool,
         /// Blocks line of sight.
@@ -124,6 +129,13 @@ model! {
 }
 
 impl PropDef {
+    /// The cells a solid prop with its footprint's top-left at `(x, y)` blocks: its `base` rows,
+    /// the front of its footprint. What the sim stamps solid and the solver floods around.
+    pub const fn solid_rect(&self, x: i32, y: i32) -> jane_core::Rect {
+        let base = if self.base == 0 || self.base > self.h { self.h } else { self.base };
+        jane_core::Rect::new(x, y + self.h as i32 - base as i32, self.w as i32, base as i32)
+    }
+
     /// The light's show rule without the instance: whether a light of this def shows for a prop
     /// that is (or is not) `on`, with the lamps lit or not. Hidden props show none (the caller's).
     pub const fn light_shows(&self, on: bool, lamps_lit: bool) -> bool {

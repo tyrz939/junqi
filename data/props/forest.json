@@ -2,7 +2,7 @@
   "bud": { "name": "Bud", "sprite": "bud", "w": 1, "h": 1, "solid": false, "blockLos": false, "flat": true, "once": true, "answers": "grow", "lightWhenOn": true, "light": { "radius": 36, "color": "#ffe89a", "flicker": 0.12 } },
   "vine_root": { "name": "Vine Root", "sprite": "vine_root", "w": 2, "h": 1, "solid": false, "blockLos": false, "flat": true, "once": true, "answers": "grow" },
   "hedge_seed": { "name": "Hedge Seed", "sprite": "hedge_seed", "w": 1, "h": 1, "solid": false, "blockLos": false, "flat": true, "once": true, "answers": "grow" },
-  "summon_stone": { "name": "Summoning Stone", "sprite": "summon_stone", "w": 2, "h": 2, "solid": true, "blockLos": false, "prompt": "Open the net" },
+  "summon_stone": { "name": "Summoning Stone", "sprite": "summon_stone", "w": 2, "h": 2, "base": 1, "solid": true, "blockLos": false, "prompt": "Open the net" },
   "dry_tree": { "name": "Dry Tree", "sprite": "dry_tree", "w": 3, "h": 2, "solid": true, "blockLos": true, "answers": "fire" },
   "forest_sunbeam": { "name": "Sunlight", "sprite": "forest_sunbeam", "w": 2, "h": 2, "solid": false, "blockLos": false, "flat": true, "dayOnly": true, "light": { "radius": 80, "color": "#fff0bc", "flicker": 0, "sky": true } },
   "forest_moonbeam": { "name": "Moonlight", "sprite": "forest_moonbeam", "w": 2, "h": 2, "solid": false, "blockLos": false, "flat": true, "nightOnly": true, "light": { "radius": 76, "color": "#b4d4ff", "flicker": 0, "sky": true } },
@@ -11,5 +11,5 @@
   "forest_rockfall": { "name": "Fallen Rock", "sprite": "forest_rockfall", "w": 3, "h": 2, "solid": true, "blockLos": true, "answers": "blast" },
   "forest_footbridge": { "name": "Broken Footbridge", "sprite": "forest_footbridge", "w": 3, "h": 2, "solid": true, "blockLos": false, "answers": "repair" },
   "forest_lamp_dead": { "name": "Dead Lamp", "sprite": "forest_lamp_dead", "w": 3, "h": 2, "solid": true, "blockLos": false, "answers": "shock", "lightWhenOn": true, "light": { "radius": 88, "color": "#ffb45a", "flicker": 0.05 } },
-  "forest_cases": { "name": "Glass Cases", "sprite": "forest_cases", "w": 2, "h": 2, "solid": true, "blockLos": false, "prompt": "Read the labels" }
+  "forest_cases": { "name": "Glass Cases", "sprite": "forest_cases", "w": 2, "h": 2, "base": 1, "solid": true, "blockLos": false, "prompt": "Read the labels" }
 }

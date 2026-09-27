@@ -193,12 +193,14 @@ pub fn build_house(seed: u32, attempt: u8) -> Blueprint {
     b.door("front_door", "door", 25, 22, (ZoneId::County, "house_front"), None);
     b.mark("front", 25, 20, Facing::North);
 
-    // Two hatches on one wall, both to the cellar, chalked in Julie's hand. The one nearer the
-    // doorway goes down to the keys; the far one to the other way out, and a note there says so.
-    b.door("hatch_a", "hatch", 9, 4, (ZoneId::Cellar, "stair_a"), Some("The hatch chalked KEYS"));
-    b.door("hatch_b", "hatch", 4, 4, (ZoneId::Cellar, "stair_b"), Some("The hatch chalked OUT"));
-    b.mark("hatch_a", 10, 7, Facing::South);
-    b.mark("hatch_b", 5, 7, Facing::South);
+    // Two hatches on one wall, both to the cellar, chalked in Julie's hand. Each goes down on its
+    // own side: the west one to the keys in the cellar's west room, the east one to the other way
+    // out in its east room, and a note there says so. (They were crossed until the owner's first
+    // playtest: the west hatch came up the east stair.)
+    b.door("hatch_a", "hatch", 4, 4, (ZoneId::Cellar, "stair_a"), Some("The hatch chalked KEYS"));
+    b.door("hatch_b", "hatch", 9, 4, (ZoneId::Cellar, "stair_b"), Some("The hatch chalked OUT"));
+    b.mark("hatch_a", 5, 7, Facing::South);
+    b.mark("hatch_b", 10, 7, Facing::South);
 
     b.prop(None, "stove", 12, 2);
     b.talker("ice_orb", "orb_ice", 15, 2, "orb_ice");

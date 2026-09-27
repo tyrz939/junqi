@@ -1351,7 +1351,28 @@ impl Canvas {
 
     /// A flat top: every drawn pixel in `r` stands `h` px high (a chest's lid, a table's top, a
     /// well's rim), run after [`Canvas::upright`], which stood its faces up.
+    ///
+    /// Its rim goes with it: what is drawn two px either side of `r` in its rows and on the row
+    /// over it (the outline, a lid's overhang) is held to `h` too, never raised. Left standing
+    /// its row's upright height, a chest's two outline columns stood 22 px against its 12 px lid
+    /// and threw two long thin lines under a torch with the lid's short shadow between them.
     pub fn lid(&mut self, r: Rect, h: u8) {
+        let h = h.max(1);
+        for y in (r.y - 1).max(0)..r.bottom().min(self.h) {
+            for x in (r.x - 2).max(0)..(r.right() + 2).min(self.w) {
+                let i = (y * self.w + x) as usize;
+                if !self.albedo[i].is_opaque() {
+                    continue;
+                }
+                let inside = y >= r.y && x >= r.x && x < r.right();
+                self.height[i] = if inside { h } else { self.height[i].min(h) };
+            }
+        }
+    }
+
+    /// Every drawn pixel in `r` stands `h` px high, and nothing round it changes: a rail seen
+    /// from above running away from the viewer.
+    pub fn level(&mut self, r: Rect, h: u8) {
         for y in r.y.max(0)..r.bottom().min(self.h) {
             for x in r.x.max(0)..r.right().min(self.w) {
                 let i = (y * self.w + x) as usize;

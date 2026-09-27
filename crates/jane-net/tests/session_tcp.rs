@@ -33,6 +33,32 @@ fn alone_a_pause_holds_the_world_and_hosting_it_does_not() {
     assert!(s.sim().unwrap().state().open, "the host opened the world");
 }
 
+/// Alone with the bag open the world is held, but a move in the bag is done at once: one tick,
+/// her stick idle, so the window shows the bag as it now is (the owner's first playtest: the
+/// bag caught up only when it was closed).
+#[test]
+fn alone_and_held_a_press_in_the_bag_is_done_at_once() {
+    let mut s = Session::local(Sim::new_game_with(bps(), "Jane"));
+    let bag = |s: &Session| s.sim().unwrap().view(Seat(0)).unwrap().me().bag.clone();
+    let before = bag(&s);
+    let from = before.iter().position(Option::is_some).expect("the start kit") as u8;
+    let to = before.iter().position(Option::is_none).expect("room") as u8;
+    let pos = |s: &Session| s.sim().unwrap().view(Seat(0)).unwrap().body().pos;
+    let at = pos(&s);
+    let mut presses = vec![Command::BagMove { from, to }];
+    let walk = InputFrame::walk(jane_core::Angle(16384));
+    assert!(s.try_step(0, walk, &mut presses, true).is_some(), "the press is stepped");
+    assert!(presses.is_empty());
+    let after = bag(&s);
+    assert_eq!(after[usize::from(to)], before[usize::from(from)], "moved");
+    assert_eq!(after[usize::from(from)], None);
+    assert_eq!(pos(&s), at, "held: her stick was idle");
+    // Nothing pressed: held still.
+    let frame = s.sim().unwrap().state().frame;
+    assert!(s.try_step(16, walk, &mut presses, true).is_none());
+    assert_eq!(s.sim().unwrap().state().frame, frame);
+}
+
 #[test]
 fn a_game_opened_to_the_lan_is_joined_over_tcp_and_both_step_one_world() {
     let mut host = Session::host(Sim::new_game_with(bps(), "Jane"), HostConfig::default(), 0).unwrap();

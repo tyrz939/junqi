@@ -21,8 +21,10 @@ use jane_core::angle::{cos_q15, sin_q15};
 
 use crate::frame::{Caster, Directional, Rgb, SpriteCmd, height_of_rows, rows_up};
 
-/// The longest a shadow gets, in heights: a sun this low casts no further (8 x 256).
-pub const MAX_COT_Q8: i32 = 8 * 256;
+/// The longest a shadow gets, in heights: a sun this low casts no further (4 x 256; the sky
+/// holds the sun and the moon at `light::LOWEST` for their shadows, where it is this, and fades
+/// their strength out by 3 degrees).
+pub const MAX_COT_Q8: i32 = 4 * 256;
 /// How much of its strength a shadow keeps at its tip, of 256.
 pub const TIP: i32 = 170;
 /// A receiver at or under this height is the ground (a tuft, a cobble's relief): it takes the
@@ -35,10 +37,15 @@ pub const GROUND: i32 = 4;
 pub const RELIEF: i32 = 8;
 /// How far up a thing standing right beside a caster's feet its foot shadow climbs, px.
 pub const FOOT_REACH: u8 = 8;
-/// The foot's rows each side of the row under the feet, and how far along the shadow it is
-/// drawn out at most, px across and down the screen.
-const FOOT_B: i32 = 2;
-const FOOT_ALONG: (i32, i32) = (6, 3);
+/// The foot's rows each side of the row under the feet, how many px wider than the feet it is
+/// each side, how far along the shadow it is drawn out at most (px across and down the screen),
+/// and how dark it is (of 255). Since 2026-09-28 a px wider, three rows deep and a little
+/// lighter than the cast shadow (it was two px wider, five rows, full strength): on T1 it read as
+/// a blob under everything beside T2's foot, which is only the field and its occlusion.
+const FOOT_B: i32 = 1;
+const FOOT_WIDER: i32 = 1;
+const FOOT_ALONG: (i32, i32) = (4, 2);
+const FOOT_STRENGTH: u8 = 208;
 /// The silhouette's rows the foot is as wide as: the feet and what is just above them.
 const FOOT_ROWS: i32 = 3;
 
@@ -81,16 +88,19 @@ pub fn shade_at(shade: Rgb, strength: u8) -> Rgb {
 /// A caster's rows, from the foot up: `(rows above the foot, first, last)` px from the sprite's
 /// left of each opaque run in the row, a row parted where it has a [`GAP`] (the contact shadow,
 /// index 1, is not the silhouette), for the sprite `s` drawn from an atlas page's albedo
-/// `albedo`, `page_w` wide, standing on row `foot_y` of the canvas. Appended to `out`. So a run
+/// `albedo`, `page_w` wide, thrown as caster `c` (standing on its foot's row of the canvas; the
+/// rows it burns, `Caster::burn`, left out: a flame casts nothing). Appended to `out`. So a run
 /// that is not over another, lower one (a canopy past its trunk, a lamp's head past its post, a
 /// lantern on its bracket) lays its shadow only where its own height throws it, apart from the
 /// root's, as T2's field has it floating.
-pub fn rows(albedo: &[u16], page_w: u16, s: &SpriteCmd, foot_y: i32, out: &mut Vec<(i32, i32, i32)>) {
+pub fn rows(albedo: &[u16], page_w: u16, s: &SpriteCmd, c: &Caster, out: &mut Vec<(i32, i32, i32)>) {
     let pw = usize::from(page_w);
     let sw = i32::from(s.src.w);
+    let foot_y = i32::from(c.foot.1);
+    let burns = |hv: i32| c.burn.0 > 0 && (i32::from(c.burn.0)..=i32::from(c.burn.1)).contains(&hv);
     for v in (0..i32::from(s.src.h)).rev() {
         let hv = foot_y - (i32::from(s.y) + v);
-        if hv <= 0 {
+        if hv <= 0 || burns(hv) {
             continue;
         }
         if hv > 255 {
@@ -157,19 +167,18 @@ pub fn bands(rows: &[(i32, i32, i32)], x: i32, c: &Caster, (kx, ky): (i32, i32),
     let reach = up(FOOT_ROWS + 1);
     let ox = ((reach * kx) >> 8).clamp(-FOOT_ALONG.0, FOOT_ALONG.0);
     let oy = ((reach * ky) >> 8).clamp(-FOOT_ALONG.1, FOOT_ALONG.1);
-    let a = (hi - lo + 1) / 2 + 2;
+    let a = (hi - lo + 1) / 2 + FOOT_WIDER;
     let cx = x + (lo + hi + 1) / 2;
     for dy in -FOOT_B..=FOOT_B {
-        // Half the ellipse's width on this row, a px at its tips.
-        let across = FOOT_B * FOOT_B - dy * dy;
-        let w = (a * jane_core::num::isqrt((across * 256) as u64) as i32 / (FOOT_B * 16)).max(1);
+        // Half the ellipse's width on this row: its middle row the whole, a px in at its tips.
+        let w = if dy == 0 { a } else { (a - 1).max(1) };
         let row = fy + 1 + dy;
         emit(Band {
             x0: cx - w + ox.min(0),
             x1: cx + w + ox.max(0),
             y0: row + oy.min(0),
             y1: row + oy.max(0) + 1,
-            strength: 255,
+            strength: FOOT_STRENGTH,
             reach: FOOT_REACH,
         });
     }
@@ -283,6 +292,11 @@ fn minus(r: (i32, i32, i32, i32), a: Option<(i32, i32, i32, i32)>, mut emit: imp
         emit((a.2, my0, r.2, my1));
     }
 }
+
+/// How much of a point light a shadow from it keeps, of 256 (every tier: T2's `LAMP_BOUNCE`, T1's
+/// light pass, T0's `pointshadow`): its pool's light bounces into its umbra, so a lamp's shadow
+/// is a deep dusk, not a hole (decided 2026-09-28, the owner: shadows read harsh on T2).
+pub const LAMP_BOUNCE: u32 = 31;
 
 /// Sub-px steps a canvas px of a point light's shadow geometry ([`Lamp`], [`Slab`]).
 pub const SUB: i32 = 16;
@@ -442,14 +456,14 @@ mod tests {
             flags: Flags::default(),
             height_px: 25,
         };
-        (albedo, s, Caster { sprite: 0, foot: (22, 31), height: 25, depth: 4 })
+        (albedo, s, Caster { sprite: 0, foot: (22, 31), height: 25, depth: 4, ..Caster::default() })
     }
 
     #[test]
     fn the_shadow_grows_out_of_the_feet_whatever_the_hour() {
         let (albedo, s, c) = post();
         let mut r = Vec::new();
-        rows(&albedo, 4, &s, i32::from(c.foot.1), &mut r);
+        rows(&albedo, 4, &s, &c, &mut r);
         // The contact shadow's row is not the silhouette; the first row is the one on the foot.
         assert_eq!(r.first(), Some(&(1, 0, 3)));
         assert_eq!(r.last().map(|r| r.0), Some(20));
@@ -463,8 +477,8 @@ mod tests {
             for x in 20..24 {
                 assert!(covers(x, fy) && covers(x, fy + 1), "{az:?} {el}: ({x}, {fy})");
             }
-            // Two px clear of the feet each side, whichever way the shadow runs.
-            assert!(covers(18, fy + 1) && covers(25, fy + 1), "{az:?} {el}");
+            // A px clear of the feet each side, whichever way the shadow runs.
+            assert!(covers(19, fy + 1) && covers(24, fy + 1), "{az:?} {el}");
             // And the shadow of the lowest row touches the foot: no gap between the two.
             let first = bands[(2 * FOOT_B + 1) as usize];
             assert!(first.y0 <= fy + FOOT_B + 1 && first.y1 >= fy - FOOT_B, "{az:?} {el}: {first:?}");
@@ -476,7 +490,7 @@ mod tests {
     fn a_shadow_reaches_up_as_high_as_the_ray_over_the_top() {
         let (albedo, s, c) = post();
         let mut r = Vec::new();
-        rows(&albedo, 4, &s, i32::from(c.foot.1), &mut r);
+        rows(&albedo, 4, &s, &c, &mut r);
         let mut bands = Vec::new();
         super::bands(&r, i32::from(s.x), &c, shear(&sun(Angle::WEST, 20)).unwrap(), |b| bands.push(b));
         let rows_only = &bands[(2 * FOOT_B + 1) as usize..];
@@ -517,9 +531,9 @@ mod tests {
             flags: Flags::default(),
             height_px: 70,
         };
-        let c = Caster { sprite: 0, foot: (foot.0 as i16, foot.1 as i16), height: 70, depth: 6 };
+        let c = Caster { sprite: 0, foot: (foot.0 as i16, foot.1 as i16), height: 70, depth: 6, ..Caster::default() };
         let mut r = Vec::new();
-        rows(&albedo, w as u16, &s, foot.1, &mut r);
+        rows(&albedo, w as u16, &s, &c, &mut r);
         let mut bands = Vec::new();
         super::bands(&r, i32::from(s.x), &c, shear(&sun(Angle::NORTH, 40)).unwrap(), |b| bands.push(b));
         (bands, foot)

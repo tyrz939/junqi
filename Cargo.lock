@@ -377,6 +377,7 @@ dependencies = [
  "jane-core",
  "jane-data",
  "jane-sim",
+ "jane-world",
 ]
 
 [[package]]

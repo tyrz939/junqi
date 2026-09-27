@@ -23,6 +23,13 @@ pub struct SpriteRef {
     /// The tallest drawn px in its height layer, true px: how tall it throws its shadow (a
     /// garden bed seen from above is many rows tall on the screen and a hand high).
     pub top: u8,
+    /// Its lowest row with an opaque px (from its top), and the lowest height there: where what
+    /// is drawn stands (`Caster::sink`). -1 for a sprite with nothing drawn.
+    pub base: i16,
+    pub base_height: u8,
+    /// Its rows (from its top), first to last, more than half of whose opaque px glow: a flame,
+    /// lit glass (`Caster::burn`). `(-1, -1)` for none.
+    pub burn: (i16, i16),
 }
 
 /// Index into [`Atlas::refs`].
@@ -147,12 +154,17 @@ impl Atlas {
             }
         }
         let mut top = 0u8;
+        let (mut base, mut base_height, mut burn) = (-1i16, 0u8, (-1i16, -1i16));
         for y in 0..h {
+            let (mut opaque, mut glowing, mut low) = (0u32, 0u32, u8::MAX);
             for x in 0..w {
                 let i = usize::from(sy + y) * usize::from(page.w) + usize::from(sx + x);
                 let t = px(i32::from(x), i32::from(y));
                 if t.albedo.is_opaque() {
                     top = top.max(t.height);
+                    opaque += 1;
+                    glowing += u32::from(t.emissive.is_opaque());
+                    low = low.min(t.height);
                 }
                 page.albedo[i] = t.albedo.0;
                 if lit {
@@ -164,6 +176,12 @@ impl Atlas {
                     page.glow.push((i as u32, t.emissive.0));
                 }
             }
+            if opaque > 0 {
+                (base, base_height) = (y as i16, low);
+            }
+            if glowing * 2 > opaque {
+                burn = (if burn.0 < 0 { y as i16 } else { burn.0 }, y as i16);
+            }
         }
         self.shelf = (pi, sx + w, sy, sh);
         self.refs.push(SpriteRef {
@@ -173,6 +191,9 @@ impl Atlas {
             ay: anchor.1,
             height,
             top,
+            base,
+            base_height,
+            burn,
         });
         (self.refs.len() - 1) as RefId
     }

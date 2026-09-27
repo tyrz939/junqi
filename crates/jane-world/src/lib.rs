@@ -25,9 +25,30 @@ use jane_core::{Blueprint, ZoneId};
 /// builder (none today) or a county whose skeleton rows cannot be satisfied at all, which the
 /// catalog's build refuses first. Never panics.
 pub fn build_zone(zone: ZoneId, seed: u32) -> Option<Blueprint> {
+    build_zone_with(zone, seed, &mut |_| {})
+}
+
+/// What a build says as each of its stages starts: `"skeleton"`, a county stage's name
+/// ([`county::STAGES`]), `"solve"`, or a zone's own name (`"house"`, `"mine"`). The loading
+/// screen listens (PRESENTATION.md §3.2); nothing that is built depends on who listens.
+pub type Report<'a> = &'a mut dyn FnMut(&'static str);
+
+/// Every name a build of all thirteen zones reports ([`Report`]), in the order a first attempt
+/// reports them. A county re-rolled says its stages again.
+pub fn build_stages() -> Vec<&'static str> {
+    let mut out = vec!["skeleton"];
+    out.extend(county::STAGES.iter().map(|&(name, _)| name));
+    out.push("solve");
+    out.extend(ZoneId::ALL.iter().filter(|&&z| z != ZoneId::County).map(|z| z.name()));
+    out
+}
+
+/// [`build_zone`], saying each stage to `report` as it starts.
+pub fn build_zone_with(zone: ZoneId, seed: u32, report: Report<'_>) -> Option<Blueprint> {
     if zone == ZoneId::County {
-        return county::build_proven(seed).ok();
+        return county::build_proven_with(seed, report).ok();
     }
+    report(zone.name());
     if interiors::is_interior(zone) {
         return interiors::build_interior(zone, seed);
     }

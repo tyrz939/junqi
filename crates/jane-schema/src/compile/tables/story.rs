@@ -103,6 +103,7 @@ struct RawProp {
     sprite: String,
     w: u8,
     h: u8,
+    base: Option<u8>,
     solid: bool,
     block_los: bool,
     #[serde(default)]
@@ -175,6 +176,13 @@ fn props(src: &Source, cx: &mut Ctx) -> &'static [PropDef] {
         let at = format!("props.{id}");
         let Some(r) = typed::<RawProp>(row, &at, &mut cx.diag) else { continue };
         cx.diag.need(r.w >= 1 && r.h >= 1, &at, "footprint < 1");
+        let base = r.base.unwrap_or(r.h);
+        cx.diag.need((1..=r.h).contains(&base), &at, "base is 1 to h rows of the footprint");
+        cx.diag.need(
+            base == r.h || (r.solid && !r.push && !r.carry && !r.gate),
+            &at,
+            "only a solid thing that stays put blocks less than its footprint",
+        );
         let ans = match r.answers.as_deref() {
             None => None,
             Some(s) => {
@@ -199,6 +207,7 @@ fn props(src: &Source, cx: &mut Ctx) -> &'static [PropDef] {
             sprite: cx.sprite(&r.sprite),
             w: r.w,
             h: r.h,
+            base,
             solid: r.solid,
             block_los: r.block_los,
             push: r.push,

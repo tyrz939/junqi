@@ -22,6 +22,13 @@ pub const FX_TO_CANVAS: u32 = 7;
 pub const CHUNK_CELLS: i32 = 16;
 /// Canvas px on a side of a terrain chunk.
 pub const CHUNK_PX: i32 = CHUNK_CELLS * CELL;
+/// Canvas px round the canvas whose casters, terrain and lights throw their shadows and light
+/// onto it (PRESENTATION.md §1.7): what stands in this band is in the frame's `casters` and
+/// `blocks` though it is not on screen, its chunks are drawn (clipped), and T2's G-buffer and
+/// height field cover it (`jane-render-wgpu`'s `GUARD`). A light's pool and a caster's shadow
+/// no longer vanish the moment what throws them leaves the screen (the owner's playtest,
+/// 2026-09-28: they did, at a 64 px band that the chunks under it did not even fill).
+pub const CAST_MARGIN: i32 = 160;
 
 /// The 3/4 view's one projection (ART.md §1.1, PRESENTATION.md §1.7): heights are true px, a
 /// thing `h` px up is drawn `rows_up(h)` rows over its ground point (four fifths, rounded up).
@@ -614,7 +621,7 @@ pub struct Light {
 /// terrain stands (walls, roofs, hedges, cliffs, fences) is a [`Block`]. The presenter decides
 /// once what casts: every tier draws a shadow for every caster and block the frame lists, and
 /// for nothing else (T2's height field holds no sprite that is not a caster).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Caster {
     /// The sprite that draws it: `Frame::sprites[sprite]`. Its albedo is the silhouette.
     pub sprite: u32,
@@ -626,6 +633,17 @@ pub struct Caster {
     pub height: u8,
     /// How deep it is across the ground, px: a person is thin, a crate is its footprint.
     pub depth: u8,
+    /// How high its lowest drawn px stands in its height layer, less one, px: a prop drawn in
+    /// the middle of its cell (a fire, a sign's post over its contact shadow) counts its heights
+    /// from its footprint's front edge, rows under what is drawn. Its caster stands on what is
+    /// drawn (`foot` is its lowest drawn row), and T2 takes this off each of its heights, so
+    /// every tier roots its shadow where it is drawn (2026-09-28: a fire's and a sign's shadows
+    /// began a few px from them).
+    pub sink: u8,
+    /// The rows over its foot, `lo..=hi`, that burn: a flame, a lamp's lit glass, more than half
+    /// of each row glowing. Light, not matter, they cast nothing on any tier (T0 and T1 leave
+    /// the rows out, T2's field stands no px that glows). `(0, 0)` is none.
+    pub burn: (u8, u8),
 }
 
 /// What the terrain stands on the ground (§1.7): a rect of its height field seen from above,

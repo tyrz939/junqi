@@ -12,5 +12,5 @@
   "parcel": { "name": "Parcel", "sprite": "parcel", "w": 1, "h": 1, "solid": false, "blockLos": false, "flat": true },
   "milk_bottles": { "name": "Milk", "sprite": "milk_bottles", "w": 1, "h": 1, "solid": false, "blockLos": false, "flat": true },
   "kitchen_chair": { "name": "Chair", "sprite": "kitchen_chair", "w": 1, "h": 1, "solid": true, "blockLos": false },
-  "unclaimed_shelf": { "name": "Shelf", "sprite": "unclaimed_shelf", "w": 2, "h": 2, "solid": true, "blockLos": false, "prompt": "Look" }
+  "unclaimed_shelf": { "name": "Shelf", "sprite": "unclaimed_shelf", "w": 2, "h": 2, "base": 1, "solid": true, "blockLos": false, "prompt": "Look" }
 }

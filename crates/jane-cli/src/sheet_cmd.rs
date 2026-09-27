@@ -31,7 +31,12 @@ pub const USAGE: &str = "  sheet layers <what> [--frame F] [--out DIR]
               [--wide] [--backend soft|gl2|wgpu] [--at ZONE[:MARK] | --at MARK]
               [--weather clear|mist|rain|storm] [--cast SPELL[:TICKS] [--spawn UNIT]] [--rows KEY=V,..]
               [--film N[:EVERY]] [--crop X,Y,W,H] [--zoom Z] [--layers] [--show-sun]
+              [--knows SPELL,..] [--learn SPELL,..] [--grow strength|spirit] [--ui]
               [--out PATH.png | --out DIR]
+                                      --learn learns spells after the rest (--knows ones before, out of
+                                      sight, so a --learn is not her first) and --grow finds a jar or a
+                                      page: the lesson's moment, filmed with the HUD and its card (--ui
+                                      draws the HUD alone);
                                       a model plays the seed from New Game (default 1 minute), then one
                                       frame is drawn headless through the presenter and soft (T0), or
                                       gl2 (T1, a hidden window's GL context) or wgpu (T2) with the gpu
@@ -266,8 +271,23 @@ fn scene(args: &[String]) -> Result<(), String> {
         None => PathBuf::from("sheets").join(format!("{name}.png")),
     };
     let bps = jane_sim::Blueprints::build(seed).map_err(|e| format!("seed {seed}: {e}"))?;
-    let o =
-        crate::scene::Opts { seed, ticks, model, hour, minute, canvas, backend, at, weather, cast, spawn, rows, gl };
+    let lesson = crate::scene::LessonOpts::parse(args)?;
+    let o = crate::scene::Opts {
+        seed,
+        ticks,
+        model,
+        hour,
+        minute,
+        canvas,
+        backend,
+        at,
+        weather,
+        cast,
+        spawn,
+        rows,
+        gl,
+        lesson,
+    };
     // `--film N[:EVERY]`: N ticks more, every EVERY-th a frame, `<name>-<tick>.png` beside the path.
     if let Some(f) = flag("--film") {
         let (n, every) = f.split_once(':').map_or((f, "1"), |p| p);
@@ -276,7 +296,35 @@ fn scene(args: &[String]) -> Result<(), String> {
         let dir = path.parent().map(std::path::Path::to_path_buf).unwrap_or_default();
         let stem = path.file_stem().map_or_else(|| name.clone(), |s| s.to_string_lossy().into_owned());
         std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+        // `--crop` and `--zoom` take each film frame's close look too.
+        let close = match (flag("--crop"), flag("--zoom")) {
+            (None, None) => None,
+            (crop, zoom) => {
+                let r = crop.map_or(Ok((0, 0, o.canvas.0, o.canvas.1)), |c| {
+                    let v: Vec<u16> = c.split(',').filter_map(|s| s.trim().parse().ok()).collect();
+                    if v.len() == 4 { Ok((v[0], v[1], v[2], v[3])) } else { Err(format!("--crop X,Y,W,H, not {c}")) }
+                })?;
+                let z = zoom.map_or(Ok(3), |z| z.parse::<u16>().map_err(|_| format!("--zoom: not a number: {z}")))?;
+                Some((r, z))
+            }
+        };
+        // `--strip PATH [--tiers t0,t1,t2] [--half]`: the film as one contact sheet, a row a tier.
+        if let Some(sp) = flag("--strip") {
+            let tiers = match flag("--tiers") {
+                Some(t) => t
+                    .split(',')
+                    .map(|s| {
+                        crate::scene::Which::parse(s.trim()).ok_or_else(|| format!("--tiers: t0, t1 or t2, not {s}"))
+                    })
+                    .collect::<Result<Vec<_>, String>>()?,
+                None => vec![backend],
+            };
+            let half = args.iter().any(|a| a == "--half");
+            return crate::strip::strip(&bps, &o, &tiers, (n, every), half, close, std::path::Path::new(sp));
+        }
         return crate::scene::film(bps, &o, n, every, |k, shot| {
+            let cropped = close.map(|(r, z)| shot.crop(r, z));
+            let shot = cropped.as_ref().unwrap_or(shot);
             let p = dir.join(format!("{stem}-{k:03}.png"));
             std::fs::write(&p, shot.png()).map_err(|e| format!("{}: {e}", p.display()))?;
             // The frame's mean brightness beside it: a flash, a lamp coming on, found by eye.

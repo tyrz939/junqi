@@ -661,13 +661,12 @@ impl LitField {
             return;
         }
         let cat = jane_data::catalog();
-        let lamps = crate::light::lamps_lit(clock);
         let pad = reach.0.div_euclid(CELL_FX) + 1;
         let lights = &mut self.lights;
         rt.props.any_in(x0 - pad, y0 - pad, x1 + pad, y1 + pad, |ix| {
             let p = &zone.props[ix as usize];
             let def = cat.story.prop(p.def);
-            if let Some(l) = crate::light::light_showing(def, p, lamps, crate::light::prop_wetness(zone, rt, p)) {
+            if let Some(l) = crate::light::light_showing(def, p, clock, crate::light::prop_wetness(zone, rt, p)) {
                 if !(warm_only && l.cold) {
                     lights.push((prop_centre(def, p), reach_sq(l.radius)));
                 }

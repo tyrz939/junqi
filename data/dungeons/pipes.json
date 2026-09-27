@@ -242,6 +242,31 @@
     "pillar": { "props": ["brick_pier"], "chance": 1 },
     "shelf": { "props": ["shelf"], "chance": 1 }
   },
+  "sets": {
+    "pieces": {
+      "sandbag_wall": {"against": "wall", "mirror": true, "parts": [["set_sandbags", 0, 0], ["set_sandbags", 3, 0], ["set_sandbags", 6, 0], ["set_sandbags", 1, 1], ["set_sandbags", 4, 1]]},
+      "pipe_store": {"against": "n", "mirror": true, "parts": [["set_pipes", 0, 0], ["set_pipes", 0, 1], ["set_pipes", 3, 0], ["set_pipes", 3, 1], ["drums", 6, 0]]},
+      "brick_fall": {"against": "wall", "mirror": true, "parts": [["set_heap_brick", 0, 0], ["set_heap_brick", 3, 0], ["scatter_rubble", 0, 2], ["scatter_rubble", 4, 2], ["scatter_silt", 2, 2]]},
+      "stores": {"against": "wall", "mirror": true, "parts": [["set_crates", 0, 0], ["set_crate_pile", 2, 0], ["drums", 5, 0], ["set_sandbags", 0, 2], ["set_sandbags", 3, 2]]},
+      "valve_bench": {"against": "n", "mirror": true, "parts": [["set_workbench", 0, 0], ["set_tool_rack", 3, 0], ["set_bin", 3, 1], ["set_pipes", 6, 0]]},
+      "damp": {"against": "free", "mirror": true, "parts": [["set_mushrooms", 0, 0], ["set_mushrooms", 1, 1], ["scatter_damp", 2, 0], ["scatter_pool", 2, 1], ["set_mushrooms", 4, 2], ["scatter_silt", 0, 2]]},
+      "drum_pair": {"against": "wall", "mirror": true, "parts": [["drums", 0, 0], ["scatter_oilpool", 2, 0]]},
+      "sandbag": {"against": "wall", "mirror": true, "parts": [["set_sandbags", 0, 0], ["scatter_silt", 1, 1]]},
+      "crate_pair": {"against": "wall", "mirror": true, "parts": [["set_crates", 0, 0], ["set_bin", 2, 1]]}
+    },
+    "rooms": {
+      "sump": {"most": 7, "take": ["brick_fall", "sandbag_wall", "damp", "stores", "damp", "drum_pair", "sandbag", "crate_pair", "drum_pair", "sandbag", "crate_pair"]},
+      "north_run": {"most": 7, "take": ["brick_fall", "damp", "sandbag_wall", "pipe_store", "damp", "drum_pair", "sandbag", "crate_pair", "drum_pair", "sandbag", "crate_pair"]},
+      "junction": {"most": 15, "take": ["pipe_store", "sandbag_wall", "brick_fall", "stores", "damp", "brick_fall", "damp", "valve_bench", "sandbag_wall", "pipe_store", "drum_pair", "sandbag", "crate_pair", "drum_pair", "sandbag", "crate_pair", "drum_pair", "sandbag", "crate_pair"]},
+      "chamber": {"most": 6, "take": ["stores", "pipe_store", "damp", "drum_pair", "sandbag", "crate_pair", "drum_pair", "sandbag", "crate_pair"]},
+      "valve_house": {"most": 7, "take": ["valve_bench", "pipe_store", "stores", "damp", "drum_pair", "sandbag", "crate_pair", "drum_pair", "sandbag", "crate_pair"]},
+      "east_run": {"most": 8, "take": ["brick_fall", "damp", "sandbag_wall", "stores", "damp", "brick_fall", "drum_pair", "sandbag", "crate_pair", "drum_pair", "sandbag", "crate_pair"]},
+      "west_run": {"most": 8, "take": ["brick_fall", "damp", "sandbag_wall", "pipe_store", "damp", "brick_fall", "drum_pair", "sandbag", "crate_pair", "drum_pair", "sandbag", "crate_pair"]},
+      "outfall": {"most": 7, "take": ["brick_fall", "sandbag_wall", "damp", "stores", "drum_pair", "sandbag", "crate_pair", "drum_pair", "sandbag", "crate_pair"]},
+      "silt": {"most": 6, "take": ["brick_fall", "damp", "damp", "drum_pair", "sandbag", "crate_pair", "drum_pair", "sandbag", "crate_pair"]},
+      "screen": {"most": 7, "take": ["stores", "pipe_store", "brick_fall", "damp", "drum_pair", "sandbag", "crate_pair", "drum_pair", "sandbag", "crate_pair"]}
+    }
+  },
   "fallback": [
     { "node": "screen", "template": "pipes.screen.a", "bay": [0, 0], "turn": 0, "mirror": false },
     { "node": "north_run", "template": "pipes.run.a", "bay": [1, 0], "turn": 0, "mirror": false },

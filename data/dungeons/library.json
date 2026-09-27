@@ -95,6 +95,24 @@
     "shelf": { "props": ["bookcase"], "chance": 0.9 },
     "desk": { "props": ["table"], "chance": 0.8 }
   },
+  "sets": {
+    "pieces": {
+      "reading": {"against": "free", "mirror": true, "parts": [["set_rug", 0, 0], ["table", 0, 0], ["kitchen_chair", 0, 2], ["kitchen_chair", 2, 2], ["kitchen_chair", 3, 0]]},
+      "fallen": {"against": "wall", "mirror": true, "parts": [["set_shelf_fallen", 0, 0], ["set_shelf_fallen", 3, 0], ["set_books", 0, 2], ["set_books", 2, 2], ["set_books", 4, 2]]},
+      "cases": {"against": "n", "parts": [["bookcase", 0, 0], ["bookcase", 3, 0], ["bookcase", 6, 0], ["bookcase", 9, 0]]},
+      "globe": {"against": "n", "mirror": true, "parts": [["bookcase", 0, 0], ["set_globe", 3, 0], ["bookcase", 4, 0]]},
+      "stack_row": {"against": "side", "mirror": true, "parts": [["bookcase", 0, 0], ["bookcase", 3, 0], ["set_books", 2, 1], ["bookcase", 0, 3], ["bookcase", 3, 3]]},
+      "bookcase": {"against": "n", "mirror": true, "parts": [["bookcase", 0, 0], ["set_books", 0, 1]]},
+      "table": {"against": "free", "mirror": true, "parts": [["table", 0, 0], ["kitchen_chair", 1, 2]]},
+      "books": {"against": "free", "mirror": true, "parts": [["set_books", 0, 0], ["set_books", 1, 1]]}
+    },
+    "rooms": {
+      "entry": {"most": 7, "take": ["reading", "cases", "fallen", "globe", "bookcase", "table", "books", "bookcase", "table", "books"]},
+      "stacks": {"most": 14, "take": ["stack_row", "fallen", "reading", "globe", "cases", "stack_row", "fallen", "cases", "reading", "bookcase", "table", "books", "bookcase", "table", "books", "bookcase", "table", "books"]},
+      "nook": {"most": 5, "take": ["reading", "cases", "globe", "bookcase", "table", "books", "bookcase", "table", "books"]},
+      "shelf": {"most": 7, "take": ["fallen", "cases", "globe", "stack_row", "bookcase", "table", "books", "bookcase", "table", "books"]}
+    }
+  },
   "fallback": [
     { "node": "entry", "template": "library.entry.a", "bay": [1, 2], "turn": 0, "mirror": false },
     { "node": "stacks", "template": "library.stacks.a", "bay": [1, 1], "turn": 0, "mirror": false },

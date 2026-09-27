@@ -12,7 +12,9 @@ use jane_core::ZoneId;
 use jane_sim::replay::{Recorder, Tape, diff_states, input_at, verify_tape};
 use jane_sim::{Blueprints, Seat, Sim, StepInput};
 
-pub const USAGE: &str = "  play --model reader|rusher --seed N [--minutes M] [--dungeon ZONE] [--tape OUT.jrp]
+pub const USAGE: &str =
+    "  play --model reader|rusher|explorer|cautious|lost --seed N [--minutes M] [--dungeon ZONE] [--tape OUT.jrp]
+       [--trace OUT.jtr] [--l4]
        [--snap OUT.png [--snap-every S]] [--ending hold|hill|train] [--profile]
        [--explain] [--explain-every S] [--from ACT] [--deaths] [--growth]
                                       a player model plays a seed headless from New Game (or a dungeon from
@@ -24,7 +26,9 @@ pub const USAGE: &str = "  play --model reader|rusher --seed N [--minutes M] [--
                                       --explain: what the bot holds, is doing and is blocked by, at the end
                                       (and every S seconds of play); --from: the story from an act
                                       (mine museum forest factory burial school choice), the acts
-                                      before it written in by the console: for looking, never a tape
+                                      before it written in by the console: for looking, never a tape;
+                                      --trace: the session's trace (VERIFICATION.md §3.1) and its L4
+                                      table; --l4: only the table
   play --fixture PATH                 write the bot-session hash fixture (seeds 1 to 3, both models, 5 min)
   replay verify FILE...               re-simulate each tape and hold it to its hash stream
   replay record --model M --seed N [--minutes M] [--dungeon ZONE] OUT.jrp
@@ -80,7 +84,8 @@ fn build(seed: u32) -> Result<Blueprints, String> {
 }
 
 fn play(args: &[String], tape: Option<&str>) -> Result<(), String> {
-    let model = Model::parse(flag(args, "--model").unwrap_or("reader")).ok_or("--model: reader or rusher")?;
+    let model = Model::parse(flag(args, "--model").unwrap_or("reader"))
+        .ok_or("--model: reader, rusher, explorer, cautious or lost")?;
     let seed = num(args, "--seed", 1)?;
     let minutes = num(args, "--minutes", 5)?;
     let dungeon = flag(args, "--dungeon")
@@ -110,6 +115,7 @@ fn play(args: &[String], tape: Option<&str>) -> Result<(), String> {
         bot.ctx.ending = Some(jane_bot::Ending::parse(e).ok_or("--ending: hold, hill or train")?);
     }
     let frames = minutes * 60 * 60;
+    let mut sess = jane_bot::run::Session::new(bot, &sim, minutes);
     let mut rec = Recorder::new(sim);
     let t0 = Instant::now();
     let mut shown = 0;
@@ -121,22 +127,22 @@ fn play(args: &[String], tape: Option<&str>) -> Result<(), String> {
     let explain_every = num(args, "--explain-every", 0)? * 60;
     let growth = args.iter().any(|a| a == "--growth");
     for _ in 0..frames {
-        if bot.done() {
+        if sess.bot.done() {
             break;
         }
         let f0 = if profile { wall_ns() } else { 0 };
-        bot.step(&mut rec);
+        sess.step(&mut rec);
         if profile {
             prof.add(wall_ns() - f0, &rec.sim().metrics());
         }
         played += 1;
         if explain_every > 0 && played % explain_every == 0 {
             if let Some(v) = rec.view(Seat(0)) {
-                println!("{}", bot.explain(&v));
+                println!("{}", sess.bot.explain(&v));
             }
         }
-        while shown < bot.log.len() {
-            let line = bot.log[shown].line();
+        while shown < sess.bot.log.len() {
+            let line = sess.bot.log[shown].line();
             println!("{line}");
             shown += 1;
             if growth && line.ends_with("quest given: the_burial") {
@@ -152,6 +158,7 @@ fn play(args: &[String], tape: Option<&str>) -> Result<(), String> {
             write_snap(&v, &numbered(path, shots))?;
         }
     }
+    let (bot, trace) = sess.finish(rec.sim());
     let us = t0.elapsed().as_micros().max(1);
     let (sim, t) = rec.finish();
     let v = sim.view(Seat(0)).ok_or("seat 0 is not in the world")?;
@@ -210,6 +217,14 @@ fn play(args: &[String], tape: Option<&str>) -> Result<(), String> {
     }
     if let Some(path) = snap {
         write_snap(&v, path)?;
+    }
+    if let Some(path) = flag(args, "--trace") {
+        let bytes = trace.encode();
+        std::fs::write(path, &bytes).map_err(|e| format!("{path}: {e}"))?;
+        println!("trace: {path}, {} records, {} bytes", trace.records.len(), bytes.len());
+    }
+    if args.iter().any(|a| a == "--l4" || a == "--trace") {
+        print!("{}", crate::sweep::l4_table(&jane_bot::experience::measure(&trace, 0)));
     }
     if let Some(path) = tape {
         let bytes = t.encode();

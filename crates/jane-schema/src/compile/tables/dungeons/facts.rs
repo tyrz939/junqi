@@ -19,6 +19,9 @@ pub struct PropFact {
     pub h: i64,
     /// The spell it answers to, if any.
     pub answers: Option<String>,
+    /// Nothing to push, carry, use, rest or craft at, no light, no gate or plate, nothing it
+    /// hides from sight: what a set piece may be made of (DUNGEONS.md §2.10).
+    pub inert: bool,
 }
 
 /// One thing a list, a death or a talk can give.
@@ -82,12 +85,18 @@ impl Facts {
         let mut f = Facts::default();
         for (id, row) in src.table("props", &mut quiet) {
             let v = &row.value;
+            let set = |k: &str| v.get(k).is_some_and(|x| !x.is_null() && x != &Value::Bool(false));
+            let inert =
+                !["push", "carry", "bench", "answers", "once", "gate", "plate", "rest", "light", "prompt", "blockLos"]
+                    .iter()
+                    .any(|k| set(k));
             f.props.insert(
                 id,
                 PropFact {
                     w: v.get("w").and_then(Value::as_i64).unwrap_or(0),
                     h: v.get("h").and_then(Value::as_i64).unwrap_or(0),
                     answers: v.get("answers").and_then(Value::as_str).map(str::to_owned),
+                    inert,
                 },
             );
         }

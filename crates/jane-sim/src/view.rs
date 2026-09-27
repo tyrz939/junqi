@@ -261,9 +261,11 @@ impl<'a> View<'a> {
     /// THE light rule, shared with the sim (`light.rs`).
     pub fn light_showing(&self, p: &Prop) -> Option<&'static Light> {
         let wet = crate::light::prop_wetness(self.zone, self.rt, p);
-        crate::light::light_showing(jane_data::catalog().story.prop(p.def), p, self.lamps_lit(), wet)
+        crate::light::light_showing(jane_data::catalog().story.prop(p.def), p, self.state.clock, wet)
     }
 
+    /// The county's night by its lamps, 18:30 to 06:30; each lamp keeps it a few minutes early
+    /// or late (`light::lamp_lit`, which [`Self::light_showing`] asks).
     pub fn lamps_lit(&self) -> bool {
         crate::light::lamps_lit(self.state.clock)
     }
@@ -311,6 +313,12 @@ impl<'a> View<'a> {
     /// A placed prop's row: where it leads, what it holds, its label.
     pub fn prop_spawn(&self, p: &Prop) -> Option<&'a PropSpawn> {
         spawn_of(self.bp, p)
+    }
+
+    /// What a prop still holds for the taking (a chest, a lost thing on the ground); empty once
+    /// it is emptied or used. A `shows_loot` row is drawn as the first of it.
+    pub fn prop_loot(&self, p: &'a Prop) -> &'a [jane_core::Stack] {
+        if p.used { &[] } else { crate::interact::loot_of(self.bp, p) }
     }
 
     /// A string a row or this zone's generator wrote: the words of a thing read, a label, a
@@ -481,6 +489,17 @@ impl<'a> View<'a> {
     /// thing that tells players apart (PLATFORM.md §2; PRESENTATION.md §3.6 `friend_seat`).
     pub fn seat_of(&self, unit: UnitId) -> Option<Seat> {
         self.state.players.iter().find(|p| p.connected && p.unit == unit).map(|p| p.seat)
+    }
+
+    /// The rest of the party sitting down: each seat, the zone her body is in and where it
+    /// stands (the map's and the party frame's "where is she"; a follower walks to her).
+    pub fn friends(&self) -> impl Iterator<Item = (Seat, ZoneId, Vec2)> + 'a {
+        let state = self.state;
+        let me = self.seat;
+        state.players.iter().filter(move |p| p.connected && p.seat != me).filter_map(move |p| {
+            let u = state.zone(p.zone)?.unit(p.unit)?;
+            Some((p.seat, p.zone, u.pos))
+        })
     }
 
     /// Whether a damage or heal number is hers to see: she dealt it or took it (PLATFORM.md §2,

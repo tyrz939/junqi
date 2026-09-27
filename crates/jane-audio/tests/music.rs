@@ -204,3 +204,53 @@ fn every_sound_effect_starts_and_ends_at_rest() {
         }
     }
 }
+
+/// A learned spell's cues (PRESENTATION.md §5.1): each school's, and its first-spell phrase, in
+/// the school's own key (a minor key for the schools that hurt, a major one for mending, growing
+/// and healing), clean at its edges and with no click, and about as loud as one another.
+#[test]
+fn every_learn_cue_is_clean_and_in_its_schools_key() {
+    let lib = jane_audio::library();
+    let sr = RATE as f32;
+    // (school, tonic pitch class, minor)
+    let keys = [
+        ("frost", 2, true),
+        ("fire", 7, true),
+        ("blast", 9, true),
+        ("shock", 0, true),
+        ("nature", 4, false),
+        ("physical", 5, false),
+        ("heal", 10, false),
+    ];
+    let mut bad = Vec::new();
+    let mut levels = Vec::new();
+    for (school, tonic, minor) in keys {
+        for name in [format!("learn_{school}"), format!("learn_first_{school}")] {
+            let p = lib.sfx.iter().find(|p| p.name == name).unwrap_or_else(|| panic!("no patch {name}"));
+            let v = &jane_audio::patch::render(p, sr, 0x5eed).variants[0];
+            let loud2: Vec<f32> = v.iter().map(|x| x * 2.0).collect();
+            if !analysis::clicks(&loud2, sr).is_empty() {
+                bad.push(format!(
+                    "{name}: clicks at {:?} s",
+                    analysis::clicks(&loud2, sr).iter().map(|i| *i as f32 / sr).collect::<Vec<_>>()
+                ));
+            }
+            let heard = analysis::keys(&analysis::chroma(v, sr));
+            if heard[0].0 != tonic || heard[0].1 != minor {
+                bad.push(format!(
+                    "{name}: wants {tonic} {}, heard {:?}",
+                    if minor { "minor" } else { "major" },
+                    &heard[..3]
+                ));
+            }
+            let l = analysis::loudness(v, sr);
+            eprintln!("{name}: {l:.1} dBFS, peak {:.1}, {:.1} s", to_db(analysis::peak(v)), v.len() as f32 / sr);
+            levels.push((name, l));
+        }
+    }
+    let (lo, hi) = levels.iter().fold((f32::MAX, f32::MIN), |(a, b), (_, l)| (a.min(*l), b.max(*l)));
+    if hi - lo > 6.0 {
+        bad.push(format!("levels spread {:.1} dB: {levels:?}", hi - lo));
+    }
+    assert!(bad.is_empty(), "\n  {}", bad.join("\n  "));
+}

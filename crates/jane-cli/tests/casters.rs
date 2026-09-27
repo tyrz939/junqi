@@ -122,7 +122,7 @@ fn frame(tier: Tier, shadows: bool) -> Frame {
             flags: jane_present::Flags::default(),
             height_px: top,
         });
-        f.casters.push(Caster { sprite: i as u32, foot, height: top, depth });
+        f.casters.push(Caster { sprite: i as u32, foot, height: top, depth, ..Caster::default() });
     }
     let sky = jane_present::light::sky(17 * 7200, 0, false, 1000, jane_data::Region::Lowfields);
     let mut sun = sky.sun.expect("the sun is up at five");

@@ -467,6 +467,11 @@ impl ZoneRuntime {
         Rect::new(i32::from(p.cell.x), i32::from(p.cell.y), i32::from(def.w), i32::from(def.h))
     }
 
+    /// What a solid prop blocks: the front rows of its footprint (`PropDef::solid_rect`).
+    fn solid_rect(p: &crate::state::Prop) -> Rect {
+        jane_data::catalog().story.prop(p.def).solid_rect(i32::from(p.cell.x), i32::from(p.cell.y))
+    }
+
     /// `solid` or `hidden` changed on this prop: its footprint is re-stamped at housekeeping.
     pub fn touch_prop(&mut self, zone: &ZoneState, ix: PropIx) {
         self.props_dirty.push(Self::footprint(&zone.props[ix as usize]));
@@ -496,7 +501,7 @@ impl ZoneRuntime {
         for &ix in scratch.iter() {
             let p = &zone.props[ix as usize];
             if p.solid && !p.hidden {
-                self.grid.stamp_prop(Self::footprint(p), cat.story.prop(p.def).block_los);
+                self.grid.stamp_prop(Self::solid_rect(p), cat.story.prop(p.def).block_los);
             }
         }
     }
@@ -507,7 +512,7 @@ impl ZoneRuntime {
         self.grid.clear_prop_flags();
         for p in &zone.props {
             if p.solid && !p.hidden {
-                self.grid.stamp_prop(Self::footprint(p), cat.story.prop(p.def).block_los);
+                self.grid.stamp_prop(Self::solid_rect(p), cat.story.prop(p.def).block_los);
             }
         }
         self.props_dirty_all = false;
@@ -531,7 +536,7 @@ impl ZoneRuntime {
             for &ix in scratch.iter() {
                 let p = &zone.props[ix as usize];
                 if p.solid && !p.hidden {
-                    self.grid.stamp_prop(Self::footprint(p), cat.story.prop(p.def).block_los);
+                    self.grid.stamp_prop(Self::solid_rect(p), cat.story.prop(p.def).block_los);
                 }
             }
         }
