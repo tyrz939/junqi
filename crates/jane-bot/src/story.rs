@@ -549,7 +549,18 @@ impl Story {
                     continue;
                 }
                 if let Some(t) = step(v, cx, q.quest, i, r.target) {
-                    offer(near(cost_of(&t)), g, t, &mut best);
+                    // A dungeon that keeps hours and is open now (the Museum, ten to four): go
+                    // while it is, before any errand.
+                    let open_now = match t {
+                        Target::Zone(z) | Target::At(z, _) => {
+                            dungeon(z)
+                                && doors_to(v, z)
+                                    .iter()
+                                    .any(|p| sense::night_lock(v, p).is_some() && !sense::shut_at(v, p, v.hour()))
+                        }
+                        _ => false,
+                    };
+                    offer(if open_now { 0 } else { near(cost_of(&t)) }, g, t, &mut best);
                 }
             }
         }
