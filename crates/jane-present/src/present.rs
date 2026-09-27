@@ -23,6 +23,7 @@ use crate::camera::{Camera, alpha_256};
 use crate::chunks::{ChunkCache, LRU, Need};
 use crate::creatures::{self, Creatures};
 use crate::drawlist::{DrawCmd, DrawList};
+use crate::facing::Face8;
 use crate::frame::{
     Block, CANVAS_H, CANVAS_W, CELL, CHUNK_PX, Caster, ChunkCmd, ChunkId, Depth, Directional, FX_TO_CANVAS, Features,
     Flags, Frame, Light, LightKind, Pass, Post, Rgb, Span, SpriteCmd, Tier, Tint, height_of_rows, rows_up,
@@ -126,7 +127,9 @@ struct UnitRec {
     /// struck (its attack's three beats).
     still: u32,
     struck: Option<(u32, SpellId)>,
-    facing: Facing,
+    /// Which of the eight ways it shows itself facing: the diagonal it walks on, kept when it
+    /// stops while the sim's facing agrees ([`Face8`]).
+    face: Face8,
 }
 
 /// A prop near the view, this tick.
@@ -471,7 +474,10 @@ impl Present {
                 creature: person.map_or_else(|| self.creatures.set(cat.combat.unit(u.def).sprite), |_| None),
                 still: if prev == cur { old.map_or(0, |o| o.still.saturating_add(1)) } else { 0 },
                 struck: old.and_then(|o| o.struck),
-                facing: u.facing,
+                face: {
+                    let was = old.map_or(Face8::of(u.facing), |o| o.face);
+                    was.moving(i64::from(cur.0 - prev.0), i64::from(cur.1 - prev.1), u.facing)
+                },
             });
         }
         self.units_next.sort_unstable_by_key(|r| r.id);
@@ -886,7 +892,7 @@ impl Present {
                         }
                     }
                     let pose = people::Pose {
-                        facing: u.facing,
+                        facing: u.face,
                         anim: u.anim,
                         tick: self.tick,
                         dead: u.dead,
@@ -902,7 +908,7 @@ impl Present {
                     let attack =
                         u.struck.map(|(t, _)| self.tick.wrapping_sub(t)).filter(|&t| t < 3 * creatures::ATTACK_TICKS);
                     let pose = creatures::Pose {
-                        facing: u.facing,
+                        facing: u.face,
                         anim: u.anim,
                         still: u.still,
                         tick: self.tick,
@@ -967,11 +973,15 @@ impl Present {
             if let Some(school) = cast_glow {
                 // The light gathered between her hands: in front of her facing the viewer or to
                 // the side, behind her facing away; it lights what is round it.
-                let (dx, dy, ahead) = match u.facing {
-                    Facing::East => (9, -21, 1),
-                    Facing::West => (-9, -21, 1),
-                    Facing::South => (0, -18, 1),
-                    Facing::North => (0, -19, -1),
+                let (dx, dy, ahead) = match u.face {
+                    Face8::East => (9, -21, 1),
+                    Face8::West => (-9, -21, 1),
+                    Face8::South => (0, -18, 1),
+                    Face8::North => (0, -19, -1),
+                    Face8::SouthEast => (5, -18, 1),
+                    Face8::SouthWest => (-5, -18, 1),
+                    Face8::NorthEast => (5, -19, -1),
+                    Face8::NorthWest => (-5, -19, -1),
                 };
                 let g = self.atlas.get(self.people.glow(school));
                 let (gx, gy) = (sx + dx - i32::from(g.src.w) / 2, sy + dy - i32::from(g.src.h) / 2);

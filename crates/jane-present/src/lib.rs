@@ -19,6 +19,7 @@ pub mod camera;
 pub mod chunks;
 pub mod creatures;
 pub mod drawlist;
+pub mod facing;
 pub mod frame;
 pub mod fx;
 pub mod input;

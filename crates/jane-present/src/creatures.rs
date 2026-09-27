@@ -4,11 +4,11 @@
 
 use jane_art::looks::{self, Family};
 use jane_art::sprite::FrameId;
-use jane_core::action::Facing;
 use jane_core::ids::SpriteId;
 
 use crate::atlas::{Atlas, RefId};
-use crate::people::{BREATHE_TICKS, WALK_TICKS};
+use crate::facing::Face8;
+use crate::people::{BREATHE_TICKS, WALK_TICKS, walk_cycle};
 
 /// Ticks a creature stands still before it sits (or grazes, or pecks): the idle pair.
 pub const IDLE_AFTER: u32 = 90;
@@ -35,7 +35,8 @@ pub struct Creatures {
 /// What a creature is doing this tick, as the frame pick needs it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Pose {
-    pub facing: Facing,
+    /// Which of the eight ways it faces.
+    pub facing: Face8,
     /// Ticks walked without stopping; 0 standing.
     pub anim: u32,
     /// Ticks stood still.
@@ -97,16 +98,19 @@ impl Creatures {
         self.sets.iter().position(|x| x.sprite == s).map(|i| i as u16)
     }
 
-    /// The frame set `set` shows for `pose`, and whether it is drawn mirrored (west).
+    /// The frame set `set` shows for `pose`, and whether it is drawn mirrored (the three west
+    /// sectors mirror the east ones). A plan without diagonals shows a diagonal from the side.
     pub fn frame(&self, set: u16, pose: Pose) -> (RefId, bool) {
         let s = &self.sets[usize::from(set)];
         let has = |f: FrameId| s.frames.iter().any(|(g, _)| *g == f);
-        let id = pick(pose, has(FrameId::Atk1));
         let at = |f: FrameId| s.frames.iter().find(|(g, _)| *g == f).map(|(_, r)| *r);
-        let r = at(id).or_else(|| at(FrameId::Down)).unwrap_or(s.frames[0].1);
-        let side = matches!(id, FrameId::Atk1 | FrameId::Atk2 | FrameId::Atk3 | FrameId::Hurt)
-            || (FrameId::Side..=FrameId::SideB).contains(&id);
-        (r, side && pose.facing == Facing::West)
+        let side = Pose { facing: Face8::of(pose.facing.cardinal()), ..pose };
+        let (id, r) = [pose, side]
+            .into_iter()
+            .map(|p| pick(p, has(FrameId::Atk1)))
+            .find_map(|f| at(f).map(|r| (f, r)))
+            .unwrap_or((FrameId::Down, at(FrameId::Down).unwrap_or(s.frames[0].1)));
+        (r, !pose.dead && pose.facing.west() && id.faces_east())
     }
 }
 
@@ -121,11 +125,7 @@ pub fn pick(p: Pose, attacks: bool) -> FrameId {
     if let Some(t) = p.attack.filter(|_| attacks) {
         return [F::Atk1, F::Atk2, F::Atk3][(t / ATTACK_TICKS).min(2) as usize];
     }
-    let cycle = match p.facing {
-        Facing::South => [F::Down, F::Down1, F::Down2, F::Down3, F::Down4, F::Down5, F::DownB],
-        Facing::North => [F::Up, F::Up1, F::Up2, F::Up3, F::Up4, F::Up5, F::UpB],
-        Facing::East | Facing::West => [F::Side, F::Side1, F::Side2, F::Side3, F::Side4, F::Side5, F::SideB],
-    };
+    let cycle = walk_cycle(p.facing);
     if p.anim > 0 {
         return cycle[(1 + (p.anim - 1) / WALK_TICKS) as usize % 6];
     }
@@ -138,9 +138,10 @@ pub fn pick(p: Pose, attacks: bool) -> FrameId {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use jane_core::action::Facing;
 
     fn pose(facing: Facing, anim: u32, still: u32) -> Pose {
-        Pose { facing, anim, still, tick: 0, dead: false, attack: None, id: 0 }
+        Pose { facing: Face8::of(facing), anim, still, tick: 0, dead: false, attack: None, id: 0 }
     }
 
     #[test]
