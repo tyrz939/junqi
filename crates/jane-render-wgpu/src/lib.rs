@@ -493,6 +493,8 @@ pub struct Wgpu {
     describe: String,
     /// The `Ui` pass (PRESENTATION.md §3.1).
     ui: ui::UiPass,
+    /// Whether the window asked for vsync (`for_window`).
+    vsync: bool,
 }
 
 impl Wgpu {
@@ -515,11 +517,29 @@ impl Wgpu {
         if let Some(&f) = caps.formats.iter().find(|f| f.is_srgb()) {
             config.format = f;
         }
-        config.present_mode = if vsync { wgpu::PresentMode::AutoVsync } else { wgpu::PresentMode::AutoNoVsync };
+        config.present_mode = present_mode(&caps.present_modes, vsync);
         config.desired_maximum_frame_latency = 2;
         surface.configure(&gpu.device, &config);
         let format = config.format;
-        Ok(Wgpu::build(gpu, Some(Window::Surface { surface, config }), format))
+        let mut w = Wgpu::build(gpu, Some(Window::Surface { surface, config }), format);
+        w.describe = format!("{}, {:?}", w.describe, w.present_mode().unwrap_or(wgpu::PresentMode::Fifo));
+        w.vsync = vsync;
+        Ok(w)
+    }
+
+    /// How the window's frames are shown (`None` with no window).
+    pub fn present_mode(&self) -> Option<wgpu::PresentMode> {
+        match &self.window {
+            Some(Window::Surface { config, .. }) => Some(config.present_mode),
+            _ => None,
+        }
+    }
+
+    /// Whether the caller paces the frames: vsync was asked for, and the present does not wait
+    /// for the display itself (mailbox), so a loop that drew as fast as it could would draw
+    /// frames nobody sees.
+    pub fn paced_by_caller(&self) -> bool {
+        self.vsync && self.present_mode().is_some_and(|m| m == wgpu::PresentMode::Mailbox)
     }
 
     /// A backend with no window that still upscales every frame to `size` px (an offscreen
@@ -578,6 +598,7 @@ impl Wgpu {
             frames: 0,
             describe,
             ui,
+            vsync: false,
         }
     }
 
@@ -864,6 +885,15 @@ impl Wgpu {
         pass[StatPass::Upscale as usize] = self.upscale_us;
         self.times.push_passes(at[9] + self.upscale_us, pass);
     }
+}
+
+/// How the window's frames are shown: with vsync, `Mailbox` where the surface offers it (a frame
+/// waits for no vblank, and the newest drawn is the one shown, so presenting never holds the
+/// loop), else `Fifo`, which every surface has; without, `Immediate`, else `Mailbox`, else `Fifo`.
+fn present_mode(offered: &[wgpu::PresentMode], vsync: bool) -> wgpu::PresentMode {
+    use wgpu::PresentMode::{Fifo, Immediate, Mailbox};
+    let order: &[wgpu::PresentMode] = if vsync { &[Mailbox, Fifo] } else { &[Immediate, Mailbox, Fifo] };
+    order.iter().copied().find(|m| offered.contains(m)).unwrap_or(Fifo)
 }
 
 /// A texture view as a binding.

@@ -45,8 +45,13 @@ use crate::{Args, shot};
 
 /// A tick is `1/60` s; the accumulator counts nanoseconds times 60, so a tick is exactly 1e9.
 const TICK: u64 = 1_000_000_000;
-/// At most this many ticks a frame (at 1x); beyond it the time is dropped (and counted).
-const MAX_CATCH_UP: u64 = 5;
+/// The most the clock may fall behind (at 1x), in ticks: a second. Beyond it the time is
+/// dropped (and counted). A slow frame (a present that blocks, an occluded window, a GPU asleep)
+/// never drops a tick: the ticks it owes run on the next frame, which is drawn once.
+const MAX_BEHIND: u64 = 60;
+/// Tick work one frame does at most before it draws: a sim slower than real time still shows,
+/// and what it owes waits for the next frame (then for the second's cap).
+const TICK_BUDGET: Duration = Duration::from_millis(50);
 /// The seat this window plays.
 const ME: Seat = Seat(0);
 /// The clear behind the title and the loading screen.
@@ -391,7 +396,7 @@ pub fn run(
         let now = Instant::now();
         acc += (now - last).as_nanos() as u64 * 60 * u64::from(app.speed.quarters) / 4;
         last = now;
-        let cap = MAX_CATCH_UP * u64::from(app.speed.quarters.max(4)) / 4;
+        let cap = MAX_BEHIND * u64::from(app.speed.quarters.max(4)) / 4;
         let mut due = acc / TICK;
         if due > cap {
             app.dropped += due - cap;
@@ -406,8 +411,17 @@ pub fn run(
             acc -= TICK;
             app.ticks += 1;
             title_clock.4 += 1;
+            if t_ticks.elapsed() >= TICK_BUDGET || args.ticks.is_some_and(|n| app.ticks >= n) {
+                break;
+            }
         }
         let tick_time = t_ticks.elapsed();
+        // A window nobody can see (minimised, hidden) is not drawn: the clock ticks on, and no
+        // present can hold the loop (PRESENTATION.md §1.11).
+        if !screen.visible() && args.ticks.is_none() {
+            std::thread::sleep(Duration::from_millis(4));
+            continue;
+        }
 
         // One frame at alpha: the world, then the UI over it.
         let t_draw = Instant::now();
@@ -458,7 +472,14 @@ pub fn run(
         if args.ticks.is_some_and(|n| app.ticks >= n) {
             break;
         }
-        if due == 0 && frame_start.elapsed() < Duration::from_millis(2) {
+        // A present that does not wait for the display (mailbox) is paced to its refresh here,
+        // so the GPU draws the frames that are shown and no more.
+        if let Some(every) = screen.frame_interval() {
+            let left = every.saturating_sub(frame_start.elapsed()).saturating_sub(Duration::from_micros(500));
+            if !left.is_zero() {
+                std::thread::sleep(left);
+            }
+        } else if due == 0 && frame_start.elapsed() < Duration::from_millis(2) {
             std::thread::sleep(Duration::from_millis(1));
         }
     }
