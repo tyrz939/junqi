@@ -373,6 +373,12 @@ model_enum! {
         Flask, Vial, Key, Bar, Orb, Stone, Gem, Herb, Bloom, Mushroom, Fruit, Grapes, Egg, Loaf, Crepe, Meat, Potatoes,
         Pot, Tin, Glove, Hat, Cap, Coat, Scarf, Fleece, Letter, Parcel, Sack, Tool, Scissors, Spanner, Spoons, Can, Net,
         Plate, Ring, Amulet, Spectacles, Logs, Butterfly, Tortoise, Dust, Spell, Status,
+        /// A cushion of moss on a stone.
+        Moss,
+        /// A satchel: its flap, buckle and strap.
+        Satchel,
+        /// Folded washing with a peg.
+        Linen,
     }
 }
 

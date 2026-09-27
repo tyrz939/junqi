@@ -39,3 +39,46 @@ fn every_icon_is_drawn_at_32_and_16() {
         }
     }
 }
+
+/// Clear px the outside cannot reach: a hole through the drawing.
+fn enclosed(c: &jane_art::canvas::Canvas) -> usize {
+    let (w, h) = (c.w(), c.h());
+    let mut seen = vec![false; (w * h) as usize];
+    let mut stack: Vec<(i32, i32)> = Vec::new();
+    for x in 0..w {
+        stack.extend([(x, 0), (x, h - 1)]);
+    }
+    for y in 0..h {
+        stack.extend([(0, y), (w - 1, y)]);
+    }
+    while let Some((x, y)) = stack.pop() {
+        if x < 0 || y < 0 || x >= w || y >= h {
+            continue;
+        }
+        let i = (y * w + x) as usize;
+        if seen[i] || c.get(x, y).is_opaque() {
+            continue;
+        }
+        seen[i] = true;
+        stack.extend([(x + 1, y), (x - 1, y), (x, y + 1), (x, y - 1)]);
+    }
+    (0..h)
+        .flat_map(|y| (0..w).map(move |x| (x, y)))
+        .filter(|&(x, y)| !seen[(y * w + x) as usize] && !c.get(x, y).is_opaque())
+        .count()
+}
+
+/// A key reads as a key (the owner's playtest: one on the ground looked like a bit of paper):
+/// every key icon, at 32 and at 16, and the key lying on the ground, has a bow with a hole
+/// through it.
+#[test]
+fn every_key_has_a_bow_with_a_hole() {
+    for r in looks::family(Family::Icon).unwrap() {
+        let Some((_, Look::Icon(l))) = looks::find(r.name) else { unreachable!() };
+        if l.class == jane_data::IconClass::Key {
+            assert!(enclosed(&r.set.frames[0].1) >= 1, "{}: no hole through the bow", r.key());
+        }
+    }
+    let key = looks::render("tale_key").unwrap();
+    assert!(enclosed(&key[0].set.frames[0].1) >= 1, "the key on the ground has no hole through its bow");
+}

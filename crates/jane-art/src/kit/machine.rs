@@ -488,12 +488,24 @@ fn small(c: &mut Canvas, k: &Kit, on: bool) -> Option<Stand> {
             Stand::Flat(if boots { 10 } else { 3 })
         }
         "key" => {
-            // A key on the ground, its bow lit, its shadow under it.
-            c.ao_contact(Rect::new(cx - 6, foot - 5, 12, 4), 1);
-            c.ellipse(Rect::new(cx - 6, foot - 9, 5, 5), b.at(Tone::Base), 2);
-            c.dot(cx - 4, foot - 7, Ix::CLEAR, 0);
-            c.line((cx - 2, foot - 6), (cx + 5, foot - 4), b.at(Tone::Light), 2, 2);
-            c.fill_rect(Rect::new(cx + 3, foot - 4, 2, 3), b.at(Tone::Base), 2);
+            // A key lying in the grass, big and bright enough to be seen from a pace off: a round
+            // bow with its hole, the shank falling a px in four, a bit of two teeth, its brass lit
+            // along the middle (the line takes the edges) with a glint on the bow.
+            let (x0, y0) = (cx - 8, foot - 12);
+            c.ao_contact(Rect::new(x0, foot - 6, 16, 5), 1);
+            c.ellipse(Rect::new(x0, y0, 8, 8), b.at(Tone::Base), 2);
+            c.line((x0 + 7, y0 + 4), (cx + 7, foot - 5), b.at(Tone::Base), 3, 2);
+            for tx in [cx + 1, cx + 5] {
+                c.fill_rect(Rect::new(tx, foot - 5, 2, 4 - i32::from(tx > cx + 2)), b.at(Tone::Base), 2);
+            }
+            c.fill_rect(Rect::new(x0 + 3, y0 + 3, 2, 2), Ix::CLEAR, 0);
+            // The light along the bow's upper arc and the shank's ridge.
+            for (x, y) in [(x0 + 2, y0 + 1), (x0 + 3, y0 + 1), (x0 + 4, y0 + 1), (x0 + 1, y0 + 2), (x0 + 1, y0 + 3)] {
+                c.dot(x, y, b.at(Tone::Light), 2);
+            }
+            c.line((x0 + 8, y0 + 4), (cx + 6, foot - 5), b.at(Tone::High), 1, 2);
+            c.dot(x0 + 2, y0 + 2, Ramp::HairWhite.at(Tone::High), 3);
+            c.dot(cx + 1, y0 + 5, Ramp::HairWhite.at(Tone::High), 3);
             Stand::Flat(2)
         }
         "diving_helmet" => {
