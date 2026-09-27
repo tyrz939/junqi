@@ -1486,13 +1486,22 @@ pub fn not_yet(v: &View<'_>, t: &Task) -> bool {
     inside("burial_glasshouse") || door
 }
 
+/// Apples kept for the keepers.
+const KEEPERS_FOOD: u32 = 4;
+
 /// May she eat now? Every room down here but a keeper's has the vigil fire behind it, and a
 /// keeper's room shuts behind her: the apples are for the keepers, unless she is nearly done
 /// for. (Eaten in the trash between, she met the Spider with none and fell with the Spider at a
-/// tenth of her health, three times on seed 1.)
+/// tenth of her health, three times on seed 1.) What is kept is a keeper's worth: past it, or
+/// with more than one thing on her, she eats (keeping all of them, she fell a dozen times in the
+/// rat room on seed 7 with thirteen apples in her bag).
 pub fn may_eat(v: &View<'_>) -> bool {
     let cat = jane_data::catalog();
+    let food = ["apple", "grape"].into_iter().map(|n| sense::holds(v, sense::item(n))).sum::<u32>();
+    let crowd = sense::enemies(v).iter().filter(|u| crate::fight::on_me(v, u)).count() > 1;
     sense::hp_permille(v.body()) < 200
+        || food > KEEPERS_FOOD
+        || crowd
         || sense::enemies(v)
             .iter()
             .any(|u| cat.combat.unit(u.def).boss && (crate::fight::on_me(v, u) || u.combat == CombatState::Combat))
