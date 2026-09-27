@@ -223,7 +223,8 @@ impl Story {
             let g = *g;
             // Out of doors on the way to it and the night come on: home, and back in the
             // morning (the county's night kills a walk that its day would not).
-            let outside = matches!(v.zone(), ZoneId::County | ZoneId::House) && c.zone != v.zone();
+            // (Julie's cellar is under the house: no road to it.)
+            let outside = v.zone() == ZoneId::County && c.zone != ZoneId::Cellar;
             if outside && !(6..20).contains(&v.hour()) && has_home(v) && v.dialogue().is_none() {
                 let hours = u32::from((30 - v.hour()) % 24);
                 let until = v.tick().0 + hours * jane_sim::tuning::TICKS_PER_HOUR;
