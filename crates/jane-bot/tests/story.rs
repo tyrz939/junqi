@@ -18,12 +18,14 @@ use jane_bot::{Bot, Ending, Mark, Model};
 use jane_sim::replay::{Recorder, verify_tape};
 use jane_sim::{Blueprints, Seat, Sim};
 
-/// Game minutes a story may take before the test calls it stuck: ten game hours of play, and
-/// the days slept away do not count against it (they are not frames).
-const STORY_FRAMES: u32 = 10 * 60 * 60 * 60;
+/// Frames a story may take before the test calls it stuck: forty game hours of play (the
+/// Reader's whole stories run 800 to 1,200 minutes of the log's clock on the seeds that end,
+/// deaths and all), and the nights slept away do not count against it (they are not frames).
+const STORY_FRAMES: u32 = 40 * 60 * 60 * 60;
 
-/// Game minutes a step of the spine may stay set aside before it counts as stuck for good.
-const STUCK_BUDGET: u32 = 90;
+/// Game minutes a step of the spine may stay set aside before it counts as stuck for good: a
+/// day and a half (a step set aside for the night, or for a door's hours, comes back to).
+const STUCK_BUDGET: u32 = 36 * 60;
 
 /// The spine, in the order the dog gives it.
 const SPINE: [&str; 12] = [
