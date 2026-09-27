@@ -35,7 +35,7 @@
   },
   "spider_queen": {
     "name": "The Spider", "faction": "undead", "controller": "ai",
-    "strength": 100, "spirit": 50, "walk": 0.35, "run": 0.9, "aggro": 14, "leash": 60, "bounds": 1.25,
+    "strength": 70, "spirit": 50, "walk": 0.35, "run": 0.9, "aggro": 14, "leash": 12, "bounds": 1.25,
     "book": ["queen_bite", "queen_web"], "respawn": 0, "autoRegen": true, "loot": [],
     "sprite": "spider_queen", "boss": true, "resist": { "physical": 0.3 },
     "phases": [

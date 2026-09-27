@@ -1,9 +1,9 @@
 {
   "flower_spray": {
-    "name": "Thorn Spray", "description": "Ten thorns in a cone, from something that was a flower bed.", "icon": "spell_nature",
+    "name": "Thorn Spray", "description": "Seven thorns in a fan, from something that was a flower bed. Far off, they spread wide enough to stand between.", "icon": "spell_nature",
     "kind": "bolt", "school": "nature", "mp": 0, "energy": 0, "range": 15, "cooldown": 5,
     "gcdImmune": false, "needsTarget": true, "needsEnemy": true, "needsLos": true, "anim": "cast",
-    "power": { "stat": "spirit", "div": 8, "varDiv": 32 }, "speed": 4, "count": 10, "fan": 45, "stop": 20
+    "power": { "stat": "spirit", "div": 8, "varDiv": 32 }, "speed": 4, "count": 7, "fan": 60, "stop": 20
   },
   "flower_lash": {
     "name": "Root", "description": "The bed lashes anything that stands on it.", "icon": "spell_nature",
@@ -15,13 +15,13 @@
     "name": "Venomous Bite", "description": "A bite that keeps hurting for three seconds.", "icon": "spell_nature",
     "kind": "melee", "school": "physical", "mp": 0, "energy": 0, "range": 0.25, "cooldown": 2,
     "gcdImmune": true, "needsTarget": true, "needsEnemy": true, "needsLos": true, "anim": "attack",
-    "power": { "stat": "strength", "div": 8, "varDiv": 32 }, "effect": "spider_venom", "stop": 16
+    "power": { "stat": "strength", "div": 12, "varDiv": 48 }, "effect": "spider_venom", "stop": 16
   },
   "queen_web": {
     "name": "Webshot", "description": "Leaves a web where it lands. Webs slow you to a quarter speed.", "icon": "spell_web",
-    "kind": "ground", "school": "physical", "mp": 1, "energy": 0, "range": 15, "cooldown": 6,
+    "kind": "ground", "school": "physical", "mp": 1, "energy": 0, "range": 15, "cooldown": 8,
     "gcdImmune": false, "needsTarget": true, "needsEnemy": true, "needsLos": true, "anim": "cast",
-    "power": { "stat": "spirit", "div": 8, "varDiv": 32, "flat": 4 }, "radius": 1.5, "duration": 10, "pulse": 1, "effect": "webbed", "stop": 20
+    "power": { "stat": "spirit", "div": 32, "varDiv": 64, "flat": 4 }, "radius": 1.5, "duration": 3, "pulse": 1, "effect": "webbed", "stop": 20
   },
   "gold_globe": {
     "name": "Poison Globe", "description": "A slow globe of poison. Slow enough to walk around, if you are looking.", "icon": "spell_nature",
