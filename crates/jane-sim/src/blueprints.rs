@@ -32,7 +32,12 @@ impl std::error::Error for BuildError {}
 /// while `build_zone` still says `None` for it (its last stages are being ported), re-rolled
 /// through its attempts as `buildZone` did.
 pub fn build_one(zone: ZoneId, seed: u32) -> Result<Blueprint, BuildError> {
-    if let Some(bp) = jane_world::build_zone(zone, seed) {
+    build_one_with(zone, seed, &mut |_| {})
+}
+
+/// [`build_one`], saying each stage to `report` as it starts (`jane_world::Report`).
+pub fn build_one_with(zone: ZoneId, seed: u32, report: jane_world::Report<'_>) -> Result<Blueprint, BuildError> {
+    if let Some(bp) = jane_world::build_zone_with(zone, seed, report) {
         return Ok(bp);
     }
     if zone == ZoneId::County {
@@ -47,9 +52,15 @@ pub fn build_one(zone: ZoneId, seed: u32) -> Result<Blueprint, BuildError> {
 
 impl Blueprints {
     pub fn build(seed: u32) -> Result<Self, BuildError> {
+        Self::build_with(seed, &mut |_| {})
+    }
+
+    /// [`Blueprints::build`], saying each stage to `report` as it starts: what the loading
+    /// screen hears (PRESENTATION.md §3.2). The blueprints are the same whoever listens.
+    pub fn build_with(seed: u32, report: jane_world::Report<'_>) -> Result<Self, BuildError> {
         let mut built: Vec<Arc<Blueprint>> = Vec::with_capacity(ZONE_COUNT);
         for z in ZoneId::ALL {
-            built.push(Arc::new(build_one(z, seed)?));
+            built.push(Arc::new(build_one_with(z, seed, report)?));
         }
         let zones: [Arc<Blueprint>; ZONE_COUNT] = built.try_into().unwrap_or_else(|_| unreachable!("thirteen zones"));
         Ok(Self { seed, zones })

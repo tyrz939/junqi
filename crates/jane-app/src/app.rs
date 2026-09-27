@@ -61,6 +61,8 @@ const DARK: u32 = 0xff10_1014;
 
 /// What the loader thread says.
 enum Loaded {
+    /// A stage of the build has started (`jane_world::Report`).
+    Stage(&'static str),
     Card(Box<Card>),
     Sim(Result<Box<Sim>, String>),
 }
@@ -71,7 +73,7 @@ enum Scene {
     /// `host`: the world opens to the LAN once built (the title's Host).
     Loading {
         rx: Receiver<Loaded>,
-        st: LoadingState,
+        st: Box<LoadingState>,
         sim: Option<Box<Sim>>,
         slot: Option<u8>,
         host: Option<HostChoice>,
@@ -419,6 +421,12 @@ pub fn run(
             PadPress { buttons: pad_now.0 & !pad_was.0, lt: pad_now.1 && !pad_was.1, rt: pad_now.2 && !pad_was.2 };
         pad_was = pad_now;
         devices.state.end_sample();
+        // Any press once the county is built goes straight on to play.
+        if let Scene::Loading { st, .. } = &mut app.scene
+            && (!keys.is_empty() || pressed || right || pad_pressed.buttons != 0)
+        {
+            st.press();
+        }
         edges.extend(app.input.drain());
         let mut actions = Vec::new();
         for edge in edges.drain(..) {
@@ -623,13 +631,14 @@ impl App<'_> {
                 self.soundtrack.title(&mut self.sound);
                 while let Ok(m) = rx.try_recv() {
                     match m {
+                        Loaded::Stage(s) => st.stage(s),
                         Loaded::Card(c) => {
                             st.card = Some(*c);
                             st.since = self.ticks as u32;
                         }
                         Loaded::Sim(Ok(s)) => {
                             *sim = Some(s);
-                            st.built = true;
+                            st.finish();
                         }
                         Loaded::Sim(Err(e)) => {
                             eprintln!("jane-app: {e}");
@@ -639,6 +648,7 @@ impl App<'_> {
                         }
                     }
                 }
+                st.tick(self.ticks as u32);
                 if st.done(self.ticks as u32)
                     && let Some(s) = sim.take()
                 {
@@ -941,22 +951,33 @@ impl App<'_> {
             .collect();
     }
 
-    /// New Game: the county built on a thread while the loading screen draws its skeleton.
+    /// The loading screen `--loading` asked for: the scroll, or the developer's map.
+    fn loading_mode(&self) -> loading::Mode {
+        if self.args.loading_map { loading::Mode::Map } else { loading::Mode::Scroll }
+    }
+
+    /// New Game: the county built on a thread while the loading screen says each stage of it
+    /// (or, `--loading map`, draws its skeleton).
     /// `host`: the world is opened to the LAN once built (the title's Host).
     fn new_game(&mut self, name: String, seed: u32, host: Option<HostChoice>) {
         let (tx, rx) = channel();
+        let mode = self.loading_mode();
         std::thread::spawn(move || {
-            if let Ok(s) = jane_world::skeleton::skeleton(seed) {
+            if mode == loading::Mode::Map
+                && let Ok(s) = jane_world::skeleton::skeleton(seed)
+            {
                 let _ = tx.send(Loaded::Card(Box::new(Card::from_skeleton(&s))));
             }
             let t0 = Instant::now();
-            let sim = Blueprints::build(seed)
-                .map(|bps| Box::new(Sim::new_game_with(bps, &name)))
-                .map_err(|e| format!("seed {seed}: {e}"));
+            let sim = Blueprints::build_with(seed, &mut |s| {
+                let _ = tx.send(Loaded::Stage(s));
+            })
+            .map(|bps| Box::new(Sim::new_game_with(bps, &name)))
+            .map_err(|e| format!("seed {seed}: {e}"));
             println!("jane-app: seed {seed}: the county built in {} ms", t0.elapsed().as_millis());
             let _ = tx.send(Loaded::Sim(sim));
         });
-        let st = LoadingState { card: None, since: self.ticks as u32, built: false, seed, verb: "New Game" };
+        let st = Box::new(LoadingState::new(mode, seed, "New Game", self.ticks as u32));
         self.end_session();
         self.scene = Scene::Loading { rx, st, sim: None, slot: None, host };
     }
@@ -973,25 +994,33 @@ impl App<'_> {
         };
         let (tx, rx) = channel();
         let seed = self.config.slot_seeds.get(usize::from(n)).copied().flatten();
+        let mode = self.loading_mode();
         std::thread::spawn(move || {
-            // With the seed known the county forms on the card while it is rebuilt; a seed
-            // remembered wrong falls back to the save's own.
+            // With the seed known the stages are said as the county is rebuilt (or it forms
+            // on the map card); a seed remembered wrong falls back to the save's own, and with
+            // none the save builds its own county, said as one stage.
             let sim = match seed {
                 Some(seed) => {
-                    if let Ok(s) = jane_world::skeleton::skeleton(seed) {
+                    if mode == loading::Mode::Map
+                        && let Ok(s) = jane_world::skeleton::skeleton(seed)
+                    {
                         let _ = tx.send(Loaded::Card(Box::new(Card::from_skeleton(&s))));
                     }
-                    Blueprints::build(seed)
-                        .ok()
-                        .and_then(|bps| Sim::from_save_with(&bytes, bps).ok())
-                        .map_or_else(|| Sim::from_save(&bytes), Ok)
+                    Blueprints::build_with(seed, &mut |s| {
+                        let _ = tx.send(Loaded::Stage(s));
+                    })
+                    .ok()
+                    .and_then(|bps| Sim::from_save_with(&bytes, bps).ok())
+                    .map_or_else(|| Sim::from_save(&bytes), Ok)
                 }
-                None => Sim::from_save(&bytes),
+                None => {
+                    let _ = tx.send(Loaded::Stage("skeleton"));
+                    Sim::from_save(&bytes)
+                }
             };
             let _ = tx.send(Loaded::Sim(sim.map(Box::new).map_err(|e| format!("slot {}: {e:?}", n + 1))));
         });
-        let st =
-            LoadingState { card: None, since: self.ticks as u32, built: false, seed: seed.unwrap_or(0), verb: "Load" };
+        let st = Box::new(LoadingState::new(mode, seed.unwrap_or(0), "Load", self.ticks as u32));
         self.end_session();
         self.scene = Scene::Loading { rx, st, sim: None, slot: Some(n), host };
         self.menus.clear();

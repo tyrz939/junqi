@@ -23,8 +23,10 @@ use jane_sim::tuning::MAX_PLAYERS;
 use jane_sim::{Seat, Sim};
 
 /// The screens, by name.
-pub const SCREENS: [&str; 12] =
-    ["hud", "dead", "choice", "tooltip", "popover", "drag", "pause", "host", "join", "table", "controls", "display"];
+pub const SCREENS: [&str; 13] = [
+    "hud", "dead", "choice", "tooltip", "popover", "drag", "pause", "host", "join", "table", "controls", "display",
+    "loading",
+];
 
 struct Rig {
     sim: Sim,
@@ -306,6 +308,21 @@ pub fn run(dir: &Path, names: &[String]) -> Result<(), String> {
             lan::stall(ui, 0b0100, 3400, false);
         });
         rig.write(dir, "table")?;
+    }
+    // New Game's loading screen mid-scroll: every stage reported at once, as on a fast machine.
+    if want("loading") {
+        use jane_present::ui::loading::{self, LoadingState, Mode};
+        let mut st = LoadingState::new(Mode::Scroll, 7, "New Game", 0);
+        for s in jane_world::build_stages() {
+            st.stage(s);
+        }
+        st.finish();
+        let at_tick = 100;
+        for now in 0..=at_tick {
+            st.tick(now);
+        }
+        rig.frame(UiInput::default(), at_tick, |ui, _, _| loading::draw(ui, &mut st));
+        rig.write(dir, "loading")?;
     }
     Ok(())
 }
