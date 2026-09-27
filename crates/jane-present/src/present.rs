@@ -111,8 +111,8 @@ struct PropRec {
     h: i32,
     look: RefId,
     flat: bool,
-    /// Set into a wall's face (a door, a lamp on its bracket): drawn over the face and standing
-    /// on the face's foot, so it throws no shadow of its own (the wall throws it).
+    /// Set into a wall's face (a door, a lamp on its bracket, a hanging): drawn over the face and
+    /// standing on the face's foot, so it throws no shadow of its own (the wall throws it).
     flush: bool,
 }
 
@@ -558,9 +558,11 @@ impl Present {
     /// torch's pool lies on the floor it lights, not in the masonry, on every tier.
     ///
     /// And a prop drawn over a wall's face and standing on the face's foot (a door, a sign on the
-    /// wall) is set into it: its px halfway and three quarters up stand on its own foot row as
-    /// the face's there do. It throws no shadow of its own, so a door never shadows the wall it
-    /// is set in.
+    /// wall, a hanging: chains or a portrait, which stands on its cell's back edge by
+    /// `jane_art::kit::hung`) is set into it: its px halfway and three quarters up stand on its
+    /// own foot row as the face's there do. It throws no shadow of its own, so a door never
+    /// shadows the wall it is set in, and chains under a torch never throw a wedge across the
+    /// floor.
     fn against_walls(&mut self) {
         /// How far a light is looked for open ground, px.
         const REACH: i32 = 24;
