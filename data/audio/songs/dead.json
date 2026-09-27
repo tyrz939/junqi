@@ -1,0 +1,24 @@
+{
+  "name": "dead",
+  "mood": "She fell: the theme's first phrase once more in D minor on a celesta, slowed and alone over strings, stopping on the second degree as if it forgot the rest, then only the strings holding and letting go",
+  "key": "D", "mode": "minor",
+  "step_ticks": 30, "bar": 8,
+  "gain": 1.46, "humanize_ms": 14, "looped": false,
+  "tracks": [
+    { "name": "melody", "inst": "celesta", "kind": "melody", "octave": 5, "vel": 0.62, "pan": 0.1 },
+    { "name": "piano", "inst": "felt_piano", "kind": "melody", "octave": 4, "vel": 0.42, "pan": -0.15 },
+    { "name": "pad", "inst": "strings", "kind": "chord", "octave": 4, "vel": 0.46, "voices": 4, "gate": 1.0 },
+    { "name": "low", "inst": "low_strings", "kind": "bass", "octave": 2, "vel": 0.44, "gate": 1.0 }
+  ],
+  "sections": {
+    "L": { "bars": 5, "chords": "1 4 6 5 1",
+      "play": {
+        "melody": "1 . 5 . 6 - 5 . | 4 - 3 - 2 - - . | 3 . . . 1 . . . | 2 - - - - - - - | . . . . . . . .",
+        "piano": ". . . . . . . . | . . . . . . . . | . . . . . . . . | . . . . . . . . | 1 - - - - - - .",
+        "pad": "x - - - - - - - | x - - - - - - - | x - - - - - - - | x - - - - - - - | x - - - - - . .",
+        "low": "1 - - - - - - - | 1 - - - - - - - | 1 - - - - - - - | 1 - - - - - - - | 1 - - - - - . ."
+      }
+    }
+  },
+  "forms": ["L"]
+}

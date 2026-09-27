@@ -1,0 +1,44 @@
+{
+  "name": "forest",
+  "mood": "Butterfly Forest, where the coloured things sing about day and night: E Lydian, a celesta turning like wings in the canopy light, a choir with no words, a flute carrying their song, beautiful and slightly wrong",
+  "key": "E", "mode": "lydian",
+  "step_ticks": 24, "bar": 8,
+  "gain": 0.80, "humanize_ms": 8,
+  "tracks": [
+    { "name": "song", "inst": "flute", "kind": "melody", "octave": 5, "vel": 0.66, "pan": 0.1, "gate": 0.95 },
+    { "name": "wings", "inst": "celesta", "alt": ["harp"], "kind": "arp", "octave": 4, "vel": 0.38, "pan": -0.3 },
+    { "name": "choir", "inst": "choir", "kind": "chord", "octave": 4, "vel": 0.42, "voices": 3, "pan": 0.2, "gate": 1.0 },
+    { "name": "glass", "inst": "glass", "kind": "chord", "octave": 5, "vel": 0.24, "voices": 2, "pan": 0.45, "gate": 1.0 },
+    { "name": "bass", "inst": "bass_soft", "kind": "bass", "octave": 2, "vel": 0.32 }
+  ],
+  "sections": {
+    "I": { "bars": 2, "chords": "1 2",
+      "play": {
+        "wings": "1 5 8 9 10 12 10 9 | 1 5 8 9 10 12 10 9",
+        "glass": "x - - - - - - - | - - - - - - - -",
+        "bass": "1 - - - - - - - | 1 - - - - - - -"
+      }
+    },
+    "D": { "bars": 8, "chords": "1 2 1 2 6 3 2 5",
+      "play": {
+        "song": "1 - 2 - 3 - - 5 | 4 - - 3 2 - - . | 3 - 5 - 8 - - 7 | 6 - - - - - . . | 5 - - 6 5 - 3 - | 5 - - - 3 - 2 - | 2 - - 4 - - 6 - | 5 - - - - - . .",
+        "wings": [
+          "1 5 8 9 10 12 10 9 | 1 5 8 9 10 12 10 9 | 1 5 8 9 10 12 10 9 | 1 5 8 9 10 12 10 9 | 1 5 8 9 10 12 10 9 | 1 5 8 9 10 12 10 9 | 1 5 8 9 10 12 10 9 | 1 5 8 9 10 12 10 9",
+          "1 5 8 5 10 8 12 8 | 1 5 8 5 10 8 12 8 | 1 5 8 5 10 8 12 8 | 1 5 8 5 10 8 12 8 | 1 5 8 5 10 8 12 8 | 1 5 8 5 10 8 12 8 | 1 5 8 5 10 8 12 8 | 1 5 8 5 10 8 12 8"
+        ],
+        "choir": "x - - - - - - - | x - - - - - - - | x - - - - - - - | x - - - - - - - | x - - - - - - - | x - - - - - - - | x - - - - - - - | x - - - - - - -",
+        "bass": "1 - - - - - - - | 1 - - - - - - - | 1 - - - - - - - | 1 - - - - - - - | 1 - - - - - - - | 1 - - - - - - - | 1 - - - - - - - | 1 - - - 5, - - -"
+      }
+    },
+    "N": { "bars": 8, "chords": "6 3 7 2 6 3 7 2",
+      "play": {
+        "song": "8 - - 7 6 - - . | 5 - - 3 - - 7, - | 7, - - 2 4 - - . | 4 - 3 - 2 - - . | 8 - - 7 6 - 5 - | 5 - - 3 - - 7, - | 7, - - 2 4 - 5 - | 6 - - - - - . .",
+        "wings": "1 5 8 5 10 8 12 8 | 1 5 8 5 10 8 12 8 | 1 5 8 5 10 8 12 8 | 1 5 8 9 10 12 10 9 | 1 5 8 5 10 8 12 8 | 1 5 8 5 10 8 12 8 | 1 5 8 5 10 8 12 8 | 1 5 8 9 10 12 10 9",
+        "glass": "x - - - - - - - | - - - - - - - - | x - - - - - - - | - - - - - - - - | x - - - - - - - | - - - - - - - - | x - - - - - - - | - - - - - - - -",
+        "choir": "x - - - - - - - | x - - - - - - - | x - - - - - - - | x - - - - - - - | x - - - - - - - | x - - - - - - - | x - - - - - - - | x - - - - - - -",
+        "bass": "1 - - - - - - - | 1 - - - - - - - | 1 - - - - - - - | 1 - - - - - - - | 1 - - - - - - - | 1 - - - - - - - | 1 - - - - - - - | 1 - - - - - - -"
+      }
+    }
+  },
+  "forms": ["I D N D", "I D D N", "I N D"]
+}

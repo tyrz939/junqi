@@ -36,13 +36,14 @@ pub const USAGE: &str = "  bench gen [--zones <all|dungeons|id,id..>] [--seeds A
                                       time worldgen stage by stage (skeleton, county stages, solver,
                                       each dungeon's build, solve and checks, New Game) against
                                       tools/perf/thresholds.json; --json prints that file's shape
-  bench frames [--backend soft|wgpu] [--frames N] [--seed N] [--ticks T] [--hour H] [--wide]
-               [--output WxH]
+  bench frames [--backend soft|gl2|wgpu] [--frames N] [--seed N] [--ticks T] [--hour H] [--wide]
+               [--output WxH] [gl2: --es --shadows N|off --half-light|--full-light --fast|--exact --flat]
                                       play to a frame (default: the town at 22:00 after 600 ticks), then
                                       time N frames there (default 600): the Frame built, the backend's
                                       draw, the whole frame to the last pixel at the output size
-                                      (wgpu: default 3840x2160, an offscreen 4K target), and the
-                                      GPU's own clock (PRESENTATION.md §1.12)";
+                                      (wgpu and gl2: default 3840x2160, an offscreen 4K target), and
+                                      the GPU's own clock (PRESENTATION.md §1.12); gl2's rows can be
+                                      turned down to stand in for old hardware";
 
 /// The rows PORT.md §9.4 gates, by metric name.
 const GATED: [&str; 4] = ["skeleton_attempt", "county_build_solve", "dungeon", "new_game"];
@@ -298,7 +299,7 @@ fn frames(args: &[String]) -> Result<(), String> {
     let num = |name: &str, d: u32| {
         flag(name).map_or(Ok(d), |s| s.parse::<u32>().map_err(|_| format!("{name}: not a number: {s}")))
     };
-    let backend = Which::parse(flag("--backend").unwrap_or("soft")).ok_or("--backend: soft or wgpu")?;
+    let backend = Which::parse(flag("--backend").unwrap_or("soft")).ok_or("--backend: soft, gl2 or wgpu")?;
     let seed = num("--seed", 1)?;
     let output = match flag("--output") {
         Some(s) => {
@@ -313,8 +314,10 @@ fn frames(args: &[String]) -> Result<(), String> {
         ticks: num("--ticks", 600)?,
         model: jane_bot::Model::Reader,
         hour: Some(u8::try_from(num("--hour", 22)? % 24).unwrap_or(22)),
+        minute: 0,
         canvas,
         backend,
+        gl: crate::scene::GlOpts::parse(args)?,
     };
     let bps = jane_sim::Blueprints::build(seed).map_err(|e| format!("seed {seed}: {e}"))?;
     let n = num("--frames", 600)?;
@@ -337,8 +340,18 @@ fn frames(args: &[String]) -> Result<(), String> {
     if let Some(s) = r.stats {
         println!(
             "  {} {}",
-            if s.gpu_clock { "GPU clock, gbuffer to grade" } else { "backend draw (its own)     " },
+            if s.gpu_clock { "GPU clock, whole frame      " } else { "backend's own clock, whole  " },
             us((s.p50_us, s.p99_us))
+        );
+        for p in jane_present::StatPass::ALL {
+            let i = p as usize;
+            if s.pass_p99_us[i] > 0 {
+                println!("    {:<26} {}", p.name(), us((s.pass_p50_us[i], s.pass_p99_us[i])));
+            }
+        }
+        println!(
+            "  last frame: {} draw calls, {} lights, {} casters, {} px written",
+            s.draw_calls, s.lights, s.casters, s.pixels_written
         );
     }
     Ok(())

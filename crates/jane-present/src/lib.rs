@@ -12,18 +12,27 @@
 //! ```
 
 pub mod atlas;
+pub mod audio;
 pub mod backend;
 pub mod camera;
 pub mod chunks;
+pub mod creatures;
 pub mod drawlist;
 pub mod frame;
 pub mod input;
+/// The names bindings use in data and in `config.json` (shared with build.rs).
+pub mod input_names;
 pub mod light;
 pub mod people;
 pub mod present;
+pub mod props;
 pub mod stand_in;
+pub mod terrain;
+pub mod text;
+pub mod ui;
+pub mod view;
 
-pub use backend::{AtlasPages, Backend, CLUT_LEN, Caps, FrameStats, FrameTimes, Page};
+pub use backend::{AO_TINT, AtlasPages, Backend, CLUT_LEN, Caps, FrameStats, FrameTimes, Page, StatPass};
 pub use frame::{
     CANVAS_H, CANVAS_W, Caster, ChunkCmd, ChunkId, ChunkLayers, Depth, Directional, Flags, Frame, Light, LightKind,
     Pass, Post, Rgb, Span, SpriteCmd, Src, Tier, Tint,

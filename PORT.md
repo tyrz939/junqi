@@ -37,7 +37,7 @@ The plan for the native rewrite. Pair with `PLAN.md` (the game), `ARCHITECTURE.m
 
 ```
 /                          Cargo.toml (workspace), rust-toolchain.toml, .cargo/config.toml, Cross.toml, clippy.toml
-/crates/jane-*/            the fourteen crates (§4)
+/crates/jane-*/            the fifteen crates (§4)
 /data/                     content, moved out of the TS tree; hand-edited; read by build.rs
    *.json, <table>/*.json  the 20 tables, base file plus fragments
    zones.json              the 13 zones in tick order: id, kind, contract, given keys and verbs, states (§5.4)
@@ -48,6 +48,7 @@ The plan for the native rewrite. Pair with `PLAN.md` (the game), `ARCHITECTURE.m
    tuning/*.json           tables that were constants in code (§6.g); aim-assist profiles
    weather.json, atmosphere.json, ecology.json, consequences.json   the living world (WORLD.md §10)
    bindings.json           default key, mouse and pad bindings (PRESENTATION.md §4)
+   audio/                  sfx.json, instruments.json, songs/*.json: every sound as numbers (PRESENTATION.md §5)
 /tests/fixtures/           replays (.jrp), hash files
 /tools/                    ci scripts, toolchain notes (rust9x, win7 build-std), pi setup, cross Dockerfiles
 /.github/workflows/
@@ -56,7 +57,7 @@ The plan for the native rewrite. Pair with `PLAN.md` (the game), `ARCHITECTURE.m
 /*.md                      root docs (§2.2)
 ```
 
-**Rule:** content lives at `/data`, outside every crate. A crate reads it only through `jane-data`'s build script or the `jane-schema` library.
+**Rule:** content lives at `/data`, outside every crate. A crate reads it only through `jane-data`'s build script or the `jane-schema` library. Presentation data outside the content hash is read by its own crate's build script, which checks it the same way: `bindings.json` by `jane-present`'s, `audio/` by `jane-audio`'s.
 
 **Rule:** `jane/` stays in place, buildable, until P10. It is the reference while the port is proven against invariants. Nothing in it is edited after P0 except doc banners.
 
@@ -114,7 +115,7 @@ The plan for the native rewrite. Pair with `PLAN.md` (the game), `ARCHITECTURE.m
 
 | Crate group | Lints |
 | --- | --- |
-| all | `unsafe_code = "forbid"` (one exception, §4), `clippy::all`, pedantic where sane, `rust_2018_idioms`, `missing_debug_implementations` |
+| all | `unsafe_code = "forbid"` (the exceptions are §4's unsafe column; as built, one: `jane-render-gl2` is `deny` and its `src/gl.rs` alone allows it), `clippy::all`, pedantic where sane, `rust_2018_idioms`, `missing_debug_implementations` |
 | `core`, `schema`, `data`, `world`, `sim`, `net`, `bot`, `art` | `clippy::float_arithmetic = "deny"`, `clippy::float_cmp = "deny"`, `clippy::disallowed_types` (HashMap, HashSet, RandomState, Instant, rand; Rc, RefCell, `Arc<Mutex>` in `sim` and `world`), `clippy::disallowed_methods` (f32/f64 conversions, `sort_unstable*`, `std::env::var`) |
 | same eight | CI grep gate: `rg '\bf(32\|64)\b' crates/jane-{core,schema,data,world,sim,net,bot,art}/src` returns nothing, and so does `rg 'as f'` |
 
@@ -131,8 +132,8 @@ The plan for the native rewrite. Pair with `PLAN.md` (the game), `ARCHITECTURE.m
 | `lz4_flex` | `sim` (save frame) | A busy county's save is ~150 KB compressed (`ARCHITECTURE.md` §3.5) |
 | `xxhash-rust` (xxh3) | `sim` (state hash), `schema` (content hash) | One hash for saves, desync checks and the content pin (`ARCHITECTURE.md` §3.6) |
 | `indexmap` | `core` re-exports | Ordered maps |
-| `sdl2` | `app` only | Window, input, audio, present; the GL context for `gl2` and the window handle for `wgpu` |
-| `glow` | `jane-render-gl2` only | OpenGL 2.1 / GLES 2.0 bindings, no C code, the same crate on the Pi and a 2006 PC |
+| `sdl2` | `app`; `jane-render-gl2` (and so `jane-cli` behind its off-by-default `gpu` feature) | Window, input, audio, present; the GL context for `gl2` (made in `jane-render-gl2`, so the entry-point loader never crosses a crate boundary, and a hidden window's for `jane sheet` and `jane bench`) and the window handle for `wgpu` |
+| `glow` | `jane-render-gl2` only | OpenGL 2.1 / GLES 2.0 bindings, no C code, the same crate on the Pi and a 2006 PC (0.17, the version wgpu's GL backend already builds). Every call is an `unsafe fn`: see §4's unsafe column |
 | `wgpu` | `jane-render-wgpu` only | Vulkan, DX12, Metal and GLES 3 behind one API; the only large dependency in the workspace, and it never touches the eight float-free crates |
 | `raw-window-handle` | `app`, the two GPU backends | The window handle contract between SDL2 and the backends |
 
@@ -182,14 +183,15 @@ jane-cli <-- schema, world, sim, net, bot, art, present, render-soft     no SDL
 | `jane-world` | Skeleton, county, interiors, dungeons, placements, stories, names, solver, checks. `build_zone(zone, seed) -> Blueprint` | core, data | forbid | none |
 | `jane-sim` | State tree, tick, actions, path, ai, combat, interact, inventory, quests, dialogue, triggers, clock, light, ring, save, replay, hash, `view::View` and `Event` (`ARCHITECTURE.md` §11) | core, data, world, postcard, lz4_flex, xxhash-rust | forbid | none |
 | `jane-bot` | Headless player over `jane-sim`: walks the first five minutes and every dungeon, records the replay fixtures, drives the bot-session hash gate. What `test/bot.ts` was, as a crate the suite and `jane-cli` share | core, data, sim | forbid | none |
-| `jane-net` | Lockstep: input frames, commands, join by snapshot, hash compare, stall, timeouts. `std::net` TCP, one thread. Host/guest `Session` over a `Transport` (`ARCHITECTURE.md` §7) | core, sim, postcard | forbid | none |
+| `jane-net` | Lockstep: input frames, commands, join by snapshot, hash compare, desync reports, stall, timeouts, discovery. `std::net` TCP polled from the caller's loop (a guest builds the county on a thread). Host/guest `Session` over a `Link` trait (`ARCHITECTURE.md` §7) | core, data, sim, postcard, serde | forbid | none |
 | `jane-art` | Procedural sprite, tile, font, icon, chrome and weather generators from `looks` rows, each emitting albedo, normal, emissive and height; palettes and ramps; atlas packing; contact sheets with its own PNG encoder (`ART.md`) | core, data | forbid | none (so sheets hash the same on every target) |
 | `jane-present` | The scene: builds the backend-agnostic `Frame` (passes and draw lists: terrain, sprite batches, lights and shadow casters, fog volumes, parallax layers, particles, post settings, UI) from `jane_sim::view::View` and presenter state (PRESENTATION.md §1); fx runtime, camera, immediate-mode ui, input mapping, `text` (English expansion of `TextId`, `{name}`, `{place:}`); the `Backend` trait and the `Features` tier table. Reads views and events, never writes state; emits `Command`s only. No SDL, no GPU; headless in tests | core, data, sim (view, events), world (names), art | forbid | allowed, discouraged |
+| `jane-audio` | *(Built 2026-09-27)* Every sound, made in code (`PRESENTATION.md` §5): FM, additive tables, Karplus-Strong strings, struck modes and filtered noise under click-free envelopes; `data/audio/sfx.json` patches rendered into buffers at boot; live ambient beds; the music sequencer on the game's tick over `data/audio/songs`; the mixer with one shared reverb and a limiter; WAV writing and the analysis the tests listen with. `build.rs` checks `data/audio` through the crate's own model (outside the content hash, like `bindings.json`). Owns no device | serde, serde_json | forbid | allowed |
 | `jane-render-soft` | T0 backend: CPU rasteriser into a `u32` framebuffer, half or full res, the multiply lightmap, no normals or shadows. Always builds; `jane sheet`, `jane film` and CI draw through it | present | deny, one measured `allow` for the blit loop if the Pentium 4 demands it | allowed |
-| `jane-render-gl2` | T1 backend: OpenGL 2.1 / GLES 2.0 through `glow`, GLSL 1.20 / ES 1.00; normal-mapped lights in a fragment shader, hard cast shadows by extruded occluder geometry, fog layers, particles, sharp-bilinear upscale | present, glow, raw-window-handle | deny (the GL calls are `glow`'s safe API) | allowed |
+| `jane-render-gl2` | T1 backend: OpenGL 2.1 / GLES 2.0 through `glow`, GLSL 1.20 / ES 1.00; normal-mapped lights in a fragment shader, hard cast shadows by extruded occluder geometry, fog layers, particles, sharp-bilinear upscale | present, core, glow, sdl2 | deny: `glow`'s calls are all `unsafe fn`, so `src/gl.rs` alone carries `#![allow(unsafe_code)]` and wraps the calls T1 makes in safe ones that check every length handed to the driver; the crate copies the workspace's lint table with `unsafe_code = "deny"` (Cargo cannot override one inherited lint). Decided 2026-09-27: GL from Rust has no safe path (SDL's loader returns raw pointers, and every binding crate's calls are unsafe), and this is the exception the column always allowed | allowed |
 | `jane-render-wgpu` | T2 backend: Vulkan / DX12 / Metal / GLES 3 through `wgpu`; everything T1 plus soft shadows, many lights, bloom, colour grading, water reflection, higher particle caps | present, wgpu, raw-window-handle | forbid | allowed |
-| `jane-app` | SDL2 binary: window, input events, audio device, loop, threads, save files, config; probes the GPU, picks the backend and tier (override in `config.json`), and hands the `Frame` to it | everything | forbid | allowed |
-| `jane-cli` | `jane gen`, `check`, `bench`, `replay verify|record|diff`, `sheet`, `view`, `serve`, `soak`, `hash`, `save inspect`, `world build`. `jane serve` is the headless lockstep host: no SDL, one status line (tick, seats, hash) | schema, world, sim, net, bot, art, present | forbid | allowed |
+| `jane-app` | SDL2 binary: window, input events, audio device (SDL2's callback at 48 kHz running `jane-audio`'s engine; silence when there is none), loop, threads, save files, config; probes the GPU, picks the backend and tier (override in `config.json`), and hands the `Frame` to it | everything | forbid | allowed |
+| `jane-cli` | `jane gen`, `check`, `bench`, `replay verify|record|diff`, `sheet`, `view`, `serve`, `soak`, `hash`, `save inspect`, `world build`, `audio render|check|list`. `jane serve` is the headless lockstep host: no SDL, no sound, one status line (tick, seats, hash) | schema, world, sim, net, bot, art, present, audio | forbid | allowed |
 
 **Rule:** `core` and `data` land first and change rarely; a change goes through integration before anyone builds on it.
 
@@ -374,7 +376,7 @@ Stages 1-9 and 10-16 are two independent worktree tracks once `core` exists.
 | **P6b** T1: `gl2`, lights, shadows, atmosphere | `jane-render-gl2`; normal-mapped lighting, hard shadows, fog volumes, parallax, weather, sharp-bilinear upscale; the `Features` ladder; a Pi 4 and an ancient PC on the desk | render-gl2, present | shaders 1; shadows 1; atmosphere 1; Pi bring-up 1 | 60 fps on a Pi 4 and on the ancient PC at 768 x 432, night, town, per §9.4; the same `Frame` draws on T0 and T1 with only `Features`-row differences (a pixel diff of the albedo pass is empty) | new ~3k |
 | **P6c** T2: `wgpu` and post | `jane-render-wgpu`; soft shadows, many lights, bloom, grading, water reflection | render-wgpu | 2 | 60 fps at 4K output on a modern PC with headroom; T1 and T2 agree on everything but the T2 rows; owner signs the look off against `ART.md` §3 on the same 24 seeds as the sheets | new ~2.5k |
 | **P7** UI and input | `PRESENTATION.md` §3-4 in `jane-present::ui` and `::input`; `bindings.json`; keyboard, mouse, pad; Controls screen; the assist profile flag | present (ui, input), app | 3-4 | Every README console row works; owner plays with a pad and with a mouse, assist on and off; UI has no sim writes except `Command`s | ~3.5k → ~3.5k |
-| **P8** Lockstep LAN | `jane-net`; host/join screens; `jane serve` | net, present (ui), cli | protocol+host 1; guest+join 1; UI 1 | Two machines, four seats, an hour without desync; hash every 60 frames; a Pi hosting headless through `jane serve`; stall and rejoin over loopback | new ~1.5k |
+| **P8** Lockstep LAN | `jane-net`; host/join screens; `jane serve` | net, present (ui), cli | protocol+host 1; guest+join 1; UI 1 | Two machines, four seats, an hour without desync; hash every 60 frames; a Pi hosting headless through `jane serve`; stall and rejoin over loopback | new ~1.5k *(built 2026-09-27 ahead of P7: ~2.4k plus tests; §7.2)* |
 | **P9** Targets and perf | Pi 4 aarch64 and armv7 on hardware (Pi 3 recorded); i686 Linux/Windows on an ancient PC; Win 7; XP if it builds; thresholds enforced per class and tier | app, backends, cli | 1 per target; 1 profiling per backend | §9.4 thresholds green in all three classes at their tier; 60 fps by the `Features` ladder, 30 fps is not a pass; RSS under ceiling | fixes |
 | **P10** Archive | `jane/` → `archive/web-remake-2026/`; banners; SYSTEMS.md rows re-marked | docs | 1 | `git grep jane/src` in root docs finds only archive notes | 0 |
 
@@ -393,7 +395,7 @@ P6 enters beside P5, not after it. On 2026-09-27 P5 stands at `ART.md` §8 step 
 | 1 | `jane-present`: `Frame` and `Pass`, the camera with tick interpolation, the counting-sort draw list, `tick()` and `draw(alpha)`, fed by `View` | headless tests |
 | 2 | `jane-render-soft`: framebuffer, CLUT blit, chunks as flat swatches, nearest upscale, `read_back`; `jane sheet scene` | a PNG of a real frame |
 | 3 | `jane-app`: SDL2 window, the fixed 60-tick loop, keyboard to `InputFrame`, the `soft` backend | the owner walks the county |
-| 4 | The P7 slice: keyboard move, use and bar slots; the prompt, the vitals, the dialogue box; the rest of P7 stays P7 | quests are played |
+| 4 | The P7 slice: keyboard move, use and bar slots; the prompt, the vitals, the dialogue box. **Done 2026-09-27, and most of the rest of P7 with it** (`PRESENTATION.md` §3 as built: title, loading, HUD, window, menus, terminal, Controls, F2 and F3; P7's gate, the owner playing with a pad and a mouse, is still to come) | quests are played |
 | 5 | The T0 lightmap and the chunk painter | night is night |
 | beside 1 to 5 | `ART.md` §8 steps 2 and 3 (person, terrain), then on in order | the placeholders go |
 | 6 | The art-director pass over whole frames (town at dusk, a field edge, the lakeshore, a wood): palette, outline and shading tuned across every family at once (`ART.md` §3.1) | frames that hold up beside the references |
@@ -402,6 +404,20 @@ P6 enters beside P5, not after it. On 2026-09-27 P5 stands at `ART.md` §8 step 
 **Stand-ins while art is missing.** A chunk with no painter draws its region's flat ground swatch (`PRESENTATION.md` §1.6 already allows it for the frames a chunk takes to paint). A unit or prop with no look draws the nearest step-1 demo sprite of its size. Both are drawn by `jane-present`, never by `jane-art`, and both go when the step that replaces them lands; `ART.md`'s rule that a row without a look is a build error applies from the P5 gate, not before.
 
 **SDL2 on a Windows or Linux x86 desk** is the `sdl2` crate's `bundled` and `static-link` features (§12), which build SDL from source and need CMake on the path; the Pi keeps the distro package.
+
+### 7.2 P8 as built (2026-09-27)
+
+Built beside P7 (`ARCHITECTURE.md` §7 has the protocol and the hooks). Decided that day (owner): LAN only, player-hosted first (`jane-app --host` plays seat 0, others `--join`), `jane serve` secondary, the transport a trait.
+
+| Gate item | State |
+| --- | --- |
+| Hash every 60 frames | Done: every peer, with its last three saves kept for a desync's report (the hash point, the first step that differs when both re-simulate, the parts that differ) |
+| Stall and rejoin over loopback | Done, in tests with a driven clock: shown at 500 ms, dropped at 10 s, the wait toggle; a dropped guest back in her own seat with her bags, caught up to the host's hash |
+| Four seats, an hour without desync | On one machine, over TCP: `jane serve` (release) and four `jane join` processes, two Readers and two Rushers, 216 000 frames (an hour at 60 Hz, ~1 000 frames lost to stalls while the machine also built and tested): 14 398 hash checks agreed, 0 differed, no seat dropped, all five ending on one hash. Two machines not yet run |
+| A Pi hosting headless through `jane serve` | `jane serve` built and soaked on x86_64; not yet run on a Pi |
+| Measured | In one process (`jane-net/tests/loopback.rs`): four seats, 18 900 frames, 927 hash checks agreed. Two `jane-app` windows on one machine, host and guest: both at frame 1200 on one hash, 16 checks agreed, each drawing both players in their own coats. `jane serve` with two bot guests over localhost for five minutes: 18 000 frames, 598 checks agreed, 0 differed |
+
+Not built: internet play, NAT traversal and relays (LAN only, by decision); host migration; a session recorded from a loaded save (only New Game sessions are tapes); saving on `SIGTERM` (std has no signal handling; `jane serve` saves on every rest and at `--ticks`). The Host and Join screens, Open to LAN, the table plate, the stall banner and the terminal's `join` and `leave` were built on the UI unit's widgets after it merged (`PRESENTATION.md` §3.2); a scripted two-window run through the title's Host and Join held 25 hash checks, 0 differed.
 
 ## 8. Agent parallelisation
 
@@ -513,7 +529,7 @@ Each is a one-line edit to flip before P0 starts.
 | Weather | Rolled hourly per region from the world stream; no storm on the first walk (`WORLD.md` §5) |
 | Player models | Reader, Explorer, Rusher, Cautious, Co-op pair, Lost (`VERIFICATION.md` §2 L3); the Reader and the Rusher first |
 | Atlas cache on disk | Allowed: written under the save dir, keyed by build hash, never shipped |
-| Procedural audio | Outlined for `PLAN.md` M8 only; a `NullBus` ships until then |
+| Procedural audio | *(Built 2026-09-27)* `jane-audio`, all synthesised, no file and no sample table over 32 entries; the cue table in `jane-present::audio`; `NullBus` for `jane serve` and the tests (`PRESENTATION.md` §5) |
 | Font | Stroke-defined glyphs on a 5 x 8 lattice, rasterised at boot at two sizes; title and heading faces from the same strokes (`ART.md` §6) |
 | Seats | Coat-only swaps by role (`ART.md` §3) |
 | Pi 3 and Pentium 4 | Recorded at T0 / T1 with shadows off, never a gate |

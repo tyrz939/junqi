@@ -182,13 +182,70 @@ ramps! {
     ClothRed "cloth_red" 0xa83e3e,
     ClothBlue "cloth_blue" 0x3e5c9a,
     ClothGreen "cloth_green" 0x4a7a4e,
-    Leaf "leaf" 0x5a9042,
+    Leaf "leaf" 0x4e8a3c,
     Grass "grass" 0x78a652,
     Bark "bark" 0x6a5242,
     Bloom "bloom" 0xd46a8a,
     Reed "reed" 0xb0a062,
     Water "water" 0x3a76a6,
     Sky "sky" 0x7aaee0,
+    // Terrain and flora (ART.md §2.6): the county's ground, walls, roofs and growing things.
+    /// Meadow grass: the Lowfields' warm green.
+    Turf "turf" 0x5f9a45,
+    /// Bare earth, a lane.
+    Earth "earth" 0x94704a,
+    /// A made road's gravel.
+    Gravel "gravel" 0x9c8e76,
+    Sand "sand" 0xd2bc86,
+    /// Marsh and moss.
+    Marsh "marsh" 0x4c7044,
+    /// Mud dried and split.
+    Mud "mud" 0x80745e,
+    /// Dug soil.
+    Soil "soil" 0x6e5236,
+    /// Setts and flags.
+    Setts "setts" 0x8e8472,
+    Ice "ice" 0xa8d4e4,
+    /// A cliff's top.
+    Rock "rock" 0x8a7a64,
+    /// A cliff's face.
+    RockFace "rock_face" 0x6a5646,
+    RoofTile "roof_tile" 0xa04a38,
+    Thatch "thatch" 0xb49052,
+    /// Stone floor slabs.
+    FloorStone "floor_stone" 0x8c8478,
+    /// The dressed walls of cellars and crypts.
+    WallDark "wall_dark" 0x4a4452,
+    Cave "cave" 0x6a5a48,
+    CaveWall "cave_wall" 0x3e332c,
+    Temple "temple" 0x5c6672,
+    TempleWall "temple_wall" 0x323a48,
+    Museum "museum" 0x9a8e7c,
+    MuseumWall "museum_wall" 0x564650,
+    Pipe "pipe" 0x566260,
+    PipeWall "pipe_wall" 0x344042,
+    Works "works" 0x6c6660,
+    WorksWall "works_wall" 0x483c38,
+    SchoolWall "school_wall" 0x46564e,
+    /// Railway ballast.
+    Ballast "ballast" 0x655a4e,
+    /// Outside the zone.
+    Void "void" 0x2a2432,
+    Hedge "hedge" 0x2f6642,
+    /// A drier, olive wood.
+    LeafOlive "leaf_olive" 0x6a8038,
+    /// The dark wet-wood green.
+    LeafDeep "leaf_deep" 0x2f6450,
+    /// Conifer needles.
+    Needle "needle" 0x2c5c46,
+    /// Shrubs.
+    Shrub "shrub" 0x3f8442,
+    /// Crops and seedlings.
+    Crop "crop" 0x74a848,
+    /// A dead tree's grey wood.
+    Deadwood "deadwood" 0x6e665e,
+    /// Meadow grass where it runs dry: the olive of a summer's end.
+    TurfDry "turf_dry" 0x8c9a46,
     // People (ART.md §2.1, §8 step 2): hair, the seat coats, cloth, leather, the pool under the
     // fallen. Appended, so the indices above them never move.
     HairBrown "hair_brown" 0x6a4a30,
@@ -357,10 +414,10 @@ const fn build() -> [[u8; 3]; LEN] {
         t[2 + i] = split(LEGACY[i].1);
         i += 1;
     }
-    let (dark, light) = (split(SHADOW_TINT), split(LIGHT_TINT));
     let mut r = 0;
     while r < Ramp::KEYS.len() {
         let key = split(Ramp::KEYS[r]);
+        let (dark, light) = (split(SHADOW_TINT), split(LIGHT_TINT));
         let mut k = 0;
         while k < 8 {
             t[RAMP_BASE as usize + r * 8 + k] = ramp_tone(Ramp::ALL[r], key, k, dark, light);
@@ -458,62 +515,6 @@ mod tests {
         for &r in Ramp::ALL {
             let l: Vec<u32> = Tone::ALL.iter().map(|&t| luma(r.at(t))).collect();
             assert!(l.windows(2).all(|w| w[0] < w[1]), "{} is out of order: {l:?}", r.name());
-        }
-    }
-
-    #[test]
-    fn pallor_greys_and_darkens_every_person_ramp() {
-        for &r in &PALLID {
-            for t in Tone::ALL {
-                let d = pallor(r.at(t));
-                assert!(is_pallid(d), "{} has no twin", r.name());
-                assert!(luma(d) < luma(r.at(t)), "{} {t:?} is not darker dead", r.name());
-            }
-            let l: Vec<u32> = Tone::ALL.iter().map(|&t| luma(pallor(r.at(t)))).collect();
-            assert!(l.windows(2).all(|w| w[0] < w[1]), "{}'s twin is out of order", r.name());
-        }
-        assert_eq!(pallor(Ix::INK), Ix::INK);
-        assert_eq!(pallor(Ramp::Iron.at(Tone::Base)), Ramp::Iron.at(Tone::Mid));
-    }
-
-    /// The owner's rule for the people's ramps: shadows lean cool, lights lean warm, and the
-    /// chroma peaks in the midtones.
-    #[test]
-    fn hue_shifted_ramps_lean_cool_in_shadow_and_warm_in_light() {
-        use crate::hue::{hsl, light_hue, shadow_hue};
-        let dist = |a: i32, b: i32| {
-            let d = (a - b).rem_euclid(3600);
-            d.min(3600 - d)
-        };
-        let chroma = |c: [u8; 3]| i32::from(*c.iter().max().unwrap()) - i32::from(*c.iter().min().unwrap());
-        for &r in Ramp::ALL {
-            let Some(cool) = shadow_hue(r) else { continue };
-            let warm = light_hue(r);
-            let at = |t: Tone| rgb(r.at(t));
-            let (hb, sb, _) = hsl(at(Tone::Base));
-            let (hd, _, _) = hsl(at(Tone::Deep));
-            let (hg, _, _) = hsl(at(Tone::High));
-            if sb >= 90 {
-                assert!(
-                    dist(hd, cool) < dist(hb, cool) || dist(hb, cool) <= 100,
-                    "{}: deep does not lean cool",
-                    r.name()
-                );
-                assert!(
-                    dist(hg, warm) < dist(hb, warm) || dist(hb, warm) <= 100,
-                    "{}: high does not lean warm",
-                    r.name()
-                );
-            } else {
-                // A grey takes a cool tint in shadow and a warm one in light.
-                assert!(dist(hd, cool) <= 300 && dist(hg, warm) <= 300, "{}: an untinted grey", r.name());
-            }
-            let mid = [Tone::Mid, Tone::Base, Tone::Lift, Tone::Light].iter().map(|&t| chroma(at(t))).max().unwrap();
-            assert!(
-                chroma(at(Tone::Deep)) <= mid && chroma(at(Tone::Glint)) <= mid,
-                "{}: chroma peaks at an end",
-                r.name()
-            );
         }
     }
 

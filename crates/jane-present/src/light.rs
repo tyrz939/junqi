@@ -38,16 +38,16 @@ const KEYS: [(i32, [i32; 3]); 9] = [
 /// The sky's own light, what a shadow is lit by on T1 and T2: blue by day, violet at dusk, a
 /// deep blue-violet at night that keeps its value (ART.md §3.1, "night is beautiful").
 const FILL_KEYS: [(i32, [i32; 3]); 10] = [
-    (0, [52, 60, 118]),
-    (HOUR * 9 / 2, [52, 60, 118]),
-    (HOUR * 6, [112, 92, 128]),
-    (HOUR * 15 / 2, [104, 124, 170]),
-    (HOUR * 16, [104, 124, 170]),
-    (HOUR * 17, [92, 96, 150]),
-    (HOUR * 18, [120, 84, 140]),
-    (HOUR * 39 / 2, [84, 66, 132]),
-    (HOUR * 21, [52, 60, 118]),
-    (HOUR * 24, [52, 60, 118]),
+    (0, [62, 62, 128]),
+    (HOUR * 9 / 2, [62, 62, 128]),
+    (HOUR * 6, [140, 112, 150]),
+    (HOUR * 15 / 2, [132, 150, 196]),
+    (HOUR * 16, [132, 150, 196]),
+    (HOUR * 17, [126, 124, 186]),
+    (HOUR * 18, [104, 100, 168]),
+    (HOUR * 39 / 2, [66, 72, 146]),
+    (HOUR * 21, [62, 62, 128]),
+    (HOUR * 24, [62, 62, 128]),
 ];
 
 /// Sunrise and sunset: the sun is up between them and its share is gone at 18:30, when the
@@ -55,11 +55,18 @@ const FILL_KEYS: [(i32, [i32; 3]); 10] = [
 const RISE: i32 = HOUR * 11 / 2;
 const SET: i32 = HOUR * 37 / 2;
 /// The sun's height at noon and the moon's at its highest.
-const SUN_TOP: i32 = 52;
+const SUN_TOP: i32 = 46;
 const MOON_TOP: i32 = 38;
 /// The sun on flat ground high in the sky, and low, on the horizon's edge.
-const SUN_HIGH: [i32; 3] = [255, 238, 212];
-const SUN_LOW: [i32; 3] = [255, 150, 74];
+const SUN_HIGH: [i32; 3] = [214, 204, 184];
+const SUN_LOW: [i32; 3] = [255, 176, 96];
+/// The broadest light that still throws a T0 silhouette (5 degrees): the sun and the moon do,
+/// the afterglow does not.
+pub const SILHOUETTE_SPREAD: u16 = (5 * 65536 / 360) as u16;
+
+/// The western sky after sunset on flat ground, and how long it glows.
+const AFTERGLOW: [i32; 3] = [96, 66, 104];
+const GLOW: i32 = HOUR * 3 / 4;
 /// The full moon on flat ground.
 const MOON: [i32; 3] = [58, 74, 120];
 
@@ -115,13 +122,14 @@ fn arc(t: i32, from: i32, to: i32, top: i32) -> Option<(Angle, Angle, i32)> {
     if into >= len {
         return None;
     }
-    // East (0) through south (a quarter turn) to west (a half turn): the county is north of
-    // the sun, so shadows lean north at noon and point east at five.
+    // East (0) through south (a quarter turn) to west (a half turn), swung west by up to 16
+    // degrees at its height: the county is north of the sun, so at noon shadows lean
+    // north-north-east, clear of what casts them, and at five they point east, a little north.
     let half = (into as i64 * 32768 / len as i64) as i32;
     let rise = sin_q15(Angle(half as u16)).0;
     let elevation = (deg(top) * rise) >> 15;
     let sin_el = sin_q15(Angle(elevation as u16)).0;
-    Some((Angle(half as u16), Angle(elevation as u16), sin_el))
+    Some((Angle((half + ((deg(16) * rise) >> 15)) as u16), Angle(elevation as u16), sin_el))
 }
 
 /// `a` toward `b` by `num / den`.
@@ -161,6 +169,16 @@ pub fn sky(clock: u32, day: u32, indoor: bool, permille: i16, region: Region) ->
             colour: colour.map(|c| c.clamp(0, 255) as u8),
             spread: deg(2) as u16 + (deg(3) * (20000 - s.min(20000)) / 20000) as u16,
         })
+    } else if (SET..SET + GLOW).contains(&t) {
+        // The afterglow: for three quarters of an hour after sunset the western sky is the
+        // brightest thing in it, a low violet light from where the sun went down, fading.
+        let left = SET + GLOW - t;
+        Some(Directional {
+            azimuth: Angle((deg(180) + deg(16) / 4) as u16),
+            elevation: Angle(deg(10) as u16),
+            colour: mix([0; 3], AFTERGLOW, left, GLOW).map(|c| c.clamp(0, 255) as u8),
+            spread: deg(7) as u16,
+        })
     } else if let Some((az, el, s)) = arc(t, SET, RISE, MOON_TOP) {
         let phase = moon_phase(day);
         let colour = mix([0; 3], MOON.map(|c| (c * phase) >> 8), s, 6000);
@@ -183,7 +201,7 @@ fn shade(fill: Rgb, sun: Rgb) -> Rgb {
     [0, 1, 2].map(|k| {
         let (f, s) = (i32::from(fill[k]), i32::from(sun[k]));
         let share = f * 255 / (f + s).max(1);
-        (255 - (255 - share) * 5 / 8).clamp(0, 255) as u8
+        (255 - (255 - share) * 7 / 8).clamp(0, 255) as u8
     })
 }
 
@@ -191,20 +209,20 @@ fn shade(fill: Rgb, sun: Rgb) -> Rgb {
 /// cold blue-green, the Works sodium and soot; dusk leans violet and night blue.
 fn grade(region: Region, t: i32) -> Post {
     let (tint, lift, saturation): (Rgb, Rgb, u8) = match region {
-        Region::Lowfields => ([255, 250, 236], [10, 6, 22], 140),
-        Region::Waters => ([236, 250, 255], [4, 12, 26], 132),
-        Region::Works => ([255, 238, 214], [14, 8, 12], 116),
+        Region::Lowfields => ([255, 250, 238], [5, 3, 12], 136),
+        Region::Waters => ([238, 250, 255], [2, 7, 14], 130),
+        Region::Works => ([255, 240, 218], [8, 5, 6], 116),
     };
     let dusk = (HOUR * 17..HOUR * 21).contains(&t);
     let night = !(HOUR * 5..HOUR * 21).contains(&t);
     let lift = if night {
-        [lift[0] / 2 + 6, lift[1] / 2 + 8, lift[2] + 14]
+        [lift[0] / 2 + 3, lift[1] / 2 + 4, lift[2] + 8]
     } else if dusk {
-        [lift[0] + 10, lift[1] / 2, lift[2] + 12]
+        [lift[0] + 2, lift[1] / 2, lift[2] + 4]
     } else {
         lift
     };
-    let exposure = if night { 150 } else { 132 };
+    let exposure = if night { 150 } else { 128 };
     Post { tint, lift, saturation, bloom: if night || dusk { 190 } else { 110 }, exposure }
 }
 
@@ -268,12 +286,14 @@ mod tests {
         let five = at(17, 0).sun.expect("the sun is up at five");
         // Low: under 25 degrees, over 10, so a person's shadow is two to five times her height.
         assert!(five.elevation.0 > deg(10) as u16 && five.elevation.0 < deg(25) as u16, "{five:?}");
-        // West of south: shadows point east.
-        assert!(five.azimuth.0 > Angle::SOUTH.0 + 8000 && five.azimuth.0 < Angle::WEST.0, "{five:?}");
+        // West, within 20 degrees: shadows point east.
+        assert!(five.azimuth.0.abs_diff(Angle::WEST.0) < deg(20) as u16, "{five:?}");
         // Warm: more red than blue.
         assert!(five.colour[0] > five.colour[2] + 40, "{five:?}");
         let noon = at(12, 0).sun.unwrap();
-        assert!(noon.elevation.0 > five.elevation.0 * 2 && noon.azimuth.0.abs_diff(Angle::SOUTH.0) < 800, "{noon:?}");
+        // High and south-south-west, so its short shadows lean clear of what casts them.
+        assert!(noon.elevation.0 > five.elevation.0 * 2, "{noon:?}");
+        assert!(noon.azimuth.0 > Angle::SOUTH.0 && noon.azimuth.0 < Angle::SOUTH.0 + deg(25) as u16, "{noon:?}");
         // By 18:30 the sun's share is gone, and the moon has only begun.
         let sunset = at(18, 29).sun.map_or(0, |s| s.colour.iter().map(|&c| u32::from(c)).sum::<u32>());
         assert!(sunset < 30, "{sunset}");

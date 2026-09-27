@@ -209,37 +209,88 @@ impl Sim {
     }
 
     pub fn summary(&self) -> Summary {
-        let s = &self.state;
-        let host = s.players.first();
-        let body = host.and_then(|p| s.zone(p.zone).and_then(|z| z.unit(p.unit)).or(p.parked.as_deref()));
-        Summary {
-            zone: host.map_or(ZoneId::County, |p| p.zone),
-            day: s.day,
-            hour: s.hour() as u8,
-            hp: body.map_or(Milli::ZERO, |u| u.hp),
-            max_hp: body.map_or(Milli::ZERO, max_hp),
-        }
+        summary_of(&self.state)
     }
 
     /// The bytes of a save. Slots are the app's and `jane serve`'s; the sim only encodes.
     pub fn save(&self) -> Vec<u8> {
-        let header = Header {
-            save_version: SAVE_VERSION,
-            content_hash: jane_data::catalog().content_hash,
-            build: env!("CARGO_PKG_VERSION").to_owned(),
-            summary: self.summary(),
-        };
-        let head = postcard::to_allocvec(&header).expect("a header encodes");
         let body = postcard::to_allocvec(&Form::of(&self.state, &self.bps)).expect("the state encodes");
-        let packed = lz4_flex::block::compress_prepend_size(&body);
-        let mut out = Vec::with_capacity(8 + head.len() + packed.len());
-        out.extend_from_slice(&MAGIC);
-        out.extend_from_slice(&(head.len() as u32).to_le_bytes());
-        out.extend_from_slice(&head);
-        out.extend_from_slice(&packed);
-        out
+        self.save_of(&body)
     }
 
+    /// The save's bytes and the state hash (`hash()`) from one encoding of the form: a lockstep
+    /// peer takes both at every hash point (ARCHITECTURE.md §7), and the hash of the body's
+    /// bytes is the hash streamed.
+    pub fn save_and_hash(&self) -> (Vec<u8>, u64) {
+        save_and_hash_of(&self.state, &self.bps)
+    }
+
+    /// The state and its blueprints, owned: [`Snapshot::save_and_hash`] can run anywhere, a
+    /// worker thread included, while the sim steps on (ARCHITECTURE.md §7: a peer's hash point
+    /// kept off the frame). Cloning the state is a fraction of encoding it.
+    pub fn snapshot(&self) -> Snapshot {
+        Snapshot { state: self.state.clone(), bps: self.bps.clone() }
+    }
+
+    fn save_of(&self, body: &[u8]) -> Vec<u8> {
+        save_bytes(&self.state, body)
+    }
+}
+
+/// A state and its seed's blueprints, as [`Sim::snapshot`] took them.
+#[derive(Clone, Debug)]
+pub struct Snapshot {
+    state: GameState,
+    bps: Blueprints,
+}
+
+impl Snapshot {
+    /// The same bytes and hash `Sim::save_and_hash` gives for the sim this was taken from.
+    pub fn save_and_hash(&self) -> (Vec<u8>, u64) {
+        save_and_hash_of(&self.state, &self.bps)
+    }
+
+    /// The frame count it was taken at.
+    pub fn frame(&self) -> u32 {
+        self.state.frame
+    }
+}
+
+fn summary_of(s: &GameState) -> Summary {
+    let host = s.players.first();
+    let body = host.and_then(|p| s.zone(p.zone).and_then(|z| z.unit(p.unit)).or(p.parked.as_deref()));
+    Summary {
+        zone: host.map_or(ZoneId::County, |p| p.zone),
+        day: s.day,
+        hour: s.hour() as u8,
+        hp: body.map_or(Milli::ZERO, |u| u.hp),
+        max_hp: body.map_or(Milli::ZERO, max_hp),
+    }
+}
+
+fn save_and_hash_of(state: &GameState, bps: &Blueprints) -> (Vec<u8>, u64) {
+    let body = postcard::to_allocvec(&Form::of(state, bps)).expect("the state encodes");
+    (save_bytes(state, &body), xxhash_rust::xxh3::xxh3_64(&body))
+}
+
+fn save_bytes(state: &GameState, body: &[u8]) -> Vec<u8> {
+    let header = Header {
+        save_version: SAVE_VERSION,
+        content_hash: jane_data::catalog().content_hash,
+        build: env!("CARGO_PKG_VERSION").to_owned(),
+        summary: summary_of(state),
+    };
+    let head = postcard::to_allocvec(&header).expect("a header encodes");
+    let packed = lz4_flex::block::compress_prepend_size(body);
+    let mut out = Vec::with_capacity(8 + head.len() + packed.len());
+    out.extend_from_slice(&MAGIC);
+    out.extend_from_slice(&(head.len() as u32).to_le_bytes());
+    out.extend_from_slice(&head);
+    out.extend_from_slice(&packed);
+    out
+}
+
+impl Sim {
     /// Load a save, building its seed's blueprints.
     pub fn from_save(bytes: &[u8]) -> Result<Sim, SaveError> {
         let form = decode_form(bytes)?;
@@ -252,6 +303,23 @@ impl Sim {
     pub fn from_save_with(bytes: &[u8], bps: Blueprints) -> Result<Sim, SaveError> {
         let state = decode_state(bytes, &bps)?;
         Ok(Self::from_state(state, bps))
+    }
+
+    /// A lockstep snapshot (ARCHITECTURE.md §7): the save's bytes of a live world, loaded as the
+    /// world it was, over blueprints already built for its seed. Unlike [`from_save`](Self::from_save),
+    /// which loads the host's world (closed, every guest parked), nothing is changed: every seat
+    /// stays where it sat and the world as open as it was, so the joiner's sim is the host's at
+    /// that frame (`decode(save(s)) == s`; its hash is the host's). The runtimes of live zones are
+    /// rebuilt, which no later step can see (§8 `runtime_rebuild_is_invisible`).
+    pub fn from_snapshot_with(bytes: &[u8], bps: Blueprints) -> Result<Sim, SaveError> {
+        let state = decode_state(bytes, &bps)?;
+        let mut sim = Sim::adopt(state, bps);
+        for z in ZoneId::ALL {
+            if sim.state.is_live(z) {
+                sim.ensure_runtime(z);
+            }
+        }
+        Ok(sim)
     }
 
     /// A save is the host's world (§3.5): it loads closed, every seat but the host's is parked

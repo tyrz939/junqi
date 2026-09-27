@@ -88,7 +88,8 @@ pub enum Pass {
     /// is the sun or the moon, added on top where it is not shadowed; `points` are
     /// `Frame::lights[points]`, `casters` are `Frame::casters[casters]`.
     Lights { ambient: Rgb, fill: Rgb, sun: Option<Directional>, points: Span, casters: Span },
-    /// The grade and the bloom (§1.9), last before the UI: T2.
+    /// The grade and the bloom (§1.9), last before the UI: all of it at T2; at T1 its tint and
+    /// lift alone (the other fields [`Post::NONE`]'s), which is what T1's `grade` row draws.
     Post(Post),
 }
 
@@ -97,6 +98,7 @@ impl Pass {
     pub fn needs(&self) -> Tier {
         match self {
             Pass::Terrain { .. } | Pass::Sprites { .. } | Pass::Lights { .. } | Pass::Silhouettes { .. } => Tier::T0,
+            Pass::Post(p) if p.saturation == 128 && p.bloom == 0 && p.exposure == 128 => Tier::T1,
             Pass::Post(_) => Tier::T2,
         }
     }
@@ -174,6 +176,11 @@ pub struct Post {
     pub bloom: u8,
     /// Exposure before the tone curve, 128 is 1.
     pub exposure: u8,
+}
+
+impl Post {
+    /// No grade at all: the tint and the lift a T1 frame carries are laid over this.
+    pub const NONE: Post = Post { tint: [255; 3], lift: [0; 3], saturation: 128, bloom: 0, exposure: 128 };
 }
 
 /// How a sprite is coloured as it is blitted.
@@ -287,6 +294,11 @@ pub struct Frame {
     pub lights: Vec<Light>,
     /// Things that throw shadows (`Pass::Lights::casters`, `Pass::Silhouettes::casters`).
     pub casters: Vec<Caster>,
+    /// The `Ui` pass (PRESENTATION.md §3.1): drawn after every pass above, unlit, in order.
+    /// Filled by `ui::Ui::finish`; the contract is `ui::cmd`'s module doc.
+    pub ui: Vec<crate::ui::UiCmd>,
+    /// The UI's run-time pictures by slot (`UiCmd::Image`); they persist across frames.
+    pub ui_images: Vec<crate::ui::UiImage>,
 }
 
 impl Frame {
@@ -303,6 +315,8 @@ impl Frame {
             layers: Vec::new(),
             lights: Vec::with_capacity(256),
             casters: Vec::with_capacity(1024),
+            ui: Vec::with_capacity(4096),
+            ui_images: Vec::new(),
         }
     }
 

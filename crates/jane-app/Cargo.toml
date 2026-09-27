@@ -11,13 +11,22 @@ publish.workspace = true
 jane-core.workspace = true
 jane-data.workspace = true
 jane-sim.workspace = true
+jane-bot.workspace = true
 jane-net.workspace = true
 jane-present.workspace = true
+# The synth the sound device runs (PRESENTATION.md §5).
+jane-audio.workspace = true
 jane-art.workspace = true
+jane-world.workspace = true
+serde.workspace = true
+serde_json.workspace = true
 jane-render-soft.workspace = true
 jane-render-gl2.workspace = true
 jane-render-wgpu.workspace = true
-sdl2.workspace = true
+# raw-window-handle: the SDL window lends wgpu its handle (src/handle.rs).
+sdl2 = { workspace = true, features = ["raw-window-handle"] }
+raw-window-handle.workspace = true
+wgpu.workspace = true
 
 [lints]
 workspace = true

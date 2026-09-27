@@ -19,6 +19,7 @@ jane-bot = { path = "crates/jane-bot" }
 jane-net = { path = "crates/jane-net" }
 jane-art = { path = "crates/jane-art" }
 jane-present = { path = "crates/jane-present" }
+jane-audio = { path = "crates/jane-audio" }
 jane-render-soft = { path = "crates/jane-render-soft" }
 jane-render-gl2 = { path = "crates/jane-render-gl2" }
 jane-render-wgpu = { path = "crates/jane-render-wgpu" }
@@ -41,6 +42,9 @@ sdl2 = { version = "0.37", default-features = false, features = ["bundled", "sta
 # raw-window-handle. No web backend: the game is native.
 wgpu = { version = "30", default-features = false, features = ["std", "parking_lot", "dx12", "metal", "vulkan", "gles", "wgsl"] }
 raw-window-handle = "0.6"
+# jane-render-gl2 only (PORT.md §3.5, P6b): T1 draws through glow's OpenGL 2.1 / GLES 2.0 bindings (the
+# same crate wgpu's GL backend already builds), GLSL 1.20 / ES 1.00; no C code of its own.
+glow = "0.17"
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
@@ -82,6 +86,11 @@ overflow-checks = true
 debug-assertions = true
 
 [profile.dev.package."*"]
+opt-level = 3
+
+# The synth runs in the audio callback sample by sample: at opt-level 1 a debug build would
+# stutter (PRESENTATION.md §5). It is presentation, so a faster dev build of it costs no checks.
+[profile.dev.package.jane-audio]
 opt-level = 3
 
 [profile.release]

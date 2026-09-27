@@ -233,6 +233,33 @@ impl Canvas {
         Canvas { flat: true, ..Canvas::new(w, h) }
     }
 
+    /// Clear all four layers, keeping the size and the flat flag: a scratch canvas reused
+    /// without allocating (the chunk painter's strips).
+    pub fn clear(&mut self) {
+        self.albedo.fill(Ix::CLEAR);
+        self.normal.fill(FLAT);
+        self.emissive.fill(Ix::CLEAR);
+        self.height.fill(0);
+        self.parts.fill(0);
+        self.part = 0;
+        self.emitting = false;
+    }
+
+    /// Clear the rect `r` (clipped to the canvas) in all four layers: a scratch canvas cleared
+    /// only where it was drawn.
+    pub fn clear_rect(&mut self, r: Rect) {
+        let (x0, y0) = (r.x.max(0), r.y.max(0));
+        let (x1, y1) = (r.right().min(self.w), r.bottom().min(self.h));
+        for y in y0..y1 {
+            let s = (y * self.w + x0) as usize..(y * self.w + x1.max(x0)) as usize;
+            self.albedo[s.clone()].fill(Ix::CLEAR);
+            self.normal[s.clone()].fill(FLAT);
+            self.emissive[s.clone()].fill(Ix::CLEAR);
+            self.height[s.clone()].fill(0);
+            self.parts[s].fill(0);
+        }
+    }
+
     /// Width in px.
     pub fn w(&self) -> i32 {
         self.w
@@ -455,33 +482,25 @@ impl Canvas {
         }
     }
 
-    /// A soft lit ellipsoid filling the box `r`: [`Canvas::ellipse_lit`]'s shading with an
-    /// ordered dither across each tone boundary instead of a hard band, and its outer 2 px
-    /// blended a tone darker by the same dither. Same normals and dome height.
+    /// A soft lit ellipsoid filling the box `r`: [`Canvas::ellipse_lit`]'s shading in all eight
+    /// tones of the ramp (the half-steps are what soften a boundary), each boundary broken into
+    /// 2 px clusters by a hash so no band runs ruled, and a tone of reflected light just inside
+    /// the edge on the shadow side. No dither: soft is made of more tones, never of a checker
+    /// (ART.md §3.1). Same normals and dome height.
     pub fn soft_ellipse(&mut self, r: Rect, ramp: Ramp, z: Z) {
         self.begin();
-        let small = r.w.min(r.h);
+        let seed = h32(r.x as u32, r.y as u32, (r.w * 131 + r.h) as u32);
         for y in r.y..r.bottom() {
             for x in r.x..r.right() {
                 let Some(n) = sphere_at(r, x, y) else { continue };
                 let lam = lambert(n);
-                let i = band(lam);
-                let mut tone = i as i32;
-                if i < 7 {
-                    let (lo, hi) = (SHADE_AT[i].max(-UNIT), SHADE_AT[i + 1]);
-                    let t = (lam - lo) * 16 / (hi - lo).max(1);
-                    // Dither only the upper part of a band into the next tone: 2 or 3 px wide.
-                    if t >= 9 && (t - 9) * 16 / 7 > i32::from(bayer(x, y)) {
-                        tone += 1;
-                    }
+                let jitter = below(h32((x >> 1) as u32, (y >> 1) as u32, seed ^ salt::STROKES), 7) as i32 - 3;
+                let mut tone = Tone::ALL[band(lam + jitter)];
+                let inner = N4.iter().all(|&(dx, dy)| sphere_at(r, x + dx, y + dy).is_some());
+                let near = sphere_at(r, x + 2, y).is_none() || sphere_at(r, x, y + 2).is_none();
+                if lam < 0 && inner && near {
+                    tone = tone.step(1);
                 }
-                // Distance from the edge in eighths of a px, by the radius along the normal.
-                let len = isqrt((n[0] * n[0] + n[1] * n[1]) as u64) as i32;
-                let e8 = (UNIT - len) * small * 4 / UNIT;
-                if e8 < 16 && 16 - e8 > i32::from(bayer(x, y)) {
-                    tone -= 1;
-                }
-                let tone = Tone::ALL[tone.clamp(0, 7) as usize];
                 self.put(x, y, ramp.at(tone), normal(n[0], n[1]), z.at(n[2], UNIT));
             }
         }
@@ -607,7 +626,7 @@ impl Canvas {
             let g = h32(seed, k, salt::STROKES ^ 1);
             let (x, y) = (r.x + below(h, r.w as u32) as i32, r.y + below(g, r.h as u32) as i32);
             let lighter = h >> 31 == 1;
-            let lean = below(g >> 8, 3) as i32 - 1;
+            let lean = below(g.rotate_right(8), 3) as i32 - 1;
             let long = (g >> 20 & 3) as i32;
             let mut px: Vec<(i32, i32, i32)> = Vec::new(); // x, y, tone step
             match kind {
@@ -656,7 +675,8 @@ impl Canvas {
     }
 
     /// The baked contact shadow: index 1 on the clear pixels of the ellipse in `r` (under a
-    /// thing, where it meets what it stands on), thinned by dither over its outer `spread` px.
+    /// thing, where it meets what it stands on), drawn `spread / 2` px inside the ellipse's edge
+    /// so it hugs the foot. Solid: a contact shadow is never a checker (ART.md §3.1).
     pub fn ao_contact(&mut self, r: Rect, spread: i32) {
         self.begin();
         let small = r.w.min(r.h);
@@ -668,7 +688,7 @@ impl Canvas {
                 }
                 let len = isqrt((n[0] * n[0] + n[1] * n[1]) as u64) as i32;
                 let e8 = (UNIT - len) * small * 4 / UNIT;
-                if 2 * e8 > i32::from(bayer(x, y)) * spread {
+                if e8 >= spread * 4 {
                     self.put(x, y, Ix::AO, FLAT, 0);
                 }
             }
@@ -710,34 +730,6 @@ impl Canvas {
                 n[0] = (256 - i32::from(n[0])).clamp(1, 255) as u8;
             }
         }
-    }
-
-    /// The outline, run last and never typed by a generator (ART.md §3): every drawn pixel that
-    /// meets clear, AO or the canvas edge becomes `k`; a pixel of a later part standing at least
-    /// 2 px above an earlier part it touches becomes `K`, the interior seam. Normals and heights
-    /// stay; outlined pixels stop emitting.
-    pub fn outline(&mut self) {
-        let mut out = self.albedo.clone();
-        for y in 0..self.h {
-            for x in 0..self.w {
-                let i = (y * self.w + x) as usize;
-                if !self.albedo[i].is_opaque() {
-                    continue;
-                }
-                if N4.iter().any(|&(dx, dy)| !self.get(x + dx, y + dy).is_opaque()) {
-                    out[i] = Ix::INK;
-                } else if N4.iter().any(|&(dx, dy)| {
-                    let j = ((y + dy) * self.w + x + dx) as usize;
-                    self.parts[j] < self.parts[i] && self.height[i] >= self.height[j].saturating_add(SEAM_RISE)
-                }) {
-                    out[i] = Ix::SEAM;
-                }
-                if out[i] != self.albedo[i] {
-                    self.emissive[i] = Ix::CLEAR;
-                }
-            }
-        }
-        self.albedo = out;
     }
 
     /// Check the layer contract (ART.md §1.1): one size; every normal inside the unit disc (so
@@ -912,16 +904,18 @@ impl Canvas {
         }
     }
 
-    /// The selective outline (sel-out), run last in place of [`Canvas::outline`]: an edge takes
-    /// its own material's dark instead of `k`. Where a drawn pixel meets clear below it or to its
-    /// right (away from the top-left light) it becomes its ramp's `deep`; where it meets clear
-    /// only above or to its left (the lit edges) it goes two tones darker than itself and no
-    /// darker than `shade`, so the line lightens and breaks where the light falls. `k` stays
-    /// where the ground needs it: under a light material whose `deep` would not stand off a
-    /// mid ground (luma over [`SELOUT_INK_LUMA`]), on the soles, and on anything not in a ramp.
-    /// Interior seams are the upper part's own ramp two tones down (`K` off a ramp). Normals and
-    /// heights stay; outlined pixels stop emitting.
-    pub fn outline_sel(&mut self) {
+    /// The outline, run last and never typed by a generator (ART.md §3): **selective** (sel-out),
+    /// the one outline every sprite and tile thing takes. An edge takes its own material's dark
+    /// instead of `k`. Where a drawn pixel meets clear below it or to its right (away from the
+    /// top-left light) it becomes its ramp's `deep`; where it meets clear only above or to its left
+    /// (the lit edges) it goes two tones darker than itself and no darker than `shade`, so the
+    /// line lightens and breaks where the light falls. `k` stays where the ground needs it: under a
+    /// light material whose `deep` would not stand off a mid ground (luma over
+    /// [`SELOUT_INK_LUMA`]), on the soles, and on anything not in a ramp. Interior seams (a later
+    /// part standing 2 px over an earlier one it touches) are the upper part's own ramp two tones
+    /// down (`K` off a ramp). A flat canvas (the font, the chrome) keeps the plain `k` and `K` of
+    /// the UI (§7). Normals and heights stay; outlined pixels stop emitting.
+    pub fn outline(&mut self) {
         let mut out = self.albedo.clone();
         let (bottom, _) = (0..self.h).rev().fold((0, false), |(b, found), y| {
             if found || !(0..self.w).any(|x| self.get(x, y).is_opaque()) { (b, found) } else { (y, true) }
@@ -942,7 +936,7 @@ impl Canvas {
                         && self.parts[j] < self.parts[i]
                         && self.height[i] >= self.height[j].saturating_add(SEAM_RISE)
                 });
-                let ramp = Ramp::of(ix);
+                let ramp = if self.flat { None } else { Ramp::of(ix) };
                 out[i] = match ramp {
                     _ if !(away || lit || seam) => ix,
                     None => {
@@ -958,8 +952,9 @@ impl Canvas {
                             let sole = open(0, 1) && y >= bottom - 1;
                             if sole || crate::palette::luma(deep) > SELOUT_INK_LUMA { Ix::INK } else { deep }
                         } else {
-                            let down = t.step(-2);
-                            r.at(if down < Tone::Shade { Tone::Shade } else { down })
+                            // Two tones down, held between the shade and the base: a white
+                            // tail's tip still gets a line.
+                            r.at(t.step(-2).clamp(Tone::Shade, Tone::Base))
                         }
                     }
                 };
@@ -1232,6 +1227,209 @@ impl Canvas {
     }
 }
 
+/// Primitives the creatures and the prop kit brought (ART.md §2.2, §2.3, §8 steps 4 and 5): a
+/// silhouette of any shape lit as a soft volume, a material dyed over another without losing
+/// its shading, and the heights of things that are not people (a flat top, a face).
+impl Canvas {
+    /// The drawn pixels of `mask` (any canvas of this size: only what is opaque on it is read)
+    /// filled in `ramp` as one soft volume: each pixel's normal leans out toward the nearest
+    /// edge of the silhouette, as far as it is within `radius` px of it, and stands up flat
+    /// beyond, so any shape (a dog's body, a sack, a fleece) turns like a body and not like a
+    /// cut-out. Tones are bands of the lambert term against [`BAKE_LIGHT`], as
+    /// [`Canvas::ellipse_lit`]; height rises from `z.lo` at the edge to `z.hi` where the volume
+    /// is flat. The silhouette is `mask`'s, clipped by the clip.
+    pub fn inflate(&mut self, mask: &Canvas, ramp: Ramp, radius: i32, z: Z) {
+        let d = mask.distance();
+        self.begin();
+        let r10 = radius.max(1) * 10;
+        let at = |x: i32, y: i32| -> i32 {
+            if x < 0 || y < 0 || x >= mask.w || y >= mask.h { 0 } else { d[(y * mask.w + x) as usize] }
+        };
+        for y in 0..mask.h {
+            for x in 0..mask.w {
+                let dd = at(x, y);
+                if dd == 0 {
+                    continue;
+                }
+                // The distance field rises inward; the surface faces down its slope, outward.
+                let (gx, gy) = (at(x + 1, y) - at(x - 1, y), at(x, y + 1) - at(x, y - 1));
+                let len = isqrt((gx * gx + gy * gy) as u64) as i32;
+                // How far out from the flat middle this px is: 0 there, UNIT at the edge.
+                let u = ((r10 - dd + 5) * UNIT / r10).clamp(0, UNIT);
+                let (nx, ny) = if len == 0 || u == 0 { (0, 0) } else { (-gx * u * 7 / (8 * len), -gy * u * 7 / (8 * len)) };
+                let n = normal(nx, ny);
+                let [a, b, c] = decode(n);
+                let tone = Tone::ALL[band(lambert([a, b, c]))];
+                let h = z.at(isqrt((UNIT * UNIT - (u * u).min(UNIT * UNIT)) as u64) as i32, UNIT);
+                self.put(x, y, ramp.at(tone), n, h);
+            }
+        }
+    }
+
+    /// The chamfer distance of every opaque pixel to the nearest clear one (or the canvas edge),
+    /// in tenths of a px (a step 10, a diagonal 14); 0 on clear pixels.
+    fn distance(&self) -> Vec<i32> {
+        let (w, h) = (self.w, self.h);
+        let mut d: Vec<i32> = self.albedo.iter().map(|a| if a.is_opaque() { i32::MAX / 2 } else { 0 }).collect();
+        let get = |d: &[i32], x: i32, y: i32| if x < 0 || y < 0 || x >= w || y >= h { 0 } else { d[(y * w + x) as usize] };
+        for y in 0..h {
+            for x in 0..w {
+                let i = (y * w + x) as usize;
+                if d[i] == 0 {
+                    continue;
+                }
+                let m = (get(&d, x - 1, y) + 10)
+                    .min(get(&d, x, y - 1) + 10)
+                    .min(get(&d, x - 1, y - 1) + 14)
+                    .min(get(&d, x + 1, y - 1) + 14);
+                d[i] = d[i].min(m);
+            }
+        }
+        for y in (0..h).rev() {
+            for x in (0..w).rev() {
+                let i = (y * w + x) as usize;
+                if d[i] == 0 {
+                    continue;
+                }
+                let m = (get(&d, x + 1, y) + 10)
+                    .min(get(&d, x, y + 1) + 10)
+                    .min(get(&d, x + 1, y + 1) + 14)
+                    .min(get(&d, x - 1, y + 1) + 14);
+                d[i] = d[i].min(m);
+            }
+        }
+        d
+    }
+
+    /// Dye what is drawn in `from` inside the drawn pixels of `mask` into `to`, tone for tone,
+    /// so a marking (a white blaze, a tan eyebrow, a painted band) keeps the shading under it.
+    /// Albedo only.
+    pub fn dye(&mut self, mask: &Canvas, from: Ramp, to: Ramp) {
+        for y in 0..self.h.min(mask.h) {
+            for x in 0..self.w.min(mask.w) {
+                if !mask.get(x, y).is_opaque() {
+                    continue;
+                }
+                if let Some((r, t)) = Ramp::of(self.get(x, y)) {
+                    if r == from {
+                        self.recolour(x, y, to.at(t));
+                    }
+                }
+            }
+        }
+    }
+
+    /// [`Canvas::dye`] inside the ellipse filling `r`.
+    pub fn dye_ellipse(&mut self, r: Rect, from: Ramp, to: Ramp) {
+        let mut m = Canvas::new(self.w, self.h);
+        m.ellipse(r, Ix::INK, 1);
+        self.dye(&m, from, to);
+    }
+
+    /// [`Canvas::dye`] inside the polygon through `pts`.
+    pub fn dye_poly(&mut self, pts: &[(i32, i32)], from: Ramp, to: Ramp) {
+        let mut m = Canvas::new(self.w, self.h);
+        m.polyline_fill(pts, Ix::INK, 1);
+        self.dye(&m, from, to);
+    }
+
+    /// A flat top: every drawn pixel in `r` stands `h` px high (a chest's lid, a table's top, a
+    /// well's rim), run after [`Canvas::upright`], which stood its faces up.
+    pub fn lid(&mut self, r: Rect, h: u8) {
+        for y in r.y.max(0)..r.bottom().min(self.h) {
+            for x in r.x.max(0)..r.right().min(self.w) {
+                let i = (y * self.w + x) as usize;
+                if self.albedo[i].is_opaque() {
+                    self.height[i] = h.max(1);
+                }
+            }
+        }
+    }
+
+    /// Hold every drawn pixel's height to at most `h` px: a thing lying flat on the ground (a
+    /// hatch, a plate, a note), whose shadow is a sliver.
+    pub fn cap_heights(&mut self, h: u8) {
+        for (z, a) in self.height.iter_mut().zip(&self.albedo) {
+            if a.is_opaque() {
+                *z = (*z).clamp(1, h.max(1));
+            }
+        }
+    }
+
+    /// A face standing up and looking at the viewer (south): `r` in `ramp`, `light` on its top
+    /// row and `shade` on its bottom and right, the base between; its normal faces south and a
+    /// little up. Height `z` (a relief: [`Canvas::upright`] stands it after).
+    pub fn face(&mut self, r: Rect, ramp: Ramp, z: u8) {
+        self.begin();
+        let n = normal(0, 88);
+        for y in r.y..r.bottom() {
+            for x in r.x..r.right() {
+                let tone = if y == r.y {
+                    Tone::Base
+                } else if x == r.right() - 1 && r.w > 3 {
+                    Tone::Shade
+                } else {
+                    Tone::Mid
+                };
+                self.put(x, y, ramp.at(tone), n, z);
+            }
+        }
+    }
+
+    /// Fill `r` with `ix` facing `n` at height `z`, as one part: a flat top faces up, a board
+    /// faces south; the kit's parts paint over it in the same part.
+    pub fn fill_normal(&mut self, r: Rect, ix: Ix, n: Normal, z: u8) {
+        self.begin();
+        for y in r.y..r.bottom() {
+            for x in r.x..r.right() {
+                self.put(x, y, ix, n, z);
+            }
+        }
+    }
+
+    /// Recolour what emits by `f`, in the albedo and the emissive alike: a flame turned cold, a
+    /// lens turned red.
+    pub fn remap_emitting(&mut self, f: impl Fn(Ix) -> Ix) {
+        for (a, e) in self.albedo.iter_mut().zip(self.emissive.iter_mut()) {
+            if *e != Ix::CLEAR {
+                *a = f(*a);
+                *e = *a;
+            }
+        }
+    }
+
+    /// Put back what glowed: each `(x, y, ix)` drawn in `ix` and emitting it again, where the
+    /// pixel is still drawn (a lamp's glass after the outline).
+    pub fn relight(&mut self, glow: &[(i32, i32, Ix)]) {
+        for &(x, y, ix) in glow {
+            if let Some(i) = self.idx(x, y) {
+                if self.albedo[i].is_opaque() && !self.flat {
+                    self.albedo[i] = ix;
+                    self.emissive[i] = ix;
+                }
+            }
+        }
+    }
+
+    /// Set the height of every drawn pixel in `r` to `f(x, y)` (at least 1): a roof that lands
+    /// on the house under it, rising from the eave's height to the ridge's.
+    pub fn heights_by(&mut self, r: Rect, f: impl Fn(i32, i32) -> i32) {
+        for y in r.y.max(0)..r.bottom().min(self.h) {
+            for x in r.x.max(0)..r.right().min(self.w) {
+                let i = (y * self.w + x) as usize;
+                if self.albedo[i].is_opaque() {
+                    self.height[i] = f(x, y).clamp(1, 255) as u8;
+                }
+            }
+        }
+    }
+
+    /// Whether any drawn pixel of this canvas has the albedo `ix`.
+    pub fn has(&self, ix: Ix) -> bool {
+        self.albedo.contains(&ix)
+    }
+}
+
 /// The lambert term of a normal (1/127ths) against [`BAKE_LIGHT`].
 fn lambert(n: [i32; 3]) -> i32 {
     (n[0] * BAKE_LIGHT[0] + n[1] * BAKE_LIGHT[1] + n[2] * BAKE_LIGHT[2]) / UNIT
@@ -1350,12 +1548,32 @@ mod tests {
         let mut c = Canvas::new(16, 16);
         c.fill_rect(Rect::new(1, 1, 14, 14), Ramp::Stone.at(Tone::Base), 2);
         c.fill_rect(Rect::new(5, 5, 6, 6), Ramp::Iron.at(Tone::Base), 6);
+        c.fill_rect(Rect::new(9, 9, 3, 3), Ramp::Stone.at(Tone::Light), 9);
         c.outline();
-        assert_eq!(c.get(1, 1), Ix::INK);
-        assert_eq!(c.get(14, 7), Ix::INK);
-        assert_eq!(c.get(5, 7), Ix::SEAM, "the raised part's edge");
+        assert_eq!(c.get(1, 1), Ramp::Stone.at(Tone::Shade), "a lit top-left edge: the material's shade");
+        let away = c.get(14, 7);
+        assert!(
+            away == Ramp::Stone.at(Tone::Deep) || away == Ix::INK,
+            "an edge away from the light: its deep, or k off a light material"
+        );
+        assert_eq!(c.get(7, 14), Ix::INK, "the sole keeps its k");
+        assert_eq!(c.get(5, 7), Ramp::Iron.at(Tone::Shade), "a seam: the upper part's own ramp two tones down");
+        assert_eq!(c.get(9, 10), Ramp::Stone.at(Tone::Base), "light stone over iron: two tones down");
         assert_eq!(c.get(4, 7), Ramp::Stone.at(Tone::Base), "the lower part is untouched");
         assert_eq!(c.get(7, 7), Ramp::Iron.at(Tone::Base));
+        let mut flat = Canvas::flat(8, 8);
+        flat.fill_rect(Rect::new(1, 1, 6, 6), Ramp::UiPanel.at(Tone::Base), 0);
+        flat.outline();
+        assert_eq!(flat.get(1, 1), Ix::INK, "the chrome keeps its k");
+    }
+
+    #[test]
+    fn a_seam_within_one_material_is_its_own_dark() {
+        let mut c = Canvas::new(12, 12);
+        c.fill_rect(Rect::new(1, 1, 10, 10), Ramp::Stone.at(Tone::Base), 2);
+        c.fill_rect(Rect::new(4, 4, 4, 4), Ramp::Stone.at(Tone::Light), 6);
+        c.outline();
+        assert_eq!(c.get(4, 5), Ramp::Stone.at(Tone::Base));
     }
 
     #[test]
@@ -1483,7 +1701,7 @@ mod tests {
         let mut c = Canvas::new(12, 12);
         c.fill_rect(Rect::new(2, 2, 8, 8), Ramp::ClothPlum.at(Tone::Light), 3);
         c.fill_rect(Rect::new(2, 11, 8, 1), Ramp::ClothPlum.at(Tone::Base), 3);
-        c.outline_sel();
+        c.outline();
         assert_eq!(c.get(5, 2), Ramp::ClothPlum.at(Tone::Base), "a lit top edge: two tones down");
         assert_eq!(c.get(9, 5), Ramp::ClothPlum.at(Tone::Deep), "the side away from the light");
         assert_eq!(c.get(5, 11), Ix::INK, "the soles keep k");
@@ -1491,7 +1709,7 @@ mod tests {
         let mut pale = Canvas::new(6, 6);
         pale.fill_rect(Rect::new(1, 1, 4, 3), Ramp::ClothLinen.at(Tone::Base), 3);
         pale.fill_rect(Rect::new(0, 5, 6, 1), Ix::SEAM, 1);
-        pale.outline_sel();
+        pale.outline();
         assert_eq!(pale.get(4, 2), Ix::INK, "a pale deep would not stand off the ground");
     }
 

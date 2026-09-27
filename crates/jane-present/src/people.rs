@@ -53,7 +53,7 @@ impl People {
     pub fn build(atlas: &mut Atlas) -> People {
         let ids: Vec<FrameId> = person::frame_ids().collect();
         let mut sets = Vec::new();
-        for r in looks::all().unwrap_or_default() {
+        for r in looks::family(looks::Family::Person).unwrap_or_default() {
             let anchor = (r.set.ax as i16, r.set.ay as i16);
             let frames = ids
                 .iter()

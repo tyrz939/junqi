@@ -6,7 +6,7 @@ use sdl2::VideoSubsystem;
 use sdl2::pixels::PixelFormatEnum;
 use sdl2::rect::Rect;
 use sdl2::render::{Texture, TextureCreator, WindowCanvas};
-use sdl2::video::WindowContext;
+use sdl2::video::{Window, WindowContext};
 
 /// Room the window's own title bar and frame take above the canvas, in desktop px.
 const DECOR_PX: u32 = 64;
@@ -22,17 +22,24 @@ pub fn start_scale(usable: Option<(u32, u32)>, asked: Option<u32>) -> u32 {
     fits.clamp(1, 2)
 }
 
-/// A window of `k` times the canvas, centred, resizable, with a renderer that waits for vsync.
-pub fn open(video: &VideoSubsystem, title: &str, k: u32) -> Result<WindowCanvas, String> {
+/// A window of `k` times the canvas, centred, resizable. `soft` puts an SDL renderer on it
+/// ([`canvas`]); `wgpu` makes its surface on it; `gl2` its context, on a window made `opengl`
+/// (with the context's attributes set before, as `jane_render_gl2::attributes` does).
+pub fn open(video: &VideoSubsystem, title: &str, k: u32, opengl: bool) -> Result<Window, String> {
     // T0 upscales nearest (PRESENTATION.md, the window); set before any texture is made.
     sdl2::hint::set("SDL_RENDER_SCALE_QUALITY", "0");
-    let mut window = video
-        .window(title, u32::from(CANVAS_W) * k, u32::from(CANVAS_H) * k)
-        .position_centered()
-        .resizable()
-        .build()
-        .map_err(|e| e.to_string())?;
+    let mut b = video.window(title, u32::from(CANVAS_W) * k, u32::from(CANVAS_H) * k);
+    b.position_centered().resizable();
+    if opengl {
+        b.opengl();
+    }
+    let mut window = b.build().map_err(|e| e.to_string())?;
     window.set_minimum_size(u32::from(CANVAS_W) / 2, u32::from(CANVAS_H) / 2).map_err(|e| e.to_string())?;
+    Ok(window)
+}
+
+/// The window's SDL renderer, waiting for vsync: what `soft` presents through.
+pub fn canvas(window: Window) -> Result<WindowCanvas, String> {
     window.into_canvas().present_vsync().build().map_err(|e| e.to_string())
 }
 

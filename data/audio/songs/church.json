@@ -1,0 +1,38 @@
+{
+  "name": "church",
+  "mood": "The church, where the vicar has stopped answering it: a hymn in D minor on a small organ, the congregation's voices faint in the rafters, closing each verse on a major chord it does not believe",
+  "key": "D", "mode": "minor",
+  "step_ticks": 60, "bar": 4,
+  "gain": 0.94, "humanize_ms": 6,
+  "tracks": [
+    { "name": "organ", "inst": "organ", "kind": "chord", "octave": 4, "vel": 0.62, "voices": 4, "gate": 1.0 },
+    { "name": "pedal", "inst": "organ", "kind": "bass", "octave": 2, "vel": 0.5, "gate": 1.0 },
+    { "name": "voices", "inst": "choir", "kind": "melody", "octave": 5, "vel": 0.52, "gate": 1.0 },
+    { "name": "treble", "inst": "organ", "kind": "melody", "octave": 5, "vel": 0.34, "pan": 0.2, "gate": 0.97 }
+  ],
+  "sections": {
+    "A": { "bars": 8, "chords": "1 4 3 7/1 6 3/4 4/5M 1",
+      "play": {
+        "organ": "x - - - | x - - - | x - - - | x - x - | x - - - | x - x - | x - x - | x - - -",
+        "pedal": "1 - - - | 1 - - - | 1 - - - | 1 - 1 - | 1 - - - | 1 - 1 - | 1 - 1 - | 1 - - -",
+        "voices": "5 5 6 5 | 4 - 3 - | 3 4 5 3 | 2 - 1 - | 1 2 3 4 | 5 - 4 - | 4 3 2 #7, | 1 - - -",
+        "treble": "5 5 6 5 | 4 - 3 - | 3 4 5 3 | 2 - 1 - | 1 2 3 4 | 5 - 4 - | 4 3 2 #7, | 1 - - ."
+      }
+    },
+    "B": { "bars": 8, "chords": "6 5 4 5M 3 7/6 4/5M 1M",
+      "play": {
+        "organ": "x - - - | x - - - | x - - - | x - - - | x - - - | x - x - | x - x - | x - - -",
+        "pedal": "1 - - - | 1 - - - | 1 - - - | 1 - - - | 1 - - - | 1 - 1 - | 1 - 1 - | 1 - - -",
+        "voices": "8 - 7 6 | 5 - - - | 6 5 4 3 | 2 - - - | 3 4 5 6 | 7 - 8 - | 4 3 2 #7, | 1 - - -",
+        "treble": "8 - 7 6 | 5 - - - | 6 5 4 3 | 2 - - - | 3 4 5 6 | 7 - 8 - | 4 3 2 #7, | #3 - - ."
+      }
+    },
+    "V": { "bars": 4, "chords": "1 6 4 5M",
+      "play": {
+        "organ": "x - - - | x - - - | x - - - | x - - -",
+        "pedal": "1 - - - | 1 - - - | 1 - - - | 1 - - -"
+      }
+    }
+  },
+  "forms": ["A B V A", "A V B A", "V A B"]
+}

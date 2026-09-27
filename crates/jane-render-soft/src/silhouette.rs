@@ -18,7 +18,7 @@ use crate::blit::Target;
 /// The longest a shadow gets, in heights: a sun this low casts no further (8 x 256).
 const MAX_COT_Q8: i32 = 8 * 256;
 /// How much of its strength a shadow keeps at its tip, of 256.
-const TIP: i32 = 150;
+const TIP: i32 = 170;
 
 /// The 4 x 4 ordered dither (thresholds 0..16), for the soft edge.
 const BAYER4: [[u8; 4]; 4] = [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]];
@@ -105,39 +105,43 @@ pub fn cast(mask: &mut Mask, page: &Page, s: &SpriteCmd, c: &Caster, (kx, ky): (
 }
 
 /// Applies the mask to `t` and clears it: each covered pixel toward `dst * shade` by its
-/// strength, a pixel on the shadow's edge only where the dither says. Returns pixels written.
+/// strength, a covered pixel on the shadow's edge by five eighths of it, and the ring of px just
+/// outside by three eighths where the ordered dither says: the edge is one dither step soft, and
+/// a post's thin shadow keeps its body. Returns pixels written.
 pub fn apply(t: &mut Target<'_>, mask: &mut Mask, shade: Rgb) -> u64 {
     let Some((x0, y0, x1, y1)) = mask.dirty.take() else { return 0 };
-    let w = mask.w;
-    let at =
-        |m: &[u8], x: i32, y: i32| if x < 0 || y < 0 || x >= w || y >= mask.h { 0 } else { m[(y * w + x) as usize] };
+    let (w, h) = (mask.w, mask.h);
+    let at = |m: &[u8], x: i32, y: i32| if x < 0 || y < 0 || x >= w || y >= h { 0 } else { m[(y * w + x) as usize] };
     let mut n = 0;
     let [sr, sg, sb] = shade.map(|c| 256 - i32::from(c) - i32::from(c >> 7));
-    for y in y0..y1 {
-        for x in x0..x1 {
-            let m = mask.px[(y * w + x) as usize];
-            if m == 0 {
-                continue;
-            }
-            let edge = at(&mask.px, x - 1, y) == 0
-                || at(&mask.px, x + 1, y) == 0
-                || at(&mask.px, x, y - 1) == 0
-                || at(&mask.px, x, y + 1) == 0;
-            if edge && BAYER4[(y & 3) as usize][(x & 3) as usize] >= 8 {
-                continue;
-            }
-            let m = i32::from(m) + i32::from(m >> 7);
+    for y in (y0 - 1).max(0)..(y1 + 1).min(h) {
+        for x in (x0 - 1).max(0)..(x1 + 1).min(w) {
+            let m = i32::from(mask.px[(y * w + x) as usize]);
+            let near = [(x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)].map(|(a, b)| i32::from(at(&mask.px, a, b)));
+            let s = if m > 0 {
+                if near.contains(&0) { m * 5 / 8 } else { m }
+            } else {
+                let most = near.into_iter().max().unwrap_or(0);
+                if most == 0 || BAYER4[(y & 3) as usize][(x & 3) as usize] >= 8 {
+                    continue;
+                }
+                most * 3 / 8
+            };
+            let s = s + (s >> 7);
             let d = &mut t.px[(y * t.w + x) as usize];
             let c = *d;
             let ch = |shift: u32, k: i32| {
                 let v = ((c >> shift) & 0xff) as i32;
-                ((v * (256 - ((k * m) >> 8))) >> 8) as u32
+                ((v * (256 - ((k * s) >> 8))) >> 8) as u32
             };
             *d = 0xff00_0000 | ch(16, sr) << 16 | ch(8, sg) << 8 | ch(0, sb);
             n += 1;
         }
-        let row = &mut mask.px[(y * w + x0) as usize..(y * w + x1) as usize];
-        row.fill(0);
+    }
+    // Cleared once every row is laid: a row cleared as it went would read as clear to the row
+    // under it, and every px of every shadow would take the edge's dither.
+    for y in y0..y1 {
+        mask.px[(y * w + x0) as usize..(y * w + x1) as usize].fill(0);
     }
     n
 }
@@ -191,5 +195,21 @@ mod tests {
         assert_eq!(px[10 * 40], 0xff80_8080);
         // The mask is clear for the next frame.
         assert!(mask.px.iter().all(|&m| m == 0) && mask.dirty.is_none());
+    }
+
+    #[test]
+    fn a_shadow_is_solid_inside_and_dithered_only_at_its_edge() {
+        let mut mask = Mask::default();
+        mask.fit(20, 20);
+        mask.span(2, 18, 2, 18, 200);
+        let mut px = vec![0xff80_8080u32; 400];
+        let mut t = Target { px: &mut px, w: 20, h: 20 };
+        apply(&mut t, &mut mask, [128, 128, 200]);
+        // Every px inside the edge is shaded, whatever the dither says there.
+        for y in 3..17 {
+            for x in 3..17 {
+                assert_ne!(px[y * 20 + x], 0xff80_8080, "({x}, {y}) left unshaded");
+            }
+        }
     }
 }

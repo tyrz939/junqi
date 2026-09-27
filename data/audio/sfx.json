@@ -1,0 +1,213 @@
+[
+  { "name": "step_grass", "peak": 0.22, "variants": 4, "send": 0.05, "layers": [
+    { "wave": "pink", "pitch": [2400, 1100], "attack_ms": 5, "decay_ms": 110, "filter": { "kind": "bp", "cutoff": [2600, 1200], "q": 0.7 } },
+    { "wave": "sine", "pitch": [95, 60], "attack_ms": 3, "decay_ms": 45, "gain": 0.25 }
+  ]},
+  { "name": "step_road", "peak": 0.22, "variants": 4, "send": 0.05, "layers": [
+    { "wave": "noise", "pitch": [1800, 1400], "attack_ms": 2, "decay_ms": 60, "filter": { "kind": "bp", "cutoff": [2000, 1300], "q": 0.9 } },
+    { "wave": "noise", "pitch": [2600, 2000], "attack_ms": 2, "decay_ms": 45, "delay_ms": 16, "gain": 0.6, "filter": { "kind": "bp", "cutoff": [2800, 2200], "q": 1.1 } },
+    { "wave": "sine", "pitch": [110, 70], "attack_ms": 3, "decay_ms": 40, "gain": 0.3 }
+  ]},
+  { "name": "step_cobble", "peak": 0.24, "variants": 4, "send": 0.08, "layers": [
+    { "wave": "noise", "pitch": [3000, 3000], "attack_ms": 1, "decay_ms": 32, "filter": { "kind": "bp", "cutoff": [3200, 2600], "q": 1.6 } },
+    { "wave": "sine", "pitch": [190, 120], "attack_ms": 2, "decay_ms": 55, "gain": 0.55 }
+  ]},
+  { "name": "step_wood", "peak": 0.26, "variants": 4, "send": 0.08, "layers": [
+    { "wave": "sine", "pitch": [165, 115], "attack_ms": 2, "decay_ms": 95, "gain": 0.9 },
+    { "wave": "noise", "pitch": [900, 900], "attack_ms": 1, "decay_ms": 40, "gain": 0.5, "filter": { "kind": "bp", "cutoff": [950, 700], "q": 2.0 } },
+    { "wave": "fm", "pitch": [420, 400], "ratio": 2.3, "duty": 1.2, "attack_ms": 1, "decay_ms": 60, "gain": 0.25 }
+  ]},
+  { "name": "step_water", "peak": 0.24, "variants": 4, "send": 0.1, "layers": [
+    { "wave": "noise", "pitch": [1500, 700], "attack_ms": 4, "decay_ms": 150, "filter": { "kind": "bp", "cutoff": [1700, 650], "q": 1.2 } },
+    { "wave": "sine", "pitch": [620, 1150], "attack_ms": 3, "decay_ms": 55, "delay_ms": 28, "gain": 0.3 }
+  ]},
+  { "name": "swing", "peak": 0.3, "variants": 3, "send": 0.08, "layers": [
+    { "wave": "pink", "pitch": [500, 1900], "attack_ms": 70, "decay_ms": 150, "filter": { "kind": "bp", "cutoff": [450, 2000], "q": 1.5 } }
+  ]},
+  { "name": "strike", "peak": 0.55, "variants": 3, "send": 0.12, "layers": [
+    { "wave": "sine", "pitch": [150, 55], "pitch_ms": 90, "attack_ms": 1.5, "decay_ms": 190 },
+    { "wave": "noise", "pitch": [1600, 500], "attack_ms": 1.5, "decay_ms": 75, "gain": 0.7, "filter": { "kind": "bp", "cutoff": [1800, 450], "q": 0.9 } }
+  ]},
+  { "name": "hit_physical", "peak": 0.6, "variants": 3, "send": 0.12, "layers": [
+    { "wave": "sine", "pitch": [130, 42], "pitch_ms": 120, "attack_ms": 1.5, "decay_ms": 260 },
+    { "wave": "noise", "pitch": [1400, 400], "attack_ms": 1.5, "decay_ms": 90, "gain": 0.6, "filter": { "kind": "bp", "cutoff": [1500, 380], "q": 0.8 } },
+    { "wave": "tri", "pitch": [260, 180], "attack_ms": 1.5, "decay_ms": 60, "gain": 0.3 }
+  ]},
+  { "name": "hit_frost", "peak": 0.42, "variants": 3, "send": 0.35, "layers": [
+    { "wave": "fm", "pitch": [1760, 1720], "ratio": 3.5, "duty": 2.0, "attack_ms": 1.5, "decay_ms": 650, "gain": 0.7 },
+    { "wave": "fm", "pitch": [2637, 2600], "ratio": 2.41, "duty": 1.5, "attack_ms": 4, "decay_ms": 420, "gain": 0.4 },
+    { "wave": "noise", "pitch": [6000, 6000], "attack_ms": 1.5, "decay_ms": 180, "gain": 0.35, "filter": { "kind": "hp", "cutoff": [5000, 7000], "q": 0.7 } }
+  ]},
+  { "name": "hit_fire", "peak": 0.5, "variants": 3, "send": 0.2, "layers": [
+    { "wave": "pink", "pitch": [300, 1500], "attack_ms": 25, "decay_ms": 480, "filter": { "kind": "lp", "cutoff": [300, 1600], "q": 0.8 } },
+    { "wave": "noise", "pitch": [3000, 3000], "attack_ms": 10, "decay_ms": 220, "gain": 0.3, "tremolo": [23, 0.8], "filter": { "kind": "bp", "cutoff": [3200, 2400], "q": 1.0 } },
+    { "wave": "sine", "pitch": [90, 50], "attack_ms": 15, "decay_ms": 300, "gain": 0.4 }
+  ]},
+  { "name": "hit_nature", "peak": 0.45, "variants": 3, "send": 0.2, "layers": [
+    { "wave": "sine", "pitch": [310, 190], "attack_ms": 1.5, "decay_ms": 140 },
+    { "wave": "pink", "pitch": [3000, 2000], "attack_ms": 20, "decay_ms": 260, "gain": 0.45, "filter": { "kind": "bp", "cutoff": [3400, 2000], "q": 0.9 } }
+  ]},
+  { "name": "hit_blast", "peak": 0.7, "variants": 2, "send": 0.3, "layers": [
+    { "wave": "sine", "pitch": [95, 34], "pitch_ms": 260, "attack_ms": 2, "decay_ms": 700 },
+    { "wave": "noise", "pitch": [1200, 200], "attack_ms": 2, "decay_ms": 600, "gain": 0.75, "filter": { "kind": "lp", "cutoff": [2400, 180], "q": 0.7 } }
+  ]},
+  { "name": "hit_shock", "peak": 0.42, "variants": 3, "send": 0.2, "layers": [
+    { "wave": "saw", "pitch": [1200, 280], "attack_ms": 1.5, "decay_ms": 280, "tremolo": [55, 0.85], "filter": { "kind": "lp", "cutoff": [5000, 900], "q": 1.2 } },
+    { "wave": "noise", "pitch": [6000, 6000], "attack_ms": 1.5, "decay_ms": 90, "gain": 0.4, "filter": { "kind": "hp", "cutoff": [4500, 4500], "q": 0.7 } }
+  ]},
+  { "name": "cast", "peak": 0.3, "variants": 2, "send": 0.4, "layers": [
+    { "wave": "fm", "pitch": [440, 880], "ratio": 2.0, "duty": 1.1, "attack_ms": 70, "decay_ms": 320 },
+    { "wave": "pink", "pitch": [800, 3000], "attack_ms": 60, "decay_ms": 260, "gain": 0.35, "filter": { "kind": "bp", "cutoff": [700, 3200], "q": 1.8 } }
+  ]},
+  { "name": "cast_failed", "peak": 0.2, "send": 0.15, "layers": [
+    { "wave": "tri", "pitch": [220, 220], "attack_ms": 4, "decay_ms": 150, "notes": [0, -3], "every_ms": 95, "filter": { "kind": "lp", "cutoff": [1200, 800], "q": 0.6 } }
+  ]},
+  { "name": "hurt", "peak": 0.5, "variants": 3, "send": 0.1, "layers": [
+    { "wave": "sine", "pitch": [115, 58], "pitch_ms": 100, "attack_ms": 1.5, "decay_ms": 210 },
+    { "wave": "noise", "pitch": [800, 300], "attack_ms": 1.5, "decay_ms": 70, "gain": 0.45, "filter": { "kind": "lp", "cutoff": [900, 300], "q": 0.7 } }
+  ]},
+  { "name": "crit", "peak": 0.45, "variants": 2, "send": 0.25, "layers": [
+    { "wave": "fm", "pitch": [1180, 1150], "ratio": 1.5, "duty": 2.2, "attack_ms": 1.5, "decay_ms": 220 },
+    { "wave": "sine", "pitch": [140, 50], "attack_ms": 1.5, "decay_ms": 220, "gain": 0.8 }
+  ]},
+  { "name": "heal", "peak": 0.32, "send": 0.5, "layers": [
+    { "wave": "sine", "pitch": [523.25, 523.25], "attack_ms": 8, "decay_ms": 700, "notes": [0, 4, 7, 12], "every_ms": 75, "gain": 0.8 },
+    { "wave": "tri", "pitch": [261.63, 261.63], "attack_ms": 250, "decay_ms": 900, "gain": 0.35, "filter": { "kind": "lp", "cutoff": [900, 700], "q": 0.6 } }
+  ]},
+  { "name": "death", "peak": 0.45, "variants": 2, "send": 0.3, "layers": [
+    { "wave": "pink", "pitch": [1200, 200], "attack_ms": 10, "decay_ms": 700, "filter": { "kind": "lp", "cutoff": [1400, 180], "q": 0.7 } },
+    { "wave": "sine", "pitch": [180, 55], "attack_ms": 5, "decay_ms": 450, "gain": 0.6 },
+    { "wave": "noise", "pitch": [2400, 2400], "attack_ms": 1.5, "decay_ms": 40, "delay_ms": 180, "gain": 0.3, "notes": [0, 0, 0], "every_ms": 70, "filter": { "kind": "bp", "cutoff": [2600, 1800], "q": 2.0 } }
+  ]},
+  { "name": "loot", "peak": 0.28, "send": 0.4, "layers": [
+    { "wave": "fm", "pitch": [1046.5, 1046.5], "ratio": 3.5, "duty": 0.8, "attack_ms": 2, "decay_ms": 420, "notes": [0, 7], "every_ms": 70 }
+  ]},
+  { "name": "quest_given", "peak": 0.32, "send": 0.55, "layers": [
+    { "wave": "fm", "pitch": [587.33, 587.33], "ratio": 3.5, "duty": 0.9, "attack_ms": 2, "decay_ms": 1100, "notes": [0, 3, 7], "every_ms": 160 },
+    { "wave": "tri", "pitch": [293.66, 293.66], "attack_ms": 300, "decay_ms": 1200, "gain": 0.3, "filter": { "kind": "lp", "cutoff": [800, 600], "q": 0.6 } }
+  ]},
+  { "name": "quest_done", "peak": 0.36, "send": 0.55, "layers": [
+    { "wave": "fm", "pitch": [587.33, 587.33], "ratio": 3.5, "duty": 0.9, "attack_ms": 2, "decay_ms": 1400, "notes": [0, 4, 7, 12], "every_ms": 120 },
+    { "wave": "tri", "pitch": [293.66, 293.66], "attack_ms": 200, "decay_ms": 1600, "gain": 0.3, "notes": [0, 7], "every_ms": 360, "filter": { "kind": "lp", "cutoff": [900, 700], "q": 0.6 } }
+  ]},
+  { "name": "learn", "peak": 0.3, "send": 0.6, "layers": [
+    { "wave": "fm", "pitch": [783.99, 783.99], "ratio": 4.0, "duty": 0.7, "attack_ms": 2, "decay_ms": 800, "notes": [0, 4, 7, 11, 14, 19], "every_ms": 65 }
+  ]},
+  { "name": "journal", "peak": 0.22, "send": 0.1, "layers": [
+    { "wave": "pink", "pitch": [2500, 2500], "attack_ms": 25, "decay_ms": 180, "filter": { "kind": "bp", "cutoff": [2200, 3400], "q": 0.6 } },
+    { "wave": "pink", "pitch": [3000, 3000], "attack_ms": 15, "decay_ms": 120, "delay_ms": 140, "gain": 0.6, "filter": { "kind": "bp", "cutoff": [3400, 2400], "q": 0.7 } },
+    { "wave": "noise", "pitch": [4000, 4000], "attack_ms": 1, "decay_ms": 12, "delay_ms": 320, "gain": 0.25, "filter": { "kind": "bp", "cutoff": [4200, 4200], "q": 3.0 } }
+  ]},
+  { "name": "open", "peak": 0.32, "send": 0.2, "layers": [
+    { "wave": "saw", "pitch": [105, 135], "attack_ms": 40, "decay_ms": 380, "vibrato": [19, 0.6], "filter": { "kind": "lp", "cutoff": [700, 1100], "q": 1.4 } },
+    { "wave": "sine", "pitch": [125, 80], "attack_ms": 2, "decay_ms": 160, "delay_ms": 330, "gain": 0.9 }
+  ]},
+  { "name": "use", "peak": 0.22, "send": 0.1, "layers": [
+    { "wave": "noise", "pitch": [2500, 2500], "attack_ms": 1, "decay_ms": 25, "filter": { "kind": "bp", "cutoff": [2600, 2200], "q": 1.5 } },
+    { "wave": "sine", "pitch": [420, 380], "attack_ms": 1.5, "decay_ms": 45, "gain": 0.5 }
+  ]},
+  { "name": "unlock", "peak": 0.28, "send": 0.15, "layers": [
+    { "wave": "noise", "pitch": [3500, 3500], "attack_ms": 1, "decay_ms": 22, "notes": [0, 0], "every_ms": 130, "filter": { "kind": "bp", "cutoff": [3600, 3000], "q": 3.0 } },
+    { "wave": "fm", "pitch": [1320, 1320], "ratio": 2.76, "duty": 0.8, "attack_ms": 1.5, "decay_ms": 300, "delay_ms": 130, "gain": 0.3 }
+  ]},
+  { "name": "locked", "peak": 0.28, "send": 0.1, "layers": [
+    { "wave": "noise", "pitch": [1800, 1800], "attack_ms": 2, "decay_ms": 230, "tremolo": [24, 0.9], "filter": { "kind": "bp", "cutoff": [1900, 1500], "q": 2.2 } },
+    { "wave": "sine", "pitch": [130, 100], "attack_ms": 2, "decay_ms": 90, "gain": 0.6 }
+  ]},
+  { "name": "switch", "peak": 0.32, "send": 0.2, "layers": [
+    { "wave": "sine", "pitch": [155, 90], "attack_ms": 1.5, "decay_ms": 130 },
+    { "wave": "noise", "pitch": [1200, 1200], "attack_ms": 1, "decay_ms": 55, "gain": 0.5, "filter": { "kind": "bp", "cutoff": [1300, 900], "q": 1.3 } },
+    { "wave": "fm", "pitch": [610, 600], "ratio": 2.7, "duty": 1.0, "attack_ms": 1.5, "decay_ms": 240, "gain": 0.22 }
+  ]},
+  { "name": "push", "peak": 0.32, "variants": 2, "send": 0.15, "layers": [
+    { "wave": "pink", "pitch": [400, 600], "attack_ms": 40, "hold_ms": 150, "decay_ms": 220, "tremolo": [13, 0.5], "filter": { "kind": "bp", "cutoff": [380, 620], "q": 1.2 } },
+    { "wave": "sine", "pitch": [70, 60], "attack_ms": 30, "hold_ms": 150, "decay_ms": 200, "gain": 0.35 }
+  ]},
+  { "name": "plate_down", "peak": 0.32, "send": 0.2, "layers": [
+    { "wave": "sine", "pitch": [210, 120], "attack_ms": 1.5, "decay_ms": 220 },
+    { "wave": "noise", "pitch": [900, 900], "attack_ms": 1, "decay_ms": 60, "gain": 0.5, "filter": { "kind": "bp", "cutoff": [950, 700], "q": 1.2 } }
+  ]},
+  { "name": "plate_up", "peak": 0.22, "send": 0.15, "layers": [
+    { "wave": "sine", "pitch": [240, 310], "attack_ms": 2, "decay_ms": 130 },
+    { "wave": "noise", "pitch": [1400, 1400], "attack_ms": 1, "decay_ms": 30, "gain": 0.3, "filter": { "kind": "bp", "cutoff": [1500, 1500], "q": 1.5 } }
+  ]},
+  { "name": "door", "peak": 0.3, "send": 0.25, "layers": [
+    { "wave": "saw", "pitch": [175, 150], "attack_ms": 60, "decay_ms": 300, "vibrato": [14, 0.4], "filter": { "kind": "lp", "cutoff": [900, 600], "q": 1.5 } },
+    { "wave": "sine", "pitch": [110, 70], "attack_ms": 2, "decay_ms": 200, "delay_ms": 280, "gain": 1.0 },
+    { "wave": "noise", "pitch": [700, 700], "attack_ms": 1, "decay_ms": 60, "delay_ms": 280, "gain": 0.4, "filter": { "kind": "lp", "cutoff": [900, 400], "q": 0.7 } }
+  ]},
+  { "name": "rest", "peak": 0.28, "send": 0.5, "layers": [
+    { "wave": "tri", "pitch": [196, 196], "attack_ms": 400, "decay_ms": 1600, "notes": [0, 7], "every_ms": 300, "filter": { "kind": "lp", "cutoff": [700, 500], "q": 0.6 } },
+    { "wave": "pink", "pitch": [600, 600], "attack_ms": 300, "decay_ms": 1200, "gain": 0.3, "filter": { "kind": "lp", "cutoff": [700, 400], "q": 0.6 } }
+  ]},
+  { "name": "respawn", "peak": 0.3, "send": 0.6, "layers": [
+    { "wave": "tri", "pitch": [293.66, 293.66], "attack_ms": 300, "decay_ms": 1400, "notes": [0, 5, 7], "every_ms": 260, "filter": { "kind": "lp", "cutoff": [900, 700], "q": 0.6 } }
+  ]},
+  { "name": "status", "peak": 0.22, "send": 0.3, "layers": [
+    { "wave": "fm", "pitch": [700, 690], "ratio": 2.4, "duty": 1.2, "attack_ms": 2, "decay_ms": 320 }
+  ]},
+  { "name": "save", "peak": 0.24, "send": 0.5, "layers": [
+    { "wave": "fm", "pitch": [659.25, 659.25], "ratio": 3.5, "duty": 0.7, "attack_ms": 2, "decay_ms": 900, "notes": [0, 7, 12], "every_ms": 110 }
+  ]},
+  { "name": "thunder", "peak": 0.8, "variants": 3, "send": 0.4, "layers": [
+    { "wave": "sine", "pitch": [48, 30], "attack_ms": 40, "decay_ms": 3200, "gain": 0.8 },
+    { "wave": "pink", "pitch": [600, 150], "attack_ms": 60, "decay_ms": 3800, "tremolo": [3.2, 0.5], "filter": { "kind": "lp", "cutoff": [700, 140], "q": 0.7 } },
+    { "wave": "noise", "pitch": [3000, 3000], "attack_ms": 2, "decay_ms": 320, "gain": 0.25, "filter": { "kind": "hp", "cutoff": [2500, 1500], "q": 0.7 } }
+  ]},
+  { "name": "owl", "peak": 0.26, "variants": 2, "send": 0.6, "layers": [
+    { "wave": "sine", "pitch": [385, 345], "attack_ms": 60, "hold_ms": 110, "decay_ms": 260, "notes": [0, -0.5], "every_ms": 620, "filter": { "kind": "lp", "cutoff": [1200, 1000], "q": 0.6 } },
+    { "wave": "pink", "pitch": [400, 400], "attack_ms": 60, "hold_ms": 100, "decay_ms": 200, "gain": 0.08, "notes": [0, 0], "every_ms": 620, "filter": { "kind": "bp", "cutoff": [400, 360], "q": 3.0 } }
+  ]},
+  { "name": "crow", "peak": 0.22, "variants": 2, "send": 0.5, "layers": [
+    { "wave": "saw", "pitch": [690, 610], "attack_ms": 20, "decay_ms": 300, "tremolo": [38, 0.6], "notes": [0, 0.5], "every_ms": 420, "filter": { "kind": "bp", "cutoff": [1400, 1200], "q": 1.6 } }
+  ]},
+  { "name": "bell_far", "peak": 0.55, "send": 0.55, "layers": [
+    { "wave": "bell", "pitch": [146.83, 146.83], "decay_ms": 9000, "filter": { "kind": "lp", "cutoff": [2400, 1400], "q": 0.6 } }
+  ]},
+  { "name": "bell_within", "peak": 0.4, "send": 0.6, "layers": [
+    { "wave": "bell", "pitch": [146.83, 146.83], "decay_ms": 8000, "filter": { "kind": "lp", "cutoff": [900, 600], "q": 0.6 } }
+  ]},
+  { "name": "bell_near", "peak": 0.8, "send": 0.35, "layers": [
+    { "wave": "bell", "pitch": [146.83, 146.83], "decay_ms": 11000 },
+    { "wave": "noise", "pitch": [2500, 2500], "attack_ms": 1, "decay_ms": 45, "gain": 0.12, "filter": { "kind": "bp", "cutoff": [2600, 1800], "q": 1.5 } }
+  ]},
+  { "name": "church_bell", "peak": 0.32, "send": 0.55, "layers": [
+    { "wave": "bell", "pitch": [392.0, 392.0], "decay_ms": 4200, "filter": { "kind": "lp", "cutoff": [3200, 2200], "q": 0.6 } }
+  ]},
+  { "name": "train_whistle", "peak": 0.22, "send": 0.7, "layers": [
+    { "wave": "square", "pitch": [440, 428], "duty": 0.42, "attack_ms": 180, "hold_ms": 900, "decay_ms": 700, "vibrato": [5.5, 0.05], "filter": { "kind": "lp", "cutoff": [1500, 1100], "q": 0.8 } },
+    { "wave": "square", "pitch": [554.37, 540], "duty": 0.42, "attack_ms": 200, "hold_ms": 880, "decay_ms": 700, "gain": 0.8, "filter": { "kind": "lp", "cutoff": [1600, 1150], "q": 0.8 } },
+    { "wave": "square", "pitch": [659.26, 642], "duty": 0.42, "attack_ms": 220, "hold_ms": 860, "decay_ms": 700, "gain": 0.6, "filter": { "kind": "lp", "cutoff": [1700, 1200], "q": 0.8 } },
+    { "wave": "pink", "pitch": [1500, 1500], "attack_ms": 150, "hold_ms": 900, "decay_ms": 600, "gain": 0.12, "filter": { "kind": "bp", "cutoff": [1600, 1200], "q": 1.2 } }
+  ]},
+  { "name": "dog_bark", "peak": 0.42, "variants": 3, "send": 0.35, "layers": [
+    { "wave": "saw", "pitch": [520, 360], "attack_ms": 6, "decay_ms": 150, "notes": [0, -1], "every_ms": 260, "filter": { "kind": "bp", "cutoff": [1300, 800], "q": 1.3 } },
+    { "wave": "pink", "pitch": [900, 900], "attack_ms": 4, "decay_ms": 110, "gain": 0.5, "notes": [0, 0], "every_ms": 260, "filter": { "kind": "bp", "cutoff": [1500, 700], "q": 1.0 } },
+    { "wave": "sine", "pitch": [240, 150], "attack_ms": 4, "decay_ms": 110, "gain": 0.4, "notes": [0, -1], "every_ms": 260 }
+  ]},
+  { "name": "dog_whine", "peak": 0.26, "send": 0.35, "layers": [
+    { "wave": "tri", "pitch": [880, 1180], "pitch_ms": 420, "attack_ms": 60, "hold_ms": 250, "decay_ms": 380, "vibrato": [6.5, 0.4], "filter": { "kind": "lp", "cutoff": [2400, 1600], "q": 0.8 } },
+    { "wave": "pink", "pitch": [1400, 1400], "attack_ms": 60, "hold_ms": 200, "decay_ms": 300, "gain": 0.12, "filter": { "kind": "bp", "cutoff": [1400, 1800], "q": 2.0 } }
+  ]},
+  { "name": "dog_pant", "peak": 0.2, "variants": 2, "send": 0.12, "layers": [
+    { "wave": "pink", "pitch": [1800, 1800], "attack_ms": 25, "hold_ms": 40, "decay_ms": 110, "notes": [0, 0, 0, 0, 0, 0], "every_ms": 190, "filter": { "kind": "bp", "cutoff": [1900, 1500], "q": 1.4 } },
+    { "wave": "pink", "pitch": [900, 900], "attack_ms": 25, "hold_ms": 30, "decay_ms": 90, "delay_ms": 95, "gain": 0.6, "notes": [0, 0, 0, 0, 0, 0], "every_ms": 190, "filter": { "kind": "bp", "cutoff": [1000, 800], "q": 1.4 } }
+  ]},
+  { "name": "ui_move", "peak": 0.1, "send": 0.05, "layers": [
+    { "wave": "fm", "pitch": [1250, 1250], "ratio": 2.0, "duty": 0.8, "attack_ms": 1, "decay_ms": 45 }
+  ]},
+  { "name": "ui_confirm", "peak": 0.16, "send": 0.15, "layers": [
+    { "wave": "fm", "pitch": [880, 880], "ratio": 4.0, "duty": 0.5, "attack_ms": 1.5, "decay_ms": 200, "notes": [0, 7], "every_ms": 55 }
+  ]},
+  { "name": "ui_back", "peak": 0.13, "send": 0.15, "layers": [
+    { "wave": "fm", "pitch": [880, 880], "ratio": 4.0, "duty": 0.5, "attack_ms": 1.5, "decay_ms": 180, "notes": [7, 0], "every_ms": 55 }
+  ]},
+  { "name": "ui_open", "peak": 0.14, "send": 0.1, "layers": [
+    { "wave": "pink", "pitch": [1500, 1500], "attack_ms": 25, "decay_ms": 120, "filter": { "kind": "bp", "cutoff": [1100, 2400], "q": 0.8 } },
+    { "wave": "fm", "pitch": [990, 990], "ratio": 2.0, "duty": 0.6, "attack_ms": 1, "decay_ms": 70, "delay_ms": 40, "gain": 0.5 }
+  ]},
+  { "name": "ui_close", "peak": 0.12, "send": 0.1, "layers": [
+    { "wave": "pink", "pitch": [1500, 1500], "attack_ms": 15, "decay_ms": 110, "filter": { "kind": "bp", "cutoff": [2400, 1000], "q": 0.8 } },
+    { "wave": "fm", "pitch": [740, 740], "ratio": 2.0, "duty": 0.6, "attack_ms": 1, "decay_ms": 70, "gain": 0.5 }
+  ]}
+]

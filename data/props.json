@@ -1,6 +1,6 @@
 {
   "door": { "name": "Door", "sprite": "door", "w": 2, "h": 2, "solid": true, "blockLos": true, "prompt": "Enter" },
-  "mine_mouth": { "name": "Mine Mouth", "sprite": "mine_mouth", "w": 3, "h": 2, "solid": true, "blockLos": true, "prompt": "Enter", "light": {"radius": 44, "color": "#f6cd40", "flicker": 0.1} },
+  "mine_mouth": { "name": "Mine Mouth", "sprite": "mine_mouth", "w": 3, "h": 2, "solid": true, "blockLos": true, "prompt": "Enter", "light": {"radius": 44, "color": "#ffb45a", "flicker": 0.1} },
   "burial_mouth": { "name": "Burial Stair", "sprite": "burial_mouth", "w": 3, "h": 2, "solid": true, "blockLos": true, "prompt": "Descend", "light": {"radius": 40, "color": "#60a0ff", "flicker": 0.2} },
   "hatch": { "name": "Cellar Hatch", "sprite": "hatch", "w": 2, "h": 2, "solid": false, "blockLos": false, "flat": true, "prompt": "Climb down" },
   "stairs": { "name": "Stairs", "sprite": "stairs", "w": 2, "h": 2, "solid": false, "blockLos": false, "flat": true, "prompt": "Climb up" },
@@ -25,7 +25,7 @@
   "torch": { "name": "Torch", "sprite": "torch", "w": 1, "h": 1, "solid": false, "blockLos": false, "light": {"radius": 64, "color": "#e1c080", "flicker": 0.2} },
   "light_stone_down": { "name": "Light Stone", "sprite": "note", "w": 1, "h": 1, "solid": false, "blockLos": false, "flat": true, "hideWhenUsed": true, "showsLoot": true, "prompt": "Pick up", "light": {"radius": 64, "color": "#f2ead0", "flicker": 0} },
   "torch_blue": { "name": "Cold Torch", "sprite": "torch_blue", "w": 1, "h": 1, "solid": false, "blockLos": false, "answers": "frost", "lightWhenOn": true, "light": {"radius": 76, "color": "#6aa8ff", "flicker": 0.2, "cold": true} },
-  "lamp_post": { "name": "Lamp Post", "sprite": "lamp_post", "w": 1, "h": 1, "solid": true, "blockLos": false, "nightOnly": true, "light": {"radius": 96, "color": "#f6cd40", "flicker": 0.05} },
+  "lamp_post": { "name": "Lamp Post", "sprite": "lamp_post", "w": 1, "h": 1, "solid": true, "blockLos": false, "nightOnly": true, "light": {"radius": 96, "color": "#ffb45a", "flicker": 0.05} },
   "campfire": { "name": "Campfire", "sprite": "campfire", "w": 2, "h": 2, "solid": true, "blockLos": false, "light": {"radius": 84, "color": "#ff9040", "flicker": 0.3}, "douse": 160, "rest": true, "prompt": "Rest" },
   "lever": { "name": "Lever", "sprite": "lever", "w": 1, "h": 1, "solid": true, "blockLos": false, "prompt": "Pull" },
   "plate": { "name": "Pressure Plate", "sprite": "plate", "w": 2, "h": 2, "solid": false, "blockLos": false, "flat": true, "plate": true },

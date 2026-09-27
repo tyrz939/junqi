@@ -28,12 +28,13 @@ fn draw(img: &mut Image, c: &Canvas, x: u32, y: u32, s: u32) {
 }
 
 /// The rows of `jane sheet unit`: the down, up and side cycles (six walk frames and the
-/// breathe) and the dead frames.
-const ROWS: [&[FrameId]; 4] = [
+/// breathe), the dead frames, and a creature's idle pair, hurt and attack.
+const ROWS: [&[FrameId]; 5] = [
     &[FrameId::Down, FrameId::Down1, FrameId::Down2, FrameId::Down3, FrameId::Down4, FrameId::Down5, FrameId::DownB],
     &[FrameId::Up, FrameId::Up1, FrameId::Up2, FrameId::Up3, FrameId::Up4, FrameId::Up5, FrameId::UpB],
     &[FrameId::Side, FrameId::Side1, FrameId::Side2, FrameId::Side3, FrameId::Side4, FrameId::Side5, FrameId::SideB],
     &[FrameId::Dead, FrameId::Dead2],
+    &[FrameId::Idle, FrameId::Idle2, FrameId::Hurt, FrameId::Atk1, FrameId::Atk2, FrameId::Atk3],
 ];
 
 /// `jane sheet unit <id>`: every set the sprite renders to (each variant, each seat), each as a
@@ -41,13 +42,18 @@ const ROWS: [&[FrameId]; 4] = [
 /// `scale` is the grid's (4 on the owner's sheets).
 pub fn unit(sets: &[Rendered], font: &Font, scale: u32) -> Image {
     let s = scale.max(1);
-    let (fw, fh) = (person::W as u32, person::H as u32);
+    let (fw, fh) = sets.first().map_or((person::W as u32, person::H as u32), |r| (r.set.w as u32, r.set.h as u32));
+    let rows: Vec<&[FrameId]> = ROWS
+        .iter()
+        .copied()
+        .filter(|ids| sets.iter().any(|r| ids.iter().any(|&f| r.set.frame(f).is_some())))
+        .collect();
     let cols = 7u32;
     let cell = (fw * s + PAD, fh * s + 14 + PAD);
     let strip_h = fh + 20;
-    let block_h = 20 + strip_h + ROWS.len() as u32 * cell.1;
+    let block_h = 20 + strip_h + rows.len() as u32 * cell.1;
     let w = PAD + cols * cell.0 + PAD;
-    let strip_w = PAD + (20 + 4) * (fw + 2) + PAD;
+    let strip_w = PAD + (30 + 4) * (fw + 2) + PAD;
     let mut img = Image::new(w.max(strip_w), PAD + sets.len() as u32 * block_h + PAD, [BG[0], BG[1], BG[2], 255]);
     for (k, r) in sets.iter().enumerate() {
         let y0 = PAD + k as u32 * block_h;
@@ -67,7 +73,7 @@ pub fn unit(sets: &[Rendered], font: &Font, scale: u32) -> Image {
                 x += fw + 2;
             }
         }
-        for (row, ids) in ROWS.iter().enumerate() {
+        for (row, ids) in rows.iter().enumerate() {
             for (col, id) in ids.iter().enumerate() {
                 let Some(c) = r.set.frame(*id) else { continue };
                 let (fx, fy) = (PAD + col as u32 * cell.0, y0 + 20 + strip_h + row as u32 * cell.1);
@@ -82,9 +88,10 @@ pub fn unit(sets: &[Rendered], font: &Font, scale: u32) -> Image {
 /// `jane sheet units`: every set of every look, the standing frames and the dead frame at 1x
 /// and 2x, named.
 pub fn units(sets: &[Rendered], font: &Font) -> Image {
-    let (fw, fh) = (person::W as u32, person::H as u32);
-    let ids = [FrameId::Down, FrameId::Up, FrameId::Side, FrameId::Dead];
-    let cell_w = ids.len() as u32 * (fw * 2 + 2) + fw * 4 + 24;
+    let fw = sets.iter().map(|r| r.set.w as u32).max().unwrap_or(person::W as u32);
+    let fh = sets.iter().map(|r| r.set.h as u32).max().unwrap_or(person::H as u32);
+    let ids = [FrameId::Down, FrameId::Up, FrameId::Side, FrameId::Idle, FrameId::Dead];
+    let cell_w = ids.len() as u32 * (fw * 2 + 2) + fw * 5 + 24;
     let cell_h = fh * 2 + 30;
     let cols = 3u32;
     let rows = (sets.len() as u32).div_ceil(cols);
@@ -93,17 +100,18 @@ pub fn units(sets: &[Rendered], font: &Font) -> Image {
         let (x0, y0) = (PAD + (k as u32 % cols) * cell_w, PAD + (k as u32 / cols) * cell_h);
         label(&mut img, font, x0, y0, &r.key(), Face::Fine, TEXT);
         let mut x = x0;
+        let (w, h) = (r.set.w as u32, r.set.h as u32);
         for id in ids {
             if let Some(c) = r.set.frame(id) {
-                draw(&mut img, c, x, y0 + 14, 1);
-                x += fw + 2;
+                draw(&mut img, c, x, y0 + 14 + fh - h, 1);
+                x += w + 2;
             }
         }
         x += 8;
         for id in ids {
             if let Some(c) = r.set.frame(id) {
-                draw(&mut img, c, x, y0 + 14, 2);
-                x += fw * 2 + 2;
+                draw(&mut img, c, x, y0 + 14 + 2 * (fh - h), 2);
+                x += w * 2 + 2;
             }
         }
     }
@@ -166,7 +174,7 @@ pub fn grid(base: &PersonLook, font: &Font) -> Result<Image, String> {
 /// the 1x frames under them: the art director's loupe.
 pub fn closeup(r: &Rendered, ids: &[FrameId], font: &Font, scale: u32) -> Image {
     let s = scale.max(1);
-    let (fw, fh) = (person::W as u32, person::H as u32);
+    let (fw, fh) = (r.set.w as u32, r.set.h as u32);
     let n = ids.len().max(1) as u32;
     let mut img =
         Image::new(PAD + n * (fw * s + PAD), PAD + 20 + fh * s + PAD + fh + 2 * PAD, [BG[0], BG[1], BG[2], 255]);

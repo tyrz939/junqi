@@ -14,7 +14,7 @@ use jane_data::{Controller, Look, catalog};
 
 fn all() -> &'static [Rendered] {
     static ALL: OnceLock<Vec<Rendered>> = OnceLock::new();
-    ALL.get_or_init(|| looks::all().expect("every look renders"))
+    ALL.get_or_init(|| looks::family(looks::Family::Person).expect("every look renders"))
 }
 
 /// The seat-0, variant-0 set of every look.
@@ -67,7 +67,7 @@ fn coverage_every_look_renders_every_frame_it_promises() {
         assert_eq!(got, want, "{}", r.key());
     }
     for (id, look) in jane_data::looks() {
-        let Look::Person(p) = look;
+        let Look::Person(p) = look else { continue };
         let n = all().iter().filter(|r| r.sprite == *id && r.seat == 0).count();
         assert_eq!(n, p.vary.count(), "{}: one set a variant", looks::name_of(*id));
         assert!(p.vary.count() <= 4, "vary budget");
@@ -96,7 +96,7 @@ fn geometry_a_person_is_32_by_40_standing_on_16_36() {
 fn geometry_the_silhouette_rules_hold() {
     // Head 16 wide (hair included, hats aside), a neck under it, the feet 4 wide.
     for r in bases() {
-        let Look::Person(p) = looks::find(r.name).unwrap().1;
+        let Some((_, Look::Person(p))) = looks::find(r.name) else { unreachable!() };
         let c = r.set.frame(FrameId::Down).unwrap();
         let pr = person::proportions(p.build);
         if p.head.hat == jane_data::Hat::None && p.head.hair != jane_data::Hair::Pigtails {
@@ -113,7 +113,7 @@ fn geometry_the_silhouette_rules_hold() {
 
 #[test]
 fn determinism_twice_is_the_same_bytes() {
-    let again = looks::all().unwrap();
+    let again = looks::family(looks::Family::Person).unwrap();
     for (a, b) in all().iter().zip(&again) {
         assert_eq!(a.set, b.set, "{}", a.key());
     }

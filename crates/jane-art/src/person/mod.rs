@@ -11,6 +11,7 @@
 //! `Dead` and `Dead2` (§4.1, [`fallen`]). West is `Side` mirrored at draw time; a mirrored
 //! normal has its `nx` flipped by the blit.
 
+mod bone;
 mod build;
 mod draw;
 mod fallen;
@@ -140,7 +141,7 @@ pub fn render(look: &PersonLook, seed: u32) -> Result<SpriteSet, String> {
             pose.spread = pose.spread.map(|s| s / 2);
         }
         let body = draw::frame(&d, p, Facing::Down, pose);
-        frames.push((id, fallen::fallen(&body, seed ^ k as u32)));
+        frames.push((id, fallen::fallen(&body, seed ^ k as u32, d.skin != Ramp::Bone)));
     }
     let mut emits = Vec::new();
     for e in look.emits {

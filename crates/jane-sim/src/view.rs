@@ -138,6 +138,12 @@ impl<'a> View<'a> {
         self.rt.grid.tile_at(cx, cy)
     }
 
+    /// The zone's render-only paint over its tiles, in paint order (a roof's slate, a wood's
+    /// pines; PORT.md §6.i). The presentation reads it; nothing in the sim does.
+    pub fn paint(&self) -> &'a [(Rect, jane_core::Material)] {
+        &self.bp.paint
+    }
+
     pub fn flags(&self, cx: i32, cy: i32) -> u8 {
         self.rt.grid.flags_at(cx, cy)
     }
@@ -307,6 +313,16 @@ impl<'a> View<'a> {
         spawn_of(self.bp, p)
     }
 
+    /// A string a row or this zone's generator wrote: the words of a thing read, a label, a
+    /// toast (`TextRef::Local` is her zone's blueprint's). Empty for a local text that is not
+    /// there.
+    pub fn text(&self, r: TextRef) -> &'a str {
+        match r {
+            TextRef::Text(t) => jane_data::catalog().text(t),
+            TextRef::Local(_) => self.bp.text(r).unwrap_or(""),
+        }
+    }
+
     /// A prop by id in her zone.
     pub fn prop(&self, id: crate::ids::PropId) -> Option<&'a Prop> {
         self.zone.prop_ix(id).map(|i| &self.zone.props[i as usize])
@@ -336,6 +352,24 @@ impl<'a> View<'a> {
         n == 1 && talking
     }
 
+    /// Whether the party has seen cell `(cx, cy)` of this zone (the fog's seen-bits, `fog.rs`):
+    /// what the map charts and the debug view shades.
+    pub fn seen(&self, cx: i32, cy: i32) -> bool {
+        let g = self.rt.fog;
+        let n = g.cells as i32;
+        crate::fog::fog_seen(&self.zone.fog, g, cx.div_euclid(n), cy.div_euclid(n))
+    }
+
+    /// Cells on a side of one fog block here (2 indoors, 8 out).
+    pub fn fog_block(&self) -> u32 {
+        self.rt.fog.cells
+    }
+
+    /// Seats sitting down now: the party penalty's head count (the HUD shows it).
+    pub fn party(&self) -> u8 {
+        self.state.connected().count() as u8
+    }
+
     /// 21:00 to 06:00.
     pub fn is_night(&self) -> bool {
         self.state.is_night()
@@ -348,6 +382,20 @@ impl<'a> View<'a> {
         let Some(s) = self.sym("the_end") else { return 0 };
         let v = self.state.flags.get(&crate::state::FlagKey::Named(s)).copied().unwrap_or(0);
         u8::try_from(v).unwrap_or(0)
+    }
+
+    /// A world flag by name, 0 when it was never set (or the name never interned): what the
+    /// presentation reads to hear the county (`bell_stopped` silences the bell at nine and six;
+    /// `omen:early_bell` rings it at ten to nine on a Tuesday). Read-only, like everything here.
+    pub fn flag(&self, name: &str) -> i32 {
+        let Some(s) = self.sym(name) else { return 0 };
+        self.state.flags.get(&crate::state::FlagKey::Named(s)).copied().unwrap_or(0)
+    }
+
+    /// The day of the week, 0 Sunday (`GameState::weekday`): the train's whistle and the early
+    /// bell keep to it.
+    pub fn weekday(&self) -> u8 {
+        self.state.weekday()
     }
 
     /// The spells the world has learned (growth is the party's).
@@ -421,6 +469,24 @@ impl<'a> View<'a> {
     pub fn sight(&self, a: Vec2, b: Vec2) -> bool {
         crate::los::line_of_sight(&self.rt.grid, a, b)
     }
+
+    /// The seat whose body `unit` is, if a connected seat's: her coat is the seat's, the one
+    /// thing that tells players apart (PLATFORM.md §2; PRESENTATION.md §3.6 `friend_seat`).
+    pub fn seat_of(&self, unit: UnitId) -> Option<Seat> {
+        self.state.players.iter().find(|p| p.connected && p.unit == unit).map(|p| p.seat)
+    }
+
+    /// Whether a damage or heal number is hers to see: she dealt it or took it (PLATFORM.md §2,
+    /// "numbers are yours"). A friend's fight shows its sparks, never her arithmetic. False for
+    /// any other kind.
+    pub fn is_my_number(&self, kind: &crate::event::EventKind) -> bool {
+        use crate::event::EventKind;
+        let me = self.me().unit;
+        match *kind {
+            EventKind::Damage { unit, from, .. } | EventKind::Heal { unit, from, .. } => unit == me || from == Some(me),
+            _ => false,
+        }
+    }
 }
 
 fn prev_pos(rt: &ZoneRuntime, id: UnitId) -> Option<Vec2> {
@@ -477,8 +543,4 @@ impl<'a> View<'a> {
         self.state.hour() as u8
     }
 
-    /// The day of the week, 0 Sunday (the train's day, `if weekday`).
-    pub fn weekday(&self) -> u8 {
-        self.state.weekday()
-    }
 }

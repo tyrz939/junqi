@@ -51,6 +51,11 @@ pub enum FrameId {
     Base3,
     On,
     Open,
+    /// A creature's idle pose, facing the viewer (ART.md §2.2): the dog and the cat sit, the
+    /// sheep grazes, a hen pecks, a rabbit sits up.
+    Idle,
+    /// The idle pose's other beat: a head tilted, a tail swept, a nose to the ground.
+    Idle2,
 }
 
 impl FrameId {
@@ -92,7 +97,58 @@ impl FrameId {
             FrameId::Base3 => "base_3",
             FrameId::On => "on",
             FrameId::Open => "open",
+            FrameId::Idle => "idle",
+            FrameId::Idle2 => "idle_2",
         }
+    }
+
+    /// Every frame, in order.
+    pub const ALL: [FrameId; 37] = {
+        use FrameId as F;
+        [
+            F::Down,
+            F::Down1,
+            F::Down2,
+            F::Down3,
+            F::Down4,
+            F::Down5,
+            F::DownB,
+            F::Up,
+            F::Up1,
+            F::Up2,
+            F::Up3,
+            F::Up4,
+            F::Up5,
+            F::UpB,
+            F::Side,
+            F::Side1,
+            F::Side2,
+            F::Side3,
+            F::Side4,
+            F::Side5,
+            F::SideB,
+            F::Atk1,
+            F::Atk2,
+            F::Atk3,
+            F::Cast1,
+            F::Cast2,
+            F::Cast3,
+            F::Hurt,
+            F::Dead,
+            F::Dead2,
+            F::Base,
+            F::Base2,
+            F::Base3,
+            F::On,
+            F::Open,
+            F::Idle,
+            F::Idle2,
+        ]
+    };
+
+    /// The frame `jane sheet` calls `name` (`"side_1"`).
+    pub fn by_name(name: &str) -> Option<FrameId> {
+        FrameId::ALL.iter().copied().find(|f| f.name() == name)
     }
 
     /// Whether this is a dead frame.
@@ -116,6 +172,18 @@ pub enum Role {
     Held,
     Eye,
     Glass,
+    /// A creature's pelt or plumage.
+    Fur,
+    /// A creature's underside or second coat colour.
+    Belly,
+    /// A creature's markings.
+    Mark,
+    /// A prop's main material.
+    Body,
+    /// A prop's second material: bands, a frame, a lid.
+    Trim,
+    /// A flame or an ember: it emits when lit.
+    Flame,
 }
 
 /// One look rendered: every frame, one size, one anchor.

@@ -18,15 +18,18 @@ use jane_sim::view::View;
 use crate::atlas::{Atlas, RefId};
 use crate::backend::AtlasPages;
 use crate::camera::{Camera, alpha_256};
-use crate::chunks::ChunkCache;
+use crate::chunks::{ChunkCache, LRU, Need};
 use crate::drawlist::{DrawCmd, DrawList};
 use crate::frame::{
     CANVAS_H, CANVAS_W, CELL, CHUNK_PX, Caster, ChunkCmd, ChunkId, Depth, FX_TO_CANVAS, Flags, Frame, Light, LightKind,
-    Pass, Rgb, Span, SpriteCmd, Tier, Tint,
+    Pass, Post, Rgb, Span, SpriteCmd, Tier, Tint,
 };
 use crate::light::{Sky, flicker, lantern_lit, sky};
+use crate::creatures::{self, Creatures};
 use crate::people::{self, People};
+use crate::props::{self, Props};
 use crate::stand_in::{self, StandIns, UnitKind};
+use crate::terrain::Terrain;
 
 /// A unit moving further than this in a tick (40 sim px, `Fx`) snaps instead of sliding: travel,
 /// a respawn, a hop.
@@ -36,6 +39,9 @@ const SNAP_FX: i64 = 40 * 256;
 const MARGIN_CELLS: i32 = 6;
 /// Canvas px round the view painted ahead, so a frame between two ticks never finds a hole.
 const CHUNK_AHEAD: i32 = 64;
+/// Chunks the terrain painter lands in a tick at most (§1.6): the rest show their swatches, or
+/// what they last had, until it reaches them. The tick a zone is entered paints all it shows.
+const LAND_PER_TICK: usize = 2;
 /// Canvas px round the view the draw list sorts over; things further out are culled.
 const SORT_MARGIN: i32 = 96;
 /// Ticks a hurt unit shows it, and the first ticks of them it flashes (§1.11).
@@ -77,6 +83,12 @@ struct UnitRec {
     glow: Option<(u16, Rgb)>,
     /// The unit's person look in [`People`], when its sprite has one; else `look` stands in.
     person: Option<u16>,
+    /// The unit's creature look in [`Creatures`], when its sprite has one.
+    creature: Option<u16>,
+    /// Ticks stood still (a creature sits, grazes or pecks after a while), and the tick it last
+    /// struck (its attack's three beats).
+    still: u32,
+    struck: Option<u32>,
     facing: Facing,
 }
 
@@ -112,8 +124,13 @@ struct LightRec {
 #[derive(Debug)]
 pub struct Present {
     atlas: Atlas,
+    /// Where the UI's glyphs, marks and icons are in the atlas.
+    ui_art: crate::ui::UiArt,
     stand: StandIns,
     people: People,
+    creatures: Creatures,
+    /// The prop kit's looks.
+    kit: Props,
     frame: Frame,
     tick: u32,
     /// The canvas the last frame was drawn for; the camera frames for it.
@@ -122,9 +139,16 @@ pub struct Present {
     zone: Option<(ZoneId, u32)>,
     zone_cells: (u32, u32),
     chunks: ChunkCache,
+    terrain: Terrain,
+    /// This tick's chunks to paint, by priority (scratch).
+    wants: Vec<(u32, ChunkId, Need)>,
+    /// A zone was entered this tick.
+    entered: bool,
     units: Vec<UnitRec>,
     units_next: Vec<UnitRec>,
     hurt: Vec<u32>,
+    /// Units that struck (cast) this tick.
+    struck: Vec<u32>,
     props: Vec<PropRec>,
     prop_scratch: Vec<PropIx>,
     standing: DrawList,
@@ -140,12 +164,25 @@ impl Present {
         let mut atlas = Atlas::with_layers(tier > Tier::T0);
         let stand = StandIns::build(&mut atlas);
         let people = People::build(&mut atlas);
+        let creatures = Creatures::build(&mut atlas);
+        let kit = Props::build(&mut atlas);
+        let terrain = Terrain::build(&mut atlas, LRU);
+        // The UI's page goes last, so no world sprite moves when it grows (PRESENTATION.md §3.1).
+        let (ui_art, mut ui_page) = crate::ui::UiArt::build(atlas.pages.pages.len() as u8);
+        if atlas.lit() {
+            let n = ui_page.albedo.len();
+            (ui_page.normal, ui_page.emissive, ui_page.height) = (vec![[128, 128]; n], vec![0; n], vec![0; n]);
+        }
+        atlas.pages.pages.push(ui_page);
         let mut frame = Frame::new(tier);
         let chunks = ChunkCache::reserved(&mut frame.layers, tier);
         Present {
             atlas,
+            ui_art,
             stand,
             people,
+            creatures,
+            kit,
             frame,
             tick: 0,
             canvas: (CANVAS_W, CANVAS_H),
@@ -153,9 +190,13 @@ impl Present {
             zone: None,
             zone_cells: (0, 0),
             chunks,
+            terrain,
+            wants: Vec::with_capacity(64),
+            entered: false,
             units: Vec::with_capacity(256),
             units_next: Vec::with_capacity(256),
             hurt: Vec::with_capacity(64),
+            struck: Vec::with_capacity(64),
             props: Vec::with_capacity(1024),
             prop_scratch: Vec::with_capacity(1024),
             standing: DrawList::default(),
@@ -176,6 +217,21 @@ impl Present {
         &self.atlas.pages
     }
 
+    /// The UI's page table: what `ui::Ui::new` takes.
+    pub fn ui_art(&self) -> &crate::ui::UiArt {
+        &self.ui_art
+    }
+
+    /// The frame as last drawn (with the `Ui` pass as last finished).
+    pub fn frame(&self) -> &Frame {
+        &self.frame
+    }
+
+    /// The frame, for the UI to finish its pass into after [`draw`](Self::draw).
+    pub fn frame_mut(&mut self) -> &mut Frame {
+        &mut self.frame
+    }
+
     /// Ticks presented since New Game.
     pub fn ticks(&self) -> u32 {
         self.tick
@@ -185,9 +241,24 @@ impl Present {
         &self.camera
     }
 
+    /// A chunk's slot and generation in the cache, if it is painted and fresh (the F3 view).
+    pub fn chunk(&self, id: ChunkId) -> Option<(u16, u32)> {
+        self.chunks.find(id)
+    }
+
+    /// The zone's size in cells, as of the last tick.
+    pub fn zone_cells(&self) -> (u32, u32) {
+        self.zone_cells
+    }
+
     /// Chunks painted so far (each paint is a new `(id, generation)`).
     pub fn chunks_painted(&self) -> u32 {
         self.chunks.painted
+    }
+
+    /// Of them, those the terrain painter landed (the rest were swatches standing in).
+    pub fn chunks_landed(&self) -> u32 {
+        self.chunks.landed
     }
 
     /// Units and props kept this tick (in and round the view).
@@ -209,14 +280,21 @@ impl Present {
         if self.zone != Some(key) {
             self.zone = Some(key);
             self.chunks.drop_all();
+            self.terrain.zone(view);
+            self.entered = true;
             self.camera.reset();
             self.units.clear();
         }
         self.zone_cells = view.size();
         self.hurt.clear();
+        self.struck.clear();
         for e in events_for(events, view.me()) {
             match e.kind {
-                EventKind::Tiles(r) => self.chunks.invalidate(r),
+                // A tile reaches a few cells round it in what the painter draws.
+                EventKind::Tiles(r) => {
+                    let g = jane_art::terrain::REACH;
+                    self.chunks.invalidate(Rect::new(r.x - g, r.y - g, r.w + 2 * g, r.h + 2 * g));
+                }
                 EventKind::Shake(n) => self.camera.shake(n),
                 EventKind::Camera { mode, rect } => {
                     self.camera.lock = match mode {
@@ -225,6 +303,7 @@ impl Present {
                     };
                 }
                 EventKind::Damage { unit, .. } => self.hurt.push(unit.get()),
+                EventKind::Cast { unit, .. } => self.struck.push(unit.get()),
                 _ => {}
             }
         }
@@ -269,14 +348,11 @@ impl Present {
             } else {
                 UnitKind::Hostile
             };
-            // A seat's coat: hers by her seat; another player's, one of the other three, by id
-            // (the view names no other seat's body).
+            // A seat's coat: hers by her seat, another player's by his (the same coat on every
+            // machine at the table).
             let seat = match kind {
                 UnitKind::Me => my_seat,
-                UnitKind::Seat => {
-                    let s = 1 + (id % 3) as u8;
-                    if s == my_seat { 0 } else { s }
-                }
+                UnitKind::Seat => view.seat_of(u.id).map_or(0, |s| s.index() as u8),
                 _ => 0,
             };
             let person = self.people.set(cat.combat.unit(u.def).sprite, uv.variant, seat);
@@ -297,6 +373,9 @@ impl Present {
                     .filter(|_| u.alive)
                     .map(|g| ((g.radius.0 >> FX_TO_CANVAS).clamp(0, 1024) as u16, rgb(g.color))),
                 person,
+                creature: person.map_or_else(|| self.creatures.set(cat.combat.unit(u.def).sprite), |_| None),
+                still: if prev == cur { old.map_or(0, |o| o.still.saturating_add(1)) } else { 0 },
+                struck: old.and_then(|o| o.struck),
                 facing: u.facing,
             });
         }
@@ -307,11 +386,16 @@ impl Present {
                 self.units[i].hurt_until = self.tick + HURT_TICKS;
             }
         }
+        for &id in &self.struck {
+            if let Ok(i) = self.units.binary_search_by_key(&id, |r| r.id) {
+                self.units[i].struck = Some(self.tick);
+            }
+        }
     }
 
     fn read_props(&mut self, view: &View<'_>, area: Rect) {
         let cat = jane_data::catalog();
-        let (props, stand) = (&mut self.props, &self.stand);
+        let (props, stand, kit) = (&mut self.props, &self.stand, &self.kit);
         props.clear();
         view.for_props_in(area, &mut self.prop_scratch, |p| {
             let d = cat.story.prop(p.def);
@@ -319,13 +403,24 @@ impl Present {
             if d.gate && !p.solid {
                 return;
             }
+            // Its look from the kit, in its state (a lamp alight, a chest looted), else its
+            // stand-in.
+            let lit = d.light.is_some() && view.light_showing(p).is_some();
+            let state = props::State {
+                on: p.on || lit,
+                open: p.used || !matches!(p.loot, jane_sim::state::LootState::AsSpawned),
+            };
             props.push(PropRec {
                 id: p.id.get(),
                 x: i32::from(p.cell.x) * CELL,
                 y: i32::from(p.cell.y) * CELL,
                 w: i32::from(d.w) * CELL,
                 h: i32::from(d.h) * CELL,
-                look: stand.prop(d.w, d.h, d.flat, d.light.is_some()),
+                look: kit.look(d.sprite, p.id.get(), state).unwrap_or_else(|| {
+                    let look = stand.prop(d.w, d.h, d.flat, d.light.is_some());
+                    // A lamp the view says is out has dark glass.
+                    if d.light.is_some() && !lit { stand.unlit(look) } else { look }
+                }),
                 flat: d.flat,
             });
         });
@@ -337,7 +432,7 @@ impl Present {
         let cat = jane_data::catalog();
         let reach =
             Rect::new(area.x - LIGHT_CELLS, area.y - LIGHT_CELLS, area.w + 2 * LIGHT_CELLS, area.h + 2 * LIGHT_CELLS);
-        let (lights, stand, atlas) = (&mut self.lights, &self.stand, &self.atlas);
+        let (lights, stand, atlas, kit) = (&mut self.lights, &self.stand, &self.atlas, &self.kit);
         lights.clear();
         view.for_props_in(reach, &mut self.light_scratch, |p| {
             let Some(l) = view.light_showing(p) else { return };
@@ -345,16 +440,20 @@ impl Present {
             let (x, y) = (i32::from(p.cell.x) * CELL, i32::from(p.cell.y) * CELL);
             let (w, h) = (i32::from(d.w) * CELL, i32::from(d.h) * CELL);
             // Where the flame is: a building's lit windows on its front, low; a thing on the
-            // floor just above it; a lamp at its glass; a fire or a stove at its heart.
+            // floor just above it; else where its sprite glows, standing on its foot (the row
+            // its sprite stands on, as it is drawn: bottom-centred on the footprint).
+            let on = props::State { on: true, open: false };
+            let look = kit.look(d.sprite, p.id.get(), on).unwrap_or_else(|| stand.prop(d.w, d.h, d.flat, true));
+            let r = atlas.get(look);
             let (gx, gy, height, size) = if d.w >= 3 || d.h >= 3 {
                 (x + w / 2, y + h + 4, 16, 12)
             } else if d.flat {
                 (x + w / 2, y + h / 2, 4, 6)
-            } else if d.w == 1 && d.h == 1 {
-                let r = atlas.get(stand.prop(d.w, d.h, d.flat, true));
-                (x + w / 2, y + h - 3, (i32::from(r.height) * 11 / 16).clamp(8, 60), 6)
             } else {
-                (x + w / 2, y + h / 2, 12, 12)
+                let foot = y + h - i32::from(r.src.h) + i32::from(r.ay);
+                // A kit lamp shines from its lit glass; a stand-in from its demo glass.
+                let glass = kit.glass(d.sprite).or_else(|| stand.glass(look)).map_or(i32::from(r.height) * 2 / 3, i32::from);
+                (x + w / 2, foot, glass.clamp(4, 60), if d.w == 1 { 6 } else { 10 })
             };
             lights.push(LightRec {
                 id: p.id.get(),
@@ -370,19 +469,44 @@ impl Present {
         lights.sort_unstable_by_key(|l| l.id);
     }
 
-    /// Paints every chunk under the view (and a little round it) that is not painted yet.
+    /// Paints the chunks under the view (and a little round it) that want it: at most
+    /// [`LAND_PER_TICK`] by the terrain painter, those on screen and nearest the middle first;
+    /// one with nothing to show yet takes its swatches meanwhile.
     fn paint_chunks(&mut self, view: &View<'_>) {
-        let Some((cx0, cy0, cx1, cy1)) =
-            self.chunk_range((self.camera.pos.0 >> FX_TO_CANVAS, self.camera.pos.1 >> FX_TO_CANVAS), CHUNK_AHEAD)
-        else {
+        let cam = (self.camera.pos.0 >> FX_TO_CANVAS, self.camera.pos.1 >> FX_TO_CANVAS);
+        let Some((cx0, cy0, cx1, cy1)) = self.chunk_range(cam, CHUNK_AHEAD) else {
             return;
         };
+        let (sx0, sy0, sx1, sy1) = self.chunk_range(cam, 0).unwrap_or((cx0, cy0, cx1, cy1));
+        let mid = (cam.0 + i32::from(self.canvas.0) / 2, cam.1 + i32::from(self.canvas.1) / 2);
         let (cells, outside, now) = (self.zone_cells, self.frame.clear, self.tick);
+        self.wants.clear();
+        let mut shown = 0;
         for cy in cy0..=cy1 {
             for cx in cx0..=cx1 {
                 let id = ChunkId { cx: cx as u16, cy: cy as u16 };
-                self.chunks.want(id, now, &mut self.frame.layers, |layers| {
-                    stand_in::paint_chunk(id, cells, outside, |x, y| view.tile(x, y), layers);
+                self.chunks.touch(id, now);
+                let need = self.chunks.need(id);
+                if need == Need::Nothing {
+                    continue;
+                }
+                let on = (sx0..=sx1).contains(&cx) && (sy0..=sy1).contains(&cy);
+                shown += usize::from(on);
+                let (dx, dy) = (cx * CHUNK_PX + CHUNK_PX / 2 - mid.0, cy * CHUNK_PX + CHUNK_PX / 2 - mid.1);
+                let d = (dx.unsigned_abs() + dy.unsigned_abs()).min(0x00ff_ffff);
+                self.wants.push((u32::from(!on) << 24 | d, id, need));
+            }
+        }
+        self.wants.sort_unstable_by_key(|w| (w.0, w.1.cy, w.1.cx));
+        let budget = if std::mem::take(&mut self.entered) { shown.max(LAND_PER_TICK) } else { LAND_PER_TICK };
+        let (chunks, terrain, layers) = (&mut self.chunks, &mut self.terrain, &mut self.frame.layers);
+        for (i, &(key, id, need)) in self.wants.iter().enumerate() {
+            if i < budget {
+                chunks.want(id, now, layers, false, |slot, l| terrain.paint(view, id, slot, outside, l));
+            } else if need == Need::Missing && key >> 24 == 0 {
+                chunks.want(id, now, layers, true, |slot, l| {
+                    terrain.swatched(slot);
+                    stand_in::paint_chunk(id, cells, outside, |x, y| view.tile(x, y), l);
                 });
             }
         }
@@ -460,12 +584,38 @@ impl Present {
             let foot = p.y + p.h - cam.1;
             let caster = (!p.flat).then(|| Caster {
                 sprite: 0,
-                foot: clamp16(x + i32::from(r.src.w) / 2, foot),
+                foot: clamp16(x + i32::from(r.src.w) / 2, y + i32::from(r.ay)),
                 height: r.src.h.min(255) as u8,
                 depth: (p.h / 4).clamp(4, 12) as u8,
             });
             let cmd = DrawCmd { y: foot, key: p.id, sprite: sprite(r, x, y, Flags::default()), caster };
             if p.flat { self.ground.push(cmd) } else { self.standing.push(cmd) }
+        }
+        // The chunks' trees, shrubs and stones, from the atlas, by their feet.
+        if let Some((cx0, cy0, cx1, cy1)) = self.chunk_range(cam, SORT_MARGIN) {
+            for cy in cy0..=cy1 {
+                for cx in cx0..=cx1 {
+                    let Some((slot, _)) = self.chunks.find(ChunkId { cx: cx as u16, cy: cy as u16 }) else {
+                        continue;
+                    };
+                    let (ox, oy) = (cx * CHUNK_PX - cam.0, cy * CHUNK_PX - cam.1);
+                    for (i, pl) in self.terrain.placed(slot).iter().enumerate() {
+                        let fl = self.terrain.flora(pl.sprite);
+                        let r = self.atlas.get(fl.look);
+                        let (fx, fy) = (ox + i32::from(pl.x), oy + i32::from(pl.y));
+                        let (x, y) = (fx - i32::from(r.ax), fy - i32::from(r.ay));
+                        if !on_canvas(x, y, r.src.w, r.src.h) {
+                            continue;
+                        }
+                        self.standing.push(DrawCmd {
+                            y: fy,
+                            key: 0x4000_0000 | u32::from(slot) << 10 | i as u32,
+                            sprite: sprite(r, x, y, Flags::default()),
+                            caster: Some(Caster { sprite: 0, foot: clamp16(fx, fy), height: r.height, depth: fl.depth }),
+                        });
+                    }
+                }
+            }
         }
         let lantern = lantern_lit(self.sky.ambient);
         let mut glows: [Option<Light>; 64] = [None; 64];
@@ -487,7 +637,7 @@ impl Present {
                     height: 20,
                     colour: scale(LANTERN, k),
                     radius: LANTERN_RADIUS,
-                    size: 3,
+                    size: 5,
                     casts: true,
                     kind: LightKind::Point,
                 });
@@ -507,20 +657,35 @@ impl Present {
             }
             // A person shows its walk, breathe or dead frame (ART.md §4); a stand-in walks with
             // a one-px bob.
-            let (look, mirror, bob) = match u.person {
-                Some(set) => {
+            let (look, mirror, bob) = match (u.person, u.creature) {
+                (Some(set), _) => {
                     let pose = people::Pose { facing: u.facing, anim: u.anim, tick: self.tick, dead: u.dead, id: u.id };
                     let (look, mirror) = self.people.frame(set, pose);
                     (look, mirror, 0)
                 }
-                None => (u.look, u.mirror, i32::from((u.anim / 9) & 1 == 1)),
+                // A creature trots, sits a while after it stops, and strikes in three beats.
+                (None, Some(set)) => {
+                    let attack = u.struck.map(|t| self.tick.wrapping_sub(t)).filter(|&t| t < 3 * creatures::ATTACK_TICKS);
+                    let pose = creatures::Pose {
+                        facing: u.facing,
+                        anim: u.anim,
+                        still: u.still,
+                        tick: self.tick,
+                        dead: u.dead,
+                        attack,
+                        id: u.id,
+                    };
+                    let (look, mirror) = self.creatures.frame(set, pose);
+                    (look, mirror, 0)
+                }
+                (None, None) => (u.look, u.mirror, i32::from((u.anim / 9) & 1 == 1)),
             };
             let r = self.atlas.get(look);
             let (x, y) = (sx - i32::from(r.ax), sy - i32::from(r.ay) - bob);
             if !on_canvas(x, y, r.src.w, r.src.h) {
                 continue;
             }
-            let tint = if u.dead && u.person.is_some() {
+            let tint = if u.dead && (u.person.is_some() || u.creature.is_some()) {
                 Tint::None
             } else if u.dead {
                 Tint::Ghost(160)
@@ -598,9 +763,10 @@ impl Present {
 
         let sky = &self.sky;
         f.passes.push(Pass::Sprites { layer: Depth::Ground, cmds: ground });
-        // Silhouette sun shadows under the standing things, where the tier has no shadow maps.
+        // Silhouette sun shadows under the standing things, where the tier has no shadow maps:
+        // from a sun or a moon, not from the afterglow, a sky too broad to throw a silhouette.
         if f.tier <= Tier::T1
-            && let Some(sun) = sky.sun
+            && let Some(sun) = sky.sun.filter(|s| s.spread <= crate::light::SILHOUETTE_SPREAD)
             && casters.len > 0
         {
             f.passes.push(Pass::Silhouettes { sun, shade: sky.shade, casters });
@@ -610,8 +776,12 @@ impl Present {
         if f.tier > Tier::T0 || sky.ambient.iter().any(|&c| c < 254) {
             f.passes.push(Pass::Lights { ambient: sky.ambient, fill: sky.fill, sun: sky.sun, points, casters });
         }
+        // The grade (§1.3 `grade`): all of it at T2; at T1 the tint and the lift alone, and none
+        // of the exposure, saturation or bloom T1 does not draw.
         if f.tier >= Tier::T2 {
             f.passes.push(Pass::Post(sky.post));
+        } else if f.tier == Tier::T1 {
+            f.passes.push(Pass::Post(Post { tint: sky.post.tint, lift: sky.post.lift, ..Post::NONE }));
         }
         &self.frame
     }

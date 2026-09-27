@@ -1,0 +1,35 @@
+{
+  "name": "arms",
+  "mood": "The Castle Arms, lit till it is light: a slow D major waltz on a harmonium with a guitar keeping the oom-pah, warm, a little out of its time, going to B minor for a verse nobody sings",
+  "key": "D", "mode": "major",
+  "step_ticks": 16, "bar": 6,
+  "gain": 1.0, "humanize_ms": 12,
+  "tracks": [
+    { "name": "tune", "inst": "reed", "alt": ["flute"], "kind": "melody", "octave": 5, "vel": 0.66, "pan": 0.15, "gate": 0.95 },
+    { "name": "chords", "inst": "guitar", "kind": "chord", "octave": 4, "vel": 0.38, "voices": 3, "pan": -0.25, "gate": 0.6 },
+    { "name": "bass", "inst": "bass_pluck", "kind": "bass", "octave": 2, "vel": 0.6 },
+    { "name": "fiddle", "inst": "strings", "kind": "melody", "octave": 4, "vel": 0.36, "pan": -0.4, "gate": 1.0 }
+  ],
+  "sections": {
+    "A": { "bars": 8, "chords": "1 1 4 1 6 2 5 1",
+      "play": {
+        "tune": [
+          "3 - - 4 5 - | 8 - - - 5 - | 6 - - 5 4 - | 3 - - - - . | 3 - - 2 1 - | 2 - 3 - 4 - | 2 - - 7, - 5, | 1 - - - - .",
+          "3 - 4 - 5 - | 8 - - - 5 - | 6 - 5 - 4 - | 3 - - - - . | 3 - 2 - 1 - | 2 - 3 - 4 - | 2 - - 7, - 5, | 1 - - - - ."
+        ],
+        "chords": ". . x . x . | . . x . x . | . . x . x . | . . x . x . | . . x . x . | . . x . x . | . . x . x . | . . x . x .",
+        "bass": "1 - . . . . | 5, - . . . . | 1 - . . . . | 5, - . . . . | 1 - . . . . | 1 - . . . . | 1 - . . . . | 1 - . . 5, .",
+        "fiddle": ". . . . . . | . . . . . . | . . . . . . | 5, - - - - - | . . . . . . | . . . . . . | . . . . . . | 3, - - - - -"
+      }
+    },
+    "B": { "bars": 8, "chords": "6 3 4 1 6 2 5 5",
+      "play": {
+        "tune": "6 - - 5 6 - | 7 - - 6 5 - | 4 - - 6 8 - | 5 - - - - . | 6 - - 5 6 - | 4 - - 2 3 - | 2 - - 3 4 - | 5 - - - - .",
+        "chords": ". . x . x . | . . x . x . | . . x . x . | . . x . x . | . . x . x . | . . x . x . | . . x . x . | . . x . x .",
+        "bass": "1 - . . . . | 1 - . . . . | 1 - . . . . | 1 - . . . . | 1 - . . . . | 1 - . . . . | 1 - . . . . | 1 - . . 5, .",
+        "fiddle": "6 - - - - - | 7 - - - - - | 8 - - - - - | 8 - - - - - | 6 - - - - - | 4 - - - - - | 5 - - - - - | 5 - - - - -"
+      }
+    }
+  },
+  "forms": ["A B A", "A A B A", "A B B A"]
+}
