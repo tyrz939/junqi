@@ -46,7 +46,9 @@ impl Lan {
 
     /// The Join screen opened: ask the network who hosts.
     pub fn open_finder(&mut self, last: Option<&str>) {
-        self.finder = Finder::new(self.port).ok();
+        // Every host answers on the discovery port whatever port it plays on; this app's port
+        // too, for a second host on one machine.
+        self.finder = Finder::new(jane_net::discovery::DISCOVERY_PORT).ok().map(|f| f.also(self.port));
         self.asked = None;
         self.found.clear();
         self.status = None;

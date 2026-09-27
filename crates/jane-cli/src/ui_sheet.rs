@@ -227,6 +227,7 @@ pub fn run(dir: &Path, names: &[String]) -> Result<(), String> {
             zone: "The Lowfields",
             company: false,
             lan: Some(("Open to LAN", true)),
+            guest: false,
         };
         rig.frame(at((384, 180)), 5000, |ui, _, _| {
             hud::draw(ui, &b, cx);
@@ -239,7 +240,7 @@ pub fn run(dir: &Path, names: &[String]) -> Result<(), String> {
     let slots = [Some("The Lowfields · Day 2, 21:00".to_owned()), None, Some("Julie's house · Day 5, 08:00".into())];
     if want("host") {
         let mut t = TitleState { name: "Tess".into(), ..TitleState::default() };
-        let mut st = HostState::default();
+        let mut st = HostState { port_text: "7777".into(), ..HostState::default() };
         st.choice.slot = Some(0);
         st.choice.seats = 3;
         for k in 0..2 {

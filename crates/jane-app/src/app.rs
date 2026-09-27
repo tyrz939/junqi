@@ -241,6 +241,7 @@ pub fn run(
             seats: args.seats,
             delay: args.delay,
             wait: args.wait,
+            port: args.port,
         });
         app.new_game(args.name.clone(), args.seed, host);
     } else if let Some(addr) = &args.join {
@@ -798,6 +799,8 @@ impl App<'_> {
                 self.lan.host_form.choice.seats = self.args.seats;
                 self.lan.host_form.choice.delay = self.args.delay;
                 self.lan.host_form.choice.wait = self.args.wait;
+                self.lan.host_form.choice.port = self.lan.port;
+                self.lan.host_form.port_text = self.lan.port.to_string();
                 self.menus.push(Menu::Host);
             }
             AppIntent::JoinMenu => {
@@ -806,6 +809,7 @@ impl App<'_> {
             }
             AppIntent::Host(choice) => {
                 self.menus.clear();
+                self.lan.port = choice.port;
                 match choice.slot {
                     Some(n) => self.load(n, Some(choice)),
                     None => {
@@ -1162,15 +1166,20 @@ impl App<'_> {
                     let lan = match &self.session {
                         Some(Session::Local(_)) => Some(("Open to LAN".to_owned(), true)),
                         Some(Session::Host(h)) => Some((format!("Hosting on port {}", h.port()), false)),
-                        _ => None,
+                        // The door, the saves and who may sit are the host's.
+                        Some(Session::Guest(_)) => Some(("The host keeps this table".to_owned(), false)),
+                        None => None,
                     };
                     let guest = matches!(self.session, Some(Session::Guest(_)));
                     let info = PauseInfo {
                         can_save: self.bufs.me.can_save && !guest,
                         when: &when,
                         zone,
-                        company: !self.alone(),
+                        // Only with someone else actually sitting at the table.
+                        company: !self.alone()
+                            && sim_of(self.session.as_ref()).is_some_and(|s| s.state().party_size() > 1),
                         lan: lan.as_ref().map(|(l, on)| (l.as_str(), *on)),
+                        guest,
                     };
                     menus::pause(&mut self.ui, &mut self.menu_state, &info);
                 }
