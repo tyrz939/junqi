@@ -246,12 +246,71 @@ pub fn max_hit(u: &Unit) -> i32 {
 }
 
 /// Something to eat, if she is low and can.
+/// Under fire from something with no feet that she is not fighting (a sentry by the fire she
+/// woke at, a cactus by the path): the nearest ground out of its reach or its sight, and the stick
+/// toward it. Stood still in its reach (waiting out the night, nothing left to choose), it shot
+/// her dead again and again where she woke.
+pub fn out_of_fire(v: &View<'_>, cx: &mut Ctx) -> Option<InputFrame> {
+    use std::collections::{BTreeSet, VecDeque};
+    let me = v.body();
+    let cat = jane_data::catalog();
+    let shooters: Vec<(jane_core::Vec2, i64)> = enemies(v)
+        .into_iter()
+        .filter(|u| on_me(v, u) && rooted(u) && reaches_her(v, u))
+        .map(|u| {
+            let far =
+                jane_sim::combat::book_of(u).iter().map(|&s| i64::from(cat.combat.spell(s).range.0)).max().unwrap_or(0);
+            (u.pos, far + i64::from(2 * CELL_FX))
+        })
+        .collect();
+    if shooters.is_empty() {
+        return None;
+    }
+    let safe = |c: (i32, i32)| {
+        let at = jane_core::Vec2::centre(c.0, c.1);
+        shooters.iter().all(|&(p, r)| dist(at, p) > r || !v.sight(p, at))
+    };
+    let start = me.pos.cell();
+    // Out of its line already (in its reach, behind a wall): nowhere to step to. (Stepped to the
+    // next safe cell regardless, she went from one to the next for the rest of the day.)
+    if safe(start) {
+        return None;
+    }
+    let mut seen = BTreeSet::new();
+    let mut q = VecDeque::new();
+    seen.insert(start);
+    q.push_back((start, 0u32));
+    while let Some((c, steps)) = q.pop_front() {
+        if c != start && safe(c) {
+            let to = jane_core::Vec2::centre(c.0, c.1);
+            return Some(match cx.nav.go(v, to, Fx::from_px(4), true) {
+                Go::Walk(f) => f,
+                _ => stick(me.pos, to, true),
+            });
+        }
+        if steps >= 30 || seen.len() > 3000 {
+            continue;
+        }
+        for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+            let n = (c.0 + dx, c.1 + dy);
+            if crate::nav::walkable(v, n.0, n.1) && seen.insert(n) {
+                q.push_back((n, steps + 1));
+            }
+        }
+    }
+    None
+}
+
 pub fn eat(v: &View<'_>) -> Option<Command> {
     if hp_permille(v.body()) >= EAT_BELOW {
         return None;
     }
     // The School: the apples are kept for the Timekeeper (`tactics::school::may_eat`).
     if v.zone() == jane_core::ZoneId::School && !crate::tactics::school::may_eat(v) {
+        return None;
+    }
+    // The Burial: for its keepers (`tactics::burial::may_eat`).
+    if v.zone() == jane_core::ZoneId::Burial && !crate::tactics::burial::may_eat(v) {
         return None;
     }
     food(v).map(Command::Item)
@@ -461,7 +520,8 @@ pub fn engage(v: &View<'_>, cx: &mut Ctx, id: UnitId) -> Option<Act> {
         cx.fight.fleeing = 0;
     }
     // The School: what she cannot walk away from is fought out (`tactics::school::stands`).
-    let kited = v.zone() == jane_core::ZoneId::School && crate::tactics::school::stands(v, t);
+    let kited = v.zone() == jane_core::ZoneId::School && crate::tactics::school::stands(v, t)
+        || crate::tactics::burial::fought_out(v, t);
     let dangerous = i64::from(max_hit(t)) * 3 >= i64::from(me.hp.points());
     if hp_permille(me) < FLEE_BELOW && cx.fight.fleeing == 0 && !has_food(v) && !would_win(v) && !kited && dangerous {
         cx.fight.fleeing = 180;
@@ -525,10 +585,18 @@ pub fn engage(v: &View<'_>, cx: &mut Ctx, id: UnitId) -> Option<Act> {
             return Some(Act { frame: InputFrame { aim: Some(dir), ..InputFrame::IDLE }, cmds });
         }
     }
+    // Something that out-hits her (a boss, or more health than she has) is kept at bolt range
+    // while the mana lasts: she backs off between casts (it is slower than she is; the frost
+    // slows it more), as a player with a bolt does.
+    let strong = cat.combat.unit(t.def).boss || t.hp > me.hp;
+    // Up close too, what she stands and fights: a bolt point-blank is still twice her swing, and
+    // a swing does not wait on it (toe to toe with three hundred mana unspent is how the School's
+    // guards killed her). What she keeps at range is not bolted up close: the cast holds her
+    // still for the Factory's Charge Hand.
     if def.kind == SpellKind::Bolt
         && knows(v, ice)
         && ready(me, ice, now)
-        && d > i64::from(3 * CELL_FX)
+        && (d > i64::from(3 * CELL_FX) || !strong)
         && g <= i64::from(def.range.0) * 9 / 10
         && v.sight(me.pos, t.pos)
     {
@@ -537,10 +605,6 @@ pub fn engage(v: &View<'_>, cx: &mut Ctx, id: UnitId) -> Option<Act> {
             cmds: vec![Command::Cast { spell: ice, on: Some(id) }],
         });
     }
-    // Something that out-hits her (a boss, or more health than she has) is kept at bolt range
-    // while the mana lasts: she backs off between casts (it is slower than she is; the frost
-    // slows it more), as a player with a bolt does.
-    let strong = cat.combat.unit(t.def).boss || t.hp > me.hp;
     // A crowd on her she would not put down standing (the Gold Mine's hub pulls three skeletons,
     // the clerk and a rat at once): stone skin, which halves their blows, while it is not on her.
     let skin = sense::item("potion_stoneskin");

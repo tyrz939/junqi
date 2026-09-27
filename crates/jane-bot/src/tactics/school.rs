@@ -327,7 +327,9 @@ pub fn strike(v: &View<'_>, cx: &mut Ctx, id: jane_sim::ids::UnitId) -> Option<O
     let chasers = on.iter().filter(walks).count();
     let hp = sense::hp_permille(me);
     let away = on.iter().all(|u| !outpaces(v, u));
-    let losing = away && (hp < RETREAT_CROWD && chasers >= 2 || hp < RETREAT_ALONE && chasers >= 1);
+    // (A web spinner on the wall counts in the crowd: it cannot follow, but it shoots while she
+    // trades blows with what walks.)
+    let losing = away && chasers >= 1 && (hp < RETREAT_CROWD && on.len() >= 2 || hp < RETREAT_ALONE);
     let timekeeper = crate::crawl::boss_of(v.zone()) == Some(t.def);
     if losing && cx.fight.fleeing == 0 && !stands(v, t) {
         if let Some(f) = run_home(v, cx) {
@@ -379,6 +381,19 @@ pub fn strike(v: &View<'_>, cx: &mut Ctx, id: jane_sim::ids::UnitId) -> Option<O
         {
             aim = jane_core::angle::iatan2(mark.pos.y.0 - me.pos.y.0, mark.pos.x.0 - me.pos.x.0);
             cmds.push(Command::Cast { spell: s, on: Some(mark.id) });
+        }
+    }
+    // Something with feet at her and a web spinner on the wall in reach of her: she walks the one
+    // with feet back out of the spinner's reach (it follows, the spinner cannot) and fights it
+    // there, rather than trading blows in the doorway under the webs.
+    let spinner_on_her = on.iter().any(|u| {
+        let def = cat.combat.unit(u.def);
+        let far = def.book.iter().map(|&s| i64::from(cat.combat.spell(s).range.0)).max().unwrap_or(0);
+        def.run.0 == 0 && far > i64::from(2 * CELL_FX) && gap(me, u) <= far + i64::from(CELL_FX)
+    });
+    if !boss && chasers >= 1 && spinner_on_her {
+        if let Some(f) = run_home(v, cx) {
+            return Some(Some(Act { frame: InputFrame { aim: Some(aim), ..f }, cmds }));
         }
     }
     // A boss that walks slower than she does (the Timekeeper, until the last of him) is kept at
@@ -521,6 +536,10 @@ pub fn stands(v: &View<'_>, t: &jane_sim::Unit) -> bool {
 fn outpaces(v: &View<'_>, u: &jane_sim::Unit) -> bool {
     let cat = jane_data::catalog();
     let def = cat.combat.unit(u.def);
+    // Something with no feet (a web spinner on the wall) does not keep up: its reach is left.
+    if def.run.0 == 0 {
+        return false;
+    }
     def.run.0 >= cat.combat.unit(v.body().def).walk.0
         || def
             .book

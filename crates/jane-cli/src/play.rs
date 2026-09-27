@@ -14,7 +14,7 @@ use jane_sim::{Blueprints, Seat, Sim, StepInput};
 
 pub const USAGE: &str = "  play --model reader|rusher --seed N [--minutes M] [--dungeon ZONE] [--tape OUT.jrp]
        [--snap OUT.png [--snap-every S]] [--ending hold|hill|train] [--profile]
-       [--explain] [--explain-every S] [--from ACT]
+       [--explain] [--explain-every S] [--from ACT] [--deaths] [--growth]
                                       a player model plays a seed headless from New Game (or a dungeon from
                                       its door, the console setting up the kit): one line per milestone;
                                       --snap draws the world round her at the end (and every S seconds of
@@ -119,6 +119,7 @@ fn play(args: &[String], tape: Option<&str>) -> Result<(), String> {
     let mut shots = 0;
     let mut prof = Profile::default();
     let explain_every = num(args, "--explain-every", 0)? * 60;
+    let growth = args.iter().any(|a| a == "--growth");
     for _ in 0..frames {
         if bot.done() {
             break;
@@ -135,8 +136,12 @@ fn play(args: &[String], tape: Option<&str>) -> Result<(), String> {
             }
         }
         while shown < bot.log.len() {
-            println!("{}", bot.log[shown].line());
+            let line = bot.log[shown].line();
+            println!("{line}");
             shown += 1;
+            if growth && line.ends_with("quest given: the_burial") {
+                print!("{}", growth_report(rec.sim()));
+            }
         }
         if let Some(path) = snap
             && every > 0
@@ -169,6 +174,30 @@ fn play(args: &[String], tape: Option<&str>) -> Result<(), String> {
     if profile {
         prof.print(played);
     }
+    // Every death, and a count by where and to what.
+    if args.iter().any(|a| a == "--deaths" || a == "--deaths-why") {
+        let cat = jane_data::catalog();
+        let mut by: std::collections::BTreeMap<(String, String), u32> = std::collections::BTreeMap::new();
+        for d in &bot.deaths {
+            println!("death {}", d.line());
+            if args.iter().any(|a| a == "--deaths-why") {
+                for l in &d.before {
+                    println!("      {l}");
+                }
+            }
+            let who = d.by.map_or("?".to_owned(), |u| cat.combat.unit(u).id.to_owned());
+            *by.entry((d.zone.name().to_owned(), who)).or_insert(0) += 1;
+        }
+        let mut rows: Vec<_> = by.into_iter().collect();
+        rows.sort_by(|a, b| b.1.cmp(&a.1).then(a.0.cmp(&b.0)));
+        println!("deaths: {} in all", bot.deaths.len());
+        for ((z, who), n) in rows {
+            println!("  {n:>4} {z:<8} {who}");
+        }
+    }
+    if growth {
+        print!("{}", growth_report(&sim));
+    }
     if args.iter().any(|a| a == "--explain") {
         println!("{}", bot.explain(&v));
     }
@@ -194,6 +223,87 @@ fn play(args: &[String], tape: Option<&str>) -> Result<(), String> {
         );
     }
     Ok(())
+}
+
+/// `--growth`: her health and strength, and every finding that grows her in the story's dungeons
+/// and quests, found or not; for one not found, the prop as the zone has it (a zone never
+/// entered has no state).
+fn growth_report(sim: &Sim) -> String {
+    use std::fmt::Write as _;
+    let cat = jane_data::catalog();
+    let st = sim.state();
+    let g = &st.growth;
+    let mut s = String::new();
+    let hp = sim.view(Seat(0)).map_or(0, |v| jane_sim::units::max_hp(v.body()).points());
+    let _ =
+        writeln!(s, "growth: max hp {hp}; grown strength {} spirit {}; {} found", g.strength, g.spirit, g.found.len());
+    let key_name = |bp: &jane_core::Blueprint, k: jane_core::Key| match k {
+        jane_core::Key::Name(n) => cat.name(n).to_owned(),
+        jane_core::Key::Local(i) => bp.local_names.get(i as usize).cloned().unwrap_or_default(),
+    };
+    let (mut all, mut got) = ((0, 0), (0, 0));
+    // The dungeons the story walks before the Burial.
+    let before = jane_bot::crawl::ORDER.iter().take_while(|&&z| z != jane_core::ZoneId::Burial);
+    for &z in before {
+        let bp = sim.blueprints().get(z);
+        let zs = st.zones[z.index()].as_deref();
+        let later = jane_bot::crawl::rooms_for_later(bp);
+        for (i, p) in bp.props.iter().enumerate() {
+            let for_later = later.iter().any(|r| r.contains(i32::from(p.cell.x), i32::from(p.cell.y)));
+            for (stat, amount, id) in jane_bot::crawl::grows_of(bp, p) {
+                let sym = match id {
+                    jane_core::Key::Name(n) => Some(jane_sim::sym::of_name(n)),
+                    jane_core::Key::Local(j) => bp.local_names.get(j as usize).and_then(|n| st.syms.find(n)),
+                };
+                let found = sym.is_some_and(|y| g.found.contains(&y));
+                let str_ = stat == jane_core::action::Stat::Strength;
+                let a = i32::from(amount);
+                let (all_, got_) = if str_ { (&mut all.0, &mut got.0) } else { (&mut all.1, &mut got.1) };
+                if !for_later {
+                    *all_ += a;
+                }
+                if found {
+                    *got_ += a;
+                }
+                let rooms: Vec<String> = bp
+                    .rects
+                    .iter()
+                    .filter(|(_, r)| r.contains(i32::from(p.cell.x), i32::from(p.cell.y)))
+                    .map(|(k, _)| key_name(bp, *k))
+                    .collect();
+                let state = match zs.and_then(|zs| zs.props.iter().find(|q| q.spawn == Some(i as u16))) {
+                    None => "zone never entered".to_owned(),
+                    Some(q) => format!("hidden {} locked {} used {}", q.hidden, q.locked, q.used),
+                };
+                let _ = writeln!(
+                    s,
+                    "  {} {:<8} {:<16} {:<8} {}{} at ({},{}) in {:?}: {}",
+                    if found {
+                        "got "
+                    } else if for_later {
+                        "LATE"
+                    } else {
+                        "MISS"
+                    },
+                    z.name(),
+                    cat.story.prop(p.def).id,
+                    key_name(bp, p.key),
+                    if str_ { "str +" } else { "spi +" },
+                    amount,
+                    p.cell.x,
+                    p.cell.y,
+                    rooms,
+                    if found { String::new() } else { state }
+                );
+            }
+        }
+    }
+    let _ = writeln!(
+        s,
+        "  before the Burial: strength {}/{} spirit {}/{} (LATE: behind a verb had only later, not counted)",
+        got.0, all.0, got.1, all.1
+    );
+    s
 }
 
 /// Monotonic nanoseconds since the first call: the wall clock lent to the sim for its metrics.

@@ -68,6 +68,8 @@ struct Run {
     /// Spine steps set aside, with how long each stayed so (game minutes; `None`: never undone).
     stuck: Vec<(String, Option<u32>)>,
     log: Vec<String>,
+    /// Every death, as the bot recorded it.
+    death_lines: Vec<String>,
     /// §11's rows that had not fired by the end.
     unnoticed: Vec<&'static str>,
 }
@@ -112,6 +114,7 @@ fn play(seed: u32, ending: Ending) -> Run {
         done,
         stuck,
         log: bot.log.iter().map(jane_bot::Milestone::line).collect(),
+        death_lines: bot.deaths.iter().map(jane_bot::Death::line).collect(),
         unnoticed,
     }
 }
@@ -137,10 +140,17 @@ fn row(r: &Run) -> String {
 #[test]
 #[ignore = "a whole story per seed: cargo test --release -p jane-bot --test story -- --ignored"]
 fn the_reader_reaches_an_ending_on_seeds_1_to_5() {
-    let runs: Vec<Run> = (1..=5).map(|s| play(s, ending_for(s))).collect();
+    // The five in parallel: each is its own sim, and a whole story is minutes of release time.
+    let runs: Vec<Run> = std::thread::scope(|sc| {
+        let hs: Vec<_> = (1..=5).map(|s| sc.spawn(move || play(s, ending_for(s)))).collect();
+        hs.into_iter().map(|h| h.join().expect("a story run")).collect()
+    });
     let mut problems = Vec::new();
     for r in &runs {
         println!("{}", row(r));
+        for d in &r.death_lines {
+            println!("    death {d}");
+        }
         if r.the_end != r.ending.the_end() {
             problems.push(format!("seed {}: ended {} not {}", r.seed, r.the_end, r.ending.the_end()));
             for l in r.log.iter().filter(|l| !l.contains("killed")) {

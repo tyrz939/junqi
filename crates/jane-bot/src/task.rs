@@ -53,6 +53,8 @@ pub struct Ctx {
     pub notes: BTreeMap<ZoneId, Vec<PropNote>>,
     /// Enemies she has seen standing, by def: where each was last seen (forgotten once seen down).
     pub seen_foes: BTreeMap<jane_core::UnitDefId, BTreeMap<UnitId, (ZoneId, Vec2)>>,
+    /// Where she fell in a dungeon, and when (the tick): somewhere not walked back into at once.
+    pub fell: Vec<(ZoneId, (i32, i32), u32)>,
     /// Which of the three endings she chooses at Yours to Say, if told (the choice policy).
     pub ending: Option<crate::Ending>,
     /// She wants the night (or the day) slept away at the next bed: waiting for a Sunday.
@@ -65,6 +67,9 @@ pub struct Ctx {
     /// Butterfly Forest's tactic (`tactics::forest`).
     pub forest: crate::tactics::forest::Forest,
 }
+
+/// How long a dungeon's death spot is let be: two game hours.
+pub const FELL_FOR: u32 = 2 * jane_sim::tuning::TICKS_PER_HOUR;
 
 /// What a prop was seen to do: enough to go back for it from another zone.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -146,12 +151,22 @@ impl Ctx {
             frames: 0,
             notes: BTreeMap::new(),
             seen_foes: BTreeMap::new(),
+            fell: Vec::new(),
             ending: None,
             sleep: false,
             run: false,
             signalled: None,
             forest: crate::tactics::forest::Forest::default(),
         }
+    }
+
+    /// Did she fall within `r` cells of `at` in zone `z`, in the last [`FELL_FOR`] ticks? What
+    /// killed her there is likely there still (a guard, a pair of them, a sentry by a fire), and
+    /// walking straight back in from where she woke is how one death became fifty.
+    pub fn fell_near(&self, z: ZoneId, at: (i32, i32), r: i32, now: u32) -> bool {
+        self.fell.iter().any(|&(fz, c, t)| {
+            fz == z && now < t + FELL_FOR && (c.0 - at.0).abs() <= r && (c.1 - at.1).abs() <= r
+        })
     }
 
     /// Was `id` someone she fought?
@@ -179,6 +194,13 @@ impl Ctx {
                 // Out of doors, where she fell is somewhere to go round next time.
                 EventKind::PlayerDied if v.zone() == ZoneId::County => {
                     self.nav.died_at(ZoneId::County, v.body().pos.cell());
+                }
+                // In a dungeon too: where she fell is let be a while ([`Ctx::fell_near`]).
+                EventKind::PlayerDied => {
+                    if self.fell.len() >= 32 {
+                        self.fell.remove(0);
+                    }
+                    self.fell.push((v.zone(), v.body().pos.cell(), v.tick().0));
                 }
                 _ => {}
             }
@@ -647,6 +669,11 @@ fn craft(inputs: &[ItemId], stage: &mut u8, t: &mut u32, v: &View<'_>) -> Status
         return Status::Failed("not at a bench".into());
     }
     let i = *stage as usize;
+    // What a making that did not come out left on the bench (no room for it in the bag) goes
+    // back in the bag first: put on top of it, the inputs never make what she came for.
+    if i == 0 && v.craft_output().is_some() {
+        return Status::Act(Act::press(Command::CraftClearAll));
+    }
     if i < inputs.len() {
         let bag = &v.me().bag;
         let Some(slot) = bag.iter().position(|s| s.is_some_and(|s| s.item == inputs[i])) else {
@@ -656,8 +683,19 @@ fn craft(inputs: &[ItemId], stage: &mut u8, t: &mut u32, v: &View<'_>) -> Status
         return Status::Act(Act::press(Command::CraftPut { bag: slot as u8, slot: i as u8 }));
     }
     if i == inputs.len() {
+        // Put in and nothing shows on the bench: the making is not one (or the puts did not
+        // take).
+        if v.craft_output().is_none() {
+            return Status::Failed("the bench makes nothing of it".into());
+        }
         *stage += 1;
         return Status::Act(Act::press(Command::CraftTake));
+    }
+    // Taken, and it is still on the bench: no room in the bag for it. "Done" here was a loop:
+    // the story chose the same making again at once, for ever (seed 3 stood at Julie's bench
+    // from minute 267 to the end, a full bag of what cannot be thrown out).
+    if v.craft_output().is_some() {
+        return Status::Failed("no room in the bag for what it makes".into());
     }
     Status::Done
 }

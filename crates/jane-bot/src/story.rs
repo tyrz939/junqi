@@ -96,6 +96,12 @@ pub struct Story {
     fled_at: u32,
     /// Fires she could not get to (something guards the way).
     bad_fires: std::collections::BTreeSet<PropId>,
+    /// A dungeon that killed her over and over, let be until this tick (and how often): not
+    /// cleared when she wakes whole, as a set-aside is (`died_out`).
+    died_out: BTreeMap<ZoneId, (u32, u32, i32)>,
+    /// A goal that got her killed on the way to it, how often, and the tick it waits till: not
+    /// cleared when she wakes whole (`died_for`).
+    killed_on: BTreeMap<Goal, (u32, u32)>,
     /// A dungeon a quest step sends her into, played whole by a crawl (in by its door, through
     /// its locks and verbs to its boss, and out), and the step it is for.
     dungeon: Option<(Box<crate::crawl::Crawl>, Goal)>,
@@ -105,12 +111,19 @@ pub struct Story {
 
 /// What she packs for an act, and how many of each: Stone Skin and a life-steal from the bench
 /// (the roses, stones and flowers she has picked up on the way), and food.
-const PROVISIONS: [(&str, u32); 3] = [("potion_stoneskin", 2), ("potion_lifesteal", 1), ("apple", 6)];
+const PROVISIONS: [(&str, u32); 3] = [("potion_stoneskin", 2), ("potion_lifesteal", 1), ("apple", APPLES_HELD)];
+
+/// The apples she carries when she can.
+const APPLES_HELD: u32 = 6;
+
+/// Short of food (under this many apples), she will go twice as far for more: a walk to a
+/// fire with none in her bag was the county's commonest death.
+const APPLES_SHORT: u32 = 3;
 
 /// What she brews for Under the Stone, and how many: the dog's bait for the small snakes ("Feed
 /// the small snakes; do not fight them"), rat meat soaked in Stranglethorn at a bench. There is
 /// no bench inside, so it is made before she goes down; two, for the two in the east hall.
-const BAIT: (&str, u32) = ("poisoned_rat_meat", 2);
+pub const BAIT: (&str, u32) = ("poisoned_rat_meat", 2);
 
 /// Cells she will go for a provision: the bench, or food seen near (not across the county: a
 /// long walk for an apple was a walk through the ruffians, and she mostly packs at home).
@@ -325,6 +338,21 @@ impl Story {
             match why {
                 // Every step still open there waits with it, not only the one that sent her in.
                 Some(why) => {
+                    // Beaten back by deaths: the dungeon waits hours, not a moment (a death
+                    // anywhere since used to clear the set-aside, and she walked straight back in
+                    // to the same guard, fifty times): an hour the first time. Beaten back
+                    // twice, it waits until she is stronger (her most health up by a
+                    // twentieth: a jar, a page) or a day: the same fight at the same strength is
+                    // the same deaths.
+                    if c.stuck.as_ref().is_some_and(|s| s.starts_with("died ")) {
+                        let most = jane_sim::units::max_hp(v.body()).points();
+                        let e = self.died_out.entry(c.zone).or_insert((0, 0, most));
+                        e.1 += 1;
+                        e.2 = most;
+                        let hours = if e.1 >= 2 { 24 } else { 1 };
+                        e.0 = v.tick().0 + hours * jane_sim::tuning::TICKS_PER_HOUR;
+                        notes.push(Mark::Note(format!("the {} again in {hours} h, or stronger", c.zone.name())));
+                    }
                     self.set_aside(v, g, &why, notes);
                     for s in Self::steps_in(v, c.zone) {
                         if s != g {
@@ -335,6 +363,18 @@ impl Story {
                 None => notes.push(Mark::Note(format!("done with the {}", c.zone.name()))),
             }
             return Act::idle();
+        }
+        // Beaten out of this dungeon a while: out of it, unless shut in (then the fight is the way).
+        if v.body().alive
+            && dungeon(v.zone())
+            && self.task.is_none()
+            && self.beaten_out(v)
+            && !crate::crawl::shut_in_with_boss(v)
+        {
+            if let Some(t) = route(v, cx, ZoneId::County) {
+                self.task = Some((t, Goal::Explore(crate::crawl::Try::Travel)));
+                return Act::idle();
+            }
         }
         // Shut in with a dungeon's boss (a lock-in behind her, and the crawl given up or never
         // begun: an explorer's chest in the arena): nothing but the fight lets her out, so the
@@ -366,10 +406,7 @@ impl Story {
                 cx.nav.roads = true;
                 if let Some((_, g)) = self.task.take() {
                     notes.push(Mark::Stuck(format!("{}: died on the way", goal_name(v, g))));
-                    // What she only wanted (a provision, a fire to mend at: there are others,
-                    // and later) waits hours after it killed her; the log's steps a moment.
-                    let hours = if matches!(g, Goal::Provision(_) | Goal::Rest) { 3 } else { 0 };
-                    self.blocked.insert(g, v.tick().0 + 600 + hours * jane_sim::tuning::TICKS_PER_HOUR);
+                    self.died_for(v, g);
                 }
             }
             self.task = None;
@@ -410,7 +447,10 @@ impl Story {
             if let Some((task, goal)) = &mut self.task {
                 let goal = *goal;
                 // Waiting where she was told to wait is not "reached, and it did not count".
-                let waiting = matches!(task, Task::Wait(_));
+                // (Nor is a thing made at the bench: brewing the snakes' bait is a walk to the
+                // bench and four makings, and it was set aside half made as "reached, and it did
+                // not count".)
+                let waiting = matches!(task, Task::Wait(_) | Task::Craft { .. });
                 match task.tick(v, cx) {
                     Status::Act(a) => return a,
                     Status::Done => {
@@ -464,6 +504,14 @@ impl Story {
                 Some((other, goal)) => {
                     // A zone or a point elsewhere: the door that leads there.
                     let (Target::Zone(z) | Target::At(z, _)) = other else { unreachable!() };
+                    // Out of a dungeon into the county's night: the night is sat out by the
+                    // dungeon's own fire instead (out of the Butterfly Forest at ten at night, she
+                    // died on the road home a dozen times, woken each time by the forest's fire).
+                    if let Some(t) = self.night_in(v, z) {
+                        self.task = Some((t, Goal::Sleep));
+                        self.fled_at = cx.fight.fled;
+                        continue;
+                    }
                     // A quest step in a dungeon: the dungeon played whole, from its door.
                     if matches!(goal, Goal::Step(..)) && dungeon(z) {
                         // Its door keeps hours ("Open ten to four"): come back when it is open.
@@ -543,8 +591,50 @@ impl Story {
         }
     }
 
+    /// She died on her way to `g`. What she only wanted (a provision, a fire to mend at: there
+    /// are others, and later) waits hours; the log's steps a moment the first time. Killed on the
+    /// way to the same thing again, it waits longer each time (an hour, three, eight): the same
+    /// walk past the same camp is the same death, and waking whole used to wipe the set-aside,
+    /// so she walked straight back out into it (three deaths in two minutes at the Burial's
+    /// mouth). Home to bed is not let be: the night has nowhere else.
+    fn died_for(&mut self, v: &View<'_>, g: Goal) {
+        let now = v.tick().0;
+        let base = if matches!(g, Goal::Provision(_) | Goal::Rest) { 3 } else { 0 };
+        let e = self.killed_on.entry(g).or_insert((0, 0));
+        // Last killed on it long ago (a day): counted afresh.
+        if e.1 + 24 * jane_sim::tuning::TICKS_PER_HOUR < now {
+            e.0 = 0;
+        }
+        e.0 += 1;
+        let more = if g == Goal::Sleep { 0 } else { [0, 1, 3, 8][(e.0 as usize - 1).min(3)] };
+        e.1 = now + 600 + (base + more) * jane_sim::tuning::TICKS_PER_HOUR;
+        self.blocked.insert(g, e.1);
+    }
+
     fn open(&self, v: &View<'_>, g: Goal) -> bool {
-        self.blocked.get(&g).is_none_or(|&until| until <= v.tick().0)
+        let now = v.tick().0;
+        if self.killed_on.get(&g).is_some_and(|&(_, until)| until > now) {
+            return false;
+        }
+        let zone = match g {
+            Goal::Step(q, i) => zone_of_step(q, usize::from(i)),
+            Goal::Look(z, _) => Some(z),
+            Goal::Explore(_) => Some(v.zone()),
+            _ => None,
+        };
+        let let_be = zone.and_then(|z| self.died_out.get(&z)).is_some_and(|&e| Self::let_be(v, e));
+        !let_be && self.blocked.get(&g).is_none_or(|&until| until <= now)
+    }
+
+    /// In a dungeon she was beaten out of (`died_out`), with no fight on: out to the county.
+    fn beaten_out(&self, v: &View<'_>) -> bool {
+        self.died_out.get(&v.zone()).is_some_and(|&e| Self::let_be(v, e))
+    }
+
+    /// A dungeon beaten out of (until, times, her most health then) still let be: before `until`,
+    /// unless she has grown a twentieth since.
+    fn let_be(v: &View<'_>, (until, _, most): (u32, u32, i32)) -> bool {
+        until > v.tick().0 && jane_sim::units::max_hp(v.body()).points() * 20 < most * 21
     }
 
     /// Run from `id` rather than fight it: out of doors, on her way somewhere (a task in hand), not
@@ -552,6 +642,29 @@ impl Story {
     /// run, or it slower than her walk.
     fn runs_from(&self, v: &View<'_>, cx: &Ctx, id: UnitId) -> bool {
         self.task.is_some() && fight::outrun(v, cx, id)
+    }
+
+    /// Night, in a dungeon, on her way out to `to` (by the county: not the house): the fire here
+    /// she can walk to, rested at, or waited by once she is whole. `None`: day, or no such fire.
+    fn night_in(&self, v: &View<'_>, to: ZoneId) -> Option<Task> {
+        let here = v.zone();
+        if (6..20).contains(&v.hour()) || !dungeon(here) || to == here || to == ZoneId::House {
+            return None;
+        }
+        let cat = jane_data::catalog();
+        let at = v.body().pos;
+        let mut reach = crate::crawl::Reach::default();
+        reach.update(v, 0);
+        let fire = v
+            .props()
+            .filter(|p| !p.hidden && cat.story.prop(p.def).rest && !self.bad_fires.contains(&p.id) && reach.beside(p))
+            .min_by_key(|p| (to_prop(p, at), p.id))?;
+        let whole = v.body().hp >= jane_sim::units::max_hp(v.body());
+        Some(if to_prop(fire, at) <= i64::from(3 * CELL_FX) && whole {
+            Task::Wait(600)
+        } else {
+            Task::Use(UseProp::new(fire.id))
+        })
     }
 
     /// Night out of doors, far from Julie's: the night is sat out by the nearest fire instead
@@ -663,16 +776,26 @@ impl Story {
         // makes it (rat meat, and Stranglethorn or its root and water: the Burial's own cold
         // chest holds the root and the water): brewed at the bench before anything else, and
         // before the water goes into anything else. Without the makings she goes down for them.
+        //
+        // Brewed as soon as she holds the makings and a bench is near, not only once the Burial
+        // is in the log: the dog pays the root and the water with the rats' meat (Under the
+        // House), when her bag has room; by the Burial it was full of what cannot be thrown out,
+        // and the first Stranglethorn had nowhere to go.
         let burial_ahead = v.quests().any(|q| !q.ready && cat.story.quest(q.quest).id == "the_burial");
+        let burial_done = cat.story.quest_id("the_burial").is_some_and(|q| v.quests_done().contains(&q));
         let bait = sense::item(BAIT.0);
-        let short = burial_ahead && holds(v, bait) < BAIT.1;
+        let short = !burial_done && holds(v, bait) < BAIT.1;
         if short && matches!(here, ZoneId::County | ZoneId::House | ZoneId::Cellar) {
             let g = Goal::Provision(bait);
             let brew = holds(v, sense::item("potion_stranglethorn")) > 0
                 || holds(v, sense::item("small_water")) > 0 && holds(v, sense::item("savage_snakeroot")) > 0;
             if brew && holds(v, sense::item("rat_meat")) > 0 && self.open(v, g) {
                 if let Some(t) = get(v, cx, bait, 0) {
-                    return Some((t, g));
+                    let home_near = here == ZoneId::House
+                        || doors_to(v, ZoneId::House).first().is_some_and(|p| to_prop(p, at) <= i64::from(PROVISION_REACH * CELL_FX));
+                    if burial_ahead || home_near || cost_of(&t) <= i64::from(PROVISION_REACH * CELL_FX) {
+                        return Some((t, g));
+                    }
                 }
             }
         }
@@ -680,11 +803,22 @@ impl Story {
         // the bench makes from what she carries, food she has seen lying about). Only out of
         // doors or in the house, and only while a dungeon step is in the log. (With the bait
         // still to brew, no potion: every one of them wants the water it needs.)
+        // The water the dog paid with the snakeroot (Under the House: "It wants you to keep
+        // them") is kept for the bait while Under the Stone is still to come: a potion never
+        // takes the last of it while a root waits for it. (It went into Stone Skin for the mine,
+        // and she came to the Burial with neither bait nor the makings.)
+        let owed = if burial_done {
+            0
+        } else {
+            let brewed = holds(v, bait) + holds(v, sense::item("potion_stranglethorn"));
+            holds(v, sense::item("savage_snakeroot")).min(BAIT.1.saturating_sub(brewed))
+        };
+        let keep_water = holds(v, sense::item("small_water")) <= owed;
         if matches!(here, ZoneId::County | ZoneId::House) && !night && hp >= COUNTY_LOW && Self::act_ahead(v) {
             for (name, want) in PROVISIONS {
                 let item = sense::item(name);
                 let g = Goal::Provision(item);
-                if holds(v, item) >= want || !self.open(v, g) || short && name.starts_with("potion_") {
+                if holds(v, item) >= want || !self.open(v, g) || (burial_ahead && short || keep_water) && name.starts_with("potion_") {
                     continue;
                 }
                 match get(v, cx, item, 0) {
@@ -698,7 +832,9 @@ impl Story {
                         {
                             continue;
                         }
-                        if c <= i64::from(PROVISION_REACH * CELL_FX) {
+                        let short_of_food = name == "apple" && holds(v, item) < APPLES_SHORT;
+                        let reach = if short_of_food { 2 * PROVISION_REACH } else { PROVISION_REACH };
+                        if c <= i64::from(reach * CELL_FX) {
                             return Some((t, g));
                         }
                     }
@@ -708,6 +844,7 @@ impl Story {
         // 1 and 2: the log. The nearest objective of any quest; one that someone is waiting
         // on (it goes back to a person, or to a place) counted at half its distance before
         // an errand for a book or a board.
+        let bag_tight = v.me().bag.iter().filter(|s| s.is_none()).count() < sense::BAG_SPARE;
         for q in v.quests() {
             let waited = someone_waits(q.quest);
             // Told how to end it, she goes and does it: Yours to Say before any errand.
@@ -729,6 +866,11 @@ impl Story {
                         Some(Target::Later(h)) => {
                             self.blocked.insert(g, v.tick().0 + u32::from(h) * jane_sim::tuning::TICKS_PER_HOUR);
                         }
+                        // A bag with no room to spare, and this hand-in takes things out of
+                        // it: first, before any dungeon (seed 2 walked into the School with a bag
+                        // of keys and gold and three lost things for the lost property box, and
+                        // had no slot for what the School gives).
+                        Some(t) if bag_tight && takes_from_bag(q.quest) => offer(0, g, t, &mut best),
                         Some(t) => offer(near(cost_of(&t)), g, t, &mut best),
                         None => {}
                     }
@@ -823,6 +965,10 @@ impl Story {
                 if guarded || crate::nav::near_danger(&cx.nav.dangers(here), c.cell(), crate::nav::DANGER_R) {
                     continue;
                 }
+            }
+            // In a dungeon, not where she fell a little while ago (`Ctx::fell_near`).
+            if here != ZoneId::County && cx.fell_near(here, sense::prop_centre(p).cell(), 7, v.tick().0) {
+                continue;
             }
             offer(d + i64::from(6 * CELL_FX), g, Target::Task(Task::Use(UseProp::new(p.id))), &mut best);
         }
@@ -947,8 +1093,14 @@ fn curious(v: &View<'_>, model: Model, p: &jane_sim::Prop) -> bool {
     let teaches = sense::prop_does(v, p, &|a| matches!(a, Action::Learn(_) | Action::Grow { .. }));
     match model {
         // Indoors, a note that gives a quest is in the way; out on the road the Rusher keeps going.
+        // Food in a chest she passes, short of it: a rusher still eats (she walked the county's
+        // roads to a fire with no apple in her bag, and died on the way, again and again).
         Model::Rusher => {
-            teaches || (v.indoor() && sense::prop_does(v, p, &|a| matches!(a, Action::Quest(_) | Action::HandIn(_))))
+            let apple = sense::item("apple");
+            let food = !p.used && s.loot.iter().any(|l| l.item == apple) && holds(v, apple) < APPLES_HELD;
+            teaches
+                || food
+                || (v.indoor() && sense::prop_does(v, p, &|a| matches!(a, Action::Quest(_) | Action::HandIn(_))))
         }
         Model::Reader => {
             teaches
@@ -994,6 +1146,12 @@ fn the_choice() -> Option<QuestId> {
 fn waits_for_sunday(v: &View<'_>, cx: &Ctx) -> bool {
     let ready = the_choice().is_some_and(|c| v.quests().any(|q| q.quest == c && q.ready));
     ready && cx.ending == Some(crate::Ending::Train) && !(v.weekday() == 0 && v.hour() < 17)
+}
+
+/// Does handing `q` in take things out of the bag (what it asked her to fetch)?
+fn takes_from_bag(q: QuestId) -> bool {
+    let cat = jane_data::catalog();
+    cat.story.quest(q).requirements.iter().any(|r| matches!(r.target, jane_data::ReqTarget::Acquire(_)))
 }
 
 /// Where Yours to Say is taken in (STORY.md §10): the thing that plays the ending she has chosen

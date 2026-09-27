@@ -22,7 +22,9 @@
 //! Hurt, she mends where she can before a hop through a door within the dungeon (it may not
 //! come back) and before going near a boss. A dungeon's tactic ([`crate::tactics`]) may hold
 //! her fire, put a boss earlier, name guards to hunt, and say when the story has what it wants
-//! from the place (she walks out then).
+//! from the place (she walks out then): not while a jar or a gold-leaf page is still to be had
+//! near where she can walk, as a thorough player plays it (`Crawl::growth_left`; the growth is
+//! the only kind the game has). A jar or page taken up and broken off is gone back to.
 //!
 //! Each thing tried is remembered with a signature of what she holds and how the zone stands;
 //! it is tried again only once that has changed (a key found, a gate opened); a fight is taken
@@ -70,6 +72,10 @@ pub enum Try {
     /// Walk to ground she has not seen.
     Explore(i32, i32),
 }
+
+/// How near a jar or a page she cannot yet get to (cells) a thing to do or ground to walk is
+/// taken to be on the way to it (`Crawl::growth_left`).
+const GROWTH_NEAR: i32 = 16;
 
 /// Cells about her feet she counts as seen as she walks.
 pub const SEEN_RADIUS: i32 = 6;
@@ -124,6 +130,13 @@ pub struct Crawl {
     /// Out, when done, by a door into this dungeon if one is to hand, not to the county (the
     /// story sets it: the pipes' outfall, up into the Factory the quest goes to next).
     pub leave_to: Option<ZoneId>,
+    /// The zone's jars and gold-leaf pages (shown or not), found as she comes in: a try at one
+    /// cut short (she was hurt and went to mend, a fight came to her) is taken up again while
+    /// it has not failed six times, whether or not anything else has changed.
+    growth: std::collections::BTreeSet<PropId>,
+    /// The last frame [`Self::growth_left`] held her: things settle for a moment after (a
+    /// shelf lets go a few ticks after the second plinth goes down) before she is let go.
+    held: Option<u32>,
 }
 
 /// The cells she can walk to from where she stands (flood over `View::flags`).
@@ -138,7 +151,7 @@ pub struct Reach {
 }
 
 impl Reach {
-    fn update(&mut self, v: &View<'_>, sig: u64) {
+    pub(crate) fn update(&mut self, v: &View<'_>, sig: u64) {
         let (w, h) = v.size();
         let (x, y) = v.body().pos.cell();
         if self.zone == Some(v.zone()) && self.sig == sig && self.at + 30 > v.frame() && self.get(x, y) {
@@ -213,6 +226,12 @@ fn signature(v: &View<'_>) -> u64 {
     h
 }
 
+/// The growth lying about a zone: its jars and gold-leaf pages, shown or not.
+fn growth_props(v: &View<'_>) -> std::collections::BTreeSet<PropId> {
+    let cat = jane_data::catalog();
+    v.props().filter(|p| matches!(cat.story.prop(p.def).id, "jar" | "jar_big" | "leaf_page")).map(|p| p.id).collect()
+}
+
 /// The key in her bag that opens a lock tagged `tag` (a content name).
 fn key_for(v: &View<'_>, tag: jane_core::Key) -> Option<ItemId> {
     let cat = jane_data::catalog();
@@ -267,6 +286,8 @@ impl Crawl {
             mine: crate::tactics::mine::Mine::default(),
             school: crate::tactics::school::School::default(),
             watch: crate::tactics::burial::Watch::default(),
+            growth: std::collections::BTreeSet::new(),
+            held: None,
             leave_to: None,
         }
     }
@@ -357,6 +378,7 @@ impl Crawl {
                 if v.zone() == self.zone {
                     self.stage = Stage::Explore;
                     self.entered = Some(v.tick().0);
+                    self.growth = growth_props(v);
                     notes.push(Mark::Note(format!("in the {}", self.zone.name())));
                 } else {
                     return self.enter(v, cx, notes);
@@ -382,7 +404,7 @@ impl Crawl {
                 if won {
                     self.reach.update(v, signature(v));
                 }
-                if crate::tactics::works::done(v, &self.reach, self.zone, won) {
+                if crate::tactics::works::done(v, &self.reach, self.zone, won) && !self.growth_left(v, cx) {
                     self.stage = Stage::Leave;
                     self.task = None;
                     cx.fight.hunt = None;
@@ -396,7 +418,7 @@ impl Crawl {
             return a;
         }
         // A dungeon done with what the story needs from it (`tactics/`): out.
-        if self.stage == Stage::Explore && crate::tactics::museum::done(v) {
+        if self.stage == Stage::Explore && crate::tactics::museum::done(v) && !self.growth_left(v, cx) {
             self.stage = Stage::Leave;
             self.task = None;
             notes.push(Mark::Note("what the story needs is in the bag: leaving".into()));
@@ -451,6 +473,14 @@ impl Crawl {
                 return Act::press(c);
             }
         }
+        // Idle (about to wait out the night, or nothing chosen) under fire from something with no
+        // feet she is not fighting: out of its reach first (`fight::out_of_fire`).
+        if self.task.is_none() {
+            if let Some(f) = fight::out_of_fire(v, cx) {
+                self.task = None;
+                return Act::hold(f);
+            }
+        }
         let sig = signature(v);
         // A dungeon shut for the night (tactics/*.rs): the night waited out by its fire (the
         // county's night is worse), and not counted as the crawl's time.
@@ -466,7 +496,7 @@ impl Crawl {
         let down = boss_of(self.zone).is_some_and(|b| self.bosses.iter().any(|&(d, _)| d == b));
         if self.stage == Stage::Explore && down {
             self.reach.update(v, sig);
-            if crate::tactics::forest::done(v, &self.reach) {
+            if crate::tactics::forest::done(v, &self.reach) && !self.growth_left(v, cx) {
                 self.stage = Stage::Leave;
                 self.task = None;
                 notes.push(Mark::Note("what the story wants is done: leaving".into()));
@@ -476,7 +506,7 @@ impl Crawl {
         // are kept for a fight; shut in with a boss there is none, and she eats and carries on.
         if sense::hp_permille(v.body()) < 500 {
             self.reach.update(v, sig);
-            match self.rest_in_reach(v) {
+            match self.rest_in_reach(v, cx) {
                 None => {
                     if let Some(c) = fight::eat(v) {
                         return Act::press(c);
@@ -507,6 +537,7 @@ impl Crawl {
         if v.zone() == jane_core::ZoneId::Burial
             && self.stage == Stage::Explore
             && crate::tactics::burial::done(v, &self.bosses)
+            && !self.growth_left(v, cx)
         {
             self.stage = Stage::Leave;
             self.task = None;
@@ -691,6 +722,53 @@ impl Crawl {
         Some((t, what))
     }
 
+    /// Is growth still on offer here, so that a dungeon's story is not yet done with (a tactic's
+    /// `done`, the Burial's box)? She plays a place as a thorough player does: a jar or a
+    /// gold-leaf page not yet opened, beside ground she can walk and not given up on, is taken
+    /// before she walks out (DUNGEONS.md §3, "Growth on the story's path").
+    fn growth_left(&mut self, v: &View<'_>, cx: &Ctx) -> bool {
+        let sig = signature(v);
+        self.reach.update(v, sig);
+        let zone = v.zone();
+        let left = |p: &Prop| self.growth.contains(&p.id) && !p.used && !cx.used.contains_key(&(zone, p.id));
+        let now = v.frame();
+        if v.props()
+            .any(|p| left(p) && !p.hidden && !p.locked && self.reach.beside(p) && self.fresh(Try::Prop(p.id), sig))
+        {
+            self.held = Some(now);
+            return true;
+        }
+        // Growth in sight but not to hand (on a shelf a puzzle lets go, down a passage not yet
+        // walked, across ground that has not been opened): what can be done near it is done
+        // first. And a thing a verb mends or breaks open to show what is behind it (a damaged
+        // door, a cracked case), or clears out of the way (a fall of rock), is worth the verb.
+        let near: Vec<Vec2> = v.props().filter(|p| left(p) && !p.hidden).map(sense::prop_centre).collect();
+        let by = |at: Vec2| near.iter().any(|&g| dist(g, at) <= i64::from(GROWTH_NEAR * CELL_FX));
+        let opens = |p: &Prop| {
+            sense::prop_does(v, p, &|a| {
+                matches!(
+                    a,
+                    jane_core::action::Action::Show(_)
+                        | jane_core::action::Action::Unlock(_)
+                        | jane_core::action::Action::Hide(_)
+                )
+            })
+        };
+        let more = self
+            .choose_where(v, cx, sig, &|w| match w {
+                Try::Cast(id) => v.prop(id).is_some_and(|p| opens(p) || by(sense::prop_centre(p))),
+                Try::Prop(id) | Try::Door(id) => v.prop(id).is_some_and(|p| by(sense::prop_centre(p))),
+                Try::Push(_, plate) => v.prop(plate).is_some_and(|p| by(sense::prop_centre(p))),
+                Try::Explore(x, y) => by(Vec2::centre(x, y)),
+                _ => false,
+            })
+            .is_some();
+        if more {
+            self.held = Some(now);
+        }
+        more || self.held.is_some_and(|t| now < t + 90)
+    }
+
     /// A failed try counts double.
     pub fn failed(&mut self, what: Try, why: &str) {
         self.failures.insert(what, why.to_owned());
@@ -708,6 +786,7 @@ impl Crawl {
             (Try::Tactic(_), _) | (_, None) => true,
             // A fight is taken up again whenever she is ready to (it may have healed; so has she).
             (Try::Fight(_), Some(&(_, n))) => n < 12,
+            (Try::Prop(id), Some(&(_, n))) if self.growth.contains(&id) => n < 6,
             (_, Some(&(s, n))) => s != sig && n < 6,
         }
     }
@@ -730,6 +809,11 @@ impl Crawl {
     }
 
     fn choose_any(&self, v: &View<'_>, cx: &Ctx, sig: u64) -> Option<(Task, Try)> {
+        self.choose_where(v, cx, sig, &|_| true)
+    }
+
+    /// [`Self::choose_any`], offering only what `keep` lets through.
+    fn choose_where(&self, v: &View<'_>, cx: &Ctx, sig: u64, keep: &dyn Fn(Try) -> bool) -> Option<(Task, Try)> {
         let cat = jane_data::catalog();
         let at = v.body().pos;
         let reach = &self.reach;
@@ -737,8 +821,14 @@ impl Crawl {
         let mut best: Option<(u8, i64, Try, Task)> = None;
         let offer = |class: u8, cost: i64, what: Try, t: Task, best: &mut Option<(u8, i64, Try, Task)>| {
             // The Burial: a corner is not gone into before she has what it asks (`tactics::burial`).
-            if !self.fresh(what, sig) || v.zone() == jane_core::ZoneId::Burial && crate::tactics::burial::not_yet(v, &t)
+            if !keep(what)
+                || !self.fresh(what, sig)
+                || v.zone() == jane_core::ZoneId::Burial && crate::tactics::burial::not_yet(v, &t)
             {
+                return;
+            }
+            // Not where she fell a little while ago (a boss excepted: that fight is the dungeon).
+            if class < 9 && task_point(v, &t).is_some_and(|p| cx.fell_near(v.zone(), p.cell(), FELL_R, v.tick().0)) {
                 return;
             }
             if best.as_ref().is_none_or(|(c, k, w, _)| (class, cost, what) < (*c, *k, *w)) {
@@ -747,18 +837,20 @@ impl Crawl {
         };
         // 0. Low: a bed or a stove she can reach (the apples are for a fight).
         if sense::hp_permille(v.body()) < 500 {
-            if let Some(p) = self.rest_in_reach(v) {
+            if let Some(p) = self.rest_in_reach(v, cx).filter(|&p| keep(Try::Rest(p))) {
                 return Some((Task::Use(UseProp::new(p)), Try::Rest(p)));
             }
         }
         // What the dungeon's own idea puts first (`tactics/`).
-        if let Some((t, what)) = crate::tactics::museum::first(v, cx, reach).filter(|(_, w)| self.fresh(*w, sig)) {
+        if let Some((t, what)) =
+            crate::tactics::museum::first(v, cx, reach).filter(|(_, w)| keep(*w) && self.fresh(*w, sig))
+        {
             return Some((t, what));
         }
         // 1. The dungeon's rest room, the first time she can walk to it: a death then wakes her
         // inside, not out on the county road (the pipes' and the Factory's walks back in were
         // what killed her).
-        if let Some(p) = self.rest_in_reach(v) {
+        if let Some(p) = self.rest_in_reach(v, cx) {
             if !self.tried.contains_key(&Try::Rest(p)) {
                 let d = v.prop(p).map_or(0, near_prop);
                 offer(1, d, Try::Rest(p), Task::Use(UseProp::new(p)), &mut best);
@@ -921,7 +1013,10 @@ impl Crawl {
         // A boss is met mended: with nothing left but the boss, a bed or a stove she can reach
         // first, when she is hurt.
         if best.as_ref().is_some_and(|b| b.0 == 9) && sense::hp_permille(v.body()) < 850 {
-            if let Some(p) = self.rest_in_reach(v).filter(|p| self.tried.get(&Try::Rest(*p)).is_none_or(|t| t.1 < 20)) {
+            if let Some(p) = self
+                .rest_in_reach(v, cx)
+                .filter(|p| keep(Try::Rest(*p)) && self.tried.get(&Try::Rest(*p)).is_none_or(|t| t.1 < 20))
+            {
                 return Some((Task::Use(UseProp::new(p)), Try::Rest(p)));
             }
         }
@@ -934,12 +1029,14 @@ impl Crawl {
         // 10. Ground she has not seen (what sleeps out of sight wakes as she comes). Not in the
         // School: what sleeps there is better left asleep (`tactics::school`).
         if best.is_none() && v.zone() != ZoneId::School {
-            if let Some((x, y)) = self.frontier(v) {
+            if let Some((x, y)) = self.frontier(v).filter(|&(x, y)| keep(Try::Explore(x, y))) {
                 let t = Task::Walk { to: Vec2::centre(x, y), near: jane_core::Fx::from_px(6) };
                 return Some((t, Try::Explore(x, y)));
             }
             // Nothing in the general order: what the dungeon's own idea asks (`tactics/`).
-            if let Some((t, what)) = crate::tactics::museum::idle(v, reach).filter(|(_, w)| self.fresh(*w, sig)) {
+            if let Some((t, what)) =
+                crate::tactics::museum::idle(v, reach).filter(|(_, w)| keep(*w) && self.fresh(*w, sig))
+            {
                 return Some((t, what));
             }
         }
@@ -948,7 +1045,10 @@ impl Crawl {
         // grip): hurt, she mends first where she can.
         let hurt = sense::hp_permille(v.body()) < 900;
         if hurt && best.as_ref().is_some_and(|b| b.0 == 8 || Self::near_boss(v, cx, b.2)) {
-            if let Some(p) = self.rest_in_reach(v).filter(|&p| self.tried.get(&Try::Rest(p)).is_none_or(|t| t.1 < 30)) {
+            if let Some(p) = self
+                .rest_in_reach(v, cx)
+                .filter(|&p| keep(Try::Rest(p)) && self.tried.get(&Try::Rest(p)).is_none_or(|t| t.1 < 30))
+            {
                 return Some((Task::Use(UseProp::new(p)), Try::Rest(p)));
             }
         }
@@ -956,7 +1056,7 @@ impl Crawl {
     }
 
     /// The nearest bed or stove she can walk to, as of the last flood.
-    fn rest_in_reach(&self, v: &View<'_>) -> Option<PropId> {
+    fn rest_in_reach(&self, v: &View<'_>, cx: &Ctx) -> Option<PropId> {
         let cat = jane_data::catalog();
         let at = v.body().pos;
         v.props()
@@ -966,6 +1066,8 @@ impl Crawl {
                     && !turns_clock(v, p)
                     && self.reach.beside(p)
                     && v.prop_spawn(p).is_some_and(|s| s.talk.is_some())
+                    // The Burial: not a fire in a statue's line (`tactics::burial::shot_at`).
+                    && !(v.zone() == ZoneId::Burial && crate::tactics::burial::shot_at(v, cx, p))
             })
             .min_by_key(|p| (sense::to_prop(p, at), p.id))
             .map(|p| p.id)
@@ -1058,7 +1160,14 @@ pub fn shut_in_with_boss(v: &View<'_>) -> bool {
     let Some(boss) = boss_of(v.zone()).and_then(|b| sense::units_of(v, b).into_iter().next()) else { return false };
     let mut reach = Reach::default();
     reach.update(v, 0);
-    reach.point(boss.pos) && !v.props().any(|p| door_of(v, p).is_some_and(|d| d.zone != v.zone()) && reach.beside(p))
+    // A fire or a bed she can walk to is a way to go on (the School's bolted front doors leave her
+    // no door out, and its sick bay is still hers): only the boss's own lock-in shuts her in.
+    let cat = jane_data::catalog();
+    reach.point(boss.pos)
+        && !v.props().any(|p| {
+            door_of(v, p).is_some_and(|d| d.zone != v.zone()) && reach.beside(p)
+                || !p.hidden && cat.story.prop(p.def).rest && reach.beside(p)
+        })
 }
 
 /// The unit a dungeon's boss room holds (`None`: the cellar, the library and the pipes have none).
@@ -1213,6 +1322,23 @@ fn face_toward(p: &Prop, at: Vec2) -> Vec2 {
     )
 }
 
+/// Cells about where she fell that the crawl lets be a while ([`crate::task::Ctx::fell_near`]).
+const FELL_R: i32 = 7;
+
+/// Where a task takes her: the prop, the drop, the unit, the point.
+fn task_point(v: &View<'_>, t: &Task) -> Option<Vec2> {
+    match t {
+        Task::Use(u) => v.prop(u.prop).map(sense::prop_centre),
+        Task::WorldCast { prop, .. } => v.prop(*prop).map(sense::prop_centre),
+        Task::Push(p) => v.prop(p.prop).map(sense::prop_centre),
+        Task::Pickup { drop, .. } => v.drops().iter().find(|d| d.id == *drop).map(|d| d.pos),
+        Task::Aim { at, .. } => Some(*at),
+        Task::Hunt(id) => v.unit(*id).map(|u| u.pos),
+        Task::Walk { to, .. } => Some(*to),
+        _ => None,
+    }
+}
+
 /// The origins a pushable passes through to cover the plate, pushed only (each push needs a
 /// cell behind it to stand in, reachable, and the cells ahead free of walls, props and sills).
 /// Breadth-first over its origin.
@@ -1320,12 +1446,54 @@ fn list_of(bp: Option<&jane_core::Blueprint>, r: jane_core::ListRef) -> &[jane_c
     }
 }
 
+/// Every `grow` a prop of a blueprint gives (its `use` list, an `if` both ways, and the
+/// conversation it opens), as (stat, amount, the finding's id): for tools that ask which were found.
+pub fn grows_of(
+    bp: &jane_core::Blueprint,
+    p: &jane_core::blueprint::PropSpawn,
+) -> Vec<(jane_core::action::Stat, i16, jane_core::Key)> {
+    fn walk(
+        bp: &jane_core::Blueprint,
+        acts: &[jane_core::Action],
+        out: &mut Vec<(jane_core::action::Stat, i16, jane_core::Key)>,
+    ) {
+        use jane_core::action::Action;
+        for a in acts {
+            match *a {
+                Action::Grow { stat, amount, id } => out.push((stat, amount, id)),
+                Action::If { then, els, .. } => {
+                    walk(bp, list_of(Some(bp), then), out);
+                    if let Some(e) = els {
+                        walk(bp, list_of(Some(bp), e), out);
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    let cat = jane_data::catalog();
+    let mut out = Vec::new();
+    if let Some(u) = p.use_list {
+        walk(bp, list_of(Some(bp), u), &mut out);
+    }
+    for n in p.talk.map(|t| cat.story.dialogue(t).nodes).unwrap_or_default() {
+        for a in n.actions.into_iter().chain(n.options.iter().filter_map(|o| o.actions)) {
+            walk(bp, cat.list(a), &mut out);
+        }
+    }
+    out
+}
+
 /// The growth on offer in a blueprint: every `grow` in its props' `use` lists and in the
 /// conversations its props open (jars, gold-leaf pages, the library's margins).
 pub fn growth_in(bp: &jane_core::Blueprint) -> Growth {
     let cat = jane_data::catalog();
     let mut out = (0, 0);
+    let later = rooms_for_later(bp);
     for p in &bp.props {
+        if later.iter().any(|r| r.contains(i32::from(p.cell.x), i32::from(p.cell.y))) {
+            continue;
+        }
         if let Some(u) = p.use_list {
             grows(Some(bp), list_of(Some(bp), u), &mut out);
         }
@@ -1336,6 +1504,26 @@ pub fn growth_in(bp: &jane_core::Blueprint) -> Growth {
         }
     }
     out
+}
+
+/// The rooms of a dungeon that ask a verb she does not have by the time she is done with it
+/// (neither known on arrival, `givenVerbs`, nor granted by a room of the place): Butterfly
+/// Forest's seed tree wants the Fireball the Burial gives, its lamp glade the Factory's spark.
+/// They are for coming back to, and what they hold is not counted as found on the story's way
+/// (DUNGEONS.md §3, "Growth on the story's path").
+pub fn rooms_for_later(bp: &jane_core::Blueprint) -> Vec<jane_core::Rect> {
+    let cat = jane_data::catalog();
+    let Some(m) = cat.dungeons.mission_of(bp.zone) else { return Vec::new() };
+    let granted = |s: &jane_core::SpellId| {
+        m.given_verbs.contains(s)
+            || m.nodes.iter().any(|n| n.grants.iter().any(|g| matches!(g, jane_data::MissionGrant::Verb(v) if v == s)))
+    };
+    m.nodes
+        .iter()
+        .filter(|n| !n.demands.iter().all(granted))
+        .flat_map(|n| n.names.iter().flat_map(|t| t.rects.iter()))
+        .filter_map(|&r| bp.rects.get(&jane_core::Key::Name(r)).copied())
+        .collect()
 }
 
 /// The growth a player has found by the time she reaches `z` (PLAN.md §2.6: "growth comes from
