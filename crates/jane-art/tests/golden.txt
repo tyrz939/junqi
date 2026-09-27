@@ -289,7 +289,7 @@ prop:bed fa080172
 prop:beehive 784ec324
 prop:bench a21f44c6
 prop:bones 37d56667
-prop:boss_chest af85b0ff
+prop:boss_chest 0f98770b
 prop:boulder 428d9d7d
 prop:brazier fa5d81f3
 prop:broken_cabinet 4afc864d
@@ -305,7 +305,7 @@ prop:candle_sconce_s 59463cb1
 prop:candle_sconce_w 86b787fc
 prop:cart af08b0be
 prop:chalk_mark c6e607c8
-prop:chest 67aa7565
+prop:chest be9200ad
 prop:coffin f585bead
 prop:cold_sconce_e 4c825456
 prop:cold_sconce_n f82b19ea
@@ -355,7 +355,7 @@ prop:leaning_ladder 96632249
 prop:lever 91f439b5
 prop:log 5e39dfe9
 prop:lost_property_desk 2da01698
-prop:luggage_trunk d0737aef
+prop:luggage_trunk 46d0a7e3
 prop:manhole 2cc1be0c
 prop:milestone 46b46dc2
 prop:milk_bottles 88bf9162
