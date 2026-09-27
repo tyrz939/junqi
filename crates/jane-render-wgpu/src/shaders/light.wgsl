@@ -277,7 +277,10 @@ fn fs_light(i: FullOut) -> LitOut {
             // The umbra takes `strength` of the sun (sun_dir.w - 1, `Directional::strength`): all
             // of it under a high clear sun, less when it is low and its light is scattered,
             // little under cloud.
-            sun_seen = 1.0 - (g.sun_dir.w - 1.0) * (1.0 - sun_disc(p, l, g.sun_col.w, t0));
+            // A sun too faint to cast (`light::FAINTEST`) comes with no strength: no trace.
+            if g.sun_dir.w > 1.001 {
+                sun_seen = 1.0 - (g.sun_dir.w - 1.0) * (1.0 - sun_disc(p, l, g.sun_col.w, t0));
+            }
             light += g.sun_col.rgb * ndl * sun_seen;
             if shine > 0.0 {
                 let hv = normalize(l + EYE);

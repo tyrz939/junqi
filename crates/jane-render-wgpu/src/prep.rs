@@ -195,9 +195,10 @@ impl Prep {
         let c = frame.clear;
         self.clear = [(c >> 16) as u8, (c >> 8) as u8, c as u8].map(|v| f64::from(linear(v)));
 
-        // Each sprite's depth across the ground: its caster's, else thin.
+        // Each sprite's depth across the ground: its caster's, else 0, which stands nothing in the
+        // height field (a sprite the frame does not list as a caster casts on no tier).
         self.depth.clear();
-        self.depth.resize(frame.sprites.len(), 2);
+        self.depth.resize(frame.sprites.len(), 0);
         for c in &frame.casters {
             if let Some(d) = self.depth.get_mut(c.sprite as usize) {
                 *d = c.depth.max(1);
@@ -524,6 +525,7 @@ mod tests {
             sun: None,
             points: Span { start: 0, len: 1 },
             casters: Span::default(),
+            blocks: Span::default(),
         });
         let mut p = Prep::default();
         p.build(&f, 0);

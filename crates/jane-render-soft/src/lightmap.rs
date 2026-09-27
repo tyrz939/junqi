@@ -31,29 +31,53 @@ const GAIN: u32 = 150;
 /// The most a pool lifts a pixel, of 256: half again as bright.
 const CAP: u32 = 384;
 
+/// The most casting lights whose own pools the buffer keeps apart (`own`): T0's `shadows` row
+/// at its most.
+pub const OWN: usize = jane_present::frame::T0_SHADOWS as usize;
+
+/// A cell's four corners as [`LightMap::corners`] gives them.
+pub type Corners = [[u32; 3]; 4];
+
 /// The light buffer, reused frame to frame.
 #[derive(Debug, Default)]
 pub struct LightMap {
     cells: Vec<[u16; 3]>,
+    /// Each cell's light before the cap: what the cap is taken from again when a light is left
+    /// out (a point light's shadow, `light_without`).
+    total: Vec<[u16; 3]>,
+    /// The pools of the first [`OWN`] casting lights, each on its own, and which light each is.
+    own: Vec<[u16; 3]>,
+    own_of: Vec<usize>,
+    /// Each cell's light as a reciprocal, `2^24 / light` per channel, for the share left in a
+    /// shadow (made with the kept-apart pools, only when a light casts).
+    recip: Vec<[u32; 3]>,
     w: i32,
     h: i32,
     rows: Vec<[u16; 3]>,
 }
 
 impl LightMap {
-    /// Fills the buffer for a canvas `cw x ch`: the ambient, then every light.
+    /// Fills the buffer for a canvas `cw x ch`: the ambient, then every light; and apart, the
+    /// pool of each of the first [`OWN`] lights that cast.
     pub fn build(&mut self, (cw, ch): (i32, i32), ambient: Rgb, lights: &[Light]) {
         self.w = cw / CELL + 2;
         self.h = ch / CELL + 2;
         let n = (self.w * self.h) as usize;
         let base = ambient.map(|c| u16::from(c) + u16::from(c >> 7));
+        self.own_of.clear();
+        self.own_of.extend(lights.iter().enumerate().filter(|(_, l)| l.casts).map(|(i, _)| i).take(OWN));
+        self.own.clear();
+        self.own.resize(n * self.own_of.len(), [0; 3]);
+        self.total.clear();
+        self.total.resize(n, base);
         // A pool shows against the dark: by day it adds a little, at night all of it.
         // (The night's flat light is T2's since the tiers were made one look, 2026-09-27: brighter
         // than it was, so the pool is measured against 330.)
         let dark = 330u32.saturating_sub(ambient.iter().map(|&c| u32::from(c)).sum::<u32>() / 3).min(220);
         self.cells.clear();
         self.cells.resize(n, base);
-        for l in lights {
+        for (li, l) in lights.iter().enumerate() {
+            let own = self.own_of.iter().position(|&o| o == li);
             let r = i32::from(l.radius);
             if r <= 0 {
                 continue;
@@ -73,13 +97,68 @@ impl LightMap {
                         continue;
                     }
                     let k = u32::from(LUT[(d2 * 255 / r2) as usize]);
-                    let c = &mut self.cells[(cy * self.w + cx) as usize];
+                    let i = (cy * self.w + cx) as usize;
+                    let add = [0, 1, 2].map(|ch| (col[ch] * k) >> 8);
+                    let c = &mut self.cells[i];
                     for ch in 0..3 {
-                        c[ch] = (u32::from(c[ch]) + ((col[ch] * k) >> 8)).min(CAP) as u16;
+                        c[ch] = (u32::from(c[ch]) + add[ch]).min(CAP) as u16;
+                    }
+                    let t = &mut self.total[i];
+                    for ch in 0..3 {
+                        t[ch] = (u32::from(t[ch]) + add[ch]).min(u32::from(u16::MAX)) as u16;
+                    }
+                    if let Some(o) = own {
+                        self.own[o * n + i] = add.map(|a| a as u16);
                     }
                 }
             }
         }
+        self.recip.clear();
+        if !self.own_of.is_empty() {
+            self.recip
+                .extend(self.cells.iter().map(|c| c.map(|v| if v == 0 { 0 } else { (1u32 << 24) / u32::from(v) })));
+        }
+    }
+
+    /// Where the casting light `li` (its index in the lights `build` was handed) is kept apart, if
+    /// it is.
+    pub fn own_slot(&self, li: usize) -> Option<usize> {
+        self.own_of.iter().position(|&o| o == li)
+    }
+
+    /// The four cells round canvas px `(x, y)` (`[at, below, right, right below]`), each as the
+    /// share of its light, of 256, that is left without the pools of the kept-apart lights in
+    /// `gone` (a bit a slot): what a px in their shadows keeps of what [`apply`](Self::apply)
+    /// multiplies it by. The same for every px of a cell: [`blend`](Self::blend) takes them to a
+    /// px.
+    pub fn corners(&self, x: i32, y: i32, gone: u8) -> Corners {
+        let n = (self.w * self.h) as usize;
+        let at = |cx: i32, cy: i32| -> [u32; 3] {
+            let i = (cy.min(self.h - 1) * self.w + cx.min(self.w - 1)) as usize;
+            let mut t = self.total[i].map(u32::from);
+            let mut left = gone;
+            while left != 0 {
+                let o = left.trailing_zeros() as usize;
+                left &= left - 1;
+                let c = self.own[o * n + i];
+                for ch in 0..3 {
+                    t[ch] = t[ch].saturating_sub(u32::from(c[ch]));
+                }
+            }
+            let r = self.recip[i];
+            [0, 1, 2].map(|k| ((u64::from(t[k].min(CAP)) * u64::from(r[k])) >> 16) as u32)
+        };
+        let (cx, cy) = (x / CELL, y / CELL);
+        [at(cx, cy), at(cx, cy + 1), at(cx + 1, cy), at(cx + 1, cy + 1)]
+    }
+
+    /// The share left at canvas px `(x, y)`, of 256, from its cell's [`corners`](Self::corners),
+    /// bilinear by `apply`'s steps.
+    pub fn blend(c: &Corners, x: i32, y: i32) -> [u32; 3] {
+        let (fx, fy) = ((x % CELL) as u32, (y % CELL) as u32);
+        let lerp = |p: [u32; 3], q: [u32; 3], f: u32| [0, 1, 2].map(|k| (p[k] * (4 - f) + q[k] * f) / 4);
+        let [p0, q0, p1, q1] = *c;
+        lerp(lerp(p0, q0, fy), lerp(p1, q1, fy), fx)
     }
 
     /// Multiplies `t` by the buffer, bilinear between cells: returns pixels written.

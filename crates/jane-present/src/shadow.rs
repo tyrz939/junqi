@@ -28,6 +28,11 @@ pub const TIP: i32 = 170;
 /// A receiver at or under this height is the ground (a tuft, a cobble's relief): it takes the
 /// shadow laid on it.
 pub const GROUND: i32 = 4;
+/// The terrain's relief at or under this height (a cobble's top, a tuft, a kerb) is its texture,
+/// not a caster: it makes no block (`terrain::blocks`) and stands in no field on T2 (decided
+/// 2026-09-27, so the three tiers cast from the same terrain; T2's cobbles lost a px of self-shade
+/// at a low sun, and a town view went from four thousand blocks to four hundred).
+pub const RELIEF: i32 = 8;
 /// How far up a thing standing right beside a caster's feet its foot shadow climbs, px.
 pub const FOOT_REACH: u8 = 8;
 /// The foot's rows each side of the row under the feet, and how far along the shadow it is
@@ -205,11 +210,204 @@ fn bands_of_rows(
     }
 }
 
+/// Rows in front of its ground point a lifted receiver looks its shadow up (T2's `front` in
+/// `light.wgsl`, T1's for the terrain): a face stands on its foot row and the rows of the
+/// terrain behind it, so the wall it is the face of never shadows it, where another's shadow on
+/// the ground at its foot does.
+pub const FRONT: i32 = 2;
+
 /// Where a receiver `h` px up at canvas row `y` takes its shadow from: the ground row under it
-/// and the reach the shadow there must have (the ground takes any).
+/// ([`FRONT`] rows in front of its foot) and the reach the shadow there must have (the ground
+/// takes any).
 pub fn ground_of(y: i32, h: u8) -> (i32, u8) {
     let h = i32::from(h);
-    if h <= GROUND { (y, 0) } else { (y + rows_up(h), h as u8) }
+    if h <= GROUND { (y, 0) } else { (y + rows_up(h) + FRONT, h as u8) }
+}
+
+/// How far under a block's top its shadow reaches over its own footprint and past it, px: a
+/// block stands the tallest of heights up to `terrain::BLOCK_TOLERANCE` apart, and a roof's px
+/// looks its shadow up two rows toward the viewer ([`FRONT`]), where the next course stands a px
+/// higher. So a roof never shadows itself, where T2 traces each px from just over its own height.
+const OWN_TOP: i32 = crate::terrain::BLOCK_TOLERANCE as i32 + 2;
+
+/// How far a block's shadow moves from one slice of its height to the next at most, px, and
+/// how tall a slice is at most: what the reach up a wall it falls on steps by.
+const SLICE: i32 = 8;
+
+/// The bands of block `b`'s shadow in a sun sheared `(kx, ky)` ([`shear`]): its footprint laid
+/// at every slice of its height, each slice stretched to meet the next (the rows' rule,
+/// [`bands`]), so the whole is the footprint swept along the sun by its height, as T2's field
+/// throws it. A slice reaches as high as the ray over the block's top there, less [`OWN_TOP`]. Its foot is its
+/// footprint (the terrain's own contact shade is painted); it keeps its whole strength to the
+/// tip, as a large thing's umbra does on T2 (a thin thing's fades, [`TIP`]).
+///
+/// Each slice is laid only where the slice under it did not lie: the mask keeps the strongest
+/// and the highest, the strength is one and the reach falls slice by slice, so what is left out
+/// is what the lower slice had already laid higher. A house is a few hundred small bands.
+pub fn block_bands(b: &crate::frame::Block, (kx, ky): (i32, i32), mut emit: impl FnMut(Band)) {
+    let hgt = i32::from(b.height);
+    let (x0, y0, x1, y1) = (i32::from(b.x0), i32::from(b.y0), i32::from(b.x1), i32::from(b.y1));
+    if hgt <= GROUND || x0 >= x1 || y0 >= y1 {
+        return;
+    }
+    let far = (hgt * kx.abs().max(ky.abs())) >> 8;
+    let n = ((hgt + SLICE - 1) / SLICE).max((far + SLICE - 1) / SLICE).max(1);
+    let mut under: Option<(i32, i32, i32, i32)> = None;
+    for i in 0..n {
+        let (h0, h1) = (hgt * i / n, hgt * (i + 1) / n);
+        let (ax, bx, ay, by) = ((h0 * kx) >> 8, (h1 * kx) >> 8, (h0 * ky) >> 8, (h1 * ky) >> 8);
+        let r = (x0 + ax.min(bx), y0 + ay.min(by), x1 + ax.max(bx), y1 + ay.max(by));
+        let reach = (hgt - h1 - OWN_TOP).clamp(1, 255) as u8;
+        minus(r, under, |(x0, y0, x1, y1)| emit(Band { x0, x1, y0, y1, strength: 255, reach }));
+        under = Some(r);
+    }
+}
+
+/// The rect `r` less the rect `a`, as up to four rects `(x0, y0, x1, y1)`.
+fn minus(r: (i32, i32, i32, i32), a: Option<(i32, i32, i32, i32)>, mut emit: impl FnMut((i32, i32, i32, i32))) {
+    let Some(a) = a.filter(|a| a.0 < r.2 && r.0 < a.2 && a.1 < r.3 && r.1 < a.3) else {
+        emit(r);
+        return;
+    };
+    let (my0, my1) = (r.1.max(a.1), r.3.min(a.3));
+    if r.1 < my0 {
+        emit((r.0, r.1, r.2, my0));
+    }
+    if my1 < r.3 {
+        emit((r.0, my1, r.2, r.3));
+    }
+    if r.0 < a.0 {
+        emit((r.0, my0, a.0, my1));
+    }
+    if a.2 < r.2 {
+        emit((a.2, my0, r.2, my1));
+    }
+}
+
+/// Sub-px steps a canvas px of a point light's shadow geometry ([`Lamp`], [`Slab`]).
+pub const SUB: i32 = 16;
+/// A point light's shadow reaches this far past its radius, px, then stops.
+pub const SHADOW_PAST: i32 = 24;
+/// A caster whose foot is further than this past a light's radius throws none of its shadow.
+const CAST_PAST: i32 = 48;
+
+/// A point light as its shadow's geometry sees it (T0 and T1, PRESENTATION.md §1.7): its ground
+/// point in [`SUB`] steps of a px (the middle of its px), its height and its radius, px.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Lamp {
+    pub x: i32,
+    pub y: i32,
+    pub h: i32,
+    pub r: i32,
+}
+
+impl Lamp {
+    pub fn of(l: &crate::frame::Light) -> Lamp {
+        Lamp {
+            x: l.pos.0 * SUB + SUB / 2,
+            y: l.pos.1 * SUB + SUB / 2,
+            h: i32::from(l.height.max(1)),
+            r: i32::from(l.radius),
+        }
+    }
+}
+
+/// A quad of a point light's shadow on the ground: its corners in [`SUB`] steps of a px, in the
+/// order a triangle strip takes them (`a0, b0, a1, b1`: the slab's foot, then its top), each with
+/// how high the shadow reaches over that ground point, px.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Slab {
+    pub c: [(i32, i32, i32); 4],
+}
+
+/// A point `(px, py)` ([`SUB`] steps) `z` px up, seen from `lamp`, laid on the ground, with the
+/// reach of the ray over a caster `top` px tall there: `t = d * h / (h - z)` from the light (a
+/// point at or over the light's height reaches the rim plus [`SHADOW_PAST`] and stops), the reach
+/// `h + (top - h) * t / d`.
+fn project(lamp: &Lamp, (px, py): (i32, i32), z: i32, top: i32) -> (i32, i32, i32) {
+    let (dx, dy) = (i64::from(px - lamp.x), i64::from(py - lamp.y));
+    let d = i64::from(jane_core::num::isqrt((dx * dx + dy * dy) as u64)).max(i64::from(SUB / 2));
+    let far = i64::from((lamp.r + SHADOW_PAST) * SUB);
+    let (h, z) = (i64::from(lamp.h), i64::from(z));
+    let t = if 2 * z >= 2 * h - 1 { far } else { (d * h / (h - z)).min(far) };
+    let reach = (h + (i64::from(top) - h) * t / d).clamp(0, 255);
+    ((i64::from(lamp.x) + dx * t / d) as i32, (i64::from(lamp.y) + dy * t / d) as i32, reach as i32)
+}
+
+/// The slab of a vertical face standing on the ground from `a` to `b` ([`SUB`] steps), from
+/// `za` px up to `zb`, seen from `lamp`, for a caster `top` px tall.
+fn slab(lamp: &Lamp, a: (i32, i32), b: (i32, i32), (za, zb): (i32, i32), top: i32) -> Slab {
+    Slab {
+        c: [project(lamp, a, za, top), project(lamp, b, za, top), project(lamp, a, zb, top), project(lamp, b, zb, top)],
+    }
+}
+
+/// Caster `c`'s shadow from `lamp` (T0 and T1, PRESENTATION.md §1.7): each run of equal rows of
+/// its sprite (`rows`, from [`rows`], its left edge at `x`), a vertical slab at the front and at
+/// the back of its footprint (the silhouettes' footprint, [`bands`]), projected from the light
+/// onto the ground. Nothing when its foot is well past the light's reach.
+pub fn row_slabs(rows: &[(i32, i32, i32)], x: i32, c: &Caster, lamp: &Lamp, mut emit: impl FnMut(Slab)) {
+    if !reaches(c, lamp) {
+        return;
+    }
+    let fy = i32::from(c.foot.1) * SUB + SUB / 2;
+    let depth = i32::from(c.depth.max(2));
+    let tall = i32::from(c.height).max(1);
+    let up = |hv: i32| height_of_rows(hv).min(tall);
+    let top = rows.last().map_or(1, |r| up(r.0));
+    let mut k = 0;
+    while k < rows.len() {
+        let (h0, u0, u1) = rows[k];
+        let mut j = k + 1;
+        while j < rows.len() && rows[j].1 == u0 && rows[j].2 == u1 && rows[j].0 == rows[j - 1].0 + 1 {
+            j += 1;
+        }
+        let h1 = rows[j - 1].0 + 1;
+        k = j;
+        let (xa, xb) = ((x + u0) * SUB, (x + u1 + 1) * SUB);
+        let deep = depth.min(2 * ((u1 - u0) / 2) + 2);
+        for by in [fy + SUB / 2 - deep * SUB, fy + SUB / 2] {
+            emit(slab(lamp, (xa, by), (xb, by), (up(h0 - 1), up(h1)), top));
+        }
+    }
+}
+
+/// Whether caster `c`'s foot lies near enough `lamp` for it to throw any of its shadow
+/// ([`row_slabs`] throws none past it).
+pub fn reaches(c: &Caster, lamp: &Lamp) -> bool {
+    let (fx, fy) = (i32::from(c.foot.0) * SUB + SUB / 2, i32::from(c.foot.1) * SUB + SUB / 2);
+    let (dx, dy) = (i64::from(fx - lamp.x), i64::from(fy - lamp.y));
+    let near = i64::from((lamp.r + CAST_PAST) * SUB);
+    dx * dx + dy * dy <= near * near
+}
+
+/// Block `b`'s shadow from `lamp`: each of its sides turned away from the light a slab from the
+/// ground to its height, projected from the light onto the ground (a side higher than the light
+/// reaches the rim); the sides turned to it throw nothing past those (a block is a box). Nothing
+/// when it lies well past the light's reach.
+pub fn block_slabs(b: &crate::frame::Block, lamp: &Lamp, mut emit: impl FnMut(Slab)) {
+    let (x0, y0, x1, y1) = (i32::from(b.x0) * SUB, i32::from(b.y0) * SUB, i32::from(b.x1) * SUB, i32::from(b.y1) * SUB);
+    let hgt = i32::from(b.height);
+    if hgt <= GROUND {
+        return;
+    }
+    let (nx, ny) = (lamp.x.clamp(x0, x1), lamp.y.clamp(y0, y1));
+    let (dx, dy) = (i64::from(nx - lamp.x), i64::from(ny - lamp.y));
+    let near = i64::from((lamp.r + CAST_PAST) * SUB);
+    if dx * dx + dy * dy > near * near {
+        return;
+    }
+    let sides = [
+        (lamp.y > y0, (x0, y0), (x1, y0)),
+        (lamp.y < y1, (x0, y1), (x1, y1)),
+        (lamp.x > x0, (x0, y0), (x0, y1)),
+        (lamp.x < x1, (x1, y0), (x1, y1)),
+    ];
+    for (away, a, c) in sides {
+        if away {
+            emit(slab(lamp, a, c, (0, hgt), hgt));
+        }
+    }
 }
 
 #[cfg(test)]
@@ -290,8 +488,9 @@ mod tests {
         // past its right edge.
         let far = rows_only.iter().map(|b| b.x1).max().unwrap();
         assert_eq!(far, 24 + ((25 * 704) >> 8), "{far}");
-        // A face 10 px up takes its shadow from the ground 8 rows under it, if it reaches 10.
-        assert_eq!(ground_of(50, 10), (58, 10));
+        // A face 10 px up takes its shadow from the ground 8 rows under it and 2 in front of that,
+        // if it reaches 10.
+        assert_eq!(ground_of(50, 10), (60, 10));
         assert_eq!(ground_of(50, 3), (50, 0));
     }
 
@@ -379,5 +578,48 @@ mod tests {
         // 1.19 away (23 rows), its depth (6 rows) behind that.
         let near = bands.iter().map(|b| b.y0).min().unwrap();
         assert!(near >= foot.1 + 18, "a shadow at its anchor: {near}");
+    }
+
+    #[test]
+    fn a_blocks_shadow_is_its_footprint_swept_along_the_sun_by_its_height() {
+        let b = crate::frame::Block { x0: 100, y0: 100, x1: 180, y1: 140, height: 60 };
+        let k = shear(&sun(Angle::WEST, 20)).unwrap();
+        let mut bands = Vec::new();
+        block_bands(&b, k, |band| bands.push(band));
+        let at = |x: i32, y: i32| {
+            bands.iter().filter(|b| b.x0 <= x && x < b.x1 && b.y0 <= y && y < b.y1).map(|b| b.reach).max()
+        };
+        // 60 px at cot 20 degrees (2.75) is 165 px east of its east wall: covered to there, and no
+        // further; the footprint itself too, but never as high as the block's own top.
+        let far = 180 + ((60 * k.0) >> 8);
+        assert!(at(far - 2, 120).is_some() && at(far + 2, 120).is_none(), "{far}");
+        assert!(at(140, 120).is_some_and(|r| i32::from(r) < 60 - crate::terrain::BLOCK_TOLERANCE as i32));
+        // The reach falls along the shadow, as the ray over its top does.
+        let (near, mid) = (at(185, 120).unwrap(), at(260, 120).unwrap());
+        assert!(near > mid && mid > 1, "{near} {mid}");
+        // West of it, nothing; and no px is laid twice by the slices.
+        assert!(at(95, 120).is_none());
+        let area: i32 = bands.iter().map(|b| (b.x1 - b.x0) * (b.y1 - b.y0)).sum();
+        assert!(area <= (far - 100) * 41, "{area}");
+    }
+
+    #[test]
+    fn a_blocks_sides_turned_to_a_lamp_throw_nothing_and_the_rest_reach_the_rim() {
+        let b = crate::frame::Block { x0: 100, y0: 100, x1: 180, y1: 108, height: 60 };
+        let lamp = Lamp { x: 140 * SUB + 8, y: 130 * SUB + 8, h: 30, r: 100 };
+        let mut slabs = Vec::new();
+        block_slabs(&b, &lamp, |q| slabs.push(q));
+        // South of it: its north side and its two ends turn away; its south side faces the lamp.
+        assert_eq!(slabs.len(), 3);
+        // Taller than the lamp, its top reaches the rim plus the past, away from the lamp; its
+        // foot is where it stands, and there the shadow reaches as high as the block.
+        for q in &slabs {
+            for (x, y, r) in q.c {
+                let (dx, dy) = (i64::from(x - lamp.x), i64::from(y - lamp.y));
+                let d = jane_core::num::isqrt((dx * dx + dy * dy) as u64) as i32 / SUB;
+                assert!(y <= 108 * SUB, "a corner south of the block: {}", y / SUB);
+                assert!((d - 100 - SHADOW_PAST).abs() <= 1 || r == 60, "a corner {d} px out reaching {r}");
+            }
+        }
     }
 }

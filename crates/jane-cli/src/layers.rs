@@ -22,7 +22,7 @@ pub fn heights(frame: &Frame, atlas: &AtlasPages) -> Heights {
     let mut hv = vec![0u8; w * h];
     let mut dv = vec![0u8; w * h];
     let mut iv = vec![0u16; w * h];
-    let mut depth = vec![2u8; frame.sprites.len()];
+    let mut depth = vec![0u8; frame.sprites.len()];
     for c in &frame.casters {
         if let Some(d) = depth.get_mut(c.sprite as usize) {
             *d = c.depth.max(1);
@@ -131,8 +131,12 @@ pub fn field(g: &Heights) -> (Vec<u8>, Vec<u8>) {
             if i32::from(z) <= jane_present::shadow::GROUND {
                 continue;
             }
-            let lo = if g.id[y * w + x] == 0 { 0 } else { run_bottom(g, x, y).min(i32::from(z)) as u8 };
             let who = g.id[y * w + x];
+            // Not one of the frame's casters, or the terrain's relief: it stands in no field.
+            if (who != 0 && g.depth[y * w + x] == 0) || (who == 0 && i32::from(z) <= jane_present::shadow::RELIEF) {
+                continue;
+            }
+            let lo = if who == 0 { 0 } else { run_bottom(g, x, y).min(i32::from(z)) as u8 };
             let mut d = i32::from(g.depth[y * w + x].max(1));
             if who != 0 {
                 // `scatter.wgsl`'s `footprint`: no deeper than it is wide, and round.

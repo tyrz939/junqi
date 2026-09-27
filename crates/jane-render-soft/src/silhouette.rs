@@ -7,7 +7,7 @@
 //! writes.
 
 use jane_present::shadow::{self, Band};
-use jane_present::{Caster, Page, Rgb, SpriteCmd};
+use jane_present::{Block, Caster, Page, Rgb, SpriteCmd};
 
 use crate::blit::Target;
 
@@ -15,7 +15,7 @@ use crate::blit::Target;
 const BAYER4: [[u8; 4]; 4] = [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]];
 /// Rows over the mask's box a lifted receiver may stand and still take its shadow from inside it:
 /// the tallest terrain's `rows_up`.
-const UP: i32 = jane_present::rows_up(100);
+const UP: i32 = jane_present::rows_up(100) + shadow::FRONT;
 
 pub use jane_present::shadow::shear;
 
@@ -71,6 +71,12 @@ pub fn cast(mask: &mut Mask, page: &Page, s: &SpriteCmd, c: &Caster, k: (i32, i3
     shadow::rows(&page.albedo, page.w, s, i32::from(c.foot.1), &mut rows);
     shadow::bands(&rows, i32::from(s.x), c, k, |b| mask.band(b));
     mask.rows = rows;
+}
+
+/// Lays block `b`'s shadow into `mask` (`shadow::block_bands`: its footprint swept along the sun
+/// by its height).
+pub fn cast_block(mask: &mut Mask, b: &Block, k: (i32, i32)) {
+    shadow::block_bands(b, k, |band| mask.band(band));
 }
 
 /// Applies the mask to `t` and clears it. `heights` is the terrain's height under each px of `t`
@@ -238,8 +244,9 @@ mod tests {
     #[test]
     fn a_shadow_climbs_a_wall_as_high_as_it_reaches_and_never_lies_across_it() {
         // A wall's face on rows 0..=9 of a 20 x 24 canvas, its foot on row 9: row y stands
-        // `height_of_rows(10 - y)` px up (the lowest three, 4 px and under, are ground). A
-        // shadow lies on the ground rows 5..12 of columns 5..10, reaching 8 px up.
+        // `height_of_rows(10 - y)` px up (the lowest three, 4 px and under, are ground), and takes
+        // its shadow from row 12, two in front of where it lands. A shadow lies on the ground
+        // rows 5..13 of columns 5..10, reaching 8 px up.
         let (w, h) = (20, 24);
         let mut heights = vec![1u8; (w * h) as usize];
         for y in 0..10 {
@@ -249,7 +256,7 @@ mod tests {
         }
         let mut mask = Mask::default();
         mask.fit(w, h);
-        mask.band(Band { x0: 5, x1: 10, y0: 5, y1: 12, strength: 200, reach: 8 });
+        mask.band(Band { x0: 5, x1: 10, y0: 5, y1: 13, strength: 200, reach: 8 });
         let mut px = vec![0xff80_8080u32; (w * h) as usize];
         let mut t = Target { px: &mut px, w, h };
         apply(&mut t, &mut mask, [128, 128, 200], &heights, 0);
@@ -263,6 +270,6 @@ mod tests {
         // Beside it on the face, lit (the ring's dither aside).
         assert!(!dark(15, 5) && !dark(2, 5));
         // On the ground in front, as laid.
-        assert!(dark(7, 11) && !dark(7, 14));
+        assert!(dark(7, 11) && dark(7, 12) && !dark(7, 15));
     }
 }

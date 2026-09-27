@@ -96,8 +96,20 @@ fn scatter(@builtin(global_invocation_id) id: vec3<u32>) {
     if f32(h) < GROUND {
         return;
     }
-    var d = max(u32(round(v.a * 255.0)), 1u);
+    let depth = u32(round(v.a * 255.0));
     let who = textureLoad(gid, vec2<i32>(id.xy), 0).r & 0xffffu;
+    // The terrain's relief up to `RELIEF` (a cobble, a tuft, a kerb) is its texture, not a
+    // caster: it stands in no field, as it throws no block on T0 and T1 (`shadow::RELIEF`).
+    if who == 0u && f32(h) <= RELIEF {
+        return;
+    }
+    // A sprite of depth 0 is not a caster of the frame's (the dead, a spell's glow in her hands, a
+    // prop lying flat or set into a wall): the presenter decides what casts, and it casts
+    // nothing here as on T0 and T1 (PRESENTATION.md §1.7).
+    if who != 0u && depth == 0u {
+        return;
+    }
+    var d = max(depth, 1u);
     var lo = 0u;
     if who != 0u {
         lo = u32(round(run_bottom(i32(id.x), i32(id.y), f32(h), who)));
