@@ -194,20 +194,38 @@ pub fn junk_slot(v: &View<'_>) -> Option<u8> {
     };
     let stacks = |i: ItemId| bag.iter().flatten().filter(|s| s.item == i).count();
     let makings = bait_makings(v);
-    bag.iter()
-        .enumerate()
-        .filter_map(|(i, s)| s.map(|s| (i, s)))
-        .filter(|(_, s)| {
-            let d = cat.combat.item(s.item);
-            let spare = stacks(s.item) > 1 && full(s.item);
-            !d.kept() && (!d.story && !wanted.contains(&s.item) && !makings.contains(&s.item) || spare)
-        })
-        .min_by_key(|(i, s)| {
-            let d = cat.combat.item(s.item);
-            let spare = stacks(s.item) > 1 && full(s.item) && s.qty < d.max_stack;
-            (!spare, rank(s.item), s.qty, *i)
-        })
-        .map(|(i, _)| i as u8)
+    let bait_short = makings.len() > 1;
+    let meat = item("rat_meat");
+    let pick = |story_too: bool| {
+        bag.iter()
+            .enumerate()
+            .filter_map(|(i, s)| s.map(|s| (i, s)))
+            .filter(|(_, s)| {
+                let d = cat.combat.item(s.item);
+                let spare = stacks(s.item) > 1 && full(s.item);
+                let asked = wanted.contains(&s.item) || makings.contains(&s.item);
+                let held_back = if story_too { bait_short && s.item == meat } else { d.story };
+                let free_of_log = !asked && !held_back;
+                !d.kept() && (free_of_log || spare)
+            })
+            .min_by_key(|(i, s)| {
+                let d = cat.combat.item(s.item);
+                let spare = stacks(s.item) > 1 && full(s.item) && s.qty < d.max_stack;
+                (!spare, rank(s.item), s.qty, *i)
+            })
+            .map(|(i, _)| i as u8)
+    };
+    // Not one slot free and nothing else to spare: what a quest once asked for and none in the
+    // log asks for now (the forest's butterflies, the rats' meat once the bait is brewed), so
+    // that a key or the Ball always has room (the Chairman's Key was left in the Factory for
+    // want of one, and the Burial stayed locked).
+    pick(false).or_else(|| {
+        let full_bag = bag.iter().all(Option::is_some);
+        if !full_bag {
+            return None;
+        }
+        pick(true)
+    })
 }
 
 /// What the bait for the Burial's small snakes is made of, and the bait itself, while Under the
