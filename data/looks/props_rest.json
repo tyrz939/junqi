@@ -159,15 +159,15 @@
   "pit_prop": { "family": "structure", "shape": "pit_prop", "rise": 14,
     "materials": { "body": "wood_dark", "trim": "iron" } },
   "crypt_pillar": { "family": "structure", "shape": "crypt_pillar", "rise": 10,
-    "materials": { "body": "temple", "accent": "bone" } },
+    "materials": { "body": "temple", "accent": "bone" }, "vary": 2 },
   "iron_column": { "family": "structure", "shape": "iron_column", "rise": 14,
     "materials": { "body": "iron", "accent": "cloth_green" } },
   "brick_pier": { "family": "structure", "shape": "brick_pier", "rise": 10,
-    "materials": { "body": "brick", "trim": "stone" } },
+    "materials": { "body": "brick", "trim": "stone" }, "vary": 2 },
   "column": { "family": "structure", "shape": "column", "rise": 16,
     "materials": { "body": "plaster" } },
   "bookcase": { "family": "furniture", "shape": "bookcase", "rise": 20,
-    "materials": { "body": "wood_dark" } },
+    "materials": { "body": "wood_dark" }, "vary": 2 },
   "school_desk": { "family": "furniture", "shape": "school_desk", "rise": 2,
     "materials": { "body": "wood_oak", "trim": "iron", "accent": "glass" } },
   "tomb": { "family": "furniture", "shape": "tomb", "rise": 2,
@@ -177,5 +177,5 @@
   "drums": { "family": "container", "shape": "drums", "rise": 2,
     "materials": { "body": "cloth_brick", "trim": "iron" } },
   "ore_tub": { "family": "container", "shape": "ore_tub", "rise": 2,
-    "materials": { "body": "wood_dark", "trim": "iron", "accent": "brass" } }
+    "materials": { "body": "wood_dark", "trim": "iron", "accent": "brass" }, "vary": 2 }
 }
