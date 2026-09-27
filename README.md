@@ -10,13 +10,13 @@ This is the third build. The first (Phaser, 2026) is archived in `archive/phaser
 
 ## Where it stands (2026-09-28)
 
-**The Rust build is the game.** It plays in a window with its whole UI, sound, three render tiers and LAN co-op; New Game to an ending is played by the bots on seed 3, and every act through the Factory on every seed tried. What is left is the Burial on every seed, real hardware (a Pi, an ancient PC), more player models and experience metrics, and people playing it. The TypeScript build in `jane/` is frozen and deprecated (2026-09-27): nothing in it is kept up to date, and it goes to the archive at P10.
+**The Rust build is the game.** It plays in a window with its whole UI, sound, three render tiers and LAN co-op; New Game to an ending is played by both bots on every seed tried (1 to 5 and 7), in 5 to 8 game hours with 7 to 33 deaths. What is left is real hardware (a Pi, an ancient PC), more player models and experience metrics, and people playing it. The TypeScript build in `jane/` is frozen and deprecated (2026-09-27): nothing in it is kept up to date, and it goes to the archive at P10.
 
 | Phase | State |
 | --- | --- |
 | P0 to P3 | Done: the workspace, the data compile, the county and its solver, eight generated dungeons and four interiors. New Game builds all thirteen zones in about 165 ms on a desktop |
 | P4 sim | Done for the story: every verb, quest, dialogue, trigger, the journal, AI, the snake, schedules, weather, omens, the bell, the three endings; `Sim::metrics()`. A tick is 1 to 2 µs at the median |
-| P4b verification | Two player models (Reader, Rusher), dungeon tactics, act starts, `--ending hold|hill|train`; the Reader finishes the story on seed 3 and every dungeon on seeds 1 to 3. Explorer, Cautious, the co-op pair, Lost and the experience metrics are not built |
+| P4b verification | Two player models (Reader, Rusher), dungeon tactics, act starts, `--ending hold|hill|train`; the Reader and the Rusher finish the story on seeds 1 to 5 and 7 (`the_reader_reaches_an_ending_on_seeds_1_to_5`), and every dungeon on seeds 1 to 3. Explorer, Cautious, the co-op pair, Lost and the experience metrics are not built |
 | P5 art | Every person, creature, prop, building, icon, tile and plant has a generated look, with fight and cast frames, held things, every dungeon dressed, region palettes; weather, fog, water, sky and fx. Reviewed frame by frame against `ART.md` §3.1 |
 | P6, P6b, P6c | `soft` (T0), `gl2` (T1) and `wgpu` (T2): one Frame, one shadow list, one grade; normal-mapped light, shadows that follow the hour and the weather, bloom. T2 at 4K about 3 ms a frame on an RTX 3060 |
 | P7 UI and input | Done: title, loading, HUD, dialogue, pause, saves, the four-tab window, the terminal, Controls with rebinding and a Display page of every Features row, F2 and F3. The pad is wired and untested by hand |
