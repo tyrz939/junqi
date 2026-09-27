@@ -422,7 +422,12 @@ pub fn offers(
     let short = !ready(v);
     for p in v.props() {
         let d = cat.story.prop(p.def);
-        if p.hidden || !d.rest || !reach.beside(p) || v.prop_spawn(p).is_none_or(|s| s.talk.is_none()) {
+        if p.hidden
+            || !d.rest
+            || !reach.beside(p)
+            || v.prop_spawn(p).is_none_or(|s| s.talk.is_none())
+            || shot_at(v, cx, p)
+        {
             continue;
         }
         let sat = cx.used.contains_key(&(v.zone(), p.id));
@@ -542,7 +547,7 @@ pub fn cuts_in(v: &View<'_>, cx: &Ctx, reach: &Reach, task: &Task, what: Try) ->
         let cat = jane_data::catalog();
         out.extend(
             v.props()
-                .filter(|p| !p.hidden && cat.story.prop(p.def).rest && reach.beside(p))
+                .filter(|p| !p.hidden && cat.story.prop(p.def).rest && reach.beside(p) && !shot_at(v, cx, p))
                 .filter(|p| v.prop_spawn(p).is_some_and(|s| s.talk.is_some()))
                 .map(|p| Try::Tactic(p.id.get())),
         );
@@ -615,6 +620,13 @@ pub fn at_elbow(v: &View<'_>, id: UnitId) -> bool {
 pub fn done(v: &View<'_>, downed: &[(jane_core::UnitDefId, u32)]) -> bool {
     let boss = crate::crawl::boss_of(v.zone());
     boss.is_some_and(|b| downed.iter().any(|&(d, _)| d == b)) && holds(v, sense::item("the_ball")) > 0
+}
+
+/// Is this fire in the line of something rooted that shoots (a statue beside the orchard's
+/// hearth, on some seeds)? She would wake there under its fire after a fall, and fall again.
+fn shot_at(v: &View<'_>, cx: &Ctx, p: &jane_sim::Prop) -> bool {
+    let c = sense::prop_centre(p);
+    keep_off(v, cx).iter().any(|&(o, r, k)| k > 0 && dist(o, c) <= r && v.sight(o, c))
 }
 
 /// Whole enough to walk into a keeper's room: nine tenths of her health and four fifths of her
@@ -969,11 +981,14 @@ pub fn keep_off(v: &View<'_>, cx: &Ctx) -> Vec<(Vec2, i64, u32)> {
     for (&def, seen) in &cx.seen_foes {
         let d = cat.combat.unit(def);
         let rooted = d.walk.0 == 0 && d.run.0 == 0 && d.aggro.0 > 0 && !d.boss;
+        // A small snake is kept out of the notice of whether or not she has its bait: without
+        // it, walking into its notice is its spit (she comes back with the meat).
+        let baited = d.bait.is_some();
         let fed = d.bait.is_some_and(|b| holds(v, b) > 0);
-        if !fed && !rooted {
+        if !baited && !rooted {
             continue;
         }
-        let (r, cost) = if fed {
+        let (r, cost) = if baited {
             (i64::from(d.aggro.0) + i64::from(d.bounds.0) + me + i64::from(CELL_FX), 0)
         } else {
             let range = d.book.iter().map(|&s| cat.combat.spell(s).range.0).max().unwrap_or(0);
@@ -988,6 +1003,9 @@ pub fn keep_off(v: &View<'_>, cx: &Ctx) -> Vec<(Vec2, i64, u32)> {
                 Some(u) if u.alive && fed && u.combat == CombatState::Combat => {}
                 Some(u) if u.alive => out.push((u.pos, r, cost)),
                 Some(_) => {}
+                // (One out of her sight is remembered only while she has its meat: without it,
+                // the one she remembers may be one that ate already and lies dead.)
+                None if baited && !fed => {}
                 None => out.push((pos, r, cost)),
             }
         }
