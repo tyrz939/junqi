@@ -287,7 +287,15 @@ impl Crawl {
                 let doing = self.task.as_ref().map_or("nothing".to_owned(), |(_, w)| format!("{w:?}"));
                 let at = v.body().pos.cell();
                 self.deaths_at.push(format!("at {at:?} by {by} while {doing}"));
+                // What she died doing is a try that failed (it is not walked back into blind).
+                if let Some((_, what)) = self.task {
+                    self.failed(what, &format!("she died doing it, by {by}"));
+                }
                 self.task = None;
+                // She wakes whole: whatever she was backing off from is not after her now (a
+                // flight left counting would run her from the next thing she meets).
+                cx.fight.fleeing = 0;
+                cx.fight.retreat = None;
                 if self.deaths_at.len() >= MAX_DEATHS {
                     let why = format!(
                         "died {} times in the {}: {}",
@@ -603,6 +611,7 @@ impl Crawl {
                 && (s.talk.is_some() || s.use_list.is_some())
                 && !def.plate
                 && !def.bench
+                && !turns_clock(v, p)
                 && !cx.used.contains_key(&(v.zone(), p.id))
             {
                 offer(4, d, Try::Prop(p.id), Task::Use(UseProp::new(p.id)), &mut best);
@@ -635,7 +644,8 @@ impl Crawl {
         // 7. Whatever hostile she can reach; bosses last. One she saw and has walked away from
         // (it sleeps out of her sight) is walked back to.
         for u in sense::enemies(v) {
-            if !fight::fightable(u) || !reach.point(u.pos) {
+            // One her feet (or her patience) lately found no way to waits its time.
+            if !fight::fightable(u) || !reach.point(u.pos) || !fight::reachable(cx, u.id, v.frame()) {
                 continue;
             }
             let boss = cat.combat.unit(u.def).boss;
@@ -672,6 +682,7 @@ impl Crawl {
             .filter(|p| {
                 !p.hidden
                     && cat.story.prop(p.def).rest
+                    && !turns_clock(v, p)
                     && self.reach.beside(p)
                     && v.prop_spawn(p).is_some_and(|s| s.talk.is_some())
             })
@@ -723,6 +734,13 @@ impl Crawl {
     }
 }
 
+/// A bed that sleeps the world forward to an hour (`rest` with `until`): never lain on in passing
+/// or to mend (the night it passes stands the dead up again); a dungeon's tactic says when.
+fn turns_clock(v: &View<'_>, p: &Prop) -> bool {
+    jane_data::catalog().story.prop(p.def).rest
+        && sense::prop_does(v, p, &|a| matches!(a, jane_core::action::Action::Rest { until: Some(_) }))
+}
+
 /// The unit a dungeon's boss room holds (`None`: the cellar, the library and the pipes have none).
 pub fn boss_of(z: ZoneId) -> Option<UnitDefId> {
     let cat = jane_data::catalog();
@@ -739,15 +757,21 @@ fn bolt_at(v: &View<'_>, reach: &Reach, p: &Prop, spell: SpellId) -> Option<Task
     let c = sense::prop_centre(p);
     let (px, py) = c.cell();
     let me = v.body().pos;
+    let s = jane_data::catalog().combat.spell(spell);
+    // A bolt switches what it ends beside: a prop that stops it (a brazier, a fuse board) where
+    // it hits, a torch standing in the open only where its flight runs out, or against the wall
+    // behind it. From each place she could stand, where would this bolt end?
+    let touch = i64::from(s.touch.unwrap_or(jane_core::Fx::from_px(14)).0) - 2 * 256;
     let mut best: Option<(i64, Vec2)> = None;
-    for r in 2..=6 {
+    for r in 2..=22 {
         for (dx, dy) in [(0, r), (0, -r), (r, 0), (-r, 0), (r, r), (-r, r), (r, -r), (-r, -r)] {
             let (x, y) = (px + dx, py + dy);
             if !reach.get(x, y) {
                 continue;
             }
             let at = Vec2::centre(x, y);
-            if !v.sight(at, c) {
+            let end = bolt_end(v, at, jane_core::angle::bearing(at, c), spell);
+            if dist(end, c) > touch {
                 continue;
             }
             let d = dist(me, at);
@@ -755,12 +779,69 @@ fn bolt_at(v: &View<'_>, reach: &Reach, p: &Prop, spell: SpellId) -> Option<Task
                 best = Some((d, at));
             }
         }
-        if best.is_some() {
-            break;
-        }
     }
     let (_, from) = best?;
     Some(Task::Aim { spell, from, at: c, t: 0 })
+}
+
+/// Where a bolt of `spell` thrown from `from` along `heading` ends, as the sim flies it
+/// (`flight.rs`): it starts a little ahead of her feet, moves its speed a tick, dies on the first
+/// move into a cell that stops a shot, or once it has flown its range and two of her bodies.
+fn bolt_end(v: &View<'_>, from: Vec2, heading: jane_core::Angle, spell: SpellId) -> Vec2 {
+    let cat = jane_data::catalog();
+    let s = cat.combat.spell(spell);
+    let speed = s.speed.unwrap_or(jane_core::Fx::from_px(2));
+    let mut left = i64::from(s.range.0) + 2 * i64::from(cat.combat.unit(v.body().def).bounds.0);
+    let vel = jane_core::angle::along(heading, speed);
+    let mut pos = from + jane_core::angle::along(heading, jane_core::Fx::from_px(4));
+    for _ in 0..400 {
+        let to = pos + vel;
+        if shot_stopped(v, pos, to) {
+            return to;
+        }
+        pos = to;
+        left -= i64::from(speed.0.max(1));
+        if left <= 0 {
+            break;
+        }
+    }
+    pos
+}
+
+/// Does a move from `a` to `b` enter a cell that stops a shot (the sim's grid walk,
+/// `los::first_blocked_cell`, over the flags the view shows)?
+fn shot_stopped(v: &View<'_>, a: Vec2, b: Vec2) -> bool {
+    let cell = i64::from(CELL_FX);
+    let (x0, y0) = (i64::from(a.x.0), i64::from(a.y.0));
+    let (dx, dy) = (i64::from(b.x.0) - x0, i64::from(b.y.0) - y0);
+    let (mut cx, mut cy) = a.cell();
+    let (tx, ty) = b.cell();
+    let (sx, sy) = (if dx > 0 { 1 } else { -1 }, if dy > 0 { 1 } else { -1 });
+    let (adx, ady) = (dx.abs(), dy.abs());
+    let mut nx = if dx > 0 { (i64::from(cx) + 1) * cell - x0 } else { x0 - i64::from(cx) * cell };
+    let mut ny = if dy > 0 { (i64::from(cy) + 1) * cell - y0 } else { y0 - i64::from(cy) * cell };
+    let mut steps = (tx - cx).abs() + (ty - cy).abs();
+    while steps > 0 {
+        steps -= 1;
+        let x_first = if dx == 0 {
+            false
+        } else if dy == 0 {
+            true
+        } else {
+            nx * ady < ny * adx
+        };
+        if x_first {
+            nx += cell;
+            cx += sx;
+        } else {
+            ny += cell;
+            cy += sy;
+        }
+        if v.flags(cx, cy) & jane_core::tile::BLOCK_SHOT != 0 {
+            return true;
+        }
+    }
+    false
 }
 
 /// The origins a pushable passes through to cover the plate, pushed only (each push needs a

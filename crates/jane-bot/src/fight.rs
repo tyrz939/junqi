@@ -135,9 +135,17 @@ pub fn tell_under(v: &View<'_>) -> Option<jane_core::Vec2> {
     let me = v.body();
     let body = i64::from(jane_data::catalog().combat.unit(me.def).bounds.0);
     let now = v.tick();
+    let cat = jane_data::catalog();
+    // Not bitten yet: its next pulse is still its first (the cast's `delay` after it was laid).
+    // A web that bites every second is always between pulses, and is no tell.
+    let fresh = |g: &jane_sim::state::Ground| {
+        cat.combat.spell(g.spell).ground.is_some_and(|p| {
+            p.delay.0 > 1 && g.until.0.saturating_sub(g.next_pulse.0) >= p.duration.0.saturating_sub(p.delay.0)
+        })
+    };
     v.grounds()
         .iter()
-        .filter(|g| g.faction != me.faction && g.next_pulse > now && g.until > now)
+        .filter(|g| g.faction != me.faction && g.next_pulse > now && g.until > now && fresh(g))
         .find(|g| dist(g.pos, me.pos) <= i64::from(g.radius.0) + body + i64::from(CELL_FX))
         .map(|g| g.pos)
 }
@@ -241,6 +249,10 @@ pub fn engage(v: &View<'_>, cx: &mut Ctx, id: UnitId) -> Option<Act> {
     let d = dist(me.pos, t.pos);
     let dir = jane_core::angle::iatan2(t.pos.y.0 - me.pos.y.0, t.pos.x.0 - me.pos.x.0);
     // Low with nothing to eat: back off (it may leash), and let the plan find a fire.
+    // Mended since (an apple, a fire): the flight is over.
+    if hp_permille(me) >= 2 * FLEE_BELOW {
+        cx.fight.fleeing = 0;
+    }
     if hp_permille(me) < FLEE_BELOW && cx.fight.fleeing == 0 && food(v).is_none() {
         cx.fight.fleeing = 180;
         cx.fight.fled += 1;
