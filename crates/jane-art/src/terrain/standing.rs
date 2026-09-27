@@ -406,6 +406,16 @@ fn fence(c: &mut Canvas, r: Ramp, (w, e, n, s): (bool, bool, bool, bool)) {
     }
     c.rect_bevel(Rect::new(mid - 3, b - 24, 6, 24), r, 1, Z::new(1, 24));
     c.dot(mid - 2, b - 24, r.at(Tone::High), 24);
+    // Every px its true height over the foot (the one projection, PRESENTATION.md §1.7): the
+    // post and the rails across the view stand up on the fence's line, where each had stood its
+    // relief's one height all the way down (a post 24 px from top to foot lay in the height field
+    // as a slab 20 rows deep and threw a chunky block; the rails, lost behind it, none). A rail
+    // running away from the viewer is level, seen from above, past the post.
+    c.upright(b - 1);
+    if !(w || e) && (n || s) {
+        let top = if n { b - 32 } else { b - 20 };
+        c.level(Rect::new(mid - 2, top, 4, (b - 24) - top), 14);
+    }
 }
 
 /// A low dry-stone wall in `c`: a capped top that runs on into its neighbours and a face of

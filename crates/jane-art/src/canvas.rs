@@ -1370,6 +1370,19 @@ impl Canvas {
         }
     }
 
+    /// Every drawn pixel in `r` stands `h` px high, and nothing round it changes: a rail seen
+    /// from above running away from the viewer.
+    pub fn level(&mut self, r: Rect, h: u8) {
+        for y in r.y.max(0)..r.bottom().min(self.h) {
+            for x in r.x.max(0)..r.right().min(self.w) {
+                let i = (y * self.w + x) as usize;
+                if self.albedo[i].is_opaque() {
+                    self.height[i] = h.max(1);
+                }
+            }
+        }
+    }
+
     /// Hold every drawn pixel's height to at most `h` px: a thing lying flat on the ground (a
     /// hatch, a plate, a note), whose shadow is a sliver.
     pub fn cap_heights(&mut self, h: u8) {
