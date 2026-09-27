@@ -443,7 +443,12 @@ pub fn offers(
         k.len()
     };
     let shut = sense::prop_named(v, "gate_wizard").is_some_and(|g| g.locked);
-    if keepers >= 4 && shut {
+    // (Or the hall says so: "A flame stands up in each corner of the hall. Nobody lit them." A
+    // crawl begun again after a fall has not seen the four fall.)
+    let flames = ["hall_flame_a", "hall_flame_b", "hall_flame_c", "hall_flame_d"]
+        .iter()
+        .all(|n| sense::prop_named(v, n).is_some_and(|p| p.on));
+    if (keepers >= 4 || flames) && shut {
         if let Some(seal) = sense::prop_named(v, "wizard_seal").filter(|p| reach.beside(p)) {
             out.push((
                 1,
