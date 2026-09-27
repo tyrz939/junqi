@@ -130,7 +130,7 @@ impl AudioBus for Sound {
     fn music(&mut self, cue: MusicCue) {
         let (out, fade_in) = fades(self.cue, cue);
         self.cue = Some(cue);
-        self.send(Cmd::Music { song: song(cue), fade_out_ms: out as f32, fade_in_ms: fade_in as f32 });
+        self.send(Cmd::Music { song: song(cue), fade_out_ms: f32::from(out), fade_in_ms: f32::from(fade_in) });
     }
 
     fn sfx(&mut self, kind: SfxKind, at: At, listener: At) {

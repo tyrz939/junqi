@@ -100,7 +100,7 @@ impl MusicCue {
 
 /// How the music moves from one cue to the next, in milliseconds: (the old one fading out, the
 /// new one fading in). A fight comes in fast and leaves slowly; a fall cuts; the bell hushes.
-pub fn fades(from: Option<MusicCue>, to: MusicCue) -> (u32, u32) {
+pub fn fades(from: Option<MusicCue>, to: MusicCue) -> (u16, u16) {
     match (from, to) {
         (_, MusicCue::Combat) => (700, 300),
         (_, MusicCue::Dead) => (300, 0),
@@ -557,8 +557,9 @@ const CHURCH_TICKS: u32 = 84;
 const BELL_TAIL: u32 = 300;
 /// Ticks of silence where the nine o'clock bell used to be.
 const NO_BELL: u32 = 480;
-/// Fx walked between footsteps: a stride of about three quarters of a cell.
-const STRIDE: i64 = CELL_FX as i64 * 3 / 4 + CELL_FX as i64 / 10;
+/// Ticks of walking between footfalls: half the walk cycle (six frames of `WALK_TICKS`), so each
+/// step lands on a frame where a foot comes down, whatever her speed.
+pub const STEP_TICKS: u32 = crate::people::WALK_TICKS * 3;
 
 /// A bell being rung, a strike at a time.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -580,7 +581,8 @@ pub struct Soundtrack {
     toll: Option<Toll>,
     hush: u32,
     no_bell: u32,
-    stride: i64,
+    /// Ticks she has been walking without a stop.
+    walking: u32,
     last_pos: Option<At>,
     beds: [u8; 10],
     ringer_phase: Option<u8>,
@@ -873,31 +875,31 @@ impl Soundtrack {
         self.hush = u32::from(strikes) * STRIKE_TICKS + BELL_TAIL;
     }
 
-    /// Her steps, a stride apart, on what is under her.
+    /// Her steps, in time with the walk cycle, on what is under her: the first as she steps
+    /// off (the drawing's first contact), then every [`STEP_TICKS`] while she keeps moving.
     fn footsteps(&mut self, s: &Sense, bus: &mut dyn AudioBus) {
         if !s.alive {
             self.last_pos = None;
+            self.walking = 0;
             return;
         }
-        if let Some(last) = self.last_pos {
+        let moved = self.last_pos.map(|last| {
             let dx = i64::from(s.pos.0.0 - last.0.0);
             let dy = i64::from(s.pos.1.0 - last.1.0);
-            let d = ((dx * dx + dy * dy) as f64).sqrt() as i64;
-            if d > 3 * i64::from(CELL_FX) {
-                // A door or a warp, not a walk.
-                self.stride = STRIDE / 2;
-            } else if d == 0 {
-                // Standing: the first step after it comes soon.
-                self.stride = self.stride.max(STRIDE / 2);
-            } else {
-                self.stride += d;
-                if self.stride >= STRIDE {
-                    self.stride -= STRIDE;
-                    if let Some(surface) = s.surface {
-                        bus.sfx(surface.sfx(), s.pos, s.pos);
-                    }
+            dx * dx + dy * dy
+        });
+        let reach = i64::from(3 * CELL_FX);
+        match moved {
+            // A door or a warp is not a walk; standing still ends one.
+            Some(d2) if d2 > 0 && d2 <= reach * reach => {
+                if self.walking % STEP_TICKS == 0
+                    && let Some(surface) = s.surface
+                {
+                    bus.sfx(surface.sfx(), s.pos, s.pos);
                 }
+                self.walking += 1;
             }
+            _ => self.walking = 0,
         }
         self.last_pos = Some(s.pos);
     }
@@ -1255,18 +1257,22 @@ mod tests {
     }
 
     #[test]
-    fn footsteps_fall_a_stride_apart_on_the_ground_under_her() {
+    fn footsteps_fall_in_time_with_the_walk_on_the_ground_under_her() {
         let mut bus = Heard::default();
         let mut t = Soundtrack::new();
         let mut s = sense();
         s.surface = Some(Surface::Wood);
-        // Walk ten cells at an eighth of a cell a tick.
-        for _ in 0..80 {
-            t.step(&s, &[], &none, &mut bus);
+        // Stand, then walk 90 ticks (a step as she sets off, then one every 18), then stop.
+        t.step(&s, &[], &none, &mut bus);
+        for _ in 0..90 {
             s.pos.0 = Fx(s.pos.0.0 + CELL_FX / 8);
+            t.step(&s, &[], &none, &mut bus);
+        }
+        for _ in 0..30 {
+            t.step(&s, &[], &none, &mut bus);
         }
         let steps = bus.sfx.iter().filter(|(k, _)| *k == SfxKind::StepWood).count();
-        assert!((10..=13).contains(&steps), "{steps} steps in ten cells");
+        assert_eq!(steps, 5, "90 ticks of walking");
         assert_eq!(Surface::of(Tile::Boardwalk), Some(Surface::Wood));
         assert_eq!(Surface::of(Tile::Cobble), Some(Surface::Cobble));
         assert_eq!(Surface::of(Tile::Grass).map(|g| g.wet(200)), Some(Surface::Water));

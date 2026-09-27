@@ -17,6 +17,11 @@ pub const USAGE: &str = "  audio list                          every sound effec
                                       inst:<name> (a dry phrase), song:<name> (one pass of its form), or scene:nine (the bell at nine
                                       over its cue and into the night), scene:six, scene:combat; --png
                                       draws it too
+  audio render play:<seed> [--hour H[:MM]] [--warm T] [--model reader|rusher] [--secs S]
+                                      the game's own sound: a model plays the seed from New Game (T ticks
+                                      unheard first), the clock is set (default 20:58), and the real cue
+                                      table drives the synth for S seconds (default 40): footsteps, beds,
+                                      the bell at nine, whatever the model runs into
   audio check [--secs S]              measure every song and patch: peak, gated loudness, DC, clicks, the
                                       key heard against the key written; exits 1 on a failure";
 
@@ -35,7 +40,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
         Some("render") => {
             let what = args.get(1).ok_or("render what? sfx:<name>, bed:<name>, song:<name>, scene:nine")?;
             let out = arg(args, "--out").map_or_else(|| PathBuf::from("sheets/audio").join(format!("{}.wav", what.replace(':', "-"))), PathBuf::from);
-            let v = render(what, seed, secs)?;
+            let v = render(what, seed, secs, args)?;
             write_wav(&out, &v)?;
             if args.iter().any(|a| a == "--png") {
                 let png = out.with_extension("png");
@@ -57,12 +62,17 @@ pub fn sheet(out: &Path) -> Result<(), String> {
     let mut all: Vec<String> = lib.sfx.iter().map(|p| format!("sfx:{}", p.name)).collect();
     all.extend(Bed::ALL.iter().map(|b| format!("bed:{}", b.name())));
     all.extend(lib.songs.iter().map(|s| format!("song:{}", s.name)));
-    all.extend(["scene:nine", "scene:six", "scene:combat"].map(String::from));
+    all.extend(["scene:nine", "scene:six", "scene:combat", "play:7"].map(String::from));
     for what in &all {
-        let v = render(what, 1, None)?;
+        let v = render(what, 1, None, &[])?;
         let name = what.replace(':', "-");
         write_wav(&dir.join(format!("{name}.wav")), &v)?;
-        if what.starts_with("song:") || what.starts_with("scene:") || what == "sfx:bell_far" || what == "sfx:bell_near" {
+        if what.starts_with("song:")
+            || what.starts_with("scene:")
+            || what.starts_with("play:")
+            || what == "sfx:bell_far"
+            || what == "sfx:bell_near"
+        {
             let img = picture(&v, what);
             let path = dir.join(format!("{name}.png"));
             std::fs::write(&path, img.png()).map_err(|e| format!("{}: {e}", path.display()))?;
@@ -102,7 +112,7 @@ fn song_secs(e: &Engine, i: usize) -> f32 {
 }
 
 /// Renders `what` (interleaved stereo at `RATE`).
-pub fn render(what: &str, seed: u32, secs: Option<f32>) -> Result<Vec<f32>, String> {
+pub fn render(what: &str, seed: u32, secs: Option<f32>, args: &[String]) -> Result<Vec<f32>, String> {
     let mut e = engine(seed);
     let (kind, name) = what.split_once(':').unwrap_or(("song", what));
     match kind {
@@ -124,6 +134,10 @@ pub fn render(what: &str, seed: u32, secs: Option<f32>) -> Result<Vec<f32>, Stri
             Ok(e.render_secs(s))
         }
         "scene" => scene(&mut e, name, secs),
+        "play" => {
+            let county = name.parse::<u32>().map_err(|_| format!("play:<seed>, not play:{name}"))?;
+            play(county, secs.unwrap_or(40.0), args)
+        }
         "inst" => {
             // A phrase up the instrument's middle: C3 E3 G3 C4 E4 G4 C5, the last held.
             let notes = [(48, 0.5), (52, 0.5), (55, 0.5), (60, 0.5), (64, 0.5), (67, 0.5), (72, 1.5)];
@@ -190,6 +204,125 @@ fn scene(e: &mut Engine, name: &str, secs: Option<f32>) -> Result<Vec<f32>, Stri
     Ok(out)
 }
 
+/// The sim with the tick's events kept, for the model and the cue table both.
+struct Heard {
+    sim: jane_sim::Sim,
+    events: Vec<jane_sim::Event>,
+}
+
+impl jane_bot::Host for Heard {
+    fn sim(&self) -> &jane_sim::Sim {
+        &self.sim
+    }
+
+    fn view(&self, seat: jane_sim::Seat) -> Option<jane_sim::View<'_>> {
+        self.sim.view(seat)
+    }
+
+    fn step(&mut self, input: &jane_sim::StepInput<'_>) -> jane_sim::Stepped {
+        self.sim.step(input)
+    }
+
+    fn drain_events(&mut self) -> &[jane_sim::Event] {
+        self.events.clear();
+        self.events.extend_from_slice(self.sim.drain_events());
+        &self.events
+    }
+}
+
+/// The cue table's asks, straight into an engine: what the app's `Sound` does over its channel.
+struct EngineBus<'a> {
+    e: &'a mut Engine,
+    cue: Option<jane_present::audio::MusicCue>,
+}
+
+impl jane_present::audio::AudioBus for EngineBus<'_> {
+    fn music(&mut self, cue: jane_present::audio::MusicCue) {
+        let (out, fade_in) = jane_present::audio::fades(self.cue, cue);
+        self.cue = Some(cue);
+        let song = cue.song().and_then(|n| self.e.song_index(n));
+        self.e.handle(Cmd::Music { song, fade_out_ms: f32::from(out), fade_in_ms: f32::from(fade_in) });
+    }
+
+    fn sfx(&mut self, kind: jane_present::audio::SfxKind, at: jane_present::audio::At, listener: jane_present::audio::At) {
+        let (Some(id), Some(p)) = (self.e.sfx_index(kind.name()), jane_present::audio::place(at, listener)) else { return };
+        self.e.handle(Cmd::Sfx { id, gain: p.gain, pan: p.pan, send: p.send, rate: 1.0 });
+    }
+
+    fn bed(&mut self, bed: jane_present::audio::Bed, level: u8) {
+        if let Some(b) = Bed::from_name(bed.name()) {
+            self.e.handle(Cmd::Bed { bed: b, level: f32::from(level) / 255.0 });
+        }
+    }
+
+    fn tick(&mut self) {}
+}
+
+/// `play:<seed>`: a model plays the county and the game's own cue table drives the engine, a tick
+/// of sound for each tick of the sim.
+fn play(seed: u32, secs: f32, args: &[String]) -> Result<Vec<f32>, String> {
+    use jane_sim::input::{Command, DevOp, InputFrame, StampedCommand, StepInput};
+    let model = arg(args, "--model").map_or(Some(jane_bot::Model::Reader), jane_bot::Model::parse).ok_or("--model: reader or rusher")?;
+    let warm = arg(args, "--warm").map_or(Ok(0), str::parse::<u32>).map_err(|e| format!("--warm: {e}"))?;
+    let (hour, minute) = match arg(args, "--hour").unwrap_or("20:58").split_once(':') {
+        Some((h, m)) => (h.parse::<u8>().map_err(|e| format!("--hour: {e}"))?, m.parse::<u8>().map_err(|e| format!("--hour: {e}"))?),
+        None => (arg(args, "--hour").unwrap_or("20").parse::<u8>().map_err(|e| format!("--hour: {e}"))?, 0),
+    };
+    let bps = jane_sim::Blueprints::build(seed).map_err(|e| format!("seed {seed}: {e}"))?;
+    let mut host = Heard { sim: jane_sim::Sim::new_game_with(bps, "Jane"), events: Vec::new() };
+    let mut bot = jane_bot::Bot::story(model);
+    let seat = jane_sim::Seat(0);
+    for _ in 0..warm {
+        if bot.done() {
+            break;
+        }
+        bot.step(&mut host);
+    }
+    let idle = |host: &mut Heard, commands: &[StampedCommand]| {
+        host.sim.step(&StepInput { frames: [InputFrame::IDLE; 4], commands });
+        host.events.clear();
+        host.events.extend_from_slice(host.sim.drain_events());
+    };
+    let cmd = [StampedCommand { seat: Some(seat), seq: u16::MAX, cmd: Command::Dev(DevOp::Time { hour }) }];
+    idle(&mut host, &cmd);
+    for _ in 0..u32::from(minute) * 120 {
+        idle(&mut host, &[]);
+    }
+    let mut e = engine(seed);
+    let mut track = jane_present::audio::Soundtrack::new();
+    let per_tick = (RATE / 60) as usize;
+    let ticks = (secs * 60.0) as u32;
+    let mut out = Vec::with_capacity(ticks as usize * per_tick * 2);
+    let mut buf = vec![0.0f32; per_tick * 2];
+    let mut heard: Vec<String> = Vec::new();
+    for t in 0..ticks {
+        if bot.done() {
+            idle(&mut host, &[]);
+        } else {
+            bot.step(&mut host);
+        }
+        let v = host.sim.view(seat).ok_or("seat 0 is not in the world")?;
+        track.tick(&v, &host.events, &mut EngineBus { e: &mut e, cue: track.cue() });
+        let now = format!("{:?}", track.cue().and_then(jane_present::audio::MusicCue::song));
+        if heard.last().is_none_or(|l| !l.ends_with(&now)) {
+            heard.push(format!("{:.1}s {now}", t as f32 / 60.0));
+        }
+        e.render(&mut buf);
+        out.extend_from_slice(&buf);
+    }
+    let v = host.sim.view(seat).ok_or("seat 0 is not in the world")?;
+    let (clock, day) = v.clock();
+    println!(
+        "  play:{seed}: {} in the {}, day {day} {:02}:{:02} at the end; the music: {}",
+        model.name(),
+        v.zone().name(),
+        clock / 7200,
+        clock % 7200 / 120,
+        heard.join(", ")
+    );
+    Ok(out)
+}
+
 /// Seconds between the bell's strikes (a hand-rung tower bell: a stroke, a swing back).
 pub const STRIKE_SECS: f32 = 2.5;
 
@@ -235,7 +368,7 @@ fn check(seed: u32, secs: Option<f32>) -> Result<(), String> {
     let lib = jane_audio::library();
     let mut bad = 0;
     for s in &lib.songs {
-        let v = render(&format!("song:{}", s.name), seed, secs)?;
+        let v = render(&format!("song:{}", s.name), seed, secs, &[])?;
         let m = analysis::mono(&v);
         let sr = RATE as f32;
         let loud = analysis::loudness(&m, sr);
