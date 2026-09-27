@@ -46,9 +46,13 @@ impl Props {
         let all = looks::family(Family::Prop).unwrap_or_default().into_iter();
         for r in all.chain(looks::family(Family::Building).unwrap_or_default()) {
             let h = r.set.h;
+            // A hanging stands on its footprint's back edge, the wall's face's foot, where its
+            // heights stand it (`jane_art::kit::hung`): so it is set into the face it hangs on.
+            let hung = matches!(looks::find(r.name), Some((_, jane_data::Look::Prop(p))) if jane_art::kit::hung(p));
+            let ay = if hung { r.set.ay } else { h };
             let mut set = Set { sprite: r.sprite, bases: Vec::new(), on: None, open: None, glass: None };
             for (f, c) in &r.set.frames {
-                let id = atlas.add_canvas(c, (0, h as i16), h.clamp(1, 255) as u8, |_, _, t| t);
+                let id = atlas.add_canvas(c, (0, ay as i16), h.clamp(1, 255) as u8, |_, _, t| t);
                 match f {
                     FrameId::On => {
                         set.on = Some(id);
@@ -123,5 +127,50 @@ mod tests {
         assert_eq!(bases.len(), 2, "two crates, picked by id");
         let r = atlas.get(out);
         assert_eq!((r.src.w, r.ay as i32), (16, i32::from(r.src.h)), "a prop stands on its foot row");
+    }
+
+    /// Where each lifted px of a sprite stands on the ground in the 3/4 view (a px `h` up drawn
+    /// at row `y` stands on row `y + rows_up(h)`, T2's field and every tier's shadow), in rows
+    /// from the sprite's top.
+    fn feet(atlas: &Atlas, id: RefId) -> Vec<i32> {
+        let r = *atlas.get(id);
+        let page = &atlas.pages.pages[usize::from(r.page)];
+        let mut out = Vec::new();
+        for y in 0..r.src.h {
+            for x in 0..r.src.w {
+                let i = usize::from(r.src.y + y) * usize::from(page.w) + usize::from(r.src.x + x);
+                let h = i32::from(page.height[i]);
+                if page.albedo[i] > 1 && h > crate::shadow::GROUND {
+                    out.push(i32::from(y) + crate::rows_up(h));
+                }
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn a_hanging_stands_on_the_face_it_hangs_on_not_a_cell_in_front_of_it() {
+        // Chains, tools and the rest of a dungeon's `scatter_wall` are placed on the floor cell
+        // under a wall and drawn up its face. They stood on the cell's front edge, so every tier
+        // saw a post 37 px tall a cell in front of the wall, and a torch hung over it (its light
+        // on the floor at the face's foot, 28 px up) threw a long hard wedge from it across the
+        // floor (the mine at 17:00). They stand on the face's foot now, as the face does.
+        let mut atlas = Atlas::with_layers(true);
+        let p = Props::build(&mut atlas);
+        let sprite = |n: &str| jane_art::looks::find(n).unwrap().0;
+        for name in ["scatter_chains", "scatter_tools", "scatter_cobweb", "scatter_frame", "scatter_poster", "scatter_moss"] {
+            let id = p.look(sprite(name), 1, State::default()).unwrap();
+            let r = *atlas.get(id);
+            assert_eq!(i32::from(r.ay), i32::from(r.src.h) - 16, "{name} stands on its cell's back edge");
+            let feet = feet(&atlas, id);
+            assert!(!feet.is_empty(), "{name} rises up the face");
+            assert!(feet.iter().all(|&f| f == i32::from(r.ay)), "{name}: every lifted px on the face's foot: {feet:?}");
+            assert!(i32::from(r.top) <= crate::height_of_rows(i32::from(r.ay)), "{name} is no taller than the face behind it");
+        }
+        // A thing standing on the floor still stands on its footprint's front edge (its lid lies
+        // behind it, on the crate).
+        let id = p.look(sprite("crate"), 1, State::default()).unwrap();
+        let r = *atlas.get(id);
+        assert_eq!(feet(&atlas, id).into_iter().max(), Some(i32::from(r.ay) - 1), "a crate stands on its front row");
     }
 }
