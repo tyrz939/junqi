@@ -500,6 +500,16 @@ pub fn engage(v: &View<'_>, cx: &mut Ctx, id: UnitId) -> Option<Act> {
     // while the mana lasts: she backs off between casts (it is slower than she is; the frost
     // slows it more), as a player with a bolt does.
     let strong = cat.combat.unit(t.def).boss || t.hp > me.hp;
+    // A crowd on her she would not put down standing (the Gold Mine's hub pulls three skeletons,
+    // the clerk and a rat at once): stone skin, which halves their blows, while it is not on her.
+    let skin = sense::item("potion_stoneskin");
+    let crowd = enemies(v).iter().filter(|u| on_me(v, u)).count() >= 2;
+    if crowd && holds(v, skin) > 0 && item_ready(me, skin, now) && !would_win(v) {
+        let effect = jane_data::catalog().combat.effect_id("stoneskin");
+        if !me.statuses.iter().any(|s| Some(s.effect) == effect) {
+            return Some(Act::press(Command::Item(skin)));
+        }
+    }
     // Against a boss, what she brought for it: stone skin, then the mana shield (a tough thing on
     // the way is not what they were brought for).
     if strong && cat.combat.unit(t.def).boss && d < i64::from(12 * CELL_FX) {
