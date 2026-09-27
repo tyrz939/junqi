@@ -35,20 +35,6 @@ pub const GROUND: i32 = 4;
 /// 2026-09-27, so the three tiers cast from the same terrain; T2's cobbles lost a px of self-shade
 /// at a low sun, and a town view went from four thousand blocks to four hundred).
 pub const RELIEF: i32 = 8;
-/// How far up a thing standing right beside a caster's feet its foot shadow climbs, px.
-pub const FOOT_REACH: u8 = 8;
-/// The foot's rows each side of the row under the feet, how many px wider than the feet it is
-/// each side, how far along the shadow it is drawn out at most (px across and down the screen),
-/// and how dark it is (of 255). Since 2026-09-28 a px wider, three rows deep and a little
-/// lighter than the cast shadow (it was two px wider, five rows, full strength): on T1 it read as
-/// a blob under everything beside T2's foot, which is only the field and its occlusion.
-const FOOT_B: i32 = 1;
-const FOOT_WIDER: i32 = 1;
-const FOOT_ALONG: (i32, i32) = (4, 2);
-const FOOT_STRENGTH: u8 = 208;
-/// The silhouette's rows the foot is as wide as: the feet and what is just above them.
-const FOOT_ROWS: i32 = 3;
-
 /// The shadow's reach per px of true height, Q8, across the ground: away from the sun.
 pub fn shear(sun: &Directional) -> Option<(i32, i32)> {
     let (se, ce) = (sin_q15(sun.elevation).0, cos_q15(sun.elevation).0);
@@ -145,47 +131,22 @@ pub struct Band {
     pub reach: u8,
 }
 
-/// The bands of caster `c`'s shadow: its foot, then its `rows` (from [`rows`]) sheared by
-/// `(kx, ky)` ([`shear`]), for its sprite drawn with its left edge at `x`.
-pub fn bands(rows: &[(i32, i32, i32)], x: i32, c: &Caster, (kx, ky): (i32, i32), mut emit: impl FnMut(Band)) {
+/// The bands of caster `c`'s shadow: its `rows` (from [`rows`]) sheared by `(kx, ky)`
+/// ([`shear`]), for its sprite drawn with its left edge at `x`, each row its true height's shear
+/// away and as thick as the caster is deep behind its foot row, as T2's field stands it.
+///
+/// There is no foot under it any more (decided 2026-09-28, the owner, measured against T2): an
+/// ellipse wider than the feet laid under every caster at full strength (five rows, two px each
+/// side; then three rows, one px) read on T0 and T1 as a blob under everything beside T2, whose
+/// only foot is its field (the rows behind the foot) and the painted contact shadow (index 1),
+/// which every tier draws the same. The lowest rows' own bands start at the foot row, so the
+/// shadow still grows out of the feet.
+pub fn bands(rows: &[(i32, i32, i32)], x: i32, c: &Caster, k: (i32, i32), emit: impl FnMut(Band)) {
     let Some(&(top, _, _)) = rows.last() else { return };
-    let fy = i32::from(c.foot.1);
-    // A row stands its rows' true height up, and no higher than the caster's tallest px.
-    let tall = i32::from(c.height).max(1);
-    let up = |hv: i32| height_of_rows(hv).min(tall);
-    // The foot: as wide as the lowest rows and two px more each side, under the feet, drawn out
-    // along the shadow as far as the feet's own shadow reaches. What stands on nothing (a bat
-    // in flight, a lantern hung over the ground) has none: its shadow is only where its height
-    // throws it.
-    if rows[0].0 > FOOT_ROWS {
-        return bands_of_rows(rows, x, c, (kx, ky), top, emit);
-    }
-    let (lo, hi) = rows
-        .iter()
-        .take_while(|r| r.0 <= FOOT_ROWS)
-        .fold((rows[0].1, rows[0].2), |(lo, hi), r| (lo.min(r.1), hi.max(r.2)));
-    let reach = up(FOOT_ROWS + 1);
-    let ox = ((reach * kx) >> 8).clamp(-FOOT_ALONG.0, FOOT_ALONG.0);
-    let oy = ((reach * ky) >> 8).clamp(-FOOT_ALONG.1, FOOT_ALONG.1);
-    let a = (hi - lo + 1) / 2 + FOOT_WIDER;
-    let cx = x + (lo + hi + 1) / 2;
-    for dy in -FOOT_B..=FOOT_B {
-        // Half the ellipse's width on this row: its middle row the whole, a px in at its tips.
-        let w = if dy == 0 { a } else { (a - 1).max(1) };
-        let row = fy + 1 + dy;
-        emit(Band {
-            x0: cx - w + ox.min(0),
-            x1: cx + w + ox.max(0),
-            y0: row + oy.min(0),
-            y1: row + oy.max(0) + 1,
-            strength: FOOT_STRENGTH,
-            reach: FOOT_REACH,
-        });
-    }
-    bands_of_rows(rows, x, c, (kx, ky), top, emit);
+    bands_of_rows(rows, x, c, k, top, emit);
 }
 
-/// The rows' bands of [`bands`], past the foot: each row its true height's shear away, stretched
+/// The rows' bands of [`bands`]: each row its true height's shear away, stretched
 /// to meet the row above, as thick as the caster is deep.
 fn bands_of_rows(
     rows: &[(i32, i32, i32)],
@@ -201,7 +162,9 @@ fn bands_of_rows(
     let up = |hv: i32| height_of_rows(hv).min(tall);
     let htop = up(top);
     for &(hv, u0, u1) in rows {
-        let (h0, h1) = (up(hv), up(hv + 1));
+        // The row `hv` over the foot row spans its bottom to its top: the lowest drawn row from
+        // the ground, so its shadow starts at the feet whatever way the sun lies.
+        let (h0, h1) = (up(hv - 1), up(hv));
         let (ax, bx) = ((h0 * kx) >> 8, (h1 * kx) >> 8);
         let (ay, by) = ((h0 * ky) >> 8, (h1 * ky) >> 8);
         let strength = 256 - (256 - TIP) * hv.min(top) / top;
@@ -471,18 +434,17 @@ mod tests {
             let k = shear(&sun(az, el)).unwrap();
             let mut bands = Vec::new();
             super::bands(&r, i32::from(s.x), &c, k, |b| bands.push(b));
-            // The foot covers the feet's own px and the row under them, full strength.
-            let (fx, fy) = (i32::from(c.foot.0), i32::from(c.foot.1));
+            // The feet's own px on the foot row are in it, and nothing is laid round them: no
+            // foot two px past the feet or rows under them, as on T2.
+            let fy = i32::from(c.foot.1);
             let covers = |x: i32, y: i32| bands.iter().any(|b| b.x0 <= x && x < b.x1 && b.y0 <= y && y < b.y1);
             for x in 20..24 {
-                assert!(covers(x, fy) && covers(x, fy + 1), "{az:?} {el}: ({x}, {fy})");
+                assert!(covers(x, fy), "{az:?} {el}: ({x}, {fy})");
             }
-            // A px clear of the feet each side, whichever way the shadow runs.
-            assert!(covers(19, fy + 1) && covers(24, fy + 1), "{az:?} {el}");
-            // And the shadow of the lowest row touches the foot: no gap between the two.
-            let first = bands[(2 * FOOT_B + 1) as usize];
-            assert!(first.y0 <= fy + FOOT_B + 1 && first.y1 >= fy - FOOT_B, "{az:?} {el}: {first:?}");
-            assert!(first.x0 <= fx + 2 && first.x1 >= fx - 1, "{az:?} {el}: {first:?}");
+            // A sun that throws its shadow up the screen or across it lays nothing under them.
+            if az != Angle::NORTH {
+                assert!(!covers(20, fy + 2) && !covers(23, fy + 2), "{az:?} {el}: a foot under the feet");
+            }
         }
     }
 
@@ -493,7 +455,7 @@ mod tests {
         rows(&albedo, 4, &s, &c, &mut r);
         let mut bands = Vec::new();
         super::bands(&r, i32::from(s.x), &c, shear(&sun(Angle::WEST, 20)).unwrap(), |b| bands.push(b));
-        let rows_only = &bands[(2 * FOOT_B + 1) as usize..];
+        let rows_only = &bands[..];
         // At the root it reaches nearly the post's height (25 px); at the tip, nothing.
         assert!(rows_only[0].reach >= 23, "{:?}", rows_only[0]);
         assert!(rows_only.last().unwrap().reach <= 2);
@@ -588,10 +550,10 @@ mod tests {
     fn what_flies_has_no_foot() {
         // A bat: a body 12 wide from row 30 to row 40, 20 rows over its anchor on row 56.
         let (bands, foot) = cast(|x, y| (30..=40).contains(&y) && (14..26).contains(&x));
-        // Nothing under it: the nearest band is its lowest row's, 16 rows' height (20 px) times
-        // 1.19 away (23 rows), its depth (6 rows) behind that.
+        // Nothing under it: the nearest band is its lowest row's, from the bottom of that row, 15
+        // rows' height (19 px) times 1.19 away (22 rows), its depth (6 rows) behind that.
         let near = bands.iter().map(|b| b.y0).min().unwrap();
-        assert!(near >= foot.1 + 18, "a shadow at its anchor: {near}");
+        assert!(near >= foot.1 + 16, "a shadow at its anchor: {near}");
     }
 
     #[test]
