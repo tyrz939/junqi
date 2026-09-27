@@ -491,9 +491,9 @@ mod tests {
         ui.begin(UiInput { actions: vec![UiAction::Down, UiAction::Right], ..UiInput::default() }, 3, (768, 432));
         let out = draw(&mut ui, &mut st, &mut b, info);
         assert_eq!(out.rows.map(|(r, k)| (r.shadows, k)), Some((4, "shadows")));
-        // T0 has no N dot L and no lamp shadows to turn; T2 has no silhouettes.
+        // T0 has no N dot L to turn, and its lamp shadows (2026-09-27); T2 has no silhouettes.
         let keys = |t| Features::rows(t).map(|r| r.key).collect::<Vec<_>>();
-        assert!(!keys(Tier::T0).contains(&"normal_light") && !keys(Tier::T0).contains(&"shadows"));
+        assert!(!keys(Tier::T0).contains(&"normal_light") && keys(Tier::T0).contains(&"shadows"));
         assert!(!keys(Tier::T2).contains(&"silhouettes") && keys(Tier::T2).contains(&"bloom"));
     }
 }

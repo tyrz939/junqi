@@ -24,8 +24,8 @@ use crate::chunks::{ChunkCache, LRU, Need};
 use crate::creatures::{self, Creatures};
 use crate::drawlist::{DrawCmd, DrawList};
 use crate::frame::{
-    CANVAS_H, CANVAS_W, CELL, CHUNK_PX, Caster, ChunkCmd, ChunkId, Depth, Directional, FX_TO_CANVAS, Features, Flags,
-    Frame, Light, LightKind, Pass, Post, Rgb, Span, SpriteCmd, Tier, Tint, height_of_rows, rows_up,
+    Block, CANVAS_H, CANVAS_W, CELL, CHUNK_PX, Caster, ChunkCmd, ChunkId, Depth, Directional, FX_TO_CANVAS, Features,
+    Flags, Frame, Light, LightKind, Pass, Post, Rgb, Span, SpriteCmd, Tier, Tint, height_of_rows, rows_up,
 };
 use crate::fx::Fx;
 use crate::light::{Sky, flicker, lantern_lit, sky};
@@ -63,13 +63,42 @@ const FLICKER_RATE: u32 = 10;
 /// A unit's draw key: its id with the top bit set (a prop's is its id).
 const UNIT_KEY: u32 = 0x8000_0000;
 
-/// Lights on screen at most, and how many of them throw shadows, by tier (§1.3 `max_lights`,
-/// §1.7: T1 the nearest 8, T2 the nearest 32).
-pub fn max_lights(tier: Tier) -> (usize, usize) {
+/// Canvas px round the canvas whose terrain throws its shadows in: T2's G-buffer guard band
+/// (`jane-render-wgpu`'s `GUARD`), so every tier casts from the same ground.
+pub const BLOCK_MARGIN: i32 = 64;
+
+/// Which lights a frame draws and which of them cast (PRESENTATION.md §1.7), one rule for every
+/// tier: of the lights that may cast (`Light::casts` as they come: prop lights, her lantern, a
+/// bolt's head), the `casting` nearest the middle of the canvas (`mid`) cast and the rest do not;
+/// then the lights are kept to `most`, the casting ones first and the rest nearest first. Ties
+/// keep the order they came in. So a tier that casts from 4 casts from the first 4 of the 8 a
+/// tier of 8 casts from, and those of the 32, whatever else is lit.
+pub fn pick_lights(lights: &mut Vec<Light>, mid: (i32, i32), most: usize, casting: usize) {
+    let d2 = |l: &Light| {
+        let (dx, dy) = (i64::from(l.pos.0 - mid.0), i64::from(l.pos.1 - mid.1));
+        dx * dx + dy * dy
+    };
+    lights.sort_by_key(|l| d2(l));
+    let mut left = casting;
+    for l in lights.iter_mut() {
+        if l.casts {
+            l.casts = left > 0;
+            left = left.saturating_sub(1);
+        }
+    }
+    if lights.len() > most {
+        lights.sort_by_key(|l| (!l.casts, d2(l)));
+        lights.truncate(most);
+    }
+}
+
+/// Lights on screen at most, by tier (§1.3 `max_lights`); how many of them cast is the
+/// `shadows` row (`Features::shadows`: T0 4, T1 8, T2 32).
+pub fn max_lights(tier: Tier) -> usize {
     match tier {
-        Tier::T0 => (16, 0),
-        Tier::T1 => (32, 8),
-        Tier::T2 => (128, 32),
+        Tier::T0 => 16,
+        Tier::T1 => 32,
+        Tier::T2 => 128,
     }
 }
 
@@ -551,10 +580,10 @@ impl Present {
         lights.sort_unstable_by_key(|l| l.id);
     }
 
-    /// A light standing inside the terrain's height field (a torch hung on a wall, whose sprite
-    /// stands on the wall's top) hangs from the wall's face instead: its ground point moves to
-    /// the nearest open ground within a cell and a half, toward the viewer first, and two px
-    /// clear of it. A light never shadows the wall it hangs on (PRESENTATION.md §1.7), and a
+    /// A light standing on the terrain's height field, in it or over it (a torch hung on a wall,
+    /// whose sprite stands on the wall's top) hangs from the wall's face instead: its ground
+    /// point moves to open ground within a cell and a half, toward the viewer if there is any
+    /// that way, else the nearest, and two px clear of it. A light never shadows the wall it hangs on (PRESENTATION.md §1.7), and a
     /// torch's pool lies on the floor it lights, not in the masonry, on every tier.
     ///
     /// And a prop drawn over a wall's face and standing on the face's foot (a door, a sign on the
@@ -587,10 +616,12 @@ impl Present {
             i32::from(l.height[((y % CHUNK_PX) * CHUNK_PX + x % CHUNK_PX) as usize])
         };
         // The height field there: the tallest terrain px standing on ground (x, y) (a px `h` up
-        // stands `rows_up(h)` rows below it, its field two rows deep).
+        // stands `rows_up(h)` rows below it, its field two rows deep), as tall as the terrain
+        // stands: a mine's rock is taller than a house, and a torch on it was left buried in it
+        // (T2 lit nothing with it, the lower tiers lit the passage through the rock).
         let field = |x: i32, y: i32| -> i32 {
             let mut most = 0;
-            for r in 0..=80 {
+            for r in 0..=rows_up(255) {
                 let h = drawn(x, y - r);
                 if h > 2 && (rows_up(h) == r || rows_up(h) == r + 1) {
                     most = most.max(h);
@@ -611,17 +642,26 @@ impl Present {
                 });
         }
         for l in &mut self.lights {
-            if field(l.x, l.y) + 2 < i32::from(l.height) {
+            // On the terrain, under its light or over it: a torch on a wall's top 20 px up, its
+            // light at 28, lit the rock's top and left the passage beside it in the rock's
+            // shadow on every tier that cast from it (the mine, 2026-09-27).
+            if field(l.x, l.y) <= 2 {
                 continue;
             }
-            'out: for d in 1..=REACH {
-                for (dx, dy) in [(0, 1), (-1, 0), (1, 0), (0, -1)] {
-                    let (x, y) = (l.x + dx * d, l.y + dy * d);
-                    if field(x, y) <= 2 {
-                        (l.x, l.y) = (x + dx * 2, y + dy * 2);
-                        break 'out;
-                    }
-                }
+            // Toward the viewer first, as far as the reach (a face looks south: a torch on it
+            // lights the floor in front of it, not the room round the wall's end); then the
+            // nearest open ground any other way.
+            let south = (1..=REACH).find(|&d| field(l.x, l.y + d) <= 2).map(|d| (0, 1, d));
+            let other = || {
+                (1..=REACH).find_map(|d| {
+                    [(-1, 0), (1, 0), (0, -1)]
+                        .into_iter()
+                        .find(|&(dx, dy)| field(l.x + dx * d, l.y + dy * d) <= 2)
+                        .map(|(dx, dy)| (dx, dy, d))
+                })
+            };
+            if let Some((dx, dy, d)) = south.or_else(other) {
+                (l.x, l.y) = (l.x + dx * (d + 2), l.y + dy * (d + 2));
             }
         }
     }
@@ -664,6 +704,7 @@ impl Present {
                 chunks.want(id, now, layers, true, |slot, l| {
                     terrain.swatched(slot, l);
                     stand_in::paint_chunk(id, cells, outside, |x, y| view.tile(x, y), l);
+                    terrain.stand(slot, l);
                 });
             }
         }
@@ -699,6 +740,7 @@ impl Present {
         f.sprites.clear();
         f.lights.clear();
         f.casters.clear();
+        f.blocks.clear();
         if self.zone.is_none() {
             return &self.frame;
         }
@@ -959,6 +1001,7 @@ impl Present {
             }
         }
         let rows = (ch + 2 * SORT_MARGIN) as u32;
+        let block_range = self.chunk_range(cam, BLOCK_MARGIN);
         let f = &mut self.frame;
         let g0 = f.sprites.len();
         f.sprites.extend(self.ground.sort(-SORT_MARGIN, rows).iter().map(|c| c.sprite));
@@ -975,6 +1018,35 @@ impl Present {
         self.holders.sort_unstable();
         let standing = Span::since(s0, f.sprites.len());
         let casters = Span::since(0, f.casters.len());
+        // What the terrain stands, from every painted chunk under the canvas and T2's guard band
+        // round it, each block held to that band: the same ground T2's field casts from. A block
+        // can stand under its own chunk (its tallest px's rows), so the chunk row over the band
+        // is read too.
+        if let Some((cx0, cy0, cx1, cy1)) = block_range {
+            let (lo, hi) = ((-BLOCK_MARGIN, -BLOCK_MARGIN), (cw + BLOCK_MARGIN, ch + BLOCK_MARGIN));
+            for cy in (cy0 - 1).max(0)..=cy1 {
+                for cx in cx0..=cx1 {
+                    let Some((slot, _)) = self.chunks.find(ChunkId { cx: cx as u16, cy: cy as u16 }) else {
+                        continue;
+                    };
+                    let (ox, oy) = (cx * CHUNK_PX - cam.0, cy * CHUNK_PX - cam.1);
+                    for b in self.terrain.blocks(slot) {
+                        let (x0, x1) = ((ox + i32::from(b.x0)).max(lo.0), (ox + i32::from(b.x1)).min(hi.0));
+                        let (y0, y1) = ((oy + i32::from(b.y0)).max(lo.1), (oy + i32::from(b.y1)).min(hi.1));
+                        if x0 < x1 && y0 < y1 {
+                            f.blocks.push(Block {
+                                x0: x0 as i16,
+                                y0: y0 as i16,
+                                x1: x1 as i16,
+                                y1: y1 as i16,
+                                height: b.height,
+                            });
+                        }
+                    }
+                }
+            }
+        }
+        let blocks = Span::since(0, f.blocks.len());
 
         // The lights: every prop light the view says shows, the glows and her lantern, those
         // whose reach touches the canvas, the nearest first up to the tier's count.
@@ -1005,40 +1077,30 @@ impl Present {
         for l in &mut f.lights {
             l.holder = l.holder.and_then(|k| holders.binary_search_by_key(&k, |h| h.0).ok().map(|i| holders[i].1));
         }
-        // The tier's counts, or fewer where the `max_lights` and `shadows` rows are turned down.
-        let (most, casting) = max_lights(f.tier);
+        // The tier's counts, or fewer where the `max_lights` and `shadows` rows are turned down:
+        // the nearest casting lights by one rule on every tier.
         let rows = self.atmos.features;
-        let (most, casting) = (most.min(usize::from(rows.max_lights)), casting.min(usize::from(rows.shadows)));
-        if f.lights.len() > most || f.lights.iter().filter(|l| l.casts).count() > casting {
-            let mid = (cw / 2, ch / 2);
-            let d2 = |l: &Light| {
-                let (dx, dy) = (i64::from(l.pos.0 - mid.0), i64::from(l.pos.1 - mid.1));
-                dx * dx + dy * dy
-            };
-            f.lights.sort_by_key(|l| d2(l));
-            f.lights.truncate(most);
-            let mut left = casting;
-            for l in &mut f.lights {
-                if l.casts {
-                    l.casts = left > 0;
-                    left = left.saturating_sub(1);
-                }
-            }
-        }
+        let most = max_lights(f.tier).min(usize::from(rows.max_lights));
+        pick_lights(&mut f.lights, (cw / 2, ch / 2), most, usize::from(rows.shadows));
         let points = Span::since(0, f.lights.len());
 
         // The sky as the weather has it: rain dims and cools, lightning flashes (§1.9).
-        let sky = &self.atmos.light(&self.sky);
+        // A sun too faint to cast (`light::FAINTEST`) casts on no tier.
+        let mut sky = self.atmos.light(&self.sky);
+        if let Some(s) = sky.sun.as_mut().filter(|s| !s.casts()) {
+            s.strength = 0;
+        }
+        let sky = &sky;
         f.passes.push(Pass::Sprites { layer: Depth::Ground, cmds: ground });
         // Silhouette sun shadows under the standing things, where the tier has no shadow maps:
-        // from a sun or a moon, not from the afterglow, a sky too broad to throw a silhouette.
+        // from the sun, the moon or the afterglow, as faint as it is.
         if f.tier <= Tier::T1
             && rows.silhouettes
-            && let Some(sun) = sky.sun.filter(Directional::silhouettes)
-            && casters.len > 0
+            && let Some(sun) = sky.sun.filter(Directional::casts)
+            && (casters.len > 0 || blocks.len > 0)
         {
             let shade = shadow::shade_at(sky.shade, sun.strength);
-            f.passes.push(Pass::Silhouettes { sun, shade, casters });
+            f.passes.push(Pass::Silhouettes { sun, shade, casters, blocks });
         }
         f.passes.push(Pass::Sprites { layer: Depth::Standing, cmds: standing });
         f.passes.push(Pass::Weather(self.atmos.atmos()));
@@ -1046,7 +1108,7 @@ impl Present {
         self.fx.draw_under_light(f, cam, alpha);
         // The light pass: on T0 left out when the multiply would change nothing (day is free).
         if f.tier > Tier::T0 || sky.ambient.iter().any(|&c| c < 254) {
-            f.passes.push(Pass::Lights { ambient: sky.ambient, fill: sky.fill, sun: sky.sun, points, casters });
+            f.passes.push(Pass::Lights { ambient: sky.ambient, fill: sky.fill, sun: sky.sun, points, casters, blocks });
         }
         // Over what is lit: the marks and splashes on the ground, the fog, the effects in the
         // air, the rain.

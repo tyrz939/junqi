@@ -6,6 +6,7 @@ pub mod blit;
 pub mod glow;
 pub mod grade;
 pub mod lightmap;
+pub mod pointshadow;
 pub mod silhouette;
 pub mod ui;
 
@@ -20,6 +21,7 @@ use jane_present::{
 use crate::blit::Target;
 use crate::glow::Glow;
 use crate::lightmap::LightMap;
+use crate::pointshadow::PointShadows;
 use crate::silhouette::Mask;
 
 /// The `soft` backend: one `u32` framebuffer, `0xAARRGGBB`.
@@ -36,6 +38,8 @@ pub struct Soft {
     heights: Vec<u8>,
     /// The light buffer at a quarter of the canvas.
     lights: LightMap,
+    /// The casting lights' shadow masks (§1.3 `shadows`).
+    point: PointShadows,
     /// What glows this frame and the bloom's buffers (§1.3 `glow`, `bloom`).
     glow: Glow,
     /// Each page's glowing texels, sorted by index.
@@ -102,7 +106,15 @@ impl Backend for Soft {
             self.fb.resize(n, frame.clear);
         }
         let mut written = n as u64;
-        let climb = frame.passes.iter().any(|p| matches!(p, Pass::Silhouettes { .. }));
+        // The light pass, read ahead: its lamps' shadows are laid under the standing things.
+        let lit = frame.passes.iter().find_map(|p| match *p {
+            Pass::Lights { ambient, points, casters, blocks, .. } => Some((ambient, points, casters, blocks)),
+            _ => None,
+        });
+        let casting = lit.is_some_and(|l| frame.lights_in(l.1).iter().any(|l| l.casts));
+        let climb = casting || frame.passes.iter().any(|p| matches!(p, Pass::Silhouettes { .. }));
+        // Whether the lightmap is built this frame (the lamps' shadows build it early).
+        let mut built = false;
         if climb {
             self.heights.clear();
             self.heights.resize(n, 0);
@@ -181,7 +193,25 @@ impl Backend for Soft {
                     }
                     written += grade::Grade::with_sky(&p, sky.as_ref(), frame.canvas).apply(t);
                 }
-                Pass::Sprites { cmds, .. } => {
+                Pass::Sprites { cmds, layer } => {
+                    // The lamps' shadows on the ground and the terrain, before what stands on it.
+                    if layer == Depth::Standing
+                        && casting
+                        && !built
+                        && let Some((ambient, points, casters, blocks)) = lit
+                    {
+                        let at = Instant::now();
+                        self.lights.build((t.w, t.h), ambient, frame.lights_in(points));
+                        built = true;
+                        let pages = &self.atlas.pages;
+                        let spans = (casters, blocks);
+                        if self.point.build(frame, frame.lights_in(points), &self.lights, spans, pages, (t.w, t.h)) {
+                            self.glow.check(t);
+                            written += self.point.apply(t, &self.lights, &self.heights);
+                            self.glow.refresh(t);
+                        }
+                        pass_us[StatPass::Shadows as usize] += at.elapsed().as_micros() as u32;
+                    }
                     for s in frame.sprites_in(cmds) {
                         if let Some(page) = self.atlas.pages.get(usize::from(s.page)) {
                             calls += 1;
@@ -195,7 +225,7 @@ impl Backend for Soft {
                         }
                     }
                 }
-                Pass::Silhouettes { sun, shade, casters } => {
+                Pass::Silhouettes { sun, shade, casters, blocks } => {
                     let Some(k) = silhouette::shear(&sun) else { continue };
                     self.mask.fit(t.w, t.h);
                     for c in frame.casters_in(casters) {
@@ -203,6 +233,9 @@ impl Backend for Soft {
                         if let Some(page) = self.atlas.pages.get(usize::from(s.page)) {
                             silhouette::cast(&mut self.mask, page, s, c, k);
                         }
+                    }
+                    for b in frame.blocks_in(blocks) {
+                        silhouette::cast_block(&mut self.mask, b, k);
                     }
                     // A glowing px the shadow darkens still glows: checked before, taken after.
                     self.glow.check(t);
@@ -221,7 +254,9 @@ impl Backend for Soft {
                     self.glow.check(t);
                     let points = frame.lights_in(points);
                     if !points.is_empty() {
-                        self.lights.build((t.w, t.h), ambient, points);
+                        if !built {
+                            self.lights.build((t.w, t.h), ambient, points);
+                        }
                         written += self.lights.apply(t);
                     } else if ambient.iter().any(|&c| c < 254) {
                         blit::multiply(t, ambient);

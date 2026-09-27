@@ -75,10 +75,15 @@ const SUN_LOW: [i32; 3] = [255, 176, 96];
 /// clear air and light mist does, the afterglow does not.
 pub const SHAFTS_SPREAD: u16 = (5 * 65536 / 360) as u16;
 
-/// A shadow at least this dark (of 255, [`Directional::strength`]) is laid as a silhouette on T0
-/// and T1: the sun and the moon in clear air and light weather; not the afterglow, nor a sun lost
-/// in cloud or mist, whose shadows on T2 are faint.
-pub const SILHOUETTE_STRENGTH: u8 = 112;
+/// The faintest shadow any tier lays (of 255, [`Directional::strength`]): under it the presenter
+/// gives the sun no strength, and no tier draws its shadow. Decided 2026-09-27: faint soft
+/// shadows are real (the afterglow, a sun in rain or mist), so every tier lays them, T0 and T1
+/// as a light silhouette feathered wide (`shadow::shade_at`, `shadow::feather`), T2 as a faint
+/// umbra in a wide penumbra. The weakest sky the clock and the weather make (the afterglow under
+/// full cloud) is 48, so today every sun, moon and afterglow casts; the floor is one rule should
+/// a fainter one come. (Until then T0 and T1 dropped every silhouette under 112, where T2 kept a
+/// faint one.)
+pub const FAINTEST: u8 = 24;
 /// The afterglow's shadow: faint.
 const GLOW_STRENGTH: u8 = 96;
 
@@ -247,8 +252,7 @@ pub fn sky(clock: u32, day: u32, indoor: bool, permille: i16, region: Region) ->
             azimuth: Angle((deg(180) + deg(16) / 4) as u16),
             elevation: Angle(deg(10) as u16),
             colour: mix([0; 3], AFTERGLOW, left, GLOW).map(|c| c.clamp(0, 255) as u8),
-            // A glow over a broad band of sky: its shadows are faint, and too faint for a
-            // silhouette.
+            // A glow over a broad band of sky: its shadows are faint and wide.
             spread: deg(7) as u16,
             strength: GLOW_STRENGTH,
         })
@@ -367,10 +371,12 @@ mod tests {
         let moon = sky(0, 0, false, 1000, Region::Lowfields).sun.expect("the moon is up at midnight");
         let s = sin_q15(moon.elevation).0;
         assert_eq!((moon.spread, moon.strength), (spread(s), strength(s)));
-        // Each lays a silhouette; the afterglow does not.
-        assert!(noon.silhouettes() && five.silhouettes() && moon.silhouettes());
-        let glow = sky((SET + HOUR / 4) as u32, 0, false, 1000, Region::Lowfields).sun.expect("the afterglow");
-        assert!(!glow.silhouettes());
+        // Each casts, and so does the afterglow, faint and wide, and a sun in full cloud.
+        assert!(noon.casts() && five.casts() && moon.casts());
+        let mut glow = sky((SET + HOUR / 4) as u32, 0, false, 1000, Region::Lowfields).sun.expect("the afterglow");
+        assert!(glow.casts() && glow.strength < five.strength && crate::shadow::feather(glow.spread) == 3);
+        diffuse(&mut glow, 65535);
+        assert!(glow.casts(), "the faintest sky the weather makes still casts: {glow:?}");
     }
 
     #[test]

@@ -88,6 +88,10 @@ fn rows_up(h: u32) -> u32 {
 // neither stands in the height field nor is lifted off the row it is drawn on.
 const GROUND: f32 = 4.5;
 
+// The terrain's relief at or under this height casts nothing on any tier
+// (`jane_present::shadow::RELIEF`).
+const RELIEF: f32 = 8.0;
+
 // The afterglow as the air and the ground take it: its hue with the chroma the sky's byte names,
 // not the power curve's (a linear orange is a red, and a red over the blue fill is mauve), at the
 // glow's own brightness. What the sky backdrop paints stays the saturated glow.

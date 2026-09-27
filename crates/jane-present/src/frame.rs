@@ -82,17 +82,19 @@ pub enum Pass {
     /// Sprites of one depth, already in draw order (y-sorted for `Standing`): `Frame::sprites[cmds]`.
     Sprites { layer: Depth, cmds: Span },
     /// Silhouette sun shadows (§1.3 `silhouettes`, T0 and T1): each caster's albedo mask sheared
-    /// along `sun` by its height and laid on the ground under the `Standing` pass, each shadowed
-    /// pixel multiplied by `shade` (the ambient's colour, never grey), its edge one dither step
-    /// soft. `Frame::casters[casters]`, in draw order.
-    Silhouettes { sun: Directional, shade: Rgb, casters: Span },
+    /// along `sun` by its height, and each block's footprint by its, laid on the ground under the
+    /// `Standing` pass, each shadowed pixel multiplied by `shade` (the ambient's colour, never
+    /// grey), its edge one dither step soft. `Frame::casters[casters]`, in draw order, and
+    /// `Frame::blocks[blocks]`.
+    Silhouettes { sun: Directional, shade: Rgb, casters: Span, blocks: Span },
     /// The light pass (§1.7). What is lit was decided by the view; each tier draws it its own way.
     /// `ambient` is the flat light T0 multiplies by (255 is full; on T0 the pass is left out when
     /// it would change nothing). `fill` is the light a surface gets from the sky alone, what a
     /// shadow is lit by on T1 and T2 (blue by day, violet at dusk, the zone's own indoors); `sun`
     /// is the sun or the moon, added on top where it is not shadowed; `points` are
-    /// `Frame::lights[points]`, `casters` are `Frame::casters[casters]`.
-    Lights { ambient: Rgb, fill: Rgb, sun: Option<Directional>, points: Span, casters: Span },
+    /// `Frame::lights[points]`, `casters` are `Frame::casters[casters]` and `blocks`
+    /// `Frame::blocks[blocks]`: what throws the shadows of the sun and of each light that casts.
+    Lights { ambient: Rgb, fill: Rgb, sun: Option<Directional>, points: Span, casters: Span, blocks: Span },
     /// The grade and the bloom (§1.9), last before the UI, on every tier: exposure, saturation,
     /// tint and lift drawn as T2 draws them (the tiers are one look, decided 2026-09-27), and the
     /// bloom where the tier's `bloom` row is on (T2 and T1 by their chains, T0 a quarter-size blur
@@ -288,6 +290,10 @@ pub struct Particle {
 /// T1's particle pool (§1.3 `max_particles`): the rain a third of it, as T2's. Raised from 2000
 /// on 2026-09-27 so a wet night on a Pi reads as T2's rain (one quad a drop).
 pub const T1_PARTICLES: u16 = 6000;
+/// How many point lights throw shadows on T0 by default (§1.3 `shadows`, decided 2026-09-27):
+/// the nearest four, laid on the ground under the standing things. `jane bench tune` turns it
+/// to none on a machine that misses T0's gate (a Pentium 4 class CPU).
+pub const T0_SHADOWS: u8 = 4;
 /// Whether T0 blooms by default (§1.3 `bloom`): a quarter-size blur of what glows.
 pub const T0_BLOOM: bool = true;
 
@@ -300,7 +306,8 @@ pub const T0_BLOOM: bool = true;
 pub struct Features {
     /// `normal_light`: N dot L per px (T1; T2 always). Off: every surface faces up.
     pub normal_light: bool,
-    /// `shadows`: how many point lights throw shadows (T1 8, T2 32; 0 is the row off).
+    /// `shadows`: how many point lights throw shadows, the nearest by one rule in the presenter
+    /// (T0 [`T0_SHADOWS`], T1 8, T2 32; 0 is the row off).
     pub shadows: u8,
     /// `silhouettes`: the sun's and moon's silhouette shadows (T0, T1).
     pub silhouettes: bool,
@@ -396,7 +403,7 @@ impl Features {
         Features {
             normal_light: !matches!(tier, Tier::T0),
             shadows: match tier {
-                Tier::T0 => 0,
+                Tier::T0 => T0_SHADOWS,
                 Tier::T1 => 8,
                 Tier::T2 => 32,
             },
@@ -502,7 +509,7 @@ impl Features {
     pub fn rows(tier: Tier) -> impl Iterator<Item = FeatureRow> {
         ROWS.into_iter().filter(move |r| match r.key {
             "normal_light" | "sharp" | "wet" => tier == Tier::T1 || (tier == Tier::T2 && r.key != "normal_light"),
-            "shadows" | "god_rays" => tier > Tier::T0,
+            "god_rays" => tier > Tier::T0,
             "silhouettes" => tier < Tier::T2,
             "glow" => tier == Tier::T0,
             _ => true,
@@ -559,10 +566,11 @@ pub struct Directional {
 }
 
 impl Directional {
-    /// Whether its shadow is dark and crisp enough for T0 and T1 to lay a silhouette: a sun or a
-    /// moon, not the afterglow's broad sky nor a sun lost in cloud.
-    pub fn silhouettes(&self) -> bool {
-        self.strength >= crate::light::SILHOUETTE_STRENGTH
+    /// Whether it throws a shadow at all, on every tier: its strength is at least
+    /// [`crate::light::FAINTEST`]. Faint soft shadows are real (the afterglow, a sun in rain or
+    /// mist), so the floor is low; the presenter gives a light under it no strength at all.
+    pub fn casts(&self) -> bool {
+        self.strength >= crate::light::FAINTEST
     }
 }
 
@@ -591,7 +599,10 @@ pub struct Light {
     pub radius: u16,
     /// The size of the glowing thing, px: a penumbra widens with it.
     pub size: u8,
-    /// Throws shadows from the casters (T1: the nearest 8; T2: the nearest 32).
+    /// Throws shadows from the casters and the blocks: the nearest `Features::shadows` of the
+    /// lights that may cast (prop lights, her lantern, a bolt's head), picked once by the
+    /// presenter (`present::pick_lights`), so every tier's casting lights are the nearest of the
+    /// same list. A unit's glow and an effect's flash never cast.
     pub casts: bool,
     pub kind: LightKind,
     /// What carries it, `Frame::sprites[holder]`: a lamp's post, a torch's bracket, the one
@@ -599,8 +610,10 @@ pub struct Light {
     pub holder: Option<u32>,
 }
 
-/// A thing that throws a shadow: a unit or a prop standing (§1.7 occluders). Wall runs and
-/// canopy cast from the terrain's height layer on T2.
+/// A thing that throws a shadow: a unit or a prop standing, a plant (§1.7 occluders). What the
+/// terrain stands (walls, roofs, hedges, cliffs, fences) is a [`Block`]. The presenter decides
+/// once what casts: every tier draws a shadow for every caster and block the frame lists, and
+/// for nothing else (T2's height field holds no sprite that is not a caster).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Caster {
     /// The sprite that draws it: `Frame::sprites[sprite]`. Its albedo is the silhouette.
@@ -613,6 +626,21 @@ pub struct Caster {
     pub height: u8,
     /// How deep it is across the ground, px: a person is thin, a crate is its footprint.
     pub depth: u8,
+}
+
+/// What the terrain stands on the ground (§1.7): a rect of its height field seen from above,
+/// canvas px `[x0, x1) x [y0, y1)` (the camera taken off), standing from the ground to `height`
+/// px. A chunk's heights stand each px `h` up on the ground `rows_up(h)` rows below it, as T2's
+/// field stands them, and the rows of one height are merged into rects
+/// (`terrain::blocks`): a house is its footprint in a few rects by its roof's courses, a wall its
+/// run, a fence its rails. T2 casts the same from its field; T0 and T1 from these.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Block {
+    pub x0: i16,
+    pub y0: i16,
+    pub x1: i16,
+    pub y1: i16,
+    pub height: u8,
 }
 
 /// The grade and the bloom (§1.9): a row per region by hour.
@@ -784,6 +812,9 @@ pub struct Frame {
     pub lights: Vec<Light>,
     /// Things that throw shadows (`Pass::Lights::casters`, `Pass::Silhouettes::casters`).
     pub casters: Vec<Caster>,
+    /// What the terrain stands that throws shadows (`Pass::Lights::blocks`,
+    /// `Pass::Silhouettes::blocks`).
+    pub blocks: Vec<Block>,
     /// The `Ui` pass (PRESENTATION.md §3.1): drawn after every pass above, unlit, in order.
     /// Filled by `ui::Ui::finish`; the contract is `ui::cmd`'s module doc.
     pub ui: Vec<crate::ui::UiCmd>,
@@ -815,6 +846,7 @@ impl Frame {
             layers: Vec::new(),
             lights: Vec::with_capacity(256),
             casters: Vec::with_capacity(1024),
+            blocks: Vec::with_capacity(4096),
             ui: Vec::with_capacity(4096),
             ui_images: Vec::new(),
             water: Vec::with_capacity(1024),
@@ -851,6 +883,10 @@ impl Frame {
 
     pub fn casters_in(&self, s: Span) -> &[Caster] {
         &self.casters[s.range()]
+    }
+
+    pub fn blocks_in(&self, s: Span) -> &[Block] {
+        &self.blocks[s.range()]
     }
 
     /// The layers a chunk command draws.

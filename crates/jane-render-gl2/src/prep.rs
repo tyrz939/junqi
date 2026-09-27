@@ -18,7 +18,7 @@ use std::ops::Range;
 
 use jane_present::frame::{Atmos, CHUNK_PX, PartShape, Particle, SkyLook};
 use jane_present::shadow;
-use jane_present::{Caster, Directional, Frame, LightKind, Pass, Post, Rgb, SpriteCmd, Tint, height_of_rows};
+use jane_present::{Caster, Directional, Frame, LightKind, Pass, Post, Rgb, SpriteCmd, Tint};
 
 use crate::gl::Blend;
 use crate::shaders::{LIGHT_SIZES, SPAN_SIZES, SPRITE_SIZES};
@@ -53,11 +53,9 @@ pub const SLOT_ROWS: u32 = 6;
 /// Canvas px above a light's disc its quad reaches: a thing standing in the disc is drawn up to
 /// this far above its ground point.
 const LIGHT_REACH_UP: i32 = 72;
-/// Point-light shadows reach this far past the light's radius, px, then stop.
-const SHADOW_PAST: f32 = 24.0;
 /// Rows over the silhouette mask's box a lifted receiver may stand and still take its shadow
 /// from inside it (`jane-render-soft::silhouette`'s, the same).
-const CLIMB: i32 = jane_present::rows_up(100);
+const CLIMB: i32 = jane_present::rows_up(100) + shadow::FRONT;
 /// T2's point light: how much brighter it is than its colour byte says, in linear light, and the
 /// least a light's luminance is held to before that gain (`jane-render-wgpu`'s prep).
 const POINT_GAIN: f32 = 3.0;
@@ -239,6 +237,15 @@ fn push(v: &mut Vec<f32>, xs: &[f32]) {
     v.extend_from_slice(xs);
 }
 
+/// A point light's shadow quad into the mask spans: its corners in canvas px, its reach twice.
+fn push_slab(v: &mut Vec<f32>, q: &shadow::Slab) {
+    let sub = shadow::SUB as f32;
+    for (x, y, r) in q.c {
+        let r = r as f32;
+        push(v, &[x as f32 / sub, y as f32 / sub, r, r]);
+    }
+}
+
 /// An sRGB byte as linear light.
 pub fn linear(c: u8) -> f32 {
     let v = f32::from(c) / 255.0;
@@ -385,16 +392,16 @@ impl Prep {
                     }
                 }
                 Pass::Sprites { cmds, .. } => self.sprites(frame, cmds.range(), pages, *rows, (cw, ch)),
-                Pass::Silhouettes { sun, shade, casters } => {
+                Pass::Silhouettes { sun, shade, casters, blocks } => {
                     if rows.silhouettes {
-                        self.silhouettes(frame, &sun, shade, casters.range(), pages, (cw, ch));
+                        self.silhouettes(frame, &sun, shade, (casters.range(), blocks.range()), pages, (cw, ch));
                     }
                 }
-                Pass::Lights { ambient, fill, sun, points, casters } => {
+                Pass::Lights { ambient, fill, sun, points, casters, blocks } => {
                     self.sky = Some(sky(ambient, fill, sun));
                     (self.ambient, self.fill) = (ambient, fill);
                     lit_seen = true;
-                    self.lights(frame, points.range(), casters.range(), pages, *rows);
+                    self.lights(frame, points.range(), (casters.range(), blocks.range()), pages, *rows);
                 }
                 Pass::Post(p) => self.post = Some(p),
                 // The atmosphere (PRESENTATION.md §1.8, §1.9, §2): the backdrop into its own
@@ -667,31 +674,36 @@ impl Prep {
         frame: &Frame,
         sun: &Directional,
         shade: Rgb,
-        casters: Range<usize>,
+        (casters, blocks): (Range<usize>, Range<usize>),
         pages: &[PageCpu],
         (cw, ch): (i32, i32),
     ) {
         let Some(k) = shear(sun) else { return };
         let first = self.span_v.len() / (4 * 4);
         let mut dirty: Option<(i32, i32, i32, i32)> = None;
+        let mut band = |span_v: &mut Vec<f32>, b: shadow::Band| {
+            let (x0, x1, y0, y1) = (b.x0.max(0), b.x1.min(cw), b.y0.max(0), b.y1.min(ch));
+            if x0 >= x1 || y0 >= y1 {
+                return;
+            }
+            let (v, r) = (f32::from(b.strength), f32::from(b.reach));
+            let (a, bb, c2, d) = (x0 as f32, y0 as f32, x1 as f32, y1 as f32);
+            push(span_v, &[a, bb, v, r, c2, bb, v, r, a, d, v, r, c2, d, v, r]);
+            dirty = Some(match dirty {
+                None => (x0, y0, x1, y1),
+                Some((p, q, rr, t)) => (p.min(x0), q.min(y0), rr.max(x1), t.max(y1)),
+            });
+        };
         for ci in casters {
             let c: Caster = frame.casters[ci];
             let Some(s) = frame.sprites.get(c.sprite as usize) else { continue };
             let prof = self.profile(frame, ci, pages);
             let (span_v, rows) = (&mut self.span_v, &self.rows[prof]);
-            shadow::bands(rows, i32::from(s.x), &c, k, |b| {
-                let (x0, x1, y0, y1) = (b.x0.max(0), b.x1.min(cw), b.y0.max(0), b.y1.min(ch));
-                if x0 >= x1 || y0 >= y1 {
-                    return;
-                }
-                let (v, r) = (f32::from(b.strength), f32::from(b.reach));
-                let (a, bb, c2, d) = (x0 as f32, y0 as f32, x1 as f32, y1 as f32);
-                push(span_v, &[a, bb, v, r, c2, bb, v, r, a, d, v, r, c2, d, v, r]);
-                dirty = Some(match dirty {
-                    None => (x0, y0, x1, y1),
-                    Some((p, q, rr, t)) => (p.min(x0), q.min(y0), rr.max(x1), t.max(y1)),
-                });
-            });
+            shadow::bands(rows, i32::from(s.x), &c, k, |b| band(span_v, b));
+        }
+        for b in &frame.blocks[blocks] {
+            let span_v = &mut self.span_v;
+            shadow::block_bands(b, k, |b| band(span_v, b));
         }
         let end = self.span_v.len() / (4 * 4);
         let Some((x0, y0, x1, y1)) = dirty else { return };
@@ -712,7 +724,14 @@ impl Prep {
     }
 
     /// The point lights' quads, and the shadow geometry of the ones that cast.
-    fn lights(&mut self, frame: &Frame, points: Range<usize>, casters: Range<usize>, pages: &[PageCpu], rows: Rows) {
+    fn lights(
+        &mut self,
+        frame: &Frame,
+        points: Range<usize>,
+        (casters, blocks): (Range<usize>, Range<usize>),
+        pages: &[PageCpu],
+        rows: Rows,
+    ) {
         let mut slot = 0u8;
         for li in points.take(usize::from(rows.max_lights)) {
             let l = frame.lights[li];
@@ -726,11 +745,16 @@ impl Prep {
             if l.casts && slot < rows.shadows.min(8) {
                 slot += 1;
                 let first = self.span_v.len() / (4 * 4);
+                let lamp = shadow::Lamp::of(&l);
                 for ci in casters.clone() {
                     // A light never shadows what holds it: her lantern's hand, a lamp's post.
                     if l.holder != Some(frame.casters[ci].sprite) {
-                        self.shadow(frame, ci, pages, (lx, ly, lh, r));
+                        self.shadow(frame, ci, pages, &lamp);
                     }
+                }
+                for b in &frame.blocks[blocks.clone()] {
+                    let span_v = &mut self.span_v;
+                    shadow::block_slabs(b, &lamp, |q| push_slab(span_v, &q));
                 }
                 let end = self.span_v.len() / (4 * 4);
                 if end > first {
@@ -764,62 +788,14 @@ impl Prep {
         }
     }
 
-    /// Caster `ci`'s shadow from a point light at `(lx, ly)`, `lh` up, reaching `r`: each run of
-    /// equal rows of its sprite, a vertical slab from the front and from the back of its
-    /// footprint, projected from the light onto the ground (a row higher than the light reaches
-    /// past the rim, where it stops). Each corner carries how high the shadow reaches there: the
-    /// ray over the caster's top, `lh + (H - lh) * t / d` at `t` from the light for a caster `d`
-    /// away, so a thing standing in the shadow is dark only up to it.
-    fn shadow(&mut self, frame: &Frame, ci: usize, pages: &[PageCpu], (lx, ly, lh, r): (f32, f32, f32, f32)) {
+    /// Caster `ci`'s shadow from `lamp`: its rows' slabs (`jane_present::shadow::row_slabs`, the
+    /// geometry T0 rasterises too), each corner carrying how high the shadow reaches there.
+    fn shadow(&mut self, frame: &Frame, ci: usize, pages: &[PageCpu], lamp: &shadow::Lamp) {
         let c = frame.casters[ci];
         let Some(s) = frame.sprites.get(c.sprite as usize) else { return };
-        let (fx, fy) = (f32::from(c.foot.0) + 0.5, f32::from(c.foot.1) + 0.5);
-        let d = ((fx - lx).powi(2) + (fy - ly).powi(2)).sqrt();
-        if d > r + 48.0 {
-            return;
-        }
-        let far = r + SHADOW_PAST;
-        let x = f32::from(s.x);
-        let depth = i32::from(c.depth.max(2));
         let prof = self.profile(frame, ci, pages);
-        // Its top, true px: the ray over it is how high the shadow reaches.
-        let tall = i32::from(c.height).max(1);
-        let up = |hv: i32| height_of_rows(hv).min(tall) as f32;
-        let top = self.rows[prof.clone()].last().map_or(1.0, |r| up(r.0));
-        // Runs of rows with the same extent, from the foot up: (from, to, first, last).
-        let mut k = prof.start;
-        while k < prof.end {
-            let (h0, u0, u1) = self.rows[k];
-            let mut j = k + 1;
-            while j < prof.end
-                && self.rows[j].1 == u0
-                && self.rows[j].2 == u1
-                && self.rows[j].0 == self.rows[j - 1].0 + 1
-            {
-                j += 1;
-            }
-            let h1 = self.rows[j - 1].0 + 1;
-            k = j;
-            // The run's bottom and top as true px (a row `hv` above the foot is `5 hv / 4` up).
-            let (za, zb) = (up(h0 - 1), up(h1));
-            let (xa, xb) = (x + u0 as f32, x + u1 as f32 + 1.0);
-            // Its footprint's front and back: the edge of its foot row and its depth behind it,
-            // no deeper than the run is wide (the silhouettes' and T2's field's,
-            // `jane_present::shadow::bands`).
-            let deep = depth.min(2 * ((u1 - u0) / 2) + 2) as f32;
-            for by in [fy + 0.5 - deep, fy + 0.5] {
-                let mut quad = [0.0f32; 16];
-                for (n, (px, z)) in [(xa, za), (xb, za), (xa, zb), (xb, zb)].into_iter().enumerate() {
-                    let (dx, dy) = (px - lx, by - ly);
-                    let dist = (dx * dx + dy * dy).sqrt().max(0.5);
-                    let t = if z >= lh - 0.5 { far } else { (dist * lh / (lh - z)).min(far) };
-                    let (gx, gy) = (lx + dx / dist * t, ly + dy / dist * t);
-                    let reach = (lh + (top - lh) * t / dist).clamp(0.0, 255.0);
-                    quad[n * 4..n * 4 + 4].copy_from_slice(&[gx, gy, reach, reach]);
-                }
-                push(&mut self.span_v, &quad);
-            }
-        }
+        let (span_v, rows) = (&mut self.span_v, &self.rows[prof]);
+        shadow::row_slabs(rows, i32::from(s.x), &c, lamp, |q| push_slab(span_v, &q));
     }
 
     /// Quads in each list.
@@ -924,6 +900,7 @@ mod tests {
                 sun: None,
                 points: Span::default(),
                 casters: Span::default(),
+                blocks: Span::default(),
             },
             Pass::Fog { volumes: Span { start: 0, len: 1 }, drift: (3, 4) },
             Pass::Particles { layer: Depth::Canopy, parts: Span { start: 2, len: 1 } },
@@ -987,6 +964,7 @@ mod tests {
             sun: None,
             points: Span { start: 0, len: 1 },
             casters: Span { start: 0, len: 1 },
+            blocks: Span::default(),
         });
         let pages = [PageCpu::new(2, 10, &[2; 20])];
         let mut p = Prep::default();

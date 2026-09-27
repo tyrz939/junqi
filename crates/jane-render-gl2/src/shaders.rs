@@ -217,7 +217,8 @@ void main() { gl_FragColor = vec4(v_val, v_val) / 255.0; }
 
 /// The silhouettes' mask applied to the albedo (`jane-render-soft::silhouette::apply`, bit for
 /// bit): a px takes the mask at the ground under it (the terrain's height from `u_height`, a px
-/// `h` up standing `rows_up(h)` rows lower; 4 px and under is the ground) where the shadow there
+/// `h` up standing `rows_up(h)` rows lower, and looking 2 rows in front of that,
+/// `shadow::FRONT`; 4 px and under is the ground) where the shadow there
 /// reaches its height; a covered px toward `shade` by its strength, its edge feathered by
 /// `u_feather` px more than one dither step: a covered px `k` in from the edge by
 /// `8 - 3 (f + 2 - k) / (f + 1)` eighths, a px `k` outside by `3 (f + 2 - k) / (f + 1)` eighths
@@ -247,7 +248,7 @@ void main() {
     vec2 q = floor(gl_FragCoord.xy);
     float h = byte(texture2D(u_height, (q + 0.5) / u_size).b);
     need = h > 4.5 ? h : 0.0;
-    vec2 p = vec2(q.x, h > 4.5 ? q.y + fdiv(h * 4.0 + 4.0, 5.0) : q.y);
+    vec2 p = vec2(q.x, h > 4.5 ? q.y + fdiv(h * 4.0 + 4.0, 5.0) + 2.0 : q.y);
     float f = u_feather;
     if (p.y > u_box.w + f || p.y < u_box.y - 1.0 - f) discard;
     float m = m_at(p);
