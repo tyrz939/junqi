@@ -187,11 +187,8 @@ impl Pipes {
             ],
         );
         let scatter_layout = layout(device, "scatter", &[B::Uniform, B::Tex, B::ReadWrite, B::Uint]);
-        let light_layout = layout(
-            device,
-            "light",
-            &[B::Uniform, B::Tex, B::Tex, B::Tex, B::Read, B::Read, B::Read, B::Read, B::Uint],
-        );
+        let light_layout =
+            layout(device, "light", &[B::Uniform, B::Tex, B::Tex, B::Tex, B::Read, B::Read, B::Read, B::Read, B::Uint]);
         let post_layout = layout(device, "post", &[B::Uniform, B::Tex, B::Sampler, B::Tex]);
         let step_layout = layout(device, "step", &[B::Uniform]);
 
@@ -589,6 +586,13 @@ impl Wgpu {
     }
 
     /// `wgpu, Vulkan, <adapter>`.
+    /// A debug view (PRESENTATION.md §1.7): the light pass draws the sun's term alone, red how
+    /// much of the sun reaches each px through the height field, green its N dot L, blue the
+    /// albedo, so a shadow's root and a self-shadow show plainly (`jane sheet scene --show-sun`).
+    pub fn show_sun(&mut self, on: bool) {
+        self.prep.show_sun = on;
+    }
+
     pub fn describe(&self) -> &str {
         &self.describe
     }

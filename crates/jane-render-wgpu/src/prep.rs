@@ -71,6 +71,8 @@ pub struct Prep {
     pub globals: Vec<u8>,
     /// The frame's clear, linear.
     pub clear: [f64; 3],
+    /// Draw the sun's term alone (`Wgpu::show_sun`).
+    pub show_sun: bool,
     depth: Vec<u8>,
     lists: Vec<Vec<u32>>,
 }
@@ -253,7 +255,9 @@ impl Prep {
         f32s(&mut self.globals, &[tr, tg, tb, f32::from(post.saturation) / 128.0]);
         let [lr, lg, lb] = post.lift.map(|c| f32::from(c) / 255.0);
         f32s(&mut self.globals, &[lr, lg, lb, f32::from(post.exposure) / 128.0]);
-        f32s(&mut self.globals, &[f32::from(post.bloom) / 255.0 * 1.4, ticks as f32, EMISSIVE_GAIN, 0.0]);
+        // w: the sun's term alone, a debug view (`Wgpu::show_sun`).
+        let show = if self.show_sun { 1.0 } else { 0.0 };
+        f32s(&mut self.globals, &[f32::from(post.bloom) / 255.0 * 1.4, ticks as f32, EMISSIVE_GAIN, show]);
         debug_assert_eq!(self.globals.len(), 128);
     }
 

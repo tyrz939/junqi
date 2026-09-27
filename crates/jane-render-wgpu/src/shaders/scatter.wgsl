@@ -20,7 +20,7 @@ fn scatter(@builtin(global_invocation_id) id: vec3<u32>) {
     }
     let v = textureLoad(gnh, vec2<i32>(id.xy), 0);
     let h = u32(round(v.b * 255.0));
-    if h < 2u {
+    if f32(h) < GROUND {
         return;
     }
     let d = max(u32(round(v.a * 255.0)), 1u);
