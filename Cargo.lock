@@ -362,6 +362,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "jane-audio"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "jane-bot"
 version = "0.1.0"
 dependencies = [
@@ -375,6 +383,7 @@ name = "jane-cli"
 version = "0.1.0"
 dependencies = [
  "jane-art",
+ "jane-audio",
  "jane-bot",
  "jane-core",
  "jane-data",

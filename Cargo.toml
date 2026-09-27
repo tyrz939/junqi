@@ -19,6 +19,7 @@ jane-bot = { path = "crates/jane-bot" }
 jane-net = { path = "crates/jane-net" }
 jane-art = { path = "crates/jane-art" }
 jane-present = { path = "crates/jane-present" }
+jane-audio = { path = "crates/jane-audio" }
 jane-render-soft = { path = "crates/jane-render-soft" }
 jane-render-gl2 = { path = "crates/jane-render-gl2" }
 jane-render-wgpu = { path = "crates/jane-render-wgpu" }
@@ -82,6 +83,11 @@ overflow-checks = true
 debug-assertions = true
 
 [profile.dev.package."*"]
+opt-level = 3
+
+# The synth runs in the audio callback sample by sample: at opt-level 1 a debug build would
+# stutter (PRESENTATION.md §5). It is presentation, so a faster dev build of it costs no checks.
+[profile.dev.package.jane-audio]
 opt-level = 3
 
 [profile.release]

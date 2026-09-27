@@ -4,6 +4,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 use std::time::Instant;
 
+mod audio_cmd;
 mod bench;
 #[path = "gen.rs"]
 mod gen_cmd;
@@ -33,6 +34,7 @@ commands:
 {GEN}
 {BENCH}
 {SHEET}
+{AUDIO}
 {HASH}
   play --model reader|rusher --seed N | replay verify|record|diff   a player model plays; tapes (`jane play --help`)
   help                                this text";
@@ -43,6 +45,7 @@ fn usage() -> String {
         .replace("{BENCH}", bench::USAGE)
         .replace("{SHEET}", sheet_cmd::USAGE)
         .replace("{HASH}", hash_cmd::USAGE)
+        .replace("{AUDIO}", audio_cmd::USAGE)
 }
 
 fn main() -> ExitCode {
@@ -78,6 +81,13 @@ fn main() -> ExitCode {
             }
         },
         Some(c @ ("play" | "replay")) => play::main(c, &args[1..]),
+        Some("audio") => match audio_cmd::run(&args[1..]) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(e) => {
+                eprintln!("jane audio: {e}");
+                ExitCode::FAILURE
+            }
+        },
         Some("sheet") => match sheet_cmd::run(&args[1..]) {
             Ok(()) => ExitCode::SUCCESS,
             Err(e) => {

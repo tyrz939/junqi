@@ -33,6 +33,8 @@ pub const USAGE: &str = "  sheet layers <what> [--frame F] [--out DIR]
                                       first; --wide draws 21:9 (1008 x 432)
   sheet ui [screen ...] [--out DIR]   the UI in states play rarely shows at once (hud, dead, choice,
                                       tooltip, popover, drag, pause), headless through soft
+  sheet audio [--out DIR]             every sound effect, bed, song and scene as WAV, songs and scenes as
+                                      a waveform over a spectrogram (jane audio)
   sheet --bless                       rewrite crates/jane-art/tests/golden.txt from the current art";
 
 /// jane-art's golden file, from this crate's manifest.
@@ -174,6 +176,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
             }
         }
         Some("scene") => scene(args)?,
+        Some("audio") => crate::audio_cmd::sheet(&out)?,
         Some("terrain") => crate::sheet_terrain::terrain(args, &out, &font)?,
         Some("flora") => crate::sheet_terrain::flora(&out, &font)?,
         Some("county") => crate::sheet_terrain::county(args, &out, &font)?,

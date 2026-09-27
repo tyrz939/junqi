@@ -21,6 +21,7 @@ jane-net.workspace = true
 jane-bot.workspace = true
 jane-art.workspace = true
 jane-present.workspace = true
+jane-audio.workspace = true
 jane-render-soft.workspace = true
 jane-render-wgpu = { workspace = true, optional = true }
 
