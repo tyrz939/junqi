@@ -32,7 +32,7 @@ use std::sync::atomic::{AtomicU8, Ordering};
 use std::time::Instant;
 
 use jane_present::frame::{CHUNK_PX, ChunkLayers};
-use jane_present::{AO_TINT, AtlasPages, Backend, CLUT_LEN, Caps, Frame, FrameStats, FrameTimes, StatPass, Tier};
+use jane_present::{AO_TINT, AtlasPages, Backend, CLUT_LEN, Caps, Features, Frame, FrameStats, FrameTimes, StatPass, Tier};
 
 use crate::gpu::{B, Gpu, array_view, group, layout, texture, write_layer};
 use crate::prep::{GLOBALS, GUARD, Kind, MAX_FOG, MAX_LIGHTS, Prep, TILE, TILE_CAP};
@@ -523,6 +523,8 @@ pub struct Wgpu {
     mist: wgpu::TextureView,
     /// Whether the window asked for vsync (`for_window`).
     vsync: bool,
+    /// The `sharp` row (§1.3): sharp bilinear to the window; off, nearest.
+    sharp: bool,
 }
 
 impl Wgpu {
@@ -632,6 +634,7 @@ impl Wgpu {
             vsync: false,
             atmos,
             mist,
+            sharp: true,
         }
     }
 
@@ -691,7 +694,8 @@ impl Wgpu {
         };
         let scale = size.1 as f32 / t.canvas.1 as f32;
         let mut step = Vec::with_capacity(16);
-        for v in [0.0f32, 0.0, scale, 0.0] {
+        // The last word: 1 draws nearest (the `sharp` row off).
+        for v in [0.0f32, 0.0, scale, if self.sharp { 0.0 } else { 1.0 }] {
             step.extend_from_slice(&v.to_le_bytes());
         }
         self.gpu.queue.write_buffer(&t.upscale_step, 0, &step);
@@ -1451,6 +1455,12 @@ impl Backend for Wgpu {
 
     fn stats(&self) -> Option<FrameStats> {
         Some(self.times.stats())
+    }
+
+    /// The one row T2 draws itself (§1.3): the upscale. Its counts, bloom and grade the
+    /// presenter has already put in the `Frame`.
+    fn set_features(&mut self, f: &Features) {
+        self.sharp = f.sharp;
     }
 }
 

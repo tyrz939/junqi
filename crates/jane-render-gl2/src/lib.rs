@@ -32,7 +32,7 @@ pub mod ui;
 use std::time::Instant;
 
 use jane_present::frame::CHUNK_PX;
-use jane_present::{AO_TINT, AtlasPages, Backend, CLUT_LEN, Caps, Frame, FrameStats, FrameTimes, StatPass, Tier};
+use jane_present::{AO_TINT, AtlasPages, Backend, CLUT_LEN, Caps, Features, Frame, FrameStats, FrameTimes, StatPass, Tier};
 
 use crate::gl::{Blend, Buffer, Fbo, Format, Gl, Program, Query, Texture, Uniform};
 use crate::prep::{After, PageCpu, Prep, SLOT_ROWS, SLOTS_ACROSS, Step};
@@ -1368,6 +1368,20 @@ impl Backend for Gl2 {
 
     fn stats(&self) -> Option<FrameStats> {
         Some(self.times.stats())
+    }
+
+    /// The rows T1 draws itself (§1.3): N dot L, the upscale, and the counts and silhouettes its
+    /// `Rows` also hold, so a frame from a presenter that kept more is held to them. The
+    /// backend's own settings (the light target's size, the albedo mode, the reflection) stay.
+    fn set_features(&mut self, f: &Features) {
+        self.rows = Rows {
+            normal_light: f.normal_light,
+            shadows: f.shadows.min(8),
+            silhouettes: f.silhouettes,
+            sharp: f.sharp,
+            max_lights: f.max_lights.min(Rows::T1.max_lights),
+            ..self.rows
+        };
     }
 }
 
