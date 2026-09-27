@@ -221,6 +221,11 @@ pub fn bait_makings(v: &View<'_>) -> Vec<ItemId> {
         return Vec::new();
     }
     let mut out: Vec<ItemId> = cat.combat.units.iter().filter_map(|u| u.bait).collect();
+    // Brewed: the bait is kept, and what made it is only more of what she carries (a full bag
+    // lost the Chairman's Key for want of room).
+    if out.iter().all(|&b| holds(v, b) >= crate::story::BAIT.1) {
+        return out;
+    }
     for _ in 0..2 {
         let more: Vec<ItemId> = cat
             .combat

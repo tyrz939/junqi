@@ -113,7 +113,7 @@ const PROVISIONS: [(&str, u32); 3] = [("potion_stoneskin", 2), ("potion_lifestea
 /// What she brews for Under the Stone, and how many: the dog's bait for the small snakes ("Feed
 /// the small snakes; do not fight them"), rat meat soaked in Stranglethorn at a bench. There is
 /// no bench inside, so it is made before she goes down; two, for the two in the east hall.
-const BAIT: (&str, u32) = ("poisoned_rat_meat", 2);
+pub const BAIT: (&str, u32) = ("poisoned_rat_meat", 2);
 
 /// Cells she will go for a provision: the bench, or food seen near (not across the county: a
 /// long walk for an apple was a walk through the ruffians, and she mostly packs at home).
