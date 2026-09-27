@@ -179,14 +179,20 @@ fn room_in(sim: &Sim, zone: jane_core::ids::ZoneId, asked: &str) -> Option<jane_
     if bp.marks.keys().any(|k| name_of(k).as_deref() == Some(asked)) {
         return None;
     }
-    let want = format!("{}_{asked}_room", zone.name());
+    // A node's floor is its template's first rect, under whatever name the mission bound it to.
+    let props = jane_data::catalog();
+    let floors: Vec<jane_core::Key> = props
+        .dungeons
+        .mission_of(zone)
+        .and_then(|m| m.nodes.iter().find(|n| n.id == asked))
+        .map(|n| n.names.iter().filter_map(|t| t.rects.first()).map(|&r| jane_core::Key::Name(r)).collect())
+        .unwrap_or_default();
     let r = bp
         .rects
         .iter()
-        .find(|(k, _)| name_of(k).as_deref() == Some(&want))
+        .find(|(k, _)| floors.contains(k))
         .or_else(|| bp.rects.iter().find(|(k, _)| name_of(k).as_deref() == Some(asked)))?
         .1;
-    let props = jane_data::catalog();
     let blocked = |x: i32, y: i32| {
         bp.tiles.get(x, y).is_none_or(|t| t.flags() & jane_core::tile::F_SOLID != 0)
             || bp.props.iter().any(|p| {

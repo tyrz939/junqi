@@ -18,8 +18,12 @@ room() {
   zone=$1
   shift
   for node in "$@"; do
-    $jane sheet scene --backend "$be" --ticks 300 --at "$zone:$node" --out "$out/$zone-$node.png" > /dev/null
-    echo "$out/$zone-$node.png"
+    # A side room this seed did not place has no rect: it is named and passed over.
+    if $jane sheet scene --backend "$be" --ticks 300 --at "$zone:$node" --out "$out/$zone-$node.png" > /dev/null 2>&1; then
+      echo "$out/$zone-$node.png"
+    else
+      echo "$zone:$node not placed on this seed" >&2
+    fi
   done
 }
 room mine entry plate store guard core firstaid office gallery vault arena nook cage
