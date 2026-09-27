@@ -10,7 +10,7 @@
 //! | time not knowing what to do | the samples with no objective, alive, not talking or fighting |
 //! | backtracking | cells walked over ground walked in the previous ten minutes, not on the way to a hand-in |
 //! | deaths by cause | `Died`: what last hurt her, the region, the hour of play |
-//! | empty walks | runs of samples walking out of doors (not talking, not fighting) with nothing new in view ([`EMPTY_SECS`] or more), and with nothing in view at all |
+//! | empty walks | runs of samples walking out of doors (not talking, not fighting) over ground not charted before, with nothing new coming on screen ([`EMPTY_SECS`] or more); *bare* when nothing at all was in view |
 //! | night exposure | samples out of doors at night outside any light, the first night |
 //! | walk to play | samples walking over samples fighting or talking |
 //! | journal size | journal writes by kind |
@@ -23,9 +23,14 @@ use jane_sim::trace::{Ev, Kind, Sample, Trace};
 /// Frames a real minute.
 pub const MINUTE: u32 = 60 * 60;
 
-/// Seconds of walking with nothing new in view that make an empty stretch (VERIFICATION.md L4
-/// "nothing-to-see stretches: runs of 60 s or more").
-pub const EMPTY_SECS: u32 = 60;
+/// Seconds of walking new ground with nothing new in view that make an empty stretch: PLAN.md
+/// §2.4's "something visible every 20 to 30 s" (VERIFICATION.md L4's nothing-to-see runs are 60 s
+/// or more: [`Experience::stretches_over`] counts those).
+pub const EMPTY_SECS: u32 = 30;
+
+/// Walking seconds charting no new ground that end an empty stretch (she is on ground seen
+/// before).
+const STALE: u32 = 3;
 
 /// Frames back that walked ground counts as walked again (L4: "the previous ten minutes").
 const BACKTRACK_WINDOW: u32 = 10 * MINUTE;
@@ -82,6 +87,9 @@ pub struct Stretch {
     pub bare: bool,
     /// The objective she was on.
     pub doing: String,
+    /// 0: nothing new at all came on screen; 1: nothing new a person would remember the walk
+    /// by (no landmark: see `trace::Sample::new_landmarks`).
+    pub kind: u8,
 }
 
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -149,10 +157,11 @@ pub fn measure(t: &Trace, seat: u8) -> Experience {
     // The objective in hand and since when.
     let mut doing: (String, Option<u16>, Option<u8>, u32) = ("none".into(), None, None, 0);
     let mut last_sample: Option<Sample> = None;
-    let mut run: Option<(Stretch, bool)> = None;
+    let mut runs: [Option<(Stretch, bool)>; 2] = [None, None];
     let mut ground: BTreeMap<(i32, i32), u32> = BTreeMap::new();
     let mut first_morning = false;
     let mut been_night = false;
+    let mut stale = 0u32;
     let mut letter_done = false;
     let close = |doing: &(String, Option<u16>, Option<u8>, u32),
                  until: u32,
@@ -290,38 +299,51 @@ pub fn measure(t: &Trace, seat: u8) -> Experience {
                         ground.insert(b, f);
                     }
                 }
-                // Empty stretches: walking out of doors with nothing new in view.
-                let empty = walking && s.zone == county && s.new_things == 0;
-                if empty {
-                    match &mut run {
-                        Some((st, bare)) => {
-                            st.secs += 1;
-                            st.to = s.cell;
-                            *bare &= s.in_view.empty();
-                        }
-                        None => {
-                            run = Some((
-                                Stretch {
-                                    frame: f,
-                                    tick: r.tick,
-                                    secs: 1,
-                                    from: s.cell,
-                                    to: s.cell,
-                                    region: s.region,
-                                    bare: false,
-                                    doing: doing.0.clone(),
-                                },
-                                s.in_view.empty(),
-                            ));
-                        }
-                    }
-                } else if s.new_things > 0 || !s.moving || s.zone != county {
-                    // Standing still (talking, fighting, reading) does not break a run of
-                    // nothing new; a new thing, or leaving the county, does.
-                    if let Some((mut st, bare)) = run.take() {
-                        if st.secs >= EMPTY_SECS {
-                            st.bare = bare;
-                            x.stretches.push(st);
+                // Empty stretches: walking out of doors over ground the map had not charted, with
+                // nothing new coming on screen (kind 0), or no new landmark (kind 1). Ground walked
+                // before is not held to it (nothing is new there by definition): three walking
+                // seconds charting nothing end a run, as a new thing or leaving the county does.
+                // Standing (talking, fighting) neither ends nor lengthens one. Not for a pair: the
+                // map is the party's, and one seat's charting is the other's new ground.
+                if walking && s.zone == county {
+                    stale = if s.new_ground > 0 { 0 } else { stale + 1 };
+                }
+                if t.header.seats == 1 {
+                    let fresh = walking && s.zone == county && stale < STALE;
+                    let over = s.zone != county || (walking && stale >= STALE);
+                    for (k, news) in [(0u8, s.new_things), (1u8, s.new_landmarks)] {
+                        let run = &mut runs[usize::from(k)];
+                        if fresh && news == 0 {
+                            match run {
+                                Some((st, bare)) => {
+                                    st.secs += 1;
+                                    st.to = s.cell;
+                                    *bare &= s.in_view.empty();
+                                }
+                                None => {
+                                    *run = Some((
+                                        Stretch {
+                                            frame: f,
+                                            tick: r.tick,
+                                            secs: 1,
+                                            from: s.cell,
+                                            to: s.cell,
+                                            region: s.region,
+                                            bare: false,
+                                            doing: doing.0.clone(),
+                                            kind: k,
+                                        },
+                                        s.in_view.empty(),
+                                    ));
+                                }
+                            }
+                        } else if news > 0 || over {
+                            if let Some((mut st, bare)) = run.take() {
+                                if st.secs >= EMPTY_SECS {
+                                    st.bare = bare;
+                                    x.stretches.push(st);
+                                }
+                            }
                         }
                     }
                 }
@@ -331,10 +353,12 @@ pub fn measure(t: &Trace, seat: u8) -> Experience {
         }
     }
     close(&doing, t.footer.frames, &mut x, &mut steps);
-    if let Some((mut st, bare)) = run.take() {
-        if st.secs >= EMPTY_SECS {
-            st.bare = bare;
-            x.stretches.push(st);
+    for run in &mut runs {
+        if let Some((mut st, bare)) = run.take() {
+            if st.secs >= EMPTY_SECS {
+                st.bare = bare;
+                x.stretches.push(st);
+            }
         }
     }
     // Each step's quest given.
@@ -406,7 +430,12 @@ impl Experience {
 
     /// Empty stretches (nothing new) of at least `secs`.
     pub fn stretches_over(&self, secs: u32) -> impl Iterator<Item = &Stretch> {
-        self.stretches.iter().filter(move |s| s.secs >= secs)
+        self.stretches.iter().filter(move |s| s.kind == 0 && s.secs >= secs)
+    }
+
+    /// Walks over new ground with no new landmark of at least `secs`.
+    pub fn plain_over(&self, secs: u32) -> impl Iterator<Item = &Stretch> {
+        self.stretches.iter().filter(move |s| s.kind == 1 && s.secs >= secs)
     }
 }
 

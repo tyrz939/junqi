@@ -99,6 +99,10 @@ pub enum Verdict {
     Unbuilt(String),
     /// More than a half-screen from any road or path, and so is the named landmark.
     OffRoad(i32),
+    /// A place's own name the words use is built (its ground is there) but written up on
+    /// nothing she can see within [`NEAR`] of the thing: no sign, board, label or lettering says
+    /// it, so she cannot tell she has arrived (QUEST-TREE.md A3).
+    Unposted(String),
     /// No instance on this seed.
     Nothing,
 }
@@ -112,6 +116,7 @@ impl Verdict {
             Verdict::Far(w) => format!("FAR: {w}"),
             Verdict::Unbuilt(w) => format!("UNBUILT: {w}"),
             Verdict::OffRoad(d) => format!("OFF-ROAD: {d} cells"),
+            Verdict::Unposted(w) => format!("UNPOSTED: {w}"),
             Verdict::Nothing => "NOTHING".into(),
         }
     }
@@ -134,6 +139,10 @@ pub struct StepAudit {
     pub instances: u32,
     /// Cells from the instance to the nearest road or path (the county).
     pub to_road: Option<i32>,
+    /// A place's own name the words use is also written away from it, by a road (a fingerpost,
+    /// a board naming where a way goes): she can find the way by reading signs. `None`: the
+    /// words use no place's own name.
+    pub pointed: Option<bool>,
     pub phrases: Vec<Phrase>,
     pub verdict: Verdict,
 }
@@ -601,6 +610,7 @@ pub fn steps(bps: &Blueprints) -> Vec<StepAudit> {
                 at: None,
                 instances: inst.len() as u32,
                 to_road: None,
+                pointed: None,
                 phrases: Vec::new(),
                 verdict: Verdict::Nothing,
             };
@@ -701,6 +711,30 @@ pub fn steps(bps: &Blueprints) -> Vec<StepAudit> {
             let road = a.to_road.unwrap_or(999);
             if verdict == Verdict::Ok && road > HALF_SCREEN && !landmark_on_road {
                 verdict = Verdict::OffRoad(road);
+            }
+            // Is the way there written anywhere? A sign naming the place, by a road, away from it.
+            let proper: Vec<&Phrase> = ph.iter().filter(|p| !p.proper.is_empty() && !p.way).collect();
+            if !proper.is_empty() {
+                a.pointed = Some(proper.iter().any(|p| {
+                    names.iter().any(|n| {
+                        !n.place
+                            && answers(n, p)
+                            && to_rect(at, n.rect) > NEAR + PLACE_EDGE
+                            && to_way(county, n.rect.centre(), HALF_SCREEN / 2).is_some()
+                    })
+                }));
+            }
+            // A3: every place's name the words use is written up near the thing, on something
+            // she can see (not only the ground a story or a patch stands on).
+            if verdict == Verdict::Ok {
+                for p in ph.iter().filter(|p| !p.proper.is_empty() && !p.way && p.ok) {
+                    let posted =
+                        names.iter().any(|n| !n.place && answers(n, p) && to_rect(at, n.rect) <= NEAR + PLACE_EDGE);
+                    if !posted {
+                        verdict = Verdict::Unposted(format!("{} {}", p.prep, p.proper.join(" ")));
+                        break;
+                    }
+                }
             }
             a.phrases = ph;
             a.verdict = verdict;

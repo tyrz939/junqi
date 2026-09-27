@@ -35,7 +35,7 @@ use crate::sim::Sim;
 use crate::state::{FactKey, JournalKind, Source};
 
 pub const MAGIC: [u8; 4] = *b"JTRC";
-pub const TRACE_VERSION: u16 = 1;
+pub const TRACE_VERSION: u16 = 2;
 /// The camera, cells (QUEST-TREE.md §1).
 pub const VIEW_W: i32 = jane_core::view::VIEW_W_CELLS as i32;
 pub const VIEW_H: i32 = jane_core::view::VIEW_H_CELLS as i32;
@@ -136,6 +136,10 @@ pub struct Sample {
     pub in_view: InView,
     /// Things in view for the first time this session (props with a verb, units, places).
     pub new_things: u16,
+    /// Of those, landmarks: a thing with words, a door, a fire, a bed or a bench, a person who
+    /// talks, a patch's edge (what a person would remember the walk by; not a herb, a rock, a
+    /// rabbit).
+    pub new_landmarks: u16,
     /// Fog blocks seen for the first time since the last sample (the map growing).
     pub new_ground: u16,
 }
@@ -446,6 +450,7 @@ fn sample(sim: &Sim, v: &crate::View<'_>, seen: &mut SeatSeen, tick: u32) -> Sam
     let cam = camera(cell);
     let mut iv = InView::default();
     let mut new_things = 0u16;
+    let mut new_landmarks = 0u16;
     for u in v.units_in(cam) {
         let u = u.unit;
         if u.id == me.id || v.seat_of(u.id).is_some() || !u.alive {
@@ -457,15 +462,20 @@ fn sample(sim: &Sim, v: &crate::View<'_>, seen: &mut SeatSeen, tick: u32) -> Sam
         }
         if seen.units.insert((zi, u.id.get())) {
             new_things += 1;
+            if cat.combat.unit(u.def).talk.is_some() {
+                new_landmarks += 1;
+            }
         }
     }
     for p in v.props_in(cam) {
         let def = cat.story.prop(p.def);
         let Some(s) = v.prop_spawn(p) else { continue };
         let mut thing = false;
+        let mut landmark = false;
         if s.talk.is_some() {
             iv.readables += 1;
             thing = true;
+            landmark = true;
         }
         if !p.used && !s.loot.is_empty() {
             iv.pickups += 1;
@@ -474,10 +484,15 @@ fn sample(sim: &Sim, v: &crate::View<'_>, seen: &mut SeatSeen, tick: u32) -> Sam
         if s.to.is_some() || def.rest || def.bench {
             iv.places += 1;
             thing = true;
+            landmark = true;
         }
-        thing |= s.use_list.is_some() || def.push || def.carry;
+        landmark |= s.label.is_some();
+        thing |= landmark || s.use_list.is_some() || def.push || def.carry;
         if thing && seen.props.insert((zi, p.id.get())) {
             new_things += 1;
+            if landmark {
+                new_landmarks += 1;
+            }
         }
     }
     iv.pickups += v
@@ -493,6 +508,7 @@ fn sample(sim: &Sim, v: &crate::View<'_>, seen: &mut SeatSeen, tick: u32) -> Sam
             iv.sites += 1;
             if seen.sites.insert((zi, i as u16)) {
                 new_things += 1;
+                new_landmarks += 1;
             }
         }
     }
@@ -539,6 +555,7 @@ fn sample(sim: &Sim, v: &crate::View<'_>, seen: &mut SeatSeen, tick: u32) -> Sam
         region: region_ix(v.region()),
         in_view: iv,
         new_things,
+        new_landmarks,
         new_ground,
     }
 }

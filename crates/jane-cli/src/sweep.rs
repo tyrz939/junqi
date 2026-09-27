@@ -47,14 +47,15 @@ pub fn l4_table(x: &Experience) -> String {
         x.walk_to_play() % 100,
         m(x.night_unlit_first * 60)
     );
-    let long: Vec<_> = x.stretches_over(60).collect();
     let _ = writeln!(
         s,
-        "  empty walks (60 s or more, nothing new in view): {}; over 2 min {}; longest {} s; bare (nothing in view) {}",
-        long.len(),
-        x.stretches_over(120).count(),
-        long.iter().map(|s| s.secs).max().unwrap_or(0),
-        long.iter().filter(|s| s.bare).count()
+        "  walks over new ground with nothing new in view: {} of 30 s or more, {} of 60; with no new landmark: {} of 30 s or more, {} of 60, {} of 120, longest {} s",
+        x.stretches_over(30).count(),
+        x.stretches_over(60).count(),
+        x.plain_over(30).count(),
+        x.plain_over(60).count(),
+        x.plain_over(120).count(),
+        x.plain_over(30).map(|s| s.secs).max().unwrap_or(0)
     );
     for b in FIRST_HOUR.iter().filter(|b| b.models.contains(&x.model.as_str())) {
         let v = first_hour_value(x, b);
@@ -106,6 +107,23 @@ pub fn audit(args: &[String]) -> Result<(), String> {
     let bad = steps.iter().filter(|a| a.verdict.bad()).count();
     println!("seed {seed}: {} steps and hand-ins, {bad} with a problem", steps.len());
     print!("{}", truth_rows(&steps, all));
+    // One quest's reading, phrase by phrase: what each named, and the nearest thing so called.
+    if let Some(q) = flag("--quest") {
+        for a in steps.iter().filter(|a| a.quest == q) {
+            println!("{} {} \"{}\" at {:?}: {}", a.quest, a.step, a.text, a.at, a.verdict.word());
+            for p in &a.phrases {
+                println!(
+                    "    {} {:?} (name {:?}){}: nearest {:?}, {}",
+                    p.prep,
+                    p.words,
+                    p.proper,
+                    if p.way { " a way" } else { "" },
+                    p.nearest,
+                    if p.ok { "ok" } else { "no" }
+                );
+            }
+        }
+    }
     let os = jane_bot::audit::omens(&bps);
     for o in &os {
         println!(
@@ -511,22 +529,24 @@ pub fn report(runs: &[Run], audits: &[SeedAudit], secs: u64, long: u32, short: u
     let _ = writeln!(s, "### 1b. Where the world is empty\n");
     let _ = writeln!(
         s,
-        "Runs of walking out of doors (not talking, not fighting) with nothing new on the 48 x 27 screen (no prop with a verb, no creature or person, no patch's edge not seen before) for 60 s or more (PLAN.md §2.4: something visible every 20 to 30 s, a deliberate empty stretch at most about 2 minutes). *Bare*: nothing at all on screen the whole way. Longest first, one per place (a 64-cell square), every model.\n"
+        "Walking out of doors (not talking, not fighting) over ground the map had not charted, measured two ways (single seats; a pair shares one map). **Nothing new**: no prop with a verb, no creature or person, no patch's edge not seen before came on the 48 x 27 screen. **No landmark**: nothing new a person would remember the walk by (a sign or anything with words, a door, a fire, a bed, a bench, a person who talks, a patch's edge); herbs, rocks and rabbits do not count. PLAN.md §2.4: something visible every 20 to 30 s, a deliberate empty stretch at most about 2 minutes. Runs of 30 s or more are listed.\n"
     );
-    let mut all: Vec<(&Run, &jane_bot::experience::Stretch, u8)> = Vec::new();
-    for r in runs {
-        for x in &r.xs {
-            for st in &x.stretches {
-                all.push((r, st, x.seat));
-            }
+    let _ = writeln!(
+        s,
+        "The longest walks with no new landmark, one per place (a 64-cell square), every seed and single-seat model. *Bare*: nothing at all on screen the whole way.\n"
+    );
+    let mut all: Vec<(&Run, &jane_bot::experience::Stretch)> = Vec::new();
+    for r in runs.iter().filter(|r| r.xs.len() == 1) {
+        for st in r.xs[0].plain_over(30) {
+            all.push((r, st));
         }
     }
-    all.sort_by_key(|(r, st, _)| (std::cmp::Reverse(st.secs), r.seed, st.frame));
+    all.sort_by_key(|(r, st)| (std::cmp::Reverse(st.secs), r.seed, st.frame));
     let mut seen_places: std::collections::BTreeSet<(u32, i32, i32)> = std::collections::BTreeSet::new();
     let _ = writeln!(s, "| # | Seed | Model | At min | Secs | From | To | Region | Bare | Doing |");
     let _ = writeln!(s, "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |");
     let mut n = 0;
-    for (r, st, seat) in &all {
+    for (r, st) in &all {
         let key = (r.seed, st.from.0 / 64, st.from.1 / 64);
         if !seen_places.insert(key) {
             continue;
@@ -537,10 +557,9 @@ pub fn report(runs: &[Run], audits: &[SeedAudit], secs: u64, long: u32, short: u
         }
         let _ = writeln!(
             s,
-            "| {n} | {} | {}{} | {} | {} | {},{} | {},{} | {} | {} | {} |",
+            "| {n} | {} | {} | {} | {} | {},{} | {},{} | {} | {} | {} |",
             r.seed,
             r.model,
-            if r.model.starts_with("pair") { format!(" seat {seat}") } else { String::new() },
             m(st.frame),
             st.secs,
             st.from.0,
@@ -555,22 +574,32 @@ pub fn report(runs: &[Run], audits: &[SeedAudit], secs: u64, long: u32, short: u
     let _ = writeln!(s);
     let _ = writeln!(
         s,
-        "Per seed and model: empty walks of 60 s or more, of 2 minutes or more, and the share of walking seconds spent in them.\n"
+        "Per seed and model, walks over new ground: with nothing new, 30 s or more / 60 s or more; with no new landmark, 30 s or more / 60 s or more / 120 s or more; and the share of walking seconds with no new landmark in a run of 30 s or more.\n"
     );
-    let _ = writeln!(s, "| Seed | {} |", ALL_MODELS.join(" | "));
-    let _ = writeln!(s, "| --- |{}", " --- |".repeat(ALL_MODELS.len()));
+    let singles: Vec<&str> = ALL_MODELS.iter().copied().filter(|m| !m.starts_with("pair")).collect();
+    let _ = writeln!(s, "| Seed | {} |", singles.join(" | "));
+    let _ = writeln!(s, "| --- |{}", " --- |".repeat(singles.len()));
+    let mut by_region = [(0u32, 0u32); 3];
     for &sd in &seeds {
         let mut row = format!("| {sd} |");
-        for md in ALL_MODELS {
-            match runs.iter().find(|r| r.seed == sd && r.model == md) {
+        for md in &singles {
+            match runs.iter().find(|r| r.seed == sd && r.model == *md) {
                 Some(r) => {
                     let x = &r.xs[0];
-                    let secs: u32 = x.stretches.iter().map(|s| s.secs).sum();
+                    let secs: u32 = x.plain_over(30).map(|s| s.secs).sum();
+                    for st in x.plain_over(30) {
+                        let e = &mut by_region[usize::from(st.region).min(2)];
+                        e.0 += 1;
+                        e.1 += st.secs;
+                    }
                     let _ = write!(
                         row,
-                        " {} / {} / {}% |",
+                        " {} / {} ; {} / {} / {} ; {}% |",
+                        x.stretches_over(30).count(),
                         x.stretches_over(60).count(),
-                        x.stretches_over(120).count(),
+                        x.plain_over(30).count(),
+                        x.plain_over(60).count(),
+                        x.plain_over(120).count(),
                         secs * 100 / x.walk_samples.max(1)
                     );
                 }
@@ -578,6 +607,15 @@ pub fn report(runs: &[Run], audits: &[SeedAudit], secs: u64, long: u32, short: u
             }
         }
         let _ = writeln!(s, "{row}");
+    }
+    let _ = writeln!(s);
+    let _ = writeln!(
+        s,
+        "By region, every single-seat run: walks of 30 s or more with no new landmark, and their seconds.\n"
+    );
+    let _ = writeln!(s, "| Region | Walks | Seconds |\n| --- | --- | --- |");
+    for (i, (c, sec)) in by_region.iter().enumerate() {
+        let _ = writeln!(s, "| {} | {c} | {sec} |", REGIONS[i]);
     }
     let _ = writeln!(s);
 
@@ -639,7 +677,7 @@ pub fn report(runs: &[Run], audits: &[SeedAudit], secs: u64, long: u32, short: u
     let _ = writeln!(s, "## 2. Every run\n");
     let _ = writeln!(
         s,
-        "| Seed | Model | Ended | Played, min | Quests done | Deaths (an hour) | No objective, min | Looking, min | Backtrack | Empty walks >= 60 s | Walk:play | ms |"
+        "| Seed | Model | Ended | Played, min | Quests done | Deaths (an hour) | No objective, min | Looking, min | Backtrack | No landmark >= 30 s | Walk:play | ms |"
     );
     let _ = writeln!(s, "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |");
     for r in runs {
@@ -659,7 +697,7 @@ pub fn report(runs: &[Run], audits: &[SeedAudit], secs: u64, long: u32, short: u
                 m(x.idle_by_hour.iter().sum()),
                 m(x.search_by_hour.iter().sum()),
                 x.backtrack_cells * 100 / x.walked_cells.max(1),
-                x.stretches_over(60).count(),
+                x.plain_over(30).count(),
                 x.walk_to_play() / 100,
                 x.walk_to_play() % 100,
                 r.ms
@@ -805,15 +843,19 @@ pub fn report(runs: &[Run], audits: &[SeedAudit], secs: u64, long: u32, short: u
     s
 }
 
-/// Why the Lost could not find a step, weighing the audit: the words (they name something not
-/// built, or name it far off), the placement (off any road), or both; "the words hold" when the
-/// audit found nothing wrong and she still did not find it (too little to go on, or too far).
+/// Why the Lost could not find a step, weighing L5's verdicts on the seeds she looked:
+/// **text** (the words name what is not built, or not near it), **unposted** (the name the words
+/// use is written up on nothing she can see near the place: text and placement both),
+/// **placement** (the thing is off the roads), **a dungeon's door** (the words place a dungeon by
+/// a region or a landmark she had not seen). "The words hold" when the audit found nothing wrong:
+/// what they name is there and posted, and she still did not come on it in twenty minutes (too
+/// far from where she was, or among too much else).
 fn why(v: &[Looked], audits: &[SeedAudit], q: u16, i: u8) -> String {
+    use jane_bot::audit::Verdict;
     let cat = jane_data::catalog();
-    let mut text = 0;
-    let mut place = 0;
-    let mut far = Vec::new();
-    for x in v {
+    let (mut text, mut unposted, mut place, mut door) = (Vec::new(), Vec::new(), Vec::new(), Vec::new());
+    let mut unpointed = Vec::new();
+    for x in v.iter().filter(|x| x.2) {
         let Some(a) = audits
             .iter()
             .find(|a| a.0 == x.0)
@@ -822,22 +864,45 @@ fn why(v: &[Looked], audits: &[SeedAudit], q: u16, i: u8) -> String {
             continue;
         };
         match &a.verdict {
-            jane_bot::audit::Verdict::Unbuilt(_) | jane_bot::audit::Verdict::Far(_) => text += 1,
-            jane_bot::audit::Verdict::OffRoad(_) => place += 1,
-            _ => {}
-        }
-        if let Some(d) = a.to_road.filter(|&d| d > jane_bot::audit::HALF_SCREEN) {
-            place += 1;
-            far.push(format!("{} cells off the road on seed {}", d, x.0));
+            Verdict::Unbuilt(_) | Verdict::Far(_) => text.push(x.0),
+            Verdict::Unposted(_) => unposted.push(x.0),
+            Verdict::OffRoad(_) => place.push(x.0),
+            Verdict::Elsewhere { .. } => door.push(x.0),
+            _ => {
+                if a.to_road.is_some_and(|d| d > jane_bot::audit::HALF_SCREEN) {
+                    place.push(x.0);
+                }
+                if a.pointed == Some(false) {
+                    unpointed.push(x.0);
+                }
+            }
         }
     }
-    let base = match (text > 0, place > 0) {
-        (true, true) => "both: the words and where it stands",
-        (true, false) => "text: the words name what is not there",
-        (false, true) => "placement: off the roads",
-        (false, false) => "the words hold, but name too little to find it by",
-    };
-    if far.is_empty() { base.to_owned() } else { format!("{base} ({})", far.join(", ")) }
+    let list = |v: &[u32]| v.iter().map(u32::to_string).collect::<Vec<_>>().join(",");
+    let mut parts = Vec::new();
+    if !unposted.is_empty() {
+        parts.push(format!("unposted: the name is on nothing she can see there (seeds {})", list(&unposted)));
+    }
+    if !text.is_empty() {
+        parts.push(format!("text: what the words name is not there or not near (seeds {})", list(&text)));
+    }
+    if !place.is_empty() {
+        parts.push(format!("placement: off the roads (seeds {})", list(&place)));
+    }
+    if !unpointed.is_empty() {
+        parts.push(format!(
+            "no way in the words: a place's name, written only at the place; no sign by a road points to it (seeds {})",
+            list(&unpointed)
+        ));
+    }
+    if !door.is_empty() {
+        parts.push(format!("a dungeon's door she never had on screen (seeds {})", list(&door)));
+    }
+    if parts.is_empty() {
+        "the words hold: named and posted, not come on in 20 min".to_owned()
+    } else {
+        parts.join("; ")
+    }
 }
 
 /// Deaths of `x`'s seat with the other seat in another zone or more than a screen away, by the

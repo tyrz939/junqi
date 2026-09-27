@@ -73,10 +73,10 @@ fn the_first_hour_holds_its_bands() {
     }
     for x in runs.iter().filter(|x| x.model == "explorer") {
         println!(
-            "nothing new in view, explorer, seed {}: {} over 1 min, {} over 2 min (band: 3, 0)",
+            "explorer, seed {}: new ground with no new landmark, {} over 1 min, {} over 2 min (band: 3, 0)",
             x.seed,
-            x.stretches_over(60).count(),
-            x.stretches_over(120).count()
+            x.plain_over(60).count(),
+            x.plain_over(120).count()
         );
     }
     assert!(bad.is_empty(), "{}", bad.join("\n"));
