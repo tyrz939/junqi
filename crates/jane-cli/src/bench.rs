@@ -83,7 +83,7 @@ fn ms(ns: u64) -> String {
 }
 
 /// `"key": integer` pairs from the thresholds file: enough JSON for a flat file this tool writes.
-fn read_gates(text: &str) -> Vec<(String, u64)> {
+pub(crate) fn read_gates(text: &str) -> Vec<(String, u64)> {
     let mut out = Vec::new();
     let mut rest = text;
     while let Some(q) = rest.find('"') {
@@ -212,6 +212,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
     match args.first().map(String::as_str) {
         Some("gen") => gen_bench(&args[1..]),
         Some("frames") => frames(&args[1..]),
+        Some("sim") => crate::bench_sim::run(&args[1..]),
         Some("tune") => tune(&args[1..]),
         _ => Err(format!("usage:\n{USAGE}{USAGE_TUNE}")),
     }

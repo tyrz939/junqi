@@ -8,5 +8,11 @@
     "county_build_solve": 300000,
     "dungeon": 15000,
     "new_game": 500000
+  },
+  "sim_source": "PORT.md §9.4's median and p99 tick, over the last quarter of `jane bench sim` (a Reader, 120 minutes from New Game); late_frame_mean is the whole frame, step, bot and tape hash (5000 frames/s)",
+  "sim": {
+    "late_tick_p50": 100,
+    "late_tick_p99": 500,
+    "late_frame_mean": 200
   }
 }
