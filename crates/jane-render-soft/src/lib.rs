@@ -3,6 +3,7 @@
 
 pub mod atmos;
 pub mod blit;
+pub mod glow;
 pub mod grade;
 pub mod lightmap;
 pub mod silhouette;
@@ -12,9 +13,12 @@ use std::time::Instant;
 
 use jane_present::frame::CHUNK_PX;
 use jane_present::frame::SkyLook;
-use jane_present::{AtlasPages, Backend, Caps, Depth, Frame, FrameStats, FrameTimes, Page, Pass, StatPass, Tier};
+use jane_present::{
+    AtlasPages, Backend, Caps, Depth, Features, Frame, FrameStats, FrameTimes, Page, Pass, StatPass, Tier,
+};
 
 use crate::blit::Target;
+use crate::glow::Glow;
 use crate::lightmap::LightMap;
 use crate::silhouette::Mask;
 
@@ -32,6 +36,13 @@ pub struct Soft {
     heights: Vec<u8>,
     /// The light buffer at a quarter of the canvas.
     lights: LightMap,
+    /// What glows this frame and the bloom's buffers (§1.3 `glow`, `bloom`).
+    glow: Glow,
+    /// Each page's glowing texels, sorted by index.
+    page_glow: Vec<Vec<(u32, u16)>>,
+    /// The `glow` row: lit windows and lamp glass added over the lightmap, and the bloom made of
+    /// them.
+    glow_on: bool,
     /// Pixels written by the last frame (the bench's proxy, §1.12).
     pub pixels_written: u64,
     /// The CPU's time per pass (§1.12); never read by the pixel path.
@@ -40,7 +51,7 @@ pub struct Soft {
 
 impl Soft {
     pub fn new() -> Soft {
-        Soft::default()
+        Soft { glow_on: Features::of(Tier::T0).glow, ..Soft::default() }
     }
 
     /// The last frame drawn: pixels, width, height.
@@ -65,6 +76,17 @@ impl Backend for Soft {
             albedo: p.albedo.clone(),
             ..Page::default()
         }));
+        self.page_glow.clear();
+        self.page_glow.extend(pages.pages.iter().map(|p| {
+            let mut g = p.glow.clone();
+            g.sort_unstable();
+            g
+        }));
+    }
+
+    /// The one row T0 draws itself: `glow` (the bloom comes in the frame's `Post`).
+    fn set_features(&mut self, f: &Features) {
+        self.glow_on = f.glow;
     }
 
     fn draw(&mut self, frame: &Frame) {
@@ -85,6 +107,9 @@ impl Backend for Soft {
             self.heights.clear();
             self.heights.resize(n, 0);
         }
+        self.glow.clear();
+        // Whether the glow was added over the light (the bloom is made of it).
+        let mut glowed = false;
         let t = &mut Target { px: &mut self.fb, w: i32::from(self.w), h: i32::from(self.h) };
         pass_us[StatPass::Sky as usize] = start.elapsed().as_micros() as u32;
         // The sky, once drawn, keeps the terrain inside the zone (its chunks paint the frame's
@@ -121,6 +146,11 @@ impl Backend for Soft {
                         }
                         written += (CHUNK_PX * CHUNK_PX) as u64;
                     }
+                    if self.glow_on {
+                        for c in frame.chunks_in(chunks) {
+                            self.glow.chunk(t, &frame.layers_of(c).glow, CHUNK_PX, (c.x, c.y), top);
+                        }
+                    }
                 }
                 Pass::Sky(s) => {
                     sky = Some(s);
@@ -143,13 +173,24 @@ impl Backend for Soft {
                 // What the sky is doing reached T0 through the ambient already, and the rain is
                 // particles. Light shafts are T2's, which a T0 frame never holds (§1.3).
                 Pass::Weather(_) | Pass::Rays { .. } => {}
-                // The grade, as T2 draws it (§1.9): the tiers are one look.
-                Pass::Post(p) => written += grade::Grade::new(&p).apply(t),
+                // The bloom of what glows, then the grade with its afterglow, as T2 draws them
+                // (§1.9): the tiers are one look.
+                Pass::Post(p) => {
+                    if glowed && p.bloom > 0 {
+                        written += self.glow.bloom(t, u32::from(p.bloom) * 358 / 255);
+                    }
+                    written += grade::Grade::with_sky(&p, sky.as_ref(), frame.canvas).apply(t);
+                }
                 Pass::Sprites { cmds, .. } => {
                     for s in frame.sprites_in(cmds) {
                         if let Some(page) = self.atlas.pages.get(usize::from(s.page)) {
                             calls += 1;
                             blit::sprite(t, page, &self.atlas.clut, s.src, i32::from(s.x), i32::from(s.y), s.flags);
+                            if self.glow_on {
+                                let glow = &self.page_glow[usize::from(s.page)];
+                                let at = (i32::from(s.x), i32::from(s.y));
+                                self.glow.sprite(t, page, glow, &self.atlas.clut, s.src, at, s.flags);
+                            }
                             written += u64::from(s.src.w) * u64::from(s.src.h);
                         }
                     }
@@ -163,11 +204,15 @@ impl Backend for Soft {
                             silhouette::cast(&mut self.mask, page, s, c, k);
                         }
                     }
+                    // A glowing px the shadow darkens still glows: checked before, taken after.
+                    self.glow.check(t);
                     written += silhouette::apply(t, &mut self.mask, shade, &self.heights);
+                    self.glow.refresh(t);
                 }
                 // T0 lights by the lightmap (§1.7): the ambient, the sun's share already in it,
                 // and every point light's pool; by the ambient alone when no light shows.
                 Pass::Lights { ambient, points, .. } => {
+                    self.glow.check(t);
                     let points = frame.lights_in(points);
                     if !points.is_empty() {
                         self.lights.build((t.w, t.h), ambient, points);
@@ -175,6 +220,11 @@ impl Backend for Soft {
                     } else if ambient.iter().any(|&c| c < 254) {
                         blit::multiply(t, ambient);
                         written += n as u64;
+                    }
+                    // Lamp glass and lit windows glow over the light (T2's emissive, unlit).
+                    if self.glow_on && self.glow.any() {
+                        written += self.glow.add(t);
+                        glowed = true;
                     }
                 }
             }

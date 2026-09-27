@@ -159,6 +159,9 @@ impl Atlas {
                     page.normal[i] = t.normal;
                     page.emissive[i] = t.emissive.0;
                     page.height[i] = t.height;
+                } else if t.albedo.is_opaque() && t.emissive.is_opaque() {
+                    // T0 keeps what glows sparse: a few texels a lamp, a window.
+                    page.glow.push((i as u32, t.emissive.0));
                 }
             }
         }
@@ -302,6 +305,22 @@ mod tests {
                 assert_eq!(page.normal[i], lamp.normal_at(x as i32, y as i32));
             } else {
                 assert!(page.normal.is_empty() && page.emissive.is_empty() && page.height.is_empty());
+            }
+        }
+    }
+
+    /// T0's atlas has no emissive layer but keeps what glows sparse (§1.3 `glow`): lamp glass and
+    /// lit windows, each on an opaque texel.
+    #[test]
+    fn a_t0_atlas_keeps_what_glows_sparse() {
+        let p = crate::Present::new(crate::Tier::T0);
+        let pages = &p.atlas().pages;
+        let n: usize = pages.iter().map(|g| g.glow.len()).sum();
+        assert!(n > 100 && n < 200_000, "{n} glowing texels");
+        for g in pages {
+            assert!(!g.lit());
+            for &(i, e) in &g.glow {
+                assert!(e > 1 && g.albedo[i as usize] > 1);
             }
         }
     }

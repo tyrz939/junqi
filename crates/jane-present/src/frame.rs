@@ -698,7 +698,14 @@ pub struct ChunkLayers {
     pub surface: Vec<u8>,
     /// The chunk's water cells, chunk-local `(x, y, shimmer phase)`: every tier.
     pub water: Vec<(u8, u8, u8)>,
+    /// T0 only (no emissive layer): what glows in the chunk, sparse, each px's index in the chunk
+    /// and its colour `0xAARRGGBB`, at most [`GLOW_CAP`] (reserved once, so painting never
+    /// allocates). The lit tiers read the emissive layer.
+    pub glow: Vec<(u16, u32)>,
 }
+
+/// The most glowing px a T0 chunk keeps (a street of lit windows is a few hundred).
+pub const GLOW_CAP: usize = 2048;
 
 /// A chunk px beyond the zone's edge: the sky shows there.
 pub const SURFACE_OUTSIDE: u8 = 254;
@@ -709,7 +716,13 @@ impl ChunkLayers {
         let n = (CHUNK_PX * CHUNK_PX) as usize;
         let water = Vec::with_capacity((CHUNK_CELLS * CHUNK_CELLS) as usize);
         if tier == Tier::T0 {
-            ChunkLayers { albedo: vec![0; n], height: vec![0; n], water, ..ChunkLayers::default() }
+            ChunkLayers {
+                albedo: vec![0; n],
+                height: vec![0; n],
+                water,
+                glow: Vec::with_capacity(GLOW_CAP),
+                ..ChunkLayers::default()
+            }
         } else {
             ChunkLayers {
                 albedo: vec![0; n],
@@ -718,6 +731,7 @@ impl ChunkLayers {
                 height: vec![0; n],
                 surface: vec![0; n],
                 water,
+                glow: Vec::new(),
             }
         }
     }

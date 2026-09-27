@@ -108,6 +108,13 @@ impl Terrain {
         if layers.has_height() {
             layers.height.copy_from_slice(&c.height);
         }
+        layers.glow.clear();
+        if !lit {
+            // T0 keeps what glows sparse (§1.3 `glow`): its lit windows, up to the reserve.
+            let room = layers.glow.capacity();
+            let glowing = c.emissive.iter().enumerate().filter(|(_, ix)| ix.is_opaque());
+            layers.glow.extend(glowing.take(room).map(|(k, &ix)| (k as u16, terrain::pack(ix))));
+        }
         if lit {
             layers.normal.copy_from_slice(&c.normal);
             for (e, &ix) in layers.emissive.iter_mut().zip(&c.emissive) {
@@ -143,6 +150,10 @@ impl Terrain {
                 }
             }
             layers.water.retain(|&(x, y, _)| x0 + i32::from(x) < w && y0 + i32::from(y) < h);
+            layers.glow.retain(|&(k, _)| {
+                let (x, y) = (i32::from(k) % CHUNK_PX, i32::from(k) / CHUNK_PX);
+                x0 + x / CELL < w && y0 + y / CELL < h
+            });
         }
         let placed = &mut self.placed[usize::from(slot)];
         placed.clear();
@@ -155,6 +166,7 @@ impl Terrain {
         self.placed[usize::from(slot)].clear();
         layers.surface.fill(0);
         layers.water.clear();
+        layers.glow.clear();
     }
 
     /// What the chunk in `slot` stands: foot px in the chunk, and the sprite.
