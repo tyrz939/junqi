@@ -60,9 +60,10 @@ pub fn first(v: &View<'_>, cx: &crate::task::Ctx, reach: &Reach) -> Option<(Task
     if let Some(r) = mend_first(v, reach) {
         return Some(r);
     }
-    // The stove once, the first time she can walk to it: it is where she will wake (the county's
+    // The stove once, the first time she passes near it: it is where she will wake (the county's
     // door is shut after four, and a woman who wakes at the Halt is not coming back in today).
-    if let Some(s) = stove(v, reach).filter(|s| !cx.used.contains_key(&(v.zone(), s.id))) {
+    let passing = |s: &&jane_sim::Prop| crate::nav::dist(v.body().pos, sense::prop_centre(s)) < i64::from(40 * CELL_FX);
+    if let Some(s) = stove(v, reach).filter(|s| !cx.used.contains_key(&(v.zone(), s.id))).filter(passing) {
         return Some((Task::Use(UseProp::new(s.id)), Try::Rest(s.id)));
     }
     if !verb {
@@ -239,18 +240,20 @@ pub fn fight(v: &View<'_>, cx: &mut crate::task::Ctx, reach: &Reach) -> Option<c
     let me = v.body();
     let rotunda = v.sym("museum_rotunda").and_then(|s| v.rect(s))?;
     let (x, y) = me.pos.cell();
+    // Worn down by the building's small fry with the stove anywhere she can walk to: to the stove,
+    // not into the apples. Every apple is wanted in the rotunda, which has no fire (a run that
+    // ate its apples on the armours lost the Attendant with him nearly down); the small fry
+    // follow her to the stove, and it mends her all the same.
+    let boss_on = sense::enemies(v).into_iter().any(|u| crate::fight::on_me(v, u) && cat.combat.unit(u.def).boss);
+    if !boss_on && sense::hp_permille(me) < crate::fight::EAT_BELOW && crate::fight::has_food(v) {
+        if let Some(s) = stove(v, reach) {
+            return Some(use_now(v, cx, s));
+        }
+    }
     // The Attendant anywhere near (a kite that strays from the rotunda must not become a flight:
     // a man let go home mends); the Shot-Firer only where she can walk to him (he stands in
     // combat with her from the far side of a locked door).
     let near = |b: &jane_sim::Unit, r: i32| dist(me.pos, b.pos) <= i64::from(r * CELL_FX);
-    // Worn down by the building's small fry with the stove a walk away: to the stove, not into
-    // the apples (they are for the rotunda, where there is no fire).
-    let boss_on = sense::enemies(v).into_iter().any(|u| crate::fight::on_me(v, u) && cat.combat.unit(u.def).boss);
-    if !boss_on && sense::hp_permille(me) < crate::fight::EAT_BELOW && crate::fight::has_food(v) {
-        if let Some(s) = stove(v, reach).filter(|s| dist(me.pos, sense::prop_centre(s)) < i64::from(70 * CELL_FX)) {
-            return Some(use_now(v, cx, s));
-        }
-    }
     let (boss, is_attendant) = match attendant(v)
         .filter(|b| crate::fight::on_me(v, b) && (rotunda.contains(x, y) || near(b, 40)))
     {
