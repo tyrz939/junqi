@@ -27,12 +27,18 @@
     "name": "Poison Globe", "description": "A slow globe of poison. Slow enough to walk around, if you are looking.", "icon": "spell_nature",
     "kind": "bolt", "school": "nature", "mp": 0, "energy": 0, "range": 30, "cooldown": 2,
     "gcdImmune": false, "needsTarget": true, "needsEnemy": true, "needsLos": true, "anim": "cast",
-    "power": { "stat": "spirit", "div": 4, "varDiv": 16 }, "speed": 2, "effect": "poisoned", "stop": 20, "glow": 20
+    "power": { "stat": "spirit", "div": 8, "varDiv": 32 }, "speed": 2, "effect": "poisoned", "stop": 20, "glow": 20
+  },
+  "gold_ring": {
+    "name": "Poison Ring", "description": "A ring of bolts, the way his snake spits them. He takes a breath between.", "icon": "spell_nature",
+    "kind": "bolt", "school": "nature", "mp": 0, "energy": 0, "range": 40, "cooldown": 6,
+    "gcdImmune": false, "needsTarget": true, "needsEnemy": true, "needsLos": false, "anim": "cast",
+    "power": { "stat": "spirit", "div": 8, "varDiv": 32 }, "speed": 2, "count": 15, "fan": 360, "stop": 20, "glow": 16
   },
   "gold_icebolt": {
     "name": "Icebolt", "description": "A bolt of frost. It was hers first.", "icon": "spell_frost",
     "kind": "bolt", "school": "frost", "mp": 4, "energy": 0, "range": 15, "cooldown": 3,
     "gcdImmune": false, "needsTarget": true, "needsEnemy": true, "needsLos": true, "anim": "cast",
-    "power": { "stat": "spirit", "div": 6, "varDiv": 24 }, "speed": 3, "effect": "chilled", "stop": 30, "glow": 28
+    "power": { "stat": "spirit", "div": 8, "varDiv": 32 }, "speed": 3, "effect": "chilled", "stop": 30, "glow": 28
   }
 }

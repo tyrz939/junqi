@@ -92,7 +92,7 @@
   "goldskin": {
     "name": "Gnox Goldskin", "faction": "undead", "controller": "ai",
     "strength": 134, "spirit": 150, "walk": 0.3, "run": 0.65, "aggro": 16, "leash": 50, "bounds": 1.25,
-    "book": ["melee_stun", "gold_globe", "snake_ring", "gold_icebolt"],
+    "book": ["melee_stun", "gold_globe", "gold_ring", "gold_icebolt"],
     "respawn": 0, "autoRegen": true, "loot": [], "sprite": "goldskin", "boss": true,
     "resist": { "physical": 0.8, "frost": 0.8, "fire": 0.8, "nature": 0.8, "blast": 0.8, "shock": 0.8 },
     "phases": [
@@ -108,7 +108,7 @@
         ]
       },
       {
-        "hpBelow": 0.5, "book": ["melee_stun", "snake_ring", "gold_globe"],
+        "hpBelow": 0.5, "book": ["melee_stun", "gold_ring", "gold_globe"],
         "onEnter": [
           { "do": "switch", "prop": "vault_brazier_a", "on": false },
           { "do": "switch", "prop": "vault_brazier_b", "on": false },
@@ -120,7 +120,7 @@
         ]
       },
       {
-        "hpBelow": 0.25, "book": ["melee_stun", "snake_ring", "gold_icebolt", "gold_globe"],
+        "hpBelow": 0.25, "book": ["melee_stun", "gold_ring", "gold_icebolt", "gold_globe"],
         "onEnter": [
           { "do": "switch", "prop": "vault_brazier_a", "on": false },
           { "do": "switch", "prop": "vault_brazier_b", "on": false },
