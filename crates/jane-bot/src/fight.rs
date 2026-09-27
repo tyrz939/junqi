@@ -103,7 +103,12 @@ pub fn retreat_point(
 }
 
 /// Running from something at `from`: to the retreat point, by the path there.
-pub fn away_from(v: &View<'_>, cx: &mut Ctx, from: jane_core::Vec2, tether: Option<(jane_core::Vec2, i64)>) -> InputFrame {
+pub fn away_from(
+    v: &View<'_>,
+    cx: &mut Ctx,
+    from: jane_core::Vec2,
+    tether: Option<(jane_core::Vec2, i64)>,
+) -> InputFrame {
     let me = v.body().pos;
     let far = cx.fight.retreat.filter(|r| {
         dist(*r, from) > dist(me, from) + i64::from(CELL_FX)
@@ -187,7 +192,8 @@ pub fn on_me(v: &View<'_>, u: &Unit) -> bool {
 
 /// Can it touch her from where it is? Something rooted to the spot (a statue, a cactus) that
 /// is still after her from beyond its longest reach is not a fight: running from it or back to
-/// it for ever is how a crawl stalls.
+/// it for ever is how a crawl stalls. What only bites reaches no further than a step past its
+/// bite (the garden's seedlings); what throws, a few cells past its throw.
 pub fn can_reach(v: &View<'_>, u: &Unit) -> bool {
     let cat = jane_data::catalog();
     let d = cat.combat.unit(u.def);
@@ -195,7 +201,9 @@ pub fn can_reach(v: &View<'_>, u: &Unit) -> bool {
         return true;
     }
     let range = d.book.iter().map(|&s| cat.combat.spell(s).range.0).max().unwrap_or(0);
-    gap(v.body(), u) <= i64::from(range) + i64::from(4 * CELL_FX)
+    let bites = d.book.iter().all(|&s| cat.combat.spell(s).kind == SpellKind::Melee);
+    let margin = if bites { CELL_FX } else { 4 * CELL_FX };
+    gap(v.body(), u) <= i64::from(range) + i64::from(margin)
 }
 
 /// Has she lately found no way to it?

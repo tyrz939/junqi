@@ -173,7 +173,9 @@ impl Nav {
         let now = v.frame();
         let off = &self.keep_off;
         let seen_by = |c: Vec2, hard: bool| {
-            off.iter().filter(move |&&(o, r, k)| (k == 0) == hard && dist(o, c) <= r && v.sight(o, c)).map(|&(_, _, k)| k)
+            off.iter()
+                .filter(move |&&(o, r, k)| (k == 0) == hard && dist(o, c) <= r && v.sight(o, c))
+                .map(|&(_, _, k)| k)
         };
         let hard = !off.is_empty() && seen_by(Vec2::centre(from.0, from.1), true).next().is_none();
         let step = |_: (i32, i32), (cx, cy): (i32, i32)| -> Option<u32> {
