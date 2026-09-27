@@ -28,16 +28,20 @@ pub const USAGE: &str = "  sheet layers <what> [--frame F] [--out DIR]
   sheet scene [--seed N] [--minutes M | --ticks T] [--model reader|rusher] [--night | --hour H[:MM]]
               [--wide] [--backend soft|gl2|wgpu] [--at ZONE[:MARK] | --at MARK]
               [--weather clear|mist|rain|storm] [--cast SPELL[:TICKS]] [--rows KEY=V,..]
-              [--film N[:EVERY]] [--crop X,Y,W,H] [--zoom Z] [--out PATH.png | --out DIR]
+              [--film N[:EVERY]] [--crop X,Y,W,H] [--zoom Z] [--layers] [--show-sun]
+              [--out PATH.png | --out DIR]
                                       a model plays the seed from New Game (default 1 minute), then one
                                       frame is drawn headless through the presenter and soft (T0), or
                                       gl2 (T1, a hidden window's GL context) or wgpu (T2) with the gpu
                                       feature; --night sets the clock to 22:00 first; --at travels to a
                                       zone's mark (its way in by default; a bare mark is the county's)
-                                      first, god on; --weather holds the sky; --cast casts east;
-                                      --rows sets Features rows; --film writes N more ticks' frames;
-                                      --wide draws 21:9 (1008 x 432); --crop and --zoom write a close
-                                      look; gl2 takes bench frames' row flags
+                                      first, god on: a frame inside a dungeon; --weather holds the sky;
+                                      --cast casts east; --rows sets Features rows; --film writes N more
+                                      ticks' frames; --wide draws 21:9 (1008 x 432); --crop and --zoom
+                                      write a close look; gl2 takes bench frames' row flags; --layers
+                                      also writes the frame's heights and the T2 height field (a px h up
+                                      stood rows_up(h) rows down), --show-sun draws wgpu's sun term
+                                      alone (red reached, green N dot L)
   sheet ui [screen ...] [--out DIR]   the UI in states play rarely shows at once (hud, dead, choice,
                                       tooltip, popover, drag, pause), headless through soft
   sheet audio [--out DIR]             every sound effect, bed, song and scene as WAV, songs and scenes as
@@ -285,6 +289,13 @@ fn scene(args: &[String]) -> Result<(), String> {
         }
     };
     std::fs::write(&path, shot.png()).map_err(|e| format!("{}: {e}", path.display()))?;
+    if let Some((height, field)) = &shot.layers {
+        for (what, png) in [("height", height), ("field", field)] {
+            let p = path.with_extension(format!("{what}.png"));
+            std::fs::write(&p, png).map_err(|e| format!("{}: {e}", p.display()))?;
+            println!("{}", p.display());
+        }
+    }
     println!(
         "{}
 {}",

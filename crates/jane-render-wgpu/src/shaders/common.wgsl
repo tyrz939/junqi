@@ -23,7 +23,7 @@ struct Globals {
     tint: vec4<f32>,
     // Grade: lift (w: exposure).
     lift: vec4<f32>,
-    // x: bloom strength, y: ticks, z: emissive gain, w: unused.
+    // x: bloom strength, y: ticks, z: emissive gain, w: 1 to draw the sun's term alone (debug).
     misc: vec4<f32>,
     // The weather (PRESENTATION.md §1.9): rain, mist, how wet the ground is, a lightning flash,
     // each 0..1.
@@ -77,6 +77,15 @@ fn puddle_at(s: u32, w: vec2<f32>, h: f32) -> f32 {
     let edge = 0.72 - (g.weather.z - 0.35) * 0.3 + select(0.06, 0.0, kind == 1u);
     return select(0.0, 1.0, n > edge);
 }
+// How many rows up the screen a thing `h` px tall is drawn: four fifths, rounded up
+// (`jane_present::rows_up`, the 3/4 view's one projection).
+fn rows_up(h: u32) -> u32 {
+    return (h * 4u + 4u) / 5u;
+}
+
+// A px at or under this height is the ground's own relief (`jane_present::shadow::GROUND`): it
+// neither stands in the height field nor is lifted off the row it is drawn on.
+const GROUND: f32 = 4.5;
 
 // A full-canvas triangle.
 struct FullOut {

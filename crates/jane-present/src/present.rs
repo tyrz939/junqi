@@ -8,29 +8,30 @@
 //! Neither reads `GameState`, and neither writes anything but the presenter.
 
 use jane_core::action::{CameraMode, Facing};
+use jane_core::ids::SpellId;
 use jane_core::num::CELL_SHIFT;
 use jane_core::{Rect, ZoneId};
 use jane_data::{Controller, Faction, Region};
 use jane_sim::event::{Event, EventKind, events_for};
 use jane_sim::ids::PropIx;
 use jane_sim::view::View;
-use jane_core::ids::SpellId;
 
 use crate::atlas::{Atlas, RefId};
 use crate::backend::AtlasPages;
 use crate::camera::{Camera, alpha_256};
 use crate::chunks::{ChunkCache, LRU, Need};
+use crate::creatures::{self, Creatures};
 use crate::drawlist::{DrawCmd, DrawList};
 use crate::frame::{
     CANVAS_H, CANVAS_W, CELL, CHUNK_PX, Caster, ChunkCmd, ChunkId, Depth, FX_TO_CANVAS, Flags, Frame, Light, LightKind,
-    Pass, Post, Rgb, Span, SpriteCmd, Tier, Tint,
+    Pass, Post, Rgb, Span, SpriteCmd, Tier, Tint, height_of_rows, rows_up,
 };
 use crate::atmos::Atmosphere;
 use crate::fx::Fx;
 use crate::light::{Sky, flicker, lantern_lit, sky};
-use crate::creatures::{self, Creatures};
 use crate::people::{self, People};
 use crate::props::{self, Props};
+use crate::shadow;
 use crate::stand_in::{self, StandIns, UnitKind};
 use crate::terrain::Terrain;
 
@@ -59,6 +60,8 @@ const LANTERN: Rgb = [255, 190, 116];
 const FLAME_HEIGHT: i32 = 28;
 /// How many steps a second a flame's flicker walks (§1.7).
 const FLICKER_RATE: u32 = 10;
+/// A unit's draw key: its id with the top bit set (a prop's is its id).
+const UNIT_KEY: u32 = 0x8000_0000;
 
 /// Lights on screen at most, and how many of them throw shadows, by tier (§1.3 `max_lights`,
 /// §1.7: T1 the nearest 8, T2 the nearest 32).
@@ -108,6 +111,9 @@ struct PropRec {
     h: i32,
     look: RefId,
     flat: bool,
+    /// Set into a wall's face (a door, a lamp on its bracket): drawn over the face and standing
+    /// on the face's foot, so it throws no shadow of its own (the wall throws it).
+    flush: bool,
 }
 
 /// A prop light the view says is showing, this tick.
@@ -121,7 +127,6 @@ struct LightRec {
     colour: Rgb,
     radius: u16,
     size: u8,
-    clear: u8,
     /// Permille it dips as it flickers.
     dip: i16,
 }
@@ -163,6 +168,8 @@ pub struct Present {
     ground: DrawList,
     lights: Vec<LightRec>,
     light_scratch: Vec<PropIx>,
+    /// This frame's standing casters by draw key, `(key, sprite)`, sorted: what holds a light.
+    holders: Vec<(u32, u32)>,
     sky: Sky,
     /// The weather, the fog and the sky (§1.9), and the effects (§2).
     atmos: Atmosphere,
@@ -217,6 +224,7 @@ impl Present {
             ground: DrawList::default(),
             lights: Vec::with_capacity(256),
             light_scratch: Vec::with_capacity(1024),
+            holders: Vec::with_capacity(1024),
             sky: sky(12 * 7200, 0, false, 1000, Region::Lowfields),
             atmos,
             fx,
@@ -343,6 +351,7 @@ impl Present {
         self.read_props(view, area);
         self.read_lights(view, area);
         self.paint_chunks(view);
+        self.against_walls();
         let (clock, day) = view.clock();
         self.sky = sky(clock, day, view.indoor(), view.ambient().0, view.region());
         self.atmos.tick(view, self.tick);
@@ -461,6 +470,7 @@ impl Present {
                     if d.light.is_some() && !lit { stand.unlit(look) } else { look }
                 }),
                 flat: d.flat,
+                flush: false,
             });
         });
         props.sort_unstable_by_key(|p| p.id);
@@ -490,34 +500,18 @@ impl Present {
                 (x + w / 2, y + h / 2, 4, 6)
             } else {
                 let foot = y + h - i32::from(r.src.h) + i32::from(r.ay);
-                // A kit lamp shines from its lit glass; a stand-in from its demo glass.
-                let glass =
-                    kit.glass(d.sprite).or_else(|| stand.glass(look)).map_or(i32::from(r.height) * 2 / 3, i32::from);
+                // A kit lamp shines from its lit glass; a stand-in from its demo glass. The glass
+                // is counted in rows up from the canvas's foot; the light's height is true px
+                // over the sprite's own foot row (`rows_up`'s inverse).
+                let over_foot = i32::from(r.src.h) - i32::from(r.ay);
+                let glass = kit
+                    .glass(d.sprite)
+                    .or_else(|| stand.glass(look))
+                    .map_or(i32::from(r.height) * 2 / 3, |g| height_of_rows(i32::from(g) - over_foot));
                 // A low flame (a fire, a stove, a lantern on the floor) lights from over its
-                // tongues, as its light does in the air round it: a light at its glass would
-                // only graze the ground and throw no pool.
-                (x + w / 2, foot, glass.clamp(FLAME_HEIGHT, 60), if d.w == 1 { 6 } else { 10 })
-            };
-            // A light hung on a wall (a torch, a miner's lamp) stands on the floor in front of the
-            // wall, as high again as it was moved: the same px on screen, and the wall it hangs
-            // on no longer stands between it and the room it lights.
-            let (gy, height) = {
-                let wall = |cy: i32| {
-                    let f = view.tile(gx.div_euclid(CELL), cy).flags();
-                    f & jane_core::tile::F_SOLID != 0 && f & jane_core::tile::F_BLOCK_LOS != 0
-                };
-                let mut cy = gy.div_euclid(CELL);
-                let mut steps = 0;
-                while wall(cy) && steps < 4 {
-                    cy += 1;
-                    steps += 1;
-                }
-                if steps > 0 && steps < 4 {
-                    let front = cy * CELL + 4;
-                    (front, (height + front - gy).clamp(4, 255))
-                } else {
-                    (gy, height)
-                }
+                // tongues, as its light does in the air round it: a light at its glass would only
+                // graze the ground and throw no pool.
+                (x + w / 2, foot, glass.clamp(FLAME_HEIGHT, 90), if d.w == 1 { 6 } else { 10 })
             };
             lights.push(LightRec {
                 id: p.id.get(),
@@ -533,12 +527,83 @@ impl Present {
                     (if l.flicker.0 >= 200 { r * 3 / 2 } else { r }) as u16
                 },
                 size: size as u8,
-                // Its own prop throws no shadow on it: a post, a fire's flames and logs.
-                clear: if d.flat { 0 } else if d.w >= 3 || d.h >= 3 { 10 } else { (w.max(h) / 2 + 6).min(40) as u8 },
                 dip: l.flicker.0,
             });
         });
         lights.sort_unstable_by_key(|l| l.id);
+    }
+
+    /// A light standing inside the terrain's height field (a torch hung on a wall, whose sprite
+    /// stands on the wall's top) hangs from the wall's face instead: its ground point moves to
+    /// the nearest open ground within a cell and a half, toward the viewer first, and two px
+    /// clear of it. A light never shadows the wall it hangs on (PRESENTATION.md §1.7), and a
+    /// torch's pool lies on the floor it lights, not in the masonry, on every tier.
+    ///
+    /// And a prop drawn over a wall's face and standing on the face's foot (a door, a sign on the
+    /// wall) is set into it: its px halfway and three quarters up stand on its own foot row as
+    /// the face's there do. It throws no shadow of its own, so a door never shadows the wall it
+    /// is set in.
+    fn against_walls(&mut self) {
+        /// How far a light is looked for open ground, px.
+        const REACH: i32 = 24;
+        let (layers, chunks) = (&self.frame.layers, &self.chunks);
+        let (zw, zh) = (self.zone_cells.0 as i32 * CELL, self.zone_cells.1 as i32 * CELL);
+        let last: std::cell::Cell<Option<(ChunkId, Option<u16>)>> = std::cell::Cell::new(None);
+        // The terrain's drawn height at zone px (x, y).
+        let drawn = |x: i32, y: i32| -> i32 {
+            if x < 0 || y < 0 || x >= zw || y >= zh {
+                return 0;
+            }
+            let id = ChunkId { cx: (x / CHUNK_PX) as u16, cy: (y / CHUNK_PX) as u16 };
+            let slot = match last.get() {
+                Some((k, s)) if k == id => s,
+                _ => {
+                    let s = chunks.find(id).map(|f| f.0);
+                    last.set(Some((id, s)));
+                    s
+                }
+            };
+            let Some(l) = slot.and_then(|s| layers.get(usize::from(s))).filter(|l| l.has_height()) else { return 0 };
+            i32::from(l.height[((y % CHUNK_PX) * CHUNK_PX + x % CHUNK_PX) as usize])
+        };
+        // The height field there: the tallest terrain px standing on ground (x, y) (a px `h` up
+        // stands `rows_up(h)` rows below it, its field two rows deep).
+        let field = |x: i32, y: i32| -> i32 {
+            let mut most = 0;
+            for r in 0..=80 {
+                let h = drawn(x, y - r);
+                if h > 2 && (rows_up(h) == r || rows_up(h) == r + 1) {
+                    most = most.max(h);
+                }
+            }
+            most
+        };
+        let atlas = &self.atlas;
+        for p in &mut self.props {
+            let r = atlas.get(p.look);
+            let (cx, foot) = (p.x + p.w / 2, p.y + p.h - i32::from(r.src.h) + i32::from(r.ay));
+            let rows = i32::from(r.ay);
+            p.flush = !p.flat
+                && rows >= 8
+                && [rows / 2, rows * 3 / 4].into_iter().all(|up| {
+                    let h = drawn(cx, foot - up);
+                    h > shadow::GROUND && (rows_up(h) - up).abs() <= 1
+                });
+        }
+        for l in &mut self.lights {
+            if field(l.x, l.y) + 2 < i32::from(l.height) {
+                continue;
+            }
+            'out: for d in 1..=REACH {
+                for (dx, dy) in [(0, 1), (-1, 0), (1, 0), (0, -1)] {
+                    let (x, y) = (l.x + dx * d, l.y + dy * d);
+                    if field(x, y) <= 2 {
+                        (l.x, l.y) = (x + dx * 2, y + dy * 2);
+                        break 'out;
+                    }
+                }
+            }
+        }
     }
 
     /// Paints the chunks under the view (and a little round it) that want it: at most
@@ -657,10 +722,10 @@ impl Present {
                 continue;
             }
             let foot = p.y + p.h - cam.1;
-            let caster = (!p.flat).then(|| Caster {
+            let caster = (!p.flat && !p.flush).then(|| Caster {
                 sprite: 0,
                 foot: clamp16(x + i32::from(r.src.w) / 2, y + i32::from(r.ay)),
-                height: r.src.h.min(255) as u8,
+                height: r.top.max(1),
                 depth: (p.h / 4).clamp(4, 12) as u8,
             });
             let cmd = DrawCmd { y: foot, key: p.id, sprite: sprite(r, x, y, Flags::default()), caster };
@@ -686,7 +751,12 @@ impl Present {
                             y: fy,
                             key: 0x4000_0000 | u32::from(slot) << 10 | i as u32,
                             sprite: sprite(r, x, y, Flags::default()),
-                            caster: Some(Caster { sprite: 0, foot: clamp16(fx, fy), height: r.height, depth: fl.depth }),
+                            caster: Some(Caster {
+                                sprite: 0,
+                                foot: clamp16(fx, fy),
+                                height: r.top.max(1),
+                                depth: fl.depth,
+                            }),
                         });
                     }
                 }
@@ -713,10 +783,10 @@ impl Present {
                     colour: scale(LANTERN, k),
                     radius: LANTERN_RADIUS,
                     size: 5,
-                    // Her own body throws no shadow on her own lantern (a black arch behind her).
-                    clear: 26,
                     casts: true,
                     kind: LightKind::Point,
+                    // Her own: resolved to her sprite once the list is sorted.
+                    holder: Some(UNIT_KEY | u.id),
                 });
                 n_glows += 1;
             }
@@ -727,9 +797,9 @@ impl Present {
                     colour,
                     radius,
                     size: 8,
-                    clear: 0,
                     casts: false,
                     kind: LightKind::Point,
+                    holder: Some(UNIT_KEY | u.id),
                 });
                 n_glows += 1;
             }
@@ -753,7 +823,15 @@ impl Present {
                             cast_glow = Some(jane_data::catalog().combat.spell(spell).school);
                         }
                     }
-                    let pose = people::Pose { facing: u.facing, anim: u.anim, tick: self.tick, dead: u.dead, id: u.id, act, hurt };
+                    let pose = people::Pose {
+                        facing: u.facing,
+                        anim: u.anim,
+                        tick: self.tick,
+                        dead: u.dead,
+                        id: u.id,
+                        act,
+                        hurt,
+                    };
                     let (look, mirror) = self.people.frame(set, pose);
                     (look, mirror, 0)
                 }
@@ -788,15 +866,10 @@ impl Present {
             } else {
                 Tint::None
             };
-            let caster = (!u.dead).then(|| Caster {
-                sprite: 0,
-                foot: clamp16(sx, sy),
-                height: r.ay.clamp(1, 255) as u8,
-                depth: 5,
-            });
+            let caster = (!u.dead).then(|| Caster { sprite: 0, foot: clamp16(sx, sy), height: r.top.max(1), depth: 5 });
             self.standing.push(DrawCmd {
                 y: sy,
-                key: 0x8000_0000 | u.id,
+                key: UNIT_KEY | u.id,
                 sprite: sprite(r, x, y, Flags { mirror, tint }),
                 caster,
             });
@@ -815,9 +888,15 @@ impl Present {
                     if on_canvas(x, y, r.src.w, r.src.h) {
                         self.standing.push(DrawCmd {
                             y: qy,
-                            key: 0x8000_0000 | u.id,
+                            key: UNIT_KEY | u.id,
                             sprite: sprite(r, x, y, Flags { mirror: false, tint: Tint::None }),
-                            caster: None,
+                            // Each coil throws its own shadow, footed where it lies.
+                            caster: (!u.dead).then(|| Caster {
+                                sprite: 0,
+                                foot: clamp16(qx, qy),
+                                height: r.top.max(1),
+                                depth: 4,
+                            }),
                         });
                     }
                 }
@@ -840,7 +919,10 @@ impl Present {
                     caster: None,
                 });
                 if n_glows < glows.len() {
-                    let c = jane_art::palette::rgb(jane_art::palette::Ramp::at(jane_art::fx::school_ramp(school), jane_art::palette::Tone::Light));
+                    let c = jane_art::palette::rgb(jane_art::palette::Ramp::at(
+                        jane_art::fx::school_ramp(school),
+                        jane_art::palette::Tone::Light,
+                    ));
                     glows[n_glows] = Some(Light {
                         pos: (sx + dx, sy),
                         height: (-dy).clamp(0, 255) as u8,
@@ -848,8 +930,8 @@ impl Present {
                         radius: 64,
                         size: 4,
                         casts: false,
-                        clear: 0,
                         kind: LightKind::Point,
+                        holder: Some(UNIT_KEY | u.id),
                     });
                     n_glows += 1;
                 }
@@ -861,12 +943,15 @@ impl Present {
         f.sprites.extend(self.ground.sort(-SORT_MARGIN, rows).iter().map(|c| c.sprite));
         let ground = Span::since(g0, f.sprites.len());
         let s0 = f.sprites.len();
+        self.holders.clear();
         for c in self.standing.sort(-SORT_MARGIN, rows) {
             if let Some(k) = c.caster {
+                self.holders.push((c.key, f.sprites.len() as u32));
                 f.casters.push(Caster { sprite: f.sprites.len() as u32, ..k });
             }
             f.sprites.push(c.sprite);
         }
+        self.holders.sort_unstable();
         let standing = Span::since(s0, f.sprites.len());
         let casters = Span::since(0, f.casters.len());
 
@@ -885,14 +970,20 @@ impl Present {
                 colour: scale(l.colour, k),
                 radius: l.radius,
                 size: l.size,
-                clear: l.clear,
                 casts: true,
                 kind: LightKind::Point,
+                // The prop that carries it: its post, its bracket, its cage.
+                holder: Some(l.id),
             });
         }
         f.lights.extend(glows[..n_glows].iter().flatten());
         // The effects' lights: a bolt lights the wall it passes (§2).
         self.fx.lights(f, cam, alpha);
+        // A light never shadows what holds it: each holder's key to its sprite, or none.
+        let holders = &self.holders;
+        for l in &mut f.lights {
+            l.holder = l.holder.and_then(|k| holders.binary_search_by_key(&k, |h| h.0).ok().map(|i| holders[i].1));
+        }
         let (most, casting) = max_lights(f.tier);
         if f.lights.len() > most || f.lights.iter().filter(|l| l.casts).count() > casting {
             let mid = (cw / 2, ch / 2);

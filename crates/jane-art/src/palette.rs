@@ -464,8 +464,9 @@ pub fn alpha(ix: Ix) -> u8 {
 }
 
 /// The contact shadow's multiply per channel in 1/256ths: a cool darkening, blue held up more
-/// than red, so a shadow on grass reads as shade and not as grey.
-pub const AO_TINT: [u16; 3] = [166, 172, 206];
+/// than red, so a shadow on grass reads as shade and not as grey; deep enough (two fifths off the
+/// red at its core) that a thing reads as standing on the ground at 1x, not pasted over it.
+pub const AO_TINT: [u16; 3] = [150, 158, 198];
 
 /// The contact shadow over `under`, `cover` of 9 strong: index 1's pixels are a crisp mask, and
 /// the blit softens it by how much of each pixel's 3 x 3 the mask covers (a pixel just outside

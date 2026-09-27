@@ -105,9 +105,11 @@ impl Terrain {
         let c = &self.chunk.layers;
         layers.albedo.copy_from_slice(&c.albedo);
         let lit = layers.lit();
+        if layers.has_height() {
+            layers.height.copy_from_slice(&c.height);
+        }
         if lit {
             layers.normal.copy_from_slice(&c.normal);
-            layers.height.copy_from_slice(&c.height);
             for (e, &ix) in layers.emissive.iter_mut().zip(&c.emissive) {
                 *e = if ix.is_opaque() { terrain::pack(ix) } else { 0 };
             }
@@ -131,9 +133,11 @@ impl Terrain {
                 let inside_y = y0 + y / CELL < h;
                 let x_in = if inside_y { ((w - x0).clamp(0, CHUNK_CELLS) * CELL) as usize } else { 0 };
                 layers.albedo[row + x_in..row + side].fill(outside);
+                if layers.has_height() {
+                    layers.height[row + x_in..row + side].fill(0);
+                }
                 if lit {
                     layers.normal[row + x_in..row + side].fill([128, 128]);
-                    layers.height[row + x_in..row + side].fill(0);
                     layers.emissive[row + x_in..row + side].fill(0);
                     layers.surface[row + x_in..row + side].fill(SURFACE_OUTSIDE);
                 }

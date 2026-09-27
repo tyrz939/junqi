@@ -26,6 +26,9 @@ pub struct Soft {
     atlas: AtlasPages,
     /// The silhouette shadows' coverage, the canvas's size.
     mask: Mask,
+    /// The terrain's height under each canvas px, for the silhouettes to climb (only filled in a
+    /// frame that has them).
+    heights: Vec<u8>,
     /// The light buffer at a quarter of the canvas.
     lights: LightMap,
     /// Pixels written by the last frame (the bench's proxy, §1.12).
@@ -76,6 +79,11 @@ impl Backend for Soft {
             self.fb.resize(n, frame.clear);
         }
         let mut written = n as u64;
+        let climb = frame.passes.iter().any(|p| matches!(p, Pass::Silhouettes { .. }));
+        if climb {
+            self.heights.clear();
+            self.heights.resize(n, 0);
+        }
         let t = &mut Target { px: &mut self.fb, w: i32::from(self.w), h: i32::from(self.h) };
         pass_us[StatPass::Sky as usize] = start.elapsed().as_micros() as u32;
         // The sky, once drawn, keeps the terrain inside the zone (its chunks paint the frame's
@@ -105,7 +113,11 @@ impl Backend for Soft {
                     let mut ground = Target { px: &mut t.px[n..], w: t.w, h: t.h - top };
                     for c in frame.chunks_in(chunks) {
                         calls += 1;
-                        blit::chunk(&mut ground, &frame.layers_of(c).albedo, CHUNK_PX, c.x, c.y - top);
+                        let l = frame.layers_of(c);
+                        blit::chunk(&mut ground, &l.albedo, CHUNK_PX, c.x, c.y - top);
+                        if climb && l.has_height() {
+                            blit::heights(&mut self.heights, (t.w, t.h), &l.height, CHUNK_PX, c.x, c.y);
+                        }
                         written += (CHUNK_PX * CHUNK_PX) as u64;
                     }
                 }
@@ -149,7 +161,7 @@ impl Backend for Soft {
                             silhouette::cast(&mut self.mask, page, s, c, k);
                         }
                     }
-                    written += silhouette::apply(t, &mut self.mask, shade);
+                    written += silhouette::apply(t, &mut self.mask, shade, &self.heights);
                 }
                 // T0 lights by the lightmap (§1.7): the ambient, the sun's share already in it,
                 // and every point light's pool; by the ambient alone when no light shows.

@@ -23,6 +23,11 @@ pub const CHUNK_CELLS: i32 = 16;
 /// Canvas px on a side of a terrain chunk.
 pub const CHUNK_PX: i32 = CHUNK_CELLS * CELL;
 
+/// The 3/4 view's one projection (ART.md §1.1, PRESENTATION.md §1.7): heights are true px, a
+/// thing `h` px up is drawn `rows_up(h)` rows over its ground point (four fifths, rounded up).
+/// Every tier's shadow reads heights through this and nothing else.
+pub use jane_art::canvas::{height_of_rows, rows_up};
+
 /// The render tier a backend draws at (PRESENTATION.md §1.3).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Tier {
@@ -376,9 +381,9 @@ pub enum LightKind {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Light {
     /// Where it stands on the ground, canvas px (the camera taken off). It shines from
-    /// `height` px above that, so it is seen at `(pos.0, pos.1 - height)`.
+    /// `height` px above that, so it is seen at `(pos.0, pos.1 - rows_up(height))`.
     pub pos: (i32, i32),
-    /// Its height above the ground, px (a lamp's glass, a lantern at her hip).
+    /// Its height above the ground, true px (a lamp's glass, a lantern at her hip).
     pub height: u8,
     /// Its colour at the centre, the flicker applied.
     pub colour: Rgb,
@@ -388,10 +393,10 @@ pub struct Light {
     pub size: u8,
     /// Throws shadows from the casters (T1: the nearest 8; T2: the nearest 32).
     pub casts: bool,
-    /// Px round its ground point that throw no shadow on it: the thing that holds it (a lamp's
-    /// own post, a fire's own flames and logs), so a light is never shadowed by its own prop.
-    pub clear: u8,
     pub kind: LightKind,
+    /// What carries it, `Frame::sprites[holder]`: a lamp's post, a torch's bracket, the one
+    /// holding a lantern. A light never shadows what holds it (PRESENTATION.md §1.7).
+    pub holder: Option<u32>,
 }
 
 /// A thing that throws a shadow: a unit or a prop standing (§1.7 occluders). Wall runs and
@@ -402,7 +407,9 @@ pub struct Caster {
     pub sprite: u32,
     /// Its ground point, canvas px: a unit's feet, the middle of a prop's front edge.
     pub foot: (i16, i16),
-    /// How tall it stands, px.
+    /// How tall it stands, true px: its sprite's tallest px (`SpriteRef::top`). A silhouette's
+    /// row stands no higher than this, so a low wide thing seen from above (a bed, a cart's
+    /// load) throws the short shadow of what it is, not of how many rows it takes on screen.
     pub height: u8,
     /// How deep it is across the ground, px: a person is thin, a crate is its footprint.
     pub depth: u8,
@@ -486,8 +493,9 @@ pub struct ChunkCmd {
     pub slot: u16,
 }
 
-/// A painted chunk, `CHUNK_PX` square, four layers (§1.6). `soft` reads the albedo alone, and a
-/// T0 presenter leaves the other three empty; T1 and T2 get all four.
+/// A painted chunk, `CHUNK_PX` square, four layers (§1.6). A T0 presenter carries the albedo and
+/// the height (what its silhouettes climb) and leaves the normal and the emissive empty; T1 and
+/// T2 get all four.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct ChunkLayers {
     /// `0xAARRGGBB`, resolved through the CLUT as it was painted (a chunk is never tinted).
@@ -511,12 +519,12 @@ pub struct ChunkLayers {
 pub const SURFACE_OUTSIDE: u8 = 254;
 
 impl ChunkLayers {
-    /// A chunk's layers: the albedo alone at T0, all four above it.
+    /// A chunk's layers: the albedo and the height at T0, all four above it.
     pub fn new(tier: Tier) -> ChunkLayers {
         let n = (CHUNK_PX * CHUNK_PX) as usize;
         let water = Vec::with_capacity((CHUNK_CELLS * CHUNK_CELLS) as usize);
         if tier == Tier::T0 {
-            ChunkLayers { albedo: vec![0; n], water, ..ChunkLayers::default() }
+            ChunkLayers { albedo: vec![0; n], height: vec![0; n], water, ..ChunkLayers::default() }
         } else {
             ChunkLayers {
                 albedo: vec![0; n],
@@ -529,8 +537,13 @@ impl ChunkLayers {
         }
     }
 
-    /// Whether the normal, emissive and height layers are carried.
+    /// Whether the normal and emissive layers are carried (the height is, from T0 up).
     pub fn lit(&self) -> bool {
+        !self.normal.is_empty()
+    }
+
+    /// Whether the height layer is carried.
+    pub fn has_height(&self) -> bool {
         !self.height.is_empty()
     }
 }

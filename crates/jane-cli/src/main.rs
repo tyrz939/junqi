@@ -9,6 +9,7 @@ mod bench;
 #[path = "gen.rs"]
 mod gen_cmd;
 mod hash_cmd;
+mod layers;
 mod play;
 mod scene;
 mod serve;

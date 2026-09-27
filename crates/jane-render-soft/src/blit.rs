@@ -110,6 +110,22 @@ pub fn chunk(t: &mut Target<'_>, px: &[u32], side: i32, x: i32, y: i32) {
     }
 }
 
+/// Copies a `side`-square block of heights with its top-left at `(x, y)` into `out`, a `(w, h)`
+/// canvas of them, clipped: the terrain under each px, for the silhouettes to climb.
+pub fn heights(out: &mut [u8], (w, h): (i32, i32), src: &[u8], side: i32, x: i32, y: i32) {
+    let (x0, x1) = (x.max(0), (x + side).min(w));
+    let (y0, y1) = (y.max(0), (y + side).min(h));
+    if x0 >= x1 || y0 >= y1 {
+        return;
+    }
+    let n = (x1 - x0) as usize;
+    for dy in y0..y1 {
+        let s = ((dy - y) * side + (x0 - x)) as usize;
+        let d = (dy * w + x0) as usize;
+        out[d..d + n].copy_from_slice(&src[s..s + n]);
+    }
+}
+
 /// Multiplies every pixel by `ambient` per channel (255 is full): `dst = dst * (L + 1) >> 8`.
 pub fn multiply(t: &mut Target<'_>, ambient: [u8; 3]) {
     let [r, g, b] = ambient.map(|c| u32::from(c) + 1);
@@ -157,7 +173,7 @@ mod tests {
         assert_eq!(px, [GREY, s1, s1, RED, 0xff20_20c0, GREY]);
         assert!(s1 < GREY && s1 & 0xff > (s1 >> 16) & 0xff);
         // Full cover is AO_TINT of each channel, blue held up most; alpha kept.
-        assert_eq!(shadow(GREY, 9), 0xff53_5667);
+        assert_eq!(shadow(GREY, 9), 0xff4b_4f63);
         assert_eq!(shadow(GREY, 0), GREY);
     }
 

@@ -28,6 +28,7 @@ pub mod light;
 pub mod people;
 pub mod present;
 pub mod props;
+pub mod shadow;
 pub mod stand_in;
 pub mod terrain;
 pub mod text;
@@ -39,6 +40,6 @@ pub use frame::{
     Atmos, CANVAS_H, CANVAS_W, Caster, ChunkCmd, ChunkId, ChunkLayers, Depth, Directional, Features, Flags, FogVolume,
     StarCmd,
     Frame, Light, LightKind, Moon, PartShape, Particle, SkyLook, WaterCmd, WeatherKind,
-    Pass, Post, Rgb, Span, SpriteCmd, Src, Tier, Tint,
+    Pass, Post, Rgb, Span, SpriteCmd, Src, Tier, Tint, height_of_rows, rows_up,
 };
 pub use present::Present;

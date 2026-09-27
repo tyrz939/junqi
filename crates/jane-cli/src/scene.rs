@@ -61,6 +61,11 @@ pub struct GlOpts {
     pub exact: Option<bool>,
     /// `normal_light`.
     pub normals: Option<bool>,
+    /// Debug (PRESENTATION.md §1.7): `--layers` writes the frame's terrain and sprite heights and
+    /// the T2 height field beside the shot; `--show-sun` draws wgpu's sun term alone (red: the
+    /// sun that reaches a px through the field, green: its N dot L, blue: the albedo).
+    pub layers: bool,
+    pub show_sun: bool,
 }
 
 impl GlOpts {
@@ -87,6 +92,8 @@ impl GlOpts {
             half_light: pick("--half-light", "--full-light"),
             exact: pick("--exact", "--fast"),
             normals: if has("--flat") { Some(false) } else { None },
+            layers: has("--layers"),
+            show_sun: has("--show-sun"),
         })
     }
 
@@ -118,7 +125,11 @@ pub fn backend(which: Which, gl: GlOpts) -> Result<Box<dyn Backend>, String> {
             Ok(Box::new(g))
         }
         #[cfg(feature = "gpu")]
-        Which::Wgpu => Ok(Box::new(jane_render_wgpu::Wgpu::headless()?)),
+        Which::Wgpu => {
+            let mut w = jane_render_wgpu::Wgpu::headless()?;
+            w.show_sun(gl.show_sun);
+            Ok(Box::new(w))
+        }
         #[cfg(not(feature = "gpu"))]
         Which::Gl2 | Which::Wgpu => Err(format!(
             "{}: this jane was built without the gpu feature (cargo build -p jane-cli --features gpu)",
@@ -243,6 +254,8 @@ pub struct Shot {
     /// `0xAARRGGBB` rows.
     pub px: Vec<u32>,
     pub line: String,
+    /// With `--layers`: PNGs of the frame's heights and of the T2 height field.
+    pub layers: Option<(Vec<u8>, Vec<u8>)>,
 }
 
 impl Shot {
@@ -266,7 +279,7 @@ impl Shot {
                 px.push(self.px[sy * usize::from(self.w) + usize::from(x + ox / z)]);
             }
         }
-        Shot { w: ow, h: oh, px, line: self.line.clone() }
+        Shot { w: ow, h: oh, px, line: self.line.clone(), layers: None }
     }
 }
 
@@ -379,14 +392,20 @@ pub fn render(bps: Blueprints, o: &Opts) -> Result<Shot, String> {
         present.fx_count().1,
         b.caps().name,
     );
-    let frame = present.draw(255, o.canvas);
+    present.draw(255, o.canvas);
+    let layers = o.gl.layers.then(|| {
+        let (hv, dv, w, h) = crate::layers::heights(present.frame(), present.atlas());
+        let f = crate::layers::field(&hv, &dv, w, h);
+        (crate::layers::png(&hv, w, h), crate::layers::png(&f, w, h))
+    });
+    let frame = present.frame();
     b.draw(frame);
     let mut px = Vec::new();
     let (w, h) = b.read_back(&mut px);
     if px.is_empty() {
         return Err(format!("{}: nothing read back", b.caps().name));
     }
-    Ok(Shot { w, h, px, line })
+    Ok(Shot { w, h, px, line, layers })
 }
 
 /// `jane sheet scene --film N[:EVERY]` (PRESENTATION.md §6, `jane film` in small): plays to the
@@ -410,7 +429,7 @@ pub fn film(bps: Blueprints, o: &Opts, n: u32, every: u32, mut out: impl FnMut(u
         let frame = present.draw(255, o.canvas);
         b.draw(frame);
         let (w, h) = b.read_back(&mut px);
-        out(k, &Shot { w, h, px: px.clone(), line: String::new() })?;
+        out(k, &Shot { w, h, px: px.clone(), line: String::new(), layers: None })?;
     }
     Ok(())
 }

@@ -353,8 +353,8 @@ impl Fx {
                 radius: g.radius,
                 size: 8,
                 casts: false,
-                clear: 0,
                 kind: LightKind::Point,
+                holder: None,
             });
         }
         for h in &self.heads {
@@ -369,8 +369,8 @@ impl Fx {
                 radius: l.radius,
                 size: 4,
                 casts: true,
-                clear: 6,
                 kind: LightKind::Point,
+                holder: None,
             });
         }
     }

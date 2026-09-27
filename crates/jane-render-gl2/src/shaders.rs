@@ -45,7 +45,7 @@ pub const UI_ATTRS: [&str; 5] = ["a_pos", "a_loc", "a_src", "a_dst", "a_col"];
 pub const RECT_SIZES: [i32; 1] = [2];
 pub const CHUNK_SIZES: [i32; 2] = [2, 2];
 pub const SPRITE_SIZES: [i32; 4] = [2, 2, 4, 4];
-pub const SPAN_SIZES: [i32; 2] = [2, 1];
+pub const SPAN_SIZES: [i32; 2] = [2, 2];
 pub const LIGHT_SIZES: [i32; 4] = [2, 4, 4, 4];
 pub const UI_SIZES: [i32; 5] = [2, 2, 4, 4, 4];
 
@@ -196,12 +196,14 @@ void main() {
 }
 ";
 
-/// Mask spans: a value per quad, the largest kept (silhouettes and point-light shadows).
+/// Mask spans: two values per quad, each the largest kept (a silhouette's strength and its reach
+/// in red and green; a point-light shadow's reach in both, its light's channel picked by the
+/// colour mask).
 pub const SPAN_VS: &str = r"
 attribute vec2 a_pos;
-attribute float a_val;
+attribute vec2 a_val;
 uniform vec2 u_canvas;
-varying float v_val;
+varying vec2 v_val;
 void main() {
     v_val = a_val;
     gl_Position = vec4(a_pos / u_canvas * 2.0 - 1.0, 0.0, 1.0);
@@ -209,24 +211,35 @@ void main() {
 ";
 
 pub const SPAN_FS: &str = r"
-varying float v_val;
-void main() { gl_FragColor = vec4(v_val / 255.0); }
+varying vec2 v_val;
+void main() { gl_FragColor = vec4(v_val, v_val) / 255.0; }
 ";
 
 /// The silhouettes' mask applied to the albedo (`jane-render-soft::silhouette::apply`, bit for
-/// bit): a covered px toward `shade` by its strength, an edge px by five eighths of it, the ring
-/// just outside by three eighths on the dither's odd squares.
+/// bit): a px takes the mask at the ground under it (the terrain's height from `u_height`, a px
+/// `h` up standing `rows_up(h)` rows lower; 4 px and under is the ground) where the shadow there
+/// reaches its height; a covered px toward `shade` by its strength, an edge px by five eighths of
+/// it, the ring just outside by three eighths on the dither's odd squares. `u_box` is the mask's
+/// box `(x0, y0, x1, y1)`: a px whose ground lies outside it takes nothing.
 pub const SILHOUETTE_FS: &str = r"
 uniform sampler2D u_mask;
 uniform sampler2D u_snap;
+uniform sampler2D u_height;
 uniform vec2 u_size;
 uniform vec3 u_k;
+uniform vec4 u_box;
+float need;
 float m_at(vec2 p) {
     if (p.x < 0.0 || p.y < 0.0 || p.x >= u_size.x || p.y >= u_size.y) return 0.0;
-    return byte(texture2D(u_mask, (p + 0.5) / u_size).r);
+    vec4 v = texture2D(u_mask, (p + 0.5) / u_size);
+    return byte(v.g) >= need ? byte(v.r) : 0.0;
 }
 void main() {
-    vec2 p = floor(gl_FragCoord.xy);
+    vec2 q = floor(gl_FragCoord.xy);
+    float h = byte(texture2D(u_height, (q + 0.5) / u_size).b);
+    need = h > 4.5 ? h : 0.0;
+    vec2 p = vec2(q.x, h > 4.5 ? q.y + fdiv(h * 4.0 + 4.0, 5.0) : q.y);
+    if (p.y > u_box.w || p.y < u_box.y - 1.0) discard;
     float m = m_at(p);
     float a = m_at(p + vec2(-1.0, 0.0));
     float b = m_at(p + vec2(1.0, 0.0));
@@ -237,19 +250,20 @@ void main() {
         s = min(min(a, b), min(c, d)) < 0.5 ? floor(m * 5.0 * 0.125) : m;
     } else {
         float most = max(max(a, b), max(c, d));
-        if (most < 0.5 || mod(p.x + p.y, 2.0) > 0.5) discard;
+        if (most < 0.5 || mod(q.x + q.y, 2.0) > 0.5) discard;
         s = floor(most * 3.0 * 0.125);
     }
     s = s + floor(s * (1.0 / 128.0));
-    vec3 v = bytes3(texture2D(u_snap, (p + 0.5) / u_size).rgb);
+    vec3 v = bytes3(texture2D(u_snap, (q + 0.5) / u_size).rgb);
     vec3 f = 256.0 - floor(u_k * s * (1.0 / 256.0));
     gl_FragColor = vec4(floor(v * f * (1.0 / 256.0)) / 255.0, 1.0);
 }
 ";
 
 /// What the light passes share: where a light-target px is on the canvas and in the county, and
-/// its normal. A px `h` up stands on the ground `h` rows lower; a standing thing's face is the
-/// front of its body, half its depth toward the viewer, so its own shadow never covers its lit face.
+/// its normal. A px `h` up stands on the ground `rows_up(h)` rows lower; a standing thing's face
+/// is the front of its body, half its depth toward the viewer, so its own shadow never covers its
+/// lit face.
 pub const LIGHT_COMMON: &str = r"
 uniform sampler2D u_nh;
 uniform vec2 u_canvas;
@@ -322,8 +336,10 @@ void main() {
     vec2 cp = canvas_px();
     vec4 nh = texture2D(u_nh, cp / u_canvas);
     float h = byte(nh.b);
-    float front = h > 0.5 ? byte(nh.a) * 0.5 + 1.0 : 0.0;
-    vec3 p = vec3(cp.x, cp.y + h + front, h);
+    // The ground's own relief (4 px and under) is the ground where it is drawn.
+    float lifted = h > 4.5 ? 1.0 : 0.0;
+    float front = lifted * (byte(nh.a) * 0.5 + 1.0);
+    vec3 p = vec3(cp.x, cp.y + lifted * fdiv(h * 4.0 + 4.0, 5.0) + front, h);
     vec2 dxy = v_l0.xy - p.xy;
     float r2 = v_l0.w * v_l0.w;
     float d2 = dot(dxy, dxy);
@@ -344,7 +360,13 @@ void main() {
     }
     float slot = floor(v_l2.w + 0.5);
     if (slot > 0.5) {
-        vec2 uv = p.xy / u_canvas;
+        // A standing thing (deeper than the terrain's 2) never takes its own shadow: its px looks
+        // the mask up past its own footprint on the side toward the light, where its own shadow
+        // (thrown away from the light) is not, and another's still is.
+        float deep = byte(nh.a);
+        vec2 q = p.xy;
+        if (deep > 2.5) q += normalize(dxy + vec2(0.0001, 0.0)) * (deep + 1.5);
+        vec2 uv = q / u_canvas;
         vec4 m = slot < 4.5 ? texture2D(u_mask_a, uv) : texture2D(u_mask_b, uv);
         float c = mod(slot - 1.0, 4.0);
         float z = byte(c < 0.5 ? m.r : (c < 1.5 ? m.g : (c < 2.5 ? m.b : m.a)));
