@@ -32,6 +32,8 @@ pub const USAGE: &str = "jane-app [--new] [--seed N] [--name NAME] [--scale K] [
   --data-dir DIR  where saves and config.json live (default: beside the exe when a file called
                   portable is there, else the user's data folder)
   --bot MODEL     a headless player (reader or rusher) plays the seat; the UI shows it
+  --loading L     the loading screen: scroll (default: a train window and a line per stage) or map
+                  (a developer's view: the county's skeleton forming, which gives the county away)
 Playing together on a LAN (the title's Host and Join do the same; ARCHITECTURE.md §7):
   --host          New Game at once, open to the LAN; you play seat 0 and others join you
   --join ADDR     join the host at ADDR[:PORT] at once; the county comes from the host
@@ -77,6 +79,9 @@ pub struct Args {
     pub delay: u8,
     pub wait: bool,
     pub token: Option<u64>,
+    /// `--loading map`: the loading screen draws the county's skeleton forming (a developer's
+    /// view) instead of the train window and its lines.
+    pub loading_map: bool,
 }
 
 fn parse(args: &[String], clock_seed: u32) -> Result<Args, String> {
@@ -99,6 +104,7 @@ fn parse(args: &[String], clock_seed: u32) -> Result<Args, String> {
         delay: jane_net::wire::DEFAULT_DELAY,
         wait: false,
         token: None,
+        loading_map: false,
     };
     let mut it = args.iter();
     while let Some(a) = it.next() {
@@ -136,6 +142,13 @@ fn parse(args: &[String], clock_seed: u32) -> Result<Args, String> {
                 out.delay = d as u8;
             }
             "--wait" => out.wait = true,
+            "--loading" => {
+                out.loading_map = match value()?.as_str() {
+                    "scroll" => false,
+                    "map" => true,
+                    l => return Err(format!("--loading: scroll or map, not {l}")),
+                }
+            }
             "--token" => out.token = Some(num(value()?)?),
             "--scale" => out.scale = Some(u32::try_from(num(value()?)?).map_err(|_| format!("{a}: too big"))?),
             "--ticks" => out.ticks = Some(num(value()?)?),
@@ -234,5 +247,8 @@ mod tests {
         assert_eq!(parse(&a("--join 10.0.0.2 --token 5"), 1).unwrap().join.as_deref(), Some("10.0.0.2"));
         assert!(parse(&a("--host --join x"), 1).is_err());
         assert!(parse(&a("--delay 9"), 1).is_err());
+        // The loading screen: the scroll unless the map is asked for.
+        assert!(!d.loading_map && parse(&a("--loading map"), 1).unwrap().loading_map);
+        assert!(parse(&a("--loading atlas"), 1).is_err());
     }
 }

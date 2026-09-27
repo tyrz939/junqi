@@ -5,6 +5,8 @@
 //!
 //! Numbers are formatted by integer helpers; nothing here calls a float formatter.
 
+pub mod loading;
+
 use std::fmt::Write as _;
 
 use jane_core::{QuestId, TextRef};

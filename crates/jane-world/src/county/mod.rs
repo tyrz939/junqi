@@ -219,13 +219,24 @@ pub fn build_county(seed: u32, attempt: u8) -> Result<Blueprint, SkeletonError> 
 /// the start). If none of [`ZONE_ATTEMPTS`] holds, the last is returned, `attempts ==
 /// ZONE_ATTEMPTS`, for the caller to refuse. An error only for rows no skeleton can satisfy.
 pub fn build_proven(seed: u32) -> Result<Blueprint, SkeletonError> {
+    build_proven_with(seed, &mut |_| {})
+}
+
+/// [`build_proven`], saying `"skeleton"`, each stage's name and `"solve"` to `report` as each
+/// starts (a re-roll says them again). Listening changes nothing that is built.
+pub fn build_proven_with(seed: u32, report: crate::Report<'_>) -> Result<Blueprint, SkeletonError> {
     let rules = ZoneRules::for_zone(ZoneId::County);
     let rows = SkeletonRows::catalog();
+    report("skeleton");
     let mut sk = build_skeleton(seed, &rows, 0)?;
     let mut attempt = 0u8;
     loop {
-        let bp = build_county_on(&sk, attempt);
-        if attempt + 1 >= ZONE_ATTEMPTS || validate(&bp, &rules).ok() {
+        let bp = build_county_on_with(&sk, attempt, report);
+        if attempt + 1 >= ZONE_ATTEMPTS {
+            return Ok(bp);
+        }
+        report("solve");
+        if validate(&bp, &rules).ok() {
             return Ok(bp);
         }
         let Some(from) = sk.attempt.checked_add(1) else { return Ok(bp) };
@@ -237,8 +248,14 @@ pub fn build_proven(seed: u32) -> Result<Blueprint, SkeletonError> {
 /// The county over a skeleton already built (the caller keeps it: the county's re-rolls and its
 /// tests read it).
 pub fn build_county_on(sk: &Skeleton, attempt: u8) -> Blueprint {
+    build_county_on_with(sk, attempt, &mut |_| {})
+}
+
+/// [`build_county_on`], saying each stage's name to `report` as it starts.
+pub fn build_county_on_with(sk: &Skeleton, attempt: u8, report: crate::Report<'_>) -> Blueprint {
     let mut c = County::new(sk, attempt);
-    for (_, stage) in STAGES {
+    for &(name, stage) in STAGES {
+        report(name);
         stage(&mut c);
     }
     c.done()
