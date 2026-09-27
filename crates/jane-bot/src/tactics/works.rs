@@ -366,6 +366,13 @@ fn kite(v: &View<'_>, cx: &mut Ctx, t: &Unit, bolts: &[SpellId]) -> Act {
             return Act::press(Command::Item(p));
         }
     }
+    // Two of its blows from dead, with food in the bag: she eats between bolts (at better than
+    // half health, eleven apples uneaten, two blows of the Charge Hand's killed her).
+    if me.hp.points() <= 2 * fight::max_hit(t) {
+        if let Some(f) = fight::food(v) {
+            return Act::press(Command::Item(f));
+        }
+    }
     // Far enough that the cast's stop does not let it reach her: its reach (both bodies and a
     // melee's), and what it closes at its pace (slowed or not) while she stands, and a cell.
     let row = cat.combat.unit(t.def);

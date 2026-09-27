@@ -574,11 +574,18 @@ pub fn engage(v: &View<'_>, cx: &mut Ctx, id: UnitId) -> Option<Act> {
             return Some(Act { frame: InputFrame { aim: Some(dir), ..InputFrame::IDLE }, cmds });
         }
     }
-    // (Up close too: a bolt point-blank is still twice her swing, and a swing does not wait on it.
-    // Stood toe to toe with three hundred mana unspent is how the School's guards killed her.)
+    // Something that out-hits her (a boss, or more health than she has) is kept at bolt range
+    // while the mana lasts: she backs off between casts (it is slower than she is; the frost
+    // slows it more), as a player with a bolt does.
+    let strong = cat.combat.unit(t.def).boss || t.hp > me.hp;
+    // Up close too, what she stands and fights: a bolt point-blank is still twice her swing, and
+    // a swing does not wait on it (toe to toe with three hundred mana unspent is how the School's
+    // guards killed her). What she keeps at range is not bolted up close: the cast holds her
+    // still for the Factory's Charge Hand.
     if def.kind == SpellKind::Bolt
         && knows(v, ice)
         && ready(me, ice, now)
+        && (d > i64::from(3 * CELL_FX) || !strong)
         && g <= i64::from(def.range.0) * 9 / 10
         && v.sight(me.pos, t.pos)
     {
@@ -587,10 +594,6 @@ pub fn engage(v: &View<'_>, cx: &mut Ctx, id: UnitId) -> Option<Act> {
             cmds: vec![Command::Cast { spell: ice, on: Some(id) }],
         });
     }
-    // Something that out-hits her (a boss, or more health than she has) is kept at bolt range
-    // while the mana lasts: she backs off between casts (it is slower than she is; the frost
-    // slows it more), as a player with a bolt does.
-    let strong = cat.combat.unit(t.def).boss || t.hp > me.hp;
     // A crowd on her she would not put down standing (the Gold Mine's hub pulls three skeletons,
     // the clerk and a rat at once): stone skin, which halves their blows, while it is not on her.
     let skin = sense::item("potion_stoneskin");
