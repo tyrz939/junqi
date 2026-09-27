@@ -270,7 +270,7 @@ impl Prep {
                 }
                 Pass::Parallax { sprites, factor, .. } => {
                     // The farther, the hazier: the School at an eighth, the trees at a quarter.
-                    let haze = if factor <= 32 { 70 } else { 30 };
+                    let haze = if factor <= 32 { 50 } else { 24 };
                     for s in frame.sprites_in(sprites) {
                         u32s(
                             &mut self.sky_sprites,

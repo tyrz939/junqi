@@ -140,7 +140,9 @@ fn fs_light(i: FullOut) -> LitOut {
     // Wet ground is darker and richer, and shines where it is smooth (§1.8); water always does.
     let wet = g.weather.z * select(0.0, select(0.55, 1.0, wet_kind == 2u), wet_kind > 0u);
     let alb = a4.rgb * (1.0 - 0.4 * wet);
-    let shine = max(wet * select(0.35, 1.0, wet_kind == 2u), select(0.0, 0.9, water > 0u));
+    // A puddle is a mirror for the lamps whatever the ground under it.
+    let puddle = puddle_at(surf, vec2<f32>(px) + g.cam.xy, textureLoad(gnh, q, 0).b * 255.0);
+    let shine = max(max(wet * select(0.35, 1.0, wet_kind == 2u), select(0.0, 0.9, water > 0u)), puddle * 1.2);
     let nh = textureLoad(gnh, q, 0);
     let em = textureLoad(gem, q, 0).rgb;
     let h = nh.b * 255.0;
@@ -160,7 +162,7 @@ fn fs_light(i: FullOut) -> LitOut {
         light *= ground_ao(p);
     }
     // What shines back: the lamps' glints and the sky's sheen on what is wet.
-    var spec = g.fill.rgb * shine * 0.18;
+    var spec = g.fill.rgb * shine * 0.07;
     var sun_seen = 0.0;
     if g.sun_dir.w > 0.5 {
         let l = g.sun_dir.xyz;
@@ -209,8 +211,8 @@ fn fs_light(i: FullOut) -> LitOut {
         if shine > 0.0 {
             // A wet road glints under a lamp: the lamp's reflection, long toward the eye.
             let hv = normalize(l + EYE);
-            let s = pow(max(dot(n, hv), 0.0), 90.0) * falloff(dist / r);
-            spec += lt.col.rgb * s * sh * shine * 0.9;
+            let s = pow(max(dot(n, hv), 0.0), 140.0) * falloff(dist / r);
+            spec += lt.col.rgb * s * sh * shine * 0.6;
         }
     }
 

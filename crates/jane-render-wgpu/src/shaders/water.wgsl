@@ -25,9 +25,6 @@ fn sky_at(x: f32, up: f32) -> vec3<f32> {
     return textureLoad(sky, p, 0).rgb;
 }
 
-fn hash(p: vec2<f32>) -> f32 {
-    return fract(sin(dot(p, vec2<f32>(12.9898, 78.233))) * 43758.547);
-}
 
 @fragment
 fn fs_water(i: FullOut) -> @location(0) vec4<f32> {
@@ -39,13 +36,16 @@ fn fs_water(i: FullOut) -> @location(0) vec4<f32> {
     if s == 254u && g.skyinfo.y > 0.5 && f32(px.y) < g.skyinfo.x {
         return vec4<f32>(sky_at(f32(px.x), g.skyinfo.x - f32(px.y) - 1.0), 1.0);
     }
-    if g.cam.z < 0.5 || !is_water(s) {
-        return here;
-    }
-    let depth = f32(s >> 2u);
     let t = g.wind.y;
     let wy = f32(px.y) + g.cam.y;
     let wx = f32(px.x) + g.cam.x;
+    // A puddle: where the ground takes rain and has had a good deal of it, in low-lying drifts
+    // of a noise anchored to the world, a mirror like the water's.
+    let puddle = puddle_at(s, vec2<f32>(wx, wy), textureLoad(gnh, q, 0).b * 255.0);
+    if g.cam.z < 0.5 && puddle == 0.0 || !is_water(s) && puddle == 0.0 {
+        return here;
+    }
+    let depth = select(f32(s >> 2u), 0.0, puddle > 0.0);
     // The ripple: two slow swells across the rows, quickened and roughened by the wind and the
     // rain, rounded to whole px so the reflection breaks into pixel-art bands.
     let wind = abs(g.wind.x) / 8.0 + g.weather.x * 1.5;
@@ -79,11 +79,16 @@ fn fs_water(i: FullOut) -> @location(0) vec4<f32> {
     if !found {
         refl = sky_at(f32(px.x + dx), f32(px.y) * 0.62 - 2.0);
     }
+    if puddle > 0.0 {
+        // A puddle is shallow and dark-bottomed: the ground under it, and over it a good share
+        // of what it mirrors, the lamps above all.
+        return vec4<f32>(mix(here.rgb * 0.8, refl * 0.9, 0.5), 1.0);
+    }
     // The water's own colour, refracted a px by the ripple.
     let under = textureLoad(lit, clamp(vec2<i32>(px.x - dx / 2, px.y), vec2<i32>(0), vec2<i32>(g.canvas) - 1), 0).rgb;
     // Deep water is dark and holds the reflection best; the shallows show their bed.
     let deep = clamp(depth / 12.0, 0.0, 1.0);
-    let k = 0.42 + 0.32 * deep;
+    let k = 0.55 + 0.3 * deep;
     let tint = mix(vec3<f32>(0.85, 0.92, 0.95), vec3<f32>(0.62, 0.74, 0.82), deep);
     // The surface: a row here and there catches the sky brighter, another lies in a trough,
     // wandering with the swell and quickened by the wind; the pixel-art water line.

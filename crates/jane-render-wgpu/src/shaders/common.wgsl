@@ -47,6 +47,37 @@ struct Globals {
 
 @group(0) @binding(0) var<uniform> g: Globals;
 
+fn hash(p: vec2<f32>) -> f32 {
+    return fract(sin(dot(p, vec2<f32>(12.9898, 78.233))) * 43758.547);
+}
+
+// Smooth noise 0..1 on a unit lattice.
+fn value_noise(p: vec2<f32>) -> f32 {
+    let b = floor(p);
+    let f = p - b;
+    let s = f * f * (3.0 - 2.0 * f);
+    let a = hash(b);
+    let c = hash(b + vec2<f32>(1.0, 0.0));
+    let d = hash(b + vec2<f32>(0.0, 1.0));
+    let e = hash(b + vec2<f32>(1.0, 1.0));
+    return mix(mix(a, c, s.x), mix(d, e, s.x), s.y);
+}
+
+// A puddle (PRESENTATION.md §1.8): 1 where ground that takes rain (the surface byte `s`: not
+// water, its wet kind 1 or 2) has had a good deal of it, in low drifts of a noise anchored to the
+// world px `w`, wider across than deep as the 3/4 view foreshortens them, and only on the ground
+// (`h`, the px's height: never on a roof or a wall); else 0. The light pass
+// makes a puddle shine and the water pass makes it a mirror.
+fn puddle_at(s: u32, w: vec2<f32>, h: f32) -> f32 {
+    let kind = select(0u, s & 3u, s < 254u && (s >> 2u) == 0u);
+    if kind == 0u || g.weather.z < 0.35 || h > 1.5 {
+        return 0.0;
+    }
+    let n = value_noise(vec2<f32>(w.x, w.y * 1.6) / 22.0) * 0.7 + value_noise(w / 7.0) * 0.3;
+    let edge = 0.72 - (g.weather.z - 0.35) * 0.3 + select(0.06, 0.0, kind == 1u);
+    return select(0.0, 1.0, n > edge);
+}
+
 // A full-canvas triangle.
 struct FullOut {
     @builtin(position) pos: vec4<f32>,
