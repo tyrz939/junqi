@@ -474,10 +474,12 @@ impl Story {
             self.task = None;
             return Act::idle();
         }
-        // The Lost: every twenty minutes, her own map and her objective go; the log's words and
-        // what she sees again are what she has.
+        // The Lost: every twenty minutes, her own map and her objective go; the log's words, the
+        // journal (where she stood when she learned each thing) and what she sees again are what
+        // she has.
         if cx.model.has_eyes_only() && cx.frames % crate::lost::FORGET_EVERY == 0 {
             cx.eyes = crate::lost::Eyes::default();
+            cx.eyes.recall(v);
             if !dungeon(v.zone()) {
                 self.task = None;
             }

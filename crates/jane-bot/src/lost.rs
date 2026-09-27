@@ -142,6 +142,31 @@ impl Eyes {
         self.frontier.retain(|b, _| !looked.contains(&(z, b.0, b.1)));
     }
 
+    /// Rebuilt from the journal alone (VERIFICATION.md L3, the Lost after a week away): every
+    /// entry of this zone says where she stood when she learned it (a sign read, a book, a
+    /// person met); what stands there with words or a verb is remembered again.
+    pub fn recall(&mut self, v: &View<'_>) {
+        let z = v.zone();
+        let spots: Vec<(i32, i32)> =
+            v.journal().filter(|e| e.zone == z).map(|e| (i32::from(e.at.x), i32::from(e.at.y))).collect();
+        for (x, y) in spots {
+            for p in v.props_in(jane_core::Rect::new(
+                x - CHECKED_NEAR,
+                y - CHECKED_NEAR,
+                2 * CHECKED_NEAR + 1,
+                2 * CHECKED_NEAR + 1,
+            )) {
+                let Some(s) = v.prop_spawn(p) else { continue };
+                if s.label.is_some() || s.talk.is_some() || s.to.is_some() {
+                    self.props.insert((z, p.id), prop_centre(p).cell());
+                    if let Some(door) = s.to {
+                        self.doors.insert(door.zone);
+                    }
+                }
+            }
+        }
+    }
+
     /// Has the cell been on screen?
     pub fn looked_at(&self, z: ZoneId, cell: (i32, i32)) -> bool {
         let (bx, by) = block_of(cell);
