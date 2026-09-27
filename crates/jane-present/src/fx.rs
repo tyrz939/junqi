@@ -260,11 +260,18 @@ impl Fx {
     /// The rain: drops fall onto ground points in and round the view, leaning with the wind, and
     /// each ends in a splash, or a ripple on water.
     fn weather(&mut self, view: &View<'_>, atmos: &Atmosphere, (vx, vy, vw, vh): (i32, i32, i32, i32)) {
-        let cap = self.cap / 3;
+        // A third of the pool; T0's pool is small, so half of it there, or its rain is a
+        // drizzle beside T2's (the tiers are one look, 2026-09-27).
+        let cap = if self.tier == Tier::T0 { self.cap / 2 } else { self.cap / 3 };
         let look = jane_art::weather::rain(atmos.region());
         // Below T2 a drop catches a little of the sky's light of its own, or a night's rain is
         // lost in the dark: T2 lights each drop by the lamps it passes.
-        let rain_glow = if self.tier >= Tier::T2 { 0 } else { 90 };
+        // T0's more: it has no lamp in the drop's own light.
+        let rain_glow = match self.tier {
+            Tier::T2 => 0,
+            Tier::T1 => 90,
+            Tier::T0 => 160,
+        };
         // Land what falls: a drop at its last tick splashes where it stands.
         let mut i = 0;
         while i < self.rain.len() {
@@ -396,6 +403,11 @@ impl Fx {
         if f.parts.len() > a0 {
             f.passes.push(Pass::Particles { layer: Depth::Canopy, parts: Span::since(a0, f.parts.len()) });
         }
+        // T0's rain goes over the light instead (`draw_air`): its lightmap multiplies a drop by
+        // the night's flat light and the rain was lost in the dark.
+        if self.tier == Tier::T0 {
+            return;
+        }
         let r0 = f.parts.len();
         for s in self.rain.iter().filter(|s| !s.ground) {
             self.put(f, s, cam, alpha, None);
@@ -462,7 +474,7 @@ impl Fx {
         if f.parts.len() > p0 {
             f.passes.push(Pass::Particles { layer: Depth::Canopy, parts: Span::since(p0, f.parts.len()) });
         }
-        if t2 {
+        if t2 || self.tier == Tier::T0 {
             let r0 = f.parts.len();
             for s in self.rain.iter().filter(|s| !s.ground) {
                 self.put(f, s, cam, alpha, Some(sky));

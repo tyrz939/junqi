@@ -93,8 +93,9 @@ pub enum Pass {
     /// is the sun or the moon, added on top where it is not shadowed; `points` are
     /// `Frame::lights[points]`, `casters` are `Frame::casters[casters]`.
     Lights { ambient: Rgb, fill: Rgb, sun: Option<Directional>, points: Span, casters: Span },
-    /// The grade and the bloom (§1.9), last before the UI: all of it at T2; at T1 its tint and
-    /// lift alone (the other fields [`Post::NONE`]'s), which is what T1's `grade` row draws.
+    /// The grade and the bloom (§1.9), last before the UI: all of it at T2; below T2 the grade
+    /// with no bloom (exposure, saturation, tint and lift, drawn as T2 draws them; the tiers
+    /// are one look, decided 2026-09-27).
     Post(Post),
     /// The sky over the view (§1.9 `Sky`): bands by hour, stars, the moon. Seen where the view
     /// meets the zone's edge (`SkyLook::zone`) and, on T2, in every water cell's reflection.
@@ -153,7 +154,7 @@ impl Pass {
             | Pass::Weather(_)
             | Pass::Fog { .. }
             | Pass::Particles { .. } => Tier::T0,
-            Pass::Post(p) if p.saturation == 128 && p.bloom == 0 && p.exposure == 128 => Tier::T1,
+            Pass::Post(p) if p.bloom == 0 => Tier::T0,
             Pass::Post(_) | Pass::Rays { .. } => Tier::T2,
         }
     }
@@ -300,7 +301,8 @@ pub struct Features {
     pub max_lights: u16,
     /// `bloom`: the emissive's bloom (T2).
     pub bloom: bool,
-    /// `grade`: the grade per region and hour (T1's tint and lift; all of it on T2).
+    /// `grade`: the grade per region and hour (exposure, saturation, tint and lift on every tier;
+    /// the bloom is T2's own row).
     pub grade: bool,
     /// `sharp`: sharp bilinear to the window (T1, T2); off, nearest.
     pub sharp: bool,
@@ -392,7 +394,7 @@ impl Features {
                 Tier::T2 => 128,
             },
             bloom: matches!(tier, Tier::T2),
-            grade: !matches!(tier, Tier::T0),
+            grade: true,
             sharp: !matches!(tier, Tier::T0),
             frame_skip: false,
             weather: true,
@@ -429,7 +431,7 @@ impl Features {
             ("normal_light", Some(v)) => self.normal_light = v && tier > Tier::T0,
             ("silhouettes", Some(v)) => self.silhouettes = v && tier < Tier::T2,
             ("bloom", Some(v)) => self.bloom = v && tier == Tier::T2,
-            ("grade", Some(v)) => self.grade = v && tier > Tier::T0,
+            ("grade", Some(v)) => self.grade = v,
             ("sharp", Some(v)) => self.sharp = v && tier > Tier::T0,
             ("frame_skip", Some(v)) => self.frame_skip = v,
             ("weather", Some(v)) => self.weather = v,
@@ -483,9 +485,7 @@ impl Features {
     /// (§1.3's `Needs` column and the per-tier cells that say "no").
     pub fn rows(tier: Tier) -> impl Iterator<Item = FeatureRow> {
         ROWS.into_iter().filter(move |r| match r.key {
-            "normal_light" | "sharp" | "wet" | "grade" => {
-                tier == Tier::T1 || (tier == Tier::T2 && r.key != "normal_light")
-            }
+            "normal_light" | "sharp" | "wet" => tier == Tier::T1 || (tier == Tier::T2 && r.key != "normal_light"),
             "shadows" => tier > Tier::T0,
             "silhouettes" => tier < Tier::T2,
             "god_rays" | "bloom" => tier == Tier::T2,

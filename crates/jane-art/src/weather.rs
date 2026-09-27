@@ -93,7 +93,8 @@ pub struct SkyColours {
 const HOUR: i32 = 7200;
 
 /// The hour ramp: twelve keyframes, `(tick of the day, zenith, horizon, glow)`, linear between.
-/// Night is deep blue, never black; dusk runs rose to violet over the West; dawn is pale rose.
+/// Night is deep blue, never black; dusk runs gold to amber low in the west under a blue zenith
+/// (golden to blue, never rose to violet); dawn is pale rose.
 /// A keyframe of the sky: tick of the day, zenith, horizon, afterglow.
 type SkyKey = (i32, [i32; 3], [i32; 3], [i32; 3]);
 
@@ -105,10 +106,10 @@ const SKY: [SkyKey; 13] = [
     (HOUR * 8, [98, 150, 210], [196, 214, 226], [214, 220, 222]),
     (HOUR * 12, [84, 140, 214], [186, 210, 230], [196, 214, 230]),
     (HOUR * 16, [92, 140, 204], [210, 208, 200], [226, 200, 170]),
-    (HOUR * 35 / 2, [98, 112, 172], [246, 184, 128], [252, 170, 96]),
-    (HOUR * 37 / 2, [72, 66, 132], [244, 142, 96], [255, 128, 72]),
-    (HOUR * 77 / 4, [44, 42, 100], [186, 100, 116], [228, 104, 88]),
-    (HOUR * 81 / 4, [22, 26, 62], [74, 60, 104], [120, 70, 104]),
+    (HOUR * 35 / 2, [92, 122, 180], [248, 196, 128], [255, 190, 100]),
+    (HOUR * 37 / 2, [50, 76, 142], [246, 176, 100], [255, 172, 84]),
+    (HOUR * 77 / 4, [28, 46, 102], [200, 140, 96], [236, 150, 80]),
+    (HOUR * 81 / 4, [22, 26, 62], [60, 62, 108], [120, 80, 78]),
     (HOUR * 43 / 2, [12, 16, 38], [30, 36, 66], [34, 36, 70]),
     (HOUR * 24, [12, 16, 38], [30, 36, 66], [30, 36, 66]),
 ];

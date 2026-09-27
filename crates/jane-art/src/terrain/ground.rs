@@ -21,9 +21,17 @@ use crate::palette::{Ix, Ramp, Tone, letter};
 const PATCH_SHIFT: u32 = 6;
 const FINE_SHIFT: u32 = 4;
 const LUSH_SHIFT: u32 = 8;
-/// Where a meadow turns to its darker tone: low, so a dark patch is a rare hollow, not the
-/// camouflage of one in three (the 18:40 critique, 2026-09-27).
-const TURF_DARK: i32 = -30;
+/// Where a meadow turns to its darker tone: never. The 18:40 critique (2026-09-27) made a dark
+/// patch a rare hollow instead of one in three; the whole-frame pass found even the rare ones
+/// read as stains on a lawn, so a meadow varies only toward the light (its drifts, its dry
+/// grass) and its dark is the shade of what stands on it.
+const TURF_DARK: i32 = -1000;
+/// Where it turns to its lighter one: about one px in twelve, in wide soft drifts.
+const TURF_LIGHT: i32 = 250;
+/// Where bare ground (earth, mud, slag, gravel) turns to its damp tone and its worn one: both
+/// rare, so three tones in equal share never make a camouflage of it.
+const EARTH_DAMP: i32 = -40;
+const EARTH_WORN: i32 = 250;
 
 pub(super) fn paint(p: &mut Painter, x0: i32, y0: i32, seed: u32) {
     p.s.ly.clear();
@@ -42,14 +50,20 @@ pub(super) fn paint(p: &mut Painter, x0: i32, y0: i32, seed: u32) {
     }
 }
 
+/// How wide, in patch units, the dithered rim of a drift is: a few px where one tone gives way
+/// to the next through a checker of both, so a drift's edge reads soft at 1x and never as the
+/// cut edge of a paper shape (the art-director pass, 2026-09-27).
+const RIM: i32 = 12;
+
 /// A tone in `Mid, Base, Lift` from a patch value 0..=255 and its meander: `Base` between `lo`
-/// and `hi`.
+/// and `hi`, each edge a checker `RIM` wide at world px `(wx, wy)`.
 #[inline]
-fn patch_tone(v: i32, m: i32, lo: i32, hi: i32) -> Tone {
+fn patch_tone(v: i32, m: i32, lo: i32, hi: i32, (wx, wy): (i32, i32)) -> Tone {
     let c = (v - 128) * 2 + 128 + m;
-    if c < lo {
+    let odd = (wx ^ wy) & 1 == 1;
+    if c < lo - RIM / 2 || (c < lo + RIM / 2 && odd) {
         Tone::Mid
-    } else if c > hi {
+    } else if c > hi + RIM / 2 || (c > hi - RIM / 2 && odd) {
         Tone::Lift
     } else {
         Tone::Base
@@ -78,30 +92,37 @@ fn base(p: &mut Painter, wx0: i32, wy0: i32, seed: u32) {
             let v = p.s.pv[i] / 3;
             let cluster = below(fast((wx >> 1) as u32, (wy >> 1) as u32, seed ^ salt::PATCH), 13) as i32 - 6;
             let m = (p.s.mv[i] - 128) / 4 + cluster;
-            // Dry grass by broad drifts, their edge wandering a little; the green just short of it
-            // lightens toward it, so the one grass turns to the other without a seam.
+            // Dry grass by broad drifts, their edge wandering a little and dithered over a few px,
+            // the two grasses met in a checker, so the one turns to the other without a seam. (A
+            // lighter band of green before it made a second edge, and islands of the darker green
+            // left inside it read as blotches on a lawn: gone in the whole-frame pass.)
             let drift = p.s.lv[i] + m / 6 - 176;
-            let dry = drift > 0;
+            let dry = drift > 3 || (drift > -3 && (wx ^ wy) & 1 == 1);
+            let w = (wx, wy);
             let mut r = st.ramp;
             let z = i32::from(st.row.rise).max(1);
             let (tone, n) = match st.row.pattern {
                 P::Water => (water_tone(p, x, y, v, m), FLAT),
                 P::Ice => (if v + m / 2 > 150 { Tone::High } else { Tone::Light }, FLAT),
-                P::Setts => setts(wx, wy, seed, (v - 128) * 2 + 128 + m),
-                P::Soil => soil(wy, v, m),
+                P::Setts => setts(p, wx, wy, seed),
+                P::Soil => soil(wx, wy, v, m),
                 P::Marsh => {
-                    let t = patch_tone(v, m, 84, 196);
-                    (if v + m / 2 < 86 { Tone::Shade } else { t }, FLAT)
+                    // Wet ground: darker more often than dry earth, its standing pools the
+                    // darkest, but still mostly its own middle tone.
+                    let t = patch_tone(v, m, 30, 236, w);
+                    (if v + m / 2 < 64 { Tone::Shade } else { t }, FLAT)
                 }
                 // A meadow is calm: its tones change over wide drifts, and the dry grass keeps
                 // closer to its middle tone than the green does.
                 P::Turf if dry => {
                     r = Ramp::TurfDry;
-                    (patch_tone(v, m, -1000, 236), FLAT)
+                    (patch_tone(v, m, -1000, 256, w), FLAT)
                 }
-                P::Turf if drift > -12 => (patch_tone(v, m, TURF_DARK, 224).step(1).min(Tone::Lift), FLAT),
-                P::Turf => (patch_tone(v, m, TURF_DARK, 224), FLAT),
-                _ => (patch_tone(v, m, 18, 188), FLAT),
+                P::Turf => (patch_tone(v, m, TURF_DARK, TURF_LIGHT, w), FLAT),
+                // Bare ground is calm: its base tone over most of it, a worn drift lighter now
+                // and then and a damp hollow darker more rarely, so wide low-frequency variation
+                // reads as wear and moisture, not camouflage (the art-director pass, 2026-09-27).
+                _ => (patch_tone(v, m, EARTH_DAMP, EARTH_WORN, w), FLAT),
             };
             p.s.ly.put(x, y, r.at(tone), n, z);
         }
@@ -134,7 +155,7 @@ fn water_tone(p: &Painter, x: i32, y: i32, v: i32, m: i32) -> Tone {
 
 /// Setts: courses 7 px tall of stones 7 to 12 px wide, a joint round each, each stone a tone of
 /// its own, lit along its top and left edges, shaded along its bottom, domed for the light pass.
-fn setts(wx: i32, wy: i32, seed: u32, patch: i32) -> (Tone, Normal) {
+fn setts(p: &Painter, wx: i32, wy: i32, seed: u32) -> (Tone, Normal) {
     const H: i32 = 7;
     let course = wy.div_euclid(H);
     let yy = wy.rem_euclid(H);
@@ -157,15 +178,24 @@ fn setts(wx: i32, wy: i32, seed: u32, patch: i32) -> (Tone, Normal) {
     if yy == H - 1 || lx == end - 1 {
         return (Tone::Shade, normal(0, 0));
     }
-    let body = match (h >> (12 + k * 3)) & 7 {
+    // Most stones the key tone, one in sixteen darker and three paler: a square that reads as
+    // laid stone and stays calm enough for the people on it to read.
+    let hs = fast((block * 4 + k) as u32, course as u32, seed ^ salt::CELL ^ 0x5e77);
+    let body = match hs & 15 {
         0 => Tone::Mid,
-        1 | 2 => Tone::Lift,
+        1..=3 => Tone::Lift,
         _ => Tone::Base,
     };
-    // Broad wear over many stones: damp and dark in the hollows, bleached on the crowns.
-    let body = if patch < 46 {
+    // Broad wear over many stones: damp and dark in the hollows, bleached on the crowns. A stone
+    // takes it whole or not at all (the wear is read at its middle, against a threshold of its
+    // own), so the wear is a scatter of darker and paler stones over a hollow, never a smudge
+    // laid across the joints.
+    let (mx, my) = (wx - lx + (start + end) / 2, course * H + H / 2);
+    let patch = ((p.s.patch.at(mx, my) * 2 + p.s.fine.at(mx, my)) / 3 - 128) * 2 + 128;
+    let wear = patch + (hs >> 8) as i32 % 61 - 30;
+    let body = if wear < -20 {
         body.step(-1)
-    } else if patch > 210 {
+    } else if wear > 260 {
         body.step(1)
     } else {
         body
@@ -185,12 +215,12 @@ fn setts(wx: i32, wy: i32, seed: u32, patch: i32) -> (Tone, Normal) {
 }
 
 /// Dug soil in rows 6 px apart: each ridge lit along its top, its furrow in shade.
-fn soil(wy: i32, v: i32, m: i32) -> (Tone, Normal) {
+fn soil(wx: i32, wy: i32, v: i32, m: i32) -> (Tone, Normal) {
     match wy.rem_euclid(6) {
         5 => (Tone::Shade, normal(0, -50)),
         4 => (Tone::Mid, normal(0, -20)),
         0 => (Tone::Lift, normal(0, 40)),
-        _ => (patch_tone(v, m, 50, 210), FLAT),
+        _ => (patch_tone(v, m, 50, 210, (wx, wy)), FLAT),
     }
 }
 

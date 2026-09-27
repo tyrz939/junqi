@@ -463,7 +463,9 @@ impl Atmosphere {
                 // two thirds of the way out.
                 let x = w / 2 + (sx - cx) * (w / 3) / north.max(1);
                 let cells = (north + (sx - cx).abs() / 2) / CELL;
-                let band = usize::from(cells < 1300) + usize::from(cells < 400);
+                // The bands step up early (the whole-frame pass): at the lake, halfway across the
+                // county, the School is the frame's landmark and its reflection must read.
+                let band = usize::from(cells < 2000) + usize::from(cells < 800);
                 let lit = if self.windows_lit() {
                     // One window steady, a second that comes and goes.
                     1 + usize::from(crate::light::flicker(self.tick, 0x5c48_4f4c, 900, 1) < 160)
@@ -551,7 +553,8 @@ impl Atmosphere {
             f.fog.push(FogVolume {
                 rect: (-64, -64, w + 64, h + 64),
                 edge: 1,
-                density: (glow * 22 / 255) as u8,
+                // Thin: every lamp in view haloes in it, and a thick one hazes the square pink.
+                density: (glow * 13 / 255) as u8,
                 colour,
                 top: 0,
             });

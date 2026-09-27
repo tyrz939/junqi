@@ -60,7 +60,7 @@ const SHADOW_PAST: f32 = 24.0;
 const CLIMB: i32 = jane_present::rows_up(100);
 /// How much of a lamp's colour lights its pool, over the dark (soft's `GAIN`, a little more:
 /// N dot L takes some back on the ground's edges).
-const POINT_GAIN: f32 = 0.95;
+const POINT_GAIN: f32 = 0.8;
 
 /// The Features rows T1 reads (PRESENTATION.md §1.3), with their T1 defaults, and the backend's
 /// own two settings. A row off draws the row below it, never nothing.
@@ -240,6 +240,21 @@ pub fn linear(c: u8) -> f32 {
     if v <= 0.04045 { v / 12.92 } else { ((v + 0.055) / 1.055).powf(2.4) }
 }
 
+/// A sky light's byte colour as linear light, its luminance through the curve and its chroma
+/// `SKY_CHROMA` of the way to the byte's own: T2's `light3` (`jane-render-wgpu`'s prep), so the
+/// fill's blue and the sun's gold are the hues T2 lights with, not the power curve's.
+fn light3(c: Rgb) -> [f32; 3] {
+    const SKY_CHROMA: f32 = 0.85;
+    let s = c.map(|v| f32::from(v) / 255.0);
+    let luma = 0.2126 * s[0] + 0.7152 * s[1] + 0.0722 * s[2];
+    if luma <= 0.0 {
+        return [0.0; 3];
+    }
+    let k = ((luma + 0.055) / 1.055).powf(2.4).min(luma) / luma;
+    let l = c.map(linear);
+    [0, 1, 2].map(|i| l[i] + (s[i] * k - l[i]) * SKY_CHROMA)
+}
+
 /// A jane-core angle (65536 a turn) in radians.
 fn rad(a: u16) -> f32 {
     f32::from(a) * std::f32::consts::TAU / 65536.0
@@ -257,10 +272,10 @@ pub use jane_present::shadow::shear;
 /// shader's floor).
 pub fn sky(ambient: Rgb, fill: Rgb, sun: Option<Directional>) -> Sky {
     let luma = |c: [f32; 3]| 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
-    let fill = fill.map(linear);
+    let fill = light3(fill);
     let sun = sun.map(|s| {
         let (az, el) = (rad(s.azimuth.0), rad(s.elevation.0));
-        ([el.cos() * az.cos(), el.cos() * az.sin(), el.sin()], s.colour.map(linear))
+        ([el.cos() * az.cos(), el.cos() * az.sin(), el.sin()], light3(s.colour))
     });
     let flat = sun.map_or(0.0, |(d, _)| (d[2].max(0.0) / d[2].max(0.2)).min(1.0));
     let lit: [f32; 3] = std::array::from_fn(|c| fill[c] + sun.map_or(0.0, |(_, col)| col[c]) * flat);
@@ -680,7 +695,8 @@ impl Prep {
     ) {
         // A pool shows against the dark: by day a little, at night all of it (soft's rule).
         let avg = ambient.iter().map(|&c| u32::from(c)).sum::<u32>() / 3;
-        let dark = (300u32.saturating_sub(avg)).min(220) as f32 / 220.0;
+        // Soft's rule (`lightmap.rs`): the night's flat light is T2's now, not the old dimmer one.
+        let dark = (330u32.saturating_sub(avg)).min(220) as f32 / 220.0;
         let mut slot = 0u8;
         for li in points.take(usize::from(rows.max_lights)) {
             let l = frame.lights[li];
@@ -707,9 +723,14 @@ impl Prep {
                 }
             }
             let g = POINT_GAIN * dark;
-            let [cr, cg, cb] = l.colour.map(|c| f32::from(c) / 255.0 * g);
-            // Flame light leans warm, as on T0 and T2: a yellow lamp on green grass is not lime.
-            let col = [cr, cg * 13.0 / 16.0, cb * 11.0 / 16.0, 0.0];
+            // T2's lamp (`jane-render-wgpu`'s prep): its byte's hue as T2 lights with it, leant
+            // warm as T2 leans it (a yellow lamp on green grass is not lime), at the byte's own
+            // brightness, so the pool is T2's colour.
+            let luma = |c: [f32; 3]| 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2];
+            let byte = l.colour.map(|c| f32::from(c) / 255.0);
+            let hue = light3(l.colour);
+            let k = luma(byte) / luma(hue).max(1e-4) * g;
+            let col = [hue[0] * k, hue[1] * k * 0.82, hue[2] * k * 0.6, 0.0];
             let spot = match l.kind {
                 LightKind::Point => [0.0, 0.0, -2.0, mask],
                 LightKind::Spot { dir, cone } => [rad(dir.0).cos(), rad(dir.0).sin(), rad(cone.0).cos(), mask],

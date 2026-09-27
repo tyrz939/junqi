@@ -168,17 +168,35 @@ fn top(
         m.line((w[0].0, w[0].1), (w[1].0, w[1].1), Ix::INK, 2 * w[0].2, 1);
     }
     let (hx, hy, _) = pts[0];
-    m.ellipse(Rect::new(hx - 4, hy - 2, 9, 5), Ix::INK, 1);
-    // The legs, out to the sides, paddling in diagonal pairs.
+    m.ellipse(Rect::new(hx - 5, hy - 2, 11, 6), Ix::INK, 1);
+    // The legs, out to the sides, paddling in diagonal pairs, splayed like a newt's.
     for (li, i) in [(0, 1), (1, 5)] {
         let (x, y, g) = pts[i];
         for side in [-1, 1] {
-            let reach = if (phase + li + i32::from(side > 0)) % 2 == 0 { 1 } else { -1 };
-            m.line((x + side * g, y), (x + side * (g + 4), y + reach * dir), Ix::INK, 2, 1);
+            let reach = if (phase + li + i32::from(side > 0)) % 2 == 0 { 2 } else { -1 };
+            m.line((x + side * g, y), (x + side * (g + 5), y + reach * dir), Ix::INK, 2, 1);
         }
     }
     c.inflate(&m, k.body, 2, relief::BODY);
     let z = relief::HEAD.hi;
+    // Seen from above it read as a flat pale cut-out (the whole-frame pass, 2026-09-27): the back
+    // now carries its form. A lit ridge down the spine toward the light, the costal grooves
+    // ticked in across each flank, and a few dim mottles on the back, a cave salamander's.
+    let r = k.body;
+    for (i, &(x, y, g)) in pts.iter().enumerate().skip(1).take(7) {
+        let zb = relief::BODY.hi;
+        c.fill_rect(Rect::new(x - 1, y, 1, 2), r.at(Tone::Light), zb);
+        if g >= 2 {
+            // The flank away from the light in shade, two px; the near one lit.
+            c.fill_rect(Rect::new(x + g - 1, y, 1, 3), r.at(Tone::Shade), zb);
+            c.fill_rect(Rect::new(x + g - 2, y + 1, 1, 2), r.at(Tone::Mid), zb);
+            c.dot(x - g + 1, y + 1, r.at(Tone::Mid), zb);
+        }
+        if i % 3 == 1 {
+            let off = if (i as i32 + phase) % 2 == 0 { 1 } else { -2 };
+            c.fill_rect(Rect::new(x + off, y + 1, 2, 2), r.at(Tone::Mid), zb);
+        }
+    }
     for side in [-1, 1] {
         gills(c, k, hx + side * 4, hy, (side, dir), flare, z);
     }

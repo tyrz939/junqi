@@ -48,7 +48,9 @@ impl LightMap {
         let n = (self.w * self.h) as usize;
         let base = ambient.map(|c| u16::from(c) + u16::from(c >> 7));
         // A pool shows against the dark: by day it adds a little, at night all of it.
-        let dark = (300 - ambient.iter().map(|&c| u32::from(c)).sum::<u32>() / 3).min(220);
+        // (The night's flat light is T2's since the tiers were made one look, 2026-09-27: brighter
+        // than it was, so the pool is measured against 330.)
+        let dark = 330u32.saturating_sub(ambient.iter().map(|&c| u32::from(c)).sum::<u32>() / 3).min(220);
         self.cells.clear();
         self.cells.resize(n, base);
         for l in lights {
@@ -59,7 +61,7 @@ impl LightMap {
             let r2 = (r * r) as u32;
             // Flame light leans warm, as on T2: a yellow lamp on green grass is not lime.
             let [cr, cg, cb] = l.colour.map(|c| (u32::from(c) * GAIN * dark / 220) >> 8);
-            let col = [cr, cg * 13 / 16, cb * 11 / 16];
+            let col = [cr, cg * 13 / 16, cb * 10 / 16];
             let (x0, x1) = (((l.pos.0 - r) / CELL).max(0), ((l.pos.0 + r) / CELL + 1).min(self.w - 1));
             let (y0, y1) = (((l.pos.1 - r) / CELL).max(0), ((l.pos.1 + r) / CELL + 1).min(self.h - 1));
             for cy in y0..=y1 {

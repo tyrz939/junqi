@@ -76,7 +76,8 @@ fn both_modes_match(mut gl: Gl2) {
             assert_eq!((w, h), CANVAS);
             // soft draws the same frame without its light pass: its albedo pass alone. The
             // atmosphere's passes go too: gl2 draws them after its albedo, over the lit canvas
-            // (the sky and the water in its compose, the particles and the fog over it).
+            // (the sky and the water in its compose, the particles and the fog over it), and the
+            // grade, which both draw last.
             let f = p.frame_mut();
             let off = |q: &Pass| {
                 matches!(
@@ -89,6 +90,7 @@ fn both_modes_match(mut gl: Gl2) {
                         | Pass::Fog { .. }
                         | Pass::Rays { .. }
                         | Pass::Particles { .. }
+                        | Pass::Post(_)
                 )
             };
             let lights: Vec<Pass> = f.passes.iter().copied().filter(|q| off(q)).collect();
