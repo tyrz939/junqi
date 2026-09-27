@@ -26,15 +26,18 @@ pub const USAGE: &str = "  sheet layers <what> [--frame F] [--out DIR]
   sheet all [--out DIR]               every sheet above, for every sprite
   sheet list                          the sprites <what> can name
   sheet scene [--seed N] [--minutes M | --ticks T] [--model reader|rusher] [--night | --hour H[:MM]]
-              [--wide] [--backend soft|gl2|wgpu] [--at MARK] [--weather clear|mist|rain|storm]
-              [--crop X,Y,W,H] [--zoom Z] [--out PATH.png | --out DIR]
+              [--wide] [--backend soft|gl2|wgpu] [--at ZONE[:MARK] | --at MARK]
+              [--weather clear|mist|rain|storm] [--cast SPELL[:TICKS]] [--rows KEY=V,..]
+              [--film N[:EVERY]] [--crop X,Y,W,H] [--zoom Z] [--out PATH.png | --out DIR]
                                       a model plays the seed from New Game (default 1 minute), then one
                                       frame is drawn headless through the presenter and soft (T0), or
                                       gl2 (T1, a hidden window's GL context) or wgpu (T2) with the gpu
                                       feature; --night sets the clock to 22:00 first; --at travels to a
-                                      county mark first; --weather holds the sky; --wide draws 21:9
-                                      (1008 x 432); --crop and --zoom write a close look; gl2 takes
-                                      bench frames' row flags
+                                      zone's mark (its way in by default; a bare mark is the county's)
+                                      first, god on; --weather holds the sky; --cast casts east;
+                                      --rows sets Features rows; --film writes N more ticks' frames;
+                                      --wide draws 21:9 (1008 x 432); --crop and --zoom write a close
+                                      look; gl2 takes bench frames' row flags
   sheet ui [screen ...] [--out DIR]   the UI in states play rarely shows at once (hud, dead, choice,
                                       tooltip, popover, drag, pause), headless through soft
   sheet audio [--out DIR]             every sound effect, bed, song and scene as WAV, songs and scenes as
@@ -221,18 +224,26 @@ fn scene(args: &[String]) -> Result<(), String> {
     let backend =
         crate::scene::Which::parse(flag("--backend").unwrap_or("soft")).ok_or("--backend: soft, gl2 or wgpu")?;
     let gl = crate::scene::GlOpts::parse(args)?;
-    let at = flag("--at").map(str::to_owned);
     let weather = flag("--weather").map(crate::scene::weather).transpose()?;
     let cast = flag("--cast").map(str::to_owned);
     let rows = crate::scene::rows(flag("--rows"))?;
     let name = format!(
-        "scene-{seed}-{ticks}{}{}{}-{}-{}",
+        "scene-{seed}-{ticks}{}{}-{}-{}",
         hour.map_or(String::new(), |h| format!("-h{h:02}{minute:02}")),
-        at.as_ref().map_or(String::new(), |a| format!("-{a}")),
         weather.map_or(String::new(), |w| format!("-{w:?}").to_lowercase()),
         model.name(),
         backend.name()
     );
+    // `--at mine` or `--at mine:guard`: a frame inside a zone, arrived at by the console's tp;
+    // `--at lake_bank`, a name that is no zone, is a mark of the county.
+    let at = flag("--at").map(|a| match a.split_once(':') {
+        Some((z, m)) => (z.to_string(), Some(m.to_string())),
+        None => (a.to_string(), None),
+    });
+    let name = match &at {
+        Some((z, m)) => format!("{name}-{z}{}", m.as_deref().map_or(String::new(), |m| format!("-{m}"))),
+        None => name,
+    };
     let path = match flag("--out") {
         Some(p) if p.ends_with(".png") => PathBuf::from(p),
         Some(dir) => PathBuf::from(dir).join(format!("{name}.png")),

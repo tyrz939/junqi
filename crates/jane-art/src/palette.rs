@@ -270,6 +270,8 @@ ramps! {
     Leather "leather" 0x5e3e2a,
     /// The pool under a fallen person: muted, never bright red.
     Pool "pool" 0x5a2c30,
+    /// The Works' grass: slag-grey with a little olive left in it (`terrain::region`).
+    TurfSlag "turf_slag" 0x6e7456,
 }
 
 impl Ramp {

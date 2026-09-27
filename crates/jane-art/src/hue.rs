@@ -46,6 +46,7 @@ pub const fn shadow_hue(r: Ramp) -> Option<i32> {
         | Ramp::Leaf
         | Ramp::Turf
         | Ramp::TurfDry
+        | Ramp::TurfSlag
         | Ramp::Marsh
         | Ramp::Hedge
         | Ramp::LeafOlive

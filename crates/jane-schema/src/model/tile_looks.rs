@@ -136,6 +136,26 @@ model_enum! {
         Fence,
         /// A low dry-stone wall, in the strips.
         StoneWall,
+        /// A mine gallery's rock, a timber set every third cell, ore in it.
+        Timbered,
+        /// Crypt ashlar in deep courses with a burial niche every other cell.
+        Crypt,
+        /// Sooted brick in courses, an iron pilaster and a beam: a works.
+        Ironwork,
+        /// A painted wall over a picture rail, moulded panels below: a museum.
+        Panelled,
+        /// Coursed walling with an iron main and a copper pipe run along it.
+        Pipework,
+        /// A painted wall over a dado rail, boards below it: a school.
+        Wainscot,
+        /// Wood blocks in a basket weave.
+        Parquet,
+        /// Riveted iron floor plates, chequered, stained with oil.
+        Plates,
+        /// Great flagstones, with a carved ledger stone among them.
+        Flags,
+        /// A wet brick invert with a drain grate now and then.
+        Grating,
     }
 }
 

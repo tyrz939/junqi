@@ -89,8 +89,10 @@
   },
   "lights": { "prop": "candle_sconce", "every": 8, "corridor": 12 },
   "dress": {
+    "scatter_floor": { "props": ["scatter_books", "scatter_papers", "scatter_books", "scatter_papers"], "chance": 0.08 },
+    "scatter_wall": { "props": ["scatter_cobweb", "scatter_frame"], "chance": 0.3 },
     "pile": { "props": ["crate", "barrel"], "chance": 0.5 },
-    "shelf": { "props": ["shelf"], "chance": 0.9 },
+    "shelf": { "props": ["bookcase"], "chance": 0.9 },
     "desk": { "props": ["table"], "chance": 0.8 }
   },
   "fallback": [

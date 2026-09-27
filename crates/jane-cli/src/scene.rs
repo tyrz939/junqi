@@ -140,8 +140,10 @@ pub struct Opts {
     pub minute: u8,
     pub canvas: (u16, u16),
     pub backend: Which,
-    /// After the play, travel to this mark of the county first (`--at lake_bank`).
-    pub at: Option<String>,
+    /// After the play, travel to this zone (by name), at this named mark or the zone's way in,
+    /// with god on and the world let settle a second: a frame inside a dungeon. A name that is
+    /// no zone is a mark of the county (`--at lake_bank`).
+    pub at: Option<(String, Option<String>)>,
     /// Hold the sky to this weather, the ground wet as after an hour of it (`--weather rain`).
     pub weather: Option<jane_present::WeatherKind>,
     /// Cast this spell east after the rest, and draw the frame so many ticks later (`--cast icebolt:12`).
@@ -149,6 +151,37 @@ pub struct Opts {
     /// `Features` rows set by key (`--rows fog=off,god_rays=off`, PRESENTATION.md §1.3).
     pub rows: Vec<(String, String)>,
     pub gl: GlOpts,
+}
+
+/// The mark `asked` in `zone`, or its way in (the console's `tp` rule): its first named mark
+/// among start, front, entry, a stair, a mouth, a gate. An unknown mark names the ones it has.
+fn mark_in(sim: &Sim, zone: jane_core::ids::ZoneId, asked: Option<&str>) -> Result<jane_core::Sym, String> {
+    let syms = &sim.state().syms;
+    let named: Vec<(&str, jane_core::Sym)> = sim
+        .blueprint(zone)
+        .marks
+        .keys()
+        .filter_map(|k| match *k {
+            jane_core::Key::Name(n) => {
+                let s = jane_sim::sym::of_name(n);
+                Some((syms.name(s), s))
+            }
+            jane_core::Key::Local(_) => None,
+        })
+        .collect();
+    if let Some(a) = asked {
+        return named.iter().find(|(n, _)| *n == a).map(|(_, s)| *s).ok_or_else(|| {
+            let mut all: Vec<&str> = named.iter().map(|(n, _)| *n).collect();
+            all.sort_unstable();
+            format!("{}: no mark {a}; it has {}", zone.name(), all.join(" "))
+        });
+    }
+    for want in ["start", "front", "entry", "stair_a", "mouth", "gate"] {
+        if let Some(s) = syms.find(want).filter(|s| named.iter().any(|(_, n)| n == s)) {
+            return Ok(s);
+        }
+    }
+    named.first().map(|(_, s)| *s).ok_or_else(|| format!("{} has no named mark", zone.name()))
 }
 
 /// `--rows fog=off,god_rays=off`: `Features` rows by their `config.json` key.
@@ -264,19 +297,20 @@ fn play(bps: Blueprints, o: &Opts, tier: Tier) -> Result<(Tap, Present, u32), St
         let v = host.sim.view(seat).ok_or("seat 0 is not in the world")?;
         present.tick(&v, &host.events);
     }
-    if let Some(at) = &o.at {
-        let v = host.sim.view(seat).ok_or("seat 0 is not in the world")?;
-        // `MARK` in the county, or `ZONE:MARK` (`mine:entry`).
-        let (zone, name) = match at.split_once(':') {
-            Some((z, m)) => (jane_core::ZoneId::from_name(z).ok_or_else(|| format!("--at: no zone \"{z}\""))?, m),
-            None => (jane_core::ZoneId::County, at.as_str()),
+    if let Some((zone, mark)) = &o.at {
+        // A name that is no zone is a mark of the county.
+        let (z, mark) = match jane_core::ids::ZoneId::from_name(zone) {
+            Some(z) => (z, mark.as_deref()),
+            None if mark.is_none() => (jane_core::ids::ZoneId::County, Some(zone.as_str())),
+            None => return Err(format!("--at: no zone {zone}")),
         };
-        let mark = v.sym(name).ok_or_else(|| format!("--at: no mark \"{name}\""))?;
-        let tp = DevOp::Tp { zone, mark };
-        let cmd = [StampedCommand { seat: Some(seat), seq: u16::MAX - 1, cmd: Command::Dev(tp) }];
-        host.sim.step(&StepInput { frames: [InputFrame::IDLE; 4], commands: &cmd });
-        // The travel lands at the end of the step; a few idle ticks settle the camera on her.
-        for _ in 0..90 {
+        let mark = mark_in(&host.sim, z, mark)?;
+        let cmds = [
+            StampedCommand { seat: Some(seat), seq: u16::MAX - 2, cmd: Command::Dev(DevOp::God(true)) },
+            StampedCommand { seat: Some(seat), seq: u16::MAX - 1, cmd: Command::Dev(DevOp::Tp { zone: z, mark }) },
+        ];
+        host.sim.step(&StepInput { frames: [InputFrame::IDLE; 4], commands: &cmds });
+        for _ in 0..60 {
             let events = host.sim.drain_events().to_vec();
             let v = host.sim.view(seat).ok_or("seat 0 is not in the world")?;
             present.tick(&v, &events);

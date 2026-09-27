@@ -174,7 +174,8 @@ fn anat(a: Anatomy, plan: Plan) -> Anat {
             head_top: ay - 12,
         },
         // Birds are the bird plan's; a stand-in so the table is total.
-        Anatomy::Hen | Anatomy::Crow => anat(Anatomy::Cat, plan),
+        // Not a quadruped: never drawn on this rig.
+        _ => anat(Anatomy::Cat, plan),
     }
 }
 

@@ -55,9 +55,9 @@ chunk/county/0_2 e1b99e73
 chunk/county/1_2 5a6d042d
 chunk/county/2_2 b6555d91
 chunk/county/3_2 eeec3138
-chunk/indoor/0_0 fc5db381
-chunk/indoor/1_0 b4d672e8
-chunk/indoor/2_0 200a61c2
-chunk/indoor/0_1 101a34ab
-chunk/indoor/1_1 143a12d5
+chunk/indoor/0_0 4faf7173
+chunk/indoor/1_0 9210479b
+chunk/indoor/2_0 b3fc838b
+chunk/indoor/0_1 b8a655f4
+chunk/indoor/1_1 f8b409da
 chunk/indoor/2_1 3709febe

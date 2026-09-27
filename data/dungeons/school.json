@@ -1846,10 +1846,10 @@
   },
   "lights": { "prop": "gas_lamp", "every": 9, "corridor": 14 },
   "dress": {
+    "scatter_floor": { "props": ["scatter_papers", "scatter_books", "scatter_papers"], "chance": 0.07 },
+    "scatter_wall": { "props": ["scatter_poster", "scatter_cobweb"], "chance": 0.3 },
     "desk": {
-      "props": [
-        "table"
-      ],
+      "props": ["school_desk"],
       "chance": 1
     },
     "pile": {
@@ -1866,9 +1866,7 @@
       "chance": 1
     },
     "shelf": {
-      "props": [
-        "shelf"
-      ],
+      "props": ["bookcase"],
       "chance": 1
     }
   },

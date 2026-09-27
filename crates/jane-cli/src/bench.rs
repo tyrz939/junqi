@@ -317,7 +317,10 @@ fn frames(args: &[String]) -> Result<(), String> {
         minute: 0,
         canvas,
         backend,
-        at: flag("--at").map(str::to_owned),
+        at: flag("--at").map(|a| match a.split_once(':') {
+            Some((z, m)) => (z.to_string(), Some(m.to_string())),
+            None => (a.to_string(), None),
+        }),
         weather: flag("--weather").map(crate::scene::weather).transpose()?,
         cast: flag("--cast").map(str::to_owned),
         rows: crate::scene::rows(flag("--rows"))?,

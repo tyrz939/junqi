@@ -108,7 +108,15 @@ pub(super) fn paint(p: &mut Painter, src: &impl TileSource, x0: i32, y0: i32, se
             };
             match st.row.pattern {
                 P::Void => fill(p, &c, st.ramp.at(Tone::Deep), 1),
-                P::Block | P::Rock => wall(p, &c, outdoor),
+                P::Block
+                | P::Rock
+                | P::Timbered
+                | P::Crypt
+                | P::Ironwork
+                | P::Panelled
+                | P::Pipework
+                | P::Wainscot => wall(p, &c, outdoor),
+                P::Parquet | P::Plates | P::Flags | P::Grating => interior_floor(p, &c),
                 P::Cliff => cliff(p, &c),
                 P::RoofTile | P::Slate | P::Thatch => {
                     roof(p, &c, st.ramp, st.row.pattern, |s| s.row.group == TileGroup::Roof, 0);
@@ -200,7 +208,11 @@ fn wall(p: &mut Painter, c: &Cell, outdoor: bool) {
     let thin = (!wl(p, -1, 0) && !wl(p, 1, 0)) || (!wl(p, 0, -1) && !wl(p, 0, 1));
     let top = i32::from(c.st.row.rise);
     let r = c.st.ramp;
-    if outdoor && !south_open && !thin && c.st.row.pattern == P::Block {
+    if outdoor
+        && !south_open
+        && !thin
+        && matches!(c.st.row.pattern, P::Block | P::Crypt | P::Ironwork | P::Panelled | P::Pipework | P::Wainscot)
+    {
         // The roof of a works, a library, a school: slate gone dark with soot.
         roof(p, c, Ramp::Slate, P::Slate, |s| s.row.wall_like, -1);
         return;
@@ -210,7 +222,10 @@ fn wall(p: &mut Painter, c: &Cell, outdoor: bool) {
             for x in 0..CELL {
                 let (wx, wy) = c.w(x, y);
                 let z = face_z(top, y, 0, 1);
-                let (ix, n) = if c.st.row.pattern == P::Rock {
+                let (ix, n) = if let Some(f) = super::interior::face(c.st.row.pattern, r, c.st.accent, wx, wy, y) {
+                    // A dungeon's own walling (`interior`).
+                    f
+                } else if c.st.row.pattern == P::Rock {
                     rock_face(r, wx, wy)
                 } else {
                     // Courses of dressed stone, `detail` px tall with a px of mortar; each stone lit
@@ -296,7 +311,7 @@ fn wall(p: &mut Painter, c: &Cell, outdoor: bool) {
 
 /// Rough rock, ridged top to bottom: the column decides the ridge, so stacked cells line up; a
 /// ridge is lit on its left edge and shaded on its right, in runs of 2 or 3 px.
-fn rock_face(r: Ramp, wx: i32, wy: i32) -> (Ix, Normal) {
+pub(super) fn rock_face(r: Ramp, wx: i32, wy: i32) -> (Ix, Normal) {
     // Ridges of 3 to 6 px: a ridge's index and px within it, by blocks of 16 px split by hash.
     let block = wx.div_euclid(16);
     let lx = wx.rem_euclid(16);
@@ -940,7 +955,23 @@ fn boards(p: &mut Painter, c: &Cell) {
     }
 }
 
-/// A cave's rough floor: broad patches, a stone or two lit on top.
+/// A dungeon's own floor (`interior`): parquet, iron plate, flags with a ledger stone, wet
+/// flags with a grate, worn by the painter's wear field.
+fn interior_floor(p: &mut Painter, c: &Cell) {
+    let z = i32::from(c.st.row.rise).max(1);
+    for y in 0..CELL {
+        for x in 0..CELL {
+            let (wx, wy) = c.w(x, y);
+            let wear = p.s.fine.at(wx, wy) + (p.s.wob_x.at(wx, wy) - 128) / 4;
+            if let Some((ix, n, dz)) = super::interior::floor(c.st.row.pattern, c.st.ramp, c.st.accent, wx, wy, wear) {
+                put(p, c, x, y, ix, n, z + dz);
+            }
+        }
+    }
+}
+
+/// A cave's rough floor: broad patches, a stone or two lit on top. The stones stand a px, no
+/// more: a lantern at her feet would stretch taller ones into a floor of spikes.
 fn rock_floor(p: &mut Painter, c: &Cell) {
     let z = i32::from(c.st.row.rise).max(1);
     let r = c.st.ramp;
@@ -961,8 +992,8 @@ fn rock_floor(p: &mut Painter, c: &Cell) {
     for s in 0..(c.h & 3) as i32 {
         let hs = h32(c.h, s as u32, 3);
         let (x, y) = (2 + below(hs, 11) as i32, 2 + below(hs.rotate_right(8), 11) as i32);
-        put(p, c, x, y, r.at(Tone::Light), normal(-50, -50), z + 2);
-        put(p, c, x + 1, y, r.at(Tone::Lift), normal(40, -40), z + 2);
+        put(p, c, x, y, r.at(Tone::Light), normal(-50, -50), z + 1);
+        put(p, c, x + 1, y, r.at(Tone::Lift), normal(40, -40), z + 1);
         put(p, c, x, y + 1, r.at(Tone::Mid), normal(-40, 40), z + 1);
         put(p, c, x + 1, y + 1, r.at(Tone::Shade), normal(50, 50), z + 1);
         step(p, c, x + 1, y + 2, -1);

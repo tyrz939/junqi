@@ -1,6 +1,7 @@
 //! `container` (ART.md §2.3): what holds things. `open` is the lid up (a chest looted, a crate
 //! prised). Shapes: `chest`, `trunk`, `crate`, `barrel`, `sack`, `jar`, `churn`, `coffin`,
-//! `tin`, `bowl`, `bottles`, `parcel`, `mug`.
+//! `tin`, `bowl`, `bottles`, `parcel`, `mug`; and the dungeons' own (§8 step 7): `urns` (the
+//! Burial), `drums` (the Factory), `ore_tub` (the mine).
 
 use jane_core::grid::Rect;
 
@@ -189,6 +190,67 @@ pub(crate) fn draw(c: &mut Canvas, k: &Kit, state: State) -> Option<Stand> {
             band(c, x, x + bw - 1, foot - 10, k.body, 5);
             c.hline(x + 2, x + bw - 3, foot - 21, k.body.at(Tone::Light), 7);
             Stand::Up(&[])
+        }
+        "urns" => {
+            // Funerary urns on the floor, three sizes, lidded, and a skull fallen between them.
+            ao(c, 1, w - 2, foot, 5);
+            for (i, (x, bw, bh)) in [(2, 10, 14), (w - 12, 9, 11), (w / 2 - 4, 8, 17)].into_iter().enumerate() {
+                let y = foot - bh;
+                let mut m = Canvas::new(c.w(), c.h());
+                m.ellipse(Rect::new(x, y + 3, bw, bh - 3), Ix::INK, 1);
+                m.fill_rect(Rect::new(x + bw / 2 - 2, y, 4, 4), Ix::INK, 1);
+                c.inflate(&m, k.body, bw / 3, Z::new(2 + i as u8, 5 + i as u8));
+                c.retone(k.body, super::HARD);
+                c.fill_normal(Rect::new(x + bw / 2 - 3, y - 1, 6, 2), k.body.at(Tone::Light), crate::canvas::FLAT, 6 + i as u8);
+                c.hline(x + 1, x + bw - 2, y + bh / 2 + 1, k.body.at(Tone::Shade), 6 + i as u8);
+            }
+            let s = (w / 2 + 3, foot - 4);
+            c.fill_rect(Rect::new(s.0, s.1, 4, 3), k.accent.at(Tone::Light), 8);
+            c.dot(s.0 + 1, s.1 + 1, Ix::SEAM, 8);
+            c.dot(s.0 + 3, s.1 + 1, Ix::SEAM, 8);
+            c.hline(s.0, s.0 + 3, s.1 + 3, k.accent.at(Tone::Shade), 8);
+            Stand::Up(&[])
+        }
+        "drums" => {
+            // Oil drums, two standing in the works' paint with their ribs and bungs, and the
+            // oil that has run from them.
+            c.ellipse(Rect::new(3, foot - 3, w - 6, 4), Ramp::Void.at(Tone::Deep), 1);
+            c.dot(8, foot - 2, Ramp::Sky.at(Tone::Shade), 1);
+            for (i, x) in [2, w / 2].into_iter().enumerate() {
+                let (dw, dh) = (w / 2 - 3, 18 - 2 * i as i32);
+                let y = foot - dh - i as i32;
+                ao(c, x, x + dw - 1, foot - i as i32, 4);
+                c.polygon_lit(&[(x, y + 2), (x + dw - 1, y + 2), (x + dw - 1, foot - i as i32), (x, foot - i as i32)], k.body, 100, Z::new(2, 4));
+                c.retone(k.body, super::HARD);
+                for yy in [y + 6, y + 11] {
+                    c.hline(x, x + dw - 1, yy, k.body.at(Tone::Light), 5);
+                    c.hline(x, x + dw - 1, yy + 1, k.body.at(Tone::Shade), 5);
+                }
+                let head = Rect::new(x, y, dw, 4);
+                c.ellipse(head, k.trim.at(Tone::Light), 6);
+                c.ellipse(Rect::new(head.x + 1, head.y + 1, head.w - 2, 2), k.trim.at(Tone::Base), 6);
+                c.dot(x + dw - 4, y + 1, k.trim.at(Tone::Deep), 7);
+                c.vline(x + 3, y + 8, y + 10, k.trim.at(Tone::Shade), 5);
+            }
+            Stand::Up(&[])
+        }
+        "ore_tub" => {
+            // A tub of ore: an iron-bound box heaped with broken rock, gold in it.
+            let (x, tw) = (3, w - 6);
+            ao(c, x, x + tw - 1, foot, 5);
+            let (top, front) = box3(c, x, tw, foot, 10, 8, k.body, Some((3, k.seed)), 3);
+            for y in [front.y + 2, front.bottom() - 3] {
+                band(c, front.x, front.right() - 1, y, k.trim, 5);
+            }
+            for i in 0..7 {
+                let hsh = parts::hash(k.seed, i, 7);
+                let (rx, ry) = (top.x + 3 + (hsh % (top.w as u32 - 6)) as i32, top.y + 1 + (hsh >> 8) as i32 % 5);
+                c.disc_lit(rx, ry, 2, Ramp::Rock, Z::flat(6 + (i % 2) as u8));
+                if hsh % 3 == 0 {
+                    c.dot(rx - 1, ry - 1, k.accent.at(Tone::High), 8);
+                }
+            }
+            Stand::Tops([(top, lid_height(10)), (Rect::default(), 0)])
         }
         "coffin" => {
             // A coffin lid seen from above: the six-sided board, its planks lengthways, brass

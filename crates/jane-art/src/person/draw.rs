@@ -78,6 +78,8 @@ pub(crate) struct Rig {
     pub trail: (i32, i32),
     /// A skeleton: the bone skin, drawn as bones (ART.md §2.1).
     pub bone: bool,
+    /// Which way the frame faces.
+    pub facing: Facing,
 }
 
 /// Whether `d` is a skeleton: the `bone` skin draws a skull, ribs and bones, not a face and
@@ -105,7 +107,7 @@ impl Rig {
         };
         let hem = (p.hip_y() + pose.lag.0 + hang).min(AY - 2);
         let trail = (pose.lag.1 + bent - lean, pose.lag.0 - pose.bob);
-        Rig { p, pose, build: d.look.build, skull, top, waist: (top + hip) / 2 + 1, hip, hem, lean, trail, bone: bony(d) }
+        Rig { p, pose, build: d.look.build, skull, top, waist: (top + hip) / 2 + 1, hip, hem, lean, trail, bone: bony(d), facing }
     }
 
     /// The eyes' first row (their lids are the row above).
@@ -138,7 +140,7 @@ impl Rig {
     }
 
     /// The body's depth seen from the side: narrower than its breadth.
-    fn side_w(&self) -> i32 {
+    pub(crate) fn side_w(&self) -> i32 {
         (self.p.shoulder_w - 2).max(8)
     }
 }
@@ -146,35 +148,71 @@ impl Rig {
 /// One living frame of a person, finished.
 pub fn frame(d: &Dress, p: Proportions, facing: Facing, pose: Pose) -> Canvas {
     let mut c = Canvas::new(super::W, super::H);
+    // Seated in her rocking chair: she faces out of it (or is its back, from behind), lower by a
+    // chair's seat, and the walk's beats rock it.
+    let seated = d.look.extras.contains(&Extra::Seated);
+    let (facing, pose, lean) = if seated { super::special::seat(facing, pose) } else { (facing, pose, 0) };
     let r = Rig::new(p, pose, d, facing);
+    if seated {
+        super::special::chair_rockers(&mut c);
+        if facing == Facing::Down {
+            super::special::chair_back(&mut c, &r, lean);
+        }
+    }
     match facing {
         Facing::Down => down(&mut c, d, &r),
         Facing::Up => up(&mut c, d, &r),
         Facing::Side => side(&mut c, d, &r),
     }
-    finish(&mut c, d);
+    if seated {
+        if facing == Facing::Up {
+            super::special::chair_back(&mut c, &r, lean);
+        }
+        super::special::chair_front(&mut c, d, &r, facing == Facing::Down);
+    }
+    super::special::extras(&mut c, d, &r);
+    super::special::wet(&mut c, d, &r);
+    super::held::at_face(&mut c, d, &r);
+    finish(&mut c, d, &r);
     c
 }
 
 /// Every material to its own tones, skin never in a checker, the clusters cleaned, the contact
 /// shadow under the feet, the selective outline (seams by relief), then each pixel's true height.
-fn finish(c: &mut Canvas, d: &Dress) {
-    for r in [d.coat, d.front, d.legs, d.hat, d.boots, d.pack] {
-        c.retone(r, CLOTH);
+fn finish(c: &mut Canvas, d: &Dress, r: &Rig) {
+    // A held lantern's light is light, not paint: it keeps its colour through the outline.
+    let glow: Vec<(i32, i32, Ix)> = if d.look.held == jane_data::HeldItem::Lantern {
+        (0..c.h())
+            .flat_map(|y| (0..c.w()).map(move |x| (x, y)))
+            .filter_map(|(x, y)| {
+                let e = c.emissive_at(x, y);
+                (e != Ix::CLEAR).then_some((x, y, e))
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
+    for m in [d.coat, d.front, d.legs, d.hat, d.boots, d.pack] {
+        c.retone(m, CLOTH);
     }
     c.retone(d.skin, SKIN);
     c.unchecker(d.skin);
-    for r in [d.coat, d.front, d.legs, d.hat, d.boots, d.pack, d.skin, d.hair] {
-        c.declutter(r);
+    for m in [d.coat, d.front, d.legs, d.hat, d.boots, d.pack, d.skin, d.hair] {
+        c.declutter(m);
     }
+    super::special::material(c, d, r);
     c.despike();
     c.ao_contact(Rect::new(CX - 7, AY - 1, 14, 4), 0);
     c.outline();
-    for r in [d.coat, d.front, d.legs, d.hat, d.boots, d.pack, d.skin, d.hair] {
-        c.declutter(r);
+    for m in [d.coat, d.front, d.legs, d.hat, d.boots, d.pack, d.skin, d.hair] {
+        c.declutter(m);
     }
     c.unchecker(d.skin);
+    c.relight(&glow);
     c.upright(AY);
+    if d.look.ghost {
+        super::special::ghost(c, r);
+    }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -215,6 +253,7 @@ fn hand(c: &mut Canvas, d: &Dress, x: i32, y: i32, z: u8) {
     c.ellipse(Rect::new(x, y, 4, 3), d.skin.at(Tone::Base), z);
     c.dot(x + 1, y, d.skin.at(Tone::Lift), z);
     c.dot(x + 2, y + 1, d.skin.at(Tone::Mid), z);
+    super::special::knuckles(c, d, x, y, z);
 }
 
 /// The legs' ramp: bare legs are skin; under a skirt, stockings in the legs' ramp.
@@ -249,15 +288,24 @@ fn skirted(coat: Coat) -> bool {
 
 /// The eyes: each two px square and dark, a lid line three px wide over it, and a glint in its
 /// top corner on the light's side.
-fn eyes(c: &mut Canvas, d: &Dress, xs: &[(i32, bool)], ey: i32, z: u8) {
+fn eyes(c: &mut Canvas, d: &Dress, shut: bool, xs: &[(i32, bool)], ey: i32, z: u8) {
     let iris = if d.eye_emits { d.eye } else { Ramp::Leather.at(Tone::Deep) };
     for &(x, outward_left) in xs {
         let lid = if outward_left { x - 1 } else { x };
+        if shut {
+            // Screwed shut: the lid pressed down to a line where the eye was.
+            c.hline(lid, lid + 2, ey + 1, Ix::SEAM, z);
+            continue;
+        }
         c.hline(lid, lid + 2, ey - 1, Ix::SEAM, z);
-        c.set_emitting(d.eye_emits);
-        c.fill_rect(Rect::new(x, ey, 2, 2), iris, z);
-        c.set_emitting(false);
-        if !d.eye_emits {
+        if d.eye_emits {
+            // The dead's eyes: a dark eye and one pinpoint of light in it, toward the nose.
+            c.fill_rect(Rect::new(x, ey, 2, 2), Ramp::Leather.at(Tone::Deep), z);
+            c.set_emitting(true);
+            c.dot(if outward_left { x + 1 } else { x }, ey, iris, z);
+            c.set_emitting(false);
+        } else {
+            c.fill_rect(Rect::new(x, ey, 2, 2), iris, z);
             c.dot(x, ey, palette::letter('w').unwrap_or(Ix::BEVEL_LIGHT), z);
         }
     }
@@ -306,6 +354,8 @@ fn down(c: &mut Canvas, d: &Dress, r: &Rig) {
     head(c, d, r, false);
     if bone {
         super::bone::face_down(c, d, r);
+        // A skeleton keeps its hat: a soldier's helmet on a skull.
+        hat_down(c, d, r);
         return;
     }
     face_down(c, d, r);
@@ -573,7 +623,7 @@ fn arms_front(c: &mut Canvas, d: &Dress, r: &Rig) {
     let aw = r.arm_w();
     for i in 0..2 {
         let spread = r.pose.spread[i];
-        let hand_y = r.p.arm_y + r.pose.bob - i32::from(r.pose.breathe) + r.p.arm_l - 1 + r.pose.arm[i] - spread / 2;
+        let hand_y = r.p.arm_y + r.pose.bob - i32::from(r.pose.breathe) + r.p.arm_l - 1 + r.pose.arm[i] - spread / 2 - r.pose.raise[i];
         let (x0, out) = if i == 0 { (s0 - aw + 1, -spread) } else { (s1, spread) };
         arm_front(c, d, r, x0, out, hand_y, i == 0);
     }
@@ -594,6 +644,9 @@ fn arm_front(c: &mut Canvas, d: &Dress, r: &Rig, x0: i32, out: i32, hand_y: i32,
     c.hline(bx, bx + aw - 1, wrist, d.coat.at(Tone::Light), z.hi);
     c.dot(bx + aw - 1, wrist, d.coat.at(Tone::Shade), z.hi);
     hand(c, d, bx + (aw - 4) / 2, wrist + 1, z.hi);
+    if outer_left {
+        super::held::draw(c, d, r, bx + (aw - 4) / 2, wrist + 1);
+    }
 }
 
 fn neck(c: &mut Canvas, d: &Dress, r: &Rig) {
@@ -608,7 +661,7 @@ fn face_down(c: &mut Canvas, d: &Dress, r: &Rig) {
     let ey = r.eye_y();
     let z = relief::SKULL.lo;
     face_tones(c, d, r);
-    eyes(c, d, &[(CX - 5, true), (CX + 3, false)], ey, z);
+    eyes(c, d, r.pose.shut, &[(CX - 5, true), (CX + 3, false)], ey, z);
     // The nose: its shadow on the far side; the mouth under it.
     c.vline(CX, ey + 2, ey + 3, d.skin.at(Tone::Mid), z);
     c.dot(CX - 1, ey + 3, d.skin.at(Tone::Lift), z);
@@ -709,9 +762,7 @@ fn hat_down(c: &mut Canvas, d: &Dress, r: &Rig) {
             face_down(c, d, r);
             c.ellipse_lit(Rect::new(CX - 2, s.bottom() - 2, 4, 3), h, Z::new(z.hi, z.hi + 1));
         }
-        Hat::Veil | Hat::Diving => {
-            c.ellipse_lit(Rect::new(s.x - 1, s.y - 3, s.w + 2, s.h + 2), h, z);
-        }
+        Hat::Veil | Hat::Diving => super::special::hood(c, d, r),
     }
 }
 
@@ -726,6 +777,7 @@ fn up(c: &mut Canvas, d: &Dress, r: &Rig) {
         arms_front(c, d, r);
         neck(c, d, r);
         super::bone::skull_back(c, d, r);
+        hat_down(c, d, r);
         return;
     }
     if d.look.body.pack {
@@ -932,7 +984,7 @@ fn apron_side(c: &mut Canvas, f: Ramp, r: &Rig, x1: i32) {
 fn arm_side(c: &mut Canvas, d: &Dress, r: &Rig, shoulder: (i32, i32), swing: i32, far: bool) {
     let (sx, sy) = shoulder;
     let z = if far { relief::FAR } else { relief::ARM };
-    let hand_y = sy + r.p.arm_l - 4;
+    let hand_y = sy + r.p.arm_l - 4 - r.pose.raise[usize::from(far)];
     let elbow = (sx + swing / 3 - i32::from(swing > 1), sy + (hand_y - sy) / 2);
     let hx = sx + swing;
     c.polygon_cloth(&[(sx - 1, sy), (sx + 2, sy), (elbow.0 + 2, elbow.1), (elbow.0 - 1, elbow.1)], d.coat, 80, z);
@@ -945,6 +997,9 @@ fn arm_side(c: &mut Canvas, d: &Dress, r: &Rig, shoulder: (i32, i32), swing: i32
     c.dot(elbow.0 - 1, elbow.1, d.coat.at(Tone::Shade), z.hi);
     c.hline(hx - 1, hx + 2, hand_y, d.coat.at(Tone::Light), z.hi);
     hand(c, d, hx - 1, hand_y + 1, z.hi);
+    if !far {
+        super::held::draw(c, d, r, hx - 1, hand_y + 1);
+    }
     if far {
         c.shade(Rect::new(hx - 3, sy, 8, hand_y - sy + 4), d.coat, 1);
         c.shade(Rect::new(hx - 3, hand_y, 8, 5), d.skin, 1);
@@ -986,7 +1041,7 @@ fn face_side(c: &mut Canvas, d: &Dress, r: &Rig) {
             c.tint(x, y, skin, t);
         }
     }
-    eyes(c, d, &[(fx, false)], ey, z);
+    eyes(c, d, r.pose.shut, &[(fx, false)], ey, z);
     // The nose, two px past the skull with its shadow under it; the mouth's corner.
     c.vline(s.right(), ey + 2, ey + 3, skin.at(Tone::Base), z);
     c.dot(s.right() - 1, ey + 4, skin.at(Tone::Mid), z);
@@ -1054,6 +1109,6 @@ fn hat_side(c: &mut Canvas, d: &Dress, r: &Rig) {
             c.set_clip(None);
             face_side(c, d, r);
         }
-        Hat::Veil | Hat::Diving => c.ellipse_lit(Rect::new(s.x - 1, s.y - 3, s.w + 2, s.h + 2), h, z),
+        Hat::Veil | Hat::Diving => super::special::hood(c, d, r),
     }
 }

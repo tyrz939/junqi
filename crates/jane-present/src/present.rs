@@ -14,6 +14,7 @@ use jane_data::{Controller, Faction, Region};
 use jane_sim::event::{Event, EventKind, events_for};
 use jane_sim::ids::PropIx;
 use jane_sim::view::View;
+use jane_core::ids::SpellId;
 
 use crate::atlas::{Atlas, RefId};
 use crate::backend::AtlasPages;
@@ -92,7 +93,7 @@ struct UnitRec {
     /// Ticks stood still (a creature sits, grazes or pecks after a while), and the tick it last
     /// struck (its attack's three beats).
     still: u32,
-    struck: Option<u32>,
+    struck: Option<(u32, SpellId)>,
     facing: Facing,
 }
 
@@ -151,9 +152,11 @@ pub struct Present {
     entered: bool,
     units: Vec<UnitRec>,
     units_next: Vec<UnitRec>,
+    /// Each serpent's trail this tick, `Fx`, newest first (its body is drawn along it).
+    trails: Vec<(u32, Vec<(i32, i32)>)>,
     hurt: Vec<u32>,
     /// Units that struck (cast) this tick.
-    struck: Vec<u32>,
+    struck: Vec<(u32, SpellId)>,
     props: Vec<PropRec>,
     prop_scratch: Vec<PropIx>,
     standing: DrawList,
@@ -205,6 +208,7 @@ impl Present {
             entered: false,
             units: Vec::with_capacity(256),
             units_next: Vec::with_capacity(256),
+            trails: Vec::new(),
             hurt: Vec::with_capacity(64),
             struck: Vec::with_capacity(64),
             props: Vec::with_capacity(1024),
@@ -328,7 +332,7 @@ impl Present {
                     };
                 }
                 EventKind::Damage { unit, .. } => self.hurt.push(unit.get()),
-                EventKind::Cast { unit, .. } => self.struck.push(unit.get()),
+                EventKind::Cast { unit, spell, .. } => self.struck.push((unit.get(), spell)),
                 _ => {}
             }
         }
@@ -361,9 +365,13 @@ impl Present {
         let my_seat = view.seat().index() as u8;
         let cat = jane_data::catalog();
         self.units_next.clear();
+        self.trails.clear();
         for uv in view.units_in(area) {
             let u = uv.unit;
             let id = u.id.get();
+            if let Some(s) = u.snake.as_deref().filter(|_| u.alive) {
+                self.trails.push((id, s.trail.iter().map(|p| (p.x.0, p.y.0)).collect()));
+            }
             let cur = (u.pos.x.0, u.pos.y.0);
             let old = self.units.binary_search_by_key(&id, |r| r.id).ok().map(|i| self.units[i]);
             // Last tick's position as this presenter drew it; a newcomer from the view's.
@@ -417,9 +425,9 @@ impl Present {
                 self.units[i].hurt_until = self.tick + HURT_TICKS;
             }
         }
-        for &id in &self.struck {
+        for &(id, spell) in &self.struck {
             if let Ok(i) = self.units.binary_search_by_key(&id, |r| r.id) {
-                self.units[i].struck = Some(self.tick);
+                self.units[i].struck = Some((self.tick, spell));
             }
         }
     }
@@ -727,15 +735,31 @@ impl Present {
             }
             // A person shows its walk, breathe or dead frame (ART.md §4); a stand-in walks with
             // a one-px bob.
+            let mut cast_glow = None;
             let (look, mirror, bob) = match (u.person, u.creature) {
                 (Some(set), _) => {
-                    let pose = people::Pose { facing: u.facing, anim: u.anim, tick: self.tick, dead: u.dead, id: u.id };
+                    // A blow or a spell under way plays its three beats; a blow taken, its hurt.
+                    let act = u.struck.and_then(|(t, spell)| {
+                        let t = self.tick.wrapping_sub(t);
+                        (t < 3 * people::ACT_TICKS).then(|| match jane_data::catalog().combat.spell(spell).anim {
+                            jane_data::CastAnim::Cast => people::Act::Cast(t),
+                            _ => people::Act::Attack(t),
+                        })
+                    });
+                    let hurt = self.tick < u.hurt_until;
+                    // Hands out on the cast's second beat: the school's light between them.
+                    if let (Some(people::Act::Cast(t)), Some((_, spell))) = (act, u.struck) {
+                        if t / people::ACT_TICKS == 1 && !u.dead {
+                            cast_glow = Some(jane_data::catalog().combat.spell(spell).school);
+                        }
+                    }
+                    let pose = people::Pose { facing: u.facing, anim: u.anim, tick: self.tick, dead: u.dead, id: u.id, act, hurt };
                     let (look, mirror) = self.people.frame(set, pose);
                     (look, mirror, 0)
                 }
                 // A creature trots, sits a while after it stops, and strikes in three beats.
                 (None, Some(set)) => {
-                    let attack = u.struck.map(|t| self.tick.wrapping_sub(t)).filter(|&t| t < 3 * creatures::ATTACK_TICKS);
+                    let attack = u.struck.map(|(t, _)| self.tick.wrapping_sub(t)).filter(|&t| t < 3 * creatures::ATTACK_TICKS);
                     let pose = creatures::Pose {
                         facing: u.facing,
                         anim: u.anim,
@@ -776,6 +800,60 @@ impl Present {
                 sprite: sprite(r, x, y, Flags { mirror, tint }),
                 caster,
             });
+            // A serpent's body along its trail, tail first, a segment at every point, each
+            // standing where it lies so it sorts among what is round it.
+            if let (Some(t), Some(segs)) = (
+                self.trails.iter().find(|(id, _)| *id == u.id).map(|(_, t)| t),
+                u.creature.and_then(|s| self.creatures.segments(s)),
+            ) {
+                let n = t.len().max(1);
+                for (k, &(px, py)) in t.iter().enumerate().skip(2).rev() {
+                    let seg = segs[(k * segs.len() / n).min(segs.len() - 1)];
+                    let r = self.atlas.get(seg);
+                    let (qx, qy) = ((px >> FX_TO_CANVAS) - cam.0, (py >> FX_TO_CANVAS) - cam.1);
+                    let (x, y) = (qx - i32::from(r.ax), qy - i32::from(r.ay));
+                    if on_canvas(x, y, r.src.w, r.src.h) {
+                        self.standing.push(DrawCmd {
+                            y: qy,
+                            key: 0x8000_0000 | u.id,
+                            sprite: sprite(r, x, y, Flags { mirror: false, tint: Tint::None }),
+                            caster: None,
+                        });
+                    }
+                }
+            }
+            if let Some(school) = cast_glow {
+                // The light gathered between her hands: in front of her facing the viewer or to
+                // the side, behind her facing away; it lights what is round it.
+                let (dx, dy, ahead) = match u.facing {
+                    Facing::East => (9, -21, 1),
+                    Facing::West => (-9, -21, 1),
+                    Facing::South => (0, -18, 1),
+                    Facing::North => (0, -19, -1),
+                };
+                let g = self.atlas.get(self.people.glow(school));
+                let (gx, gy) = (sx + dx - i32::from(g.src.w) / 2, sy + dy - i32::from(g.src.h) / 2);
+                self.standing.push(DrawCmd {
+                    y: sy + ahead,
+                    key: 0x4000_0000 | u.id,
+                    sprite: sprite(g, gx, gy, Flags::default()),
+                    caster: None,
+                });
+                if n_glows < glows.len() {
+                    let c = jane_art::palette::rgb(jane_art::palette::Ramp::at(jane_art::fx::school_ramp(school), jane_art::palette::Tone::Light));
+                    glows[n_glows] = Some(Light {
+                        pos: (sx + dx, sy),
+                        height: (-dy).clamp(0, 255) as u8,
+                        colour: c,
+                        radius: 64,
+                        size: 4,
+                        casts: false,
+                        clear: 0,
+                        kind: LightKind::Point,
+                    });
+                    n_glows += 1;
+                }
+            }
         }
         let rows = (ch + 2 * SORT_MARGIN) as u32;
         let f = &mut self.frame;

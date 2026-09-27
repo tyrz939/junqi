@@ -7,9 +7,18 @@
 //! Units: canvas px at 16 a cell; speeds and positions in 1/16 px (`Q4`); a particle stands on
 //! a ground point `(x, y)` at a height `z`, and is seen at `(x, y - z)`. Ticks at 60 a second.
 //! Integer throughout; the dice are the presenter's own [`Lcg`], never the sim's.
+//!
+//! The school colours live here too (`school_ramp`, `SCHOOL_COLOUR` in the design): every
+//! spell's glow, bolt and pool reads its ramp, and `cast_glow` is the light gathered between a
+//! caster's hands in the people's cast cycle.
 
 use jane_core::Angle;
+use jane_core::action::School;
+use jane_core::grid::Rect;
 use jane_core::angle::{cos_q15, sin_q15};
+
+use crate::canvas::{Canvas, Z};
+use crate::palette::{Ramp, Tone};
 
 /// A presentation-only generator (PRESENTATION.md §2): a linear congruential step, reseeded per
 /// zone from `h32(seed, zone)`, so the same fight looks the same twice and nothing it rolls
@@ -1354,7 +1363,7 @@ pub fn rasterise(sparks: &[Spark], px: &mut [u32], w: i32, h: i32, (ox, oy): (i3
                 }
             }
             Shape::Streak => {
-                crate::canvas::bresenham(x, y, x - s.vx * 2 / 16, y - (s.vy - s.vz) * 2 / 16, |a, b| put(a, b, c))
+                crate::canvas::bresenham(x, y, x - s.vx * 2 / 16, y - (s.vy - s.vz) * 2 / 16, |a, b| put(a, b, c));
             }
             Shape::Ring(r0, r1) => {
                 let r = i32::from(r0) + (i32::from(r1) - i32::from(r0)) * i32::from(s.age) / i32::from(s.life.max(1));
@@ -1468,5 +1477,57 @@ mod tests {
         let (mut a, mut b) = (Lcg(99), Lcg(99));
         assert!((0..100).all(|_| a.roll() == b.roll()));
         assert!((0..1000).all(|_| a.range(-3, 3).abs() <= 3));
+    }
+}
+
+// ---- The school colours and the cast's glow (the people's cast cycle).
+
+/// The ramp a school's light is drawn in.
+pub const fn school_ramp(s: School) -> Ramp {
+    match s {
+        School::Heal => Ramp::Bloom,
+        School::Physical => Ramp::HairWhite,
+        School::Frost => Ramp::Sky,
+        School::Fire => Ramp::Ember,
+        School::Nature => Ramp::Leaf,
+        School::Blast => Ramp::ClothOchre,
+        School::Shock => Ramp::GlassLit,
+    }
+}
+
+/// Every school, in order.
+pub const SCHOOLS: [School; 7] =
+    [School::Heal, School::Physical, School::Frost, School::Fire, School::Nature, School::Blast, School::Shock];
+
+/// The light a cast gathers between the hands: a soft orb of the school's colour, its core
+/// bright, four short rays, all emitting. 13 x 13, drawn centred on the hands.
+pub fn cast_glow(s: School) -> Canvas {
+    let ramp = school_ramp(s);
+    let mut c = Canvas::new(13, 13);
+    c.set_emitting(true);
+    c.soft_ellipse(Rect::new(2, 2, 9, 9), ramp, Z::new(1, 2));
+    c.retone(ramp, [Tone::Base, Tone::Base, Tone::Lift, Tone::Light, Tone::Light, Tone::High, Tone::Glint, Tone::Glint]);
+    for (x, y) in [(6, 0), (6, 1), (6, 11), (6, 12), (0, 6), (1, 6), (11, 6), (12, 6)] {
+        c.dot(x, y, ramp.at(Tone::Light), 2);
+    }
+    c.fill_rect(Rect::new(5, 5, 3, 3), ramp.at(Tone::Glint), 3);
+    c.set_emitting(false);
+    c
+}
+
+#[cfg(test)]
+mod school_tests {
+    use super::*;
+    use crate::palette::Ix;
+
+    #[test]
+    fn every_school_glows_in_its_own_colour() {
+        let mut seen = std::collections::BTreeSet::new();
+        for s in SCHOOLS {
+            let c = cast_glow(s);
+            c.validate().unwrap();
+            assert!(c.emissive().iter().filter(|&&e| e != Ix::CLEAR).count() > 40, "{s:?} glows");
+            assert!(seen.insert(school_ramp(s)), "{s:?} shares a colour");
+        }
     }
 }
