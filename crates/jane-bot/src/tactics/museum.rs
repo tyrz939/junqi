@@ -457,9 +457,14 @@ pub fn fight(v: &View<'_>, cx: &mut crate::task::Ctx, reach: &Reach) -> Option<c
     let def = cat.combat.unit(boss.def);
     let hp = sense::hp_permille(boss);
     let next = def.phases.iter().map(|p| i32::from(p.hp_below.0)).filter(|&t| t < hp).max().unwrap_or(0);
-    // (Only while Explosion is known and some armour can be blown from ground she can reach.)
-    let blastable = has_explosion(v) && armours(v).any(|p| blast_spot(v, reach, p, None).is_some());
-    let hold = is_attendant && blastable && hp - next <= 80 && !dazzled;
+    // (Only while Explosion is known and some armour can be blown from ground she can reach:
+    // asked last, and only with a bolt in hand, since each armour's spot is a sight scan.)
+    let hold = is_attendant
+        && hp - next <= 80
+        && !dazzled
+        && bolt_ready.is_some()
+        && has_explosion(v)
+        && armours(v).any(|p| blast_spot(v, reach, p, None).is_some());
     let range = ice.map_or(0, |s| i64::from(cat.combat.spell(s).range.0) * 9 / 10);
     if let Some(s) = bolt_ready.filter(|_| !hold && in_sight && d > i64::from(3 * CELL_FX) && d <= range) {
         return Some(crate::Act {

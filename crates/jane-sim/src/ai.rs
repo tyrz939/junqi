@@ -40,7 +40,7 @@ use crate::event::SpellError;
 use crate::ids::UnitId;
 use crate::light::{lit_at, max_light_radius, prop_centre, reach_sq};
 use crate::los::line_of_sight;
-use crate::path::{PATH_WINDOW, PathAsk, REPATH_TICKS, cost_of_cells};
+use crate::path::{PATH_WINDOW, PathAsk, REPATH_BACKOFF_MAX, REPATH_TICKS, cost_of_cells};
 use crate::runtime::ZoneRuntime;
 use crate::state::{CombatState, PathCache, Unit, ZoneState};
 use crate::status::{is_stunned, speed_factor};
@@ -551,18 +551,30 @@ pub fn follow_to(cx: &mut Ctx<'_>, id: UnitId, goal: Vec2, speed: Fx, max_cells:
         if !found {
             // Remembered as an empty path toward this goal, so the walker asks again when its
             // re-plan comes or the goal moves, not every tick (the TS asked every tick it could).
+            // Asked again toward the same goal and found nothing again, it waits twice as long
+            // each time (an empty path's `at` counts the failures), up to `REPATH_BACKOFF_MAX`
+            // doublings: the dog's order to a mark it cannot reach searched its whole budget
+            // every third of a second.
+            let again = live_path(u).is_some_and(|p| p.cells.is_empty() && p.goal == goal_cell);
+            let fails = if again { live_path(u).map_or(0, |p| p.at).saturating_add(1) } else { 1 };
             clear_path(u);
+            let wait = Tick(REPATH_TICKS << u32::from(fails.min(REPATH_BACKOFF_MAX)));
+            let repath_at = now.after(wait);
             if let Some(p) = u.path.as_deref_mut() {
                 p.goal = goal_cell;
-                p.repath_at = now.after(Tick(REPATH_TICKS));
+                p.at = fails;
+                p.repath_at = repath_at;
             } else {
-                let repath_at = now.after(Tick(REPATH_TICKS));
-                u.path = Some(Box::new(PathCache { cells: Vec::new(), at: 0, goal: goal_cell, repath_at }));
+                u.path = Some(Box::new(PathCache { cells: Vec::new(), at: fails, goal: goal_cell, repath_at }));
             }
             return false;
         }
         let cells = s.path.out.iter().map(|&(x, y)| CellIx(y as u32 * w + x as u32));
-        let repath_at = now.after(Tick(REPATH_TICKS));
+        // A path that stops short of a fixed goal (partial: it was out of the search's reach)
+        // is walked to its end before it is planned again; `due` would re-run the same whole
+        // search every third of a second for the same answer.
+        let partial = s.path.out.last().is_none_or(|&(x, y)| (x, y) != (gx, gy));
+        let repath_at = now.after(Tick(if partial { REPATH_TICKS << REPATH_BACKOFF_MAX } else { REPATH_TICKS }));
         match u.path.as_deref_mut() {
             Some(p) => {
                 p.cells.clear();
