@@ -215,6 +215,7 @@ pub fn run(
     screen.backend().set_features(&present.features());
     let ui = Ui::new(present.ui_art().clone());
     let describe = screen.describe();
+    crate::crash::note_backend(&describe);
     let mut win = screen.size();
     let mut devices = Devices::new(pads, win.1);
     let mut canvas_px = canvas_size(win.0, win.1);
@@ -459,6 +460,7 @@ pub fn run(
             app.tick(held, &mut events);
             acc -= TICK;
             app.ticks += 1;
+            crate::crash::note_tick(app.ticks);
             title_clock.4 += 1;
             if t_ticks.elapsed() >= TICK_BUDGET || args.ticks.is_some_and(|n| app.ticks >= n) {
                 break;
@@ -1078,6 +1080,7 @@ impl App<'_> {
         // The county's music is the county's seed's, on every machine at the table.
         if let Some(sim) = session.sim() {
             self.sound.set_seed(sim.state().seed);
+            crate::crash::note_seed(sim.state().seed);
         }
         self.session = Some(session);
         self.scene = Scene::Play;

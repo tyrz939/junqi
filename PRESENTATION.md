@@ -766,7 +766,7 @@ Each is a one-line edit if the owner flips it before P6.
 | Loudness | Every cue at -21 dBFS gated, within 2 dB; the bell's hush 6 dB under | §5.3 |
 | Volumes | Master 80, music 70, effects 80 (beds follow effects), square law; a row on the Controls screen, not a screen of its own | §5.5 |
 | Audio thread | SDL2's callback owning the engine, commands over a channel; floats; 1024-sample buffers | §5.5 |
-| Saves and config | Slot files and `config.json` in `%APPDATA%\Jane`, `~/Library/Application Support/Jane` or `$XDG_DATA_HOME/jane`; beside the exe when a file called `portable` is there; `--data-dir` overrides | §3.2 |
+| Saves and config | Slot files and `config.json` in `%APPDATA%\Jane`, `~/Library/Application Support/Jane` or `$XDG_DATA_HOME/jane`; beside the exe when a file called `portable` is there; `--data-dir` overrides; a panic is appended to `crash.log` there (`jane-app/src/crash.rs`) | §3.2 |
 | The window's height | 350, not 380: the HUD's bar stays visible below it as a drop target | §3.2 |
 | The quest tab's name | Log (`VOICE.md` rule 8: no "quest" in the game's words) | §3.2 |
 | The title | A backdrop painted once into a UI image with what moves drawn over it each frame, not the `Sky` and `FarLandmark` passes; the passes can take it over when §2.8's parallax lands | §3.2 |
