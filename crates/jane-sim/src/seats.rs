@@ -187,17 +187,33 @@ impl Sim {
         }
     }
 
-    /// Sit down (§4.5). A `who` that has played here before gets her own body and bags back;
-    /// anyone else gets the start kit. Refused when the world is closed or all four are taken.
-    pub(crate) fn join(&mut self, who: ClientToken) -> Option<Seat> {
+    /// The seat `Join { who }` would give now, and whether it is her own body back; `None` when
+    /// it would be refused (the world closed, or all four taken). One rule for [`join`] and for
+    /// [`seat_for`](Self::seat_for).
+    fn seat_choice(&self, who: ClientToken) -> Option<(Seat, bool)> {
         let s = &self.state;
         if !s.players.is_empty() && !s.open {
             return None;
         }
-        let back = s.players.iter().position(|p| !p.connected && p.who == who && p.parked.is_some());
-        if back.is_none() && s.players.len() >= MAX_PLAYERS {
-            return None;
+        match s.players.iter().position(|p| !p.connected && p.who == who && p.parked.is_some()) {
+            Some(i) => Some((Seat(i as u8), true)),
+            None if s.players.len() < MAX_PLAYERS => Some((Seat(s.players.len() as u8), false)),
+            None => None,
         }
+    }
+
+    /// The seat a `Join { who }` applied first in the next step would sit her in, or `None` if it
+    /// would be refused. The lockstep host tells a joiner her seat with the snapshot it sends
+    /// before the step that seats her (ARCHITECTURE.md §7).
+    pub fn seat_for(&self, who: ClientToken) -> Option<Seat> {
+        self.seat_choice(who).map(|(s, _)| s)
+    }
+
+    /// Sit down (§4.5). A `who` that has played here before gets her own body and bags back;
+    /// anyone else gets the start kit. Refused when the world is closed or all four are taken.
+    pub(crate) fn join(&mut self, who: ClientToken) -> Option<Seat> {
+        let (chosen, returning) = self.seat_choice(who)?;
+        let back = returning.then_some(chosen.index());
         let (zone, at, facing) = self.arrival();
         self.ensure_zone(zone);
         self.ensure_runtime(zone);

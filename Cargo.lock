@@ -407,8 +407,12 @@ dependencies = [
 name = "jane-net"
 version = "0.1.0"
 dependencies = [
+ "jane-bot",
  "jane-core",
+ "jane-data",
  "jane-sim",
+ "postcard",
+ "serde",
 ]
 
 [[package]]

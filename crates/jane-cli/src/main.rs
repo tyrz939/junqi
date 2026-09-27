@@ -10,6 +10,7 @@ mod gen_cmd;
 mod hash_cmd;
 mod play;
 mod scene;
+mod serve;
 mod sheet_cmd;
 mod sheet_terrain;
 mod snap;
@@ -34,6 +35,7 @@ commands:
 {BENCH}
 {SHEET}
 {HASH}
+{SERVE}
   play --model reader|rusher --seed N | replay verify|record|diff   a player model plays; tapes (`jane play --help`)
   help                                this text";
 
@@ -43,6 +45,7 @@ fn usage() -> String {
         .replace("{BENCH}", bench::USAGE)
         .replace("{SHEET}", sheet_cmd::USAGE)
         .replace("{HASH}", hash_cmd::USAGE)
+        .replace("{SERVE}", serve::USAGE)
 }
 
 fn main() -> ExitCode {
@@ -78,6 +81,20 @@ fn main() -> ExitCode {
             }
         },
         Some(c @ ("play" | "replay")) => play::main(c, &args[1..]),
+        Some(c @ ("serve" | "join" | "find")) => {
+            let r = match c {
+                "serve" => serve::serve(&args[1..]),
+                "join" => serve::join(&args[1..]),
+                _ => serve::find(&args[1..]),
+            };
+            match r {
+                Ok(()) => ExitCode::SUCCESS,
+                Err(e) => {
+                    eprintln!("jane {c}: {e}");
+                    ExitCode::FAILURE
+                }
+            }
+        }
         Some("sheet") => match sheet_cmd::run(&args[1..]) {
             Ok(()) => ExitCode::SUCCESS,
             Err(e) => {

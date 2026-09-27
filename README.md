@@ -83,7 +83,33 @@ The title builds nothing; New Game builds the thirteen zones on a thread while t
 
 **Saves and config.** Three slots, `slot1.jane` to `slot3.jane`, and `config.json` (the name last used, the backend, the aim assist, the bindings that differ from `data/bindings.json`, each slot's seed) live in `%APPDATA%\Jane` on Windows, `~/Library/Application Support/Jane` on a Mac and `$XDG_DATA_HOME/jane` elsewhere; beside the exe instead when a file called `portable` sits there. The pause menu saves only within reach of a bed or a fire; resting at one saves by itself to the slot last used.
 
-Still to come (`PORT.md` §7): bots playing seeds (`jane play`, `dossier`), the LAN host (`jane serve`).
+Still to come (`PORT.md` §7): bots playing seeds (`jane play`, `dossier`).
+
+### Play together on a LAN
+
+Up to four, one world, on one network (`ARCHITECTURE.md` §7). One player hosts from her own game and plays in it; the others join her. Everyone runs the same build: a join from another build or other content is refused, and the refusal shows both content hashes.
+
+**From the menus.** The host picks **Host** on the title: a new world or one of her save slots, the door open or closed, two to four seats, the input delay, and whether to wait for a player who stalls; then Host. A world already being played alone opens from the pause menu's **Open to LAN**. Everyone else picks **Join**: the hosts on the network are listed, or type the host's address (her machine's LAN IP, `:port` if not 7777). The county comes from the host, so a joiner needs no seed.
+
+At the table each window plays its own seat and draws it in its own coat: plum, teal, moss, ochre; a plate under the vitals shows who sits there. Newcomers and returners arrive at the party's last fire; a guest who drops and comes back gets her own body and bags (her token is kept in `config.json`). Everyone is weaker for every player connected, wherever they stand, and it is ordinary single-player again when the guests leave. Pause stops the world only when you play alone. A player whose input stalls is waited for (a banner says whose coat and how long), and after 10 s gets up unless the host chose to wait. Anyone's rest saves the host's slot; a guest does not save.
+
+The same from the command line:
+
+```bash
+cargo run --release -p jane-app -- --seed 7 --host                 # New Game, open to the LAN (--port --seats --delay --wait)
+cargo run --release -p jane-app -- --join 192.168.1.20             # join at once (--port, or ADDR:PORT; --token N)
+```
+
+Headless, on a Pi or any machine nobody plays at:
+
+```bash
+cargo jane serve --seed 7 --save world.jsave --port 7777     # one status line: tick, seats, hash, hash checks agreed
+cargo jane join 127.0.0.1:7777 --model rusher                 # a bot plays a seat headless (soaks, tests)
+cargo jane find                                               # who hosts on this LAN (a UDP broadcast)
+cargo jane serve --seed 7 --record session.jrp --ticks 36000  # a new game's session as a tape: cargo jane replay verify session.jrp
+```
+
+On a headless host the first to join takes seat 0. Internet play is not supported: a LAN only, for now.
 
 Targets: `x86_64` Linux and Windows, `i686` (SSE2, Pentium 4 era), `aarch64` and `armv7` Linux (Raspberry Pi); Windows 7 and XP later through their own toolchains. One dedicated build per target. Rendering picks a backend at boot: `wgpu` on a modern GPU, `gl2` on anything with an OpenGL 2.1 driver (a 2006 PC, every Pi), `soft` when there is nothing. `PORT.md` §3, `PRESENTATION.md` §1.
 

@@ -322,6 +322,16 @@ pub enum AppIntent {
     /// The bag, book, quests or map window, on a tab.
     OpenWindow(u8),
     CloseWindow,
+    /// The title's Host screen (P8, `ui::lan`).
+    HostMenu,
+    /// The title's Join screen.
+    JoinMenu,
+    /// Host: the world and the table's rules (ARCHITECTURE.md §7).
+    Host(crate::ui::lan::HostChoice),
+    /// Join the host at this address (`host[:port]`).
+    Join(String),
+    /// The pause menu: open this world to the LAN.
+    OpenToLan,
 }
 
 /// What the UI hands the app.

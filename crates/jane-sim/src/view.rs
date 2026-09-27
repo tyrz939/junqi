@@ -449,6 +449,24 @@ impl<'a> View<'a> {
     pub fn sight(&self, a: Vec2, b: Vec2) -> bool {
         crate::los::line_of_sight(&self.rt.grid, a, b)
     }
+
+    /// The seat whose body `unit` is, if a connected seat's: her coat is the seat's, the one
+    /// thing that tells players apart (PLATFORM.md §2; PRESENTATION.md §3.6 `friend_seat`).
+    pub fn seat_of(&self, unit: UnitId) -> Option<Seat> {
+        self.state.players.iter().find(|p| p.connected && p.unit == unit).map(|p| p.seat)
+    }
+
+    /// Whether a damage or heal number is hers to see: she dealt it or took it (PLATFORM.md §2,
+    /// "numbers are yours"). A friend's fight shows its sparks, never her arithmetic. False for
+    /// any other kind.
+    pub fn is_my_number(&self, kind: &crate::event::EventKind) -> bool {
+        use crate::event::EventKind;
+        let me = self.me().unit;
+        match *kind {
+            EventKind::Damage { unit, from, .. } | EventKind::Heal { unit, from, .. } => unit == me || from == Some(me),
+            _ => false,
+        }
+    }
 }
 
 fn prev_pos(rt: &ZoneRuntime, id: UnitId) -> Option<Vec2> {
