@@ -193,13 +193,14 @@ pub fn junk_slot(v: &View<'_>) -> Option<u8> {
         bag.iter().flatten().any(|s| s.item == i && u32::from(s.qty) >= max)
     };
     let stacks = |i: ItemId| bag.iter().flatten().filter(|s| s.item == i).count();
+    let makings = bait_makings(v);
     bag.iter()
         .enumerate()
         .filter_map(|(i, s)| s.map(|s| (i, s)))
         .filter(|(_, s)| {
             let d = cat.combat.item(s.item);
             let spare = stacks(s.item) > 1 && full(s.item);
-            !d.kept() && (!d.story && !wanted.contains(&s.item) || spare)
+            !d.kept() && (!d.story && !wanted.contains(&s.item) && !makings.contains(&s.item) || spare)
         })
         .min_by_key(|(i, s)| {
             let d = cat.combat.item(s.item);
@@ -207,6 +208,37 @@ pub fn junk_slot(v: &View<'_>) -> Option<u8> {
             (!spare, rank(s.item), s.qty, *i)
         })
         .map(|(i, _)| i as u8)
+}
+
+/// What the bait for the Burial's small snakes is made of, and the bait itself, while Under the
+/// Stone is still to come ("Feed the small snakes; do not fight them"; the dog paid the
+/// snakeroot and the water for it): a nearly full bag threw the root and the water out in the
+/// Factory, and she came to the Burial with nothing to feed them. Every bait a creature's row
+/// names, and what a bench makes it from, two steps down.
+pub fn bait_makings(v: &View<'_>) -> Vec<ItemId> {
+    let cat = jane_data::catalog();
+    if cat.story.quest_id("the_burial").is_some_and(|q| v.quests_done().contains(&q)) {
+        return Vec::new();
+    }
+    let mut out: Vec<ItemId> = cat.combat.units.iter().filter_map(|u| u.bait).collect();
+    for _ in 0..2 {
+        let more: Vec<ItemId> = cat
+            .combat
+            .recipes
+            .iter()
+            .filter(|r| out.contains(&r.output))
+            .flat_map(|r| r.inputs.iter().copied())
+            .collect();
+        out.extend(more);
+    }
+    // The rats' meat comes again with every rat, and she carries a stack of it all the story:
+    // not kept back, or a bag full of what cannot be thrown out never has room for the bench's
+    // first Stranglethorn.
+    let meat = item("rat_meat");
+    out.retain(|&i| i != meat);
+    out.sort();
+    out.dedup();
+    out
 }
 
 pub fn holds(v: &View<'_>, item: ItemId) -> u32 {
