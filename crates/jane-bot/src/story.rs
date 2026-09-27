@@ -402,7 +402,13 @@ impl Story {
         }
         // What she passes: things to read or open.
         let reach = i64::from(if cx.model == Model::Reader { 20 } else { 12 } * CELL_FX);
+        // Out of doors nothing past reach is taken, so that is asked first, and cheaply: the
+        // county has thousands of props, and this runs every frame she has nothing in hand.
+        let indoor = v.indoor();
         for p in v.props() {
+            if !indoor && sense::plainly_past(p, at, reach) {
+                continue;
+            }
             let g = Goal::Look(here, p.id);
             if cx.used.contains_key(&(here, p.id)) || !self.open(v, g) {
                 continue;
@@ -413,7 +419,7 @@ impl Story {
             }
             // What teaches is worth crossing the zone for; the rest only when passing.
             let teaches = sense::prop_does(v, p, &|a| matches!(a, Action::Learn(_) | Action::Grow { .. }));
-            if d > reach && !(teaches && v.indoor()) {
+            if d > reach && !(teaches && indoor) {
                 continue;
             }
             offer(d + i64::from(6 * CELL_FX), g, Target::Task(Task::Use(UseProp::new(p.id))), &mut best);
@@ -545,6 +551,15 @@ fn curious(v: &View<'_>, model: Model, p: &jane_sim::Prop) -> bool {
 /// Does a person (a talker's conversation) or a place (a trigger) take `q` back, rather than a
 /// thing read? The dog's errands before the lost property book's.
 pub fn someone_waits(q: QuestId) -> bool {
+    // A question of the catalog alone, asked of every quest in the log whenever she chooses
+    // (every frame she has nothing in hand): answered for every quest once, and kept.
+    static WAITS: std::sync::OnceLock<Vec<bool>> = std::sync::OnceLock::new();
+    let waits = WAITS
+        .get_or_init(|| (0..jane_data::catalog().story.quests.len()).map(|i| waits_for(QuestId(i as u16))).collect());
+    waits[q.index()]
+}
+
+fn waits_for(q: QuestId) -> bool {
     let cat = jane_data::catalog();
     let does = |a: &Action| matches!(a, Action::HandIn(x) if *x == q);
     let mut hit = false;
