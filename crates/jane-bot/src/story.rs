@@ -432,7 +432,7 @@ impl Story {
     }
 
     /// Is a step of a quest in the log to be played in a dungeon (an act ahead)?
-    fn act_ahead(&self, v: &View<'_>) -> bool {
+    fn act_ahead(v: &View<'_>) -> bool {
         let cat = jane_data::catalog();
         v.quests().filter(|q| !q.ready).any(|q| {
             let def = cat.story.quest(q.quest);
@@ -542,7 +542,7 @@ impl Story {
         // Before an act's dungeon: ready for it, as a player packs for a long walk (the potions
         // the bench makes from what she carries, food she has seen lying about). Only out of
         // doors or in the house, and only while a dungeon step is in the log.
-        if matches!(here, ZoneId::County | ZoneId::House) && self.act_ahead(v) {
+        if matches!(here, ZoneId::County | ZoneId::House) && Self::act_ahead(v) {
             for (name, want) in PROVISIONS {
                 let item = sense::item(name);
                 let g = Goal::Provision(item);
