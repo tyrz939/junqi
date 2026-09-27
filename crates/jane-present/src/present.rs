@@ -17,16 +17,16 @@ use jane_sim::ids::PropIx;
 use jane_sim::view::View;
 
 use crate::atlas::{Atlas, RefId};
+use crate::atmos::Atmosphere;
 use crate::backend::AtlasPages;
 use crate::camera::{Camera, alpha_256};
 use crate::chunks::{ChunkCache, LRU, Need};
 use crate::creatures::{self, Creatures};
 use crate::drawlist::{DrawCmd, DrawList};
 use crate::frame::{
-    CANVAS_H, CANVAS_W, CELL, CHUNK_PX, Caster, ChunkCmd, ChunkId, Depth, FX_TO_CANVAS, Features, Flags, Frame, Light, LightKind,
-    Pass, Post, Rgb, Span, SpriteCmd, Tier, Tint, height_of_rows, rows_up,
+    CANVAS_H, CANVAS_W, CELL, CHUNK_PX, Caster, ChunkCmd, ChunkId, Depth, FX_TO_CANVAS, Features, Flags, Frame, Light,
+    LightKind, Pass, Post, Rgb, Span, SpriteCmd, Tier, Tint, height_of_rows, rows_up,
 };
-use crate::atmos::Atmosphere;
 use crate::fx::Fx;
 use crate::light::{Sky, flicker, lantern_lit, sky};
 use crate::people::{self, People};
@@ -855,7 +855,8 @@ impl Present {
                 }
                 // A creature trots, sits a while after it stops, and strikes in three beats.
                 (None, Some(set)) => {
-                    let attack = u.struck.map(|(t, _)| self.tick.wrapping_sub(t)).filter(|&t| t < 3 * creatures::ATTACK_TICKS);
+                    let attack =
+                        u.struck.map(|(t, _)| self.tick.wrapping_sub(t)).filter(|&t| t < 3 * creatures::ATTACK_TICKS);
                     let pose = creatures::Pose {
                         facing: u.facing,
                         anim: u.anim,

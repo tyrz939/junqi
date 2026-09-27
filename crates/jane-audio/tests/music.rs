@@ -74,7 +74,11 @@ fn every_cue_is_matched_clean_and_in_its_key() {
         let loud = analysis::loudness(&h.mono, sr);
         let want = LOUDNESS - song.under;
         if (loud - want).abs() > TOLERANCE_DB {
-            bad.push(format!("{}: {loud:.1} dBFS, wants {want:.1} (gain x{:.2})", h.name, 10f32.powf((want - loud) / 20.0)));
+            bad.push(format!(
+                "{}: {loud:.1} dBFS, wants {want:.1} (gain x{:.2})",
+                h.name,
+                10f32.powf((want - loud) / 20.0)
+            ));
         }
         // Never at the ceiling, never clipped.
         let peak = analysis::peak(&h.stereo);
@@ -90,7 +94,11 @@ fn every_cue_is_matched_clean_and_in_its_key() {
         let loud2: Vec<f32> = h.mono.iter().map(|x| x * 2.0).collect();
         let clicks = analysis::clicks(&loud2, sr);
         if !clicks.is_empty() {
-            bad.push(format!("{}: clicks at {:?} s", h.name, clicks.iter().take(4).map(|i| *i as f32 / sr).collect::<Vec<_>>()));
+            bad.push(format!(
+                "{}: clicks at {:?} s",
+                h.name,
+                clicks.iter().take(4).map(|i| *i as f32 / sr).collect::<Vec<_>>()
+            ));
         }
         // Heard in the key it was written in (among the three likeliest).
         let tonic = jane_audio::model::pitch_class(&song.key).unwrap();
@@ -103,7 +111,13 @@ fn every_cue_is_matched_clean_and_in_its_key() {
         for n in &h.notes {
             let pc = (n.midi - tonic).rem_euclid(12);
             if !n.chromatic && !steps.contains(&pc) {
-                bad.push(format!("{}: note {} is outside {} {} and was not asked for", h.name, n.midi, song.key, song.mode.name()));
+                bad.push(format!(
+                    "{}: note {} is outside {} {} and was not asked for",
+                    h.name,
+                    n.midi,
+                    song.key,
+                    song.mode.name()
+                ));
                 break;
             }
         }

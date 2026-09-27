@@ -57,7 +57,8 @@ impl Creatures {
         for r in looks::family(Family::Creature).unwrap_or_default() {
             let anchor = (r.set.ax as i16, r.set.ay as i16);
             let height = r.set.ay.clamp(1, 255) as u8;
-            let frames = r.set.frames.iter().map(|(f, c)| (*f, atlas.add_canvas(c, anchor, height, |_, _, t| t))).collect();
+            let frames =
+                r.set.frames.iter().map(|(f, c)| (*f, atlas.add_canvas(c, anchor, height, |_, _, t| t))).collect();
             sets.push(Set { sprite: r.sprite, frames });
         }
         let mut segments = Vec::new();
@@ -70,7 +71,14 @@ impl Creatures {
             if let Ok(segs) = jane_art::creature::snake_segments(l, seed) {
                 let refs = segs
                     .iter()
-                    .map(|c| atlas.add_canvas(c, ((c.w() / 2) as i16, (c.h() - 2) as i16), c.h().clamp(1, 255) as u8, |_, _, t| t))
+                    .map(|c| {
+                        atlas.add_canvas(
+                            c,
+                            ((c.w() / 2) as i16, (c.h() - 2) as i16),
+                            c.h().clamp(1, 255) as u8,
+                            |_, _, t| t,
+                        )
+                    })
                     .collect();
                 segments.push((*sprite, refs));
             }

@@ -483,7 +483,9 @@ impl Features {
     /// (§1.3's `Needs` column and the per-tier cells that say "no").
     pub fn rows(tier: Tier) -> impl Iterator<Item = FeatureRow> {
         ROWS.into_iter().filter(move |r| match r.key {
-            "normal_light" | "sharp" | "wet" | "grade" => tier == Tier::T1 || (tier == Tier::T2 && r.key != "normal_light"),
+            "normal_light" | "sharp" | "wet" | "grade" => {
+                tier == Tier::T1 || (tier == Tier::T2 && r.key != "normal_light")
+            }
             "shadows" => tier > Tier::T0,
             "silhouettes" => tier < Tier::T2,
             "god_rays" | "bloom" => tier == Tier::T2,
@@ -499,7 +501,13 @@ impl Features {
         match key {
             "shadows" => {
                 let v = u16::from(self.shadows);
-                self.shadows = if v == 0 { top.shadows } else if v <= 2 { 0 } else { (v / 2) as u8 };
+                self.shadows = if v == 0 {
+                    top.shadows
+                } else if v <= 2 {
+                    0
+                } else {
+                    (v / 2) as u8
+                };
             }
             "max_lights" => self.max_lights = half(self.max_lights, top.max_lights, top.max_lights / 4),
             "max_particles" => self.max_particles = half(self.max_particles, top.max_particles, top.max_particles / 4),

@@ -28,7 +28,9 @@ const EYE: Ramp = Ramp::ClothMustard;
 /// One beat's pose: the head's offset (x, y), the jaws open, the tongue out.
 fn pose(beat: Beat) -> ((i32, i32), bool, bool) {
     match beat {
-        Beat::Walk(k) => (([0, 1, 2, 1, 0, -1][usize::from(k % 6)], [0, 0, 1, 0, 0, 1][usize::from(k % 6)]), false, false),
+        Beat::Walk(k) => {
+            (([0, 1, 2, 1, 0, -1][usize::from(k % 6)], [0, 0, 1, 0, 0, 1][usize::from(k % 6)]), false, false)
+        }
         Beat::Breathe => ((0, 1), false, true),
         Beat::Idle(0) => ((0, 7), false, false),
         Beat::Idle(_) => ((0, 7), false, true),
@@ -53,7 +55,19 @@ pub(crate) fn draw(c: &mut Canvas, k: &Coat, facing: Facing, beat: Beat) {
             // The neck in an S up from the back of the coil, the head facing east.
             let (hx, hy) = (ax + 4 + off.0, ay - 20 + off.1);
             let mut m = Canvas::new(c.w(), c.h());
-            m.polyline_fill(&[(ax - 5, ay - 6), (ax - 1, ay - 7), (ax + 1, ay - 13), (hx - 1, hy + 4), (hx - 5, hy + 3), (ax - 3, ay - 13), (ax - 7, ay - 8)], Ix::INK, 1);
+            m.polyline_fill(
+                &[
+                    (ax - 5, ay - 6),
+                    (ax - 1, ay - 7),
+                    (ax + 1, ay - 13),
+                    (hx - 1, hy + 4),
+                    (hx - 5, hy + 3),
+                    (ax - 3, ay - 13),
+                    (ax - 7, ay - 8),
+                ],
+                Ix::INK,
+                1,
+            );
             c.inflate(&m, k.body, 3, relief::NECK);
             belly_side(c, k, ax, ay, hx, hy);
             head_side(c, k, hx, hy, open, tongue);
@@ -108,7 +122,11 @@ fn belly_side(c: &mut Canvas, k: &Coat, ax: i32, ay: i32, hx: i32, hy: i32) {
     if k.belly == k.body {
         return;
     }
-    c.dye_poly(&[(ax - 1, ay - 7), (ax + 1, ay - 12), (hx - 2, hy + 5), (hx - 1, hy + 3), (ax + 2, ay - 12), (ax, ay - 6)], k.body, k.belly);
+    c.dye_poly(
+        &[(ax - 1, ay - 7), (ax + 1, ay - 12), (hx - 2, hy + 5), (hx - 1, hy + 3), (ax + 2, ay - 12), (ax, ay - 6)],
+        k.body,
+        k.belly,
+    );
 }
 
 fn eye(c: &mut Canvas, k: &Coat, x: i32, y: i32, z: u8) {
@@ -123,7 +141,18 @@ fn head_front(c: &mut Canvas, k: &Coat, hx: i32, hy: i32, toward: bool, open: bo
     let mut m = Canvas::new(c.w(), c.h());
     // Flat and broad at the hinge of the jaw, a blunt snout toward the viewer.
     let (w, h) = (13, 6);
-    m.polyline_fill(&[(hx - w / 2, hy), (hx + w / 2, hy), (hx + w / 2 - 1, hy + 3), (hx + 2, hy + h), (hx - 2, hy + h), (hx - w / 2 + 1, hy + 3)], Ix::INK, 1);
+    m.polyline_fill(
+        &[
+            (hx - w / 2, hy),
+            (hx + w / 2, hy),
+            (hx + w / 2 - 1, hy + 3),
+            (hx + 2, hy + h),
+            (hx - 2, hy + h),
+            (hx - w / 2 + 1, hy + 3),
+        ],
+        Ix::INK,
+        1,
+    );
     c.inflate(&m, k.body, 2, relief::HEAD);
     let z = relief::HEAD.hi;
     if !toward {
@@ -156,7 +185,11 @@ fn head_front(c: &mut Canvas, k: &Coat, hx: i32, hy: i32, toward: bool, open: bo
 
 fn head_side(c: &mut Canvas, k: &Coat, hx: i32, hy: i32, open: bool, tongue: bool) {
     let mut m = Canvas::new(c.w(), c.h());
-    m.polyline_fill(&[(hx - 6, hy + 1), (hx + 1, hy), (hx + 7, hy + 3), (hx + 7, hy + 5), (hx + 1, hy + 6), (hx - 6, hy + 6)], Ix::INK, 1);
+    m.polyline_fill(
+        &[(hx - 6, hy + 1), (hx + 1, hy), (hx + 7, hy + 3), (hx + 7, hy + 5), (hx + 1, hy + 6), (hx - 6, hy + 6)],
+        Ix::INK,
+        1,
+    );
     c.inflate(&m, k.body, 2, relief::HEAD);
     let z = relief::HEAD.hi;
     c.hline(hx - 4, hx + 4, hy + 1, k.body.at(Tone::Light), z);
@@ -202,7 +235,13 @@ pub(crate) fn segments(k: &Coat) -> Vec<Canvas> {
             let mut m = Canvas::new(d + 2, d + 2);
             m.ellipse(Rect::new(1, 1, d, d - 1), Ix::INK, 1);
             c.inflate(&m, k.body, d / 3, Z::new(1, (d / 2) as u8 + 1));
-            c.strokes(Rect::new(1, 1, d, d), k.body, StrokeKind::Feather, 12, h32(k.seed, 20 + i as u32, salt::STROKES));
+            c.strokes(
+                Rect::new(1, 1, d, d),
+                k.body,
+                StrokeKind::Feather,
+                12,
+                h32(k.seed, 20 + i as u32, salt::STROKES),
+            );
             let mid = (d + 2) / 2;
             c.dye_poly(&[(mid, 2), (mid + 2, 4), (mid, 6), (mid - 2, 4)], k.body, k.mark);
             if k.belly != k.body {

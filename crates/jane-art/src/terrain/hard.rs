@@ -120,14 +120,9 @@ pub(super) fn paint(p: &mut Painter, src: &impl TileSource, x0: i32, y0: i32, se
             };
             match st.row.pattern {
                 P::Void => fill(p, &c, st.ramp.at(Tone::Deep), 1),
-                P::Block
-                | P::Rock
-                | P::Timbered
-                | P::Crypt
-                | P::Ironwork
-                | P::Panelled
-                | P::Pipework
-                | P::Wainscot => wall(p, &c, outdoor),
+                P::Block | P::Rock | P::Timbered | P::Crypt | P::Ironwork | P::Panelled | P::Pipework | P::Wainscot => {
+                    wall(p, &c, outdoor)
+                }
                 P::Parquet | P::Plates | P::Flags | P::Grating => interior_floor(p, &c),
                 P::Cliff => cliff(p, &c),
                 P::RoofTile | P::Slate | P::Thatch => {

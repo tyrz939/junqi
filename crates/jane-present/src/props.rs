@@ -112,14 +112,16 @@ mod tests {
         let p = Props::build(&mut atlas);
         let sprite = |n: &str| jane_art::looks::find(n).unwrap().0;
         let lamp = sprite("lamp_post");
-        let (out, lit) = (p.look(lamp, 1, State::default()).unwrap(), p.look(lamp, 1, State { on: true, open: false }).unwrap());
+        let (out, lit) =
+            (p.look(lamp, 1, State::default()).unwrap(), p.look(lamp, 1, State { on: true, open: false }).unwrap());
         assert_ne!(out, lit);
         let g = p.glass(lamp).expect("a street lamp's glass glows");
         assert!(g > 30, "high on its post: {g}");
         let chest = sprite("chest");
         assert_ne!(p.look(chest, 3, State::default()), p.look(chest, 3, State { on: false, open: true }));
         let crate_ = sprite("crate");
-        let bases: std::collections::BTreeSet<RefId> = (0..32).filter_map(|i| p.look(crate_, i, State::default())).collect();
+        let bases: std::collections::BTreeSet<RefId> =
+            (0..32).filter_map(|i| p.look(crate_, i, State::default())).collect();
         assert_eq!(bases.len(), 2, "two crates, picked by id");
         let r = atlas.get(out);
         assert_eq!((r.src.w, r.ay as i32), (16, i32::from(r.src.h)), "a prop stands on its foot row");

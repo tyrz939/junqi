@@ -142,7 +142,11 @@ mod tests {
         let mut clut = vec![0xff00_0000; 1024];
         clut[2] = 0xff11_2233;
         clut[5] = 0xffff_0000;
-        let atlas = AtlasPages { clut, pages: vec![Page { w: 2, h: 1, albedo: vec![5, 1], ..Page::default() }], ..AtlasPages::default() };
+        let atlas = AtlasPages {
+            clut,
+            pages: vec![Page { w: 2, h: 1, albedo: vec![5, 1], ..Page::default() }],
+            ..AtlasPages::default()
+        };
         let mut px = vec![0xff80_8080; 16];
         let mut t = Target { px: &mut px, w: 4, h: 4 };
         draw(&mut t, &f, &atlas);

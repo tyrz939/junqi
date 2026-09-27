@@ -351,7 +351,11 @@ fn play(bps: Blueprints, o: &Opts, tier: Tier) -> Result<(Tap, Present, u32), St
         let (name, after) = c.split_once(':').map_or((c.as_str(), 12), |(s, t)| (s, t.parse().unwrap_or(12)));
         let spell = jane_data::catalog().combat.spell_id(name).ok_or_else(|| format!("--cast: no spell \"{name}\""))?;
         let dev = |seq: u16, op| StampedCommand { seat: Some(seat), seq, cmd: Command::Dev(op) };
-        let setup = [dev(u16::MAX - 3, DevOp::Learn(spell)), dev(u16::MAX - 2, DevOp::Mp(9999)), dev(u16::MAX - 4, DevOp::God(true))];
+        let setup = [
+            dev(u16::MAX - 3, DevOp::Learn(spell)),
+            dev(u16::MAX - 2, DevOp::Mp(9999)),
+            dev(u16::MAX - 4, DevOp::God(true)),
+        ];
         host.sim.step(&StepInput { frames: [InputFrame::IDLE; 4], commands: &setup });
         let aim = InputFrame { aim: Some(jane_core::Angle::EAST), ..InputFrame::IDLE };
         let cast = [StampedCommand { seat: Some(seat), seq: u16::MAX - 5, cmd: Command::Cast { spell, on: None } }];
@@ -416,7 +420,13 @@ pub fn render(bps: Blueprints, o: &Opts) -> Result<Shot, String> {
 /// frame `o` asks for, then `n` more ticks with the world idle, drawing every `every`-th at
 /// `alpha = 1`: the rain falling, a mist drifting, a lightning strike, a bolt in flight. Each
 /// shot is handed to `out` with its tick.
-pub fn film(bps: Blueprints, o: &Opts, n: u32, every: u32, mut out: impl FnMut(u32, &Shot) -> Result<(), String>) -> Result<(), String> {
+pub fn film(
+    bps: Blueprints,
+    o: &Opts,
+    n: u32,
+    every: u32,
+    mut out: impl FnMut(u32, &Shot) -> Result<(), String>,
+) -> Result<(), String> {
     let mut b = backend(o.backend, o.gl)?;
     let (mut host, mut present, _) = play(bps, o, o.backend.tier())?;
     b.upload_atlas(present.atlas());

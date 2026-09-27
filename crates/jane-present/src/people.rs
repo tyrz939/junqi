@@ -123,7 +123,23 @@ impl People {
                 (plain, at(plain).unwrap_or(s.frames[0].1))
             }
         };
-        let side = !matches!(id, FrameId::AtkDown1 | FrameId::AtkDown2 | FrameId::AtkDown3 | FrameId::AtkUp1 | FrameId::AtkUp2 | FrameId::AtkUp3 | FrameId::CastDown1 | FrameId::CastDown2 | FrameId::CastDown3 | FrameId::CastUp1 | FrameId::CastUp2 | FrameId::CastUp3 | FrameId::HurtDown | FrameId::HurtUp);
+        let side = !matches!(
+            id,
+            FrameId::AtkDown1
+                | FrameId::AtkDown2
+                | FrameId::AtkDown3
+                | FrameId::AtkUp1
+                | FrameId::AtkUp2
+                | FrameId::AtkUp3
+                | FrameId::CastDown1
+                | FrameId::CastDown2
+                | FrameId::CastDown3
+                | FrameId::CastUp1
+                | FrameId::CastUp2
+                | FrameId::CastUp3
+                | FrameId::HurtDown
+                | FrameId::HurtUp
+        );
         (r, side && !pose.dead && pose.facing == Facing::West)
     }
 }
@@ -138,7 +154,9 @@ pub fn pick(p: Pose) -> FrameId {
     }
     let beat = |t: u32| (t / ACT_TICKS).min(2) as usize;
     let (atk, cast, hurt) = match p.facing {
-        Facing::South => ([F::AtkDown1, F::AtkDown2, F::AtkDown3], [F::CastDown1, F::CastDown2, F::CastDown3], F::HurtDown),
+        Facing::South => {
+            ([F::AtkDown1, F::AtkDown2, F::AtkDown3], [F::CastDown1, F::CastDown2, F::CastDown3], F::HurtDown)
+        }
         Facing::North => ([F::AtkUp1, F::AtkUp2, F::AtkUp3], [F::CastUp1, F::CastUp2, F::CastUp3], F::HurtUp),
         Facing::East | Facing::West => ([F::Atk1, F::Atk2, F::Atk3], [F::Cast1, F::Cast2, F::Cast3], F::Hurt),
     };
@@ -188,7 +206,10 @@ mod tests {
         assert_eq!(people.frame(set, hurt), people.frame(set, pose(Facing::South, 0, 0)));
         let jane = jane_art::looks::find("jane").unwrap().0;
         let js = people.set(jane, 0, 0).unwrap();
-        assert_ne!(people.frame(js, Pose { act: Some(Act::Attack(ACT_TICKS)), ..pose(Facing::East, 0, 0) }).0, people.frame(js, pose(Facing::East, 0, 0)).0);
+        assert_ne!(
+            people.frame(js, Pose { act: Some(Act::Attack(ACT_TICKS)), ..pose(Facing::East, 0, 0) }).0,
+            people.frame(js, pose(Facing::East, 0, 0)).0
+        );
     }
 
     #[test]

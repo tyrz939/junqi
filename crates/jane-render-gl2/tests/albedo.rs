@@ -164,6 +164,11 @@ fn the_atmosphere_is_drawn(gl: &mut Gl2) {
 fn is_atmosphere(q: &Pass) -> bool {
     matches!(
         q,
-        Pass::Sky(_) | Pass::Parallax { .. } | Pass::Water { .. } | Pass::Weather(_) | Pass::Fog { .. } | Pass::Particles { .. }
+        Pass::Sky(_)
+            | Pass::Parallax { .. }
+            | Pass::Water { .. }
+            | Pass::Weather(_)
+            | Pass::Fog { .. }
+            | Pass::Particles { .. }
     )
 }

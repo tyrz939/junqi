@@ -145,8 +145,14 @@ fn display(ui: &mut Ui, st: &mut ControlsState, info: ControlsInfo<'_>, r: Rect,
     );
     for (i, label) in ["auto", "soft", "gl2", "wgpu"].iter().enumerate() {
         let br = Rect::new(x + 200 + i as i32 * 84, by, 78, 22);
-        if ui.button(wid("display-backend", i as u32), br, label, ButtonKind::Tab { on: info.backend == *label }, true, false)
-        {
+        if ui.button(
+            wid("display-backend", i as u32),
+            br,
+            label,
+            ButtonKind::Tab { on: info.backend == *label },
+            true,
+            false,
+        ) {
             out.backend = Some(label);
         }
     }
@@ -240,8 +246,14 @@ pub fn draw(ui: &mut Ui, st: &mut ControlsState, b: &mut Bindings, info: Control
     // Right of the heading's rule: the keys' page, then Display.
     for (i, (label, tx, tw)) in [("Keys", 170, 60), ("Display", 104, 92)].into_iter().enumerate() {
         let tr = Rect::new(x + w - tx, y + 12, tw, 20);
-        if ui.button(wid("controls-page", i as u32), tr, label, ButtonKind::Tab { on: st.page == i as u8 }, !capturing, false)
-        {
+        if ui.button(
+            wid("controls-page", i as u32),
+            tr,
+            label,
+            ButtonKind::Tab { on: st.page == i as u8 },
+            !capturing,
+            false,
+        ) {
             st.page = i as u8;
         }
     }

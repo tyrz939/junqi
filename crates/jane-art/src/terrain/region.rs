@@ -29,7 +29,12 @@ pub const REGIONS: [RegionStyle; 3] = [
     RegionStyle { name: "lowfields", ground: &[], wall: &[], roof: &[] },
     RegionStyle {
         name: "waters",
-        ground: &[(Ramp::Turf, Ramp::LeafDeep), (Ramp::TurfDry, Ramp::Marsh), (Ramp::Earth, Ramp::Mud), (Ramp::Hedge, Ramp::Needle)],
+        ground: &[
+            (Ramp::Turf, Ramp::LeafDeep),
+            (Ramp::TurfDry, Ramp::Marsh),
+            (Ramp::Earth, Ramp::Mud),
+            (Ramp::Hedge, Ramp::Needle),
+        ],
         wall: &[],
         roof: &[(Ramp::RoofTile, Ramp::Slate), (Ramp::Thatch, Ramp::Reed)],
     },

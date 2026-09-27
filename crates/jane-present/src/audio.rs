@@ -50,7 +50,11 @@ pub enum MusicCue {
 impl MusicCue {
     /// A zone's cue, normalised: only the county's depends on the region and the hour.
     pub fn zone(zone: ZoneId, region: Region, night: bool) -> MusicCue {
-        if zone == ZoneId::County { MusicCue::Zone(zone, region, night) } else { MusicCue::Zone(zone, Region::Lowfields, false) }
+        if zone == ZoneId::County {
+            MusicCue::Zone(zone, region, night)
+        } else {
+            MusicCue::Zone(zone, Region::Lowfields, false)
+        }
     }
 
     /// The song it plays (`data/audio/songs`), `None` for silence.
@@ -309,8 +313,18 @@ pub enum Bed {
 }
 
 impl Bed {
-    pub const ALL: [Bed; 10] =
-        [Bed::Rain, Bed::RainRoof, Bed::Wind, Bed::Birds, Bed::Crickets, Bed::Lake, Bed::Hum, Bed::Cave, Bed::Fire, Bed::Clock];
+    pub const ALL: [Bed; 10] = [
+        Bed::Rain,
+        Bed::RainRoof,
+        Bed::Wind,
+        Bed::Birds,
+        Bed::Crickets,
+        Bed::Lake,
+        Bed::Hum,
+        Bed::Cave,
+        Bed::Fire,
+        Bed::Clock,
+    ];
 
     pub const fn name(self) -> &'static str {
         match self {
@@ -420,10 +434,16 @@ impl Surface {
     /// What a tile sounds like underfoot; `None` for what she cannot stand on.
     pub fn of(tile: Tile) -> Option<Surface> {
         Some(match tile {
-            Tile::Grass | Tile::GrassTall | Tile::Garden | Tile::FlowerBed | Tile::Crops | Tile::Moss | Tile::GrownPath => {
-                Surface::Grass
+            Tile::Grass
+            | Tile::GrassTall
+            | Tile::Garden
+            | Tile::FlowerBed
+            | Tile::Crops
+            | Tile::Moss
+            | Tile::GrownPath => Surface::Grass,
+            Tile::Dirt | Tile::Road | Tile::Track | Tile::Sand | Tile::DryBed | Tile::Rubble | Tile::Rail => {
+                Surface::Road
             }
-            Tile::Dirt | Tile::Road | Tile::Track | Tile::Sand | Tile::DryBed | Tile::Rubble | Tile::Rail => Surface::Road,
             Tile::Cobble
             | Tile::Stepping
             | Tile::Floor
@@ -527,9 +547,10 @@ impl Sense {
             if view.indoor() {
                 s
             } else {
-                let wet = u16::try_from(cx).ok().zip(u16::try_from(cy).ok()).map_or(0, |(x, y)| {
-                    view.wetness_at(jane_core::Cell { x, y })
-                });
+                let wet = u16::try_from(cx)
+                    .ok()
+                    .zip(u16::try_from(cy).ok())
+                    .map_or(0, |(x, y)| view.wetness_at(jane_core::Cell { x, y }));
                 s.wet(wet)
             }
         });
@@ -764,7 +785,9 @@ impl Soundtrack {
                 EventKind::Heal { unit, .. } if unit == s.me => bus.sfx(SfxKind::Heal, me, me),
                 EventKind::Death { unit, at: p, .. } if unit != s.me => bus.sfx(SfxKind::Death, at(p), me),
                 EventKind::Cast { at: p, .. } => bus.sfx(SfxKind::Cast, at(p), me),
-                EventKind::CastFailed { unit, why, .. } if unit == s.me && why.says() => bus.sfx(SfxKind::CastFailed, me, me),
+                EventKind::CastFailed { unit, why, .. } if unit == s.me && why.says() => {
+                    bus.sfx(SfxKind::CastFailed, me, me)
+                }
                 EventKind::Status { unit, on: true, .. } if unit == s.me => bus.sfx(SfxKind::Status, me, me),
                 EventKind::Respawn { unit } if unit == s.me => {
                     self.dead = false;
@@ -1459,7 +1482,10 @@ mod tests {
             MusicCue::zone(ZoneId::County, Region::Waters, false).song(),
             MusicCue::zone(ZoneId::County, Region::Waters, true).song()
         );
-        assert_eq!(MusicCue::zone(ZoneId::Mine, Region::Works, true), MusicCue::zone(ZoneId::Mine, Region::Lowfields, false));
+        assert_eq!(
+            MusicCue::zone(ZoneId::Mine, Region::Works, true),
+            MusicCue::zone(ZoneId::Mine, Region::Lowfields, false)
+        );
         assert_eq!(fades(Some(MusicCue::Combat), MusicCue::Zone(ZoneId::County, Region::Works, false)), (2500, 2500));
     }
 }

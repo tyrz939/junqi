@@ -79,7 +79,15 @@ pub fn render(look: &IconLook) -> Result<Vec<SpriteSet>, String> {
         draw(&mut G { c: &mut c, s }, look, ramp, trim);
         finish(&mut c, ramp, trim);
         let emits = if look.glow { vec![Role::Glass] } else { Vec::new() };
-        out.push(SpriteSet { w: s, h: s, ax: 0, ay: 0, frames: vec![(FrameId::Base, c)], roles: vec![(Role::Body, ramp)], emits });
+        out.push(SpriteSet {
+            w: s,
+            h: s,
+            ax: 0,
+            ay: 0,
+            frames: vec![(FrameId::Base, c)],
+            roles: vec![(Role::Body, ramp)],
+            emits,
+        });
     }
     Ok(out)
 }
@@ -90,12 +98,15 @@ fn default_trim(class: IconClass) -> Ramp {
         IconClass::Key | IconClass::Ring | IconClass::Amulet | IconClass::Spectacles => Ramp::Brass,
         IconClass::Herb | IconClass::Bloom | IconClass::Fruit | IconClass::Grapes => Ramp::Leaf,
         IconClass::Spell | IconClass::Status => Ramp::Iron,
-        IconClass::Tool | IconClass::Spanner | IconClass::Scissors | IconClass::Spoons | IconClass::Can => Ramp::WoodDark,
+        IconClass::Tool | IconClass::Spanner | IconClass::Scissors | IconClass::Spoons | IconClass::Can => {
+            Ramp::WoodDark
+        }
         _ => Ramp::Leather,
     }
 }
 
-const HARD: [Tone; 8] = [Tone::Shade, Tone::Shade, Tone::Mid, Tone::Base, Tone::Base, Tone::Light, Tone::High, Tone::High];
+const HARD: [Tone; 8] =
+    [Tone::Shade, Tone::Shade, Tone::Mid, Tone::Base, Tone::Base, Tone::Light, Tone::High, Tone::High];
 
 fn finish(c: &mut Canvas, ramp: Ramp, trim: Ramp) {
     let glow: Vec<(i32, i32, Ix)> = (0..c.h())
@@ -258,30 +269,30 @@ fn draw(g: &mut G<'_>, look: &IconLook, ramp: Ramp, trim: Ramp) {
         IconClass::Glove | IconClass::Coat | IconClass::Scarf | IconClass::Hat | IconClass::Cap | IconClass::Fleece => {
             garment(g, look.class, ramp, trim);
         }
-        IconClass::Letter | IconClass::Parcel | IconClass::Sack => {
-            match look.class {
-                IconClass::Letter => {
-                    g.poly(ramp, &[(3, 8), (29, 8), (29, 25), (3, 25)], 2);
-                    g.line(ramp.at(Tone::Shade), (3, 8), (16, 18), 1);
-                    g.line(ramp.at(Tone::Shade), (29, 8), (16, 18), 1);
-                    g.ell(Ramp::ClothRed, 13, 15, 6, 6);
-                }
-                IconClass::Parcel => {
-                    g.poly(ramp, &[(5, 9), (27, 9), (27, 27), (5, 27)], 2);
-                    g.fill(trim.at(Tone::Base), 15, 9, 2, 18);
-                    g.fill(trim.at(Tone::Base), 5, 17, 22, 2);
-                    g.ell(trim, 12, 4, 8, 6);
-                }
-                _ => {
-                    g.vol(ramp, 6, |m, g| {
-                        m.ellipse(g.r(5, 10, 22, 20), Ix::INK, 1);
-                        m.fill_rect(g.r(12, 4, 8, 8), Ix::INK, 1);
-                    });
-                    g.fill(trim.at(Tone::Base), 11, 11, 10, 2);
-                }
+        IconClass::Letter | IconClass::Parcel | IconClass::Sack => match look.class {
+            IconClass::Letter => {
+                g.poly(ramp, &[(3, 8), (29, 8), (29, 25), (3, 25)], 2);
+                g.line(ramp.at(Tone::Shade), (3, 8), (16, 18), 1);
+                g.line(ramp.at(Tone::Shade), (29, 8), (16, 18), 1);
+                g.ell(Ramp::ClothRed, 13, 15, 6, 6);
             }
+            IconClass::Parcel => {
+                g.poly(ramp, &[(5, 9), (27, 9), (27, 27), (5, 27)], 2);
+                g.fill(trim.at(Tone::Base), 15, 9, 2, 18);
+                g.fill(trim.at(Tone::Base), 5, 17, 22, 2);
+                g.ell(trim, 12, 4, 8, 6);
+            }
+            _ => {
+                g.vol(ramp, 6, |m, g| {
+                    m.ellipse(g.r(5, 10, 22, 20), Ix::INK, 1);
+                    m.fill_rect(g.r(12, 4, 8, 8), Ix::INK, 1);
+                });
+                g.fill(trim.at(Tone::Base), 11, 11, 10, 2);
+            }
+        },
+        IconClass::Tool | IconClass::Scissors | IconClass::Spanner | IconClass::Spoons => {
+            tool(g, look.class, ramp, trim)
         }
-        IconClass::Tool | IconClass::Scissors | IconClass::Spanner | IconClass::Spoons => tool(g, look.class, ramp, trim),
         IconClass::Net => {
             for k in 0..5 {
                 let o = 4 + k * 6;
@@ -367,11 +378,32 @@ fn draw(g: &mut G<'_>, look: &IconLook, ramp: Ramp, trim: Ramp) {
 fn garment(g: &mut G<'_>, class: IconClass, ramp: Ramp, trim: Ramp) {
     match class {
         IconClass::Glove => {
-            g.poly(ramp, &[(9, 28), (9, 13), (11, 5), (14, 5), (15, 12), (17, 4), (20, 4), (21, 12), (24, 8), (27, 10), (23, 22), (22, 28)], 3);
+            g.poly(
+                ramp,
+                &[
+                    (9, 28),
+                    (9, 13),
+                    (11, 5),
+                    (14, 5),
+                    (15, 12),
+                    (17, 4),
+                    (20, 4),
+                    (21, 12),
+                    (24, 8),
+                    (27, 10),
+                    (23, 22),
+                    (22, 28),
+                ],
+                3,
+            );
             g.fill(trim.at(Tone::Base), 9, 25, 13, 3);
         }
         IconClass::Coat => {
-            g.poly(ramp, &[(10, 4), (22, 4), (29, 10), (27, 19), (24, 17), (24, 29), (8, 29), (8, 17), (5, 19), (3, 10)], 3);
+            g.poly(
+                ramp,
+                &[(10, 4), (22, 4), (29, 10), (27, 19), (24, 17), (24, 29), (8, 29), (8, 17), (5, 19), (3, 10)],
+                3,
+            );
             g.line(ramp.at(Tone::Shade), (16, 5), (16, 28), 1);
             for y in [12, 18, 24] {
                 g.dot(Ramp::Brass.at(Tone::Light), 14, y);

@@ -32,7 +32,9 @@ pub mod ui;
 use std::time::Instant;
 
 use jane_present::frame::CHUNK_PX;
-use jane_present::{AO_TINT, AtlasPages, Backend, CLUT_LEN, Caps, Features, Frame, FrameStats, FrameTimes, StatPass, Tier};
+use jane_present::{
+    AO_TINT, AtlasPages, Backend, CLUT_LEN, Caps, Features, Frame, FrameStats, FrameTimes, StatPass, Tier,
+};
 
 use crate::gl::{Blend, Buffer, Fbo, Format, Gl, Program, Query, Texture, Uniform};
 use crate::prep::{After, PageCpu, Prep, SLOT_ROWS, SLOTS_ACROSS, Step};
@@ -133,17 +135,22 @@ impl Progs {
                 &skyed(sh::COMPOSE_FS),
                 &sh::RECT_ATTRS,
                 &[
-                    "u_size", "u_alb", "u_light", "u_emi", "u_nh", "u_sky", "u_tint", "u_lift", "u_egain", "u_info",
-                    "u_weather", "u_cam", "u_fill",
+                    "u_size",
+                    "u_alb",
+                    "u_light",
+                    "u_emi",
+                    "u_nh",
+                    "u_sky",
+                    "u_tint",
+                    "u_lift",
+                    "u_egain",
+                    "u_info",
+                    "u_weather",
+                    "u_cam",
+                    "u_fill",
                 ],
             )?,
-            sky: Prog::new(
-                gl,
-                sh::RECT_VS,
-                &skyed(sh::SKY_FS),
-                &sh::RECT_ATTRS,
-                &with_sky(&["u_size"]),
-            )?,
+            sky: Prog::new(gl, sh::RECT_VS, &skyed(sh::SKY_FS), &sh::RECT_ATTRS, &with_sky(&["u_size"]))?,
             far: Prog::new(
                 gl,
                 sh::SPRITE_VS,
@@ -164,8 +171,18 @@ impl Progs {
                 &graded(sh::FOG_FS),
                 &sh::RECT_ATTRS,
                 &[
-                    "u_size", "u_nh", "u_light", "u_mist", "u_vrect[0]", "u_vcol[0]", "u_vshape[0]", "u_n", "u_move",
-                    "u_base", "u_tint", "u_lift",
+                    "u_size",
+                    "u_nh",
+                    "u_light",
+                    "u_mist",
+                    "u_vrect[0]",
+                    "u_vcol[0]",
+                    "u_vshape[0]",
+                    "u_n",
+                    "u_move",
+                    "u_base",
+                    "u_tint",
+                    "u_lift",
                 ],
             )?,
             ui: Prog::new(
@@ -1031,7 +1048,8 @@ impl Gl2 {
         let a = self.prep.atmos;
         // The tick wraps well inside a float's whole numbers; the swell skips once a half hour.
         let tick = (frame.tick % 100_000) as f32;
-        self.gl.set_f(p.u("u_weather"), &[f32::from(a.rain) / 255.0, f32::from(a.wet) / 255.0, f32::from(a.wind), tick]);
+        self.gl
+            .set_f(p.u("u_weather"), &[f32::from(a.rain) / 255.0, f32::from(a.wet) / 255.0, f32::from(a.wind), tick]);
         self.gl.set_f(p.u("u_cam"), &[frame.camera.0 as f32, frame.camera.1 as f32]);
         self.gl.set_f(p.u("u_fill"), &self.prep.fill.map(|v| f32::from(v) / 255.0));
         self.rect(0.0, 0.0, c.0 as f32, c.1 as f32);

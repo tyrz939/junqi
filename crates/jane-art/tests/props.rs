@@ -79,7 +79,8 @@ fn coverage_the_first_walk_dresses_and_every_look_draws_its_frames() {
         assert_eq!(got, kit::frame_ids(&look(r)), "{}", r.key());
     }
     // Every prop sprite a row names must have a look before the P5 gate; count the ones that do.
-    let names: BTreeSet<&str> = catalog().story.props.iter().map(|p| catalog().sprites[usize::from(p.sprite.0)]).collect();
+    let names: BTreeSet<&str> =
+        catalog().story.props.iter().map(|p| catalog().sprites[usize::from(p.sprite.0)]).collect();
     let dressed = names.iter().filter(|n| looks::find(n).is_some()).count();
     println!("{dressed} of {} prop sprites dressed", names.len());
     let bare: Vec<&&str> = names.iter().filter(|n| looks::find(n).is_none()).collect();
@@ -178,7 +179,9 @@ fn colour_budget() {
             .set
             .frames
             .iter()
-            .flat_map(|(_, c)| c.albedo().iter().filter(|a| a.is_opaque() && **a != Ix::INK && **a != Ix::SEAM).map(|a| a.0))
+            .flat_map(|(_, c)| {
+                c.albedo().iter().filter(|a| a.is_opaque() && **a != Ix::INK && **a != Ix::SEAM).map(|a| a.0)
+            })
             .collect();
         assert!(used.len() <= 64, "{}: {} colours, the budget is 64", r.key(), used.len());
     }

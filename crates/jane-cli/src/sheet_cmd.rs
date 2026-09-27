@@ -267,7 +267,11 @@ fn scene(args: &[String]) -> Result<(), String> {
             let p = dir.join(format!("{stem}-{k:03}.png"));
             std::fs::write(&p, shot.png()).map_err(|e| format!("{}: {e}", p.display()))?;
             // The frame's mean brightness beside it: a flash, a lamp coming on, found by eye.
-            let luma: u64 = shot.px.iter().map(|&c| u64::from((c >> 16) & 0xff) + u64::from((c >> 8) & 0xff) + u64::from(c & 0xff)).sum();
+            let luma: u64 = shot
+                .px
+                .iter()
+                .map(|&c| u64::from((c >> 16) & 0xff) + u64::from((c >> 8) & 0xff) + u64::from(c & 0xff))
+                .sum();
             println!("{} mean {}", p.display(), luma / (3 * shot.px.len().max(1) as u64));
             Ok(())
         });

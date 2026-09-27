@@ -21,7 +21,11 @@ pub(crate) fn draw(c: &mut Canvas, k: &Kit, state: State) -> Option<Stand> {
             ao(c, x0 - 1, x1 + 1, foot, 6);
             // The hill round it.
             let mut m = Canvas::new(c.w(), c.h());
-            m.polyline_fill(&[(0, foot), (0, top + 12), (w / 4, top + 3), (3 * w / 4, top + 1), (w - 1, top + 10), (w - 1, foot)], Ix::INK, 1);
+            m.polyline_fill(
+                &[(0, foot), (0, top + 12), (w / 4, top + 3), (3 * w / 4, top + 1), (w - 1, top + 10), (w - 1, foot)],
+                Ix::INK,
+                1,
+            );
             c.inflate(&m, k.body, 6, Z::new(2, 10));
             c.retone(k.body, super::HARD);
             let door = Rect::new(w / 2 - 12, foot - 24, 24, 24);
@@ -36,7 +40,12 @@ pub(crate) fn draw(c: &mut Canvas, k: &Kit, state: State) -> Option<Stand> {
                 for x in [door.x - 2, door.right()] {
                     post(c, x, door.y - 2, foot - 1, 3, k.trim, 12);
                 }
-                c.fill_normal(Rect::new(door.x - 3, door.y - 4, door.w + 6, 4), k.trim.at(Tone::Base), super::parts::south(), 13);
+                c.fill_normal(
+                    Rect::new(door.x - 3, door.y - 4, door.w + 6, 4),
+                    k.trim.at(Tone::Base),
+                    super::parts::south(),
+                    13,
+                );
                 c.hline(door.x - 3, door.right() + 2, door.y - 4, k.trim.at(Tone::Light), 13);
             } else {
                 for i in 0..9 {
@@ -123,13 +132,20 @@ pub(crate) fn draw(c: &mut Canvas, k: &Kit, state: State) -> Option<Stand> {
             ao(c, cx - 6, cx + 5, foot, 5);
             c.rect_bevel(Rect::new(cx - 5, foot - 4, 10, 4), k.trim, 1, Z::new(2, 4));
             post(c, cx - 1, foot - 12, foot - 4, 3, k.trim, 4);
-            c.polyline_fill(&[(cx - 4, foot - 13), (cx + 3, foot - 13), (cx + 1, foot - 11), (cx - 2, foot - 11)], k.trim.at(Tone::Base), 5);
+            c.polyline_fill(
+                &[(cx - 4, foot - 13), (cx + 3, foot - 13), (cx + 1, foot - 11), (cx - 2, foot - 11)],
+                k.trim.at(Tone::Base),
+                5,
+            );
             let orb = Rect::new(cx - 6, foot - 25, 12, 12);
             c.set_emitting(on);
             c.soft_ellipse(orb, k.accent, Z::new(6, 12));
             c.set_emitting(false);
             if !on {
-                c.retone(k.accent, [Tone::Deep, Tone::Deep, Tone::Shade, Tone::Shade, Tone::Mid, Tone::Base, Tone::Light, Tone::Light]);
+                c.retone(
+                    k.accent,
+                    [Tone::Deep, Tone::Deep, Tone::Shade, Tone::Shade, Tone::Mid, Tone::Base, Tone::Light, Tone::Light],
+                );
             }
             c.dot(cx - 3, orb.y + 3, Ramp::HairWhite.at(Tone::High), 12);
             Stand::Up(&[])
@@ -191,7 +207,11 @@ pub(crate) fn draw(c: &mut Canvas, k: &Kit, state: State) -> Option<Stand> {
             c.fill_normal(Rect::new(bx.x + 3, bx.y + 3, bx.w - 6, bx.h - 4), k.body.at(Tone::Deep), parts::south(), 5);
             c.fill_rect(Rect::new(cx - 1, bx.y + 6, 2, 6), Ramp::Stone.at(Tone::Light), 6);
             c.dot(cx - 1, bx.y + 5, Ramp::Stone.at(Tone::High), 6);
-            c.polyline_fill(&[(bx.x - 2, bx.y), (cx - 1, bx.y - 6), (cx, bx.y - 6), (bx.right() + 1, bx.y)], k.accent.at(Tone::Base), 7);
+            c.polyline_fill(
+                &[(bx.x - 2, bx.y), (cx - 1, bx.y - 6), (cx, bx.y - 6), (bx.right() + 1, bx.y)],
+                k.accent.at(Tone::Base),
+                7,
+            );
             c.line((bx.x - 2, bx.y), (cx - 1, bx.y - 6), k.accent.at(Tone::Light), 1, 7);
             blocks(c, Rect::new(cx - 5, foot - 3, 10, 3), Ramp::Stone, 3, 5, false, k.seed, 2);
             Stand::Up(&[])

@@ -32,7 +32,9 @@ use std::sync::atomic::{AtomicU8, Ordering};
 use std::time::Instant;
 
 use jane_present::frame::{CHUNK_PX, ChunkLayers};
-use jane_present::{AO_TINT, AtlasPages, Backend, CLUT_LEN, Caps, Features, Frame, FrameStats, FrameTimes, StatPass, Tier};
+use jane_present::{
+    AO_TINT, AtlasPages, Backend, CLUT_LEN, Caps, Features, Frame, FrameStats, FrameTimes, StatPass, Tier,
+};
 
 use crate::gpu::{B, Gpu, array_view, group, layout, texture, write_layer};
 use crate::prep::{GLOBALS, GUARD, Kind, MAX_FOG, MAX_LIGHTS, Prep, TILE, TILE_CAP};
@@ -609,8 +611,9 @@ impl Wgpu {
         let times = FrameTimes::new(stamps.is_some());
         let ui = ui::UiPass::new(device, &gpu.queue);
         let atmos = atmos::AtmosPipes::new(device);
-        let mist = texture(device, "mist", (1, 1, 1), wgpu::TextureFormat::R8Unorm, wgpu::TextureUsages::TEXTURE_BINDING)
-            .create_view(&wgpu::TextureViewDescriptor::default());
+        let mist =
+            texture(device, "mist", (1, 1, 1), wgpu::TextureFormat::R8Unorm, wgpu::TextureUsages::TEXTURE_BINDING)
+                .create_view(&wgpu::TextureViewDescriptor::default());
         Wgpu {
             gpu,
             pipes,

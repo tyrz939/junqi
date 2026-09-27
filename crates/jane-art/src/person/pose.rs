@@ -48,7 +48,20 @@ pub struct Pose {
 }
 
 const fn pose(bob: i32, arm: [i32; 2], leg: [i32; 2], lift: [i32; 2], lean: i32) -> Pose {
-    Pose { bob, arm, leg, lift, lean, lag: (0, 0), breathe: false, phase: 0, spread: [0, 0], splay: [0, 0], raise: [0, 0], shut: false }
+    Pose {
+        bob,
+        arm,
+        leg,
+        lift,
+        lean,
+        lag: (0, 0),
+        breathe: false,
+        phase: 0,
+        spread: [0, 0],
+        splay: [0, 0],
+        raise: [0, 0],
+        shut: false,
+    }
 }
 
 /// The fallen, before they are laid down (ART.md §4.1): seen from above on her back, one arm
@@ -207,7 +220,11 @@ pub fn fight(attacks: bool, casts: bool) -> Vec<(FrameId, Facing, Pose)> {
         }
     }
     if attacks || casts {
-        v.extend([(F::Hurt, Facing::Side, HURT_SIDE), (F::HurtDown, Facing::Down, HURT_DOWN), (F::HurtUp, Facing::Up, HURT_DOWN)]);
+        v.extend([
+            (F::Hurt, Facing::Side, HURT_SIDE),
+            (F::HurtDown, Facing::Down, HURT_DOWN),
+            (F::HurtUp, Facing::Up, HURT_DOWN),
+        ]);
     }
     v
 }

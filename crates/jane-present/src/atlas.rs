@@ -262,7 +262,8 @@ mod tests {
         }
         // More than a page's worth forces a second, and nothing crosses a page's edge.
         let mut at = Atlas::with_layers(false);
-        let ids: Vec<RefId> = (0..900).map(|i| at.add(200 + (i % 3) * 30, 90 + (i % 4) * 11, (0, 0), 1, |_, _| Ix(2))).collect();
+        let ids: Vec<RefId> =
+            (0..900).map(|i| at.add(200 + (i % 3) * 30, 90 + (i % 4) * 11, (0, 0), 1, |_, _| Ix(2))).collect();
         assert!(at.pages.pages.len() > 2);
         for &id in &ids {
             let r = at.get(id);

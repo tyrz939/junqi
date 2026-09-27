@@ -265,7 +265,8 @@ impl Prep {
                         f32s(&mut self.lights, &[r, gg, b, f32::from(l.size)]);
                         // w: 0 when it casts nothing, else one more than its holder's id (1: none),
                         // so its trace skips what carries it.
-                        let casts = if l.casts { 1.0 + l.holder.map_or(0, |h| sprite_id(h as usize)) as f32 } else { 0.0 };
+                        let casts =
+                            if l.casts { 1.0 + l.holder.map_or(0, |h| sprite_id(h as usize)) as f32 } else { 0.0 };
                         f32s(&mut self.lights, &[dir.0, dir.1, cone, casts]);
                         self.n_lights += 1;
                     }

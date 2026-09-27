@@ -463,7 +463,12 @@ impl Prep {
             let (x0, x1, top) = (f32::from(s.x), f32::from(s.x) + sw, -f32::from(s.y));
             let rect = [sx, sy, sx + sw, sy + sh];
             let info = [0.0, 0.0, 0.0, 2.0];
-            for (px, py, u, v) in [(x0, top, sx, sy), (x1, top, sx + sw, sy), (x0, top - sh, sx, sy + sh), (x1, top - sh, sx + sw, sy + sh)] {
+            for (px, py, u, v) in [
+                (x0, top, sx, sy),
+                (x1, top, sx + sw, sy),
+                (x0, top - sh, sx, sy + sh),
+                (x1, top - sh, sx + sw, sy + sh),
+            ] {
                 push(&mut self.far_v, &[px, py, u, v]);
                 push(&mut self.far_v, &rect);
                 push(&mut self.far_v, &info);
@@ -863,7 +868,13 @@ mod tests {
             Pass::Parallax { layer: Depth::FarLandmark, factor: 32, sprites: Span { start: 0, len: 1 } },
             Pass::Water { cells: Span::default() },
             Pass::Particles { layer: Depth::Weather, parts: Span { start: 0, len: 2 } },
-            Pass::Lights { ambient: [60; 3], fill: [40; 3], sun: None, points: Span::default(), casters: Span::default() },
+            Pass::Lights {
+                ambient: [60; 3],
+                fill: [40; 3],
+                sun: None,
+                points: Span::default(),
+                casters: Span::default(),
+            },
             Pass::Fog { volumes: Span { start: 0, len: 1 }, drift: (3, 4) },
             Pass::Particles { layer: Depth::Canopy, parts: Span { start: 2, len: 1 } },
         ]);
