@@ -1036,7 +1036,18 @@ impl Story {
                     _ => None,
                 }
             };
-            if let Some(at) = pick.as_ref().and_then(|p| point(&p.2)) {
+            // A thing to use is reached from any side of it: the side nearest her can be the
+            // far side of a wall (the Seam, at the back of the Mine's vault, was "out of reach"
+            // from the side facing the corridor, and she went out and in again for ever).
+            let used = match pick.as_ref().map(|p| &p.2) {
+                Some(Target::Task(Task::Use(u))) => v.prop(u.prop),
+                _ => None,
+            };
+            if let Some(p) = used {
+                if !ex.reaches_prop(v, p) {
+                    pick = None;
+                }
+            } else if let Some(at) = pick.as_ref().and_then(|p| point(&p.2)) {
                 if !ex.reaches(v, at) {
                     pick = None;
                 }

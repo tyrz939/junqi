@@ -781,6 +781,12 @@ impl Crawl {
         self.reach.point(at)
     }
 
+    /// Can she stand beside `p` (any side of it, not only the one nearest her)?
+    pub fn reaches_prop(&mut self, v: &View<'_>, p: &jane_sim::Prop) -> bool {
+        self.reach.update(v, signature(v));
+        self.reach.beside(p)
+    }
+
     fn fresh(&self, what: Try, sig: u64) -> bool {
         match (what, self.tried.get(&what)) {
             (Try::Tactic(_), _) | (_, None) => true,
