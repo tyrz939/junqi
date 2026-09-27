@@ -52,6 +52,9 @@ const BLOOM_LEVELS: usize = 5;
 const ALBEDO: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8UnormSrgb;
 const NH: wgpu::TextureFormat = wgpu::TextureFormat::Rgba8Unorm;
 const HDR: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
+/// Whose each G-buffer px is: the sprite's index in the frame plus one, 0 for the terrain. The
+/// height field carries it so a trace skips what it starts on and what holds its light.
+const ID: wgpu::TextureFormat = wgpu::TextureFormat::R16Uint;
 
 /// The pipelines and their layouts.
 #[derive(Debug)]
@@ -183,9 +186,9 @@ impl Pipes {
                 B::TexArray,
             ],
         );
-        let scatter_layout = layout(device, "scatter", &[B::Uniform, B::Tex, B::ReadWrite]);
+        let scatter_layout = layout(device, "scatter", &[B::Uniform, B::Tex, B::ReadWrite, B::Uint]);
         let light_layout =
-            layout(device, "light", &[B::Uniform, B::Tex, B::Tex, B::Tex, B::Read, B::Read, B::Read, B::Read]);
+            layout(device, "light", &[B::Uniform, B::Tex, B::Tex, B::Tex, B::Read, B::Read, B::Read, B::Read, B::Uint]);
         let post_layout = layout(device, "post", &[B::Uniform, B::Tex, B::Sampler, B::Tex]);
         let step_layout = layout(device, "step", &[B::Uniform]);
 
@@ -200,12 +203,12 @@ impl Pipes {
             step_mode: wgpu::VertexStepMode::Instance,
             attributes: &SPRITE_ATTRS,
         };
-        let three = [target(ALBEDO, None), target(NH, None), target(ALBEDO, None)];
+        let three = [target(ALBEDO, None), target(NH, None), target(ALBEDO, None), target(ID, None)];
         // The albedo alone: the other two attachments are there and left as they are.
         let masked =
             |format| Some(wgpu::ColorTargetState { format, blend: None, write_mask: wgpu::ColorWrites::empty() });
-        let over = [target(ALBEDO, Some(OVER)), masked(NH), masked(ALBEDO)];
-        let multiply = [target(ALBEDO, Some(MULTIPLY)), masked(NH), masked(ALBEDO)];
+        let over = [target(ALBEDO, Some(OVER)), masked(NH), masked(ALBEDO), masked(ID)];
+        let multiply = [target(ALBEDO, Some(MULTIPLY)), masked(NH), masked(ALBEDO), masked(ID)];
         let chunk =
             render_pipeline(device, "chunks", &[&gbuf_layout], &gm, "vs_chunk", "fs_chunk", &[chunk_buf], true, &three);
         let sprite = render_pipeline(
@@ -335,6 +338,7 @@ struct Targets {
     galb: wgpu::TextureView,
     gnh: wgpu::TextureView,
     gem: wgpu::TextureView,
+    gid: wgpu::TextureView,
     hmap: wgpu::Buffer,
     hdr: wgpu::TextureView,
     bsrc: wgpu::TextureView,
@@ -582,6 +586,13 @@ impl Wgpu {
     }
 
     /// `wgpu, Vulkan, <adapter>`.
+    /// A debug view (PRESENTATION.md §1.7): the light pass draws the sun's term alone, red how
+    /// much of the sun reaches each px through the height field, green its N dot L, blue the
+    /// albedo, so a shadow's root and a self-shadow show plainly (`jane sheet scene --show-sun`).
+    pub fn show_sun(&mut self, on: bool) {
+        self.prep.show_sun = on;
+    }
+
     pub fn describe(&self) -> &str {
         &self.describe
     }
@@ -709,6 +720,7 @@ impl Wgpu {
         let galb = view(texture(d, "g albedo", (full.0, full.1, 1), ALBEDO, rt));
         let gnh = view(texture(d, "g normal height", (full.0, full.1, 1), NH, rt));
         let gem = view(texture(d, "g emissive", (full.0, full.1, 1), ALBEDO, rt));
+        let gid = view(texture(d, "g id", (full.0, full.1, 1), ID, rt));
         let hmap = d.create_buffer(&wgpu::BufferDescriptor {
             label: Some("height field"),
             size: u64::from(full.0) * u64::from(full.1) * 4,
@@ -746,7 +758,8 @@ impl Wgpu {
         let tiles = storage("tiles", tiles_n * 8);
         let tile_lights = storage("tile lights", tiles_n * TILE_CAP as u64 * 4);
         let g = self.globals.as_entire_binding();
-        let scatter_bg = group(d, "scatter", &p.scatter_layout, &[g.clone(), r(&gnh), hmap.as_entire_binding()]);
+        let scatter_bg =
+            group(d, "scatter", &p.scatter_layout, &[g.clone(), r(&gnh), hmap.as_entire_binding(), r(&gid)]);
         let light_bg = group(
             d,
             "light",
@@ -760,6 +773,7 @@ impl Wgpu {
                 lights.as_entire_binding(),
                 tiles.as_entire_binding(),
                 tile_lights.as_entire_binding(),
+                r(&gid),
             ],
         );
         let smp = wgpu::BindingResource::Sampler(&p.sampler);
@@ -800,6 +814,7 @@ impl Wgpu {
             galb,
             gnh,
             gem,
+            gid,
             hmap,
             hdr,
             bsrc,
@@ -1031,6 +1046,7 @@ impl Backend for Wgpu {
                     attach(&t.galb, wgpu::Color { r: cr, g: cg, b: cb, a: 1.0 }),
                     attach(&t.gnh, wgpu::Color { r: 128.0 / 255.0, g: 128.0 / 255.0, b: 0.0, a: 0.0 }),
                     attach(&t.gem, wgpu::Color::BLACK),
+                    attach(&t.gid, wgpu::Color::TRANSPARENT),
                 ],
                 depth_stencil_attachment: None,
                 timestamp_writes: stamps.map(|s| s.writes(Some(0), Some(1))),
@@ -1056,7 +1072,7 @@ impl Backend for Wgpu {
             };
             let mut pass = enc.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("gbuffer list"),
-                color_attachments: &[keep(&t.galb), keep(&t.gnh), keep(&t.gem)],
+                color_attachments: &[keep(&t.galb), keep(&t.gnh), keep(&t.gem), keep(&t.gid)],
                 depth_stencil_attachment: None,
                 timestamp_writes: stamps.map(|s| s.writes(Some(2), Some(3))),
                 occlusion_query_set: None,

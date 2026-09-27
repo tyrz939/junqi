@@ -29,6 +29,16 @@ struct Globals {
 
 @group(0) @binding(0) var<uniform> g: Globals;
 
+// How many rows up the screen a thing `h` px tall is drawn: four fifths, rounded up
+// (`jane_present::rows_up`, the 3/4 view's one projection).
+fn rows_up(h: u32) -> u32 {
+    return (h * 4u + 4u) / 5u;
+}
+
+// A px at or under this height is the ground's own relief (`jane_present::shadow::GROUND`): it
+// neither stands in the height field nor is lifted off the row it is drawn on.
+const GROUND: f32 = 4.5;
+
 // A full-canvas triangle.
 struct FullOut {
     @builtin(position) pos: vec4<f32>,

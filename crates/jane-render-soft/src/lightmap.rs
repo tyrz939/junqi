@@ -123,6 +123,7 @@ mod tests {
             size: 4,
             casts: true,
             kind: LightKind::Point,
+            holder: None,
         };
         m.build((96, 96), [64, 64, 128], &[lamp]);
         let mut px = vec![0xff80_8080; 96 * 96];

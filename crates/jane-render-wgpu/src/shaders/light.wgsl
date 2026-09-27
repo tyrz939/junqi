@@ -8,6 +8,9 @@
 // from the point, the light is `k * clearance / t` visible (k is the light's distance over its
 // size, or 1 / tan of the sun's spread): the penumbra widens with the distance from what casts
 // it, as a real one does, and a thin post's shadow is sharp at its foot and soft at its tip.
+// A trace never meets the thing it starts on (a sprite does not shadow itself: its own field is
+// a thin wall at its feet that a low sun would otherwise draw across its own body) nor the thing
+// holding its light (a lamp's post, a torch's bracket, her lantern's hand).
 
 @group(0) @binding(1) var galb: texture_2d<f32>;
 @group(0) @binding(2) var gnh: texture_2d<f32>;
@@ -28,6 +31,12 @@ struct Light {
 // Per 32 x 32 tile: (first, count) into `tile_lights`.
 @group(0) @binding(6) var<storage, read> tiles: array<vec2<u32>>;
 @group(0) @binding(7) var<storage, read> tile_lights: array<u32>;
+@group(0) @binding(8) var gid: texture_2d<u32>;
+
+// Whose field a trace passes through as if it were not there: the px's own thing and the light's
+// holder (0: nothing; the terrain is 0 and is never skipped).
+var<private> skip_own: u32;
+var<private> skip_holder: u32;
 
 struct LitOut {
     @location(0) colour: vec4<f32>,
@@ -39,7 +48,12 @@ fn texel_height(x: i32, y: i32) -> f32 {
     if x < 0 || y < 0 || x >= w || y >= i32(g.full.y) {
         return 0.0;
     }
-    return f32(hmap[u32(y * w + x)]);
+    let v = hmap[u32(y * w + x)];
+    let who = v & 0xffffu;
+    if who != 0u && (who == skip_own || who == skip_holder) {
+        return 0.0;
+    }
+    return f32(v >> 16u);
 }
 
 // The height field between texels, bilinear: an edge seen at a slant is a slope, not a stair,
@@ -132,13 +146,22 @@ fn fs_light(i: FullOut) -> LitOut {
     let n = vec3<f32>(nx, ny, sqrt(max(1.0 - nx * nx - ny * ny, 0.0)));
     // Where this pixel is: on the ground under it, `h` above. A standing thing's face is the
     // front of its body, half its depth toward the viewer from the line it stands on, so its
-    // own body never shadows its face.
-    let front = select(0.0, depth * 0.5 + 1.0, h > 0.5);
-    let p = vec3<f32>(f32(q.x) + 0.5, f32(q.y) + 0.5 + h + front, h);
+    // own body never shadows its face. The ground's own relief (a tuft, a cobble, 4 px and
+    // under) is the ground where it is drawn: moved down its few rows, every shadow on the
+    // grass would stand that far up the screen from what casts it.
+    let lifted = h > GROUND;
+    let front = select(0.0, depth * 0.5 + 1.0, lifted);
+    let down = select(0.0, f32(rows_up(u32(h + 0.5))), lifted);
+    let p = vec3<f32>(f32(q.x) + 0.5, f32(q.y) + 0.5 + down + front, h);
+    skip_own = textureLoad(gid, q, 0).r;
+    skip_holder = 0u;
     let t0 = 1.0;
 
     var light = g.fill.rgb;
-    if h < 3.0 {
+    // The sun's shadow and its N dot L, for the debug view (`Wgpu::show_sun`, misc.w).
+    var sun_seen = 1.0;
+    var sun_ndl = 0.0;
+    if !lifted {
         light *= ground_ao(p);
     }
     if g.sun_dir.w > 0.5 {
@@ -147,8 +170,10 @@ fn fs_light(i: FullOut) -> LitOut {
         // to two and a half times that.
         let ndl = min(max(dot(n, l), 0.0) / max(l.z, 0.2), 2.5);
         if ndl > 0.0 {
-            light += g.sun_col.rgb * ndl * trace(p, l, 2000.0, g.sun_col.w, t0, 3.0);
+            sun_seen = trace(p, l, 2000.0, g.sun_col.w, t0, 3.0);
+            light += g.sun_col.rgb * ndl * sun_seen;
         }
+        sun_ndl = ndl;
     }
     let tile = vec2<u32>(px) / 32u;
     let tr = tiles[tile.y * g.tiles_x + tile.x];
@@ -173,6 +198,7 @@ fn fs_light(i: FullOut) -> LitOut {
         }
         var sh = 1.0;
         if lt.spot.w > 0.5 {
+            skip_holder = u32(lt.spot.w + 0.5) - 1u;
             let dxy = length(v.xy);
             sh = trace(p, l, dxy - (lt.col.w + 3.0), clamp(dxy / max(lt.col.w, 1.0), 2.0, 16.0), t0, 1.0);
         }
@@ -182,6 +208,10 @@ fn fs_light(i: FullOut) -> LitOut {
     let lit = alb * light + em * g.misc.z;
     var o: LitOut;
     o.colour = vec4<f32>(lit, 1.0);
+    if g.misc.w > 0.5 {
+        // Red: how much of the sun reaches the px; green: its N dot L; blue: the albedo.
+        o.colour = vec4<f32>(sun_seen, sun_ndl * 0.4, dot(alb, vec3<f32>(0.3, 0.5, 0.2)), 1.0);
+    }
     // What blooms: the emissive, and a little of whatever is lit past white.
     o.bloom = vec4<f32>(em * g.misc.z + max(lit - vec3<f32>(1.1), vec3<f32>(0.0)) * 0.25, 1.0);
     return o;

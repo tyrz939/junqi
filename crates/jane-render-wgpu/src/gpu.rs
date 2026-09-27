@@ -101,6 +101,8 @@ pub enum B {
     TexArray,
     /// A `u32` texture array.
     UintArray,
+    /// A `u32` texture.
+    Uint,
     Sampler,
 }
 
@@ -132,15 +134,15 @@ pub fn layout(device: &wgpu::Device, label: &str, entries: &[B]) -> wgpu::BindGr
                         min_binding_size: None,
                     },
                 ),
-                B::Tex | B::TexArray | B::UintArray => (
+                B::Tex | B::TexArray | B::UintArray | B::Uint => (
                     wgpu::ShaderStages::FRAGMENT | wgpu::ShaderStages::COMPUTE,
                     wgpu::BindingType::Texture {
-                        sample_type: if matches!(b, B::UintArray) {
+                        sample_type: if matches!(b, B::UintArray | B::Uint) {
                             wgpu::TextureSampleType::Uint
                         } else {
                             wgpu::TextureSampleType::Float { filterable: true }
                         },
-                        view_dimension: if matches!(b, B::Tex) {
+                        view_dimension: if matches!(b, B::Tex | B::Uint) {
                             wgpu::TextureViewDimension::D2
                         } else {
                             wgpu::TextureViewDimension::D2Array

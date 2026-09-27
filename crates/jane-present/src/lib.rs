@@ -26,6 +26,7 @@ pub mod light;
 pub mod people;
 pub mod present;
 pub mod props;
+pub mod shadow;
 pub mod stand_in;
 pub mod terrain;
 pub mod text;
@@ -35,6 +36,6 @@ pub mod view;
 pub use backend::{AO_TINT, AtlasPages, Backend, CLUT_LEN, Caps, FrameStats, FrameTimes, Page, StatPass};
 pub use frame::{
     CANVAS_H, CANVAS_W, Caster, ChunkCmd, ChunkId, ChunkLayers, Depth, Directional, Flags, Frame, Light, LightKind,
-    Pass, Post, Rgb, Span, SpriteCmd, Src, Tier, Tint,
+    Pass, Post, Rgb, Span, SpriteCmd, Src, Tier, Tint, height_of_rows, rows_up,
 };
 pub use present::Present;
