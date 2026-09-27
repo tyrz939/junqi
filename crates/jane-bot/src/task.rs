@@ -669,6 +669,11 @@ fn craft(inputs: &[ItemId], stage: &mut u8, t: &mut u32, v: &View<'_>) -> Status
         return Status::Failed("not at a bench".into());
     }
     let i = *stage as usize;
+    // What a making that did not come out left on the bench (no room for it in the bag) goes
+    // back in the bag first: put on top of it, the inputs never make what she came for.
+    if i == 0 && v.craft_output().is_some() {
+        return Status::Act(Act::press(Command::CraftClearAll));
+    }
     if i < inputs.len() {
         let bag = &v.me().bag;
         let Some(slot) = bag.iter().position(|s| s.is_some_and(|s| s.item == inputs[i])) else {

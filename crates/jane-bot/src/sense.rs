@@ -193,20 +193,75 @@ pub fn junk_slot(v: &View<'_>) -> Option<u8> {
         bag.iter().flatten().any(|s| s.item == i && u32::from(s.qty) >= max)
     };
     let stacks = |i: ItemId| bag.iter().flatten().filter(|s| s.item == i).count();
-    bag.iter()
-        .enumerate()
-        .filter_map(|(i, s)| s.map(|s| (i, s)))
-        .filter(|(_, s)| {
-            let d = cat.combat.item(s.item);
-            let spare = stacks(s.item) > 1 && full(s.item);
-            !d.kept() && (!d.story && !wanted.contains(&s.item) || spare)
-        })
-        .min_by_key(|(i, s)| {
-            let d = cat.combat.item(s.item);
-            let spare = stacks(s.item) > 1 && full(s.item) && s.qty < d.max_stack;
-            (!spare, rank(s.item), s.qty, *i)
-        })
-        .map(|(i, _)| i as u8)
+    let makings = bait_makings(v);
+    let bait_short = makings.len() > 1;
+    let meat = item("rat_meat");
+    let pick = |story_too: bool| {
+        bag.iter()
+            .enumerate()
+            .filter_map(|(i, s)| s.map(|s| (i, s)))
+            .filter(|(_, s)| {
+                let d = cat.combat.item(s.item);
+                let spare = stacks(s.item) > 1 && full(s.item);
+                let asked = wanted.contains(&s.item) || makings.contains(&s.item);
+                let held_back = if story_too { bait_short && s.item == meat } else { d.story };
+                let free_of_log = !asked && !held_back;
+                !d.kept() && (free_of_log || spare)
+            })
+            .min_by_key(|(i, s)| {
+                let d = cat.combat.item(s.item);
+                let spare = stacks(s.item) > 1 && full(s.item) && s.qty < d.max_stack;
+                (!spare, rank(s.item), s.qty, *i)
+            })
+            .map(|(i, _)| i as u8)
+    };
+    // Not one slot free and nothing else to spare: what a quest once asked for and none in the
+    // log asks for now (the forest's butterflies, the rats' meat once the bait is brewed), so
+    // that a key or the Ball always has room (the Chairman's Key was left in the Factory for
+    // want of one, and the Burial stayed locked).
+    pick(false).or_else(|| {
+        let full_bag = bag.iter().all(Option::is_some);
+        if !full_bag {
+            return None;
+        }
+        pick(true)
+    })
+}
+
+/// What the bait for the Burial's small snakes is made of, and the bait itself, while Under the
+/// Stone is still to come ("Feed the small snakes; do not fight them"; the dog paid the
+/// snakeroot and the water for it): a nearly full bag threw the root and the water out in the
+/// Factory, and she came to the Burial with nothing to feed them. Every bait a creature's row
+/// names, and what a bench makes it from, two steps down.
+pub fn bait_makings(v: &View<'_>) -> Vec<ItemId> {
+    let cat = jane_data::catalog();
+    if cat.story.quest_id("the_burial").is_some_and(|q| v.quests_done().contains(&q)) {
+        return Vec::new();
+    }
+    let mut out: Vec<ItemId> = cat.combat.units.iter().filter_map(|u| u.bait).collect();
+    // Brewed: the bait is kept, and what made it is only more of what she carries (a full bag
+    // lost the Chairman's Key for want of room).
+    if out.iter().all(|&b| holds(v, b) >= crate::story::BAIT.1) {
+        return out;
+    }
+    for _ in 0..2 {
+        let more: Vec<ItemId> = cat
+            .combat
+            .recipes
+            .iter()
+            .filter(|r| out.contains(&r.output))
+            .flat_map(|r| r.inputs.iter().copied())
+            .collect();
+        out.extend(more);
+    }
+    // The rats' meat comes again with every rat, and she carries a stack of it all the story:
+    // not kept back, or a bag full of what cannot be thrown out never has room for the bench's
+    // first Stranglethorn.
+    let meat = item("rat_meat");
+    out.retain(|&i| i != meat);
+    out.sort();
+    out.dedup();
+    out
 }
 
 pub fn holds(v: &View<'_>, item: ItemId) -> u32 {

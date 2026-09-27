@@ -116,7 +116,7 @@ const PROVISIONS: [(&str, u32); 3] = [("potion_stoneskin", 2), ("potion_lifestea
 /// What she brews for Under the Stone, and how many: the dog's bait for the small snakes ("Feed
 /// the small snakes; do not fight them"), rat meat soaked in Stranglethorn at a bench. There is
 /// no bench inside, so it is made before she goes down; two, for the two in the east hall.
-const BAIT: (&str, u32) = ("poisoned_rat_meat", 2);
+pub const BAIT: (&str, u32) = ("poisoned_rat_meat", 2);
 
 /// Cells she will go for a provision: the bench, or food seen near (not across the county: a
 /// long walk for an apple was a walk through the ruffians, and she mostly packs at home).
@@ -440,7 +440,10 @@ impl Story {
             if let Some((task, goal)) = &mut self.task {
                 let goal = *goal;
                 // Waiting where she was told to wait is not "reached, and it did not count".
-                let waiting = matches!(task, Task::Wait(_));
+                // (Nor is a thing made at the bench: brewing the snakes' bait is a walk to the
+                // bench and four makings, and it was set aside half made as "reached, and it did
+                // not count".)
+                let waiting = matches!(task, Task::Wait(_) | Task::Craft { .. });
                 match task.tick(v, cx) {
                     Status::Act(a) => return a,
                     Status::Done => {
@@ -766,16 +769,26 @@ impl Story {
         // makes it (rat meat, and Stranglethorn or its root and water: the Burial's own cold
         // chest holds the root and the water): brewed at the bench before anything else, and
         // before the water goes into anything else. Without the makings she goes down for them.
+        //
+        // Brewed as soon as she holds the makings and a bench is near, not only once the Burial
+        // is in the log: the dog pays the root and the water with the rats' meat (Under the
+        // House), when her bag has room; by the Burial it was full of what cannot be thrown out,
+        // and the first Stranglethorn had nowhere to go.
         let burial_ahead = v.quests().any(|q| !q.ready && cat.story.quest(q.quest).id == "the_burial");
+        let burial_done = cat.story.quest_id("the_burial").is_some_and(|q| v.quests_done().contains(&q));
         let bait = sense::item(BAIT.0);
-        let short = burial_ahead && holds(v, bait) < BAIT.1;
+        let short = !burial_done && holds(v, bait) < BAIT.1;
         if short && matches!(here, ZoneId::County | ZoneId::House | ZoneId::Cellar) {
             let g = Goal::Provision(bait);
             let brew = holds(v, sense::item("potion_stranglethorn")) > 0
                 || holds(v, sense::item("small_water")) > 0 && holds(v, sense::item("savage_snakeroot")) > 0;
             if brew && holds(v, sense::item("rat_meat")) > 0 && self.open(v, g) {
                 if let Some(t) = get(v, cx, bait, 0) {
-                    return Some((t, g));
+                    let home_near = here == ZoneId::House
+                        || doors_to(v, ZoneId::House).first().is_some_and(|p| to_prop(p, at) <= i64::from(PROVISION_REACH * CELL_FX));
+                    if burial_ahead || home_near || cost_of(&t) <= i64::from(PROVISION_REACH * CELL_FX) {
+                        return Some((t, g));
+                    }
                 }
             }
         }
@@ -783,11 +796,22 @@ impl Story {
         // the bench makes from what she carries, food she has seen lying about). Only out of
         // doors or in the house, and only while a dungeon step is in the log. (With the bait
         // still to brew, no potion: every one of them wants the water it needs.)
+        // The water the dog paid with the snakeroot (Under the House: "It wants you to keep
+        // them") is kept for the bait while Under the Stone is still to come: a potion never
+        // takes the last of it while a root waits for it. (It went into Stone Skin for the mine,
+        // and she came to the Burial with neither bait nor the makings.)
+        let owed = if burial_done {
+            0
+        } else {
+            let brewed = holds(v, bait) + holds(v, sense::item("potion_stranglethorn"));
+            holds(v, sense::item("savage_snakeroot")).min(BAIT.1.saturating_sub(brewed))
+        };
+        let keep_water = holds(v, sense::item("small_water")) <= owed;
         if matches!(here, ZoneId::County | ZoneId::House) && !night && hp >= COUNTY_LOW && Self::act_ahead(v) {
             for (name, want) in PROVISIONS {
                 let item = sense::item(name);
                 let g = Goal::Provision(item);
-                if holds(v, item) >= want || !self.open(v, g) || short && name.starts_with("potion_") {
+                if holds(v, item) >= want || !self.open(v, g) || (burial_ahead && short || keep_water) && name.starts_with("potion_") {
                     continue;
                 }
                 match get(v, cx, item, 0) {
