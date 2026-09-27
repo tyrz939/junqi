@@ -138,13 +138,14 @@ fn lin3(c: [u8; 3]) -> [f32; 3] {
     c.map(linear)
 }
 
-/// How far the sky's lights (the fill, the sun, the afterglow) keep the chroma their bytes name
-/// rather than the power curve's, 0..1. Taken channel by channel through the curve, a dusk blue
+/// How far every light (the fill, the sun, the afterglow, the lamps) keeps the chroma its byte
+/// names rather than the power curve's, 0..1. Taken channel by channel through the curve, a dusk blue
 /// and a low sun's orange both come out far more saturated than the byte (a linear orange is a
 /// red), and the two meet on a lit face as mauve; T1 multiplies the bytes as they are. So their
 /// brightness goes through the curve and most of their hue does not (the art-director pass,
-/// 2026-09-27): a dusk reads gold where the sun is and blue where it is not.
-const SKY_CHROMA: f32 = 0.6;
+/// 2026-09-27): a dusk reads gold where the sun is and blue where it is not, and a lamp's pool
+/// fades into the night through a warm grey rather than through mauve.
+const SKY_CHROMA: f32 = 0.85;
 
 /// A light's byte colour as linear light, its luminance through the curve and its chroma
 /// [`SKY_CHROMA`] of the way to the byte's own.
@@ -275,7 +276,7 @@ impl Prep {
                             &mut self.lights,
                             &[l.pos.0 as f32 + g, l.pos.1 as f32 + g, f32::from(l.height), f32::from(l.radius)],
                         );
-                        let [r, gg, b] = lin3(l.colour);
+                        let [r, gg, b] = light3(l.colour);
                         // Flame light leans warm: a yellow lamp reads as a lamp on green grass,
                         // not as lime; and not so far that its pool, fading into the blue of the
                         // night, passes through mauve (the art-director pass, 2026-09-27). A deep orange flame (a fire) is held up to a lamp's

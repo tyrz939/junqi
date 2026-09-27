@@ -71,7 +71,9 @@ pub const SILHOUETTE_SPREAD: u16 = (5 * 65536 / 360) as u16;
 
 /// The western sky after sunset on flat ground, and how long it glows: the sun's gold held low
 /// in the west, so the warmth stays where the sun went down while the fill turns the rest blue.
-const AFTERGLOW: [i32; 3] = [140, 116, 78];
+/// Yellow more than orange and not bright: flat ground takes it and the fill at once, and an
+/// orange one over the blue made every lit face lavender.
+const AFTERGLOW: [i32; 3] = [112, 102, 68];
 const GLOW: i32 = HOUR * 3 / 4;
 /// The full moon on flat ground.
 const MOON: [i32; 3] = [58, 74, 120];
