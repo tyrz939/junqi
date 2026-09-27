@@ -2,7 +2,7 @@
 //! the `Features` rows, so T1's albedo pass, everything before the light, is `soft`'s frame
 //! before its lightmap, pixel for pixel. One test in this file: SDL lives once in a process.
 
-use jane_present::{Backend, Pass, Present, Tier};
+use jane_present::{Backend, Pass, Present, Tier, WeatherKind};
 use jane_render_gl2::{Api, Gl2, Rows};
 use jane_render_soft::Soft;
 use jane_sim::input::DevOp;
@@ -75,7 +75,8 @@ fn both_modes_match(mut gl: Gl2) {
             let (w, h) = gl.read_albedo(&mut albedo);
             assert_eq!((w, h), CANVAS);
             // soft draws the same frame without its light pass: its albedo pass alone. The
-            // atmosphere's passes go too, since gl2 does not draw them yet (PRESENTATION.md §1.3).
+            // atmosphere's passes go too: gl2 draws them after its albedo, over the lit canvas
+            // (the sky and the water in its compose, the particles and the fog over it).
             let f = p.frame_mut();
             let off = |q: &Pass| {
                 matches!(
@@ -114,4 +115,60 @@ fn both_modes_match(mut gl: Gl2) {
         assert!(s.frames > 0 || s.draw_calls > 0);
     }
     assert!(silhouettes, "some frame had the sun's silhouettes");
+    the_atmosphere_is_drawn(&mut gl);
+}
+
+/// The atmosphere's passes on T1 (PRESENTATION.md §1.3): rain and mist at night draw, and leave
+/// the albedo pass as it was.
+fn the_atmosphere_is_drawn(gl: &mut Gl2) {
+    gl.set_rows(Rows::T1);
+    for kind in [WeatherKind::Rain, WeatherKind::Mist] {
+        let mut sim = Sim::new_game(1, "Jane");
+        let mut p = Present::new(Tier::T1);
+        p.set_canvas(CANVAS);
+        p.atmos_mut().force(Some((kind, if kind == WeatherKind::Rain { 255 } else { 0 })));
+        let cmd = [StampedCommand { seat: Some(Seat(0)), seq: 1, cmd: Command::Dev(DevOp::Time { hour: 22 }) }];
+        for k in 0..240 {
+            let cmds: &[StampedCommand] = if k == 0 { &cmd } else { &[] };
+            sim.step(&StepInput { frames: [InputFrame::IDLE; 4], commands: cmds });
+            let events = sim.drain_events().to_vec();
+            let v = sim.view(Seat(0)).expect("seat 0 plays");
+            p.tick(&v, &events);
+        }
+        gl.upload_atlas(p.atlas());
+        let frame = p.draw(200, CANVAS);
+        let want = |q: &Pass| match kind {
+            WeatherKind::Rain => matches!(q, Pass::Particles { .. }),
+            _ => matches!(q, Pass::Fog { .. }),
+        };
+        assert!(frame.passes.iter().any(want), "{kind:?} at night puts its pass in the frame");
+        gl.draw(p.frame());
+        let (mut with, mut albedo) = (Vec::new(), Vec::new());
+        gl.read_back(&mut with);
+        gl.read_albedo(&mut albedo);
+        let f = p.frame_mut();
+        let atmos: Vec<Pass> = f.passes.iter().copied().filter(is_atmosphere).collect();
+        f.passes.retain(|q| !is_atmosphere(q));
+        gl.draw(p.frame());
+        p.frame_mut().passes.extend(atmos);
+        let (mut without, mut albedo2) = (Vec::new(), Vec::new());
+        gl.read_back(&mut without);
+        gl.read_albedo(&mut albedo2);
+        let (n, most, _) = diff(&with, &without, usize::from(CANVAS.0));
+        eprintln!("{kind:?} at 22:00: the atmosphere changes {n} px, by at most {most}");
+        assert!(n > 2000, "{kind:?}: gl2 draws its atmosphere ({n} px changed)");
+        assert_eq!(albedo, albedo2, "{kind:?}: the atmosphere never touches the albedo pass");
+    }
+}
+
+fn is_atmosphere(q: &Pass) -> bool {
+    matches!(
+        q,
+        Pass::Sky(_)
+            | Pass::Parallax { .. }
+            | Pass::Water { .. }
+            | Pass::Weather(_)
+            | Pass::Fog { .. }
+            | Pass::Particles { .. }
+    )
 }

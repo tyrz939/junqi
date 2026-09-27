@@ -159,6 +159,9 @@ pub struct Opts {
     pub weather: Option<jane_present::WeatherKind>,
     /// Cast this spell east after the rest, and draw the frame so many ticks later (`--cast icebolt:12`).
     pub cast: Option<String>,
+    /// With `--cast`: first put this unit (by its catalog name) a few cells east of her, the
+    /// console's `spawn`, so the bolt has a body to hit (`--spawn skeleton`).
+    pub spawn: Option<String>,
     /// `Features` rows set by key (`--rows fog=off,god_rays=off`, PRESENTATION.md §1.3).
     pub rows: Vec<(String, String)>,
     pub gl: GlOpts,
@@ -351,8 +354,17 @@ fn play(bps: Blueprints, o: &Opts, tier: Tier) -> Result<(Tap, Present, u32), St
         let (name, after) = c.split_once(':').map_or((c.as_str(), 12), |(s, t)| (s, t.parse().unwrap_or(12)));
         let spell = jane_data::catalog().combat.spell_id(name).ok_or_else(|| format!("--cast: no spell \"{name}\""))?;
         let dev = |seq: u16, op| StampedCommand { seat: Some(seat), seq, cmd: Command::Dev(op) };
-        let setup = [dev(u16::MAX - 3, DevOp::Learn(spell)), dev(u16::MAX - 2, DevOp::Mp(9999)), dev(u16::MAX - 4, DevOp::God(true))];
+        let setup = [
+            dev(u16::MAX - 3, DevOp::Learn(spell)),
+            dev(u16::MAX - 2, DevOp::Mp(9999)),
+            dev(u16::MAX - 4, DevOp::God(true)),
+        ];
         host.sim.step(&StepInput { frames: [InputFrame::IDLE; 4], commands: &setup });
+        if let Some(u) = &o.spawn {
+            let def = jane_data::catalog().combat.unit_id(u).ok_or_else(|| format!("--spawn: no unit \"{u}\""))?;
+            let spawn = [dev(u16::MAX - 6, DevOp::Spawn(def))];
+            host.sim.step(&StepInput { frames: [InputFrame::IDLE; 4], commands: &spawn });
+        }
         let aim = InputFrame { aim: Some(jane_core::Angle::EAST), ..InputFrame::IDLE };
         let cast = [StampedCommand { seat: Some(seat), seq: u16::MAX - 5, cmd: Command::Cast { spell, on: None } }];
         host.sim.step(&StepInput { frames: [aim; 4], commands: &cast });
@@ -374,6 +386,10 @@ pub fn render(bps: Blueprints, o: &Opts) -> Result<Shot, String> {
     let mut b = backend(o.backend, o.gl)?;
     let (host, mut present, played) = play(bps, o, o.backend.tier())?;
     b.upload_atlas(present.atlas());
+    // `--rows` the backend draws itself (`normal_light`, `sharp`): after gl2's own flags only when asked.
+    if !o.rows.is_empty() {
+        b.set_features(&present.features());
+    }
     let seat = Seat(0);
     let v = host.sim.view(seat).ok_or("seat 0 is not in the world")?;
     let (clock, day) = v.clock();
@@ -412,10 +428,20 @@ pub fn render(bps: Blueprints, o: &Opts) -> Result<Shot, String> {
 /// frame `o` asks for, then `n` more ticks with the world idle, drawing every `every`-th at
 /// `alpha = 1`: the rain falling, a mist drifting, a lightning strike, a bolt in flight. Each
 /// shot is handed to `out` with its tick.
-pub fn film(bps: Blueprints, o: &Opts, n: u32, every: u32, mut out: impl FnMut(u32, &Shot) -> Result<(), String>) -> Result<(), String> {
+pub fn film(
+    bps: Blueprints,
+    o: &Opts,
+    n: u32,
+    every: u32,
+    mut out: impl FnMut(u32, &Shot) -> Result<(), String>,
+) -> Result<(), String> {
     let mut b = backend(o.backend, o.gl)?;
     let (mut host, mut present, _) = play(bps, o, o.backend.tier())?;
     b.upload_atlas(present.atlas());
+    // `--rows` the backend draws itself (`normal_light`, `sharp`): after gl2's own flags only when asked.
+    if !o.rows.is_empty() {
+        b.set_features(&present.features());
+    }
     let seat = Seat(0);
     let mut px = Vec::new();
     for k in 0..n {
@@ -465,6 +491,9 @@ pub fn bench(bps: Blueprints, o: &Opts, frames: u32, output: (u32, u32)) -> Resu
     let (mut build, mut submit, mut whole) = (Vec::new(), Vec::new(), Vec::new());
     let mut b = Bench::new(o.backend, output, o.gl)?;
     b.backend().upload_atlas(present.atlas());
+    if !o.rows.is_empty() {
+        b.backend().set_features(&present.features());
+    }
     for k in 0..frames + 30 {
         host.sim.step(&StepInput { frames: [InputFrame::IDLE; 4], commands: &[] });
         let events = host.sim.drain_events().to_vec();
@@ -591,6 +620,7 @@ mod tests {
             at: None,
             weather: None,
             cast: None,
+            spawn: None,
             rows: Vec::new(),
             gl: GlOpts::default(),
         };

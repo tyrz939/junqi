@@ -132,7 +132,8 @@ fn render_entry(id: SpriteId, look: &Look) -> Result<Vec<Rendered>, String> {
     match look {
         Look::Person(p) => {
             for v in 0..p.vary.count() {
-                let set = person::render_fighting(&p.variant(v), person::seed(name), fight(id)).map_err(|e| format!("{name}: {e}"))?;
+                let set = person::render_fighting(&p.variant(v), person::seed(name), fight(id))
+                    .map_err(|e| format!("{name}: {e}"))?;
                 let seats = if has_seats(id) { 1 + person::SEAT_COATS.len() } else { 1 };
                 for seat in 0..seats {
                     let set = person::seat(&set, seat);

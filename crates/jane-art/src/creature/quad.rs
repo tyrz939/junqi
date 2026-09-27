@@ -346,7 +346,11 @@ fn tail_side(c: &mut Canvas, k: &Coat, root: (i32, i32), wag: i32) {
             // A working dog's tail: up and back in a feathered curve, the tip a px higher with the
             // swing.
             let tip = (x - 5, y - 4 - wag.max(0));
-            m.polyline_fill(&[(x + 1, y - 1), (x + 1, y + 2), (x - 3, y), (tip.0 - 1, tip.1 + 2), tip, (x - 2, y - 3)], Ix::INK, 1);
+            m.polyline_fill(
+                &[(x + 1, y - 1), (x + 1, y + 2), (x - 3, y), (tip.0 - 1, tip.1 + 2), tip, (x - 2, y - 3)],
+                Ix::INK,
+                1,
+            );
             // The feathering under it.
             m.polyline_fill(&[(x - 1, y + 1), (x - 4, y + 2), (tip.0, tip.1 + 3)], Ix::INK, 1);
         }
@@ -354,7 +358,14 @@ fn tail_side(c: &mut Canvas, k: &Coat, root: (i32, i32), wag: i32) {
             // A fox's brush: long, full, carried low and back.
             let tip = (x - 7, y + 3 - wag / 2);
             m.polyline_fill(
-                &[(x + 1, y - 1), (x - 3, y - 2), (tip.0 - 1, tip.1 - 1), (tip.0 - 1, tip.1 + 1), (x - 3, y + 3), (x + 1, y + 2)],
+                &[
+                    (x + 1, y - 1),
+                    (x - 3, y - 2),
+                    (tip.0 - 1, tip.1 - 1),
+                    (tip.0 - 1, tip.1 + 1),
+                    (x - 3, y + 3),
+                    (x + 1, y + 2),
+                ],
                 Ix::INK,
                 1,
             );
@@ -407,7 +418,11 @@ fn ear_side(c: &mut Canvas, k: &Coat, s: Rect, far: bool, lag: i32) {
         Ears::Prick if k.look.anatomy == Anatomy::Dog => {
             // A working dog's ear stands but tips over at the top, toward the face: soft,
             // never a Doberman's spike.
-            m.polyline_fill(&[(x - 1, y + 1), (x + 2, y + 1), (x + 2, y - 2), (x + 3, y - 1), (x + 1, y - 3 + lag), (x - 1, y - 1)], Ix::INK, 1);
+            m.polyline_fill(
+                &[(x - 1, y + 1), (x + 2, y + 1), (x + 2, y - 2), (x + 3, y - 1), (x + 1, y - 3 + lag), (x - 1, y - 1)],
+                Ix::INK,
+                1,
+            );
         }
         Ears::Prick => {
             let h = if k.look.plan == Plan::QuadrupedMid { 4 } else { 3 };
@@ -416,11 +431,19 @@ fn ear_side(c: &mut Canvas, k: &Coat, s: Rect, far: bool, lag: i32) {
         Ears::Flop => {
             // Folded over at the top and hanging behind the eye, its tip a px lower as the
             // head comes down.
-            m.polyline_fill(&[(x - 1, y - 1), (x + 1, y - 1), (x + 1, y + 2 + lag), (x, y + 3 + lag), (x - 1, y + 1)], Ix::INK, 1);
+            m.polyline_fill(
+                &[(x - 1, y - 1), (x + 1, y - 1), (x + 1, y + 2 + lag), (x, y + 3 + lag), (x - 1, y + 1)],
+                Ix::INK,
+                1,
+            );
         }
         Ears::Tall => {
             let lean = -1 - lag;
-            m.polyline_fill(&[(x - 1, y + 1), (x + 1, y + 1), (x + 1 + lean, y - 6), (x + lean, y - 7), (x - 1 + lean, y - 6)], Ix::INK, 1);
+            m.polyline_fill(
+                &[(x - 1, y + 1), (x + 1, y + 1), (x + 1 + lean, y - 6), (x + lean, y - 7), (x - 1 + lean, y - 6)],
+                Ix::INK,
+                1,
+            );
         }
         Ears::Round => m.ellipse(Rect::new(x - 1, y - 3, 3, 3), Ix::INK, 1),
         Ears::Side => m.polyline_fill(&[(x - 3, y + 1), (x + 1, y), (x + 1, y + 2)], Ix::INK, 1),
@@ -430,11 +453,8 @@ fn ear_side(c: &mut Canvas, k: &Coat, s: Rect, far: bool, lag: i32) {
     c.inflate(&m, ramp, 1, z);
     // The inside of an ear that stands: a line of pink or of shade.
     if matches!(kind, Ears::Prick | Ears::Tall) && !far {
-        let inner = if matches!(k.look.anatomy, Anatomy::Rabbit | Anatomy::Cat | Anatomy::Rat) {
-            Ramp::Skin
-        } else {
-            ramp
-        };
+        let inner =
+            if matches!(k.look.anatomy, Anatomy::Rabbit | Anatomy::Cat | Anatomy::Rat) { Ramp::Skin } else { ramp };
         for d in 0..2 {
             c.dot(x + lag.max(0), y - d, inner.at(Tone::Mid), relief::EAR);
         }
@@ -472,7 +492,9 @@ fn torso_side(c: &mut Canvas, k: &Coat, a: &Anat, bob: i32, breathe: bool, head:
         // A working dog's ruff: a full chest and throat, its edge in soft tufts, and the
         // feathering along the back of the forelegs' tops and the belly.
         m.ellipse(Rect::new(chest.right() - 6, chest.y - 4, 8, chest.h + 3), Ix::INK, 1);
-        for (tx, ty) in [(chest.right() + 1, chest.y + 1), (chest.right() + 1, chest.y + 4), (chest.right(), chest.bottom() - 1)] {
+        for (tx, ty) in
+            [(chest.right() + 1, chest.y + 1), (chest.right() + 1, chest.y + 4), (chest.right(), chest.bottom() - 1)]
+        {
             m.fill_rect(Rect::new(tx, ty, 1, 2), Ix::INK, 1);
         }
         for tx in (rump.x + 4..chest.x + 4).step_by(3) {
@@ -496,7 +518,11 @@ fn head_side(c: &mut Canvas, k: &Coat, a: &Anat, s: Rect, p: &Pose) {
         match an {
             Anatomy::Fox | Anatomy::Rat => {
                 // A pointed snout: a wedge to the nose.
-                m.polyline_fill(&[(mz.x - 1, mz.y), (mz.right(), mz.y + mz.h / 2), (mz.x - 1, mz.bottom())], Ix::INK, 1);
+                m.polyline_fill(
+                    &[(mz.x - 1, mz.y), (mz.right(), mz.y + mz.h / 2), (mz.x - 1, mz.bottom())],
+                    Ix::INK,
+                    1,
+                );
             }
             _ => m.fill_rect(Rect::new(mz.x, mz.y + 1, mz.w, mz.h - 1), Ix::INK, 1),
         }
@@ -513,11 +539,21 @@ fn head_side(c: &mut Canvas, k: &Coat, a: &Anat, s: Rect, p: &Pose) {
     // collie's tricolour) has a white muzzle instead, the tan only a spot on the cheek.
     if mz.w > 0 && muzzle_ramp(k) != skin {
         if k.look.markings.contains(&Marking::Blaze) && an == Anatomy::Dog {
-            c.dye_poly(&[(mz.x - 1, mz.y + 1), (mz.right(), mz.y), (mz.right(), mz.bottom()), (mz.x - 1, mz.bottom())], skin, k.belly);
+            c.dye_poly(
+                &[(mz.x - 1, mz.y + 1), (mz.right(), mz.y), (mz.right(), mz.bottom()), (mz.x - 1, mz.bottom())],
+                skin,
+                k.belly,
+            );
             c.dye_ellipse(Rect::new(ex - 1, ey + 2, 4, 3), skin, muzzle_ramp(k));
         } else {
             c.dye_poly(
-                &[(ex - 1, ey + 2), (ex + 2, ey + 2), (mz.right() - 2, mz.y + 2), (mz.right() - 1, mz.bottom()), (ex - 1, mz.bottom())],
+                &[
+                    (ex - 1, ey + 2),
+                    (ex + 2, ey + 2),
+                    (mz.right() - 2, mz.y + 2),
+                    (mz.right() - 1, mz.bottom()),
+                    (ex - 1, mz.bottom()),
+                ],
                 skin,
                 muzzle_ramp(k),
             );
@@ -606,7 +642,13 @@ fn side(c: &mut Canvas, k: &Coat, a: &Anat, p: &Pose) {
     let an = k.look.anatomy;
     let legs = if an == Anatomy::Sheep { k.mark } else { k.body };
     let leg_ramp = |i: usize| -> Ramp {
-        if k.look.markings.contains(&Marking::Socks) { k.mark } else if i >= 2 && an == Anatomy::Rabbit { k.body } else { legs }
+        if k.look.markings.contains(&Marking::Socks) {
+            k.mark
+        } else if i >= 2 && an == Anatomy::Rabbit {
+            k.body
+        } else {
+            legs
+        }
     };
     // The tail behind everything but the far legs' shade.
     tail_side(c, k, (a.tail.0, a.tail.1 + p.bob), p.wag);
@@ -656,7 +698,11 @@ fn pelt_side(c: &mut Canvas, k: &Coat, a: &Anat, p: &Pose) {
         let chest = a.chest;
         if k.look.markings.contains(&Marking::Blaze) {
             // A white shirt-front: the chest from the throat down, round at the front.
-            c.dye_ellipse(Rect::new(chest.right() - 6, chest.y - 3 + b - i32::from(p.breathe), 9, chest.h + 4), k.body, k.belly);
+            c.dye_ellipse(
+                Rect::new(chest.right() - 6, chest.y - 3 + b - i32::from(p.breathe), 9, chest.h + 4),
+                k.body,
+                k.belly,
+            );
         } else {
             let pts = [
                 (a.rump.x + 3, a.belly - 1 + b),
@@ -714,8 +760,11 @@ fn front(c: &mut Canvas, k: &Coat, a: &Anat, p: &Pose, facing_us: bool) {
     let head_top = if facing_us { ay - fore + 1 - a.head_h } else { a.head_top + (ay - a.leg_top - fore) + 2 };
     let a = &Anat { head_top, ..*a };
     let bw = a.front_w + 2;
-    let body_top = if facing_us { head_top + 2 - i32::from(an == Anatomy::Sheep) * 6 } else { head_top + a.head_h / 2 - i32::from(an == Anatomy::Sheep) * 4 }
-        + b
+    let body_top = if facing_us {
+        head_top + 2 - i32::from(an == Anatomy::Sheep) * 6
+    } else {
+        head_top + a.head_h / 2 - i32::from(an == Anatomy::Sheep) * 4
+    } + b
         - i32::from(p.breathe);
     if !facing_us {
         // The head is beyond the back: the body will cover its lower half.
@@ -724,7 +773,13 @@ fn front(c: &mut Canvas, k: &Coat, a: &Anat, p: &Pose, facing_us: bool) {
     // Front and hind legs alternate: the near pair are the fore legs facing us, the hind away.
     let lw = a.leg_w;
     // A sheep stands on four thin legs set wide under its fleece.
-    let gap = if an == Anatomy::Sheep { bw / 3 } else if bw >= 12 { 2 } else { 1 };
+    let gap = if an == Anatomy::Sheep {
+        bw / 3
+    } else if bw >= 12 {
+        2
+    } else {
+        1
+    };
     let (l0, l1) = (ax - gap / 2 - lw - (gap % 2), ax + (gap + 1) / 2);
     // The far pair, peeking out wide and higher up the screen (further away).
     let far_y = ay - 2;
@@ -772,7 +827,11 @@ fn front(c: &mut Canvas, k: &Coat, a: &Anat, p: &Pose, facing_us: bool) {
     if k.belly != k.body && an != Anatomy::Sheep {
         let cw = bw / 2 + 1;
         let y0 = a.head_top + a.head_h - 2 + b;
-        c.dye_poly(&[(ax - cw / 2, y0), (ax + cw / 2, y0), (ax + 1, leg_top + 2), (ax - 2, leg_top + 2)], k.body, k.belly);
+        c.dye_poly(
+            &[(ax - cw / 2, y0), (ax + cw / 2, y0), (ax + 1, leg_top + 2), (ax - 2, leg_top + 2)],
+            k.body,
+            k.belly,
+        );
     }
     head_front(c, k, a, b + p.head.1, p.shut, p.mouth, 0);
     collar_front(c, k, a, b);
@@ -871,7 +930,9 @@ fn head_front(c: &mut Canvas, k: &Coat, a: &Anat, b: i32, shut: bool, mouth: boo
         c.dye(&d, muzzle_ramp(k), k.belly);
     }
     if k.look.markings.contains(&Marking::Grizzle) {
-        for (x, y) in [(mz.x + 1, mz.bottom() - 1), (mz.right() - 2, mz.bottom() - 1), (mz.right() - 1, mz.bottom() - 2)] {
+        for (x, y) in
+            [(mz.x + 1, mz.bottom() - 1), (mz.right() - 2, mz.bottom() - 1), (mz.right() - 1, mz.bottom() - 2)]
+        {
             if c.get(x, y).is_opaque() {
                 c.dot(x, y, Ramp::HairGrey.at(Tone::Light), z);
             }
@@ -939,12 +1000,32 @@ fn ears_front(c: &mut Canvas, k: &Coat, s: Rect, behind: bool, tilt: i32) {
                 m.polyline_fill(&[(a, s.y + 2), (b, s.y + 2), (x + side, s.y + 2 - h - up)], Ix::INK, 1);
             }
             Ears::Tall => {
-                m.polyline_fill(&[(x - 1, s.y + 1), (x + 1, s.y + 1), (x + 1 + side, s.y - 7 - up), (x + side, s.y - 8 - up), (x - 1 + side, s.y - 7 - up)], Ix::INK, 1);
+                m.polyline_fill(
+                    &[
+                        (x - 1, s.y + 1),
+                        (x + 1, s.y + 1),
+                        (x + 1 + side, s.y - 7 - up),
+                        (x + side, s.y - 8 - up),
+                        (x - 1 + side, s.y - 7 - up),
+                    ],
+                    Ix::INK,
+                    1,
+                );
             }
             Ears::Round => m.ellipse(Rect::new(x - 1 + side, s.y - 2, 3, 3), Ix::INK, 1),
             Ears::Flop => {
                 let o = if side < 0 { s.x - 2 } else { s.right() - 1 };
-                m.polyline_fill(&[(o, s.y), (o + 2, s.y), (o + 2 + side.min(0), s.y + 5 - up), (o + 1, s.y + 6 - up), (o - side.max(0), s.y + 4 - up)], Ix::INK, 1);
+                m.polyline_fill(
+                    &[
+                        (o, s.y),
+                        (o + 2, s.y),
+                        (o + 2 + side.min(0), s.y + 5 - up),
+                        (o + 1, s.y + 6 - up),
+                        (o - side.max(0), s.y + 4 - up),
+                    ],
+                    Ix::INK,
+                    1,
+                );
             }
             Ears::Side => {
                 let o = if side < 0 { s.x - 3 } else { s.right() - 1 };
@@ -1010,7 +1091,12 @@ fn idle(c: &mut Canvas, k: &Coat, a: &Anat, beat: u8) {
             let mut t = mask(c);
             let sweep = if beat == 1 { 2 } else { 0 };
             let tw = if an == Anatomy::Cat { 2 } else { 3 };
-            t.polyline(&[(ax + 3, ay - 2), (ax + 6 + sweep, ay - 1), (ax + 8 + sweep, ay - 2 - sweep / 2)], Ix::INK, tw, 1);
+            t.polyline(
+                &[(ax + 3, ay - 2), (ax + 6 + sweep, ay - 1), (ax + 8 + sweep, ay - 2 - sweep / 2)],
+                Ix::INK,
+                tw,
+                1,
+            );
             c.inflate(&t, k.body, 1, relief::FAR);
             if k.look.markings.contains(&Marking::TipWhite) || an == Anatomy::Fox {
                 c.dye_ellipse(Rect::new(ax + 6 + sweep, ay - 4 - sweep / 2, 4, 4), k.body, k.belly);
@@ -1033,7 +1119,14 @@ fn idle(c: &mut Canvas, k: &Coat, a: &Anat, beat: u8) {
             if k.belly != k.body {
                 let cw = a.front_w / 2 + 2;
                 c.dye_poly(
-                    &[(ax - cw / 2, top + 2), (ax + cw / 2, top + 2), (ax + cw / 2, top + 5), (ax + 1, ay - 3), (ax - 2, ay - 3), (ax - cw / 2 - 1, top + 5)],
+                    &[
+                        (ax - cw / 2, top + 2),
+                        (ax + cw / 2, top + 2),
+                        (ax + cw / 2, top + 5),
+                        (ax + 1, ay - 3),
+                        (ax - 2, ay - 3),
+                        (ax - cw / 2 - 1, top + 5),
+                    ],
                     k.body,
                     k.belly,
                 );

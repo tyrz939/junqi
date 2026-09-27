@@ -24,8 +24,18 @@ pub enum Bed {
 }
 
 impl Bed {
-    pub const ALL: [Bed; 10] =
-        [Bed::Rain, Bed::RainRoof, Bed::Wind, Bed::Birds, Bed::Crickets, Bed::Lake, Bed::Hum, Bed::Cave, Bed::Fire, Bed::Clock];
+    pub const ALL: [Bed; 10] = [
+        Bed::Rain,
+        Bed::RainRoof,
+        Bed::Wind,
+        Bed::Birds,
+        Bed::Crickets,
+        Bed::Lake,
+        Bed::Hum,
+        Bed::Cave,
+        Bed::Fire,
+        Bed::Clock,
+    ];
 
     pub const fn name(self) -> &'static str {
         match self {
@@ -136,19 +146,72 @@ impl BedVoice {
     pub fn new(bed: Bed, sr: f32, seed: u32) -> BedVoice {
         let (f, lp) = match bed {
             Bed::Rain => (
-                [Svf::new(500.0, 0.6, sr), Svf::new(500.0, 0.6, sr), Svf::new(6500.0, 0.6, sr), Svf::new(6500.0, 0.6, sr)],
+                [
+                    Svf::new(500.0, 0.6, sr),
+                    Svf::new(500.0, 0.6, sr),
+                    Svf::new(6500.0, 0.6, sr),
+                    Svf::new(6500.0, 0.6, sr),
+                ],
                 [OnePole::new(250.0, sr); 4],
             ),
             Bed::RainRoof => (
-                [Svf::new(180.0, 0.6, sr), Svf::new(180.0, 0.6, sr), Svf::new(1400.0, 0.7, sr), Svf::new(1400.0, 0.7, sr)],
+                [
+                    Svf::new(180.0, 0.6, sr),
+                    Svf::new(180.0, 0.6, sr),
+                    Svf::new(1400.0, 0.7, sr),
+                    Svf::new(1400.0, 0.7, sr),
+                ],
                 [OnePole::new(120.0, sr); 4],
             ),
-            Bed::Wind => ([Svf::new(400.0, 0.9, sr), Svf::new(450.0, 0.9, sr), Svf::new(600.0, 5.0, sr), Svf::new(90.0, 0.7, sr)], [OnePole::new(1.0, sr); 4]),
-            Bed::Crickets => ([Svf::new(4700.0, 3.0, sr), Svf::new(4700.0, 3.0, sr), Svf::new(100.0, 0.7, sr), Svf::new(100.0, 0.7, sr)], [OnePole::new(1.0, sr); 4]),
-            Bed::Lake => ([Svf::new(700.0, 0.7, sr), Svf::new(650.0, 0.7, sr), Svf::new(1600.0, 2.0, sr), Svf::new(120.0, 0.7, sr)], [OnePole::new(2.0, sr); 4]),
-            Bed::Hum => ([Svf::new(110.0, 0.7, sr), Svf::new(2400.0, 4.0, sr), Svf::new(100.0, 0.7, sr), Svf::new(100.0, 0.7, sr)], [OnePole::new(0.5, sr); 4]),
-            Bed::Cave => ([Svf::new(140.0, 0.7, sr), Svf::new(120.0, 0.7, sr), Svf::new(100.0, 0.7, sr), Svf::new(100.0, 0.7, sr)], [OnePole::new(0.3, sr); 4]),
-            Bed::Fire => ([Svf::new(380.0, 0.6, sr), Svf::new(420.0, 0.6, sr), Svf::new(3000.0, 0.7, sr), Svf::new(100.0, 0.7, sr)], [OnePole::new(3.0, sr); 4]),
+            Bed::Wind => (
+                [Svf::new(400.0, 0.9, sr), Svf::new(450.0, 0.9, sr), Svf::new(600.0, 5.0, sr), Svf::new(90.0, 0.7, sr)],
+                [OnePole::new(1.0, sr); 4],
+            ),
+            Bed::Crickets => (
+                [
+                    Svf::new(4700.0, 3.0, sr),
+                    Svf::new(4700.0, 3.0, sr),
+                    Svf::new(100.0, 0.7, sr),
+                    Svf::new(100.0, 0.7, sr),
+                ],
+                [OnePole::new(1.0, sr); 4],
+            ),
+            Bed::Lake => (
+                [
+                    Svf::new(700.0, 0.7, sr),
+                    Svf::new(650.0, 0.7, sr),
+                    Svf::new(1600.0, 2.0, sr),
+                    Svf::new(120.0, 0.7, sr),
+                ],
+                [OnePole::new(2.0, sr); 4],
+            ),
+            Bed::Hum => (
+                [
+                    Svf::new(110.0, 0.7, sr),
+                    Svf::new(2400.0, 4.0, sr),
+                    Svf::new(100.0, 0.7, sr),
+                    Svf::new(100.0, 0.7, sr),
+                ],
+                [OnePole::new(0.5, sr); 4],
+            ),
+            Bed::Cave => (
+                [
+                    Svf::new(140.0, 0.7, sr),
+                    Svf::new(120.0, 0.7, sr),
+                    Svf::new(100.0, 0.7, sr),
+                    Svf::new(100.0, 0.7, sr),
+                ],
+                [OnePole::new(0.3, sr); 4],
+            ),
+            Bed::Fire => (
+                [
+                    Svf::new(380.0, 0.6, sr),
+                    Svf::new(420.0, 0.6, sr),
+                    Svf::new(3000.0, 0.7, sr),
+                    Svf::new(100.0, 0.7, sr),
+                ],
+                [OnePole::new(3.0, sr); 4],
+            ),
             Bed::Birds | Bed::Clock => ([Svf::new(100.0, 0.7, sr); 4], [OnePole::new(1.0, sr); 4]),
         };
         let mut rng = Rng::new(seed ^ crate::patch::hash(bed.name()));
@@ -216,7 +279,17 @@ impl BedVoice {
 
     /// Spawns a grain.
     #[allow(clippy::too_many_arguments)]
-    fn grain(&mut self, sr: f32, ms: f32, attack_ms: f32, hz: (f32, f32), noise: Option<(f32, f32)>, gain: f32, pan: f32, send: f32) {
+    fn grain(
+        &mut self,
+        sr: f32,
+        ms: f32,
+        attack_ms: f32,
+        hz: (f32, f32),
+        noise: Option<(f32, f32)>,
+        gain: f32,
+        pan: f32,
+        send: f32,
+    ) {
         if self.grains.len() >= 48 {
             return;
         }
@@ -387,7 +460,8 @@ impl BedVoice {
                 let wave_len = 1.4 * sr;
                 self.lfo[1] += 1.0;
                 let x = (self.lfo[1] / wave_len).min(1.0);
-                let swell = if x < 0.3 { (x / 0.3).powi(2) } else { (1.0 - (x - 0.3) / 0.7).max(0.0).powi(2) } * self.lfo[2];
+                let swell =
+                    if x < 0.3 { (x / 0.3).powi(2) } else { (1.0 - (x - 0.3) / 0.7).max(0.0).powi(2) } * self.lfo[2];
                 if (self.lfo[1] - (0.3 * wave_len)).abs() < 0.5 && self.rng.f() < 0.7 {
                     let hz = 900.0 + self.rng.f() * 800.0;
                     let pan = self.lfo[3];
@@ -417,7 +491,8 @@ impl BedVoice {
                     self.countdown = (sr * (5.0 + self.rng.f() * 11.0)) as u32;
                     let hz = 90.0 + self.rng.f() * 80.0;
                     let modes = [[1.0, 0.5, 1.6], [2.76, 0.3, 0.9], [5.4, 0.2, 0.5], [8.93, 0.1, 0.3]];
-                    self.clank = Some((Modal::new(hz, &modes, 0.0, sr, 1.0), 0.14 + 0.08 * self.rng.f(), self.rng.bi() * 0.8));
+                    self.clank =
+                        Some((Modal::new(hz, &modes, 0.0, sr, 1.0), 0.14 + 0.08 * self.rng.f(), self.rng.bi() * 0.8));
                 }
                 self.countdown -= 1;
                 let (mut cl, mut cr) = (0.0, 0.0);
@@ -497,7 +572,10 @@ mod tests {
             let rms = crate::analysis::rms(&l);
             println!("{bed:?}: peak {:.1} dB, rms {:.1} dB", crate::analysis::to_db(p), crate::analysis::to_db(rms));
             assert!(p < 0.25, "{bed:?} peaks {p}");
-            assert!((-40.0..-24.0).contains(&crate::analysis::to_db(rms)) || matches!(bed, Bed::Birds | Bed::Clock), "{bed:?}");
+            assert!(
+                (-40.0..-24.0).contains(&crate::analysis::to_db(rms)) || matches!(bed, Bed::Birds | Bed::Clock),
+                "{bed:?}"
+            );
             assert!(rms > 1e-5, "{bed:?} is silent");
             assert!(crate::analysis::dc(&l).abs() < 0.01, "{bed:?} has DC");
             assert_eq!(Bed::from_name(bed.name()), Some(bed));

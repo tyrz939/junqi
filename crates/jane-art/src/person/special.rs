@@ -205,7 +205,8 @@ pub(super) fn material(c: &mut Canvas, d: &Dress, r: &Rig) {
         // lift, a rivet at the lit end of it.
         let iron = Ramp::Iron;
         for y in (r.top + 2..AY - 3).filter(|y| (y - r.top) % 4 == 2) {
-            let row: Vec<i32> = (0..c.w()).filter(|&x| matches!(Ramp::of(c.get(x, y)), Some((q, _)) if q == iron)).collect();
+            let row: Vec<i32> =
+                (0..c.w()).filter(|&x| matches!(Ramp::of(c.get(x, y)), Some((q, _)) if q == iron)).collect();
             let (Some(&a), Some(&b)) = (row.first(), row.last()) else { continue };
             for &x in &row {
                 c.tint(x, y, iron, Tone::Shade);
@@ -237,8 +238,20 @@ pub(super) fn material(c: &mut Canvas, d: &Dress, r: &Rig) {
         Skin::Stone => {
             let st = Ramp::Stone;
             let l = r.lean;
-            score(c, st, &[(CX + 2 + l, r.top + 2), (CX + 3 + l, r.top + 5), (CX + 2 + l, r.top + 7), (CX + 4 + l, r.top + 10)], Tone::Deep, Some(Tone::Light));
-            score(c, st, &[(CX - 4, r.hip + 3), (CX - 2, r.hip + 6), (CX - 3, r.hip + 9)], Tone::Deep, Some(Tone::Light));
+            score(
+                c,
+                st,
+                &[(CX + 2 + l, r.top + 2), (CX + 3 + l, r.top + 5), (CX + 2 + l, r.top + 7), (CX + 4 + l, r.top + 10)],
+                Tone::Deep,
+                Some(Tone::Light),
+            );
+            score(
+                c,
+                st,
+                &[(CX - 4, r.hip + 3), (CX - 2, r.hip + 6), (CX - 3, r.hip + 9)],
+                Tone::Deep,
+                Some(Tone::Light),
+            );
             score(c, st, &[(s.x + 2, s.y + 1), (s.x + 3, s.y + 3)], Tone::Shade, None);
             // Lichen where the rain sits: on the shoulders and along the hem.
             let lichen = Ramp::LeafOlive;
@@ -246,7 +259,11 @@ pub(super) fn material(c: &mut Canvas, d: &Dress, r: &Rig) {
                 for (k, px) in (x..x + w).enumerate() {
                     for py in [y, y + 1] {
                         if matches!(Ramp::of(c.get(px, py)), Some((q, _)) if q == st) {
-                            c.recolour(px, py, lichen.at(if (k + (py - y) as usize) % 2 == 0 { Tone::Base } else { Tone::Shade }));
+                            c.recolour(
+                                px,
+                                py,
+                                lichen.at(if (k + (py - y) as usize) % 2 == 0 { Tone::Base } else { Tone::Shade }),
+                            );
                         }
                     }
                 }
@@ -256,7 +273,8 @@ pub(super) fn material(c: &mut Canvas, d: &Dress, r: &Rig) {
             // A sheen on the brow and the near cheek: skin that has never been warm.
             let w = Ramp::Plaster;
             if front {
-                let (fx, cx) = if r.facing == Facing::Side { (s.right() - 4, s.right() - 3) } else { (s.x + 3, s.x + 2) };
+                let (fx, cx) =
+                    if r.facing == Facing::Side { (s.right() - 4, s.right() - 3) } else { (s.x + 3, s.x + 2) };
                 c.tint(fx, s.y + 2, w, Tone::High);
                 c.tint(fx + 1, s.y + 2, w, Tone::High);
                 c.tint(cx, ey + 2, w, Tone::Glint);

@@ -26,7 +26,11 @@ pub(crate) fn draw(c: &mut Canvas, k: &Kit, state: State) -> Option<Stand> {
             c.line((cx - 1, foot - 14), (cx - 6, foot - 22), k.trim.at(Tone::Base), 2, 5);
             c.line((cx + 1, foot - 14), (cx + 6, foot - 24), k.trim.at(Tone::Base), 2, 5);
             if dry {
-                for (x0, y0, x1, y1) in [(cx - 6, foot - 22, cx - 10, foot - 30), (cx + 6, foot - 24, cx + 11, foot - 31), (cx, foot - 16, cx + 1, foot - 33)] {
+                for (x0, y0, x1, y1) in [
+                    (cx - 6, foot - 22, cx - 10, foot - 30),
+                    (cx + 6, foot - 24, cx + 11, foot - 31),
+                    (cx, foot - 16, cx + 1, foot - 33),
+                ] {
                     c.line((x0, y0), (x1, y1), k.trim.at(Tone::Mid), 1, 6);
                 }
                 return Some(Stand::Up(&[]));
@@ -36,7 +40,10 @@ pub(crate) fn draw(c: &mut Canvas, k: &Kit, state: State) -> Option<Stand> {
             // Apples, a few, lit.
             for i in 0..6 {
                 let hh = parts::hash(k.seed, i, 33);
-                let (x, y) = (crown.x + 4 + (hh % (crown.w - 8) as u32) as i32, crown.y + 8 + ((hh >> 8) % (crown.h - 12) as u32) as i32);
+                let (x, y) = (
+                    crown.x + 4 + (hh % (crown.w - 8) as u32) as i32,
+                    crown.y + 8 + ((hh >> 8) % (crown.h - 12) as u32) as i32,
+                );
                 c.fill_rect(Rect::new(x, y, 2, 2), k.accent.at(Tone::Base), 12);
                 c.dot(x, y, k.accent.at(Tone::Light), 12);
             }
@@ -45,7 +52,12 @@ pub(crate) fn draw(c: &mut Canvas, k: &Kit, state: State) -> Option<Stand> {
         "stump" => {
             let cx = w / 2;
             ao(c, cx - 6, cx + 5, foot, 5);
-            c.polygon_lit(&[(cx - 5, foot - 8), (cx + 4, foot - 8), (cx + 5, foot - 1), (cx - 6, foot - 1)], k.trim, 110, Z::new(2, 4));
+            c.polygon_lit(
+                &[(cx - 5, foot - 8), (cx + 4, foot - 8), (cx + 5, foot - 1), (cx - 6, foot - 1)],
+                k.trim,
+                110,
+                Z::new(2, 4),
+            );
             c.ellipse(Rect::new(cx - 5, foot - 11, 10, 5), k.body.at(Tone::Light), 5);
             c.ellipse(Rect::new(cx - 3, foot - 10, 6, 3), k.body.at(Tone::Base), 5);
             c.dot(cx - 1, foot - 9, k.body.at(Tone::Mid), 5);
@@ -53,7 +65,12 @@ pub(crate) fn draw(c: &mut Canvas, k: &Kit, state: State) -> Option<Stand> {
         }
         "log" => {
             ao(c, 1, w - 2, foot, 4);
-            c.polygon_lit(&[(3, foot - 9), (w - 4, foot - 9), (w - 4, foot - 1), (3, foot - 1)], k.trim, 0, Z::new(2, 5));
+            c.polygon_lit(
+                &[(3, foot - 9), (w - 4, foot - 9), (w - 4, foot - 1), (3, foot - 1)],
+                k.trim,
+                0,
+                Z::new(2, 5),
+            );
             for y in [foot - 7, foot - 4] {
                 c.hline(5, w - 6, y, k.trim.at(Tone::Shade), 5);
             }
@@ -111,7 +128,18 @@ pub(crate) fn draw(c: &mut Canvas, k: &Kit, state: State) -> Option<Stand> {
                 let x = if n == 1 { 2 + (hh & 1) as i32 } else { 1 + ((hh >> 8) % (w - sw - 1).max(1) as u32) as i32 };
                 let y = foot - sh - if n == 1 { 0 } else { ((hh >> 12) % (h / 3).max(1) as u32) as i32 };
                 let mut m = Canvas::new(c.w(), c.h());
-                m.polyline_fill(&[(x + 2, y), (x + sw - 3, y + 1), (x + sw - 1, y + sh / 2), (x + sw - 2, y + sh - 1), (x + 1, y + sh - 1), (x, y + sh / 3)], Ix::INK, 1);
+                m.polyline_fill(
+                    &[
+                        (x + 2, y),
+                        (x + sw - 3, y + 1),
+                        (x + sw - 1, y + sh / 2),
+                        (x + sw - 2, y + sh - 1),
+                        (x + 1, y + sh - 1),
+                        (x, y + sh / 3),
+                    ],
+                    Ix::INK,
+                    1,
+                );
                 c.inflate(&m, k.body, (sw.min(sh) / 3).max(2), Z::new(2 + i as u8, 6 + i as u8));
                 c.retone(k.body, super::HARD);
                 if hh >> 16 & 1 == 0 {
@@ -136,8 +164,18 @@ pub(crate) fn draw(c: &mut Canvas, k: &Kit, state: State) -> Option<Stand> {
         "vine" => {
             // A root across the ground, knotted, lit along its top.
             c.ao_contact(Rect::new(1, foot - 7, w - 2, 8), 1);
-            c.polyline(&[(1, foot - 3), (8, foot - 6), (16, foot - 4), (24, foot - 7), (w - 2, foot - 5)], k.body.at(Tone::Base), 3, 2);
-            c.polyline(&[(1, foot - 4), (8, foot - 7), (16, foot - 5), (24, foot - 8), (w - 2, foot - 6)], k.body.at(Tone::Light), 1, 3);
+            c.polyline(
+                &[(1, foot - 3), (8, foot - 6), (16, foot - 4), (24, foot - 7), (w - 2, foot - 5)],
+                k.body.at(Tone::Base),
+                3,
+                2,
+            );
+            c.polyline(
+                &[(1, foot - 4), (8, foot - 7), (16, foot - 5), (24, foot - 8), (w - 2, foot - 6)],
+                k.body.at(Tone::Light),
+                1,
+                3,
+            );
             c.line((12, foot - 5), (14, foot - 1), k.body.at(Tone::Shade), 1, 2);
             Stand::Flat(3)
         }
@@ -147,7 +185,11 @@ pub(crate) fn draw(c: &mut Canvas, k: &Kit, state: State) -> Option<Stand> {
             ao(c, 1, w - 2, foot, 6);
             let top = foot - (h - 2).min(k.fh * 16 - 2);
             let mut m = Canvas::new(c.w(), c.h());
-            m.polyline_fill(&[(1, foot - 1), (3, top + 6), (w / 3, top + 1), (2 * w / 3, top), (w - 3, top + 5), (w - 2, foot - 1)], Ix::INK, 1);
+            m.polyline_fill(
+                &[(1, foot - 1), (3, top + 6), (w / 3, top + 1), (2 * w / 3, top), (w - 3, top + 5), (w - 2, foot - 1)],
+                Ix::INK,
+                1,
+            );
             c.inflate(&m, k.body, 5, Z::new(2, 8));
             c.retone(k.body, super::HARD);
             c.strokes(Rect::new(2, top, w - 4, 6), Ramp::Grass, crate::canvas::StrokeKind::Grass, 6, k.seed);
@@ -235,7 +277,10 @@ fn crown_volume(c: &mut Canvas, k: &Kit, r: Rect) {
         m.ellipse(Rect::new(cx - 5, cy - 4, 10, 9), Ix::INK, 1);
     }
     c.inflate(&m, k.body, 7, Z::new(8, 14));
-    c.retone(k.body, [Tone::Deep, Tone::Shade, Tone::Shade, Tone::Mid, Tone::Base, Tone::Base, Tone::Lift, Tone::Light]);
+    c.retone(
+        k.body,
+        [Tone::Deep, Tone::Shade, Tone::Shade, Tone::Mid, Tone::Base, Tone::Base, Tone::Lift, Tone::Light],
+    );
     for i in 0..(r.w * r.h / 18) {
         let hh = parts::hash(k.seed, i, 66);
         let (x, y) = (r.x + (hh % r.w as u32) as i32, r.y + ((hh >> 8) % r.h as u32) as i32);
@@ -268,7 +313,14 @@ fn wreck_car(c: &mut Canvas, k: &Kit, x: i32, bw: i32, foot: i32) {
         (r(75), foot - 8),
     ];
     c.polygon_lit(&hull, body, 90, Z::new(3, 6));
-    let cab = [(r(16), foot - 17), (r(19), foot - 31), (r(24), foot - 34), (r(44), foot - 34), (r(48), foot - 31), (r(51), foot - 17)];
+    let cab = [
+        (r(16), foot - 17),
+        (r(19), foot - 31),
+        (r(24), foot - 34),
+        (r(44), foot - 34),
+        (r(48), foot - 31),
+        (r(51), foot - 17),
+    ];
     c.polygon_lit(&cab, body, 110, Z::new(6, 9));
     c.retone(body, super::HARD);
     // The roof's top catching the sky, the bonnet's crown, the waist line.
@@ -308,7 +360,13 @@ fn wreck_car(c: &mut Canvas, k: &Kit, x: i32, bw: i32, foot: i32) {
         c.tint(rx, ry, body, Tone::Deep);
         for (dx, dy) in [(0, 0), (1, 0), (0, 1)] {
             if matches!(Ramp::of(c.get(rx + dx, ry + dy)), Some((q, _)) if q == body) {
-                c.put(rx + dx, ry + dy, Ramp::Copper.at(if dx == 0 { Tone::Shade } else { Tone::Base }), crate::canvas::FLAT, 7);
+                c.put(
+                    rx + dx,
+                    ry + dy,
+                    Ramp::Copper.at(if dx == 0 { Tone::Shade } else { Tone::Base }),
+                    crate::canvas::FLAT,
+                    7,
+                );
             }
         }
     }

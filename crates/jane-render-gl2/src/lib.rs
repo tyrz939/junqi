@@ -32,10 +32,12 @@ pub mod ui;
 use std::time::Instant;
 
 use jane_present::frame::CHUNK_PX;
-use jane_present::{AO_TINT, AtlasPages, Backend, CLUT_LEN, Caps, Frame, FrameStats, FrameTimes, StatPass, Tier};
+use jane_present::{
+    AO_TINT, AtlasPages, Backend, CLUT_LEN, Caps, Features, Frame, FrameStats, FrameTimes, StatPass, Tier,
+};
 
 use crate::gl::{Blend, Buffer, Fbo, Format, Gl, Program, Query, Texture, Uniform};
-use crate::prep::{PageCpu, Prep, SLOT_ROWS, SLOTS_ACROSS, Step};
+use crate::prep::{After, PageCpu, Prep, SLOT_ROWS, SLOTS_ACROSS, Step};
 use crate::shaders as sh;
 
 pub use crate::prep::Rows;
@@ -81,11 +83,21 @@ struct Progs {
     compose: Prog,
     ui: Prog,
     upscale: Prog,
+    sky: Prog,
+    far: Prog,
+    shape: Prog,
+    fog: Prog,
 }
+
+/// The sky's uniforms, which the backdrop's programs and the compose share.
+const SKY_UNIFORMS: [&str; 4] = ["u_zenith", "u_horizon", "u_glow", "u_glow_x"];
 
 impl Progs {
     fn new(gl: &Gl) -> Result<Progs, String> {
         let light = |fs: &str| format!("{}{fs}", sh::LIGHT_COMMON);
+        let graded = |fs: &str| format!("{}{fs}", sh::GRADE);
+        let skyed = |fs: &str| format!("{}{}{fs}", sh::GRADE, sh::SKY_COMMON);
+        let with_sky = |u: &[&'static str]| -> Vec<&'static str> { u.iter().chain(&SKY_UNIFORMS).copied().collect() };
         Ok(Progs {
             chunk: Prog::new(gl, sh::CHUNK_VS, sh::CHUNK_FS, &sh::CHUNK_ATTRS, &["u_canvas", "u_tex", "u_src"])?,
             sprite: Prog::new(
@@ -115,14 +127,63 @@ impl Progs {
                 sh::LIGHT_VS,
                 &light(sh::POINT_FS),
                 &sh::LIGHT_ATTRS,
-                &["u_nh", "u_canvas", "u_scale", "u_normals", "u_mask_a", "u_mask_b"],
+                &["u_nh", "u_canvas", "u_scale", "u_normals", "u_mask_a", "u_mask_b", "u_emi", "u_wet"],
             )?,
             compose: Prog::new(
                 gl,
                 sh::RECT_VS,
-                sh::COMPOSE_FS,
+                &skyed(sh::COMPOSE_FS),
                 &sh::RECT_ATTRS,
-                &["u_size", "u_alb", "u_light", "u_emi", "u_tint", "u_lift", "u_egain"],
+                &[
+                    "u_size",
+                    "u_alb",
+                    "u_light",
+                    "u_emi",
+                    "u_nh",
+                    "u_sky",
+                    "u_tint",
+                    "u_lift",
+                    "u_egain",
+                    "u_info",
+                    "u_weather",
+                    "u_cam",
+                    "u_fill",
+                ],
+            )?,
+            sky: Prog::new(gl, sh::RECT_VS, &skyed(sh::SKY_FS), &sh::RECT_ATTRS, &with_sky(&["u_size"]))?,
+            far: Prog::new(
+                gl,
+                sh::SPRITE_VS,
+                &skyed(sh::FAR_FS),
+                &sh::SPRITE_ATTRS,
+                &with_sky(&["u_canvas", "u_alb", "u_pem", "u_clut", "u_page", "u_fill", "u_haze", "u_egain"]),
+            )?,
+            shape: Prog::new(
+                gl,
+                sh::SHAPE_VS,
+                &graded(sh::SHAPE_FS),
+                &sh::SHAPE_ATTRS,
+                &["u_canvas", "u_light", "u_lit", "u_tint", "u_lift"],
+            )?,
+            fog: Prog::new(
+                gl,
+                sh::RECT_VS,
+                &graded(sh::FOG_FS),
+                &sh::RECT_ATTRS,
+                &[
+                    "u_size",
+                    "u_nh",
+                    "u_light",
+                    "u_mist",
+                    "u_vrect[0]",
+                    "u_vcol[0]",
+                    "u_vshape[0]",
+                    "u_n",
+                    "u_move",
+                    "u_base",
+                    "u_tint",
+                    "u_lift",
+                ],
             )?,
             ui: Prog::new(
                 gl,
@@ -192,6 +253,8 @@ struct Targets {
     mask_a: Target,
     mask_b: Target,
     out: Target,
+    /// The sky backdrop: the canvas's width, 256 rows, row `y` `y` px over the horizon.
+    sky: Target,
 }
 
 impl Targets {
@@ -209,11 +272,12 @@ impl Targets {
             mask_a: Target::new(gl, lw, lh, false)?,
             mask_b: Target::new(gl, lw, lh, false)?,
             out: Target::new(gl, w, h, true)?,
+            sky: Target::new(gl, w, SKY_ROWS, false)?,
         })
     }
 
     fn free(self, gl: &Gl) {
-        for t in [self.alb, self.nh, self.emi, self.sil, self.light, self.mask_a, self.mask_b, self.out] {
+        for t in [self.alb, self.nh, self.emi, self.sil, self.light, self.mask_a, self.mask_b, self.out, self.sky] {
             t.free(gl);
         }
         gl.delete_texture(self.snap);
@@ -230,16 +294,29 @@ struct Timer {
 }
 
 /// The sections a frame is timed in, and the `StatPass` each reports as.
-const SECTIONS: usize = 7;
+const SECTIONS: usize = 9;
 const SECTION_PASS: [StatPass; SECTIONS] = [
     StatPass::Chunks,
     StatPass::List,
     StatPass::Shadows,
     StatPass::Light,
+    // The compose: the light by the albedo, the water, the sky, the wet ground and the grade.
     StatPass::Grade,
     StatPass::Ui,
     StatPass::Upscale,
+    // The backdrop into its target.
+    StatPass::Sky,
+    // Over the canvas: the particles and the fog.
+    StatPass::Fx,
 ];
+/// The sections' indices.
+const SEC_GRADE: usize = 4;
+const SEC_UI: usize = 5;
+const SEC_UPSCALE: usize = 6;
+const SEC_SKY: usize = 7;
+const SEC_AFTER: usize = 8;
+/// Rows of the sky backdrop's target.
+const SKY_ROWS: u32 = 256;
 const RING: usize = 4;
 
 /// The vertex buffers, one per layout, and the quad index buffer.
@@ -252,6 +329,10 @@ struct Buffers {
     ui: Buffer,
     rect: Buffer,
     index: Buffer,
+    /// Particles, stars and the moon.
+    shape: Buffer,
+    /// The far things on the backdrop.
+    far: Buffer,
 }
 
 /// A UI image on the GPU: the generation it holds, its texture and its size.
@@ -267,6 +348,8 @@ pub struct Gl2 {
     progs: Progs,
     bufs: Buffers,
     clut: Option<Texture>,
+    /// The mist tile the fog drifts (§1.9), repeating.
+    mist: Option<Texture>,
     pages_gl: Vec<PageGl>,
     pages: Vec<PageCpu>,
     /// The chunk atlas: albedo, normal and height, emissive; and the generation each slot holds.
@@ -347,6 +430,8 @@ impl Gl2 {
             ui: gl.buffer()?,
             rect: gl.buffer()?,
             index: gl.buffer()?,
+            shape: gl.buffer()?,
+            far: gl.buffer()?,
         };
         gl.quad_indices(bufs.index, 16383);
         let side = SLOTS_ACROSS * 256;
@@ -373,7 +458,7 @@ impl Gl2 {
         // Tile GPUs flush the whole target for every copy out of it: the fast albedo there.
         let tiled = gl.info.es
             || ["VC4", "V3D", "Mali", "Adreno", "PowerVR", "Vivante"].iter().any(|t| gl.info.renderer.contains(t));
-        let rows = Rows { exact: !tiled, half_light: tiled, ..Rows::T1 };
+        let rows = Rows { exact: !tiled, half_light: tiled, reflect: !tiled, ..Rows::T1 };
         let times = FrameTimes::new(timer.is_some());
         Ok(Gl2 {
             gl,
@@ -382,6 +467,7 @@ impl Gl2 {
             progs,
             bufs,
             clut: None,
+            mist: None,
             pages_gl: Vec::new(),
             pages: Vec::new(),
             chunk_tex,
@@ -457,7 +543,7 @@ impl Gl2 {
             Some(o) => (Some(o.fbo), (o.w, o.h)),
             None => (None, self.ctx.size()),
         };
-        self.time_begin(6);
+        self.time_begin(SEC_UPSCALE);
         self.gl.target(dst, ww, wh);
         self.gl.clear([0.0, 0.0, 0.0, 1.0]);
         let scale = wh as f32 / out.h as f32;
@@ -477,7 +563,7 @@ impl Gl2 {
         if self.offscreen.is_none() {
             self.ctx.swap();
         }
-        self.cpu_us[6] = t0.elapsed().as_micros() as u32;
+        self.cpu_us[SEC_UPSCALE] = t0.elapsed().as_micros() as u32;
         Ok(())
     }
 
@@ -530,7 +616,12 @@ impl Gl2 {
             }
             self.gl.upload(self.chunk_tex[1], x, y, side, side, Format::Rgba8, buf);
             if l.lit() {
+                // The emissive's alpha carries the surface byte (§1.8): how the px takes rain, its
+                // depth in water, or beyond the zone, where the sky shows.
                 argb_bytes(buf, &l.emissive);
+                for (p, &s) in buf.chunks_exact_mut(4).zip(&l.surface) {
+                    p[3] = s;
+                }
             } else {
                 buf.clear();
                 buf.resize(l.albedo.len() * 4, 0);
@@ -707,7 +798,9 @@ impl Gl2 {
         // Steps 2: the normal and height, and the emissive, of the same terrain and sprites.
         for (target, tex, mode, clear) in [
             (t.nh, self.chunk_tex[1], 4.0, [128.0 / 255.0, 128.0 / 255.0, 0.0, 0.0]),
-            (t.emi, self.chunk_tex[2], 5.0, [0.0, 0.0, 0.0, 1.0]),
+            // Its alpha is the surface byte: 255 a thing (every sprite writes it), and where
+            // nothing is drawn, 254: beyond the zone.
+            (t.emi, self.chunk_tex[2], 5.0, [0.0, 0.0, 0.0, 254.0 / 255.0]),
         ] {
             self.gl.target(Some(target.fbo), c.0, c.1);
             self.gl.clear(clear);
@@ -816,8 +909,8 @@ impl Gl2 {
         let normals = if self.rows.normal_light { 1.0 } else { 0.0 };
         let scale = t.scale as f32;
         let Some(sky) = self.prep.sky else {
-            // No light pass (a T0 frame): lit flat.
-            self.gl.clear([0.5, 0.5, 0.5, 1.0]);
+            // No light pass (a T0 frame): lit flat, no glint.
+            self.gl.clear([0.5, 0.5, 0.5, 0.0]);
             return;
         };
         let p = &self.progs.ambient;
@@ -845,9 +938,12 @@ impl Gl2 {
             self.gl.bind(0, t.nh.tex);
             self.gl.bind(1, t.mask_a.tex);
             self.gl.bind(2, t.mask_b.tex);
+            self.gl.bind(3, t.emi.tex);
             self.gl.set_i(p.u("u_nh"), 0);
             self.gl.set_i(p.u("u_mask_a"), 1);
             self.gl.set_i(p.u("u_mask_b"), 2);
+            self.gl.set_i(p.u("u_emi"), 3);
+            self.gl.set_f(p.u("u_wet"), &[f32::from(self.prep.atmos.wet) / 255.0]);
             self.gl.set_f(p.u("u_canvas"), &[c.0 as f32, c.1 as f32]);
             self.gl.set_f(p.u("u_scale"), &[scale]);
             self.gl.set_f(p.u("u_normals"), &[normals]);
@@ -858,28 +954,161 @@ impl Gl2 {
         }
     }
 
-    /// Step 5: the canvas.
-    fn compose(&mut self, t: &Targets) {
+    /// The frame's T1 grade: its tint and lift (none without a `Post` pass).
+    fn grade(&self) -> ([f32; 3], [f32; 3]) {
+        match self.prep.post {
+            Some(post) => (post.tint.map(|v| f32::from(v) / 255.0), post.lift.map(|v| f32::from(v) / 255.0)),
+            None => ([1.0; 3], [0.0; 3]),
+        }
+    }
+
+    /// Sets the sky's uniforms of program `p` (in use) from the frame's backdrop.
+    fn sky_uniforms(&self, p: &Prog) {
+        let Some(s) = self.prep.backdrop else { return };
+        let lin = |c: jane_present::Rgb| c.map(prep::linear);
+        self.gl.set_f(p.u("u_zenith"), &lin(s.zenith));
+        self.gl.set_f(p.u("u_horizon"), &lin(s.horizon));
+        let [r, g, b] = lin(s.glow);
+        self.gl.set_f(p.u("u_glow"), &[r, g, b, f32::from(s.glow_amount) / 255.0]);
+        self.gl.set_f(p.u("u_glow_x"), &[f32::from(s.glow_x)]);
+    }
+
+    /// The sky backdrop into its target (§1.9): the gradient, the stars and the moon over it, then
+    /// the far things standing on its horizon.
+    fn backdrop(&mut self, t: &Targets) {
+        if self.prep.backdrop.is_none() {
+            return;
+        }
+        let s = t.sky;
+        self.gl.target(Some(s.fbo), s.w, s.h);
+        self.gl.blend(Blend::Off);
+        let p = &self.progs.sky;
+        self.gl.use_program(p.p);
+        self.sky_uniforms(&self.progs.sky);
+        self.gl.set_f(self.progs.sky.u("u_size"), &[s.w as f32, s.h as f32]);
+        self.rect(0.0, 0.0, s.w as f32, s.h as f32);
+        let quads = self.prep.sky_shapes.clone();
+        if !quads.is_empty() {
+            let p = &self.progs.shape;
+            self.gl.use_program(p.p);
+            self.gl.set_f(p.u("u_canvas"), &[s.w as f32, s.h as f32]);
+            self.gl.set_f(p.u("u_lit"), &[0.0]);
+            self.gl.set_f(p.u("u_tint"), &[1.0; 3]);
+            self.gl.set_f(p.u("u_lift"), &[0.0; 3]);
+            self.gl.point(self.bufs.shape, &sh::SHAPE_SIZES, self.prep.shape_v.len() / 12);
+            self.gl.blend(Blend::Over);
+            self.gl.draw_quads(quads.start, quads.len());
+            self.calls += 1;
+        }
+        if !self.prep.far_draws.is_empty() {
+            let p = &self.progs.far;
+            self.gl.use_program(p.p);
+            self.sky_uniforms(&self.progs.far);
+            let p = &self.progs.far;
+            self.gl.set_f(p.u("u_canvas"), &[s.w as f32, s.h as f32]);
+            self.gl.set_i(p.u("u_alb"), 0);
+            self.gl.set_i(p.u("u_pem"), 2);
+            self.gl.set_i(p.u("u_clut"), 3);
+            self.gl.set_f(p.u("u_fill"), &self.prep.fill.map(prep::linear));
+            self.gl.set_f(p.u("u_egain"), &[EMISSIVE_GAIN]);
+            self.gl.point(self.bufs.far, &sh::SPRITE_SIZES, self.prep.far_v.len() / 12);
+            self.gl.blend(Blend::Off);
+            for k in 0..self.prep.far_draws.len() {
+                let (page, r, haze) = self.prep.far_draws[k].clone();
+                self.bind_page(page, self.progs.far.u("u_page"));
+                self.gl.set_f(self.progs.far.u("u_haze"), &[haze]);
+                self.gl.draw_quads(r.start, r.len());
+                self.calls += 1;
+            }
+        }
+    }
+
+    /// Step 5: the canvas: the light by the albedo, the emissive, the water, the wet ground, the
+    /// sky beyond the zone's top edge, the grade (`COMPOSE_FS`).
+    fn compose(&mut self, t: &Targets, frame: &Frame) {
         let c = t.canvas;
         self.gl.target(Some(t.out.fbo), c.0, c.1);
         let p = &self.progs.compose;
         self.gl.use_program(p.p);
         self.gl.blend(Blend::Off);
-        self.gl.bind(0, t.alb.tex);
-        self.gl.bind(1, t.light.tex);
-        self.gl.bind(2, t.emi.tex);
-        self.gl.set_i(p.u("u_alb"), 0);
-        self.gl.set_i(p.u("u_light"), 1);
-        self.gl.set_i(p.u("u_emi"), 2);
+        for (unit, tex) in [t.alb.tex, t.light.tex, t.emi.tex, t.nh.tex, t.sky.tex].into_iter().enumerate() {
+            self.gl.bind(unit as u32, tex);
+        }
+        for (unit, name) in ["u_alb", "u_light", "u_emi", "u_nh", "u_sky"].into_iter().enumerate() {
+            self.gl.set_i(p.u(name), unit as i32);
+        }
         self.gl.set_f(p.u("u_size"), &[c.0 as f32, c.1 as f32]);
-        let (tint, lift) = match self.prep.post {
-            Some(post) => (post.tint.map(|v| f32::from(v) / 255.0), post.lift.map(|v| f32::from(v) / 255.0)),
-            None => ([1.0; 3], [0.0; 3]),
-        };
+        let (tint, lift) = self.grade();
         self.gl.set_f(p.u("u_tint"), &tint);
         self.gl.set_f(p.u("u_lift"), &lift);
         self.gl.set_f(p.u("u_egain"), &[EMISSIVE_GAIN]);
+        let (top, sky) = self.prep.backdrop.map_or((0.0, 0.0), |s| (s.zone.1 as f32, 1.0));
+        let reflect = if self.rows.reflect { 1.0 } else { 0.0 };
+        self.gl.set_f(p.u("u_info"), &[top, sky, if self.prep.water { 1.0 } else { 0.0 }, reflect]);
+        let a = self.prep.atmos;
+        // The tick wraps well inside a float's whole numbers; the swell skips once a half hour.
+        let tick = (frame.tick % 100_000) as f32;
+        self.gl
+            .set_f(p.u("u_weather"), &[f32::from(a.rain) / 255.0, f32::from(a.wet) / 255.0, f32::from(a.wind), tick]);
+        self.gl.set_f(p.u("u_cam"), &[frame.camera.0 as f32, frame.camera.1 as f32]);
+        self.gl.set_f(p.u("u_fill"), &self.prep.fill.map(|v| f32::from(v) / 255.0));
         self.rect(0.0, 0.0, c.0 as f32, c.1 as f32);
+    }
+
+    /// What lies over the composed canvas, in the frame's order: the particles (lit by the light
+    /// target where they lie under the light) and the fog.
+    fn after(&mut self, t: &Targets, frame: &Frame) {
+        if self.prep.after.is_empty() {
+            return;
+        }
+        let c = t.canvas;
+        self.gl.target(Some(t.out.fbo), c.0, c.1);
+        let (tint, lift) = self.grade();
+        let steps = std::mem::take(&mut self.prep.after);
+        for step in &steps {
+            match step {
+                After::Parts { quads, lit } => {
+                    let p = &self.progs.shape;
+                    self.gl.use_program(p.p);
+                    self.gl.bind(0, t.light.tex);
+                    self.gl.set_i(p.u("u_light"), 0);
+                    self.gl.set_f(p.u("u_canvas"), &[c.0 as f32, c.1 as f32]);
+                    self.gl.set_f(p.u("u_lit"), &[if *lit { 1.0 } else { 0.0 }]);
+                    self.gl.set_f(p.u("u_tint"), &tint);
+                    self.gl.set_f(p.u("u_lift"), &lift);
+                    self.gl.point(self.bufs.shape, &sh::SHAPE_SIZES, self.prep.shape_v.len() / 12);
+                    self.gl.blend(Blend::Over);
+                    self.gl.draw_quads(quads.start, quads.len());
+                    self.calls += 1;
+                }
+                After::Fog => {
+                    let Some(mist) = self.mist else { continue };
+                    let p = &self.progs.fog;
+                    self.gl.use_program(p.p);
+                    for (unit, (name, tex)) in
+                        [("u_nh", t.nh.tex), ("u_light", t.light.tex), ("u_mist", mist)].into_iter().enumerate()
+                    {
+                        self.gl.bind(unit as u32, tex);
+                        self.gl.set_i(p.u(name), unit as i32);
+                    }
+                    self.gl.set_f(p.u("u_size"), &[c.0 as f32, c.1 as f32]);
+                    self.gl.set_f4s(p.u("u_vrect[0]"), &self.prep.fog_rect);
+                    self.gl.set_f4s(p.u("u_vcol[0]"), &self.prep.fog_col);
+                    self.gl.set_f4s(p.u("u_vshape[0]"), &self.prep.fog_shape);
+                    self.gl.set_f(p.u("u_n"), &[(self.prep.fog_rect.len() / 4) as f32]);
+                    let d = self.prep.drift;
+                    let cam = frame.camera;
+                    self.gl.set_f(p.u("u_move"), &[cam.0 as f32, cam.1 as f32, f32::from(d.0), f32::from(d.1)]);
+                    self.gl.set_f(p.u("u_base"), &self.prep.ambient.map(|v| f32::from(v) / 255.0));
+                    self.gl.set_f(p.u("u_tint"), &tint);
+                    self.gl.set_f(p.u("u_lift"), &lift);
+                    self.gl.blend(Blend::Over);
+                    self.rect(0.0, 0.0, c.0 as f32, c.1 as f32);
+                }
+            }
+        }
+        self.prep.after = steps;
+        self.gl.blend(Blend::Off);
     }
 
     /// Uploads what changed of the frame's UI images.
@@ -1010,6 +1239,23 @@ impl Backend for Gl2 {
             gl.upload(t, 0, 0, CLUT_LEN as u32, 1, Format::Rgba8, &bytes);
             self.clut = Some(t);
         }
+        // The mist tile (§1.9): 256 on a side, repeating, its alpha as luminance.
+        if let Some(m) = self.mist.take() {
+            gl.delete_texture(m);
+        }
+        // `jane_art::weather::MIST_SIDE`.
+        let side = 256u32;
+        if pages.mist.len() == (side * side) as usize
+            && let Ok(t) = gl.texture(side, side, Format::La8, true)
+        {
+            bytes.clear();
+            for &m in &pages.mist {
+                bytes.extend_from_slice(&[m, 255]);
+            }
+            gl.upload(t, 0, 0, side, side, Format::La8, &bytes);
+            gl.repeat(t);
+            self.mist = Some(t);
+        }
         self.pages.clear();
         let max = gl.info.max_texture.clamp(2048, 8192) as usize;
         for p in &pages.pages {
@@ -1080,6 +1326,12 @@ impl Backend for Gl2 {
         if !self.prep.light_v.is_empty() {
             self.gl.vertices(self.bufs.light, &self.prep.light_v, &sh::LIGHT_SIZES);
         }
+        if !self.prep.shape_v.is_empty() {
+            self.gl.vertices(self.bufs.shape, &self.prep.shape_v, &sh::SHAPE_SIZES);
+        }
+        if !self.prep.far_v.is_empty() {
+            self.gl.vertices(self.bufs.far, &self.prep.far_v, &sh::SPRITE_SIZES);
+        }
         self.albedo(&t, frame.clear);
         let at = Instant::now();
         self.time_begin(2);
@@ -1092,22 +1344,32 @@ impl Backend for Gl2 {
         self.time_end();
         self.cpu_us[3] = at.elapsed().as_micros() as u32;
         let at = Instant::now();
-        self.time_begin(4);
-        self.compose(&t);
+        self.time_begin(SEC_SKY);
+        self.backdrop(&t);
         self.time_end();
-        self.cpu_us[4] = at.elapsed().as_micros() as u32;
+        self.cpu_us[SEC_SKY] = at.elapsed().as_micros() as u32;
         let at = Instant::now();
-        self.time_begin(5);
+        self.time_begin(SEC_GRADE);
+        self.compose(&t, frame);
+        self.time_end();
+        self.cpu_us[SEC_GRADE] = at.elapsed().as_micros() as u32;
+        let at = Instant::now();
+        self.time_begin(SEC_AFTER);
+        self.after(&t, frame);
+        self.time_end();
+        self.cpu_us[SEC_AFTER] = at.elapsed().as_micros() as u32;
+        let at = Instant::now();
+        self.time_begin(SEC_UI);
         self.ui(&t, frame);
         self.time_end();
-        self.cpu_us[5] = at.elapsed().as_micros() as u32;
+        self.cpu_us[SEC_UI] = at.elapsed().as_micros() as u32;
         self.targets = Some(t);
         if self.timer.is_none() {
             let mut pass = [0u32; StatPass::COUNT];
             for (k, us) in self.cpu_us.iter().enumerate() {
                 pass[SECTION_PASS[k] as usize] += us;
             }
-            self.times.push_passes(t0.elapsed().as_micros() as u32 + self.cpu_us[6], pass);
+            self.times.push_passes(t0.elapsed().as_micros() as u32 + self.cpu_us[SEC_UPSCALE], pass);
         }
         self.frames += 1;
         self.times.set_counts(self.calls, self.prep.n_lights as u32, self.prep.casters as u32, 0);
@@ -1124,6 +1386,20 @@ impl Backend for Gl2 {
 
     fn stats(&self) -> Option<FrameStats> {
         Some(self.times.stats())
+    }
+
+    /// The rows T1 draws itself (§1.3): N dot L, the upscale, and the counts and silhouettes its
+    /// `Rows` also hold, so a frame from a presenter that kept more is held to them. The
+    /// backend's own settings (the light target's size, the albedo mode, the reflection) stay.
+    fn set_features(&mut self, f: &Features) {
+        self.rows = Rows {
+            normal_light: f.normal_light,
+            shadows: f.shadows.min(8),
+            silhouettes: f.silhouettes,
+            sharp: f.sharp,
+            max_lights: f.max_lights.min(Rows::T1.max_lights),
+            ..self.rows
+        };
     }
 }
 

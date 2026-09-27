@@ -85,7 +85,13 @@ pub(crate) fn draw(c: &mut Canvas, k: &Kit, state: State) -> Option<Stand> {
             c.disc_lit(front.right() - 7, front.y + 9, 2, k.body, Z::flat(8));
             // The gauge and the lamp on the top.
             c.disc_lit(top.x + 8, top.y + top.h / 2, 3, Ramp::ClothLinen, Z::flat(9));
-            c.line((top.x + 8, top.y + top.h / 2), (top.x + 9 + i32::from(on) * 2, top.y + top.h / 2 - 2), Ix::SEAM, 1, 10);
+            c.line(
+                (top.x + 8, top.y + top.h / 2),
+                (top.x + 9 + i32::from(on) * 2, top.y + top.h / 2 - 2),
+                Ix::SEAM,
+                1,
+                10,
+            );
             pilot(c, k, top.x + 16, top.y + 3, on);
             c.line((front.x + 2, foot - 1), (front.x - 2, foot - 1), Ramp::ClothBlack.at(Tone::Base), 2, 2);
             Stand::Tops([(top, super::parts::lid_height(20)), (Rect::default(), 0)])
@@ -93,7 +99,12 @@ pub(crate) fn draw(c: &mut Canvas, k: &Kit, state: State) -> Option<Stand> {
         "valve" => {
             // A valve on a pipe from the ground: a hand wheel with its spokes, red.
             ao(c, cx - 5, cx + 4, foot, 4);
-            c.polygon_lit(&[(cx - 2, foot - 12), (cx + 1, foot - 12), (cx + 1, foot - 1), (cx - 2, foot - 1)], k.trim, 90, Z::flat(3));
+            c.polygon_lit(
+                &[(cx - 2, foot - 12), (cx + 1, foot - 12), (cx + 1, foot - 1), (cx - 2, foot - 1)],
+                k.trim,
+                90,
+                Z::flat(3),
+            );
             c.hline(cx - 6, cx + 5, foot - 4, k.trim.at(Tone::Base), 3);
             let r = Rect::new(cx - 6, foot - 22, 12, 11);
             c.ellipse(r, k.accent.at(Tone::Base), 5);
@@ -183,8 +194,12 @@ fn small(c: &mut Canvas, k: &Kit, on: bool) -> Option<Stand> {
             let h = parts::hash(k.seed, 1, 90);
             for i in 0..3 + fw / 16 {
                 let hh = parts::hash(k.seed, i, 91);
-                let (bw, bh) = (fw * 3 / 8 + (hh >> 12) as i32 % (fw / 4).max(1), fh / 4 + (hh >> 16) as i32 % (fh / 6).max(1));
-                let (x, y) = (2 + (hh % (fw - bw - 3).max(1) as u32) as i32, foot - fh * 2 / 3 + ((hh >> 8) % (fh / 3).max(1) as u32) as i32);
+                let (bw, bh) =
+                    (fw * 3 / 8 + (hh >> 12) as i32 % (fw / 4).max(1), fh / 4 + (hh >> 16) as i32 % (fh / 6).max(1));
+                let (x, y) = (
+                    2 + (hh % (fw - bw - 3).max(1) as u32) as i32,
+                    foot - fh * 2 / 3 + ((hh >> 8) % (fh / 3).max(1) as u32) as i32,
+                );
                 c.ellipse(Rect::new(x, y, bw, bh), b.at(if i == 0 { Tone::Shade } else { Tone::Deep }), 1);
             }
             c.fill_rect(Rect::new(4 + (h % (fw as u32 / 2)) as i32, foot - fh / 2, 2, 1), b.at(Tone::Light), 1);
@@ -196,7 +211,11 @@ fn small(c: &mut Canvas, k: &Kit, on: bool) -> Option<Stand> {
                 let hh = parts::hash(k.seed, i, 92);
                 let (x, y) = (1 + i * 6 + (hh % 2) as i32, foot - 11 + (hh >> 4) as i32 % 3);
                 let lean = if hh & 1 == 0 { 1 } else { -1 };
-                c.polyline_fill(&[(x, y + 1), (x + 6, y), (x + 7 + lean, y + 7), (x + 1 + lean, y + 8)], Ramp::ClothLinen.at(Tone::Light), 2);
+                c.polyline_fill(
+                    &[(x, y + 1), (x + 6, y), (x + 7 + lean, y + 7), (x + 1 + lean, y + 8)],
+                    Ramp::ClothLinen.at(Tone::Light),
+                    2,
+                );
                 for r in 0..3 {
                     c.hline(x + 2, x + 5, y + 2 + 2 * r, Ramp::ClothLinen.at(Tone::Mid), 2);
                 }
@@ -261,7 +280,9 @@ fn small(c: &mut Canvas, k: &Kit, on: bool) -> Option<Stand> {
             let r = Rect::new(1, foot - k.fh * 16 + 5, w - 2, k.fh * 16 - 7);
             c.fill_normal(r, b.at(Tone::Base), FLAT, 1);
             c.shade(Rect::new(r.x + r.w / 2, r.y, r.w / 2, r.h), b, 1);
-            for (x0, y0, x1, y1) in [(r.x + 1, r.y + 1, r.right() - 2, r.y + 1), (r.x + 1, r.bottom() - 2, r.right() - 2, r.bottom() - 2)] {
+            for (x0, y0, x1, y1) in
+                [(r.x + 1, r.y + 1, r.right() - 2, r.y + 1), (r.x + 1, r.bottom() - 2, r.right() - 2, r.bottom() - 2)]
+            {
                 c.hline(x0, x1, y0.min(y1), k.accent.at(Tone::Base), 1);
             }
             c.vline(r.x + 1, r.y + 1, r.bottom() - 2, k.accent.at(Tone::Base), 1);
@@ -274,7 +295,11 @@ fn small(c: &mut Canvas, k: &Kit, on: bool) -> Option<Stand> {
                 c.dot(x, r.y - 1, k.accent.at(Tone::Light), 1);
                 c.dot(x, r.bottom(), k.accent.at(Tone::Light), 1);
             }
-            c.polyline_fill(&[(r.right() - 5, r.bottom() - 1), (r.right() - 1, r.bottom() - 1), (r.right() - 1, r.bottom() - 5)], b.at(Tone::Light), 2);
+            c.polyline_fill(
+                &[(r.right() - 5, r.bottom() - 1), (r.right() - 1, r.bottom() - 1), (r.right() - 1, r.bottom() - 5)],
+                b.at(Tone::Light),
+                2,
+            );
             Stand::Flat(2)
         }
         "bonepile" => {
@@ -321,7 +346,8 @@ fn small(c: &mut Canvas, k: &Kit, on: bool) -> Option<Stand> {
                 crate::creature::stair(c, (ox, oy), e, silk.at(Tone::Base), 4);
             }
             for r in [4, 8, 11] {
-                let pts: Vec<(i32, i32)> = ends.iter().map(|&(ex, ey)| (ox + (ex - ox) * r / 13, oy + (ey - oy) * r / 13)).collect();
+                let pts: Vec<(i32, i32)> =
+                    ends.iter().map(|&(ex, ey)| (ox + (ex - ox) * r / 13, oy + (ey - oy) * r / 13)).collect();
                 for p in pts.windows(2) {
                     crate::creature::stair(c, p[0], p[1], silk.at(Tone::Light), 4);
                 }
@@ -361,7 +387,11 @@ fn small(c: &mut Canvas, k: &Kit, on: bool) -> Option<Stand> {
             for i in 0..5 {
                 let hh = parts::hash(k.seed, i, 97);
                 let y = 3 + (hh % 11) as i32;
-                c.fill_rect(Rect::new(5 + (hh >> 8) as i32 % 3, y, 2, 2), k.accent.at(if i % 2 == 0 { Tone::Base } else { Tone::Light }), 4);
+                c.fill_rect(
+                    Rect::new(5 + (hh >> 8) as i32 % 3, y, 2, 2),
+                    k.accent.at(if i % 2 == 0 { Tone::Base } else { Tone::Light }),
+                    4,
+                );
             }
             c.ellipse(Rect::new(3, foot - 5, 9, 4), k.accent.at(Tone::Base), 3);
             c.hline(4, 10, foot - 5, k.accent.at(Tone::Light), 3);
@@ -383,7 +413,13 @@ fn small(c: &mut Canvas, k: &Kit, on: bool) -> Option<Stand> {
         "bedroll" => {
             // A bedroll: a blanket rolled, tied twice, lying on the ground.
             c.ao_contact(Rect::new(3, foot - 8, w - 6, 8), 1);
-            soft(c, &[(3, foot - 9), (w - 5, foot - 9), (w - 3, foot - 5), (w - 5, foot - 1), (3, foot - 1), (2, foot - 5)], b, 3, Z::new(1, 4));
+            soft(
+                c,
+                &[(3, foot - 9), (w - 5, foot - 9), (w - 3, foot - 5), (w - 5, foot - 1), (3, foot - 1), (2, foot - 5)],
+                b,
+                3,
+                Z::new(1, 4),
+            );
             for x in [w / 3, 2 * w / 3] {
                 c.vline(x, foot - 9, foot - 1, k.trim.at(Tone::Base), 5);
             }
@@ -394,7 +430,23 @@ fn small(c: &mut Canvas, k: &Kit, on: bool) -> Option<Stand> {
         "glove" => {
             // A glove on a folded cloth: the Shot-Firer's, singed.
             box3(c, cx - 11, 22, foot, 4, 10, Ramp::ClothLinen, None, 2);
-            soft(c, &[(cx - 5, foot - 6), (cx - 5, foot - 12), (cx - 3, foot - 15), (cx - 1, foot - 12), (cx + 1, foot - 16), (cx + 3, foot - 12), (cx + 6, foot - 13), (cx + 4, foot - 7), (cx + 3, foot - 5)], b, 2, Z::new(4, 6));
+            soft(
+                c,
+                &[
+                    (cx - 5, foot - 6),
+                    (cx - 5, foot - 12),
+                    (cx - 3, foot - 15),
+                    (cx - 1, foot - 12),
+                    (cx + 1, foot - 16),
+                    (cx + 3, foot - 12),
+                    (cx + 6, foot - 13),
+                    (cx + 4, foot - 7),
+                    (cx + 3, foot - 5),
+                ],
+                b,
+                2,
+                Z::new(4, 6),
+            );
             c.fill_rect(Rect::new(cx - 5, foot - 7, 9, 2), k.trim.at(Tone::Base), 6);
             c.dot(cx + 2, foot - 11, Ramp::ClothBlack.at(Tone::Base), 6);
             Stand::Flat(6)
@@ -415,7 +467,13 @@ fn small(c: &mut Canvas, k: &Kit, on: bool) -> Option<Stand> {
             c.ao_contact(Rect::new(cx - 7, foot - 5, 14, 5), 1);
             for (i, x) in [(0, cx - 6), (1, cx + 1)] {
                 let top = if boots { foot - 12 } else { foot - 5 };
-                soft(c, &[(x, top), (x + 4, top), (x + 5, foot - 3), (x + 5, foot - 1), (x, foot - 1)], b, 2, Z::new(2, if boots { 8 } else { 3 }));
+                soft(
+                    c,
+                    &[(x, top), (x + 4, top), (x + 5, foot - 3), (x + 5, foot - 1), (x, foot - 1)],
+                    b,
+                    2,
+                    Z::new(2, if boots { 8 } else { 3 }),
+                );
                 if boots {
                     c.hline(x, x + 4, top, b.at(Tone::Light), 9);
                     c.hline(x, x + 5, foot - 2, k.trim.at(Tone::Shade), 3);
@@ -474,11 +532,21 @@ fn small(c: &mut Canvas, k: &Kit, on: bool) -> Option<Stand> {
                     for i in 0..5 {
                         let a = jane_core::angle::Angle((i * 13107) as u16);
                         let (s, co) = (jane_core::angle::sin_q15(a).0, jane_core::angle::cos_q15(a).0);
-                        c.line((cx + ((co * 5) >> 15), foot - 6 + ((s * 3) >> 15)), (cx - ((co * 5) >> 15), foot - 6 - ((s * 3) >> 15)), b.at(if i % 2 == 0 { Tone::Light } else { Tone::Base }), 2, 2);
+                        c.line(
+                            (cx + ((co * 5) >> 15), foot - 6 + ((s * 3) >> 15)),
+                            (cx - ((co * 5) >> 15), foot - 6 - ((s * 3) >> 15)),
+                            b.at(if i % 2 == 0 { Tone::Light } else { Tone::Base }),
+                            2,
+                            2,
+                        );
                     }
                 }
                 _ => {
-                    for (x, y, r) in [(cx - 6, foot - 8, Ramp::ClothLinen), (cx - 1, foot - 10, Ramp::ClothSky), (cx + 1, foot - 7, Ramp::ClothRose)] {
+                    for (x, y, r) in [
+                        (cx - 6, foot - 8, Ramp::ClothLinen),
+                        (cx - 1, foot - 10, Ramp::ClothSky),
+                        (cx + 1, foot - 7, Ramp::ClothRose),
+                    ] {
                         soft(c, &[(x, y), (x + 7, y + 1), (x + 6, y + 6), (x - 1, y + 5)], r, 2, Z::new(1, 4));
                     }
                 }

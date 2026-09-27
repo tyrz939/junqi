@@ -107,7 +107,20 @@ impl Rig {
         };
         let hem = (p.hip_y() + pose.lag.0 + hang).min(AY - 2);
         let trail = (pose.lag.1 + bent - lean, pose.lag.0 - pose.bob);
-        Rig { p, pose, build: d.look.build, skull, top, waist: (top + hip) / 2 + 1, hip, hem, lean, trail, bone: bony(d), facing }
+        Rig {
+            p,
+            pose,
+            build: d.look.build,
+            skull,
+            top,
+            waist: (top + hip) / 2 + 1,
+            hip,
+            hem,
+            lean,
+            trail,
+            bone: bony(d),
+            facing,
+        }
     }
 
     /// The eyes' first row (their lids are the row above).
@@ -623,7 +636,9 @@ fn arms_front(c: &mut Canvas, d: &Dress, r: &Rig) {
     let aw = r.arm_w();
     for i in 0..2 {
         let spread = r.pose.spread[i];
-        let hand_y = r.p.arm_y + r.pose.bob - i32::from(r.pose.breathe) + r.p.arm_l - 1 + r.pose.arm[i] - spread / 2 - r.pose.raise[i];
+        let hand_y = r.p.arm_y + r.pose.bob - i32::from(r.pose.breathe) + r.p.arm_l - 1 + r.pose.arm[i]
+            - spread / 2
+            - r.pose.raise[i];
         let (x0, out) = if i == 0 { (s0 - aw + 1, -spread) } else { (s1, spread) };
         arm_front(c, d, r, x0, out, hand_y, i == 0);
     }

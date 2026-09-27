@@ -102,14 +102,22 @@ fn side(c: &mut Canvas, k: &Coat, ax: i32, ay: i32, phase: i32, lift: i32, open:
     }
     // The tail's fin, above and below.
     let (tx, ty, _) = pts[9];
-    m.polyline_fill(&[(pts[6].0, pts[6].1 - 2), (tx - 3, ty - 1), (tx - 3, ty + 1), (pts[6].0, pts[6].1 + 2)], Ix::INK, 1);
+    m.polyline_fill(
+        &[(pts[6].0, pts[6].1 - 2), (tx - 3, ty - 1), (tx - 3, ty + 1), (pts[6].0, pts[6].1 + 2)],
+        Ix::INK,
+        1,
+    );
     // The head: flat and wide, a blunt snout.
     let (hx, hy, _) = pts[0];
     m.ellipse(Rect::new(hx - 3, hy - 3, 8, 5), Ix::INK, 1);
     c.inflate(&m, k.body, 2, relief::BODY);
     if k.belly != k.body {
         for w in pts.windows(2) {
-            c.dye_poly(&[(w[0].0, w[0].1 + 1), (w[1].0, w[1].1 + 1), (w[1].0, w[1].1 + w[1].2), (w[0].0, w[0].1 + w[0].2)], k.body, k.belly);
+            c.dye_poly(
+                &[(w[0].0, w[0].1 + 1), (w[1].0, w[1].1 + 1), (w[1].0, w[1].1 + w[1].2), (w[0].0, w[0].1 + w[0].2)],
+                k.body,
+                k.belly,
+            );
         }
     }
     // The near legs.
@@ -130,7 +138,18 @@ fn side(c: &mut Canvas, k: &Coat, ax: i32, ay: i32, phase: i32, lift: i32, open:
 }
 
 #[allow(clippy::too_many_arguments)]
-fn top(c: &mut Canvas, k: &Coat, ax: i32, ay: i32, toward: bool, phase: i32, lift: i32, open: bool, flare: bool, lunge: i32) {
+fn top(
+    c: &mut Canvas,
+    k: &Coat,
+    ax: i32,
+    ay: i32,
+    toward: bool,
+    phase: i32,
+    lift: i32,
+    open: bool,
+    flare: bool,
+    lunge: i32,
+) {
     // From above: the head toward the viewer (or away), the body running up the screen in an S.
     let dir = if toward { -1 } else { 1 };
     // From above the head keeps its row: a lift or a lunge shows in the jaw and the gills.

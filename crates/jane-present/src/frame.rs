@@ -284,10 +284,28 @@ pub struct Particle {
 }
 
 /// The visual features (§1.3): a row each, with the tier it needs and its `config.json` key
-/// under `[present]`. `Features::of(tier)` is each tier's default; a row set above its tier's
-/// reach is held to what the tier draws.
+/// under `present`. `Features::of(tier)` is each tier's default; a row set above its tier's
+/// reach is held to what the tier draws. The presenter reads the rows that change what a frame
+/// holds (the atmosphere, the lights, the silhouettes, the grade); a backend is handed the rest
+/// (`Backend::set_features`: `normal_light` and `sharp`); the app reads `frame_skip`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Features {
+    /// `normal_light`: N dot L per px (T1; T2 always). Off: every surface faces up.
+    pub normal_light: bool,
+    /// `shadows`: how many point lights throw shadows (T1 8, T2 32; 0 is the row off).
+    pub shadows: u8,
+    /// `silhouettes`: the sun's and moon's silhouette shadows (T0, T1).
+    pub silhouettes: bool,
+    /// `max_lights`: point lights drawn at most (16, 32, 128).
+    pub max_lights: u16,
+    /// `bloom`: the emissive's bloom (T2).
+    pub bloom: bool,
+    /// `grade`: the grade per region and hour (T1's tint and lift; all of it on T2).
+    pub grade: bool,
+    /// `sharp`: sharp bilinear to the window (T1, T2); off, nearest.
+    pub sharp: bool,
+    /// `frame_skip`: draw every other tick (30 fps); the sim still steps at 60.
+    pub frame_skip: bool,
     /// `weather`: rain, storm and mist, their particles and their grade.
     pub weather: bool,
     /// `fog`: fog volumes per area (one drift tile on T0, two layers on T1 and T2).
@@ -304,13 +322,79 @@ pub struct Features {
     pub max_particles: u16,
 }
 
+/// A `Features` row as the Controls screen offers it (§1.3): its `config.json` key, its label,
+/// and whether a change shows at once (else on the next start).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct FeatureRow {
+    pub key: &'static str,
+    pub label: &'static str,
+    pub live: bool,
+}
+
+const fn row(key: &'static str, label: &'static str) -> FeatureRow {
+    FeatureRow { key, label, live: true }
+}
+
+/// Every row a player can turn, in the Controls screen's order; `Features::rows` keeps the ones a
+/// tier has. `soft_shadows` and `sun_shadows` are not among them: T2's traced shadows are its
+/// only ones, and T1's sun is its silhouettes. `half_res` is not built.
+const ROWS: [FeatureRow; 15] = [
+    row("normal_light", "Lit relief"),
+    row("shadows", "Lamp shadows"),
+    row("silhouettes", "Sun shadows"),
+    row("max_lights", "Lights"),
+    row("weather", "Weather"),
+    row("fog", "Fog"),
+    row("water", "Water"),
+    row("wet", "Wet ground"),
+    row("god_rays", "Light shafts"),
+    row("sky", "Sky"),
+    row("bloom", "Bloom"),
+    row("grade", "Grade"),
+    row("max_particles", "Particles"),
+    row("sharp", "Sharp upscale"),
+    row("frame_skip", "Frame skip"),
+];
+
 impl Features {
-    /// The rows' keys, in the order `jane bench` and F2 print them.
-    pub const KEYS: [&'static str; 7] = ["weather", "fog", "water", "wet", "god_rays", "sky", "max_particles"];
+    /// The rows' keys, in the order `jane bench` and F2 print them and `config.json` holds them.
+    pub const KEYS: [&'static str; 15] = [
+        "normal_light",
+        "shadows",
+        "silhouettes",
+        "max_lights",
+        "weather",
+        "fog",
+        "water",
+        "wet",
+        "god_rays",
+        "sky",
+        "bloom",
+        "grade",
+        "max_particles",
+        "sharp",
+        "frame_skip",
+    ];
 
     /// A tier's defaults (§1.3).
     pub const fn of(tier: Tier) -> Features {
         Features {
+            normal_light: !matches!(tier, Tier::T0),
+            shadows: match tier {
+                Tier::T0 => 0,
+                Tier::T1 => 8,
+                Tier::T2 => 32,
+            },
+            silhouettes: !matches!(tier, Tier::T2),
+            max_lights: match tier {
+                Tier::T0 => 16,
+                Tier::T1 => 32,
+                Tier::T2 => 128,
+            },
+            bloom: matches!(tier, Tier::T2),
+            grade: !matches!(tier, Tier::T0),
+            sharp: !matches!(tier, Tier::T0),
+            frame_skip: false,
             weather: true,
             fog: true,
             water: true,
@@ -325,8 +409,9 @@ impl Features {
         }
     }
 
-    /// Sets a row by its `config.json` key (`"on"`, `"off"`, or a number for `max_particles`),
-    /// held to what `tier` can draw. `false` if the key or value is not one.
+    /// Sets a row by its `config.json` key (`"on"`, `"off"`, or a number for `shadows`,
+    /// `max_lights` and `max_particles`, where `"on"` is the tier's own and `"off"` none), held to
+    /// what `tier` can draw. `false` if the key or value is not one.
     pub fn set(&mut self, tier: Tier, key: &str, value: &str) -> bool {
         let on = match value {
             "on" | "true" | "1" => Some(true),
@@ -334,20 +419,104 @@ impl Features {
             _ => None,
         };
         let top = Features::of(tier);
+        let count = |most: u16| match (on, value.parse::<u16>()) {
+            (_, Ok(n)) => Some(n.min(most)),
+            (Some(true), _) => Some(most),
+            (Some(false), _) => Some(0),
+            (None, Err(_)) => None,
+        };
         match (key, on) {
+            ("normal_light", Some(v)) => self.normal_light = v && tier > Tier::T0,
+            ("silhouettes", Some(v)) => self.silhouettes = v && tier < Tier::T2,
+            ("bloom", Some(v)) => self.bloom = v && tier == Tier::T2,
+            ("grade", Some(v)) => self.grade = v && tier > Tier::T0,
+            ("sharp", Some(v)) => self.sharp = v && tier > Tier::T0,
+            ("frame_skip", Some(v)) => self.frame_skip = v,
             ("weather", Some(v)) => self.weather = v,
             ("fog", Some(v)) => self.fog = v,
             ("water", Some(v)) => self.water = v,
             ("wet", Some(v)) => self.wet = v && tier > Tier::T0,
             ("god_rays", Some(v)) => self.god_rays = v && tier == Tier::T2,
             ("sky", Some(v)) => self.sky = v,
-            ("max_particles", _) => match value.parse::<u16>() {
-                Ok(n) => self.max_particles = n.min(top.max_particles),
-                Err(_) => return false,
+            ("shadows", _) => match count(u16::from(top.shadows)) {
+                Some(n) => self.shadows = n as u8,
+                None => return false,
+            },
+            ("max_lights", _) => match count(top.max_lights) {
+                // No light at all is not a row: the lamps are what the sim says is lit.
+                Some(n) => self.max_lights = n.max(1),
+                None => return false,
+            },
+            ("max_particles", _) => match count(top.max_particles) {
+                Some(n) => self.max_particles = n,
+                None => return false,
             },
             _ => return false,
         }
         true
+    }
+
+    /// A row's value as `config.json` holds it: `"on"` or `"off"`, or the count.
+    pub fn get(&self, key: &str) -> Option<String> {
+        let b = |v: bool| Some(if v { "on" } else { "off" }.to_owned());
+        match key {
+            "normal_light" => b(self.normal_light),
+            "shadows" => Some(self.shadows.to_string()),
+            "silhouettes" => b(self.silhouettes),
+            "max_lights" => Some(self.max_lights.to_string()),
+            "bloom" => b(self.bloom),
+            "grade" => b(self.grade),
+            "sharp" => b(self.sharp),
+            "frame_skip" => b(self.frame_skip),
+            "weather" => b(self.weather),
+            "fog" => b(self.fog),
+            "water" => b(self.water),
+            "wet" => b(self.wet),
+            "god_rays" => b(self.god_rays),
+            "sky" => b(self.sky),
+            "max_particles" => Some(self.max_particles.to_string()),
+            _ => None,
+        }
+    }
+
+    /// The rows a player can turn at `tier` (the Controls screen's toggles): those the tier draws
+    /// (§1.3's `Needs` column and the per-tier cells that say "no").
+    pub fn rows(tier: Tier) -> impl Iterator<Item = FeatureRow> {
+        ROWS.into_iter().filter(move |r| match r.key {
+            "normal_light" | "sharp" | "wet" | "grade" => {
+                tier == Tier::T1 || (tier == Tier::T2 && r.key != "normal_light")
+            }
+            "shadows" => tier > Tier::T0,
+            "silhouettes" => tier < Tier::T2,
+            "god_rays" | "bloom" => tier == Tier::T2,
+            _ => true,
+        })
+    }
+
+    /// The row's next value as the Controls screen turns it: a switch flips; a count steps down
+    /// by halves from the tier's own (lamp shadows to none), then back up to it.
+    pub fn cycle(&mut self, tier: Tier, key: &str) {
+        let top = Features::of(tier);
+        let half = |v: u16, most: u16, floor: u16| if v <= floor { most } else { (v / 2).max(floor) };
+        match key {
+            "shadows" => {
+                let v = u16::from(self.shadows);
+                self.shadows = if v == 0 {
+                    top.shadows
+                } else if v <= 2 {
+                    0
+                } else {
+                    (v / 2) as u8
+                };
+            }
+            "max_lights" => self.max_lights = half(self.max_lights, top.max_lights, top.max_lights / 4),
+            "max_particles" => self.max_particles = half(self.max_particles, top.max_particles, top.max_particles / 4),
+            _ => {
+                if let Some(v) = self.get(key) {
+                    self.set(tier, key, if v == "on" { "off" } else { "on" });
+                }
+            }
+        }
     }
 }
 

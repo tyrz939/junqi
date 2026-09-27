@@ -43,11 +43,8 @@ const ROWS: [&[FrameId]; 5] = [
 pub fn unit(sets: &[Rendered], font: &Font, scale: u32) -> Image {
     let s = scale.max(1);
     let (fw, fh) = sets.first().map_or((person::W as u32, person::H as u32), |r| (r.set.w as u32, r.set.h as u32));
-    let rows: Vec<&[FrameId]> = ROWS
-        .iter()
-        .copied()
-        .filter(|ids| sets.iter().any(|r| ids.iter().any(|&f| r.set.frame(f).is_some())))
-        .collect();
+    let rows: Vec<&[FrameId]> =
+        ROWS.iter().copied().filter(|ids| sets.iter().any(|r| ids.iter().any(|&f| r.set.frame(f).is_some()))).collect();
     let cols = 7u32;
     let cell = (fw * s + PAD, fh * s + 14 + PAD);
     let strip_h = fh + 20;

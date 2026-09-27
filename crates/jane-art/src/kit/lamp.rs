@@ -69,7 +69,17 @@ pub(crate) fn draw(c: &mut Canvas, k: &Kit, state: State) -> Option<Stand> {
                     c.line((x0, bowl_y + 4), (x1, foot - 1), k.trim.at(Tone::Shade), 1, 3);
                 }
             }
-            c.polygon_lit(&[(cx - bw / 2, bowl_y), (cx + bw / 2 - 1, bowl_y), (cx + bw / 2 - 3, bowl_y + 4), (cx - bw / 2 + 2, bowl_y + 4)], k.trim, 90, Z::flat(5));
+            c.polygon_lit(
+                &[
+                    (cx - bw / 2, bowl_y),
+                    (cx + bw / 2 - 1, bowl_y),
+                    (cx + bw / 2 - 3, bowl_y + 4),
+                    (cx - bw / 2 + 2, bowl_y + 4),
+                ],
+                k.trim,
+                90,
+                Z::flat(5),
+            );
             c.hline(cx - bw / 2, cx + bw / 2 - 1, bowl_y, k.trim.at(Tone::Light), 5);
             if lit {
                 embers(c, cx - bw / 2 + 2, bowl_y, bw - 4);
@@ -131,21 +141,29 @@ pub(crate) fn draw(c: &mut Canvas, k: &Kit, state: State) -> Option<Stand> {
                         let d = dx * dx + dy * dy;
                         let keep = d < 170 || (d < 256 && super::parts::hash(k.seed, x / 2, y / 2 + 90) % 3 != 0);
                         if keep {
-                            let t = if d < 50 { Tone::High } else if d < 150 { Tone::Light } else { Tone::Base };
+                            let t = if d < 50 {
+                                Tone::High
+                            } else if d < 150 {
+                                Tone::Light
+                            } else {
+                                Tone::Base
+                            };
                             c.fill_rect(Rect::new(x, y, 1, 1), k.accent.at(t), 1);
                         }
                     }
                 }
                 for i in 0..5 {
                     let hh = super::parts::hash(k.seed, i, 82);
-                    let (x, y) = (r.x + 4 + (hh % (r.w - 8) as u32) as i32, r.y + 2 + ((hh >> 8) % (r.h - 6) as u32) as i32);
+                    let (x, y) =
+                        (r.x + 4 + (hh % (r.w - 8) as u32) as i32, r.y + 2 + ((hh >> 8) % (r.h - 6) as u32) as i32);
                     c.fill_rect(Rect::new(x, y, 1, 2), k.accent.at(Tone::Glint), 2);
                 }
                 c.set_emitting(false);
             } else {
                 for i in 0..4 {
                     let hh = super::parts::hash(k.seed, i, 81);
-                    let (x, y) = (r.x + 3 + (hh % (r.w - 6) as u32) as i32, r.y + 3 + ((hh >> 8) % (r.h - 6) as u32) as i32);
+                    let (x, y) =
+                        (r.x + 3 + (hh % (r.w - 6) as u32) as i32, r.y + 3 + ((hh >> 8) % (r.h - 6) as u32) as i32);
                     c.fill_rect(Rect::new(x, y, 2, 2), Ramp::Stone.at(Tone::Light), 1);
                 }
             }

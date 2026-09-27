@@ -31,12 +31,44 @@ impl Prepared {
 
 #[derive(Clone, Debug)]
 enum Osc {
-    Fm { pc: f32, pm: f32, pm2: f32, fb: f32, i1: f32, i1_floor: f32, i1_coef: f32, i2: f32, i2_coef: f32 },
-    Table { phases: [f32; 4], ratios: [f32; 4], pans: [(f32, f32); 4], n: usize, breath: Svf, pink: Pink, formants: Vec<Svf> },
+    Fm {
+        pc: f32,
+        pm: f32,
+        pm2: f32,
+        fb: f32,
+        i1: f32,
+        i1_floor: f32,
+        i1_coef: f32,
+        i2: f32,
+        i2_coef: f32,
+    },
+    Table {
+        phases: [f32; 4],
+        ratios: [f32; 4],
+        pans: [(f32, f32); 4],
+        n: usize,
+        breath: Svf,
+        pink: Pink,
+        formants: Vec<Svf>,
+    },
     Pluck(Box<Pluck>),
-    Bell { modes: Box<Modal>, strike: f32, strike_coef: f32, strike_f: Svf },
-    Drum { phase: f32, bend: f32, bend_coef: f32, click: f32, click_coef: f32, click_f: Svf },
-    Noise { pink: Pink },
+    Bell {
+        modes: Box<Modal>,
+        strike: f32,
+        strike_coef: f32,
+        strike_f: Svf,
+    },
+    Drum {
+        phase: f32,
+        bend: f32,
+        bend_coef: f32,
+        click: f32,
+        click_coef: f32,
+        click_f: Svf,
+    },
+    Noise {
+        pink: Pink,
+    },
 }
 
 /// One sounding note.
@@ -116,7 +148,15 @@ impl Voice {
                     pans[k] = pan_gains((pan + spread * 0.6).clamp(-1.0, 1.0));
                 }
                 let formants = i.formants.iter().map(|f| Svf::new(f[0], f[1], sr)).collect();
-                Osc::Table { phases, ratios, pans, n, breath: Svf::new(hz * 2.0, 1.5, sr), pink: Pink::default(), formants }
+                Osc::Table {
+                    phases,
+                    ratios,
+                    pans,
+                    n,
+                    breath: Svf::new(hz * 2.0, 1.5, sr),
+                    pink: Pink::default(),
+                    formants,
+                }
             }
             VoiceKind::Pluck => {
                 let t60 = i.sustain_s * (261.63 / hz).powf(0.5);
@@ -342,11 +382,8 @@ impl Voice {
             }
             let g = e * self.amp;
             // A table voice panned each of its unison voices already.
-            let (vl, vr) = if matches!(self.osc, Osc::Table { .. }) {
-                (l * g, r * g)
-            } else {
-                (l * g * self.gl, r * g * self.gr)
-            };
+            let (vl, vr) =
+                if matches!(self.osc, Osc::Table { .. }) { (l * g, r * g) } else { (l * g * self.gl, r * g * self.gr) };
             ol[k] += vl;
             or[k] += vr;
             sl[k] += vl * self.send;

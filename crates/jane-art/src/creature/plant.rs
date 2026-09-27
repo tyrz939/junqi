@@ -81,11 +81,37 @@ fn cactus(c: &mut Canvas, k: &Coat, facing: Facing, (sway, bob, shuffle, lean, o
     let top = ay - 30 + bob;
     let x = ax + sway + lean;
     let mut m = Canvas::new(c.w(), c.h());
-    m.polyline_fill(&[(ax - 5, ay - 2), (ax + 4, ay - 2), (x + 5, top + 5), (x + 3, top), (x - 4, top), (x - 6, top + 5)], Ix::INK, 1);
+    m.polyline_fill(
+        &[(ax - 5, ay - 2), (ax + 4, ay - 2), (x + 5, top + 5), (x + 3, top), (x - 4, top), (x - 6, top + 5)],
+        Ix::INK,
+        1,
+    );
     // The arms: out and up.
     let (ly, ry) = (ay - 17 + bob, ay - 21 + bob);
-    m.polyline_fill(&[(ax - 5, ly), (ax - 10, ly), (ax - 12 + sway, ly - 8), (ax - 9 + sway, ly - 9), (ax - 8, ly - 3), (ax - 5, ly - 3)], Ix::INK, 1);
-    m.polyline_fill(&[(ax + 4, ry), (ax + 9, ry), (ax + 11 + sway, ry - 7), (ax + 8 + sway, ry - 8), (ax + 7, ry - 3), (ax + 4, ry - 3)], Ix::INK, 1);
+    m.polyline_fill(
+        &[
+            (ax - 5, ly),
+            (ax - 10, ly),
+            (ax - 12 + sway, ly - 8),
+            (ax - 9 + sway, ly - 9),
+            (ax - 8, ly - 3),
+            (ax - 5, ly - 3),
+        ],
+        Ix::INK,
+        1,
+    );
+    m.polyline_fill(
+        &[
+            (ax + 4, ry),
+            (ax + 9, ry),
+            (ax + 11 + sway, ry - 7),
+            (ax + 8 + sway, ry - 8),
+            (ax + 7, ry - 3),
+            (ax + 4, ry - 3),
+        ],
+        Ix::INK,
+        1,
+    );
     c.inflate(&m, k.body, 3, relief::BODY);
     // Ribs down the column, spines lit along them.
     for dx in [-3, 0, 3] {
@@ -107,7 +133,16 @@ fn cactus(c: &mut Canvas, k: &Coat, facing: Facing, (sway, bob, shuffle, lean, o
         let eyes: &[(i32, i32)] = if facing == Facing::Side { &[(fx + 2, fy)] } else { &[(fx, fy), (fx + 4, fy)] };
         eyes_glow(c, k, eyes, relief::BODY.hi + 1);
         let mw = if open { 3 } else { 1 };
-        c.fill_rect(Rect::new(fx + if facing == Facing::Side { 2 } else { 1 }, fy + 4, 4 - i32::from(facing == Facing::Side), mw), k.body.at(Tone::Deep), relief::BODY.hi + 1);
+        c.fill_rect(
+            Rect::new(
+                fx + if facing == Facing::Side { 2 } else { 1 },
+                fy + 4,
+                4 - i32::from(facing == Facing::Side),
+                mw,
+            ),
+            k.body.at(Tone::Deep),
+            relief::BODY.hi + 1,
+        );
     }
 }
 
@@ -187,8 +222,22 @@ fn flower(c: &mut Canvas, k: &Coat, facing: Facing, (sway, bob, shuffle, lean, o
 /// Point `i` of `n` round a circle of radius `r`, from a table of sixteen directions.
 fn ring_at(i: i32, n: i32, r: i32) -> (i32, i32) {
     const DIRS: [(i32, i32); 16] = [
-        (0, -100), (38, -92), (71, -71), (92, -38), (100, 0), (92, 38), (71, 71), (38, 92),
-        (0, 100), (-38, 92), (-71, 71), (-92, 38), (-100, 0), (-92, -38), (-71, -71), (-38, -92),
+        (0, -100),
+        (38, -92),
+        (71, -71),
+        (92, -38),
+        (100, 0),
+        (92, 38),
+        (71, 71),
+        (38, 92),
+        (0, 100),
+        (-38, 92),
+        (-71, 71),
+        (-92, 38),
+        (-100, 0),
+        (-92, -38),
+        (-71, -71),
+        (-38, -92),
     ];
     let (x, y) = DIRS[((i * 16 / n) % 16) as usize];
     (x * r / 100, y * r / 100)
@@ -215,7 +264,12 @@ fn pumpkin(c: &mut Canvas, k: &Coat, facing: Facing, (sway, bob, shuffle, lean, 
     let (sx, sy) = (g.x + g.w / 2, g.y);
     c.fill_rect(Rect::new(sx - 1, sy - 4, 3, 5), Ramp::WoodDark.at(Tone::Base), relief::HEAD.lo);
     c.vline(sx - 1, sy - 4, sy, Ramp::WoodDark.at(Tone::Light), relief::HEAD.lo);
-    c.polyline(&[(sx + 1, sy - 3), (sx + 5, sy - 5), (sx + 6, sy - 2), (sx + 4, sy - 1)], Ramp::Leaf.at(Tone::Base), 1, relief::HEAD.lo);
+    c.polyline(
+        &[(sx + 1, sy - 3), (sx + 5, sy - 5), (sx + 6, sy - 2), (sx + 4, sy - 1)],
+        Ramp::Leaf.at(Tone::Base),
+        1,
+        relief::HEAD.lo,
+    );
     if facing == Facing::Up {
         return;
     }

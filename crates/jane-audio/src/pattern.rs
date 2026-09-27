@@ -21,9 +21,18 @@ pub enum Step {
     Rest,
     Hold,
     /// A degree (0-based: `1` is 0), a semitone alteration and an octave shift.
-    Note { deg: i32, acc: i32, oct: i32, vel: f32, maybe: bool },
+    Note {
+        deg: i32,
+        acc: i32,
+        oct: i32,
+        vel: f32,
+        maybe: bool,
+    },
     /// A chord, a drum hit, or a place a drift may sound.
-    Hit { vel: f32, maybe: bool },
+    Hit {
+        vel: f32,
+        maybe: bool,
+    },
 }
 
 /// A chord as the progression names it, for half a bar.
@@ -63,8 +72,20 @@ impl Chord {
         let semis = match k {
             0 => 0,
             2 => match (self.sus, self.third) {
-                (2, _) => if borrowed { 2 } else { diatonic(1) },
-                (4, _) => if borrowed { 5 } else { diatonic(3) },
+                (2, _) => {
+                    if borrowed {
+                        2
+                    } else {
+                        diatonic(1)
+                    }
+                }
+                (4, _) => {
+                    if borrowed {
+                        5
+                    } else {
+                        diatonic(3)
+                    }
+                }
                 (_, Some(t)) => t,
                 _ if borrowed => 4,
                 _ => diatonic(2),

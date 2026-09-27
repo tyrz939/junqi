@@ -89,7 +89,13 @@ pub(super) fn face(pat: P, r: Ramp, accent: Option<Ramp>, wx: i32, wy: i32, y: i
                         6 => Tone::Lift,
                         _ => Tone::Base,
                     };
-                    let t = if yy == 0 { t.step(1) } else if yy == 6 { t.step(-1) } else { t };
+                    let t = if yy == 0 {
+                        t.step(1)
+                    } else if yy == 6 {
+                        t.step(-1)
+                    } else {
+                        t
+                    };
                     (r.at(t), normal(if lx == 0 { -30 } else { 0 }, FACE))
                 }
             }
@@ -168,7 +174,19 @@ pub(super) fn face(pat: P, r: Ramp, accent: Option<Ramp>, wx: i32, wy: i32, y: i
                     _ => Tone::Deep,
                 };
                 let t = if flange { t.step(1) } else { t };
-                (iron.at(t), normal(0, if y <= 4 { FACE - 60 } else if y >= 7 { FACE + 30 } else { FACE }))
+                (
+                    iron.at(t),
+                    normal(
+                        0,
+                        if y <= 4 {
+                            FACE - 60
+                        } else if y >= 7 {
+                            FACE + 30
+                        } else {
+                            FACE
+                        },
+                    ),
+                )
             } else if (11..=12).contains(&y) {
                 // A copper run below it on brackets.
                 if lx == 16 {

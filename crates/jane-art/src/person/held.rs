@@ -81,7 +81,11 @@ pub(super) fn draw(c: &mut Canvas, d: &Dress, r: &Rig, hx: i32, hy: i32) {
             c.vline(x + 1, hy - 12, foot - 2, wood.at(Tone::Shade), z);
             if d.look.held == HeldItem::Broom {
                 let bx = x + i32::from(side) - 2;
-                c.polyline_fill(&[(bx, foot - 5), (bx + 5, foot - 5), (bx + 7, foot), (bx - 2, foot)], Ramp::Reed.at(Tone::Base), z);
+                c.polyline_fill(
+                    &[(bx, foot - 5), (bx + 5, foot - 5), (bx + 7, foot), (bx - 2, foot)],
+                    Ramp::Reed.at(Tone::Base),
+                    z,
+                );
                 for k in 0..3 {
                     c.vline(bx + 1 + 2 * k, foot - 3, foot - 1, Ramp::Reed.at(Tone::Shade), z);
                 }
@@ -116,7 +120,11 @@ pub(super) fn draw(c: &mut Canvas, d: &Dress, r: &Rig, hx: i32, hy: i32) {
             // A billhook: a short handle and a curved blade hooked at its tip.
             let (tx, ty) = if side { (hx + 5, hy - 4) } else { (hx + 1, hy - 6) };
             c.line((hx + 1, hy + 1), (tx - 1, ty + 2), wood.at(Tone::Base), 2, z);
-            c.polyline_fill(&[(tx - 1, ty + 2), (tx + 1, ty - 2), (tx + 3, ty - 3), (tx + 3, ty - 1), (tx + 1, ty + 1)], Ramp::Iron.at(Tone::Light), z + 1);
+            c.polyline_fill(
+                &[(tx - 1, ty + 2), (tx + 1, ty - 2), (tx + 3, ty - 3), (tx + 3, ty - 1), (tx + 1, ty + 1)],
+                Ramp::Iron.at(Tone::Light),
+                z + 1,
+            );
             c.dot(tx + 3, ty - 3, Ramp::Iron.at(Tone::High), z + 1);
         }
         HeldItem::Book => {

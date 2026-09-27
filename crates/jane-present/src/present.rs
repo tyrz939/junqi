@@ -17,16 +17,16 @@ use jane_sim::ids::PropIx;
 use jane_sim::view::View;
 
 use crate::atlas::{Atlas, RefId};
+use crate::atmos::Atmosphere;
 use crate::backend::AtlasPages;
 use crate::camera::{Camera, alpha_256};
 use crate::chunks::{ChunkCache, LRU, Need};
 use crate::creatures::{self, Creatures};
 use crate::drawlist::{DrawCmd, DrawList};
 use crate::frame::{
-    CANVAS_H, CANVAS_W, CELL, CHUNK_PX, Caster, ChunkCmd, ChunkId, Depth, FX_TO_CANVAS, Flags, Frame, Light, LightKind,
-    Pass, Post, Rgb, Span, SpriteCmd, Tier, Tint, height_of_rows, rows_up,
+    CANVAS_H, CANVAS_W, CELL, CHUNK_PX, Caster, ChunkCmd, ChunkId, Depth, FX_TO_CANVAS, Features, Flags, Frame, Light,
+    LightKind, Pass, Post, Rgb, Span, SpriteCmd, Tier, Tint, height_of_rows, rows_up,
 };
-use crate::atmos::Atmosphere;
 use crate::fx::Fx;
 use crate::light::{Sky, flicker, lantern_lit, sky};
 use crate::people::{self, People};
@@ -111,8 +111,8 @@ struct PropRec {
     h: i32,
     look: RefId,
     flat: bool,
-    /// Set into a wall's face (a door, a lamp on its bracket): drawn over the face and standing
-    /// on the face's foot, so it throws no shadow of its own (the wall throws it).
+    /// Set into a wall's face (a door, a lamp on its bracket, a hanging): drawn over the face and
+    /// standing on the face's foot, so it throws no shadow of its own (the wall throws it).
     flush: bool,
 }
 
@@ -235,6 +235,24 @@ impl Present {
     /// where a sheet holds the weather (`Atmosphere::force`).
     pub fn atmos_mut(&mut self) -> &mut Atmosphere {
         &mut self.atmos
+    }
+
+    /// The `Features` rows in force (§1.3).
+    pub fn features(&self) -> Features {
+        self.atmos.features
+    }
+
+    /// Sets the rows, each held to what this presenter's tier draws; they show from the next
+    /// tick (the particle pool) or the next frame (the rest).
+    pub fn set_features(&mut self, f: Features) {
+        let tier = self.frame.tier;
+        let mut held = Features::of(tier);
+        for k in Features::KEYS {
+            if let Some(v) = f.get(k) {
+                held.set(tier, k, &v);
+            }
+        }
+        self.atmos.features = held;
     }
 
     /// The effect pool's parts alive: the effects' and the weather's.
@@ -540,9 +558,11 @@ impl Present {
     /// torch's pool lies on the floor it lights, not in the masonry, on every tier.
     ///
     /// And a prop drawn over a wall's face and standing on the face's foot (a door, a sign on the
-    /// wall) is set into it: its px halfway and three quarters up stand on its own foot row as
-    /// the face's there do. It throws no shadow of its own, so a door never shadows the wall it
-    /// is set in.
+    /// wall, a hanging: chains or a portrait, which stands on its cell's back edge by
+    /// `jane_art::kit::hung`) is set into it: its px halfway and three quarters up stand on its
+    /// own foot row as the face's there do. It throws no shadow of its own, so a door never
+    /// shadows the wall it is set in, and chains under a torch never throw a wedge across the
+    /// floor.
     fn against_walls(&mut self) {
         /// How far a light is looked for open ground, px.
         const REACH: i32 = 24;
@@ -837,7 +857,8 @@ impl Present {
                 }
                 // A creature trots, sits a while after it stops, and strikes in three beats.
                 (None, Some(set)) => {
-                    let attack = u.struck.map(|(t, _)| self.tick.wrapping_sub(t)).filter(|&t| t < 3 * creatures::ATTACK_TICKS);
+                    let attack =
+                        u.struck.map(|(t, _)| self.tick.wrapping_sub(t)).filter(|&t| t < 3 * creatures::ATTACK_TICKS);
                     let pose = creatures::Pose {
                         facing: u.facing,
                         anim: u.anim,
@@ -984,7 +1005,10 @@ impl Present {
         for l in &mut f.lights {
             l.holder = l.holder.and_then(|k| holders.binary_search_by_key(&k, |h| h.0).ok().map(|i| holders[i].1));
         }
+        // The tier's counts, or fewer where the `max_lights` and `shadows` rows are turned down.
         let (most, casting) = max_lights(f.tier);
+        let rows = self.atmos.features;
+        let (most, casting) = (most.min(usize::from(rows.max_lights)), casting.min(usize::from(rows.shadows)));
         if f.lights.len() > most || f.lights.iter().filter(|l| l.casts).count() > casting {
             let mid = (cw / 2, ch / 2);
             let d2 = |l: &Light| {
@@ -1009,6 +1033,7 @@ impl Present {
         // Silhouette sun shadows under the standing things, where the tier has no shadow maps:
         // from a sun or a moon, not from the afterglow, a sky too broad to throw a silhouette.
         if f.tier <= Tier::T1
+            && rows.silhouettes
             && let Some(sun) = sky.sun.filter(|s| s.spread <= crate::light::SILHOUETTE_SPREAD)
             && casters.len > 0
         {
@@ -1029,10 +1054,13 @@ impl Present {
         self.fx.draw_air(f, cam, alpha, sky);
         // The grade (§1.3 `grade`): all of it at T2; at T1 the tint and the lift alone, and none
         // of the exposure, saturation or bloom T1 does not draw.
+        // The `grade` row off leaves the lit frame as it is; the `bloom` row off, the glow.
+        let post = if rows.grade { sky.post } else { Post { bloom: sky.post.bloom, ..Post::NONE } };
+        let post = Post { bloom: if rows.bloom { post.bloom } else { 0 }, ..post };
         if f.tier >= Tier::T2 {
-            f.passes.push(Pass::Post(sky.post));
+            f.passes.push(Pass::Post(post));
         } else if f.tier == Tier::T1 {
-            f.passes.push(Pass::Post(Post { tint: sky.post.tint, lift: sky.post.lift, ..Post::NONE }));
+            f.passes.push(Pass::Post(Post { tint: post.tint, lift: post.lift, ..Post::NONE }));
         }
         &self.frame
     }

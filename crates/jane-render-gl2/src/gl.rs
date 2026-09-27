@@ -194,6 +194,18 @@ impl Gl {
         }
     }
 
+    /// Makes `t` repeat past its edges (the mist tile, which drifts). Its sides must be powers of
+    /// two on GLES 2.
+    pub fn repeat(&self, t: Texture) {
+        // SAFETY: state settings on a texture this context made, bound on the scratch unit.
+        unsafe {
+            self.gl.active_texture(glow::TEXTURE0 + SCRATCH_UNIT);
+            self.gl.bind_texture(glow::TEXTURE_2D, Some(t));
+            self.gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_WRAP_S, glow::REPEAT as i32);
+            self.gl.tex_parameter_i32(glow::TEXTURE_2D, glow::TEXTURE_WRAP_T, glow::REPEAT as i32);
+        }
+    }
+
     /// Writes `data` (`w x h` texels of `format`, rows tight) into `t` at `(x, y)`.
     #[allow(clippy::too_many_arguments)]
     pub fn upload(&self, t: Texture, x: u32, y: u32, w: u32, h: u32, format: Format, data: &[u8]) {
@@ -393,6 +405,15 @@ impl Gl {
                 _ => {}
             }
         }
+    }
+
+    /// Sets a `vec4` array uniform of the program in use from `v`, four floats an element.
+    pub fn set_f4s(&self, u: Option<&Uniform>, v: &[f32]) {
+        if v.len() < 4 {
+            return;
+        }
+        // SAFETY: as above; glow hands GL the slice's length over four, whole elements only.
+        unsafe { self.gl.uniform_4_f32_slice(u, &v[..v.len() / 4 * 4]) }
     }
 
     pub fn buffer(&self) -> Result<Buffer, String> {

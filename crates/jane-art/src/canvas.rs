@@ -1270,7 +1270,8 @@ impl Canvas {
                 let len = isqrt((gx * gx + gy * gy) as u64) as i32;
                 // How far out from the flat middle this px is: 0 there, UNIT at the edge.
                 let u = ((r10 - dd + 5) * UNIT / r10).clamp(0, UNIT);
-                let (nx, ny) = if len == 0 || u == 0 { (0, 0) } else { (-gx * u * 7 / (8 * len), -gy * u * 7 / (8 * len)) };
+                let (nx, ny) =
+                    if len == 0 || u == 0 { (0, 0) } else { (-gx * u * 7 / (8 * len), -gy * u * 7 / (8 * len)) };
                 let n = normal(nx, ny);
                 let [a, b, c] = decode(n);
                 let tone = Tone::ALL[band(lambert([a, b, c]))];
@@ -1285,7 +1286,8 @@ impl Canvas {
     fn distance(&self) -> Vec<i32> {
         let (w, h) = (self.w, self.h);
         let mut d: Vec<i32> = self.albedo.iter().map(|a| if a.is_opaque() { i32::MAX / 2 } else { 0 }).collect();
-        let get = |d: &[i32], x: i32, y: i32| if x < 0 || y < 0 || x >= w || y >= h { 0 } else { d[(y * w + x) as usize] };
+        let get =
+            |d: &[i32], x: i32, y: i32| if x < 0 || y < 0 || x >= w || y >= h { 0 } else { d[(y * w + x) as usize] };
         for y in 0..h {
             for x in 0..w {
                 let i = (y * w + x) as usize;

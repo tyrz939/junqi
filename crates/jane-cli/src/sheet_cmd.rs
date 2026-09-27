@@ -27,7 +27,7 @@ pub const USAGE: &str = "  sheet layers <what> [--frame F] [--out DIR]
   sheet list                          the sprites <what> can name
   sheet scene [--seed N] [--minutes M | --ticks T] [--model reader|rusher] [--night | --hour H[:MM]]
               [--wide] [--backend soft|gl2|wgpu] [--at ZONE[:MARK] | --at MARK]
-              [--weather clear|mist|rain|storm] [--cast SPELL[:TICKS]] [--rows KEY=V,..]
+              [--weather clear|mist|rain|storm] [--cast SPELL[:TICKS] [--spawn UNIT]] [--rows KEY=V,..]
               [--film N[:EVERY]] [--crop X,Y,W,H] [--zoom Z] [--layers] [--show-sun]
               [--out PATH.png | --out DIR]
                                       a model plays the seed from New Game (default 1 minute), then one
@@ -36,7 +36,7 @@ pub const USAGE: &str = "  sheet layers <what> [--frame F] [--out DIR]
                                       feature; --night sets the clock to 22:00 first; --at travels to a
                                       zone's mark (its way in by default; a bare mark is the county's)
                                       first, god on: a frame inside a dungeon; --weather holds the sky;
-                                      --cast casts east; --rows sets Features rows; --film writes N more
+                                      --cast casts east (--spawn puts a unit in its way); --rows sets Features rows; --film writes N more
                                       ticks' frames; --wide draws 21:9 (1008 x 432); --crop and --zoom
                                       write a close look; gl2 takes bench frames' row flags; --layers
                                       also writes the frame's heights and the T2 height field (a px h up
@@ -230,6 +230,7 @@ fn scene(args: &[String]) -> Result<(), String> {
     let gl = crate::scene::GlOpts::parse(args)?;
     let weather = flag("--weather").map(crate::scene::weather).transpose()?;
     let cast = flag("--cast").map(str::to_owned);
+    let spawn = flag("--spawn").map(str::to_owned);
     let rows = crate::scene::rows(flag("--rows"))?;
     let name = format!(
         "scene-{seed}-{ticks}{}{}-{}-{}",
@@ -254,7 +255,8 @@ fn scene(args: &[String]) -> Result<(), String> {
         None => PathBuf::from("sheets").join(format!("{name}.png")),
     };
     let bps = jane_sim::Blueprints::build(seed).map_err(|e| format!("seed {seed}: {e}"))?;
-    let o = crate::scene::Opts { seed, ticks, model, hour, minute, canvas, backend, at, weather, cast, rows, gl };
+    let o =
+        crate::scene::Opts { seed, ticks, model, hour, minute, canvas, backend, at, weather, cast, spawn, rows, gl };
     // `--film N[:EVERY]`: N ticks more, every EVERY-th a frame, `<name>-<tick>.png` beside the path.
     if let Some(f) = flag("--film") {
         let (n, every) = f.split_once(':').map_or((f, "1"), |p| p);
@@ -267,7 +269,11 @@ fn scene(args: &[String]) -> Result<(), String> {
             let p = dir.join(format!("{stem}-{k:03}.png"));
             std::fs::write(&p, shot.png()).map_err(|e| format!("{}: {e}", p.display()))?;
             // The frame's mean brightness beside it: a flash, a lamp coming on, found by eye.
-            let luma: u64 = shot.px.iter().map(|&c| u64::from((c >> 16) & 0xff) + u64::from((c >> 8) & 0xff) + u64::from(c & 0xff)).sum();
+            let luma: u64 = shot
+                .px
+                .iter()
+                .map(|&c| u64::from((c >> 16) & 0xff) + u64::from((c >> 8) & 0xff) + u64::from(c & 0xff))
+                .sum();
             println!("{} mean {}", p.display(), luma / (3 * shot.px.len().max(1) as u64));
             Ok(())
         });

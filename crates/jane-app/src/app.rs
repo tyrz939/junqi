@@ -158,6 +158,8 @@ struct App<'a> {
     /// Where the reticle is drawn this frame.
     reticle: Option<(i32, i32)>,
     controls: ControlsState,
+    /// The Controls screen turned a `Features` row: the backend is told before the next draw.
+    features_changed: bool,
     /// Playing together: the Host and Join screens, a join under way, the table.
     lan: Lan,
     /// What the bot heard of the steps since it last acted.
@@ -189,6 +191,10 @@ pub fn run(
     let config = Config::load(&dirs);
     let mut present = Present::new(screen.backend().caps().tier);
     screen.backend().upload_atlas(present.atlas());
+    // The Features rows (PRESENTATION.md §1.3): the tier's own with config.json's laid over
+    // them; the presenter acts on most, the backend is handed the ones it draws itself.
+    present.set_features(config.features(present.frame().tier));
+    screen.backend().set_features(&present.features());
     let ui = Ui::new(present.ui_art().clone());
     let describe = screen.describe();
     let mut win = screen.size();
@@ -237,6 +243,7 @@ pub fn run(
         console: Console::default(),
         reticle: None,
         controls: ControlsState::default(),
+        features_changed: false,
         lan: Lan::new(args.port),
         bot_heard: Vec::new(),
         sound,
@@ -273,6 +280,8 @@ pub fn run(
     let mut pad_was = (0u32, false, false);
     let mut title_clock = (Instant::now(), 0u32, Duration::ZERO, Duration::ZERO, 0u32);
     let mut typing = false;
+    // The tick the backend last drew at (the `frame_skip` row).
+    let mut drawn_at: u64 = 0;
     // Script presses to let go of next frame.
     let mut release: Vec<u16> = Vec::new();
 
@@ -463,12 +472,24 @@ pub fn run(
         typing = app.ui.typing;
         app.ui.finish(app.present.frame_mut());
         app.stages[2] = t_draw.elapsed().as_micros() as u32;
+        if app.features_changed {
+            screen.backend().set_features(&app.present.features());
+            app.features_changed = false;
+        }
+        // The `frame_skip` row (§1.12 step 8): the backend draws and shows every other tick, 30
+        // fps; the sim, the presenter and the UI still run every frame, so no press is lost.
+        let skip = app.present.features().frame_skip && app.ticks < drawn_at + 2 && args.ticks.is_none();
         let t_backend = Instant::now();
-        screen.backend().draw(app.present.frame());
+        if !skip {
+            screen.backend().draw(app.present.frame());
+            drawn_at = app.ticks;
+        }
         app.stages[3] = t_backend.elapsed().as_micros() as u32;
         let draw_time = t_draw.elapsed();
         let t_wait = Instant::now();
-        screen.show(win)?;
+        if !skip {
+            screen.show(win)?;
+        }
         app.stages[4] = t_wait.elapsed().as_micros() as u32;
         app.perf.frame(app.stages, app.started.elapsed().as_millis() as u64, app.ticks);
         for out in std::mem::take(&mut app.ui.out) {
@@ -1245,9 +1266,22 @@ impl App<'_> {
                 }
                 Menu::Controls => {
                     let backend = self.config.backend.clone().unwrap_or_else(|| "auto".into());
-                    let info = ControlsInfo { assist: self.input.assist, backend: &backend, volumes: self.config.volumes() };
+                    let info = ControlsInfo {
+                        assist: self.input.assist,
+                        backend: &backend,
+                        volumes: self.config.volumes(),
+                        rows: self.present.features(),
+                        tier: self.present.frame().tier,
+                    };
                     let out = controls::draw(&mut self.ui, &mut self.controls, &mut self.input.bindings, info);
                     let mut save = out.bindings;
+                    // A row turned: the presenter at once, the backend before the next draw.
+                    if let Some((rows, key)) = out.rows {
+                        self.present.set_features(rows);
+                        self.config.set_feature(self.present.frame().tier, &self.present.features(), key);
+                        self.features_changed = true;
+                        save = true;
+                    }
                     if out.bindings {
                         self.config.set_bindings(&self.input.bindings);
                     }

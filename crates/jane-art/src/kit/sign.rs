@@ -108,7 +108,11 @@ pub(crate) fn draw(c: &mut Canvas, k: &Kit, state: State) -> Option<Stand> {
             let top = foot - (k.h - 2).min(36);
             ao(c, 0, w - 1, foot - 1, 6);
             let mut m = Canvas::new(c.w(), c.h());
-            m.polyline_fill(&[(3, foot - 1), (2, top + 8), (5, top + 1), (9, top), (12, top + 5), (13, foot - 2)], Ix::INK, 1);
+            m.polyline_fill(
+                &[(3, foot - 1), (2, top + 8), (5, top + 1), (9, top), (12, top + 5), (13, foot - 2)],
+                Ix::INK,
+                1,
+            );
             c.inflate(&m, k.body, 3, Z::new(2, 6));
             c.retone(k.body, super::HARD);
             for (i, (x, y)) in [(5, top + 9), (9, top + 16), (6, top + 22)].into_iter().enumerate() {
@@ -128,13 +132,25 @@ pub(crate) fn draw(c: &mut Canvas, k: &Kit, state: State) -> Option<Stand> {
             blocks(c, Rect::new(6, foot - 12, w - 12, 4), k.body, 4, 10, false, k.seed ^ 1, 5);
             let (sx, sw) = (w / 2 - 4, 8);
             let top = foot - (k.h - 8).min(40);
-            c.polygon_lit(&[(sx + 1, top + 6), (sx + sw - 2, top + 6), (sx + sw - 1, foot - 12), (sx, foot - 12)], k.body, 80, Z::flat(6));
+            c.polygon_lit(
+                &[(sx + 1, top + 6), (sx + sw - 2, top + 6), (sx + sw - 1, foot - 12), (sx, foot - 12)],
+                k.body,
+                80,
+                Z::flat(6),
+            );
             c.retone(k.body, super::HARD);
             // The cross.
             c.fill_normal(Rect::new(w / 2 - 1, top, 2, 7), k.body.at(Tone::Base), parts::south(), 7);
             c.fill_normal(Rect::new(w / 2 - 3, top + 2, 6, 2), k.body.at(Tone::Base), parts::south(), 7);
             c.vline(w / 2 - 1, top, top + 6, k.body.at(Tone::Light), 7);
-            writing(c, Rect::new(sx + 2, top + 10, sw - 4, foot - 14 - top - 10), rows.max(4), k.body.at(Tone::Deep), k.seed, 7);
+            writing(
+                c,
+                Rect::new(sx + 2, top + 10, sw - 4, foot - 14 - top - 10),
+                rows.max(4),
+                k.body.at(Tone::Deep),
+                k.seed,
+                7,
+            );
             Stand::Up(&[])
         }
         "portrait" => {
@@ -148,7 +164,17 @@ pub(crate) fn draw(c: &mut Canvas, k: &Kit, state: State) -> Option<Stand> {
             c.rect_bevel(r, k.accent, 2, Z::new(5, 7));
             let canvas = Rect::new(r.x + 2, r.y + 2, r.w - 4, r.h - 4);
             c.fill_normal(canvas, Ramp::ClothGreen.at(Tone::Shade), parts::south(), 6);
-            c.polygon_cloth(&[(cx - 4, canvas.y + 9), (cx + 3, canvas.y + 9), (cx + 5, canvas.bottom() - 1), (cx - 6, canvas.bottom() - 1)], Ramp::ClothBlack, 60, Z::flat(7));
+            c.polygon_cloth(
+                &[
+                    (cx - 4, canvas.y + 9),
+                    (cx + 3, canvas.y + 9),
+                    (cx + 5, canvas.bottom() - 1),
+                    (cx - 6, canvas.bottom() - 1),
+                ],
+                Ramp::ClothBlack,
+                60,
+                Z::flat(7),
+            );
             c.ellipse(Rect::new(cx - 3, canvas.y + 2, 6, 7), Ramp::Skin.at(Tone::Mid), 7);
             for i in 0..3 {
                 c.line((cx - 3 + i, canvas.y + 2), (cx + 1 + i, canvas.y + 8), Ramp::ClothLinen.at(Tone::Light), 1, 8);
@@ -158,7 +184,11 @@ pub(crate) fn draw(c: &mut Canvas, k: &Kit, state: State) -> Option<Stand> {
         "chalk" => {
             // Chalk on the flags: a mark and an arrow, rubbed (or pencil, in the accent).
             let y = foot - 7;
-            let chalk = if k.look.materials.accent.is_some() { k.accent.at(Tone::Base) } else { Ramp::HairWhite.at(Tone::Light) };
+            let chalk = if k.look.materials.accent.is_some() {
+                k.accent.at(Tone::Base)
+            } else {
+                Ramp::HairWhite.at(Tone::Light)
+            };
             c.line((3, y + 3), (8, y - 1), chalk, 2, 1);
             c.line((8, y - 1), (12, y + 3), chalk, 2, 1);
             c.line((4, y + 5), (11, y + 5), Ramp::HairWhite.at(Tone::Base), 2, 1);
@@ -173,7 +203,14 @@ pub(crate) fn draw(c: &mut Canvas, k: &Kit, state: State) -> Option<Stand> {
             c.vline(r.x + r.w / 2, r.y + 1, r.bottom() - 1, k.body.at(Tone::Base), 1);
             c.fill_normal(Rect::new(r.right() - 2, r.y, 2, 2), k.body.at(Tone::Mid), crate::canvas::normal(40, -40), 2);
             writing(c, Rect::new(r.x + 1, r.y + 2, r.w / 2 - 2, r.h - 3), 3, Ramp::Slate.at(Tone::Mid), k.seed, 1);
-            writing(c, Rect::new(r.x + r.w / 2 + 1, r.y + 2, r.w / 2 - 2, r.h - 3), 3, Ramp::Slate.at(Tone::Mid), k.seed ^ 5, 1);
+            writing(
+                c,
+                Rect::new(r.x + r.w / 2 + 1, r.y + 2, r.w / 2 - 2, r.h - 3),
+                3,
+                Ramp::Slate.at(Tone::Mid),
+                k.seed ^ 5,
+                1,
+            );
             Stand::Flat(2)
         }
         _ => return None,

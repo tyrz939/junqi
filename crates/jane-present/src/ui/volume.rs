@@ -39,7 +39,12 @@ pub fn nudge(v: Volumes, ch: u8, by: i32) -> Volumes {
 /// Returns the volumes when they changed this frame.
 pub fn row(ui: &mut Ui, x: i32, y: i32, v: Volumes, lit: Option<u8>) -> Option<Volumes> {
     let mut out = None;
-    ui.text(x + 20, y + 3, "Volume", Ink::small(if lit.is_some() { style::text_bright() } else { style::text() }).shadow());
+    ui.text(
+        x + 20,
+        y + 3,
+        "Volume",
+        Ink::small(if lit.is_some() { style::text_bright() } else { style::text() }).shadow(),
+    );
     if ui.interactive
         && let Some(ch) = lit
     {
@@ -56,7 +61,12 @@ pub fn row(ui: &mut Ui, x: i32, y: i32, v: Volumes, lit: Option<u8>) -> Option<V
         let ch = i as u8;
         let gx = x + 200 + i as i32 * 132;
         let on = lit == Some(ch);
-        ui.text(gx, y - line_h(Face::Fine) + 1, label, Ink::fine(if on { style::gold() } else { style::quiet() }).shadow());
+        ui.text(
+            gx,
+            y - line_h(Face::Fine) + 1,
+            label,
+            Ink::fine(if on { style::gold() } else { style::quiet() }).shadow(),
+        );
         let minus = Rect::new(gx, y, 22, 22);
         let plus = Rect::new(gx + 74, y, 22, 22);
         if ui.button(wid("vol-down", u32::from(ch)), minus, "-", ButtonKind::Tab { on: false }, true, false) {

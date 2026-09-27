@@ -117,7 +117,8 @@ fn wing(c: &mut Canvas, k: &Coat, pts: &[(i32, i32)], spot: Option<(i32, i32)>, 
             if !inside(x, y) {
                 continue;
             }
-            let edge = (1..=margin).any(|d| !inside(x - d, y) || !inside(x + d, y) || !inside(x, y - d) || !inside(x, y + d));
+            let edge =
+                (1..=margin).any(|d| !inside(x - d, y) || !inside(x + d, y) || !inside(x, y - d) || !inside(x, y + d));
             if edge {
                 let t = if y < (y0 + y1) / 2 { Tone::Base } else { Tone::Shade };
                 c.put(x, y, k.body.at(t), crate::canvas::FLAT, z.lo + 1);
@@ -182,7 +183,13 @@ fn body(c: &mut Canvas, k: &Coat, cx: i32, cy: i32, u: i32, head_down: bool, sid
     m.ellipse(head, Ix::INK, 1);
     m.ellipse(abdomen, Ix::INK, 1);
     c.inflate(&m, k.body, sc(1).max(1), z);
-    c.strokes(Rect::new(cx - sc(8), cy - sc(8), sc(16), sc(16)), k.body, StrokeKind::Fur, 8, h32(k.seed, 5, salt::STROKES));
+    c.strokes(
+        Rect::new(cx - sc(8), cy - sc(8), sc(16), sc(16)),
+        k.body,
+        StrokeKind::Fur,
+        8,
+        h32(k.seed, 5, salt::STROKES),
+    );
     // The abdomen's bands.
     if side {
         for x in (abdomen.x + 1..abdomen.right() - 1).step_by(2) {
@@ -206,7 +213,13 @@ fn body(c: &mut Canvas, k: &Coat, cx: i32, cy: i32, u: i32, head_down: bool, sid
     }
     c.set_emitting(false);
     // The feelers: a club on a butterfly's, barbs down a moth's.
-    let (hx, hy) = if side { (head.right() - 1, head.y) } else if head_down { (cx, head.bottom() - 1) } else { (cx, head.y) };
+    let (hx, hy) = if side {
+        (head.right() - 1, head.y)
+    } else if head_down {
+        (cx, head.bottom() - 1)
+    } else {
+        (cx, head.y)
+    };
     for s in [-1, 1] {
         let tip = if side {
             (hx + sc(3) + i32::from(s > 0) * sc(1), hy - sc(3) + i32::from(s > 0))
@@ -256,7 +269,11 @@ pub(crate) fn draw(c: &mut Canvas, k: &Coat, facing: Facing, beat: Beat) {
                 let f: Vec<(i32, i32)> = fore.iter().map(|&q| p(q)).collect();
                 let h: Vec<(i32, i32)> = hind.iter().map(|&q| p(q)).collect();
                 // The fore and hind wings' eyespots: a butterfly's toward the apex, a moth's in the middle.
-                let fspot = if moth { p(((fore[1].0 + fore[2].0) / 2 - 3, (fore[1].1 + fore[2].1) / 2 + 1)) } else { p((fore[1].0 - 3, fore[1].1 + 2)) };
+                let fspot = if moth {
+                    p(((fore[1].0 + fore[2].0) / 2 - 3, (fore[1].1 + fore[2].1) / 2 + 1))
+                } else {
+                    p((fore[1].0 - 3, fore[1].1 + 2))
+                };
                 let hspot = p(((hind[1].0 + hind[2].0 + hind[3].0) / 3 - 1, (hind[1].1 + hind[2].1 + hind[3].1) / 3));
                 wing(c, k, &h, (moth && open > 0).then_some(hspot), spot_r, u, false, relief::FAR);
                 wing(c, k, &f, (open > 0).then_some(fspot), spot_r, u, false, relief::NEAR);
@@ -272,16 +289,46 @@ pub(crate) fn draw(c: &mut Canvas, k: &Coat, facing: Facing, beat: Beat) {
                 // behind and below it. Spread, both are edge on: a thin blade either way.
                 let (f, h): (Outline, Outline) = match open {
                     0 => (
-                        vec![(cx + dx, cy - sc(1)), (cx - sc(2) + dx, cy - sc(11)), (cx + sc(5) + dx, cy - sc(9)), (cx + sc(2) + dx, cy - sc(1))],
-                        vec![(cx + dx, cy), (cx - sc(6) + dx, cy - sc(6)), (cx - sc(5) + dx, cy - sc(2)), (cx - sc(1) + dx, cy + sc(1))],
+                        vec![
+                            (cx + dx, cy - sc(1)),
+                            (cx - sc(2) + dx, cy - sc(11)),
+                            (cx + sc(5) + dx, cy - sc(9)),
+                            (cx + sc(2) + dx, cy - sc(1)),
+                        ],
+                        vec![
+                            (cx + dx, cy),
+                            (cx - sc(6) + dx, cy - sc(6)),
+                            (cx - sc(5) + dx, cy - sc(2)),
+                            (cx - sc(1) + dx, cy + sc(1)),
+                        ],
                     ),
                     1 => (
-                        vec![(cx + dx, cy - sc(1)), (cx - sc(6) + dx, cy - sc(8)), (cx + sc(3) + dx, cy - sc(7)), (cx + sc(2) + dx, cy - sc(1))],
-                        vec![(cx + dx, cy), (cx - sc(7) + dx, cy - sc(3)), (cx - sc(6) + dx, cy), (cx - sc(1) + dx, cy + sc(1))],
+                        vec![
+                            (cx + dx, cy - sc(1)),
+                            (cx - sc(6) + dx, cy - sc(8)),
+                            (cx + sc(3) + dx, cy - sc(7)),
+                            (cx + sc(2) + dx, cy - sc(1)),
+                        ],
+                        vec![
+                            (cx + dx, cy),
+                            (cx - sc(7) + dx, cy - sc(3)),
+                            (cx - sc(6) + dx, cy),
+                            (cx - sc(1) + dx, cy + sc(1)),
+                        ],
                     ),
                     _ => (
-                        vec![(cx + dx, cy - sc(2)), (cx - sc(8) + dx, cy - sc(4)), (cx + sc(3) + dx, cy - sc(4)), (cx + sc(2) + dx, cy - sc(1))],
-                        vec![(cx + dx, cy - sc(1)), (cx - sc(7) + dx, cy - sc(2)), (cx - sc(6) + dx, cy), (cx + dx, cy)],
+                        vec![
+                            (cx + dx, cy - sc(2)),
+                            (cx - sc(8) + dx, cy - sc(4)),
+                            (cx + sc(3) + dx, cy - sc(4)),
+                            (cx + sc(2) + dx, cy - sc(1)),
+                        ],
+                        vec![
+                            (cx + dx, cy - sc(1)),
+                            (cx - sc(7) + dx, cy - sc(2)),
+                            (cx - sc(6) + dx, cy),
+                            (cx + dx, cy),
+                        ],
                     ),
                 };
                 let spot = (open < 2 && !far).then(|| (cx + dx, (f[1].1 + f[3].1) / 2));

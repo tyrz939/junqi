@@ -83,6 +83,19 @@ pub fn seed(sprite: &str) -> u32 {
     crate::person::seed(sprite)
 }
 
+/// The shapes hung on the wall over the cell they are placed in (a dungeon's `scatter_wall`:
+/// DUNGEONS.md, the scatter): drawn up the face behind the footprint, not standing on it.
+const HUNG: [&str; 6] = ["chains", "cobweb", "poster", "frame", "moss", "tools"];
+
+/// Whether `look` hangs on the wall behind its footprint (chains, a cobweb, a notice, a portrait,
+/// moss, tools leant against it): its heights stand up from the footprint's back edge, the
+/// wall's face's foot, as the face's own do, so it lies on the face in every tier's shadow and
+/// never stands a cell in front of the wall as a post (PRESENTATION.md §1.7). The presenter
+/// stands it on that row (`jane_present::props`).
+pub fn hung(look: &PropLook) -> bool {
+    look.family == PropFamily::SmallThing && HUNG.contains(&look.shape)
+}
+
 /// The frames a look promises: its bases, then `On` and `Open` as its states list them.
 pub fn frame_ids(look: &PropLook) -> Vec<FrameId> {
     let mut v = vec![FrameId::Base];
@@ -206,7 +219,9 @@ fn finish(c: &mut Canvas, k: &Kit, stand: Stand) {
     c.relight(&glow);
     match stand {
         Stand::Up(tops) => {
-            c.upright(k.foot());
+            // A hanging stands on the face's foot, as the face does: what lies on the floor in
+            // front of it (a tool's head, the moss's clump) is the ground.
+            c.upright(if hung(&k.look) { k.back() } else { k.foot() });
             for &(r, h) in tops {
                 c.lid(r, h);
             }

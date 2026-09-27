@@ -74,7 +74,8 @@ pub fn icons(sets: &[Rendered], font: &Font) -> Image {
 pub fn props(sets: &[Rendered], font: &Font) -> Image {
     const S: u32 = 3;
     let cols = 4u32;
-    let cell_w = sets.iter().map(|r| r.set.w as u32 * (S + 1) * r.set.frames.len().min(3) as u32).max().unwrap_or(64) + 40;
+    let cell_w =
+        sets.iter().map(|r| r.set.w as u32 * (S + 1) * r.set.frames.len().min(3) as u32).max().unwrap_or(64) + 40;
     let cell_w = cell_w.min(560);
     let cell_h = sets.iter().map(|r| r.set.h as u32 * S).max().unwrap_or(48) + 30;
     let rows = (sets.len() as u32).div_ceil(cols);

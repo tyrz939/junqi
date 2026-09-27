@@ -167,7 +167,10 @@ pub fn render_fighting(look: &PersonLook, seed: u32, fight: Fight) -> Result<Spr
         let standing = Dress { look: PersonLook { extras: unseated(look.extras), ..d.look }, ..d };
         let body = draw::frame(&standing, p, Facing::Down, pose);
         // Only flesh bleeds: a skeleton, a waxwork, a statue, an armour and a shade lie dry.
-        frames.push((id, fallen::fallen(&body, seed ^ k as u32, matches!(d.skin, Ramp::Skin | Ramp::SkinPale | Ramp::SkinDark))));
+        frames.push((
+            id,
+            fallen::fallen(&body, seed ^ k as u32, matches!(d.skin, Ramp::Skin | Ramp::SkinPale | Ramp::SkinDark)),
+        ));
     }
     for (id, facing, pose) in pose::fight(fight.attacks, fight.casts) {
         frames.push((id, draw::frame(&d, p, facing, pose)));
@@ -186,7 +189,9 @@ pub fn render_fighting(look: &PersonLook, seed: u32, fight: Fight) -> Result<Spr
 /// `extras` without `seated` (a slice made once at boot for a seated look, else the same one).
 fn unseated(extras: &'static [jane_data::Extra]) -> &'static [jane_data::Extra] {
     if extras.contains(&jane_data::Extra::Seated) {
-        Box::leak(extras.iter().copied().filter(|&e| e != jane_data::Extra::Seated).collect::<Vec<_>>().into_boxed_slice())
+        Box::leak(
+            extras.iter().copied().filter(|&e| e != jane_data::Extra::Seated).collect::<Vec<_>>().into_boxed_slice(),
+        )
     } else {
         extras
     }

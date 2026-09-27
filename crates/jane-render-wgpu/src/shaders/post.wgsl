@@ -12,7 +12,8 @@ struct Step {
     texel: vec2<f32>,
     // Upscale: output px per canvas px; the canvas's size in px.
     scale: f32,
-    pad: f32,
+    // Upscale: 1 draws nearest (the `sharp` row off).
+    nearest: f32,
 };
 
 @group(1) @binding(0) var<uniform> st: Step;
@@ -100,7 +101,7 @@ fn fs_upscale(i: FullOut) -> @location(0) vec4<f32> {
     let texel = i.pos.xy / st.scale;
     let base = floor(texel);
     let f = texel - base - 0.5;
-    let region = 0.5 - 0.5 / st.scale;
+    let region = select(0.5 - 0.5 / st.scale, 0.5, st.nearest > 0.5);
     let off = (f - clamp(f, vec2<f32>(-region), vec2<f32>(region))) * st.scale + 0.5;
     return textureSampleLevel(src, smp, (base + off) / size, 0.0);
 }

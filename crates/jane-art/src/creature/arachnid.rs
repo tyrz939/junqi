@@ -142,7 +142,11 @@ fn top(c: &mut Canvas, k: &Coat, beat: Beat, toward_us: bool) {
         Anatomy::Spider => Rect::new(ax - sc(5), ab_y - sc(3), sc(10), sc(9)),
         _ => Rect::new(ax - sc(7), ab_y - sc(5), sc(14), sc(12)),
     };
-    let ceph = if lurker { Rect::new(ax - sc(3), ceph_y - sc(3), sc(6), sc(5)) } else { Rect::new(ax - sc(5), ceph_y - sc(4), sc(10), sc(8)) };
+    let ceph = if lurker {
+        Rect::new(ax - sc(3), ceph_y - sc(3), sc(6), sc(5))
+    } else {
+        Rect::new(ax - sc(5), ceph_y - sc(4), sc(10), sc(8))
+    };
     let r = reach(k);
     let lw = if u == 3 { 3 } else { 2 };
     // The legs behind the body first, then the body, then the front legs over it.
@@ -243,7 +247,11 @@ fn side(c: &mut Canvas, k: &Coat, beat: Beat) {
             let foot = if raised { (ceph.right() + sc(4), cy - sc(8)) } else { (ax + lunge + fx, ay - 1 - lift) };
             leg(c, k, hip, knee, foot, lw, if far { relief::FAR } else { relief::LEG });
             if far {
-                c.shade(Rect::new(foot.0.min(knee.0) - 2, knee.1 - 2, (foot.0 - knee.0).abs() + 5, ay - knee.1 + 3), k.body, 1);
+                c.shade(
+                    Rect::new(foot.0.min(knee.0) - 2, knee.1 - 2, (foot.0 - knee.0).abs() + 5, ay - knee.1 + 3),
+                    k.body,
+                    1,
+                );
             }
         }
     };
@@ -264,7 +272,13 @@ fn side(c: &mut Canvas, k: &Coat, beat: Beat) {
     }
     c.set_emitting(false);
     let fang = if k.look.anatomy == Anatomy::Queen { Ramp::Bone } else { k.body };
-    c.line((ceph.right() - 1, ceph.bottom() - sc(2)), (ceph.right() + i32::from(beat == Beat::Attack(1)), ceph.bottom()), fang.at(Tone::Light), 1, z);
+    c.line(
+        (ceph.right() - 1, ceph.bottom() - sc(2)),
+        (ceph.right() + i32::from(beat == Beat::Attack(1)), ceph.bottom()),
+        fang.at(Tone::Light),
+        1,
+        z,
+    );
 }
 
 /// On its back: the belly up in its own colour, the legs drawn in over it in hooks, pair by

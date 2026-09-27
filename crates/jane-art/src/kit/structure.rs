@@ -56,7 +56,12 @@ pub(crate) fn draw(c: &mut Canvas, k: &Kit, state: State) -> Option<Stand> {
             c.ellipse(Rect::new(x + 3, basin.y + 2, fw - 6, basin.h - 4), Ramp::Water.at(Tone::Base), 5);
             c.ellipse(Rect::new(x + 8, basin.y + 5, fw - 16, basin.h - 10), Ramp::Water.at(Tone::Light), 5);
             let cx = w / 2;
-            c.polygon_lit(&[(cx - 2, foot - 36), (cx + 1, foot - 36), (cx + 2, foot - 16), (cx - 3, foot - 16)], k.body, 90, Z::flat(7));
+            c.polygon_lit(
+                &[(cx - 2, foot - 36), (cx + 1, foot - 36), (cx + 2, foot - 16), (cx - 3, foot - 16)],
+                k.body,
+                90,
+                Z::flat(7),
+            );
             c.ellipse(Rect::new(cx - 7, foot - 40, 14, 5), k.body.at(Tone::Light), 8);
             for dx in [-6, 5] {
                 c.vline(cx + dx, foot - 36, foot - 20, Ramp::Water.at(Tone::High), 8);
@@ -70,7 +75,12 @@ pub(crate) fn draw(c: &mut Canvas, k: &Kit, state: State) -> Option<Stand> {
             let top = foot - (h - 2).min(44);
             ao(c, cx - 8, cx + 7, foot, 6);
             c.rect_bevel(Rect::new(cx - 8, foot - 5, 16, 5), k.body, 1, Z::new(2, 4));
-            c.polygon_lit(&[(cx - 5, top + 5), (cx + 4, top + 5), (cx + 4, foot - 5), (cx - 5, foot - 5)], k.body, 110, Z::new(4, 6));
+            c.polygon_lit(
+                &[(cx - 5, top + 5), (cx + 4, top + 5), (cx + 4, foot - 5), (cx - 5, foot - 5)],
+                k.body,
+                110,
+                Z::new(4, 6),
+            );
             c.retone(k.body, super::HARD);
             for x in [cx - 3, cx, cx + 2] {
                 c.vline(x, top + 6, foot - 6, k.body.at(Tone::Mid), 6);
@@ -84,14 +94,23 @@ pub(crate) fn draw(c: &mut Canvas, k: &Kit, state: State) -> Option<Stand> {
             let cx = w / 2;
             let top = foot - (h - 2).min(44);
             ao(c, cx - 9, cx + 8, foot, 6);
-            c.polygon_lit(&[(cx - 4, top + 6), (cx + 3, top + 6), (cx + 3, foot - 1), (cx - 4, foot - 1)], k.body, 100, Z::new(4, 6));
+            c.polygon_lit(
+                &[(cx - 4, top + 6), (cx + 3, top + 6), (cx + 3, foot - 1), (cx - 4, foot - 1)],
+                k.body,
+                100,
+                Z::new(4, 6),
+            );
             c.retone(k.body, super::HARD);
             for (x, y0, y1) in [(cx - 2, top + 10, top + 22), (cx, top + 24, foot - 6), (cx + 1, top + 12, top + 17)] {
                 c.vline(x, y0, y1, k.body.at(Tone::Mid), 6);
             }
             c.dot(cx - 1, top + 28, k.body.at(Tone::Deep), 6);
             c.rect_bevel(Rect::new(cx - 11, top + 1, 22, 5), k.body, 1, Z::new(6, 8));
-            c.polyline_fill(&[(cx - 4, top + 6), (cx + 3, top + 6), (cx + 1, top + 8), (cx - 2, top + 8)], k.body.at(Tone::Light), 8);
+            c.polyline_fill(
+                &[(cx - 4, top + 6), (cx + 3, top + 6), (cx + 1, top + 8), (cx - 2, top + 8)],
+                k.body.at(Tone::Light),
+                8,
+            );
             c.hline(cx - 5, cx + 4, top + 13, k.trim.at(Tone::Light), 7);
             c.hline(cx - 5, cx + 4, top + 14, k.trim.at(Tone::Shade), 7);
             for x in [cx - 8, cx + 6] {
@@ -129,11 +148,20 @@ pub(crate) fn draw(c: &mut Canvas, k: &Kit, state: State) -> Option<Stand> {
             let top = foot - (h - 2).min(44);
             ao(c, cx - 8, cx + 7, foot, 6);
             c.rect_bevel(Rect::new(cx - 7, foot - 4, 14, 4), k.body, 1, Z::new(2, 3));
-            c.polygon_lit(&[(cx - 3, top + 5), (cx + 2, top + 5), (cx + 2, foot - 4), (cx - 3, foot - 4)], k.body, 110, Z::new(4, 6));
+            c.polygon_lit(
+                &[(cx - 3, top + 5), (cx + 2, top + 5), (cx + 2, foot - 4), (cx - 3, foot - 4)],
+                k.body,
+                110,
+                Z::new(4, 6),
+            );
             c.retone(k.body, super::HARD);
             c.vline(cx - 4, top + 7, foot - 5, k.body.at(Tone::Light), 6);
             c.vline(cx + 3, top + 7, foot - 5, k.body.at(Tone::Shade), 6);
-            c.polyline_fill(&[(cx - 10, top + 3), (cx + 9, top + 3), (cx + 3, top + 10), (cx - 4, top + 10)], k.body.at(Tone::Base), 7);
+            c.polyline_fill(
+                &[(cx - 10, top + 3), (cx + 9, top + 3), (cx + 3, top + 10), (cx - 4, top + 10)],
+                k.body.at(Tone::Base),
+                7,
+            );
             c.hline(cx - 10, cx + 9, top + 3, k.body.at(Tone::Light), 7);
             c.rect_bevel(Rect::new(cx - 11, top - 1, 22, 4), k.body, 1, Z::new(7, 8));
             for x in [cx - 8, cx - 3, cx + 2, cx + 7] {
@@ -173,7 +201,12 @@ pub(crate) fn draw(c: &mut Canvas, k: &Kit, state: State) -> Option<Stand> {
             ao(c, cx - 9, cx + 8, foot, 6);
             c.rect_bevel(Rect::new(cx - 9, foot - 4, 18, 4), k.body, 1, Z::new(2, 3));
             c.ellipse_lit(Rect::new(cx - 7, foot - 7, 14, 4), k.body, Z::new(3, 4));
-            c.polygon_lit(&[(cx - 5, top + 8), (cx + 4, top + 8), (cx + 4, foot - 6), (cx - 5, foot - 6)], k.body, 120, Z::new(4, 6));
+            c.polygon_lit(
+                &[(cx - 5, top + 8), (cx + 4, top + 8), (cx + 4, foot - 6), (cx - 5, foot - 6)],
+                k.body,
+                120,
+                Z::new(4, 6),
+            );
             c.retone(k.body, super::HARD);
             for x in [cx - 3, cx - 1, cx + 1, cx + 3] {
                 c.vline(x, top + 9, foot - 7, k.body.at(Tone::Mid), 6);
@@ -246,7 +279,12 @@ pub(crate) fn draw(c: &mut Canvas, k: &Kit, state: State) -> Option<Stand> {
             while x + 7 < w - 3 {
                 let ramp = items[(parts::hash(k.seed, i, 60) % 5) as usize];
                 let (iw, ih) = if i % 3 == 2 { (10, 12) } else { (6, 8) };
-                c.polygon_cloth(&[(x, top + 2), (x + iw - 1, top + 2), (x + iw, top + 2 + ih), (x - 1, top + 2 + ih)], ramp, 50, Z::flat(5));
+                c.polygon_cloth(
+                    &[(x, top + 2), (x + iw - 1, top + 2), (x + iw, top + 2 + ih), (x - 1, top + 2 + ih)],
+                    ramp,
+                    50,
+                    Z::flat(5),
+                );
                 c.hline(x, x + iw - 1, top + 2, ramp.at(Tone::Light), 5);
                 c.dot(x + 1, top + 1, Ramp::WoodPale.at(Tone::Light), 6);
                 x += iw + 3;
@@ -265,7 +303,12 @@ pub(crate) fn draw(c: &mut Canvas, k: &Kit, state: State) -> Option<Stand> {
             if mine {
                 c.retone(k.body, super::HARD);
                 band(c, x, x + cw - 1, top.bottom(), k.trim, 5);
-                c.fill_normal(Rect::new(top.x + 2, top.y + 2, top.w - 4, top.h - 3), Ramp::Stone.at(Tone::Mid), FLAT, 5);
+                c.fill_normal(
+                    Rect::new(top.x + 2, top.y + 2, top.w - 4, top.h - 3),
+                    Ramp::Stone.at(Tone::Mid),
+                    FLAT,
+                    5,
+                );
             }
             let wheels: &[i32] = if k.look.shape == "trolley" { &[x + 2, x + cw - 6] } else { &[x + 3, x + cw - 9] };
             let rad = if k.look.shape == "trolley" { 2 } else { 3 };
@@ -285,7 +328,20 @@ pub(crate) fn draw(c: &mut Canvas, k: &Kit, state: State) -> Option<Stand> {
             ao(c, cx - 8, cx + 7, foot, 5);
             box3(c, cx - 5, 10, foot, 7, 3, k.trim, Some((1, k.seed)), 3);
             let top = foot - 15;
-            c.polyline_fill(&[(cx - 11, top), (cx + 8, top), (cx + 6, top + 3), (cx + 3, top + 4), (cx + 3, top + 6), (cx - 4, top + 6), (cx - 4, top + 4), (cx - 8, top + 3)], k.body.at(Tone::Base), 5);
+            c.polyline_fill(
+                &[
+                    (cx - 11, top),
+                    (cx + 8, top),
+                    (cx + 6, top + 3),
+                    (cx + 3, top + 4),
+                    (cx + 3, top + 6),
+                    (cx - 4, top + 6),
+                    (cx - 4, top + 4),
+                    (cx - 8, top + 3),
+                ],
+                k.body.at(Tone::Base),
+                5,
+            );
             c.hline(cx - 10, cx + 7, top, k.body.at(Tone::High), 6);
             c.hline(cx - 9, cx + 6, top + 1, k.body.at(Tone::Light), 6);
             Stand::Up(&[])
@@ -310,7 +366,12 @@ pub(crate) fn draw(c: &mut Canvas, k: &Kit, state: State) -> Option<Stand> {
             let cx = w / 2;
             if k.look.shape == "pillar_box" {
                 ao(c, cx - 5, cx + 4, foot, 4);
-                c.polygon_lit(&[(cx - 5, foot - 20), (cx + 4, foot - 20), (cx + 4, foot - 1), (cx - 5, foot - 1)], k.body, 110, Z::new(2, 5));
+                c.polygon_lit(
+                    &[(cx - 5, foot - 20), (cx + 4, foot - 20), (cx + 4, foot - 1), (cx - 5, foot - 1)],
+                    k.body,
+                    110,
+                    Z::new(2, 5),
+                );
                 c.ellipse_lit(Rect::new(cx - 6, foot - 24, 12, 6), k.body, Z::new(5, 7));
                 c.retone(k.body, super::HARD);
                 c.hline(cx - 3, cx + 2, foot - 16, Ix::SEAM, 6);
@@ -341,8 +402,20 @@ pub(crate) fn draw(c: &mut Canvas, k: &Kit, state: State) -> Option<Stand> {
                 "ticket_window" => {
                     let (_, front) = box3(c, x, bw, foot, tall - 6, 6, k.body, Some((3, k.seed)), 3);
                     glass(c, Rect::new(front.x + 5, front.y + 5, front.w - 10, 8), false, 5);
-                    c.fill_normal(Rect::new(front.x + 3, front.y + 14, front.w - 6, 3), k.trim.at(Tone::Light), FLAT, 6);
-                    parts::writing(c, Rect::new(front.x + 4, front.y + 1, front.w - 8, 3), 1, k.accent.at(Tone::Light), k.seed, 6);
+                    c.fill_normal(
+                        Rect::new(front.x + 3, front.y + 14, front.w - 6, 3),
+                        k.trim.at(Tone::Light),
+                        FLAT,
+                        6,
+                    );
+                    parts::writing(
+                        c,
+                        Rect::new(front.x + 4, front.y + 1, front.w - 8, 3),
+                        1,
+                        k.accent.at(Tone::Light),
+                        k.seed,
+                        6,
+                    );
                 }
                 "shelter" => {
                     for px in [x + 1, x + bw - 4] {
@@ -368,7 +441,12 @@ pub(crate) fn draw(c: &mut Canvas, k: &Kit, state: State) -> Option<Stand> {
             let cx = w / 2;
             ao(c, cx - 4, cx + 3, foot, 4);
             box3(c, cx - 5, 10, foot, 4, 3, Ramp::Stone, None, 2);
-            c.polygon_lit(&[(cx - 3, foot - 22), (cx + 2, foot - 22), (cx + 2, foot - 5), (cx - 3, foot - 5)], k.body, 100, Z::new(3, 5));
+            c.polygon_lit(
+                &[(cx - 3, foot - 22), (cx + 2, foot - 22), (cx + 2, foot - 5), (cx - 3, foot - 5)],
+                k.body,
+                100,
+                Z::new(3, 5),
+            );
             c.retone(k.body, super::HARD);
             c.disc_lit(cx, foot - 23, 2, k.body, Z::flat(6));
             c.line((cx - 3, foot - 20), (cx - 8, foot - 14), k.body.at(Tone::Base), 1, 6);
@@ -397,7 +475,12 @@ pub(crate) fn draw(c: &mut Canvas, k: &Kit, state: State) -> Option<Stand> {
             ao(c, cx - 3, cx + 2, foot, 3);
             post(c, cx - 1, top + 8, foot - 1, 2, k.trim, 3);
             c.line((cx - 10, top + 13), (cx + 9, top + 13), k.trim.at(Tone::Base), 2, 4);
-            c.polygon_cloth(&[(cx - 9, top + 12), (cx + 8, top + 12), (cx + 5, top + 26), (cx - 6, top + 26)], k.body, 60, Z::flat(5));
+            c.polygon_cloth(
+                &[(cx - 9, top + 12), (cx + 8, top + 12), (cx + 5, top + 26), (cx - 6, top + 26)],
+                k.body,
+                60,
+                Z::flat(5),
+            );
             for (sx, sy) in [(cx - 10, top + 15), (cx + 9, top + 15), (cx - 5, top + 27)] {
                 c.fill_rect(Rect::new(sx, sy, 2, 2), Ramp::Reed.at(Tone::Light), 6);
             }
@@ -415,7 +498,11 @@ pub(crate) fn draw(c: &mut Canvas, k: &Kit, state: State) -> Option<Stand> {
             let top = foot - (h - 3).min(24);
             c.polygon_lit(&[(x + tw / 2, top), (x + tw - 1, foot - 1), (x, foot - 1)], k.body, 120, Z::new(2, 8));
             c.retone(k.body, super::HARD);
-            c.polyline_fill(&[(x + tw / 2, top + 6), (x + tw / 2 + 4, foot - 1), (x + tw / 2 - 4, foot - 1)], Ix::SEAM, 9);
+            c.polyline_fill(
+                &[(x + tw / 2, top + 6), (x + tw / 2 + 4, foot - 1), (x + tw / 2 - 4, foot - 1)],
+                Ix::SEAM,
+                9,
+            );
             c.line((x + tw / 2, top), (x + tw - 1, top - 2), k.trim.at(Tone::Base), 1, 9);
             Stand::Up(&[])
         }
@@ -467,7 +554,19 @@ pub(crate) fn draw(c: &mut Canvas, k: &Kit, state: State) -> Option<Stand> {
             c.fill_normal(Rect::new(2, top, w - 4, 4), k.trim.at(Tone::Base), parts::south(), 4);
             c.hline(2, w - 3, top, k.trim.at(Tone::Light), 4);
             let cx = w / 2;
-            c.polygon_lit(&[(cx - 4, top + 5), (cx + 3, top + 5), (cx + 6, top + 18), (cx + 8, top + 21), (cx - 9, top + 21), (cx - 7, top + 18)], k.body, 110, Z::new(6, 9));
+            c.polygon_lit(
+                &[
+                    (cx - 4, top + 5),
+                    (cx + 3, top + 5),
+                    (cx + 6, top + 18),
+                    (cx + 8, top + 21),
+                    (cx - 9, top + 21),
+                    (cx - 7, top + 18),
+                ],
+                k.body,
+                110,
+                Z::new(6, 9),
+            );
             c.retone(k.body, super::HARD);
             c.hline(cx - 9, cx + 8, top + 21, k.body.at(Tone::Shade), 9);
             c.disc_lit(cx - 1, top + 23, 2, k.body, Z::flat(9));
@@ -481,7 +580,12 @@ pub(crate) fn draw(c: &mut Canvas, k: &Kit, state: State) -> Option<Stand> {
             if k.look.shape == "rope" {
                 c.line((cx - 1, top), (cx - 1, foot - 3), k.body.at(Tone::Base), 2, 4);
                 c.vline(cx - 1, top, foot - 3, k.body.at(Tone::Light), 4);
-                c.polygon_lit(&[(cx - 3, foot - 18), (cx + 2, foot - 18), (cx + 2, foot - 8), (cx - 3, foot - 8)], k.accent, 90, Z::flat(5));
+                c.polygon_lit(
+                    &[(cx - 3, foot - 18), (cx + 2, foot - 18), (cx + 2, foot - 8), (cx - 3, foot - 8)],
+                    k.accent,
+                    90,
+                    Z::flat(5),
+                );
                 for y in [foot - 16, foot - 12] {
                     c.hline(cx - 3, cx + 2, y, Ramp::ClothLinen.at(Tone::Base), 5);
                 }
@@ -517,11 +621,33 @@ pub(crate) fn draw(c: &mut Canvas, k: &Kit, state: State) -> Option<Stand> {
             }
             c.rect_bevel(Rect::new(cx - 6, foot - 4, 12, 4), k.trim, 1, Z::new(2, 3));
             for x in [cx - 4, cx + 1] {
-                c.polygon_lit(&[(x, foot - 16), (x + 3, foot - 16), (x + 3, foot - 4), (x, foot - 4)], k.body, 90, Z::flat(4));
+                c.polygon_lit(
+                    &[(x, foot - 16), (x + 3, foot - 16), (x + 3, foot - 4), (x, foot - 4)],
+                    k.body,
+                    90,
+                    Z::flat(4),
+                );
             }
-            c.polygon_lit(&[(cx - 6, top + 11), (cx + 5, top + 11), (cx + 4, top + 22), (cx + 3, foot - 15), (cx - 4, foot - 15), (cx - 5, top + 22)], k.body, 110, Z::new(5, 8));
+            c.polygon_lit(
+                &[
+                    (cx - 6, top + 11),
+                    (cx + 5, top + 11),
+                    (cx + 4, top + 22),
+                    (cx + 3, foot - 15),
+                    (cx - 4, foot - 15),
+                    (cx - 5, top + 22),
+                ],
+                k.body,
+                110,
+                Z::new(5, 8),
+            );
             for x in [cx - 9, cx + 6] {
-                c.polygon_lit(&[(x, top + 11), (x + 3, top + 11), (x + 3, top + 22), (x, top + 22)], k.body, 90, Z::flat(7));
+                c.polygon_lit(
+                    &[(x, top + 11), (x + 3, top + 11), (x + 3, top + 22), (x, top + 22)],
+                    k.body,
+                    90,
+                    Z::flat(7),
+                );
                 c.disc_lit(x + 1, top + 11, 2, k.body, Z::flat(9));
             }
             c.ellipse_lit(Rect::new(cx - 4, top, 8, 11), k.body, Z::new(8, 10));
@@ -536,7 +662,12 @@ pub(crate) fn draw(c: &mut Canvas, k: &Kit, state: State) -> Option<Stand> {
             let top = foot - (h - 2).min(40);
             ao(c, cx - 8, cx + 7, foot, 5);
             box3(c, cx - 9, 18, foot, 5, 6, k.trim, None, 2);
-            c.polygon_cloth(&[(cx - 5, top + 10), (cx + 4, top + 10), (cx + 6, foot - 8), (cx - 7, foot - 8)], k.accent, 80, Z::new(4, 6));
+            c.polygon_cloth(
+                &[(cx - 5, top + 10), (cx + 4, top + 10), (cx + 6, foot - 8), (cx - 7, foot - 8)],
+                k.accent,
+                80,
+                Z::new(4, 6),
+            );
             c.ellipse_lit(Rect::new(cx - 4, top, 8, 10), k.body, Z::new(6, 8));
             c.dot(cx - 2, top + 5, Ix::SEAM, 9);
             c.dot(cx + 1, top + 5, Ix::SEAM, 9);
@@ -583,7 +714,11 @@ pub(crate) fn draw(c: &mut Canvas, k: &Kit, state: State) -> Option<Stand> {
 /// A pitched roof over `x..x + w` whose ridge is on row `top`: slates in the accent's ramp.
 fn roof(c: &mut Canvas, k: &Kit, x: i32, w: i32, top: i32, z: u8) {
     let ramp = k.accent;
-    c.polyline_fill(&[(x + w / 2 - 1, top), (x + w / 2, top), (x + w - 1, top + 7), (x, top + 7)], ramp.at(Tone::Base), z);
+    c.polyline_fill(
+        &[(x + w / 2 - 1, top), (x + w / 2, top), (x + w - 1, top + 7), (x, top + 7)],
+        ramp.at(Tone::Base),
+        z,
+    );
     for y in (top + 2..top + 8).step_by(2) {
         c.hline(x + 1, x + w - 2, y, ramp.at(Tone::Mid), z);
     }

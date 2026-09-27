@@ -14,8 +14,8 @@
 
 use jane_core::Angle;
 use jane_core::action::School;
-use jane_core::grid::Rect;
 use jane_core::angle::{cos_q15, sin_q15};
+use jane_core::grid::Rect;
 
 use crate::canvas::{Canvas, Z};
 use crate::palette::{Ramp, Tone};
@@ -1506,7 +1506,10 @@ pub fn cast_glow(s: School) -> Canvas {
     let mut c = Canvas::new(13, 13);
     c.set_emitting(true);
     c.soft_ellipse(Rect::new(2, 2, 9, 9), ramp, Z::new(1, 2));
-    c.retone(ramp, [Tone::Base, Tone::Base, Tone::Lift, Tone::Light, Tone::Light, Tone::High, Tone::Glint, Tone::Glint]);
+    c.retone(
+        ramp,
+        [Tone::Base, Tone::Base, Tone::Lift, Tone::Light, Tone::Light, Tone::High, Tone::Glint, Tone::Glint],
+    );
     for (x, y) in [(6, 0), (6, 1), (6, 11), (6, 12), (0, 6), (1, 6), (11, 6), (12, 6)] {
         c.dot(x, y, ramp.at(Tone::Light), 2);
     }

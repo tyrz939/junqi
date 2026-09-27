@@ -64,7 +64,14 @@ fn pose(beat: Beat) -> Pose {
     match beat {
         Beat::Walk(k) => {
             let Step { near: (r0, l0), far: (r1, l1), bob, fwd } = STEP[usize::from(k % 6)];
-            Pose { reach: [r0, r1], lift: [l0, l1], bob, head: (fwd, 0), flick: i32::from(k % 3 == 2), ..Pose::default() }
+            Pose {
+                reach: [r0, r1],
+                lift: [l0, l1],
+                bob,
+                head: (fwd, 0),
+                flick: i32::from(k % 3 == 2),
+                ..Pose::default()
+            }
         }
         Beat::Breathe => Pose { flick: 1, head: (0, 1), ..Pose::default() },
         Beat::Hurt => Pose { head: (-1, 1), shut: true, flick: -1, ..Pose::default() },
@@ -190,7 +197,11 @@ fn front(c: &mut Canvas, k: &Coat, p: &Pose, facing_us: bool, peck: i32) {
     if !facing_us {
         // The tail toward the viewer: a hen's fan over the back, a crow's wedge down.
         if hen {
-            m.polyline_fill(&[(ax - 3, 8 + b), (ax - 1, 3 + b - p.flick), (ax + 2, 3 + b - p.flick), (ax + 3, 8 + b)], Ix::INK, 1);
+            m.polyline_fill(
+                &[(ax - 3, 8 + b), (ax - 1, 3 + b - p.flick), (ax + 2, 3 + b - p.flick), (ax + 3, 8 + b)],
+                Ix::INK,
+                1,
+            );
         } else {
             m.polyline_fill(&[(ax - 1, 12 + b), (ax, 12 + b), (ax + 1, 15 + b), (ax - 2, 15 + b)], Ix::INK, 1);
         }

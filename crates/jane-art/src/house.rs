@@ -64,7 +64,14 @@ pub fn render(look: &HouseLook, sprite: SpriteId, seed: u32) -> Result<SpriteSet
     let walls = if look.style == HouseStyle::Steeple { 0 } else { storey(look.style) * i32::from(look.storeys) };
     let (w, h) = (i32::from(fw) * CELL_PX, i32::from(fh) * CELL_PX + walls + i32::from(look.rise));
     let r = crate::person::ramp;
-    let s = Stuff { look: *look, roof: roof_ramp(look.roof), wall: wall_ramp(look.wall), door: r(look.door)?, trim: r(look.trim)?, seed };
+    let s = Stuff {
+        look: *look,
+        roof: roof_ramp(look.roof),
+        wall: wall_ramp(look.wall),
+        door: r(look.door)?,
+        trim: r(look.trim)?,
+        seed,
+    };
     let mut frames = Vec::new();
     let ids: &[FrameId] = if look.lit { &[FrameId::Base, FrameId::On] } else { &[FrameId::Base] };
     for &id in ids {
@@ -73,7 +80,15 @@ pub fn render(look: &HouseLook, sprite: SpriteId, seed: u32) -> Result<SpriteSet
         frames.push((id, c));
     }
     let emits = if look.lit { vec![Role::Glass] } else { Vec::new() };
-    Ok(SpriteSet { w, h, ax: 0, ay: h - i32::from(fh) * CELL_PX, frames, roles: vec![(Role::Body, s.wall), (Role::Trim, s.roof)], emits })
+    Ok(SpriteSet {
+        w,
+        h,
+        ax: 0,
+        ay: h - i32::from(fh) * CELL_PX,
+        frames,
+        roles: vec![(Role::Body, s.wall), (Role::Trim, s.roof)],
+        emits,
+    })
 }
 
 /// How tall one storey's wall stands, px: a door and a window's height with the lintel over
@@ -275,7 +290,10 @@ fn roof(c: &mut Canvas, s: &Stuff, x0: i32, x1: i32, ridge: i32, eave: i32) {
             m.fill_rect(Rect::new(r.x, r.y, r.w, r.h - 2), Ix::INK, 1);
             m.ellipse(Rect::new(r.x, r.bottom() - 6, r.w, 6), Ix::INK, 1);
             c.inflate(&m, ramp, 4, Z::new(8, 10));
-            c.retone(ramp, [Tone::Shade, Tone::Shade, Tone::Mid, Tone::Base, Tone::Base, Tone::Lift, Tone::Light, Tone::Light]);
+            c.retone(
+                ramp,
+                [Tone::Shade, Tone::Shade, Tone::Mid, Tone::Base, Tone::Base, Tone::Lift, Tone::Light, Tone::Light],
+            );
             // The straw laid in courses: each a lit lip over a band of shade where the next
             // course overhangs it, and the reed's grain in short streaks of two or three px.
             for y in (r.y + 6..r.bottom() - 4).step_by(6) {
@@ -328,7 +346,8 @@ fn roof(c: &mut Canvas, s: &Stuff, x0: i32, x1: i32, ridge: i32, eave: i32) {
             // A few slates or tiles lighter or darker than the rest: weather, in clusters.
             for i in 0..(r.w * r.h / 120).max(2) {
                 let hh = parts::hash(s.seed, i, 13);
-                let (x, y) = (r.x + (hh % r.w as u32) as i32, r.y + 1 + ((hh >> 8) % (r.h - 2).max(1) as u32) as i32 / 3 * 3);
+                let (x, y) =
+                    (r.x + (hh % r.w as u32) as i32, r.y + 1 + ((hh >> 8) % (r.h - 2).max(1) as u32) as i32 / 3 * 3);
                 let t = if hh >> 20 & 1 == 0 { Tone::Light } else { Tone::Mid };
                 for dx in 0..3 {
                     c.tint(x + dx, y, ramp, t);
@@ -476,7 +495,8 @@ fn front_gable(c: &mut Canvas, s: &Stuff, cx: i32, eave: i32, ridge: i32, lit: b
     window(c, s, win, lit, 1);
     // The two slopes: four px of roof along each upper edge, overhanging the eave by two, and a
     // barge board of trim under each.
-    let (west, east) = ([Tone::High, Tone::Light, Tone::Lift, Tone::Base], [Tone::Base, Tone::Mid, Tone::Shade, Tone::Deep]);
+    let (west, east) =
+        ([Tone::High, Tone::Light, Tone::Lift, Tone::Base], [Tone::Base, Tone::Mid, Tone::Shade, Tone::Deep]);
     for i in 0..4 {
         c.line((cx - 1, peak - 1 + i), (cx - half - 2, eave + 1 + i), s.roof.at(west[i as usize]), 1, 12);
         c.line((cx, peak - 1 + i), (cx + half + 1, eave + 1 + i), s.roof.at(east[i as usize]), 1, 12);
@@ -511,7 +531,11 @@ fn porch(c: &mut Canvas, s: &Stuff, cx: i32, foot: i32) {
     for px in [cx - 8, cx + 6] {
         post(c, px, foot - 17, foot - 1, 2, s.trim, 9);
     }
-    c.polyline_fill(&[(cx - 10, foot - 16), (cx - 1, foot - 22), (cx, foot - 22), (cx + 9, foot - 16)], s.roof.at(Tone::Base), 10);
+    c.polyline_fill(
+        &[(cx - 10, foot - 16), (cx - 1, foot - 22), (cx, foot - 22), (cx + 9, foot - 16)],
+        s.roof.at(Tone::Base),
+        10,
+    );
     c.line((cx - 10, foot - 16), (cx - 1, foot - 22), s.roof.at(Tone::Light), 1, 10);
     c.hline(cx - 10, cx + 9, foot - 16, s.roof.at(Tone::Deep), 10);
 }
@@ -532,7 +556,12 @@ fn steeple(c: &mut Canvas, s: &Stuff, lit: bool) {
         window(c, s, Rect::new(x + tw / 2 - 3, foot - 12, 6, 7), true, 1);
     }
     let top = 2;
-    c.polygon_lit(&[(x + tw / 2 - 1, top + 3), (x + tw / 2, top + 3), (x + tw, base), (x - 1, base)], s.roof, 90, Z::new(10, 16));
+    c.polygon_lit(
+        &[(x + tw / 2 - 1, top + 3), (x + tw / 2, top + 3), (x + tw, base), (x - 1, base)],
+        s.roof,
+        90,
+        Z::new(10, 16),
+    );
     c.retone(s.roof, crate::kit::HARD);
     c.vline(x + tw / 2, top, top + 3, Ramp::Iron.at(Tone::Base), 17);
     c.hline(x + tw / 2 - 2, x + tw / 2 + 2, top + 1, Ramp::Iron.at(Tone::Base), 17);

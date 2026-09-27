@@ -84,7 +84,8 @@ impl Engine {
     /// the county's (it varies the music, never the sound effects).
     pub fn new(lib: &Library, sr: f32, seed: u32) -> Engine {
         let insts: Vec<Prepared> = lib.instruments.iter().cloned().map(Prepared::new).collect();
-        let inst_names: BTreeMap<&str, usize> = lib.instruments.iter().enumerate().map(|(i, x)| (x.name.as_str(), i)).collect();
+        let inst_names: BTreeMap<&str, usize> =
+            lib.instruments.iter().enumerate().map(|(i, x)| (x.name.as_str(), i)).collect();
         let songs: Vec<SongData> =
             lib.songs.iter().map(|s| SongData::new(s, &|n: &str| inst_names.get(n).copied().unwrap_or(0))).collect();
         let sfx: Vec<Rendered> = lib.sfx.iter().map(|p| patch::render(p, sr, 0x5eed)).collect();
@@ -185,9 +186,7 @@ impl Engine {
                 }
                 if self.voices.len() >= MAX_SFX {
                     // The one furthest through gives way.
-                    if let Some((i, _)) =
-                        self.voices.iter().enumerate().max_by(|a, b| a.1.pos.total_cmp(&b.1.pos))
-                    {
+                    if let Some((i, _)) = self.voices.iter().enumerate().max_by(|a, b| a.1.pos.total_cmp(&b.1.pos)) {
                         self.voices.swap_remove(i);
                     }
                 }
@@ -284,7 +283,8 @@ impl Engine {
             let d = prev_duck + (self.duck - prev_duck) * t;
             let (vm, vmu, vs) = (v(0), v(1) * d, v(2));
             let va = vs * d;
-            let (wl, wr) = self.reverb.run(msl[k] * vmu + fsl[k] * vs + asl[k] * va, msr[k] * vmu + fsr[k] * vs + asr[k] * va);
+            let (wl, wr) =
+                self.reverb.run(msl[k] * vmu + fsl[k] * vs + asl[k] * va, msr[k] * vmu + fsr[k] * vs + asr[k] * va);
             let l = (ml[k] * vmu + fl[k] * vs + al[k] * va + wl) * vm;
             let r = (mr[k] * vmu + fr[k] * vs + ar[k] * va + wr) * vm;
             let (l, r) = (self.dc[0].run(l), self.dc[1].run(r));

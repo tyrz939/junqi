@@ -81,7 +81,12 @@ fn geometry_each_plan_has_its_box_and_stands_on_its_anchor() {
             assert!(x0 >= 0 && y0 >= 0 && x1 < w && y1 < h, "{} {f:?}", r.key());
             if creature::hovers(l.plan) {
                 // A flyer hovers over its anchor, where its shadow lies: never on it.
-                assert!(f.is_dead() || (ay - h / 2..=ay - 2).contains(&y1), "{} {f:?}: hovering {} over", r.key(), ay - y1);
+                assert!(
+                    f.is_dead() || (ay - h / 2..=ay - 2).contains(&y1),
+                    "{} {f:?}: hovering {} over",
+                    r.key(),
+                    ay - y1
+                );
             } else if matches!(f, FrameId::Down | FrameId::Up | FrameId::Side | FrameId::Idle) {
                 assert_eq!(y1, ay, "{} {f:?}: standing on the anchor row", r.key());
             } else if !f.is_dead() {
@@ -261,7 +266,8 @@ fn dead_frames_lie_down() {
         let (_, y0, _, y1) = drawn(c);
         assert!(y1 - y0 < sy1 - sy0, "{}: {} tall lying, {} standing", r.key(), y1 - y0 + 1, sy1 - sy0 + 1);
         assert!(y1 >= r.set.ay - 2, "{}: floats, lowest row {y1}", r.key());
-        let live = c.albedo().iter().filter(|a| Ramp::of(**a).is_some_and(|(r, _)| palette::PALLID.contains(&r))).count();
+        let live =
+            c.albedo().iter().filter(|a| Ramp::of(**a).is_some_and(|(r, _)| palette::PALLID.contains(&r))).count();
         assert_eq!(live, 0, "{}: a ramp shows unpallid", r.key());
         assert!(c.emissive().iter().all(|&e| e == Ix::CLEAR), "{}: the dead never shine", r.key());
     }
