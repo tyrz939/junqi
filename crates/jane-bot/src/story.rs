@@ -107,6 +107,11 @@ pub struct Story {
 /// (the roses, stones and flowers she has picked up on the way), and food.
 const PROVISIONS: [(&str, u32); 3] = [("potion_stoneskin", 2), ("potion_lifesteal", 1), ("apple", 6)];
 
+/// What she brews for Under the Stone, and how many: the dog's bait for the small snakes ("Feed
+/// the small snakes; do not fight them"), rat meat soaked in Stranglethorn at a bench. There is
+/// no bench inside, so it is made before she goes down; two, for the two in the east hall.
+const BAIT: (&str, u32) = ("poisoned_rat_meat", 2);
+
 /// Cells she will go for a provision: the bench, or food seen near.
 const PROVISION_REACH: i32 = 900;
 
@@ -116,6 +121,10 @@ const QUIET: u32 = 30;
 /// Frames a dungeon's crawl may run before the story takes her out of it and tries later: forty
 /// game minutes (the crawl test gives one twenty).
 const CRAWL_FRAMES: u32 = 60 * 60 * 40;
+
+/// The Burial's: five keepers deep, each a walk back to a fire first, it takes the crawl thirty
+/// to fifty-five minutes (its test gives an hour).
+const BURIAL_FRAMES: u32 = 60 * 60 * 70;
 
 /// A zone a quest step is played in whole: a dungeon, not the county or the house.
 pub fn dungeon(z: ZoneId) -> bool {
@@ -279,7 +288,8 @@ impl Story {
             if night && v.zone() == c.zone && c.stage == crate::crawl::Stage::Leave && v.dialogue().is_none() {
                 return Act::idle();
             }
-            if !c.done() && c.frames < CRAWL_FRAMES {
+            let budget = if c.zone == ZoneId::Burial { BURIAL_FRAMES } else { CRAWL_FRAMES };
+            if !c.done() && c.frames < budget {
                 let a = c.think(v, cx, events, notes);
                 if !c.done() {
                     return a;
@@ -582,14 +592,32 @@ impl Story {
                 return Some((Target::At(z, a), Goal::Rest));
             }
         }
+        // Under the Stone ahead of her, short of bait for its small snakes and holding what
+        // makes it (rat meat, and Stranglethorn or its root and water: the Burial's own cold
+        // chest holds the root and the water): brewed at the bench before anything else, and
+        // before the water goes into anything else. Without the makings she goes down for them.
+        let burial_ahead = v.quests().any(|q| !q.ready && cat.story.quest(q.quest).id == "the_burial");
+        let bait = sense::item(BAIT.0);
+        let short = burial_ahead && holds(v, bait) < BAIT.1;
+        if short && matches!(here, ZoneId::County | ZoneId::House | ZoneId::Cellar) {
+            let g = Goal::Provision(bait);
+            let brew = holds(v, sense::item("potion_stranglethorn")) > 0
+                || holds(v, sense::item("small_water")) > 0 && holds(v, sense::item("savage_snakeroot")) > 0;
+            if brew && holds(v, sense::item("rat_meat")) > 0 && self.open(v, g) {
+                if let Some(t) = get(v, cx, bait, 0) {
+                    return Some((t, g));
+                }
+            }
+        }
         // Before an act's dungeon: ready for it, as a player packs for a long walk (the potions
         // the bench makes from what she carries, food she has seen lying about). Only out of
-        // doors or in the house, and only while a dungeon step is in the log.
+        // doors or in the house, and only while a dungeon step is in the log. (With the bait
+        // still to brew, no potion: every one of them wants the water it needs.)
         if matches!(here, ZoneId::County | ZoneId::House) && Self::act_ahead(v) {
             for (name, want) in PROVISIONS {
                 let item = sense::item(name);
                 let g = Goal::Provision(item);
-                if holds(v, item) >= want || !self.open(v, g) {
+                if holds(v, item) >= want || !self.open(v, g) || short && name.starts_with("potion_") {
                     continue;
                 }
                 match get(v, cx, item, 0) {
@@ -1199,6 +1227,14 @@ fn get(v: &View<'_>, cx: &Ctx, item: ItemId, depth: u8) -> Option<Target> {
                         return Some(Target::At(z, n.at));
                     }
                 }
+                // None seen yet: the one the log names ("made at the bench in Julie's kitchen").
+                let kitchen = cat.story.quests.iter().flat_map(|q| q.requirements.iter()).any(|r| {
+                    let t = cat.text(r.text).to_lowercase();
+                    t.contains("bench") && t.contains("kitchen")
+                });
+                if kitchen && here != ZoneId::House {
+                    return Some(Target::Zone(ZoneId::House));
+                }
             }
             Some(i) if depth < 2 => {
                 if let Some(t) = get(v, cx, i, depth + 1) {
@@ -1223,6 +1259,14 @@ fn get(v: &View<'_>, cx: &Ctx, item: ItemId, depth: u8) -> Option<Target> {
                 return Some(t);
             }
         }
+    }
+    // Where the log said it is to be had ("Rat meat, from the rats in Julie's cellar"), done
+    // or not: there.
+    let named = cat.story.quests.iter().flat_map(|q| q.requirements.iter()).find_map(|r| {
+        (r.target == jane_data::ReqTarget::Acquire(item)).then(|| zone_in_text(cat.text(r.text))).flatten()
+    });
+    if let Some(z) = named.filter(|&z| z != here) {
+        return Some(Target::Zone(z));
     }
     None
 }

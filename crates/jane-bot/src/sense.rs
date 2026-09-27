@@ -184,14 +184,28 @@ pub fn junk_slot(v: &View<'_>) -> Option<u8> {
             u8::from(ingredient)
         }
     };
+    // A second stack of something she has a full one of (the rats' meat, wood, apples by the
+    // score) goes first, story or not: what the story wants of it, the full stack still holds.
+    // A bag of things destroy refuses and the story names otherwise never has room again, and
+    // a key in a chest (the Burial's scaled door) stays in the chest.
+    let full = |i: ItemId| {
+        let max = u32::from(cat.combat.item(i).max_stack);
+        bag.iter().flatten().any(|s| s.item == i && u32::from(s.qty) >= max)
+    };
+    let stacks = |i: ItemId| bag.iter().flatten().filter(|s| s.item == i).count();
     bag.iter()
         .enumerate()
         .filter_map(|(i, s)| s.map(|s| (i, s)))
         .filter(|(_, s)| {
             let d = cat.combat.item(s.item);
-            !d.kept() && !d.story && !wanted.contains(&s.item)
+            let spare = stacks(s.item) > 1 && full(s.item);
+            !d.kept() && (!d.story && !wanted.contains(&s.item) || spare)
         })
-        .min_by_key(|(i, s)| (rank(s.item), s.qty, *i))
+        .min_by_key(|(i, s)| {
+            let d = cat.combat.item(s.item);
+            let spare = stacks(s.item) > 1 && full(s.item) && s.qty < d.max_stack;
+            (!spare, rank(s.item), s.qty, *i)
+        })
         .map(|(i, _)| i as u8)
 }
 

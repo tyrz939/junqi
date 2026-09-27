@@ -160,7 +160,18 @@ pub fn start_at(sim: &mut Sim, act: &str) -> Result<Vec<Command>, String> {
             }
         }
     }
-    let packed = [("key_auntie_house", 1), ("apple", 6), ("potion_lifesteal", 1), ("potion_manashield", 1)];
+    // Under the House (`rats_below`, written done above) is handed in holding the three pieces of
+    // meat ("It wants you to keep them"), and pays two Savage Snakeroot and two water: the dog's
+    // bait for the Burial's small snakes, brewed at the bench before Under the Stone.
+    let packed = [
+        ("key_auntie_house", 1),
+        ("apple", 6),
+        ("potion_lifesteal", 1),
+        ("potion_manashield", 1),
+        ("rat_meat", 3),
+        ("savage_snakeroot", 2),
+        ("small_water", 2),
+    ];
     for &(i, qty) in items.iter().chain(&packed) {
         out.push(Command::Dev(DevOp::Give { item: item(i), qty }));
     }
