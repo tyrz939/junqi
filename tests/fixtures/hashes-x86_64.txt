@@ -1,5 +1,5 @@
 # jane gen --zones all --seeds 1..16 --hash
-# content 755ddc212c75b780, blueprint hash layout 4
+# content 229a4365b31f7fc8, blueprint hash layout 4
 # zone seed hash (FNV-1a 64 over little-endian bytes)
 county 1 48a9ae0b9b882d50
 county 2 4e4251dd24df8257

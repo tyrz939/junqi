@@ -72,7 +72,7 @@ pub fn clear_footprint(cx: &mut Ctx<'_>, prop: PropIx) {
         return;
     }
     let def = cx.cat.story.prop(p.def);
-    let r = Rect::new(i32::from(p.cell.x), i32::from(p.cell.y), i32::from(def.w), i32::from(def.h));
+    let r = def.solid_rect(i32::from(p.cell.x), i32::from(p.cell.y));
     let mut stamped = false;
     for ix in 0..cx.zone.units.len() {
         let u = &cx.zone.units[ix];

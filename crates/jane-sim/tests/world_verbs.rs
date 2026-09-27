@@ -292,6 +292,35 @@ fn hold_to_push_moves_a_barrel_a_cell_and_walking_away_pulls_it_back() {
     assert!(rt.grid.solid(20, 16) && rt.grid.solid(21, 17) && !rt.grid.solid(22, 16));
 }
 
+/// A chest stands on the front row of its footprint and its lid is drawn over the back row, so
+/// from above she walks into the back row and stops at its front (the owner's first playtest:
+/// "can't get close to things from above them"). From below, beside and for a pushed barrel,
+/// the whole footprint still blocks.
+#[test]
+fn from_above_she_stands_behind_a_chest_as_close_as_its_drawing() {
+    let mut r = Room::new(false);
+    r.chest("chest", 20, 16, &[("apple", 1)]);
+    r.prop("barrel", "barrel", 30, 16, |_| {});
+    let mut s = r.build();
+    let rt = s.runtime(ZoneId::County).unwrap();
+    assert!(!rt.grid.solid(20, 16) && !rt.grid.solid(21, 16), "the back row is her side of it");
+    assert!(rt.grid.solid(20, 17) && rt.grid.solid(21, 17), "the front row stands");
+    assert!(rt.grid.solid(30, 16) && rt.grid.solid(31, 17), "a barrel she pushes is its whole footprint");
+    // Walking down onto it from above: she stops at its front row, not its back row.
+    let walk = |s: &mut Sim, dir: Angle| (0..120).for_each(|_| step(s, jane_sim::InputFrame::walk(dir)));
+    let cell = jane_core::num::CELL_PX;
+    place(&mut s, 20, 12, Facing::South);
+    walk(&mut s, Angle::SOUTH);
+    let y = me(&s).pos.y.px();
+    assert_eq!(y, 17 * cell - 3, "flush on the front row's top edge (her body box is 3 px each way)");
+    let f = s.view(Seat(0)).unwrap().focus().expect("the chest is in reach from behind");
+    assert_eq!(f.verb, Verb::Open);
+    // From below she still meets its front edge.
+    place(&mut s, 20, 21, Facing::North);
+    walk(&mut s, Angle::NORTH);
+    assert_eq!(me(&s).pos.y.px(), 18 * cell + 3, "flush on its front edge from below");
+}
+
 #[test]
 fn a_pushed_barrel_stops_at_a_sill_that_feet_walk_over() {
     // dungeon-verbs.test.ts E4: the sill.
