@@ -31,6 +31,11 @@ impl TileSource for ViewTiles<'_, '_> {
         !self.view.indoor()
     }
     fn region(&self, x: i32, y: i32) -> u8 {
+        // Only the county's ground takes its region's ramps: a dungeon (the forest's glades
+        // too) is built of its own stuff.
+        if self.view.zone() != jane_core::ids::ZoneId::County {
+            return 0;
+        }
         match self.view.region_at(x, y) {
             jane_data::Region::Lowfields => 0,
             jane_data::Region::Waters => 1,
