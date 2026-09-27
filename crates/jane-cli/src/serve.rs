@@ -29,7 +29,8 @@ pub const USAGE: &str = "  serve [--seed N | --save PATH] [--name NAME] [--port 
 /// `jane find`: ask the LAN who hosts, for two seconds, and list what answered.
 pub fn find(args: &[String]) -> Result<(), String> {
     let o = opts(args, false)?;
-    let mut f = jane_net::discovery::Finder::new(o.port).map_err(|e| e.to_string())?;
+    let mut f =
+        jane_net::discovery::Finder::new(jane_net::discovery::DISCOVERY_PORT).map_err(|e| e.to_string())?.also(o.port);
     let t0 = Instant::now();
     let mut asked = None;
     while t0.elapsed() < Duration::from_secs(2) {
@@ -42,7 +43,7 @@ pub fn find(args: &[String]) -> Result<(), String> {
     }
     let found = f.poll();
     if found.is_empty() {
-        println!("no host answered on udp {}", o.port);
+        println!("no host answered on udp {} or {}", jane_net::discovery::DISCOVERY_PORT, o.port);
     }
     for h in found {
         let o = &h.offer;
@@ -167,7 +168,7 @@ pub fn serve(args: &[String]) -> Result<(), String> {
     if o.record.is_some() && !host.record() {
         return Err("--record: only a new game is recorded (a tape begins at New Game)".into());
     }
-    match jane_net::discovery::Beacon::bind(o.port) {
+    match jane_net::discovery::Beacon::bind_any(&[jane_net::discovery::DISCOVERY_PORT, o.port]) {
         Ok(b) => host = host.with_beacon(b),
         Err(e) => log(&format!("jane serve: no discovery on udp {}: {e}", o.port)),
     }
