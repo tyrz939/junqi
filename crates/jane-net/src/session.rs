@@ -26,6 +26,8 @@ pub struct Local {
     seq: u16,
     events: Vec<Event>,
     rested: bool,
+    /// Commands for other seats (the console's `join` and `leave`), in the next step.
+    extra: Vec<(Option<Seat>, Command)>,
 }
 
 #[derive(Debug)]
@@ -56,7 +58,7 @@ pub struct Status {
 
 impl Session {
     pub fn local(sim: Sim) -> Session {
-        Session::Local(Box::new(Local { sim, seq: 0, events: Vec::new(), rested: false }))
+        Session::Local(Box::new(Local { sim, seq: 0, events: Vec::new(), rested: false, extra: Vec::new() }))
     }
 
     /// Host `sim` on the LAN: listen on `port` (TCP) and answer discovery on it (UDP).
@@ -149,13 +151,18 @@ impl Session {
                 if paused {
                     return None;
                 }
-                let cmds: Vec<StampedCommand> = presses
+                let mut cmds: Vec<StampedCommand> = presses
                     .drain(..)
                     .map(|cmd| {
                         l.seq = l.seq.wrapping_add(1);
                         StampedCommand { seat: Some(Seat::HOST), seq: l.seq, cmd }
                     })
                     .collect();
+                for (seat, cmd) in l.extra.drain(..) {
+                    l.seq = l.seq.wrapping_add(1);
+                    cmds.push(StampedCommand { seat, seq: l.seq, cmd });
+                }
+                cmds.sort_by_key(|c| (c.seat, c.seq));
                 let mut frames = [InputFrame::IDLE; MAX_PLAYERS];
                 frames[0] = held;
                 let out = l.sim.step(&StepInput { frames, commands: &cmds });
@@ -225,6 +232,23 @@ impl Session {
                 let desync = g.drain_reports().pop();
                 Status { role: "joined", seats, stall: g.stall(), joining, ended, desync, notes: Vec::new() }
             }
+        }
+    }
+
+    /// A command for a seat other than this one, or a seat's sitting down (`seat: None`): the
+    /// console's `join` and `leave` (ENGINE.md §12), which sit an idle body down or get one up.
+    /// Only where the world lives (alone, or hosting); a guest cannot seat anyone.
+    pub fn inject(&mut self, seat: Option<Seat>, cmd: Command) -> Result<(), &'static str> {
+        match self {
+            Session::Local(l) => {
+                l.extra.push((seat, cmd));
+                Ok(())
+            }
+            Session::Host(h) => {
+                h.inject(seat, cmd);
+                Ok(())
+            }
+            Session::Guest(_) => Err("only the host seats people"),
         }
     }
 

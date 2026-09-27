@@ -483,6 +483,19 @@ impl Host {
         }
     }
 
+    /// A command the host adds to the next bundle for a seat, or a sitting-down (`None`): the
+    /// console's `join` (an idle body; its input is always idle, nobody sends it) and `leave`
+    /// (a guest's seat so got up is hung up on, and may come back).
+    pub fn inject(&mut self, seat: Option<Seat>, cmd: Command) {
+        if let (Some(s), Command::Leave) = (seat, cmd) {
+            if let Some(i) = self.conns.iter().position(|c| c.seat == Some(s) && c.state != State::Closed) {
+                self.lost(i, Some(ByeWhy::Dropped));
+                return;
+            }
+        }
+        self.inject.push((seat, cmd));
+    }
+
     fn get_up(&mut self, s: Seat) {
         let si = &mut self.seats[s.index()];
         if si.active {
