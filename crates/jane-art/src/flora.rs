@@ -19,9 +19,10 @@ use jane_core::angle::{Angle, cos_q15, iatan2, sin_q15};
 use jane_core::grid::Rect;
 use jane_core::num::isqrt;
 
-use crate::canvas::{BAKE_LIGHT, Canvas, UNIT, Z, height_of_rows, normal};
+use crate::canvas::{BAKE_LIGHT, Canvas, UNIT, height_of_rows, normal};
 use crate::hash::{below, h32};
 use crate::palette::{Ix, Ramp, Tone, letter};
+use crate::rock::Dress;
 
 /// Hash salt: flora shapes.
 const SALT: u32 = 0x464c_4f52;
@@ -540,54 +541,71 @@ pub fn bush(seed: u32, ramp: Ramp, berries: bool) -> Sprite {
     Sprite { canvas: c, ax, ay }
 }
 
-/// A pile of two or three stones on one cell: 26 x 22, each stone lit on its top, a crack in one.
+/// A pile of two or three stones on one cell: 26 x 22, each a faceted stone of its own
+/// (`rock::stone`), the ones behind first, a front stone standing proud of them so the line
+/// between them is a seam.
 pub fn rocks(seed: u32, stone: Ramp) -> Sprite {
     let mut d = Dice::new(seed);
     let (w, h) = (26, 22);
     let mut c = Canvas::new(w, h);
     let (ax, ay) = (13, 20);
-    let mut stones = vec![Rect::new(3 + d.range(0, 3), 8, 14, 12), Rect::new(12 + d.range(0, 2), 10, 12, 10)];
+    let mut stones = vec![
+        Rect::new(2 + d.range(0, 3), 8 + d.range(0, 2), 14 + d.range(-1, 1), 12),
+        Rect::new(12 + d.range(0, 2), 11 + d.range(0, 1), 11 + d.range(-1, 1), 10),
+    ];
     if d.range(0, 9) < 6 {
-        stones.push(Rect::new(8 + d.range(0, 4), 3, 10, 9));
+        stones.push(Rect::new(7 + d.range(0, 4), 3 + d.range(0, 2), 10 + d.range(-1, 1), 10));
     }
-    stones.sort_by_key(|r| (r.y, r.x));
-    for r in stones {
-        let top = (ay - r.y).clamp(2, 255) as u8;
-        c.soft_ellipse(r, stone, Z::new(1, top));
+    // Back ones first: the higher a stone's foot, the further back it lies.
+    stones.sort_by_key(|r| (r.bottom(), r.x));
+    let small = crate::rock::Dress { moss: false, crack: false, edges: false };
+    for (i, r) in stones.into_iter().enumerate() {
+        let r = Rect::new(r.x, r.y, r.w, r.h.min(ay + 1 - r.y));
+        crate::rock::stone(
+            &mut c,
+            r,
+            stone,
+            d.next(),
+            Dress { moss: i == 0 && d.range(0, 2) == 0, ..small },
+            2 + 2 * i as u8,
+        );
     }
     c.outline();
+    stand(&mut c, ay);
     Sprite { canvas: c, ax, ay }
 }
 
-/// A boulder, standing on one cell and overhanging it: 34 x 30, with a crack and a patch of moss
-/// on its lit shoulder.
+/// A boulder, standing on one cell and overhanging it: 34 x 30, cut into faces by
+/// `rock::stone` (a lit top tipped to the sky, sides facing out along their edges, a crease
+/// where a lit face turns dark, a crack, lichen and moss where the rain sits), sitting on a
+/// flat foot with a pebble or two and a tuft beside it. No two are the same shape.
 pub fn boulder(seed: u32, stone: Ramp) -> Sprite {
     let mut d = Dice::new(seed);
     let (w, h) = (34, 30);
     let mut c = Canvas::new(w, h);
     let (ax, ay) = (17, 28);
-    c.soft_ellipse(Rect::new(2 + d.range(-1, 1), 4, 30, 25), stone, Z::new(1, 22));
-    // A crack wandering down from the crown, lit on its left lip.
-    let mut x = 13 + d.range(0, 8);
-    for y in 7..18 {
-        if c.get(x, y).is_opaque() && c.get(x - 1, y).is_opaque() {
-            let z = c.height_at(x, y);
-            c.dot(x, y, stone.at(Tone::Deep), z);
-            c.dot(x - 1, y, stone.at(Tone::Light), z);
-        }
-        x += d.range(-1, 1);
+    let (bw, bh) = (d.range(26, 31), d.range(21, 26));
+    let x = ax - bw / 2 + d.range(-1, 1);
+    crate::rock::stone(
+        &mut c,
+        Rect::new(x, ay + 1 - bh, bw, bh),
+        stone,
+        d.next(),
+        // Two boulders in three carry moss: a crag's fallen stones are not a matched set.
+        Dress { moss: d.range(0, 2) > 0, crack: true, edges: true },
+        6,
+    );
+    // What it shed and what grows at its foot: a pebble on one side, a tuft on the other.
+    let left = d.range(0, 1) == 0;
+    let (px, tx) = if left { (x - 2, x + bw - 2) } else { (x + bw + 1, x + 2) };
+    if d.range(0, 3) > 0 {
+        crate::rock::pebble(&mut c, px.clamp(3, w - 4), ay, stone, d.next(), 2);
     }
-    // Moss on the lit shoulder, in clumps.
-    for _ in 0..4 {
-        let (mx, my) = (d.range(6, 14), d.range(6, 11));
-        for (dx, dy, t) in [(0, 0, Tone::Lift), (1, 0, Tone::Base), (0, 1, Tone::Mid), (1, 1, Tone::Shade)] {
-            if c.get(mx + dx, my + dy).is_opaque() {
-                let z = c.height_at(mx + dx, my + dy);
-                c.dot(mx + dx, my + dy, Ramp::Marsh.at(t), z);
-            }
-        }
+    if d.range(0, 2) > 0 {
+        crate::rock::tuft(&mut c, tx.clamp(2, w - 3), ay, 3);
     }
     c.outline();
+    stand(&mut c, ay);
     Sprite { canvas: c, ax, ay }
 }
 
@@ -621,7 +639,7 @@ impl Default for Ramps {
     }
 }
 
-/// Every flora sprite the chunk painter stamps, built once: 43 of them (ART.md §2).
+/// Every flora sprite the chunk painter stamps, built once: 46 of them (ART.md §2).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Bank {
     /// Large broadleaves by leaf (ordinary, olive, wet), four of each.
@@ -638,8 +656,8 @@ pub struct Bank {
     pub berry: [Sprite; 2],
     /// Stone piles.
     pub rocks: [Sprite; 4],
-    /// Boulders.
-    pub boulders: [Sprite; 3],
+    /// Boulders: six, so neighbours by a crag are seldom twins.
+    pub boulders: [Sprite; 6],
 }
 
 impl Bank {
@@ -692,10 +710,10 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_bank_is_forty_three_valid_sprites_with_their_feet_inside() {
+    fn a_bank_is_forty_six_valid_sprites_with_their_feet_inside() {
         let b = Bank::new(Ramps::default());
         let all = b.all();
-        assert_eq!(all.len(), 43);
+        assert_eq!(all.len(), 46);
         for (name, s) in &all {
             s.canvas.validate().unwrap_or_else(|e| panic!("{name}: {e}"));
             assert!(s.ax >= 0 && s.ax < s.canvas.w() && s.ay >= 0 && s.ay < s.canvas.h(), "{name}");
