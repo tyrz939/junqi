@@ -24,6 +24,10 @@ const LUSH_SHIFT: u32 = 8;
 /// Where a meadow turns to its darker tone: low, so a dark patch is a rare hollow, not the
 /// camouflage of one in three (the 18:40 critique, 2026-09-27).
 const TURF_DARK: i32 = -30;
+/// Where bare ground (earth, mud, slag, gravel) turns to its damp tone and its worn one: both
+/// rare, so three tones in equal share never make a camouflage of it.
+const EARTH_DAMP: i32 = -40;
+const EARTH_WORN: i32 = 250;
 
 pub(super) fn paint(p: &mut Painter, x0: i32, y0: i32, seed: u32) {
     p.s.ly.clear();
@@ -87,11 +91,13 @@ fn base(p: &mut Painter, wx0: i32, wy0: i32, seed: u32) {
             let (tone, n) = match st.row.pattern {
                 P::Water => (water_tone(p, x, y, v, m), FLAT),
                 P::Ice => (if v + m / 2 > 150 { Tone::High } else { Tone::Light }, FLAT),
-                P::Setts => setts(wx, wy, seed, (v - 128) * 2 + 128 + m),
+                P::Setts => setts(p, wx, wy, seed),
                 P::Soil => soil(wy, v, m),
                 P::Marsh => {
-                    let t = patch_tone(v, m, 84, 196);
-                    (if v + m / 2 < 86 { Tone::Shade } else { t }, FLAT)
+                    // Wet ground: darker more often than dry earth, its standing pools the
+                    // darkest, but still mostly its own middle tone.
+                    let t = patch_tone(v, m, 30, 236);
+                    (if v + m / 2 < 64 { Tone::Shade } else { t }, FLAT)
                 }
                 // A meadow is calm: its tones change over wide drifts, and the dry grass keeps
                 // closer to its middle tone than the green does.
@@ -101,7 +107,10 @@ fn base(p: &mut Painter, wx0: i32, wy0: i32, seed: u32) {
                 }
                 P::Turf if drift > -12 => (patch_tone(v, m, TURF_DARK, 224).step(1).min(Tone::Lift), FLAT),
                 P::Turf => (patch_tone(v, m, TURF_DARK, 224), FLAT),
-                _ => (patch_tone(v, m, 18, 188), FLAT),
+                // Bare ground is calm: its base tone over most of it, a worn drift lighter now
+                // and then and a damp hollow darker more rarely, so wide low-frequency variation
+                // reads as wear and moisture, not camouflage (the art-director pass, 2026-09-27).
+                _ => (patch_tone(v, m, EARTH_DAMP, EARTH_WORN), FLAT),
             };
             p.s.ly.put(x, y, r.at(tone), n, z);
         }
@@ -134,7 +143,7 @@ fn water_tone(p: &Painter, x: i32, y: i32, v: i32, m: i32) -> Tone {
 
 /// Setts: courses 7 px tall of stones 7 to 12 px wide, a joint round each, each stone a tone of
 /// its own, lit along its top and left edges, shaded along its bottom, domed for the light pass.
-fn setts(wx: i32, wy: i32, seed: u32, patch: i32) -> (Tone, Normal) {
+fn setts(p: &Painter, wx: i32, wy: i32, seed: u32) -> (Tone, Normal) {
     const H: i32 = 7;
     let course = wy.div_euclid(H);
     let yy = wy.rem_euclid(H);
@@ -157,15 +166,24 @@ fn setts(wx: i32, wy: i32, seed: u32, patch: i32) -> (Tone, Normal) {
     if yy == H - 1 || lx == end - 1 {
         return (Tone::Shade, normal(0, 0));
     }
-    let body = match (h >> (12 + k * 3)) & 7 {
+    // Most stones the key tone, one in sixteen darker and three paler: a square that reads as
+    // laid stone and stays calm enough for the people on it to read.
+    let hs = fast((block * 4 + k) as u32, course as u32, seed ^ salt::CELL ^ 0x5e77);
+    let body = match hs & 15 {
         0 => Tone::Mid,
-        1 | 2 => Tone::Lift,
+        1..=3 => Tone::Lift,
         _ => Tone::Base,
     };
-    // Broad wear over many stones: damp and dark in the hollows, bleached on the crowns.
-    let body = if patch < 46 {
+    // Broad wear over many stones: damp and dark in the hollows, bleached on the crowns. A stone
+    // takes it whole or not at all (the wear is read at its middle, against a threshold of its
+    // own), so the wear is a scatter of darker and paler stones over a hollow, never a smudge
+    // laid across the joints.
+    let (mx, my) = (wx - lx + (start + end) / 2, course * H + H / 2);
+    let patch = ((p.s.patch.at(mx, my) * 2 + p.s.fine.at(mx, my)) / 3 - 128) * 2 + 128;
+    let wear = patch + (hs >> 8) as i32 % 61 - 30;
+    let body = if wear < -20 {
         body.step(-1)
-    } else if patch > 210 {
+    } else if wear > 260 {
         body.step(1)
     } else {
         body

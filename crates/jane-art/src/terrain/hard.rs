@@ -884,6 +884,18 @@ fn hedge(p: &mut Painter, c: &Cell) {
     }
 }
 
+/// Where a floor's broad wear darkens a stone a step (trodden, stained) and where it lightens one
+/// (scrubbed, bleached): both rare, so the wear reads as a few soft drifts over a calm floor and
+/// never as a camouflage of stains (the art-director pass, 2026-09-27).
+pub(super) const WEAR_DARK: i32 = 52;
+pub(super) const WEAR_LIGHT: i32 = 214;
+
+/// The floors' broad wear at world px `(wx, wy)`, 0..=255 about 128: the 64 px patches over the
+/// 16 px ones, meandered, so a worn drift spans many slabs rather than one cell.
+fn wear_at(p: &Painter, wx: i32, wy: i32) -> i32 {
+    (p.s.patch.at(wx, wy) * 2 + p.s.fine.at(wx, wy)) / 3 + (p.s.wob_x.at(wx, wy) - 128) / 4
+}
+
 /// Floor slabs `detail` px square, a joint round each, each slab a tone of its own, lit along
 /// its inner top and left and shaded along its bottom and right; a crack across one now and then.
 fn slabs(p: &mut Painter, c: &Cell) {
@@ -904,10 +916,10 @@ fn slabs(p: &mut Painter, c: &Cell) {
                 1 => Tone::Lift,
                 _ => Tone::Base,
             };
-            let wear = p.s.fine.at(wx, wy) + (p.s.wob_x.at(wx, wy) - 128) / 4;
-            let body = if wear < 70 {
+            let wear = wear_at(p, wx, wy);
+            let body = if wear < WEAR_DARK {
                 body.step(-1)
-            } else if wear > 196 {
+            } else if wear > WEAR_LIGHT {
                 body.step(1)
             } else {
                 body
@@ -979,7 +991,7 @@ fn interior_floor(p: &mut Painter, c: &Cell) {
     for y in 0..CELL {
         for x in 0..CELL {
             let (wx, wy) = c.w(x, y);
-            let wear = p.s.fine.at(wx, wy) + (p.s.wob_x.at(wx, wy) - 128) / 4;
+            let wear = wear_at(p, wx, wy);
             if let Some((ix, n, dz)) = super::interior::floor(c.st.row.pattern, c.st.ramp, c.st.accent, wx, wy, wear) {
                 put(p, c, x, y, ix, n, z + dz);
             }
@@ -995,10 +1007,10 @@ fn rock_floor(p: &mut Painter, c: &Cell) {
     for y in 0..CELL {
         for x in 0..CELL {
             let (wx, wy) = c.w(x, y);
-            let v = (p.s.patch.at(wx, wy) * 2 + p.s.fine.at(wx, wy)) / 3 + (p.s.wob_x.at(wx, wy) - 128) / 4;
-            let t = if v < 100 {
+            let v = wear_at(p, wx, wy);
+            let t = if v < WEAR_DARK + 20 {
                 Tone::Mid
-            } else if v > 168 {
+            } else if v > WEAR_LIGHT - 20 {
                 Tone::Lift
             } else {
                 Tone::Base

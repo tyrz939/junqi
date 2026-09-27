@@ -221,9 +221,9 @@ pub(super) fn face(pat: P, r: Ramp, accent: Option<Ramp>, wx: i32, wy: i32, y: i
 /// (low: trodden or stained).
 pub(super) fn floor(pat: P, r: Ramp, accent: Option<Ramp>, wx: i32, wy: i32, wear: i32) -> Option<(Ix, Normal, i32)> {
     let worn = |t: Tone| {
-        if wear < 70 {
+        if wear < super::hard::WEAR_DARK {
             t.step(-1)
-        } else if wear > 196 {
+        } else if wear > super::hard::WEAR_LIGHT {
             t.step(1)
         } else {
             t
