@@ -23,8 +23,8 @@ use jane_sim::tuning::MAX_PLAYERS;
 use jane_sim::{Seat, Sim};
 
 /// The screens, by name.
-pub const SCREENS: [&str; 10] =
-    ["hud", "dead", "choice", "tooltip", "popover", "drag", "pause", "host", "join", "table"];
+pub const SCREENS: [&str; 12] =
+    ["hud", "dead", "choice", "tooltip", "popover", "drag", "pause", "host", "join", "table", "controls", "display"];
 
 struct Rig {
     sim: Sim,
@@ -235,6 +235,29 @@ pub fn run(dir: &Path, names: &[String]) -> Result<(), String> {
             menus::pause(ui, &mut st, &info);
         });
         rig.write(dir, "pause")?;
+    }
+    // The Controls screen's two pages: the bindings, and Display with T1's rows, two turned down.
+    for (name, page) in [("controls", 0u8), ("display", 1)] {
+        if !want(name) {
+            continue;
+        }
+        let mut st = jane_present::ui::controls::ControlsState { page, drow: 1, ..Default::default() };
+        let mut rows = jane_present::Features::of(Tier::T1);
+        rows.cycle(Tier::T1, "shadows");
+        rows.cycle(Tier::T1, "fog");
+        let info = jane_present::ui::controls::ControlsInfo {
+            assist: None,
+            backend: "auto",
+            volumes: jane_present::audio::Volumes::default(),
+            rows,
+            tier: Tier::T1,
+        };
+        let mut b = Bindings::default();
+        rig.frame(at((384, 60)), 5000, |ui, _, _| {
+            ui.interactive = true;
+            jane_present::ui::controls::draw(ui, &mut st, &mut b, info);
+        });
+        rig.write(dir, name)?;
     }
     // Playing together (P8): the title's Host and Join, and the table on the HUD.
     let slots = [Some("The Lowfields · Day 2, 21:00".to_owned()), None, Some("Julie's house · Day 5, 08:00".into())];

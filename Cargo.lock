@@ -396,6 +396,7 @@ dependencies = [
  "jane-schema",
  "jane-sim",
  "jane-world",
+ "serde_json",
 ]
 
 [[package]]

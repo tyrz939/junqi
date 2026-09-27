@@ -374,6 +374,10 @@ pub fn render(bps: Blueprints, o: &Opts) -> Result<Shot, String> {
     let mut b = backend(o.backend, o.gl)?;
     let (host, mut present, played) = play(bps, o, o.backend.tier())?;
     b.upload_atlas(present.atlas());
+    // `--rows` the backend draws itself (`normal_light`, `sharp`): after gl2's own flags only when asked.
+    if !o.rows.is_empty() {
+        b.set_features(&present.features());
+    }
     let seat = Seat(0);
     let v = host.sim.view(seat).ok_or("seat 0 is not in the world")?;
     let (clock, day) = v.clock();
@@ -416,6 +420,10 @@ pub fn film(bps: Blueprints, o: &Opts, n: u32, every: u32, mut out: impl FnMut(u
     let mut b = backend(o.backend, o.gl)?;
     let (mut host, mut present, _) = play(bps, o, o.backend.tier())?;
     b.upload_atlas(present.atlas());
+    // `--rows` the backend draws itself (`normal_light`, `sharp`): after gl2's own flags only when asked.
+    if !o.rows.is_empty() {
+        b.set_features(&present.features());
+    }
     let seat = Seat(0);
     let mut px = Vec::new();
     for k in 0..n {
@@ -465,6 +473,9 @@ pub fn bench(bps: Blueprints, o: &Opts, frames: u32, output: (u32, u32)) -> Resu
     let (mut build, mut submit, mut whole) = (Vec::new(), Vec::new(), Vec::new());
     let mut b = Bench::new(o.backend, output, o.gl)?;
     b.backend().upload_atlas(present.atlas());
+    if !o.rows.is_empty() {
+        b.backend().set_features(&present.features());
+    }
     for k in 0..frames + 30 {
         host.sim.step(&StepInput { frames: [InputFrame::IDLE; 4], commands: &[] });
         let events = host.sim.drain_events().to_vec();

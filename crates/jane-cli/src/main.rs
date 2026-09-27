@@ -45,7 +45,7 @@ commands:
 fn usage() -> String {
     USAGE
         .replace("{GEN}", gen_cmd::USAGE)
-        .replace("{BENCH}", bench::USAGE)
+        .replace("{BENCH}", &format!("{}{}", bench::USAGE, bench::USAGE_TUNE))
         .replace("{SHEET}", sheet_cmd::USAGE)
         .replace("{HASH}", hash_cmd::USAGE)
         .replace("{SERVE}", serve::USAGE)

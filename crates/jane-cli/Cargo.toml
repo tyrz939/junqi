@@ -23,6 +23,8 @@ jane-art.workspace = true
 jane-present.workspace = true
 jane-audio.workspace = true
 jane-render-soft.workspace = true
+# `jane bench tune` writes the ladder's rows into config.json's `present`.
+serde_json.workspace = true
 jane-render-gl2 = { workspace = true, optional = true }
 jane-render-wgpu = { workspace = true, optional = true }
 
