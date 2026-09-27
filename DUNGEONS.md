@@ -837,6 +837,10 @@ Any five of the six open the boss: a hub with a real choice (K1). All eight give
 
 With those the fight is the one written above: open the stone with the five, grow a lit bud, stand off the flower while it comes down (a body on the flower keeps it from landing), put everything into it for six seconds, set off for the next lit bud in time to be beside it as Grow comes round, frost it and run while it follows. The bot's play of it is `crates/jane-bot/src/tactics/forest.rs`.
 
+*The Collector's net* was spirit / 1 a pulse, twice a throw: some 120 at phase 3, with his blows on top, which a player with Stone Skin could stand up to and the story's own kit (no Stone Skin by then) could not, nor kite, as the web holds her for him. It is spirit / 4 now (about seventeen a pulse), still `webbed`: "a thrown net: a `ground` effect, webbed for two seconds", a snare as written, not the blow.
+
+The forest also keeps its sign's hours for the bot: it is not set out for after six in the evening or before seven in the morning (`tactics::forest::shut_hour`, read by `sense::hours_till_open`), the Emperor's glade is not opened after six, and inside at sunset (the sunbeams out, the butterflies to roost) she waits the night out by the hearth rather than walking the county in the dark, unless the Emperor is on her.
+
 One sim change came out of the forest's rooted enemies: a cactus or a flower (no feet: `walk` and `run` 0) never leaves its post, so no chase took it past its leash and it held her in its fight from anywhere in the zone. It lets go now once she is half again its aggro from it (`ai.rs`, `fight`).
 
 ---
