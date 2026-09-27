@@ -97,7 +97,12 @@ pub struct Story {
     /// A dungeon a quest step sends her into, played whole by a crawl (in by its door, through
     /// its locks and verbs to its boss, and out), and the step it is for.
     dungeon: Option<(Box<crate::crawl::Crawl>, Goal)>,
+    /// Nothing to do: the frame to look again.
+    quiet_until: u32,
 }
+
+/// Frames between looks when there was nothing to do.
+const QUIET: u32 = 30;
 
 /// Frames a dungeon's crawl may run before the story takes her out of it and tries later: forty
 /// game minutes (the crawl test gives one twenty).
@@ -354,6 +359,11 @@ impl Story {
                     }
                 }
             }
+            // Nothing to do a moment ago: look again in a little while, not every frame (a
+            // choice reads every prop and person about her).
+            if v.frame() < self.quiet_until {
+                return Act::idle();
+            }
             match self.choose(v, cx) {
                 Some((Target::Fight(id), _)) => {
                     cx.fight.hunt = Some(id);
@@ -396,8 +406,9 @@ impl Story {
                     }
                 }
                 None => {
-                    self.idle += 1;
-                    if self.idle == 600 {
+                    self.idle += QUIET;
+                    self.quiet_until = v.frame() + QUIET;
+                    if (600..600 + QUIET).contains(&self.idle) {
                         notes.push(Mark::Stuck("nothing left to do".into()));
                     }
                     if self.idle >= 600 && self.blocked.values().all(|&u| u <= v.tick().0) {
