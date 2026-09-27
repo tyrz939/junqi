@@ -28,6 +28,7 @@
 //! | [`sim`], `seats`, `travel` | the scheduler, seats and commands, travel |
 //! | [`save`] | save, load and the hash |
 //! | [`replay`] | tapes: record, re-simulate, verify (`.jrp`) |
+//! | [`trace`] | traces: what a played session was like, observed (`.jtr`, VERIFICATION.md §3.1) |
 //! | [`view`] | what a seat sees |
 
 #![deny(clippy::float_arithmetic, clippy::float_cmp)]
@@ -78,6 +79,7 @@ pub mod snake;
 pub mod state;
 pub mod status;
 pub mod sym;
+pub mod trace;
 mod travel;
 pub mod triggers;
 pub mod tuning;
