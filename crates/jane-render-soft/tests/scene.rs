@@ -103,8 +103,8 @@ fn night_is_darker_than_noon() {
     };
     let (noon, night) = (mean(12), mean(23));
     // T2 is the reference look, and its night keeps its value (ART.md §3.1, "night is
-    // beautiful, not dark"): about two thirds of noon's mean, lamps and all.
-    assert!(night * 4 < noon * 3, "noon {noon}, night {night}");
+    // beautiful, not dark"): about three quarters of noon's mean now its windows light it too.
+    assert!(night * 5 < noon * 4, "noon {noon}, night {night}");
 }
 
 #[test]
