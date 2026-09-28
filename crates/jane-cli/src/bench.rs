@@ -10,7 +10,7 @@
 //!   `county.solve` the solver's verdict on it, `county_build_solve` the two (the §9.4 row).
 //! - `dungeon.<zone>`: the proven build as `jane_world::build_zone` makes it, every re-roll
 //!   included, split into `.build` (the candidates), `.solve` (the traced base solve), `.walk` (the
-//!   first completion C7 and C8 read) and `.C1` .. `.C12`, each summed over the attempts; `dungeon`
+//!   first completion C7 and C8 read) and `.C1` .. `.C13`, each summed over the attempts; `dungeon`
 //!   pools every generated dungeon's total (the §9.4 row).
 //! - `interior.<zone>`: a hand-built interior, proven.
 //! - `new_game`: all thirteen zones through `build_zone`, one after another (the §9.4 row), only

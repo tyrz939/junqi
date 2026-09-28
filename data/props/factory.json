@@ -1,4 +1,5 @@
 {
+  "factory_way_in": { "name": "Way In", "sprite": "factory_way_in", "w": 2, "h": 1, "solid": false, "blockLos": false, "flat": true, "prompt": "Climb in" },
   "socket_dead": { "name": "Dead Socket", "sprite": "socket_dead", "w": 1, "h": 1, "solid": true, "blockLos": true, "answers": "shock", "lightWhenOn": true, "light": { "radius": 40, "color": "#bfe4ff", "flicker": 0.3 } },
   "fuse_box": { "name": "Fuse Box", "sprite": "fuse_box", "w": 1, "h": 1, "solid": true, "blockLos": true, "answers": "shock" },
   "call_box": { "name": "Call Box", "sprite": "call_box", "w": 1, "h": 1, "solid": true, "blockLos": true, "answers": "shock" },

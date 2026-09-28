@@ -402,7 +402,7 @@ fn conditions_met(cx, &[Cond]) -> bool
 ### 5.3 Where names are checked
 
 1. **Providers, at build** (`jane-schema`): every `NameId` used by any list, condition or quest must be provided by a declared source: the zone contract in `zones.json`, a dungeon `bind`/`gateAs`/`propAs`, a derived `zone_node_socket` name from every mission × pool template, a placement row key, an anchor or area id, a `.chunk` export, a story slot or thing. Zone-scoped lists must find the provider in that zone; zone-less lists (dialogue, rewards, item use) may find it anywhere.
-2. **Blueprint, per build** (`jane_world::validate`): contract names exist, no duplicate keys, nothing in a wall, every blueprint list names things in this blueprint, the lock-and-key flood, C1 to C12.
+2. **Blueprint, per build** (`jane_world::validate`): contract names exist, no duplicate keys, nothing in a wall, every blueprint list names things in this blueprint, the lock-and-key flood, C1 to C13.
 
 A typo in `"prop": "gate_bos"` is a build error naming the file and the row.
 
@@ -516,7 +516,7 @@ A `Bundle` is a replay frame, and a session hosted from New Game is a `.jrp` (`H
 | `awake_only_equals_everyone` | A test switch (`Sim::tick_everyone`) ticks every unit the old way (regen paid to every unit every tick, the controllers' pass over every unit asking whether it is awake); both runs settled (`Sim::settle`: every unit paid to now, which only moves `synced`), hashes equal, and a run settled only at the end equals them |
 | `streams` | Carried: a change to one stage's draws moves nothing outside it |
 | `same_seed_same_blueprint` | 64 seeds per zone, twice in process, across a process boundary, across the CI matrix |
-| `solver_and_checks` | Every zone, every seed, through the solver and C1 to C12 |
+| `solver_and_checks` | Every zone, every seed, through the solver and C1 to C13 |
 | `budget` | 3 000 sleepers and 8 000 props: median step under 1 ms on a Pi 3, under 0.25 ms on x86_64 CI |
 | the carried suites | Against `jane-bot`: sim, engine, replay, coop, verbs2, rest, dungeon-verbs, quests |
 | `compiled_equals_dev_data` | Static catalog equals the `dev-data` load |
@@ -548,7 +548,7 @@ CLI: `jane replay verify | record | diff | trace`, `jane hash --seed N --frames 
 
 **Fixed:** `Sim.aims`; clock rows per player; `asPlayer` and the circular ctx; lists mutated while iterated; the sleeper timer pass; one perturbed RNG; per-instance list copies; append-only `tileDeltas`; growable fog; anim driving logic; `book` pushed into; the bag on the body; FNV-over-JSON hash and JSON-gzip save; string keys in hot loops; the catalog built thrice; no schema check; unchecked names; the sim ↔ world cycle and module singletons; seven "nearest free cell" copies and four "clear target" copies; unit mixing (px, metres, ticks, seconds); English in the sim; linear `party.ofUnit`; the replay side channel; `frozen` before `tick++`; authored places as code; camera size baked into worldgen; `hasZone` gating; aim was raw with no assist, so the pad could not play (now deterministic assist in the sim, §5.4); the world had no memory of the player, so no line could say "you were told" (now the journal, §3.7).
 
-**Kept, deliberately:** the `sim.ts` tick order and the double flush; windowed A* 10/14 with node tie-break; supercover LOS; the 6 × 6 body box with axis-separated sliding; occupancy shapes paths and never blocks; prop buckets by origin cell with reach-back; the load ring from block centres, with `awake` saved; the verb list, conditions, the trigger model with `reset`, the quest kinds, the dialogue shape; the solver and C1 to C12; the dungeon generator's steps and naming; terrain never saved (seed plus deltas); freeze only when alone, one heroine, the party penalty by connected count, story items handed on, one fire; string keys for units and props, as `Sym`; `dev` commands as ordinary commands.
+**Kept, deliberately:** the `sim.ts` tick order and the double flush; windowed A* 10/14 with node tie-break; supercover LOS; the 6 × 6 body box with axis-separated sliding; occupancy shapes paths and never blocks; prop buckets by origin cell with reach-back; the load ring from block centres, with `awake` saved; the verb list, conditions, the trigger model with `reset`, the quest kinds, the dialogue shape; the solver and C1 to C13; the dungeon generator's steps and naming; terrain never saved (seed plus deltas); freeze only when alone, one heroine, the party penalty by connected count, story items handed on, one fire; string keys for units and props, as `Sym`; `dev` commands as ordinary commands.
 
 ## 11. Sim-facing API for presentation
 

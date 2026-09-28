@@ -152,11 +152,14 @@ struct Rows {
 }
 
 impl Rows {
-    fn new() -> Self {
+    /// A lock-in's way in is the dungeon's own (`<mission>_way_in`: the mine's timbered steps,
+    /// the Burial's bone), the plain stone row only where a dungeon has none: a grey slab in a
+    /// corridor read as a block left between the mine's rooms (the owner's playtest, 2026-09-29).
+    fn new(m: &MissionDef) -> Self {
         let id = |s: &str| catalog().story.prop_id(s);
         Self {
             chest: id("chest"),
-            way_in: id("way_in"),
+            way_in: id(&format!("{}_way_in", m.id)).or_else(|| id("way_in")),
             door: id("door"),
             notice: id("notice"),
             found: [
@@ -1424,7 +1427,7 @@ fn assemble(
         k: Kit { bp, claimed: vec![false; (w * h) as usize], w, h },
         info,
         lanes: Lanes::new(i32::from(cols), i32::from(rows)),
-        rows: Rows::new(),
+        rows: Rows::new(m),
         at_self: catalog().name_id("@self"),
         room_at: vec![None; m.nodes.len()],
         state_gates: Vec::new(),

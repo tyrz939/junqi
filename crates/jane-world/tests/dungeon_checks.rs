@@ -1,6 +1,6 @@
-//! PORT.md §6.m stage 15: checks C1 to C12 really reject, each its own bad case, and only that
+//! PORT.md §6.m stage 15: checks C1 to C13 really reject, each its own bad case, and only that
 //! check fires. Carries `jane/test/dungeon-gen.test.ts` "the checks really reject, each by name:
-//! C1 and C3 to C12", `forest.test.ts` "the checks really reject" and `library.test.ts` "C5
+//! C1 and C3 to C13", `forest.test.ts` "the checks really reject" and `library.test.ts` "C5
 //! really rejects". Each test builds a proven dungeon, breaks exactly the thing one check
 //! guards (in the blueprint, or in the mission it is judged against), and asserts that that
 //! check, and no other, fires.
@@ -356,6 +356,42 @@ fn c12_a_trigger_that_drops_a_gate_on_whoever_tripped_it() {
     assert!(t.contains("C12: trigger mine_arena_lock would put gate_boss on top of whoever tripped it"), "{t}");
 }
 
+/// The owner's playtest (2026-09-29): "an inner mine door stands on open ground with no wall
+/// around it". Knock the wall from beside a gate, or slide the way out of its gap along the wall,
+/// and C13 names it.
+#[test]
+fn c13_a_door_on_open_ground_or_in_the_wrong_wall() {
+    let b = mine();
+    let c = catalog();
+    let foot = |bp: &Blueprint, name: &str| {
+        let k = key(bp, name);
+        let p = bp.props.iter().find(|p| p.key == k).unwrap();
+        let d = c.story.prop(p.def);
+        (i32::from(p.cell.x), i32::from(p.cell.y), i32::from(d.w), i32::from(d.h))
+    };
+    let floor = c.dungeons.mission_of(ZoneId::Mine).unwrap().floor;
+    let t = only(
+        Check::C13,
+        &broken(&b, |bp| {
+            let (x, y, w, h) = foot(bp, "gate_generic_a");
+            // The cell beyond its west (or north) end, where the wall stood.
+            let (fx, fy) = if w > h { (x - 1, y) } else { (x, y - 1) };
+            bp.tiles.set(fx, fy, floor);
+        }),
+    );
+    assert!(t.contains("C13: gate_generic_a (gate_"), "{t}");
+    let t = only(
+        Check::C13,
+        &broken(&b, |bp| {
+            let (x, ..) = foot(bp, "exit_door");
+            // Out of its gap and along the wall onto the room's floor, where the old templates
+            // stood it: against the wall with nothing either side.
+            prop(bp, "exit_door").cell.x = u16::try_from(x - 3).unwrap();
+        }),
+    );
+    assert!(t.contains("C13: exit_door (door)") && t.contains("running west to east"), "{t}");
+}
+
 #[test]
 fn the_forest_checks_really_reject() {
     // `forest.test.ts`: the lock-in, the light on the bank, and the boss glade behind it.
@@ -409,5 +445,5 @@ fn the_checks_run_in_the_designed_order() {
     // And ORDER is the TypeScript's: the walk (C8) before the rest room that reads it (C7).
     let pos = |c: Check| ORDER.iter().position(|&x| x == c).unwrap();
     assert!(pos(Check::C8) < pos(Check::C7));
-    assert_eq!(ORDER.len(), 11, "C1, C3 to C12; C2 falls out of C1");
+    assert_eq!(ORDER.len(), 12, "C1, C3 to C13; C2 falls out of C1");
 }

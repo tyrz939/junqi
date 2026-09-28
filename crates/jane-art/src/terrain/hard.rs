@@ -1032,16 +1032,25 @@ fn rock_floor(p: &mut Painter, c: &Cell) {
     }
 }
 
-/// A threshold stone, grooved across the way through.
+/// A threshold, grooved across the way through, in the floor's own material: the room's or the
+/// corridor's it joins, never a stone of its own (a grey slab in a mine's doorway read as a block
+/// between the rooms, and on a side door as a door leaf stood in the wall: the owner's playtest,
+/// 2026-09-29). Its lit edge is a lift, not a light, so it reads as a worn step and not a slab.
 fn sill(p: &mut Painter, c: &Cell) {
     let across = nb(p, c, -1, 0) == Tile::Sill || nb(p, c, 1, 0) == Tile::Sill;
     let z = i32::from(c.st.row.rise).max(1);
-    let r = c.st.ramp;
+    let through: [(i32, i32); 4] =
+        if across { [(0, 1), (0, -1), (1, 0), (-1, 0)] } else { [(1, 0), (-1, 0), (0, 1), (0, -1)] };
+    let r = through
+        .iter()
+        .map(|&(dx, dy)| nst(p, c, dx, dy))
+        .find(|s| s.tile != Tile::Sill && s.tile != Tile::Void && !s.raised() && !s.row.wall_like)
+        .map_or(c.st.ramp, |s| s.ramp);
     for y in 0..CELL {
         for x in 0..CELL {
             let b = if across { y } else { x };
             let t = match b {
-                0 | 1 => Tone::Light,
+                0 | 1 => Tone::Lift,
                 2 | 13 => Tone::Shade,
                 14 | 15 => Tone::Mid,
                 _ => Tone::Base,

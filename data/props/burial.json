@@ -1,4 +1,5 @@
 {
+  "burial_way_in": { "name": "Way In", "sprite": "burial_way_in", "w": 2, "h": 1, "solid": false, "blockLos": false, "flat": true, "prompt": "Climb in" },
   "brazier": {
     "name": "Brazier", "sprite": "brazier", "w": 1, "h": 1, "solid": true, "blockLos": false,
     "answers": "fire", "lightWhenOn": true, "light": { "radius": 80, "color": "#ffa048", "flicker": 0.25 }

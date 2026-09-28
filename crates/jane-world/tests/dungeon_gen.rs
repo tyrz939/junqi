@@ -1,6 +1,6 @@
 //! PORT.md §6.m stages 12 to 15: the dungeon generator's layout, locks, lamps, fill and names,
 //! held to all eight missions over `SEEDS` seeds, every one of them proven by the solver and
-//! checks C1 to C12 inside the attempt budget, the fallback included. Carries the structural parts of
+//! checks C1 to C13 inside the attempt budget, the fallback included. Carries the structural parts of
 //! `jane/test/{dungeon-gen,dungeons,dungeon-dressing}.test.ts` and of the per-dungeon files: every
 //! seed embeds without the fallback, corridors never cross or break into a room, rooms sit in
 //! their bays, the contract's names are all there, names do not move with the attempt, the lamps
@@ -519,6 +519,10 @@ fn lockins_seal_behind_her_and_show_a_way_in() {
             let gate = bp.props.iter().find(|p| p.key == l.gate).expect("the gate");
             let way_in = bp.props.iter().find(|p| p.key == l.way_in).expect("the way in");
             assert!(way_in.hidden, "{} seed {seed}: the way in shows before the room seals", m.id);
+            // In the dungeon's own stuff, never the plain grey stone row (the owner's playtest,
+            // 2026-09-29: a grey block between the mine's rooms).
+            let row = catalog().story.prop(way_in.def).id;
+            assert_eq!(row, format!("{}_way_in", m.id), "{} seed {seed}: the way in is plain stone", m.id);
             assert_eq!(way_in.to.map(|d| (d.zone, d.mark)), Some((m.zone, l.mark)));
             let rect = bp.rects[&l.rect];
             let mark = bp.marks[&l.mark].cell;
@@ -660,14 +664,14 @@ fn the_fallback_is_whole_and_the_same_on_every_seed() {
     }
 }
 
-// --- stages 14 and 15 wired in: the solver and C1 to C12 judge every candidate ----------------
+// --- stages 14 and 15 wired in: the solver and C1 to C13 judge every candidate ----------------
 
 fn shown(faults: &[jane_world::dungeon::checks::Fault]) -> Vec<String> {
     faults.iter().map(ToString::to_string).collect()
 }
 
 /// `dungeon-gen.test.ts` (and every per-dungeon file) "64 seeds: every one is proven (solver and
-/// C1 to C12) inside the attempt budget, and none needs the fallback". `build` already refused
+/// C1 to C13) inside the attempt budget, and none needs the fallback". `build` already refused
 /// every candidate the solver or a check would not pass; this proves the one it kept, again, and
 /// reports how many attempts it took.
 #[test]

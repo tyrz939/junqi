@@ -18,7 +18,7 @@ pub mod steps;
 use jane_core::{Blueprint, ZoneId};
 
 /// The zone a seed builds, proven: every candidate is judged by the solver (and, for a generated
-/// dungeon, checks C1 to C12) and re-rolled until one holds (`buildZone`).
+/// dungeon, checks C1 to C13) and re-rolled until one holds (`buildZone`).
 ///
 /// All thirteen zones: the county ([`county::build_proven`]), the eight generated dungeons and
 /// the four hand-built interiors (house, cellar, arms, church). `None` only for a zone with no

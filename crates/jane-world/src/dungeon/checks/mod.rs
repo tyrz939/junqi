@@ -18,6 +18,7 @@
 //! | C10 | the verb's first lock and the boss gate are seen before they can be opened (`c10_seen`) |
 //! | C11 | plates can be held (`c11_plates`) |
 //! | C12 | nothing solid appears on a person (`c12_trigger_solid`) |
+//! | C13 | every door and gate stands in a wall gap, wall on both flanks (`c13_doors_in_walls`) |
 //!
 //! The files follow the TypeScript's numbering (C7 is the rest room, C8 the walk). They run in
 //! [`ORDER`], which is the TypeScript's: C8 walks before C7 reads where along the walk the rest
@@ -53,6 +54,7 @@ pub mod c09_cycle;
 pub mod c10_seen;
 pub mod c11_plates;
 pub mod c12_trigger_solid;
+pub mod c13_doors_in_walls;
 
 pub use c08_crit_len::{Walk, distances, first_completion};
 
@@ -74,10 +76,11 @@ pub enum Check {
     C10,
     C11,
     C12,
+    C13,
 }
 
 /// The order the checks run in: the TypeScript's `checkDungeon`.
-pub const ORDER: [Check; 11] = [
+pub const ORDER: [Check; 12] = [
     Check::C1,
     Check::C3,
     Check::C4,
@@ -89,6 +92,7 @@ pub const ORDER: [Check; 11] = [
     Check::C10,
     Check::C11,
     Check::C12,
+    Check::C13,
 ];
 
 impl Check {
@@ -107,6 +111,7 @@ impl Check {
             Check::C10 => "C10",
             Check::C11 => "C11",
             Check::C12 => "C12",
+            Check::C13 => "C13",
         }
     }
 }
@@ -193,7 +198,7 @@ impl Ctx<'_> {
     }
 }
 
-/// Checks C1 to C12 on a candidate, after the solver. Empty: the blueprint is the dungeon that
+/// Checks C1 to C13 on a candidate, after the solver. Empty: the blueprint is the dungeon that
 /// was designed. A refusal by the solver stops here, as the TypeScript's did.
 pub fn check_dungeon(built: &Built) -> Vec<Fault> {
     check(&built.blueprint, &built.info)
@@ -239,6 +244,7 @@ pub fn run(check: Check, c: &Ctx<'_>) -> Vec<Fault> {
         Check::C10 => c10_seen::check(c),
         Check::C11 => c11_plates::check(c),
         Check::C12 => c12_trigger_solid::check(c),
+        Check::C13 => c13_doors_in_walls::check(c),
         Check::Build | Check::Solver => Vec::new(),
     }
 }

@@ -5,7 +5,7 @@
 //! their grid and never in their contract; every pool a mission names exists") and of
 //! `jane/test/dungeon-gen.test.ts` ("the contract derived from the mission's binds contains
 //! every name the story already leans on", "generated names come from node and socket", the
-//! fallback's "every critical node"). The seeded parts (layout, solver, C1-C12, the harness)
+//! fallback's "every critical node"). The seeded parts (layout, solver, C1-C13, the harness)
 //! are P3's.
 
 use jane_core::ids::{NameId, ZoneId};

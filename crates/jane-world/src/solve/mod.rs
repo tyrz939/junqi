@@ -23,7 +23,7 @@
 //! - **ablation**: [`ablate`] takes one thing away, so a caller can prove a lock holds.
 //!
 //! Callers: `buildZone`'s loop asks [`validate`] with [`ZoneRules::for_zone`] of each candidate
-//! and re-rolls on `!report.ok()`; the dungeon checks (C1 to C12) ask [`solve`] traced and
+//! and re-rolls on `!report.ok()`; the dungeon checks (C1 to C13) ask [`solve`] traced and
 //! [`ablate::lock_holds`]; the template harness asks [`solve`] with `fragment` and `entry`.
 
 pub mod ablate;

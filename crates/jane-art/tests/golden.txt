@@ -357,6 +357,7 @@ prop:boulder ec788ad4
 prop:brazier fa5d81f3
 prop:broken_cabinet 4afc864d
 prop:broken_hoist 74035e33
+prop:burial_way_in bf90d8c3
 prop:caged_bulb_e 9311629b
 prop:caged_bulb_n 75760277
 prop:caged_bulb_s 9087c1c0
@@ -386,11 +387,13 @@ prop:factory_rack 0466c23e
 prop:factory_shutter_h 4aa16b8c
 prop:factory_shutter_v f18f5968
 prop:factory_stove 3ba4daa5
+prop:factory_way_in b7f50f28
 prop:fingerpost 37450846
 prop:flowerbed 47a9168b
 prop:flowers f57ce1e0
 prop:forest_cases 785806cf
 prop:forest_rockfall 0f5afc87
+prop:forest_way_in 0d0f1c59
 prop:fruit_bowl d46ced88
 prop:gas_lamp_e 0ebc2b8e
 prop:gas_lamp_n 0f040d20
@@ -426,6 +429,7 @@ prop:mine_lamp_e 77f1c64c
 prop:mine_lamp_n 7dd85780
 prop:mine_lamp_s cdc5fd44
 prop:mine_lamp_w 0c397b4b
+prop:mine_way_in bf4e0720
 prop:minecart 13854260
 prop:museum_case a8514d1b
 prop:museum_plinth e6d9793c
@@ -436,6 +440,7 @@ prop:museum_wall_lamp_e c79753a2
 prop:museum_wall_lamp_n 6583e0aa
 prop:museum_wall_lamp_s 20e39de4
 prop:museum_wall_lamp_w 9d2b11cb
+prop:museum_way_in e4776013
 prop:name_board e8bf7af0
 prop:note 76a80ba3
 prop:notice_board 170d6f0b
@@ -455,6 +460,7 @@ prop:rubble 6765ed0b
 prop:scarecrow b6ff1196
 prop:school_pegs 1a3debb7
 prop:school_register b1828593
+prop:school_way_in 82c9e2e4
 prop:shelf 915a0e85
 prop:sickbay_bed_bell a8ed6f63
 prop:sign 61e40b1c

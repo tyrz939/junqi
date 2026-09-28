@@ -95,7 +95,7 @@
     {
       "id": "vent", "kind": "puzzle", "order": 5, "critical": true, "pool": "factory.vent", "heat": 0,
       "holds": [
-        { "socket": "prop:vent", "prop": "way_in", "to": { "zone": "factory", "mark": "factory_gen_in" }, "label": "The extract vent" },
+        { "socket": "prop:vent", "prop": "factory_way_in", "to": { "zone": "factory", "mark": "factory_gen_in" }, "label": "The extract vent" },
         { "socket": "jar:main", "prop": "jar", "label": "A jar left on the duct" }
       ],
       "binds": [

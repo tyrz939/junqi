@@ -5,7 +5,7 @@
 //!
 //! - [`build_candidate`] / [`build_dungeon`]: one candidate for `(zone, seed, attempt)`.
 //! - [`build`]: the attempt loop over `ZONE_ATTEMPTS`, each candidate judged by [`Proven`]: the
-//!   lock-and-key solver (`crate::solve`), then checks C1 to C12 ([`checks`]). The last attempt
+//!   lock-and-key solver (`crate::solve`), then checks C1 to C13 ([`checks`]). The last attempt
 //!   spends the mission's hand-placed fallback, and is judged too; if even that is refused it is
 //!   returned with the reasons in `info.errors`, because the player is never thrown at.
 //! - [`build_with`]: the same loop with another judge ([`AcceptAll`] takes the first candidate
@@ -51,7 +51,7 @@ impl Validate for AcceptAll {
 }
 
 /// The real judge (world/index.ts `buildZone`: `validateBlueprint`, then `check`): the solver
-/// with the mission's contract, keys, spells and states, then C1 to C12.
+/// with the mission's contract, keys, spells and states, then C1 to C13.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct Proven;
 
@@ -67,7 +67,7 @@ pub fn build_dungeon(zone: ZoneId, seed: u32, attempt: u8) -> Blueprint {
     build_candidate(zone, seed, attempt).blueprint
 }
 
-/// The dungeon for a seed: the first candidate the solver and C1 to C12 accept.
+/// The dungeon for a seed: the first candidate the solver and C1 to C13 accept.
 pub fn build(zone: ZoneId, seed: u32) -> Built {
     build_with(zone, seed, &Proven)
 }

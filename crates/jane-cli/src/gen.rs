@@ -1,6 +1,6 @@
 //! `jane gen --zones <dungeons|all|id,id,..> [--seeds A..B | --seed N] [--hash]`: build each zone
 //! for each seed through `jane_world::build_zone` (every candidate proven by the solver and, for a
-//! dungeon, checks C1 to C12) and print a line per build.
+//! dungeon, checks C1 to C13) and print a line per build.
 //!
 //! With `--hash` the line is `<zone> <seed> <hash>`: the blueprint's 64-bit hash
 //! (`jane_world::hash`, FNV-1a 64 over explicit little-endian bytes) as 16 hex digits, after a

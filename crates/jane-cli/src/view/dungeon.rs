@@ -1,7 +1,7 @@
 //! `jane view --dungeon <id|all> [--seeds A..B | --seed N] [--out DIR] [--no-png]`: each seed's
 //! generated dungeon as a PNG (a colour per tile family, props as dots, units as diamonds, marks
 //! as crosses), and a line per build with its attempts after validation (the solver and checks
-//! C1 to C12), whether it fell back, and its time; each refused attempt with its first reason.
+//! C1 to C13), whether it fell back, and its time; each refused attempt with its first reason.
 
 use std::path::Path;
 use std::time::Instant;

@@ -1,6 +1,6 @@
 # Jane: Dungeons
 
-> **Design truth, with the build moving to Rust (September 2026).** The mission graphs, the template format, the checks C1 to C12 and the seven dungeons carry unchanged. Where a fact below has drifted from the code it is marked *(corrected)*; the port's changes to the generator (solver as a module, templates linted at build time, `data/rooms/`) are `PORT.md` §6.k and §5.3. File paths are the TypeScript build's.
+> **Design truth, with the build moving to Rust (September 2026).** The mission graphs, the template format, the checks C1 to C12 (and C13, added in Rust) and the seven dungeons carry unchanged. Where a fact below has drifted from the code it is marked *(corrected)*; the port's changes to the generator (solver as a module, templates linted at build time, `data/rooms/`) are `PORT.md` §6.k and §5.3. File paths are the TypeScript build's.
 
 What a dungeon is in this game, how one is generated, and what the seven of them are. Written September 2026. Pair with `PLAN.md` section 3 (authored mission, generated space), `DESIGN-2020.md` section 4 (what 2020 drew), `STORY.md`, `VOICE.md`, `PLATFORM.md` section 2 (co-op) and `MISSING-SYSTEMS.md`.
 
@@ -456,6 +456,7 @@ The existing flood stays. It gains inputs and the generator adds checks around i
 | C10 | The tease | For the verb's first lock and for the boss gate: some cell reached in an earlier pass has wall line of sight to the prop |
 | C11 | Plates can be held | Each plate whose `release` re-locks something required shares a room with a pushable that has a push path to it (the template proved it; this re-checks after dressing claimed cells) |
 | C12 | Nothing solid can appear on a person | No `show`, `lock` or `fill` target overlaps a rect a player must stand in to cause it. Gates stand in corridors outside trigger rects, as `boss_arena` does today |
+| C13 | Every door stands in a wall *(added 2026-09-29)* | A gate, a shutter or a door out stands in a gap of a wall with wall on both flanks, the way its footprint draws it: wider than tall (or the square door out) in a wall running west to east, taller than wide (drawn edge on) in one running north to south. The way out stands in its room's rim between two jambs. The owner met a mine door standing on open ground; `jane-world` `checks/c13_doors_in_walls.rs` |
 
 **Tests to add** (names are the bar, per Rule 0): `templates.test.ts` (lint, solver and ablation for every `.room`), `template-bots.test.ts` (eight transforms each), `dungeon-gen.test.ts` (64 seeds per dungeon in the suite, 1,000 as a soak behind `DUNGEON_SEEDS=1000`, zero fallbacks allowed in the 64), `dungeon-contract.test.ts` (derived contract contains today's), and the existing `dungeons.test.ts` unchanged and still green on the generated mine.
 

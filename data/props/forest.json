@@ -1,4 +1,5 @@
 {
+  "forest_way_in": { "name": "Way In", "sprite": "forest_way_in", "w": 2, "h": 1, "solid": false, "blockLos": false, "flat": true, "prompt": "Climb in" },
   "bud": { "name": "Bud", "sprite": "bud", "w": 1, "h": 1, "solid": false, "blockLos": false, "flat": true, "once": true, "answers": "grow", "lightWhenOn": true, "light": { "radius": 36, "color": "#ffe89a", "flicker": 0.12 } },
   "vine_root": { "name": "Vine Root", "sprite": "vine_root", "w": 2, "h": 1, "solid": false, "blockLos": false, "flat": true, "once": true, "answers": "grow" },
   "hedge_seed": { "name": "Hedge Seed", "sprite": "hedge_seed", "w": 1, "h": 1, "solid": false, "blockLos": false, "flat": true, "once": true, "answers": "grow" },

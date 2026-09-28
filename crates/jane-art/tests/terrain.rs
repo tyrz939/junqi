@@ -162,3 +162,55 @@ fn the_county_sample_has_canopy_water_casters_and_lit_windows() {
 fn every_style_resolves_its_ramps() {
     Styles::from_looks(&jane_data::tile_looks()).unwrap();
 }
+
+/// No dungeon draws a doorway in plain grey: the sill under a door in use (across a north or
+/// south door, and down a west or east one) is a threshold of the floor it joins, in that floor's
+/// own colour (the owner's playtest, 2026-09-29: a grey block between the mine's rooms, and a
+/// side door that read as a door leaf stood in the wall).
+#[test]
+fn a_dungeon_sill_is_its_floors_own_material() {
+    let mean = |c: &Chunk, r: Rect| {
+        let mut s = [0u64; 3];
+        for (x, y) in r.cells() {
+            for py in 0..16 {
+                for px in 0..16 {
+                    let v = c.layers.albedo[((y * 16 + py) * CHUNK_PX + x * 16 + px) as usize];
+                    for (i, sh) in [16, 8, 0].into_iter().enumerate() {
+                        s[i] += u64::from((v >> sh) & 0xff);
+                    }
+                }
+            }
+        }
+        let n = (r.w * r.h * 256) as u64;
+        s.map(|v| (v / n) as i32)
+    };
+    let mut p = Painter::new();
+    let mut c = Chunk::new();
+    for m in jane_data::catalog().dungeons.missions {
+        let mut g = jane_core::grid::Grid::new(16, 16, Tile::Void);
+        for y in 1..15 {
+            for x in 1..15 {
+                g.set(x, y, m.wall);
+            }
+        }
+        for y in 2..14 {
+            for x in 2..14 {
+                g.set(x, y, m.floor);
+            }
+        }
+        // A north door's sill, three across, and a west door's, three down.
+        for x in 6..9 {
+            g.set(x, 4, Tile::Sill);
+        }
+        for y in 8..11 {
+            g.set(4, y, Tile::Sill);
+        }
+        p.paint(&TileMap::new(g, false), 5, 0, 0, &mut c);
+        let floor = mean(&c, Rect::new(8, 7, 4, 4));
+        for (what, r) in [("across", Rect::new(6, 4, 3, 1)), ("down", Rect::new(4, 8, 1, 3))] {
+            let sill = mean(&c, r);
+            let off = (0..3).map(|i| (sill[i] - floor[i]).abs()).max().unwrap();
+            assert!(off <= 36, "{}: the sill {what} is {sill:?}, the floor {floor:?}", m.id);
+        }
+    }
+}

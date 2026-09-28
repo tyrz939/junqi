@@ -1,4 +1,5 @@
 {
+  "school_way_in": { "name": "Way In", "sprite": "school_way_in", "w": 2, "h": 1, "solid": false, "blockLos": false, "flat": true, "prompt": "Climb in" },
   "bell_rope": { "name": "Bell Rope", "sprite": "bell_rope", "w": 1, "h": 1, "solid": true, "blockLos": false, "prompt": "Pull" },
   "clock_stopped": { "name": "School Clock", "sprite": "clock_stopped", "w": 1, "h": 1, "solid": true, "blockLos": false, "once": true, "prompt": "Stop it", "lockedSays": "is out of reach" },
   "sickbay_bed_bell": { "name": "The Far Bed", "sprite": "sickbay_bed_bell", "w": 2, "h": 3, "solid": true, "blockLos": false, "rest": true, "prompt": "Rest" },
