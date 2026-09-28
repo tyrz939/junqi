@@ -34,7 +34,7 @@ use jane_data::{PlaceAt, PlacementDef, StoryDef};
 use super::County;
 use super::centre;
 use super::country::roads::{compass, distance_words};
-use super::country::{Kind, Place, in_box};
+use super::country::{FIRST_CLEAR, Kind, Place, dist, in_box};
 use super::placements::{apply_edit, hide_under, pick_top, put_prop};
 use super::tale_ground::{OnFoot, Standing, Stood, near_on_foot, place_cells, spot_for};
 use crate::kit::{Kit, js_round};
@@ -820,7 +820,9 @@ fn posts(c: &mut County<'_>, names: &Names) {
     for (b, name, near) in to {
         let Some(start) = reach(&rb, b).road else { continue };
         let mut at: Vec<(i32, i32)> = Vec::new();
-        if near {
+        // The first walk (the halt, Julie's, the town) is the letter's: no post of this kind on it.
+        let first = |c: &County<'_>, (x, y): (i32, i32)| dist(&c.country.d_first, x, y) < FIRST_CLEAR;
+        if near && !first(c, start) {
             at.push(start);
         }
         // Along the roads from the nearest point, nearest first: the first cell far enough off
@@ -831,7 +833,10 @@ fn posts(c: &mut County<'_>, names: &Names) {
         while let Some(((x, y), d)) = queue.pop_front() {
             let off = i64::from(POST_OFF);
             let apart = i64::from(POST_APART);
-            if edge_d2(b, (x, y)) >= off * off && far.iter().all(|&f| d2(f, (x, y)) >= apart * apart) {
+            if edge_d2(b, (x, y)) >= off * off
+                && far.iter().all(|&f| d2(f, (x, y)) >= apart * apart)
+                && !first(c, (x, y))
+            {
                 far.push((x, y));
                 if far.len() == 2 {
                     break;
