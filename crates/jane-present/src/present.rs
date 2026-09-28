@@ -1190,7 +1190,8 @@ impl Present {
                                 x1: x1 as i16,
                                 y1: y1 as i16,
                                 height: b.height,
-                                mask: b.mask,
+                                lo: b.lo,
+                                fence: b.fence,
                             });
                         }
                     }

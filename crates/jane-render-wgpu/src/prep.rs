@@ -5,7 +5,7 @@
 use std::ops::Range;
 
 use jane_present::frame::{Atmos, PartShape, SkyLook};
-use jane_present::{Depth, Frame, LightKind, Pass, Post, Tint};
+use jane_present::{Depth, Frame, LightKind, Pass, Post, Tint, shadow};
 
 /// Canvas px round the canvas the G-buffer and the height field cover, so a caster off screen
 /// still casts in: the presenter's casting band (`jane_present::frame::CAST_MARGIN`), whose
@@ -76,6 +76,14 @@ pub struct Prep {
     pub tiles_y: u32,
     /// The globals uniform, [`GLOBALS`] bytes.
     pub globals: Vec<u8>,
+    /// What spills (the fence rule, PRESENTATION.md §1.7): a byte a canvas px, how much of the
+    /// sun the bands of every spilling block take off the ground there (`shadow::block_bands`,
+    /// the bands T0 and T1 lay), its edge softened as wide as theirs is feathered. Whether it has
+    /// any this frame, and had any the last (so it is cleared on the GPU once).
+    pub spill: Vec<u8>,
+    pub spill_on: bool,
+    pub spill_was: bool,
+    spill_line: Vec<u32>,
     /// The frame's clear, linear.
     pub clear: [f64; 3],
     /// The sky's sprites (`SpriteIn`, the same layout), drawn onto the sky backdrop.
@@ -172,6 +180,58 @@ fn rad(a: u16) -> f32 {
 
 impl Prep {
     /// Fills every list from `frame`.
+    /// Lays the bands of every block that spills (the fence rule: a fence's posts and rails, a
+    /// hedge; `shadow::spills`) into [`Prep::spill`], as T0 and T1 lay them, then softens their
+    /// edge by a box `feather + 1` px each way (`shadow::feather`: T0's and T1's edge, as wide).
+    fn spill_bands(&mut self, frame: &Frame, sun: &jane_present::Directional, (w, h): (i32, i32)) {
+        let (Some(k), Some(ks)) = (shadow::shear(sun), shadow::spill_shear(sun)) else { return };
+        let mut dirty: Option<(i32, i32, i32, i32)> = None;
+        let spill = &mut self.spill;
+        for b in frame.blocks.iter().filter(|b| shadow::spills(b)) {
+            shadow::block_bands(b, k, ks, |band| {
+                let (x0, x1, y0, y1) = (band.x0.max(0), band.x1.min(w), band.y0.max(0), band.y1.min(h));
+                if x0 >= x1 || y0 >= y1 {
+                    return;
+                }
+                for y in y0..y1 {
+                    spill[(y * w + x0) as usize..(y * w + x1) as usize].fill(band.strength);
+                }
+                dirty = Some(match dirty {
+                    None => (x0, y0, x1, y1),
+                    Some((a, b, c, d)) => (a.min(x0), b.min(y0), c.max(x1), d.max(y1)),
+                });
+            });
+        }
+        let Some((x0, y0, x1, y1)) = dirty else { return };
+        self.spill_on = true;
+        let r = shadow::feather(sun.spread) + 1;
+        let (x0, y0, x1, y1) = ((x0 - r).max(0), (y0 - r).max(0), (x1 + r).min(w), (y1 + r).min(h));
+        let n = 2 * r + 1;
+        let mut line = std::mem::take(&mut self.spill_line);
+        for y in y0..y1 {
+            let row = (y * w) as usize;
+            line.clear();
+            line.extend(
+                (x0..x1).map(|x| {
+                    (x - r..=x + r).map(|xx| u32::from(spill[row + xx.clamp(0, w - 1) as usize])).sum::<u32>()
+                }),
+            );
+            for (x, v) in (x0..x1).zip(&line) {
+                spill[row + x as usize] = (v / n as u32) as u8;
+            }
+        }
+        for x in x0..x1 {
+            line.clear();
+            line.extend((y0..y1).map(|y| {
+                (y - r..=y + r).map(|yy| u32::from(spill[(yy.clamp(0, h - 1) * w + x) as usize])).sum::<u32>()
+            }));
+            for (y, v) in (y0..y1).zip(&line) {
+                spill[(y * w + x) as usize] = (v / n as u32) as u8;
+            }
+        }
+        self.spill_line = line;
+    }
+
     pub fn build(&mut self, frame: &Frame, ticks: u32) {
         let (w, h) = (u32::from(frame.canvas.0), u32::from(frame.canvas.1));
         self.chunks.clear();
@@ -199,6 +259,15 @@ impl Prep {
         self.part_draws.clear();
         let c = frame.clear;
         self.clear = [(c >> 16) as u8, (c >> 8) as u8, c as u8].map(|v| f64::from(linear(v)));
+        self.spill_was = self.spill_on;
+        if self.spill.len() != (w * h) as usize {
+            self.spill.clear();
+            self.spill.resize((w * h) as usize, 0);
+            self.spill_was = true;
+        } else if self.spill_on {
+            self.spill.fill(0);
+        }
+        self.spill_on = false;
 
         // Each sprite's depth across the ground: its caster's, else 0, which stands nothing in the
         // height field (a sprite the frame does not list as a caster casts on no tier).
@@ -376,6 +445,9 @@ impl Prep {
         }
 
         let (fill, sun) = sky.unwrap_or(([255; 3], None));
+        if let Some(s) = sun.filter(|s| s.strength > 0) {
+            self.spill_bands(frame, &s, (w as i32, h as i32));
+        }
         let g = GUARD as f32;
         f32s(&mut self.globals, &[(w + 2 * GUARD) as f32, (h + 2 * GUARD) as f32, w as f32, h as f32, g, hmax + 2.0]);
         u32s(&mut self.globals, &[self.n_lights, self.tiles_x]);

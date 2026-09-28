@@ -93,7 +93,7 @@ fn frame(tier: Tier, shadows: bool) -> Frame {
     f.canvas = (W, H);
     f.clear = GRASS;
     f.layers = chunks();
-    let (mut field, mut masks, mut runs, mut out) = (Vec::new(), Vec::new(), Vec::new(), Vec::new());
+    let (mut field, mut runs, mut out) = (Vec::new(), Vec::new(), Vec::new());
     for k in 0..3u16 {
         f.chunks.push(ChunkCmd {
             id: ChunkId { cx: k, cy: 0 },
@@ -102,7 +102,7 @@ fn frame(tier: Tier, shadows: bool) -> Frame {
             y: 0,
             slot: k,
         });
-        blocks(&f.layers[usize::from(k)].height, &mut field, &mut masks, &mut runs, &mut out);
+        blocks(&f.layers[usize::from(k)].height, &[], &mut field, &mut runs, &mut out);
         let dx = k as i16 * CHUNK_PX as i16;
         f.blocks.extend(out.iter().map(|b| Block { x0: b.x0 + dx, x1: b.x1 + dx, ..*b }));
     }

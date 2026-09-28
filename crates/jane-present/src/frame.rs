@@ -647,11 +647,14 @@ pub struct Caster {
 }
 
 /// What the terrain stands on the ground (§1.7): a rect of its height field seen from above,
-/// canvas px `[x0, x1) x [y0, y1)` (the camera taken off), standing from the ground to `height`
-/// px. A chunk's heights stand each px `h` up on the ground `rows_up(h)` rows below it, as T2's
-/// field stands them, and the rows of one height are merged into rects
-/// (`terrain::blocks`): a house is its footprint in a few rects by its roof's courses, a wall its
-/// run, a fence its rails. T2 casts the same from its field; T0 and T1 from these.
+/// canvas px `[x0, x1) x [y0, y1)` (the camera taken off), standing from `lo` px up to `height`.
+/// A chunk's heights stand each px `h` up on the ground `rows_up(h)` rows below it, as T2's field
+/// stands them, and the rows of one height are merged into rects (`terrain::blocks`): a house is
+/// its footprint in a few rects by its roof's courses, a wall its run. A fence is not in its
+/// heights' blocks: each post and rail is a block of its own as it is drawn (`fence`, from
+/// `jane_art::terrain::Chunk::fences`), a rail floating from `lo`. T2 casts the height field's
+/// blocks from its field and what spills (a fence, a hedge: `shadow::spills`) by the same bands
+/// as T0 and T1; T0 and T1 cast every block.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Block {
     pub x0: i16,
@@ -659,11 +662,11 @@ pub struct Block {
     pub x1: i16,
     pub y1: i16,
     pub height: u8,
-    /// What of its height is matter, for a block that spills (`shadow::spills`, the fence rule):
-    /// bit `i` set where something stands between `2i` and `2i + 2` px up (`terrain::blocks`:
-    /// each px from the bottom of its own run down the screen to its height, so a fence's rails
-    /// are two bars over open ground and a hedge is solid). 0: solid from the ground.
-    pub mask: u32,
+    /// Its bottom, px up: 0 from the ground (every block of the height field, a post); a rail's
+    /// underside.
+    pub lo: u8,
+    /// A fence's post or rail (the fence rule, `shadow::spills`).
+    pub fence: bool,
 }
 
 /// The grade and the bloom (§1.9): a row per region by hour.
@@ -764,6 +767,9 @@ pub struct ChunkLayers {
     pub surface: Vec<u8>,
     /// The chunk's water cells, chunk-local `(x, y, shimmer phase)`: every tier.
     pub water: Vec<(u8, u8, u8)>,
+    /// T1 and T2: which px a fence drew, a bit a px, row by row (`jane_art::terrain::Chunk::
+    /// fence_px`): T2's sun passes them (the fence rule, PRESENTATION.md §1.7).
+    pub fence: Vec<u64>,
     /// T0 only (no emissive layer): what glows in the chunk, sparse, each px's index in the chunk
     /// and its colour `0xAARRGGBB`, at most [`GLOW_CAP`] (reserved once, so painting never
     /// allocates). The lit tiers read the emissive layer.
@@ -796,6 +802,7 @@ impl ChunkLayers {
                 emissive: vec![0; n],
                 height: vec![0; n],
                 surface: vec![0; n],
+                fence: vec![0; n / 64],
                 water,
                 glow: Vec::new(),
             }
@@ -810,6 +817,12 @@ impl ChunkLayers {
     /// Whether the height layer is carried.
     pub fn has_height(&self) -> bool {
         !self.height.is_empty()
+    }
+
+    /// Whether a fence drew chunk px `k` (`y * CHUNK_PX + x`): never at T0, which keeps no
+    /// fence layer.
+    pub fn is_fence(&self, k: usize) -> bool {
+        self.fence.get(k / 64).is_some_and(|w| w >> (k % 64) & 1 == 1)
     }
 }
 

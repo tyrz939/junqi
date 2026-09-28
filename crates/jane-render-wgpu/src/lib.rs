@@ -75,7 +75,6 @@ struct Pipes {
     contact: wgpu::RenderPipeline,
     ghost: wgpu::RenderPipeline,
     scatter: wgpu::ComputePipeline,
-    thin: wgpu::ComputePipeline,
     light: wgpu::RenderPipeline,
     down: wgpu::RenderPipeline,
     up: wgpu::RenderPipeline,
@@ -194,8 +193,11 @@ impl Pipes {
             ],
         );
         let scatter_layout = layout(device, "scatter", &[B::Uniform, B::Tex, B::ReadWrite, B::Uint, B::Tex]);
-        let light_layout =
-            layout(device, "light", &[B::Uniform, B::Tex, B::Tex, B::Tex, B::Read, B::Read, B::Read, B::Read, B::Uint]);
+        let light_layout = layout(
+            device,
+            "light",
+            &[B::Uniform, B::Tex, B::Tex, B::Tex, B::Read, B::Read, B::Read, B::Read, B::Uint, B::Tex],
+        );
         let post_layout = layout(device, "post", &[B::Uniform, B::Tex, B::Sampler, B::Tex]);
         let step_layout = layout(device, "step", &[B::Uniform]);
 
@@ -271,15 +273,6 @@ impl Pipes {
             compilation_options: wgpu::PipelineCompilationOptions::default(),
             cache: None,
         });
-        // The fence rule's mark over the field, after the scatter (`scatter.wgsl`'s `thin`).
-        let thin = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-            label: Some("thin"),
-            layout: Some(&spl),
-            module: &sm,
-            entry_point: Some("thin"),
-            compilation_options: wgpu::PipelineCompilationOptions::default(),
-            cache: None,
-        });
 
         let lm = module(device, "light", LIGHT);
         let light = render_pipeline(
@@ -321,7 +314,6 @@ impl Pipes {
             contact,
             ghost,
             scatter,
-            thin,
             light,
             down,
             up,
@@ -375,6 +367,8 @@ struct Targets {
     tile_lights: wgpu::Buffer,
     scatter_bg: wgpu::BindGroup,
     light_bg: wgpu::BindGroup,
+    /// What spills (the fence rule, `Prep::spill`), the canvas's size.
+    spill: wgpu::Texture,
     /// Per bloom step: its post group and its step group, down then up.
     down: Vec<(wgpu::BindGroup, wgpu::BindGroup)>,
     up: Vec<(wgpu::BindGroup, wgpu::BindGroup)>,
@@ -792,14 +786,23 @@ impl Wgpu {
         let gid = view(texture(d, "g id", (full.0, full.1, 1), ID, rt));
         let hmap = d.create_buffer(&wgpu::BufferDescriptor {
             label: Some("height field"),
-            // Three thirds: each texel's top and whose (`h << 16 | id`), its bottom (`256 - lo`,
-            // 0 where nothing floats), and the terrain's matter by height where it may spill
-            // (the fence rule, `scatter.wgsl`'s `mask_of`).
-            size: u64::from(full.0) * u64::from(full.1) * 12,
+            // Two halves: each texel's top and whose (`h << 16 | id`), and its bottom (`256 - lo`,
+            // 0 where nothing floats).
+            size: u64::from(full.0) * u64::from(full.1) * 8,
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
         let hdr = view(texture(d, "hdr", (w, h, 1), HDR, rt));
+        // What spills (the fence rule): the canvas's coverage by the bands T0 and T1 lay
+        // (`Prep::spill`), written each frame it has any.
+        let spill = texture(
+            d,
+            "spill",
+            (w, h, 1),
+            wgpu::TextureFormat::R8Unorm,
+            wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        );
+        let spill_view = spill.create_view(&wgpu::TextureViewDescriptor::default());
         let bsrc = view(texture(d, "bloom source", (w, h, 1), HDR, rt));
         let sizes: Vec<(u32, u32)> = (1..=BLOOM_LEVELS).map(|k| ((w >> k).max(1), (h >> k).max(1))).collect();
         let levels: Vec<wgpu::TextureView> =
@@ -846,6 +849,7 @@ impl Wgpu {
                 tiles.as_entire_binding(),
                 tile_lights.as_entire_binding(),
                 r(&gid),
+                r(&spill_view),
             ],
         );
         let smp = wgpu::BindingResource::Sampler(&p.sampler);
@@ -941,6 +945,7 @@ impl Wgpu {
             tile_lights,
             scatter_bg,
             light_bg,
+            spill,
             down,
             up,
             grade,
@@ -1052,12 +1057,13 @@ fn rgba(out: &mut Vec<u8>, px: &[u32]) {
     }
 }
 
-/// A chunk's normal and height as `(nx, ny, height, depth)`; a T0 chunk is flat.
+/// A chunk's normal and height as `(nx, ny, height, depth)`, a fence's px's depth marked
+/// (`common.wgsl`'s `FENCE`, the fence rule); a T0 chunk is flat.
 fn nh(out: &mut Vec<u8>, l: &ChunkLayers) {
     out.clear();
     if l.lit() {
-        for (n, &h) in l.normal.iter().zip(&l.height) {
-            out.extend_from_slice(&[n[0], n[1], h, 2]);
+        for (k, (n, &h)) in l.normal.iter().zip(&l.height).enumerate() {
+            out.extend_from_slice(&[n[0], n[1], h, if l.is_fence(k) { 2 | 128 } else { 2 }]);
         }
     } else {
         for _ in &l.albedo {
@@ -1175,6 +1181,9 @@ impl Backend for Wgpu {
             q.write_buffer(&self.chunk_buf, 0, &prep.chunks);
         }
         q.write_buffer(&self.globals, 0, &prep.globals);
+        if prep.spill_on || prep.spill_was {
+            write_layer(q, &t.spill, 0, t.canvas, 1, &prep.spill);
+        }
         q.write_buffer(&t.lights, 0, &prep.lights[..prep.lights.len().min(t.lights.size() as usize)]);
         q.write_buffer(&t.tiles, 0, &prep.tiles[..prep.tiles.len().min(t.tiles.size() as usize)]);
         q.write_buffer(
@@ -1281,13 +1290,6 @@ impl Backend for Wgpu {
                 }),
             });
             pass.set_pipeline(&self.pipes.scatter);
-            pass.set_bind_group(0, &t.scatter_bg, &[]);
-            pass.dispatch_workgroups(t.full.0.div_ceil(8), t.full.1.div_ceil(8), 1);
-        }
-        {
-            let mut pass =
-                enc.begin_compute_pass(&wgpu::ComputePassDescriptor { label: Some("thin"), timestamp_writes: None });
-            pass.set_pipeline(&self.pipes.thin);
             pass.set_bind_group(0, &t.scatter_bg, &[]);
             pass.dispatch_workgroups(t.full.0.div_ceil(8), t.full.1.div_ceil(8), 1);
         }

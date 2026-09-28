@@ -49,7 +49,7 @@ use crate::flora::{Bank, Ramps};
 use crate::palette::{self, Ix, Ramp, Tone};
 
 use field::Field;
-pub use standing::mask;
+pub use standing::{fence_parts, mask};
 pub use style::{Style, Styles, over, snake};
 
 /// Screen px per cell.
@@ -300,6 +300,32 @@ pub struct CasterSeg {
     pub height: u8,
 }
 
+/// The least height a fence's px stands at, px: over the shadows' ground (`jane_present::shadow::
+/// GROUND`, 4), so a fence is never the ground its own shadow is laid on, and under the relief
+/// the terrain casts from (8).
+pub const FENCE_FLOOR: u8 = 5;
+
+/// A part of a fence as its shadow sees it (PRESENTATION.md §1.7, the fence rule): a post or a
+/// rail as a box on the ground, chunk-local px `[x0, x1) x [y0, y1)` of the ground it stands
+/// over, its matter from `lo` px up to `hi`. A post stands from the ground; a rail floats. Built
+/// from the fence's cells and their neighbours with the numbers the fence is drawn with
+/// (`standing::fence`), so the shadow is the posts and the two rails as drawn.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct FencePart {
+    /// The footprint's left edge, chunk-local px.
+    pub x0: i16,
+    /// Its top row.
+    pub y0: i16,
+    /// Its right edge, exclusive.
+    pub x1: i16,
+    /// Its bottom row, exclusive: the row under the fence's foot.
+    pub y1: i16,
+    /// Its matter's bottom, px up (0: from the ground).
+    pub lo: u8,
+    /// Its top, px up.
+    pub hi: u8,
+}
+
 /// A flora sprite stood in the chunk: which one (its index in `Painter::bank().all()`), where its
 /// foot is (chunk-local px) and the cell row whose strip holds it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -332,6 +358,13 @@ pub struct Chunk {
     /// The flora stamped into the strips, as placements of `Painter::bank().all()` sprites: for a
     /// renderer that would rather draw trees from its atlas than keep their strips.
     pub placed: Vec<Placed>,
+    /// The chunk's fences as posts and rails ([`FencePart`]): what their sun shadows are thrown
+    /// from on every tier. Not in the golden (a view of the tiles, like `casters`).
+    pub fences: Vec<FencePart>,
+    /// Which px of the layers a fence drew ([`Standing::Placed`] only), a bit a px, row by row
+    /// (`y * CHUNK_PX + x`): the sun passes them by (their shadow is [`Chunk::fences`]'), a lamp
+    /// does not.
+    pub fence_px: Vec<u64>,
 }
 
 impl Default for Chunk {
@@ -360,7 +393,15 @@ impl Chunk {
             water: Vec::with_capacity((CHUNK_CELLS * CHUNK_CELLS) as usize),
             casters: Vec::with_capacity(256),
             placed: Vec::with_capacity((CHUNK_CELLS * CHUNK_CELLS) as usize),
+            fences: Vec::with_capacity(256),
+            fence_px: vec![0; (CHUNK_PX * CHUNK_PX / 64) as usize],
         }
+    }
+
+    /// Whether a fence drew chunk-local px `(x, y)`.
+    pub fn is_fence(&self, x: i32, y: i32) -> bool {
+        let k = (y * CHUNK_PX + x) as usize;
+        (0..CHUNK_PX).contains(&x) && (0..CHUNK_PX).contains(&y) && self.fence_px[k / 64] >> (k % 64) & 1 == 1
     }
 
     /// The rows with standing things in them, top row first.
@@ -549,6 +590,9 @@ struct Scratch {
     /// One strip row being drawn, its mask, and one standing thing.
     row: Canvas,
     rowmask: Vec<u8>,
+    /// Which px of the strip a fence drew (`Standing::Placed`): what `bake` marks in
+    /// [`Chunk::fence_px`].
+    fencerow: Vec<bool>,
     /// Where the strip canvas was last drawn: what the next row clears.
     row_bb: Rect,
     thing: Canvas,
@@ -630,6 +674,7 @@ impl Painter {
             wob_y: Field::default(),
             row: Canvas::new(CHUNK_PX + 2 * STRIP_MARGIN, STRIP_H),
             rowmask: vec![0; ((CHUNK_PX + 2 * STRIP_MARGIN) * STRIP_H) as usize],
+            fencerow: vec![false; ((CHUNK_PX + 2 * STRIP_MARGIN) * STRIP_H) as usize],
             row_bb: Rect::new(0, 0, CHUNK_PX + 2 * STRIP_MARGIN, STRIP_H),
             thing: Canvas::new(3 * CELL, STRIP_H),
         };
@@ -665,6 +710,7 @@ impl Painter {
         out.cy = cy;
         out.n_strips = 0;
         out.placed.clear();
+        out.fence_px.fill(0);
         standing::strips(self, x0, y0, seed, out);
         self.finish(x0, y0, out);
     }

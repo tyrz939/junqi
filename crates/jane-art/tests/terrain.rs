@@ -162,3 +162,31 @@ fn the_county_sample_has_canopy_water_casters_and_lit_windows() {
 fn every_style_resolves_its_ramps() {
     Styles::from_looks(&jane_data::tile_looks()).unwrap();
 }
+
+#[test]
+fn a_placed_fence_marks_its_px_stands_them_off_the_ground_and_gives_its_posts_and_rails() {
+    // The sample's fences: a run across cells 2..14 of row 2 and down columns 2 and 13 to row 9
+    // (PRESENTATION.md §1.7, the fence rule).
+    let map = sample_county();
+    let mut p = Painter::new();
+    p.set_standing(jane_art::terrain::Standing::Placed);
+    let mut c = Chunk::new();
+    p.paint(&map, 1, 0, 0, &mut c);
+    let fence_px = (0..CHUNK_PX * CHUNK_PX).filter(|&k| c.is_fence(k % CHUNK_PX, k / CHUNK_PX)).count();
+    // Twelve cells across, eight down each side: posts and rails, a few hundred px a cell.
+    assert!(fence_px > 20 * 60, "{fence_px} px marked a fence's");
+    for k in 0..CHUNK_PX * CHUNK_PX {
+        if c.is_fence(k % CHUNK_PX, k / CHUNK_PX) {
+            assert!(c.layers.height[k as usize] >= jane_art::terrain::FENCE_FLOOR, "a fence px on the ground at {k}");
+        }
+    }
+    // A post a fence cell from the ground to 28 px; every other part floats (a rail).
+    let posts = c.fences.iter().filter(|f| f.lo == 0).count();
+    assert_eq!(posts, 12 + 2 * 7, "{:?}", c.fences);
+    assert!(c.fences.iter().all(|f| f.lo == 0 && f.hi == 28 || f.lo > 0 && f.hi > f.lo));
+    // Each post stands on its cell's foot row, under its drawn px.
+    for f in c.fences.iter().filter(|f| f.lo == 0) {
+        let (x, y) = (i32::from(f.x0) + 2, i32::from(f.y1) - 1);
+        assert!(c.is_fence(x, y) && c.is_fence(x, y - 20), "a post's part off its drawing at ({x}, {y})");
+    }
+}

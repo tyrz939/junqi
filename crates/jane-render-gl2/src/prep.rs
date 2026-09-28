@@ -156,6 +156,8 @@ pub enum Step {
         apply: (i32, i32, i32, i32),
         k: [f32; 3],
         feather: i32,
+        /// The camera's canvas px, four each way: the dither is laid by the county's px.
+        dither: (i32, i32),
     },
 }
 
@@ -721,6 +723,7 @@ impl Prep {
             apply: (ax0, ay0, ax1 - ax0, ay1 - ay0),
             k,
             feather: f,
+            dither: (frame.camera.0 & 3, frame.camera.1 & 3),
         });
     }
 
