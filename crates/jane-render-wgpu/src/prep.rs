@@ -80,12 +80,13 @@ pub struct Prep {
     pub globals: Vec<u8>,
     /// What spills (the fence rule, PRESENTATION.md §1.7): a byte a canvas px, how much of the
     /// sun the bands of every spilling block take off the ground there (`shadow::block_bands`,
-    /// the bands T0 and T1 lay), its edge softened as wide as theirs is feathered. Whether it has
+    /// the bands T0 and T1 lay); the light pass softens its edge as wide as theirs is feathered. Whether it has
     /// any this frame, and had any the last (so it is cleared on the GPU once).
     pub spill: Vec<u8>,
     pub spill_on: bool,
     pub spill_was: bool,
-    spill_line: Vec<u32>,
+    /// How far apart the light pass's taps of it are, px (`feather + 1`).
+    spill_soft: f32,
     /// The frame's clear, linear.
     pub clear: [f64; 3],
     /// The sky's sprites (`SpriteIn`, the same layout), drawn onto the sky backdrop.
@@ -183,11 +184,10 @@ fn rad(a: u16) -> f32 {
 impl Prep {
     /// Fills every list from `frame`.
     /// Lays the bands of every block that spills (the fence rule: a fence's posts and rails, a
-    /// hedge; `shadow::spills`) into [`Prep::spill`], as T0 and T1 lay them, then softens their
-    /// edge by a box `feather + 1` px each way (`shadow::feather`: T0's and T1's edge, as wide).
+    /// hedge; `shadow::spills`) into [`Prep::spill`], as T0 and T1 lay them.
     fn spill_bands(&mut self, frame: &Frame, sun: &jane_present::Directional, (w, h): (i32, i32)) {
         let (Some(k), Some(ks)) = (shadow::shear(sun), shadow::spill_shear(sun)) else { return };
-        let mut dirty: Option<(i32, i32, i32, i32)> = None;
+        let mut any = false;
         let spill = &mut self.spill;
         for b in frame.blocks.iter().filter(|b| shadow::spills(b)) {
             shadow::block_bands(b, k, ks, |band| {
@@ -198,40 +198,16 @@ impl Prep {
                 for y in y0..y1 {
                     spill[(y * w + x0) as usize..(y * w + x1) as usize].fill(band.strength);
                 }
-                dirty = Some(match dirty {
-                    None => (x0, y0, x1, y1),
-                    Some((a, b, c, d)) => (a.min(x0), b.min(y0), c.max(x1), d.max(y1)),
-                });
+                any = true;
             });
         }
-        let Some((x0, y0, x1, y1)) = dirty else { return };
+        if !any {
+            return;
+        }
         self.spill_on = true;
-        let r = shadow::feather(sun.spread) + 1;
-        let (x0, y0, x1, y1) = ((x0 - r).max(0), (y0 - r).max(0), (x1 + r).min(w), (y1 + r).min(h));
-        let n = 2 * r + 1;
-        let mut line = std::mem::take(&mut self.spill_line);
-        for y in y0..y1 {
-            let row = (y * w) as usize;
-            line.clear();
-            line.extend(
-                (x0..x1).map(|x| {
-                    (x - r..=x + r).map(|xx| u32::from(spill[row + xx.clamp(0, w - 1) as usize])).sum::<u32>()
-                }),
-            );
-            for (x, v) in (x0..x1).zip(&line) {
-                spill[row + x as usize] = (v / n as u32) as u8;
-            }
-        }
-        for x in x0..x1 {
-            line.clear();
-            line.extend((y0..y1).map(|y| {
-                (y - r..=y + r).map(|yy| u32::from(spill[(yy.clamp(0, h - 1) * w + x) as usize])).sum::<u32>()
-            }));
-            for (y, v) in (y0..y1).zip(&line) {
-                spill[(y * w + x) as usize] = (v / n as u32) as u8;
-            }
-        }
-        self.spill_line = line;
+        // Its edge is softened in the light pass (`light.wgsl`'s `spill_at`), a tent of 3 x 3
+        // taps `feather + 1` px apart (T0's and T1's edge, as wide).
+        self.spill_soft = (shadow::feather(sun.spread) + 1) as f32;
     }
 
     pub fn build(&mut self, frame: &Frame, ticks: u32) {
@@ -510,7 +486,7 @@ impl Prep {
             &mut self.globals,
             &[frame.camera.0 as f32, frame.camera.1 as f32, f32::from(u8::from(self.has_water)), self.n_parts as f32],
         );
-        f32s(&mut self.globals, &[s.zone.0 as f32, s.zone.2 as f32, s.zone.3 as f32, 0.0]);
+        f32s(&mut self.globals, &[s.zone.0 as f32, s.zone.2 as f32, s.zone.3 as f32, self.spill_soft]);
         debug_assert_eq!(self.globals.len(), GLOBALS);
         if self.fog.is_empty() {
             f32s(&mut self.fog, &[0.0; 12]);

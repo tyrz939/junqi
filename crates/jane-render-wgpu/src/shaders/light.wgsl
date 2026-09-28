@@ -35,6 +35,27 @@ struct Light {
 // What spills (the fence rule, `common.wgsl`): how much of the sun the fences' and hedges' bands
 // take off the ground at each canvas px (`Prep::spill`).
 @group(0) @binding(9) var spill: texture_2d<f32>;
+// Each tile's tallest (`scatter.wgsl`'s `tops`).
+@group(0) @binding(10) var<storage, read> tile_tops: array<u32>;
+
+// The tallest top in the tile under `q`, grown by `TOP_GROW` (off the field: nothing).
+fn tile_top(q: vec2<f32>) -> f32 {
+    let x = i32(floor(q.x));
+    let y = i32(floor(q.y));
+    if x < 0 || y < 0 || x >= i32(g.full.x) || y >= i32(g.full.y) {
+        return 0.0;
+    }
+    return f32(tile_tops[(y / TOP_TILE) * top_tiles_x() + x / TOP_TILE]);
+}
+
+// How far along `dir` from `q` the ray leaves the tile it is in, px.
+fn tile_exit(q: vec2<f32>, dir: vec2<f32>) -> f32 {
+    let t = f32(TOP_TILE);
+    let b = floor(q / t) * t;
+    let ex = select(select(1e9, (b.x - q.x) / dir.x, dir.x < -1e-5), (b.x + t - q.x) / dir.x, dir.x > 1e-5);
+    let ey = select(select(1e9, (b.y - q.y) / dir.y, dir.y < -1e-5), (b.y + t - q.y) / dir.y, dir.y > 1e-5);
+    return max(min(ex, ey), 0.0);
+}
 
 // Whose field a trace passes through as if it were not there: the px's own thing and the light's
 // holder (0: nothing; the terrain is 0 and is never skipped).
@@ -143,6 +164,22 @@ fn trace(p: vec3<f32>, l: vec3<f32>, max_t: f32, k: f32, t0: f32, max_step: f32)
     return r * r * (3.0 - 2.0 * r);
 }
 
+// How much of the sun what spills takes off the canvas px `px` (the fence rule, `common.wgsl`):
+// its mask under a tent of 3 x 3 taps `g.zone.w` px apart, 1 : 2 : 1 each way, so its edge is
+// about as soft as T0's and T1's feathered one.
+fn spill_at(px: vec2<i32>) -> f32 {
+    let s = i32(g.zone.w);
+    let hi = vec2<i32>(i32(g.canvas.x) - 1, i32(g.canvas.y) - 1);
+    var sum = 0.0;
+    for (var j = -1; j <= 1; j++) {
+        for (var i = -1; i <= 1; i++) {
+            let q = clamp(px + vec2<i32>(i, j) * s, vec2<i32>(0), hi);
+            sum += textureLoad(spill, q, 0).r * f32((2 - abs(i)) * (2 - abs(j)));
+        }
+    }
+    return sum / 16.0;
+}
+
 // How far across a side ray of `sun_disc` lies at the most, px.
 const SIDE_MAX: f32 = 1.5;
 
@@ -180,6 +217,14 @@ fn sun_disc(p: vec3<f32>, l: vec3<f32>, k: f32, t0: f32) -> f32 {
             break;
         }
         let q = p.xy + dir * t;
+        // Over the tallest of this tile by more than any penumbra could reach (the clearance
+        // over its top is at least `z - top`, and the ray only rises): cross the tile at once.
+        let top = tile_top(q);
+        if rise >= 0.0 && k * (z - top) >= t {
+            t += tile_exit(q, dir) + 0.5;
+            step = clamp(t * 0.1, 1.0, 2.0);
+            continue;
+        }
         var f: vec2<f32>;
         if step > 1.25 {
             f = height_max(q);
@@ -305,7 +350,7 @@ fn fs_light(i: FullOut) -> LitOut {
                 // the ground alone (a fence never shadows its own rails, a hedge its own face).
                 // `sun_seen` is the darker of the two, as T0 and T1 keep the strongest band.
                 if !lifted {
-                    seen = min(seen, 1.0 - textureLoad(spill, px, 0).r);
+                    seen = min(seen, 1.0 - spill_at(px));
                 }
                 sun_seen = 1.0 - (g.sun_dir.w - 1.0) * (1.0 - seen);
             }

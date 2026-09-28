@@ -75,6 +75,7 @@ struct Pipes {
     contact: wgpu::RenderPipeline,
     ghost: wgpu::RenderPipeline,
     scatter: wgpu::ComputePipeline,
+    tops: wgpu::ComputePipeline,
     light: wgpu::RenderPipeline,
     down: wgpu::RenderPipeline,
     up: wgpu::RenderPipeline,
@@ -192,11 +193,12 @@ impl Pipes {
                 B::TexArray,
             ],
         );
-        let scatter_layout = layout(device, "scatter", &[B::Uniform, B::Tex, B::ReadWrite, B::Uint, B::Tex]);
+        let scatter_layout =
+            layout(device, "scatter", &[B::Uniform, B::Tex, B::ReadWrite, B::Uint, B::Tex, B::ReadWrite]);
         let light_layout = layout(
             device,
             "light",
-            &[B::Uniform, B::Tex, B::Tex, B::Tex, B::Read, B::Read, B::Read, B::Read, B::Uint, B::Tex],
+            &[B::Uniform, B::Tex, B::Tex, B::Tex, B::Read, B::Read, B::Read, B::Read, B::Uint, B::Tex, B::Read],
         );
         let post_layout = layout(device, "post", &[B::Uniform, B::Tex, B::Sampler, B::Tex]);
         let step_layout = layout(device, "step", &[B::Uniform]);
@@ -273,6 +275,16 @@ impl Pipes {
             compilation_options: wgpu::PipelineCompilationOptions::default(),
             cache: None,
         });
+        // Each tile's tallest, after the scatter (`scatter.wgsl`'s `tops`): what lets the sun's
+        // trace cross open ground a tile at a time.
+        let tops = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("tops"),
+            layout: Some(&spl),
+            module: &sm,
+            entry_point: Some("tops"),
+            compilation_options: wgpu::PipelineCompilationOptions::default(),
+            cache: None,
+        });
 
         let lm = module(device, "light", LIGHT);
         let light = render_pipeline(
@@ -314,6 +326,7 @@ impl Pipes {
             contact,
             ghost,
             scatter,
+            tops,
             light,
             down,
             up,
@@ -344,6 +357,9 @@ struct ChunkTex {
     scratch: Vec<u8>,
 }
 
+/// The side of a tile of `scatter.wgsl`'s `tops`, px (`common.wgsl`'s `TOP_TILE`).
+const TOP_TILE: u32 = 32;
+
 /// Everything sized by the canvas.
 #[derive(Debug)]
 struct Targets {
@@ -354,6 +370,7 @@ struct Targets {
     gem: wgpu::TextureView,
     gid: wgpu::TextureView,
     hmap: wgpu::Buffer,
+    tops: wgpu::Buffer,
     hdr: wgpu::TextureView,
     bsrc: wgpu::TextureView,
     levels: Vec<wgpu::TextureView>,
@@ -793,6 +810,13 @@ impl Wgpu {
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
+        // Each 32 px tile's tallest in the field, grown by 4 px (`scatter.wgsl`'s `tops`).
+        let tops = d.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("tile tops"),
+            size: u64::from(full.0.div_ceil(TOP_TILE)) * u64::from(full.1.div_ceil(TOP_TILE)) * 4,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
         let hdr = view(texture(d, "hdr", (w, h, 1), HDR, rt));
         // What spills (the fence rule): the canvas's coverage by the bands T0 and T1 lay
         // (`Prep::spill`), written each frame it has any.
@@ -834,8 +858,12 @@ impl Wgpu {
         let tiles = storage("tiles", tiles_n * 8);
         let tile_lights = storage("tile lights", tiles_n * TILE_CAP as u64 * 4);
         let g = self.globals.as_entire_binding();
-        let scatter_bg =
-            group(d, "scatter", &p.scatter_layout, &[g.clone(), r(&gnh), hmap.as_entire_binding(), r(&gid), r(&gem)]);
+        let scatter_bg = group(
+            d,
+            "scatter",
+            &p.scatter_layout,
+            &[g.clone(), r(&gnh), hmap.as_entire_binding(), r(&gid), r(&gem), tops.as_entire_binding()],
+        );
         let light_bg = group(
             d,
             "light",
@@ -851,6 +879,7 @@ impl Wgpu {
                 tile_lights.as_entire_binding(),
                 r(&gid),
                 r(&spill_view),
+                tops.as_entire_binding(),
             ],
         );
         let smp = wgpu::BindingResource::Sampler(&p.sampler);
@@ -935,6 +964,7 @@ impl Wgpu {
             gem,
             gid,
             hmap,
+            tops,
             hdr,
             bsrc,
             levels,
@@ -1281,6 +1311,7 @@ impl Backend for Wgpu {
             }
         }
         enc.clear_buffer(&t.hmap, 0, None);
+        enc.clear_buffer(&t.tops, 0, None);
         {
             let mut pass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor {
                 label: Some("height field"),
@@ -1292,6 +1323,8 @@ impl Backend for Wgpu {
             });
             pass.set_pipeline(&self.pipes.scatter);
             pass.set_bind_group(0, &t.scatter_bg, &[]);
+            pass.dispatch_workgroups(t.full.0.div_ceil(8), t.full.1.div_ceil(8), 1);
+            pass.set_pipeline(&self.pipes.tops);
             pass.dispatch_workgroups(t.full.0.div_ceil(8), t.full.1.div_ceil(8), 1);
         }
         {

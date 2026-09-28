@@ -20,6 +20,7 @@
 @group(0) @binding(2) var<storage, read_write> hmap: array<atomic<u32>>;
 @group(0) @binding(3) var gid: texture_2d<u32>;
 @group(0) @binding(4) var gem: texture_2d<f32>;
+@group(0) @binding(5) var<storage, read_write> tile_tops: array<atomic<u32>>;
 
 // A run whose lowest px is this high or lower stands on the ground: the feet, a trunk's root.
 const FLOAT: f32 = 6.5;
@@ -148,6 +149,34 @@ fn scatter(@builtin(global_invocation_id) id: vec3<u32>) {
                 atomicMax(&hmap[i], packed);
                 atomicMax(&hmap[n + i], 256u - min(lo, h));
             }
+        }
+    }
+}
+
+// After `scatter`: each tile's tallest top (`common.wgsl`'s `TOP_TILE`), a texel counted in its
+// own tile and in each tile within `TOP_GROW` px of it (the trace reads a texel or two round its
+// ray, the side rays a px and a half across).
+@compute @workgroup_size(8, 8)
+fn tops(@builtin(global_invocation_id) id: vec3<u32>) {
+    let w = u32(g.full.x);
+    if id.x >= w || id.y >= u32(g.full.y) {
+        return;
+    }
+    let top = atomicLoad(&hmap[id.y * w + id.x]) >> 16u;
+    if top == 0u {
+        return;
+    }
+    let tw = top_tiles_x();
+    let th = (i32(g.full.y) + TOP_TILE - 1) / TOP_TILE;
+    let x = i32(id.x);
+    let y = i32(id.y);
+    let tx0 = max((x - TOP_GROW) / TOP_TILE, 0);
+    let tx1 = min((x + TOP_GROW) / TOP_TILE, tw - 1);
+    let ty0 = max((y - TOP_GROW) / TOP_TILE, 0);
+    let ty1 = min((y + TOP_GROW) / TOP_TILE, th - 1);
+    for (var ty = ty0; ty <= ty1; ty++) {
+        for (var tx = tx0; tx <= tx1; tx++) {
+            atomicMax(&tile_tops[ty * tw + tx], top);
         }
     }
 }

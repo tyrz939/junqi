@@ -42,7 +42,8 @@ struct Globals {
     // xy: the camera (the view's top-left in the zone, canvas px), z: 1 if water is in view,
     // w: particles.
     cam: vec4<f32>,
-    // The zone's left, right and bottom edges on the canvas.
+    // The zone's left, right and bottom edges on the canvas; w: how far apart the taps softening
+    // what spills are, px (the fence rule, `light.wgsl`'s `spill_at`).
     zone: vec4<f32>,
 };
 
@@ -98,6 +99,14 @@ const RELIEF: f32 = 8.0;
 // passes them: their sun shadow is the bands T0 and T1 lay, from the frame's blocks
 // (`Prep::spill`, the light pass's `spill`), on the ground alone.
 const SPILL_ID: u32 = 0xffffu;
+
+// The field's tiles (`scatter.wgsl`'s `tops`): each 32 px tile keeps the tallest top standing in
+// it or within `TOP_GROW` px of it, so a ray over a tile's top crosses it at once.
+const TOP_TILE: i32 = 32;
+const TOP_GROW: i32 = 4;
+fn top_tiles_x() -> i32 {
+    return (i32(g.full.x) + TOP_TILE - 1) / TOP_TILE;
+}
 const SPILL_LOW: f32 = 10.0;
 const FENCE: u32 = 128u;
 
