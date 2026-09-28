@@ -11,7 +11,7 @@ fn free_port() -> u16 {
 }
 
 #[test]
-#[ignore = "real time: about 15 s"]
+#[ignore = "slow: three processes over TCP in real time, about 15 s"]
 fn serve_and_two_headless_guests_hold_one_hash() {
     let exe = env!("CARGO_BIN_EXE_jane");
     let port = free_port().to_string();

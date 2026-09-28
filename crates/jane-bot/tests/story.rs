@@ -138,7 +138,7 @@ fn row(r: &Run) -> String {
 /// Seeds 1 to 5, the endings in turn: every run reaches the ending it chose, through every act
 /// of the spine, and nothing the spine needs stays set aside past the budget.
 #[test]
-#[ignore = "a whole story per seed: cargo test --release -p jane-bot --test story -- --ignored"]
+#[ignore = "slow: a whole story on five seeds, a minute or more each in release"]
 fn the_reader_reaches_an_ending_on_seeds_1_to_5() {
     // The five in parallel: each is its own sim, and a whole story is minutes of release time.
     let runs: Vec<Run> = std::thread::scope(|sc| {

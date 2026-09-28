@@ -8,7 +8,7 @@
 use std::process::Command;
 
 #[test]
-#[ignore = "wall time: a two-hour session, run in release"]
+#[ignore = "slow: a two-hour session timed against the tick budget, run in release"]
 fn the_late_game_keeps_the_tick_budget() {
     let out = Command::new(env!("CARGO_BIN_EXE_jane"))
         .args(["bench", "sim", "--model", "reader", "--seeds", "7", "--minutes", "120", "--gate"])

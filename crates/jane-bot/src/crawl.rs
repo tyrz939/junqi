@@ -730,7 +730,13 @@ impl Crawl {
         let sig = signature(v);
         self.reach.update(v, sig);
         let zone = v.zone();
-        let left = |p: &Prop| self.growth.contains(&p.id) && !p.used && !cx.used.contains_key(&(zone, p.id));
+        // (What a dungeon's tactic leaves for another visit is not waited on either.)
+        let left = |p: &Prop| {
+            self.growth.contains(&p.id)
+                && !p.used
+                && !cx.used.contains_key(&(zone, p.id))
+                && !crate::tactics::forest::skip(v, p)
+        };
         let now = v.frame();
         if v.props()
             .any(|p| left(p) && !p.hidden && !p.locked && self.reach.beside(p) && self.fresh(Try::Prop(p.id), sig))

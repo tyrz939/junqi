@@ -373,7 +373,7 @@ Nearly all of it was the bot, not the world: she came to the Burial with one bai
 
 What is left: most deaths out of doors are with no apple in the bag (the county's apples do not come again, and the pantry holds none: a renewable food is a content decision, not taken here); the Museum's attendant and the School's Ringer are the dearest keepers now; a bag fills with what destroy refuses (the keys of places done, twenty gold bars), and only a hand-in empties it.
 
-The whole-story runs are `#[ignore]`d for their length (a minute or more of release time a seed): CI runs `cargo test --release -p jane-bot --test story -- --ignored`. The three endings from the choice run always.
+The whole-story runs are the slow tier (§6; `#[ignore = "slow: …"]`, a minute or more of release time a seed): `cargo test --release -p jane-bot --test story -- --ignored`. The three endings from the choice run in the fast tier, always.
 
 How the story bot plays it (`crates/jane-bot/src/story.rs`): a quest step in a dungeon is played whole by the crawl (in by its door, through its locks and verbs to its boss, out again); a door that keeps hours is come back to when it opens; out of doors from eight in the evening she goes home to Julie's bed and sleeps till six (the first thing the county teaches); whoever takes a quest back and keeps hours is looked for where the hours put them; a door shut from outside is gone round by the zone she has seen a door from, or the one the log names; a far goal is planned over 16-cell blocks first (`coarse.rs`); a bag nearly full throws out what can be found again. To look at an act without playing the ones before, `jane play --from ACT[+]` puts a new game at it (for looking, never a tape), and `--explain`, `--profile` and `--show-prop KEY` say what the bot holds, where the time goes and what the ground round a prop is.
 
@@ -401,9 +401,18 @@ She has been told about the School once, by the well, and not its name.       [L
 
 ## 6. CI shape
 
+**Two tiers of `cargo test`.** The suite is cut by wall time, not by layer, so that the run a change is checked against on every save stays short:
+
+| Tier | Command | What runs | Time | When |
+| --- | --- | --- | --- | --- |
+| Fast | `cargo test --workspace` | Unit tests and short checks: L0; the L1 and L2 sweeps (`SEEDS`, 64 by default, every one under fifteen seconds); the bot's first minutes, replay and save-form round trips, the L5 audit, the trace, the three endings from the choice; art, present and render checks | about three minutes in a dev build | Every change, before every push |
+| Slow | `cargo test --release --workspace -- --ignored` | Everything marked `#[ignore = "slow: …"]`: every dungeon crawl on three seeds (§4.2), the first hour's bands (§4.1, L4), the whole story on five seeds (§4.3), the two-hour late-game budget, the three-process `serve`, the T1 albedo gate, the timing prints | about five minutes in release | Before a merge, and nightly |
+
+**Rule:** a test that plays more than a few game minutes, or takes more than about twenty seconds in a dev build, is `#[ignore = "slow: <why>"]`; the fast tier never waits on a whole game. `-- --include-ignored` runs both tiers in one go.
+
 | When | Layers | Seeds × models | Time | Blocks |
 | --- | --- | --- | --- | --- |
-| Every merge | L0; L1 (64 seeds); L2 tables and floors; L3 Reader and Rusher on 8 seeds for 1 hour each; L4 on those traces; L5 static on 8 seeds | 8 × 2 | < 10 min | The merge |
+| Every merge | Both tiers: L0; L1 (64 seeds); L2 tables and floors; L3 Reader and Rusher on 8 seeds for 1 hour each; L4 on those traces; L5 static on 8 seeds | 8 × 2 | < 10 min | The merge |
 | Nightly | L3 to L6 on 64 seeds × all models (1 hour each; Cautious and Explorer 8 hours on 8 of them); every film clip; every dossier; the `EXPERIENCE.md` report | 64 × 7 | hours, on the Pi rack if it exists | The next day's work, by the owner reading the report |
 | Weekly soak | L1 and L2 on 1000 seeds; L3 to L6 on 256 seeds × all models; L1 on every dungeon 1000 seeds | 256 × 7 | a weekend | A phase gate |
 | Cross-target | Trace bytes equal across x86_64, i686, aarch64, armv7 for 4 seeds × Reader | | with `determinism` | The merge, from P4 |

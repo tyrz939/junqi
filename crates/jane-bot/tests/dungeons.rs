@@ -12,6 +12,11 @@
 //! test holds every run to getting in and to ending in a known state (out, or stopped with a
 //! reason), and the dungeons it finishes to finishing (all of them: the School in forty minutes,
 //! the Burial in an hour).
+//!
+//! Every crawl is minutes of game on three seeds (the binary is forty seconds of a dev build), so
+//! all of them are the slow tier (VERIFICATION.md §6): `cargo test --release -p jane-bot --test
+//! dungeons -- --ignored`, or one dungeon by name. The cellar crawl that the fast tier keeps is
+//! `determinism.rs`'s.
 
 mod common;
 
@@ -85,16 +90,19 @@ fn play(z: ZoneId, must_finish: bool) {
 }
 
 #[test]
+#[ignore = "slow: a crawl on three seeds"]
 fn julies_cellar() {
     play(ZoneId::Cellar, true);
 }
 
 #[test]
+#[ignore = "slow: a crawl on three seeds"]
 fn the_library() {
     play(ZoneId::Library, true);
 }
 
 #[test]
+#[ignore = "slow: a crawl on three seeds"]
 fn the_gold_mine() {
     play(ZoneId::Mine, true);
 }
@@ -104,6 +112,7 @@ fn the_gold_mine() {
 /// the night. It still finishes and walks out by a door (the adit, or the front door unbarred
 /// once he is down): the omen costs a night, never the run.
 #[test]
+#[ignore = "slow: a crawl through a night on three seeds"]
 fn the_gold_mine_on_a_barred_night() {
     use jane_bot::crawl::Crawl;
     use jane_bot::{Bot, Plan};
@@ -136,31 +145,37 @@ fn the_gold_mine_on_a_barred_night() {
 }
 
 #[test]
+#[ignore = "slow: a crawl on three seeds"]
 fn the_museum() {
     play(ZoneId::Museum, true);
 }
 
 #[test]
+#[ignore = "slow: a crawl on three seeds"]
 fn butterfly_forest() {
     play(ZoneId::Forest, true);
 }
 
 #[test]
+#[ignore = "slow: a crawl on three seeds"]
 fn the_pipes() {
     play(ZoneId::Pipes, true);
 }
 
 #[test]
+#[ignore = "slow: a crawl on three seeds"]
 fn the_factory() {
     play(ZoneId::Factory, true);
 }
 
 #[test]
+#[ignore = "slow: an hour's crawl on three seeds"]
 fn the_burial_chamber() {
     play(ZoneId::Burial, true);
 }
 
 #[test]
+#[ignore = "slow: forty minutes' crawl on three seeds"]
 fn the_school() {
     play(ZoneId::School, true);
 }

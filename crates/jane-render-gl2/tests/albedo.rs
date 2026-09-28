@@ -1,6 +1,8 @@
 //! The tier gate (PRESENTATION.md §1.3, §1.12): the same `Frame` on T0 and T1 differs only in
 //! the `Features` rows, so T1's albedo pass, everything before the light, is `soft`'s frame
 //! before its lightmap, pixel for pixel. One test in this file: SDL lives once in a process.
+//! Four scenes drawn twice on two APIs and read back are half a minute of a dev build, so it is
+//! the slow tier (VERIFICATION.md §6): `cargo test --release -p jane-render-gl2 -- --ignored`.
 
 use jane_present::{Backend, Pass, Present, Tier, WeatherKind};
 use jane_render_gl2::{Api, Gl2, Rows};
@@ -46,6 +48,7 @@ fn diff(a: &[u32], b: &[u32], w: usize) -> (usize, u32, First) {
 }
 
 #[test]
+#[ignore = "slow: four scenes on two GL APIs against soft, about half a minute in a dev build"]
 fn the_albedo_pass_is_softs_pixel_for_pixel() {
     // GLSL 1.20 on desktop GL, then GLSL ES 1.00 where the driver makes a GLES context.
     for api in [Api::Desktop, Api::Es] {

@@ -5,6 +5,9 @@
 //!
 //! Also held: the Explorer's first hour is not empty (§4.1 "nothing-to-see stretches": none over
 //! two minutes, at most three over one), recorded.
+//!
+//! Twelve first hours (three seeds, four models) are half a minute of a dev build, so this is the
+//! slow tier (VERIFICATION.md §6): `cargo test --release -p jane-bot --test experience -- --ignored`.
 
 mod common;
 
@@ -36,6 +39,7 @@ fn first_hour(seed: u32, model: Model) -> Experience {
 }
 
 #[test]
+#[ignore = "slow: twelve first hours (three seeds, four models), about half a minute in a dev build"]
 fn the_first_hour_holds_its_bands() {
     let models = [Model::Reader, Model::Rusher, Model::Lost, Model::Explorer];
     let runs: Vec<Experience> = std::thread::scope(|sc| {

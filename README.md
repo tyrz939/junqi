@@ -56,7 +56,8 @@ Needs the pinned toolchain (`rust-toolchain.toml`; rustup installs it on first u
 What runs today (all headless; `cargo jane` is an alias for `cargo run -q -p jane-cli --`):
 
 ```bash
-cargo test --workspace                                   # SEEDS=64 by default; about a minute
+cargo test --workspace                                   # the fast tier: unit tests and short checks, SEEDS=64; about three minutes in a dev build
+cargo test --release --workspace -- --ignored            # the slow tier: every dungeon crawl, the first hour's bands, the whole story, the late game; pre-merge and nightly
 cargo jane check                                         # compile /data, list every error and warning
 cargo jane view --seeds 1..24 --out sheets/              # each seed's skeleton as a PNG (+ a .txt of its checks)
 cargo jane view --county --seed 7 --scale 4              # a built county's cells, with each stage's time

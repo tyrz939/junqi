@@ -16,8 +16,10 @@
 //!   A butterfly not there with her standing by its bud is in her bag.
 //! - **What is not to be spent** ([`skip`]): the hedge seeds (they close a gap and open nothing),
 //!   every bud (the glades' are the butterflies', the summoning glade's are the Emperor's), and
-//!   the bare bank and the stone while she holds fewer butterflies than the stone asks for. Four
-//!   apples are kept for the Emperor ([`keep_food`]) unless she is near the end.
+//!   the bare bank and the stone while she holds fewer butterflies than the stone asks for, and
+//!   the far glades' growth once the story's part is done (the crawl neither walks to it nor
+//!   waits on it before leaving). Four apples are kept for the Emperor ([`keep_food`]) unless
+//!   she is near the end.
 //! - **The Emperor** ([`engage`], [`look`]), played the way the glade is built to be played: the
 //!   stone opened with the five, then a bud in the sky's light grown whenever Grow comes round.
 //!   The bud's list sends the Emperor down to it to feed, stunned for six seconds and taking
@@ -126,8 +128,29 @@ pub fn skip(v: &View<'_>, p: &Prop) -> bool {
         // keep what comes to it) and the Emperor's (`engage`).
         "hedge_seed" | "bud" => true,
         "summon_stone" | "forest_vine_bank" => short,
+        // With the Emperor down and the key in her bag, the far glades' jars and pages are
+        // left for another visit (`done`): neither walked to nor waited on (one of them stands
+        // behind a cactus she cannot put down, and she died going for it).
+        "jar" | "jar_big" | "leaf_page" => far_growth(v, p),
         _ => false,
     }
+}
+
+/// How far from the summoning stone the growth the story wants of the forest stands
+/// (`done`): the reward glade's page and jar are within it; the far glades' jars are not.
+const NEAR_STONE: i32 = 40 * CELL_FX;
+
+/// Growth left for another visit: the story's part is done (the key in her bag, the Emperor
+/// down) and `p` stands further from the stone than the reward glade.
+fn far_growth(v: &View<'_>, p: &Prop) -> bool {
+    if holds(v, sense::item("key_works")) == 0 {
+        return false;
+    }
+    let Some(st) = stone(v) else { return false };
+    if dist(prop_centre(p), prop_centre(st)) < i64::from(NEAR_STONE) {
+        return false;
+    }
+    crate::crawl::boss_of(ZoneId::Forest).is_some_and(|b| sense::units_of(v, b).is_empty())
 }
 
 /// The butterfly a bud calls (its `use` list sends it to the flower), as the sym of its key.
@@ -314,7 +337,7 @@ pub fn done(v: &View<'_>, reach: &Reach) -> bool {
     !v.props().any(|p| {
         !p.used
             && reach.beside(p)
-            && dist(prop_centre(p), at) < i64::from(40 * CELL_FX)
+            && dist(prop_centre(p), at) < i64::from(NEAR_STONE)
             && sense::prop_does(v, p, &|a| matches!(a, Action::Grow { .. }))
     })
 }
