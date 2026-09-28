@@ -839,8 +839,17 @@ impl Crawl {
             {
                 return;
             }
-            // Not where she fell a little while ago (a boss excepted: that fight is the dungeon).
-            if class < 9 && task_point(v, &t).is_some_and(|p| cx.fell_near(v.zone(), p.cell(), FELL_R, v.tick().0)) {
+            // Not where she fell a little while ago (a boss excepted: that fight is the dungeon;
+            // and a key lying there, the one thing the fight was for: the School's Caretaker,
+            // coming for her on sight now, put her down beside where he then fell with the tower
+            // key, and the crawl left it lying and called the School done).
+            let key_drop = matches!(what, Try::Pickup(id) if v.drops().iter().any(|d| {
+                d.id == id && cat.combat.items.get(d.item.index()).is_some_and(|i| i.opens.is_some())
+            }));
+            if class < 9
+                && !key_drop
+                && task_point(v, &t).is_some_and(|p| cx.fell_near(v.zone(), p.cell(), FELL_R, v.tick().0))
+            {
                 return;
             }
             if best.as_ref().is_none_or(|(c, k, w, _)| (class, cost, what) < (*c, *k, *w)) {
