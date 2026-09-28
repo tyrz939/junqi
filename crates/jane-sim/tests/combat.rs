@@ -78,6 +78,56 @@ fn a_bolt_flies_lands_chills_and_pulls_aggro() {
     assert!(ev.iter().any(|e| matches!(e.kind, EventKind::Impact { school: School::Frost, .. })));
 }
 
+/// The owner's playtest: "I can cast frost bolt through a gate when standing close to it while
+/// it's locked". Hard against a shut gate, facing it, the bolt is born past her chest and so
+/// inside the gate's cells; it stops there, and the skeleton beyond takes nothing.
+#[test]
+fn a_bolt_cast_point_blank_stops_on_a_shut_gate() {
+    let cat = jane_data::catalog();
+    let mut s = field();
+    learn(&mut s, "icebolt");
+    let d = cat.story.prop_id("gate_v").unwrap();
+    {
+        let st = s.state_mut();
+        let id = st.next.prop();
+        let key = st.syms.intern("test_gate");
+        st.zone_mut(Z).unwrap().props.push(jane_sim::state::Prop {
+            id,
+            key,
+            def: d,
+            spawn: None,
+            cell: jane_core::Cell::new(12, 9),
+            solid: true,
+            hidden: false,
+            locked: true,
+            used: false,
+            on: false,
+            loot: jane_sim::state::LootState::AsSpawned,
+            under_done: false,
+            night: jane_sim::state::NightState::AsSpawned,
+        });
+    }
+    s.rebuild_runtimes();
+    let foe = spawn(&mut s, "skeleton", 20, 10);
+    rooted(&mut s, foe);
+    // Her centre a pixel short of the gate's west face: its first cell is x = 12.
+    let her = me(&s);
+    edit(&mut s, her, |u| u.pos = Vec2::new(jane_core::Fx::from_px(12 * 8 - 1), Vec2::centre(0, 10).y));
+    s.drain_events();
+    cast(&mut s, 0, "icebolt", aim(Angle::EAST), None);
+    steps(&mut s, 20);
+    let ev = events(&mut s);
+    assert!(ev.iter().any(|e| matches!(e.kind, EventKind::Cast { unit, .. } if unit == her)), "she cast");
+    assert!(damage_to(&ev, foe).is_empty(), "nothing beyond the gate takes the bolt");
+    let at = ev.iter().find_map(|e| match e.kind {
+        EventKind::Impact { at, .. } => Some(at),
+        _ => None,
+    });
+    let at = at.expect("the bolt stopped");
+    assert_eq!(at.x.cell(), 12, "on the gate, not past it");
+    assert!(s.state().zone(Z).unwrap().projectiles.is_empty());
+}
+
 /// sim.test.ts "melee is forgiving": the bar's first slot, aimed east, finds the skeleton west.
 #[test]
 fn the_bar_swings_and_melee_finds_what_is_behind_her() {

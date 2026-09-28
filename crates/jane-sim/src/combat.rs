@@ -23,6 +23,7 @@
 use jane_core::action::{School, Stat};
 use jane_core::angle::{along, bearing, cos_q15, sin_q15};
 use jane_core::num::{CELL_FX, dist_sq, div_round, isqrt};
+use jane_core::tile::BLOCK_SHOT;
 use jane_core::{Angle, EffectId, Fx, Key, Milli, Sfc32, SpellId, UnitDefId, Vec2};
 use jane_data::{Controller, Faction, SpellDef, SpellKind, SpellPower, WorldSpell};
 
@@ -31,7 +32,7 @@ use crate::ctx::Ctx;
 use crate::event::{Event, EventKind, SfxKind, SpellError, ToastKind};
 use crate::ids::{Seat, UnitId};
 use crate::input::InputFrame;
-use crate::los::line_of_sight;
+use crate::los::{first_blocked_cell, line_of_sight};
 use crate::runtime::ZoneRuntime;
 use crate::state::{GameState, Ground, Projectile, Unit};
 use crate::status::{apply_effect, is_stunned, offence};
@@ -488,13 +489,18 @@ fn cast_bolt(
             dir
         };
         let hit = make_hit(cx, caster, spell, caster, spell.effect);
+        // Born past her chest, unless that is through something that stops a shot: hard against a
+        // shut gate the start would sit inside its cells, and a flight never tests the cell it
+        // starts in. Then it is born at her centre and the gate stops it on its first moves.
+        let born = c.pos + along(heading, BOLT_START_FX);
+        let pos = if first_blocked_cell(&cx.rt.grid, c.pos, born, BLOCK_SHOT).is_some() { c.pos } else { born };
         let pid = cx.world.next.proj();
         cx.zone.projectiles.push(Projectile {
             id: pid,
             spell: id,
             from: Some(caster),
             faction: c.faction,
-            pos: c.pos + along(heading, BOLT_START_FX),
+            pos,
             vel: along(heading, speed),
             heading,
             left,
