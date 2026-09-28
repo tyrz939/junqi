@@ -742,8 +742,29 @@ impl Story {
     /// Run from `id` rather than fight it: out of doors, on her way somewhere (a task in hand), not
     /// sent after it, and losing the trade of blows with everything on her; with the energy to
     /// run, or it slower than her walk.
+    /// Or, out of doors and well (three fifths of her health or more), within a couple of dozen
+    /// cells of a word to say or a place to reach: the errand first, then the fight. Now that the county's things come for her on sight by day
+    /// (PLAN.md §2.6), the yard skeleton met her on the step before the dog could ask her to put
+    /// it down, and one she downs before she is asked stands up again only ten minutes on.
     fn runs_from(&self, v: &View<'_>, cx: &Ctx, id: UnitId) -> bool {
-        self.task.is_some() && fight::outrun(v, cx, id)
+        self.task.is_some() && (fight::outrun(v, cx, id) || self.errand_first(v, cx, id))
+    }
+
+    fn errand_first(&self, v: &View<'_>, cx: &Ctx, id: UnitId) -> bool {
+        const NEAR: i64 = 24 * CELL_FX as i64;
+        if v.zone() != ZoneId::County || cx.fight.hunt == Some(id) {
+            return false;
+        }
+        let me = v.body();
+        if me.hp.points() * 5 < jane_sim::units::max_hp(me).points() * 3 {
+            return false;
+        }
+        let to = match self.task.as_ref().map(|(t, _)| t) {
+            Some(Task::Walk { to, .. }) => Some(*to),
+            Some(Task::Talk { unit, .. }) => v.unit(*unit).map(|u| u.pos),
+            _ => None,
+        };
+        to.is_some_and(|to| dist(me.pos, to) <= NEAR)
     }
 
     /// Night, in a dungeon, on her way out to `to` (by the county: not the house): the fire here
