@@ -37,8 +37,8 @@
     {
       "id": "plate", "kind": "teach", "order": 1, "critical": true, "pool": "mine.plate", "heat": 0.4,
       "holds": [
-        { "socket": "plate:main", "prop": "plate", "use": [{ "do": "unlock", "prop": "@chest:reward" }], "release": [{ "do": "lock", "prop": "@chest:reward" }] },
-        { "socket": "chest:reward", "loot": [{ "item": "key_pit", "qty": 1 }], "locked": true, "label": "The chest" },
+        { "socket": "plate:main", "prop": "plate", "label": "The weighbridge plate", "use": [{ "do": "unlock", "prop": "@chest:reward" }, { "do": "toast", "text": "The plate goes down. Across the room something under the floor lets go of the chest." }], "release": [{ "do": "lock", "prop": "@chest:reward" }] },
+        { "socket": "chest:reward", "prop": "weighed_chest", "loot": [{ "item": "key_pit", "qty": 1 }], "locked": true, "label": "The chest" },
         { "socket": "push:main", "prop": "barrel" }
       ],
       "binds": [

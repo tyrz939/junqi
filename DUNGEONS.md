@@ -424,6 +424,8 @@ prop    N_wayin  hidden, outside G, `to` = this zone, mark N_in. "Climb in". One
 
 The way in is hidden until the room seals, so it can never bypass a keyed gate. It is how a friend who was late, or who died and walked back, follows (K20). Boss arenas use the same macro with the boss as the only unit.
 
+**Boards (built 29 September 2026).** Gates stand at the far room's mouth, so from a hub every way on is the same dark opening. After the fill, the generator paints a board (`sign`, 2 x 1, "Read") beside each door of the entrance, the hub and a mini-boss's room whose corridor leads to a room with a `board_<mission>_<node>` dialogue row: on the first row of floor in from the wall, one clear cell from the opening (under the lamp that flanks it), the right side first. The row's speaker is the board's name, so the prompt beside the door already says where it goes ("Read  PAY OFFICE"); reading it says the rest. A mission opts in by writing the rows; only the mine has them (§3.1). Boards stand before the set pieces and the scatter, so those keep clear of them, and every check runs on the board as on anything else.
+
 **Contract names survive because the mission binds them.** `binds` maps a template's socket, mark or rect to the name the story uses. The mine's arena node carries `{ from: "gate:in", as: "gate_boss" }`, `{ from: "boss", as: "iron_knuckles" }`, `{ from: "inner", as: "boss_arena" }`. The burial's lock-in node binds its four spawn marks to `lockin_a` .. `lockin_d`, its inner rect to `lockin_room` and its entry gate to `gate_snake`. The snake's template carries eight ordered marks `loop:1..8` that become its patrol. `triggers.json`, `dialogue.json` and `quests.json` are untouched. `CONTRACTS[zone]` is then **derived** from the def's binds, and a test asserts the derived list contains every name in today's hand-written list, so nothing can be dropped by accident.
 
 ### 2.6 Proof: the solver, extended
@@ -760,6 +762,21 @@ The Headmaster brought the school down here when the nights got longer, because 
 | A door that locks behind her | Only the big door (the lock-in, above) and the front door on an omen night, which is barred from nine to five and never from inside the adit |
 
 What the model leaves out it leaves out on purpose: units standing on plates (a friend, a lured rat) only add ways; other pushables stand still while one is proven (every push is still undoable). The same search was run on the other seven: the Factory has the same leak (its two plain locks take `key_generic`, and a spent one strands every room past No. 1 LINE); the rest came out clean.
+
+**Is it clear what to do? (the legibility pass, 29 September 2026.)** The mission walked as a first-time player with nothing but the quest log and the screen. Each place she could stall, and what now tells her, in the world (no markers). `crates/jane-world/tests/dungeon_cues.rs` holds the cues on seeds 1 to 16; before and after frames are in `sheets/mine-logic/` (local).
+
+| Where | What was unclear | What tells her now |
+| --- | --- | --- |
+| The way in | The notice reveals the chart, but the chart has no names, and the three ways on look alike | The notice has a plan in words, true on every seed: "The WEIGHBRIDGE, the STORES and the TALLY OFFICE open off the way in, the TALLY OFFICE behind a Company gate. The SHAFT HALL is through the STORES, behind another. FIRST AID, the PAY OFFICE, No. 2 GALLERY and No. 3 PIT open off the SHAFT HALL. The STRONG ROOM is through the PAY OFFICE." A board beside each door names the room it goes to |
+| The weighbridge | The chest said "The chest is locked", like a key lock, while she held a key that would not turn in it. Nothing tied it to the plate | The chest is a `weighed_chest`: "The chest has no keyhole. Something under the floor holds the lid down". The plate says "The plate goes down. Across the room something under the floor lets go of the chest." The board by the way-in door: "WEIGHBRIDGE. Tubs to stand on the plate until the clerk has booked them." |
+| Two keys, two gates | Which key, which gate | The Pit Key "opens the Company's padlocks down the mine"; both gates are "The Company gate"; the STORES board: "Padlock keys to be signed for here" |
+| The Headmaster's key | Its gate stands at the office's own mouth, down a dark corridor, out of sight of the hub on most seeds | The key: "The tag says HM, and under it, crossed out, PAY OFFICE". The hub's board: "PAY OFFICE. Under it, in chalk ... HEADMASTER. Knock and wait." The quest log: "The Headmaster, in the PAY OFFICE down the gold mine" |
+| Repair learned: now what? | The broken steps stand in the corridor at the gallery's end; on seed 1 that is 45 cells up a dead end from the hub, never seen from it | The hub's board by that door: "No. 2 GALLERY. Up the steps." and, chalked, "STEPS OUT. SEE THE CARPENTER." (Wood already says "Two planks mend a stair") |
+| The vault key | The vault's gate is at the vault's mouth, a corridor away from the office | The office's board by that door: "STRONG ROOM. Pay office staff only." |
+| The big key | "The door everyone in the mine stopped opening": which? | The hub's board: "No. 3 PIT. NO ENTRY. The words have been painted over twice, and they show through both times." The quest log: "Iron Knuckles, in No. 3 PIT down the gold mine" |
+| The hub | Five doorways alike | A board at each |
+
+Left as it is: after the fight the nook's gate lifts with a sound and no words, but it is the pit's only other way out; the gallery's ways on (the track, the adit, the nook's gate) are each labelled. Lamps were not used as a trail: the mine lights every corridor alike but the two to the Headmaster and the pit, which are dark on purpose ("the walk to him is the one walk nobody lit"), and that already reads as a warning.
 
 ---
 

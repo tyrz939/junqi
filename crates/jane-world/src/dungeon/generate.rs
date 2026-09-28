@@ -774,6 +774,59 @@ impl Gen<'_> {
         });
     }
 
+    // --- boards: where each way on goes, painted beside its door -----------------------------
+
+    /// A painted board beside each door of the entrance, the hub and a mini-boss's room whose
+    /// corridor leads to a room with a `board_<mission>_<node>` dialogue row (DUNGEONS.md §2.5,
+    /// "Boards"). Its name is the row's speaker, so the prompt beside the door already says where
+    /// the door goes; reading it says the rest. It stands on the first row of floor in from the
+    /// wall, one clear cell from the opening, on whichever side is free (the right first). No row,
+    /// no board: a mission opts in by writing them.
+    fn boards(&mut self) {
+        let m = self.m;
+        let cat = catalog();
+        let Some(def) = cat.story.prop_id("sign") else { return };
+        let (bw, bh) = footprint(def);
+        let layout = self.layout;
+        let mut n = 0;
+        for ri in 0..self.info.rooms.len() {
+            let (node, doors) = (self.info.rooms[ri].node, self.info.rooms[ri].doors.clone());
+            if !matches!(
+                m.nodes[node].kind,
+                MissionNodeKind::Entrance | MissionNodeKind::Hub | MissionNodeKind::Miniboss
+            ) {
+                continue;
+            }
+            for di in doors {
+                let other = layout.corridors.iter().find_map(|c| match (c.a, c.b) {
+                    (a, b) if a.node == node && a.door == di => Some(b.node),
+                    (a, b) if b.node == node && b.door == di => Some(a.node),
+                    _ => None,
+                });
+                let Some(other) = other else { continue };
+                let Some(tree) = cat.story.dialogue_id(&format!("board_{}_{}", m.id, m.nodes[other].id)) else {
+                    continue;
+                };
+                let (d, x, y) = self.door_at(node, di);
+                let (ox, oy) = out(d.side);
+                let spots = if matches!(d.side, RoomSide::N | RoomSide::S) {
+                    let row = y - oy;
+                    [(x + 3, row), (x - 2 - bw, row)]
+                } else {
+                    let col = if ox < 0 { x + 1 } else { x - bw };
+                    [(col, y + 3), (col, y - 3)]
+                };
+                let Some(&(bx, by)) = spots.iter().find(|&&(bx, by)| self.k.fits(bx, by, bw, bh)) else { continue };
+                let key = self.key_for(&format!("{}_{}_board_{n}", m.id, m.nodes[node].id));
+                n += 1;
+                let label = TextRef::Text(cat.story.dialogue[tree.index()].speaker);
+                let p = self.k.prop(key, def, bx, by, bw, bh);
+                p.talk = Some(tree);
+                p.label = Some(label);
+            }
+        }
+    }
+
     // --- lamps: on the walls, by rule (lights.rs) --------------------------------------------
 
     fn lamps(&mut self) {
@@ -1437,6 +1490,7 @@ fn assemble(
         g.locks();
         g.lamps();
         g.fill();
+        g.boards();
         if set_pieces {
             g.sets();
         }

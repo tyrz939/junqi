@@ -76,7 +76,7 @@
   },
   "key_mine_headmaster": {
     "name": "Headmaster's Key", "icon": "item_key_blue", "maxStack": 1, "usable": false, "cooldown": 1, "opens": "mine_headmaster",
-    "description": "The tag says HM. It was on a dead clerk."
+    "description": "The tag says HM, and under it, crossed out, PAY OFFICE. It was on a dead clerk."
   },
   "key_mine_vault": {
     "name": "Mine Vault Key", "icon": "item_key_purple", "maxStack": 1, "usable": false, "cooldown": 1, "opens": "mine_vault",
