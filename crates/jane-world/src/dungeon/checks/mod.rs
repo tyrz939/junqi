@@ -35,7 +35,7 @@ use jane_core::Blueprint;
 use jane_core::action::{Action, FlagKey, ListRef, School};
 use jane_core::grid::Rect;
 use jane_core::ids::{ItemId, Key, NameId, SpellId};
-use jane_data::{Answers, Catalog, MissionDef, MissionNode, SpellKind, WorldSpell, catalog};
+use jane_data::{Answers, Catalog, MissionDef, MissionHolding, MissionNode, SpellKind, WorldSpell, catalog};
 
 use super::generate::{BuildInfo, Built, RoomInfo};
 use crate::solve::model::{Options, Trail, ZoneRules};
@@ -55,6 +55,7 @@ pub mod c10_seen;
 pub mod c11_plates;
 pub mod c12_trigger_solid;
 pub mod c13_doors_in_walls;
+pub mod states;
 
 pub use c08_crit_len::{Walk, distances, first_completion};
 
@@ -285,37 +286,48 @@ impl Gains {
 /// What a node gives, read off its holdings: guaranteed drops and death lists of its units,
 /// loot, `use` lists, the lists of a control's states, and every line of a dialogue it holds.
 pub fn gains_of(bp: &Blueprint, node: &MissionNode) -> Gains {
-    let cat = catalog();
     let mut g = Gains::default();
     for h in node.holds {
-        if let Some(u) = h.unit {
-            let Some(def) = cat.combat.units.get(u.index()) else { continue };
-            for l in def.loot.iter().filter(|l| l.chance.0 >= 1000) {
-                g.item(cat, l.item, l.qty);
-            }
-            g.actions(bp, cat, def.on_death);
-            continue;
+        add_holding(bp, h, &mut g);
+    }
+    g
+}
+
+/// What one holding gives (a part of [`gains_of`]).
+pub fn gains_of_holding(bp: &Blueprint, h: &MissionHolding) -> Gains {
+    let mut g = Gains::default();
+    add_holding(bp, h, &mut g);
+    g
+}
+
+fn add_holding(bp: &Blueprint, h: &MissionHolding, g: &mut Gains) {
+    let cat = catalog();
+    if let Some(u) = h.unit {
+        let Some(def) = cat.combat.units.get(u.index()) else { return };
+        for l in def.loot.iter().filter(|l| l.chance.0 >= 1000) {
+            g.item(cat, l.item, l.qty);
         }
-        for s in h.loot.unwrap_or(&[]) {
-            g.item(cat, s.item, s.qty);
+        g.actions(bp, cat, def.on_death);
+        return;
+    }
+    for s in h.loot.unwrap_or(&[]) {
+        g.item(cat, s.item, s.qty);
+    }
+    g.actions(bp, cat, h.use_list);
+    if let Some(state) = h.controls {
+        g.states.push(state);
+        for &l in &h.becomes {
+            g.actions(bp, cat, l);
         }
-        g.actions(bp, cat, h.use_list);
-        if let Some(state) = h.controls {
-            g.states.push(state);
-            for &l in &h.becomes {
-                g.actions(bp, cat, l);
-            }
-        }
-        if let Some(tree) = h.talk.and_then(|t| cat.story.dialogue.get(t.index())) {
-            for n in tree.nodes {
-                g.actions(bp, cat, n.actions);
-                for o in n.options {
-                    g.actions(bp, cat, o.actions);
-                }
+    }
+    if let Some(tree) = h.talk.and_then(|t| cat.story.dialogue.get(t.index())) {
+        for n in tree.nodes {
+            g.actions(bp, cat, n.actions);
+            for o in n.options {
+                g.actions(bp, cat, o.actions);
             }
         }
     }
-    g
 }
 
 /// What a spell switches on: a world verb its own, anything else its school.

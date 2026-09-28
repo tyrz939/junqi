@@ -70,9 +70,13 @@
     "name": "Auntie's Basement Key", "icon": "item_key_iron", "maxStack": 4, "usable": false, "cooldown": 1, "opens": "basement",
     "description": "One iron key. Julie's cellar has two iron doors that both take it."
   },
+  "key_pit": {
+    "name": "Pit Key", "icon": "item_key_iron", "maxStack": 4, "usable": false, "cooldown": 1, "opens": "pit",
+    "description": "Stamped GOLDSKIN on the bow. It opens the Company's padlocks down the mine, once each, and nothing else."
+  },
   "key_mine_headmaster": {
     "name": "Headmaster's Key", "icon": "item_key_blue", "maxStack": 1, "usable": false, "cooldown": 1, "opens": "mine_headmaster",
-    "description": "The tag says HM. It was on a dead clerk."
+    "description": "The tag says HM, and under it, crossed out, PAY OFFICE. It was on a dead clerk."
   },
   "key_mine_vault": {
     "name": "Mine Vault Key", "icon": "item_key_purple", "maxStack": 1, "usable": false, "cooldown": 1, "opens": "mine_vault",

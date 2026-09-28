@@ -208,14 +208,15 @@ fn every_contract_name_exists_on_every_seed() {
         assert!(bp.rects.contains_key(&Key::Name(m.all_rect)));
         assert!(bp.props.iter().any(|p| p.to.is_some()), "{} seed {seed}: no way out", m.id);
         // Every name the generator could have made from a mission's name is the interned one;
-        // only its lamps, its scatter and its set pieces (anonymous dressing, nothing names them)
-        // are local.
+        // only its lamps, its scatter, its set pieces and its door boards (anonymous, nothing
+        // names them) are local.
         for p in &bp.props {
             if let Key::Local(_) = p.key {
                 assert!(
                     name(bp, p.key).contains("_lamp_")
                         || name(bp, p.key).contains("_scatter_")
-                        || name(bp, p.key).contains("_set_"),
+                        || name(bp, p.key).contains("_set_")
+                        || name(bp, p.key).contains("_board_"),
                     "{} seed {seed}: {} is not interned",
                     m.id,
                     name(bp, p.key)

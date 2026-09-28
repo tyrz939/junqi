@@ -37,8 +37,8 @@
     {
       "id": "plate", "kind": "teach", "order": 1, "critical": true, "pool": "mine.plate", "heat": 0.4,
       "holds": [
-        { "socket": "plate:main", "prop": "plate", "use": [{ "do": "unlock", "prop": "@chest:reward" }], "release": [{ "do": "lock", "prop": "@chest:reward" }] },
-        { "socket": "chest:reward", "loot": [{ "item": "key_generic", "qty": 1 }], "locked": true, "label": "The chest" },
+        { "socket": "plate:main", "prop": "plate", "label": "The weighbridge plate", "use": [{ "do": "unlock", "prop": "@chest:reward" }, { "do": "toast", "text": "The plate goes down. Across the room something under the floor lets go of the chest." }], "release": [{ "do": "lock", "prop": "@chest:reward" }] },
+        { "socket": "chest:reward", "prop": "weighed_chest", "loot": [{ "item": "key_pit", "qty": 1 }], "locked": true, "label": "The chest" },
         { "socket": "push:main", "prop": "barrel" }
       ],
       "binds": [
@@ -46,13 +46,13 @@
         { "from": "chest:reward", "as": "plate_chest", "what": "prop" },
         { "from": "push:main", "as": "plate_barrel", "what": "prop" }
       ],
-      "demands": [], "grants": [{ "key": "generic" }]
+      "demands": [], "grants": [{ "key": "pit" }]
     },
     {
       "id": "store", "kind": "key", "order": 1, "critical": true, "pool": "mine.store", "heat": 0.4,
-      "holds": [{ "socket": "chest:main", "loot": [{ "item": "key_generic", "qty": 1 }, { "item": "iron", "qty": 4 }] }],
+      "holds": [{ "socket": "chest:main", "loot": [{ "item": "key_pit", "qty": 1 }, { "item": "iron", "qty": 4 }] }],
       "binds": [{ "from": "chest:main", "as": "store_chest", "what": "prop" }],
-      "demands": [], "grants": [{ "key": "generic" }, { "item": "iron", "qty": 4 }]
+      "demands": [], "grants": [{ "key": "pit" }, { "item": "iron", "qty": 4 }]
     },
     {
       "id": "guard", "kind": "fight", "order": 2, "critical": true, "pool": "mine.guard", "heat": 0.8,
@@ -174,8 +174,8 @@
   "edges": [
     { "from": "entry", "to": "plate", "kind": { "t": "open" } },
     { "from": "entry", "to": "store", "kind": { "t": "open" } },
-    { "from": "entry", "to": "guard", "kind": { "t": "key", "tag": "generic", "gateAs": "gate_generic_a" } },
-    { "from": "store", "to": "core", "kind": { "t": "key", "tag": "generic", "gateAs": "gate_generic_b" } },
+    { "from": "entry", "to": "guard", "kind": { "t": "key", "tag": "pit", "gateAs": "gate_generic_a", "label": "The Company gate" } },
+    { "from": "store", "to": "core", "kind": { "t": "key", "tag": "pit", "gateAs": "gate_generic_b", "label": "The Company gate" } },
     { "from": "core", "to": "firstaid", "kind": { "t": "open" } },
     { "from": "core", "to": "office", "kind": { "t": "key", "tag": "mine_headmaster", "gateAs": "gate_hm", "label": "The Headmaster's door" } },
     {

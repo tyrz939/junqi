@@ -4,5 +4,6 @@
   "broken_hoist": { "name": "Broken Hoist", "sprite": "broken_hoist", "w": 2, "h": 2, "solid": true, "blockLos": false, "answers": "repair" },
   "broken_cabinet": { "name": "Broken Cabinet", "sprite": "broken_cabinet", "w": 3, "h": 1, "solid": true, "blockLos": false, "answers": "repair" },
   "firstaid_stove": { "name": "Stove", "sprite": "stove", "w": 2, "h": 2, "base": 1, "solid": true, "blockLos": false, "rest": true, "prompt": "Rest", "light": { "radius": 56, "color": "#ff9040", "flicker": 0.25 } },
+  "weighed_chest": { "name": "Chest", "sprite": "chest", "w": 2, "h": 2, "base": 1, "solid": true, "blockLos": false, "lockedSays": "has no keyhole. Something under the floor holds the lid down" },
   "mine_seam": {"name": "The Seam", "sprite": "adit_rock", "w": 3, "h": 2, "solid": true, "blockLos": false, "prompt": "Look"}
 }

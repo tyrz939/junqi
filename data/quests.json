@@ -46,8 +46,8 @@
     "returnTo": "the dog, on Julie's step, by day",
     "requirements": [
       { "type": "location", "target": "mine", "qty": 1, "text": "The Gold Mine, at the end of the mine road" },
-      { "type": "kill", "target": "headmaster", "qty": 1, "text": "The Headmaster, down the gold mine" },
-      { "type": "kill", "target": "iron_knuckles", "qty": 1, "text": "Iron Knuckles, down the gold mine" }
+      { "type": "kill", "target": "headmaster", "qty": 1, "text": "The Headmaster, in the PAY OFFICE down the gold mine" },
+      { "type": "kill", "target": "iron_knuckles", "qty": 1, "text": "Iron Knuckles, in No. 3 PIT down the gold mine" }
     ],
     "rewards": [{ "do": "give", "item": "apple", "qty": 5 }, { "do": "give", "item": "potion_stoneskin", "qty": 2 }]
   },
