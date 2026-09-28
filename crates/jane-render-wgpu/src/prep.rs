@@ -8,9 +8,11 @@ use jane_present::frame::{Atmos, PartShape, SkyLook};
 use jane_present::{Depth, Frame, LightKind, Pass, Post, Tint, shadow};
 
 /// Canvas px round the canvas the G-buffer and the height field cover, so a caster off screen
-/// still casts in: the presenter's casting band (`jane_present::frame::CAST_MARGIN`), whose
-/// casters and chunks the frame carries.
-pub const GUARD: u32 = jane_present::frame::CAST_MARGIN as u32;
+/// still casts in: the presenter's casting band's widest side (`Frame::guard`, from
+/// `shadow::cast_margins`), whose casters and chunks the frame carries.
+pub fn guard(frame: &Frame) -> u32 {
+    u32::from(frame.guard)
+}
 /// A sprite that burns no rows (`SpriteIn`'s last word).
 pub const NO_BURN: u32 = 0xffff;
 /// Light tiles are this many canvas px square.
@@ -322,7 +324,12 @@ impl Prep {
                         let id = sprite_id(cmds.start as usize + k);
                         u32s(&mut self.sprites, &[u32::from(depth), id, u32::from(sink), burn]);
                         if layer == Depth::Standing {
-                            hmax = hmax.max(f32::from(s.height_px));
+                            // Its tallest px may stand its rows' true height (a tree's crown is
+                            // `height_of_rows` of its rows, a fifth over them): a ray under the
+                            // field's top must not stop short of it (the tip of a tall tree's
+                            // long evening shadow was cut off when it was the tallest in view).
+                            let rows = i32::from(s.height_px);
+                            hmax = hmax.max(jane_present::height_of_rows(rows).max(rows) as f32);
                         }
                         self.n_sprites += 1;
                     }
@@ -355,7 +362,7 @@ impl Prep {
                             LightKind::Point => ((0.0, 0.0), -2.0),
                             LightKind::Spot { dir, cone } => ((rad(dir.0).cos(), rad(dir.0).sin()), rad(cone.0).cos()),
                         };
-                        let g = GUARD as f32;
+                        let g = guard(frame) as f32;
                         f32s(
                             &mut self.lights,
                             &[l.pos.0 as f32 + g, l.pos.1 as f32 + g, f32::from(l.height), f32::from(l.radius)],
@@ -448,8 +455,9 @@ impl Prep {
         if let Some(s) = sun.filter(|s| s.strength > 0) {
             self.spill_bands(frame, &s, (w as i32, h as i32));
         }
-        let g = GUARD as f32;
-        f32s(&mut self.globals, &[(w + 2 * GUARD) as f32, (h + 2 * GUARD) as f32, w as f32, h as f32, g, hmax + 2.0]);
+        let gu = guard(frame);
+        let g = gu as f32;
+        f32s(&mut self.globals, &[(w + 2 * gu) as f32, (h + 2 * gu) as f32, w as f32, h as f32, g, hmax + 2.0]);
         u32s(&mut self.globals, &[self.n_lights, self.tiles_x]);
         let [fr, fg, fb] = light3(fill);
         f32s(&mut self.globals, &[fr, fg, fb, 0.0]);

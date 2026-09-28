@@ -87,6 +87,36 @@ pub fn spills(b: &crate::frame::Block) -> bool {
     b.fence || i32::from(b.height) <= SPILL_LOW
 }
 
+/// The tallest thing that throws a sun shadow, px: a pine (82 rows, 102 px), a house's ridge (76),
+/// and a little over.
+pub const TALLEST: i32 = 104;
+/// The casting band never reaches further than this on any side, px: [`TALLEST`] at the longest
+/// shadow ([`MAX_COT_Q8`], four heights).
+pub const CAST_MARGIN_MAX: i32 = TALLEST * MAX_COT_Q8 / 256;
+
+/// The casting band round the canvas for a sun or moon `sun` (PRESENTATION.md §1.7): at least
+/// `frame::CAST_MARGIN` every way (a lamp's reach, a tall sprite's), and on each side the sun
+/// shines from as far as [`TALLEST`] throws its shadow ([`shear`]), up to [`CAST_MARGIN_MAX`], in
+/// steps of 32 px (so T2's guard band is not made again every minute of the evening). So a
+/// house's long evening shadow stays on screen until its last px has left it, where it
+/// vanished at a fixed 160 px band (2026-09-29); the side a shadow falls away to keeps the least.
+pub fn cast_margins(sun: Option<&Directional>) -> crate::frame::Margins {
+    use crate::frame::{CAST_MARGIN, Margins};
+    let Some((kx, ky)) = sun.and_then(shear) else { return Margins::uniform(CAST_MARGIN) };
+    let reach = |k: i32| {
+        let r = ((TALLEST * k.abs()) >> 8).min(CAST_MARGIN_MAX);
+        ((r + 31) / 32 * 32).max(CAST_MARGIN)
+    };
+    let (x, y) = (reach(kx), reach(ky));
+    // A shadow falling east is thrown by what stands west of it: the band reaches west.
+    Margins {
+        left: if kx > 0 { x } else { CAST_MARGIN },
+        right: if kx < 0 { x } else { CAST_MARGIN },
+        top: if ky > 0 { y } else { CAST_MARGIN },
+        bottom: if ky < 0 { y } else { CAST_MARGIN },
+    }
+}
+
 /// A gap in a row of 2 px or more parts it into two runs: a lantern hung off its post, a hand
 /// held out from the body. A single px (a dithered edge, a notch between leaves) does not: T2's
 /// field keeps a column's whole height, and closes it with the rows over and under.
@@ -792,6 +822,28 @@ mod tests {
             let lit = (120..180).filter(|&x| !at(&bands, x, y)).count();
             assert!(lit >= 12, "row {y}: {lit} px of 60 lit, the posts' lines run into a slab");
         }
+    }
+
+    #[test]
+    fn the_casting_band_reaches_as_far_as_the_longest_shadow_toward_the_sun() {
+        use crate::frame::{CAST_MARGIN, Margins};
+        assert_eq!(cast_margins(None), Margins::uniform(CAST_MARGIN));
+        for s in [five(), noon(), sun(Angle(16384 - 12000), 20), sun(Angle::WEST, 14), sun(Angle::EAST, 14)] {
+            let m = cast_margins(Some(&s));
+            let (kx, ky) = shear(&s).unwrap();
+            // The tallest thing's shadow, thrown from just past the band on the sun's side, does
+            // not reach the canvas; or the band is at its cap.
+            let (far_x, far_y) = ((TALLEST * kx.abs()) >> 8, (TALLEST * ky.abs()) >> 8);
+            let side_x = if kx > 0 { m.left } else { m.right };
+            let side_y = if ky > 0 { m.top } else { m.bottom };
+            assert!(side_x >= far_x.min(CAST_MARGIN_MAX) && side_y >= far_y.min(CAST_MARGIN_MAX), "{s:?}: {m:?}");
+            assert!(m.most() <= CAST_MARGIN_MAX.max(CAST_MARGIN) + 31 && m.left.min(m.right) == CAST_MARGIN);
+        }
+        // At five the band reaches west (the shadows run east) over a house's evening shadow.
+        let m = cast_margins(Some(&five()));
+        assert!(m.left >= 320 && m.right == CAST_MARGIN, "{m:?}");
+        // At noon a shadow is a height long: the least band will do.
+        assert_eq!(cast_margins(Some(&noon())), Margins::uniform(CAST_MARGIN));
     }
 
     #[test]

@@ -173,7 +173,8 @@ fn sun_disc(p: vec3<f32>, l: vec3<f32>, k: f32, t0: f32) -> f32 {
     var res = vec3<f32>(1.0);
     var t = t0;
     var step = 1.0;
-    for (var i = 0; i < 160; i++) {
+    // Enough steps to cross the longest shadow (`shadow::CAST_MARGIN_MAX`, 416 px, at 2 px a step).
+    for (var i = 0; i < 224; i++) {
         let z = p.z + 0.75 + rise * t;
         if rise >= 0.0 && z > g.hmax {
             break;

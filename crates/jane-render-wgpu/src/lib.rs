@@ -38,7 +38,7 @@ use jane_present::{
 };
 
 use crate::gpu::{B, Gpu, array_view, group, layout, texture, write_layer};
-use crate::prep::{GLOBALS, GUARD, Kind, MAX_FOG, MAX_LIGHTS, Prep, TILE, TILE_CAP};
+use crate::prep::{GLOBALS, Kind, MAX_FOG, MAX_LIGHTS, Prep, TILE, TILE_CAP};
 
 pub use crate::gpu::block_on;
 
@@ -770,14 +770,15 @@ impl Wgpu {
         ));
     }
 
-    /// Makes the targets for a `w x h` canvas, if they are not that size already.
-    fn fit(&mut self, (w, h): (u32, u32)) {
-        if self.targets.as_ref().is_some_and(|t| t.canvas == (w, h)) {
+    /// Makes the targets for a `w x h` canvas with a guard band of `guard` px round it (the
+    /// casting band's widest side, `Frame::guard`), if they are not that size already.
+    fn fit(&mut self, (w, h): (u32, u32), guard: u32) {
+        let full = (w + 2 * guard, h + 2 * guard);
+        if self.targets.as_ref().is_some_and(|t| t.canvas == (w, h) && t.full == full) {
             return;
         }
         let d = &self.gpu.device;
         let p = &self.pipes;
-        let full = (w + 2 * GUARD, h + 2 * GUARD);
         let rt = wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING;
         let view = |t: wgpu::Texture| t.create_view(&wgpu::TextureViewDescriptor::default());
         let galb = view(texture(d, "g albedo", (full.0, full.1, 1), ALBEDO, rt));
@@ -1157,7 +1158,7 @@ impl Backend for Wgpu {
         let t0 = Instant::now();
         self.collect_stamps();
         let canvas = (u32::from(frame.canvas.0).max(1), u32::from(frame.canvas.1).max(1));
-        self.fit(canvas);
+        self.fit(canvas, prep::guard(frame));
         self.frames = self.frames.wrapping_add(1);
         self.prep.build(frame, self.frames);
         self.upload_chunks(frame);

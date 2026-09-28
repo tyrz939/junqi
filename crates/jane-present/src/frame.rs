@@ -23,12 +23,48 @@ pub const CHUNK_CELLS: i32 = 16;
 /// Canvas px on a side of a terrain chunk.
 pub const CHUNK_PX: i32 = CHUNK_CELLS * CELL;
 /// Canvas px round the canvas whose casters, terrain and lights throw their shadows and light
-/// onto it (PRESENTATION.md §1.7): what stands in this band is in the frame's `casters` and
-/// `blocks` though it is not on screen, its chunks are drawn (clipped), and T2's G-buffer and
-/// height field cover it (`jane-render-wgpu`'s `GUARD`). A light's pool and a caster's shadow
-/// no longer vanish the moment what throws them leaves the screen (the owner's playtest,
-/// 2026-09-28: they did, at a 64 px band that the chunks under it did not even fill).
+/// onto it at the least (PRESENTATION.md §1.7): what stands in this band is in the frame's
+/// `casters` and `blocks` though it is not on screen, its chunks are drawn (clipped), and T2's
+/// G-buffer and height field cover it (`Frame::guard`). A light's pool and a caster's shadow no
+/// longer vanish the moment what throws them leaves the screen (the owner's playtest,
+/// 2026-09-28: they did, at a 64 px band that the chunks under it did not even fill). On the
+/// side the sun shines from, the band reaches as far as the longest shadow the sun throws
+/// (`shadow::cast_margins`, 2026-09-29).
 pub const CAST_MARGIN: i32 = 160;
+
+/// The casting band round the canvas this frame, px a side (`shadow::cast_margins`): the least,
+/// [`CAST_MARGIN`], every way, and on the side the sun or moon shines from as far as the longest
+/// shadow it throws.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Margins {
+    pub left: i32,
+    pub top: i32,
+    pub right: i32,
+    pub bottom: i32,
+}
+
+impl Margins {
+    /// `m` every way.
+    pub const fn uniform(m: i32) -> Margins {
+        Margins { left: m, top: m, right: m, bottom: m }
+    }
+
+    /// Each side `d` px further.
+    pub const fn grow(self, d: i32) -> Margins {
+        Margins { left: self.left + d, top: self.top + d, right: self.right + d, bottom: self.bottom + d }
+    }
+
+    /// The widest side.
+    pub fn most(self) -> i32 {
+        self.left.max(self.top).max(self.right).max(self.bottom)
+    }
+}
+
+impl Default for Margins {
+    fn default() -> Margins {
+        Margins::uniform(CAST_MARGIN)
+    }
+}
 
 /// The 3/4 view's one projection (ART.md §1.1, PRESENTATION.md §1.7): heights are true px, a
 /// thing `h` px up is drawn `rows_up(h)` rows over its ground point (four fifths, rounded up).
@@ -836,6 +872,9 @@ pub struct Frame {
     /// Top-left of the view in the zone, canvas px, interpolated. Every command below is
     /// already in canvas coordinates (the camera taken off); this is for parallax.
     pub camera: (i32, i32),
+    /// T2's G-buffer guard band round the canvas, px: the casting band's widest side
+    /// (`Margins::most`), so every tier casts from the same band.
+    pub guard: u16,
     /// Filled before anything else, as `0xAARRGGBB`.
     pub clear: u32,
     /// In draw order.
@@ -875,6 +914,7 @@ impl Frame {
             tier,
             canvas: (CANVAS_W, CANVAS_H),
             camera: (0, 0),
+            guard: CAST_MARGIN as u16,
             clear: 0xff10_1014,
             passes: Vec::with_capacity(24),
             chunks: Vec::with_capacity(64),
