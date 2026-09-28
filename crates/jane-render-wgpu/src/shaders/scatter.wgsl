@@ -19,6 +19,7 @@
 @group(0) @binding(1) var gnh: texture_2d<f32>;
 @group(0) @binding(2) var<storage, read_write> hmap: array<atomic<u32>>;
 @group(0) @binding(3) var gid: texture_2d<u32>;
+@group(0) @binding(4) var gem: texture_2d<f32>;
 
 // A run whose lowest px is this high or lower stands on the ground: the feet, a trunk's root.
 const FLOAT: f32 = 6.5;
@@ -109,6 +110,12 @@ fn scatter(@builtin(global_invocation_id) id: vec3<u32>) {
     if who != 0u && depth == 0u {
         return;
     }
+    // What glows on a sprite (a flame, a lamp's lit glass, her lantern's) is light, not matter:
+    // it stands in no field, as T0 and T1 leave its rows out (`Caster::burn`). The terrain's lit
+    // windows are its walls, and stand.
+    if who != 0u && any(textureLoad(gem, vec2<i32>(id.xy), 0).rgb > vec3<f32>(0.0)) {
+        return;
+    }
     var d = max(depth, 1u);
     var lo = 0u;
     if who != 0u {
@@ -137,5 +144,47 @@ fn scatter(@builtin(global_invocation_id) id: vec3<u32>) {
                 atomicMax(&hmap[n + i], 256u - min(lo, h));
             }
         }
+    }
+}
+
+// Whether terrain stands in the field at `(x, y)` (a texel marked thin is terrain still).
+fn terrain_at(x: i32, y: i32) -> bool {
+    let w = i32(g.full.x);
+    if x < 0 || y < 0 || x >= w || y >= i32(g.full.y) {
+        return false;
+    }
+    let v = atomicLoad(&hmap[u32(y * w + x)]);
+    let who = v & 0xffffu;
+    return v != 0u && (who == 0u || who == THIN_ID);
+}
+
+// After `scatter`: marks each terrain texel that spills (the fence rule, `common.wgsl`'s
+// `THIN_ID`), so the sun's trace can leave it out and the spill's take it alone. Thin is judged
+// in the field, where a fence's rails stand two rows deep and a wall's run a cell: a fence with
+// a person beside it is thin still (only the terrain counts), and a mark under way is terrain
+// still to its neighbours.
+@compute @workgroup_size(8, 8)
+fn thin(@builtin(global_invocation_id) id: vec3<u32>) {
+    let w = u32(g.full.x);
+    let hh = u32(g.full.y);
+    if id.x >= w || id.y >= hh {
+        return;
+    }
+    let i = id.y * w + id.x;
+    let v = atomicLoad(&hmap[i]);
+    if v == 0u || (v & 0xffffu) != 0u {
+        return;
+    }
+    let h = f32(v >> 16u);
+    if h > SPILL_TOP {
+        return;
+    }
+    let x = i32(id.x);
+    let y = i32(id.y);
+    let low = h <= SPILL_LOW;
+    let across = !terrain_at(x, y - THIN) && !terrain_at(x, y + THIN);
+    let along = !terrain_at(x - THIN, y) && !terrain_at(x + THIN, y);
+    if low || across || along {
+        atomicOr(&hmap[i], THIN_ID);
     }
 }

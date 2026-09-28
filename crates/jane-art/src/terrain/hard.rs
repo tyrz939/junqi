@@ -818,15 +818,21 @@ fn isqrt_i(v: i32) -> i32 {
     jane_core::num::isqrt(v.max(0) as u64) as i32
 }
 
+/// The rows a clipped hedge's face drops: its height.
+const HEDGE_ROWS: i32 = 7;
+
 /// A clipped hedge: leaf in clumps round jittered centres, each lit on its upper left, lit along
 /// the hedge's top, a shaded face where it drops south.
 fn hedge(p: &mut Painter, c: &Cell) {
     let same = |p: &Painter, dx: i32, dy: i32| nb(p, c, dx, dy) == Tile::Hedge;
-    // The face drops six rows where it is open to the south: the hedge stands that high.
-    let top = height_of_rows(6);
+    // The face drops seven rows where it is open to the south: the hedge stands that high, 9 px,
+    // over the terrain's relief (`RELIEF`, 8 px, is texture and casts nothing: at six rows, 8 px,
+    // a hedge threw no shadow on any tier, whichever way it ran, and only the bushes planted in
+    // it did, 2026-09-28).
+    let top = height_of_rows(HEDGE_ROWS);
     let r = c.st.ramp;
     let south = !same(p, 0, 1);
-    let face_from = if south { CELL - 6 } else { CELL };
+    let face_from = if south { CELL - HEDGE_ROWS } else { CELL };
     for y in 0..CELL {
         for x in 0..CELL {
             let (wx, wy) = c.w(x, y);

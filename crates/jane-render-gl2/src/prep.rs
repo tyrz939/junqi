@@ -658,7 +658,7 @@ impl Prep {
         if let Some(s) = frame.sprites.get(c.sprite as usize)
             && let Some(page) = pages.get(usize::from(s.page))
         {
-            shadow::rows(&page.albedo, page.w, s, i32::from(c.foot.1), &mut self.rows);
+            shadow::rows(&page.albedo, page.w, s, c, &mut self.rows);
         }
         let r = start..self.rows.len();
         if let Some(p) = self.profiles.get_mut(ci) {
@@ -679,6 +679,7 @@ impl Prep {
         (cw, ch): (i32, i32),
     ) {
         let Some(k) = shear(sun) else { return };
+        let Some(ks) = shadow::spill_shear(sun) else { return };
         let first = self.span_v.len() / (4 * 4);
         let mut dirty: Option<(i32, i32, i32, i32)> = None;
         let mut band = |span_v: &mut Vec<f32>, b: shadow::Band| {
@@ -703,7 +704,7 @@ impl Prep {
         }
         for b in &frame.blocks[blocks] {
             let span_v = &mut self.span_v;
-            shadow::block_bands(b, k, |b| band(span_v, b));
+            shadow::block_bands(b, k, ks, |b| band(span_v, b));
         }
         let end = self.span_v.len() / (4 * 4);
         let Some((x0, y0, x1, y1)) = dirty else { return };
@@ -947,7 +948,7 @@ mod tests {
             flags: Flags::default(),
             height_px: 10,
         });
-        f.casters.push(Caster { sprite: 0, foot: (50, 10), height: 10, depth: 2 });
+        f.casters.push(Caster { sprite: 0, foot: (50, 10), height: 10, depth: 2, ..Caster::default() });
         f.lights.push(jane_present::Light {
             pos: (10, 10),
             height: 6,

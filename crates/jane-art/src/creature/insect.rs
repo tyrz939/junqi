@@ -244,6 +244,80 @@ fn body(c: &mut Canvas, k: &Coat, cx: i32, cy: i32, u: i32, head_down: bool, sid
     }
 }
 
+/// The body turned an eighth (the diagonals): the head down and to the right of the thorax
+/// (`head_down`) or up and to the right, the banded abdomen trailing the other way as a chain of
+/// three soft beads, the eyes and the feelers at the head.
+fn body_turned(c: &mut Canvas, k: &Coat, cx: i32, cy: i32, u: i32, head_down: bool) {
+    let sc = |v: i32| v * u / 2;
+    let z = relief::BODY;
+    let moth = matches!(k.look.anatomy, Anatomy::Moth | Anatomy::Emperor);
+    let fat = i32::from(moth);
+    // The body's line: toward the head, one px across for every px down (up).
+    let dir = (1, if head_down { 1 } else { -1 });
+    let at = |d: i32| (cx + dir.0 * d * 4 / 10, cy + dir.1 * d * 9 / 10);
+    let mut m = Canvas::new(c.w(), c.h());
+    let th = at(0);
+    let tw = sc(2) + 1 + 2 * fat;
+    m.ellipse(Rect::new(th.0 - tw / 2, th.1 - sc(2) + 1, tw, sc(3)), Ix::INK, 1);
+    let hd = at(sc(3));
+    let hw = sc(2) + 1;
+    let head = Rect::new(hd.0 - hw / 2, hd.1 - hw / 2, hw, hw);
+    m.ellipse(head, Ix::INK, 1);
+    let mut beads = Vec::with_capacity(3);
+    for i in 1..=3 {
+        let b = at(-sc(1) - i * sc(2));
+        let bw = (sc(2) + 2 * fat - i / 2).max(2);
+        let r = Rect::new(b.0 - bw / 2, b.1 - bw / 2, bw, bw);
+        m.ellipse(r, Ix::INK, 1);
+        beads.push(r);
+    }
+    c.inflate(&m, k.body, sc(1).max(1), z);
+    c.strokes(
+        Rect::new(cx - sc(8), cy - sc(8), sc(16), sc(16)),
+        k.body,
+        StrokeKind::Fur,
+        8,
+        h32(k.seed, 5, salt::STROKES),
+    );
+    // The abdomen's bands: where one bead meets the next.
+    for w in beads.windows(2) {
+        let (a, b) = (w[0], w[1]);
+        let (x, y) = ((a.x + a.w / 2 + b.x + b.w / 2) / 2, (a.y + a.h / 2 + b.y + b.h / 2) / 2);
+        c.tint(x, y, k.body, Tone::Deep);
+        c.tint(x + 1, y, k.body, Tone::Deep);
+    }
+    // The eyes: toward us both show, the far one close to the near; away, the one on the
+    // right past the head's edge.
+    let eye = if k.eye_emits { Ramp::Ember.at(Tone::High) } else { k.belly.at(Tone::High) };
+    c.set_emitting(k.eye_emits);
+    if head_down {
+        c.dot(head.x, head.y + head.h / 2, eye, z.hi + 1);
+        c.dot(head.right() - 1, head.y + head.h / 2 + 1, eye, z.hi + 1);
+    } else {
+        c.dot(head.right() - 1, head.y + head.h / 2, eye, z.hi + 1);
+    }
+    c.set_emitting(false);
+    // The feelers, forward of the head either side of the body's line.
+    let (hx, hy) = (hd.0 + dir.0 * hw / 2, hd.1 + dir.1 * hw / 2);
+    for s in [-1, 1] {
+        // Either side of the line (1, dir.1) is along (dir.1, -1) and its opposite.
+        let tip = (hx + sc(3) + s * sc(2) * dir.1 / 2, hy + dir.1 * sc(2) - s * sc(2));
+        let from = (hx, hy);
+        let ink = k.body.at(Tone::Shade);
+        stair(c, from, tip, ink, z.hi);
+        if moth {
+            let n = 3.max(u / 2);
+            for i in 1..=n {
+                let (px, py) = (from.0 + (tip.0 - from.0) * i / (n + 1), from.1 + (tip.1 - from.1) * i / (n + 1));
+                c.dot(px - 1, py, k.body.at(Tone::Base), z.hi);
+            }
+        } else {
+            c.fill_rect(Rect::new(tip.0 - 1, tip.1 - 1, 2, 2), k.body.at(Tone::Base), z.hi);
+            c.dot(tip.0 - 1, tip.1 - 1, k.mark.at(Tone::Light), z.hi);
+        }
+    }
+}
+
 pub(crate) fn draw(c: &mut Canvas, k: &Coat, facing: Facing, beat: Beat) {
     let u = unit(k);
     let sc = |v: i32| v * u / 2;
@@ -260,12 +334,29 @@ pub(crate) fn draw(c: &mut Canvas, k: &Coat, facing: Facing, beat: Beat) {
     let moth = matches!(k.look.anatomy, Anatomy::Moth | Anatomy::Emperor);
     let spot_r = if emperor { 3 } else { 1 };
     match facing {
-        Facing::Down | Facing::Up => {
+        Facing::Down | Facing::Up | Facing::DownRight | Facing::UpRight => {
             // The lowest of it hovers over the anchor; the box holds the tallest beat.
             let cy = ay - hover - sc(REACH_DOWN) - rise;
-            let head_down = facing == Facing::Down;
+            let head_down = matches!(facing, Facing::Down | Facing::DownRight);
+            let turned = matches!(facing, Facing::DownRight | Facing::UpRight);
+            // Turned, the whole of it swings on the ground toward the right, a quarter of a
+            // right angle and a little more (an eighth read as a tumble of edges): the body's
+            // line from straight down (up) the screen to down (up) and to the right, the wings
+            // with it.
+            let tq = |x: i32, y: i32| -> (i32, i32) {
+                if !turned {
+                    (x, y)
+                } else if head_down {
+                    ((x * 9 + y * 4) / 10, (y * 9 - x * 4) / 10)
+                } else {
+                    ((x * 9 - y * 4) / 10, (y * 9 + x * 4) / 10)
+                }
+            };
             for side in [-1, 1] {
-                let p = |q: (i32, i32)| (cx + side * sc(q.0), cy + sc(q.1));
+                let p = |q: (i32, i32)| {
+                    let (x, y) = tq(side * sc(q.0), sc(q.1));
+                    (cx + x, cy + y)
+                };
                 let f: Vec<(i32, i32)> = fore.iter().map(|&q| p(q)).collect();
                 let h: Vec<(i32, i32)> = hind.iter().map(|&q| p(q)).collect();
                 // The fore and hind wings' eyespots: a butterfly's toward the apex, a moth's in the middle.
@@ -278,7 +369,11 @@ pub(crate) fn draw(c: &mut Canvas, k: &Coat, facing: Facing, beat: Beat) {
                 wing(c, k, &h, (moth && open > 0).then_some(hspot), spot_r, u, false, relief::FAR);
                 wing(c, k, &f, (open > 0).then_some(fspot), spot_r, u, false, relief::NEAR);
             }
-            body(c, k, cx, cy, u, head_down, false);
+            if turned {
+                body_turned(c, k, cx, cy, u, head_down);
+            } else {
+                body(c, k, cx, cy, u, head_down, false);
+            }
         }
         Facing::Side => {
             // Seen from the side: raised wings face on over the back, spread ones edge on.

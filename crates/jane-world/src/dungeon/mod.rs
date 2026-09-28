@@ -18,6 +18,7 @@ pub mod generate;
 pub mod harness;
 pub mod layout;
 pub mod lights;
+pub mod sets;
 
 use jane_core::blueprint::ZONE_ATTEMPTS;
 use jane_core::{Blueprint, ZoneId};

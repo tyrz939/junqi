@@ -662,6 +662,51 @@ model! {
     }
 }
 
+model_enum! {
+    /// Where a set piece stands in its room (DUNGEONS.md §2.10): its back row flush to the north
+    /// wall, its front row to the south wall, its side to the west wall (mirrored to the east),
+    /// its back and side into a north corner, any one wall, or free on the floor.
+    pub enum SetAgainst { N, S, Side, Corner, Wall, Free }
+}
+
+model! {
+    /// One prop of a set piece, at its cell in the piece.
+    pub struct MissionSetPart {
+        pub prop: PropDefId,
+        pub x: u8,
+        pub y: u8,
+    }
+}
+
+model! {
+    /// A set piece (DUNGEONS.md §2.10): a small authored arrangement of props (a rug under a
+    /// table and its chairs, a heap against a wall, a workbench and its rack) placed whole as
+    /// dressing, after everything the mission and the templates put down. Its parts are inert:
+    /// nothing to push, carry, use or light, and nothing that blocks sight, so it can stand in
+    /// a way and never in a check's.
+    pub struct MissionSetPiece {
+        pub name: &'static str,
+        pub against: SetAgainst,
+        /// Against the east wall (or a north-east corner) the parts are laid out mirrored.
+        pub mirror: bool,
+        /// The piece's box in cells.
+        pub w: u8,
+        pub h: u8,
+        pub parts: &'static [MissionSetPart],
+    }
+}
+
+model! {
+    /// What a room is furnished with: up to `most` of `take` (indices into
+    /// `MissionDef::sets`), the first always tried first, the rest in a seeded order.
+    pub struct MissionSetRoom {
+        /// Node index.
+        pub node: u8,
+        pub most: u8,
+        pub take: &'static [u8],
+    }
+}
+
 model! {
     /// How the building is lit (lights.ts).
     pub struct MissionLights {
@@ -726,6 +771,10 @@ model! {
         pub edges: &'static [MissionEdge],
         pub budget: MissionBudget,
         pub dress: &'static [MissionDress],
+        /// The set pieces, by name order.
+        pub sets: &'static [MissionSetPiece],
+        /// Which rooms take which set pieces, by node.
+        pub set_rooms: &'static [MissionSetRoom],
         /// `None`: no lamps at all.
         pub lights: Option<MissionLights>,
         pub fallback: &'static [MissionPlacement],

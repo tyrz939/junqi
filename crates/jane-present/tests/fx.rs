@@ -95,3 +95,58 @@ fn a_bolt_that_hits_a_body_lands_an_impact_on_it() {
     assert!(end.flew < 120, "it flew {} px: it missed the skeleton", end.flew);
     shows_the_impact(&mut p, end.at);
 }
+
+/// Loot glints (the owner's first playtest: a corpse worth looting sparkles, WoW-style). A drop
+/// on the ground throws a gold, glowing mote now and then; where nothing lies nothing glints;
+/// taken, it glints no more.
+#[test]
+fn a_drop_glints_until_it_is_taken() {
+    let seat = Seat(0);
+    let mut sim = Sim::new_game(1, "Jane");
+    let mut p = Present::new(Tier::T0);
+    p.set_canvas(CANVAS);
+    let run = |sim: &mut Sim, p: &mut Present, n: u32| {
+        for _ in 0..n {
+            sim.step(&StepInput { frames: [InputFrame::IDLE; 4], commands: &[] });
+            let events = sim.drain_events().to_vec();
+            p.tick(&sim.view(seat).expect("seat 0 plays"), &events);
+        }
+    };
+    run(&mut sim, &mut p, 2);
+    let (her, zone) = {
+        let v = sim.view(seat).expect("seat 0 plays");
+        (v.body().pos, v.zone())
+    };
+    // A rat's meat, lying a few cells east of her, where the rat fell.
+    let at = jane_core::Vec2::new(her.x + jane_core::Fx::from_px(24), her.y);
+    let item = jane_data::catalog().combat.item_id("rat_meat").expect("rat meat");
+    let st = sim.state_mut();
+    let id = st.next.drop();
+    let born = st.tick;
+    st.zone_mut(zone).expect("her zone").drops.push(jane_sim::state::Drop { id, item, qty: 1, pos: at, born });
+    // Glowing parts over the drop, and glowing parts anywhere.
+    let glints = |p: &mut Present| {
+        let f = p.draw(128, CANVAS);
+        let (x, y) = ((at.x.0 >> FX_TO_CANVAS) - f.camera.0, (at.y.0 >> FX_TO_CANVAS) - f.camera.1);
+        let over = |q: &&jane_present::frame::Particle| {
+            q.glow > 0 && (i32::from(q.x) - x).abs() <= 8 && (-24..=4).contains(&(i32::from(q.y) - y))
+        };
+        (f.parts.iter().filter(over).count(), f.parts.iter().filter(|q| q.glow > 0).count())
+    };
+    // Over two of its beats it has glinted, and nowhere else.
+    let mut seen = 0;
+    for _ in 0..140 {
+        run(&mut sim, &mut p, 1);
+        let (over, all) = glints(&mut p);
+        assert_eq!(over, all, "nothing glints but the drop");
+        seen += over;
+    }
+    assert!(seen > 0, "the drop glinted");
+    // Taken: its last glint dies out and none come.
+    sim.state_mut().zone_mut(zone).expect("her zone").drops.clear();
+    run(&mut sim, &mut p, 60);
+    for _ in 0..140 {
+        run(&mut sim, &mut p, 1);
+        assert_eq!(glints(&mut p).1, 0, "a drop taken glints no more");
+    }
+}

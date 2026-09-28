@@ -154,7 +154,10 @@ impl Session {
         let held = if paused { InputFrame::IDLE } else { held };
         match self {
             Session::Local(l) => {
-                if paused {
+                // Held, the world waits; but what she did in her bag (a move, a drop, a use) is
+                // stepped at once, one tick with her stick idle, so the window shows it this
+                // frame and not when it closes.
+                if paused && presses.is_empty() && l.extra.is_empty() {
                     return None;
                 }
                 let mut cmds: Vec<StampedCommand> = presses

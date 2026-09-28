@@ -21,8 +21,10 @@ use jane_core::angle::{cos_q15, sin_q15};
 
 use crate::frame::{Caster, Directional, Rgb, SpriteCmd, height_of_rows, rows_up};
 
-/// The longest a shadow gets, in heights: a sun this low casts no further (8 x 256).
-pub const MAX_COT_Q8: i32 = 8 * 256;
+/// The longest a shadow gets, in heights: a sun this low casts no further (4 x 256; the sky
+/// holds the sun and the moon at `light::LOWEST` for their shadows, where it is this, and fades
+/// their strength out by 3 degrees).
+pub const MAX_COT_Q8: i32 = 4 * 256;
 /// How much of its strength a shadow keeps at its tip, of 256.
 pub const TIP: i32 = 170;
 /// A receiver at or under this height is the ground (a tuft, a cobble's relief): it takes the
@@ -33,24 +35,54 @@ pub const GROUND: i32 = 4;
 /// 2026-09-27, so the three tiers cast from the same terrain; T2's cobbles lost a px of self-shade
 /// at a low sun, and a town view went from four thousand blocks to four hundred).
 pub const RELIEF: i32 = 8;
-/// How far up a thing standing right beside a caster's feet its foot shadow climbs, px.
-pub const FOOT_REACH: u8 = 8;
-/// The foot's rows each side of the row under the feet, and how far along the shadow it is
-/// drawn out at most, px across and down the screen.
-const FOOT_B: i32 = 2;
-const FOOT_ALONG: (i32, i32) = (6, 3);
-/// The silhouette's rows the foot is as wide as: the feet and what is just above them.
-const FOOT_ROWS: i32 = 3;
-
-/// The shadow's reach per px of true height, Q8, across the ground: away from the sun.
-pub fn shear(sun: &Directional) -> Option<(i32, i32)> {
+/// How long a shadow is per px of true height, Q8: the cotangent of the sun's elevation, no
+/// more than [`MAX_COT_Q8`]; none with the sun down.
+fn cot(sun: &Directional) -> Option<i32> {
     let (se, ce) = (sin_q15(sun.elevation).0, cos_q15(sun.elevation).0);
     if se <= 0 {
         return None;
     }
-    let cot = (ce * 256 / se).min(MAX_COT_Q8);
+    Some((ce * 256 / se).min(MAX_COT_Q8))
+}
+
+/// The shadow's reach per px of true height, Q8, across the ground: away from the sun.
+pub fn shear(sun: &Directional) -> Option<(i32, i32)> {
+    let cot = cot(sun)?;
     let (ca, sa) = (cos_q15(sun.azimuth).0, sin_q15(sun.azimuth).0);
     Some((-(ca * cot) >> 15, -(sa * cot) >> 15))
+}
+
+/// The least south component (down the screen, toward the viewer) a spilling terrain block's
+/// sun shadow has, of the shadow's length per height: sin 20 degrees, Q15. **The fence rule**
+/// (decided 2026-09-28, the owner, PRESENTATION.md §1.7): the sun is south all day, so every
+/// shadow runs up the screen, and a fence's or a hedge's lies behind its own drawn rows where
+/// nothing sees it; a thin or low block is thrown as if the sun stood at least this far north,
+/// so its shadow spills out in front of it, long east or west with the hour, and it reads as
+/// casting on every tier.
+pub const SPILL_SOUTH_Q15: i32 = 11207;
+/// A terrain block whose footprint is this deep (rows) or this wide (px) or less is thin: a
+/// fence's rails and posts, a gatepost, a stile. T2's field marks a terrain texel thin where no
+/// terrain stands this far from it up and down, or left and right (`scatter.wgsl`'s `thin`).
+pub const THIN: i32 = 4;
+/// A terrain block up to this height spills whatever its footprint: a hedge (9 px), a kerb.
+pub const SPILL_LOW: i32 = 10;
+/// A thin block taller than this (a wall's end, a chimney) keeps the sun's true shadow.
+pub const SPILL_TOP: i32 = 40;
+
+/// [`shear`] for a spilling block: the same, its south component no less than
+/// [`SPILL_SOUTH_Q15`] of the shadow's length.
+pub fn spill_shear(sun: &Directional) -> Option<(i32, i32)> {
+    let cot = cot(sun)?;
+    let (kx, ky) = shear(sun)?;
+    Some((kx, ky.max((SPILL_SOUTH_Q15 * cot) >> 15)))
+}
+
+/// Whether block `b` is thrown by [`spill_shear`] rather than [`shear`]: thin ([`THIN`]) and
+/// no taller than [`SPILL_TOP`], or low ([`SPILL_LOW`]).
+pub fn spills(b: &crate::frame::Block) -> bool {
+    let h = i32::from(b.height);
+    let (w, d) = (i32::from(b.x1) - i32::from(b.x0), i32::from(b.y1) - i32::from(b.y0));
+    h <= SPILL_LOW || (h <= SPILL_TOP && (w <= THIN || d <= THIN))
 }
 
 /// A gap in a row of 2 px or more parts it into two runs: a lantern hung off its post, a hand
@@ -81,16 +113,19 @@ pub fn shade_at(shade: Rgb, strength: u8) -> Rgb {
 /// A caster's rows, from the foot up: `(rows above the foot, first, last)` px from the sprite's
 /// left of each opaque run in the row, a row parted where it has a [`GAP`] (the contact shadow,
 /// index 1, is not the silhouette), for the sprite `s` drawn from an atlas page's albedo
-/// `albedo`, `page_w` wide, standing on row `foot_y` of the canvas. Appended to `out`. So a run
+/// `albedo`, `page_w` wide, thrown as caster `c` (standing on its foot's row of the canvas; the
+/// rows it burns, `Caster::burn`, left out: a flame casts nothing). Appended to `out`. So a run
 /// that is not over another, lower one (a canopy past its trunk, a lamp's head past its post, a
 /// lantern on its bracket) lays its shadow only where its own height throws it, apart from the
 /// root's, as T2's field has it floating.
-pub fn rows(albedo: &[u16], page_w: u16, s: &SpriteCmd, foot_y: i32, out: &mut Vec<(i32, i32, i32)>) {
+pub fn rows(albedo: &[u16], page_w: u16, s: &SpriteCmd, c: &Caster, out: &mut Vec<(i32, i32, i32)>) {
     let pw = usize::from(page_w);
     let sw = i32::from(s.src.w);
+    let foot_y = i32::from(c.foot.1);
+    let burns = |hv: i32| c.burn.0 > 0 && (i32::from(c.burn.0)..=i32::from(c.burn.1)).contains(&hv);
     for v in (0..i32::from(s.src.h)).rev() {
         let hv = foot_y - (i32::from(s.y) + v);
-        if hv <= 0 {
+        if hv <= 0 || burns(hv) {
             continue;
         }
         if hv > 255 {
@@ -135,48 +170,22 @@ pub struct Band {
     pub reach: u8,
 }
 
-/// The bands of caster `c`'s shadow: its foot, then its `rows` (from [`rows`]) sheared by
-/// `(kx, ky)` ([`shear`]), for its sprite drawn with its left edge at `x`.
-pub fn bands(rows: &[(i32, i32, i32)], x: i32, c: &Caster, (kx, ky): (i32, i32), mut emit: impl FnMut(Band)) {
+/// The bands of caster `c`'s shadow: its `rows` (from [`rows`]) sheared by `(kx, ky)`
+/// ([`shear`]), for its sprite drawn with its left edge at `x`, each row its true height's shear
+/// away and as thick as the caster is deep behind its foot row, as T2's field stands it.
+///
+/// There is no foot under it any more (decided 2026-09-28, the owner, measured against T2): an
+/// ellipse wider than the feet laid under every caster at full strength (five rows, two px each
+/// side; then three rows, one px) read on T0 and T1 as a blob under everything beside T2, whose
+/// only foot is its field (the rows behind the foot) and the painted contact shadow (index 1),
+/// which every tier draws the same. The lowest rows' own bands start at the foot row, so the
+/// shadow still grows out of the feet.
+pub fn bands(rows: &[(i32, i32, i32)], x: i32, c: &Caster, k: (i32, i32), emit: impl FnMut(Band)) {
     let Some(&(top, _, _)) = rows.last() else { return };
-    let fy = i32::from(c.foot.1);
-    // A row stands its rows' true height up, and no higher than the caster's tallest px.
-    let tall = i32::from(c.height).max(1);
-    let up = |hv: i32| height_of_rows(hv).min(tall);
-    // The foot: as wide as the lowest rows and two px more each side, under the feet, drawn out
-    // along the shadow as far as the feet's own shadow reaches. What stands on nothing (a bat
-    // in flight, a lantern hung over the ground) has none: its shadow is only where its height
-    // throws it.
-    if rows[0].0 > FOOT_ROWS {
-        return bands_of_rows(rows, x, c, (kx, ky), top, emit);
-    }
-    let (lo, hi) = rows
-        .iter()
-        .take_while(|r| r.0 <= FOOT_ROWS)
-        .fold((rows[0].1, rows[0].2), |(lo, hi), r| (lo.min(r.1), hi.max(r.2)));
-    let reach = up(FOOT_ROWS + 1);
-    let ox = ((reach * kx) >> 8).clamp(-FOOT_ALONG.0, FOOT_ALONG.0);
-    let oy = ((reach * ky) >> 8).clamp(-FOOT_ALONG.1, FOOT_ALONG.1);
-    let a = (hi - lo + 1) / 2 + 2;
-    let cx = x + (lo + hi + 1) / 2;
-    for dy in -FOOT_B..=FOOT_B {
-        // Half the ellipse's width on this row, a px at its tips.
-        let across = FOOT_B * FOOT_B - dy * dy;
-        let w = (a * jane_core::num::isqrt((across * 256) as u64) as i32 / (FOOT_B * 16)).max(1);
-        let row = fy + 1 + dy;
-        emit(Band {
-            x0: cx - w + ox.min(0),
-            x1: cx + w + ox.max(0),
-            y0: row + oy.min(0),
-            y1: row + oy.max(0) + 1,
-            strength: 255,
-            reach: FOOT_REACH,
-        });
-    }
-    bands_of_rows(rows, x, c, (kx, ky), top, emit);
+    bands_of_rows(rows, x, c, k, top, emit);
 }
 
-/// The rows' bands of [`bands`], past the foot: each row its true height's shear away, stretched
+/// The rows' bands of [`bands`]: each row its true height's shear away, stretched
 /// to meet the row above, as thick as the caster is deep.
 fn bands_of_rows(
     rows: &[(i32, i32, i32)],
@@ -192,7 +201,9 @@ fn bands_of_rows(
     let up = |hv: i32| height_of_rows(hv).min(tall);
     let htop = up(top);
     for &(hv, u0, u1) in rows {
-        let (h0, h1) = (up(hv), up(hv + 1));
+        // The row `hv` over the foot row spans its bottom to its top: the lowest drawn row from
+        // the ground, so its shadow starts at the feet whatever way the sun lies.
+        let (h0, h1) = (up(hv - 1), up(hv));
         let (ax, bx) = ((h0 * kx) >> 8, (h1 * kx) >> 8);
         let (ay, by) = ((h0 * ky) >> 8, (h1 * ky) >> 8);
         let strength = 256 - (256 - TIP) * hv.min(top) / top;
@@ -234,7 +245,8 @@ const OWN_TOP: i32 = crate::terrain::BLOCK_TOLERANCE as i32 + 2;
 /// how tall a slice is at most: what the reach up a wall it falls on steps by.
 const SLICE: i32 = 8;
 
-/// The bands of block `b`'s shadow in a sun sheared `(kx, ky)` ([`shear`]): its footprint laid
+/// The bands of block `b`'s shadow in a sun sheared `k` ([`shear`]; a thin or low block takes
+/// `ks`, [`spill_shear`], the fence rule): its footprint laid
 /// at every slice of its height, each slice stretched to meet the next (the rows' rule,
 /// [`bands`]), so the whole is the footprint swept along the sun by its height, as T2's field
 /// throws it. A slice reaches as high as the ray over the block's top there, less [`OWN_TOP`]. Its foot is its
@@ -244,7 +256,8 @@ const SLICE: i32 = 8;
 /// Each slice is laid only where the slice under it did not lie: the mask keeps the strongest
 /// and the highest, the strength is one and the reach falls slice by slice, so what is left out
 /// is what the lower slice had already laid higher. A house is a few hundred small bands.
-pub fn block_bands(b: &crate::frame::Block, (kx, ky): (i32, i32), mut emit: impl FnMut(Band)) {
+pub fn block_bands(b: &crate::frame::Block, k: (i32, i32), ks: (i32, i32), mut emit: impl FnMut(Band)) {
+    let (kx, ky) = if spills(b) { ks } else { k };
     let hgt = i32::from(b.height);
     let (x0, y0, x1, y1) = (i32::from(b.x0), i32::from(b.y0), i32::from(b.x1), i32::from(b.y1));
     if hgt <= GROUND || x0 >= x1 || y0 >= y1 {
@@ -283,6 +296,11 @@ fn minus(r: (i32, i32, i32, i32), a: Option<(i32, i32, i32, i32)>, mut emit: imp
         emit((a.2, my0, r.2, my1));
     }
 }
+
+/// How much of a point light a shadow from it keeps, of 256 (every tier: T2's `LAMP_BOUNCE`, T1's
+/// light pass, T0's `pointshadow`): its pool's light bounces into its umbra, so a lamp's shadow
+/// is a deep dusk, not a hole (decided 2026-09-28, the owner: shadows read harsh on T2).
+pub const LAMP_BOUNCE: u32 = 31;
 
 /// Sub-px steps a canvas px of a point light's shadow geometry ([`Lamp`], [`Slab`]).
 pub const SUB: i32 = 16;
@@ -442,14 +460,14 @@ mod tests {
             flags: Flags::default(),
             height_px: 25,
         };
-        (albedo, s, Caster { sprite: 0, foot: (22, 31), height: 25, depth: 4 })
+        (albedo, s, Caster { sprite: 0, foot: (22, 31), height: 25, depth: 4, ..Caster::default() })
     }
 
     #[test]
     fn the_shadow_grows_out_of_the_feet_whatever_the_hour() {
         let (albedo, s, c) = post();
         let mut r = Vec::new();
-        rows(&albedo, 4, &s, i32::from(c.foot.1), &mut r);
+        rows(&albedo, 4, &s, &c, &mut r);
         // The contact shadow's row is not the silhouette; the first row is the one on the foot.
         assert_eq!(r.first(), Some(&(1, 0, 3)));
         assert_eq!(r.last().map(|r| r.0), Some(20));
@@ -457,18 +475,17 @@ mod tests {
             let k = shear(&sun(az, el)).unwrap();
             let mut bands = Vec::new();
             super::bands(&r, i32::from(s.x), &c, k, |b| bands.push(b));
-            // The foot covers the feet's own px and the row under them, full strength.
-            let (fx, fy) = (i32::from(c.foot.0), i32::from(c.foot.1));
+            // The feet's own px on the foot row are in it, and nothing is laid round them: no
+            // foot two px past the feet or rows under them, as on T2.
+            let fy = i32::from(c.foot.1);
             let covers = |x: i32, y: i32| bands.iter().any(|b| b.x0 <= x && x < b.x1 && b.y0 <= y && y < b.y1);
             for x in 20..24 {
-                assert!(covers(x, fy) && covers(x, fy + 1), "{az:?} {el}: ({x}, {fy})");
+                assert!(covers(x, fy), "{az:?} {el}: ({x}, {fy})");
             }
-            // Two px clear of the feet each side, whichever way the shadow runs.
-            assert!(covers(18, fy + 1) && covers(25, fy + 1), "{az:?} {el}");
-            // And the shadow of the lowest row touches the foot: no gap between the two.
-            let first = bands[(2 * FOOT_B + 1) as usize];
-            assert!(first.y0 <= fy + FOOT_B + 1 && first.y1 >= fy - FOOT_B, "{az:?} {el}: {first:?}");
-            assert!(first.x0 <= fx + 2 && first.x1 >= fx - 1, "{az:?} {el}: {first:?}");
+            // A sun that throws its shadow up the screen or across it lays nothing under them.
+            if az != Angle::NORTH {
+                assert!(!covers(20, fy + 2) && !covers(23, fy + 2), "{az:?} {el}: a foot under the feet");
+            }
         }
     }
 
@@ -476,10 +493,10 @@ mod tests {
     fn a_shadow_reaches_up_as_high_as_the_ray_over_the_top() {
         let (albedo, s, c) = post();
         let mut r = Vec::new();
-        rows(&albedo, 4, &s, i32::from(c.foot.1), &mut r);
+        rows(&albedo, 4, &s, &c, &mut r);
         let mut bands = Vec::new();
         super::bands(&r, i32::from(s.x), &c, shear(&sun(Angle::WEST, 20)).unwrap(), |b| bands.push(b));
-        let rows_only = &bands[(2 * FOOT_B + 1) as usize..];
+        let rows_only = &bands[..];
         // At the root it reaches nearly the post's height (25 px); at the tip, nothing.
         assert!(rows_only[0].reach >= 23, "{:?}", rows_only[0]);
         assert!(rows_only.last().unwrap().reach <= 2);
@@ -517,9 +534,9 @@ mod tests {
             flags: Flags::default(),
             height_px: 70,
         };
-        let c = Caster { sprite: 0, foot: (foot.0 as i16, foot.1 as i16), height: 70, depth: 6 };
+        let c = Caster { sprite: 0, foot: (foot.0 as i16, foot.1 as i16), height: 70, depth: 6, ..Caster::default() };
         let mut r = Vec::new();
-        rows(&albedo, w as u16, &s, foot.1, &mut r);
+        rows(&albedo, w as u16, &s, &c, &mut r);
         let mut bands = Vec::new();
         super::bands(&r, i32::from(s.x), &c, shear(&sun(Angle::NORTH, 40)).unwrap(), |b| bands.push(b));
         (bands, foot)
@@ -574,10 +591,10 @@ mod tests {
     fn what_flies_has_no_foot() {
         // A bat: a body 12 wide from row 30 to row 40, 20 rows over its anchor on row 56.
         let (bands, foot) = cast(|x, y| (30..=40).contains(&y) && (14..26).contains(&x));
-        // Nothing under it: the nearest band is its lowest row's, 16 rows' height (20 px) times
-        // 1.19 away (23 rows), its depth (6 rows) behind that.
+        // Nothing under it: the nearest band is its lowest row's, from the bottom of that row, 15
+        // rows' height (19 px) times 1.19 away (22 rows), its depth (6 rows) behind that.
         let near = bands.iter().map(|b| b.y0).min().unwrap();
-        assert!(near >= foot.1 + 18, "a shadow at its anchor: {near}");
+        assert!(near >= foot.1 + 16, "a shadow at its anchor: {near}");
     }
 
     #[test]
@@ -585,7 +602,7 @@ mod tests {
         let b = crate::frame::Block { x0: 100, y0: 100, x1: 180, y1: 140, height: 60 };
         let k = shear(&sun(Angle::WEST, 20)).unwrap();
         let mut bands = Vec::new();
-        block_bands(&b, k, |band| bands.push(band));
+        block_bands(&b, k, k, |band| bands.push(band));
         let at = |x: i32, y: i32| {
             bands.iter().filter(|b| b.x0 <= x && x < b.x1 && b.y0 <= y && y < b.y1).map(|b| b.reach).max()
         };
@@ -601,6 +618,39 @@ mod tests {
         assert!(at(95, 120).is_none());
         let area: i32 = bands.iter().map(|b| (b.x1 - b.x0) * (b.y1 - b.y0)).sum();
         assert!(area <= (far - 100) * 41, "{area}");
+    }
+
+    #[test]
+    fn a_fence_spills_its_shadow_south_of_its_rails_and_a_wall_does_not() {
+        // A fence's rails across the view at five: 21 px tall, two rows deep in the field, as
+        // `terrain::blocks` stands them. The sun 15 degrees south of west (`light::sky`'s five).
+        let s = sun(Angle(32768 - 2730), 16);
+        let (k, ks) = (shear(&s).unwrap(), spill_shear(&s).unwrap());
+        assert_eq!(k.0, ks.0, "the spill keeps the shadow's east reach");
+        assert!(k.1 < 0 && ks.1 > 0, "true north {}, spilt south {}", k.1, ks.1);
+        let fence = crate::frame::Block { x0: 100, y0: 95, x1: 196, y1: 97, height: 21 };
+        assert!(spills(&fence));
+        let mut bands = Vec::new();
+        block_bands(&fence, k, ks, |band| bands.push(band));
+        let lowest = bands.iter().map(|b| b.y1).max().unwrap();
+        let far = bands.iter().map(|b| b.x1).max().unwrap();
+        // At least sin 20 degrees of four heights at cot 16 degrees (3.5): 21 x 3.5 x 0.34, 25
+        // rows below its foot, and as far east as the true shadow.
+        assert!(lowest >= 97 + 24, "the fence's shadow reaches row {lowest}");
+        assert_eq!(far, 196 + ((21 * k.0) >> 8));
+        // A hedge is low and spills; a house and a one-cell wall are neither thin nor low.
+        assert!(spills(&crate::frame::Block { x0: 100, y0: 80, x1: 120, y1: 100, height: 9 }));
+        assert!(!spills(&crate::frame::Block { x0: 100, y0: 40, x1: 196, y1: 96, height: 13 }));
+        assert!(!spills(&crate::frame::Block { x0: 100, y0: 40, x1: 180, y1: 100, height: 60 }));
+        // A wall's block at the same sun keeps the true shadow: nothing below its foot.
+        let wall = crate::frame::Block { x0: 100, y0: 40, x1: 196, y1: 96, height: 13 };
+        let mut bands = Vec::new();
+        block_bands(&wall, k, ks, |band| bands.push(band));
+        assert!(bands.iter().all(|b| b.y1 <= 96), "a wall spills");
+        // The spill is at most the shadow's length: the sky's lowest sun holds it under four heights.
+        let low = sun(Angle::WEST, 14);
+        let (kx, ky) = spill_shear(&low).unwrap();
+        assert!(kx.abs().max(ky.abs()) <= MAX_COT_Q8);
     }
 
     #[test]

@@ -8,7 +8,7 @@
 //! 4. lock     gates, verb props, lock-ins and their way in, flag gates, state gates (and, in 5,
 //!    the one list per control that drives them both ways)
 //! 5. fill     lamps on the walls by rule (`lights.rs`), holdings into sockets, the enemy mix by
-//!    heat, dressing
+//!    heat, dressing, then the set pieces (`sets.rs`, DUNGEONS.md §2.10) and the scatter
 //! 6. name     bound things get their contract name, the rest `<zone>_<node>_<socket>`: interned
 //!    at build (`MissionNode::names`), so nothing here formats a name the story can lean on
 //! 7. emit     the Blueprint and the trigger rows it carries
@@ -17,8 +17,8 @@
 //! re-rolled layout cannot hand the same jar out twice or lose one (`grow` keys on the name).
 //!
 //! Dice: the embedding draws from `DunChoose` and `DunEmbed` (`layout.rs`); per room, the
-//! pushables and the enemy mix from `DunFill`, the dressing from `DunDress` (`a` = the node).
-//! The lamps throw none.
+//! pushables and the enemy mix from `DunFill`, the dressing from `DunDress` (`a` = the node;
+//! `b` 0 the dress sockets, 1 the scatter, 2 the set pieces). The lamps throw none.
 
 use jane_core::action::{Action, CameraMode, Cond, Condition, FlagKey, FlagOp, FlagTest, Stat};
 use jane_core::blueprint::{Door, Mark, PropSpawn, Trigger, TriggerMode, UnitSpawn, Waypoint, ZONE_ATTEMPTS};
@@ -26,12 +26,13 @@ use jane_core::tile::F_SOLID;
 use jane_core::{Blueprint, Cell, Key, NameId, PropDefId, Rect, Sfc32, TemplateId, TextRef, Tile, UnitDefId, ZoneId};
 use jane_data::{
     BAY_H, BAY_W, BORDER, MissionDef, MissionEdgeKind, MissionNodeKind, MissionNodeNames, MissionPlacement,
-    MissionProp, RoomDoor, RoomShape, RoomSide, RoomSocketKind, RoomTemplate, catalog,
+    MissionProp, MissionSetPiece, RoomDoor, RoomShape, RoomSide, RoomSocketKind, RoomTemplate, catalog,
 };
 
 use super::bind::Binding;
 use super::layout::{Corridor, Lanes, Layout, embed, embed_fallback};
 use super::lights::{LitCorridor, LitRoom, family_index, mount_on, place_lamps};
+use super::sets;
 use crate::steps::{Step, dice};
 
 /// A placed room, as the checks and the viewer want it.
@@ -1065,6 +1066,158 @@ impl Gen<'_> {
         }
     }
 
+    /// The zone as the set pieces see it once everything else is down (`sets.rs`): where a part
+    /// may lie, where feet go, where a solid part may not stand, and the walls; and what she walks
+    /// to (the things she uses, the units, the marks).
+    fn set_floor(&self) -> (sets::Floor, Vec<Rect>) {
+        let c = catalog();
+        let (w, h) = (self.k.w, self.k.h);
+        let mut f = sets::Floor::new(w, h);
+        let mut goals = Vec::new();
+        for y in 0..h {
+            for x in 0..w {
+                let (t, i) = (self.k.get(x, y), (y * w + x) as usize);
+                f.wall[i] = t == self.m.wall;
+                f.walk[i] = t.flags() & F_SOLID == 0;
+                f.open[i] = t == self.m.floor && !self.k.claimed[i];
+            }
+        }
+        // Ground a `fill` will change (a pool drained, a vine grown) is never furnished.
+        let lists = self.k.bp.lists.iter().map(Vec::as_slice).chain(c.lists.iter().copied());
+        for a in lists.flatten() {
+            if let Action::Fill { rect, .. } = a {
+                if let Some(&r) = self.k.bp.rects.get(rect) {
+                    for y in (r.y - 1)..=r.bottom() {
+                        for x in (r.x - 1)..=r.right() {
+                            if let Some(i) = f.ix(x, y) {
+                                f.open[i] = false;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        for p in &self.k.bp.props {
+            let d = c.story.prop(p.def);
+            let r = Rect::new(i32::from(p.cell.x), i32::from(p.cell.y), i32::from(d.w), i32::from(d.h));
+            // What may move or go (a gate, a pushed thing, a verb's rubble, what is shown later) is
+            // walked through; what stays is walked round.
+            let goes =
+                p.hidden || p.locked || p.use_list.is_some() || d.gate || d.push || d.carry || d.answers.is_some();
+            if d.solid && !goes {
+                for y in r.y..r.bottom() {
+                    for x in r.x..r.right() {
+                        if let Some(i) = f.ix(x, y) {
+                            f.walk[i] = false;
+                        }
+                    }
+                }
+            }
+            let used = goes
+                || d.prompt.is_some()
+                || p.release.is_some()
+                || !p.loot.is_empty()
+                || p.talk.is_some()
+                || p.to.is_some()
+                || p.key_tag.is_some()
+                || d.plate
+                || d.rest
+                || d.bench
+                || d.once
+                || d.light.is_some();
+            // A lamp hung by rule (lights.rs) is in the wall itself and nobody uses it; one the
+            // mission hangs (a lamp to spark) is stood at like anything else.
+            if used && !self.lamps.contains(&p.key) {
+                f.keep_off(r, if d.answers.is_some() { 2 } else { 1 });
+                goals.push(r);
+            }
+        }
+        for u in &self.k.bp.units {
+            let r = Rect::new(i32::from(u.cell.x), i32::from(u.cell.y), 1, 1);
+            f.keep_off(r, 1);
+            goals.push(r);
+        }
+        for mk in self.k.bp.marks.values() {
+            let r = Rect::new(i32::from(mk.cell.x), i32::from(mk.cell.y), 1, 1);
+            f.keep_off(r, 1);
+            goals.push(r);
+        }
+        (f, goals)
+    }
+
+    /// The set pieces (DUNGEONS.md §2.10, `sets.rs`): each room its node's pieces, after the
+    /// mission, the templates and the lamps, before the scatter. Seeded per node (`DunDress`,
+    /// `b` = 2), so it moves nothing else the dice decide.
+    fn sets(&mut self) {
+        let m = self.m;
+        if m.set_rooms.is_empty() {
+            return;
+        }
+        let (mut floor, goals) = self.set_floor();
+        let mut n = 0;
+        for ri in 0..self.info.rooms.len() {
+            let r = self.info.rooms[ri].clone();
+            let Some(sr) = m.set_rooms.iter().find(|s| usize::from(s.node) == r.node) else { continue };
+            // An arena (a boss's, a keeper's, a room that seals) is a set piece of its own (K14):
+            // its floor is the fight's, and nothing is stood in it. Where anything else is fought,
+            // what furnishes the room keeps to its walls.
+            let node = &m.nodes[r.node];
+            if matches!(node.kind, MissionNodeKind::Boss | MissionNodeKind::Miniboss)
+                || self.info.lockins.iter().any(|l| l.node == r.node)
+            {
+                continue;
+            }
+            let calm = node.heat_cost == 0;
+            let template = catalog().dungeons.template(r.template);
+            // The ground between a plate and what is pushed or carried onto it stays clear.
+            let mut push = None::<Rect>;
+            for (si, ts) in template.sockets.iter().enumerate() {
+                if matches!(ts.kind, RoomSocketKind::Plate | RoomSocketKind::Push | RoomSocketKind::Carry) {
+                    let s = r.shape.sockets[si];
+                    let s = Rect::new(r.x + s.x, r.y + s.y, s.w, s.h);
+                    push = Some(push.map_or(s, |p| {
+                        let (x0, y0) = (p.x.min(s.x), p.y.min(s.y));
+                        Rect::new(x0, y0, p.right().max(s.right()) - x0, p.bottom().max(s.bottom()) - y0)
+                    }));
+                }
+            }
+            // A thing to push that no plate waits for (the Burial's great torch) is pushed where she
+            // likes, round the whole room: that room is left to it.
+            let plate = template.sockets.iter().any(|s| s.kind == RoomSocketKind::Plate);
+            if push.is_some() && !plate {
+                continue;
+            }
+            if let Some(p) = push {
+                floor.keep_off(p, 3);
+            }
+            // The cell that stands for the room (the checks walk between them) stays open.
+            floor.keep_off(Rect::new(r.centre.0, r.centre.1, 1, 1), 1);
+            let doors = r
+                .doors
+                .iter()
+                .map(|&di| {
+                    let d = &r.shape.doors[di];
+                    (r.x + i32::from(d.x), r.y + i32::from(d.y), d.side)
+                })
+                .collect();
+            let mut in_room: Vec<Rect> = goals.iter().copied().filter(|g| g.overlaps(r.rect)).collect();
+            in_room.push(Rect::new(r.centre.0, r.centre.1, 1, 1));
+            let room = sets::SetRoom { rect: r.rect, doors, goals: in_room, calm };
+            let mut rng = dice(self.seed, self.zone, Step::DunDress, self.attempt, r.node as i32, 2);
+            let mut order: Vec<u8> = sr.take.to_vec();
+            if order.len() > 1 {
+                rng.shuffle(&mut order[1..]);
+            }
+            let pieces: Vec<&MissionSetPiece> = order.iter().map(|&i| &m.sets[usize::from(i)]).collect();
+            for p in sets::furnish(&mut floor, &room, &pieces, usize::from(sr.most), &mut rng) {
+                let key = self.key_for(&format!("{}_set_{n}", m.id));
+                n += 1;
+                let (w, h) = footprint(p.prop);
+                self.k.prop(key, p.prop, p.x, p.y, w, h);
+            }
+        }
+    }
+
     /// The scatter (DUNGEONS.md: "Dressing (barrel piles, torch runs) is the scatter"): after
     /// everything the mission and the templates place, each room's open floor takes the
     /// dungeon's floor marks (`dress.scatter_floor`: bones, stains, papers, leaves) and the cells
@@ -1188,12 +1341,22 @@ pub fn build_candidate(zone: ZoneId, seed: u32, attempt: u8) -> Built {
 /// [`build_candidate`] for a mission given as data (a test may hand one that asks for something
 /// other than the catalog's).
 pub fn build_mission(m: &'static MissionDef, seed: u32, attempt: u8) -> Built {
+    build_mission_dressed(m, seed, attempt, true)
+}
+
+/// [`build_mission`] with no set pieces (DUNGEONS.md §2.10): the same candidate but for them,
+/// so a test can hold that a set piece never changes whether a candidate is proven.
+pub fn build_mission_bare(m: &'static MissionDef, seed: u32, attempt: u8) -> Built {
+    build_mission_dressed(m, seed, attempt, false)
+}
+
+fn build_mission_dressed(m: &'static MissionDef, seed: u32, attempt: u8, set_pieces: bool) -> Built {
     let layout = if attempt >= ZONE_ATTEMPTS - 1 {
         embed_fallback(m).map_err(|e| vec![e])
     } else {
         embed(m, seed, m.zone, attempt).ok_or_else(Vec::new)
     };
-    assemble(m, seed, attempt, layout, (m.cols, m.rows), false)
+    assemble(m, seed, attempt, layout, (m.cols, m.rows), false, set_pieces)
 }
 
 /// One room and nothing else, as a whole (small) zone: the template harness's blueprint
@@ -1213,7 +1376,7 @@ pub fn build_room_alone(m: &'static MissionDef, node: usize, template: TemplateI
         dropped: (0..m.nodes.len()).filter(|&n| n != node).map(|n| n as u8).collect(),
         fallback: true,
     };
-    assemble(m, 1, ZONE_ATTEMPTS - 1, Ok(layout), (shape.bays.0 + 2, shape.bays.1 + 2), true)
+    assemble(m, 1, ZONE_ATTEMPTS - 1, Ok(layout), (shape.bays.0 + 2, shape.bays.1 + 2), true, true)
 }
 
 /// Stamp a layout (or say why there is none) onto a lattice of `cols x rows` bays.
@@ -1224,6 +1387,7 @@ fn assemble(
     layout: Result<Layout, Vec<String>>,
     (cols, rows): (u8, u8),
     stubs: bool,
+    set_pieces: bool,
 ) -> Built {
     let zone = m.zone;
     let (w, h) = (2 * BORDER + i32::from(cols) * BAY_W, 2 * BORDER + i32::from(rows) * BAY_H);
@@ -1273,6 +1437,9 @@ fn assemble(
         g.locks();
         g.lamps();
         g.fill();
+        if set_pieces {
+            g.sets();
+        }
         g.scatter();
         g.zone_rects();
     }

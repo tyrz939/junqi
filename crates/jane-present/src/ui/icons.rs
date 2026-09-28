@@ -1,8 +1,7 @@
-//! Stand-in icons and the chrome's marks (PORT.md §7.1, "stand-ins while art is missing"): the
-//! icon family of ART.md §2.5 has not landed, so every item, spell and status icon a row names is
-//! drawn here from its name (`item_key_brass` is a brass key, `item_potion_red` a red flask,
-//! `spell_frost` a frost medallion), with `jane-art`'s lit primitives and the one outline, on a
-//! flat 32 px canvas. They go when the icon generator lands; nothing outside this file knows.
+//! Icons and the chrome's marks. An item, spell or status icon is `jane-art`'s icon look (ART.md
+//! §2.5: drawn at 32, and its chip drawn again at 16, never a downscale) when the name has one,
+//! which every row's does ([`look`]); the stand-ins below, drawn from the name (`item_key_brass`
+//! a brass key, `spell_frost` a frost medallion), are what a name without a look falls back to.
 
 use jane_art::canvas::{Canvas, Dir, Z};
 use jane_art::palette::{Ix, Ramp, Tone};
@@ -37,7 +36,25 @@ fn ramp_of(word: &str, or: Ramp) -> Ramp {
     }
 }
 
-/// The icon for an item, spell or effect named `name`; a plain parcel for anything unknown.
+/// The icon look `name` renders to, at 32 and as its 16 chip: `jane-art`'s icon family (the
+/// bag's, the bar's and a thing lying on the ground's), or `None` for a name with no look.
+pub fn look(name: &str) -> Option<(Canvas, Canvas)> {
+    let sets = jane_art::looks::render(name).ok()?;
+    let at = |v: u8| sets.iter().find(|r| r.variant == v).and_then(|r| r.set.frames.first()).map(|(_, c)| c.clone());
+    Some((at(0)?, at(1)?))
+}
+
+/// The icon for `name` at 32 and at 16: its look, else the stand-in and the stand-in halved.
+pub fn both(name: &str) -> (Canvas, Canvas) {
+    look(name).unwrap_or_else(|| {
+        let big = icon(name);
+        let small = half(&big);
+        (big, small)
+    })
+}
+
+/// The stand-in icon for an item, spell or effect named `name`; a plain parcel for anything
+/// unknown.
 pub fn icon(name: &str) -> Canvas {
     let mut c = Canvas::flat(ICON, ICON);
     let (family, rest) = name.split_once('_').unwrap_or((name, ""));

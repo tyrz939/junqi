@@ -92,6 +92,18 @@ const GROUND: f32 = 4.5;
 // (`jane_present::shadow::RELIEF`).
 const RELIEF: f32 = 8.0;
 
+// The fence rule (PRESENTATION.md 1.7, `jane_present::shadow::spill_shear`): a terrain texel of
+// the field that is thin (no terrain `THIN` px from it up and down, or left and right: a fence's
+// rails and posts) and no taller than `SPILL_TOP`, or low (`SPILL_LOW` or under: a hedge), is
+// marked `THIN_ID` in the field's id and thrown by the sun as if it stood at least `SPILL_SOUTH`
+// (sin 20 degrees) of its light's flat length north, so its shadow spills south of what casts
+// it and shows, where the true one lies behind its rails. T0 and T1 do the same by the block.
+const THIN_ID: u32 = 0xffffu;
+const THIN: i32 = 4;
+const SPILL_LOW: f32 = 10.0;
+const SPILL_TOP: f32 = 40.0;
+const SPILL_SOUTH: f32 = 0.34202;
+
 // The afterglow as the air and the ground take it: its hue with the chroma the sky's byte names,
 // not the power curve's (a linear orange is a red, and a red over the blue fill is mauve), at the
 // glow's own brightness. What the sky backdrop paints stays the saturated glow.

@@ -116,6 +116,8 @@ model! {
         pub boots_ramp: Option<&'static str>,
         /// A pack on the back: drawn on `up`, a strap on `side`.
         pub pack: bool,
+        /// A bedroll strapped across the top of the pack (ART.md §2.1): a traveller's.
+        pub roll: bool,
     }
 }
 
@@ -371,6 +373,12 @@ model_enum! {
         Flask, Vial, Key, Bar, Orb, Stone, Gem, Herb, Bloom, Mushroom, Fruit, Grapes, Egg, Loaf, Crepe, Meat, Potatoes,
         Pot, Tin, Glove, Hat, Cap, Coat, Scarf, Fleece, Letter, Parcel, Sack, Tool, Scissors, Spanner, Spoons, Can, Net,
         Plate, Ring, Amulet, Spectacles, Logs, Butterfly, Tortoise, Dust, Spell, Status,
+        /// A cushion of moss on a stone.
+        Moss,
+        /// A satchel: its flap, buckle and strap.
+        Satchel,
+        /// Folded washing with a peg.
+        Linen,
     }
 }
 

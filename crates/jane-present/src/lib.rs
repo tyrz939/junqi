@@ -19,11 +19,13 @@ pub mod camera;
 pub mod chunks;
 pub mod creatures;
 pub mod drawlist;
+pub mod facing;
 pub mod frame;
 pub mod fx;
 pub mod input;
 /// The names bindings use in data and in `config.json` (shared with build.rs).
 pub mod input_names;
+pub mod lesson;
 pub mod light;
 pub mod people;
 pub mod present;

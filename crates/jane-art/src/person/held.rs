@@ -19,9 +19,10 @@ const Z_HELD: u8 = 9;
 /// The held thing in the hand whose top-left is `(hx, hy)` (a 4 x 3 mitt).
 pub(super) fn draw(c: &mut Canvas, d: &Dress, r: &Rig, hx: i32, hy: i32) {
     let z = Z_HELD;
-    let side = r.facing == Facing::Side;
+    // On a diagonal a hafted thing leans the way she faces, as from the side.
+    let side = r.facing == Facing::Side || r.facing.diagonal();
     // Facing away, a thing in her hand is partly behind her: drawn a relief lower.
-    let z = if r.facing == Facing::Up { z - 4 } else { z };
+    let z = if r.facing.back() { z - 4 } else { z };
     let wood = Ramp::WoodOak;
     match d.look.held {
         HeldItem::None | HeldItem::Pipe => {}
@@ -139,12 +140,12 @@ pub(super) fn draw(c: &mut Canvas, d: &Dress, r: &Rig, hx: i32, hy: i32) {
 
 /// What is held at the face, drawn over the head: a pipe.
 pub(super) fn at_face(c: &mut Canvas, d: &Dress, r: &Rig) {
-    if d.look.held != HeldItem::Pipe || r.facing == Facing::Up {
+    if d.look.held != HeldItem::Pipe || r.facing.back() {
         return;
     }
     let s = r.skull;
     let my = r.eye_y() + 5;
-    let (x, dir) = if r.facing == Facing::Side { (s.right() - 2, 1) } else { (super::draw::CX, 1) };
+    let (x, dir) = if r.facing == Facing::Side { (s.right() - 2, 1) } else { (r.cx(), 1) };
     c.hline(x, x + 3 * dir, my, Ramp::WoodDark.at(Tone::Base), Z_HELD);
     c.fill_rect(Rect::new(x + 3 * dir, my - 2, 2, 3), Ramp::WoodDark.at(Tone::Light), Z_HELD);
     c.dot(x + 3 * dir, my - 3, Ix::SEAM, Z_HELD);

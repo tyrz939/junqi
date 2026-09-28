@@ -91,6 +91,68 @@ pub(crate) fn draw(c: &mut Canvas, k: &Coat, facing: Facing, beat: Beat) {
             }
             head_front(c, k, hx, hy, toward, open, tongue);
         }
+        Facing::DownRight | Facing::UpRight => {
+            let toward = facing == Facing::DownRight;
+            let (hx, hy) = (ax + 3 + off.0, ay - 21 + off.1 + i32::from(!toward));
+            // The neck reared out of the coil and leaning into the turn.
+            let neck = [(ax - 3, ay - 7), (ax + 2, ay - 11), (ax + off.0, ay - 15), (hx - 1, hy + 5)];
+            let mut m = Canvas::new(c.w(), c.h());
+            m.polyline(&neck, Ix::INK, 5, 1);
+            c.inflate(&m, k.body, 2, relief::NECK);
+            if toward && k.belly != k.body {
+                // The throat's pale scales down the near side of the neck.
+                let throat: Vec<(i32, i32)> = neck.iter().map(|&(x, y)| (x + 1, y)).collect();
+                c.polyline(&throat, k.belly.at(Tone::Base), 2, relief::NECK.hi);
+                for y in (hy + 6..ay - 7).step_by(2) {
+                    for x in 0..c.w() {
+                        c.tint(x, y, k.belly, Tone::Mid);
+                    }
+                }
+            }
+            head_turned(c, k, hx, hy, toward, open, tongue);
+        }
+    }
+}
+
+/// The head turned an eighth: the wedge's snout down and to the right (`toward`) with both gold
+/// eyes, the far one close to the snout, the nostrils at its tip; or up and to the right, the
+/// crown's pattern toward us and the right eye at its edge. The tongue flicks along the facing.
+fn head_turned(c: &mut Canvas, k: &Coat, hx: i32, hy: i32, toward: bool, open: bool, tongue: bool) {
+    let mut m = Canvas::new(c.w(), c.h());
+    let pts: [(i32, i32); 6] = if toward {
+        [(hx - 6, hy), (hx + 4, hy - 1), (hx + 7, hy + 2), (hx + 5, hy + 5), (hx, hy + 6), (hx - 5, hy + 3)]
+    } else {
+        [(hx - 5, hy + 1), (hx, hy - 1), (hx + 6, hy - 2), (hx + 7, hy + 1), (hx + 3, hy + 4), (hx - 4, hy + 5)]
+    };
+    m.polyline_fill(&pts, Ix::INK, 1);
+    c.inflate(&m, k.body, 2, relief::HEAD);
+    let z = relief::HEAD.hi;
+    let r = Ramp::ClothRed;
+    if !toward {
+        c.dye_poly(&[(hx - 1, hy), (hx + 2, hy + 1), (hx, hy + 4), (hx - 3, hy + 2)], k.body, k.mark);
+        eye(c, k, hx + 4, hy - 1, z);
+        if tongue {
+            c.line((hx + 7, hy - 1), (hx + 9, hy - 3), r.at(Tone::Base), 1, z);
+            c.dot(hx + 10, hy - 3, r.at(Tone::Base), z);
+            c.dot(hx + 9, hy - 4, r.at(Tone::Base), z);
+        }
+        return;
+    }
+    c.hline(hx - 4, hx + 2, hy, k.body.at(Tone::Light), z);
+    c.dye_poly(&[(hx - 1, hy), (hx + 1, hy + 2), (hx - 1, hy + 4), (hx - 3, hy + 2)], k.body, k.mark);
+    eye(c, k, hx - 4, hy + 1, z);
+    eye(c, k, hx + 3, hy, z);
+    c.dot(hx + 5, hy + 3, Ix::INK, z);
+    c.dot(hx + 4, hy + 4, Ix::INK, z);
+    if open {
+        c.polyline_fill(&[(hx + 5, hy + 5), (hx - 1, hy + 6), (hx + 3, hy + 9)], Ramp::ClothRose.at(Tone::Base), z);
+        c.vline(hx + 4, hy + 5, hy + 7, Ramp::Bone.at(Tone::High), z);
+        c.vline(hx, hy + 6, hy + 7, Ramp::Bone.at(Tone::High), z);
+    }
+    if tongue {
+        c.line((hx + 6, hy + 5), (hx + 8, hy + 7), r.at(Tone::Base), 1, z);
+        c.dot(hx + 9, hy + 7, r.at(Tone::Base), z);
+        c.dot(hx + 8, hy + 8, r.at(Tone::Base), z);
     }
 }
 

@@ -12,6 +12,7 @@ pub mod dialogue;
 pub mod hud;
 pub mod icons;
 pub mod lan;
+pub mod lesson;
 pub mod loading;
 pub mod map;
 pub mod menus;

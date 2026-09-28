@@ -7,6 +7,7 @@ mod app;
 mod audio;
 mod config;
 mod console;
+mod crash;
 mod devices;
 mod game;
 mod handle;
@@ -193,6 +194,8 @@ fn main() -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
+    // A panic leaves crash.log beside the config: a release build aborts with nothing on screen.
+    crash::install(saves::Dirs::find(args.data_dir.as_deref()).root);
     match game::run(&args) {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {

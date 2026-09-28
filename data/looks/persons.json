@@ -2,7 +2,7 @@
   "jane": { "family": "person", "build": "slim",
     "head": { "hair": "long", "hair_ramp": "hair_dark" },
     "body": { "coat": "coat", "coat_ramp": "cloth_plum", "front": "scarf", "front_ramp": "cloth_mustard",
-              "legs": "trousers", "legs_ramp": "cloth_brown", "boots": "boots", "pack": true } },
+              "legs": "trousers", "legs_ramp": "cloth_brown", "boots": "boots", "pack": true, "roll": true } },
 
   "town_tilly": { "family": "person", "build": "child",
     "head": { "hair": "pigtails", "hair_ramp": "hair_fair" },

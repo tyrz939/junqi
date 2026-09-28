@@ -30,7 +30,7 @@
 
   "item_herb_cap": { "family": "icon", "class": "mushroom", "ramp": "cloth_red", "trim": "cloth_cream" },
   "item_herb_lily": { "family": "icon", "class": "bloom", "ramp": "hair_white" },
-  "item_herb_moss": { "family": "icon", "class": "herb", "ramp": "leaf", "trim": "grass" },
+  "item_herb_moss": { "family": "icon", "class": "moss", "ramp": "leaf", "trim": "grass" },
   "item_herb_nasturtium": { "family": "icon", "class": "bloom", "ramp": "cloth_ochre" },
   "item_herb_pansy": { "family": "icon", "class": "bloom", "ramp": "cloth_plum" },
   "item_herb_root": { "family": "icon", "class": "herb", "ramp": "wood_pale", "trim": "leaf" },
@@ -55,9 +55,9 @@
   "item_coat": { "family": "icon", "class": "coat", "ramp": "cloth_plum" },
   "item_scarf": { "family": "icon", "class": "scarf", "ramp": "cloth_mustard", "trim": "cloth_red" },
   "item_fleece": { "family": "icon", "class": "fleece", "ramp": "cloth_cream" },
-  "item_haversack": { "family": "icon", "class": "sack", "ramp": "cloth_moss", "trim": "leather" },
+  "item_haversack": { "family": "icon", "class": "satchel", "ramp": "cloth_moss", "trim": "leather" },
   "item_sack": { "family": "icon", "class": "sack", "ramp": "cloth_cream", "trim": "leather" },
-  "item_washing": { "family": "icon", "class": "scarf", "ramp": "cloth_linen", "trim": "cloth_sky" },
+  "item_washing": { "family": "icon", "class": "linen", "ramp": "cloth_linen", "trim": "cloth_sky" },
 
   "item_letter": { "family": "icon", "class": "letter", "ramp": "cloth_linen" },
   "item_present": { "family": "icon", "class": "parcel", "ramp": "cloth_red", "trim": "cloth_mustard" },

@@ -72,6 +72,38 @@ pub enum FrameId {
     CastUp3,
     HurtDown,
     HurtUp,
+    /// The diagonals (ART.md §4): facing the viewer and to the right (south-east), the walk, the
+    /// breathe; south-west is this mirrored at draw time, as west is `Side`'s.
+    DownRight,
+    DownRight1,
+    DownRight2,
+    DownRight3,
+    DownRight4,
+    DownRight5,
+    DownRightB,
+    /// Facing away and to the right (north-east); north-west mirrors it.
+    UpRight,
+    UpRight1,
+    UpRight2,
+    UpRight3,
+    UpRight4,
+    UpRight5,
+    UpRightB,
+    /// A person's attack, cast and hurt on the diagonals.
+    AtkDownRight1,
+    AtkDownRight2,
+    AtkDownRight3,
+    AtkUpRight1,
+    AtkUpRight2,
+    AtkUpRight3,
+    CastDownRight1,
+    CastDownRight2,
+    CastDownRight3,
+    CastUpRight1,
+    CastUpRight2,
+    CastUpRight3,
+    HurtDownRight,
+    HurtUpRight,
 }
 
 impl FrameId {
@@ -129,11 +161,39 @@ impl FrameId {
             FrameId::CastUp3 => "cast_up_3",
             FrameId::HurtDown => "hurt_down",
             FrameId::HurtUp => "hurt_up",
+            FrameId::DownRight => "down_right",
+            FrameId::DownRight1 => "down_right_1",
+            FrameId::DownRight2 => "down_right_2",
+            FrameId::DownRight3 => "down_right_3",
+            FrameId::DownRight4 => "down_right_4",
+            FrameId::DownRight5 => "down_right_5",
+            FrameId::DownRightB => "down_right_b",
+            FrameId::UpRight => "up_right",
+            FrameId::UpRight1 => "up_right_1",
+            FrameId::UpRight2 => "up_right_2",
+            FrameId::UpRight3 => "up_right_3",
+            FrameId::UpRight4 => "up_right_4",
+            FrameId::UpRight5 => "up_right_5",
+            FrameId::UpRightB => "up_right_b",
+            FrameId::AtkDownRight1 => "atk_down_right_1",
+            FrameId::AtkDownRight2 => "atk_down_right_2",
+            FrameId::AtkDownRight3 => "atk_down_right_3",
+            FrameId::AtkUpRight1 => "atk_up_right_1",
+            FrameId::AtkUpRight2 => "atk_up_right_2",
+            FrameId::AtkUpRight3 => "atk_up_right_3",
+            FrameId::CastDownRight1 => "cast_down_right_1",
+            FrameId::CastDownRight2 => "cast_down_right_2",
+            FrameId::CastDownRight3 => "cast_down_right_3",
+            FrameId::CastUpRight1 => "cast_up_right_1",
+            FrameId::CastUpRight2 => "cast_up_right_2",
+            FrameId::CastUpRight3 => "cast_up_right_3",
+            FrameId::HurtDownRight => "hurt_down_right",
+            FrameId::HurtUpRight => "hurt_up_right",
         }
     }
 
     /// Every frame, in order.
-    pub const ALL: [FrameId; 51] = {
+    pub const ALL: [FrameId; 79] = {
         use FrameId as F;
         [
             F::Down,
@@ -187,6 +247,34 @@ impl FrameId {
             F::CastUp3,
             F::HurtDown,
             F::HurtUp,
+            F::DownRight,
+            F::DownRight1,
+            F::DownRight2,
+            F::DownRight3,
+            F::DownRight4,
+            F::DownRight5,
+            F::DownRightB,
+            F::UpRight,
+            F::UpRight1,
+            F::UpRight2,
+            F::UpRight3,
+            F::UpRight4,
+            F::UpRight5,
+            F::UpRightB,
+            F::AtkDownRight1,
+            F::AtkDownRight2,
+            F::AtkDownRight3,
+            F::AtkUpRight1,
+            F::AtkUpRight2,
+            F::AtkUpRight3,
+            F::CastDownRight1,
+            F::CastDownRight2,
+            F::CastDownRight3,
+            F::CastUpRight1,
+            F::CastUpRight2,
+            F::CastUpRight3,
+            F::HurtDownRight,
+            F::HurtUpRight,
         ]
     };
 
@@ -198,6 +286,30 @@ impl FrameId {
     /// Whether this is a dead frame.
     pub const fn is_dead(self) -> bool {
         matches!(self, FrameId::Dead | FrameId::Dead2)
+    }
+
+    /// Whether this frame faces east and so is drawn mirrored for the west-facing ones (west,
+    /// south-west, north-west): the side's and the diagonals' walks, breathes, blows, casts and
+    /// hurts. Facing the viewer or away, an idle and the dead are never mirrored.
+    pub const fn faces_east(self) -> bool {
+        use FrameId as F;
+        matches!(
+            self,
+            F::Side
+                | F::Side1
+                | F::Side2
+                | F::Side3
+                | F::Side4
+                | F::Side5
+                | F::SideB
+                | F::Atk1
+                | F::Atk2
+                | F::Atk3
+                | F::Cast1
+                | F::Cast2
+                | F::Cast3
+                | F::Hurt
+        ) || (self as u8) >= (F::DownRight as u8)
     }
 }
 

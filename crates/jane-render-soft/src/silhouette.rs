@@ -17,7 +17,7 @@ const BAYER4: [[u8; 4]; 4] = [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15,
 /// the tallest terrain's `rows_up`.
 const UP: i32 = jane_present::rows_up(100) + shadow::FRONT;
 
-pub use jane_present::shadow::shear;
+pub use jane_present::shadow::{shear, spill_shear};
 
 /// The mask the shadows are gathered in, the canvas's size, and the box it was written in.
 #[derive(Debug, Default)]
@@ -68,15 +68,15 @@ impl Mask {
 pub fn cast(mask: &mut Mask, page: &Page, s: &SpriteCmd, c: &Caster, k: (i32, i32)) {
     let mut rows = std::mem::take(&mut mask.rows);
     rows.clear();
-    shadow::rows(&page.albedo, page.w, s, i32::from(c.foot.1), &mut rows);
+    shadow::rows(&page.albedo, page.w, s, c, &mut rows);
     shadow::bands(&rows, i32::from(s.x), c, k, |b| mask.band(b));
     mask.rows = rows;
 }
 
 /// Lays block `b`'s shadow into `mask` (`shadow::block_bands`: its footprint swept along the sun
-/// by its height).
-pub fn cast_block(mask: &mut Mask, b: &Block, k: (i32, i32)) {
-    shadow::block_bands(b, k, |band| mask.band(band));
+/// by its height; a thin or low block along `ks`, the fence rule).
+pub fn cast_block(mask: &mut Mask, b: &Block, k: (i32, i32), ks: (i32, i32)) {
+    shadow::block_bands(b, k, ks, |band| mask.band(band));
 }
 
 /// Applies the mask to `t` and clears it. `heights` is the terrain's height under each px of `t`
@@ -170,7 +170,7 @@ mod tests {
             flags: Flags::default(),
             height_px: 12,
         };
-        (page, s, Caster { sprite: 0, foot: (5, 10), height: 12, depth: 2 })
+        (page, s, Caster { sprite: 0, foot: (5, 10), height: 12, depth: 2, ..Caster::default() })
     }
 
     #[test]
@@ -190,9 +190,10 @@ mod tests {
         let east = px[10 * 40 + 14];
         assert!(east & 0xff > (east >> 16) & 0xff && east != 0xff80_8080, "{east:08x}");
         assert_eq!(px[10 * 40], 0xff80_8080);
-        // Right beside the foot, either side, the foot's shadow grounds it.
-        assert_ne!(px[11 * 40 + 3], 0xff80_8080);
-        assert_ne!(px[11 * 40 + 6], 0xff80_8080);
+        // The shadow starts at the foot (the post's own columns on its foot row), and no foot is
+        // laid under it (2026-09-28): two rows under the foot, beside it, the ground is as it was.
+        assert_ne!(px[10 * 40 + 5], 0xff80_8080);
+        assert_eq!(px[12 * 40 + 3], 0xff80_8080);
         // The mask is clear for the next frame.
         assert!(mask.px.iter().all(|&m| m == 0) && mask.reach.iter().all(|&m| m == 0) && mask.dirty.is_none());
     }

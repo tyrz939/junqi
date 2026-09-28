@@ -85,9 +85,20 @@ pub(crate) fn draw(c: &mut Canvas, k: &Coat, facing: Facing, beat: Beat) {
     match (facing, beat) {
         (_, Beat::Dead) => dead(c, k),
         (Facing::Side, _) => side(c, k, beat),
-        (Facing::Down, _) | (_, Beat::Idle(_)) => top(c, k, beat, true),
-        (Facing::Up, _) => top(c, k, beat, false),
+        (Facing::Down, _) | (_, Beat::Idle(_)) => top(c, k, beat, true, false),
+        (Facing::Up, _) => top(c, k, beat, false, false),
+        (Facing::DownRight, _) => top(c, k, beat, true, true),
+        (Facing::UpRight, _) => top(c, k, beat, false, true),
     }
+}
+
+/// `p` turned an eighth about `o` on the ground (ART.md §2.2): the body's line from the
+/// abdomen to the head swung from straight down (or up) the screen to down (or up) and to the
+/// right, every leg with it, the screen's depth a little squashed.
+fn turn_about(o: (i32, i32), p: (i32, i32), toward: bool) -> (i32, i32) {
+    let (x, y) = (p.0 - o.0, p.1 - o.1);
+    let (tx, ty) = if toward { (x + y, y - x) } else { (x - y, x + y) };
+    (o.0 + tx * 7 / 10, o.1 + ty * 6 / 10)
 }
 
 /// The abdomen's marking along its back.
@@ -116,7 +127,7 @@ fn mark(c: &mut Canvas, k: &Coat, ab: Rect, toward_us: bool) {
 
 /// From the front or behind, 3/4 top-down: the abdomen behind the head up the screen (or
 /// toward the viewer from behind), the legs in a ring round it.
-fn top(c: &mut Canvas, k: &Coat, beat: Beat, toward_us: bool) {
+fn top(c: &mut Canvas, k: &Coat, beat: Beat, toward_us: bool, turned: bool) {
     let u = unit(k);
     let sc = |v: i32| v * u / 2;
     let (_, _, ax, ay) = super::size_of(k.look.plan, k.look.anatomy);
@@ -147,6 +158,15 @@ fn top(c: &mut Canvas, k: &Coat, beat: Beat, toward_us: bool) {
     } else {
         Rect::new(ax - sc(5), ceph_y - sc(4), sc(10), sc(8))
     };
+    // Turned (the diagonals), everything swings an eighth about the body's middle, and the
+    // lowest foot is set back on the ground.
+    let o = ((ab.x + ab.w / 2 + ceph.x + ceph.w / 2) / 2, (ab.y + ab.h / 2 + ceph.y + ceph.h / 2) / 2);
+    let rt = |p: (i32, i32)| if turned { turn_about(o, p, toward_us) } else { p };
+    let move_rect = |r: Rect| {
+        let (x, y) = rt((r.x + r.w / 2, r.y + r.h / 2));
+        Rect::new(x - r.w / 2, y - r.h / 2, r.w, r.h)
+    };
+    let (ab, ceph) = (move_rect(ab), move_rect(ceph));
     let r = reach(k);
     let lw = if u == 3 { 3 } else { 2 };
     // The legs behind the body first, then the body, then the front legs over it.
@@ -170,6 +190,8 @@ fn top(c: &mut Canvas, k: &Coat, beat: Beat, toward_us: bool) {
             } else {
                 (knee.0 + side * sc(3) + side * lift, ay - 1 + sc(FY[j]) - lift)
             };
+            let (hip, knee, mut foot) = (rt(hip), rt(knee), rt(foot));
+            foot.1 = foot.1.min(ay - 1);
             legs.push((side, i as i32, hip, knee, foot));
         }
     }
@@ -191,27 +213,36 @@ fn top(c: &mut Canvas, k: &Coat, beat: Beat, toward_us: bool) {
         leg(c, k, hip, knee, foot, lw, relief::LEG);
     }
     if toward_us {
-        // The eyes in a cluster at the front, the fangs under them.
-        let ey = ceph.bottom() - sc(3);
+        // The eyes in a cluster at the front, the fangs under them. Turned, the cluster sits
+        // toward the head's lower right, the far eyes closing up on the near.
+        let (hx, ey) = (ceph.x + ceph.w / 2 + i32::from(turned) * sc(2), ceph.bottom() - sc(3));
+        let squeeze = |dx: i32| if turned { dx * 2 / 3 } else { dx };
         let z = relief::LEG.hi;
         c.set_emitting(k.eye_emits);
         // Two big eyes in front, 2 x 2, and the small ones in a ring over them.
         for dx in [-2, 1] {
-            c.fill_rect(Rect::new(ax + dx, ey, 2, 2), eye_ix(k), z);
+            c.fill_rect(Rect::new(hx + squeeze(dx), ey, 2, 2), eye_ix(k), z);
         }
         let small: &[(i32, i32)] = match k.look.anatomy {
             Anatomy::Queen => &[(-4, -1), (-3, -3), (-1, -3), (2, -3), (4, -3), (5, -1)],
             _ => &[(-3, -2), (-1, -2), (2, -2), (4, -2)],
         };
         for &(dx, dy) in small {
-            c.dot(ax + dx - 1, ey + dy + 1, eye_ix(k), z);
+            c.dot(hx + squeeze(dx) - 1, ey + dy + 1, eye_ix(k), z);
         }
         c.set_emitting(false);
         let fang = if k.look.anatomy == Anatomy::Queen { Ramp::Bone } else { k.body };
         let open = i32::from(beat == Beat::Attack(1));
         for dx in [-1 - open, open] {
-            c.vline(ax + dx, ceph.bottom(), ceph.bottom() + sc(2) - 1, fang.at(Tone::Light), z);
+            let x = hx + dx + i32::from(turned);
+            c.vline(x, ceph.bottom(), ceph.bottom() + sc(2) - 1, fang.at(Tone::Light), z);
         }
+    } else if turned {
+        // From behind and to the right, the far edge of the eye cluster shows past the head.
+        let z = relief::LEG.hi;
+        c.set_emitting(k.eye_emits);
+        c.fill_rect(Rect::new(ceph.right() - sc(2), ceph.y + 1, 2, 1), eye_ix(k), z);
+        c.set_emitting(false);
     }
 }
 

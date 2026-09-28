@@ -87,7 +87,10 @@ fn geometry_each_plan_has_its_box_and_stands_on_its_anchor() {
                     r.key(),
                     ay - y1
                 );
-            } else if matches!(f, FrameId::Down | FrameId::Up | FrameId::Side | FrameId::Idle) {
+            } else if matches!(
+                f,
+                FrameId::Down | FrameId::Up | FrameId::Side | FrameId::DownRight | FrameId::UpRight | FrameId::Idle
+            ) {
                 assert_eq!(y1, ay, "{} {f:?}: standing on the anchor row", r.key());
             } else if !f.is_dead() {
                 assert!((ay - 1..=ay + 1).contains(&y1), "{} {f:?}: off the ground by {}", r.key(), ay - y1);
@@ -286,4 +289,22 @@ fn julie_is_herself() {
     let (idle, tilt) = (dog.set.frame(FrameId::Idle).unwrap(), dog.set.frame(FrameId::Idle2).unwrap());
     let moved = idle.albedo().iter().zip(tilt.albedo()).filter(|(a, b)| a != b).count();
     assert!(moved >= 20, "the second beat tilts the head and sweeps the tail ({moved} px)");
+}
+
+#[test]
+fn every_creature_turns_on_the_diagonals() {
+    // The diagonals are drawn, not copied: each differs from the side and from facing us or away.
+    for r in all() {
+        for (diag, others) in [
+            (FrameId::DownRight, [FrameId::Side, FrameId::Down]),
+            (FrameId::UpRight, [FrameId::Side, FrameId::Up]),
+            (FrameId::DownRight1, [FrameId::Side1, FrameId::Down1]),
+            (FrameId::UpRight1, [FrameId::Side1, FrameId::Up1]),
+        ] {
+            let d = r.set.frame(diag).unwrap_or_else(|| panic!("{} has no {diag:?}", r.key()));
+            for o in others {
+                assert_ne!(Some(d), r.set.frame(o), "{} {diag:?} is its {o:?}", r.key());
+            }
+        }
+    }
 }

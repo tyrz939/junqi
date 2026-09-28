@@ -367,6 +367,35 @@
     "bench": { "props": ["table"], "chance": 1 },
     "shelf": { "props": ["shelf"], "chance": 1 }
   },
+  "sets": {
+    "pieces": {
+      "lathe_line": {"against": "n", "parts": [["set_lathe", 0, 0], ["set_lathe", 4, 0], ["set_lathe", 8, 0], ["set_stool", 1, 2], ["set_stool", 5, 2], ["set_stool", 9, 2], ["scatter_cogs", 3, 2], ["scatter_cogs", 7, 2]]},
+      "lathe_island": {"against": "free", "mirror": true, "parts": [["set_lathe", 0, 0], ["set_bin", 3, 1], ["set_lathe", 5, 0], ["set_stool", 1, 2], ["set_stool", 6, 2]]},
+      "drum_store": {"against": "wall", "mirror": true, "parts": [["drums", 0, 0], ["drums", 2, 0], ["drums", 4, 0], ["drums", 1, 2], ["drums", 3, 2], ["scatter_oilpool", 5, 2]]},
+      "scrap_pile": {"against": "wall", "mirror": true, "parts": [["set_heap_scrap", 0, 0], ["set_heap_scrap", 3, 0], ["scatter_cogs", 1, 2], ["scatter_oil", 4, 2], ["scatter_cogs", 5, 2]]},
+      "bench_row": {"against": "n", "mirror": true, "parts": [["set_workbench", 0, 0], ["set_tool_rack", 3, 0], ["set_workbench", 6, 0], ["set_bin", 3, 1], ["set_stool", 1, 2], ["set_stool", 7, 2]]},
+      "pallets": {"against": "wall", "mirror": true, "parts": [["set_crate_pile", 0, 0], ["set_crates", 3, 0], ["set_crate_pile", 5, 0], ["town_sacks", 0, 2], ["town_sacks", 2, 2]]},
+      "pipe_rack": {"against": "n", "mirror": true, "parts": [["set_pipes", 0, 0], ["set_pipes", 0, 1], ["set_pipes", 3, 0], ["set_pipes", 3, 1], ["set_bin", 6, 0]]},
+      "office_desk": {"against": "free", "mirror": true, "parts": [["set_rug", 0, 0], ["set_desk", 0, 0], ["kitchen_chair", 1, 2], ["set_books", 4, 0], ["set_crates", 5, 1]]},
+      "benches": {"against": "n", "parts": [["set_bench", 0, 0], ["set_bench", 4, 0], ["set_bench", 8, 0]]},
+      "drum_pair": {"against": "wall", "mirror": true, "parts": [["drums", 0, 0], ["drums", 2, 0]]},
+      "crate_pair": {"against": "wall", "mirror": true, "parts": [["set_crates", 0, 0], ["set_bin", 2, 1]]},
+      "lathe": {"against": "free", "mirror": true, "parts": [["set_lathe", 0, 0], ["set_stool", 1, 2]]}
+    },
+    "rooms": {
+      "yard": {"most": 8, "take": ["pallets", "drum_store", "scrap_pile", "pipe_rack", "pallets", "drum_store", "drum_pair", "crate_pair", "lathe", "drum_pair", "crate_pair", "lathe"]},
+      "loading": {"most": 8, "take": ["pallets", "pallets", "drum_store", "pallets", "scrap_pile", "drum_pair", "crate_pair", "lathe", "drum_pair", "crate_pair", "lathe"]},
+      "lockers": {"most": 6, "take": ["benches", "pallets", "benches", "drum_pair", "crate_pair", "lathe", "drum_pair", "crate_pair", "lathe"]},
+      "line_a": {"most": 16, "take": ["lathe_line", "lathe_island", "drum_store", "bench_row", "scrap_pile", "lathe_island", "lathe_line", "pallets", "pipe_rack", "drum_store", "lathe_island", "drum_pair", "crate_pair", "lathe", "drum_pair", "crate_pair", "lathe", "drum_pair", "crate_pair", "lathe"]},
+      "time_office": {"most": 6, "take": ["office_desk", "pallets", "benches", "drum_pair", "crate_pair", "lathe", "drum_pair", "crate_pair", "lathe"]},
+      "vent": {"most": 7, "take": ["scrap_pile", "drum_store", "scrap_pile", "pipe_rack", "drum_pair", "crate_pair", "lathe", "drum_pair", "crate_pair", "lathe"]},
+      "gen_shutter": {"most": 7, "take": ["bench_row", "drum_store", "pipe_rack", "scrap_pile", "drum_pair", "crate_pair", "lathe", "drum_pair", "crate_pair", "lathe"]},
+      "press_hall": {"most": 13, "take": ["lathe_line", "scrap_pile", "pallets", "lathe_island", "drum_store", "lathe_island", "bench_row", "drum_pair", "crate_pair", "lathe", "drum_pair", "crate_pair", "lathe", "drum_pair", "crate_pair", "lathe"]},
+      "office": {"most": 6, "take": ["office_desk", "pallets", "benches", "drum_pair", "crate_pair", "lathe", "drum_pair", "crate_pair", "lathe"]},
+      "roller_door": {"most": 7, "take": ["pallets", "pallets", "drum_store", "scrap_pile", "drum_pair", "crate_pair", "lathe", "drum_pair", "crate_pair", "lathe"]},
+      "stores": {"most": 8, "take": ["pallets", "pallets", "pipe_rack", "drum_store", "pallets", "drum_pair", "crate_pair", "lathe", "drum_pair", "crate_pair", "lathe"]}
+    }
+  },
   "fallback": [
     { "node": "yard", "template": "factory.yard.a", "bay": [0, 0], "turn": 0, "mirror": false },
     { "node": "loading", "template": "factory.loading.a", "bay": [1, 0], "turn": 0, "mirror": false },

@@ -48,6 +48,34 @@ pub fn expand(s: &str, heroine: &str, seed: u32, out: &mut String) {
     out.push_str(rest);
 }
 
+/// The line the first spell's card adds under what the spell does (PRESENTATION.md §3.2): what
+/// magic is in Castle, said as the county says things. A witch's work passes down a family
+/// (`STORY.md` §2.7), and Julie's letters are always one fact short (`VOICE.md` rule 11).
+pub const FIRST_SPELL: &str = "It runs in families. Nobody wrote that part down.";
+
+/// What a jar or a page leaves her, as the growth moment says it (and as its toast did).
+pub const fn grew(stat: jane_core::action::Stat) -> &'static str {
+    match stat {
+        jane_core::action::Stat::Strength => "A little stronger",
+        jane_core::action::Stat::Spirit => "The words stay",
+    }
+}
+
+/// A spell's card line (§3.2): as many of the sentences of what it does as fit `cols` columns
+/// in `lines` lines, at least the first.
+pub fn card_line(description: &str, cols: usize, lines: usize) -> &str {
+    let fits = |s: &str| crate::ui::core::wrap_lines(s, cols).count() <= lines;
+    let mut end = description.find(". ").map_or(description.len(), |i| i + 1);
+    while end < description.len() {
+        let next = description[end..].find(". ").map_or(description.len(), |i| end + i + 1);
+        if !fits(&description[..next]) {
+            break;
+        }
+        end = next;
+    }
+    description[..end].trim()
+}
+
 /// [`expand`] into a new string.
 pub fn expanded(s: &str, heroine: &str, seed: u32) -> String {
     let mut out = String::with_capacity(s.len() + 16);
@@ -217,11 +245,11 @@ pub fn toast(v: &View<'_>, kind: &ToastKind, out: &mut String) -> Tone {
             Tone::Plain
         }
         ToastKind::Stronger => {
-            out.push_str("A little stronger");
+            out.push_str(grew(jane_core::action::Stat::Strength));
             Tone::Good
         }
         ToastKind::WordsStay => {
-            out.push_str("The words stay");
+            out.push_str(grew(jane_core::action::Stat::Spirit));
             Tone::Good
         }
         ToastKind::Under { top, found } => {

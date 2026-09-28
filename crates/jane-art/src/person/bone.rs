@@ -30,13 +30,14 @@ fn socket(c: &mut Canvas, d: &Dress, x: i32, y: i32, w: i32, z: u8) {
 fn carve(c: &mut Canvas, r: &Rig, front: Option<i32>) {
     let s = r.skull;
     let ey = r.eye_y();
-    // The neck's two columns stay.
+    // The neck's two columns stay; three quarters on, the jaw turns a px with the face.
     let neck = if front.is_some() { CX - 3 + r.lean } else { CX - 1 };
+    let jc = CX + r.turn() / 2;
     for y in ey + 3..=s.bottom() + 1 {
         let half = if y <= ey + 4 { 5 } else { 4 };
         for x in s.x - 1..=s.right() {
             let out = match front {
-                None => x < CX - half || x >= CX + half,
+                None => x < jc - half || x >= jc + half,
                 Some(fx) => x < fx - half - 1,
             };
             if out && c.get(x, y).is_opaque() && y < r.top && !(neck..neck + 2).contains(&x) {
@@ -53,23 +54,25 @@ pub(super) fn face_down(c: &mut Canvas, d: &Dress, r: &Rig) {
     let ey = r.eye_y();
     let z = relief::SKULL.lo;
     let b = d.skin;
+    // Three quarters on, the face turns a px toward the right.
+    let cx = CX + r.turn() / 2;
     // The brow ridge lit, the temples and cheeks in shade under it.
     for x in s.x + 2..s.right() - 2 {
         c.tint(x, ey - 2, b, Tone::Lift);
     }
     c.shade(Rect::new(s.x, ey, 4, 5), b, 1);
     c.shade(Rect::new(s.right() - 4, ey - 2, 4, 7), b, 1);
-    socket(c, d, CX - 6, ey, 3, z);
-    socket(c, d, CX + 2, ey, 3, z);
+    socket(c, d, cx - 6, ey, 3, z);
+    socket(c, d, cx + 2, ey, 3, z);
     // The nasal hollow, and the teeth over the jaw's line.
-    c.hline(CX - 1, CX, ey + 3, Ix::SEAM, z);
-    c.dot(CX - 1, ey + 2, b.at(Tone::Shade), z);
+    c.hline(cx - 1, cx, ey + 3, Ix::SEAM, z);
+    c.dot(cx - 1, ey + 2, b.at(Tone::Shade), z);
     let t = ey + 4;
-    c.hline(CX - 3, CX + 2, t, b.at(Tone::Light), z);
-    for x in [CX - 2, CX + 1] {
+    c.hline(cx - 3, cx + 2, t, b.at(Tone::Light), z);
+    for x in [cx - 2, cx + 1] {
         c.dot(x, t, Ix::SEAM, z);
     }
-    c.hline(CX - 3, CX + 2, t + 1, b.at(Tone::Shade), z);
+    c.hline(cx - 3, cx + 2, t + 1, b.at(Tone::Shade), z);
 }
 
 /// The skull in profile, facing east.
@@ -141,23 +144,24 @@ pub(super) fn rags(c: &mut Canvas, d: &Dress, r: &Rig, facing_us: bool) {
     tear(c, d, r.hem, CX - 10, CX + 9);
     let b = d.skin;
     let z = relief::FRONT;
+    let cx = r.cx();
     if facing_us {
         // The ribcage, the sternum lit down the middle, the ribs in shade lines between.
-        let cage = Rect::new(CX - 4, t + 1, 8, r.waist - t);
+        let cage = Rect::new(cx - 4, t + 1, 8, r.waist - t);
         c.ellipse_lit(cage, b, Z::new(z, z + 1));
         for y in (cage.y + 2..cage.bottom() - 1).step_by(2) {
             c.hline(cage.x + 1, cage.right() - 2, y, b.at(Tone::Shade), z + 1);
         }
-        c.vline(CX - 1, cage.y + 1, cage.bottom() - 2, b.at(Tone::Light), z + 1);
+        c.vline(cx - 1, cage.y + 1, cage.bottom() - 2, b.at(Tone::Light), z + 1);
         // The spine below it, to the pelvis.
-        c.fill_rect(Rect::new(CX - 1, cage.bottom(), 2, r.hip - cage.bottom()), b.at(Tone::Mid), z);
+        c.fill_rect(Rect::new(cx - 1, cage.bottom(), 2, r.hip - cage.bottom()), b.at(Tone::Mid), z);
     } else {
         // A tear in the back and the spine through it.
-        let hole = Rect::new(CX - 3, t + 3, 6, r.waist - t - 1);
+        let hole = Rect::new(cx - 3, t + 3, 6, r.waist - t - 1);
         c.ellipse(hole, Ix::SEAM, z);
-        c.vline(CX - 1, hole.y, hole.bottom() - 1, b.at(Tone::Base), z + 1);
+        c.vline(cx - 1, hole.y, hole.bottom() - 1, b.at(Tone::Base), z + 1);
         for y in (hole.y + 1..hole.bottom() - 1).step_by(2) {
-            c.dot(CX - 1, y, b.at(Tone::Light), z + 1);
+            c.dot(cx - 1, y, b.at(Tone::Light), z + 1);
         }
     }
 }
