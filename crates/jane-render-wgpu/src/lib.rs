@@ -75,6 +75,7 @@ struct Pipes {
     contact: wgpu::RenderPipeline,
     ghost: wgpu::RenderPipeline,
     scatter: wgpu::ComputePipeline,
+    thin: wgpu::ComputePipeline,
     light: wgpu::RenderPipeline,
     down: wgpu::RenderPipeline,
     up: wgpu::RenderPipeline,
@@ -270,6 +271,15 @@ impl Pipes {
             compilation_options: wgpu::PipelineCompilationOptions::default(),
             cache: None,
         });
+        // The fence rule's mark over the field, after the scatter (`scatter.wgsl`'s `thin`).
+        let thin = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("thin"),
+            layout: Some(&spl),
+            module: &sm,
+            entry_point: Some("thin"),
+            compilation_options: wgpu::PipelineCompilationOptions::default(),
+            cache: None,
+        });
 
         let lm = module(device, "light", LIGHT);
         let light = render_pipeline(
@@ -311,6 +321,7 @@ impl Pipes {
             contact,
             ghost,
             scatter,
+            thin,
             light,
             down,
             up,
@@ -1269,6 +1280,13 @@ impl Backend for Wgpu {
                 }),
             });
             pass.set_pipeline(&self.pipes.scatter);
+            pass.set_bind_group(0, &t.scatter_bg, &[]);
+            pass.dispatch_workgroups(t.full.0.div_ceil(8), t.full.1.div_ceil(8), 1);
+        }
+        {
+            let mut pass =
+                enc.begin_compute_pass(&wgpu::ComputePassDescriptor { label: Some("thin"), timestamp_writes: None });
+            pass.set_pipeline(&self.pipes.thin);
             pass.set_bind_group(0, &t.scatter_bg, &[]);
             pass.dispatch_workgroups(t.full.0.div_ceil(8), t.full.1.div_ceil(8), 1);
         }

@@ -37,6 +37,10 @@ struct Light {
 // holder (0: nothing; the terrain is 0 and is never skipped).
 var<private> skip_own: u32;
 var<private> skip_holder: u32;
+// What of the terrain a trace sees (the fence rule, `common.wgsl`'s `THIN_ID`): 0 all of it
+// (a lamp, the ground's occlusion), 1 all but what spills (the sun's own trace), 2 what spills
+// alone (the sun's spill trace).
+var<private> field_mode: u32;
 
 struct LitOut {
     @location(0) colour: vec4<f32>,
@@ -58,6 +62,9 @@ fn texel(x: i32, y: i32) -> vec2<f32> {
     let v = hmap[i];
     let who = v & 0xffffu;
     if v == 0u || (who != 0u && (who == skip_own || who == skip_holder)) {
+        return vec2<f32>(OPEN, 0.0);
+    }
+    if (field_mode == 1u && who == THIN_ID) || (field_mode == 2u && who != THIN_ID) {
         return vec2<f32>(OPEN, 0.0);
     }
     let lo = hmap[u32(w * i32(g.full.y)) + i];
@@ -94,9 +101,10 @@ fn height_max(q: vec2<f32>) -> vec2<f32> {
 }
 
 // How much of a light toward `l` (unit, x east, y south, z up) reaches `p`, marching at most
-// `max_t` px across the ground from `t0`, with penumbra factor `k`. The ray's clearance at a
-// texel is how far it passes over the top or under the bottom.
-fn trace(p: vec3<f32>, l: vec3<f32>, max_t: f32, k: f32, t0: f32, max_step: f32) -> f32 {
+// `max_t` px across the ground from `t0`, with penumbra factor `k`, and no further once the ray
+// is over `top`. The ray's clearance at a texel is how far it passes over the top or under the
+// bottom.
+fn trace(p: vec3<f32>, l: vec3<f32>, max_t: f32, k: f32, t0: f32, max_step: f32, top: f32) -> f32 {
     let lxy = length(l.xy);
     if lxy < 0.0005 {
         return 1.0;
@@ -111,7 +119,7 @@ fn trace(p: vec3<f32>, l: vec3<f32>, max_t: f32, k: f32, t0: f32, max_step: f32)
             break;
         }
         let z = p.z + 0.75 + rise * t;
-        if rise >= 0.0 && z > g.hmax {
+        if rise >= 0.0 && z > top {
             break;
         }
         let q = p.xy + dir * t;
@@ -264,6 +272,7 @@ fn fs_light(i: FullOut) -> LitOut {
     let p = vec3<f32>(f32(q.x) + 0.5, f32(q.y) + 0.5 + down + front, h);
     skip_own = textureLoad(gid, q, 0).r;
     skip_holder = 0u;
+    field_mode = 0u;
     let t0 = 1.0;
 
     var light = g.fill.rgb;
@@ -286,7 +295,19 @@ fn fs_light(i: FullOut) -> LitOut {
             // little under cloud.
             // A sun too faint to cast (`light::FAINTEST`) comes with no strength: no trace.
             if g.sun_dir.w > 1.001 {
-                sun_seen = 1.0 - (g.sun_dir.w - 1.0) * (1.0 - sun_disc(p, l, g.sun_col.w, t0));
+                field_mode = 1u;
+                var seen = sun_disc(p, l, g.sun_col.w, t0);
+                // The fence rule (`common.wgsl`): what spills is traced apart, toward a sun held
+                // at least `SPILL_SOUTH` of its flat length north, one ray with the sun's
+                // penumbra; a px over `SPILL_TOP` is never in such a shadow. `sun_seen` is the
+                // darker of the two, as T0 and T1 keep the strongest band.
+                if h <= SPILL_TOP {
+                    field_mode = 2u;
+                    let ls = vec3<f32>(l.x, min(l.y, -SPILL_SOUTH * length(l.xy)), l.z);
+                    seen = min(seen, trace(p, ls, 4096.0, g.sun_col.w, t0, 2.0, SPILL_TOP + 0.5));
+                }
+                field_mode = 0u;
+                sun_seen = 1.0 - (g.sun_dir.w - 1.0) * (1.0 - seen);
             }
             light += g.sun_col.rgb * ndl * sun_seen;
             if shine > 0.0 {
@@ -326,7 +347,7 @@ fn fs_light(i: FullOut) -> LitOut {
                 att = falloff(max(dist, r * HELD_REACH) / r) * ndl;
             } else {
                 let dxy = length(v.xy);
-                sh = trace(p, l, dxy - (lt.col.w + 3.0), clamp(dxy / max(lt.col.w, 1.0), 2.0, PEN_K), t0, 1.0);
+                sh = trace(p, l, dxy - (lt.col.w + 3.0), clamp(dxy / max(lt.col.w, 1.0), 2.0, PEN_K), t0, 1.0, g.hmax);
                 // A lamp's umbra keeps a little of its light: its pool bounces into its shadows.
                 sh = LAMP_BOUNCE + (1.0 - LAMP_BOUNCE) * sh;
             }

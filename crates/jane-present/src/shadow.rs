@@ -35,15 +35,54 @@ pub const GROUND: i32 = 4;
 /// 2026-09-27, so the three tiers cast from the same terrain; T2's cobbles lost a px of self-shade
 /// at a low sun, and a town view went from four thousand blocks to four hundred).
 pub const RELIEF: i32 = 8;
-/// The shadow's reach per px of true height, Q8, across the ground: away from the sun.
-pub fn shear(sun: &Directional) -> Option<(i32, i32)> {
+/// How long a shadow is per px of true height, Q8: the cotangent of the sun's elevation, no
+/// more than [`MAX_COT_Q8`]; none with the sun down.
+fn cot(sun: &Directional) -> Option<i32> {
     let (se, ce) = (sin_q15(sun.elevation).0, cos_q15(sun.elevation).0);
     if se <= 0 {
         return None;
     }
-    let cot = (ce * 256 / se).min(MAX_COT_Q8);
+    Some((ce * 256 / se).min(MAX_COT_Q8))
+}
+
+/// The shadow's reach per px of true height, Q8, across the ground: away from the sun.
+pub fn shear(sun: &Directional) -> Option<(i32, i32)> {
+    let cot = cot(sun)?;
     let (ca, sa) = (cos_q15(sun.azimuth).0, sin_q15(sun.azimuth).0);
     Some((-(ca * cot) >> 15, -(sa * cot) >> 15))
+}
+
+/// The least south component (down the screen, toward the viewer) a spilling terrain block's
+/// sun shadow has, of the shadow's length per height: sin 20 degrees, Q15. **The fence rule**
+/// (decided 2026-09-28, the owner, PRESENTATION.md §1.7): the sun is south all day, so every
+/// shadow runs up the screen, and a fence's or a hedge's lies behind its own drawn rows where
+/// nothing sees it; a thin or low block is thrown as if the sun stood at least this far north,
+/// so its shadow spills out in front of it, long east or west with the hour, and it reads as
+/// casting on every tier.
+pub const SPILL_SOUTH_Q15: i32 = 11207;
+/// A terrain block whose footprint is this deep (rows) or this wide (px) or less is thin: a
+/// fence's rails and posts, a gatepost, a stile. T2's field marks a terrain texel thin where no
+/// terrain stands this far from it up and down, or left and right (`scatter.wgsl`'s `thin`).
+pub const THIN: i32 = 4;
+/// A terrain block up to this height spills whatever its footprint: a hedge (9 px), a kerb.
+pub const SPILL_LOW: i32 = 10;
+/// A thin block taller than this (a wall's end, a chimney) keeps the sun's true shadow.
+pub const SPILL_TOP: i32 = 40;
+
+/// [`shear`] for a spilling block: the same, its south component no less than
+/// [`SPILL_SOUTH_Q15`] of the shadow's length.
+pub fn spill_shear(sun: &Directional) -> Option<(i32, i32)> {
+    let cot = cot(sun)?;
+    let (kx, ky) = shear(sun)?;
+    Some((kx, ky.max((SPILL_SOUTH_Q15 * cot) >> 15)))
+}
+
+/// Whether block `b` is thrown by [`spill_shear`] rather than [`shear`]: thin ([`THIN`]) and
+/// no taller than [`SPILL_TOP`], or low ([`SPILL_LOW`]).
+pub fn spills(b: &crate::frame::Block) -> bool {
+    let h = i32::from(b.height);
+    let (w, d) = (i32::from(b.x1) - i32::from(b.x0), i32::from(b.y1) - i32::from(b.y0));
+    h <= SPILL_LOW || (h <= SPILL_TOP && (w <= THIN || d <= THIN))
 }
 
 /// A gap in a row of 2 px or more parts it into two runs: a lantern hung off its post, a hand
@@ -206,7 +245,8 @@ const OWN_TOP: i32 = crate::terrain::BLOCK_TOLERANCE as i32 + 2;
 /// how tall a slice is at most: what the reach up a wall it falls on steps by.
 const SLICE: i32 = 8;
 
-/// The bands of block `b`'s shadow in a sun sheared `(kx, ky)` ([`shear`]): its footprint laid
+/// The bands of block `b`'s shadow in a sun sheared `k` ([`shear`]; a thin or low block takes
+/// `ks`, [`spill_shear`], the fence rule): its footprint laid
 /// at every slice of its height, each slice stretched to meet the next (the rows' rule,
 /// [`bands`]), so the whole is the footprint swept along the sun by its height, as T2's field
 /// throws it. A slice reaches as high as the ray over the block's top there, less [`OWN_TOP`]. Its foot is its
@@ -216,7 +256,8 @@ const SLICE: i32 = 8;
 /// Each slice is laid only where the slice under it did not lie: the mask keeps the strongest
 /// and the highest, the strength is one and the reach falls slice by slice, so what is left out
 /// is what the lower slice had already laid higher. A house is a few hundred small bands.
-pub fn block_bands(b: &crate::frame::Block, (kx, ky): (i32, i32), mut emit: impl FnMut(Band)) {
+pub fn block_bands(b: &crate::frame::Block, k: (i32, i32), ks: (i32, i32), mut emit: impl FnMut(Band)) {
+    let (kx, ky) = if spills(b) { ks } else { k };
     let hgt = i32::from(b.height);
     let (x0, y0, x1, y1) = (i32::from(b.x0), i32::from(b.y0), i32::from(b.x1), i32::from(b.y1));
     if hgt <= GROUND || x0 >= x1 || y0 >= y1 {
@@ -561,7 +602,7 @@ mod tests {
         let b = crate::frame::Block { x0: 100, y0: 100, x1: 180, y1: 140, height: 60 };
         let k = shear(&sun(Angle::WEST, 20)).unwrap();
         let mut bands = Vec::new();
-        block_bands(&b, k, |band| bands.push(band));
+        block_bands(&b, k, k, |band| bands.push(band));
         let at = |x: i32, y: i32| {
             bands.iter().filter(|b| b.x0 <= x && x < b.x1 && b.y0 <= y && y < b.y1).map(|b| b.reach).max()
         };
@@ -577,6 +618,39 @@ mod tests {
         assert!(at(95, 120).is_none());
         let area: i32 = bands.iter().map(|b| (b.x1 - b.x0) * (b.y1 - b.y0)).sum();
         assert!(area <= (far - 100) * 41, "{area}");
+    }
+
+    #[test]
+    fn a_fence_spills_its_shadow_south_of_its_rails_and_a_wall_does_not() {
+        // A fence's rails across the view at five: 21 px tall, two rows deep in the field, as
+        // `terrain::blocks` stands them. The sun 15 degrees south of west (`light::sky`'s five).
+        let s = sun(Angle(32768 - 2730), 16);
+        let (k, ks) = (shear(&s).unwrap(), spill_shear(&s).unwrap());
+        assert_eq!(k.0, ks.0, "the spill keeps the shadow's east reach");
+        assert!(k.1 < 0 && ks.1 > 0, "true north {}, spilt south {}", k.1, ks.1);
+        let fence = crate::frame::Block { x0: 100, y0: 95, x1: 196, y1: 97, height: 21 };
+        assert!(spills(&fence));
+        let mut bands = Vec::new();
+        block_bands(&fence, k, ks, |band| bands.push(band));
+        let lowest = bands.iter().map(|b| b.y1).max().unwrap();
+        let far = bands.iter().map(|b| b.x1).max().unwrap();
+        // At least sin 20 degrees of four heights at cot 16 degrees (3.5): 21 x 3.5 x 0.34, 25
+        // rows below its foot, and as far east as the true shadow.
+        assert!(lowest >= 97 + 24, "the fence's shadow reaches row {lowest}");
+        assert_eq!(far, 196 + ((21 * k.0) >> 8));
+        // A hedge is low and spills; a house and a one-cell wall are neither thin nor low.
+        assert!(spills(&crate::frame::Block { x0: 100, y0: 80, x1: 120, y1: 100, height: 9 }));
+        assert!(!spills(&crate::frame::Block { x0: 100, y0: 40, x1: 196, y1: 96, height: 13 }));
+        assert!(!spills(&crate::frame::Block { x0: 100, y0: 40, x1: 180, y1: 100, height: 60 }));
+        // A wall's block at the same sun keeps the true shadow: nothing below its foot.
+        let wall = crate::frame::Block { x0: 100, y0: 40, x1: 196, y1: 96, height: 13 };
+        let mut bands = Vec::new();
+        block_bands(&wall, k, ks, |band| bands.push(band));
+        assert!(bands.iter().all(|b| b.y1 <= 96), "a wall spills");
+        // The spill is at most the shadow's length: the sky's lowest sun holds it under four heights.
+        let low = sun(Angle::WEST, 14);
+        let (kx, ky) = spill_shear(&low).unwrap();
+        assert!(kx.abs().max(ky.abs()) <= MAX_COT_Q8);
     }
 
     #[test]

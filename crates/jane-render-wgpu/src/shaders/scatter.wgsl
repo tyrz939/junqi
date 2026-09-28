@@ -146,3 +146,45 @@ fn scatter(@builtin(global_invocation_id) id: vec3<u32>) {
         }
     }
 }
+
+// Whether terrain stands in the field at `(x, y)` (a texel marked thin is terrain still).
+fn terrain_at(x: i32, y: i32) -> bool {
+    let w = i32(g.full.x);
+    if x < 0 || y < 0 || x >= w || y >= i32(g.full.y) {
+        return false;
+    }
+    let v = atomicLoad(&hmap[u32(y * w + x)]);
+    let who = v & 0xffffu;
+    return v != 0u && (who == 0u || who == THIN_ID);
+}
+
+// After `scatter`: marks each terrain texel that spills (the fence rule, `common.wgsl`'s
+// `THIN_ID`), so the sun's trace can leave it out and the spill's take it alone. Thin is judged
+// in the field, where a fence's rails stand two rows deep and a wall's run a cell: a fence with
+// a person beside it is thin still (only the terrain counts), and a mark under way is terrain
+// still to its neighbours.
+@compute @workgroup_size(8, 8)
+fn thin(@builtin(global_invocation_id) id: vec3<u32>) {
+    let w = u32(g.full.x);
+    let hh = u32(g.full.y);
+    if id.x >= w || id.y >= hh {
+        return;
+    }
+    let i = id.y * w + id.x;
+    let v = atomicLoad(&hmap[i]);
+    if v == 0u || (v & 0xffffu) != 0u {
+        return;
+    }
+    let h = f32(v >> 16u);
+    if h > SPILL_TOP {
+        return;
+    }
+    let x = i32(id.x);
+    let y = i32(id.y);
+    let low = h <= SPILL_LOW;
+    let across = !terrain_at(x, y - THIN) && !terrain_at(x, y + THIN);
+    let along = !terrain_at(x - THIN, y) && !terrain_at(x + THIN, y);
+    if low || across || along {
+        atomicOr(&hmap[i], THIN_ID);
+    }
+}

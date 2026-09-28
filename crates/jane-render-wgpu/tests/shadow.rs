@@ -293,6 +293,51 @@ fn stand(atlas: &AtlasPages, ay: i32, foot: (i32, i32), depth: u8, sun: Directio
 
 /// A sun in the north at 40 degrees: shadows run south, down the screen, in front of what
 /// casts them, so the whole of one is seen.
+#[test]
+fn a_fence_spills_its_shadow_south_of_its_rails_and_a_wall_does_not() {
+    let Some(mut b) = backend() else { return };
+    // A fence across the view, 96 px long: its rails and posts upright on their line, 21 px at
+    // the top, standing two or three rows deep in the field on its foot row 96 (the fence rule,
+    // PRESENTATION.md §1.7): thin, so the sun at five throws it as if it stood 20 degrees
+    // north: its shadow spills south of the rails, and runs east as far as the true one.
+    let fence = ground(|x, y| {
+        if !(80..176).contains(&x) {
+            return None;
+        }
+        match y {
+            79..=95 => Some(height_of_rows(96 - y).max(1) as u8),
+            _ => None,
+        }
+    });
+    let px = draw(&mut b, &atlas(|_| 1), &frame(fence, false, Some(five()), &[]));
+    let lit = luma(at(&px, 30, 120));
+    let dark = |x: i32, y: i32| luma(at(&px, x, y)) * 10 < lit * 8;
+    // 14 rows south of the foot the spill (sin 20 degrees of cot 16, 1.19 rows a px of height)
+    // is the rails 12 px up, laid 40 px east: dark from 120 to 216, lit either side.
+    assert!(dark(150, 110) && dark(200, 110), "no spill south of the fence");
+    assert!(!dark(95, 110) && !dark(232, 110), "the spill runs the wrong way");
+    // Its true shadow (18 rows north of the foot, behind the rails) is not laid as well: east
+    // of the fence's end, level with its rails, the grass is open.
+    assert!(!dark(190, 85), "the fence throws its true shadow too");
+    // And the wall's block of the test before, a cell deep and 13 px, spills nothing.
+    let wall = ground(|x, y| {
+        if !(80..176).contains(&x) {
+            return None;
+        }
+        match y {
+            40..=79 => Some(height_of_rows(16) as u8),
+            80..=95 => Some(height_of_rows(96 - y).max(1) as u8),
+            _ => None,
+        }
+    });
+    // (A chunk is held by its generation: a fresh backend, or the fence would be drawn again.)
+    let Some(mut b) = backend() else { return };
+    let px = draw(&mut b, &atlas(|_| 1), &frame(wall, false, Some(five()), &[]));
+    let lit = luma(at(&px, 30, 120));
+    assert!(luma(at(&px, 128, 104)) * 10 >= lit * 8, "the wall spills south");
+    assert!(luma(at(&px, 190, 85)) * 10 < lit * 8, "the wall lost its true shadow");
+}
+
 fn north_sun() -> Directional {
     Directional {
         azimuth: Angle::NORTH,
