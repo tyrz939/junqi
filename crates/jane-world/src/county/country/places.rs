@@ -6,7 +6,7 @@ use jane_core::num::Permille;
 use jane_core::{Rect, Sfc32, Tile, pick_weighted};
 use jane_data::{PlaceKind, Region, RuinKind};
 
-use super::{CAMP_BACK, FIRST_CLEAR, Normal, Place, Q, clear, dist, distance_field, ground, near_chunk, room, run};
+use super::{FIRST_CLEAR, Normal, Place, Q, camp_back, clear, dist, distance_field, ground, near_chunk, room, run};
 use crate::county::{County, centre};
 use crate::skeleton::place::walk_key;
 use crate::skeleton::{Biome, COUNTY_W, Skeleton};
@@ -464,7 +464,9 @@ fn allowed(c: &County<'_>, kind: Kind, x: i32, y: i32, d: Option<u8>) -> bool {
         }
         Kind::Cottage => g.threat <= 3 && g.biome != Biome::Marsh,
         Kind::Camp | Kind::Den => {
-            d.is_some_and(|d| d >= CAMP_BACK) && g.threat > 0 && dist(&c.country.d_first, x, y) >= FIRST_CLEAR + 8
+            d.is_some_and(|d| d >= camp_back(g.region))
+                && g.threat > 0
+                && dist(&c.country.d_first, x, y) >= FIRST_CLEAR + 8
         }
         // The copses of the hedged fields are worked too.
         Kind::Woodcutter => matches!(g.biome, Biome::Wood | Biome::WetWood | Biome::Foothill | Biome::Hedge),

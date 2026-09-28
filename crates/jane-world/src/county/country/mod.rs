@@ -65,6 +65,26 @@ pub const DB: i32 = 4;
 pub const ROAD_CLEAR: u8 = 22;
 /// Camps stand back from the road by this much, so a careful walker passes them. *Tuning.*
 pub const CAMP_BACK: u8 = 26;
+/// The Works' road is walkable with care, and the ground off it as harsh as ever: its creatures
+/// see 18 m by day and half as far again after dark, so they stand this much further back from a
+/// road there (the sweep of 28 September 2026: every model died on the Works' roads). *Tuning.*
+pub const WORKS_BACK: u8 = 14;
+
+/// Nearer a road than this nothing that bites stands, on the ground of `region`.
+pub const fn road_clear(region: Region) -> u8 {
+    match region {
+        Region::Works => ROAD_CLEAR + WORKS_BACK,
+        _ => ROAD_CLEAR,
+    }
+}
+
+/// How far back from a road a camp or a den stands, on the ground of `region`.
+pub const fn camp_back(region: Region) -> u8 {
+    match region {
+        Region::Works => CAMP_BACK + WORKS_BACK,
+        _ => CAMP_BACK,
+    }
+}
 /// Nothing that bites within this of the first walk (station, Julie's, the town). *Tuning.*
 pub const FIRST_CLEAR: u8 = 44;
 /// A distance field's reading off the grid, and its cap.

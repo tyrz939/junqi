@@ -460,7 +460,19 @@
     }
   },
   {
+    "key": "farm_gate",
+    "at": {
+      "anchor": "scarecrow_gate",
+      "within": 12
+    },
+    "prop": {
+      "def": "gate_h",
+      "label": "The farm gate"
+    }
+  },
+  {
     "key": "scarecrow_gate",
+    "beside": "farm_gate",
     "at": {
       "anchor": "scarecrow_gate",
       "within": 12
@@ -542,6 +554,18 @@
       "def": "note",
       "talk": "note_pike",
       "label": "A note on Mr Pike's step"
+    }
+  },
+  {
+    "key": "pike_hedge_sign",
+    "at": {
+      "anchor": "cottage_pike",
+      "within": 12
+    },
+    "prop": {
+      "def": "sign",
+      "talk": "pike_hedge_sign",
+      "label": "The Long Hedge"
     }
   },
   {
@@ -715,7 +739,20 @@
     }
   },
   {
+    "key": "gang_fire",
+    "at": {
+      "anchor": "quarry_camp",
+      "within": 12
+    },
+    "prop": {
+      "def": "campfire",
+      "talk": "fire",
+      "label": "The gang's fire"
+    }
+  },
+  {
     "key": "tally_slate",
+    "beside": "gang_fire",
     "at": {
       "anchor": "quarry_camp",
       "within": 12

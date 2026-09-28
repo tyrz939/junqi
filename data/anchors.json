@@ -2,7 +2,7 @@
   { "id": "halt_well", "kind": "well", "name": "The well on the station road", "where": { "road": ["station", "julie_house"], "dist": { "to": "station", "min": 100, "max": 280 } } },
   { "id": "halt_signpost", "kind": "signpost", "name": "The signpost on the station road", "where": { "road": ["station", "julie_house"], "dist": { "to": "station", "min": 200, "max": 420 }, "apart": { "from": "halt_well", "min": 110 } } },
   { "id": "halt_cart", "kind": "cart", "name": "The cart on the station road", "where": { "road": ["station", "julie_house"], "dist": { "to": "station", "min": 300, "max": 560 }, "apart": { "from": "halt_signpost", "min": 90 } } },
-  { "id": "carters_cart", "kind": "cart", "name": "The carter's cart", "where": { "road": ["town", "gold_mine"], "dist": { "to": "gold_mine", "min": 100, "max": 280 } } },
+  { "id": "carters_cart", "kind": "cart", "name": "The carter's cart", "where": { "road": ["town", "gold_mine"], "dist": { "to": "gold_mine", "min": 30, "max": 90 } } },
   { "id": "scarecrow_gate", "kind": "scarecrow", "name": "The scarecrow at the farm gate", "where": { "road": ["town", "farm"], "dist": { "to": "farm", "min": 60, "max": 150 } } },
   { "id": "scarecrow_hedge", "kind": "scarecrow", "name": "The scarecrow in the Long Hedge", "where": { "area": "long_hedge" } },
   { "id": "scarecrow_top", "kind": "scarecrow", "name": "The scarecrow on the Top Field", "where": { "rim": { "area": "top_field", "toward": "farm" } } },

@@ -24,6 +24,7 @@
 use jane_core::action::{Action, Facing};
 use jane_core::blueprint::StoryPlace;
 use jane_core::hash::Fnv;
+use jane_core::num::isqrt;
 use jane_core::search::{Fill, fill};
 use jane_core::tile::F_SOLID;
 use jane_core::view::{HALF_H_CELLS, HALF_W_CELLS};
@@ -32,7 +33,8 @@ use jane_data::{PlaceAt, PlacementDef, StoryDef};
 
 use super::County;
 use super::centre;
-use super::country::{Kind, Place, in_box};
+use super::country::roads::{compass, distance_words};
+use super::country::{FIRST_CLEAR, Kind, Place, dist, in_box};
 use super::placements::{apply_edit, hide_under, pick_top, put_prop};
 use super::tale_ground::{OnFoot, Standing, Stood, near_on_foot, place_cells, spot_for};
 use crate::kit::{Kit, js_round};
@@ -613,7 +615,7 @@ fn lay_path(c: &mut County<'_>, p: &Place, road: (i32, i32), name: &str) -> Vec<
             continue;
         }
         let key = c.k.local(&format!("story_post_{}", p.n));
-        let label = c.k.text("A fingerpost");
+        let label = c.k.text(&format!("A fingerpost to {name}"));
         let words = c.k.text(&format!("FOOTPATH. {}, {metres} m.", name.to_uppercase()));
         let read = c.k.list(vec![Action::Read(words)]);
         let q = c.k.prop(Some(key), post, x, y);
@@ -773,6 +775,128 @@ pub fn stories(c: &mut County<'_>) {
     c.ground = cl.ground;
     c.on_foot = cl.on_foot;
     super::placements::apply_placements(c, super::placements::Stage::Places, cat.county.placements);
+    posts(c, &names);
+}
+
+/// A fingerpost to a place stands this far from it at least, in cells from its edge: passed on the
+/// way there, not only at it. *Tuning.*
+const POST_OFF: i32 = 72;
+/// How far along the roads from the nearest point a post to a place is looked for, cells walked.
+/// *Tuning.*
+const POST_WALK: i32 = 480;
+/// Two posts to one place stand at least this far apart: one each way along the road. *Tuning.*
+const POST_APART: i32 = 60;
+/// The set places the quests send her to by name that have no board of their own at the road:
+/// the dungeons' doors and the library.
+const POSTED_SITES: [&str; 7] = ["gold_mine", "museum", "library", "butterfly_forest", "factory", "burial", "school"];
+
+/// Squared cells from a rect's edge.
+fn edge_d2(b: Rect, (x, y): (i32, i32)) -> i64 {
+    let dx = i64::from((b.x - x).max(x - (b.x + b.w - 1)).max(0));
+    let dy = i64::from((b.y - y).max(y - (b.y + b.h - 1)).max(0));
+    dx * dx + dy * dy
+}
+
+/// The roadside fingerposts (the sweep of 28 September 2026: a place's name written only at the
+/// place is not a way to it). Every story's place and every set place a quest sends her to by name
+/// gets one on each way along the road nearest it, [`POST_OFF`] or more from it, saying which way
+/// it lies and how far; a place by the road (not one a footpath was laid to, whose post is at the
+/// path's end) gets one where the road comes nearest as well. Each post's label names the place.
+fn posts(c: &mut County<'_>, names: &Names) {
+    let cat = jane_data::catalog();
+    let rb = road_bins(&c.k);
+    let mut to: Vec<(Rect, String, bool)> = Vec::new();
+    for &(id, i) in &c.story_claims.claims {
+        let pathed = c.story_claims.paths.iter().any(|(s, _)| *s == id);
+        to.push((c.places[i].bounds, names.story(id), !pathed));
+    }
+    for id in POSTED_SITES {
+        if let Some(ch) = c.chunks.iter().find(|ch| ch.id() == id) {
+            let name = cat.text(c.sk.site(ch.site).def.name);
+            let name = name.strip_prefix("The ").map_or_else(|| name.to_owned(), |n| format!("the {n}"));
+            to.push((ch.bounds, name, false));
+        }
+    }
+    for (b, name, near) in to {
+        let Some(start) = reach(&rb, b).road else { continue };
+        let mut at: Vec<(i32, i32)> = Vec::new();
+        // The first walk (the halt, Julie's, the town) is the letter's: no post of this kind on it.
+        let first = |c: &County<'_>, (x, y): (i32, i32)| dist(&c.country.d_first, x, y) < FIRST_CLEAR;
+        if near && !first(c, start) {
+            at.push(start);
+        }
+        // Along the roads from the nearest point, nearest first: the first cell far enough off
+        // each way.
+        let mut seen = std::collections::BTreeSet::from([start]);
+        let mut queue = std::collections::VecDeque::from([(start, 0)]);
+        let mut far: Vec<(i32, i32)> = Vec::new();
+        while let Some(((x, y), d)) = queue.pop_front() {
+            let off = i64::from(POST_OFF);
+            let apart = i64::from(POST_APART);
+            if edge_d2(b, (x, y)) >= off * off
+                && far.iter().all(|&f| d2(f, (x, y)) >= apart * apart)
+                && !first(c, (x, y))
+            {
+                far.push((x, y));
+                if far.len() == 2 {
+                    break;
+                }
+            }
+            if d >= POST_WALK {
+                continue;
+            }
+            for (ox, oy) in [(0, -1), (1, 0), (0, 1), (-1, 0)] {
+                let n = (x + ox, y + oy);
+                if c.k.get(n.0, n.1) == Tile::Road && seen.insert(n) {
+                    queue.push_back((n, d + 1));
+                }
+            }
+        }
+        at.extend(far);
+        for road in at {
+            post_beside(c, road, b, &name);
+        }
+    }
+}
+
+/// A fingerpost to `name` (whose ground is `b`) on open ground beside the road cell `road`, with
+/// room in front of it to stand and read.
+fn post_beside(c: &mut County<'_>, road: (i32, i32), b: Rect, name: &str) {
+    let def = jane_data::catalog().story.prop_id("fingerpost").expect("a fingerpost row");
+    let open = |c: &County<'_>, x: i32, y: i32| {
+        !matches!(c.k.get(x, y), Tile::Road | Tile::Boardwalk | Tile::Water)
+            && !c.k.solid(x, y)
+            && !c.k.is_claimed(x, y)
+    };
+    let mut spot = None;
+    'rings: for r in 3..=7 {
+        for (x, y) in [
+            (road.0 + r, road.1),
+            (road.0 - r - 1, road.1),
+            (road.0, road.1 + r),
+            (road.0, road.1 - r),
+            (road.0 + r, road.1 + r),
+            (road.0 - r - 1, road.1 - r),
+        ] {
+            let fits = open(c, x, y) && open(c, x + 1, y) && !c.k.solid(x, y + 1) && !c.k.solid(x + 1, y + 1);
+            if fits && !super::country::near_chunk(c, x, y, 2) {
+                spot = Some((x, y));
+                break 'rings;
+            }
+        }
+    }
+    let Some((x, y)) = spot else { return };
+    let (tx, ty) = (b.x + b.w / 2, b.y + b.h / 2);
+    let (dx, dy) = (tx - x, ty - y);
+    let tenths = i64::from(isqrt((d2((x, y), (tx, ty)) * 100) as u64));
+    let words = format!("{}, {}, {}.", name.to_uppercase(), compass(dx, dy), distance_words(tenths));
+    let label = c.k.text(&format!("A fingerpost to {name}"));
+    let words = c.k.text(&words);
+    let read = c.k.list(vec![Action::Read(words)]);
+    let key = c.k.local(&format!("place_post_{x}_{y}"));
+    let p = c.k.prop(Some(key), def, x, y);
+    p.label = Some(label);
+    p.use_list = Some(read);
 }
 
 /// A row at a story's place. The place was built and claimed whole, so nothing here searches for

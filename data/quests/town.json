@@ -133,7 +133,7 @@
     "name": "School Lane",
     "description": "Dot says the lane that runs up past the church to the north gate has no name anywhere in town, and nobody walks up it. There is a sign at the top. Her mum will not take her.",
     "completion": "CHURCH LANE, and under the paint, SCHOOL LANE. Dot says that is the fourth, and that they do not say it any more. She gave you a key she found in the gutter.",
-    "requirements": [{ "type": "location", "target": "lane_church", "qty": 1, "text": "The sign at the top of Church Lane, by the north gate" }],
+    "requirements": [{ "type": "location", "target": "lane_church", "qty": 1, "text": "The sign at the end of Church Lane, by the north gate" }],
     "rewards": [{ "do": "give", "item": "key_generic", "qty": 1 }],
     "returnTo": "Dot, on Cross Lane"
   },
