@@ -100,8 +100,7 @@ fn target(s: &Sim, id: UnitId) -> (CombatState, Option<UnitId>) {
 
 // --- chasing ---------------------------------------------------------------------------------
 
-/// sim.test.ts "enemies chase a player who is standing still, and hit them". After the bell: by
-/// day the field is the county's gentlest ground, and that is the next test.
+/// sim.test.ts "enemies chase a player who is standing still, and hit them", after the bell.
 #[test]
 fn enemies_chase_a_player_standing_still_and_hit_her() {
     let mut s = field();
@@ -114,46 +113,36 @@ fn enemies_chase_a_player_standing_still_and_hit_her() {
     assert!(px(dist(unit(&s, foe).pos, unit(&s, me(&s)).pos)) <= 16, "it came to her");
 }
 
-/// Wary (PLAN.md §2.6 "Day"): by day a creature of the county's gentlest ground (threat 1, as
-/// the phase table left its strength) starts no fight with her, though she stands beside it; she
-/// strikes it and it fights back; at the bell it comes for her. Harder ground, or a dungeon, and
-/// it comes by day as ever.
+/// No hour is wary (the owner, 2026-09-29; PLAN.md §2.6 "Day"): at ten in the morning on the
+/// county's gentlest ground (threat 1, as the phase table left its strength) a skeleton that sees
+/// her within its aggro comes for her, and so does the same row at threat 2. A rabbit's row has
+/// no aggro and leaves her be.
 #[test]
-fn by_day_the_gentlest_ground_leaves_her_be() {
+fn by_day_the_gentlest_ground_comes_for_her_on_sight() {
     let mut s = field();
     hour(&mut s, 10);
     let her = me(&s);
     let foe = spawn(&mut s, "skeleton", 13, 10);
     let hp = unit(&s, her).hp;
+    steps(&mut s, 20);
+    assert_eq!(target(&s, foe), (CombatState::Combat, Some(her)), "it saw her by day and came");
     steps(&mut s, 60 * 4);
-    assert_eq!(target(&s, foe), (CombatState::Idle, None), "it has seen her and minds its own business");
-    assert_eq!(unit(&s, her).hp, hp);
+    assert!(unit(&s, her).hp < hp, "and it hit her");
+    remove(&mut s, foe);
 
-    // Harder ground: the same row at threat 2, by the same light, has her at once.
     let hard = spawn(&mut s, "skeleton", 13, 14);
     edit(&mut s, hard, |u| u.strength *= 2);
     steps(&mut s, 20);
     assert_eq!(target(&s, hard).1, Some(her));
     remove(&mut s, hard);
 
-    // Struck, it fights back.
-    edit(&mut s, her, |u| u.pos = Vec2::centre(12, 10));
-    steps(&mut s, 1);
-    cmd(&mut s, Some(0), Command::Cast { spell: spell("melee_player"), on: None });
-    steps(&mut s, 30);
-    assert_eq!(target(&s, foe), (CombatState::Combat, Some(her)));
-    remove(&mut s, foe);
-
-    // At the bell the county is what it became.
-    let night = spawn(&mut s, "skeleton", 16, 10);
-    hour(&mut s, 21);
-    steps(&mut s, 20);
-    assert_eq!(target(&s, night).1, Some(her));
+    let rabbit = spawn(&mut s, "rabbit", 12, 11);
+    steps(&mut s, 60 * 2);
+    assert_ne!(target(&s, rabbit).1, Some(her), "a rabbit is no hostile");
 }
 
-/// Skeletons are wary on the county's gentlest ground by day, not dormant: in a dungeon, the Gold
-/// Mine included, one comes for her on sight at noon (the owner's first playtest met the yard's
-/// wary skeleton and asked; WORLD.md §*by day the Lowfields' own ground leaves her be*).
+/// In a dungeon, the Gold Mine included, a skeleton comes for her on sight at noon (the owner's
+/// playtests: "enemies don't aggro unless hit first"; WORLD.md §*hostiles come on sight*).
 #[test]
 fn a_skeleton_in_the_mine_comes_on_sight_by_day() {
     let mut s = field();
