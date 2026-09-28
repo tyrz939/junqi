@@ -324,7 +324,7 @@ fn the_burials_stair_up_is_the_way_into_the_school_behind_goldskin_and_everywher
     let tag = jane_data::catalog().name_id("school_stair").expect("the tag");
     assert_eq!(stair.key_tag, Some(jane_core::Key::Name(tag)));
     assert_eq!(stair.to, Some(Door { zone: ZoneId::School, mark: key(bp, "boiler") }));
-    // Its whole footprint and a cell round it: it stands in the rim between two jambs (C13), so
+    // Its whole footprint and a cell round it: it stands set into the rim (C13), so
     // the floor she reaches is in front of it, not beside its corner.
     let d = jane_data::catalog().story.prop(stair.def);
     let at = Rect::new(i32::from(stair.cell.x), i32::from(stair.cell.y), i32::from(d.w), i32::from(d.h));

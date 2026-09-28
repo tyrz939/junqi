@@ -357,7 +357,7 @@ fn c12_a_trigger_that_drops_a_gate_on_whoever_tripped_it() {
 }
 
 /// The owner's playtest (2026-09-29): "an inner mine door stands on open ground with no wall
-/// around it". Knock the wall from beside a gate, or slide the way out of its gap along the wall,
+/// around it". Knock the wall from beside a gate, or stand the way out a step in front of its gap,
 /// and C13 names it.
 #[test]
 fn c13_a_door_on_open_ground_or_in_the_wrong_wall() {
@@ -383,10 +383,12 @@ fn c13_a_door_on_open_ground_or_in_the_wrong_wall() {
     let t = only(
         Check::C13,
         &broken(&b, |bp| {
-            let (x, ..) = foot(bp, "exit_door");
-            // Out of its gap and along the wall onto the room's floor, where the old templates
-            // stood it: against the wall with nothing either side.
-            prop(bp, "exit_door").cell.x = u16::try_from(x - 3).unwrap();
+            let (x, y, _, h) = foot(bp, "exit_door");
+            // Out of its gap a step onto the room's floor: in front of the wall, nothing either
+            // side of it.
+            let open = |x: i32, y: i32| bp.tiles.read(x, y, jane_core::Tile::Void) == floor;
+            let into = if open(x, y + h) { 1 } else { -1 };
+            prop(bp, "exit_door").cell.y = u16::try_from(y + into).unwrap();
         }),
     );
     assert!(t.contains("C13: exit_door (door)") && t.contains("running west to east"), "{t}");

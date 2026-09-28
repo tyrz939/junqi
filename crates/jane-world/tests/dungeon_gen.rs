@@ -512,6 +512,34 @@ fn everything_stands_on_open_floor_inside_the_zone() {
     }
 }
 
+/// The owner's playtest (2026-09-29): "the door floats: it stands a metre or so in front of the
+/// wall". Every gate and every door out stands flush with its room's wall: a gate's line (a door
+/// out's foot row) is the room's own rim, not a cell out in the corridor or in on the floor.
+#[test]
+fn doors_and_gates_stand_in_the_wall_line() {
+    let c = catalog();
+    for (m, seed, b) in sweep() {
+        let bp = &b.blueprint;
+        for p in &bp.props {
+            let d = c.story.prop(p.def);
+            if !d.solid || !(d.gate || p.to.is_some()) {
+                continue;
+            }
+            let (x, y, w, h) = (i32::from(p.cell.x), i32::from(p.cell.y), i32::from(d.w), i32::from(d.h));
+            let flush = b.info.rooms.iter().any(|r| {
+                let rb = r.bounds();
+                if h > w {
+                    (x == rb.x || x == rb.right() - 1) && y >= rb.y && y + h <= rb.bottom()
+                } else {
+                    let foot = y + h - 1;
+                    (foot == rb.y || foot == rb.bottom() - 1) && x >= rb.x && x + w <= rb.right()
+                }
+            });
+            assert!(flush, "{} seed {seed}: {} ({}) at {x},{y} stands off its wall", m.id, name(bp, p.key), d.id);
+        }
+    }
+}
+
 #[test]
 fn lockins_seal_behind_her_and_show_a_way_in() {
     for (m, seed, b) in sweep().iter().step_by(3) {

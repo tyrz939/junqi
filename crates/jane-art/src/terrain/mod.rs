@@ -721,6 +721,10 @@ impl Painter {
                     TileGroup::Ground | TileGroup::Water => st.row.inherit.unwrap_or(t),
                     TileGroup::Flora => self.borrow(src, x, y, st.row.inherit.unwrap_or(Tile::Grass)),
                     _ if lone => self.borrow(src, x, y, Tile::Dirt),
+                    // A doorway's sill is drawn as the floor it joins, no slab of its own (the
+                    // owner's playtest, 2026-09-29: "normal floor continuing between rooms and
+                    // halls"). It stays a sill to the sim, where nothing is pushed onto it.
+                    _ if t == Tile::Sill => self.floor_of_sill(src, x, y),
                     _ => t,
                 };
                 let ps = self.styles.tile(paint);
@@ -823,6 +827,27 @@ impl Painter {
 
     /// The ground a standing thing at `(x, y)` stands on: its first neighbour (N, W, E, S) with
     /// open ground or a floor to lend, else `default`.
+    /// The floor a sill at `(x, y)` joins: the first open neighbour, the way through first, that
+    /// is no sill; else the sill itself.
+    fn floor_of_sill(&self, src: &impl TileSource, x: i32, y: i32) -> Tile {
+        let across = src.tile(x - 1, y) == Tile::Sill || src.tile(x + 1, y) == Tile::Sill;
+        let order: [(i32, i32); 4] =
+            if across { [(0, 1), (0, -1), (1, 0), (-1, 0)] } else { [(1, 0), (-1, 0), (0, 1), (0, -1)] };
+        for (dx, dy) in order {
+            let n = src.tile(x + dx, y + dy);
+            if n == Tile::Void || n == Tile::Sill {
+                continue;
+            }
+            let st = self.styles.cell(n, src.material(x + dx, y + dy));
+            match st.row.group {
+                TileGroup::Ground => return st.row.inherit.unwrap_or(n),
+                TileGroup::Made if n.flags() & F_SOLID == 0 => return n,
+                _ => {}
+            }
+        }
+        Tile::Sill
+    }
+
     fn borrow(&self, src: &impl TileSource, x: i32, y: i32, default: Tile) -> Tile {
         // Stepping stones stand in the water when the water is round them.
         let own = self.styles.cell(src.tile(x, y), src.material(x, y));

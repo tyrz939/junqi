@@ -318,6 +318,34 @@ impl Gen<'_> {
         (d, r.x + i32::from(d.x), r.y + i32::from(d.y))
     }
 
+    /// A door out whose socket has its back to a north or south wall, set into that wall: its
+    /// foot row in the wall's own row, in a gap as wide as it is, the wall going on either side
+    /// of it, so it stands flush with the wall's face and not a cell in front of it on the floor
+    /// (the owner's playtest, 2026-09-29; C13). North, the rest of it stands in the solid beyond;
+    /// south, it rises over the floor in front as the wall's face does. Where the wall is not
+    /// whole there, it is left where the template put it (and C13 says so).
+    fn set_in_wall(&mut self, x: i32, y: i32, w: i32, h: i32) -> (i32, i32) {
+        let solid = |g: &Self, i: i32, j: i32| g.k.get(i, j).flags() & F_SOLID != 0;
+        let row = |g: &Self, j: i32| (x - 1..=x + w).all(|i| solid(g, i, j));
+        let to = if row(self, y - 1) && (y - h..y - 1).all(|j| row(self, j)) {
+            Some(y - h)
+        } else if row(self, y + h) {
+            Some(y + 1)
+        } else {
+            None
+        };
+        let Some(ny) = to else { return (x, y) };
+        let floor = self.m.floor;
+        for j in ny..ny + h {
+            for i in x..x + w {
+                if solid(self, i, j) {
+                    self.k.bp.tiles.set(i, j, floor);
+                }
+            }
+        }
+        (x, ny)
+    }
+
     // --- rooms -------------------------------------------------------------------------------
 
     fn rooms(&mut self) {
@@ -475,11 +503,11 @@ impl Gen<'_> {
 
     // --- locks -------------------------------------------------------------------------------
 
-    /// A gate in the one corridor cell that is always there: just outside the far room's door.
+    /// A gate in the far room's doorway itself: in the gap of its wall, flush with the wall's
+    /// face, never a step out in the corridor in front of it (the owner's playtest, 2026-09-29:
+    /// "the door floats"). The rim is outside the room's rect, so it drops on nobody (C12).
     fn place_gate(&mut self, c: &Corridor, key: Key, rows: [PropDefId; 2]) -> Option<&mut PropSpawn> {
-        let (d, x, y) = self.door_at(c.b.node, c.b.door);
-        let (ox, oy) = out(d.side);
-        let (gx, gy) = (x + ox, y + oy);
+        let (d, gx, gy) = self.door_at(c.b.node, c.b.door);
         if footprint(rows[0]) != (3, 1) || footprint(rows[1]) != (1, 3) {
             self.err("gate rows must be 3x1 and 1x3");
             return None;
@@ -985,6 +1013,12 @@ impl Gen<'_> {
                     ));
                     continue;
                 }
+                // A door out stands in the wall its socket has its back to, flush with its face.
+                let (px, py) = if hd.to.is_some() && catalog().story.prop(def).solid {
+                    self.set_in_wall(px, py, s.w, s.h)
+                } else {
+                    (px, py)
+                };
                 let guarded = !hd.guarded_by.is_empty();
                 let bind = Binding::new(n, self.at_self, Some(key));
                 let mut list: Option<Vec<Action>> = hd.use_list.map(|l| bind.actions(&mut self.k.bp, l));

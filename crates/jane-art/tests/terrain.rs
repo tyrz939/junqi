@@ -164,7 +164,7 @@ fn every_style_resolves_its_ramps() {
 }
 
 /// No dungeon draws a doorway in plain grey: the sill under a door in use (across a north or
-/// south door, and down a west or east one) is a threshold of the floor it joins, in that floor's
+/// south door, and down a west or east one) is drawn as the floor it joins, in that floor's
 /// own colour (the owner's playtest, 2026-09-29: a grey block between the mine's rooms, and a
 /// side door that read as a door leaf stood in the wall).
 #[test]
