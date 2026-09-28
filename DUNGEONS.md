@@ -47,7 +47,7 @@ A fight in the middle pays for the item. The fight at the end asks whether the p
 
 **K4. Small keys pace. The boss key is a statement of the goal.**
 Small keys are fungible and consumed, which creates the series' one classic failure: spend a key on the wrong door and the dungeon cannot be finished. Tom Coxon's [metazelda](https://github.com/tcoxon/metazelda) avoids it by construction (to reach key n the player must already hold keys 1 to n-1). The big key is different: it is seen as a locked door early, so the whole dungeon is a walk toward something already shown. That is this game's spine in small (`PLAN.md` section 2.2: the School is visible from the platform).
-**So in this game:** `key_generic` stays ("Opens any plain lock once, then it is the lock's"). Every zone holds at least as many plain keys as plain locks, and the solver proves that no order of spending strands the player (check C3). The boss door is visible, by line of sight, before its key is found (check C10).
+**So in this game:** `key_generic` stays ("Opens any plain lock once, then it is the lock's"). Every zone holds at least as many plain keys as plain locks, and the solver proves that no order of spending strands the player (check C3). The boss door is visible, by line of sight, before its key is found (check C10). *(Amended 29 September 2026, the softlock pass, §3.1:)* a dungeon's own plain keys fit only that dungeon's locks, as Zelda's small keys do. A plain key that also fits a shed in the county can be carried out and spent there, and the dungeon is then a key short with nothing in it to say where another is. The mine's are the Pit Key (`key_pit`, tag `pit`); `key_generic` stays for the cellar, the county and quest rewards. `dungeon_states.rs` proves it for the mine; the Factory still takes `key_generic` and is the next to change.
 
 **K5. The map and the compass are pacing devices, not conveniences.**
 Finding the map turns wandering into planning. Finding the compass turns planning into intent. They arrive a third and two thirds of the way in.
@@ -491,8 +491,8 @@ The mission, which is what is authored. Contract names from today's `CONTRACTS.m
 ```
 order  node       kind       holds / binds                                        heat
 0      entry      entrance   `exit_door`, mark `entry`, rect `mine_entry`, notice  0.2
-1      plate      teach      `plate_a`, `plate_chest` (key_generic), `plate_barrel` 0.4
-1      store      key        `store_chest` (key_generic, iron x4)                  0.4
+1      plate      teach      `plate_a`, `plate_chest` (key_pit), `plate_barrel` 0.4
+1      store      key        `store_chest` (key_pit, iron x4)                      0.4
 2      guard      fight      `clerk` (drops HM key), guard_chest (wood x2)         0.8
 3      core       hub        track dressing, sight of the steps and the big door   0.6
 4      firstaid   rest       fire *new*                                            0
@@ -509,8 +509,8 @@ order  node       kind       holds / binds                                      
 edges
 entry   -open->                         plate
 entry   -open->                         store
-entry   -key generic `gate_generic_a`-> guard
-store   -key generic `gate_generic_b`-> core
+entry   -key pit `gate_generic_a`->     guard
+store   -key pit `gate_generic_b`->     core
 core    -open->                         firstaid
 core    -key mine_headmaster `gate_hm`-> office
 core    -verb repair `broken_steps` (wood x2)-> gallery
@@ -744,6 +744,22 @@ The Headmaster brought the school down here when the nights got longer, because 
 **What could go wrong.** A hoist rect overlapping a lever cell, so the puller hits herself: template lint forbids it. `strike` must not hit friendly units unless told to. The adit needs a county chunk change (`mine_adit` mark and a door), which touches `CONTRACTS.county`.
 
 **As the bot plays it** (`crates/jane-bot/src/tactics/mine.rs`, September 2026). No data or sim change was needed: the arena works as built, and the bot now plays it the way it is built to be played. Four clean drops kill him (200 each, 800 hp) and on most seeds that is the whole fight. Once he is on her, she opens the arena chest, mends a hoist whenever he is staggered or far off, and works the levers. She goes straight to a lever when his way to her runs under its load and she will get there first. Otherwise she goes round by a bait point past the far side of that lever's rect, so that he comes at her through it. She pulls the moment his cell is in the rect while she faces the lever. When the hoists are spent (a death spends them: the levers are `once`), she fights him with Icebolt from range and keeps out of his reach. She never backs out of the room: he stays on her, and at home he would mend. Before the big door, hurt, she goes to the First Aid stove first. The key's own words say what the door is ("Opens the door everyone in the mine stopped opening"), and that is how she knows. Measured: seeds 1 to 20 all finish, in 8 to 14 game minutes, with 2 deaths across the twenty. The cage cannot trap the crawl: a barrel already holding one plate down is no longer pushed onto the other, which used to send the two barrels back and forth for minutes. The powder store is not in today's mission graph. With the omen true and the crawl in at eight in the evening, it still walks out by a door in the barred hours (`the_gold_mine_on_a_barred_night`). The front door is unbarred for good as she crosses the entry room with him down, and the adit is never barred from inside. Entering, though, is barred: on an omen night the county door does not open from nine to five while he stands. The story has to bring her by day.
+
+**Can she get stuck? (the softlock pass, 29 September 2026.)** The owner got lost in the mine, so the mine was read as a machine, not played: every state she can put it into, and whether it can still be finished from there. `crates/jane-world/tests/dungeon_states.rs` proves it on seeds 1 to 16, in two parts. On the room graph (`dungeon::checks::states`, 1,688 states a seed): every order of opening locks, of spending wood and iron on any verb prop she likes (the cabinet, the hoists, the track), and of carrying a key out and spending it on a lock in another zone, searched whole, and from every state reached the mission can still be finished. On the cell grid: the plate's barrel and the cage's two, pushed and pulled every way they go with everything else in the room standing where it stands, and from every place a barrel can be left it can still be brought back onto its plate (22 plates on the sixteen seeds, 16,696 states).
+
+| Could it strand her? | Verdict |
+| --- | --- |
+| Two plain keys, two plain locks, spent in either order | No: both keys are reached before either lock (C3, and the state search) |
+| A plain key carried out of the mine and spent on a lock outside | **Yes, as it was.** The plate chest's and the store's keys were `key_generic`, which also opens the Society's shed in the Lowfields and the cellar's storage room. Spend one there and the mine is a key short; the only others in the county are quest rewards, and nothing in the mine says so. **Fixed:** they are Pit Keys (`key_pit`, "Stamped GOLDSKIN on the bow. It opens the Company's padlocks down the mine, once each, and nothing else."), the two gates take `pit` and say "The Company gate". A test asserts no lock outside the mine takes `pit` |
+| Wood or iron spent on the wrong thing first | No: wood 3 in the mine (guard chest 2, office 1) against the cabinet 1 and the steps 2, so any order works; iron 4 + 4 against the track 4 and the hoists 4, both optional. Both are replaceable (the county's roadside chests), so wood spent outside is found again |
+| A barrel pushed into a corner or against the wrong wall | No: a push is undone by a pull from where she stands after it and a pull by a push, and a sill keeps every barrel in its room. Proven on the grid, as above |
+| A key dropped by the clerk or the Headmaster, lost | No: a drop that opens anything never ages out (`loot::step_drops`), it lands within reach even beside a wall, and Destroy refuses a key |
+| Dying mid-puzzle, or in the pit | No: death keeps her bag; the big door's lock-in re-opens on her death (the reset), and the key was spent on the way in, so she walks back in without one. Hoist levers are spent (`once`), and Iron Knuckles can still be beaten with Icebolt (K3) |
+| Leaving and coming back mid-puzzle | No: the zone is kept whole (`ZoneState`), barrels where they were, gates open |
+| The plate re-locking the chest | No: it re-locks only what is still shut; once opened, the key is hers |
+| A door that locks behind her | Only the big door (the lock-in, above) and the front door on an omen night, which is barred from nine to five and never from inside the adit |
+
+What the model leaves out it leaves out on purpose: units standing on plates (a friend, a lured rat) only add ways; other pushables stand still while one is proven (every push is still undoable). The same search was run on the other seven: the Factory has the same leak (its two plain locks take `key_generic`, and a spent one strands every room past No. 1 LINE); the rest came out clean.
 
 ---
 
