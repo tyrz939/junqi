@@ -244,6 +244,9 @@ const OWN_TOP: i32 = crate::terrain::BLOCK_TOLERANCE as i32 + 2;
 /// How far a block's shadow moves from one slice of its height to the next at most, px, and
 /// how tall a slice is at most: what the reach up a wall it falls on steps by.
 const SLICE: i32 = 8;
+/// How far a spilling block's shadow moves from one slice to the next at most, px (the fence
+/// rule's openwork: a post's line stays a line).
+const SPILL_SLICE: i32 = 2;
 
 /// The bands of block `b`'s shadow in a sun sheared `k` ([`shear`]; a thin or low block takes
 /// `ks`, [`spill_shear`], the fence rule): its footprint laid
@@ -271,6 +274,10 @@ pub fn block_bands(b: &crate::frame::Block, k: (i32, i32), ks: (i32, i32), mut e
         sweep((x0, y0, x1, y1), (0, hgt), k, Some(hgt), &mut emit);
         return;
     }
+    // A spill is swept from what is drawn: a block stands a px wider each side than its px
+    // (`terrain::block`, so T2's steps never pass a wall's end), which bands need not, and a
+    // post's line 2 px wider closed the grass between one post's and the next's.
+    let (x0, x1) = if x1 - x0 > 2 { (x0 + 1, x1 - 1) } else { (x0, x1) };
     if b.mask == 0 {
         sweep((x0, y0, x1, y1), (0, hgt), ks, None, &mut emit);
         return;
@@ -304,13 +311,22 @@ fn sweep(
 ) {
     let span = hi - lo;
     let far = (span * kx.abs().max(ky.abs())) >> 8;
-    let n = ((span + SLICE - 1) / SLICE).max((far + SLICE - 1) / SLICE).max(1);
+    // A spill moves [`SPILL_SLICE`] px a slice at most: each slice's band is the box round its
+    // part of the sweep, and a post's shadow runs a long shallow diagonal, which boxes 8 px
+    // along fill in from one post's line to the next (the fence read as a slab on T0 and T1 where
+    // T2's trace kept the lit grass between them, 2026-09-28).
+    // Its slices' heights in quarter px (a px of height moves a low sun's spill 3 or 4 px); a
+    // block's true shadow keeps whole px, so walls and houses lay what they did.
+    let (step, q) = if top.is_none() { (SPILL_SLICE, 4) } else { (SLICE, 1) };
+    let shift = if q == 4 { 10 } else { 8 };
+    let n = ((span + SLICE - 1) / SLICE).max((far + step - 1) / step).max(1);
     let mut under: Option<(i32, i32, i32, i32)> = None;
     for i in 0..n {
-        let (h0, h1) = (lo + span * i / n, lo + span * (i + 1) / n);
-        let (ax, bx, ay, by) = ((h0 * kx) >> 8, (h1 * kx) >> 8, (h0 * ky) >> 8, (h1 * ky) >> 8);
+        let (h0, h1) = (q * lo + q * span * i / n, q * lo + q * span * (i + 1) / n);
+        let (ax, bx) = ((h0 * kx) >> shift, (h1 * kx) >> shift);
+        let (ay, by) = ((h0 * ky) >> shift, (h1 * ky) >> shift);
         let r = (x0 + ax.min(bx), y0 + ay.min(by), x1 + ax.max(bx), y1 + ay.max(by));
-        let reach = top.map_or(1, |t| (t - h1 - OWN_TOP).clamp(1, 255) as u8);
+        let reach = top.map_or(1, |t| (t - h1 / q - OWN_TOP).clamp(1, 255) as u8);
         minus(r, under, |(x0, y0, x1, y1)| emit(Band { x0, x1, y0, y1, strength: 255, reach }));
         under = Some(r);
     }
@@ -677,7 +693,7 @@ mod tests {
         // At least sin 20 degrees of four heights at cot 16 degrees (3.5): 21 x 3.5 x 0.34, 25
         // rows below its foot, and as far east as the true shadow.
         assert!(lowest >= 97 + 24, "the fence's shadow reaches row {lowest}");
-        assert_eq!(far, 196 + ((21 * k.0) >> 8));
+        assert_eq!(far, 195 + ((21 * k.0) >> 8));
         // The spill lies on the ground alone: it never climbs the fence's own rails.
         assert!(bands.iter().all(|b| b.reach <= 1));
         // A hedge is low and spills; a house and a one-cell wall are neither thin nor low.
@@ -693,6 +709,25 @@ mod tests {
         let low = sun(Angle::WEST, 14);
         let (kx, ky) = spill_shear(&low).unwrap();
         assert!(kx.abs().max(ky.abs()) <= MAX_COT_Q8);
+    }
+
+    #[test]
+    fn a_posts_spill_is_a_line_as_wide_as_it_is_drawn_swept() {
+        // A fence's post as `terrain::blocks` stands it: 8 px wide (its 6 drawn and T2's margin),
+        // 2 rows deep, 28 px; the sun at five. Along a row its spill's line is what is drawn
+        // swept: 6 px and two rows of its slant (2.8 px of east a row), a px or two for the
+        // slices. With 8 px slices and the margin a row was twice that, and the posts' lines,
+        // 16 px apart, merged into a slab on T0 and T1.
+        let s = sun(Angle(32768 - 2730), 16);
+        let (k, ks) = (shear(&s).unwrap(), spill_shear(&s).unwrap());
+        let post = crate::frame::Block { x0: 100, y0: 83, x1: 108, y1: 85, height: 28, mask: 0 };
+        let mut bands = Vec::new();
+        block_bands(&post, k, ks, |band| bands.push(band));
+        for y in 86..115 {
+            let covered =
+                (100..260).filter(|&x| bands.iter().any(|b| b.y0 <= y && y < b.y1 && b.x0 <= x && x < b.x1)).count();
+            assert!(covered <= 15, "row {y}: the post's line covers {covered} px");
+        }
     }
 
     #[test]
