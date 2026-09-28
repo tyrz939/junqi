@@ -256,21 +256,61 @@ const SLICE: i32 = 8;
 /// Each slice is laid only where the slice under it did not lie: the mask keeps the strongest
 /// and the highest, the strength is one and the reach falls slice by slice, so what is left out
 /// is what the lower slice had already laid higher. A house is a few hundred small bands.
+///
+/// A spilling block (the fence rule) is swept along `ks` bar by bar (`Block::mask`: a fence's
+/// two rails throw two lines with lit grass between and under them, a hedge one band), and its
+/// bands reach no higher than the ground: the spill lies on the ground alone, never up the
+/// fence's own rails nor a hedge's own face (T2 gives no terrain px over the ground the spill).
 pub fn block_bands(b: &crate::frame::Block, k: (i32, i32), ks: (i32, i32), mut emit: impl FnMut(Band)) {
-    let (kx, ky) = if spills(b) { ks } else { k };
     let hgt = i32::from(b.height);
     let (x0, y0, x1, y1) = (i32::from(b.x0), i32::from(b.y0), i32::from(b.x1), i32::from(b.y1));
     if hgt <= GROUND || x0 >= x1 || y0 >= y1 {
         return;
     }
-    let far = (hgt * kx.abs().max(ky.abs())) >> 8;
-    let n = ((hgt + SLICE - 1) / SLICE).max((far + SLICE - 1) / SLICE).max(1);
+    if !spills(b) {
+        sweep((x0, y0, x1, y1), (0, hgt), k, Some(hgt), &mut emit);
+        return;
+    }
+    if b.mask == 0 {
+        sweep((x0, y0, x1, y1), (0, hgt), ks, None, &mut emit);
+        return;
+    }
+    // Each run of set bits is a bar from its first bit's floor to its last's ceiling.
+    let mut i = 0;
+    while i < 32 {
+        if b.mask >> i & 1 == 0 {
+            i += 1;
+            continue;
+        }
+        let first = i;
+        while i < 32 && b.mask >> i & 1 == 1 {
+            i += 1;
+        }
+        let (lo, hi) = (2 * first, (2 * i).min(hgt));
+        if hi > lo {
+            sweep((x0, y0, x1, y1), (lo, hi), ks, None, &mut emit);
+        }
+    }
+}
+
+/// The bands of the footprint `(x0, y0, x1, y1)` swept along `(kx, ky)` from `lo` to `hi` px up,
+/// reaching up as the ray over a top of `top` does (none: the ground alone).
+fn sweep(
+    (x0, y0, x1, y1): (i32, i32, i32, i32),
+    (lo, hi): (i32, i32),
+    (kx, ky): (i32, i32),
+    top: Option<i32>,
+    emit: &mut impl FnMut(Band),
+) {
+    let span = hi - lo;
+    let far = (span * kx.abs().max(ky.abs())) >> 8;
+    let n = ((span + SLICE - 1) / SLICE).max((far + SLICE - 1) / SLICE).max(1);
     let mut under: Option<(i32, i32, i32, i32)> = None;
     for i in 0..n {
-        let (h0, h1) = (hgt * i / n, hgt * (i + 1) / n);
+        let (h0, h1) = (lo + span * i / n, lo + span * (i + 1) / n);
         let (ax, bx, ay, by) = ((h0 * kx) >> 8, (h1 * kx) >> 8, (h0 * ky) >> 8, (h1 * ky) >> 8);
         let r = (x0 + ax.min(bx), y0 + ay.min(by), x1 + ax.max(bx), y1 + ay.max(by));
-        let reach = (hgt - h1 - OWN_TOP).clamp(1, 255) as u8;
+        let reach = top.map_or(1, |t| (t - h1 - OWN_TOP).clamp(1, 255) as u8);
         minus(r, under, |(x0, y0, x1, y1)| emit(Band { x0, x1, y0, y1, strength: 255, reach }));
         under = Some(r);
     }
@@ -599,7 +639,7 @@ mod tests {
 
     #[test]
     fn a_blocks_shadow_is_its_footprint_swept_along_the_sun_by_its_height() {
-        let b = crate::frame::Block { x0: 100, y0: 100, x1: 180, y1: 140, height: 60 };
+        let b = crate::frame::Block { x0: 100, y0: 100, x1: 180, y1: 140, height: 60, mask: 0 };
         let k = shear(&sun(Angle::WEST, 20)).unwrap();
         let mut bands = Vec::new();
         block_bands(&b, k, k, |band| bands.push(band));
@@ -628,7 +668,7 @@ mod tests {
         let (k, ks) = (shear(&s).unwrap(), spill_shear(&s).unwrap());
         assert_eq!(k.0, ks.0, "the spill keeps the shadow's east reach");
         assert!(k.1 < 0 && ks.1 > 0, "true north {}, spilt south {}", k.1, ks.1);
-        let fence = crate::frame::Block { x0: 100, y0: 95, x1: 196, y1: 97, height: 21 };
+        let fence = crate::frame::Block { x0: 100, y0: 95, x1: 196, y1: 97, height: 21, mask: 0 };
         assert!(spills(&fence));
         let mut bands = Vec::new();
         block_bands(&fence, k, ks, |band| bands.push(band));
@@ -638,12 +678,14 @@ mod tests {
         // rows below its foot, and as far east as the true shadow.
         assert!(lowest >= 97 + 24, "the fence's shadow reaches row {lowest}");
         assert_eq!(far, 196 + ((21 * k.0) >> 8));
+        // The spill lies on the ground alone: it never climbs the fence's own rails.
+        assert!(bands.iter().all(|b| b.reach <= 1));
         // A hedge is low and spills; a house and a one-cell wall are neither thin nor low.
-        assert!(spills(&crate::frame::Block { x0: 100, y0: 80, x1: 120, y1: 100, height: 9 }));
-        assert!(!spills(&crate::frame::Block { x0: 100, y0: 40, x1: 196, y1: 96, height: 13 }));
-        assert!(!spills(&crate::frame::Block { x0: 100, y0: 40, x1: 180, y1: 100, height: 60 }));
+        assert!(spills(&crate::frame::Block { x0: 100, y0: 80, x1: 120, y1: 100, height: 9, mask: 0 }));
+        assert!(!spills(&crate::frame::Block { x0: 100, y0: 40, x1: 196, y1: 96, height: 13, mask: 0 }));
+        assert!(!spills(&crate::frame::Block { x0: 100, y0: 40, x1: 180, y1: 100, height: 60, mask: 0 }));
         // A wall's block at the same sun keeps the true shadow: nothing below its foot.
-        let wall = crate::frame::Block { x0: 100, y0: 40, x1: 196, y1: 96, height: 13 };
+        let wall = crate::frame::Block { x0: 100, y0: 40, x1: 196, y1: 96, height: 13, mask: 0 };
         let mut bands = Vec::new();
         block_bands(&wall, k, ks, |band| bands.push(band));
         assert!(bands.iter().all(|b| b.y1 <= 96), "a wall spills");
@@ -654,8 +696,37 @@ mod tests {
     }
 
     #[test]
+    fn a_fences_shadow_is_its_rails_with_lit_grass_between_them() {
+        // The rails' block of `terrain::blocks`' fence: bars 8 to 11 and 18 to 21 px up, in a
+        // sun due south 20 degrees up: its true shadow straight up the screen, behind the rails;
+        // the spill lays it straight down, sin 20 degrees of cot 20 (0.94) rows a px.
+        let s = sun(Angle::SOUTH, 20);
+        let (k, ks) = (shear(&s).unwrap(), spill_shear(&s).unwrap());
+        assert_eq!(ks.0, 0);
+        let mask = (1 << 4) | (1 << 5) | (1 << 9) | (1 << 10);
+        let rails = crate::frame::Block { x0: 100, y0: 95, x1: 196, y1: 97, height: 21, mask };
+        let mut bands = Vec::new();
+        block_bands(&rails, k, ks, |band| bands.push(band));
+        let covered = |y: i32| bands.iter().any(|b| b.y0 <= y && y < b.y1 && b.x0 <= 150 && 150 < b.x1);
+        let row = |h: i32| (h * ks.1) >> 8;
+        let rows: Vec<i32> = (90..140).filter(|&y| covered(y)).collect();
+        // Two lines, the lower rail's and the upper's; the grass under the lower one (and the
+        // fence's own footprint) and between the two is lit.
+        assert!(covered(95 + row(8)) && covered(95 + row(18)), "{rows:?}");
+        assert!(!covered(96) && !covered(95 + row(8) - 1), "lit under the lower rail: {rows:?}");
+        assert!(!covered(97 + row(12)), "no lit gap between the rails: {rows:?}");
+        assert!(!covered(97 + row(21) + 1), "{rows:?}");
+        // Solid (a hedge), the same block throws one band from its foot.
+        let solid = crate::frame::Block { mask: 0, ..rails };
+        let mut bands = Vec::new();
+        block_bands(&solid, k, ks, |band| bands.push(band));
+        let covered = |y: i32| bands.iter().any(|b| b.y0 <= y && y < b.y1 && b.x0 <= 150 && 150 < b.x1);
+        assert!((95..97 + row(21)).all(covered));
+    }
+
+    #[test]
     fn a_blocks_sides_turned_to_a_lamp_throw_nothing_and_the_rest_reach_the_rim() {
-        let b = crate::frame::Block { x0: 100, y0: 100, x1: 180, y1: 108, height: 60 };
+        let b = crate::frame::Block { x0: 100, y0: 100, x1: 180, y1: 108, height: 60, mask: 0 };
         let lamp = Lamp { x: 140 * SUB + 8, y: 130 * SUB + 8, h: 30, r: 100 };
         let mut slabs = Vec::new();
         block_slabs(&b, &lamp, |q| slabs.push(q));

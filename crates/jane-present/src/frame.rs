@@ -652,13 +652,18 @@ pub struct Caster {
 /// field stands them, and the rows of one height are merged into rects
 /// (`terrain::blocks`): a house is its footprint in a few rects by its roof's courses, a wall its
 /// run, a fence its rails. T2 casts the same from its field; T0 and T1 from these.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Block {
     pub x0: i16,
     pub y0: i16,
     pub x1: i16,
     pub y1: i16,
     pub height: u8,
+    /// What of its height is matter, for a block that spills (`shadow::spills`, the fence rule):
+    /// bit `i` set where something stands between `2i` and `2i + 2` px up (`terrain::blocks`:
+    /// each px from the bottom of its own run down the screen to its height, so a fence's rails
+    /// are two bars over open ground and a hedge is solid). 0: solid from the ground.
+    pub mask: u32,
 }
 
 /// The grade and the bloom (§1.9): a row per region by hour.

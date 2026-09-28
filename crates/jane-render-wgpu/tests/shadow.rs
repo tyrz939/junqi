@@ -338,6 +338,38 @@ fn a_fence_spills_its_shadow_south_of_its_rails_and_a_wall_does_not() {
     assert!(luma(at(&px, 190, 85)) * 10 < lit * 8, "the wall lost its true shadow");
 }
 
+#[test]
+fn a_fences_shadow_is_its_rails_with_lit_grass_between_and_it_never_darkens_them() {
+    let Some(mut b) = backend() else { return };
+    // Two rails across the view, no post, their foot on row 96: 21 to 18 px (rows 79 to 81)
+    // and 11 to 8 px (rows 87 to 89), upright, over grass. At five the spill lays the lower
+    // rail's 8 to 11 px 6 to 13 rows south of the foot and the upper's 18 to 21 px 17 to 24,
+    // each run 27 to 71 px east (the fence rule's bars, PRESENTATION.md §1.7).
+    let rails = ground(|x, y| {
+        if !(80..176).contains(&x) {
+            return None;
+        }
+        match y {
+            79..=81 | 87..=89 => Some(height_of_rows(96 - y) as u8),
+            _ => None,
+        }
+    });
+    let lit_rails = draw(&mut b, &atlas(|_| 1), &frame(rails, false, Some(five()), &[]));
+    let lit = luma(at(&lit_rails, 30, 120));
+    let dark = |x: i32, y: i32| luma(at(&lit_rails, x, y)) * 10 < lit * 8;
+    let col: Vec<bool> = (96..126).map(|y| dark(165, y)).collect();
+    // Dark where each rail's line lies, lit under the lower one and between the two.
+    assert!(dark(165, 106) && dark(165, 117), "no rail lines: {col:?}");
+    assert!(!dark(165, 99) && !dark(165, 111), "no lit gap between the rails: {col:?}");
+    // The rails (the grass's albedo, facing the low sun) are never in their own shadow: no
+    // darker than the open grass anywhere along them.
+    for x in (84..172).step_by(8) {
+        for y in [80, 88] {
+            assert!(!dark(x, y), "a rail shadowed at ({x}, {y}): {}", luma(at(&lit_rails, x, y)));
+        }
+    }
+}
+
 fn north_sun() -> Directional {
     Directional {
         azimuth: Angle::NORTH,

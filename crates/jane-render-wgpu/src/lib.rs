@@ -792,9 +792,10 @@ impl Wgpu {
         let gid = view(texture(d, "g id", (full.0, full.1, 1), ID, rt));
         let hmap = d.create_buffer(&wgpu::BufferDescriptor {
             label: Some("height field"),
-            // Two halves: each texel's top and whose (`h << 16 | id`), then its bottom
-            // (`256 - lo`, 0 where nothing floats).
-            size: u64::from(full.0) * u64::from(full.1) * 8,
+            // Three thirds: each texel's top and whose (`h << 16 | id`), its bottom (`256 - lo`,
+            // 0 where nothing floats), and the terrain's matter by height where it may spill
+            // (the fence rule, `scatter.wgsl`'s `mask_of`).
+            size: u64::from(full.0) * u64::from(full.1) * 12,
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });

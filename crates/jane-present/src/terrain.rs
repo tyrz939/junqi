@@ -9,7 +9,7 @@ use jane_sim::view::View;
 
 use crate::atlas::{Atlas, RefId};
 use crate::frame::{Block, CELL, CHUNK_CELLS, CHUNK_PX, ChunkId, ChunkLayers, SURFACE_OUTSIDE, rows_up};
-use crate::shadow::RELIEF;
+use crate::shadow::{RELIEF, SPILL_TOP};
 
 /// A zone as the painter reads it: the view's tiles, the paint kept beside them.
 struct ViewTiles<'v, 'a> {
@@ -69,6 +69,7 @@ pub struct Terrain {
     /// The field `blocks` builds in.
     field: Vec<u8>,
     runs: Vec<Run>,
+    masks: Vec<u32>,
     /// Each slot's lit windows as lights (`windows`), chunk-local px.
     windows: Vec<Vec<Window>>,
 }
@@ -152,8 +153,41 @@ const FIELD_ROWS: i32 = CHUNK_PX + rows_up(255) + 1;
 /// roof's course, a cliff's broken top. The block stands the tallest of them.
 pub const BLOCK_TOLERANCE: u8 = 3;
 
-/// A rect of the field still growing down the rows: `(x0, x1, y0, lo, hi)`.
-pub type Run = (i16, i16, i16, u8, u8);
+/// A rect of the field still growing down the rows: `(x0, x1, y0, lo, hi, mask)`.
+pub type Run = (i16, i16, i16, u8, u8, u32);
+
+/// A run of lifted px down a column of the drawing whose lowest px is this high or lower stands
+/// on the ground (T2's `scatter.wgsl` `FLOAT`); higher, it floats: a fence's rail over the grass
+/// between it and the next.
+const FLOAT: i32 = 6;
+
+/// The bottom of the run of terrain px that the px at `(x, y)`, `h` high, is part of, walking
+/// down its column of the drawing while the next px goes on from it (no higher than it and at
+/// most [`RUN_DROP`] lower: an upright face drops a px or two a row, a level rail none; the
+/// grass under a rail, or a post's top under a rail seen from above, is another thing): 0 if it
+/// comes down to [`FLOAT`] (the ground). `scatter.wgsl`'s `terrain_bottom` walks the same.
+fn run_bottom(height: &[u8], side: usize, x: usize, y: usize, h: i32) -> i32 {
+    let mut low = h;
+    for yy in (y + 1..height.len() / side).take(RUN_WALK) {
+        let next = i32::from(height[yy * side + x]);
+        if next > low + 1 || next + RUN_DROP < low {
+            break;
+        }
+        low = next;
+    }
+    if low <= FLOAT { 0 } else { low }
+}
+
+/// How much lower the next px down a run may be and still go on from it, px.
+const RUN_DROP: i32 = 2;
+/// How far down the drawing a run is walked, rows.
+const RUN_WALK: usize = 48;
+
+/// The mask bits of a run of matter from `lo` to `hi` px up ([`Block::mask`]).
+fn mask_of(lo: i32, hi: i32) -> u32 {
+    let (a, b) = ((lo / 2).clamp(0, 31) as u32, (hi / 2).clamp(0, 31) as u32);
+    (u32::MAX >> (31 - b)) & (u32::MAX << a)
+}
 
 /// What the terrain of one chunk stands on the ground, as [`Block`]s in chunk-local px (a block
 /// can reach under the chunk: a px `h` up stands `rows_up(h)` rows below it), into `out`.
@@ -164,26 +198,37 @@ pub type Run = (i16, i16, i16, u8, u8);
 /// [`BLOCK_TOLERANCE`], and a run that meets one of the same columns in the row above within it
 /// grows that one down: a house's face and walls are the block of its eave, its roof a block a
 /// course or two, a wall's run one block, a fence's rails a thin one.
-pub fn blocks(height: &[u8], field: &mut Vec<u8>, runs: &mut Vec<Run>, out: &mut Vec<Block>) {
+pub fn blocks(height: &[u8], field: &mut Vec<u8>, masks: &mut Vec<u32>, runs: &mut Vec<Run>, out: &mut Vec<Block>) {
     out.clear();
     let side = CHUNK_PX as usize;
     field.clear();
     field.resize(side * FIELD_ROWS as usize, 0);
+    masks.clear();
+    masks.resize(side * FIELD_ROWS as usize, 0);
     for (k, &h) in height.iter().enumerate() {
         if i32::from(h) <= RELIEF {
             continue;
         }
         let (x, y) = (k % side, k / side);
         let gy = y + rows_up(i32::from(h)) as usize;
+        // What of its height is matter (the fence rule, `Block::mask`): from the bottom of its
+        // run down the drawing to its height, for what may spill.
+        let h32 = i32::from(h);
+        let m = if h32 <= SPILL_TOP { mask_of(run_bottom(height, side, x, y, h32), h32) } else { u32::MAX };
         for r in [gy - 1, gy] {
             let f = &mut field[r * side + x];
             *f = (*f).max(h);
+            masks[r * side + x] |= m;
         }
     }
+    // A run's mask is kept only where it may spill and is not solid from the ground (0): so a
+    // wall or a house is cut into blocks as before, whatever its columns' masks.
+    let key = |hi: u8, m: u32| if i32::from(hi) <= SPILL_TOP && m & m.wrapping_add(1) != 0 { m } else { 0 };
     runs.clear();
     let mut open = 0;
     for r in 0..FIELD_ROWS {
         let row = &field[r as usize * side..(r as usize + 1) * side];
+        let mrow = &masks[r as usize * side..(r as usize + 1) * side];
         let r = r as i16;
         // This row's runs, appended after the open rects; the open ones not grown are closed.
         let first = runs.len();
@@ -194,30 +239,34 @@ pub fn blocks(height: &[u8], field: &mut Vec<u8>, runs: &mut Vec<Run>, out: &mut
                 x += 1;
                 continue;
             }
-            let (x0, mut lo, mut hi) = (x, h, h);
+            let (x0, mut lo, mut hi, m) = (x, h, h, key(h, mrow[x]));
             x += 1;
-            while x < side && row[x] > 0 && hi.max(row[x]) - lo.min(row[x]) <= BLOCK_TOLERANCE {
+            while x < side
+                && row[x] > 0
+                && hi.max(row[x]) - lo.min(row[x]) <= BLOCK_TOLERANCE
+                && key(hi.max(row[x]), mrow[x]) == m
+            {
                 (lo, hi) = (lo.min(row[x]), hi.max(row[x]));
                 x += 1;
             }
-            runs.push((x0 as i16, x as i16, r, lo, hi));
+            runs.push((x0 as i16, x as i16, r, lo, hi, m));
         }
         // Grow each open rect by the run of its columns, or close it.
         let mut kept = 0;
         for i in 0..open {
-            let (x0, x1, y0, lo, hi) = runs[i];
+            let (x0, x1, y0, lo, hi, m) = runs[i];
             let grown = (first..runs.len()).find(|&j| {
-                let (a, b, _, l, h) = runs[j];
-                a == x0 && b == x1 && h > 0 && hi.max(h) - lo.min(l) <= BLOCK_TOLERANCE
+                let (a, b, _, l, h, mm) = runs[j];
+                a == x0 && b == x1 && h > 0 && hi.max(h) - lo.min(l) <= BLOCK_TOLERANCE && mm == m
             });
             match grown {
                 Some(j) => {
-                    let (_, _, _, l, h) = runs[j];
+                    let (_, _, _, l, h, _) = runs[j];
                     runs[j].4 = 0;
-                    runs[kept] = (x0, x1, y0, lo.min(l), hi.max(h));
+                    runs[kept] = (x0, x1, y0, lo.min(l), hi.max(h), m);
                     kept += 1;
                 }
-                None => out.push(block(x0, x1, y0, r, hi)),
+                None => out.push(block(x0, x1, y0, r, hi, m)),
             }
         }
         // The runs that grew nothing open rects of their own.
@@ -231,8 +280,8 @@ pub fn blocks(height: &[u8], field: &mut Vec<u8>, runs: &mut Vec<Run>, out: &mut
         runs.truncate(n);
         open = n;
     }
-    for &(x0, x1, y0, _, hi) in &runs[..open] {
-        out.push(block(x0, x1, y0, FIELD_ROWS as i16, hi));
+    for &(x0, x1, y0, _, hi, m) in &runs[..open] {
+        out.push(block(x0, x1, y0, FIELD_ROWS as i16, hi, m));
     }
 }
 
@@ -248,8 +297,8 @@ fn drawn_width(c: &jane_art::Canvas) -> i32 {
 }
 
 /// A block over columns `x0..x1` and rows `y0..y1`, a px wider each side (T2's terrain).
-fn block(x0: i16, x1: i16, y0: i16, y1: i16, height: u8) -> Block {
-    Block { x0: x0 - 1, y0, x1: x1 + 1, y1, height }
+fn block(x0: i16, x1: i16, y0: i16, y1: i16, height: u8, mask: u32) -> Block {
+    Block { x0: x0 - 1, y0, x1: x1 + 1, y1, height, mask }
 }
 
 impl Terrain {
@@ -286,6 +335,7 @@ impl Terrain {
             blocks: (0..slots).map(|_| Vec::with_capacity(BLOCKS)).collect(),
             field: Vec::with_capacity((CHUNK_PX * FIELD_ROWS) as usize),
             runs: Vec::with_capacity(512),
+            masks: Vec::with_capacity((CHUNK_PX * FIELD_ROWS) as usize),
             windows: (0..slots).map(|_| Vec::new()).collect(),
         }
     }
@@ -373,7 +423,7 @@ impl Terrain {
     pub fn stand(&mut self, slot: u16, layers: &ChunkLayers) {
         let out = &mut self.blocks[usize::from(slot)];
         if layers.has_height() {
-            blocks(&layers.height, &mut self.field, &mut self.runs, out);
+            blocks(&layers.height, &mut self.field, &mut self.masks, &mut self.runs, out);
         } else {
             out.clear();
         }
@@ -447,10 +497,53 @@ mod tests {
         }
         h[200 * side + 150] = 5;
         h[200 * side + 160] = 8;
-        let (mut field, mut runs, mut out) = (Vec::new(), Vec::new(), Vec::new());
-        blocks(&h, &mut field, &mut runs, &mut out);
+        let (mut field, mut masks, mut runs, mut out) = (Vec::new(), Vec::new(), Vec::new(), Vec::new());
+        blocks(&h, &mut field, &mut masks, &mut runs, &mut out);
         // The roof lands 48 rows down, on the face's foot: the house's ground is rows 107 to
         // 148, and every px of its face and roof stands on it, a px wider each side.
-        assert_eq!(out, [Block { x0: 15, y0: 107, x1: 97, y1: 149, height: 60 }]);
+        assert_eq!(out, [Block { x0: 15, y0: 107, x1: 97, y1: 149, height: 60, mask: 0 }]);
+    }
+
+    #[test]
+    fn a_fences_rails_are_bars_over_open_ground_and_a_hedge_is_solid() {
+        // A post-and-rail fence across the chunk as `standing::fence` draws it, its foot on row
+        // 99: rails on rows 82..85 and 90..93 (21 to 18 px and 11 to 8), a post 6 px wide down
+        // to the foot; and a hedge cell to the right, a crown at 9 px over a face of 7 rows.
+        let side = CHUNK_PX as usize;
+        let mut h = vec![1u8; side * side];
+        for x in 10..120 {
+            for y in [82, 83, 84, 90, 91, 92] {
+                h[y * side + x] = height_of_rows(99 - y as i32) as u8;
+            }
+        }
+        // A tuft of relief 5 px high under the lower rail (the house_front fence has them): the
+        // rail's run ends at its own lowest px, 8, not on down the tuft to the ground.
+        for x in 20..40 {
+            h[93 * side + x] = 5;
+        }
+        for x in 60..66 {
+            for y in 76..100 {
+                h[y * side + x] = height_of_rows(99 - y as i32).max(1) as u8;
+            }
+        }
+        for y in 140..160 {
+            for x in 140..160 {
+                h[y * side + x] = if y < 153 { 9 } else { height_of_rows(160 - y as i32).max(1) as u8 };
+            }
+        }
+        let (mut field, mut masks, mut runs, mut out) = (Vec::new(), Vec::new(), Vec::new(), Vec::new());
+        blocks(&h, &mut field, &mut masks, &mut runs, &mut out);
+        let at = |x: i16, y: i16| out.iter().find(|b| b.x0 <= x && x < b.x1 && b.y0 <= y && y < b.y1).copied();
+        // The rails' block: two bars, 18 to 21 and 8 to 11 px, nothing under the lower one
+        // nor between them.
+        let rails = at(30, 98).unwrap();
+        assert_eq!(rails.height, 21);
+        assert_eq!(rails.mask, (1 << 4) | (1 << 5) | (1 << 9) | (1 << 10), "{:#b}", rails.mask);
+        // The post's, solid from the ground to its top; the hedge's to its crown: solid is 0.
+        let post = at(62, 98).unwrap();
+        assert_eq!((post.height, post.mask), (28, 0), "{:#b}", post.mask);
+        let hedge = at(150, 158).unwrap();
+        assert_eq!((hedge.height, hedge.mask), (9, 0), "{:#b}", hedge.mask);
+        assert!(crate::shadow::spills(&rails) && crate::shadow::spills(&post) && crate::shadow::spills(&hedge));
     }
 }

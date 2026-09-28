@@ -98,6 +98,9 @@ const RELIEF: f32 = 8.0;
 // marked `THIN_ID` in the field's id and thrown by the sun as if it stood at least `SPILL_SOUTH`
 // (sin 20 degrees) of its light's flat length north, so its shadow spills south of what casts
 // it and shows, where the true one lies behind its rails. T0 and T1 do the same by the block.
+// The spill is thrown from what of each marked texel is matter (the field's third word, a bit
+// every 2 px up: a fence's rails are two bars over open ground, a hedge solid), and lies on the
+// ground alone.
 const THIN_ID: u32 = 0xffffu;
 const THIN: i32 = 4;
 const SPILL_LOW: f32 = 10.0;

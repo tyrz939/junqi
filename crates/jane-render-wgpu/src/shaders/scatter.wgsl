@@ -23,6 +23,39 @@
 
 // A run whose lowest px is this high or lower stands on the ground: the feet, a trunk's root.
 const FLOAT: f32 = 6.5;
+// How much lower the next terrain px down a run may be and still go on from it, and how far a
+// run is walked (`jane_present::terrain::run_bottom`'s `RUN_DROP`, `RUN_WALK`).
+const RUN_DROP: u32 = 2u;
+const RUN_WALK: i32 = 48;
+
+// The bottom of the run of terrain px the px at `(x, y)`, `h` high, is part of (the fence rule's
+// matter, `common.wgsl`): down the drawing while the next px goes on from it, no higher and at
+// most `RUN_DROP` lower (an upright face, a level rail); 0 if it comes down to the ground. A
+// sprite drawn over it ends the walk.
+fn terrain_bottom(x: i32, y: i32, h: u32) -> u32 {
+    let hh = i32(g.full.y);
+    var low = h;
+    for (var k = 1; k <= RUN_WALK; k++) {
+        let yy = y + k;
+        if yy >= hh || textureLoad(gid, vec2<i32>(x, yy), 0).r != 0u {
+            break;
+        }
+        let next = u32(round(textureLoad(gnh, vec2<i32>(x, yy), 0).b * 255.0));
+        if next > low + 1u || next + RUN_DROP < low {
+            break;
+        }
+        low = next;
+    }
+    return select(low, 0u, f32(low) <= FLOAT);
+}
+
+// The matter bits of a run from `lo` to `hi` px up: bit `i` for `2i` to `2i + 2`
+// (`jane_present::terrain::mask_of`).
+fn mask_of(lo: u32, hi: u32) -> u32 {
+    let a = min(lo / 2u, 31u);
+    let b = min(hi / 2u, 31u);
+    return (0xffffffffu >> (31u - b)) & (0xffffffffu << a);
+}
 // How far down the screen a run is followed; past it, it is taken to stand on the ground.
 const WALK: i32 = 192;
 
@@ -118,9 +151,13 @@ fn scatter(@builtin(global_invocation_id) id: vec3<u32>) {
     }
     var d = max(depth, 1u);
     var lo = 0u;
+    // The terrain's matter by height where it may spill (the fence rule); the field's third word.
+    var matter = 0u;
     if who != 0u {
         lo = u32(round(run_bottom(i32(id.x), i32(id.y), f32(h), who)));
         d = footprint(i32(id.x), i32(id.y), who, d);
+    } else if f32(h) <= SPILL_TOP {
+        matter = mask_of(terrain_bottom(i32(id.x), i32(id.y), h), h);
     }
     // Its footprint is behind the row it stands on: a sprite's lowest px is the front of what it
     // stands on, so the ground drawn in front of its foot is never inside it (a bush's footprint
@@ -142,6 +179,9 @@ fn scatter(@builtin(global_invocation_id) id: vec3<u32>) {
                 let i = u32(y) * w + u32(x);
                 atomicMax(&hmap[i], packed);
                 atomicMax(&hmap[n + i], 256u - min(lo, h));
+                if matter != 0u {
+                    atomicOr(&hmap[2u * n + i], matter);
+                }
             }
         }
     }
