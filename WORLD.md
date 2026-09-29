@@ -460,6 +460,18 @@ Cross-region references that must agree. Each row is an L5 cohesion check: the s
 | The statue | The lake; W9; W15; Mother's Garden | Two statues (the lake's, the garden's), each with its own turn; never confused in a line |
 | North | Every School line | The School is north of every Lowfields place on every seed; "north" is the only bearing text may use |
 
+### 8.3 Where things are kept
+
+A county that hands her keys she must not throw away and gold bars nobody buys gives her somewhere to put them down. **Cupboards** (a prop row with `store`, `jane_sim::store`) keep 24 slots each; what is in one belongs to the world and the whole party, saved with it. Anything goes in, keys and a quest's things included; what is in a cupboard is not in her bag, so nothing that asks her to *hold* a thing sees it there. They stand where a person would keep things, never in a dungeon:
+
+| Where | Which | Stands |
+| --- | --- | --- |
+| Julie's house, the kitchen | Julie's dresser (`julies_dresser`) | Against the north wall between the two hatches, plates on its rack |
+| Julie's house, the front room | Her cupboard (`julies_cupboard`) | Against the north wall by the bed, where the second shelf stood |
+| Julie's cellar, room A | A cupboard (`cellar_cupboard`) | On the north wall, left of the way in from the iron door |
+| The Castle Arms | A lodger's cupboard (`arms_cupboard`) | On the landing behind the partition, in the corner under it |
+| Castle Halt | Left Luggage (`left_luggage_locker`), a green locker | By the lost property, within 12 of its mark (`data/placements/lowfields.json`) |
+
 ---
 
 ## 9. Story, structured

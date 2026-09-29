@@ -10,6 +10,8 @@ pub const MAX_PLAYERS: usize = 4;
 pub const BAG_SLOTS: usize = 24;
 pub const BAR_SLOTS: usize = 8;
 pub const CRAFT_INPUTS: usize = 3;
+/// A cupboard's slots (`store.rs`): a whole bag goes into one.
+pub const STORE_SLOTS: usize = 24;
 
 /// `CreatureStatCalc`: max hp = strength x 5, max mp = spirit x 5.
 pub const HP_PER_STRENGTH: i32 = 5;

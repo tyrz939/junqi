@@ -415,6 +415,10 @@ pub enum UiAction {
     Right,
     TabLeft,
     TabRight,
+    /// At a cupboard: the lit thing across to the other side (X, or 2).
+    Quick,
+    /// At a cupboard: everything in the bag put away (Y, or 3).
+    QuickAll,
     Bags,
     Book,
     Quests,
@@ -720,6 +724,8 @@ fn edge_for(a: Action, mode: Mode, from_pad: bool) -> Option<Edge> {
             Action::Pause => Some(UiAction::Cancel),
             Action::Use if from_pad => Some(UiAction::Cancel),
             Action::Use | Action::Bar(0) => Some(UiAction::Confirm),
+            Action::Bar(1) => Some(UiAction::Quick),
+            Action::Bar(2) => Some(UiAction::QuickAll),
             Action::Bar(3) if from_pad => Some(UiAction::TabLeft),
             Action::Bar(4) if from_pad => Some(UiAction::TabRight),
             _ => None,
@@ -956,8 +962,12 @@ mod tests {
         dev.button(MouseButton::Left, true);
         let (f, edges) = sample(&mut input, &mut dev, &ui);
         assert_eq!((f.mv_mag, f.use_held, f.aim), (0, false, None));
-        // Scancode order: E, W, 3 (no bar in a screen), Return, Esc; the click is the screen's.
-        assert_eq!(edges, [UiAction::Confirm, UiAction::Up, UiAction::Confirm, UiAction::Cancel].map(Edge::Ui));
+        // Scancode order: E, W, 3 (no bar in a screen: at a cupboard, put all away), Return, Esc;
+        // the click is the screen's.
+        assert_eq!(
+            edges,
+            [UiAction::Confirm, UiAction::Up, UiAction::QuickAll, UiAction::Confirm, UiAction::Cancel].map(Edge::Ui)
+        );
         // Typing: only Esc and the console key are heard.
         let text = Context { mode: Mode::Text, feet: None };
         let mut dev = DeviceState::default();

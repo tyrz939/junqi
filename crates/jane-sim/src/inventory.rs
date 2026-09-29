@@ -6,7 +6,8 @@
 //! - **Bound items** (keys the story is using, Julie's letter) refuse to be destroyed, and so do
 //!   keys (anything that opens a lock) and anything that cannot be had again
 //!   (`ItemDef::replaceable`, worked out at build). There is no dropping from the bag, so
-//!   destroying is the one way a thing leaves it unasked.
+//!   destroying is the one way a thing leaves it unasked. What she may not destroy she can put
+//!   down in a cupboard (`store.rs`).
 //! - **Story items** (anything that opens a lock, anything a quest asks her to bring) are handed
 //!   on when their holder leaves (`seats.rs`) and never age out on the ground: what the party's
 //!   story needs held now, a rat's meat for a count as much as a key.

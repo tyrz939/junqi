@@ -10,7 +10,7 @@ use jane_core::{Angle, ItemId, QuestId, SpellId, Sym, ZoneId};
 use jane_data::BarSlot;
 use serde::{Deserialize, Serialize};
 
-use crate::ids::{ClientToken, Seat, UnitId};
+use crate::ids::{ClientToken, PropId, Seat, UnitId};
 use crate::tuning::MAX_PLAYERS;
 
 /// Which aim assist the seat plays with (§5.4).
@@ -120,7 +120,7 @@ pub enum DevOp {
 /// Handled: `Join`, `Leave`, `Open`, `Bind`, `Unbind`, `BarSwap`, `CloseDialogue`,
 /// `Dev(God | Tp | Time | Flag | Grow)` (seats); `Bar`, `Cast`, `Dev(Hp | Mp | Learn | Kill | Spawn)`
 /// (combat). The rest are no-ops until their owners land (interact: `Use`; inventory: `Item`,
-/// `Bag*`, `Craft*`, `Dev(Give)`, a bar slot holding an item; dialogue: `Advance`, `Choose`;
+/// `Bag*`, `Craft*`, `Dev(Give)`, a bar slot holding an item; store: `Store*`; dialogue: `Advance`, `Choose`;
 /// quests: `Dev(Quest)`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Command {
@@ -155,6 +155,29 @@ pub enum Command {
     },
     CraftClearAll,
     CraftTake,
+    /// Bag slot `bag` into cupboard `prop` (`store.rs`): onto its slot `to`, or wherever it
+    /// fits (`None`: a quick move, shift-click).
+    StorePut {
+        prop: PropId,
+        bag: u8,
+        to: Option<u8>,
+    },
+    /// Cupboard `prop`'s slot `slot` into her bag: onto bag slot `to`, or wherever it fits.
+    StoreTake {
+        prop: PropId,
+        slot: u8,
+        to: Option<u8>,
+    },
+    /// One of cupboard `prop`'s slots onto another.
+    StoreMove {
+        prop: PropId,
+        from: u8,
+        to: u8,
+    },
+    /// Everything in her bag that fits, into cupboard `prop`.
+    StorePutAll {
+        prop: PropId,
+    },
     Bind {
         slot: u8,
         to: BarSlotWire,

@@ -129,7 +129,8 @@ GameState { version, seed, frame: u32 /* step calls: the wire and replay clock *
   rest: Option<RestPoint>, growth { spells, strength, spirit, found: Vec<Sym> }, syms: SymTable,
   journal: Journal /* §3.7 */, weather: [WeatherState; 3] /* a sky per region, §4.6 */,
   consequences_done: BitVec /* one bit per ConsequenceId, §4.6 */, consequences_owed: Vec<(ZoneId, ConsequenceId)> /* edits waiting for their zone */,
-  rumours: BTreeMap<(NameId /* person */, StoryId), Tick /* since */> }
+  rumours: BTreeMap<(NameId /* person */, StoryId), Tick /* since */>,
+  stores: BTreeMap<(ZoneId, PropId), Box<[Option<Stack>; 24]>> /* the cupboards, the party's; a row only while something is in it */ }
 
 PlayerState { seat, who, unit: UnitId, zone, last_mark: NameId, respawn_at: Option<Tick>,
   bag: Box<[Option<Stack>; 24]>, bar: [Option<BarSlot>; 8], craft: [Option<Stack>; 3] /* hers: OFF the unit */,
@@ -175,8 +176,11 @@ StampedCommand { seat: Option<Seat> /* None = join */, seq: u16, cmd: Command }
 StepInput<'a> { frames: [InputFrame; 4], commands: &'a [StampedCommand] }   // sorted (seat, seq)
 
 enum Command { Use, Bar { slot, on }, Cast { spell, on }, Item(ItemId), BagMove, BagDestroy, CraftPut, CraftClear, CraftClearAll, CraftTake,
+  StorePut { prop, bag, to: Option<u8> }, StoreTake { prop, slot, to: Option<u8> }, StoreMove { prop, from, to }, StorePutAll { prop },
   Bind, Unbind, BarSwap, Advance, Choose, CloseDialogue, Join { who }, Leave, Open(bool), Dev(DevOp) }
 ```
+
+**Cupboards** (`store.rs`, decided 2026-09-29, SAVE_VERSION 10). A prop whose row says `store` (a cupboard, Julie's dresser, the left-luggage locker) keeps 24 slots stacked as a bag stacks. They are the **world's**, in `GameState.stores` keyed by zone and prop, shared by the whole party as the quests and the rest point are (bags stay each seat's own), saved and hashed with the rest; a cupboard emptied drops its row, so it saves as one never used. Anything may go in, keys, bound things and quest items included: it is how a bag full of keys and gold bars that cannot be destroyed is emptied. What is in a cupboard is not held: `Acquire`, `HasItem` and a lock's key all read the bags, and no step says otherwise. USE on one emits `Event::Store { prop }` to her alone and the window opens on it (PRESENTATION.md §3.2); every `Store*` command names the prop and is refused unless she stands within the bench's reach of it, alive, in its zone; `View::store(prop)` is `None` out of that reach. A move onto an empty slot goes whole, onto the same thing tops up (the rest stays), onto something else swaps; `to: None` tops up the other side's stacks and fills its first holes, and what does not fit stays put. `jane-sim/tests/store.rs` holds the round trip, a full bag put away keys and all (and no longer held for a quest), a save and load, and two seats sharing one cupboard.
 
 The client turns move and aim into `(Angle, magnitude)` with whatever arithmetic it likes and quantises; the sim never normalises. Facing from angle by the dominant axis; an exact 45° keeps the current axis (`faceVector`). `Sim.aims` is gone: a `Cast` at frame `f` reads `frames[seat].aim` of frame `f`, so the aim is in the record. The frame carries the raw aim and the assist profile, never an assisted angle: the sim resolves assist itself at cast time (§5.4), so a replay of the recorded frames reproduces every assisted cast exactly.
 
@@ -563,7 +567,7 @@ struct View<'a>   // one seat, her zone, read only
   focus() -> Option<Focus { target: FocusRef, verb: Verb /* Enter, TryTheDoor, Unlock, Open, PickUp, Craft, Read, Use, HoldToPush, Take(ItemId), Talk, PutDown, Custom(TextId) */, pushes: bool /* "(hold to push)" */ }>
   hud() -> Hud { hp, max_hp, mp, max_mp, energy, statuses, target: Option<(UnitId, Permille)> }
   dialogue() -> Option<DialogueView { speaker, lines: &[TextId], line, options: &[TextId], awaiting_choice }>
-  quests() -> impl Iterator<QuestView { id, counts }>, near_bench(), near_rest(), craft_output(), book(), marks(), rects(), debug()
+  quests() -> impl Iterator<QuestView { id, counts }>, near_bench(), near_rest(), craft_output(), store(prop) /* a cupboard in reach */, book(), marks(), rects(), debug()
   assisted_aim(frame, spell) -> Option<Angle>                                  // §5.4; the reticle draws it, the sim casts along it
   tick(), frame(), is_night(), learned(), sym(&str), name(Sym), mark(Sym), rect(Sym), triggers(), list(ListRef),
   unit(UnitId), props(), sight(a, b)                                           // what jane-bot's models read (§8), all derived
@@ -578,7 +582,7 @@ struct Event { to: Option<Seat>, in_zone: Option<ZoneId>, kind: EventKind }
 enum EventKind { Toast(ToastKind), Damage { unit, from, at, amount, school, crit, absorbed }, Heal, Death { unit, def, at }, Respawn,
   Cast { unit, spell, at }, CastFailed { unit, spell, why: SpellError }, Impact { spell, school, at }, Swing { unit, at, facing },
   Status { unit, effect, on }, Loot, Learn(SpellId),
-  Quest { quest, change }, Zone { zone, first }, Shake, Camera, Tiles(CellRect), Prop { prop, change }, Bag, Dialogue, PlayerDied, Rest,
+  Quest { quest, change }, Zone { zone, first }, Shake, Camera, Tiles(CellRect), Prop { prop, change }, Bag, Store { prop } /* hers: a cupboard opened */, Dialogue, PlayerDied, Rest,
   Sfx { kind, at }, Party { connected }, Journal(JournalKind), Weather { region, kind } /* personal: the sky over her changed */, Consequence(ConsequenceId) }
 
 enum ToastKind { Text(TextRef), QuestGiven(QuestId), QuestDone(QuestId), KillProgress { quest, req, n, of }, InventoryFull, TooTired, Needs { item, qty },

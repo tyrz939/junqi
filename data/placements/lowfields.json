@@ -53,6 +53,17 @@
     }
   },
   {
+    "key": "left_luggage_locker",
+    "at": {
+      "mark": "lost_property",
+      "within": 12
+    },
+    "prop": {
+      "def": "left_luggage_locker",
+      "label": "Left Luggage"
+    }
+  },
+  {
     "key": "night_parcel",
     "at": {
       "slot": "night_parcel"

@@ -22,7 +22,7 @@ use serde::{Deserialize, Serialize};
 use crate::codec;
 use crate::ids::{ClientToken, Counters, DropId, GroundId, ProjId, PropId, Seat, UnitId};
 use crate::sym::SymTable;
-use crate::tuning::{BAG_SLOTS, BAR_SLOTS, CRAFT_INPUTS};
+use crate::tuning::{BAG_SLOTS, BAR_SLOTS, CRAFT_INPUTS, STORE_SLOTS};
 
 /// The save and hash schema's version. Bumped by any change to a type in this module.
 ///
@@ -36,7 +36,8 @@ use crate::tuning::{BAG_SLOTS, BAR_SLOTS, CRAFT_INPUTS};
 /// 8: a zone's units and props are saved as what differs from its blueprint's spawn
 /// (`ZoneState::spawned`, `save::Form`), and the name tail as runs of blueprint locals.
 /// 9: food comes back (`Prop::regrow`, `regrow.rs`).
-pub const SAVE_VERSION: u16 = 9;
+/// 10: cupboards (`GameState::stores`, `store.rs`).
+pub const SAVE_VERSION: u16 = 10;
 
 /// A fixed-size bit set (trigger bits, consequences done).
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -133,7 +134,14 @@ pub struct GameState {
     /// Who hears of which story, from when (§4.6.e): written when one of the story's quests is
     /// first handed in, at that tick plus the row's `after`. A person keyed by a content name.
     pub rumours: BTreeMap<(NameId, StoryId), Tick>,
+    /// What is kept in the cupboards (`store.rs`), by zone and prop: the world's, so the whole
+    /// party shares one cupboard's shelves, as it shares the quests and the rest point (her bags
+    /// stay hers). Only a cupboard with something in it has a row; the last thing out removes it.
+    pub stores: BTreeMap<(ZoneId, PropId), Store>,
 }
+
+/// One cupboard's slots, stacked like a bag's (`bag.rs`).
+pub type Store = Box<[Option<Stack>; STORE_SLOTS]>;
 
 /// The three regions under their own skies (`jane_data::Region` order).
 pub const REGIONS: usize = 3;

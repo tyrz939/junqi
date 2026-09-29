@@ -112,6 +112,8 @@ struct RawProp {
     carry: bool,
     #[serde(default)]
     bench: bool,
+    #[serde(default)]
+    store: bool,
     answers: Option<String>,
     #[serde(default)]
     once: bool,
@@ -215,6 +217,7 @@ fn props(src: &Source, cx: &mut Ctx) -> &'static [PropDef] {
             push: r.push,
             carry: r.carry,
             bench: r.bench,
+            store: r.store,
             answers: ans,
             once: r.once,
             gate: r.gate,

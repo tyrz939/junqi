@@ -380,8 +380,10 @@ prop:cracked_wall_h 494de894
 prop:cracked_wall_v 7b3c6724
 prop:crate a835e6e7
 prop:crop bd05abe0
+prop:cupboard 528b556a
 prop:dinner_tin 2f3a09be
 prop:door 9a0510f0
+prop:dresser 3e11b798
 prop:dry_tree 36128a71
 prop:factory_rack 0466c23e
 prop:factory_shutter_h 4aa16b8c
@@ -418,6 +420,7 @@ prop:lamp_cage_s a1981a71
 prop:lamp_cage_w 3808317a
 prop:lamp_post 2776dfd9
 prop:leaning_ladder 96632249
+prop:left_luggage_locker 29365bce
 prop:lever 91f439b5
 prop:log 5e39dfe9
 prop:lost_property_desk 2da01698

@@ -93,6 +93,7 @@ impl Sim {
             weather: crate::living::first_skies(),
             consequences_done: Bits::new(jane_data::catalog().living.consequences.len() as u32),
             consequences_owed: Vec::new(),
+            stores: std::collections::BTreeMap::new(),
             rumours: BTreeMap::new(),
         };
         // The world stream's first draws: which of the county's claims are true (omens.rs).
