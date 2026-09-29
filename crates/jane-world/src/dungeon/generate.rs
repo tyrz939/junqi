@@ -840,12 +840,14 @@ impl Gen<'_> {
                 };
                 let (d, x, y) = self.door_at(node, di);
                 let (ox, oy) = out(d.side);
+                // The first row of floor in from the wall; if a room dresses that row (the
+                // library's shelves), the row inside it.
                 let spots = if matches!(d.side, RoomSide::N | RoomSide::S) {
                     let row = y - oy;
-                    [(x + 3, row), (x - 2 - bw, row)]
+                    [(x + 3, row), (x - 2 - bw, row), (x + 3, row - oy), (x - 2 - bw, row - oy)]
                 } else {
                     let col = if ox < 0 { x + 1 } else { x - bw };
-                    [(col, y + 3), (col, y - 3)]
+                    [(col, y + 3), (col, y - 3), (col - ox, y + 3), (col - ox, y - 3)]
                 };
                 let Some(&(bx, by)) = spots.iter().find(|&&(bx, by)| self.k.fits(bx, by, bw, bh)) else { continue };
                 let key = self.key_for(&format!("{}_{}_board_{n}", m.id, m.nodes[node].id));

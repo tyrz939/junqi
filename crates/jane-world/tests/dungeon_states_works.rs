@@ -77,8 +77,7 @@ fn no_state_of_the_factory_the_museum_the_library_or_the_pipes_strands_her() {
             most = most.max(v.states);
             assert!(v.stranded.is_empty(), "{zone:?} seed {seed}, {} states:\n{}", v.states, v.stranded.join("\n"));
         }
-        // The Library has no lock at all: one state is the whole of it.
-        assert!(most > 1 || zone == ZoneId::Library, "{zone:?}: only {most} states searched");
+        assert!(most > 10, "{zone:?}: only {most} states searched");
     }
 }
 

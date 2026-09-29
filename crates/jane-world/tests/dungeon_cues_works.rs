@@ -155,3 +155,24 @@ fn the_pipes_say_which_penstock_the_valve_lifts_and_where_the_outfall_comes_up()
     assert!(said.iter().any(|t| t.contains("WEST RUN") && t.contains("penstock lifts")), "{said:?}");
     assert!(said.iter().any(|t| t.contains("EAST RUN drains, and its penstock lifts")), "{said:?}");
 }
+
+#[test]
+fn every_way_on_from_the_librarys_desk_and_stacks_has_its_name_beside_it() {
+    boards_by_every_way_on(ZoneId::Library, "notice_library");
+}
+
+#[test]
+fn the_library_says_where_the_steps_go_and_where_the_last_book_is() {
+    // The page is out of reach until the library steps stand on the plate.
+    assert!(lines_of("board_library_stacks").contains("put back on their mark"));
+    assert!(lines_of("board_library_shelf").contains("one left"));
+    let cat = catalog();
+    let b = build(ZoneId::Library, 1);
+    let page = jane_core::Key::Name(cat.name_id("library_page").expect("the page"));
+    let page = b.blueprint.props.iter().find(|p| p.key == page).expect("the stacks' page");
+    let label = page.label.map(|l| match l {
+        jane_core::TextRef::Text(t) => cat.text(t),
+        jane_core::TextRef::Local(_) => "",
+    });
+    assert_eq!(label, Some("A page on the top shelf"));
+}

@@ -26,7 +26,7 @@
       "id": "stacks", "kind": "hub", "order": 1, "critical": true, "pool": "library.stacks", "heat": 0,
       "holds": [
         { "socket": "plate:main", "prop": "plate", "use": [{ "do": "unlock", "prop": "@page:reward" }], "release": [{ "do": "lock", "prop": "@page:reward" }] },
-        { "socket": "page:reward", "prop": "leaf_page", "locked": true, "label": "The pressed page" },
+        { "socket": "page:reward", "prop": "leaf_page", "locked": true, "label": "A page on the top shelf" },
         { "socket": "push:main", "prop": "crate", "label": "Library steps" }
       ],
       "binds": [

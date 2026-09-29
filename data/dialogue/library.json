@@ -17,7 +17,7 @@
     "nodes": {
       "read": {
         "lines": [
-          "CASTLE LENDING LIBRARY. Tuesday to Saturday, nine until six. Reading room through the stacks.",
+          "CASTLE LENDING LIBRARY. Tuesday to Saturday, nine until six. The STACKS off the LENDING DESK; the READING ROOM and REFERENCE off the STACKS, and REFERENCE opens onto the LENDING DESK as well.",
           "Books are not to leave the building. Neither is anyone, after six.",
           "Underneath, in pencil: the roof came in on the fourteenth. Nobody has been up to look."
         ]
@@ -52,5 +52,9 @@
         "actions": [{ "do": "rest" }]
       }
     }
-  }
+  },
+  "board_library_entry": {"speaker": "LENDING DESK", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["LENDING DESK. Tickets to be shown going out."]}}},
+  "board_library_stacks": {"speaker": "STACKS", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["STACKS. The library steps are to be put back on their mark after use."]}}},
+  "board_library_nook": {"speaker": "READING ROOM", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["READING ROOM. Silence."]}}},
+  "board_library_shelf": {"speaker": "REFERENCE", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["REFERENCE. Books are not to be taken out.", "Under it, in pencil: one left. The roof came in over it on the fourteenth."]}}}
 }
