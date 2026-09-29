@@ -127,6 +127,8 @@ pub struct Crawl {
     school: crate::tactics::school::School,
     /// The Burial: whether she has stood still getting nowhere (`tactics::burial::Watch`).
     watch: crate::tactics::burial::Watch,
+    /// Baited creatures seen standing (`burial::keep_off`), the last time she chose.
+    baited: Option<usize>,
     /// Out, when done, by a door into this dungeon if one is to hand, not to the county (the
     /// story sets it: the pipes' outfall, up into the Factory the quest goes to next).
     pub leave_to: Option<ZoneId>,
@@ -291,6 +293,7 @@ impl Crawl {
             mine: crate::tactics::mine::Mine::default(),
             school: crate::tactics::school::School::default(),
             watch: crate::tactics::burial::Watch::default(),
+            baited: None,
             growth: std::collections::BTreeSet::new(),
             held: None,
             leave_to: None,
@@ -869,6 +872,16 @@ impl Crawl {
     }
 
     fn choose(&mut self, v: &View<'_>, cx: &Ctx, sig: u64) -> Option<(Task, Try)> {
+        // A baited creature's notice is ground she keeps off: what she could find no side of while
+        // it stood (the Burial's lurker chest, inside the lurkers' notice) is tried afresh once one
+        // has eaten and died, however often it failed before.
+        let cat = jane_data::catalog();
+        let baited =
+            crate::sense::enemies(v).iter().filter(|u| u.alive && cat.combat.unit(u.def).bait.is_some()).count();
+        if self.baited.is_some_and(|b| baited < b) {
+            self.tried.retain(|w, _| !matches!(w, Try::Prop(_) | Try::Pickup(_)));
+        }
+        self.baited = Some(baited);
         // The School: the sick bay fire first; the rope and the beds when nothing else is left.
         if v.zone() == ZoneId::School {
             let mut s = std::mem::take(&mut self.school);
