@@ -285,6 +285,9 @@ pub struct ZoneRuntime {
     /// The blueprint's region map (the county's; empty elsewhere): whose sky and ramp a cell is
     /// under (`region_at`).
     pub regions: jane_core::RegionMap,
+    /// The soonest `Prop::regrow` of the zone's props (`regrow.rs`), so housekeeping looks at
+    /// the props only when some food is due back.
+    pub regrow_next: Option<jane_core::Tick>,
 }
 
 impl ZoneRuntime {
@@ -333,6 +336,7 @@ impl ZoneRuntime {
             paths_this_tick: 0,
             fog: FogGeom::of(bp),
             regions: bp.regions.clone(),
+            regrow_next: crate::regrow::soonest(zone),
         };
         for (i, p) in zone.props.iter().enumerate() {
             rt.index_prop(i as PropIx, p);

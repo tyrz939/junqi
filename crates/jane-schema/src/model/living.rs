@@ -7,7 +7,7 @@
 //! (a kill adds its row's `weight`, every ten game minutes the area's `recover` comes off, give
 //! or take half).
 
-use jane_core::action::{Condition, ListRef};
+use jane_core::action::{Condition, ListRef, Stack};
 use jane_core::ids::{NameId, TextId, UnitDefId, ZoneId};
 use jane_core::num::Tick;
 
@@ -140,6 +140,27 @@ model! {
 }
 
 model! {
+    /// A named larder that fills again (`data/tuning/sim.json` `regrow.restock`): once emptied,
+    /// `loot` is in it again when its time comes, whatever it first held.
+    pub struct Restock {
+        /// The prop's content name (`pantry_chest`, `fruit_bowl`).
+        pub prop: NameId,
+        pub loot: &'static [Stack],
+    }
+}
+
+model! {
+    /// Food that comes back (`data/tuning/sim.json` `regrow`, WORLD.md §4.6): an emptied source
+    /// (a prop whose def is `regrow`, or a named `restock` larder) is full again `days` game days
+    /// after it was emptied, give or take half a day by the prop's own id.
+    pub struct RegrowTuning {
+        /// Whole game days, at least 1.
+        pub days: u8,
+        pub restock: &'static [Restock],
+    }
+}
+
+model! {
     /// `data/tuning/sim.json`: the sim's numbers that are content.
     pub struct SimTuning {
         /// Journal entries kept per kind (ARCHITECTURE.md §3.7, §12).
@@ -147,6 +168,7 @@ model! {
         pub wetness: WetnessTuning,
         /// Hours from New Game in which the sky stays clear whatever is drawn (the first walk).
         pub clear_hours: u8,
+        pub regrow: RegrowTuning,
     }
 }
 

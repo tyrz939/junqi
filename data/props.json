@@ -35,7 +35,7 @@
   "pillar": { "name": "Pillar", "sprite": "pillar", "w": 2, "h": 2, "base": 1, "solid": true, "blockLos": true },
   "coffin": { "name": "Coffin", "sprite": "coffin", "w": 2, "h": 3, "solid": true, "blockLos": false },
   "car_wreck": { "name": "Abandoned Car", "sprite": "car_wreck", "w": 5, "h": 3, "base": 2, "solid": true, "blockLos": false, "prompt": "Search" },
-  "apple_tree": { "name": "Apple Tree", "sprite": "apple_tree", "w": 2, "h": 2, "base": 1, "solid": true, "blockLos": true, "prompt": "Pick" },
+  "apple_tree": { "name": "Apple Tree", "sprite": "apple_tree", "w": 2, "h": 2, "base": 1, "solid": true, "blockLos": true, "prompt": "Pick", "regrow": true },
   "herb": { "name": "Herb", "sprite": "herb", "w": 1, "h": 1, "solid": false, "blockLos": false, "flat": true, "hideWhenUsed": true, "prompt": "Gather" },
   "rose": { "name": "White Water Rose", "sprite": "rose", "w": 1, "h": 1, "solid": false, "blockLos": false, "flat": true, "hideWhenUsed": true, "prompt": "Gather" },
   "minecart": { "name": "Minecart", "sprite": "minecart", "w": 2, "h": 2, "base": 1, "solid": true, "blockLos": false }

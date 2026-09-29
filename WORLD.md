@@ -263,6 +263,10 @@ One thing per region walks a road at night, announced by a sign first (`QUESTS.m
 
 **Rule: nothing respawns on a timer. Populations recover toward `cap` at a `recover` rate per area, every ten game minutes, and the rate is a row.** A creature a patch's row names stands up at the next ten-minute mark after it falls, when the ecology looks, if the patch is under its line; one no row names yet keeps its row's `respawn` until its patch is written. A patch she cleared is quieter for a day; a patch whose reason she removed (the rats' food, the camp's fire, the shift relieved) stays cleared through a consequence (§6). Bosses and named creatures never return (`respawn: 0`). Nothing stands up in view.
 
+### 4.6 Food that comes back
+
+*(Decided 2026-09-29.)* **Rule: the county's food returns every few days; nothing else does.** An apple tree or a windfall she empties (a prop def with `regrow`) holds what its spawn row held again `regrow.days` game days later (3), give or take half a day by the prop's own id, so an orchard comes back a tree at a time and not in one minute. Julie's larders fill again on the same clock with a few staples, not with what they first held (`regrow.restock` in `data/tuning/sim.json`: the pantry chest two vials of water and two bunches of grapes, the fruit bowl two apples; the potion makings do not come back). The clock starts when the source is emptied and runs through a bed's night; a zone nobody is in fills up the moment she walks in. It is the world's, so a tree one seat stripped is bare for the others. Small amounts, spread out: food is findable, never a farm. Herbs are makings, not food, and do not return; a dungeon's chest is as it was designed. `jane-sim` `regrow.rs`, saved as `Prop::regrow`.
+
 ---
 
 ## 5. Weather and atmosphere

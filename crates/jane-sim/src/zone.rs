@@ -93,6 +93,7 @@ pub fn spawn_prop(s: &PropSpawn, i: u16, id: PropId, key: Sym) -> Prop {
         on: s.on,
         loot: LootState::AsSpawned,
         under_done: false,
+        regrow: None,
         night: crate::state::NightState::AsSpawned,
     }
 }
