@@ -178,7 +178,7 @@
               "else": [
                 {
                   "do": "toast",
-                  "text": "It rings the period and nothing else. The tower is locked and there are clocks in this building still going."
+                  "text": "It rings the period and nothing else. The tower stays locked while a classroom clock is still going, or while its key is on the Caretaker's ring."
                 }
               ]
             }

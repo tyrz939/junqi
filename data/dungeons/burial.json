@@ -39,9 +39,9 @@
               "then": [
                 { "do": "flag", "flag": "burial_four" },
                 { "do": "shake", "amount": 3 },
-                { "do": "toast", "text": "The seal turns. Something in the back wall of the hall lets go of it." }
+                { "do": "toast", "text": "The seal turns. Off THE HALL, something lets go of GNOX GOLDSKIN's door." }
               ],
-              "else": [{ "do": "toast", "text": "Four names are cut into it. It will not turn yet." }]
+              "else": [{ "do": "toast", "text": "Four names are cut into it: the keeper of his snakes, his gardener, his housekeeper, his soldier. It will not turn while any of them is standing." }]
             }
           ]
         },
@@ -53,7 +53,7 @@
           "socket": "prop:door_brazier", "prop": "brazier", "label": "Brazier",
           "use": [
             { "do": "flag", "flag": "burial_south" },
-            { "do": "toast", "text": "Warm light, for the first time down here. The south passage is open behind it." }
+            { "do": "toast", "text": "Warm light, for the first time down here. Off THE HALL, the door to THE LONG ROOM goes back." }
           ]
         }
       ],
@@ -418,11 +418,11 @@
       }
     },
     { "from": "web", "to": "nursery", "kind": { "t": "open" }, "also": [{ "t": "lockin", "gateAs": "gate_nursery", "toast": "The way out fills with web behind you." }] },
-    { "from": "hall", "to": "dark", "kind": { "t": "oneway", "how": "opens_on", "flag": "burial_south", "gateAs": "gate_dark", "label": "The south passage" } },
+    { "from": "hall", "to": "dark", "kind": { "t": "oneway", "how": "opens_on", "flag": "burial_south", "gateAs": "gate_dark", "label": "THE LONG ROOM" } },
     { "from": "dark", "to": "parade", "kind": { "t": "open" }, "also": [{ "t": "lockin", "gateAs": "gate_parade", "toast": "The gate drops behind you. Somebody has swept this floor." }] },
     {
       "from": "hall", "to": "vault",
-      "kind": { "t": "oneway", "how": "opens_on", "flag": "burial_four", "gateAs": "gate_wizard", "label": "The wizard's door" },
+      "kind": { "t": "oneway", "how": "opens_on", "flag": "burial_four", "gateAs": "gate_wizard", "label": "GNOX GOLDSKIN's door" },
       "also": [{ "t": "lockin", "toast": "The door goes back the way it came. He was already standing." }]
     },
     { "from": "vault", "to": "stair", "kind": { "t": "oneway", "how": "opens_on", "flag": "burial_cleared", "gateAs": "gate_stair" } },

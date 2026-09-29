@@ -5,9 +5,11 @@
     "nodes": {
       "read": {
         "lines": [
-          "CASTLE SCHOOL: TIMETABLE. Woodwork, Chemistry and Botany are taught in lesson time. Physics, Domestic Science and the sixth period at break.",
-          "The sixth period has no subject against it. Someone has drawn a snowflake there, in the same hand, in ink.",
-          "Periods are rung from the hall. The rope is by the stair and it is kept up to date."
+          "CASTLE SCHOOL: TIMETABLE. WOODWORK, CHEMISTRY and BOTANY are taught in lesson time, BOTANY in daylight only. PHYSICS, DOMESTIC SCIENCE and the sixth period at break. LOST PROPERTY is open at break.",
+          "The sixth period has no subject against it. Someone has drawn a snowflake there, in the same hand, in ink. Against it, in pencil: THE ICE HOUSE.",
+          "Periods are rung from THE HALL. The rope is by the stair and it is kept up to date.",
+          "The BOILER ROOM stair comes up into THE HALL. SICK BAY, the LOWER CORRIDOR, the UPPER CORRIDOR and the TOWER are off THE HALL. WOODWORK, CHEMISTRY, PHYSICS and LOST PROPERTY are off the LOWER CORRIDOR; BOTANY, DOMESTIC SCIENCE, THE ICE HOUSE and the STAFF ROOM off the UPPER CORRIDOR.",
+          "Each classroom clock is stopped at the end of its lesson. The TOWER is opened from the rope once every clock has stopped, by whoever holds its key. The Caretaker keeps the key, and does his rounds of the LOWER CORRIDOR after the bell at nine."
         ]
       }
     }
@@ -100,5 +102,18 @@
         ]
       }
     }
-  }
+  },
+  "board_school_boiler": {"speaker": "BOILER ROOM", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["BOILER ROOM. Caretaker only."]}}},
+  "board_school_hall": {"speaker": "THE HALL", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["THE HALL. Periods are rung from the rope by the stair."]}}},
+  "board_school_sick_bay": {"speaker": "SICK BAY", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["SICK BAY. Knock and come in."]}}},
+  "board_school_corridor": {"speaker": "LOWER CORRIDOR", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["LOWER CORRIDOR. WOODWORK, CHEMISTRY, PHYSICS, LOST PROPERTY.", "Walk, do not run. The Caretaker does his rounds here after the bell at nine."]}}},
+  "board_school_top_corridor": {"speaker": "UPPER CORRIDOR", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["UPPER CORRIDOR. BOTANY, DOMESTIC SCIENCE, THE ICE HOUSE, STAFF ROOM."]}}},
+  "board_school_tower": {"speaker": "TOWER", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["TOWER. No pupils.", "Opened from the rope by whoever holds the key, once every classroom clock has stopped. The key is the Caretaker's."]}}},
+  "board_school_woodwork": {"speaker": "WOODWORK", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["WOODWORK. Lesson time. Mind the floor."]}}},
+  "board_school_chemistry": {"speaker": "CHEMISTRY", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["CHEMISTRY. Lesson time. The fume cupboards are sealed."]}}},
+  "board_school_botany": {"speaker": "BOTANY", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["BOTANY. Lesson time, in daylight only."]}}},
+  "board_school_physics": {"speaker": "PHYSICS", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["PHYSICS. Break. The board is dead until it is fed."]}}},
+  "board_school_domestic": {"speaker": "DOMESTIC SCIENCE", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["DOMESTIC SCIENCE. Break. The ranges are to be lit before the lesson."]}}},
+  "board_school_ice_house": {"speaker": "THE ICE HOUSE", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["THE ICE HOUSE. Break.", "A snowflake is chalked beside the name."]}}},
+  "board_school_lost_property": {"speaker": "LOST PROPERTY", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["LOST PROPERTY. Break."]}}}
 }

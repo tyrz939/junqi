@@ -104,6 +104,15 @@ fn the_factorys_plan_the_press_hall_and_the_quest_log_say_where_the_foreman_is()
     let cat = catalog();
     let key = cat.combat.item(cat.combat.item_id("key_shop").expect("the shop key"));
     assert!(cat.text(key.description).contains("Factory floor"));
+    // The press hall's power shutter is named beside its door (a door a state lifts is boarded
+    // from any room), wherever the seed keeps the stores.
+    let stores = cat.story.dialogue_id("board_factory_stores").expect("the stores board row");
+    for seed in 1..=16 {
+        let b = build(ZoneId::Factory, seed);
+        let kept = b.info.rooms.iter().any(|r| b.info.mission.nodes[r.node].id == "stores");
+        let boarded = b.blueprint.props.iter().any(|p| p.talk == Some(stores));
+        assert_eq!(boarded, kept, "seed {seed}");
+    }
 }
 
 #[test]

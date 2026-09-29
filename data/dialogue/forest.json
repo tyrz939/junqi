@@ -7,6 +7,8 @@
         "lines": [
           "BUTTERFLY FOREST. A public garden of the county council. Open from sunrise to sunset.",
           "Do not pick the flowers. Visitors are counted in at the gate and counted out again.",
+          "Under it, the plan of the gardens as they were. THE LAWN is inside THE GATE, and THE KEEPER'S HUT past it. THE RIDES go round the hut, and off them THE HEARTH, THE ROCKERY, THE MAZE, THE WATER GARDEN and THE STANDING STONE.",
+          "THE ROSE WALK is across THE WATER GARDEN, and THE GROTTO through THE MAZE. Butterflies are released at THE STANDING STONE, five at a time. Nets from THE KEEPER'S HUT.",
           "Below, on a newer board in a different hand: the paths have grown over. Keep to the light."
         ]
       }
@@ -171,5 +173,14 @@
       }
     }
   },
-  "road_butterfly": {"speaker": "Butterfly", "start": [{"node": "a"}], "nodes": {"a": {"lines": ["A butterfly over the road by the forest gate. Its colours are the ones that floated past the window in the tunnel.", "It keeps a little way ahead of you, and then goes back toward the gate, as if it had been told how far to come."]}}}
+  "road_butterfly": {"speaker": "Butterfly", "start": [{"node": "a"}], "nodes": {"a": {"lines": ["A butterfly over the road by the forest gate. Its colours are the ones that floated past the window in the tunnel.", "It keeps a little way ahead of you, and then goes back toward the gate, as if it had been told how far to come."]}}},
+  "board_forest_gate": {"speaker": "THE GATE", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["THE GATE. Visitors are counted out here."]}}},
+  "board_forest_first_glade": {"speaker": "THE LAWN", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["THE LAWN. The beds are planted where the sun comes down."]}}},
+  "board_forest_hut": {"speaker": "THE KEEPER'S HUT", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["THE KEEPER'S HUT. Nets are issued here."]}}},
+  "board_forest_ring": {"speaker": "THE RIDES", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["THE RIDES. Every garden opens off the rides."]}}},
+  "board_forest_hearth": {"speaker": "THE HEARTH", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["THE HEARTH. A charcoal burner's. Visitors may rest by it."]}}},
+  "board_forest_rock": {"speaker": "THE ROCKERY", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["THE ROCKERY. Mind the loose stone."]}}},
+  "board_forest_runner": {"speaker": "THE MAZE", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["THE MAZE. Visitors are asked not to cut through the hedges."]}}},
+  "board_forest_island": {"speaker": "THE WATER GARDEN", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["THE WATER GARDEN. The footbridge is closed for repair."]}}},
+  "board_forest_stone": {"speaker": "THE STANDING STONE", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["THE STANDING STONE. Butterflies are released here, five at a time.", "The path up to it has gone to bare earth."]}}}
 }

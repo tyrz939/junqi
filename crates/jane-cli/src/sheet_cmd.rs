@@ -41,7 +41,8 @@ pub const USAGE: &str = "  sheet layers <what> [--frame F] [--out DIR]
                                       frame is drawn headless through the presenter and soft (T0), or
                                       gl2 (T1, a hidden window's GL context) or wgpu (T2) with the gpu
                                       feature; --night sets the clock to 22:00 first; --at travels to a
-                                      zone's mark (its way in by default; a bare mark is the county's)
+                                      zone's mark (its way in by default; a bare mark is the county's;
+                                      a dungeon's room by its node; ZONE:X,Y a cell)
                                       first, god on: a frame inside a dungeon; --weather holds the sky;
                                       --cast casts east (--spawn puts a unit in its way); --rows sets Features rows; --film writes N more
                                       ticks' frames; --wide draws 21:9 (1008 x 432); --crop and --zoom

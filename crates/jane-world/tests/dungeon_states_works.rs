@@ -63,7 +63,7 @@ fn outside(zone: ZoneId) -> Vec<NameId> {
 fn verdict(zone: ZoneId, b: &Built) -> states::Verdict {
     let m = b.info.mission;
     let dropped = b.info.layout.as_ref().map_or(&[][..], |l| l.dropped.as_slice());
-    states::search(&b.blueprint, m, dropped, &outside(zone))
+    states::search_gated(&b.blueprint, m, dropped, &outside(zone))
 }
 
 #[test]

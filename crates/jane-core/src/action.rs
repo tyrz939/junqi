@@ -363,6 +363,13 @@ pub enum Condition {
     },
     /// The day of the week, 0 Sunday to 6 Saturday: New Game is a Sunday (`GameState::weekday`).
     Weekday(u8),
+    /// A unit of this zone stands inside a rect of it (false when it is not here): a boss's
+    /// lock-in drops its gate only with the boss inside, or she is shut in alone (DUNGEONS.md
+    /// §3.3, "Can she get stuck?").
+    Within {
+        unit: Key,
+        rect: Key,
+    },
 }
 
 /// A condition, or its negation.

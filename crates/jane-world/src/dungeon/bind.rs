@@ -53,6 +53,7 @@ impl Binding {
             Condition::Flag { key, test } => Condition::Flag { key: self.flag(key), test },
             Condition::Dead(k) => Condition::Dead(self.key(k)),
             Condition::Knows(f) => Condition::Knows(self.fact(f)),
+            Condition::Within { unit, rect } => Condition::Within { unit: self.key(unit), rect: self.key(rect) },
             other => other,
         };
         Cond { not: c.not, c: inner }

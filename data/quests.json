@@ -70,7 +70,7 @@
     "requirements": [
       { "type": "location", "target": "library", "qty": 1, "text": "The ruined library, on the road past the Museum" },
       { "type": "location", "target": "forest", "qty": 1, "text": "The gate of Butterfly Forest, on the road past the ruined library" },
-      { "type": "location", "target": "emperor_down", "qty": 1, "text": "The Emperor, at the stone in Butterfly Forest, past the ruined library" }
+      { "type": "location", "target": "emperor_down", "qty": 1, "text": "The Emperor, which five butterflies bring down to THE STANDING STONE in Butterfly Forest, past the ruined library" }
     ],
     "rewards": [{ "do": "give", "item": "apple", "qty": 5 }, { "do": "give", "item": "potion_stoneskin", "qty": 1 }]
   },
@@ -93,8 +93,8 @@
     "returnTo": "the dog, at the graveyard gate, from six till the bell",
     "requirements": [
       { "type": "location", "target": "burial", "qty": 1, "text": "The Hoar Stone, on the footpath from the graveyard" },
-      { "type": "location", "target": "burial_garden", "qty": 1, "text": "The garden, inside the Burial Chamber, under the Hoar Stone" },
-      { "type": "acquire", "target": "the_ball", "qty": 1, "text": "The Ball, in the Burial Chamber, under the Hoar Stone" }
+      { "type": "location", "target": "burial_garden", "qty": 1, "text": "The garden of HIS GARDENER, through THE STATUE PASSAGE under the Hoar Stone. Fire is kept there" },
+      { "type": "acquire", "target": "the_ball", "qty": 1, "text": "The Ball, in GNOX GOLDSKIN's box behind the seal under the Hoar Stone. The seal turns when his four are still" }
     ],
     "rewards": [{ "do": "give", "item": "light_stone", "qty": 1 }]
   },
@@ -105,7 +105,7 @@
     "returnTo": "the dog, at the top of Church Lane, from six till noon",
     "requirements": [
       { "type": "location", "target": "school", "qty": 1, "text": "The School, on the hill north of Castle" },
-      { "type": "location", "target": "ringer_down", "qty": 1, "text": "Whoever rings the bell, in the School's tower" }
+      { "type": "location", "target": "ringer_down", "qty": 1, "text": "Whoever rings the bell, up the TOWER stair from THE HALL of the School" }
     ],
     "rewards": [{ "do": "flag", "flag": "spine_done" }]
   },
