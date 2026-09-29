@@ -115,6 +115,9 @@ model! {
         pub rest: bool,
         /// Gathered things vanish once looted.
         pub hide_when_used: bool,
+        /// Food that comes back: emptied, what its spawn row holds is there again some days on
+        /// (`tuning/sim.json` `regrow`; `jane-sim` `regrow.rs`). An apple tree, a windfall.
+        pub regrow: bool,
         pub light: Option<Light>,
         /// Zone wetness (0..=255, the rain ramp of ARCHITECTURE.md §4.6.b) at or above which its
         /// light goes out; `None` = rain never puts it out. Only a prop with a light has one.

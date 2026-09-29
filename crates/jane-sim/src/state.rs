@@ -35,8 +35,9 @@ use crate::tuning::{BAG_SLOTS, BAR_SLOTS, CRAFT_INPUTS, STORE_SLOTS};
 /// skies); the ecology steps every ten game minutes; a bed's night moves the tick too.
 /// 8: a zone's units and props are saved as what differs from its blueprint's spawn
 /// (`ZoneState::spawned`, `save::Form`), and the name tail as runs of blueprint locals.
-/// 9: cupboards (`GameState::stores`, `store.rs`).
-pub const SAVE_VERSION: u16 = 9;
+/// 9: food comes back (`Prop::regrow`, `regrow.rs`).
+/// 10: cupboards (`GameState::stores`, `store.rs`).
+pub const SAVE_VERSION: u16 = 10;
 
 /// A fixed-size bit set (trigger bits, consequences done).
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -783,4 +784,7 @@ pub struct Prop {
     pub under_done: bool,
     /// Its hours, if a verb set them.
     pub night: NightState,
+    /// Emptied food that comes back (`regrow.rs`): the tick it is full again. `None` for
+    /// anything else, and once it is back.
+    pub regrow: Option<Tick>,
 }

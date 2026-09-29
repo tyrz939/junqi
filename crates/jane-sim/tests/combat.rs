@@ -104,6 +104,7 @@ fn a_bolt_cast_point_blank_stops_on_a_shut_gate() {
             on: false,
             loot: jane_sim::state::LootState::AsSpawned,
             under_done: false,
+            regrow: None,
             night: jane_sim::state::NightState::AsSpawned,
         });
     }

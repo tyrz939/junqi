@@ -375,7 +375,7 @@ impl Sim {
     ///  9 statuses                                            (status unit)
     /// 10 flush x2      the only place hp changes             (combat unit)
     /// 11 triggers      and plates
-    /// 12 housekeeping  prop flags, fills owed, fog every 10   (drops: loot unit)
+    /// 12 housekeeping  food back, prop flags, fills owed, fog every 10 (drops: loot unit)
     /// 13 zone ops      spawn, despawn, wake; the zone goes back; world ops drain
     /// 14 travel        seat order
     ///    sleep         a bed chosen after step 0 (a trigger, a clock row); each seat's sky told
@@ -586,6 +586,7 @@ impl Sim {
             // what changed; the fills still owed land if their rect is clear; fog every 10.
             crate::loot::step_drops(cx);
             crate::life::respawn_due(cx);
+            crate::regrow::regrow_due(cx);
             cx.rt.flush_prop_flags(cx.zone, &mut cx.scratch.props);
             clear::step_pending_fill(cx);
             if cx.world.tick.0 % FOG_EVERY == 0 {

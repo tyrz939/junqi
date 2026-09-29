@@ -33,8 +33,8 @@ use crate::compile::fraction::Num;
 use crate::compile::lists::{self, RawAction, RawCond};
 use crate::compile::source::{Row, Source, typed};
 use crate::model::{
-    self, ConsequenceDef, County, EcologyDef, Population, Region, RegionWeather, Season, SimTuning, Sky, SkyBand,
-    WetnessTuning, in_span,
+    self, ConsequenceDef, County, EcologyDef, Population, Region, RegionWeather, RegrowTuning, Season, SimTuning, Sky,
+    SkyBand, WetnessTuning, in_span,
 };
 
 pub fn compile(src: &Source, cx: &mut Ctx, county: &County) -> model::Living {
@@ -369,11 +369,54 @@ struct RawTuning {
     journal_ring: u16,
     wetness: RawWetness,
     clear_hours: u8,
+    regrow: Option<RawRegrow>,
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawRegrow {
+    days: u8,
+    #[serde(default)]
+    restock: std::collections::BTreeMap<String, Vec<RawStack>>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RawStack {
+    item: String,
+    qty: u16,
+}
+
+/// With no `regrow` in `tuning/sim.json`: three days, and no larder named.
+pub const DEFAULT_REGROW: RegrowTuning = RegrowTuning { days: 3, restock: &[] };
+
 /// With no `tuning/sim.json` (a test fixture): the defaults of ARCHITECTURE.md §12.
-pub const DEFAULT_TUNING: SimTuning =
-    SimTuning { journal_ring: 512, wetness: WetnessTuning { every: Tick(60), rise: 3, fall: 1 }, clear_hours: 2 };
+pub const DEFAULT_TUNING: SimTuning = SimTuning {
+    journal_ring: 512,
+    wetness: WetnessTuning { every: Tick(60), rise: 3, fall: 1 },
+    clear_hours: 2,
+    regrow: DEFAULT_REGROW,
+};
+
+fn regrow(cx: &mut Ctx, file: &str, r: Option<&RawRegrow>) -> RegrowTuning {
+    let Some(r) = r else { return DEFAULT_REGROW };
+    let at = format!("{file}.regrow");
+    cx.diag.need(r.days >= 1, &at, "days: food comes back a day after it is taken at the soonest");
+    let mut restock = Vec::with_capacity(r.restock.len());
+    for (prop, loot) in &r.restock {
+        let at = format!("{at}.restock.{prop}");
+        cx.diag.need(!loot.is_empty(), &at, "a larder that fills again fills with something");
+        let mut out = Vec::with_capacity(loot.len());
+        for s in loot {
+            cx.diag.need(s.qty >= 1, &at, format!("{} x{}: qty < 1", s.item, s.qty));
+            if let Some(item) = cx.item(&at, &s.item) {
+                out.push(jane_core::action::Stack { item, qty: s.qty });
+            }
+        }
+        restock.push(model::Restock { prop: cx.name(prop), loot: leak(out) });
+    }
+    RegrowTuning { days: r.days, restock: leak(restock) }
+}
 
 fn tuning(src: &Source, cx: &mut Ctx) -> SimTuning {
     let file = "tuning/sim.json";
@@ -386,10 +429,12 @@ fn tuning(src: &Source, cx: &mut Ctx) -> SimTuning {
         Tick(60)
     });
     cx.diag.need(every.0 >= 1, format!("{file}.wetness.every"), "the ramp steps at least every tick");
+    let regrow = regrow(cx, file, r.regrow.as_ref());
     SimTuning {
         journal_ring: r.journal_ring,
         wetness: WetnessTuning { every, rise: r.wetness.rise, fall: r.wetness.fall },
         clear_hours: r.clear_hours,
+        regrow,
     }
 }
 
@@ -559,5 +604,17 @@ mod tests {
         let bad = r#"{"journalRing": 0, "wetness": {"every": 0, "rise": 4, "fall": 2}, "clearHours": 1}"#;
         let b = build(&[("tuning/sim.json", bad)]);
         assert!(has(&b, "journalRing") && has(&b, "at least every tick"));
+        assert_eq!(tu.regrow, DEFAULT_REGROW, "no regrow: three days, no larder");
+        let t = r#"{"journalRing": 64, "wetness": {"every": 1, "rise": 4, "fall": 2}, "clearHours": 1,
+                    "regrow": {"days": 2, "restock": {"larder": [{"item": "i", "qty": 2}]}}}"#;
+        let (l, cx) = build(&[("tuning/sim.json", t)]);
+        assert!(errors(&cx).is_empty(), "{:?}", errors(&cx));
+        assert_eq!(l.tuning.regrow.days, 2);
+        assert_eq!(l.tuning.regrow.restock.len(), 1);
+        assert_eq!(l.tuning.regrow.restock[0].loot[0].qty, 2);
+        let bad = r#"{"journalRing": 64, "wetness": {"every": 1, "rise": 4, "fall": 2}, "clearHours": 1,
+                      "regrow": {"days": 0, "restock": {"larder": [], "shelf": [{"item": "nope", "qty": 1}]}}}"#;
+        let b = build(&[("tuning/sim.json", bad)]);
+        assert!(has(&b, "a day after") && has(&b, "fills with something") && has(&b, "\"nope\""));
     }
 }

@@ -475,6 +475,7 @@ fn open_loot(cx: &mut Ctx<'_>, seat: Seat, body: UnitId, ix: PropIx) {
             p.hidden = true;
             cx.rt.touch_prop(cx.zone, ix);
         }
+        crate::regrow::emptied(cx, ix);
         if let Some(list) = use_list {
             run_actions(cx, list, Subject::Unit(body));
         }

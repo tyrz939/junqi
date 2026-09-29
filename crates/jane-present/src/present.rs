@@ -1438,6 +1438,7 @@ mod tests {
             on: false,
             loot: LootState::Left(vec![jane_core::Stack { item: key, qty: 1 }]),
             under_done: false,
+            regrow: None,
             night: NightState::AsSpawned,
         });
         let drop = st.next.drop();
