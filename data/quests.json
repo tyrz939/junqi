@@ -105,7 +105,7 @@
     "returnTo": "the dog, at the top of Church Lane, from six till noon",
     "requirements": [
       { "type": "location", "target": "school", "qty": 1, "text": "The School, on the hill north of Castle" },
-      { "type": "location", "target": "ringer_down", "qty": 1, "text": "Whoever rings the bell, in the School's tower" }
+      { "type": "location", "target": "ringer_down", "qty": 1, "text": "Whoever rings the bell, up the TOWER stair from THE HALL of the School" }
     ],
     "rewards": [{ "do": "flag", "flag": "spine_done" }]
   },

@@ -1237,6 +1237,18 @@ Each lesson ends at a classroom clock that she stops (a `once` prop: `flag lesso
 | The Belfry shut with the Timekeeper outside | No, since the Forest's fix |
 | Dying mid-lesson | No: she wakes by the grate, the period is what it was, and nothing she did is undone |
 
+**Is it clear what to do? (the legibility pass, 29 September 2026.)** The School is played by its timetable, so the timetable has to be enough to plan the day by. `dungeon_cues_late.rs` holds the cues on seeds 1 to 16. Frames are in `sheets/logic-b/`.
+
+| Where | What was unclear | What tells her now |
+| --- | --- | --- |
+| The timetable | It said which lessons fall in which period. It did not say where the rooms were, what a lesson asked of her, or what opens the tower | It has the plan: which rooms are off THE HALL, the LOWER CORRIDOR and the UPPER CORRIDOR. It says BOTANY is taught in daylight only and that the snowflake period is THE ICE HOUSE. It gives the rule: "Each classroom clock is stopped at the end of its lesson. The TOWER is opened from the rope once every clock has stopped, by whoever holds its key. The Caretaker keeps the key, and does his rounds of the LOWER CORRIDOR after the bell at nine" |
+| A classroom door | Shut, its gate bore the room's name. Open, the gate is gone and the doorway is nameless | A board by every classroom door, on both sides, names the room and its period. A board inside names the corridor it opens onto. The generator boards a door whose gate a state lifts, from any room (§2.5). Each board also hints at the lesson: WOODWORK "Mind the floor", CHEMISTRY "The fume cupboards are sealed", PHYSICS "The board is dead until it is fed", DOMESTIC SCIENCE "The ranges are to be lit before the lesson", and a chalked snowflake by THE ICE HOUSE |
+| The rope, too early | "The tower is locked and there are clocks in this building still going." The key was not mentioned | "The tower stays locked while a classroom clock is still going, or while its key is on the Caretaker's ring." The TOWER's board says the same |
+| The Caretaker | Where and when to find him | The timetable and the LOWER CORRIDOR's board: his rounds, after the bell at nine |
+| The quest log | "Whoever rings the bell, in the School's tower" | "Whoever rings the bell, up the TOWER stair from THE HALL of the School" |
+
+Left as it is: the staff room is open at every hour and on no one's route, so it has no board.
+
 ---
 
 ### 3.7 Optional: the Closed Line (phase 3)

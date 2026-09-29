@@ -152,3 +152,36 @@ fn the_burials_notice_the_seal_and_the_quest_log_say_the_same_four() {
     let says = says.expect("the seal has words");
     assert!(four.iter().all(|k| says.contains(&k.to_lowercase())), "{says}");
 }
+
+// --- the School ---------------------------------------------------------------------------------
+
+#[test]
+fn every_classroom_door_has_its_name_beside_it_open_or_shut() {
+    // The classrooms' gates bear their names while shut; open, the gate is gone, and the board
+    // beside the door is what says which room it is, from either corridor.
+    boards_by_every_door(ZoneId::School);
+}
+
+#[test]
+fn the_timetable_says_where_every_room_is_when_it_is_open_and_what_opens_the_tower() {
+    the_notice_names_every_board(ZoneId::School, "notice_school");
+    let t = lines_of("notice_school");
+    assert!(t.contains("clock is stopped at the end of its lesson"), "{t}");
+    assert!(t.contains("The Caretaker keeps the key") && t.contains("LOWER CORRIDOR after the bell at nine"), "{t}");
+    assert!(t.contains("BOTANY in daylight only"), "{t}");
+    // Each classroom's board says its period, as the timetable does.
+    for (room, period) in [
+        ("woodwork", "Lesson time"),
+        ("chemistry", "Lesson time"),
+        ("botany", "Lesson time"),
+        ("physics", "Break"),
+        ("domestic", "Break"),
+        ("ice_house", "Break"),
+        ("lost_property", "Break"),
+    ] {
+        let b = lines_of(&format!("board_school_{room}"));
+        assert!(b.contains(period), "{room}: {b}");
+    }
+    let steps = steps_of("the_school");
+    assert!(steps.iter().any(|s| s.contains("TOWER") && s.contains("THE HALL")), "{steps:?}");
+}
