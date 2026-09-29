@@ -89,13 +89,13 @@
               { "do": "fill", "rect": "pipes_east_pool", "tile": 5 },
               { "do": "fill", "rect": "pipes_west_pool", "tile": 21 },
               { "do": "shake", "amount": 2 },
-              { "do": "toast", "text": "Water goes over to the east side. Somewhere behind you a run empties and keeps running for a while after." }
+              { "do": "toast", "text": "Water goes over to the EAST RUN, and its penstock drops. Somewhere behind you the WEST RUN empties, and its penstock lifts." }
             ],
             "dry": [
               { "do": "fill", "rect": "pipes_east_pool", "tile": 21 },
               { "do": "fill", "rect": "pipes_west_pool", "tile": 5 },
               { "do": "shake", "amount": 2 },
-              { "do": "toast", "text": "The east side drains. The west fills. It takes about as long either way." }
+              { "do": "toast", "text": "The EAST RUN drains, and its penstock lifts. The WEST RUN fills, and its penstock drops." }
             ]
           }
         }

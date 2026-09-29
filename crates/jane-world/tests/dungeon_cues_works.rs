@@ -125,3 +125,33 @@ fn the_museums_plan_names_rooms_not_compass_points_and_its_boards_say_what_opens
     assert!(lines_of("board_museum_stores").contains("Power shutter"));
     assert!(lines_of("board_museum_science").contains("ARTS"), "the floor key is from ARTS");
 }
+
+#[test]
+fn every_way_on_from_the_pipes_sump_and_junction_has_its_name_stencilled_beside_it() {
+    boards_by_every_way_on(ZoneId::Pipes, "notice_pipes");
+}
+
+#[test]
+fn the_pipes_say_which_penstock_the_valve_lifts_and_where_the_outfall_comes_up() {
+    // "East run to the Works" sent her east; it is the OUTFALL's ladder that comes up in the Works.
+    let plan = lines_of("notice_pipes");
+    assert!(plan.contains("OUTFALL's ladder comes up in the Works yard"), "{plan}");
+    assert!(!plan.contains("East run to the Works"));
+    let steps = quest_steps("the_factory");
+    assert!(steps.iter().any(|s| s.contains("OUTFALL")), "{steps:?}");
+    // Each way the valve turns, the toast names the run that opens.
+    let cat = catalog();
+    let m = cat.dungeons.mission_of(ZoneId::Pipes).expect("the pipes");
+    let valve = m.nodes.iter().flat_map(|n| n.holds).find(|h| h.controls.is_some()).expect("the valve");
+    let b = build(ZoneId::Pipes, 1);
+    let mut said = Vec::new();
+    for &list in valve.becomes.iter().flatten() {
+        jane_world::solve::rows::each_action(&b.blueprint, cat, list, &mut |a| {
+            if let jane_core::Action::Toast(jane_core::TextRef::Text(t)) = *a {
+                said.push(cat.text(t));
+            }
+        });
+    }
+    assert!(said.iter().any(|t| t.contains("WEST RUN") && t.contains("penstock lifts")), "{said:?}");
+    assert!(said.iter().any(|t| t.contains("EAST RUN drains, and its penstock lifts")), "{said:?}");
+}

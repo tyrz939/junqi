@@ -5,7 +5,8 @@
     "nodes": {
       "read": {
         "lines": [
-          "GOLDSKIN MINING Co. SURFACE WATER. North run to the town. East run to the Works. West run to the outfall, when the valve allows it.",
+          "GOLDSKIN MINING Co. SURFACE WATER. The NORTH RUN and JUNCTION 3 off the SUMP. The GANGERS' CHAMBER, the VALVE HOUSE, the EAST RUN and the WEST RUN off JUNCTION 3, each run behind a penstock. The OUTFALL through the WEST RUN, on a Company padlock; the OUTFALL's ladder comes up in the Works yard, inside the wall.",
+          "The EAST VALVE decides which penstock is up. Ladders up to the street from the NORTH RUN, the EAST RUN and the WEST RUN. The doors off the SUMP and off JUNCTION 3 have their names stencilled beside them.",
           "Covers are not to be lifted from the street. They lift from below, and that is the way they were meant to lift."
         ]
       }
@@ -47,5 +48,12 @@
         "actions": [{ "do": "rest" }]
       }
     }
-  }
+  },
+  "board_pipes_sump": {"speaker": "SUMP", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["SUMP. The grate up to Castle."]}}},
+  "board_pipes_north_run": {"speaker": "NORTH RUN", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["NORTH RUN. Ladder up to the town.", "Under it, in chalk: rungs out. Iron in the ganger's box."]}}},
+  "board_pipes_junction": {"speaker": "JUNCTION 3", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["JUNCTION 3. All runs meet here."]}}},
+  "board_pipes_chamber": {"speaker": "GANGERS' CHAMBER", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["GANGERS' CHAMBER. Dry. The brazier is kept in."]}}},
+  "board_pipes_valve_house": {"speaker": "VALVE HOUSE", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["VALVE HOUSE. The EAST VALVE. Turned at six and at six."]}}},
+  "board_pipes_east_run": {"speaker": "EAST RUN", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["EAST RUN. The penstock is up while the east is dry."]}}},
+  "board_pipes_west_run": {"speaker": "WEST RUN", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["WEST RUN. To the OUTFALL. The penstock is up while the east runs."]}}}
 }

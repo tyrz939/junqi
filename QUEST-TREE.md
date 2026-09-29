@@ -209,8 +209,8 @@ Chains are independent; only the order inside a chain is fixed. Walks below: **s
 | Step | Where | Thinking | Confuse | Verdict |
 | --- | --- | --- | --- | --- |
 | "The pipes, down the grate at the edge of Castle" | The grate stands beside the town (`doors.json`, "The grate to the pipes"); banner "The Pipes" | "Under the town" | Not "in the road": the grate is set beside the town, not in a street | OK |
-| "The Factory, in the Works" | Up a manhole by the Factory, or the road past the graveyard; banner "The Factory" | | | OK |
-| "The Foreman, in the Factory's assembly hall" | Past the generator (Electric, from the orb) | | A place his death marks | OK |
+| "The Factory, in the Works past the graveyard, or up the OUTFALL's ladder from the pipes" | Up the outfall's manhole into the Factory's yard, or the road past the graveyard; banner "The Factory" | | | OK |
+| "The Foreman, in ASSEMBLY, through the FOREMAN'S OFFICE in the Factory" | Past the generator (Electric, from the orb); the works plan and the boards use the same names | | A place his death marks | OK |
 
 ### Under the Stone
 - **Unlocked by:** the dog, after the Factory (`offer_burial`: the graveyard road "that goes north, toward the School. Do not go as far as the School"; the Chairman's Key "unlocks the stair under it"; the rats' meat soaked in Stranglethorn for the small snakes; "Whatever is under that stone was buried with the county's gold, all of it, cast into one ball. Bring the ball up."). **Hand-in:** the dog, at the graveyard gate from six till the bell ("You found him, then. Gnox Goldskin, with his arms round it." / "The stone says leave it there. That was her hand, and it was right when it was written. It is not right now." / "She is not dead, {name}. I would know."). Read again after, the Hoar Stone's scratches are in the hand of the letter. **Pays:** a light stone. **Tier:** far (2,006 / 874).

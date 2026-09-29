@@ -1081,6 +1081,15 @@ A lit lamp cannot answer a bolt (`schoolTouch` skips props that are `on`), which
 | The press hall | The wall came down in the middle of the hall, and the office's gate went up at the far end of a corridor with no word of it | The press hall's notice, chalked: "the FOREMAN'S OFFICE gate is chained into this wall". The toast: "... the chain on the FOREMAN'S OFFICE gate was built into it. Both are on the floor." |
 | The Foreman | The quest log said "the Factory's assembly hall" | "The Foreman, in ASSEMBLY, through the FOREMAN'S OFFICE in the Factory" |
 
+**The pipes, both passes (29 September 2026).** The state search is clean on seeds 1 to 16 (1,536 to 3,072 states a seed: the valve either way at any time, the four ladders mended in any order with the iron found, the outfall key carried out), and the junction's barrel is proven back onto its plate from anywhere on the grid. Iron cannot run short: five boxes on the way give 2 each against four ladders at 1, and the outfall's own store gives 2 beside the ladder up into the Factory. A friend turning the valve while she is in a run shuts its penstock behind her, and every run has a ladder up (a prank, as the Museum's breaker). The legibility pass:
+
+| Where | What was unclear | What tells her now |
+| --- | --- | --- |
+| The run plan | "East run to the Works": the EAST RUN's ladder comes up by the graveyard, and it is the OUTFALL's that comes up in the Works yard, so a player going to the Factory went the wrong way | The plan in words, true on every seed: the NORTH RUN and JUNCTION 3 off the SUMP; the GANGERS' CHAMBER, the VALVE HOUSE, the EAST RUN and the WEST RUN off JUNCTION 3, each behind a penstock; the OUTFALL through the WEST RUN on a Company padlock, "and the OUTFALL's ladder comes up in the Works yard, inside the wall". The Factory's quest step: "... or up the OUTFALL's ladder from the pipes" |
+| JUNCTION 3 | Six ways alike; two penstocks, and which one the valve lifts | A stencilled board at each: SUMP, NORTH RUN ("Rungs out. Iron in the ganger's box"), GANGERS' CHAMBER ("The brazier is kept in"), VALVE HOUSE, EAST RUN ("The penstock is up while the east is dry"), WEST RUN ("To the OUTFALL. The penstock is up while the east runs") |
+| The valve | "Somewhere behind you a run empties": which one, and what opened | "Water goes over to the EAST RUN, and its penstock drops. Somewhere behind you the WEST RUN empties, and its penstock lifts", and back: "The EAST RUN drains, and its penstock lifts. The WEST RUN fills, and its penstock drops." |
+| The outfall key | "The hours the gear may be turned ... are all at night": she waits for a night that changes nothing | "... Nobody has kept to them." |
+
 ---
 
 ### 3.5 The Burial Chamber (phase 5): Fire
