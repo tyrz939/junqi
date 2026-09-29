@@ -93,8 +93,8 @@
     "returnTo": "the dog, at the graveyard gate, from six till the bell",
     "requirements": [
       { "type": "location", "target": "burial", "qty": 1, "text": "The Hoar Stone, on the footpath from the graveyard" },
-      { "type": "location", "target": "burial_garden", "qty": 1, "text": "The garden, inside the Burial Chamber, under the Hoar Stone" },
-      { "type": "acquire", "target": "the_ball", "qty": 1, "text": "The Ball, in the Burial Chamber, under the Hoar Stone" }
+      { "type": "location", "target": "burial_garden", "qty": 1, "text": "The garden of HIS GARDENER, through THE STATUE PASSAGE under the Hoar Stone. Fire is kept there" },
+      { "type": "acquire", "target": "the_ball", "qty": 1, "text": "The Ball, in GNOX GOLDSKIN's box behind the seal under the Hoar Stone. The seal turns when his four are still" }
     ],
     "rewards": [{ "do": "give", "item": "light_stone", "qty": 1 }]
   },

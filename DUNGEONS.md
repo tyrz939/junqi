@@ -1149,6 +1149,19 @@ Every name in today's `CONTRACTS.burial` is kept. What is built (cold torches, t
 | **The Snake's guard room, after a death anywhere** | **Yes, as it was.** It is the one lock-in written by hand (`data/triggers.json`, `burial_lockin`), and it had no memory of being cleared. Every death after it fired ran its reset and re-armed it. The next walk through stood four guards up and dropped the scaled door behind her. The clear that lifts the door fires once, and had fired, so the door stayed down. She could leave only through the Snake, whether she was ready for it or not. **Fixed:** the clear sets `burial_lockin_clear` and the lock asks for it not set, as the generator's lock-ins do. `lockins.rs` holds it: clear the room, die elsewhere, walk back through, and nothing stands up. `dungeon_states_late.rs` asks it of every trigger in the three zones that locks and resets |
 | Dying mid-fight | No: every lock-in re-opens at her death. The bosses' flags are set only at their deaths |
 
+**Is it clear what to do? (the legibility pass, 29 September 2026.)** The Burial is the densest place in the game for fights, so the goal has to read through them: the same four names, and the one rule for the seal, are on the notice, on the seal, on Goldskin's door and in the quest log. `dungeon_cues_late.rs` holds the cues on seeds 1 to 16. Frames are in `sheets/logic-b/`.
+
+| Where | What was unclear | What tells her now |
+| --- | --- | --- |
+| The hall | Seven openings round a dark hall sixty cells across. The notice named the four in the corners but not where they were | Every opening off the hall has its name cut on a stone beside it: THE STAIR, THE VIGIL, THE ALCOVE, THE STATUE PASSAGE, THE LINEN ROOM, THE LONG ROOM, GNOX GOLDSKIN. The notice has the plan in the same words: which rooms lead to THE KEEPER OF HIS SNAKES, HIS GARDENER, HIS HOUSEKEEPER and HIS SOLDIER. The keepers' own rooms have stones by their ways back |
+| The seal | "Four names are cut into it. It will not turn yet." Which four, and what then? | The seal names them and says "It will not turn while any of them is standing". The notice, Goldskin's stone and the quest log say "The seal is turned when his four are still" |
+| Fire | Nothing said where it was, and two corners and the orchard need it | The quest log's second step: "The garden of HIS GARDENER, through THE STATUE PASSAGE under the Hoar Stone. Fire is kept there" |
+| THE LONG ROOM | Its gate was "The south passage", which is not south on every seed. It opens when the hall's brazier is lit, far across the hall | The gate is named THE LONG ROOM. Its stone says "it is opened by warm light, and by nothing else". Lighting the brazier says "Off THE HALL, the door to THE LONG ROOM goes back" |
+| The alcove, the linen room | The cold torches and the web gave no hint | The alcove's stone: "the torches in it are lit with cold". The linen room's: "it has not been swept" |
+| Goldskin's door | Its gate was "The wizard's door", a name nothing else used | "GNOX GOLDSKIN's door". The seal's toast names it when it turns |
+
+Left as it is: the hall's four flames light together once all four keepers are down. Lighting one per keeper was tried on paper, but a brazier answers Fire and she can light any of them herself, so a flame there cannot mean progress.
+
 ---
 
 ### 3.6 The School (phase 6): the end

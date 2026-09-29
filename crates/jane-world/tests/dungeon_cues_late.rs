@@ -113,3 +113,42 @@ fn the_forests_sign_names_every_garden_a_post_names_and_the_plan() {
     let steps = steps_of("the_forest");
     assert!(steps.iter().any(|s| s.contains("five butterflies") && s.contains("THE STANDING STONE")), "{steps:?}");
 }
+
+// --- the Burial Chamber -------------------------------------------------------------------------
+
+#[test]
+fn every_passage_off_the_burials_hall_and_its_keepers_rooms_has_its_name_cut_beside_it() {
+    boards_by_every_door(ZoneId::Burial);
+}
+
+#[test]
+fn the_burials_notice_the_seal_and_the_quest_log_say_the_same_four() {
+    the_notice_names_every_board(ZoneId::Burial, "notice_burial");
+    let notice = lines_of("notice_burial");
+    let four = ["THE KEEPER OF HIS SNAKES", "HIS GARDENER", "HIS HOUSEKEEPER", "HIS SOLDIER"];
+    for k in four {
+        assert!(notice.contains(k), "the notice does not name {k}");
+    }
+    // The goal reads through the fights: the seal, the notice, the Goldskin door and the log all
+    // say what turns the seal.
+    assert!(notice.contains("The seal is turned when his four are still"), "{notice}");
+    assert!(lines_of("board_burial_vault").contains("when his four are still"));
+    let steps = steps_of("the_burial");
+    assert!(steps.iter().any(|s| s.contains("GNOX GOLDSKIN") && s.contains("his four are still")), "{steps:?}");
+    assert!(steps.iter().any(|s| s.contains("HIS GARDENER") && s.contains("Fire")), "{steps:?}");
+    let b = build(ZoneId::Burial, 1);
+    let cat = catalog();
+    let seal =
+        b.blueprint.props.iter().find(|p| p.key == jane_core::Key::Name(cat.name_id("wizard_seal").expect("seal")));
+    let says = seal.and_then(|p| p.use_list).map(|r| {
+        let mut out = String::new();
+        jane_world::solve::rows::each_action(&b.blueprint, cat, r, &mut |a| {
+            if let jane_core::Action::Toast(jane_core::TextRef::Text(t)) = *a {
+                out.push_str(cat.text(t));
+            }
+        });
+        out
+    });
+    let says = says.expect("the seal has words");
+    assert!(four.iter().all(|k| says.contains(&k.to_lowercase())), "{says}");
+}

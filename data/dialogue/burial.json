@@ -5,7 +5,9 @@
     "nodes": {
       "board": {
         "lines": [
-          "CASTLE BURIAL GROUND. LOWER CHAMBERS. Four corners off the hall, in the order they were dug: the keeper of his snakes, his gardener, his housekeeper, his soldier.",
+          "CASTLE BURIAL GROUND. LOWER CHAMBERS. Four corners off THE HALL, in the order they were dug: THE KEEPER OF HIS SNAKES, HIS GARDENER, HIS HOUSEKEEPER, HIS SOLDIER.",
+          "THE STAIR comes down into THE HALL, and THE VIGIL is off it. THE KEEPER OF HIS SNAKES lies past THE ALCOVE, THE RAT RUN and THE GUARD. HIS GARDENER lies past THE STATUE PASSAGE, his garden and THE ORCHARD, in his glasshouse. HIS HOUSEKEEPER lies past THE LINEN ROOM, and HIS SOLDIER past THE LONG ROOM.",
+          "GNOX GOLDSKIN lies behind the sealed door off THE HALL. The seal is turned when his four are still, and not before.",
           "Interments by arrangement with the parish. The four corners were all arranged on the same morning."
         ]
       }
@@ -48,5 +50,16 @@
         "actions": [{ "do": "rest" }]
       }
     }
-  }
+  },
+  "board_burial_hall": {"speaker": "THE HALL", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["THE HALL. His four lie in the corners off it."]}}},
+  "board_burial_entry": {"speaker": "THE STAIR", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["THE STAIR. Up to the Hoar Stone."]}}},
+  "board_burial_alcove": {"speaker": "THE ALCOVE", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["THE ALCOVE. On the way to THE KEEPER OF HIS SNAKES.", "Cut smaller underneath: the torches in it are lit with cold."]}}},
+  "board_burial_rat": {"speaker": "THE RAT RUN", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["THE RAT RUN. Between THE ALCOVE and THE GUARD."]}}},
+  "board_burial_lockin": {"speaker": "THE GUARD", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["THE GUARD. Between THE RAT RUN and THE KEEPER OF HIS SNAKES."]}}},
+  "board_burial_east": {"speaker": "THE STATUE PASSAGE", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["THE STATUE PASSAGE. Between THE HALL and the garden of HIS GARDENER.", "Cut smaller underneath: the small snakes are fed, not fought."]}}},
+  "board_burial_orchard": {"speaker": "THE ORCHARD", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["THE ORCHARD. Between the garden and the glasshouse of HIS GARDENER."]}}},
+  "board_burial_vigil": {"speaker": "THE VIGIL", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["THE VIGIL. A fire is kept."]}}},
+  "board_burial_web": {"speaker": "THE LINEN ROOM", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["THE LINEN ROOM. Between THE HALL and HIS HOUSEKEEPER.", "Cut smaller underneath: it has not been swept."]}}},
+  "board_burial_dark": {"speaker": "THE LONG ROOM", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["THE LONG ROOM. Between THE HALL and HIS SOLDIER.", "Cut smaller underneath: it is opened by warm light, and by nothing else."]}}},
+  "board_burial_vault": {"speaker": "GNOX GOLDSKIN", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["GNOX GOLDSKIN. Sealed.", "The seal in THE HALL is turned when his four are still, and not before."]}}}
 }

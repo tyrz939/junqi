@@ -471,9 +471,9 @@ pub fn offers(
             out.push((9, sense::to_prop(p, me), Try::Tactic(p.id.get()), Task::Use(crate::task::UseProp::new(p.id))));
         }
     }
-    // The seal in the hall: "Four names are cut into it. It will not turn yet." Turned again
-    // once she has put down four keepers of this place (the notice names the four corners), while
-    // the wizard's door behind it is still shut.
+    // The seal in the hall: "It will not turn while any of them is standing." Turned again once
+    // she has put down four keepers of this place (the notice names the four corners), while the
+    // wizard's door behind it is still shut.
     let keepers = {
         let mut k: Vec<jane_core::UnitDefId> =
             downed.iter().map(|&(d, _)| d).filter(|&d| Some(d) != crate::crawl::boss_of(v.zone())).collect();
