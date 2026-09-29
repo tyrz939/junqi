@@ -15,7 +15,7 @@ use jane_present::ui::menus::{self, MenuState, PauseInfo};
 use jane_present::ui::title::{self, TitleInfo, TitleState};
 use jane_present::ui::window::{self, WindowState};
 use jane_present::ui::{Ui, UiOut};
-use jane_present::view::{DialogueView, StatusChip, TargetFrame, ViewBuffers};
+use jane_present::view::{DialogueView, SlotData, StatusChip, StoreView, TargetFrame, ViewBuffers};
 use jane_present::{Backend, Present, Tier};
 use jane_render_soft::Soft;
 use jane_sim::input::{InputFrame, StepInput};
@@ -23,9 +23,9 @@ use jane_sim::tuning::MAX_PLAYERS;
 use jane_sim::{Seat, Sim};
 
 /// The screens, by name.
-pub const SCREENS: [&str; 13] = [
+pub const SCREENS: [&str; 14] = [
     "hud", "dead", "choice", "tooltip", "popover", "drag", "pause", "host", "join", "table", "controls", "display",
-    "loading",
+    "loading", "store",
 ];
 
 struct Rig {
@@ -220,6 +220,46 @@ pub fn run(dir: &Path, names: &[String]) -> Result<(), String> {
             return Err("the drag did not start".into());
         }
         rig.write(dir, "drag")?;
+    }
+    if want("store") {
+        // At Julie's dresser: her bag beside it, a few things put away, a drag in flight from the
+        // bag into the dresser.
+        let cat = jane_data::catalog();
+        let mut slots = vec![SlotData::default(); jane_sim::tuning::STORE_SLOTS];
+        for (i, (name, qty)) in
+            [("key_basement", 1), ("gold_bar", 16), ("gold_bar", 5), ("key_generic", 1), ("apple", 6), ("wood", 4)]
+                .into_iter()
+                .enumerate()
+        {
+            let item = cat.combat.item_id(name).ok_or(format!("no item {name}"))?;
+            let d = cat.combat.item(item);
+            slots[[0, 1, 2, 3, 6, 7][i]] =
+                SlotData { item: Some(item), icon: Some(d.icon), count: qty, usable: d.usable, ..SlotData::default() };
+        }
+        let used = slots.iter().filter(|s| s.item.is_some()).count();
+        let prop = jane_sim::ids::PropId(std::num::NonZeroU32::new(1).expect("one"));
+        let mut sb = b.clone();
+        sb.window.store = Some(StoreView { prop, name: "Dresser".into(), slots, used });
+        let mut st = WindowState::default();
+        let r = window::rect((768, 432));
+        // The bag's first slot and the dresser's fifth, as the two panels lay them out.
+        let lx = i32::from(r.x) + 12 + (i32::from(r.w) - 24 - 2 * (6 * 40 - 4) - 84) / 2;
+        let gy = i32::from(r.y) + 42 + 6 + 26;
+        let from = (lx + 18, gy + 18);
+        let to = (lx + (6 * 40 - 4) + 84 + 4 * 40 + 18, gy + 18);
+        let press = UiInput { pointer: Some(from), held: true, pressed: true, ..UiInput::default() };
+        rig.frame(press, 4500, |ui, _, sim| {
+            hud::draw(ui, &sb, win_cx);
+            window::draw(ui, &mut st, &sb, sim.view(Seat(0)).as_ref(), win_cx);
+        });
+        for (k, p) in [(from.0 + 40, from.1 + 30), (to.0 - 60, to.1 + 20), to].iter().enumerate() {
+            let hold = UiInput { pointer: Some(*p), held: true, ..UiInput::default() };
+            rig.frame(hold, 4501 + k as u32, |ui, _, sim| {
+                hud::draw(ui, &sb, win_cx);
+                window::draw(ui, &mut st, &sb, sim.view(Seat(0)).as_ref(), win_cx);
+            });
+        }
+        rig.write(dir, "store")?;
     }
     if want("pause") {
         let mut st = MenuState::default();

@@ -116,6 +116,7 @@ Whole game: three regions, six dungeons, 50–60 quests, roughly 15–25 hours. 
 - No fast travel. No map markers beyond what Jane has seen or been told.
 - **Beds and fires** *(decided, built)*: the game saves only within reach of a bed or a fire, resting at one is the save, and dying wakes you at the last one you used, however far that is. A bed can also sleep the clock to morning. Before the first rest you wake at the Halt fire, the party's from New Game: never resting is never the better plan. Placing fires is therefore level design: the distance between two fires is the length of a run.
 - Bags are 24 slots and stay 24.
+- **Food comes back** *(decided 2026-09-29, built)*: apple trees, windfalls and Julie's pantry and fruit bowl fill again about three game days after they are emptied, a little at a time, so most county deaths are not with an empty bag. Nothing else regrows. `WORLD.md` §4.6.
 
 ### 2.6 Danger: how difficulty is laid out
 
@@ -148,6 +149,29 @@ Enemies are **rows × threat**: one `skeleton` row, scaled by the phase table at
 | **Spirit** (mana, spell power) | Gold-leaf pages in the same kinds of places | likewise |
 | **Verbs** | One per dungeon: Icebolt, Repair, Explosion, Grow, Electric, Fire | Each opens sealed things in *earlier* areas (§ below) |
 | **Potions** | Craft | Temporary edges; the eight 2020 potions are already rows |
+
+**The curve** *(owner's goal, 2026-09-29: she starts weak and ends much stronger)*. Measured by `jane-bot/tests/growth.rs` (the Reader's whole story on seeds 1 to 5, slow tier), which holds the targets:
+
+| Target | Held as |
+| --- | --- |
+| At New Game an early foe (the Lowfields' rat, skeleton, spider at phase 1) is a real threat | 2 to 4 of her blows to kill; its blow at least 5 % of her health |
+| By the end an early foe is nothing | one blow of her best; its blow under 2 % of her |
+| Every dungeon still bites on arrival | its own foes, at the growth she brings, take at least two blows of her best on average |
+
+Her melee (`melee_player`) rolls `strength / 1.5 + irandom(strength / 8) + 12`, the same shape as her bolts on spirit, so strength is felt in the hand as well as in the bar: 35 a blow at New Game, about 100 at the Burial's door, about 150 at the end (it was `strength / 8 + 7`: 11 to 30 over the whole game, and a skeleton took her nine blows at the start and four at the end). A creature's plain `melee` has a flat 9 (was 6), which is felt at phase 1 and hardly past it. The School's jars give 4 strength and its pages 6 spirit, the Burial's pages 4 (all were 2), so the end is near the 2020 table's 1,000. Her spells and blows look and sound as grown as she is: halo, light, sparks and weight scale with her spirit (spells) and strength (blows), twice New Game's at 200 (`jane-present` `fx::might`).
+
+| Hour of play (mean of 5 seeds, food regrowing, cupboards in) | HP | Str | Spi | Rat / skeleton / spider: her blows to kill (melee) | Their blow, ‰ of her | Deaths that hour |
+| --- | ---: | ---: | ---: | --- | --- | ---: |
+| New Game, before | 150 | 30 | 30 | 5 / 9 / 4 | 50 / 59 / 63 | |
+| New Game, after | 150 | 30 | 30 | 2 / 3 / 2 | 71 / 80 / 63 | |
+| 2, before | 442 | 88 | 60 | 3 / 5.8 / 2.8 | 17 / 20 / 21 | 6 |
+| 2, after | 404 | 81 | 60 | 1.2 / 2.2 / 1 | 28 / 32 / 25 | 15 |
+| 4, before | 597 | 119 | 84 | 2.8 / 4.8 / 2 | 13 / 15 / 16 | 31 |
+| 4, after | 762 | 152 | 101 | 1 / 1 / 1 | 14 / 16 / 12 | 13 |
+| End, before (5 to 11 hours) | 884 | 177 | 96 | 2 / 3.6 / 2 | 8 / 10 / 10 | 125 in all |
+| End, after (4 to 7 hours) | 941 | 188 | 116 | 1 / 1 / 1 | 11 / 12 / 10 | 65 in all |
+
+On arrival (after), a dungeon's own foes take her best (the better of melee and her bolts) about 2 blows in the mine, cellar, pipes and forest, 2 to 5 in the Museum, 4 in the Waters, 4 to 6 in the Works, 7 to 8 in the Factory, 6 in the Burial and 4 to 5 in the School; their blows are 3 % (Museum) to 11 % (Burial) of her. The whole story on seeds 1 to 5 still reaches its three endings.
 
 That makes exploring the dangerous pocket the *way you get strong enough for the next region*, which is the loop a big harsh map needs. It also means difficulty is set by where upgrades are placed, which the generator controls and the solver can check: **by the time the critical path reaches threat N, at least the upgrades for phase N−1 are reachable without crossing threat N.**
 
@@ -281,6 +305,7 @@ Art items from §6 are pulled forward whenever a milestone makes them visible.
 | Tone | A slight Silent Hill lean, welcomed: mist, light that reaches further than it protects, a bell at nine, a county that is two places. `VOICE.md` §Tone |
 | Growth | From finding things. No XP bar, no levels. §2.6 |
 | Threat | Felt only. Enemy health is never a number |
+| Food | *(Decided 2026-09-29)* Comes back every few days: trees, windfalls, Julie's larders; small amounts, jittered per source, the world's in co-op. `WORLD.md` §4.6 |
 | Night doors | Door by door, a creative choice (`nightLock` on the prop row) |
 | How people play | *(Changed 2026-09-25, 26)* A native Rust build, one binary per target (x86-64, i686 with SSE2, aarch64 and armv7 Linux for the Pi; old Windows later); three render backends behind one scene (software, OpenGL 2.1 for ancient PCs and every Pi, Vulkan and friends for modern PCs and the Pi 4), 60 fps as the gate in every class; LAN co-op by deterministic lockstep with a host that may be headless on a Pi. `PORT.md`, `PRESENTATION.md` §1, `ARCHITECTURE.md` §7. The browser build is archived |
 | Art | *(Changed 2026-09-25, 26)* No drawn sprites. Every visual is generated by code from parameters and seeds: people, creatures, props, buildings, icons, terrain, flora, weather, effects, the font, the UI and the title. The look is modern pixel art well above SNES, nostalgic but beautiful first (Sea of Stars class): a 768 x 432 canvas at 16 px per cell, normal-mapped light with cast shadows, emissive, fog and atmosphere layers per area, parallax and weather. `ART.md`, `PRESENTATION.md` |

@@ -14,6 +14,9 @@
   "bench": { "name": "Craft Bench", "sprite": "bench", "w": 3, "h": 2, "solid": true, "blockLos": false, "bench": true },
   "table": { "name": "Table", "sprite": "table", "w": 3, "h": 2, "solid": true, "blockLos": false },
   "lost_property_desk": { "name": "Lost property desk", "sprite": "lost_property_desk", "w": 3, "h": 2, "solid": true, "blockLos": false, "prompt": "Read" },
+  "cupboard": { "name": "Cupboard", "sprite": "cupboard", "w": 2, "h": 1, "solid": true, "blockLos": false, "store": true },
+  "dresser": { "name": "Dresser", "sprite": "dresser", "w": 3, "h": 1, "solid": true, "blockLos": false, "store": true },
+  "left_luggage_locker": { "name": "Left Luggage", "sprite": "left_luggage_locker", "w": 2, "h": 1, "solid": true, "blockLos": false, "store": true },
   "shelf": { "name": "Shelf", "sprite": "shelf", "w": 3, "h": 1, "solid": true, "blockLos": false },
   "bed": { "name": "Bed", "sprite": "bed", "w": 2, "h": 3, "solid": true, "blockLos": false, "rest": true, "prompt": "Rest" },
   "stove": { "name": "Stove", "sprite": "stove", "w": 2, "h": 2, "base": 1, "solid": true, "blockLos": false, "light": {"radius": 40, "color": "#ff9040", "flicker": 0.25} },
@@ -35,7 +38,7 @@
   "pillar": { "name": "Pillar", "sprite": "pillar", "w": 2, "h": 2, "base": 1, "solid": true, "blockLos": true },
   "coffin": { "name": "Coffin", "sprite": "coffin", "w": 2, "h": 3, "solid": true, "blockLos": false },
   "car_wreck": { "name": "Abandoned Car", "sprite": "car_wreck", "w": 5, "h": 3, "base": 2, "solid": true, "blockLos": false, "prompt": "Search" },
-  "apple_tree": { "name": "Apple Tree", "sprite": "apple_tree", "w": 2, "h": 2, "base": 1, "solid": true, "blockLos": true, "prompt": "Pick" },
+  "apple_tree": { "name": "Apple Tree", "sprite": "apple_tree", "w": 2, "h": 2, "base": 1, "solid": true, "blockLos": true, "prompt": "Pick", "regrow": true },
   "herb": { "name": "Herb", "sprite": "herb", "w": 1, "h": 1, "solid": false, "blockLos": false, "flat": true, "hideWhenUsed": true, "prompt": "Gather" },
   "rose": { "name": "White Water Rose", "sprite": "rose", "w": 1, "h": 1, "solid": false, "blockLos": false, "flat": true, "hideWhenUsed": true, "prompt": "Gather" },
   "minecart": { "name": "Minecart", "sprite": "minecart", "w": 2, "h": 2, "base": 1, "solid": true, "blockLos": false }

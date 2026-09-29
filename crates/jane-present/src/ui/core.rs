@@ -65,6 +65,8 @@ pub struct UiInput {
     pub keys: KeySet,
     /// The last device used was a pad: pad glyphs in the hints.
     pub pad: bool,
+    /// Shift is held: a click on a slot at a cupboard moves it across (PRESENTATION.md §3.2).
+    pub shift: bool,
 }
 
 impl UiInput {
@@ -221,6 +223,8 @@ pub enum ButtonKind {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DragPayload {
     Bag(u8),
+    /// A slot of the open cupboard.
+    Store(u8),
     Craft(u8),
     Bar(u8),
     Spell(SpellId),
@@ -230,6 +234,12 @@ pub enum DragPayload {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum DropTarget {
     Bag(u8),
+    /// A slot of the open cupboard.
+    Store(u8),
+    /// The open cupboard's panel between its slots: wherever it fits.
+    StorePanel,
+    /// The bag's panel between its slots, beside a cupboard: wherever it fits.
+    BagPanel,
     Craft(u8),
     Bar(u8),
     /// The bar's plate between the slots.

@@ -112,6 +112,8 @@ struct RawProp {
     carry: bool,
     #[serde(default)]
     bench: bool,
+    #[serde(default)]
+    store: bool,
     answers: Option<String>,
     #[serde(default)]
     once: bool,
@@ -129,6 +131,8 @@ struct RawProp {
     rest: bool,
     #[serde(default)]
     hide_when_used: bool,
+    #[serde(default)]
+    regrow: bool,
     light: Option<RawLight>,
     douse: Option<u8>,
     #[serde(default)]
@@ -213,6 +217,7 @@ fn props(src: &Source, cx: &mut Ctx) -> &'static [PropDef] {
             push: r.push,
             carry: r.carry,
             bench: r.bench,
+            store: r.store,
             answers: ans,
             once: r.once,
             gate: r.gate,
@@ -222,6 +227,7 @@ fn props(src: &Source, cx: &mut Ctx) -> &'static [PropDef] {
             day_only: r.day_only,
             rest: r.rest,
             hide_when_used: r.hide_when_used,
+            regrow: r.regrow,
             light: lit,
             douse: r.douse,
             shows_loot: r.shows_loot,

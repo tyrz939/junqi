@@ -28,7 +28,7 @@ use crate::ids::{Counters, PropId, UnitId};
 use crate::sim::Sim;
 use crate::state::{
     Bits, CombatState, Drop, Fill, FlagKey, GameState, Ground, Growth, Journal, PlayerState, Projectile, Prop, Quests,
-    REGIONS, RestPoint, RingKey, SAVE_VERSION, SpawnBase, TriggerBits, Unit, WeatherState, ZoneState,
+    REGIONS, RestPoint, RingKey, SAVE_VERSION, SpawnBase, Store, TriggerBits, Unit, WeatherState, ZoneState,
 };
 use crate::sym::{SymTable, of_name};
 use crate::units::max_hp;
@@ -399,6 +399,7 @@ pub struct Form<'a> {
     consequences_done: Cow<'a, Bits>,
     consequences_owed: Cow<'a, [(ZoneId, ConsequenceId)]>,
     rumours: Cow<'a, BTreeMap<(NameId, StoryId), Tick>>,
+    stores: Cow<'a, BTreeMap<(ZoneId, PropId), Store>>,
 }
 
 /// A zone's part of the [`Form`]: [`ZoneState`]'s fields in its order, units and props as
@@ -467,6 +468,7 @@ impl<'a> Form<'a> {
             consequences_done,
             consequences_owed,
             rumours,
+            stores,
         } = s;
         Form {
             version: *version,
@@ -491,6 +493,7 @@ impl<'a> Form<'a> {
             consequences_done: Cow::Borrowed(consequences_done),
             consequences_owed: Cow::Borrowed(consequences_owed),
             rumours: Cow::Borrowed(rumours),
+            stores: Cow::Borrowed(stores),
         }
     }
 
@@ -519,6 +522,7 @@ impl<'a> Form<'a> {
             consequences_done,
             consequences_owed,
             rumours,
+            stores,
         } = self;
         let mut table = SymTable::default();
         for run in syms {
@@ -566,6 +570,7 @@ impl<'a> Form<'a> {
             consequences_done: consequences_done.into_owned(),
             consequences_owed: consequences_owed.into_owned(),
             rumours: rumours.into_owned(),
+            stores: stores.into_owned(),
         })
     }
 }

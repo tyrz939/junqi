@@ -4,6 +4,11 @@
 //! the craft strip, the bar off itself; dropping a thing off every panel asks once and destroys it.
 //! A right click (or a second press on a pad) opens the slot's popover. The keys move a focus ring
 //! over the bag, pick up with confirm and put down with confirm.
+//!
+//! At a cupboard (USE on one, `jane_sim::store`) the Bag tab is two panels, her bag and the
+//! cupboard, 6 x 4 each: drag either way; shift-click or a right click moves a thing across to
+//! wherever it fits; the ring walks across both, confirm carries and puts down, X (or 2) moves the
+//! lit thing across and Y (or 3) puts the whole bag away. Every move is a sim command.
 
 use std::fmt::Write as _;
 
@@ -13,7 +18,7 @@ use jane_core::SpellId;
 use jane_data::SpellKind;
 use jane_sim::View;
 use jane_sim::input::{BarSlotWire, Command};
-use jane_sim::tuning::{BAG_SLOTS, BAR_SLOTS};
+use jane_sim::tuning::{BAG_SLOTS, BAR_SLOTS, STORE_SLOTS};
 
 use crate::input::UiAction;
 use crate::text;
@@ -25,7 +30,7 @@ use crate::ui::hud::{self, HudCtx};
 use crate::ui::map::{self, MapChart};
 use crate::ui::menus::{self, MenuState};
 use crate::ui::style::{self, argb};
-use crate::view::{SlotData, ViewBuffers};
+use crate::view::{SlotData, StoreView, ViewBuffers};
 
 /// The tabs, in order.
 pub const TABS: [&str; 4] = ["Bag", "Book", "Log", "Map"];
@@ -40,7 +45,8 @@ const GAP: i32 = 4;
 #[derive(Clone, Debug, Default)]
 pub struct WindowState {
     pub tab: usize,
-    /// The bag slot the keys have lit, and one picked up to be put down.
+    /// The bag slot the keys have lit, and one picked up to be put down. At a cupboard, 0..24 are
+    /// the bag's and 24..48 the cupboard's.
     pub focus: u8,
     pub carried: Option<u8>,
     /// The book's and the log's lit rows.
@@ -111,7 +117,18 @@ pub fn draw(ui: &mut Ui, st: &mut WindowState, b: &ViewBuffers, v: Option<&View<
     ui.text_right(x + W - 16, y + 16, esc, Ink::fine(style::quiet()).shadow());
     let body = Rect::new(x + 12, y + 42, W - 24, H - 54);
     match st.tab {
-        0 => bag_tab(ui, st, b, body, cx, live),
+        0 => match &b.window.store {
+            Some(s) => store_tab(ui, st, b, s, body, cx, live),
+            None => {
+                if usize::from(st.focus) >= BAG_SLOTS {
+                    st.focus = 0;
+                }
+                if st.carried.is_some_and(|c| usize::from(c) >= BAG_SLOTS) {
+                    st.carried = None;
+                }
+                bag_tab(ui, st, b, body, cx, live);
+            }
+        },
         1 => book_tab(ui, st, b, body, live),
         2 => log_tab(ui, st, b, body, live),
         _ => match v {
@@ -169,6 +186,22 @@ fn drops(ui: &mut Ui, st: &mut WindowState, b: &ViewBuffers) {
         }
         (DragPayload::Craft(slot), DropTarget::Bag(_) | DropTarget::Window | DropTarget::Outside) => {
             Some(Command::CraftClear { slot })
+        }
+        // At a cupboard: either way, onto a slot or anywhere on the other panel.
+        (DragPayload::Bag(bag), DropTarget::Store(to)) => {
+            b.window.store.as_ref().map(|s| Command::StorePut { prop: s.prop, bag, to: Some(to) })
+        }
+        (DragPayload::Bag(bag), DropTarget::StorePanel) => {
+            b.window.store.as_ref().map(|s| Command::StorePut { prop: s.prop, bag, to: None })
+        }
+        (DragPayload::Store(slot), DropTarget::Bag(to)) => {
+            b.window.store.as_ref().map(|s| Command::StoreTake { prop: s.prop, slot, to: Some(to) })
+        }
+        (DragPayload::Store(slot), DropTarget::BagPanel) => {
+            b.window.store.as_ref().map(|s| Command::StoreTake { prop: s.prop, slot, to: None })
+        }
+        (DragPayload::Store(from), DropTarget::Store(to)) => {
+            b.window.store.as_ref().map(|s| Command::StoreMove { prop: s.prop, from, to })
         }
         _ => None,
     };
@@ -319,6 +352,166 @@ fn bag_tab(ui: &mut Ui, st: &mut WindowState, b: &ViewBuffers, body: Rect, cx: H
         "Drag to move or to the bar · right click for more · drop outside to destroy"
     };
     ui.text(x0, body.bottom() - 12, hint, Ink::fine(style::quiet()).shadow());
+}
+
+/// Columns of each panel at a cupboard.
+const STORE_COLS: i32 = 6;
+
+/// The command that moves cell `from` onto cell `to` at a cupboard (cells: 0..24 the bag, 24..48
+/// the cupboard; `to: None` is across, wherever it fits).
+fn store_move(prop: jane_sim::ids::PropId, from: u8, to: Option<u8>) -> Option<Command> {
+    let bag = BAG_SLOTS as u8;
+    Some(match (from < bag, to) {
+        (true, None) => Command::StorePut { prop, bag: from, to: None },
+        (false, None) => Command::StoreTake { prop, slot: from - bag, to: None },
+        (true, Some(t)) if t < bag => Command::BagMove { from, to: t },
+        (true, Some(t)) => Command::StorePut { prop, bag: from, to: Some(t - bag) },
+        (false, Some(t)) if t < bag => Command::StoreTake { prop, slot: from - bag, to: Some(t) },
+        (false, Some(t)) => Command::StoreMove { prop, from: from - bag, to: t - bag },
+    })
+    .filter(|c| !matches!(*c, Command::BagMove { from, to } | Command::StoreMove { from, to, .. } if from == to))
+}
+
+/// The ring one step along `a` over the two panels, side by side.
+fn store_step(focus: u8, a: UiAction) -> u8 {
+    let (n, cols) = (BAG_SLOTS as i32, STORE_COLS);
+    let rows = n / cols;
+    let f = i32::from(focus);
+    let (side, i) = (f / n, f % n);
+    let (col, row) = (i % cols + side * cols, i / cols);
+    let (col, row) = match a {
+        UiAction::Left => ((col + 2 * cols - 1) % (2 * cols), row),
+        UiAction::Right => ((col + 1) % (2 * cols), row),
+        UiAction::Up => (col, (row + rows - 1) % rows),
+        UiAction::Down => (col, (row + 1) % rows),
+        _ => (col, row),
+    };
+    ((col / cols) * n + row * cols + col % cols) as u8
+}
+
+/// The Bag tab at a cupboard: her bag on the left, the cupboard on the right.
+fn store_tab(
+    ui: &mut Ui,
+    st: &mut WindowState,
+    b: &ViewBuffers,
+    s: &StoreView,
+    body: Rect,
+    cx: HudCtx<'_>,
+    live: bool,
+) {
+    let cell = SLOT + GAP;
+    let panel_w = STORE_COLS * cell - GAP;
+    let rows = BAG_SLOTS as i32 / STORE_COLS;
+    let between = 84;
+    let lx = i32::from(body.x) + (i32::from(body.w) - 2 * panel_w - between) / 2;
+    let rx = lx + panel_w + between;
+    let y0 = i32::from(body.y) + 6;
+    let gy = y0 + 26;
+    let total = (BAG_SLOTS + STORE_SLOTS) as u8;
+    if usize::from(st.focus) >= usize::from(total) {
+        st.focus = 0;
+    }
+    let item_at = |c: u8| -> Option<jane_core::ItemId> {
+        let c = usize::from(c);
+        if c < BAG_SLOTS {
+            b.window.bag.get(c).and_then(|d| d.item)
+        } else {
+            s.slots.get(c - BAG_SLOTS).and_then(|d| d.item)
+        }
+    };
+
+    // The keys and the pad: the ring walks both panels; confirm carries and puts down.
+    if live {
+        for a in ui.input.actions.clone() {
+            match a {
+                UiAction::Left | UiAction::Right | UiAction::Up | UiAction::Down => st.focus = store_step(st.focus, a),
+                UiAction::Confirm => match st.carried.take() {
+                    Some(from) => {
+                        if let Some(c) = store_move(s.prop, from, Some(st.focus)) {
+                            ui.command(c);
+                        }
+                    }
+                    None if item_at(st.focus).is_some() => st.carried = Some(st.focus),
+                    None => {}
+                },
+                UiAction::Quick => {
+                    st.carried = None;
+                    if item_at(st.focus).is_some() {
+                        if let Some(c) = store_move(s.prop, st.focus, None) {
+                            ui.command(c);
+                        }
+                    }
+                }
+                UiAction::QuickAll => {
+                    st.carried = None;
+                    ui.command(Command::StorePutAll { prop: s.prop });
+                }
+                _ => {}
+            }
+        }
+    }
+
+    // The two panels' headings, and a well under each grid.
+    let grid_h = rows * cell - GAP;
+    ui.text(lx, y0, "Bag", Ink::small(style::gold()).shadow());
+    let held = b.window.bag.iter().filter(|d| d.item.is_some()).count();
+    ui.text_right(lx + panel_w, y0 + 3, &format!("{held} of {BAG_SLOTS}"), Ink::fine(style::quiet()).shadow());
+    ui.text(rx, y0, &s.name, Ink::small(style::gold()).shadow());
+    ui.text_right(rx + panel_w, y0 + 3, &format!("{} of {STORE_SLOTS}", s.used), Ink::fine(style::quiet()).shadow());
+    let lwell = Rect::new(lx - 6, gy - 6, panel_w + 12, grid_h + 12);
+    let rwell = Rect::new(rx - 6, gy - 6, panel_w + 12, grid_h + 12);
+    ui.well(lwell, false);
+    ui.well(rwell, false);
+    ui.drop_area(lwell, DropTarget::BagPanel);
+    ui.drop_area(rwell, DropTarget::StorePanel);
+    // Between them, the way things go.
+    let mid = lx + panel_w + between / 2;
+    ui.text(mid - 6, gy + grid_h / 2 - 16, "→", Ink::small(style::gold_deep()).shadow());
+    ui.text(mid - 6, gy + grid_h / 2 + 2, "←", Ink::small(style::gold_deep()).shadow());
+
+    for c in 0..total {
+        let store = usize::from(c) >= BAG_SLOTS;
+        let i = i32::from(c) % BAG_SLOTS as i32;
+        let x = if store { rx } else { lx };
+        let sr = Rect::new(x + i % STORE_COLS * cell, gy + i / STORE_COLS * cell, SLOT, SLOT);
+        let d = if store { &s.slots[i as usize] } else { &b.window.bag[i as usize] };
+        let mut v = slot_view(d);
+        v.usable = st.carried != Some(c);
+        let (payload, target) = if store {
+            (d.item.is_some().then_some(DragPayload::Store(i as u8)), DropTarget::Store(i as u8))
+        } else {
+            (d.item.is_some().then_some(DragPayload::Bag(i as u8)), DropTarget::Bag(i as u8))
+        };
+        let out = ui.slot(wid("store-cell", u32::from(c)), sr, &v, payload, target, st.focus == c);
+        if out.hovered {
+            st.focus = c;
+        }
+        if let Some(item) = d.item {
+            ui.tip(wid("store-tip", u32::from(c)), sr, |t| hud::slot_tip(t, Some(item), None));
+            // Shift-click, or a right click: across, wherever it fits.
+            if (out.clicked && ui.input.shift) || out.right_clicked {
+                if let Some(cmd) = store_move(s.prop, c, None) {
+                    ui.command(cmd);
+                }
+            }
+        }
+    }
+
+    // Everything in the bag, away.
+    let by = gy + grid_h + 14;
+    let all = Rect::new(lx + panel_w - 120, by, 120, 24);
+    if ui.button(wid("store-all", 0), all, "Put all away", ButtonKind::Chip, held > 0, false) {
+        ui.command(Command::StorePutAll { prop: s.prop });
+    }
+    let note = "Kept here for the whole party";
+    ui.text_right(rx + panel_w, by + 6, note, Ink::fine(style::dim()).shadow());
+
+    let hint = if cx.pad {
+        "A picks up and puts down · X moves it across · Y puts all away · B closes"
+    } else {
+        "Drag between them · shift-click or right click moves a thing across"
+    };
+    ui.text(lx, body.bottom() - 12, hint, Ink::fine(style::quiet()).shadow());
 }
 
 fn spell_line(id: SpellId) -> String {
@@ -538,6 +731,49 @@ mod tests {
         let out = press(&mut ui, &mut st, UiAction::Confirm, 3);
         assert_eq!(out, vec![UiOut::Command(Command::BagMove { from, to: from + 8 })]);
         assert_eq!(st.carried, None);
+    }
+
+    #[test]
+    fn at_a_cupboard_the_ring_walks_both_panels_and_every_move_is_a_command() {
+        let mut b = bufs();
+        let prop = jane_sim::ids::PropId(std::num::NonZeroU32::new(77).unwrap());
+        let slots = vec![SlotData::default(); STORE_SLOTS];
+        b.window.store = Some(StoreView { prop, name: "Dresser".into(), slots, used: 0 });
+        let from = b.window.bag.iter().position(|s| s.item.is_some()).expect("the start kit") as u8;
+        let mut ui = Ui::new(UiArt::build(1).0);
+        let mut st = WindowState { focus: from, ..WindowState::default() };
+        let bind = Bindings::default();
+        let cx = HudCtx { bindings: &bind, pad: true, window_open: true };
+        let press = |ui: &mut Ui, st: &mut WindowState, a: UiAction, t: u32| {
+            ui.begin(UiInput { actions: vec![a], pad: true, ..UiInput::default() }, t, (768, 432));
+            draw(ui, st, &b, None, cx);
+            ui.out.clone()
+        };
+        // X: across, wherever it fits.
+        let out = press(&mut ui, &mut st, UiAction::Quick, 1);
+        assert_eq!(out, vec![UiOut::Command(Command::StorePut { prop, bag: from, to: None })]);
+        // Carried with A, walked right across the gap into the cupboard, put down with A.
+        press(&mut ui, &mut st, UiAction::Confirm, 2);
+        assert_eq!(st.carried, Some(from));
+        let col = i32::from(from) % STORE_COLS;
+        for t in 0..STORE_COLS - col {
+            press(&mut ui, &mut st, UiAction::Right, 3 + t as u32);
+        }
+        assert!(usize::from(st.focus) >= BAG_SLOTS, "into the cupboard: {}", st.focus);
+        let to = st.focus - BAG_SLOTS as u8;
+        let out = press(&mut ui, &mut st, UiAction::Confirm, 20);
+        assert_eq!(out, vec![UiOut::Command(Command::StorePut { prop, bag: from, to: Some(to) })]);
+        // Y: the whole bag away.
+        let out = press(&mut ui, &mut st, UiAction::QuickAll, 21);
+        assert_eq!(out, vec![UiOut::Command(Command::StorePutAll { prop })]);
+        // And back: a cupboard slot to the bag.
+        assert_eq!(store_move(prop, 30, Some(2)), Some(Command::StoreTake { prop, slot: 6, to: Some(2) }));
+        assert_eq!(store_move(prop, 30, None), Some(Command::StoreTake { prop, slot: 6, to: None }));
+        assert_eq!(store_move(prop, 30, Some(31)), Some(Command::StoreMove { prop, from: 6, to: 7 }));
+        assert_eq!(store_move(prop, 30, Some(30)), None);
+        // Left from the cupboard's first column is the bag's last.
+        assert_eq!(store_step(24, UiAction::Left), 5);
+        assert_eq!(store_step(0, UiAction::Left), 24 + 5);
     }
 
     #[test]

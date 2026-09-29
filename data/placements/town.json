@@ -34,7 +34,7 @@
       "within": 8
     },
     "prop": {
-      "def": "lost_thing",
+      "def": "windfall",
       "loot": [
         {
           "item": "apple",

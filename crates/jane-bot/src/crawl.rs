@@ -579,6 +579,11 @@ impl Crawl {
             }
             if self.stage == Stage::Leave {
                 self.reach.update(v, sig);
+                let won = boss_of(self.zone).is_some_and(|b| self.bosses.iter().any(|&(d, _)| d == b));
+                if let Some(t) = won.then(|| back_into_lockin(v, &self.reach)).flatten() {
+                    self.task = Some((t, Try::Travel));
+                    continue;
+                }
                 let reach = &self.reach;
                 let next = self.leave_to.filter(|&z| {
                     sense::doors_to(v, z).iter().any(|p| !p.hidden && sense::can_open(v, p) && reach.beside(p))
@@ -1249,6 +1254,31 @@ pub fn shut_in_with_boss(v: &View<'_>) -> bool {
             door_of(v, p).is_some_and(|d| d.zone != v.zone()) && reach.beside(p)
                 || !p.hidden && cat.story.prop(p.def).rest && reach.beside(p)
         })
+}
+
+/// Back into a lock-in's room whose gate is still down. The gate lifts when the room is cleared
+/// *while someone stands in it* (its clear is a `While` row, DUNGEONS.md §2.5), so a boss drawn
+/// out of its room and put down outside leaves the gate shut until she steps back in: a player
+/// walks back through, the bot planned round the shut gate and found no way out (seed 2's
+/// Emperor, chased out of the stone glade and killed in the passage to the reward room, left
+/// her walled in behind it). The nearest cell she can walk to inside the room, if she is not in it.
+fn back_into_lockin(v: &View<'_>, reach: &Reach) -> Option<Task> {
+    use jane_core::action::Action;
+    let me = v.body().pos;
+    let (mx, my) = me.cell();
+    let locked = |k: jane_core::Key| {
+        let s = v.key_sym(k);
+        v.props().any(|p| p.key == s && p.locked)
+    };
+    v.triggers()
+        .filter(|(t, fired)| !fired && t.trigger.once && t.trigger.mode == jane_core::blueprint::TriggerMode::While)
+        .filter(|(t, _)| v.list(t.trigger.actions).iter().any(|a| matches!(*a, Action::Unlock(k) if locked(k))))
+        .filter_map(|(t, _)| v.rect(t.rect))
+        .filter(|r| !r.contains(mx, my))
+        .flat_map(|r| (r.y + 1..r.bottom() - 1).flat_map(move |y| (r.x + 1..r.right() - 1).map(move |x| (x, y))))
+        .filter(|&(x, y)| reach.get(x, y))
+        .min_by_key(|&(x, y)| dist(me, Vec2::centre(x, y)))
+        .map(|(x, y)| Task::Walk { to: Vec2::centre(x, y), near: jane_core::Fx::from_px(6) })
 }
 
 /// The unit a dungeon's boss room holds (`None`: the cellar, the library and the pipes have none).

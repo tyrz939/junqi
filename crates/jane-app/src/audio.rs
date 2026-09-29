@@ -164,6 +164,17 @@ impl AudioBus for Sound {
         self.send(Cmd::Sfx { id, gain: p.gain, pan: p.pan, send: p.send, rate });
     }
 
+    /// Her growth heard (PLAN.md §2.6): at the end of the game her casts and blows are half as
+    /// loud again, a little wetter, and some two semitones deeper than at New Game.
+    fn sfx_with(&mut self, kind: SfxKind, at: At, listener: At, might: u16) {
+        let Some(id) = SfxKind::ALL.iter().position(|k| *k == kind).and_then(|i| self.sfx[i]) else { return };
+        let Some(p) = place(at, listener) else { return };
+        let grown = f32::from(might.clamp(256, 512) - 256) / 256.0;
+        let gain = p.gain * (1.0 + 0.5 * grown);
+        let send = p.send + 0.1 * grown;
+        self.send(Cmd::Sfx { id, gain, pan: p.pan, send, rate: 1.0 - 0.11 * grown });
+    }
+
     fn bed(&mut self, bed: Bed, level: u8) {
         let Some(b) = Bed::ALL.iter().position(|x| *x == bed).and_then(|i| self.beds[i]) else { return };
         self.send(Cmd::Bed { bed: b, level: f32::from(level) / 255.0 });

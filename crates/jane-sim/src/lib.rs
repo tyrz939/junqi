@@ -18,6 +18,7 @@
 //! | [`combat`], [`assist`] | the cast pipeline, the combat verbs and the console's; aim assist |
 //! | [`flight`], [`status`], [`flush`] | steps 8, 9 and 10: bolts and pools, statuses, the flush (death, phases) |
 //! | [`life`], [`loot`] | regen, respawn and waking; drops |
+//! | [`regrow`] | food that comes back: emptied trees, windfalls and larders fill again |
 //! | [`interact`], [`inventory`], [`bag`], [`dialogue`], [`quests`] | USE and the world verbs; bags, items and crafting; conversations; the quest log |
 //! | [`triggers`], [`under`], [`clear`], [`light`], [`verbs`] | triggers and plates; things under things; nothing solid lands on a unit; the light rule; rest and growth |
 //! | [`journal`] | what is known (§3.7) |
@@ -69,6 +70,7 @@ pub mod omens;
 pub mod path;
 pub mod presence;
 pub mod quests;
+pub mod regrow;
 pub mod replay;
 pub mod ring;
 pub mod runtime;
@@ -78,6 +80,7 @@ pub mod sim;
 pub mod snake;
 pub mod state;
 pub mod status;
+pub mod store;
 pub mod sym;
 pub mod trace;
 mod travel;

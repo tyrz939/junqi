@@ -263,6 +263,10 @@ One thing per region walks a road at night, announced by a sign first (`QUESTS.m
 
 **Rule: nothing respawns on a timer. Populations recover toward `cap` at a `recover` rate per area, every ten game minutes, and the rate is a row.** A creature a patch's row names stands up at the next ten-minute mark after it falls, when the ecology looks, if the patch is under its line; one no row names yet keeps its row's `respawn` until its patch is written. A patch she cleared is quieter for a day; a patch whose reason she removed (the rats' food, the camp's fire, the shift relieved) stays cleared through a consequence (§6). Bosses and named creatures never return (`respawn: 0`). Nothing stands up in view.
 
+### 4.6 Food that comes back
+
+*(Decided 2026-09-29.)* **Rule: the county's food returns every few days; nothing else does.** An apple tree or a windfall she empties (a prop def with `regrow`) holds what its spawn row held again `regrow.days` game days later (3), give or take half a day by the prop's own id, so an orchard comes back a tree at a time and not in one minute. Julie's larders fill again on the same clock with a few staples, not with what they first held (`regrow.restock` in `data/tuning/sim.json`: the pantry chest two vials of water and two bunches of grapes, the fruit bowl two apples; the potion makings do not come back). The clock starts when the source is emptied and runs through a bed's night; a zone nobody is in fills up the moment she walks in. It is the world's, so a tree one seat stripped is bare for the others. Small amounts, spread out: food is findable, never a farm. Herbs are makings, not food, and do not return; a dungeon's chest is as it was designed. `jane-sim` `regrow.rs`, saved as `Prop::regrow`.
+
 ---
 
 ## 5. Weather and atmosphere
@@ -455,6 +459,18 @@ Cross-region references that must agree. Each row is an L5 cohesion check: the s
 | White roses | Julie's cellar; Sallow Bottom's jetty sign; K8; the rose omen | One kind of rose, in two places; the omen is about picking after dark |
 | The statue | The lake; W9; W15; Mother's Garden | Two statues (the lake's, the garden's), each with its own turn; never confused in a line |
 | North | Every School line | The School is north of every Lowfields place on every seed; "north" is the only bearing text may use |
+
+### 8.3 Where things are kept
+
+A county that hands her keys she must not throw away and gold bars nobody buys gives her somewhere to put them down. **Cupboards** (a prop row with `store`, `jane_sim::store`) keep 24 slots each; what is in one belongs to the world and the whole party, saved with it. Anything goes in, keys and a quest's things included; what is in a cupboard is not in her bag, so nothing that asks her to *hold* a thing sees it there. They stand where a person would keep things, never in a dungeon:
+
+| Where | Which | Stands |
+| --- | --- | --- |
+| Julie's house, the kitchen | Julie's dresser (`julies_dresser`) | Against the north wall between the two hatches, plates on its rack |
+| Julie's house, the front room | Her cupboard (`julies_cupboard`) | Against the north wall by the bed, where the second shelf stood |
+| Julie's cellar, room A | A cupboard (`cellar_cupboard`) | On the north wall, left of the way in from the iron door |
+| The Castle Arms | A lodger's cupboard (`arms_cupboard`) | On the landing behind the partition, in the corner under it |
+| Castle Halt | Left Luggage (`left_luggage_locker`), a green locker | By the lost property, within 12 of its mark (`data/placements/lowfields.json`) |
 
 ---
 

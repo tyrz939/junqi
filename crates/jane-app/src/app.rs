@@ -447,6 +447,8 @@ pub fn run(
             typed: std::mem::take(&mut typed),
             keys,
             pad: app.input.pad_active(),
+            shift: devices.state.keys.has(jane_present::input::sc::LSHIFT)
+                || devices.state.keys.has(jane_present::input::sc::RSHIFT),
         };
 
         // The clock: whole ticks due since the last frame, scaled by the speed.
@@ -716,6 +718,14 @@ impl App<'_> {
                 if let Some(v) = session.sim().and_then(|s| s.view(me)) {
                     self.present.tick(&v, events);
                     self.bufs.tick(&v, events);
+                    // USE on a cupboard opens the window on it; closing the window lets it go.
+                    if self.bufs.window.take_opened() && self.menus.is_empty() {
+                        self.win_open = true;
+                        self.win.tab = 0;
+                    }
+                    if !self.win_open {
+                        self.bufs.window.close_store();
+                    }
                     self.soundtrack.tick(&v, events, &mut self.sound);
                     self.soundtrack.lesson(self.present.lessons(), &mut self.sound);
                     self.stages[1] += t.elapsed().as_micros() as u32;

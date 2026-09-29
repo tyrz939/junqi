@@ -193,6 +193,7 @@ fn interactable(h: &Here<'_>, def: &PropDef, p: &Prop) -> bool {
         || s.is_some_and(|s| s.talk.is_some())
         || def.carry
         || def.bench
+        || def.store
         || usable(def, s, p)
         // A stone, a barrel, a bale: nothing to open, but it moves. The prompt is how she learns that.
         || def.push
@@ -217,6 +218,9 @@ fn first_verb(h: &Here<'_>, def: &PropDef, p: &Prop, seat: Option<Seat>) -> Opti
     }
     if def.bench {
         return Some(Verb::Craft);
+    }
+    if def.store {
+        return Some(custom.unwrap_or(Verb::Open));
     }
     if s.is_some_and(|s| s.talk.is_some()) {
         return Some(custom.unwrap_or(Verb::Read));
@@ -411,6 +415,12 @@ fn use_prop(cx: &mut Ctx<'_>, seat: Seat, body: UnitId, ix: PropIx) {
         cx.emit(EventKind::Prop { prop: pid, change: PropChange::Use });
         return;
     }
+    if def.store {
+        // A cupboard: the window opens on it, for her; what is in it is the party's (`store.rs`).
+        crate::inventory::emit_to(cx, seat, EventKind::Store { prop: pid });
+        cx.emit(EventKind::Prop { prop: pid, change: PropChange::Open });
+        return;
+    }
     let (talk, use_list) = (spawn.and_then(|s| s.talk), spawn.and_then(|s| s.use_list));
     if let Some(tree) = talk {
         // Something read may also do something: the wall notice is the map (`Reveal`).
@@ -465,6 +475,7 @@ fn open_loot(cx: &mut Ctx<'_>, seat: Seat, body: UnitId, ix: PropIx) {
             p.hidden = true;
             cx.rt.touch_prop(cx.zone, ix);
         }
+        crate::regrow::emptied(cx, ix);
         if let Some(list) = use_list {
             run_actions(cx, list, Subject::Unit(body));
         }

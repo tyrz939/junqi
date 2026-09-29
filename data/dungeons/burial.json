@@ -99,7 +99,7 @@
             { "item": "small_water", "qty": 2 }
           ]
         },
-        { "socket": "page:main", "prop": "leaf_page" }
+        { "socket": "page:main", "prop": "leaf_page", "use": [{ "do": "grow", "stat": "spirit", "amount": 4, "id": "@self" }, { "do": "hide", "prop": "@self" }] }
       ],
       "binds": [
         { "from": "prop:torch_a", "as": "torch_a", "what": "prop" },
@@ -189,7 +189,7 @@
         { "socket": "push:root_b", "prop": "root_wall" },
         { "socket": "push:root_c", "prop": "root_wall" },
         { "socket": "prop:scroll", "prop": "scroll_fire", "talk": "scroll_fire", "label": "The burnt scroll", "guardedBy": ["@unit:flower"] },
-        { "socket": "page:main", "prop": "leaf_page" },
+        { "socket": "page:main", "prop": "leaf_page", "use": [{ "do": "grow", "stat": "spirit", "amount": 4, "id": "@self" }, { "do": "hide", "prop": "@self" }] },
         { "socket": "prop:brazier", "prop": "brazier", "label": "Brazier" }
       ],
       "binds": [
@@ -228,7 +228,7 @@
         },
         { "socket": "rest:fire", "prop": "campfire", "hidden": true, "talk": "burial_orchard_fire" },
         { "socket": "jar:main", "prop": "jar" },
-        { "socket": "page:main", "prop": "leaf_page" }
+        { "socket": "page:main", "prop": "leaf_page", "use": [{ "do": "grow", "stat": "spirit", "amount": 4, "id": "@self" }, { "do": "hide", "prop": "@self" }] }
       ],
       "binds": [
         { "from": "verbprop:hearth", "as": "cold_hearth", "what": "prop" },
@@ -262,7 +262,7 @@
           "socket": "push:web_v", "prop": "web_wall_v", "label": "Web",
           "use": [{ "do": "hide", "prop": "@self" }, { "do": "toast", "text": "It goes like paper. There is a shelf behind it." }]
         },
-        { "socket": "page:main", "prop": "leaf_page" }
+        { "socket": "page:main", "prop": "leaf_page", "use": [{ "do": "grow", "stat": "spirit", "amount": 4, "id": "@self" }, { "do": "hide", "prop": "@self" }] }
       ],
       "binds": [
         { "from": "push:web_v", "as": "web_alcove", "what": "prop" },

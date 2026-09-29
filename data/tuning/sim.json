@@ -1,5 +1,12 @@
 {
   "journalRing": 512,
   "wetness": { "every": 1, "rise": 3, "fall": 1 },
-  "clearHours": 2
+  "clearHours": 2,
+  "regrow": {
+    "days": 3,
+    "restock": {
+      "pantry_chest": [{ "item": "small_water", "qty": 2 }, { "item": "grape", "qty": 2 }],
+      "fruit_bowl": [{ "item": "apple", "qty": 2 }]
+    }
+  }
 }

@@ -180,9 +180,26 @@ pub struct QuestRow {
     pub done: bool,
 }
 
+/// The cupboard she opened, beside her bag (`jane_sim::store`).
+#[derive(Clone, Debug)]
+pub struct StoreView {
+    pub prop: jane_sim::ids::PropId,
+    /// Its label, else its row's name ("Dresser", "Left Luggage").
+    pub name: String,
+    pub slots: Vec<SlotData>,
+    /// Slots with something in them.
+    pub used: usize,
+}
+
 /// The window's buffer.
 #[derive(Clone, Debug, Default)]
 pub struct WindowView {
+    /// The cupboard open beside her bag, while she is within reach of it. Set by USE on one (the
+    /// sim's `Store` event), dropped when the window closes ([`WindowView::close_store`]) or the
+    /// sim says it is out of reach.
+    pub store: Option<StoreView>,
+    /// A cupboard was opened this tick: the app opens the window on it ([`WindowView::take_opened`]).
+    opened: bool,
     pub bag: Vec<SlotData>,
     pub craft: [SlotData; CRAFT_INPUTS],
     pub craft_out: Option<SlotData>,
@@ -190,6 +207,18 @@ pub struct WindowView {
     pub stats: StatsCard,
     pub book: Vec<SpellRow>,
     pub quests: Vec<QuestRow>,
+}
+
+impl WindowView {
+    /// A cupboard was opened since the last call.
+    pub fn take_opened(&mut self) -> bool {
+        std::mem::take(&mut self.opened)
+    }
+
+    /// The window closed: the cupboard with it.
+    pub fn close_store(&mut self) {
+        self.store = None;
+    }
 }
 
 /// Her conversation as the box draws it.
@@ -269,7 +298,12 @@ impl ViewBuffers {
                     }
                     self.scratch = s;
                 }
+                EventKind::Store { prop } => {
+                    self.window.store = Some(StoreView { prop, name: String::new(), slots: Vec::new(), used: 0 });
+                    self.window.opened = true;
+                }
                 EventKind::Zone { zone, .. } => {
+                    self.window.store = None;
                     self.hud.banner = Some((text::zone_name(zone, v.region()), now));
                     self.fighting = None;
                 }
@@ -479,6 +513,27 @@ impl ViewBuffers {
             w.craft[i] = st.map_or(SlotData::default(), |st| stack(st.item, st.qty));
         }
         w.at_bench = self.me.at_bench;
+        // The cupboard, read through the sim's reach (`View::store`): out of reach, it is gone.
+        let open = w.store.as_ref().map(|s| s.prop);
+        match open.and_then(|p| v.store(p).map(|slots| (p, slots))) {
+            Some((p, slots)) => {
+                let st = w.store.as_mut().expect("open");
+                if st.name.is_empty() {
+                    if let Some(prop) = v.prop(p) {
+                        match v.prop_spawn(prop).and_then(|s| s.label) {
+                            Some(l) => st.name.push_str(v.text(l)),
+                            None => st.name.push_str(text::text(cat.story.prop(prop.def).name)),
+                        }
+                    }
+                }
+                st.slots.resize(slots.len(), SlotData::default());
+                for (d, s) in st.slots.iter_mut().zip(slots.iter()) {
+                    *d = s.map_or(SlotData::default(), |s| stack(s.item, s.qty));
+                }
+                st.used = slots.iter().flatten().count();
+            }
+            None => w.store = None,
+        }
         w.craft_out = v.craft_output().map(|(item, qty)| stack(item, qty));
         w.stats = StatsCard {
             strength: body.strength,

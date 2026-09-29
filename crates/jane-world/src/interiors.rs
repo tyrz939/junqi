@@ -202,6 +202,9 @@ pub fn build_house(seed: u32, attempt: u8) -> Blueprint {
     b.mark("hatch_a", 5, 7, Facing::South);
     b.mark("hatch_b", 10, 7, Facing::South);
 
+    // Julie's dresser against the north wall, between the hatches: somewhere to leave what the
+    // bag cannot carry and cannot throw away (`jane_sim::store`, WORLD.md §8.3).
+    b.prop(Some("julies_dresser"), "dresser", 6, 2);
     b.prop(None, "stove", 12, 2);
     b.talker("ice_orb", "orb_ice", 15, 2, "orb_ice");
     b.prop(None, "table", 6, 11);
@@ -214,7 +217,8 @@ pub fn build_house(seed: u32, attempt: u8) -> Blueprint {
     // Front room: leftover furniture along the wall, as 2020 stacked its benches.
     b.talker("julies_bed", "bed", 29, 3, "bed");
     b.prop(None, "shelf", 21, 2);
-    b.prop(None, "shelf", 25, 2);
+    // Her cupboard by the bed, where the second shelf stood.
+    b.prop(Some("julies_cupboard"), "cupboard", 25, 2);
     let mut rng = b.k.dice(Step::IntHouse, 1, 0);
     let (tx, ty) = (21 + rng.range(0, 4), 10 + rng.range(0, 3));
     b.prop(None, "table", tx, ty);
@@ -257,6 +261,7 @@ pub fn build_cellar(seed: u32, attempt: u8) -> Blueprint {
     b.door("stair_a", "stairs", 6, 66, (ZoneId::House, "hatch_a"), None);
     b.mark("stair_a", 10, 66, Facing::East);
     b.chest(Some("cellar_chest"), "chest", 20, 52, &[("key_basement", 2)]);
+    b.prop(Some("cellar_cupboard"), "cupboard", 8, 50);
     let mut rng = dice(&b, Cellar::PileA);
     b.k.pile(&mut rng, Rect::new(a.x + 1, a.y + 8, 10, 6), prop_def("barrel"), 3);
 
@@ -394,6 +399,8 @@ pub fn build_arms(seed: u32, attempt: u8) -> Blueprint {
     b.prop(None, "torch", 24, 8);
     // Beyond the partition, the rest of the house: kegs and the landing.
     b.prop(None, "crate", 25, 14);
+    // A cupboard on the landing for a lodger's things, in the corner under the partition.
+    b.prop(Some("arms_cupboard"), "cupboard", 30, 11);
     b.prop(None, "barrel", 28, 14);
     b.prop(None, "barrel", 28, 18);
     b.done("The Castle Arms", 700)
