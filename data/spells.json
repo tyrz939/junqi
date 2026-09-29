@@ -3,13 +3,13 @@
     "name": "Melee", "description": "Swing at whatever is in front of you. A hit hands back a little energy.", "icon": "spell_melee",
     "kind": "melee", "school": "physical", "mp": 0, "energy": 0, "range": 0.5, "cooldown": 1.2,
     "gcdImmune": true, "needsTarget": false, "needsEnemy": true, "needsLos": true, "anim": "attack",
-    "power": { "stat": "strength", "div": 8, "varDiv": 32, "flat": 7 }, "restoreEnergy": 3, "stop": 12
+    "power": { "stat": "strength", "div": 1.5, "varDiv": 8, "flat": 12 }, "restoreEnergy": 3, "stop": 12
   },
   "melee": {
     "name": "Melee", "description": "Basic melee attack.", "icon": "spell_melee",
     "kind": "melee", "school": "physical", "mp": 0, "energy": 0, "range": 0.25, "cooldown": 2,
     "gcdImmune": true, "needsTarget": true, "needsEnemy": true, "needsLos": true, "anim": "attack",
-    "power": { "stat": "strength", "div": 8, "varDiv": 32, "flat": 6 }, "restoreEnergy": 3, "stop": 20
+    "power": { "stat": "strength", "div": 8, "varDiv": 32, "flat": 9 }, "restoreEnergy": 3, "stop": 20
   },
   "melee_fast": {
     "name": "Flurry", "description": "A fast melee attack.", "icon": "spell_melee",

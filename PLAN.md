@@ -150,6 +150,29 @@ Enemies are **rows × threat**: one `skeleton` row, scaled by the phase table at
 | **Verbs** | One per dungeon: Icebolt, Repair, Explosion, Grow, Electric, Fire | Each opens sealed things in *earlier* areas (§ below) |
 | **Potions** | Craft | Temporary edges; the eight 2020 potions are already rows |
 
+**The curve** *(owner's goal, 2026-09-29: she starts weak and ends much stronger)*. Measured by `jane-bot/tests/growth.rs` (the Reader's whole story on seeds 1 to 5, slow tier), which holds the targets:
+
+| Target | Held as |
+| --- | --- |
+| At New Game an early foe (the Lowfields' rat, skeleton, spider at phase 1) is a real threat | 2 to 4 of her blows to kill; its blow at least 5 % of her health |
+| By the end an early foe is nothing | one blow of her best; its blow under 2 % of her |
+| Every dungeon still bites on arrival | its own foes, at the growth she brings, take at least two blows of her best on average |
+
+Her melee (`melee_player`) rolls `strength / 1.5 + irandom(strength / 8) + 12`, the same shape as her bolts on spirit, so strength is felt in the hand as well as in the bar: 35 a blow at New Game, about 100 at the Burial's door, about 150 at the end (it was `strength / 8 + 7`: 11 to 30 over the whole game, and a skeleton took her nine blows at the start and four at the end). A creature's plain `melee` has a flat 9 (was 6), which is felt at phase 1 and hardly past it. The School's jars give 4 strength and its pages 6 spirit, the Burial's pages 4 (all were 2), so the end is near the 2020 table's 1,000. Her spells and blows look and sound as grown as she is: halo, light, sparks and weight scale with her spirit (spells) and strength (blows), twice New Game's at 200 (`jane-present` `fx::might`).
+
+| Hour of play (mean of 5 seeds, food regrowing) | HP | Str | Spi | Rat / skeleton / spider: her blows to kill (melee) | Their blow, ‰ of her | Deaths that hour |
+| --- | ---: | ---: | ---: | --- | --- | ---: |
+| New Game, before | 150 | 30 | 30 | 5 / 9 / 4 | 50 / 59 / 63 | |
+| New Game, after | 150 | 30 | 30 | 2 / 3 / 2 | 71 / 80 / 63 | |
+| 2, before | 394 | 79 | 59 | 3.2 / 6 / 2.6 | 21 / 24 / 26 | 17 |
+| 2, after | 404 | 81 | 62 | 1.2 / 2.2 / 1 | 29 / 32 / 25 | 6 |
+| 4, before | 674 | 135 | 83 | 2.4 / 4.4 / 2 | 11 / 14 / 14 | 21 |
+| 4, after | 808 | 162 | 105 | 1 / 1 / 1 | 13 / 15 / 12 | 7 |
+| End, before (4 to 12 hours) | 868 | 174 | 94 | 2 / 3.8 / 2 | 8 / 10 / 10 | 128 in all |
+| End, after (4 to 9 hours) | 945 | 189 | 116 | 1 / 1 / 1 | 11 / 12 / 10 | 38 in all |
+
+On arrival (after), a dungeon's own foes take her best (the better of melee and her bolts) about 2 blows in the mine, cellar, pipes and forest, 2 to 5 in the Museum, 4 in the Waters, 4 to 6 in the Works, 7 to 8 in the Factory, 6 in the Burial and 4 to 5 in the School; their blows are 3 % (Museum) to 11 % (Burial) of her. The whole story on seeds 1 to 5 still reaches its three endings.
+
 That makes exploring the dangerous pocket the *way you get strong enough for the next region*, which is the loop a big harsh map needs. It also means difficulty is set by where upgrades are placed, which the generator controls and the solver can check: **by the time the critical path reaches threat N, at least the upgrades for phase N−1 are reachable without crossing threat N.**
 
 **Verb gates re-open the old map.** Each region is seeded with things that need a later verb: a collapsed bridge (Repair) that is a shortcut home, a rock over a cave mouth (Explosion), a dry bed that Grow fills with a path, a dead lamp run on the east road that Electric relights (and which then *stays* lit, making that road safe at night for good). Returning to the Lowfields with three new verbs should feel like a different place.

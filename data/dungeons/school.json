@@ -284,7 +284,8 @@
         },
         {
           "socket": "jar:main",
-          "prop": "jar"
+          "prop": "jar",
+          "use": [{ "do": "grow", "stat": "strength", "amount": 4, "id": "@self" }]
         }
       ],
       "binds": [
@@ -370,7 +371,8 @@
         },
         {
           "socket": "page:main",
-          "prop": "leaf_page"
+          "prop": "leaf_page",
+          "use": [{ "do": "grow", "stat": "spirit", "amount": 6, "id": "@self" }, { "do": "hide", "prop": "@self" }]
         }
       ],
       "binds": [
@@ -553,7 +555,8 @@
         },
         {
           "socket": "jar:main",
-          "prop": "jar"
+          "prop": "jar",
+          "use": [{ "do": "grow", "stat": "strength", "amount": 4, "id": "@self" }]
         }
       ],
       "binds": [
@@ -663,7 +666,8 @@
         },
         {
           "socket": "jar:main",
-          "prop": "jar"
+          "prop": "jar",
+          "use": [{ "do": "grow", "stat": "strength", "amount": 4, "id": "@self" }]
         }
       ],
       "binds": [
@@ -767,7 +771,8 @@
         },
         {
           "socket": "page:main",
-          "prop": "leaf_page"
+          "prop": "leaf_page",
+          "use": [{ "do": "grow", "stat": "spirit", "amount": 6, "id": "@self" }, { "do": "hide", "prop": "@self" }]
         }
       ],
       "binds": [
@@ -865,7 +870,8 @@
         },
         {
           "socket": "jar:main",
-          "prop": "jar"
+          "prop": "jar",
+          "use": [{ "do": "grow", "stat": "strength", "amount": 4, "id": "@self" }]
         }
       ],
       "binds": [
@@ -979,7 +985,8 @@
         },
         {
           "socket": "page:main",
-          "prop": "leaf_page"
+          "prop": "leaf_page",
+          "use": [{ "do": "grow", "stat": "spirit", "amount": 6, "id": "@self" }, { "do": "hide", "prop": "@self" }]
         }
       ],
       "binds": [
@@ -1075,7 +1082,8 @@
         },
         {
           "socket": "jar:main",
-          "prop": "jar"
+          "prop": "jar",
+          "use": [{ "do": "grow", "stat": "strength", "amount": 4, "id": "@self" }]
         }
       ],
       "binds": [
@@ -1598,7 +1606,8 @@
       "holds": [
         {
           "socket": "page:main",
-          "prop": "leaf_page"
+          "prop": "leaf_page",
+          "use": [{ "do": "grow", "stat": "spirit", "amount": 6, "id": "@self" }, { "do": "hide", "prop": "@self" }]
         },
         {
           "socket": "chest:main",
@@ -1646,11 +1655,13 @@
       "holds": [
         {
           "socket": "jar:a",
-          "prop": "jar"
+          "prop": "jar",
+          "use": [{ "do": "grow", "stat": "strength", "amount": 4, "id": "@self" }]
         },
         {
           "socket": "jar:b",
-          "prop": "jar"
+          "prop": "jar",
+          "use": [{ "do": "grow", "stat": "strength", "amount": 4, "id": "@self" }]
         },
         {
           "socket": "prop:pegs",

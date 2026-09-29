@@ -433,6 +433,13 @@ pub trait AudioBus {
     /// A sound at `at`, heard from `listener`: attenuated over [`HEARING_CELLS`] and panned
     /// ([`place`]). A sound with no place is played at the listener.
     fn sfx(&mut self, kind: SfxKind, at: At, listener: At);
+    /// A sound of hers carrying her growth (`might` in 256ths, [`crate::fx::might`]: 256 at New
+    /// Game, 512 at the end): the app's plays it fuller and deeper. A bus that cannot, plays it
+    /// as it is.
+    fn sfx_with(&mut self, kind: SfxKind, at: At, listener: At, might: u16) {
+        let _ = might;
+        self.sfx(kind, at, listener);
+    }
     /// A bed to a level (0 silent, 255 full); the bus fades it there.
     fn bed(&mut self, bed: Bed, level: u8);
     /// Once a tick, after everything else.
@@ -597,6 +604,9 @@ pub struct Sense {
     /// is fighting within six cells of it.
     pub dog: Option<At>,
     pub dog_alarmed: bool,
+    /// Her growth as her casts and blows carry it: her spirit's and her strength's
+    /// [`crate::fx::might`].
+    pub might: (u16, u16),
 }
 
 /// How far a fire's crackle carries, in cells.
@@ -688,6 +698,7 @@ impl Sense {
             fire,
             dog,
             dog_alarmed,
+            might: (crate::fx::might(body.spirit), crate::fx::might(body.strength)),
         }
     }
 
@@ -872,8 +883,11 @@ impl Soundtrack {
                     };
                     bus.sfx(k, at(p), me);
                 }
-                EventKind::Swing { at: p, .. } => bus.sfx(SfxKind::Swing, at(p), me),
-                EventKind::Impact { school, at: p, .. } => {
+                EventKind::Swing { unit, at: p, .. } => {
+                    let m = if unit == s.me { s.might.1 } else { 256 };
+                    bus.sfx_with(SfxKind::Swing, at(p), me, m);
+                }
+                EventKind::Impact { spell, school, at: p } => {
                     let k = match school {
                         School::Heal => SfxKind::Heal,
                         School::Physical => SfxKind::HitPhysical,
@@ -883,7 +897,12 @@ impl Soundtrack {
                         School::Blast => SfxKind::HitBlast,
                         School::Shock => SfxKind::HitShock,
                     };
-                    bus.sfx(k, at(p), me);
+                    let m = match (crate::fx::players_spell(spell), school) {
+                        (false, _) => 256,
+                        (true, School::Physical) => s.might.1,
+                        (true, _) => s.might.0,
+                    };
+                    bus.sfx_with(k, at(p), me, m);
                 }
                 EventKind::Damage { unit, from, at: p, crit, .. } => {
                     if unit == s.me {
@@ -898,7 +917,10 @@ impl Soundtrack {
                 }
                 EventKind::Heal { unit, .. } if unit == s.me => bus.sfx(SfxKind::Heal, me, me),
                 EventKind::Death { unit, at: p, .. } if unit != s.me => bus.sfx(SfxKind::Death, at(p), me),
-                EventKind::Cast { at: p, .. } => bus.sfx(SfxKind::Cast, at(p), me),
+                EventKind::Cast { unit, at: p, .. } => {
+                    let m = if unit == s.me { s.might.0 } else { 256 };
+                    bus.sfx_with(SfxKind::Cast, at(p), me, m);
+                }
                 EventKind::CastFailed { unit, why, .. } if unit == s.me && why.says() => {
                     bus.sfx(SfxKind::CastFailed, me, me);
                 }
@@ -1301,6 +1323,7 @@ mod tests {
             fire: 0,
             dog: None,
             dog_alarmed: false,
+            might: (256, 256),
         }
     }
 

@@ -49,6 +49,39 @@ struct Head {
     prev: (i32, i32),
     cur: (i32, i32),
     bolt: art::Bolt,
+    /// Her growth in it ([`might`]; 256 for anything not hers).
+    might: u16,
+}
+
+/// How much of her growth a cast of hers carries, in 256ths (PLAN.md §2.6: growth is seen): 256
+/// at New Game's 30, rising evenly to 512 at 200 and no further. Her spells take it from her
+/// spirit, her blows from her strength. Presentation only: the sim's numbers are the numbers.
+pub fn might(stat: u16) -> u16 {
+    256 + (u32::from(stat.clamp(30, 200)) - 30).saturating_mul(256).div_ceil(170) as u16
+}
+
+/// Is `spell` one only the party casts (her melee and the verbs she learns)? A row's AI casts
+/// its own copies (`icebolt_ai`, `spark_ai`), so a spell no creature's book holds is hers.
+pub fn players_spell(spell: jane_core::SpellId) -> bool {
+    use std::sync::OnceLock;
+    static THEIRS: OnceLock<Vec<bool>> = OnceLock::new();
+    let theirs = THEIRS.get_or_init(|| {
+        let cat = jane_data::catalog();
+        let mut v = vec![false; cat.combat.spells.len()];
+        for u in cat.combat.units.iter().filter(|u| u.controller != jane_data::Controller::Player) {
+            for &s in u.book.iter().chain(u.phases.iter().flat_map(|p| p.book.iter())) {
+                v[s.index()] = true;
+            }
+        }
+        v
+    });
+    !theirs.get(spell.index()).copied().unwrap_or(true)
+}
+
+/// Her spirit's and her strength's [`might`] in `view`.
+fn her_might(view: &View<'_>) -> (u16, u16) {
+    let b = view.body();
+    (might(b.spirit), might(b.strength))
 }
 
 /// The pool and its dice.
@@ -135,6 +168,20 @@ impl Fx {
     }
 
     fn emit(&mut self, r: &Recipe, at: (i32, i32), dir: Angle) {
+        self.emit_with(r, at, dir, 256);
+    }
+
+    /// `r` with her growth in it (`might` in 256ths, [`might`]): past 256 as many parts again
+    /// in proportion (twice as many at 512), and a light that reaches and lasts as much further.
+    fn emit_with(&mut self, r: &Recipe, at: (i32, i32), dir: Angle, might: u16) {
+        self.emit_once(r, at, dir, might);
+        let more = u32::from(might.saturating_sub(256));
+        if more > 0 && self.rng.below(256) < more {
+            self.emit_once(&Recipe { light: None, ..*r }, at, dir, 256);
+        }
+    }
+
+    fn emit_once(&mut self, r: &Recipe, at: (i32, i32), dir: Angle, might: u16) {
         let fx_cap = self.cap - self.cap / 3;
         let parts = &mut self.parts;
         art::emit(r, at, dir, &mut self.rng, &mut |s| {
@@ -149,7 +196,10 @@ impl Fx {
         });
         if let Some(l) = r.light {
             let colour = l.role.of(art::hue(r.tint));
-            self.glows.push(Glow { x: at.0, y: at.1, z: l.z, colour, radius: l.radius, ticks: l.ticks, left: l.ticks });
+            let m = u32::from(might);
+            let radius = (u32::from(l.radius) * m / 256).min(u32::from(u16::MAX)) as u16;
+            let ticks = (u32::from(l.ticks) * (m + 256) / 512).clamp(1, 255) as u8;
+            self.glows.push(Glow { x: at.0, y: at.1, z: l.z, colour, radius, ticks, left: ticks });
             if self.glows.len() > 48 {
                 self.glows.remove(0);
             }
@@ -160,6 +210,9 @@ impl Fx {
     pub fn on_events(&mut self, view: &View<'_>, events: &[Event]) {
         let cat = jane_data::catalog();
         let px = |v: jane_core::Vec2| (v.x.0 >> FX_TO_CANVAS, v.y.0 >> FX_TO_CANVAS);
+        let (spirit, strength) = her_might(view);
+        // A party body's: growth is the world's, so every seat's body is as grown as hers.
+        let ours = |u: jane_sim::ids::UnitId| view.seat_of(u).is_some();
         for e in jane_sim::event::events_for(events, view.me()) {
             match e.kind {
                 EventKind::Cast { unit, spell, at } => {
@@ -168,18 +221,27 @@ impl Fx {
                     let facing = view.unit(unit).map_or(Facing::South, |u| u.facing);
                     let (dx, dy) = step(facing);
                     let (x, y) = px(at);
-                    self.emit(&art::cast(f.cast), (x + dx * 10, y + dy * 4), angle(facing));
+                    let m = if ours(unit) { spirit } else { 256 };
+                    self.emit_with(&art::cast(f.cast), (x + dx * 10, y + dy * 4), angle(facing), m);
                 }
-                EventKind::Swing { at, facing, .. } => {
+                EventKind::Swing { unit, at, facing } => {
                     let (dx, dy) = step(facing);
                     let (x, y) = px(at);
-                    self.emit(&art::swing(), (x + dx * 12, y + dy * 8), angle(facing));
+                    let m = if ours(unit) { strength } else { 256 };
+                    self.emit_with(&art::swing(), (x + dx * 12, y + dy * 8), angle(facing), m);
                 }
                 EventKind::Impact { spell, at, .. } => {
                     let def = cat.combat.spell(spell);
                     if let Some(f) = art::spell(def.id) {
                         let dir = Angle(self.rng.below(65536) as u16);
-                        self.emit(&art::impact(f.impact), px(at), dir);
+                        let m = if !players_spell(spell) {
+                            256
+                        } else if def.school == jane_core::action::School::Physical {
+                            strength
+                        } else {
+                            spirit
+                        };
+                        self.emit_with(&art::impact(f.impact), px(at), dir, m);
                     }
                 }
                 EventKind::Death { at, .. } => self.emit(&art::death(), px(at), Angle::NORTH),
@@ -233,13 +295,15 @@ impl Fx {
             self.emit(&r, at, Angle::NORTH);
         }
         // Bolts: their trails, and their heads for the frame.
+        let (spirit, _) = her_might(view);
         self.heads_next.clear();
         for p in view.projectiles() {
             let def = cat.combat.spell(p.spell);
             let Some(bolt) = art::spell(def.id).and_then(|f| f.bolt) else { continue };
             let cur = (p.pos.x.0 >> (FX_TO_CANVAS - 4), p.pos.y.0 >> (FX_TO_CANVAS - 4));
             let prev = self.heads.iter().find(|h| h.id == p.id.get()).map_or(cur, |h| h.cur);
-            self.heads_next.push(Head { id: p.id.get(), prev, cur, bolt });
+            let might = if p.from.is_some_and(|u| view.seat_of(u).is_some()) { spirit } else { 256 };
+            self.heads_next.push(Head { id: p.id.get(), prev, cur, bolt, might });
             let back = Angle(p.heading.0.wrapping_add(32768));
             // Shed along the tick's whole path, not at its end: a trail, not a string of beads.
             for k in 0..3 {
@@ -247,7 +311,7 @@ impl Fx {
                 let at = (prev.0 + (cur.0 - prev.0) * t / 256, prev.1 + (cur.1 - prev.1) * t / 256);
                 let jitter = (self.rng.range(-1, 1), self.rng.range(-1, 1));
                 if k == 0 || self.rng.below(2) == 0 {
-                    self.emit(&art::trail(bolt), (at.0 / Q + jitter.0, at.1 / Q + jitter.1), back);
+                    self.emit_with(&art::trail(bolt), (at.0 / Q + jitter.0, at.1 / Q + jitter.1), back, might);
                 }
             }
         }
@@ -431,7 +495,7 @@ impl Fx {
                 pos: (x - cam.0, y - cam.1),
                 height: l.z,
                 colour: l.role.of(hue),
-                radius: l.radius,
+                radius: (u32::from(l.radius) * u32::from(h.might) / 256).min(u32::from(u16::MAX)) as u16,
                 size: 4,
                 casts: true,
                 kind: LightKind::Point,
@@ -500,6 +564,9 @@ impl Fx {
         let a = i32::from(alpha);
         for h in &self.heads {
             let (tint, r, _) = art::head(h.bolt);
+            // Her growth: a wider halo, and past half-way a bigger core.
+            let r = (u32::from(r) * u32::from(h.might) / 256).min(255) as u8;
+            let core = if h.might >= 384 { 3 } else { 2 };
             let hue = art::hue(tint);
             let (x, y) = lerp(h.prev, h.cur, a);
             let (sx, sy) = (x - cam.0, y - cam.1 - 16);
@@ -514,9 +581,10 @@ impl Fx {
                 glow: 255,
                 height: 16,
             });
-            for (shape, colour, alpha) in
-                [(PartShape::Glow { r }, Role::Mid.of(hue), 200), (PartShape::Dot { size: 2 }, Role::Core.of(hue), 255)]
-            {
+            for (shape, colour, alpha) in [
+                (PartShape::Glow { r }, Role::Mid.of(hue), 200),
+                (PartShape::Dot { size: core }, Role::Core.of(hue), 255),
+            ] {
                 let off = i32::from(matches!(shape, PartShape::Dot { .. }));
                 f.parts.push(Particle {
                     x: (sx - off) as i16,
@@ -625,4 +693,34 @@ fn angle(f: Facing) -> Angle {
 /// Q4 `a` toward `b` at `alpha` of 256, as whole px.
 fn lerp(a: (i32, i32), b: (i32, i32), alpha: i32) -> (i32, i32) {
     ((a.0 + (b.0 - a.0) * alpha / 256) / Q, (a.1 + (b.1 - a.1) * alpha / 256) / Q)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Growth is seen: New Game's 30 is the recipes as drawn, 200 is twice them, and nothing
+    /// past it (PLAN.md §2.6).
+    #[test]
+    fn might_runs_from_new_game_to_twice() {
+        assert_eq!(might(1), 256);
+        assert_eq!(might(30), 256);
+        assert_eq!(might(115), 384);
+        assert_eq!(might(200), 512);
+        assert_eq!(might(900), 512);
+        assert!((30..200).all(|s| might(s) <= might(s + 1)));
+    }
+
+    /// Her melee and her verbs are hers; a creature's copies (`icebolt_ai`) are not.
+    #[test]
+    fn a_players_spell_is_one_no_creature_casts() {
+        let cat = jane_data::catalog();
+        let id = |s| cat.combat.spell_id(s).expect(s);
+        for s in ["melee_player", "icebolt", "fireball", "spark", "explosion"] {
+            assert!(players_spell(id(s)), "{s}");
+        }
+        for s in ["melee", "icebolt_ai", "spider_bite"] {
+            assert!(!players_spell(id(s)), "{s}");
+        }
+    }
 }
