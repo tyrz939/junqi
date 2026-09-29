@@ -160,16 +160,16 @@ Enemies are **rows × threat**: one `skeleton` row, scaled by the phase table at
 
 Her melee (`melee_player`) rolls `strength / 1.5 + irandom(strength / 8) + 12`, the same shape as her bolts on spirit, so strength is felt in the hand as well as in the bar: 35 a blow at New Game, about 100 at the Burial's door, about 150 at the end (it was `strength / 8 + 7`: 11 to 30 over the whole game, and a skeleton took her nine blows at the start and four at the end). A creature's plain `melee` has a flat 9 (was 6), which is felt at phase 1 and hardly past it. The School's jars give 4 strength and its pages 6 spirit, the Burial's pages 4 (all were 2), so the end is near the 2020 table's 1,000. Her spells and blows look and sound as grown as she is: halo, light, sparks and weight scale with her spirit (spells) and strength (blows), twice New Game's at 200 (`jane-present` `fx::might`).
 
-| Hour of play (mean of 5 seeds, food regrowing) | HP | Str | Spi | Rat / skeleton / spider: her blows to kill (melee) | Their blow, ‰ of her | Deaths that hour |
+| Hour of play (mean of 5 seeds, food regrowing, cupboards in) | HP | Str | Spi | Rat / skeleton / spider: her blows to kill (melee) | Their blow, ‰ of her | Deaths that hour |
 | --- | ---: | ---: | ---: | --- | --- | ---: |
 | New Game, before | 150 | 30 | 30 | 5 / 9 / 4 | 50 / 59 / 63 | |
 | New Game, after | 150 | 30 | 30 | 2 / 3 / 2 | 71 / 80 / 63 | |
-| 2, before | 394 | 79 | 59 | 3.2 / 6 / 2.6 | 21 / 24 / 26 | 17 |
-| 2, after | 404 | 81 | 62 | 1.2 / 2.2 / 1 | 29 / 32 / 25 | 6 |
-| 4, before | 674 | 135 | 83 | 2.4 / 4.4 / 2 | 11 / 14 / 14 | 21 |
-| 4, after | 808 | 162 | 105 | 1 / 1 / 1 | 13 / 15 / 12 | 7 |
-| End, before (4 to 12 hours) | 868 | 174 | 94 | 2 / 3.8 / 2 | 8 / 10 / 10 | 128 in all |
-| End, after (4 to 9 hours) | 945 | 189 | 116 | 1 / 1 / 1 | 11 / 12 / 10 | 38 in all |
+| 2, before | 442 | 88 | 60 | 3 / 5.8 / 2.8 | 17 / 20 / 21 | 6 |
+| 2, after | 404 | 81 | 60 | 1.2 / 2.2 / 1 | 28 / 32 / 25 | 15 |
+| 4, before | 597 | 119 | 84 | 2.8 / 4.8 / 2 | 13 / 15 / 16 | 31 |
+| 4, after | 762 | 152 | 101 | 1 / 1 / 1 | 14 / 16 / 12 | 13 |
+| End, before (5 to 11 hours) | 884 | 177 | 96 | 2 / 3.6 / 2 | 8 / 10 / 10 | 125 in all |
+| End, after (4 to 7 hours) | 941 | 188 | 116 | 1 / 1 / 1 | 11 / 12 / 10 | 65 in all |
 
 On arrival (after), a dungeon's own foes take her best (the better of melee and her bolts) about 2 blows in the mine, cellar, pipes and forest, 2 to 5 in the Museum, 4 in the Waters, 4 to 6 in the Works, 7 to 8 in the Factory, 6 in the Burial and 4 to 5 in the School; their blows are 3 % (Museum) to 11 % (Burial) of her. The whole story on seeds 1 to 5 still reaches its three endings.
 
