@@ -140,7 +140,7 @@
     "spirit": 1,
     "walk": 0.55,
     "run": 1.2,
-    "aggro": 16,
+    "aggro": 9,
     "leash": 80,
     "bounds": 1,
     "book": [
@@ -197,7 +197,7 @@
     "spirit": 1,
     "walk": 0.55,
     "run": 1.2,
-    "aggro": 14,
+    "aggro": 9,
     "leash": 70,
     "bounds": 1,
     "book": [

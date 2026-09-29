@@ -12,7 +12,10 @@
 //! **order** (`Send`: it walks there and minds nothing else, [`crate::npc`]), **`sight: lit`**
 //! (it only notices, and only keeps, a target that stands in a prop's light) and
 //! **`shuns_light`** (it will not step into warm light: it walks to the edge and waits). And one
-//! thing that is not a row at all: the night ([`night_reach`]), which lengthens its reach. By day
+//! thing that is not a row at all: the night ([`night_reach`]), which lengthens its reach. How
+//! far it notices her is [`aggro_reach`]: its row's aggro, shorter the more she has grown past
+//! its phase and a little longer while she is behind it, a quarter longer in the dark, never
+//! off the screen (WoW's rule scaled to the view; PLAN.md §2.6 *Aggro*). By day
 //! nothing is wary: a hostile comes for her on sight within its aggro, day or night, county or
 //! dungeon (the owner, 2026-09-29; PLAN.md §2.6 *Day*). What leaves her be is a row with no
 //! aggro (the county's rabbits, sheep, hens and its people), not an hour.
@@ -47,8 +50,8 @@ use crate::runtime::ZoneRuntime;
 use crate::state::{CombatState, PathCache, Unit, ZoneState};
 use crate::status::{is_stunned, speed_factor};
 use crate::tuning::{
-    AGGRO_PERIOD, BAIT_EAT_FX, BAIT_HIT, CHASE_PATH_TIMES, LEASH_PATH_TIMES, LEASH_SNAP_FX, NIGHT_AGGRO, NIGHT_LEASH,
-    PATROL_PATH_CELLS, PATROL_REACHED_FX, REPATH_SOON, WORKS_SCALE,
+    AGGRO_FLOOR_FX, AGGRO_MAX_FX, AGGRO_PAR, AGGRO_PERIOD, BAIT_EAT_FX, BAIT_HIT, CHASE_PATH_TIMES, LEASH_PATH_TIMES,
+    LEASH_SNAP_FX, NIGHT_AGGRO, NIGHT_LEASH, PATROL_PATH_CELLS, PATROL_REACHED_FX, REPATH_SOON, WORKS_SCALE,
 };
 use crate::units::{def_of, face_vector, move_unit, think_offset};
 
@@ -125,9 +128,11 @@ fn idle(cx: &mut Ctx<'_>, id: UnitId, def: &UnitDef, shy: bool) {
     if (now.0 + think_offset(id)) % AGGRO_PERIOD == 0 {
         // The only place a sleeping county asks about the dark, and it asks once every ten ticks.
         let dark = if def.aggro.0 > 0 { night_reach(cx, id, def) } else { 0 };
-        let reach = i64::from(def.aggro.0) * i64::from(10 + NIGHT_AGGRO * dark) / 10;
-        let party = nearest_enemy(cx, id, reach, def.sight == UnitSight::Lit);
-        let found = party.or_else(|| hunted(cx, id, def, reach));
+        let party = nearest_enemy(cx, id, def, dark, def.sight == UnitSight::Lit);
+        let found = party.or_else(|| {
+            let prey = cx.zone.unit(id).map_or(0, |u| aggro_reach(def, u.strength, None, dark));
+            hunted(cx, id, def, prey)
+        });
         if let Some(t) = found {
             let u = cx.zone.unit_mut(id).expect("unit");
             u.target = Some(t);
@@ -196,9 +201,11 @@ fn fight(cx: &mut Ctx<'_>, id: UnitId, def: &UnitDef, run: Fx, shy: bool) {
     let u = cx.zone.unit(id).expect("unit");
     let (pos, home) = (u.pos, u.home);
     // A rooted thing (a flower, a cactus: no feet) never leaves its post, so no chase takes it
-    // past its leash: it lets go once she is half again its aggro from it, or it would hold her
-    // in its fight from across the zone for good.
-    let rooted_off = run.0 <= 0 && distance(tpos, home) > i64::from(def.aggro.0.max(CELL_FX)) * 3 / 2;
+    // past its leash: it lets go once she is half again the screen's notice from it (or its own
+    // aggro, if longer), or it would hold her in its fight from across the zone for good. Not its
+    // own shorter aggro (2026-09-30): she shoots it from bolt range, on the screen, and a thing
+    // that let go there stood idle and mended whole between her bolts.
+    let rooted_off = run.0 <= 0 && distance(tpos, home) > i64::from(def.aggro.0.max(AGGRO_MAX_FX)) * 3 / 2;
     let too_far = distance(pos, home) > leash || rooted_off;
     // Light is how a sentry sees: a target that steps into the dark is a target it no longer has.
     let unseen = !too_far && def.sight == UnitSight::Lit && !lit_at(cx.zone, cx.rt, clock, tpos, false);
@@ -299,13 +306,52 @@ pub fn night_reach(cx: &Ctx<'_>, id: UnitId, def: &UnitDef) -> i32 {
     if u32::from(u.strength) >= u32::from(def.strength) * u32::from(WORKS_SCALE) { 2 } else { 1 }
 }
 
-/// The party body nearest `id` (between bodies) within `reach`, alive, awake, unhidden, not a
-/// god, an enemy, in sight (and, `lit_only`, standing in a prop's light). A tie goes to the later
-/// seat, as the TS's scan did. A friendly AI (no row has one) looks at every present unit.
-pub fn nearest_enemy(cx: &mut Ctx<'_>, id: UnitId, reach: i64, lit_only: bool) -> Option<UnitId> {
+/// How far (between bodies, `Fx`) a unit of row `def` standing at `strength` notices a body whose
+/// strength and spirit come to `her` (`None`: not her, the prey of its `hunts`), with `dark` from
+/// [`night_reach`]. WoW's rule (20 yards at her level, a yard less for each level she is over it,
+/// never under 5) scaled to a view 27 cells high (PLAN.md §2.6 *Aggro*, the owner, 2026-09-30):
+///
+/// - its match is [`AGGRO_PAR`] times its phase's scale (its strength over its row's: the
+///   phase table's multiple, as spawned). At her match it is the row's aggro;
+/// - past her match it shortens by a quarter for each match more (twice it: three quarters;
+///   five times: nothing), never under [`AGGRO_FLOOR_FX`] (a row shorter than that keeps its own);
+/// - short of it, it lengthens by half of what she lacks (half her match: a quarter longer);
+/// - in the dark a quarter longer again ([`NIGHT_AGGRO`]), and never past [`AGGRO_MAX_FX`];
+/// - a boss is its arena's: its row, a quarter longer in the dark; a row with no aggro is 0.
+///
+/// Integer throughout, and nothing drawn: every machine at the table gets the same reach.
+pub fn aggro_reach(def: &UnitDef, strength: u16, her: Option<u32>, dark: i32) -> i64 {
+    let base = i64::from(def.aggro.0);
+    if base <= 0 {
+        return 0;
+    }
+    let night = |r: i64| if dark > 0 { r * NIGHT_AGGRO / 100 } else { r };
+    if def.boss {
+        return night(base);
+    }
+    let max = i64::from(AGGRO_MAX_FX).max(base);
+    let r = match her {
+        None => base,
+        Some(her) => {
+            let scale = (i64::from(strength) / i64::from(def.strength.max(1))).max(1);
+            let par = AGGRO_PAR * scale;
+            let her = i64::from(her);
+            let r = if her >= par { base * (5 * par - her) / (4 * par) } else { base * (3 * par - her) / (2 * par) };
+            r.clamp(base.min(i64::from(AGGRO_FLOOR_FX)), max)
+        }
+    };
+    night(r).min(max)
+}
+
+/// The party body nearest `id` (between bodies) within its [`aggro_reach`] of that body, alive,
+/// awake, unhidden, not a god, an enemy, in sight (and, `lit_only`, standing in a prop's light).
+/// A tie goes to the later seat, as the TS's scan did. A friendly AI (no row has one) looks at
+/// every present unit, at its row's reach.
+pub fn nearest_enemy(cx: &mut Ctx<'_>, id: UnitId, def: &UnitDef, dark: i32, lit_only: bool) -> Option<UnitId> {
     let u = cx.zone.unit(id)?;
     let (pos, faction) = (u.pos, u.faction);
     let mut best: Option<UnitId> = None;
+    let reach = aggro_reach(def, u.strength, None, dark);
     let mut best_d = reach;
     let here = cx.zone.id;
     let clock = cx.world.clock;
@@ -325,7 +371,11 @@ pub fn nearest_enemy(cx: &mut Ctx<'_>, id: UnitId, reach: i64, lit_only: bool) -
         if z != here || cx.world.players.get(seat).is_some_and(|p| p.god) {
             continue;
         }
-        if seen(cx, u, oid, &mut best_d, lit_only, clock) {
+        let Some(o) = cx.zone.unit(oid) else { continue };
+        let mine = aggro_reach(def, u.strength, Some(u32::from(o.strength) + u32::from(o.spirit)), dark);
+        let mut within = if best.is_some() { mine.min(best_d) } else { mine };
+        if seen(cx, u, oid, &mut within, lit_only, clock) {
+            best_d = within;
             best = Some(oid);
         }
     }

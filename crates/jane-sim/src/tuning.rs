@@ -190,9 +190,20 @@ pub fn journal_ring() -> u32 {
 
 /// An idle creature looks about it every this many ticks, staggered by `think_offset`.
 pub const AGGRO_PERIOD: u32 = 10;
-/// Night reach, tenths: aggro `* (10 + 4 * dark) / 10`, leash `* (10 + 6 * dark) / 10` (§2).
-pub const NIGHT_AGGRO: i32 = 4;
+/// Night reach. Aggro, per cent: `* 125 / 100` out of the lamplight however dark it is, and never
+/// past [`AGGRO_MAX_FX`] (the owner, 2026-09-30: the old `* (10 + 4 * dark) / 10` put a Works
+/// creature's notice at 29 m, twice off the screen). Leash, tenths: `* (10 + 6 * dark) / 10` (§2).
+pub const NIGHT_AGGRO: i64 = 125;
 pub const NIGHT_LEASH: i32 = 6;
+/// Aggro, WoW's rule scaled to the view (PLAN.md §2.6 *Aggro*, 2026-09-30). The view is 48 x 27
+/// cells, so a creature that notices her past 14 m does it from off the screen: the notice never
+/// goes past this, by day or by night (bosses keep their arena's rows).
+pub const AGGRO_MAX_FX: i32 = 14 * CELL_FX;
+/// However far above a creature she has grown, it still notices her this close (WoW's 5 yards).
+pub const AGGRO_FLOOR_FX: i32 = 4 * CELL_FX;
+/// Her strength and spirit at New Game: what a creature at phase 1 (scale 1) is her match at.
+/// At scale `m` its match is `m` times this; she is "above it" as far as her sum passes that.
+pub const AGGRO_PAR: i64 = 60;
 /// A creature at this multiple of its row's strength (the phase table's threat 4) is deep
 /// county: the night counts twice for it.
 pub const WORKS_SCALE: u16 = PHASE_SCALE[4] as u16;

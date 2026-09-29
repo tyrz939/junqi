@@ -1,7 +1,7 @@
 {
   "master": {
     "name": "Master", "faction": "undead", "controller": "ai",
-    "strength": 18, "spirit": 12, "walk": 0.5, "run": 1, "aggro": 11, "leash": 60, "bounds": 1,
+    "strength": 18, "spirit": 12, "walk": 0.5, "run": 1, "aggro": 10, "leash": 60, "bounds": 1,
     "book": ["icebolt_ai", "melee"], "respawn": 0, "autoRegen": true, "loot": [], "sprite": "school_master"
   },
   "caretaker": {

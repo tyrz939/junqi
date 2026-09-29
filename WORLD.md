@@ -214,6 +214,31 @@ Outside a meeting's hours the dog is on the step, and never in two places. Each 
 
 **Rule: hostiles come on sight.** A hostile comes for her the moment she is within its aggro and in its sight, by day as by night, on the gentlest ground as on the hardest, in the county and in every dungeon; the night lengthens its reach, it does not wake it. What leaves her be is a row with no aggro (rabbits, sheep, hens, butterflies, the county's people), not an hour. The owner decided this on 2026-09-29, overriding the earlier *by day the Lowfields' own ground leaves her be*: his playtests met that rule as "enemies don't aggro unless hit first" and wanted the county harsher (`PLAN.md` §2.6, *Day*; `jane-sim/tests/ai.rs` `by_day_the_gentlest_ground_comes_for_her_on_sight`, `a_skeleton_in_the_mine_comes_on_sight_by_day`).
 
+**Rule: a creature notices her from on the screen, and less as she outgrows it** *(the owner, 2026-09-30: "aggro range is too big; WoW-like")*. WoW's 20 yards at her level, a yard less a level over it and never under 5, scaled to a view of 48 × 27 cells (13.5 m to the top edge): most rows notice her at 8 to 10 m, the big and the elite at 11 to 13 m, and nothing past 14 m, by day or night. Her growth is her level: her strength and spirit against the creature's phase (60 a phase-table step, her New Game sum), so the Lowfields' phase-1 things notice her at their row's reach at New Game and at 4 m by the end, while a deep phase notices her from further while she is behind it. The night adds a quarter, however dark. Bosses keep their arena's rows; rows with no aggro notice nobody (`PLAN.md` §2.6 *Aggro*; `jane_sim::ai::aggro_reach`). A rooted thing (a flower, a cactus, a statue) lets go of a fight once she is half again 14 m from it (21 m; or half again its own aggro if longer), not half again its now shorter aggro: shot at from bolt range, it stays in the fight rather than letting go and mending whole between her bolts.
+
+| Row | Aggro before (m) | After (m) |
+| --- | ---: | ---: |
+| skeleton, quarryman, statue, cactus, wall_spider, tale_spinner, the Pryor sitter | 16 | 9 |
+| night_skeleton / night_soldier | 18 / 20 | 10 / 11 |
+| skeleton_guard, bandit | 16 | 10 |
+| soldier, rose_soldier | 18 | 10 |
+| skeleton_clerk, plot_tenant | 14 | 8 |
+| bat, ruffian, the Hurst ruffian | 14 | 9 |
+| spider | 14 | 8 |
+| lake_shape | 14 | 10 |
+| pumpkin, pumpkin_top | 12 | 8 |
+| shade, forest_night_spider | 12 | 9 |
+| crow | 11 | 9 |
+| sentry, master | 11 | 10 |
+| flower | 10 | 8 |
+| hauler | 9 | 11 |
+| tale_under | 24 | 13 |
+| yard_bones (new) | | 5 |
+| rat, stuffed_fox, armour, waxwork, lurker; every boss | as they were | as they were |
+| At night | × 1.4, × 1.8 in the Works (29 m) | × 1.25, and never past 14 m |
+
+**Julie's yard** *(the owner, 2026-09-30)*. The yard skeleton ran at her before she reached the dog, so the dog's quest had nothing left to fight and the one skeleton was a chase on the step. Now seven `yard_bones` (a skeleton that notices her at 5 m, leash 40 m, back in 600 s) stand about the yard: two in it (the keyed `yard_skeleton` in the far corner, the hand-in's consequence takes it off for good, and one by the east fence), and five scattered 6 cells and more outside the fence within 90 cells of the yard's middle, 16 cells and more from the station road, off every road's metal and out of every set place's box (`life::yard_bones`, `Step::CountyYard`). She walks up to them; the dog's quest (`defeat_skeleton`, now a kill of `yard_bones`) always has one to hand.
+
 **Rule: a kill quest's patch holds N+1 of its target within five cells of the patch's centre by day, and refills within ten game minutes of being allowed to** (`QUESTS.md` K8). That is `cap` N+1, a `hold` line one kill never reaches (so each of the N she was asked for stands up again at the next ten-minute mark after it falls, out of her sight; a unit's own `respawn` is only for creatures no patch's row names), and an ecology that looks at a held patch every ten game minutes: once the pressure is under the line, whatever was due stands up at the next ten-minute mark. `recover` is a rate per ten minutes, not a timer per corpse; a patch cleared to the last is quieter for hours.
 
 ### 4.2 Prey and predators

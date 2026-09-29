@@ -456,6 +456,20 @@ fn the_first_walk_is_safe(sk: &Skeleton, c: &County<'_>, s: &mut Survey) {
             s.bad.push(format!("seed {}: something that bites {d} cells from the first walk at ({x}, {y})", s.seed));
         }
     }
+    // Julie's yard (WORLD.md §4.1): seven short-sighted bones, the two in the yard and five outside
+    // the fence, none on a road's metal.
+    let yard = jane_data::catalog().combat.unit_id("yard_bones").expect("the yard's row");
+    let bones: Vec<_> = bp.units.iter().filter(|u| u.def == yard).collect();
+    if bones.len() != 7 {
+        s.bad.push(format!("seed {}: {} of the yard's bones stand, not 7", s.seed, bones.len()));
+    }
+    for u in bones {
+        let (x, y) = (i32::from(u.cell.x), i32::from(u.cell.y));
+        let in_yard = c.chunks.iter().any(|ch| ch.bounds.contains(x, y));
+        if !in_yard && dist(&c.country.d_road, x, y) < 8 {
+            s.bad.push(format!("seed {}: the yard's bones by a road at ({x}, {y})", s.seed));
+        }
+    }
 }
 
 /// The longest dark roads get a relay box and a run of dead lamps, and sparking the box lights
@@ -592,7 +606,7 @@ fn nothing_stands_on_a_road_or_in_a_box() {
 
 #[test]
 fn nothing_bites_near_the_first_walk_or_in_a_haven() {
-    for what in ["from the first walk", "phase"] {
+    for what in ["from the first walk", "phase", "the yard's bones"] {
         assert_clean(what);
     }
 }

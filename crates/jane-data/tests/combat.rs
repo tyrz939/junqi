@@ -29,7 +29,7 @@ fn every_table_is_there_in_id_order() {
     let k = &c().combat;
     assert_eq!(k.spells.len(), 33);
     assert_eq!(k.effects.len(), 21);
-    assert_eq!(k.units.len(), 155);
+    assert_eq!(k.units.len(), 156);
     for ids in [
         k.spells.iter().map(|s| s.id).collect::<Vec<_>>(),
         k.effects.iter().map(|e| e.id).collect(),
@@ -137,9 +137,9 @@ fn phases_fall_in_hp_below() {
 
 #[test]
 fn unit_numbers_convert_as_the_architecture_says() {
-    // data/units.json bat: aggro 14 m, leash 110 m, bounds 0.75 m, walk 0.8 and run 1.7 px per tick, respawn 600 s.
+    // data/units.json bat: aggro 9 m, leash 110 m, bounds 0.75 m, walk 0.8 and run 1.7 px per tick, respawn 600 s.
     let bat = unit("bat");
-    assert_eq!(bat.aggro, Fx(14 * METRE_FX));
+    assert_eq!(bat.aggro, Fx(9 * METRE_FX));
     assert_eq!(bat.leash, Fx(110 * METRE_FX));
     assert_eq!(bat.bounds, Fx(1536));
     assert_eq!((bat.walk, bat.run), (Fx(205), Fx(435)));

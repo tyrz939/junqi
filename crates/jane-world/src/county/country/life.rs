@@ -90,6 +90,70 @@ fn table(region: Region) -> &'static [Wild] {
     }
 }
 
+/// The bones about Julie's yard (the owner, 2026-09-30; WORLD.md §4 *Julie's yard*): this many
+/// outside the fence, besides the two the chunk stands in the yard. *Tuning.*
+const YARD_OUT: usize = 5;
+/// They stand this far out from the yard's box at least, and within this of its middle (100 m of
+/// the yard), in cells. *Tuning.*
+const YARD_OFF: i32 = 6;
+const YARD_REACH: i64 = 90;
+/// Clear of the station road (the first walk to Julie's gate) by this, of any road's metal by this,
+/// and of each other by this, in cells. *Tuning.*
+const YARD_WALK_CLEAR: i64 = 16;
+const YARD_ROAD_CLEAR: u8 = 8;
+const YARD_APART: i64 = 8;
+/// Throws at a spot before the yard makes do with fewer. *Tuning.*
+const YARD_TRIES: u32 = 400;
+
+/// A few of the yard's short-sighted bones (`yard_bones`, aggro 5 m) on open ground a little
+/// outside Julie's fence, so the dog's quest always has one to hand and none comes running at her
+/// on the step: clear of the station road she walks in on, off every road's metal, out of every
+/// set place's box, never in water. Their phase is the row's (0: content, not the ground's).
+pub fn yard_bones(c: &mut County<'_>) {
+    let sk = c.sk;
+    let Some(b) = c.chunks.iter().find(|ch| ch.site == sk.named.julie_house).map(|ch| ch.bounds) else { return };
+    let (mx, my) = (b.x + b.w / 2, b.y + b.h / 2);
+    let walk = sk.named.first_walk()[0];
+    let station: Vec<(i32, i32)> = sk
+        .roads
+        .iter()
+        .enumerate()
+        .filter(|(_, r)| (r.from, r.to) == walk)
+        .flat_map(|(n, _)| c.lines[n].iter().copied())
+        .collect();
+    let far = |(x, y): (i32, i32), pts: &[(i32, i32)], r: i64| {
+        pts.iter().all(|&(px, py)| {
+            let (dx, dy) = (i64::from(px - x), i64::from(py - y));
+            dx * dx + dy * dy >= r * r
+        })
+    };
+    let def = defs().u.yard_bones;
+    let mut rng = c.k.dice(Step::CountyYard, 0, 0);
+    let mut stood: Vec<(i32, i32)> = Vec::new();
+    let reach = YARD_REACH as i32;
+    for _ in 0..YARD_TRIES {
+        if stood.len() >= YARD_OUT {
+            break;
+        }
+        let (x, y) = (mx + rng.range(-reach, reach), my + rng.range(-reach, reach));
+        let (dx, dy) = (i64::from(x - mx), i64::from(y - my));
+        let ok = dx * dx + dy * dy <= YARD_REACH * YARD_REACH
+            && !b.grow(YARD_OFF).contains(x, y)
+            && !near_chunk(c, x, y, 2)
+            && !c.k.solid(x, y)
+            && !c.k.is_claimed(x, y)
+            && c.k.get(x, y) != Tile::Water
+            && !ground(sk, x, y).wet
+            && dist(&c.country.d_road, x, y) >= YARD_ROAD_CLEAR
+            && far((x, y), &station, YARD_WALK_CLEAR)
+            && far((x, y), &stood, YARD_APART);
+        if ok {
+            c.k.unit(None, def, x, y, Vec::new());
+            stood.push((x, y));
+        }
+    }
+}
+
 /// The creatures a macro cell of this region and biome may hold.
 fn wild_here(region: Region, biome: Biome) -> Vec<UnitDefId> {
     let u = &defs().u;

@@ -306,6 +306,7 @@ pub fn furnish_places(c: &mut County<'_>) {
 /// after the bell, which fills no screen by day.
 pub fn furnish_life(c: &mut County<'_>) {
     ready(c);
+    life::yard_bones(c);
     life::wildlife(c);
     life::wanderers(c);
     life::gaps(c);

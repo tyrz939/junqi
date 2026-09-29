@@ -5,7 +5,9 @@
 // south. `yard_gate` is just inside the west gate, where the old small county began. The garden
 // book lies by the barrel, as the quest says, clear of the dog on the step. The quest skeleton
 // stands in the far corner, in sight of the stoop and out of reach of anyone who only comes in at
-// the west gate and stands about. Julie's hens keep still.
+// the west gate and stands about; a second stands by the east fence. Both are `yard_bones`, which
+// notice her at 5 m, so she walks up to them (the county puts five more outside the fence:
+// `life::yard_bones`). Julie's hens keep still.
 id      julie_house
 box     42x28
 anchor  centre
@@ -60,7 +62,7 @@ things
 ..........................................
 ..........................................
 ..........................................
-..........................................
+.....................................z....
 ...aa.....................................
 ...aa.................wwwww...............
 .................................JJJ......
@@ -149,7 +151,8 @@ o prop dog_bowl dogs_bowl {"talk": "dogs_bowl", "label": "The dog's bowl"}
 d unit dog dog south
 h unit town_hen - south
 D unit town_hen_brown - west
-y unit skeleton yard_skeleton south
+y unit yard_bones yard_skeleton south
+z unit yard_bones - west
 E mark house_front south
 G mark yard_gate east
 g mark garden_book south

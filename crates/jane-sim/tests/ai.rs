@@ -306,19 +306,20 @@ fn a_shade_waits_at_the_edge_of_warm_light() {
     assert_eq!(unit(&s, shade).combat, CombatState::Idle);
 }
 
-/// PLAN.md 2.6, `ai.ts nightReach`: after dark a creature out of the lamplight notices from
-/// further off (aggro x 1.4); in warm light it is its daytime self.
+/// PLAN.md 2.6, `ai::aggro_reach`: after dark a creature out of the lamplight notices from
+/// further off (aggro x 1.25, the owner 2026-09-30); in warm light it is its daytime self.
 #[test]
 fn the_night_lengthens_its_reach_outside_the_light() {
-    // A skeleton notices at 16 m between bodies: 18 m centre to centre. At 20 m, only at night.
+    // A skeleton notices her at New Game at 9 m between bodies: 11 m centre to centre (13.25 m
+    // at night). At 12 m, only at night.
     let at = |night: bool, lamp: bool| {
         let mut s = field();
         if night {
             hour(&mut s, 22);
         }
-        let foe = spawn(&mut s, "skeleton", 30, 10);
+        let foe = spawn(&mut s, "skeleton", 22, 10);
         if lamp {
-            put_prop(&mut s, "brazier", 30, 9, true);
+            put_prop(&mut s, "brazier", 22, 9, true);
         }
         steps(&mut s, 20);
         unit(&s, foe).combat

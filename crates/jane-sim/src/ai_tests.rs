@@ -132,6 +132,65 @@ fn def_id(id: &str) -> UnitDefId {
     jane_data::catalog().combat.unit_id(id).unwrap()
 }
 
+// --- aggro -----------------------------------------------------------------------------------
+
+/// PLAN.md §2.6 *Aggro* (the owner, 2026-09-30): WoW's rule scaled to a view 27 cells high. A
+/// skeleton (9 m) notices her at 9 m at her match (New Game against phase 1), shorter as she grows
+/// past it down to 4 m, longer while she is behind its phase but never past 14 m; the dark adds a
+/// quarter, however deep, and the cap holds; a boss keeps its arena's row; a rabbit notices nobody.
+#[test]
+fn aggro_shrinks_as_she_outgrows_it_and_never_leaves_the_screen() {
+    use crate::ai::aggro_reach;
+    use jane_core::num::METRE_FX;
+    let cat = jane_data::catalog();
+    let row = |id: &str| cat.combat.unit(def_id(id));
+    let m = |metres_x100: i64| metres_x100 * i64::from(METRE_FX) / 100;
+    let bones = row("skeleton");
+    let base = i64::from(bones.aggro.0);
+    assert_eq!(base, m(900));
+    let at = |her: u32, mult: u16, dark: i32| aggro_reach(bones, bones.strength * mult, Some(her), dark);
+    // Her match: New Game (strength 30, spirit 30) against phase 1.
+    assert_eq!(at(60, 1, 0), m(900));
+    // Twice her match: three quarters; five times and past: the floor.
+    assert_eq!(at(120, 1, 0), m(675));
+    assert_eq!(at(300, 1, 0), m(400));
+    assert_eq!(at(1_000, 1, 0), m(400));
+    // Behind it: phase 3 (a match of 180) against New Game notices from a third further...
+    assert_eq!(at(60, 3, 0), m(1200));
+    // ...and nothing is ever past the cap, by day or by night (phase 6's match is 480: 13.2 m).
+    assert!(at(30, 8, 0) > m(1300) && at(30, 8, 0) < m(1400));
+    assert_eq!(at(30, 8, 2), m(1400));
+    // The dark: a quarter longer, the same however deep.
+    assert_eq!(at(60, 1, 1), m(1125));
+    assert_eq!(at(60, 1, 2), m(1125));
+    assert_eq!(at(300, 1, 1), m(500));
+    // Never longer as she grows, at any phase, day or night, and always on the screen.
+    for mult in [1, 2, 3, 4, 6, 8] {
+        for dark in 0..=2 {
+            let mut last = i64::MAX;
+            for her in (30..=1_200).step_by(10) {
+                let r = at(her, mult, dark);
+                assert!(r <= last && (m(400)..=m(1400)).contains(&r), "{mult} {dark} {her}: {r}");
+                last = r;
+            }
+        }
+    }
+    // Not her (the prey of a `hunts` row): the row's own, a quarter longer in the dark.
+    assert_eq!(aggro_reach(bones, bones.strength * 6, None, 0), base);
+    assert_eq!(aggro_reach(bones, bones.strength, None, 1), m(1125));
+    // A boss keeps its arena's reach, grown or not; a passive row notices nobody.
+    let boss = row("headmaster");
+    assert!(boss.boss);
+    assert_eq!(aggro_reach(boss, boss.strength, Some(2_000), 0), i64::from(boss.aggro.0));
+    assert_eq!(aggro_reach(boss, boss.strength, Some(2_000), 1), i64::from(boss.aggro.0) * 5 / 4);
+    let rabbit = row("rabbit");
+    assert_eq!(aggro_reach(rabbit, rabbit.strength, Some(60), 2), 0);
+    // The yard's bones (5 m) are her match at New Game and come down to the floor as she grows.
+    let yard = row("yard_bones");
+    assert_eq!(aggro_reach(yard, yard.strength, Some(60), 0), m(500));
+    assert_eq!(aggro_reach(yard, yard.strength, Some(300), 0), m(400));
+}
+
 // --- E9: send --------------------------------------------------------------------------------
 
 /// verbs2.test.ts E9 "it walks to the mark past someone it would otherwise attack, then its
