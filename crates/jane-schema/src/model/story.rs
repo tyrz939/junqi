@@ -94,6 +94,9 @@ model! {
         pub carry: bool,
         /// A crafting bench: crafting works within reach of one.
         pub bench: bool,
+        /// A cupboard, a dresser, a left-luggage locker: USE opens it beside her bag, and what is put
+        /// in it stays there, the world's and the whole party's (`jane_sim::store`).
+        pub store: bool,
         /// What switches it on; `None` = nothing does.
         pub answers: Option<Answers>,
         /// Its `use` list runs only the first time.

@@ -247,6 +247,10 @@ pub enum EventKind {
     },
     /// Her bag or craft row changed.
     Bag,
+    /// She opened a cupboard (`store.rs`): the window opens on it, beside her bag. To her alone.
+    Store {
+        prop: PropId,
+    },
     /// Her conversation opened, moved on or closed.
     Dialogue,
     /// Into her bag.
@@ -283,6 +287,7 @@ impl EventKind {
             EventKind::Toast(_)
                 | EventKind::Zone { .. }
                 | EventKind::Bag
+                | EventKind::Store { .. }
                 | EventKind::Dialogue
                 | EventKind::Loot { .. }
                 | EventKind::Learn(_)

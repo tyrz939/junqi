@@ -244,6 +244,20 @@ impl<'a> View<'a> {
         near_rest(&self.here(), self.body().pos, &mut Vec::new())
     }
 
+    /// Cupboard `prop` as she sees it from where she stands: what it holds, `None` unless it is a
+    /// cupboard of her zone within her reach (`store.rs`). The window shows it beside her bag and
+    /// closes when this goes `None`. What is in it is the party's: every seat reads the same.
+    pub fn store(
+        &self,
+        prop: crate::ids::PropId,
+    ) -> Option<&'a [Option<jane_core::Stack>; crate::tuning::STORE_SLOTS]> {
+        let p = self.prop(prop)?;
+        let def = jane_data::catalog().story.prop(p.def);
+        let near = crate::interact::prop_distance_sq(def, p, self.body().pos)
+            <= i64::from(crate::store::STORE_REACH_FX).pow(2);
+        (def.store && near && self.body().alive).then(|| crate::store::slots_of(self.state, self.zone.id, prop))
+    }
+
     /// What her craft row makes.
     pub fn craft_output(&self) -> Option<(ItemId, u16)> {
         crate::inventory::craft_output(&self.me().craft)

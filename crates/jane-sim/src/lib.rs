@@ -78,6 +78,7 @@ pub mod sim;
 pub mod snake;
 pub mod state;
 pub mod status;
+pub mod store;
 pub mod sym;
 pub mod trace;
 mod travel;

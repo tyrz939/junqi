@@ -13,7 +13,7 @@ use crate::sim::{Sim, stamp_seats_fog};
 use crate::state::{FlagKey, PlayerState, QuestProgress, Stats, TravelRequest, Unit};
 use crate::tuning::{ARRIVAL_RADIUS, BAR_SLOTS, MAX_PLAYERS, TICKS_PER_HOUR};
 use crate::units::{max_hp, max_mp, new_unit};
-use crate::{dialogue, interact, inventory, quests};
+use crate::{dialogue, interact, inventory, quests, store};
 
 impl Sim {
     /// Apply one command (step 0). A cast reads its seat's frame: the raw aim and the assist
@@ -72,6 +72,10 @@ impl Sim {
             | Command::CraftClear { .. }
             | Command::CraftClearAll
             | Command::CraftTake
+            | Command::StorePut { .. }
+            | Command::StoreTake { .. }
+            | Command::StoreMove { .. }
+            | Command::StorePutAll { .. }
             | Command::Advance
             | Command::Choose { .. }
             | Command::CloseDialogue => self.seat_command(seat, c.cmd),
@@ -110,6 +114,10 @@ impl Sim {
                 Command::CraftTake => {
                     inventory::craft_take(cx, seat);
                 }
+                Command::StorePut { prop, bag, to } => store::put(cx, seat, prop, bag, to),
+                Command::StoreTake { prop, slot, to } => store::take(cx, seat, prop, slot, to),
+                Command::StoreMove { prop, from, to } => store::arrange(cx, prop, from, to),
+                Command::StorePutAll { prop } => store::put_all(cx, seat, prop),
                 Command::Advance => dialogue::advance(cx),
                 Command::Choose { option } => dialogue::choose(cx, option),
                 Command::CloseDialogue => dialogue::close(cx),

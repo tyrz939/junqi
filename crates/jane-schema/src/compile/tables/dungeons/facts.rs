@@ -86,10 +86,12 @@ impl Facts {
         for (id, row) in src.table("props", &mut quiet) {
             let v = &row.value;
             let set = |k: &str| v.get(k).is_some_and(|x| !x.is_null() && x != &Value::Bool(false));
-            let inert =
-                !["push", "carry", "bench", "answers", "once", "gate", "plate", "rest", "light", "prompt", "blockLos"]
-                    .iter()
-                    .any(|k| set(k));
+            let inert = ![
+                "push", "carry", "bench", "store", "answers", "once", "gate", "plate", "rest", "light", "prompt",
+                "blockLos",
+            ]
+            .iter()
+            .any(|k| set(k));
             f.props.insert(
                 id,
                 PropFact {
