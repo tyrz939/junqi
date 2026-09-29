@@ -8,7 +8,7 @@
   "hauler": {
     "name": "Hauler", "faction": "undead", "controller": "ai",
     "strength": 240, "spirit": 1, "walk": 0.45, "run": 0.45, "aggro": 9, "leash": 200, "bounds": 1.25,
-    "book": ["melee_stun"], "respawn": 0, "autoRegen": true, "loot": [],
+    "book": ["melee_stun"], "respawn": 180, "autoRegen": true, "loot": [],
     "resist": { "physical": 0.04, "frost": 0.04, "fire": 0.04, "nature": 0.04, "blast": 0.04, "shock": 0.04 },
     "sprite": "factory_hauler", "sight": "lit"
   },

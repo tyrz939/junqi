@@ -5,7 +5,8 @@
     "nodes": {
       "read": {
         "lines": [
-          "GOLDSKIN MINING Co. FACTORY. Loading bay, lockers and No. 1 line off this door. Time office off the line. Press hall and assembly beyond it.",
+          "GOLDSKIN MINING Co. FACTORY. The LOADING BAY is off the yard, and the LOCKERS and No. 1 LINE off the LOADING BAY, the line on a shop padlock. The TIME OFFICE, the EXTRACT, the SWITCH ROOM and the PRESS HALL are off No. 1 LINE, the PRESS HALL on another padlock. The GENERATOR HALL is down the EXTRACT, and through the SWITCH ROOM from the line.",
+          "The STORES and the FOREMAN'S OFFICE are off the PRESS HALL, the STORES behind a power shutter. ASSEMBLY is through the FOREMAN'S OFFICE, and DESPATCH through ASSEMBLY; the roller door there gives on this yard. Shop keys are signed for at the LOCKERS.",
           "The lamp runs are marked in red. All but one of them has been crossed out, and the crossings out are in the same hand as the plan."
         ]
       }
@@ -42,7 +43,8 @@
       "read": {
         "lines": [
           "CALL BOXES. Press for a hauler. Do not press twice.",
-          "A hauler walks the shortest way it knows to the box that called it. It does not know which of these walls are new."
+          "A hauler walks the shortest way it knows to where it is called. It does not know which of these walls are new.",
+          "Chalked on the new brickwork, in the same hand as the plan: the FOREMAN'S OFFICE gate is chained into this wall. Nobody is to call a hauler."
         ]
       }
     }
@@ -101,5 +103,11 @@
         "lines": ["The rest of the diary is sums. Nine, fourteen, nine, fourteen, and then a column that does not add up to anything."]
       }
     }
-  }
+  },
+  "board_factory_loading": {"speaker": "LOADING BAY", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["LOADING BAY. The LOCKERS and No. 1 LINE off it.", "Under it: shop keys to be signed for at the LOCKERS."]}}},
+  "board_factory_roller_door": {"speaker": "DESPATCH", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["DESPATCH. The roller door is worked from inside, off ASSEMBLY."]}}},
+  "board_factory_time_office": {"speaker": "TIME OFFICE", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["TIME OFFICE. Clock in. Clock out.", "The stove is kept in."]}}},
+  "board_factory_vent": {"speaker": "EXTRACT", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["EXTRACT. The duct drops to the GENERATOR HALL.", "Under it, scratched: nobody comes back up it."]}}},
+  "board_factory_press_hall": {"speaker": "PRESS HALL", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["PRESS HALL. Haulers working. The STORES and the FOREMAN'S OFFICE through the hall."]}}},
+  "board_factory_gen_shutter": {"speaker": "SWITCH ROOM", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["SWITCH ROOM. Between No. 1 LINE and the GENERATOR HALL.", "The shutter is on the generator's own supply, and there is none."]}}}
 }

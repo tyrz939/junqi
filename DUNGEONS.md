@@ -762,7 +762,7 @@ The Headmaster brought the school down here when the nights got longer, because 
 | The plate re-locking the chest | No: it re-locks only what is still shut; once opened, the key is hers |
 | A door that locks behind her | Only the big door (the lock-in, above) and the front door on an omen night, which is barred from nine to five and never from inside the adit |
 
-What the model leaves out it leaves out on purpose: units standing on plates (a friend, a lured rat) only add ways; other pushables stand still while one is proven (every push is still undoable). The same search was run on the other seven: the Factory has the same leak (its two plain locks take `key_generic`, and a spent one strands every room past No. 1 LINE); the rest came out clean.
+What the model leaves out it leaves out on purpose: units standing on plates (a friend, a lured rat) only add ways; other pushables stand still while one is proven (every push is still undoable). The same search was run on the other seven: the Factory has the same leak (its two plain locks took `key_generic`, and a spent one stranded every room past No. 1 LINE: fixed, §3.4); the rest came out clean on the room graph (the Factory, the Museum, the Pipes and the Library are §3.2 to §3.4).
 
 **Is it clear what to do? (the legibility pass, 29 September 2026.)** The mission walked as a first-time player with nothing but the quest log and the screen. Each place she could stall, and what now tells her, in the world (no markers). `crates/jane-world/tests/dungeon_cues.rs` holds the cues on seeds 1 to 16; before and after frames are in `sheets/mine-logic/` (local).
 
@@ -978,7 +978,7 @@ It is the Museum's breaker turned inside out (there, dark was the danger) and th
 order node        kind      holds                                                     heat
 0     sump        entrance  up from the sewer through a grate (Explosion). Dark        0.2
 1     loading     teach     one lamp left burning over the far door, one sentry. Step into the light and learn   0.3
-2     lockers     key       key_generic x2. The foreman's diary, page one (notice: the plan of the works)        0.3
+2     lockers     key       key_shop x2. The foreman's diary, page one (notice: the plan of the works)        0.3
 3     line_a      fight     dark. Rats, bats. Haulers on patrol, which cannot be fought, only avoided           0.7
 4     time_office rest      the clocking-in room. A stove. Cards in the rack, all stamped for today            0
 5     vent        puzzle    a one-way drop (2020). A way-in prop: friends can follow. No way back up            0
@@ -1010,7 +1010,7 @@ order node        kind      holds                                               
 | --- | --- |
 | `socket_dead` | `unlock` the shutter it feeds; `lightWhenOn` |
 | `fuse_box` | `hide` each lamp prop on its run, `lock` each shutter on its circuit, `flag` |
-| `call_box` | `send` its hauler to the mark behind the weak wall, `then`: `hide` the wall, `shake`, and the hauler stays where it stops |
+| `call_box` | `send` its hauler to the mark behind the weak wall, `then`: `hide` the wall, `shake`, and the hauler stays where it stops. It switches itself off as it rings, so it rings again until the wall is down (§3.4, "Can she get stuck?") |
 | `generator_cold` (shown when `broken_generator` is Repaired) | `flag factory_power`, `show` every lamp, `unlock` every powered shutter, `shake`, toast |
 | `grid_socket` | `strike` the grid's rect |
 | `relay_box` (county) | `switch` on every `lamp_dead` of its run; `flag lamps_<run>` |
@@ -1019,7 +1019,7 @@ A lit lamp cannot answer a bolt (`schoolTouch` skips props that are `on`), which
 
 **What Electric re-opens.** **Dead lamp runs, for good** (`PLAN.md` section 2.6): each failing run on the east and north roads has a relay box at its head; one spark and the run stays lit every night after, the road keeps its -1 threat, and the walk home is changed for the rest of the game. This is the largest single reward in the design and it is the verb, not loot. Also: the signal at Castle Halt (the Closed Line). The Museum's breaker, which now holds through the night. The moth's lamp in the Forest.
 
-**Keys and rewards.** Plain keys x2, `key_foreman`, `key_stone` ("The Chairman's Key", tagged in the foreman's hand for the Hoar Stone on the graveyard footpath: the only key to the Burial's county stair, so the Factory comes before the Burial). Big jar. Small jars x2. Leaf pages x2. The diary (three notices, each one fact short). **Rest:** the time office; the works canteen outside (`sites.json`). **Shortcut:** the roller door. **The cellar study** pays off here: the stand is the same stand.
+**Keys and rewards.** Shop Keys x2 (`key_shop`, the Factory's own; they were plain keys), `key_foreman`, `key_stone` ("The Chairman's Key", tagged in the foreman's hand for the Hoar Stone on the graveyard footpath: the only key to the Burial's county stair, so the Factory comes before the Burial). Big jar. Small jars x2. Leaf pages x2. The diary (three notices, each one fact short). **Rest:** the time office; the works canteen outside (`sites.json`). **Shortcut:** the roller door. **The cellar study** pays off here: the stand is the same stand.
 
 **At night.** Indoors, so the halls do not change. The yard does: the Cooling Yard is threat 5 past the Factory's own ring (the approach is never harder than the Factory's rooms, phase 4), and after dark in the Works whatever stands in it notices her from further off and follows her further, so arriving by the pipes is the sensible way after nine, and the roller door opens onto something she may not want to walk out into. **Omen:** "The day shift clocks off at six. If true: at six the haulers walk to the time office and stand there until seven." An hour a day when the press hall is empty and the rest room is not.
 
@@ -1035,6 +1035,29 @@ A lit lamp cannot answer a bolt (`schoolTouch` skips props that are `on`), which
 - *A sim fix, general:* a unit leashing home that stood in its home's own cell, but more than a pixel and a half off its mark, leashed for ever (a path from a cell to itself has no steps), mending and deaf. The Foreman did, after every fight she walked away from. It now snaps home from its home cell (`ai.rs`, `leash`).
 - *Not built, and the bot does without:* the Charge Hand led past the dormant sentry so that it fires on him (they are one faction; the bot kites him with frost instead, which works); the day shift at the time office. The generator hall's sentry must die for the orb to unlock (`guardedBy` both): from the dark it never fights and mends faster than she hurts it, so she puts it down from a lit cell in its sight.
 - *A question for John:* `night_reach` (things notice from further, and follow further, in the dark after the bell) applies indoors too, so the Factory's halls are harder after nine than "Indoors, so the halls do not change" says. At ten at night, from the wicket, the Reader still finishes all seven seeds (one death on one). Left as it is.
+
+**Can she get stuck? (the softlock pass on the Factory, 29 September 2026.)** As the mine's (§3.1): `crates/jane-world/tests/dungeon_states_works.rs` searches every state of the room graph on seeds 1 to 16 (388 a seed: locks in any order, iron on the generator whenever she likes, keys carried out), and from every one the Foreman can still be reached; `crates/jane-sim/tests/factory_call_box.rs` plays the press hall on the real seed.
+
+| Could it strand her? | Verdict |
+| --- | --- |
+| A plain key carried out and spent on a lock outside | **Yes, as it was.** The lockers held two `key_generic`, which also open the Society's shed and the cellar's storage room; one spent there left No. 1 LINE or the PRESS HALL shut for good, and everything past it. **Fixed:** they are Shop Keys (`key_shop`, "It opens the padlocks on the Factory floor, once each, and nothing else"), and both gates take `shop`. (`key_works` is the Night Watchman's, the wicket's and the grate's.) A test asserts no lock outside the Factory takes a tag the Factory's locks take |
+| The press hall's hauler killed before the call box is rung | **Yes, as it was.** The wall comes down only in the `then` of the hauler's `send`, and a dead hauler (`respawn: 0`, and it can be killed: 4,800 health at the Works' scale, and only 4 % resist) is never sent; the box, a shock prop, was on and spent at the first spark. Nothing else opens the FOREMAN'S OFFICE. **Fixed:** haulers stand up again (`respawn: 180`, unseen, as any creature); the box switches itself off as it rings, and says so when nothing is there to answer ("The box rings at the far end, and nothing comes. Whatever answers it is not up yet.", an `if dead`); the hauler's arrival switches it on for good |
+| The hauler's walk given up (its order's budget runs out) | **Yes, as it was**, the same way: the box was spent and nothing came. **Fixed** by the same re-arming box |
+| Iron spent on the wrong thing | No: the generator is the only iron sink in the Factory (4), and the lockers and the fitter's box by the generator give 4 each |
+| The vent's drop | No: the extract room and the generator hall are joined by an open corridor as well, so the drop commits nothing |
+| No. 1 LINE's fuse box sparked | Not a softlock: it brings the STORES shutter down for good (the stores are a side room: iron, coal, a jar), and its toast says so |
+| Dying in ASSEMBLY | No: the lock-in resets on her death (§2.5) |
+
+**Is it clear what to do? (the legibility pass on the Factory.)** Walked as a first-time player with the quest log and the screen. `crates/jane-world/tests/dungeon_cues_works.rs` holds the cues on seeds 1 to 16; frames are in `sheets/logic-a/` (local).
+
+| Where | What was unclear | What tells her now |
+| --- | --- | --- |
+| The yard | The plan said "Press hall and assembly beyond it": no generator, no office, and nothing about which doors are padlocked | The plan in words, true on every seed: the LOADING BAY off the yard, the LOCKERS and No. 1 LINE off it (a shop padlock), the TIME OFFICE, the EXTRACT, the SWITCH ROOM and the PRESS HALL off the line (another padlock), the GENERATOR HALL down the EXTRACT, the STORES (a power shutter) and the FOREMAN'S OFFICE off the PRESS HALL, ASSEMBLY through the office, DESPATCH through ASSEMBLY; "Shop keys are signed for at the LOCKERS". Boards by the yard's doors: LOADING BAY, DESPATCH ("The roller door is worked from inside, off ASSEMBLY") |
+| Two padlocks | Which key, and where the keys are | The Shop Key's words; the LOADING BAY board: "shop keys to be signed for at the LOCKERS" |
+| No. 1 LINE | Five doorways alike, in the dark | A board at each: LOADING BAY, TIME OFFICE ("The stove is kept in"), EXTRACT ("The duct drops to the GENERATOR HALL"), SWITCH ROOM ("The shutter is on the generator's own supply, and there is none"), PRESS HALL |
+| The generator | "The board beside it wakes up and does nothing else": is it broken? | "The starting board beside it wakes up, and waits to be started" (she has just been given Spark) |
+| The press hall | The wall came down in the middle of the hall, and the office's gate went up at the far end of a corridor with no word of it | The press hall's notice, chalked: "the FOREMAN'S OFFICE gate is chained into this wall". The toast: "... the chain on the FOREMAN'S OFFICE gate was built into it. Both are on the floor." |
+| The Foreman | The quest log said "the Factory's assembly hall" | "The Foreman, in ASSEMBLY, through the FOREMAN'S OFFICE in the Factory" |
 
 ---
 
