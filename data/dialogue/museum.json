@@ -5,8 +5,9 @@
     "nodes": {
       "read": {
         "lines": [
-          "CASTLE MUSEUM, GROUND FLOOR. HISTORY off the entrance hall. ARTS west. SCIENCE east. Cloakroom and conveniences as signed.",
-          "Open ten to four. The west end of the plan has been painted over in council cream. The rest of it is still right."
+          "CASTLE MUSEUM, GROUND FLOOR. HISTORY and the CENTRAL HALL off the ENTRANCE HALL, the CONVENIENCES through HISTORY. The CLOAKROOM, ARTS and SCIENCE off the CENTRAL HALL; MAINTENANCE through the CLOAKROOM, and the STORES through SCIENCE.",
+          "Open ten to four. A fourth wing off the CENTRAL HALL has been PAINTED OVER on the plan, in council cream. The rest of it is still right.",
+          "The doors off this hall, the CENTRAL HALL and SCIENCE have their names on boards beside them."
         ]
       }
     }
@@ -76,5 +77,13 @@
         ]
       }
     }
-  }
+  },
+  "board_museum_entry": {"speaker": "ENTRANCE HALL", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["ENTRANCE HALL. The way out, and the floor plan."]}}},
+  "board_museum_atrium": {"speaker": "CENTRAL HALL", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["CENTRAL HALL. The CLOAKROOM, ARTS and SCIENCE off it."]}}},
+  "board_museum_history": {"speaker": "HISTORY", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["HISTORY. THE COUNTY AND THE COMPANY.", "Under it, on a card: the CONVENIENCES are through this gallery."]}}},
+  "board_museum_cloakroom": {"speaker": "CLOAKROOM", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["CLOAKROOM. MAINTENANCE through the cloakroom. Staff only."]}}},
+  "board_museum_arts": {"speaker": "ARTS", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["ARTS. The exhibits are not to leave their plinths while the lights are on."]}}},
+  "board_museum_science": {"speaker": "SCIENCE", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["SCIENCE. THE MODERN METHOD. Presented by the Company.", "Under it, on a card: FLOOR KEY No. 3, from ARTS."]}}},
+  "board_museum_stores": {"speaker": "STORES", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["STORES. Power shutter. Staff only."]}}},
+  "board_museum_magic": {"speaker": "PAINTED OVER", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["The board has been painted over in council cream, like the end of the plan. The letters show through: MAGIC.", "Behind it the arch is plaster, and new, and there is a draught through it."]}}}
 }

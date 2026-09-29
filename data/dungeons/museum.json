@@ -126,7 +126,7 @@
               { "do": "if", "when": [{ "if": "flag", "flag": "museum_gone_arts_b", "not": true }], "then": [{ "do": "hide", "prop": "museum_arts_exhibit_b" }, { "do": "spawn", "unit": "museum_arts_walker_b", "def": "stuffed_fox", "at": "museum_arts_stand_b" }] },
               { "do": "spawn", "unit": "museum_prowler", "def": "stuffed_fox", "at": "@prowler" },
               { "do": "shake", "amount": 2 },
-              { "do": "toast", "text": "The lights go out one wing at a time. Somewhere a shutter comes down." }
+              { "do": "toast", "text": "The lights go out one wing at a time. The STORES shutter comes down, and out in the halls things step down off their plinths." }
             ],
             "lit": [
               { "do": "show", "prop": "museum_atrium_lamp_a" },

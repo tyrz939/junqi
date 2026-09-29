@@ -878,6 +878,28 @@ magic  -oneway opens_on museum_cleared-> atrium   shortcut: the fire door
 
 Still hard, and meant to be: at the story's health one flurry with a stun in it is half of her, and a seed can take a dozen deaths (whole story seed 2: eleven) before the one that wins. Each death costs only the walk back from the stove.
 
+**Can she get stuck? (the softlock pass on the Museum, 29 September 2026.)** As the mine's (§3.1): `crates/jane-world/tests/dungeon_states_works.rs` searches every state of the room graph on seeds 1 to 16 (88 to 176 a seed: the four keys in any order, the breaker thrown either way at any time, wood on the cubicle door or kept), and from every one the Attendant can still be reached; the two plinths of NATURAL HISTORY are proven on the cell grid on the seeds that keep the room. Nothing was found.
+
+| Could it strand her? | Verdict |
+| --- | --- |
+| A key carried out | No: the Museum's four keys have tags of their own, and no lock outside takes them |
+| The breaker thrown the wrong way | No: it throws back, from the room it is in, which neither state shuts |
+| An exhibit blown up | No: an exhibit's `gone` flag only takes a walker out of the dark; the doorways that matter are gates, and the STORES armour is the verb's own lock |
+| The Shot-Firer killed in the corridor | No: his glove lets go when someone stands in SCIENCE with him down |
+| A friend throws the breaker while she is in ARTS | Shut in until it is thrown back (a prank, not a softlock, as above) |
+| A death before she has rested | She wakes at the Halt, and the county door is shut from four to ten: a wait, not a softlock |
+
+**Is it clear what to do? (the legibility pass on the Museum.)** `crates/jane-world/tests/dungeon_cues_works.rs` holds the cues on seeds 1 to 16; frames are in `sheets/logic-a/` (local).
+
+| Where | What was unclear | What tells her now |
+| --- | --- | --- |
+| The floor plan | "ARTS west. SCIENCE east." The wings go where the lattice puts them, so on most seeds it was false; and nothing said where the conveniences, the maintenance room or the stores were | The plan in words, true on every seed: HISTORY and the CENTRAL HALL off the ENTRANCE HALL, the CONVENIENCES through HISTORY; the CLOAKROOM, ARTS and SCIENCE off the CENTRAL HALL; MAINTENANCE through the CLOAKROOM, the STORES through SCIENCE; "A fourth wing off the CENTRAL HALL has been PAINTED OVER on the plan". A test holds the plan to no compass points |
+| The central hall | Five doorways, one of them plaster | A board at each: ENTRANCE HALL, CLOAKROOM ("MAINTENANCE through the cloakroom"), ARTS, SCIENCE, and one PAINTED OVER ("The letters show through: MAGIC") |
+| ARTS | An armour stands in the doorway, and nothing says the lights move it | The ARTS board: "The exhibits are not to leave their plinths while the lights are on" |
+| The breaker | "Somewhere a shutter comes down" | "The STORES shutter comes down, and out in the halls things step down off their plinths" |
+| SCIENCE | The gate says SCIENCE, and the key is in another wing | The floor key says SCIENCE; the SCIENCE board: "FLOOR KEY No. 3, from ARTS" |
+| The stores | Shut in the dark, and blocked by an armour in the light | The STORES board in SCIENCE: "Power shutter"; the armour's label: "An armour in the doorway" |
+
 ---
 
 ### 3.3 Butterfly Forest (phase 3): Grow

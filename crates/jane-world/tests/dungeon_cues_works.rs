@@ -105,3 +105,23 @@ fn the_factorys_plan_the_press_hall_and_the_quest_log_say_where_the_foreman_is()
     let key = cat.combat.item(cat.combat.item_id("key_shop").expect("the shop key"));
     assert!(cat.text(key.description).contains("Factory floor"));
 }
+
+#[test]
+fn every_way_on_from_the_museums_decisions_has_its_name_painted_beside_it() {
+    boards_by_every_way_on(ZoneId::Museum, "notice_museum");
+}
+
+#[test]
+fn the_museums_plan_names_rooms_not_compass_points_and_its_boards_say_what_opens_them() {
+    // "ARTS west. SCIENCE east." was false on most seeds: the wings go where the lattice puts them.
+    let plan = lines_of("notice_museum");
+    for word in ["north", "south", "east", "west"] {
+        let lower = plan.to_lowercase();
+        assert!(!lower.split(|c: char| !c.is_alphabetic()).any(|w| w == word), "{word}: {plan}");
+    }
+    assert!(plan.contains("PAINTED OVER") && plan.contains("Open ten to four"), "{plan}");
+    // The dark is what empties the ARTS doorway, and the light is what lifts the STORES shutter.
+    assert!(lines_of("board_museum_arts").contains("while the lights are on"));
+    assert!(lines_of("board_museum_stores").contains("Power shutter"));
+    assert!(lines_of("board_museum_science").contains("ARTS"), "the floor key is from ARTS");
+}
