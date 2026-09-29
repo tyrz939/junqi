@@ -17,7 +17,7 @@ const BAYER4: [[u8; 4]; 4] = [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15,
 /// the tallest terrain's `rows_up`.
 const UP: i32 = jane_present::rows_up(100) + shadow::FRONT;
 
-pub use jane_present::shadow::{shear, spill_shear};
+pub use jane_present::shadow::shear;
 
 /// The mask the shadows are gathered in, the canvas's size, and the box it was written in.
 #[derive(Debug, Default)]
@@ -74,9 +74,9 @@ pub fn cast(mask: &mut Mask, page: &Page, s: &SpriteCmd, c: &Caster, k: (i32, i3
 }
 
 /// Lays block `b`'s shadow into `mask` (`shadow::block_bands`: its footprint swept along the sun
-/// by its height; a thin or low block along `ks`, the fence rule).
-pub fn cast_block(mask: &mut Mask, b: &Block, k: (i32, i32), ks: (i32, i32)) {
-    shadow::block_bands(b, k, ks, |band| mask.band(band));
+/// by its height; a fence's part or a low block exactly, on the ground alone).
+pub fn cast_block(mask: &mut Mask, b: &Block, k: (i32, i32)) {
+    shadow::block_bands(b, k, |band| mask.band(band));
 }
 
 /// Applies the mask to `t` and clears it. `heights` is the terrain's height under each px of `t`

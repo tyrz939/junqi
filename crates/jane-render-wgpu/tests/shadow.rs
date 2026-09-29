@@ -4,7 +4,7 @@
 
 use jane_core::Angle;
 use jane_present::frame::CHUNK_PX;
-use jane_present::shadow::{self, shear, spill_shear};
+use jane_present::shadow::{self, shear};
 use jane_present::{
     AtlasPages, Backend, Block, CLUT_LEN, Caster, ChunkCmd, ChunkId, ChunkLayers, Depth, Directional, Flags, Frame,
     Light, LightKind, Page, Pass, Post, Span, SpriteCmd, Src, Tier, height_of_rows,
@@ -330,18 +330,18 @@ fn with_blocks(mut f: Frame, blocks: &[Block]) -> Frame {
 
 #[test]
 fn a_fence_lays_the_bands_t0_and_t1_lay_on_the_ground_alone_and_a_wall_spills_nothing() {
-    // The fence rule (PRESENTATION.md §1.7): at five a fence's shadow is its posts' lines and its
-    // two rails' thrown south-east, the bands `shadow::block_bands` gives T0 and T1, and its
-    // true shadow (north, behind its rails) is not laid; it never darkens the fence.
+    // A fence's sun shadow (PRESENTATION.md §1.7) is its posts' lines and its two rails' along
+    // the true sun, the bands `shadow::block_bands` gives T0 and T1; it never darkens the fence.
+    // A sun in the north throws it down the screen, where it is seen whole.
     let Some(mut b) = backend() else { return };
     let (layers, blocks) = fence();
-    let px = draw(&mut b, &atlas(|_| 1), &with_blocks(frame(layers, false, Some(five()), &[]), &blocks));
+    let px = draw(&mut b, &atlas(|_| 1), &with_blocks(frame(layers, false, Some(north_sun()), &[]), &blocks));
     let lit = luma(at(&px, 30, 140));
     let dark = |x: i32, y: i32| luma(at(&px, x, y)) * 10 < lit * 8;
-    let (k, ks) = (shear(&five()).unwrap(), spill_shear(&five()).unwrap());
+    let k = shear(&north_sun()).unwrap();
     let mut bands = Vec::new();
     for bl in &blocks {
-        shadow::block_bands(bl, k, ks, |band| bands.push(band));
+        shadow::block_bands(bl, k, |band| bands.push(band));
     }
     let covered =
         |x: i32, y: i32, r: i32| bands.iter().any(|b| b.x0 - r <= x && x < b.x1 + r && b.y0 - r <= y && y < b.y1 + r);
@@ -362,17 +362,20 @@ fn a_fence_lays_the_bands_t0_and_t1_lay_on_the_ground_alone_and_a_wall_spills_no
         }
     }
     assert!(n > 500 && agree * 100 >= n * 97, "T2 lays {agree} of {n} px as the bands do");
-    // A post's line starts at its foot, and the grass between two posts' lines is lit.
-    assert!(dark(104, 97) && dark(120, 108), "no post's line from its foot");
-    let row: Vec<bool> = (90..200).map(|x| dark(x, 104)).collect();
-    let gaps = row.windows(2).filter(|w| w[0] && !w[1]).count();
-    assert!(gaps >= 4, "the posts' lines run together on row 104: {row:?}");
-    // Its true shadow is not laid: east of the fence's end, level with its rails, open grass.
-    assert!(!dark(200, 84), "the fence throws its true shadow too");
-    // The fence (the grass's albedo, facing the low sun) is never in its own shadow.
+    // A post's line starts at its foot; down a column between two posts, the rails' lines with
+    // lit grass under the lower one and between them (cot 40 degrees: 1.19 rows a px).
+    assert!(dark(104, 97) && dark(104, 110), "no post's line from its foot");
+    let col: Vec<bool> = (96..130).map(|y| dark(113, y)).collect();
+    let lines = col.windows(2).filter(|w| !w[0] && w[1]).count() + usize::from(col[0]);
+    assert!(lines >= 2 && !dark(113, 99), "no floating rails in the fence's shadow: {col:?}");
+    // The fence (the grass's albedo, facing the low sun at five, which throws its shadow east
+    // along it) is never in its own shadow.
+    let (layers, _) = fence();
+    let px = draw(&mut b, &atlas(|_| 1), &with_blocks(frame(layers, false, Some(five()), &[]), &blocks));
+    let lit = luma(at(&px, 30, 140));
     for x in (82..172).step_by(8) {
         for y in [78, 86] {
-            assert!(!dark(x, y), "a rail shadowed at ({x}, {y}): {}", luma(at(&px, x, y)));
+            assert!(luma(at(&px, x, y)) * 10 >= lit * 8, "a rail shadowed at ({x}, {y}): {}", luma(at(&px, x, y)));
         }
     }
     // A wall's block a cell deep and 13 px spills nothing south, and keeps its true shadow.
@@ -525,4 +528,57 @@ fn a_noon_shadow_is_crisper_and_darker_than_five_oclocks_and_cloud_fades_it() {
     let (_, mist) = softness(&mut b, 46, 65535 * 3 / 8);
     let (_, rain) = softness(&mut b, 46, 65535);
     assert!(noon < mist && mist < rain, "noon {noon}, in mist {mist}, in rain {rain}");
+}
+
+#[test]
+fn a_lamp_throws_a_fences_posts_and_floating_rails_far_off_and_right_against_it() {
+    // The owner's second playtest (2026-09-29): a lamp or her lantern saw an E-W fence as a wall,
+    // and right against it saw through it. The fence's parts stand in the field with their bars
+    // (`scatter.wgsl`'s `fences`), as T0's and T1's lamps throw them (`shadow::block_slabs`).
+    // Each frame is drawn with the fence's blocks and without (its px alone stand in no field).
+    let (layers, blocks) = fence();
+    let lamp = |pos: (i32, i32), height: u8| Light {
+        pos,
+        height,
+        colour: [255, 220, 170],
+        radius: 140,
+        size: 3,
+        casts: true,
+        kind: LightKind::Point,
+        holder: None,
+    };
+    let shot = |l: Light, with: bool| {
+        let mut b = backend()?;
+        let f = frame(layers.clone(), false, None, &[l]);
+        let f = if with { with_blocks(f, &blocks) } else { f };
+        Some(draw(&mut b, &atlas(|_| 1), &f))
+    };
+    // A lamp 40 px up, 35 px south of the fence, between two posts (x 107..117).
+    let far = lamp((112, 130), 40);
+    let (Some(with), Some(open)) = (shot(far, true), shot(far, false)) else { return };
+    let dark = |x: i32, y: i32| luma(at(&with, x, y)) * 10 < luma(at(&open, x, y)) * 8;
+    // Up the column between the posts: lit under the lower rail, its line, lit between the two
+    // rails, the upper one's line (t = d 40 / (40 - z) from the lamp: rows 79 to 88 and 56 to 69, the
+    // penumbra round them).
+    let col: Vec<bool> = (40..95).map(|y| dark(112, y)).collect();
+    assert!(!dark(112, 92), "the ground under the lower rail is in its shadow: the fence is a wall: {col:?}");
+    assert!(dark(112, 83), "the lower rail throws nothing: {col:?}");
+    assert!(!dark(112, 78), "no gap between the rails' lines: {col:?}");
+    assert!(dark(112, 62), "the upper rail throws nothing: {col:?}");
+    // Behind a post (x 101..107, 0 to 28 px), along the ray from the lamp through it, dark far
+    // up the screen.
+    assert!(dark(96, 60) && dark(92, 45), "a post throws nothing");
+    // Her lantern, 18 px up, three rows south of the fence's foot, right against it.
+    let near = lamp((112, 98), 18);
+    let (Some(with), Some(open)) = (shot(near, true), shot(near, false)) else { return };
+    let dark = |x: i32, y: i32| luma(at(&with, x, y)) * 10 < luma(at(&open, x, y)) * 8;
+    let col: Vec<bool> = (40..95).map(|y| dark(112, y)).collect();
+    // Its posts either side (x 101..107 and 117..123) throw their shadows out nearly level with
+    // the fence: on the ground between the next posts, a row or two up from its foot.
+    assert!(dark(96, 92) && dark(128, 92), "the light passes through the posts right against them");
+    assert!(dark(112, 91), "the light passes under the lower rail right against it: {col:?}");
+    // Between the lower rail's line and the upper rail's, lit: the upper rail's underside (17 px)
+    // is a px over the lantern, so its soft shadow (the lantern is 3 px across) takes most of
+    // the ground past a few rows; T0 and T1, lighting from a point, lay it from 63 px out.
+    assert!(!dark(112, 84), "the fence is a wall to a light right against it: {col:?}");
 }

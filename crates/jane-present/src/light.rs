@@ -27,31 +27,41 @@ const NIGHT: [i32; 3] = [80, 104, 140];
 /// median against T2's per channel), the day's kept warm rather than the measured mauve (a flat
 /// light has no blue shade beside a gold lit side to read against). T0 multiplies by them (past
 /// 255 through its grade's exposure, `t0_gain`); T1 scales its fill and sun to their luma.
-const KEYS: [(i32, [i32; 3]); 14] = [
+const KEYS: [(i32, [i32; 3]); 18] = [
     (0, NIGHT),
     (HOUR * 9 / 2, [76, 98, 136]),
-    (HOUR * 6, [214, 168, 200]),
+    // Dawn (2026-09-29, the owner: sunrises and sunsets somewhat real and beautiful; ART.md
+    // §3.1, warm and cool meet through grey, never mauve): the blue hour, grey-blue, then a
+    // brief deep orange as the sun clears the horizon (5:30), then gold.
+    (HOUR * 21 / 4, [112, 122, 158]),
+    (HOUR * 11 / 2, [160, 150, 150]),
+    (HOUR * 23 / 4, [214, 156, 116]),
+    (HOUR * 25 / 4, [244, 206, 174]),
     (HOUR * 15 / 2, [268, 248, 240]),
     // Noon is white, so a T0 frame at midday needs no light pass (day is free) and only its
     // exposure: T2's noon is about an eighth brighter than the art as drawn.
     (HOUR * 12, [292, 292, 292]),
     (HOUR * 33 / 2, [270, 240, 222]),
     (HOUR * 17, [256, 222, 200]),
-    (HOUR * 35 / 2, [240, 204, 180]),
-    (HOUR * 18, [184, 160, 170]),
-    (HOUR * 37 / 2, [163, 140, 160]),
-    (HOUR * 75 / 4, [150, 132, 160]),
-    (HOUR * 39 / 2, [104, 108, 155]),
+    // Dusk, the same mirrored: gold, deepening; a brief deep orange as the sun goes (18:15);
+    // grey at sunset; then the blue hour.
+    (HOUR * 35 / 2, [246, 204, 170]),
+    (HOUR * 18, [228, 174, 130]),
+    (HOUR * 73 / 4, [206, 142, 102]),
+    (HOUR * 37 / 2, [150, 142, 148]),
+    (HOUR * 75 / 4, [116, 124, 162]),
+    (HOUR * 39 / 2, [98, 108, 155]),
     (HOUR * 21, NIGHT),
     (HOUR * 24, NIGHT),
 ];
 
 /// The sky's own light, what a shadow is lit by on T1 and T2: blue by day, a deeper blue at dusk, a
 /// deep blue-violet at night that keeps its value (ART.md §3.1, "night is beautiful").
-const FILL_KEYS: [(i32, [i32; 3]); 10] = [
+const FILL_KEYS: [(i32, [i32; 3]); 11] = [
     (0, [48, 72, 132]),
     (HOUR * 9 / 2, [48, 72, 132]),
-    (HOUR * 6, [140, 112, 150]),
+    (HOUR * 11 / 2, [76, 96, 156]),
+    (HOUR * 13 / 2, [120, 134, 180]),
     (HOUR * 15 / 2, [132, 150, 196]),
     (HOUR * 16, [132, 150, 196]),
     (HOUR * 17, [116, 132, 186]),
@@ -70,7 +80,7 @@ const SUN_TOP: i32 = 46;
 const MOON_TOP: i32 = 38;
 /// The sun on flat ground high in the sky, and low, on the horizon's edge.
 const SUN_HIGH: [i32; 3] = [214, 204, 184];
-const SUN_LOW: [i32; 3] = [255, 176, 96];
+const SUN_LOW: [i32; 3] = [255, 150, 74];
 /// The broadest sun that still throws light shafts on T2 (5 degrees, and a little): the sun in
 /// clear air and light mist does, the afterglow does not.
 pub const SHAFTS_SPREAD: u16 = (5 * 65536 / 360) as u16;
@@ -98,42 +108,42 @@ pub fn spread(sin_el: i32) -> u16 {
     (deg(1) + deg(4) * low / 20000) as u16
 }
 
-/// How dark the sun's or the moon's shadows are in clear air at `sin_el`, by how long they are:
-/// [`STRENGTH_HIGH`] of its light taken away while a shadow is a height long or shorter (45
-/// degrees up and over: the sky's own blue and the ground's bounce always fill an umbra a
-/// little), falling evenly with the length to [`STRENGTH_LOW`] at four heights (14 degrees,
-/// [`LOWEST`], where the length stops growing), then eased to nothing by 3 degrees, as the sun's
-/// light thins into the haze on the horizon: a shadow fades as it grows long, from the early
-/// afternoon, and is gone before it gets absurd; the dusk hands over to the afterglow. (Decided
-/// 2026-09-28, the owner's first playtest: the umbra was the whole sun's at noon, which read
-/// harsh on T2, and a shadow at 18:20 was eight heights long and as dark as five o'clock's. Then
-/// 2026-09-29: the long evening shadows should taper earlier and more gradually; they had kept
-/// the whole of 224 until 30 degrees and 176 at 12, so five o'clock's were as dark as three's.)
+/// How dark the sun's or the moon's shadows are in clear air at `sin_el` (its elevation's sine,
+/// Q15), by the keys of [`STRENGTH_KEYS`], linear between them: [`STRENGTH_HIGH`] of its light
+/// taken away high in the sky (the sky's own blue and the ground's bounce always fill an umbra a
+/// little), still strong low in the evening with shadows two and three heights long (200 at 11
+/// degrees, half past five), then falling steeply as the sun goes down (176 at 8 degrees, a
+/// quarter to six; 88 at 5.5, six; 16 at 2.8, a quarter past), gone by 2 degrees; and the same
+/// at sunrise, mirrored, so shadows come on quickly as the sun clears the horizon about six and
+/// strengthen through the next half hour. (Decided 2026-09-28, the owner's first playtest: the
+/// umbra was the whole sun's at noon, which read harsh on T2, and a shadow at 18:20 was eight
+/// heights long and as dark as five o'clock's. 2026-09-29, the second: shadows went invisible too
+/// early in the evening, 68 at half past five; they stay strong until the sun is going down,
+/// then go quickly, before the lamps are fully on.)
 pub fn strength(sin_el: i32) -> u8 {
-    // sin 14 and 3 degrees, Q15.
-    const FOUR: i32 = 7927;
-    const GONE: i32 = 1715;
     let s = sin_el.clamp(0, 32768);
-    let (hi, lo) = (i32::from(STRENGTH_HIGH), i32::from(STRENGTH_LOW));
-    let v = if s >= FOUR {
-        // The shadow's length a height, Q8: cot = cos / sin.
-        let c = jane_core::num::isqrt((32768 * 32768 - s * s) as u64) as i32;
-        let cot = (c * 256 / s).clamp(256, 1024);
-        hi - (hi - lo) * (cot - 256) / 768
-    } else if s > GONE {
-        // Eased in, so it slips away rather than stopping.
-        let t = (s - GONE) * 256 / (FOUR - GONE);
-        lo * t * t / (256 * 256)
-    } else {
-        0
-    };
+    let mut v = 0;
+    for w in STRENGTH_KEYS.windows(2) {
+        let ((s0, v0), (s1, v1)) = (w[0], w[1]);
+        if s >= s1 {
+            v = v1;
+        } else if s > s0 {
+            v = v0 + (v1 - v0) * (s - s0) / (s1 - s0);
+            break;
+        } else {
+            break;
+        }
+    }
     v.clamp(0, 255) as u8
 }
 
-/// The sun's or the moon's umbra while its shadows are a height long or less, and at four
-/// heights, of 255 ([`strength`]).
+/// [`strength`]'s keys: `(sin elevation Q15, strength)`, rising: sin 2, 2.8, 5.5, 8.3, 11 and 30
+/// degrees (the sun's at 18:20, 18:15, 18:00, 17:45 and 17:30 in the county's day, and high).
+pub const STRENGTH_KEYS: [(i32, i32); 6] =
+    [(1144, 0), (1600, 16), (3140, 88), (4730, 176), (6252, 200), (16384, STRENGTH_HIGH as i32)];
+
+/// The sun's or the moon's umbra high in the sky, of 255 ([`strength`]).
 pub const STRENGTH_HIGH: u8 = 224;
-pub const STRENGTH_LOW: u8 = 128;
 
 /// The lowest the sun or the moon stands as a shadow's light, [`Angle`] units: 14 degrees, where
 /// a shadow is four heights long ([`crate::shadow::MAX_COT_Q8`]). A body under it (the last hour
@@ -271,9 +281,11 @@ pub fn sky(clock: u32, day: u32, indoor: bool, permille: i16, region: Region) ->
     let t = (clock % (24 * HOUR as u32)) as i32;
     let fill = keyed(&FILL_KEYS, clock);
     let sun = if let Some((az, el, s)) = arc(t, RISE, SET, SUN_TOP) {
-        // Warm and low toward the horizon, white overhead; gone as it touches the horizon.
+        // Warm and low toward the horizon, white overhead; its deep orange held to about 3 degrees
+        // (a quarter past six) so the horizon moment glows on every tier, then gone as it touches
+        // the horizon (it faded from 6 degrees, and T2 never showed the orange).
         let colour = mix(SUN_LOW, SUN_HIGH, s, 20000);
-        let colour = mix([0; 3], colour, s, 3400);
+        let colour = mix([0; 3], colour, s, 1600);
         Some(Directional {
             azimuth: az,
             elevation: Angle(el.0.max(LOWEST)),
@@ -433,13 +445,18 @@ mod tests {
             let (kx, ky) = crate::shadow::shear(&s).unwrap();
             assert!(kx.abs().max(ky.abs()) <= crate::shadow::MAX_COT_Q8, "17:{m:02}: {kx} {ky}");
         }
-        // Five o'clock's shadows (3.5 heights) are well under noon's and still plain; they taper
-        // from the early afternoon, evenly with their length.
-        assert!((130..=160).contains(&at(0).strength), "five o'clock's shadows: {}", at(0).strength);
-        let el = |d: i32| strength(sin_q15(Angle::from_degrees(d)).0);
-        assert!(el(46) == STRENGTH_HIGH && el(40) < STRENGTH_HIGH && el(30) < 210, "{} {}", el(40), el(30));
-        for d in 15..45 {
-            assert!(el(d) < el(d + 1) && el(d + 1) - el(d) <= 12, "{d} degrees: {} to {}", el(d), el(d + 1));
+        // The owner's curve (2026-09-29): strong through half past five with shadows two and
+        // three heights long, then gone quickly as the sun goes down, by a quarter past six;
+        // the same at sunrise, mirrored.
+        let hm = |h: i32, m: i32| sky((h * HOUR + m * 120) as u32, 0, false, 1000, Region::Lowfields).sun.unwrap();
+        assert!(hm(17, 0).strength >= 200 && hm(17, 30).strength >= 190, "{:?} {:?}", hm(17, 0), hm(17, 30));
+        assert!((150..=190).contains(&hm(17, 45).strength), "{:?}", hm(17, 45));
+        assert!((60..=120).contains(&hm(18, 0).strength), "{:?}", hm(18, 0));
+        assert!(hm(18, 15).strength <= 40, "{:?}", hm(18, 15));
+        assert!(hm(17, 45).strength - hm(18, 0).strength >= 60, "no steep drop about six");
+        for (dusk, dawn) in [((17, 30), (5, 30 + 60)), ((18, 0), (5, 60)), ((18, 15), (5, 45))] {
+            let (a, b) = (hm(dusk.0, dusk.1).strength, hm(dawn.0 + dawn.1 / 60, dawn.1 % 60).strength);
+            assert!(a.abs_diff(b) <= 8, "dusk {dusk:?} {a} against dawn {dawn:?} {b}");
         }
         assert!(!at(86).casts(), "a sun on the horizon still casts: {:?}", at(86));
         // The afterglow takes over from nothing, peaks faint, and fades with its light.

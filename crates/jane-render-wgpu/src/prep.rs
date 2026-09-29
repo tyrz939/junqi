@@ -13,6 +13,8 @@ use jane_present::{Depth, Frame, LightKind, Pass, Post, Tint, shadow};
 pub fn guard(frame: &Frame) -> u32 {
     u32::from(frame.guard)
 }
+/// The most fence parts (posts and rails) a frame stands in T2's field (`Prep::fences`).
+pub const MAX_FENCE_PARTS: usize = 8192;
 /// A sprite that burns no rows (`SpriteIn`'s last word).
 pub const NO_BURN: u32 = 0xffff;
 /// Light tiles are this many canvas px square.
@@ -84,6 +86,10 @@ pub struct Prep {
     /// any this frame, and had any the last (so it is cleared on the GPU once).
     pub spill: Vec<u8>,
     pub spill_on: bool,
+    /// The frame's fence parts for T2's field (`scatter.wgsl`'s `fences`): a header `(count, 0,
+    /// 0, 0)`, then per part `(x0, y0, x1, y1)` in G-buffer px and `(lo, hi, 0, 0)`, i32 each.
+    pub fences: Vec<u8>,
+    pub n_fences: u32,
     pub spill_was: bool,
     /// How far apart the light pass's taps of it are, px (`feather + 1`).
     spill_soft: f32,
@@ -186,11 +192,11 @@ impl Prep {
     /// Lays the bands of every block that spills (the fence rule: a fence's posts and rails, a
     /// hedge; `shadow::spills`) into [`Prep::spill`], as T0 and T1 lay them.
     fn spill_bands(&mut self, frame: &Frame, sun: &jane_present::Directional, (w, h): (i32, i32)) {
-        let (Some(k), Some(ks)) = (shadow::shear(sun), shadow::spill_shear(sun)) else { return };
+        let Some(k) = shadow::shear(sun) else { return };
         let mut any = false;
         let spill = &mut self.spill;
         for b in frame.blocks.iter().filter(|b| shadow::spills(b)) {
-            shadow::block_bands(b, k, ks, |band| {
+            shadow::block_bands(b, k, |band| {
                 let (x0, x1, y0, y1) = (band.x0.max(0), band.x1.min(w), band.y0.max(0), band.y1.min(h));
                 if x0 >= x1 || y0 >= y1 {
                     return;
@@ -427,6 +433,18 @@ impl Prep {
             self.tile(frame);
         }
 
+        // A fence's posts and rails, for the field (every light's shadow of them on T2).
+        let gu = guard(frame) as i32;
+        self.fences.clear();
+        self.n_fences = 0;
+        i32s(&mut self.fences, &[0, 0, 0, 0]);
+        for b in frame.blocks.iter().filter(|b| b.fence).take(MAX_FENCE_PARTS) {
+            let (x0, y0, x1, y1) =
+                (i32::from(b.x0) + gu, i32::from(b.y0) + gu, i32::from(b.x1) + gu, i32::from(b.y1) + gu);
+            i32s(&mut self.fences, &[x0, y0, x1, y1, i32::from(b.lo), i32::from(b.height), 0, 0]);
+            self.n_fences += 1;
+        }
+        self.fences[..4].copy_from_slice(&(self.n_fences as i32).to_le_bytes());
         let (fill, sun) = sky.unwrap_or(([255; 3], None));
         if let Some(s) = sun.filter(|s| s.strength > 0) {
             self.spill_bands(frame, &s, (w as i32, h as i32));

@@ -227,7 +227,6 @@ impl Backend for Soft {
                 }
                 Pass::Silhouettes { sun, shade, casters, blocks } => {
                     let Some(k) = silhouette::shear(&sun) else { continue };
-                    let Some(ks) = silhouette::spill_shear(&sun) else { continue };
                     self.mask.fit(t.w, t.h);
                     for c in frame.casters_in(casters) {
                         let Some(s) = frame.sprites.get(c.sprite as usize) else { continue };
@@ -236,7 +235,7 @@ impl Backend for Soft {
                         }
                     }
                     for b in frame.blocks_in(blocks) {
-                        silhouette::cast_block(&mut self.mask, b, k, ks);
+                        silhouette::cast_block(&mut self.mask, b, k);
                     }
                     // A glowing px the shadow darkens still glows: checked before, taken after.
                     self.glow.check(t);

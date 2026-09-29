@@ -21,6 +21,9 @@
 @group(0) @binding(3) var gid: texture_2d<u32>;
 @group(0) @binding(4) var gem: texture_2d<f32>;
 @group(0) @binding(5) var<storage, read_write> tile_tops: array<atomic<u32>>;
+// The frame's fence blocks in G-buffer px: element 0's x their count, then two a part,
+// `(x0, y0, x1, y1)` and `(lo, hi, 0, 0)` (`Prep::fences`).
+@group(0) @binding(6) var<storage, read> fence_parts: array<vec4<i32>>;
 
 // A run whose lowest px is this high or lower stands on the ground: the feet, a trunk's root.
 const FLOAT: f32 = 6.5;
@@ -107,6 +110,10 @@ fn scatter(@builtin(global_invocation_id) id: vec3<u32>) {
     if who == 0u && f32(h) <= RELIEF {
         return;
     }
+    // A fence's px: its posts and rails stand in the field as the frame's parts (`fences`).
+    if who == 0u && (depth_byte & FENCE) != 0u {
+        return;
+    }
     // A sprite of depth 0 is not a caster of the frame's (the dead, a spell's glow in her hands, a
     // prop lying flat or set into a wall): the presenter decides what casts, and it casts
     // nothing here as on T0 and T1 (PRESENTATION.md §1.7).
@@ -124,8 +131,8 @@ fn scatter(@builtin(global_invocation_id) id: vec3<u32>) {
     if who != 0u {
         lo = u32(round(run_bottom(i32(id.x), i32(id.y), f32(h), who)));
         d = footprint(i32(id.x), i32(id.y), who, d);
-    } else if (depth_byte & FENCE) != 0u || f32(h) <= SPILL_LOW {
-        // What spills (the fence rule, `common.wgsl`): the sun's trace passes it.
+    } else if f32(h) <= SPILL_LOW {
+        // What the sun's trace passes (`common.wgsl`): its shadow is the bands.
         who = SPILL_ID;
     }
     // Its footprint is behind the row it stands on: a sprite's lowest px is the front of what it
@@ -177,6 +184,36 @@ fn tops(@builtin(global_invocation_id) id: vec3<u32>) {
     for (var ty = ty0; ty <= ty1; ty++) {
         for (var tx = tx0; tx <= tx1; tx++) {
             atomicMax(&tile_tops[ty * tw + tx], top);
+        }
+    }
+}
+
+// After `scatter`: each of the frame's fence parts (`fence_parts`) stands on its footprint, its
+// top the tallest (`hi << 16 | FENCE_ID`) and its bars OR'd into the field's third word, a bit a
+// px from `lo` to `hi` (`common.wgsl`), so two rails over the same ground keep the gap between.
+@compute @workgroup_size(64)
+fn fences(@builtin(global_invocation_id) id: vec3<u32>) {
+    let count = u32(fence_parts[0].x);
+    if id.x >= count {
+        return;
+    }
+    let r = fence_parts[1u + 2u * id.x];
+    let z = fence_parts[2u + 2u * id.x];
+    let lo = u32(clamp(z.x, 0, i32(FENCE_BITS)));
+    let hi = u32(clamp(z.y, 0, 255));
+    let top = min(hi, FENCE_BITS);
+    if hi <= lo {
+        return;
+    }
+    let bits = select(0xffffffffu, (1u << top) - 1u, top < 32u) & ~((1u << lo) - 1u);
+    let w = i32(g.full.x);
+    let hh = i32(g.full.y);
+    let n = u32(w * hh);
+    for (var y = max(r.y, 0); y < min(r.w, hh); y++) {
+        for (var x = max(r.x, 0); x < min(r.z, w); x++) {
+            let i = u32(y * w + x);
+            atomicMax(&hmap[i], (hi << 16u) | FENCE_ID);
+            atomicOr(&hmap[2u * n + i], bits);
         }
     }
 }

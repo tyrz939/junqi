@@ -76,6 +76,7 @@ struct Pipes {
     ghost: wgpu::RenderPipeline,
     scatter: wgpu::ComputePipeline,
     tops: wgpu::ComputePipeline,
+    fences: wgpu::ComputePipeline,
     light: wgpu::RenderPipeline,
     down: wgpu::RenderPipeline,
     up: wgpu::RenderPipeline,
@@ -194,7 +195,7 @@ impl Pipes {
             ],
         );
         let scatter_layout =
-            layout(device, "scatter", &[B::Uniform, B::Tex, B::ReadWrite, B::Uint, B::Tex, B::ReadWrite]);
+            layout(device, "scatter", &[B::Uniform, B::Tex, B::ReadWrite, B::Uint, B::Tex, B::ReadWrite, B::Read]);
         let light_layout = layout(
             device,
             "light",
@@ -285,6 +286,15 @@ impl Pipes {
             compilation_options: wgpu::PipelineCompilationOptions::default(),
             cache: None,
         });
+        // A fence's posts and rails into the field, after the scatter (`scatter.wgsl`'s `fences`).
+        let fences = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("fences"),
+            layout: Some(&spl),
+            module: &sm,
+            entry_point: Some("fences"),
+            compilation_options: wgpu::PipelineCompilationOptions::default(),
+            cache: None,
+        });
 
         let lm = module(device, "light", LIGHT);
         let light = render_pipeline(
@@ -327,6 +337,7 @@ impl Pipes {
             ghost,
             scatter,
             tops,
+            fences,
             light,
             down,
             up,
@@ -371,6 +382,7 @@ struct Targets {
     gid: wgpu::TextureView,
     hmap: wgpu::Buffer,
     tops: wgpu::Buffer,
+    fence_parts: wgpu::Buffer,
     hdr: wgpu::TextureView,
     bsrc: wgpu::TextureView,
     levels: Vec<wgpu::TextureView>,
@@ -804,9 +816,9 @@ impl Wgpu {
         let gid = view(texture(d, "g id", (full.0, full.1, 1), ID, rt));
         let hmap = d.create_buffer(&wgpu::BufferDescriptor {
             label: Some("height field"),
-            // Two halves: each texel's top and whose (`h << 16 | id`), and its bottom (`256 - lo`,
-            // 0 where nothing floats).
-            size: u64::from(full.0) * u64::from(full.1) * 8,
+            // Three thirds: each texel's top and whose (`h << 16 | id`), its bottom (`256 - lo`,
+            // 0 where nothing floats), and a fence's bars (`scatter.wgsl`'s `fences`).
+            size: u64::from(full.0) * u64::from(full.1) * 12,
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -814,6 +826,13 @@ impl Wgpu {
         let tops = d.create_buffer(&wgpu::BufferDescriptor {
             label: Some("tile tops"),
             size: u64::from(full.0.div_ceil(TOP_TILE)) * u64::from(full.1.div_ceil(TOP_TILE)) * 4,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        // The frame's fence parts (`Prep::fences`).
+        let fence_parts = d.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("fence parts"),
+            size: ((1 + 2 * prep::MAX_FENCE_PARTS) * 16) as u64,
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
@@ -862,7 +881,15 @@ impl Wgpu {
             d,
             "scatter",
             &p.scatter_layout,
-            &[g.clone(), r(&gnh), hmap.as_entire_binding(), r(&gid), r(&gem), tops.as_entire_binding()],
+            &[
+                g.clone(),
+                r(&gnh),
+                hmap.as_entire_binding(),
+                r(&gid),
+                r(&gem),
+                tops.as_entire_binding(),
+                fence_parts.as_entire_binding(),
+            ],
         );
         let light_bg = group(
             d,
@@ -965,6 +992,7 @@ impl Wgpu {
             gid,
             hmap,
             tops,
+            fence_parts,
             hdr,
             bsrc,
             levels,
@@ -1212,6 +1240,7 @@ impl Backend for Wgpu {
             q.write_buffer(&self.chunk_buf, 0, &prep.chunks);
         }
         q.write_buffer(&self.globals, 0, &prep.globals);
+        q.write_buffer(&t.fence_parts, 0, &prep.fences);
         if prep.spill_on || prep.spill_was {
             write_layer(q, &t.spill, 0, t.canvas, 1, &prep.spill);
         }
@@ -1324,6 +1353,10 @@ impl Backend for Wgpu {
             pass.set_pipeline(&self.pipes.scatter);
             pass.set_bind_group(0, &t.scatter_bg, &[]);
             pass.dispatch_workgroups(t.full.0.div_ceil(8), t.full.1.div_ceil(8), 1);
+            if prep.n_fences > 0 {
+                pass.set_pipeline(&self.pipes.fences);
+                pass.dispatch_workgroups(prep.n_fences.div_ceil(64), 1, 1);
+            }
             pass.set_pipeline(&self.pipes.tops);
             pass.dispatch_workgroups(t.full.0.div_ceil(8), t.full.1.div_ceil(8), 1);
         }

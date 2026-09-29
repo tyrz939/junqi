@@ -681,7 +681,6 @@ impl Prep {
         (cw, ch): (i32, i32),
     ) {
         let Some(k) = shear(sun) else { return };
-        let Some(ks) = shadow::spill_shear(sun) else { return };
         let first = self.span_v.len() / (4 * 4);
         let mut dirty: Option<(i32, i32, i32, i32)> = None;
         let mut band = |span_v: &mut Vec<f32>, b: shadow::Band| {
@@ -706,7 +705,7 @@ impl Prep {
         }
         for b in &frame.blocks[blocks] {
             let span_v = &mut self.span_v;
-            shadow::block_bands(b, k, ks, |b| band(span_v, b));
+            shadow::block_bands(b, k, |b| band(span_v, b));
         }
         let end = self.span_v.len() / (4 * 4);
         let Some((x0, y0, x1, y1)) = dirty else { return };

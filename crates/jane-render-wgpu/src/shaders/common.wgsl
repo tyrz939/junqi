@@ -93,12 +93,19 @@ const GROUND: f32 = 4.5;
 // (`jane_present::shadow::RELIEF`).
 const RELIEF: f32 = 8.0;
 
-// The fence rule (PRESENTATION.md 1.7, `jane_present::shadow::spills`): a fence's px (the chunk's
-// depth byte has `FENCE` set) and the terrain `SPILL_LOW` px high or lower (a hedge) stand in the
-// field for the lamps and the ground's occlusion as ever, marked `SPILL_ID`, and the sun's trace
-// passes them: their sun shadow is the bands T0 and T1 lay, from the frame's blocks
-// (`Prep::spill`, the light pass's `spill`), on the ground alone.
+// What the sun's trace passes (PRESENTATION.md 1.7, `jane_present::shadow::spills`): the terrain
+// `SPILL_LOW` px high or lower (a hedge) stands in the field for the lamps and the ground's
+// occlusion as ever, marked `SPILL_ID`; its sun shadow is the bands T0 and T1 lay, from the
+// frame's blocks (`Prep::spill`, the light pass's `spill`), on the ground alone. A fence is not
+// the terrain's px (the chunk's depth byte has `FENCE` set on them: the scatter stands none of
+// them) but its posts and rails, the frame's fence blocks, written into the field by `fences`
+// as `FENCE_ID` texels with the bars of what stands there in the field's third word (a bit a
+// px up, `FENCE_BITS` of them): its sun shadow is the bands too, and a lamp's trace sees its
+// bars (`light.wgsl`'s `fence_clear`), so a lamp or her lantern throws its posts, its two
+// floating rails and the gaps between them as the lamps of T0 and T1 do.
 const SPILL_ID: u32 = 0xffffu;
+const FENCE_ID: u32 = 0xfffeu;
+const FENCE_BITS: u32 = 32u;
 
 // The field's tiles (`scatter.wgsl`'s `tops`): each 32 px tile keeps the tallest top standing in
 // it or within `TOP_GROW` px of it, so a ray over a tile's top crosses it at once.

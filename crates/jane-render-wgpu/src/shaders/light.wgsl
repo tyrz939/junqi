@@ -88,12 +88,54 @@ fn texel(x: i32, y: i32) -> vec2<f32> {
     if v == 0u || (who != 0u && (who == skip_own || who == skip_holder)) {
         return vec2<f32>(OPEN, 0.0);
     }
-    if skip_spill && who == SPILL_ID {
+    if skip_spill && who == SPILL_ID || who == FENCE_ID {
         return vec2<f32>(OPEN, 0.0);
     }
     let lo = hmap[u32(w * i32(g.full.y)) + i];
     return vec2<f32>(select(256.0 - f32(lo), 0.0, lo == 0u), f32(v >> 16u));
 }
+
+// How far a ray at height `z` passes clear of a fence's bars at the texel under `q` (the field's
+// third word, `scatter.wgsl`'s `fences`): over, under or between them; open where no fence
+// stands; under 0 inside a bar.
+fn fence_clear(q: vec2<f32>, z: f32) -> f32 {
+    let x = i32(floor(q.x));
+    let y = i32(floor(q.y));
+    let w = i32(g.full.x);
+    if x < 0 || y < 0 || x >= w || y >= i32(g.full.y) {
+        return OPEN;
+    }
+    let i = u32(y * w + x);
+    if (hmap[i] & 0xffffu) != FENCE_ID {
+        return OPEN;
+    }
+    let m = hmap[2u * u32(w * i32(g.full.y)) + i];
+    if m == 0u {
+        return OPEN;
+    }
+    let top = f32(firstLeadingBit(m) + 1u);
+    if z >= top {
+        return z - top;
+    }
+    let zi = u32(max(z, 0.0));
+    if ((m >> zi) & 1u) == 1u {
+        return -1.0;
+    }
+    var c = OPEN;
+    let below = m & ((1u << zi) - 1u);
+    if below != 0u {
+        c = min(c, z - f32(firstLeadingBit(below) + 1u));
+    }
+    let above = m >> (zi + 1u);
+    if above != 0u {
+        c = min(c, f32(zi + 1u + firstTrailingBit(above)) - z);
+    }
+    return c;
+}
+
+// Whether a lamp's trace sees the fences' bars (`fence_clear`): from the ground alone, as T0 and
+// T1 lay a fence's lamp shadow (reach 1), so a fence never shadows itself.
+var<private> see_fences: bool;
 
 // The field between texels: its top bilinear, so an edge seen at a slant is a slope, not a
 // stair, and a penumbra has no steps in it; its bottom the lowest of the four that stand.
@@ -127,7 +169,10 @@ fn height_max(q: vec2<f32>) -> vec2<f32> {
 // How much of a light toward `l` (unit, x east, y south, z up) reaches `p`, marching at most
 // `max_t` px across the ground from `t0`, with penumbra factor `k`. The ray's clearance at a
 // texel is how far it passes over the top or under the bottom.
-fn trace(p: vec3<f32>, l: vec3<f32>, max_t: f32, k: f32, t0: f32, max_step: f32) -> f32 {
+// A fence's bars (`see_fences`) are seen on up to `fence_t`, the light's own ground point: the
+// field stops short of the glowing thing's size, but her lantern right against a fence is still
+// on the other side of its rails.
+fn trace(p: vec3<f32>, l: vec3<f32>, max_t: f32, fence_t: f32, k: f32, t0: f32, max_step: f32) -> f32 {
     let lxy = length(l.xy);
     if lxy < 0.0005 {
         return 1.0;
@@ -138,7 +183,8 @@ fn trace(p: vec3<f32>, l: vec3<f32>, max_t: f32, k: f32, t0: f32, max_step: f32)
     var t = t0;
     var step = 1.0;
     for (var i = 0; i < 160; i++) {
-        if t >= max_t {
+        let fences = see_fences && t < fence_t;
+        if t >= max_t && !fences {
             break;
         }
         let z = p.z + 0.75 + rise * t;
@@ -146,14 +192,21 @@ fn trace(p: vec3<f32>, l: vec3<f32>, max_t: f32, k: f32, t0: f32, max_step: f32)
             break;
         }
         let q = p.xy + dir * t;
-        // A branch, not a `select`: a select reads both.
-        var f: vec2<f32>;
-        if step > 1.25 {
-            f = height_max(q);
-        } else {
-            f = height_at(q);
+        var clear = OPEN;
+        if t < max_t {
+            // A branch, not a `select`: a select reads both.
+            var f: vec2<f32>;
+            if step > 1.25 {
+                f = height_max(q);
+            } else {
+                f = height_at(q);
+            }
+            clear = max(z - f.y, f.x - z);
         }
-        res = min(res, k * max(z - f.y, f.x - z) / t);
+        if fences {
+            clear = min(clear, fence_clear(q, z));
+        }
+        res = min(res, k * clear / t);
         if res <= 0.0 {
             return 0.0;
         }
@@ -321,6 +374,7 @@ fn fs_light(i: FullOut) -> LitOut {
     skip_own = textureLoad(gid, q, 0).r;
     skip_holder = 0u;
     skip_spill = false;
+    see_fences = !lifted;
     let t0 = 1.0;
 
     var light = g.fill.rgb;
@@ -392,7 +446,7 @@ fn fs_light(i: FullOut) -> LitOut {
                 att = falloff(max(dist, r * HELD_REACH) / r) * ndl;
             } else {
                 let dxy = length(v.xy);
-                sh = trace(p, l, dxy - (lt.col.w + 3.0), clamp(dxy / max(lt.col.w, 1.0), 2.0, PEN_K), t0, 1.0);
+                sh = trace(p, l, dxy - (lt.col.w + 3.0), dxy - 0.5, clamp(dxy / max(lt.col.w, 1.0), 2.0, PEN_K), t0, 1.0);
                 // A lamp's umbra keeps a little of its light: its pool bounces into its shadows.
                 sh = LAMP_BOUNCE + (1.0 - LAMP_BOUNCE) * sh;
             }
