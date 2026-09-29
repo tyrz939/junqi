@@ -307,7 +307,7 @@ mod tests {
     fn a_kill_counts_for_quests_in_the_log_and_a_named_victim_is_known_dead() {
         let cat = jane_data::catalog();
         let mut s = room(|_| {});
-        let skeleton = cat.combat.unit_id("skeleton").unwrap();
+        let skeleton = cat.combat.unit_id("yard_bones").unwrap();
         let q = cat.story.quest_id("defeat_skeleton").unwrap();
         // Not in the log: nothing counts.
         in_ctx(&mut s, |cx, _| quest_kill(cx, Seat(0), skeleton));

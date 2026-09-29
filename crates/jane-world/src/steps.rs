@@ -59,6 +59,8 @@ pub enum Step {
     /// What stands up at the bell on a road's unlit edge and on the rough ground: `a` is the road
     /// (`-1`: the ground), `b` the point of its line (the macro cell's `y * SKEL_W + x`).
     CountyNight,
+    /// The bones about Julie's yard, outside its fence (`life::yard_bones`): one set of dice.
+    CountyYard,
 }
 
 impl From<Step> for u16 {

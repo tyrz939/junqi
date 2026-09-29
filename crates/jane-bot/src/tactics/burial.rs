@@ -43,12 +43,21 @@ use crate::nav::{Go, dist};
 use crate::sense::{self, holds};
 use crate::task::{Ctx, Status, Task, nudge};
 
+/// How far `u` notices her, body to body, as the sim reckons it (`ai::aggro_reach`: her growth
+/// against its phase), reckoned dark after the bell whether or not it stands in a lamp's light.
+fn aggro_of(v: &View<'_>, u: &Unit) -> i64 {
+    let d = jane_data::catalog().combat.unit(u.def);
+    let me = v.body();
+    let her = u32::from(me.strength) + u32::from(me.spirit);
+    jane_sim::ai::aggro_reach(d, u.strength, Some(her), i32::from(v.is_night()))
+}
+
 /// A baited creature notices her within its aggro, body to body (`ai::seen`): at or under this,
 /// centre to centre and in its sight, it has her.
 fn notice(v: &View<'_>, u: &Unit) -> i64 {
     let cat = jane_data::catalog();
     let d = cat.combat.unit(u.def);
-    i64::from(d.aggro.0) + i64::from(d.bounds.0) + i64::from(cat.combat.unit(v.body().def).bounds.0)
+    aggro_of(v, u) + i64::from(d.bounds.0) + i64::from(cat.combat.unit(v.body().def).bounds.0)
 }
 
 /// It goes for a bait it can see within its nose, centre to the bait: twice as far as it
@@ -69,7 +78,7 @@ fn watched(v: &View<'_>, not: UnitId, at: Vec2) -> bool {
     sense::enemies(v).into_iter().filter(|u| u.id != not && u.alive).any(|u| {
         let d = cat.combat.unit(u.def);
         d.aggro.0 > 0
-            && dist(u.pos, at) <= i64::from(d.aggro.0) + i64::from(d.bounds.0) + me + i64::from(CELL_FX)
+            && dist(u.pos, at) <= aggro_of(v, u) + i64::from(d.bounds.0) + me + i64::from(CELL_FX)
             && v.sight(u.pos, at)
     })
 }
@@ -1062,7 +1071,15 @@ pub fn keep_off(v: &View<'_>, cx: &Ctx) -> Vec<(Vec2, i64, u32)> {
             match v.unit(id) {
                 // Woken, it is fed where it is (it cannot resist the meat, even spitting).
                 Some(u) if u.alive && fed && u.combat == CombatState::Combat => {}
-                Some(u) if u.alive => out.push((u.pos, r, cost)),
+                // A baited one seen is kept off by its reach as the sim has it (her growth against it).
+                Some(u) if u.alive => {
+                    let r = if baited {
+                        r.max(aggro_of(v, u) + i64::from(d.bounds.0) + me + i64::from(CELL_FX))
+                    } else {
+                        r
+                    };
+                    out.push((u.pos, r, cost));
+                }
                 Some(_) => {}
                 None => out.push((pos, r, cost)),
             }

@@ -1,7 +1,7 @@
 {
   "shade": {
     "name": "Shade", "faction": "undead", "controller": "ai",
-    "strength": 24, "spirit": 1, "walk": 0.3, "run": 0.7, "aggro": 12, "leash": 60, "bounds": 1,
+    "strength": 24, "spirit": 1, "walk": 0.3, "run": 0.7, "aggro": 9, "leash": 60, "bounds": 1,
     "book": ["melee"], "respawn": 0, "autoRegen": true, "loot": [], "sprite": "shade",
     "resist": { "frost": 0.5 }, "shunsLight": true
   },
