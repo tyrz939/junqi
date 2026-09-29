@@ -774,6 +774,12 @@ impl Gen<'_> {
         }
         let mut when = vec![flag_is_set(clear, true)];
         when.extend(foes.first().map(|&u| Cond { not: true, c: Condition::Dead(u) }));
+        // A boss's gate drops only with the boss inside: one that chased her out and was a step
+        // behind when she ran back in was shut out, and her with nothing in there to fight or to
+        // die to (DUNGEONS.md §3.3, "Can she get stuck?").
+        if boss_fight {
+            when.push(Cond { not: false, c: Condition::Within { unit: foes[0], rect: rect_key } });
+        }
         let bp = &mut self.k.bp;
         let lock_trigger = Trigger {
             rect: rect_key,
@@ -812,7 +818,8 @@ impl Gen<'_> {
     /// "Boards"). Its name is the row's speaker, so the prompt beside the door already says where
     /// the door goes; reading it says the rest. It stands on the first row of floor in from the
     /// wall, one clear cell from the opening, on whichever side is free (the right first). No row,
-    /// no board: a mission opts in by writing them.
+    /// no board: a mission opts in by writing them. A door whose gate a state lifts is boarded from
+    /// whatever room it opens off, since the gate that bore its name is gone while it is open.
     fn boards(&mut self) {
         let m = self.m;
         let cat = catalog();
@@ -822,19 +829,23 @@ impl Gen<'_> {
         let mut n = 0;
         for ri in 0..self.info.rooms.len() {
             let (node, doors) = (self.info.rooms[ri].node, self.info.rooms[ri].doors.clone());
-            if !matches!(
+            let decides = matches!(
                 m.nodes[node].kind,
                 MissionNodeKind::Entrance | MissionNodeKind::Hub | MissionNodeKind::Miniboss
-            ) {
-                continue;
-            }
+            );
             for di in doors {
                 let other = layout.corridors.iter().find_map(|c| match (c.a, c.b) {
-                    (a, b) if a.node == node && a.door == di => Some(b.node),
-                    (a, b) if b.node == node && b.door == di => Some(a.node),
+                    (a, b) if a.node == node && a.door == di => Some((b.node, c.edge)),
+                    (a, b) if b.node == node && b.door == di => Some((a.node, c.edge)),
                     _ => None,
                 });
-                let Some(other) = other else { continue };
+                let Some((other, edge)) = other else { continue };
+                // From any other room, a door whose gate a state lifts: open, the gate and its
+                // name are gone, so the name is painted beside it (the School's classrooms).
+                let lifts = matches!(m.edges[edge].kind, MissionEdgeKind::State { .. });
+                if !decides && !lifts {
+                    continue;
+                }
                 let Some(tree) = cat.story.dialogue_id(&format!("board_{}_{}", m.id, m.nodes[other].id)) else {
                     continue;
                 };

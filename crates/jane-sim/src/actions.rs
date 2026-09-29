@@ -124,6 +124,15 @@ fn condition(cx: &Ctx<'_>, c: Condition) -> bool {
         // A door's hours' rule, on the clock everyone shares.
         Condition::Hours { from, to } => jane_core::action::hour_within(cx.world.hour() as u8, from, to),
         Condition::Weekday(d) => cx.world.weekday() == d,
+        // A unit here by that name, standing in the rect (its centre's cell): a lock-in's boss.
+        Condition::Within { unit, rect } => {
+            let (u, r) = (cx.sym(unit), cx.sym(rect));
+            let at = cx.rt.unit_names.get(&u).and_then(|&id| cx.zone.unit(id)).map(|u| u.pos.cell());
+            match (at, cx.rt.rects.get(&r)) {
+                (Some((x, y)), Some(r)) => r.contains(x, y),
+                _ => false,
+            }
+        }
     }
 }
 

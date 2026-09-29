@@ -234,6 +234,10 @@ impl Hud {
 /// The open cell nearest the middle of a rect of `zone` named `<zone>_<asked>_room` (a generated
 /// dungeon's room by its node) or `asked`, if there is one and `asked` is no mark.
 fn room_in(sim: &Sim, zone: jane_core::ids::ZoneId, asked: &str) -> Option<jane_core::num::Vec2> {
+    // A cell (`--at burial:40,12`): a board by a door, a gate.
+    if let Some((x, y)) = asked.split_once(',').and_then(|(x, y)| Some((x.parse().ok()?, y.parse().ok()?))) {
+        return Some(jane_core::num::Vec2::centre(x, y));
+    }
     let bp = sim.blueprint(zone);
     let syms = &sim.state().syms;
     let name_of = |k: &jane_core::Key| match *k {

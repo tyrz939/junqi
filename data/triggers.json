@@ -38,6 +38,7 @@
   },
   "burial_lockin": {
     "zone": "burial", "rect": "lockin_room", "once": true,
+    "when": [{ "if": "flag", "flag": "burial_lockin_clear", "not": true }],
     "actions": [
       { "do": "lock", "prop": "gate_snake" },
       { "do": "spawn", "unit": "guard_a", "def": "skeleton_guard", "at": "lockin_a" },
@@ -58,7 +59,7 @@
       { "if": "dead", "unit": "guard_a" }, { "if": "dead", "unit": "guard_b" },
       { "if": "dead", "unit": "guard_c" }, { "if": "dead", "unit": "guard_d" }
     ],
-    "actions": [{ "do": "unlock", "prop": "gate_snake" }, { "do": "unlock", "prop": "giant_key_chest" }, { "do": "toast", "text": "Quiet. The ornate chest clicks." }]
+    "actions": [{ "do": "flag", "flag": "burial_lockin_clear" }, { "do": "unlock", "prop": "gate_snake" }, { "do": "unlock", "prop": "giant_key_chest" }, { "do": "toast", "text": "Quiet. The ornate chest clicks." }]
   },
   "snake_arena": {
     "zone": "burial", "rect": "snake_arena", "once": true,

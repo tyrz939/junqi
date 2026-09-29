@@ -358,6 +358,13 @@ impl Emit for Condition {
             Condition::Weekday(d) => {
                 let _ = write!(out, "Condition::Weekday({d})");
             }
+            Condition::Within { unit, rect } => {
+                out.push_str("Condition::Within { unit: ");
+                unit.emit(out);
+                out.push_str(", rect: ");
+                rect.emit(out);
+                out.push_str(" }");
+            }
         }
     }
 }

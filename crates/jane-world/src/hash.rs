@@ -757,6 +757,11 @@ impl Feed for Cond {
                 h.u8(13);
                 h.u16(c.0);
             }
+            Condition::Within { unit, rect } => {
+                h.u8(14);
+                unit.feed(h);
+                rect.feed(h);
+            }
         }
     }
 }

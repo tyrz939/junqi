@@ -25,11 +25,12 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use jane_core::Blueprint;
-use jane_core::action::FlagKey;
+use jane_core::action::{Action, Cond, Condition, FlagKey, FlagTest, ListRef};
 use jane_core::ids::{ItemId, Key, NameId, SpellId};
-use jane_data::{MissionDef, MissionEdgeKind, MissionNodeKind, MissionProp, catalog};
+use jane_data::{Answers, MissionDef, MissionEdgeKind, MissionNodeKind, MissionProp, catalog};
 
 use super::{Gains, answers_of, gains_of_holding};
+use crate::solve::rows;
 
 /// A spend she may make: what it takes and what it gives.
 #[derive(Clone, Debug)]
@@ -71,6 +72,19 @@ pub struct Verdict {
 /// left out), and whether each can still be finished. `outside`: key tags that also fit a lock in
 /// another zone.
 pub fn search(bp: &Blueprint, m: &MissionDef, dropped: &[u8], outside: &[NameId]) -> Verdict {
+    search_with(bp, m, dropped, outside, false)
+}
+
+/// [`search`], with what a prop gives held back until she can have it ([`Gated`]): a verb that
+/// answers it known, whatever shows or unlocks it done, the conditions of an `if` met. A building
+/// whose way on is a condition (the Burial's seal, the School's bell rope) is only searched truly
+/// this way; without it, what the rope gives when six clocks are stopped is had on reaching the
+/// hall.
+pub fn search_gated(bp: &Blueprint, m: &MissionDef, dropped: &[u8], outside: &[NameId]) -> Verdict {
+    search_with(bp, m, dropped, outside, true)
+}
+
+fn search_with(bp: &Blueprint, m: &MissionDef, dropped: &[u8], outside: &[NameId], gated: bool) -> Verdict {
     let cat = catalog();
     let gone = |n: usize| dropped.iter().any(|&d| usize::from(d) == n);
     let nodes: Vec<usize> = (0..m.nodes.len()).filter(|&n| !gone(n)).collect();
@@ -89,7 +103,9 @@ pub fn search(bp: &Blueprint, m: &MissionDef, dropped: &[u8], outside: &[NameId]
         for h in m.nodes[n].holds {
             let g = gains_of_holding(bp, h);
             if h.needs.is_empty() {
-                merge(&mut gains[n], &g);
+                if !(gated && h.unit.is_none()) {
+                    merge(&mut gains[n], &g);
+                }
                 continue;
             }
             let answers = match h.prop {
@@ -104,7 +120,18 @@ pub fn search(bp: &Blueprint, m: &MissionDef, dropped: &[u8], outside: &[NameId]
     let Some(entrance) = nodes.iter().copied().find(|&n| m.nodes[n].kind == MissionNodeKind::Entrance) else {
         return Verdict::default();
     };
-    let s = Search { m, nodes: &nodes, locks: &locks, gains: &gains, sinks: &sinks, entrance, outside, bound: &bound };
+    let model = gated.then(|| Gated::of(bp, m, &nodes, &gains, &sinks));
+    let s = Search {
+        m,
+        nodes: &nodes,
+        locks: &locks,
+        gains: &gains,
+        sinks: &sinks,
+        entrance,
+        outside,
+        bound: &bound,
+        gated: model.as_ref(),
+    };
     s.run()
 }
 
@@ -129,6 +156,8 @@ struct Search<'a> {
     entrance: usize,
     outside: &'a [NameId],
     bound: &'a dyn Fn(NameId) -> bool,
+    /// [`search_gated`]'s model; `None`, a free holding gives on reaching its room.
+    gated: Option<&'a Gated>,
 }
 
 /// A state worked out: where she can be and what she holds.
@@ -173,6 +202,9 @@ impl Search<'_> {
                 if s.used >> i & 1 == 1 {
                     merge(&mut had, &k.gives);
                 }
+            }
+            if let Some(g) = self.gated {
+                g.settle(self, s, &reached, &mut had);
             }
             let m = self.m;
             let mut moved = false;
@@ -350,5 +382,252 @@ impl Search<'_> {
             stranded.push(format!("[{}] strands her short of {}", path.join(", "), lost.join(", ")));
         }
         Verdict { states: how.len(), stranded }
+    }
+}
+
+// --- the gated model ---------------------------------------------------------------------------
+
+/// Where a thing that shows or unlocks a prop comes from.
+#[derive(Clone, Copy, Debug)]
+enum Src {
+    Entry(usize),
+    Sink(usize),
+    Trigger(usize),
+}
+
+/// A free prop's gift, or one branch of it: what it gives, once her verbs, whatever shows and
+/// unlocks it, and the conditions of the `if` it sits in allow.
+#[derive(Clone, Debug)]
+struct Entry {
+    node: usize,
+    answers: Option<Answers>,
+    /// Any one of these showing it will do; empty, it stands shown.
+    shown_by: Vec<Src>,
+    unlocked_by: Vec<Src>,
+    when: Vec<Cond>,
+    gives: Gains,
+}
+
+/// A trigger of the zone's (the mission's, a lock-in's, the story's), with no rect asked: it
+/// runs once its conditions hold.
+#[derive(Clone, Debug)]
+struct TriggerGift {
+    when: Vec<Cond>,
+    gives: Gains,
+}
+
+/// [`search_gated`]'s model of the zone's free props and triggers.
+#[derive(Clone, Debug, Default)]
+pub struct Gated {
+    entries: Vec<Entry>,
+    triggers: Vec<TriggerGift>,
+    /// Every flag anything here sets: a condition on any other is not the model's to judge.
+    known: BTreeSet<FlagKey>,
+}
+
+/// What a list gives and what it shows and unlocks, split by the `if`s it sits in.
+#[derive(Default)]
+struct Branch {
+    when: Vec<Cond>,
+    gives: Gains,
+    shows: Vec<Key>,
+    unlocks: Vec<Key>,
+}
+
+fn branches(bp: &Blueprint, list: Option<ListRef>, when: &[Cond], out: &mut Vec<Branch>, depth: u8) {
+    let cat = catalog();
+    let Some(l) = list.and_then(|r| rows::list(bp, cat, r)) else { return };
+    if depth > 8 {
+        return;
+    }
+    let at = out.len();
+    out.push(Branch { when: when.to_vec(), ..Branch::default() });
+    for a in l {
+        match *a {
+            Action::Give(s) => out[at].gives.item(cat, s.item, s.qty),
+            Action::Learn(sp) => out[at].gives.verbs.push(sp),
+            Action::Flag { key, .. } => out[at].gives.flags.push(key),
+            Action::Show(k) => out[at].shows.push(k),
+            Action::Unlock(k) => out[at].unlocks.push(k),
+            Action::If { when: w, then, els } => {
+                let mut inner = when.to_vec();
+                inner.extend(rows::conds(bp, cat, w).unwrap_or(&[]).iter().copied());
+                branches(bp, Some(then), &inner, out, depth + 1);
+                // What happens otherwise is had as if it always could: the model's optimism.
+                branches(bp, els, when, out, depth + 1);
+            }
+            Action::Send { then, .. } => branches(bp, then, when, out, depth + 1),
+            _ => {}
+        }
+    }
+}
+
+impl Gated {
+    fn of(bp: &Blueprint, m: &MissionDef, nodes: &[usize], gains: &[Gains], sinks: &[Sink]) -> Gated {
+        let cat = catalog();
+        let mut g = Gated::default();
+        let mut shows: Vec<(Src, Key)> = Vec::new();
+        let mut unlocks: Vec<(Src, Key)> = Vec::new();
+        // Props: the free holdings she can reach, and what each branch of their lists gives.
+        let mut placed: Vec<(usize, &jane_core::blueprint::PropSpawn)> = Vec::new();
+        let mut sink_at = 0;
+        for &n in nodes {
+            for h in m.nodes[n].holds {
+                let prop = bp.props.iter().find(|p| p.key == Key::Name(h.key));
+                if !h.needs.is_empty() {
+                    // The sinks, in `search`'s order: what their lists show and unlock.
+                    let mut bs = Vec::new();
+                    branches(bp, prop.and_then(|p| p.use_list), &[], &mut bs, 0);
+                    for b in bs {
+                        shows.extend(b.shows.iter().map(|&k| (Src::Sink(sink_at), k)));
+                        unlocks.extend(b.unlocks.iter().map(|&k| (Src::Sink(sink_at), k)));
+                    }
+                    sink_at += 1;
+                    continue;
+                }
+                if h.unit.is_some() {
+                    continue;
+                }
+                let bare = Entry {
+                    node: n,
+                    answers: None,
+                    shown_by: Vec::new(),
+                    unlocked_by: Vec::new(),
+                    when: Vec::new(),
+                    gives: Gains::default(),
+                };
+                let Some(p) = prop else {
+                    // Not placed as a prop: had on reaching the room, as `search` has it.
+                    g.entries.push(Entry { gives: gains_of_holding(bp, h), ..bare });
+                    continue;
+                };
+                // The talk, the loot and a control's states, had whole.
+                let mut base = Gains::default();
+                for s in &p.loot {
+                    base.item(cat, s.item, s.qty);
+                }
+                if let Some(tree) = p.talk.and_then(|t| cat.story.dialogue.get(t.index())) {
+                    for d in tree.nodes {
+                        base.actions(bp, cat, d.actions);
+                        for o in d.options {
+                            base.actions(bp, cat, o.actions);
+                        }
+                    }
+                }
+                if let Some(state) = h.controls {
+                    base.states.push(state);
+                    for &l in &h.becomes {
+                        base.actions(bp, cat, l);
+                    }
+                }
+                let first = g.entries.len();
+                let answers = cat.story.prop(p.def).answers.filter(|&a| a != Answers::Physical);
+                g.entries.push(Entry { answers, gives: base, ..bare });
+                let mut bs = Vec::new();
+                branches(bp, p.use_list, &[], &mut bs, 0);
+                for b in bs {
+                    let i = g.entries.len();
+                    shows.extend(b.shows.iter().map(|&k| (Src::Entry(i), k)));
+                    unlocks.extend(b.unlocks.iter().map(|&k| (Src::Entry(i), k)));
+                    g.entries.push(Entry { when: b.when, gives: b.gives, ..g.entries[first].clone() });
+                }
+                placed.extend((first..g.entries.len()).map(|i| (i, p)));
+            }
+        }
+        // Triggers: the blueprint's (the mission's own, the lock-ins') and the story's for the zone.
+        let story = cat.story.triggers_in(m.zone).map(|(_, d)| &d.trigger);
+        for t in bp.triggers.values().chain(story) {
+            let when = t.when.and_then(|w| rows::conds(bp, cat, w)).unwrap_or(&[]).to_vec();
+            let mut bs = Vec::new();
+            branches(bp, Some(t.actions), &when, &mut bs, 0);
+            for b in bs {
+                let i = g.triggers.len();
+                shows.extend(b.shows.iter().map(|&k| (Src::Trigger(i), k)));
+                unlocks.extend(b.unlocks.iter().map(|&k| (Src::Trigger(i), k)));
+                g.triggers.push(TriggerGift { when: b.when, gives: b.gives });
+            }
+        }
+        // Hidden and locked props wait on whatever shows and unlocks them. One that nothing here
+        // shows or unlocks is had as it stands (something the model does not see sees to it).
+        for (i, p) in placed {
+            if p.hidden {
+                g.entries[i].shown_by = shows.iter().filter(|s| s.1 == p.key).map(|s| s.0).collect();
+            }
+            if p.locked && p.key_tag.is_none() {
+                g.entries[i].unlocked_by = unlocks.iter().filter(|s| s.1 == p.key).map(|s| s.0).collect();
+            }
+        }
+        let all = g.entries.iter().map(|e| &e.gives).chain(g.triggers.iter().map(|t| &t.gives));
+        let all = all.chain(gains).chain(sinks.iter().map(|k| &k.gives));
+        g.known = all.flat_map(|x| x.flags.iter().copied()).collect();
+        g
+    }
+
+    fn met(&self, search: &Search<'_>, s: &State, had: &Gains, when: &[Cond]) -> bool {
+        let cat = catalog();
+        when.iter().all(|c| {
+            if c.not {
+                return true;
+            }
+            match c.c {
+                Condition::Flag { key, test } if self.known.contains(&key) => {
+                    let v = had.flags.iter().filter(|&&f| f == key).count() as i32;
+                    match test {
+                        FlagTest::Eq(n) => v == n,
+                        FlagTest::Min(n) => v >= n,
+                        FlagTest::NonZero => v != 0,
+                    }
+                }
+                Condition::HasItem(st) => match cat.combat.items.get(st.item.index()).and_then(|d| d.opens) {
+                    Some(tag) => {
+                        let have = had.keys.get(&tag).copied().unwrap_or(0)
+                            + if search.m.given_keys.contains(&tag) { 99 } else { 0 }
+                            - s.keys_spent.get(&tag).copied().unwrap_or(0);
+                        have >= i32::from(st.qty.max(1))
+                    }
+                    None => true,
+                },
+                _ => true,
+            }
+        })
+    }
+
+    /// Everything she can have in a state, given the rooms she reached: to a fixed point.
+    fn settle(&self, search: &Search<'_>, s: &State, reached: &[bool], had: &mut Gains) {
+        let mut entry = vec![false; self.entries.len()];
+        let mut trig = vec![false; self.triggers.len()];
+        let on = |src: &Src, entry: &[bool], trig: &[bool]| match *src {
+            Src::Entry(i) => entry[i],
+            Src::Sink(i) => s.used >> i & 1 == 1,
+            Src::Trigger(i) => trig[i],
+        };
+        loop {
+            let mut moved = false;
+            for (i, t) in self.triggers.iter().enumerate() {
+                if !trig[i] && self.met(search, s, had, &t.when) {
+                    trig[i] = true;
+                    merge(had, &t.gives);
+                    moved = true;
+                }
+            }
+            for (i, e) in self.entries.iter().enumerate() {
+                if entry[i] || !reached[e.node] {
+                    continue;
+                }
+                let verb = e
+                    .answers
+                    .is_none_or(|a| search.m.given_verbs.iter().chain(&had.verbs).any(|&v| answers_of(v) == Some(a)));
+                let shown = e.shown_by.is_empty() || e.shown_by.iter().any(|x| on(x, &entry, &trig));
+                let open = e.unlocked_by.is_empty() || e.unlocked_by.iter().any(|x| on(x, &entry, &trig));
+                if verb && shown && open && self.met(search, s, had, &e.when) {
+                    entry[i] = true;
+                    merge(had, &e.gives);
+                    moved = true;
+                }
+            }
+            if !moved {
+                return;
+            }
+        }
     }
 }
