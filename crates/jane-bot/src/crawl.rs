@@ -130,6 +130,11 @@ pub struct Crawl {
     /// Out, when done, by a door into this dungeon if one is to hand, not to the county (the
     /// story sets it: the pipes' outfall, up into the Factory the quest goes to next).
     pub leave_to: Option<ZoneId>,
+    /// The words of the room the step names (the Lost: [`room_words`]); with nothing else to
+    /// do, the ground not yet seen nearest a door whose board, notice or own name shares one is
+    /// walked to first (not the door itself before another: which hop comes first is the
+    /// dungeon's puzzle, and a hop may not come back).
+    pub want: Vec<String>,
     /// The zone's jars and gold-leaf pages (shown or not), found as she comes in: a try at one
     /// cut short (she was hurt and went to mend, a fight came to her) is taken up again while
     /// it has not failed six times, whether or not anything else has changed.
@@ -289,6 +294,7 @@ impl Crawl {
             growth: std::collections::BTreeSet::new(),
             held: None,
             leave_to: None,
+            want: Vec::new(),
         }
     }
 
@@ -680,6 +686,60 @@ impl Crawl {
         }
     }
 
+    /// The Lost: the ground she has not been near that lies nearest a door whose board or notice
+    /// names the room the step is in (`want`), of the ground she can walk to; else
+    /// [`Self::frontier`].
+    fn frontier_named(&self, v: &View<'_>) -> Option<(i32, i32)> {
+        if self.want.is_empty() {
+            return self.frontier(v);
+        }
+        let named: Vec<(i32, i32)> = v
+            .props()
+            .filter(|p| !p.hidden && door_of(v, p).is_some() && self.reach.beside(p) && names_room(v, p, &self.want))
+            .map(|p| sense::prop_centre(p).cell())
+            .collect();
+        if named.is_empty() {
+            return self.frontier(v);
+        }
+        let near = |c: (i32, i32)| {
+            named.iter().map(|n| i64::from((n.0 - c.0).abs()) + i64::from((n.1 - c.1).abs())).min().unwrap_or(0)
+        };
+        self.unseen(v, NAMED_UNSEEN).into_iter().min_by_key(|&c| (near(c), c.1, c.0)).or_else(|| self.frontier(v))
+    }
+
+    /// Up to `n` cells she can walk to and has not been near, nearest first by a flood.
+    fn unseen(&self, v: &View<'_>, n: usize) -> Vec<(i32, i32)> {
+        let (w, h) = v.size();
+        let mut out = Vec::new();
+        if self.seen.len() != (w * h) as usize {
+            return out;
+        }
+        let start = v.body().pos.cell();
+        let ix = |x: i32, y: i32| (y as u32 * w + x as u32) as usize;
+        if !walkable(v, start.0, start.1) {
+            return out;
+        }
+        let mut been = vec![false; (w * h) as usize];
+        let mut q = VecDeque::from([start]);
+        been[ix(start.0, start.1)] = true;
+        while let Some((cx, cy)) = q.pop_front() {
+            if !self.seen[ix(cx, cy)] {
+                out.push((cx, cy));
+                if out.len() >= n {
+                    break;
+                }
+            }
+            for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+                let (nx, ny) = (cx + dx, cy + dy);
+                if walkable(v, nx, ny) && !been[ix(nx, ny)] {
+                    been[ix(nx, ny)] = true;
+                    q.push_back((nx, ny));
+                }
+            }
+        }
+        out
+    }
+
     /// The nearest cell she can walk to and has not been near, by a flood from her feet.
     fn frontier(&self, v: &View<'_>) -> Option<(i32, i32)> {
         let (w, h) = v.size();
@@ -1050,7 +1110,7 @@ impl Crawl {
         // 10. Ground she has not seen (what sleeps out of sight wakes as she comes). Not in the
         // School: what sleeps there is better left asleep (`tactics::school`).
         if best.is_none() && v.zone() != ZoneId::School {
-            if let Some((x, y)) = self.frontier(v).filter(|&(x, y)| keep(Try::Explore(x, y))) {
+            if let Some((x, y)) = self.frontier_named(v).filter(|&(x, y)| keep(Try::Explore(x, y))) {
                 let t = Task::Walk { to: Vec2::centre(x, y), near: jane_core::Fx::from_px(6) };
                 return Some((t, Try::Explore(x, y)));
             }
@@ -1406,6 +1466,75 @@ fn sokoban(v: &View<'_>, reach: &Reach, thing: &Prop, plate: &Prop) -> Option<Ve
     }
     path.reverse();
     Some(path)
+}
+
+/// Words that name no one room: the kinds of room, and the ways through.
+const ROOMLESS: [&str; 8] = ["room", "rooms", "hall", "door", "doors", "passage", "way", "inside"];
+
+/// Unseen cells weighed for the one nearest a door that names the room.
+const NAMED_UNSEEN: usize = 4096;
+
+/// Cells about a door within which a board or a notice is its board.
+const BOARD_NEAR: i32 = 5;
+
+/// A text's words as a room is named by them: [`crate::lost::words`], but a wind kept (the east
+/// hall is not the west) and the dungeon's own name and the kinds of room dropped.
+pub fn room_words(text: &str, z: ZoneId) -> Vec<String> {
+    let own = crate::lost::words(z.name());
+    tokens(text)
+        .into_iter()
+        .filter(|w| {
+            let wind = matches!(w.as_str(), "north" | "south" | "east" | "west");
+            (wind || !crate::lost::STOP.contains(&w.as_str()))
+                && !ROOMLESS.contains(&w.as_str())
+                && !own.iter().any(|o| o == w)
+        })
+        .collect()
+}
+
+/// Lower-case words of three letters or more, a possessive's "'s" dropped.
+fn tokens(text: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for w in text.split(|c: char| !c.is_alphanumeric() && c != '\'') {
+        let w = w.trim_matches('\'').to_lowercase();
+        let w = w.strip_suffix("'s").map(str::to_owned).unwrap_or(w);
+        if w.len() >= 3 && !w.chars().all(|c| c.is_ascii_digit()) && !out.contains(&w) {
+            out.push(w);
+        }
+    }
+    out
+}
+
+/// Does a door within the dungeon name the room `want` is in: its own name, or the words on a
+/// board or a notice beside it?
+fn names_room(v: &View<'_>, door: &Prop, want: &[String]) -> bool {
+    let cat = jane_data::catalog();
+    let r = prop_rect(door);
+    let about = jane_core::Rect::new(r.x - BOARD_NEAR, r.y - BOARD_NEAR, r.w + 2 * BOARD_NEAR, r.h + 2 * BOARD_NEAR);
+    let mut text = String::new();
+    for p in v.props_in(about) {
+        let Some(s) = v.prop_spawn(p) else { continue };
+        if p.id != door.id && s.label.is_none() && s.use_list.is_none() {
+            continue;
+        }
+        if let Some(l) = s.label {
+            text.push_str(v.text(l));
+            text.push(' ');
+        }
+        if p.id == door.id {
+            text.push_str(cat.text(cat.story.prop(p.def).name));
+            text.push(' ');
+        }
+        if let Some(l) = s.use_list {
+            sense::visit(&|l| v.list(l), l, &mut |a| {
+                if let jane_core::action::Action::Read(t) = *a {
+                    text.push_str(v.text(t));
+                    text.push(' ');
+                }
+            });
+        }
+    }
+    crate::lost::score(&tokens(&text), want) > 0
 }
 
 /// The cell to stand in to push a `w x h` prop at origin `o` along `(dx, dy)`: against the far

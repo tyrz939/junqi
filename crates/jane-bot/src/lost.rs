@@ -6,6 +6,12 @@
 //! `jane_sim::trace::camera`): a prop, a person or a creature she has had in view, a door she has
 //! seen, ground she has looked over. Until then she looks for it from the words alone:
 //!
+//! 0. **A fingerpost that names it**: every sign with words she passes by a road she reads
+//!    (within [`READ_NEAR`]), and a fingerpost whose label shares words with the step (the
+//!    landmark of 1) she walks to and reads. What it says, which way and how far, is a [`Lead`]:
+//!    she walks the roads to where it says the place is, reading the posts at the junctions on
+//!    the way (a newer one that names it turns her), until the thing is on screen. A lead walked
+//!    to its end without finding it is spent.
 //! 1. **A landmark the words name**: of the things she has had on screen, the one whose name or
 //!    label shares the most words with the step's text (a well for "at the well on the station
 //!    road"), not yet stood by; she walks to it and looks round.
@@ -19,7 +25,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use jane_core::num::CELL_FX;
+use jane_core::num::{CELL_FX, isqrt};
 use jane_core::{QuestId, Vec2, ZoneId};
 use jane_sim::View;
 use jane_sim::ids::{PropId, UnitId};
@@ -45,6 +51,35 @@ pub const SHUNNED: i32 = 64;
 /// Blocks of what she has looked at, and of the road frontier, cells.
 pub const BLOCK: i32 = 8;
 
+/// Cells from a sign's edge within which she reads it as she passes (a fingerpost stands three to
+/// seven cells off the road's line).
+pub const READ_NEAR: i32 = 10;
+
+/// Cells from where a lead says the place is that count as there: walked to its end.
+pub const LEAD_ARRIVED: i32 = 12;
+
+/// Cells within which a post she has had on screen and not read is gone to and read.
+pub const POST_NEAR: i32 = 32;
+
+/// Rings about where a sign says a place is searched for a road to walk to.
+const LEAD_ROAD: i32 = 40;
+
+/// What a sign said of a place: its name's words, and the road cell nearest where it says the
+/// place is (which way from the sign, and how far).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Lead {
+    /// The sign, and which of the places it names (a fork's post names several).
+    pub post: PropId,
+    pub nth: u8,
+    /// The place's name as the sign writes it, and its words.
+    pub name: String,
+    pub words: Vec<String>,
+    /// Where to walk: a road cell (else a walkable one) about where the sign says the place is.
+    pub to: (i32, i32),
+    /// The look it was read on (the newest reading is the nearest post).
+    pub read: u32,
+}
+
 /// Her memory of the screen.
 #[derive(Clone, Debug, Default)]
 pub struct Eyes {
@@ -65,6 +100,12 @@ pub struct Eyes {
     pub looks: u32,
     /// Blocks the screen has covered, by zone.
     pub looked: BTreeSet<(ZoneId, i32, i32)>,
+    /// Signs she has read (the county's).
+    pub read: BTreeSet<PropId>,
+    /// What they said of the places they name.
+    pub leads: Vec<Lead>,
+    /// Signs read that named a place (a newer lead may turn a walk on an older one).
+    pub reads: u32,
 }
 
 pub fn block_of((x, y): (i32, i32)) -> (i32, i32) {
@@ -99,6 +140,12 @@ impl Eyes {
             self.props.insert((z, p.id), c);
             if crate::sense::to_prop(p, me) <= i64::from(CHECKED_NEAR * CELL_FX) {
                 self.checked.insert((z, p.id));
+            }
+            if z == ZoneId::County
+                && !self.read.contains(&p.id)
+                && crate::sense::to_prop(p, me) <= i64::from(READ_NEAR * CELL_FX)
+            {
+                self.read_sign(v, p);
             }
         }
         for u in v.units_in(cam) {
@@ -167,6 +214,88 @@ impl Eyes {
         }
     }
 
+    /// Read a sign by the road: each place it names with a way and a distance becomes a lead.
+    fn read_sign(&mut self, v: &View<'_>, p: &jane_sim::Prop) {
+        let mut text = String::new();
+        if let Some(l) = v.prop_spawn(p).and_then(|s| s.use_list) {
+            crate::sense::visit(&|l| v.list(l), l, &mut |a| {
+                if let jane_core::action::Action::Read(t) = *a {
+                    if !text.is_empty() {
+                        text.push(' ');
+                    }
+                    text.push_str(v.text(t));
+                }
+            });
+        }
+        self.read.insert(p.id);
+        if text.is_empty() {
+            return;
+        }
+        let at = prop_centre(p).cell();
+        let (w0, h0) = v.size();
+        let mut any = false;
+        for (nth, w) in way_words(&text).into_iter().enumerate() {
+            let heading = match w.heading {
+                Some(h) => h,
+                // A footpath's post: the path goes on from the road past the post.
+                None if w.footpath => match from_road(v, at) {
+                    Some(h) => h,
+                    None => continue,
+                },
+                None => continue,
+            };
+            let (hx, hy) = (i64::from(heading.0), i64::from(heading.1));
+            let len = i64::from(isqrt((hx * hx + hy * hy) as u64).max(1));
+            let m = i64::from(w.metres);
+            let est = (
+                (i64::from(at.0) + hx * m / len).clamp(0, i64::from(w0) - 1) as i32,
+                (i64::from(at.1) + hy * m / len).clamp(0, i64::from(h0) - 1) as i32,
+            );
+            let Some(to) =
+                nearest_road(v, est, LEAD_ROAD).or_else(|| crate::nav::nearest_walkable(v, est.0, est.1, 20))
+            else {
+                continue;
+            };
+            let words = words(&w.name);
+            if words.is_empty() {
+                continue;
+            }
+            any = true;
+            self.leads.push(Lead { post: p.id, nth: nth as u8, name: w.name, words, to, read: self.looks });
+        }
+        if any {
+            self.reads += 1;
+        }
+    }
+
+    /// The nearest fingerpost or signpost she has had on screen within [`POST_NEAR`] and not
+    /// read (a junction's post is read before a road is chosen).
+    pub fn unread_post(&self, v: &View<'_>) -> Option<(i32, i32)> {
+        let cat = jane_data::catalog();
+        let posts = [cat.story.prop_id("fingerpost"), cat.story.prop_id("signpost")];
+        let at = v.body().pos.cell();
+        let z = v.zone();
+        self.props
+            .iter()
+            .filter(|&(&(pz, id), &c)| {
+                pz == z
+                    && !self.read.contains(&id)
+                    && sq(c, at) <= i64::from(POST_NEAR * POST_NEAR)
+                    && v.prop(id).is_some_and(|p| posts.contains(&Some(p.def)))
+            })
+            .min_by_key(|&(&(_, id), &c)| (sq(c, at), id))
+            .map(|(_, &c)| c)
+    }
+
+    /// The lead whose whole name the step's words say (the longest name, then the newest read),
+    /// not `spent`.
+    pub fn lead(&self, want: &[String], spent: &impl Fn(&Lead) -> bool) -> Option<&Lead> {
+        self.leads
+            .iter()
+            .filter(|l| names(&l.words, want) && !spent(l))
+            .max_by_key(|l| (l.words.len(), l.read, std::cmp::Reverse((l.post, l.nth))))
+    }
+
     /// Has the cell been on screen?
     pub fn looked_at(&self, z: ZoneId, cell: (i32, i32)) -> bool {
         let (bx, by) = block_of(cell);
@@ -188,6 +317,117 @@ impl Eyes {
             .min_by_key(|&(c, t)| (std::cmp::Reverse(t), sq(c, from), c.1, c.0))
             .map(|(c, _)| c)
     }
+}
+
+/// Does a place's name (its words) answer the step's words: every word of the name is among them
+/// ("Hazel Spinney" is not "Poplar Spinney", nor "Lower Millbrook Farm" "Millbrook Farm")?
+pub fn names(name: &[String], want: &[String]) -> bool {
+    !name.is_empty() && score(want, name) == name.len()
+}
+
+/// One place a sign names: its name, which way (a heading) and how far (metres, which are
+/// cells).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct WayWords {
+    pub name: String,
+    pub heading: Option<(i32, i32)>,
+    pub metres: i32,
+    /// On a footpath's post ("FOOTPATH. THE OLD MILL, 250 m."): the way is the path's.
+    pub footpath: bool,
+}
+
+/// A wind as a sign writes it, as a heading in tenths.
+fn wind(s: &str) -> Option<(i32, i32)> {
+    Some(match s.trim() {
+        "NORTH" => (0, -10),
+        "SOUTH" => (0, 10),
+        "EAST" => (10, 0),
+        "WEST" => (-10, 0),
+        "NORTH-EAST" => (7, -7),
+        "NORTH-WEST" => (-7, -7),
+        "SOUTH-EAST" => (7, 7),
+        "SOUTH-WEST" => (-7, 7),
+        _ => return None,
+    })
+}
+
+/// A distance as a sign writes it ("850 m", "1.2 km"), in metres.
+fn metres(s: &str) -> Option<i32> {
+    let s = s.trim().trim_end_matches('.');
+    let (num, per) = if let Some(n) = s.strip_suffix(" km") {
+        (n, 1000)
+    } else if let Some(n) = s.strip_suffix(" m") {
+        (n, 1)
+    } else {
+        return None;
+    };
+    let (whole, tenth) = num.split_once('.').unwrap_or((num, "0"));
+    let whole: i32 = whole.trim().parse().ok()?;
+    let tenth: i32 = tenth.get(..1).unwrap_or("0").parse().ok()?;
+    Some(whole * per + tenth * per / 10)
+}
+
+/// The places a sign's words name, with how far each is and, where it says, which way: a
+/// roadside post ("THE GOLD MINE, NORTH-EAST, 850 m."), a fork's ("EAST: CASTLE, 1.2 km;
+/// LOWFIELDS, 900 m. WEST: ..."), a footpath's ("FOOTPATH. THE OLD MILL, 250 m.").
+pub fn way_words(text: &str) -> Vec<WayWords> {
+    let mut out = Vec::new();
+    let mut footpath = false;
+    for sentence in text.split(". ") {
+        let sentence = sentence.trim().trim_end_matches('.');
+        if sentence == "FOOTPATH" {
+            footpath = true;
+            continue;
+        }
+        let (heading, body) = match sentence.split_once(": ") {
+            Some((d, b)) if wind(d).is_some() => (wind(d), b),
+            _ => (None, sentence),
+        };
+        for entry in body.split("; ") {
+            let mut name: Vec<&str> = Vec::new();
+            let (mut h, mut m) = (heading, None);
+            for part in entry.split(", ") {
+                if let Some(d) = wind(part) {
+                    h = Some(d);
+                } else if let Some(x) = metres(part) {
+                    m = Some(x);
+                } else {
+                    name.push(part.trim());
+                }
+            }
+            let Some(metres) = m else { continue };
+            if name.is_empty() {
+                continue;
+            }
+            out.push(WayWords { name: name.join(", "), heading: h, metres, footpath: footpath && h.is_none() });
+        }
+    }
+    out
+}
+
+/// The way from the nearest road to a footpath's post, which the path goes on in: a heading.
+fn from_road(v: &View<'_>, at: (i32, i32)) -> Option<(i32, i32)> {
+    let r = nearest_road(v, at, 12)?;
+    let (dx, dy) = (at.0 - r.0, at.1 - r.1);
+    ((dx, dy) != (0, 0)).then_some((dx, dy))
+}
+
+/// The nearest road cell (a road or a street she can stand on) to `(x, y)` within `r` rings.
+pub fn nearest_road(v: &View<'_>, (x, y): (i32, i32), r: i32) -> Option<(i32, i32)> {
+    let ok = |cx: i32, cy: i32| walkable(v, cx, cy) && road(v.tile(cx, cy));
+    if ok(x, y) {
+        return Some((x, y));
+    }
+    for k in 1..=r {
+        for d in -k..=k {
+            for (cx, cy) in [(x + d, y - k), (x + d, y + k), (x - k, y + d), (x + k, y + d)] {
+                if ok(cx, cy) {
+                    return Some((cx, cy));
+                }
+            }
+        }
+    }
+    None
 }
 
 fn sq(a: (i32, i32), b: (i32, i32)) -> i64 {
@@ -244,7 +484,7 @@ pub fn fog_block_of(v: &View<'_>, (x, y): (i32, i32)) -> (i32, i32) {
 }
 
 /// Words that carry no place.
-const STOP: [&str; 74] = [
+pub const STOP: [&str; 74] = [
     "the", "a", "an", "at", "on", "in", "by", "of", "to", "from", "into", "up", "down", "near", "past", "behind",
     "under", "over", "off", "out", "and", "or", "with", "for", "after", "before", "her", "his", "its", "their", "your",
     "whoever", "any", "some", "made", "end", "edge", "side", "first", "next", "last", "same", "along", "across",
@@ -369,4 +609,40 @@ pub fn landmark(v: &View<'_>, eyes: &Eyes, want: &[String]) -> Option<(i32, i32)
         }
     }
     best.map(|b| b.3)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_sign_says_which_way_and_how_far() {
+        let w = way_words("THE GOLD MINE, NORTH-EAST, 1.2 km.");
+        assert_eq!(
+            w,
+            vec![WayWords { name: "THE GOLD MINE".into(), heading: Some((7, -7)), metres: 1200, footpath: false }]
+        );
+        let w = way_words("EAST: CASTLE, 1.2 km; LOWFIELDS, 900 m. WEST: THE HALT, 2.0 km.");
+        let got: Vec<_> = w.iter().map(|w| (w.name.as_str(), w.heading, w.metres)).collect();
+        assert_eq!(
+            got,
+            vec![
+                ("CASTLE", Some((10, 0)), 1200),
+                ("LOWFIELDS", Some((10, 0)), 900),
+                ("THE HALT", Some((-10, 0)), 2000)
+            ]
+        );
+        let w = way_words("FOOTPATH. CARTER'S FARM, 250 m.");
+        assert_eq!(w, vec![WayWords { name: "CARTER'S FARM".into(), heading: None, metres: 250, footpath: true }]);
+        assert!(way_words("CASTLE 3.4 km").is_empty());
+    }
+
+    #[test]
+    fn a_name_answers_the_words_whole() {
+        let want = words("Her apples, to the woodpile at Poplar Spinney");
+        assert!(names(&words("POPLAR SPINNEY"), &want));
+        assert!(!names(&words("HAZEL SPINNEY"), &want));
+        assert!(!names(&words("LOWER POPLAR SPINNEY"), &want));
+        assert!(names(&words("the Gold Mine"), &words("The Gold Mine, at the end of the mine road")));
+    }
 }

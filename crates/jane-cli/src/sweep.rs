@@ -490,7 +490,9 @@ pub fn report(runs: &[Run], audits: &[SeedAudit], secs: u64, long: u32, short: u
         "| # | Step | Words (seed of the first row) | Gave up on seeds | Looked, min (seed: min) | Audit | Why |"
     );
     let _ = writeln!(s, "| --- | --- | --- | --- | --- | --- | --- |");
-    for (n, ((q, i), v)) in ranked.iter().take(25).enumerate() {
+    // Every step given up on, and the first 25 in all.
+    let shown = ranked.iter().filter(|(_, v)| v.iter().any(|x| x.2)).count().max(25);
+    for (n, ((q, i), v)) in ranked.iter().take(shown).enumerate() {
         let gave: Vec<String> = v.iter().filter(|x| x.2).map(|x| x.0.to_string()).collect();
         let looked: Vec<String> = v.iter().map(|x| format!("{}: {}", x.0, m(x.1))).collect();
         let seed0 = v[0].0;
@@ -522,6 +524,14 @@ pub fn report(runs: &[Run], audits: &[SeedAudit], secs: u64, long: u32, short: u
     }
     if ranked.is_empty() {
         let _ = writeln!(s, "(The Lost looked for nothing: every step's thing was on screen before she needed it.)");
+    } else {
+        let gave: usize = ranked.iter().map(|(_, v)| v.iter().filter(|x| x.2).count()).sum();
+        let steps = ranked.iter().filter(|(_, v)| v.iter().any(|x| x.2)).count();
+        let _ = writeln!(
+            s,
+            "\nIn all: {gave} give-ups over {steps} steps; {} steps looked for (the table shows every step given up on, and at least 25).",
+            ranked.len()
+        );
     }
     let _ = writeln!(s);
 

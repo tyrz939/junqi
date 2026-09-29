@@ -84,6 +84,10 @@ enum Target {
 #[derive(Debug, Default)]
 pub struct Story {
     task: Option<(Task, Goal)>,
+    /// The zone she was in last frame, and the frames she lately changed zone on (in and out of
+    /// a door every frame is a goal on each side of it that wants the other: [`FLIPS`]).
+    zone_was: Option<ZoneId>,
+    flips: Vec<u32>,
     fails: BTreeMap<Goal, u32>,
     /// Set aside until this tick (a night slept counts: the clock is what she waits on).
     blocked: BTreeMap<Goal, u32>,
@@ -131,6 +135,11 @@ pub struct Looking {
     pub bad_fog: std::collections::BTreeSet<(i32, i32)>,
     /// Each step's landmark words (the words do not change on a seed).
     pub words: BTreeMap<(QuestId, u8), Vec<String>>,
+    /// Leads walked to their end (a sign, and which place on it).
+    pub spent: std::collections::BTreeSet<(PropId, u8)>,
+    /// Steps walked to by a sign's way: the target, and how many signs she had read then (a
+    /// newer one, or the target come on screen, turns the walk).
+    leading: BTreeMap<(QuestId, u8), (Target, u32)>,
 }
 
 /// Cells a quest's thing may be from the Explorer for it to go and do it (quests are incidental).
@@ -142,6 +151,18 @@ const SEARCH_EXTRA: i32 = 120;
 
 /// A landmark the words name costs less than a road not walked.
 const LANDMARK_EXTRA: i32 = 40;
+
+/// Changes of zone, within frames, that are a door gone in and out of for nothing.
+const FLIPS: (usize, u32) = (8, 120);
+
+/// A way a sign gave costs least of what she does not know: it is the way.
+const LEAD_EXTRA: i32 = 20;
+
+/// Squared cells between two cells.
+fn sq(a: (i32, i32), b: (i32, i32)) -> i64 {
+    let (dx, dy) = (i64::from(a.0 - b.0), i64::from(a.1 - b.1));
+    dx * dx + dy * dy
+}
 
 /// What a walk to the map's edge costs over its distance, cells (the Explorer).
 const FRONTIER_EXTRA: i32 = 30;
@@ -226,9 +247,13 @@ pub fn zone_in_text(text: &str) -> Option<ZoneId> {
 /// The crawl for a quest step in dungeon `z`: out, when it is done, by a door into the dungeon
 /// the quest's next step is in if there is one to hand (the pipes' outfall, up into the Factory),
 /// else to the county.
-fn crawl_for(v: &View<'_>, z: ZoneId, g: Goal) -> crate::crawl::Crawl {
+fn crawl_for(v: &View<'_>, z: ZoneId, g: Goal, lost: bool) -> crate::crawl::Crawl {
     let mut c = crate::crawl::Crawl::new(z);
     if let Goal::Step(q, i) = g {
+        // The Lost reads the boards beside the doors for the room the step names.
+        if lost {
+            c.want = crate::crawl::room_words(&crate::lost::step_text(v, q, Some(usize::from(i))), z);
+        }
         let cat = jane_data::catalog();
         let def = cat.story.quest(q);
         let counts = v.quests().find(|x| x.quest == q);
@@ -308,7 +333,13 @@ impl Story {
                             });
                             let _ = writeln!(
                                 out,
-                                "    lost: words {want:?}; landmark {lm:?} {lm_name:?}; looked {} frames; seen {} props, {} checked, road ends {:?}",
+                                "    lost: words {want:?}; landmark {lm:?} {lm_name:?}; signs say {:?}; looked {} frames; seen {} props, {} checked, road ends {:?}",
+                                cx.eyes
+                                    .leads
+                                    .iter()
+                                    .filter(|l| crate::lost::names(&l.words, &want))
+                                    .map(|l| (l.name.as_str(), l.to, self.looking.spent.contains(&(l.post, l.nth))))
+                                    .collect::<Vec<_>>(),
                                 self.looking.frames.get(&(q.quest, i as u8)).copied().unwrap_or(0),
                                 cx.eyes.props.len(),
                                 cx.eyes.checked.len(),
@@ -452,7 +483,7 @@ impl Story {
         let here = v.zone();
         if dungeon(here) && self.task.is_none() {
             if let Some(g) = self.step_in(v, here) {
-                self.dungeon = Some((Box::new(crawl_for(v, here, g)), g));
+                self.dungeon = Some((Box::new(crawl_for(v, here, g, cx.model.has_eyes_only())), g));
                 return Act::idle();
             }
         }
@@ -474,6 +505,20 @@ impl Story {
             self.task = None;
             return Act::idle();
         }
+        // In and out of a door, frame after frame (seed 4's Lost at Julie's door, 29 September
+        // 2026: for hours): what she is doing is set aside.
+        if self.zone_was != Some(v.zone()) {
+            self.zone_was = Some(v.zone());
+            let now = v.frame();
+            self.flips.retain(|&f| f + FLIPS.1 > now);
+            self.flips.push(now);
+            if self.flips.len() >= FLIPS.0 {
+                self.flips.clear();
+                if let Some((_, g)) = self.task.take() {
+                    self.set_aside(v, g, "in and out of a door", notes);
+                }
+            }
+        }
         // The Lost: every twenty minutes, her own map and her objective go; the log's words, the
         // journal (where she stood when she learned each thing) and what she sees again are what
         // she has.
@@ -493,6 +538,15 @@ impl Story {
             if *n >= crate::lost::SEARCH_BUDGET && self.looking.gave_up.insert(key) {
                 notes.push(Mark::Note(format!("lost: gave up looking for {} (told where)", search_name(key))));
                 self.task = None;
+            }
+            // On a sign's way: a newer sign read, or the thing come on screen, turns her.
+            if cx.frames % 30 == 2 {
+                if let Some((t, reads)) = self.looking.leading.get(&key) {
+                    if *reads != cx.eyes.reads || known(v, cx, t) {
+                        self.looking.leading.remove(&key);
+                        self.task = None;
+                    }
+                }
             }
         }
         // Out of doors, what she would lose to, trading blows as the rows say, is not fought: she
@@ -623,7 +677,7 @@ impl Story {
                             notes.push(Mark::Note(format!("the {} is shut for {wait} h", z.name())));
                             continue;
                         }
-                        self.dungeon = Some((Box::new(crawl_for(v, z, goal)), goal));
+                        self.dungeon = Some((Box::new(crawl_for(v, z, goal, cx.model.has_eyes_only())), goal));
                         return Act::idle();
                     }
                     match route(v, cx, z) {
@@ -1275,9 +1329,39 @@ impl Story {
         let want = self.looking.words.entry(key).or_insert_with(|| crate::lost::landmark_words(v, q, i)).clone();
         let at = v.body().pos.cell();
         let dangers = cx.nav.dangers(v.zone());
-        let (extra, c) = crate::lost::landmark(v, &cx.eyes, &want)
-            .and_then(|c| crate::nav::nearest_walkable(v, c.0, c.1, 4))
-            .map(|c| (LANDMARK_EXTRA, c))
+        // A lead walked to its end is spent (for any step: the place is not about here).
+        let arrived = i64::from(crate::lost::LEAD_ARRIVED);
+        for l in &cx.eyes.leads {
+            if sq(l.to, at) <= arrived * arrived {
+                self.looking.spent.insert((l.post, l.nth));
+            }
+        }
+        // What a sign said first; then a landmark the words name, the roads, the map's edge.
+        let spent = |l: &crate::lost::Lead| {
+            self.looking.spent.contains(&(l.post, l.nth))
+                || self.looking.bad_road.contains(&crate::lost::block_of(l.to))
+                || crate::nav::near_danger(&dangers, l.to, crate::lost::SHUNNED)
+        };
+        let led = cx.eyes.lead(&want, &spent).map(|l| l.to);
+        if led.is_some() {
+            self.looking.leading.insert(key, (t.clone(), cx.eyes.reads));
+        } else {
+            self.looking.leading.remove(&key);
+        }
+        let (extra, c) = led
+            .map(|c| (LEAD_EXTRA, c))
+            .or_else(|| {
+                cx.eyes
+                    .unread_post(v)
+                    .and_then(|c| crate::nav::nearest_walkable(v, c.0, c.1, 4))
+                    .filter(|&c| !self.looking.bad_road.contains(&crate::lost::block_of(c)))
+                    .map(|c| (LEAD_EXTRA, c))
+            })
+            .or_else(|| {
+                crate::lost::landmark(v, &cx.eyes, &want)
+                    .and_then(|c| crate::nav::nearest_walkable(v, c.0, c.1, 4))
+                    .map(|c| (LANDMARK_EXTRA, c))
+            })
             .or_else(|| cx.eyes.road_frontier(at, &self.looking.bad_road, &dangers).map(|c| (SEARCH_EXTRA, c)))
             .or_else(|| crate::lost::fog_frontier(v, 60, &self.looking.bad_fog, &dangers).map(|c| (SEARCH_EXTRA, c)))?;
         let to = Vec2::centre(c.0, c.1);
