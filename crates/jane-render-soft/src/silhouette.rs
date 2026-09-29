@@ -88,8 +88,10 @@ pub fn cast_block(mask: &mut Mask, b: &Block, k: (i32, i32), ks: (i32, i32)) {
 /// it, and a px `k` px outside takes `3 (feather + 2 - k) / (feather + 1)` eighths where the 4 x 4
 /// ordered dither is under `8 (feather + 2 - k) / (feather + 1)`: with no feather, five eighths
 /// on the edge and three on the odd squares of the ring outside, one dither step soft, and a
-/// post's thin shadow keeps its body. Returns pixels written.
-pub fn apply(t: &mut Target<'_>, mask: &mut Mask, shade: Rgb, heights: &[u8], feather: i32) -> u64 {
+/// post's thin shadow keeps its body. The dither is laid by the county's px, not the screen's
+/// (`dither`: the camera's canvas px, `Frame::camera`), so a shadow's edge does not crawl as she
+/// walks. Returns pixels written.
+pub fn apply(t: &mut Target<'_>, mask: &mut Mask, shade: Rgb, heights: &[u8], feather: i32, dither: (i32, i32)) -> u64 {
     let Some((x0, y0, x1, y1)) = mask.dirty.take() else { return 0 };
     let (w, h) = (mask.w, mask.h);
     let (px, reach) = (&mask.px, &mask.reach);
@@ -123,7 +125,9 @@ pub fn apply(t: &mut Target<'_>, mask: &mut Mask, shade: Rgb, heights: &[u8], fe
                 else {
                     continue;
                 };
-                if i32::from(BAYER4[(y & 3) as usize][(x & 3) as usize]) >= 8 * (f + 2 - k) / (f + 1) {
+                if i32::from(BAYER4[((y + dither.1) & 3) as usize][((x + dither.0) & 3) as usize])
+                    >= 8 * (f + 2 - k) / (f + 1)
+                {
                     continue;
                 }
                 most * (3 * (f + 2 - k) / (f + 1)) / 8
@@ -184,7 +188,7 @@ mod tests {
         cast(&mut mask, &page, &s, &c, k);
         let mut px = vec![0xff80_8080u32; 800];
         let mut t = Target { px: &mut px, w: 40, h: 20 };
-        let n = apply(&mut t, &mut mask, [128, 128, 200], &[], 0);
+        let n = apply(&mut t, &mut mask, [128, 128, 200], &[], 0, (0, 0));
         assert!(n > 20, "{n}");
         // East of the post on its foot row is shadowed, and bluer than it is red; well west is not.
         let east = px[10 * 40 + 14];
@@ -205,7 +209,7 @@ mod tests {
         mask.band(Band { x0: 2, x1: 18, y0: 2, y1: 18, strength: 200, reach: 50 });
         let mut px = vec![0xff80_8080u32; 400];
         let mut t = Target { px: &mut px, w: 20, h: 20 };
-        apply(&mut t, &mut mask, [128, 128, 200], &[], 0);
+        apply(&mut t, &mut mask, [128, 128, 200], &[], 0, (0, 0));
         // Every px inside the edge is shaded, whatever the dither says there.
         for y in 3..17 {
             for x in 3..17 {
@@ -227,7 +231,7 @@ mod tests {
         let mut px = vec![0xff80_8080u32; 800];
         let mut t = Target { px: &mut px, w: 40, h: 20 };
         let shade = shadow::shade_at([128, 128, 200], sun.strength);
-        apply(&mut t, &mut mask, shade, &[], shadow::feather(sun.spread));
+        apply(&mut t, &mut mask, shade, &[], shadow::feather(sun.spread), (0, 0));
         let row: Vec<u32> = (0..40).map(|x| px[10 * 40 + x] >> 16 & 0xff).collect();
         let middle = row[20];
         (row.iter().filter(|&&r| r != 0x80 && r != middle).count(), middle)
@@ -260,7 +264,7 @@ mod tests {
         mask.band(Band { x0: 5, x1: 10, y0: 5, y1: 13, strength: 200, reach: 8 });
         let mut px = vec![0xff80_8080u32; (w * h) as usize];
         let mut t = Target { px: &mut px, w, h };
-        apply(&mut t, &mut mask, [128, 128, 200], &heights, 0);
+        apply(&mut t, &mut mask, [128, 128, 200], &heights, 0, (0, 0));
         let dark = |x: i32, y: i32| px[(y * w + x) as usize] != 0xff80_8080;
         // Up the face over the columns it covers, as high as 8 px (the face's rows 4 and more
         // are 7 px and less; row 3 is 8 px; row 2 is 10 px and stays lit).

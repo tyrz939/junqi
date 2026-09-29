@@ -4,9 +4,10 @@
 
 use jane_core::Angle;
 use jane_present::frame::CHUNK_PX;
+use jane_present::shadow::{self, shear, spill_shear};
 use jane_present::{
-    AtlasPages, Backend, CLUT_LEN, Caster, ChunkCmd, ChunkId, ChunkLayers, Depth, Directional, Flags, Frame, Light,
-    LightKind, Page, Pass, Post, Span, SpriteCmd, Src, Tier, height_of_rows,
+    AtlasPages, Backend, Block, CLUT_LEN, Caster, ChunkCmd, ChunkId, ChunkLayers, Depth, Directional, Flags, Frame,
+    Light, LightKind, Page, Pass, Post, Span, SpriteCmd, Src, Tier, height_of_rows,
 };
 use jane_render_wgpu::Wgpu;
 
@@ -293,33 +294,88 @@ fn stand(atlas: &AtlasPages, ay: i32, foot: (i32, i32), depth: u8, sun: Directio
 
 /// A sun in the north at 40 degrees: shadows run south, down the screen, in front of what
 /// casts them, so the whole of one is seen.
+/// A post-and-rail fence across the view as the painter draws it, six cells from x 80, its foot
+/// on row 95: each cell's post 6 px wide (rows 72 to 95, 28 px at its top), the rails across
+/// rows 77 to 79 (21 to 18 px) and 85 to 87 (11 to 8), every px of it marked a fence's and
+/// standing at least 5 px up; and its posts and rails as the frame's blocks.
+fn fence() -> (ChunkLayers, Vec<Block>) {
+    let post = |x: i32| (80..176).contains(&x) && (x - 80) % 16 >= 5 && (x - 80) % 16 < 11;
+    let rail = |x: i32, y: i32| (80..176).contains(&x) && matches!(y, 77..=79 | 85..=87);
+    let mut l =
+        ground(|x, y| (post(x) && (72..=95).contains(&y) || rail(x, y)).then(|| height_of_rows(95 - y).max(5) as u8));
+    for y in 0..CHUNK_PX {
+        for x in 0..CHUNK_PX {
+            if post(x) && (72..=95).contains(&y) || rail(x, y) {
+                let k = (y * CHUNK_PX + x) as usize;
+                l.fence[k / 64] |= 1 << (k % 64);
+            }
+        }
+    }
+    let part = |x0: i16, x1: i16, lo: u8, height: u8| Block { x0, y0: 94, x1, y1: 96, height, lo, fence: true };
+    let mut blocks: Vec<Block> = (0..6).map(|i| part(85 + 16 * i, 91 + 16 * i, 0, 28)).collect();
+    blocks.extend([part(80, 176, 7, 11), part(80, 176, 17, 21)]);
+    (l, blocks)
+}
+
+/// `f` with `blocks` as its terrain's.
+fn with_blocks(mut f: Frame, blocks: &[Block]) -> Frame {
+    f.blocks.extend_from_slice(blocks);
+    for p in &mut f.passes {
+        if let Pass::Lights { blocks: b, .. } = p {
+            *b = Span { start: 0, len: blocks.len() as u32 };
+        }
+    }
+    f
+}
+
 #[test]
-fn a_fence_spills_its_shadow_south_of_its_rails_and_a_wall_does_not() {
+fn a_fence_lays_the_bands_t0_and_t1_lay_on_the_ground_alone_and_a_wall_spills_nothing() {
+    // The fence rule (PRESENTATION.md §1.7): at five a fence's shadow is its posts' lines and its
+    // two rails' thrown south-east, the bands `shadow::block_bands` gives T0 and T1, and its
+    // true shadow (north, behind its rails) is not laid; it never darkens the fence.
     let Some(mut b) = backend() else { return };
-    // A fence across the view, 96 px long: its rails and posts upright on their line, 21 px at
-    // the top, standing two or three rows deep in the field on its foot row 96 (the fence rule,
-    // PRESENTATION.md §1.7): thin, so the sun at five throws it as if it stood 20 degrees
-    // north: its shadow spills south of the rails, and runs east as far as the true one.
-    let fence = ground(|x, y| {
-        if !(80..176).contains(&x) {
-            return None;
-        }
-        match y {
-            79..=95 => Some(height_of_rows(96 - y).max(1) as u8),
-            _ => None,
-        }
-    });
-    let px = draw(&mut b, &atlas(|_| 1), &frame(fence, false, Some(five()), &[]));
-    let lit = luma(at(&px, 30, 120));
+    let (layers, blocks) = fence();
+    let px = draw(&mut b, &atlas(|_| 1), &with_blocks(frame(layers, false, Some(five()), &[]), &blocks));
+    let lit = luma(at(&px, 30, 140));
     let dark = |x: i32, y: i32| luma(at(&px, x, y)) * 10 < lit * 8;
-    // 14 rows south of the foot the spill (sin 20 degrees of cot 16, 1.19 rows a px of height)
-    // is the rails 12 px up, laid 40 px east: dark from 120 to 216, lit either side.
-    assert!(dark(150, 110) && dark(200, 110), "no spill south of the fence");
-    assert!(!dark(95, 110) && !dark(232, 110), "the spill runs the wrong way");
-    // Its true shadow (18 rows north of the foot, behind the rails) is not laid as well: east
-    // of the fence's end, level with its rails, the grass is open.
-    assert!(!dark(190, 85), "the fence throws its true shadow too");
-    // And the wall's block of the test before, a cell deep and 13 px, spills nothing.
+    let (k, ks) = (shear(&five()).unwrap(), spill_shear(&five()).unwrap());
+    let mut bands = Vec::new();
+    for bl in &blocks {
+        shadow::block_bands(bl, k, ks, |band| bands.push(band));
+    }
+    let covered =
+        |x: i32, y: i32, r: i32| bands.iter().any(|b| b.x0 - r <= x && x < b.x1 + r && b.y0 - r <= y && y < b.y1 + r);
+    let (mut agree, mut n) = (0, 0);
+    for y in (97..H as i32).step_by(2) {
+        for x in (0..W as i32).step_by(2) {
+            if covered(x, y, 0) && !covered(x, y, -3) {
+                continue;
+            }
+            // Well inside a band: dark; three px from any: lit.
+            if !covered(x, y, 3)
+                || covered(x, y, -3)
+                || bands.iter().any(|b| b.x0 + 3 <= x && x < b.x1 - 3 && b.y0 <= y && y < b.y1)
+            {
+                n += 1;
+                agree += i32::from(dark(x, y) == covered(x, y, 0));
+            }
+        }
+    }
+    assert!(n > 500 && agree * 100 >= n * 97, "T2 lays {agree} of {n} px as the bands do");
+    // A post's line starts at its foot, and the grass between two posts' lines is lit.
+    assert!(dark(104, 97) && dark(120, 108), "no post's line from its foot");
+    let row: Vec<bool> = (90..200).map(|x| dark(x, 104)).collect();
+    let gaps = row.windows(2).filter(|w| w[0] && !w[1]).count();
+    assert!(gaps >= 4, "the posts' lines run together on row 104: {row:?}");
+    // Its true shadow is not laid: east of the fence's end, level with its rails, open grass.
+    assert!(!dark(200, 84), "the fence throws its true shadow too");
+    // The fence (the grass's albedo, facing the low sun) is never in its own shadow.
+    for x in (82..172).step_by(8) {
+        for y in [78, 86] {
+            assert!(!dark(x, y), "a rail shadowed at ({x}, {y}): {}", luma(at(&px, x, y)));
+        }
+    }
+    // A wall's block a cell deep and 13 px spills nothing south, and keeps its true shadow.
     let wall = ground(|x, y| {
         if !(80..176).contains(&x) {
             return None;
@@ -336,38 +392,6 @@ fn a_fence_spills_its_shadow_south_of_its_rails_and_a_wall_does_not() {
     let lit = luma(at(&px, 30, 120));
     assert!(luma(at(&px, 128, 104)) * 10 >= lit * 8, "the wall spills south");
     assert!(luma(at(&px, 190, 85)) * 10 < lit * 8, "the wall lost its true shadow");
-}
-
-#[test]
-fn a_fences_shadow_is_its_rails_with_lit_grass_between_and_it_never_darkens_them() {
-    let Some(mut b) = backend() else { return };
-    // Two rails across the view, no post, their foot on row 96: 21 to 18 px (rows 79 to 81)
-    // and 11 to 8 px (rows 87 to 89), upright, over grass. At five the spill lays the lower
-    // rail's 8 to 11 px 6 to 13 rows south of the foot and the upper's 18 to 21 px 17 to 24,
-    // each run 27 to 71 px east (the fence rule's bars, PRESENTATION.md §1.7).
-    let rails = ground(|x, y| {
-        if !(80..176).contains(&x) {
-            return None;
-        }
-        match y {
-            79..=81 | 87..=89 => Some(height_of_rows(96 - y) as u8),
-            _ => None,
-        }
-    });
-    let lit_rails = draw(&mut b, &atlas(|_| 1), &frame(rails, false, Some(five()), &[]));
-    let lit = luma(at(&lit_rails, 30, 120));
-    let dark = |x: i32, y: i32| luma(at(&lit_rails, x, y)) * 10 < lit * 8;
-    let col: Vec<bool> = (96..126).map(|y| dark(165, y)).collect();
-    // Dark where each rail's line lies, lit under the lower one and between the two.
-    assert!(dark(165, 106) && dark(165, 117), "no rail lines: {col:?}");
-    assert!(!dark(165, 99) && !dark(165, 111), "no lit gap between the rails: {col:?}");
-    // The rails (the grass's albedo, facing the low sun) are never in their own shadow: no
-    // darker than the open grass anywhere along them.
-    for x in (84..172).step_by(8) {
-        for y in [80, 88] {
-            assert!(!dark(x, y), "a rail shadowed at ({x}, {y}): {}", luma(at(&lit_rails, x, y)));
-        }
-    }
 }
 
 fn north_sun() -> Directional {

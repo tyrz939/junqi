@@ -23,12 +23,48 @@ pub const CHUNK_CELLS: i32 = 16;
 /// Canvas px on a side of a terrain chunk.
 pub const CHUNK_PX: i32 = CHUNK_CELLS * CELL;
 /// Canvas px round the canvas whose casters, terrain and lights throw their shadows and light
-/// onto it (PRESENTATION.md §1.7): what stands in this band is in the frame's `casters` and
-/// `blocks` though it is not on screen, its chunks are drawn (clipped), and T2's G-buffer and
-/// height field cover it (`jane-render-wgpu`'s `GUARD`). A light's pool and a caster's shadow
-/// no longer vanish the moment what throws them leaves the screen (the owner's playtest,
-/// 2026-09-28: they did, at a 64 px band that the chunks under it did not even fill).
+/// onto it at the least (PRESENTATION.md §1.7): what stands in this band is in the frame's
+/// `casters` and `blocks` though it is not on screen, its chunks are drawn (clipped), and T2's
+/// G-buffer and height field cover it (`Frame::guard`). A light's pool and a caster's shadow no
+/// longer vanish the moment what throws them leaves the screen (the owner's playtest,
+/// 2026-09-28: they did, at a 64 px band that the chunks under it did not even fill). On the
+/// side the sun shines from, the band reaches as far as the longest shadow the sun throws
+/// (`shadow::cast_margins`, 2026-09-29).
 pub const CAST_MARGIN: i32 = 160;
+
+/// The casting band round the canvas this frame, px a side (`shadow::cast_margins`): the least,
+/// [`CAST_MARGIN`], every way, and on the side the sun or moon shines from as far as the longest
+/// shadow it throws.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Margins {
+    pub left: i32,
+    pub top: i32,
+    pub right: i32,
+    pub bottom: i32,
+}
+
+impl Margins {
+    /// `m` every way.
+    pub const fn uniform(m: i32) -> Margins {
+        Margins { left: m, top: m, right: m, bottom: m }
+    }
+
+    /// Each side `d` px further.
+    pub const fn grow(self, d: i32) -> Margins {
+        Margins { left: self.left + d, top: self.top + d, right: self.right + d, bottom: self.bottom + d }
+    }
+
+    /// The widest side.
+    pub fn most(self) -> i32 {
+        self.left.max(self.top).max(self.right).max(self.bottom)
+    }
+}
+
+impl Default for Margins {
+    fn default() -> Margins {
+        Margins::uniform(CAST_MARGIN)
+    }
+}
 
 /// The 3/4 view's one projection (ART.md §1.1, PRESENTATION.md §1.7): heights are true px, a
 /// thing `h` px up is drawn `rows_up(h)` rows over its ground point (four fifths, rounded up).
@@ -647,11 +683,14 @@ pub struct Caster {
 }
 
 /// What the terrain stands on the ground (§1.7): a rect of its height field seen from above,
-/// canvas px `[x0, x1) x [y0, y1)` (the camera taken off), standing from the ground to `height`
-/// px. A chunk's heights stand each px `h` up on the ground `rows_up(h)` rows below it, as T2's
-/// field stands them, and the rows of one height are merged into rects
-/// (`terrain::blocks`): a house is its footprint in a few rects by its roof's courses, a wall its
-/// run, a fence its rails. T2 casts the same from its field; T0 and T1 from these.
+/// canvas px `[x0, x1) x [y0, y1)` (the camera taken off), standing from `lo` px up to `height`.
+/// A chunk's heights stand each px `h` up on the ground `rows_up(h)` rows below it, as T2's field
+/// stands them, and the rows of one height are merged into rects (`terrain::blocks`): a house is
+/// its footprint in a few rects by its roof's courses, a wall its run. A fence is not in its
+/// heights' blocks: each post and rail is a block of its own as it is drawn (`fence`, from
+/// `jane_art::terrain::Chunk::fences`), a rail floating from `lo`. T2 casts the height field's
+/// blocks from its field and what spills (a fence, a hedge: `shadow::spills`) by the same bands
+/// as T0 and T1; T0 and T1 cast every block.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct Block {
     pub x0: i16,
@@ -659,11 +698,11 @@ pub struct Block {
     pub x1: i16,
     pub y1: i16,
     pub height: u8,
-    /// What of its height is matter, for a block that spills (`shadow::spills`, the fence rule):
-    /// bit `i` set where something stands between `2i` and `2i + 2` px up (`terrain::blocks`:
-    /// each px from the bottom of its own run down the screen to its height, so a fence's rails
-    /// are two bars over open ground and a hedge is solid). 0: solid from the ground.
-    pub mask: u32,
+    /// Its bottom, px up: 0 from the ground (every block of the height field, a post); a rail's
+    /// underside.
+    pub lo: u8,
+    /// A fence's post or rail (the fence rule, `shadow::spills`).
+    pub fence: bool,
 }
 
 /// The grade and the bloom (§1.9): a row per region by hour.
@@ -764,6 +803,9 @@ pub struct ChunkLayers {
     pub surface: Vec<u8>,
     /// The chunk's water cells, chunk-local `(x, y, shimmer phase)`: every tier.
     pub water: Vec<(u8, u8, u8)>,
+    /// T1 and T2: which px a fence drew, a bit a px, row by row (`jane_art::terrain::Chunk::
+    /// fence_px`): T2's sun passes them (the fence rule, PRESENTATION.md §1.7).
+    pub fence: Vec<u64>,
     /// T0 only (no emissive layer): what glows in the chunk, sparse, each px's index in the chunk
     /// and its colour `0xAARRGGBB`, at most [`GLOW_CAP`] (reserved once, so painting never
     /// allocates). The lit tiers read the emissive layer.
@@ -796,6 +838,7 @@ impl ChunkLayers {
                 emissive: vec![0; n],
                 height: vec![0; n],
                 surface: vec![0; n],
+                fence: vec![0; n / 64],
                 water,
                 glow: Vec::new(),
             }
@@ -811,6 +854,12 @@ impl ChunkLayers {
     pub fn has_height(&self) -> bool {
         !self.height.is_empty()
     }
+
+    /// Whether a fence drew chunk px `k` (`y * CHUNK_PX + x`): never at T0, which keeps no
+    /// fence layer.
+    pub fn is_fence(&self, k: usize) -> bool {
+        self.fence.get(k / 64).is_some_and(|w| w >> (k % 64) & 1 == 1)
+    }
 }
 
 /// One frame's draw, in pass order.
@@ -823,6 +872,9 @@ pub struct Frame {
     /// Top-left of the view in the zone, canvas px, interpolated. Every command below is
     /// already in canvas coordinates (the camera taken off); this is for parallax.
     pub camera: (i32, i32),
+    /// T2's G-buffer guard band round the canvas, px: the casting band's widest side
+    /// (`Margins::most`), so every tier casts from the same band.
+    pub guard: u16,
     /// Filled before anything else, as `0xAARRGGBB`.
     pub clear: u32,
     /// In draw order.
@@ -862,6 +914,7 @@ impl Frame {
             tier,
             canvas: (CANVAS_W, CANVAS_H),
             camera: (0, 0),
+            guard: CAST_MARGIN as u16,
             clear: 0xff10_1014,
             passes: Vec::with_capacity(24),
             chunks: Vec::with_capacity(64),

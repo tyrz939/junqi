@@ -232,6 +232,7 @@ uniform vec2 u_size;
 uniform vec3 u_k;
 uniform vec4 u_box;
 uniform float u_feather;
+uniform vec2 u_dither;
 float need;
 float m_at(vec2 p) {
     if (p.x < 0.0 || p.y < 0.0 || p.x >= u_size.x || p.y >= u_size.y) return 0.0;
@@ -282,7 +283,7 @@ void main() {
             if (most > 0.5) break;
         }
         if (most < 0.5) discard;
-        if (bayer(q) >= floor(8.0 * (f + 2.0 - kk) / (f + 1.0) + 0.001)) discard;
+        if (bayer(q + u_dither) >= floor(8.0 * (f + 2.0 - kk) / (f + 1.0) + 0.001)) discard;
         s = floor(most * floor(3.0 * (f + 2.0 - kk) / (f + 1.0) + 0.001) * 0.125);
     }
     s = s + floor(s * (1.0 / 128.0));

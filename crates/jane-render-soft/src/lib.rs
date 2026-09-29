@@ -246,6 +246,7 @@ impl Backend for Soft {
                         shade,
                         &self.heights,
                         jane_present::shadow::feather(sun.spread),
+                        frame.camera,
                     );
                     self.glow.refresh(t);
                 }

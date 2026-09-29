@@ -20,42 +20,11 @@
 @group(0) @binding(2) var<storage, read_write> hmap: array<atomic<u32>>;
 @group(0) @binding(3) var gid: texture_2d<u32>;
 @group(0) @binding(4) var gem: texture_2d<f32>;
+@group(0) @binding(5) var<storage, read_write> tile_tops: array<atomic<u32>>;
 
 // A run whose lowest px is this high or lower stands on the ground: the feet, a trunk's root.
 const FLOAT: f32 = 6.5;
-// How much lower the next terrain px down a run may be and still go on from it, and how far a
-// run is walked (`jane_present::terrain::run_bottom`'s `RUN_DROP`, `RUN_WALK`).
-const RUN_DROP: u32 = 2u;
-const RUN_WALK: i32 = 48;
 
-// The bottom of the run of terrain px the px at `(x, y)`, `h` high, is part of (the fence rule's
-// matter, `common.wgsl`): down the drawing while the next px goes on from it, no higher and at
-// most `RUN_DROP` lower (an upright face, a level rail); 0 if it comes down to the ground. A
-// sprite drawn over it ends the walk.
-fn terrain_bottom(x: i32, y: i32, h: u32) -> u32 {
-    let hh = i32(g.full.y);
-    var low = h;
-    for (var k = 1; k <= RUN_WALK; k++) {
-        let yy = y + k;
-        if yy >= hh || textureLoad(gid, vec2<i32>(x, yy), 0).r != 0u {
-            break;
-        }
-        let next = u32(round(textureLoad(gnh, vec2<i32>(x, yy), 0).b * 255.0));
-        if next > low + 1u || next + RUN_DROP < low {
-            break;
-        }
-        low = next;
-    }
-    return select(low, 0u, f32(low) <= FLOAT);
-}
-
-// The matter bits of a run from `lo` to `hi` px up: bit `i` for `2i` to `2i + 2`
-// (`jane_present::terrain::mask_of`).
-fn mask_of(lo: u32, hi: u32) -> u32 {
-    let a = min(lo / 2u, 31u);
-    let b = min(hi / 2u, 31u);
-    return (0xffffffffu >> (31u - b)) & (0xffffffffu << a);
-}
 // How far down the screen a run is followed; past it, it is taken to stand on the ground.
 const WALK: i32 = 192;
 
@@ -130,8 +99,9 @@ fn scatter(@builtin(global_invocation_id) id: vec3<u32>) {
     if f32(h) < GROUND {
         return;
     }
-    let depth = u32(round(v.a * 255.0));
-    let who = textureLoad(gid, vec2<i32>(id.xy), 0).r & 0xffffu;
+    let depth_byte = u32(round(v.a * 255.0));
+    let depth = depth_byte & (FENCE - 1u);
+    var who = textureLoad(gid, vec2<i32>(id.xy), 0).r & 0xffffu;
     // The terrain's relief up to `RELIEF` (a cobble, a tuft, a kerb) is its texture, not a
     // caster: it stands in no field, as it throws no block on T0 and T1 (`shadow::RELIEF`).
     if who == 0u && f32(h) <= RELIEF {
@@ -151,13 +121,12 @@ fn scatter(@builtin(global_invocation_id) id: vec3<u32>) {
     }
     var d = max(depth, 1u);
     var lo = 0u;
-    // The terrain's matter by height where it may spill (the fence rule); the field's third word.
-    var matter = 0u;
     if who != 0u {
         lo = u32(round(run_bottom(i32(id.x), i32(id.y), f32(h), who)));
         d = footprint(i32(id.x), i32(id.y), who, d);
-    } else if f32(h) <= SPILL_TOP {
-        matter = mask_of(terrain_bottom(i32(id.x), i32(id.y), h), h);
+    } else if (depth_byte & FENCE) != 0u || f32(h) <= SPILL_LOW {
+        // What spills (the fence rule, `common.wgsl`): the sun's trace passes it.
+        who = SPILL_ID;
     }
     // Its footprint is behind the row it stands on: a sprite's lowest px is the front of what it
     // stands on, so the ground drawn in front of its foot is never inside it (a bush's footprint
@@ -167,7 +136,7 @@ fn scatter(@builtin(global_invocation_id) id: vec3<u32>) {
     let n = w * hh;
     // A sprite stands as wide as it is drawn: a post 2 px wide throws a shadow 2 px wide, as on
     // T0 and T1. The terrain a px wider each side, so a wall's end is never stepped past.
-    let spread = select(0, 1, who == 0u);
+    let spread = select(0, 1, who == 0u || who == SPILL_ID);
     for (var dx = -spread; dx <= spread; dx++) {
         let x = i32(id.x) + dx;
         if x < 0 || x >= i32(w) {
@@ -179,52 +148,35 @@ fn scatter(@builtin(global_invocation_id) id: vec3<u32>) {
                 let i = u32(y) * w + u32(x);
                 atomicMax(&hmap[i], packed);
                 atomicMax(&hmap[n + i], 256u - min(lo, h));
-                if matter != 0u {
-                    atomicOr(&hmap[2u * n + i], matter);
-                }
             }
         }
     }
 }
 
-// Whether terrain stands in the field at `(x, y)` (a texel marked thin is terrain still).
-fn terrain_at(x: i32, y: i32) -> bool {
-    let w = i32(g.full.x);
-    if x < 0 || y < 0 || x >= w || y >= i32(g.full.y) {
-        return false;
-    }
-    let v = atomicLoad(&hmap[u32(y * w + x)]);
-    let who = v & 0xffffu;
-    return v != 0u && (who == 0u || who == THIN_ID);
-}
-
-// After `scatter`: marks each terrain texel that spills (the fence rule, `common.wgsl`'s
-// `THIN_ID`), so the sun's trace can leave it out and the spill's take it alone. Thin is judged
-// in the field, where a fence's rails stand two rows deep and a wall's run a cell: a fence with
-// a person beside it is thin still (only the terrain counts), and a mark under way is terrain
-// still to its neighbours.
+// After `scatter`: each tile's tallest top (`common.wgsl`'s `TOP_TILE`), a texel counted in its
+// own tile and in each tile within `TOP_GROW` px of it (the trace reads a texel or two round its
+// ray, the side rays a px and a half across).
 @compute @workgroup_size(8, 8)
-fn thin(@builtin(global_invocation_id) id: vec3<u32>) {
+fn tops(@builtin(global_invocation_id) id: vec3<u32>) {
     let w = u32(g.full.x);
-    let hh = u32(g.full.y);
-    if id.x >= w || id.y >= hh {
+    if id.x >= w || id.y >= u32(g.full.y) {
         return;
     }
-    let i = id.y * w + id.x;
-    let v = atomicLoad(&hmap[i]);
-    if v == 0u || (v & 0xffffu) != 0u {
+    let top = atomicLoad(&hmap[id.y * w + id.x]) >> 16u;
+    if top == 0u {
         return;
     }
-    let h = f32(v >> 16u);
-    if h > SPILL_TOP {
-        return;
-    }
+    let tw = top_tiles_x();
+    let th = (i32(g.full.y) + TOP_TILE - 1) / TOP_TILE;
     let x = i32(id.x);
     let y = i32(id.y);
-    let low = h <= SPILL_LOW;
-    let across = !terrain_at(x, y - THIN) && !terrain_at(x, y + THIN);
-    let along = !terrain_at(x - THIN, y) && !terrain_at(x + THIN, y);
-    if low || across || along {
-        atomicOr(&hmap[i], THIN_ID);
+    let tx0 = max((x - TOP_GROW) / TOP_TILE, 0);
+    let tx1 = min((x + TOP_GROW) / TOP_TILE, tw - 1);
+    let ty0 = max((y - TOP_GROW) / TOP_TILE, 0);
+    let ty1 = min((y + TOP_GROW) / TOP_TILE, th - 1);
+    for (var ty = ty0; ty <= ty1; ty++) {
+        for (var tx = tx0; tx <= tx1; tx++) {
+            atomicMax(&tile_tops[ty * tw + tx], top);
+        }
     }
 }

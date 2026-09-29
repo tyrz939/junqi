@@ -30,7 +30,7 @@ pub const USAGE: &str = "  sheet layers <what> [--frame F] [--out DIR]
   sheet scene [--seed N] [--minutes M | --ticks T] [--model reader|rusher] [--night | --hour H[:MM]]
               [--wide] [--backend soft|gl2|wgpu] [--at ZONE[:MARK] | --at MARK]
               [--weather clear|mist|rain|storm] [--cast SPELL[:TICKS] [--spawn UNIT]] [--rows KEY=V,..]
-              [--film N[:EVERY]] [--crop X,Y,W,H] [--zoom Z] [--layers] [--show-sun]
+              [--film N[:EVERY] [--walk DIR[:TICKS],..]] [--crop X,Y,W,H] [--zoom Z] [--layers] [--show-sun]
               [--knows SPELL,..] [--learn SPELL,..] [--grow strength|spirit] [--ui]
               [--out PATH.png | --out DIR]
                                       --learn learns spells after the rest (--knows ones before, out of
@@ -287,6 +287,23 @@ fn scene(args: &[String]) -> Result<(), String> {
         rows,
         gl,
         lesson,
+        walk: match flag("--walk") {
+            None => Vec::new(),
+            Some(w) => w
+                .split(',')
+                .map(|leg| {
+                    let (dir, ticks) = leg.split_once(':').unwrap_or((leg, "100000"));
+                    let dir = match dir {
+                        "east" => jane_core::Angle::EAST,
+                        "west" => jane_core::Angle::WEST,
+                        "north" => jane_core::Angle::NORTH,
+                        "south" => jane_core::Angle::SOUTH,
+                        _ => return Err(format!("--walk DIR[:TICKS],..: east, west, north or south, not {dir}")),
+                    };
+                    Ok((dir, ticks.parse::<u32>().map_err(|_| format!("--walk: ticks, not {ticks}"))?))
+                })
+                .collect::<Result<Vec<_>, String>>()?,
+        },
     };
     // `--film N[:EVERY]`: N ticks more, every EVERY-th a frame, `<name>-<tick>.png` beside the path.
     if let Some(f) = flag("--film") {

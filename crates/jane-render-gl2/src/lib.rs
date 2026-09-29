@@ -128,7 +128,7 @@ impl Progs {
                 sh::RECT_VS,
                 sh::SILHOUETTE_FS,
                 &sh::RECT_ATTRS,
-                &["u_size", "u_mask", "u_snap", "u_height", "u_k", "u_box", "u_feather"],
+                &["u_size", "u_mask", "u_snap", "u_height", "u_k", "u_box", "u_feather", "u_dither"],
             )?,
             ambient: Prog::new(
                 gl,
@@ -868,8 +868,8 @@ impl Gl2 {
                     self.gl.draw_quads(quads.start, quads.len());
                     self.calls += 1;
                 }
-                Step::Silhouette { spans, mask, apply, k, feather } => {
-                    self.silhouette(t, spans.clone(), *mask, *apply, *k, *feather);
+                Step::Silhouette { spans, mask, apply, k, feather, dither } => {
+                    self.silhouette(t, spans.clone(), *mask, *apply, *k, (*feather, *dither));
                     current = None;
                 }
             }
@@ -921,7 +921,7 @@ impl Gl2 {
         mask: (i32, i32, i32, i32),
         (x, y, w, h): (i32, i32, i32, i32),
         k: [f32; 3],
-        feather: i32,
+        (feather, dither): (i32, (i32, i32)),
     ) {
         let c = t.canvas;
         self.gl.target(Some(t.sil.fbo), c.0, c.1);
@@ -949,6 +949,7 @@ impl Gl2 {
         self.gl.set_f(p.u("u_size"), &[c.0 as f32, c.1 as f32]);
         self.gl.set_f(p.u("u_k"), &k);
         self.gl.set_f(p.u("u_feather"), &[feather as f32]);
+        self.gl.set_f(p.u("u_dither"), &[dither.0 as f32, dither.1 as f32]);
         self.gl.set_f(p.u("u_box"), &[mask.0 as f32, mask.1 as f32, mask.2 as f32, mask.3 as f32]);
         self.rect(x as f32, y as f32, (x + w) as f32, (y + h) as f32);
     }

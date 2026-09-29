@@ -98,27 +98,31 @@ pub fn spread(sin_el: i32) -> u16 {
     (deg(1) + deg(4) * low / 20000) as u16
 }
 
-/// How dark the sun's or the moon's shadows are in clear air at `sin_el`: [`STRENGTH_HIGH`] of
-/// its light taken away from 30 degrees up (the sky's own blue and the ground's bounce always
-/// fill an umbra a little), falling to [`STRENGTH_LOW`] at 12 degrees, then fading to nothing
-/// by 3 degrees, as the sun's light thins into the haze on the horizon: a shadow grows long as
-/// the sun sinks and fades out before it gets absurd, and the dusk hands over to the afterglow.
-/// (Decided 2026-09-28, the owner's first playtest: the umbra was the whole sun's at noon, which
-/// read harsh on T2, and a shadow at 18:20 was eight heights long and as dark as five o'clock's.)
+/// How dark the sun's or the moon's shadows are in clear air at `sin_el`, by how long they are:
+/// [`STRENGTH_HIGH`] of its light taken away while a shadow is a height long or shorter (45
+/// degrees up and over: the sky's own blue and the ground's bounce always fill an umbra a
+/// little), falling evenly with the length to [`STRENGTH_LOW`] at four heights (14 degrees,
+/// [`LOWEST`], where the length stops growing), then eased to nothing by 3 degrees, as the sun's
+/// light thins into the haze on the horizon: a shadow fades as it grows long, from the early
+/// afternoon, and is gone before it gets absurd; the dusk hands over to the afterglow. (Decided
+/// 2026-09-28, the owner's first playtest: the umbra was the whole sun's at noon, which read
+/// harsh on T2, and a shadow at 18:20 was eight heights long and as dark as five o'clock's. Then
+/// 2026-09-29: the long evening shadows should taper earlier and more gradually; they had kept
+/// the whole of 224 until 30 degrees and 176 at 12, so five o'clock's were as dark as three's.)
 pub fn strength(sin_el: i32) -> u8 {
-    // sin 30, 12 and 3 degrees, Q15.
-    const HIGH: i32 = 16384;
-    const LOW: i32 = 6813;
+    // sin 14 and 3 degrees, Q15.
+    const FOUR: i32 = 7927;
     const GONE: i32 = 1715;
     let s = sin_el.clamp(0, 32768);
     let (hi, lo) = (i32::from(STRENGTH_HIGH), i32::from(STRENGTH_LOW));
-    let v = if s >= HIGH {
-        hi
-    } else if s >= LOW {
-        lo + (hi - lo) * (s - LOW) / (HIGH - LOW)
+    let v = if s >= FOUR {
+        // The shadow's length a height, Q8: cot = cos / sin.
+        let c = jane_core::num::isqrt((32768 * 32768 - s * s) as u64) as i32;
+        let cot = (c * 256 / s).clamp(256, 1024);
+        hi - (hi - lo) * (cot - 256) / 768
     } else if s > GONE {
         // Eased in, so it slips away rather than stopping.
-        let t = (s - GONE) * 256 / (LOW - GONE);
+        let t = (s - GONE) * 256 / (FOUR - GONE);
         lo * t * t / (256 * 256)
     } else {
         0
@@ -126,9 +130,10 @@ pub fn strength(sin_el: i32) -> u8 {
     v.clamp(0, 255) as u8
 }
 
-/// The sun's or the moon's umbra high in the sky and at 12 degrees, of 255 ([`strength`]).
+/// The sun's or the moon's umbra while its shadows are a height long or less, and at four
+/// heights, of 255 ([`strength`]).
 pub const STRENGTH_HIGH: u8 = 224;
-pub const STRENGTH_LOW: u8 = 176;
+pub const STRENGTH_LOW: u8 = 128;
 
 /// The lowest the sun or the moon stands as a shadow's light, [`Angle`] units: 14 degrees, where
 /// a shadow is four heights long ([`crate::shadow::MAX_COT_Q8`]). A body under it (the last hour
@@ -428,7 +433,14 @@ mod tests {
             let (kx, ky) = crate::shadow::shear(&s).unwrap();
             assert!(kx.abs().max(ky.abs()) <= crate::shadow::MAX_COT_Q8, "17:{m:02}: {kx} {ky}");
         }
-        assert!(at(0).strength >= 170, "five o'clock's shadows are strong: {}", at(0).strength);
+        // Five o'clock's shadows (3.5 heights) are well under noon's and still plain; they taper
+        // from the early afternoon, evenly with their length.
+        assert!((130..=160).contains(&at(0).strength), "five o'clock's shadows: {}", at(0).strength);
+        let el = |d: i32| strength(sin_q15(Angle::from_degrees(d)).0);
+        assert!(el(46) == STRENGTH_HIGH && el(40) < STRENGTH_HIGH && el(30) < 210, "{} {}", el(40), el(30));
+        for d in 15..45 {
+            assert!(el(d) < el(d + 1) && el(d + 1) - el(d) <= 12, "{d} degrees: {} to {}", el(d), el(d + 1));
+        }
         assert!(!at(86).casts(), "a sun on the horizon still casts: {:?}", at(86));
         // The afterglow takes over from nothing, peaks faint, and fades with its light.
         let glow = |m: i32| sky((SET + m * 120) as u32, 0, false, 1000, Region::Lowfields).sun.unwrap().strength;

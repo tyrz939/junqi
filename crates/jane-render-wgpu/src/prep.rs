@@ -5,12 +5,14 @@
 use std::ops::Range;
 
 use jane_present::frame::{Atmos, PartShape, SkyLook};
-use jane_present::{Depth, Frame, LightKind, Pass, Post, Tint};
+use jane_present::{Depth, Frame, LightKind, Pass, Post, Tint, shadow};
 
 /// Canvas px round the canvas the G-buffer and the height field cover, so a caster off screen
-/// still casts in: the presenter's casting band (`jane_present::frame::CAST_MARGIN`), whose
-/// casters and chunks the frame carries.
-pub const GUARD: u32 = jane_present::frame::CAST_MARGIN as u32;
+/// still casts in: the presenter's casting band's widest side (`Frame::guard`, from
+/// `shadow::cast_margins`), whose casters and chunks the frame carries.
+pub fn guard(frame: &Frame) -> u32 {
+    u32::from(frame.guard)
+}
 /// A sprite that burns no rows (`SpriteIn`'s last word).
 pub const NO_BURN: u32 = 0xffff;
 /// Light tiles are this many canvas px square.
@@ -76,6 +78,15 @@ pub struct Prep {
     pub tiles_y: u32,
     /// The globals uniform, [`GLOBALS`] bytes.
     pub globals: Vec<u8>,
+    /// What spills (the fence rule, PRESENTATION.md §1.7): a byte a canvas px, how much of the
+    /// sun the bands of every spilling block take off the ground there (`shadow::block_bands`,
+    /// the bands T0 and T1 lay); the light pass softens its edge as wide as theirs is feathered. Whether it has
+    /// any this frame, and had any the last (so it is cleared on the GPU once).
+    pub spill: Vec<u8>,
+    pub spill_on: bool,
+    pub spill_was: bool,
+    /// How far apart the light pass's taps of it are, px (`feather + 1`).
+    spill_soft: f32,
     /// The frame's clear, linear.
     pub clear: [f64; 3],
     /// The sky's sprites (`SpriteIn`, the same layout), drawn onto the sky backdrop.
@@ -172,6 +183,33 @@ fn rad(a: u16) -> f32 {
 
 impl Prep {
     /// Fills every list from `frame`.
+    /// Lays the bands of every block that spills (the fence rule: a fence's posts and rails, a
+    /// hedge; `shadow::spills`) into [`Prep::spill`], as T0 and T1 lay them.
+    fn spill_bands(&mut self, frame: &Frame, sun: &jane_present::Directional, (w, h): (i32, i32)) {
+        let (Some(k), Some(ks)) = (shadow::shear(sun), shadow::spill_shear(sun)) else { return };
+        let mut any = false;
+        let spill = &mut self.spill;
+        for b in frame.blocks.iter().filter(|b| shadow::spills(b)) {
+            shadow::block_bands(b, k, ks, |band| {
+                let (x0, x1, y0, y1) = (band.x0.max(0), band.x1.min(w), band.y0.max(0), band.y1.min(h));
+                if x0 >= x1 || y0 >= y1 {
+                    return;
+                }
+                for y in y0..y1 {
+                    spill[(y * w + x0) as usize..(y * w + x1) as usize].fill(band.strength);
+                }
+                any = true;
+            });
+        }
+        if !any {
+            return;
+        }
+        self.spill_on = true;
+        // Its edge is softened in the light pass (`light.wgsl`'s `spill_at`), a tent of 3 x 3
+        // taps `feather + 1` px apart (T0's and T1's edge, as wide).
+        self.spill_soft = (shadow::feather(sun.spread) + 1) as f32;
+    }
+
     pub fn build(&mut self, frame: &Frame, ticks: u32) {
         let (w, h) = (u32::from(frame.canvas.0), u32::from(frame.canvas.1));
         self.chunks.clear();
@@ -199,6 +237,15 @@ impl Prep {
         self.part_draws.clear();
         let c = frame.clear;
         self.clear = [(c >> 16) as u8, (c >> 8) as u8, c as u8].map(|v| f64::from(linear(v)));
+        self.spill_was = self.spill_on;
+        if self.spill.len() != (w * h) as usize {
+            self.spill.clear();
+            self.spill.resize((w * h) as usize, 0);
+            self.spill_was = true;
+        } else if self.spill_on {
+            self.spill.fill(0);
+        }
+        self.spill_on = false;
 
         // Each sprite's depth across the ground: its caster's, else 0, which stands nothing in the
         // height field (a sprite the frame does not list as a caster casts on no tier).
@@ -253,7 +300,12 @@ impl Prep {
                         let id = sprite_id(cmds.start as usize + k);
                         u32s(&mut self.sprites, &[u32::from(depth), id, u32::from(sink), burn]);
                         if layer == Depth::Standing {
-                            hmax = hmax.max(f32::from(s.height_px));
+                            // Its tallest px may stand its rows' true height (a tree's crown is
+                            // `height_of_rows` of its rows, a fifth over them): a ray under the
+                            // field's top must not stop short of it (the tip of a tall tree's
+                            // long evening shadow was cut off when it was the tallest in view).
+                            let rows = i32::from(s.height_px);
+                            hmax = hmax.max(jane_present::height_of_rows(rows).max(rows) as f32);
                         }
                         self.n_sprites += 1;
                     }
@@ -286,7 +338,7 @@ impl Prep {
                             LightKind::Point => ((0.0, 0.0), -2.0),
                             LightKind::Spot { dir, cone } => ((rad(dir.0).cos(), rad(dir.0).sin()), rad(cone.0).cos()),
                         };
-                        let g = GUARD as f32;
+                        let g = guard(frame) as f32;
                         f32s(
                             &mut self.lights,
                             &[l.pos.0 as f32 + g, l.pos.1 as f32 + g, f32::from(l.height), f32::from(l.radius)],
@@ -376,8 +428,12 @@ impl Prep {
         }
 
         let (fill, sun) = sky.unwrap_or(([255; 3], None));
-        let g = GUARD as f32;
-        f32s(&mut self.globals, &[(w + 2 * GUARD) as f32, (h + 2 * GUARD) as f32, w as f32, h as f32, g, hmax + 2.0]);
+        if let Some(s) = sun.filter(|s| s.strength > 0) {
+            self.spill_bands(frame, &s, (w as i32, h as i32));
+        }
+        let gu = guard(frame);
+        let g = gu as f32;
+        f32s(&mut self.globals, &[(w + 2 * gu) as f32, (h + 2 * gu) as f32, w as f32, h as f32, g, hmax + 2.0]);
         u32s(&mut self.globals, &[self.n_lights, self.tiles_x]);
         let [fr, fg, fb] = light3(fill);
         f32s(&mut self.globals, &[fr, fg, fb, 0.0]);
@@ -430,7 +486,7 @@ impl Prep {
             &mut self.globals,
             &[frame.camera.0 as f32, frame.camera.1 as f32, f32::from(u8::from(self.has_water)), self.n_parts as f32],
         );
-        f32s(&mut self.globals, &[s.zone.0 as f32, s.zone.2 as f32, s.zone.3 as f32, 0.0]);
+        f32s(&mut self.globals, &[s.zone.0 as f32, s.zone.2 as f32, s.zone.3 as f32, self.spill_soft]);
         debug_assert_eq!(self.globals.len(), GLOBALS);
         if self.fog.is_empty() {
             f32s(&mut self.fog, &[0.0; 12]);

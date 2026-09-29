@@ -26,7 +26,7 @@ use crate::drawlist::{DrawCmd, DrawList};
 use crate::facing::Face8;
 use crate::frame::{
     Block, CANVAS_H, CANVAS_W, CAST_MARGIN, CELL, CHUNK_PX, Caster, ChunkCmd, ChunkId, Depth, Directional,
-    FX_TO_CANVAS, Features, Flags, Frame, Light, LightKind, Pass, Post, Rgb, Span, SpriteCmd, Tier, Tint,
+    FX_TO_CANVAS, Features, Flags, Frame, Light, LightKind, Margins, Pass, Post, Rgb, Span, SpriteCmd, Tier, Tint,
     height_of_rows, rows_up,
 };
 use crate::fx::Fx;
@@ -41,18 +41,18 @@ use crate::terrain::Terrain;
 /// A unit moving further than this in a tick (40 sim px, `Fx`) snaps instead of sliding: travel,
 /// a respawn, a hop.
 const SNAP_FX: i64 = 40 * 256;
-/// Cells round the view whose units and props are kept: whatever stands in the casting band
-/// ([`CAST_MARGIN`]), and a tall sprite standing below it that still reaches into it.
-const MARGIN_CELLS: i32 = (CAST_MARGIN + 96) / CELL;
-/// Canvas px round the view painted ahead, so a frame between two ticks never finds a hole, and
-/// the casting band's ground and the lights just past it stand on painted chunks.
-const CHUNK_AHEAD: i32 = CAST_MARGIN + 32;
+/// Px past the casting band whose units and props are kept: a tall sprite standing below the
+/// band that still reaches into it.
+const KEEP_PAST: i32 = 96;
+/// Canvas px past the casting band painted ahead, so a frame between two ticks never finds a
+/// hole, and the casting band's ground and the lights just past it stand on painted chunks.
+const CHUNK_AHEAD: i32 = 32;
 /// Chunks the terrain painter lands in a tick at most (§1.6): the rest show their swatches, or
 /// what they last had, until it reaches them. The tick a zone is entered paints all it shows.
 const LAND_PER_TICK: usize = 2;
-/// Canvas px round the view the draw list sorts over; things further out are culled: the casting
-/// band and the tallest thing standing below it.
-const SORT_MARGIN: i32 = CAST_MARGIN + 128;
+/// Canvas px past the casting band the draw list sorts over; things further out are culled: the
+/// tallest thing standing below it.
+const SORT_PAST: i32 = 128;
 /// Ticks a hurt unit shows it, and the first ticks of them it flashes (§1.11).
 const HURT_TICKS: u32 = 8;
 const FLASH_TICKS: u32 = 4;
@@ -77,10 +77,6 @@ const FLICKER_RATE: u32 = 10;
 const UNIT_KEY: u32 = 0x8000_0000;
 /// A drop's key in the draw list and the prop list: its id with this bit, above every prop's.
 const DROP_KEY: u32 = 0x2000_0000;
-
-/// Canvas px round the canvas whose terrain throws its shadows in: the casting band, T2's
-/// G-buffer guard band (`jane-render-wgpu`'s `GUARD`), so every tier casts from the same ground.
-pub const BLOCK_MARGIN: i32 = CAST_MARGIN;
 
 /// Which lights a frame draws and which of them cast (PRESENTATION.md §1.7), one rule for every
 /// tier: of the lights that may cast (`Light::casts` as they come: prop lights, her lantern, a
@@ -220,6 +216,8 @@ pub struct Present {
     /// This frame's standing casters by draw key, `(key, sprite)`, sorted: what holds a light.
     holders: Vec<(u32, u32)>,
     sky: Sky,
+    /// The casting band round the canvas for the sky's sun (`shadow::cast_margins`).
+    margins: Margins,
     /// The weather, the fog and the sky (§1.9), and the effects (§2).
     atmos: Atmosphere,
     fx: Fx,
@@ -277,6 +275,7 @@ impl Present {
             light_scratch: Vec::with_capacity(1024),
             holders: Vec::with_capacity(1024),
             sky: sky(12 * 7200, 0, false, 1000, Region::Lowfields),
+            margins: Margins::default(),
             atmos,
             fx,
             lessons: Lessons::new(tier),
@@ -431,6 +430,7 @@ impl Present {
         self.against_walls();
         let (clock, day) = view.clock();
         self.sky = sky(clock, day, view.indoor(), view.ambient().0, view.region());
+        self.margins = crate::shadow::cast_margins(self.sky.sun.as_ref());
         self.atmos.tick(view, self.tick);
         self.fx.on_events(view, events);
         let me = view.me().unit.get();
@@ -454,7 +454,10 @@ impl Present {
     fn area(&self) -> Rect {
         let (x, y) = (self.camera.pos.0 >> CELL_SHIFT, self.camera.pos.1 >> CELL_SHIFT);
         let (w, h) = (i32::from(self.canvas.0) / CELL + 2, i32::from(self.canvas.1) / CELL + 2);
-        Rect::new(x - MARGIN_CELLS, y - MARGIN_CELLS, w + 2 * MARGIN_CELLS, h + 2 * MARGIN_CELLS)
+        let m = self.margins.grow(KEEP_PAST);
+        let cells = |px: i32| (px + CELL - 1) / CELL;
+        let (l, t, r, b) = (cells(m.left), cells(m.top), cells(m.right), cells(m.bottom));
+        Rect::new(x - l, y - t, w + l + r, h + t + b)
     }
 
     fn read_units(&mut self, view: &View<'_>, area: Rect) {
@@ -740,10 +743,10 @@ impl Present {
     /// one with nothing to show yet takes its swatches meanwhile.
     fn paint_chunks(&mut self, view: &View<'_>) {
         let cam = (self.camera.pos.0 >> FX_TO_CANVAS, self.camera.pos.1 >> FX_TO_CANVAS);
-        let Some((cx0, cy0, cx1, cy1)) = self.chunk_range(cam, CHUNK_AHEAD) else {
+        let Some((cx0, cy0, cx1, cy1)) = self.chunk_range(cam, self.margins.grow(CHUNK_AHEAD)) else {
             return;
         };
-        let (sx0, sy0, sx1, sy1) = self.chunk_range(cam, 0).unwrap_or((cx0, cy0, cx1, cy1));
+        let (sx0, sy0, sx1, sy1) = self.chunk_range(cam, Margins::uniform(0)).unwrap_or((cx0, cy0, cx1, cy1));
         let mid = (cam.0 + i32::from(self.canvas.0) / 2, cam.1 + i32::from(self.canvas.1) / 2);
         let (cells, outside, now) = (self.zone_cells, self.frame.clear, self.tick);
         self.wants.clear();
@@ -779,9 +782,9 @@ impl Present {
         }
     }
 
-    /// The chunks under a view whose top-left is `cam` (canvas px), grown by `margin` px and
+    /// The chunks under a view whose top-left is `cam` (canvas px), grown by `m` px each side and
     /// held to the zone: inclusive `(cx0, cy0, cx1, cy1)`, or `None` for an empty zone.
-    fn chunk_range(&self, cam: (i32, i32), margin: i32) -> Option<(i32, i32, i32, i32)> {
+    fn chunk_range(&self, cam: (i32, i32), m: Margins) -> Option<(i32, i32, i32, i32)> {
         let (zw, zh) = (self.zone_cells.0 as i32 * CELL, self.zone_cells.1 as i32 * CELL);
         if zw <= 0 || zh <= 0 {
             return None;
@@ -789,10 +792,10 @@ impl Present {
         let last = ((zw - 1) / CHUNK_PX, (zh - 1) / CHUNK_PX);
         let c0 = |v: i32, hi: i32| v.div_euclid(CHUNK_PX).clamp(0, hi);
         Some((
-            c0(cam.0 - margin, last.0),
-            c0(cam.1 - margin, last.1),
-            c0(cam.0 + i32::from(self.canvas.0) + margin, last.0),
-            c0(cam.1 + i32::from(self.canvas.1) + margin, last.1),
+            c0(cam.0 - m.left, last.0),
+            c0(cam.1 - m.top, last.1),
+            c0(cam.0 + i32::from(self.canvas.0) + m.right, last.0),
+            c0(cam.1 + i32::from(self.canvas.1) + m.bottom, last.1),
         ))
     }
 
@@ -818,7 +821,9 @@ impl Present {
 
         // Terrain: every painted chunk under the view and its casting band (the band's are
         // clipped away on screen; T2's G-buffer stands them in its field).
-        if let Some((cx0, cy0, cx1, cy1)) = self.chunk_range(cam, CAST_MARGIN) {
+        let band = self.margins;
+        self.frame.guard = band.most().clamp(0, i32::from(u16::MAX)) as u16;
+        if let Some((cx0, cy0, cx1, cy1)) = self.chunk_range(cam, band) {
             let f = &mut self.frame;
             for cy in cy0..=cy1 {
                 for cx in cx0..=cx1 {
@@ -847,9 +852,9 @@ impl Present {
             |x: i32, y: i32, w: u16, h: u16| x + i32::from(w) > 0 && y + i32::from(h) > 0 && x < cw && y < ch;
         // What stands in the casting band round the canvas is kept, if it casts: its shadow may
         // lie on screen (§1.7). Drawn, it is clipped away.
-        let m = CAST_MARGIN;
-        let in_band =
-            |x: i32, y: i32, w: u16, h: u16| x + i32::from(w) > -m && y + i32::from(h) > -m && x < cw + m && y < ch + m;
+        let in_band = |x: i32, y: i32, w: u16, h: u16| {
+            x + i32::from(w) > -band.left && y + i32::from(h) > -band.top && x < cw + band.right && y < ch + band.bottom
+        };
         for p in &self.props {
             let r = self.atlas.get(p.look);
             // Bottom-centred on the footprint.
@@ -889,7 +894,7 @@ impl Present {
             if p.flat { self.ground.push(cmd) } else { self.standing.push(cmd) }
         }
         // The chunks' trees, shrubs and stones, from the atlas, by their feet.
-        if let Some((cx0, cy0, cx1, cy1)) = self.chunk_range(cam, SORT_MARGIN) {
+        if let Some((cx0, cy0, cx1, cy1)) = self.chunk_range(cam, band.grow(SORT_PAST)) {
             for cy in cy0..=cy1 {
                 for cx in cx0..=cx1 {
                     let Some((slot, _)) = self.chunks.find(ChunkId { cx: cx as u16, cy: cy as u16 }) else {
@@ -1149,16 +1154,16 @@ impl Present {
                 }
             }
         }
-        let rows = (ch + 2 * SORT_MARGIN) as u32;
-        let block_range = self.chunk_range(cam, BLOCK_MARGIN);
-        let window_range = self.chunk_range(cam, CAST_MARGIN);
+        let (sort_top, rows) = (band.top + SORT_PAST, (ch + band.top + band.bottom + 2 * SORT_PAST) as u32);
+        let block_range = self.chunk_range(cam, band);
+        let window_range = self.chunk_range(cam, Margins::uniform(CAST_MARGIN));
         let f = &mut self.frame;
         let g0 = f.sprites.len();
-        f.sprites.extend(self.ground.sort(-SORT_MARGIN, rows).iter().map(|c| c.sprite));
+        f.sprites.extend(self.ground.sort(-sort_top, rows).iter().map(|c| c.sprite));
         let ground = Span::since(g0, f.sprites.len());
         let s0 = f.sprites.len();
         self.holders.clear();
-        for c in self.standing.sort(-SORT_MARGIN, rows) {
+        for c in self.standing.sort(-sort_top, rows) {
             if let Some(k) = c.caster {
                 self.holders.push((c.key, f.sprites.len() as u32));
                 f.casters.push(Caster { sprite: f.sprites.len() as u32, ..k });
@@ -1173,7 +1178,7 @@ impl Present {
         // can stand under its own chunk (its tallest px's rows), so the chunk row over the band
         // is read too.
         if let Some((cx0, cy0, cx1, cy1)) = block_range {
-            let (lo, hi) = ((-BLOCK_MARGIN, -BLOCK_MARGIN), (cw + BLOCK_MARGIN, ch + BLOCK_MARGIN));
+            let (lo, hi) = ((-band.left, -band.top), (cw + band.right, ch + band.bottom));
             for cy in (cy0 - 1).max(0)..=cy1 {
                 for cx in cx0..=cx1 {
                     let Some((slot, _)) = self.chunks.find(ChunkId { cx: cx as u16, cy: cy as u16 }) else {
@@ -1190,7 +1195,8 @@ impl Present {
                                 x1: x1 as i16,
                                 y1: y1 as i16,
                                 height: b.height,
-                                mask: b.mask,
+                                lo: b.lo,
+                                fence: b.fence,
                             });
                         }
                     }

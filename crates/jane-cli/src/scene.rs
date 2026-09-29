@@ -167,6 +167,9 @@ pub struct Opts {
     pub gl: GlOpts,
     /// A lesson's moment to look at (PRESENTATION.md §2.1, §3.2).
     pub lesson: LessonOpts,
+    /// `--film` only: she walks each way for so many ticks in turn, then stands (`--walk
+    /// south:60,east:600`), the camera with her.
+    pub walk: Vec<(jane_core::Angle, u32)>,
 }
 
 /// `--knows`, `--learn`, `--grow` and `--ui`: a spell learned (or a jar found) after the rest,
@@ -608,7 +611,16 @@ pub fn film(
     let mut first = std::mem::take(&mut host.events);
     let mut hud = o.lesson.ui.then(|| Hud::new(&present));
     for k in 0..n {
-        host.sim.step(&StepInput { frames: [InputFrame::IDLE; 4], commands: &[] });
+        let mut frames = [InputFrame::IDLE; 4];
+        let mut left = k;
+        for &(dir, ticks) in &o.walk {
+            if left < ticks {
+                frames[0] = InputFrame::walk(dir);
+                break;
+            }
+            left -= ticks;
+        }
+        host.sim.step(&StepInput { frames, commands: &[] });
         let mut events = std::mem::take(&mut first);
         events.extend_from_slice(host.sim.drain_events());
         let v = host.sim.view(seat).ok_or("seat 0 is not in the world")?;
@@ -795,6 +807,7 @@ mod tests {
             rows: Vec::new(),
             gl: GlOpts::default(),
             lesson: LessonOpts::default(),
+            walk: Vec::new(),
         };
         let a = render(bps.clone(), &o).unwrap();
         let b = render(bps, &o).unwrap();

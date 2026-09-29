@@ -52,37 +52,69 @@ pub fn shear(sun: &Directional) -> Option<(i32, i32)> {
     Some((-(ca * cot) >> 15, -(sa * cot) >> 15))
 }
 
-/// The least south component (down the screen, toward the viewer) a spilling terrain block's
-/// sun shadow has, of the shadow's length per height: sin 20 degrees, Q15. **The fence rule**
-/// (decided 2026-09-28, the owner, PRESENTATION.md §1.7): the sun is south all day, so every
-/// shadow runs up the screen, and a fence's or a hedge's lies behind its own drawn rows where
-/// nothing sees it; a thin or low block is thrown as if the sun stood at least this far north,
-/// so its shadow spills out in front of it, long east or west with the hour, and it reads as
-/// casting on every tier.
-pub const SPILL_SOUTH_Q15: i32 = 11207;
-/// A terrain block whose footprint is this deep (rows) or this wide (px) or less is thin: a
-/// fence's rails and posts, a gatepost, a stile. T2's field marks a terrain texel thin where no
-/// terrain stands this far from it up and down, or left and right (`scatter.wgsl`'s `thin`).
-pub const THIN: i32 = 4;
-/// A terrain block up to this height spills whatever its footprint: a hedge (9 px), a kerb.
+/// **The fence rule** (decided 2026-09-28, redrawn 2026-09-29, the owner, PRESENTATION.md §1.7):
+/// the sun is south all day, so every shadow runs up the screen, and a fence's or a hedge's lies
+/// behind its own drawn rows where nothing sees it. A fence (its posts and rails, `Block::fence`)
+/// and a low block (a hedge) are thrown by the sun mirrored into the north of the sky: the
+/// shadow is as long as the true one and as far east or west, its north turned south (down the
+/// screen, toward the viewer), and turned at least this far off the east-west line, so an
+/// east-west fence's posts throw lines that stand apart rather than a hatch along the fence
+/// (they had run 20 degrees off it, 2026-09-28, and every post's line lay over the next's).
+/// Sin and cos of 40 degrees, Q15.
+pub const SPILL_SIN_Q15: i32 = 21063;
+pub const SPILL_COS_Q15: i32 = 25102;
+/// A terrain block up to this height spills whatever its shape: a hedge (9 px), a kerb.
 pub const SPILL_LOW: i32 = 10;
-/// A thin block taller than this (a wall's end, a chimney) keeps the sun's true shadow.
-pub const SPILL_TOP: i32 = 40;
 
-/// [`shear`] for a spilling block: the same, its south component no less than
-/// [`SPILL_SOUTH_Q15`] of the shadow's length.
+/// The shadow's reach per px of true height for what spills (the fence rule, [`SPILL_SIN_Q15`]):
+/// [`shear`]'s length, mirrored south and turned at least 40 degrees off the east-west line.
 pub fn spill_shear(sun: &Directional) -> Option<(i32, i32)> {
     let cot = cot(sun)?;
-    let (kx, ky) = shear(sun)?;
-    Some((kx, ky.max((SPILL_SOUTH_Q15 * cot) >> 15)))
+    let (ca, sa) = (cos_q15(sun.azimuth).0, sin_q15(sun.azimuth).0);
+    // Away from the sun, a unit vector Q15; its north mirrored south.
+    let (dx, dy) = (-ca, sa.abs());
+    let (dx, dy) = if dy < SPILL_SIN_Q15 {
+        (if dx < 0 { -SPILL_COS_Q15 } else { SPILL_COS_Q15 }, SPILL_SIN_Q15)
+    } else {
+        (dx, dy)
+    };
+    Some(((dx * cot) >> 15, (dy * cot) >> 15))
 }
 
-/// Whether block `b` is thrown by [`spill_shear`] rather than [`shear`]: thin ([`THIN`]) and
-/// no taller than [`SPILL_TOP`], or low ([`SPILL_LOW`]).
+/// Whether block `b` is thrown by [`spill_shear`] rather than [`shear`]: a fence's part, or a
+/// block no taller than [`SPILL_LOW`].
 pub fn spills(b: &crate::frame::Block) -> bool {
-    let h = i32::from(b.height);
-    let (w, d) = (i32::from(b.x1) - i32::from(b.x0), i32::from(b.y1) - i32::from(b.y0));
-    h <= SPILL_LOW || (h <= SPILL_TOP && (w <= THIN || d <= THIN))
+    b.fence || i32::from(b.height) <= SPILL_LOW
+}
+
+/// The tallest thing that throws a sun shadow, px: a pine (82 rows, 102 px), a house's ridge (76),
+/// and a little over.
+pub const TALLEST: i32 = 104;
+/// The casting band never reaches further than this on any side, px: [`TALLEST`] at the longest
+/// shadow ([`MAX_COT_Q8`], four heights).
+pub const CAST_MARGIN_MAX: i32 = TALLEST * MAX_COT_Q8 / 256;
+
+/// The casting band round the canvas for a sun or moon `sun` (PRESENTATION.md §1.7): at least
+/// `frame::CAST_MARGIN` every way (a lamp's reach, a tall sprite's), and on each side the sun
+/// shines from as far as [`TALLEST`] throws its shadow ([`shear`]), up to [`CAST_MARGIN_MAX`], in
+/// steps of 32 px (so T2's guard band is not made again every minute of the evening). So a
+/// house's long evening shadow stays on screen until its last px has left it, where it
+/// vanished at a fixed 160 px band (2026-09-29); the side a shadow falls away to keeps the least.
+pub fn cast_margins(sun: Option<&Directional>) -> crate::frame::Margins {
+    use crate::frame::{CAST_MARGIN, Margins};
+    let Some((kx, ky)) = sun.and_then(shear) else { return Margins::uniform(CAST_MARGIN) };
+    let reach = |k: i32| {
+        let r = ((TALLEST * k.abs()) >> 8).min(CAST_MARGIN_MAX);
+        ((r + 31) / 32 * 32).max(CAST_MARGIN)
+    };
+    let (x, y) = (reach(kx), reach(ky));
+    // A shadow falling east is thrown by what stands west of it: the band reaches west.
+    Margins {
+        left: if kx > 0 { x } else { CAST_MARGIN },
+        right: if kx < 0 { x } else { CAST_MARGIN },
+        top: if ky > 0 { y } else { CAST_MARGIN },
+        bottom: if ky < 0 { y } else { CAST_MARGIN },
+    }
 }
 
 /// A gap in a row of 2 px or more parts it into two runs: a lantern hung off its post, a hand
@@ -244,91 +276,106 @@ const OWN_TOP: i32 = crate::terrain::BLOCK_TOLERANCE as i32 + 2;
 /// How far a block's shadow moves from one slice of its height to the next at most, px, and
 /// how tall a slice is at most: what the reach up a wall it falls on steps by.
 const SLICE: i32 = 8;
-/// How far a spilling block's shadow moves from one slice to the next at most, px (the fence
-/// rule's openwork: a post's line stays a line).
-const SPILL_SLICE: i32 = 2;
 
-/// The bands of block `b`'s shadow in a sun sheared `k` ([`shear`]; a thin or low block takes
-/// `ks`, [`spill_shear`], the fence rule): its footprint laid
-/// at every slice of its height, each slice stretched to meet the next (the rows' rule,
-/// [`bands`]), so the whole is the footprint swept along the sun by its height, as T2's field
-/// throws it. A slice reaches as high as the ray over the block's top there, less [`OWN_TOP`]. Its foot is its
-/// footprint (the terrain's own contact shade is painted); it keeps its whole strength to the
-/// tip, as a large thing's umbra does on T2 (a thin thing's fades, [`TIP`]).
+/// The bands of block `b`'s shadow in a sun sheared `k` ([`shear`]; a fence's part or a low
+/// block takes `ks`, [`spill_shear`], the fence rule).
 ///
-/// Each slice is laid only where the slice under it did not lie: the mask keeps the strongest
-/// and the highest, the strength is one and the reach falls slice by slice, so what is left out
-/// is what the lower slice had already laid higher. A house is a few hundred small bands.
+/// A block's true shadow is its footprint laid at every slice of its height, each slice
+/// stretched to meet the next (the rows' rule, [`bands`]), so the whole is the footprint swept
+/// along the sun by its height, as T2's field throws it. A slice reaches as high as the ray over
+/// the block's top there, less [`OWN_TOP`]. Its foot is its footprint (the terrain's own contact
+/// shade is painted); it keeps its whole strength to the tip, as a large thing's umbra does (a
+/// thin thing's fades, [`TIP`]). Each slice is laid only where the slice under it did not lie:
+/// the mask keeps the strongest and the highest, the strength is one and the reach falls slice
+/// by slice, so what is left out is what the lower slice had already laid higher.
 ///
-/// A spilling block (the fence rule) is swept along `ks` bar by bar (`Block::mask`: a fence's
-/// two rails throw two lines with lit grass between and under them, a hedge one band), and its
-/// bands reach no higher than the ground: the spill lies on the ground alone, never up the
-/// fence's own rails nor a hedge's own face (T2 gives no terrain px over the ground the spill).
+/// A spilling block is its footprint swept from its bottom (`Block::lo`: a rail floats, a post
+/// stands from the ground) to its top along `ks`, exactly, a band a row ([`spill_rows`]): a post
+/// throws a line from its foot, each rail a line of its own with lit ground under and between
+/// them. It reaches no higher than the ground: it lies on the ground alone, and never on the
+/// fence nor the hedge that throws it (every tier; a fence's px stand at least
+/// `jane_art::terrain::FENCE_FLOOR` up, over [`GROUND`]).
 pub fn block_bands(b: &crate::frame::Block, k: (i32, i32), ks: (i32, i32), mut emit: impl FnMut(Band)) {
     let hgt = i32::from(b.height);
     let (x0, y0, x1, y1) = (i32::from(b.x0), i32::from(b.y0), i32::from(b.x1), i32::from(b.y1));
     if hgt <= GROUND || x0 >= x1 || y0 >= y1 {
         return;
     }
-    if !spills(b) {
-        sweep((x0, y0, x1, y1), (0, hgt), k, Some(hgt), &mut emit);
+    if spills(b) {
+        // A block of the height field stands a px wider each side than what is drawn (for T2's
+        // steps, `terrain::block`); a fence's parts are as drawn.
+        let (x0, x1) = if !b.fence && x1 - x0 > 2 { (x0 + 1, x1 - 1) } else { (x0, x1) };
+        spill_rows((x0, y0, x1, y1), (i32::from(b.lo).min(hgt), hgt), ks, emit);
         return;
     }
-    // A spill is swept from what is drawn: a block stands a px wider each side than its px
-    // (`terrain::block`, so T2's steps never pass a wall's end), which bands need not, and a
-    // post's line 2 px wider closed the grass between one post's and the next's.
-    let (x0, x1) = if x1 - x0 > 2 { (x0 + 1, x1 - 1) } else { (x0, x1) };
-    if b.mask == 0 {
-        sweep((x0, y0, x1, y1), (0, hgt), ks, None, &mut emit);
-        return;
-    }
-    // Each run of set bits is a bar from its first bit's floor to its last's ceiling.
-    let mut i = 0;
-    while i < 32 {
-        if b.mask >> i & 1 == 0 {
-            i += 1;
-            continue;
-        }
-        let first = i;
-        while i < 32 && b.mask >> i & 1 == 1 {
-            i += 1;
-        }
-        let (lo, hi) = (2 * first, (2 * i).min(hgt));
-        if hi > lo {
-            sweep((x0, y0, x1, y1), (lo, hi), ks, None, &mut emit);
-        }
+    let (kx, ky) = k;
+    let far = (hgt * kx.abs().max(ky.abs())) >> 8;
+    let n = ((hgt + SLICE - 1) / SLICE).max((far + SLICE - 1) / SLICE).max(1);
+    let mut under: Option<(i32, i32, i32, i32)> = None;
+    for i in 0..n {
+        let (h0, h1) = (hgt * i / n, hgt * (i + 1) / n);
+        let (ax, bx) = ((h0 * kx) >> 8, (h1 * kx) >> 8);
+        let (ay, by) = ((h0 * ky) >> 8, (h1 * ky) >> 8);
+        let r = (x0 + ax.min(bx), y0 + ay.min(by), x1 + ax.max(bx), y1 + ay.max(by));
+        let reach = (hgt - h1 - OWN_TOP).clamp(1, 255) as u8;
+        minus(r, under, |(x0, y0, x1, y1)| emit(Band { x0, x1, y0, y1, strength: 255, reach }));
+        under = Some(r);
     }
 }
 
-/// The bands of the footprint `(x0, y0, x1, y1)` swept along `(kx, ky)` from `lo` to `hi` px up,
-/// reaching up as the ray over a top of `top` does (none: the ground alone).
-fn sweep(
+/// The footprint `(x0, y0, x1, y1)` swept along `(kx, ky)` (Q8 px a px of height) from `lo` to
+/// `hi` px up, exactly: a band a row, each the px whose middles the swept box covers there, at
+/// full strength, on the ground alone (reach 1). Rows of the same span are one band. So a thin
+/// post's shadow is a line as thick as the post whatever its slant (slices of it, boxes along a
+/// diagonal, had filled in from one post's line to the next).
+pub fn spill_rows(
     (x0, y0, x1, y1): (i32, i32, i32, i32),
     (lo, hi): (i32, i32),
     (kx, ky): (i32, i32),
-    top: Option<i32>,
-    emit: &mut impl FnMut(Band),
+    mut emit: impl FnMut(Band),
 ) {
-    let span = hi - lo;
-    let far = (span * kx.abs().max(ky.abs())) >> 8;
-    // A spill moves [`SPILL_SLICE`] px a slice at most: each slice's band is the box round its
-    // part of the sweep, and a post's shadow runs a long shallow diagonal, which boxes 8 px
-    // along fill in from one post's line to the next (the fence read as a slab on T0 and T1 where
-    // T2's trace kept the lit grass between them, 2026-09-28).
-    // Its slices' heights in quarter px (a px of height moves a low sun's spill 3 or 4 px); a
-    // block's true shadow keeps whole px, so walls and houses lay what they did.
-    let (step, q) = if top.is_none() { (SPILL_SLICE, 4) } else { (SLICE, 1) };
-    let shift = if q == 4 { 10 } else { 8 };
-    let n = ((span + SLICE - 1) / SLICE).max((far + step - 1) / step).max(1);
-    let mut under: Option<(i32, i32, i32, i32)> = None;
-    for i in 0..n {
-        let (h0, h1) = (q * lo + q * span * i / n, q * lo + q * span * (i + 1) / n);
-        let (ax, bx) = ((h0 * kx) >> shift, (h1 * kx) >> shift);
-        let (ay, by) = ((h0 * ky) >> shift, (h1 * ky) >> shift);
-        let r = (x0 + ax.min(bx), y0 + ay.min(by), x1 + ax.max(bx), y1 + ay.max(by));
-        let reach = top.map_or(1, |t| (t - h1 / q - OWN_TOP).clamp(1, 255) as u8);
-        minus(r, under, |(x0, y0, x1, y1)| emit(Band { x0, x1, y0, y1, strength: 255, reach }));
-        under = Some(r);
+    if x0 >= x1 || y0 >= y1 || hi <= lo {
+        return;
+    }
+    // The box's offset (Q8 px) at its bottom and over its height.
+    let (ax, ay) = (lo * kx, lo * ky);
+    let (dx, dy) = ((hi - lo) * kx, (hi - lo) * ky);
+    let (omin, omax) = (ay.min(ay + dy), ay.max(ay + dy));
+    let first = y0 + (omin >> 8) - 1;
+    let last = y1 + ((omax + 255) >> 8) + 1;
+    let mut open: Option<Band> = None;
+    for y in first..=last {
+        // The box's offsets whose rows cover this row's middle: `y0 + oy <= Y < y1 + oy`.
+        let yc = y * 256 + 128;
+        let (p, q) = (omin.max(yc - y1 * 256 + 1), omax.min(yc - y0 * 256));
+        if p > q {
+            continue;
+        }
+        // And the east-west offsets those take.
+        let (ox0, ox1) = if dy == 0 {
+            (ax.min(ax + dx), ax.max(ax + dx))
+        } else {
+            let at = |o: i32| ax + ((i64::from(o - ay) * i64::from(dx)) / i64::from(dy)) as i32;
+            (at(p).min(at(q)), at(p).max(at(q)))
+        };
+        // The px whose middles lie in `[x0 + ox0, x1 + ox1)`.
+        let xa = (x0 * 256 + ox0 - 128 + 255).div_euclid(256);
+        let xb = (x1 * 256 + ox1 - 128 + 255).div_euclid(256);
+        if xa >= xb {
+            continue;
+        }
+        let band = Band { x0: xa, x1: xb, y0: y, y1: y + 1, strength: 255, reach: 1 };
+        open = match open {
+            Some(o) if o.x0 == xa && o.x1 == xb && o.y1 == y => Some(Band { y1: y + 1, ..o }),
+            Some(o) => {
+                emit(o);
+                Some(band)
+            }
+            None => Some(band),
+        };
+    }
+    if let Some(o) = open {
+        emit(o);
     }
 }
 
@@ -455,8 +502,8 @@ pub fn reaches(c: &Caster, lamp: &Lamp) -> bool {
     dx * dx + dy * dy <= near * near
 }
 
-/// Block `b`'s shadow from `lamp`: each of its sides turned away from the light a slab from the
-/// ground to its height, projected from the light onto the ground (a side higher than the light
+/// Block `b`'s shadow from `lamp`: each of its sides turned away from the light a slab from its
+/// bottom (`Block::lo`: a rail floats) to its height, projected from the light onto the ground (a side higher than the light
 /// reaches the rim); the sides turned to it throw nothing past those (a block is a box). Nothing
 /// when it lies well past the light's reach.
 pub fn block_slabs(b: &crate::frame::Block, lamp: &Lamp, mut emit: impl FnMut(Slab)) {
@@ -479,7 +526,7 @@ pub fn block_slabs(b: &crate::frame::Block, lamp: &Lamp, mut emit: impl FnMut(Sl
     ];
     for (away, a, c) in sides {
         if away {
-            emit(slab(lamp, a, c, (0, hgt), hgt));
+            emit(slab(lamp, a, c, (i32::from(b.lo).min(hgt), hgt), hgt));
         }
     }
 }
@@ -655,7 +702,7 @@ mod tests {
 
     #[test]
     fn a_blocks_shadow_is_its_footprint_swept_along_the_sun_by_its_height() {
-        let b = crate::frame::Block { x0: 100, y0: 100, x1: 180, y1: 140, height: 60, mask: 0 };
+        let b = crate::frame::Block { x0: 100, y0: 100, x1: 180, y1: 140, height: 60, ..Default::default() };
         let k = shear(&sun(Angle::WEST, 20)).unwrap();
         let mut bands = Vec::new();
         block_bands(&b, k, k, |band| bands.push(band));
@@ -676,92 +723,150 @@ mod tests {
         assert!(area <= (far - 100) * 41, "{area}");
     }
 
-    #[test]
-    fn a_fence_spills_its_shadow_south_of_its_rails_and_a_wall_does_not() {
-        // A fence's rails across the view at five: 21 px tall, two rows deep in the field, as
-        // `terrain::blocks` stands them. The sun 15 degrees south of west (`light::sky`'s five).
-        let s = sun(Angle(32768 - 2730), 16);
-        let (k, ks) = (shear(&s).unwrap(), spill_shear(&s).unwrap());
-        assert_eq!(k.0, ks.0, "the spill keeps the shadow's east reach");
-        assert!(k.1 < 0 && ks.1 > 0, "true north {}, spilt south {}", k.1, ks.1);
-        let fence = crate::frame::Block { x0: 100, y0: 95, x1: 196, y1: 97, height: 21, mask: 0 };
-        assert!(spills(&fence));
+    /// The sun at five (15 degrees south of west, 16 up: `light::sky`'s) and noon (a little west
+    /// of south, 46 up).
+    fn five() -> Directional {
+        sun(Angle(32768 - 2730), 16)
+    }
+    fn noon() -> Directional {
+        sun(Angle(16384 + 1500), 46)
+    }
+
+    /// An east-west run of `n` fence cells as the painter draws it, foot row `99`, its first
+    /// cell's left edge at x 96: its posts and rails (`jane_art::terrain::fence_parts`).
+    fn fence_run(n: i32) -> Vec<crate::frame::Block> {
+        let mut out = Vec::new();
+        for i in 0..n {
+            let nb = (i > 0, i < n - 1, false, false);
+            jane_art::terrain::fence_parts((96 + 16 * i, 84), nb, |f| {
+                out.push(crate::frame::Block {
+                    x0: f.x0,
+                    y0: f.y0,
+                    x1: f.x1,
+                    y1: f.y1,
+                    height: f.hi,
+                    lo: f.lo,
+                    fence: true,
+                });
+            });
+        }
+        out
+    }
+
+    fn laid(blocks: &[crate::frame::Block], s: &Directional) -> Vec<Band> {
+        let (k, ks) = (shear(s).unwrap(), spill_shear(s).unwrap());
         let mut bands = Vec::new();
-        block_bands(&fence, k, ks, |band| bands.push(band));
-        let lowest = bands.iter().map(|b| b.y1).max().unwrap();
-        let far = bands.iter().map(|b| b.x1).max().unwrap();
-        // At least sin 20 degrees of four heights at cot 16 degrees (3.5): 21 x 3.5 x 0.34, 25
-        // rows below its foot, and as far east as the true shadow.
-        assert!(lowest >= 97 + 24, "the fence's shadow reaches row {lowest}");
-        assert_eq!(far, 195 + ((21 * k.0) >> 8));
-        // The spill lies on the ground alone: it never climbs the fence's own rails.
-        assert!(bands.iter().all(|b| b.reach <= 1));
-        // A hedge is low and spills; a house and a one-cell wall are neither thin nor low.
-        assert!(spills(&crate::frame::Block { x0: 100, y0: 80, x1: 120, y1: 100, height: 9, mask: 0 }));
-        assert!(!spills(&crate::frame::Block { x0: 100, y0: 40, x1: 196, y1: 96, height: 13, mask: 0 }));
-        assert!(!spills(&crate::frame::Block { x0: 100, y0: 40, x1: 180, y1: 100, height: 60, mask: 0 }));
-        // A wall's block at the same sun keeps the true shadow: nothing below its foot.
-        let wall = crate::frame::Block { x0: 100, y0: 40, x1: 196, y1: 96, height: 13, mask: 0 };
-        let mut bands = Vec::new();
-        block_bands(&wall, k, ks, |band| bands.push(band));
-        assert!(bands.iter().all(|b| b.y1 <= 96), "a wall spills");
-        // The spill is at most the shadow's length: the sky's lowest sun holds it under four heights.
-        let low = sun(Angle::WEST, 14);
-        let (kx, ky) = spill_shear(&low).unwrap();
-        assert!(kx.abs().max(ky.abs()) <= MAX_COT_Q8);
+        for b in blocks {
+            block_bands(b, k, ks, |band| bands.push(band));
+        }
+        bands
+    }
+
+    fn at(bands: &[Band], x: i32, y: i32) -> bool {
+        bands.iter().any(|b| b.x0 <= x && x < b.x1 && b.y0 <= y && y < b.y1)
     }
 
     #[test]
-    fn a_posts_spill_is_a_line_as_wide_as_it_is_drawn_swept() {
-        // A fence's post as `terrain::blocks` stands it: 8 px wide (its 6 drawn and T2's margin),
-        // 2 rows deep, 28 px; the sun at five. Along a row its spill's line is what is drawn
-        // swept: 6 px and two rows of its slant (2.8 px of east a row), a px or two for the
-        // slices. With 8 px slices and the margin a row was twice that, and the posts' lines,
-        // 16 px apart, merged into a slab on T0 and T1.
-        let s = sun(Angle(32768 - 2730), 16);
-        let (k, ks) = (shear(&s).unwrap(), spill_shear(&s).unwrap());
-        let post = crate::frame::Block { x0: 100, y0: 83, x1: 108, y1: 85, height: 28, mask: 0 };
-        let mut bands = Vec::new();
-        block_bands(&post, k, ks, |band| bands.push(band));
-        for y in 86..115 {
-            let covered =
-                (100..260).filter(|&x| bands.iter().any(|b| b.y0 <= y && y < b.y1 && b.x0 <= x && x < b.x1)).count();
-            assert!(covered <= 15, "row {y}: the post's line covers {covered} px");
+    fn a_fence_spills_south_as_long_as_the_true_shadow_and_a_wall_does_not() {
+        for s in [five(), noon(), sun(Angle(16384 - 12000), 20), sun(Angle::WEST, 14)] {
+            let (k, ks) = (shear(&s).unwrap(), spill_shear(&s).unwrap());
+            // As long as the true shadow (within a px in 256), toward the viewer, as far east or
+            // west, and at least 40 degrees off the east-west line.
+            let len = |(x, y): (i32, i32)| jane_core::num::isqrt((x * x + y * y) as u64) as i32;
+            assert!((len(k) - len(ks)).abs() <= 2, "{k:?} {ks:?}");
+            assert!(ks.1 > 0 && ks.0.signum() == k.0.signum(), "{k:?} {ks:?}");
+            assert!(ks.1 * SPILL_COS_Q15 >= ks.0.abs() * SPILL_SIN_Q15 - (1 << 16), "{ks:?}");
+        }
+        // At five: east, turned 40 degrees south. At noon: south, as long as the true one north.
+        let (k, ks) = (shear(&noon()).unwrap(), spill_shear(&noon()).unwrap());
+        assert!(k.1 < 0 && (ks.1 + k.1).abs() <= 2 && ks.0 == k.0, "{k:?} {ks:?}");
+        // A wall at five keeps the true sun: nothing south of its foot.
+        let wall = crate::frame::Block { x0: 100, y0: 40, x1: 196, y1: 96, height: 13, ..Default::default() };
+        assert!(!spills(&wall));
+        assert!(laid(&[wall], &five()).iter().all(|b| b.y1 <= 96));
+        // A hedge is low and spills; a house does not.
+        assert!(spills(&crate::frame::Block { x0: 100, y0: 80, x1: 120, y1: 100, height: 9, ..Default::default() }));
+        assert!(!spills(&crate::frame::Block { x0: 100, y0: 40, x1: 180, y1: 100, height: 60, ..Default::default() }));
+    }
+
+    #[test]
+    fn a_fences_shadow_is_its_posts_rooted_at_their_feet_and_two_rails_on_the_ground_alone() {
+        let run = fence_run(6);
+        for s in [five(), noon(), sun(Angle(16384 - 12000), 20)] {
+            let bands = laid(&run, &s);
+            // On the ground alone: never on the fence it is thrown by.
+            assert!(bands.iter().all(|b| b.reach == 1 && b.strength == 255));
+            let ks = spill_shear(&s).unwrap();
+            // Each post's line starts at its foot, under the post (x 101..107 for the second
+            // cell's, 112 + 5), and runs away along the spill: the row two under the foot is
+            // covered under or beside the post.
+            for i in 1..5 {
+                let px = 96 + 16 * i + 8;
+                assert!((px - 4..px + 4).any(|x| at(&bands, x, 100)), "{ks:?}: post {i} not rooted");
+            }
+            // Down a column between two posts, the ground is lit under the lower rail's line,
+            // between the two rails' lines, and past the upper one's, each rail a line.
+            let row = |h: i32| 99 + ((h * ks.1) >> 8);
+            let x = |h: i32| 96 + 16 * 2 + 1 + ((h * ks.0) >> 8);
+            let lower = (7..=11).any(|h| at(&bands, x(h), row(h)));
+            let upper = (17..=21).any(|h| at(&bands, x(h), row(h)));
+            assert!(lower && upper, "{ks:?}: a rail throws no line");
+            assert!(!at(&bands, x(3), row(3)), "{ks:?}: lit under the lower rail");
+            assert!(!at(&bands, x(14), row(14)), "{ks:?}: lit between the rails");
+        }
+        // At five the posts' lines stand apart: every row of the spill off the rails' lines (2.2
+        // rows a px of height: the lower rail's rows 114 to 124, the upper's 137 to 147) has lit
+        // ground between one post's line and the next's (16 px apart, each no wider than 10).
+        let bands = laid(&run, &five());
+        for y in (101..113).chain(126..136) {
+            let lit = (120..180).filter(|&x| !at(&bands, x, y)).count();
+            assert!(lit >= 12, "row {y}: {lit} px of 60 lit, the posts' lines run into a slab");
         }
     }
 
     #[test]
-    fn a_fences_shadow_is_its_rails_with_lit_grass_between_them() {
-        // The rails' block of `terrain::blocks`' fence: bars 8 to 11 and 18 to 21 px up, in a
-        // sun due south 20 degrees up: its true shadow straight up the screen, behind the rails;
-        // the spill lays it straight down, sin 20 degrees of cot 20 (0.94) rows a px.
-        let s = sun(Angle::SOUTH, 20);
-        let (k, ks) = (shear(&s).unwrap(), spill_shear(&s).unwrap());
-        assert_eq!(ks.0, 0);
-        let mask = (1 << 4) | (1 << 5) | (1 << 9) | (1 << 10);
-        let rails = crate::frame::Block { x0: 100, y0: 95, x1: 196, y1: 97, height: 21, mask };
+    fn the_casting_band_reaches_as_far_as_the_longest_shadow_toward_the_sun() {
+        use crate::frame::{CAST_MARGIN, Margins};
+        assert_eq!(cast_margins(None), Margins::uniform(CAST_MARGIN));
+        for s in [five(), noon(), sun(Angle(16384 - 12000), 20), sun(Angle::WEST, 14), sun(Angle::EAST, 14)] {
+            let m = cast_margins(Some(&s));
+            let (kx, ky) = shear(&s).unwrap();
+            // The tallest thing's shadow, thrown from just past the band on the sun's side, does
+            // not reach the canvas; or the band is at its cap.
+            let (far_x, far_y) = ((TALLEST * kx.abs()) >> 8, (TALLEST * ky.abs()) >> 8);
+            let side_x = if kx > 0 { m.left } else { m.right };
+            let side_y = if ky > 0 { m.top } else { m.bottom };
+            assert!(side_x >= far_x.min(CAST_MARGIN_MAX) && side_y >= far_y.min(CAST_MARGIN_MAX), "{s:?}: {m:?}");
+            assert!(m.most() <= CAST_MARGIN_MAX.max(CAST_MARGIN) + 31 && m.left.min(m.right) == CAST_MARGIN);
+        }
+        // At five the band reaches west (the shadows run east) over a house's evening shadow.
+        let m = cast_margins(Some(&five()));
+        assert!(m.left >= 320 && m.right == CAST_MARGIN, "{m:?}");
+        // At noon a shadow is a height long: the least band will do.
+        assert_eq!(cast_margins(Some(&noon())), Margins::uniform(CAST_MARGIN));
+    }
+
+    #[test]
+    fn a_spill_row_is_the_px_whose_middles_the_swept_box_covers() {
+        // A box 6 x 2 at (100, 98) swept 16 px east and 16 south from 0 to 16 px up (a shear of
+        // one px a px each way): a diagonal line 6 px wide and 2 rows deep at its root.
         let mut bands = Vec::new();
-        block_bands(&rails, k, ks, |band| bands.push(band));
-        let covered = |y: i32| bands.iter().any(|b| b.y0 <= y && y < b.y1 && b.x0 <= 150 && 150 < b.x1);
-        let row = |h: i32| (h * ks.1) >> 8;
-        let rows: Vec<i32> = (90..140).filter(|&y| covered(y)).collect();
-        // Two lines, the lower rail's and the upper's; the grass under the lower one (and the
-        // fence's own footprint) and between the two is lit.
-        assert!(covered(95 + row(8)) && covered(95 + row(18)), "{rows:?}");
-        assert!(!covered(96) && !covered(95 + row(8) - 1), "lit under the lower rail: {rows:?}");
-        assert!(!covered(97 + row(12)), "no lit gap between the rails: {rows:?}");
-        assert!(!covered(97 + row(21) + 1), "{rows:?}");
-        // Solid (a hedge), the same block throws one band from its foot.
-        let solid = crate::frame::Block { mask: 0, ..rails };
+        spill_rows((100, 98, 106, 100), (0, 16), (256, 256), |b| bands.push(b));
+        assert!(at(&bands, 100, 98) && at(&bands, 105, 99) && !at(&bands, 99, 98) && !at(&bands, 106, 98));
+        for y in 98..116 {
+            let xs: Vec<i32> = (80..140).filter(|&x| at(&bands, x, y)).collect();
+            assert!((6..=8).contains(&xs.len()), "row {y}: {xs:?}");
+        }
+        assert!(!(80..140).any(|x| at(&bands, x, 116)));
+        // Floating from 8 px: nothing near the root.
         let mut bands = Vec::new();
-        block_bands(&solid, k, ks, |band| bands.push(band));
-        let covered = |y: i32| bands.iter().any(|b| b.y0 <= y && y < b.y1 && b.x0 <= 150 && 150 < b.x1);
-        assert!((95..97 + row(21)).all(covered));
+        spill_rows((100, 98, 106, 100), (8, 16), (256, 256), |b| bands.push(b));
+        assert!(!(80..140).any(|x| at(&bands, x, 100)) && at(&bands, 110, 107));
     }
 
     #[test]
     fn a_blocks_sides_turned_to_a_lamp_throw_nothing_and_the_rest_reach_the_rim() {
-        let b = crate::frame::Block { x0: 100, y0: 100, x1: 180, y1: 108, height: 60, mask: 0 };
+        let b = crate::frame::Block { x0: 100, y0: 100, x1: 180, y1: 108, height: 60, ..Default::default() };
         let lamp = Lamp { x: 140 * SUB + 8, y: 130 * SUB + 8, h: 30, r: 100 };
         let mut slabs = Vec::new();
         block_slabs(&b, &lamp, |q| slabs.push(q));

@@ -38,7 +38,7 @@ use jane_present::{
 };
 
 use crate::gpu::{B, Gpu, array_view, group, layout, texture, write_layer};
-use crate::prep::{GLOBALS, GUARD, Kind, MAX_FOG, MAX_LIGHTS, Prep, TILE, TILE_CAP};
+use crate::prep::{GLOBALS, Kind, MAX_FOG, MAX_LIGHTS, Prep, TILE, TILE_CAP};
 
 pub use crate::gpu::block_on;
 
@@ -75,7 +75,7 @@ struct Pipes {
     contact: wgpu::RenderPipeline,
     ghost: wgpu::RenderPipeline,
     scatter: wgpu::ComputePipeline,
-    thin: wgpu::ComputePipeline,
+    tops: wgpu::ComputePipeline,
     light: wgpu::RenderPipeline,
     down: wgpu::RenderPipeline,
     up: wgpu::RenderPipeline,
@@ -193,9 +193,13 @@ impl Pipes {
                 B::TexArray,
             ],
         );
-        let scatter_layout = layout(device, "scatter", &[B::Uniform, B::Tex, B::ReadWrite, B::Uint, B::Tex]);
-        let light_layout =
-            layout(device, "light", &[B::Uniform, B::Tex, B::Tex, B::Tex, B::Read, B::Read, B::Read, B::Read, B::Uint]);
+        let scatter_layout =
+            layout(device, "scatter", &[B::Uniform, B::Tex, B::ReadWrite, B::Uint, B::Tex, B::ReadWrite]);
+        let light_layout = layout(
+            device,
+            "light",
+            &[B::Uniform, B::Tex, B::Tex, B::Tex, B::Read, B::Read, B::Read, B::Read, B::Uint, B::Tex, B::Read],
+        );
         let post_layout = layout(device, "post", &[B::Uniform, B::Tex, B::Sampler, B::Tex]);
         let step_layout = layout(device, "step", &[B::Uniform]);
 
@@ -271,12 +275,13 @@ impl Pipes {
             compilation_options: wgpu::PipelineCompilationOptions::default(),
             cache: None,
         });
-        // The fence rule's mark over the field, after the scatter (`scatter.wgsl`'s `thin`).
-        let thin = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
-            label: Some("thin"),
+        // Each tile's tallest, after the scatter (`scatter.wgsl`'s `tops`): what lets the sun's
+        // trace cross open ground a tile at a time.
+        let tops = device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
+            label: Some("tops"),
             layout: Some(&spl),
             module: &sm,
-            entry_point: Some("thin"),
+            entry_point: Some("tops"),
             compilation_options: wgpu::PipelineCompilationOptions::default(),
             cache: None,
         });
@@ -321,7 +326,7 @@ impl Pipes {
             contact,
             ghost,
             scatter,
-            thin,
+            tops,
             light,
             down,
             up,
@@ -352,6 +357,9 @@ struct ChunkTex {
     scratch: Vec<u8>,
 }
 
+/// The side of a tile of `scatter.wgsl`'s `tops`, px (`common.wgsl`'s `TOP_TILE`).
+const TOP_TILE: u32 = 32;
+
 /// Everything sized by the canvas.
 #[derive(Debug)]
 struct Targets {
@@ -362,6 +370,7 @@ struct Targets {
     gem: wgpu::TextureView,
     gid: wgpu::TextureView,
     hmap: wgpu::Buffer,
+    tops: wgpu::Buffer,
     hdr: wgpu::TextureView,
     bsrc: wgpu::TextureView,
     levels: Vec<wgpu::TextureView>,
@@ -375,6 +384,8 @@ struct Targets {
     tile_lights: wgpu::Buffer,
     scatter_bg: wgpu::BindGroup,
     light_bg: wgpu::BindGroup,
+    /// What spills (the fence rule, `Prep::spill`), the canvas's size.
+    spill: wgpu::Texture,
     /// Per bloom step: its post group and its step group, down then up.
     down: Vec<(wgpu::BindGroup, wgpu::BindGroup)>,
     up: Vec<(wgpu::BindGroup, wgpu::BindGroup)>,
@@ -776,14 +787,15 @@ impl Wgpu {
         ));
     }
 
-    /// Makes the targets for a `w x h` canvas, if they are not that size already.
-    fn fit(&mut self, (w, h): (u32, u32)) {
-        if self.targets.as_ref().is_some_and(|t| t.canvas == (w, h)) {
+    /// Makes the targets for a `w x h` canvas with a guard band of `guard` px round it (the
+    /// casting band's widest side, `Frame::guard`), if they are not that size already.
+    fn fit(&mut self, (w, h): (u32, u32), guard: u32) {
+        let full = (w + 2 * guard, h + 2 * guard);
+        if self.targets.as_ref().is_some_and(|t| t.canvas == (w, h) && t.full == full) {
             return;
         }
         let d = &self.gpu.device;
         let p = &self.pipes;
-        let full = (w + 2 * GUARD, h + 2 * GUARD);
         let rt = wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING;
         let view = |t: wgpu::Texture| t.create_view(&wgpu::TextureViewDescriptor::default());
         let galb = view(texture(d, "g albedo", (full.0, full.1, 1), ALBEDO, rt));
@@ -792,14 +804,30 @@ impl Wgpu {
         let gid = view(texture(d, "g id", (full.0, full.1, 1), ID, rt));
         let hmap = d.create_buffer(&wgpu::BufferDescriptor {
             label: Some("height field"),
-            // Three thirds: each texel's top and whose (`h << 16 | id`), its bottom (`256 - lo`,
-            // 0 where nothing floats), and the terrain's matter by height where it may spill
-            // (the fence rule, `scatter.wgsl`'s `mask_of`).
-            size: u64::from(full.0) * u64::from(full.1) * 12,
+            // Two halves: each texel's top and whose (`h << 16 | id`), and its bottom (`256 - lo`,
+            // 0 where nothing floats).
+            size: u64::from(full.0) * u64::from(full.1) * 8,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+            mapped_at_creation: false,
+        });
+        // Each 32 px tile's tallest in the field, grown by 4 px (`scatter.wgsl`'s `tops`).
+        let tops = d.create_buffer(&wgpu::BufferDescriptor {
+            label: Some("tile tops"),
+            size: u64::from(full.0.div_ceil(TOP_TILE)) * u64::from(full.1.div_ceil(TOP_TILE)) * 4,
             usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
         let hdr = view(texture(d, "hdr", (w, h, 1), HDR, rt));
+        // What spills (the fence rule): the canvas's coverage by the bands T0 and T1 lay
+        // (`Prep::spill`), written each frame it has any.
+        let spill = texture(
+            d,
+            "spill",
+            (w, h, 1),
+            wgpu::TextureFormat::R8Unorm,
+            wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+        );
+        let spill_view = spill.create_view(&wgpu::TextureViewDescriptor::default());
         let bsrc = view(texture(d, "bloom source", (w, h, 1), HDR, rt));
         let sizes: Vec<(u32, u32)> = (1..=BLOOM_LEVELS).map(|k| ((w >> k).max(1), (h >> k).max(1))).collect();
         let levels: Vec<wgpu::TextureView> =
@@ -830,8 +858,12 @@ impl Wgpu {
         let tiles = storage("tiles", tiles_n * 8);
         let tile_lights = storage("tile lights", tiles_n * TILE_CAP as u64 * 4);
         let g = self.globals.as_entire_binding();
-        let scatter_bg =
-            group(d, "scatter", &p.scatter_layout, &[g.clone(), r(&gnh), hmap.as_entire_binding(), r(&gid), r(&gem)]);
+        let scatter_bg = group(
+            d,
+            "scatter",
+            &p.scatter_layout,
+            &[g.clone(), r(&gnh), hmap.as_entire_binding(), r(&gid), r(&gem), tops.as_entire_binding()],
+        );
         let light_bg = group(
             d,
             "light",
@@ -846,6 +878,8 @@ impl Wgpu {
                 tiles.as_entire_binding(),
                 tile_lights.as_entire_binding(),
                 r(&gid),
+                r(&spill_view),
+                tops.as_entire_binding(),
             ],
         );
         let smp = wgpu::BindingResource::Sampler(&p.sampler);
@@ -930,6 +964,7 @@ impl Wgpu {
             gem,
             gid,
             hmap,
+            tops,
             hdr,
             bsrc,
             levels,
@@ -941,6 +976,7 @@ impl Wgpu {
             tile_lights,
             scatter_bg,
             light_bg,
+            spill,
             down,
             up,
             grade,
@@ -1052,12 +1088,13 @@ fn rgba(out: &mut Vec<u8>, px: &[u32]) {
     }
 }
 
-/// A chunk's normal and height as `(nx, ny, height, depth)`; a T0 chunk is flat.
+/// A chunk's normal and height as `(nx, ny, height, depth)`, a fence's px's depth marked
+/// (`common.wgsl`'s `FENCE`, the fence rule); a T0 chunk is flat.
 fn nh(out: &mut Vec<u8>, l: &ChunkLayers) {
     out.clear();
     if l.lit() {
-        for (n, &h) in l.normal.iter().zip(&l.height) {
-            out.extend_from_slice(&[n[0], n[1], h, 2]);
+        for (k, (n, &h)) in l.normal.iter().zip(&l.height).enumerate() {
+            out.extend_from_slice(&[n[0], n[1], h, if l.is_fence(k) { 2 | 128 } else { 2 }]);
         }
     } else {
         for _ in &l.albedo {
@@ -1151,7 +1188,7 @@ impl Backend for Wgpu {
         let t0 = Instant::now();
         self.collect_stamps();
         let canvas = (u32::from(frame.canvas.0).max(1), u32::from(frame.canvas.1).max(1));
-        self.fit(canvas);
+        self.fit(canvas, prep::guard(frame));
         self.frames = self.frames.wrapping_add(1);
         self.prep.build(frame, self.frames);
         self.upload_chunks(frame);
@@ -1175,6 +1212,9 @@ impl Backend for Wgpu {
             q.write_buffer(&self.chunk_buf, 0, &prep.chunks);
         }
         q.write_buffer(&self.globals, 0, &prep.globals);
+        if prep.spill_on || prep.spill_was {
+            write_layer(q, &t.spill, 0, t.canvas, 1, &prep.spill);
+        }
         q.write_buffer(&t.lights, 0, &prep.lights[..prep.lights.len().min(t.lights.size() as usize)]);
         q.write_buffer(&t.tiles, 0, &prep.tiles[..prep.tiles.len().min(t.tiles.size() as usize)]);
         q.write_buffer(
@@ -1271,6 +1311,7 @@ impl Backend for Wgpu {
             }
         }
         enc.clear_buffer(&t.hmap, 0, None);
+        enc.clear_buffer(&t.tops, 0, None);
         {
             let mut pass = enc.begin_compute_pass(&wgpu::ComputePassDescriptor {
                 label: Some("height field"),
@@ -1283,12 +1324,7 @@ impl Backend for Wgpu {
             pass.set_pipeline(&self.pipes.scatter);
             pass.set_bind_group(0, &t.scatter_bg, &[]);
             pass.dispatch_workgroups(t.full.0.div_ceil(8), t.full.1.div_ceil(8), 1);
-        }
-        {
-            let mut pass =
-                enc.begin_compute_pass(&wgpu::ComputePassDescriptor { label: Some("thin"), timestamp_writes: None });
-            pass.set_pipeline(&self.pipes.thin);
-            pass.set_bind_group(0, &t.scatter_bg, &[]);
+            pass.set_pipeline(&self.pipes.tops);
             pass.dispatch_workgroups(t.full.0.div_ceil(8), t.full.1.div_ceil(8), 1);
         }
         {

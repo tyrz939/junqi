@@ -259,7 +259,7 @@ mod tests {
         let mut f = Frame::new(jane_present::Tier::T0);
         f.canvas = (w as u16, h as u16);
         // A wall 60 px tall, 8 rows deep, across the middle; the lamp south of it.
-        f.blocks.push(Block { x0: 40, y0: 50, x1: 120, y1: 58, height: 60, mask: 0 });
+        f.blocks.push(Block { x0: 40, y0: 50, x1: 120, y1: 58, height: 60, ..Block::default() });
         let lights = [lamp(80, 90)];
         let mut lm = LightMap::default();
         lm.build((w, h), [40, 40, 60], &lights);

@@ -8,8 +8,8 @@ use jane_core::grid::Rect;
 use jane_data::{TileGroup, TilePattern as P};
 
 use super::{
-    CELL, CHUNK_CELLS, CHUNK_PX, CasterSeg, Chunk, NONE, Painter, Placed, STRIP_BELOW, STRIP_H, STRIP_MARGIN, Standing,
-    Style, fast, pack, salt,
+    CELL, CHUNK_CELLS, CHUNK_PX, CasterSeg, Chunk, FENCE_FLOOR, FencePart, NONE, Painter, Placed, STRIP_BELOW, STRIP_H,
+    STRIP_MARGIN, Standing, Style, fast, pack, salt,
 };
 use crate::canvas::{Canvas, FLAT, Z, normal};
 use crate::flora::{Bank, Sprite};
@@ -418,6 +418,53 @@ fn fence(c: &mut Canvas, r: Ramp, (w, e, n, s): (bool, bool, bool, bool)) {
     }
 }
 
+/// A fence's post: its px across its cell (6 wide round the middle) and the rows it is drawn
+/// over its foot (`fence`'s bevelled rect, 24 rows).
+const POST: (i32, i32, i32) = (5, 11, 23);
+/// Its two rails, the rows each is drawn over the foot, lowest to highest (`fence`'s rails,
+/// `b - 10` and `b - 18`, three rows each).
+const RAILS: [(i32, i32); 2] = [(7, 9), (15, 17)];
+/// A rail seen from above down a north-south run is drawn 4 px wide round the middle.
+const RAIL_W: i32 = 2;
+
+/// The posts and rails of a fence cell whose top-left is chunk-local px `(wx, wy)` and whose
+/// neighbours along `(w, e, n, s)` are fence, as its shadow sees them ([`FencePart`]): the post
+/// on the cell's foot row from the ground to its drawn top; each rail a bar from the bottom of its
+/// lowest drawn row's height to its top (`height_of_rows`, the one projection), along the run to
+/// each neighbour's post (half a cell each way), or a stub 4 px wide where the cell stands alone,
+/// as drawn. A north-south run is drawn from above as one level bar; its shadow is thrown from the
+/// same two rails as an east-west one's, so a fence reads as posts and two rails whichever way it
+/// runs. The footprint on the ground is the fence's line, its foot row and the row over it (the
+/// terrain stands two rows deep, `terrain::blocks`).
+pub fn fence_parts((wx, wy): (i32, i32), (w, e, n, s): (bool, bool, bool, bool), mut emit: impl FnMut(FencePart)) {
+    use crate::canvas::height_of_rows as up;
+    let foot = wy + CELL - 1;
+    let mid = wx + 8;
+    let bar = |r: (i32, i32)| ((up(r.0 - 1)).clamp(0, 255) as u8, up(r.1).clamp(0, 255) as u8);
+    let part = |x0: i32, y0: i32, x1: i32, y1: i32, (lo, hi): (u8, u8)| FencePart {
+        x0: x0 as i16,
+        y0: y0 as i16,
+        x1: x1 as i16,
+        y1: y1 as i16,
+        lo,
+        hi,
+    };
+    emit(part(wx + POST.0, foot - 1, wx + POST.1, foot + 1, (0, up(POST.2).clamp(0, 255) as u8)));
+    for r in RAILS {
+        if w || e || !(n || s) {
+            let x0 = if w { wx } else { mid - RAIL_W };
+            let x1 = if e { wx + CELL } else { mid + RAIL_W };
+            emit(part(x0, foot - 1, x1, foot + 1, bar(r)));
+        }
+        if n {
+            emit(part(mid - RAIL_W, foot - 1 - CELL / 2, mid + RAIL_W, foot + 1, bar(r)));
+        }
+        if s {
+            emit(part(mid - RAIL_W, foot - 1, mid + RAIL_W, foot + 1 + CELL / 2, bar(r)));
+        }
+    }
+}
+
 /// A low dry-stone wall in `c`: a capped top that runs on into its neighbours and a face of
 /// coursed stone where it drops south.
 fn stone_wall(c: &mut Canvas, r: Ramp, (w, e, n, s): (bool, bool, bool, bool), h: u32) {
@@ -497,6 +544,13 @@ pub(super) fn strips(p: &mut Painter, x0: i32, y0: i32, seed: u32, out: &mut Chu
                 p.s.row.stamp(&thing, sx, sy);
                 grow_bb(&mut p.s.row_bb, sx, sy, thing.w(), thing.h());
                 mark(&mut p.s.rowmask, sw, &thing, sx, sy, None);
+                if placed {
+                    // Which px a fence drew (a low wall drawn over one takes them back).
+                    let fence = st.row.pattern == P::Fence;
+                    for (tx, ty) in drawn(&thing, sx, sy, sw) {
+                        p.s.fencerow[(ty * sw + tx) as usize] = fence;
+                    }
+                }
                 if margin {
                     retag(&mut p.s.rowmask, sw, &thing, sx, sy);
                 }
@@ -541,12 +595,13 @@ pub(super) fn strips(p: &mut Painter, x0: i32, y0: i32, seed: u32, out: &mut Chu
                         if p.s.rowmask[i] == BORROWED {
                             p.s.row.clear_px(x, y);
                             p.s.rowmask[i] = mask::CLEAR;
+                            p.s.fencerow[i] = false;
                         }
                     }
                 }
             }
             if placed {
-                bake(p, row);
+                bake(p, row, out);
             } else {
                 crop(p, row, canopy, out);
             }
@@ -556,8 +611,9 @@ pub(super) fn strips(p: &mut Painter, x0: i32, y0: i32, seed: u32, out: &mut Chu
 
 /// Paint the strip canvas's drawn px into the ground layers, where they fall in the chunk: a
 /// fence or a low wall laid flat with the walls, its heights kept for the light.
-fn bake(p: &mut Painter, row: i32) {
+fn bake(p: &mut Painter, row: i32, out: &mut Chunk) {
     let bb = p.s.row_bb;
+    let sw = p.s.row.w();
     let top = (row + 1) * CELL + STRIP_BELOW - STRIP_H;
     for y in bb.y.max(0)..bb.bottom().min(STRIP_H) {
         let ly = top + y;
@@ -568,10 +624,30 @@ fn bake(p: &mut Painter, row: i32) {
             let ix = p.s.row.get(x, y);
             if ix.is_opaque() {
                 let (n, z) = (p.s.row.normal_at(x, y), p.s.row.height_at(x, y));
+                // What a fence drew, and what drew over one, as the layers now hold it. A fence
+                // px stands at least `FENCE_FLOOR` up, so no fence px is the ground a shadow is
+                // laid on: its own spill never darkens its post's foot (PRESENTATION.md §1.7).
+                let fence = p.s.fencerow[(y * sw + x) as usize];
+                let z = if fence { z.max(FENCE_FLOOR) } else { z };
                 p.s.ly.put(x - STRIP_MARGIN, ly, ix, n, i32::from(z));
+                let k = (ly * CHUNK_PX + x - STRIP_MARGIN) as usize;
+                let bit = 1u64 << (k % 64);
+                if fence {
+                    out.fence_px[k / 64] |= bit;
+                } else {
+                    out.fence_px[k / 64] &= !bit;
+                }
             }
         }
     }
+}
+
+/// The strip px `(x, y)` a thing `c` stamped at `(sx, sy)` draws, inside a strip `sw` wide.
+fn drawn(c: &Canvas, sx: i32, sy: i32, sw: i32) -> impl Iterator<Item = (i32, i32)> + '_ {
+    (0..c.h()).flat_map(move |y| (0..c.w()).map(move |x| (x, y))).filter_map(move |(x, y)| {
+        let (tx, ty) = (sx + x, sy + y);
+        (c.get(x, y).is_opaque() && tx >= 0 && ty >= 0 && tx < sw && ty < STRIP_H).then_some((tx, ty))
+    })
 }
 
 /// A mask value for a strip's scratch only: a px laid by a cell beyond the chunk, for the outline.
@@ -616,6 +692,7 @@ fn reset_row(p: &mut Painter) {
     for y in bb.y.max(0)..bb.bottom().min(STRIP_H) {
         let (a, b) = (bb.x.max(0), bb.right().min(sw).max(bb.x.max(0)));
         p.s.rowmask[(y * sw + a) as usize..(y * sw + b) as usize].fill(mask::CLEAR);
+        p.s.fencerow[(y * sw + a) as usize..(y * sw + b) as usize].fill(false);
     }
     p.s.row_bb = Rect::new(0, 0, 0, 0);
 }
@@ -685,6 +762,7 @@ fn crop(p: &Painter, row: i32, canopy: bool, out: &mut Chunk) {
 /// every tree that shows one, at the crown's height.
 pub(super) fn casters(p: &Painter, x0: i32, y0: i32, out: &mut Chunk) {
     out.casters.clear();
+    out.fences.clear();
     let casts = |cx: i32, cy: i32| -> u8 {
         let st = own(p, cx, cy);
         let raised_wall =
@@ -727,6 +805,7 @@ pub(super) fn casters(p: &Painter, x0: i32, y0: i32, out: &mut Chunk) {
             if st.row.pattern == P::Fence {
                 let same = |dx: i32, dy: i32| raw(p, cx + dx, cy + dy) == st.tile;
                 let (w, e, n, s) = (same(-1, 0), same(1, 0), same(0, -1), same(0, 1));
+                fence_parts((cx * CELL, cy * CELL), (w, e, n, s), |f| out.fences.push(f));
                 let (mx, my) = (wx + 8, wy + CELL - 4);
                 if w || e || !(n || s) {
                     let (a, b) = ((if w { wx } else { mx - 2 }, my), (if e { wx + CELL } else { mx + 2 }, my));
