@@ -474,9 +474,8 @@ pub fn speaker_knows(cx: &crate::actions::Ask<'_>, story: StoryId) -> bool {
 /// `Condition::SpeakerLit`: the prop she is talking to shows its light, by the one rule the
 /// view draws it by (`light::light_showing`, with the rain where it stands): a doused fire's
 /// words never say it burns. False outside a conversation, or talking to a unit.
-pub fn speaker_lit(cx: &Ctx<'_>) -> bool {
-    let Some(d) = cx.actor.and_then(|s| cx.world.player(s)).and_then(|p| p.dialogue) else { return false };
-    let Speaker::Prop(id) = d.speaker else { return false };
+pub fn speaker_lit(cx: &crate::actions::Ask<'_>) -> bool {
+    let Speaker::Prop(id) = cx.speaker else { return false };
     let Some(p) = cx.zone.prop_ix(id).map(|ix| &cx.zone.props[ix as usize]) else { return false };
     let wet = crate::light::prop_wetness(cx.zone, cx.rt, p);
     crate::light::light_showing(cx.cat.story.prop(p.def), p, cx.world.clock, wet).is_some()
