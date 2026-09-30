@@ -176,9 +176,9 @@ const TENT: i32 = (GROUND_TAPS + 1) * (GROUND_TAPS + 1) * (GROUND_TAPS + 1) * (G
 /// neither drifts nor is drifted into.
 const NARROW: i32 = 112;
 /// Where a px's share of the other ground, pushed by the drift, turns it over (of 256).
-const FLIP: i32 = 150;
+const FLIP: i32 = 144;
 /// How far the drift pushes a share: the larger, the shorter the tongues.
-const REACH_DIV: i32 = 160;
+const REACH_DIV: i32 = 128;
 /// The surface map's side, px, and where the chunk's px 0 is in it.
 const MAP: i32 = super::MM;
 
