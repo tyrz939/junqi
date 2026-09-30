@@ -21,7 +21,7 @@ pub(crate) struct Field {
 }
 
 /// `3t² - 2t³` for `t` in 0..=256, in 1/256ths.
-const fn smooth(t: i32) -> i32 {
+pub(crate) const fn smooth(t: i32) -> i32 {
     (t * t * (768 - 2 * t)) >> 16
 }
 

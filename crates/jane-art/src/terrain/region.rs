@@ -65,6 +65,29 @@ pub fn tint(region: u8, ix: Ix) -> Ix {
     ix
 }
 
+/// Whether some region swaps `ramp` as ground: what the ecotone blends across a border (a wall's
+/// or a roof's ramp keeps its cell's region whole).
+#[inline]
+pub fn is_ground(ramp: Ramp) -> bool {
+    GROUND[ramp as usize]
+}
+
+/// [`is_ground`] by ramp, worked once.
+const GROUND: [bool; Ramp::ALL.len()] = {
+    let mut t = [false; Ramp::ALL.len()];
+    let mut r = 0;
+    while r < REGIONS.len() {
+        let g = REGIONS[r].ground;
+        let mut i = 0;
+        while i < g.len() {
+            t[g[i].0 as usize] = true;
+            i += 1;
+        }
+        r += 1;
+    }
+    t
+};
+
 #[cfg(test)]
 mod tests {
     use super::*;
