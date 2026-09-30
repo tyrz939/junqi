@@ -29,6 +29,7 @@
 // surfaces is a few bytes counted by a filter: both read plainer as written.
 #![allow(clippy::verbose_bit_mask, clippy::naive_bytecount)]
 
+mod ecotone;
 mod field;
 mod ground;
 mod hard;
@@ -557,6 +558,13 @@ struct Scratch {
     mat: Vec<Option<Material>>,
     /// Each cell's region (`TileSource::region`).
     region: Vec<u8>,
+    /// Each region's share of the ground, blended across its borders.
+    eco: ecotone::Ecotone,
+    /// Which other wild ground each cell has near it, for the drifts across their edge.
+    gmix: ecotone::GroundMix,
+    /// Which surfaces drift ([`blends`]), by id; and which cells a drift reached.
+    blend: [bool; 256],
+    hit: Vec<bool>,
     /// The tile each cell is drawn as: its surface for ground, the ground it borrows for a
     /// standing thing, itself for a hard tile.
     paint: Vec<Tile>,
@@ -619,6 +627,8 @@ pub struct Painter {
     bank: Bank,
     standing: Standing,
     s: Scratch,
+    /// Per palette index: whether a region swaps it as ground, and its colour in each region.
+    lut: Vec<(bool, [u32; 3])>,
     /// The chunk being painted: its first world cell, and the world seed.
     x0c: i32,
     y0c: i32,
@@ -654,6 +664,10 @@ impl Painter {
             raw: vec![Tile::Void; cells],
             mat: vec![None; cells],
             region: vec![0; cells],
+            eco: ecotone::Ecotone::default(),
+            gmix: ecotone::GroundMix::default(),
+            blend: std::array::from_fn(|g| blends(&styles, g as u8)),
+            hit: vec![false; (ecotone::HIT_SIDE * ecotone::HIT_SIDE) as usize],
             paint: vec![Tile::Void; cells],
             surf: vec![NONE; cells],
             surf2: vec![NONE; cells],
@@ -678,7 +692,14 @@ impl Painter {
             row_bb: Rect::new(0, 0, CHUNK_PX + 2 * STRIP_MARGIN, STRIP_H),
             thing: Canvas::new(3 * CELL, STRIP_H),
         };
-        Painter { styles, bank: Bank::new(ramps), standing: Standing::Strips, s, x0c: 0, y0c: 0, seed: 0 }
+        let lut = (0..palette::LEN)
+            .map(|i| {
+                let ix = Ix(i as u16);
+                let ground = Ramp::of(ix).is_some_and(|(r, _)| region::is_ground(r));
+                (ground, [0u8, 1, 2].map(|r| pack(region::tint(r, ix))))
+            })
+            .collect();
+        Painter { styles, bank: Bank::new(ramps), standing: Standing::Strips, s, lut, x0c: 0, y0c: 0, seed: 0 }
     }
 
     /// The styles it paints with.
@@ -701,7 +722,9 @@ impl Painter {
         let (x0, y0) = (cx * CHUNK_CELLS, cy * CHUNK_CELLS);
         (self.x0c, self.y0c, self.seed) = (x0, y0, seed);
         self.gather(src, x0, y0);
+        self.s.eco.fill(src, x0, y0, seed);
         self.resolve(src, x0, y0);
+        self.ground_mix(x0, y0, seed);
         self.surface_map(x0, y0, seed);
         ground::paint(self, x0, y0, seed);
         hard::paint(self, src, x0, y0, seed);
@@ -996,6 +1019,24 @@ impl Painter {
                 }
             }
         }
+        // Where two wild grounds meet, drifts of each over the other (`ecotone::GroundMix`),
+        // before the edges are read off the map, so a drift has its rim like any patch; an edge
+        // can then fall in any cell by one a drift reached.
+        self.s.gmix.apply(&mut self.s.mm, &self.s.blend, &mut self.s.hit);
+        let side = ecotone::HIT_SIDE;
+        for cy in -2..side - 2 {
+            for cx in -2..side - 2 {
+                if !self.s.hit[((cy + 2) * side + cx + 2) as usize] {
+                    continue;
+                }
+                for (dx, dy) in [(0, 0), (-1, 0), (1, 0), (0, -1), (0, 1), (-1, -1), (1, -1), (-1, 1), (1, 1)] {
+                    let (x, y) = (cx + dx, cy + dy);
+                    if (-M..CHUNK_CELLS + M).contains(&x) && (-M..CHUNK_CELLS + M).contains(&y) {
+                        self.s.mixed[Self::at(x, y)] = true;
+                    }
+                }
+            }
+        }
         // Water's slivers: where two pools meet only at a corner the chamfers leave a thread of
         // water a px or two wide; a px of water with three or fewer water px round it goes to the
         // land beside it, and a px of land hemmed in by seven goes to water.
@@ -1062,6 +1103,14 @@ impl Painter {
         }
     }
 
+    /// Where two wild grounds meet, which draws as which (`ecotone::GroundMix`). Only grounds of
+    /// a loose pattern blend: a garden's rows, setts and water keep their edge.
+    fn ground_mix(&mut self, x0: i32, y0: i32, seed: u32) {
+        let surf = &self.s.surf;
+        let blend = &self.s.blend;
+        self.s.gmix.fill(|x, y| surf[Self::at(x, y)], |g| blend[usize::from(g)], x0 * CELL, y0 * CELL, seed);
+    }
+
     /// The surface at chunk-local px `(x, y)`, which may be up to 16 px outside the chunk.
     #[inline]
     fn surf_px(&self, x: i32, y: i32) -> u8 {
@@ -1086,12 +1135,34 @@ impl Painter {
     fn finish(&mut self, x0: i32, y0: i32, out: &mut Chunk) {
         let ly = &self.s.ly;
         let l = &mut out.layers;
-        // Each pixel in its cell's region's ramps (`region`); the Lowfields' as painted.
+        // Each pixel in its region's ramps (`region`); the Lowfields' as painted. A wall or a roof
+        // takes its cell's region whole; the ground its share of each by the ecotone.
         let regions = &self.s.region;
+        let eco = &self.s.eco;
+        let lut = &self.lut;
+        // A region past the table draws as the Lowfields.
+        let reg = |r: u8| if r > 2 { 0 } else { usize::from(r) };
+        let lowfields =
+            eco.whole == Some(0) && (0..CHUNK_CELLS).all(|y| (0..CHUNK_CELLS).all(|x| regions[Self::at(x, y)] == 0));
         for (i, (dst, &ix)) in l.albedo.iter_mut().zip(&ly.albedo).enumerate() {
+            let Some(&(ground, rgb)) = lut.get(usize::from(ix.0)) else {
+                *dst = pack(ix);
+                continue;
+            };
+            if lowfields {
+                *dst = rgb[0];
+                continue;
+            }
             let (px, py) = (i as i32 % CHUNK_PX, i as i32 / CHUNK_PX);
-            let r = regions[Self::at(px / CELL, py / CELL)];
-            *dst = pack(if r == 0 { ix } else { region::tint(r, ix) });
+            *dst = match eco.whole {
+                Some(r) if ground => rgb[reg(r)],
+                None if ground => {
+                    let (a, b, t) = eco.mix(px, py);
+                    let ca = rgb[reg(a)];
+                    if t == 0 || a == b { ca } else { mix_rgb(ca, rgb[reg(b)], t) }
+                }
+                _ => rgb[reg(regions[Self::at(px / CELL, py / CELL)])],
+            };
         }
         l.normal.copy_from_slice(&ly.normal);
         l.emissive.copy_from_slice(&ly.emissive);
@@ -1124,11 +1195,39 @@ impl Painter {
     }
 }
 
+/// Whether ground `g` drifts into the wild grounds beside it (`ecotone::GroundMix`): a wild
+/// ground of a loose pattern; a garden's rows, setts and water keep their edge.
+fn blends(styles: &Styles, g: u8) -> bool {
+    g != NONE && {
+        let st = styles.id(g);
+        st.row.wild
+            && !st.is_water()
+            && matches!(
+                st.row.pattern,
+                jane_data::TilePattern::Turf
+                    | jane_data::TilePattern::Earth
+                    | jane_data::TilePattern::Marsh
+                    | jane_data::TilePattern::Sand
+                    | jane_data::TilePattern::Cracked
+            )
+    }
+}
+
 /// A cheap hash for the per-pixel paths (a stone of a course, a cluster of an edge): one
 /// multiply per field into jane-core's `mix32`. What is picked once a cell uses `h32`.
 #[inline]
 pub(crate) const fn fast(a: u32, b: u32, salt: u32) -> u32 {
     jane_core::hash::mix32(a.wrapping_mul(0x9e37_79b1) ^ b.wrapping_mul(0x85eb_ca77) ^ salt.wrapping_mul(0xc2b2_ae3d))
+}
+
+/// `a` and `b` (`0xFFRRGGBB`) mixed `t` of 256 toward `b`.
+#[inline]
+fn mix_rgb(a: u32, b: u32, t: i32) -> u32 {
+    let ch = |s: u32| {
+        let (x, y) = (((a >> s) & 0xff) as i32, ((b >> s) & 0xff) as i32);
+        ((x * (256 - t) + y * t) >> 8) as u32
+    };
+    0xff00_0000 | ch(16) << 16 | ch(8) << 8 | ch(0)
 }
 
 /// `ix` as `0xFFRRGGBB`.
