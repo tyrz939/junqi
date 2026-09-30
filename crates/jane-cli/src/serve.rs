@@ -211,6 +211,9 @@ pub fn serve(args: &[String]) -> Result<(), String> {
             std::thread::sleep(Duration::from_millis(1));
         }
     }
+    // The last hash points may still be on the replica's thread: wait for them, so the closing
+    // line names the hash at the last point stepped, as each guest's does.
+    host.settle(clock.elapsed().as_millis() as u64);
     log(&status(&host, ticks));
     let c = host.checks();
     log(&format!("jane serve: hash checks with guests: {} agreed, {} differed, last at frame {}", c.ok, c.bad, c.last));
@@ -347,7 +350,9 @@ pub fn join(args: &[String]) -> Result<(), String> {
             std::thread::sleep(Duration::from_millis(1));
         }
     }
-    if let Session::Guest(g) = &s {
+    if let Session::Guest(g) = &mut s {
+        // As the host's closing line: the hash points still on the replica's thread first.
+        g.settle();
         if let (Some(sim), Some((hf, h))) = (g.sim(), g.last_hash()) {
             log(&format!("jane join: {stepped} frames stepped, frame {}, hash {h:016x}@{hf}", sim.state().frame));
         }

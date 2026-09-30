@@ -51,6 +51,7 @@ fn serve_and_two_headless_guests_hold_one_hash() {
     assert!(checks.contains(", 0 differed"), "{checks}");
     assert!(agreed >= 16, "{checks}");
     assert_eq!(finals[0], finals[1], "both guests end on one hash");
+    assert!(finals[0].ends_with("@900"), "the hash at the last point stepped, not an earlier one: {}", finals[0]);
     assert!(host_out.contains(&format!("hash {}", finals[0])), "the host's hash at that frame too: {}", finals[0]);
     // The session was a tape: re-simulated offline, it lands on every hash the host saw.
     let v = Command::new(exe).args(["replay", "verify"]).arg(&tape).output().unwrap();
