@@ -15,6 +15,7 @@ use jane_core::{Rect, Tile};
 
 use super::County;
 use super::chunks::Chunk;
+use super::ways::{Way, WayKind};
 use crate::kit::{Kit, js_round};
 
 /// Cells from the box to the ring the lanes run round it on.
@@ -29,44 +30,54 @@ const REACH: i32 = 2;
 /// is, rather than the tree or the water the land left there.
 pub fn link_lines(c: &mut County<'_>) {
     let boxes: Vec<Rect> = c.chunks.iter().map(|ch| ch.bounds).collect();
+    let mut ways = Vec::new();
     for line in &c.lines {
         for ch in &c.chunks {
-            link_line(&mut c.k, line, ch, &boxes);
+            link_line(line, ch, c.k.w(), c.k.h(), &mut ways);
         }
     }
+    for way in &ways {
+        for &q in way {
+            lane(&mut c.k, &mut c.trodden, q, &boxes);
+        }
+    }
+    c.ways.extend(ways.into_iter().map(|line| Way { kind: WayKind::Link, line, door: None }));
     for ch in &c.chunks {
         for &g in &ch.gates {
-            lane(&mut c.k, g, &boxes);
+            lane(&mut c.k, &mut c.trodden, g, &boxes);
         }
     }
 }
 
 /// Join `line` to `ch` at every point it crosses into or out of the box grown by [`REACH`], from
 /// the last point outside.
-pub fn link_line(k: &mut Kit, line: &[(i32, i32)], ch: &Chunk, boxes: &[Rect]) {
+pub fn link_line(line: &[(i32, i32)], ch: &Chunk, w: i32, h: i32, ways: &mut Vec<Vec<(i32, i32)>>) {
     let near = ch.bounds.grow(REACH);
     let Some(&(x0, y0)) = line.first() else { return };
     let mut was = near.contains(x0, y0);
     for i in 1..line.len() {
         let now = near.contains(line[i].0, line[i].1);
         if now != was {
-            connect(k, if now { line[i - 1] } else { line[i] }, ch, boxes);
+            if let Some(way) = connect(if now { line[i - 1] } else { line[i] }, ch, w, h) {
+                ways.push(way);
+            }
         }
         was = now;
     }
 }
 
 /// A lane from `p` to the chunk's gate nearest it (by Manhattan distance, the first of equals):
-/// straight out to the ring, the shorter way round it, and straight in to the gate.
-fn connect(k: &mut Kit, p: (i32, i32), ch: &Chunk, boxes: &[Rect]) {
-    let Some(&gate) = ch.gates.iter().min_by_key(|g| (g.0 - p.0).abs() + (g.1 - p.1).abs()) else { return };
+/// straight out to the ring, the shorter way round it, and straight in to the gate. Its centre
+/// line, from the gate out.
+fn connect(p: (i32, i32), ch: &Chunk, cw: i32, ch_h: i32) -> Option<Vec<(i32, i32)>> {
+    let &gate = ch.gates.iter().min_by_key(|g| (g.0 - p.0).abs() + (g.1 - p.1).abs())?;
     let b = ch.bounds;
     let (x0, y0) = ((b.x - RING).max(RING_EDGE), (b.y - RING).max(RING_EDGE));
-    let x1 = (b.right() + RING - 1).min(k.w() - RING_EDGE - 1);
-    let y1 = (b.bottom() + RING - 1).min(k.h() - RING_EDGE - 1);
+    let x1 = (b.right() + RING - 1).min(cw - RING_EDGE - 1);
+    let y1 = (b.bottom() + RING - 1).min(ch_h - RING_EDGE - 1);
     let path = perimeter(Rect::new(x0, y0, x1 - x0 + 1, y1 - y0 + 1));
     if path.is_empty() {
-        return;
+        return None;
     }
     let nearest = |q: (i32, i32)| {
         let mut at = 0;
@@ -84,21 +95,24 @@ fn connect(k: &mut Kit, p: (i32, i32), ch: &Chunk, boxes: &[Rect]) {
     let len = path.len();
     let forward = (g + len - a) % len;
     let back = forward > len - forward;
+    let mut out = Vec::new();
+    straight(p, path[a], |q| out.push(q));
     let mut n = a;
     loop {
-        lane(k, path[n], boxes);
+        out.push(path[n]);
         if n == g {
             break;
         }
         n = if back { (n + len - 1) % len } else { (n + 1) % len };
     }
-    straight(p, path[a], |q| lane(k, q, boxes));
-    straight(path[g], gate, |q| lane(k, q, boxes));
+    straight(path[g], gate, |q| out.push(q));
+    out.reverse();
+    Some(out)
 }
 
 /// Three cells square of lane round `(x, y)`: trodden dirt, planks over water; a road, the
 /// railway and every chunk's box left as they are.
-fn lane(k: &mut Kit, (x, y): (i32, i32), boxes: &[Rect]) {
+fn lane(k: &mut Kit, trodden: &mut [bool], (x, y): (i32, i32), boxes: &[Rect]) {
     for cy in y - 1..=y + 1 {
         for cx in x - 1..=x + 1 {
             if !k.inside(cx, cy) || boxes.iter().any(|b| b.contains(cx, cy)) {
@@ -107,7 +121,10 @@ fn lane(k: &mut Kit, (x, y): (i32, i32), boxes: &[Rect]) {
             match k.get(cx, cy) {
                 Tile::Road | Tile::Boardwalk | Tile::Track | Tile::Rail => {}
                 Tile::Water => k.set(cx, cy, Tile::Boardwalk),
-                _ => k.set(cx, cy, Tile::Dirt),
+                _ => {
+                    k.set(cx, cy, Tile::Dirt);
+                    super::ways::tread(trodden, k, cx, cy);
+                }
             }
         }
     }

@@ -34,7 +34,7 @@ use jane_data::{PlaceAt, PlacementDef, StoryDef};
 use super::County;
 use super::centre;
 use super::country::roads::{compass, distance_words};
-use super::country::{FIRST_CLEAR, Kind, Place, dist, in_box};
+use super::country::{FIRST_CLEAR, Kind, Place, dist};
 use super::placements::{apply_edit, hide_under, pick_top, put_prop};
 use super::tale_ground::{OnFoot, Standing, Stood, near_on_foot, place_cells, spot_for};
 use crate::kit::{Kit, js_round};
@@ -61,23 +61,6 @@ const CHAIN: usize = 8;
 /// Kinds that stand off the road by nature, and are reached by a footpath laid for the story.
 const fn pathed(k: Kind) -> bool {
     matches!(k, Kind::Camp | Kind::Ruin | Kind::Woodcutter)
-}
-
-/// Ground a footpath may be trodden over: grass, growth and scrub. Never water, a fence, a wall or
-/// a field in crops.
-const fn treadable(t: Tile) -> bool {
-    matches!(
-        t,
-        Tile::Grass
-            | Tile::GrassTall
-            | Tile::Bush
-            | Tile::Tree
-            | Tile::DeadTree
-            | Tile::Moss
-            | Tile::DryBed
-            | Tile::Sand
-            | Tile::Rubble
-    )
 }
 
 /// Within 1.25 half-screens each way: on screen from there.
@@ -584,26 +567,39 @@ fn region_name(r: jane_data::Region) -> &'static str {
     }
 }
 
-/// A trodden path, two cells wide, from the road straight to the nearest edge of the place, and a
-/// fingerpost where it leaves the road saying where it goes. Returns the path's centre line. A set
-/// place's box keeps its own ground where the path crosses it (the TypeScript trod a path across
-/// the farm's grass).
+/// A trodden path, two cells wide, from the road to the place: to its house's door if it has one,
+/// else to the edge of it nearest the road, round whatever stands in the way
+/// (`country::tread_way`); and a fingerpost where it leaves the road saying where it goes.
+/// Returns the path's centre line, from the road. A set place's box keeps its own ground where
+/// the path crosses it (the TypeScript trod a path across the farm's grass).
 fn lay_path(c: &mut County<'_>, p: &Place, road: (i32, i32), name: &str) -> Vec<(i32, i32)> {
     let b = p.bounds;
-    let (tx, ty) = (road.0.clamp(b.x, b.x + b.w - 1), road.1.clamp(b.y, b.y + b.h - 1));
-    let n = (tx - road.0).abs().max((ty - road.1).abs());
-    let steps = i64::from(n.max(1));
-    let mut line = Vec::new();
-    for s in 0..=n {
-        let x = road.0 + js_round(i64::from(tx - road.0) * i64::from(s), steps) as i32;
-        let y = road.1 + js_round(i64::from(ty - road.1) * i64::from(s), steps) as i32;
-        line.push((x, y));
-        for (i, j) in [(0, 0), (1, 0), (0, 1), (1, 1)] {
-            if treadable(c.k.get(x + i, y + j)) && !in_box(c, x + i, y + j) {
-                c.k.set(x + i, y + j, Tile::Dirt);
-            }
-        }
-    }
+    let cat = jane_data::catalog();
+    // The door nearest the road of any building in the place.
+    let door =
+        c.k.blueprint()
+            .props
+            .iter()
+            .filter(|q| {
+                let d = cat.story.prop(q.def);
+                let r = Rect::new(i32::from(q.cell.x), i32::from(q.cell.y), i32::from(d.w), i32::from(d.h));
+                r.overlaps(b.grow(2)) && super::ways::door_approach(d, 0, 0).is_some()
+            })
+            .map(|q| super::ways::door_step(q.def, i32::from(q.cell.x), i32::from(q.cell.y)))
+            .min_by_key(|&(x, y)| ((x - road.0).abs() + (y - road.1).abs(), x, y));
+    let edge = (road.0.clamp(b.x, b.x + b.w - 1), road.1.clamp(b.y, b.y + b.h - 1));
+    let from = door.unwrap_or(edge);
+    let mut line = super::country::tread_way(
+        c,
+        from,
+        2,
+        door,
+        super::country::Reach::Road,
+        Some(road),
+        super::ways::WayKind::Story,
+    );
+    line.reverse();
+    let n = i32::try_from(line.len()).unwrap_or(i32::MAX);
     // The fingerpost: a few cells along the path from the road, to one side of it, on open ground.
     let at = line[(line.len() - 1).min(5)];
     let metres = (js_round(i64::from(n) * 11, 500) * 50).max(50);
