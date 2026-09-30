@@ -15,6 +15,45 @@ pub struct MenuState {
     pub focus: u8,
 }
 
+/// Each open menu's own light, bottom to top (§3.1: the top layer eats input). One light shared
+/// by every layer moved the pause menu's light under "Quit to the title?" as Yes and No were
+/// chosen (2026-10-01); each layer keeps its own, and a layer under another is drawn with its
+/// light where it was left.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct MenuLights {
+    states: Vec<MenuState>,
+}
+
+impl MenuLights {
+    /// A menu opened on top, lit at `st`.
+    pub fn push(&mut self, st: MenuState) {
+        self.states.push(st);
+    }
+
+    /// The top menu closed: the one under it keeps its light.
+    pub fn pop(&mut self) {
+        self.states.pop();
+    }
+
+    pub fn clear(&mut self) {
+        self.states.clear();
+    }
+
+    /// As many lights as `n` open menus: one closed or opened some other way loses or gains its
+    /// light at the top.
+    pub fn sync(&mut self, n: usize) {
+        self.states.resize(n, MenuState::default());
+    }
+
+    /// Layer `k`'s light (0 at the bottom).
+    pub fn layer(&mut self, k: usize) -> &mut MenuState {
+        if self.states.len() <= k {
+            self.states.resize(k + 1, MenuState::default());
+        }
+        &mut self.states[k]
+    }
+}
+
 impl MenuState {
     /// Moves the light by this frame's up and down, skipping disabled rows.
     pub fn nav(&mut self, ui: &Ui, enabled: &[bool]) {
@@ -275,6 +314,31 @@ mod tests {
         ui.begin(UiInput { actions: vec![UiAction::Down], ..UiInput::default() }, 2, (768, 432));
         st.nav(&ui, &[true, false, true]);
         assert_eq!(st.focus, 0, "wraps");
+    }
+
+    #[test]
+    fn a_confirmation_owns_the_keys_and_the_menu_under_it_keeps_its_light() {
+        let mut ui = Ui::new(UiArt::build(1).0);
+        let mut lights = MenuLights::default();
+        lights.push(MenuState::default());
+        lights.push(MenuState { focus: 1 });
+        let info = PauseInfo::default();
+        for (t, a) in [UiAction::Up, UiAction::Down, UiAction::Up, UiAction::Confirm].into_iter().enumerate() {
+            ui.begin(UiInput { actions: vec![a], ..UiInput::default() }, t as u32, (768, 432));
+            // The app's loop: every layer drawn, only the top one interactive.
+            ui.interactive = false;
+            pause(&mut ui, lights.layer(0), &info);
+            ui.interactive = true;
+            let picked = confirm(&mut ui, lights.layer(1), "Quit to the title?");
+            assert_eq!(lights.layer(0).focus, 0, "Resume stays lit under the question ({a:?})");
+            if a == UiAction::Confirm {
+                assert_eq!(picked, Some(true), "Up from No is Yes");
+            }
+            assert!(!ui.out.iter().any(|o| matches!(o, UiOut::Intent(_))), "the pause menu under it picks nothing");
+        }
+        assert_eq!(lights.layer(1).focus, 0);
+        lights.pop();
+        assert_eq!(lights.layer(0).focus, 0, "back to the pause menu as it was");
     }
 
     #[test]

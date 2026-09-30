@@ -352,7 +352,7 @@
     "materials": { "body": "wood_dark", "trim": "iron" } },
 
   "apple_tree": { "family": "vegetation", "shape": "apple_tree", "rise": 14,
-    "materials": { "body": "leaf", "trim": "bark", "accent": "cloth_red" }, "vary": 2 },
+    "materials": { "body": "leaf", "trim": "bark", "accent": "cloth_red" }, "states": ["base", "open"], "vary": 2 },
   "dry_tree": { "family": "vegetation", "shape": "dry_tree", "rise": 4,
     "materials": { "body": "bark", "trim": "bark" } },
   "stump": { "family": "vegetation", "shape": "stump", "rise": 0,

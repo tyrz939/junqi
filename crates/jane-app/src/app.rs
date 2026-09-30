@@ -27,8 +27,10 @@ use jane_present::ui::hud::{self, HudCtx};
 use jane_present::ui::lan::{self as lan_ui, HostChoice, HostInfo, JoinInfo};
 use jane_present::ui::lesson as lesson_ui;
 use jane_present::ui::loading::{self, Card, LoadingState};
-use jane_present::ui::menus::{self, MenuState, PauseInfo, SlotMode, SlotRow};
+use jane_present::ui::marks as quest_marks;
+use jane_present::ui::menus::{self, MenuLights, MenuState, PauseInfo, SlotMode, SlotRow};
 use jane_present::ui::perf::{self, FrameInfo, PerfLog, PerfView, SimTally, TopLine};
+use jane_present::ui::saved as saved_ui;
 use jane_present::ui::title::{self, TitleInfo, TitleState};
 use jane_present::ui::window::{self, WindowState};
 use jane_present::ui::world::{self, WorldDebug};
@@ -118,7 +120,8 @@ struct App<'a> {
     session: Option<Session>,
     title: TitleState,
     menus: Vec<Menu>,
-    menu_state: MenuState,
+    /// Each open menu's own light (a confirmation over the pause menu leaves its light alone).
+    menu_lights: MenuLights,
     dialogue: DialogueBox,
     /// This seat's presses, for the next step.
     pending: Vec<Command>,
@@ -239,7 +242,7 @@ pub fn run(
         scene: Scene::Title,
         session: None,
         menus: Vec::new(),
-        menu_state: MenuState::default(),
+        menu_lights: MenuLights::default(),
         dialogue: DialogueBox::default(),
         pending: Vec::new(),
         camera: (0, 0),
@@ -711,6 +714,10 @@ impl App<'_> {
                     self.perf.tick(us);
                 }
                 let rested = session.take_rested();
+                let rested_by = session.take_rested_by();
+                // A guest who rested: the host writes the world, and her card says so.
+                let guest_rested = matches!(session, Session::Guest(_))
+                    && events.iter().any(|e| matches!(e.kind, jane_sim::EventKind::Rested { by } if by == me));
                 // Alone and held, the music steps back; with company the world goes on, and so
                 // does its sound (PRESENTATION.md §5.5).
                 self.sound.set_held(paused && session.pauses());
@@ -737,7 +744,11 @@ impl App<'_> {
                 // Anyone at the table rested: the world is written where it lives (a guest's
                 // rest saves the host's world; a guest writes nothing).
                 if rested {
-                    self.autosave();
+                    self.autosave(rested_by, me);
+                }
+                if guest_rested {
+                    self.bufs.saved("Saved at the host's table", true);
+                    self.soundtrack.ui(jane_present::audio::SfxKind::Save, &mut self.sound);
                 }
             }
         }
@@ -774,7 +785,7 @@ impl App<'_> {
                 UiAction::Pause => {
                     if matches!(self.scene, Scene::Play) && self.menus.is_empty() {
                         self.menus.push(Menu::Pause);
-                        self.menu_state = MenuState::default();
+                        self.menu_lights.push(MenuState::default());
                     }
                 }
                 UiAction::Cancel => {
@@ -784,7 +795,7 @@ impl App<'_> {
                         actions.push(a);
                     } else if !self.menus.is_empty() {
                         self.menus.pop();
-                        self.menu_state = MenuState::default();
+                        self.menu_lights.pop();
                     } else if self.win_open {
                         if self.win.destroy.is_some() {
                             actions.push(a);
@@ -871,16 +882,16 @@ impl App<'_> {
             AppIntent::LoadMenu => {
                 self.read_slots();
                 self.menus.push(Menu::Slots(SlotMode::Load));
-                self.menu_state = MenuState::default();
+                self.menu_lights.push(MenuState::default());
             }
             AppIntent::SaveMenu => {
                 self.read_slots();
                 self.menus.push(Menu::Slots(SlotMode::Save));
-                self.menu_state = MenuState::default();
+                self.menu_lights.push(MenuState::default());
             }
             AppIntent::ToTitle => {
                 self.menus.push(Menu::ConfirmTitle);
-                self.menu_state = MenuState { focus: 1 };
+                self.menu_lights.push(MenuState { focus: 1 });
             }
             AppIntent::Quit => self.quit = true,
             AppIntent::Resume => self.menus.clear(),
@@ -891,7 +902,7 @@ impl App<'_> {
             AppIntent::Pause => {
                 if self.menus.is_empty() {
                     self.menus.push(Menu::Pause);
-                    self.menu_state = MenuState::default();
+                    self.menu_lights.push(MenuState::default());
                 }
             }
             AppIntent::Console(line) => self.console_line(&line),
@@ -908,7 +919,7 @@ impl App<'_> {
                     self.lan.close_finder();
                 }
                 self.menus.pop();
-                self.menu_state = MenuState::default();
+                self.menu_lights.pop();
             }
             AppIntent::HostMenu => {
                 self.read_slots();
@@ -1065,25 +1076,43 @@ impl App<'_> {
                 self.config.last_slot = Some(n);
                 self.config.set_slot_seed(n, seed);
                 let _ = self.config.save(&self.dirs);
-                self.bufs.push_toast(&format!("Saved to slot {}", n + 1), jane_present::text::Tone::Good);
+                self.bufs.saved(&format!("Saved to slot {}", n + 1), true);
                 self.soundtrack.ui(jane_present::audio::SfxKind::Save, &mut self.sound);
                 self.read_slots();
             }
-            Err(e) => self.say(&e),
+            Err(e) => {
+                self.bufs.saved(&format!("Couldn't save: {e}"), false);
+                self.soundtrack.ui(jane_present::audio::SfxKind::Locked, &mut self.sound);
+                self.say(&e);
+            }
         }
     }
 
-    /// She rested: the game writes the slot it last used (§3.2 `Event::Rest`).
-    fn autosave(&mut self) {
+    /// Someone rested: the game writes the slot it last used (§3.2 `Event::Rest`), and the save
+    /// card says so: "Saved" for her own rest, whose coat it was for another seat's.
+    fn autosave(&mut self, by: Option<Seat>, me: Seat) {
         if matches!(self.session, Some(Session::Guest(_))) {
             return;
         }
         let Some((bytes, seed)) = sim_of(self.session.as_ref()).map(|s| (s.save(), s.state().seed)) else { return };
         let n = self.slot.unwrap_or(0);
-        if saves::write(&self.dirs, n, &bytes).is_ok() {
-            self.slot = Some(n);
-            self.config.set_slot_seed(n, seed);
-            let _ = self.config.save(&self.dirs);
+        match saves::write(&self.dirs, n, &bytes) {
+            Ok(()) => {
+                self.slot = Some(n);
+                self.config.set_slot_seed(n, seed);
+                let _ = self.config.save(&self.dirs);
+                let line = match by.filter(|&b| b != me) {
+                    Some(b) => format!("Saved by the {} coat", jane_present::ui::lan::coat_name(b.index())),
+                    None => "Saved".to_owned(),
+                };
+                self.bufs.saved(&line, true);
+                self.soundtrack.ui(jane_present::audio::SfxKind::Save, &mut self.sound);
+            }
+            Err(e) => {
+                self.bufs.saved(&format!("Couldn't save: {e}"), false);
+                self.soundtrack.ui(jane_present::audio::SfxKind::Locked, &mut self.sound);
+                self.say(&e);
+            }
         }
     }
 
@@ -1260,6 +1289,9 @@ impl App<'_> {
                 loading::draw(&mut self.ui, st);
             }
             Scene::Play => {
+                // The quest marks over heads, on the world under everything else (§3.8).
+                self.ui.interactive = false;
+                quest_marks::draw(&mut self.ui, self.present.marks(), self.present.dark(), self.present.ticks());
                 if self.world_dbg.on
                     && let Some(v) = sim_of(self.session.as_ref()).and_then(|s| s.view(me_of(self.session.as_ref())))
                 {
@@ -1269,6 +1301,8 @@ impl App<'_> {
                 let top_is_hud = self.menus.is_empty() && self.bufs.dialogue.is_none();
                 self.ui.interactive = top_is_hud;
                 hud::draw(&mut self.ui, &self.bufs, cx);
+                // The world written down (§3.2).
+                saved_ui::draw(&mut self.ui, &self.bufs);
                 // A spell learned, a jar or a page found: its card or its words (§3.2).
                 lesson_ui::draw(&mut self.ui, self.present.lessons(), &self.bufs, self.win_open);
                 // At a table: who sits at it, and whom it waits for.
@@ -1298,6 +1332,7 @@ impl App<'_> {
         }
         // The menus over whichever scene.
         let n = self.menus.len();
+        self.menu_lights.sync(n);
         for (k, m) in self.menus.clone().into_iter().enumerate() {
             self.ui.interactive = k + 1 == n;
             match m {
@@ -1326,9 +1361,9 @@ impl App<'_> {
                         lan: lan.as_ref().map(|(l, on)| (l.as_str(), *on)),
                         guest,
                     };
-                    menus::pause(&mut self.ui, &mut self.menu_state, &info);
+                    menus::pause(&mut self.ui, self.menu_lights.layer(k), &info);
                 }
-                Menu::Slots(mode) => menus::slots(&mut self.ui, &mut self.menu_state, mode, &self.slot_rows),
+                Menu::Slots(mode) => menus::slots(&mut self.ui, self.menu_lights.layer(k), mode, &self.slot_rows),
                 Menu::Host => {
                     let slots: Vec<Option<String>> =
                         self.slot_rows.iter().map(|r| (!r.empty).then(|| format!("{} · {}", r.zone, r.when))).collect();
@@ -1380,8 +1415,9 @@ impl App<'_> {
                     }
                 }
                 Menu::ConfirmTitle => {
-                    if let Some(yes) = menus::confirm(&mut self.ui, &mut self.menu_state, "Quit to the title?") {
+                    if let Some(yes) = menus::confirm(&mut self.ui, self.menu_lights.layer(k), "Quit to the title?") {
                         self.menus.pop();
+                        self.menu_lights.pop();
                         if yes {
                             self.menus.clear();
                             self.end_session();

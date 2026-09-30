@@ -26,6 +26,7 @@ pub struct Local {
     seq: u16,
     events: Vec<Event>,
     rested: bool,
+    rested_by: Option<Seat>,
     /// Commands for other seats (the console's `join` and `leave`), in the next step.
     extra: Vec<(Option<Seat>, Command)>,
 }
@@ -58,7 +59,14 @@ pub struct Status {
 
 impl Session {
     pub fn local(sim: Sim) -> Session {
-        Session::Local(Box::new(Local { sim, seq: 0, events: Vec::new(), rested: false, extra: Vec::new() }))
+        Session::Local(Box::new(Local {
+            sim,
+            seq: 0,
+            events: Vec::new(),
+            rested: false,
+            rested_by: None,
+            extra: Vec::new(),
+        }))
     }
 
     /// Host `sim` on the LAN: listen on `port` (TCP), and answer discovery on the discovery
@@ -180,6 +188,9 @@ impl Session {
                 if l.events.iter().any(|e| e.kind == jane_sim::EventKind::Rest) {
                     l.rested = true;
                 }
+                if let Some(by) = crate::host::rested_by(&l.events) {
+                    l.rested_by = Some(by);
+                }
                 Some(out)
             }
             Session::Host(h) => {
@@ -214,6 +225,15 @@ impl Session {
             Session::Local(l) => std::mem::take(&mut l.rested),
             Session::Host(h) => h.take_rested(),
             Session::Guest(_) => false,
+        }
+    }
+
+    /// Whose rest it was (after [`take_rested`](Self::take_rested)); a guest keeps no save.
+    pub fn take_rested_by(&mut self) -> Option<Seat> {
+        match self {
+            Session::Local(l) => l.rested_by.take(),
+            Session::Host(h) => h.take_rested_by(),
+            Session::Guest(_) => None,
         }
     }
 

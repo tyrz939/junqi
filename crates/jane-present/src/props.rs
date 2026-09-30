@@ -17,9 +17,13 @@ struct Set {
     sprite: SpriteId,
     bases: Vec<RefId>,
     on: Option<RefId>,
-    open: Option<RefId>,
+    /// Open, one for each base (an apple tree picked keeps its crown), else one for them all.
+    opens: Vec<RefId>,
     /// How high its lit glass glows above its foot, px: where its light shines from.
     glass: Option<u8>,
+    /// A top things stand on: rows from its foot to the top's front edge, and the top's rows
+    /// (`jane_art::kit::surface`).
+    surface: Option<(i32, i32)>,
 }
 
 /// Every prop look, packed.
@@ -50,9 +54,16 @@ impl Props {
             let h = r.set.h;
             // A hanging stands on its footprint's back edge, the wall's face's foot, where its
             // heights stand it (`jane_art::kit::hung`): so it is set into the face it hangs on.
-            let hung = matches!(looks::find(r.name), Some((_, jane_data::Look::Prop(p))) if jane_art::kit::hung(p));
+            let look = match looks::find(r.name) {
+                Some((_, jane_data::Look::Prop(p))) => Some(p),
+                _ => None,
+            };
+            let hung = look.is_some_and(jane_art::kit::hung);
             let ay = if hung { r.set.ay } else { h };
-            let mut set = Set { sprite: r.sprite, bases: Vec::new(), on: None, open: None, glass: None };
+            let fh = jane_art::kit::footprint(r.sprite).map_or(1, |(_, fh)| i32::from(fh));
+            let surface = look.and_then(|l| jane_art::kit::surface(l, fh));
+            let mut set =
+                Set { sprite: r.sprite, bases: Vec::new(), on: None, opens: Vec::new(), glass: None, surface };
             for (f, c) in &r.set.frames {
                 let id = atlas.add_canvas(c, (0, ay as i16), h.clamp(1, 255) as u8, |_, _, t| t);
                 match f {
@@ -60,7 +71,7 @@ impl Props {
                         set.on = Some(id);
                         set.glass = glow_height(c);
                     }
-                    FrameId::Open => set.open = Some(id),
+                    FrameId::Open | FrameId::Open2 | FrameId::Open3 => set.opens.push(id),
                     _ => set.bases.push(id),
                 }
             }
@@ -103,12 +114,19 @@ impl Props {
     /// by its id (ART.md §1, the TS build's rule).
     pub fn look(&self, sprite: SpriteId, id: u32, state: State) -> Option<RefId> {
         let s = self.find(sprite)?;
-        let base = s.bases[(jane_art::hash::h32(id, 0, 0x5641_5259) % s.bases.len() as u32) as usize];
+        let i = (jane_art::hash::h32(id, 0, 0x5641_5259) % s.bases.len() as u32) as usize;
+        let base = s.bases[i];
         Some(match (state.open, state.on) {
-            (true, _) if s.open.is_some() => s.open.unwrap_or(base),
+            (true, _) if !s.opens.is_empty() => s.opens[i.min(s.opens.len() - 1)],
             (_, true) if s.on.is_some() => s.on.unwrap_or(base),
             _ => base,
         })
+    }
+
+    /// Whether sprite `s` is a top things stand on: `(front, depth)`, the rows from its foot to
+    /// the top's front edge and the top's rows.
+    pub fn surface(&self, s: SpriteId) -> Option<(i32, i32)> {
+        self.find(s).and_then(|x| x.surface)
     }
 
     /// How high sprite `s`'s lit glass glows above its foot, px.
@@ -130,6 +148,7 @@ fn glow_height(c: &jane_art::Canvas) -> Option<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use jane_art::palette::Tone;
 
     #[test]
     fn a_lamp_lights_a_chest_opens_and_bases_vary_by_id() {
@@ -169,6 +188,37 @@ mod tests {
             }
         }
         out
+    }
+
+    /// An apple tree picked shows bare: its own crown (each base its own open frame), no
+    /// apples in it; filled again (its loot as spawned), the apples are back (2026-10-01).
+    #[test]
+    fn a_picked_apple_tree_is_bare_until_it_bears_again() {
+        let mut atlas = Atlas::with_layers(true);
+        let p = Props::build(&mut atlas);
+        let tree = jane_art::looks::find("apple_tree").unwrap().0;
+        let apples = |atlas: &Atlas, id: RefId| {
+            let r = *atlas.get(id);
+            let page = &atlas.pages.pages[usize::from(r.page)];
+            let red = [Tone::Base, Tone::Light].map(|t| jane_art::palette::Ramp::ClothRed.at(t).0);
+            (0..r.src.h)
+                .flat_map(|y| (0..r.src.w).map(move |x| (x, y)))
+                .filter(|&(x, y)| {
+                    let i = usize::from(r.src.y + y) * usize::from(page.w) + usize::from(r.src.x + x);
+                    red.contains(&page.albedo[i])
+                })
+                .count()
+        };
+        let mut crowns = std::collections::BTreeSet::new();
+        for id in 0..16 {
+            let full = p.look(tree, id, State::default()).unwrap();
+            let bare = p.look(tree, id, State { on: false, open: true }).unwrap();
+            assert_ne!(full, bare, "tree {id}: picked looks picked");
+            assert!(apples(&atlas, full) > 0, "tree {id}: apples on it");
+            assert_eq!(apples(&atlas, bare), 0, "tree {id}: none once picked");
+            crowns.insert((full, bare));
+        }
+        assert_eq!(crowns.len(), 2, "each crown its own bare frame");
     }
 
     #[test]

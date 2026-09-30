@@ -14,10 +14,44 @@ use crate::ui::art::Mark;
 use crate::ui::cmd::Rect;
 use crate::ui::core::{
     AppIntent, ButtonKind, DragPayload, DropTarget, Ink, PanelStyle, SlotView, Ui, advance, fmt_u32, line_h, text_w,
-    wid,
+    wid, wrap_lines,
 };
 use crate::ui::style::{self, argb, fade};
 use crate::view::{BANNER_TICKS, Gauge, TOAST_FADE, TOAST_TICKS, ViewBuffers};
+
+/// Columns a line of world text (a toast, the prompt) wraps at in the Small face: the
+/// tooltip's rule (§3.2). A mine chest's "has no keyhole" ran off both edges of the canvas.
+pub const TEXT_COLS: i32 = 40;
+/// Px kept clear between world text and the canvas's edges.
+pub const TEXT_EDGE: i32 = 12;
+
+/// The columns world text in `face` wraps at on a canvas `cw` wide: [`TEXT_COLS`], fewer where
+/// the canvas is too narrow for them.
+pub fn text_cols(cw: i32, face: Face) -> usize {
+    TEXT_COLS.min((cw - 2 * TEXT_EDGE - 20) / advance(face)).max(8) as usize
+}
+
+/// Lines a toast shows at most, and the prompt: what runs longer ends in "...".
+pub const TOAST_LINES: usize = 4;
+pub const PROMPT_LINES: usize = 3;
+
+/// `s` wrapped at `cols`, at most `most` lines, the last cut short with "..." if it ran on.
+pub fn wrapped(s: &str, cols: usize, most: usize) -> Vec<String> {
+    let mut lines: Vec<String> = wrap_lines(s, cols).map(str::to_owned).collect();
+    if lines.len() > most {
+        lines.truncate(most.max(1));
+        if let Some(last) = lines.last_mut() {
+            while last.chars().count() + 3 > cols && last.pop().is_some() {}
+            last.push_str("...");
+        }
+    }
+    lines
+}
+
+/// Where a line `w` px wide starts, centred on a canvas `cw` wide and kept on it.
+pub fn centred_x(cw: i32, w: i32) -> i32 {
+    ((cw - w) / 2).clamp(TEXT_EDGE, (cw - w - TEXT_EDGE).max(TEXT_EDGE))
+}
 
 /// The bar's slot size and the gap between slots, px.
 pub const SLOT: i32 = 36;
@@ -296,16 +330,22 @@ fn prompt(ui: &mut Ui, b: &ViewBuffers, bar: Rect, cx: HudCtx<'_>) -> i32 {
     if p.hold && p.verb != "Hold to push" {
         words.push_str(" (hold to push)");
     }
-    let tw = text_w(Face::Small, &words);
     let cap = key_cap_w(cx, Action::Use);
+    // Wrapped to the canvas beside the key cap, the block centred and kept on the canvas.
+    let cols = text_cols(cw - cap - 8, Face::Small);
+    let lines = wrapped(&words, cols, PROMPT_LINES);
+    let tw = lines.iter().map(|l| text_w(Face::Small, l)).max().unwrap_or(0);
+    let step = line_h(Face::Small) + 2;
+    let more = (lines.len().max(1) as i32 - 1) * step;
     let w = cap + 8 + tw;
-    let x = (cw - w) / 2;
-    let y = top - 22;
-    // Rises a few px as it appears for the first time is out of scope; a steady breathing lift.
-    ui.fill(Rect::new(x - 12, y - 3, w + 24, 24), argb(style::INK, 120));
-    ui.rule(x - 30, x + w + 30, y - 4, style::gold_deep());
+    let x = centred_x(cw, w);
+    let y = top - 22 - more;
+    ui.fill(Rect::new(x - 12, y - 3, w + 24, 24 + more), argb(style::INK, 120));
+    ui.rule((x - 30).max(0), (x + w + 30).min(cw), y - 4, style::gold_deep());
     key_cap(ui, x, y, cx, Action::Use);
-    ui.text(x + cap + 8, y + 1, &words, Ink::small(style::text_bright()).shadow());
+    for (i, l) in lines.iter().enumerate() {
+        ui.text(x + cap + 8, y + 1 + i as i32 * step, l, Ink::small(style::text_bright()).shadow());
+    }
     y - 8
 }
 
@@ -369,11 +409,23 @@ fn toasts(ui: &mut Ui, b: &ViewBuffers, bottom: i32) {
             words.push_str("  x");
             words.push_str(fmt_u32(u32::from(t.count), &mut buf));
         }
-        let w = text_w(Face::Small, &words);
-        let x = (cw - w) / 2;
-        ui.fill(Rect::new(x - 10, y + rise - 1, w + 20, lh), fade(argb(style::INK, 110), a));
-        ui.text(x, y + rise + 1, &words, Ink::small(ink).shadow().alpha(a));
-        y -= lh + 2;
+        // Wrapped at the tooltip's width, each line centred, the block kept on the canvas.
+        let lines = wrapped(&words, text_cols(cw, Face::Small), TOAST_LINES);
+        let step = line_h(Face::Small) + 2;
+        let more = (lines.len().max(1) as i32 - 1) * step;
+        let top = y - more;
+        // An older toast with no room left above the newer ones is not drawn.
+        if top < TEXT_EDGE {
+            break;
+        }
+        let w = lines.iter().map(|l| text_w(Face::Small, l)).max().unwrap_or(0);
+        let bx = centred_x(cw, w);
+        ui.fill(Rect::new(bx - 10, top + rise - 1, w + 20, lh + more), fade(argb(style::INK, 110), a));
+        for (i, l) in lines.iter().enumerate() {
+            let x = centred_x(cw, text_w(Face::Small, l));
+            ui.text(x, top + rise + 1 + i as i32 * step, l, Ink::small(ink).shadow().alpha(a));
+        }
+        y = top - lh - 2;
     }
 }
 
@@ -405,7 +457,7 @@ fn banner(ui: &mut Ui, b: &ViewBuffers, cw: i32, ch: i32) {
     let a = a.min(255) as u8;
     let w = text_w(Face::Head, name);
     let y = ch / 4 - 14;
-    let x = (cw - w) / 2;
+    let x = centred_x(cw, w);
     // The rules grow out from the name as it arrives.
     let grow = (age.min(40) as i32) * 3;
     ui.rule(x - 30 - grow, x - 10, y + 13, style::gold());
@@ -437,4 +489,50 @@ fn veil(ui: &mut Ui, b: &ViewBuffers, cw: i32, ch: i32) {
     let w = text_w(Face::Small, &line);
     ui.mark(Mark::Skull, (cw - w) / 2 - 22, y + 34, 220);
     ui.text((cw - w) / 2, y + 35, &line, Ink::small(style::quiet()).shadow());
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ui::UiArt;
+    use crate::ui::cmd::UiCmd;
+    use crate::ui::core::UiInput;
+    use crate::view::Prompt;
+
+    /// The strings the game says, as a toast and as the prompt's label, on the narrowest, the
+    /// usual and a 21:9 canvas: every glyph lands inside the canvas. A mine chest's "has no
+    /// keyhole" ran off both edges (2026-10-01). The catalog's longest lines are the worst case.
+    #[test]
+    fn every_text_stays_on_the_canvas_as_a_toast_and_as_the_prompt() {
+        let cat = jane_data::catalog();
+        let mut ui = Ui::new(UiArt::build(1).0);
+        let bind = Bindings::default();
+        let cx = HudCtx { bindings: &bind, pad: false, window_open: true };
+        let mut longest = cat.texts.to_vec();
+        longest.sort_by_key(|s| std::cmp::Reverse(s.len()));
+        let mut all = vec!["Chest has no keyhole. Something under the floor holds the lid down"];
+        all.extend(longest.into_iter().filter(|s| !s.contains('\n')).take(60));
+        all.extend(cat.texts.iter().copied().filter(|s| s.len() > 30 && s.len() < 120 && !s.contains('\n')));
+        for canvas in [(640u16, 360u16), (768, 432), (1008, 432)] {
+            let (cw, ch) = (i32::from(canvas.0), i32::from(canvas.1));
+            for s in &all {
+                let mut b = ViewBuffers::new();
+                b.push_toast(s, Say::Refused);
+                b.hud.prompt = Some(Prompt { verb: "Read", label: (*s).to_owned(), hold: false });
+                b.tick += 20;
+                ui.begin(UiInput::default(), b.tick, canvas);
+                draw(&mut ui, &b, cx);
+                for c in &ui.cmds {
+                    if let UiCmd::Sprite { dst, ink, .. } = c
+                        && *ink != 0
+                    {
+                        assert!(
+                            dst.x >= 0 && dst.right() <= cw && dst.y >= 0 && dst.bottom() <= ch,
+                            "a glyph of {s:?} at {dst:?} leaves the {cw}x{ch} canvas"
+                        );
+                    }
+                }
+            }
+        }
+    }
 }

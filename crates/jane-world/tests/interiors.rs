@@ -300,3 +300,27 @@ fn the_solver_refuses_a_broken_interior() {
     bp.props.iter_mut().filter(|p| p.key == chest).for_each(|p| p.loot.clear());
     assert!(!validate(&bp, &ZoneRules::for_zone(ZoneId::Cellar)).ok());
 }
+
+/// Julie's fruit bowl stands on her kitchen table, not on the floor (the owner, 2026-10-01): its
+/// footprint lies on a table's, on every seed. The presenter draws it on the top.
+#[test]
+fn the_fruit_bowl_stands_on_the_kitchen_table() {
+    let cat = catalog();
+    for seed in 0..8 {
+        let house = build_interior(ZoneId::House, seed).expect("the house");
+        let bowl = prop(&house, "fruit_bowl");
+        let b = cat.story.prop(bowl.def);
+        let (bx, by) = (i32::from(bowl.cell.x), i32::from(bowl.cell.y));
+        let on = house.props.iter().any(|t| {
+            let d = cat.story.prop(t.def);
+            let (tx, ty) = (i32::from(t.cell.x), i32::from(t.cell.y));
+            d.id == "table"
+                && bx >= tx
+                && by >= ty
+                && bx + i32::from(b.w) <= tx + i32::from(d.w)
+                && by + i32::from(b.h) <= ty + i32::from(d.h)
+        });
+        assert!(on, "seed {seed}: the bowl at {bx},{by} is on no table");
+        assert_eq!(bowl.loot.first().map(|s| cat.combat.item(s.item).id), Some("apple"));
+    }
+}

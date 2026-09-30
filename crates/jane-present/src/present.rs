@@ -14,7 +14,7 @@ use jane_core::{Rect, ZoneId};
 use jane_data::{Controller, Faction, Region};
 use jane_sim::event::{Event, EventKind, events_for};
 use jane_sim::ids::PropIx;
-use jane_sim::view::View;
+use jane_sim::view::{QuestMark, View};
 
 use crate::atlas::{Atlas, RefId};
 use crate::atmos::Atmosphere;
@@ -113,6 +113,9 @@ pub fn max_lights(tier: Tier) -> usize {
     }
 }
 
+/// Rows between a head and the quest mark over it (§3.8).
+const MARK_CLEAR: i32 = 0;
+
 /// A unit as the presenter keeps it between ticks.
 #[derive(Clone, Copy, Debug)]
 struct UnitRec {
@@ -146,6 +149,20 @@ struct UnitRec {
     /// It stands on the ground under what the terrain draws over it (a house's eaves): what is
     /// drawn at its feet is the roof in front of it, not a step under it, so it lifts no light.
     under: bool,
+    /// The quest mark over its head for this seat (`View::quest_mark`), none while she is
+    /// talking to it.
+    mark: Option<QuestMark>,
+}
+
+/// A quest mark to draw over a person's head this frame (§3.8): where its foot is on the canvas
+/// (the glyph stands on it), and which mark.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct QuestMarker {
+    /// The unit's id: its bob's phase.
+    pub id: u32,
+    pub x: i32,
+    pub y: i32,
+    pub mark: QuestMark,
 }
 
 /// A prop near the view, this tick.
@@ -165,6 +182,13 @@ struct PropRec {
     /// Stands on what the terrain raises (a chimney on a roof, a torch on a wall): drawn over it,
     /// never behind it.
     on_top: bool,
+    /// A top things stand on (a table): `(front, depth)` rows (`Props::surface`).
+    surface: Option<(i32, i32)>,
+    /// Stands on another prop's top (Julie's fruit bowl on her table): drawn that many rows up,
+    /// sorted just after the table's foot, and it throws no shadow of its own.
+    lift: i32,
+    /// The foot it sorts by, when it stands on a top: the top's.
+    sort_foot: Option<i32>,
 }
 
 /// A prop light the view says is showing, this tick.
@@ -229,6 +253,9 @@ pub struct Present {
     fx: Fx,
     /// The moment a spell is learned, or a jar or a page found (§2.1).
     lessons: Lessons,
+    /// This frame's quest marks over heads (§3.8), and whether it is dark enough for them to glow.
+    marks: Vec<QuestMarker>,
+    dark: bool,
 }
 
 impl Present {
@@ -285,6 +312,8 @@ impl Present {
             atmos,
             fx,
             lessons: Lessons::new(tier),
+            marks: Vec::with_capacity(16),
+            dark: false,
         }
     }
 
@@ -292,6 +321,16 @@ impl Present {
     /// hold read).
     pub fn lessons(&self) -> &Lessons {
         &self.lessons
+    }
+
+    /// This frame's quest marks over heads, in unit id order (§3.8): what `ui::marks` draws.
+    pub fn marks(&self) -> &[QuestMarker] {
+        &self.marks
+    }
+
+    /// Dark enough that her lantern is lit: the marks glow.
+    pub fn dark(&self) -> bool {
+        self.dark
     }
 
     /// The atmosphere (the weather, the fog, the sky): what F2 and the sheet tools read, and
@@ -472,6 +511,11 @@ impl Present {
         let cat = jane_data::catalog();
         self.units_next.clear();
         self.trails.clear();
+        // Whom she is talking to: the mark over them is down while she does.
+        let talking_to = view.dialogue().and_then(|d| match d.speaker {
+            jane_sim::state::Speaker::Unit(id) => Some(id),
+            _ => None,
+        });
         for uv in view.units_in(area) {
             let u = uv.unit;
             let id = u.id.get();
@@ -530,6 +574,7 @@ impl Present {
                     let (x, y) = u.pos.cell();
                     view.tile(x, y).is_roof()
                 },
+                mark: if talking_to == Some(u.id) { None } else { view.quest_mark(u) },
             });
         }
         self.units_next.sort_unstable_by_key(|r| r.id);
@@ -587,8 +632,12 @@ impl Present {
                     let t = view.tile(i32::from(p.cell.x), i32::from(p.cell.y));
                     t.is_roof() || t.flags() & jane_core::tile::F_SOLID != 0
                 },
+                surface: kit.surface(d.sprite),
+                lift: 0,
+                sort_foot: None,
             });
         });
+        stand_on_tops(props);
         // What lies on the ground (a creature's loot where it fell) as its item, a cell's
         // footprint round its point, on the ground under everything standing.
         for d in view.drops() {
@@ -605,6 +654,9 @@ impl Present {
                 flat: true,
                 flush: false,
                 on_top: false,
+                surface: None,
+                lift: 0,
+                sort_foot: None,
             });
         }
         props.sort_unstable_by_key(|p| p.id);
@@ -828,6 +880,8 @@ impl Present {
         f.lights.clear();
         f.casters.clear();
         f.blocks.clear();
+        self.marks.clear();
+        self.dark = lantern_lit(self.sky.ambient);
         if self.zone.is_none() {
             return &self.frame;
         }
@@ -882,13 +936,13 @@ impl Present {
             let r = self.atlas.get(p.look);
             // Bottom-centred on the footprint.
             let x = p.x + (p.w - i32::from(r.src.w)) / 2 - cam.0;
-            let y = p.y + p.h - i32::from(r.src.h) - cam.1;
-            let casts = !p.flat && !p.flush;
+            let y = p.y + p.h - i32::from(r.src.h) - cam.1 - p.lift;
+            let casts = !p.flat && !p.flush && p.sort_foot.is_none();
             if !(on_canvas(x, y, r.src.w, r.src.h) || casts && in_band(x, y, r.src.w, r.src.h)) {
                 continue;
             }
-            let foot = p.y + p.h - cam.1;
-            let caster = (!p.flat && !p.flush).then(|| {
+            let foot = p.sort_foot.unwrap_or(p.y + p.h) - cam.1;
+            let caster = casts.then(|| {
                 // It stands on what is drawn (§1.7): a thing drawn over its footprint's front
                 // edge (a fire in the middle of its cell, a sign's post over its contact shadow)
                 // throws from its lowest drawn row, its heights less what they counted under it.
@@ -1096,6 +1150,11 @@ impl Present {
             let (x, y) = (sx - i32::from(r.ax), sy - i32::from(r.ay) - bob);
             if !(on_canvas(x, y, r.src.w, r.src.h) || !u.dead && in_band(x, y, r.src.w, r.src.h)) {
                 continue;
+            }
+            // Over the head: the top of what it stands, a few rows clear.
+            if let Some(mark) = u.mark.filter(|_| !u.dead) {
+                let head = sy - rows_up(i32::from(r.top.max(16))) - bob;
+                self.marks.push(QuestMarker { id: u.id, x: sx, y: head - MARK_CLEAR, mark });
             }
             let tint = if u.dead && (u.person.is_some() || u.creature.is_some()) {
                 Tint::None
@@ -1421,6 +1480,36 @@ fn sprite(r: &crate::atlas::SpriteRef, x: i32, y: i32, flags: Flags) -> SpriteCm
     }
 }
 
+/// Each small thing whose footprint lies on a top (a bowl on a table) stands on it: drawn up on
+/// the top, as far back on it as its footprint is back on the table's, and sorted just after the
+/// table so the table never covers it. Tops are few: each thing is tried against those alone.
+fn stand_on_tops(props: &mut [PropRec]) {
+    let tops: Vec<Top> = props.iter().filter_map(|t| t.surface.map(|s| (t.x, t.y, t.w, t.h, s))).collect();
+    if tops.is_empty() {
+        return;
+    }
+    for p in props.iter_mut().filter(|p| !p.flat && p.surface.is_none()) {
+        let Some(&(_, ty, _, th, (front, depth))) = tops
+            .iter()
+            .find(|&&(tx, ty, tw, th, _)| p.x >= tx && p.y >= ty && p.x + p.w <= tx + tw && p.y + p.h <= ty + th)
+        else {
+            continue;
+        };
+        // Its foot's place on the top: a few rows in from the top's front edge for the table's
+        // front row, toward its back edge as the footprint goes back (`back` rows of floor
+        // behind the table's foot, which its own foot already stands up).
+        let back = ty + th - (p.y + p.h);
+        p.lift = front + SURFACE_INSET + back * (depth - SURFACE_INSET) / th.max(1) - back;
+        p.sort_foot = Some(ty + th + 1);
+    }
+}
+
+/// A top's footprint `(x, y, w, h)` and its `(front, depth)` rows.
+type Top = (i32, i32, i32, i32, (i32, i32));
+
+/// Rows in from a top's front edge that a thing on it stands.
+const SURFACE_INSET: i32 = 3;
+
 /// The sim facing nearest a shown one: a diagonal is the axis she walks nearer (down or up
 /// the screen, since that is how she is seen from).
 fn nearest_axis(f: Face8) -> Facing {
@@ -1439,6 +1528,41 @@ mod tests {
     use jane_sim::{Seat, Sim};
 
     use super::*;
+
+    /// A bowl whose footprint lies on a table's stands on its top: drawn up on the top (further
+    /// back for a footprint further back), sorted after the table, throwing no shadow of its own;
+    /// a thing beside the table is left alone.
+    #[test]
+    fn a_bowl_on_a_table_stands_on_its_top() {
+        let rec = |x: i32, y: i32, w: i32, h: i32, surface: Option<(i32, i32)>| PropRec {
+            id: 0,
+            x,
+            y,
+            w,
+            h,
+            look: 0,
+            flat: false,
+            flush: false,
+            on_top: false,
+            surface,
+            lift: 0,
+            sort_foot: None,
+        };
+        let mut v = vec![
+            rec(96, 176, 48, 32, Some((10, 18))),
+            rec(112, 192, 32, 16, None),
+            rec(112, 176, 32, 16, None),
+            rec(160, 192, 32, 16, None),
+        ];
+        stand_on_tops(&mut v);
+        let table_foot = 176 + 32;
+        let (front, back, beside) = (v[1], v[2], v[3]);
+        assert_eq!(front.sort_foot, Some(table_foot + 1), "after the table");
+        let drawn = |p: PropRec| p.y + p.h - p.lift;
+        assert_eq!(drawn(front), table_foot - 10 - SURFACE_INSET, "a few rows onto the top");
+        assert!(drawn(back) < drawn(front) && drawn(back) > table_foot - 10 - 18, "further back, still on it");
+        assert_eq!((beside.lift, beside.sort_foot), (0, None), "beside the table: on the floor");
+    }
 
     /// A step or a dais she stands on raises her lights (capped), the ground's relief does not,
     /// and under a house's eaves the roof drawn at her feet raises nothing (§1.7).

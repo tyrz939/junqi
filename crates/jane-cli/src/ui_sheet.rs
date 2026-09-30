@@ -23,9 +23,9 @@ use jane_sim::tuning::MAX_PLAYERS;
 use jane_sim::{Seat, Sim};
 
 /// The screens, by name.
-pub const SCREENS: [&str; 14] = [
+pub const SCREENS: [&str; 16] = [
     "hud", "dead", "choice", "tooltip", "popover", "drag", "pause", "host", "join", "table", "controls", "display",
-    "loading", "store",
+    "loading", "store", "long", "saved",
 ];
 
 struct Rig {
@@ -220,6 +220,44 @@ pub fn run(dir: &Path, names: &[String]) -> Result<(), String> {
             return Err("the drag did not start".into());
         }
         rig.write(dir, "drag")?;
+    }
+    if want("saved") {
+        // The save card: writing, then shut with its glint (another seat's rest), then a failure.
+        for (name, text, ok, age) in [
+            ("saved", "Saved", true, 20),
+            ("saved-by", "Saved by the teal coat", true, 56),
+            ("save-failed", "Couldn't save: the disk is full", false, 40),
+        ] {
+            let mut b = rig.bufs.clone();
+            b.hud.toasts.clear();
+            b.hud.prompt = None;
+            b.hud.banner = None;
+            b.saved(text, ok);
+            b.tick += age;
+            rig.frame(UiInput::default(), tick, |ui, _, _| {
+                hud::draw(ui, &b, cx);
+                jane_present::ui::saved::draw(ui, &b);
+            });
+            rig.write(dir, name)?;
+        }
+    }
+    if want("long") {
+        // The longest words a toast and the prompt carry: a mine chest's "has no keyhole" ran off
+        // both edges of the canvas (2026-10-01).
+        let mut b = rig.bufs.clone();
+        b.hud.toasts.clear();
+        b.push_toast("Chest has no keyhole. Something under the floor holds the lid down", Tone::Refused);
+        b.push_toast("The Nameless Stone, cut clean and set in the ground by somebody's careful hand", Tone::Plain);
+        b.hud.prompt = Some(jane_present::view::Prompt {
+            verb: "Read",
+            label: "The noticeboard outside the Castle Arms, papered over three times".into(),
+            hold: false,
+        });
+        // Risen and faded in.
+        b.tick += 12;
+        b.hud.banner = None;
+        rig.frame(UiInput::default(), tick, |ui, _, _| hud::draw(ui, &b, cx));
+        rig.write(dir, "long")?;
     }
     if want("store") {
         // At Julie's dresser: her bag beside it, a few things put away, a drag in flight from the

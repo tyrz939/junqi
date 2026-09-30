@@ -262,6 +262,11 @@ pub enum EventKind {
     Learn(SpellId),
     /// She rested: the app writes the save. Party-wide.
     Rest,
+    /// Who rested, beside the `Rest`: the host's save card says whose rest it was ("Saved by the
+    /// teal coat"), and a guest's own card says it was hers. Party-wide.
+    Rested {
+        by: Seat,
+    },
     Camera {
         mode: CameraMode,
         rect: Option<Sym>,

@@ -32,6 +32,27 @@ pub const LAG_FALL: u16 = 14;
 pub const FLASH_TICKS: u8 = 12;
 /// Ticks the target frame outlives the last blow between her and it.
 pub const TARGET_TICKS: u32 = 600;
+/// Ticks the save card stays (§3.2, `ui::saved`): about two seconds; a failure stays twice as
+/// long, so it is read.
+pub const SAVED_TICKS: u32 = 130;
+pub const SAVE_FAILED_TICKS: u32 = 260;
+
+/// The save card: the world was written down (or was not).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SavedCard {
+    /// "Saved", "Saved by the teal coat", "Couldn't save: ...".
+    pub text: String,
+    pub ok: bool,
+    /// The presenter tick it went up.
+    pub born: u32,
+}
+
+impl SavedCard {
+    /// Ticks it stays.
+    pub fn ticks(&self) -> u32 {
+        if self.ok { SAVED_TICKS } else { SAVE_FAILED_TICKS }
+    }
+}
 
 /// A toast on screen.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -256,6 +277,8 @@ pub struct ViewBuffers {
     pub hud: HudView,
     pub window: WindowView,
     pub dialogue: Option<DialogueView>,
+    /// The save card, while it shows.
+    pub saved: Option<SavedCard>,
     /// The hostile she is fighting, and the last tick a blow passed between them.
     fighting: Option<(jane_sim::UnitId, u32)>,
     scratch: String,
@@ -336,12 +359,20 @@ impl ViewBuffers {
                 _ => {}
             }
         }
-        // Toasts age out; the banner comes down.
+        // The save card goes; toasts age out; the banner comes down.
+        if self.saved.as_ref().is_some_and(|c| now.wrapping_sub(c.born) >= c.ticks()) {
+            self.saved = None;
+        }
         self.hud.toasts.retain(|t| now.wrapping_sub(t.born) < TOAST_TICKS);
         if self.hud.banner.is_some_and(|(_, t)| now.wrapping_sub(t) >= BANNER_TICKS) {
             self.hud.banner = None;
         }
         self.read(v);
+    }
+
+    /// Puts the save card up: `ok`, the world written down; else what went wrong.
+    pub fn saved(&mut self, text: &str, ok: bool) {
+        self.saved = Some(SavedCard { text: text.to_owned(), ok, born: self.tick });
     }
 
     /// Puts a toast up, or bumps the one already saying it.

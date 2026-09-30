@@ -14,7 +14,6 @@ use crate::canvas::{Canvas, FLAT, Z};
 use crate::palette::{Ix, Ramp, Tone};
 
 pub(crate) fn draw(c: &mut Canvas, k: &Kit, state: State) -> Option<Stand> {
-    let _ = state;
     let (w, h, foot) = (k.w, k.h, k.foot());
     Some(match k.look.shape {
         "apple_tree" | "dry_tree" => {
@@ -37,8 +36,9 @@ pub(crate) fn draw(c: &mut Canvas, k: &Kit, state: State) -> Option<Stand> {
             }
             let crown = Rect::new(cx - 13, (foot - 44).max(0), 26, 26);
             crown_volume(c, k, crown);
-            // Apples, a few, lit.
-            for i in 0..6 {
+            // Apples, a few, lit; none on a tree she has picked (`open`) until it bears again.
+            let apples = if state == State::Open { 0 } else { 6 };
+            for i in 0..apples {
                 let hh = parts::hash(k.seed, i, 33);
                 let (x, y) = (
                     crown.x + 4 + (hh % (crown.w - 8) as u32) as i32,

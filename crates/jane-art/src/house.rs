@@ -96,7 +96,10 @@ pub fn render(look: &HouseLook, sprite: SpriteId, seed: u32) -> Result<SpriteSet
 fn storey(style: HouseStyle) -> i32 {
     match style {
         HouseStyle::Barn => 36,
-        HouseStyle::Shed | HouseStyle::Hut => 22,
+        // A shed's boards stand a door's height, near hers: it reads as a hut of planks, not a
+        // tent (the owner, 2026-10-01).
+        HouseStyle::Shed => 26,
+        HouseStyle::Hut => 22,
         _ => 28,
     }
 }
@@ -118,7 +121,10 @@ fn house(c: &mut Canvas, s: &Stuff, depth: i32, lit: bool) {
     // ridge (three fifths of it, facing the viewer and the sun), its back slope beyond, seen
     // foreshortened and in shade.
     let back = (eave - depth).max(2);
-    let slope = (eave - back) * 3 / 5;
+    // A shed's roof is one pent of tin falling from the back to the front, square at its ends:
+    // no ridge, no hips, nothing down to the ground.
+    let shed = look.style == HouseStyle::Shed;
+    let slope = if shed { eave - back } else { (eave - back) * 3 / 5 };
     let ridge = eave - slope;
     c.ao_contact(Rect::new(x0 - 2, foot - 3, x1 - x0 + 5 + lean, 6), 1);
     wall(c, s, Rect::new(x0, eave + 1, x1 - x0 + 1, wall_h));
@@ -129,7 +135,7 @@ fn house(c: &mut Canvas, s: &Stuff, depth: i32, lit: bool) {
     // farmhouse turns a gable to the road over its door; thatch, reed, tile and tin are hipped
     // (the ends slope back; thatch soft at its corners).
     let thatched = matches!(look.roof, Roofing::Thatch | Roofing::Reed);
-    if look.roof == Roofing::Slate {
+    if look.roof == Roofing::Slate || shed {
         barges(c, s, x0 - 2, x1 + 2, back, eave + 2);
         if matches!(look.style, HouseStyle::Cottage | HouseStyle::Farmhouse | HouseStyle::Inn) && !look.dormers {
             front_gable(c, s, (x0 + x1) / 2 + door_offset(s), eave, ridge, lit);
@@ -142,7 +148,9 @@ fn house(c: &mut Canvas, s: &Stuff, depth: i32, lit: bool) {
             dormer(c, s, dx, ridge + slope / 2, lit);
         }
     }
-    chimney(c, s, x0 + (x1 - x0) * if s.seed & 1 == 0 { 1 } else { 4 } / 5, ridge);
+    if !shed {
+        chimney(c, s, x0 + (x1 - x0) * if s.seed & 1 == 0 { 1 } else { 4 } / 5, ridge);
+    }
     if lean > 0 {
         let lx = x1 + 3;
         let lh = wall_h * 2 / 3;
@@ -203,6 +211,9 @@ fn openings(c: &mut Canvas, s: &Stuff, x0: i32, x1: i32, eave: i32, foot: i32, l
     let look = &s.look;
     let st = storey(look.style);
     let mid = (x0 + x1) / 2 + door_offset(s);
+    if look.style == HouseStyle::Shed {
+        return shed_front(c, s, (x0, x1), mid, foot, lit);
+    }
     let barn = look.style == HouseStyle::Barn;
     // The door (a barn's great doors).
     let (dw, dh) = if barn { (22, 24) } else { (8, 14.min(st - 4)) };
@@ -237,6 +248,40 @@ fn openings(c: &mut Canvas, s: &Stuff, x0: i32, x1: i32, eave: i32, foot: i32, l
         }
     }
     let _ = eave;
+}
+
+/// A shed's front: a ledged and braced plank door with a hasp and a padlock on it (it is always
+/// locked: "Padlocked. The padlock is new and the shed is not."), and one small window.
+fn shed_front(c: &mut Canvas, s: &Stuff, (x0, x1): (i32, i32), mid: i32, foot: i32, lit: bool) {
+    let st = storey(s.look.style);
+    let (dw, dh) = (10, st - 5);
+    let door = Rect::new(mid - dw / 2, foot - dh + 1, dw, dh);
+    c.fill_normal(Rect::new(door.x - 1, door.y - 1, door.w + 2, door.h + 1), s.trim.at(Tone::Deep), parts::south(), 4);
+    planks(c, door, s.door, 3, false, false, s.seed ^ 3, 5);
+    // The ledges across it and the brace between them, each lit along its top.
+    for y in [door.y + 3, door.bottom() - 5] {
+        c.fill_normal(Rect::new(door.x, y, door.w, 2), s.door.at(Tone::Base), parts::south(), 6);
+        c.hline(door.x, door.right() - 1, y, s.door.at(Tone::Light), 6);
+    }
+    c.line((door.x + 1, door.bottom() - 6), (door.right() - 2, door.y + 5), s.door.at(Tone::Light), 1, 6);
+    // The hasp over the door's edge onto the frame, and the padlock hung on its staple: brass,
+    // a lit top and the shackle's iron loop.
+    let hy = door.y + dh / 2 - 1;
+    c.fill_normal(Rect::new(door.right() - 4, hy, 6, 2), Ramp::Iron.at(Tone::Base), parts::south(), 7);
+    c.hline(door.right() - 4, door.right() + 1, hy, Ramp::Iron.at(Tone::Light), 7);
+    let lock = Rect::new(door.right() - 1, hy + 3, 4, 4);
+    c.dot(lock.x, hy + 2, Ramp::Iron.at(Tone::Light), 8);
+    c.dot(lock.x + 3, hy + 2, Ramp::Iron.at(Tone::Mid), 8);
+    c.fill_normal(lock, Ramp::Brass.at(Tone::Base), parts::south(), 8);
+    c.hline(lock.x, lock.right() - 1, lock.y, Ramp::Brass.at(Tone::High), 8);
+    c.dot(lock.x + 1, lock.y + 2, Ramp::Brass.at(Tone::Deep), 8);
+    // A plank sill under the door.
+    c.fill_normal(Rect::new(door.x - 1, foot - 1, door.w + 2, 2), s.trim.at(Tone::Base), FLAT, 2);
+    // One small window, on whichever side has the room.
+    let (ww, wh) = (7, 6);
+    let wx =
+        if door.x - x0 >= ww + 8 { x0 + (door.x - x0 - ww) / 2 } else { door.right() + (x1 - door.right() - ww) / 2 };
+    window(c, s, Rect::new(wx, foot - st + 6, ww, wh), lit && !s.look.boarded, 0);
 }
 
 /// A window in its frame: four panes round a cross, a sill; lit, warm and emitting a little

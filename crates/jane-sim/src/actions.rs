@@ -84,13 +84,86 @@ pub fn fact_key(cx: &Ctx<'_>, f: jane_core::action::FactKey) -> FactKey {
 
 /// Every condition holds (each possibly negated).
 pub fn conditions_met(cx: &Ctx<'_>, list: &[Cond]) -> bool {
-    list.iter().all(|c| condition(cx, c.c) != c.not)
+    conditions_hold(&cx.ask(), list)
 }
 
-fn condition(cx: &Ctx<'_>, c: Condition) -> bool {
+/// What a condition reads, and nothing it may change: the world, the zone, who asks, and whom
+/// she is talking to. The sim asks through a [`Ctx`]; a `View` asks too, read only, to say what
+/// a conversation would open on (`View::quest_mark`).
+#[derive(Clone, Copy)]
+pub struct Ask<'a> {
+    pub cat: &'static jane_data::Catalog,
+    pub world: &'a crate::state::GameState,
+    pub zone: &'a crate::state::ZoneState,
+    pub rt: &'a crate::runtime::ZoneRuntime,
+    pub bp: &'a jane_core::Blueprint,
+    pub actor: Option<crate::ids::Seat>,
+    /// Whom she is talking to, as `SpeakerKnows` asks it.
+    pub speaker: Speaker,
+}
+
+impl std::fmt::Debug for Ask<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Ask").field("zone", &self.zone.id).field("actor", &self.actor).finish_non_exhaustive()
+    }
+}
+
+impl<'a> Ask<'a> {
+    fn sym(&self, k: jane_core::Key) -> jane_core::Sym {
+        crate::sym::of_key(k, &self.rt.locals)
+    }
+
+    fn flag(&self, k: FlagKey) -> i32 {
+        self.world.flags.get(&k).copied().unwrap_or(0)
+    }
+
+    fn flag_key(&self, k: jane_core::FlagKey) -> FlagKey {
+        match k {
+            jane_core::FlagKey::Named(n) => FlagKey::Named(self.sym(n)),
+            jane_core::FlagKey::Been(n) => FlagKey::Been(self.sym(n)),
+            jane_core::FlagKey::Dead(n) => FlagKey::Dead(self.sym(n)),
+        }
+    }
+
+    fn fact_key(&self, f: jane_core::action::FactKey) -> FactKey {
+        use jane_core::action::FactKey as C;
+        match f {
+            C::Place(k) => FactKey::Place(self.sym(k)),
+            C::Person(k) => FactKey::Person(self.sym(k)),
+            C::Thing(t) => FactKey::Thing(t),
+            C::Claim(t) => FactKey::Claim(t),
+            C::Route(a, b) => FactKey::Route(self.sym(a), self.sym(b)),
+            C::Danger(k) => FactKey::Danger(self.sym(k)),
+            C::Rumour(s) => FactKey::Rumour(s),
+        }
+    }
+
+    /// A condition list, from the catalog or this zone's blueprint.
+    pub fn conds(&self, r: CondsRef) -> &'a [Cond] {
+        match r {
+            CondsRef::Catalog(_) => self.cat.conds_of(r),
+            CondsRef::Blueprint(_) => self.bp.conds_of(r).unwrap_or(&[]),
+        }
+    }
+
+    /// An action list, from the catalog or this zone's blueprint.
+    pub fn list(&self, r: ListRef) -> &'a [Action] {
+        match r {
+            ListRef::Catalog(_) => self.cat.list(r),
+            ListRef::Blueprint(_) => self.bp.list(r).unwrap_or(&[]),
+        }
+    }
+}
+
+/// Every condition holds (each possibly negated), read only.
+pub fn conditions_hold(a: &Ask<'_>, list: &[Cond]) -> bool {
+    list.iter().all(|c| condition(a, c.c) != c.not)
+}
+
+fn condition(cx: &Ask<'_>, c: Condition) -> bool {
     match c {
         Condition::Flag { key, test } => {
-            let v = flag(cx, flag_key(cx, key));
+            let v = cx.flag(cx.flag_key(key));
             match test {
                 FlagTest::Eq(n) => v == n,
                 FlagTest::Min(n) => v >= n,
@@ -113,10 +186,10 @@ fn condition(cx: &Ctx<'_>, c: Condition) -> bool {
             let s = cx.sym(k);
             match cx.rt.unit_names.get(&s).and_then(|&id| cx.zone.unit(id)) {
                 Some(u) => !u.alive,
-                None => flag(cx, FlagKey::Dead(s)) != 0,
+                None => cx.flag(FlagKey::Dead(s)) != 0,
             }
         }
-        Condition::Knows(f) => journal::knows(cx.world, fact_key(cx, f)),
+        Condition::Knows(f) => journal::knows(cx.world, cx.fact_key(f)),
         Condition::Heard(t) => journal::heard(cx.world, t),
         // Whoever she is talking to has heard of it by now (§4.6.e); false outside a conversation.
         Condition::SpeakerKnows(s) => crate::living::speaker_knows(cx, s),

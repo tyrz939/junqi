@@ -97,6 +97,22 @@ pub fn hung(look: &PropLook) -> bool {
     look.family == PropFamily::SmallThing && HUNG.contains(&look.shape)
 }
 
+/// A top a thing can stand on (a table, a desk, a workbench, a counter, an altar), `fh` cells
+/// deep: `(front, depth)`, the rows from the foot up to the top's front edge and the rows of
+/// the top behind it, as its painter draws them (`furniture::draw`). A thing whose footprint
+/// lies on it is drawn standing there (`jane_present::props`: Julie's fruit bowl on her table).
+pub fn surface(look: &PropLook, fh: i32) -> Option<(i32, i32)> {
+    if look.family != PropFamily::Furniture {
+        return None;
+    }
+    match look.shape {
+        "table" | "desk" | "workbench" => Some((furniture::TABLE_LEG + 1, furniture::table_depth(fh))),
+        "counter" => Some((furniture::COUNTER_FACE, furniture::counter_depth(fh, furniture::COUNTER_FACE))),
+        "altar" => Some((furniture::ALTAR_FACE, furniture::counter_depth(fh, furniture::ALTAR_FACE))),
+        _ => None,
+    }
+}
+
 /// The frames a look promises: its bases, then `On` and `Open` as its states list them.
 pub fn frame_ids(look: &PropLook) -> Vec<FrameId> {
     let mut v = vec![FrameId::Base];
@@ -111,6 +127,13 @@ pub fn frame_ids(look: &PropLook) -> Vec<FrameId> {
     }
     if look.states.contains(&PropState::Open) {
         v.push(FrameId::Open);
+        // Each base its own open frame, so what is opened keeps the look it had.
+        if look.vary >= 2 {
+            v.push(FrameId::Open2);
+        }
+        if look.vary >= 3 {
+            v.push(FrameId::Open3);
+        }
     }
     v
 }
@@ -145,6 +168,8 @@ pub fn render(look: &PropLook, sprite: SpriteId, seed: u32) -> Result<SpriteSet,
         let (state, s) = match id {
             FrameId::On => (State::On, seed),
             FrameId::Open => (State::Open, seed),
+            FrameId::Open2 => (State::Open, seed.wrapping_add(1)),
+            FrameId::Open3 => (State::Open, seed.wrapping_add(2)),
             FrameId::Base2 => (State::Base, seed.wrapping_add(1)),
             FrameId::Base3 => (State::Base, seed.wrapping_add(2)),
             _ => (State::Base, seed),

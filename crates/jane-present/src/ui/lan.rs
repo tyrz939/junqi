@@ -19,6 +19,14 @@ use crate::ui::style::{self, argb};
 /// The seats' coats, seat by seat (ART.md: the look's own plum, then `person::SEAT_COATS`).
 pub const COATS: [Ramp; 4] = [Ramp::ClothPlum, Ramp::ClothTeal, Ramp::ClothMoss, Ramp::ClothOchre];
 
+/// Each coat as the table says it ("Saved by the teal coat").
+pub const COAT_NAMES: [&str; 4] = ["plum", "teal", "moss", "ochre"];
+
+/// Seat `i`'s coat by name.
+pub fn coat_name(i: usize) -> &'static str {
+    COAT_NAMES.get(i).copied().unwrap_or("stranger's")
+}
+
 /// What the Host screen asks for.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct HostChoice {

@@ -403,8 +403,16 @@
   },
   "bed": {
     "speaker": "Bed",
-    "start": [{ "node": "bed" }],
+    "start": [{ "when": [{ "if": "night" }], "node": "bed" }, { "node": "day" }],
     "nodes": {
+      "day": {
+        "lines": ["Not tired. The day's written down all the same."],
+        "actions": [{ "do": "rest" }],
+        "options": [
+          { "label": "Lie down anyway", "actions": [{ "do": "rest", "until": 6 }], "goto": "slept" },
+          { "label": "Leave it" }
+        ]
+      },
       "bed": {
         "lines": ["The bed has been made, recently and badly, by someone without the hands for it."],
         "options": [

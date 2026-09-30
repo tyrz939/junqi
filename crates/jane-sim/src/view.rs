@@ -588,3 +588,204 @@ impl<'a> View<'a> {
         self.state.hour() as u8
     }
 }
+
+/// Which mark a person shows over her head, for one seat (PRESENTATION.md §3.8): the owner's
+/// only markers in the world. Presentation draws it; the sim only says which.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum QuestMark {
+    /// Talking to them now would give her a quest she has not had.
+    Offer,
+    /// A quest of hers is ready, and talking to them now would take it back.
+    HandIn,
+}
+
+/// Conversations followed into (`Talk`) and lists nested (`If`, `Send`) before giving up.
+const MARK_DEPTH: u8 = 6;
+
+/// The quest marks (PRESENTATION.md §3.8): what a conversation would open on for this seat,
+/// asked read only, as `dialogue::start` asks it.
+impl View<'_> {
+    /// The mark over `unit` for this seat: a hand-in over an offer. Asked as she would ask it
+    /// now: the tree's start rules with her as the actor and the person as the speaker, then
+    /// every node that start can reach, each `If` taken the way it goes now. A quest hidden
+    /// until something happens (a start rule on a flag) shows nothing until it has. `None` for
+    /// someone with nothing to say, hostile, hidden or dead.
+    pub fn quest_mark(&self, unit: &Unit) -> Option<QuestMark> {
+        let cat = jane_data::catalog();
+        if !unit.alive || unit.hidden || unit.faction != jane_data::Faction::Friendly {
+            return None;
+        }
+        let tree = cat.combat.unit(unit.def).talk?;
+        let ask = crate::actions::Ask {
+            cat,
+            world: self.state,
+            zone: self.zone,
+            rt: self.rt,
+            bp: self.bp,
+            actor: Some(self.seat),
+            speaker: Speaker::Unit(unit.id),
+        };
+        let mut found = (false, false);
+        self.mark_tree(&ask, tree, 0, &mut found);
+        match found {
+            (_, true) => Some(QuestMark::HandIn),
+            (true, false) => Some(QuestMark::Offer),
+            _ => None,
+        }
+    }
+
+    /// Every person of her zone awake and in the world with a mark for this seat, in id order.
+    pub fn quest_marks(&self) -> impl Iterator<Item = (UnitId, QuestMark)> + '_ {
+        self.zone.units.iter().filter(|u| u.awake).filter_map(|u| self.quest_mark(u).map(|m| (u.id, m)))
+    }
+
+    fn mark_tree(&self, ask: &crate::actions::Ask<'_>, tree: DialogueId, depth: u8, found: &mut (bool, bool)) {
+        let t = ask.cat.story.dialogue(tree);
+        let Some(entry) =
+            t.start.iter().find(|s| s.when.is_none_or(|w| crate::actions::conditions_hold(ask, ask.conds(w))))
+        else {
+            return;
+        };
+        // The nodes that start reaches, by `goto` and by either option.
+        let mut seen = vec![false; t.nodes.len()];
+        let mut todo = vec![entry.node];
+        while let Some(i) = todo.pop() {
+            let Some(slot) = seen.get_mut(usize::from(i)) else { continue };
+            if std::mem::replace(slot, true) {
+                continue;
+            }
+            let n = t.node(i);
+            if let Some(l) = n.actions {
+                self.mark_list(ask, l, depth, found);
+            }
+            todo.extend(n.goto);
+            for o in n.options {
+                if let Some(l) = o.actions {
+                    self.mark_list(ask, l, depth, found);
+                }
+                todo.extend(o.goto);
+            }
+        }
+    }
+
+    fn mark_list(&self, ask: &crate::actions::Ask<'_>, l: ListRef, depth: u8, found: &mut (bool, bool)) {
+        if depth > MARK_DEPTH {
+            return;
+        }
+        for a in ask.list(l) {
+            match *a {
+                Action::Quest(q) => {
+                    found.0 |= crate::quests::active(self.state, q).is_none() && !crate::quests::done(self.state, q);
+                }
+                Action::HandIn(q) => found.1 |= crate::quests::ready(self.state, q),
+                Action::If { when, then, els } => {
+                    if crate::actions::conditions_hold(ask, ask.conds(when)) {
+                        self.mark_list(ask, then, depth + 1, found);
+                    } else if let Some(e) = els {
+                        self.mark_list(ask, e, depth + 1, found);
+                    }
+                }
+                Action::Send { then: Some(t), .. } => self.mark_list(ask, t, depth + 1, found),
+                Action::Talk(t) => self.mark_tree(ask, t, depth + 1, found),
+                _ => {}
+            }
+        }
+    }
+}
+
+/// What her active quests still want (PRESENTATION.md §3.8, the quest sparkles): the items a
+/// step asks her to hold and does not yet have enough of, and the places a step asks her to
+/// have been and she has not. Read through [`View::quest_wants`], once a tick.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct QuestWants {
+    pub items: Vec<ItemId>,
+    pub places: Vec<Sym>,
+}
+
+impl QuestWants {
+    pub fn is_empty(&self) -> bool {
+        self.items.is_empty() && self.places.is_empty()
+    }
+}
+
+/// The quest sparkles (PRESENTATION.md §3.8): what a step still wants, and whether a prop or a
+/// thing lying on the ground is what it wants. Read only.
+impl<'a> View<'a> {
+    /// What her active quests' unfinished steps want, for this seat.
+    pub fn quest_wants(&self) -> QuestWants {
+        let mut w = QuestWants::default();
+        let cat = jane_data::catalog();
+        for q in self.quests() {
+            for (i, r) in cat.story.quest(q.quest).requirements.iter().enumerate() {
+                if q.count(i) >= r.qty {
+                    continue;
+                }
+                match r.target {
+                    jane_data::ReqTarget::Acquire(item) if !w.items.contains(&item) => w.items.push(item),
+                    jane_data::ReqTarget::Location(n) => {
+                        let s = crate::sym::of_name(n);
+                        if !w.places.contains(&s) {
+                            w.places.push(s);
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+        w
+    }
+
+    /// Whether prop `p` is something a step wants her to use, read, take or open: it holds a
+    /// wanted item, or using it or talking to it gives one or marks a wanted place. Hidden and
+    /// emptied things are not.
+    pub fn prop_wanted(&self, w: &QuestWants, p: &'a Prop) -> bool {
+        if w.is_empty() || p.hidden {
+            return false;
+        }
+        if self.prop_loot(p).iter().any(|s| w.items.contains(&s.item)) {
+            return true;
+        }
+        let Some(spawn) = self.prop_spawn(p) else { return false };
+        let does = |a: &Action| match *a {
+            Action::Give(s) => w.items.contains(&s.item),
+            Action::Location(k) => w.places.contains(&self.key_sym(k)),
+            _ => false,
+        };
+        let mut hit = false;
+        if let Some(l) = spawn.use_list {
+            self.visit_list(l, 0, &mut |a| hit |= does(a));
+        }
+        if let (false, Some(t)) = (hit, spawn.talk) {
+            for n in jane_data::catalog().story.dialogue(t).nodes {
+                for l in n.actions.into_iter().chain(n.options.iter().filter_map(|o| o.actions)) {
+                    self.visit_list(l, 0, &mut |a| hit |= does(a));
+                }
+            }
+        }
+        hit
+    }
+
+    /// Whether a thing lying on the ground is an item a step wants.
+    pub fn drop_wanted(&self, w: &QuestWants, d: &Drop) -> bool {
+        w.items.contains(&d.item)
+    }
+
+    fn visit_list(&self, l: ListRef, depth: u8, f: &mut impl FnMut(&Action)) {
+        if depth > MARK_DEPTH {
+            return;
+        }
+        for a in self.list(l) {
+            f(a);
+            match *a {
+                Action::If { then, els, .. } => {
+                    self.visit_list(then, depth + 1, f);
+                    if let Some(e) = els {
+                        self.visit_list(e, depth + 1, f);
+                    }
+                }
+                Action::Send { then: Some(t), .. } => self.visit_list(t, depth + 1, f),
+                _ => {}
+            }
+        }
+    }
+}

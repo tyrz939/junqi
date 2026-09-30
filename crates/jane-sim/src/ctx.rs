@@ -156,6 +156,24 @@ impl Ctx<'_> {
         let p = self.world.player(seat)?;
         (p.zone == self.zone.id && self.zone.unit(p.unit).is_some()).then_some(p.unit)
     }
+
+    /// What a condition reads here: whom the actor is talking to is her conversation's speaker.
+    pub fn ask(&self) -> crate::actions::Ask<'_> {
+        let speaker = self
+            .actor
+            .and_then(|s| self.world.player(s))
+            .and_then(|p| p.dialogue)
+            .map_or(crate::state::Speaker::None, |d| d.speaker);
+        crate::actions::Ask {
+            cat: self.cat,
+            world: self.world,
+            zone: self.zone,
+            rt: self.rt,
+            bp: self.bp,
+            actor: self.actor,
+            speaker,
+        }
+    }
 }
 
 /// The one function that lets go of a unit (§4.2): everyone's target on it is cleared, a unit

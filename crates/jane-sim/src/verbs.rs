@@ -64,6 +64,9 @@ pub fn rest(cx: &mut Ctx<'_>, until: Option<u8>) {
     }
     // To everyone: the world lives on the host's machine, and a guest's rest saves it too.
     cx.emit_all(EventKind::Rest);
+    if let Some(by) = cx.actor {
+        cx.emit_all(EventKind::Rested { by });
+    }
 }
 
 /// Growth by finding: `id` is the jar itself, so a reward paid to four seats is eaten once.

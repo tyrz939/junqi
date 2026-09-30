@@ -24,7 +24,7 @@ prop:cottage_timber 750796c5
 prop:farmhouse 136eaf7b
 prop:inn af2232c6
 prop:reed_hut 0e162d2f
-prop:shed 0bf0019f
+prop:shed e6815c2c
 prop:tale_cottage_boarded 253c912d
 prop:town_steeple f18baae1
 unit:bat 5ad5a50b
@@ -346,7 +346,7 @@ unit:villager_woodcutter#1 e37828e3
 unit:villager_woodcutter#2 1d9e1802
 unit:villager_woodcutter#3 af466cf5
 prop:adit_rock b61306d5
-prop:apple_tree 50d94871
+prop:apple_tree 6da10148
 prop:barrel 66395efd
 prop:bed fa080172
 prop:beehive 784ec324

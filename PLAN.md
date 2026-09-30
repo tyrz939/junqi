@@ -113,7 +113,7 @@ Whole game: three regions, six dungeons, 50–60 quests, roughly 15–25 hours. 
 
 ### 2.5 Harshness
 
-- No fast travel. No map markers beyond what Jane has seen or been told.
+- No fast travel. No map markers beyond what Jane has seen or been told. **The map and the world stay marker-free; people and quest things do not** *(decided 2026-10-01, the owner, built)*: a gold "?" floats over a person with a quest to give her, a "!" over whoever takes a ready one back (the owner's way round; WoW's is the opposite, `!` to take and `?` to hand in, and one pair of constants flips it, `ui::marks::OFFER_GLYPH`/`HAND_IN_GLYPH`), and whatever a step of hers still wants (a prop to use, read, take or open, a thing on the ground) glints like loot until the step is done. A deliberate hint layer, read through the `View` per seat: `PRESENTATION.md` §3.8.
 - **Beds and fires** *(decided, built)*: the game saves only within reach of a bed or a fire, resting at one is the save, and dying wakes you at the last one you used, however far that is. A bed can also sleep the clock to morning. Before the first rest you wake at the Halt fire, the party's from New Game: never resting is never the better plan. Placing fires is therefore level design: the distance between two fires is the length of a run.
 - Bags are 24 slots and stay 24.
 - **Food comes back** *(decided 2026-09-29, built)*: apple trees, windfalls and Julie's pantry and fruit bowl fill again about three game days after they are emptied, a little at a time, so most county deaths are not with an empty bag. Nothing else regrows. `WORLD.md` §4.6.
