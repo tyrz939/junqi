@@ -904,3 +904,45 @@ fn runtime_rebuild_is_invisible_over_a_living_day() {
     }
     assert_eq!(a.state(), b.state());
 }
+
+/// The owner (2026-10-01): the fire by the mine was drawn out while its words said it burned. A
+/// fire's words are chosen by `speakerLit` and its picture by `View::light_showing` (the presenter
+/// draws a prop's lit frame, its flame and its pool by it): the two are one rule, dry and in the
+/// rain, for the fire by the mine mouth on three seeds.
+#[test]
+fn a_fires_words_say_what_it_is_drawn_as_in_the_rain_and_out_of_it() {
+    use common::bot::talk_through;
+    use jane_sim::state::Speaker;
+    let cat = catalog();
+    let douse = cat.story.prop(cat.story.prop_id("campfire").unwrap()).douse.unwrap();
+    for seed in [SEED, 1, 2] {
+        let b = if seed == SEED { bps() } else { Blueprints::build(seed).expect("the seed builds") };
+        let mut s = Sim::new_game_with(b, "Jane");
+        tp(&mut s, ZoneId::County);
+        let fire = prop(&s, "mine_fire");
+        let (fx, fy) = (i32::from(fire.cell.x), i32::from(fire.cell.y));
+        let r = region_ix(s.runtime(ZoneId::County).unwrap().region_at(fx, fy));
+        for wet in [false, true] {
+            if wet {
+                let now = s.state().tick;
+                s.state_mut().weather[r] = sky(WeatherKind::Rain, now);
+                s.state_mut().zone_mut(ZoneId::County).unwrap().wetness[r] = 255;
+                s.step(&StepInput::IDLE);
+            }
+            // Beside it, facing it: west of it, else east.
+            let sides = [(fx - 1, fy + 1, Facing::East), (fx + 2, fy + 1, Facing::West)];
+            let talked = sides.into_iter().any(|(x, y, f)| {
+                place(&mut s, x, y, f);
+                cmd(&mut s, Command::Use);
+                s.view(Seat(0)).unwrap().dialogue().is_some_and(|d| d.speaker == Speaker::Prop(fire.id))
+            });
+            assert!(talked, "seed {seed}: she could not talk to the fire at {fx},{fy}");
+            let v = s.view(Seat(0)).unwrap();
+            let lit = v.light_showing(&prop(&s, "mine_fire")).is_some();
+            assert_eq!(lit, !wet || s.state().zone(ZoneId::County).unwrap().wetness[r] < douse, "seed {seed}");
+            let node = v.dialogue().unwrap().node.expect("its words").id;
+            assert_eq!(node == "fire", lit, "seed {seed}, wet {wet}: it says {node:?} and is drawn lit {lit}");
+            talk_through(&mut s, &[]);
+        }
+    }
+}

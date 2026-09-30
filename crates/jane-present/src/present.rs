@@ -1354,8 +1354,10 @@ impl Present {
         f.passes.push(Pass::Weather(self.atmos.atmos()));
         // Below T2 the parts that do not glow go under the light, so the lamps light the rain.
         self.fx.draw_under_light(f, cam, alpha);
-        // The light pass: on T0 left out when the multiply would change nothing (day is free).
-        if f.tier > Tier::T0 || sky.ambient.iter().any(|&c| c < 254) {
+        // The light pass: on T0 left out when the multiply would change nothing (day is free),
+        // unless a light shows: its flame's glow and its faint pool are this pass's, and a fire
+        // at noon drawn without them read as out (the owner, 2026-10-01).
+        if f.tier > Tier::T0 || sky.ambient.iter().any(|&c| c < 254) || points.len > 0 {
             f.passes.push(Pass::Lights { ambient: sky.ambient, fill: sky.fill, sun: sky.sun, points, casters, blocks });
         }
         // Over what is lit: the marks and splashes on the ground, the fog, the effects in the

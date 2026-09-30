@@ -418,10 +418,14 @@
   },
   "fire": {
     "speaker": "Fire",
-    "start": [{ "node": "fire" }],
+    "start": [{ "when": [{ "if": "speakerLit" }], "node": "fire" }, { "node": "out" }],
     "nodes": {
       "fire": {
-        "lines": ["A fire somebody laid and nobody lit. It catches for you at once.", "Nothing comes near while it burns. If it goes badly out there, this is where you will wake."],
+        "lines": ["A fire somebody laid and left burning low. You feed it from the pile beside it.", "Nothing comes near while it burns. If it goes badly out there, this is where you will wake."],
+        "actions": [{ "do": "rest" }]
+      },
+      "out": {
+        "lines": ["The rain has this fire out: black wet logs in a ring of stones. It will not catch while the rain lasts.", "It keeps nothing off like this. Still, if it goes badly out there, this is where you will wake."],
         "actions": [{ "do": "rest" }]
       }
     }

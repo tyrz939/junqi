@@ -27,30 +27,37 @@ const NIGHT: [i32; 3] = [80, 104, 140];
 /// median against T2's per channel), the day's kept warm rather than the measured mauve (a flat
 /// light has no blue shade beside a gold lit side to read against). T0 multiplies by them (past
 /// 255 through its grade's exposure, `t0_gain`); T1 scales its fill and sun to their luma.
-const KEYS: [(i32, [i32; 3]); 18] = [
+const KEYS: [(i32, [i32; 3]); 21] = [
     (0, NIGHT),
     (HOUR * 9 / 2, [76, 98, 136]),
-    // Dawn (2026-09-29, the owner: sunrises and sunsets somewhat real and beautiful; ART.md
-    // §3.1, warm and cool meet through grey, never mauve): the blue hour, grey-blue, then a
-    // brief deep orange as the sun clears the horizon (5:30), then gold.
-    (HOUR * 21 / 4, [112, 122, 158]),
-    (HOUR * 11 / 2, [160, 150, 150]),
-    (HOUR * 23 / 4, [214, 156, 116]),
-    (HOUR * 25 / 4, [244, 206, 174]),
+    // Dawn and dusk (2026-09-29, the owner: sunrises and sunsets somewhat real and beautiful;
+    // ART.md §3.1, warm and cool meet through grey, never mauve. 2026-10-01, the third playtest:
+    // the darkness sets as the shadows fade, so the light falls in step with the sun's
+    // strength, [`strength`], over the last hour before sunset, and a shadow goes because it is
+    // getting dark, not in a scene still bright). Dawn: the blue hour, grey as the sun clears
+    // the horizon (5:30), a low warmth, then gold as its shadows come on.
+    (HOUR * 21 / 4, [100, 110, 150]),
+    (HOUR * 11 / 2, [114, 116, 128]),
+    (HOUR * 23 / 4, [144, 122, 112]),
+    (HOUR * 6, [184, 144, 118]),
+    (HOUR * 25 / 4, [222, 170, 130]),
+    (HOUR * 13 / 2, [246, 204, 174]),
     (HOUR * 15 / 2, [268, 248, 240]),
     // Noon is white, so a T0 frame at midday needs no light pass (day is free) and only its
     // exposure: T2's noon is about an eighth brighter than the art as drawn.
     (HOUR * 12, [292, 292, 292]),
     (HOUR * 33 / 2, [270, 240, 222]),
     (HOUR * 17, [256, 222, 200]),
-    // Dusk, the same mirrored: gold, deepening; a brief deep orange as the sun goes (18:15);
-    // grey at sunset; then the blue hour.
+    // Dusk, the same mirrored: gold through half past five while the shadows are strong, then
+    // falling with them: a dim gold at six (their strength about half), a last low warmth at a
+    // quarter past (all but gone), grey at sunset, then the blue hour and night.
     (HOUR * 35 / 2, [246, 204, 170]),
-    (HOUR * 18, [228, 174, 130]),
-    (HOUR * 73 / 4, [206, 142, 102]),
-    (HOUR * 37 / 2, [150, 142, 148]),
-    (HOUR * 75 / 4, [116, 124, 162]),
-    (HOUR * 39 / 2, [98, 108, 155]),
+    (HOUR * 71 / 4, [222, 170, 130]),
+    (HOUR * 18, [184, 144, 118]),
+    (HOUR * 73 / 4, [144, 122, 112]),
+    (HOUR * 37 / 2, [114, 116, 128]),
+    (HOUR * 75 / 4, [100, 110, 150]),
+    (HOUR * 39 / 2, [90, 104, 148]),
     (HOUR * 21, NIGHT),
     (HOUR * 24, NIGHT),
 ];
@@ -145,6 +152,32 @@ pub const STRENGTH_KEYS: [(i32, i32); 6] =
 /// The sun's or the moon's umbra high in the sky, of 255 ([`strength`]).
 pub const STRENGTH_HIGH: u8 = 224;
 
+/// How much of the sun's light reaches the ground at `sin_el` (its elevation's sine, Q15), of
+/// 256: all of it while its shadows are strong, and as they fade ([`strength`]) the light goes
+/// with them, on the same keys, so a shadow goes because the dusk has come and at dawn comes on
+/// as the light does (the owner's third playtest, 2026-10-01: shadows gone while the scene was
+/// still bright read wrong).
+pub fn sun_light(sin_el: i32) -> i32 {
+    (i32::from(strength(sin_el)) * 256 / STRENGTH_KEYS[4].1).min(256)
+}
+
+/// How much of a point light's pool shows against `ambient`, the flat light (of 256): a fire at
+/// noon lights barely the ground at its foot (its flame still glows, the emissive), more as the
+/// day goes, and all of it from the blue hour on; the same indoors, by the zone's light. Every
+/// tier scales its lamps by it (the owner's third playtest, 2026-10-01: a fire read as bright
+/// at noon as at night).
+pub fn pool(ambient: Rgb) -> u32 {
+    let l = (u32::from(ambient[0]) * 3 + u32::from(ambient[1]) * 6 + u32::from(ambient[2])) / 10;
+    let span = POOL_DAY_LUMA - POOL_DUSK_LUMA;
+    POOL_DAY + (256 - POOL_DAY) * POOL_DAY_LUMA.saturating_sub(l).min(span) / span
+}
+
+/// [`pool`]'s keys: its least, in full day at [`POOL_DAY_LUMA`] of flat light and brighter,
+/// rising to all of it at [`POOL_DUSK_LUMA`] (the blue hour) and darker.
+const POOL_DAY: u32 = 20;
+const POOL_DAY_LUMA: u32 = 236;
+const POOL_DUSK_LUMA: u32 = 128;
+
 /// The lowest the sun or the moon stands as a shadow's light, [`Angle`] units: 14 degrees, where
 /// a shadow is four heights long ([`crate::shadow::MAX_COT_Q8`]). A body under it (the last hour
 /// before sunset, the moon rising) keeps its colour and its fading strength and lights and
@@ -164,7 +197,7 @@ pub fn diffuse(sun: &mut Directional, cloud: u32) {
 /// in the west, so the warmth stays where the sun went down while the fill turns the rest blue.
 /// Yellow more than orange and not bright: flat ground takes it and the fill at once, and an
 /// orange one over the blue made every lit face lavender.
-const AFTERGLOW: [i32; 3] = [112, 102, 68];
+const AFTERGLOW: [i32; 3] = [84, 76, 50];
 const GLOW: i32 = HOUR * 3 / 4;
 /// The full moon on flat ground.
 const MOON: [i32; 3] = [58, 74, 120];
@@ -281,11 +314,10 @@ pub fn sky(clock: u32, day: u32, indoor: bool, permille: i16, region: Region) ->
     let t = (clock % (24 * HOUR as u32)) as i32;
     let fill = keyed(&FILL_KEYS, clock);
     let sun = if let Some((az, el, s)) = arc(t, RISE, SET, SUN_TOP) {
-        // Warm and low toward the horizon, white overhead; its deep orange held to about 3 degrees
-        // (a quarter past six) so the horizon moment glows on every tier, then gone as it touches
-        // the horizon (it faded from 6 degrees, and T2 never showed the orange).
+        // Warm and low toward the horizon, white overhead; and its light fading as its shadows
+        // do ([`sun_light`]): the dusk darkens because the sun goes, on T2 as on T0 and T1.
         let colour = mix(SUN_LOW, SUN_HIGH, s, 20000);
-        let colour = mix([0; 3], colour, s, 1600);
+        let colour = mix([0; 3], colour, sun_light(s), 256);
         Some(Directional {
             azimuth: az,
             elevation: Angle(el.0.max(LOWEST)),
@@ -300,10 +332,11 @@ pub fn sky(clock: u32, day: u32, indoor: bool, permille: i16, region: Region) ->
         // fade with its light; a broad glow high over the west, so they are short and soft.
         let (into, left) = (t - SET, SET + GLOW - t);
         let rise = (into * 4).min(left * 4 / 3).min(GLOW);
+        // Its light rises out of the dark the sun left as its shadows do, and fades with them.
         Some(Directional {
             azimuth: Angle((deg(180) + deg(16) / 4) as u16),
             elevation: Angle(deg(GLOW_ELEVATION) as u16),
-            colour: mix([0; 3], AFTERGLOW, left, GLOW).map(|c| c.clamp(0, 255) as u8),
+            colour: mix([0; 3], AFTERGLOW, rise, GLOW).map(|c| c.clamp(0, 255) as u8),
             // A glow over a broad band of sky: its shadows are faint and wide.
             spread: deg(7) as u16,
             strength: (i32::from(GLOW_STRENGTH) * rise / GLOW) as u8,
@@ -462,6 +495,42 @@ mod tests {
         // The afterglow takes over from nothing, peaks faint, and fades with its light.
         let glow = |m: i32| sky((SET + m * 120) as u32, 0, false, 1000, Region::Lowfields).sun.unwrap().strength;
         assert!(glow(0) < FAINTEST && glow(12) > glow(1) && glow(12) <= GLOW_STRENGTH && glow(44) < glow(12));
+    }
+
+    #[test]
+    fn the_dark_sets_as_the_shadows_fade_and_lifts_as_they_come() {
+        let luma = |c: [u8; 3]| (u32::from(c[0]) * 3 + u32::from(c[1]) * 6 + u32::from(c[2])) / 10;
+        let flat = |h: i32, m: i32| luma(ambient((h * HOUR + m * 120) as u32, false, 1000));
+        let sun = |h: i32, m: i32| sky((h * HOUR + m * 120) as u32, 0, false, 1000, Region::Lowfields).sun.unwrap();
+        let lit = |h: i32, m: i32| sun(h, m).colour.iter().map(|&c| u32::from(c)).sum::<u32>();
+        // Bright while the shadows are strong (half past five), then falling with them: by six,
+        // shadows at half strength, the light has lost about a third; by a quarter past, the
+        // shadows all but gone, half; the blue hour at a quarter to seven, a little over night.
+        assert!(flat(17, 30) > 200, "{}", flat(17, 30));
+        assert!(flat(17, 45) < flat(17, 30) - 20 && flat(18, 0) < 160 && flat(18, 15) < 135, "{}", flat(18, 0));
+        assert!(flat(18, 45) < 120 && flat(18, 45) > flat(0, 0), "{} {}", flat(18, 45), flat(0, 0));
+        // The sun's own light (T2's) goes with its shadows, not after them.
+        assert!(lit(17, 30) > 400 && lit(18, 0) * 2 < lit(17, 30) + 60 && lit(18, 15) < 60, "{}", lit(18, 0));
+        // Dawn the same, mirrored.
+        for (dusk, dawn) in [((17, 45), (6, 15)), ((18, 0), (6, 0)), ((18, 15), (5, 45)), ((18, 45), (5, 15))] {
+            let (a, b) = (flat(dusk.0, dusk.1), flat(dawn.0, dawn.1));
+            assert!(a.abs_diff(b) <= 6, "dusk {dusk:?} {a} against dawn {dawn:?} {b}");
+        }
+        // Warm into cool through grey, never mauve: red over blue no further than green is.
+        for m in (0..=120).step_by(5) {
+            let c = ambient((17 * HOUR + 30 * 120 + m * 120) as u32, false, 1000);
+            assert!(!(c[0] > c[1] + 4 && c[2] > c[1] + 4), "17:30 + {m}: {c:?}");
+        }
+    }
+
+    #[test]
+    fn a_fires_pool_shows_against_the_dark_not_the_day() {
+        let at = |h: i32, m: i32| pool(ambient((h * HOUR + m * 120) as u32, false, 1000));
+        assert!(at(12, 0) <= 24, "a fire at noon: {}", at(12, 0));
+        assert!(at(12, 0) < at(17, 30) && at(17, 30) < at(18, 0) && at(18, 0) < at(18, 30));
+        assert_eq!((at(18, 45), at(0, 0)), (256, 256));
+        // Indoors by the zone's light: a dim mine's lamps show whole.
+        assert_eq!(pool(ambient(0, true, 160)), 256);
     }
 
     #[test]

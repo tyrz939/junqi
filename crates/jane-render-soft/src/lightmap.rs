@@ -71,10 +71,9 @@ impl LightMap {
         self.own.resize(n * self.own_of.len(), [0; 3]);
         self.total.clear();
         self.total.resize(n, base);
-        // A pool shows against the dark: by day it adds a little, at night all of it.
-        // (The night's flat light is T2's since the tiers were made one look, 2026-09-27: brighter
-        // than it was, so the pool is measured against 330.)
-        let dark = 330u32.saturating_sub(ambient.iter().map(|&c| u32::from(c)).sum::<u32>() / 3).min(220);
+        // A pool shows against the dark: by day it adds a little, at night all of it, by the
+        // rule every tier keeps (`light::pool`).
+        let dark = jane_present::light::pool(ambient);
         self.cells.clear();
         self.cells.resize(n, base);
         for (li, l) in lights.iter().enumerate() {
@@ -85,7 +84,7 @@ impl LightMap {
             }
             let r2 = (r * r) as u32;
             // Flame light leans warm, as on T2: a yellow lamp on green grass is not lime.
-            let [cr, cg, cb] = l.colour.map(|c| (u32::from(c) * GAIN * dark / 220) >> 8);
+            let [cr, cg, cb] = l.colour.map(|c| (u32::from(c) * GAIN * dark / 256) >> 8);
             let col = [cr, cg * 13 / 16, cb * 10 / 16];
             // A spot lights its cone alone (a sentry's eye, a lit window's spill), as on T1 and
             // T2: a cell whose direction from the light is further round than its half-angle.

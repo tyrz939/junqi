@@ -410,6 +410,18 @@ fn play(bps: Blueprints, o: &Opts, tier: Tier) -> Result<(Tap, Present, u32), St
     if let Some(k) = o.weather {
         let wet = if matches!(k, jane_present::WeatherKind::Rain | jane_present::WeatherKind::Storm) { 255 } else { 0 };
         present.atmos_mut().force(Some((k, wet)));
+        // The sim's sky and ground too, so what the rain puts out (a campfire's `douse`) is out
+        // in the frame as it is in the game: a frame never draws a fire lit that the sim has out.
+        if wet > 0 {
+            use jane_sim::state::{WeatherKind as Sky, WeatherState};
+            let kind = if matches!(k, jane_present::WeatherKind::Storm) { Sky::Storm } else { Sky::Rain };
+            let now = host.sim.state().tick;
+            let st = host.sim.state_mut();
+            st.weather = st.weather.map(|_| WeatherState { kind, since: now, until: jane_core::Tick(u32::MAX) });
+            if let Some(z) = st.zone_mut(jane_core::ZoneId::County) {
+                z.wetness = z.wetness.map(|_| 255);
+            }
+        }
     }
     for (k, v) in &o.rows {
         if !present.atmos_mut().features.set(tier, k, v) {

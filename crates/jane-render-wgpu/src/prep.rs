@@ -346,8 +346,10 @@ impl Prep {
                 }
                 // Replaced by the shadow maps at T2 (§1.3 `silhouettes`).
                 Pass::Silhouettes { .. } => {}
-                Pass::Lights { fill, sun, points, .. } => {
+                Pass::Lights { ambient, fill, sun, points, .. } => {
                     sky = Some((fill, sun));
+                    // As much of each pool as shows against the sky's light (`light::pool`).
+                    let pool = jane_present::light::pool(ambient) as f32 / 256.0;
                     for l in frame.lights_in(points).iter().take(MAX_LIGHTS) {
                         let (dir, cone) = match l.kind {
                             LightKind::Point => ((0.0, 0.0), -2.0),
@@ -365,7 +367,7 @@ impl Prep {
                         // brightness, or the grass it stands on would swallow its pool.
                         let [r, gg, b] = [r, gg * 0.82, b * 0.6];
                         let luma = 0.2126 * r + 0.7152 * gg + 0.0722 * b;
-                        let k = POINT_GAIN * (MIN_LUMA / luma.max(0.01)).clamp(1.0, 1.8);
+                        let k = POINT_GAIN * (MIN_LUMA / luma.max(0.01)).clamp(1.0, 1.8) * pool;
                         let [r, gg, b] = [r * k, gg * k, b * k];
                         f32s(&mut self.lights, &[r, gg, b, f32::from(l.size)]);
                         // w: 0 when it casts nothing, else one more than its holder's id (1: none),
