@@ -16,18 +16,51 @@ use jane_core::{CellIx, Lookup, Rect, Tile};
 pub const OUTSIDE: u8 = F_SOLID | F_BLOCK_LOS;
 const KEEP_ON_TILE_CHANGE: u8 = jane_core::tile::KEEP_ON_TILE_CHANGE;
 
+/// What feet meet in one cell (`ZoneGrid::feet_meet`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Meets<'a> {
+    Open,
+    /// Terrain, the grid's edge, or a prop solid to its cell's edges.
+    Whole,
+    /// Props' feet over part of it: a row of sixteen bits (bit `i` = sixteenth `i` from the
+    /// west) for each sixteenth of the cell from the north.
+    Part(&'a [u16; 16]),
+}
+
 #[derive(Clone, Debug)]
 pub struct ZoneGrid {
     tiles: Grid<Tile>,
     flags: Grid<u8>,
     occ: Lookup<CellIx, u16>,
+    /// The cells a solid prop stamps but whose feet (`PropDef::solid_parts`) cover only part of:
+    /// what of each is solid to feet, in sixteenths. A cell stamped with no entry is solid whole.
+    /// Paths, sight and the solver read the cell; only a moving body reads this.
+    parts: Lookup<CellIx, [u16; 16]>,
 }
 
 impl ZoneGrid {
     /// From tiles; flags are the tiles' own, with nothing stamped and nobody standing.
     pub fn new(tiles: Grid<Tile>) -> Self {
         let flags = Grid::from_vec(tiles.w(), tiles.h(), tiles.as_slice().iter().map(|t| t.flags()).collect());
-        Self { tiles, flags, occ: Lookup::with_capacity(256) }
+        Self { tiles, flags, occ: Lookup::with_capacity(256), parts: Lookup::with_capacity(256) }
+    }
+
+    /// What feet meet in cell `(x, y)`: the whole cell (terrain, outside, a prop solid to its
+    /// edges), part of it (props' feet), or nothing.
+    #[inline]
+    pub fn feet_meet(&self, x: i32, y: i32) -> Meets<'_> {
+        if !self.inside(x, y) {
+            return Meets::Whole;
+        }
+        let i = self.ix(x, y);
+        let f = *self.flags.at(i);
+        if f & F_SOLID != 0 {
+            Meets::Whole
+        } else if f & F_PROP_SOLID != 0 {
+            self.parts.get(&i).map_or(Meets::Whole, Meets::Part)
+        } else {
+            Meets::Open
+        }
     }
 
     pub fn w(&self) -> u32 {
@@ -103,6 +136,8 @@ impl ZoneGrid {
                 if let Some(f) = self.flags.get_mut(x, y) {
                     *f &= keep;
                 }
+                let i = self.ix(x, y);
+                self.parts.remove(&i);
             }
         }
     }
@@ -112,9 +147,10 @@ impl ZoneGrid {
         for f in self.flags.as_mut_slice() {
             *f &= keep;
         }
+        self.parts.clear();
     }
 
-    /// Stamp a solid prop's footprint (clipped).
+    /// Stamp a solid prop's footprint (clipped), solid to feet whole.
     pub fn stamp_prop(&mut self, r: Rect, block_los: bool) {
         let bits = F_PROP_SOLID | if block_los { F_PROP_LOS } else { 0 };
         let Some(r) = r.intersect(self.flags.bounds()) else { return };
@@ -123,6 +159,36 @@ impl ZoneGrid {
                 if let Some(f) = self.flags.get_mut(x, y) {
                     *f |= bits;
                 }
+                let i = self.ix(x, y);
+                self.parts.remove(&i);
+            }
+        }
+    }
+
+    /// Stamp a solid prop's footprint (clipped) whose feet are `parts`: rects in sixteenths of a
+    /// cell on the grid (a cell's `x * 16`). The cells are solid as [`ZoneGrid::stamp_prop`]'s
+    /// are; feet meet only the parts. A cell another prop already holds whole stays whole.
+    pub fn stamp_prop_parts(&mut self, r: Rect, block_los: bool, parts: &[Rect; 3]) {
+        let bits = F_PROP_SOLID | if block_los { F_PROP_LOS } else { 0 };
+        let Some(r) = r.intersect(self.flags.bounds()) else { return };
+        for y in r.y..r.bottom() {
+            for x in r.x..r.right() {
+                let i = self.ix(x, y);
+                let f = self.flags.at_mut(i);
+                let whole = *f & F_PROP_SOLID != 0 && !self.parts.contains(&i);
+                *f |= bits;
+                if whole {
+                    continue;
+                }
+                let mut m = self.parts.get(&i).copied().unwrap_or([0; 16]);
+                let cell = Rect::new(x * 16, y * 16, 16, 16);
+                for p in parts.iter().filter_map(|p| p.intersect(cell)) {
+                    let row = (((1u32 << p.w) - 1) << (p.x - cell.x)) as u16;
+                    for sy in p.y..p.bottom() {
+                        m[(sy - cell.y) as usize] |= row;
+                    }
+                }
+                self.parts.insert(i, m);
             }
         }
     }

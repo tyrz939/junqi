@@ -471,11 +471,6 @@ impl ZoneRuntime {
         Rect::new(i32::from(p.cell.x), i32::from(p.cell.y), i32::from(def.w), i32::from(def.h))
     }
 
-    /// What a solid prop blocks: the front rows of its footprint (`PropDef::solid_rect`).
-    fn solid_rect(p: &crate::state::Prop) -> Rect {
-        jane_data::catalog().story.prop(p.def).solid_rect(i32::from(p.cell.x), i32::from(p.cell.y))
-    }
-
     /// `solid` or `hidden` changed on this prop: its footprint is re-stamped at housekeeping.
     pub fn touch_prop(&mut self, zone: &ZoneState, ix: PropIx) {
         self.props_dirty.push(Self::footprint(&zone.props[ix as usize]));
@@ -499,24 +494,22 @@ impl ZoneRuntime {
     /// Re-stamp the prop flags over one rect of cells from the props as they stand
     /// (`runtime.ts restampCells`).
     pub fn restamp_cells(&mut self, zone: &ZoneState, r: Rect, scratch: &mut Vec<PropIx>) {
-        let cat = jane_data::catalog();
         self.grid.clear_prop_flags_in(r);
         self.props.query(r.x, r.y, r.right() - 1, r.bottom() - 1, scratch);
         for &ix in scratch.iter() {
             let p = &zone.props[ix as usize];
             if p.solid && !p.hidden {
-                self.grid.stamp_prop(Self::solid_rect(p), cat.story.prop(p.def).block_los);
+                stamp(&mut self.grid, p);
             }
         }
     }
 
     /// Re-stamp every solid prop: zone entry, load, and whoever set `props_dirty_all`.
     pub fn restamp_all(&mut self, zone: &ZoneState) {
-        let cat = jane_data::catalog();
         self.grid.clear_prop_flags();
         for p in &zone.props {
             if p.solid && !p.hidden {
-                self.grid.stamp_prop(Self::solid_rect(p), cat.story.prop(p.def).block_los);
+                stamp(&mut self.grid, p);
             }
         }
         self.props_dirty_all = false;
@@ -530,7 +523,6 @@ impl ZoneRuntime {
             self.restamp_all(zone);
             return;
         }
-        let cat = jane_data::catalog();
         let mut i = 0;
         while i < self.props_dirty.len() {
             let r = self.props_dirty[i];
@@ -540,7 +532,7 @@ impl ZoneRuntime {
             for &ix in scratch.iter() {
                 let p = &zone.props[ix as usize];
                 if p.solid && !p.hidden {
-                    self.grid.stamp_prop(Self::solid_rect(p), cat.story.prop(p.def).block_los);
+                    stamp(&mut self.grid, p);
                 }
             }
         }
@@ -561,6 +553,20 @@ impl ZoneRuntime {
     pub fn mark(&self, s: Sym) -> Option<Mark> {
         self.marks.get(&s).copied()
     }
+}
+
+/// Stamp a solid prop: its `base` rows (`PropDef::solid_rect`) for paths, sight and the solver,
+/// and where its look meets the ground (`PropDef::solid_parts`) for feet.
+fn stamp(grid: &mut ZoneGrid, p: &crate::state::Prop) {
+    let def = jane_data::catalog().story.prop(p.def);
+    let (x, y) = (i32::from(p.cell.x), i32::from(p.cell.y));
+    let cells = def.solid_rect(x, y);
+    if def.feet.is_none() {
+        grid.stamp_prop(cells, def.block_los);
+        return;
+    }
+    let parts = def.solid_parts().map(|r| Rect::new(r.x + x * 16, r.y + y * 16, r.w, r.h));
+    grid.stamp_prop_parts(cells, def.block_los, &parts);
 }
 
 /// The cell of a position, as a flat index into a `w`-wide grid.

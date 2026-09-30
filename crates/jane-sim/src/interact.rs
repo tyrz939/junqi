@@ -23,6 +23,7 @@ use jane_core::{Blueprint, Cell, Fx, ItemId, NightLock, Rect, TextId, TextRef, V
 use jane_data::{Answers, Faction, PropDef, WorldSpell};
 
 use crate::actions::{Subject, request_travel, run_actions};
+use crate::clear::box_touches_feet;
 use crate::ctx::Ctx;
 use crate::dialogue;
 use crate::event::{EventKind, PropChange, SfxKind, ToastKind};
@@ -32,8 +33,8 @@ use crate::light::{grows_at, prop_centre};
 use crate::runtime::ZoneRuntime;
 use crate::state::{GameState, LootState, NightState, Prop, Speaker, TravelRequest, Unit, ZoneState};
 use crate::tuning::{
-    FOCUS_BEHIND_FX, FOCUS_PUSH_ONLY_FX, PICKUP_REACH_FX, PUSH_ENERGY, PUSH_HOLD_TICKS, TALK_REACH_FX, USE_REACH_FX,
-    WORLD_SPELL_REACH_FX,
+    BODY_HALF_FX, FOCUS_BEHIND_FX, FOCUS_PUSH_ONLY_FX, PICKUP_REACH_FX, PUSH_ENERGY, PUSH_HOLD_TICKS, TALK_REACH_FX,
+    USE_REACH_FX, WORLD_SPELL_REACH_FX,
 };
 use crate::under::uncover;
 use crate::units::{move_unit, place_unit, spend_energy};
@@ -565,7 +566,10 @@ fn footprint_free(cx: &mut Ctx<'_>, ix: PropIx, to: (i32, i32), pushed: bool) ->
     let was = cx.zone.props[ix as usize].solid;
     cx.zone.props[ix as usize].solid = false;
     cx.rt.restamp_cells(cx.zone, here, &mut cx.scratch.props);
-    let ok = there.cells().all(|(x, y)| cx.rt.grid.free(x, y, None));
+    // Nothing solid there, and no body where its feet would stand: one in the notch behind it may
+    // stay (she pushes a crate south from there), one its feet would land on may not.
+    let ok = there.cells().all(|(x, y)| cx.rt.grid.inside(x, y) && !cx.rt.grid.solid(x, y))
+        && !cx.zone.units.iter().any(|u| u.alive && !u.hidden && box_touches_feet(u, def, to));
     cx.zone.props[ix as usize].solid = was;
     cx.rt.restamp_cells(cx.zone, here, &mut cx.scratch.props);
     ok
@@ -581,15 +585,16 @@ pub fn put_down(cx: &mut Ctx<'_>, body: UnitId) {
     };
     let def = cx.cat.story.prop(cx.zone.props[ix as usize].def);
     let (fx, fy) = u.facing.delta();
-    let (ucx, ucy) = u.pos.cell();
     let (w, h) = (i32::from(def.w), i32::from(def.h));
-    // The cell block directly ahead: past her feet along the facing, centred across it.
-    let ahead = |f: i32, at: i32, size: i32| match f.cmp(&0) {
-        std::cmp::Ordering::Greater => at + 1,
-        std::cmp::Ordering::Less => at - size,
-        std::cmp::Ordering::Equal => at - size.div_euclid(2),
+    // The cell block directly ahead: past the leading edge of her body box along the facing (not
+    // her feet's cell: with her feet in its far half, the box reaches into the next cell, and a
+    // rock put down there held her fast), centred across it.
+    let ahead = |f: i32, at: Fx, size: i32| match f.cmp(&0) {
+        std::cmp::Ordering::Greater => Fx(at.0 + BODY_HALF_FX - 1).cell() + 1,
+        std::cmp::Ordering::Less => Fx(at.0 - BODY_HALF_FX).cell() - size,
+        std::cmp::Ordering::Equal => at.cell() - size.div_euclid(2),
     };
-    let (x, y) = (ahead(fx, ucx, w), ahead(fy, ucy, h));
+    let (x, y) = (ahead(fx, u.pos.x, w), ahead(fy, u.pos.y, h));
     if !footprint_free(cx, ix, (x, y), false) {
         cx.emit(EventKind::Toast(ToastKind::NoRoom));
         return;

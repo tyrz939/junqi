@@ -19,6 +19,8 @@
 //! south she leans on it from the row above, where on its front row alone she would walk into it
 //! (the bots that push crates onto the factory's plates were killed in the corner it left them).
 
+use std::fmt::Write as _;
+
 use jane_art::canvas::rows_up;
 use jane_art::looks::{self, Family, Rendered};
 use jane_art::palette::Ix;
@@ -111,4 +113,120 @@ fn a_prop_blocks_no_row_north_of_the_ground_it_is_drawn_on() {
         }
     }
     assert!(over.is_empty(), "blocks other than the rows it stands on: {over:#?}");
+}
+
+// --- feet ------------------------------------------------------------------------------------
+
+/// Where `data/prop_feet.json` lives.
+const FEET: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../data/prop_feet.json");
+
+/// Sixteenths of a cell feet may leave open at either side and hold their footprint's width.
+const SIDE_SLACK: i32 = jane_data::FEET_SIDE_SLACK;
+
+/// A px this high or lower touches the ground: a crate's foot, a table's legs, a trunk's base, a
+/// lamp post's foot (canvas px of true height).
+const CONTACT: i32 = 2;
+
+/// What stands on that contact up to this high is the thing's own body over the ground (a
+/// crate's lid, a table's top, a counter's): her body meets it. Higher is over her feet (a
+/// tree's crown, a lamp's head, a sign's board, a stall's awning, a cupboard's top).
+const BODY: i32 = 20;
+
+/// The least depth feet take, when its contact is at least this wide (sixteenths: 2 px).
+const MIN_DEEP: i32 = 4;
+
+/// Whether a prop keeps its whole width to feet: what shuts a way or is part of a puzzle the
+/// solver proves by its cells (a pushed or carried thing, a gate, whatever answers a verb or a
+/// blow, [`WAYS`]). Its feet leave at most [`SIDE_SLACK`] open at either side, so none of them
+/// side by side lets her slip between, and the notch behind it is a dead end
+/// (`PropDef::solid_parts`).
+fn keeps_width(d: &PropDef) -> bool {
+    d.push || d.carry || d.gate || d.answers.is_some() || WAYS.contains(&d.id)
+}
+
+/// Where a look meets the ground, in sixteenths of a cell (canvas px) from its footprint's
+/// top-left, over every frame (the AO shadow is not the thing): across, the columns of its px
+/// that touch the ground ([`CONTACT`]); deep, the ground under its px in those columns up to
+/// [`BODY`] high, run down to its footprint's front edge, within its `base` rows. A thing that
+/// [`keeps_width`] spans all but [`SIDE_SLACK`] of its footprint across. `None` when that is its
+/// `base` rows whole (nothing to gain), or it keeps them whole: a house (its walls stand on every
+/// side of its footprint, the back one under its roof) and a hanging (the wall's).
+fn feet_of(d: &PropDef, r: &Rendered, building: bool) -> Option<[u8; 4]> {
+    let hung = matches!(looks::find(r.name), Some((_, jane_data::Look::Prop(p))) if jane_art::kit::hung(p));
+    if (building && d.w >= 4) || hung {
+        return None;
+    }
+    let (fw, fh) = (i32::from(d.w) * CELL, i32::from(d.h) * CELL);
+    let top = (i32::from(d.h) - i32::from(d.base)) * CELL;
+    let px = |f: &dyn Fn(i32, i32, i32, i32)| {
+        for (_, c) in &r.set.frames {
+            let back = c.h() - fh;
+            for y in 0..c.h() {
+                for x in 0..c.w() {
+                    if c.get(x, y).is_opaque() {
+                        let h = i32::from(c.height_at(x, y));
+                        f(x, y + rows_up(h) - back, h, y);
+                    }
+                }
+            }
+        }
+    };
+    let (x0, x1) = (std::cell::Cell::new(fw), std::cell::Cell::new(0));
+    px(&|x, _, h, _| {
+        if h <= CONTACT {
+            x0.set(x0.get().min(x));
+            x1.set(x1.get().max(x + 1));
+        }
+    });
+    let (mut x0, mut x1) = (x0.get(), x1.get());
+    if x1 <= x0 {
+        return None;
+    }
+    let y0 = std::cell::Cell::new(fh - 1);
+    px(&|x, gy, h, _| {
+        if h <= BODY && (x0..x1).contains(&x) {
+            y0.set(y0.get().min(gy.clamp(top, fh - 1)));
+        }
+    });
+    // Drawn standing up with no top (a trunk, a post, a rock), it is as deep as its contact is
+    // wide, up to [`MIN_DEEP`]: never a line a sixteenth deep.
+    let y0 = y0.get().min(fh - (x1 - x0).min(MIN_DEEP)).max(top);
+    if keeps_width(d) {
+        (x0, x1) = (x0.clamp(0, SIDE_SLACK), x1.clamp(fw - SIDE_SLACK, fw));
+    }
+    if x0 == 0 && x1 == fw && y0 == top {
+        return None;
+    }
+    Some([x0 as u8, y0 as u8, (x1 - x0) as u8, (fh - y0) as u8])
+}
+
+/// The owner's playtest: "approaching from above, she still can't get close to a crate, nor to
+/// the Lost Property table". Feet collide with where each look meets the ground (`PropDef::feet`,
+/// `jane_sim::units`), and that is written from the art: this checks `data/prop_feet.json`
+/// against it. Re-bless after an intended change to a look or a footprint with
+/// `JANE_BLESS=1 cargo test -p jane-present --test prop_base`.
+#[test]
+fn a_prop_s_feet_are_where_its_look_meets_the_ground() {
+    let all = solid_looks();
+    let want: Vec<(&str, [u8; 4])> =
+        all.iter().filter_map(|(d, r, building)| feet_of(d, r, *building).map(|f| (d.id, f))).collect();
+    if std::env::var_os("JANE_BLESS").is_some() {
+        let mut s = String::from("{\n");
+        for (i, (id, [x, y, w, h])) in want.iter().enumerate() {
+            let comma = if i + 1 < want.len() { "," } else { "" };
+            writeln!(s, "  \"{id}\": [{x}, {y}, {w}, {h}]{comma}").expect("a String");
+        }
+        s.push_str("}\n");
+        std::fs::write(FEET, s).expect("data/prop_feet.json");
+        return;
+    }
+    let mut wrong = Vec::new();
+    for (d, r, building) in &all {
+        let f = feet_of(d, r, *building);
+        if d.feet != f {
+            wrong.push(format!("{}: data {:?}, drawn {:?}", d.id, d.feet, f));
+        }
+    }
+    assert!(want.len() > 100, "most solid props stand on less than their cells ({})", want.len());
+    assert!(wrong.is_empty(), "prop_feet.json is not what the art draws (bless it: see above): {wrong:#?}");
 }

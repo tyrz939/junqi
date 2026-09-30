@@ -13,6 +13,7 @@
 use jane_core::num::CELL_FX;
 use jane_core::tile::F_SOLID;
 use jane_core::{Rect, Tile, Vec2};
+use jane_data::PropDef;
 
 use crate::ctx::Ctx;
 use crate::event::EventKind;
@@ -28,6 +29,21 @@ fn box_touches(u: &Unit, r: Rect) -> bool {
         && x - BODY_HALF_FX < r.right() * CELL_FX
         && y + BODY_HALF_FX > r.y * CELL_FX
         && y - BODY_HALF_FX < r.bottom() * CELL_FX
+}
+
+/// Does `u`'s body box touch what feet meet of a prop of `def` with its footprint's top-left at
+/// `cell` (`PropDef::solid_parts`, in sixteenths of a cell)? One standing in the notch behind it
+/// does not.
+pub fn box_touches_feet(u: &Unit, def: &PropDef, cell: (i32, i32)) -> bool {
+    let (x, y) = (u.pos.x.0, u.pos.y.0);
+    let s = CELL_FX / 16;
+    def.solid_parts().iter().filter(|r| r.w > 0 && r.h > 0).any(|r| {
+        let (rx, ry) = (cell.0 * CELL_FX + r.x * s, cell.1 * CELL_FX + r.y * s);
+        x + BODY_HALF_FX > rx
+            && x - BODY_HALF_FX < rx + r.w * s
+            && y + BODY_HALF_FX > ry
+            && y - BODY_HALF_FX < ry + r.h * s
+    })
 }
 
 /// Move unit `ix` to the nearest cell it can stand on, reached over open floor from where it is.
@@ -72,11 +88,12 @@ pub fn clear_footprint(cx: &mut Ctx<'_>, prop: PropIx) {
         return;
     }
     let def = cx.cat.story.prop(p.def);
-    let r = def.solid_rect(i32::from(p.cell.x), i32::from(p.cell.y));
+    let cell = (i32::from(p.cell.x), i32::from(p.cell.y));
+    let r = def.solid_rect(cell.0, cell.1);
     let mut stamped = false;
     for ix in 0..cx.zone.units.len() {
         let u = &cx.zone.units[ix];
-        if !u.alive || u.hidden || !box_touches(u, r) {
+        if !u.alive || u.hidden || !box_touches_feet(u, def, cell) {
             continue;
         }
         // The grid must show the prop before anyone looks for a free cell, or its own cells look free.
