@@ -79,6 +79,7 @@ impl Glow {
         src: Src,
         (x, y): (i32, i32),
         flags: Flags,
+        behind: Option<(jane_present::Foot, &[u8])>,
     ) {
         if glow.is_empty() || matches!(flags.tint, Tint::Ghost(_)) || src.w == 0 || src.h == 0 {
             return;
@@ -97,7 +98,17 @@ impl Glow {
             }
             let col = (gx - sx) as i32;
             let col = if flags.mirror { sw as i32 - 1 - col } else { col };
-            self.note(t, x + col, y + (gy - sy) as i32, clut.get(usize::from(e)).copied().unwrap_or(0));
+            let (px, py) = (x + col, y + (gy - sy) as i32);
+            // What the terrain hides of it does not glow, seen through or not (the lit tiers draw
+            // what shows through as colour alone).
+            if let Some((f, hs)) = behind
+                && (0..t.w).contains(&px)
+                && (0..t.h).contains(&py)
+                && jane_present::Foot::hides(hs[(py * t.w + px) as usize], py, i32::from(f.y))
+            {
+                continue;
+            }
+            self.note(t, px, py, clut.get(usize::from(e)).copied().unwrap_or(0));
         }
     }
 
@@ -305,10 +316,10 @@ mod tests {
         let mirror = Flags { mirror: true, tint: Tint::None };
         let mut g = Glow::default();
         g.clear();
-        crate::blit::sprite(&mut t, &page, &clut, src, 0, 0, PLAIN);
-        g.sprite(&t, &page, &glow, &clut, src, (0, 0), PLAIN);
-        crate::blit::sprite(&mut t, &page, &clut, src, 4, 0, mirror);
-        g.sprite(&t, &page, &glow, &clut, src, (4, 0), mirror);
+        crate::blit::sprite(&mut t, &page, &clut, src, 0, 0, PLAIN, None);
+        g.sprite(&t, &page, &glow, &clut, src, (0, 0), PLAIN, None);
+        crate::blit::sprite(&mut t, &page, &clut, src, 4, 0, mirror, None);
+        g.sprite(&t, &page, &glow, &clut, src, (4, 0), mirror, None);
         // Something is drawn over the first sprite's glowing px.
         t.px[2] = 0xff20_2020;
         g.check(&t);
@@ -327,8 +338,8 @@ mod tests {
         let src = Src { x: 0, y: 0, w: 4, h: 1 };
         let mut g = Glow::default();
         g.clear();
-        crate::blit::sprite(&mut t, &page, &clut, src, 30, 32, PLAIN);
-        g.sprite(&t, &page, &glow, &clut, src, (30, 32), PLAIN);
+        crate::blit::sprite(&mut t, &page, &clut, src, 30, 32, PLAIN, None);
+        g.sprite(&t, &page, &glow, &clut, src, (30, 32), PLAIN, None);
         g.bloom(&mut t, 256);
         let red = |x: usize, y: usize| (t.px[y * 64 + x] >> 16) & 0xff;
         assert!(red(32, 28) > 0x10, "a halo over it");

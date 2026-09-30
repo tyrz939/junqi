@@ -184,7 +184,7 @@ fn boxes_are_whole(sk: &Skeleton, c: &County<'_>, bad: &mut Vec<String>) {
         for y in 0..ch.def.h {
             for x in 0..ch.def.w {
                 let (cx, cy) = (b.x + i32::from(x), b.y + i32::from(y));
-                let (want, got) = (ch.def.tile(x, y), c.k.get(cx, cy));
+                let (want, got) = (jane_world::county::chunks::stamped_tile(ch.def, x, y), c.k.get(cx, cy));
                 if want == Tile::Rail && got != Tile::Rail {
                     bad.push(format!("seed {}: {} lost its rail at ({cx}, {cy}): {got:?}", sk.seed, ch.id()));
                 }

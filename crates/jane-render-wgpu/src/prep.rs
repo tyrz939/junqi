@@ -65,8 +65,11 @@ pub struct Prep {
     /// `SpriteIn`: src (4 x u32), dst (x, y, page, flags as i32), extra (depth, id, sink, the rows
     /// it burns: first | last << 16, top-down, [`NO_BURN`] none): its id
     /// is its index in the frame plus one, what the G-buffer's id target and the height field
-    /// carry (0 is the terrain).
+    /// carry (0 is the terrain), and foot (the row it stands on, 1 when the terrain stands in
+    /// front of its feet, 1 when a player is seen through it, 0: `Foot`).
     pub sprites: Vec<u8>,
+    /// Some sprite stands behind the terrain: the terrain's heights are copied for it.
+    pub behind: bool,
     pub n_sprites: u32,
     /// The sprite draws, in order.
     pub draws: Vec<Draw>,
@@ -221,6 +224,7 @@ impl Prep {
         self.chunks.clear();
         self.chunk_slots.clear();
         self.sprites.clear();
+        self.behind = false;
         self.draws.clear();
         self.lights.clear();
         self.tiles.clear();
@@ -305,6 +309,10 @@ impl Prep {
                         i32s(&mut self.sprites, &[i32::from(s.x), i32::from(s.y), i32::from(s.page), flags as i32]);
                         let id = sprite_id(cmds.start as usize + k);
                         u32s(&mut self.sprites, &[u32::from(depth), id, u32::from(sink), burn]);
+                        // Where it stands, when the terrain stands in front of its feet (`Foot`).
+                        let foot = s.foot.map_or([0; 4], |f| [i32::from(f.y), 1, i32::from(f.see), 0]);
+                        i32s(&mut self.sprites, &foot);
+                        self.behind |= s.foot.is_some();
                         if layer == Depth::Standing {
                             // Its tallest px may stand its rows' true height (a tree's crown is
                             // `height_of_rows` of its rows, a fifth over them): a ray under the
@@ -573,6 +581,7 @@ mod tests {
             y: 0,
             flags: Flags { mirror: false, tint },
             height_px: 40,
+            foot: None,
         }
     }
 
@@ -590,7 +599,7 @@ mod tests {
         p.build(&f, 0);
         let got: Vec<(Kind, Range<u32>)> = p.draws.iter().map(|d| (d.kind, d.range.clone())).collect();
         assert_eq!(got, [(Kind::Contact, 0..4), (Kind::Opaque, 0..1), (Kind::Ghost, 1..2), (Kind::Opaque, 2..4)]);
-        assert_eq!(p.sprites.len(), 4 * 48);
+        assert_eq!(p.sprites.len(), 4 * 64);
         assert_eq!(p.globals.len(), GLOBALS);
     }
 

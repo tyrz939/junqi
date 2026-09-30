@@ -57,7 +57,7 @@ pub fn parallax(t: &mut Target<'_>, s: &SkyLook, page: &Page, clut: &[u32], sp: 
     // Clip to the sky: draw into a target that ends at the horizon.
     let n = (top * t.w) as usize;
     let mut sky = Target { px: &mut t.px[..n], w: t.w, h: top };
-    blit::sprite(&mut sky, page, clut, sp.src, i32::from(sp.x), y, Flags::default());
+    blit::sprite(&mut sky, page, clut, sp.src, i32::from(sp.x), y, Flags::default(), None);
     u64::from(sp.src.w) * u64::from(sp.src.h)
 }
 

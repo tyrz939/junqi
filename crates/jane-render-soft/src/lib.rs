@@ -113,6 +113,8 @@ impl Backend for Soft {
         });
         let casting = lit.is_some_and(|l| frame.lights_in(l.1).iter().any(|l| l.casts));
         let climb = casting || frame.passes.iter().any(|p| matches!(p, Pass::Silhouettes { .. }));
+        // What stands behind the terrain is cut by its heights too (PRESENTATION.md §1.6).
+        let climb = climb || frame.sprites.iter().any(|s| s.foot.is_some());
         // Whether the lightmap is built this frame (the lamps' shadows build it early).
         let mut built = false;
         if climb {
@@ -215,11 +217,12 @@ impl Backend for Soft {
                     for s in frame.sprites_in(cmds) {
                         if let Some(page) = self.atlas.pages.get(usize::from(s.page)) {
                             calls += 1;
-                            blit::sprite(t, page, &self.atlas.clut, s.src, i32::from(s.x), i32::from(s.y), s.flags);
+                            let behind = s.foot.map(|f| (f, &self.heights[..]));
+                            let (x, y) = (i32::from(s.x), i32::from(s.y));
+                            blit::sprite(t, page, &self.atlas.clut, s.src, x, y, s.flags, behind);
                             if self.glow_on {
                                 let glow = &self.page_glow[usize::from(s.page)];
-                                let at = (i32::from(s.x), i32::from(s.y));
-                                self.glow.sprite(t, page, glow, &self.atlas.clut, s.src, at, s.flags);
+                                self.glow.sprite(t, page, glow, &self.atlas.clut, s.src, (x, y), s.flags, behind);
                             }
                             written += u64::from(s.src.w) * u64::from(s.src.h);
                         }

@@ -121,6 +121,7 @@ fn frame(tier: Tier, shadows: bool) -> Frame {
             y: foot.1 - 63,
             flags: jane_present::Flags::default(),
             height_px: top,
+            foot: None,
         });
         f.casters.push(Caster { sprite: i as u32, foot, height: top, depth, ..Caster::default() });
     }

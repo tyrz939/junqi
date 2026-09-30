@@ -38,7 +38,7 @@ pub fn tile_rgb(t: Tile) -> [u8; 3] {
         T::Tree => [34, 84, 40],
         T::Fence => [120, 84, 52],
         T::HouseWall => [150, 110, 90],
-        T::HouseRoof => [130, 60, 50],
+        T::HouseRoof | T::Eaves => [130, 60, 50],
         T::Floor | T::FloorWood => [170, 140, 100],
         T::Wall | T::WallTop | T::StoneWall => [110, 106, 100],
         T::Moss => [104, 140, 80],
@@ -159,10 +159,10 @@ fn relief(t: &impl Fn(i32, i32) -> Tile, (cx, cy): (i32, i32), x: i32, y: i32) -
                 (normal(0, 96), height_of_rows(z).max(1) as u8)
             }
         }
-        T::HouseRoof => {
+        T::HouseRoof | T::Eaves => {
             // The run of roof in this column: pitched along it, the ridge in the middle.
-            let up = (1..=12).take_while(|&k| t(0, -k) == T::HouseRoof).count() as i32;
-            let down = (1..=12).take_while(|&k| t(0, k) == T::HouseRoof).count() as i32;
+            let up = (1..=12).take_while(|&k| t(0, -k).is_roof()).count() as i32;
+            let down = (1..=12).take_while(|&k| t(0, k).is_roof()).count() as i32;
             let len = (up + down + 1) * CELL;
             let r = up * CELL + y;
             let mid = len / 2;

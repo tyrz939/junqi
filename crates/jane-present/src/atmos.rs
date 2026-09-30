@@ -443,6 +443,7 @@ impl Atmosphere {
                 y: y.clamp(-4096, 4096) as i16,
                 flags: Flags::default(),
                 height_px: 0,
+                foot: None,
             }
         };
         // The moon, then the School to the north at an eighth, then the treeline at a quarter.

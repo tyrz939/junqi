@@ -26,8 +26,8 @@ use crate::drawlist::{DrawCmd, DrawList};
 use crate::facing::Face8;
 use crate::frame::{
     Block, CANVAS_H, CANVAS_W, CAST_MARGIN, CELL, CHUNK_PX, Caster, ChunkCmd, ChunkId, Depth, Directional,
-    FX_TO_CANVAS, Features, Flags, Frame, Light, LightKind, Margins, Pass, Post, Rgb, Span, SpriteCmd, Tier, Tint,
-    height_of_rows, rows_up,
+    FX_TO_CANVAS, Features, Flags, Foot, Frame, Light, LightKind, Margins, Pass, Post, Rgb, Span, SpriteCmd, Tier,
+    Tint, height_of_rows, rows_up,
 };
 use crate::fx::Fx;
 use crate::lesson::{Her, Lessons};
@@ -159,6 +159,9 @@ struct PropRec {
     /// Set into a wall's face (a door, a lamp on its bracket, a hanging): drawn over the face and
     /// standing on the face's foot, so it throws no shadow of its own (the wall throws it).
     flush: bool,
+    /// Stands on what the terrain raises (a chimney on a roof, a torch on a wall): drawn over it,
+    /// never behind it.
+    on_top: bool,
 }
 
 /// A prop light the view says is showing, this tick.
@@ -573,6 +576,10 @@ impl Present {
                 }),
                 flat: d.flat,
                 flush: false,
+                on_top: {
+                    let t = view.tile(i32::from(p.cell.x), i32::from(p.cell.y));
+                    t.is_roof() || t.flags() & jane_core::tile::F_SOLID != 0
+                },
             });
         });
         // What lies on the ground (a creature's loot where it fell) as its item, a cell's
@@ -590,6 +597,7 @@ impl Present {
                 look,
                 flat: true,
                 flush: false,
+                on_top: false,
             });
         }
         props.sort_unstable_by_key(|p| p.id);
@@ -855,6 +863,14 @@ impl Present {
         let in_band = |x: i32, y: i32, w: u16, h: u16| {
             x + i32::from(w) > -band.left && y + i32::from(h) > -band.top && x < cw + band.right && y < ch + band.bottom
         };
+        // Whether the terrain stands in front of feet at zone px `(x, y)` (PRESENTATION.md §1.6,
+        // *behind the terrain*): what is drawn over the row above them stands on ground south of
+        // it. Then every tier leaves out what of the sprite the terrain stands over.
+        let (chunks, layers, cells) = (&self.chunks, &self.frame.layers, self.zone_cells);
+        let behind = |x: i32, y: i32| {
+            let h = drawn_height(chunks, layers, cells, (x, y - 1));
+            Foot::hides(h.clamp(0, 255) as u8, y - 1, y)
+        };
         for p in &self.props {
             let r = self.atlas.get(p.look);
             // Bottom-centred on the footprint.
@@ -890,7 +906,10 @@ impl Present {
                     burn,
                 }
             });
-            let cmd = DrawCmd { y: foot, key: p.id, sprite: sprite(r, x, y, Flags::default()), caster };
+            let mut cmd = DrawCmd { y: foot, key: p.id, sprite: sprite(r, x, y, Flags::default()), caster };
+            if !p.flat && !p.flush && !p.on_top && behind(p.x + p.w / 2, p.y + p.h) {
+                cmd.sprite.foot = Some(Foot { y: clamp16(0, foot).1, see: false });
+            }
             if p.flat { self.ground.push(cmd) } else { self.standing.push(cmd) }
         }
         // The chunks' trees, shrubs and stones, from the atlas, by their feet.
@@ -909,10 +928,14 @@ impl Present {
                         if !in_band(x, y, r.src.w, r.src.h) {
                             continue;
                         }
+                        let mut sp = sprite(r, x, y, Flags::default());
+                        if behind(fx + cam.0, fy + cam.1) {
+                            sp.foot = Some(Foot { y: clamp16(0, fy).1, see: false });
+                        }
                         self.standing.push(DrawCmd {
                             y: fy,
                             key: 0x4000_0000 | u32::from(slot) << 10 | i as u32,
-                            sprite: sprite(r, x, y, Flags::default()),
+                            sprite: sp,
                             caster: Some(Caster {
                                 sprite: 0,
                                 foot: clamp16(fx, fy - i32::from(fl.lift)),
@@ -1079,12 +1102,12 @@ impl Present {
                 depth: 5,
                 ..Caster::default()
             });
-            self.standing.push(DrawCmd {
-                y: sy,
-                key: UNIT_KEY | u.id,
-                sprite: sprite(r, x, y, Flags { mirror, tint }),
-                caster,
-            });
+            let mut sp = sprite(r, x, y, Flags { mirror, tint });
+            if behind(fx >> FX_TO_CANVAS, fy >> FX_TO_CANVAS) {
+                // A player shows through what hides her.
+                sp.foot = Some(Foot { y: clamp16(0, sy).1, see: u.player });
+            }
+            self.standing.push(DrawCmd { y: sy, key: UNIT_KEY | u.id, sprite: sp, caster });
             // A serpent's body along its trail, tail first, a segment at every point, each
             // standing where it lies so it sorts among what is round it.
             if let (Some(t), Some(segs)) = (
@@ -1098,10 +1121,14 @@ impl Present {
                     let (qx, qy) = ((px >> FX_TO_CANVAS) - cam.0, (py >> FX_TO_CANVAS) - cam.1);
                     let (x, y) = (qx - i32::from(r.ax), qy - i32::from(r.ay));
                     if in_band(x, y, r.src.w, r.src.h) {
+                        let mut sp = sprite(r, x, y, Flags { mirror: false, tint: Tint::None });
+                        if behind(px >> FX_TO_CANVAS, py >> FX_TO_CANVAS) {
+                            sp.foot = Some(Foot { y: clamp16(0, qy).1, see: false });
+                        }
                         self.standing.push(DrawCmd {
                             y: qy,
                             key: UNIT_KEY | u.id,
-                            sprite: sprite(r, x, y, Flags { mirror: false, tint: Tint::None }),
+                            sprite: sp,
                             // Each coil throws its own shadow, footed where it lies.
                             caster: (!u.dead).then(|| Caster {
                                 sprite: 0,
@@ -1371,6 +1398,7 @@ fn sprite(r: &crate::atlas::SpriteRef, x: i32, y: i32, flags: Flags) -> SpriteCm
         y: y.clamp(i32::from(i16::MIN), i32::from(i16::MAX)) as i16,
         flags,
         height_px: r.height,
+        foot: None,
     }
 }
 

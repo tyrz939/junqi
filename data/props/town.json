@@ -30,7 +30,7 @@
   "town_trolley": { "name": "Luggage Trolley", "sprite": "town_trolley", "w": 2, "h": 1, "solid": true, "blockLos": false, "push": true },
   "town_steeple": { "name": "Steeple", "sprite": "town_steeple", "w": 2, "h": 2, "base": 1, "solid": true, "blockLos": true },
   "town_barn_doors": { "name": "Barn Doors", "sprite": "town_barn_doors", "w": 4, "h": 3, "base": 1, "solid": true, "blockLos": true, "prompt": "Look" },
-  "town_chimney": { "name": "Chimney", "sprite": "town_chimney", "w": 1, "h": 1, "solid": true, "blockLos": true },
+  "town_chimney": { "name": "Chimney", "sprite": "town_chimney", "w": 1, "h": 1, "solid": false, "blockLos": false },
   "town_pew": { "name": "Pew", "sprite": "town_pew", "w": 4, "h": 1, "solid": true, "blockLos": false },
   "town_altar": { "name": "Altar", "sprite": "town_altar", "w": 4, "h": 2, "base": 1, "solid": true, "blockLos": false, "prompt": "Look" },
   "town_bar": { "name": "Bar", "sprite": "town_bar", "w": 3, "h": 2, "base": 1, "solid": true, "blockLos": false },

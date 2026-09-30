@@ -6,8 +6,8 @@ use jane_core::Angle;
 use jane_present::frame::CHUNK_PX;
 use jane_present::shadow::{self, shear};
 use jane_present::{
-    AtlasPages, Backend, Block, CLUT_LEN, Caster, ChunkCmd, ChunkId, ChunkLayers, Depth, Directional, Flags, Frame,
-    Light, LightKind, Page, Pass, Post, Span, SpriteCmd, Src, Tier, height_of_rows,
+    AtlasPages, Backend, Block, CLUT_LEN, Caster, ChunkCmd, ChunkId, ChunkLayers, Depth, Directional, Flags, Foot,
+    Frame, Light, LightKind, Page, Pass, Post, Span, SpriteCmd, Src, Tier, height_of_rows,
 };
 use jane_render_wgpu::Wgpu;
 
@@ -100,6 +100,7 @@ fn frame(layers: ChunkLayers, sprite: bool, sun: Option<Directional>, points: &[
             y: (FOOT.1 - AY) as i16,
             flags: Flags::default(),
             height_px: 45,
+            foot: None,
         });
         f.casters.push(Caster {
             sprite: 0,
@@ -168,6 +169,46 @@ fn a_sprite_never_darkens_itself_in_open_sun_and_its_shadow_grows_from_its_feet(
     // And it is her silhouette's: far out along the shadow, still dark.
     let far = luma(at(&standing, FOOT.0 + 60, FOOT.1 - 16));
     assert!(far * 10 < lit * 9, "no long shadow at five: {far} of {lit}");
+}
+
+/// Behind the terrain (PRESENTATION.md §1.6): a roof 40 px up over the rows her body is drawn
+/// on, standing on ground south of her feet, hides her there; seen through it, one px in two of
+/// her shows, colour alone (the roof's field and light are as they were); below the roof's
+/// front she is drawn whole.
+#[test]
+fn what_stands_behind_the_terrain_is_hidden_where_it_stands_in_front() {
+    let Some(mut b) = backend() else { return };
+    let atlas = atlas(|y| height_of_rows(AY - y).max(1) as u8);
+    let roof = |_: i32, y: i32| (70..90).contains(&y).then_some(40);
+    let with = |foot: Option<Foot>| {
+        let mut f = frame(ground(roof), true, Some(five()), &[]);
+        f.sprites[0].foot = foot;
+        f.casters.clear();
+        if let Some(Pass::Lights { casters, .. }) = f.passes.iter_mut().find(|q| matches!(q, Pass::Lights { .. })) {
+            *casters = Span::default();
+        }
+        f
+    };
+    let mut bare = frame(ground(roof), false, Some(five()), &[]);
+    bare.passes.retain(|q| !matches!(q, Pass::Sprites { .. }));
+    let bare = draw(&mut b, &atlas, &bare);
+    let whole = draw(&mut b, &atlas, &with(None));
+    let hid = draw(&mut b, &atlas, &with(Some(Foot { y: FOOT.1 as i16, see: false })));
+    let seen = draw(&mut b, &atlas, &with(Some(Foot { y: FOOT.1 as i16, see: true })));
+    let (mut under, mut shown, mut below) = (0, 0, 0);
+    for (x, y) in body() {
+        if (70..90).contains(&y) {
+            under += 1;
+            assert_ne!(at(&whole, x, y), at(&bare, x, y), "({x}, {y}): she is drawn over the roof when not behind it");
+            assert_eq!(at(&hid, x, y), at(&bare, x, y), "({x}, {y}): the roof hides her");
+            shown += usize::from(at(&seen, x, y) != at(&bare, x, y));
+        } else if y >= 90 {
+            below += 1;
+            assert_eq!(at(&hid, x, y), at(&whole, x, y), "({x}, {y}): below the roof she is drawn");
+        }
+    }
+    assert!(under > 100 && below > 10);
+    assert!(shown * 3 > under && shown * 3 < under * 2, "seen through: {shown} of {under} px show");
 }
 
 #[test]
@@ -275,6 +316,7 @@ fn stand(atlas: &AtlasPages, ay: i32, foot: (i32, i32), depth: u8, sun: Directio
         y: (foot.1 - ay) as i16,
         flags: Flags::default(),
         height_px: top,
+        foot: None,
     });
     f.casters.push(Caster { sprite: 0, foot: (foot.0 as i16, foot.1 as i16), height: top, depth, ..Caster::default() });
     f.passes.clear();

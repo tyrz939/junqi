@@ -37,6 +37,7 @@ float fdiv(float a, float b) { return floor((a + 0.5) / b); }
 pub const RECT_ATTRS: [&str; 1] = ["a_pos"];
 pub const CHUNK_ATTRS: [&str; 2] = ["a_pos", "a_uv"];
 pub const SPRITE_ATTRS: [&str; 4] = ["a_pos", "a_uv", "a_rect", "a_info"];
+pub const STAND_ATTRS: [&str; 5] = ["a_pos", "a_uv", "a_rect", "a_info", "a_foot"];
 pub const SPAN_ATTRS: [&str; 2] = ["a_pos", "a_val"];
 pub const LIGHT_ATTRS: [&str; 4] = ["a_pos", "a_l0", "a_l1", "a_l2"];
 pub const UI_ATTRS: [&str; 5] = ["a_pos", "a_loc", "a_src", "a_dst", "a_col"];
@@ -45,6 +46,7 @@ pub const UI_ATTRS: [&str; 5] = ["a_pos", "a_loc", "a_src", "a_dst", "a_col"];
 pub const RECT_SIZES: [i32; 1] = [2];
 pub const CHUNK_SIZES: [i32; 2] = [2, 2];
 pub const SPRITE_SIZES: [i32; 4] = [2, 2, 4, 4];
+pub const STAND_SIZES: [i32; 5] = [2, 2, 4, 4, 4];
 pub const SPAN_SIZES: [i32; 2] = [2, 2];
 pub const LIGHT_SIZES: [i32; 4] = [2, 4, 4, 4];
 pub const UI_SIZES: [i32; 5] = [2, 2, 4, 4, 4];
@@ -95,7 +97,32 @@ void main() {
 }
 ";
 
-/// One fragment program, six modes (`u_mode`):
+/// The sprite program's vertices: [`SPRITE_VS`]'s, and `a_foot` (the row it stands on, 1 when
+/// the terrain stands in front of its feet, 1 when a player is seen through it: `Foot`).
+pub const STAND_VS: &str = r"
+attribute vec2 a_pos;
+attribute vec2 a_uv;
+attribute vec4 a_rect;
+attribute vec4 a_info;
+attribute vec4 a_foot;
+uniform vec2 u_canvas;
+varying vec2 v_uv;
+varying vec4 v_rect;
+varying vec4 v_info;
+varying vec4 v_foot;
+void main() {
+    v_uv = a_uv;
+    v_rect = a_rect;
+    v_info = a_info;
+    v_foot = a_foot;
+    gl_Position = vec4(a_pos / u_canvas * 2.0 - 1.0, 0.0, 1.0);
+}
+";
+
+/// One fragment program, six modes (`u_mode`). In every mode a px the terrain stands in front
+/// of is left out (`jane_present::Foot::skips`: the terrain's height from `u_terr`, more than 8
+/// px up, standing `rows_up(h)` rows lower than its row, south of the foot), but for one in two of
+/// a player's opaque texels, on the canvas's checker:
 ///
 /// 0. albedo, exact: `soft`'s blit. Opaque texels their CLUT colour (flash toward white, ghost over
 ///    the snapshot of what is under it); clear and contact-shadow texels darken the snapshot by
@@ -118,9 +145,11 @@ uniform vec4 u_page;
 uniform vec2 u_canvas;
 uniform vec3 u_ao;
 uniform float u_mode;
+uniform sampler2D u_terr;
 varying vec2 v_uv;
 varying vec4 v_rect;
 varying vec4 v_info;
+varying vec4 v_foot;
 
 vec2 page_uv(vec2 t) {
     float s = floor((t.y + 0.5) / u_page.y);
@@ -148,12 +177,22 @@ vec3 ao_factor(float k) {
     vec3 d = 256.0 - u_ao;
     return 256.0 - vec3(fdiv(d.r * k, 9.0), fdiv(d.g * k, 9.0), fdiv(d.b * k, 9.0));
 }
+bool hidden() {
+    if (v_foot.y < 0.5) return false;
+    float h = byte(texture2D(u_terr, gl_FragCoord.xy / u_canvas).b);
+    return h > 8.0 && floor(gl_FragCoord.y) + fdiv(h * 4.0 + 4.0, 5.0) > floor(v_foot.x + 0.5);
+}
 void main() {
     vec2 t = clamp(floor(v_uv), v_rect.xy, v_rect.zw - 1.0);
     float ix = index_at(t);
     float kind = floor(v_info.x + 0.5);
     float w = floor(v_info.y + 0.5);
     float mode = floor(u_mode + 0.5);
+    // Seen through, it is colour alone: the terrain keeps its normal, height and glow.
+    if (hidden()) {
+        vec2 p = floor(gl_FragCoord.xy);
+        if (mode > 3.5 || v_foot.z < 0.5 || ix < 1.5 || mod(p.x + p.y, 2.0) > 0.5) discard;
+    }
     if (mode < 0.5) {
         if (ix > 1.5) {
             vec3 c = clut(ix);

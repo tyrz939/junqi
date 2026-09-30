@@ -112,7 +112,10 @@ impl Styles {
     /// The style a cell is drawn with: `m` when it paints over `t`, else `t`'s.
     pub fn cell(&self, t: Tile, m: Option<Material>) -> &Style {
         match m {
-            Some(m) if over(m) == t => self.materials[material_ix(m)].as_ref().unwrap_or_else(|| self.tile(t)),
+            // The eaves are the roof's back rows: its slate or thatch is theirs.
+            Some(m) if over(m) == t || t == Tile::Eaves && over(m) == Tile::HouseRoof => {
+                self.materials[material_ix(m)].as_ref().unwrap_or_else(|| self.tile(t))
+            }
             _ => self.tile(t),
         }
     }

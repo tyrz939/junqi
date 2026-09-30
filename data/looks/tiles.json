@@ -27,6 +27,7 @@
 
   "house_wall": { "group": "wall", "height": "raised", "rise": 28, "ramp": "plaster", "accent": "wood_dark", "pattern": "plaster", "detail": 5, "normal": "wall", "wet": 1 },
   "house_roof": { "group": "roof", "height": "raised", "rise": 44, "ramp": "roof_tile", "pattern": "roof_tile", "detail": 4, "normal": "roof", "wet": 2 },
+  "eaves": { "group": "roof", "height": "raised", "rise": 44, "ramp": "roof_tile", "pattern": "roof_tile", "detail": 4, "normal": "roof", "wet": 2 },
   "hedge": { "group": "wall", "height": "raised", "rise": 16, "ramp": "hedge", "pattern": "hedge" },
   "cliff": { "group": "wall", "height": "raised", "rise": 24, "ramp": "rock", "accent": "rock_face", "pattern": "cliff", "normal": "cliff", "wet": 1, "wallLike": true },
 

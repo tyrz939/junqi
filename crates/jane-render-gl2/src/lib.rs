@@ -117,10 +117,10 @@ impl Progs {
             chunk: Prog::new(gl, sh::CHUNK_VS, sh::CHUNK_FS, &sh::CHUNK_ATTRS, &["u_canvas", "u_tex", "u_src"])?,
             sprite: Prog::new(
                 gl,
-                sh::SPRITE_VS,
+                sh::STAND_VS,
                 sh::SPRITE_FS,
-                &sh::SPRITE_ATTRS,
-                &["u_canvas", "u_alb", "u_pnh", "u_pem", "u_clut", "u_snap", "u_page", "u_ao", "u_mode"],
+                &sh::STAND_ATTRS,
+                &["u_canvas", "u_alb", "u_pnh", "u_pem", "u_clut", "u_snap", "u_page", "u_ao", "u_mode", "u_terr"],
             )?,
             span: Prog::new(gl, sh::SPAN_VS, sh::SPAN_FS, &sh::SPAN_ATTRS, &["u_canvas"])?,
             silhouette: Prog::new(
@@ -299,6 +299,8 @@ struct Targets {
     alb: Target,
     nh: Target,
     emi: Target,
+    /// The terrain's normal and height alone, for what stands behind it (`Foot`).
+    terr: Target,
     /// What the albedo was, for the texels that read what is under them.
     snap: Texture,
     /// The silhouettes' span mask, the canvas's size.
@@ -337,6 +339,7 @@ impl Targets {
             alb: Target::new(gl, w, h, false)?,
             nh: Target::new(gl, w, h, false)?,
             emi: Target::new(gl, w, h, false)?,
+            terr: Target::new(gl, w, h, false)?,
             snap: gl.texture(w, h, Format::Rgba8, false)?,
             sil: Target::new(gl, w, h, false)?,
             light: Target::new(gl, lw, lh, true)?,
@@ -348,7 +351,9 @@ impl Targets {
     }
 
     fn free(self, gl: &Gl) {
-        for t in [self.alb, self.nh, self.emi, self.sil, self.light, self.mask_a, self.mask_b, self.out, self.sky] {
+        for t in
+            [self.alb, self.nh, self.emi, self.terr, self.sil, self.light, self.mask_a, self.mask_b, self.out, self.sky]
+        {
             t.free(gl);
         }
         for t in self.down.into_iter().chain(self.up).chain([self.fin, self.rays]) {
@@ -689,6 +694,11 @@ impl Gl2 {
                 for (n, &h) in l.normal.iter().zip(&l.height) {
                     buf.extend_from_slice(&[n[0], n[1], h, 2]);
                 }
+            } else if l.has_height() {
+                // Flat, but standing as high as it is: what stands behind it is cut by it.
+                for &h in &l.height {
+                    buf.extend_from_slice(&[128, 128, h, 2]);
+                }
             } else {
                 buf.resize(l.albedo.len() * 4, 0);
                 for p in buf.chunks_exact_mut(4) {
@@ -779,17 +789,19 @@ impl Gl2 {
     }
 
     /// The sprite program in use, the sprite quads pointed at, its samplers set.
-    fn sprite_program(&mut self, canvas: (u32, u32), mode: f32) {
+    /// `terr` is the terrain's heights, what stands behind it reads (`Foot`).
+    fn sprite_program(&mut self, canvas: (u32, u32), mode: f32, terr: Texture) {
         let p = &self.progs.sprite;
         self.gl.use_program(p.p);
+        self.gl.bind(5, terr);
         self.gl.set_f(p.u("u_canvas"), &[canvas.0 as f32, canvas.1 as f32]);
-        for (k, n) in ["u_alb", "u_pnh", "u_pem", "u_clut", "u_snap"].iter().enumerate() {
+        for (k, n) in ["u_alb", "u_pnh", "u_pem", "u_clut", "u_snap", "u_terr"].iter().enumerate() {
             self.gl.set_i(p.u(n), k as i32);
         }
         self.gl.set_f(p.u("u_ao"), &AO_TINT.map(f32::from));
         self.gl.set_f(p.u("u_mode"), &[mode]);
-        let verts = self.prep.sprite_v.len() / 12;
-        self.gl.point(self.bufs.sprite, &sh::SPRITE_SIZES, verts);
+        let verts = self.prep.sprite_v.len() / 16;
+        self.gl.point(self.bufs.sprite, &sh::STAND_SIZES, verts);
     }
 
     /// The chunk program in use over `tex`, the chunk quads pointed at.
@@ -811,6 +823,21 @@ impl Gl2 {
         // (step 2 draws that target again from the start).
         if self.prep.steps.iter().any(|s| matches!(s, Step::Silhouette { .. })) {
             self.gl.target(Some(t.nh.fbo), c.0, c.1);
+            self.gl.clear([128.0 / 255.0, 128.0 / 255.0, 0.0, 0.0]);
+            self.gl.blend(Blend::Off);
+            if !self.prep.solid_chunks.is_empty() {
+                self.chunk_program(c, self.chunk_tex[1]);
+                for k in 0..self.prep.solid_chunks.len() {
+                    let r = self.prep.solid_chunks[k].clone();
+                    self.gl.draw_quads(r.start, r.len());
+                    self.calls += 1;
+                }
+            }
+        }
+        // What stands behind the terrain reads its heights (`Foot`): they alone, into their own
+        // target, which the sprites read in every mode.
+        if self.prep.behind {
+            self.gl.target(Some(t.terr.fbo), c.0, c.1);
             self.gl.clear([128.0 / 255.0, 128.0 / 255.0, 0.0, 0.0]);
             self.gl.blend(Blend::Off);
             if !self.prep.solid_chunks.is_empty() {
@@ -856,7 +883,7 @@ impl Gl2 {
                 Step::Copy(x, y, w, h) => self.gl.copy_to(t.snap, *x, *y, *w, *h),
                 Step::Sprites { page, quads, mode, blend } => {
                     if current.is_none() {
-                        self.sprite_program(c, *mode);
+                        self.sprite_program(c, *mode, t.terr.tex);
                         self.gl.bind(4, t.snap);
                     }
                     if current.map(|p| p.0) != Some(*page) {
@@ -894,7 +921,7 @@ impl Gl2 {
                 }
             }
             if !self.prep.solid.is_empty() {
-                self.sprite_program(c, mode);
+                self.sprite_program(c, mode, t.terr.tex);
                 let mut page = None;
                 for k in 0..self.prep.solid.len() {
                     let (p, r) = self.prep.solid[k].clone();
@@ -1592,7 +1619,7 @@ impl Backend for Gl2 {
             self.gl.vertices(self.bufs.chunk, &self.prep.chunk_v, &sh::CHUNK_SIZES);
         }
         if !self.prep.sprite_v.is_empty() {
-            self.gl.vertices(self.bufs.sprite, &self.prep.sprite_v, &sh::SPRITE_SIZES);
+            self.gl.vertices(self.bufs.sprite, &self.prep.sprite_v, &sh::STAND_SIZES);
         }
         if !self.prep.span_v.is_empty() {
             self.gl.vertices(self.bufs.span, &self.prep.span_v, &sh::SPAN_SIZES);

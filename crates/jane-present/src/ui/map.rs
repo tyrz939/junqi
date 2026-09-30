@@ -89,7 +89,7 @@ impl ChartInk {
             T::Cliff | T::Rubble | T::Cobble | T::CaveWall | T::CaveFloor | T::Stepping => ChartInk::Rock,
             T::Water | T::Ice => ChartInk::Water,
             T::Road | T::Rail | T::Boardwalk | T::GrownPath => ChartInk::Road,
-            T::HouseWall | T::HouseRoof | T::StoneWall | T::Floor | T::FloorWood => ChartInk::Roofs,
+            T::HouseWall | T::HouseRoof | T::Eaves | T::StoneWall | T::Floor | T::FloorWood => ChartInk::Roofs,
             _ => ChartInk::Meadow,
         }
     }
