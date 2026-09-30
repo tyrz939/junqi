@@ -104,6 +104,9 @@ pub enum FrameId {
     CastUpRight3,
     HurtDownRight,
     HurtUpRight,
+    /// `Open` for a look's second and third bases: an apple tree picked keeps its own crown.
+    Open2,
+    Open3,
 }
 
 impl FrameId {
@@ -145,6 +148,8 @@ impl FrameId {
             FrameId::Base3 => "base_3",
             FrameId::On => "on",
             FrameId::Open => "open",
+            FrameId::Open2 => "open_2",
+            FrameId::Open3 => "open_3",
             FrameId::Idle => "idle",
             FrameId::Idle2 => "idle_2",
             FrameId::AtkDown1 => "atk_down_1",
@@ -193,7 +198,7 @@ impl FrameId {
     }
 
     /// Every frame, in order.
-    pub const ALL: [FrameId; 79] = {
+    pub const ALL: [FrameId; 81] = {
         use FrameId as F;
         [
             F::Down,
@@ -275,6 +280,8 @@ impl FrameId {
             F::CastUpRight3,
             F::HurtDownRight,
             F::HurtUpRight,
+            F::Open2,
+            F::Open3,
         ]
     };
 

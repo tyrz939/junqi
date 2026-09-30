@@ -162,6 +162,9 @@ pub struct Opts {
     /// With `--cast`: first put this unit (by its catalog name) a few cells east of her, the
     /// console's `spawn`, so the bolt has a body to hit (`--spawn skeleton`).
     pub spawn: Option<String>,
+    /// Quests given her before the frame (`--quest the_last_name,roberts_cap`): the marks and
+    /// sparkles of a quest under way (PRESENTATION.md §3.8).
+    pub quests: Vec<String>,
     /// `Features` rows set by key (`--rows fog=off,god_rays=off`, PRESENTATION.md §1.3).
     pub rows: Vec<(String, String)>,
     pub gl: GlOpts,
@@ -225,6 +228,7 @@ impl Hud {
         let bind = jane_present::input::Bindings::default();
         let cx = jane_present::ui::hud::HudCtx { bindings: &bind, pad: false, window_open: false };
         self.ui.begin(jane_present::ui::core::UiInput::default(), self.bufs.tick, canvas);
+        jane_present::ui::marks::draw(&mut self.ui, present.marks(), present.dark(), present.ticks());
         jane_present::ui::hud::draw(&mut self.ui, &self.bufs, cx);
         jane_present::ui::lesson::draw(&mut self.ui, present.lessons(), &self.bufs, false);
         self.ui.finish(present.frame_mut());
@@ -512,6 +516,26 @@ fn play(bps: Blueprints, o: &Opts, tier: Tier) -> Result<(Tap, Present, u32), St
         let events = host.sim.drain_events().to_vec();
         let v = host.sim.view(seat).ok_or("seat 0 is not in the world")?;
         present.tick(&v, &events);
+    }
+    // `--quest`: given her, and the world let run a second so the sparkles have risen.
+    if !o.quests.is_empty() {
+        let dev = |seq: u16, op| StampedCommand { seat: Some(seat), seq, cmd: Command::Dev(op) };
+        let cmds = o
+            .quests
+            .iter()
+            .enumerate()
+            .map(|(i, q)| {
+                let id = jane_data::catalog().story.quest_id(q).ok_or_else(|| format!("--quest: no quest \"{q}\""))?;
+                Ok(dev(900 + i as u16, DevOp::Quest(id)))
+            })
+            .collect::<Result<Vec<_>, String>>()?;
+        host.sim.step(&StepInput { frames: [InputFrame::IDLE; 4], commands: &cmds });
+        for _ in 0..70 {
+            let events = host.sim.drain_events().to_vec();
+            let v = host.sim.view(seat).ok_or("seat 0 is not in the world")?;
+            present.tick(&v, &events);
+            host.sim.step(&StepInput { frames: [InputFrame::IDLE; 4], commands: &[] });
+        }
     }
     // `--knows`: learned out of sight; `--learn`: learned now, the moments to come; `--grow`: a
     // finding's word to the presenter alone.
@@ -820,6 +844,7 @@ mod tests {
             weather: None,
             cast: None,
             spawn: None,
+            quests: Vec::new(),
             rows: Vec::new(),
             gl: GlOpts::default(),
             lesson: LessonOpts::default(),

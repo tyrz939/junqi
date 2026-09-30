@@ -453,15 +453,14 @@ pub const fn news_key(c: ConsequenceId) -> StoryId {
 
 /// `Condition::SpeakerHeard`: whoever she is talking to has heard of what the county did (a
 /// consequence's `spreads`) by now. False outside a conversation.
-pub fn speaker_heard(cx: &Ctx<'_>, c: ConsequenceId) -> bool {
+pub fn speaker_heard(cx: &crate::actions::Ask<'_>, c: ConsequenceId) -> bool {
     speaker_knows(cx, news_key(c))
 }
 
 /// `Condition::SpeakerKnows`: whoever she is talking to (a person, or a door that speaks for
 /// whoever is behind it) has heard of the story by now. False outside a conversation.
-pub fn speaker_knows(cx: &Ctx<'_>, story: StoryId) -> bool {
-    let Some(d) = cx.actor.and_then(|s| cx.world.player(s)).and_then(|p| p.dialogue) else { return false };
-    let key = match d.speaker {
+pub fn speaker_knows(cx: &crate::actions::Ask<'_>, story: StoryId) -> bool {
+    let key = match cx.speaker {
         Speaker::Unit(id) => cx.zone.unit(id).and_then(|u| u.key),
         Speaker::Prop(id) => cx.zone.prop_ix(id).map(|ix| cx.zone.props[ix as usize].key),
         Speaker::None => None,

@@ -285,6 +285,7 @@ fn scene(args: &[String]) -> Result<(), String> {
         weather,
         cast,
         spawn,
+        quests: flag("--quest").map(|q| q.split(',').map(|s| s.trim().to_owned()).collect()).unwrap_or_default(),
         rows,
         gl,
         lesson,

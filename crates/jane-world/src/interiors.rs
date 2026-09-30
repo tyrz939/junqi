@@ -208,10 +208,12 @@ pub fn build_house(seed: u32, attempt: u8) -> Blueprint {
     b.prop(None, "stove", 12, 2);
     b.talker("ice_orb", "orb_ice", 15, 2, "orb_ice");
     b.prop(None, "table", 6, 11);
+    // The fruit bowl stands on the kitchen table, on its front half (the owner, 2026-10-01: not
+    // on the floor). Its footprint lies on the table's, and the presenter draws it on the top.
+    b.chest(Some("fruit_bowl"), "fruit_bowl", 7, 12, &[("apple", 4)]);
     b.talker("julies_note", "note", 10, 12, "julies_note");
     b.prop(Some("bench"), "bench", 3, 17);
     b.chest(Some("pantry_chest"), "chest", 9, 19, &[("gold_dust", 2), ("small_water", 3), ("pansy", 2)]);
-    b.chest(Some("fruit_bowl"), "fruit_bowl", 13, 15, &[("apple", 4)]);
     b.prop(None, "shelf", 12, 20);
 
     // Front room: leftover furniture along the wall, as 2020 stacked its benches.

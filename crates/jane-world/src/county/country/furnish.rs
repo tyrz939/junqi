@@ -462,8 +462,11 @@ fn woodcutter(c: &mut County<'_>, rng: &mut Sfc32, d: &Defs, b: Rect) {
     own(c, "woodpile", pile);
     put(c, d.p.woodpile, x0 + 10, y0 + 4);
     // Known by what it is: a story that says "his shed" only ever claims a clearing with a shed.
-    let (name, def) = if chance(rng, 500) { ("shed", d.p.shed) } else { ("tent", d.p.tent) };
-    let shelter = talk(c, def, x0 + 13, y0 + 8, d.t.country_shed);
+    // Each says what it is: a padlocked shed, a tent with a camper's things in it (a tent that
+    // said it was padlocked was the owner's, 2026-10-01).
+    let (name, def, says) =
+        if chance(rng, 500) { ("shed", d.p.shed, d.t.country_shed) } else { ("tent", d.p.tent, d.t.country_tent) };
+    let shelter = talk(c, def, x0 + 13, y0 + 8, says);
     own(c, name, shelter);
     let fire = put(c, d.p.campfire_cold, x0 + 6, y0 + 9);
     own(c, "fire", fire);

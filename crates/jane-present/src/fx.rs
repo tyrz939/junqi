@@ -119,6 +119,8 @@ const GLINT_MARGIN: i32 = 16;
 const GLINT_HALO: [u8; 3] = [255, 214, 120];
 const GLINT_CORE: [u8; 3] = [255, 250, 220];
 const GLINT_LATE: [u8; 3] = [240, 170, 80];
+/// A quest sparkle's beat is its prop's own, salted apart from a drop's.
+const QUEST_GLINT_SALT: u32 = 0x7175_6573;
 
 impl Fx {
     /// A pool for `tier`, sized by its `max_particles`.
@@ -337,23 +339,52 @@ impl Fx {
     /// creature leaves is dropped where it fell, so a glint rises from every drop in the view now
     /// and then, gold, glowing, drifting up a little and gone; taken, it stops. A corpse that
     /// left nothing has nothing under it, and nothing glints.
+    ///
+    /// The quest sparkles (§3.8) are the same glint: whatever a step of hers still wants (a
+    /// prop to use, read, take or open, a thing lying on the ground) glints on its own beat,
+    /// read through `View::quest_wants`, and stops once the step is done.
     fn glints(&mut self, view: &View<'_>, (vx, vy, vw, vh): (i32, i32, i32, i32)) {
         let fx_cap = self.cap - self.cap / 3;
+        if fx_cap == 0 {
+            return;
+        }
+        let inside = |x: i32, y: i32| {
+            x >= vx - GLINT_MARGIN
+                && y >= vy - GLINT_MARGIN
+                && x <= vx + vw + GLINT_MARGIN
+                && y <= vy + vh + GLINT_MARGIN
+        };
+        // Each on its own beat, so a heap of loot twinkles rather than blinks.
+        let due = |id: u32, salt: u32| self.tick % GLINT_EVERY == jane_art::hash::h32(id, 0, salt) % GLINT_EVERY;
+        let mut at: Vec<(i32, i32, (i32, i32))> = Vec::new();
         for d in view.drops() {
             let (x, y) = (d.pos.x.0 >> FX_TO_CANVAS, d.pos.y.0 >> FX_TO_CANVAS);
-            if x < vx - GLINT_MARGIN
-                || y < vy - GLINT_MARGIN
-                || x > vx + vw + GLINT_MARGIN
-                || y > vy + vh + GLINT_MARGIN
-            {
-                continue;
+            if inside(x, y) && due(d.id.get(), 0x676c_696e) {
+                at.push((x, y, (5, 3)));
             }
-            // Each on its own beat, so a heap of loot twinkles rather than blinks.
-            let beat = jane_art::hash::h32(d.id.get(), 0, 0x676c_696e) % GLINT_EVERY;
-            if self.tick % GLINT_EVERY != beat || fx_cap == 0 {
-                continue;
+        }
+        let wants = view.quest_wants();
+        if !wants.is_empty() {
+            let cells = jane_core::Rect::new(
+                (vx - GLINT_MARGIN).div_euclid(CELL),
+                (vy - GLINT_MARGIN).div_euclid(CELL),
+                (vw + 2 * GLINT_MARGIN) / CELL + 2,
+                (vh + 2 * GLINT_MARGIN) / CELL + 2,
+            );
+            let cat = jane_data::catalog();
+            for p in view.props_in(cells) {
+                if !due(p.id.get(), QUEST_GLINT_SALT) || !view.prop_wanted(&wants, p) {
+                    continue;
+                }
+                let d = cat.story.prop(p.def);
+                let (w, h) = (i32::from(d.w) * CELL, i32::from(d.h) * CELL);
+                // Over the thing: its footprint's middle, a little up it.
+                let (x, y) = (i32::from(p.cell.x) * CELL + w / 2, i32::from(p.cell.y) * CELL + h / 2);
+                at.push((x, y, (w / 3 + 2, h / 4 + 2)));
             }
-            let (ox, oy, oz) = (self.rng.range(-5, 5), self.rng.range(-3, 2), self.rng.range(2, 7));
+        }
+        for (x, y, (rx, ry)) in at {
+            let (ox, oy, oz) = (self.rng.range(-rx, rx), self.rng.range(-ry, ry.min(2)), self.rng.range(2, 7));
             for (shape, colour, glow) in [(Shape::Glow(4), GLINT_HALO, 180), (Shape::Dot(1), GLINT_CORE, 255)] {
                 if self.parts.len() >= fx_cap {
                     self.parts.pop_front();

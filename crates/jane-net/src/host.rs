@@ -192,6 +192,8 @@ pub struct Host {
     notes: Vec<Note>,
     checks: Checks,
     rested: bool,
+    /// Whose rest it was, the last this step.
+    rested_by: Option<Seat>,
     /// Guests' hashes that came before the host's own for that frame was encoded: `(token,
     /// frame, hash)`.
     waiting: Vec<(u64, u32, u64)>,
@@ -238,6 +240,7 @@ impl Host {
             notes: Vec::new(),
             checks: Checks::default(),
             rested: false,
+            rested_by: None,
             waiting: Vec::new(),
             tape: None,
         }
@@ -319,6 +322,11 @@ impl Host {
 
     pub fn take_rested(&mut self) -> bool {
         std::mem::take(&mut self.rested)
+    }
+
+    /// Whose rest asked for the save [`take_rested`](Self::take_rested) reported, once.
+    pub fn take_rested_by(&mut self) -> Option<Seat> {
+        self.rested_by.take()
     }
 
     /// The wait toggle: on, a stalled seat is waited for however long.
@@ -808,6 +816,9 @@ impl Host {
         if self.events.iter().any(|e| e.kind == EventKind::Rest) {
             self.rested = true;
         }
+        if let Some(by) = rested_by(&self.events) {
+            self.rested_by = Some(by);
+        }
         let m = wire::encode(&Msg::Bundle(b.clone()));
         for c in &mut self.conns {
             if c.state == State::Seated && c.link.send(m.clone()).is_ok() {
@@ -870,4 +881,12 @@ impl Host {
             self.blocked = None;
         }
     }
+}
+
+/// The last seat to rest in these events (`EventKind::Rested`).
+pub fn rested_by(events: &[jane_sim::Event]) -> Option<Seat> {
+    events.iter().rev().find_map(|e| match e.kind {
+        EventKind::Rested { by } => Some(by),
+        _ => None,
+    })
 }

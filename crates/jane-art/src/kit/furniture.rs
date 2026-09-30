@@ -12,6 +12,36 @@ use super::{Kit, Stand, State};
 use crate::canvas::{Canvas, FLAT, Z};
 use crate::palette::{Ix, Ramp, Tone};
 
+/// A table's legs, rows: its top's front edge stands one row over them (`super::surface`).
+pub(crate) const TABLE_LEG: i32 = 9;
+/// A counter's front and an altar's, rows up to the top.
+pub(crate) const COUNTER_FACE: i32 = 16;
+pub(crate) const ALTAR_FACE: i32 = 14;
+
+/// The rows of a table's top, `fh` cells deep.
+pub(crate) const fn table_depth(fh: i32) -> i32 {
+    let d = fh * 16 - 14;
+    if d < 8 {
+        8
+    } else if d > 18 {
+        18
+    } else {
+        d
+    }
+}
+
+/// The rows of a counter's or an altar's top over a front `face` rows high, `fh` cells deep.
+pub(crate) const fn counter_depth(fh: i32, face: i32) -> i32 {
+    let d = fh * 16 - face;
+    if d < 6 {
+        6
+    } else if d > 16 {
+        16
+    } else {
+        d
+    }
+}
+
 pub(crate) fn draw(c: &mut Canvas, k: &Kit, state: State) -> Option<Stand> {
     let on = state == State::On;
     let (w, h, foot) = (k.w, k.h, k.foot());
@@ -19,8 +49,8 @@ pub(crate) fn draw(c: &mut Canvas, k: &Kit, state: State) -> Option<Stand> {
         "table" | "desk" | "workbench" => {
             // A table top of planks over four legs (the far two in its shade), what lies on it.
             let (x, tw) = (2, w - 4);
-            let leg = 9;
-            let depth = (k.fh * 16 - 14).clamp(8, 18);
+            let leg = TABLE_LEG;
+            let depth = table_depth(k.fh);
             ao(c, x, x + tw - 1, foot, 6);
             for lx in [x + 1, x + tw - 4] {
                 post(c, lx, foot - leg - depth + 2, foot - leg, 3, k.trim, 2);
@@ -73,8 +103,8 @@ pub(crate) fn draw(c: &mut Canvas, k: &Kit, state: State) -> Option<Stand> {
         "counter" | "altar" => {
             // A counter or an altar: a panelled front to the floor, a top that overhangs it, a
             // cloth over an altar.
-            let face = if k.look.shape == "altar" { 14 } else { 16 };
-            let depth = (k.fh * 16 - face).clamp(6, 16);
+            let face = if k.look.shape == "altar" { ALTAR_FACE } else { COUNTER_FACE };
+            let depth = counter_depth(k.fh, face);
             ao(c, 1, w - 2, foot, 6);
             let (top, front) = box3(c, 1, w - 2, foot, face, depth, k.body, Some(((w / 12).max(2), k.seed)), 3);
             for px in (front.x + 3..front.right() - 4).step_by(10) {
