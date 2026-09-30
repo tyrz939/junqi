@@ -21,3 +21,7 @@ Thumbs.db
 # Milestone screenshots, kept locally (the repo ships no image files)
 /progress/
 /dist/
+
+# The frozen TypeScript build and the archived Phaser remake: kept locally, not in the repo (2026-09-30)
+/jane/
+/archive/
