@@ -355,6 +355,10 @@ pub enum Condition {
     /// Whoever she is talking to has heard of what the county did (a consequence row's `spreads`)
     /// by now: the town's news, as `SpeakerKnows` is a story's.
     SpeakerHeard(ConsequenceId),
+    /// The prop she is talking to shows its light now, by THE rule the picture is drawn by
+    /// (`jane_sim::light::light_showing`): a fire's words say it burns only while it is drawn
+    /// burning, and say it is out when the rain has it out (false outside a conversation).
+    SpeakerLit,
     /// The clock's hour is `from` up to `to`, wrapping midnight ([`hour_within`], a door's hours'
     /// rule): the Museum's bench knows when the doors are shut.
     Hours {

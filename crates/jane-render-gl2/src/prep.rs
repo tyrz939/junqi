@@ -778,7 +778,9 @@ impl Prep {
             let [cr, cg, cb] = light3(l.colour);
             let [cr, cg, cb] = [cr, cg * 0.82, cb * 0.6];
             let luma = 0.2126 * cr + 0.7152 * cg + 0.0722 * cb;
-            let k = POINT_GAIN * (MIN_LUMA / luma.max(0.01)).clamp(1.0, 1.8);
+            // And as much of its pool as shows against the sky's light (`light::pool`).
+            let pool = jane_present::light::pool(self.ambient) as f32 / 256.0;
+            let k = POINT_GAIN * (MIN_LUMA / luma.max(0.01)).clamp(1.0, 1.8) * pool;
             let col = [cr * k, cg * k, cb * k, 0.0];
             let spot = match l.kind {
                 LightKind::Point => [0.0, 0.0, -2.0, mask],

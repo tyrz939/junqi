@@ -113,7 +113,8 @@ fn frame(layers: ChunkLayers, sprite: bool, sun: Option<Directional>, points: &[
     }
     f.lights.extend_from_slice(points);
     f.passes.push(Pass::Lights {
-        ambient: [200; 3],
+        // A night's flat light with its night fill: a lamp's pool shows whole (`light::pool`).
+        ambient: [96, 106, 140],
         fill: [70, 78, 120],
         sun,
         points: Span { start: 0, len: points.len() as u32 },

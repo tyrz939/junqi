@@ -238,6 +238,12 @@ pub enum RawCond {
         #[serde(default)]
         not: bool,
     },
+    /// The prop she is talking to shows its light (a fire burning, not rained out):
+    /// `{"if": "speakerLit"}`.
+    SpeakerLit {
+        #[serde(default)]
+        not: bool,
+    },
     /// The clock's hour is `from` up to `to`, wrapping midnight: `{"if": "hours", "from": 16,
     /// "to": 10}` (a door's `nightHours` rule).
     Hours {
@@ -496,6 +502,7 @@ pub fn cond(cx: &mut Ctx, at: &str, c: &RawCond) -> Option<Cond> {
             (*not, Condition::Flag { key, test })
         }
         RawCond::Night { not } => (*not, Condition::Night),
+        RawCond::SpeakerLit { not } => (*not, Condition::SpeakerLit),
         RawCond::QuestActive { quest, not } => (*not, Condition::QuestActive(cx.quest(at, quest)?)),
         RawCond::QuestReady { quest, not } => (*not, Condition::QuestReady(cx.quest(at, quest)?)),
         RawCond::QuestDone { quest, not } => (*not, Condition::QuestDone(cx.quest(at, quest)?)),

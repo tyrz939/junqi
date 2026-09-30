@@ -762,6 +762,7 @@ impl Feed for Cond {
                 unit.feed(h);
                 rect.feed(h);
             }
+            Condition::SpeakerLit => h.u8(15),
         }
     }
 }

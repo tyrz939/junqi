@@ -87,7 +87,11 @@ fn a_town_night_has_every_pass_and_noon_needs_no_light() {
     );
     assert!(!f.chunks.is_empty() && !f.sprites.is_empty());
     let (_, mut noon) = at_hour(1, 12, Tier::T0);
-    assert!(!noon.draw(255, CANVAS).passes.iter().any(|p| matches!(p, Pass::Lights { .. })));
+    // Noon needs no light pass unless a light shows: a fire's flame glow and its faint pool are
+    // the pass's, and a fire drawn at noon without them read as out (2026-10-01).
+    let f = noon.draw(255, CANVAS);
+    let lit = f.passes.iter().any(|p| matches!(p, Pass::Lights { .. }));
+    assert_eq!(lit, !f.lights.is_empty(), "{} lights", f.lights.len());
 }
 
 #[test]
