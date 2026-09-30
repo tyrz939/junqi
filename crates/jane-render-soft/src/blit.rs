@@ -1,7 +1,7 @@
 //! The pixel path (PRESENTATION.md §1.4): integer only, scalar code that autovectorises, no
 //! intrinsics, no floats, so a frame is the same bytes on every target.
 
-use jane_present::{AO_TINT, Flags, Page, Src, Tint};
+use jane_present::{AO_TINT, Flags, Foot, Page, Src, Tint};
 
 /// A `u32` canvas, `0xAARRGGBB`, row-major.
 #[derive(Debug)]
@@ -42,8 +42,20 @@ fn weight(a: u8) -> u32 {
 /// Blits `src` of `page` with its top-left at `(x, y)`: index 0 skipped, index 1 darkens what is
 /// under it by how much of its 3 x 3 the contact shadow covers (so a clear texel beside one takes
 /// a little of it), every other index its CLUT colour, tinted. A mirrored sprite walks its source
-/// columns backwards. Clipped to the target.
-pub fn sprite(t: &mut Target<'_>, page: &Page, clut: &[u32], src: Src, x: i32, y: i32, flags: Flags) {
+/// columns backwards. Clipped to the target. `behind` is where it stands when the terrain stands
+/// in front of it, with the terrain's heights over the target: a px the terrain hides is left
+/// as it is ([`Foot::skips`]).
+#[allow(clippy::too_many_arguments)]
+pub fn sprite(
+    t: &mut Target<'_>,
+    page: &Page,
+    clut: &[u32],
+    src: Src,
+    x: i32,
+    y: i32,
+    flags: Flags,
+    behind: Option<(Foot, &[u8])>,
+) {
     let (sw, sh) = (i32::from(src.w), i32::from(src.h));
     let (x0, x1) = (x.max(0), (x + sw).min(t.w));
     let (y0, y1) = (y.max(0), (y + sh).min(t.h));
@@ -66,6 +78,11 @@ pub fn sprite(t: &mut Target<'_>, page: &Page, clut: &[u32], src: Src, x: i32, y
             let col = dx - x;
             let sx = if flags.mirror { sw - 1 - col } else { col };
             let i = srow[sx as usize];
+            if let Some((f, hs)) = behind
+                && f.skips(hs[(dy * t.w + dx) as usize], dx, dy, i)
+            {
+                continue;
+            }
             let d = &mut drow[dx as usize];
             match i {
                 0 | 1 => {
@@ -161,7 +178,7 @@ mod tests {
     fn blit(flags: Flags) -> Vec<u32> {
         let mut px = vec![GREY; 6];
         let mut t = Target { px: &mut px, w: 6, h: 1 };
-        sprite(&mut t, &page(), &clut(), Src { x: 0, y: 0, w: 4, h: 1 }, 1, 0, flags);
+        sprite(&mut t, &page(), &clut(), Src { x: 0, y: 0, w: 4, h: 1 }, 1, 0, flags, None);
         px
     }
 
@@ -205,7 +222,7 @@ mod tests {
         let mut t = Target { px: &mut px, w: 4, h: 4 };
         let page = Page { w: 3, h: 3, albedo: vec![2; 9], ..Page::default() };
         for (x, y) in [(-2, -2), (3, 3), (-5, 0), (0, 9)] {
-            sprite(&mut t, &page, &clut(), Src { x: 0, y: 0, w: 3, h: 3 }, x, y, Flags::default());
+            sprite(&mut t, &page, &clut(), Src { x: 0, y: 0, w: 3, h: 3 }, x, y, Flags::default(), None);
         }
         assert_eq!(px.iter().filter(|&&p| p == RED).count(), 2);
         let mut px = vec![0u32; 16];
@@ -213,6 +230,41 @@ mod tests {
         chunk(&mut t, &[7; 9], 3, 2, -1);
         assert_eq!(px.iter().filter(|&&p| p == 7).count(), 4);
         assert_eq!(px[2], 7);
+    }
+
+    #[test]
+    fn what_stands_behind_the_terrain_is_cut_where_it_stands_in_front() {
+        // A 3 x 3 sprite of red standing on row 3, over a roof 40 px up on the left two columns
+        // (its ground rows south of her feet) and flat ground on the right.
+        let page = Page { w: 3, h: 3, albedo: vec![2; 9], ..Page::default() };
+        let mut heights = vec![0u8; 16];
+        for y in 0..4 {
+            heights[y * 4] = 40;
+            heights[y * 4 + 1] = 40;
+        }
+        let draw = |see: bool| {
+            let mut px = vec![GREY; 16];
+            let mut t = Target { px: &mut px, w: 4, h: 4 };
+            let foot = Foot { y: 3, see };
+            let src = Src { x: 0, y: 0, w: 3, h: 3 };
+            sprite(&mut t, &page, &clut(), src, 0, 0, Flags::default(), Some((foot, &heights)));
+            px
+        };
+        let hid = draw(false);
+        for y in 0..3 {
+            assert_eq!(&hid[y * 4..y * 4 + 3], &[GREY, GREY, RED], "row {y}");
+        }
+        // Seen through: one px in two of what is hidden, on the canvas's checker.
+        let seen = draw(true);
+        for y in 0..3usize {
+            for x in 0..2usize {
+                assert_eq!(seen[y * 4 + x], if (x + y) % 2 == 0 { RED } else { GREY }, "({x}, {y})");
+            }
+        }
+        // A kerb's relief hides nothing; a wall's face whose foot is her row hides nothing.
+        assert!(!Foot::hides(Foot::RELIEF, 0, 3));
+        assert!(!Foot::hides(12, 0, 10));
+        assert!(Foot::hides(12, 0, 9));
     }
 
     #[test]

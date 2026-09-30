@@ -762,6 +762,41 @@ pub struct SpriteCmd {
     pub flags: Flags,
     /// How tall the thing stands, screen px: shadow length and water on T1 and T2.
     pub height_px: u8,
+    /// Set when the terrain stands in front of its feet (PRESENTATION.md §1.6, *behind the
+    /// terrain*): every tier leaves out each px of it over which the terrain stands
+    /// ([`Foot::hides`]).
+    pub foot: Option<Foot>,
+}
+
+/// A standing sprite whose feet the terrain stands in front of: a house's roof over her on its
+/// eaves, a fence she is behind (PRESENTATION.md §1.6). Where a px of terrain more than
+/// [`Foot::RELIEF`] px up stands on ground south of `y` (its canvas row plus `rows_up` of its
+/// height), it is in front, and the sprite's px there is not drawn; `see` keeps one px in two of
+/// it there (a checker on the canvas), so she shows through what hides her.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Foot {
+    /// The canvas row of the ground it stands on.
+    pub y: i16,
+    /// Seen through what hides it (a player).
+    pub see: bool,
+}
+
+impl Foot {
+    /// The terrain's relief at or under this is its texture (`shadow::RELIEF`): it hides nothing.
+    pub const RELIEF: u8 = 8;
+
+    /// Whether terrain `h` px up at canvas row `y` stands in front of what stands on row `foot`.
+    #[inline]
+    pub const fn hides(h: u8, y: i32, foot: i32) -> bool {
+        h > Self::RELIEF && y + rows_up(h as i32) > foot
+    }
+
+    /// Whether the px at canvas `(x, y)` of a sprite standing on row `self.y`, index `ix`
+    /// (0 clear, 1 its contact shadow) over terrain `h` px up, is left out.
+    #[inline]
+    pub const fn skips(self, h: u8, x: i32, y: i32, ix: u16) -> bool {
+        Self::hides(h, y, self.y as i32) && !(self.see && ix > 1 && (x + y) & 1 == 0)
+    }
 }
 
 /// A chunk's place in its zone, in chunks.

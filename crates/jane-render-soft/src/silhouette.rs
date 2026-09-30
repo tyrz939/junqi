@@ -173,6 +173,7 @@ mod tests {
             y: 0,
             flags: Flags::default(),
             height_px: 12,
+            foot: None,
         };
         (page, s, Caster { sprite: 0, foot: (5, 10), height: 12, depth: 2, ..Caster::default() })
     }

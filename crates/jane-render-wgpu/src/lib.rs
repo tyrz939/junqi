@@ -175,7 +175,8 @@ fn render_pipeline(
 }
 
 const CHUNK_ATTRS: [wgpu::VertexAttribute; 1] = wgpu::vertex_attr_array![0 => Sint32x4];
-const SPRITE_ATTRS: [wgpu::VertexAttribute; 3] = wgpu::vertex_attr_array![0 => Uint32x4, 1 => Sint32x4, 2 => Uint32x4];
+const SPRITE_ATTRS: [wgpu::VertexAttribute; 4] =
+    wgpu::vertex_attr_array![0 => Uint32x4, 1 => Sint32x4, 2 => Uint32x4, 3 => Sint32x4];
 
 impl Pipes {
     fn new(device: &wgpu::Device, surface: Option<wgpu::TextureFormat>) -> Pipes {
@@ -192,6 +193,7 @@ impl Pipes {
                 B::TexArray,
                 B::TexArray,
                 B::TexArray,
+                B::Tex,
             ],
         );
         let scatter_layout =
@@ -211,7 +213,7 @@ impl Pipes {
             attributes: &CHUNK_ATTRS,
         };
         let sprite_buf = wgpu::VertexBufferLayout {
-            array_stride: 48,
+            array_stride: 64,
             step_mode: wgpu::VertexStepMode::Instance,
             attributes: &SPRITE_ATTRS,
         };
@@ -378,6 +380,10 @@ struct Targets {
     full: (u32, u32),
     galb: wgpu::TextureView,
     gnh: wgpu::TextureView,
+    gnh_tex: wgpu::Texture,
+    /// The terrain's normal and height, for what stands behind it (`Foot`).
+    gterr: wgpu::TextureView,
+    gterr_tex: wgpu::Texture,
     gem: wgpu::TextureView,
     gid: wgpu::TextureView,
     hmap: wgpu::Buffer,
@@ -640,7 +646,7 @@ impl Wgpu {
         };
         let stamps = gpu.timestamps.then(|| Stamps::new(&gpu, "frame stamps", FRAME_STAMPS));
         let present_stamps = gpu.timestamps.then(|| Stamps::new(&gpu, "upscale stamps", 2));
-        let sprite_buf = instance_buffer(device, "sprites", 4096 * 48);
+        let sprite_buf = instance_buffer(device, "sprites", 4096 * 64);
         let chunk_buf = instance_buffer(device, "chunks", 128 * 16);
         let describe = format!("wgpu, {}", gpu.describe());
         let times = FrameTimes::new(stamps.is_some());
@@ -778,7 +784,7 @@ impl Wgpu {
     }
 
     fn gbuf_group(&mut self) {
-        let Some(a) = &self.atlas else { return };
+        let (Some(a), Some(t)) = (&self.atlas, &self.targets) else { return };
         let (ca, cn, ce) =
             (array_view(&self.chunks.albedo), array_view(&self.chunks.nh), array_view(&self.chunks.emissive));
         self.gbuf_bg = Some(group(
@@ -795,6 +801,7 @@ impl Wgpu {
                 r(&ca),
                 r(&cn),
                 r(&ce),
+                r(&t.gterr),
             ],
         ));
     }
@@ -811,7 +818,13 @@ impl Wgpu {
         let rt = wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::TEXTURE_BINDING;
         let view = |t: wgpu::Texture| t.create_view(&wgpu::TextureViewDescriptor::default());
         let galb = view(texture(d, "g albedo", (full.0, full.1, 1), ALBEDO, rt));
-        let gnh = view(texture(d, "g normal height", (full.0, full.1, 1), NH, rt));
+        let gnh_tex = texture(d, "g normal height", (full.0, full.1, 1), NH, rt | wgpu::TextureUsages::COPY_SRC);
+        let gnh = view(gnh_tex.clone());
+        // The terrain's normal and height alone, copied after the chunks: what stands behind it
+        // reads them (`Foot`).
+        let copy = wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST;
+        let gterr_tex = texture(d, "g terrain", (full.0, full.1, 1), NH, copy);
+        let gterr = view(gterr_tex.clone());
         let gem = view(texture(d, "g emissive", (full.0, full.1, 1), ALBEDO, rt));
         let gid = view(texture(d, "g id", (full.0, full.1, 1), ID, rt));
         let hmap = d.create_buffer(&wgpu::BufferDescriptor {
@@ -988,6 +1001,9 @@ impl Wgpu {
             full,
             galb,
             gnh,
+            gnh_tex,
+            gterr,
+            gterr_tex,
             gem,
             gid,
             hmap,
@@ -1011,6 +1027,8 @@ impl Wgpu {
             upscale,
             upscale_step,
         });
+        // The G-buffer's group reads the terrain's copy, which is the targets'.
+        self.gbuf_group();
     }
 
     /// Uploads the chunk slots the frame draws whose generation the GPU does not hold.
@@ -1315,6 +1333,14 @@ impl Backend for Wgpu {
                 pass.draw(0..4, 0..prep.n_chunks);
                 calls += 1;
             }
+        }
+        if prep.behind {
+            let (w, h) = t.full;
+            enc.copy_texture_to_texture(
+                t.gnh_tex.as_image_copy(),
+                t.gterr_tex.as_image_copy(),
+                wgpu::Extent3d { width: w, height: h, depth_or_array_layers: 1 },
+            );
         }
         {
             let mut pass = enc.begin_render_pass(&wgpu::RenderPassDescriptor {

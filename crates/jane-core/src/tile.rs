@@ -113,6 +113,23 @@ tiles! {
     Boardwalk = 48: 0,
     // A bare trunk: stops feet, not eyes.
     DeadTree = 50: F_SOLID,
+    // The back rows of a house's roof: drawn as the roof, but the ground under them lies behind
+    // the house (its roof stands on its walls, `EAVES_ROWS` rows south of its back edge), so feet
+    // and eyes pass and she is drawn behind the roof.
+    Eaves = 51: 0,
+}
+
+/// How many rows at the back of a house's roof are [`Tile::Eaves`]: what the roof overhangs of
+/// the ground behind the house. The roof's back edge stands 57 px up and so is drawn three rows
+/// and a half north of the ground it stands on (`jane-art`'s `terrain_reach` holds the painter to
+/// this); the fourth row is half over the house and blocks, as a prop's base rounds up.
+pub const EAVES_ROWS: i32 = 3;
+
+impl Tile {
+    /// Drawn as a house's roof: [`Tile::HouseRoof`] and the [`Tile::Eaves`] behind it.
+    pub const fn is_roof(self) -> bool {
+        matches!(self, Tile::HouseRoof | Tile::Eaves)
+    }
 }
 
 /// A tile is saved as its id, the number content and room legends use, so a save does not
@@ -171,8 +188,9 @@ mod tests {
             assert_eq!(Tile::from_id(id), None);
             assert!(Material::from_ts_tile(id).is_some());
         }
-        assert_eq!(Tile::ALL.len(), 47);
-        assert_eq!(Tile::from_id(51), None);
+        assert_eq!(Tile::ALL.len(), 48);
+        assert_eq!(Tile::from_id(51), Some(Tile::Eaves));
+        assert_eq!(Tile::from_id(52), None);
     }
 
     #[test]

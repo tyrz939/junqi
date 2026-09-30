@@ -562,6 +562,7 @@ mod tests {
             y: 11,
             flags: Flags::default(),
             height_px: 25,
+            foot: None,
         };
         (albedo, s, Caster { sprite: 0, foot: (22, 31), height: 25, depth: 4, ..Caster::default() })
     }
@@ -636,6 +637,7 @@ mod tests {
             y: (foot.1 - 56) as i16,
             flags: Flags::default(),
             height_px: 70,
+            foot: None,
         };
         let c = Caster { sprite: 0, foot: (foot.0 as i16, foot.1 as i16), height: 70, depth: 6, ..Caster::default() };
         let mut r = Vec::new();

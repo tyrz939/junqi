@@ -95,6 +95,7 @@ const EMPTY: SpriteCmd = SpriteCmd {
     y: 0,
     flags: crate::frame::Flags { mirror: false, tint: crate::frame::Tint::None },
     height_px: 0,
+    foot: None,
 };
 
 #[cfg(test)]

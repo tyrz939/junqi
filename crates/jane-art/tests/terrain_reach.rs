@@ -24,9 +24,10 @@ use jane_core::grid::Grid;
 /// Where the thing stands: cell (6, 8) of a chunk of grass.
 const AT: (i32, i32) = (6, 8);
 
-/// Painted into the ground layers under her, and its drawing reaches rows south of its cell: a
-/// roof stands on its house's walls, a storey down. She may not step onto the ground it overhangs
-/// from above, for she would be drawn over the roof; she stops at its edge as at a wall's top.
+/// Painted into the ground layers, and its drawing reaches rows south of its cell: a roof stands
+/// on its house's walls, a storey down. What of it overhangs the ground behind the house is its
+/// eaves ([`Tile::Eaves`], its back `EAVES_ROWS`), which she walks under and is drawn behind
+/// (`eaves_are_the_roof_over_the_ground_behind_the_house`); the rest is over the house.
 const UNDER_HER: [Tile; 1] = [Tile::HouseRoof];
 
 fn scene(t: Tile, run: i32) -> TileMap {
@@ -109,4 +110,46 @@ fn every_solid_tile_is_drawn_standing_in_the_cell_it_blocks() {
     }
     assert!(seen >= 20, "the solid tiles were painted ({seen})");
     assert!(bad.is_empty(), "drawn standing outside the cell it blocks: {bad:#?}");
+}
+
+/// A house as the county stamps it (its roof's back rows the eaves): the ground its roof and
+/// walls stand on begins in the first row of roof that blocks, so from behind she walks under the
+/// eaves to within a row of the house's true back and no further.
+#[test]
+fn eaves_are_the_roof_over_the_ground_behind_the_house() {
+    use jane_core::tile::EAVES_ROWS;
+    let (x0, x1, top) = (4, 11, 2);
+    let mut g = Grid::new(16, 16, Tile::Grass);
+    for x in x0..x1 {
+        for y in top..top + EAVES_ROWS {
+            g.set(x, y, Tile::Eaves);
+        }
+        for y in top + EAVES_ROWS..top + EAVES_ROWS + 2 {
+            g.set(x, y, Tile::HouseRoof);
+        }
+        for y in top + EAVES_ROWS + 2..top + EAVES_ROWS + 5 {
+            g.set(x, y, Tile::HouseWall);
+        }
+    }
+    let mut p = Painter::new();
+    p.set_standing(Standing::Placed);
+    let mut c = Chunk::new();
+    p.paint(&TileMap::new(g, true), 1, 0, 0, &mut c);
+    let side = 16 * CELL;
+    let mut north = i32::MAX;
+    for y in 0..side {
+        for x in x0 * CELL..x1 * CELL {
+            let h = i32::from(c.layers.height[(y * side + x) as usize]);
+            if h > 8 {
+                north = north.min(y + rows_up(h));
+            }
+        }
+    }
+    let blocks = (top + EAVES_ROWS) * CELL;
+    eprintln!("the house stands on rows from {north} (its first blocking row starts at {blocks})");
+    assert!(
+        (blocks..blocks + CELL).contains(&north),
+        "the house stands on ground from row {north}; its first blocking row is {blocks}..{}",
+        blocks + CELL
+    );
 }

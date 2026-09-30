@@ -21,7 +21,7 @@ use jane_present::shadow;
 use jane_present::{Caster, Directional, Frame, LightKind, Pass, Post, Rgb, SpriteCmd, Tint};
 
 use crate::gl::Blend;
-use crate::shaders::{LIGHT_SIZES, SPAN_SIZES, SPRITE_SIZES};
+use crate::shaders::{LIGHT_SIZES, SPAN_SIZES, STAND_SIZES};
 
 /// Fog volumes T1 draws at most (the fog shader's arrays): the first eight the frame holds, the
 /// weather's mist and the evening's haze among them.
@@ -185,6 +185,8 @@ pub struct Prep {
     /// Ranges of chunk quads, then of sprite quads by page, that the normal and emissive passes
     /// draw (no ghosts: a ghost neither catches a height nor glows).
     pub solid_chunks: Vec<Range<usize>>,
+    /// Some sprite stands behind the terrain (`Foot`): the terrain's heights are drawn for it.
+    pub behind: bool,
     pub solid: Vec<(u8, Range<usize>)>,
     /// Mask quads: pos, two values (silhouettes' strength and reach, then the point lights'
     /// shadows' reach twice).
@@ -331,6 +333,7 @@ impl Prep {
         self.chunk_v.clear();
         self.chunk_slots.clear();
         self.sprite_v.clear();
+        self.behind = false;
         self.steps.clear();
         self.solid_chunks.clear();
         self.solid.clear();
@@ -540,7 +543,7 @@ impl Prep {
 
     /// One sprite pass: its quads, its albedo steps, its solid ranges.
     fn sprites(&mut self, frame: &Frame, range: Range<usize>, pages: &[PageCpu], rows: Rows, (cw, ch): (i32, i32)) {
-        let first = self.sprite_v.len() / (4 * 12);
+        let first = self.sprite_v.len() / (4 * 16);
         let mut quads = std::mem::take(&mut self.quads);
         quads.clear();
         for i in range {
@@ -561,17 +564,20 @@ impl Prep {
             let (ul, ur) = if s.flags.mirror { (sx + sw, sx) } else { (sx, sx + sw) };
             let rect = [sx, sy, sx + sw, sy + sh];
             let info = [kind, weight, if s.flags.mirror { 1.0 } else { 0.0 }, depth];
+            let foot = s.foot.map_or([0.0; 4], |f| [f32::from(f.y), 1.0, if f.see { 1.0 } else { 0.0 }, 0.0]);
+            self.behind |= s.foot.is_some();
             let (x0, y0, x1, y1) = (x as f32, y as f32, (x + w) as f32, (y + h) as f32);
             for (px, py, u, v) in [(x0, y0, ul, sy), (x1, y0, ur, sy), (x0, y1, ul, sy + sh), (x1, y1, ur, sy + sh)] {
                 push(&mut self.sprite_v, &[px, py, u, v]);
                 push(&mut self.sprite_v, &rect);
                 push(&mut self.sprite_v, &info);
+                push(&mut self.sprite_v, &foot);
             }
-            let q = self.sprite_v.len() / (4 * 12) - 1;
+            let q = self.sprite_v.len() / (4 * 16) - 1;
             let reads = ghost || pages[usize::from(s.page)].has_ao(s.src);
             quads.push((q, s.page, reads, ghost, r));
         }
-        let end = self.sprite_v.len() / (4 * 12);
+        let end = self.sprite_v.len() / (4 * 16);
         if end > first {
             self.sprite_steps(&quads, end, rows);
         }
@@ -806,7 +812,7 @@ impl Prep {
         let per = |sizes: &[i32]| sizes.iter().sum::<i32>() as usize * 4;
         (
             self.chunk_v.len() / 16,
-            self.sprite_v.len() / per(&SPRITE_SIZES),
+            self.sprite_v.len() / per(&STAND_SIZES),
             self.span_v.len() / per(&SPAN_SIZES),
             self.light_v.len() / per(&LIGHT_SIZES),
         )
@@ -826,6 +832,7 @@ mod tests {
             y: 0,
             flags: Flags { mirror: false, tint },
             height_px: 8,
+            foot: None,
         }
     }
 
@@ -949,6 +956,7 @@ mod tests {
             y: 0,
             flags: Flags::default(),
             height_px: 10,
+            foot: None,
         });
         f.casters.push(Caster { sprite: 0, foot: (50, 10), height: 10, depth: 2, ..Caster::default() });
         f.lights.push(jane_present::Light {

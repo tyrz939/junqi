@@ -18,7 +18,8 @@
 use jane_core::action::TextRef;
 use jane_core::blueprint::{Door, PropSpawn, Waypoint};
 use jane_core::num::Tick;
-use jane_core::{Key, NameId, Rect, Sfc32};
+use jane_core::tile::EAVES_ROWS;
+use jane_core::{Key, NameId, Rect, Sfc32, Tile};
 use jane_data::{ChunkDef, ChunkFill, PropTemplate};
 
 use crate::kit::Kit;
@@ -71,6 +72,15 @@ pub fn apply_template(p: &mut PropSpawn, t: &PropTemplate) {
     p.night_lock = t.night_lock.map(jane_data::NightLockDef::lock);
 }
 
+/// The tile `def` stamps at its cell `(x, y)`: its grid's, but a roof's back [`EAVES_ROWS`] rows
+/// are [`Tile::Eaves`], for the ground under them lies behind the house (its roof stands on its
+/// walls three rows and a half south of its back edge): she walks there, drawn behind the roof.
+pub fn stamped_tile(def: &ChunkDef, x: u16, y: u16) -> Tile {
+    let roof = |y: i32| y >= 0 && def.tile(x, y as u16) == Tile::HouseRoof;
+    let t = def.tile(x, y);
+    if t == Tile::HouseRoof && (1..=EAVES_ROWS).any(|d| !roof(i32::from(y) - d)) { Tile::Eaves } else { t }
+}
+
 /// Stamp `def` for site row `site`, whose origin cell is `(ox, oy)`. Its fills throw
 /// [`Step::CountyChunk`] at the kit's attempt, one stream per fill: `(site, fill)`.
 pub fn stamp(k: &mut Kit, def: &'static ChunkDef, site: u8, ox: i32, oy: i32) -> Chunk {
@@ -81,7 +91,7 @@ pub fn stamp(k: &mut Kit, def: &'static ChunkDef, site: u8, ox: i32, oy: i32) ->
 
     for y in 0..def.h {
         for x in 0..def.w {
-            k.set(bx + i32::from(x), by + i32::from(y), def.tile(x, y));
+            k.set(bx + i32::from(x), by + i32::from(y), stamped_tile(def, x, y));
         }
     }
     for r in def.claims {

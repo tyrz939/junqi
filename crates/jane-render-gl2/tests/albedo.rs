@@ -4,6 +4,7 @@
 //! Four scenes drawn twice on two APIs and read back are half a minute of a dev build, so it is
 //! the slow tier (VERIFICATION.md §6): `cargo test --release -p jane-render-gl2 -- --ignored`.
 
+use jane_core::Angle;
 use jane_present::{Backend, Pass, Present, Tier, WeatherKind};
 use jane_render_gl2::{Api, Gl2, Rows};
 use jane_render_soft::Soft;
@@ -21,6 +22,33 @@ fn at_hour(seed: u32, hour: u8) -> Present {
     for k in 0..40 {
         let cmds: &[StampedCommand] = if k == 0 { &cmd } else { &[] };
         sim.step(&StepInput { frames: [InputFrame::IDLE; 4], commands: cmds });
+        let events = sim.drain_events().to_vec();
+        let v = sim.view(Seat(0)).expect("seat 0 plays");
+        p.tick(&v, &events);
+    }
+    p
+}
+
+/// She walks round Julie's house and in under its eaves at 11:00 (PRESENTATION.md §1.6): its
+/// roof stands in front of her, and she is seen through it on the canvas's checker.
+fn behind_house() -> Present {
+    let mut sim = Sim::new_game(1, "Jane");
+    let mut p = Present::new(Tier::T1);
+    p.set_canvas(CANVAS);
+    let mark = sim.state().syms.find("house_front").expect("Julie's house has a front");
+    let seat = Some(Seat(0));
+    let cmds = [
+        StampedCommand { seat, seq: 1, cmd: Command::Dev(DevOp::God(true)) },
+        StampedCommand { seat, seq: 2, cmd: Command::Dev(DevOp::Time { hour: 11 }) },
+        StampedCommand { seat, seq: 3, cmd: Command::Dev(DevOp::Tp { zone: jane_core::ids::ZoneId::County, mark }) },
+    ];
+    let legs = [(Angle::WEST, 90), (Angle::NORTH, 140), (Angle::EAST, 75), (Angle::SOUTH, 60)];
+    let steps = std::iter::repeat_n(InputFrame::IDLE, 61)
+        .chain(legs.iter().flat_map(|&(dir, n)| std::iter::repeat_n(InputFrame::walk(dir), n)));
+    for (k, frame) in steps.enumerate() {
+        let cmds: &[StampedCommand] = if k == 0 { &cmds } else { &[] };
+        let idle = InputFrame::IDLE;
+        sim.step(&StepInput { frames: [frame, idle, idle, idle], commands: cmds });
         let events = sim.drain_events().to_vec();
         let v = sim.view(Seat(0)).expect("seat 0 plays");
         p.tick(&v, &events);
@@ -63,14 +91,19 @@ fn both_modes_match(mut gl: Gl2) {
     eprintln!("{}", gl.describe());
     let mut soft = Soft::new();
     let mut silhouettes = false;
-    for (seed, hour) in [(1, 22), (1, 17), (2, 12), (3, 19)] {
-        let mut p = at_hour(seed, hour);
+    let scenes =
+        [(1, 22), (1, 17), (2, 12), (3, 19)].map(|(seed, hour)| (format!("seed {seed} {hour:02}:00"), seed, hour));
+    for (label, seed, hour) in scenes.into_iter().chain([("behind Julie's house".to_string(), 1, 11)]) {
+        let mut p = if label.starts_with("behind") { behind_house() } else { at_hour(seed, hour) };
         gl.upload_atlas(p.atlas());
         soft.upload_atlas(p.atlas());
         let frame = p.draw(200, CANVAS);
         assert_eq!(frame.tier, Tier::T1);
         assert!(frame.passes.iter().any(|q| matches!(q, Pass::Lights { .. })));
         silhouettes |= frame.passes.iter().any(|q| matches!(q, Pass::Silhouettes { .. }));
+        if label.starts_with("behind") {
+            assert!(frame.sprites.iter().any(|s| s.foot.is_some_and(|f| f.see)), "{label}: she stands behind the roof");
+        }
         for exact in [true, false] {
             gl.set_rows(Rows { exact, ..Rows::T1 });
             gl.draw(p.frame());
@@ -103,13 +136,13 @@ fn both_modes_match(mut gl: Gl2) {
             let (px, sw, sh) = soft.pixels();
             assert_eq!((sw, sh), CANVAS);
             let (n, most, first) = diff(px, &albedo, usize::from(w));
-            eprintln!("seed {seed} {hour:02}:00 exact {exact}: {n} px differ, by at most {most}; first {first:x?}");
+            eprintln!("{label} exact {exact}: {n} px differ, by at most {most}; first {first:x?}");
             if exact {
-                assert_eq!(n, 0, "seed {seed} at {hour}: the exact albedo is soft's; first {first:x?}");
+                assert_eq!(n, 0, "{label}: the exact albedo is soft's; first {first:x?}");
             } else {
                 // The fast mode blends where soft floors, and lays the contact shadows under the
                 // pass: never more than a few levels, and on few px.
-                assert!(n < px.len() / 20 && most <= 16, "seed {seed} at {hour}: {n} px differ in the fast mode");
+                assert!(n < px.len() / 20 && most <= 16, "{label}: {n} px differ in the fast mode");
             }
         }
         // The whole frame is lit: the light changes the albedo, and the canvas reads back.

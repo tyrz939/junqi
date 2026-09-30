@@ -11,6 +11,8 @@
 @group(0) @binding(6) var chunk_albedo: texture_2d_array<f32>;
 @group(0) @binding(7) var chunk_nh: texture_2d_array<f32>;
 @group(0) @binding(8) var chunk_emissive: texture_2d_array<f32>;
+// The terrain's normal and height alone (the chunks' pass, copied): what stands behind it reads it.
+@group(0) @binding(9) var terrain_nh: texture_2d<f32>;
 
 struct GOut {
     @location(0) albedo: vec4<f32>,
@@ -67,6 +69,9 @@ struct SpriteOut {
     @location(3) @interpolate(flat) sink: u32,
     // The rows it burns, first | last << 16 (`Caster::burn`): they stand in no field.
     @location(4) @interpolate(flat) burn: u32,
+    // The canvas row it stands on, 1 when the terrain stands in front of its feet, 1 when a
+    // player is seen through it (`Foot`).
+    @location(5) @interpolate(flat) foot: vec4<i32>,
 };
 
 @vertex
@@ -75,6 +80,7 @@ fn vs_sprite(
     @location(0) src: vec4<u32>,
     @location(1) dst: vec4<i32>,
     @location(2) extra: vec4<u32>,
+    @location(3) foot: vec4<i32>,
 ) -> SpriteOut {
     let corner = vec2<f32>(f32(vi & 1u), f32((vi >> 1u) & 1u));
     let size = vec2<f32>(f32(src.z), f32(src.w));
@@ -86,7 +92,27 @@ fn vs_sprite(
     o.info = vec4<u32>(u32(dst.z), u32(dst.w), extra.x, extra.y);
     o.sink = extra.z;
     o.burn = extra.w;
+    o.foot = foot;
     return o;
+}
+
+// Whether the terrain hides this px of a sprite standing behind it (`jane_present::Foot::skips`):
+// a px of terrain more than 8 px up standing on ground south of the sprite's feet (its row plus
+// `rows_up` of its height), but for one in two of a player's opaque texels, on the canvas's
+// checker.
+fn hidden(i: SpriteOut) -> bool {
+    if i.foot.y == 0 {
+        return false;
+    }
+    let p = vec2<i32>(floor(i.pos.xy));
+    let h = u32(round(textureLoad(terrain_nh, p, 0).b * 255.0));
+    let y = p.y - i32(g.guard);
+    return h > 8u && y + i32((h * 4u + 4u) / 5u) > i.foot.x;
+}
+
+fn skips(i: SpriteOut, ix: u32) -> bool {
+    let q = vec2<i32>(floor(i.pos.xy)) - vec2<i32>(i32(g.guard));
+    return hidden(i) && (i.foot.z == 0 || ix <= 1u || ((q.x + q.y) & 1) != 0);
 }
 
 // The texel of the sprite under this fragment (a mirrored frame walks its columns backwards).
@@ -107,7 +133,7 @@ fn fs_sprite(i: SpriteOut) -> GOut {
     let t = texel(i);
     let page = i32(i.info.x);
     let ix = textureLoad(atlas_albedo, t, page, 0).r;
-    if ix <= 1u {
+    if ix <= 1u || skips(i, ix) {
         discard;
     }
     var c = clut_at(ix);
@@ -139,6 +165,12 @@ fn fs_sprite(i: SpriteOut) -> GOut {
     o.nh = vec4<f32>(n, h, select(f32(i.info.z) / 255.0, 0.0, burns));
     o.emissive = vec4<f32>(ec, 1.0);
     o.id = i.info.w;
+    // Seen through what hides it, it is colour alone: the terrain keeps its field and its glow.
+    if hidden(i) {
+        o.nh = textureLoad(terrain_nh, vec2<i32>(floor(i.pos.xy)), 0);
+        o.emissive = vec4<f32>(0.0, 0.0, 0.0, 1.0);
+        o.id = 0u;
+    }
     return o;
 }
 
@@ -152,7 +184,7 @@ fn fs_contact(i: SpriteOut) -> @location(0) vec4<f32> {
     let page = i32(i.info.x);
     let t = texel(i);
     let ix = textureLoad(atlas_albedo, t, page, 0).r;
-    if ix > 1u {
+    if ix > 1u || skips(i, ix) {
         discard;
     }
     let lo = vec2<i32>(i32(i.src.x), i32(i.src.y));
@@ -177,7 +209,7 @@ fn fs_contact(i: SpriteOut) -> @location(0) vec4<f32> {
 @fragment
 fn fs_ghost(i: SpriteOut) -> @location(0) vec4<f32> {
     let ix = textureLoad(atlas_albedo, texel(i), i32(i.info.x), 0).r;
-    if ix <= 1u {
+    if ix <= 1u || skips(i, ix) {
         discard;
     }
     let a = f32((i.info.y >> 8u) & 255u) / 255.0;
