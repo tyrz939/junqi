@@ -84,6 +84,12 @@ model! {
         /// front of its footprint with its top over the back rows, so she can step into them from
         /// above and be drawn behind it (`solid_rect`). `h` when the row does not say.
         pub base: u8,
+        /// Where its look meets the ground: x, y, w, h in sixteenths of a cell (a canvas px) from
+        /// its footprint's top-left (`data/prop_feet.json`, written from the art by `jane-present`'s
+        /// `prop_base` test). Feet collide with these and not the whole `base` rows, so she walks
+        /// up to a crate's back from the north (`solid_parts`); the grid, the paths and the solver
+        /// keep the cells. `None`: the `base` rows whole.
+        pub feet: Option<[u8; 4]>,
         /// Blocks movement.
         pub solid: bool,
         /// Blocks line of sight.
@@ -134,12 +140,48 @@ model! {
     }
 }
 
+/// Sixteenths of a cell feet may leave open at either side and still hold their footprint's width
+/// (`PropDef::solid_parts`): two such side by side, or one beside a wall, leave her (six px,
+/// twelve sixteenths) no room between.
+pub const FEET_SIDE_SLACK: i32 = 4;
+
 impl PropDef {
     /// The cells a solid prop with its footprint's top-left at `(x, y)` blocks: its `base` rows,
     /// the front of its footprint. What the sim stamps solid and the solver floods around.
     pub const fn solid_rect(&self, x: i32, y: i32) -> jane_core::Rect {
         let base = if self.base == 0 || self.base > self.h { self.h } else { self.base };
         jane_core::Rect::new(x, y + self.h as i32 - base as i32, self.w as i32, base as i32)
+    }
+
+    /// What feet collide with, in sixteenths of a cell (a canvas px) from the footprint's
+    /// top-left. Feet as wide as the footprint (within [`FEET_SIDE_SLACK`]: a crate, a table, a
+    /// wall a verb clears) come with two posts a sixteenth wide up the footprint's west and east
+    /// edges from them to the back of its `base` rows. The notch between the posts is where she
+    /// stands behind it: she enters it from the north and leaves it the same way (too little is
+    /// open at either side for her to slip out under a post), so it joins no two places the cells
+    /// keep apart. Narrow feet (a trunk, a lamp post) stand alone, and she walks round them. With
+    /// no `feet`, the `base` rows whole. Unused rects are empty.
+    pub const fn solid_parts(&self) -> [jane_core::Rect; 3] {
+        let base = if self.base == 0 || self.base > self.h { self.h } else { self.base };
+        let top = (self.h as i32 - base as i32) * 16;
+        let none = jane_core::Rect::new(0, 0, 0, 0);
+        match self.feet {
+            None => [jane_core::Rect::new(0, top, self.w as i32 * 16, base as i32 * 16), none, none],
+            Some([x, y, w, h]) => {
+                let (x, y, w, h) = (x as i32, y as i32, w as i32, h as i32);
+                let fw = self.w as i32 * 16;
+                // Narrow feet (a trunk, a post) stand free in their cells: she walks round them.
+                let wide = x <= FEET_SIDE_SLACK && x + w >= fw - FEET_SIDE_SLACK;
+                if y <= top || !wide {
+                    return [jane_core::Rect::new(x, y, w, h), none, none];
+                }
+                [
+                    jane_core::Rect::new(x, y, w, h),
+                    jane_core::Rect::new(0, top, 1, y - top),
+                    jane_core::Rect::new(fw - 1, top, 1, y - top),
+                ]
+            }
+        }
     }
 
     /// The light's show rule without the instance: whether a light of this def shows for a prop

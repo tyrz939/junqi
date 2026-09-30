@@ -1,7 +1,9 @@
 //! One unit's making and moving (`sim/units.ts`).
 //!
 //! **Movement** is a 6 x 6 px box on the feet ([`BODY_HALF_FX`]), axis-separated: x first, then
-//! y, each sliding flush to the cell border when blocked. Units never block each other's feet;
+//! y, each sliding flush against what it meets: terrain by the cell, a solid prop by where its
+//! look meets the ground (`PropDef::solid_parts`, in sixteenths of a cell), so from the north she
+//! walks up to a crate's back though paths keep its cells. Units never block each other's feet;
 //! they shape paths through occupancy instead, so nothing wedges in a corridor.
 
 use jane_core::action::Facing;
@@ -10,7 +12,7 @@ use jane_core::num::CELL_FX;
 use jane_core::{Angle, Fx, Milli, Tick, UnitDefId, Vec2};
 use jane_data::UnitDef;
 
-use crate::grid::ZoneGrid;
+use crate::grid::{Meets, ZoneGrid};
 use crate::ids::UnitId;
 use crate::runtime::ZoneRuntime;
 use crate::state::{CombatState, Patrol, SnakeBody, Unit};
@@ -160,31 +162,88 @@ pub fn face_angle(u: &mut Unit, a: Angle) {
     face_vector(u, i64::from(cos_q15(a).0), i64::from(sin_q15(a).0));
 }
 
-/// Is the body box at `(x, y)` in any solid cell?
-pub fn box_blocked(g: &ZoneGrid, x: Fx, y: Fx) -> bool {
-    let x0 = Fx(x.0 - BODY_HALF_FX).cell();
-    let x1 = Fx(x.0 + BODY_HALF_FX - 1).cell();
-    let y0 = Fx(y.0 - BODY_HALF_FX).cell();
-    let y1 = Fx(y.0 + BODY_HALF_FX - 1).cell();
-    for cy in y0..=y1 {
-        for cx in x0..=x1 {
-            if g.solid(cx, cy) {
-                return true;
+/// A sixteenth of a cell (a canvas px), the grain of a prop's feet.
+const SUB_FX: i32 = CELL_FX / 16;
+
+/// An axis-aligned box in `Fx`, half-open: `[x0, x1) x [y0, y1)`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Span {
+    x0: i32,
+    y0: i32,
+    x1: i32,
+    y1: i32,
+}
+
+/// Every solid piece feet meet inside `b`, to `f`: a whole cell, or one sixteenth-row of a
+/// cell's props' feet from its first to its last solid sixteenth inside `b`'s columns. Stops
+/// and returns true the first time `f` does.
+fn pieces(g: &ZoneGrid, b: Span, mut f: impl FnMut(Span) -> bool) -> bool {
+    for cy in Fx(b.y0).cell()..=Fx(b.y1 - 1).cell() {
+        for cx in Fx(b.x0).cell()..=Fx(b.x1 - 1).cell() {
+            let (ox, oy) = (cx * CELL_FX, cy * CELL_FX);
+            match g.feet_meet(cx, cy) {
+                Meets::Open => {}
+                Meets::Whole => {
+                    if f(Span { x0: ox, y0: oy, x1: ox + CELL_FX, y1: oy + CELL_FX }) {
+                        return true;
+                    }
+                }
+                Meets::Part(rows) => {
+                    let c0 = (b.x0 - ox).max(0) / SUB_FX;
+                    let c1 = (b.x1 - 1 - ox).min(CELL_FX - 1) / SUB_FX;
+                    let cols = ((1u32 << (c1 + 1)) - (1u32 << c0)) as u16;
+                    let r0 = (b.y0 - oy).max(0) / SUB_FX;
+                    let r1 = (b.y1 - 1 - oy).min(CELL_FX - 1) / SUB_FX;
+                    for r in r0..=r1 {
+                        let m = rows[r as usize] & cols;
+                        if m == 0 {
+                            continue;
+                        }
+                        let (lo, hi) = (m.trailing_zeros() as i32, 16 - m.leading_zeros() as i32);
+                        let y = oy + r * SUB_FX;
+                        if f(Span { x0: ox + lo * SUB_FX, y0: y, x1: ox + hi * SUB_FX, y1: y + SUB_FX }) {
+                            return true;
+                        }
+                    }
+                }
             }
         }
     }
     false
 }
 
-/// Blocked on this axis: close the gap to the cell border so the body sits flush.
-fn slide_to(pos: i32, delta: i32) -> i32 {
-    if delta > 0 {
-        let edge = (Fx(pos + BODY_HALF_FX - 1).cell() + 1) * CELL_FX - BODY_HALF_FX;
-        pos.max((pos + delta).min(edge))
-    } else {
-        let edge = Fx(pos - BODY_HALF_FX).cell() * CELL_FX + BODY_HALF_FX;
-        pos.min((pos + delta).max(edge))
-    }
+/// The body box with its feet at `(x, y)`.
+fn body_at(x: i32, y: i32) -> Span {
+    Span { x0: x - BODY_HALF_FX, y0: y - BODY_HALF_FX, x1: x + BODY_HALF_FX, y1: y + BODY_HALF_FX }
+}
+
+/// Is the body box at `(x, y)` in anything solid to feet: terrain, or a prop's feet?
+pub fn box_blocked(g: &ZoneGrid, x: Fx, y: Fx) -> bool {
+    pieces(g, body_at(x.0, y.0), |_| true)
+}
+
+/// How far the body box `b` moves by `delta` along one axis before it meets something: all of
+/// it if nothing is in the way, else flush against the nearest thing ahead. What it already
+/// touches is not ahead (the caller's last check keeps a body that stays inside something).
+fn slide(g: &ZoneGrid, b: Span, horizontal: bool, delta: i32) -> i32 {
+    let (lo, hi) = if horizontal { (b.x0, b.x1) } else { (b.y0, b.y1) };
+    let swept = match (horizontal, delta > 0) {
+        (true, true) => Span { x1: b.x1 + delta, ..b },
+        (true, false) => Span { x0: b.x0 + delta, ..b },
+        (false, true) => Span { y1: b.y1 + delta, ..b },
+        (false, false) => Span { y0: b.y0 + delta, ..b },
+    };
+    let mut reach = delta.abs();
+    pieces(g, swept, |p| {
+        let (p0, p1) = if horizontal { (p.x0, p.x1) } else { (p.y0, p.y1) };
+        if delta > 0 && p0 >= hi {
+            reach = reach.min(p0 - hi);
+        } else if delta < 0 && p1 <= lo {
+            reach = reach.min(lo - p1);
+        }
+        false
+    });
+    reach * delta.signum()
 }
 
 /// Move by `(dx, dy)` with axis-separated sliding; keeps occupancy and unit blocks. Returns
@@ -194,11 +253,19 @@ pub fn move_unit(rt: &mut ZoneRuntime, u: &mut Unit, dx: Fx, dy: Fx) -> bool {
     let g = &rt.grid;
     if dx.0 != 0 {
         let nx = Fx(u.pos.x.0 + dx.0);
-        u.pos.x = if box_blocked(g, nx, u.pos.y) { Fx(slide_to(u.pos.x.0, dx.0)) } else { nx };
+        u.pos.x = if box_blocked(g, nx, u.pos.y) {
+            Fx(u.pos.x.0 + slide(g, body_at(u.pos.x.0, u.pos.y.0), true, dx.0))
+        } else {
+            nx
+        };
     }
     if dy.0 != 0 {
         let ny = Fx(u.pos.y.0 + dy.0);
-        u.pos.y = if box_blocked(g, u.pos.x, ny) { Fx(slide_to(u.pos.y.0, dy.0)) } else { ny };
+        u.pos.y = if box_blocked(g, u.pos.x, ny) {
+            Fx(u.pos.y.0 + slide(g, body_at(u.pos.x.0, u.pos.y.0), false, dy.0))
+        } else {
+            ny
+        };
     }
     if box_blocked(g, u.pos.x, u.pos.y) {
         u.pos = from;
@@ -280,11 +347,39 @@ mod tests {
         assert!(move_unit(&mut rt, u, Fx::from_px(1), Fx::from_px(1)));
         assert_eq!(u.pos, at(37, 21));
         assert!(!move_unit(&mut rt, u, Fx::from_px(1), Fx::ZERO));
-        // A step that ends past a border it cannot cross stops at the border of its own cell.
-        let mut v = u.clone();
-        v.pos = at(20, 20);
-        let _ = box_blocked(&rt.grid, v.pos.x, v.pos.y);
-        assert_eq!(slide_to(v.pos.x.0, Fx::from_px(30).0), Fx::from_px(21).0);
+        // A step that ends past what it cannot cross stops flush against it, however far it came.
+        let b = body_at(Fx::from_px(20).0, Fx::from_px(20).0);
+        assert_eq!(slide(&rt.grid, b, true, Fx::from_px(30).0), Fx::from_px(17).0);
+        assert_eq!(slide(&rt.grid, b, true, Fx::from_px(-30).0), Fx::from_px(-17).0, "the grid's edge");
+    }
+
+    /// The owner: "many items should just have a little bounding box on the ground, but it seems
+    /// to extend to the size of the sprite". Every solid prop with feet, walked onto from the north
+    /// down the middle of them: her body box stops on the ground its look stands on, never more
+    /// than 2 px short of it and never in it; paths still see its cells.
+    #[test]
+    fn from_the_north_feet_stop_on_every_prop_s_ground() {
+        let cat = jane_data::catalog();
+        let (px, py) = (10, 20);
+        let mut far = Vec::new();
+        let mut n = 0;
+        for def in cat.story.props.iter().filter(|d| d.solid) {
+            let Some([fx, fy, fw, _]) = def.feet else { continue };
+            let mut g = ZoneGrid::new(Grid::new(40, 40, Tile::Floor));
+            let parts = def.solid_parts().map(|r| Rect::new(r.x + px * 16, r.y + py * 16, r.w, r.h));
+            g.stamp_prop_parts(def.solid_rect(px, py), false, &parts);
+            let x = px * CELL_FX + (i32::from(fx) * 2 + i32::from(fw)) * SUB_FX / 2;
+            let b = body_at(x, 12 * CELL_FX);
+            let bottom = b.y1 + slide(&g, b, false, 12 * CELL_FX);
+            let gap = py * CELL_FX + i32::from(fy) * SUB_FX - bottom;
+            if !(0..=2 * 256).contains(&gap) {
+                far.push(format!("{}: {} px short", def.id, f64::from(gap) / 256.0));
+            }
+            assert!(def.solid_rect(px, py).cells().all(|(x, y)| g.solid(x, y)), "{}: cells", def.id);
+            n += 1;
+        }
+        assert!(n > 150, "most solid props have feet ({n})");
+        assert!(far.is_empty(), "stopped short of or inside the ground: {far:#?}");
     }
 
     #[test]

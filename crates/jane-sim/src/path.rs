@@ -14,7 +14,7 @@
 use jane_core::search::{Astar, PathEnd, PathQuery, octile_to};
 use jane_core::tile::{BLOCK_MOVE, F_OCC};
 
-use crate::grid::ZoneGrid;
+use crate::grid::{Meets, ZoneGrid};
 
 pub const PATH_WINDOW: u32 = 256;
 pub const PATH_BUDGET: u32 = 6000;
@@ -103,7 +103,9 @@ impl PathScratch {
         if ask.start == ask.goal {
             return Some(PathEnd::Found);
         }
-        if grid.flags_at(tx, ty) & BLOCK_MOVE != 0 {
+        // A goal in a prop's cell that feet can stand in part of (the notch behind a crate, the
+        // ground beside a trunk: `PropDef::solid_parts`) is walked to; one solid whole is not.
+        if grid.flags_at(tx, ty) & BLOCK_MOVE != 0 && !matches!(grid.feet_meet(tx, ty), Meets::Part(_)) {
             return self.fail();
         }
         // Mirror `sim/path.ts`'s window: the goal is inside it or the search is partial.

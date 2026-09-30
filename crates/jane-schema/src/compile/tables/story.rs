@@ -27,7 +27,7 @@ use crate::compile::lists::{self, RawAction, RawCond};
 use crate::compile::source::{Row, Source, typed};
 use crate::model::{
     self, Answers, BAR_SLOTS, BarSlot, ClockDef, DialogueLine, DialogueNode, DialogueOption, DialogueStart,
-    DialogueTree, Light, PropDef, QuestDef, QuestReq, ReqTarget, StartDef, TriggerDef,
+    DialogueTree, FEET_SIDE_SLACK, Light, PropDef, QuestDef, QuestReq, ReqTarget, StartDef, TriggerDef,
 };
 
 pub fn compile(src: &Source, cx: &mut Ctx) -> model::Story {
@@ -173,8 +173,32 @@ fn light(cx: &mut Ctx, at: &str, l: &RawLight) -> Option<Light> {
     Some(Light { radius, color, flicker, cold: l.cold, sky: l.sky })
 }
 
+/// A prop's `feet` (x, y, w, h in sixteenths of a cell) must lie in the rows it stamps and stand
+/// on its front edge. What is pushed, carried, a gate or answers a verb is part of a way or a
+/// puzzle the solver proves by its cells: its feet hold the footprint's width, leaving at most
+/// [`FEET_SIDE_SLACK`] open at either side, so none side by side lets her slip between, and its
+/// back is a notch she steps into from the north only (`PropDef::solid_parts`).
+fn feet_fit(cx: &mut Ctx, at: &str, f: [u8; 4], r: &RawProp, base: u8) {
+    let [x, y, w, h] = f.map(i32::from);
+    let (fw, fh) = (i32::from(r.w) * 16, i32::from(r.h) * 16);
+    let top = (i32::from(r.h) - i32::from(base)) * 16;
+    cx.diag.need(r.solid && !r.flat, at, "only a solid prop that stands up has feet");
+    cx.diag.need(w >= 1 && h >= 1 && x + w <= fw, at, "feet are at least a sixteenth each way, in the footprint");
+    cx.diag.need(y >= top && y + h == fh, at, "feet stand on the front edge, within the rows it blocks");
+    let wide = x <= FEET_SIDE_SLACK && x + w >= fw - FEET_SIDE_SLACK;
+    cx.diag.need(
+        wide || !(r.push || r.carry || r.gate || r.answers.is_some()),
+        at,
+        "a way's or a puzzle's feet leave at most 4 sixteenths of a cell open at either side",
+    );
+}
+
 fn props(src: &Source, cx: &mut Ctx) -> &'static [PropDef] {
     let rows = src.table("props", &mut cx.diag);
+    let feet_rows = src.table("prop_feet", &mut cx.diag);
+    for id in feet_rows.keys().filter(|id| !rows.contains_key(*id)) {
+        cx.diag.error(format!("prop_feet.{id}"), "no prop row has this id");
+    }
     let mut out: Vec<Option<PropDef>> = vec![None; cx.ids.props.len()];
     for (id, row) in &rows {
         let at = format!("props.{id}");
@@ -197,6 +221,12 @@ fn props(src: &Source, cx: &mut Ctx) -> &'static [PropDef] {
                 a
             }
         };
+        let feet = feet_rows.get(id).and_then(|row| {
+            let at = format!("prop_feet.{id}");
+            let f = typed::<[u8; 4]>(row, &at, &mut cx.diag)?;
+            feet_fit(cx, &at, f, &r, base);
+            Some(f)
+        });
         let flagged = r.light_when_on || r.night_only || r.day_only;
         cx.diag.need(!flagged || r.light.is_some(), &at, "light flag without a light");
         cx.diag.need(!(r.night_only && r.day_only), &at, "a light cannot be both nightOnly and dayOnly");
@@ -212,6 +242,7 @@ fn props(src: &Source, cx: &mut Ctx) -> &'static [PropDef] {
             w: r.w,
             h: r.h,
             base,
+            feet,
             solid: r.solid,
             block_los: r.block_los,
             push: r.push,
