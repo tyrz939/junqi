@@ -143,6 +143,9 @@ struct UnitRec {
     /// Which of the eight ways it shows itself facing: the diagonal it walks on, kept when it
     /// stops while the sim's facing agrees ([`Face8`]).
     face: Face8,
+    /// It stands on the ground under what the terrain draws over it (a house's eaves): what is
+    /// drawn at its feet is the roof in front of it, not a step under it, so it lifts no light.
+    under: bool,
 }
 
 /// A prop near the view, this tick.
@@ -522,6 +525,10 @@ impl Present {
                 face: {
                     let was = old.map_or(Face8::of(u.facing), |o| o.face);
                     was.moving(i64::from(cur.0 - prev.0), i64::from(cur.1 - prev.1), u.facing)
+                },
+                under: {
+                    let (x, y) = u.pos.cell();
+                    view.tile(x, y).is_roof()
                 },
             });
         }
@@ -964,14 +971,18 @@ impl Present {
             };
             let (sx, sy) = ((fx >> FX_TO_CANVAS) - cam.0, (fy >> FX_TO_CANVAS) - cam.1);
             // What she stands on, if the terrain raises it (a step, a dais): what she holds is
-            // that much higher, so its light is over the step, not in it (§1.7).
-            let lift = drawn_height(
-                &self.chunks,
-                &self.frame.layers,
-                self.zone_cells,
-                (fx >> FX_TO_CANVAS, fy >> FX_TO_CANVAS),
+            // that much higher, so its light is over the step, not in it (§1.7). Under a house's
+            // eaves the roof drawn at her feet stands in front of her, on the house: she stands
+            // on the ground behind it, and her light falls there, not on the roof.
+            let lift = light_lift(
+                u.under,
+                drawn_height(
+                    &self.chunks,
+                    &self.frame.layers,
+                    self.zone_cells,
+                    (fx >> FX_TO_CANVAS, fy >> FX_TO_CANVAS),
+                ),
             );
-            let lift = if lift > shadow::RELIEF { lift.min(MAX_LIFT) } else { 0 };
             // A creature's glow at its heart.
             if let Some((radius, colour)) = u.glow.filter(|_| n_glows < glows.len()) {
                 let height = 14 + lift;
@@ -1376,6 +1387,14 @@ fn drawn_height(
     i32::from(l.height[((y % CHUNK_PX) * CHUNK_PX + x % CHUNK_PX) as usize])
 }
 
+/// How much a unit's lights are raised by the terrain drawn `drawn` px up at its feet (§1.7): a
+/// step or a dais it stands on raises them (by `MAX_LIFT` at most); the ground's relief does not,
+/// nor does a roof drawn over it where it stands `under` the eaves (the roof is in front of it,
+/// on the house, and its light falls on the ground behind the house).
+fn light_lift(under: bool, drawn: i32) -> i32 {
+    if under || drawn <= shadow::RELIEF { 0 } else { drawn.min(MAX_LIFT) }
+}
+
 /// `0xRRGGBB` as bytes.
 fn rgb(c: u32) -> Rgb {
     [(c >> 16) as u8, (c >> 8) as u8, c as u8]
@@ -1420,6 +1439,16 @@ mod tests {
     use jane_sim::{Seat, Sim};
 
     use super::*;
+
+    /// A step or a dais she stands on raises her lights (capped), the ground's relief does not,
+    /// and under a house's eaves the roof drawn at her feet raises nothing (§1.7).
+    #[test]
+    fn her_lights_stand_on_a_platform_and_not_on_a_roof_she_is_behind() {
+        assert_eq!(light_lift(false, 24), 24, "a platform raises her light");
+        assert_eq!(light_lift(false, 90), MAX_LIFT);
+        assert_eq!(light_lift(false, shadow::RELIEF), 0);
+        assert_eq!(light_lift(true, 57), 0, "a roof in front of her raises nothing");
+    }
 
     /// A thing left lying is drawn as what it holds, and a drop as its item: Mrs Bettany's key
     /// was a note on the grass (the owner's first playtest). Every key item has a ground look

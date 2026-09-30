@@ -13,13 +13,18 @@ const CANVAS: (u16, u16) = (768, 432);
 
 /// She stands at Julie's front door, then walks each leg; the presenter ticks beside.
 fn walk(legs: &[(Angle, u32)]) -> (Sim, Present) {
+    walk_at(11, legs)
+}
+
+/// As [`walk`], at `hour`.
+fn walk_at(hour: u8, legs: &[(Angle, u32)]) -> (Sim, Present) {
     let mut sim = Sim::new_game(1, "Jane");
     let mut p = Present::new(Tier::T0);
     p.set_canvas(CANVAS);
     let mark = sim.state().syms.find("house_front").expect("Julie's house has a front");
     let cmds = [
         StampedCommand { seat: Some(Seat(0)), seq: 1, cmd: Command::Dev(DevOp::God(true)) },
-        StampedCommand { seat: Some(Seat(0)), seq: 2, cmd: Command::Dev(DevOp::Time { hour: 11 }) },
+        StampedCommand { seat: Some(Seat(0)), seq: 2, cmd: Command::Dev(DevOp::Time { hour }) },
         StampedCommand {
             seat: Some(Seat(0)),
             seq: 3,
@@ -79,4 +84,23 @@ fn in_front_of_julies_house_nothing_stands_before_her() {
     let (_, mut p) = walk(&[(Angle::SOUTH, 10)]);
     let f = p.draw(255, CANVAS);
     assert_eq!(her_foot(f), None);
+}
+
+/// Round the west end of Julie's house, north past it, east along its back, then south under
+/// its eaves.
+const BEHIND: [(Angle, u32); 4] = [(Angle::WEST, 90), (Angle::NORTH, 140), (Angle::EAST, 75), (Angle::SOUTH, 60)];
+
+#[test]
+fn behind_julies_house_at_night_her_lantern_falls_on_the_ground_not_the_roof() {
+    let (sim, mut p) = walk_at(22, &BEHIND);
+    let v = sim.view(Seat(0)).expect("seat 0 plays");
+    let (x, y) = v.body().pos.cell();
+    assert_eq!(v.tile(x, y), Tile::Eaves, "she walked in under the eaves, at ({x}, {y})");
+    let f = p.draw(255, CANVAS);
+    let feet = i32::from(her_foot(f).expect("behind the roof").y);
+    let lantern = f.lights.iter().find(|l| l.radius == 136 && l.size == 3).expect("her lantern is lit at 22:00");
+    // Its ground point is by her feet (two rows at most either way as she faces), not the
+    // roof's ground a lift's rows south; and it shines from her hand, not the roof's height.
+    assert!((lantern.pos.1 - feet).abs() <= 2, "its pool lies on her row {feet}, not at {}", lantern.pos.1);
+    assert!(lantern.height < 40, "it shines from her hand, not over the roof: {} px", lantern.height);
 }
