@@ -80,10 +80,11 @@ fn a_town_night_has_every_pass_and_noon_needs_no_light() {
         .collect();
     // Out of doors the sky and its far things come first; the moon is up at 22:00, so its
     // silhouettes lie under the standing things; the weather, clear on the first walk, before
-    // the light; the grade last (every tier draws it, 2026-09-27).
+    // the light; the grade last (every tier draws it, 2026-09-27). She is drawn again after the
+    // standing things, seen through whatever covers her (`Tint::Seen`, 2026-10-01).
     assert_eq!(
         kinds,
-        ["sky", "far", "far", "terrain", "ground", "silhouettes", "standing", "weather", "lights", "post"]
+        ["sky", "far", "far", "terrain", "ground", "silhouettes", "standing", "standing", "weather", "lights", "post"]
     );
     assert!(!f.chunks.is_empty() && !f.sprites.is_empty());
     let (_, mut noon) = at_hour(1, 12, Tier::T0);

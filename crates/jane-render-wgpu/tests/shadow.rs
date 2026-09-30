@@ -211,6 +211,57 @@ fn what_stands_behind_the_terrain_is_hidden_where_it_stands_in_front() {
     assert!(shown * 3 > under && shown * 3 < under * 2, "seen through: {shown} of {under} px show");
 }
 
+/// Seen through what stands in front (PRESENTATION.md §1.6): a prop standing in front of her
+/// covers her lower half, and her copy drawn after the standing things (`Tint::Seen`) shows one px
+/// in two of what it covers, on the canvas's checker; the rest stays covered.
+#[test]
+fn a_prop_in_front_of_her_is_seen_through_on_the_checker() {
+    let Some(mut b) = backend() else { return };
+    let mut atlas = atlas(|y| height_of_rows(AY - y).max(1) as u8);
+    // The page doubled: her on the left, a block of another colour on the right.
+    let p = &mut atlas.pages[0];
+    let (w, h) = (usize::from(SW), usize::from(SH));
+    let mut albedo = vec![0; 2 * w * h];
+    for y in 0..h {
+        albedo[y * 2 * w..y * 2 * w + w].copy_from_slice(&p.albedo[y * w..y * w + w]);
+        for x in 0..w {
+            albedo[y * 2 * w + w + x] = if y >= 20 { 3 } else { 0 };
+        }
+    }
+    p.height =
+        (0..h).flat_map(|y| p.height[y * w..y * w + w].iter().chain(&p.height[y * w..y * w + w]).copied()).collect();
+    p.normal =
+        (0..h).flat_map(|y| p.normal[y * w..y * w + w].iter().chain(&p.normal[y * w..y * w + w]).copied()).collect();
+    p.emissive = vec![0; 2 * w * h];
+    p.albedo = albedo;
+    p.w = 2 * SW;
+    atlas.clut[3] = 0xff20_3090;
+    let mut f = frame(ground(|_, _| None), true, None, &[]);
+    let her = f.sprites[0];
+    // The block stands 8 px in front of her.
+    f.sprites.push(SpriteCmd { src: Src { x: SW, ..her.src }, y: her.y + 8, ..her });
+    f.passes.retain(|q| !matches!(q, Pass::Sprites { .. }));
+    let pos = f.passes.iter().position(|q| matches!(q, Pass::Lights { .. })).expect("a light pass");
+    f.passes.insert(pos, Pass::Sprites { layer: Depth::Standing, cmds: Span { start: 0, len: 2 } });
+    let bare = draw(&mut b, &atlas, &f);
+    f.sprites.push(SpriteCmd { flags: Flags { mirror: false, tint: jane_present::Tint::Seen }, ..her });
+    f.passes.insert(pos + 1, Pass::Sprites { layer: Depth::Standing, cmds: Span { start: 2, len: 1 } });
+    let seen = draw(&mut b, &atlas, &f);
+    let (mut on, mut off) = (0, 0);
+    for (x, y) in body() {
+        let covered = y - (FOOT.1 - AY) >= 28;
+        if !covered {
+            assert_eq!(at(&seen, x, y), at(&bare, x, y), "({x}, {y}): uncovered, as she was");
+        } else if jane_present::Tint::seen_at(x, y) {
+            on += usize::from(at(&seen, x, y) != at(&bare, x, y));
+        } else {
+            off += 1;
+            assert_eq!(at(&seen, x, y), at(&bare, x, y), "({x}, {y}): stays covered");
+        }
+    }
+    assert!(on > 20 && off > 20, "seen through: {on} px show, {off} stay covered");
+}
+
 #[test]
 fn a_light_never_shadows_the_one_who_holds_it() {
     let Some(mut b) = backend() else { return };

@@ -734,6 +734,20 @@ pub enum Tint {
     Flash(u8),
     /// Over what is under it at `a` of 255 (a ghost, the canopy ghost, the dead).
     Ghost(u8),
+    /// Seen through what stands in front of it (PRESENTATION.md §1.6): drawn again after every
+    /// standing thing, one opaque texel in two on the canvas's checker ([`Tint::seen_at`]), its
+    /// colour alone (no contact shadow, no normal, height or glow). Where nothing covers it, it
+    /// lays its own colour on itself; where a roof, a house, a tree's crown or a tall prop does,
+    /// it shows through.
+    Seen,
+}
+
+impl Tint {
+    /// Whether a [`Tint::Seen`] sprite lays its texel on canvas px `(x, y)`.
+    #[inline]
+    pub const fn seen_at(x: i32, y: i32) -> bool {
+        (x + y) & 1 == 0
+    }
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

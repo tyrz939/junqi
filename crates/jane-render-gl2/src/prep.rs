@@ -137,7 +137,14 @@ impl PageCpu {
 
 /// One sprite of a pass as the albedo steps see it: its quad, its page, whether it reads what is
 /// under it, whether it is a ghost, and its rect clipped to the canvas.
-type Quad = (usize, u8, bool, bool, (i32, i32, i32, i32));
+/// A quad: its index, page, whether it reads what is under it, how it is drawn ([`OPAQUE`],
+/// [`GHOST`], [`SEEN`]) and its canvas rect.
+type Quad = (usize, u8, bool, u8, (i32, i32, i32, i32));
+
+/// A quad of every target; a ghost blended over (colour alone); one seen through (colour alone).
+const OPAQUE: u8 = 0;
+const GHOST: u8 = 1;
+const SEEN: u8 = 2;
 
 /// One step of the albedo pass.
 #[derive(Clone, Debug, PartialEq)]
@@ -557,8 +564,14 @@ impl Prep {
                 Tint::None => (0.0, 0.0),
                 Tint::Flash(a) => (1.0, f32::from(a) + f32::from(a >> 7)),
                 Tint::Ghost(a) => (2.0, f32::from(a) + f32::from(a >> 7)),
+                Tint::Seen => (3.0, 0.0),
             };
-            let ghost = kind > 1.5;
+            let ghost = s.flags.tint != Tint::Seen && kind > 1.5;
+            let how = match s.flags.tint {
+                Tint::Seen => SEEN,
+                _ if ghost => GHOST,
+                _ => OPAQUE,
+            };
             let depth = f32::from(self.depth.get(i).copied().unwrap_or(2));
             let (sx, sy, sw, sh) = (f32::from(s.src.x), f32::from(s.src.y), f32::from(s.src.w), f32::from(s.src.h));
             let (ul, ur) = if s.flags.mirror { (sx + sw, sx) } else { (sx, sx + sw) };
@@ -574,8 +587,8 @@ impl Prep {
                 push(&mut self.sprite_v, &foot);
             }
             let q = self.sprite_v.len() / (4 * 16) - 1;
-            let reads = ghost || pages[usize::from(s.page)].has_ao(s.src);
-            quads.push((q, s.page, reads, ghost, r));
+            let reads = ghost || how == OPAQUE && pages[usize::from(s.page)].has_ao(s.src);
+            quads.push((q, s.page, reads, how, r));
         }
         let end = self.sprite_v.len() / (4 * 16);
         if end > first {
@@ -589,13 +602,13 @@ impl Prep {
         // The solid runs by page, for the normal and emissive passes.
         let mut k = 0;
         while k < quads.len() {
-            if quads[k].3 {
+            if quads[k].3 != OPAQUE {
                 k += 1;
                 continue;
             }
             let (q0, page) = (quads[k].0, quads[k].1);
             let mut j = k + 1;
-            while j < quads.len() && !quads[j].3 && quads[j].1 == page && quads[j].0 == quads[j - 1].0 + 1 {
+            while j < quads.len() && quads[j].3 == OPAQUE && quads[j].1 == page && quads[j].0 == quads[j - 1].0 + 1 {
                 j += 1;
             }
             self.solid.push((page, q0..quads[j - 1].0 + 1));
@@ -648,7 +661,7 @@ impl Prep {
                 while j < quads.len() && quads[j].1 == page && quads[j].3 == ghost {
                     j += 1;
                 }
-                let (mode, blend) = if ghost { (3.0, Blend::Over) } else { (1.0, Blend::Off) };
+                let (mode, blend) = if ghost == GHOST { (3.0, Blend::Over) } else { (1.0, Blend::Off) };
                 self.steps.push(Step::Sprites { page, quads: quads[k].0..quads[j - 1].0 + 1, mode, blend });
                 k = j;
             }

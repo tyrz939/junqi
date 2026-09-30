@@ -184,7 +184,8 @@ fn fs_contact(i: SpriteOut) -> @location(0) vec4<f32> {
     let page = i32(i.info.x);
     let t = texel(i);
     let ix = textureLoad(atlas_albedo, t, page, 0).r;
-    if ix > 1u || skips(i, ix) {
+    // One seen through (tint kind 3) lays no contact shadow.
+    if ix > 1u || skips(i, ix) || ((i.info.y >> 16u) & 3u) == 3u {
         discard;
     }
     let lo = vec2<i32>(i32(i.src.x), i32(i.src.y));
@@ -210,6 +211,12 @@ fn fs_contact(i: SpriteOut) -> @location(0) vec4<f32> {
 fn fs_ghost(i: SpriteOut) -> @location(0) vec4<f32> {
     let ix = textureLoad(atlas_albedo, texel(i), i32(i.info.x), 0).r;
     if ix <= 1u || skips(i, ix) {
+        discard;
+    }
+    // Seen through what stands in front of it (tint kind 3): one opaque texel in two on the
+    // canvas's checker, whole.
+    let q = vec2<i32>(floor(i.pos.xy)) - vec2<i32>(i32(g.guard));
+    if ((i.info.y >> 16u) & 3u) == 3u && ((q.x + q.y) & 1) != 0 {
         discard;
     }
     let a = f32((i.info.y >> 8u) & 255u) / 255.0;

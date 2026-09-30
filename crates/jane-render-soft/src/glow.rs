@@ -81,7 +81,7 @@ impl Glow {
         flags: Flags,
         behind: Option<(jane_present::Foot, &[u8])>,
     ) {
-        if glow.is_empty() || matches!(flags.tint, Tint::Ghost(_)) || src.w == 0 || src.h == 0 {
+        if glow.is_empty() || matches!(flags.tint, Tint::Ghost(_) | Tint::Seen) || src.w == 0 || src.h == 0 {
             return;
         }
         let pw = u32::from(page.w);

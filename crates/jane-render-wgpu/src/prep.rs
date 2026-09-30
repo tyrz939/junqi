@@ -298,6 +298,7 @@ impl Prep {
                             Tint::None => (0u32, 0u32),
                             Tint::Flash(a) => (1, u32::from(a)),
                             Tint::Ghost(a) => (2, u32::from(a)),
+                            Tint::Seen => (3, 255),
                         };
                         let flags = u32::from(s.flags.mirror) | a << 8 | kind << 16;
                         let (depth, sink, burn) =
@@ -331,7 +332,7 @@ impl Prep {
                         let ghost = |i: u32| {
                             matches!(
                                 frame.sprites[cmds.start as usize + (i - first) as usize].flags.tint,
-                                Tint::Ghost(_)
+                                Tint::Ghost(_) | Tint::Seen
                             )
                         };
                         for i in first + 1..=end {

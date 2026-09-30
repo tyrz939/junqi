@@ -77,6 +77,14 @@ fn behind_julies_house_she_stands_under_its_eaves_and_is_seen_through_its_roof()
     let f = p.draw(255, CANVAS);
     let foot = her_foot(f).expect("behind the roof, her sprite stands behind the terrain");
     assert!(foot.see, "a player is seen through what hides her");
+    // And drawn again after every standing thing, seen through whatever covers her.
+    let seen = f.passes.iter().filter_map(|q| match *q {
+        Pass::Sprites { layer: Depth::Standing, cmds } => Some(cmds),
+        _ => None,
+    });
+    let seen: Vec<_> =
+        seen.flat_map(|c| f.sprites_in(c)).filter(|s| s.flags.tint == jane_present::Tint::Seen).collect();
+    assert!(!seen.is_empty(), "her copy seen through what stands in front of her");
 }
 
 #[test]

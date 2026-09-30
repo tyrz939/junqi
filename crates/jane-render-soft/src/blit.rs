@@ -85,6 +85,7 @@ pub fn sprite(
             }
             let d = &mut drow[dx as usize];
             match i {
+                0 | 1 if flags.tint == Tint::Seen => {}
                 0 | 1 => {
                     if near_ao {
                         let mut cover = 0;
@@ -105,6 +106,8 @@ pub fn sprite(
                         Tint::None => c,
                         Tint::Flash(a) => lerp(c, 0xffff_ffff, weight(a)),
                         Tint::Ghost(a) => lerp(*d, c, weight(a)),
+                        Tint::Seen if Tint::seen_at(dx, dy) => c,
+                        Tint::Seen => *d,
                     };
                 }
             }

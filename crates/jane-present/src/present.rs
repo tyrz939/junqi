@@ -130,6 +130,8 @@ struct UnitRec {
     me: bool,
     /// A player's unit, hers or another seat's: it carries a lantern at night.
     player: bool,
+    /// Seen through whatever stands in front of it (a player, or a threat): `Tint::Seen`.
+    seen: bool,
     /// Its glow: radius canvas px and colour.
     glow: Option<(u16, Rgb)>,
     /// The unit's person look in [`People`], when its sprite has one; else `look` stands in.
@@ -216,6 +218,8 @@ pub struct Present {
     props: Vec<PropRec>,
     prop_scratch: Vec<PropIx>,
     standing: DrawList,
+    /// The sprites seen through what stands in front of them (`Tint::Seen`), this frame.
+    seen: Vec<SpriteCmd>,
     ground: DrawList,
     lights: Vec<LightRec>,
     light_scratch: Vec<PropIx>,
@@ -276,6 +280,7 @@ impl Present {
             props: Vec::with_capacity(1024),
             prop_scratch: Vec::with_capacity(1024),
             standing: DrawList::default(),
+            seen: Vec::with_capacity(64),
             ground: DrawList::default(),
             lights: Vec::with_capacity(256),
             light_scratch: Vec::with_capacity(1024),
@@ -512,6 +517,7 @@ impl Present {
                 dead: !u.alive,
                 me: matches!(kind, UnitKind::Me),
                 player: matches!(kind, UnitKind::Me | UnitKind::Seat),
+                seen: matches!(kind, UnitKind::Me | UnitKind::Seat | UnitKind::Hostile),
                 glow: jane_data::catalog()
                     .combat
                     .unit(u.def)
@@ -861,6 +867,7 @@ impl Present {
         // Props and units, flat ones on the ground, the rest y-sorted with the units.
         self.ground.clear();
         self.standing.clear();
+        self.seen.clear();
         let a = i64::from(alpha_256(alpha));
         let (cw, ch) = (i32::from(canvas.0), i32::from(canvas.1));
         let on_canvas =
@@ -1118,6 +1125,9 @@ impl Present {
                 // A player shows through what hides her.
                 sp.foot = Some(Foot { y: clamp16(0, sy).1, see: u.player });
             }
+            if u.seen && on_canvas(x, y, r.src.w, r.src.h) {
+                self.seen.push(SpriteCmd { flags: Flags { mirror, tint: Tint::Seen }, foot: None, ..sp });
+            }
             self.standing.push(DrawCmd { y: sy, key: UNIT_KEY | u.id, sprite: sp, caster });
             // A serpent's body along its trail, tail first, a segment at every point, each
             // standing where it lies so it sorts among what is round it.
@@ -1210,6 +1220,10 @@ impl Present {
         }
         self.holders.sort_unstable();
         let standing = Span::since(s0, f.sprites.len());
+        // Whoever is seen through what stands in front of them, drawn again over it all.
+        let v0 = f.sprites.len();
+        f.sprites.extend_from_slice(&self.seen);
+        let seen = Span::since(v0, f.sprites.len());
         let casters = Span::since(0, f.casters.len());
         // What the terrain stands, from every painted chunk under the canvas and T2's guard band
         // round it, each block held to that band: the same ground T2's field casts from. A block
@@ -1334,6 +1348,9 @@ impl Present {
             f.passes.push(Pass::Silhouettes { sun, shade, casters, blocks });
         }
         f.passes.push(Pass::Sprites { layer: Depth::Standing, cmds: standing });
+        if seen.len > 0 {
+            f.passes.push(Pass::Sprites { layer: Depth::Standing, cmds: seen });
+        }
         f.passes.push(Pass::Weather(self.atmos.atmos()));
         // Below T2 the parts that do not glow go under the light, so the lamps light the rain.
         self.fx.draw_under_light(f, cam, alpha);

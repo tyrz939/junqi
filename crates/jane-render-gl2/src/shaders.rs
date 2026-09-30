@@ -188,6 +188,14 @@ void main() {
     float kind = floor(v_info.x + 0.5);
     float w = floor(v_info.y + 0.5);
     float mode = floor(u_mode + 0.5);
+    // Seen through what stands in front of it (kind 3), drawn after the standing things: one
+    // opaque texel in two on the canvas's checker, colour alone.
+    if (kind > 2.5) {
+        vec2 q = floor(gl_FragCoord.xy);
+        if (mode > 1.5 || ix < 1.5 || mod(q.x + q.y, 2.0) > 0.5) discard;
+        gl_FragColor = vec4(clut(ix) / 255.0, 1.0);
+        return;
+    }
     // Seen through, it is colour alone: the terrain keeps its normal, height and glow.
     if (hidden()) {
         vec2 p = floor(gl_FragCoord.xy);
