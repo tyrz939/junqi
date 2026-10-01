@@ -91,6 +91,8 @@ enum Menu {
     Slots(SlotMode),
     /// A question the app asked: quit to title and lose what is unsaved.
     ConfirmTitle,
+    /// Save over slot `n`, which holds a save?
+    Overwrite(u8),
     Controls,
     /// The title's Host and Join (P8).
     Host,
@@ -814,7 +816,10 @@ impl App<'_> {
                         Err(e) => eprintln!("jane-app: shot: {e}"),
                     }
                 }
-                UiAction::QuickSave => self.save_to(self.slot.unwrap_or(0)),
+                UiAction::QuickSave => {
+                    let rows = &self.slot_rows;
+                    self.save_to(saves::quick_slot(self.slot, |n| rows.get(usize::from(n)).is_none_or(|r| r.empty)));
+                }
                 UiAction::QuickLoad => {
                     if let Some(n) = self.slot.or_else(|| saves::latest(&self.dirs)) {
                         self.load(n, None);
@@ -877,7 +882,12 @@ impl App<'_> {
             AppIntent::Load(n) => self.load(n, None),
             AppIntent::Save(n) => {
                 self.save_to(n);
-                self.menus.retain(|m| !matches!(m, Menu::Slots(_)));
+                self.menus.retain(|m| !matches!(m, Menu::Slots(_) | Menu::Overwrite(_)));
+            }
+            AppIntent::Overwrite(n) => {
+                // "Keep it" lit first: writing over a save is never one stray press.
+                self.menus.push(Menu::Overwrite(n));
+                self.menu_lights.push(MenuState { focus: 1 });
             }
             AppIntent::LoadMenu => {
                 self.read_slots();
@@ -962,20 +972,47 @@ impl App<'_> {
         }
     }
 
+    /// What the slot's note keeps beside a save of `summary`: read off the view as it is now.
+    fn slot_meta(&self, summary: jane_sim::Summary) -> saves::SlotMeta {
+        let h = &self.bufs.hud;
+        let line = h.tracker.first();
+        saves::SlotMeta {
+            summary: Some(summary),
+            place: h.zone_name.to_owned(),
+            day: h.day,
+            clock: h.clock.clone(),
+            night: h.night,
+            quest: line.map(|l| l.title.clone()).unwrap_or_default(),
+            step: line.map(|l| l.step.clone()).unwrap_or_default(),
+            saved_unix: saves::unix_now(),
+        }
+    }
+
     fn read_slots(&mut self) {
         let latest = saves::latest(&self.dirs);
         self.slot_rows = (0..SLOTS)
             .map(|n| match saves::info(&self.dirs, n) {
                 Some(i) => {
                     let s = &i.summary;
-                    SlotRow {
+                    let mut row = SlotRow {
                         empty: false,
                         zone: text::zone_name(s.zone, jane_data::Region::Lowfields).into(),
-                        when: format!("Day {}, {:02}:00", s.day + 1, s.hour),
-                        hp: format!("HP {} of {}", s.hp.points(), s.max_hp.points()),
+                        when: format!("Day {} · {:02}:00", s.day + 1, s.hour),
+                        night: !(6..18).contains(&s.hour),
+                        hp: format!("{} of {}", s.hp.points(), s.max_hp.points()),
                         age: saves::age(i.modified),
                         latest: latest == Some(n),
+                        ..SlotRow::default()
+                    };
+                    if let Some(m) = i.meta {
+                        row.age = saves::age(m.saved_at().or(i.modified));
+                        row.when = format!("Day {} · {}", m.day, m.clock);
+                        row.zone = m.place;
+                        row.night = m.night;
+                        row.quest = m.quest;
+                        row.step = m.step;
                     }
+                    row
                 }
                 None => SlotRow { empty: true, ..SlotRow::default() },
             })
@@ -1066,17 +1103,18 @@ impl App<'_> {
         }
         let Some(sim) = sim_of(self.session.as_ref()) else { return };
         if !self.bufs.me.can_save {
-            self.bufs.push_toast("I can only save by a bed or a fire", jane_present::text::Tone::Refused);
+            self.bufs.push_toast(menus::REST_TO_SAVE, jane_present::text::Tone::Refused);
             return;
         }
-        let (bytes, seed) = (sim.save(), sim.state().seed);
+        let (bytes, seed, summary) = (sim.save(), sim.state().seed, sim.summary());
         match saves::write(&self.dirs, n, &bytes) {
             Ok(()) => {
+                let _ = saves::write_meta(&self.dirs, n, &self.slot_meta(summary));
                 self.slot = Some(n);
                 self.config.last_slot = Some(n);
                 self.config.set_slot_seed(n, seed);
                 let _ = self.config.save(&self.dirs);
-                self.bufs.saved(&format!("Saved to slot {}", n + 1), true);
+                self.bufs.saved(&saves::saved_line(n, None), true);
                 self.soundtrack.ui(jane_present::audio::SfxKind::Save, &mut self.sound);
                 self.read_slots();
             }
@@ -1094,18 +1132,21 @@ impl App<'_> {
         if matches!(self.session, Some(Session::Guest(_))) {
             return;
         }
-        let Some((bytes, seed)) = sim_of(self.session.as_ref()).map(|s| (s.save(), s.state().seed)) else { return };
+        let Some((bytes, seed, summary)) =
+            sim_of(self.session.as_ref()).map(|s| (s.save(), s.state().seed, s.summary()))
+        else {
+            return;
+        };
         let n = self.slot.unwrap_or(0);
         match saves::write(&self.dirs, n, &bytes) {
             Ok(()) => {
+                let _ = saves::write_meta(&self.dirs, n, &self.slot_meta(summary));
                 self.slot = Some(n);
                 self.config.set_slot_seed(n, seed);
                 let _ = self.config.save(&self.dirs);
-                let line = match by.filter(|&b| b != me) {
-                    Some(b) => format!("Saved by the {} coat", jane_present::ui::lan::coat_name(b.index())),
-                    None => "Saved".to_owned(),
-                };
-                self.bufs.saved(&line, true);
+                let coat = by.filter(|&b| b != me).map(|b| jane_present::ui::lan::coat_name(b.index()));
+                self.bufs.saved(&saves::saved_line(n, coat), true);
+                self.read_slots();
                 self.soundtrack.ui(jane_present::audio::SfxKind::Save, &mut self.sound);
             }
             Err(e) => {
@@ -1412,6 +1453,19 @@ impl App<'_> {
                     }
                     if save && let Err(e) = self.config.save(&self.dirs) {
                         eprintln!("jane-app: {e}");
+                    }
+                }
+                Menu::Overwrite(n) => {
+                    let row = self.slot_rows.get(usize::from(n)).cloned().unwrap_or_default();
+                    let question = format!("Save over slot {}?", n + 1);
+                    let detail = menus::overwrite_detail(&row);
+                    let ask = menus::Ask { question: &question, detail: &detail, yes: "Save over", no: "Keep it" };
+                    if let Some(yes) = menus::ask(&mut self.ui, self.menu_lights.layer(k), &ask) {
+                        self.menus.pop();
+                        self.menu_lights.pop();
+                        if yes {
+                            self.intent(AppIntent::Save(n));
+                        }
                     }
                 }
                 Menu::ConfirmTitle => {

@@ -11,7 +11,7 @@ use jane_present::ui::core::{DragPayload, UiInput};
 use jane_present::ui::dialogue::{self, DialogueBox};
 use jane_present::ui::hud::{self, HudCtx};
 use jane_present::ui::lan::{self, HostInfo, HostState, JoinInfo, JoinState, LanRow};
-use jane_present::ui::menus::{self, MenuState, PauseInfo};
+use jane_present::ui::menus::{self, MenuState, PauseInfo, SlotMode, SlotRow};
 use jane_present::ui::title::{self, TitleInfo, TitleState};
 use jane_present::ui::window::{self, WindowState};
 use jane_present::ui::{Ui, UiOut};
@@ -23,9 +23,27 @@ use jane_sim::tuning::MAX_PLAYERS;
 use jane_sim::{Seat, Sim};
 
 /// The screens, by name.
-pub const SCREENS: [&str; 16] = [
-    "hud", "dead", "choice", "tooltip", "popover", "drag", "pause", "host", "join", "table", "controls", "display",
-    "loading", "store", "long", "saved",
+pub const SCREENS: [&str; 20] = [
+    "hud",
+    "dead",
+    "choice",
+    "tooltip",
+    "popover",
+    "drag",
+    "pause",
+    "host",
+    "join",
+    "table",
+    "controls",
+    "display",
+    "loading",
+    "store",
+    "long",
+    "saved",
+    "slots-save",
+    "slots-confirm",
+    "slots-grey",
+    "slots-load",
 ];
 
 struct Rig {
@@ -220,6 +238,89 @@ pub fn run(dir: &Path, names: &[String]) -> Result<(), String> {
             return Err("the drag did not start".into());
         }
         rig.write(dir, "drag")?;
+    }
+    // The save slots: the picker with used and empty slots, the question before a save is written
+    // over, Save grey away from rest, and the load picker (sheets/slots/ in the docs).
+    {
+        let line = rig.bufs.hud.tracker.first().cloned().unwrap_or_default();
+        let rows = vec![
+            SlotRow {
+                empty: false,
+                zone: "The Lowfields".into(),
+                when: "Day 3 · 21:14".into(),
+                night: true,
+                quest: line.title.clone(),
+                step: line.step.clone(),
+                hp: "34 of 40".into(),
+                age: "5 min ago".into(),
+                latest: true,
+            },
+            SlotRow { empty: true, ..SlotRow::default() },
+            SlotRow {
+                empty: false,
+                zone: "Auntie's House".into(),
+                when: "Day 1 · 17:40".into(),
+                night: false,
+                quest: "Under the House".into(),
+                step: "The cellar's two iron doors, and the rats behind them".into(),
+                hp: "40 of 40".into(),
+                age: "yesterday".into(),
+                latest: false,
+            },
+        ];
+        let mut quiet = rig.bufs.clone();
+        quiet.hud.toasts.clear();
+        quiet.hud.target = None;
+        quiet.hud.statuses.clear();
+        if want("slots-save") {
+            let mut st = MenuState { focus: 0 };
+            rig.frame(UiInput::default(), 6000, |ui, _, _| {
+                hud::draw(ui, &quiet, cx);
+                ui.interactive = true;
+                menus::slots(ui, &mut st, SlotMode::Save, &rows);
+            });
+            rig.write(dir, "slots-save")?;
+        }
+        if want("slots-confirm") {
+            let mut under = MenuState { focus: 2 };
+            let mut st = MenuState { focus: 1 };
+            let detail = menus::overwrite_detail(&rows[2]);
+            let ask = menus::Ask { question: "Save over slot 3?", detail: &detail, yes: "Save over", no: "Keep it" };
+            rig.frame(UiInput::default(), 6010, |ui, _, _| {
+                hud::draw(ui, &quiet, cx);
+                ui.interactive = false;
+                menus::slots(ui, &mut under, SlotMode::Save, &rows);
+                ui.interactive = true;
+                menus::ask(ui, &mut st, &ask);
+            });
+            rig.write(dir, "slots-confirm")?;
+        }
+        if want("slots-grey") {
+            let mut st = MenuState::default();
+            let info = PauseInfo {
+                can_save: false,
+                when: "Day 3, 21:14",
+                zone: "The Lowfields",
+                company: false,
+                lan: Some(("Open to LAN", true)),
+                guest: false,
+            };
+            rig.frame(UiInput::default(), 6020, |ui, _, _| {
+                hud::draw(ui, &quiet, cx);
+                ui.interactive = true;
+                menus::pause(ui, &mut st, &info);
+            });
+            rig.write(dir, "slots-grey")?;
+        }
+        if want("slots-load") {
+            let mut st = MenuState { focus: 2 };
+            rig.frame(UiInput::default(), 6030, |ui, _, _| {
+                ui.fill(jane_present::ui::cmd::Rect::new(0, 0, 768, 432), 0xff10_1014);
+                ui.interactive = true;
+                menus::slots(ui, &mut st, SlotMode::Load, &rows);
+            });
+            rig.write(dir, "slots-load")?;
+        }
     }
     if want("saved") {
         // The save card: writing, then shut with its glint (another seat's rest), then a failure.

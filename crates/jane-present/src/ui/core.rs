@@ -305,6 +305,8 @@ pub enum AppIntent {
     Continue,
     Load(u8),
     Save(u8),
+    /// Save into a slot that holds a save: the app asks first (`menus::ask`).
+    Overwrite(u8),
     ToTitle,
     Quit,
     Resume,
