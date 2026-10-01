@@ -352,7 +352,7 @@ pub fn run_action(cx: &mut Ctx<'_>, a: &Action, subject: Subject) {
                 return;
             };
             let (mx, my) = (i32::from(mark.cell.x), i32::from(mark.cell.y));
-            let (fx, fy) = cx.rt.grid.nearest_free(mx, my, SPAWN_RADIUS, None).unwrap_or((mx, my));
+            let (fx, fy) = cx.rt.grid.nearest_roomy(mx, my, SPAWN_RADIUS).unwrap_or((mx, my));
             let id = cx.world.next.unit();
             let u = new_unit(id, Some(key), def, Vec2::centre(fx, fy), mark.facing.unwrap_or_default(), cx.world.tick);
             cx.ops.spawn.push(u);

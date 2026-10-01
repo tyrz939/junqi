@@ -764,6 +764,14 @@ fn log_tab(ui: &mut Ui, st: &mut WindowState, b: &ViewBuffers, body: Rect, cx: H
         }
         yy += wrap_lines(s, cols - 3).count() as i32 * line_h(Face::Fine) + 4;
     }
+    // The way there, from Castle (`jane_sim::route`).
+    if !q.way.is_empty() {
+        yy += 2;
+        for l in wrap_lines(&q.way, cols - 3) {
+            ui.text(dx + 16, yy, l, Ink::fine(style::quiet()).shadow());
+            yy += line_h(Face::Fine);
+        }
+    }
     if q.done {
         ui.text(dx, yy + 4, "Done", Ink::fine(style::good()).shadow());
     } else if let Some(id) = q.id {
