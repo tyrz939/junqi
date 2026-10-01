@@ -12,7 +12,8 @@ use jane_data::{Region, RuinKind};
 
 use super::defs::{Defs, defs};
 use super::places::Kind;
-use super::{County, Side, folk, ground, hostile, keep, lane, own, pad, pen, put, put_with, road_side, run};
+use super::{County, Side, folk, ground, hostile, keep, lane, own, pad, pen, put, put_with, road_side, run, walk};
+use crate::county::ways::{door_approach, door_step};
 use crate::skeleton::Biome;
 
 /// A coin toss at `p` permille.
@@ -25,9 +26,19 @@ fn pick<T: Copy>(rng: &mut Sfc32, items: &[T]) -> T {
     *rng.pick(items).expect("a list of at least one")
 }
 
-/// A prop that answers with a dialogue tree.
+/// A prop that answers with a dialogue tree. A building's door step is cleared and claimed with
+/// it: nothing the place sets down after stands in front of its door.
 fn talk(c: &mut County<'_>, def: PropDefId, x: i32, y: i32, tree: DialogueId) -> Option<jane_core::Key> {
-    put_with(c, def, x, y, |p| p.talk = Some(tree))
+    let key = put_with(c, def, x, y, |p| p.talk = Some(tree))?;
+    if let Some(cells) = door_approach(jane_data::catalog().story.prop(def), x, y) {
+        for (ax, ay) in cells {
+            if matches!(c.k.get(ax, ay), Tile::Tree | Tile::DeadTree | Tile::Bush) {
+                c.k.set(ax, ay, Tile::Grass);
+            }
+            c.k.claim(Rect::new(ax, ay, 1, 1));
+        }
+    }
+    Some(key)
 }
 
 /// A prop that holds something.
@@ -179,6 +190,7 @@ fn hamlet(c: &mut County<'_>, rng: &mut Sfc32, d: &Defs, x0: i32, y0: i32) {
     let slots: &[i32] = if n == 2 { &[3, 21] } else { &[0, 12, 24] };
     let first = rng.irandom(4) as usize;
     let cottages = d.cottages();
+    let mut steps = Vec::new();
     for (i, &sx) in slots.iter().enumerate() {
         let def = cottages[(first + i) % 4];
         let w = if def == d.p.cottage_tile { 9 } else { 8 };
@@ -186,11 +198,16 @@ fn hamlet(c: &mut County<'_>, rng: &mut Sfc32, d: &Defs, x0: i32, y0: i32) {
         let door = pick(rng, &d.doors());
         let house = talk(c, def, hx, y0 + 1, door);
         own(c, HOUSES[i], house);
+        if house.is_some() {
+            steps.push(door_step(def, hx, y0 + 1));
+        }
         let bed = if chance(rng, 500) { 0 } else { w - 2 };
         put(c, d.p.flowerbed, hx + bed, y0 + 7);
         if chance(rng, 500) {
+            // Flowers along the front, on the other side of the door from the bed.
+            let from = if bed == 0 { w - 3 } else { 0 };
             for f in 0..3 {
-                c.k.set(hx + 3 + f, y0 + 8, Tile::FlowerBed);
+                c.k.set(hx + from + f, y0 + 7, Tile::FlowerBed);
             }
         }
     }
@@ -202,6 +219,10 @@ fn hamlet(c: &mut County<'_>, rng: &mut Sfc32, d: &Defs, x0: i32, y0: i32) {
     own(c, "well", well);
     put(c, d.p.trough, gx + 3, gy + 1);
     put(c, d.p.log, gx - 7, gy - 1);
+    // A walk from every door down to the green.
+    for step in steps {
+        walk(c, step);
+    }
     // South of the green: a hen house and its hens, a vegetable plot, a line of washing.
     let coop = talk(c, d.p.hen_coop, x0 + 4, y0 + 22, d.t.country_coop);
     own(c, "coop", coop);
@@ -242,10 +263,10 @@ fn hamlet(c: &mut County<'_>, rng: &mut Sfc32, d: &Defs, x0: i32, y0: i32) {
     c.k.claim(Rect::new(x0, y0, w, h));
     // The lane leaves by the side the road is on: between two houses if that is north.
     match road_side(c, gx, gy) {
-        Side::N => lane(c, x0 + if n == 2 { 15 } else { 10 }, y0 + 4, 2),
-        Side::E => lane(c, x0 + 34, gy, 2),
-        Side::W => lane(c, x0 + 1, gy, 2),
-        Side::S => lane(c, gx, gy + 5, 2),
+        Side::N => lane(c, x0 + if n == 2 { 15 } else { 10 }, y0 + 4, 2, None),
+        Side::E => lane(c, x0 + 34, gy, 2, None),
+        Side::W => lane(c, x0 + 1, gy, 2, None),
+        Side::S => lane(c, gx, gy + 5, 2, None),
     }
 }
 
@@ -257,6 +278,12 @@ fn farmstead(c: &mut County<'_>, rng: &mut Sfc32, d: &Defs, x0: i32, y0: i32) {
     let barn = talk(c, d.p.barn, x0 + 27, y0 + 1, d.t.country_barn);
     own(c, "barn", barn);
     pad(c, rng, x0 + 20, y0 + 11, 24, 7, Tile::Dirt);
+    if house.is_some() {
+        walk(c, door_step(d.p.farmhouse, x0 + 2, y0 + 1));
+    }
+    if barn.is_some() {
+        walk(c, door_step(d.p.barn, x0 + 27, y0 + 1));
+    }
     let cart = put(c, d.p.hay_cart, x0 + 23, y0 + 9);
     own(c, "cart", cart);
     let stack = put(c, d.p.haystack, x0 + 15, y0 + 2);
@@ -307,10 +334,10 @@ fn farmstead(c: &mut County<'_>, rng: &mut Sfc32, d: &Defs, x0: i32, y0: i32) {
     c.k.claim(Rect::new(x0, y0, w, h));
     // Out of the yard by the side the road is on, never through the field.
     match road_side(c, x0 + 20, y0 + 15) {
-        Side::N => lane(c, x0 + 19, y0 + 8, 2),
-        Side::S => lane(c, x0 + 25, y0 + 14, 2),
-        Side::E => lane(c, x0 + 38, y0 + 12, 2),
-        Side::W => lane(c, x0 + 1, y0 + 12, 2),
+        Side::N => lane(c, x0 + 19, y0 + 8, 2, None),
+        Side::S => lane(c, x0 + 25, y0 + 14, 2, None),
+        Side::E => lane(c, x0 + 38, y0 + 12, 2, None),
+        Side::W => lane(c, x0 + 1, y0 + 12, 2, None),
     }
 }
 
@@ -348,7 +375,8 @@ fn cottage(c: &mut County<'_>, rng: &mut Sfc32, d: &Defs, x0: i32, y0: i32) {
     keep(c, "garden", gx + 4, gy + 5);
     keep(c, "yard", hx + 7, y0 + 10);
     c.k.claim(Rect::new(x0, y0, w, h));
-    lane(c, hx + 4, y0 + 9, 2);
+    let step = door_step(def, hx, y0 + 1);
+    lane(c, step.0, step.1, 2, Some(step));
 }
 
 /// The inn: a long stone house with a sign, a yard, a trough and a cart, and a lamp by the door.
@@ -356,6 +384,9 @@ fn inn(c: &mut County<'_>, rng: &mut Sfc32, d: &Defs, x0: i32, y0: i32) {
     let house = talk(c, d.p.inn, x0 + 2, y0 + 1, d.t.country_inn);
     own(c, "house", house);
     pad(c, rng, x0 + 12, y0 + 12, 24, 8, Tile::Cobble);
+    if house.is_some() {
+        walk(c, door_step(d.p.inn, x0 + 2, y0 + 1));
+    }
     put(c, d.p.lamp_post, x0 + 15, y0 + 9);
     let trough = put(c, d.p.trough, x0 + 16, y0 + 12);
     own(c, "trough", trough);
@@ -374,7 +405,7 @@ fn inn(c: &mut County<'_>, rng: &mut Sfc32, d: &Defs, x0: i32, y0: i32) {
     keep(c, "yard", x0 + 18, y0 + 11);
     keep(c, "back", x0 + 25, y0 + 9);
     c.k.claim(Rect::new(x0, y0, w, h));
-    lane(c, x0 + 12, y0 + 14, 3);
+    lane(c, x0 + 12, y0 + 14, 3, None);
 }
 
 /// Apple trees in rows, a fence along one side, hives.
@@ -451,11 +482,8 @@ fn herd(c: &mut County<'_>, rng: &mut Sfc32, d: &Defs, x: i32, y: i32) {
 fn woodcutter(c: &mut County<'_>, rng: &mut Sfc32, d: &Defs, b: Rect) {
     let (x0, y0, w, h) = (b.x, b.y, b.w, b.h);
     pad(c, rng, x0 + (w >> 1), y0 + (h >> 1), 16, 12, Tile::Dirt);
-    for _ in 0..6 {
-        let sx = x0 + 2 + rng.irandom(w - 4);
-        let sy = y0 + 2 + rng.irandom(h - 4);
-        put(c, d.p.stump, sx, sy);
-    }
+    // Where the stumps are is thrown now; they go down once the shelter has its door step.
+    let stumps: Vec<(i32, i32)> = (0..6).map(|_| (x0 + 2 + rng.irandom(w - 4), y0 + 2 + rng.irandom(h - 4))).collect();
     put(c, d.p.log, x0 + 4, y0 + h - 5);
     put(c, d.p.log, x0 + 12, y0 + 3);
     let pile = put(c, d.p.woodpile, x0 + 7, y0 + 4);
@@ -468,6 +496,9 @@ fn woodcutter(c: &mut County<'_>, rng: &mut Sfc32, d: &Defs, b: Rect) {
         if chance(rng, 500) { ("shed", d.p.shed, d.t.country_shed) } else { ("tent", d.p.tent, d.t.country_tent) };
     let shelter = talk(c, def, x0 + 13, y0 + 8, says);
     own(c, name, shelter);
+    for (sx, sy) in stumps {
+        put(c, d.p.stump, sx, sy);
+    }
     let fire = put(c, d.p.campfire_cold, x0 + 6, y0 + 9);
     own(c, "fire", fire);
     if ground(c.sk, x0, y0).region == Region::Lowfields {

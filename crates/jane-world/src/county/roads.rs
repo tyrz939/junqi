@@ -117,5 +117,16 @@ pub fn lay_paths(c: &mut County<'_>) {
 fn footpath(c: &mut County<'_>, rng: &mut Sfc32, pts: &[(i32, i32)], width: i32) -> Vec<(i32, i32)> {
     let line = stroke_line(rng, pts, 2);
     c.k.square_brush(&line, width, |t| (!matches!(t, Tile::Road | Tile::Boardwalk)).then_some(Tile::Dirt));
+    let half = width / 2;
+    for &(x, y) in &line {
+        for cy in y - half..y - half + width {
+            for cx in x - half..x - half + width {
+                if c.k.inside(cx, cy) && c.k.get(cx, cy) == Tile::Dirt {
+                    super::ways::tread(&mut c.trodden, &c.k, cx, cy);
+                }
+            }
+        }
+    }
+    c.ways.push(super::ways::Way { kind: super::ways::WayKind::Footpath, line: line.clone(), door: None });
     line
 }

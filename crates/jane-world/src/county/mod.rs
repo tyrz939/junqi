@@ -16,7 +16,7 @@
 //! | `paths` | the burial footpath and `data/paths.json`'s footpaths | 5 |
 //! | `chunks` | the set places stamped where the skeleton put them, their rects, the link lanes | 6 |
 //! | `rail` | the railway raster: track, ballast, trestle, crossings, the fences at its ends | 5 |
-//! | `path_ends` | a mark at each footpath end, and a fingerpost saying where it goes | 5 |
+//! | `path_ends` | the footpaths and link lanes claimed; a mark at each footpath end, and a fingerpost saying where it goes | 5 |
 //! | `doors` | the ways into the dungeons | 6 |
 //! | `place_chunks` | placement rows inside the chunks, then the chunks claimed | 7 |
 //! | `road_furniture` | lamps, bridge lamps, forks, milestones; the roads' margins claimed | 7 |
@@ -27,6 +27,7 @@
 //! | `country` | field edges, hamlets, farms, camps, dens, ruins, ponds | 7 |
 //! | `stories` | stories claim places, boards go up, the stories' rows | 8 |
 //! | `scatter` | herbs and rocks | 9 |
+//! | `ways` | every way and door step cleared: growth gives way, a fence a gate, a thing on it moved aside | 9 |
 //! | `wildlife` | by region, biome and threat | 9 |
 //! | `cut_through` | a way cut to any named place the wood closed round | 9 |
 //! | `drop_unreachable` | small places and creatures nobody can reach are dropped | 9 |
@@ -48,6 +49,7 @@ pub mod roads;
 pub mod small;
 pub mod stories;
 pub mod tale_ground;
+pub mod ways;
 
 use jane_core::blueprint::{Area, RegionMap, ZONE_ATTEMPTS};
 use jane_core::num::Permille;
@@ -106,6 +108,12 @@ pub struct County<'a> {
     /// Ground a short walk from each tale's place (an index into `places`), kept from when the
     /// tale was fitted there, for its rows.
     pub on_foot: Vec<(usize, tale_ground::OnFoot)>,
+    /// Every cell a footpath, a lane or a link lane trod (`y * w + x`): kept clear of whatever is
+    /// set down after it (`ways`).
+    pub trodden: Vec<bool>,
+    /// Every lane, link lane and footpath as laid: its centre line and where it is meant to meet
+    /// its place (`ways::Way`).
+    pub ways: Vec<ways::Way>,
 }
 
 /// The centre cell of macro cell `m`, on either axis.
@@ -133,6 +141,8 @@ impl<'a> County<'a> {
             story_claims: stories::Claims::default(),
             ground: None,
             on_foot: Vec::new(),
+            trodden: vec![false; (COUNTY_W * COUNTY_H) as usize],
+            ways: Vec::new(),
         }
     }
 
@@ -178,7 +188,7 @@ pub const STAGES: &[(&str, StageFn)] = &[
     ("paths", roads::lay_paths),
     ("chunks", stamp_chunks),
     ("rail", rail::lay_railway),
-    ("path_ends", paths::path_ends),
+    ("path_ends", path_ends),
     ("doors", doors::set_doors),
     ("place_chunks", place_chunks),
     ("road_furniture", road_furniture),
@@ -189,6 +199,7 @@ pub const STAGES: &[(&str, StageFn)] = &[
     ("country", country),
     ("stories", stories),
     ("scatter", scatter),
+    ("ways", ways::clear_ways),
     ("wildlife", wildlife),
     ("cut_through", cut_through),
     ("drop_unreachable", drop_unreachable),
@@ -287,7 +298,23 @@ fn stamp_chunks(c: &mut County<'_>) {
             c.k.rect(key, c.chunks[i].bounds);
         }
     }
+    // A footpath laid before the stamps is the chunk's ground where it crossed a box.
+    let w = c.k.w();
+    for ch in &c.chunks {
+        for (x, y) in ch.bounds.cells() {
+            if c.k.inside(x, y) {
+                c.trodden[(y * w + x) as usize] = false;
+            }
+        }
+    }
     links::link_lines(c);
+}
+
+/// Every cell the footpaths and the link lanes trod claimed, so nothing set down after stands on
+/// a way; then each footpath's ends marked and signed (`paths::path_ends`).
+fn path_ends(c: &mut County<'_>) {
+    ways::claim_trodden(c);
+    paths::path_ends(c);
 }
 
 /// Cells round a chunk's box closed to what comes after its placement rows.

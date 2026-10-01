@@ -513,30 +513,322 @@ pub fn downhill(field: &Grid<u8>, x: i32, y: i32) -> Vec<(i32, i32)> {
     out
 }
 
-/// A lane of worn dirt `width` wide from a place's front to the nearest road, down the distance
-/// field ([`downhill`]). A roadside fence gets a gate where the lane meets it.
-pub fn lane(c: &mut County<'_>, x: i32, y: i32, width: i32) {
-    for (lx, ly) in downhill(&c.country.d_road, x, y) {
-        for j in 0..width {
-            for i in 0..width {
-                let (cx, cy) = (lx + i, ly + j);
-                if in_box(c, cx, cy) {
-                    continue;
-                }
-                let t = c.k.get(cx, cy);
-                if t == Tile::Fence && dist(&c.country.d_road, cx, cy) <= 6 {
-                    c.k.set(cx, cy, Tile::Dirt);
-                    continue;
-                }
-                // Over growth and open grass only; claimed ground is crossed only where it is
-                // still grass (a road's margin).
-                if !soft(t) || (c.k.is_claimed(cx, cy) && !matches!(t, Tile::Grass | Tile::GrassTall)) {
-                    continue;
-                }
-                c.k.set(cx, cy, Tile::Dirt);
+/// Where a way is laid to.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Reach {
+    /// A cell of road under its centre line.
+    Road,
+    /// Road, or a way already trodden.
+    Way,
+    /// Road, a way, or any worn ground: a green, a yard.
+    Worn,
+}
+
+/// How far a lane's way is looked for round where it starts, each way.
+const LANE_REACH: i32 = 120;
+/// How far round a way to a known cell of road may stray outside the box of its two ends.
+const LANE_MARGIN: i32 = 24;
+/// What a step of lane costs, and what it costs more to turn, to clear growth, to cross a
+/// place's claimed ground, to walk over a bed or a crop row, and to open a fence for a gate.
+const STEP: u32 = 10;
+const TURN: u32 = 14;
+const GROWTH: u32 = 4;
+const CLAIMED: u32 = 4;
+const BEDS: u32 = 160;
+const GATE: u32 = 400;
+const RUBBLE: u32 = 20;
+
+/// Every place's board (put up later, by the stories), and the cells in front of it she reads it
+/// from: no way is trodden there.
+fn board_cells(c: &County<'_>) -> Vec<(i32, i32)> {
+    let mut out = Vec::new();
+    for p in c.places.iter().chain(c.country.cur.as_ref()) {
+        for &(name, (bx, by)) in &p.slots {
+            if name == "board" {
+                out.extend([(bx, by), (bx + 1, by), (bx, by + 1), (bx + 1, by + 1)]);
             }
         }
     }
+    out
+}
+
+/// The way a lane `width` wide takes from `(x, y)` to the road: the cheapest walk to a cell of
+/// road, or of a way already trodden, round every building, rock and trunk (their feet), every
+/// set place's box, water and whatever else stops feet, preferring to run straight, to keep off
+/// beds and crops, and to go round a fence rather than through it (where it must, it gets a
+/// gate). Its centre line from `(x, y)`; `None` if nothing is in reach.
+fn route(
+    c: &County<'_>,
+    x: i32,
+    y: i32,
+    width: i32,
+    reach: Reach,
+    toward: Option<(i32, i32)>,
+) -> Option<Vec<(i32, i32)>> {
+    use std::cmp::Reverse;
+    use std::collections::BinaryHeap;
+    const DIRS: [(i32, i32); 4] = [(0, 1), (1, 0), (0, -1), (-1, 0)];
+    let cat = jane_data::catalog();
+    // Round the start, or round both ends of a way to a known cell of road.
+    let win = match toward {
+        None => Rect::new(x - LANE_REACH, y - LANE_REACH, 2 * LANE_REACH + 1, 2 * LANE_REACH + 1),
+        Some((tx, ty)) => {
+            let (x0, y0) = (x.min(tx) - LANE_MARGIN, y.min(ty) - LANE_MARGIN);
+            Rect::new(x0, y0, x.max(tx) + LANE_MARGIN - x0 + 1, y.max(ty) + LANE_MARGIN - y0 + 1)
+        }
+    };
+    let win = win.intersect(Rect::new(0, 0, c.k.w(), c.k.h()))?;
+    if !win.contains(x, y) {
+        return None;
+    }
+    let (ww, wh) = (win.w, win.h);
+    let ix = |cx: i32, cy: i32| ((cy - win.y) * ww + (cx - win.x)) as usize;
+    // What stops a lane's cells: every solid prop's feet in the window.
+    let mut feet = vec![false; (ww * wh) as usize];
+    for p in &c.k.blueprint().props {
+        let d = cat.story.prop(p.def);
+        if !super::ways::stops_feet(d, p) {
+            continue;
+        }
+        let r = Rect::new(i32::from(p.cell.x), i32::from(p.cell.y), i32::from(d.w), i32::from(d.h));
+        if !r.overlaps(win) {
+            continue;
+        }
+        for (fx, fy) in super::ways::feet_cells(d, r.x, r.y) {
+            if win.contains(fx, fy) {
+                feet[ix(fx, fy)] = true;
+            }
+        }
+    }
+    for (fx, fy) in board_cells(c) {
+        if win.contains(fx, fy) {
+            feet[ix(fx, fy)] = true;
+        }
+    }
+    let boxes: Vec<Rect> = c.chunks.iter().map(|ch| ch.bounds).filter(|b| b.grow(1).overlaps(win)).collect();
+    let cell_cost = |cx: i32, cy: i32| -> Option<u32> {
+        if !win.contains(cx, cy) || feet[ix(cx, cy)] || boxes.iter().any(|b| b.contains(cx, cy)) {
+            return None;
+        }
+        let t = c.k.get(cx, cy);
+        Some(match t {
+            Tile::Fence | Tile::StoneWall | Tile::Hedge => GATE,
+            Tile::Crops | Tile::Garden | Tile::FlowerBed => BEDS,
+            Tile::Tree | Tile::DeadTree | Tile::Bush => GROWTH,
+            Tile::Rubble => RUBBLE,
+            Tile::Water => return None,
+            _ if t.flags() & jane_core::tile::F_SOLID != 0 => return None,
+            Tile::Road | Tile::Boardwalk | Tile::Dirt | Tile::Cobble => 0,
+            _ if c.k.is_claimed(cx, cy) => CLAIMED,
+            _ => 0,
+        })
+    };
+    let brush_cost = |cx: i32, cy: i32| -> Option<u32> {
+        let mut sum = 0;
+        for j in 0..width {
+            for i in 0..width {
+                sum += cell_cost(cx + i, cy + j)?;
+            }
+        }
+        Some(sum)
+    };
+    let goal = |cx: i32, cy: i32| {
+        if toward == Some((cx, cy)) {
+            return true;
+        }
+        if reach == Reach::Road {
+            return c.k.get(cx, cy) == Tile::Road;
+        }
+        (0..width).any(|j| {
+            (0..width).any(|i| {
+                let (gx, gy) = (cx + i, cy + j);
+                let t = c.k.get(gx, gy);
+                matches!(t, Tile::Road | Tile::Boardwalk)
+                    || (reach == Reach::Worn && matches!(t, Tile::Dirt | Tile::Cobble))
+                    || super::ways::trodden_at(c, gx, gy)
+            })
+        })
+    };
+    // A lane set to start on a board, or on anything else in the way, starts beside it.
+    let (x, y) = if brush_cost(x, y).is_some() {
+        (x, y)
+    } else {
+        let mut near = None;
+        'rings: for r in 1..=3i32 {
+            for j in -r..=r {
+                for i in -r..=r {
+                    if i.abs().max(j.abs()) == r && brush_cost(x + i, y + j).is_some() {
+                        near = Some((x + i, y + j));
+                        break 'rings;
+                    }
+                }
+            }
+        }
+        near?
+    };
+    // Dijkstra over (cell, heading): the heading makes a turn cost. Ties go to the lower state
+    // index, so the same ground always gives the same lane.
+    let n = (ww * wh) as usize;
+    let mut best = vec![u32::MAX; n * 4];
+    let mut from = vec![u32::MAX; n * 4];
+    let mut heap = BinaryHeap::new();
+    for d in 0..4 {
+        best[ix(x, y) * 4 + d] = 0;
+        heap.push(Reverse((0u32, (ix(x, y) * 4 + d) as u32)));
+    }
+    let mut end = None;
+    while let Some(Reverse((cost, s))) = heap.pop() {
+        let s = s as usize;
+        if cost > best[s] {
+            continue;
+        }
+        let (i, d) = (s / 4, s % 4);
+        let (cx, cy) = (win.x + (i as i32 % ww), win.y + (i as i32 / ww));
+        if goal(cx, cy) {
+            end = Some(s);
+            break;
+        }
+        for (nd, &(ox, oy)) in DIRS.iter().enumerate() {
+            let (nx, ny) = (cx + ox, cy + oy);
+            let Some(extra) = brush_cost(nx, ny) else { continue };
+            let turn = if nd == d { 0 } else { TURN };
+            let next = cost + STEP + turn + extra;
+            let t = ix(nx, ny) * 4 + nd;
+            if next < best[t] {
+                best[t] = next;
+                from[t] = s as u32;
+                heap.push(Reverse((next, t as u32)));
+            }
+        }
+    }
+    let mut s = end?;
+    let mut line = Vec::new();
+    loop {
+        let i = s / 4;
+        line.push((win.x + (i as i32 % ww), win.y + (i as i32 / ww)));
+        let f = from[s];
+        if f == u32::MAX {
+            break;
+        }
+        s = f as usize;
+    }
+    line.reverse();
+    Some(line)
+}
+
+/// A lane of worn dirt `width` wide from a place's front to the nearest road or way already
+/// trodden ([`route`]; down the distance field, [`downhill`], if none is in reach). A fence it
+/// must cross gets a gate. Its cells are claimed as they are trodden: nothing placed after
+/// stands on it.
+pub fn lane(c: &mut County<'_>, x: i32, y: i32, width: i32, door: Option<(i32, i32)>) {
+    tread_way(c, (x, y), width, door, Reach::Way, None, super::ways::WayKind::Lane);
+}
+
+/// A walk two cells wide from a door's step to the nearest worn ground (a green, a yard, a lane).
+pub fn walk(c: &mut County<'_>, (x, y): (i32, i32)) {
+    tread_way(c, (x, y), 2, Some((x, y)), Reach::Worn, None, super::ways::WayKind::Lane);
+}
+
+/// [`lane`], [`walk`] and a story's path: to what `reach` says, or to `toward` (a known
+/// cell of road), recorded as a way of `kind`. Its centre line, from `(x, y)`.
+pub fn tread_way(
+    c: &mut County<'_>,
+    (x, y): (i32, i32),
+    width: i32,
+    door: Option<(i32, i32)>,
+    reach: Reach,
+    toward: Option<(i32, i32)>,
+    kind: super::ways::WayKind,
+) -> Vec<(i32, i32)> {
+    let routed = route(c, x, y, width, reach, toward);
+    let line = match &routed {
+        Some(l) => l.clone(),
+        None if reach == Reach::Worn => vec![(x, y)],
+        None => match toward {
+            // Straight to the road, as the way to a story's place always went.
+            Some((tx, ty)) => {
+                let n = (tx - x).abs().max((ty - y).abs());
+                let steps = i64::from(n.max(1));
+                (0..=n)
+                    .map(|s| {
+                        let at = |a: i32, b: i32| a + js_round(i64::from(b - a) * i64::from(s), steps) as i32;
+                        (at(x, tx), at(y, ty))
+                    })
+                    .collect()
+            }
+            None => downhill(&c.country.d_road, x, y),
+        },
+    };
+    // Down the field, nothing has looked for what stands in the way: it is trodden round.
+    let mut under = Vec::new();
+    if routed.is_none() {
+        under = board_cells(c);
+        let cat = jane_data::catalog();
+        let (x0, y0) = line.iter().fold((i32::MAX, i32::MAX), |a, p| (a.0.min(p.0), a.1.min(p.1)));
+        let (x1, y1) = line.iter().fold((i32::MIN, i32::MIN), |a, p| (a.0.max(p.0), a.1.max(p.1)));
+        let span = Rect::new(x0 - 1, y0 - 1, x1 - x0 + width + 2, y1 - y0 + width + 2);
+        for p in &c.k.blueprint().props {
+            let d = cat.story.prop(p.def);
+            let r = Rect::new(i32::from(p.cell.x), i32::from(p.cell.y), i32::from(d.w), i32::from(d.h));
+            if super::ways::stops_feet(d, p) && r.overlaps(span) {
+                under.extend(super::ways::feet_cells(d, r.x, r.y));
+            }
+        }
+    }
+    for &(lx, ly) in &line {
+        for j in 0..width {
+            for i in 0..width {
+                let (cx, cy) = (lx + i, ly + j);
+                if in_box(c, cx, cy) || !c.k.inside(cx, cy) || under.contains(&(cx, cy)) {
+                    continue;
+                }
+                let t = c.k.get(cx, cy);
+                let paint = if routed.is_some() {
+                    // The route went only where feet may go once growth is cleared and a fence
+                    // opened: all of it is trodden, road and cobbles kept.
+                    matches!(
+                        t,
+                        Tile::Grass
+                            | Tile::GrassTall
+                            | Tile::Moss
+                            | Tile::DryBed
+                            | Tile::Sand
+                            | Tile::Tree
+                            | Tile::DeadTree
+                            | Tile::Bush
+                            | Tile::Rubble
+                            | Tile::Fence
+                            | Tile::StoneWall
+                            | Tile::Hedge
+                            | Tile::Crops
+                            | Tile::Garden
+                            | Tile::FlowerBed
+                    )
+                } else if matches!(t, Tile::Fence | Tile::StoneWall | Tile::Hedge)
+                    && (toward.is_some() || dist(&c.country.d_road, cx, cy) <= 6)
+                {
+                    true
+                } else if matches!(t, Tile::Dirt | Tile::Cobble) {
+                    false
+                } else if !soft(t) || (c.k.is_claimed(cx, cy) && !matches!(t, Tile::Grass | Tile::GrassTall)) {
+                    // Over growth and open grass only; claimed ground is crossed only where it is
+                    // still grass (a road's margin).
+                    continue;
+                } else {
+                    true
+                };
+                if paint {
+                    c.k.set(cx, cy, Tile::Dirt);
+                }
+                if matches!(c.k.get(cx, cy), Tile::Dirt | Tile::Cobble) {
+                    super::ways::tread(&mut c.trodden, &c.k, cx, cy);
+                    c.k.claim(Rect::new(cx, cy, 1, 1));
+                }
+            }
+        }
+    }
+    c.ways.push(super::ways::Way { kind, line: line.clone(), door });
+    line
 }
 
 /// A straight fence, hedge or wall with a gate of three every `gate_every` cells (0: none);
