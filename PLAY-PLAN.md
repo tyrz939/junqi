@@ -13,7 +13,12 @@ Jane's writing and dungeon structure already stand near the best of their genre.
 
 The plan fixes that in eight phases. Phase 0 is small fixes. Phases 1 to 3 rebuild the core loop on four ideas:
 
-1. **Fights have time in the right places.** Enemies wind up, she can hop, a few heavy spells cast, and the 1.5 s GCD and post-cast root go.
+1. **Fights have targets and time in the right places.**
+   - She targets a foe or a prop, or aims freely.
+   - Melee auto-attacks.
+   - Spells have real casts (1.0 to 1.5 s) she can walk through.
+   - Enemies wind up, and she can hop.
+   - The post-cast root goes.
 2. **Fires are made, not found.** People's fires stay lit. Wild pits need deadwood and a match (or Fire). Rest heals over time, and only a bed heals at once.
 3. **She grows two ways.** Finds stay the power channel (jars, pages, Words). XP and levels pay every quest and buy talent points in eight witch **Crafts**, at most three per witch, reset at the dog.
 4. **Every number that changes is measured.** A telemetry harness in the repo, and bots that play the new rules before any tuning is trusted.
@@ -37,20 +42,76 @@ Every mechanic below is integer, in ticks, inside the sim, so lockstep, saves an
 
 ## 2. The new core loop
 
-### 2.1 Combat: time in the right places
+### 2.1 Combat: targets, auto-attack, real casts
 
-The research found that Jane has **no cast times today**. The "WoW feel" is a 1.5 s GCD plus a 0.5 s root *after* every cast. That is the wrong half of WoW: a wait that tells nobody anything. Diablo 3 made exactly this recovery cancellable "to make combat feel responsive".
+**Owner's direction (2026-10-02):**
+- Make casting enjoyable.
+- 0.5 s feels short coming from WoW, so go with what is best for this game.
+- Melee should auto-attack.
+- Aiming at moving things without targeting is very hard, so mix targeting with free aim and keep the puzzles working.
+
+The research found that Jane has **no cast times today**. Her "WoW feel" is a 1.5 s GCD plus a 0.5 s root *after* every cast: a wait that tells nobody anything. The new model moves the wait *before* the effect, where it can be read, built up and interrupted. It also makes hitting a moving thing a matter of choosing it, not of leading it.
+
+**Targeting: a target when she has one, free aim when she wants it.**
+- **Choosing a target:**
+  - clicking a foe;
+  - Tab, or RB/LB on a pad, which cycles foes in front of her, nearest first.
+- **A target's display:** a ring under it, its name and a slim health bar. Hostile targets get a red ring and props a gold one.
+- **Targeted bolts curve onto their target** with a capped turn rate, so moving foes are hittable. Walls still matter:
+  - a cast needs sight to start;
+  - a bolt can still strike a wall if the target ducks behind one;
+  - range is checked at start and at release.
+- **Props are targets too.** Clicking a blue torch, a cracked wall, a socket or a bud and casting the Word sends it there. Puzzles get easier to aim and lose nothing, and assist's "prefer a prop on the line" becomes explicit.
+- **Free aim stays:**
+  - with no target;
+  - while she holds the free-aim key (or pushes the right stick on a pad);
+  - for every ground spell (Hoarfrost, Kindling, Powder's charges, the Hand-Bell-style pools), which always lands at the cursor or stick point.
+- **Soft target:** attacking with no target picks the nearest hostile in front of her (WoW's auto-target on attack).
+- **Lockstep:** the target is a unit or prop id in the input frame, validated in the sim like everything else.
+
+**Melee auto-attacks.** Right-clicking a foe, or attacking with a hostile target in reach, starts her stick swinging on its swing timer, as in WoW.
+- She turns to face her target, and moving does not stop the swings.
+- Swings stop when the target dies or leaves reach, or while she casts; they resume after.
+- Every swing refunds energy, so auto-attack is **the generator** for the hop and for Blackthorn's actives, which fire as instants or on her next swing.
+- Melee no longer competes with spells for button presses, so a melee witch plays like a WoW feral or warrior and a caster can stand back.
+
+**Casts with weight.**
+
+| Spell | Cast | Why |
+| --- | --- | --- |
+| Icebolt | **1.0 s** | The filler: chill, kite, light blue torches |
+| Fireball | **1.5 s** | The heavy hit plus burning. Hearth's procs make it instant (in the style of WoW's Hot Streak) |
+| Explosion | **1.2 s charge**, at a target or a ground point | Cracks walls, softens plate, knocks back |
+| Electric (Spark) | **Instant**, short cooldown | The interrupt: it cancels a machine's wind-up |
+| Mend | **1.5 s cast** heal on her target (a friend) or herself | The support seat's staple |
+| Grow, Repair | **Instant** at props | A verb at a prop pays no tax |
+| Craft actives | A mix: instants (Still, Rap, Darn), casts (Overload 1.5 s), channels | Each craft gets a rhythm of its own |
+
+**Rules:**
+- **The GCD is 1.0 s** (was 1.5 s). Auto-attack is off it.
+- **No post-cast root.** She **walks at half speed while casting**, and the hop cancels her cast.
+- **Mana is spent at completion.** An interrupted cast costs nothing.
+- **Interrupts:** stuns and heavy knockback interrupt her; plain damage does not (no pushback).
+- **A 200 ms queue window** lets the next press wait for the current cast, so chains feel tight at 50 ms of LAN delay.
+
+**What makes casting enjoyable:**
+- a glow that builds at her hands, with a rising tone;
+- a slim cast bar under her;
+- a release with punch (flash, sound, hitlag on big hits);
+- procs that hand her an instant;
+- Craft talents that let her cast while moving at full speed (Rime's "cold hands" for Icebolt);
+- interrupting a foe's wind-up with Spark.
+
+The cast times are data fields, so tuning after telemetry is one number per spell.
+
+**The rest of the fight model:**
 
 | Keep | Change | Add |
 | --- | --- | --- |
-| Cursor and right-stick aim with in-sim assist (twin-stick). No tab-target or WC3/Dota unit targeting: aiming at a prop is a puzzle verb, and unit targeting removes dodging | GCD 1.5 s → **0.5 s**. **No player post-cast root**; Icebolt keeps a 6-tick recovery that movement cancels | **A 200 ms input buffer**, WoW's spell-queue window made deterministic |
-| Bolts that fly and don't home | Swing: no root, 1.0 s cooldown, refunds energy (**the generator**) | **A hop**: 30 energy, ~1.5 m, i-frames on ticks 1 to 7. It cancels her own cast. Space (keys) or LT (pad) |
-| Per-spell cooldowns, mana, energy | **Fireball: a 0.5 s cast. Explosion: a 0.8 s charge.** She walks at half speed while casting. A stun interrupts and refunds | **Mend**: a 1.5 s channel (a found charm, §2.3) |
-| The Hand-Bell and Shot-Firer tells | Boss HP down so fights take **20 to 40 actions**, not 60 to 125 | **Enemy wind-ups on every blow**: rats 0.35 s, skeletons 0.5 s, soldiers and bosses 0.8 s, the cactus 1.0 s. **Plus the table's input delay D** in co-op, so a guest gets a solo reaction window |
-| | | **Interrupts both ways**: Spark cancels a machine's wind-up, chill lengthens one by 50%, her swing's knockback cancels a small foe's. Boss tells are drawn interruptible or not |
-| | | **Hitlag in the sim** (attacker and victim only, 4 to 6 ticks; a boss 10 on a phase change), **knockback** (6 px swing, 10 px Explosion; none on bosses; plates ignore pushes), **pad soft-lock** when the right stick is at rest |
-
-**On "casting takes time like WoW".** The plan gives real casts to the two heavy bolts and the heal, and lets Crafts add a few more where a cast *is* the design (Current's Overload, a 1 s wind-up). It puts the rest of the time on the enemies, where it creates dodging. If the owner wants a heavier WoW cadence (most damage spells at 1 to 1.5 s), the same machinery does it with one data field per spell. See decision D1.
+| Per-spell cooldowns, mana, energy, sprint | Boss HP down so fights take **20 to 40 actions**, not 60 to 125 | **A hop**: 30 energy, about 1.5 m, i-frames on ticks 1 to 7. It cancels her cast. Space (keys) or LT (pad) |
+| The Hand-Bell and Shot-Firer tells | | **Enemy wind-ups on every blow**: rats 0.35 s, skeletons 0.5 s, soldiers and bosses 0.8 s, the cactus 1.0 s. **Plus the table's input delay D** in co-op, so a guest gets a solo reaction window. A wind-up's melee hits only if she is still in reach and in its arc; its bolts and pools land where they were aimed when it began |
+| | | **Interrupts both ways**: Spark cancels a machine's wind-up, chill lengthens one by 50%, and knockback cancels a small foe's. Boss tells are drawn interruptible or not |
+| | | **Hitlag in the sim** (attacker and victim only, 4 to 6 ticks; a boss 10 on a phase change). **Knockback**: 6 px on a swing, 10 px on Explosion, none on bosses; plates ignore pushes |
 
 **Diablo, taken and left.** Take the feel (hitlag, knockback, sound), the hop, generator and spender, and "marked" foes: a common foe given one extra rule from the roster Jane already has (lit-sight, shuns light, plated, webbing), named in an omen and readable on sight. Leave random loot and affixes; they fight the solver and the voice.
 
@@ -136,7 +197,7 @@ Each phase ends green, pushed and released. Format bumps are grouped so saves br
 | 0.2 | **Fix the two bot stalls**: seed 6 at the Factory (Reader, Cautious) and seed 8 after the Mine (Rusher) | story bot, solver |
 | 0.3 | **No one-shots near the start**: nothing within 400 m of the Halt deals 35% or more of starting health in one cast; the cactus gets a 1 s bristle tell; a bot audit extends "first walk is safe" to the fields beside it | `data/spells.json` `cactus_spray`, `jane-bot` audit |
 | 0.4 | **Castle shows at most three "?"** at once, gated by day, act or news; the parish board is the breadcrumb | `data/dialogue/town.json` |
-| 0.5 | **Quest marks on prop givers** (the lost-property book, the parish board, the glovebox, the farmhouse door) | `View::quest_mark` |
+| 0.5 | **Quest marks on prop givers** (the lost-property book, the parish board, the glovebox, the farmhouse door), and **the marks swapped to WoW's**: "!" offers, "?" takes back | `View::quest_mark`, `ui::marks` |
 | 0.6 | **The story's set-ups paid off**: the Small Present in all three endings, never opened; her name taken off the scarf and the stump, so the time book lands first; Julie's own line in the time book; "She is not dead." at the Burial, saving "{name}. I would know." for the last page | `data/items.json`, `data/dialogue/*.json` |
 | 0.7 | **A repetition pass plus a lint test**: "all the same" at most 3 (it is 15), "No bell" openers at most 2 (it is 10 of 14), the third Halfway House line, the five rule-breaking lines, and knock lines rationed to one in three odd | `data/dialogue/*.json`, `jane-data` tests |
 | 0.8 | **The great torch on the Burial's critical path** | `data/dungeons/burial.json`, `tactics/burial.rs` |
@@ -146,14 +207,14 @@ The audit's "teeth in the first hour" (Iron Knuckles at 4 actions) waits for the
 
 ### Phase 1: combat feel (one save and replay bump)
 
-- **Data:** the GCD at 0.5 s, the root removed, and the buffer.
+- **Targeting:** hard targets on foes and props; Tab, RB and LB cycle; click to target; a soft target on attack; bolts that curve onto their target; free aim kept.
+- **Melee:** auto-attack with an energy refund.
+- **Casts:** cast times per §2.1, a GCD of 1.0 s, no post-cast root, half-speed walking while casting, and the 200 ms queue. The cast feel: a glow, a tone, a bar and the release.
 - **Enemies:** a `windup` on every enemy blow, plus D at the LAN table.
 - **The hop.**
-- **Casts:** Fireball and Explosion cast.
 - **Feel:** hitlag and knockback, plus interrupts both ways.
-- **The pad:** soft-lock.
 - **Bosses:** HP down to 20 to 40 actions.
-- **The bots learn to hop and read wind-ups before any telemetry is trusted.** Otherwise their deaths rise and mislead tuning.
+- **The bots learn to target, hop and read wind-ups before any telemetry is trusted.** Otherwise their deaths rise and mislead tuning.
 
 Touches: `combat.rs`, `state.rs`, `sim.rs` (the move gate), `ai.rs`, `flush.rs`, `status.rs`, `assist.rs`, `tuning.rs`, `input.rs`, `view.rs`, `save.rs`, `codec.rs`, `jane-net`, `jane-present` (raise frames, cast glow, decals), `jane-audio` (wind-up cues), `jane-bot`.
 
@@ -253,11 +314,18 @@ Touches: `data/props*.json`, `data/items.json`, the `station` and `julie_house` 
 
 ---
 
-## 4. Decisions for the owner
+## 4. Decisions (owner, 2026-10-02: "go ahead with all your points")
 
-| # | Decision | Recommended |
+Everything below is **decided as recommended**, with three of the owner's own changes:
+- **D1:** cast times are set by gameplay, as in §2.1.
+- **D10:** the quest marks are swapped to WoW's way round.
+- **D15 and D16** are added.
+
+| # | Decision | Decided |
 | --- | --- | --- |
-| D1 | Cast weight: light (Fireball 0.5 s, Explosion 0.8 s, Mend channel, a few Craft casts) or WoW-heavy (most damage spells 1 to 1.5 s) | **Light**; the time goes on enemy wind-ups instead |
+| D1 | Cast weight | **§2.1**: Icebolt 1.0 s, Fireball 1.5 s, Explosion 1.2 s, Spark instant, Mend 1.5 s, verbs at props instant, GCD 1.0 s |
+| D15 | Targeting | **Hybrid**: click, Tab or RB/LB targets a foe or a prop; targeted bolts curve onto it; free aim with no target, on a held key or the pushed right stick, and for ground spells |
+| D16 | Melee | **Auto-attack** on a hostile target in reach; swings refund energy |
 | D2 | Hop binding: Space (bar slot 1 moves to 1 and left click) or sprint plus a tapped direction | **Space** on keys, LT on pad |
 | D3 | Levels give points only, not stats | **Yes**; finds stay power |
 | D4 | Eight Crafts, at most three per witch, capstone 12, far shelf 16, cap 25 | **Yes** |
@@ -266,7 +334,7 @@ Touches: `data/props*.json`, `data/items.json`, the `station` and `julie_house` 
 | D7 | Rest at a fire heals over time and threat breaks it; only a bed heals at once | **Yes** |
 | D8 | Unbanked jars drop on death until a rest | **Yes**, after the one-shots are capped |
 | D9 | The co-op penalty counts only nearby seats, reworded | **Yes** (this changes your server-wide decision) |
-| D10 | The quest marks stay "?" to give and "!" to hand in (yours); WoW players read "!" as a new quest | **Keep yours** |
+| D10 | The quest marks | **Swapped to WoW's**: a gold "!" offers a quest, a "?" takes it back (Phase 0) |
 | D11 | Reset-on-exit rooms, so puzzles can go wrong | **Yes**, a few per dungeon |
 | D12 | Giving Jane a stake: the Factory drafts, Julie's line in the time book, the Small Present paid off | **Yes** |
 | D13 | The difficulty dial | **Yes**, in Phase 4 |
