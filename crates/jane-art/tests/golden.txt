@@ -404,7 +404,7 @@ prop:gas_lamp_w c14d5afc
 prop:gate_h 3b3e69cc
 prop:gate_v 51afbb9a
 prop:gravestone 97a3ecdd
-prop:great_torch f04e3279
+prop:great_torch 179e8b1b
 prop:hatch 729b48bc
 prop:hay_cart 0c04ddef
 prop:haystack d4096121

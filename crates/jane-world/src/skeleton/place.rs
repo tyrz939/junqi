@@ -211,9 +211,13 @@ pub struct PlaceCtx<'a> {
     pub near_rail: &'a Grid<bool>,
 }
 
-/// The named patches, in row order (PLAN.md 2.6). A row that cannot be placed on this seed is
-/// skipped, not fatal: patches are texture, sites are story (the caller re-rolls for a missing
-/// `required` one).
+/// The named patches, in row order (PLAN.md 2.6). A row whose ground is nowhere on this seed is
+/// laid on looser ground before it is given up: from half as near to its anchor to twice as far,
+/// then off the road or not, then anywhere in its region, then with its ground (a bank, a road)
+/// inside it rather than under its middle, and last overlapping another patch by a third. A
+/// region keeps its named dangers on every seed; the rules still hold that keep a patch off a
+/// haven and off a story door. One that cannot be laid even so is skipped, not fatal: patches
+/// are texture, sites are story (the caller re-rolls for a missing `required` one).
 pub fn place_areas(ctx: &PlaceCtx<'_>, rows: &[AreaDef], seed: u32, attempt: u8) -> Vec<PlacedArea> {
     let mut out: Vec<PlacedArea> = Vec::new();
     for (ix, row) in rows.iter().enumerate() {
@@ -244,35 +248,60 @@ pub fn place_areas(ctx: &PlaceCtx<'_>, rows: &[AreaDef], seed: u32, attempt: u8)
                 };
                 (s.mx, s.my, r10)
             })
-            .chain(out.iter().map(|a| (a.mx, a.my, (i64::from(a.def.radius) + radius) * 9)))
             .collect();
+        // Two patches may overlap a tenth (the last resort: a third).
+        let apart = |a: &PlacedArea, k: i64| (a.mx, a.my, (i64::from(a.def.radius) + radius) * k);
         let mut candidates = Vec::new();
-        for y in reach..SKEL_H - reach {
-            for x in reach..SKEL_W - reach {
-                if ctx.t.region.read(x, y, Region::Lowfields) != row.region || !terrain_fits(ctx.t, w.terrain, x, y) {
-                    continue;
-                }
-                let rd = road_tenths(ctx.road_dist.read(x, y, u16::MAX));
-                if w.on_road && rd > 0 {
-                    continue;
-                }
-                if w.off_road.is_some_and(|m| rd < i64::from(m) * 10) {
-                    continue;
-                }
-                if let Some(n) = near {
-                    let d2 = metres_sq(x, y, n.mx, n.my);
-                    let lo = i64::from(w.near_min.unwrap_or(0));
-                    if d2 < lo * lo || w.near_max.is_some_and(|m| d2 > i64::from(m) * i64::from(m)) {
+        // 0: the row as written; 1: from half as near to its anchor to twice as far; 2: off the
+        // road or not; 3: anywhere in its region; 4: its ground (a bank, a road) inside the middle
+        // half of it, not under its middle; 5: anywhere inside it; 6: and overlapping another patch
+        // by a third. A pool always has its water's edge and a lane its road.
+        let ground_in =
+            |x: i32, y: i32, r: i32| (-r..=r).any(|j| (-r..=r).any(|i| terrain_fits(ctx.t, w.terrain, x + i, y + j)));
+        for loose in 0..7usize {
+            for y in reach..SKEL_H - reach {
+                for x in reach..SKEL_W - reach {
+                    if ctx.t.region.read(x, y, Region::Lowfields) != row.region
+                        || match loose {
+                            0..4 => !terrain_fits(ctx.t, w.terrain, x, y),
+                            4 => !ground_in(x, y, reach / 2),
+                            _ => !ground_in(x, y, reach - 1),
+                        }
+                    {
                         continue;
                     }
+                    let rd = road_tenths(ctx.road_dist.read(x, y, u16::MAX));
+                    if w.on_road && rd > [0, 0, 0, 0, radius * 5, radius * 9, radius * 9][loose] {
+                        continue;
+                    }
+                    if loose < 2 && w.off_road.is_some_and(|m| rd < i64::from(m) * 10) {
+                        continue;
+                    }
+                    if let Some(n) = near.filter(|_| loose < 3) {
+                        let d2 = metres_sq(x, y, n.mx, n.my);
+                        let lo = i64::from(w.near_min.unwrap_or(0)) >> loose.min(1);
+                        let hi = |m: u16| i64::from(m) << loose.min(1);
+                        if d2 < lo * lo || w.near_max.is_some_and(|m| d2 > hi(m) * hi(m)) {
+                            continue;
+                        }
+                    }
+                    if row.threat > 1 && i32::from(ctx.safe_dist.read(x, y, u16::MAX)) <= (reach + 2) * 10 {
+                        continue;
+                    }
+                    let k = if loose < 6 { 9 } else { 7 };
+                    if keep_out
+                        .iter()
+                        .copied()
+                        .chain(out.iter().map(|a| apart(a, k)))
+                        .any(|(kx, ky, r10)| nearer_than(x, y, kx, ky, r10))
+                    {
+                        continue;
+                    }
+                    candidates.push(cell_of(x, y));
                 }
-                if row.threat > 1 && i32::from(ctx.safe_dist.read(x, y, u16::MAX)) <= (reach + 2) * 10 {
-                    continue;
-                }
-                if keep_out.iter().any(|&(kx, ky, r10)| nearer_than(x, y, kx, ky, r10)) {
-                    continue;
-                }
-                candidates.push(cell_of(x, y));
+            }
+            if !candidates.is_empty() {
+                break;
             }
         }
         // A patch is somewhere she is sent by name, so its edge is seen from a road wherever the row
