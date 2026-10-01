@@ -70,6 +70,15 @@
         "when": [
           {
             "if": "questDone",
+            "quest": "tale_bees_comb"
+          }
+        ],
+        "node": "in_2"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
             "quest": "tale_bees_tell"
           }
         ],
@@ -863,6 +872,15 @@
           }
         ],
         "node": "wait_1"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "tale_walk_follow"
+          }
+        ],
+        "node": "in_1"
       },
       {
         "node": "offer_1"
@@ -2500,6 +2518,15 @@
         "node": "wait_1"
       },
       {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "tale_scarf_rows"
+          }
+        ],
+        "node": "in_1"
+      },
+      {
         "node": "offer_1"
       }
     ],
@@ -2862,6 +2889,15 @@
           }
         ],
         "node": "wait_1"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "tale_halt_oil"
+          }
+        ],
+        "node": "in_1"
       },
       {
         "node": "offer_1"
@@ -3290,6 +3326,15 @@
           }
         ],
         "node": "wait_1"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "tale_vermin_clear"
+          }
+        ],
+        "node": "in_1"
       },
       {
         "node": "offer_1"

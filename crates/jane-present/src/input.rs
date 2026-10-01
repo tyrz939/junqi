@@ -37,6 +37,7 @@ pub mod sc {
     pub const RETURN: u16 = 40;
     pub const ESCAPE: u16 = 41;
     pub const BACKSPACE: u16 = 42;
+    pub const DELETE: u16 = 76;
     pub const TAB: u16 = 43;
     pub const SPACE: u16 = 44;
     pub const N0: u16 = 39;
@@ -419,6 +420,8 @@ pub enum UiAction {
     Quick,
     /// At a cupboard: everything in the bag put away (Y, or 3).
     QuickAll,
+    /// Delete or Backspace in a screen: the Log's Abandon (X on a pad is `Quick`).
+    Remove,
     Bags,
     Book,
     Quests,
@@ -606,6 +609,10 @@ impl Input {
                 if mode == Mode::Ui {
                     self.edges.push(Edge::Ui(UiAction::Confirm));
                 }
+                continue;
+            }
+            if mode == Mode::Ui && (code == sc::DELETE || code == sc::BACKSPACE) {
+                self.edges.push(Edge::Ui(UiAction::Remove));
                 continue;
             }
             for b in self.bindings.rows.iter().filter(|b| code != 0 && b.keys.contains(&code)) {

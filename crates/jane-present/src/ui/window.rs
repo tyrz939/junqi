@@ -24,7 +24,7 @@ use crate::input::UiAction;
 use crate::text;
 use crate::ui::cmd::Rect;
 use crate::ui::core::{
-    ButtonKind, DragPayload, DropTarget, Ink, PanelStyle, SlotView, Ui, advance, line_h, wid, wrap_lines,
+    ButtonKind, DragPayload, DropTarget, Ink, PanelStyle, SlotView, Ui, advance, line_h, text_w, wid, wrap_lines,
 };
 use crate::ui::hud::{self, HudCtx};
 use crate::ui::map::{self, MapChart};
@@ -49,9 +49,12 @@ pub struct WindowState {
     /// the bag's and 24..48 the cupboard's.
     pub focus: u8,
     pub carried: Option<u8>,
-    /// The book's and the log's lit rows.
+    /// The book's and the log's lit rows, and the log's first row in sight.
     pub book: usize,
     pub log: usize,
+    pub log_top: usize,
+    /// A quest waiting on "abandon it?".
+    pub abandon: Option<jane_core::QuestId>,
     pub map: MapChart,
     /// A bag slot waiting on "destroy it?".
     pub destroy: Option<u8>,
@@ -63,6 +66,18 @@ pub struct WindowState {
 impl WindowState {
     pub fn on(tab: usize) -> WindowState {
         WindowState { tab, ..WindowState::default() }
+    }
+
+    /// "Abandon ...?" over the window, "Keep it" lit first: setting a quest aside is never one
+    /// stray press.
+    pub fn ask_abandon(&mut self, q: jane_core::QuestId) {
+        self.abandon = Some(q);
+        self.confirm = MenuState { focus: 1 };
+    }
+
+    /// A question is up over the window (destroy it? abandon it?): it owns every key.
+    pub fn asking(&self) -> bool {
+        self.destroy.is_some() || self.abandon.is_some()
     }
 }
 
@@ -93,7 +108,7 @@ pub fn draw(ui: &mut Ui, st: &mut WindowState, b: &ViewBuffers, v: Option<&View<
     ui.panel(r, PanelStyle::Window);
     ui.drop_area(r, DropTarget::Window);
     // The tabs.
-    let live = ui.interactive && st.destroy.is_none() && !ui.popover_open();
+    let live = ui.interactive && !st.asking() && !ui.popover_open();
     for (i, t) in TABS.iter().enumerate() {
         let tr = Rect::new(x + 14 + i as i32 * 92, y + 10, 88, 24);
         if ui.button(wid("tab", i as u32), tr, t, ButtonKind::Tab { on: st.tab == i }, true, false) {
@@ -130,7 +145,7 @@ pub fn draw(ui: &mut Ui, st: &mut WindowState, b: &ViewBuffers, v: Option<&View<
             }
         },
         1 => book_tab(ui, st, b, body, live),
-        2 => log_tab(ui, st, b, body, live),
+        2 => log_tab(ui, st, b, body, cx, live),
         _ => match v {
             Some(v) => map::draw(
                 ui,
@@ -158,6 +173,18 @@ pub fn draw(ui: &mut Ui, st: &mut WindowState, b: &ViewBuffers, v: Option<&View<
                 ui.command(Command::BagDestroy { slot });
             }
             st.destroy = None;
+        }
+    }
+    if let Some(q) = st.abandon {
+        let title = b.window.quests.iter().find(|r| r.id == Some(q)).map_or("it", |r| r.title.as_str());
+        let question = format!("Abandon {title}?");
+        let ask = menus::Ask { question: &question, detail: ABANDON_DETAIL, yes: "Abandon", no: "Keep it" };
+        ui.interactive = true;
+        if let Some(yes) = menus::ask(ui, &mut st.confirm, &ask) {
+            if yes {
+                ui.command(Command::Abandon(q));
+            }
+            st.abandon = None;
         }
     }
 }
@@ -616,18 +643,48 @@ fn book_tab(ui: &mut Ui, st: &mut WindowState, b: &ViewBuffers, body: Rect, live
     ui.text(x0, body.bottom() - 12, hint, Ink::fine(style::quiet()).shadow());
 }
 
-fn log_tab(ui: &mut Ui, st: &mut WindowState, b: &ViewBuffers, body: Rect, live: bool) {
+/// The Log's footer: what Enter (A on a pad) and Delete (X) do to the lit quest.
+pub const LOG_HINTS: [(&str, &str); 2] = [("Enter", "Track"), ("Del", "Abandon")];
+
+/// What "Abandon ...?" says under the question.
+pub const ABANDON_DETAIL: &str = "It leaves the log, for everyone at the table. Whoever asked will ask again, and what only it wanted is set down at her feet.";
+
+/// Why the main line's Abandon is grey.
+pub const STORY_OWN: &str = "The main story cannot be abandoned";
+
+/// A tick box at `(x, y)`, 11 px: a gold square in it while tracked.
+pub fn tick_box(ui: &mut Ui, x: i32, y: i32, on: bool, lit: bool) {
+    let edge = if lit { style::gold() } else { style::gold_deep() };
+    ui.fill(Rect::new(x, y, 11, 11), argb(style::INK, 230));
+    ui.fill(Rect::new(x + 1, y + 1, 9, 9), argb(edge, 255));
+    ui.fill(Rect::new(x + 2, y + 2, 7, 7), argb(style::panel_bottom(), 255));
+    if on {
+        ui.fill(Rect::new(x + 3, y + 3, 5, 5), argb(style::gold(), 255));
+        ui.fill(Rect::new(x + 3, y + 3, 5, 1), argb(Ramp::UiInk.at(Tone::Glint), 220));
+        ui.fill(Rect::new(x + 3, y + 7, 5, 1), argb(style::gold_deep(), 255));
+    }
+}
+
+/// The Log (PRESENTATION.md §3.2): the quests on the left, each with its tick box (ticked: the
+/// tracker shows it), the lit one's words on the right with Track and Abandon under them, and
+/// the keys at the foot. Enter or A (or a click on the box) tracks; Delete or X (or the button)
+/// asks "Abandon ...?", the safe answer lit first; the main line's Abandon is grey, with why.
+fn log_tab(ui: &mut Ui, st: &mut WindowState, b: &ViewBuffers, body: Rect, cx: HudCtx<'_>, live: bool) {
     let (x0, y0) = (i32::from(body.x) + 8, i32::from(body.y) + 4);
     let qs = &b.window.quests;
     if qs.is_empty() {
         ui.text(x0, y0, "Nothing asked of her yet", Ink::small(style::quiet()).shadow());
         return;
     }
+    let mut toggle = None;
+    let mut ask = false;
     if live {
         for a in &ui.input.actions {
             match a {
                 UiAction::Up => st.log = (st.log + qs.len() - 1) % qs.len(),
                 UiAction::Down => st.log = (st.log + 1) % qs.len(),
+                UiAction::Confirm => toggle = Some(st.log),
+                UiAction::Quick | UiAction::Remove => ask = true,
                 _ => {}
             }
         }
@@ -635,10 +692,18 @@ fn log_tab(ui: &mut Ui, st: &mut WindowState, b: &ViewBuffers, body: Rect, live:
     st.log = st.log.min(qs.len() - 1);
     let lw = 230;
     let row_h = 22;
-    for (i, q) in qs.iter().enumerate().take(((i32::from(body.h) - 8) / row_h) as usize) {
-        let rr = Rect::new(x0, y0 + i as i32 * row_h, lw, row_h - 2);
+    let foot = 24;
+    let shown = ((i32::from(body.h) - 8 - foot) / row_h).max(1) as usize;
+    // The list scrolls to keep the lit row in sight.
+    st.log_top = st.log_top.min(st.log).max((st.log + 1).saturating_sub(shown));
+    for (i, q) in qs.iter().enumerate().skip(st.log_top).take(shown) {
+        let rr = Rect::new(x0, y0 + (i - st.log_top) as i32 * row_h, lw, row_h - 2);
+        let boxr = Rect::new(x0 + 5, i32::from(rr.y) + 4, 11, 11);
         if ui.hover(rr) && ui.input.pointer.is_some() {
             st.log = i;
+        }
+        if !q.done && live && ui.hover(boxr) && ui.input.released {
+            toggle = Some(i);
         }
         let lit = st.log == i;
         if lit {
@@ -652,20 +717,27 @@ fn log_tab(ui: &mut Ui, st: &mut WindowState, b: &ViewBuffers, body: Rect, live:
         } else {
             ("•", style::text())
         };
-        ui.text(x0 + 6, i32::from(rr.y) + 4, mark, Ink::fine(ink).shadow());
-        let title: String = q.title.chars().take(((lw - 24) / advance(Face::Fine)) as usize).collect();
-        ui.text(
-            x0 + 20,
-            i32::from(rr.y) + 4,
-            &title,
-            Ink::fine(if q.done { style::dim() } else { style::text_bright() }).shadow(),
-        );
+        let tx = if q.done {
+            ui.text(x0 + 7, i32::from(rr.y) + 4, mark, Ink::fine(ink).shadow());
+            x0 + 20
+        } else {
+            tick_box(ui, i32::from(boxr.x), i32::from(boxr.y), q.tracked, lit);
+            ui.text(x0 + 21, i32::from(rr.y) + 4, mark, Ink::fine(ink).shadow());
+            x0 + 32
+        };
+        let title: String = q.title.chars().take(((lw - (tx - x0) - 6) / advance(Face::Fine)) as usize).collect();
+        let ink = if q.done { style::dim() } else { style::text_bright() };
+        ui.text(tx, i32::from(rr.y) + 4, &title, Ink::fine(ink).shadow());
         ui.claim(rr);
+    }
+    if qs.len() > shown {
+        let more = format!("{} of {}", st.log + 1, qs.len());
+        ui.text_right(x0 + lw - 4, body.bottom() - foot - 10, &more, Ink::fine(style::dim()).shadow());
     }
     let q = &qs[st.log];
     let dx = x0 + lw + 18;
     let dw = body.right() - dx - 12;
-    ui.fill(Rect::new(dx - 10, y0, 1, i32::from(body.h) - 16), argb(style::gold_deep(), 90));
+    ui.fill(Rect::new(dx - 10, y0, 1, i32::from(body.h) - 12 - foot), argb(style::gold_deep(), 90));
     let cols_small = (dw / advance(Face::Small)) as usize;
     let mut yy = y0;
     for l in wrap_lines(&q.title, cols_small) {
@@ -694,6 +766,46 @@ fn log_tab(ui: &mut Ui, st: &mut WindowState, b: &ViewBuffers, body: Rect, live:
     }
     if q.done {
         ui.text(dx, yy + 4, "Done", Ink::fine(style::good()).shadow());
+    } else if let Some(id) = q.id {
+        // Track and Abandon, at the pane's foot.
+        let by = body.bottom() - foot - 28;
+        let label = if q.tracked { "Untrack" } else { "Track" };
+        if ui.button(wid("log-track", 0), Rect::new(dx, by, 92, 22), label, ButtonKind::Chip, live, false) {
+            toggle = Some(st.log);
+        }
+        let ar = Rect::new(dx + 100, by, 92, 22);
+        if ui.button(wid("log-abandon", 0), ar, "Abandon", ButtonKind::Chip, live && !q.main, false) {
+            ask = true;
+        }
+        if q.main {
+            ui.text(dx + 200, by + 5, "The story's own", Ink::fine(style::dim()).shadow());
+        }
+        if ask && live && !q.main {
+            st.ask_abandon(id);
+        }
+    }
+    if let Some(t) = toggle.and_then(|i| qs.get(i)).filter(|t| !t.done).and_then(|t| t.id) {
+        ui.intent(crate::ui::core::AppIntent::Track(t));
+    }
+    // The keys, at the foot.
+    let fy = body.bottom() - 18;
+    ui.fill(Rect::new(x0, fy - 5, i32::from(body.w) - 16, 1), argb(style::gold_deep(), 70));
+    let mut hx = x0;
+    let pads = [crate::ui::art::Mark::PadA, crate::ui::art::Mark::PadX];
+    let keys = if cx.pad { ["A", "X"] } else { [LOG_HINTS[0].0, LOG_HINTS[1].0] };
+    for (k, (_, words)) in LOG_HINTS.iter().enumerate() {
+        let w = hud::cap(ui, hx, fy, keys[k], cx.pad.then_some(pads[k]));
+        let grey = k == 1 && (q.main || q.done);
+        ui.text(hx + w + 5, fy + 3, words, Ink::fine(if grey { style::dim() } else { style::quiet() }).shadow());
+        hx += w + 5 + text_w(Face::Fine, words) + 16;
+    }
+    if cx.pad {
+        let w = hud::cap(ui, hx, fy, "LB", Some(crate::ui::art::Mark::PadShoulder));
+        let w2 = hud::cap(ui, hx + w + 2, fy, "RB", Some(crate::ui::art::Mark::PadShoulder));
+        ui.text(hx + w + w2 + 7, fy + 3, "Tabs", Ink::fine(style::quiet()).shadow());
+    }
+    if q.main && !q.done {
+        ui.text_right(body.right() - 12, fy + 3, STORY_OWN, Ink::fine(style::dim()).shadow());
     }
 }
 
@@ -786,5 +898,64 @@ mod tests {
         ui.begin(UiInput { actions: vec![UiAction::TabLeft], ..UiInput::default() }, 1, (768, 432));
         draw(&mut ui, &mut st, &b, None, cx);
         assert_eq!(st.tab, 3);
+    }
+
+    /// A log of two: the main line's letter and Mr Ames's spectacles, side.
+    fn log_bufs() -> ViewBuffers {
+        let cat = jane_data::catalog();
+        let mut b = ViewBuffers::new();
+        for (id, main) in [("the_letter", true), ("ames_spectacles", false)] {
+            b.window.quests.push(crate::view::QuestRow {
+                id: cat.story.quest_id(id),
+                title: id.into(),
+                body: "Words.".into(),
+                steps: vec![("A step".into(), false)],
+                main,
+                tracked: main,
+                ..crate::view::QuestRow::default()
+            });
+        }
+        b
+    }
+
+    fn log_press(ui: &mut Ui, st: &mut WindowState, b: &ViewBuffers, a: Vec<UiAction>, t: u32) -> Vec<UiOut> {
+        let bind = Bindings::default();
+        let cx = HudCtx { bindings: &bind, pad: true, window_open: true };
+        ui.begin(UiInput { actions: a, pad: true, ..UiInput::default() }, t, (768, 432));
+        draw(ui, st, b, None, cx);
+        ui.out.clone()
+    }
+
+    #[test]
+    fn the_log_tracks_with_a_and_abandons_with_x_asking_first() {
+        use crate::ui::core::AppIntent;
+        let b = log_bufs();
+        let cat = jane_data::catalog();
+        let (letter, ames) =
+            (cat.story.quest_id("the_letter").unwrap(), cat.story.quest_id("ames_spectacles").unwrap());
+        let mut ui = Ui::new(UiArt::build(1).0);
+        let mut st = WindowState::on(2);
+        // A (confirm) on the lit row tracks it, or stops.
+        let out = log_press(&mut ui, &mut st, &b, vec![UiAction::Confirm], 1);
+        assert!(out.contains(&UiOut::Intent(AppIntent::Track(letter))), "{out:?}");
+        // X on the main line: nothing asks, nothing goes.
+        log_press(&mut ui, &mut st, &b, vec![UiAction::Quick], 2);
+        assert_eq!(st.abandon, None, "the main line is not abandoned");
+        // Down to the side quest; X asks, with "Keep it" lit first.
+        log_press(&mut ui, &mut st, &b, vec![UiAction::Down], 3);
+        log_press(&mut ui, &mut st, &b, vec![UiAction::Remove], 4);
+        assert_eq!(st.abandon, Some(ames));
+        assert!(st.asking());
+        assert_eq!(st.confirm.focus, 1, "the safe answer is lit first");
+        // The question owns the keys: A now answers it ("Keep it"), and nothing is abandoned.
+        let out = log_press(&mut ui, &mut st, &b, vec![UiAction::Confirm], 5);
+        assert!(!out.iter().any(|o| matches!(o, UiOut::Command(Command::Abandon(_)))), "{out:?}");
+        assert!(!out.contains(&UiOut::Intent(AppIntent::Track(ames))), "the question ate the press");
+        assert_eq!(st.abandon, None);
+        // Asked again, Up to "Abandon", A: the command goes.
+        log_press(&mut ui, &mut st, &b, vec![UiAction::Quick], 6);
+        log_press(&mut ui, &mut st, &b, vec![UiAction::Up], 7);
+        let out = log_press(&mut ui, &mut st, &b, vec![UiAction::Confirm], 8);
+        assert!(out.contains(&UiOut::Command(Command::Abandon(ames))), "{out:?}");
     }
 }

@@ -37,7 +37,8 @@ use crate::tuning::{BAG_SLOTS, BAR_SLOTS, CRAFT_INPUTS, STORE_SLOTS};
 /// (`ZoneState::spawned`, `save::Form`), and the name tail as runs of blueprint locals.
 /// 9: food comes back (`Prop::regrow`, `regrow.rs`).
 /// 10: cupboards (`GameState::stores`, `store.rs`).
-pub const SAVE_VERSION: u16 = 10;
+/// 11: side quests set aside keep their kills (`Quests::set_aside`, `quests::abandon`).
+pub const SAVE_VERSION: u16 = 11;
 
 /// A fixed-size bit set (trigger bits, consequences done).
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -195,6 +196,10 @@ impl GameState {
 pub struct Quests {
     pub active: Vec<QuestProgress>,
     pub done: Vec<QuestId>,
+    /// Side quests abandoned, with what they had counted: the dead stay dead, so a kill made
+    /// for it still counts when it is taken again (`quests::abandon`, `quests::give`). At most
+    /// one row a quest; a quest taken again leaves it.
+    pub set_aside: Vec<QuestProgress>,
 }
 
 /// A quest in the log (`quests.rs`); the host's start quests are given at New Game.

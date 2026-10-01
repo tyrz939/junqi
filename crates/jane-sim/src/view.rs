@@ -626,7 +626,7 @@ impl View<'_> {
             speaker: Speaker::Unit(unit.id),
         };
         let mut found = (false, false);
-        self.mark_tree(&ask, tree, 0, &mut found);
+        self.mark_tree(&ask, tree, 0, None, &mut found);
         match found {
             (_, true) => Some(QuestMark::HandIn),
             (true, false) => Some(QuestMark::Offer),
@@ -639,7 +639,32 @@ impl View<'_> {
         self.zone.units.iter().filter(|u| u.awake).filter_map(|u| self.quest_mark(u).map(|m| (u.id, m)))
     }
 
-    fn mark_tree(&self, ask: &crate::actions::Ask<'_>, tree: DialogueId, depth: u8, found: &mut (bool, bool)) {
+    /// Whether talking to `speaker` (someone or something of her zone talking as `tree`) now
+    /// would reach a `quest` verb giving `q`, asked as the marks ask it: the "?" for one quest,
+    /// which the abandon proofs read (`quests::abandon`: set aside, it is offered again).
+    pub fn would_offer(&self, tree: DialogueId, speaker: Speaker, q: QuestId) -> bool {
+        let ask = crate::actions::Ask {
+            cat: jane_data::catalog(),
+            world: self.state,
+            zone: self.zone,
+            rt: self.rt,
+            bp: self.bp,
+            actor: Some(self.seat),
+            speaker,
+        };
+        let mut found = (false, false);
+        self.mark_tree(&ask, tree, 0, Some(q), &mut found);
+        found.0
+    }
+
+    fn mark_tree(
+        &self,
+        ask: &crate::actions::Ask<'_>,
+        tree: DialogueId,
+        depth: u8,
+        want: Option<QuestId>,
+        found: &mut (bool, bool),
+    ) {
         let t = ask.cat.story.dialogue(tree);
         let Some(entry) =
             t.start.iter().find(|s| s.when.is_none_or(|w| crate::actions::conditions_hold(ask, ask.conds(w))))
@@ -656,37 +681,44 @@ impl View<'_> {
             }
             let n = t.node(i);
             if let Some(l) = n.actions {
-                self.mark_list(ask, l, depth, found);
+                self.mark_list(ask, l, depth, want, found);
             }
             todo.extend(n.goto);
             for o in n.options {
                 if let Some(l) = o.actions {
-                    self.mark_list(ask, l, depth, found);
+                    self.mark_list(ask, l, depth, want, found);
                 }
                 todo.extend(o.goto);
             }
         }
     }
 
-    fn mark_list(&self, ask: &crate::actions::Ask<'_>, l: ListRef, depth: u8, found: &mut (bool, bool)) {
+    fn mark_list(
+        &self,
+        ask: &crate::actions::Ask<'_>,
+        l: ListRef,
+        depth: u8,
+        want: Option<QuestId>,
+        found: &mut (bool, bool),
+    ) {
         if depth > MARK_DEPTH {
             return;
         }
         for a in ask.list(l) {
             match *a {
-                Action::Quest(q) => {
+                Action::Quest(q) if want.is_none_or(|w| w == q) => {
                     found.0 |= crate::quests::active(self.state, q).is_none() && !crate::quests::done(self.state, q);
                 }
                 Action::HandIn(q) => found.1 |= crate::quests::ready(self.state, q),
                 Action::If { when, then, els } => {
                     if crate::actions::conditions_hold(ask, ask.conds(when)) {
-                        self.mark_list(ask, then, depth + 1, found);
+                        self.mark_list(ask, then, depth + 1, want, found);
                     } else if let Some(e) = els {
-                        self.mark_list(ask, e, depth + 1, found);
+                        self.mark_list(ask, e, depth + 1, want, found);
                     }
                 }
-                Action::Send { then: Some(t), .. } => self.mark_list(ask, t, depth + 1, found),
-                Action::Talk(t) => self.mark_tree(ask, t, depth + 1, found),
+                Action::Send { then: Some(t), .. } => self.mark_list(ask, t, depth + 1, want, found),
+                Action::Talk(t) => self.mark_tree(ask, t, depth + 1, want, found),
                 _ => {}
             }
         }

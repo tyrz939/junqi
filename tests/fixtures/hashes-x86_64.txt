@@ -1,22 +1,22 @@
 # jane gen --zones all --seeds 1..16 --hash
-# content c63ae240b9a541d0, blueprint hash layout 4
+# content d1b769dd9f9f65df, blueprint hash layout 4
 # zone seed hash (FNV-1a 64 over little-endian bytes)
-county 1 f51b1e27e768e749
-county 2 f0268c7c80ffccd6
-county 3 463d2ea79f63f0b6
-county 4 829164cce9448f68
-county 5 5f4e7415e7de7f1f
-county 6 4123f00fcfb8686d
-county 7 1ff7e25fc3f44a9c
-county 8 71a8d57ee185b560
-county 9 809444f82edad3e7
-county 10 b2b8b0196923f536
-county 11 fd68e1b2e6db3424
-county 12 db75179938cc1f3d
-county 13 77230f76ce2cebcc
-county 14 effb8fd418e5a629
-county 15 5ee7783f0537b897
-county 16 61cd0cee9ace8861
+county 1 07b35f1dba60dc08
+county 2 b3847c877246d45f
+county 3 b933cfbde15b165d
+county 4 cd42a8a7d7611ca5
+county 5 28459265940e1c5e
+county 6 555aaf69614d1192
+county 7 7f9b2cb702e71923
+county 8 ccc8ae37191455e7
+county 9 139fd495f7fd04fe
+county 10 177261e0e96c2d61
+county 11 a628e3976335fd05
+county 12 b442064a5abdc6b6
+county 13 5048070e2bf57341
+county 14 a9a25e8246fc8fde
+county 15 a2cf40b4c48272fe
+county 16 474ed96131f16b10
 house 1 0f85eaf09962ba98
 house 2 c5051d5f31e1c215
 house 3 2079286b03b0a953

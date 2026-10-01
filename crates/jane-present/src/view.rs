@@ -120,6 +120,74 @@ pub struct QuestLine {
     pub title: String,
     pub step: String,
     pub ready: bool,
+    /// The story's own line.
+    pub main: bool,
+}
+
+/// Quests a newly given one is tracked by default while fewer than this are (the main line's
+/// always is).
+pub const AUTO_TRACK: usize = 5;
+
+/// Which quests the tracker shows (PRESENTATION.md §3.2): this window's seat's choice, never the
+/// sim's, kept beside the save slot (`slotN.meta.json`). A quest new to the log is tracked by
+/// default, the main line's always and a side quest's while fewer than [`AUTO_TRACK`] are; one
+/// untracked stays untracked; a quest gone from the log (done, set aside) is forgotten, so taken
+/// again it is new again.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct Tracking {
+    /// Tracked, in the order they were.
+    pub on: Vec<QuestId>,
+    /// Every quest of the log this has seen, tracked or not.
+    pub seen: Vec<QuestId>,
+}
+
+impl Tracking {
+    pub fn is_on(&self, q: QuestId) -> bool {
+        self.on.contains(&q)
+    }
+
+    /// Track it, or stop.
+    pub fn toggle(&mut self, q: QuestId) {
+        match self.on.iter().position(|&t| t == q) {
+            Some(i) => {
+                self.on.remove(i);
+            }
+            None => self.on.push(q),
+        }
+        if !self.seen.contains(&q) {
+            self.seen.push(q);
+        }
+    }
+
+    /// The log as it stands: new quests tracked by default, gone ones forgotten.
+    pub fn sync(&mut self, log: &[QuestId]) {
+        self.on.retain(|q| log.contains(q));
+        self.seen.retain(|q| log.contains(q));
+        let cat = jane_data::catalog();
+        for &q in log {
+            if self.seen.contains(&q) {
+                continue;
+            }
+            self.seen.push(q);
+            if cat.story.quest(q).main || self.on.len() < AUTO_TRACK {
+                self.on.push(q);
+            }
+        }
+    }
+
+    /// As content ids, for the slot's note: `(tracked, seen)`.
+    pub fn ids(&self) -> (Vec<String>, Vec<String>) {
+        let id = |q: &QuestId| jane_data::catalog().story.quest(*q).id.to_owned();
+        (self.on.iter().map(id).collect(), self.seen.iter().map(id).collect())
+    }
+
+    /// From a slot's note; an id the content no longer has is dropped.
+    pub fn from_ids(on: &[String], seen: &[String]) -> Tracking {
+        let q = |v: &[String]| -> Vec<QuestId> {
+            v.iter().filter_map(|s| jane_data::catalog().story.quest_id(s)).collect()
+        };
+        Tracking { on: q(on), seen: q(seen) }
+    }
 }
 
 /// What USE would do now.
@@ -199,6 +267,10 @@ pub struct QuestRow {
     pub steps: Vec<(String, bool)>,
     pub ready: bool,
     pub done: bool,
+    /// The story's own line: it cannot be abandoned.
+    pub main: bool,
+    /// The tracker shows it.
+    pub tracked: bool,
 }
 
 /// The cupboard she opened, beside her bag (`jane_sim::store`).
@@ -279,6 +351,10 @@ pub struct ViewBuffers {
     pub dialogue: Option<DialogueView>,
     /// The save card, while it shows.
     pub saved: Option<SavedCard>,
+    /// Which quests the tracker shows (the app keeps it with the slot).
+    pub track: Tracking,
+    /// The log's quests this tick, for [`Tracking::sync`].
+    log_ids: Vec<QuestId>,
     /// The hostile she is fighting, and the last tick a blow passed between them.
     fighting: Option<(jane_sim::UnitId, u32)>,
     scratch: String,
@@ -463,11 +539,21 @@ impl ViewBuffers {
             }
         }
 
-        // The tracker: the first four quests, each at its first unfinished step.
+        // The tracker: the quests this seat tracks, the main line first, each at its first
+        // unfinished step.
+        self.log_ids.clear();
+        self.log_ids.extend(v.quests().map(|q| q.quest));
+        self.track.sync(&self.log_ids);
         h.tracker.clear();
-        for q in v.quests().take(4) {
+        let track = &self.track;
+        let main_first = v
+            .quests()
+            .filter(|q| cat.story.quest(q.quest).main)
+            .chain(v.quests().filter(|q| !cat.story.quest(q.quest).main))
+            .filter(|q| track.is_on(q.quest));
+        for q in main_first {
             let d = cat.story.quest(q.quest);
-            let mut line = QuestLine { quest: Some(q.quest), ready: q.ready, ..QuestLine::default() };
+            let mut line = QuestLine { quest: Some(q.quest), ready: q.ready, main: d.main, ..QuestLine::default() };
             text::expand(text::text(d.name), heroine, seed, &mut line.title);
             if q.ready {
                 line.step.push_str("Back to ");
@@ -591,6 +677,8 @@ impl ViewBuffers {
             row.id = Some(q.quest);
             row.ready = q.ready;
             row.done = false;
+            row.main = d.main;
+            row.tracked = self.track.is_on(q.quest);
             text::expand(text::text(d.name), heroine, seed, &mut row.title);
             text::expand(text::text(d.description), heroine, seed, &mut row.body);
             row.steps.clear();
@@ -615,6 +703,8 @@ impl ViewBuffers {
             row.id = Some(q);
             row.ready = false;
             row.done = true;
+            row.main = d.main;
+            row.tracked = false;
             text::expand(text::text(d.name), heroine, seed, &mut row.title);
             text::expand(text::text(d.completion), heroine, seed, &mut row.body);
             row.steps.clear();
@@ -747,5 +837,51 @@ mod tests {
         assert!(!b.hud.clock.is_empty());
         assert!(b.hud.day >= 1);
         assert!(b.hud.zone_name.starts_with("The") || b.hud.zone_name.contains("House"));
+    }
+
+    #[test]
+    fn tracking_defaults_toggles_and_forgets() {
+        let cat = jane_data::catalog();
+        let main = cat.story.quest_id("the_letter").unwrap();
+        let side: Vec<QuestId> = cat
+            .story
+            .quests
+            .iter()
+            .enumerate()
+            .filter(|(_, d)| !d.main)
+            .map(|(i, _)| QuestId(i as u16))
+            .take(7)
+            .collect();
+        let mut t = Tracking::default();
+        // New Game: the letter, tracked.
+        t.sync(&[main]);
+        assert!(t.is_on(main));
+        // Side quests tracked as they come while fewer than five are; past that, not.
+        let mut log = vec![main];
+        log.extend(&side);
+        t.sync(&log);
+        assert_eq!(t.on.len(), AUTO_TRACK, "{:?}", t.on);
+        assert!(!t.is_on(side[5]) && !t.is_on(side[6]));
+        // Untracked stays untracked; tracked by hand stays tracked.
+        t.toggle(side[0]);
+        t.toggle(side[6]);
+        t.sync(&log);
+        assert!(!t.is_on(side[0]) && t.is_on(side[6]));
+        // The main line is tracked even with the cap full.
+        let mut u = Tracking::default();
+        u.sync(&side[..5]);
+        u.sync(&[&side[..5], &[main][..]].concat());
+        assert!(u.is_on(main) && u.on.len() == 6);
+        // Gone from the log (set aside), forgotten: taken again, it is new again.
+        let without: Vec<QuestId> = log.iter().copied().filter(|&q| q != side[0]).collect();
+        t.sync(&without);
+        assert!(!t.seen.contains(&side[0]));
+        t.toggle(side[1]);
+        t.sync(&log);
+        assert!(t.is_on(side[0]), "taken again, tracked by default");
+        // Through content ids and back, as the slot's note keeps it.
+        let (on, seen) = t.ids();
+        assert_eq!(Tracking::from_ids(&on, &seen), t);
+        assert_eq!(Tracking::from_ids(&["no_such_quest".into()], &[]), Tracking::default());
     }
 }

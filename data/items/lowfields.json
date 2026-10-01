@@ -20,11 +20,13 @@
     "description": "A small key on a hospital tag. Opens the nurse's case. The tag gives a ward number and no hospital."
   },
   "nurses_parcel": {
-    "name": "Parcel for Mrs Allen", "icon": "item_present", "maxStack": 1, "usable": false, "cooldown": 1,
-    "description": "Dressings, made up and labelled in a neat hand. For the door facing the fire in Castle square."
+    "name": "Parcel for Mrs Allen", "icon": "item_present", "maxStack": 1, "usable": true, "keep": true, "cooldown": 1,
+    "description": "Dressings, made up and labelled in a neat hand. For the door facing the fire in Castle square. Use to read the label.",
+    "use": [{ "do": "quest", "quest": "mrs_allens_dressing" }]
   },
   "haversack": {
-    "name": "Walker's Haversack", "icon": "item_haversack", "maxStack": 1, "usable": false, "cooldown": 1,
-    "description": "Canvas, dry inside. The label says: if found, return to Lost Property, Castle Halt."
+    "name": "Walker's Haversack", "icon": "item_haversack", "maxStack": 1, "usable": true, "keep": true, "cooldown": 1,
+    "description": "Canvas, dry inside. The label says: if found, return to Lost Property, Castle Halt. Use to read the label.",
+    "use": [{ "do": "quest", "quest": "if_found" }]
   }
 }

@@ -381,6 +381,7 @@ impl Observer {
                             QuestChange::Progress => 1,
                             QuestChange::Ready => 2,
                             QuestChange::Done => 3,
+                            QuestChange::Abandoned => 4,
                         },
                     }),
                     EventKind::Damage { unit, from, amount, .. } if unit == me => {

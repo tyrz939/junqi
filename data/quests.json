@@ -1,5 +1,6 @@
 {
   "the_letter": {
+    "main": true,
     "name": "A Letter from Julie",
     "description": "The letter looked a hundred years old. Auntie Julie, a woman you were told you had and never met, asked you to Castle for your birthday. Twelve hours on the Sunday train. No signal since the tunnel.\n\nThe map in the letter is one road from Castle Halt. It ends at a house and a dog.",
     "completion": "The stoop is real. Julie is not on it. The dog has been waiting.",
@@ -8,6 +9,7 @@
     "rewards": []
   },
   "defeat_skeleton": {
+    "main": true,
     "name": "The Thing in the Yard",
     "description": "The dog wants the walking bones off Julie's fence line. It will not say why a key is waiting until they stay down.",
     "completion": "The skeleton will not get up again. The dog has decided you are allowed a key.",
@@ -16,6 +18,7 @@
     "rewards": [{ "do": "give", "item": "key_auntie_house" }, { "do": "quest", "quest": "see_the_kitchen" }]
   },
   "see_the_kitchen": {
+    "main": true,
     "name": "Julie's Kitchen",
     "description": "The house key was always for you. Go in. Look at what she left out.",
     "completion": "Auntie is not home. The house still is.",
@@ -24,6 +27,7 @@
     "rewards": []
   },
   "stock_the_bench": {
+    "main": true,
     "name": "Dust, Water, Pansy",
     "description": "Julie's note says the bench is set for one potion and that you should make it before you go down any stairs. Gold dust, a vial of water, a pansy from the pantry chest. Stand at the bench and open your bags. The dog will want to know.",
     "completion": "It fizzes blue. You made that. The dog is not surprised.",
@@ -32,6 +36,7 @@
     "rewards": [{ "do": "give", "item": "small_water", "qty": 4 }, { "do": "give", "item": "gold_dust", "qty": 2 }]
   },
   "rats_below": {
+    "main": true,
     "name": "Under the House",
     "description": "There are rats in the cellar under Julie's kitchen, down either hatch. The dog wants three pieces of meat and will not say what for.",
     "completion": "Three pieces, wrapped in a page of the parish news. The dog did not want them. It wants you to keep them.",
@@ -40,6 +45,7 @@
     "rewards": [{ "do": "give", "item": "savage_snakeroot", "qty": 2 }, { "do": "give", "item": "small_water", "qty": 2 }]
   },
   "the_mine": {
+    "main": true,
     "name": "End of Term",
     "description": "The Gold Mine is at the end of the mine road out of Castle; its mouth is the one with the lamp. The Headmaster keeps the vault key. Something called Iron Knuckles keeps everything else. Broken things down there want Repair, and Repair wants wood and iron.",
     "completion": "The mine is quiet. Goldskin dug it, and the dead went on digging after him. They have stopped. The vault held a brass key tagged MAGIC.",
@@ -52,6 +58,7 @@
     "rewards": [{ "do": "give", "item": "apple", "qty": 5 }, { "do": "give", "item": "potion_stoneskin", "qty": 2 }]
   },
   "the_museum": {
+    "main": true,
     "name": "Painted Over",
     "description": "The Museum is across the river from Castle, on the road over the bridge. It is open ten to four, and the brass key from the mine's vault opens its front door. One wing has had its name painted over. The dog wants you to see what was kept in it.",
     "completion": "You went into the wing that was painted over. The case that was not on the plan held a council key on a green tag, for the library and the forest gate.",
@@ -63,6 +70,7 @@
     "rewards": [{ "do": "give", "item": "gold_dust", "qty": 2 }, { "do": "give", "item": "potion_manashield", "qty": 1 }]
   },
   "the_forest": {
+    "main": true,
     "name": "Counted Out",
     "description": "The key on the green tag opens the ruined library and the gate of Butterfly Forest, on the road past the Museum. Read the library's last page before the gate: nothing in that forest grows for anyone who has not. The forest is open from sunrise to sunset, and visitors are counted in and out. The dog will be on the Museum's steps from four till the bell, or on Julie's step by day.",
     "completion": "Eleven glass cases on the Collector's wall, labelled with trades and not species. The one marked NIGHT WATCHMAN held a key where the wings should be. You were counted in, and you were counted out.",
@@ -75,6 +83,7 @@
     "rewards": [{ "do": "give", "item": "apple", "qty": 5 }, { "do": "give", "item": "potion_stoneskin", "qty": 1 }]
   },
   "the_factory": {
+    "main": true,
     "name": "Not Relieved",
     "description": "The Factory is the Company's, in the Works past the graveyard. The pipes run there, dry most days, from the Company's grate at the edge of Castle. The Night Watchman's Key opens the grate, and the Works' wicket by day. The Company kept a key in the Factory to one door of its own, and the dog wants it. The dog will be at the graveyard gate from six till the bell, or on Julie's step by day.",
     "completion": "The Foreman is down and the roller door is open onto the yard. His locker held the Chairman's Key, stamped G.M.Co. and tagged for the Hoar Stone on the graveyard footpath.",
@@ -87,6 +96,7 @@
     "rewards": [{ "do": "give", "item": "small_water", "qty": 4 }, { "do": "give", "item": "potion_stoneskin", "qty": 1 }]
   },
   "the_burial": {
+    "main": true,
     "name": "Under the Stone",
     "description": "The Burial Chamber is past Castle, off the graveyard road: a footpath from the graveyard ends at the Hoar Stone, which says DO NOT, and the Chairman's Key unlocks the stair under it. Cold, dark, foggy. The torches wake for cold. Feed the small snakes; do not fight them. What is buried there was buried with a ball of gold, and the dog wants it: at the graveyard gate, from six till the bell.",
     "completion": "The Ball was in his box, at the foot of a stair that goes up and not out. Somebody has locked that stair, and not from his side. The Ball is heavier than it looks.",
@@ -99,6 +109,7 @@
     "rewards": [{ "do": "give", "item": "light_stone", "qty": 1 }]
   },
   "the_school": {
+    "main": true,
     "name": "The Bell at Nine",
     "description": "The School is on the hill north of Castle: the one lit window. The stair out of the Burial Chamber comes up in its boiler room, and Julie's Other Key opens it; the key on the caretaker's bin opens the front doors from outside. The bell is rung from the tower. The dog wants to know who rings it, and will be at the top of Church Lane from six in the morning till noon.",
     "completion": "You went up the tower. The man on the rope kept the Company's time: Amos Noone. The register in the top room is his time book, marked up to this morning, and the last name in it is yours.",
@@ -109,5 +120,5 @@
     ],
     "rewards": [{ "do": "flag", "flag": "spine_done" }]
   },
-  "the_choice": {"name": "Yours to Say", "description": "The dog will not say what to do with the Ball. Three places will take it. The ring in the dust on the study desk under Julie's house: sit with it there, as she did, and the days stay days. The hollow at the back of the Gold Mine's vault: the hill has it back, and the night goes, and everything in it. Or leave it at Castle Halt and take the Sunday train, which stops if you signal.", "completion": "It is decided. Nobody in Castle will ever tell you it was the right thing, or the wrong one.", "returnTo": "the study desk under Julie's house, the mine's vault, or Castle Halt", "requirements": [{"type": "acquire", "target": "the_ball", "qty": 1, "text": "The Ball, from the Burial Chamber, until you set it down"}], "rewards": []}
+  "the_choice": {"main": true, "name": "Yours to Say", "description": "The dog will not say what to do with the Ball. Three places will take it. The ring in the dust on the study desk under Julie's house: sit with it there, as she did, and the days stay days. The hollow at the back of the Gold Mine's vault: the hill has it back, and the night goes, and everything in it. Or leave it at Castle Halt and take the Sunday train, which stops if you signal.", "completion": "It is decided. Nobody in Castle will ever tell you it was the right thing, or the wrong one.", "returnTo": "the study desk under Julie's house, the mine's vault, or Castle Halt", "requirements": [{"type": "acquire", "target": "the_ball", "qty": 1, "text": "The Ball, from the Burial Chamber, until you set it down"}], "rewards": []}
 }

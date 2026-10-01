@@ -331,6 +331,8 @@ pub enum AppIntent {
     Assist(jane_sim::input::AssistProfile),
     /// A line typed into the terminal.
     Console(String),
+    /// Track a quest on the tracker, or stop (the Log's tick box: per seat, never the sim's).
+    Track(jane_core::QuestId),
     /// The bag, book, quests or map window, on a tab.
     OpenWindow(u8),
     CloseWindow,

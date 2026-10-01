@@ -1,6 +1,7 @@
 //! The determinism gates of ARCHITECTURE.md §8 with the world verbs on the tape: USE (talk,
 //! loot, lift, push), conversations advanced, chosen and closed, bags moved, crafting, items,
-//! gifts and quests from the console. `same_tape_same_hash`, `runtime_rebuild_is_invisible` and
+//! gifts and quests from the console, a side quest set aside and taken again (and the main line
+//! asked to go, refusing). `same_tape_same_hash`, `runtime_rebuild_is_invisible` and
 //! `save_load_continue` over it; run under `--profile checked` too.
 
 mod common;
@@ -38,6 +39,7 @@ impl VerbTape {
             self.cmd(Command::Dev(DevOp::Tp { zone: ZoneId::County, mark: gate }));
             let q = cat.story.quest_id("defeat_skeleton").unwrap();
             self.cmd(Command::Dev(DevOp::Quest(q)));
+            self.cmd(Command::Dev(DevOp::Quest(cat.story.quest_id("ames_spectacles").unwrap())));
         }
         if self.rng.below(30) == 0 {
             let dir = Angle(self.rng.next_u32() as u16);
@@ -71,6 +73,14 @@ impl VerbTape {
                 self.cmd(Command::Dev(DevOp::Give { item, qty: 1 }));
             }
             12 => self.cmd(Command::Item(cat.combat.item_id("julies_letter").unwrap())),
+            // A side quest set aside and taken again; the main line asked to go, and refusing.
+            13 if self.rng.below(3) == 0 => {
+                let q = ["ames_spectacles", "ames_spectacles", "defeat_skeleton"][self.rng.below(3) as usize];
+                self.cmd(Command::Abandon(cat.story.quest_id(q).unwrap()));
+            }
+            14 if self.rng.below(3) == 0 => {
+                self.cmd(Command::Dev(DevOp::Quest(cat.story.quest_id("ames_spectacles").unwrap())));
+            }
             11 if self.rng.below(8) == 0 => {
                 let slot = self.rng.below(24) as u8;
                 self.cmd(Command::BagDestroy { slot });
@@ -83,8 +93,9 @@ impl VerbTape {
     }
 }
 
-fn run(sim: &mut Sim, tape: &mut VerbTape, from: u32, to: u32) -> (u32, u32) {
-    let (mut talks, mut bags) = (0, 0);
+/// Conversations, bag changes and quests set aside along the way.
+fn run(sim: &mut Sim, tape: &mut VerbTape, from: u32, to: u32) -> (u32, u32, u32) {
+    let (mut talks, mut bags, mut aside) = (0, 0, 0);
     for f in from..to {
         let input = tape.frame(f);
         sim.step(&input);
@@ -92,11 +103,12 @@ fn run(sim: &mut Sim, tape: &mut VerbTape, from: u32, to: u32) -> (u32, u32) {
             match e.kind {
                 EventKind::Dialogue => talks += 1,
                 EventKind::Bag => bags += 1,
+                EventKind::Quest { change: jane_sim::event::QuestChange::Abandoned, .. } => aside += 1,
                 _ => {}
             }
         }
     }
-    (talks, bags)
+    (talks, bags, aside)
 }
 
 fn new_game() -> Sim {
@@ -108,17 +120,18 @@ fn same_verb_tape_same_hash() {
     let mut a = new_game();
     let mut b = new_game();
     let (mut ta, mut tb) = (VerbTape::new(5), VerbTape::new(5));
-    let (mut talks, mut bags) = (0, 0);
+    let (mut talks, mut bags, mut aside) = (0, 0, 0);
     for chunk in 0..15 {
-        let (t, g) = run(&mut a, &mut ta, chunk * 120, (chunk + 1) * 120);
+        let (t, g, n) = run(&mut a, &mut ta, chunk * 120, (chunk + 1) * 120);
         run(&mut b, &mut tb, chunk * 120, (chunk + 1) * 120);
         talks += t;
         bags += g;
+        aside += n;
         assert_eq!(a.hash(), b.hash(), "frame {}", (chunk + 1) * 120);
     }
     assert_eq!(a.state(), b.state());
     // The tape did what it says.
-    assert!(talks > 0 && bags > 0, "talks {talks}, bags {bags}");
+    assert!(talks > 0 && bags > 0 && aside > 0, "talks {talks}, bags {bags}, set aside {aside}");
 }
 
 #[test]

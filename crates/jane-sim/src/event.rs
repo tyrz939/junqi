@@ -30,6 +30,14 @@ pub enum ToastKind {
     QuestGiven(QuestId),
     /// "Done: {name}". Party-wide.
     QuestDone(QuestId),
+    /// A side quest set aside, and by whose seat ("Set aside: {name}", or "{name} was set
+    /// aside by the teal coat"). Party-wide.
+    QuestAbandoned {
+        quest: QuestId,
+        by: Seat,
+    },
+    /// "That is the story's own": the main line is not set aside. Hers alone.
+    StoryOwn,
     /// "{req text}: n/of". Party-wide.
     KillProgress {
         quest: QuestId,
@@ -92,6 +100,8 @@ pub enum QuestChange {
     Progress,
     Ready,
     Done,
+    /// Set aside: out of the log, offerable again (`quests::abandon`).
+    Abandoned,
 }
 
 /// Why a cast failed (`combat.ts SpellError`). Failure is an enum, never a silent no-op.

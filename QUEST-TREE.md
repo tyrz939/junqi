@@ -14,7 +14,7 @@ There are no markers, no pins and no arrows (`PLAN.md` 2.5). Everything she has 
 
 | Where | What it shows | Source |
 | --- | --- | --- |
-| **Tracker** (top right, always on) | The quest's name, then each step's `text` with a count: `A red glove, at the well on the station road 0/1`. When every step is done: `Lost Property - ready` and **`Back to the lost-property book, on the platform at Castle Halt`** | `ui/hud.ts`, `requirements[].text`, `returnTo` |
+| **Tracker** (down the right; the quests she ticks in the Log, the main line and the first five side quests by default) | The quest's name, then each step's `text` with a count: `A red glove, at the well on the station road 0/1`. When every step is done: `Lost Property - ready` and **`Back to the lost-property book, on the platform at Castle Halt`** | `ui/hud.ts`, `requirements[].text`, `returnTo` |
 | **Quest log** (Quests tab) | The description, the steps with `[ ]` / `[x]`, and when done **`Ready to hand in: <returnTo>.`** | `ui/windows.ts` |
 | **Use prompt** (above the bar) | What USE will do, **and now the name of the thing**: `[E] Read: The parish board`, `[E] Pick up: A red glove`, `[E] Knock: The farmhouse door` | `ui/hud.ts`, the prop's `label` |
 | **Dialogue** | The giver's offer, its "wait" line if she asks again (the directions, repeated), its hand-in line | `data/dialogue*` |

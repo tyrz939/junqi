@@ -17,7 +17,7 @@ use crate::ui::core::{
     wid, wrap_lines,
 };
 use crate::ui::style::{self, argb, fade};
-use crate::view::{BANNER_TICKS, Gauge, TOAST_FADE, TOAST_TICKS, ViewBuffers};
+use crate::view::{BANNER_TICKS, Gauge, QuestLine, TOAST_FADE, TOAST_TICKS, ViewBuffers};
 
 /// Columns a line of world text (a toast, the prompt) wraps at in the Small face: the
 /// tooltip's rule (§3.2). A mine chest's "has no keyhole" ran off both edges of the canvas.
@@ -213,28 +213,101 @@ fn sky(ui: &mut Ui, b: &ViewBuffers, cw: i32) {
     );
 }
 
+/// The tracker's width, px.
+pub const TRACKER_W: i32 = 208;
+/// Its top: under the sky plate.
+pub const TRACKER_TOP: i32 = 60;
+/// Px kept clear under it: the save card, the toasts and the prompt live there.
+pub const TRACKER_FOOT: i32 = 150;
+/// Lines a step shows at most; what runs longer ends in "...".
+pub const TRACKER_STEP_LINES: usize = 3;
+
+/// One tracked quest's band, laid out.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct TrackerBand {
+    pub rect: Rect,
+    pub title: String,
+    pub steps: Vec<String>,
+    pub ready: bool,
+    pub main: bool,
+}
+
+/// The tracker laid out on a canvas: the bands that fit down the right edge between the sky
+/// plate and [`TRACKER_FOOT`], each step wrapped at the band's width and cut at
+/// [`TRACKER_STEP_LINES`]; the rest counted (`more`, said under the last band as "N more in
+/// the Log").
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct TrackerLayout {
+    pub bands: Vec<TrackerBand>,
+    pub more: usize,
+    /// Where the "more" line goes.
+    pub more_y: i32,
+}
+
+pub fn tracker_layout(lines: &[QuestLine], canvas: (i32, i32)) -> TrackerLayout {
+    let (cw, ch) = canvas;
+    let w = TRACKER_W.min(cw - 16);
+    let x = cw - w - 8;
+    let bottom = (ch - TRACKER_FOOT).max(TRACKER_TOP + 40);
+    let fw = advance(Face::Fine);
+    let lh = line_h(Face::Fine);
+    let cols = ((w - 24) / fw).max(8) as usize;
+    let mut out = TrackerLayout { more_y: TRACKER_TOP, ..TrackerLayout::default() };
+    let mut y = TRACKER_TOP;
+    for (n, q) in lines.iter().enumerate() {
+        let title = wrapped(&q.title, ((w - 22) / fw).max(8) as usize, 1).pop().unwrap_or_default();
+        let steps = wrapped(&q.step, cols, TRACKER_STEP_LINES);
+        let h = 16 + steps.len() as i32 * lh + 5;
+        // Room for this band, and for the "more" line if any come after it.
+        let after = if n + 1 < lines.len() { lh + 2 } else { 0 };
+        if y + h + after > bottom {
+            out.more = lines.len() - n;
+            break;
+        }
+        out.bands.push(TrackerBand { rect: Rect::new(x, y, w, h), title, steps, ready: q.ready, main: q.main });
+        y += h + 4;
+    }
+    out.more_y = y;
+    out
+}
+
+/// The tracker (§3.2): the quests this seat tracks, the main line first, each on a dark band
+/// with a gold edge: its name (a diamond for the story's own), then its open step ("Back to ..."
+/// in gold when it is ready). It keeps down the right edge, clear of the sky plate above and the
+/// save card and toasts below; what does not fit is counted.
 fn tracker(ui: &mut Ui, b: &ViewBuffers, cw: i32) {
     let lines = &b.hud.tracker;
     if lines.is_empty() {
         return;
     }
-    let w = 200;
-    let x = cw - w - 8;
-    let mut y = 60;
-    let fw = advance(Face::Fine);
-    let cols = ((w - 20) / fw) as usize;
-    for q in lines {
-        // A soft dark backing so the words read over any ground, no frame.
-        let steps: Vec<&str> = crate::ui::core::wrap_lines(&q.step, cols).collect();
-        let hgt = 14 + steps.len() as i32 * line_h(Face::Fine) + 4;
-        ui.fill(Rect::new(x, y, w, hgt), argb(style::INK, 110));
-        ui.fill(Rect::new(x, y, 2, hgt), argb(if q.ready { style::gold() } else { style::gold_deep() }, 220));
-        ui.text(x + 8, y + 2, &q.title, Ink::fine(if q.ready { style::gold() } else { style::text_bright() }).shadow());
-        for (i, s) in steps.iter().enumerate() {
-            let ink = if q.ready { style::gold() } else { style::quiet() };
-            ui.text(x + 12, y + 14 + i as i32 * line_h(Face::Fine), s, Ink::fine(ink).shadow());
+    let lay = tracker_layout(lines, (cw, ui.canvas.1));
+    let lh = line_h(Face::Fine);
+    for band in &lay.bands {
+        let (x, y, w, h) =
+            (i32::from(band.rect.x), i32::from(band.rect.y), i32::from(band.rect.w), i32::from(band.rect.h));
+        // A soft dark backing so the words read over any ground: deeper at the edge, fading in.
+        ui.fill(Rect::new(x, y, w, h), argb(style::INK, 104));
+        ui.fill(Rect::new(x, y, 24, h), argb(style::INK, 40));
+        let edge = if band.ready { style::gold() } else { style::gold_deep() };
+        ui.fill(Rect::new(x, y, 2, h), argb(edge, 225));
+        ui.fill(Rect::new(x + 2, y, w - 2, 1), argb(style::gold_deep(), 50));
+        let mut tx = x + 8;
+        if band.main {
+            ui.mark(Mark::Diamond, x + 7, y + 4, 255);
+            tx += 10;
         }
-        y += hgt + 4;
+        let ink = if band.ready { style::gold() } else { style::text_bright() };
+        ui.text(tx, y + 3, &band.title, Ink::fine(ink).shadow());
+        let step_ink = if band.ready { style::gold() } else { style::quiet() };
+        for (i, s) in band.steps.iter().enumerate() {
+            ui.text(x + 14, y + 16 + i as i32 * lh, s, Ink::fine(step_ink).shadow());
+        }
+    }
+    if lay.more > 0 {
+        let x = cw - TRACKER_W.min(cw - 16) - 8;
+        let more = format!("{} more in the Log", lay.more);
+        ui.fill(Rect::new(x, lay.more_y, 2, lh), argb(style::gold_deep(), 120));
+        ui.text(x + 8, lay.more_y, &more, Ink::fine(style::dim()).shadow());
     }
 }
 
@@ -373,15 +446,35 @@ pub fn key_cap(ui: &mut Ui, x: i32, y: i32, cx: HudCtx<'_>, a: Action) {
         ui.text(x + 8 - text_w(Face::Fine, l) / 2, y + 4, l, Ink::fine(style::text_bright()).outline());
         return;
     }
-    let k = cx.bindings.key(a);
-    let w = text_w(Face::Fine, k).max(8) + 10;
+    cap(ui, x, y, cx.bindings.key(a), None);
+}
+
+/// A key cap with `key` on it at `(x, y)`, 18 px tall, or with `pad` the pad's button (its mark,
+/// `key` printed over it: "A", "LB"); returns its width.
+pub fn cap(ui: &mut Ui, x: i32, y: i32, key: &str, pad: Option<Mark>) -> i32 {
+    if let Some(m) = pad {
+        if m == Mark::PadShoulder {
+            // A shoulder: a small dark lozenge with its name.
+            let w = text_w(Face::Fine, key) + 8;
+            ui.fill(Rect::new(x + 1, y + 2, w - 2, 14), argb(style::INK, 255));
+            ui.fill(Rect::new(x, y + 3, w, 12), argb(style::INK, 255));
+            ui.fill(Rect::new(x + 1, y + 3, w - 2, 1), argb(Ramp::UiInk.at(Tone::Mid), 255));
+            ui.text(x + 4, y + 4, key, Ink::fine(style::text_bright()));
+            return w;
+        }
+        ui.mark(m, x, y + 1, 255);
+        ui.text(x + 8 - text_w(Face::Fine, key) / 2, y + 4, key, Ink::fine(style::text_bright()).outline());
+        return 16;
+    }
+    let w = text_w(Face::Fine, key).max(8) + 10;
     let r = Rect::new(x, y, w, 18);
     ui.fill(Rect::new(x + 1, y, w - 2, 18), argb(style::INK, 255));
     ui.fill(Rect::new(x, y + 1, w, 16), argb(style::INK, 255));
     ui.fill(r.inset(1), argb(Ramp::UiInk.at(Tone::Light), 255));
     ui.fill(Rect::new(x + 1, y + 14, w - 2, 3), argb(Ramp::UiInk.at(Tone::Mid), 255));
     ui.fill(Rect::new(x + 2, y + 1, w - 4, 1), argb(Ramp::UiInk.at(Tone::Glint), 255));
-    ui.text(x + (w - text_w(Face::Fine, k)) / 2, y + 2, k, Ink::fine(style::INK));
+    ui.text(x + (w - text_w(Face::Fine, key)) / 2, y + 2, key, Ink::fine(style::INK));
+    w
 }
 
 fn toasts(ui: &mut Ui, b: &ViewBuffers, bottom: i32) {
@@ -534,5 +627,48 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn the_tracker_stays_on_screen_with_long_words_and_counts_the_rest() {
+        let long = "A very long step that goes on and on about the well by the station road and the lamp \
+                    posts and the hedge and the gate and the dog and the fire at the halt, and then some more";
+        let lines: Vec<QuestLine> = (0..8)
+            .map(|i| QuestLine {
+                quest: None,
+                title: format!("Quest number {i} with a name far too long for the tracker's band to hold"),
+                step: long.into(),
+                ready: i == 2,
+                main: i == 0,
+            })
+            .collect();
+        for canvas in [(768, 432), (1024, 432), (560, 432), (768, 300)] {
+            let lay = tracker_layout(&lines, canvas);
+            assert!(!lay.bands.is_empty(), "{canvas:?}: at least one shows");
+            assert_eq!(lay.bands.len() + lay.more, lines.len(), "{canvas:?}: every quest shown or counted");
+            let fw = advance(Face::Fine);
+            for b in &lay.bands {
+                let r = b.rect;
+                assert!(
+                    r.x >= 0 && r.right() <= canvas.0 && i32::from(r.y) >= TRACKER_TOP,
+                    "{canvas:?}: {r:?} on screen"
+                );
+                assert!(r.bottom() <= canvas.1 - TRACKER_FOOT, "{canvas:?}: {r:?} clear of the save card and toasts");
+                assert!(b.steps.len() <= TRACKER_STEP_LINES);
+                for s in b.steps.iter().chain(std::iter::once(&b.title)) {
+                    assert!(14 + s.chars().count() as i32 * fw <= i32::from(r.w), "{canvas:?}: {s:?} fits its band");
+                }
+            }
+            if lay.more > 0 {
+                assert!(lay.more_y + line_h(Face::Fine) <= canvas.1 - TRACKER_FOOT);
+            }
+            // The save card sits below all of it.
+            let card = crate::view::SavedCard { text: "Saved to slot 3 by the ochre coat".into(), ok: true, born: 0 };
+            let sc = crate::ui::saved::rect(canvas, &card);
+            assert!(lay.bands.iter().all(|b| b.rect.bottom() < i32::from(sc.y)), "{canvas:?}");
+        }
+        // One quest: one band.
+        let one = tracker_layout(&lines[..1], (768, 432));
+        assert_eq!((one.bands.len(), one.more), (1, 0));
     }
 }

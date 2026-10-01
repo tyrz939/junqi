@@ -121,7 +121,7 @@ pub enum DevOp {
 /// `Dev(God | Tp | Time | Flag | Grow)` (seats); `Bar`, `Cast`, `Dev(Hp | Mp | Learn | Kill | Spawn)`
 /// (combat). The rest are no-ops until their owners land (interact: `Use`; inventory: `Item`,
 /// `Bag*`, `Craft*`, `Dev(Give)`, a bar slot holding an item; store: `Store*`; dialogue: `Advance`, `Choose`;
-/// quests: `Dev(Quest)`).
+/// quests: `Dev(Quest)`, `Abandon`).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub enum Command {
     Use,
@@ -203,6 +203,9 @@ pub enum Command {
     /// Seat 0 only: let others sit down, or stop letting them.
     Open(bool),
     Dev(DevOp),
+    /// Set a side quest aside (`quests::abandon`): any seat may, for the whole party, as any
+    /// seat may take one; the main line refuses. Last, so older tapes keep their variant numbers.
+    Abandon(QuestId),
 }
 
 /// A bar slot as a command carries it (the catalog's `BarSlot` has no serde).

@@ -248,6 +248,9 @@ model! {
         pub requirements: &'static [QuestReq],
         /// Runs once per connected seat, with her as the actor, when it is handed in.
         pub rewards: ListRef,
+        /// The story's own line (`"main": true`): never set aside from the log. Every other
+        /// quest is a side quest the party may abandon (`jane_sim::quests::abandon`).
+        pub main: bool,
     }
 }
 

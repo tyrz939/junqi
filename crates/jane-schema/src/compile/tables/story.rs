@@ -302,6 +302,9 @@ struct RawQuest {
     return_to: String,
     requirements: Vec<RawReq>,
     rewards: Vec<RawAction>,
+    /// The story's own line: it cannot be abandoned.
+    #[serde(default)]
+    main: bool,
 }
 
 fn quests(src: &Source, cx: &mut Ctx) -> &'static [QuestDef] {
@@ -341,6 +344,7 @@ fn quests(src: &Source, cx: &mut Ctx) -> &'static [QuestDef] {
             return_to: text(cx, &format!("{at}.returnTo"), &r.return_to),
             requirements: leak(reqs),
             rewards: list(cx, &format!("{at}.rewards"), &r.rewards),
+            main: r.main,
         };
         if ok {
             let i = cx.ids.quests.get(id).map_or(0, usize::from);

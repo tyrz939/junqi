@@ -23,7 +23,7 @@ use jane_sim::tuning::MAX_PLAYERS;
 use jane_sim::{Seat, Sim};
 
 /// The screens, by name.
-pub const SCREENS: [&str; 20] = [
+pub const SCREENS: [&str; 28] = [
     "hud",
     "dead",
     "choice",
@@ -44,7 +44,18 @@ pub const SCREENS: [&str; 20] = [
     "slots-confirm",
     "slots-grey",
     "slots-load",
+    "quests-log",
+    "quests-log-pad",
+    "quests-abandon",
+    "quests-main",
+    "quests-day-1",
+    "quests-day-4",
+    "quests-night-1",
+    "quests-night-4",
 ];
+
+/// Side quests the quest sheets give her, beside the letter New Game gives.
+const SHEET_QUESTS: [&str; 3] = ["ames_spectacles", "the_nurses_round", "hurst_camp"];
 
 struct Rig {
     sim: Sim,
@@ -70,6 +81,25 @@ impl Rig {
             bufs.tick(&v, &events);
         }
         Rig { sim, present, soft, ui, bufs }
+    }
+
+    /// `n` frames stepped, the commands on the first, the presenter and the buffers fed.
+    fn steps(&mut self, n: u32, cmds: &[jane_sim::Command]) {
+        for i in 0..n {
+            let stamped: Vec<jane_sim::StampedCommand> = if i == 0 {
+                cmds.iter()
+                    .enumerate()
+                    .map(|(k, &cmd)| jane_sim::StampedCommand { seat: Some(Seat(0)), seq: k as u16, cmd })
+                    .collect()
+            } else {
+                Vec::new()
+            };
+            self.sim.step(&StepInput { frames: [InputFrame::IDLE; MAX_PLAYERS], commands: &stamped });
+            let events = self.sim.drain_events().to_vec();
+            let v = self.sim.view(Seat(0)).expect("seat 0");
+            self.present.tick(&v, &events);
+            self.bufs.tick(&v, &events);
+        }
     }
 
     /// Draws one frame: the world, then `ui_fn` over it at presenter tick `tick`.
@@ -502,6 +532,69 @@ pub fn run(dir: &Path, names: &[String]) -> Result<(), String> {
         }
         rig.frame(UiInput::default(), at_tick, |ui, _, _| loading::draw(ui, &mut st));
         rig.write(dir, "loading")?;
+    }
+    if names.is_empty() || names.iter().any(|n| n.starts_with("quests-")) {
+        quests(dir, &want, cx)?;
+    }
+    Ok(())
+}
+
+/// The Log with its tick boxes and keys, "Abandon ...?", the main line's grey Abandon, and the
+/// tracker in play by day and by night with one quest and with four.
+fn quests(dir: &Path, want: &dyn Fn(&str) -> bool, cx: HudCtx<'_>) -> Result<(), String> {
+    let cat = jane_data::catalog();
+    let side: Vec<_> = SHEET_QUESTS.iter().map(|q| cat.story.quest_id(q).expect("a sheet quest")).collect();
+    let give: Vec<jane_sim::Command> =
+        side.iter().map(|&q| jane_sim::Command::Dev(jane_sim::input::DevOp::Quest(q))).collect();
+    for (hour, label) in [(17, "day"), (22, "night")] {
+        let mut rig = Rig::new(7);
+        rig.sim.state_mut().clock = hour * jane_sim::tuning::TICKS_PER_HOUR;
+        rig.steps(30, &[]);
+        for (n, cmds) in [(1, &[][..]), (4, &give[..])] {
+            let name = format!("quests-{label}-{n}");
+            rig.steps(30, cmds);
+            if want(&name) {
+                let mut b = rig.bufs.clone();
+                b.hud.toasts.clear();
+                b.hud.banner = None;
+                rig.frame(UiInput::default(), 9000, |ui, _, _| hud::draw(ui, &b, cx));
+                rig.write(dir, &name)?;
+            }
+        }
+        if label != "day" {
+            continue;
+        }
+        // The Log, with the fourth quest untracked by hand and a side quest lit.
+        rig.bufs.track.toggle(side[2]);
+        rig.steps(2, &[]);
+        let mut b = rig.bufs.clone();
+        b.hud.toasts.clear();
+        let lit = b.window.quests.iter().position(|r| r.id == Some(side[0])).unwrap_or(0);
+        let main = b.window.quests.iter().position(|r| r.main).unwrap_or(0);
+        let win_cx = HudCtx { window_open: true, ..cx };
+        let shots: [(&str, usize, bool, bool); 4] = [
+            ("quests-log", lit, false, false),
+            ("quests-log-pad", lit, true, false),
+            ("quests-abandon", lit, false, true),
+            ("quests-main", main, false, false),
+        ];
+        for (name, row, pad, asking) in shots {
+            if !want(name) {
+                continue;
+            }
+            let mut st = WindowState::on(2);
+            st.log = row;
+            if let Some(q) = b.window.quests[row].id.filter(|_| asking) {
+                st.ask_abandon(q);
+            }
+            let wcx = HudCtx { pad, ..win_cx };
+            let input = if pad { UiInput { pad: true, ..UiInput::default() } } else { UiInput::default() };
+            rig.frame(input, 9100, |ui, _, _| {
+                hud::draw(ui, &b, wcx);
+                window::draw(ui, &mut st, &b, None, wcx);
+            });
+            rig.write(dir, name)?;
+        }
     }
     Ok(())
 }

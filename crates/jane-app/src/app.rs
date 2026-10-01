@@ -669,8 +669,14 @@ impl App<'_> {
                     let (loaded_slot, host) = (*slot, *host);
                     let session = self.open_session(*s, host);
                     self.begin_play(session);
-                    if loaded_slot.is_some() {
+                    if let Some(n) = loaded_slot {
                         self.slot = loaded_slot;
+                        // The tracker as this slot was saved with it; else the defaults.
+                        if let Some(on) =
+                            saves::info(&self.dirs, n).and_then(|i| i.meta).and_then(|m| m.tracked.map(|t| (t, m.seen)))
+                        {
+                            self.bufs.track = jane_present::view::Tracking::from_ids(&on.0, &on.1);
+                        }
                     }
                 }
             }
@@ -799,7 +805,7 @@ impl App<'_> {
                         self.menus.pop();
                         self.menu_lights.pop();
                     } else if self.win_open {
-                        if self.win.destroy.is_some() {
+                        if self.win.asking() {
                             actions.push(a);
                         } else {
                             self.win_open = false;
@@ -918,6 +924,7 @@ impl App<'_> {
             AppIntent::Console(line) => self.console_line(&line),
             AppIntent::OpenWindow(tab) => self.window_key(usize::from(tab)),
             AppIntent::CloseWindow => self.win_open = false,
+            AppIntent::Track(q) => self.bufs.track.toggle(q),
             AppIntent::Back => {
                 if self.menus.last() == Some(&Menu::Join) {
                     if self.lan.joining.is_some() {
@@ -976,6 +983,7 @@ impl App<'_> {
     fn slot_meta(&self, summary: jane_sim::Summary) -> saves::SlotMeta {
         let h = &self.bufs.hud;
         let line = h.tracker.first();
+        let (tracked, seen) = self.bufs.track.ids();
         saves::SlotMeta {
             summary: Some(summary),
             place: h.zone_name.to_owned(),
@@ -985,6 +993,8 @@ impl App<'_> {
             quest: line.map(|l| l.title.clone()).unwrap_or_default(),
             step: line.map(|l| l.step.clone()).unwrap_or_default(),
             saved_unix: saves::unix_now(),
+            tracked: Some(tracked),
+            seen,
         }
     }
 

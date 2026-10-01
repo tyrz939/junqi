@@ -12,7 +12,7 @@ use jane_bot::{Act, Model};
 use jane_core::Milli;
 use jane_core::action::School;
 use jane_net::{HostConfig, Note};
-use jane_sim::event::EventKind;
+use jane_sim::event::{EventKind, ToastKind};
 use jane_sim::input::{Command, DevOp};
 use jane_sim::tuning::PARTY_TAKEN;
 use jane_sim::{Hit, Seat};
@@ -246,4 +246,55 @@ fn each_sees_only_her_own_numbers() {
     let body = t.host.sim().state().player(sa).unwrap().unit;
     assert_eq!(host.seat_of(body), Some(sa));
     assert_eq!(hers.seat_of(host.me().unit), Some(Seat(0)));
+}
+
+fn toasts(heard: &[jane_sim::Event]) -> impl Iterator<Item = ToastKind> + '_ {
+    heard.iter().filter_map(|e| if let EventKind::Toast(k) = e.kind { Some(k) } else { None })
+}
+
+/// A side quest set aside by a guest (`quests::abandon`): any seat may, for the whole party, at
+/// the same frame on every machine; everyone is told whose coat it was; the main line refuses
+/// whoever asks; and the worlds stay one hash.
+#[test]
+fn a_guest_sets_a_side_quest_aside_for_everyone_in_step() {
+    let cat = jane_data::catalog();
+    let side = cat.story.quest_id("ames_spectacles").unwrap();
+    let main = cat.story.quest_id("the_letter").unwrap();
+    let mut t = Table::new(HostConfig::default(), Policy::Idle);
+    let mut n = 0u32;
+    let a = t.knock(
+        301,
+        Policy::Script(Box::new(move |_, _| {
+            n += 1;
+            match n {
+                5 => Act::press(Command::Dev(DevOp::Quest(side))),
+                60 => Act::press(Command::Abandon(main)),
+                90 => Act::press(Command::Abandon(side)),
+                _ => Act::idle(),
+            }
+        })),
+    );
+    let b = t.knock(302, Policy::Idle);
+    let sa = t.seated(a);
+    t.seated(b);
+    let has = |sim: &jane_sim::Sim, q| sim.state().quests.active.iter().any(|p| p.quest == q);
+    t.until(600, "the guest takes it", |t| has(t.host.sim(), side));
+    t.same_hash();
+    let mut heard = Vec::new();
+    for _ in 0..600 {
+        t.run(1);
+        heard.extend(toasts(&t.host_heard));
+        if !has(t.host.sim(), side) {
+            break;
+        }
+    }
+    assert!(!has(t.host.sim(), side), "set aside in the host's world");
+    assert!(has(t.host.sim(), main), "the main line stayed");
+    assert!(heard.contains(&ToastKind::QuestAbandoned { quest: side, by: sa }), "whose coat: {heard:?}");
+    t.run(30);
+    for p in &t.peers {
+        let s = p.g.sim().unwrap();
+        assert!(!has(s, side) && has(s, main), "on every machine");
+    }
+    t.same_hash();
 }

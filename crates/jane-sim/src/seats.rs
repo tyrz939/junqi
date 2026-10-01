@@ -78,7 +78,8 @@ impl Sim {
             | Command::StorePutAll { .. }
             | Command::Advance
             | Command::Choose { .. }
-            | Command::CloseDialogue => self.seat_command(seat, c.cmd),
+            | Command::CloseDialogue
+            | Command::Abandon(_) => self.seat_command(seat, c.cmd),
             // A seated join is nobody's.
             Command::Join { .. } => {}
         }
@@ -126,6 +127,9 @@ impl Sim {
                 }
                 Command::Dev(DevOp::Quest(q)) => {
                     quests::give(cx, q);
+                }
+                Command::Abandon(q) => {
+                    quests::abandon(cx, q);
                 }
                 _ => {}
             }

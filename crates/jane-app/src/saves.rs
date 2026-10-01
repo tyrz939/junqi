@@ -88,6 +88,12 @@ pub struct SlotMeta {
     pub step: String,
     /// Seconds since 1970, real time.
     pub saved_unix: u64,
+    /// The tracker's choice for this seat, as quest content ids: what it tracks, and every quest
+    /// of the log it had seen (so one untracked stays so). Absent in an older note: the defaults.
+    #[serde(default)]
+    pub tracked: Option<Vec<String>>,
+    #[serde(default)]
+    pub seen: Vec<String>,
 }
 
 impl SlotMeta {
@@ -216,6 +222,7 @@ mod tests {
             quest: "A Letter from Julie".into(),
             step: "Auntie Julie's house".into(),
             saved_unix: unix_now(),
+            ..SlotMeta::default()
         };
         write_meta(&dirs, 0, &meta).unwrap();
         let got = info(&dirs, 0).unwrap();
@@ -250,5 +257,34 @@ mod tests {
     fn an_asked_folder_wins() {
         assert_eq!(Dirs::find(Some("x/y")).root, PathBuf::from("x/y"));
         assert!(Dirs::find(Some("x")).config().ends_with("config.json"));
+    }
+
+    #[test]
+    fn the_tracker_rides_in_the_slots_note_and_an_old_note_means_the_defaults() {
+        let dirs = temp("track");
+        let sim = jane_sim::Sim::new_game(3, "Tess");
+        write(&dirs, 0, &sim.save()).unwrap();
+        let summary = info(&dirs, 0).unwrap().summary;
+        let mut t = jane_present::view::Tracking::default();
+        let cat = jane_data::catalog();
+        let side = cat.story.quest_id("ames_spectacles").unwrap();
+        t.sync(&[cat.story.quest_id("the_letter").unwrap(), side]);
+        t.toggle(side);
+        let (tracked, seen) = t.ids();
+        let meta = SlotMeta { summary: Some(summary.clone()), tracked: Some(tracked), seen, ..SlotMeta::default() };
+        write_meta(&dirs, 0, &meta).unwrap();
+        let got = info(&dirs, 0).unwrap().meta.unwrap();
+        let back = jane_present::view::Tracking::from_ids(got.tracked.as_deref().unwrap(), &got.seen);
+        assert_eq!(back, t, "round trip");
+        assert!(!back.is_on(side), "untracked stays so");
+        // A note written before the tracker was kept: no choice, so the defaults.
+        let old = format!(
+            "{{\"summary\": {}, \"place\": \"\", \"day\": 1, \"clock\": \"\", \"night\": false, \"quest\": \"\", \"step\": \"\", \"saved_unix\": 0}}",
+            serde_json::to_string(&summary).unwrap()
+        );
+        std::fs::write(dirs.meta(0), old).unwrap();
+        let got = info(&dirs, 0).unwrap().meta.expect("an older note still reads");
+        assert_eq!((got.tracked, got.seen.len()), (None, 0));
+        let _ = std::fs::remove_dir_all(&dirs.root);
     }
 }

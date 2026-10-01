@@ -160,6 +160,24 @@ pub fn toast(v: &View<'_>, kind: &ToastKind, out: &mut String) -> Tone {
             expand(text(quest(q).name), heroine, seed, out);
             Tone::Good
         }
+        // Set aside: "Set aside: Rendle's Coat" for whoever did it, "Rendle's Coat was set
+        // aside by the teal coat" for the rest of the table.
+        ToastKind::QuestAbandoned { quest: q, by } => {
+            if by == v.seat() {
+                out.push_str("Set aside: ");
+                expand(text(quest(q).name), heroine, seed, out);
+            } else {
+                expand(text(quest(q).name), heroine, seed, out);
+                out.push_str(" was set aside by the ");
+                out.push_str(crate::ui::lan::coat_name(by.index()));
+                out.push_str(" coat");
+            }
+            Tone::Plain
+        }
+        ToastKind::StoryOwn => {
+            out.push_str("That is the story's own: it cannot be set aside");
+            Tone::Refused
+        }
         ToastKind::KillProgress { quest: q, req, n, of } => {
             let d = quest(q);
             if let Some(r) = d.requirements.get(usize::from(req)) {

@@ -202,3 +202,73 @@ fn the_three_endings_are_played_from_the_choice() {
         assert!(bot.done(), "the bot stops at the end");
     }
 }
+
+/// Plays the bot's steps, and every [`Hostile::every`] frames sets aside every side quest in
+/// the log, as a player who abandons everything she is given would.
+struct Hostile {
+    sim: Sim,
+    frames: u32,
+    every: u32,
+    seq: u16,
+    /// Side quests set aside, all told.
+    aside: u32,
+}
+
+impl jane_bot::Host for Hostile {
+    fn view(&self, seat: Seat) -> Option<jane_sim::View<'_>> {
+        self.sim.view(seat)
+    }
+
+    fn step(&mut self, input: &jane_sim::StepInput<'_>) -> jane_sim::Stepped {
+        self.frames += 1;
+        let cat = jane_data::catalog();
+        let side: Vec<_> =
+            self.sim.state().quests.active.iter().map(|p| p.quest).filter(|&q| !cat.story.quest(q).main).collect();
+        if self.frames % self.every == 0 && !side.is_empty() {
+            let mut cmds = input.commands.to_vec();
+            for q in side {
+                self.seq = self.seq.wrapping_add(1);
+                self.aside += 1;
+                cmds.push(jane_sim::StampedCommand {
+                    seat: Some(Seat(0)),
+                    seq: self.seq,
+                    cmd: jane_sim::Command::Abandon(q),
+                });
+            }
+            cmds.sort_by_key(|c| (c.seat, c.seq));
+            return self.sim.step(&jane_sim::StepInput { frames: input.frames, commands: &cmds });
+        }
+        self.sim.step(input)
+    }
+
+    fn drain_events(&mut self) -> &[jane_sim::Event] {
+        self.sim.drain_events()
+    }
+
+    fn sim(&self) -> &Sim {
+        &self.sim
+    }
+}
+
+/// Abandoning can never make the main story incompletable: the Reader plays seed 2 with every
+/// side quest she takes set aside again every half a minute, and still reaches her ending
+/// through every act of the spine.
+#[test]
+#[ignore = "slow: a whole story, a minute or more in release"]
+fn the_story_ends_with_every_side_quest_set_aside_as_it_is_taken() {
+    let seed = 2;
+    let ending = ending_for(seed);
+    let mut host = Hostile { sim: Sim::new_game_with(bps(seed), "Jane"), frames: 0, every: 1800, seq: 40000, aside: 0 };
+    let mut bot = Bot::story(Model::Reader);
+    bot.ctx.ending = Some(ending);
+    let frames = bot.play(&mut host, STORY_FRAMES);
+    let v = host.sim.view(Seat(0)).expect("seat 0");
+    let cat = jane_data::catalog();
+    println!("seed {seed}: the_end {} in {}, {} side quests set aside", v.the_end(), clock(Some(frames)), host.aside);
+    for q in SPINE {
+        let id = cat.story.quest_id(q).expect("a spine quest");
+        assert!(v.quests_done().contains(&id), "{q} done: {:?}", bot.stuck());
+    }
+    assert_eq!(v.the_end(), ending.the_end(), "{:?}", bot.stuck());
+    assert!(host.aside > 0, "she was given side quests to set aside");
+}
