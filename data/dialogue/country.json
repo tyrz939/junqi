@@ -58,7 +58,7 @@
       "a": { "lines": ["Has the bell been going early for you? I thought it was me. My sister says it's gone before nine twice this week."], "actions": [{ "do": "flag", "flag": "said:woman", "value": 1 }] },
       "b": { "lines": ["I don't let the children past the garden after tea. I couldn't tell you why. It just feels like the right thing to do."], "actions": [{ "do": "flag", "flag": "said:woman", "value": 2 }] },
       "c": { "lines": ["I'm only waiting for my husband. He went to see about a cart this morning. He's usually back by now."], "actions": [{ "do": "flag", "flag": "said:woman", "value": 3 }] },
-      "d": { "lines": ["Walking to Castle? Keep to the road. The fields are fine. It's what's in them."], "actions": [{ "do": "flag", "flag": "said:woman", "value": 0 }] }
+      "d": { "lines": ["Walking to Castle? Keep to the road once the lamps are lit. Things come up to the edge of it after dark. They don't come onto it, as a rule."], "actions": [{ "do": "flag", "flag": "said:woman", "value": 0 }] }
     }
   },
   "country_woodcutter": {
@@ -125,12 +125,12 @@
   "country_door_1": {
     "speaker": "Door",
     "start": [{ "node": "knock" }],
-    "nodes": { "knock": { "lines": ["You knock. Somebody inside stops what they were doing, and waits for you to go."] } }
+    "nodes": { "knock": { "lines": ["A woman comes to the door drying her hands. She's nothing to sell and nothing to buy, thank you, and she hopes you get where you're going before the lamps."] } }
   },
   "country_door_2": {
     "speaker": "Door",
     "start": [{ "node": "knock" }],
-    "nodes": { "knock": { "lines": ["Nobody answers. Come back after dark and the windows are lit, and nobody answers then either."] } }
+    "nodes": { "knock": { "lines": ["\"Who is it?\" A man's voice, then: \"No, thank you. We keep early hours out here.\""] } }
   },
   "country_door_3": {
     "speaker": "Door",
@@ -198,7 +198,7 @@
   "country_pump": {
     "speaker": "Pump",
     "start": [{ "node": "look" }],
-    "nodes": { "look": { "lines": ["The handle is warm, as if somebody put it down a moment ago."] } }
+    "nodes": { "look": { "lines": ["An iron pump, the green paint worn off the handle where it is held. The water comes up cold on the second stroke."] } }
   },
   "country_grave": {
     "speaker": "Gravestone",

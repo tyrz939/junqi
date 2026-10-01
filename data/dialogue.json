@@ -42,7 +42,7 @@
         "lines": [
           "{name}.",
           "You came on the Sunday train. She said you would. Then she stopped saying anything.",
-          "There are bones walking her fence line. Put them down and I will give you her key. Space swings. I would do it myself, but look at me."
+          "There are bones walking her fence line. Put them down and I will give you her key. I would do it myself, but look at me."
         ],
         "options": [
           { "label": "I'll do it", "actions": [{ "do": "quest", "quest": "defeat_skeleton" }] },
@@ -207,7 +207,7 @@
         "lines": [
           "You found him, then. Gnox Goldskin, with his arms round it.",
           "The stone says leave it there. That was her hand, and it was right when it was written. It is not right now.",
-          "She is not dead, {name}. I would know."
+          "She is not dead."
         ],
         "options": [{ "label": "Then I keep walking", "actions": [{ "do": "handin", "quest": "the_burial" }] }]
       },
@@ -338,10 +338,11 @@
   },
   "study_desk": {
     "speaker": "The Study Desk",
-    "start": [{"when": [{"if": "questActive", "quest": "the_choice"}, {"if": "hasItem", "item": "the_ball", "qty": 1}], "node": "ring"}, {"node": "look"}],
+    "start": [{"when": [{"if": "flag", "flag": "the_end", "eq": 1}, {"if": "hasItem", "item": "birthday_present", "qty": 1}], "node": "held_present"}, {"when": [{"if": "questActive", "quest": "the_choice"}, {"if": "hasItem", "item": "the_ball", "qty": 1}], "node": "ring"}, {"node": "look"}],
     "nodes": {
       "ring": {"lines": ["The clean ring in the dust is the Ball's size exactly.", "The chair has been pulled up to it. The seat is worn, and the dust on the desk stops where two arms would rest."], "options": [{"label": "Set the ball in the ring and sit down", "actions": [{"do": "handin", "quest": "the_choice"}, {"do": "take", "item": "the_ball", "qty": 1}, {"do": "take", "item": "key_stair", "qty": 1}, {"do": "flag", "flag": "shield_held"}, {"do": "flag", "flag": "the_end", "value": 1}], "goto": "held_1"}, {"label": "Not yet"}]},
-      "held_1": {"lines": ["It sits in the ring as if the ring had been cut for it. It is warm, and then it is the warmth of the room, and then the room is the warmth of it.", "Up the stair the kitchen clock goes on. Out in the county the lamps come on at half past six, and nobody notices that they are a little brighter than they were."], "goto": "held_2"},
+      "held_1": {"lines": ["It sits in the ring as if the ring had been cut for it. It is warm, and then it is the warmth of the room, and then the room is the warmth of it.", "Up the stair the kitchen clock goes on. Out in the county the lamps come on at half past six, and nobody notices that they are a little brighter than they were."], "actions": [{"do": "if", "when": [{"if": "hasItem", "item": "birthday_present", "qty": 1}], "then": [{"do": "talk", "tree": "study_desk"}]}], "goto": "held_2"},
+      "held_present": {"lines": ["You take the present out from under the clothes and set it on the desk beside the Ball.", "It is still for her."], "actions": [{"do": "take", "item": "birthday_present", "qty": 1}], "goto": "held_2"},
       "held_2": {"lines": ["At nine there is no bell. At six Ernest Dunn comes down from the back room of the Arms for his own tray.", "He walks across the square to where his brother is waiting by the telephone. Neither of them says anything about the spring.", "On Cinder Walk the night shift walks until six, as it always has. The Works were never inside it, and nobody was ever going to relieve them from here."], "goto": "held_3"},
       "held_3": {"lines": ["Julie's Other Key goes on the nail by the stove, under the house key. LOCKED, AND KEPT LOCKED. That is your work now. It was hers.", "Late, something comes down the cellar stair one step at a time, the way a dog does, and lies across your feet. It is after nine. It has never been in the house after nine.", "You put your hand on its head. \"She is not dead, {name},\" it says. \"I would know. She is asleep.\""]},
       "look": {
@@ -406,7 +407,7 @@
     "start": [{ "when": [{ "if": "night" }], "node": "bed" }, { "node": "day" }],
     "nodes": {
       "day": {
-        "lines": ["Not tired. The day's written down all the same."],
+        "lines": ["Not tired. The day's written down anyway."],
         "actions": [{ "do": "rest" }],
         "options": [
           { "label": "Lie down anyway", "actions": [{ "do": "rest", "until": 6 }], "goto": "slept" },

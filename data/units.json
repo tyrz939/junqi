@@ -130,7 +130,7 @@
       { "do": "unlock", "prop": "snake_gate_south" },
       { "do": "unlock", "prop": "snake_gate_east" },
       { "do": "shake", "amount": 4 },
-      { "do": "toast", "text": "The snake is still. Julie was never in its mouth." }
+      { "do": "toast", "text": "The snake is still. Along its back the scales are worn smooth, the way a banister is." }
     ]
   }
 }

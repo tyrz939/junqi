@@ -2559,7 +2559,7 @@
       },
       "in_1": {
         "lines": [
-          "Did I spell it right? I go by the voice. Voices are harder to spell than you'd think.",
+          "I've not got your name yet. I'll have it by the time you go.",
           "Everybody who comes up to the door. It's not the School's register. It's only mine, and it's warmer.",
           "Yours isn't finished. I can finish it, or you can pull it out. It's your row. You say."
         ],
@@ -2689,7 +2689,7 @@
       "read": {
         "lines": [
           "The newest rows, over the arm of her chair. Plain knitting, with a name worked into each row in a darker wool: SAM ILES. ADA ILES. THE CONSTABLE. MR DUNN.",
-          "The last row is only half done. The half that is done spells {name}."
+          "The last row is only cast on, in the darker wool. There are no letters in it yet."
         ],
         "actions": [
           {
@@ -2700,7 +2700,7 @@
       },
       "decide": {
         "lines": [
-          "Your row, half done, the needles still in it. The half that is done spells {name}."
+          "Your row, cast on, the needles still in it. No letters yet."
         ],
         "options": [
           {
@@ -2744,7 +2744,7 @@
       },
       "done": {
         "lines": [
-          "The newest rows. The last one is finished, and it spells {name}."
+          "The newest rows. The last one is finished. She went by your voice, she says, and she has it right."
         ]
       },
       "pulled": {
@@ -2906,7 +2906,7 @@
     "nodes": {
       "offer_1": {
         "lines": [
-          "Afternoon. Nothing stops here. We keep the lamps all the same. The Company likes them kept.",
+          "Afternoon. Nothing stops here, but we keep the lamps lit. The Company likes them kept.",
           "They're dry. The oil's in the lamp locker, and a barrel's rolled against it. My back won't shift it. Would yours?"
         ],
         "options": [

@@ -2384,7 +2384,7 @@
       },
       "after": {
         "lines": [
-          "I've looked at them. They're potatoes. I've put them out of the house all the same."
+          "I've looked at them. They're potatoes. I've still put them out of the house."
         ]
       }
     }
@@ -3412,7 +3412,7 @@
       "in_1": {
         "lines": [
           "What did it say?",
-          "Read it again. No. There's nobody by that name round here. Take this, anyway."
+          "Only the year, and room for a name? Somebody's keeping a place, then. Take this, anyway."
         ],
         "options": [
           {
@@ -3444,7 +3444,7 @@
       "names": {
         "lines": [
           "Names cut in the stump, one under another, each with its year. The years go back further than the tree could have stood.",
-          "The newest is at the bottom, the wood still pale: {name}, and this year."
+          "The newest is at the bottom: a pale new cut, squared off for a name and not yet lettered, and this year beside it."
         ]
       }
     }

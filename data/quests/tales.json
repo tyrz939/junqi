@@ -99,14 +99,14 @@
   "tale_scarf_rows": {
     "name": "The Last Rows",
     "description": "Mrs Wakes, at {place:tale_scarf}, knits one row for everybody who comes up her path. Her eyes are going. She would like the newest rows read to her, off the scarf where it hangs over the arm of her chair, to be sure she has everybody right.",
-    "completion": "Names worked into the rows in a darker wool, one to a row. The last row is only half done, and the half that is done is your name.",
+    "completion": "Names worked into the rows in a darker wool, one to a row. The last row is cast on, with no name in it yet. She says she will have it by the time you go.",
     "returnTo": "Mrs Wakes, at {place:tale_scarf}",
     "requirements": [{ "type": "location", "target": "tale_scarf_read", "qty": 1, "text": "The newest rows of Mrs Wakes's scarf, at {place:tale_scarf}" }],
     "rewards": [{ "do": "give", "item": "apple", "qty": 2 }]
   },
   "tale_scarf_row": {
     "name": "Your Row",
-    "description": "Half a row of Mrs Wakes's scarf has your name in it. She can finish it or pull it out, she says, and it is your row. Finished, you are counted. Pulled out, nobody has you down anywhere, and she would not like that for anybody.",
+    "description": "Mrs Wakes has cast on a row of her scarf for you. She can finish it or pull it out, she says, and it is your row. Finished, you are counted. Pulled out, nobody has you down anywhere, and she would not like that for anybody.",
     "completion": "Your row, decided, on the arm of her chair.",
     "returnTo": "Mrs Wakes, at {place:tale_scarf}",
     "requirements": [{ "type": "location", "target": "tale_scarf_decided", "qty": 1, "text": "Your row, on the scarf over her chair at {place:tale_scarf}" }],

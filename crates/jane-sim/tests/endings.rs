@@ -186,9 +186,9 @@ fn the_dog_names_three_ways_and_calls_none_of_them_right() {
     // No line calls one of the three right or wrong.
     for (tree, nodes) in [
         ("dog", &["the_three", "the_ask", "epilogue"][..]),
-        ("study_desk", &["ring", "held_1", "held_2", "held_3"][..]),
-        ("mine_seam", &["ball", "hill_1", "hill_2", "hill_3"][..]),
-        ("the_train", &["in", "train_1", "train_2", "train_3"][..]),
+        ("study_desk", &["ring", "held_1", "held_present", "held_2", "held_3"][..]),
+        ("mine_seam", &["ball", "hill_1", "hill_2", "hill_3", "hill_present", "hill_4"][..]),
+        ("the_train", &["in", "train_ball", "train_present", "train_1", "train_2", "train_3"][..]),
     ] {
         for n in nodes {
             for l in lines_of(tree, n) {
@@ -206,15 +206,33 @@ fn the_first_ending_is_the_ring_on_the_study_desk() {
     cmd(&mut s, Command::Dev(DevOp::Tp { zone: ZoneId::Cellar, mark: study }));
     idle(&mut s, 3);
     use_prop(&mut s, "study_desk");
+    assert_eq!(holds(&s, "birthday_present"), 1, "she came with it");
     let said = conversation(&mut s, &[0]);
-    assert_eq!(said, ["ring", "held_1", "held_2", "held_3"], "{said:?}");
+    assert_eq!(said, ["ring", "held_1", "held_present", "held_2", "held_3"], "{said:?}");
     closed_by(&s, 1);
+    assert_eq!(holds(&s, "birthday_present"), 0, "the present is on the desk beside the Ball");
+    assert!(lines_of("study_desk", "held_present").join(" ").contains("It is still for her."));
     assert_eq!(holds(&s, "key_stair"), 0, "her Other Key goes on the nail by the stove");
     let last = lines_of("study_desk", "held_3").join(" ");
     assert!(last.contains("She is not dead, {name},") && last.contains("I would know."));
     assert!(last.contains("hand on its head"));
     let ernest = lines_of("study_desk", "held_2").join(" ");
     assert!(ernest.contains("Ernest Dunn comes down") && ernest.contains("night shift"));
+}
+
+/// Without the present in her bag the ending goes straight on: it is only set down if she holds it.
+#[test]
+fn an_ending_without_the_present_says_nothing_of_it() {
+    let mut s = to_the_choice();
+    let present = jane_data::catalog().combat.item_id("birthday_present").unwrap();
+    jane_sim::bag::bag_remove(&mut s.state_mut().players[0].bag[..], present, 1);
+    let study = sym(&s, "cellar_study");
+    cmd(&mut s, Command::Dev(DevOp::Tp { zone: ZoneId::Cellar, mark: study }));
+    idle(&mut s, 3);
+    use_prop(&mut s, "study_desk");
+    let said = conversation(&mut s, &[0]);
+    assert_eq!(said, ["ring", "held_1", "held_2", "held_3"], "{said:?}");
+    closed_by(&s, 1);
 }
 
 #[test]
@@ -228,10 +246,11 @@ fn the_second_ending_puts_the_ball_back_in_the_hill_and_the_dog_goes_with_the_ni
     assert!(look.contains("the size of a fist"));
     use_prop(&mut s, "mine_seam");
     let said = conversation(&mut s, &[0]);
-    assert_eq!(said, ["ball", "hill_1", "hill_2", "hill_3"], "{said:?}");
+    assert_eq!(said, ["ball", "hill_1", "hill_2", "hill_3", "hill_present", "hill_4"], "{said:?}");
     closed_by(&s, 2);
+    assert_eq!(holds(&s, "birthday_present"), 0, "the present is left on the step");
     assert_eq!(flag(&s, "night_gone"), 1);
-    let last = lines_of("mine_seam", "hill_3").join(" ");
+    let last = lines_of("mine_seam", "hill_4").join(" ");
     assert!(last.contains("She is not dead, {name},") && last.contains("hand on its head"));
     assert!(lines_of("mine_seam", "hill_2").join(" ").contains("one tray fewer"), "Ernest goes with the night");
 
@@ -272,8 +291,10 @@ fn the_third_ending_is_the_sunday_train_and_it_stops_because_she_signals() {
     let d = s.view(Seat(0)).unwrap().dialogue().expect("the train stops, and the guard is at the door");
     assert_eq!(d.node.map(|n| n.id), Some("in"));
     let said = conversation(&mut s, &[0]);
-    assert_eq!(said, ["in", "train_1", "train_2", "train_3"], "{said:?}");
+    assert_eq!(said, ["in", "train_present", "train_1", "train_2", "train_3"], "{said:?}");
     closed_by(&s, 3);
+    assert_eq!(holds(&s, "birthday_present"), 0, "the present is on the bench with the Ball");
+    assert!(lines_of("the_train", "train_present").join(" ").contains("ONE PARCEL"));
     assert_eq!(holds(&s, "key_stair"), 1, "she takes her Other Key with her, and reads its back");
     assert!(lines_of("the_train", "train_2").join(" ").contains("OR FOR YOU, IF YOU WOULD RATHER NOT"));
     assert!(lines_of("the_train", "train_1").join(" ").contains("She is not dead, {name},"));

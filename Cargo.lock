@@ -414,6 +414,7 @@ version = "0.1.0"
 dependencies = [
  "jane-core",
  "jane-schema",
+ "serde_json",
 ]
 
 [[package]]
