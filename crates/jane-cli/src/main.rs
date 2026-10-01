@@ -43,7 +43,7 @@ commands:
 {AUDIO}
 {HASH}
 {SERVE}
-  play --model reader|rusher|explorer|cautious|lost --seed N | replay verify|record|diff
+  play --model reader|rusher|explorer|cautious|lost --seed N | replay verify|record|diff | telemetry
                                       a player model plays; tapes and traces (`jane play --help`)
 {SWEEP}
   help                                this text";
@@ -91,7 +91,7 @@ fn main() -> ExitCode {
                 ExitCode::FAILURE
             }
         },
-        Some(c @ ("play" | "replay")) => play::main(c, &args[1..]),
+        Some(c @ ("play" | "replay" | "telemetry")) => play::main(c, &args[1..]),
         Some(c @ ("sweep" | "dossier")) => {
             let r = if c == "sweep" { sweep::sweep(&args[1..]) } else { sweep::dossier(&args[1..]) };
             match r {

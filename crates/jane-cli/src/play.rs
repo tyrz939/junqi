@@ -7,6 +7,7 @@ use std::path::Path;
 use std::time::Instant;
 
 use jane_bot::crawl::Crawl;
+use jane_bot::telemetry::Telemetry;
 use jane_bot::{Bot, Model, Plan};
 use jane_core::ZoneId;
 use jane_sim::replay::{Recorder, Tape, diff_states, input_at, verify_tape};
@@ -14,7 +15,7 @@ use jane_sim::{Blueprints, Seat, Sim, StepInput};
 
 pub const USAGE: &str =
     "  play --model reader|rusher|explorer|cautious|lost --seed N [--minutes M] [--dungeon ZONE] [--tape OUT.jrp]
-       [--trace OUT.jtr] [--l4]
+       [--trace OUT.jtr] [--l4] [--telemetry DIR]
        [--snap OUT.png [--snap-every S]] [--ending hold|hill|train] [--profile]
        [--explain] [--explain-every S] [--from ACT] [--deaths] [--growth]
                                       a player model plays a seed headless from New Game (or a dungeon from
@@ -28,8 +29,13 @@ pub const USAGE: &str =
                                       (mine museum forest factory burial school choice), the acts
                                       before it written in by the console: for looking, never a tape;
                                       --trace: the session's trace (VERIFICATION.md §3.1) and its L4
-                                      table; --l4: only the table
-  play --fixture PATH                 write the bot-session hash fixture (seeds 1 to 3, both models, 5 min)
+                                      table; --l4: only the table; --telemetry: the run's CSVs (kills,
+                                      blows, heals, rests, minutes, milestones, chapters, deaths,
+                                      summary) into DIR (PLAY-PLAN.md 0.1)
+  telemetry [--models M,M] [--seeds A..B | --seed N] [--minutes M] [--threads T] --out DIR
+                                      the story from New Game for each model on each seed, in parallel:
+                                      every run's CSVs and one summary.csv, the summary printed
+  play --fixture PATH                write the bot-session hash fixture (seeds 1 to 3, both models, 5 min)
   replay verify FILE...               re-simulate each tape and hold it to its hash stream
   replay record --model M --seed N [--minutes M] [--dungeon ZONE] OUT.jrp
                                       a model's session, recorded
@@ -62,6 +68,7 @@ pub fn run(cmd: &str, args: &[String]) -> Result<(), String> {
     match (cmd, args.first().map(String::as_str)) {
         ("play", _) if flag(args, "--fixture").is_some() => fixture(flag(args, "--fixture").expect("a path")),
         ("play", _) => play(args, flag(args, "--tape")),
+        ("telemetry", _) => telemetry(args),
         ("replay", Some("verify")) => verify(&args[1..]),
         ("replay", Some("record")) => {
             let out =
@@ -115,6 +122,8 @@ fn play(args: &[String], tape: Option<&str>) -> Result<(), String> {
         bot.ctx.ending = Some(jane_bot::Ending::parse(e).ok_or("--ending: hold, hill or train")?);
     }
     let frames = minutes * 60 * 60;
+    let tele_dir = flag(args, "--telemetry");
+    let mut tele = tele_dir.map(|_| Telemetry::new(model.name(), seed));
     let mut sess = jane_bot::run::Session::new(bot, &sim, minutes);
     let mut rec = Recorder::new(sim);
     let t0 = Instant::now();
@@ -132,6 +141,9 @@ fn play(args: &[String], tape: Option<&str>) -> Result<(), String> {
         }
         let f0 = if profile { wall_ns() } else { 0 };
         sess.step(&mut rec);
+        if let Some(t) = tele.as_mut() {
+            t.observe(rec.sim(), sess.bot.events());
+        }
         if profile {
             prof.add(wall_ns() - f0, &rec.sim().metrics());
         }
@@ -177,6 +189,10 @@ fn play(args: &[String], tape: Option<&str>) -> Result<(), String> {
     );
     if let Some(why) = bot.stuck() {
         println!("last stuck: {why}");
+    }
+    if let (Some(t), Some(dir)) = (&tele, tele_dir) {
+        let row = t.write(Path::new(dir), &bot).map_err(|e| format!("{dir}: {e}"))?;
+        println!("telemetry: {dir}\n{}", table(&[row]));
     }
     if profile {
         prof.print(played);
@@ -238,6 +254,74 @@ fn play(args: &[String], tape: Option<&str>) -> Result<(), String> {
         );
     }
     Ok(())
+}
+
+/// `jane telemetry`: each model on each seed from New Game, in parallel, every run's tables and
+/// one `summary.csv` written to `--out`, and the summary printed as a table.
+fn telemetry(args: &[String]) -> Result<(), String> {
+    let models = flag(args, "--models")
+        .unwrap_or("reader")
+        .split(',')
+        .map(|m| Model::parse(m).ok_or_else(|| format!("--models: no model {m}")))
+        .collect::<Result<Vec<_>, _>>()?;
+    let seeds: Vec<u32> = if flag(args, "--seed").or(flag(args, "--seeds")).is_some() {
+        crate::gen_cmd::seeds(args)?.collect()
+    } else {
+        (1..=3).collect()
+    };
+    let minutes = num(args, "--minutes", 900)?;
+    let out = Path::new(flag(args, "--out").ok_or("--out DIR")?);
+    let jobs: Vec<(Model, u32)> = models.iter().flat_map(|&m| seeds.iter().map(move |&s| (m, s))).collect();
+    let threads = num(args, "--threads", std::thread::available_parallelism().map_or(4, |n| n.get() as u32))?.max(1);
+    let next = std::sync::atomic::AtomicUsize::new(0);
+    let done: Vec<std::sync::Mutex<Option<Result<String, String>>>> =
+        jobs.iter().map(|_| std::sync::Mutex::new(None)).collect();
+    std::thread::scope(|s| {
+        for _ in 0..threads.min(jobs.len() as u32) {
+            s.spawn(|| {
+                loop {
+                    let i = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    let Some(&(m, seed)) = jobs.get(i) else { break };
+                    let r = jane_bot::telemetry::play(m, seed, minutes)
+                        .and_then(|(bot, t)| t.write(out, &bot).map_err(|e| format!("{}: {e}", out.display())));
+                    eprintln!("{} seed {seed}: {}", m.name(), if r.is_ok() { "written" } else { "failed" });
+                    *done[i].lock().expect("a run's slot") = Some(r);
+                }
+            });
+        }
+    });
+    let mut rows = Vec::new();
+    for d in done {
+        rows.push(d.into_inner().expect("a run's slot").expect("every job ran")?);
+    }
+    let mut csv = format!("{}\n", jane_bot::telemetry::SUMMARY_HEADER);
+    for r in &rows {
+        csv.push_str(r);
+        csv.push('\n');
+    }
+    let path = out.join("summary.csv");
+    std::fs::write(&path, csv).map_err(|e| format!("{}: {e}", path.display()))?;
+    print!("{}", table(&rows));
+    println!("written: {}", out.display());
+    Ok(())
+}
+
+/// Summary rows as an aligned table under their header.
+fn table(rows: &[String]) -> String {
+    let all: Vec<Vec<&str>> = std::iter::once(jane_bot::telemetry::SUMMARY_HEADER)
+        .chain(rows.iter().map(String::as_str))
+        .map(|r| r.split(',').collect())
+        .collect();
+    let cols = all.iter().map(Vec::len).max().unwrap_or(0);
+    let width: Vec<usize> =
+        (0..cols).map(|c| all.iter().filter_map(|r| r.get(c)).map(|s| s.len()).max().unwrap_or(0)).collect();
+    let mut s = String::new();
+    for r in &all {
+        let cells: Vec<String> = r.iter().enumerate().map(|(i, c)| format!("{c:>w$}", w = width[i])).collect();
+        s.push_str(&cells.join(" "));
+        s.push('\n');
+    }
+    s
 }
 
 /// `--growth`: her health and strength, and every finding that grows her in the story's dungeons

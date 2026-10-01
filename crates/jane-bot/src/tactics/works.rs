@@ -36,6 +36,10 @@ pub const LIT_TOLL: u8 = 40;
 
 /// How far out, in cells, she looks for floor to back off across.
 const STEER_R: i32 = 4;
+/// Steering frames without a step before the way she pressed is given up.
+const PINNED: u32 = 20;
+/// Either side of a way given up, the ring's cells that lie that way too (about 33 degrees).
+const WALLED_ARC: u16 = 6000;
 
 /// Frames between re-reckonings of the lit floor (lamps go on and off with the fuses).
 const TOLL_EVERY: u32 = 20;
@@ -199,6 +203,7 @@ fn begin(cx: &mut Ctx, t: &Unit) {
         cx.fight.t = 0;
         cx.fight.fights += 1;
         cx.fight.retreat = None;
+        cx.fight.walled.clear();
     }
     cx.fight.t += 1;
     cx.foes.insert(t.id);
@@ -499,6 +504,27 @@ fn steer(
 ) -> InputFrame {
     let me = v.body().pos;
     let (mx, my) = me.cell();
+    // Pressed at a retreat and not moved a step: something finer than the cells (a prop's edge
+    // inside a cell called open) stops her there. Seed 6's Factory: flush in the corner of a
+    // bench by the generator, the Charge Hand a cell off across it, neither could reach the
+    // other, and she pressed the same way for 900 minutes. That way is given up for the fight.
+    if cx.fight.pinned.0 == me {
+        cx.fight.pinned.1 += 1;
+    } else {
+        cx.fight.pinned = (me, 0);
+    }
+    if cx.fight.pinned.1 >= PINNED {
+        if let Some(r) = cx.fight.retreat.take() {
+            if cx.fight.walled.len() < 8 {
+                cx.fight.walled.push(iatan2(r.y.0 - me.y.0, r.x.0 - me.x.0));
+            }
+        }
+        cx.fight.pinned.1 = 0;
+    }
+    let walled = |c: Vec2| {
+        let a = iatan2(c.y.0 - me.y.0, c.x.0 - me.x.0);
+        cx.fight.walled.iter().any(|&w| a.0.wrapping_sub(w.0).min(w.0.wrapping_sub(a.0)) < WALLED_ARC)
+    };
     let keep = cx.fight.retreat.filter(|&r| {
         let (rx, ry) = r.cell();
         dist(r, me) > i64::from(CELL_FX) && dist(r, from) > dist(me, from) && walkable(v, rx, ry)
@@ -518,7 +544,7 @@ fn steer(
                     continue;
                 }
                 let c = Vec2::centre(x, y);
-                if tether.is_some_and(|(home, r)| dist(c, home) > r) {
+                if tether.is_some_and(|(home, r)| dist(c, home) > r) || walled(c) {
                     continue;
                 }
                 let mut score = dist(c, from) + openness(v, x, y) * i64::from(CELL_FX) / 4;
@@ -535,8 +561,11 @@ fn steer(
                     cx.fight.retreat = Some(r);
                     r
                 }
-                // Nowhere four out: straight away.
-                None => Vec2 { x: Fx(2 * me.x.0 - from.x.0), y: Fx(2 * me.y.0 - from.y.0) },
+                // Nowhere four out: straight away (and every way open to her again).
+                None => {
+                    cx.fight.walled.clear();
+                    Vec2 { x: Fx(2 * me.x.0 - from.x.0), y: Fx(2 * me.y.0 - from.y.0) }
+                }
             }
         }
     };

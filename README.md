@@ -10,13 +10,13 @@ This is the third build. The first (Phaser, 2026) and the second (TypeScript, Se
 
 ## Where it stands (2026-09-28)
 
-**The Rust build is the game.** It plays in a window with its whole UI, sound, three render tiers and LAN co-op; New Game to an ending is played by both bots on every seed tried (1 to 5 and 7), in 5 to 8 game hours with 7 to 33 deaths. What is left is real hardware (a Pi, an ancient PC), more player models and experience metrics, and people playing it.
+**The Rust build is the game.** It plays in a window with its whole UI, sound, three render tiers and LAN co-op; New Game to an ending is played by the Reader, the Cautious and the Rusher on every seed tried (1 to 8), in 3 to 6 hours of play. What is left is real hardware (a Pi, an ancient PC), more player models and experience metrics, and people playing it.
 
 | Phase | State |
 | --- | --- |
 | P0 to P3 | Done: the workspace, the data compile, the county and its solver, eight generated dungeons and four interiors. New Game builds all thirteen zones in about 165 ms on a desktop |
 | P4 sim | Done for the story: every verb, quest, dialogue, trigger, the journal, AI, the snake, schedules, weather, omens, the bell, the three endings; `Sim::metrics()`. A tick is 1 to 2 µs at the median |
-| P4b verification | Two player models (Reader, Rusher), dungeon tactics, act starts, `--ending hold|hill|train`; the Reader and the Rusher finish the story on seeds 1 to 5 and 7 (`the_reader_reaches_an_ending_on_seeds_1_to_5`), and every dungeon on seeds 1 to 3. Explorer, Cautious, the co-op pair, Lost and the experience metrics are not built |
+| P4b verification | Two player models (Reader, Rusher), dungeon tactics, act starts, `--ending hold|hill|train`; the Reader, the Cautious and the Rusher finish the story on seeds 1 to 8 (`the_reader_reaches_an_ending_on_seeds_1_to_8`), and every dungeon on seeds 1 to 3. Explorer, Cautious, the co-op pair, Lost and the experience metrics are not built |
 | P5 art | Every person, creature, prop, building, icon, tile and plant has a generated look, with fight and cast frames, held things, every dungeon dressed, region palettes; weather, fog, water, sky and fx. Reviewed frame by frame against `ART.md` §3.1 |
 | P6, P6b, P6c | `soft` (T0), `gl2` (T1) and `wgpu` (T2): one Frame, one shadow list, one grade; normal-mapped light, shadows that follow the hour and the weather, bloom. T2 at 4K about 3 ms a frame on an RTX 3060 |
 | P7 UI and input | Done: title, loading, HUD, dialogue, pause, saves, the four-tab window, the terminal, Controls with rebinding and a Display page of every Features row, F2 and F3. The pad is wired and untested by hand |
@@ -51,6 +51,7 @@ cargo jane view --dungeon all --seeds 1..9               # generated dungeons, a
 cargo jane view --interior all --seed 1                  # the house, cellar, Arms and church
 cargo jane gen --zones all --seeds 1..16 --hash          # every zone built and proven; one hash per (zone, seed)
 cargo jane hash --seed 7 --frames 600                    # a new game stepped, and its state hash
+cargo jane telemetry --models reader,rusher --seeds 1..3 --out progress/telemetry   # kills, blows, heals, rests, minutes, chapters, deaths as CSVs + summary.csv
 cargo jane sheet light sphere                            # art sheets: layers, light, font, chrome, palette
 cargo jane sheet ui                                      # the UI's screens headless: hud, dead, choice, tooltip, popover, drag, pause
 cargo run --release -p jane-cli --features gpu -- sheet scene --hour 22 --backend gl2   # one frame through T1 (soft, gl2 or wgpu)

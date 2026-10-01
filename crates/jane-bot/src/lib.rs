@@ -52,6 +52,7 @@ pub mod story;
 pub mod tactics;
 pub mod talk;
 pub mod task;
+pub mod telemetry;
 
 use std::fmt::Write as _;
 
