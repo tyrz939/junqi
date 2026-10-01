@@ -99,6 +99,7 @@ What to leave: jump scares, body horror, cruelty shown on screen, radio static a
 5. **Some, not most, are a little off.** One or two per street: the woman who has been waiting since Sunday, the man who likes to be early for a Tuesday that is not coming. They are never cute-random, never broken English (Rule 1), never the first thing a stranger says (Rule 0).
 6. **Say different things.** Two neighbours never share a line. A person with more than one thing to say says it over several visits (a counter flag: `talked_x` 1, 2, ...). Country trees turn over their lines the same way (`said:farmer` 0 to 4), so the next farmer she stops says the next thing a farmer would.
 7. **The heroine is `{name}`.** No "Jane" in any row, and no en or em dashes (tests enforce both in Castle's files).
+8. **A good phrase is rationed.** "All the same", "never once", "No bell last night." and the rest each have a budget across every written line (`crates/jane-data/tests/voice.rs`). Raise one only by cutting a use somewhere else.
 
 **Before and after, from the game's own lines:**
 

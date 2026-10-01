@@ -20,6 +20,7 @@ jane-schema = { workspace = true, features = ["compile"] }
 
 [dev-dependencies]
 jane-schema = { workspace = true, features = ["compile"] }
+serde_json.workspace = true
 
 [lints]
 workspace = true

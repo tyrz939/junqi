@@ -36,7 +36,7 @@
         "actions": [{ "do": "learn", "spell": "grow" }]
       },
       "spent": {
-        "lines": ["The page says the same thing. The cut edges are all the same length."]
+        "lines": ["The page says the same thing. The cut edges are all one length."]
       }
     }
   },

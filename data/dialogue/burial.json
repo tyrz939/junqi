@@ -56,7 +56,7 @@
   "board_burial_alcove": {"speaker": "THE ALCOVE", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["THE ALCOVE. On the way to THE KEEPER OF HIS SNAKES.", "Cut smaller underneath: the torches in it are lit with cold."]}}},
   "board_burial_rat": {"speaker": "THE RAT RUN", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["THE RAT RUN. Between THE ALCOVE and THE GUARD."]}}},
   "board_burial_lockin": {"speaker": "THE GUARD", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["THE GUARD. Between THE RAT RUN and THE KEEPER OF HIS SNAKES."]}}},
-  "board_burial_east": {"speaker": "THE STATUE PASSAGE", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["THE STATUE PASSAGE. Between THE HALL and the garden of HIS GARDENER.", "Cut smaller underneath: the small snakes are fed, not fought."]}}},
+  "board_burial_east": {"speaker": "THE STATUE PASSAGE", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["THE STATUE PASSAGE. Between THE HALL and the garden of HIS GARDENER.", "Cut smaller underneath: HE FED THEM FROM HIS OWN PLATE. NOBODY ELSE WAS ALLOWED TO."]}}},
   "board_burial_orchard": {"speaker": "THE ORCHARD", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["THE ORCHARD. Between the garden and the glasshouse of HIS GARDENER."]}}},
   "board_burial_vigil": {"speaker": "THE VIGIL", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["THE VIGIL. A fire is kept."]}}},
   "board_burial_web": {"speaker": "THE LINEN ROOM", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["THE LINEN ROOM. Between THE HALL and HIS HOUSEKEEPER.", "Cut smaller underneath: it has not been swept."]}}},

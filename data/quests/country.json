@@ -667,7 +667,7 @@
   "pardew_nest": {
     "name": "In the Woodpile",
     "description": "Mr Pardew, at {place:pardew}, says an owl has nested in his woodpile, and he will not burn a stick of it until he knows the nest is empty. He would like somebody with better knees to look.",
-    "completion": "No owl. In a gap between the logs, a nest of straw, and in it three buttons, a child's, all the same. Mr Pardew said owls do that, and you both let that be the answer.",
+    "completion": "No owl. In a gap between the logs, a nest of straw, and in it three buttons off a child's coat, all alike. Mr Pardew said owls do that, and you both let that be the answer.",
     "returnTo": "Mr Pardew, at {place:pardew}",
     "requirements": [
       {
@@ -849,7 +849,7 @@
   "gethin_stump": {
     "name": "Names in the Stump",
     "description": "Mr Gethin, at {place:gethin}, has an old stump in his clearing that the cutters have put their names in for a hundred years. His eyes are going. He would like the newest name read to him. Somebody cut one since Friday, and nobody has been.",
-    "completion": "The newest cut was fresh, the wood still pale: your name, and this year. Mr Gethin asked you to read it again, and then said there was nobody by that name round here.",
+    "completion": "The newest cut was fresh, the wood still pale: room squared off for a name, not yet lettered, and this year. Mr Gethin said somebody was keeping a place.",
     "returnTo": "Mr Gethin, at {place:gethin}",
     "requirements": [
       {
@@ -875,7 +875,7 @@
   "ruck_kindling": {
     "name": "Kindling",
     "description": "Mr Ruck, at {place:ruck}, has a bundle of kindling for the old lady at {place:ruck_cottage}, who has nobody to cut for her. He would like it left at her door. She will want to pay. He would like you not to let her.",
-    "completion": "She took the kindling through the door and pressed a bag of grapes on you and would not hear no. Mr Ruck said she has done that every week for thirty years, and he has never once got away.",
+    "completion": "She took the kindling through the door and pressed a bag of grapes on you and would not hear no. Mr Ruck said she has done that every week for thirty years, and nobody has got away yet.",
     "returnTo": "Mr Ruck, at {place:ruck}",
     "requirements": [
       {
