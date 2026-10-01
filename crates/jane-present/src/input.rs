@@ -577,6 +577,8 @@ impl Input {
             sprint: held(Action::Sprint),
             use_held: held(Action::Use),
             assist: self.profile(),
+            target: None,
+            free: false,
         }
     }
 

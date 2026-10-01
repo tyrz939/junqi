@@ -47,7 +47,7 @@
     "kind": "bolt", "school": "frost", "mp": 14, "energy": 0, "range": 15, "cooldown": 2,
     "gcdImmune": false, "needsTarget": false, "needsEnemy": true, "needsLos": true, "anim": "cast",
     "power": { "stat": "spirit", "div": 1.25, "varDiv": 8 }, "speed": 5, "effect": "chilled",
-    "splash": { "radius": 25, "div": 5 }, "stop": 30, "glow": 28
+    "splash": { "radius": 25, "div": 5 }, "cast": 1.0, "stop": 30, "glow": 28
   },
   "icebolt_ai": {
     "name": "Icebolt", "description": "A bolt of frost.", "icon": "spell_frost",
@@ -60,7 +60,7 @@
     "kind": "bolt", "school": "fire", "mp": 22, "energy": 0, "range": 15, "cooldown": 2,
     "gcdImmune": false, "needsTarget": false, "needsEnemy": true, "needsLos": true, "anim": "cast",
     "power": { "stat": "spirit", "div": 1, "varDiv": 2 }, "speed": 5, "effect": "burning",
-    "splash": { "radius": 25, "div": 5 }, "stop": 30, "glow": 40
+    "splash": { "radius": 25, "div": 5 }, "cast": 1.5, "stop": 30, "glow": 40
   },
   "repair": {
     "name": "Repair", "description": "Mend the broken thing in front of you. Costs what it is made of: wood, iron, gold.", "icon": "spell_repair",

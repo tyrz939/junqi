@@ -4,7 +4,7 @@
     "kind": "bolt", "school": "blast", "mp": 30, "energy": 0, "range": 8, "cooldown": 6,
     "gcdImmune": false, "needsTarget": false, "needsEnemy": true, "needsLos": true, "anim": "cast",
     "power": { "stat": "spirit", "div": 0.8, "varDiv": 2 }, "speed": 2.5,
-    "splash": { "radius": 28, "div": 1 }, "touch": 28, "stop": 30, "glow": 36
+    "splash": { "radius": 28, "div": 1 }, "touch": 28, "cast": 1.2, "stop": 30, "glow": 36
   },
   "grow": {
     "name": "Grow", "description": "Bring on the growing thing in front of you. Nothing grows without light.", "icon": "spell_grow",

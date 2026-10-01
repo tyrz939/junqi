@@ -183,7 +183,11 @@ model! {
         /// There exactly when `kind` is `World`.
         pub world: Option<WorldSpell>,
         /// How long the caster is held still after casting, `Tick` (content writes ticks; 0 when left out).
+        /// A seat's body is never held (PLAY-PLAN §2.1); only the AI reads it.
         pub stop: Tick,
+        /// How long the cast builds before it lands, `Tick` (content writes seconds; 0 when left
+        /// out: an instant). A seat's cost is paid when it lands; she walks at half speed meanwhile.
+        pub cast: Tick,
         /// Light the projectile carries, radius in `Fx` (content writes px).
         pub glow: Option<Fx>,
         /// How close to a prop's middle a bolt must end to switch on a prop that answers its

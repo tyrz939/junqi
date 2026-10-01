@@ -22,7 +22,16 @@ pub enum AssistProfile {
     Mouse,
 }
 
-/// Held input for one seat for one frame. Seven bytes on the wire ([`InputFrame::to_bytes`]).
+/// What a seat has chosen (PLAY-PLAN §2.1): a unit (a foe, a friend) or a prop (a blue torch, a
+/// cracked wall, a socket, a bud). The client holds it and carries it in every frame; the sim
+/// validates it each tick (`target.rs`): something gone, hidden or too far is no target.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub enum TargetRef {
+    Unit(UnitId),
+    Prop(PropId),
+}
+
+/// Held input for one seat for one frame. Twelve bytes on the wire ([`InputFrame::to_bytes`]).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct InputFrame {
     pub mv_dir: Angle,
@@ -33,6 +42,10 @@ pub struct InputFrame {
     pub sprint: bool,
     pub use_held: bool,
     pub assist: AssistProfile,
+    /// Her hard target as the client holds it; `None`: free aim.
+    pub target: Option<TargetRef>,
+    /// The free-aim key held (or the right stick pushed): casts go along `aim` even with a target.
+    pub free: bool,
 }
 
 impl InputFrame {
@@ -43,6 +56,8 @@ impl InputFrame {
         sprint: false,
         use_held: false,
         assist: AssistProfile::Off,
+        target: None,
+        free: false,
     };
 
     /// Walking along `dir` at full tilt.
@@ -50,22 +65,37 @@ impl InputFrame {
         InputFrame { mv_dir: dir, mv_mag: 127, ..InputFrame::IDLE }
     }
 
-    /// `[dir lo, dir hi, mag, aim lo, aim hi, flags, 0]`; flags: bit 0 sprint, 1 use, 2 aim
-    /// present, 3..=4 assist.
-    pub fn to_bytes(self) -> [u8; 7] {
+    /// `[dir lo, dir hi, mag, aim lo, aim hi, flags, id 0..=3, 0, 0]`; flags: bit 0 sprint, 1 use,
+    /// 2 aim present, 3..=4 assist, 5 free aim, 6..=7 the target's kind (0 none, 1 unit, 2 prop).
+    pub fn to_bytes(self) -> [u8; 12] {
         let aim = self.aim.unwrap_or_default().0;
+        let (kind, id) = match self.target {
+            None => (0u8, 0u32),
+            Some(TargetRef::Unit(u)) => (1, u.get()),
+            Some(TargetRef::Prop(p)) => (2, p.get()),
+        };
         let flags = u8::from(self.sprint)
             | u8::from(self.use_held) << 1
             | u8::from(self.aim.is_some()) << 2
-            | (self.assist as u8) << 3;
+            | (self.assist as u8) << 3
+            | u8::from(self.free) << 5
+            | kind << 6;
         let [d0, d1] = self.mv_dir.0.to_le_bytes();
         let [a0, a1] = aim.to_le_bytes();
-        [d0, d1, self.mv_mag.min(127), a0, a1, flags, 0]
+        let [i0, i1, i2, i3] = id.to_le_bytes();
+        [d0, d1, self.mv_mag.min(127), a0, a1, flags, i0, i1, i2, i3, 0, 0]
     }
 
-    pub fn from_bytes(b: [u8; 7]) -> InputFrame {
+    pub fn from_bytes(b: [u8; 12]) -> InputFrame {
         let flags = b[5];
+        let id = u32::from_le_bytes([b[6], b[7], b[8], b[9]]);
         InputFrame {
+            free: flags & 32 != 0,
+            target: match flags >> 6 {
+                1 => UnitId::new(id).map(TargetRef::Unit),
+                2 => PropId::new(id).map(TargetRef::Prop),
+                _ => None,
+            },
             mv_dir: Angle(u16::from_le_bytes([b[0], b[1]])),
             mv_mag: b[2].min(127),
             aim: (flags & 4 != 0).then_some(Angle(u16::from_le_bytes([b[3], b[4]]))),
@@ -206,6 +236,23 @@ pub enum Command {
     /// Set a side quest aside (`quests::abandon`): any seat may, for the whole party, as any
     /// seat may take one; the main line refuses. Last, so older tapes keep their variant numbers.
     Abandon(QuestId),
+    /// Click to move (PLAY-PLAN §2.1): walk there on a path through what she has seen and do
+    /// what the place asks (`walk.rs`). Any held move cancels it.
+    Goto(Goto),
+    /// Esc: stop swinging, walking and casting (an unfinished cast costs nothing).
+    Halt,
+}
+
+/// Where a right-click sends her.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Goto {
+    /// Open ground: walk there.
+    Ground(jane_core::Vec2),
+    /// A foe: into reach, then swing (a caster already in range of it only targets it). A
+    /// friend or a person: over to her, then talk.
+    Unit(UnitId),
+    /// A door, a fire, a chest, anything used: over to it, then use it.
+    Prop(PropId),
 }
 
 /// A bar slot as a command carries it (the catalog's `BarSlot` has no serde).
@@ -262,7 +309,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_frame_is_seven_bytes_and_round_trips() {
+    fn a_frame_is_twelve_bytes_and_round_trips() {
         let f = InputFrame {
             mv_dir: Angle(40_000),
             mv_mag: 99,
@@ -270,10 +317,14 @@ mod tests {
             sprint: true,
             use_held: false,
             assist: AssistProfile::Mouse,
+            target: PropId::new(70_000).map(TargetRef::Prop),
+            free: true,
         };
         assert_eq!(InputFrame::from_bytes(f.to_bytes()), f);
         assert_eq!(InputFrame::from_bytes(InputFrame::IDLE.to_bytes()), InputFrame::IDLE);
+        let u = InputFrame { target: UnitId::new(3).map(TargetRef::Unit), ..InputFrame::IDLE };
+        assert_eq!(InputFrame::from_bytes(u.to_bytes()), u);
         let wire = postcard::to_allocvec(&f).unwrap();
-        assert!(wire.len() <= 11, "{}", wire.len());
+        assert!(wire.len() <= 16, "{}", wire.len());
     }
 }

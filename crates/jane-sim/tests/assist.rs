@@ -240,14 +240,14 @@ fn assist_replays_exactly() {
     };
     let mut rng = Sfc32::seeded(77, 1);
     let mut a = setup();
-    let mut tape: Vec<([u8; 7], Option<Command>)> = Vec::new();
+    let mut tape: Vec<([u8; 12], Option<Command>)> = Vec::new();
     let mut bent = [0u32; 3];
     let mut casts = [0u32; 3];
     for f in 0..3000u32 {
         let p = [AssistProfile::Off, AssistProfile::Pad, AssistProfile::Mouse][(f / 200 % 3) as usize];
         let raw = Angle::EAST.wrapping_add(rng.range(-5000, 5000));
         let fr =
-            InputFrame { mv_dir: Angle::SOUTH, mv_mag: 0, aim: Some(raw), sprint: false, use_held: false, assist: p };
+            InputFrame { mv_dir: Angle::SOUTH, mv_mag: 0, aim: Some(raw), sprint: false, use_held: false, assist: p, ..InputFrame::IDLE };
         let c = match rng.below(12) {
             0 => Some(Command::Cast { spell: spell("icebolt"), on: None }),
             1 => Some(Command::Cast { spell: spell("spark"), on: None }),

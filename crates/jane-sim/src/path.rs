@@ -93,6 +93,22 @@ impl PathScratch {
         shunning: bool,
         mut shun: impl FnMut(i32, i32) -> bool,
     ) -> Option<PathEnd> {
+        self.find_weighted(grid, ask, shunning, |x, y| if shunning && shun(x, y) { None } else { Some(0) })
+    }
+
+    /// The general search: `extra` says what entering a cell costs beyond its step (tenths of a
+    /// cell), or `None` to never enter it (the goal included). With `partial`, a goal it cannot
+    /// reach returns the path to the nearest cell it can (possibly empty), as for a shunner; a
+    /// click-walk asks this way through the cells she has seen, preferring roads and light
+    /// (`walk.rs`). Extra costs are never negative, so the octile estimate stays admissible.
+    pub fn find_weighted(
+        &mut self,
+        grid: &ZoneGrid,
+        ask: PathAsk,
+        partial: bool,
+        mut extra: impl FnMut(i32, i32) -> Option<u32>,
+    ) -> Option<PathEnd> {
+        let shunning = partial;
         self.stats.searches += 1;
         self.out.clear();
         let (sx, sy) = ask.start;
@@ -134,16 +150,14 @@ impl PathScratch {
                     return None;
                 }
             }
-            if shunning && shun(cx, cy) {
-                return None;
-            }
+            let more = extra(cx, cy)?;
             if cx != nx && cy != ny {
                 if grid.flags_at(cx, ny) & BLOCK_MOVE != 0 || grid.flags_at(nx, cy) & BLOCK_MOVE != 0 {
                     return None;
                 }
-                return Some(DIAGONAL);
+                return Some(DIAGONAL + more);
             }
-            Some(STRAIGHT)
+            Some(STRAIGHT + more)
         };
         let end = self.astar.find(&q, step, octile_to(ask.goal), &mut self.out);
         self.stats.expanded += self.astar.expanded - before;

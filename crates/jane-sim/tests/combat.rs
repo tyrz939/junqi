@@ -715,6 +715,7 @@ impl FightTape {
                     sprint: self.rng.below(4) == 0,
                     use_held: false,
                     assist,
+                    ..InputFrame::IDLE
                 };
             }
         }

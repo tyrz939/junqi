@@ -148,6 +148,8 @@ struct RawSpell {
     world: Option<WorldSpell>,
     /// Ticks, as written.
     stop: Option<u32>,
+    /// Seconds.
+    cast: Option<Num>,
     glow: Option<Num>,
     touch: Option<Num>,
 }
@@ -268,6 +270,7 @@ fn spell(cx: &mut Ctx, at: &str, id: &str, r: &RawSpell) -> SpellDef {
         ground,
         world: r.world,
         stop: Tick(r.stop.unwrap_or(0)),
+        cast: r.cast.map_or(Tick(0), |c| conv(cx, at, "cast", c.ticks())),
         glow: r.glow.map(|g| conv(cx, at, "glow", g.fx_px())),
         touch,
     }
@@ -952,7 +955,7 @@ mod tests {
         "needsEnemy": true, "needsLos": true, "anim": "cast",
         "power": {"stat": "spirit", "div": 1.25, "varDiv": 32, "flat": 2},
         "speed": 2.5, "count": 15, "fan": 360, "splash": {"radius": 25, "div": 5}, "effect": "chill",
-        "glow": 20, "touch": 28, "stop": 24},
+        "glow": 20, "touch": 28, "stop": 24, "cast": 1.25},
       "pool": {"name": "Pool", "description": "d", "icon": "spell_nature", "kind": "ground", "school": "nature",
         "mp": 0, "energy": 0, "range": 10, "cooldown": 6, "gcdImmune": false, "needsTarget": false,
         "needsEnemy": false, "needsLos": false, "anim": "cast", "radius": 1.5, "duration": 2.5},
@@ -1062,6 +1065,7 @@ mod tests {
         assert_eq!(bolt.glow, Some(Fx(20 * 256)));
         assert_eq!(bolt.touch, Some(Fx(28 * 256)));
         assert_eq!(bolt.stop, Tick(24), "stop is written in ticks");
+        assert_eq!(bolt.cast, Tick(75), "a cast is written in seconds");
         assert_eq!(bolt.power, Some(SpellPower { stat: Stat::Spirit, div: 1250, var_div: 32000, flat: Milli(2000) }));
         assert_eq!((bolt.ground, bolt.world), (None, None));
 
@@ -1078,6 +1082,8 @@ mod tests {
         assert_eq!(swing.range, Fx(512), "a quarter metre");
         assert_eq!(swing.restore_energy, Milli(3000));
         assert_eq!(swing.stop, Tick(0));
+        assert_eq!(swing.cast, Tick(0), "no cast is an instant");
+        assert_eq!(swing.cast, Tick(0), "no cast is an instant");
         assert_eq!(swing.power.map(|p| p.flat), Some(Milli(0)));
     }
 

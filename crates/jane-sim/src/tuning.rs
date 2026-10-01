@@ -259,3 +259,32 @@ pub const WATCH_Y_FX: i32 = 80 * FX_ONE;
 /// A unit shown again where something solid now stands comes back on the nearest free cell
 /// within this many.
 pub const PRESENCE_NUDGE_RADIUS: i32 = 6;
+
+// --- the player's side of a fight (PLAY-PLAN §2.1: `target.rs`, `cast.rs`, `walk.rs`) ---------
+
+/// A seat's global cooldown: 1 s. The AI keeps [`GCD`]; a swing is off both.
+pub const PLAYER_GCD: Tick = Tick(60);
+/// A press this close to her being free (her cast landing, her GCD ending) waits for it: 200 ms.
+pub const QUEUE_TICKS: u32 = 12;
+/// A hard target farther than this from her (centre to centre) is let go: about two screens.
+pub const TARGET_KEEP_FX: i64 = 48 * CELL_FX as i64;
+/// How far Tab (RB, LB) looks for foes, and the soft target on an attack with none.
+pub const TAB_REACH_FX: i64 = 24 * CELL_FX as i64;
+/// "In front": within this of her facing, either side.
+pub const FRONT_HALF: i32 = Angle::from_degrees(90).0 as i32;
+/// A bolt cast at a unit turns toward it at most this far a tick.
+pub const SEEK_TURN: i32 = Angle::from_degrees(6).0 as i32;
+/// A click-walk plans at most this far at once, in cells; a longer walk plans again at the end.
+pub const WALK_PATH_CELLS: u32 = 160;
+/// A click-walk gives up after this long: 30 s.
+pub const WALK_GIVE_UP: Tick = Tick(30 * TICK_RATE);
+/// A click-walk's extra cost (tenths of a cell) for a cell off a made way, and for a dark one:
+/// it prefers roads and lit ground, never at more than a short detour.
+pub const WALK_OFF_ROAD: u32 = 4;
+pub const WALK_DARK: u32 = 3;
+/// Ticks without moving that end a click-walk: she has got as near as she can.
+pub const WALK_STUCK: u8 = 20;
+/// Within this of a clicked point she has arrived.
+pub const WALK_ARRIVED_FX: i64 = CELL_FX as i64 / 2;
+/// A walk into reach of a foe stops this far inside it, so its next step does not drop the swing.
+pub const WALK_REACH_SLACK_FX: i64 = FX_ONE as i64 * 2;

@@ -38,7 +38,7 @@ use crate::state::{GameState, Ground, Projectile, Unit};
 use crate::status::{apply_effect, is_stunned, offence};
 use crate::tuning::{
     ALLY_AIM_SLACK_FX, BOLT_START_FX, CRIT_ONE_IN, DEV_KILL_HIT, DEV_KILL_REACH_FX, DEV_SPAWN_OFFSET, DEV_SPAWN_RADIUS,
-    GCD, MELEE_BEHIND_FX, SNAKE_HITBOX_EVERY, px,
+    GCD, MELEE_BEHIND_FX, PLAYER_GCD, SNAKE_HITBOX_EVERY, px,
 };
 use crate::units::{def_of, face_angle, face_vector, facing_angle, new_unit, restore_energy};
 
@@ -181,6 +181,38 @@ pub fn try_cast_with(
     aim: Option<Angle>,
     on: Option<UnitId>,
 ) -> Result<(), SpellError> {
+    let checked = check_cast(cx, caster, id, spell, aim, on)?;
+    land_checked(cx, caster, id, spell, aim, checked, Landing::default())
+}
+
+/// What [`check_cast`] resolved: the unit it is cast at, and a friendly spell's friend.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Checked {
+    pub target: Option<UnitId>,
+    pub friend: Option<UnitId>,
+}
+
+/// How a checked cast lands (`cast.rs` sets these for a seat's cast).
+#[derive(Clone, Copy, Debug, Default)]
+pub struct Landing {
+    /// A bolt seeks this.
+    pub seek: crate::state::Seek,
+    /// A world verb lands on this prop, not on whatever is nearest.
+    pub prop: Option<crate::ids::PropIx>,
+    /// The global cooldown began with the cast; landing does not start it again.
+    pub gcd_started: bool,
+}
+
+/// Step 1 of the pipeline alone: everything [`try_cast_with`] checks, in its order, and nothing
+/// spawned or paid. A seat's cast with a cast time checks here when it begins.
+pub fn check_cast(
+    cx: &mut Ctx<'_>,
+    caster: UnitId,
+    id: SpellId,
+    spell: &SpellDef,
+    aim: Option<Angle>,
+    on: Option<UnitId>,
+) -> Result<Checked, SpellError> {
     let now = cx.world.tick;
     let Some(cix) = cx.zone.unit_ix(caster) else { return Err(SpellError::CastUnsuccessful) };
     crate::life::pay_regen(&mut cx.zone.units[cix], now);
@@ -222,9 +254,28 @@ pub fn try_cast_with(
     if c.energy < spell.energy {
         return Err(SpellError::NotEnoughEnergy);
     }
+    if aim.is_some() {
+        target = None;
+    }
+    Ok(Checked { target, friend })
+}
+
+/// Steps 2 and 3 for a cast [`check_cast`] passed: spawn its kind, then pay. A seat's body is
+/// never rooted after (PLAY-PLAN §2.1) and its GCD is [`PLAYER_GCD`]; the AI's are as before.
+pub fn land_checked(
+    cx: &mut Ctx<'_>,
+    caster: UnitId,
+    id: SpellId,
+    spell: &SpellDef,
+    aim: Option<Angle>,
+    checked: Checked,
+    landing: Landing,
+) -> Result<(), SpellError> {
+    let now = cx.world.tick;
+    let Some(cix) = cx.zone.unit_ix(caster) else { return Err(SpellError::CastUnsuccessful) };
+    let Checked { target, friend } = checked;
     if let Some(a) = aim {
         face_angle(&mut cx.zone.units[cix], a);
-        target = None;
     }
 
     let valid = match spell.kind {
@@ -233,7 +284,7 @@ pub fn try_cast_with(
             true
         }
         SpellKind::Bolt => {
-            cast_bolt(cx, caster, id, spell, target, aim);
+            cast_bolt(cx, caster, id, spell, target, aim, landing.seek);
             true
         }
         SpellKind::OnSelf => {
@@ -257,7 +308,13 @@ pub fn try_cast_with(
             cast_ground(cx, caster, id, spell, target);
             true
         }
-        SpellKind::World => crate::hooks::world_verb(cx, caster, spell.world.unwrap_or(WorldSpell::Repair)),
+        SpellKind::World => {
+            let verb = spell.world.unwrap_or(WorldSpell::Repair);
+            match landing.prop {
+                Some(ix) => crate::hooks::world_verb_at(cx, caster, verb, ix),
+                None => crate::hooks::world_verb(cx, caster, verb),
+            }
+        }
     };
     if !valid {
         return Err(SpellError::CastUnsuccessful);
@@ -266,16 +323,19 @@ pub fn try_cast_with(
     // Pay.
     let tpos = target.and_then(|t| cx.zone.unit(t)).map(|t| t.pos);
     let u = &mut cx.zone.units[cix];
+    let seat_body = u.controller == Controller::Player;
     u.mp -= spell.mp;
     u.energy -= spell.energy;
     if spell.cooldown.0 > 0 {
         u.cooldowns.retain(|&(s, until)| s != id && until > now);
         u.cooldowns.push((id, now.after(spell.cooldown)));
     }
-    if !spell.gcd_immune {
-        u.gcd_until = now.after(GCD);
+    if !spell.gcd_immune && !landing.gcd_started {
+        u.gcd_until = now.after(if seat_body { PLAYER_GCD } else { GCD });
     }
-    u.stop_until = u.stop_until.max(now.after(spell.stop));
+    if !seat_body {
+        u.stop_until = u.stop_until.max(now.after(spell.stop));
+    }
     if let Some(t) = tpos {
         face_vector(u, i64::from(t.x.0 - u.pos.x.0), i64::from(t.y.0 - u.pos.y.0));
     }
@@ -455,9 +515,10 @@ impl Caster {
     }
 }
 
-/// Bolts fly straight from the caster: along the aim, else at the target, else along her facing.
-/// A fan is random inside its arc (2020's cactus); a ring (`fan` 360) is evenly spaced with the
-/// first bolt on the line. Each bolt rolls its own blow now.
+/// Bolts fly from the caster: along the aim, else at the target, else along her facing; one cast
+/// at a seat's target seeks it (`seek`, `flight.rs`). A fan is random inside its arc (2020's
+/// cactus); a ring (`fan` 360) is evenly spaced with the first bolt on the line. Each bolt rolls
+/// its own blow now.
 fn cast_bolt(
     cx: &mut Ctx<'_>,
     caster: UnitId,
@@ -465,6 +526,7 @@ fn cast_bolt(
     spell: &SpellDef,
     target: Option<UnitId>,
     aim: Option<Angle>,
+    seek: crate::state::Seek,
 ) {
     let c = Caster::of(cx.zone.unit(caster).expect("caster"));
     let dir = match (aim, target.and_then(|t| cx.zone.unit(t))) {
@@ -507,6 +569,7 @@ fn cast_bolt(
             born: now,
             hit: hit.amount,
             crit: hit.crit,
+            seek,
         });
     }
 }
@@ -535,7 +598,8 @@ fn cast_ground(cx: &mut Ctx<'_>, caster: UnitId, id: SpellId, spell: &SpellDef, 
 // --- the seat's side: commands, verbs, the console -------------------------------------------
 
 /// `Command::Cast` and a bar slot's spell (`sim.ts playerCast`): not while reading, only a
-/// spell she knows, along the frame's aim resolved by assist (§5.4). A failure says why to her.
+/// spell she knows; at her target, or along the frame's aim resolved by assist (§5.4), with its
+/// cast time, queue and walk to range (`cast.rs`). A failure says why to her.
 pub fn player_cast(cx: &mut Ctx<'_>, seat: Seat, spell: SpellId, on: Option<UnitId>, frame: InputFrame) {
     let Some(p) = cx.world.player(seat) else { return };
     if p.dialogue.is_some() {
@@ -546,12 +610,14 @@ pub fn player_cast(cx: &mut Ctx<'_>, seat: Seat, spell: SpellId, on: Option<Unit
     if !book_has(u, &cx.world.growth.spells, spell) {
         return;
     }
-    let aim = frame.aim.map(|raw| crate::assist::assisted_aim(cx, seat, spell, raw, frame.assist));
-    if let Err(why) = try_cast(cx, body, spell, aim, on) {
-        cx.emit(EventKind::CastFailed { unit: body, spell, why });
-        if why.says() {
-            cx.emit(EventKind::Toast(ToastKind::SpellError(why)));
-        }
+    crate::cast::press(cx, seat, spell, on, frame);
+}
+
+/// Say a seat's failed cast to her.
+pub fn say_failed(cx: &mut Ctx<'_>, body: UnitId, spell: SpellId, why: SpellError) {
+    cx.emit(EventKind::CastFailed { unit: body, spell, why });
+    if why.says() {
+        cx.emit(EventKind::Toast(ToastKind::SpellError(why)));
     }
 }
 

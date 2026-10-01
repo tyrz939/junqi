@@ -330,7 +330,13 @@ pub fn use_(cx: &mut Ctx<'_>) {
         focus_of(&h, &cx.zone.units[ix], &mut cx.scratch.units, &mut cx.scratch.props_b)
     };
     let Some(f) = f else { return };
-    match f.target {
+    use_ref(cx, seat, body, f.target);
+}
+
+/// Use one thing for the actor (`Use` on her focus; a click-walk at its end, `walk.rs`): take a
+/// drop, talk to a person, use a prop.
+pub fn use_ref(cx: &mut Ctx<'_>, seat: Seat, body: UnitId, target: FocusRef) {
+    match target {
         FocusRef::Drop(d) => {
             inventory::pick_up(cx, seat, d);
         }
@@ -750,6 +756,27 @@ pub fn world_spell_target(cx: &mut Ctx<'_>, caster: UnitId, verb: WorldSpell) ->
         best = Some(ix);
     }
     (best, shaded)
+}
+
+/// Does prop `ix` answer `verb` now: shown, not yet used, the verb its own and, for Grow, in the
+/// sky's light? `Err(true)` when only the dark stops it. A targeted verb asks this (`cast.rs`).
+pub fn world_spell_fits(cx: &Ctx<'_>, ix: PropIx, verb: WorldSpell) -> Result<(), bool> {
+    let Some(p) = cx.zone.props.get(ix as usize) else { return Err(false) };
+    let def = cx.cat.story.prop(p.def);
+    if p.hidden || p.used || !answers_verb(def.answers, verb) {
+        return Err(false);
+    }
+    if verb == WorldSpell::Grow && !grows_at(cx.zone, cx.rt, cx.world.clock, prop_centre(def, p)) {
+        return Err(true);
+    }
+    Ok(())
+}
+
+/// Is prop `ix` within a world verb's reach of `at`?
+pub fn in_verb_reach(zone: &ZoneState, ix: PropIx, at: Vec2) -> bool {
+    zone.props.get(ix as usize).is_some_and(|p| {
+        prop_distance_sq(jane_data::catalog().story.prop(p.def), p, at) <= sq(WORLD_SPELL_REACH_FX)
+    })
 }
 
 /// Repair or Grow landing on prop `ix` for the caster: pays its `needs` from the caster's bag

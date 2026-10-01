@@ -217,6 +217,18 @@ pub enum EventKind {
         spell: SpellId,
         why: SpellError,
     },
+    /// A seat began a cast with a cast time; it lands at `done` (a `Cast`) unless stopped.
+    CastBegin {
+        unit: UnitId,
+        spell: SpellId,
+        done: jane_core::Tick,
+    },
+    /// A cast that was building stopped without landing (a stun, a heavy blow, Esc, its target
+    /// gone): nothing was spent.
+    CastStopped {
+        unit: UnitId,
+        spell: SpellId,
+    },
     /// A spell landed: a melee blow, or a bolt at its end.
     Impact {
         spell: SpellId,
