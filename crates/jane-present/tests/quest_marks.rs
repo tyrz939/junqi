@@ -77,3 +77,21 @@ fn each_seat_sees_its_own_and_none_over_whom_she_is_talking_to() {
     assert!(over(&marks(&sim, &mut p0, 0)).is_none());
     assert!(over(&marks(&sim, &mut p1, 1)).is_none());
 }
+
+#[test]
+fn a_book_that_gives_a_quest_wears_the_mark_and_loses_it_while_she_reads() {
+    let mut sim = Sim::new_game(1, "Jane");
+    let key = sim.state().syms.find("lost_property_book").expect("the lost-property book");
+    let county = sim.state().zone(jane_core::ZoneId::County).unwrap();
+    let book = county.props.iter().find(|p| p.key == key).unwrap().clone();
+    stand(&mut sim, 0, i32::from(book.cell.x) + 3, i32::from(book.cell.y) + 2);
+    step(&mut sim, &[]);
+    let mut p = Present::new(Tier::T0);
+    p.set_canvas(CANVAS);
+    let id = jane_present::present::PROP_MARK_KEY | book.id.get();
+    let over = |m: &[(u32, QuestMark, (i32, i32))]| m.iter().find(|e| e.0 == id).map(|e| e.1);
+    assert_eq!(over(&marks(&sim, &mut p, 0)), Some(QuestMark::Offer), "a \"!\" over the book");
+    sim.state_mut().players[0].dialogue =
+        Some(Dialogue { tree: None, node: 0, line: 0, speaker: Speaker::Prop(book.id), read: None });
+    assert_eq!(over(&marks(&sim, &mut p, 0)), None, "none over what she is reading");
+}

@@ -7,7 +7,7 @@
 //! in the content, from New Game, each place that gives it is found in the dialogue (a start row,
 //! the nodes it reaches, the list with the `quest` verb); the row's conditions are made to hold
 //! (quests it needs done are done, one it hands in is made ready, flags and the hour set, things
-//! held) until its giver would offer it, as the "?" over him is asked; then it is taken by that
+//! held) until its giver would offer it, as the "!" over him is asked; then it is taken by that
 //! very list (the giver's `give`s and flags with it), set aside at once, and must be offered
 //! again; then taken again, every step made good, set aside once more, and offered again. A quest
 //! whose giver cannot be brought to offer it at all is a failure too, so nothing escapes the

@@ -1,6 +1,7 @@
-//! The quest marks over heads (PRESENTATION.md §3.8): the one marker the world has, and only on
-//! people. A small gold glyph in the stroke font over whoever has a quest to give her, and over
-//! whoever takes one back once it is ready; a gentle bob; a soft glow round it after dark.
+//! The quest marks over heads (PRESENTATION.md §3.8): the one marker the world has. A small gold
+//! glyph in the stroke font over whoever (or whatever: a book, a board, a door) has a quest to
+//! give her, and over whoever takes one back once it is ready; a gentle bob; a soft glow round
+//! it after dark.
 //!
 //! Which mark is the sim's word (`View::quest_mark`, per seat), gathered by the presenter with
 //! where each head is ([`Present::marks`](crate::Present::marks)): so each machine at a table
@@ -15,12 +16,11 @@ use crate::ui::cmd::Rect;
 use crate::ui::core::{Ink, Ui, advance, line_h};
 use crate::ui::style::{self, argb};
 
-/// The glyph over someone with a quest to give her. The owner's choice (2026-10-01): the
-/// question is theirs to ask. WoW has it the other way round (`!` to take a quest, `?` to hand
-/// one in): swap these two to flip it.
-pub const OFFER_GLYPH: &str = "?";
+/// The glyph over someone with a quest to give her: WoW's way round, which players already read
+/// (PLAY-PLAN.md D10): a "!" offers, a "?" takes back.
+pub const OFFER_GLYPH: &str = "!";
 /// The glyph over someone a ready quest goes back to.
-pub const HAND_IN_GLYPH: &str = "!";
+pub const HAND_IN_GLYPH: &str = "?";
 
 /// Ticks for one bob, up and down, and how many rows it rises.
 pub const BOB_TICKS: u32 = 72;
@@ -86,9 +86,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_owner_s_way_round_and_one_constant_flips_it() {
-        assert_eq!(glyph(QuestMark::Offer), "?");
-        assert_eq!(glyph(QuestMark::HandIn), "!");
+    fn wow_s_way_round_an_exclamation_offers_and_a_question_takes_back() {
+        assert_eq!(glyph(QuestMark::Offer), "!");
+        assert_eq!(glyph(QuestMark::HandIn), "?");
     }
 
     #[test]

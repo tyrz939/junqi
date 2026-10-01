@@ -639,8 +639,66 @@ impl View<'_> {
         self.zone.units.iter().filter(|u| u.awake).filter_map(|u| self.quest_mark(u).map(|m| (u.id, m)))
     }
 
+    /// The mark over a thing that gives quests by its words (the lost-property book, the parish
+    /// board, a farmhouse door), asked as [`quest_mark`](Self::quest_mark) asks a person: what
+    /// using it now would open on, with the prop as the speaker. `None` for one hidden, or one a
+    /// use would not read (locked, a way through, still holding something to take, a thing to
+    /// carry or a cupboard: `interact::use_prop` does those first).
+    pub fn prop_quest_mark(&self, p: &Prop) -> Option<QuestMark> {
+        if p.hidden || p.locked {
+            return None;
+        }
+        let cat = jane_data::catalog();
+        let spawn = spawn_of(self.bp, p)?;
+        let d = cat.story.prop(p.def);
+        if spawn.to.is_some() || d.carry || d.store || crate::interact::has_loot(self.bp, p) {
+            return None;
+        }
+        let tree = spawn.talk?;
+        let ask = crate::actions::Ask {
+            cat,
+            world: self.state,
+            zone: self.zone,
+            rt: self.rt,
+            bp: self.bp,
+            actor: Some(self.seat),
+            speaker: Speaker::Prop(p.id),
+        };
+        let mut found = (false, false);
+        self.mark_tree(&ask, tree, 0, None, &mut found);
+        match found {
+            (_, true) => Some(QuestMark::HandIn),
+            (true, false) => Some(QuestMark::Offer),
+            _ => None,
+        }
+    }
+
+    /// Every thing of her zone with a mark for this seat, in its order.
+    pub fn prop_quest_marks(&self) -> impl Iterator<Item = (crate::ids::PropId, QuestMark)> + '_ {
+        self.props().filter_map(|p| self.prop_quest_mark(p).map(|m| (p.id, m)))
+    }
+
+    /// The cell under every "!" of her zone for this seat, people (near her or not) and things
+    /// alike: how crowded the offers stand (PLAY-PLAN.md 0.4, at most three in a place).
+    pub fn offer_cells(&self) -> Vec<(i32, i32)> {
+        let people = self.zone.units.iter().filter(|u| self.quest_mark(u) == Some(QuestMark::Offer));
+        let things = self.props().filter(|p| self.prop_quest_mark(p) == Some(QuestMark::Offer));
+        people.map(|u| u.pos.cell()).chain(things.map(|p| (i32::from(p.cell.x), i32::from(p.cell.y)))).collect()
+    }
+
+    /// The most "!" within `cells` of any one of them (it counted too), and theirs: the crowd a
+    /// place shows her at once (PLAY-PLAN.md 0.4).
+    pub fn offer_crowd(&self, cells: i32) -> Vec<(i32, i32)> {
+        let all = self.offer_cells();
+        let near = |a: (i32, i32)| -> Vec<(i32, i32)> {
+            let r2 = i64::from(cells) * i64::from(cells);
+            all.iter().copied().filter(|b| i64::from(a.0 - b.0).pow(2) + i64::from(a.1 - b.1).pow(2) <= r2).collect()
+        };
+        all.iter().map(|&c| near(c)).max_by_key(Vec::len).unwrap_or_default()
+    }
+
     /// Whether talking to `speaker` (someone or something of her zone talking as `tree`) now
-    /// would reach a `quest` verb giving `q`, asked as the marks ask it: the "?" for one quest,
+    /// would reach a `quest` verb giving `q`, asked as the marks ask it: the "!" for one quest,
     /// which the abandon proofs read (`quests::abandon`: set aside, it is offered again).
     pub fn would_offer(&self, tree: DialogueId, speaker: Speaker, q: QuestId) -> bool {
         let ask = crate::actions::Ask {
