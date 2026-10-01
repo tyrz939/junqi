@@ -69,6 +69,23 @@ The research found that Jane has **no cast times today**. Her "WoW feel" is a 1.
 - **Soft target:** attacking with no target picks the nearest hostile in front of her (WoW's auto-target on attack).
 - **Lockstep:** the target is a unit or prop id in the input frame, validated in the sim like everything else.
 
+**Click to move (owner, 2026-10-02), alongside WASD, not instead of it.** On mouse:
+
+| Input | What she does |
+| --- | --- |
+| Left-click a foe or prop | **Targets it without moving**, so a caster can target and cast from range |
+| Right-click ground | Walks there, pathing around fences, props and water |
+| Right-click a foe | Walks into her *attack range* and starts auto-attacking. A melee build closes to reach; at range, a caster's right-click only targets |
+| Right-click a person, door, fire or chest | Walks over and uses it |
+| A spell key with the target out of range | Walks to the edge of range, then casts (League of Legends' rule) |
+| Any WASD key | Cancels the walk and gives direct control back. The pad keeps the stick |
+
+The pathing has four rules:
+- **It never cheats the fog.** Paths route only through cells she has seen; into unseen ground she walks straight and stops at the first obstacle.
+- **It never pushes puzzle props.** Click-walking routes around pushables; pushing stays a deliberate WASD move.
+- **It prefers roads and lit ground**, and a hit stops the walk.
+- **It is lockstep-cheap.** A click sends one destination, and every peer computes the same path with the sim's existing deterministic pathfinding (capped length).
+
 **Melee auto-attacks.** Right-clicking a foe, or attacking with a hostile target in reach, starts her stick swinging on its swing timer, as in WoW.
 - She turns to face her target, and moving does not stop the swings.
 - Swings stop when the target dies or leaves reach, or while she casts; they resume after.
@@ -209,6 +226,7 @@ The audit's "teeth in the first hour" (Iron Knuckles at 4 actions) waits for the
 
 - **Targeting:** hard targets on foes and props; Tab, RB and LB cycle; click to target; a soft target on attack; bolts that curve onto their target; free aim kept.
 - **Melee:** auto-attack with an energy refund.
+- **Click to move:** right-click to walk, attack or use; walk to range on an out-of-range cast; WASD cancels (§2.1).
 - **Casts:** cast times per §2.1, a GCD of 1.0 s, no post-cast root, half-speed walking while casting, and the 200 ms queue. The cast feel: a glow, a tone, a bar and the release.
 - **Enemies:** a `windup` on every enemy blow, plus D at the LAN table.
 - **The hop.**
@@ -326,6 +344,7 @@ Everything below is **decided as recommended**, with three of the owner's own ch
 | D1 | Cast weight | **§2.1**: Icebolt 1.0 s, Fireball 1.5 s, Explosion 1.2 s, Spark instant, Mend 1.5 s, verbs at props instant, GCD 1.0 s |
 | D15 | Targeting | **Hybrid**: click, Tab or RB/LB targets a foe or a prop; targeted bolts curve onto it; free aim with no target, on a held key or the pushed right stick, and for ground spells |
 | D16 | Melee | **Auto-attack** on a hostile target in reach; swings refund energy |
+| D17 | Click to move | **Yes, beside WASD**: right-click to walk, attack or use; left-click targets without moving; a spell out of range walks her to range; paths never cheat the fog or push puzzle props |
 | D2 | Hop binding: Space (bar slot 1 moves to 1 and left click) or sprint plus a tapped direction | **Space** on keys, LT on pad |
 | D3 | Levels give points only, not stats | **Yes**; finds stay power |
 | D4 | Eight Crafts, at most three per witch, capstone 12, far shelf 16, cap 25 | **Yes** |
