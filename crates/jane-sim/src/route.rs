@@ -399,8 +399,8 @@ impl Route {
         for l in self.legs.iter().take(2) {
             bits.push(match l {
                 Leg::InTown { dir, .. } => format!("in Castle, {dir} of the square"),
-                Leg::Out { dir, .. } => format!("{dir} out of Castle"),
-                Leg::Post { dir, .. } => format!("{dir} at the fingerpost"),
+                Leg::Out { dir, .. } => format!("{dir} from Castle"),
+                Leg::Post { dir, .. } => format!("{dir} at the post"),
                 Leg::Off { .. } => "off the road".to_owned(),
             });
         }

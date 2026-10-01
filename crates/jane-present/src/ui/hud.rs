@@ -228,7 +228,7 @@ pub struct TrackerBand {
     pub rect: Rect,
     pub title: String,
     pub steps: Vec<String>,
-    /// The way and the bearing (`QuestLine::way`, `bearing`), a line each at most.
+    /// The way and the bearing (`QuestLine::way`, `bearing`), two lines each at most.
     pub way: Vec<String>,
     pub ready: bool,
     pub main: bool,
@@ -259,11 +259,8 @@ pub fn tracker_layout(lines: &[QuestLine], canvas: (i32, i32)) -> TrackerLayout 
     for (n, q) in lines.iter().enumerate() {
         let title = wrapped(&q.title, ((w - 22) / fw).max(8) as usize, 1).pop().unwrap_or_default();
         let steps = wrapped(&q.step, cols, TRACKER_STEP_LINES);
-        let mut way: Vec<String> = [&q.way, &q.bearing]
-            .into_iter()
-            .filter(|s| !s.is_empty())
-            .filter_map(|s| wrapped(s, cols, 1).pop())
-            .collect();
+        let mut way: Vec<String> =
+            [&q.way, &q.bearing].into_iter().filter(|s| !s.is_empty()).flat_map(|s| wrapped(s, cols, 2)).collect();
         // Room for this band, and for the "more" line if any come after it; on a short canvas
         // the way gives up its lines before the quest gives up its band.
         let after = if n + 1 < lines.len() { lh + 2 } else { 0 };
@@ -673,9 +670,9 @@ mod tests {
                 );
                 assert!(r.bottom() <= canvas.1 - TRACKER_FOOT, "{canvas:?}: {r:?} clear of the save card and toasts");
                 assert!(b.steps.len() <= TRACKER_STEP_LINES);
-                assert!(b.way.len() <= 2, "{canvas:?}: the way and the bearing, a line each at most");
+                assert!(b.way.len() <= 4, "{canvas:?}: the way and the bearing, two lines each at most");
                 if canvas.1 == 432 {
-                    assert_eq!(lay.bands[0].way.len(), 2, "{canvas:?}: the first band has room for both");
+                    assert!(lay.bands[0].way.len() >= 3, "{canvas:?}: the first band has room for both");
                 }
                 for s in b.steps.iter().chain(&b.way).chain(std::iter::once(&b.title)) {
                     assert!(14 + s.chars().count() as i32 * fw <= i32::from(r.w), "{canvas:?}: {s:?} fits its band");
