@@ -353,8 +353,13 @@ fn signs_read(sk: &Skeleton, c: &County<'_>, first_prop: usize, s: &mut Survey) 
     for p in bp.props[first_prop..].iter().filter(|p| matches!(p.key, Key::Local(_))) {
         if c.k.local_name(p.key).is_some_and(|n| n.starts_with("story_post_")) {
             let text = words(bp, p.use_list).unwrap_or_default();
+            // "FOOTPATH. NAME, WIND, 150 m."
             let ok = text.strip_prefix("FOOTPATH. ").and_then(|t| t.strip_suffix('.')).is_some_and(|t| {
-                t.rsplit_once(", ").is_some_and(|(n, d)| places.iter().any(|m| m == n) && is_distance(d))
+                let bits: Vec<&str> = t.split(", ").collect();
+                bits.len() == 3
+                    && places.iter().any(|m| m == bits[0])
+                    && WINDS.contains(&bits[1])
+                    && is_distance(bits[2])
             });
             if !ok {
                 s.bad.push(format!("seed {}: a story's fingerpost reads {text:?}", s.seed));
@@ -372,7 +377,7 @@ fn signs_read(sk: &Skeleton, c: &County<'_>, first_prop: usize, s: &mut Survey) 
             }
             continue;
         }
-        // The lighting notice at Pell's stone: each numbered lamp, which way, how far.
+        // The lighting notice at Pell's stone: each numbered lamp, which way, how far (to ten metres).
         if c.k.local_name(p.key).is_some_and(|n| n.starts_with("lighting_notice_")) {
             let text = words(bp, p.use_list).unwrap_or_default();
             let body = text
@@ -383,7 +388,13 @@ fn signs_read(sk: &Skeleton, c: &County<'_>, first_prop: usize, s: &mut Survey) 
                 lamps.len() == 3
                     && lamps.iter().zip(["LAMP 12", "LAMP 13", "LAMP 15"]).all(|(l, n)| {
                         let bits: Vec<&str> = l.split(", ").collect();
-                        bits.len() == 3 && bits[0] == n && WINDS.contains(&bits[1]) && is_distance(bits[2])
+                        bits.len() == 3
+                            && bits[0] == n
+                            && WINDS.contains(&bits[1])
+                            && bits[2]
+                                .strip_suffix(" m")
+                                .and_then(|m| m.parse::<u32>().ok())
+                                .is_some_and(|m| m >= 10 && m % 10 == 0)
                     })
             });
             if !ok {

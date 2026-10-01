@@ -607,14 +607,20 @@ fn lay_path(c: &mut County<'_>, p: &Place, road: (i32, i32), name: &str) -> Vec<
     let metres = (js_round(i64::from(n) * 11, 500) * 50).max(50);
     let cat = jane_data::catalog();
     let post = cat.story.prop_id("fingerpost").expect("a fingerpost row");
-    for (ox, oy) in [(2, 0), (-3, 0), (2, 1), (-3, 1), (0, 2), (0, -2), (3, 2), (-4, 2)] {
+    // Beside the path's foot, else a little further off it: a path with no post is no way.
+    let near = [(2, 0), (-3, 0), (2, 1), (-3, 1), (0, 2), (0, -2), (3, 2), (-4, 2)];
+    let further =
+        (3..=8).flat_map(|r| [(r, 0), (-r - 1, 0), (0, r), (0, -r), (r, r), (-r - 1, r), (r, -r), (-r - 1, -r)]);
+    let (tx, ty) = (b.x + b.w / 2, b.y + b.h / 2);
+    for (ox, oy) in near.into_iter().chain(further) {
         let (x, y) = (at.0 + ox, at.1 + oy);
         if !c.k.fits(x, y, 2, 1, 0) || c.k.solid(x, y + 1) {
             continue;
         }
         let key = c.k.local(&format!("story_post_{}", p.n));
         let label = c.k.text(&format!("A fingerpost to {name}"));
-        let words = c.k.text(&format!("FOOTPATH. {}, {metres} m.", name.to_uppercase()));
+        // Which way the place lies from the post, as well as how far by the path.
+        let words = c.k.text(&format!("FOOTPATH. {}, {}, {metres} m.", name.to_uppercase(), compass(tx - x, ty - y)));
         let read = c.k.list(vec![Action::Read(words)]);
         let q = c.k.prop(Some(key), post, x, y);
         q.label = Some(label);
@@ -824,6 +830,10 @@ const FAR_OFF: i32 = 240;
 /// How far along the roads the second ring, and the forks given an arm, are looked for, cells
 /// walked: a place is named on the way to it, not only at its own road. *Tuning.*
 const FAR_WALK: i32 = 900;
+/// Waymarks along the footpath to the Hoar Stone stand this many points of the path apart, and
+/// stop this many cells from the stone (in sight of it). *Tuning.*
+const WAYMARK_STEP: usize = 90;
+const WAYMARK_SIGHT: i32 = 30;
 /// A place whose road runs out short of [`FAR_OFF`] is posted from roads this much further off
 /// at most, cells. *Tuning.*
 const FAR_BAND: i32 = 160;
@@ -1023,6 +1033,32 @@ fn posts(c: &mut County<'_>, names: &Names) {
             put(c, &mut ours, road, ti);
         }
     }
+    // The footpath from the graveyard to the Hoar Stone: a post where it leaves the graveyard's
+    // ground and one every [`WAYMARK_STEP`] cells along it, each saying which way the stone is and
+    // how far, until it is in sight.
+    let grave = c.chunks.iter().find(|ch| ch.id() == "graveyard").map(|ch| ch.bounds);
+    let stone = sites.iter().find(|&&(id, _)| id == "burial").map(|&(_, ti)| ti);
+    if let (Some(grave), Some(ti)) = (grave, stone) {
+        let b = to[ti].0;
+        let line = c
+            .lines
+            .iter()
+            .find(|l| {
+                l.first().is_some_and(|&(x, y)| grave.grow(4).contains(x, y))
+                    && l.last().is_some_and(|&(x, y)| b.grow(8).contains(x, y))
+            })
+            .cloned();
+        if let Some(line) = line {
+            let from = line.iter().position(|&(x, y)| !grave.grow(3).contains(x, y)).unwrap_or(line.len());
+            let sight = i64::from(WAYMARK_SIGHT);
+            for &cell in line[from..].iter().step_by(WAYMARK_STEP) {
+                if edge_d2(b, cell) < sight * sight {
+                    break;
+                }
+                put(c, &mut ours, cell, ti);
+            }
+        }
+    }
     // Each post's words, an arm for each place it names, and its label.
     for p in &ours {
         let words: Vec<String> = p.arms.iter().map(|&ti| way_to(&to[ti].1, to[ti].0, p.at)).collect();
@@ -1073,15 +1109,15 @@ fn posts(c: &mut County<'_>, names: &Names) {
 /// A post to place `ti` by the road cell `road`: an arm on one already put up near it, else a new
 /// post beside the road.
 fn put(c: &mut County<'_>, ours: &mut Vec<Post>, road: (i32, i32), ti: usize) {
-    let shared = ours.iter_mut().find(|p| {
-        (p.road.0 - road.0).abs() <= MERGE_NEAR && (p.road.1 - road.1).abs() <= MERGE_NEAR && p.arms.len() < MERGE_ARMS
-    });
-    match shared {
-        Some(p) => {
-            if !p.arms.contains(&ti) {
-                p.arms.push(ti);
-            }
-        }
+    let near = |p: &Post| {
+        [p.road, p.at].iter().any(|&(x, y)| (x - road.0).abs() <= MERGE_NEAR && (y - road.1).abs() <= MERGE_NEAR)
+    };
+    // One there already names it: nothing to add.
+    if ours.iter().any(|p| near(p) && p.arms.contains(&ti)) {
+        return;
+    }
+    match ours.iter_mut().find(|p| near(p) && p.arms.len() < MERGE_ARMS) {
+        Some(p) => p.arms.push(ti),
         None => {
             let def = jane_data::catalog().story.prop_id("fingerpost").expect("a fingerpost row");
             if let Some((key, spot)) = post_beside(c, road, def) {
@@ -1095,6 +1131,10 @@ fn put(c: &mut County<'_>, ours: &mut Vec<Post>, road: (i32, i32), ti: usize) {
 /// stone lists them: which way each stands and how far. "By day there is no telling a dead lamp
 /// from a live one": the notice says where they are, not which are dark.
 const LAMPS: [(&str, &str); 3] = [("lamp_12", "LAMP 12"), ("lamp_13", "LAMP 13"), ("lamp_15", "LAMP 15")];
+/// A numbered lamp further than this from a road (cells, each way) is moved to its verge, this
+/// near; the road is looked for this far round it.
+const VERGE: i32 = 4;
+const VERGE_LOOK: i32 = 24;
 
 /// The County's lighting notice by the road at Pell's stone, listing the numbered lamps past it.
 fn lamp_notice(c: &mut County<'_>) {
@@ -1105,6 +1145,37 @@ fn lamp_notice(c: &mut County<'_>) {
         Some((i32::from(p.cell.x), i32::from(p.cell.y)))
     };
     let Some(stone) = at(c, "pell_stone") else { return };
+    // They are street lamps: each stands at the verge of the road nearest it, where it is seen from
+    // the road (its anchor is a road's step and the macro cell beside it, up to a screen's height
+    // into the field).
+    for (key, _) in LAMPS {
+        let Some(n) = cat.name_id(key) else { continue };
+        let Some(q) = c.k.blueprint().props.iter().position(|p| p.key == Key::Name(n)) else { continue };
+        let (x, y) = {
+            let p = &c.k.blueprint().props[q];
+            (i32::from(p.cell.x), i32::from(p.cell.y))
+        };
+        let road = (y - VERGE_LOOK..=y + VERGE_LOOK)
+            .flat_map(|j| (x - VERGE_LOOK..=x + VERGE_LOOK).map(move |i| (i, j)))
+            .filter(|&(i, j)| c.k.get(i, j) == Tile::Road)
+            .min_by_key(|&(i, j)| (d2((i, j), (x, y)), j, i));
+        let Some(road) = road else { continue };
+        if d2(road, (x, y)) <= i64::from(VERGE * VERGE) {
+            continue;
+        }
+        let verge = (1..=VERGE)
+            .flat_map(|r| (-r..=r).flat_map(move |d| [(d, -r), (d, r), (-r, d), (r, d)]))
+            .map(|(dx, dy)| (road.0 + dx, road.1 + dy))
+            .find(|&(i, j)| {
+                c.k.fits(i, j, 1, 1, 0)
+                    && !matches!(c.k.get(i, j), Tile::Road | Tile::Cobble | Tile::Boardwalk | Tile::Water)
+                    && !super::ways::trodden_at(c, i, j)
+            });
+        if let Some((i, j)) = verge {
+            c.k.claim(Rect::new(i, j, 1, 1));
+            c.k.props_mut()[q].cell = crate::kit::cell(i, j);
+        }
+    }
     let Some(lamps) = LAMPS.iter().map(|&(k, name)| at(c, k).map(|l| (name, l))).collect::<Option<Vec<_>>>() else {
         return;
     };
@@ -1140,9 +1211,11 @@ fn lamp_notice(c: &mut County<'_>) {
     let key = c.k.local(&format!("lighting_notice_{x}_{y}"));
     c.k.prop(Some(key), def, x, y);
     let mut words = String::from("COUNTY LIGHTING.");
+    // The County measures to ten metres.
     for (name, (lx, ly)) in lamps {
         let tenths = i64::from(isqrt((d2((x, y), (lx, ly)) * 100) as u64));
-        let _ = write!(words, " {name}, {}, {}.", compass(lx - x, ly - y), distance_words(tenths));
+        let metres = (js_round(tenths, 100) * 10).max(10);
+        let _ = write!(words, " {name}, {}, {metres} m.", compass(lx - x, ly - y));
     }
     words.push_str(" THERE IS NO LAMP 14 ON THIS ROAD.");
     let label = c.k.text("The County's lighting notice");

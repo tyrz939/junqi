@@ -308,6 +308,10 @@ fn things_stand_where_their_rows_say(sk: &Skeleton, c: &County<'_>, _: &Report, 
         // A spread row's things are each at a point of their own about the patch, then open ground
         // within six of that.
         let reach = if row.spread { within + 6 } else { within } + w.max(h) + 1;
+        // Pell's numbered lamps are street lamps, moved to the verge of the road nearest them
+        // (`county::stories`): within 24 of where their row put them, and 4 of the road.
+        let lamp = ["lamp_12", "lamp_13", "lamp_15"].contains(&name(row.key));
+        let reach = if lamp { reach + 28 } else { reach };
         let far = |(x, y): (i32, i32)| (x - at.0).abs().max((y - at.1).abs()) > reach;
         for &k in row.keys {
             let prop = prop_at(bp, k).map(|p| (cell_of(p.cell), p.def));
