@@ -21,6 +21,8 @@
 //! number to break a tie; the walkable ground and the ground a short walk from a tale's place are
 //! `jane_core::search::fill` and `flood`.
 
+use std::fmt::Write as _;
+
 use jane_core::action::{Action, Facing};
 use jane_core::blueprint::StoryPlace;
 use jane_core::hash::Fnv;
@@ -34,7 +36,7 @@ use jane_data::{PlaceAt, PlacementDef, StoryDef};
 use super::County;
 use super::centre;
 use super::country::roads::{compass, distance_words};
-use super::country::{FIRST_CLEAR, Kind, Place, dist};
+use super::country::{Kind, Place};
 use super::placements::{apply_edit, hide_under, pick_top, put_prop};
 use super::tale_ground::{OnFoot, Standing, Stood, near_on_foot, place_cells, spot_for};
 use crate::kit::{Kit, js_round};
@@ -605,14 +607,20 @@ fn lay_path(c: &mut County<'_>, p: &Place, road: (i32, i32), name: &str) -> Vec<
     let metres = (js_round(i64::from(n) * 11, 500) * 50).max(50);
     let cat = jane_data::catalog();
     let post = cat.story.prop_id("fingerpost").expect("a fingerpost row");
-    for (ox, oy) in [(2, 0), (-3, 0), (2, 1), (-3, 1), (0, 2), (0, -2), (3, 2), (-4, 2)] {
+    // Beside the path's foot, else a little further off it: a path with no post is no way.
+    let near = [(2, 0), (-3, 0), (2, 1), (-3, 1), (0, 2), (0, -2), (3, 2), (-4, 2)];
+    let further =
+        (3..=8).flat_map(|r| [(r, 0), (-r - 1, 0), (0, r), (0, -r), (r, r), (-r - 1, r), (r, -r), (-r - 1, -r)]);
+    let (tx, ty) = (b.x + b.w / 2, b.y + b.h / 2);
+    for (ox, oy) in near.into_iter().chain(further) {
         let (x, y) = (at.0 + ox, at.1 + oy);
         if !c.k.fits(x, y, 2, 1, 0) || c.k.solid(x, y + 1) {
             continue;
         }
         let key = c.k.local(&format!("story_post_{}", p.n));
         let label = c.k.text(&format!("A fingerpost to {name}"));
-        let words = c.k.text(&format!("FOOTPATH. {}, {metres} m.", name.to_uppercase()));
+        // Which way the place lies from the post, as well as how far by the path.
+        let words = c.k.text(&format!("FOOTPATH. {}, {}, {metres} m.", name.to_uppercase(), compass(tx - x, ty - y)));
         let read = c.k.list(vec![Action::Read(words)]);
         let q = c.k.prop(Some(key), post, x, y);
         q.label = Some(label);
@@ -783,8 +791,64 @@ const POST_WALK: i32 = 480;
 /// Two posts to one place stand at least this far apart: one each way along the road. *Tuning.*
 const POST_APART: i32 = 60;
 /// The set places the quests send her to by name that have no board of their own at the road:
-/// the dungeons' doors and the library.
-const POSTED_SITES: [&str; 7] = ["gold_mine", "museum", "library", "butterfly_forest", "factory", "burial", "school"];
+/// the dungeons' doors and the library, each by the name the quest's words use for it (the
+/// burial is found by its stone: "The Hoar Stone, on the footpath from the graveyard").
+const POSTED_SITES: [(&str, Option<&str>); 7] = [
+    ("gold_mine", None),
+    ("museum", None),
+    ("library", None),
+    ("butterfly_forest", None),
+    ("factory", None),
+    ("burial", Some("the Hoar Stone")),
+    ("school", None),
+];
+/// Doors set beside a site rather than in a landmark's face, which the quests send her to by
+/// name: the Company's grate at the edge of Castle ("The pipes, down the Company's grate").
+const POSTED_DOORS: [(&str, &str); 1] = [("pipes_grate", "the Company's grate")];
+/// Where the quests' words say a set place is past or from (chunk, then the place told of): a post
+/// there names it. "The Factory, in the Works past the graveyard"; "the footpath from the
+/// graveyard" to the Hoar Stone; "the ruined library, on the road past the Museum"; "Butterfly
+/// Forest, on the road past the ruined library"; "the mine road out of Castle"; "the hill north
+/// of Castle".
+const TOLD_FROM: [(&str, &str); 6] = [
+    ("graveyard", "factory"),
+    ("graveyard", "burial"),
+    ("museum", "library"),
+    ("library", "butterfly_forest"),
+    ("town", "gold_mine"),
+    ("town", "school"),
+];
+/// A post where a place is told from stands by the road within this many cells of that place's
+/// edge, on its side toward the place told of.
+const TOLD_NEAR: i32 = 24;
+/// No post of this kind within this many cells of the platform or Julie's gate: the opening is
+/// the letter's. *Tuning.*
+const OPENING_CLEAR: i32 = 48;
+/// The second ring of posts to a place: this far from it at least, cells from its edge, and
+/// within [`FAR_WALK`] of it along the roads. *Tuning.*
+const FAR_OFF: i32 = 240;
+/// How far along the roads the second ring, and the forks given an arm, are looked for, cells
+/// walked: a place is named on the way to it, not only at its own road. *Tuning.*
+const FAR_WALK: i32 = 900;
+/// Waymarks along the footpath to the Hoar Stone stand this many points of the path apart, and
+/// stop this many cells from the stone (in sight of it). *Tuning.*
+const WAYMARK_STEP: usize = 90;
+const WAYMARK_SIGHT: i32 = 30;
+/// A place whose road runs out short of [`FAR_OFF`] is posted from roads this much further off
+/// at most, cells. *Tuning.*
+const FAR_BAND: i32 = 160;
+/// A fork's post is this near the road cell the walk reached, cells each way.
+const ARM_NEAR: i32 = 8;
+/// The most arms a fork's post is given for places nearby, the nearest first. *Tuning.*
+const ARMS: usize = 2;
+/// An arm on a fork's post names a place at least this far from it, cells from its edge: one
+/// nearer has its own posts at its road. *Tuning.*
+const ARM_OFF: i32 = 150;
+/// A post to a place this near (cells, each way) one already put up for another takes the place
+/// as another arm instead of standing beside it. *Tuning.*
+const MERGE_NEAR: i32 = 12;
+/// The most places one post put up here names.
+const MERGE_ARMS: usize = 3;
 
 /// Squared cells from a rect's edge.
 fn edge_d2(b: Rect, (x, y): (i32, i32)) -> i64 {
@@ -793,79 +857,401 @@ fn edge_d2(b: Rect, (x, y): (i32, i32)) -> i64 {
     dx * dx + dy * dy
 }
 
+/// What a sign by a road says of a place from `(x, y)`: its name, which way and how far.
+fn way_to(name: &str, b: Rect, (x, y): (i32, i32)) -> String {
+    let (tx, ty) = (b.x + b.w / 2, b.y + b.h / 2);
+    let tenths = i64::from(isqrt((d2((x, y), (tx, ty)) * 100) as u64));
+    format!("{}, {}, {}.", name.to_uppercase(), compass(tx - x, ty - y), distance_words(tenths))
+}
+
+/// A post put up by [`posts`]: its key, the road cell it was put up for, where it stands, and the
+/// places it names (indices into the list of places).
+struct Post {
+    key: Key,
+    road: (i32, i32),
+    at: (i32, i32),
+    arms: Vec<usize>,
+}
+
 /// The roadside fingerposts (the sweep of 28 September 2026: a place's name written only at the
-/// place is not a way to it). Every story's place and every set place a quest sends her to by name
-/// gets one on each way along the road nearest it, [`POST_OFF`] or more from it, saying which way
-/// it lies and how far; a place by the road (not one a footpath was laid to, whose post is at the
-/// path's end) gets one where the road comes nearest as well. Each post's label names the place.
+/// place is not a way to it). Every story's place and every set place a quest sends her to by
+/// name gets one on each way along the road nearest it, [`POST_OFF`] or more from it, and two
+/// more [`FAR_OFF`] or more from it, saying which way it lies and how far; a place by the road
+/// (not one a footpath was laid to, whose post is at the path's end) gets one where the road comes
+/// nearest as well. Places whose posts would stand together share one post, an arm each. And
+/// every fork's fingerpost within [`FAR_WALK`] along the roads gets an arm for the nearest
+/// [`ARMS`] such places it does not already name (the clarity pass of 1 October 2026: a place far
+/// from where she was told of it is found by reading the posts on the way).
 fn posts(c: &mut County<'_>, names: &Names) {
     let cat = jane_data::catalog();
     let rb = road_bins(&c.k);
     let mut to: Vec<(Rect, String, bool)> = Vec::new();
+    // Where each place is told of, by the words of its quests: (that place's ground, the index of
+    // the place told of in `to`). A story's place that stands near another's (a camp by the farm
+    // whose quest sends her there) is told of from that one.
+    let mut told: Vec<(Rect, usize)> = Vec::new();
     for &(id, i) in &c.story_claims.claims {
         let pathed = c.story_claims.paths.iter().any(|(s, _)| *s == id);
+        if let Some(n) = cat.county.story(id).near.and_then(|n| c.story_claims.place_of(n.story)) {
+            told.push((c.places[n].bounds, to.len()));
+        }
         to.push((c.places[i].bounds, names.story(id), !pathed));
     }
-    for id in POSTED_SITES {
+    let mut sites: Vec<(&str, usize)> = Vec::new();
+    for (id, own) in POSTED_SITES {
         if let Some(ch) = c.chunks.iter().find(|ch| ch.id() == id) {
-            let name = cat.text(c.sk.site(ch.site).def.name);
-            let name = name.strip_prefix("The ").map_or_else(|| name.to_owned(), |n| format!("the {n}"));
+            let name = own.map_or_else(
+                || {
+                    let name = cat.text(c.sk.site(ch.site).def.name);
+                    name.strip_prefix("The ").map_or_else(|| name.to_owned(), |n| format!("the {n}"))
+                },
+                str::to_owned,
+            );
+            sites.push((id, to.len()));
             to.push((ch.bounds, name, false));
         }
     }
-    for (b, name, near) in to {
-        let Some(start) = reach(&rb, b).road else { continue };
+    for (key, name) in POSTED_DOORS {
+        let Some(n) = cat.name_id(key) else { continue };
+        let Some(p) = c.k.blueprint().props.iter().find(|p| p.key == Key::Name(n)) else { continue };
+        let d = cat.story.prop(p.def);
+        let b = Rect::new(i32::from(p.cell.x), i32::from(p.cell.y), i32::from(d.w), i32::from(d.h));
+        to.push((b, name.to_owned(), true));
+    }
+    for (from, place) in TOLD_FROM {
+        let Some(&(_, ti)) = sites.iter().find(|&&(id, _)| id == place) else { continue };
+        if let Some(ch) = c.chunks.iter().find(|ch| ch.id() == from) {
+            told.push((ch.bounds, ti));
+        }
+    }
+    // The opening's ground: the platform and Julie's gate.
+    let opening: Vec<Rect> =
+        c.chunks.iter().filter(|ch| matches!(ch.id(), "station" | "julie_house")).map(|ch| ch.bounds).collect();
+    let open_d = i64::from(OPENING_CLEAR);
+    let first = |(x, y): (i32, i32)| opening.iter().any(|&b| edge_d2(b, (x, y)) < open_d * open_d);
+    // The forks' posts, binned, for the arms.
+    let bin = |x: i32, y: i32| (x.div_euclid(BIN), y.div_euclid(BIN));
+    let mut forks: std::collections::BTreeMap<(i32, i32), Vec<usize>> = std::collections::BTreeMap::new();
+    for (n, &(_, (x, y), _)) in c.fork_posts.iter().enumerate() {
+        forks.entry(bin(x, y)).or_default().push(n);
+    }
+    // Each fork post's arms: (cells walked, the place's index in `to`).
+    let mut arms: Vec<Vec<(i32, usize)>> = vec![Vec::new(); c.fork_posts.len()];
+    let mut ours: Vec<Post> = Vec::new();
+    for (ti, (b, _, near)) in to.iter().enumerate() {
+        // The road nearest it; a place no road comes near (the Hoar Stone, at the end of its
+        // footpath) has only the rings below, from the roads that far off.
+        let start = reach(&rb, *b).road;
         let mut at: Vec<(i32, i32)> = Vec::new();
-        // The first walk (the halt, Julie's, the town) is the letter's: no post of this kind on it.
-        let first = |c: &County<'_>, (x, y): (i32, i32)| dist(&c.country.d_first, x, y) < FIRST_CLEAR;
-        if near && !first(c, start) {
+        if let Some(start) = start.filter(|&s| *near && !first(s)) {
             at.push(start);
         }
-        // Along the roads from the nearest point, nearest first: the first cell far enough off
-        // each way.
-        let mut seen = std::collections::BTreeSet::from([start]);
-        let mut queue = std::collections::VecDeque::from([(start, 0)]);
-        let mut far: Vec<(i32, i32)> = Vec::new();
+        // Along the roads from the nearest point, nearest first: the first cells far enough off
+        // each way, in two rings, and the forks' posts on the way.
+        let mut seen: std::collections::BTreeSet<(i32, i32)> = start.into_iter().collect();
+        let mut queue: std::collections::VecDeque<((i32, i32), i32)> = start.map(|s| (s, 0)).into_iter().collect();
+        let mut rings: [Vec<(i32, i32)>; 2] = [Vec::new(), Vec::new()];
+        let mut armed: Vec<usize> = Vec::new();
+        let apart = i64::from(POST_APART);
         while let Some(((x, y), d)) = queue.pop_front() {
-            let off = i64::from(POST_OFF);
-            let apart = i64::from(POST_APART);
-            if edge_d2(b, (x, y)) >= off * off
-                && far.iter().all(|&f| d2(f, (x, y)) >= apart * apart)
-                && !first(c, (x, y))
-            {
-                far.push((x, y));
-                if far.len() == 2 {
-                    break;
+            for (ring, off, walk) in [(0, POST_OFF, POST_WALK), (1, FAR_OFF, FAR_WALK)] {
+                let off = i64::from(off);
+                if rings[ring].len() < 2
+                    && d <= walk
+                    && edge_d2(*b, (x, y)) >= off * off
+                    && rings[ring].iter().all(|&f| d2(f, (x, y)) >= apart * apart)
+                    && !first((x, y))
+                {
+                    rings[ring].push((x, y));
                 }
             }
-            if d >= POST_WALK {
+            let (bx, by) = bin(x, y);
+            for oy in -1..=1 {
+                for ox in -1..=1 {
+                    for &n in forks.get(&(bx + ox, by + oy)).map_or(&[][..], Vec::as_slice) {
+                        let (px, py) = c.fork_posts[n].1;
+                        if (px - x).abs() <= ARM_NEAR && (py - y).abs() <= ARM_NEAR && !armed.contains(&n) {
+                            armed.push(n);
+                            arms[n].push((d, ti));
+                        }
+                    }
+                }
+            }
+            if d >= FAR_WALK {
                 continue;
             }
-            for (ox, oy) in [(0, -1), (1, 0), (0, 1), (-1, 0)] {
+            // Eight ways: a lane drawn on the slant joins its cells corner to corner.
+            for (ox, oy) in [(0, -1), (1, 0), (0, 1), (-1, 0), (1, -1), (1, 1), (-1, 1), (-1, -1)] {
                 let n = (x + ox, y + oy);
-                if c.k.get(n.0, n.1) == Tile::Road && seen.insert(n) {
+                if matches!(c.k.get(n.0, n.1), Tile::Road | Tile::Cobble | Tile::Boardwalk) && seen.insert(n) {
                     queue.push_back((n, d + 1));
                 }
             }
         }
-        at.extend(far);
+        // A place whose road runs out short of a ring is posted from the nearest roads that far
+        // off, whichever way they run: what they say of it is as true.
+        for (ring, off) in [(0, POST_OFF), (1, FAR_OFF)] {
+            if rings[ring].len() == 2 {
+                continue;
+            }
+            let (lo, hi) = (i64::from(off), i64::from(off + FAR_BAND));
+            let mut cells = road_cells(&rb, b.grow(off + FAR_BAND));
+            cells.retain(|&r| (lo * lo..hi * hi).contains(&edge_d2(*b, r)) && !first(r));
+            cells.sort_by_key(|&(x, y)| (edge_d2(*b, (x, y)), y, x));
+            for r in cells {
+                if rings[ring].len() == 2 {
+                    break;
+                }
+                if rings.iter().flatten().all(|&f| d2(f, r) >= apart * apart) {
+                    rings[ring].push(r);
+                }
+            }
+        }
+        let [inner, outer] = rings;
+        at.extend(inner);
+        at.extend(outer);
         for road in at {
-            post_beside(c, road, b, &name);
+            put(c, &mut ours, road, ti);
+        }
+    }
+    // Where each place is told of: a post by the road there, on the side toward it.
+    for &(from, ti) in &told {
+        let target = to[ti].0;
+        let (tx, ty) = (target.x + target.w / 2, target.y + target.h / 2);
+        let near = i64::from(TOLD_NEAR);
+        let mut cells = road_cells(&rb, from.grow(TOLD_NEAR));
+        cells.retain(|&r| edge_d2(from, r) <= near * near && !first(r));
+        // A place off the road (a clearing at the end of its footpath) is told of from the road
+        // its path leaves.
+        let road = cells
+            .into_iter()
+            .min_by_key(|&(x, y)| (d2((x, y), (tx, ty)), y, x))
+            .or_else(|| reach(&rb, from).road.filter(|&r| !first(r)));
+        let Some(road) = road else { continue };
+        let off = i64::from(POST_OFF);
+        if edge_d2(target, road) >= off * off {
+            put(c, &mut ours, road, ti);
+        }
+    }
+    // The footpath from the graveyard to the Hoar Stone: a post where it leaves the graveyard's
+    // ground and one every [`WAYMARK_STEP`] cells along it, each saying which way the stone is and
+    // how far, until it is in sight.
+    let grave = c.chunks.iter().find(|ch| ch.id() == "graveyard").map(|ch| ch.bounds);
+    let stone = sites.iter().find(|&&(id, _)| id == "burial").map(|&(_, ti)| ti);
+    if let (Some(grave), Some(ti)) = (grave, stone) {
+        let b = to[ti].0;
+        let line = c
+            .lines
+            .iter()
+            .find(|l| {
+                l.first().is_some_and(|&(x, y)| grave.grow(4).contains(x, y))
+                    && l.last().is_some_and(|&(x, y)| b.grow(8).contains(x, y))
+            })
+            .cloned();
+        if let Some(line) = line {
+            let from = line.iter().position(|&(x, y)| !grave.grow(3).contains(x, y)).unwrap_or(line.len());
+            let sight = i64::from(WAYMARK_SIGHT);
+            for &cell in line[from..].iter().step_by(WAYMARK_STEP) {
+                if edge_d2(b, cell) < sight * sight {
+                    break;
+                }
+                put(c, &mut ours, cell, ti);
+            }
+        }
+    }
+    // Each post's words, an arm for each place it names, and its label.
+    for p in &ours {
+        let words: Vec<String> = p.arms.iter().map(|&ti| way_to(&to[ti].1, to[ti].0, p.at)).collect();
+        let named: Vec<&str> = p.arms.iter().map(|&ti| to[ti].1.as_str()).collect();
+        let label = match named.as_slice() {
+            [a] => format!("A fingerpost to {a}"),
+            [rest @ .., last] => format!("A fingerpost to {} and {last}", rest.join(", ")),
+            [] => continue,
+        };
+        let label = c.k.text(&label);
+        let words = c.k.text(&words.join(" "));
+        let read = c.k.list(vec![Action::Read(words)]);
+        if let Some(q) = super::placements::prop_index(&c.k, p.key) {
+            let row = &mut c.k.props_mut()[q];
+            row.label = Some(label);
+            row.use_list = Some(read);
+        }
+    }
+    lamp_notice(c);
+    // The forks' new arms: the nearest places it does not name yet, far enough off to want the
+    // arm, after what it said before.
+    for (n, mut list) in arms.into_iter().enumerate() {
+        let (key, (x, y), text) = c.fork_posts[n].clone();
+        list.sort();
+        let off = i64::from(ARM_OFF);
+        let mut words = text.clone();
+        let mut added = 0;
+        for (_, ti) in list {
+            let (b, name, _) = &to[ti];
+            if added == ARMS || words.contains(&name.to_uppercase()) || edge_d2(*b, (x, y)) < off * off {
+                continue;
+            }
+            words.push(' ');
+            words.push_str(&way_to(name, *b, (x, y)));
+            added += 1;
+        }
+        if added == 0 {
+            continue;
+        }
+        let words = c.k.text(&words);
+        let read = c.k.list(vec![Action::Read(words)]);
+        if let Some(q) = super::placements::prop_index(&c.k, key) {
+            c.k.props_mut()[q].use_list = Some(read);
         }
     }
 }
 
-/// A fingerpost to `name` (whose ground is `b`) on open ground beside the road cell `road`, with
-/// room in front of it to stand and read.
-fn post_beside(c: &mut County<'_>, road: (i32, i32), b: Rect, name: &str) {
-    let def = jane_data::catalog().story.prop_id("fingerpost").expect("a fingerpost row");
+/// A post to place `ti` by the road cell `road`: an arm on one already put up near it, else a new
+/// post beside the road.
+fn put(c: &mut County<'_>, ours: &mut Vec<Post>, road: (i32, i32), ti: usize) {
+    let near = |p: &Post| {
+        [p.road, p.at].iter().any(|&(x, y)| (x - road.0).abs() <= MERGE_NEAR && (y - road.1).abs() <= MERGE_NEAR)
+    };
+    // One there already names it: nothing to add.
+    if ours.iter().any(|p| near(p) && p.arms.contains(&ti)) {
+        return;
+    }
+    match ours.iter_mut().find(|p| near(p) && p.arms.len() < MERGE_ARMS) {
+        Some(p) => p.arms.push(ti),
+        None => {
+            let def = jane_data::catalog().story.prop_id("fingerpost").expect("a fingerpost row");
+            if let Some((key, spot)) = post_beside(c, road, def) {
+                ours.push(Post { key, road, at: spot, arms: vec![ti] });
+            }
+        }
+    }
+}
+
+/// The numbered dark lamps past Pell's stone (Number Fourteen), as a notice by the road at the
+/// stone lists them: which way each stands and how far. "By day there is no telling a dead lamp
+/// from a live one": the notice says where they are, not which are dark.
+const LAMPS: [(&str, &str); 3] = [("lamp_12", "LAMP 12"), ("lamp_13", "LAMP 13"), ("lamp_15", "LAMP 15")];
+/// A numbered lamp further than this from a road (cells, each way) is moved to its verge, this
+/// near; the road is looked for this far round it.
+const VERGE: i32 = 4;
+const VERGE_LOOK: i32 = 24;
+
+/// The County's lighting notice by the road at Pell's stone, listing the numbered lamps past it.
+fn lamp_notice(c: &mut County<'_>) {
+    let cat = jane_data::catalog();
+    let at = |c: &County<'_>, key: &str| {
+        let n = cat.name_id(key)?;
+        let p = c.k.blueprint().props.iter().find(|p| p.key == Key::Name(n))?;
+        Some((i32::from(p.cell.x), i32::from(p.cell.y)))
+    };
+    let Some(stone) = at(c, "pell_stone") else { return };
+    // They are street lamps: each stands at the verge of the road nearest it, where it is seen from
+    // the road (its anchor is a road's step and the macro cell beside it, up to a screen's height
+    // into the field).
+    for (key, _) in LAMPS {
+        let Some(n) = cat.name_id(key) else { continue };
+        let Some(q) = c.k.blueprint().props.iter().position(|p| p.key == Key::Name(n)) else { continue };
+        let (x, y) = {
+            let p = &c.k.blueprint().props[q];
+            (i32::from(p.cell.x), i32::from(p.cell.y))
+        };
+        let road = (y - VERGE_LOOK..=y + VERGE_LOOK)
+            .flat_map(|j| (x - VERGE_LOOK..=x + VERGE_LOOK).map(move |i| (i, j)))
+            .filter(|&(i, j)| c.k.get(i, j) == Tile::Road)
+            .min_by_key(|&(i, j)| (d2((i, j), (x, y)), j, i));
+        let Some(road) = road else { continue };
+        if d2(road, (x, y)) <= i64::from(VERGE * VERGE) {
+            continue;
+        }
+        let verge = (1..=VERGE)
+            .flat_map(|r| (-r..=r).flat_map(move |d| [(d, -r), (d, r), (-r, d), (r, d)]))
+            .map(|(dx, dy)| (road.0 + dx, road.1 + dy))
+            .find(|&(i, j)| {
+                c.k.fits(i, j, 1, 1, 0)
+                    && !matches!(c.k.get(i, j), Tile::Road | Tile::Cobble | Tile::Boardwalk | Tile::Water)
+                    && !super::ways::trodden_at(c, i, j)
+            });
+        if let Some((i, j)) = verge {
+            c.k.claim(Rect::new(i, j, 1, 1));
+            c.k.props_mut()[q].cell = crate::kit::cell(i, j);
+        }
+    }
+    let Some(lamps) = LAMPS.iter().map(|&(k, name)| at(c, k).map(|l| (name, l))).collect::<Option<Vec<_>>>() else {
+        return;
+    };
+    let Some(def) = cat.story.prop_id("signpost") else { return };
+    // Beside the stone on open ground, else beside the first of the lamps.
     let open = |c: &County<'_>, x: i32, y: i32| {
-        !matches!(c.k.get(x, y), Tile::Road | Tile::Boardwalk | Tile::Water)
+        c.k.fits(x, y, 2, 1, 0)
+            && !c.k.solid(x, y + 1)
+            && !c.k.solid(x + 1, y + 1)
+            && (x..x + 2).all(|i| !matches!(c.k.get(i, y), Tile::Road | Tile::Cobble | Tile::Boardwalk | Tile::Water))
+    };
+    let mut spot = None;
+    'find: for (cx, cy) in [stone, lamps[0].1] {
+        for r in 2..=12 {
+            for (x, y) in [
+                (cx + r, cy),
+                (cx - r - 1, cy),
+                (cx, cy + r),
+                (cx, cy - r),
+                (cx + r, cy + r),
+                (cx - r - 1, cy - r),
+                (cx + r, cy - r),
+                (cx - r - 1, cy + r),
+            ] {
+                if open(c, x, y) {
+                    spot = Some((x, y));
+                    break 'find;
+                }
+            }
+        }
+    }
+    let Some((x, y)) = spot else { return };
+    let key = c.k.local(&format!("lighting_notice_{x}_{y}"));
+    c.k.prop(Some(key), def, x, y);
+    let mut words = String::from("COUNTY LIGHTING.");
+    // The County measures to ten metres.
+    for (name, (lx, ly)) in lamps {
+        let tenths = i64::from(isqrt((d2((x, y), (lx, ly)) * 100) as u64));
+        let metres = (js_round(tenths, 100) * 10).max(10);
+        let _ = write!(words, " {name}, {}, {metres} m.", compass(lx - x, ly - y));
+    }
+    words.push_str(" THERE IS NO LAMP 14 ON THIS ROAD.");
+    let label = c.k.text("The County's lighting notice");
+    let words = c.k.text(&words);
+    let read = c.k.list(vec![Action::Read(words)]);
+    if let Some(q) = super::placements::prop_index(&c.k, key) {
+        let row = &mut c.k.props_mut()[q];
+        row.label = Some(label);
+        row.use_list = Some(read);
+    }
+}
+
+/// The road cells in the bins `r` overlaps, in bin order.
+fn road_cells(rb: &RoadBins, r: Rect) -> Vec<(i32, i32)> {
+    let (bx0, bx1) = (r.x.div_euclid(BIN).max(0), (r.x + r.w).div_euclid(BIN).min(rb.cols - 1));
+    let (by0, by1) = (r.y.div_euclid(BIN).max(0), (r.y + r.h).div_euclid(BIN).min(rb.rows - 1));
+    let mut out = Vec::new();
+    for by in by0..=by1 {
+        for bx in bx0..=bx1 {
+            out.extend(rb.bins[(by * rb.cols + bx) as usize].iter().copied().filter(|&(x, y)| r.contains(x, y)));
+        }
+    }
+    out
+}
+
+/// A fingerpost on open ground beside the road cell `road`, with room in front of it to stand and
+/// read: its key and where it stands. Its words are put on by [`posts`] once it knows every place
+/// it names.
+fn post_beside(c: &mut County<'_>, road: (i32, i32), def: jane_core::PropDefId) -> Option<(Key, (i32, i32))> {
+    let open = |c: &County<'_>, x: i32, y: i32| {
+        !matches!(c.k.get(x, y), Tile::Road | Tile::Cobble | Tile::Boardwalk | Tile::Water)
             && !c.k.solid(x, y)
             && !c.k.is_claimed(x, y)
     };
     let mut spot = None;
-    'rings: for r in 3..=7 {
+    'rings: for r in 3..=10 {
         for (x, y) in [
             (road.0 + r, road.1),
             (road.0 - r - 1, road.1),
@@ -873,6 +1259,8 @@ fn post_beside(c: &mut County<'_>, road: (i32, i32), b: Rect, name: &str) {
             (road.0, road.1 - r),
             (road.0 + r, road.1 + r),
             (road.0 - r - 1, road.1 - r),
+            (road.0 + r, road.1 - r),
+            (road.0 - r - 1, road.1 + r),
         ] {
             let fits = open(c, x, y) && open(c, x + 1, y) && !c.k.solid(x, y + 1) && !c.k.solid(x + 1, y + 1);
             if fits && !super::country::near_chunk(c, x, y, 2) {
@@ -881,18 +1269,10 @@ fn post_beside(c: &mut County<'_>, road: (i32, i32), b: Rect, name: &str) {
             }
         }
     }
-    let Some((x, y)) = spot else { return };
-    let (tx, ty) = (b.x + b.w / 2, b.y + b.h / 2);
-    let (dx, dy) = (tx - x, ty - y);
-    let tenths = i64::from(isqrt((d2((x, y), (tx, ty)) * 100) as u64));
-    let words = format!("{}, {}, {}.", name.to_uppercase(), compass(dx, dy), distance_words(tenths));
-    let label = c.k.text(&format!("A fingerpost to {name}"));
-    let words = c.k.text(&words);
-    let read = c.k.list(vec![Action::Read(words)]);
+    let (x, y) = spot?;
     let key = c.k.local(&format!("place_post_{x}_{y}"));
-    let p = c.k.prop(Some(key), def, x, y);
-    p.label = Some(label);
-    p.use_list = Some(read);
+    c.k.prop(Some(key), def, x, y);
+    Some((key, (x, y)))
 }
 
 /// A row at a story's place. The place was built and claimed whole, so nothing here searches for

@@ -340,25 +340,65 @@ fn signs_read(sk: &Skeleton, c: &County<'_>, first_prop: usize, s: &mut Survey) 
     // A story's footpath's post names the story's place (`county::stories`).
     let places: Vec<String> =
         cat.county.stories.iter().map(|x| jane_world::names::story_name(sk.seed, x.id).to_uppercase()).collect();
+    // A place's arm on a post (`county::stories::posts`): a story's place, a site, or one of the
+    // places the quests name that is no site (the Hoar Stone over the burial, the Company's grate);
+    // which way, how far.
+    let arm = |a: &str| {
+        let bits: Vec<&str> = a.split(", ").collect();
+        let named = |n: &str| {
+            places.iter().chain(&names).any(|m| m == n) || ["THE HOAR STONE", "THE COMPANY'S GRATE"].contains(&n)
+        };
+        bits.len() == 3 && named(bits[0]) && WINDS.contains(&bits[1]) && is_distance(bits[2])
+    };
     for p in bp.props[first_prop..].iter().filter(|p| matches!(p.key, Key::Local(_))) {
         if c.k.local_name(p.key).is_some_and(|n| n.starts_with("story_post_")) {
             let text = words(bp, p.use_list).unwrap_or_default();
+            // "FOOTPATH. NAME, WIND, 150 m."
             let ok = text.strip_prefix("FOOTPATH. ").and_then(|t| t.strip_suffix('.')).is_some_and(|t| {
-                t.rsplit_once(", ").is_some_and(|(n, d)| places.iter().any(|m| m == n) && is_distance(d))
+                let bits: Vec<&str> = t.split(", ").collect();
+                bits.len() == 3
+                    && places.iter().any(|m| m == bits[0])
+                    && WINDS.contains(&bits[1])
+                    && is_distance(bits[2])
             });
             if !ok {
                 s.bad.push(format!("seed {}: a story's fingerpost reads {text:?}", s.seed));
             }
             continue;
         }
-        // A post to a place (`county::stories`): the place's name, which way, how far.
+        // A post to a place (`county::stories`): for each place it names (one to three), the
+        // place's name, which way, how far.
         if c.k.local_name(p.key).is_some_and(|n| n.starts_with("place_post_")) {
             let text = words(bp, p.use_list).unwrap_or_default();
-            let bits: Vec<&str> = text.strip_suffix('.').unwrap_or(&text).split(", ").collect();
-            let named = |n: &str| places.iter().chain(&names).any(|m| m == n);
-            let ok = bits.len() == 3 && named(bits[0]) && WINDS.contains(&bits[1]) && is_distance(bits[2]);
+            let arms: Vec<&str> = text.strip_suffix('.').unwrap_or(&text).split(". ").collect();
+            let ok = (1..=3).contains(&arms.len()) && arms.iter().all(|a| arm(a));
             if !ok {
                 s.bad.push(format!("seed {}: a post to a place reads {text:?}", s.seed));
+            }
+            continue;
+        }
+        // The lighting notice at Pell's stone: each numbered lamp, which way, how far (to ten metres).
+        if c.k.local_name(p.key).is_some_and(|n| n.starts_with("lighting_notice_")) {
+            let text = words(bp, p.use_list).unwrap_or_default();
+            let body = text
+                .strip_prefix("COUNTY LIGHTING. ")
+                .and_then(|t| t.strip_suffix(" THERE IS NO LAMP 14 ON THIS ROAD."));
+            let ok = body.is_some_and(|b| {
+                let lamps: Vec<&str> = b.strip_suffix('.').unwrap_or(b).split(". ").collect();
+                lamps.len() == 3
+                    && lamps.iter().zip(["LAMP 12", "LAMP 13", "LAMP 15"]).all(|(l, n)| {
+                        let bits: Vec<&str> = l.split(", ").collect();
+                        bits.len() == 3
+                            && bits[0] == n
+                            && WINDS.contains(&bits[1])
+                            && bits[2]
+                                .strip_suffix(" m")
+                                .and_then(|m| m.parse::<u32>().ok())
+                                .is_some_and(|m| m >= 10 && m % 10 == 0)
+                    })
+            });
+            if !ok {
+                s.bad.push(format!("seed {}: the lighting notice reads {text:?}", s.seed));
             }
             continue;
         }
@@ -389,8 +429,11 @@ fn signs_read(sk: &Skeleton, c: &County<'_>, first_prop: usize, s: &mut Survey) 
             _ => {
                 s.forks += 1;
                 let ways: Vec<&str> = body.split(". ").collect();
-                ways.len() >= 2
-                    && ways.iter().all(|w| {
+                // Its ways, then an arm for a place or two nearby (`county::stories::posts`).
+                let roads = ways.iter().take_while(|w| w.split_once(": ").is_some_and(|(d, _)| WINDS.contains(&d)));
+                roads.clone().count() >= 2
+                    && ways.iter().skip(roads.clone().count()).all(|a| arm(a))
+                    && roads.clone().all(|w| {
                         let Some((wind, list)) = w.split_once(": ") else { return false };
                         WINDS.contains(&wind)
                             && list.split("; ").all(|x| {

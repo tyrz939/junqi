@@ -341,7 +341,8 @@ fn sign_fork(c: &mut County<'_>, fork: (i32, i32), named: &[u8], from: &mut From
             if near_chunk(c, x, y, 4) || !placeable(c, x, y, pw, ph) {
                 continue;
             }
-            read_sign(c, post, x, y, "A fingerpost", &text);
+            let key = read_sign(c, post, x, y, "A fingerpost", &text);
+            c.fork_posts.push((key, (x, y), text));
             // And a lamp on the other corner, so a fork can be found after dark.
             lamp_beside(c, &line, near, -side, 8);
             return;

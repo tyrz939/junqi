@@ -80,7 +80,7 @@
     "completion": "The Foreman is down and the roller door is open onto the yard. His locker held the Chairman's Key, stamped G.M.Co. and tagged for the Hoar Stone on the graveyard footpath.",
     "returnTo": "the dog, at the graveyard gate, from six till the bell",
     "requirements": [
-      { "type": "location", "target": "pipes", "qty": 1, "text": "The pipes, down the grate at the edge of Castle" },
+      { "type": "location", "target": "pipes", "qty": 1, "text": "The pipes, down the Company's grate at the edge of Castle" },
       { "type": "location", "target": "factory", "qty": 1, "text": "The Factory, in the Works past the graveyard, or up the OUTFALL's ladder from the pipes" },
       { "type": "location", "target": "foreman_down", "qty": 1, "text": "The Foreman, in ASSEMBLY, through the FOREMAN'S OFFICE in the Factory" }
     ],
