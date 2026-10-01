@@ -75,9 +75,9 @@ fn spell_numbers_convert_as_the_architecture_says() {
     assert_eq!(ice.splash.map(|s| (s.radius, s.div)), Some((Fx(25 * 256), 5)));
     assert_eq!(ice.stop, Tick(30));
     assert_eq!(ice.effect, c().combat.effect_id("chilled"));
-    // The snake's ring is 360 degrees of evenly spaced bolts; the cactus sprays inside 45.
+    // The snake's ring is 360 degrees of evenly spaced bolts; the cactus sprays six inside 45 (PLAY-PLAN.md 0.3).
     assert_eq!((spell("snake_ring").count, spell("snake_ring").fan), (15, Angle(u16::MAX)));
-    assert_eq!((spell("cactus_spray").count, spell("cactus_spray").fan), (10, Angle(8192)));
+    assert_eq!((spell("cactus_spray").count, spell("cactus_spray").fan), (6, Angle(8192)));
 }
 
 /// catalog.ts buildCatalog: effect pulses come at most once a tick; resists are multipliers.

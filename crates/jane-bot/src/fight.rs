@@ -42,6 +42,11 @@ pub struct Fight {
     pub fled: u32,
     /// Where she is backing off to.
     pub retreat: Option<jane_core::Vec2>,
+    /// Where she stood when she last steered, and for how many steering frames she has not
+    /// moved from it (a prop's edge inside a cell the grid calls open stops her body short).
+    pub pinned: (jane_core::Vec2, u32),
+    /// Ways she steered and could not go (the retreats given up on), for this fight.
+    pub walled: Vec<jane_core::Angle>,
     /// Units her feet could find no way to, and the frame to try again.
     pub unreachable: std::collections::BTreeMap<UnitId, u32>,
 }

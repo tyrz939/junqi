@@ -1,6 +1,6 @@
 //! The whole story, played (STORY.md §4, §10; VERIFICATION.md §2 L3): the Reader from New Game
 //! through every act, dungeon, revelation and choice to one of the three endings, on seeds 1 to
-//! 5, each ending on at least one of them; every run a tape that replays to its hashes; and
+//! 8, each ending on at least one of them; every run a tape that replays to its hashes; and
 //! nothing the story needs set aside for longer than [`STUCK_BUDGET`].
 //!
 //! The endings are chosen by the bot's choice policy (`Ctx::ending`, `jane play --ending`): the
@@ -76,9 +76,14 @@ struct Run {
 
 /// The Reader from New Game to the end, recorded, and its tape verified against its hashes.
 fn play(seed: u32, ending: Ending) -> Run {
+    play_as(Model::Reader, seed, ending)
+}
+
+/// [`play`] with another model.
+fn play_as(model: Model, seed: u32, ending: Ending) -> Run {
     let b = bps(seed);
     let mut rec = Recorder::new(Sim::new_game_with(b.clone(), "Jane"));
-    let mut bot = Bot::story(Model::Reader);
+    let mut bot = Bot::story(model);
     bot.ctx.ending = Some(ending);
     let frames = bot.play(&mut rec, STORY_FRAMES);
     let (sim, tape) = rec.finish();
@@ -135,18 +140,65 @@ fn row(r: &Run) -> String {
     )
 }
 
-/// Seeds 1 to 5, the endings in turn: every run reaches the ending it chose, through every act
-/// of the spine, and nothing the spine needs stays set aside past the budget.
+/// Seeds 1 to 8, the endings in turn: every run reaches the ending it chose, through every act
+/// of the spine, and nothing the spine needs stays set aside past the budget. Seed 6 stalled in
+/// the Factory until 2026-10-02 (pressed into a bench's corner by the generator, the Charge Hand
+/// a cell off across it: `tactics::works::steer` now gives up a way she cannot go).
 #[test]
-#[ignore = "slow: a whole story on five seeds, a minute or more each in release"]
-fn the_reader_reaches_an_ending_on_seeds_1_to_5() {
-    // The five in parallel: each is its own sim, and a whole story is minutes of release time.
+#[ignore = "slow: a whole story on eight seeds, a minute or more each in release"]
+fn the_reader_reaches_an_ending_on_seeds_1_to_8() {
+    // In parallel: each is its own sim, and a whole story is minutes of release time.
     let runs: Vec<Run> = std::thread::scope(|sc| {
-        let hs: Vec<_> = (1..=5).map(|s| sc.spawn(move || play(s, ending_for(s)))).collect();
+        let hs: Vec<_> = (1..=8).map(|s| sc.spawn(move || play(s, ending_for(s)))).collect();
         hs.into_iter().map(|h| h.join().expect("a story run")).collect()
     });
+    let mut problems = problems(&runs);
+    // Each of the three is reached on at least one seed.
+    for e in [Ending::Hold, Ending::Hill, Ending::Train] {
+        if !runs.iter().any(|r| r.the_end == e.the_end()) {
+            problems.push(format!("no seed reached the {} ending", e.name()));
+        }
+    }
+    assert!(
+        problems.is_empty(),
+        "{}",
+        problems.join(
+            "
+"
+        )
+    );
+}
+
+/// The two other stalls the overnight audit found (PLAY-PLAN.md 0.2): the Cautious on seed 6 (the
+/// Reader's Factory corner) and the Rusher on seed 8, which came out of the Museum by a park wall
+/// and planned over whole blocks a way that crossed it (`coarse.rs` plans over the pieces of a
+/// block now). Both play to an ending.
+#[test]
+#[ignore = "slow: two whole stories, a minute or more each in release"]
+fn the_cautious_on_seed_6_and_the_rusher_on_seed_8_reach_an_ending() {
+    let runs: Vec<Run> = std::thread::scope(|sc| {
+        let hs: Vec<_> = [(Model::Cautious, 6), (Model::Rusher, 8)]
+            .into_iter()
+            .map(|(m, s)| sc.spawn(move || play_as(m, s, ending_for(s))))
+            .collect();
+        hs.into_iter().map(|h| h.join().expect("a story run")).collect()
+    });
+    let problems = problems(&runs);
+    assert!(
+        problems.is_empty(),
+        "{}",
+        problems.join(
+            "
+"
+        )
+    );
+}
+
+/// What is wrong with each run: an ending not its own, a spine quest not done, a notice never
+/// fired, a step set aside past the budget.
+fn problems(runs: &[Run]) -> Vec<String> {
     let mut problems = Vec::new();
-    for r in &runs {
+    for r in runs {
         println!("{}", row(r));
         for d in &r.death_lines {
             println!("    death {d}");
@@ -171,13 +223,7 @@ fn the_reader_reaches_an_ending_on_seeds_1_to_5() {
             }
         }
     }
-    // Each of the three is reached on at least one seed.
-    for e in [Ending::Hold, Ending::Hill, Ending::Train] {
-        if !runs.iter().any(|r| r.the_end == e.the_end()) {
-            problems.push(format!("no seed reached the {} ending", e.name()));
-        }
-    }
-    assert!(problems.is_empty(), "{}", problems.join("\n"));
+    problems
 }
 
 /// From Yours to Say (the console putting a new game there, the Ball in her bag): each of the
