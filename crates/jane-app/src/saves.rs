@@ -9,7 +9,9 @@
 //! scripts). `config.json` lives in the same folder.
 
 use std::path::{Path, PathBuf};
-use std::time::SystemTime;
+use std::time::{Duration, SystemTime};
+
+use serde::{Deserialize, Serialize};
 
 use jane_sim::save::read_header;
 
@@ -47,6 +49,11 @@ impl Dirs {
         self.root.join(format!("slot{}.jane", n + 1))
     }
 
+    /// Slot `n`'s note: what the picker shows that the save's header does not hold.
+    pub fn meta(&self, n: u8) -> PathBuf {
+        self.root.join(format!("slot{}.meta.json", n + 1))
+    }
+
     pub fn config(&self) -> PathBuf {
         self.root.join("config.json")
     }
@@ -57,6 +64,42 @@ impl Dirs {
 pub struct SlotInfo {
     pub summary: jane_sim::Summary,
     pub modified: Option<SystemTime>,
+    /// The note written beside it, when it is there and still names this save.
+    pub meta: Option<SlotMeta>,
+}
+
+/// A slot's note, `slotN.meta.json` beside `slotN.jane` (decided 2026-10-01): the place's own
+/// name, the minute, the story's step and the real time it was written, read off the view as
+/// the save is made. The save itself is the sim's and is untouched (`SAVE_VERSION` stays); a
+/// slot without a note, or whose note names another save, shows what its header holds.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SlotMeta {
+    /// The header of the save this describes: a note left over from another save is ignored.
+    pub summary: Option<jane_sim::Summary>,
+    /// "The Lowfields", in the zone's region.
+    pub place: String,
+    /// From 1, as the HUD says it.
+    pub day: u32,
+    /// "21:14".
+    pub clock: String,
+    pub night: bool,
+    /// The first quest the tracker shows, and its open step.
+    pub quest: String,
+    pub step: String,
+    /// Seconds since 1970, real time.
+    pub saved_unix: u64,
+}
+
+impl SlotMeta {
+    /// When it was written, real time.
+    pub fn saved_at(&self) -> Option<SystemTime> {
+        (self.saved_unix > 0).then(|| SystemTime::UNIX_EPOCH + Duration::from_secs(self.saved_unix))
+    }
+}
+
+/// Now, as [`SlotMeta::saved_unix`] keeps it.
+pub fn unix_now() -> u64 {
+    SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).map_or(0, |d| d.as_secs())
 }
 
 /// Slot `n`'s summary; `None` for an empty or unreadable slot (an unreadable slot is an empty
@@ -66,12 +109,40 @@ pub fn info(dirs: &Dirs, n: u8) -> Option<SlotInfo> {
     let bytes = std::fs::read(&path).ok()?;
     let (h, _) = read_header(&bytes).ok()?;
     let modified = std::fs::metadata(&path).and_then(|m| m.modified()).ok();
-    Some(SlotInfo { summary: h.summary, modified })
+    let meta = std::fs::read(dirs.meta(n))
+        .ok()
+        .and_then(|b| serde_json::from_slice::<SlotMeta>(&b).ok())
+        .filter(|m| m.summary.as_ref() == Some(&h.summary));
+    Some(SlotInfo { summary: h.summary, modified, meta })
+}
+
+/// Writes slot `n`'s note beside it (after the save: a note never names a save not written).
+pub fn write_meta(dirs: &Dirs, n: u8, meta: &SlotMeta) -> Result<(), String> {
+    let path = dirs.meta(n);
+    let json = serde_json::to_vec_pretty(meta).map_err(|e| e.to_string())?;
+    std::fs::write(&path, json).map_err(|e| format!("{}: {e}", path.display()))
+}
+
+/// The slot F5 writes: the one last saved to or loaded from, else the first empty one, else the
+/// first.
+pub fn quick_slot(last: Option<u8>, empty: impl Fn(u8) -> bool) -> u8 {
+    last.or_else(|| (0..SLOTS).find(|&n| empty(n))).unwrap_or(0)
+}
+
+/// The save card's words: which slot, and whose rest it was when not hers.
+pub fn saved_line(n: u8, by: Option<&str>) -> String {
+    match by {
+        Some(coat) => format!("Saved to slot {} by the {coat} coat", n + 1),
+        None => format!("Saved to slot {}", n + 1),
+    }
 }
 
 /// The most recently written slot.
 pub fn latest(dirs: &Dirs) -> Option<u8> {
-    (0..SLOTS).filter_map(|n| info(dirs, n).map(|i| (n, i.modified))).max_by_key(|(_, m)| *m).map(|(n, _)| n)
+    (0..SLOTS)
+        .filter_map(|n| info(dirs, n).map(|i| (n, i.meta.and_then(|m| m.saved_at()).or(i.modified))))
+        .max_by_key(|(_, m)| *m)
+        .map(|(n, _)| n)
 }
 
 /// Writes `bytes` to slot `n`: a temporary file beside it, then a rename, so a crash mid-write
@@ -128,6 +199,43 @@ mod tests {
         std::fs::write(dirs.slot(2), b"not a save").unwrap();
         assert!(info(&dirs, 2).is_none());
         let _ = std::fs::remove_dir_all(&dirs.root);
+    }
+
+    #[test]
+    fn a_slots_note_round_trips_and_a_stale_one_is_ignored() {
+        let dirs = temp("meta");
+        let sim = jane_sim::Sim::new_game(3, "Tess");
+        write(&dirs, 0, &sim.save()).unwrap();
+        assert_eq!(info(&dirs, 0).unwrap().meta, None, "a save without its note still reads");
+        let meta = SlotMeta {
+            summary: Some(sim.summary()),
+            place: "The Lowfields".into(),
+            day: 3,
+            clock: "21:14".into(),
+            night: true,
+            quest: "A Letter from Julie".into(),
+            step: "Auntie Julie's house".into(),
+            saved_unix: unix_now(),
+        };
+        write_meta(&dirs, 0, &meta).unwrap();
+        let got = info(&dirs, 0).unwrap();
+        assert_eq!(got.meta.as_ref(), Some(&meta));
+        assert!(got.meta.unwrap().saved_at().is_some());
+        // A note naming another save (the slot written over since, its note not): not shown.
+        let mut other = sim.summary();
+        other.day += 1;
+        write_meta(&dirs, 0, &SlotMeta { summary: Some(other), ..meta }).unwrap();
+        assert_eq!(info(&dirs, 0).unwrap().meta, None, "a stale note is not shown");
+        let _ = std::fs::remove_dir_all(&dirs.root);
+    }
+
+    #[test]
+    fn quick_save_names_the_slot_it_writes() {
+        assert_eq!(quick_slot(Some(1), |_| true), 1, "the slot last used");
+        assert_eq!(quick_slot(None, |n| n == 2), 2, "else the first empty one");
+        assert_eq!(quick_slot(None, |_| false), 0, "else the first");
+        assert_eq!(saved_line(quick_slot(Some(1), |_| false), None), "Saved to slot 2");
+        assert_eq!(saved_line(0, Some("teal")), "Saved to slot 1 by the teal coat");
     }
 
     #[test]

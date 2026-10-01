@@ -192,9 +192,14 @@ impl AudioBus for Sound {
 pub fn intent_sound(i: &jane_present::ui::core::AppIntent) -> Option<SfxKind> {
     use jane_present::ui::core::AppIntent as I;
     Some(match i {
-        I::Pause | I::Controls | I::LoadMenu | I::SaveMenu | I::OpenWindow(_) | I::HostMenu | I::JoinMenu => {
-            SfxKind::UiOpen
-        }
+        I::Pause
+        | I::Controls
+        | I::LoadMenu
+        | I::SaveMenu
+        | I::Overwrite(_)
+        | I::OpenWindow(_)
+        | I::HostMenu
+        | I::JoinMenu => SfxKind::UiOpen,
         I::Back | I::Resume | I::CloseWindow => SfxKind::UiClose,
         I::NewGame { .. }
         | I::Continue

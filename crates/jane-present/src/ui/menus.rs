@@ -5,8 +5,9 @@ use jane_art::font::Face;
 use jane_art::palette::{Ramp, Tone};
 
 use crate::input::UiAction;
+use crate::ui::art::Mark;
 use crate::ui::cmd::Rect;
-use crate::ui::core::{AppIntent, ButtonKind, Ink, PanelStyle, Ui, text_w, wid};
+use crate::ui::core::{AppIntent, ButtonKind, Ink, PanelStyle, Ui, advance, line_h, text_w, wid, wrap_lines};
 use crate::ui::style::{self, argb};
 
 /// A menu's own state: which row is lit.
@@ -138,6 +139,22 @@ pub struct PauseInfo<'a> {
     pub guest: bool,
 }
 
+/// Why the pause menu's Save is grey, where it is: the words under the rows and the F5 refusal.
+pub const REST_TO_SAVE: &str = "Rest at a bed or fire to save";
+/// A guest's Save: the world is not hers to write.
+pub const HOSTS_TO_SAVE: &str = "The host's world: anyone's rest saves it there";
+
+/// Why Save cannot be picked now; `None` when it can.
+pub fn save_reason(info: &PauseInfo<'_>) -> Option<&'static str> {
+    if info.guest {
+        Some(HOSTS_TO_SAVE)
+    } else if !info.can_save {
+        Some(REST_TO_SAVE)
+    } else {
+        None
+    }
+}
+
 /// The pause menu: Resume, Save, Load, Open to LAN, Controls, Quit to Title.
 pub fn pause(ui: &mut Ui, st: &mut MenuState, info: &PauseInfo<'_>) {
     let (cw, ch) = ui.canvas;
@@ -167,17 +184,18 @@ pub fn pause(ui: &mut Ui, st: &mut MenuState, info: &PauseInfo<'_>) {
         Some(k) if k == 4 + lan => ui.intent(AppIntent::ToTitle),
         _ => {}
     }
-    // Why Save is grey, under the rows while it is.
+    // Why Save is grey: a lock beside the grey word, and the reason under the rows.
     let foot = y + h - 44;
-    if info.guest {
-        let s = "The host's world: anyone's rest saves it there";
-        ui.text(cw / 2 - text_w(Face::Fine, s) / 2, foot, s, Ink::fine(style::quiet()).shadow());
-    } else if info.can_save {
+    if let Some(why) = save_reason(info) {
+        let row = y + 52 + 30;
+        ui.mark_ink(Mark::Lock, cw / 2 + text_w(Face::Small, "Save") / 2 + 6, row + 6, style::dim(), 200);
+        let tw = text_w(Face::Fine, why) + 20;
+        let lx = cw / 2 - tw / 2;
+        ui.mark_ink(Mark::Lock, lx, foot - 3, style::quiet(), 230);
+        ui.text(lx + 20, foot, why, Ink::fine(style::quiet()).shadow());
+    } else {
         let s = "A bed or a fire is in reach";
         ui.text(cw / 2 - text_w(Face::Fine, s) / 2, foot, s, Ink::fine(style::good()).shadow());
-    } else {
-        let s = "Save by a bed or a fire";
-        ui.text(cw / 2 - text_w(Face::Fine, s) / 2, foot, s, Ink::fine(style::quiet()).shadow());
     }
     let mut line = String::with_capacity(48);
     line.push_str(info.zone);
@@ -197,10 +215,19 @@ pub fn pause(ui: &mut Ui, st: &mut MenuState, info: &PauseInfo<'_>) {
 pub struct SlotRow {
     /// Empty (or unreadable): nothing to load.
     pub empty: bool,
-    /// "The Lowfields", "Day 3, 21:00", "HP 34 of 40", "2 min ago".
+    /// Where she stood: "The Lowfields".
     pub zone: String,
+    /// "Day 3 · 21:14" (the hour alone, "Day 3 · 21:00", for a save without its note).
     pub when: String,
+    /// It was night: the moon beside the time, else the sun.
+    pub night: bool,
+    /// The story where she was, when the slot's note says: the quest she followed first and its
+    /// open step ("A Letter from Julie", "Auntie Julie's house").
+    pub quest: String,
+    pub step: String,
+    /// "34 of 40".
     pub hp: String,
+    /// When it was written, in real time: "5 min ago".
     pub age: String,
     /// The last one written: what Continue loads.
     pub latest: bool,
@@ -213,17 +240,59 @@ pub enum SlotMode {
     Load,
 }
 
-/// The slot list: three rows and Back. Saving over a slot, and loading, are one pick.
+/// What picking slot `i` does: an empty slot saves at once, a used one asks first
+/// ([`AppIntent::Overwrite`]); a load loads.
+pub fn slot_intent(mode: SlotMode, i: u8, row: &SlotRow) -> AppIntent {
+    match (mode, row.empty) {
+        (SlotMode::Save, true) => AppIntent::Save(i),
+        (SlotMode::Save, false) => AppIntent::Overwrite(i),
+        (SlotMode::Load, _) => AppIntent::Load(i),
+    }
+}
+
+/// What the overwrite question says is lost: "The Lowfields, Day 3 · 21:14, saved 5 min ago.
+/// Saving here replaces it."
+pub fn overwrite_detail(row: &SlotRow) -> String {
+    let mut s = format!("{}, {}", row.zone, row.when);
+    if !row.age.is_empty() {
+        s.push_str(", saved ");
+        s.push_str(&row.age);
+    }
+    s.push_str(". Saving here replaces it.");
+    s
+}
+
+/// `s` cut to `w` px in `face`, with "..." where it was cut.
+pub fn fit(face: Face, s: &str, w: i32) -> String {
+    let cols = (w / advance(face)).max(0) as usize;
+    if s.chars().count() <= cols {
+        return s.to_owned();
+    }
+    let keep = cols.saturating_sub(3);
+    let mut out: String = s.chars().take(keep).collect();
+    // Cut at a word's end when one is near, not through a word.
+    if s.chars().nth(keep).is_some_and(|c| c != ' ')
+        && let Some(sp) = out.rfind(' ').filter(|&sp| out.len() - sp <= 8)
+    {
+        out.truncate(sp);
+    }
+    out.truncate(out.trim_end_matches([' ', ',', ';', ':', '.', '-']).len());
+    out.push_str("...");
+    out
+}
+
+/// The picker: one card a slot, then a line saying what the lit one does, then Back. Saving
+/// into an empty slot is one pick; over a used one asks first (the app's confirmation).
 pub fn slots(ui: &mut Ui, st: &mut MenuState, mode: SlotMode, rows_in: &[SlotRow]) {
     let (cw, ch) = ui.canvas;
     dim(ui, 170);
-    let (w, row_h) = (420, 54);
-    let h = 70 + rows_in.len() as i32 * row_h + 44;
+    let (w, row_h) = (480.min(cw - 24), 68);
+    let n = rows_in.len();
+    let h = 56 + n as i32 * row_h + 62;
     let r = Rect::new((cw - w) / 2, (ch - h) / 2, w, h);
     ui.panel(r, PanelStyle::Window);
     let (x, y) = (i32::from(r.x), i32::from(r.y));
     heading(ui, cw / 2, y + 14, if mode == SlotMode::Save { "Save" } else { "Load" });
-    let n = rows_in.len();
     let mut enabled: Vec<bool> = rows_in.iter().map(|s| mode == SlotMode::Save || !s.empty).collect();
     enabled.push(true);
     st.nav(ui, &enabled);
@@ -235,41 +304,98 @@ pub fn slots(ui: &mut Ui, st: &mut MenuState, mode: SlotMode, rows_in: &[SlotRow
             st.focus = i as u8;
         }
         let lit = st.focus == i as u8;
-        ui.well(rr, lit);
-        if lit {
-            ui.fill(rr.inset(2), argb(Ramp::UiPanel.at(Tone::Light), 60));
-            ui.focus_ring(rr);
-        }
-        let (rx, ry) = (i32::from(rr.x), i32::from(rr.y));
-        let mut num = String::from("Slot ");
-        num.push(char::from(b'1' + i as u8));
-        ui.text(rx + 10, ry + 6, &num, Ink::fine(if lit { style::gold() } else { style::quiet() }).shadow());
-        if s.latest {
-            ui.text(rx + 10, ry + 30, "latest", Ink::fine(style::gold_deep()).shadow());
-        }
-        if s.empty {
-            ui.text(rx + 70, ry + 14, "Empty", Ink::small(style::dim()).shadow());
-        } else {
-            ui.text(
-                rx + 70,
-                ry + 5,
-                &s.zone,
-                Ink::small(if on { style::text_bright() } else { style::dim() }).shadow(),
-            );
-            ui.text(rx + 70, ry + 27, &s.when, Ink::fine(style::text()).shadow());
-            ui.text_right(rx + i32::from(rr.w) - 10, ry + 8, &s.hp, Ink::fine(style::quiet()).shadow());
-            ui.text_right(rx + i32::from(rr.w) - 10, ry + 27, &s.age, Ink::fine(style::quiet()).shadow());
-        }
+        slot_card(ui, rr, i as u8, s, on, lit);
         let clicked = over && ui.input.released;
         let confirmed = lit && ui.interactive && ui.input.has(UiAction::Confirm);
         if on && (clicked || confirmed) {
-            ui.intent(if mode == SlotMode::Save { AppIntent::Save(i as u8) } else { AppIntent::Load(i as u8) });
+            ui.intent(slot_intent(mode, i as u8, s));
         }
         ui.claim(rr);
     }
-    let back = Rect::new(x + w / 2 - 70, y + h - 38, 140, 26);
+    // What the lit card does, said before it is done.
+    let hint = match rows_in.get(usize::from(st.focus)) {
+        Some(s) if mode == SlotMode::Save && s.empty => "An empty slot: saves here at once",
+        Some(_) if mode == SlotMode::Save => "Holds a save: asks before writing over it",
+        Some(_) => "Loads the world as it was saved",
+        None => "",
+    };
+    let hy = y + 52 + n as i32 * row_h + 2;
+    let hint = fit(Face::Fine, hint, w - 40);
+    ui.text(cw / 2 - text_w(Face::Fine, &hint) / 2, hy, &hint, Ink::fine(style::quiet()).shadow());
+    let back = Rect::new(x + w / 2 - 70, y + h - 36, 140, 26);
     if back_button(ui, st, back, n as u8) {
         ui.intent(AppIntent::Back);
+    }
+}
+
+/// One slot's card in `rr`: a numbered plate on the left, then where she was and when, the
+/// story's step, her health and how long ago in real time.
+fn slot_card(ui: &mut Ui, rr: Rect, i: u8, s: &SlotRow, on: bool, lit: bool) {
+    let (x, y, w, h) = (i32::from(rr.x), i32::from(rr.y), i32::from(rr.w), i32::from(rr.h));
+    ui.well(rr, lit);
+    if lit {
+        ui.fill(rr.inset(2), argb(Ramp::UiPanel.at(Tone::Light), 56));
+        ui.rule(x + 52, x + w - 8, y + 2, style::gold_deep());
+    }
+    // The plate: a dark tablet with gold rules, the slot's number cut into it.
+    let (px, py, pw, ph) = (x + 6, y + 6, 40, h - 12);
+    ui.fill(Rect::new(px, py, pw, ph), argb(Ramp::UiSlot.at(Tone::Deep), 220));
+    ui.fill(Rect::new(px + 1, py + 1, pw - 2, ph / 2), argb(Ramp::UiPanel.at(Tone::Base), 90));
+    let rim = if s.empty { style::dim() } else { style::gold_deep() };
+    ui.rule(px + 2, px + pw - 2, py, rim);
+    ui.rule(px + 2, px + pw - 2, py + ph - 1, rim);
+    let num = [b'1' + i];
+    let num = std::str::from_utf8(&num).unwrap_or("?");
+    let ink = if s.empty {
+        style::dim()
+    } else if lit {
+        Ramp::UiGold.at(Tone::High)
+    } else {
+        style::gold()
+    };
+    ui.text_in(Rect::new(px, py + 1, pw, ph), num, Ink::head(ink).shadow());
+    if s.latest {
+        ui.mark(Mark::Diamond, px + pw / 2 - 3, py + ph - 4, 255);
+    }
+    if lit {
+        ui.focus_ring(rr);
+    }
+    let (tx, right) = (x + 56, x + w - 10);
+    if s.empty {
+        let ty = y + (h - line_h(Face::Small)) / 2;
+        ui.text(tx, ty, "Empty", Ink::small(if on { style::quiet() } else { style::dim() }).shadow());
+        return;
+    }
+    let bright = if on { style::text_bright() } else { style::dim() };
+    // Line one: the place, and the hour with the sun or the moon.
+    let ww = text_w(Face::Fine, &s.when);
+    ui.text_right(right, y + 8, &s.when, Ink::fine(if lit { style::gold() } else { style::text() }).shadow());
+    ui.mark(if s.night { Mark::Moon } else { Mark::Sun }, right - ww - 20, y + 3, 255);
+    let place = fit(Face::Small, &s.zone, right - ww - 28 - tx);
+    ui.text(tx, y + 5, &place, Ink::small(bright).shadow());
+    // Line two: the story, the quest in gold and its open step after it.
+    let sy = y + 26;
+    if !s.quest.is_empty() {
+        let q = fit(Face::Fine, &s.quest, right - tx);
+        let after = ui.text(tx, sy, &q, Ink::fine(style::gold_deep()).shadow());
+        let left = right - after - text_w(Face::Fine, " · ");
+        if !s.step.is_empty() && left > advance(Face::Fine) * 6 {
+            let step = fit(Face::Fine, &s.step, left);
+            let x2 = ui.text(after, sy, " · ", Ink::fine(style::dim()).shadow());
+            ui.text(x2, sy, &step, Ink::fine(style::text()).shadow());
+        }
+    }
+    // Line three: her health, the real time since, and the latest mark.
+    let ly = y + h - 17;
+    if !s.hp.is_empty() {
+        ui.mark(Mark::Heart, tx - 2, ly - 3, 230);
+        ui.text(tx + 16, ly, &s.hp, Ink::fine(style::quiet()).shadow());
+    }
+    ui.text_right(right, ly, &s.age, Ink::fine(style::quiet()).shadow());
+    if s.latest {
+        let l = "latest";
+        let lx = right - text_w(Face::Fine, &s.age) - text_w(Face::Fine, l) - 14;
+        ui.text(lx, ly, l, Ink::fine(style::gold_deep()).shadow());
     }
 }
 
@@ -281,17 +407,43 @@ pub fn back_button(ui: &mut Ui, st: &mut MenuState, r: Rect, index: u8) -> bool 
     ui.button(wid("back", u32::from(index)), r, "Back", ButtonKind::Menu, true, st.focus == index)
 }
 
+/// A question over everything: its words, a line or two more, and the two answers.
+#[derive(Clone, Copy, Debug)]
+pub struct Ask<'a> {
+    pub question: &'a str,
+    /// Wrapped under the question; empty for none.
+    pub detail: &'a str,
+    pub yes: &'a str,
+    pub no: &'a str,
+}
+
 /// A yes-or-no over everything: "Destroy the brass key?".
 pub fn confirm(ui: &mut Ui, st: &mut MenuState, question: &str) -> Option<bool> {
+    ask(ui, st, &Ask { question, detail: "", yes: "Yes", no: "No" })
+}
+
+/// [`confirm`] with more to say and its own answers: "Save over slot 2?", what is there now,
+/// "Save over" and "Keep it". The app draws it as the top layer, so it owns every key.
+pub fn ask(ui: &mut Ui, st: &mut MenuState, a: &Ask<'_>) -> Option<bool> {
     let (cw, ch) = ui.canvas;
     dim(ui, 120);
-    let w = (text_w(Face::Small, question) + 60).max(260);
-    let h = 100;
+    let least = if a.detail.is_empty() { 260 } else { 340 };
+    let w = (text_w(Face::Small, a.question) + 60).max(least).min(cw - 32);
+    let cols = ((w - 40) / advance(Face::Fine)).max(1) as usize;
+    let lines = if a.detail.is_empty() { 0 } else { wrap_lines(a.detail, cols).count() as i32 };
+    let extra = if lines > 0 { lines * line_h(Face::Fine) + 8 } else { 0 };
+    let bw = (text_w(Face::Small, a.yes).max(text_w(Face::Small, a.no)) + 48).max(120);
+    let h = 100 + extra;
     let r = Rect::new((cw - w) / 2, (ch - h) / 2, w, h);
     ui.panel(r, PanelStyle::Window);
     let (x, y) = (i32::from(r.x), i32::from(r.y));
-    ui.text_in(Rect::new(x, y + 14, w, 20), question, Ink::small(style::text_bright()).shadow());
-    let picked = rows(ui, st, "confirm", Rect::new(x + w / 2 - 60, y + 42, 120, 0), 26, &["Yes", "No"], &[true, true]);
+    ui.text_in(Rect::new(x, y + 14, w, 20), a.question, Ink::small(style::text_bright()).shadow());
+    if lines > 0 {
+        let dr = Rect::new(x + 20, y + 40, w - 40, lines * line_h(Face::Fine));
+        ui.wrapped(dr, a.detail, Ink::fine(style::quiet()).shadow());
+    }
+    let at = Rect::new(x + w / 2 - bw / 2, y + 42 + extra, bw, 0);
+    let picked = rows(ui, st, "confirm", at, 26, &[a.yes, a.no], &[true, true]);
     if ui.interactive && ui.input.has(UiAction::Cancel) {
         return Some(false);
     }
@@ -339,6 +491,82 @@ mod tests {
         assert_eq!(lights.layer(1).focus, 0);
         lights.pop();
         assert_eq!(lights.layer(0).focus, 0, "back to the pause menu as it was");
+    }
+
+    fn used() -> SlotRow {
+        SlotRow {
+            zone: "The Lowfields".into(),
+            when: "Day 3 · 21:14".into(),
+            age: "5 min ago".into(),
+            ..SlotRow::default()
+        }
+    }
+
+    #[test]
+    fn saving_over_a_used_slot_asks_first_and_the_question_owns_the_keys() {
+        let mut ui = Ui::new(UiArt::build(1).0);
+        let rows = [used(), SlotRow { empty: true, ..SlotRow::default() }, used()];
+        let press = |a| UiInput { actions: vec![a], ..UiInput::default() };
+        // An empty slot saves at once; a used one asks; a load loads.
+        let mut st = MenuState { focus: 1 };
+        ui.begin(press(UiAction::Confirm), 1, (768, 432));
+        slots(&mut ui, &mut st, SlotMode::Save, &rows);
+        assert!(ui.out.contains(&UiOut::Intent(AppIntent::Save(1))));
+        let mut lights = MenuLights::default();
+        lights.push(MenuState { focus: 0 });
+        ui.begin(press(UiAction::Down), 2, (768, 432));
+        slots(&mut ui, lights.layer(0), SlotMode::Save, &rows);
+        ui.begin(press(UiAction::Down), 3, (768, 432));
+        slots(&mut ui, lights.layer(0), SlotMode::Save, &rows);
+        assert_eq!(lights.layer(0).focus, 2, "the keys walk the cards, the empty one too");
+        ui.begin(press(UiAction::Confirm), 4, (768, 432));
+        slots(&mut ui, lights.layer(0), SlotMode::Save, &rows);
+        assert!(ui.out.contains(&UiOut::Intent(AppIntent::Overwrite(2))), "a used slot asks");
+        assert!(!ui.out.contains(&UiOut::Intent(AppIntent::Save(2))), "and does not save yet");
+        assert_eq!(slot_intent(SlotMode::Load, 2, &rows[2]), AppIntent::Load(2));
+        // The app opens the question on top with "Keep it" lit; it owns every key.
+        lights.push(MenuState { focus: 1 });
+        let detail = overwrite_detail(&rows[2]);
+        assert!(detail.contains("The Lowfields") && detail.contains("5 min ago"), "{detail}");
+        let ask_ = Ask { question: "Save over slot 3?", detail: &detail, yes: "Save over", no: "Keep it" };
+        let mut answer = None;
+        for (t, a) in [UiAction::Up, UiAction::Down, UiAction::Up, UiAction::Confirm].into_iter().enumerate() {
+            ui.begin(press(a), 10 + t as u32, (768, 432));
+            ui.interactive = false;
+            slots(&mut ui, lights.layer(0), SlotMode::Save, &rows);
+            ui.interactive = true;
+            answer = ask(&mut ui, lights.layer(1), &ask_);
+            assert_eq!(lights.layer(0).focus, 2, "the card under the question keeps its light ({a:?})");
+            assert!(!ui.out.iter().any(|o| matches!(o, UiOut::Intent(_))), "the picker under it picks nothing");
+        }
+        assert_eq!(answer, Some(true), "Up, Down, Up from Keep it is Save over");
+        // Confirm at once on the question as it opens keeps the save.
+        let mut st = MenuState { focus: 1 };
+        ui.begin(press(UiAction::Confirm), 20, (768, 432));
+        assert_eq!(ask(&mut ui, &mut st, &ask_), Some(false));
+    }
+
+    #[test]
+    fn grey_save_says_why_and_where() {
+        let info = PauseInfo::default();
+        assert_eq!(save_reason(&info), Some("Rest at a bed or fire to save"));
+        assert_eq!(save_reason(&PauseInfo { can_save: true, ..PauseInfo::default() }), None);
+        assert_eq!(save_reason(&PauseInfo { guest: true, ..PauseInfo::default() }), Some(HOSTS_TO_SAVE));
+        // Grey, not hidden: the light steps over it, and it stays on the menu.
+        let mut ui = Ui::new(UiArt::build(1).0);
+        let mut st = MenuState::default();
+        ui.begin(UiInput { actions: vec![UiAction::Down], ..UiInput::default() }, 1, (768, 432));
+        pause(&mut ui, &mut st, &info);
+        assert_eq!(st.focus, 2, "Down from Resume skips the grey Save to Load");
+        assert!(text_w(Face::Fine, REST_TO_SAVE) + 20 < 300 - 16, "the reason fits the pause plate");
+    }
+
+    #[test]
+    fn long_words_are_cut_to_fit() {
+        assert_eq!(fit(Face::Fine, "short", 80), "short");
+        let cut = fit(Face::Fine, "Auntie Julie's house, at the end of the station road", 8 * 22);
+        assert_eq!(cut, "Auntie Julie's...", "cut at a word's end");
+        assert!(text_w(Face::Fine, &cut) <= 8 * 22);
     }
 
     #[test]
