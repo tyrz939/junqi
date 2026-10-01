@@ -35,7 +35,7 @@ impl Style {
 #[derive(Clone, Debug)]
 pub struct Styles {
     tiles: Vec<Option<Style>>,
-    materials: [Option<Style>; 4],
+    materials: [Option<Style>; 5],
     /// Every id 0..=255 to its style (Void's for an id no tile has): the hot lookup.
     by_id: Vec<Style>,
 }
@@ -46,6 +46,7 @@ pub const fn over(m: Material) -> Tile {
         Material::RoofSlate | Material::RoofThatch => Tile::HouseRoof,
         Material::BrickWall => Tile::HouseWall,
         Material::Pine => Tile::Tree,
+        Material::WildEarth => Tile::Dirt,
     }
 }
 
@@ -55,6 +56,7 @@ const fn material_ix(m: Material) -> usize {
         Material::RoofThatch => 1,
         Material::BrickWall => 2,
         Material::Pine => 3,
+        Material::WildEarth => 4,
     }
 }
 
@@ -81,7 +83,7 @@ impl Styles {
                 return Err(format!("tile {} has no look", t.name()));
             }
         }
-        let mut materials = [None; 4];
+        let mut materials = [None; 5];
         for (m, row) in looks.materials {
             materials[material_ix(*m)] = Some(resolve(over(*m), row, &format!("{m:?}"))?);
         }
@@ -124,7 +126,7 @@ impl Styles {
     pub fn all(&self) -> Vec<(String, Tile, Option<Material>)> {
         let mut out: Vec<(String, Tile, Option<Material>)> =
             Tile::ALL.iter().map(|&t| (snake(t.name()), t, None)).collect();
-        for m in [Material::RoofSlate, Material::RoofThatch, Material::BrickWall, Material::Pine] {
+        for m in [Material::RoofSlate, Material::RoofThatch, Material::BrickWall, Material::Pine, Material::WildEarth] {
             out.push((snake(&format!("{m:?}")), over(m), Some(m)));
         }
         out

@@ -20,7 +20,8 @@ use crate::compile::source::{Source, typed};
 use crate::model::{self, TileGroup, TileHeight, TileNormal, TilePattern, TileStyle};
 
 /// The render-only materials, in their order (PORT.md §6.i).
-const MATERIALS: [Material; 4] = [Material::RoofSlate, Material::RoofThatch, Material::BrickWall, Material::Pine];
+const MATERIALS: [Material; 5] =
+    [Material::RoofSlate, Material::RoofThatch, Material::BrickWall, Material::Pine, Material::WildEarth];
 
 /// `GrassTall` as `grass_tall`.
 pub fn snake(name: &str) -> String {

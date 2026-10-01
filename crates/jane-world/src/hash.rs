@@ -387,6 +387,7 @@ impl Feed for Material {
             Material::RoofThatch => 1,
             Material::BrickWall => 2,
             Material::Pine => 3,
+            Material::WildEarth => 4,
         });
     }
 }

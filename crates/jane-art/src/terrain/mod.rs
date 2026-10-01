@@ -132,7 +132,8 @@ pub struct TileMap {
     pub regions: jane_core::blueprint::RegionMap,
 }
 
-const MATERIALS: [Material; 4] = [Material::RoofSlate, Material::RoofThatch, Material::BrickWall, Material::Pine];
+const MATERIALS: [Material; 5] =
+    [Material::RoofSlate, Material::RoofThatch, Material::BrickWall, Material::Pine, Material::WildEarth];
 
 /// A material as the byte a paint grid keeps: 0 for none.
 fn code(m: Material) -> u8 {
@@ -707,6 +708,13 @@ impl Painter {
         &self.styles
     }
 
+    /// The px of the last chunk painted that a drift between two wild grounds turned over
+    /// (`ecotone::GroundMix`): chunk-local `(x, y)`, the surface (a tile id) it was and the one
+    /// it took. For tests and sheets: a laid way's cells never appear here.
+    pub fn drifts(&self) -> &[(i16, i16, u8, u8)] {
+        &self.s.gmix.flips
+    }
+
     /// The flora it stamps.
     pub fn bank(&self) -> &Bank {
         &self.bank
@@ -1106,9 +1114,13 @@ impl Painter {
     /// Where two wild grounds meet, which draws as which (`ecotone::GroundMix`). Only grounds of
     /// a loose pattern blend: a garden's rows, setts and water keep their edge.
     fn ground_mix(&mut self, x0: i32, y0: i32, seed: u32) {
-        let surf = &self.s.surf;
-        let blend = &self.s.blend;
-        self.s.gmix.fill(|x, y| surf[Self::at(x, y)], |g| blend[usize::from(g)], x0 * CELL, y0 * CELL, seed);
+        let (surf, raw, mat) = (&self.s.surf, &self.s.raw, &self.s.mat);
+        let (blend, styles) = (&self.s.blend, &self.styles);
+        let laid = |x: i32, y: i32| {
+            let k = Self::at(x, y);
+            laid(styles, raw[k], mat[k], surf[k])
+        };
+        self.s.gmix.fill(|x, y| surf[Self::at(x, y)], |g| blend[usize::from(g)], laid, x0 * CELL, y0 * CELL, seed);
     }
 
     /// The surface at chunk-local px `(x, y)`, which may be up to 16 px outside the chunk.
@@ -1211,6 +1223,20 @@ fn blends(styles: &Styles, g: u8) -> bool {
                     | jane_data::TilePattern::Cracked
             )
     }
+}
+
+/// Whether a cell of tile `raw` painted `mat`, drawn as surface `surf`, is ground laid by hand,
+/// which keeps its edge where wild ground drifts (`ecotone::GroundMix`): earth the land did not
+/// lay (a lane, a walk, a yard, a town's ground: dirt without `Material::WildEarth`), whether the
+/// cell is that dirt (even where the speckle filter drew it as the grass round it) or is drawn as
+/// it (a stone by a lane borrows the lane's ground, a lone tuft of grass in a yard takes the
+/// yard's); and a grown-over path.
+fn laid(styles: &Styles, raw: Tile, mat: Option<Material>, surf: u8) -> bool {
+    let earth = |row: &jane_data::TileStyle| row.pattern == jane_data::TilePattern::Earth;
+    let own = styles.tile(raw).row;
+    raw == Tile::GrownPath
+        || mat != Some(Material::WildEarth)
+            && (own.group == TileGroup::Ground && earth(&own) || surf != NONE && earth(&styles.id(surf).row))
 }
 
 /// A cheap hash for the per-pixel paths (a stone of a course, a cluster of an edge): one

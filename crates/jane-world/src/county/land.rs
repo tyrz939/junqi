@@ -142,6 +142,7 @@ pub fn paint_land(c: &mut County<'_>) {
                 let clump = (clump24 >> 8) + (((r - Q16_ONE / 2) * 31) >> 8);
                 let (tile, pine) = ground(biome, clump, r, x, y, &s);
                 tiles[i_row] = tile;
+                c.wild_earth[i_row] = tile == Tile::Dirt;
                 if pine {
                     pines.cell(x);
                 }
@@ -319,6 +320,29 @@ impl Pines {
     fn finish(self) -> Vec<Rect> {
         self.rects
     }
+}
+
+/// The open earth the land laid that is still dirt, off every way, door step and set place, as
+/// rects: what drifts into the wild ground round it (`Material::WildEarth`). A lane, a yard or a
+/// town's ground is dirt laid by hand and keeps its edge.
+pub fn wild_earth(c: &County<'_>) -> Vec<Rect> {
+    let (w, h) = (c.k.w(), c.k.h());
+    let boxes: Vec<Rect> = c.chunks.iter().map(|ch| ch.bounds).collect();
+    let mut runs = Pines::default();
+    for y in 0..h {
+        for x in 0..w {
+            let i = (y * w + x) as usize;
+            if c.wild_earth[i]
+                && !c.trodden[i]
+                && c.k.get(x, y) == Tile::Dirt
+                && !boxes.iter().any(|b| b.contains(x, y))
+            {
+                runs.cell(x);
+            }
+        }
+        runs.end_row(y);
+    }
+    runs.finish()
 }
 
 /// The tree line round the edge, `EDGE` deep.

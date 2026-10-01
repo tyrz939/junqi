@@ -111,6 +111,9 @@ pub struct County<'a> {
     /// Every cell a footpath, a lane or a link lane trod (`y * w + x`): kept clear of whatever is
     /// set down after it (`ways`).
     pub trodden: Vec<bool>,
+    /// Every cell the land laid as open earth (`y * w + x`): what is still dirt of it at the end,
+    /// off every way and set place, is painted `Material::WildEarth` (`land::wild_earth`).
+    pub wild_earth: Vec<bool>,
     /// Every lane, link lane and footpath as laid: its centre line and where it is meant to meet
     /// its place (`ways::Way`).
     pub ways: Vec<ways::Way>,
@@ -145,6 +148,7 @@ impl<'a> County<'a> {
             ground: None,
             on_foot: Vec::new(),
             trodden: vec![false; (COUNTY_W * COUNTY_H) as usize],
+            wild_earth: vec![false; (COUNTY_W * COUNTY_H) as usize],
             ways: Vec::new(),
             fork_posts: Vec::new(),
         }
@@ -153,7 +157,9 @@ impl<'a> County<'a> {
     /// The finished blueprint, with the skeleton's patches as placed: each a square of its radius
     /// about its centre (the ecology's areas, ARCHITECTURE.md §4.6.c); and the skeleton's region
     /// of every macro cell, so the sky that rains on a cell is its region's (§4.6.b).
-    pub fn done(self) -> Blueprint {
+    pub fn done(mut self) -> Blueprint {
+        let earth = land::wild_earth(&self);
+        self.k.paint_all(earth, jane_core::Material::WildEarth);
         let areas = self
             .sk
             .areas

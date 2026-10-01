@@ -57,5 +57,6 @@
   "roof_slate": { "group": "roof", "height": "raised", "rise": 44, "ramp": "slate", "pattern": "slate", "detail": 4, "normal": "roof", "wet": 2 },
   "roof_thatch": { "group": "roof", "height": "raised", "rise": 44, "ramp": "thatch", "pattern": "thatch", "detail": 3, "normal": "roof" },
   "brick_wall": { "group": "wall", "height": "raised", "rise": 28, "ramp": "brick", "accent": "wood_dark", "pattern": "brick", "detail": 5, "normal": "wall", "wet": 1 },
-  "pine": { "group": "flora", "inherit": "grass", "height": "canopy", "rise": 84, "ramp": "needle", "accent": "bark", "pattern": "pine" }
+  "pine": { "group": "flora", "inherit": "grass", "height": "canopy", "rise": 84, "ramp": "needle", "accent": "bark", "pattern": "pine" },
+  "wild_earth": { "group": "ground", "rise": 2, "ramp": "earth", "pattern": "earth", "detail": 5, "wet": 1, "wild": true }
 }

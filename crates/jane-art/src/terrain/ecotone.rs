@@ -191,6 +191,11 @@ pub(crate) struct GroundMix {
     /// Per cell `-2..=17` each way, row-major `GC x GC`: the two grounds with the most of its
     /// neighbourhood (a surface id, or `super::NONE`) and their shares, 0..=256.
     cells: Vec<[(u8, i32); 2]>,
+    /// Per cell, the same lattice: laid by hand, kept whole.
+    laid: Vec<bool>,
+    /// The chunk's px the last [`GroundMix::apply`] turned over: chunk-local `(x, y)`, the
+    /// ground it was and the ground it took.
+    pub flips: Vec<(i16, i16, u8, u8)>,
     /// The drifts' noise, a lattice a cell apart, over the surface map; its top-left world px.
     drift: Field,
     mx: i32,
@@ -203,6 +208,8 @@ impl Default for GroundMix {
     fn default() -> Self {
         GroundMix {
             cells: vec![[(super::NONE, 0); 2]; (GC * GC) as usize],
+            laid: vec![false; (GC * GC) as usize],
+            flips: Vec::new(),
             drift: Field::default(),
             mx: 0,
             my: 0,
@@ -215,18 +222,30 @@ impl GroundMix {
     /// Work the shares from `surf(x, y)` (the surface of chunk-local cell `(x, y)`, up to
     /// `REACH` outside) and `blends(g)` (whether ground `g` drifts into its neighbours), over the
     /// chunk whose top-left world px is `(px0, py0)`.
-    pub fn fill(&mut self, surf: impl Fn(i32, i32) -> u8, blends: impl Fn(u8) -> bool, px0: i32, py0: i32, seed: u32) {
+    ///
+    /// `laid(x, y)`: the cell's ground was laid by hand (a lane, a yard, a grown-over path): it
+    /// neither drifts nor lends its ground to a drift, so a way keeps its edge and its fill.
+    pub fn fill(
+        &mut self,
+        surf: impl Fn(i32, i32) -> u8,
+        blends: impl Fn(u8) -> bool,
+        laid: impl Fn(i32, i32) -> bool,
+        px0: i32,
+        py0: i32,
+        seed: u32,
+    ) {
         self.calm = true;
         for cj in 0..GC {
             for ci in 0..GC {
                 let (x, y) = (ci - 2, cj - 2);
+                self.laid[(cj * GC + ci) as usize] = laid(x, y);
                 // At most a few grounds: tally them in a small list.
                 let mut tally = [(super::NONE, 0i32); 4];
                 for b in -GROUND_TAPS..=GROUND_TAPS {
                     let wb = GROUND_TAPS + 1 - b.abs();
                     for a in -GROUND_TAPS..=GROUND_TAPS {
                         let o = surf(x + a, y + b);
-                        if !blends(o) {
+                        if !blends(o) || laid(x + a, y + b) {
                             continue;
                         }
                         let w = wb * (GROUND_TAPS + 1 - a.abs());
@@ -252,8 +271,9 @@ impl GroundMix {
     /// Lay the drifts over the surface map `mm` (`MAP x MAP` px, the chunk's px 0 at `CELL`):
     /// each px of a ground `blend` names takes the other ground where the drift says, and `hit`
     /// (`GC x GC`, cells `-2..=17`) is set for every cell a px of which changed.
-    pub fn apply(&self, mm: &mut [u8], blend: &[bool; 256], hit: &mut [bool]) {
+    pub fn apply(&mut self, mm: &mut [u8], blend: &[bool; 256], hit: &mut [bool]) {
         hit.fill(false);
+        self.flips.clear();
         if self.calm {
             return;
         }
@@ -302,7 +322,9 @@ impl GroundMix {
                         }
                         let i = ((y + CELL) * MAP + x + CELL) as usize;
                         let g = mm[i];
-                        if !blend[usize::from(g)] {
+                        if !blend[usize::from(g)]
+                            || self.laid[((y.div_euclid(CELL) + 2) * GC + x.div_euclid(CELL) + 2) as usize]
+                        {
                             continue;
                         }
                         let bil = |s: [i32; 4]| {
@@ -333,6 +355,9 @@ impl GroundMix {
                         let noise = self.drift.at(self.mx + x + CELL, self.my + y + CELL) - 128;
                         if t + noise * bell / REACH_DIV >= FLIP {
                             mm[i] = o;
+                            if (0..CHUNK_PX).contains(&x) && (0..CHUNK_PX).contains(&y) {
+                                self.flips.push((x as i16, y as i16, g, o));
+                            }
                             hit[((y.div_euclid(CELL) + 2) * GC + x.div_euclid(CELL) + 2) as usize] = true;
                         }
                     }

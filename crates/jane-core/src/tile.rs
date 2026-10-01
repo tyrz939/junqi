@@ -160,6 +160,10 @@ pub enum Material {
     BrickWall,
     /// Over `Tree`: a conifer, a tree in every rule but its drawing.
     Pine,
+    /// Over `Dirt`: open earth the land laid (a foothill's, the slag's, the yards'), not a lane,
+    /// a yard or a town's ground. Only it drifts into the wild ground beside it (`jane-art`'s
+    /// ecotone); dirt without it is laid by hand and keeps its edge.
+    WildEarth,
 }
 
 impl Material {
