@@ -126,8 +126,8 @@
     "returnTo": "Pell's stone, by the last lit lamp",
     "requirements": [
       { "type": "location", "target": "lamp_12", "qty": 1, "text": "No. 12, the first dark lamp past Pell's stone, at night" },
-      { "type": "location", "target": "lamp_13", "qty": 1, "text": "No. 13, the next lamp along the same road, at night" },
-      { "type": "location", "target": "lamp_15", "qty": 1, "text": "No. 15, the last dark lamp on the same road, at night" }
+      { "type": "location", "target": "lamp_13", "qty": 1, "text": "No. 13, the next lamp past Pell's stone, at night" },
+      { "type": "location", "target": "lamp_15", "qty": 1, "text": "No. 15, the last dark lamp past Pell's stone, at night" }
     ],
     "rewards": [{ "do": "give", "item": "light_stone", "qty": 2 }]
   },

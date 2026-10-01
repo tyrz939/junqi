@@ -93,6 +93,7 @@ First run, before any fix: about thirty distinct step failures across the 26 que
 | No. 13 and No. 15 were only "the next lamp" | Checked against No. 12, they were 3 to 6 half-screens away | Each lamp is its own landmark; each has its number on a plate (and now a label) |
 | The Lost Property tin 1,540 to 1,990 steps from the book | Over the "near" budget | Deliberate: two of three lie on the road she came in by, and the third is one road on. Tier "far", reason written |
 | "The crate is at the north end of the platform" | A compass word in a chunk being rebuilt | "Be on the platform when it goes; the parcel is left on the crate there" |
+| **The Lost's sweep, 1 October 2026** (seeds 1 to 8): Farrant's ring, Denny's light, Rendle's coat, the lamps, the Hoar Stone, the Factory, the forest gate missed on two to seven seeds | A place's posts stood only at its own road, half of them were never put up (a fingerpost found no room, a lane drawn on the slant broke the walk along the roads, a bridge ended it, the first walk was left bare), and nothing pointed at a place from where the quest is given | Every story place and every set place the quests name gets posts in two rings along the roads (72 cells off and 240 off, the outer from the nearest roads that far when its own road runs out); places whose posts would stand together share one post, an arm each; every fork's fingerpost within 900 cells walked gets an arm for the nearest places it does not name; a post where each place is told of (a camp's at the farm whose quest sends her there, the Factory and the Hoar Stone at the graveyard, the library at the Museum, the forest at the library, the mine and the School at Castle); the burial is posted as **the Hoar Stone**, the name its step uses; **the Company's grate** is posted; a **County lighting notice** by Pell's stone lists Lamps 12, 13 and 15, which way and how far ("THERE IS NO LAMP 14 ON THIS ROAD"). `crates/jane-bot/tests/clarity.rs` holds it |
 
 Not changed, on purpose: no quest text uses a compass bearing or a distance in metres. Both change per seed (`QUESTS.md` K4). Directions are always "the X road", "at the Y", "up the Z track", and the world guarantees the X, Y and Z.
 
@@ -208,7 +209,7 @@ Chains are independent; only the order inside a chain is fixed. Walks below: **s
 
 | Step | Where | Thinking | Confuse | Verdict |
 | --- | --- | --- | --- | --- |
-| "The pipes, down the grate at the edge of Castle" | The grate stands beside the town (`doors.json`, "The grate to the pipes"); banner "The Pipes" | "Under the town" | Not "in the road": the grate is set beside the town, not in a street | OK |
+| "The pipes, down the Company's grate at the edge of Castle" | The grate stands beside the town (`doors.json`, "The Company's grate, to the pipes"); fingerposts to "THE COMPANY'S GRATE" on the roads by it; banner "The Pipes" | "Under the town" | Not "in the road": the grate is set beside the town, not in a street | OK |
 | "The Factory, in the Works past the graveyard, or up the OUTFALL's ladder from the pipes" | Up the outfall's manhole into the Factory's yard, or the road past the graveyard; banner "The Factory" | | | OK |
 | "The Foreman, in ASSEMBLY, through the FOREMAN'S OFFICE in the Factory" | Past the generator (Electric, from the orb); the works plan and the boards use the same names | | A place his death marks | OK |
 
@@ -324,8 +325,8 @@ The stone is found, not sent to: it stands by the last lit lamp of the longest L
 
 | "No. 12, the first dark lamp past Pell's stone, at night" | 30 / 33 steps; plate "No. 12" | | | OK |
 | --- | --- | --- | --- | --- |
-| "No. 13, the next lamp along the same road, at night" | 104 / 104 | | The audit used to measure it against No. 12 | OK |
-| "No. 15, the last dark lamp on the same road, at night" | 177 / 93 | | | OK |
+| "No. 13, the next lamp past Pell's stone, at night" | 104 / 104; the County's lighting notice by the stone says which way and how far | | The audit used to measure it against No. 12 | OK |
+| "No. 15, the last dark lamp past Pell's stone, at night" | 177 / 93; the notice too | | | OK |
 
 **E2 The Lampman's Brazier.** Two planks and a fire stone: "There are two in the car in the wood" (1,430 / 375 steps). Hand-in: the cold brazier past No. 15, which lights and becomes a fire. The car's planks are also the mine's stair wood: the decision.
 

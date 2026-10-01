@@ -114,6 +114,9 @@ pub struct County<'a> {
     /// Every lane, link lane and footpath as laid: its centre line and where it is meant to meet
     /// its place (`ways::Way`).
     pub ways: Vec<ways::Way>,
+    /// Every fork's fingerpost as `country::roads::forks` set it up: its key, where it stands and
+    /// its words, so the stories stage can add an arm for a place nearby (`stories::posts`).
+    pub fork_posts: Vec<(Key, (i32, i32), String)>,
 }
 
 /// The centre cell of macro cell `m`, on either axis.
@@ -143,6 +146,7 @@ impl<'a> County<'a> {
             on_foot: Vec::new(),
             trodden: vec![false; (COUNTY_W * COUNTY_H) as usize],
             ways: Vec::new(),
+            fork_posts: Vec::new(),
         }
     }
 
