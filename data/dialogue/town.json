@@ -5,9 +5,14 @@
       { "when": [{ "if": "questReady", "quest": "sixpence" }], "node": "in" },
       { "when": [{ "if": "questDone", "quest": "sixpence" }], "node": "after" },
       { "when": [{ "if": "questActive", "quest": "sixpence" }], "node": "wait" },
-      { "node": "offer" }
+      { "when": [{ "if": "flag", "flag": "read_board" }, { "if": "flag", "flag": "mornings", "min": 1 }], "node": "offer" },
+      { "when": [{ "if": "flag", "flag": "mornings", "min": 2 }], "node": "offer" },
+      { "node": "early" }
     ],
     "nodes": {
+      "early": {
+        "lines": ["Mum says I'm not to bother people."]
+      },
       "offer": {
         "lines": [
           "Have you seen a black cat? He's called Sixpence. He hasn't come in since Sunday.",
@@ -67,9 +72,14 @@
       { "when": [{ "if": "questReady", "quest": "second_post" }], "node": "in" },
       { "when": [{ "if": "questDone", "quest": "second_post" }], "node": "after" },
       { "when": [{ "if": "questActive", "quest": "second_post" }], "node": "wait" },
-      { "node": "offer" }
+      { "when": [{ "if": "questActive", "quest": "sixpence" }], "node": "offer" },
+      { "when": [{ "if": "questDone", "quest": "sixpence" }], "node": "offer" },
+      { "node": "early" }
     ],
     "nodes": {
+      "early": {
+        "lines": ["Good morning. Stamps at the counter, parcels at the side."]
+      },
       "offer": {
         "lines": [
           "Three letters came in the second post with the wrong numbers on them, and the boy hasn't come in to take them round.",
@@ -147,9 +157,14 @@
       { "when": [{ "if": "questReady", "quest": "washing_day" }], "node": "in" },
       { "when": [{ "if": "questDone", "quest": "washing_day" }], "node": "after" },
       { "when": [{ "if": "questActive", "quest": "washing_day" }], "node": "wait" },
-      { "node": "offer" }
+      { "when": [{ "if": "questActive", "quest": "paid_to_sunday" }, { "if": "flag", "flag": "mornings", "min": 2 }], "node": "offer" },
+      { "when": [{ "if": "questDone", "quest": "paid_to_sunday" }, { "if": "flag", "flag": "mornings", "min": 2 }], "node": "offer" },
+      { "node": "early" }
     ],
     "nodes": {
+      "early": {
+        "lines": ["Don't mind me. I'm only seeing to the line."]
+      },
       "offer": {
         "lines": [
           "The wind had three things off my line this morning. There was no wind this morning.",
@@ -267,9 +282,14 @@
       { "when": [{ "if": "questReady", "quest": "two_loaves" }], "node": "in" },
       { "when": [{ "if": "questDone", "quest": "two_loaves" }], "node": "after" },
       { "when": [{ "if": "questActive", "quest": "two_loaves" }], "node": "wait" },
-      { "node": "offer" }
+      { "when": [{ "if": "questActive", "quest": "second_post" }], "node": "offer" },
+      { "when": [{ "if": "questDone", "quest": "second_post" }], "node": "offer" },
+      { "node": "early" }
     ],
     "nodes": {
+      "early": {
+        "lines": ["Morning. Nothing on the tray yet. Come back when it's out."]
+      },
       "offer": {
         "lines": [
           "Bread's gone by ten, mostly. I bake for forty. I've always baked for forty, and I sell about nine.",
@@ -346,9 +366,14 @@
       {"when": [{"if": "speakerKnows", "news": "allotments_thinned"}, {"if": "flag", "flag": "said_sheds_mrs_bex", "not": true}], "node": "news_sheds"},
       { "when": [{ "if": "questDone", "quest": "never_any_eggs" }], "node": "after" },
       { "when": [{ "if": "questActive", "quest": "never_any_eggs" }], "node": "wait" },
-      { "node": "offer" }
+      { "when": [{ "if": "questActive", "quest": "washing_day" }, { "if": "flag", "flag": "mornings", "min": 2 }], "node": "offer" },
+      { "when": [{ "if": "questDone", "quest": "washing_day" }, { "if": "flag", "flag": "mornings", "min": 2 }], "node": "offer" },
+      { "node": "early" }
     ],
     "nodes": {
+      "early": {
+        "lines": ["I'm waiting on the eggs."]
+      },
       "news_sheds": {"lines": ["The Milkman says the rats are gone from the allotment sheds. There'll be eggs, then. Not today. Tomorrow, I expect."], "actions": [{"do": "flag", "flag": "said_sheds_mrs_bex"}]},
       "offer": {
         "lines": [
@@ -389,9 +414,14 @@
       { "when": [{ "if": "questActive", "quest": "the_back_room" }], "node": "room_wait" },
       { "when": [{ "if": "questDone", "quest": "on_the_hour" }], "node": "room_offer" },
       { "when": [{ "if": "questActive", "quest": "on_the_hour" }], "node": "hour_wait" },
-      { "node": "offer" }
+      { "when": [{ "if": "questActive", "quest": "white_roses" }, { "if": "flag", "flag": "mornings", "min": 2 }], "node": "offer" },
+      { "when": [{ "if": "questDone", "quest": "white_roses" }, { "if": "flag", "flag": "mornings", "min": 2 }], "node": "offer" },
+      { "node": "early" }
     ],
     "nodes": {
+      "early": {
+        "lines": ["Is that the time? I thought it was later."]
+      },
       "news_bell": {"lines": ["No bell last night. At nine I sat by my door with my coat on, in case. Nothing rang."], "actions": [{"do": "flag", "flag": "said_bell_mr_dunn"}]},
       "offer": {
         "lines": [
@@ -443,7 +473,8 @@
       {"when": [{"if": "speakerKnows", "news": "mine_quiet"}, {"if": "flag", "flag": "said_mine_constable", "not": true}], "node": "news_mine"},
       { "when": [{ "if": "questDone", "quest": "the_constables_paces" }], "node": "after" },
       { "when": [{ "if": "questActive", "quest": "the_constables_paces" }], "node": "wait" },
-      { "when": [{ "if": "flag", "flag": "talked_constable" }], "node": "offer" },
+      { "when": [{ "if": "flag", "flag": "talked_constable" }, { "if": "questActive", "quest": "school_lane" }, { "if": "flag", "flag": "mornings", "min": 3 }], "node": "offer" },
+      { "when": [{ "if": "flag", "flag": "talked_constable" }, { "if": "questDone", "quest": "school_lane" }, { "if": "flag", "flag": "mornings", "min": 3 }], "node": "offer" },
       { "node": "first" }
     ],
     "nodes": {
@@ -507,9 +538,14 @@
       {"when": [{"if": "speakerKnows", "news": "burial_quiet"}, {"if": "flag", "flag": "said_burial_mr_sallis", "not": true}], "node": "news_burial"},
       { "when": [{ "if": "questDone", "quest": "white_roses" }], "node": "after" },
       { "when": [{ "if": "questActive", "quest": "white_roses" }], "node": "wait" },
-      { "node": "offer" }
+      { "when": [{ "if": "questActive", "quest": "the_new_stone" }, { "if": "flag", "flag": "mornings", "min": 1 }], "node": "offer" },
+      { "when": [{ "if": "questDone", "quest": "the_new_stone" }, { "if": "flag", "flag": "mornings", "min": 1 }], "node": "offer" },
+      { "node": "early" }
     ],
     "nodes": {
+      "early": {
+        "lines": ["Mind the edges. I've only just done them."]
+      },
       "news_burial": {"lines": ["They say the fog's gone off the old graveyard, up the road. Mrs Sallis is behind the church, where it was always clear. I might go in and see her on Sunday. I might."], "actions": [{"do": "flag", "flag": "said_burial_mr_sallis"}]},
       "offer": {
         "lines": [
@@ -621,9 +657,14 @@
       { "when": [{ "if": "questActive", "quest": "school_lane" }], "node": "lane_wait" },
       { "when": [{ "if": "questDone", "quest": "the_fourth_lane" }], "node": "lane_offer" },
       { "when": [{ "if": "questActive", "quest": "the_fourth_lane" }], "node": "count_wait" },
-      { "node": "offer" }
+      { "when": [{ "if": "questActive", "quest": "the_back_room" }, { "if": "flag", "flag": "mornings", "min": 2 }], "node": "offer" },
+      { "when": [{ "if": "questDone", "quest": "the_back_room" }, { "if": "flag", "flag": "mornings", "min": 2 }], "node": "offer" },
+      { "node": "early" }
     ],
     "nodes": {
+      "early": {
+        "lines": ["Shh. I'm counting."]
+      },
       "offer": {
         "lines": [
           "I'm counting the lanes. There's Back Lane, Cross Lane and Pound Lane.",
@@ -681,9 +722,14 @@
     "start": [
       { "when": [{ "if": "questDone", "quest": "too_red" }], "node": "after" },
       { "when": [{ "if": "questActive", "quest": "too_red" }], "node": "wait" },
-      { "node": "offer" }
+      { "when": [{ "if": "questActive", "quest": "never_any_eggs" }, { "if": "flag", "flag": "mornings", "min": 3 }], "node": "offer" },
+      { "when": [{ "if": "questDone", "quest": "never_any_eggs" }, { "if": "flag", "flag": "mornings", "min": 3 }], "node": "offer" },
+      { "node": "early" }
     ],
     "nodes": {
+      "early": {
+        "lines": ["Morning. They've come on, haven't they."]
+      },
       "offer": {
         "lines": [
           "I water them morning and evening. They don't need it. It's something to do with my hands.",

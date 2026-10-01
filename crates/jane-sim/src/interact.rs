@@ -97,7 +97,7 @@ pub fn loot_of<'b>(bp: &'b Blueprint, p: &'b Prop) -> &'b [jane_core::Stack] {
     }
 }
 
-fn has_loot(bp: &Blueprint, p: &Prop) -> bool {
+pub(crate) fn has_loot(bp: &Blueprint, p: &Prop) -> bool {
     !p.used && !loot_of(bp, p).is_empty()
 }
 

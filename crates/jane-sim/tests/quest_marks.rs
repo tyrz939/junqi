@@ -1,5 +1,5 @@
-//! The quest marks and sparkles (PRESENTATION.md §3.8), as the `View` says them: a "?" over a
-//! person with a quest to give her, a "!" over whoever takes a ready one back, nothing while a
+//! The quest marks and sparkles (PRESENTATION.md §3.8), as the `View` says them: a "!" over a
+//! person with a quest to give her, a "?" over whoever takes a ready one back, nothing while a
 //! quest is under way or once it is done; and the things a step still wants, until it has them.
 //! Mr Hale and his three (`the_last_name`, `roberts_cap`, `the_new_stone`) on the real seed.
 
@@ -114,4 +114,101 @@ fn each_seat_its_own_marks() {
     s.state_mut().players[0].dialogue =
         Some(Dialogue { tree: None, node: 0, line: 0, speaker: Speaker::Unit(h), read: None });
     assert_eq!(mark(&s, 0, h), Some(QuestMark::Offer), "the view says it; the presenter hides it");
+}
+
+/// "A place" for the crowd rule: forty cells round any "!" (PLAY-PLAN.md 0.4).
+const CROWD_CELLS: i32 = 40;
+/// The most a place may show at once.
+const CROWD_MAX: usize = 3;
+
+/// The Castle's own errands, the people and the board, as the town's start rules give them.
+const TOWN: [(&str, &str); 19] = [
+    ("parish_board", "footpath_three"),
+    ("parish_board", "rats_in_the_sheds"),
+    ("parish_board", "plot_nine"),
+    ("mr_hale", "the_last_name"),
+    ("mr_hale", "roberts_cap"),
+    ("mr_hale", "the_new_stone"),
+    ("mr_sallis", "white_roses"),
+    ("mr_dunn", "on_the_hour"),
+    ("mr_dunn", "the_back_room"),
+    ("dot", "the_fourth_lane"),
+    ("dot", "school_lane"),
+    ("constable", "the_constables_paces"),
+    ("tilly", "sixpence"),
+    ("miss_dray", "second_post"),
+    ("mrs_oddie", "two_loaves"),
+    ("milkman", "paid_to_sunday"),
+    ("mrs_marsh", "washing_day"),
+    ("mrs_bex", "never_any_eggs"),
+    ("mrs_hobb", "too_red"),
+];
+
+fn set_flag(s: &mut Sim, name: &str, value: i32) {
+    let flag = sym(s, name);
+    cmd(s, Command::Dev(DevOp::Flag { flag, value }));
+}
+
+/// Whoever (or whatever) of the county talks as `tree`.
+fn speaker_of(s: &Sim, tree: &str) -> Speaker {
+    let cat = jane_data::catalog();
+    let t = cat.story.dialogue_id(tree).unwrap_or_else(|| panic!("no tree {tree}"));
+    let v = s.view(Seat(0)).unwrap();
+    let z = s.state().zone(jane_core::ZoneId::County).unwrap();
+    if let Some(u) = z.units.iter().find(|u| cat.combat.unit(u.def).talk == Some(t)) {
+        return Speaker::Unit(u.id);
+    }
+    let p = v.props().find(|p| v.prop_spawn(p).is_some_and(|sp| sp.talk == Some(t)));
+    Speaker::Prop(p.unwrap_or_else(|| panic!("nobody talks as {tree}")).id)
+}
+
+fn offers(s: &Sim, tree: &str, q: &str) -> bool {
+    let t = jane_data::catalog().story.dialogue_id(tree).unwrap();
+    s.view(Seat(0)).unwrap().would_offer(t, speaker_of(s, tree), quest(q))
+}
+
+#[track_caller]
+fn no_crowd(s: &Sim, seed: u32, when: &str) {
+    let c = s.view(Seat(0)).unwrap().offer_crowd(CROWD_CELLS);
+    assert!(c.len() <= CROWD_MAX, "seed {seed} {when}: {} \"!\" within {CROWD_CELLS} cells: {c:?}", c.len());
+}
+
+#[test]
+fn the_castle_never_shows_more_than_three_offers_and_every_errand_comes_round() {
+    for seed in 1..=8 {
+        let mut s = Sim::new_game_with(jane_sim::Blueprints::build(seed).unwrap(), "Jane");
+        idle(&mut s, 2);
+        no_crowd(&s, seed, "the first evening");
+        // The first morning, before and after the board; the constable already met.
+        set_flag(&mut s, "mornings", 1);
+        no_crowd(&s, seed, "the first morning");
+        assert!(!offers(&s, "tilly", "sixpence"), "seed {seed}: Tilly waits for the board or a second day");
+        set_flag(&mut s, "read_board", 1);
+        assert!(offers(&s, "tilly", "sixpence"), "seed {seed}: the board is the way in");
+        set_flag(&mut s, "talked_constable", 1);
+        no_crowd(&s, seed, "the first morning, the board read");
+        // Each day: everything offered is taken (all at once, the worst case), then all of it
+        // done; until nothing more comes round that day.
+        for day in 1..=4 {
+            set_flag(&mut s, "mornings", day);
+            no_crowd(&s, seed, &format!("morning {day}"));
+            loop {
+                let open: Vec<&str> = TOWN.iter().filter(|(t, q)| offers(&s, t, q)).map(|e| e.1).collect();
+                if open.is_empty() {
+                    break;
+                }
+                for q in &open {
+                    cmd(&mut s, Command::Dev(DevOp::Quest(quest(q))));
+                    no_crowd(&s, seed, &format!("day {day}, {q} taken"));
+                }
+                for q in &open {
+                    hand_in(&mut s, quest(q));
+                    no_crowd(&s, seed, &format!("day {day}, {q} done"));
+                }
+            }
+        }
+        let undone: Vec<&str> =
+            TOWN.iter().map(|e| e.1).filter(|q| !s.state().quests.done.contains(&quest(q))).collect();
+        assert!(undone.is_empty(), "seed {seed}: never offered {undone:?}");
+    }
 }

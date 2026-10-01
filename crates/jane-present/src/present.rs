@@ -115,6 +115,8 @@ pub fn max_lights(tier: Tier) -> usize {
 
 /// Rows between a head and the quest mark over it (§3.8).
 const MARK_CLEAR: i32 = 0;
+/// A thing's quest mark keeps its own key apart from a person's (its bob's phase).
+pub const PROP_MARK_KEY: u32 = 0x1000_0000;
 
 /// A unit as the presenter keeps it between ticks.
 #[derive(Clone, Copy, Debug)]
@@ -156,11 +158,11 @@ struct UnitRec {
     mark: Option<QuestMark>,
 }
 
-/// A quest mark to draw over a person's head this frame (§3.8): where its foot is on the canvas
+/// A quest mark to draw over a person's head, or a thing's top, this frame (§3.8): where its foot is on the canvas
 /// (the glyph stands on it), and which mark.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct QuestMarker {
-    /// The unit's id: its bob's phase.
+    /// The unit's id, or a thing's id with [`PROP_MARK_KEY`]: its bob's phase.
     pub id: u32,
     pub x: i32,
     pub y: i32,
@@ -191,6 +193,9 @@ struct PropRec {
     lift: i32,
     /// The foot it sorts by, when it stands on a top: the top's.
     sort_foot: Option<i32>,
+    /// Its quest mark for this seat (a book, a board, a door that gives quests), unless she is
+    /// reading it.
+    mark: Option<QuestMark>,
 }
 
 /// A prop light the view says is showing, this tick.
@@ -601,6 +606,11 @@ impl Present {
         let cat = jane_data::catalog();
         let (props, stand, kit) = (&mut self.props, &self.stand, &self.kit);
         props.clear();
+        // What she is reading: the mark over it is down while she does.
+        let reading = view.dialogue().and_then(|d| match d.speaker {
+            jane_sim::state::Speaker::Prop(id) => Some(id),
+            _ => None,
+        });
         view.for_props_in(area, &mut self.prop_scratch, |p| {
             let d = cat.story.prop(p.def);
             // An open gate is a doorway.
@@ -641,6 +651,7 @@ impl Present {
                 surface: kit.surface(d.sprite),
                 lift: 0,
                 sort_foot: None,
+                mark: if reading == Some(p.id) { None } else { view.prop_quest_mark(p) },
             });
         });
         stand_on_tops(props);
@@ -663,6 +674,7 @@ impl Present {
                 surface: None,
                 lift: 0,
                 sort_foot: None,
+                mark: None,
             });
         }
         props.sort_unstable_by_key(|p| p.id);
@@ -947,6 +959,11 @@ impl Present {
             let casts = !p.flat && !p.flush && p.sort_foot.is_none();
             if !(on_canvas(x, y, r.src.w, r.src.h) || casts && in_band(x, y, r.src.w, r.src.h)) {
                 continue;
+            }
+            // Over its top, as over a head.
+            if let Some(mark) = p.mark {
+                let id = PROP_MARK_KEY | p.id;
+                self.marks.push(QuestMarker { id, x: x + i32::from(r.src.w) / 2, y: y - MARK_CLEAR, mark });
             }
             let foot = p.sort_foot.unwrap_or(p.y + p.h) - cam.1;
             let caster = casts.then(|| {
@@ -1566,6 +1583,7 @@ mod tests {
             surface,
             lift: 0,
             sort_foot: None,
+            mark: None,
         };
         let mut v = vec![
             rec(96, 176, 48, 32, Some((10, 18))),

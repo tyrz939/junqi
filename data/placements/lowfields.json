@@ -121,7 +121,13 @@
     "prop": {
       "def": "notice_board",
       "talk": "parish_board",
-      "label": "The parish board"
+      "label": "The parish board",
+      "use": [
+        {
+          "do": "flag",
+          "flag": "read_board"
+        }
+      ]
     }
   },
   {
