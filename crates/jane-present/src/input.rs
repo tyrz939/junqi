@@ -14,7 +14,7 @@
 use jane_core::angle::iatan2;
 use jane_core::{Angle, Fx, Rect, Vec2};
 use jane_sim::UnitId;
-use jane_sim::input::{AssistProfile, InputFrame};
+use jane_sim::input::{AssistProfile, InputFrame, TargetRef};
 use jane_sim::view::View;
 
 use crate::frame::CANVAS_H;
@@ -247,6 +247,18 @@ pub enum Action {
     Sprint,
     /// Use, talk; held: push and pull.
     Use,
+    /// Left click (PLAY-PLAN §2.1): target the foe or prop under the cursor, without moving;
+    /// over open ground, let the target go.
+    Select,
+    /// Right click: walk there, or to the foe and swing at it, or to the door, fire, chest or
+    /// person and use it (click to move; the pad has none).
+    Goto,
+    /// Tab, RB: the next foe in front, nearest first (Shift-Tab goes back).
+    Target,
+    /// LB: the foe before.
+    TargetBack,
+    /// Held: casts go along the aim even with a target.
+    FreeAim,
     /// A bar slot, `0..8`.
     Bar(u8),
     Bags,
@@ -444,6 +456,12 @@ pub enum GameAction {
     Use,
     /// `Command::Bar { slot }`, `0..8`.
     Bar(u8),
+    /// A left click in the world: target what is under the cursor (`target::pick_target`).
+    Select,
+    /// A right click in the world: `Command::Goto` (`target::goto_at`).
+    Goto,
+    /// Tab, RB (`back`: Shift-Tab, LB): cycle the foes in front.
+    Tab { back: bool },
 }
 
 /// A press, queued.
@@ -500,6 +518,12 @@ pub struct Input {
     pub assist: Option<AssistProfile>,
     /// The table in force: the compiled rows with the player's overrides over them.
     pub bindings: Bindings,
+    /// Her hard target as this client holds it (PLAY-PLAN §2.1), carried in every frame;
+    /// `target.rs` chooses it, settles it against the view and lets it go.
+    pub target: Option<TargetRef>,
+    /// The target last let go (Esc, a click on open ground): not taken back from the sim's soft
+    /// target until the sim has let it go too (it hears the `Halt` a few frames later).
+    pub dropped: Option<TargetRef>,
 }
 
 impl Input {
@@ -549,25 +573,21 @@ impl Input {
             _ => None,
         };
         let mut aim = None;
+        // The right stick pushed aims freely (PLAY-PLAN §2.1), as the free-aim key does.
+        let mut stick_out = false;
         if let Some(p) = &dev.pad {
             let (rx, ry) = (axis(p.axes[2]), axis(p.axes[3]));
             if rx.hypot(ry) > AIM_DEADZONE {
                 self.aim_pad = true;
+                stick_out = true;
                 aim = Some(angle_of(rx, ry));
             }
         }
         if !self.aim_pad
             && let Some((dx, dy)) = chest_to_cursor
+            && dx.hypot(dy) > AIM_MIN_PX
         {
-            let len = dx.hypot(dy);
-            if len > AIM_MIN_PX {
-                aim = Some(angle_of(dx, dy));
-                // 2020's virtual stick: right button held walks toward the cursor.
-                if mx == 0.0 && my == 0.0 && dev.mouse.is_held(MouseButton::Right) {
-                    let s = (len / WALK_FULL_PX).min(1.0);
-                    (mx, my) = (dx / len * s, dy / len * s);
-                }
-            }
+            aim = Some(angle_of(dx, dy));
         }
         let (mv_dir, mv_mag) = quantise(mx, my);
         InputFrame {
@@ -577,8 +597,8 @@ impl Input {
             sprint: held(Action::Sprint),
             use_held: held(Action::Use),
             assist: self.profile(),
-            target: None,
-            free: false,
+            target: self.target,
+            free: held(Action::FreeAim) || stick_out,
         }
     }
 
@@ -617,8 +637,11 @@ impl Input {
                 self.edges.push(Edge::Ui(UiAction::Remove));
                 continue;
             }
+            let shift = dev.keys.has(sc::LSHIFT) || dev.keys.has(sc::RSHIFT);
             for b in self.bindings.rows.iter().filter(|b| code != 0 && b.keys.contains(&code)) {
-                if let Some(e) = edge_for(b.action, mode, false) {
+                // Shift-Tab goes back through the foes.
+                let a = if b.action == Action::Target && shift { Action::TargetBack } else { b.action };
+                if let Some(e) = edge_for(a, mode, false) {
                     self.edges.push(e);
                 }
             }
@@ -721,6 +744,10 @@ fn edge_for(a: Action, mode: Mode, from_pad: bool) -> Option<Edge> {
                 Action::Pause => Some(Edge::Ui(UiAction::Pause)),
                 Action::Use => Some(Edge::Game(GameAction::Use)),
                 Action::Bar(n) => Some(Edge::Game(GameAction::Bar(n))),
+                Action::Select => Some(Edge::Game(GameAction::Select)),
+                Action::Goto => Some(Edge::Game(GameAction::Goto)),
+                Action::Target => Some(Edge::Game(GameAction::Tab { back: false })),
+                Action::TargetBack => Some(Edge::Game(GameAction::Tab { back: true })),
                 _ => None,
             };
         }
@@ -735,8 +762,8 @@ fn edge_for(a: Action, mode: Mode, from_pad: bool) -> Option<Edge> {
             Action::Use | Action::Bar(0) => Some(UiAction::Confirm),
             Action::Bar(1) => Some(UiAction::Quick),
             Action::Bar(2) => Some(UiAction::QuickAll),
-            Action::Bar(3) if from_pad => Some(UiAction::TabLeft),
-            Action::Bar(4) if from_pad => Some(UiAction::TabRight),
+            Action::TargetBack if from_pad => Some(UiAction::TabLeft),
+            Action::Target if from_pad => Some(UiAction::TabRight),
             _ => None,
         },
     };
@@ -909,7 +936,7 @@ mod tests {
     }
 
     #[test]
-    fn number_keys_space_and_left_click_press_bar_slots() {
+    fn number_keys_and_space_press_bar_slots_and_left_click_targets() {
         let mut input = Input::new();
         let mut dev = DeviceState::default();
         for n in 0..8 {
@@ -922,7 +949,8 @@ mod tests {
         press(&mut dev, sc::SPACE);
         dev.button(MouseButton::Left, true);
         let (_, edges) = sample(&mut input, &mut dev, &Context::default());
-        assert_eq!(edges, vec![Edge::Game(GameAction::Bar(0)), Edge::Game(GameAction::Bar(0))]);
+        // Left click chooses a target now (PLAY-PLAN §2.1); it no longer swings.
+        assert_eq!(edges, vec![Edge::Game(GameAction::Bar(0)), Edge::Game(GameAction::Select)]);
     }
 
     #[test]
@@ -940,17 +968,17 @@ mod tests {
     fn the_toggles() {
         let mut input = Input::new();
         let mut dev = DeviceState::default();
-        for k in [sc::ESCAPE, sc::TAB, sc::M, sc::GRAVE, sc::F2, sc::F3, sc::F12] {
+        for k in [sc::ESCAPE, sc::I, sc::M, sc::GRAVE, sc::F2, sc::F3, sc::F12] {
             press(&mut dev, k);
         }
         let (_, edges) = sample(&mut input, &mut dev, &Context::default());
-        // Scancode order: Esc 41, Tab 43, ` 53, F2 59, F3 60, F12 69, M 16 first.
+        // Scancode order: I 12, M 16, Esc 41, ` 53, F2 59, F3 60, F12 69.
         assert_eq!(
             edges,
             [
+                UiAction::Bags,
                 UiAction::Map,
                 UiAction::Pause,
-                UiAction::Bags,
                 UiAction::Console,
                 UiAction::Debug,
                 UiAction::Grid,
@@ -958,6 +986,42 @@ mod tests {
             ]
             .map(Edge::Ui)
         );
+    }
+
+    #[test]
+    fn tab_cycles_foes_and_shift_tab_goes_back() {
+        let mut input = Input::new();
+        let mut dev = DeviceState::default();
+        press(&mut dev, sc::TAB);
+        let (_, edges) = sample(&mut input, &mut dev, &Context::default());
+        assert_eq!(edges, vec![Edge::Game(GameAction::Tab { back: false })]);
+        dev.key(sc::TAB, false);
+        press(&mut dev, sc::LSHIFT);
+        press(&mut dev, sc::TAB);
+        let (f, edges) = sample(&mut input, &mut dev, &Context::default());
+        assert_eq!(edges, vec![Edge::Game(GameAction::Tab { back: true })]);
+        assert!(f.sprint, "Shift still sprints");
+        // In a screen Tab is nothing of hers; the bags are I now.
+        dev = DeviceState::default();
+        press(&mut dev, sc::TAB);
+        let (_, edges) = sample(&mut input, &mut dev, &Context { mode: Mode::Ui, feet: None });
+        assert!(edges.is_empty(), "{edges:?}");
+    }
+
+    #[test]
+    fn the_frame_carries_her_target_and_the_free_aim_key() {
+        let mut input = Input::new();
+        let mut dev = DeviceState::default();
+        let t = TargetRef::Unit(UnitId::new(7).unwrap());
+        input.target = Some(t);
+        let (f, _) = sample(&mut input, &mut dev, &Context::default());
+        assert_eq!((f.target, f.free), (Some(t), false));
+        dev.key(sc::LCTRL, true);
+        let (f, _) = sample(&mut input, &mut dev, &Context::default());
+        assert_eq!((f.target, f.free), (Some(t), true), "held Ctrl aims freely, the target kept");
+        // A screen sends an idle frame: no target either.
+        let (f, _) = sample(&mut input, &mut dev, &Context { mode: Mode::Ui, feet: None });
+        assert_eq!(f.target, None);
     }
 
     #[test]
@@ -1009,23 +1073,24 @@ mod tests {
     }
 
     #[test]
-    fn the_right_button_walks_toward_the_cursor_by_distance_over_64() {
+    fn a_right_click_is_a_click_to_move_not_a_virtual_stick() {
         let mut input = Input::new();
         let mut dev = DeviceState::default();
         dev.button(MouseButton::Right, true);
         let feet = (200.0, 212.0); // chest (200, 200)
-        for (dist, mag) in [(16.0, 32), (32.0, 64), (64.0, 127), (300.0, 127)] {
-            dev.mouse.pos = Some((200.0, 200.0 + dist));
-            let (f, edges) = sample(&mut input, &mut dev, &play_at(feet));
-            assert_eq!(f.mv_mag, mag, "{dist}");
-            assert_eq!(f.mv_dir, Angle::SOUTH);
-            assert!(edges.is_empty(), "the right button is no bar slot");
-        }
-        // Keys win over the virtual stick.
-        press(&mut dev, sc::A);
-        let (f, _) = sample(&mut input, &mut dev, &play_at(feet));
-        assert_eq!((f.mv_dir, f.mv_mag), (Angle::WEST, 127));
+        dev.mouse.pos = Some((200.0, 264.0));
+        let (f, edges) = sample(&mut input, &mut dev, &play_at(feet));
+        assert_eq!(edges, vec![Edge::Game(GameAction::Goto)], "the app turns it into Command::Goto");
+        assert_eq!(f.mv_mag, 0, "held, it no longer walks her toward the cursor");
         assert_eq!(f.aim, Some(Angle::SOUTH));
+        // Held, it is pressed once.
+        let (_, edges) = sample(&mut input, &mut dev, &play_at(feet));
+        assert!(edges.is_empty());
+        // A screen's click is the screen's.
+        dev.button(MouseButton::Right, false);
+        dev.button(MouseButton::Right, true);
+        let (_, edges) = sample(&mut input, &mut dev, &Context { mode: Mode::Ui, feet: Some(feet) });
+        assert!(edges.is_empty());
     }
 
     #[test]
@@ -1043,10 +1108,16 @@ mod tests {
         assert_eq!(f.aim, Some(Angle::NORTH));
         assert!(f.sprint && f.use_held);
         assert_eq!(f.assist, AssistProfile::Pad);
+        assert!(f.free, "the right stick pushed aims freely");
         assert!(input.pad_active() && !input.aiming_with_mouse());
+        // LB is the foe before now (bar 4 and 5 went to the stick clicks).
         assert_eq!(
             edges,
-            vec![Edge::Game(GameAction::Use), Edge::Game(GameAction::Bar(0)), Edge::Game(GameAction::Bar(3))]
+            vec![
+                Edge::Game(GameAction::Use),
+                Edge::Game(GameAction::Tab { back: true }),
+                Edge::Game(GameAction::Bar(0))
+            ]
         );
         // Held, not pressed again; a small stick is inside the dead zone.
         p.axes[0] = 3000;
@@ -1076,7 +1147,7 @@ mod tests {
         let (_, edges) = sample(&mut input, &mut dev, &Context { mode: Mode::Ui, feet: None });
         assert_eq!(
             edges,
-            [UiAction::Down, UiAction::Cancel, UiAction::Confirm, UiAction::TabRight, UiAction::Cancel].map(Edge::Ui)
+            [UiAction::Down, UiAction::Cancel, UiAction::TabRight, UiAction::Confirm, UiAction::Cancel].map(Edge::Ui)
         );
     }
 

@@ -199,6 +199,15 @@ pub enum SfxKind {
     UiBack,
     UiOpen,
     UiClose,
+    /// Her cast building (PLAY-PLAN §2.1): four short swells, each a step higher, at a quarter,
+    /// a half and three quarters of the way, so the tone rises to the release and stops when it
+    /// is cut short.
+    CastRise1,
+    CastRise2,
+    CastRise3,
+    CastRise4,
+    /// A cast that built lands: a thump and a crack.
+    CastRelease,
 }
 
 impl SfxKind {
@@ -231,7 +240,7 @@ impl SfxKind {
         }
     }
 
-    pub const ALL: [SfxKind; 68] = [
+    pub const ALL: [SfxKind; 73] = [
         SfxKind::StepGrass,
         SfxKind::StepRoad,
         SfxKind::StepCobble,
@@ -300,6 +309,11 @@ impl SfxKind {
         SfxKind::UiBack,
         SfxKind::UiOpen,
         SfxKind::UiClose,
+        SfxKind::CastRise1,
+        SfxKind::CastRise2,
+        SfxKind::CastRise3,
+        SfxKind::CastRise4,
+        SfxKind::CastRelease,
     ];
 
     /// Its row in `data/audio/sfx.json`.
@@ -373,6 +387,11 @@ impl SfxKind {
             SfxKind::UiBack => "ui_back",
             SfxKind::UiOpen => "ui_open",
             SfxKind::UiClose => "ui_close",
+            SfxKind::CastRise1 => "cast_rise_1",
+            SfxKind::CastRise2 => "cast_rise_2",
+            SfxKind::CastRise3 => "cast_rise_3",
+            SfxKind::CastRise4 => "cast_rise_4",
+            SfxKind::CastRelease => "cast_release",
         }
     }
 }
@@ -607,6 +626,8 @@ pub struct Sense {
     /// Her growth as her casts and blows carry it: her spirit's and her strength's
     /// [`crate::fx::might`].
     pub might: (u16, u16),
+    /// Her cast building (`View::fight`): the tick it began, and how far along in 256ths.
+    pub building: Option<(u32, u16)>,
 }
 
 /// How far a fire's crackle carries, in cells.
@@ -699,6 +720,10 @@ impl Sense {
             dog,
             dog_alarmed,
             might: (crate::fx::might(body.spirit), crate::fx::might(body.strength)),
+            building: view.fight().cast.map(|c| {
+                let len = c.done.0.saturating_sub(c.started.0).max(1);
+                (c.started.0, (view.tick().0.saturating_sub(c.started.0).min(len) * 256 / len) as u16)
+            }),
         }
     }
 
@@ -775,6 +800,13 @@ pub struct Soundtrack {
     thunder: u32,
     rng: u32,
     pub ticks: u32,
+    /// Her cast building as last heard: when it began, and the swells already played.
+    rising: Option<(u32, u8)>,
+}
+
+/// The swell for a cast `frac` 256ths of the way: a step a quarter.
+pub const fn rise_step(frac: u16) -> u8 {
+    if frac >= 192 { 3 } else { (frac / 64) as u8 }
 }
 
 /// The two clock times the table keeps itself: the nine a stopped bell leaves silent (no event
@@ -869,6 +901,24 @@ impl Soundtrack {
             self.rng = s.seed | 1;
         }
         let me = s.pos;
+        // Her cast building: a swell a quarter, each a step higher, the tone rising to the
+        // release (PLAY-PLAN §2.1); a cast cut short stops rising.
+        match s.building {
+            Some((began, frac)) => {
+                let step = rise_step(frac);
+                let from = match self.rising {
+                    Some((b, played)) if b == began => played + 1,
+                    _ => 0,
+                };
+                // Only the newest swell: a late frame does not stack the ones it missed.
+                if from <= step {
+                    let rises = [SfxKind::CastRise1, SfxKind::CastRise2, SfxKind::CastRise3, SfxKind::CastRise4];
+                    bus.sfx_with(rises[usize::from(step)], me, me, s.might.0);
+                    self.rising = Some((began, step));
+                }
+            }
+            None => self.rising = None,
+        }
         let mut hostile = s.hostile;
         // The tick's events, those that are hers to hear.
         for e in events.iter().filter(|e| e.to.is_none_or(|t| t == s.seat) && e.in_zone.is_none_or(|z| z == s.zone)) {
@@ -917,9 +967,11 @@ impl Soundtrack {
                 }
                 EventKind::Heal { unit, .. } if unit == s.me => bus.sfx(SfxKind::Heal, me, me),
                 EventKind::Death { unit, at: p, .. } if unit != s.me => bus.sfx(SfxKind::Death, at(p), me),
-                EventKind::Cast { unit, at: p, .. } => {
+                EventKind::Cast { unit, spell, at: p } => {
                     let m = if unit == s.me { s.might.0 } else { 256 };
-                    bus.sfx_with(SfxKind::Cast, at(p), me, m);
+                    // A cast that built lands with a thump and a crack; an instant as before.
+                    let built = jane_data::catalog().combat.spell(spell).cast.0 > 0;
+                    bus.sfx_with(if built { SfxKind::CastRelease } else { SfxKind::Cast }, at(p), me, m);
                 }
                 EventKind::CastFailed { unit, why, .. } if unit == s.me && why.says() => {
                     bus.sfx(SfxKind::CastFailed, me, me);
@@ -1324,6 +1376,7 @@ mod tests {
             dog: None,
             dog_alarmed: false,
             might: (256, 256),
+            building: None,
         }
     }
 

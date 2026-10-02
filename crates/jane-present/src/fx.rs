@@ -208,6 +208,25 @@ impl Fx {
         }
     }
 
+    /// A cast building at a body's feet `at` (zone canvas px): its school's motes drawn in to her
+    /// hands, more often as it nears its end (`frac` in 256ths).
+    pub fn gather(&mut self, at: (i32, i32), facing: Facing, spell: jane_core::SpellId, frac: u16, id: u32) {
+        let every = if frac > 192 {
+            4
+        } else if frac > 96 {
+            6
+        } else {
+            9
+        };
+        if (self.tick.wrapping_add(id)) % every != 0 {
+            return;
+        }
+        let Some(f) = art::spell(jane_data::catalog().combat.spell(spell).id) else { return };
+        let (dx, dy) = step(facing);
+        let r = art::cast(f.cast);
+        self.emit_once(&Recipe { light: None, ..r }, (at.0 + dx * 10, at.1 + dy * 4), angle(facing), 256);
+    }
+
     /// This tick's events, as they happen (§2: a cast or a death resolves now, not a frame late).
     pub fn on_events(&mut self, view: &View<'_>, events: &[Event]) {
         let cat = jane_data::catalog();
@@ -224,7 +243,28 @@ impl Fx {
                     let (dx, dy) = step(facing);
                     let (x, y) = px(at);
                     let m = if ours(unit) { spirit } else { 256 };
-                    self.emit_with(&art::cast(f.cast), (x + dx * 10, y + dy * 4), angle(facing), m);
+                    let hands = (x + dx * 10, y + dy * 4);
+                    if def.cast.0 > 0 {
+                        // A cast that built (its motes gathered while it did, [`Fx::gather`])
+                        // lands with punch (PLAY-PLAN §2.1): a burst out of her hands and a
+                        // bright flash.
+                        self.emit_with(&art::impact(f.impact), hands, angle(facing), m);
+                        let colour = art::Role::Core.of(art::hue(art::cast(f.cast).tint));
+                        self.glows.push(Glow {
+                            x: hands.0,
+                            y: hands.1,
+                            z: 18,
+                            colour,
+                            radius: 120,
+                            ticks: 10,
+                            left: 10,
+                        });
+                        if self.glows.len() > 48 {
+                            self.glows.remove(0);
+                        }
+                    } else {
+                        self.emit_with(&art::cast(f.cast), hands, angle(facing), m);
+                    }
                 }
                 EventKind::Swing { unit, at, facing } => {
                     let (dx, dy) = step(facing);

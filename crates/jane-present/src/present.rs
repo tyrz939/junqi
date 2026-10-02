@@ -7,7 +7,7 @@
 //! `Frame` at `alpha` and reads nothing else.
 //! Neither reads `GameState`, and neither writes anything but the presenter.
 
-use jane_core::action::{CameraMode, Facing};
+use jane_core::action::{CameraMode, Facing, School};
 use jane_core::ids::SpellId;
 use jane_core::num::CELL_SHIFT;
 use jane_core::{Rect, ZoneId};
@@ -156,6 +156,59 @@ struct UnitRec {
     /// The quest mark over its head for this seat (`View::quest_mark`), none while she is
     /// talking to it.
     mark: Option<QuestMark>,
+    /// A seat's cast building (`View::casting`): how far along in 256ths, and its school.
+    build: Option<(u16, School, SpellId)>,
+    /// Half the width of the ring under it when it is her target, canvas px.
+    ring: i32,
+}
+
+/// What is drawn over the world for her side of a fight this frame (PLAY-PLAN §2.1,
+/// PRESENTATION.md §3.9): the ring under her target, every cast bar, where a click sent her.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct FightOverlay {
+    pub target: Option<TargetMarker>,
+    pub bars: Vec<CastBar>,
+    /// Where a click on open ground sent her, canvas px, and the presenter's tick.
+    pub walk: Option<(i32, i32)>,
+    pub tick: u32,
+}
+
+/// Her target this frame: where it stands on the canvas and what the ring says.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TargetMarker {
+    /// Its feet (a prop's front edge, middle), canvas px.
+    pub x: i32,
+    pub y: i32,
+    /// Half the ring's width, canvas px.
+    pub half: i32,
+    /// The top of what it stands (its head), canvas px: the name and the bar go over it.
+    pub head: i32,
+    /// A foe (a red ring), else a prop (gold).
+    pub hostile: bool,
+    /// A foe's name; empty for a prop.
+    pub name: &'static str,
+    /// A foe's health, points: now and full.
+    pub hp: Option<(i32, i32)>,
+}
+
+/// A slim bar under a seat's body while her cast builds.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct CastBar {
+    /// Her feet, canvas px.
+    pub x: i32,
+    pub y: i32,
+    /// 0 to 256.
+    pub frac: u16,
+    pub school: School,
+}
+
+/// Her target as the view had it this tick.
+#[derive(Clone, Copy, Debug)]
+struct TargetSeen {
+    to: jane_sim::input::TargetRef,
+    hostile: bool,
+    name: &'static str,
+    hp: Option<(i32, i32)>,
 }
 
 /// A quest mark to draw over a person's head, or a thing's top, this frame (§3.8): where its foot is on the canvas
@@ -265,6 +318,12 @@ pub struct Present {
     /// This frame's quest marks over heads (§3.8), and whether it is dark enough for them to glow.
     marks: Vec<QuestMarker>,
     dark: bool,
+    /// Her target as the view said this tick, and where a click on open ground sent her (zone
+    /// canvas px).
+    aimed: Option<TargetSeen>,
+    walk_to: Option<(i32, i32)>,
+    /// This frame's ring, cast bars and walk marker.
+    fight: FightOverlay,
 }
 
 impl Present {
@@ -324,7 +383,15 @@ impl Present {
             lessons: Lessons::new(tier),
             marks: Vec::with_capacity(16),
             dark: false,
+            aimed: None,
+            walk_to: None,
+            fight: FightOverlay::default(),
         }
+    }
+
+    /// This frame's ring under her target, the cast bars and the walk marker (`ui::fight`).
+    pub fn fight(&self) -> &FightOverlay {
+        &self.fight
     }
 
     /// The moment under way, and the gifts waiting (what the UI's card, the sound and the app's
@@ -478,6 +545,32 @@ impl Present {
         let body = view.body();
         self.camera.tick((body.pos.x.0, body.pos.y.0), self.zone_cells, self.canvas, self.tick);
         let area = self.area();
+        // Her side of a fight (PLAY-PLAN §2.1): her target as the sim kept it, a click-walk's end.
+        let cat = jane_data::catalog();
+        self.aimed = view.target().map(|to| match to {
+            jane_sim::input::TargetRef::Unit(id) => {
+                let u = view.unit(id);
+                TargetSeen {
+                    to,
+                    hostile: view.target_hostile(to),
+                    name: u.map_or("", |u| crate::text::text(cat.combat.unit(u.def).name)),
+                    hp: u.map(|u| (u.hp.0 / 1000, jane_sim::units::max_hp(u).0 / 1000)),
+                }
+            }
+            jane_sim::input::TargetRef::Prop(_) => TargetSeen { to, hostile: false, name: "", hp: None },
+        });
+        self.walk_to = view
+            .fight()
+            .walk
+            .as_ref()
+            .filter(|w| {
+                matches!(
+                    w.then,
+                    jane_sim::state::WalkThen::Stop
+                        | jane_sim::state::WalkThen::Use(jane_sim::input::TargetRef::Prop(_))
+                )
+            })
+            .map(|w| (w.to.x.0 >> FX_TO_CANVAS, w.to.y.0 >> FX_TO_CANVAS));
         self.read_units(view, area);
         self.read_props(view, area);
         self.read_lights(view, area);
@@ -503,6 +596,14 @@ impl Present {
         let cam = (self.camera.pos.0 >> FX_TO_CANVAS, self.camera.pos.1 >> FX_TO_CANVAS);
         self.fx.set_cap(self.atmos.features.max_particles);
         self.fx.tick(view, &self.atmos, self.tick, (cam.0, cam.1, cw, ch));
+        // A cast building draws its motes in to her hands (PLAY-PLAN §2.1).
+        for u in &self.units {
+            if let Some((frac, _, spell)) = u.build.filter(|_| !u.dead) {
+                let facing =
+                    view.unit(jane_sim::UnitId::new(u.id).expect("a unit id")).map_or(Facing::South, |b| b.facing);
+                self.fx.gather((u.cur.0 >> FX_TO_CANVAS, u.cur.1 >> FX_TO_CANVAS), facing, spell, frac, u.id);
+            }
+        }
     }
 
     /// The cells the view covers this tick, with the margin.
@@ -586,6 +687,12 @@ impl Present {
                     view.tile(x, y).is_roof()
                 },
                 mark: if talking_to == Some(u.id) { None } else { view.quest_mark(u) },
+                build: view.casting(u.id).filter(|_| u.alive).map(|c| {
+                    let (len, done) =
+                        (c.done.0.saturating_sub(c.started.0).max(1), view.tick().0.saturating_sub(c.started.0));
+                    ((done.min(len) * 256 / len) as u16, cat.combat.spell(c.spell).school, c.spell)
+                }),
+                ring: ((cat.combat.unit(u.def).bounds.0 >> FX_TO_CANVAS) + 6).clamp(9, 30),
             });
         }
         self.units_next.sort_unstable_by_key(|r| r.id);
@@ -899,6 +1006,10 @@ impl Present {
         f.casters.clear();
         f.blocks.clear();
         self.marks.clear();
+        self.fight.target = None;
+        self.fight.bars.clear();
+        self.fight.tick = self.tick;
+        self.fight.walk = self.walk_to.map(|(x, y)| (x - cam.0, y - cam.1));
         self.dark = lantern_lit(self.sky.ambient);
         if self.zone.is_none() {
             return &self.frame;
@@ -959,6 +1070,20 @@ impl Present {
             let casts = !p.flat && !p.flush && p.sort_foot.is_none();
             if !(on_canvas(x, y, r.src.w, r.src.h) || casts && in_band(x, y, r.src.w, r.src.h)) {
                 continue;
+            }
+            // Her target: a gold ring at its front edge.
+            if let Some(t) =
+                self.aimed.filter(|t| matches!(t.to, jane_sim::input::TargetRef::Prop(pid) if pid.get() == p.id))
+            {
+                self.fight.target = Some(TargetMarker {
+                    x: p.x + p.w / 2 - cam.0,
+                    y: p.y + p.h - cam.1 - p.lift,
+                    half: (p.w / 2 + 6).clamp(11, 40),
+                    head: y,
+                    hostile: false,
+                    name: t.name,
+                    hp: None,
+                });
             }
             // Over its top, as over a head.
             if let Some(mark) = p.mark {
@@ -1090,7 +1215,9 @@ impl Present {
             let (look, mirror, bob) = match (u.person, u.creature) {
                 (Some(set), _) => {
                     // A blow or a spell under way plays its three beats; a blow taken, its hurt.
-                    let act = lesson.map(|(_, t)| people::Act::Cast(t)).or_else(|| {
+                    // A cast building holds her hands out on its second beat until it lands.
+                    let building = u.build.filter(|_| !u.dead).map(|_| people::Act::Cast(people::ACT_TICKS));
+                    let act = lesson.map(|(_, t)| people::Act::Cast(t)).or(building).or_else(|| {
                         u.struck.and_then(|(t, spell)| {
                             let t = self.tick.wrapping_sub(t);
                             (t < 3 * people::ACT_TICKS).then(|| match jane_data::catalog().combat.spell(spell).anim {
@@ -1105,6 +1232,8 @@ impl Present {
                         if t / people::ACT_TICKS == 1 {
                             cast_glow = Some(school);
                         }
+                    } else if let Some((_, school, _)) = u.build.filter(|_| !u.dead) {
+                        cast_glow = Some(school);
                     } else if let (Some(people::Act::Cast(t)), Some((_, spell))) = (act, u.struck) {
                         if t / people::ACT_TICKS == 1 && !u.dead {
                             cast_glow = Some(jane_data::catalog().combat.spell(spell).school);
@@ -1179,6 +1308,17 @@ impl Present {
             if let Some(mark) = u.mark.filter(|_| !u.dead) {
                 let head = sy - rows_up(i32::from(r.top.max(16))) - bob;
                 self.marks.push(QuestMarker { id: u.id, x: sx, y: head - MARK_CLEAR, mark });
+            }
+            // Her side of a fight: the ring under her target, a bar under anyone casting.
+            if let Some(t) =
+                self.aimed.filter(|t| matches!(t.to, jane_sim::input::TargetRef::Unit(id) if id.get() == u.id))
+            {
+                let head = sy - rows_up(i32::from(r.top.max(16))) - bob;
+                self.fight.target =
+                    Some(TargetMarker { x: sx, y: sy, half: u.ring, head, hostile: t.hostile, name: t.name, hp: t.hp });
+            }
+            if let Some((frac, school, _)) = u.build.filter(|_| !u.dead) {
+                self.fight.bars.push(CastBar { x: sx, y: sy, frac, school });
             }
             let tint = if u.dead && (u.person.is_some() || u.creature.is_some()) {
                 Tint::None
@@ -1268,7 +1408,8 @@ impl Present {
                         pos: (sx + dx, sy),
                         height: (-dy).clamp(0, 255) as u8,
                         colour: c,
-                        radius: 64,
+                        // A cast building gathers: its light grows from a spark to the full glow.
+                        radius: u.build.filter(|_| !u.dead).map_or(64, |(f, _, _)| 20 + f * 60 / 256),
                         size: 4,
                         casts: false,
                         kind: LightKind::Point,
