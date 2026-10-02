@@ -36,7 +36,7 @@ use crate::interact::{footprint, in_verb_reach};
 use crate::los::{first_blocked_cell, line_of_sight};
 use crate::state::{PendingCast, QueuedCast, Seek, Unit, WalkThen};
 use crate::target::{hostile, pos_of, soft_target, valid};
-use crate::tuning::{MOVE_DEADZONE, PLAYER_GCD, QUEUE_TICKS, SCHOOL_TOUCH_FX};
+use crate::tuning::{AUTO_SLACK_FX, MOVE_DEADZONE, PLAYER_GCD, QUEUE_TICKS, SCHOOL_TOUCH_FX};
 use crate::units::{face_angle, face_vector, facing_angle};
 
 /// Held still: stunned, or rooted to nothing by a status (the bell's "stunned", a web). She
@@ -505,17 +505,33 @@ pub fn before_move(cx: &mut Ctx<'_>, seat: Seat, frame: InputFrame) {
 /// Step 6, after she moves: auto-attack. She faces her foe and swings when the timer allows;
 /// it pauses while she casts and stops when the foe is gone or out of reach (unless a
 /// click-walk is closing on it).
-pub fn after_move(cx: &mut Ctx<'_>, seat: Seat) {
+pub fn after_move(cx: &mut Ctx<'_>, seat: Seat, frame: InputFrame) {
     let Some(t) = cx.world.players[seat.index()].fight.auto else { return };
     let body = cx.world.players[seat.index()].unit;
     let Some(u) = cx.zone.unit(body) else { return };
     let ok = valid(cx.zone, u, TargetRef::Unit(t)) && hostile(cx.zone, u, TargetRef::Unit(t));
     let reach = swing_reach(u);
-    let in_reach = ok && reach.is_some_and(|r| cx.zone.unit(t).is_some_and(|o| metres_between(u, o) <= r));
+    let gap = cx.zone.unit(t).map(|o| metres_between(u, o));
+    let in_reach = ok && reach.zip(gap).is_some_and(|(r, g)| g <= r);
+    // Knocked back a step by her own blow it is still hers: "leaving her reach" is going
+    // further than a knock and a cell (`feel.rs` pushes a swing's victim 6 px).
+    let near = ok && reach.zip(gap).is_some_and(|(r, g)| g <= r + AUTO_SLACK_FX);
     let closing = cx.world.players[seat.index()].fight.walk.as_ref().is_some_and(|w| w.then == WalkThen::Attack(t));
-    if !ok || (!in_reach && !closing) {
+    if !ok || (!near && !closing) {
         cx.world.players[seat.index()].fight.auto = None;
         return;
+    }
+    // Just out of reach, with it her target and nothing held: she steps back in (a click's
+    // walk to it again), as a player holding the attack does.
+    if !in_reach
+        && !closing
+        && frame.mv_mag <= MOVE_DEADZONE
+        && frame.target == Some(TargetRef::Unit(t))
+        && cx.world.players[seat.index()].fight.cast.is_none()
+    {
+        if let Some(to) = cx.zone.unit(t).map(|o| o.pos) {
+            crate::walk::start(cx, seat, to, WalkThen::Attack(t));
+        }
     }
     if in_reach {
         let tpos = cx.zone.unit(t).map(|o| o.pos);

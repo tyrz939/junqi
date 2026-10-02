@@ -286,6 +286,8 @@ pub const WALK_DARK: u32 = 3;
 pub const WALK_STUCK: u8 = 20;
 /// Within this of a clicked point she has arrived.
 pub const WALK_ARRIVED_FX: i64 = CELL_FX as i64 / 2;
+/// Auto-attack holds a foe this far past her reach (a knock and a cell) before it lets go.
+pub const AUTO_SLACK_FX: i64 = CELL_FX as i64 + 8 * FX_ONE as i64;
 /// A walk into reach of a foe stops this far inside it, so its next step does not drop the swing.
 pub const WALK_REACH_SLACK_FX: i64 = FX_ONE as i64 * 2;
 // --- the fight's feel (feel.rs; PLAY-PLAN.md §2.1, research-combat §4.5 to 4.8) ---------------

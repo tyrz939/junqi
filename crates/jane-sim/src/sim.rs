@@ -666,7 +666,7 @@ fn tick_player(cx: &mut Ctx<'_>, seat: usize, frame: InputFrame) {
         }
     }
     if !busy {
-        crate::cast::after_move(cx, Seat(seat as u8));
+        crate::cast::after_move(cx, Seat(seat as u8), frame);
     }
     let u = &mut cx.zone.units[ix];
     // Energy: sprint spends, carrying spends, anything else (walking included) restores.
