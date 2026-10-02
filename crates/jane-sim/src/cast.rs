@@ -149,7 +149,14 @@ pub fn reach_check(cx: &Ctx<'_>, u: &Unit, def: &SpellDef, t: TargetRef) -> Resu
                     return Err(SpellError::NotInLos);
                 }
             }
-            let reach = i64::from(def.range.0) + 2 * bounds(u) + i64::from(def.touch.unwrap_or(SCHOOL_TOUCH_FX).0);
+            // As far as a bolt goes: born past her chest, flying its range and two of her bodies
+            // (and the last step it takes past that), and touching what is within its touch of
+            // where it ends.
+            let reach = i64::from(crate::tuning::BOLT_START_FX.0)
+                + i64::from(def.range.0)
+                + 2 * bounds(u)
+                + i64::from(def.speed.map_or(0, |s| s.0))
+                + i64::from(def.touch.unwrap_or(SCHOOL_TOUCH_FX).0);
             if dist_sq(u.pos, at) > reach * reach {
                 return Err(SpellError::TooFar);
             }
