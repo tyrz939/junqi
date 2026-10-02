@@ -8,7 +8,7 @@ mod common;
 use jane_core::tile::F_SOLID;
 use jane_core::{Blueprint, QuestId, ZoneId};
 use jane_sim::Blueprints;
-use jane_sim::route::{Leg, Roads, Route, place_of_step, road, sign};
+use jane_sim::route::{Leg, Roads, Route, Site, Start, place_of_step, road, sign};
 
 /// Can her feet stand on `(x, y)`: no terrain, no solid prop's cells.
 fn open(bp: &Blueprint, solid: &[bool], x: i32, y: i32) -> bool {
@@ -50,15 +50,25 @@ fn faults(bp: &Blueprint, solid: &[bool], roads: &Roads, r: &Route, what: &str) 
         if !roads.town().contains(from.0, from.1) {
             bad.push(format!("{what}: the square is not in Castle"));
         }
+        if !roads.town().contains(r.from.at().0, r.from.at().1) {
+            bad.push(format!("{what}: in Castle, from {:?} outside it", r.from));
+        }
         return bad;
     }
-    // The way is road she can walk, a step at a time, from Castle.
-    let p = &r.path;
-    if p.is_empty()
-        || !roads.town().contains(p[0].0, p[0].1)
-        || !r.to.grow(4).contains(p[p.len() - 1].0, p[p.len() - 1].1)
+    // It says where it starts from, and starts there.
+    let from = format!("from {}", r.from.said()).replace("from the edge of ", "from ");
+    if !words.to_lowercase().replace("from the edge of ", "from ").contains(&from.to_lowercase()) {
+        bad.push(format!("{what}: does not say {from:?}: {words}"));
+    }
+    if let Some(g) = r.from.ground()
+        && !g.grow(3).contains(r.from.at().0, r.from.at().1)
     {
-        bad.push(format!("{what}: does not start in Castle and end at the place"));
+        bad.push(format!("{what}: {:?} starts away from its ground", r.from));
+    }
+    // The way is road she can walk, a step at a time, from the start.
+    let p = &r.path;
+    if p.is_empty() || p[0] != r.from.at() || !r.to.grow(4).contains(p[p.len() - 1].0, p[p.len() - 1].1) {
+        bad.push(format!("{what}: does not start at {:?} and end at the place", r.from));
     }
     for (i, &(x, y)) in p.iter().enumerate() {
         if !open(bp, solid, x, y) {
@@ -79,11 +89,17 @@ fn faults(bp: &Blueprint, solid: &[bool], roads: &Roads, r: &Route, what: &str) 
     }
     // The legs in the order the walk meets them; each post where it is said to be.
     let mut last = 0;
-    for l in &r.legs {
+    for (k, l) in r.legs.iter().enumerate() {
         let at = match l {
             Leg::Out { at, .. } | Leg::Post { at, .. } | Leg::Off { at, .. } => *at,
-            Leg::InTown { .. } => {
-                bad.push(format!("{what}: in Castle and out of it"));
+            Leg::InTown { from, .. } => {
+                // Last, where the way comes into Castle.
+                if k + 1 != r.legs.len() || !roads.town().contains(from.0, from.1) {
+                    bad.push(format!("{what}: in Castle before the way is done"));
+                }
+                if !p.iter().skip(last).any(|c| roads.town().contains(c.0, c.1)) {
+                    bad.push(format!("{what}: says Castle, and the way never comes into it"));
+                }
                 continue;
             }
         };
@@ -96,8 +112,15 @@ fn faults(bp: &Blueprint, solid: &[bool], roads: &Roads, r: &Route, what: &str) 
         }
         last = i;
         if let Leg::Out { at, dir, road: by_road } = l {
-            if roads.town().contains(at.0, at.1) && i + 1 < p.len() {
-                bad.push(format!("{what}: leaves Castle inside it"));
+            match r.from.ground() {
+                Some(g) if g.contains(at.0, at.1) && i + 1 < p.len() => {
+                    bad.push(format!("{what}: leaves {} inside it", r.from.said()));
+                }
+                Some(g) if p[..i].iter().any(|c| !g.contains(c.0, c.1)) => {
+                    bad.push(format!("{what}: out of {} before it says so", r.from.said()));
+                }
+                None if i != 0 => bad.push(format!("{what}: does not set out from {:?}", r.from)),
+                _ => {}
             }
             let j = (i + 40).min(p.len() - 1);
             let wind = jane_world::county::country::roads::compass(p[j].0 - p[i].0, p[j].1 - p[i].1).to_lowercase();
@@ -149,18 +172,29 @@ fn faults(bp: &Blueprint, solid: &[bool], roads: &Roads, r: &Route, what: &str) 
         {
             bad.push(format!("{what}: leaves the road at {at:?}, where there is none"));
         }
-        Some(Leg::Off { .. }) => {}
+        Some(Leg::Off { .. } | Leg::InTown { .. }) => {}
         _ => bad.push(format!("{what}: never leaves the road")),
     }
     bad
 }
 
-fn check(bps: &Blueprints, seed: u32, print: bool) -> (usize, Vec<String>) {
+/// Every step's way from Castle; and, from every `every`th place the steps go to, the way there
+/// from each named place, from a point on a road and from where she might have been asked. The
+/// count of ways and the faults.
+fn check(bps: &Blueprints, seed: u32, print: bool, every: usize) -> (usize, Vec<String>) {
     let cat = jane_data::catalog();
     let county = bps.get(ZoneId::County);
     let solid = solid_props(county);
     let roads = Roads::new(county).expect("the county has Castle");
     let (mut n, mut bad) = (0, Vec::new());
+    let mut one = |r: Route, what: &str, bad: &mut Vec<String>| {
+        if print {
+            println!("{what}: {} | {}", r.words(), r.short());
+        }
+        n += 1;
+        bad.extend(faults(county, &solid, &roads, &r, what));
+    };
+    let mut places: Vec<(String, Route)> = Vec::new();
     for (qi, q) in cat.story.quests.iter().enumerate() {
         for i in 0..q.requirements.len() {
             let Some(place) = place_of_step(bps, QuestId(qi as u16), i) else { continue };
@@ -169,33 +203,90 @@ fn check(bps: &Blueprints, seed: u32, print: bool) -> (usize, Vec<String>) {
                 bad.push(format!("{what}: no way to {:?}", place.rect));
                 continue;
             };
-            if print {
-                println!("{what}: {} | {}", r.words(), r.short());
+            if !places.iter().any(|(_, p)| p.to == r.to) {
+                places.push((what.clone(), r.clone()));
             }
-            n += 1;
-            bad.extend(faults(county, &solid, &roads, &r, &what));
+            one(r, &what, &mut bad);
+        }
+    }
+    let m = places.len();
+    for k in (0..m).step_by(every) {
+        let (what, from_castle) = &places[k];
+        let to = from_castle.to;
+        let mut starts: Vec<Start> = roads
+            .sites()
+            .iter()
+            .filter(|s| !s.start.ground().is_some_and(|g| g.grow(6).overlaps(to)))
+            .map(|s| s.start.clone())
+            .collect();
+        // Halfway along another place's way, by the road; and where a third's ends.
+        let other = &places[(k + 1) % m].1.path;
+        if let Some(&mid) = other.get(other.len() / 2)
+            && roads.near_road(mid)
+        {
+            starts.push(Start::Here(mid));
+        }
+        if let Some(&end) = places[(k + 2) % m].1.path.last() {
+            starts.push(Start::Given(end));
+        }
+        for s in starts {
+            let what = format!("{what}, from {s:?}");
+            match roads.route_from(&s, to) {
+                Some(r) => one(r, &what, &mut bad),
+                None => bad.push(format!("{what}: no way to {to:?}")),
+            }
         }
     }
     (n, bad)
 }
 
-/// Seed 7's county, every step the words give a place for.
+/// Seed 7's county, every step the words give a place for, from Castle; and from the other
+/// starts to every third place.
 #[test]
 fn every_way_on_seed_7_is_true_to_the_county() {
-    let (n, bad) = check(&common::bps(), common::SEED, false);
-    assert!(n > 80, "most steps have a way ({n})");
+    let (n, bad) = check(&common::bps(), common::SEED, std::env::var_os("JANE_ROUTE_PRINT").is_some(), 3);
+    assert!(n > 150, "most steps have a way ({n})");
     assert!(bad.is_empty(), "a way the county does not bear out: {bad:#?}");
 }
 
-/// Seeds 1 to 8.
+/// Where the way starts: where she is, by a road; else the nearest place she knows, never the
+/// one she is going to; else where she was asked; else Castle.
+#[test]
+fn the_way_starts_from_the_most_use_of_what_she_knows() {
+    let bps = common::bps();
+    let roads = Roads::new(bps.get(ZoneId::County)).expect("the county has Castle");
+    let site = |id: &str| roads.sites().iter().find(|s| s.id == id).expect("the site is built");
+    let to = site("gold_mine").start.ground().unwrap();
+    let on_road = site("station").start.at();
+    assert!(roads.is_road(on_road), "the Halt's start is on its road");
+    let (all, none) = (|_: &Site| true, |_: &Site| false);
+    assert_eq!(roads.start(Some(on_road), None, &none, None, to), Start::Here(on_road));
+    let w = bps.get(ZoneId::County).tiles.w() as i32;
+    let wild = (0..w * w)
+        .map(|i| (i % w, i / w))
+        .find(|&(x, y)| {
+            (x - on_road.0).abs() < 300 && (y - on_road.1).abs() < 300 && roads.open(x, y) && !roads.near_road((x, y))
+        })
+        .expect("open ground off the roads near the Halt");
+    let s = roads.start(Some(wild), None, &all, None, to);
+    assert!(matches!(s, Start::Place { .. }), "off the road she starts from a place she knows: {s:?}");
+    assert!(!s.ground().unwrap().grow(6).overlaps(to), "not the place she is going to");
+    assert_eq!(roads.start(Some(wild), None, &none, Some(on_road), to), Start::Given(on_road));
+    assert_eq!(roads.start(Some(wild), None, &none, None, to), roads.castle());
+    let r = roads.route_from(&Start::Here(on_road), to).expect("a way from the Halt");
+    assert!(r.words().starts_with("From here, "), "{}", r.words());
+    assert!(r.short().contains(" from here"), "{}", r.short());
+}
+
+/// Seeds 1 to 8, from every start to every place.
 #[test]
 #[ignore = "slow: eight seeds built whole"]
 fn every_way_on_seeds_1_to_8_is_true_to_the_county() {
     let mut all = Vec::new();
     for seed in 1..=8 {
         let bps = Blueprints::build(seed).expect("the seed builds");
-        let (n, bad) = check(&bps, seed, false);
-        assert!(n > 80, "seed {seed}: most steps have a way ({n})");
+        let (n, bad) = check(&bps, seed, false, 1);
+        assert!(n > 300, "seed {seed}: most steps have a way ({n})");
         all.extend(bad);
     }
     assert!(all.is_empty(), "a way the county does not bear out: {all:#?}");

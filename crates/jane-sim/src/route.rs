@@ -1,16 +1,19 @@
 //! The way to a quest step's place, read off the county as built (the owner's playtest of 2
 //! October 2026: "quest directions can feel confusing, giving clearer directions would help on
-//! top of names"). From Castle along the roads to the road nearest the place: which way the road
-//! leaves Castle, each fingerpost the way turns at and what the post says that way, and where it
+//! top of names"). From the most use of what she knows ([`Roads::start`]: where she is if she is
+//! by a road, else the nearest named place she has been to or seen on a post, else where she was
+//! asked, else Castle) along the roads to the road nearest the place: which way the road leaves
+//! the start, each fingerpost the way turns at and what the post says that way, and where it
 //! leaves the road. Every word is something the county has, in the order the walk meets it
-//! (QUEST-TREE.md §2, "the words are true"; `tests/route.rs` holds it on seeds 1 to 8).
+//! (QUEST-TREE.md §2, "the words are true"; `tests/route.rs` holds it on seeds 1 to 8, from Castle,
+//! every named place and points on the roads).
 //!
 //! Presentation only: the Log and the tracker read it; nothing in the sim does. A [`Roads`] is
-//! built once per county (a walk over its road cells from Castle), a [`Route`] once per step.
+//! read once per county, a [`Route`] walked (A* over the county) once per start and step.
 
 use jane_core::action::{Action, ListRef, TextRef};
 use jane_core::blueprint::StoryPlace;
-use jane_core::{Blueprint, Key, Lookup, QuestId, Rect, Tile, ZoneId};
+use jane_core::{Blueprint, Key, QuestId, Rect, Tile, ZoneId};
 use jane_data::ReqTarget;
 use jane_world::county::country::roads::{compass, distance_words};
 
@@ -27,22 +30,65 @@ const BY_ROAD: i32 = 6;
 /// crosses a field only where a road would go three times as far round).
 const ON_ROAD: (u32, u32) = (10, 14);
 const OFF_ROAD: (u32, u32) = (30, 42);
-const NONE: u8 = u8::MAX;
-const START: u8 = u8::MAX - 1;
+const START: u8 = u8::MAX;
+/// The walk's queue, by cost to come plus the least the rest could cost: a step adds at most the
+/// dearest step and the most one step can take off the rest, so a ring this long never wraps.
+const RING: usize = 64;
 
 /// The eight steps, the four straight ones first.
 const STEPS: [(i32, i32); 8] = [(0, -1), (1, 0), (0, 1), (-1, 0), (1, -1), (1, 1), (-1, 1), (-1, -1)];
+
+/// A road this near her (cells, each way) is one she is on or by: the way starts where she is.
+pub const NEAR_ROAD: i32 = 6;
 
 /// Ground the way runs on: the roads' metal, their bridges, Castle's cobbles.
 pub fn road(t: Tile) -> bool {
     matches!(t, Tile::Road | Tile::Boardwalk | Tile::Cobble)
 }
 
+/// Where the way starts from: the most use to her of what she knows.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Start {
+    /// Where she is, on a road or by one.
+    Here((i32, i32)),
+    /// A named place: its name as the way says it ("Castle", "the Gold Mine"), its ground, and
+    /// the cell the way starts from there (Castle's square).
+    Place { name: String, ground: Rect, at: (i32, i32) },
+    /// Where she was when she was asked.
+    Given((i32, i32)),
+}
+
+impl Start {
+    /// The cell the way starts from.
+    pub fn at(&self) -> (i32, i32) {
+        match self {
+            Start::Here(at) | Start::Given(at) | Start::Place { at, .. } => *at,
+        }
+    }
+
+    /// A named place's ground: the way says where it leaves it.
+    pub fn ground(&self) -> Option<Rect> {
+        match self {
+            Start::Place { ground, .. } => Some(*ground),
+            _ => None,
+        }
+    }
+
+    /// As the way says it, after "from".
+    pub fn said(&self) -> &str {
+        match self {
+            Start::Here(_) => "here",
+            Start::Place { name, .. } => name,
+            Start::Given(_) => "where you were asked",
+        }
+    }
+}
+
 /// One thing the way meets, in order.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Leg {
-    /// Out of Castle at `at`, heading `dir`: by a road (`road`, one is a few steps on), else
-    /// across the ground to one.
+    /// Out from the start (out of a named place's ground) at `at`, heading `dir`: by a road
+    /// (`road`, one is a few steps on), else across the ground to one.
     Out { at: (i32, i32), dir: &'static str, road: bool },
     /// At the fingerpost standing at `post`, by the road at `at`, `metres` on from the last leg:
     /// go `dir`. `sign`: a place the post names that way, in its own words.
@@ -50,13 +96,15 @@ pub enum Leg {
     /// Where the way leaves the road for good, at `at`, `metres` on: the place is `dir` of it,
     /// `off` metres on foot (0: by the road).
     Off { at: (i32, i32), dir: &'static str, off: i32, metres: i32 },
-    /// In Castle itself: the place is `dir` of the square's mark at `from`, `off` metres.
-    InTown { from: (i32, i32), dir: &'static str, off: i32 },
+    /// In Castle: the place is `dir` of the square's mark at `from`, `off` metres. Alone when the
+    /// way starts in Castle; last, `metres` on from the leg before, when the way comes into it.
+    InTown { from: (i32, i32), dir: &'static str, off: i32, metres: i32 },
 }
 
-/// The way from Castle to a place: its legs, and the cells it walks (Castle's square first).
+/// The way from where it starts to a place: its legs, and the cells it walks (the start first).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Route {
+    pub from: Start,
     pub to: Rect,
     pub legs: Vec<Leg>,
     pub path: Vec<(i32, i32)>,
@@ -69,21 +117,29 @@ struct Post {
     words: String,
 }
 
-/// The county walked from Castle's square, keeping to the roads: the step each cell was reached
-/// by, the fingerposts, Castle's ground and its square.
+/// A named place of the county (a site): its ground, the start the way takes from it, and the
+/// fingerposts that name it.
+#[derive(Clone, Debug)]
+pub struct Site {
+    pub id: &'static str,
+    pub start: Start,
+    pub posts: Vec<(i32, i32)>,
+}
+
+/// The county as the way reads it: where her feet go, the roads, the fingerposts, the named
+/// places, Castle and its square.
 #[derive(Debug)]
 pub struct Roads {
     w: i32,
+    h: i32,
     town: Rect,
     square: (i32, i32),
-    /// By `y * w + x`: the step ([`STEPS`]) a cell was reached by; [`START`] for the square,
-    /// [`NONE`] for one never reached.
-    from: Vec<u8>,
-    /// By `y * w + x`: what reaching the cell cost, metres (saturating).
-    cost: Vec<u16>,
+    /// By `y * w + x`, a bit each: ground her feet can stand on.
+    open: Vec<u64>,
     /// By `y * w + x`, a bit each: a road's cell.
     on_road: Vec<u64>,
     posts: Vec<Post>,
+    sites: Vec<Site>,
 }
 
 /// Is `k` the name `s`: a content name, or one the generator made.
@@ -106,116 +162,108 @@ fn read_words(bp: &Blueprint, list: Option<ListRef>) -> Option<String> {
     })
 }
 
+fn bit(bits: &[u64], i: usize) -> bool {
+    bits.get(i / 64).is_some_and(|b| b & (1 << (i % 64)) != 0)
+}
+
 impl Roads {
     /// The county's (`None` for a blueprint with no Castle).
     pub fn new(county: &Blueprint) -> Option<Roads> {
         let cat = jane_data::catalog();
-        let town = county.rects.iter().find(|(k, _)| is_named(county, **k, "site_town")).map(|(_, r)| *r)?;
+        let rect_of = |name: &str| county.rects.iter().find(|(k, _)| is_named(county, **k, name)).map(|(_, r)| *r);
+        let town = rect_of("site_town")?;
         let square = county
             .marks
             .iter()
             .find(|(k, _)| is_named(county, **k, "town_square"))
             .map_or(town.centre(), |(_, m)| (i32::from(m.cell.x), i32::from(m.cell.y)));
         let (w, h) = (county.tiles.w() as i32, county.tiles.h() as i32);
-        let ix = |x: i32, y: i32| (y * w + x) as u32;
+        let n = (w * h) as usize;
         // What stands on the road and stops her: a solid prop's cells (a gate while it is locked).
-        let mut blocked = Lookup::with_capacity(1 << 12);
-        for p in &county.props {
-            let d = cat.story.prop(p.def);
-            if d.solid && !p.hidden && (!d.gate || p.locked) {
-                for (x, y) in d.solid_rect(i32::from(p.cell.x), i32::from(p.cell.y)).cells() {
-                    blocked.insert(ix(x, y), ());
-                }
-            }
-        }
-        let open = |x: i32, y: i32| {
-            county.tiles.inside(x, y)
-                && county.tiles.read(x, y, Tile::Void).flags() & jane_core::tile::F_SOLID == 0
-                && !blocked.contains(&ix(x, y))
-        };
-        // The cheapest walk from the square (a bucket queue: costs are small integers).
-        let mut from = vec![NONE; (w * h) as usize];
-        let mut cost = vec![u32::MAX; (w * h) as usize];
-        let mut buckets: Vec<Vec<(i32, i32)>> = vec![Vec::new(); OFF_ROAD.1 as usize + 1];
-        if !open(square.0, square.1) {
-            return None;
-        }
-        from[ix(square.0, square.1) as usize] = START;
-        cost[ix(square.0, square.1) as usize] = 0;
-        buckets[0].push(square);
-        let (mut now, mut left) = (0u32, 1usize);
-        while left > 0 {
-            let b = now as usize % buckets.len();
-            let Some((x, y)) = buckets[b].pop() else {
-                now += 1;
-                continue;
-            };
-            left -= 1;
-            if cost[ix(x, y) as usize] != now {
-                continue;
-            }
-            for (k, (dx, dy)) in STEPS.into_iter().enumerate() {
-                let (nx, ny) = (x + dx, y + dy);
-                if !open(nx, ny) {
-                    continue;
-                }
-                let diag = dx != 0 && dy != 0;
-                if diag && !(open(x + dx, y) && open(x, y + dy)) {
-                    continue;
-                }
-                let on = road(county.tiles.read(nx, ny, Tile::Void));
-                let step = match (on, diag) {
-                    (true, false) => ON_ROAD.0,
-                    (true, true) => ON_ROAD.1,
-                    (false, false) => OFF_ROAD.0,
-                    (false, true) => OFF_ROAD.1,
-                };
-                let c = now + step;
-                let i = ix(nx, ny) as usize;
-                if c < cost[i] {
-                    cost[i] = c;
-                    from[i] = k as u8;
-                    let n = buckets.len();
-                    buckets[c as usize % n].push((nx, ny));
-                    left += 1;
-                }
-            }
-        }
-        let fingerpost = cat.story.prop_id("fingerpost")?;
-        let posts = county
-            .props
-            .iter()
-            .filter(|p| p.def == fingerpost && !p.hidden)
-            .filter_map(|p| {
-                // A fork's post: its words name a way each ("EAST: ..."). A post to one place
-                // stands where there is no choice to make.
-                let words = read_words(county, p.use_list).filter(|w| w.contains(": "))?;
-                Some(Post { at: (i32::from(p.cell.x), i32::from(p.cell.y)), words })
-            })
-            .collect();
-        let cost = cost.iter().map(|&c| (c / 10).min(u32::from(u16::MAX)) as u16).collect();
-        let mut on_road = vec![0u64; (w * h) as usize / 64 + 1];
+        let mut open = vec![0u64; n / 64 + 1];
+        let mut on_road = vec![0u64; n / 64 + 1];
         for (i, t) in county.tiles.as_slice().iter().enumerate() {
+            if t.flags() & jane_core::tile::F_SOLID == 0 {
+                open[i / 64] |= 1 << (i % 64);
+            }
             if road(*t) {
                 on_road[i / 64] |= 1 << (i % 64);
             }
         }
-        Some(Roads { w, town, square, from, cost, on_road, posts })
+        for p in &county.props {
+            let d = cat.story.prop(p.def);
+            if d.solid && !p.hidden && (!d.gate || p.locked) {
+                for (x, y) in d.solid_rect(i32::from(p.cell.x), i32::from(p.cell.y)).cells() {
+                    if county.tiles.inside(x, y) {
+                        let i = (y * w + x) as usize;
+                        open[i / 64] &= !(1 << (i % 64));
+                    }
+                }
+            }
+        }
+        let fingerpost = cat.story.prop_id("fingerpost")?;
+        let all_posts: Vec<Post> = county
+            .props
+            .iter()
+            .filter(|p| p.def == fingerpost && !p.hidden)
+            .filter_map(|p| {
+                let words = read_words(county, p.use_list)?;
+                Some(Post { at: (i32::from(p.cell.x), i32::from(p.cell.y)), words })
+            })
+            .collect();
+        let mut roads = Roads { w, h, town, square, open, on_road, posts: Vec::new(), sites: Vec::new() };
+        if !roads.open(square.0, square.1) {
+            return None;
+        }
+        for s in cat.county.sites {
+            let Some(ground) = rect_of(&format!("site_{}", s.id)) else { continue };
+            let name = cat.text(s.name);
+            let at = if s.id == "town" {
+                square
+            } else {
+                // The road through or by its ground nearest its middle, else open ground there.
+                let c = ground.centre();
+                let near = |pred: &dyn Fn(i32, i32) -> bool| {
+                    ground
+                        .grow(3)
+                        .cells()
+                        .filter(|&(x, y)| pred(x, y))
+                        .min_by_key(|&(x, y)| ((x - c.0).pow(2) + (y - c.1).pow(2), y, x))
+                };
+                let Some(at) =
+                    near(&|x, y| roads.open(x, y) && roads.is_road((x, y))).or_else(|| near(&|x, y| roads.open(x, y)))
+                else {
+                    continue;
+                };
+                at
+            };
+            let upper = name.to_uppercase();
+            let posts = all_posts.iter().filter(|p| p.words.contains(&upper)).map(|p| p.at).collect();
+            let said = match name.strip_prefix("The ") {
+                Some(rest) => format!("the {rest}"),
+                None => name.to_owned(),
+            };
+            roads.sites.push(Site { id: s.id, start: Start::Place { name: said, ground, at }, posts });
+        }
+        // A fork's post: its words name a way each ("EAST: ..."). A post to one place stands
+        // where there is no choice to make.
+        roads.posts = all_posts.into_iter().filter(|p| p.words.contains(": ")).collect();
+        Some(roads)
     }
 
-    /// Did the walk from Castle reach `(x, y)`?
-    pub fn walked(&self, x: i32, y: i32) -> bool {
-        x >= 0 && x < self.w && y >= 0 && self.from.get((y * self.w + x) as usize).is_some_and(|&f| f != NONE)
-    }
-
-    fn cost_at(&self, x: i32, y: i32) -> u16 {
-        self.cost[(y * self.w + x) as usize]
+    /// Can her feet stand on `(x, y)`?
+    pub fn open(&self, x: i32, y: i32) -> bool {
+        x >= 0 && y >= 0 && x < self.w && y < self.h && bit(&self.open, (y * self.w + x) as usize)
     }
 
     /// Is `(x, y)` a road's cell?
     pub fn is_road(&self, (x, y): (i32, i32)) -> bool {
-        let i = (y * self.w + x) as usize;
-        self.on_road.get(i / 64).is_some_and(|b| b & (1 << (i % 64)) != 0)
+        x >= 0 && y >= 0 && x < self.w && y < self.h && bit(&self.on_road, (y * self.w + x) as usize)
+    }
+
+    /// Is a road within [`NEAR_ROAD`] of `(x, y)`?
+    pub fn near_road(&self, (x, y): (i32, i32)) -> bool {
+        Rect::new(x - NEAR_ROAD, y - NEAR_ROAD, 2 * NEAR_ROAD + 1, 2 * NEAR_ROAD + 1).cells().any(|c| self.is_road(c))
     }
 
     /// Castle's ground.
@@ -223,41 +271,158 @@ impl Roads {
         self.town
     }
 
-    /// The way from Castle to `to` (a place's ground in the county).
-    pub fn route(&self, to: Rect) -> Option<Route> {
-        let (cx, cy) = to.centre();
-        if self.town.contains(cx, cy) {
-            let (dx, dy) = (cx - self.square.0, cy - self.square.1);
-            let off = isqrt(dx, dy);
-            let dir = wind(dx, dy);
-            return Some(Route { to, legs: vec![Leg::InTown { from: self.square, dir, off }], path: Vec::new() });
+    /// The county's named places.
+    pub fn sites(&self) -> &[Site] {
+        &self.sites
+    }
+
+    /// The way from Castle's square.
+    pub fn castle(&self) -> Start {
+        self.sites.iter().find(|s| s.id == "town").map_or_else(
+            || Start::Place { name: "Castle".to_owned(), ground: self.town, at: self.square },
+            |s| s.start.clone(),
+        )
+    }
+
+    /// Where the way to `to` is best started from: where she is (`here`), if she is on a road or
+    /// by one; else the nearest named place (to her, else to where she last was in the county,
+    /// `last`) that `known` says she has been to or seen posted, not the place itself; else where
+    /// she was asked (`given`); else Castle.
+    pub fn start(
+        &self,
+        here: Option<(i32, i32)>,
+        last: Option<(i32, i32)>,
+        known: &dyn Fn(&Site) -> bool,
+        given: Option<(i32, i32)>,
+        to: Rect,
+    ) -> Start {
+        if let Some(at) = here
+            && self.open(at.0, at.1)
+            && self.near_road(at)
+        {
+            return Start::Here(at);
         }
-        // The cell of the place's ground (or beside it: a door, a building) the walk reached
-        // cheapest; of two as cheap, the first in row order.
-        let end = (0..4).find_map(|g| {
-            to.grow(g).cells().filter(|&(x, y)| self.walked(x, y)).min_by_key(|&(x, y)| (self.cost_at(x, y), y, x))
-        })?;
-        let mut path = vec![end];
-        let mut at = end;
-        loop {
-            match *self.from.get((at.1 * self.w + at.0) as usize)? {
-                START => break,
-                NONE => return None,
-                k => {
-                    let (dx, dy) = STEPS[usize::from(k)];
-                    at = (at.0 - dx, at.1 - dy);
-                    path.push(at);
+        let near = here.or(last).or(given);
+        let place = self
+            .sites
+            .iter()
+            .filter(|s| known(s) && !s.start.ground().is_some_and(|g| g.grow(BY_ROAD).overlaps(to)))
+            .min_by_key(|s| near.map_or(0, |(x, y)| dist2(nearest_in(s.start.ground().unwrap_or(to), (x, y)), (x, y))));
+        match (place, given) {
+            (Some(s), _) => s.start.clone(),
+            (None, Some(at)) if self.open(at.0, at.1) => Start::Given(at),
+            _ => self.castle(),
+        }
+    }
+
+    /// The cheapest walk from `from` to `to` (or beside it: a door, a building), keeping to the
+    /// roads: A* over the county, the least the rest could cost being the straight way by road.
+    fn walk(&self, from: (i32, i32), to: Rect) -> Option<Vec<(i32, i32)>> {
+        let goal = (0..4).map(|g| to.grow(g)).find(|r| r.cells().any(|(x, y)| self.open(x, y)))?;
+        if !self.open(from.0, from.1) {
+            return None;
+        }
+        let w = self.w;
+        let ix = |x: i32, y: i32| (y * w + x) as usize;
+        let rest = |x: i32, y: i32| {
+            let (nx, ny) = nearest_in(goal, (x, y));
+            let (dx, dy) = ((nx - x).unsigned_abs(), (ny - y).unsigned_abs());
+            let (lo, hi) = (dx.min(dy), dx.max(dy));
+            lo * ON_ROAD.1 + (hi - lo) * ON_ROAD.0
+        };
+        let n = (self.w * self.h) as usize;
+        // Cost to come + 1 (0: not reached), and the step each cell was reached by.
+        let mut cost = vec![0u32; n];
+        let mut step = vec![0u8; n];
+        let mut ring: Vec<Vec<(i32, i32, u32)>> = vec![Vec::new(); RING];
+        cost[ix(from.0, from.1)] = 1;
+        step[ix(from.0, from.1)] = START;
+        let mut now = rest(from.0, from.1);
+        ring[now as usize % RING].push((from.0, from.1, 0));
+        let mut left = 1usize;
+        let end = loop {
+            if left == 0 {
+                return None;
+            }
+            let Some((x, y, c)) = ring[now as usize % RING].pop() else {
+                now += 1;
+                continue;
+            };
+            left -= 1;
+            if cost[ix(x, y)] != c + 1 {
+                continue;
+            }
+            if goal.contains(x, y) {
+                break (x, y);
+            }
+            for (k, (dx, dy)) in STEPS.into_iter().enumerate() {
+                let (nx, ny) = (x + dx, y + dy);
+                if !self.open(nx, ny) {
+                    continue;
+                }
+                let diag = dx != 0 && dy != 0;
+                if diag && !(self.open(x + dx, y) && self.open(x, y + dy)) {
+                    continue;
+                }
+                let s = match (self.is_road((nx, ny)), diag) {
+                    (true, false) => ON_ROAD.0,
+                    (true, true) => ON_ROAD.1,
+                    (false, false) => OFF_ROAD.0,
+                    (false, true) => OFF_ROAD.1,
+                };
+                let nc = c + s;
+                let i = ix(nx, ny);
+                if cost[i] == 0 || nc + 1 < cost[i] {
+                    cost[i] = nc + 1;
+                    step[i] = k as u8;
+                    ring[(nc + rest(nx, ny)) as usize % RING].push((nx, ny, nc));
+                    left += 1;
                 }
             }
+        };
+        let mut path = vec![end];
+        let mut at = end;
+        while step[ix(at.0, at.1)] != START {
+            let (dx, dy) = STEPS[usize::from(step[ix(at.0, at.1)])];
+            at = (at.0 - dx, at.1 - dy);
+            path.push(at);
         }
         path.reverse();
-        let out = path.iter().position(|&(x, y)| !self.town.contains(x, y)).unwrap_or(0);
+        Some(path)
+    }
+
+    /// The way from Castle to `to` (a place's ground in the county).
+    pub fn route(&self, to: Rect) -> Option<Route> {
+        self.route_from(&self.castle(), to)
+    }
+
+    /// The way from `from` to `to`.
+    pub fn route_from(&self, from: &Start, to: Rect) -> Option<Route> {
+        let (cx, cy) = to.centre();
+        let start = from.at();
+        let to_town = self.town.contains(cx, cy);
+        let in_town = |dist: i32| {
+            let (dx, dy) = (cx - self.square.0, cy - self.square.1);
+            Leg::InTown { from: self.square, dir: wind(dx, dy), off: isqrt(dx, dy), metres: dist }
+        };
+        if to_town && self.town.contains(start.0, start.1) {
+            return Some(Route { from: from.clone(), to, legs: vec![in_town(0)], path: Vec::new() });
+        }
+        let path = self.walk(start, to)?;
+        // Out of the start's ground; into Castle's, when the place is there.
+        let out = from.ground().and_then(|g| path.iter().position(|&(x, y)| !g.contains(x, y))).unwrap_or(0);
+        let enter = if to_town {
+            (out..path.len()).find(|&i| self.town.contains(path[i].0, path[i].1)).unwrap_or(path.len() - 1)
+        } else {
+            path.len() - 1
+        };
         let heading = |i: usize| {
             let j = (i + AHEAD).min(path.len() - 1);
             wind(path[j].0 - path[i].0, path[j].1 - path[i].1)
         };
-        // Where it leaves the road for good: the last cell on a road, from Castle's edge on.
-        let leave = (out..path.len()).rev().find(|&i| self.is_road(path[i])).unwrap_or(out);
+        // Where it leaves the road for good: the last cell on a road, from the start's edge on.
+        let leave = (out..=enter).rev().find(|&i| self.is_road(path[i])).unwrap_or(out);
+        let leave = if to_town { enter } else { leave };
         let by_road = path[out..=(out + AHEAD).min(path.len() - 1)].iter().any(|&c| self.is_road(c));
         let mut legs = vec![Leg::Out { at: path[out], dir: heading(out), road: by_road }];
         let mut dir = heading(out);
@@ -293,20 +458,27 @@ impl Roads {
             dir = now;
             last = i;
         }
+        if to_town {
+            legs.push(in_town(metres_along(&path, last, enter)));
+            return Some(Route { from: from.clone(), to, legs, path });
+        }
         if !self.is_road(path[leave]) {
-            // No road from Castle's edge: on foot from there.
+            // No road from the start's edge: on foot from there.
             let off = metres_along(&path, out, path.len() - 1);
             let at = path[out];
-            legs.push(Leg::Off { at, dir: wind(to.centre().0 - at.0, to.centre().1 - at.1), off, metres: 0 });
-            return Some(Route { to, legs, path });
+            legs.push(Leg::Off { at, dir: wind(cx - at.0, cy - at.1), off, metres: 0 });
+            return Some(Route { from: from.clone(), to, legs, path });
         }
         let off = metres_along(&path, leave, path.len() - 1);
         let off = if off <= BY_ROAD { 0 } else { off };
-        let (cx, cy) = to.centre();
         let at = path[leave];
         legs.push(Leg::Off { at, dir: wind(cx - at.0, cy - at.1), off, metres: metres_along(&path, last, leave) });
-        Some(Route { to, legs, path })
+        Some(Route { from: from.clone(), to, legs, path })
     }
+}
+
+fn dist2(a: (i32, i32), b: (i32, i32)) -> i64 {
+    i64::from(a.0 - b.0).pow(2) + i64::from(a.1 - b.1).pow(2)
 }
 
 /// The wind of `(dx, dy)` in prose ("north-east").
@@ -361,19 +533,32 @@ pub fn metres(m: i32) -> String {
 }
 
 impl Route {
+    /// From where, as the way says it: "the edge of Castle" when it is a place's ground it walks
+    /// out of on foot.
+    fn start_edge(&self) -> String {
+        match self.from {
+            Start::Place { .. } => format!("the edge of {}", self.from.said()),
+            _ => self.from.said().to_owned(),
+        }
+    }
+
     /// The whole way, as the Log says it.
     pub fn words(&self) -> String {
+        let from = self.from.said();
         if let [Leg::Out { .. }, Leg::Off { dir, off, metres: 0, .. }] = self.legs[..] {
-            return format!("From the edge of Castle it is {dir}, about {} on foot.", metres(off));
+            return capitalise(&format!("From {}, it is {dir}, about {} on foot.", self.start_edge(), metres(off)));
         }
         let mut out = Vec::new();
         for l in &self.legs {
             out.push(match l {
-                Leg::InTown { dir, off, .. } => {
+                Leg::InTown { dir, off, metres: m, .. } if *m <= BY_ROAD => {
                     format!("In Castle: {} of the square, about {}.", dir, metres(*off))
                 }
-                Leg::Out { dir, road: true, .. } => format!("From Castle take the road {dir}."),
-                Leg::Out { dir, road: false, .. } => format!("From Castle go {dir} on foot to the road."),
+                Leg::InTown { dir, off, metres: m, .. } => {
+                    format!("After about {}, in Castle: {} of the square, about {}.", metres(*m), dir, metres(*off))
+                }
+                Leg::Out { dir, road: true, .. } => format!("From {from}, take the road {dir}."),
+                Leg::Out { dir, road: false, .. } => format!("From {from}, go {dir} on foot to the road."),
                 Leg::Post { dir, sign, metres: m, .. } => match sign {
                     Some(s) => format!("After about {}, at the fingerpost, go {dir}, the way it says {s}.", metres(*m)),
                     None => format!("After about {}, at the fingerpost, go {dir}.", metres(*m)),
@@ -390,16 +575,17 @@ impl Route {
         capitalise(&out.join(" "))
     }
 
-    /// The way in one short line, for the tracker: out of Castle and the first turn.
+    /// The way in one short line, for the tracker: out from the start and the first turn.
     pub fn short(&self) -> String {
         if let [Leg::Out { .. }, Leg::Off { dir, metres: 0, .. }] = self.legs[..] {
-            return format!("{} from the edge of Castle, on foot", capitalise(dir));
+            return capitalise(&format!("{dir} from {}, on foot", self.start_edge()));
         }
         let mut bits = Vec::new();
         for l in self.legs.iter().take(2) {
             bits.push(match l {
-                Leg::InTown { dir, .. } => format!("in Castle, {dir} of the square"),
-                Leg::Out { dir, .. } => format!("{dir} from Castle"),
+                Leg::InTown { dir, metres: 0, .. } => format!("in Castle, {dir} of the square"),
+                Leg::InTown { .. } => "into Castle".to_owned(),
+                Leg::Out { dir, .. } => format!("{dir} from {}", self.from.said()),
                 Leg::Post { dir, .. } => format!("{dir} at the post"),
                 Leg::Off { .. } => "off the road".to_owned(),
             });
