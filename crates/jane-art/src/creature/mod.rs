@@ -23,6 +23,7 @@
 mod arachnid;
 mod bird;
 mod crawler;
+pub mod critter;
 mod flyer;
 mod insect;
 pub(crate) use insect::stair;

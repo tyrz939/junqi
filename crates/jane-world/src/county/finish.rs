@@ -110,7 +110,7 @@ pub fn blocked_by_props(k: &Kit) -> Vec<bool> {
 /// Every cell a walker reaches from the platform, four ways over ground that does not stop feet
 /// and round every prop that does ([`blocked_by_props`]): the solver's flood before any key is
 /// found. By cell index (`y * w + x`); `None` for a county with no `start`.
-fn from_start(k: &Kit, blocked: &[bool]) -> Option<Vec<bool>> {
+pub(super) fn from_start(k: &Kit, blocked: &[bool]) -> Option<Vec<bool>> {
     let s = start(k)?;
     let tiles = k.blueprint().tiles.as_slice();
     let mut reach = Fill::new();

@@ -20,7 +20,7 @@ use crate::compile::source::{Source, typed};
 use crate::model::{
     Anatomy, Boots, Build, Coat, CreatureLook, CreatureRamps, Ears, EmitRole, Extra, Face, Front, Hair, Hat, HeldItem,
     HouseLook, HouseStyle, IconClass, IconLook, IconMark, Legs, Look, Marking, Mount, PersonBody, PersonHead,
-    PersonLook, PersonVary, Plan, PropFamily, PropLook, PropMaterials, PropState, Roofing, Skin, Tail, Walling,
+    PersonLook, PersonVary, Plan, PropFamily, PropLook, PropMaterials, PropState, Roofing, Skin, Tail, Task, Walling,
 };
 use jane_core::ids::SpriteId;
 
@@ -177,6 +177,9 @@ fn one() -> u8 {
 fn floor() -> Mount {
     Mount::Floor
 }
+fn no_task() -> Task {
+    Task::None
+}
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -186,6 +189,8 @@ struct RawPerson {
     body: RawBody,
     #[serde(default)]
     held: Option<RawHeld>,
+    #[serde(default = "no_task")]
+    task: Task,
     #[serde(default)]
     extras: Vec<Extra>,
     #[serde(default)]
@@ -439,6 +444,7 @@ fn person(p: RawPerson, at: &str, cx: &mut Ctx) -> Look {
                 roll: p.body.roll,
             },
             held,
+            task: p.task,
             extras: leak(p.extras.clone()),
             emits: leak(p.emits.clone()),
             ghost: p.ghost,
@@ -526,6 +532,7 @@ mod tests {
                 roll: false,
             },
             held: HeldItem::None,
+            task: Task::None,
             extras: &[],
             emits: &[],
             ghost: false,

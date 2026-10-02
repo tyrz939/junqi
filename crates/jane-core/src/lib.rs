@@ -8,6 +8,7 @@
 pub mod action;
 pub mod angle;
 pub mod blueprint;
+pub mod garden;
 pub mod grid;
 pub mod hash;
 pub mod ids;

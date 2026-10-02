@@ -4,7 +4,8 @@
 //! it, its chimney's pots, and the garden in front of it with its boundary. A room seen from
 //! inside (Julie's house, the Arms, St Anne's) is a [`Room`], whose seed papers its walls.
 //!
-//! All of it is drawing: a house's look moves no tile, no collision and no hash of the world. The
+//! All of it is drawing: a house's look moves no tile, no collision and no hash of the world; its
+//! garden's boundary is drawn only where the world laid one (`jane_core::garden`). The
 //! seeds are picked in reading order so that no two houses a frame can hold at once share three
 //! or more of roof, wall, door, window rhythm, boundary and hero detail (ART-PLAN §7 rule 1).
 
@@ -21,8 +22,6 @@ const LOOK: u32 = 0x4c4f_4f4b;
 /// A frame's reach in cells (the scene's 768 x 432 at 16 px): two houses nearer than this each
 /// way can be seen at once.
 pub const VIEW: (i32, i32) = (48, 27);
-/// The most rows of garden in front of a house.
-const PLOT_ROWS: i32 = 3;
 /// Bucket side, cells, of the lookup.
 const BUCKET: i32 = 16;
 
@@ -301,6 +300,12 @@ pub struct House {
     pub plot: Rect,
     /// The west cell of its door, if a door is set in its front.
     pub door: Option<i32>,
+    /// The cells of the garden's front row the sim holds fence or low wall on, a bit a column
+    /// from `plot.x` (none: an open garden); what the painter draws its boundary on.
+    pub fence: u64,
+    /// The west cell of the gate: the two cells under the door left open in the boundary, if it
+    /// has one.
+    pub gate: Option<i32>,
     /// Its seed, picked under rule 1.
     pub seed: u32,
     /// What it is, by its door.
@@ -317,16 +322,17 @@ impl House {
     pub fn holds(&self, x: i32, y: i32) -> bool {
         self.rect.contains(x, y)
     }
-}
 
-/// Whether `t` is a house's roof or wall.
-fn built(t: Tile) -> bool {
-    matches!(t, Tile::HouseWall | Tile::HouseRoof | Tile::Eaves)
-}
+    /// Whether world cell `(x, y)` is on its garden's boundary: fence or low wall to the sim,
+    /// drawn as its own.
+    pub fn fenced(&self, x: i32, y: i32) -> bool {
+        y == self.plot.bottom() - 1 && self.plot.contains(x, y) && self.fence >> (x - self.plot.x).min(63) & 1 == 1
+    }
 
-/// Whether `t` is ground a front garden is laid on.
-fn plot_ground(t: Tile) -> bool {
-    matches!(t, Tile::Grass | Tile::FlowerBed | Tile::Garden | Tile::GrassTall)
+    /// The west cell of its path's two: its gate's, else under its door.
+    pub fn path_x(&self) -> i32 {
+        self.gate.unwrap_or_else(|| jane_core::garden::gate_x(self.plot, self.door))
+    }
 }
 
 /// Every house of a zone, with a lookup by cell. Filled once a zone; nothing is allocated per
@@ -345,60 +351,34 @@ impl Houses {
     pub fn fill(&mut self, (w, h): (i32, i32), tile: impl Fn(i32, i32) -> Tile, doors: &[(i32, i32, Kind)], seed: u32) {
         self.list.clear();
         self.buckets.clear();
-        let mut seen = vec![0u64; ((w.max(0) * h.max(0)) as usize).div_ceil(64)];
-        let mark = |seen: &mut Vec<u64>, x: i32, y: i32| {
-            let k = (y * w + x) as usize;
-            let was = seen[k / 64] >> (k % 64) & 1 == 1;
-            seen[k / 64] |= 1 << (k % 64);
-            was
-        };
-        let mut stack = Vec::new();
-        for y in 0..h {
-            for x in 0..w {
-                if !built(tile(x, y)) || mark(&mut seen, x, y) {
-                    continue;
-                }
-                // The block, 4-connected.
-                let (mut x0, mut y0, mut x1, mut y1) = (x, y, x, y);
-                let mut eave = i32::MAX;
-                stack.push((x, y));
-                while let Some((cx, cy)) = stack.pop() {
-                    (x0, y0, x1, y1) = (x0.min(cx), y0.min(cy), x1.max(cx), y1.max(cy));
-                    if tile(cx, cy) == Tile::HouseWall {
-                        eave = eave.min(cy);
-                    }
-                    for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
-                        let (nx, ny) = (cx + dx, cy + dy);
-                        if nx >= 0 && ny >= 0 && nx < w && ny < h && built(tile(nx, ny)) && !mark(&mut seen, nx, ny) {
-                            stack.push((nx, ny));
-                        }
+        for b in jane_core::garden::blocks((w, h), &tile) {
+            let rect = b.rect;
+            let (rows, fenced) = jane_core::garden::front(rect, h, &tile);
+            let plot = Rect::new(rect.x, rect.bottom(), rect.w, rows);
+            let door = doors.iter().find(|d| d.1 >= b.eave && rect.contains(d.0, d.1));
+            // The boundary as the sim has it, and the gate the gap under the door (else the
+            // middle) if both its cells are open.
+            let (mut fence, mut gate) = (0u64, None);
+            if fenced {
+                let fy = plot.bottom() - 1;
+                for x in plot.x..plot.right().min(plot.x + 64) {
+                    if jane_core::garden::boundary(tile(x, fy)) {
+                        fence |= 1 << (x - plot.x);
                     }
                 }
-                if eave == i32::MAX {
-                    continue;
-                }
-                let rect = Rect::new(x0, y0, x1 - x0 + 1, y1 - y0 + 1);
-                // The garden: the rows in front of it that are mostly grass, three at most.
-                let mut rows = 0;
-                while rows < PLOT_ROWS {
-                    let gy = rect.bottom() + rows;
-                    let green = (rect.x..rect.right()).filter(|&gx| plot_ground(tile(gx, gy))).count() as i32;
-                    if gy >= h || green * 3 < rect.w * 2 {
-                        break;
-                    }
-                    rows += 1;
-                }
-                let plot = Rect::new(rect.x, rect.bottom(), rect.w, rows);
-                let door = doors.iter().find(|d| d.1 >= eave && rect.contains(d.0, d.1));
-                self.list.push(House {
-                    rect,
-                    eave,
-                    plot,
-                    door: door.map(|d| d.0),
-                    seed: 0,
-                    kind: door.map_or(Kind::Home, |d| d.2),
-                });
+                let gx = jane_core::garden::gate_x(plot, door.map(|d| d.0));
+                gate = (fence >> (gx - plot.x).min(62) & 3 == 0).then_some(gx);
             }
+            self.list.push(House {
+                rect,
+                eave: b.eave,
+                plot,
+                door: door.map(|d| d.0),
+                fence,
+                gate,
+                seed: 0,
+                kind: door.map_or(Kind::Home, |d| d.2),
+            });
         }
         // Seeds in reading order, each the first of its tries that shares fewer than three of
         // rule 1's six with every house picked before it that a frame can hold beside it.

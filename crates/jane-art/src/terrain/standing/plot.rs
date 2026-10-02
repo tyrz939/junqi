@@ -4,7 +4,8 @@
 //! veg patch's cabbages in rows, a tidy lawn mown in stripes, or a neglected one's long grass;
 //! and standing in it what the recipe has (hollyhocks, a water butt and bean canes, a bird bath
 //! and a sundial, a rusted bike). The ground is painted here; what stands is a `garden` sprite.
-//! Drawing only: the sim's cells are the grass they were.
+//! The boundary is drawn only on the cells the sim holds fence or low wall on (`House::fence`,
+//! laid by the county's `gardens` stage), its gate only in the gap: a garden with none is open.
 
 use super::super::hard::voronoi;
 use super::super::houses::{Garden, House, Look};
@@ -21,11 +22,6 @@ fn house(p: &Painter, cx: i32, cy: i32) -> Option<(House, i32, i32)> {
     h.plot.contains(wx, wy).then_some((h, wx, wy))
 }
 
-/// The gate's west cell: under the door, else the middle of the garden.
-fn gate_x(h: &House) -> i32 {
-    h.door.unwrap_or(h.plot.x + h.plot.w / 2 - 1).clamp(h.plot.x, h.plot.right() - 2)
-}
-
 /// What stands on a garden's cell: `None` if the cell is no garden's, else what (if anything) it
 /// shows in place of what the tile would have stood there.
 // None: no garden here, the tile stands as it would; Some(None): a garden that shows nothing.
@@ -33,7 +29,7 @@ fn gate_x(h: &House) -> i32 {
 pub(super) fn thing(p: &Painter, cx: i32, cy: i32) -> Option<Option<Thing>> {
     let (h, wx, wy) = house(p, cx, cy)?;
     let l = h.look();
-    let gx = gate_x(&h);
+    let gx = h.path_x();
     let hh = h32(wx as u32, wy as u32, h.seed ^ 0x9a2d);
     let piece = |pc: Piece, ox: i32, oy: i32| {
         Some(Some(Thing {
@@ -45,15 +41,15 @@ pub(super) fn thing(p: &Painter, cx: i32, cy: i32) -> Option<Option<Thing>> {
             shade: !pc.is_boundary(),
         }))
     };
-    if wy == h.plot.bottom() - 1 {
-        // The boundary along the garden's front, its gate under the door: a cottage garden's
-        // gate is a rose arch.
-        return if wx == gx {
-            piece(if l.garden == Garden::Cottage { Piece::RoseArch } else { Piece::of(l.boundary, true, false) }, 8, 0)
-        } else if wx == gx + 1 {
-            Some(None)
-        } else {
+    if h.fence != 0 && wy == h.plot.bottom() - 1 {
+        // The boundary along the garden's front where the sim has it, its gate in the gap under
+        // the door: a cottage garden's gate is a rose arch.
+        return if h.fenced(wx, wy) {
             piece(Piece::of(l.boundary, false, l.garden == Garden::Neglect), 0, 0)
+        } else if h.gate == Some(wx) {
+            piece(if l.garden == Garden::Cottage { Piece::RoseArch } else { Piece::of(l.boundary, true, false) }, 8, 0)
+        } else {
+            Some(None)
         };
     }
     if wx == gx || wx == gx + 1 {
@@ -84,12 +80,12 @@ pub(super) fn thing(p: &Painter, cx: i32, cy: i32) -> Option<Option<Thing>> {
 /// Paint a garden's ground on chunk-local cell `(cx, cy)`: its path, its beds, its lawn; the
 /// wall's shade kept over them, the boundary's laid along its foot.
 pub(super) fn ground(p: &mut Painter, cx: i32, cy: i32, seed: u32) {
-    let Some((h, _, wy)) = house(p, cx, cy) else { return };
+    let Some((h, wx, wy)) = house(p, cx, cy) else { return };
     let l = h.look();
-    let gx = gate_x(&h);
+    let gx = h.path_x();
     let (path0, path1) = (gx * CELL + 9, gx * CELL + 23);
     let (px0, py0) = (cx * CELL, cy * CELL);
-    let boundary = wy == h.plot.bottom() - 1;
+    let boundary = h.fenced(wx, wy);
     for y in 0..CELL {
         for x in 0..CELL {
             let (wpx, wpy) = ((cx + p.x0c) * CELL + x, (cy + p.y0c) * CELL + y);

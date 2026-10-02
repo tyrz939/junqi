@@ -393,3 +393,8 @@ Every item ends with ART §3.1's review: before-and-after renders at 1x and 3x o
 **Craft**
 - [Slynyrd: Pixelblog 20, Top Down Tiles](https://www.slynyrd.com/blog/2019/8/27/pixelblog-20-top-down-tiles)
 - [Saint11: pixel art tutorials (vegetation, wind, idle, smoke, water)](https://saint11.art/blog/pixel-art-tutorials/)
+
+## 9. Later (owner, 2026-10-03, after the week's reset)
+
+- **Leaves that move within the plant.** Beyond a crown's lean, individual leaves and clusters should flutter: a few loose leaves tip and flicker on the windward edge, and the odd one lets go and joins the falling leaves. Owner: "moving some leaves etc could be good too but do it in a later pass".
+- **Foliage sway feedback**, being fixed in batch 3: the first sway had too few frames and every plant stepped on the same tick. The fix is 6 to 8 small steps on a faster cycle, with a phase for each plant and a travelling gust wave.
