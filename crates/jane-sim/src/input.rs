@@ -241,6 +241,13 @@ pub enum Command {
     Goto(Goto),
     /// Esc: stop swinging, walking and casting (an unfinished cast costs nothing).
     Halt,
+    /// Her hop (`feel::hop`): along this frame's stick, else her facing.
+    Hop,
+    /// The table's input delay D in frames (stamped with seat `None`, from the host): every
+    /// foe's wind-up is that much longer (`GameState::table_delay`).
+    Table {
+        delay: u8,
+    },
 }
 
 /// Where a right-click sends her.

@@ -563,7 +563,12 @@ fn a_ground_with_a_delay_is_seen_before_it_bites() {
         }
         let (at, pos) = rung.expect("he lifts the bell");
         assert_eq!(unit(&s, her).hp, hp, "nothing yet");
-        assert_eq!(at.0 - s.state().tick.0, delay.0, "it rings a delay after it is lifted");
+        // Lifted, it is a wind-up (`feel.rs`): it rings the longer of the Headmaster's wind-up
+        // and its own delay after, and he is held to it.
+        let tell = jane_sim::feel::windup_of(unit(&s, hm), cat.combat.spell(bell)).0;
+        assert!(tell >= delay.0);
+        assert_eq!(at.0 - s.state().tick.0, tell, "it rings a wind-up after it is lifted");
+        let delay = Tick(tell);
         let hm_at = unit(&s, hm).pos;
         if stand {
             steps(&mut s, delay.0 + 2);

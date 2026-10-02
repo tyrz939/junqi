@@ -127,6 +127,12 @@ pub enum SfxKind {
     StepWood,
     StepWater,
     Swing,
+    /// A foe's wind-up begins (`feel.rs`): a breath drawn up, the tell's sound. Steady (a boss
+    /// tell nothing breaks) is lower and longer.
+    Windup,
+    WindupSteady,
+    /// Her hop.
+    Hop,
     Strike,
     HitPhysical,
     HitFrost,
@@ -240,13 +246,16 @@ impl SfxKind {
         }
     }
 
-    pub const ALL: [SfxKind; 73] = [
+    pub const ALL: [SfxKind; 76] = [
         SfxKind::StepGrass,
         SfxKind::StepRoad,
         SfxKind::StepCobble,
         SfxKind::StepWood,
         SfxKind::StepWater,
         SfxKind::Swing,
+        SfxKind::Windup,
+        SfxKind::WindupSteady,
+        SfxKind::Hop,
         SfxKind::Strike,
         SfxKind::HitPhysical,
         SfxKind::HitFrost,
@@ -325,6 +334,9 @@ impl SfxKind {
             SfxKind::StepWood => "step_wood",
             SfxKind::StepWater => "step_water",
             SfxKind::Swing => "swing",
+            SfxKind::Windup => "windup",
+            SfxKind::WindupSteady => "windup_steady",
+            SfxKind::Hop => "hop",
             SfxKind::Strike => "strike",
             SfxKind::HitPhysical => "hit_physical",
             SfxKind::HitFrost => "hit_frost",
@@ -937,6 +949,11 @@ impl Soundtrack {
                     let m = if unit == s.me { s.might.1 } else { 256 };
                     bus.sfx_with(SfxKind::Swing, at(p), me, m);
                 }
+                // A foe's tell, heard where its blow will land.
+                EventKind::Windup { at: p, interruptible, .. } => {
+                    bus.sfx(if interruptible { SfxKind::Windup } else { SfxKind::WindupSteady }, at(p), me);
+                }
+                EventKind::Hop { at: p, .. } => bus.sfx(SfxKind::Hop, at(p), me),
                 EventKind::Impact { spell, school, at: p } => {
                     let k = match school {
                         School::Heal => SfxKind::Heal,

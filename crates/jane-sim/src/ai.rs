@@ -39,7 +39,7 @@ use jane_core::num::{CELL_FX, dist_sq, isqrt};
 use jane_core::{CellIx, Fx, SpellId, Tick, Vec2};
 use jane_data::{Controller, Faction, UnitDef, UnitSight};
 
-use crate::combat::{Hit, distance, is_enemy, max_bounds, metres_between, query_near, queue_hit, try_cast};
+use crate::combat::{Hit, distance, is_enemy, max_bounds, metres_between, query_near, queue_hit};
 use crate::ctx::Ctx;
 use crate::event::SpellError;
 use crate::ids::UnitId;
@@ -75,7 +75,8 @@ pub fn step_controllers(cx: &mut Ctx<'_>, everyone: bool) {
     }
     for &id in &ids {
         let Some(u) = cx.zone.unit(id) else { continue };
-        if !u.alive || u.hidden || is_stunned(u, now) {
+        // Frozen by a blow's hitlag, it waits with the stunned.
+        if !u.alive || u.hidden || is_stunned(u, now) || crate::feel::lagged(u, now) {
             continue;
         }
         match u.controller {
@@ -114,7 +115,12 @@ pub fn tick_ai_with(cx: &mut Ctx<'_>, id: UnitId, def: &UnitDef) {
         0 => def.run,
         n => def.phases.get(usize::from(n) - 1).and_then(|p| p.run).unwrap_or(def.run),
     };
-    match u.combat {
+    // Out of the fight (it lost her, it leashed), a blow it was winding up is let go.
+    let combat = u.combat;
+    if combat != CombatState::Combat && u.feel.windup.is_some() {
+        crate::feel::drop_windup(cx, id);
+    }
+    match combat {
         CombatState::Idle => idle(cx, id, def, shy),
         CombatState::Leash => leash(cx, id, def, run, shy),
         CombatState::Combat => fight(cx, id, def, run, shy),
@@ -220,6 +226,11 @@ fn fight(cx: &mut Ctx<'_>, id: UnitId, def: &UnitDef, run: Fx, shy: bool) {
         clear_path(u);
         return;
     }
+    // Winding up a blow: committed to it until it lands (`feel.rs`).
+    if u.feel.windup.is_some() {
+        crate::feel::hold(cx, id);
+        return;
+    }
     if now < u.stop_until {
         return;
     }
@@ -235,7 +246,7 @@ fn fight(cx: &mut Ctx<'_>, id: UnitId, def: &UnitDef, run: Fx, shy: bool) {
         approach(cx, id, tpos, run, leash, shy);
         return;
     };
-    match try_cast(cx, id, spell, None, None) {
+    match crate::feel::cast_or_windup(cx, id, spell) {
         Ok(()) => {
             let u = cx.zone.unit_mut(id).expect("unit");
             clear_path(u);

@@ -210,7 +210,9 @@ impl Host {
         cfg.seats = cfg.seats.clamp(1, MAX_PLAYERS as u8);
         let f = sim.state().frame;
         let mut seats: [SeatIn; MAX_PLAYERS] = Default::default();
-        let mut inject = vec![(Some(Seat::HOST), Command::Open(true))];
+        // The table's delay goes into the world first, so every wind-up at it is D longer (a
+        // guest reads a foe's blow in a solo player's window), on the tape as on every peer.
+        let mut inject = vec![(None, Command::Table { delay: cfg.delay }), (Some(Seat::HOST), Command::Open(true))];
         let host_sat = sim.state().player(Seat::HOST).is_some_and(|p| p.connected);
         if cfg.plays {
             seats[0] = SeatIn { active: true, need_from: f + u32::from(cfg.delay), inputs: BTreeMap::new() };
@@ -713,7 +715,7 @@ impl Host {
         // A seat getting up in this bundle may be the one a returning guest wants back.
         let leaving = self.inject.iter().any(|(_, c)| matches!(c, Command::Leave));
         // One join a bundle: a second would be seated by a prediction that did not know of the first.
-        let mut joined = self.inject.iter().any(|(s, _)| s.is_none());
+        let mut joined = self.inject.iter().any(|(_, c)| matches!(c, Command::Join { .. }));
         for i in 0..self.conns.len() {
             let State::Joining { resync } = self.conns[i].state else { continue };
             if resync {

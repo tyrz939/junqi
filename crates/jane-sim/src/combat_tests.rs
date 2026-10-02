@@ -193,6 +193,8 @@ fn a_friendly_spell_lands_where_the_cursor_or_the_stick_says() {
         cast: Tick::ZERO,
         glow: None,
         touch: None,
+        windup: None,
+        interruptible: true,
     };
     let id = SpellId(u16::MAX);
     let party = || {

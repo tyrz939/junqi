@@ -40,7 +40,8 @@ use crate::tuning::{BAG_SLOTS, BAR_SLOTS, CRAFT_INPUTS, STORE_SLOTS};
 /// 11: side quests set aside keep their kills (`Quests::set_aside`, `quests::abandon`).
 /// 12: the player's side of a fight (PLAY-PLAN §2.1): `PlayerState::fight` (her target, her
 /// cast building, the press queued behind it, her swings and her click-walk), a frame's target
-/// and free-aim bit, a bolt's `seek`.
+/// and free-aim bit, a bolt's `seek`; and the fight's feel (`feel.rs`): `Unit::feel` (wind-up,
+/// hop, hitlag, knock) and `GameState::table_delay`. One bump for Phase 1.
 pub const SAVE_VERSION: u16 = 12;
 
 /// A fixed-size bit set (trigger bits, consequences done).
@@ -113,6 +114,10 @@ pub struct GameState {
     pub name: String,
     /// Whether anyone else may sit down. A save always loads closed.
     pub open: bool,
+    /// The LAN table's input delay D in frames (`Command::Table`; 0 alone): every foe's wind-up
+    /// is that much longer, so a guest reacts in a solo player's window (PLAY-PLAN.md §2.1).
+    /// A save always loads at 0.
+    pub table_delay: u8,
     pub next: Counters,
     /// The world stream: weather on the hour and ecology every ten game minutes, drawn in a
     /// fixed order (§4.4, `living.rs`). Nothing else draws from it.
@@ -785,6 +790,8 @@ pub struct Unit {
     pub hold: u8,
     pub phase: u8,
     pub snake: Option<Box<SnakeBody>>,
+    /// The fight's feel (`feel.rs`): a foe's wind-up, hitlag, knockback, her hop.
+    pub feel: crate::feel::Feel,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

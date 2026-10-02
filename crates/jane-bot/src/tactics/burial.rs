@@ -803,6 +803,14 @@ pub fn fight(v: &View<'_>, cx: &mut Ctx, id: UnitId, task: Option<&Task>) -> Opt
             return None;
         }
     }
+    // A bite winding up at her: out of its reach (a hop on its last ticks). What is thrown is
+    // left to the room's own rules above (its cover, its pools).
+    let bite = crate::fight::tell_on_me(v).is_some_and(|(_, w, _)| cat.combat.spell(w.spell).kind == SpellKind::Melee);
+    if !held && bite {
+        if let Some(a) = crate::fight::dodge_tell(v, cx) {
+            return Some(Some(a));
+        }
+    }
     if let Some(c) = crate::fight::eat(v) {
         return Some(Some(Act::press(c)));
     }
@@ -850,8 +858,13 @@ pub fn fight(v: &View<'_>, cx: &mut Ctx, id: UnitId, task: Option<&Task>) -> Opt
         // (Only while she is inside it: out past it already, the way back is past the keeper.)
         let tether = (leash > 0).then_some((k.home, leash * 2 / 3)).filter(|&(h, r)| dist(me.pos, h) <= r);
         let room = room_of(v, k.home).filter(|r| kd.controller == jane_data::Controller::Snake && inside(r, me.pos));
-        if let Some(f) = retreat(v, cx, k.pos, tether, room, slips_past(k.def)) {
-            return Some(Some(Act::hold(InputFrame { aim: Some(dir), ..f })));
+        // Out past its tether already, backing off further only leads it home to mend (the
+        // Spider's leash is twelve metres): its blows are dodged as they wind up instead.
+        let leads_home = leash > 0 && tether.is_none() && kd.controller != jane_data::Controller::Snake;
+        if !leads_home {
+            if let Some(f) = retreat(v, cx, k.pos, tether, room, slips_past(k.def)) {
+                return Some(Some(Act::hold(InputFrame { aim: Some(dir), ..f })));
+            }
         }
     }
     // Proof against everything she has (Goldskin's gilding), with a fire to light in its room
@@ -917,13 +930,14 @@ pub fn fight(v: &View<'_>, cx: &mut Ctx, id: UnitId, task: Option<&Task>) -> Opt
     if mobile && g < i64::from(6 * CELL_FX) {
         let leash = i64::from(td.leash.0);
         let tether = (leash > 0).then_some((t.home, leash * 2 / 3)).filter(|&(h, r)| dist(me.pos, h) <= r);
+        let leads_home = leash > 0 && tether.is_none() && td.controller != jane_data::Controller::Snake;
         // The snake loses her the moment a wall stands between them, and goes home whole: its
         // room is kept to (the room it was met in, as the map shows it).
         let room = (td.controller == jane_data::Controller::Snake)
             .then(|| room_of(v, t.home))
             .flatten()
             .filter(|r| inside(r, me.pos));
-        if let Some(f) = retreat(v, cx, t.pos, tether, room, slips_past(t.def)) {
+        if let Some(f) = retreat(v, cx, t.pos, tether, room, slips_past(t.def)).filter(|_| !leads_home) {
             return Some(Some(Act::hold(InputFrame { aim: Some(dir), ..f })));
         }
     }

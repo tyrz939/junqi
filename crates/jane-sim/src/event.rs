@@ -309,6 +309,34 @@ pub enum EventKind {
     },
     /// Something the county does for good has happened (§4.6.d). Party-wide.
     Consequence(jane_core::ConsequenceId),
+    // --- the fight's feel (`feel.rs`) --------------------------------------------------------
+    /// A foe began to wind up a blow (PLAY-PLAN.md §2.1): `at` is where it was aimed (the
+    /// victim, a bolt's mark, a pool's middle), `lands` when it comes. The presenter raises it,
+    /// lays the decal and sounds the cue; `interruptible` picks the tell's colour.
+    Windup {
+        unit: UnitId,
+        spell: SpellId,
+        at: Vec2,
+        lands: jane_core::Tick,
+        interruptible: bool,
+    },
+    /// A wind-up broken before it landed (a stun, a jolt, a knock).
+    Interrupted {
+        unit: UnitId,
+        spell: SpellId,
+        at: Vec2,
+    },
+    /// She hopped.
+    Hop {
+        unit: UnitId,
+        at: Vec2,
+        dir: jane_core::Angle,
+    },
+    /// A blow passed through her hop.
+    Evaded {
+        unit: UnitId,
+        at: Vec2,
+    },
 }
 
 impl EventKind {

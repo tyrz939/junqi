@@ -857,6 +857,7 @@ impl App<'_> {
                 let at = cursor.map(|c| canvas_to_world(c, self.camera));
                 let cmd = match g {
                     GameAction::Use => Command::Use,
+                    GameAction::Hop => Command::Hop,
                     GameAction::Bar(slot) => Command::Bar {
                         slot,
                         on: at.and_then(|at| {

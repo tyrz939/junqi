@@ -50,6 +50,9 @@ mod combat_tests;
 pub mod ctx;
 pub mod dialogue;
 pub mod event;
+pub mod feel;
+#[cfg(test)]
+mod feel_tests;
 pub mod flight;
 pub mod flush;
 pub mod fog;

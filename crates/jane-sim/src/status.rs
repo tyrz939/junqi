@@ -139,6 +139,8 @@ pub fn apply_effect(cx: &mut Ctx<'_>, id: UnitId, e: EffectId, from: Option<Unit
             });
             cx.emit(EventKind::Status { unit: id, effect: e, on: true });
         }
+        // A stun breaks a wind-up, a chill draws one out (`feel.rs`).
+        crate::feel::on_status(cx, id, def);
     }
     if def.heal.0 > 0 {
         queue_hit(cx, Hit { to: id, amount: def.heal, school: School::Heal, from, crit: false, status: None });

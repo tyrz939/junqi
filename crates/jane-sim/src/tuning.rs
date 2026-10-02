@@ -288,3 +288,38 @@ pub const WALK_STUCK: u8 = 20;
 pub const WALK_ARRIVED_FX: i64 = CELL_FX as i64 / 2;
 /// A walk into reach of a foe stops this far inside it, so its next step does not drop the swing.
 pub const WALK_REACH_SLACK_FX: i64 = FX_ONE as i64 * 2;
+// --- the fight's feel (feel.rs; PLAY-PLAN.md §2.1, research-combat §4.5 to 4.8) ---------------
+
+/// Her hop: what it costs, how far it goes (1.5 m) over how many ticks, the ticks (from its
+/// first) a blow passes through her, and how soon (from its start) she may hop again.
+pub const HOP_ENERGY: Milli = Milli(30_000);
+pub const HOP_FX: i32 = CELL_FX * 3 / 2;
+pub const HOP_TICKS: u32 = 10;
+pub const HOP_IFRAMES: u32 = 7;
+pub const HOP_EVERY: Tick = Tick(18);
+/// How the hop's length is laid over its ticks, in hundredths: quick off the mark, landing soft.
+pub const HOP_EASE: [i32; HOP_TICKS as usize] = [16, 14, 13, 12, 10, 9, 8, 7, 6, 5];
+
+/// Hitlag, in ticks: her swing landing, a crit or a kill, and a boss changing phase or falling.
+/// Hers never passes a tenth of her swing's cycle; it never stacks (the longest wins).
+pub const LAG_SWING: u32 = 4;
+pub const LAG_SWING_BIG: u32 = 6;
+pub const LAG_BOSS: u32 = 10;
+
+/// Knockback, in px, laid over `KNOCK_TICKS`: her swing on a small or middling foe, an
+/// Explosion's burst, a heavy foe's blow on her.
+pub const KNOCK_SWING_PX: i32 = 6;
+pub const KNOCK_BURST_PX: i32 = 10;
+pub const KNOCK_HEAVY_PX: i32 = 4;
+pub const KNOCK_TICKS: u8 = 4;
+/// Bodies at least this wide are heavy (nothing of hers pushes them; they push her); under
+/// `SMALL_BOUNDS_FX` they are small (her swing breaks their wind-up).
+pub const HEAVY_BOUNDS_FX: i32 = CELL_FX * 5 / 4;
+pub const SMALL_BOUNDS_FX: i32 = CELL_FX;
+/// A unit row resisting physical blows at least this much is plated: it is not pushed.
+pub const PLATED_RESIST: Permille = Permille(500);
+/// A melee wind-up lands only on a victim inside this half-arc of the line it began on (45°:
+/// a 90° arc).
+pub const WINDUP_HALF_ARC: i32 = 8192;
+/// The most input delay a table may add to the wind-ups (`jane-net`'s `MAX_DELAY`).
+pub const TABLE_DELAY_MAX: u8 = 6;

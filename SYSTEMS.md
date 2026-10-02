@@ -148,6 +148,25 @@ The pipeline is the product: validate → spawn a kind → pay only if valid →
 | Potions as effect rows (manashield, lifesteal, critical, stoneskin, firelash, sparktongue, winterbite, stranglethorn) | **SHAPE** — rows exist and validate; no test drinks one |
 | Numbers follow the 2020 balance sheet, phase 1 | **SHAPE** — see `DESIGN-2020.md` §3.1 |
 
+### 3b. The fight's feel, the foes' side (`jane-sim/src/feel.rs`, PLAY-PLAN.md §2.1)
+
+All of it in ticks, inside the sim: saved, hashed, replayed (`SAVE_VERSION` 12).
+
+| Contract | Bar |
+| --- | --- |
+| **Wind-ups.** An AI's melee, bolt or pool winds up before it lands: the spell row's `windup` (seconds), else the unit row's (rats, bats, spiders 0.35 s; skeletons, crows and the commons 0.5 s; soldiers, armour, haulers and every boss 0.8 s; the cactus's bristle 1.0 s). The foe stands, faces its point and is committed; after the blow it keeps its row's `stop`, her window | **IN** — `feel_tests` `a_skeletons_blow_winds_up_half_a_second_and_misses_her_if_she_steps_out`, `a_rat_winds_up_a_third_of_a_second_and_the_cactus_bristles_a_whole_one` |
+| A melee wind-up lands only on its victim still in reach and inside a 90° arc of the line it began on; a bolt flies at the point locked when it began; a pool is laid at once on its point (the decal) and bites when the wind-up ends (at least its `delay`) | **IN** — `a_melee_wind_up_lands_only_inside_its_arc`, `a_bolt_flies_at_the_point_locked_when_it_began` |
+| **At a LAN table every wind-up is D ticks longer**: `Command::Table { delay }` (the host's, first in the first bundle, so on the tape and in every snapshot) sets `GameState::table_delay`; a save loads at 0 | **IN** — `at_a_lan_table_every_wind_up_is_d_ticks_longer` |
+| The Hand-Bell and `charge_lob` are committed: stunning the caster takes up the pool not yet bitten | **IN** — `the_hand_bells_pool_is_committed_and_a_stun_takes_it_up` |
+| **Interrupts on foes**: a stun breaks an interruptible wind-up; a jolt (Spark, only on a machine) breaks any; a slow (a chill) lengthens one by half, once; her swing's knockback breaks a small foe's (under a metre). A broken blow costs its cooldown and recovery. Boss tells drawn steady are `"interruptible": false` (Goldskin's globe and ring, the Flower's spray, the Emperor's swoop, the toll) | **IN** — `a_stun_breaks_an_interruptible_wind_up_and_not_a_boss_tell_drawn_steady`, `a_jolt_breaks_a_machines_wind_up_and_takes_nothing_else`, `a_chill_draws_a_wind_up_out_by_half_once`, `her_swing_knocks_a_small_foe_out_of_its_wind_up_and_a_middling_one_back` |
+| **The hop** (`Command::Hop`; Space, pad LT): 30 energy, 1.5 m over 10 ticks along the stick (else her facing), blows pass through her on ticks 1 to 7, 18 ticks from one to the next; it ends her recovery and her cast (`feel::interrupt_her_cast` is the player side's seam) | **IN** — `her_hop_goes_a_metre_and_a_half_passes_blows_on_ticks_1_to_7_and_waits_18`, `a_hop_steps_out_of_a_wind_up_it_could_not_walk_out_of` |
+| **Hitlag** per unit, the attacker and the victim only: her swing 4, a crit or a kill 6, never past a tenth of her swing's cycle; a boss's phase change or fall 10, the boss alone; never mid-hop, never stacked; a frozen foe's wind-up waits with it | **IN** — `hitlag_freezes_her_and_its_victim_four_ticks_never_past_a_tenth_of_her_swing_nor_mid_hop`, `a_boss_freezes_ten_ticks_alone_when_it_changes_phase` |
+| **Knockback**, over 4 ticks with the walk's collision, stepped after the flush: her swing 6 px on small and middling foes, an Explosion of hers 10 px out from the burst, a heavy foe (1.25 m) 4 px on her. Bosses, plated (physical resist half or more) and rooted things are not pushed; a push never carries a body onto a plate and never moves a prop | **IN** — `bosses_plated_and_rooted_things_are_not_pushed_and_heavy_ones_push_her`; `tests/feel.rs` `her_swing_never_pushes_a_foe_onto_a_plate` |
+| **Boss fights of 20 to 40 of her blows**: a unit row's `hpScale` (the Burial four, Goldskin, the Attendant, the Caretaker, the Ringer) | **IN** — `the_long_boss_fights_are_cut_to_twenty_to_forty_of_her_blows`; telemetry (`jane telemetry`) |
+| Presentation: a foe winding up holds its raise; a gold glint over it where the blow can be broken, red where not; a pool or ring of bolts lays a ground decal whose ring closes as the blow comes; the `windup` / `windup_steady` / `hop` cues; shake only on her own crits and kills | **SHAPE** — `sheets/p1-enemies/` |
+| Bots read the tells: out of a melee's reach (swinging on the way), aside from a bolt's line, out of a pool, a hop on the last ticks (`jane-bot` `fight::dodge_tell`) | **IN** — the slow tier's story runs and crawls |
+| The Burial's snake keeps its own coil-and-spit clock: no wind-up | **SHAPE** |
+
 **Scalability:** a new spell is a JSON row. A new status is an `effects.json` row and needs no TypeScript, because no behaviour is keyed by effect id.
 
 ## 4. Items / bags / craft / bar

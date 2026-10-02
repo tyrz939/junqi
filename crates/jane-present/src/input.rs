@@ -245,6 +245,8 @@ pub enum Action {
     Left,
     Right,
     Sprint,
+    /// Her hop (`Command::Hop`): out of a blow's way.
+    Hop,
     /// Use, talk; held: push and pull.
     Use,
     /// Left click (PLAY-PLAN §2.1): target the foe or prop under the cursor, without moving;
@@ -462,6 +464,8 @@ pub enum GameAction {
     Goto,
     /// Tab, RB (`back`: Shift-Tab, LB): cycle the foes in front.
     Tab { back: bool },
+    /// `Command::Hop`.
+    Hop,
 }
 
 /// A press, queued.
@@ -748,6 +752,7 @@ fn edge_for(a: Action, mode: Mode, from_pad: bool) -> Option<Edge> {
                 Action::Goto => Some(Edge::Game(GameAction::Goto)),
                 Action::Target => Some(Edge::Game(GameAction::Tab { back: false })),
                 Action::TargetBack => Some(Edge::Game(GameAction::Tab { back: true })),
+                Action::Hop => Some(Edge::Game(GameAction::Hop)),
                 _ => None,
             };
         }
@@ -759,7 +764,8 @@ fn edge_for(a: Action, mode: Mode, from_pad: bool) -> Option<Edge> {
             // B on a pad is back, as Esc is.
             Action::Pause => Some(UiAction::Cancel),
             Action::Use if from_pad => Some(UiAction::Cancel),
-            Action::Use | Action::Bar(0) => Some(UiAction::Confirm),
+            // Space was bar 1 and goes on in a menu or a conversation still.
+            Action::Use | Action::Bar(0) | Action::Hop => Some(UiAction::Confirm),
             Action::Bar(1) => Some(UiAction::Quick),
             Action::Bar(2) => Some(UiAction::QuickAll),
             Action::TargetBack if from_pad => Some(UiAction::TabLeft),
@@ -936,7 +942,7 @@ mod tests {
     }
 
     #[test]
-    fn number_keys_and_space_press_bar_slots_and_left_click_targets() {
+    fn number_keys_press_bar_slots_space_hops_and_left_click_targets() {
         let mut input = Input::new();
         let mut dev = DeviceState::default();
         for n in 0..8 {
@@ -949,8 +955,8 @@ mod tests {
         press(&mut dev, sc::SPACE);
         dev.button(MouseButton::Left, true);
         let (_, edges) = sample(&mut input, &mut dev, &Context::default());
-        // Left click chooses a target now (PLAY-PLAN §2.1); it no longer swings.
-        assert_eq!(edges, vec![Edge::Game(GameAction::Bar(0)), Edge::Game(GameAction::Select)]);
+        // Space is the hop (PLAY-PLAN.md D2); left click chooses a target (§2.1), never a swing.
+        assert_eq!(edges, vec![Edge::Game(GameAction::Hop), Edge::Game(GameAction::Select)]);
     }
 
     #[test]
