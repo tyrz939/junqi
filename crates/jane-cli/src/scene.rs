@@ -159,6 +159,9 @@ pub struct Opts {
     pub weather: Option<jane_present::WeatherKind>,
     /// Cast this spell east after the rest, and draw the frame so many ticks later (`--cast icebolt:12`).
     pub cast: Option<String>,
+    /// After the rest, she walks up to the unit of this catalog name and talks to it, and the
+    /// frame is drawn as its first line is said (`--talk town_sweeper`): the emotes (ART-PLAN B3).
+    pub talk: Option<String>,
     /// With `--cast`: first put this unit (by its catalog name) a few cells east of her, the
     /// console's `spawn`, so the bolt has a body to hit (`--spawn skeleton`).
     pub spawn: Option<String>,
@@ -230,6 +233,7 @@ impl Hud {
         let cx = jane_present::ui::hud::HudCtx { bindings: &bind, pad: false, window_open: false };
         self.ui.begin(jane_present::ui::core::UiInput::default(), self.bufs.tick, canvas);
         jane_present::ui::marks::draw(&mut self.ui, present.marks(), present.dark(), present.ticks());
+        jane_present::ui::marks::draw_emotes(&mut self.ui, present.emotes(), present.ticks());
         jane_present::ui::hud::draw(&mut self.ui, &self.bufs, cx);
         jane_present::ui::lesson::draw(&mut self.ui, present.lessons(), &self.bufs, false);
         self.ui.finish(present.frame_mut());
@@ -517,6 +521,46 @@ fn play(bps: Blueprints, o: &Opts, tier: Tier) -> Result<(Tap, Present, u32), St
         let events = host.sim.drain_events().to_vec();
         let v = host.sim.view(seat).ok_or("seat 0 is not in the world")?;
         present.tick(&v, &events);
+    }
+    // `--talk NAME`: she walks to NAME (steered, a cell short) and presses USE.
+    if let Some(name) = &o.talk {
+        let def = jane_data::catalog().combat.unit_id(name).ok_or_else(|| format!("--talk: no unit \"{name}\""))?;
+        let mut pressed: u16 = 0;
+        for _ in 0..900 {
+            let me = host.sim.state().players[0].unit;
+            let z = host.sim.state().players[0].zone;
+            let zs = host.sim.state().zone(z).ok_or("her zone")?;
+            let her = zs.unit(me).ok_or("her body")?.pos;
+            let them = zs.units.iter().filter(|u| u.def == def && u.alive).map(|u| u.pos).next();
+            let Some(them) = them else { return Err(format!("--talk: no {name} here")) };
+            let (dx, dy) = (them.x.0 - her.x.0, them.y.0 - her.y.0);
+            let near = dx.abs() < 24 << 7 && dy.abs() < 24 << 7;
+            let frame = if near { InputFrame::IDLE } else { InputFrame::walk(jane_core::angle::bearing(her, them)) };
+            let press = [StampedCommand { seat: Some(seat), seq: 2000 + pressed, cmd: Command::Use }];
+            let cmds: &[StampedCommand] = if near && pressed < 2 {
+                pressed += 1;
+                &press
+            } else {
+                &[]
+            };
+            host.sim.step(&StepInput {
+                frames: [frame, InputFrame::IDLE, InputFrame::IDLE, InputFrame::IDLE],
+                commands: cmds,
+            });
+            let events = host.sim.drain_events().to_vec();
+            let v = host.sim.view(seat).ok_or("seat 0 is not in the world")?;
+            present.tick(&v, &events);
+            if pressed >= 1 && v.dialogue().is_some() {
+                // The line said, the emote risen.
+                for _ in 0..30 {
+                    host.sim.step(&StepInput { frames: [InputFrame::IDLE; 4], commands: &[] });
+                    let events = host.sim.drain_events().to_vec();
+                    let v = host.sim.view(seat).ok_or("seat 0 is not in the world")?;
+                    present.tick(&v, &events);
+                }
+                break;
+            }
+        }
     }
     // `--quest`: given her, and the world let run a second so the sparkles have risen.
     if !o.quests.is_empty() {
@@ -1039,6 +1083,7 @@ mod tests {
             at: None,
             weather: None,
             cast: None,
+            talk: None,
             spawn: None,
             quests: Vec::new(),
             rows: Vec::new(),

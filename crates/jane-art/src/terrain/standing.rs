@@ -71,6 +71,11 @@ fn near(p: &Painter, cx: i32, cy: i32, r: i32, f: impl Fn(Tile) -> bool) -> bool
     (-r..=r).any(|dy| (-r..=r).any(|dx| f(raw(p, cx + dx, cy + dy))))
 }
 
+/// The side of cell `(cx, cy)` water lies on, if water touches it.
+fn water_side(p: &Painter, cx: i32, cy: i32) -> Option<(i32, i32)> {
+    [(0, 1), (1, 0), (-1, 0), (0, -1)].into_iter().find(|&(dx, dy)| raw(p, cx + dx, cy + dy) == Tile::Water)
+}
+
 /// The broadleaf a tree tile is drawn as, green or turned. `lone` is a tree with no tree beside
 /// it (a hedgerow's or a field's), else it is in a wood.
 fn broadleaf(p: &Painter, cx: i32, cy: i32, (wx, wy): (i32, i32), h: u32, lone: bool, seed: u32) -> Kind {
@@ -225,6 +230,13 @@ fn thing(p: &Painter, cx: i32, cy: i32, seed: u32) -> Option<Thing> {
             let wet = matches!(ground, Some(P::Marsh | P::Cracked));
             let keep = busy_share(wx, wy, seed) >= 12 && h % 3 == 0;
             keep.then(|| Thing::of(p, if wet { Kind::Reeds } else { Kind::Grass }, h >> 3, (h >> 6) as i32 % 9 - 4, 0))
+        }
+        P::Turf if st.row.group == TileGroup::Ground && h % 5 < 3 && water_side(p, cx, cy).is_some() => {
+            // Reeds at the water's margin (ART-PLAN B4): a stand on three grass cells in five
+            // along a bank, leaning out toward the water.
+            let (dx, dy) = water_side(p, cx, cy).unwrap_or((0, 0));
+            let (ox, oy) = (dx * 5 + (h >> 6) as i32 % 5 - 2, if dy < 0 { -3 } else { dy * 3 });
+            Some(Thing::of(p, Kind::Reeds, h >> 3, ox, oy))
         }
         P::Turf if st.row.group == TileGroup::Ground && region != 2 => {
             // A wood's edge: ferns and bracken in the grass beside the trees.

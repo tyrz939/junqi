@@ -62,9 +62,14 @@ impl TileSource for ViewTiles<'_, '_> {
 #[derive(Clone, Copy, Debug)]
 pub struct Flora {
     pub look: RefId,
-    /// Its sway (ART-PLAN M2): the rest frame, then its top sheared a px (two at the very top)
-    /// one way and then the other. A thing that does not sway has its look three times.
-    pub sway: [RefId; 3],
+    /// Its sway (ART-PLAN M2), seven leans from three px west at its top to three east, the rest
+    /// frame in the middle ([`SWAY_REST`]): each lean a px more than the last at the very top,
+    /// spread down the rows so it bends, not jumps (the owner, 2026-10-03). A crown leans less
+    /// than reeds and only over its upper half. A thing that does not sway has its look seven
+    /// times.
+    pub sway: [RefId; SWAY_FRAMES],
+    /// How it sways: [`SwayClass`].
+    pub class: SwayClass,
     /// Whether it rustles when she walks through it (reeds, long grass).
     pub rustles: bool,
     /// How deep it is across the ground, px (a trunk is thin, a shrub is its spread).
@@ -286,25 +291,61 @@ fn drawn_width(c: &jane_art::Canvas) -> i32 {
         .unwrap_or(0)
 }
 
-/// A sway frame of a flora sprite (ART-PLAN M2): its rows from the top of what is drawn down a
-/// fifth of its height pushed two px toward `dir`, the rows down to a third one px, the rest at
-/// rest, so the crown leans over a trunk that stays put. Two px wider each side than the sprite,
-/// its anchor moved with it.
-fn sheared(atlas: &mut Atlas, c: &jane_art::Canvas, (ax, ay): (i32, i32), dir: i32) -> RefId {
+/// Sway frames a flora sprite has: leans `-3..=3`.
+pub const SWAY_FRAMES: usize = 7;
+/// The upright frame's index.
+pub const SWAY_REST: usize = 3;
+
+/// How a flora sprite sways: its lean's reach and its own pace (`Present::draw` reads the pace).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SwayClass {
+    /// Not at all (a stone, a dead tree, a garden's boundary).
+    Still,
+    /// A crown: two px at most at its top, over its upper half; slow.
+    Crown,
+    /// A shrub, a fern, bracken: two px at its top, down to its foot; brisker.
+    Bush,
+    /// Reeds and long grass: three px at the tips, down to the foot; quickest.
+    Reed,
+}
+
+impl SwayClass {
+    /// Ticks for one sway to and fro in a breeze: about 1.5 to 3 s (the owner, 2026-10-03).
+    pub const fn period(self) -> u32 {
+        match self {
+            SwayClass::Still | SwayClass::Crown => 170,
+            SwayClass::Bush => 130,
+            SwayClass::Reed => 96,
+        }
+    }
+}
+
+/// A sway frame of a flora sprite (ART-PLAN M2): leaned `lean` (`-3..=3`) toward east, each row
+/// shifted by its share of the lean, the whole of it at the top of what is drawn and none at the
+/// row where the bend starts (a crown's middle, a reed's foot), rounded, so one lean to the next
+/// moves the top a px and the rows under it in a soft spread. Three px wider each side than the
+/// sprite, its anchor moved with it.
+fn sheared(atlas: &mut Atlas, c: &jane_art::Canvas, (ax, ay): (i32, i32), lean: i32, class: SwayClass) -> RefId {
     let top = (0..c.h()).find(|&y| (0..c.w()).any(|x| c.get(x, y).is_opaque())).unwrap_or(0);
     let tall = (ay - top).max(1);
-    let shift = |y: i32| {
-        if y < top + tall / 5 {
-            2 * dir
-        } else if y < top + tall / 3 {
-            dir
-        } else {
-            0
-        }
+    let (bend, reach) = match class {
+        SwayClass::Crown => (top + tall * 11 / 20, 2),
+        SwayClass::Bush => (ay, 2),
+        _ => (ay, 3),
     };
-    let (w, h) = ((c.w() + 4) as u16, c.h() as u16);
-    atlas.add_texels(w, h, (ax as i16 + 2, ay as i16), ay.clamp(1, 255) as u8, |x, y| {
-        crate::atlas::Texel::of(c, x - 2 - shift(y), y)
+    let span = (bend - top).max(1);
+    let shift = |y: i32| {
+        if y >= bend {
+            return 0;
+        }
+        // lean * reach / 3 at the top, falling off to none at the bend; rounded to nearest.
+        let num = lean * reach * (bend - y) * 2;
+        let den = 3 * span * 2;
+        (num + den.signum() * num.signum() * den / 2) / den
+    };
+    let (w, h) = ((c.w() + 6) as u16, c.h() as u16);
+    atlas.add_texels(w, h, (ax as i16 + 3, ay as i16), ay.clamp(1, 255) as u8, |x, y| {
+        crate::atlas::Texel::of(c, x - 3 - shift(y), y)
     })
 }
 
@@ -327,12 +368,25 @@ impl Terrain {
                 let (w, h) = (s.canvas.w(), s.ay);
                 let look = atlas.add_canvas(&s.canvas, (s.ax as i16, s.ay as i16), h.clamp(1, 255) as u8, |_, _, t| t);
                 let kind = bank.kind_of(i as u16);
-                let sway = if kind.sways() {
-                    [look, sheared(atlas, &s.canvas, (s.ax, s.ay), -1), sheared(atlas, &s.canvas, (s.ax, s.ay), 1)]
-                } else {
-                    [look; 3]
-                };
                 let rustles = matches!(kind, jane_art::flora::Kind::Reeds | jane_art::flora::Kind::Grass);
+                let class = if !kind.sways() {
+                    SwayClass::Still
+                } else if rustles {
+                    SwayClass::Reed
+                } else if kind.is_tree() {
+                    SwayClass::Crown
+                } else {
+                    SwayClass::Bush
+                };
+                let mut sway = [look; SWAY_FRAMES];
+                if class != SwayClass::Still {
+                    for (k, f) in sway.iter_mut().enumerate() {
+                        let lean = k as i32 - SWAY_REST as i32;
+                        if lean != 0 {
+                            *f = sheared(atlas, &s.canvas, (s.ax, s.ay), lean, class);
+                        }
+                    }
+                }
                 // A tree throws its shadow from its trunk; a shrub or a stone from its spread,
                 // as deep as it is drawn wide (round, seen from above): a row of bushes planted
                 // down the screen, a cell apart, is a hedge in the field as one across it is
@@ -350,7 +404,7 @@ impl Terrain {
                 // What it stands on, rows over its foot (a shrub's rim; its heights are counted
                 // from there, `jane_art::flora::base`).
                 let lift = (s.ay - jane_art::flora::base(&s.canvas, s.ay)).clamp(0, 255) as u8;
-                Flora { look, sway, rustles, depth: depth.clamp(3, 16) as u8, lift }
+                Flora { look, sway, class, rustles, depth: depth.clamp(3, 16) as u8, lift }
             })
             .collect();
         Terrain {
