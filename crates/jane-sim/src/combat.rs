@@ -411,6 +411,8 @@ fn cast_melee(cx: &mut Ctx<'_>, caster: UnitId, id: SpellId, spell: &SpellDef, l
     }
     let hit = make_hit(cx, caster, spell, v, spell.effect);
     queue_hit(cx, hit);
+    // Hitlag and knockback (`feel.rs`).
+    crate::feel::melee_landed(cx, caster, v, spell, hit.crit);
     // What a status adds to every melee blow (Firelash, Winterbite).
     let now = cx.world.tick;
     let cat = cx.cat;

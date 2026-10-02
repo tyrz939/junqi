@@ -778,6 +778,7 @@ impl App<'_> {
                 }
                 let cmd = match g {
                     GameAction::Use => Command::Use,
+                    GameAction::Hop => Command::Hop,
                     GameAction::Bar(slot) => Command::Bar {
                         slot,
                         on: cursor.and_then(|c| {

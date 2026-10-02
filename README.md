@@ -115,7 +115,7 @@ Targets: `x86_64` Linux and Windows, `i686` (SSE2, Pentium 4 era), `aarch64` and
 New Game puts Jane on the platform at Castle Halt at 17:00, with a fire, a sign and one road. The county is 2 km square and different every seed; the story's places are always there, at distances the story needs. The station road to Julie's gate is a minute or two on foot; the lamp posts come on at 18:30, three real minutes after she steps off the train.
 
 1. Follow the lit road east to Julie's house (two to four minutes). Reaching the stoop completes the letter.
-2. **E** on the dog. Take the quest. **Space** (or left click) swings. Put the yard skeleton down. A kill before you accept does not count; that is 2020's rule.
+2. **E** on the dog. Take the quest. **Left click** (or 1) swings; **Space** hops out of a blow's way. Put the yard skeleton down. A kill before you accept does not count; that is 2020's rule.
 3. Back to the dog for the house key. **E** on the door twice: unlock, enter.
 4. In the kitchen: read Julie's note, open the pantry chest, stand at the bench, open your bags (**I**), drag dust + water + pansy into the craft row, take the potion. Touch the orb by the stove. You learn Icebolt. Aim with the mouse.
 5. The two hatches are the cellar. It has two iron doors and one kind of iron key, rats, roses, and a locked storage room with the wood and iron the mine will want.
@@ -131,7 +131,8 @@ Things worth knowing: Repair costs what the thing is made of. A pressure plate s
 | Aim | Mouse | Right stick |
 | Sprint (spends energy) | Shift | RT |
 | Use / talk; hold to push, hold and back away to pull | E or F | B |
-| Bar slot 1 | Space, left click, 1 | A |
+| Bar slot 1 | Left click, 1 | A |
+| Hop: 30 energy, a blow passes through her | Space | LT |
 | Bar slots 2–5 / 6–8 | 2–5 / 6–8 | X, Y, LB, RB |
 | Bag / book / log / map (one window, four tabs) | I or Tab / K / J / M, or the HUD's buttons | View; LB and RB change tab |
 | In the window | Drag to move, to the bar, to the bench, or off to destroy; right click for Use, Put on the bar, Destroy | Stick moves the ring, A picks up and puts down |

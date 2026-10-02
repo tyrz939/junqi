@@ -245,6 +245,8 @@ pub enum Action {
     Left,
     Right,
     Sprint,
+    /// Her hop (`Command::Hop`): out of a blow's way.
+    Hop,
     /// Use, talk; held: push and pull.
     Use,
     /// A bar slot, `0..8`.
@@ -444,6 +446,8 @@ pub enum GameAction {
     Use,
     /// `Command::Bar { slot }`, `0..8`.
     Bar(u8),
+    /// `Command::Hop`.
+    Hop,
 }
 
 /// A press, queued.
@@ -719,6 +723,7 @@ fn edge_for(a: Action, mode: Mode, from_pad: bool) -> Option<Edge> {
                 Action::Pause => Some(Edge::Ui(UiAction::Pause)),
                 Action::Use => Some(Edge::Game(GameAction::Use)),
                 Action::Bar(n) => Some(Edge::Game(GameAction::Bar(n))),
+                Action::Hop => Some(Edge::Game(GameAction::Hop)),
                 _ => None,
             };
         }
@@ -730,7 +735,8 @@ fn edge_for(a: Action, mode: Mode, from_pad: bool) -> Option<Edge> {
             // B on a pad is back, as Esc is.
             Action::Pause => Some(UiAction::Cancel),
             Action::Use if from_pad => Some(UiAction::Cancel),
-            Action::Use | Action::Bar(0) => Some(UiAction::Confirm),
+            // Space was bar 1 and goes on in a menu or a conversation still.
+            Action::Use | Action::Bar(0) | Action::Hop => Some(UiAction::Confirm),
             Action::Bar(1) => Some(UiAction::Quick),
             Action::Bar(2) => Some(UiAction::QuickAll),
             Action::Bar(3) if from_pad => Some(UiAction::TabLeft),
@@ -907,7 +913,7 @@ mod tests {
     }
 
     #[test]
-    fn number_keys_space_and_left_click_press_bar_slots() {
+    fn number_keys_and_left_click_press_bar_slots_and_space_hops() {
         let mut input = Input::new();
         let mut dev = DeviceState::default();
         for n in 0..8 {
@@ -920,7 +926,8 @@ mod tests {
         press(&mut dev, sc::SPACE);
         dev.button(MouseButton::Left, true);
         let (_, edges) = sample(&mut input, &mut dev, &Context::default());
-        assert_eq!(edges, vec![Edge::Game(GameAction::Bar(0)), Edge::Game(GameAction::Bar(0))]);
+        // Space is the hop now (PLAY-PLAN.md D2); left click is still bar 1.
+        assert_eq!(edges, vec![Edge::Game(GameAction::Hop), Edge::Game(GameAction::Bar(0))]);
     }
 
     #[test]

@@ -20,6 +20,6 @@
     "description": "It comes down out of its own dust and is gone again before the wings have finished.",
     "icon": "spell_melee", "kind": "melee", "school": "physical", "mp": 0, "energy": 0, "range": 0.25, "cooldown": 1.2,
     "gcdImmune": true, "needsTarget": true, "needsEnemy": true, "needsLos": true, "anim": "attack",
-    "power": { "stat": "strength", "div": 16, "varDiv": 64, "flat": 2 }, "stop": 10
+    "power": { "stat": "strength", "div": 16, "varDiv": 64, "flat": 2 }, "stop": 10, "interruptible": false
   }
 }

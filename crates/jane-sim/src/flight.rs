@@ -71,6 +71,12 @@ pub fn step_projectiles(cx: &mut Ctx<'_>) {
             i += 1;
             continue;
         }
+        // An Explosion of hers pushes what it caught out from the burst (`feel::burst`).
+        let blast = spell.school == jane_core::action::School::Blast;
+        let mut caught: Vec<crate::ids::UnitId> = Vec::new();
+        if blast {
+            caught.extend(victim);
+        }
         if let Some(splash) = spell.splash.filter(|_| p.hit.0 > 0) {
             let amount = round_points(i64::from(p.hit.0) / i64::from(splash.div.max(1)));
             query_near(cx.rt, p.pos, i64::from(splash.radius.0) + i64::from(max_bounds()), &mut near);
@@ -97,7 +103,13 @@ pub fn step_projectiles(cx: &mut Ctx<'_>) {
                     crit: false,
                     status: None,
                 });
+                if blast {
+                    caught.push(id);
+                }
             }
+        }
+        if blast {
+            crate::feel::burst(cx, spell, p.pos, p.from, &caught);
         }
         cx.zone.projectiles.remove(i);
         crate::hooks::school_touch(cx, spell.school, p.pos, p.from, spell.touch.unwrap_or(SCHOOL_TOUCH_FX));

@@ -189,6 +189,12 @@ model! {
         /// How close to a prop's middle a bolt must end to switch on a prop that answers its
         /// school, `Fx` (content writes px). A bolt's only; the sim's default (14 px) when `None`.
         pub touch: Option<Fx>,
+        /// A foe's wind-up before the blow lands, `Tick` (content writes seconds): the unit's
+        /// own `windup` when `None`. A ground spell's tell is the longer of this and its `delay`.
+        pub windup: Option<Tick>,
+        /// A stun (or a jolt on a machine, or a small foe's knockback) cancels its wind-up
+        /// (true when left out). A boss's tell drawn uninterruptible says `false`.
+        pub interruptible: bool,
     }
 }
 
@@ -445,6 +451,12 @@ model! {
         pub hunts: &'static [UnitDefId],
         /// Unit defs an idle one walks its leash away from (ARCHITECTURE.md §4.6.c).
         pub flees: &'static [UnitDefId],
+        /// How long its blows wind up, `Tick` (content writes seconds; 0 when left out): a
+        /// spell row's own `windup` beats it.
+        pub windup: Tick,
+        /// Its health as a share of `strength x HP_PER_STRENGTH`, `Permille` (1000 when left
+        /// out): a boss's fight is shortened without softening its blows.
+        pub hp_scale: Permille,
     }
 }
 

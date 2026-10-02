@@ -9,6 +9,7 @@ pub const ACTION_NAMES: &[(&str, &str, &str)] = &[
     ("left", "Action::Left", "Walk left"),
     ("right", "Action::Right", "Walk right"),
     ("sprint", "Action::Sprint", "Sprint"),
+    ("hop", "Action::Hop", "Hop"),
     ("use", "Action::Use", "Use, talk, push"),
     ("bar1", "Action::Bar(0)", "Bar 1"),
     ("bar2", "Action::Bar(1)", "Bar 2"),

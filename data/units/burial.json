@@ -1,11 +1,13 @@
 {
   "shade": {
+    "windup": 0.5,
     "name": "Shade", "faction": "undead", "controller": "ai",
     "strength": 24, "spirit": 1, "walk": 0.3, "run": 0.7, "aggro": 9, "leash": 60, "bounds": 1,
     "book": ["melee"], "respawn": 0, "autoRegen": true, "loot": [], "sprite": "shade",
     "resist": { "frost": 0.5 }, "shunsLight": true
   },
   "great_flower": {
+    "windup": 0.8, "hpScale": 0.33,
     "name": "The Flower", "faction": "undead", "controller": "ai",
     "strength": 110, "spirit": 60, "walk": 0, "run": 0, "aggro": 16, "leash": 90, "bounds": 1.5,
     "book": ["flower_spray", "flower_lash"], "respawn": 0, "autoRegen": true, "loot": [],
@@ -34,6 +36,7 @@
     ]
   },
   "spider_queen": {
+    "windup": 0.8, "hpScale": 0.75,
     "name": "The Spider", "faction": "undead", "controller": "ai",
     "strength": 70, "spirit": 50, "walk": 0.35, "run": 0.9, "aggro": 14, "leash": 12, "bounds": 1.25,
     "book": ["queen_bite", "queen_web"], "respawn": 0, "autoRegen": true, "loot": [],
@@ -62,6 +65,7 @@
     ]
   },
   "the_soldier": {
+    "windup": 0.8, "hpScale": 0.24,
     "name": "The Soldier", "faction": "undead", "controller": "ai",
     "strength": 150, "spirit": 20, "walk": 0.2, "run": 0.45, "aggro": 12, "leash": 40, "bounds": 1.25,
     "book": ["melee_stun", "melee_fast"], "respawn": 0, "autoRegen": true, "loot": [],
@@ -90,6 +94,7 @@
     ]
   },
   "goldskin": {
+    "windup": 0.8, "hpScale": 0.24,
     "name": "Gnox Goldskin", "faction": "undead", "controller": "ai",
     "strength": 134, "spirit": 150, "walk": 0.3, "run": 0.65, "aggro": 16, "leash": 50, "bounds": 1.25,
     "book": ["melee_stun", "gold_globe", "gold_ring", "gold_icebolt"],

@@ -133,6 +133,7 @@
     "talk": "story_pryor"
   },
   "story_pryor_sitter": {
+    "windup": 0.5,
     "name": "One of the Sitters",
     "faction": "undead",
     "controller": "ai",
@@ -190,6 +191,7 @@
     "talk": "story_hurst"
   },
   "story_hurst_ruffian": {
+    "windup": 0.5,
     "name": "Ruffian",
     "faction": "bandit",
     "controller": "ai",

@@ -38,7 +38,7 @@ use crate::tuning::{BAG_SLOTS, BAR_SLOTS, CRAFT_INPUTS, STORE_SLOTS};
 /// 9: food comes back (`Prop::regrow`, `regrow.rs`).
 /// 10: cupboards (`GameState::stores`, `store.rs`).
 /// 11: side quests set aside keep their kills (`Quests::set_aside`, `quests::abandon`).
-pub const SAVE_VERSION: u16 = 11;
+pub const SAVE_VERSION: u16 = 12;
 
 /// A fixed-size bit set (trigger bits, consequences done).
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -110,6 +110,10 @@ pub struct GameState {
     pub name: String,
     /// Whether anyone else may sit down. A save always loads closed.
     pub open: bool,
+    /// The LAN table's input delay D in frames (`Command::Table`; 0 alone): every foe's wind-up
+    /// is that much longer, so a guest reacts in a solo player's window (PLAY-PLAN.md §2.1).
+    /// A save always loads at 0.
+    pub table_delay: u8,
     pub next: Counters,
     /// The world stream: weather on the hour and ecology every ten game minutes, drawn in a
     /// fixed order (§4.4, `living.rs`). Nothing else draws from it.
@@ -690,6 +694,8 @@ pub struct Unit {
     pub hold: u8,
     pub phase: u8,
     pub snake: Option<Box<SnakeBody>>,
+    /// The fight's feel (`feel.rs`): a foe's wind-up, hitlag, knockback, her hop.
+    pub feel: crate::feel::Feel,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]

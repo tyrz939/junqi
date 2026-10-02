@@ -150,6 +150,8 @@ struct RawSpell {
     stop: Option<u32>,
     glow: Option<Num>,
     touch: Option<Num>,
+    windup: Option<Num>,
+    interruptible: Option<bool>,
 }
 
 fn spells(src: &Source, cx: &mut Ctx) -> &'static [SpellDef] {
@@ -270,6 +272,8 @@ fn spell(cx: &mut Ctx, at: &str, id: &str, r: &RawSpell) -> SpellDef {
         stop: Tick(r.stop.unwrap_or(0)),
         glow: r.glow.map(|g| conv(cx, at, "glow", g.fx_px())),
         touch,
+        windup: r.windup.map(|w| conv(cx, at, "windup", w.ticks())),
+        interruptible: r.interruptible.unwrap_or(true),
     }
 }
 
@@ -473,6 +477,8 @@ struct RawUnit {
     #[serde(default)]
     vary: u8,
     vary_with: Option<String>,
+    windup: Option<Num>,
+    hp_scale: Option<Num>,
 }
 
 /// One row of a unit's hours (ARCHITECTURE.md §4.6.a): `{"from": 9, "to": 21, "mark": "arms_front"}`,
@@ -741,6 +747,11 @@ fn unit(cx: &mut Ctx, at: &str, id: &str, r: &RawUnit) -> UnitDef {
         vary_key: vary_key(cx, at, id, r),
         hunts: unit_refs(cx, &format!("{at}.hunts"), &r.hunts),
         flees: unit_refs(cx, &format!("{at}.flees"), &r.flees),
+        windup: r.windup.map_or(Tick(0), |w| conv(cx, at, "windup", w.ticks())),
+        hp_scale: r.hp_scale.map_or(Permille(1000), |h| {
+            cx.diag.need(h.is_positive(), format!("{at}.hpScale"), "hpScale must be > 0");
+            conv(cx, at, "hpScale", h.permille())
+        }),
     }
 }
 

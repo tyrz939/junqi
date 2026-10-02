@@ -147,6 +147,9 @@ struct UnitRec {
     /// struck (its attack's three beats).
     still: u32,
     struck: Option<(u32, SpellId)>,
+    /// A blow it is winding up (`jane_sim::feel`): it holds its raise, the first beat of the
+    /// attack or the cast, until the blow lands.
+    raise: Option<SpellId>,
     /// Which of the eight ways it shows itself facing: the diagonal it walks on, kept when it
     /// stops while the sim's facing agrees ([`Face8`]).
     face: Face8,
@@ -577,6 +580,7 @@ impl Present {
                 creature: person.map_or_else(|| self.creatures.set(cat.combat.unit(u.def).sprite), |_| None),
                 still: if prev == cur { old.map_or(0, |o| o.still.saturating_add(1)) } else { 0 },
                 struck: old.and_then(|o| o.struck),
+                raise: u.feel.windup.filter(|_| u.alive).map(|w| w.spell),
                 face: {
                     let was = old.map_or(Face8::of(u.facing), |o| o.face);
                     was.moving(i64::from(cur.0 - prev.0), i64::from(cur.1 - prev.1), u.facing)
@@ -1091,13 +1095,23 @@ impl Present {
                 (Some(set), _) => {
                     // A blow or a spell under way plays its three beats; a blow taken, its hurt.
                     let act = lesson.map(|(_, t)| people::Act::Cast(t)).or_else(|| {
-                        u.struck.and_then(|(t, spell)| {
-                            let t = self.tick.wrapping_sub(t);
-                            (t < 3 * people::ACT_TICKS).then(|| match jane_data::catalog().combat.spell(spell).anim {
-                                jane_data::CastAnim::Cast => people::Act::Cast(t),
-                                _ => people::Act::Attack(t),
+                        u.struck
+                            .and_then(|(t, spell)| {
+                                let t = self.tick.wrapping_sub(t);
+                                (t < 3 * people::ACT_TICKS).then(|| {
+                                    match jane_data::catalog().combat.spell(spell).anim {
+                                        jane_data::CastAnim::Cast => people::Act::Cast(t),
+                                        _ => people::Act::Attack(t),
+                                    }
+                                })
                             })
-                        })
+                            // Winding up: the raise held, its first beat, until the blow lands.
+                            .or_else(|| {
+                                u.raise.map(|spell| match jane_data::catalog().combat.spell(spell).anim {
+                                    jane_data::CastAnim::Cast => people::Act::Cast(0),
+                                    _ => people::Act::Attack(0),
+                                })
+                            })
                     });
                     let hurt = self.tick < u.hurt_until;
                     // Hands out on the cast's second beat: the school's light between them.
@@ -1125,8 +1139,12 @@ impl Present {
                 }
                 // A creature trots, sits a while after it stops, and strikes in three beats.
                 (None, Some(set)) => {
-                    let attack =
-                        u.struck.map(|(t, _)| self.tick.wrapping_sub(t)).filter(|&t| t < 3 * creatures::ATTACK_TICKS);
+                    // Winding up a blow, it holds its first beat (the raise) until the blow lands.
+                    let attack = u
+                        .struck
+                        .map(|(t, _)| self.tick.wrapping_sub(t))
+                        .filter(|&t| t < 3 * creatures::ATTACK_TICKS)
+                        .or(u.raise.map(|_| 0));
                     let pose = creatures::Pose {
                         facing: u.face,
                         anim: u.anim,

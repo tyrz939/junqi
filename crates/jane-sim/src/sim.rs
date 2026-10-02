@@ -80,6 +80,7 @@ impl Sim {
             day: 0,
             name: name.to_owned(),
             open: false,
+            table_delay: 0,
             next: crate::ids::Counters::default(),
             rng: Sfc32::seeded(seed, 1),
             players: Vec::with_capacity(MAX_PLAYERS),
@@ -576,6 +577,7 @@ impl Sim {
             laps.lap(m, Phase::Statuses);
             // 10 flush: the only place a blow changes hp
             crate::flush::flush(cx);
+            crate::flush::knocks(cx);
             laps.lap(m, Phase::Flush);
 
             // 11 triggers, and plates every 6 ticks
@@ -614,10 +616,18 @@ fn tick_player(cx: &mut Ctx<'_>, seat: usize, frame: InputFrame) {
         }
         return;
     }
+    // Mid-hop the hop carries her and the stick waits (`feel.rs`).
+    if crate::feel::hop_step(cx, ix, tick) {
+        return;
+    }
     // With company the world does not stop for a conversation, but she does.
     let stunned = crate::status::is_stunned(&cx.zone.units[ix], tick);
     let mag = if busy { 0 } else { frame.mv_mag.min(127) };
-    let wants_move = mag > MOVE_DEADZONE && tick >= cx.zone.units[ix].stop_until && !stunned;
+    // Frozen by her blow's hitlag, her feet wait a few ticks too.
+    let wants_move = mag > MOVE_DEADZONE
+        && tick >= cx.zone.units[ix].stop_until
+        && !stunned
+        && !crate::feel::lagged(&cx.zone.units[ix], tick);
     let held = frame.use_held && !busy;
     // Held against a pushable she is braced: she leans into it (or pulls it) instead of walking.
     let braced = if held && !stunned {
