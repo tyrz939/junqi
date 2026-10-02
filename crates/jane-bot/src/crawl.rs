@@ -934,8 +934,11 @@ impl Crawl {
                 *best = Some((class, cost, what, t));
             }
         };
-        // 0. Low: a bed or a stove she can reach (the apples are for a fight).
-        if sense::hp_permille(v.body()) < 500 {
+        // 0. Low: a bed or a stove she can reach (the apples are for a fight). And, while fires
+        // are made, a jar or a page found since the last rest is banked at the stove she can
+        // reach before anything else (`jane_sim::fire`: a death would take it off).
+        let unbanked = v.fires_made() && v.unbanked().iter().any(|e| e.seat == v.seat() && !e.lying);
+        if sense::hp_permille(v.body()) < 500 || unbanked {
             if let Some(p) = self.rest_in_reach(v, cx).filter(|&p| keep(Try::Rest(p))) {
                 return Some((Task::Use(UseProp::new(p)), Try::Rest(p)));
             }

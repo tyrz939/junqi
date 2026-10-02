@@ -312,6 +312,9 @@ pub enum Plan {
     Crawl(crawl::Crawl),
 }
 
+/// Ticks after a rest at a fire before she sits down at one again, standing (ten seconds).
+pub const REST_COOL: u32 = 600;
+
 /// A headless player on one seat.
 #[derive(Debug)]
 pub struct Bot {
@@ -331,6 +334,9 @@ pub struct Bot {
     last_hurt: Option<jane_core::UnitDefId>,
     /// The last few seconds, a line each half second, for the next death's record.
     recent: std::collections::VecDeque<String>,
+    /// The tick she last rested (`EventKind::Rested` by her seat): with made fires she does not
+    /// sit down again within [`REST_COOL`] of getting up.
+    rested: Option<u32>,
 }
 
 /// One death, recorded (for telling the bot's mistakes from the world's hardness).
@@ -385,6 +391,7 @@ impl Bot {
             events: Vec::new(),
             log: Vec::new(),
             deaths: Vec::new(),
+            rested: None,
             last_hurt: None,
             recent: std::collections::VecDeque::new(),
             setup: Vec::new(),
@@ -584,6 +591,33 @@ impl Bot {
         };
         for m in notes {
             self.note(v, m);
+        }
+        self.cool_rest(v, act)
+    }
+
+    /// With made fires, a fire's rest is over time and anything that comes gets her up: sat down
+    /// again at once, under a blow, she sat there for ever (the Museum's shot-firer). Within
+    /// [`REST_COOL`] of her last rest, standing, a press on a fire is not made: the plan fights,
+    /// eats or walks on instead.
+    fn cool_rest(&mut self, v: &View<'_>, mut act: Act) -> Act {
+        let me = self.seat;
+        if self.events.iter().any(|e| matches!(e.kind, jane_sim::EventKind::Rested { by } if by == me)) {
+            self.rested = Some(v.tick().0);
+        }
+        let recent = self.rested.is_some_and(|t| v.tick().0 < t.saturating_add(REST_COOL));
+        if !v.fires_made() || !recent || v.body().seated.is_some() || v.dialogue().is_some() {
+            return act;
+        }
+        let cat = jane_data::catalog();
+        let at_fire = v.focus().is_some_and(|f| match f.target {
+            jane_sim::interact::FocusRef::Prop(id) => v.prop(id).is_some_and(|p| {
+                let d = cat.story.prop(p.def);
+                (d.rest && d.light.is_some()) || (d.made && p.on)
+            }),
+            _ => false,
+        });
+        if at_fire {
+            act.cmds.retain(|c| *c != Command::Use);
         }
         act
     }
