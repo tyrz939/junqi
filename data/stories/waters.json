@@ -8,7 +8,7 @@
     "board": "CASTLE BRIDGE TRUST. {NAME}. Tolls payable to the keeper. Keeper: R. GEDGE.",
     "threat": [0, 3],
     "quests": ["the_toll", "the_keepers_tally"],
-    "ruin": "walls"
+    "ruin": "house"
   },
   {
     "id": "reed_end",

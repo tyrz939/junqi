@@ -1517,7 +1517,7 @@
       "offer_1": {
         "lines": [
           "CASTLE BRIDGE TRUST. THE KEEPER LIGHTS THE BRAZIER AT DUSK, SO THE ROAD CAN SEE THE GATE.",
-          "The brazier is cold. The keeper's coal scuttle stands full against the back wall."
+          "The brazier is cold. The keeper's coal scuttle stands full by the step."
         ],
         "options": [
           {
@@ -1536,7 +1536,7 @@
       },
       "wait_1": {
         "lines": [
-          "THE KEEPER LIGHTS THE BRAZIER AT DUSK. Carry the scuttle from the back wall and set it down on the coal pan by the brazier."
+          "THE KEEPER LIGHTS THE BRAZIER AT DUSK. Carry the scuttle from the step and set it down on the coal pan by the brazier."
         ]
       },
       "in_1": {
@@ -1621,7 +1621,7 @@
       },
       "wait_3": {
         "lines": [
-          "The key went with the keeper's boat, stove in behind the house. The toll box is by the back wall."
+          "The key went with the keeper's boat, stove in behind the house. The toll box is by the house."
         ]
       },
       "in_3": {
@@ -1660,7 +1660,7 @@
     "nodes": {
       "cold": {
         "lines": [
-          "A brazier by the gate, cold. The coal pan beside it is empty. The scuttle is six steps off, against the back wall."
+          "A brazier by the gate, cold. The coal pan beside it is empty. The scuttle is six steps off, by the step."
         ]
       }
     }

@@ -1,7 +1,7 @@
 {
   "the_toll": {
     "name": "The Toll",
-    "description": "The toll board at {place:tollhouse} says the keeper lights the brazier at dusk, so the road can see the gate. The brazier is cold. His coal scuttle stands full against the back wall, six steps from it, and has not been carried since the spring.",
+    "description": "The toll board at {place:tollhouse} says the keeper lights the brazier at dusk, so the road can see the gate. The brazier is cold. His coal scuttle stands full by the step, six steps from it, and has not been carried since the spring.",
     "completion": "The coal caught at once, as if it had been waiting. The road can see the gate again. Nobody comes through it.",
     "returnTo": "the toll board at {place:tollhouse}",
     "requirements": [
