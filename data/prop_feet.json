@@ -15,6 +15,7 @@
   "broken_steps": [4, 6, 40, 26],
   "burial_mouth": [0, 28, 48, 4],
   "call_box": [4, 13, 8, 3],
+  "campfire_cold": [2, 20, 27, 12],
   "car_wreck": [16, 44, 56, 4],
   "cart_wreck": [4, 28, 38, 4],
   "chest": [3, 17, 26, 15],

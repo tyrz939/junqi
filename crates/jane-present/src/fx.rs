@@ -154,6 +154,14 @@ impl Fx {
         self.rain.truncate(weather);
     }
 
+    /// A struck match at world point `at` (her hand's ground point; it flares `MATCH_Z` px up):
+    /// `jane_art::fx::match_flare`, half a second of flare settling to a small flame, with its
+    /// light. What the sim's "she strikes a match" calls; nothing calls it from the events yet.
+    pub fn match_flare(&mut self, at: jane_core::Vec2) {
+        let px = (at.x.0 >> FX_TO_CANVAS, at.y.0 >> FX_TO_CANVAS);
+        self.emit(&art::match_flare(), px, Angle::NORTH);
+    }
+
     pub fn count(&self) -> (usize, usize) {
         (self.parts.len(), self.rain.len())
     }
@@ -753,5 +761,21 @@ mod tests {
         for s in ["melee", "icebolt_ai", "spider_bite"] {
             assert!(!players_spell(id(s)), "{s}");
         }
+    }
+
+    /// A struck match flares where she stands, lights the dark round it, and is gone in half a
+    /// second and a little.
+    #[test]
+    fn a_match_flares_at_her_hand_and_goes_out() {
+        let mut fx = Fx::new(Tier::T0, 256);
+        let at = jane_core::Vec2::centre(5, 7);
+        fx.match_flare(at);
+        assert!(fx.count().0 > 0, "parts");
+        let g = fx.glows.first().copied().expect("a light");
+        assert_eq!((g.x, g.y), (at.x.0 >> FX_TO_CANVAS, at.y.0 >> FX_TO_CANVAS));
+        for _ in 0..80 {
+            fx.parts.retain_mut(Spark::step);
+        }
+        assert_eq!(fx.count().0, 0, "out");
     }
 }

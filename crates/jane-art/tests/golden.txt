@@ -95,6 +95,8 @@ icon:item_coat 12c4e51d
 icon:item_coat#1 92d9e198
 icon:item_crepe f01abea7
 icon:item_crepe#1 de5cba1c
+icon:item_deadwood 91a1c010
+icon:item_deadwood#1 c6ec8d79
 icon:item_egg 556098cb
 icon:item_egg#1 47f0e644
 icon:item_fire_stone ef1a653c
@@ -155,6 +157,8 @@ icon:item_light_stone 34f6eeb5
 icon:item_light_stone#1 219da2bb
 icon:item_loaf 8f13cc0b
 icon:item_loaf#1 790d0f77
+icon:item_match 2de4c5e9
+icon:item_match#1 10ed62ed
 icon:item_meat dce62c07
 icon:item_meat#1 ff4f93d2
 icon:item_meat_green e25378cc
@@ -537,6 +541,7 @@ prop:woodpile a002df94
 prop:bedroll 63b174b5
 prop:bell_rope a649f26e
 prop:bookcase d75014bf
+prop:brazier_cold 7574a5a5
 prop:brick_pier 907c3ee0
 prop:broken_generator f02f5796
 prop:broken_steps 9b7afdf2
@@ -544,7 +549,7 @@ prop:broken_track bc25f140
 prop:bud 9072657b
 prop:burial_mouth 5bab1add
 prop:call_box c0eade5c
-prop:campfire_cold 7574a5a5
+prop:campfire_cold 57e71e61
 prop:candle_ends e65a650c
 prop:car_wreck 392c07b1
 prop:cart_wreck e8bf010a
@@ -579,6 +584,7 @@ prop:museum_exhibit_fox d281cbda
 prop:museum_exhibit_waxwork 00de05fb
 prop:museum_gallery_lamp 93e7bb11
 prop:museum_portrait ad2e7b6a
+prop:old_grate 87e7392e
 prop:ore_tub 42f31649
 prop:page_explosion ece70422
 prop:page_grow 4986ba1f
