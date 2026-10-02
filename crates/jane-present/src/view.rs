@@ -371,31 +371,149 @@ pub struct ViewBuffers {
 /// A step's place, the whole way there and the short one.
 type Way = (jane_sim::route::Place, String, String);
 
-/// The ways to quest steps' places (`jane_sim::route`): the county's roads walked once a seed,
-/// and each step's way worked out the first time it is asked for.
+/// How often a step's way is looked at again, presenter ticks.
+const WAY_CHECK: u32 = 20;
+/// She is on a way while she is this near a cell of it (cells, each way).
+const WAY_STRAY: i32 = 10;
+/// A way that could not be found is tried again after this many ticks.
+const WAY_RETRY: u32 = 600;
+
+/// A step's way as worked out last: from where, and the path index she walks past before it is
+/// worked out again from where she is then (the next fingerpost it turns at).
+#[derive(Clone, Debug)]
+struct Plan {
+    place: jane_sim::route::Place,
+    route: Option<jane_sim::route::Route>,
+    way: Option<Way>,
+    next: usize,
+    made: Option<u32>,
+    checked: u32,
+}
+
+impl Plan {
+    /// Is the way to be worked out again, from `want`, with her at `here`? Not while she walks
+    /// the leg she is on: only when she has passed its end, has left it, or a start of more use
+    /// to her than the last one turns up.
+    fn stale(&self, want: &jane_sim::route::Start, here: Option<(i32, i32)>, now: u32) -> bool {
+        use jane_sim::route::Start;
+        let Some(made) = self.made else { return true };
+        let Some(route) = &self.route else { return now.wrapping_sub(made) >= WAY_RETRY };
+        let near = |a: (i32, i32), b: (i32, i32)| (a.0 - b.0).abs() <= WAY_STRAY && (a.1 - b.1).abs() <= WAY_STRAY;
+        let same = match (&route.from, want) {
+            (Start::Here(a), Start::Here(b)) | (Start::Given(a), Start::Given(b)) => near(*a, *b),
+            (a, b) => a == b,
+        };
+        if same {
+            return false;
+        }
+        let Some(at) = here else { return false };
+        let on = route
+            .path
+            .iter()
+            .enumerate()
+            .filter(|(_, c)| near(**c, at))
+            .min_by_key(|(i, c)| ((c.0 - at.0).pow(2) + (c.1 - at.1).pow(2), *i));
+        on.is_none_or(|(i, _)| i >= self.next)
+    }
+
+    fn set(&mut self, route: Option<jane_sim::route::Route>, now: u32) {
+        use jane_sim::route::Leg;
+        self.made = Some(now);
+        self.next = route
+            .as_ref()
+            .and_then(|r| match r.legs.get(1) {
+                Some(Leg::Post { at, .. }) => r.path.iter().position(|c| c == at),
+                _ => None,
+            })
+            .unwrap_or(usize::MAX);
+        self.way = route.as_ref().map(|r| (self.place, r.words(), r.short()));
+        self.route = route;
+    }
+}
+
+/// The ways to quest steps' places (`jane_sim::route`): the county's roads read once a seed, and
+/// each step's way worked out from the most use of what she knows, again when she has walked a
+/// leg of it or left it, and not while she walks one.
 #[derive(Clone, Debug, Default)]
 struct Ways {
     seed: Option<u32>,
     roads: Option<std::sync::Arc<jane_sim::route::Roads>>,
-    /// (quest, step): its place, the whole way and the short one.
-    steps: Vec<((QuestId, usize), Option<Way>)>,
+    /// (quest, step): its way, `None` when the words name no place the county can show.
+    steps: Vec<((QuestId, usize), Option<Plan>)>,
+    /// Where she was in the county when each quest came into the log; `None` for those in it
+    /// when the presenter started (a game loaded).
+    given: Vec<(QuestId, Option<(i32, i32)>)>,
+    /// Her last cell in the county.
+    last: Option<(i32, i32)>,
+    /// By named place (`Roads::sites`): she has seen it, or a fingerpost that names it.
+    known: Vec<bool>,
+    now: u32,
 }
 
 impl Ways {
-    fn get(&mut self, v: &View<'_>, q: QuestId, i: usize) -> Option<&Way> {
+    /// Once a tick, before any [`Self::get`]: where she is, what she knows, new quests.
+    fn update(&mut self, v: &View<'_>, now: u32) {
         if self.seed != Some(v.seed()) {
             self.seed = Some(v.seed());
             self.roads = jane_sim::route::Roads::new(v.blueprints().get(ZoneId::County)).map(std::sync::Arc::new);
             self.steps.clear();
+            self.given = v.quests().map(|q| (q.quest, None)).collect();
+            self.last = None;
+            self.known = vec![false; self.roads.as_ref().map_or(0, |r| r.sites().len())];
         }
-        if !self.steps.iter().any(|(k, _)| *k == (q, i)) {
-            let got = jane_sim::route::place_of_step(v.blueprints(), q, i).and_then(|place| {
-                let r = self.roads.as_ref()?.route(place.rect)?;
-                Some((place, r.words(), r.short()))
-            });
-            self.steps.push(((q, i), got));
+        self.now = now;
+        if v.zone() == ZoneId::County {
+            self.last = Some(v.body().pos.cell());
+            if let Some(roads) = &self.roads
+                && now % WAY_CHECK == 0
+            {
+                for (k, s) in roads.sites().iter().enumerate() {
+                    if !self.known[k] {
+                        let (x, y) = s.start.ground().map_or(s.start.at(), jane_core::Rect::centre);
+                        self.known[k] = v.seen(x, y) || s.posts.iter().any(|p| v.seen(p.0, p.1));
+                    }
+                }
+            }
         }
-        self.steps.iter().find(|(k, _)| *k == (q, i)).and_then(|(_, g)| g.as_ref())
+        for q in v.quests() {
+            if !self.given.iter().any(|g| g.0 == q.quest) {
+                self.given.push((q.quest, self.last));
+            }
+        }
+    }
+
+    fn get(&mut self, v: &View<'_>, q: QuestId, i: usize) -> Option<&Way> {
+        let roads = self.roads.clone()?;
+        let k = match self.steps.iter().position(|(k, _)| *k == (q, i)) {
+            Some(k) => k,
+            None => {
+                let plan = jane_sim::route::place_of_step(v.blueprints(), q, i).map(|place| Plan {
+                    place,
+                    route: None,
+                    way: None,
+                    next: usize::MAX,
+                    made: None,
+                    checked: 0,
+                });
+                self.steps.push(((q, i), plan));
+                self.steps.len() - 1
+            }
+        };
+        let here = (v.zone() == ZoneId::County).then(|| v.body().pos.cell());
+        let given = self.given.iter().find(|g| g.0 == q).and_then(|g| g.1);
+        let (now, last, known) = (self.now, self.last, &self.known);
+        let plan = self.steps[k].1.as_mut()?;
+        if plan.made.is_none() || (here.is_some() && now.wrapping_sub(plan.checked) >= WAY_CHECK) {
+            plan.checked = now;
+            let knows = |s: &jane_sim::route::Site| {
+                roads.sites().iter().position(|t| t.id == s.id).is_some_and(|i| known.get(i).copied().unwrap_or(false))
+            };
+            let want = roads.start(here, last, &knows, given, plan.place.rect);
+            if plan.stale(&want, here, now) {
+                plan.set(roads.route_from(&want, plan.place.rect), now);
+            }
+        }
+        plan.way.as_ref()
     }
 }
 
@@ -414,6 +532,7 @@ impl ViewBuffers {
         self.tick = self.tick.wrapping_add(1);
         let now = self.tick;
         self.seed = v.seed();
+        self.ways.update(v, now);
         if self.heroine != v.heroine() {
             self.heroine.clear();
             self.heroine.push_str(v.heroine());

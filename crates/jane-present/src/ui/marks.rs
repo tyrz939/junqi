@@ -58,8 +58,95 @@ pub fn draw(ui: &mut Ui, marks: &[QuestMarker], dark: bool, tick: u32) {
             glow(ui, (cx, cy), 10, argb(Ramp::UiGold.at(Tone::Light), 62));
             glow(ui, (cx, cy), 6, argb(Ramp::UiGold.at(Tone::High), 96));
         }
-        let ink = Ink::small(style::gold()).outline();
-        ui.text(i32::from(r.x), i32::from(r.y), glyph(m.mark), ink);
+        match m.mark {
+            QuestMark::Offer => offer(ui, i32::from(r.x), i32::from(r.y)),
+            QuestMark::HandIn => {
+                ui.text(i32::from(r.x), i32::from(r.y), glyph(m.mark), Ink::small(style::gold()).outline());
+            }
+        }
+    }
+}
+
+/// The offer's "!", drawn rather than set: the font's is one 2 px stroke, where the "?" it stands
+/// beside spans 10 px. WoW's weight instead: a bar 6 px wide that narrows to 4, a gap the ink
+/// outline keeps dark, and a dot as wide as the bar's foot; lit down its left and shaded down
+/// its right, outlined in ink like the "?". It fills the same 12 rows of the cell as the "?".
+pub const OFFER_MASK: [&str; 12] = [
+    ".####.", //
+    "######", //
+    "######", //
+    "######", //
+    "######", //
+    ".####.", //
+    ".####.", //
+    ".####.", //
+    "......", //
+    "......", //
+    ".####.", //
+    ".####.", //
+];
+/// Where the mask sits in the glyph's cell: centred on the "?" (ink columns 1 to 10, rows 1 to 12).
+const OFFER_AT: (i32, i32) = (3, 1);
+
+/// Is `(x, y)` of the "!" inked?
+pub fn offer_at(x: i32, y: i32) -> bool {
+    usize::try_from(y)
+        .ok()
+        .and_then(|y| OFFER_MASK.get(y))
+        .and_then(|row| usize::try_from(x).ok().and_then(|x| row.as_bytes().get(x)))
+        .is_some_and(|&b| b == b'#')
+}
+
+/// Draws the "!" in the cell whose top-left is `(x, y)`: its ink outline, then the gold a row at
+/// a time, in runs of one tone.
+fn offer(ui: &mut Ui, x: i32, y: i32) {
+    let (x, y) = (x + OFFER_AT.0, y + OFFER_AT.1);
+    let rows = OFFER_MASK.len() as i32;
+    let cols = OFFER_MASK[0].len() as i32;
+    let ink = argb(style::INK, 255);
+    for oy in -1..=rows {
+        let mut ox = -1;
+        while ox <= cols {
+            let edge = |ox: i32| {
+                !offer_at(ox, oy)
+                    && [(1, 0), (-1, 0), (0, 1), (0, -1)].iter().any(|(dx, dy)| offer_at(ox + dx, oy + dy))
+            };
+            if edge(ox) {
+                let start = ox;
+                while ox <= cols && edge(ox) {
+                    ox += 1;
+                }
+                ui.fill(Rect::new(x + start, y + oy, ox - start, 1), ink);
+            } else {
+                ox += 1;
+            }
+        }
+    }
+    for oy in 0..rows {
+        let mut ox = 0;
+        while ox < cols {
+            let tone = |ox: i32| {
+                if !offer_at(ox, oy) {
+                    None
+                } else if oy == 0 || !offer_at(ox - 1, oy) {
+                    Some(Tone::High)
+                } else if !offer_at(ox + 1, oy) || !offer_at(ox, oy + 1) {
+                    Some(Tone::Base)
+                } else {
+                    Some(Tone::Light)
+                }
+            };
+            match tone(ox) {
+                None => ox += 1,
+                Some(t) => {
+                    let start = ox;
+                    while ox < cols && tone(ox) == Some(t) {
+                        ox += 1;
+                    }
+                    ui.fill(Rect::new(x + start, y + oy, ox - start, 1), argb(Ramp::UiGold.at(t), 255));
+                }
+            }
+        }
     }
 }
 
@@ -89,6 +176,18 @@ mod tests {
     fn wow_s_way_round_an_exclamation_offers_and_a_question_takes_back() {
         assert_eq!(glyph(QuestMark::Offer), "!");
         assert_eq!(glyph(QuestMark::HandIn), "?");
+    }
+
+    /// The "!" carries the "?"'s weight: as tall (12 rows), at least twice the font stroke's
+    /// ink, wider over its top than its foot, and a dark gap between bar and dot.
+    #[test]
+    fn the_offer_is_as_bold_as_the_question() {
+        let inked = |y: i32| (0..6).filter(|&x| offer_at(x, y)).count();
+        let total: usize = (0..12).map(inked).sum();
+        assert_eq!(OFFER_MASK.len(), 12);
+        assert!(total >= 2 * 20, "{total} px against the font's 20");
+        assert!(inked(1) > inked(7) && inked(7) >= 4, "tapers, and the foot is no stroke");
+        assert!((0..12).any(|y| inked(y) == 0) && inked(11) > 0, "a gap, then the dot");
     }
 
     #[test]
