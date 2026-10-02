@@ -26,6 +26,7 @@
 //! | `place_areas` | placement rows in the named patches | 7 |
 //! | `country` | field edges, hamlets, farms, camps, dens, ruins, ponds | 7 |
 //! | `stories` | stories claim places, boards go up, the stories' rows | 8 |
+//! | `perimeters` | an edge round every named patch: a hedge, a field wall, a reed edge, a slag bank | 9 |
 //! | `scatter` | herbs and rocks | 9 |
 //! | `ways` | every way and door step cleared: growth gives way, a fence a gate, a thing on it moved aside | 9 |
 //! | `wildlife` | by region, biome and threat | 9 |
@@ -43,6 +44,7 @@ pub mod finish;
 pub mod land;
 pub mod links;
 pub mod paths;
+pub mod perimeter;
 pub mod placements;
 pub mod rail;
 pub mod roads;
@@ -120,6 +122,8 @@ pub struct County<'a> {
     /// Every fork's fingerpost as `country::roads::forks` set it up: its key, where it stands and
     /// its words, so the stories stage can add an arm for a place nearby (`stories::posts`).
     pub fork_posts: Vec<(Key, (i32, i32), String)>,
+    /// Each named patch's edge as laid, in the skeleton's order (`perimeter::lay_perimeters`).
+    pub perimeters: Vec<perimeter::Perimeter>,
 }
 
 /// The centre cell of macro cell `m`, on either axis.
@@ -151,6 +155,7 @@ impl<'a> County<'a> {
             wild_earth: vec![false; (COUNTY_W * COUNTY_H) as usize],
             ways: Vec::new(),
             fork_posts: Vec::new(),
+            perimeters: Vec::new(),
         }
     }
 
@@ -208,6 +213,7 @@ pub const STAGES: &[(&str, StageFn)] = &[
     ("place_areas", place_areas),
     ("country", country),
     ("stories", stories),
+    ("perimeters", perimeter::lay_perimeters),
     ("scatter", scatter),
     ("ways", ways::clear_ways),
     ("wildlife", wildlife),

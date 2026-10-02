@@ -61,6 +61,8 @@ pub enum Step {
     CountyNight,
     /// The bones about Julie's yard, outside its fence (`life::yard_bones`): one set of dice.
     CountyYard,
+    /// A named patch's edge (`county::perimeter`): `a` is the patch's row in the area table.
+    CountyPerimeter,
 }
 
 impl From<Step> for u16 {
