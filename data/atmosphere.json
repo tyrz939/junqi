@@ -25,7 +25,7 @@
     "colour": "#9a8c7e", "density": 160, "height": "full", "drift": [6, 0]
   },
   "ground_fog": {
-    "areas": ["chapel_rise"], "rects": ["site_graveyard"],
+    "areas": ["chapel_rise"], "rects": ["site_graveyard", "site_burial"],
     "hours": [21, 6], "needs": ["clear", "mist", "rain"],
     "colour": "#b4bac6", "density": 560, "height": "ground", "top": 14, "drift": [1, 0], "spread": 4
   },

@@ -29,12 +29,46 @@ const EASE: u32 = 110;
 const FLASH: [u8; 7] = [255, 255, 150, 70, 30, 12, 0];
 
 /// The sky's sprites in the atlas (ART.md §2.8): the School in three distance bands and three
-/// lightings (dark, one window, two), a treeline per region, the moon in eight phases.
+/// lightings (dark, one window, two), a treeline per region, the moon in eight phases, and a
+/// far landmark of each region's own in three bands (`jane_art::far`): the Works' chimney by
+/// day and by night in each frame of its plume, St Anne's spire dark and at evensong, the lake's
+/// statue plain and gilded by the dawn.
 #[derive(Debug)]
 pub struct SkyArt {
     school: [[RefId; 3]; 3],
     treeline: [RefId; 3],
     moon: [RefId; 8],
+    chimney: [[[RefId; PLUME]; 2]; 3],
+    spire: [[RefId; 2]; 3],
+    statue: [[RefId; 2]; 3],
+}
+
+/// Frames of the Works' plume.
+const PLUME: usize = jane_art::far::PLUME_FRAMES as usize;
+/// Ticks a frame of the plume is held.
+const PLUME_TICKS: u32 = 14;
+
+/// A landmark on the horizon (§1.9 `FarLandmark`): what it is. Each stands at a county mark.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Far {
+    /// The School on its hill, north of Castle (everyone's).
+    School,
+    /// The Factory's chimney, the Works'.
+    Chimney,
+    /// St Anne's spire in Castle, the Lowfields'.
+    Spire,
+    /// The statue in the lake, the Waters'.
+    Statue,
+}
+
+impl Far {
+    /// Every landmark, and the county mark it stands at.
+    pub const ALL: [(Far, &'static str); 4] = [
+        (Far::School, "school_mouth"),
+        (Far::Chimney, "factory_mouth"),
+        (Far::Spire, "church_door"),
+        (Far::Statue, "lake_statue_mouth"),
+    ];
 }
 
 impl SkyArt {
@@ -46,7 +80,12 @@ impl SkyArt {
         let treeline =
             [Region::Lowfields, Region::Waters, Region::Works].map(|r| add(weather::treeline(r, 0x7472_6565)));
         let moon = [0u8, 1, 2, 3, 4, 5, 6, 7].map(|p| add(weather::moon(p)));
-        SkyArt { school, treeline, moon }
+        let chimney = [0u8, 1, 2].map(|band| {
+            [false, true].map(|night| core::array::from_fn(|f| add(jane_art::far::chimney(band, night, f as u8))))
+        });
+        let spire = [0u8, 1, 2].map(|band| [false, true].map(|lit| add(jane_art::far::spire(band, lit))));
+        let statue = [0u8, 1, 2].map(|band| [false, true].map(|dawn| add(jane_art::far::statue(band, dawn))));
+        SkyArt { school, treeline, moon, chimney, spire, statue }
     }
 }
 
@@ -85,8 +124,9 @@ pub struct Atmosphere {
     rng: Lcg,
     /// A sheet's or film's sky, over the view's (`jane sheet scene --weather`).
     force: Option<(WeatherKind, u8)>,
-    /// The School's door in the county, zone canvas px.
-    school: Option<(i32, i32)>,
+    /// The far landmarks in the county, each at its mark, zone canvas px: the School's door, the
+    /// Factory's, St Anne's, the lake statue's.
+    far: Vec<(Far, (i32, i32))>,
     vols: Vec<Vol>,
     /// The mist tile's drift, Q4 px.
     drift: (i32, i32),
@@ -131,7 +171,7 @@ impl Atmosphere {
             wet: 0,
             rng: Lcg(1),
             force: None,
-            school: None,
+            far: Vec::with_capacity(4),
             vols: Vec::with_capacity(32),
             drift: (0, 0),
         }
@@ -148,13 +188,14 @@ impl Atmosphere {
         let zone = view.zone();
         self.zone = Some(zone);
         self.rng = Lcg(jane_art::hash::h32(view.seed(), zone as u32, 0x6174_6d6f));
-        self.school = if zone == ZoneId::County {
-            view.sym("school_mouth")
-                .and_then(|s| view.mark(s))
-                .map(|m| (i32::from(m.cell.x) * CELL + CELL / 2, i32::from(m.cell.y) * CELL))
-        } else {
-            None
-        };
+        self.far.clear();
+        if zone == ZoneId::County {
+            for (kind, mark) in Far::ALL {
+                if let Some(m) = view.sym(mark).and_then(|s| view.mark(s)) {
+                    self.far.push((kind, (i32::from(m.cell.x) * CELL + CELL / 2, i32::from(m.cell.y) * CELL)));
+                }
+            }
+        }
         self.vols.clear();
         let px = |r: jane_core::Rect| (r.x * CELL, r.y * CELL, (r.x + r.w) * CELL, (r.y + r.h) * CELL);
         for layer in jane_data::atmosphere().layers {
@@ -456,29 +497,39 @@ impl Atmosphere {
                 -i32::from(m.up),
             ));
         }
-        if let Some((sx, sy)) = self.school {
-            let (cx, cy) = (cam.0 + w / 2, cam.1 + h / 2);
+        // The far landmarks north of her, the farthest first: each by its bearing across the
+        // canvas (straight ahead mid-screen, at 45 degrees two thirds of the way out), in the
+        // band its distance puts it in.
+        let (cx, cy) = (cam.0 + w / 2, cam.1 + h / 2);
+        let mut ahead = [(0, Far::School, 0, 0usize); 4];
+        let mut n = 0;
+        for &(kind, (sx, sy)) in &self.far {
             let north = cy - sy;
-            if north > 0 {
-                // Its bearing puts it across the canvas: straight ahead mid-screen, at 45 degrees
-                // two thirds of the way out.
-                let x = w / 2 + (sx - cx) * (w / 3) / north.max(1);
-                let cells = (north + (sx - cx).abs() / 2) / CELL;
-                // The bands step up early (the whole-frame pass): at the lake, halfway across the
-                // county, the School is the frame's landmark and its reflection must read.
-                let band = usize::from(cells < 2000) + usize::from(cells < 800);
-                let lit = if self.windows_lit() {
-                    // One window steady, a second that comes and goes.
-                    1 + usize::from(crate::light::flicker(self.tick, 0x5c48_4f4c, 900, 1) < 160)
-                } else {
-                    0
-                };
-                let id = self.art.school[band][lit];
-                let r = atlas.get(id);
-                let x = x - i32::from(r.src.w) / 2;
-                if x + i32::from(r.src.w) > -64 && x < w + 64 {
-                    f.sprites.push(sprite(id, x, -i32::from(r.src.h)));
-                }
+            if north <= 0 || n == ahead.len() {
+                continue;
+            }
+            let x = w / 2 + (sx - cx) * (w / 3) / north.max(1);
+            let cells = (north + (sx - cx).abs() / 2) / CELL;
+            // The bands step up early (the whole-frame pass): at the lake, halfway across the
+            // county, the School is the frame's landmark and its reflection must read. The
+            // regions' own are smaller things and step up nearer.
+            let band = match kind {
+                Far::School => usize::from(cells < 2000) + usize::from(cells < 800),
+                _ => usize::from(cells < 1200) + usize::from(cells < 500),
+            };
+            ahead[n] = (cells, kind, x, band);
+            n += 1;
+        }
+        let ahead = &mut ahead[..n];
+        ahead.sort_by_key(|a| core::cmp::Reverse(a.0));
+        for &(_, kind, x, band) in ahead.iter() {
+            let (id, mirror) = self.far_look(kind, band);
+            let r = atlas.get(id);
+            let x = x - i32::from(r.src.w) / 2;
+            if x + i32::from(r.src.w) > -64 && x < w + 64 {
+                let mut s = sprite(id, x, -i32::from(r.src.h));
+                s.flags.mirror = mirror;
+                f.sprites.push(s);
             }
         }
         let far = Span::since(s0, f.sprites.len());
@@ -497,6 +548,64 @@ impl Atmosphere {
             factor: 64,
             sprites: Span::since(s1, f.sprites.len()),
         });
+    }
+
+    /// A far landmark's sprite in `band` as the hour has it, and whether it is mirrored.
+    fn far_look(&self, kind: Far, band: usize) -> (RefId, bool) {
+        let t = self.clock % (24 * HOUR);
+        match kind {
+            Far::School => {
+                let lit = if self.windows_lit() {
+                    // One window steady, a second that comes and goes.
+                    1 + usize::from(crate::light::flicker(self.tick, 0x5c48_4f4c, 900, 1) < 160)
+                } else {
+                    0
+                };
+                (self.art.school[band][lit], false)
+            }
+            Far::Chimney => {
+                let frame = (self.tick / PLUME_TICKS) as usize % PLUME;
+                (self.art.chimney[band][usize::from(self.windows_lit())][frame], false)
+            }
+            // Evensong: a candle in the west window from half past five to eight.
+            Far::Spire => (self.art.spire[band][usize::from((HOUR * 35 / 2..HOUR * 20).contains(&t))], false),
+            // Gilded while the morning's afterglow is on the haze; turned the other way by night
+            // (WORLD.md §2.1: by day the statue faces the way it faces by day).
+            Far::Statue => {
+                let dawn = t < 12 * HOUR && self.afterglow_clear() > 40;
+                let night = !(HOUR * 6..HOUR * 21).contains(&t);
+                (self.art.statue[band][usize::from(dawn)], night)
+            }
+        }
+    }
+
+    /// The far landmarks this zone has, each at its mark, zone canvas px: the county's four.
+    pub fn landmarks(&self) -> &[(Far, (i32, i32))] {
+        &self.far
+    }
+
+    /// Whether the moon is up and not clouded over: what a dead lamp's glass catches.
+    pub fn moon_up(&self) -> bool {
+        !self.indoor && self.sky_look((0, 0, 0, 0), 512).moon.is_some()
+    }
+
+    /// The thickest fog over zone canvas px `(x, y)` now, 0..=255, of the place's layers and the
+    /// weather's mist: what the Hoar Stone rises out of.
+    pub fn fog_at(&self, x: i32, y: i32) -> u8 {
+        if self.indoor || !self.features.fog {
+            return 0;
+        }
+        let mut d = self.mist * 170 / 65535;
+        for v in &self.vols {
+            let inside = v.rect.is_none_or(|(x0, y0, x1, y1)| {
+                let s = i32::from(v.layer.spread) * CELL;
+                x >= x0 - s && y >= y0 - s && x < x1 + s && y < y1 + s
+            });
+            if inside {
+                d = d.max(u32::from(v.layer.density) * 255 / 1000 * v.level / 65535);
+            }
+        }
+        d.min(255) as u8
     }
 
     /// The School's windows are lit from when the lamps come on (18:30) until six.
@@ -648,6 +757,43 @@ pub fn sky_at(s: &SkyLook, x: i32, up: i32) -> Rgb {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn every_region_has_its_landmark_on_the_horizon_ahead_of_her() {
+        let mut atlas = Atlas::new();
+        let mut a = Atmosphere::new(Tier::T0, &mut atlas);
+        for seed in [1u32, 4, 7] {
+            let sim = jane_sim::Sim::new_game(seed, "Tess");
+            let v = sim.view(jane_sim::Seat(0)).unwrap();
+            a.zone(&v);
+            let kinds: Vec<Far> = a.landmarks().iter().map(|l| l.0).collect();
+            for k in [Far::School, Far::Chimney, Far::Spire, Far::Statue] {
+                assert!(kinds.contains(&k), "seed {seed}: {k:?} stands in the county");
+            }
+            let (zw, zh) = v.size();
+            let (cw, ch) = (768, 432);
+            for &(kind, (lx, ly)) in a.landmarks() {
+                // Stand her well south of it, looking north: it is ahead, mid-canvas.
+                let cy = (ly + 300 * CELL).min(zh as i32 * CELL - ch / 2);
+                if cy - ly < 40 * CELL {
+                    continue;
+                }
+                let cam = (lx - cw / 2, cy - ch / 2);
+                let mut f = Frame::new(Tier::T0);
+                f.canvas = (cw as u16, ch as u16);
+                a.draw_back(&mut f, cam, (zw, zh), &atlas);
+                let far = f.passes.iter().find_map(|p| match p {
+                    Pass::Parallax { layer: Depth::FarLandmark, sprites, .. } => Some(*sprites),
+                    _ => None,
+                });
+                let far = far.expect("a far landmark pass");
+                let ahead = f.sprites[far.range()]
+                    .iter()
+                    .any(|s| (i32::from(s.x) + i32::from(s.src.w) / 2 - cw / 2).abs() <= 2);
+                assert!(ahead, "seed {seed}: {kind:?} stands straight ahead on the horizon");
+            }
+        }
+    }
 
     #[test]
     fn the_sky_runs_from_horizon_to_zenith_and_the_afterglow_is_low_in_its_bearing() {
