@@ -113,11 +113,62 @@ fn the_reader_takes_the_new_quests_on_her_way() {
             .collect();
         hs.into_iter().map(|h| h.join().expect("a run")).collect()
     });
-    let mut all_done = 0;
+    let mut all_given = 0;
     for &(seed, given, done, end) in &runs {
         println!("seed {seed}: {given} of the new quests given, {done} done; the end {end}");
-        all_done += done;
+        all_given += given;
         assert!(end, "seed {seed}: the Reader did not reach an ending with the new quests in the county");
     }
-    assert!(all_done >= 8, "the Reader finished only {all_done} of the new quests over eight seeds");
+    // She walks the spine through both regions and is offered what stands by her way.
+    assert!(all_given >= 8, "the Reader was given only {all_given} of the new quests over eight seeds");
 }
+
+/// Game hours the side-quest run plays.
+const ERRAND_HOURS: u32 = 16;
+
+/// The side-quest run: a Reader put at the Burial's act (the Works open, the verbs to that act
+/// learned, her growth what the dungeons before it hold) with every new quest of the Waters and
+/// the Works in her log and what their givers hand over in her bag, playing sixteen game hours.
+/// What she finishes is what the words and the world let a player who reads finish.
+#[test]
+#[ignore = "slow: sixteen game hours on three seeds"]
+fn a_reader_given_the_new_quests_finishes_them() {
+    let cat = jane_data::catalog();
+    let ids: Vec<_> = NEW.iter().map(|q| cat.story.quest_id(q).expect("a quest")).collect();
+    let runs: Vec<(u32, Vec<&'static str>)> = std::thread::scope(|sc| {
+        let hs: Vec<_> = (1..=3u32)
+            .map(|seed| {
+                let ids = ids.clone();
+                sc.spawn(move || {
+                    let mut sim = Sim::new_game_with(Blueprints::build(seed).expect("the seed builds"), "Jane");
+                    let mut setup = jane_bot::console::start_at(&mut sim, "burial").expect("the act");
+                    for &q in &ids {
+                        setup.push(jane_sim::Command::Dev(jane_sim::DevOp::Quest(q)));
+                    }
+                    for (item, qty) in [("signal_dinner", 3), ("nurses_bag", 1)] {
+                        let item = cat.combat.item_id(item).expect("an item");
+                        setup.push(jane_sim::Command::Dev(jane_sim::DevOp::Give { item, qty }));
+                    }
+                    let mut bot = Bot::story(Model::Reader);
+                    bot.setup = setup;
+                    bot.play(&mut sim, ERRAND_HOURS * 60 * 60 * 60);
+                    let v = sim.view(jane_sim::Seat(0)).expect("seat 0");
+                    let done: Vec<&'static str> =
+                        ids.iter().filter(|q| v.quests_done().contains(q)).map(|&q| cat.story.quest(q).id).collect();
+                    (seed, done)
+                })
+            })
+            .collect();
+        hs.into_iter().map(|h| h.join().expect("a run")).collect()
+    });
+    let mut all = 0;
+    for (seed, done) in &runs {
+        println!("seed {seed}: {} of {} done: {}", done.len(), NEW.len(), done.join(", "));
+        all += done.len();
+    }
+    assert!(all >= MIN_DONE, "the Reader finished {all} of the new quests over three seeds");
+}
+
+/// The least the side-quest run finishes over its three seeds (measured 2 October 2026: see
+/// QUEST-TREE.md §11: 19, 19 and 22 of 33, the Tuesday round whole on all three).
+const MIN_DONE: usize = 50;
