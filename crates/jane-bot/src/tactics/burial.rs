@@ -23,6 +23,10 @@
 //!   glasshouse before the scroll has taught her Fire; not a keeper's room (or the ground before
 //!   one that walks) short of breath: the fire first (`ready`). Drops of plain things left in
 //!   rooms she has walked out of, and torches that only give light, are not walked back for.
+//! - **The great torch** (`under_the_torch`, `held_off`): the crawl pushes it onto the plate by
+//!   HIS SOLDIER's gate like any plate's barrel; the shades at the edge of its light are let be
+//!   while she pushes, never hunted, and shot from inside warm light when they stand off at its
+//!   edge (waiting for them, or backing off from them, is a stand-off for ever).
 //! - **Getting nowhere** (`Watch`): fifteen seconds standing still with nothing about her going
 //!   down, the crawl drops her task and she lets be what is not at her elbow a while.
 //! - **Done** (`done`): Goldskin down and the ball in her bag, she leaves by the way she came.
@@ -795,6 +799,12 @@ pub fn fight(v: &View<'_>, cx: &mut Ctx, id: UnitId, task: Option<&Task>) -> Opt
         return Some(Some(Act::press(c)));
     }
     let t = v.unit(id).filter(|t| t.alive)?;
+    if under_the_torch(v, t, task) {
+        return Some(None);
+    }
+    if let Some(a) = held_off(v, cx, t, id) {
+        return Some(a);
+    }
     let now = v.tick();
     let td = cat.combat.unit(t.def);
     let dir = jane_core::angle::iatan2(t.pos.y.0 - me.pos.y.0, t.pos.x.0 - me.pos.x.0);
@@ -1317,9 +1327,78 @@ fn shooters(v: &View<'_>, t: &Unit) -> Vec<(Vec2, i64)> {
 
 /// Not gone looking for down here: whatever stands up again ten seconds after she has gone (all
 /// but the keepers). It is fought when it comes at her; hunting it is a round that never ends.
+/// Nor is a shade: it waits at the edge of warm light for her to step out of it, so going after
+/// it from the great torch's light is a stand-off that never ends either.
 pub fn not_hunted(def: jane_core::UnitDefId) -> bool {
     let d = jane_data::catalog().combat.unit(def);
-    d.respawn.0 > 0 && !d.boss
+    d.respawn.0 > 0 && !d.boss || d.shuns_light
+}
+
+/// Pushing something that gives warm light (the great torch) with a shade after her: she keeps
+/// pushing. It cannot step into the light she is in, and turning to fight it from there is the
+/// stand-off `not_hunted` keeps her out of.
+fn under_the_torch(v: &View<'_>, t: &Unit, task: Option<&Task>) -> bool {
+    let cat = jane_data::catalog();
+    let Some(Task::Push(p)) = task else { return false };
+    let warm = v.prop(p.prop).and_then(|q| cat.story.prop(q.def).light).is_some_and(|l| !l.cold);
+    warm && cat.combat.unit(t.def).shuns_light
+}
+
+/// Does warm light (a lit brazier, the great torch; not a cold torch) cover the point, a cell in
+/// from its edge? The sim's rule (`light::lit_at`), drawn in a little: a shade at the very edge
+/// still reaches over it.
+fn warm_at(v: &View<'_>, at: Vec2) -> bool {
+    let cat = jane_data::catalog();
+    v.props().any(|p| {
+        v.light_showing(p).is_some_and(|l| {
+            let r = i64::from(l.radius.0) - i64::from(CELL_FX);
+            !l.cold && r > 0 && dist(jane_sim::light::prop_centre(cat.story.prop(p.def), p), at) <= r
+        })
+    })
+}
+
+/// A shade kept off her by the warm light she stands in (the great torch on its plate, with the
+/// shades crowding its edge): it will not come, so backing off from it or waiting for it is a
+/// stand-off for ever. It is shot from inside the light, from where she is or from ground in the
+/// light with a clear line to it; with no such ground, or no bolt to hand, it is let be.
+/// (`fight`'s answer: `None` not this one's to say, `Some(None)` let it be.)
+#[allow(clippy::option_option)]
+fn held_off(v: &View<'_>, cx: &mut Ctx, t: &Unit, id: UnitId) -> Option<Option<Act>> {
+    let cat = jane_data::catalog();
+    let me = v.body();
+    if !cat.combat.unit(t.def).shuns_light || !warm_at(v, me.pos) {
+        return None;
+    }
+    let bolt = best_bolt(v, t)?;
+    let reach = i64::from(cat.combat.spell(bolt).range.0) * 9 / 10;
+    let dir = jane_core::angle::iatan2(t.pos.y.0 - me.pos.y.0, t.pos.x.0 - me.pos.x.0);
+    let good = |at: Vec2| dist(at, t.pos) <= reach && warm_at(v, at) && shot_clear(v, at, t.pos);
+    if good(me.pos) {
+        let aim = InputFrame { aim: Some(dir), ..InputFrame::IDLE };
+        return Some(Some(Act { frame: aim, cmds: vec![Command::Cast { spell: bolt, on: Some(id) }] }));
+    }
+    let start = me.pos.cell();
+    let mut seen = BTreeSet::from([start]);
+    let mut q = VecDeque::from([(start, 0u32)]);
+    while let Some((c, n)) = q.pop_front() {
+        let at = Vec2::centre(c.0, c.1);
+        if n > 0 && good(at) {
+            return match cx.nav.go(v, at, Fx::from_px(4), true) {
+                Go::Walk(f) => Some(Some(Act::hold(InputFrame { aim: Some(dir), ..f }))),
+                _ => Some(None),
+            };
+        }
+        if n >= 12 {
+            continue;
+        }
+        for (dx, dy) in [(1, 0), (-1, 0), (0, 1), (0, -1)] {
+            let nb = (c.0 + dx, c.1 + dy);
+            if crate::nav::walkable(v, nb.0, nb.1) && seen.insert(nb) {
+                q.push_back((nb, n + 1));
+            }
+        }
+    }
+    Some(None)
 }
 
 /// Does it throw a fan of many (the cactus's needles)?

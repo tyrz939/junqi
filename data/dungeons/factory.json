@@ -59,7 +59,7 @@
         { "socket": "prop:lamp_a", "prop": "works_lamp", "label": "A lamp on the line" },
         { "socket": "prop:lamp_b", "prop": "works_lamp", "label": "A lamp on the line" },
         {
-          "socket": "prop:fuse", "prop": "fuse_box", "label": "The fuse box for No. 1 line",
+          "socket": "prop:fuse", "prop": "fuse_box", "label": "The fuse box for No. 1 line and the STORES", "talk": "factory_line_fuse",
           "use": [
             { "do": "switch", "prop": "factory_line_lamp_a", "on": false },
             { "do": "switch", "prop": "factory_line_lamp_b", "on": false },

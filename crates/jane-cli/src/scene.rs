@@ -171,8 +171,9 @@ pub struct Opts {
     /// A lesson's moment to look at (PRESENTATION.md §2.1, §3.2).
     pub lesson: LessonOpts,
     /// `--film` only: she walks each way for so many ticks in turn, then stands (`--walk
-    /// south:60,east:600`), the camera with her.
-    pub walk: Vec<(jane_core::Angle, u32)>,
+    /// south:60,east:600`), the camera with her; a `push-` leg leans on USE as she goes, pushing
+    /// what she walks into (`--walk push-east:600`: the Burial's great torch).
+    pub walk: Vec<(jane_core::Angle, u32, bool)>,
 }
 
 /// `--knows`, `--learn`, `--grow` and `--ui`: a spell learned (or a jar found) after the rest,
@@ -653,9 +654,9 @@ pub fn film(
     for k in 0..n {
         let mut frames = [InputFrame::IDLE; 4];
         let mut left = k;
-        for &(dir, ticks) in &o.walk {
+        for &(dir, ticks, push) in &o.walk {
             if left < ticks {
-                frames[0] = InputFrame::walk(dir);
+                frames[0] = InputFrame { use_held: push, ..InputFrame::walk(dir) };
                 break;
             }
             left -= ticks;

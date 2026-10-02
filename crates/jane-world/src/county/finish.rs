@@ -184,7 +184,14 @@ pub fn cut_through(c: &mut County<'_>) {
                 if ring.iter().any(|&(x, y)| seen[ix(x, y)]) {
                     continue;
                 }
-                let ring: Vec<(i32, i32)> = ring.into_iter().filter(|&(x, y)| open(k, x, y)).collect();
+                // Walled in by thicket on every side (a dead lamp in a wood that grew round it):
+                // the way out starts in the thicket against it.
+                let open_ring: Vec<(i32, i32)> = ring.iter().copied().filter(|&(x, y)| open(k, x, y)).collect();
+                let ring = if open_ring.is_empty() {
+                    ring.into_iter().filter(|&(x, y)| cuttable(k.get(x, y)) && !blocked[ix(x, y)]).collect()
+                } else {
+                    open_ring
+                };
                 if ring.is_empty() {
                     continue;
                 }
@@ -212,6 +219,9 @@ pub fn cut_through(c: &mut County<'_>) {
             }
             let Some(&(dx, dy)) = DIRS4.iter().find(|&&(dx, dy)| out.dist(x + dx, y + dy) == d - 1) else { break };
             (x, y, d) = (x + dx, y + dy, d - 1);
+        }
+        if k.solid(x, y) && cuttable(k.get(x, y)) {
+            k.set(x, y, Tile::Dirt);
         }
         // Its ground is the reached country's now.
         let tiles = k.blueprint().tiles.as_slice();
