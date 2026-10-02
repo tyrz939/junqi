@@ -263,7 +263,10 @@ fn bolt(v: &View<'_>, t: &Unit, spells: &[SpellId]) -> Option<Act> {
     spells
         .iter()
         .find(|&&s| {
-            knows(v, s) && fight::ready(me, s, v.tick()) && fight::may_cast(me, t, s) && gap <= i64::from(cat.combat.spell(s).range.0) * 9 / 10
+            knows(v, s)
+                && fight::ready(me, s, v.tick())
+                && fight::may_cast(me, t, s)
+                && gap <= i64::from(cat.combat.spell(s).range.0) * 9 / 10
         })
         .map(|&s| Act {
             frame: InputFrame { aim: Some(dir), ..InputFrame::IDLE },

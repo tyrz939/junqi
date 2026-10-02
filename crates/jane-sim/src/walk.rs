@@ -116,10 +116,9 @@ fn arrived(cx: &Ctx<'_>, seat: Seat, w: &ClickWalk) -> bool {
         WalkThen::Attack(id) => cx.zone.unit(id).is_some_and(|o| {
             crate::cast::swing_reach(u).is_some_and(|r| metres_between(u, o) <= (r - WALK_REACH_SLACK_FX).max(0))
         }),
-        WalkThen::Use(TargetRef::Unit(id)) => cx
-            .zone
-            .unit(id)
-            .is_some_and(|o| distance(u.pos, o.pos) <= i64::from(TALK_REACH_FX) - WALK_REACH_SLACK_FX),
+        WalkThen::Use(TargetRef::Unit(id)) => {
+            cx.zone.unit(id).is_some_and(|o| distance(u.pos, o.pos) <= i64::from(TALK_REACH_FX) - WALK_REACH_SLACK_FX)
+        }
         WalkThen::Use(TargetRef::Prop(id)) => cx.zone.prop_ix(id).is_some_and(|ix| {
             let p = &cx.zone.props[ix as usize];
             let r = i64::from(USE_REACH_FX) - WALK_REACH_SLACK_FX;
@@ -139,9 +138,10 @@ fn goal_now(cx: &Ctx<'_>, seat: Seat, w: &ClickWalk) -> Option<Vec2> {
         WalkThen::Attack(id) | WalkThen::Use(TargetRef::Unit(id)) => {
             cx.zone.unit(id).filter(|o| o.alive && !o.hidden).map(|o| o.pos)
         }
-        WalkThen::Use(TargetRef::Prop(id)) => {
-            cx.zone.prop_ix(id).map(|ix| prop_centre(cx.cat.story.prop(cx.zone.props[ix as usize].def), &cx.zone.props[ix as usize]))
-        }
+        WalkThen::Use(TargetRef::Prop(id)) => cx
+            .zone
+            .prop_ix(id)
+            .map(|ix| prop_centre(cx.cat.story.prop(cx.zone.props[ix as usize].def), &cx.zone.props[ix as usize])),
         WalkThen::Cast { .. } => {
             cx.world.players[seat.index()].fight.target.and_then(|t| crate::target::pos_of(cx.zone, t))
         }

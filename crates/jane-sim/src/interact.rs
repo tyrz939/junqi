@@ -774,9 +774,9 @@ pub fn world_spell_fits(cx: &Ctx<'_>, ix: PropIx, verb: WorldSpell) -> Result<()
 
 /// Is prop `ix` within a world verb's reach of `at`?
 pub fn in_verb_reach(zone: &ZoneState, ix: PropIx, at: Vec2) -> bool {
-    zone.props.get(ix as usize).is_some_and(|p| {
-        prop_distance_sq(jane_data::catalog().story.prop(p.def), p, at) <= sq(WORLD_SPELL_REACH_FX)
-    })
+    zone.props
+        .get(ix as usize)
+        .is_some_and(|p| prop_distance_sq(jane_data::catalog().story.prop(p.def), p, at) <= sq(WORLD_SPELL_REACH_FX))
 }
 
 /// Repair or Grow landing on prop `ix` for the caster: pays its `needs` from the caster's bag

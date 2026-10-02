@@ -296,7 +296,9 @@ pub fn best_bolt(v: &View<'_>, u: &Unit) -> Option<jane_core::SpellId> {
     let cat = jane_data::catalog();
     let me = v.body();
     let now = v.tick();
-    let near = |s: jane_core::SpellId| crate::fight::gap(me, u) <= i64::from(cat.combat.spell(s).range.0) * 9 / 10;
+    let near = |s: jane_core::SpellId| {
+        crate::fight::gap(me, u) <= i64::from(cat.combat.spell(s).range.0) * 9 / 10 && crate::fight::may_cast(me, u, s)
+    };
     // The burst ("Everything near the burst takes all of it"): at a crowd (something else inside
     // its reach of the one she aims at), or at a rooted keeper while she has mana to spare. It hits
     // harder than either bolt and never her, and waits six seconds between.

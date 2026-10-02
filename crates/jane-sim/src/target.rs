@@ -90,7 +90,7 @@ pub fn foes_in_front(zone: &ZoneState, rt: &ZoneRuntime, body: &Unit, facing: An
         }
         found.push((d, id));
     }
-    found.sort_unstable();
+    found.sort();
     out.clear();
     out.extend(found.into_iter().map(|(_, id)| id));
 }

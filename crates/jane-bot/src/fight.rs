@@ -59,10 +59,7 @@ pub fn with_targets(v: &View<'_>, mut act: Act) -> Act {
     let cat = jane_data::catalog();
     let Some(me) = v.unit(v.me().unit) else { return act };
     for c in &act.cmds {
-        let (spell, on) = match *c {
-            Command::Cast { spell, on } => (spell, on),
-            _ => continue,
-        };
+        let Command::Cast { spell, on } = *c else { continue };
         let def = cat.combat.spell(spell);
         let foe = on.map(TargetRef::Unit).filter(|&t| v.target_valid(t) && v.target_hostile(t));
         let target = match def.kind {
@@ -75,6 +72,13 @@ pub fn with_targets(v: &View<'_>, mut act: Act) -> Act {
             act.frame.target = target;
             act.frame.free = false;
         }
+    }
+    // Whatever the plan, a cast building with something dangerous at her elbow is let go.
+    if v.fight().cast.is_some()
+        && !act.cmds.contains(&Command::Halt)
+        && (tell_under(v).is_some() || enemies(v).iter().any(|t| on_me(v, t) && cast_caught(v, t)))
+    {
+        act.cmds.push(Command::Halt);
     }
     if act.cmds.is_empty() {
         if let Some(pc) = v.fight().cast.filter(|pc| pc.at.is_none()) {
@@ -185,10 +189,7 @@ pub fn may_cast(me: &Unit, t: &Unit, s: SpellId) -> bool {
 /// Building a cast while a dangerous foe closes to its bite: Esc, and step back.
 pub fn cast_caught(v: &View<'_>, t: &Unit) -> bool {
     let me = v.body();
-    v.fight().cast.is_some()
-        && !rooted(t)
-        && dangerous(me, t)
-        && gap(me, t) <= bite(t) + i64::from(CELL_FX)
+    v.fight().cast.is_some() && !rooted(t) && dangerous(me, t) && gap(me, t) <= bite(t) + i64::from(CELL_FX)
 }
 
 /// Body gap between two units (centre distance less both bodies), `Fx`.
@@ -619,7 +620,9 @@ pub fn engage(v: &View<'_>, cx: &mut Ctx, id: UnitId) -> Option<Act> {
     }
     let now = v.tick();
     if let Some(at) = tell_under(v) {
-        return Some(Act::hold(step_out(v, cx, at)));
+        // A cast building under a tell is let go: she gets out at full speed.
+        let cmds = if v.fight().cast.is_some() { vec![Command::Halt] } else { Vec::new() };
+        return Some(Act { frame: step_out(v, cx, at), cmds });
     }
     if let Some(c) = eat(v) {
         return Some(Act::press(c));
@@ -686,7 +689,8 @@ pub fn engage(v: &View<'_>, cx: &mut Ctx, id: UnitId) -> Option<Act> {
         // that keeps after her is put down on the way, not led round the dungeon).
         let ice = sense::spell("icebolt");
         let reach = i64::from(cat.combat.spell(ice).range.0) * 9 / 10;
-        if knows(v, ice) && ready(me, ice, now) && may_cast(me, t, ice) && gap(me, t) <= reach && v.sight(me.pos, t.pos) {
+        if knows(v, ice) && ready(me, ice, now) && may_cast(me, t, ice) && gap(me, t) <= reach && v.sight(me.pos, t.pos)
+        {
             return Some(Act {
                 frame: InputFrame { aim: Some(dir), ..frame },
                 cmds: vec![Command::Cast { spell: ice, on: Some(id) }],
@@ -762,7 +766,11 @@ pub fn engage(v: &View<'_>, cx: &mut Ctx, id: UnitId) -> Option<Act> {
             }
         }
     }
-    if strong && knows(v, ice) && me.mp >= def.mp && (d < i64::from(6 * CELL_FX) || (!may_cast(me, t, ice) && g <= i64::from(def.range.0))) {
+    if strong
+        && knows(v, ice)
+        && me.mp >= def.mp
+        && (d < i64::from(6 * CELL_FX) || (!may_cast(me, t, ice) && g <= i64::from(def.range.0)))
+    {
         // Inside two thirds of its leash from home, so it keeps coming.
         let leash = i64::from(cat.combat.unit(t.def).leash.0);
         let tether = (leash > 0).then_some((t.home, leash * 2 / 3));

@@ -67,10 +67,7 @@ fn the_pad_pulls_the_mouse_barely_and_off_not_at_all() {
     assert!(d > i32::from(ASSIST_MOUSE.cone.0) && d < i32::from(ASSIST_PAD.cone.0) && d > i32::from(ASSIST_PAD.snap.0));
     assert_eq!(bolt_heading(&mut s, Angle::EAST, AssistProfile::Pad), toward(Angle::EAST, d, 350));
     let now = s.state().tick;
-    assert_eq!(
-        s.state().players[0].assist,
-        Some(Assisted { unit: foe, until: now.after(ASSIST_PAD.sticky_ticks) })
-    );
+    assert_eq!(s.state().players[0].assist, Some(Assisted { unit: foe, until: now.after(ASSIST_PAD.sticky_ticks) }));
     let mut s = fresh();
     let foe = spawn(&mut s, "skeleton", 20, 12);
     rooted(&mut s, foe);
@@ -261,8 +258,15 @@ fn assist_replays_exactly() {
     for f in 0..3000u32 {
         let p = [AssistProfile::Off, AssistProfile::Pad, AssistProfile::Mouse][(f / 200 % 3) as usize];
         let raw = Angle::EAST.wrapping_add(rng.range(-5000, 5000));
-        let fr =
-            InputFrame { mv_dir: Angle::SOUTH, mv_mag: 0, aim: Some(raw), sprint: false, use_held: false, assist: p, ..InputFrame::IDLE };
+        let fr = InputFrame {
+            mv_dir: Angle::SOUTH,
+            mv_mag: 0,
+            aim: Some(raw),
+            sprint: false,
+            use_held: false,
+            assist: p,
+            ..InputFrame::IDLE
+        };
         let c = match rng.below(12) {
             0 => Some(Command::Cast { spell: spell("icebolt"), on: None }),
             1 => Some(Command::Cast { spell: spell("spark"), on: None }),

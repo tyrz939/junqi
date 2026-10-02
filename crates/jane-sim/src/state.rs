@@ -482,7 +482,10 @@ pub enum WalkThen {
     /// Into reach of it, then use it (talk to a person, open a door, sit at a fire).
     Use(crate::input::TargetRef),
     /// Into the spell's range of her target, then cast it.
-    Cast { spell: SpellId, on: Option<UnitId> },
+    Cast {
+        spell: SpellId,
+        on: Option<UnitId>,
+    },
 }
 
 /// A click-walk (`walk.rs`): a capped path through seen ground, re-planned toward a goal that

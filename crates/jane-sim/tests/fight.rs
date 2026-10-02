@@ -12,7 +12,9 @@ use jane_core::angle::bearing;
 use jane_core::{Angle, Milli, Tick, Vec2};
 use jane_sim::event::{EventKind, SpellError};
 use jane_sim::state::WalkThen;
-use jane_sim::{Command, DevOp, Goto, Hit, InputFrame, PropId, Seat, Sim, StampedCommand, StepInput, TargetRef, UnitId};
+use jane_sim::{
+    Command, DevOp, Goto, Hit, InputFrame, PropId, Seat, Sim, StampedCommand, StepInput, TargetRef, UnitId,
+};
 
 /// A prop of `def` on a cell of the county, made at runtime (as `tests/assist.rs` makes them).
 fn put_prop(s: &mut Sim, def: &str, x: u16, y: u16) -> PropId {
@@ -317,14 +319,7 @@ fn a_stun_stops_a_cast_and_nothing_is_spent_but_plain_damage_does_not() {
     let mp = unit(&s, me(&s)).mp;
     press(&mut s, "fireball", at_unit(rat));
     let m = me(&s);
-    let blow = |status| Hit {
-        to: m,
-        amount: Milli(3000),
-        school: School::Physical,
-        from: None,
-        crit: false,
-        status,
-    };
+    let blow = |status| Hit { to: m, amount: Milli(3000), school: School::Physical, from: None, crit: false, status };
     let b = blow(None);
     s.queue_hit(Z, b);
     hold(&mut s, 2, at_unit(rat));
@@ -410,9 +405,7 @@ fn a_right_click_walks_her_there_round_a_wall() {
     let m = me(&s);
     edit(&mut s, m, |u| u.pos = Vec2::centre(36, 40));
     // Everything seen, so it may plan round the wall's top.
-    for w in s.state_mut().zone_mut(Z).unwrap().fog.iter_mut() {
-        *w = u32::MAX;
-    }
+    s.state_mut().zone_mut(Z).unwrap().fog.fill(u32::MAX);
     let to = Vec2::centre(46, 40);
     cmd(&mut s, Some(0), Command::Goto(Goto::Ground(to)));
     hold(&mut s, 900, InputFrame::IDLE);
@@ -427,9 +420,7 @@ fn a_click_walk_never_routes_through_the_unseen() {
     let geom_cells = 8;
     {
         let zs = s.state_mut().zone_mut(Z).unwrap();
-        for w in zs.fog.iter_mut() {
-            *w = 0;
-        }
+        zs.fog.fill(0);
     }
     // She has seen only the blocks round her, 8 cells each.
     hold(&mut s, 10, InputFrame::IDLE);
@@ -449,9 +440,7 @@ fn a_click_walk_never_routes_through_the_unseen() {
 #[test]
 fn a_click_walk_routes_round_a_crate_and_never_pushes_it() {
     let mut s = field();
-    for w in s.state_mut().zone_mut(Z).unwrap().fog.iter_mut() {
-        *w = u32::MAX;
-    }
+    s.state_mut().zone_mut(Z).unwrap().fog.fill(u32::MAX);
     let c = put_prop(&mut s, "crate", 14, 9);
     let cell = prop(&s, c).cell;
     cmd(&mut s, Some(0), Command::Goto(Goto::Ground(Vec2::centre(20, 10))));

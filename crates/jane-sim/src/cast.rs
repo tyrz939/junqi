@@ -308,13 +308,13 @@ fn release(cx: &mut Ctx<'_>, seat: Seat, frame: InputFrame) {
     let Some(u) = cx.zone.unit(body).filter(|u| u.alive) else { return };
     let def = cx.cat.combat.spell(pc.spell);
     if let Some(t) = pc.at {
-        let why = if !valid(cx.zone, u, t) {
-            Some(SpellError::NoTarget)
-        } else {
+        let why = if valid(cx.zone, u, t) {
             match reach_check(cx, u, def, t) {
                 Err(SpellError::TooFar) => Some(SpellError::TooFar),
                 _ => None,
             }
+        } else {
+            Some(SpellError::NoTarget)
         };
         if let Some(why) = why {
             stopped(cx, seat, body, pc.spell);
@@ -499,11 +499,7 @@ pub fn after_move(cx: &mut Ctx<'_>, seat: Seat) {
     let ok = valid(cx.zone, u, TargetRef::Unit(t)) && hostile(cx.zone, u, TargetRef::Unit(t));
     let reach = swing_reach(u);
     let in_reach = ok && reach.is_some_and(|r| cx.zone.unit(t).is_some_and(|o| metres_between(u, o) <= r));
-    let closing = cx.world.players[seat.index()]
-        .fight
-        .walk
-        .as_ref()
-        .is_some_and(|w| w.then == WalkThen::Attack(t));
+    let closing = cx.world.players[seat.index()].fight.walk.as_ref().is_some_and(|w| w.then == WalkThen::Attack(t));
     if !ok || (!in_reach && !closing) {
         cx.world.players[seat.index()].fight.auto = None;
         return;

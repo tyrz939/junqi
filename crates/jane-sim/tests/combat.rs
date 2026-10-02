@@ -12,8 +12,8 @@ mod field;
 use field::*;
 use jane_core::action::School;
 use jane_core::{Angle, Milli, Sfc32, Tick, Vec2, ZoneId};
-use jane_sim::input::{Goto, TargetRef};
 use jane_sim::event::{EventKind, SpellError, ToastKind};
+use jane_sim::input::{Goto, TargetRef};
 use jane_sim::state::{FlagKey, RestPoint, StatusInst};
 use jane_sim::units::{max_hp, max_mp};
 use jane_sim::{
