@@ -1068,7 +1068,9 @@ impl Present {
                             y: fy,
                             key: 0x4000_0000 | u32::from(slot) << 10 | i as u32,
                             sprite: sp,
-                            caster: Some(Caster {
+                            // A stand of reeds or long grass casts nothing, as the tufts painted
+                            // round it cast nothing (`shadow::RELIEF`): it is growth, not a thing.
+                            caster: (!fl.rustles).then(|| Caster {
                                 sprite: 0,
                                 foot: clamp16(fx, fy - i32::from(fl.lift)),
                                 height: r.top.max(1),
