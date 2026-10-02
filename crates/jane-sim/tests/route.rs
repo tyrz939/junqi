@@ -128,7 +128,10 @@ fn faults(bp: &Blueprint, solid: &[bool], roads: &Roads, r: &Route, what: &str) 
                 bad.push(format!("{what}: out of Castle the way heads {wind}, not {dir}"));
             }
             // "Take the road": there is one, a few steps out.
-            let on_foot = matches!(r.legs[..], [_, Leg::Off { metres: 0, .. }]);
+            let on_foot = matches!(
+                r.legs[..],
+                [_, Leg::Off { metres: 0, .. }] | [Leg::Out { road: false, .. }, Leg::InTown { .. }]
+            );
             let ahead = if *by_road { &p[i..=j] } else { &p[i..] };
             if !on_foot && !ahead.iter().any(|c| road(bp.tiles.read(c.0, c.1, jane_core::Tile::Void))) {
                 bad.push(format!("{what}: no road out of Castle at {at:?}"));

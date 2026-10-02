@@ -558,6 +558,11 @@ impl Route {
                     format!("After about {}, in Castle: {} of the square, about {}.", metres(*m), dir, metres(*off))
                 }
                 Leg::Out { dir, road: true, .. } => format!("From {from}, take the road {dir}."),
+                Leg::Out { dir, road: false, .. }
+                    if self.legs.len() == 2 && matches!(self.legs[1], Leg::InTown { .. }) =>
+                {
+                    format!("From {from}, go {dir} on foot.")
+                }
                 Leg::Out { dir, road: false, .. } => format!("From {from}, go {dir} on foot to the road."),
                 Leg::Post { dir, sign, metres: m, .. } => match sign {
                     Some(s) => format!("After about {}, at the fingerpost, go {dir}, the way it says {s}.", metres(*m)),
