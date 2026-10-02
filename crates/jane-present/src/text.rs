@@ -104,7 +104,38 @@ pub fn verb(v: Verb) -> &'static str {
         Verb::Talk => "Talk",
         Verb::PutDown => "Put down",
         Verb::Custom(t) => text(t),
+        Verb::MakeFire => "Hold to make a fire",
+        Verb::AddWood => "Rest  (hold: add wood)",
+        Verb::Rest => "Rest",
+        Verb::GatherWood => "Gather deadwood",
     }
+}
+
+/// Pell's notice, over every cold pit (PLAY-PLAN.md §2.2).
+const PIT_NOTICE: &str = "\"To be kept laid. Any passer-by may light it.\"";
+
+/// Where a fire stands, as the county says it: the named patch it is in, else the zone's name.
+fn fire_place(v: &View<'_>, zone: jane_core::ZoneId, at: jane_core::Cell, out: &mut String) {
+    let cat = jane_data::catalog();
+    let (x, y) = (i32::from(at.x), i32::from(at.y));
+    if v.zone() == zone {
+        let named = v.areas().filter(|(_, r)| r.contains(x, y)).find_map(|(s, _)| {
+            let n = v.name(s);
+            cat.county.areas.iter().find(|a| cat.name(a.id) == n).map(|a| text(a.name))
+        });
+        if let Some(n) = named {
+            // "at the Long Hedge", mid-sentence.
+            match n.strip_prefix("The ") {
+                Some(rest) => {
+                    out.push_str("the ");
+                    out.push_str(rest);
+                }
+                None => out.push_str(n),
+            }
+            return;
+        }
+    }
+    out.push_str(zone_name(zone, jane_data::Region::Lowfields));
 }
 
 /// Why a cast failed, as she says it; `None` for the quiet ones (GCD, cooldown, a plain miss).
@@ -289,6 +320,50 @@ pub fn toast(v: &View<'_>, kind: &ToastKind, out: &mut String) -> Tone {
         }
         ToastKind::WokeAtDoor => {
             out.push_str("I woke at the door I came in by");
+            Tone::Plain
+        }
+        ToastKind::FireWants(w) => {
+            use jane_sim::event::FireWant;
+            match w {
+                FireWant::Wood => {
+                    out.push_str(PIT_NOTICE);
+                    out.push_str(" Two sticks of deadwood, and a light.");
+                }
+                FireWant::Light => {
+                    out.push_str(PIT_NOTICE);
+                    out.push_str(" A match, a fire stone, or Fire.");
+                }
+                FireWant::Planks => out.push_str("Too good to burn. Repair wants those."),
+                FireWant::Fire => out.push_str("Old iron, cold for years. Only Fire will light this."),
+                FireWant::Wet => out.push_str("Too wet. It won't take in this."),
+            }
+            Tone::Refused
+        }
+        ToastKind::FireLit { by, zone, at } => {
+            if by == v.seat() {
+                out.push_str("The fire takes. It will keep your place.");
+            } else {
+                let coat = crate::ui::lan::coat_name(by.index());
+                let mut c = coat.chars();
+                if let Some(f) = c.next() {
+                    out.extend(f.to_uppercase());
+                    out.push_str(c.as_str());
+                }
+                out.push_str(" has lit the fire at ");
+                fire_place(v, zone, at, out);
+            }
+            Tone::Good
+        }
+        ToastKind::FireFed { hours } => {
+            let _ = write!(out, "It will burn {hours} hours yet");
+            Tone::Plain
+        }
+        ToastKind::FoundLies => {
+            out.push_str("What I found since the fire lies where I fell");
+            Tone::Refused
+        }
+        ToastKind::FoundHome => {
+            out.push_str("It has gone back to where I found it");
             Tone::Plain
         }
     }

@@ -91,6 +91,38 @@ pub enum ToastKind {
     WokeAtRest,
     /// She woke at the door she came in by (no rest point at all: a county without a fire).
     WokeAtDoor,
+    // --- fires (`fire.rs`) ----------------------------------------------------------------
+    /// A cold pit tried with something missing: the parish notice over it, and what is wanted.
+    FireWants(FireWant),
+    /// A made fire lit, by whom and where. Party-wide ("Teal has lit the fire at the Long Hedge").
+    FireLit {
+        by: Seat,
+        zone: ZoneId,
+        at: jane_core::Cell,
+    },
+    /// Fed: it burns this many whole game hours more (rounded down).
+    FireFed {
+        hours: u8,
+    },
+    /// Her finder fell before anyone rested: what she found since lies where she fell.
+    FoundLies,
+    /// Fallen again before she took it back: it has gone home to where it was found.
+    FoundHome,
+}
+
+/// What a cold pit wants before it will take (`ToastKind::FireWants`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FireWant {
+    /// Two deadwood.
+    Wood,
+    /// Planks, and no deadwood: "Too good to burn. Repair wants those."
+    Planks,
+    /// A match, a fire stone or Fire.
+    Light,
+    /// An old grate: only Fire lights it.
+    Fire,
+    /// Rain, and nothing over the pit: "Too wet. It won't take in this." Nothing is spent.
+    Wet,
 }
 
 /// What happened to a quest (`Quest` events, party-wide).
@@ -138,6 +170,8 @@ pub enum SfxKind {
     Push,
     PlateDown,
     PlateUp,
+    /// A match struck, a fire caught (`fire.rs`).
+    Kindle,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

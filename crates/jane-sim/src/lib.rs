@@ -49,6 +49,7 @@ mod combat_tests;
 pub mod ctx;
 pub mod dialogue;
 pub mod event;
+pub mod fire;
 pub mod flight;
 pub mod flush;
 pub mod fog;

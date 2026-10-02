@@ -35,7 +35,9 @@ pub enum Refill {
 /// Whether a prop comes back when emptied, and with what.
 pub fn refill_of(p: &Prop) -> Option<Refill> {
     let cat = jane_data::catalog();
-    if cat.story.prop(p.def).regrow && p.spawn.is_some() {
+    let def = cat.story.prop(p.def);
+    // Deadwood comes back on the same clock as the apples (`fire.rs`).
+    if (def.regrow || def.wood > 0) && p.spawn.is_some() {
         return Some(Refill::Spawn);
     }
     cat.living.tuning.regrow.restock.iter().find(|r| of_name(r.prop) == p.key).map(|r| Refill::Restock(r.loot))

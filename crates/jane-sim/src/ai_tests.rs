@@ -455,6 +455,7 @@ fn a_gathered_field_is_the_light_rule() {
             loot: LootState::AsSpawned,
             under_done: false,
             regrow: None,
+            burns_until: None,
             night: crate::state::NightState::AsSpawned,
         });
     };

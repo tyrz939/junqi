@@ -30,7 +30,8 @@ pub fn everyone_resting(cx: &mut Ctx<'_>) -> bool {
             let h = Here { world: cx.world, zone: cx.zone, rt: cx.rt, bp: cx.bp };
             near_rest(&h, at, &mut cx.scratch.props_b)
         } else {
-            cx.world.zone(pz).is_some_and(|zs| zs.unit(unit).is_some_and(|u| near_rest_scan(zs, u.pos)))
+            let fires = cx.world.fires_made;
+            cx.world.zone(pz).is_some_and(|zs| zs.unit(unit).is_some_and(|u| near_rest_scan(zs, u.pos, fires)))
         };
         if !ok {
             return false;
@@ -44,16 +45,35 @@ pub fn everyone_resting(cx: &mut Ctx<'_>) -> bool {
 /// resting: the step runs the night (`living::Sim::sleep_to`: the clock and the tick move
 /// together, and the skipped hours' weather, ecology, consequences and respawns happen). Without
 /// it no time passes (a fire).
+///
+/// Under `fires_made` (`fire.rs`) a fire mends over time instead: she is sat down and the step
+/// mends her while nothing gets her up. A bed (a rest prop with no light, or a rest that passes
+/// the clock) still mends at once, and clears what ails her. Any rest banks the party's finds.
 pub fn rest(cx: &mut Ctx<'_>, until: Option<u8>) {
     let Some(body) = cx.actor_unit() else { return };
     let now = cx.world.tick;
+    let fires = cx.world.fires_made;
+    let bed = until.is_some() || {
+        let at = cx.zone.unit(body).map_or(Vec2::ZERO, |u| u.pos);
+        let h = Here { world: cx.world, zone: cx.zone, rt: cx.rt, bp: cx.bp };
+        crate::interact::near_bed(&h, at, &mut cx.scratch.props_b)
+    };
     let Some(u) = cx.zone.unit_mut(body) else { return };
     crate::life::pay_regen(u, now);
-    crate::zone::heal_full(u);
+    if fires && !bed {
+        crate::fire::sit(u);
+    } else {
+        crate::zone::heal_full(u);
+        if fires {
+            u.statuses.clear();
+            u.seated = None;
+        }
+    }
     u.energy = ENERGY_MAX;
     u.energy_locked = false;
     let pos = u.pos;
     cx.world.rest = Some(RestPoint { zone: cx.zone.id, pos });
+    crate::fire::bank(cx.world);
     if let Some(h) = until {
         // The clock is everyone's. The night only passes when the whole party is resting.
         if everyone_resting(cx) {
@@ -84,6 +104,7 @@ pub fn grow(cx: &mut Ctx<'_>, stat: Stat, amount: i16, id: Sym) -> bool {
     *v = v.saturating_add_signed(amount);
     cx.wops.ops.push(WorldOp::Grow { stat, amount });
     cx.emit_all(EventKind::Toast(if stat == Stat::Strength { ToastKind::Stronger } else { ToastKind::WordsStay }));
+    crate::fire::found(cx, stat, amount, id);
     true
 }
 
@@ -163,6 +184,7 @@ pub fn place(cx: &mut Ctx<'_>, who: Option<UnitId>, def: PropDefId, item: ItemId
                 loot,
                 under_done: false,
                 regrow: None,
+                burns_until: None,
                 night: crate::state::NightState::AsSpawned,
             });
             let ix = (cx.zone.props.len() - 1) as PropIx;

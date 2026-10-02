@@ -144,6 +144,7 @@ pub fn revive_player(cx: &mut Ctx<'_>, seat: Seat) {
     crate::hooks::put_down_dead(cx, seat, body);
     let Some(u) = cx.zone.unit_mut(body) else { return };
     u.alive = true;
+    u.seated = None;
     u.hp = max_hp(u);
     u.mp = max_mp(u);
     u.energy = ENERGY_MAX;
@@ -155,6 +156,8 @@ pub fn revive_player(cx: &mut Ctx<'_>, seat: Seat) {
     // Lock-ins undo themselves and re-arm, so a death never leaves a gate shut in her face (the
     // triggers unit's).
     crate::hooks::reset_lock_ins(cx, seat, body);
+    // What she found since the last rest comes off, and lies where she fell (`fire.rs`).
+    crate::fire::unbank_on_death(cx, seat, dead_at);
     let rest = cx.world.rest;
     let here = cx.zone.id;
     let pos = match rest {

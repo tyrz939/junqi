@@ -65,6 +65,14 @@ pub enum Verb {
     PutDown,
     /// The prop row's own prompt ("Gather", "Pick up").
     Custom(TextId),
+    /// A cold pit: hold to lay deadwood and light it (`fire.rs`).
+    MakeFire,
+    /// Her lit fire, deadwood in her bag: hold to feed it; a tap rests.
+    AddWood,
+    /// A lit made fire: sit and mend.
+    Rest,
+    /// A stump, a woodpile, a log: deadwood.
+    GatherWood,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -198,6 +206,8 @@ fn interactable(h: &Here<'_>, def: &PropDef, p: &Prop) -> bool {
         || usable(def, s, p)
         // A stone, a barrel, a bale: nothing to open, but it moves. The prompt is how she learns that.
         || def.push
+        || crate::fire::is_pit(h.world, h.bp, def, p)
+        || crate::fire::is_wood(h.world, h.bp, def, p)
 }
 
 fn first_verb(h: &Here<'_>, def: &PropDef, p: &Prop, seat: Option<Seat>) -> Option<Verb> {
@@ -222,6 +232,12 @@ fn first_verb(h: &Here<'_>, def: &PropDef, p: &Prop, seat: Option<Seat>) -> Opti
     }
     if def.store {
         return Some(custom.unwrap_or(Verb::Open));
+    }
+    if crate::fire::is_pit(h.world, h.bp, def, p) {
+        return Some(crate::fire::verb(h.world, seat, p));
+    }
+    if crate::fire::is_wood(h.world, h.bp, def, p) {
+        return Some(Verb::GatherWood);
     }
     if s.is_some_and(|s| s.talk.is_some()) {
         return Some(custom.unwrap_or(Verb::Read));
@@ -400,6 +416,15 @@ fn use_prop(cx: &mut Ctx<'_>, seat: Seat, body: UnitId, ix: PropIx) {
         }
         return;
     }
+    let p = &cx.zone.props[ix as usize];
+    if crate::fire::is_pit(cx.world, bp, def, p) {
+        crate::fire::tap(cx, seat, body, ix);
+        return;
+    }
+    if crate::fire::is_wood(cx.world, bp, def, p) {
+        crate::fire::gather(cx, seat, ix);
+        return;
+    }
     if loot {
         open_loot(cx, seat, body, ix);
         return;
@@ -533,7 +558,13 @@ fn any_prop_near(
 
 /// A bed or a fire within reach of `at`: the game can only be saved there.
 pub fn near_rest(h: &Here<'_>, at: Vec2, props: &mut Vec<PropIx>) -> bool {
-    any_prop_near(h, at, 2 * USE_REACH_FX, props, |d, p| d.rest && !p.hidden)
+    let fires = h.world.fires_made;
+    any_prop_near(h, at, 2 * USE_REACH_FX, props, |d, p| crate::fire::rests(fires, d, p))
+}
+
+/// A bed within reach of `at`: a rest prop with no light (a fire has one). Mends at once.
+pub fn near_bed(h: &Here<'_>, at: Vec2, props: &mut Vec<PropIx>) -> bool {
+    any_prop_near(h, at, 2 * USE_REACH_FX, props, |d, p| d.rest && d.light.is_none() && !p.hidden)
 }
 
 /// A bench within reach: the bag window shows the craft row only then.
@@ -543,11 +574,11 @@ pub fn near_bench(h: &Here<'_>, at: Vec2, props: &mut Vec<PropIx>) -> bool {
 
 /// A bed or a fire near `at` in a zone whose runtime is not to hand: by a scan of its props (the
 /// rare question `Rest { until }` asks of a friend in another zone).
-pub fn near_rest_scan(zone: &ZoneState, at: Vec2) -> bool {
+pub fn near_rest_scan(zone: &ZoneState, at: Vec2, fires: bool) -> bool {
     let cat = jane_data::catalog();
     zone.props.iter().any(|p| {
         let def = cat.story.prop(p.def);
-        def.rest && !p.hidden && prop_distance_sq(def, p, at) <= sq(2 * USE_REACH_FX)
+        crate::fire::rests(fires, def, p) && prop_distance_sq(def, p, at) <= sq(2 * USE_REACH_FX)
     })
 }
 
@@ -654,6 +685,11 @@ pub fn hold_use(cx: &mut Ctx<'_>, body: UnitId, mx: i32, my: i32) -> bool {
         cx.zone.units[ix].hold = 0;
         return false;
     }
+    // A fire to make or feed has the hold first (`fire.rs`).
+    if let Some(busy) = crate::fire::hold(cx, body) {
+        return busy;
+    }
+    let u = &cx.zone.units[ix];
     let (pos, facing) = (u.pos, u.facing);
     let Some(pix) = pushable_ahead(cx, pos, facing) else {
         cx.zone.units[ix].hold = 0;

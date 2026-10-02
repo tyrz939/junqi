@@ -6,7 +6,8 @@
     "days": 3,
     "restock": {
       "pantry_chest": [{ "item": "small_water", "qty": 2 }, { "item": "grape", "qty": 2 }],
-      "fruit_bowl": [{ "item": "apple", "qty": 2 }]
+      "fruit_bowl": [{ "item": "apple", "qty": 2 }],
+      "kitchen_drawer": [{ "item": "match", "qty": 10 }]
     }
   }
 }

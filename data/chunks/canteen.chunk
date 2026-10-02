@@ -117,7 +117,7 @@ legend
 ^ tile HouseRoof
 & tile HouseWall
 C prop campfire canteen_fire {"talk": "fire"}
-c prop crate
+c prop crate - {"loot": [{"item": "match", "qty": 4}]}
 B prop barrel
 P prop town_park_bench
 L prop lamp_post

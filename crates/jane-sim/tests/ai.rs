@@ -44,6 +44,7 @@ fn put_prop(s: &mut Sim, def: &str, x: u16, y: u16, on: bool) -> PropId {
         loot: LootState::AsSpawned,
         under_done: false,
         regrow: None,
+        burns_until: None,
         night: jane_sim::state::NightState::AsSpawned,
     });
     s.rebuild_runtimes();
@@ -674,6 +675,7 @@ fn busy_county() -> (Sim, Vec<UnitId>, Vec<PropId>) {
                         loot: LootState::AsSpawned,
                         under_done: false,
                         regrow: None,
+                        burns_until: None,
                         night: jane_sim::state::NightState::AsSpawned,
                     });
                     extra.push(id);

@@ -100,6 +100,7 @@ pub fn new_unit(
         hold: 0,
         phase: 0,
         snake,
+        seated: None,
     };
     u.hp = max_hp(&u);
     u.mp = max_mp(&u);

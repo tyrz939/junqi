@@ -381,6 +381,22 @@ pub fn put(c: &mut County<'_>, def: jane_core::PropDefId, x: i32, y: i32) -> Opt
     put_with(c, def, x, y, |_| {})
 }
 
+/// Deadwood by a fire pit (PLAY-PLAN.md §2.2: "deadwood within 12 cells of every cold pit"): a
+/// stump of `def` at the first open cell in rings three to eight cells out from `(x, y)`, the
+/// ring's cells in a fixed order. No dice. `None` if every cell is taken (the L1 test says so).
+pub fn wood_by(c: &mut County<'_>, def: jane_core::PropDefId, x: i32, y: i32) -> Option<Key> {
+    for r in 3..=8 {
+        for i in -r..=r {
+            for (dx, dy) in [(i, -r), (r, i), (-i, r), (-r, -i)] {
+                if let Some(k) = put(c, def, x + dx, y + dy) {
+                    return Some(k);
+                }
+            }
+        }
+    }
+    None
+}
+
 /// A prop the place being stamped is known by ("the well", "the barn"), for a story to find by
 /// name. The first of a name wins.
 pub fn own(c: &mut County<'_>, name: &'static str, p: Option<Key>) -> Option<Key> {

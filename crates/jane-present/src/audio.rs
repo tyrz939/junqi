@@ -880,6 +880,7 @@ impl Soundtrack {
                         SimSfx::Push => SfxKind::Push,
                         SimSfx::PlateDown => SfxKind::PlateDown,
                         SimSfx::PlateUp => SfxKind::PlateUp,
+                        SimSfx::Kindle => SfxKind::HitFire,
                     };
                     bus.sfx(k, at(p), me);
                 }

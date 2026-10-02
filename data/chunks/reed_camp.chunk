@@ -115,7 +115,7 @@ claims
 legend
 : tile Dirt
 R prop campfire reed_fire {"talk": "fire"}
-C prop crate
+C prop crate - {"loot": [{"item": "match", "qty": 4}]}
 B prop barrel
 P prop town_park_bench
 L prop lamp_post

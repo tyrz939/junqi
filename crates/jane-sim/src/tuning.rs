@@ -259,3 +259,22 @@ pub const WATCH_Y_FX: i32 = 80 * FX_ONE;
 /// A unit shown again where something solid now stands comes back on the nearest free cell
 /// within this many.
 pub const PRESENCE_NUDGE_RADIUS: i32 = 6;
+
+// --- fires (PLAY-PLAN.md §2.2, `fire.rs`) ---------------------------------------------------
+
+/// Phase 2: made fires, a fire's rest over time, growth unbanked until a rest. New Game copies
+/// it into `GameState::fires_made`. Off until the bots can play it (PLAY-PLAN.md Phase 2).
+pub const FIRES_MADE: bool = false;
+/// Deadwood a fire is laid with.
+pub const FIRE_LAY: u16 = 2;
+/// A made fire burns four game hours, each more deadwood two more, never past twelve from now.
+pub const FIRE_BURNS: u32 = 4 * TICKS_PER_HOUR;
+pub const FIRE_MORE: u32 = 2 * TICKS_PER_HOUR;
+pub const FIRE_MOST: u32 = 12 * TICKS_PER_HOUR;
+/// Making a fire, or feeding one, is USE held this long: one second, and no dice.
+pub const FIRE_HOLD_TICKS: u8 = 60;
+/// A tent or a shed this near a made fire (cells, footprint to footprint) keeps the rain off it.
+pub const FIRE_SHELTER_CELLS: i32 = 3;
+/// Seated at a fire she is whole in thirty seconds: `max / REST_TICKS` a tick, the remainder
+/// carried (`state::Seated`).
+pub const REST_TICKS: u32 = 1800;

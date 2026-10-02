@@ -24,7 +24,7 @@ use jane_core::{Key, PropDefId, Rect, Sfc32, Tile};
 
 use super::country::defs::defs;
 use super::country::roads::{compass, distance_words};
-use super::country::{downhill, ellipse_within, in_box};
+use super::country::{downhill, ellipse_within, in_box, wood_by};
 use super::placements::PoiSpot;
 use super::{County, centre};
 use crate::steps::Step;
@@ -141,7 +141,7 @@ fn small_place(c: &mut County<'_>, rng: &mut Sfc32, p: &PoiSpot, name: Key) {
                 s.lay(x - 1, y + 4, 3, 1, Tile::Dirt);
             }
             s.lay(x - 6, y + 1, 5, 2, Tile::Garden);
-            s.put(d.p.campfire_cold, 5, 1);
+            s.pit(d.p.campfire_cold, d.p.stump, 5, 1);
             s.put(d.p.crate_, -2, 3);
             s.outskirt(9, Tile::Bush, 16);
         }
@@ -186,7 +186,7 @@ fn small_place(c: &mut County<'_>, rng: &mut Sfc32, p: &PoiSpot, name: Key) {
             // Somebody stopped here for a night. The ring of stones is cold and the cart never went on.
             s.pad(11, 9, Tile::Dirt);
             s.put(d.p.road_cart, 3, -2);
-            s.put(d.p.campfire_cold, 0, 0);
+            s.pit(d.p.campfire_cold, d.p.stump, 0, 0);
             s.put(d.p.crate_, -3, -1);
             s.put(d.p.barrel, -1, 3);
             s.outskirt(7, Tile::Bush, 14);
@@ -339,6 +339,16 @@ impl Small<'_, '_> {
         let (px, py) = (self.x + ox, self.y + oy);
         if self.rolled && self.c.k.fits(px, py, i32::from(row.w), i32::from(row.h), 0) {
             self.c.k.prop(None, def, px, py);
+        }
+    }
+
+    /// A cold fire pit at an offset, and a stump of deadwood near it (`wood_by`) if it went down.
+    fn pit(&mut self, pit: PropDefId, stump: PropDefId, ox: i32, oy: i32) {
+        let row = jane_data::catalog().story.prop(pit);
+        let (px, py) = (self.x + ox, self.y + oy);
+        if self.rolled && self.c.k.fits(px, py, i32::from(row.w), i32::from(row.h), 0) {
+            self.c.k.prop(None, pit, px, py);
+            wood_by(self.c, stump, px, py);
         }
     }
 
