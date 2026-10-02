@@ -304,10 +304,10 @@ The engine names four kinds: `Clear`, `Mist`, `Rain`, `Storm` (`ARCHITECTURE.md`
 | --- | --- | --- | --- | --- | --- |
 | Clear | Full | Dry | Burn | Out | As the hour says |
 | Mist | Half; lamp light reaches a third as far; the School's window shows only from high ground | Dry | Burn | Out, fewer lines about the lamps | Night creatures come up an hour early |
-| Rain | Two-thirds | Wet: the ramp climbs; unpaved tracks slow her by a tenth; fords deepen a cell | Open fires go out *as light* when wetness crosses their `douse`; still a rest point; relit at six | In. Knock lines only | Rats and rabbits in. Undead unmoved |
+| Rain | Two-thirds | Wet: the ramp climbs; unpaved tracks slow her by a tenth; fords deepen a cell | A kept fire goes out *as light* when wetness crosses its `douse`, and is still a rest point; relit at six. A made fire (PLAY-PLAN.md §2.2) goes out for good at the next ten-minute mark, unless a tent or a shed stands within three cells of it; its place still wakes her | In. Knock lines only | Rats and rabbits in. Undead unmoved |
 | Storm | Half; lightning shows the whole screen for a frame | Wet. A trunk down across one path per storm (pushable) | As rain | In, doors barred. The reedcutters off the water | Bats grounded. Electric lamps flicker |
 
-**Rule: weather never takes away a rest point, a key, a road or a quest target.** It costs time, light and company. A trunk across the footpath leaves the road open. No storm on the first walk; mist never hides a lit lamp inside its reach.
+**Rule: weather never takes away a *kept* rest point, a key, a road or a quest target.** It costs time, light and company. A fire she made is hers to lose to the rain (decision D6, 2026-10-02); the county's own fires (the hubs, the hearths, the dungeons' stoves, a fire a quest lit) are never put out, and every region keeps one inside its base threat (`crates/jane-world/tests/county_fires.rs`). A trunk across the footpath leaves the road open. No storm on the first walk; mist never hides a lit lamp inside its reach.
 
 ### 5.2 Weights by region and hour band
 
@@ -579,7 +579,7 @@ Shapes follow `ARCHITECTURE.md` §4.6; this table says what each row must hold f
 | §3 people | L5 claims | Every `tells` line names only things placed within a screen of the speaker or true everywhere |
 | §4 ecology | L6 ecology, havens | Counts at 06:00 and 21:00 match the rows within one; kill one and it stands again at the next ten-minute mark it is not watched; a held patch refills within ten game minutes of falling under its line; nothing leaked crosses a hub fence or the first walk |
 | §4.3 night | L6 presence | At 21:00 every night-only unit is up within a game hour; by 07:00 none remain; none hide or show in view |
-| §5 weather | L6 weather | Same kind for the same seed, day and hour on every replay; no storm on the first walk; mist never hides a lit lamp inside its reach; no kind removes a rest point, key, road or target |
+| §5 weather | L6 weather | Same kind for the same seed, day and hour on every replay; no storm on the first walk; mist never hides a lit lamp inside its reach; no kind removes a kept rest point, key, road or target |
 | §5.3 atmosphere | L1, L6 | Every layer's key resolves on every seed; no layer covers a hub fire; every quest landmark under a layer is visible from its road |
 | §6 consequence | L6 consequences | Every quest and tale branch has a row with at least one world edit; the edit is present after hand-in, after a save and load, and in a zone entered later |
 | §7 rumour | L5 knows, L6 rumours | No line assumes a fact the journal lacks at that tick on any trace; a rumour is offered only after its event and within a day |

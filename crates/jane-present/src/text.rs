@@ -105,7 +105,7 @@ pub fn verb(v: Verb) -> &'static str {
         Verb::PutDown => "Put down",
         Verb::Custom(t) => text(t),
         Verb::MakeFire => "Hold to make a fire",
-        Verb::AddWood => "Rest  (hold: add wood)",
+        Verb::AddWood => "Hold to add wood, or rest",
         Verb::Rest => "Rest",
         Verb::GatherWood => "Gather deadwood",
     }

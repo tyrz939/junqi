@@ -209,6 +209,14 @@ pub fn run(args: &[String]) -> Result<(), String> {
             }
         }
         Some("scene") => scene(args)?,
+        // PLAY-PLAN.md §2.2's frames: the pit cold, laid, flaring, lit at night, ash; the Halt card.
+        Some("fire-scenes") => {
+            let dir = out.join("p2-fires");
+            std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+            for f in crate::scene::fire_scenes(1, &dir)? {
+                println!("{f}");
+            }
+        }
         Some("audio") => crate::audio_cmd::sheet(&out)?,
         Some("terrain") => crate::sheet_terrain::terrain(args, &out, &font)?,
         Some("flora") => crate::sheet_terrain::flora(&out, &font)?,

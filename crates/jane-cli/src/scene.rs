@@ -826,6 +826,201 @@ impl Bench {
     }
 }
 
+/// `jane sheet fire-scenes` (PLAY-PLAN.md §2.2's frames): made fires on, on seed `seed`, through
+/// `soft`, written as PNGs into `out`: a cold pit; laying it (the laid frame, USE held); the
+/// flare as it takes; the made fire lit at night with the Night Shift at its edge; the ash; and
+/// the Halt trunk's card. The world is driven by hand (the console's verbs, her bag filled), not
+/// by a model. Each written file's name.
+pub fn fire_scenes(seed: u32, out: &std::path::Path) -> Result<Vec<String>, String> {
+    use jane_core::ZoneId;
+    let canvas = (768, 432);
+    let bps = Blueprints::build(seed).map_err(|e| format!("seed {seed}: {e}"))?;
+    let mut sim = Sim::new_game_with(bps, "Jane");
+    let mut present = Present::new(Tier::T0);
+    present.set_canvas(canvas);
+    let mut b = backend(Which::Soft, GlOpts::default())?;
+    b.upload_atlas(present.atlas());
+    let mut hud = Hud::new(&present);
+    let seat = Seat(0);
+    let mut seq = 0u16;
+    let mut step = |sim: &mut Sim, present: &mut Present, hud: &mut Hud, frame: InputFrame, cmd: Option<Command>| {
+        seq = seq.wrapping_add(1);
+        let cmds: Vec<StampedCommand> =
+            cmd.into_iter().map(|cmd| StampedCommand { seat: Some(seat), seq, cmd }).collect();
+        let mut frames = [InputFrame::IDLE; 4];
+        frames[0] = frame;
+        sim.step(&StepInput { frames, commands: &cmds });
+        let events = sim.drain_events().to_vec();
+        if let Some(v) = sim.view(seat) {
+            present.tick(&v, &events);
+            hud.bufs.tick(&v, &events);
+        }
+    };
+    let idle = InputFrame::IDLE;
+    let mut written = Vec::new();
+    let mut shoot = |present: &mut Present, hud: &mut Hud, name: &str| -> Result<(), String> {
+        present.draw(255, canvas);
+        hud.draw(present, canvas);
+        b.draw(present.frame());
+        let mut px = Vec::new();
+        let (w, h) = b.read_back(&mut px);
+        let shot = Shot { w, h, px, line: String::new(), layers: None };
+        let path = out.join(format!("{name}.png"));
+        std::fs::write(&path, shot.png()).map_err(|e| format!("{}: {e}", path.display()))?;
+        written.push(path.display().to_string());
+        // And the fire close to, at 3x (ART.md §3.1's close look): the middle of the frame.
+        let (cw, ch) = (176, 112);
+        let close = shot.crop(((w - cw) / 2, (h - ch) / 2, cw, ch), 3);
+        let path = out.join(format!("{name}-3x.png"));
+        std::fs::write(&path, close.png()).map_err(|e| format!("{}: {e}", path.display()))?;
+        written.push(path.display().to_string());
+        Ok(())
+    };
+    step(&mut sim, &mut present, &mut hud, idle, Some(Command::Dev(DevOp::Fires(true))));
+    step(&mut sim, &mut present, &mut hud, idle, Some(Command::Dev(DevOp::God(true))));
+
+    let start = mark_in(&sim, ZoneId::County, None)?;
+    let stand_at = |sim: &mut Sim, x: i32, y: i32| {
+        let at = jane_core::Vec2::centre(x, y);
+        sim.state_mut().players[0].travel =
+            Some(jane_sim::state::TravelRequest { zone: ZoneId::County, mark: start, at: Some(at) });
+    };
+    let home = sim.view(seat).map_or((0, 0), |v| v.body().pos.cell());
+
+    // A cold pit near where she starts, with a free cell east, west or south of it to stand on.
+    let cat = jane_data::catalog();
+    let pit_def = cat.story.prop_id("campfire_cold").ok_or("no fire pit row")?;
+    let mut pits: Vec<(jane_sim::PropId, jane_core::Cell)> = sim
+        .state()
+        .zone(ZoneId::County)
+        .map(|z| z.props.iter().filter(|p| p.def == pit_def && !p.hidden).map(|p| (p.id, p.cell)).collect())
+        .unwrap_or_default();
+    let far = |c: &jane_core::Cell| {
+        let (dx, dy) = (i32::from(c.x) - home.0, i32::from(c.y) - home.1);
+        dx * dx + dy * dy
+    };
+    pits.sort_by_key(|(id, c)| (far(c), *id));
+    let mut found = None;
+    'pits: for (id, c) in pits {
+        let (x, y) = (i32::from(c.x), i32::from(c.y));
+        // Out in the open: no walls round it (a ruin's hearth is a picture of a ruin).
+        let walled = sim.runtime(ZoneId::County).map_or(0, |rt| {
+            (-5..=6).flat_map(|j| (-5..=6).map(move |i| (x + i, y + j))).filter(|&(i, j)| rt.grid.solid(i, j)).count()
+        });
+        if walled > 10 {
+            continue;
+        }
+        for (sx, sy, face) in [
+            (x + 2, y + 1, jane_core::Angle::WEST),
+            (x - 1, y + 1, jane_core::Angle::EAST),
+            (x, y + 2, jane_core::Angle::NORTH),
+        ] {
+            if sim.runtime(ZoneId::County).is_some_and(|rt| rt.grid.solid(sx, sy)) {
+                continue;
+            }
+            stand_at(&mut sim, sx, sy);
+            step(&mut sim, &mut present, &mut hud, idle, None);
+            step(&mut sim, &mut present, &mut hud, InputFrame { mv_dir: face, mv_mag: 20, ..idle }, None);
+            let on_it = sim
+                .view(seat)
+                .and_then(|v| v.focus())
+                .is_some_and(|f| f.target == jane_sim::interact::FocusRef::Prop(id));
+            if on_it {
+                found = Some(id);
+                break 'pits;
+            }
+        }
+    }
+    let pit = found.ok_or("no pit to stand at")?;
+    step(&mut sim, &mut present, &mut hud, idle, Some(Command::Dev(DevOp::Time { hour: 17 })));
+    for _ in 0..90 {
+        step(&mut sim, &mut present, &mut hud, idle, None);
+    }
+    shoot(&mut present, &mut hud, "pit-cold")?;
+    for (item, n) in [("deadwood", 4), ("match", 3)] {
+        let item = cat.combat.item_id(item).ok_or("no such item")?;
+        step(&mut sim, &mut present, &mut hud, idle, Some(Command::Dev(DevOp::Give { item, qty: n })));
+    }
+    let held = InputFrame { use_held: true, ..idle };
+    for _ in 0..40 {
+        step(&mut sim, &mut present, &mut hud, held, None);
+    }
+    shoot(&mut present, &mut hud, "pit-laying")?;
+    for _ in 0..21 {
+        step(&mut sim, &mut present, &mut hud, held, None);
+    }
+    for _ in 0..6 {
+        step(&mut sim, &mut present, &mut hud, idle, None);
+    }
+    shoot(&mut present, &mut hud, "pit-flare")?;
+
+    // Night: the made fire burning, and the Night Shift kept at the edge of its light.
+    step(&mut sim, &mut present, &mut hud, idle, Some(Command::Dev(DevOp::Time { hour: 23 })));
+    if let Some(shade) = cat.combat.unit_id("night_skeleton") {
+        for _ in 0..3 {
+            step(&mut sim, &mut present, &mut hud, idle, Some(Command::Dev(DevOp::Spawn(shade))));
+        }
+        // Out in the dark round the fire, each its own way off: they come in to the edge of its
+        // light and wait there (`shunsLight`).
+        let me = sim.view(seat).map_or(jane_core::Vec2::ZERO, |v| v.body().pos);
+        let cell = jane_core::num::CELL_FX;
+        if let Some(z) = sim.state_mut().zone_mut(ZoneId::County) {
+            let shades: Vec<_> = z.units.iter().filter(|u| u.def == shade).map(|u| u.id).collect();
+            for (id, (dx, dy)) in shades.into_iter().zip([(12, -2), (-11, 3), (2, 11)]) {
+                if let Some(u) = z.unit_mut(id) {
+                    u.pos = jane_core::Vec2::new(jane_core::Fx(me.x.0 + dx * cell), jane_core::Fx(me.y.0 + dy * cell));
+                    u.home = u.pos;
+                }
+            }
+        }
+        sim.rebuild_runtimes();
+    }
+    for _ in 0..240 {
+        step(&mut sim, &mut present, &mut hud, idle, None);
+    }
+    shoot(&mut present, &mut hud, "pit-lit-night")?;
+
+    // Burnt down: ash, by morning light.
+    step(&mut sim, &mut present, &mut hud, idle, Some(Command::Dev(DevOp::Kill)));
+    let until = sim
+        .state()
+        .zone(ZoneId::County)
+        .and_then(|z| z.props.iter().find(|p| p.id == pit))
+        .and_then(|p| p.burns_until)
+        .ok_or("the pit did not light")?;
+    sim.state_mut().tick = jane_core::Tick(until.0.saturating_sub(1));
+    for _ in 0..1300 {
+        step(&mut sim, &mut present, &mut hud, idle, None);
+    }
+    step(&mut sim, &mut present, &mut hud, idle, Some(Command::Dev(DevOp::Time { hour: 9 })));
+    for _ in 0..60 {
+        step(&mut sim, &mut present, &mut hud, idle, None);
+    }
+    shoot(&mut present, &mut hud, "pit-ash")?;
+
+    // The Halt trunk, by the fire she steps off the train beside: its card, at five.
+    let trunk = sim.state().zone(ZoneId::County).and_then(|z| {
+        let key = sim.state().syms.find("halt_trunk")?;
+        z.props.iter().find(|p| p.key == key).map(|p| p.cell)
+    });
+    if let Some(c) = trunk {
+        step(&mut sim, &mut present, &mut hud, idle, Some(Command::Dev(DevOp::Time { hour: 17 })));
+        stand_at(&mut sim, i32::from(c.x), i32::from(c.y) + 2);
+        step(&mut sim, &mut present, &mut hud, idle, None);
+        let north = InputFrame { mv_dir: jane_core::Angle::NORTH, mv_mag: 20, ..idle };
+        step(&mut sim, &mut present, &mut hud, north, None);
+        for _ in 0..240 {
+            step(&mut sim, &mut present, &mut hud, idle, None);
+        }
+        step(&mut sim, &mut present, &mut hud, idle, Some(Command::Use));
+        for _ in 0..20 {
+            step(&mut sim, &mut present, &mut hud, idle, None);
+        }
+        shoot(&mut present, &mut hud, "halt-trunk-note")?;
+    }
+    Ok(written)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

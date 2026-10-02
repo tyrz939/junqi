@@ -81,11 +81,44 @@ fn play(seed: u32, ending: Ending) -> Run {
 
 /// [`play`] with another model.
 fn play_as(model: Model, seed: u32, ending: Ending) -> Run {
+    play_with(model, seed, ending, false)
+}
+
+/// [`play_as`]; `fires_bare`: with made fires on (`jane_sim::fire`, PLAY-PLAN.md §2.2) and every
+/// match she holds thrown out each time a spine quest is done (L3: the kept fires carry her).
+fn play_with(model: Model, seed: u32, ending: Ending, fires_bare: bool) -> Run {
     let b = bps(seed);
     let mut rec = Recorder::new(Sim::new_game_with(b.clone(), "Jane"));
     let mut bot = Bot::story(model);
     bot.ctx.ending = Some(ending);
-    let frames = bot.play(&mut rec, STORY_FRAMES);
+    let frames = if fires_bare {
+        bot.setup.push(jane_sim::Command::Dev(jane_sim::DevOp::Fires(true)));
+        let cat = jane_data::catalog();
+        let spine: Vec<_> = SPINE.iter().filter_map(|q| cat.story.quest_id(q)).collect();
+        let m = cat.combat.item_id("match").expect("matches");
+        let mut chapters = usize::MAX;
+        let mut n = 0;
+        while n < STORY_FRAMES && !bot.done() {
+            bot.step(&mut rec);
+            n += 1;
+            if n % 60 != 0 || !bot.setup.is_empty() {
+                continue;
+            }
+            let Some(v) = rec.view(Seat(0)) else { continue };
+            let done = spine.iter().filter(|q| v.quests_done().contains(q)).count();
+            if done != chapters {
+                chapters = done;
+                for (slot, s) in v.me().bag.iter().enumerate() {
+                    if s.is_some_and(|s| s.item == m) {
+                        bot.setup.push(jane_sim::Command::BagDestroy { slot: slot as u8 });
+                    }
+                }
+            }
+        }
+        n
+    } else {
+        bot.play(&mut rec, STORY_FRAMES)
+    };
     let (sim, tape) = rec.finish();
     let v = sim.view(Seat(0)).expect("seat 0");
     let cat = jane_data::catalog();
@@ -167,6 +200,21 @@ fn the_reader_reaches_an_ending_on_seeds_1_to_8() {
 "
         )
     );
+}
+
+/// PLAY-PLAN.md §2.2's L3 proof for made fires: with them on and every match she holds thrown out
+/// at the start of each chapter (each spine quest done), the Reader still finishes on seeds 1 to
+/// 8: the kept fires carry her, and what she lights on the way is extra. `FIRES_MADE` is flipped
+/// on only while this holds.
+#[test]
+#[ignore = "slow: a whole story on eight seeds with made fires, a minute or more each in release"]
+fn the_reader_reaches_an_ending_with_made_fires_and_no_matches_kept() {
+    let runs: Vec<Run> = std::thread::scope(|sc| {
+        let hs: Vec<_> = (1..=8).map(|s| sc.spawn(move || play_with(Model::Reader, s, ending_for(s), true))).collect();
+        hs.into_iter().map(|h| h.join().expect("a story run")).collect()
+    });
+    let problems = problems(&runs);
+    assert!(problems.is_empty(), "{}", problems.join("\n"));
 }
 
 /// The two other stalls the overnight audit found (PLAY-PLAN.md 0.2): the Cautious on seed 6 (the
