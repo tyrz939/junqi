@@ -337,7 +337,13 @@ pub struct Bot {
     /// The tick she last rested (`EventKind::Rested` by her seat): with made fires she does not
     /// sit down again within [`REST_COOL`] of getting up.
     rested: Option<u32>,
+    /// Things put in the cupboard she stands at, this visit: no more than a bagful, so a full
+    /// cupboard is not pressed every frame.
+    stowed: u8,
 }
+
+/// Free bag slots she makes at a cupboard.
+const STOW_FREE: usize = 4;
 
 /// One death, recorded (for telling the bot's mistakes from the world's hardness).
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -392,6 +398,7 @@ impl Bot {
             log: Vec::new(),
             deaths: Vec::new(),
             rested: None,
+            stowed: 0,
             last_hurt: None,
             recent: std::collections::VecDeque::new(),
             setup: Vec::new(),
@@ -577,6 +584,23 @@ impl Bot {
         if v.dialogue().is_none() {
             if let Some(slot) = sense::junk_slot(v) {
                 return Act::press(Command::BagDestroy { slot });
+            }
+            // At a cupboard with a bag nearly full of what destroy refuses: some of it put down,
+            // so an apple or a quest's thing has room (a spare potion only when the bag is tight).
+            match sense::cupboard_in_reach(v) {
+                Some(prop) if usize::from(self.stowed) < jane_sim::tuning::BAG_SLOTS => {
+                    let bag = &v.me().bag[..jane_sim::tuning::BAG_SLOTS];
+                    let tight = bag.iter().filter(|s| s.is_none()).count() < sense::BAG_SPARE;
+                    let usable = |slot: u8| {
+                        bag[usize::from(slot)].is_some_and(|s| jane_data::catalog().combat.item(s.item).usable)
+                    };
+                    if let Some(slot) = sense::stow_slot(v, STOW_FREE).filter(|&s| tight || !usable(s)) {
+                        self.stowed += 1;
+                        return Act::press(Command::StorePut { prop, bag: slot, to: None });
+                    }
+                }
+                Some(_) => {}
+                None => self.stowed = 0,
             }
             // Seated at a fire (`jane_sim::fire`): she sits until she is whole. Anything that
             // comes for her gets her up (the sim's rule), and then the plan has her again.

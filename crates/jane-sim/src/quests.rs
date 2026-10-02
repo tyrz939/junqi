@@ -246,6 +246,7 @@ fn take_from_party(cx: &mut Ctx<'_>, item: ItemId, qty: u16) -> u16 {
         }
         let got = crate::bag::bag_remove(&mut p.bag[..], item, left);
         if got > 0 {
+            crate::bag::ring_settle(&mut p.bag[..]);
             left -= got;
             cx.events.push(Event { to: Some(crate::ids::Seat(i as u8)), in_zone: None, kind: EventKind::Bag });
         }

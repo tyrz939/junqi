@@ -8,6 +8,12 @@ use jane_core::{Angle, Fx, Milli, Permille, Tick};
 /// Up to four seats share a world (PLATFORM.md).
 pub const MAX_PLAYERS: usize = 4;
 pub const BAG_SLOTS: usize = 24;
+/// Her key ring, past the bag's slots (`bag.rs`): a key that finds the bag full goes on it, so a
+/// full bag never leaves a key in its chest (seed 6's Burial: the snake key stayed in the chest
+/// behind a bag of things nothing gives twice). It empties into the bag as room comes.
+pub const RING_SLOTS: usize = 8;
+/// The bag and the ring as one row of slots: the bag's first, the ring's after.
+pub const HELD_SLOTS: usize = BAG_SLOTS + RING_SLOTS;
 pub const BAR_SLOTS: usize = 8;
 pub const CRAFT_INPUTS: usize = 3;
 /// A cupboard's slots (`store.rs`): a whole bag goes into one.

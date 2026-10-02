@@ -6,6 +6,8 @@
 
 use jane_core::{ItemId, Stack};
 
+use crate::tuning::BAG_SLOTS;
+
 fn max_stack(item: ItemId) -> u16 {
     jane_data::catalog().combat.item(item).max_stack.max(1)
 }
@@ -36,6 +38,39 @@ pub fn bag_add(bag: &mut [Option<Stack>], item: ItemId, qty: u16) -> u16 {
         }
     }
     left
+}
+
+/// Into her bag and ring (`PlayerState::bag`): what fits in the bag goes there; a key that does
+/// not fit goes on the ring. Returns how many did not fit.
+pub fn held_add(held: &mut [Option<Stack>], item: ItemId, qty: u16) -> u16 {
+    let split = BAG_SLOTS.min(held.len());
+    let left = bag_add(&mut held[..split], item, qty);
+    if left > 0 && is_key(item) { bag_add(&mut held[split..], item, left) } else { left }
+}
+
+/// Would `qty` of `item` fit in her bag, or a key on her ring?
+pub fn held_has_room(held: &[Option<Stack>], item: ItemId, qty: u16) -> bool {
+    let split = BAG_SLOTS.min(held.len());
+    bag_has_room(&held[..split], item, qty) || (is_key(item) && bag_has_room(&held[split..], item, qty))
+}
+
+/// What is on the ring comes into the bag's free slots. True if anything moved.
+pub fn ring_settle(held: &mut [Option<Stack>]) -> bool {
+    let split = BAG_SLOTS.min(held.len());
+    let mut moved = false;
+    for r in split..held.len() {
+        let Some(s) = held[r] else { continue };
+        let Some(to) = held[..split].iter().position(Option::is_none) else { break };
+        held[to] = Some(s);
+        held[r] = None;
+        moved = true;
+    }
+    moved
+}
+
+/// A key: anything that opens a lock.
+fn is_key(item: ItemId) -> bool {
+    jane_data::catalog().combat.item(item).opens.is_some()
 }
 
 /// How many of `item` the bag holds.
@@ -140,5 +175,26 @@ mod tests {
         assert_eq!(bag[3].unwrap().qty, max - 4 + 2);
         assert!(bag_has_room(&bag, apple, max));
         assert!(!bag_move(&mut bag, 2, 0), "an empty slot moves nothing");
+    }
+
+    #[test]
+    fn a_full_bag_takes_a_key_on_the_ring_and_lets_it_in_as_room_comes() {
+        let cat = jane_data::catalog();
+        let rock = cat.combat.item_id("rock").unwrap();
+        let key = cat.combat.item_id("key_forest").unwrap();
+        let max = cat.combat.item(rock).max_stack;
+        let mut held = [None; crate::tuning::HELD_SLOTS];
+        for _ in 0..BAG_SLOTS {
+            held_add(&mut held, rock, max);
+        }
+        assert_eq!(held_add(&mut held, rock, 1), 1, "the ring holds keys alone");
+        assert!(held_has_room(&held, key, 1));
+        assert_eq!(held_add(&mut held, key, 1), 0, "a full bag never leaves a key behind");
+        assert_eq!(held[BAG_SLOTS].unwrap().item, key);
+        assert!(!ring_settle(&mut held), "no room yet");
+        bag_remove(&mut held, rock, max);
+        assert!(ring_settle(&mut held));
+        assert_eq!(held[BAG_SLOTS - 1].unwrap().item, key, "into the slot the rocks left");
+        assert_eq!(held[BAG_SLOTS], None);
     }
 }

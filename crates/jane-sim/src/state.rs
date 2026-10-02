@@ -22,7 +22,7 @@ use serde::{Deserialize, Serialize};
 use crate::codec;
 use crate::ids::{ClientToken, Counters, DropId, GroundId, ProjId, PropId, Seat, UnitId};
 use crate::sym::SymTable;
-use crate::tuning::{BAG_SLOTS, BAR_SLOTS, CRAFT_INPUTS, STORE_SLOTS};
+use crate::tuning::{BAR_SLOTS, CRAFT_INPUTS, HELD_SLOTS, STORE_SLOTS};
 
 /// The save and hash schema's version. Bumped by any change to a type in this module.
 ///
@@ -40,7 +40,8 @@ use crate::tuning::{BAG_SLOTS, BAR_SLOTS, CRAFT_INPUTS, STORE_SLOTS};
 /// 11: side quests set aside keep their kills (`Quests::set_aside`, `quests::abandon`).
 /// 13: made fires, rest by a fire over time, growth unbanked until a rest (`GameState::fires_made`,
 /// `Prop::burns_until`, `Unit::seated`, `Growth::unbanked`, `fire.rs`). (12 is another branch's.)
-pub const SAVE_VERSION: u16 = 13;
+/// 14: the key ring past the bag's slots (`PlayerState::bag`, `tuning::RING_SLOTS`).
+pub const SAVE_VERSION: u16 = 14;
 
 /// A fixed-size bit set (trigger bits, consequences done).
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -450,8 +451,9 @@ pub struct PlayerState {
     pub last_mark: Sym,
     /// When a dead seat stands back up. The revive itself is the combat unit's.
     pub respawn_at: Option<Tick>,
-    /// Bags are hers, off the body (`bag.rs`, `inventory.rs`; the start kit goes in here).
-    pub bag: Box<[Option<Stack>; BAG_SLOTS]>,
+    /// Bags are hers, off the body (`bag.rs`, `inventory.rs`; the start kit goes in here): the
+    /// bag's `tuning::BAG_SLOTS`, then the key ring's (`tuning::RING_SLOTS`).
+    pub bag: Box<[Option<Stack>; HELD_SLOTS]>,
     #[serde(with = "codec::bar")]
     pub bar: [Option<BarSlot>; BAR_SLOTS],
     /// Her craft row (`inventory.rs`).

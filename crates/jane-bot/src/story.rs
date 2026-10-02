@@ -60,6 +60,8 @@ pub enum Goal {
     Gather,
     /// Home before dark: the night slept away in Julie's bed.
     Sleep,
+    /// Home to Julie's cupboard with a bag nearly full of what destroy refuses (`sense::stow_slot`).
+    Stow,
     /// Ready for an act: a potion brewed at Julie's bench, or food picked up, before the dungeon.
     Provision(ItemId),
     /// In a dungeon with the quest's thing out of reach: what the crawl would do next.
@@ -901,6 +903,19 @@ impl Story {
             }
             return Some((bed(v, cx), Goal::Sleep));
         }
+        // A bag nearly full of what she may not throw out: some of it into Julie's cupboard
+        // before anything else, or nothing more goes in (seed 6 provisioned apples it had no room
+        // for till the run ran out).
+        let jammed = sense::stow_slot(v, sense::BAG_SPARE).is_some();
+        if jammed && matches!(v.zone(), ZoneId::County | ZoneId::House) && has_home(v) && self.open(v, Goal::Stow) {
+            if v.zone() == ZoneId::House {
+                if let Some(p) = sense::cupboard(v) {
+                    return Some((Target::Task(Task::Use(UseProp::new(p))), Goal::Stow));
+                }
+            } else {
+                return Some((Target::Zone(ZoneId::House), Goal::Stow));
+            }
+        }
         let here = v.zone();
         let at = v.body().pos;
         // Candidates with a cost: (distance-ish, goal, target). Nearest first; ties by goal.
@@ -1037,7 +1052,8 @@ impl Story {
         // 1 and 2: the log. The nearest objective of any quest; one that someone is waiting
         // on (it goes back to a person, or to a place) counted at half its distance before
         // an errand for a book or a board.
-        let bag_tight = v.me().bag.iter().filter(|s| s.is_none()).count() < sense::BAG_SPARE;
+        let bag_tight =
+            v.me().bag[..jane_sim::tuning::BAG_SLOTS].iter().filter(|s| s.is_none()).count() < sense::BAG_SPARE;
         for q in v.quests() {
             let waited = someone_waits(q.quest);
             // Told how to end it, she goes and does it: Yours to Say before any errand.
@@ -1424,6 +1440,7 @@ fn goal_name(v: &View<'_>, g: Goal) -> String {
         Goal::Rest => "rest at a fire or a bed".into(),
         Goal::Gather => "gather deadwood".into(),
         Goal::Sleep => "home to sleep".into(),
+        Goal::Stow => "home to the cupboard".into(),
         Goal::Provision(i) => format!("provision {}", cat.combat.item(i).id),
         Goal::Explore(t) => format!("explore: {t:?}"),
         Goal::Search(q, i) => format!("look for {}", search_name((q, i))),

@@ -967,7 +967,7 @@ impl ViewBuffers {
         // The window.
         let w = &mut self.window;
         w.bag.resize(BAG_SLOTS, SlotData::default());
-        for (i, st) in me.bag.iter().enumerate() {
+        for (i, st) in me.bag.iter().take(BAG_SLOTS).enumerate() {
             w.bag[i] = st.map_or(SlotData::default(), |st| stack(st.item, st.qty));
         }
         for (i, st) in me.craft.iter().enumerate() {

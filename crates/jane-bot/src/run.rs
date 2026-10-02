@@ -152,6 +152,7 @@ fn decision(v: &View<'_>, g: Option<Goal>) -> Kind {
         Some(Goal::Rest) => ("rest".to_owned(), None, None, String::new()),
         Some(Goal::Gather) => ("gather".to_owned(), None, None, String::new()),
         Some(Goal::Sleep) => ("sleep".to_owned(), None, None, String::new()),
+        Some(Goal::Stow) => ("stow".to_owned(), None, None, String::new()),
         Some(Goal::Talk(..)) => ("talk".to_owned(), None, None, String::new()),
         Some(Goal::Look(..)) => ("look".to_owned(), None, None, String::new()),
         Some(Goal::Provision(i)) => (format!("provision {}", cat.combat.item(i).id), None, None, String::new()),

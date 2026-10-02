@@ -1020,7 +1020,7 @@ fn never_loses_a_reward_when_the_bag_is_full() {
     for _ in 0..40 {
         cmd(&mut s, Command::Dev(DevOp::Give { item: item("wood"), qty: 16 }));
     }
-    assert!(s.state().players[0].bag.iter().all(Option::is_some));
+    assert!(s.state().players[0].bag[..jane_sim::tuning::BAG_SLOTS].iter().all(Option::is_some));
     let drops = s.state().zone(ZoneId::County).unwrap().drops.len();
     let q = cat.story.quest_id("defeat_skeleton").unwrap();
     cmd(&mut s, Command::Dev(DevOp::Quest(q)));
