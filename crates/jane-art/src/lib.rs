@@ -12,6 +12,7 @@ pub mod canvas;
 pub mod chrome;
 pub mod creature;
 pub mod demo;
+pub mod far;
 pub mod flora;
 pub mod font;
 pub mod fx;
