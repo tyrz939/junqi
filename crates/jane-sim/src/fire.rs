@@ -379,24 +379,40 @@ pub fn step_seated(cx: &mut Ctx<'_>) {
 }
 
 /// Is anything hostile after her, or near enough to see her and come? Its target is her, or she
-/// stands inside its aggro reach of her (`ai::aggro_reach`, the dark counted) in its sight.
+/// stands inside its aggro reach of her (`ai::aggro_reach`, the dark counted) in its sight. As the
+/// AI itself notices her (`ai::nearest_enemy`): asleep, going home, a thing that will not step
+/// into the warm light she sits in, or one that sees only the lit while she is in the dark, cannot
+/// come for her, and does not get her up.
 pub fn threatened(cx: &mut Ctx<'_>, body: UnitId) -> bool {
     let Some(her) = cx.zone.unit(body) else { return false };
     let (pos, her_sum) = (her.pos, u32::from(her.strength) + u32::from(her.spirit));
+    let clock = cx.world.clock;
+    let warm = crate::light::lit_at(cx.zone, cx.rt, clock, pos, true);
+    let lit = warm || crate::light::lit_at(cx.zone, cx.rt, clock, pos, false);
     let mut near = std::mem::take(&mut cx.scratch.near);
     let reach = i64::from(crate::tuning::AGGRO_MAX_FX) * 2;
     crate::combat::query_near(cx.rt, pos, reach, &mut near);
     let mut found = false;
     for &oid in &near {
         let Some(o) = cx.zone.unit(oid) else { continue };
-        if oid == body || !o.alive || o.hidden || o.faction == Faction::Friendly || o.controller == Controller::Npc {
+        if oid == body
+            || !o.alive
+            || o.hidden
+            || !o.awake
+            || o.faction == Faction::Friendly
+            || o.controller == Controller::Npc
+            || o.combat == crate::state::CombatState::Leash
+        {
+            continue;
+        }
+        let def = crate::units::def_of(o);
+        if (def.shuns_light && warm) || (def.sight == jane_data::UnitSight::Lit && !lit) {
             continue;
         }
         if o.target == Some(body) {
             found = true;
             break;
         }
-        let def = crate::units::def_of(o);
         let dark = crate::ai::night_reach(cx, oid, def);
         let Some(o) = cx.zone.unit(oid) else { continue };
         let Some(h) = cx.zone.unit(body) else { continue };

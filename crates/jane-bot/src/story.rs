@@ -594,6 +594,11 @@ impl Story {
                 match task.tick(v, cx) {
                     Status::Act(a) => return a,
                     Status::Done => {
+                        // Sat by a fire (`jane_sim::fire`): not again at once if something gets
+                        // her up; the fight, or the way on, comes first.
+                        if goal == Goal::Rest && v.fires_made() {
+                            self.blocked.insert(Goal::Rest, v.tick().0 + REST_AGAIN);
+                        }
                         self.task = None;
                         self.fails.remove(&goal);
                         if waiting {
@@ -1637,6 +1642,8 @@ fn wood_near(v: &View<'_>) -> Option<PropId> {
 const WOOD_LOW: u32 = 4;
 /// From this near, cells.
 const WOOD_NEAR: i32 = 10;
+/// Ticks after sitting down by a fire before she makes for one again (ten seconds).
+const REST_AGAIN: u32 = 600;
 
 /// The line under which she mends before walking on, out of doors, permille.
 const COUNTY_LOW: i32 = 600;

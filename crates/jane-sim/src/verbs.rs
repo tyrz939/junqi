@@ -61,7 +61,10 @@ pub fn rest(cx: &mut Ctx<'_>, until: Option<u8>) {
     let Some(u) = cx.zone.unit_mut(body) else { return };
     crate::life::pay_regen(u, now);
     if fires && !bed {
-        crate::fire::sit(u);
+        // Sat already: she stays sat, her mending carried on.
+        if u.seated.is_none() {
+            crate::fire::sit(u);
+        }
     } else {
         crate::zone::heal_full(u);
         if fires {
