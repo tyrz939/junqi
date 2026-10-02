@@ -580,7 +580,7 @@ impl Bot {
         for m in notes {
             self.note(v, m);
         }
-        act
+        fight::with_targets(v, act)
     }
 
     /// Play one frame on `host`.

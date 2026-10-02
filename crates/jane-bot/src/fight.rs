@@ -15,7 +15,7 @@ use jane_core::{Fx, ItemId, SpellId, Tick};
 use jane_data::SpellKind;
 use jane_sim::ids::UnitId;
 use jane_sim::state::CombatState;
-use jane_sim::{Command, InputFrame, Unit, View};
+use jane_sim::{Command, InputFrame, TargetRef, Unit, View};
 
 use crate::Act;
 use crate::nav::{Go, dist, stick};
@@ -49,6 +49,93 @@ pub struct Fight {
     pub walled: Vec<jane_core::Angle>,
     /// Units her feet could find no way to, and the frame to try again.
     pub unreachable: std::collections::BTreeMap<UnitId, u32>,
+}
+
+/// The player's side of a fight as a player plays it (PLAY-PLAN §2.1), over any act a plan
+/// made: a cast at a foe targets that foe (its bolt curves on); a bolt aimed down a line at a prop
+/// that answers its school, or a verb with such a prop in reach, targets the prop; and while a
+/// free-aimed cast builds, the aim it began with is held, so walking on does not swing it away.
+pub fn with_targets(v: &View<'_>, mut act: Act) -> Act {
+    let cat = jane_data::catalog();
+    let Some(me) = v.unit(v.me().unit) else { return act };
+    for c in &act.cmds {
+        let (spell, on) = match *c {
+            Command::Cast { spell, on } => (spell, on),
+            _ => continue,
+        };
+        let def = cat.combat.spell(spell);
+        let foe = on.map(TargetRef::Unit).filter(|&t| v.target_valid(t) && v.target_hostile(t));
+        let target = match def.kind {
+            SpellKind::Bolt | SpellKind::Melee if foe.is_some() => foe,
+            SpellKind::Bolt => act.frame.aim.and_then(|a| prop_on_line(v, me, def, a)),
+            SpellKind::World => prop_in_reach(v, me, def),
+            _ => None,
+        };
+        if target.is_some() {
+            act.frame.target = target;
+            act.frame.free = false;
+        }
+    }
+    if act.cmds.is_empty() {
+        if let Some(pc) = v.fight().cast.filter(|pc| pc.at.is_none()) {
+            if pc.aim.is_some() {
+                act.frame.aim = pc.aim;
+            }
+        }
+    }
+    act
+}
+
+/// The nearest prop answering `def`'s school whose middle lies within its touch of the line
+/// along `aim` and inside its flight.
+fn prop_on_line(v: &View<'_>, me: &Unit, def: &jane_data::SpellDef, aim: jane_core::Angle) -> Option<TargetRef> {
+    let cat = jane_data::catalog();
+    let touch = i64::from(def.touch.unwrap_or(jane_sim::tuning::SCHOOL_TOUCH_FX).0);
+    let far = i64::from(def.range.0) + touch;
+    let (c, s) = (i64::from(jane_core::angle::cos_q15(aim).0), i64::from(jane_core::angle::sin_q15(aim).0));
+    let (cx, cy) = me.pos.cell();
+    let r = (far / i64::from(CELL_FX)) as i32 + 2;
+    let mut best: Option<(i64, jane_sim::PropId)> = None;
+    for p in v.props_in(jane_core::Rect::new(cx - r, cy - r, 2 * r + 1, 2 * r + 1)) {
+        let pd = cat.story.prop(p.def);
+        if p.hidden || p.on || pd.answers.and_then(jane_data::Answers::school) != Some(def.school) {
+            continue;
+        }
+        let at = jane_sim::light::prop_centre(pd, p);
+        let (vx, vy) = (i64::from(at.x.0 - me.pos.x.0), i64::from(at.y.0 - me.pos.y.0));
+        let along = (vx * c + vy * s) >> 15;
+        let off = ((vx * s - vy * c) >> 15).abs();
+        if along < 0 || along > far || off > touch {
+            continue;
+        }
+        if best.is_none_or(|(b, _)| along < b) {
+            best = Some((along, p.id));
+        }
+    }
+    best.map(|(_, id)| TargetRef::Prop(id))
+}
+
+/// The nearest prop in a world verb's reach that answers it, not yet used.
+fn prop_in_reach(v: &View<'_>, me: &Unit, def: &jane_data::SpellDef) -> Option<TargetRef> {
+    let cat = jane_data::catalog();
+    let want = match def.world? {
+        jane_data::WorldSpell::Repair => jane_data::Answers::Repair,
+        jane_data::WorldSpell::Grow => jane_data::Answers::Grow,
+    };
+    let reach = i64::from(jane_sim::tuning::WORLD_SPELL_REACH_FX);
+    let (cx, cy) = me.pos.cell();
+    let mut best: Option<(i64, jane_sim::PropId)> = None;
+    for p in v.props_in(jane_core::Rect::new(cx - 4, cy - 4, 9, 9)) {
+        let pd = cat.story.prop(p.def);
+        if p.hidden || p.used || pd.answers != Some(want) {
+            continue;
+        }
+        let d = jane_sim::interact::prop_distance_sq(pd, p, me.pos);
+        if d <= reach * reach && best.is_none_or(|(b, _)| d < b) {
+            best = Some((d, p.id));
+        }
+    }
+    best.map(|(_, id)| TargetRef::Prop(id))
 }
 
 pub fn ready(u: &Unit, s: SpellId, now: Tick) -> bool {
