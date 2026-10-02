@@ -230,7 +230,7 @@
     "materials": { "body": "wood_oak", "trim": "wood_dark", "accent": "slate" } },
 
   "table": { "family": "furniture", "shape": "table", "rise": 2,
-    "materials": { "body": "wood_oak", "trim": "wood_dark", "accent": "cloth_red" } },
+    "materials": { "body": "wood_oak", "trim": "wood_dark", "accent": "cloth_red" }, "vary": 3 },
   "bench": { "family": "furniture", "shape": "workbench", "rise": 2,
     "materials": { "body": "wood_oak", "trim": "wood_dark", "accent": "iron" } },
   "lost_property_desk": { "family": "furniture", "shape": "desk", "rise": 2,

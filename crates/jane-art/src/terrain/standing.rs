@@ -22,6 +22,8 @@ use crate::flora::{Kind, Species, Sprite};
 use crate::hash::{below, h32};
 use crate::palette::{Ix, Ramp, Tone, letter};
 
+mod plot;
+
 /// A standing thing: the bank sprite, how far its foot sits east of the cell's centre and below
 /// the cell's bottom (px), whether its crown is canopy, whether it is a tree (a caster round its
 /// trunk), and whether it lays a contact shade (low growth does not).
@@ -122,6 +124,10 @@ fn broadleaf(p: &Painter, cx: i32, cy: i32, (wx, wy): (i32, i32), h: u32, lone: 
 /// own are the shaded floor under their neighbours' (a fern, a stump, a fallen limb now and
 /// then); grass at a wood's edge grows ferns and bracken; long grass carries a stand that sways.
 fn thing(p: &Painter, cx: i32, cy: i32, seed: u32) -> Option<Thing> {
+    // A house's front garden is its own (ART-PLAN M7).
+    if let Some(t) = plot::thing(p, cx, cy) {
+        return t;
+    }
     let st = own(p, cx, cy);
     let (wx, wy) = (cx + p.x0c, cy + p.y0c);
     let h = h32(wx as u32, wy as u32, seed ^ salt::STAND);
@@ -249,6 +255,7 @@ pub(super) fn ground(p: &mut Painter, x0: i32, y0: i32, seed: u32) {
                 P::Crops => crops(p, px, py, wx, wy, g, &st, h, z),
                 _ => {}
             }
+            plot::ground(p, cx, cy, seed);
         }
     }
     // Long grass, from the cells round the chunk too (its blades reach into the next cell): clumps

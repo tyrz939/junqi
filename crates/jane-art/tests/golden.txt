@@ -18,10 +18,10 @@ chrome-sweep 3212dc9c
 prop:barn e71b531f
 prop:cottage_empty fb828276
 prop:cottage_slate bcdb9723
-prop:cottage_thatch 4bb81125
-prop:cottage_tile e1f9e22a
+prop:cottage_thatch 8a36bd3a
+prop:cottage_tile 61489079
 prop:cottage_timber 750796c5
-prop:farmhouse 136eaf7b
+prop:farmhouse 9fce944f
 prop:inn af2232c6
 prop:reed_hut 0e162d2f
 prop:shed e6815c2c
@@ -478,7 +478,7 @@ prop:standing_stone 1a2b2e7c
 prop:stove d01facc9
 prop:stump 8b2138a9
 prop:summon_stone 75d46282
-prop:table 2340a4ab
+prop:table d5105d52
 prop:tale_backboards 92fef555
 prop:tale_chair 1dfa7be7
 prop:tale_drywall 7ceb0f42
@@ -498,7 +498,7 @@ prop:torch_blue b4656374
 prop:town_altar 4dfe4d2f
 prop:town_anvil d0a1ea0f
 prop:town_bar fb5719d1
-prop:town_chimney cf6d4e60
+prop:town_chimney d9a8d8f9
 prop:town_farm_cart 3f8e63f4
 prop:town_flower_bed b15d7597
 prop:town_fountain 1ba372ae

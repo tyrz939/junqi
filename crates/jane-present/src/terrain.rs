@@ -3,6 +3,7 @@
 //! and stones come back as placements the scene draws from the atlas, sorted among the units.
 //! Fences and low walls are painted into the ground with the walls (`Standing::Placed`).
 
+use jane_art::terrain::houses::{self, House, Houses, Room};
 use jane_art::terrain::{self, Chunk, PaintMap, Painter, Placed, Standing, TileSource};
 use jane_core::{Material, Tile};
 use jane_sim::view::View;
@@ -15,6 +16,9 @@ use crate::shadow::RELIEF;
 struct ViewTiles<'v, 'a> {
     view: &'v View<'a>,
     paint: &'v PaintMap,
+    houses: &'v Houses,
+    room: Option<Room>,
+    daylight: bool,
 }
 
 impl TileSource for ViewTiles<'_, '_> {
@@ -43,6 +47,15 @@ impl TileSource for ViewTiles<'_, '_> {
             jane_data::Region::Works => 2,
         }
     }
+    fn house(&self, x: i32, y: i32) -> Option<House> {
+        self.houses.at(x, y).copied()
+    }
+    fn room(&self) -> Option<Room> {
+        self.room
+    }
+    fn daylight(&self) -> bool {
+        self.daylight
+    }
 }
 
 /// A flora sprite as the atlas holds it, with what its shadow is thrown as.
@@ -67,6 +80,10 @@ pub struct Terrain {
     painter: Painter,
     chunk: Chunk,
     paint: PaintMap,
+    /// The zone's houses (ART-PLAN Q2), its room seen from inside (M4), and whether it is day.
+    houses: Houses,
+    room: Option<Room>,
+    daylight: bool,
     flora: Vec<Flora>,
     placed: Vec<Vec<Placed>>,
     /// Each slot's blocks, chunk-local px (`blocks`).
@@ -322,7 +339,14 @@ impl Terrain {
                 // (at a third of the canvas's width, light passed between them one way and not
                 // the other, 2026-09-28).
                 let wide = drawn_width(&s.canvas);
-                let depth = if name.contains("tree") || name.starts_with("pine") { 6 } else { wide.max(w / 3) };
+                // A garden's boundary is a line a few px deep, not a block as deep as it is long
+                // (ART-PLAN M7); what stands in a garden is round.
+                let depth = match kind {
+                    jane_art::flora::Kind::Garden(g) if g.is_boundary() => 3,
+                    jane_art::flora::Kind::Garden(_) => (wide / 2).max(4),
+                    _ if name.contains("tree") || name.starts_with("pine") => 6,
+                    _ => wide.max(w / 3),
+                };
                 // What it stands on, rows over its foot (a shrub's rim; its heights are counted
                 // from there, `jane_art::flora::base`).
                 let lift = (s.ay - jane_art::flora::base(&s.canvas, s.ay)).clamp(0, 255) as u8;
@@ -333,6 +357,9 @@ impl Terrain {
             painter,
             chunk: Chunk::new(),
             paint: PaintMap::default(),
+            houses: Houses::default(),
+            room: None,
+            daylight: true,
             flora,
             placed: (0..slots).map(|_| Vec::with_capacity(PLACED)).collect(),
             blocks: (0..slots).map(|_| Vec::with_capacity(BLOCKS)).collect(),
@@ -342,15 +369,59 @@ impl Terrain {
         }
     }
 
-    /// A new zone: its paint read once.
+    /// A new zone: its paint read once, its houses found and seeded, its room if it is one.
     pub fn zone(&mut self, view: &View<'_>) {
         self.paint.fill(view.size(), view.paint());
+        let cat = jane_data::catalog();
+        let (w, h) = view.size();
+        let all = jane_core::Rect::new(0, 0, w as i32, h as i32);
+        let is_door =
+            |p: &jane_sim::state::Prop| cat.sprites.get(usize::from(cat.story.prop(p.def).sprite.0)) == Some(&"door");
+        let doors: Vec<(i32, i32, houses::Kind)> = view
+            .props_in(all)
+            .filter(|p| is_door(p))
+            .map(|p| {
+                let to = view.prop_spawn(p).and_then(|s| s.to).map(|d| d.zone);
+                (i32::from(p.cell.x), i32::from(p.cell.y), houses::door_kind(to))
+            })
+            .collect();
+        self.houses.fill((w as i32, h as i32), |x, y| view.tile(x, y), &doors, view.seed());
+        let tall = view.props_in(all).filter(|p| !cat.story.prop(p.def).flat).flat_map(|p| {
+            let d = cat.story.prop(p.def);
+            (0..i32::from(d.w)).map(move |dx| (i32::from(p.cell.x) + dx, i32::from(p.cell.y)))
+        });
+        self.room = terrain::room_of(
+            view.zone(),
+            view.seed(),
+            w as i32,
+            |x, y| view.tile(x, y).flags() & jane_core::tile::F_SOLID != 0,
+            tall.collect::<Vec<_>>().into_iter(),
+        );
+    }
+
+    /// The zone's houses, for the props drawn on them (a door's paint, a chimney's pots).
+    pub fn houses(&self) -> &Houses {
+        &self.houses
+    }
+
+    /// The zone's room, if it is one.
+    pub fn room(&self) -> Option<Room> {
+        self.room
+    }
+
+    /// Whether it is day for a room's windows; true when it has just turned, so a room's chunks
+    /// are painted again.
+    pub fn set_daylight(&mut self, day: bool) -> bool {
+        let turned = self.daylight != day;
+        self.daylight = day;
+        turned && self.room.is_some()
     }
 
     /// Paints chunk `id` properly into `layers`, the chunk in `slot`. Cells outside the zone
     /// take `outside`, as the swatches do.
     pub fn paint(&mut self, view: &View<'_>, id: ChunkId, slot: u16, outside: u32, layers: &mut ChunkLayers) {
-        let src = ViewTiles { view, paint: &self.paint };
+        let src =
+            ViewTiles { view, paint: &self.paint, houses: &self.houses, room: self.room, daylight: self.daylight };
         let (cx, cy) = (i32::from(id.cx), i32::from(id.cy));
         terrain::paint_chunk(&mut self.painter, &src, view.seed(), cx, cy, &mut self.chunk);
         let c = &self.chunk.layers;

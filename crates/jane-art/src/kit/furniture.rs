@@ -96,6 +96,11 @@ pub(crate) fn draw(c: &mut Canvas, k: &Kit, state: State) -> Option<Stand> {
                         c.fill_normal(Rect::new(top.x + tw / 2 - 3, top.y, 6, top.h), k.accent.at(Tone::Base), FLAT, 6);
                         c.vline(top.x + tw / 2 - 3, top.y, top.bottom() - 1, k.accent.at(Tone::Light), 6);
                     }
+                    // What was left on it (ART-PLAN M4), by its base: nothing; a teapot and a
+                    // cup; the paper and a bowl.
+                    if k.look.vary >= 2 {
+                        clutter(c, top, k.seed % 3, k.seed);
+                    }
                 }
             }
             Stand::Tops([(top, lid_height(leg)), (Rect::default(), 0)])
@@ -591,5 +596,42 @@ fn wares(c: &mut Canvas, k: &Kit, x: i32, y: i32, w: i32, row: i32) {
             _ => at += 3,
         }
         i += 1;
+    }
+}
+
+/// What lies on a table's `top` (ART-PLAN M4): `0` nothing, `1` a teapot and a cup on its west
+/// half, `2` the newspaper folded and a bowl on its east half. Small, at the back of the top, so
+/// what stands on the table (a fruit bowl, a note) stands in front.
+fn clutter(c: &mut Canvas, top: Rect, which: u32, seed: u32) {
+    let z = 8;
+    match which {
+        1 => {
+            // A brown teapot: a round body lit on its left, a spout, a lid and its knob.
+            let (x, y) = (top.x + 5, top.y + 2);
+            c.ellipse_lit(Rect::new(x, y + 1, 7, 5), Ramp::ClothBrown, Z::flat(z));
+            c.hline(x + 2, x + 4, y, Ramp::ClothBrown.at(Tone::Light), z + 1);
+            c.dot(x + 3, y - 1, Ramp::ClothBrown.at(Tone::High), z + 1);
+            c.line((x + 7, y + 3), (x + 9, y + 1), Ramp::ClothBrown.at(Tone::Base), 1, z);
+            c.vline(x - 1, y + 2, y + 4, Ramp::ClothBrown.at(Tone::Shade), z);
+            // A cup on its saucer.
+            let (cx, cy) = (x + 11, y + 3);
+            c.hline(cx - 1, cx + 3, cy + 2, Ramp::ClothLinen.at(Tone::Mid), z);
+            c.fill_rect(Rect::new(cx, cy, 3, 2), Ramp::ClothLinen.at(Tone::Light), z);
+            c.dot(cx + 3, cy, Ramp::ClothLinen.at(Tone::Base), z);
+        }
+        2 => {
+            // The paper, folded, its columns of print; a bowl beside it.
+            let (x, y) = (top.right() - 16, top.y + 2);
+            c.fill_normal(Rect::new(x, y, 8, 5), Ramp::ClothLinen.at(Tone::Light), FLAT, z);
+            c.hline(x, x + 7, y + 4, Ramp::ClothLinen.at(Tone::Mid), z);
+            for (i, yy) in [y + 1, y + 2, y + 3].into_iter().enumerate() {
+                let w = 3 + (parts::hash(seed, i as i32, 3) % 3) as i32;
+                c.hline(x + 1, x + w, yy, Ramp::Slate.at(Tone::Lift), z);
+            }
+            c.hline(x + 1, x + 6, y, Ramp::Slate.at(Tone::Mid), z);
+            c.ellipse_lit(Rect::new(x + 10, y + 1, 6, 4), Ramp::ClothCream, Z::flat(z));
+            c.hline(x + 11, x + 14, y + 1, Ramp::ClothBlue.at(Tone::Base), z + 1);
+        }
+        _ => {}
     }
 }

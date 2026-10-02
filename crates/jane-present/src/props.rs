@@ -26,14 +26,41 @@ struct Set {
     /// A top things stand on: rows from its foot to the top's front edge, and the top's rows
     /// (`jane_art::kit::surface`).
     surface: Option<(i32, i32)>,
+    /// A house's own make of it (ART-PLAN Q2, `jane_art::kit::house_variants`): a front door's
+    /// paint and style, a chimney's pots; and which of a house's looks picks among them.
+    house: Vec<RefId>,
+    pick: HousePick,
+}
+
+/// Which of a house's looks picks a prop's house variant.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum HousePick {
+    None,
+    Door,
+    Chimney,
 }
 
 /// Every prop look, packed.
 #[derive(Clone, Debug, Default)]
 pub struct Props {
     sets: Vec<Set>,
+    /// The rugs a room lays (ART-PLAN M4): `set_rug`, `set_rug_blue`, `set_runner`; and what
+    /// each is laid by (a table, a bed, a hearth's stove), with which.
+    rugs: [Option<SpriteId>; 3],
+    rug_by: Vec<(SpriteId, Rug)>,
     /// Each item icon at ground scale, by icon.
     loot: Vec<(SpriteId, RefId)>,
+}
+
+/// Where a room lays a rug by a thing (ART-PLAN M4).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Rug {
+    /// Under a table, a cell proud of it each way.
+    Table,
+    /// A runner along a bed's foot.
+    Bed,
+    /// Before a hearth.
+    Hearth,
 }
 
 /// A made fire's state (ART.md §2.3, `jane_art::kit::fire_pit`: the fire pit `campfire_cold`
@@ -66,6 +93,7 @@ impl Props {
     /// out, and its props keep their stand-in.
     pub fn build(atlas: &mut Atlas) -> Props {
         let mut sets = Vec::new();
+        let (mut rugs, mut rug_by) = ([None; 3], Vec::new());
         let all = looks::family(Family::Prop).unwrap_or_default().into_iter();
         for r in all.chain(looks::family(Family::Building).unwrap_or_default()) {
             let h = r.set.h;
@@ -76,6 +104,15 @@ impl Props {
                 _ => None,
             };
             let hung = look.is_some_and(jane_art::kit::hung);
+            match r.name {
+                "set_rug" => rugs[0] = Some(r.sprite),
+                "set_rug_blue" => rugs[1] = Some(r.sprite),
+                "set_runner" => rugs[2] = Some(r.sprite),
+                "table" => rug_by.push((r.sprite, Rug::Table)),
+                "bed" => rug_by.push((r.sprite, Rug::Bed)),
+                "stove" => rug_by.push((r.sprite, Rug::Hearth)),
+                _ => {}
+            }
             let fire = look.is_some_and(jane_art::kit::fire_pit);
             let ay = if hung { r.set.ay } else { h };
             let fh = jane_art::kit::footprint(r.sprite).map_or(1, |(_, fh)| i32::from(fh));
@@ -88,7 +125,22 @@ impl Props {
                 laid: None,
                 glass: None,
                 surface,
+                house: Vec::new(),
+                pick: HousePick::None,
             };
+            if let Some(l) = look {
+                let canvases =
+                    jane_art::kit::house_variants(l, r.sprite, jane_art::kit::seed(r.name)).unwrap_or_default();
+                set.house = canvases
+                    .iter()
+                    .map(|c| atlas.add_canvas(c, (0, ay as i16), h.clamp(1, 255) as u8, |_, _, t| t))
+                    .collect();
+                set.pick = match l.shape {
+                    _ if set.house.is_empty() => HousePick::None,
+                    "door" => HousePick::Door,
+                    _ => HousePick::Chimney,
+                };
+            }
             for (f, c) in &r.set.frames {
                 let id = atlas.add_canvas(c, (0, ay as i16), h.clamp(1, 255) as u8, |_, _, t| t);
                 match f {
@@ -119,7 +171,19 @@ impl Props {
                 (id, atlas.add_canvas(&small, (0, small.h() as i16), 1, |_, _, t| t))
             })
             .collect();
-        Props { sets, loot }
+        Props { sets, rugs, rug_by, loot }
+    }
+
+    /// The rug a room lays by a thing drawn as `sprite`, if it lays one: where, and its look
+    /// (picked by the thing's `id`: the red rug or the blue; a runner by a bed).
+    pub fn rug(&self, sprite: SpriteId, id: u32) -> Option<(Rug, RefId)> {
+        let &(_, rug) = self.rug_by.iter().find(|r| r.0 == sprite)?;
+        let which = match rug {
+            Rug::Bed => 2,
+            _ => (jane_art::hash::h32(id, 1, 0x5275_6721) % 2) as usize,
+        };
+        let s = self.rugs[which]?;
+        Some((rug, self.look(s, id, State::default())?))
     }
 
     /// Item icon `icon` as a thing lying on the ground.
@@ -147,6 +211,18 @@ impl Props {
             (_, true) if s.on.is_some() => s.on.unwrap_or(base),
             _ => base,
         })
+    }
+
+    /// The frame a door or a chimney drawn as `sprite` shows on a house of look `l` (ART-PLAN
+    /// Q2): its paint and make, its pots. None for a sprite with no house variants.
+    pub fn house_look(&self, sprite: SpriteId, l: &jane_art::terrain::houses::Look) -> Option<RefId> {
+        let s = self.find(sprite)?;
+        let v = match s.pick {
+            HousePick::None => return None,
+            HousePick::Door => l.door_variant(),
+            HousePick::Chimney => l.chimney_variant(),
+        };
+        s.house.get(v as usize).copied()
     }
 
     /// The frame a made fire `id` drawn as `sprite` shows in `state`: `Cold` its base, `Laid`

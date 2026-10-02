@@ -77,6 +77,8 @@ const FLICKER_RATE: u32 = 10;
 const UNIT_KEY: u32 = 0x8000_0000;
 /// A drop's key in the draw list and the prop list: its id with this bit, above every prop's.
 const DROP_KEY: u32 = 0x2000_0000;
+/// A rug's key in the prop list (ART-PLAN M4): the id of the thing it is laid by, with this bit.
+const RUG_KEY: u32 = 0x0800_0000;
 
 /// Which lights a frame draws and which of them cast (PRESENTATION.md §1.7), one rule for every
 /// tier: of the lights that may cast (`Light::casts` as they come: prop lights, her lantern, a
@@ -453,6 +455,12 @@ impl Present {
             self.fx.zone(view);
             self.lessons.zone(view);
         }
+        // A room's windows lay daylight on its floor and are dark at night (ART-PLAN M4): its
+        // chunks are painted again when the lamps come on or go off.
+        if self.terrain.set_daylight(!view.lamps_lit()) {
+            let (w, h) = view.size();
+            self.chunks.invalidate(Rect::new(0, 0, w as i32, h as i32));
+        }
         self.zone_cells = view.size();
         self.hurt.clear();
         self.struck.clear();
@@ -605,6 +613,8 @@ impl Present {
     fn read_props(&mut self, view: &View<'_>, area: Rect) {
         let cat = jane_data::catalog();
         let (props, stand, kit) = (&mut self.props, &self.stand, &self.kit);
+        let houses = self.terrain.houses();
+        let room = self.terrain.room().map(|r| r.kind);
         props.clear();
         // What she is reading: the mark over it is down while she does.
         let reading = view.dialogue().and_then(|d| match d.speaker {
@@ -653,6 +663,45 @@ impl Present {
                 .then(|| view.prop_loot(p).first())
                 .flatten()
                 .and_then(|s| kit.loot_look(cat.combat.item(s.item).icon));
+            // A room lays a rug under its table, along its bed's foot and before its hearth
+            // (ART-PLAN M4): flat on the floor under everything, nothing a foot meets.
+            // A pub lays none under its tables, a church none at all.
+            let lays = |rug: props::Rug| match room {
+                Some(jane_art::terrain::houses::RoomKind::Julie) => true,
+                Some(jane_art::terrain::houses::RoomKind::Inn) => rug != props::Rug::Table,
+                _ => false,
+            };
+            if let Some((rug, look)) = kit.rug(d.sprite, p.id.get()).filter(|r| lays(r.0)) {
+                let (cx, cy, cw, ch) = (i32::from(p.cell.x), i32::from(p.cell.y), i32::from(d.w), i32::from(d.h));
+                let (mut x, y, w, h) = match rug {
+                    props::Rug::Table => (cx + cw / 2 - 2, cy + ch / 2 - 1, 4, 3),
+                    props::Rug::Bed => (cx + cw - 6, cy + ch, 6, 2),
+                    props::Rug::Hearth => (cx + cw / 2 - 2, cy + ch, 4, 3),
+                };
+                // Kept off the walls: moved along until both its ends lie on the floor.
+                let solid = |x: i32| view.tile(x, y).flags() & jane_core::tile::F_SOLID != 0;
+                while solid(x) && x < cx + cw {
+                    x += 1;
+                }
+                while solid(x + w - 1) && x > cx - w {
+                    x -= 1;
+                }
+                props.push(PropRec {
+                    id: RUG_KEY | p.id.get(),
+                    x: x * CELL,
+                    y: y * CELL,
+                    w: w * CELL,
+                    h: h * CELL,
+                    look,
+                    flat: true,
+                    flush: false,
+                    on_top: false,
+                    surface: None,
+                    lift: 0,
+                    sort_foot: None,
+                    mark: None,
+                });
+            }
             props.push(PropRec {
                 id: p.id.get(),
                 x: i32::from(p.cell.x) * CELL,
@@ -660,6 +709,13 @@ impl Present {
                 w: i32::from(d.w) * CELL,
                 h: i32::from(d.h) * CELL,
                 look: held
+                    .or_else(|| {
+                        // A front door or a chimney on a house with a look is its house's own
+                        // (ART-PLAN Q2); St Anne's keeps its oak.
+                        let house = houses.at(i32::from(p.cell.x), i32::from(p.cell.y));
+                        let house = house.filter(|h| h.kind != jane_art::terrain::houses::Kind::Church);
+                        house.and_then(|h| kit.house_look(d.sprite, &h.look()))
+                    })
                     .or_else(|| match fire {
                         Some(f) => kit.fire_look(d.sprite, p.id.get(), f),
                         None => kit.look(d.sprite, p.id.get(), state),

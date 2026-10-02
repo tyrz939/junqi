@@ -1387,6 +1387,8 @@ pub enum Kind {
     Reeds,
     /// Long grass that sways and rustles.
     Grass,
+    /// A front garden's boundary, gate or ornament (ART-PLAN M7, `garden`).
+    Garden(crate::garden::Piece),
 }
 
 impl Kind {
@@ -1397,7 +1399,7 @@ impl Kind {
 
     /// Whether a breeze moves it (ART-PLAN M2): crowns, shrubs, ferns and tall growth.
     pub fn sways(self) -> bool {
-        !matches!(self, Kind::Dead | Kind::Rocks | Kind::Boulder | Kind::Stump | Kind::Limb)
+        !matches!(self, Kind::Dead | Kind::Rocks | Kind::Boulder | Kind::Stump | Kind::Limb | Kind::Garden(_))
     }
 }
 
@@ -1484,6 +1486,14 @@ impl Bank {
         b.run(Kind::Grass, "grass", 3, |i| {
             stand_of(28000 + i * 89, if i == 1 { Ramp::Turf } else { Ramp::TurfDry }, false)
         });
+        for piece in crate::garden::Piece::ALL {
+            use crate::garden::Piece as G;
+            let n = match piece {
+                G::RoseArch | G::Hollyhocks | G::Canes | G::Bike => 2,
+                _ => 1,
+            };
+            b.run(Kind::Garden(piece), piece.name(), n, |i| crate::garden::sprite(piece, 29000 + i * 97));
+        }
         b
     }
 
@@ -1529,7 +1539,8 @@ mod tests {
     fn a_bank_is_valid_sprites_with_their_feet_inside() {
         let b = Bank::new(Ramps::default());
         let all = b.all();
-        assert!((60..=90).contains(&all.len()), "{}", all.len());
+        // About seventy plants, and the gardens' twenty pieces (ART-PLAN M7).
+        assert!((60..=110).contains(&all.len()), "{}", all.len());
         for (name, s) in &all {
             s.canvas.validate().unwrap_or_else(|e| panic!("{name}: {e}"));
             assert!(s.ax >= 0 && s.ax < s.canvas.w() && s.ay >= 0 && s.ay < s.canvas.h(), "{name}");

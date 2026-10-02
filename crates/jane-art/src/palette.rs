@@ -282,6 +282,24 @@ ramps! {
     LeafMaple "leaf_maple" 0xc4aa3e,
     /// Yew: the churchyard's near-black green.
     LeafYew "leaf_yew" 0x2a4634,
+    // Houses with owners (ART-PLAN Q2): the plasters, the knapped flint, a roof newly tiled, the
+    // doors' paints and the wisteria over them. Laid after the autumn ramps, so nothing moves.
+    /// Suffolk pink plaster.
+    PlasterPink "plaster_pink" 0xd6a494,
+    /// Ochre plaster.
+    PlasterOchre "plaster_ochre" 0xd4ac68,
+    /// Limewash: near white, warm.
+    Limewash "limewash" 0xe2ddd0,
+    /// Knapped flint: blue-grey nodules in their mortar.
+    Flint "flint" 0x58606a,
+    /// A clay tile roof newly laid: brighter, more orange than the weathered one.
+    RoofTileNew "roof_tile_new" 0xb85c3a,
+    /// A door's oxblood paint.
+    Oxblood "oxblood" 0x6e2a30,
+    /// A door's racing green.
+    RacingGreen "racing_green" 0x2c5a40,
+    /// Wisteria in flower: lilac.
+    Wisteria "wisteria" 0x9a88c4,
 }
 
 impl Ramp {

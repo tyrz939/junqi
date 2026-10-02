@@ -48,6 +48,9 @@ pub(crate) struct Kit {
     pub w: i32,
     pub h: i32,
     pub seed: u32,
+    /// A house's own make of it (ART-PLAN Q2, [`house_variants`]): a front door's paint and
+    /// style, a chimney's pots and stack. None for the look as its row draws it.
+    pub house: Option<u32>,
 }
 
 impl Kit {
@@ -185,6 +188,7 @@ pub fn render(look: &PropLook, sprite: SpriteId, seed: u32) -> Result<SpriteSet,
         w: fw * CELL_PX,
         h: fh * CELL_PX + i32::from(look.rise),
         seed,
+        house: None,
     };
     let mut frames = Vec::new();
     for id in frame_ids(look) {
@@ -211,6 +215,57 @@ pub fn render(look: &PropLook, sprite: SpriteId, seed: u32) -> Result<SpriteSet,
     }
     let emits = if look.emits.contains(&EmitRole::Glass) { vec![Role::Glass, Role::Flame] } else { Vec::new() };
     Ok(SpriteSet { w: kit.w, h: kit.h, ax: 0, ay: kit.back(), frames, roles, emits })
+}
+
+/// How many house variants a look has ([`house_variants`]): a front door twelve (four paints by
+/// three makes: `terrain::houses::Look::door_variant`), a chimney nine (one to three pots by three
+/// heights of stack: `Look::chimney_variant`); anything else none.
+pub fn house_count(look: &PropLook) -> u32 {
+    match (look.family, look.shape) {
+        (PropFamily::Barrier, "door") => 12,
+        (PropFamily::Structure, "chimney") => 9,
+        _ => 0,
+    }
+}
+
+/// The base frame of `look`, drawn as `sprite`, in each of its house variants ([`house_count`]):
+/// what the renderer draws a door or a chimney on a house with a look as (ART-PLAN Q2). Each is
+/// the canvas [`render`] gives, anchored the same.
+pub fn house_variants(look: &PropLook, sprite: SpriteId, seed: u32) -> Result<Vec<Canvas>, String> {
+    let n = house_count(look);
+    if n == 0 {
+        return Ok(Vec::new());
+    }
+    let (fw, fh) = footprint(sprite)?;
+    let (fw, fh) = (i32::from(fw), i32::from(fh));
+    let r = crate::person::ramp;
+    let base = Kit {
+        look: *look,
+        body: r(look.materials.body)?,
+        trim: look.materials.trim.map_or(Ok(Ramp::Iron), r)?,
+        accent: look.materials.accent.map_or(Ok(Ramp::Brass), r)?,
+        fw,
+        fh,
+        w: fw * CELL_PX,
+        h: fh * CELL_PX + i32::from(look.rise),
+        seed,
+        house: None,
+    };
+    (0..n)
+        .map(|v| {
+            // A door's leaf is painted in its house's paint.
+            let body = if look.shape == "door" {
+                crate::terrain::houses::DOORS[(v / 3) as usize % crate::terrain::houses::DOORS.len()]
+            } else {
+                base.body
+            };
+            let k = Kit { house: Some(v), body, ..base };
+            let mut c = Canvas::new(k.w, k.h);
+            let flat = draw(&mut c, &k, State::Base)?;
+            finish(&mut c, &k, flat);
+            Ok(c)
+        })
+        .collect()
 }
 
 /// How the heights are finished: stood up row by row, or lying flat at most `n` px.
