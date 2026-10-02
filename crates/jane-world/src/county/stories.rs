@@ -809,9 +809,13 @@ const POSTED_DOORS: [(&str, &str); 1] = [("pipes_grate", "the Company's grate")]
 /// there names it. "The Factory, in the Works past the graveyard"; "the footpath from the
 /// graveyard" to the Hoar Stone; "the ruined library, on the road past the Museum"; "Butterfly
 /// Forest, on the road past the ruined library"; "the mine road out of Castle"; "the hill north
-/// of Castle".
-const TOLD_FROM: [(&str, &str); 6] = [
+/// of Castle"; "the pipes run there [to the Factory] from the Company's grate at the edge of
+/// Castle" (2 October 2026: out of the pipes by the town with the ladder up still to mend, a
+/// reader had nothing at Castle to say where the Factory lay, and on seeds where the Works road
+/// winds past [`FAR_WALK`] the first post naming it stood a kilometre on).
+const TOLD_FROM: [(&str, &str); 7] = [
     ("graveyard", "factory"),
+    ("town", "factory"),
     ("graveyard", "burial"),
     ("museum", "library"),
     ("library", "butterfly_forest"),

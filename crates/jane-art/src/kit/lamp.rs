@@ -54,20 +54,60 @@ pub(crate) fn draw(c: &mut Canvas, k: &Kit, state: State) -> Option<Stand> {
             }
             Stand::Up(&[])
         }
-        "brazier" | "great_torch" => {
-            // An iron bowl of coals on three legs (a great torch stands it on a tall shaft).
+        "great_torch" => {
+            // The great torch: a cresset the dead were walked to their places by, too heavy to
+            // lift. A squat stone sled on iron runners (it is dragged, never carried), a collar,
+            // a stout banded column, and a wide caged basket of pitch with a flame to match.
             let cx = w / 2;
-            let tall = k.look.shape == "great_torch";
-            let bowl_y = if tall { foot - 30 } else { foot - 10 };
-            let bw = if tall { 12 } else { 10 };
-            ao(c, cx - bw / 2, cx + bw / 2 - 1, foot - 1, 5);
-            if tall {
-                c.rect_bevel(Rect::new(cx - 5, foot - 4, 10, 4), k.trim, 1, Z::new(2, 4));
-                post(c, cx - 2, bowl_y + 4, foot - 4, 4, k.trim, 3);
+            let bowl_y = foot - 30;
+            ao(c, cx - 12, cx + 11, foot - 1, 6);
+            c.rect_bevel(Rect::new(cx - 11, foot - 9, 22, 8), k.body, 1, Z::new(2, 4));
+            c.hline(cx - 10, cx + 9, foot - 6, k.body.at(Tone::Shade), 4);
+            c.hline(cx - 12, cx + 11, foot - 1, k.trim.at(Tone::Shade), 2);
+            c.hline(cx - 11, cx + 10, foot - 2, k.trim.at(Tone::Base), 2);
+            for x in [cx - 12, cx + 11] {
+                c.dot(x, foot - 3, k.trim.at(Tone::Base), 2);
+            }
+            c.rect_bevel(Rect::new(cx - 5, foot - 12, 10, 3), k.trim, 1, Z::new(3, 4));
+            post(c, cx - 3, bowl_y + 6, foot - 12, 6, k.trim, 3);
+            c.vline(cx - 1, bowl_y + 7, foot - 13, k.trim.at(Tone::Shade), 3);
+            c.vline(cx + 1, bowl_y + 7, foot - 13, k.trim.at(Tone::Shade), 3);
+            for y in [bowl_y + 9, foot - 16] {
+                c.hline(cx - 4, cx + 3, y, k.trim.at(Tone::Light), 4);
+                c.hline(cx - 4, cx + 3, y + 1, k.trim.at(Tone::Shade), 4);
+            }
+            let bw = 20;
+            c.polygon_lit(
+                &[(cx - bw / 2, bowl_y), (cx + bw / 2 - 1, bowl_y), (cx + 6, bowl_y + 6), (cx - 7, bowl_y + 6)],
+                k.trim,
+                90,
+                Z::flat(5),
+            );
+            c.hline(cx - bw / 2, cx + bw / 2 - 1, bowl_y, k.trim.at(Tone::Light), 5);
+            c.hline(cx - 7, cx + 6, bowl_y + 6, k.trim.at(Tone::Shade), 5);
+            for i in 0..5 {
+                let x = cx - 8 + i * 4;
+                c.line((x, bowl_y + 1), (x + (cx - x) / 4, bowl_y + 5), k.trim.at(Tone::Shade), 1, 5);
+            }
+            if lit {
+                embers(c, cx - bw / 2 + 2, bowl_y, bw - 4);
+                parts::flame(c, cx - 4, bowl_y, 13, 1, 6);
+                parts::flame(c, cx + 4, bowl_y, 11, -1, 6);
+                parts::flame(c, cx, bowl_y + 1, 16, 0, 6);
+                recolour_flame(c, k);
             } else {
-                for (x0, x1) in [(cx - 4, cx - 5), (cx + 3, cx + 4), (cx, cx)] {
-                    c.line((x0, bowl_y + 4), (x1, foot - 1), k.trim.at(Tone::Shade), 1, 3);
-                }
+                coals(c, cx - bw / 2 + 2, bowl_y - 1, bw - 4);
+            }
+            Stand::Up(&[])
+        }
+        "brazier" => {
+            // An iron bowl of coals on three legs.
+            let cx = w / 2;
+            let bowl_y = foot - 10;
+            let bw = 10;
+            ao(c, cx - bw / 2, cx + bw / 2 - 1, foot - 1, 5);
+            for (x0, x1) in [(cx - 4, cx - 5), (cx + 3, cx + 4), (cx, cx)] {
+                c.line((x0, bowl_y + 4), (x1, foot - 1), k.trim.at(Tone::Shade), 1, 3);
             }
             c.polygon_lit(
                 &[
@@ -83,8 +123,8 @@ pub(crate) fn draw(c: &mut Canvas, k: &Kit, state: State) -> Option<Stand> {
             c.hline(cx - bw / 2, cx + bw / 2 - 1, bowl_y, k.trim.at(Tone::Light), 5);
             if lit {
                 embers(c, cx - bw / 2 + 2, bowl_y, bw - 4);
-                parts::flame(c, cx - 2, bowl_y, if tall { 12 } else { 9 }, 1, 6);
-                parts::flame(c, cx + 2, bowl_y, if tall { 9 } else { 6 }, -1, 6);
+                parts::flame(c, cx - 2, bowl_y, 9, 1, 6);
+                parts::flame(c, cx + 2, bowl_y, 6, -1, 6);
                 recolour_flame(c, k);
             } else {
                 coals(c, cx - bw / 2 + 2, bowl_y - 1, bw - 4);

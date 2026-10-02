@@ -30,7 +30,7 @@ pub const USAGE: &str = "  sheet layers <what> [--frame F] [--out DIR]
   sheet scene [--seed N] [--minutes M | --ticks T] [--model reader|rusher] [--night | --hour H[:MM]]
               [--wide] [--backend soft|gl2|wgpu] [--at ZONE[:MARK] | --at MARK]
               [--weather clear|mist|rain|storm] [--cast SPELL[:TICKS] [--spawn UNIT]] [--rows KEY=V,..]
-              [--film N[:EVERY] [--walk DIR[:TICKS],..]] [--crop X,Y,W,H] [--zoom Z] [--layers] [--show-sun]
+              [--film N[:EVERY] [--walk [push-]DIR[:TICKS],..]] [--crop X,Y,W,H] [--zoom Z] [--layers] [--show-sun]
               [--knows SPELL,..] [--learn SPELL,..] [--grow strength|spirit] [--ui]
               [--out PATH.png | --out DIR]
                                       --learn learns spells after the rest (--knows ones before, out of
@@ -295,6 +295,8 @@ fn scene(args: &[String]) -> Result<(), String> {
                 .split(',')
                 .map(|leg| {
                     let (dir, ticks) = leg.split_once(':').unwrap_or((leg, "100000"));
+                    // `push-east`: leaning on USE as she goes, so what she walks into is pushed.
+                    let (push, dir) = dir.strip_prefix("push-").map_or((false, dir), |d| (true, d));
                     let dir = match dir {
                         "east" => jane_core::Angle::EAST,
                         "west" => jane_core::Angle::WEST,
@@ -302,7 +304,7 @@ fn scene(args: &[String]) -> Result<(), String> {
                         "south" => jane_core::Angle::SOUTH,
                         _ => return Err(format!("--walk DIR[:TICKS],..: east, west, north or south, not {dir}")),
                     };
-                    Ok((dir, ticks.parse::<u32>().map_err(|_| format!("--walk: ticks, not {ticks}"))?))
+                    Ok((dir, ticks.parse::<u32>().map_err(|_| format!("--walk: ticks, not {ticks}"))?, push))
                 })
                 .collect::<Result<Vec<_>, String>>()?,
         },

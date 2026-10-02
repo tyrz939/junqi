@@ -110,5 +110,6 @@
   "board_factory_vent": {"speaker": "EXTRACT", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["EXTRACT. The duct drops to the GENERATOR HALL.", "Under it, scratched: nobody comes back up it."]}}},
   "board_factory_press_hall": {"speaker": "PRESS HALL", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["PRESS HALL. Haulers working. The STORES and the FOREMAN'S OFFICE through the hall."]}}},
   "board_factory_gen_shutter": {"speaker": "SWITCH ROOM", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["SWITCH ROOM. Between No. 1 LINE and the GENERATOR HALL.", "The shutter is on the generator's own supply, and there is none."]}}},
-  "board_factory_stores": {"speaker": "STORES", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["STORES. Power shutter. Up while the works has power."]}}}
+  "board_factory_stores": {"speaker": "STORES", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["STORES. Power shutter. Up while the works has power."]}}},
+  "factory_line_fuse": {"speaker": "Fuse Box", "start": [{"node": "read"}], "nodes": {"read": {"lines": ["No. 1 LINE. ONE FUSE FOR THE LINE LAMPS AND THE STORES SHUTTER.", "IF IT GOES, THE SHUTTER COMES DOWN AND STAYS DOWN UNTIL THE FITTER CALLS. Under it, in pencil: he has not called."]}}}
 }

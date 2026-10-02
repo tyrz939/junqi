@@ -810,7 +810,7 @@ impl App<'_> {
                 if let Some(v) = session.sim().and_then(|s| s.view(me)) {
                     self.present.tick(&v, events);
                     self.bufs.tick(&v, events);
-                    // USE on a cupboard opens the window on it; closing the window lets it go.
+                    // USE on a cupboard or a bench opens the window on her bag; closing it lets a cupboard go.
                     if self.bufs.window.take_opened() && self.menus.is_empty() {
                         self.win_open = true;
                         self.win.tab = 0;

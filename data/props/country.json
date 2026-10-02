@@ -19,7 +19,7 @@
   "log": { "name": "Log", "sprite": "log", "w": 2, "h": 1, "solid": true, "blockLos": false },
   "tent": { "name": "Tent", "sprite": "tent", "w": 3, "h": 2, "base": 1, "solid": true, "blockLos": true, "prompt": "Look" },
   "bedroll": { "name": "Bedroll", "sprite": "bedroll", "w": 2, "h": 1, "solid": false, "blockLos": false, "flat": true },
-  "den": { "name": "Den", "sprite": "den", "w": 3, "h": 2, "solid": true, "blockLos": true, "prompt": "Look" },
+  "den": { "name": "Den", "sprite": "den", "w": 3, "h": 2, "solid": true, "blockLos": true, "way": true, "prompt": "Look" },
   "bones": { "name": "Bones", "sprite": "bones", "w": 1, "h": 1, "solid": false, "blockLos": false, "flat": true },
   "milestone": { "name": "Milestone", "sprite": "milestone", "w": 1, "h": 1, "solid": true, "blockLos": false, "prompt": "Read" },
   "wayside_shrine": { "name": "Wayside Shrine", "sprite": "wayside_shrine", "w": 2, "h": 2, "base": 1, "solid": true, "blockLos": false, "prompt": "Look" },

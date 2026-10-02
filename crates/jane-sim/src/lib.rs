@@ -74,6 +74,7 @@ pub mod quests;
 pub mod regrow;
 pub mod replay;
 pub mod ring;
+pub mod route;
 pub mod runtime;
 pub mod save;
 mod seats;

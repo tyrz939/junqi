@@ -774,7 +774,7 @@ pub fn dev_spawn(cx: &mut Ctx<'_>, body: UnitId, def: UnitDefId) {
     }
     let Some(me) = cx.zone.unit(body) else { return };
     let (x, y) = me.pos.cell();
-    let Some((fx, fy)) = cx.rt.grid.nearest_free(x + DEV_SPAWN_OFFSET, y, DEV_SPAWN_RADIUS, None) else { return };
+    let Some((fx, fy)) = cx.rt.grid.nearest_roomy(x + DEV_SPAWN_OFFSET, y, DEV_SPAWN_RADIUS) else { return };
     let id = cx.world.next.unit();
     let u = new_unit(id, None, def, Vec2::centre(fx, fy), jane_core::action::Facing::South, cx.world.tick);
     cx.ops.spawn.push(u);

@@ -327,6 +327,22 @@ fn every_site_row_holds_by_road_and_every_road_site_is_reachable() {
     }
 }
 
+/// The world audit (1 October 2026): on seeds 1 to 7 the Still Pool was missing on four, the
+/// Cooling Yard on five and the Drowned Lane on three. Each region keeps its named dangers on
+/// every seed, in its own region, the seeds a player is most likely to be dealt included.
+#[test]
+fn the_drowned_lane_the_still_pool_and_the_cooling_yard_are_there_on_seeds_1_to_16() {
+    let cat = catalog();
+    for seed in 1..=16 {
+        let s = skeleton(seed).expect("the catalog's rows build");
+        for id in ["drowned_lane", "still_pool", "cooling_yard"] {
+            let a = s.areas.iter().find(|a| cat.name(a.def.id) == id);
+            let a = a.unwrap_or_else(|| panic!("seed {seed}: no {id}"));
+            assert_eq!(s.region_at(a.mx, a.my), a.def.region, "seed {seed}: {id} out of its region");
+        }
+    }
+}
+
 #[test]
 fn every_required_patch_and_every_anchor_is_placed() {
     let c = &catalog().county;

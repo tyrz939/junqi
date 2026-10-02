@@ -811,7 +811,67 @@ impl Gen<'_> {
         });
     }
 
-    // --- boards: where each way on goes, painted beside its door -----------------------------
+    // --- plates that hold a gate, and boards: both by their door --------------------------------
+
+    /// A plate that lifts a corridor's gate lies by that gate's mouth, whichever door of its room
+    /// the layout gave the corridor (the Burial's great torch, held down beside HIS SOLDIER's
+    /// gate): on the first floor in from the wall, one clear cell from the opening, the right
+    /// side first, else a row further in. Its template socket stands for "somewhere in this
+    /// room" only. No room for it there and the attempt fails, so a plate never works a door
+    /// from across the room.
+    fn plates_by_gates(&mut self) {
+        let cat = catalog();
+        let layout = self.layout;
+        for pi in 0..self.k.bp.props.len() {
+            let p = &self.k.bp.props[pi];
+            let def = p.def;
+            if !cat.story.prop(def).plate {
+                continue;
+            }
+            let Some(list) = p.use_list else { continue };
+            let mut gates: Vec<Key> = Vec::new();
+            crate::solve::rows::each_action(&self.k.bp, cat, list, &mut |a| {
+                if let Action::Unlock(k) = *a {
+                    gates.push(k);
+                }
+            });
+            let (px, py) = (i32::from(p.cell.x), i32::from(p.cell.y));
+            let Some(ri) = self.info.rooms.iter().position(|r| r.rect.contains(px, py)) else { continue };
+            let node = self.info.rooms[ri].node;
+            let door = layout.corridors.iter().find_map(|c| {
+                let gated = self.info.locks.iter().any(|l| l.edge == c.edge && gates.contains(&l.prop));
+                match (c.a, c.b) {
+                    (a, _) if gated && a.node == node => Some(a.door),
+                    (_, b) if gated && b.node == node => Some(b.door),
+                    _ => None,
+                }
+            });
+            let Some(door) = door else { continue };
+            let (bw, bh) = footprint(def);
+            let (d, x, y) = self.door_at(node, door);
+            let (ox, oy) = out(d.side);
+            let spots = if matches!(d.side, RoomSide::N | RoomSide::S) {
+                let row = if oy < 0 { y + 1 } else { y - bh };
+                [(x + 3, row), (x - 2 - bw, row), (x + 3, row - oy), (x - 2 - bw, row - oy)]
+            } else {
+                let col = if ox < 0 { x + 1 } else { x - bw };
+                [(col, y + 3), (col, y - 2 - bh), (col - ox, y + 3), (col - ox, y - 2 - bh)]
+            };
+            for j in py..py + bh {
+                for i in px..px + bw {
+                    self.k.claimed[(j * self.k.w + i) as usize] = false;
+                }
+            }
+            let Some(&(bx, by)) = spots.iter().find(|&&(bx, by)| self.k.fits(bx, by, bw, bh)) else {
+                self.k.claim(px, py, bw, bh);
+                let row = cat.story.prop(def).id;
+                self.err(format!("no room for \"{row}\" by the mouth of the gate it lifts"));
+                continue;
+            };
+            self.k.claim(bx, by, bw, bh);
+            self.k.bp.props[pi].cell = cell(bx, by);
+        }
+    }
 
     /// A painted board beside each door of the entrance, the hub and a mini-boss's room whose
     /// corridor leads to a room with a `board_<mission>_<node>` dialogue row (DUNGEONS.md §2.5,
@@ -1540,6 +1600,7 @@ fn assemble(
         g.locks();
         g.lamps();
         g.fill();
+        g.plates_by_gates();
         g.boards();
         if set_pieces {
             g.sets();
@@ -1547,6 +1608,7 @@ fn assemble(
         g.scatter();
         g.zone_rects();
     }
+    crate::kit::settle_units(&mut g.k.bp);
     let mut info = g.info;
     let blueprint = g.k.bp;
     info.layout = Some(layout);

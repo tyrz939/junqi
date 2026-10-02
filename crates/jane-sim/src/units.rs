@@ -246,33 +246,29 @@ fn slide(g: &ZoneGrid, b: Span, horizontal: bool, delta: i32) -> i32 {
     reach * delta.signum()
 }
 
-/// Move by `(dx, dy)` with axis-separated sliding; keeps occupancy and unit blocks. Returns
-/// whether it moved.
-pub fn move_unit(rt: &mut ZoneRuntime, u: &mut Unit, dx: Fx, dy: Fx) -> bool {
-    let from = u.pos;
-    let g = &rt.grid;
+/// Where a body box with its feet at `pos` ends after moving by `(dx, dy)`: axis-separated, x
+/// then y, each sliding flush against what it meets; where it was if it would end in something.
+pub fn step_box(g: &ZoneGrid, pos: Vec2, dx: Fx, dy: Fx) -> Vec2 {
+    let mut p = pos;
     if dx.0 != 0 {
-        let nx = Fx(u.pos.x.0 + dx.0);
-        u.pos.x = if box_blocked(g, nx, u.pos.y) {
-            Fx(u.pos.x.0 + slide(g, body_at(u.pos.x.0, u.pos.y.0), true, dx.0))
-        } else {
-            nx
-        };
+        let nx = Fx(p.x.0 + dx.0);
+        p.x = if box_blocked(g, nx, p.y) { Fx(p.x.0 + slide(g, body_at(p.x.0, p.y.0), true, dx.0)) } else { nx };
     }
     if dy.0 != 0 {
-        let ny = Fx(u.pos.y.0 + dy.0);
-        u.pos.y = if box_blocked(g, u.pos.x, ny) {
-            Fx(u.pos.y.0 + slide(g, body_at(u.pos.x.0, u.pos.y.0), false, dy.0))
-        } else {
-            ny
-        };
+        let ny = Fx(p.y.0 + dy.0);
+        p.y = if box_blocked(g, p.x, ny) { Fx(p.y.0 + slide(g, body_at(p.x.0, p.y.0), false, dy.0)) } else { ny };
     }
-    if box_blocked(g, u.pos.x, u.pos.y) {
-        u.pos = from;
-    }
-    if u.pos == from {
+    if box_blocked(g, p.x, p.y) { pos } else { p }
+}
+
+/// Move by `(dx, dy)` with axis-separated sliding ([`step_box`]); keeps occupancy and unit
+/// blocks. Returns whether it moved.
+pub fn move_unit(rt: &mut ZoneRuntime, u: &mut Unit, dx: Fx, dy: Fx) -> bool {
+    let to = step_box(&rt.grid, u.pos, dx, dy);
+    if to == u.pos {
         return false;
     }
+    u.pos = to;
     rt.moved(u);
     true
 }
@@ -351,6 +347,91 @@ mod tests {
         let b = body_at(Fx::from_px(20).0, Fx::from_px(20).0);
         assert_eq!(slide(&rt.grid, b, true, Fx::from_px(30).0), Fx::from_px(17).0);
         assert_eq!(slide(&rt.grid, b, true, Fx::from_px(-30).0), Fx::from_px(-17).0, "the grid's edge");
+    }
+
+    /// The owner: "things you can now get to close from above still have a weird block above
+    /// them from each side, like an invisible little wall". Every solid prop with feet, walked up
+    /// to from the north, south, west and east: her body box stops within 2 px of its drawn
+    /// ground box, never in it. Walked along its back flush above that box, east and west, and
+    /// slid along it diagonally from either end, she never stands still and comes out past its far
+    /// end. Only what keeps its width (a crate, a gate, a wall a verb clears) shuts its back to
+    /// her from the side: its posts.
+    #[test]
+    fn every_prop_s_ground_box_is_met_from_every_side_and_its_back_walked_past() {
+        const G: i32 = 2 * 256;
+        const AX: i32 = 300;
+        const DI: i32 = 212;
+        let cat = jane_data::catalog();
+        let (px, py) = (40, 14);
+        let (mut bad, mut n, mut walled_n) = (Vec::new(), 0, 0);
+        for def in cat.story.props.iter().filter(|d| d.solid) {
+            let Some(f) = def.feet else { continue };
+            let [fx, fy, fw, fh] = f.map(|v| i32::from(v) * SUB_FX);
+            let mut g = ZoneGrid::new(Grid::new(96, 48, Tile::Floor));
+            let parts = def.solid_parts().map(|r| Rect::new(r.x + px * 16, r.y + py * 16, r.w, r.h));
+            g.stamp_prop_parts(def.solid_rect(px, py), false, &parts);
+            let (ox, oy) = (px * CELL_FX, py * CELL_FX);
+            let (x0, y0, x1, y1) = (ox + fx, oy + fy, ox + fx + fw, oy + fy + fh);
+            // Shut behind from the side: only what keeps its width, with feet as wide as it and a
+            // notch behind them in the rows it stamps.
+            let slack = jane_data::FEET_SIDE_SLACK * SUB_FX;
+            let top = (i32::from(def.h) - i32::from(def.base)) * CELL_FX;
+            let wide = fx <= slack && fx + fw >= i32::from(def.w) * CELL_FX - slack;
+            let walled = def.keeps_width() && wide && fy > top;
+            walled_n += usize::from(walled);
+            // Walk from `from` by `d` a tick for `ticks`: where she ends, and the ticks she stood.
+            let run = |from: (i32, i32), d: (i32, i32), ticks: i32| {
+                let mut p = Vec2::new(Fx(from.0), Fx(from.1));
+                let mut still = 0;
+                for _ in 0..ticks {
+                    let q = step_box(&g, p, Fx(d.0), Fx(d.1));
+                    still += i32::from(q == p);
+                    p = q;
+                }
+                (p.x.0, p.y.0, still)
+            };
+            let h = BODY_HALF_FX;
+            let (mx, my) = ((x0 + x1) / 2, (y0 + y1) / 2);
+            let side = if walled { G + slack } else { G };
+            let far = (x1 - x0 + 8 * CELL_FX) / AX;
+            let gaps = [
+                ("north", y0 - (run((mx, oy - 3 * CELL_FX), (0, AX), 200).1 + h), G),
+                ("south", (run((mx, y1 + 3 * CELL_FX), (0, -AX), 200).1 - h) - y1, G),
+                ("west", x0 - (run((x0 - 3 * CELL_FX, my), (AX, 0), 200).0 + h), side),
+                ("east", (run((x1 + 3 * CELL_FX, my), (-AX, 0), 200).0 - h) - x1, side),
+            ];
+            for (from, gap, most) in gaps {
+                if !(0..=most).contains(&gap) {
+                    bad.push(format!("{} from the {from}: {} px short", def.id, f64::from(gap) / 256.0));
+                }
+            }
+            // Along its back, her feet a px above its ground box.
+            let back = y0 - h - SUB_FX;
+            let east = run((ox - 3 * CELL_FX, back), (AX, 0), far + 60);
+            let west = run((ox + i32::from(def.w) * CELL_FX + 3 * CELL_FX, back), (-AX, 0), far + 60);
+            if walled {
+                if east.0 + h > ox + SUB_FX || west.0 - h < ox + i32::from(def.w) * CELL_FX - SUB_FX {
+                    bad.push(format!("{}: keeps its width, yet she slipped behind it", def.id));
+                }
+            } else {
+                let se = run((x0 - 12 * 256, y0 - h - 12 * 256), (DI, DI), far + 60);
+                let sw = run((x1 + 12 * 256, y0 - h - 12 * 256), (-DI, DI), far + 60);
+                for (way, (x, _, still), past) in [
+                    ("east along its back", east, east.0 - h >= x1),
+                    ("west along its back", west, west.0 + h <= x0),
+                    ("south-east onto its back", se, se.0 - h >= x1),
+                    ("south-west onto its back", sw, sw.0 + h <= x0),
+                ] {
+                    if still > 0 || !past {
+                        bad.push(format!("{} {way}: stood {still} ticks, ended at {} px", def.id, x / 256));
+                    }
+                }
+            }
+            n += 1;
+        }
+        assert!(n > 150, "most solid props have feet ({n})");
+        assert!(walled_n > 0, "what keeps its width still has posts");
+        assert!(bad.is_empty(), "an invisible wall, or a way in: {bad:#?}");
     }
 
     /// The owner: "many items should just have a little bounding box on the ground, but it seems

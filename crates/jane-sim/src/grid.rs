@@ -251,13 +251,26 @@ impl ZoneGrid {
     /// The nearest free cell in growing square rings (2020's `PathTo` spiral, in the right
     /// units): top and bottom edges, then the two sides, in a fixed order.
     pub fn nearest_free(&self, cx: i32, cy: i32, max_radius: i32, own: Option<(i32, i32)>) -> Option<(i32, i32)> {
-        if self.free(cx, cy, own) {
+        Self::nearest(cx, cy, max_radius, |x, y| self.free(x, y, own))
+    }
+
+    /// [`nearest_free`](Self::nearest_free) for a unit put into the world (a spawn, a respawn): a
+    /// free cell with an open cell beside it, so it is never put down boxed in.
+    pub fn nearest_roomy(&self, cx: i32, cy: i32, max_radius: i32) -> Option<(i32, i32)> {
+        Self::nearest(cx, cy, max_radius, |x, y| {
+            self.free(x, y, None)
+                && [(0, -1), (1, 0), (0, 1), (-1, 0)].iter().any(|(dx, dy)| !self.solid(x + dx, y + dy))
+        })
+    }
+
+    fn nearest(cx: i32, cy: i32, max_radius: i32, ok: impl Fn(i32, i32) -> bool) -> Option<(i32, i32)> {
+        if ok(cx, cy) {
             return Some((cx, cy));
         }
         for r in 1..=max_radius {
             for d in -r..=r {
                 for (x, y) in [(cx + d, cy - r), (cx + d, cy + r), (cx - r, cy + d), (cx + r, cy + d)] {
-                    if self.free(x, y, own) {
+                    if ok(x, y) {
                         return Some((x, y));
                     }
                 }
@@ -315,5 +328,12 @@ mod tests {
         assert_eq!(g.nearest_free(4, 4, 3, None), Some((3, 3)));
         assert_eq!(g.nearest_free(4, 3, 0, Some((4, 3))), Some((4, 3)));
         assert_eq!(g.nearest_free(4, 4, 0, None), None);
+        // A free cell walled in on four sides is no place to put a unit down.
+        let mut b = floor(9, 9);
+        for (x, y) in [(4, 3), (5, 4), (4, 5), (3, 4)] {
+            b.set_tile(x, y, Tile::Wall);
+        }
+        assert_eq!(b.nearest_free(4, 4, 2, None), Some((4, 4)));
+        assert_ne!(b.nearest_roomy(4, 4, 2), Some((4, 4)));
     }
 }
