@@ -833,12 +833,21 @@ fn hedge(p: &mut Painter, c: &Cell) {
     let r = c.st.ramp;
     let south = !same(p, 0, 1);
     let face_from = if south { CELL - HEDGE_ROWS } else { CELL };
+    // October (ART-PLAN Q1): along some stretches of a hedge two clumps in five have gone bronze
+    // or copper; the Waters' hedges keep their green.
+    let turning = p.s.region[Painter::at(c.cx, c.cy)] != 1
+        && crate::hash::h32((c.wx >> 2) as u32, (c.wy >> 2) as u32, 0x4e_b20e) % 3 != 0;
     for y in 0..CELL {
         for x in 0..CELL {
             let (wx, wy) = c.w(x, y);
             // Leaf clumps round the jittered centres of a 6 px lattice, each a small dome lit
             // from the top-left, a crevice of shade where two clumps meet.
             let v = voronoi(wx, wy, 6, 0x4e);
+            let r = if turning && (v.id >> 16) % 5 < 2 {
+                if (v.id >> 20) & 1 == 0 { Ramp::LeafOak } else { Ramp::LeafBeech }
+            } else {
+                r
+            };
             let (dx, dy) = (v.dx, v.dy);
             let s = -(dx * 2 + dy * 3) - (dx * dx + dy * dy) / 2;
             let t = if v.edge {
@@ -947,8 +956,11 @@ fn slabs(p: &mut Painter, c: &Cell) {
     }
 }
 
-/// Floorboards `detail` px wide along the room, butt joints staggered by board, each board a tone
-/// of its own with a grain run or two along it.
+/// Floorboards `detail` px wide along the room, butt joints staggered by board. Calm, so the
+/// furniture on them reads (ART-PLAN Q5): most boards the key tone, one in seven a half-step
+/// darker and one in nine a half-step lighter; the broad wear taken a whole board at a time, read
+/// at the board's middle; a grain run on one board in three, a half-step and no more; a joint a
+/// shade under each board and a half-step at each butt end.
 fn boards(p: &mut Painter, c: &Cell) {
     let wide = i32::from(c.st.row.detail).clamp(3, 8);
     let z = i32::from(c.st.row.rise).max(1);
@@ -962,24 +974,31 @@ fn boards(p: &mut Painter, c: &Cell) {
             let along = (wx + off).rem_euclid(40);
             let bt = fast(seg as u32, board as u32, 0xb0a2);
             let row = wy.rem_euclid(wide);
-            // A grain run: one row of the board, 5 to 12 px long, somewhere along it.
+            let body = match bt % 48 {
+                0..=3 => Tone::Mid,
+                4..=9 => Tone::Lift,
+                _ => Tone::Base,
+            };
+            // Pure in the board's middle (a board runs past the chunk's noise), at cell scale.
+            let wear = super::slow((seg * 40 - off + 20).div_euclid(CELL), board * wide / CELL, 0xb0a2_3ea2);
+            let body = if wear < 64 {
+                body.step(-1)
+            } else if wear > 196 {
+                body.step(1)
+            } else {
+                body
+            };
+            // A grain run: one row of the board, 5 to 12 px long, on one board in three.
             let (gs, gl, gr) =
                 ((bt >> 4) as i32 % 28, 5 + (bt >> 9) as i32 % 8, 1 + (bt >> 13) as i32 % (wide - 2).max(1));
-            let grain = row == gr && along >= gs && along < gs + gl;
-            let t = if row == wide - 1 || along == 0 {
-                Tone::Shade
-            } else if row == 0 {
-                Tone::Lift
-            } else if grain {
-                Tone::Mid
+            let grain = (bt >> 20) % 3 == 0 && row == gr && along >= gs && along < gs + gl;
+            let t = if row == wide - 1 {
+                body.step(-2).max(Tone::Shade)
+            } else if along == 0 || grain {
+                body.step(-1)
             } else {
-                match bt % 3 {
-                    0 => Tone::Mid,
-                    1 => Tone::Base,
-                    _ => Tone::Lift,
-                }
+                body
             };
-            let t = if grain && bt % 3 == 0 { Tone::Shade } else { t };
             put(p, c, x, y, r.at(t), FLAT, z);
         }
     }

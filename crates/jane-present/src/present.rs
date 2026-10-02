@@ -1024,7 +1024,19 @@ impl Present {
             }
             if p.flat { self.ground.push(cmd) } else { self.standing.push(cmd) }
         }
-        // The chunks' trees, shrubs and stones, from the atlas, by their feet.
+        // The chunks' trees, shrubs and stones, from the atlas, by their feet. Crowns, shrubs,
+        // ferns and reeds sway (ART-PLAN M2): the frame by the tick, the plant's own phase and the
+        // wind (a breeze slow, a storm quick), rest, one way, rest, the other; reeds and long grass
+        // she walks through rustle, quick, while she moves among them. Presentation only.
+        let wind = self.atmos.wind().unsigned_abs() as i32;
+        let period = (64 - wind * 2).clamp(12, 64) as u32;
+        let walker = self
+            .units
+            .iter()
+            .find(|u| u.me)
+            .filter(|u| u.prev != u.cur)
+            .map(|u| ((u.cur.0 >> FX_TO_CANVAS) - cam.0, (u.cur.1 >> FX_TO_CANVAS) - cam.1));
+        let tick = self.tick;
         if let Some((cx0, cy0, cx1, cy1)) = self.chunk_range(cam, band.grow(SORT_PAST)) {
             for cy in cy0..=cy1 {
                 for cx in cx0..=cx1 {
@@ -1034,8 +1046,16 @@ impl Present {
                     let (ox, oy) = (cx * CHUNK_PX - cam.0, cy * CHUNK_PX - cam.1);
                     for (i, pl) in self.terrain.placed(slot).iter().enumerate() {
                         let fl = self.terrain.flora(pl.sprite);
-                        let r = self.atlas.get(fl.look);
                         let (fx, fy) = (ox + i32::from(pl.x), oy + i32::from(pl.y));
+                        let own = jane_core::hash::mix32((fx + cam.0) as u32 ^ ((fy + cam.1) as u32).rotate_left(16));
+                        let rustle =
+                            fl.rustles && walker.is_some_and(|(wx, wy)| (wx - fx).abs() <= 8 && (wy - fy).abs() <= 6);
+                        let frame = if rustle {
+                            1 + (tick / 3).wrapping_add(own) % 2
+                        } else {
+                            [0, 1, 0, 2][((tick / period).wrapping_add(own) % 4) as usize]
+                        };
+                        let r = self.atlas.get(fl.sway[frame as usize]);
                         let (x, y) = (fx - i32::from(r.ax), fy - i32::from(r.ay));
                         if !in_band(x, y, r.src.w, r.src.h) {
                             continue;

@@ -159,7 +159,7 @@ float index_at(vec2 t) {
     vec4 v = texture2D(u_alb, page_uv(t));
     return byte(v.r) + 256.0 * byte(v.a);
 }
-vec3 clut(float i) { return bytes3(texture2D(u_clut, vec2((i + 0.5) / 1024.0, 0.5)).rgb); }
+vec3 clut(float i) { return bytes3(texture2D(u_clut, vec2((i + 0.5) / 2048.0, 0.5)).rgb); }
 vec3 under() { return bytes3(texture2D(u_snap, gl_FragCoord.xy / u_canvas).rgb); }
 float cover(vec2 t) {
     float c = 0.0;
@@ -587,7 +587,7 @@ vec2 page_uv(vec2 t) {
     return (vec2(t.x + s * u_page.x, t.y - s * u_page.y) + 0.5) / u_page.zw;
 }
 float index_of(vec4 v) { return byte(v.r) + 256.0 * byte(v.a); }
-vec3 clut(float i) { return texture2D(u_clut, vec2((i + 0.5) / 1024.0, 0.5)).rgb; }
+vec3 clut(float i) { return texture2D(u_clut, vec2((i + 0.5) / 2048.0, 0.5)).rgb; }
 void main() {
     vec2 t = clamp(floor(v_uv), v_rect.xy, v_rect.zw - 1.0);
     float ix = index_of(texture2D(u_alb, page_uv(t)));
@@ -1071,7 +1071,7 @@ void main() {
             gl_FragColor = vec4(0.0, 0.0, 0.0, 0.25 * alpha);
         } else {
             float at = v_col.x > 0.5 ? v_col.x : ix;
-            gl_FragColor = vec4(texture2D(u_clut, vec2((at + 0.5) / 1024.0, 0.5)).rgb, alpha);
+            gl_FragColor = vec4(texture2D(u_clut, vec2((at + 0.5) / 2048.0, 0.5)).rgb, alpha);
         }
     } else {
         vec4 c = texture2D(u_img, (texel() + 0.5) / u_img_size);

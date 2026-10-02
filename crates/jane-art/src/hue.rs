@@ -51,6 +51,10 @@ pub const fn shadow_hue(r: Ramp) -> Option<i32> {
         | Ramp::Hedge
         | Ramp::LeafOlive
         | Ramp::LeafDeep
+        | Ramp::LeafBeech
+        | Ramp::LeafOak
+        | Ramp::LeafMaple
+        | Ramp::LeafYew
         | Ramp::Needle
         | Ramp::Shrub
         | Ramp::Crop

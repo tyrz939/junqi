@@ -289,6 +289,11 @@ impl Atmosphere {
         self.wind
     }
 
+    /// The hour of the clock, 0 to 23.
+    pub fn hour(&self) -> u32 {
+        self.clock / HOUR % 24
+    }
+
     /// How hard it rains, 0..=65535.
     pub fn rain(&self) -> u32 {
         self.rain

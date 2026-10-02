@@ -49,6 +49,11 @@ impl TileSource for ViewTiles<'_, '_> {
 #[derive(Clone, Copy, Debug)]
 pub struct Flora {
     pub look: RefId,
+    /// Its sway (ART-PLAN M2): the rest frame, then its top sheared a px (two at the very top)
+    /// one way and then the other. A thing that does not sway has its look three times.
+    pub sway: [RefId; 3],
+    /// Whether it rustles when she walks through it (reeds, long grass).
+    pub rustles: bool,
     /// How deep it is across the ground, px (a trunk is thin, a shrub is its spread).
     pub depth: u8,
     /// How many rows over its foot the row it stands on is: its caster's foot, so every tier
@@ -264,6 +269,28 @@ fn drawn_width(c: &jane_art::Canvas) -> i32 {
         .unwrap_or(0)
 }
 
+/// A sway frame of a flora sprite (ART-PLAN M2): its rows from the top of what is drawn down a
+/// fifth of its height pushed two px toward `dir`, the rows down to a third one px, the rest at
+/// rest, so the crown leans over a trunk that stays put. Two px wider each side than the sprite,
+/// its anchor moved with it.
+fn sheared(atlas: &mut Atlas, c: &jane_art::Canvas, (ax, ay): (i32, i32), dir: i32) -> RefId {
+    let top = (0..c.h()).find(|&y| (0..c.w()).any(|x| c.get(x, y).is_opaque())).unwrap_or(0);
+    let tall = (ay - top).max(1);
+    let shift = |y: i32| {
+        if y < top + tall / 5 {
+            2 * dir
+        } else if y < top + tall / 3 {
+            dir
+        } else {
+            0
+        }
+    };
+    let (w, h) = ((c.w() + 4) as u16, c.h() as u16);
+    atlas.add_texels(w, h, (ax as i16 + 2, ay as i16), ay.clamp(1, 255) as u8, |x, y| {
+        crate::atlas::Texel::of(c, x - 2 - shift(y), y)
+    })
+}
+
 /// A block over columns `x0..x1` and rows `y0..y1`, a px wider each side (T2's terrain).
 fn block(x0: i16, x1: i16, y0: i16, y1: i16, height: u8) -> Block {
     Block { x0: x0 - 1, y0, x1: x1 + 1, y1, height, lo: 0, fence: false }
@@ -274,13 +301,21 @@ impl Terrain {
     pub fn build(atlas: &mut Atlas, slots: usize) -> Terrain {
         let mut painter = Painter::new();
         painter.set_standing(Standing::Placed);
-        let flora = painter
-            .bank()
+        let bank = painter.bank();
+        let flora = bank
             .all()
             .into_iter()
-            .map(|(name, s)| {
+            .enumerate()
+            .map(|(i, (name, s))| {
                 let (w, h) = (s.canvas.w(), s.ay);
                 let look = atlas.add_canvas(&s.canvas, (s.ax as i16, s.ay as i16), h.clamp(1, 255) as u8, |_, _, t| t);
+                let kind = bank.kind_of(i as u16);
+                let sway = if kind.sways() {
+                    [look, sheared(atlas, &s.canvas, (s.ax, s.ay), -1), sheared(atlas, &s.canvas, (s.ax, s.ay), 1)]
+                } else {
+                    [look; 3]
+                };
+                let rustles = matches!(kind, jane_art::flora::Kind::Reeds | jane_art::flora::Kind::Grass);
                 // A tree throws its shadow from its trunk; a shrub or a stone from its spread,
                 // as deep as it is drawn wide (round, seen from above): a row of bushes planted
                 // down the screen, a cell apart, is a hedge in the field as one across it is
@@ -291,7 +326,7 @@ impl Terrain {
                 // What it stands on, rows over its foot (a shrub's rim; its heights are counted
                 // from there, `jane_art::flora::base`).
                 let lift = (s.ay - jane_art::flora::base(&s.canvas, s.ay)).clamp(0, 255) as u8;
-                Flora { look, depth: depth.clamp(3, 16) as u8, lift }
+                Flora { look, sway, rustles, depth: depth.clamp(3, 16) as u8, lift }
             })
             .collect();
         Terrain {
