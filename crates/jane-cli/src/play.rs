@@ -32,7 +32,7 @@ pub const USAGE: &str =
                                       table; --l4: only the table; --telemetry: the run's CSVs (kills,
                                       blows, heals, rests, minutes, milestones, chapters, deaths,
                                       summary) into DIR (PLAY-PLAN.md 0.1)
-  telemetry [--models M,M] [--seeds A..B | --seed N] [--minutes M] [--threads T] --out DIR
+  telemetry [--models M,M] [--seeds A..B | --seed N] [--minutes M] [--threads T] [--fires on|off] --out DIR
                                       the story from New Game for each model on each seed, in parallel:
                                       every run's CSVs and one summary.csv, the summary printed
   play --fixture PATH                write the bot-session hash fixture (seeds 1 to 3, both models, 5 min)
@@ -270,6 +270,13 @@ fn telemetry(args: &[String]) -> Result<(), String> {
         (1..=3).collect()
     };
     let minutes = num(args, "--minutes", 900)?;
+    // `--fires on|off`: made fires (`jane_sim::fire`) for every run, whatever New Game says.
+    let fires = match flag(args, "--fires") {
+        None => None,
+        Some("on") => Some(true),
+        Some("off") => Some(false),
+        Some(x) => return Err(format!("--fires on|off, not {x}")),
+    };
     let out = Path::new(flag(args, "--out").ok_or("--out DIR")?);
     let jobs: Vec<(Model, u32)> = models.iter().flat_map(|&m| seeds.iter().map(move |&s| (m, s))).collect();
     let threads = num(args, "--threads", std::thread::available_parallelism().map_or(4, |n| n.get() as u32))?.max(1);
@@ -282,7 +289,7 @@ fn telemetry(args: &[String]) -> Result<(), String> {
                 loop {
                     let i = next.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
                     let Some(&(m, seed)) = jobs.get(i) else { break };
-                    let r = jane_bot::telemetry::play(m, seed, minutes)
+                    let r = jane_bot::telemetry::play_with(m, seed, minutes, fires)
                         .and_then(|(bot, t)| t.write(out, &bot).map_err(|e| format!("{}: {e}", out.display())));
                     eprintln!("{} seed {seed}: {}", m.name(), if r.is_ok() { "written" } else { "failed" });
                     *done[i].lock().expect("a run's slot") = Some(r);

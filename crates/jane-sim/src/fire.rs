@@ -43,10 +43,7 @@ use crate::interact::{FocusRef, Here, Verb, focus_of, spawn_of};
 use crate::inventory;
 use crate::sim::Sim;
 use crate::state::{GameState, Prop, Seated, Unbanked, ZoneState};
-use crate::tuning::{
-    FIRE_BURNS, FIRE_HOLD_TICKS, FIRE_LAY, FIRE_MORE, FIRE_MOST, FIRE_SHELTER_CELLS, REST_TICKS, TICKS_PER_HOUR,
-};
-use crate::units::{max_hp, max_mp};
+use crate::tuning::{FIRE_BURNS, FIRE_HOLD_TICKS, FIRE_LAY, FIRE_MORE, FIRE_MOST, FIRE_SHELTER_CELLS, TICKS_PER_HOUR};
 
 fn item(id: &str) -> Option<ItemId> {
     jane_data::catalog().combat.item_id(id)
@@ -375,22 +372,8 @@ pub fn step_seated(cx: &mut Ctx<'_>) {
             }
             continue;
         }
-        let u = cx.zone.unit_mut(body).expect("her body");
-        let (hmax, mmax) = (max_hp(u), max_mp(u));
-        let Some(s) = u.seated.as_deref_mut() else { continue };
-        let mend = |v: Milli, max: Milli, acc: &mut u32| -> Milli {
-            *acc += max.0.max(0) as u32;
-            let add = (*acc / REST_TICKS) as i32;
-            *acc %= REST_TICKS;
-            Milli((v.0 + add).min(max.0))
-        };
-        let hp = mend(u.hp, hmax, &mut s.hp_acc);
-        let mp = mend(u.mp, mmax, &mut s.mp_acc);
-        s.hp_was = hp;
-        u.hp = hp;
-        u.mp = u.mp.max(mp);
-        if u.hp >= hmax && u.mp >= mmax {
-            u.seated = None;
+        if let Some(u) = cx.zone.unit_mut(body) {
+            crate::life::mend_seated(u);
         }
     }
 }

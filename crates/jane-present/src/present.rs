@@ -611,8 +611,30 @@ impl Present {
             jane_sim::state::Speaker::Prop(id) => Some(id),
             _ => None,
         });
+        // The pit she is laying a fire in: USE held on it (`jane_sim::fire::hold`).
+        let laying = (view.body().hold > 0)
+            .then(|| view.focus())
+            .flatten()
+            .filter(|f| f.verb == jane_sim::interact::Verb::MakeFire)
+            .and_then(|f| match f.target {
+                jane_sim::interact::FocusRef::Prop(id) => Some(id),
+                _ => None,
+            });
         view.for_props_in(area, &mut self.prop_scratch, |p| {
             let d = cat.story.prop(p.def);
+            // A made fire (`jane_sim::fire`): cold, laid while she lays it, lit, or ash.
+            let fire = d.made.then(|| {
+                use props::FireState;
+                if p.on {
+                    FireState::Lit
+                } else if laying == Some(p.id) {
+                    FireState::Laid
+                } else if p.used {
+                    FireState::Ash
+                } else {
+                    FireState::Cold
+                }
+            });
             // An open gate is a doorway.
             if d.gate && !p.solid {
                 return;
@@ -637,11 +659,16 @@ impl Present {
                 y: i32::from(p.cell.y) * CELL,
                 w: i32::from(d.w) * CELL,
                 h: i32::from(d.h) * CELL,
-                look: held.or_else(|| kit.look(d.sprite, p.id.get(), state)).unwrap_or_else(|| {
-                    let look = stand.prop(d.w, d.h, d.flat, d.light.is_some());
-                    // A lamp the view says is out has dark glass.
-                    if d.light.is_some() && !lit { stand.unlit(look) } else { look }
-                }),
+                look: held
+                    .or_else(|| match fire {
+                        Some(f) => kit.fire_look(d.sprite, p.id.get(), f),
+                        None => kit.look(d.sprite, p.id.get(), state),
+                    })
+                    .unwrap_or_else(|| {
+                        let look = stand.prop(d.w, d.h, d.flat, d.light.is_some());
+                        // A lamp the view says is out has dark glass.
+                        if d.light.is_some() && !lit { stand.unlit(look) } else { look }
+                    }),
                 flat: d.flat,
                 flush: false,
                 on_top: {

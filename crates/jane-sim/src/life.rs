@@ -68,6 +68,28 @@ pub fn pay_regen(u: &mut Unit, now: Tick) {
     }
 }
 
+/// Seated at a fire (`fire.rs`, after the flush): a tick's mending, `max / REST_TICKS` of her
+/// health and mana with the remainder carried (`Seated`'s accumulators), so she is whole in
+/// thirty seconds on every machine. Whole, she gets up.
+pub fn mend_seated(u: &mut Unit) {
+    let (hmax, mmax) = (max_hp(u), max_mp(u));
+    let Some(s) = u.seated.as_deref_mut() else { return };
+    let mend = |v: Milli, max: Milli, acc: &mut u32| -> Milli {
+        *acc += max.0.max(0) as u32;
+        let add = (*acc / crate::tuning::REST_TICKS) as i32;
+        *acc %= crate::tuning::REST_TICKS;
+        Milli((v.0 + add).min(max.0))
+    };
+    let hp = mend(u.hp, hmax, &mut s.hp_acc);
+    let mp = mend(u.mp, mmax, &mut s.mp_acc);
+    s.hp_was = hp;
+    u.hp = hp;
+    u.mp = u.mp.max(mp);
+    if u.hp >= hmax && u.mp >= mmax {
+        u.seated = None;
+    }
+}
+
 /// Step 5: every awake unit's regen, paid to now (a unit that woke this tick catches up here).
 pub fn pay_awake(cx: &mut Ctx<'_>) {
     let now = cx.world.tick;

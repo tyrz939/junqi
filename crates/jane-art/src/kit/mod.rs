@@ -87,7 +87,7 @@ pub fn footprint(sprite: SpriteId) -> Result<(u8, u8), String> {
 /// Looks drawn before any prop row names them, and the footprint their rows will give: Pell's
 /// iron brazier (the old `campfire_cold`, renamed when that became the fire pit) and the old
 /// grate, 2026-10-02. A row that names one wins; drop it from here once its rows are in.
-const UNPLACED: [(&str, (u8, u8)); 2] = [("brazier_cold", (2, 2)), ("old_grate", (2, 2))];
+const UNPLACED: [(&str, (u8, u8)); 0] = [];
 
 /// The stable seed of a sprite id.
 pub fn seed(sprite: &str) -> u32 {

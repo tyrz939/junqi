@@ -225,6 +225,8 @@ impl Fx {
         let ours = |u: jane_sim::ids::UnitId| view.seat_of(u).is_some();
         for e in jane_sim::event::events_for(events, view.me()) {
             match e.kind {
+                // She struck a match, or a fire took (`jane_sim::fire::make`).
+                EventKind::Sfx { kind: jane_sim::event::SfxKind::Kindle, at } => self.match_flare(at),
                 EventKind::Cast { unit, spell, at } => {
                     let def = cat.combat.spell(spell);
                     let Some(f) = art::spell(def.id) else { continue };

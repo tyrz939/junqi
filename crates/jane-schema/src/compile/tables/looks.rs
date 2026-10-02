@@ -283,7 +283,7 @@ fn unique<T: PartialEq>(v: &[T]) -> bool {
 
 /// Looks drawn ahead of the rows that will name them (2026-10-02, the fire she makes: the art
 /// branch landed before the sim's rows). Empty this once those rows are in.
-const AWAITING: [&str; 4] = ["brazier_cold", "old_grate", "item_deadwood", "item_match"];
+const AWAITING: [&str; 0] = [];
 
 pub fn compile(src: &Source, cx: &mut Ctx) -> &'static [(SpriteId, Look)] {
     let mut out = Vec::new();
