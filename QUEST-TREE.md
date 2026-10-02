@@ -523,37 +523,39 @@ Web spinners in the walls, two empty cage traps with the doors tied open, a hatc
 
 | # | id | Giver | Where | Verb | Pays | What changes |
 | --- | --- | --- | --- | --- | --- | --- |
-| W1 | `the_toll` | the toll board, The Tollhouse | the coal scuttle to the brazier | **carry** | a fire stone | the tollhouse brazier burns: a new fire |
-| W2 | `three_crossings` | the same | Castle Bridge, three times after the bell | **test a claim** | fire stones, a light stone | her count in the toll book; the journal records the bridge's claim as borne out or given the lie, by what the seed's bridge did |
-| W3 | `the_keepers_tally` | the same | the key in the sunk boat, the toll box | find, open | Stone Skin, vials | the tally pinned up |
+| W1 | `the_toll` | the toll board, The Tollhouse | the coal scuttle to the brazier | **carry** | Stone Skin | the tollhouse brazier burns: a new fire |
+| W2 | `three_crossings` | the same | Castle Bridge, three times after the bell | **test a claim** | moss, caps | her count in the toll book; the journal records the bridge's claim as borne out or given the lie, by what the seed's bridge did |
+| W3 | `the_keepers_tally` | the same | the key in the sunk boat, the toll box | find, open | Stone Skin, lilies | the tally pinned up |
 | W4 | `cutting_order` | the order slate | cut reed in the Eel Beds | gather | caps, moss | three bundles stacked at the fire |
 | W5 | `what_the_eels_eat` | the slate | marsh rats in the Eel Beds | kill 6 | jar | the rats gone; a reedcutter back in the beds by day; Mrs Fludd hears |
 | W6 | `one_hook_empty` | the coat hooks | Skeat's coat at the Still Pool (4) | detour | page | five coats on the hooks |
-| W7 | `the_planting_book` | the planting book, Mother's Garden | one of three herbs from the beds | gather | lilies, gold dust | seedlings from the garden in Julie's yard |
+| W7 | `the_planting_book` | the planting book, Mother's Garden | one of three herbs from the beds | gather | lilies, caps | seedlings from the garden in Julie's yard |
 | W8 | `dead_heading` | the planting book | garden flowers | kill 5 | jar | a bed cut back to the root |
 | W9 | `mother` | the statue | a white rose, after the bell | vigil | page | the rose on the plinth |
-| W10 | `overdue` | the returns box, the ruined library | three books on Glasshouse Row | fetch | light stones | the library's fire lit |
+| W10 | `overdue` | the returns box, the ruined library | three books on Glasshouse Row | fetch | moss | the library's fire lit |
 | W11 | | | | | | **Not built:** the spine's Counted Out already walks her into the stacks |
 | W12 | `road_closed` | the council board, the Drowned Lane | the near and the far flood board | walk the road that is the danger | Stone Skin | her 0 in the depth column |
-| W13 | `the_diversion` | the board, overleaf | three waymarks round the lane | walk the safe way | a fire stone | the brazier at the last waymark: a new fire |
+| W13 | `the_diversion` | the board, overleaf | three waymarks round the lane | walk the safe way | coal | the brazier at the last waymark: a new fire |
 | W14 | `nobody_has_drowned` | the shrine by the statue | three name tags at the Still Pool | fetch | jar | candles under the names |
 | W15 | `the_statue_faces` | the shrine | the brass plate, at noon and after the bell | **test a claim** | page | her chalk on the plate |
-| | `loveday_landing` | Mrs Loveday, Reed End | down to the landing with her, after the bell | **walk with** | Life Steal | a card on the landing post |
-| K1 | `shift_rota` | the rota | the three hut books | sign | light stones | a card under the rota |
+| | `loveday_landing` | Mrs Loveday, Reed End | down to the landing with her, after the bell | **walk with** | Stone Skin | a card on the landing post |
+| K1 | `shift_rota` | the rota | the three hut books | sign | coal | a card under the rota |
 | K2 | `dinners_out` | the hatch | a tin at each of three dead signals on Cinder Walk | deliver | jar | the tins at the signals, one moved and empty |
 | K3 | `relieve_the_night_shift` | the rota | the night shift in the Cooling Yard | kill 6 | jar | six stood down for good; six pairs of boots under the board |
-| K4 | `signals_at_danger` | the lamp log, Hut Three | the hut lamp, lit and kept till six | **hold the light** | light and fire stones | the lamp lit every night from the bell |
+| K4 | `signals_at_danger` | the lamp log, Hut Three | the hut lamp, lit and kept till six | **hold the light** | iron, coal | the lamp lit every night from the bell |
 | K5 | `the_foremans_diary` | the wagon locker, the Sidings | three pages in the wagons | fetch | page | the diary whole |
 | K6 | `last_wagon` | the locker | the pay clerk | kill | iron, coal | his pay packets on the locker |
 | K7 | `register_of_burials` | the lodge book, the graveyard gate | three stones on Chapel Rise | check | jar | her initials on the first stone |
 | K8 | `flowers_for_the_rise` | the lodge book | three white roses from Sallow Bottom | cross-region return | page | roses on the stones |
-| K9 | `goldskins_four` | a carved stone on Chapel Rise | four corner markers by the Hoar Stone | read in turn | potions | chalk in the carving |
-| K10 | `what_the_pipes_say` | the pipe mouth in the canteen yard | the pipe mouths at Slag Mere | **listen** | iron, a fire stone | QUIET chalked on the flange |
+| K9 | `goldskins_four` | a carved stone on Chapel Rise | four corner markers by the Hoar Stone | read in turn | Stone Skin | chalk in the carving |
+| K10 | `what_the_pipes_say` | the pipe mouth in the canteen yard | the pipe mouths at Slag Mere | **listen** | iron | QUIET chalked on the flange |
 | K11 | `the_mere` | the far pipe mouth | slag cactus | kill 6 | jar | six gone from round the pipe |
 | K12 | `the_bell_rope` | a shrine at the Bellfield | the Bellfield at nine | vigil | page | a candle end in the niche |
-| K13 | `fourteen_again` | Pell's stone, once a spark is known | Lamps 12, 13 and 15 | verb return | light stones | the three lamps burn after the bell |
+| K13 | `fourteen_again` | Pell's stone, once a spark is known | Lamps 12, 13 and 15 | verb return | Stone Skin | the three lamps burn after the bell |
 | K14 | `the_adit` | the tally slate, once Explosion is known | the rock across the adit | verb return | large jar | the adit open |
 | | `breen_coal` | Mr Breen, Hut One | three lumps of coal from the Sidings | fetch | Stone Skin | his stove lit: a new fire |
+
+**What they pay.** After a chain's first link: growth (a jar or a page), a fire, or what the county gives again (herbs, coal, iron, Stone Skin), never a thing the bag must keep for good (light and fire stones, vials, the rarer potions). A Reader who takes every errand offered came to the Burial on seed 4 with a bag of things that cannot be thrown away, and left the snake's key in its chest; the canteen's tins can be had again for a lump of coal, so a full bag may let them go.
 
 **The Tuesday round**, the cross-region chain (Duskwood's Stalvan in small; `tuesday.json` and one link in each region's file). Mrs Allen, after her dressing: the nurse did the Waters after her on a Tuesday. **Tuesday**: ask Mrs Loveday at Reed End, who has kept a bag on her step for the nurse's next call. **Her Next Call**: take it to Mr Pask at Hut Two in the Works, whose hut book has E.M. signed on a Tuesday in the spring. **The Lodge Book**: what the register at the graveyard gate says (E.M. against every burial for one week in the spring, then nothing), told back through Mrs Allen's flap. Nobody says what happened to her. Mrs Fludd hears of the asking, and has seen the nurse go past to the Works and not come back; a pint stands on Mrs Allen's step for the nurse; at the end a card in the window: NURSE CALLED. TUESDAY.
 

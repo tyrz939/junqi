@@ -5,9 +5,20 @@
     "completion": "The coal caught at once, as if it had been waiting. The road can see the gate again. Nobody comes through it.",
     "returnTo": "the toll board at {place:tollhouse}",
     "requirements": [
-      { "type": "location", "target": "tollhouse_lit", "qty": 1, "text": "The coal scuttle, carried to the brazier at {place:tollhouse}" }
+      {
+        "type": "location",
+        "target": "tollhouse_lit",
+        "qty": 1,
+        "text": "The coal scuttle, carried to the brazier at {place:tollhouse}"
+      }
     ],
-    "rewards": [{ "do": "give", "item": "fire_stone", "qty": 1 }]
+    "rewards": [
+      {
+        "do": "give",
+        "item": "potion_stoneskin",
+        "qty": 1
+      }
+    ]
   },
   "three_crossings": {
     "name": "Three Crossings",
@@ -15,9 +26,25 @@
     "completion": "Three crossings after the bell, and you counted them yourself. You wrote the number in the toll book under the keeper's, in the same column.",
     "returnTo": "the toll board at {place:tollhouse}",
     "requirements": [
-      { "type": "location", "target": "three_crossings_done", "qty": 1, "text": "Over Castle Bridge three times, after the bell" }
+      {
+        "type": "location",
+        "target": "three_crossings_done",
+        "qty": 1,
+        "text": "Over Castle Bridge three times, after the bell"
+      }
     ],
-    "rewards": [{ "do": "give", "item": "fire_stone", "qty": 2 }, { "do": "give", "item": "light_stone", "qty": 1 }]
+    "rewards": [
+      {
+        "do": "give",
+        "item": "night_lich_moss",
+        "qty": 2
+      },
+      {
+        "do": "give",
+        "item": "white_water_cap",
+        "qty": 2
+      }
+    ]
   },
   "the_keepers_tally": {
     "name": "The Keeper's Tally",
@@ -25,10 +52,31 @@
     "completion": "The box held the takings, in a bag tied twice, and his tally. The last page counts the same walker over and over, in pencil, until the pencil gave out.",
     "returnTo": "the toll board at {place:tollhouse}",
     "requirements": [
-      { "type": "location", "target": "toll_key_found", "qty": 1, "text": "The keeper's key, in the sunk boat at {place:tollhouse}" },
-      { "type": "location", "target": "toll_box_opened", "qty": 1, "text": "The toll box at {place:tollhouse}, opened" }
+      {
+        "type": "location",
+        "target": "toll_key_found",
+        "qty": 1,
+        "text": "The keeper's key, in the sunk boat at {place:tollhouse}"
+      },
+      {
+        "type": "location",
+        "target": "toll_box_opened",
+        "qty": 1,
+        "text": "The toll box at {place:tollhouse}, opened"
+      }
     ],
-    "rewards": [{ "do": "give", "item": "potion_stoneskin", "qty": 1 }, { "do": "give", "item": "small_empty_vial", "qty": 2 }]
+    "rewards": [
+      {
+        "do": "give",
+        "item": "potion_stoneskin",
+        "qty": 1
+      },
+      {
+        "do": "give",
+        "item": "honeylace_lily",
+        "qty": 2
+      }
+    ]
   },
   "cutting_order": {
     "name": "Cutting Order",
@@ -36,9 +84,25 @@
     "completion": "Three bundles stacked by the fire, tied as they were tied. Somebody will come for them from Castle, the slate says. It has said so since the spring.",
     "returnTo": "the order slate at the Reedcutters' fire",
     "requirements": [
-      { "type": "acquire", "target": "cut_reed", "qty": 3, "text": "Bundles of cut reed, stacked in the Eel Beds" }
+      {
+        "type": "acquire",
+        "target": "cut_reed",
+        "qty": 3,
+        "text": "Bundles of cut reed, stacked in the Eel Beds"
+      }
     ],
-    "rewards": [{ "do": "give", "item": "white_water_cap", "qty": 2 }, { "do": "give", "item": "night_lich_moss", "qty": 1 }]
+    "rewards": [
+      {
+        "do": "give",
+        "item": "white_water_cap",
+        "qty": 2
+      },
+      {
+        "do": "give",
+        "item": "night_lich_moss",
+        "qty": 1
+      }
+    ]
   },
   "what_the_eels_eat": {
     "name": "What the Eels Eat",
@@ -46,9 +110,21 @@
     "completion": "Six marks crossed on the slate. Next morning the cutters went back into the beds, and Mrs Fludd kept the fire in for them.",
     "returnTo": "the order slate at the Reedcutters' fire",
     "requirements": [
-      { "type": "kill", "target": "marsh_rat", "qty": 6, "text": "Marsh rats, in the Eel Beds" }
+      {
+        "type": "kill",
+        "target": "marsh_rat",
+        "qty": 6,
+        "text": "Marsh rats, in the Eel Beds"
+      }
     ],
-    "rewards": [{ "do": "grow", "stat": "strength", "amount": 3, "id": "jar_eel_beds" }]
+    "rewards": [
+      {
+        "do": "grow",
+        "stat": "strength",
+        "amount": 3,
+        "id": "jar_eel_beds"
+      }
+    ]
   },
   "one_hook_empty": {
     "name": "One Hook Empty",
@@ -56,9 +132,21 @@
     "completion": "A coat on the fifth hook. It was dry when you took it off the post, and it is dry now, which nothing at the Still Pool is.",
     "returnTo": "the coat hooks at the Reedcutters' fire",
     "requirements": [
-      { "type": "acquire", "target": "skeat_coat", "qty": 1, "text": "Skeat's coat, on the mooring post at the Still Pool" }
+      {
+        "type": "acquire",
+        "target": "skeat_coat",
+        "qty": 1,
+        "text": "Skeat's coat, on the mooring post at the Still Pool"
+      }
     ],
-    "rewards": [{ "do": "grow", "stat": "spirit", "amount": 3, "id": "page_skeat" }]
+    "rewards": [
+      {
+        "do": "grow",
+        "stat": "spirit",
+        "amount": 3,
+        "id": "page_skeat"
+      }
+    ]
   },
   "the_planting_book": {
     "name": "The Planting Book",
@@ -66,11 +154,37 @@
     "completion": "One of each, laid on the open page. You wrote the date. The hand above yours is very like the one on Julie's labels, and is not.",
     "returnTo": "the planting book at Mother's Garden",
     "requirements": [
-      { "type": "acquire", "target": "honeylace_lily", "qty": 1, "text": "A honeylace lily, in the beds at Mother's Garden" },
-      { "type": "acquire", "target": "white_water_cap", "qty": 1, "text": "A white water cap, in the beds at Mother's Garden" },
-      { "type": "acquire", "target": "night_lich_moss", "qty": 1, "text": "Night lich moss, in the beds at Mother's Garden" }
+      {
+        "type": "acquire",
+        "target": "honeylace_lily",
+        "qty": 1,
+        "text": "A honeylace lily, in the beds at Mother's Garden"
+      },
+      {
+        "type": "acquire",
+        "target": "white_water_cap",
+        "qty": 1,
+        "text": "A white water cap, in the beds at Mother's Garden"
+      },
+      {
+        "type": "acquire",
+        "target": "night_lich_moss",
+        "qty": 1,
+        "text": "Night lich moss, in the beds at Mother's Garden"
+      }
     ],
-    "rewards": [{ "do": "give", "item": "honeylace_lily", "qty": 2 }, { "do": "give", "item": "gold_dust", "qty": 1 }]
+    "rewards": [
+      {
+        "do": "give",
+        "item": "honeylace_lily",
+        "qty": 2
+      },
+      {
+        "do": "give",
+        "item": "white_water_cap",
+        "qty": 2
+      }
+    ]
   },
   "dead_heading": {
     "name": "Dead-heading",
@@ -78,9 +192,21 @@
     "completion": "Five cut back to the root. The book has a column for it, and you ticked it, and the tick before yours is the spring's.",
     "returnTo": "the planting book at Mother's Garden",
     "requirements": [
-      { "type": "kill", "target": "garden_flower", "qty": 5, "text": "Garden flowers, in the beds at Mother's Garden" }
+      {
+        "type": "kill",
+        "target": "garden_flower",
+        "qty": 5,
+        "text": "Garden flowers, in the beds at Mother's Garden"
+      }
     ],
-    "rewards": [{ "do": "grow", "stat": "strength", "amount": 3, "id": "jar_mothers_garden" }]
+    "rewards": [
+      {
+        "do": "grow",
+        "stat": "strength",
+        "amount": 3,
+        "id": "jar_mothers_garden"
+      }
+    ]
   },
   "mother": {
     "name": "Mother",
@@ -88,9 +214,21 @@
     "completion": "You left the rose at her feet after the bell. She was facing the beds when you did, not the gate. In the morning the rose was still there.",
     "returnTo": "the statue at Mother's Garden",
     "requirements": [
-      { "type": "location", "target": "mother_rose", "qty": 1, "text": "A white water rose, left at the statue at Mother's Garden after the bell" }
+      {
+        "type": "location",
+        "target": "mother_rose",
+        "qty": 1,
+        "text": "A white water rose, left at the statue at Mother's Garden after the bell"
+      }
     ],
-    "rewards": [{ "do": "grow", "stat": "spirit", "amount": 3, "id": "page_mother" }]
+    "rewards": [
+      {
+        "do": "grow",
+        "stat": "spirit",
+        "amount": 3,
+        "id": "page_mother"
+      }
+    ]
   },
   "overdue": {
     "name": "Overdue",
@@ -98,9 +236,20 @@
     "completion": "Three books in the returns box. You looked in the margins. Julie writes small, and mostly about how much water.",
     "returnTo": "the returns box at the ruined library",
     "requirements": [
-      { "type": "acquire", "target": "overdue_book", "qty": 3, "text": "Library books, left on Glasshouse Row" }
+      {
+        "type": "acquire",
+        "target": "overdue_book",
+        "qty": 3,
+        "text": "Overdue books, left on Glasshouse Row"
+      }
     ],
-    "rewards": [{ "do": "give", "item": "light_stone", "qty": 2 }]
+    "rewards": [
+      {
+        "do": "give",
+        "item": "night_lich_moss",
+        "qty": 2
+      }
+    ]
   },
   "road_closed": {
     "name": "Road Closed",
@@ -108,10 +257,26 @@
     "completion": "Dry from end to end. You wrote 0 in the column. Every number above yours is 0 as well.",
     "returnTo": "the council board at the Drowned Lane",
     "requirements": [
-      { "type": "location", "target": "lane_near_board", "qty": 1, "text": "The near flood board, in the Drowned Lane" },
-      { "type": "location", "target": "lane_far_board", "qty": 1, "text": "The far flood board, in the Drowned Lane" }
+      {
+        "type": "location",
+        "target": "lane_near_board",
+        "qty": 1,
+        "text": "The near flood board, in the Drowned Lane"
+      },
+      {
+        "type": "location",
+        "target": "lane_far_board",
+        "qty": 1,
+        "text": "The far flood board, in the Drowned Lane"
+      }
     ],
-    "rewards": [{ "do": "give", "item": "potion_stoneskin", "qty": 2 }]
+    "rewards": [
+      {
+        "do": "give",
+        "item": "potion_stoneskin",
+        "qty": 2
+      }
+    ]
   },
   "the_diversion": {
     "name": "Diversion",
@@ -119,11 +284,32 @@
     "completion": "Round by the waymarks, the long way, and nothing came out of the lane at you. The brazier at the last one is lit now. The road users have still to come.",
     "returnTo": "the council board at the Drowned Lane",
     "requirements": [
-      { "type": "location", "target": "diversion_1", "qty": 1, "text": "The first diversion waymark, by the Drowned Lane" },
-      { "type": "location", "target": "diversion_2", "qty": 1, "text": "The second diversion waymark, by the Drowned Lane" },
-      { "type": "location", "target": "diversion_3", "qty": 1, "text": "The last diversion waymark and its brazier, by the Drowned Lane" }
+      {
+        "type": "location",
+        "target": "diversion_1",
+        "qty": 1,
+        "text": "The first diversion waymark, by the Drowned Lane"
+      },
+      {
+        "type": "location",
+        "target": "diversion_2",
+        "qty": 1,
+        "text": "The second diversion waymark, by the Drowned Lane"
+      },
+      {
+        "type": "location",
+        "target": "diversion_3",
+        "qty": 1,
+        "text": "The last diversion waymark and its brazier, by the Drowned Lane"
+      }
     ],
-    "rewards": [{ "do": "give", "item": "fire_stone", "qty": 1 }]
+    "rewards": [
+      {
+        "do": "give",
+        "item": "coal",
+        "qty": 2
+      }
+    ]
   },
   "nobody_has_drowned": {
     "name": "Nobody Has Drowned",
@@ -131,9 +317,21 @@
     "completion": "Three tags back on the list. The list is complete. You read it twice and did not count it.",
     "returnTo": "the shrine by the statue in the lake",
     "requirements": [
-      { "type": "acquire", "target": "name_tag", "qty": 3, "text": "Brass name tags, on the bank at the Still Pool" }
+      {
+        "type": "acquire",
+        "target": "name_tag",
+        "qty": 3,
+        "text": "Brass name tags, on the bank at the Still Pool"
+      }
     ],
-    "rewards": [{ "do": "grow", "stat": "strength", "amount": 3, "id": "jar_lake_shrine" }]
+    "rewards": [
+      {
+        "do": "grow",
+        "stat": "strength",
+        "amount": 3,
+        "id": "jar_lake_shrine"
+      }
+    ]
   },
   "the_statue_faces": {
     "name": "Which Way It Faces",
@@ -141,10 +339,27 @@
     "completion": "At noon it faced the road. After the bell it faced the water. The plate says the road. You have both down in your own hand.",
     "returnTo": "the shrine by the statue in the lake",
     "requirements": [
-      { "type": "location", "target": "statue_noon", "qty": 1, "text": "The brass plate by the statue in the lake, at noon" },
-      { "type": "location", "target": "statue_night", "qty": 1, "text": "The brass plate by the statue in the lake, after the bell" }
+      {
+        "type": "location",
+        "target": "statue_noon",
+        "qty": 1,
+        "text": "The brass plate by the statue in the lake, at noon"
+      },
+      {
+        "type": "location",
+        "target": "statue_night",
+        "qty": 1,
+        "text": "The brass plate by the statue in the lake, after the bell"
+      }
     ],
-    "rewards": [{ "do": "grow", "stat": "spirit", "amount": 3, "id": "page_statue" }]
+    "rewards": [
+      {
+        "do": "grow",
+        "stat": "spirit",
+        "amount": 3,
+        "id": "page_statue"
+      }
+    ]
   },
   "loveday_landing": {
     "name": "To the Landing",
@@ -152,9 +367,20 @@
     "completion": "She rang the landing bell three times, and the beds said nothing back. She walked home beside you, and thanked you at the door as if he had come.",
     "returnTo": "Mrs Loveday, at {place:reed_end}, by day",
     "requirements": [
-      { "type": "location", "target": "loveday_walked", "qty": 1, "text": "Mrs Loveday, walked down to the landing at {place:reed_end}, after the bell" }
+      {
+        "type": "location",
+        "target": "loveday_walked",
+        "qty": 1,
+        "text": "Mrs Loveday, walked down to the landing at {place:reed_end}, after the bell"
+      }
     ],
-    "rewards": [{ "do": "give", "item": "potion_lifesteal", "qty": 1 }]
+    "rewards": [
+      {
+        "do": "give",
+        "item": "potion_stoneskin",
+        "qty": 1
+      }
+    ]
   },
   "tuesday_reed_end": {
     "name": "Her Next Call",
@@ -162,8 +388,24 @@
     "completion": "Mr Pask took the bag and turned it over. He said she always tied it like that, and that it had been a while.",
     "returnTo": "Mr Pask, at {place:hut_two}",
     "requirements": [
-      { "type": "acquire", "target": "nurses_bag", "qty": 1, "text": "The nurse's bag, to Mr Pask at {place:hut_two}" }
+      {
+        "type": "acquire",
+        "target": "nurses_bag",
+        "qty": 1,
+        "text": "The nurse's bag, to Mr Pask at {place:hut_two}"
+      }
     ],
-    "rewards": [{ "do": "give", "item": "fire_stone", "qty": 1 }, { "do": "give", "item": "iron", "qty": 2 }]
+    "rewards": [
+      {
+        "do": "give",
+        "item": "iron",
+        "qty": 2
+      },
+      {
+        "do": "give",
+        "item": "coal",
+        "qty": 2
+      }
+    ]
   }
 }

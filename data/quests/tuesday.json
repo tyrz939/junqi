@@ -5,8 +5,19 @@
     "completion": "Mrs Loveday had seen her, on a Tuesday in the spring, and not since. She had kept something of the nurse's back for her, and it is still there.",
     "returnTo": "Mrs Loveday, at {place:reed_end}",
     "requirements": [
-      { "type": "location", "target": "tuesday_reed_end_asked", "qty": 1, "text": "Mrs Loveday's door at {place:reed_end}" }
+      {
+        "type": "location",
+        "target": "tuesday_reed_end_asked",
+        "qty": 1,
+        "text": "Mrs Loveday's door at {place:reed_end}"
+      }
     ],
-    "rewards": [{ "do": "give", "item": "potion_manashield", "qty": 1 }]
+    "rewards": [
+      {
+        "do": "give",
+        "item": "potion_stoneskin",
+        "qty": 1
+      }
+    ]
   }
 }

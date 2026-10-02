@@ -40,13 +40,7 @@
     ],
     "respawn": 600,
     "autoRegen": true,
-    "loot": [
-      {
-        "item": "savage_snakeroot",
-        "qty": 1,
-        "chance": 1
-      }
-    ],
+    "loot": [],
     "sprite": "flower"
   },
   "reed_fludd": {

@@ -23,7 +23,7 @@
   {"key": "returns_box", "at": {"site": "library", "within": 12}, "prop": {"def": "returns_box", "label": "The returns box", "talk": "returns_box"}},
   {"key": "library_fire", "at": {"site": "library", "within": 14}, "prop": {"def": "campfire", "talk": "fire", "hidden": true}},
   {"key": "glasshouse_sign", "at": {"area": "glasshouse_row", "within": 18}, "prop": {"def": "sign", "label": "A parks board", "talk": "glasshouse_sign"}},
-  {"key": "glasshouse_book", "count": 3, "at": {"area": "glasshouse_row", "within": 22}, "prop": {"def": "lost_thing", "label": "A library book", "loot": [{"item": "overdue_book", "qty": 1}]}},
+  {"key": "glasshouse_book", "count": 3, "at": {"area": "glasshouse_row", "within": 22}, "prop": {"def": "lost_thing", "label": "An overdue book", "loot": [{"item": "overdue_book", "qty": 1}]}},
   {"key": "lane_board", "at": {"area": "drowned_lane", "within": 32}, "prop": {"def": "road_closed", "label": "The council board", "talk": "lane_board"}},
   {"key": "lane_near", "at": {"area": "drowned_lane", "within": 32}, "prop": {"def": "road_closed", "label": "The near flood board", "talk": "lane_near"}},
   {"key": "lane_far", "at": {"area": "drowned_lane", "within": 40}, "prop": {"def": "road_closed", "label": "The far flood board", "talk": "lane_far"}},

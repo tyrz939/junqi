@@ -27,7 +27,7 @@
     "rewards": [
       {
         "do": "give",
-        "item": "light_stone",
+        "item": "coal",
         "qty": 2
       }
     ]
@@ -104,13 +104,13 @@
     "rewards": [
       {
         "do": "give",
-        "item": "light_stone",
-        "qty": 3
+        "item": "iron",
+        "qty": 2
       },
       {
         "do": "give",
-        "item": "fire_stone",
-        "qty": 1
+        "item": "coal",
+        "qty": 2
       }
     ]
   },
@@ -252,13 +252,8 @@
     "rewards": [
       {
         "do": "give",
-        "item": "potion_lifesteal",
-        "qty": 1
-      },
-      {
-        "do": "give",
-        "item": "potion_manashield",
-        "qty": 1
+        "item": "potion_stoneskin",
+        "qty": 2
       }
     ]
   },
@@ -285,12 +280,7 @@
       {
         "do": "give",
         "item": "iron",
-        "qty": 2
-      },
-      {
-        "do": "give",
-        "item": "fire_stone",
-        "qty": 1
+        "qty": 3
       }
     ]
   },
@@ -366,8 +356,8 @@
     "rewards": [
       {
         "do": "give",
-        "item": "light_stone",
-        "qty": 3
+        "item": "potion_stoneskin",
+        "qty": 1
       }
     ]
   },

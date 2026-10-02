@@ -200,6 +200,26 @@
           {
             "if": "questActive",
             "quest": "dinners_out"
+          },
+          {
+            "if": "hasItem",
+            "item": "signal_dinner",
+            "qty": 1,
+            "not": true
+          },
+          {
+            "if": "hasItem",
+            "item": "coal",
+            "qty": 1
+          }
+        ],
+        "node": "more"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "dinners_out"
           }
         ],
         "node": "wait"
@@ -319,6 +339,31 @@
       "third": {
         "lines": [
           "\"There's knocking in the pipe in the yard, some nights. Three and a rest and three. I don't answer it.\""
+        ]
+      },
+      "more": {
+        "lines": [
+          "\"Dropped them? I've more. I always make more. Bring us a lump of coal for the range and they're yours.\""
+        ],
+        "options": [
+          {
+            "label": "A lump of coal for three tins",
+            "actions": [
+              {
+                "do": "take",
+                "item": "coal",
+                "qty": 1
+              },
+              {
+                "do": "give",
+                "item": "signal_dinner",
+                "qty": 3
+              }
+            ]
+          },
+          {
+            "label": "Not now"
+          }
         ]
       }
     }

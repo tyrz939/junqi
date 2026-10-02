@@ -35,7 +35,7 @@
     "description": "A toll keeper's tally, one walker a line. The last page is one walker, over and over, in a hand that did not hurry."
   },
   "overdue_book": {
-    "name": "Library Book",
+    "name": "Overdue Book",
     "icon": "item_letter",
     "maxStack": 3,
     "usable": false,
