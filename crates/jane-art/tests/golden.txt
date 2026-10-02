@@ -242,6 +242,7 @@ unit:bandit#1 bf0ccbe1
 unit:bandit#2 baa3d90c
 unit:bandit#3 d84aafdf
 unit:boss 24152e14
+unit:breen 04571d9a
 unit:collector 5e7626cc
 unit:factory_charge_hand d1dfba1a
 unit:factory_foreman fed67b0d
@@ -261,6 +262,7 @@ unit:jane 8d36afd7
 unit:jane@1 0445c18d
 unit:jane@2 b7746644
 unit:jane@3 843845ac
+unit:loveday 2f415998
 unit:miniboss cd43c39d
 unit:museum_armour b89ede98
 unit:museum_attendant 5f627623
@@ -269,6 +271,8 @@ unit:museum_waxwork 62464ca8
 unit:museum_waxwork#1 1b620c23
 unit:museum_waxwork#2 71c76f35
 unit:museum_waxwork#3 7a2d965a
+unit:pask 6696691d
+unit:reed_fludd 4c39b5f8
 unit:ruffian 170840a0
 unit:ruffian#1 65462b98
 unit:ruffian#2 22f110da

@@ -3,5 +3,8 @@
   { "id": "top_field_track", "from": "farm", "via": "scarecrow_top", "to": "farm", "width": 2, "marks": ["top_track_farm", "top_track_back"] },
   { "id": "quarry_track", "from": "gold_mine", "via": "quarry_camp", "to": "gold_mine", "width": 2, "marks": ["quarry_track_mine", "quarry_track_back"] },
   { "id": "allotment_path", "from": "town", "via": "allotments", "to": "town", "width": 2, "marks": ["allotment_path_town", "allotment_path_back"] },
-  { "id": "nurses_prints", "from": "car_wood", "via": "nurses_coat", "to": "car_wood", "width": 1, "marks": ["nurses_prints_car", "nurses_prints_back"] }
+  { "id": "nurses_prints", "from": "car_wood", "via": "nurses_coat", "to": "car_wood", "width": 1, "marks": ["nurses_prints_car", "nurses_prints_back"] },
+  {"id": "eel_beds_path", "from": "reed_camp", "via": "eel_beds", "to": "reed_camp", "width": 2, "marks": ["eel_path_camp", "eel_path_back"]},
+  {"id": "still_pool_path", "from": "lake_statue", "via": "still_pool", "to": "lake_statue", "width": 2, "marks": ["still_path_lake", "still_path_back"]},
+  {"id": "glasshouse_path", "from": "library", "via": "glasshouse_row", "to": "library", "width": 2, "marks": ["glass_path_library", "glass_path_back"]}
 ]

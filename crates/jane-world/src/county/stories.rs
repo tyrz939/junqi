@@ -1332,7 +1332,39 @@ pub fn at_place(c: &mut County<'_>, row: &PlacementDef) {
             None => None,
         };
         let foot = foot.map(|n| c.on_foot[n].1.clone());
-        let Some(spot) = spot_for(&mut c.k, foot.as_ref(), p.bounds, row, false, None) else { return };
+        // A solid thing set down by position keeps off the footpath laid to its own place where
+        // it can (seed 26: the Intake's path ran up through its front, and the flat stone stood
+        // on it): the path's cells are water while it looks, and if that leaves no room, it
+        // looks again as before.
+        let solid = row.prop.is_some_and(|t| cat.story.prop(t.def).solid);
+        let mut own: Vec<(i32, i32)> = if solid {
+            c.story_claims
+                .paths
+                .iter()
+                .filter(|(s, _)| *s == story)
+                .flat_map(|(_, l)| l.iter().copied())
+                .flat_map(|(x, y)| [(x, y), (x + 1, y), (x, y + 1), (x + 1, y + 1)])
+                .filter(|&(x, y)| c.k.inside(x, y))
+                .collect()
+        } else {
+            Vec::new()
+        };
+        own.sort();
+        own.dedup();
+        let mut spot = None;
+        if !own.is_empty() {
+            let was: Vec<Tile> = own.iter().map(|&(x, y)| c.k.get(x, y)).collect();
+            for &(x, y) in &own {
+                c.k.set(x, y, Tile::Water);
+            }
+            spot = spot_for(&mut c.k, foot.as_ref(), p.bounds, row, false, None);
+            for (&(x, y), &t) in own.iter().zip(&was) {
+                c.k.set(x, y, t);
+            }
+        }
+        let Some(spot) = spot.or_else(|| spot_for(&mut c.k, foot.as_ref(), p.bounds, row, false, None)) else {
+            return;
+        };
         cell = Some(spot);
     }
     if let Some(n) = folk_slot(slot) {

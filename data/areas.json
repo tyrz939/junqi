@@ -7,16 +7,16 @@
   { "id": "quarry_steps", "required": true, "name": "Quarry Steps", "region": "lowfields", "threat": 3, "radius": 110, "where": { "terrain": "foothill", "offRoad": 60, "near": "gold_mine", "nearMin": 290, "nearMax": 500 } },
 
   { "id": "drowned_lane", "required": true, "name": "The Drowned Lane", "region": "waters", "threat": 4, "radius": 130, "where": { "near": "museum", "nearMin": 260, "nearMax": 700, "onRoad": true } },
-  { "id": "eel_beds", "name": "The Eel Beds", "region": "waters", "threat": 3, "radius": 120, "where": { "terrain": "bank" } },
-  { "id": "mothers_garden", "name": "Mother's Garden", "region": "waters", "threat": 4, "radius": 100, "where": { "offRoad": 100 } },
-  { "id": "glasshouse_row", "name": "Glasshouse Row", "region": "waters", "threat": 3, "radius": 110, "where": { "near": "library", "nearMin": 200, "nearMax": 550 } },
+  { "id": "eel_beds", "required": true, "name": "The Eel Beds", "region": "waters", "threat": 3, "radius": 120, "where": { "terrain": "bank" } },
+  { "id": "mothers_garden", "required": true, "name": "Mother's Garden", "region": "waters", "threat": 4, "radius": 100, "where": { "offRoad": 100 } },
+  { "id": "glasshouse_row", "required": true, "name": "Glasshouse Row", "region": "waters", "threat": 3, "radius": 110, "where": { "near": "library", "nearMin": 200, "nearMax": 550 } },
   { "id": "still_pool", "required": true, "name": "The Still Pool", "region": "waters", "threat": 4, "radius": 110, "where": { "near": "lake_statue", "nearMin": 160, "nearMax": 450, "terrain": "bank" } },
   { "id": "tollhouse_reach", "name": "Tollhouse Reach", "region": "waters", "threat": 2, "radius": 100, "where": { "onRoad": true } },
 
-  { "id": "chapel_rise", "name": "Chapel Rise", "region": "works", "threat": 5, "radius": 110, "where": { "near": "graveyard", "nearMin": 180, "nearMax": 420 } },
-  { "id": "sidings", "name": "The Sidings", "region": "works", "threat": 5, "radius": 140, "where": { "terrain": "flat", "offRoad": 80 } },
+  { "id": "chapel_rise", "required": true, "name": "Chapel Rise", "region": "works", "threat": 5, "radius": 110, "where": { "near": "graveyard", "nearMin": 180, "nearMax": 420 } },
+  { "id": "sidings", "required": true, "name": "The Sidings", "region": "works", "threat": 5, "radius": 140, "where": { "terrain": "flat", "offRoad": 80 } },
   { "id": "cooling_yard", "required": true, "name": "The Cooling Yard", "region": "works", "threat": 5, "radius": 110, "where": { "near": "factory", "nearMin": 180, "nearMax": 420 } },
-  { "id": "cinder_walk", "name": "Cinder Walk", "region": "works", "threat": 3, "radius": 100, "where": { "onRoad": true } },
-  { "id": "slag_mere", "name": "Slag Mere", "region": "works", "threat": 5, "radius": 120, "where": { "offRoad": 140 } },
-  { "id": "bellfield", "name": "The Bellfield", "region": "works", "threat": 6, "radius": 130, "where": { "near": "school", "nearMin": 160, "nearMax": 420 } }
+  { "id": "cinder_walk", "required": true, "name": "Cinder Walk", "region": "works", "threat": 3, "radius": 100, "where": { "onRoad": true } },
+  { "id": "slag_mere", "required": true, "name": "Slag Mere", "region": "works", "threat": 5, "radius": 120, "where": { "offRoad": 140 } },
+  { "id": "bellfield", "required": true, "name": "The Bellfield", "region": "works", "threat": 6, "radius": 130, "where": { "near": "school", "nearMin": 160, "nearMax": 420 } }
 ]

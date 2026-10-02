@@ -29,7 +29,7 @@ fn every_table_is_there_in_id_order() {
     let k = &c().combat;
     assert_eq!(k.spells.len(), 33);
     assert_eq!(k.effects.len(), 21);
-    assert_eq!(k.units.len(), 156);
+    assert_eq!(k.units.len(), 166);
     for ids in [
         k.spells.iter().map(|s| s.id).collect::<Vec<_>>(),
         k.effects.iter().map(|e| e.id).collect(),

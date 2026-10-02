@@ -1,7 +1,21 @@
 {
   "museum_bench": {
     "speaker": "Bench",
-    "start": [{ "when": [{ "if": "hours", "from": 16, "to": 10 }], "node": "shut" }, { "node": "open" }],
+    "start": [
+      {
+        "when": [
+          {
+            "if": "hours",
+            "from": 16,
+            "to": 10
+          }
+        ],
+        "node": "shut"
+      },
+      {
+        "node": "open"
+      }
+    ],
     "nodes": {
       "shut": {
         "lines": [
@@ -9,12 +23,2000 @@
           "The doors open at ten. Somebody has worn the paint off the end nearest them."
         ],
         "options": [
-          { "label": "Wait for ten", "actions": [{ "do": "rest", "until": 10 }], "goto": "waited" },
-          { "label": "Not now" }
+          {
+            "label": "Wait for ten",
+            "actions": [
+              {
+                "do": "rest",
+                "until": 10
+              }
+            ],
+            "goto": "waited"
+          },
+          {
+            "label": "Not now"
+          }
         ]
       },
-      "waited": { "lines": ["You sit. Nobody else comes. At ten there is a sound of bolts behind the doors, and then nothing."] },
-      "open": { "lines": ["A bench facing the Museum doors. They are open. Nobody is on the bench, and nobody has been."] }
+      "waited": {
+        "lines": [
+          "You sit. Nobody else comes. At ten there is a sound of bolts behind the doors, and then nothing."
+        ]
+      },
+      "open": {
+        "lines": [
+          "A bench facing the Museum doors. They are open. Nobody is on the bench, and nobody has been."
+        ]
+      }
+    }
+  },
+  "reed_fludd": {
+    "speaker": "Mrs Fludd",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "flag",
+            "flag": "talked_fludd",
+            "not": true
+          }
+        ],
+        "node": "first"
+      },
+      {
+        "when": [
+          {
+            "if": "speakerKnows",
+            "news": "tuesday_asked"
+          },
+          {
+            "if": "flag",
+            "flag": "fludd_told_nurse",
+            "not": true
+          }
+        ],
+        "node": "news_nurse"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "one_hook_empty"
+          }
+        ],
+        "node": "after_hook"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "what_the_eels_eat"
+          }
+        ],
+        "node": "after_eels"
+      },
+      {
+        "when": [
+          {
+            "if": "flag",
+            "flag": "talked_fludd",
+            "eq": 1
+          }
+        ],
+        "node": "second"
+      },
+      {
+        "node": "third"
+      }
+    ],
+    "nodes": {
+      "first": {
+        "lines": [
+          "You've come over the bridge, then. Sit by it if you like. The fire's for anyone.",
+          "They're down the beds till five. I keep it in so there's something to come up to."
+        ],
+        "actions": [
+          {
+            "do": "flag",
+            "flag": "talked_fludd",
+            "value": 1
+          }
+        ]
+      },
+      "second": {
+        "lines": [
+          "Orders go on the slate. Castle still wants reed for thatch, or somebody in Castle still writes it down.",
+          "Four coats on those hooks. I mind the fire. I don't mind the hooks."
+        ],
+        "actions": [
+          {
+            "do": "flag",
+            "flag": "talked_fludd",
+            "value": 2
+          }
+        ]
+      },
+      "third": {
+        "lines": [
+          "The eels come up the cut at dusk, and the rats come up after the eels.",
+          "Don't stand on the far bank after the bell. Nobody's said why. Nobody's had to."
+        ]
+      },
+      "after_eels": {
+        "lines": [
+          "They went back into the beds this morning, first time since the spring. They didn't say much. They don't."
+        ]
+      },
+      "after_hook": {
+        "lines": [
+          "Five coats. I've not seen five on those hooks since the spring.",
+          "I've said nothing to them about it, and you won't either."
+        ]
+      },
+      "news_nurse": {
+        "lines": [
+          "Mrs Loveday says you were asking after the nurse. Tuesdays, she was. Over the bridge after her dinner, and back before the lamps.",
+          "She went past this fire on her way to the Works the once, and never came back past it. I'd have seen. I see everybody."
+        ],
+        "actions": [
+          {
+            "do": "flag",
+            "flag": "fludd_told_nurse",
+            "value": 1
+          }
+        ]
+      }
+    }
+  },
+  "reed_slate": {
+    "speaker": "Order Slate",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "what_the_eels_eat"
+          }
+        ],
+        "node": "in_2"
+      },
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "cutting_order"
+          }
+        ],
+        "node": "in_1"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "what_the_eels_eat"
+          }
+        ],
+        "node": "wait_2"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "cutting_order"
+          }
+        ],
+        "node": "wait_1"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "cutting_order",
+            "not": true
+          }
+        ],
+        "node": "offer_1"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "what_the_eels_eat",
+            "not": true
+          }
+        ],
+        "node": "offer_2"
+      },
+      {
+        "node": "after"
+      }
+    ],
+    "nodes": {
+      "offer_1": {
+        "lines": [
+          "CASTLE RURAL DISTRICT. REED FOR THATCH. 3 BUNDLES, CUT AND TIED. LEAVE AT THE FIRE FOR COLLECTION.",
+          "Under it in chalk: beds closed. rats. The cut reed is stacked in the Eel Beds, where the cutters left it."
+        ],
+        "options": [
+          {
+            "label": "Fetch the reed",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "cutting_order"
+              }
+            ]
+          },
+          {
+            "label": "Leave it"
+          }
+        ]
+      },
+      "wait_1": {
+        "lines": [
+          "3 BUNDLES. The cut reed is stacked in the Eel Beds, along the bank."
+        ]
+      },
+      "in_1": {
+        "lines": [
+          "A space on the slate under the order, and a stub of chalk on a string."
+        ],
+        "options": [
+          {
+            "label": "Write: 3 bundles, at the fire",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "cutting_order"
+              },
+              {
+                "do": "take",
+                "item": "cut_reed",
+                "qty": 3
+              }
+            ]
+          },
+          {
+            "label": "Not yet"
+          }
+        ]
+      },
+      "offer_2": {
+        "lines": [
+          "Under the order, a second line in chalk: beds closed. rats. we will not go back in till they are seen to.",
+          "Six tally marks are drawn ready under it. None is crossed."
+        ],
+        "options": [
+          {
+            "label": "See to them",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "what_the_eels_eat"
+              }
+            ]
+          },
+          {
+            "label": "Leave it"
+          }
+        ]
+      },
+      "wait_2": {
+        "lines": [
+          "Six marks, none crossed. The marsh rats are in the Eel Beds."
+        ]
+      },
+      "in_2": {
+        "lines": [
+          "Six marks drawn ready."
+        ],
+        "options": [
+          {
+            "label": "Cross them out",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "what_the_eels_eat"
+              }
+            ]
+          },
+          {
+            "label": "Not yet"
+          }
+        ]
+      },
+      "after": {
+        "lines": [
+          "REED FOR THATCH. 3 BUNDLES. Ticked. Under it in chalk: beds open. Somebody has drawn an eel, quite well."
+        ]
+      }
+    }
+  },
+  "reed_hooks": {
+    "speaker": "Coat Hooks",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "one_hook_empty"
+          }
+        ],
+        "node": "in"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "one_hook_empty"
+          }
+        ],
+        "node": "wait"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "one_hook_empty",
+            "not": true
+          }
+        ],
+        "node": "offer"
+      },
+      {
+        "node": "after"
+      }
+    ],
+    "nodes": {
+      "offer": {
+        "lines": [
+          "Five hooks on a plank by the fire, a name burnt over each: PARFITT, ROWE, DIMMOCK, LOVEDAY, SKEAT. Four coats, wet at the hems.",
+          "Under SKEAT, in pencil: his coat is on the post at the Still Pool. nobody is to go for it."
+        ],
+        "options": [
+          {
+            "label": "Go for it",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "one_hook_empty"
+              }
+            ]
+          },
+          {
+            "label": "Leave it"
+          }
+        ]
+      },
+      "wait": {
+        "lines": [
+          "SKEAT. The coat is on the mooring post at the Still Pool. Nobody is to go for it."
+        ]
+      },
+      "in": {
+        "lines": [
+          "The fifth hook, empty."
+        ],
+        "options": [
+          {
+            "label": "Hang the coat on it",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "one_hook_empty"
+              },
+              {
+                "do": "take",
+                "item": "skeat_coat",
+                "qty": 1
+              }
+            ]
+          },
+          {
+            "label": "Not yet"
+          }
+        ]
+      },
+      "after": {
+        "lines": [
+          "Five hooks. Five coats."
+        ]
+      }
+    }
+  },
+  "reed_hooks_full": {
+    "speaker": "Coat Hooks",
+    "start": [
+      {
+        "node": "look"
+      }
+    ],
+    "nodes": {
+      "look": {
+        "lines": [
+          "PARFITT, ROWE, DIMMOCK, LOVEDAY, SKEAT. Five coats on five hooks. Four are wet at the hems.",
+          "The fifth is dry. Somebody has gone over SKEAT in pencil, to make it darker."
+        ]
+      }
+    }
+  },
+  "reed_bundles": {
+    "speaker": "Cut Reed",
+    "start": [
+      {
+        "node": "look"
+      }
+    ],
+    "nodes": {
+      "look": {
+        "lines": [
+          "Three bundles of reed for thatch, tied twice, waiting by the fire for Castle to send for them."
+        ]
+      }
+    }
+  },
+  "eel_cutter": {
+    "speaker": "A Reedcutter",
+    "start": [
+      {
+        "node": "a"
+      }
+    ],
+    "nodes": {
+      "a": {
+        "lines": [
+          "He does not stop cutting. \"Rats are down. Eels are up. Reed's the same as ever.\"",
+          "\"You'll be the one Mrs Fludd keeps on about. She keeps on about everybody.\""
+        ]
+      }
+    }
+  },
+  "eel_sign": {
+    "speaker": "Board",
+    "start": [
+      {
+        "node": "read"
+      }
+    ],
+    "nodes": {
+      "read": {
+        "lines": [
+          "THE EEL BEDS. CASTLE REED. CUTTERS ONLY PAST THIS BOARD.",
+          "Under it, newer: BEDS CLOSED. Under that, in chalk, smaller: rats."
+        ]
+      }
+    }
+  },
+  "still_sign": {
+    "speaker": "Notice",
+    "start": [
+      {
+        "node": "read"
+      }
+    ],
+    "nodes": {
+      "read": {
+        "lines": [
+          "CASTLE RURAL DISTRICT COUNCIL. THE STILL POOL. NO BOATS. NO BATHING. NO MOORING.",
+          "Under it, in pencil: S. moored here anyway."
+        ]
+      }
+    }
+  },
+  "still_post": {
+    "speaker": "Mooring Post",
+    "start": [
+      {
+        "node": "look"
+      }
+    ],
+    "nodes": {
+      "look": {
+        "lines": [
+          "A post driven into the bank, a rope still round it and cut short. Nothing near it moves when you do."
+        ]
+      }
+    }
+  },
+  "garden_sign": {
+    "speaker": "Gate",
+    "start": [
+      {
+        "node": "read"
+      }
+    ],
+    "nodes": {
+      "read": {
+        "lines": [
+          "MOTHER'S GARDEN. PLEASE KEEP TO THE PATHS. PLEASE CLOSE THE GATE BEHIND YOU.",
+          "There is no gate. There are no paths. The board is freshly painted."
+        ]
+      }
+    }
+  },
+  "planting_book": {
+    "speaker": "Planting Book",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "dead_heading"
+          }
+        ],
+        "node": "in_2"
+      },
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "the_planting_book"
+          }
+        ],
+        "node": "in_1"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "dead_heading"
+          }
+        ],
+        "node": "wait_2"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "the_planting_book"
+          }
+        ],
+        "node": "wait_1"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "the_planting_book",
+            "not": true
+          }
+        ],
+        "node": "offer_1"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "dead_heading",
+            "not": true
+          }
+        ],
+        "node": "offer_2"
+      },
+      {
+        "node": "after"
+      }
+    ],
+    "nodes": {
+      "offer_1": {
+        "lines": [
+          "THIS WEEK. LIFT: ONE HONEYLACE LILY. ONE WHITE WATER CAP. ONE NIGHT LICH MOSS. FROM THE BEDS.",
+          "The hand is careful. The week at the top of the page is in the spring."
+        ],
+        "options": [
+          {
+            "label": "Lift them",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "the_planting_book"
+              }
+            ]
+          },
+          {
+            "label": "Leave it"
+          }
+        ]
+      },
+      "wait_1": {
+        "lines": [
+          "One honeylace lily, one white water cap, one night lich moss. The beds are round the statue."
+        ]
+      },
+      "in_1": {
+        "lines": [
+          "Room on the page under the list."
+        ],
+        "options": [
+          {
+            "label": "Lay them on the page",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "the_planting_book"
+              }
+            ]
+          },
+          {
+            "label": "Not yet"
+          }
+        ]
+      },
+      "offer_2": {
+        "lines": [
+          "Overleaf: DEAD-HEAD THE BEDS. WEEKLY. WITHOUT FAIL.",
+          "Nobody has dead-headed them since the spring. What grows in the beds has turned to watch the gate."
+        ],
+        "options": [
+          {
+            "label": "Cut them back",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "dead_heading"
+              }
+            ]
+          },
+          {
+            "label": "Leave it"
+          }
+        ]
+      },
+      "wait_2": {
+        "lines": [
+          "DEAD-HEAD THE BEDS. Five will do. There is a column for it."
+        ]
+      },
+      "in_2": {
+        "lines": [
+          "The column for dead-heading, and room for a tick."
+        ],
+        "options": [
+          {
+            "label": "Tick it",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "dead_heading"
+              }
+            ]
+          },
+          {
+            "label": "Not yet"
+          }
+        ]
+      },
+      "after": {
+        "lines": [
+          "THIS WEEK, and your date, and your tick. The next week is ruled out ready, and nobody has written in it."
+        ]
+      }
+    }
+  },
+  "mother_statue": {
+    "speaker": "Statue",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "mother"
+          }
+        ],
+        "node": "in"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "mother"
+          },
+          {
+            "if": "night"
+          },
+          {
+            "if": "hasItem",
+            "item": "white_water_rose",
+            "qty": 1
+          }
+        ],
+        "node": "leave"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "mother"
+          }
+        ],
+        "node": "wait"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "mother",
+            "not": true
+          }
+        ],
+        "node": "offer"
+      },
+      {
+        "node": "after"
+      }
+    ],
+    "nodes": {
+      "offer": {
+        "lines": [
+          "A woman in stone, hands folded, facing the gateposts. On the plinth: MOTHER, WHO KEPT THIS GARDEN. FLOWERS AFTER THE BELL, PLEASE.",
+          "There are no flowers. There is a ring on the plinth where a jar stood."
+        ],
+        "options": [
+          {
+            "label": "Bring her one",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "mother"
+              }
+            ]
+          },
+          {
+            "label": "Leave it"
+          }
+        ]
+      },
+      "wait": {
+        "lines": [
+          "FLOWERS AFTER THE BELL, PLEASE. A white water rose, then, after nine."
+        ]
+      },
+      "leave": {
+        "lines": [
+          "She is facing the beds now, not the gateposts. You set the rose where the jar stood."
+        ],
+        "actions": [
+          {
+            "do": "location",
+            "name": "mother_rose"
+          },
+          {
+            "do": "take",
+            "item": "white_water_rose",
+            "qty": 1
+          }
+        ]
+      },
+      "in": {
+        "lines": [
+          "The rose is where you left it. She faces the gateposts again."
+        ],
+        "options": [
+          {
+            "label": "Leave it there",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "mother"
+              }
+            ]
+          },
+          {
+            "label": "Not yet"
+          }
+        ]
+      },
+      "after": {
+        "lines": [
+          "MOTHER, WHO KEPT THIS GARDEN. A white rose on the plinth, browning at the edges."
+        ]
+      }
+    }
+  },
+  "returns_box": {
+    "speaker": "Returns Box",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "overdue"
+          }
+        ],
+        "node": "in"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "overdue"
+          }
+        ],
+        "node": "wait"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "overdue",
+            "not": true
+          }
+        ],
+        "node": "offer"
+      },
+      {
+        "node": "after"
+      }
+    ],
+    "nodes": {
+      "offer": {
+        "lines": [
+          "CASTLE FREE LIBRARY. RETURNS. A list on the lid: three books out to Glasshouse Row, overdue since the spring.",
+          "NO FINES ARE CHARGED IF BOOKS ARE RETURNED. Julie's name is not on the list."
+        ],
+        "options": [
+          {
+            "label": "Fetch them",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "overdue"
+              }
+            ]
+          },
+          {
+            "label": "Leave it"
+          }
+        ]
+      },
+      "wait": {
+        "lines": [
+          "Three books out to Glasshouse Row. NO FINES ARE CHARGED."
+        ]
+      },
+      "in": {
+        "lines": [
+          "The flap is not locked."
+        ],
+        "options": [
+          {
+            "label": "Return them",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "overdue"
+              },
+              {
+                "do": "take",
+                "item": "overdue_book",
+                "qty": 3
+              }
+            ]
+          },
+          {
+            "label": "Not yet"
+          }
+        ]
+      },
+      "after": {
+        "lines": [
+          "RETURNS. Three lines on the lid struck through in your pencil. Under them someone has written: thank you. The ink is old."
+        ]
+      }
+    }
+  },
+  "glasshouse_sign": {
+    "speaker": "Board",
+    "start": [
+      {
+        "node": "read"
+      }
+    ],
+    "nodes": {
+      "read": {
+        "lines": [
+          "CASTLE PARKS. GLASSHOUSE ROW. GLASS IS NOT TO BE BROKEN FURTHER.",
+          "Somebody has, since."
+        ]
+      }
+    }
+  },
+  "lane_board": {
+    "speaker": "Council Board",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "the_diversion"
+          }
+        ],
+        "node": "in_2"
+      },
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "road_closed"
+          }
+        ],
+        "node": "in_1"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "the_diversion"
+          }
+        ],
+        "node": "wait_2"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "road_closed"
+          }
+        ],
+        "node": "wait_1"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "road_closed",
+            "not": true
+          }
+        ],
+        "node": "offer_1"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "the_diversion",
+            "not": true
+          }
+        ],
+        "node": "offer_2"
+      },
+      {
+        "node": "after"
+      }
+    ],
+    "nodes": {
+      "offer_1": {
+        "lines": [
+          "CASTLE RURAL DISTRICT COUNCIL. THE DROWNED LANE. ROAD CLOSED. FLOODING.",
+          "ROAD USERS TO REPORT THE DEPTH AT THE NEAR BOARD AND THE FAR BOARD. DO NOT STOP IN THE LANE. The lane is dry as far as you can see."
+        ],
+        "options": [
+          {
+            "label": "Walk it",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "road_closed"
+              }
+            ]
+          },
+          {
+            "label": "Leave it"
+          }
+        ]
+      },
+      "wait_1": {
+        "lines": [
+          "REPORT THE DEPTH AT THE NEAR BOARD AND THE FAR BOARD. Both stand in the lane."
+        ]
+      },
+      "in_1": {
+        "lines": [
+          "A column for the depth, a pencil on a string. Every line in the column says 0."
+        ],
+        "options": [
+          {
+            "label": "Write 0",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "road_closed"
+              }
+            ]
+          },
+          {
+            "label": "Not yet"
+          }
+        ]
+      },
+      "offer_2": {
+        "lines": [
+          "Overleaf: DIVERSION. FOLLOW THE WAYMARKS ROUND THE LANE. A BRAZIER IS KEPT AT THE LAST WAYMARK FOR ROAD USERS."
+        ],
+        "options": [
+          {
+            "label": "Go round",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "the_diversion"
+              }
+            ]
+          },
+          {
+            "label": "Leave it"
+          }
+        ]
+      },
+      "wait_2": {
+        "lines": [
+          "DIVERSION. Three waymarks round the lane. The brazier is at the last."
+        ]
+      },
+      "in_2": {
+        "lines": [
+          "DIVERSION. Under it, a column for road users, empty."
+        ],
+        "options": [
+          {
+            "label": "Sign it",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "the_diversion"
+              }
+            ]
+          },
+          {
+            "label": "Not yet"
+          }
+        ]
+      },
+      "after": {
+        "lines": [
+          "ROAD CLOSED. FLOODING. DIVERSION. Your name in the column for road users, and nobody's under it."
+        ]
+      }
+    }
+  },
+  "lane_near": {
+    "speaker": "Flood Board",
+    "start": [
+      {
+        "node": "read"
+      }
+    ],
+    "nodes": {
+      "read": {
+        "lines": [
+          "THE DROWNED LANE. NEAR BOARD. DEPTH:",
+          "The board is ruled for a number. The lane at your feet is dry."
+        ],
+        "actions": [
+          {
+            "do": "location",
+            "name": "lane_near_board"
+          }
+        ]
+      }
+    }
+  },
+  "lane_far": {
+    "speaker": "Flood Board",
+    "start": [
+      {
+        "node": "read"
+      }
+    ],
+    "nodes": {
+      "read": {
+        "lines": [
+          "THE DROWNED LANE. FAR BOARD. DEPTH:",
+          "A tide line runs across the board higher than your head. The lane is dry."
+        ],
+        "actions": [
+          {
+            "do": "location",
+            "name": "lane_far_board"
+          }
+        ]
+      }
+    }
+  },
+  "diversion_1": {
+    "speaker": "Waymark",
+    "start": [
+      {
+        "node": "read"
+      }
+    ],
+    "nodes": {
+      "read": {
+        "lines": [
+          "THE DROWNED LANE. DIVERSION. 1 OF 3. DO NOT CUT ACROSS."
+        ],
+        "actions": [
+          {
+            "do": "location",
+            "name": "diversion_1"
+          }
+        ]
+      }
+    }
+  },
+  "diversion_2": {
+    "speaker": "Waymark",
+    "start": [
+      {
+        "node": "read"
+      }
+    ],
+    "nodes": {
+      "read": {
+        "lines": [
+          "THE DROWNED LANE. DIVERSION. 2 OF 3. ROAD USERS ARE THANKED FOR THEIR PATIENCE."
+        ],
+        "actions": [
+          {
+            "do": "location",
+            "name": "diversion_2"
+          }
+        ]
+      }
+    }
+  },
+  "diversion_3": {
+    "speaker": "Waymark",
+    "start": [
+      {
+        "node": "read"
+      }
+    ],
+    "nodes": {
+      "read": {
+        "lines": [
+          "THE DROWNED LANE. DIVERSION. 3 OF 3. BRAZIER FOR ROAD USERS. PLEASE LEAVE IT LAID."
+        ],
+        "actions": [
+          {
+            "do": "location",
+            "name": "diversion_3"
+          },
+          {
+            "do": "if",
+            "when": [
+              {
+                "if": "questActive",
+                "quest": "the_diversion"
+              }
+            ],
+            "then": [
+              {
+                "do": "show",
+                "prop": "diversion_fire"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  },
+  "lake_shrine": {
+    "speaker": "Shrine",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "the_statue_faces"
+          }
+        ],
+        "node": "in_2"
+      },
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "nobody_has_drowned"
+          }
+        ],
+        "node": "in_1"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "the_statue_faces"
+          }
+        ],
+        "node": "wait_2"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "nobody_has_drowned"
+          }
+        ],
+        "node": "wait_1"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "nobody_has_drowned",
+            "not": true
+          }
+        ],
+        "node": "offer_1"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "the_statue_faces",
+            "not": true
+          }
+        ],
+        "node": "offer_2"
+      },
+      {
+        "node": "after"
+      }
+    ],
+    "nodes": {
+      "offer_1": {
+        "lines": [
+          "A wayside shrine with a board of names inside it, a brass tag on a nail for each. None of them is crossed out.",
+          "Three nails are empty. A card: TAGS LAST SEEN AT THE STILL POOL. TO BE PUT BACK, SO THAT THE LIST IS COMPLETE."
+        ],
+        "options": [
+          {
+            "label": "Find them",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "nobody_has_drowned"
+              }
+            ]
+          },
+          {
+            "label": "Leave it"
+          }
+        ]
+      },
+      "wait_1": {
+        "lines": [
+          "Three empty nails. TAGS LAST SEEN AT THE STILL POOL."
+        ]
+      },
+      "in_1": {
+        "lines": [
+          "Three empty nails, three tags in your hand."
+        ],
+        "options": [
+          {
+            "label": "Nail them up",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "nobody_has_drowned"
+              },
+              {
+                "do": "take",
+                "item": "name_tag",
+                "qty": 3
+              }
+            ]
+          },
+          {
+            "label": "Not yet"
+          }
+        ]
+      },
+      "offer_2": {
+        "lines": [
+          "Under the names, in another hand: the statue does not face the same way at night. read the plate at noon and after the bell."
+        ],
+        "options": [
+          {
+            "label": "Read it at both",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "the_statue_faces"
+              }
+            ]
+          },
+          {
+            "label": "Leave it"
+          }
+        ]
+      },
+      "wait_2": {
+        "lines": [
+          "Read the plate at noon and after the bell. It is on the bank by the statue."
+        ]
+      },
+      "in_2": {
+        "lines": [
+          "Room under the line about the statue."
+        ],
+        "options": [
+          {
+            "label": "Write: the road at noon, the water after the bell",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "the_statue_faces"
+              }
+            ]
+          },
+          {
+            "label": "Not yet"
+          }
+        ]
+      },
+      "after": {
+        "lines": [
+          "The names, complete. Under the line about the statue, in your hand: the road at noon, the water after the bell. Nobody has crossed that out either."
+        ]
+      }
+    }
+  },
+  "statue_plate": {
+    "speaker": "Brass Plate",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "hours",
+            "from": 11,
+            "to": 13
+          }
+        ],
+        "node": "noon"
+      },
+      {
+        "when": [
+          {
+            "if": "night"
+          }
+        ],
+        "node": "night"
+      },
+      {
+        "node": "day"
+      }
+    ],
+    "nodes": {
+      "noon": {
+        "lines": [
+          "CASTLE RURAL DISTRICT. THE STATUE IN THE LAKE. SHE FACES THE ROAD.",
+          "It is noon, near enough. She faces the road."
+        ],
+        "actions": [
+          {
+            "do": "location",
+            "name": "statue_noon"
+          }
+        ]
+      },
+      "night": {
+        "lines": [
+          "CASTLE RURAL DISTRICT. THE STATUE IN THE LAKE. SHE FACES THE ROAD.",
+          "She faces the water."
+        ],
+        "actions": [
+          {
+            "do": "location",
+            "name": "statue_night"
+          }
+        ]
+      },
+      "day": {
+        "lines": [
+          "CASTLE RURAL DISTRICT. THE STATUE IN THE LAKE. SHE FACES THE ROAD.",
+          "She does."
+        ]
+      }
+    }
+  },
+  "toll_board_house": {
+    "speaker": "Toll Board",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "the_keepers_tally"
+          }
+        ],
+        "node": "in_3"
+      },
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "three_crossings"
+          }
+        ],
+        "node": "in_2"
+      },
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "the_toll"
+          }
+        ],
+        "node": "in_1"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "the_keepers_tally"
+          }
+        ],
+        "node": "wait_3"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "three_crossings"
+          }
+        ],
+        "node": "wait_2"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "the_toll"
+          }
+        ],
+        "node": "wait_1"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "the_toll",
+            "not": true
+          }
+        ],
+        "node": "offer_1"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "three_crossings",
+            "not": true
+          }
+        ],
+        "node": "offer_2"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "the_keepers_tally",
+            "not": true
+          }
+        ],
+        "node": "offer_3"
+      },
+      {
+        "node": "after"
+      }
+    ],
+    "nodes": {
+      "offer_1": {
+        "lines": [
+          "CASTLE BRIDGE TRUST. THE KEEPER LIGHTS THE BRAZIER AT DUSK, SO THE ROAD CAN SEE THE GATE.",
+          "The brazier is cold. The keeper's coal scuttle stands full by the step."
+        ],
+        "options": [
+          {
+            "label": "Carry the coal",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "the_toll"
+              }
+            ]
+          },
+          {
+            "label": "Leave it"
+          }
+        ]
+      },
+      "wait_1": {
+        "lines": [
+          "THE KEEPER LIGHTS THE BRAZIER AT DUSK. Carry the scuttle from the step and set it down on the coal pan by the brazier."
+        ]
+      },
+      "in_1": {
+        "lines": [
+          "The brazier is lit."
+        ],
+        "options": [
+          {
+            "label": "It's lit",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "the_toll"
+              }
+            ]
+          }
+        ]
+      },
+      "offer_2": {
+        "lines": [
+          "THE BRIDGE COUNTS WHO CROSSES. Under the board, the toll book: one walker, three crossings, one night in the spring. Then nothing.",
+          "Castle Bridge is on the Museum road. The count starts again at six, the book says."
+        ],
+        "options": [
+          {
+            "label": "Cross it three times",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "three_crossings"
+              }
+            ]
+          },
+          {
+            "label": "Leave it"
+          }
+        ]
+      },
+      "wait_2": {
+        "lines": [
+          "Three crossings of Castle Bridge, after the bell, in one night. The count starts again at six."
+        ]
+      },
+      "in_2": {
+        "lines": [
+          "The toll book, open at the keeper's last line."
+        ],
+        "options": [
+          {
+            "label": "Write yours under his",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "three_crossings"
+              }
+            ]
+          },
+          {
+            "label": "Not yet"
+          }
+        ]
+      },
+      "offer_3": {
+        "lines": [
+          "TAKINGS ARE KEPT IN THE TOLL BOX. THE KEEPER KEEPS THE KEY. HE IS A CAREFUL MAN.",
+          "Under it, in pencil, the same again: he is a careful man. His boat lies stove in behind the house."
+        ],
+        "options": [
+          {
+            "label": "Find the key",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "the_keepers_tally"
+              }
+            ]
+          },
+          {
+            "label": "Leave it"
+          }
+        ]
+      },
+      "wait_3": {
+        "lines": [
+          "The key went with the keeper's boat, stove in behind the house. The toll box is by the house."
+        ]
+      },
+      "in_3": {
+        "lines": [
+          "The toll box is open, and the tally is out."
+        ],
+        "options": [
+          {
+            "label": "Pin the tally up",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "the_keepers_tally"
+              }
+            ]
+          },
+          {
+            "label": "Not yet"
+          }
+        ]
+      },
+      "after": {
+        "lines": [
+          "CASTLE BRIDGE TRUST. The keeper's tally pinned beside the board. The same walker on every line, and your three crossings the last."
+        ]
+      }
+    }
+  },
+  "tollhouse_brazier": {
+    "speaker": "Brazier",
+    "start": [
+      {
+        "node": "cold"
+      }
+    ],
+    "nodes": {
+      "cold": {
+        "lines": [
+          "A brazier by the gate, cold. The coal pan beside it is empty. The scuttle is six steps off, by the step."
+        ]
+      }
+    }
+  },
+  "tollhouse_tally": {
+    "speaker": "Tally",
+    "start": [
+      {
+        "node": "read"
+      }
+    ],
+    "nodes": {
+      "read": {
+        "lines": [
+          "The keeper's tally, pinned up. One walker a line, the same walker, all down the page.",
+          "At the foot, in your hand: three."
+        ]
+      }
+    }
+  },
+  "loveday_door": {
+    "speaker": "Mrs Loveday's Door",
+    "start": [
+      {
+        "node": "look"
+      }
+    ],
+    "nodes": {
+      "look": {
+        "lines": [
+          "A cottage thatched in its own reed. LOVEDAY on the door, in pokerwork. Nobody answers. Mrs Loveday keeps her callers on the step."
+        ]
+      }
+    }
+  },
+  "loveday": {
+    "speaker": "Mrs Loveday",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "loveday_landing"
+          },
+          {
+            "if": "night",
+            "not": true
+          }
+        ],
+        "node": "land_in"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "tuesday_round"
+          }
+        ],
+        "node": "tue_ask"
+      },
+      {
+        "when": [
+          {
+            "if": "flag",
+            "flag": "loveday_at_landing"
+          }
+        ],
+        "node": "at_landing"
+      },
+      {
+        "when": [
+          {
+            "if": "flag",
+            "flag": "loveday_out"
+          }
+        ],
+        "node": "going"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "loveday_landing"
+          },
+          {
+            "if": "night"
+          }
+        ],
+        "node": "land_go"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "loveday_landing"
+          }
+        ],
+        "node": "land_wait"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "tuesday_round"
+          },
+          {
+            "if": "questDone",
+            "quest": "tuesday_reed_end",
+            "not": true
+          },
+          {
+            "if": "questActive",
+            "quest": "tuesday_reed_end",
+            "not": true
+          }
+        ],
+        "node": "tue_offer"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "loveday_landing",
+            "not": true
+          }
+        ],
+        "node": "land_offer"
+      },
+      {
+        "node": "talk"
+      }
+    ],
+    "nodes": {
+      "land_offer": {
+        "lines": [
+          "I go down to the landing after the bell and ring him in. Loveday. He cuts the far beds.",
+          "I'll not go down there without somebody beside me with a light. Not now. Would you walk down with me tonight?"
+        ],
+        "options": [
+          {
+            "label": "After the bell, then",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "loveday_landing"
+              }
+            ]
+          },
+          {
+            "label": "Not tonight"
+          }
+        ]
+      },
+      "land_wait": {
+        "lines": [
+          "After the bell. Come to me here, and we'll go down together. It isn't far."
+        ]
+      },
+      "land_go": {
+        "lines": [
+          "Keep the light by me. It isn't far. It never used to be."
+        ],
+        "actions": [
+          {
+            "do": "flag",
+            "flag": "loveday_out",
+            "value": 1
+          },
+          {
+            "do": "send",
+            "unit": "reed_end_loveday",
+            "to": "reed_end_landing",
+            "then": [
+              {
+                "do": "flag",
+                "flag": "loveday_at_landing",
+                "value": 1
+              }
+            ]
+          }
+        ]
+      },
+      "going": {
+        "lines": [
+          "Stay by me. The landing's just down here."
+        ]
+      },
+      "at_landing": {
+        "lines": [
+          "She rings the landing bell three times and waits. The beds say nothing back.",
+          "That'll do. He knows the way, if he wants it."
+        ]
+      },
+      "land_in": {
+        "lines": [
+          "You came down with me. That's more than anyone has since the spring.",
+          "Have this. It was put by for him. He'd want it used."
+        ],
+        "options": [
+          {
+            "label": "Thank you",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "loveday_landing"
+              }
+            ]
+          }
+        ]
+      },
+      "tue_ask": {
+        "lines": [
+          "The nurse? Tuesdays, after Mrs Allen. She came over the bridge after her dinner.",
+          "She left a bag here for Mr Pask, her next call, in the Works. She was to pick it up on her way home. It's on the step yet."
+        ],
+        "actions": [
+          {
+            "do": "location",
+            "name": "tuesday_reed_end_asked"
+          }
+        ],
+        "options": [
+          {
+            "label": "I'll take it on to him",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "tuesday_round"
+              },
+              {
+                "do": "quest",
+                "quest": "tuesday_reed_end"
+              },
+              {
+                "do": "give",
+                "item": "nurses_bag",
+                "qty": 1
+              }
+            ]
+          },
+          {
+            "label": "Not now",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "tuesday_round"
+              }
+            ]
+          }
+        ]
+      },
+      "tue_offer": {
+        "lines": [
+          "The nurse's bag is on the step yet, for Mr Pask at {place:hut_two}. Will you take it on?"
+        ],
+        "options": [
+          {
+            "label": "I'll take it",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "tuesday_reed_end"
+              },
+              {
+                "do": "give",
+                "item": "nurses_bag",
+                "qty": 1
+              }
+            ]
+          },
+          {
+            "label": "Not now"
+          }
+        ]
+      },
+      "talk": {
+        "lines": [
+          "Reed End. We cut to order, or we did. The order slate's at the fire, if Castle still wants any.",
+          "He was always first at the beds and last at the fire. Now it's the other way about, and I'm the one waiting."
+        ]
+      }
+    }
+  },
+  "landing_bell": {
+    "speaker": "Landing Bell",
+    "start": [
+      {
+        "node": "look"
+      }
+    ],
+    "nodes": {
+      "look": {
+        "lines": [
+          "A ship's bell on a post, a rope to ring it. LOVEDAY cut into the post, and under it a notch for every evening it has been rung, all down the post and round the back."
+        ]
+      }
+    }
+  },
+  "reed_end_card": {
+    "speaker": "Card",
+    "start": [
+      {
+        "node": "read"
+      }
+    ],
+    "nodes": {
+      "read": {
+        "lines": [
+          "A card tied to the landing post in Mrs Loveday's hand: RUNG, and a date. Under it, from another evening: RUNG."
+        ]
+      }
+    }
+  },
+  "tollhouse_count": {
+    "speaker": "Toll Book",
+    "start": [
+      {
+        "node": "look"
+      }
+    ],
+    "nodes": {
+      "look": {
+        "lines": [
+          "The toll book, open at the keeper's last line: one walker, three crossings. Under it, in your hand, the same column: three."
+        ]
+      }
+    }
+  },
+  "reed_end_bag": {
+    "speaker": "The Nurse's Bag",
+    "start": [
+      {
+        "node": "look"
+      }
+    ],
+    "nodes": {
+      "look": {
+        "lines": [
+          "A cloth bag on the step, tied at the neck in a nurse's knot. A label: PASK, HUT TWO. Tuesday."
+        ]
+      }
+    }
+  },
+  "lane_zero": {
+    "speaker": "Depth Column",
+    "start": [
+      {
+        "node": "look"
+      }
+    ],
+    "nodes": {
+      "look": {
+        "lines": [
+          "DEPTH: 0, 0, 0, all the way down the column, and at the foot, in your hand, 0."
+        ]
+      }
     }
   }
 }

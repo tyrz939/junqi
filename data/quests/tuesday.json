@@ -1,0 +1,23 @@
+{
+  "tuesday_round": {
+    "name": "Tuesday",
+    "description": "Mrs Allen says the nurse did the Waters on a Tuesday after her, over Castle Bridge to {place:reed_end}, where the Lovedays cut reed. Mrs Allen would like to know whether Mrs Loveday has seen her since. She does not say since when.",
+    "completion": "Mrs Loveday had seen her, on a Tuesday in the spring, and not since. She had kept something of the nurse's back for her, and it is still there.",
+    "returnTo": "Mrs Loveday, at {place:reed_end}",
+    "requirements": [
+      {
+        "type": "location",
+        "target": "tuesday_reed_end_asked",
+        "qty": 1,
+        "text": "Mrs Loveday's door at {place:reed_end}"
+      }
+    ],
+    "rewards": [
+      {
+        "do": "give",
+        "item": "potion_stoneskin",
+        "qty": 1
+      }
+    ]
+  }
+}

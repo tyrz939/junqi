@@ -213,7 +213,9 @@ fn the_nurses_round_three_notes_her_coat_and_a_parcel_through_mrs_allens_door() 
     assert_eq!(holds(&s, "nurses_parcel"), 0);
     assert!(s.state().growth.found.contains(&sym(&s, "jar_mrs_allen")));
     assert_eq!(me(&s).strength, strength + 3);
-    read(&mut s, "door_allen", "allen_after", &[], None);
+    // After the dressing she asks after the nurse: the Tuesday round (QUEST-TREE.md §11), declined here.
+    read(&mut s, "door_allen", "tue_offer", &[1], None);
+    assert!(!quest_active(&s, "tuesday_round"));
     assert_eq!(me(&s).strength, strength + 3, "a jar is found once");
 }
 
