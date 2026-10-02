@@ -140,6 +140,8 @@ impl Sim {
         let p = &mut self.state.players[seat.index()];
         match op {
             DevOp::God(on) => p.god = on,
+            // Phase 2's rules on or off (`fire.rs`): the tests' and the console's, on the tape like any command.
+            DevOp::Fires(on) => self.state.fires_made = on,
             // Performed with every other zone change, at the end of the step.
             DevOp::Tp { zone, mark } => p.travel = Some(TravelRequest { zone, mark, at: None }),
             DevOp::Time { hour } => self.state.clock = u32::from(hour % 24) * TICKS_PER_HOUR,

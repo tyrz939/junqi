@@ -176,9 +176,11 @@ pub fn junk_slot(v: &View<'_>) -> Option<u8> {
         let d = cat.combat.item(i);
         let mends = matches!(d.id, "wood" | "iron");
         let ingredient = cat.combat.recipes.iter().any(|r| r.inputs.contains(&i));
+        // What makes a fire, while fires are made: as good as a potion.
+        let fire = v.fires_made() && matches!(d.id, "deadwood" | "match" | "fire_stone");
         if mends {
             3
-        } else if d.usable {
+        } else if d.usable || fire {
             2
         } else {
             u8::from(ingredient)

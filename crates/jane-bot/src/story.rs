@@ -56,6 +56,8 @@ pub enum Goal {
     Look(ZoneId, PropId),
     /// Mend at a fire or a bed.
     Rest,
+    /// Deadwood off a stump on the way, while fires are made.
+    Gather,
     /// Home before dark: the night slept away in Julie's bed.
     Sleep,
     /// Ready for an act: a potion brewed at Julie's bench, or food picked up, before the dungeon.
@@ -925,18 +927,22 @@ impl Story {
         // The nearest fire, by the way there: every place she died on it costs as much again
         // as the straight line (a fire past a camp is not the near one).
         let danger = cx.nav.dangers(here);
+        let way = |p: &&jane_sim::Prop| (to_prop(p, at) + danger_on_way(&danger, at, sense::prop_centre(p)), p.id);
+        // A fire burning (kept, or made and still lit); and, low, a cold pit she holds the
+        // makings for (`jane_sim::fire`).
         let fire = v
             .props()
-            .filter(|p| {
-                cat.story.prop(p.def).rest
-                    && v.prop_spawn(p).is_some_and(|s| s.talk.is_some())
-                    && !self.bad_fires.contains(&p.id)
-            })
-            .min_by_key(|p| (to_prop(p, at) + danger_on_way(&danger, at, sense::prop_centre(p)), p.id));
+            .filter(|p| rest_fire(v, p).is_some_and(|u| u.hold == 0) && !self.bad_fires.contains(&p.id))
+            .min_by_key(way);
+        let pit = v
+            .props()
+            .filter(|p| rest_fire(v, p).is_some_and(|u| u.hold > 0) && !self.bad_fires.contains(&p.id))
+            .min_by_key(way);
         let low = low_out_of_doors(v);
         if low && self.open(v, Goal::Rest) {
-            if let Some(p) = fire {
-                return Some((Target::Task(Task::Use(UseProp::new(p.id))), Goal::Rest));
+            let near = [fire, pit].into_iter().flatten().min_by_key(way);
+            if let Some(u) = near.and_then(|p| rest_fire(v, p)) {
+                return Some((Target::Task(Task::Use(u)), Goal::Rest));
             }
             let mut known: Vec<(i64, ZoneId, Vec2)> = cx
                 .notes
@@ -1212,6 +1218,12 @@ impl Story {
                 );
             }
         }
+        // Deadwood on the way, while fires are made and she is short of it: a stop in passing.
+        if self.open(v, Goal::Gather) {
+            if let Some(p) = wood_near(v).and_then(|id| v.prop(id)) {
+                offer(to_prop(p, at), Goal::Gather, Target::Task(Task::Use(UseProp::new(p.id))), &mut best);
+            }
+        }
         // The Explorer: the nearest ground not yet seen, unless something is nearer.
         if cx.model == Model::Explorer && here == ZoneId::County {
             if let Some(c) = crate::lost::fog_frontier(v, 80, &self.looking.bad_fog, &cx.nav.dangers(here)) {
@@ -1405,6 +1417,7 @@ fn goal_name(v: &View<'_>, g: Goal) -> String {
         Goal::Step(q, i) => format!("{} step {}", cat.story.quest(q).id, i + 1),
         Goal::Talk(z, u) => format!("talk to {:?} in {}", u, z.name()),
         Goal::Rest => "rest at a fire or a bed".into(),
+        Goal::Gather => "gather deadwood".into(),
         Goal::Sleep => "home to sleep".into(),
         Goal::Provision(i) => format!("provision {}", cat.combat.item(i).id),
         Goal::Explore(t) => format!("explore: {t:?}"),
@@ -1555,20 +1568,75 @@ fn train(v: &View<'_>, cx: &Ctx) -> Option<Target> {
 /// under three fifths: the county's roads are long and what is on them hits hard, and a walk
 /// begun at half her health was a walk that did not end (the fire is free, and near).
 fn low_out_of_doors(v: &View<'_>) -> bool {
-    let cat = jane_data::catalog();
     let at = v.body().pos;
     // Only with a fire near: a long walk to one is a walk through what hurt her.
-    let fire_near = || {
-        v.props().any(|p| {
-            !p.hidden
-                && cat.story.prop(p.def).rest
-                && v.prop_spawn(p).is_some_and(|s| s.talk.is_some())
-                && to_prop(p, at) <= i64::from(FIRE_NEAR * CELL_FX)
-        })
-    };
+    let fire_near = || v.props().any(|p| rest_fire(v, p).is_some() && to_prop(p, at) <= i64::from(FIRE_NEAR * CELL_FX));
     let line = if v.zone() == ZoneId::County && fire_near() { COUNTY_LOW } else { fight::EAT_BELOW };
     sense::hp_permille(v.body()) < line && !fight::has_food(v)
 }
+
+/// Could she light a fire now (`jane_sim::fire::plan`, the rain aside)? Two deadwood, and a
+/// match, a fire stone, or Fire with the mana for it (only Fire, at an old grate). Only while
+/// fires are made.
+fn can_make_fire(v: &View<'_>, fire_only: bool) -> bool {
+    if !v.fires_made() {
+        return false;
+    }
+    let held = |n: &str| sense::holds(v, sense::item(n));
+    if held("deadwood") < u32::from(jane_sim::tuning::FIRE_LAY) {
+        return false;
+    }
+    let cat = jane_data::catalog();
+    let fire =
+        jane_sim::fire::fire_spell().is_some_and(|f| v.learned().contains(&f) && v.body().mp >= cat.combat.spell(f).mp);
+    fire || (!fire_only && (held("match") > 0 || held("fire_stone") > 0))
+}
+
+/// A fire she can rest at, and how: a kept one (a `rest` row, read by its talk) or a made one
+/// burning, pressed; a cold pit she holds the makings for, held a second first. `None` for
+/// anything else (a pit she cannot light, a quest's brazier, ash).
+fn rest_fire(v: &View<'_>, p: &jane_sim::Prop) -> Option<UseProp> {
+    let d = jane_data::catalog().story.prop(p.def);
+    if p.hidden {
+        return None;
+    }
+    let spawn = v.prop_spawn(p);
+    if d.rest && spawn.is_some_and(|s| s.talk.is_some()) {
+        return Some(UseProp::new(p.id));
+    }
+    if !v.fires_made() || !d.made || spawn.is_some_and(|s| s.talk.is_some() || s.use_list.is_some()) {
+        return None;
+    }
+    if p.on {
+        return Some(UseProp::new(p.id));
+    }
+    can_make_fire(v, d.fire_only).then(|| UseProp::make_fire(p.id))
+}
+
+/// Deadwood to pick up on the way, while fires are made and she holds under [`WOOD_LOW`]: the
+/// nearest stump, woodpile or log not yet gathered within [`WOOD_NEAR`] cells.
+fn wood_near(v: &View<'_>) -> Option<PropId> {
+    if !v.fires_made() || sense::holds(v, sense::item("deadwood")) >= WOOD_LOW {
+        return None;
+    }
+    let cat = jane_data::catalog();
+    let at = v.body().pos;
+    v.props()
+        .filter(|p| {
+            !p.hidden
+                && !p.used
+                && cat.story.prop(p.def).wood > 0
+                && v.prop_spawn(p).is_none_or(|s| s.talk.is_none())
+                && to_prop(p, at) <= i64::from(WOOD_NEAR * CELL_FX)
+        })
+        .min_by_key(|p| (to_prop(p, at), p.id))
+        .map(|p| p.id)
+}
+
+/// Gather deadwood under this many sticks (two fires' worth).
+const WOOD_LOW: u32 = 4;
+/// From this near, cells.
+const WOOD_NEAR: i32 = 10;
 
 /// The line under which she mends before walking on, out of doors, permille.
 const COUNTY_LOW: i32 = 600;

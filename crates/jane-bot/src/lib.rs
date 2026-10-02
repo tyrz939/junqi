@@ -571,6 +571,11 @@ impl Bot {
             if let Some(slot) = sense::junk_slot(v) {
                 return Act::press(Command::BagDestroy { slot });
             }
+            // Seated at a fire (`jane_sim::fire`): she sits until she is whole. Anything that
+            // comes for her gets her up (the sim's rule), and then the plan has her again.
+            if v.body().seated.is_some() {
+                return Act::idle();
+            }
         }
         let mut notes = Vec::new();
         let act = match &mut self.plan {
