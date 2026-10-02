@@ -475,6 +475,68 @@ impl Roads {
         legs.push(Leg::Off { at, dir: wind(cx - at.0, cy - at.1), off, metres: metres_along(&path, last, leave) });
         Some(Route { from: from.clone(), to, legs, path })
     }
+
+    /// The same way, walked as far as its cell `i`, said from there: "here" is where she stands
+    /// now, not where the way was set. The road out is read again from `i`, the turns and the
+    /// leaving still ahead keep their places, and the first of them counts its metres from `i`.
+    /// No new walk: the cells are the way's own. `None` when `i` is past the way's first turn or
+    /// its end (the way is worked out again there), or the way did not start from where she was.
+    pub fn walked(&self, r: &Route, i: usize) -> Option<Route> {
+        if !matches!(r.from, Start::Here(_)) || i == 0 || i + 1 >= r.path.len() {
+            return None;
+        }
+        let path = &r.path;
+        let ix = |at: (i32, i32)| path.iter().position(|&c| c == at);
+        let (cx, cy) = r.to.centre();
+        let here = path[i];
+        let heading = {
+            let j = (i + AHEAD).min(path.len() - 1);
+            wind(path[j].0 - here.0, path[j].1 - here.1)
+        };
+        let road = path[i..=(i + AHEAD).min(path.len() - 1)].iter().any(|&c| self.is_road(c));
+        let mut legs = vec![Leg::Out { at: here, dir: heading, road }];
+        let mut first = true;
+        for l in r.legs.iter().skip(1) {
+            let leg = match *l {
+                Leg::Post { post, at, dir, ref sign, .. } => {
+                    let k = ix(at)?;
+                    if k <= i {
+                        return None;
+                    }
+                    let metres = if first { metres_along(path, i, k) } else { leg_metres(l) };
+                    Leg::Post { post, at, dir, sign: sign.clone(), metres }
+                }
+                Leg::Off { metres: 0, .. } => {
+                    let off = metres_along(path, i, path.len() - 1);
+                    let off = if road && off <= BY_ROAD { 0 } else { off };
+                    Leg::Off { at: here, dir: wind(cx - here.0, cy - here.1), off, metres: 0 }
+                }
+                Leg::Off { at, dir, off, metres } => {
+                    let k = ix(at)?;
+                    if k <= i {
+                        return None;
+                    }
+                    Leg::Off { at, dir, off, metres: if first { metres_along(path, i, k) } else { metres } }
+                }
+                Leg::InTown { from, dir, off, metres } => {
+                    let walked = if first { metres_along(path, 0, i) } else { 0 };
+                    Leg::InTown { from, dir, off, metres: (metres - walked).max(0) }
+                }
+                Leg::Out { .. } => continue,
+            };
+            first = false;
+            legs.push(leg);
+        }
+        Some(Route { from: Start::Here(here), to: r.to, legs, path: path[i..].to_vec() })
+    }
+}
+
+/// A turn's own metres, from the leg before it.
+fn leg_metres(l: &Leg) -> i32 {
+    match *l {
+        Leg::Post { metres, .. } | Leg::Off { metres, .. } | Leg::InTown { metres, .. } => metres,
+        Leg::Out { .. } => 0,
+    }
 }
 
 fn dist2(a: (i32, i32), b: (i32, i32)) -> i64 {

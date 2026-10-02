@@ -17,7 +17,7 @@ use crate::ui::core::{
     wid, wrap_lines,
 };
 use crate::ui::style::{self, argb, fade};
-use crate::view::{BANNER_TICKS, Gauge, QuestLine, TOAST_FADE, TOAST_TICKS, ViewBuffers};
+use crate::view::{Gauge, QuestLine, TOAST_FADE, TOAST_TICKS, ViewBuffers};
 
 /// Columns a line of world text (a toast, the prompt) wraps at in the Small face: the
 /// tooltip's rule (§3.2). A mine chest's "has no keyhole" ran off both edges of the canvas.
@@ -551,16 +551,35 @@ fn buttons(ui: &mut Ui, ch: i32) {
 }
 
 fn banner(ui: &mut Ui, b: &ViewBuffers, cw: i32, ch: i32) {
-    let Some((name, born)) = b.hud.banner else { return };
-    let age = b.tick.wrapping_sub(born);
+    let Some(bn) = &b.hud.banner else { return };
+    let (name, total) = (bn.text.as_str(), bn.ticks());
+    let age = b.tick.wrapping_sub(bn.born);
     let a = if age < 30 {
         age * 255 / 30
-    } else if age > BANNER_TICKS - 50 {
-        (BANNER_TICKS - age) * 255 / 50
+    } else if age > total - 50 {
+        (total - age) * 255 / 50
     } else {
         255
     };
     let a = a.min(255) as u8;
+    if bn.place {
+        // A named place she has crossed into: smaller than a zone's, its rules short and still,
+        // a diamond at each end, as a map's lettering sits between two flourishes.
+        let w = text_w(Face::Small, name);
+        let y = ch / 4 - 6;
+        let x = centred_x(cw, w);
+        let grow = (age.min(30) as i32) * 2 / 3;
+        let ra = argb(style::gold(), a);
+        let ry = y + 6;
+        ui.fill(Rect::new(x - 12 - grow, ry, 8 + grow, 1), ra);
+        ui.fill(Rect::new(x + w + 4, ry, 8 + grow, 1), ra);
+        ui.fill(Rect::new(x - 14 - grow, ry - 1, 1, 3), ra);
+        ui.fill(Rect::new(x - 15 - grow, ry, 3, 1), ra);
+        ui.fill(Rect::new(x + w + 13 + grow, ry - 1, 1, 3), ra);
+        ui.fill(Rect::new(x + w + 12 + grow, ry, 3, 1), ra);
+        ui.text(x, y, name, Ink::small(style::text_bright()).shadow().alpha(a));
+        return;
+    }
     let w = text_w(Face::Head, name);
     let y = ch / 4 - 14;
     let x = centred_x(cw, w);

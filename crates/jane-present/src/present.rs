@@ -22,6 +22,7 @@ use crate::backend::AtlasPages;
 use crate::camera::{Camera, alpha_256};
 use crate::chunks::{ChunkCache, LRU, Need};
 use crate::creatures::{self, Creatures};
+use crate::cues::Cues;
 use crate::drawlist::{DrawCmd, DrawList};
 use crate::facing::Face8;
 use crate::frame::{
@@ -79,6 +80,8 @@ const UNIT_KEY: u32 = 0x8000_0000;
 const DROP_KEY: u32 = 0x2000_0000;
 /// A rug's key in the prop list (ART-PLAN M4): the id of the thing it is laid by, with this bit.
 const RUG_KEY: u32 = 0x0800_0000;
+/// The Hoar Stone's key in the prop list (`cues`): above every prop's and every drop's.
+const STONE_KEY: u32 = 0x4000_0000;
 
 /// Which lights a frame draws and which of them cast (PRESENTATION.md §1.7), one rule for every
 /// tier: of the lights that may cast (`Light::casts` as they come: prop lights, her lantern, a
@@ -267,6 +270,10 @@ pub struct Present {
     /// This frame's quest marks over heads (§3.8), and whether it is dark enough for them to glow.
     marks: Vec<QuestMarker>,
     dark: bool,
+    /// Cues past the screen edge: crows over camps, the dead lamps' glass, the Hoar Stone.
+    cues: Cues,
+    /// The hour of the clock, as last read.
+    hour: u8,
 }
 
 impl Present {
@@ -280,6 +287,7 @@ impl Present {
         let terrain = Terrain::build(&mut atlas, LRU);
         let atmos = Atmosphere::new(tier, &mut atlas);
         let fx = Fx::new(tier, atmos.features.max_particles);
+        let cues = Cues::new(&mut atlas);
         // The UI's page goes last, so no world sprite moves when it grows (PRESENTATION.md §3.1).
         let (ui_art, mut ui_page) = crate::ui::UiArt::build(atlas.pages.pages.len() as u8);
         if atlas.lit() {
@@ -326,6 +334,8 @@ impl Present {
             lessons: Lessons::new(tier),
             marks: Vec::with_capacity(16),
             dark: false,
+            cues,
+            hour: 12,
         }
     }
 
@@ -462,6 +472,9 @@ impl Present {
             self.chunks.invalidate(Rect::new(0, 0, w as i32, h as i32));
         }
         self.zone_cells = view.size();
+        let kit = &self.kit;
+        self.cues.zone(view, |s| kit.glass(s));
+        self.hour = view.hour();
         self.hurt.clear();
         self.struck.clear();
         for e in events_for(events, view.me()) {
@@ -738,6 +751,33 @@ impl Present {
             });
         });
         stand_on_tops(props);
+        // The Hoar Stone on the stair's block: drawn while any of its height can be on screen,
+        // so it shows over the bottom edge before the block does.
+        // The regions' landmarks likewise, each as tall as it is (`cues`): the chimney, the
+        // spire, the statue.
+        let stone = self.cues.stone().map(|(foot, look)| (foot, look, jane_art::far::HOAR_W / 2));
+        let tall = self.cues.standing(self.hour).map(|(foot, look, ax, _)| (foot, look, ax));
+        for (i, ((sx, sy), look, ax)) in stone.into_iter().chain(tall).enumerate() {
+            let r = self.atlas.get(look);
+            let reach = Rect::new(area.x - 4, area.y, area.w + 8, area.h + i32::from(r.src.h) / CELL + 1);
+            if reach.contains(sx.div_euclid(CELL), sy.div_euclid(CELL)) {
+                props.push(PropRec {
+                    id: STONE_KEY + i as u32,
+                    x: sx - ax,
+                    y: sy - CELL,
+                    w: i32::from(r.src.w),
+                    h: CELL,
+                    look,
+                    flat: false,
+                    flush: false,
+                    on_top: true,
+                    surface: None,
+                    lift: 0,
+                    sort_foot: None,
+                    mark: None,
+                });
+            }
+        }
         // What lies on the ground (a creature's loot where it fell) as its item, a cell's
         // footprint round its point, on the ground under everything standing.
         for d in view.drops() {
@@ -1545,6 +1585,13 @@ impl Present {
         // air, the rain.
         self.fx.draw_ground(f, cam, alpha, sky);
         self.atmos.draw_fog(f, cam, sky);
+        // Past the screen's edge: crows over the camps, the dead lamps' glass, the Hoar Stone
+        // out of the fog.
+        let fog_at_stone = self.cues.stone().map_or(0, |((x, y), _)| self.atmos.fog_at(x, y - CELL));
+        let her = me_feet.map(|(x, y)| (x + cam.0, y + cam.1));
+        let t256 = u64::from(self.tick) * 256 + u64::from(alpha);
+        let moon = self.atmos.moon_up();
+        self.cues.draw(f, &self.atlas, cam, t256, sky, her, self.hour, moon, fog_at_stone);
         self.fx.draw_air(f, cam, alpha, sky);
         self.lessons.draw(f, cam, alpha, me_feet);
         // The grade (§1.3 `grade`): the same on every tier, so a frame from any of them is the
