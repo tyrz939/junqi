@@ -262,6 +262,20 @@
   { "name": "crow", "peak": 0.22, "variants": 2, "send": 0.5, "layers": [
     { "wave": "saw", "pitch": [690, 610], "attack_ms": 20, "decay_ms": 300, "tremolo": [38, 0.6], "notes": [0, 0.5], "every_ms": 420, "filter": { "kind": "bp", "cutoff": [1400, 1200], "q": 1.6 } }
   ]},
+  { "name": "bees", "peak": 0.2, "variants": 2, "send": 0.45, "layers": [
+    { "wave": "saw", "pitch": [212, 218], "attack_ms": 260, "hold_ms": 900, "decay_ms": 520, "tremolo": [23, 0.45], "filter": { "kind": "bp", "cutoff": [900, 760], "q": 1.4 } },
+    { "wave": "saw", "pitch": [229, 224], "attack_ms": 320, "hold_ms": 820, "decay_ms": 600, "gain": 0.7, "tremolo": [31, 0.5], "filter": { "kind": "bp", "cutoff": [1300, 1100], "q": 1.8 } },
+    { "wave": "pink", "pitch": [2200, 2200], "attack_ms": 300, "hold_ms": 800, "decay_ms": 500, "gain": 0.12, "filter": { "kind": "bp", "cutoff": [2400, 2000], "q": 1.2 } }
+  ]},
+  { "name": "knocking", "peak": 0.3, "variants": 2, "send": 0.7, "layers": [
+    { "wave": "sine", "pitch": [118, 82], "attack_ms": 2, "decay_ms": 140, "notes": [0, 0, 0], "every_ms": 340, "filter": { "kind": "lp", "cutoff": [420, 300], "q": 0.8 } },
+    { "wave": "noise", "pitch": [600, 600], "attack_ms": 1, "decay_ms": 50, "gain": 0.35, "notes": [0, 0, 0], "every_ms": 340, "filter": { "kind": "lp", "cutoff": [520, 380], "q": 0.7 } }
+  ]},
+  { "name": "boots", "peak": 0.26, "variants": 2, "send": 0.5, "layers": [
+    { "wave": "noise", "pitch": [1400, 1000], "attack_ms": 2, "decay_ms": 70, "notes": [0, 0, 0, 0, 0, 0], "every_ms": 480, "filter": { "kind": "bp", "cutoff": [1500, 900], "q": 1.0 } },
+    { "wave": "sine", "pitch": [92, 58], "attack_ms": 3, "decay_ms": 90, "gain": 0.6, "notes": [0, 0, 0, 0, 0, 0], "every_ms": 480 },
+    { "wave": "noise", "pitch": [3400, 3400], "attack_ms": 1, "decay_ms": 25, "gain": 0.2, "delay_ms": 30, "notes": [0, 0, 0, 0, 0, 0], "every_ms": 480, "filter": { "kind": "bp", "cutoff": [3600, 3000], "q": 2.0 } }
+  ]},
   { "name": "bell_far", "peak": 0.55, "send": 0.55, "layers": [
     { "wave": "bell", "pitch": [146.83, 146.83], "decay_ms": 9000, "filter": { "kind": "lp", "cutoff": [2400, 1400], "q": 0.6 } }
   ]},

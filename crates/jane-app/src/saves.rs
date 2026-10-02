@@ -94,6 +94,87 @@ pub struct SlotMeta {
     pub tracked: Option<Vec<String>>,
     #[serde(default)]
     pub seen: Vec<String>,
+    /// The map's ink and her pins, this seat's (`jane_present::memory`). Absent in an older note:
+    /// a blank map.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub map: Vec<MapRow>,
+}
+
+/// One mark of the map's ink, or one pin, as the note keeps it.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct MapRow {
+    /// The zone's content id ("county").
+    pub zone: String,
+    pub x: i32,
+    pub y: i32,
+    /// "fire", "made", "cold", "sign", "name" or "pin".
+    pub kind: String,
+    /// A sign's words, a place's name.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub text: String,
+    /// A made fire's burn left, of 255.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub burn: u8,
+    /// Learned and not yet inked: on the chart at the next rest.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub pending: bool,
+}
+
+#[allow(clippy::trivially_copy_pass_by_ref)] // serde asks for a reference
+fn is_zero(v: &u8) -> bool {
+    *v == 0
+}
+
+/// The map's memory as the note's rows.
+pub fn map_rows(m: &jane_present::memory::MapMemory) -> Vec<MapRow> {
+    use jane_present::memory::{FireState, Note};
+    let mark = |k: &jane_present::memory::MapMark, pending: bool| {
+        let (kind, text, burn) = match &k.note {
+            Note::Fire(FireState::Kept) => ("fire", String::new(), 0),
+            Note::Fire(FireState::Made { burn }) => ("made", String::new(), *burn),
+            Note::Fire(FireState::Cold) => ("cold", String::new(), 0),
+            Note::Sign(t) => ("sign", t.clone(), 0),
+            Note::Name(t) => ("name", t.clone(), 0),
+        };
+        MapRow { zone: k.zone.name().into(), x: k.at.0, y: k.at.1, kind: kind.into(), text, burn, pending }
+    };
+    let mut out: Vec<MapRow> = m.inked.iter().map(|k| mark(k, false)).collect();
+    out.extend(m.pending.iter().map(|k| mark(k, true)));
+    out.extend(m.pins.iter().map(|p| MapRow {
+        zone: p.zone.name().into(),
+        x: p.at.0,
+        y: p.at.1,
+        kind: "pin".into(),
+        ..MapRow::default()
+    }));
+    out
+}
+
+/// The note's rows as the map's memory; a row it does not know is passed over.
+pub fn map_of(rows: &[MapRow]) -> jane_present::memory::MapMemory {
+    use jane_present::memory::{FireState, MapMark, MapMemory, Note, PINS, Pin};
+    let mut m = MapMemory::default();
+    for r in rows {
+        let Some(zone) = jane_core::ZoneId::from_name(&r.zone) else { continue };
+        let at = (r.x, r.y);
+        let note = match r.kind.as_str() {
+            "fire" => Note::Fire(FireState::Kept),
+            "made" => Note::Fire(FireState::Made { burn: r.burn }),
+            "cold" => Note::Fire(FireState::Cold),
+            "sign" => Note::Sign(r.text.clone()),
+            "name" => Note::Name(r.text.clone()),
+            "pin" => {
+                if m.pins.len() < PINS {
+                    m.pins.push(Pin { zone, at });
+                }
+                continue;
+            }
+            _ => continue,
+        };
+        let k = MapMark { zone, at, note };
+        if r.pending { m.pending.push(k) } else { m.inked.push(k) }
+    }
+    m
 }
 
 impl SlotMeta {
@@ -285,6 +366,29 @@ mod tests {
         std::fs::write(dirs.meta(0), old).unwrap();
         let got = info(&dirs, 0).unwrap().meta.expect("an older note still reads");
         assert_eq!((got.tracked, got.seen.len()), (None, 0));
+        let _ = std::fs::remove_dir_all(&dirs.root);
+    }
+
+    #[test]
+    fn the_maps_ink_and_her_pins_ride_in_the_slots_note() {
+        use jane_core::ZoneId;
+        use jane_present::memory::{FireState, MapMark, MapMemory, Note};
+        let dirs = temp("map");
+        let sim = jane_sim::Sim::new_game(3, "Tess");
+        write(&dirs, 0, &sim.save()).unwrap();
+        let summary = info(&dirs, 0).unwrap().summary;
+        let mut m = MapMemory::default();
+        m.learn(MapMark { zone: ZoneId::County, at: (10, 12), note: Note::Sign("EAST: GOLD MINE, 300 m.".into()) });
+        m.learn(MapMark { zone: ZoneId::County, at: (300, 40), note: Note::Name("The Long Hedge".into()) });
+        m.ink(Some((ZoneId::County, (20, 20), FireState::Kept)));
+        m.learn(MapMark { zone: ZoneId::Mine, at: (5, 5), note: Note::Sign("MIND THE SHAFT".into()) });
+        m.toggle_pin(ZoneId::County, (500, 500));
+        m.toggle_pin(ZoneId::County, (900, 100));
+        let meta = SlotMeta { summary: Some(summary), map: map_rows(&m), ..SlotMeta::default() };
+        write_meta(&dirs, 0, &meta).unwrap();
+        let got = info(&dirs, 0).unwrap().meta.unwrap();
+        assert_eq!(map_of(&got.map), m, "the ink, what waits for a rest, and the pins come back as they were");
+        assert_eq!(map_of(&got.map).pins.len(), 2);
         let _ = std::fs::remove_dir_all(&dirs.root);
     }
 }
