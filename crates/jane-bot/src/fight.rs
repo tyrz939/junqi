@@ -175,7 +175,7 @@ pub fn dangerous(me: &Unit, t: &Unit) -> bool {
 
 /// May she begin `s` at `t` now (PLAY-PLAN §2.1: a cast takes time and slows her)? Always an
 /// instant, and always at what has no feet or could not hurt her much; else only if it cannot
-/// close to its bite in half the cast (she backs off at half speed meanwhile, and lets the cast
+/// close to its bite in a third of the cast (she backs off at half speed meanwhile, and lets the cast
 /// go if it closes: [`cast_caught`]).
 pub fn may_cast(me: &Unit, t: &Unit, s: SpellId) -> bool {
     let cast = i64::from(jane_data::catalog().combat.spell(s).cast.0);
@@ -183,7 +183,7 @@ pub fn may_cast(me: &Unit, t: &Unit, s: SpellId) -> bool {
         return true;
     }
     let run = i64::from(jane_data::catalog().combat.unit(t.def).run.0.max(1));
-    (gap(me, t) - bite(t)).max(0) / run > cast / 2 + 6
+    (gap(me, t) - bite(t)).max(0) / run > cast / 3
 }
 
 /// Building a cast while a dangerous foe closes to its bite: Esc, and step back.
@@ -744,6 +744,20 @@ pub fn engage(v: &View<'_>, cx: &mut Ctx, id: UnitId) -> Option<Act> {
         return Some(Act {
             frame: InputFrame { aim: Some(dir), ..InputFrame::IDLE },
             cmds: vec![Command::Cast { spell: ice, on: Some(id) }],
+        });
+    }
+    // Too close for a cast that takes time: the spark, which is instant, while it gets through.
+    let spark = sense::spell("spark");
+    if knows(v, spark)
+        && ready(me, spark, now)
+        && !may_cast(me, t, ice)
+        && jane_sim::status::resist_factor(t, cat.combat.spell(spark).school, now) >= 500
+        && g <= i64::from(cat.combat.spell(spark).range.0) * 9 / 10
+        && v.sight(me.pos, t.pos)
+    {
+        return Some(Act {
+            frame: InputFrame { aim: Some(dir), ..InputFrame::IDLE },
+            cmds: vec![Command::Cast { spell: spark, on: Some(id) }],
         });
     }
     // A crowd on her she would not put down standing (the Gold Mine's hub pulls three skeletons,

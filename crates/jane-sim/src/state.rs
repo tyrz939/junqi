@@ -446,6 +446,8 @@ pub struct Fight {
     /// Swinging at this foe on the swing timer.
     pub auto: Option<UnitId>,
     pub walk: Option<Box<ClickWalk>>,
+    /// Held still at her last step (`cast::held_still`): a hold that lands stops her cast once.
+    pub held: bool,
 }
 
 /// A cast building (`cast.rs`): it lands at `done` unless something stops it.

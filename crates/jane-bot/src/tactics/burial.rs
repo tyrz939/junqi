@@ -332,6 +332,12 @@ pub fn best_bolt(v: &View<'_>, u: &Unit) -> Option<jane_core::SpellId> {
             let d = cat.combat.spell(s);
             (jane_sim::status::resist_factor(u, d.school, now), -i64::from(d.mp.0))
         })
+        // Too close for a cast that takes time: the instant spark, while it gets through.
+        .or_else(|| {
+            let s = sense::spell("spark");
+            let gets = jane_sim::status::resist_factor(u, cat.combat.spell(s).school, now) >= 500;
+            (sense::knows(v, s) && crate::fight::ready(me, s, now) && near(s) && gets).then_some(s)
+        })
 }
 
 fn feed(f: &mut Feed, v: &View<'_>, cx: &mut Ctx) -> Status {

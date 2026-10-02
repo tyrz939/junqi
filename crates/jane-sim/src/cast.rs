@@ -228,7 +228,7 @@ pub fn begin(cx: &mut Ctx<'_>, seat: Seat, spell: SpellId, mut on: Option<UnitId
     let def = cx.cat.combat.spell(spell);
     let body = cx.world.players[seat.index()].unit;
     let Some(u) = cx.zone.unit(body).filter(|u| u.alive) else { return };
-    if held_still(u, now) {
+    if crate::status::is_stunned(u, now) {
         say_failed(cx, body, spell, SpellError::CastUnsuccessful);
         return;
     }
@@ -457,9 +457,13 @@ pub fn before_move(cx: &mut Ctx<'_>, seat: Seat, frame: InputFrame) {
         Some(t @ TargetRef::Unit(id)) if hostile(cx.zone, u, t) => Some(id),
         _ => None,
     };
-    let stunned = held_still(u, now);
+    let held = held_still(u, now);
+    let stunned = crate::status::is_stunned(u, now);
     let f = &mut cx.world.players[seat.index()].fight;
     f.target = target;
+    // Caught as it lands (a hold that was not on her at her last step): the cast stops once.
+    let caught = held && !f.held;
+    f.held = held;
     // Auto-attack follows her to a new foe.
     if let (Some(a), Some(n)) = (f.auto, switch_to) {
         if a != n {
@@ -469,8 +473,10 @@ pub fn before_move(cx: &mut Ctx<'_>, seat: Seat, frame: InputFrame) {
     if frame.mv_mag > MOVE_DEADZONE {
         f.walk = None;
     }
-    if stunned {
+    if caught || stunned {
         interrupt(cx, seat);
+    }
+    if stunned {
         return;
     }
     if cx.world.players[seat.index()].fight.cast.is_some_and(|c| now >= c.done) {
