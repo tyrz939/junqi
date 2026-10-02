@@ -8,8 +8,8 @@
 //! | --- | --- | --- |
 //! | **Hedge** | the Lowfields' wild patches, Mother's Garden, Bellfield | a hedge one to two deep, an oak now and then and at every corner; long grass along its foot |
 //! | **Wall** | fields and yards: the Top Field, the allotments, Quarry Steps, Glasshouse Row, Chapel Rise | a low dry-stone wall, a bush at the corners, a tuft at its foot |
-//! | **Reed edge** | the Waters | a drain one to two wide, reed along both banks, a clump of willow scrub; cut through a wood, the trees on its banks felled so it shows |
-//! | **Slag bank** | the Works | a cinder ridge swelling from one cell wide to three, its slag in clumps on dark ground, thinning to a few stones at a gap; the odd lump rolled off its foot |
+//! | **Reed edge** | the Waters | a drain one to two wide, reed along both banks, a clump of willow scrub |
+//! | **Slag bank** | the Works | a bank of slag two deep, cinder earth either side |
 //!
 //! Laid after the stories and before the scatter and the ways, on open ground only: never on a
 //! claimed cell (a road's margin, a set place, a small place), a way, water, a prop's footprint, a
@@ -189,32 +189,8 @@ pub fn lay_perimeters(c: &mut County<'_>) {
     }
 }
 
-/// A cell of the edge's line.
-#[derive(Clone, Copy, Debug)]
-struct Spot {
-    at: (i32, i32),
-    /// A run's first cell: where two runs meet.
-    corner: bool,
-    /// Within a few cells of a gateway: a bank thins out to a few stones there.
-    taper: bool,
-}
-
-/// A slag bank's reach either side of its line along a run, `0..=1` cells: smooth along the run
-/// (a lattice every [`BANK_LUMP`] cells), so the bank swells and narrows from one to three wide.
-fn bank_reach(salt: u32, j: i32) -> i32 {
-    let (k, f) = (j / BANK_LUMP, j % BANK_LUMP);
-    let v = |k: i32| (mix32(salt ^ (k as u32).wrapping_mul(0x9e37_79b9)) & 255) as i32;
-    let at = (v(k) * (BANK_LUMP - f) + v(k + 1) * f) / BANK_LUMP;
-    i32::from(at >= 120)
-}
-
-/// Cells along a run between a slag bank's swells.
-const BANK_LUMP: i32 = 5;
-/// Cells either side of a gateway a slag bank tapers over.
-const TAPER: i32 = 3;
-
-/// The cells of the edge's line round `(cx, cy)`.
-fn runs(rng: &mut jane_core::Sfc32, edge: Edge, (cx, cy): (i32, i32), radius: i32) -> Vec<Spot> {
+/// The cells of the edge's line round `(cx, cy)`, each with whether it is a corner.
+fn runs(rng: &mut jane_core::Sfc32, edge: Edge, (cx, cy): (i32, i32), radius: i32) -> Vec<((i32, i32), bool)> {
     let q = TURN / 4;
     // The corners: seven to ten, evenly round with a little give, each its own distance out.
     let n = 7 + rng.below(4) as i32;
@@ -232,8 +208,6 @@ fn runs(rng: &mut jane_core::Sfc32, edge: Edge, (cx, cy): (i32, i32), radius: i3
     let mut gated: Vec<i32> = (0..n).collect();
     rng.shuffle(&mut gated);
     gated.truncate(3 + rng.below(3) as usize);
-    // Only a bank draws for its swells, so the other edges' runs are as they were.
-    let (bank_in, bank_out) = if edge == Edge::Slag { (rng.next_u32(), rng.next_u32()) } else { (0, 0) };
     let mut cells = Vec::new();
     let mut run: Vec<((i32, i32), bool)> = Vec::new();
     let mut seg = Vec::new();
@@ -259,36 +233,24 @@ fn runs(rng: &mut jane_core::Sfc32, edge: Edge, (cx, cy): (i32, i32), radius: i3
             run.extend(seg.iter().map(|&c| (c, across)));
         }
         let deep = match edge {
-            Edge::Wall | Edge::Slag => 1,
+            Edge::Wall => 1,
+            Edge::Slag => 2,
             Edge::Hedge | Edge::Reed => 1 + rng.below(2) as i32,
         };
-        let j0 = cells.len() as i32;
         // A gateway: four to six cells left out, somewhere in the run's middle half.
         let gate = gated.contains(&i).then(|| {
             let at = run.len() as i32 / 4 + rng.below((run.len() as u32 / 2).max(1)) as i32;
             (at, at + 4 + rng.below(3) as i32)
         });
         for (j, &((x, y), vertical)) in run.iter().enumerate() {
-            let j = j as i32;
-            if gate.is_some_and(|(g0, g1)| (g0..g1).contains(&j)) {
+            if gate.is_some_and(|(g0, g1)| (g0..g1).contains(&(j as i32))) {
                 continue;
             }
-            let corner = j == 0;
-            let taper = gate.is_some_and(|(g0, g1)| (g0 - TAPER..g1 + TAPER).contains(&j));
-            cells.push(Spot { at: (x, y), corner, taper });
-            // Away from the centre, and towards it.
-            let (ox, oy) = if vertical { ((x - cx).signum(), 0) } else { (0, (y - cy).signum()) };
-            let (outer, inner) = match edge {
-                // A bank swells and narrows on each side on its own.
-                Edge::Slag => (bank_reach(bank_out, j0 + j), bank_reach(bank_in, j0 + j)),
+            cells.push(((x, y), j == 0));
+            if deep == 2 {
                 // The second row on the side away from the centre, so a corner closes.
-                _ => (deep - 1, 0),
-            };
-            for k in 1..=outer {
-                cells.push(Spot { at: (x + ox * k, y + oy * k), corner, taper });
-            }
-            for k in 1..=inner {
-                cells.push(Spot { at: (x - ox * k, y - oy * k), corner, taper });
+                let out = if vertical { (x + (x - cx).signum(), y) } else { (x, y + (y - cy).signum()) };
+                cells.push((out, j == 0));
             }
         }
     }
@@ -318,7 +280,7 @@ fn lay(
     let (bw, bh) = (bx.w, bx.h);
     let local = |x: i32, y: i32| ((y - bx.y) * bw + (x - bx.x)) as usize;
     let inside = |x: i32, y: i32| x >= bx.x && y >= bx.y && x < bx.x + bw && y < bx.y + bh;
-    let mut tiles_before: Vec<Tile> = bx.cells().map(|(x, y)| c.k.get(x, y)).collect();
+    let tiles_before: Vec<Tile> = bx.cells().map(|(x, y)| c.k.get(x, y)).collect();
     // Within `CLEAR` of a way or of anything kept: a square dilation, rows then columns.
     let mut near = vec![false; (bw * bh) as usize];
     for (x, y) in bx.cells() {
@@ -338,50 +300,17 @@ fn lay(
                 ((y - CLEAR).max(0)..=(y + CLEAR).min(bh - 1)).any(|yy| rows[(yy * bw + x) as usize]);
         }
     }
-    // A drain through a wood is cut: the trees on its line, beside it and just south of it (whose
-    // crowns would be drawn over it) are felled first, so it shows. Done before anything is
-    // flooded, so the felling is the ground the edge is judged on.
-    if edge == Edge::Reed {
-        for s in &cells {
-            let (x, y) = s.at;
-            if !inside(x, y) || near[local(x, y)] || c.k.is_claimed(x, y) {
-                continue;
-            }
-            for dy in -1..=2 {
-                for dx in -1..=1 {
-                    let (tx, ty) = (x + dx, y + dy);
-                    if inside(tx, ty)
-                        && !near[local(tx, ty)]
-                        && !c.k.is_claimed(tx, ty)
-                        && c.k.get(tx, ty) == Tile::Tree
-                    {
-                        c.k.set(tx, ty, Tile::GrassTall);
-                        tiles_before[local(tx, ty)] = Tile::GrassTall;
-                    }
-                }
-            }
-        }
-    }
     let free = |c: &County<'_>, x: i32, y: i32| {
         inside(x, y) && wild(c.k.get(x, y)) && !c.k.is_claimed(x, y) && !near[local(x, y)]
     };
     // The core, then its foot along both sides.
     let mut laid: Vec<(i32, i32, Tile)> = Vec::new();
     let mut part = vec![0u8; near.len()];
-    // Close to a way (inside `CLEAR + 2` of it) a bank thins out as at a gateway.
-    let by_way = |x: i32, y: i32| {
-        [(-2, -2), (0, -2), (2, -2), (-2, 0), (2, 0), (-2, 2), (0, 2), (2, 2)]
-            .iter()
-            .any(|&(dx, dy)| !inside(x + dx, y + dy) || near[local(x + dx, y + dy)])
-    };
-    for &Spot { at: (x, y), corner, taper } in &cells {
+    for &((x, y), corner) in &cells {
         if !free(c, x, y) || part[local(x, y)] != 0 {
             continue;
         }
         let r = roll(salt, x, y);
-        // A bank's slag lies in clumps: a coarse roll every three cells decides where.
-        let clump = roll(salt ^ 0x68e3_1da4, x.div_euclid(3), y.div_euclid(3));
-        let thin = taper || by_way(x, y);
         let t = match (edge, corner) {
             (Edge::Hedge, true) => Tile::Tree,
             (Edge::Hedge, false) if r < 9 => Tile::Tree,
@@ -389,9 +318,7 @@ fn lay(
             (Edge::Wall | Edge::Reed, true) => Tile::Bush,
             (Edge::Wall, false) => Tile::StoneWall,
             (Edge::Reed, false) => Tile::Water,
-            (Edge::Slag, _) if thin && r < 40 => Tile::Rubble,
-            (Edge::Slag, _) if !thin && (r < 48 || (clump > 100 && r < 215)) => Tile::Rubble,
-            (Edge::Slag, _) if r % 4 == 0 => Tile::Dirt,
+            (Edge::Slag, _) if r < 220 => Tile::Rubble,
             (Edge::Slag, _) => Tile::DryBed,
         };
         // Scrub stays shut: the edge never opens ground.
@@ -413,14 +340,12 @@ fn lay(
             let t = match edge {
                 Edge::Hedge if r < 150 => Tile::GrassTall,
                 Edge::Wall if r < 60 => Tile::GrassTall,
+                Edge::Hedge | Edge::Wall => continue,
                 Edge::Reed if r < 16 => Tile::Bush,
                 Edge::Reed if r < 210 => Tile::GrassTall,
                 Edge::Reed => Tile::Moss,
-                // The odd lump rolled off the bank's foot.
-                Edge::Slag if r < 9 => Tile::Rubble,
-                Edge::Slag if r < 130 => Tile::Dirt,
-                Edge::Slag if r < 200 => Tile::DryBed,
-                Edge::Hedge | Edge::Wall | Edge::Slag => continue,
+                Edge::Slag if r < 150 => Tile::Dirt,
+                Edge::Slag => Tile::DryBed,
             };
             laid.push((fx, fy, t));
         }
