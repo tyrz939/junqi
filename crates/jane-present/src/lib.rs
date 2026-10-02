@@ -11,6 +11,7 @@
 //! backend.draw(frame);
 //! ```
 
+pub mod ambient;
 pub mod atlas;
 pub mod atmos;
 pub mod audio;

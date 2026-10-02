@@ -14,9 +14,11 @@ use jane_core::ids::SpriteId;
 use crate::{model, model_enum};
 
 model_enum! {
-    /// A person's proportions: a per-build table of eight numbers in `jane-art` (ART.md §2.1).
+    /// A person's proportions: a per-build table in `jane-art` (ART.md §2.1). `stooped` is an
+    /// old body (the head carried low and forward, the back curved), `tall` a tall thin one
+    /// (long legs, narrow shoulders).
     #[cfg_attr(feature = "compile", derive(serde::Deserialize), serde(rename_all = "snake_case"))]
-    pub enum Build { Slim, Broad, Child, Stout }
+    pub enum Build { Slim, Broad, Child, Stout, Stooped, Tall }
 }
 
 model_enum! {
@@ -79,6 +81,14 @@ model_enum! {
     /// `keys`: a ring of keys at the belt; `knuckles`: iron over the fists.
     #[cfg_attr(feature = "compile", derive(serde::Deserialize), serde(rename_all = "snake_case"))]
     pub enum Extra { WatchChain, BellAnkle, Shawl, Seated, Wet, Stoop, Keys, Knuckles }
+}
+
+model_enum! {
+    /// What a person does while standing at their work (ART-PLAN Q4): a loop of two to four
+    /// frames the composer draws for the look and the presenter plays while the schedule row
+    /// is the one the work belongs to. Presentation only.
+    #[cfg_attr(feature = "compile", derive(serde::Deserialize), serde(rename_all = "snake_case"))]
+    pub enum Task { None, Sweep, Read, Bottles, Knit }
 }
 
 model_enum! {
@@ -168,6 +178,8 @@ model! {
         pub head: PersonHead,
         pub body: PersonBody,
         pub held: HeldItem,
+        /// The work it does while it stands at it (ART-PLAN Q4).
+        pub task: Task,
         pub extras: &'static [Extra],
         pub emits: &'static [EmitRole],
         /// Ramps go to mist and the figure is a 50 % checker; height halves.

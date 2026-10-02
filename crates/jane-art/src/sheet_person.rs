@@ -197,7 +197,7 @@ pub fn units(sets: &[Rendered], font: &Font) -> Image {
 /// look's other axes from `base`.
 pub fn grid(base: &PersonLook, font: &Font) -> Result<Image, String> {
     const S: u32 = 2;
-    let builds = [Build::Slim, Build::Broad, Build::Stout, Build::Child];
+    let builds = [Build::Slim, Build::Broad, Build::Stout, Build::Child, Build::Stooped, Build::Tall];
     let hairs =
         [Hair::Short, Hair::Cropped, Hair::Long, Hair::Bun, Hair::Pigtails, Hair::Bald, Hair::Curlers, Hair::Wet];
     let coats = [

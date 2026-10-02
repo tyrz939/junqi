@@ -188,7 +188,10 @@ fn boxes_are_whole(sk: &Skeleton, c: &County<'_>, bad: &mut Vec<String>) {
                 if want == Tile::Rail && got != Tile::Rail {
                     bad.push(format!("seed {}: {} lost its rail at ({cx}, {cy}): {got:?}", sk.seed, ch.id()));
                 }
-                if want != got && !near_rail(cx, cy) {
+                // A front garden's fence (the `gardens` stage) is the place's own: laid only on
+                // its garden ground.
+                let garden_fence = got == Tile::Fence && jane_core::garden::plot_ground(want);
+                if want != got && !near_rail(cx, cy) && !garden_fence {
                     cut += 1;
                 }
             }

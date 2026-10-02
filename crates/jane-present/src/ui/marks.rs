@@ -150,6 +150,115 @@ fn offer(ui: &mut Ui, x: i32, y: i32) {
     }
 }
 
+/// An emote over a head (ART-PLAN B3): a small white bubble with a mark in it, keyed on what
+/// the person is saying or doing (`Present::emotes`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Emote {
+    /// Surprised, or saying so: a red "!".
+    Bang,
+    /// Asking, or puzzled: a "?".
+    Ask,
+    /// Lost for words, or thinking: three dots.
+    Dots,
+    /// Whistling at work, singing in the evening: a note.
+    Note,
+    /// Fond: a heart.
+    Heart,
+}
+
+/// Ticks an emote shows, from its pop to gone.
+pub const EMOTE_TICKS: u32 = 96;
+
+/// An emote this frame: whose (its bob's phase), the head's top as a mark's, which, how old.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct EmoteMarker {
+    pub id: u32,
+    pub x: i32,
+    pub y: i32,
+    pub emote: Emote,
+    pub age: u32,
+}
+
+/// The bubble's inside, px; its ink line goes round it and its tail hangs under its left half.
+const BUBBLE: (i32, i32) = (10, 8);
+
+/// Each emote's mark, 8 x 6, inside the bubble a px in from its edge.
+fn emote_mask(e: Emote) -> [&'static str; 6] {
+    match e {
+        Emote::Bang => ["...##...", "...##...", "...##...", "...##...", "........", "...##..."],
+        Emote::Ask => ["..####..", ".##..##.", ".....##.", "...###..", "........", "...##..."],
+        Emote::Dots => ["........", "........", "........", "##.##.##", "##.##.##", "........"],
+        Emote::Note => ["....###.", "....#.##", "....#...", "..###...", ".####...", "..##...."],
+        Emote::Heart => [".##..##.", "########", "########", ".######.", "..####..", "...##..."],
+    }
+}
+
+/// The mark's ink: red for a surprise and a heart, ink for the rest.
+fn emote_ink(e: Emote) -> (Ramp, Tone) {
+    match e {
+        Emote::Bang => (Ramp::ClothRed, Tone::Base),
+        Emote::Heart => (Ramp::ClothRose, Tone::Base),
+        Emote::Note => (Ramp::ClothNavy, Tone::Base),
+        Emote::Ask | Emote::Dots => (Ramp::ClothNavy, Tone::Shade),
+    }
+}
+
+/// Draws every emote: a pop up out of the head over its first ticks, a gentle bob, gone in a
+/// fade over its last. Over the world, under the rest of the UI, as the marks.
+pub fn draw_emotes(ui: &mut Ui, emotes: &[EmoteMarker], tick: u32) {
+    for e in emotes {
+        if e.age >= EMOTE_TICKS {
+            continue;
+        }
+        // It rises out of the head over four ticks, then bobs as a mark does.
+        let rise = (4 - e.age.min(4) as i32) * 2;
+        let a = if e.age + 12 > EMOTE_TICKS { ((EMOTE_TICKS - e.age) * 21).min(255) as u8 } else { 255 };
+        let (w, h) = (BUBBLE.0 + 2, BUBBLE.1 + 2);
+        let x = e.x - w / 2;
+        let y = e.y - h - 3 + rise - bob(tick, e.id) / 2;
+        let ink = argb(style::INK, a);
+        let paper = argb(Ramp::HairWhite.at(Tone::High), a);
+        let shade = argb(Ramp::HairWhite.at(Tone::Base), a);
+        // The ink line round the bubble, its corners cut.
+        ui.fill(Rect::new(x + 1, y, w - 2, 1), ink);
+        ui.fill(Rect::new(x + 1, y + h - 1, w - 2, 1), ink);
+        ui.fill(Rect::new(x, y + 1, 1, h - 2), ink);
+        ui.fill(Rect::new(x + w - 1, y + 1, 1, h - 2), ink);
+        // The paper, a shade along its bottom and right.
+        ui.fill(Rect::new(x + 1, y + 1, w - 2, h - 2), paper);
+        ui.fill(Rect::new(x + 2, y + h - 2, w - 3, 1), shade);
+        ui.fill(Rect::new(x + w - 2, y + 2, 1, h - 3), shade);
+        // The tail: two rows down and to the left, toward the head.
+        let tx = x + w / 2 - 2;
+        ui.fill(Rect::new(tx, y + h - 1, 3, 1), paper);
+        ui.fill(Rect::new(tx - 1, y + h - 1, 1, 2), ink);
+        ui.fill(Rect::new(tx + 3, y + h - 1, 1, 1), ink);
+        ui.fill(Rect::new(tx, y + h, 2, 1), paper);
+        ui.fill(Rect::new(tx + 2, y + h, 1, 1), ink);
+        ui.fill(Rect::new(tx - 1, y + h + 1, 2, 1), ink);
+        // The mark, a row at a time in runs.
+        let (ramp, tone) = emote_ink(e.emote);
+        let c = argb(ramp.at(tone), a);
+        let lit = argb(ramp.at(tone.step(1)), a);
+        for (r, row) in emote_mask(e.emote).iter().enumerate() {
+            let b = row.as_bytes();
+            let mut k = 0;
+            while k < b.len() {
+                if b[k] != b'#' {
+                    k += 1;
+                    continue;
+                }
+                let start = k;
+                while k < b.len() && b[k] == b'#' {
+                    k += 1;
+                }
+                let colour = if r == 0 || start == 0 { lit } else { c };
+                ui.fill(Rect::new(x + 2 + start as i32, y + 2 + r as i32, (k - start) as i32, 1), colour);
+            }
+        }
+    }
+}
+
 /// A soft disc of `c` round `(cx, cy)`, radius `r`, a row at a time.
 fn glow(ui: &mut Ui, (cx, cy): (i32, i32), r: i32, c: u32) {
     for dy in -r..=r {
@@ -188,6 +297,15 @@ mod tests {
         assert!(total >= 2 * 20, "{total} px against the font's 20");
         assert!(inked(1) > inked(7) && inked(7) >= 4, "tapers, and the foot is no stroke");
         assert!((0..12).any(|y| inked(y) == 0) && inked(11) > 0, "a gap, then the dot");
+    }
+
+    #[test]
+    fn every_emote_has_a_mark_that_fits_its_bubble() {
+        for e in [Emote::Bang, Emote::Ask, Emote::Dots, Emote::Note, Emote::Heart] {
+            let m = emote_mask(e);
+            assert!(m.iter().all(|r| r.len() as i32 == BUBBLE.0 - 2), "{e:?}");
+            assert!(m.iter().any(|r| r.contains('#')), "{e:?}");
+        }
     }
 
     #[test]

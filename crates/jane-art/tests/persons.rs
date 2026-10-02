@@ -82,7 +82,10 @@ fn coverage_every_unit_sprite_has_a_look() {
 
 #[test]
 fn coverage_every_look_renders_every_frame_it_promises() {
-    let want = |r: &Rendered| person::frame_ids_for(looks::fight(r.sprite));
+    let want = |r: &Rendered| {
+        let Some((_, Look::Person(p))) = looks::find(r.name) else { unreachable!() };
+        person::frame_ids_for(looks::fight(r.sprite), p.task)
+    };
     for r in all() {
         let got: Vec<FrameId> = r.set.frames.iter().map(|(f, _)| *f).collect();
         assert_eq!(got, want(r), "{}", r.key());

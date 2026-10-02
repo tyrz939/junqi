@@ -883,10 +883,14 @@ impl Painter {
             for i in 0..GM {
                 let (x, y) = (x0 + i - M, y0 + j - M);
                 let k = Self::k(i, j);
-                self.s.raw[k] = src.tile(x, y);
+                let house = src.house(x, y);
+                // A garden's boundary is drawn as its house's own (`standing::plot`), on the grass
+                // it stands in: the sim's fence is not drawn again under it.
+                let fenced = house.is_some_and(|h| h.fenced(x, y));
+                self.s.raw[k] = if fenced { Tile::Grass } else { src.tile(x, y) };
                 self.s.mat[k] = src.material(x, y);
                 self.s.region[k] = src.region(x, y);
-                self.s.house[k] = src.house(x, y);
+                self.s.house[k] = house;
             }
         }
     }

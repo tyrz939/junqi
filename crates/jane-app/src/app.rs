@@ -1347,6 +1347,7 @@ impl App<'_> {
                 // The quest marks over heads, on the world under everything else (§3.8).
                 self.ui.interactive = false;
                 quest_marks::draw(&mut self.ui, self.present.marks(), self.present.dark(), self.present.ticks());
+                quest_marks::draw_emotes(&mut self.ui, self.present.emotes(), self.present.ticks());
                 if self.world_dbg.on
                     && let Some(v) = sim_of(self.session.as_ref()).and_then(|s| s.view(me_of(self.session.as_ref())))
                 {

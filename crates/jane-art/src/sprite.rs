@@ -107,6 +107,34 @@ pub enum FrameId {
     /// `Open` for a look's second and third bases: an apple tree picked keeps its own crown.
     Open2,
     Open3,
+    /// A person's blink (ART-PLAN Q4): the standing frame with the eyes a 1-px line, on the
+    /// facings whose eyes show (the west ones mirror the side's and the diagonal's).
+    DownBlink,
+    SideBlink,
+    DownRightBlink,
+    /// The frame after a turn (ART-PLAN B3): the new facing standing, with the hair's ends and
+    /// the hem still swung from the old, trailing behind and lifted a px. A turn to face the
+    /// viewer or away passes through the diagonal on the side it came from.
+    SideTurn,
+    DownRightTurn,
+    UpRightTurn,
+    /// A landing (ART-PLAN B3): the standing frame squashed, a px shorter and a touch wider.
+    DownLand,
+    UpLand,
+    SideLand,
+    DownRightLand,
+    UpRightLand,
+    /// A townsperson's work (ART-PLAN Q4): a loop of up to four beats facing the viewer (a page
+    /// turned, a bottle set down, the needles and the rocking chair), never mirrored ...
+    Task1,
+    Task2,
+    Task3,
+    Task4,
+    /// ... or from the side (the broom swept), mirrored for the west like the side's walk.
+    TaskSide1,
+    TaskSide2,
+    TaskSide3,
+    TaskSide4,
 }
 
 impl FrameId {
@@ -194,11 +222,30 @@ impl FrameId {
             FrameId::CastUpRight3 => "cast_up_right_3",
             FrameId::HurtDownRight => "hurt_down_right",
             FrameId::HurtUpRight => "hurt_up_right",
+            FrameId::DownBlink => "down_blink",
+            FrameId::SideBlink => "side_blink",
+            FrameId::DownRightBlink => "down_right_blink",
+            FrameId::SideTurn => "side_turn",
+            FrameId::DownRightTurn => "down_right_turn",
+            FrameId::UpRightTurn => "up_right_turn",
+            FrameId::DownLand => "down_land",
+            FrameId::UpLand => "up_land",
+            FrameId::SideLand => "side_land",
+            FrameId::DownRightLand => "down_right_land",
+            FrameId::UpRightLand => "up_right_land",
+            FrameId::Task1 => "task_1",
+            FrameId::Task2 => "task_2",
+            FrameId::Task3 => "task_3",
+            FrameId::Task4 => "task_4",
+            FrameId::TaskSide1 => "task_side_1",
+            FrameId::TaskSide2 => "task_side_2",
+            FrameId::TaskSide3 => "task_side_3",
+            FrameId::TaskSide4 => "task_side_4",
         }
     }
 
     /// Every frame, in order.
-    pub const ALL: [FrameId; 81] = {
+    pub const ALL: [FrameId; 100] = {
         use FrameId as F;
         [
             F::Down,
@@ -282,6 +329,25 @@ impl FrameId {
             F::HurtUpRight,
             F::Open2,
             F::Open3,
+            F::DownBlink,
+            F::SideBlink,
+            F::DownRightBlink,
+            F::SideTurn,
+            F::DownRightTurn,
+            F::UpRightTurn,
+            F::DownLand,
+            F::UpLand,
+            F::SideLand,
+            F::DownRightLand,
+            F::UpRightLand,
+            F::Task1,
+            F::Task2,
+            F::Task3,
+            F::Task4,
+            F::TaskSide1,
+            F::TaskSide2,
+            F::TaskSide3,
+            F::TaskSide4,
         ]
     };
 
@@ -316,7 +382,22 @@ impl FrameId {
                 | F::Cast2
                 | F::Cast3
                 | F::Hurt
-        ) || (self as u8) >= (F::DownRight as u8)
+        ) || ((self as u8) >= (F::DownRight as u8) && (self as u8) <= (F::HurtUpRight as u8))
+            || matches!(
+                self,
+                F::SideBlink
+                    | F::DownRightBlink
+                    | F::SideTurn
+                    | F::DownRightTurn
+                    | F::UpRightTurn
+                    | F::SideLand
+                    | F::DownRightLand
+                    | F::UpRightLand
+                    | F::TaskSide1
+                    | F::TaskSide2
+                    | F::TaskSide3
+                    | F::TaskSide4
+            )
     }
 }
 
