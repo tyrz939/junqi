@@ -371,3 +371,9 @@ Everything below is **decided as recommended**, with three of the owner's own ch
 - **Bots.** Every phase needs the bots taught first, or the slow tier goes red and the numbers lie.
 - **Scope.** Phases 5 to 7 are content-heavy. Phases 0 to 3 are the foundation and are worth finishing before any of it.
 - **The pad is untested by hand.** The hop and soft-lock need a real controller session.
+
+---
+
+## 6. Bugs to fix after the reset (owner playtests, 2026-10-03)
+
+- **U-shaped block above some props.** Coming from above, she can walk right up to the prop, but in the space above it she cannot move left or right: she can only enter or leave from straight above. The likely cause is the side posts (`PropDef::solid_parts`) and the "enter and leave the space behind only from the north" rule for puzzle, gate and `way` props, which still make a U around the space above. **Fix:** list which props do this; for each, make the side edges match the drawn ground box, or keep the U only where a puzzle truly needs it, and draw it so it reads. **Test:** extend `units.rs`'s approach test to step sideways out of the space above every boxed prop.
