@@ -246,6 +246,8 @@ pub enum Tint {
     Gold,
     Drain,
     Smoke,
+    /// A struck match: white-yellow, settling to a small orange flame.
+    Match,
 }
 
 /// A tint's colours.
@@ -268,6 +270,7 @@ pub const fn hue(t: Tint) -> Hue {
         Tint::Gold => ([255, 246, 200], [240, 206, 72], [160, 118, 40]),
         Tint::Drain => ([236, 170, 210], [170, 82, 142], [90, 40, 82]),
         Tint::Smoke => ([112, 104, 108], [74, 68, 72], [48, 44, 50]),
+        Tint::Match => ([255, 250, 228], [255, 204, 92], [226, 118, 44]),
     };
     Hue { core, mid, deep }
 }
@@ -1221,6 +1224,85 @@ pub fn death() -> Recipe {
     }
 }
 
+/// How high a struck match is held, px: her hand.
+pub const MATCH_Z: u8 = 12;
+
+/// How long a match flare lasts, ticks: half a second.
+pub const MATCH_TICKS: u8 = 30;
+
+/// A struck match (2026-10-02, the fire she makes): a white-yellow flare with a spit of sparks
+/// off the head, settling over half a second to a small steady flame with a thread of smoke;
+/// all of it glows, and it lights the dark round her while it burns.
+pub fn match_flare() -> Recipe {
+    const Z: u8 = MATCH_Z;
+    Recipe {
+        tint: Tint::Match,
+        emits: &[
+            // The flare: a hot bloom the size of her hand, shrinking fast.
+            Emit {
+                n: 1,
+                shape: Shape::Glow(5),
+                role: Role::Mid,
+                late: Some(Role::Deep),
+                glow: 255,
+                life: (12, 12),
+                z: Z,
+                ..E
+            },
+            // Its white heart, over it.
+            Emit {
+                n: 1,
+                shape: Shape::Glow(3),
+                role: Role::Core,
+                late: Some(Role::Mid),
+                glow: 255,
+                life: (10, 10),
+                z: Z,
+                ..E
+            },
+            // The spit off the head as it catches.
+            Emit {
+                n: 5,
+                shape: Shape::Streak,
+                role: Role::Core,
+                late: Some(Role::Deep),
+                speed: (12, 26),
+                rise: 8,
+                grav: -2,
+                drag: 210,
+                life: (4, 8),
+                glow: 255,
+                z: Z,
+                ..E
+            },
+            // The flame it settles to: a small body and its bright heart over it.
+            Emit {
+                n: 1,
+                shape: Shape::Dot(2),
+                role: Role::Mid,
+                late: Some(Role::Deep),
+                glow: 255,
+                life: (30, 30),
+                z: Z,
+                ..E
+            },
+            Emit {
+                n: 1,
+                shape: Shape::Dot(1),
+                role: Role::Core,
+                late: Some(Role::Mid),
+                glow: 255,
+                life: (28, 28),
+                z: Z + 2,
+                ..E
+            },
+            // A thread of smoke going up from it.
+            Emit { n: 2, shape: Shape::Dot(1), role: Role::Smoke, rise: 5, drag: 240, life: (18, 28), z: Z + 3, ..E },
+        ],
+        light: Some(FxLight { radius: 56, role: Role::Mid, ticks: MATCH_TICKS, z: Z }),
+    }
+}
+
 /// One particle in flight: ground point and height in Q4 px, velocity in Q4 px a tick.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Spark {
@@ -1449,6 +1531,30 @@ mod tests {
             assert!(cat.combat.effects.iter().any(|s| s.id == *id), "fx entry {id} names no effect");
         }
         assert!(draws(&death(), 30) > 0);
+    }
+
+    #[test]
+    fn a_struck_match_flares_and_settles_within_half_a_second() {
+        let r = match_flare();
+        assert!(draws(&r, u32::from(MATCH_TICKS)) > 0);
+        let mut rng = Lcg(3);
+        let mut pool = Vec::new();
+        emit(&r, (0, 0), Angle::NORTH, &mut rng, &mut |s| pool.push(s));
+        let size = |pool: &[Spark]| {
+            let mut px = vec![0u32; 64 * 64];
+            rasterise(pool, &mut px, 64, 64, (32, 40))
+        };
+        let flare = size(&pool);
+        for _ in 0..20 {
+            pool.retain_mut(Spark::step);
+        }
+        let settled = size(&pool);
+        assert!(settled > 0 && settled * 3 < flare, "a flare of {flare} px settles to a small flame, not {settled}");
+        assert!(pool.iter().filter(|s| s.glow > 0).count() >= 2, "the flame burns on, glowing");
+        for _ in 0..u32::from(MATCH_TICKS) {
+            pool.retain_mut(Spark::step);
+        }
+        assert!(pool.is_empty(), "and goes out");
     }
 
     #[test]

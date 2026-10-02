@@ -19,6 +19,8 @@ struct Set {
     on: Option<RefId>,
     /// Open, one for each base (an apple tree picked keeps its crown), else one for them all.
     opens: Vec<RefId>,
+    /// A made fire's wood laid, unlit (`jane_art::kit::fire_pit`: its `Open2`).
+    laid: Option<RefId>,
     /// How high its lit glass glows above its foot, px: where its light shines from.
     glass: Option<u8>,
     /// A top things stand on: rows from its foot to the top's front edge, and the top's rows
@@ -32,6 +34,21 @@ pub struct Props {
     sets: Vec<Set>,
     /// Each item icon at ground scale, by icon.
     loot: Vec<(SpriteId, RefId)>,
+}
+
+/// A made fire's state (ART.md §2.3, `jane_art::kit::fire_pit`: the fire pit `campfire_cold`
+/// and the `old_grate`), as [`Props::fire_look`] picks its frame.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub enum FireState {
+    /// Never or long unlit: old char in the ring (frame `Base`).
+    #[default]
+    Cold,
+    /// Deadwood laid crosswise in it, not yet lit: her hold while she makes it (`Open2`).
+    Laid,
+    /// Burning: flames and embers, emissive (`On`).
+    Lit,
+    /// Burnt out: grey ash, charred stubs, a last ember or two glowing dim (`Open`).
+    Ash,
 }
 
 /// A prop's state as the frame pick reads it.
@@ -59,11 +76,19 @@ impl Props {
                 _ => None,
             };
             let hung = look.is_some_and(jane_art::kit::hung);
+            let fire = look.is_some_and(jane_art::kit::fire_pit);
             let ay = if hung { r.set.ay } else { h };
             let fh = jane_art::kit::footprint(r.sprite).map_or(1, |(_, fh)| i32::from(fh));
             let surface = look.and_then(|l| jane_art::kit::surface(l, fh));
-            let mut set =
-                Set { sprite: r.sprite, bases: Vec::new(), on: None, opens: Vec::new(), glass: None, surface };
+            let mut set = Set {
+                sprite: r.sprite,
+                bases: Vec::new(),
+                on: None,
+                opens: Vec::new(),
+                laid: None,
+                glass: None,
+                surface,
+            };
             for (f, c) in &r.set.frames {
                 let id = atlas.add_canvas(c, (0, ay as i16), h.clamp(1, 255) as u8, |_, _, t| t);
                 match f {
@@ -71,6 +96,7 @@ impl Props {
                         set.on = Some(id);
                         set.glass = glow_height(c);
                     }
+                    FrameId::Open2 if fire => set.laid = Some(id),
                     FrameId::Open | FrameId::Open2 | FrameId::Open3 => set.opens.push(id),
                     _ => set.bases.push(id),
                 }
@@ -120,6 +146,20 @@ impl Props {
             (true, _) if !s.opens.is_empty() => s.opens[i.min(s.opens.len() - 1)],
             (_, true) if s.on.is_some() => s.on.unwrap_or(base),
             _ => base,
+        })
+    }
+
+    /// The frame a made fire `id` drawn as `sprite` shows in `state`: `Cold` its base, `Laid`
+    /// its `Open2`, `Lit` its `On`, `Ash` its `Open` (`jane_art::kit::frame_ids`). A sprite
+    /// without the frame shows its base (or, lit, its `On`): a plain campfire is cold or lit.
+    pub fn fire_look(&self, sprite: SpriteId, id: u32, state: FireState) -> Option<RefId> {
+        let s = self.find(sprite)?;
+        let base = self.look(sprite, id, State::default())?;
+        Some(match state {
+            FireState::Cold => base,
+            FireState::Laid => s.laid.unwrap_or(base),
+            FireState::Lit => s.on.unwrap_or(base),
+            FireState::Ash => s.opens.first().copied().unwrap_or(base),
         })
     }
 
@@ -219,6 +259,42 @@ mod tests {
             crowns.insert((full, bare));
         }
         assert_eq!(crowns.len(), 2, "each crown its own bare frame");
+    }
+
+    /// A fire pit and the old grate each show four frames, one a state; lit and ash glow, cold
+    /// and laid do not; the old campfire is cold or lit (2026-10-02).
+    #[test]
+    fn a_made_fire_is_cold_laid_lit_or_ash() {
+        let mut atlas = Atlas::with_layers(true);
+        let p = Props::build(&mut atlas);
+        let glows = |atlas: &Atlas, id: RefId| {
+            let r = *atlas.get(id);
+            let page = &atlas.pages.pages[usize::from(r.page)];
+            (0..r.src.h)
+                .flat_map(|y| (0..r.src.w).map(move |x| (x, y)))
+                .filter(|&(x, y)| {
+                    let i = usize::from(r.src.y + y) * usize::from(page.w) + usize::from(r.src.x + x);
+                    page.emissive[i] != 0
+                })
+                .count()
+        };
+        let all = [FireState::Cold, FireState::Laid, FireState::Lit, FireState::Ash];
+        for name in ["campfire_cold", "old_grate"] {
+            let s = jane_art::looks::find(name).unwrap().0;
+            let f: Vec<RefId> = all.iter().map(|&st| p.fire_look(s, 9, st).unwrap()).collect();
+            let distinct: std::collections::BTreeSet<RefId> = f.iter().copied().collect();
+            assert_eq!(distinct.len(), 4, "{name}: four frames");
+            assert_eq!(f[0], p.look(s, 9, State::default()).unwrap(), "{name}: cold is its base");
+            assert_eq!(f[2], p.look(s, 9, State { on: true, open: false }).unwrap(), "{name}: lit is on");
+            assert_eq!(f[3], p.look(s, 9, State { on: false, open: true }).unwrap(), "{name}: ash is open");
+            let g: Vec<usize> = f.iter().map(|&id| glows(&atlas, id)).collect();
+            assert!(g[0] == 0 && g[1] == 0, "{name}: cold and laid are dark: {g:?}");
+            assert!(g[2] > 4 * g[3] && g[3] > 0, "{name}: lit blazes, ash glows a little: {g:?}");
+            assert!(p.glass(s).is_some(), "{name}: its light shines from its flames");
+        }
+        let camp = jane_art::looks::find("campfire").unwrap().0;
+        assert_eq!(p.fire_look(camp, 1, FireState::Laid), p.fire_look(camp, 1, FireState::Cold));
+        assert_ne!(p.fire_look(camp, 1, FireState::Lit), p.fire_look(camp, 1, FireState::Cold));
     }
 
     #[test]

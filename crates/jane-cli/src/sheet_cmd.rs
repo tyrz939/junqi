@@ -24,6 +24,8 @@ pub const USAGE: &str = "  sheet layers <what> [--frame F] [--out DIR]
   sheet silhouettes <id> ... [--out DIR]
                                       looks' standing frames filled black, then as drawn
   sheet units [--out DIR]             every look standing and dead, at 1x and 2x
+  sheet fires [--out DIR]             the fires she makes cold, laid, lit and ash, day and night;
+                                      the match flare; deadwood and matches
   sheet person --grid [--out DIR]     every build by every hair and coat
   sheet all [--out DIR]               every sheet above, for every sprite
   sheet list                          the sprites <what> can name
@@ -175,6 +177,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
             }
             write(&out, "props", &jane_art::sheet_kit::props(&sets, &font))?;
         }
+        Some("fires") => write(&out, "fires", &jane_art::sheet_kit::fires(&font)?)?,
         Some("creatures") => {
             write(&out, "creatures", &sheet_person::units(&looks::family(looks::Family::Creature)?, &font))?;
         }

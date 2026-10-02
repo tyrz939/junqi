@@ -379,6 +379,10 @@ model_enum! {
         Satchel,
         /// Folded washing with a peg.
         Linen,
+        /// Deadwood: a bundle of grey broken sticks, tied (not `logs`, split firewood).
+        Sticks,
+        /// A matchbox, its tray out and its heads showing, a match beside it.
+        Matchbox,
     }
 }
 

@@ -22,8 +22,12 @@
 
   "cold_hearth": { "family": "lamp", "shape": "fire", "rise": 4,
     "materials": { "body": "stone", "trim": "wood_dark", "accent": "ember" } },
-  "campfire_cold": { "family": "lamp", "shape": "brazier", "rise": 6,
+  "brazier_cold": { "family": "lamp", "shape": "brazier", "rise": 6,
     "materials": { "body": "stone", "trim": "iron", "accent": "ember" } },
+  "campfire_cold": { "family": "lamp", "shape": "pit", "rise": 8,
+    "materials": { "body": "stone", "trim": "bark", "accent": "ember" }, "states": ["base", "on", "open"], "emits": ["glass"] },
+  "old_grate": { "family": "lamp", "shape": "grate", "rise": 8,
+    "materials": { "body": "stone", "trim": "iron", "accent": "ember" }, "states": ["base", "on", "open"], "emits": ["glass"] },
   "works_lamp": { "family": "lamp", "shape": "bulb", "rise": 0,
     "materials": { "body": "iron", "accent": "glass_lit" }, "states": ["base", "on"], "emits": ["glass"] },
   "museum_gallery_lamp": { "family": "lamp", "shape": "bulb", "rise": 0,

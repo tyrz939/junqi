@@ -281,6 +281,10 @@ fn unique<T: PartialEq>(v: &[T]) -> bool {
     v.iter().enumerate().all(|(i, a)| !v[..i].contains(a))
 }
 
+/// Looks drawn ahead of the rows that will name them (2026-10-02, the fire she makes: the art
+/// branch landed before the sim's rows). Empty this once those rows are in.
+const AWAITING: [&str; 4] = ["brazier_cold", "old_grate", "item_deadwood", "item_match"];
+
 pub fn compile(src: &Source, cx: &mut Ctx) -> &'static [(SpriteId, Look)] {
     let mut out = Vec::new();
     // The terrain's looks are keyed by tile, not sprite: `tile_looks.rs` compiles them, and a
@@ -288,9 +292,19 @@ pub fn compile(src: &Source, cx: &mut Ctx) -> &'static [(SpriteId, Look)] {
     let sprite_looks = |f: &str| f != "looks/tiles.json" && !f.starts_with("looks/tiles/");
     for (key, row) in src.table_of("looks", sprite_looks, &mut cx.diag) {
         let at = format!("looks.{key}");
-        let Some(sprite) = cx.sprites.get(&key) else {
-            cx.diag.error(format!("{}: {at}", row.file), "no row names this sprite: a look no row uses");
-            continue;
+        let sprite = match cx.sprites.get(&key) {
+            Some(s) => s,
+            // Drawn ahead of the rows that will name them (a branch in flight): interned here,
+            // after every row, so no other sprite's id moves. Each is a warning until its row
+            // lands; then drop it from `AWAITING`.
+            None if AWAITING.contains(&key.as_str()) => {
+                cx.diag.warn(format!("{}: {at}", row.file), "a look awaiting the row that will name it");
+                cx.sprites.intern(&key)
+            }
+            None => {
+                cx.diag.error(format!("{}: {at}", row.file), "no row names this sprite: a look no row uses");
+                continue;
+            }
         };
         let Some(raw) = typed::<RawLook>(&row, &at, &mut cx.diag) else { continue };
         let look = match raw {

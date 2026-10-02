@@ -15,6 +15,7 @@
 
 mod barrier;
 mod container;
+mod fire;
 mod furniture;
 mod growing;
 mod lamp;
@@ -72,12 +73,21 @@ impl Kit {
 pub fn footprint(sprite: SpriteId) -> Result<(u8, u8), String> {
     let props = jane_data::catalog().story.props;
     let mut sizes = props.iter().filter(|p| p.sprite == sprite).map(|p| (p.w, p.h));
-    let first = sizes.next().ok_or("no prop row names this sprite")?;
+    let name = jane_data::catalog().sprites.get(usize::from(sprite.0)).copied().unwrap_or("");
+    let first = match sizes.next() {
+        Some(f) => f,
+        None => UNPLACED.iter().find(|(n, _)| *n == name).map(|(_, f)| *f).ok_or("no prop row names this sprite")?,
+    };
     match sizes.find(|s| *s != first) {
         Some(other) => Err(format!("its rows disagree on the footprint: {first:?} and {other:?}")),
         None => Ok(first),
     }
 }
+
+/// Looks drawn before any prop row names them, and the footprint their rows will give: Pell's
+/// iron brazier (the old `campfire_cold`, renamed when that became the fire pit) and the old
+/// grate, 2026-10-02. A row that names one wins; drop it from here once its rows are in.
+const UNPLACED: [(&str, (u8, u8)); 2] = [("brazier_cold", (2, 2)), ("old_grate", (2, 2))];
 
 /// The stable seed of a sprite id.
 pub fn seed(sprite: &str) -> u32 {
@@ -113,8 +123,19 @@ pub fn surface(look: &PropLook, fh: i32) -> Option<(i32, i32)> {
     }
 }
 
-/// The frames a look promises: its bases, then `On` and `Open` as its states list them.
+/// Whether `look` is a fire she makes (`lamp` shapes `pit` and `grate`, `fire.rs`): four frames,
+/// `Base` cold, `Open2` laid, `On` lit and `Open` ash, whose last embers glow (the one unlit
+/// frame that emits).
+pub fn fire_pit(look: &PropLook) -> bool {
+    look.family == PropFamily::Lamp && matches!(look.shape, "pit" | "grate")
+}
+
+/// The frames a look promises: its bases, then `On` and `Open` as its states list them. A made
+/// fire ([`fire_pit`]) promises its four: cold, lit, ash, laid.
 pub fn frame_ids(look: &PropLook) -> Vec<FrameId> {
+    if fire_pit(look) {
+        return vec![FrameId::Base, FrameId::On, FrameId::Open, FrameId::Open2];
+    }
     let mut v = vec![FrameId::Base];
     if look.vary >= 2 {
         v.push(FrameId::Base2);
@@ -144,6 +165,8 @@ pub(crate) enum State {
     Base,
     On,
     Open,
+    /// A made fire's wood laid in it, not yet lit (`fire.rs`).
+    Laid,
 }
 
 /// Render every frame of `look`, drawn as `sprite` (whose rows give the footprint).
@@ -166,6 +189,8 @@ pub fn render(look: &PropLook, sprite: SpriteId, seed: u32) -> Result<SpriteSet,
     let mut frames = Vec::new();
     for id in frame_ids(look) {
         let (state, s) = match id {
+            // A made fire keeps one seed through its states: the same stones, cold or lit.
+            FrameId::Open2 if fire_pit(look) => (State::Laid, seed),
             FrameId::On => (State::On, seed),
             FrameId::Open => (State::Open, seed),
             FrameId::Open2 => (State::Open, seed.wrapping_add(1)),
@@ -197,6 +222,9 @@ pub(crate) enum Stand {
     Tops([(Rect, u8); 2]),
     /// Lying flat, at most this high.
     Flat(u8),
+    /// A hearth: lying flat at most `.0` px, but what glows (a flame) stands up from row `.1`,
+    /// the bed it burns on.
+    Hearth(u8, i32),
 }
 
 fn draw(c: &mut Canvas, k: &Kit, state: State) -> Result<Stand, String> {
@@ -263,5 +291,14 @@ fn finish(c: &mut Canvas, k: &Kit, stand: Stand) {
             }
         }
         Stand::Flat(h) => c.cap_heights(h),
+        Stand::Hearth(h, bed) => {
+            c.cap_heights(h);
+            for &(x, y, _) in &glow {
+                if y < bed {
+                    let up = crate::canvas::height_of_rows(bed - y).max(i32::from(h));
+                    c.heights_by(Rect::new(x, y, 1, 1), |_, _| up);
+                }
+            }
+        }
     }
 }

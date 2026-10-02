@@ -72,6 +72,8 @@
   "item_amulet": { "family": "icon", "class": "amulet", "ramp": "brass", "trim": "cloth_teal" },
   "item_spectacles": { "family": "icon", "class": "spectacles", "ramp": "iron" },
   "item_wood": { "family": "icon", "class": "logs", "ramp": "bark", "trim": "wood_pale" },
+  "item_deadwood": { "family": "icon", "class": "sticks", "ramp": "bark", "trim": "wood_pale" },
+  "item_match": { "family": "icon", "class": "matchbox", "ramp": "cloth_ochre", "trim": "wood_pale" },
   "item_butterfly": { "family": "icon", "class": "butterfly", "ramp": "cloth_sky" },
   "item_tortoise": { "family": "icon", "class": "tortoise", "ramp": "wood_oak" },
 
