@@ -272,7 +272,7 @@ unit:museum_waxwork#1 1d1a0b68
 unit:museum_waxwork#2 114f8bfa
 unit:museum_waxwork#3 d0dc910d
 unit:pask 681447cc
-unit:reed_fludd 80c009dc
+unit:reed_fludd 0f564058
 unit:ruffian fea78526
 unit:ruffian#1 c7751ee8
 unit:ruffian#2 cd352ffc

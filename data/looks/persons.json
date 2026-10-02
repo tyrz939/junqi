@@ -200,7 +200,7 @@
     "held": { "item": "suitcase" } },
   "reed_fludd": { "family": "person", "build": "stout",
     "head": { "hair": "bun", "hair_ramp": "hair_grey", "skin": "skin_pale", "hat": "scarf", "hat_ramp": "cloth_green" },
-    "body": { "coat": "dress", "coat_ramp": "cloth_brown", "front_ramp": "cloth_mustard", "legs": "skirt", "legs_ramp": "cloth_green", "boots": "boots" },
+    "body": { "coat": "dress", "coat_ramp": "cloth_brown", "front_ramp": "cloth_mustard", "legs": "skirt", "legs_ramp": "cloth_green", "boots": "shoes" },
     "extras": ["shawl", "seated"] },
   "loveday": { "family": "person", "build": "slim",
     "head": { "hair": "bun", "hair_ramp": "hair_brown", "hat": "scarf", "hat_ramp": "reed" },

@@ -98,6 +98,12 @@ pub struct Story {
     /// The goal last finished, and how often in a row it was chosen again at once.
     last: Option<Goal>,
     again: u32,
+    /// Quest steps reached since the log last moved, and how often each: two steps that each
+    /// want an hour she is not at (Mrs Loveday's walk "after the bell", a loaf on a step) were
+    /// reached by turns all day on seed 1, never twice in a row, and the Choice never came.
+    reached: BTreeMap<Goal, u32>,
+    /// The log's progress when `reached` was last cleared ([`log_progress`]).
+    progress: u64,
     idle: u32,
     done: bool,
     /// Deaths seen, to notice a new one.
@@ -602,7 +608,17 @@ impl Story {
                             self.blocked.insert(Goal::Rest, v.tick().0 + REST_AGAIN);
                         }
                         self.task = None;
-                        self.fails.remove(&goal);
+                        // A step reached with the log no further on is not done with.
+                        let now = log_progress(v);
+                        if now != self.progress {
+                            self.progress = now;
+                            self.reached.clear();
+                            self.fails.remove(&goal);
+                        } else if matches!(goal, Goal::Step(..)) && !waiting {
+                            *self.reached.entry(goal).or_insert(0) += 1;
+                        } else {
+                            self.fails.remove(&goal);
+                        }
                         if waiting {
                             self.last = None;
                             self.again = 0;
@@ -656,8 +672,10 @@ impl Story {
                     }
                 }
                 Some((Target::Task(t), goal)) => {
-                    if self.last == Some(goal) && self.again >= 4 {
+                    let by_turns = self.reached.get(&goal).is_some_and(|&n| n >= 4) && log_progress(v) == self.progress;
+                    if (self.last == Some(goal) && self.again >= 4) || by_turns {
                         self.again = 0;
+                        self.reached.remove(&goal);
                         self.set_aside(v, goal, "reached, and it did not count", notes);
                         continue;
                     }
@@ -1700,6 +1718,16 @@ fn target_point(v: &View<'_>, t: &Target) -> Option<Vec2> {
 }
 
 /// Has she been let into Julie's house (the kitchen stood in)?
+/// How far the quest log has come: quests done, and every count of every quest in hand.
+fn log_progress(v: &View<'_>) -> u64 {
+    let cat = jane_data::catalog();
+    let counts: u64 = v
+        .quests()
+        .map(|q| (0..cat.story.quest(q.quest).requirements.len()).map(|i| u64::from(q.count(i))).sum::<u64>())
+        .sum();
+    (v.quests_done().len() as u64) << 32 | counts
+}
+
 fn has_home(v: &View<'_>) -> bool {
     let cat = jane_data::catalog();
     cat.story.quest_id("see_the_kitchen").is_some_and(|q| v.quests_done().contains(&q))

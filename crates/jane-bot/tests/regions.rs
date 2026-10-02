@@ -170,5 +170,5 @@ fn a_reader_given_the_new_quests_finishes_them() {
 }
 
 /// The least the side-quest run finishes over its three seeds (measured 2 October 2026: see
-/// QUEST-TREE.md §11: 19, 18 and 24 of 33, the Tuesday round whole on all three).
+/// QUEST-TREE.md §11: 20, 16 and 20 of 33 after the merge of 3 October).
 const MIN_DONE: usize = 50;

@@ -49,6 +49,9 @@ pub struct Fight {
     pub walled: Vec<jane_core::Angle>,
     /// Units her feet could find no way to, and the frame to try again.
     pub unreachable: std::collections::BTreeMap<UnitId, u32>,
+    /// Frames on rooted things since one last went down: a bed of them taken by turns resets
+    /// [`Fight::t`] at every turn.
+    pub rooted_t: u32,
 }
 
 pub fn ready(u: &Unit, s: SpellId, now: Tick) -> bool {
@@ -437,9 +440,16 @@ pub fn threat(v: &View<'_>, cx: &mut Ctx) -> Option<UnitId> {
     // thing with no feet is not fought from where it cannot reach, nor when she is low.
     let ignore = crate::tactics::works::ignore;
     let low = hp_permille(v.body()) < cx.flee_below() && food(v).is_none();
+    // A rooted thing she shot at for three minutes and did not put down is let be, on her or
+    // not: it cannot follow, and she can walk out of its reach (seed 1's slag cacti held her at
+    // the pipe mouth, bolting one and then the next, for the rest of the run).
+    let now = v.frame();
+    let let_be = |u: &Unit| rooted(u) && !reachable(cx, u.id, now);
     let on: Vec<&Unit> = enemies(v)
         .into_iter()
-        .filter(|u| on_me(v, u) && fightable(u) && !ignore(u) && reaches_her_here(v, u) && !(low && rooted(u)))
+        .filter(|u| {
+            on_me(v, u) && fightable(u) && !ignore(u) && reaches_her_here(v, u) && !(low && rooted(u)) && !let_be(u)
+        })
         .collect();
     if let Some(&nearest) = on.first() {
         // With a crowd on her, one at a time: the one she is hitting while it is still at her,
@@ -450,7 +460,6 @@ pub fn threat(v: &View<'_>, cx: &mut Ctx) -> Option<UnitId> {
         let weakest = on.iter().filter(|u| gap(me, u) <= reach).min_by_key(|u| (u.hp, u.id));
         return Some(held.or(weakest).unwrap_or(&nearest).id);
     }
-    let now = v.frame();
     match cx.fight.hunt.and_then(|t| v.unit(t)).filter(|u| u.alive && reachable(cx, u.id, now)) {
         Some(u) => Some(u.id),
         None => {
@@ -470,11 +479,12 @@ pub fn engage(v: &View<'_>, cx: &mut Ctx, id: UnitId) -> Option<Act> {
     let Some(t) = v.unit(id).filter(|u| u.alive) else {
         cx.fight.target = None;
         cx.fight.t = 0;
+        cx.fight.rooted_t = 0;
         return None;
     };
     // Let be a while ago, and not after her: still let be (a hunt taken up again at once started
     // the three minutes over, for ever, at something out of sight she could not get to).
-    if !reachable(cx, id, v.frame()) && !on_me(v, t) {
+    if !reachable(cx, id, v.frame()) && (!on_me(v, t) || rooted(t)) {
         return None;
     }
     if cx.fight.target != Some(id) {
@@ -484,11 +494,22 @@ pub fn engage(v: &View<'_>, cx: &mut Ctx, id: UnitId) -> Option<Act> {
     }
     cx.fight.t += 1;
     cx.foes.insert(id);
-    if cx.fight.t > 60 * 180 {
-        // Three minutes on one thing: let it be, for five.
+    if rooted(t) {
+        cx.fight.rooted_t += 1;
+    }
+    if cx.fight.t > 60 * 180 || cx.fight.rooted_t > 60 * 180 {
+        // Three minutes on one thing (or on a bed of rooted things by turns): let it be, for
+        // five; a rooted one, that cannot follow her, for half an hour.
+        let rest = if rooted(t) { 60 * 60 * 30 } else { 60 * 300 };
         cx.fight.target = None;
         cx.fight.hunt = None;
-        cx.fight.unreachable.insert(id, v.frame() + 60 * 300);
+        cx.fight.rooted_t = 0;
+        cx.fight.unreachable.insert(id, v.frame() + rest);
+        if rooted(t) {
+            for u in enemies(v).into_iter().filter(|u| rooted(u) && on_me(v, u)) {
+                cx.fight.unreachable.insert(u.id, v.frame() + rest);
+            }
+        }
         return None;
     }
     let now = v.tick();
