@@ -239,10 +239,15 @@ pub fn begin(cx: &mut Ctx<'_>, seat: Seat, spell: SpellId, mut on: Option<UnitId
         say_failed(cx, body, spell, SpellError::CastUnsuccessful);
         return;
     }
-    let (at, hard) = chosen(cx, u, def, &mut on, &frame);
+    let (mut at, hard) = chosen(cx, u, def, &mut on, &frame);
     if let Some(t) = at {
         match reach_check(cx, u, def, t) {
             Ok(()) => {}
+            // A bolt at a prop it cannot be sure of reaching, with an aim: it flies along the
+            // aim as a free one would, and the prop answers if the bolt ends near it (`flight.rs`).
+            Err(_) if matches!(t, TargetRef::Prop(_)) && def.kind == SpellKind::Bolt && frame.aim.is_some() => {
+                at = None;
+            }
             Err(SpellError::TooFar) if hard && may_walk => {
                 if let Some(to) = pos_of(cx.zone, t) {
                     crate::walk::start(cx, seat, to, WalkThen::Cast { spell, on });

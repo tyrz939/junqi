@@ -192,6 +192,16 @@ pub fn cast_caught(v: &View<'_>, t: &Unit) -> bool {
     v.fight().cast.is_some() && !rooted(t) && dangerous(me, t) && gap(me, t) <= bite(t) + i64::from(CELL_FX)
 }
 
+/// May she spend a bolt on `t`? On a boss, or on what could put her down, always; on the
+/// common run of things (a rat, a bat) only from the top half of her well. A 1 s GCD lets her
+/// cast half as often again as the old 1.5 s, and a crawl that bolts every rat comes to the
+/// Foreman empty (the Factory's seed-1 stalls of the Phase 1 merge).
+pub fn well_for(me: &Unit, t: &Unit) -> bool {
+    jane_data::catalog().combat.unit(t.def).boss
+        || dangerous(me, t)
+        || i64::from(me.mp.0) * 2 >= i64::from(jane_sim::units::max_mp(me).0)
+}
+
 /// Body gap between two units (centre distance less both bodies), `Fx`.
 pub fn gap(a: &Unit, b: &Unit) -> i64 {
     let cat = jane_data::catalog();
@@ -834,6 +844,7 @@ pub fn engage(v: &View<'_>, cx: &mut Ctx, id: UnitId) -> Option<Act> {
         && knows(v, ice)
         && ready(me, ice, now)
         && may_cast(me, t, ice)
+        && well_for(me, t)
         && (d > i64::from(3 * CELL_FX) || !strong)
         && g <= i64::from(def.range.0) * 9 / 10
         && v.sight(me.pos, t.pos)
@@ -848,6 +859,7 @@ pub fn engage(v: &View<'_>, cx: &mut Ctx, id: UnitId) -> Option<Act> {
     if knows(v, spark)
         && ready(me, spark, now)
         && !may_cast(me, t, ice)
+        && well_for(me, t)
         && jane_sim::status::resist_factor(t, cat.combat.spell(spark).school, now) >= 500
         && g <= i64::from(cat.combat.spell(spark).range.0) * 9 / 10
         && v.sight(me.pos, t.pos)
