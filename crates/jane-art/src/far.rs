@@ -48,6 +48,303 @@ fn disc_dither(c: &mut Canvas, cx: i32, cy: i32, r: i32, ix: Ix, fill: i32, z: u
 /// puts the furnace's glow under the plume (the night shift is working).
 pub fn chimney(band: u8, night: bool, frame: u8) -> Canvas {
     let u = unit(band);
+    let mut c = chimney_at(u, night);
+    let mouth = (14 * u, c.h() - 1 - 45 * u);
+    plume_into(&mut c, u, night, frame, mouth, false);
+    c
+}
+
+/// The world chimney's mouth: px across from its canvas's left edge, and up from its foot.
+pub const WORLD_MOUTH: (i32, i32) = (28, 434);
+/// The world plume's unit, px.
+pub const PLUME_U: i32 = 8;
+/// The world plume's mouth in its own canvas: `(x, rows over the bottom)`.
+pub const PLUME_MOUTH: (i32, i32) = (2 * PLUME_U, 2 * PLUME_U);
+/// Where each world landmark's foot is across its canvas, px: the chimney's, the spire's, the
+/// statue's.
+pub const WORLD_FEET: [i32; 3] = [WORLD_MOUTH.0, 36, 11 * STATUE_U];
+/// The world statue's unit, px.
+const STATUE_U: i32 = 12;
+
+/// The px at `(x, y)` a tone darker if it is drawn in `ramp`: a mortar course, a slate course.
+fn darken(c: &mut Canvas, ramp: Ramp, x: i32, y: i32) {
+    if let Some((r, t)) = Ramp::of(c.get(x, y))
+        && r == ramp
+    {
+        let t = match t {
+            Tone::High | Tone::Light => Tone::Base,
+            Tone::Lift | Tone::Base => Tone::Mid,
+            Tone::Mid => Tone::Shade,
+            _ => Tone::Deep,
+        };
+        c.recolour(x, y, ramp.at(t));
+    }
+}
+
+/// The volume over `mask` in `ramp`, turned as a body is (`Canvas::inflate`) and its shading
+/// cut to the material's few tones.
+fn solid(c: &mut Canvas, mask: &Canvas, ramp: Ramp, radius: i32, z: crate::canvas::Z) {
+    c.inflate(mask, ramp, radius, z);
+    c.retone(ramp, [Tone::Deep, Tone::Shade, Tone::Shade, Tone::Mid, Tone::Base, Tone::Base, Tone::Light, Tone::High]);
+}
+
+/// The Factory's great stack as it stands in the county, a real thing among the Works' walls: a
+/// brick column on a plinth, rounded by the light, tapering from 34 px to 24 over 380, its mortar
+/// courses, two iron bands, a soot-black head under a stone cap, and by night the furnace in its
+/// mouth. No plume (that is [`plume_world`], laid over the mouth, so it can rise high and drift by
+/// frame without a frame of the whole stack). Its foot is the bottom row, `WORLD_FEET[0]` across.
+pub fn chimney_world(night: bool) -> Canvas {
+    let (w, h) = (56, 450);
+    let f = h - 1;
+    let cx = WORLD_MOUTH.0;
+    let mut m = Canvas::new(w, h);
+    // The plinth, then the shaft, then the cap's corbel.
+    m.fill_rect(Rect::new(cx - 20, f - 40, 40, 41), Ix::INK, 1);
+    for y in (f - 422)..(f - 40) {
+        let k = (f - 40 - y) * 256 / 382;
+        let half = (17 * 256 - 5 * k) / 256;
+        m.hline(cx - half, cx + half - 1, y, Ix::INK, 1);
+    }
+    let mut c = Canvas::new(w, h);
+    solid(&mut c, &m, Ramp::Brick, 7, crate::canvas::Z::new(2, 12));
+    // Works brick: a century of the Works' smoke has darkened all of it a tone.
+    for y in 0..h {
+        for x in 0..w {
+            darken(&mut c, Ramp::Brick, x, y);
+        }
+    }
+    // Mortar: a darker course every fourth row, broken by the bond.
+    for y in (f - 420..f - 2).step_by(4) {
+        for x in 0..w {
+            if m.get(x, y).is_opaque() && (x + (y / 4) * 3) % 7 != 0 {
+                darken(&mut c, Ramp::Brick, x, y);
+            }
+        }
+    }
+    // The plinth's coping: a stone course over it, lit on its top.
+    c.rect_lit(Rect::new(cx - 22, f - 44, 44, 5), Ramp::Stone, 10);
+    // Two iron bands round the shaft.
+    for by in [f - 150, f - 285] {
+        let half = (0..w).filter(|&x| m.get(x, by).is_opaque()).count() as i32 / 2 + 1;
+        for x in cx - half..cx + half {
+            let t = if x < cx - half / 3 {
+                Tone::Light
+            } else if x < cx + half / 2 {
+                Tone::Base
+            } else {
+                Tone::Shade
+            };
+            c.dot(x, by, Ramp::Iron.at(t), 12);
+            c.dot(x, by + 1, Ramp::Iron.at(Tone::Shade), 12);
+        }
+    }
+    // Soot: the head blackened, thinning down the shaft by the Bayer pattern.
+    for y in (f - 422)..(f - 350) {
+        let k = (y - (f - 422)) * 16 / 72;
+        for x in 0..w {
+            if m.get(x, y).is_opaque() && bayer(x, y) >= k {
+                darken(&mut c, Ramp::Brick, x, y);
+                darken(&mut c, Ramp::Brick, x, y);
+            }
+        }
+    }
+    // The cap: a stone corbel two courses deep, and the dark of the mouth on its top.
+    c.rect_lit(Rect::new(cx - 15, f - 430, 30, 9), Ramp::Stone, 14);
+    c.rect_lit(Rect::new(cx - 13, f - 434, 26, 5), Ramp::Stone, 14);
+    c.fill_rect(Rect::new(cx - 9, f - 434, 18, 2), Ramp::WallDark.at(Tone::Deep), 14);
+    if night {
+        c.set_emitting(true);
+        c.hline(cx - 8, cx + 7, f - 434, Ramp::Ember.at(Tone::Base), 14);
+        c.hline(cx - 5, cx + 4, f - 433, Ramp::Ember.at(Tone::Light), 14);
+        c.set_emitting(false);
+    }
+    c.outline();
+    c.upright(f);
+    c
+}
+
+/// The world plume, frame `frame`: high and long, its mouth at [`PLUME_MOUTH`].
+pub fn plume_world(night: bool, frame: u8) -> Canvas {
+    let u = PLUME_U;
+    let mut c = Canvas::new(42 * u, 26 * u);
+    let mouth = (PLUME_MOUTH.0, c.h() - 1 - PLUME_MOUTH.1);
+    plume_into(&mut c, u, night, frame, mouth, true);
+    c
+}
+
+/// St Anne's tower and broach spire as they stand on its roof in the county: a stone tower lit
+/// on its west face, two string courses, the belfry's louvred openings and a window that is lit
+/// at evensong (`lit`); the spire in slate courses, lit west and shaded east, a lucarne halfway,
+/// broaches at its foot, and an iron cross and a brass cock over it. 72 x 520, its foot the
+/// bottom row, `WORLD_FEET[1]` across.
+pub fn spire_world(lit: bool) -> Canvas {
+    let (w, h) = (72, 520);
+    let f = h - 1;
+    let mut c = Canvas::new(w, h);
+    let (x0, x1, top) = (12, 60, f - 180);
+    // The tower: a block lit from the west.
+    for y in top..=f {
+        for x in x0..x1 {
+            let t = if x == x0 {
+                Tone::Light
+            } else if x >= x1 - 16 {
+                if x == x1 - 1 { Tone::Deep } else { Tone::Shade }
+            } else {
+                Tone::Base
+            };
+            c.dot(x, y, Ramp::Stone.at(t), 12);
+        }
+    }
+    // Its stones: a course every six rows, the joints staggered.
+    for y in (top + 3..f).step_by(6) {
+        for x in x0 + 1..x1 - 1 {
+            if (x + (y / 6) * 5) % 11 != 0 {
+                darken(&mut c, Ramp::Stone, x, y);
+            } else {
+                darken(&mut c, Ramp::Stone, x, y - 1);
+                darken(&mut c, Ramp::Stone, x, y - 2);
+            }
+        }
+    }
+    for sy in [f - 64, f - 124] {
+        c.rect_lit(Rect::new(x0 - 2, sy, x1 - x0 + 4, 4), Ramp::Stone, 12);
+    }
+    // The belfry: two tall openings, louvred.
+    for bx in [x0 + 8, x1 - 18] {
+        c.fill_rect(Rect::new(bx, f - 170, 10, 34), Ramp::WallDark.at(Tone::Deep), 12);
+        c.polyline_fill(&[(bx, f - 170), (bx + 5, f - 176), (bx + 9, f - 170)], Ramp::WallDark.at(Tone::Deep), 12);
+        for ly in (f - 166..f - 138).step_by(4) {
+            c.hline(bx + 1, bx + 8, ly, Ramp::WoodDark.at(Tone::Shade), 12);
+        }
+    }
+    // The west window, lit at evensong.
+    let win = Rect::new(x0 + 18, f - 46, 10, 26);
+    if lit {
+        c.set_emitting(true);
+        c.fill_rect(win, Ramp::GlassLit.at(Tone::Base), 12);
+        c.vline(win.x + 5, win.y, win.y + win.h - 1, Ramp::GlassLit.at(Tone::Shade), 12);
+        c.dot(win.x + 1, win.y + 1, Ramp::GlassLit.at(Tone::High), 12);
+        c.set_emitting(false);
+    } else {
+        c.fill_rect(win, Ramp::WallDark.at(Tone::Deep), 12);
+        c.vline(win.x + 5, win.y, win.y + win.h - 1, Ramp::Stone.at(Tone::Shade), 12);
+    }
+    // The spire: the tower's width to a point, the west face lit, the east in shade, courses.
+    let apex = (36, f - 470);
+    for y in apex.1..top {
+        let k = (y - apex.1) * 256 / (top - apex.1);
+        let half = (24 * k) / 256;
+        for x in apex.0 - half..=apex.0 + half {
+            let t = if x == apex.0 - half {
+                Tone::Light
+            } else if x < apex.0 - half / 3 {
+                Tone::Base
+            } else if x < apex.0 + half / 3 {
+                Tone::Mid
+            } else {
+                Tone::Shade
+            };
+            c.dot(x, y, Ramp::Slate.at(t), 14);
+        }
+        if (y - apex.1) % 7 == 6 {
+            for x in apex.0 - half + 1..apex.0 + half {
+                darken(&mut c, Ramp::Slate, x, y);
+            }
+        }
+    }
+    // The broaches at its foot, and a lucarne halfway up.
+    c.polyline_fill(&[(x0, top), (x0 + 10, top - 22), (x0 + 10, top)], Ramp::Slate.at(Tone::Base), 14);
+    c.polyline_fill(&[(x1 - 1, top), (x1 - 11, top - 22), (x1 - 11, top)], Ramp::Slate.at(Tone::Shade), 14);
+    let ly = f - 330;
+    c.fill_rect(Rect::new(apex.0 - 4, ly, 8, 12), Ramp::WallDark.at(Tone::Deep), 14);
+    c.polyline_fill(&[(apex.0 - 6, ly), (apex.0, ly - 7), (apex.0 + 5, ly)], Ramp::Slate.at(Tone::Light), 14);
+    // The finial: an iron rod and cross, and the cock on it catching the light.
+    c.vline(apex.0, f - 500, apex.1, Ramp::Iron.at(Tone::Shade), 14);
+    c.hline(apex.0 - 5, apex.0 + 5, f - 490, Ramp::Iron.at(Tone::Base), 14);
+    c.hline(apex.0 - 3, apex.0 + 5, f - 503, Ramp::Brass.at(Tone::Base), 14);
+    c.polyline_fill(
+        &[
+            (apex.0 - 3, f - 503),
+            (apex.0 - 1, f - 509),
+            (apex.0 + 2, f - 506),
+            (apex.0 + 5, f - 509),
+            (apex.0 + 4, f - 503),
+        ],
+        Ramp::Brass.at(Tone::Light),
+        14,
+    );
+    c.outline();
+    c.upright(f);
+    c
+}
+
+/// The lake's statue as she stands in the county on her plinth: the figure of [`statue`] at 12
+/// px a unit, turned as a body is in weathered stone, the plinth in lit courses; `dawn` gilds her
+/// eastern edge. Her foot is the bottom row, `WORLD_FEET[2]` across.
+pub fn statue_world(dawn: bool) -> Canvas {
+    let u = STATUE_U;
+    let flat = statue_at(u, false);
+    let (w, h) = (flat.w(), flat.h());
+    let f = h - 1;
+    let plinth = 11 * u;
+    // Her figure: what the far statue drew over the plinth.
+    let mut m = Canvas::new(w, h);
+    for y in 0..f - plinth {
+        for x in 0..w {
+            if flat.get(x, y).is_opaque() {
+                m.dot(x, y, Ix::INK, 1);
+            }
+        }
+    }
+    let mut c = Canvas::new(w, h);
+    solid(&mut c, &m, Ramp::Slate, 6, crate::canvas::Z::new(4, 14));
+    // The folds of her robe and the veil's edge, cut in shadow.
+    let p = |ax: i32, ay: i32| (11 * u + ax * u / 10, f - ay * u / 10);
+    for (a, b) in
+        [(p(-6, 185), p(-12, 112)), (p(6, 180), p(10, 112)), (p(-15, 238), p(-9, 190)), (p(1, 205), p(-2, 120))]
+    {
+        crate::canvas::bresenham(a.0, a.1, b.0, b.1, |x, y| {
+            darken(&mut c, Ramp::Slate, x, y);
+            darken(&mut c, Ramp::Slate, x + 1, y);
+        });
+    }
+    // The plinth: a footing, the die and a cornice, each a lit block.
+    let mid = 11 * u;
+    c.rect_lit(Rect::new(mid - 4 * u, f - 2 * u + 1, 8 * u, 2 * u), Ramp::Slate, 8);
+    c.rect_lit(Rect::new(mid - 3 * u, f - 10 * u + 1, 6 * u, 8 * u), Ramp::Slate, 10);
+    c.rect_lit(Rect::new(mid - 4 * u, f - 11 * u + 1, 8 * u, u), Ramp::Slate, 10);
+    // The lake's mark on the die: the stone darker and greened up to where the water stands in
+    // winter, the line itself a ragged px.
+    let wet = f - 2 * u - u - u / 2;
+    for y in wet..f - 2 * u {
+        for x in mid - 3 * u + 1..mid + 3 * u - 1 {
+            darken(&mut c, Ramp::Slate, x, y);
+        }
+    }
+    for x in mid - 3 * u + 1..mid + 3 * u - 1 {
+        if bayer(x, wet) < 10 {
+            c.dot(x, wet - 1, Ramp::Marsh.at(Tone::Shade), 10);
+        }
+    }
+    c.outline();
+    if dawn {
+        // The dawn along her eastern edge, row by row, inside the outline: the first sun on her
+        // before it is on anything else, so it glows.
+        for y in 0..f - plinth {
+            if let Some(x) = (0..w).rev().find(|&x| m.get(x, y).is_opaque()) {
+                c.dot(x - 2, y, Ramp::Brass.at(Tone::Base), 14);
+                c.set_emitting(y % 3 != 0);
+                c.dot(x - 1, y, Ramp::Brass.at(Tone::Light), 14);
+                c.set_emitting(false);
+            }
+        }
+    }
+    c.upright(f);
+    c
+}
+
+/// The shops and the stacks, `u` px a unit, on a canvas with room for a plume.
+fn chimney_at(u: i32, night: bool) -> Canvas {
     let (w, h) = (52 * u, 56 * u);
     let mut c = Canvas::new(w, h);
     let base = h - 1;
@@ -100,24 +397,30 @@ pub fn chimney(band: u8, night: bool, frame: u8) -> Canvas {
         c.hline(top - u, top + u - 1, y(44) - 1, Ramp::Ember.at(Tone::Base), 12);
         c.set_emitting(false);
     }
-    // The plume: puffs leaving the mouth and drifting east on the wind, growing and thinning, each
-    // with a lit crown and a shaded belly; the frame walks them along.
-    // Many overlapping puffs make one billowing body: every belly first, then every middle tone,
-    // then every lit crown, so the plume reads as a single rope of smoke lit along its top.
-    let n = 24;
+    c
+}
+
+/// The plume out of a mouth at `mouth` (px in `c`), `u` px a unit, frame `frame`: puffs leaving
+/// the mouth and drifting east on the wind, growing and thinning, each with a lit crown and a
+/// shaded belly; the frame walks them along. `tall` lifts it twice as high and a little further,
+/// the world's plume. Many overlapping puffs make one billowing body: every belly first, then
+/// every middle tone, then every lit crown, so it reads as one rope of smoke lit along its top.
+fn plume_into(c: &mut Canvas, u: i32, night: bool, frame: u8, mouth: (i32, i32), tall: bool) {
+    let n = if tall { 30 } else { 24 };
     let len = 256;
+    let (run, up) = if tall { (36, 10) } else { (32, 4) };
     let puffs: Vec<(i32, i32, i32, i32)> = (0..n)
         .map(|k| {
             let s = (k * len / n + i32::from(frame % PLUME_FRAMES) * len / (n * i32::from(PLUME_FRAMES))) % len;
             let hs = h32(k as u32, 0, salt::PLUME);
             // Along a curve that rises steeply at the mouth and lies over on the wind, swelling.
-            let dx = s * 32 * u / len;
-            let rise = (4 * u * s / len) + (5 * u * (s.min(64))) / 64;
+            let dx = s * run * u / len;
+            let rise = (up * u * s / len) + (5 * u * (s.min(64))) / 64;
             let wob = (below(hs, 3) as i32 - 1) * u * s / (2 * len);
             let r = u * 3 / 4 + s * 5 * u / (2 * len) + below(hs >> 8, 2) as i32 * u / 3;
             // Thick at the mouth, gone to a haze past two thirds.
             let fill = (17 - s * 16 / len).clamp(2, 16);
-            (top + dx, y(45) - rise + wob, r.max(1), fill)
+            (mouth.0 + dx, mouth.1 - rise + wob, r.max(1), fill)
         })
         .collect();
     let (belly, mid, crown) = if night {
@@ -126,13 +429,13 @@ pub fn chimney(band: u8, night: bool, frame: u8) -> Canvas {
         (Ramp::Stone.at(Tone::Shade), Ramp::Stone.at(Tone::Mid), Ramp::Stone.at(Tone::Light))
     };
     for &(px, py, r, fill) in &puffs {
-        disc_dither(&mut c, px, py, r, belly, fill, 6);
+        disc_dither(c, px, py, r, belly, fill, 6);
     }
     for &(px, py, r, fill) in &puffs {
-        disc_dither(&mut c, px - r / 5, py - r / 3, r * 3 / 4, mid, fill, 6);
+        disc_dither(c, px - r / 5, py - r / 3, r * 3 / 4, mid, fill, 6);
     }
     for &(px, py, r, fill) in &puffs {
-        disc_dither(&mut c, px - r / 3, py - r / 2, r / 2, crown, fill, 6);
+        disc_dither(c, px - r / 3, py - r / 2, r / 2, crown, fill, 6);
     }
     for (k, &(px, py, r, fill)) in puffs.iter().enumerate() {
         let s = (k as i32 * len / n + i32::from(frame % PLUME_FRAMES) * len / (n * i32::from(PLUME_FRAMES))) % len;
@@ -149,14 +452,16 @@ pub fn chimney(band: u8, night: bool, frame: u8) -> Canvas {
             c.set_emitting(false);
         }
     }
-    c
 }
 
 /// St Anne's over the Lowfields: the nave's long roof, a west tower with its belfry open, and the
 /// broach spire on it to a weathercock, two churchyard yews at its foot. `lit` puts a candle in
 /// the nave's west window (evensong).
 pub fn spire(band: u8, lit: bool) -> Canvas {
-    let u = unit(band);
+    spire_at(unit(band), lit)
+}
+
+fn spire_at(u: i32, lit: bool) -> Canvas {
     let (w, h) = (34 * u, 50 * u);
     let mut c = Canvas::new(w, h);
     let base = h - 1;
@@ -230,7 +535,10 @@ pub fn spire(band: u8, lit: bool) -> Canvas {
 /// (right) as the haze is lit from under the sky: a shape against the haze before she is a
 /// statue. The day and the night faces are the presenter's mirror, not this.
 pub fn statue(band: u8, dawn: bool) -> Canvas {
-    let u = unit(band);
+    statue_at(unit(band), dawn)
+}
+
+fn statue_at(u: i32, dawn: bool) -> Canvas {
     let (w, h) = (22 * u, 40 * u);
     let mut c = Canvas::new(w, h);
     let base = h - 1;
@@ -305,8 +613,21 @@ pub fn statue(band: u8, dawn: bool) -> Canvas {
             }
         }
     }
-    // The veil falls from the crown behind her shoulders.
-    c.polyline_fill(&[(hx - hr, hy - hr / 2), p(-17, 245), p(-8, 250), (hx, hy)], body, 14);
+    // Her neck, and the veil falling from the back of her head over her west shoulder.
+    let neck = (u * 4 / 5).max(1);
+    c.fill_rect(Rect::new(hx - neck / 2, hy, neck, p(0, 259).1 - hy + 1), body, 14);
+    c.polyline_fill(
+        &[
+            (hx - hr / 2, hy - hr),
+            (hx - hr - u / 4, hy),
+            (hx - hr - u / 3, hy + hr + u / 2),
+            p(-19, 243),
+            p(-6, 257),
+            (hx, hy + hr),
+        ],
+        body,
+        14,
+    );
     for py in -hr..=0 {
         let half = jane_core::num::isqrt((hr * hr - py * py) as u64) as i32;
         c.dot(hx + half, hy + py, rim, 14);

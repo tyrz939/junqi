@@ -2,10 +2,18 @@
 //! what pulls her sideways toward a find she cannot see yet. Presentation only, read from the
 //! view; nothing here touches the sim.
 //!
-//! - **Crows over every camp.** A fire with two or more hostile spawns round it is a camp; four
-//!   or five crows circle high over it by day, wide enough and high enough to cross her screen
-//!   from about half a screen off it, each a dark wing-stroke "v" that flaps in bursts and
-//!   glides between, its shadow sweeping the ground under it while the sun casts.
+//! - **The regions' landmarks.** The Works' chimney with its plume (the furnace's glow under it
+//!   by night), St Anne's spire and the lake's statue (gilded at dawn) stand in the county as
+//!   silhouettes as tall as they are, drawn over the scene, so their tops show over the bottom
+//!   and side edges of her screen from a screen or two off; past the top edge, within three
+//!   screens, the plume or the tip pokes in at the edge, fainter the farther. The far layer's
+//!   versions (`atmos`) stay on the horizon besides.
+//! - **Crows over the enemy camps.** The camps the stories put down (Rendle's, the hurst's) and
+//!   the bands of ruffians round their own lit fires: five to twenty a seed, not every cold
+//!   hearth the wild things stand near. Four or five crows circle over each by day, wide enough
+//!   and high enough to cross her screen from about half a screen off it, each a black
+//!   wing-stroke "v" that flaps in bursts and glides between, its shadow sweeping the ground
+//!   under it while the sun casts.
 //! - **The dead lamps.** At night a dead lamp's glass catches the moon, a cold point that comes
 //!   and goes, and its post takes a cool rim down its moon side, so it shows dark against the
 //!   moonlit ground; within her lantern's reach the glass throws her lantern back.
@@ -25,15 +33,18 @@ use jane_data::Faction;
 use jane_sim::view::View;
 
 use crate::atlas::{Atlas, RefId};
+use crate::atmos::Far;
 use crate::frame::{CELL, Depth, Flags, Frame, PartShape, Particle, Pass, Rgb, Span, SpriteCmd, Tier, Tint};
 use crate::light::Sky;
 
 /// Crows over a camp.
 const CROWS: u32 = 4;
-/// Hostile spawns within this many cells of a fire make it a camp.
-const CAMP_REACH: i32 = 7;
-/// A crow's colour before light: a blue-black.
-const CROW: Rgb = [30, 28, 38];
+/// Hostile spawns are counted within this many cells of a fire.
+const CAMP_REACH: i32 = 4;
+/// A lit fire with this many hostile spawns round it is a band's camp.
+const RUFFIANS: usize = 4;
+/// A crow's colour before light: near black.
+const CROW: Rgb = [14, 12, 20];
 /// A dead lamp's glass catching the moon, and her lantern.
 const MOONLIT: Rgb = [206, 218, 255];
 const LANTERN_BACK: Rgb = [255, 214, 150];
@@ -75,14 +86,67 @@ pub struct Cues {
     lamps: Vec<(u32, (i32, i32), i32)>,
     stone_look: RefId,
     stone_ghost: RefId,
+    /// The regions' landmarks standing in the county, each at its foot (zone canvas px).
+    landmarks: Vec<(Far, (i32, i32))>,
+    art: WorldArt,
+}
+
+/// Frames of the world plume.
+const PLUME: usize = jane_art::far::PLUME_FRAMES as usize;
+/// Ticks a frame of the world plume is held.
+const PLUME_TICKS: u32 = 12;
+/// Rows of a landmark's top that poke in at the top edge when it stands past it.
+const TIP_ROWS: i32 = 160;
+/// The most a landmark's tip shows at the top edge, of 255.
+const TIP_ALPHA: u32 = 230;
+
+/// The world landmarks' looks (`jane_art::far::*_world`): day and night (or dark and lit, plain
+/// and gilded), the plume's frames, and the tips that poke in at the top edge.
+#[derive(Debug)]
+struct WorldArt {
+    chimney: [RefId; 2],
+    plume: [[RefId; PLUME]; 2],
+    spire: [RefId; 2],
+    statue: [RefId; 2],
+    plume_tip: [RefId; PLUME],
+    spire_tip: RefId,
+    statue_tip: RefId,
+}
+
+/// The top `rows` of `c`, thinning by the Bayer pattern over their lower third into nothing: a
+/// landmark's tip as it pokes in at the top edge.
+fn tip(c: &jane_art::Canvas, rows: i32) -> jane_art::Canvas {
+    let top = (0..c.h()).find(|&y| (0..c.w()).any(|x| c.get(x, y).is_opaque())).unwrap_or(0);
+    let mut t = jane_art::Canvas::new(c.w(), rows);
+    for y in 0..rows {
+        let fade = (rows - y) * 48 / rows;
+        for x in 0..c.w() {
+            let ix = c.get(x, top + y);
+            if ix.is_opaque() && i32::from(jane_art::canvas::bayer(x, y)) < fade {
+                t.dot(x, y, ix, 1);
+            }
+        }
+    }
+    t
 }
 
 impl Cues {
-    /// The stone's two looks packed into `atlas`.
+    /// The stone's two looks and the world landmarks' packed into `atlas`.
     pub fn new(atlas: &mut Atlas) -> Cues {
-        let stone = jane_art::far::hoar_stone();
-        let ghost = jane_art::far::hoar_silhouette();
+        use jane_art::far;
+        let stone = far::hoar_stone();
+        let ghost = far::hoar_silhouette();
         let h = stone.h();
+        let mut add = |c: &jane_art::Canvas| atlas.add_canvas(c, (0, c.h() as i16), 1, |_, _, t| t);
+        let art = WorldArt {
+            chimney: [false, true].map(|n| add(&far::chimney_world(n))),
+            plume: [false, true].map(|n| core::array::from_fn(|k| add(&far::plume_world(n, k as u8)))),
+            spire: [false, true].map(|l| add(&far::spire_world(l))),
+            statue: [false, true].map(|d| add(&far::statue_world(d))),
+            plume_tip: core::array::from_fn(|k| add(&tip(&far::plume_world(false, k as u8), TIP_ROWS))),
+            spire_tip: add(&tip(&far::spire_world(false), TIP_ROWS)),
+            statue_tip: add(&tip(&far::statue_world(false), TIP_ROWS)),
+        };
         Cues {
             zone: None,
             camps: Vec::new(),
@@ -90,7 +154,14 @@ impl Cues {
             lamps: Vec::new(),
             stone_look: atlas.add_canvas(&stone, (0, h as i16), h.clamp(1, 255) as u8, |_, _, t| t),
             stone_ghost: atlas.add_canvas(&ghost, (0, h as i16), 1, |_, _, t| t),
+            landmarks: Vec::new(),
+            art,
         }
+    }
+
+    /// The regions' landmarks standing in this zone, each at its foot (zone canvas px).
+    pub fn landmarks(&self) -> &[(Far, (i32, i32))] {
+        &self.landmarks
     }
 
     /// Finds the zone's camps, its stone and its dead lamps, once a zone.
@@ -114,14 +185,37 @@ impl Cues {
             .filter(|u| cat.combat.unit(u.def).faction != Faction::Friendly)
             .map(|u| (i32::from(u.cell.x), i32::from(u.cell.y)))
             .collect();
+        // The story's camps (Rendle's, the hurst's): the bounds of each place a story claimed
+        // as a camp.
+        let local = |k: jane_core::Key| match k {
+            jane_core::Key::Name(n) => view.name(jane_sim::sym::of_name(n)).to_owned(),
+            jane_core::Key::Local(i) => bp.local_names.get(i as usize).cloned().unwrap_or_default(),
+        };
+        let story_camps: Vec<jane_core::Rect> = bp
+            .stories
+            .values()
+            .filter_map(|s| match s {
+                jane_core::blueprint::StoryPlace::Placed { kind, bounds, .. } if local(*kind) == "camp" => {
+                    Some(*bounds)
+                }
+                _ => None,
+            })
+            .collect();
         for p in view.props() {
             let d = cat.story.prop(p.def);
             let (cx, cy) = (i32::from(p.cell.x), i32::from(p.cell.y));
             if matches!(d.id, "camp_fire" | "campfire_cold") {
                 let (mx, my) = (cx + i32::from(d.w) / 2, cy + i32::from(d.h) / 2);
-                let near =
-                    hostile.iter().filter(|&&(x, y)| (x - mx).abs() <= CAMP_REACH && (y - my).abs() <= CAMP_REACH);
-                if near.count() >= 2 {
+                let near = hostile
+                    .iter()
+                    .filter(|&&(x, y)| (x - mx).abs() <= CAMP_REACH && (y - my).abs() <= CAMP_REACH)
+                    .count();
+                // A camp the story put there, or a band of ruffians round their own lit fire:
+                // not every cold hearth the wild things stand near (the county has over a
+                // hundred of those, and crows over all of them would say nothing).
+                let story = story_camps.iter().any(|b| b.contains(mx, my));
+                let band = d.id == "camp_fire" && near >= RUFFIANS;
+                if story || band {
                     self.camps.push(Camp {
                         x: cx * CELL + i32::from(d.w) * CELL / 2,
                         y: cy * CELL + i32::from(d.h) * CELL / 2,
@@ -150,6 +244,154 @@ impl Cues {
             if x0 <= x1 {
                 self.stone = Some(((x0 + x1 + 1) * CELL / 2, y0 * CELL + CELL / 2));
             }
+        }
+        self.landmarks.clear();
+        if view.zone() == ZoneId::County {
+            self.find_landmarks(view);
+        }
+    }
+
+    /// Where each region's landmark stands: the chimney over the back of the Works' sheds, the
+    /// spire at the west end of St Anne's roof, the statue behind her plinth.
+    fn find_landmarks(&mut self, view: &View<'_>) {
+        let mark =
+            |name: &str| view.sym(name).and_then(|s| view.mark(s)).map(|m| (i32::from(m.cell.x), i32::from(m.cell.y)));
+        // The box of the cells `keep` holds within `r` of `(x, y)`, north of it.
+        let bbox = |(x, y): (i32, i32), r: i32, keep: &dyn Fn(jane_core::Tile) -> bool| {
+            let (mut x0, mut y0, mut x1, mut y1) = (i32::MAX, i32::MAX, i32::MIN, i32::MIN);
+            for yy in y - r..=y {
+                for xx in x - r..=x + r {
+                    if keep(view.tile(xx, yy)) {
+                        (x0, y0, x1, y1) = (x0.min(xx), y0.min(yy), x1.max(xx), y1.max(yy));
+                    }
+                }
+            }
+            (x0 <= x1).then_some((x0, y0, x1, y1))
+        };
+        if let Some(m) = mark("factory_mouth") {
+            let foot = match bbox(m, 40, &|t| t == jane_core::Tile::Wall) {
+                // The stack over the back of the sheds, two thirds of the way east.
+                Some((x0, y0, x1, _)) => ((x0 + (x1 - x0) * 2 / 3) * CELL, (y0 + 6) * CELL),
+                None => (m.0 * CELL, (m.1 - 12) * CELL),
+            };
+            self.landmarks.push((Far::Chimney, foot));
+        }
+        if let Some(m) = mark("church_door") {
+            // The roof the door is in: walk up from the door to its ridge and west to its end.
+            let roof = |x: i32, y: i32| view.tile(x, y).is_roof();
+            let mut y = m.1 - 1;
+            while y > m.1 - 8 && !roof(m.0, y) {
+                y -= 1;
+            }
+            let (mut x0, mut y0) = (m.0, y);
+            while roof(m.0, y0 - 1) && y0 > m.1 - 40 {
+                y0 -= 1;
+            }
+            while roof(x0 - 1, y) && x0 > m.0 - 30 {
+                x0 -= 1;
+            }
+            let foot = if roof(m.0, y) { ((x0 + 3) * CELL, (y0 + 4) * CELL) } else { (m.0 * CELL, (m.1 - 6) * CELL) };
+            self.landmarks.push((Far::Spire, foot));
+        }
+        if let Some(m) = mark("lake_statue_mouth") {
+            let foot = match bbox(m, 14, &|t| t == jane_core::Tile::TempleWall) {
+                Some((x0, y0, x1, _)) => ((x0 + x1 + 1) * CELL / 2, y0 * CELL + CELL),
+                None => (m.0 * CELL + CELL / 2, (m.1 - 8) * CELL),
+            };
+            self.landmarks.push((Far::Statue, foot));
+        }
+    }
+
+    /// A landmark's look at `hour`, where its foot is across its canvas (px from the left),
+    /// whether it is mirrored, and its tip's look at `tick`.
+    fn landmark_look(&self, kind: Far, hour: u8, tick: u32) -> (RefId, i32, bool, RefId) {
+        let a = &self.art;
+        let [chimney, spire, statue] = jane_art::far::WORLD_FEET;
+        match kind {
+            Far::Chimney => (
+                a.chimney[usize::from(!(6..18).contains(&hour))],
+                chimney,
+                false,
+                a.plume_tip[(tick / PLUME_TICKS) as usize % PLUME],
+            ),
+            // Evensong, half past five to eight: a candle in the tower's window.
+            Far::Spire => (a.spire[usize::from((17..20).contains(&hour))], spire, false, a.spire_tip),
+            // Gilded in the dawn's haze; turned the other way by night.
+            Far::Statue => {
+                (a.statue[usize::from((5..9).contains(&hour))], statue, !(6..21).contains(&hour), a.statue_tip)
+            }
+            Far::School => (a.spire[0], spire, false, a.spire_tip),
+        }
+    }
+
+    /// The landmarks standing in the county at `hour`, to be drawn among the standing things:
+    /// each one's foot (zone canvas px), its look, where the foot is across it, and whether it
+    /// is mirrored.
+    pub fn standing(&self, hour: u8) -> impl Iterator<Item = ((i32, i32), RefId, i32, bool)> + '_ {
+        self.landmarks.iter().map(move |&(kind, foot)| {
+            let (look, ax, mirror, _) = self.landmark_look(kind, hour, 0);
+            (foot, look, ax, mirror)
+        })
+    }
+
+    /// Over the scene, after the fog: the chimney's plume over its mouth wherever any of it is
+    /// in view (smoke, so a little thin), with the furnace's glow under it by night; and each
+    /// landmark that stands past the top edge within three screens pokes its tip (the plume,
+    /// the spire's point, the statue's hand) in at the edge at its bearing, fainter the farther.
+    /// The landmarks themselves stand among the standing things (`Present::read_props`, from
+    /// [`Cues::standing`]), as tall as they are.
+    fn draw_landmarks(&self, f: &mut Frame, atlas: &Atlas, cam: (i32, i32), tick: u32, hour: u8, sky: &Sky) {
+        let (w, h) = (i32::from(f.canvas.0), i32::from(f.canvas.1));
+        // Below T2 a sprite after the light is drawn as it is: the dark thins what shows of it.
+        let luma = (u32::from(sky.ambient[0]) + u32::from(sky.ambient[1]) + u32::from(sky.ambient[2])) / 3;
+        let dim = if f.tier >= Tier::T2 { 256 } else { (luma + 64).min(256) };
+        let s0 = f.sprites.len();
+        let mut glow: Option<(i32, i32)> = None;
+        let sprite = |id: RefId, x: i32, y: i32, a: u32| {
+            let r = atlas.get(id);
+            SpriteCmd {
+                page: r.page,
+                src: r.src,
+                x: x.clamp(-4096, 4096) as i16,
+                y: y.clamp(-4096, 4096) as i16,
+                flags: Flags { mirror: false, tint: Tint::Ghost((a * dim / 256).min(255) as u8) },
+                height_px: 0,
+                foot: None,
+            }
+        };
+        let night = !(6..18).contains(&hour);
+        for &(kind, (fx, fy)) in &self.landmarks {
+            let (sx, sy) = (fx - cam.0, fy - cam.1);
+            if kind == Far::Chimney && sy >= 0 {
+                let p = self.art.plume[usize::from(night)][(tick / PLUME_TICKS) as usize % PLUME];
+                let pr = atlas.get(p);
+                let (mx, my) = (sx, sy - jane_art::far::WORLD_MOUTH.1);
+                let (px, py) =
+                    (mx - jane_art::far::PLUME_MOUTH.0, my + jane_art::far::PLUME_MOUTH.1 - i32::from(pr.src.h));
+                if px + i32::from(pr.src.w) > 0 && px < w && py + i32::from(pr.src.h) > 0 && py < h {
+                    f.sprites.push(sprite(p, px, py, 215));
+                    if night {
+                        glow = Some((mx, my));
+                    }
+                }
+            } else if sy < 0 && sy > -3 * h && sx > -w / 2 && sx < w + w / 2 {
+                let (_, _, _, tip_look) = self.landmark_look(kind, hour, tick);
+                let tr = atlas.get(tip_look);
+                let k = (3 * h + sy) as u32 * 256 / (3 * h) as u32;
+                let side = if (0..w).contains(&sx) { 256 } else { 128 };
+                let a = TIP_ALPHA * k / 256 * side / 256;
+                let tw = i32::from(tr.src.w);
+                let tx = if kind == Far::Chimney { sx - jane_art::far::PLUME_MOUTH.0 } else { sx - tw / 2 };
+                f.sprites.push(sprite(tip_look, tx.clamp(-tw / 2, w - tw / 2), 0, a));
+            }
+        }
+        if f.sprites.len() > s0 {
+            f.passes.push(Pass::Sprites { layer: Depth::NearFog, cmds: Span::since(s0, f.sprites.len()) });
+        }
+        if let Some((x, y)) = glow {
+            let p0 = f.parts.len();
+            glint(f, x, y + 3, [255, 120, 60], 12, 230, 255);
+            f.passes.push(Pass::Particles { layer: Depth::Canopy, parts: Span::since(p0, f.parts.len()) });
         }
     }
 
@@ -239,6 +481,7 @@ impl Cues {
             }
         }
         let tick = (t256 / 256) as u32;
+        self.draw_landmarks(f, atlas, cam, tick, hour, sky);
         // Crows by day, from six till eight in the evening, and their shadows while the sun casts.
         let s0 = f.parts.len();
         let day = (6..20).contains(&hour);
@@ -369,21 +612,21 @@ fn glint(f: &mut Frame, x: i32, y: i32, colour: Rgb, r: u8, a: u32, z: u8) {
     });
 }
 
-/// One crow at canvas px `(x, y)`, about thirteen px across: a body with its wedge of a tail, and
-/// each wing a long stroke to its tip over a short one at its root (the arm is broader than the
+/// One crow at canvas px `(x, y)`, about nineteen px across: a body with its wedge of a tail, and
+/// each wing two px thick to its tip and three at its root (the arm is broader than the
 /// hand); up, level, down, or a glide's shallow "v" with the tips lifted, the inner wing a px lower
 /// as it banks round the camp. A stroke is laid both ways so it is even to its tip.
 fn crow_parts(f: &mut Frame, x: i32, y: i32, c: &Crow, colour: Rgb, up: u8) {
     // (tip dx, tip dy, root dx, root dy) of the left wing; the right is its mirror.
     let (tx, ty, rx, ry) = match c.wings {
-        1 => (-5, -5, -3, -2),
-        2 => (-7, 0, -4, 1),
-        3 => (-6, 3, -3, 2),
-        _ => (-7, -2, -4, 0),
+        1 => (-6, -6, -4, -3),
+        2 => (-9, 0, -5, 1),
+        3 => (-8, 3, -4, 2),
+        _ => (-9, -2, -5, 0),
     };
     let bank = if c.cw { (0, 1) } else { (1, 0) };
     let part =
-        |shape, x: i32, y: i32| Particle { x: x as i16, y: y as i16, shape, colour, alpha: 245, glow: 0, height: up };
+        |shape, x: i32, y: i32| Particle { x: x as i16, y: y as i16, shape, colour, alpha: 255, glow: 0, height: up };
     let mut stroke = |a: (i32, i32), b: (i32, i32)| {
         let d = |p: i32, q: i32| (q - p).clamp(-40, 40) as i8;
         f.parts.push(part(PartShape::Streak { dx: d(a.0, b.0), dy: d(a.1, b.1) }, a.0, a.1));
@@ -393,6 +636,7 @@ fn crow_parts(f: &mut Frame, x: i32, y: i32, c: &Crow, colour: Rgb, up: u8) {
         let root = if side < 0 { x - 1 } else { x };
         stroke((root, y), (root + side * -tx, y + ty + dip));
         stroke((root, y + 1), (root + side * -rx, y + 1 + ry + dip));
+        stroke((root + side, y + 1), (root + side * (1 - tx), y + 1 + ty + dip));
     }
     f.parts.push(part(PartShape::Dot { size: 2 }, x - 1, y));
     f.parts.push(part(PartShape::Dot { size: 1 }, x - 1, y + 2));
@@ -403,15 +647,63 @@ fn crow_parts(f: &mut Frame, x: i32, y: i32, c: &Crow, colour: Rgb, up: u8) {
 mod tests {
     use super::*;
 
+    /// Whether any sprite of a `NearFog` pass in `f` lands on its canvas.
+    fn shows(f: &Frame) -> bool {
+        let (w, h) = (i32::from(f.canvas.0), i32::from(f.canvas.1));
+        f.passes.iter().any(|p| match p {
+            Pass::Sprites { layer: Depth::NearFog, cmds } => f.sprites[cmds.range()].iter().any(|s| {
+                let (x, y) = (i32::from(s.x), i32::from(s.y));
+                x + i32::from(s.src.w) > 0 && x < w && y + i32::from(s.src.h) > 0 && y < h
+            }),
+            _ => false,
+        })
+    }
+
+    #[test]
+    fn each_region_s_landmark_shows_from_a_screen_and_a_half_off() {
+        let mut atlas = Atlas::new();
+        let mut c = Cues::new(&mut atlas);
+        let sky = crate::light::sky(12 * 7200, 0, false, 1000, jane_data::Region::Lowfields);
+        let (w, h) = (768, 432);
+        for seed in [1u32, 4, 7] {
+            let sim = jane_sim::Sim::new_game(seed, "Tess");
+            let v = sim.view(jane_sim::Seat(0)).unwrap();
+            c.zone(&v, |_| None);
+            let kinds: Vec<Far> = c.landmarks().iter().map(|l| l.0).collect();
+            assert_eq!(kinds, [Far::Chimney, Far::Spire, Far::Statue], "seed {seed}: a landmark a region");
+            for (&(kind, (fx, fy)), (_, look, ax, _)) in c.landmarks().iter().zip(c.standing(12)) {
+                // A screen and a half south of it, its tip pokes in at the top edge.
+                let cam = (fx - w / 2, fy + h * 3 / 2 - h / 2);
+                let mut f = Frame::new(Tier::T0);
+                f.canvas = (w as u16, h as u16);
+                c.draw(&mut f, &atlas, cam, 0, &sky, None, 12, false, 0);
+                assert!(shows(&f), "seed {seed}: {kind:?}'s tip shows from a screen and a half south of it");
+                // A screen and a half north of it, it stands up over the bottom edge.
+                let cam = (fx - w / 2, fy - h * 3 / 2 - h / 2);
+                let r = atlas.get(look);
+                let (x, y) = (fx - ax - cam.0, fy - i32::from(r.src.h) - cam.1);
+                assert!(
+                    x + i32::from(r.src.w) > 0 && x < w && y < h,
+                    "seed {seed}: {kind:?} stands over the bottom edge from a screen and a half north of it ({y})"
+                );
+            }
+        }
+    }
+
     #[test]
     fn crows_wheel_high_over_every_camp_and_cross_a_screen_from_off_it() {
         let mut atlas = Atlas::new();
+        let mut c = Cues::new(&mut atlas);
         for seed in [1u32, 2, 3] {
             let sim = jane_sim::Sim::new_game(seed, "Tess");
             let v = sim.view(jane_sim::Seat(0)).unwrap();
-            let mut c = Cues::new(&mut atlas);
             c.zone(&v, |_| None);
-            assert!(c.camps().len() >= 3, "seed {seed}: the county's camps are found ({})", c.camps().len());
+            let n = c.camps().len();
+            eprintln!(
+                "seed {seed}: {n} camps with crows over them, the first at {:?}",
+                c.camps().first().map(|k| (k.x / CELL, k.y / CELL))
+            );
+            assert!((5..=20).contains(&n), "seed {seed}: the enemy camps, not every hearth ({n})");
             assert!(c.stone().is_some(), "seed {seed}: the Hoar Stone stands on the stair's block");
             for camp in c.camps() {
                 let mut far = 0;

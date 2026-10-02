@@ -670,15 +670,19 @@ impl Present {
         stand_on_tops(props);
         // The Hoar Stone on the stair's block: drawn while any of its height can be on screen,
         // so it shows over the bottom edge before the block does.
-        if let Some(((sx, sy), look)) = self.cues.stone() {
-            let reach = Rect::new(area.x, area.y, area.w, area.h + jane_art::far::HOAR_H / CELL + 1);
+        // The regions' landmarks likewise, each as tall as it is (`cues`): the chimney, the
+        // spire, the statue.
+        let stone = self.cues.stone().map(|(foot, look)| (foot, look, jane_art::far::HOAR_W / 2));
+        let tall = self.cues.standing(self.hour).map(|(foot, look, ax, _)| (foot, look, ax));
+        for (i, ((sx, sy), look, ax)) in stone.into_iter().chain(tall).enumerate() {
+            let r = self.atlas.get(look);
+            let reach = Rect::new(area.x - 4, area.y, area.w + 8, area.h + i32::from(r.src.h) / CELL + 1);
             if reach.contains(sx.div_euclid(CELL), sy.div_euclid(CELL)) {
-                let w = jane_art::far::HOAR_W;
                 props.push(PropRec {
-                    id: STONE_KEY,
-                    x: sx - w / 2,
+                    id: STONE_KEY + i as u32,
+                    x: sx - ax,
                     y: sy - CELL,
-                    w,
+                    w: i32::from(r.src.w),
                     h: CELL,
                     look,
                     flat: false,
