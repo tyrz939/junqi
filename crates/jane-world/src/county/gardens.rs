@@ -4,6 +4,8 @@
 //! painter draws the house's own boundary (pickets, a low wall, privet, railings) on exactly
 //! these cells and its gate in the gap, so what she walks into is what she sees.
 //!
+//! The farm's house fronts its working yard, not a garden: it is left open.
+//!
 //! A fence goes down only on plain garden ground nothing else wants: never on a way, a road, a
 //! path, a door's step, a thing, a unit's cell or its patrol, or a mark; and a garden whose gate
 //! would open onto something solid is left open. Then the flood from `start` is taken again,
@@ -73,9 +75,13 @@ pub fn fence_gardens(c: &mut County<'_>) {
         .collect();
     let blocked = blocked_by_props(&c.k);
     let open = |x: i32, y: i32| c.k.inside(x, y) && !c.k.solid(x, y) && !blocked[at(x, y)];
+    let yards: Vec<Rect> = c.chunks.iter().filter(|ch| ch.id() == "farm").map(|ch| ch.bounds).collect();
     let mut laid = Vec::new();
     for b in garden::blocks((w, h), |x, y| c.k.get(x, y)) {
         let rect = b.rect;
+        if yards.iter().any(|y| y.contains(rect.x, rect.y)) {
+            continue;
+        }
         let Some(&(door, _)) = doors.iter().find(|d| d.1 >= b.eave && rect.contains(d.0, d.1)) else { continue };
         let (rows, fenced) = garden::front(rect, h, |x, y| c.k.get(x, y));
         if fenced || rows < 2 || rect.w < 4 || rect.w > 64 {
