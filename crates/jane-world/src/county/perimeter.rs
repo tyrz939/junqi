@@ -232,7 +232,8 @@ fn runs(rng: &mut jane_core::Sfc32, edge: Edge, (cx, cy): (i32, i32), radius: i3
     let mut gated: Vec<i32> = (0..n).collect();
     rng.shuffle(&mut gated);
     gated.truncate(3 + rng.below(3) as usize);
-    let (bank_in, bank_out) = (rng.next_u32(), rng.next_u32());
+    // Only a bank draws for its swells, so the other edges' runs are as they were.
+    let (bank_in, bank_out) = if edge == Edge::Slag { (rng.next_u32(), rng.next_u32()) } else { (0, 0) };
     let mut cells = Vec::new();
     let mut run: Vec<((i32, i32), bool)> = Vec::new();
     let mut seg = Vec::new();
