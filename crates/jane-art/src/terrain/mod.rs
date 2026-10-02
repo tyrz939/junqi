@@ -1246,6 +1246,35 @@ pub(crate) const fn fast(a: u32, b: u32, salt: u32) -> u32 {
     jane_core::hash::mix32(a.wrapping_mul(0x9e37_79b1) ^ b.wrapping_mul(0x85eb_ca77) ^ salt.wrapping_mul(0xc2b2_ae3d))
 }
 
+/// Where the ground is busy (ART-PLAN Q3, "busy beside quiet"): a slow value noise over world
+/// cells `(wx, wy)`, a lattice point every eight cells eased between, 0..=255. Scatter (tufts,
+/// reeds, stones, flowers) keeps its density where this is high and thins to a fifth where it is
+/// low, so the ground reads as patches of growth with clear ground between them, never as an even
+/// carpet. Pure in the cell and the seed: two chunks agree on a seam.
+pub(crate) fn busy(wx: i32, wy: i32, seed: u32) -> i32 {
+    // Stretched about the middle, so most cells are plainly in a patch or plainly out of one.
+    (128 + (slow(wx, wy, seed) - 128) * 2).clamp(0, 255)
+}
+
+/// The slow noise under [`busy`], unstretched: 0..=255 about 128, rarely near either end. What
+/// a rare thing (a worn board, a ledger stone's patch) is gated by.
+pub(crate) fn slow(wx: i32, wy: i32, seed: u32) -> i32 {
+    const SHIFT: i32 = 3;
+    let (gx, gy) = (wx >> SHIFT, wy >> SHIFT);
+    let (tx, ty) = (field::smooth((wx & 7) * 32 + 16), field::smooth((wy & 7) * 32 + 16));
+    let v = |i: i32, j: i32| (fast(i as u32, j as u32, seed ^ 0x4255_5359) >> 24) as i32;
+    let top = v(gx, gy) * (256 - tx) + v(gx + 1, gy) * tx;
+    let bottom = v(gx, gy + 1) * (256 - tx) + v(gx + 1, gy + 1) * tx;
+    (top * (256 - ty) + bottom * ty) >> 16
+}
+
+/// How much of a scatter's density a busy cell keeps, in 16ths: all of it in a patch, a fifth
+/// outside one, eased across the patch's edge.
+pub(crate) fn busy_share(wx: i32, wy: i32, seed: u32) -> u32 {
+    let b = busy(wx, wy, seed);
+    (3 + (b - 100).clamp(0, 80) * 13 / 80) as u32
+}
+
 /// `a` and `b` (`0xFFRRGGBB`) mixed `t` of 256 toward `b`.
 #[inline]
 fn mix_rgb(a: u32, b: u32, t: i32) -> u32 {

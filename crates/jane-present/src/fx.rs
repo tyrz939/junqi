@@ -99,7 +99,29 @@ pub struct Fx {
     grounds: Vec<u32>,
     grounds_next: Vec<u32>,
     tick: u32,
+    /// The wind's leaves this tick (ART-PLAN Q1): how many, the wind and the view they blow over.
+    leaves: Leaves,
 }
+
+/// Leaves blown on the wind (ART-PLAN Q1, Stardew's wind debris): about twenty to a screen by
+/// day, none at night, indoors or in heavy rain. Each is a pure function of its index and the
+/// tick: it starts upwind somewhere over the view, drifts with the wind as it falls from forty
+/// px or so, flutters side to side and tumbles (its size and its lit face by turns), and is gone
+/// where it lands; then it starts again elsewhere. No dice, no state but these numbers.
+#[derive(Clone, Copy, Debug, Default)]
+struct Leaves {
+    n: u16,
+    wind: i32,
+    view: (i32, i32, i32, i32),
+    works: bool,
+}
+
+/// A leaf's life in ticks at the least, and how much longer one may live.
+const LEAF_LIFE: (u32, u32) = (300, 180);
+/// Canvas px round the view a leaf may start in, so they blow in from off the screen.
+const LEAF_MARGIN: i32 = 48;
+/// Hash salt: the leaves.
+const LEAF_SALT: u32 = 0x4c45_4146;
 
 /// A frame of Q4 px.
 const Q: i32 = 16;
@@ -139,6 +161,7 @@ impl Fx {
             grounds: Vec::with_capacity(32),
             grounds_next: Vec::with_capacity(32),
             tick: 0,
+            leaves: Leaves::default(),
         }
     }
 
@@ -343,6 +366,7 @@ impl Fx {
         std::mem::swap(&mut self.grounds, &mut self.grounds_next);
         self.glints(view, view_px);
         self.weather(view, atmos, view_px);
+        self.leaves = Leaves::over(atmos, view_px);
     }
 
     /// Loot glints (the owner's first playtest: WoW's sparkle on a corpse worth looting). What a
@@ -563,6 +587,7 @@ impl Fx {
         for s in self.parts.iter().filter(|s| !s.ground && s.glow == 0) {
             self.put(f, s, cam, alpha, None);
         }
+        self.draw_leaves(f, cam, alpha, None);
         if f.parts.len() > a0 {
             f.passes.push(Pass::Particles { layer: Depth::Canopy, parts: Span::since(a0, f.parts.len()) });
         }
@@ -577,6 +602,60 @@ impl Fx {
         }
         if f.parts.len() > r0 {
             f.passes.push(Pass::Particles { layer: Depth::Weather, parts: Span::since(r0, f.parts.len()) });
+        }
+    }
+
+    /// The wind's leaves into the frame (`sky` as [`Fx::put`] takes it).
+    fn draw_leaves(&self, f: &mut Frame, cam: (i32, i32), alpha: u8, sky: Option<&Sky>) {
+        let l = self.leaves;
+        let (vx, vy, vw, vh) = l.view;
+        for i in 0..u32::from(l.n) {
+            let hi = jane_core::hash::mix32(i ^ LEAF_SALT);
+            let life = LEAF_LIFE.0 + hi % LEAF_LIFE.1;
+            let at = self.tick.wrapping_add(hi >> 8);
+            let (cycle, t) = (at / life, at % life);
+            // Sub-tick, so a leaf glides between ticks: 1/256ths of a tick.
+            let tq = (t * 256 + u32::from(alpha)) as i32;
+            let hs = jane_core::hash::mix32(cycle.wrapping_mul(0x9e37_79b1) ^ hi);
+            // Where it lands, then back along its flight to where it starts.
+            let drift = 4 + l.wind;
+            let (gx, gy) = (
+                vx - LEAF_MARGIN + (hs % (vw + 2 * LEAF_MARGIN) as u32) as i32,
+                vy + ((hs >> 12) % vh.max(1) as u32) as i32,
+            );
+            let total = life as i32 * drift / Q;
+            let flutter = jane_core::angle::sin_q15(Angle(((tq * 6) as u32).wrapping_add(hs) as u16)).0;
+            let x = gx - total + drift * tq / 256 / Q + flutter * 3 / 32768;
+            let y = gy - (life as i32 - tq / 256) / 24;
+            let top = 30 + (hs >> 24) as i32 % 30;
+            let z = top - top * tq / (life as i32 * 256);
+            let (sx, sy) = (x - cam.0, y - z - cam.1);
+            let (cw, ch) = (i32::from(f.canvas.0), i32::from(f.canvas.1));
+            if sx < -4 || sy < -4 || sx > cw + 4 || sy > ch + 4 || z <= 0 {
+                continue;
+            }
+            let ramp = match (l.works, hs % 5) {
+                (true, 0..=2) => jane_art::palette::Ramp::LeafOak,
+                (true, _) => jane_art::palette::Ramp::Bark,
+                (_, 0 | 1) => jane_art::palette::Ramp::LeafBeech,
+                (_, 2 | 3) => jane_art::palette::Ramp::LeafOak,
+                _ => jane_art::palette::Ramp::LeafMaple,
+            };
+            // It tumbles: its face to the light, then its edge.
+            let face = flutter > 0;
+            let tone = if face { jane_art::palette::Tone::Light } else { jane_art::palette::Tone::Mid };
+            let colour = jane_art::palette::rgb(ramp.at(tone));
+            // In and out over a second, not popping.
+            let fade = (t.min(life - t) * 8).min(255) as u8;
+            f.parts.push(Particle {
+                x: sx as i16,
+                y: sy as i16,
+                shape: PartShape::Dot { size: if face && hs & 1 == 0 { 2 } else { 1 } },
+                colour: self.lit(colour, 0, sky),
+                alpha: fade,
+                glow: 0,
+                height: z.clamp(0, 255) as u8,
+            });
         }
     }
 
@@ -600,6 +679,9 @@ impl Fx {
         let t2 = self.tier >= Tier::T2;
         for s in self.parts.iter().filter(|s| !s.ground && (t2 || s.glow > 0)) {
             self.put(f, s, cam, alpha, Some(sky));
+        }
+        if t2 {
+            self.draw_leaves(f, cam, alpha, Some(sky));
         }
         // Each bolt's head: a soft glow and a bright core.
         let a = i32::from(alpha);
@@ -709,6 +791,29 @@ impl Fx {
             glow: s.glow,
             height: (z / Q).clamp(0, 255) as u8,
         });
+    }
+}
+
+impl Leaves {
+    /// This tick's leaves over the view `(x, y, w, h)`, canvas px: about twenty to a screen of
+    /// 768 x 432 out of doors by day; fewer at the day's ends; none at night, none from half rain
+    /// up; the Works' fewer, and brown.
+    fn over(atmos: &Atmosphere, view: (i32, i32, i32, i32)) -> Leaves {
+        let hour = atmos.hour();
+        let day = match hour {
+            8..=17 => 16,
+            7 | 18 => 8,
+            _ => 0,
+        };
+        let rain = 16 - (atmos.rain() * 32 / 65536).min(16) as i32;
+        let works = atmos.region() == jane_data::Region::Works;
+        let area = (view.2 * view.3).max(0) as i64;
+        let n = if atmos.outdoors() {
+            20 * area / (768 * 432) * i64::from(day * rain) / 256 * if works { 2 } else { 3 } / 3
+        } else {
+            0
+        };
+        Leaves { n: n.clamp(0, 64) as u16, wind: atmos.wind(), view, works }
     }
 }
 

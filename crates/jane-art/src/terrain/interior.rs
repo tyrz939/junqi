@@ -5,7 +5,7 @@
 //! other cell; a works' sooted brick with iron pilasters and a beam; a museum's painted wall
 //! over a picture rail and moulded panels; a sewer's walling with an iron main and a copper run;
 //! a school's painted wall over a dado and boards. Floors: parquet, riveted iron plate, great
-//! flags with a carved ledger stone among them, and a wet brick invert with a drain grate.
+//! flags with carved ledger stones gathered among them, and a wet brick invert with a drain grate.
 //!
 //! Pure functions of the world px and the style's ramps, so a seam never shows and a chunk is
 //! the same painted twice; `hard` calls them per pixel and keeps its own face lighting (the lit
@@ -304,7 +304,7 @@ pub(super) fn floor(pat: P, r: Ramp, accent: Option<Ramp>, wx: i32, wy: i32, wea
             (r.at(t), n, dz)
         }
         P::Flags => {
-            // Great flags in a running bond; one in eleven a ledger stone, carved.
+            // Great flags in a running bond; now and then a ledger stone, carved.
             let row = wy.div_euclid(12);
             let xs = wx + (row & 1) * 8;
             let (lx, ly) = (xs.rem_euclid(16), wy.rem_euclid(12));
@@ -317,7 +317,10 @@ pub(super) fn floor(pat: P, r: Ramp, accent: Option<Ramp>, wx: i32, wy: i32, wea
                 6 => Tone::Lift,
                 _ => Tone::Base,
             };
-            let ledger = k % 11 == 0;
+            // One in about forty a ledger stone, and those gathered (ART-PLAN Q5): thick in a
+            // few rows of the dead together, rare elsewhere, never a ruled scatter.
+            let gathered = super::slow(xs.div_euclid(16), row * 12 / 16, 0x1ed6_e700) > 178;
+            let ledger = if gathered { k % 5 == 0 } else { k % 90 == 0 };
             let carved = ledger
                 && ((lx == 2 || lx == 13) && (2..=9).contains(&ly)
                     || (ly == 2 || ly == 9) && (2..=13).contains(&lx)

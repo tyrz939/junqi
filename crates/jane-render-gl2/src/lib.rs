@@ -4,7 +4,7 @@
 //! A frame, on the GPU:
 //!
 //! 1. **Albedo**: the frame's passes in order into an RGBA8 target: terrain chunks, then each
-//!    sprite pass by the CLUT (the 1024-entry master palette, `LUMINANCE_ALPHA` indices), the
+//!    sprite pass by the CLUT (the 2048-entry master palette, `LUMINANCE_ALPHA` indices), the
 //!    contact shadow by its 3 x 3 cover, and between the ground and the standing things the sun's
 //!    silhouettes (a span mask built from the casters' rows, applied as `soft` applies it). In the
 //!    exact mode this is `soft`'s frame before its light, byte for byte (`prep.rs`).
