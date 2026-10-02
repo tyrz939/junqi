@@ -27,6 +27,7 @@
 //! | `country` | field edges, hamlets, farms, camps, dens, ruins, ponds | 7 |
 //! | `stories` | stories claim places, boards go up, the stories' rows | 8 |
 //! | `pit_wood` | deadwood (a stump) by every made fire's pit that has none within 12 cells | 8 |
+//! | `gardens` | a fence along each house's front garden, its gate gap under the door | 8 |
 //! | `scatter` | herbs and rocks | 9 |
 //! | `ways` | every way and door step cleared: growth gives way, a fence a gate, a thing on it moved aside | 9 |
 //! | `wildlife` | by region, biome and threat | 9 |
@@ -41,6 +42,7 @@ pub mod chunks;
 pub mod country;
 pub mod doors;
 pub mod finish;
+pub mod gardens;
 pub mod land;
 pub mod links;
 pub mod paths;
@@ -210,6 +212,7 @@ pub const STAGES: &[(&str, StageFn)] = &[
     ("country", country),
     ("stories", stories),
     ("pit_wood", pit_wood),
+    ("gardens", gardens::fence_gardens),
     ("scatter", scatter),
     ("ways", ways::clear_ways),
     ("wildlife", wildlife),
