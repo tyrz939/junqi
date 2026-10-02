@@ -1,0 +1,14 @@
+{
+  "rota_board": { "name": "Rota", "sprite": "factory_rack", "w": 3, "h": 1, "solid": true, "blockLos": false, "prompt": "Read" },
+  "serving_hatch": { "name": "Serving Hatch", "sprite": "town_ticket_window", "w": 2, "h": 2, "base": 1, "solid": true, "blockLos": true, "prompt": "Knock" },
+  "hut_book": { "name": "Hut Book", "sprite": "tale_timetable", "w": 2, "h": 1, "solid": true, "blockLos": false, "prompt": "Read" },
+  "hut_lamp": { "name": "Hut Lamp", "sprite": "lamp_post", "w": 1, "h": 1, "solid": true, "blockLos": false, "lightWhenOn": true, "light": { "radius": 64, "color": "#ffc070", "flicker": 0.1 }, "prompt": "Look" },
+  "dead_signal": { "name": "Dead Signal", "sprite": "tale_signal_red", "w": 1, "h": 1, "solid": true, "blockLos": false, "prompt": "Look" },
+  "slag_wagon": { "name": "Slag Wagon", "sprite": "minecart", "w": 2, "h": 2, "base": 1, "solid": true, "blockLos": false, "prompt": "Look" },
+  "wagon_locker": { "name": "Locker", "sprite": "tale_locker", "w": 2, "h": 2, "base": 1, "solid": true, "blockLos": false, "prompt": "Open" },
+  "pipe_mouth": { "name": "Pipe Mouth", "sprite": "set_pipes", "w": 3, "h": 1, "solid": true, "blockLos": false, "prompt": "Listen" },
+  "lodge_book": { "name": "Lodge Book", "sprite": "school_register", "w": 2, "h": 1, "solid": true, "blockLos": false, "prompt": "Read" },
+  "grave_marker": { "name": "Grave", "sprite": "town_headstone", "w": 1, "h": 1, "solid": true, "blockLos": false, "prompt": "Read" },
+  "corner_marker": { "name": "Marker", "sprite": "standing_stone", "w": 1, "h": 1, "solid": true, "blockLos": false, "prompt": "Read" },
+  "left_tin": { "name": "Dinner Tin", "sprite": "dinner_tin", "w": 1, "h": 1, "solid": false, "blockLos": false, "flat": true, "prompt": "Look" }
+}

@@ -1,0 +1,107 @@
+{
+  "marsh_rat": {
+    "name": "Marsh Rat",
+    "faction": "beast",
+    "controller": "ai",
+    "strength": 10,
+    "spirit": 1,
+    "walk": 0.45,
+    "run": 1.05,
+    "aggro": 7,
+    "leash": 45,
+    "bounds": 0.75,
+    "book": [
+      "melee"
+    ],
+    "respawn": 600,
+    "autoRegen": true,
+    "loot": [
+      {
+        "item": "rat_meat",
+        "qty": 1,
+        "chance": 1
+      }
+    ],
+    "sprite": "rat"
+  },
+  "garden_flower": {
+    "name": "Garden Flower",
+    "faction": "undead",
+    "controller": "ai",
+    "strength": 10,
+    "spirit": 1,
+    "walk": 0,
+    "run": 0,
+    "aggro": 8,
+    "leash": 80,
+    "bounds": 1,
+    "book": [
+      "melee"
+    ],
+    "respawn": 600,
+    "autoRegen": true,
+    "loot": [
+      {
+        "item": "savage_snakeroot",
+        "qty": 1,
+        "chance": 1
+      }
+    ],
+    "sprite": "flower"
+  },
+  "reed_fludd": {
+    "name": "Mrs Fludd",
+    "faction": "friendly",
+    "controller": "npc",
+    "strength": 30,
+    "spirit": 3,
+    "walk": 0.3,
+    "run": 0.8,
+    "aggro": 0,
+    "leash": 0,
+    "bounds": 1,
+    "book": [],
+    "respawn": 0,
+    "autoRegen": true,
+    "loot": [],
+    "sprite": "reed_fludd",
+    "talk": "reed_fludd"
+  },
+  "eel_cutter": {
+    "name": "A Reedcutter",
+    "faction": "friendly",
+    "controller": "npc",
+    "strength": 30,
+    "spirit": 3,
+    "walk": 0.3,
+    "run": 0.8,
+    "aggro": 0,
+    "leash": 0,
+    "bounds": 1,
+    "book": [],
+    "respawn": 0,
+    "autoRegen": true,
+    "loot": [],
+    "dayOnly": true,
+    "sprite": "folk_reedcutter",
+    "talk": "eel_cutter"
+  },
+  "loveday": {
+    "name": "Mrs Loveday",
+    "faction": "friendly",
+    "controller": "npc",
+    "strength": 30,
+    "spirit": 3,
+    "walk": 0.3,
+    "run": 0.8,
+    "aggro": 0,
+    "leash": 0,
+    "bounds": 1,
+    "book": [],
+    "respawn": 0,
+    "autoRegen": true,
+    "loot": [],
+    "sprite": "loveday",
+    "talk": "loveday"
+  }
+}

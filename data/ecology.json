@@ -1,5 +1,9 @@
 [
   { "area": "allotments", "recover": 10, "populations": [{ "unit": "rat", "cap": 12, "weight": 300, "hold": 360 }] },
   { "area": "top_field", "recover": 15, "populations": [{ "unit": "pumpkin_top", "cap": 7, "weight": 120, "hold": 480 }] },
-  { "area": "quarry_steps", "recover": 12, "populations": [{ "unit": "quarryman", "cap": 6, "weight": 150, "hold": 450 }] }
+  { "area": "quarry_steps", "recover": 12, "populations": [{ "unit": "quarryman", "cap": 6, "weight": 150, "hold": 450 }] },
+  { "area": "eel_beds", "recover": 12, "populations": [{ "unit": "marsh_rat", "cap": 7, "weight": 120, "hold": 480 }] },
+  { "area": "mothers_garden", "recover": 15, "populations": [{ "unit": "garden_flower", "cap": 6, "weight": 120, "hold": 480 }] },
+  { "area": "cooling_yard", "recover": 15, "populations": [{ "unit": "shift_soldier", "cap": 7, "weight": 120, "hold": 480 }] },
+  { "area": "slag_mere", "recover": 15, "populations": [{ "unit": "mere_cactus", "cap": 7, "weight": 120, "hold": 480 }] }
 ]

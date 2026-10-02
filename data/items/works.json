@@ -1,0 +1,20 @@
+{
+  "signal_dinner": {
+    "name": "Dinner Tin",
+    "icon": "item_tin",
+    "maxStack": 3,
+    "usable": false,
+    "cooldown": 1,
+    "bound": true,
+    "description": "A works dinner tin, still warm, a signalman's number chalked on the lid. Not yours to eat."
+  },
+  "diary_page": {
+    "name": "Diary Page",
+    "icon": "item_letter",
+    "maxStack": 3,
+    "usable": false,
+    "cooldown": 1,
+    "bound": true,
+    "description": "A page of the foreman's diary, numbered in the corner. The hand is neat until the last lines."
+  }
+}

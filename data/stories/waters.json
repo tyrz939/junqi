@@ -1,0 +1,24 @@
+[
+  {
+    "id": "tollhouse",
+    "kind": "ruin",
+    "region": "waters",
+    "tale": true,
+    "name": "The Tollhouse",
+    "board": "CASTLE BRIDGE TRUST. {NAME}. Tolls payable to the keeper. Keeper: R. GEDGE.",
+    "threat": [0, 3],
+    "quests": ["the_toll", "the_keepers_tally"],
+    "ruin": "walls"
+  },
+  {
+    "id": "reed_end",
+    "kind": "ruin",
+    "region": "waters",
+    "tale": true,
+    "name": "Reed End",
+    "board": "{NAME}. LOVEDAY. Reed cut to order. Ring at the landing.",
+    "threat": [0, 3],
+    "quests": ["loveday_landing", "tuesday_reed_end"],
+    "ruin": "house"
+  }
+]

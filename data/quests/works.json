@@ -1,0 +1,439 @@
+{
+  "shift_rota": {
+    "name": "Shift Rota",
+    "description": "The rota on the canteen wall: WATCHMEN TO SIGN ON AT HUT ONE, HUT TWO AND HUT THREE. Nobody has signed on this week, or any week since the spring. Sign each hut book, and the rota can be marked.",
+    "completion": "Three hut books signed in your hand. Two of them had a watchman's name above yours. The third had the same name, every day, in a hand that got smaller.",
+    "returnTo": "the rota in the works canteen",
+    "requirements": [
+      {
+        "type": "location",
+        "target": "hut_one_signed",
+        "qty": 1,
+        "text": "The hut book at {place:hut_one}"
+      },
+      {
+        "type": "location",
+        "target": "hut_two_signed",
+        "qty": 1,
+        "text": "The hut book at {place:hut_two}"
+      },
+      {
+        "type": "location",
+        "target": "hut_three_signed",
+        "qty": 1,
+        "text": "The hut book at {place:hut_three}"
+      }
+    ],
+    "rewards": [
+      {
+        "do": "give",
+        "item": "light_stone",
+        "qty": 2
+      }
+    ]
+  },
+  "dinners_out": {
+    "name": "Dinners Out",
+    "description": "Whoever is behind the canteen hatch cooks for the signalmen on Cinder Walk, who will not come in for it. Three tins, one at the foot of each dead signal. Leave them and do not wait for thanks, the hatch says. Nobody on that road has thanked anybody since the spring.",
+    "completion": "Three tins at three dead signals. When you passed again, two were where you left them, full. One had been moved a foot, and was empty.",
+    "returnTo": "the serving hatch in the works canteen",
+    "requirements": [
+      {
+        "type": "location",
+        "target": "signal_tin_1",
+        "qty": 1,
+        "text": "A tin, left at the first dead signal on Cinder Walk"
+      },
+      {
+        "type": "location",
+        "target": "signal_tin_2",
+        "qty": 1,
+        "text": "A tin, left at the second dead signal on Cinder Walk"
+      },
+      {
+        "type": "location",
+        "target": "signal_tin_3",
+        "qty": 1,
+        "text": "A tin, left at the third dead signal on Cinder Walk"
+      }
+    ],
+    "rewards": [
+      {
+        "do": "grow",
+        "stat": "strength",
+        "amount": 4,
+        "id": "jar_canteen"
+      }
+    ]
+  },
+  "relieve_the_night_shift": {
+    "name": "Relief",
+    "description": "The rota on the canteen wall: NIGHT SHIFT TO BE RELIEVED AT SIX. In red under it: NOT RELIEVED. The night shift are in the Cooling Yard. The voice behind the hatch says not to go down there in the dark, and not much in the light. Six would be a relief.",
+    "completion": "Six stood down in the Cooling Yard. They went without a sound, the way men go off a shift. You crossed NOT RELIEVED off the rota, and it is still legible.",
+    "returnTo": "the rota in the works canteen",
+    "requirements": [
+      {
+        "type": "kill",
+        "target": "shift_soldier",
+        "qty": 6,
+        "text": "The night shift, in the Cooling Yard"
+      }
+    ],
+    "rewards": [
+      {
+        "do": "grow",
+        "stat": "strength",
+        "amount": 4,
+        "id": "jar_cooling_yard"
+      }
+    ]
+  },
+  "signals_at_danger": {
+    "name": "Hold the Light",
+    "description": "The board at {place:hut_three} says its lamp is to be kept lit till six. The lamp log under it stops in the spring, on a night it was not. Light the hut lamp after the bell and be there beside it, lit, in the last hour before six.",
+    "completion": "The lamp was lit at six when the bell went for the day shift. You wrote it in the log. Nobody had written in it since the spring, and the last line said: lamp out at 3. relief did not come.",
+    "returnTo": "the lamp log at {place:hut_three}",
+    "requirements": [
+      {
+        "type": "location",
+        "target": "hut_three_held",
+        "qty": 1,
+        "text": "The hut lamp at {place:hut_three}, lit and kept till six"
+      }
+    ],
+    "rewards": [
+      {
+        "do": "give",
+        "item": "light_stone",
+        "qty": 3
+      },
+      {
+        "do": "give",
+        "item": "fire_stone",
+        "qty": 1
+      }
+    ]
+  },
+  "the_foremans_diary": {
+    "name": "The Foreman's Diary",
+    "description": "A slag wagon in the Sidings has a locker, and in the locker the foreman's diary with its last three pages torn out. A note in the binding: pages in the wagons. Read them in order. The wagons are one wagon, the note says, more or less.",
+    "completion": "Three pages back in the binding. The last entry is short. The night shift went on at nine, and the foreman wrote that he would see them off at six, and the page after that is the cover.",
+    "returnTo": "the wagon locker in the Sidings",
+    "requirements": [
+      {
+        "type": "acquire",
+        "target": "diary_page",
+        "qty": 3,
+        "text": "Diary pages, in the slag wagons in the Sidings"
+      }
+    ],
+    "rewards": [
+      {
+        "do": "grow",
+        "stat": "spirit",
+        "amount": 4,
+        "id": "page_foreman"
+      }
+    ]
+  },
+  "last_wagon": {
+    "name": "Last Wagon",
+    "description": "The foreman's diary, last page: the pay clerk still goes down the Sidings with the wages every Friday, and pays nobody, and comes back. He is at the end of the Sidings with his satchel. The foreman would have stopped him. He did not get the chance.",
+    "completion": "The pay clerk is down for good at the end of the Sidings. His satchel held the week's wages, in packets, for men whose names the diary has. And the materials the Works was owed, by the weight.",
+    "returnTo": "the wagon locker in the Sidings",
+    "requirements": [
+      {
+        "type": "kill",
+        "target": "pay_clerk",
+        "qty": 1,
+        "text": "The pay clerk, at the end of the Sidings"
+      }
+    ],
+    "rewards": [
+      {
+        "do": "give",
+        "item": "iron",
+        "qty": 4
+      },
+      {
+        "do": "give",
+        "item": "coal",
+        "qty": 4
+      }
+    ]
+  },
+  "register_of_burials": {
+    "name": "Register of Burials",
+    "description": "The lodge book at the graveyard gate is a register of burials. The last three are on Chapel Rise, and each line wants the stone checked against the book. The names are ones you have heard in Castle. The dates fall in one week in the spring.",
+    "completion": "Three stones on Chapel Rise, three lines in the book, and they agree. You initialled the column, under a district nurse's initials, in the same ink.",
+    "returnTo": "the lodge book at the graveyard gate",
+    "requirements": [
+      {
+        "type": "location",
+        "target": "grave_1",
+        "qty": 1,
+        "text": "The first stone in the register, on Chapel Rise"
+      },
+      {
+        "type": "location",
+        "target": "grave_2",
+        "qty": 1,
+        "text": "The second stone in the register, on Chapel Rise"
+      },
+      {
+        "type": "location",
+        "target": "grave_3",
+        "qty": 1,
+        "text": "The third stone in the register, on Chapel Rise"
+      }
+    ],
+    "rewards": [
+      {
+        "do": "grow",
+        "stat": "strength",
+        "amount": 4,
+        "id": "jar_chapel_rise"
+      }
+    ]
+  },
+  "flowers_for_the_rise": {
+    "name": "Flowers for the Rise",
+    "description": "The lodge book at the graveyard gate has a standing order: white water roses for the stones on Chapel Rise, three, weekly. Nothing white grows in the Works. The roses grow at Sallow Bottom, in the Lowfields, by the parish jetty. Do not pick them after dark, the parish says.",
+    "completion": "Three white roses on three stones. The lodge book has a column for flowers, and nothing written in it for a long time but ditto.",
+    "returnTo": "the lodge book at the graveyard gate",
+    "requirements": [
+      {
+        "type": "acquire",
+        "target": "white_water_rose",
+        "qty": 3,
+        "text": "White water roses, from the jetty at Sallow Bottom"
+      }
+    ],
+    "rewards": [
+      {
+        "do": "grow",
+        "stat": "spirit",
+        "amount": 4,
+        "id": "page_chapel_rise"
+      }
+    ]
+  },
+  "goldskins_four": {
+    "name": "The Four",
+    "description": "A carved stone on Chapel Rise: FOUR TO KEEP THE CORNERS. There is a marker at each corner of the ground round the Hoar Stone. The carving says to read them in turn. It does not say whose they are, and the markers do not either.",
+    "completion": "Four markers, four corners, read in turn. Nothing on them but a corner each, and a date, and the same date four times.",
+    "returnTo": "the carved stone on Chapel Rise",
+    "requirements": [
+      {
+        "type": "location",
+        "target": "corner_1",
+        "qty": 1,
+        "text": "The first corner marker, by the Hoar Stone"
+      },
+      {
+        "type": "location",
+        "target": "corner_2",
+        "qty": 1,
+        "text": "The second corner marker, by the Hoar Stone"
+      },
+      {
+        "type": "location",
+        "target": "corner_3",
+        "qty": 1,
+        "text": "The third corner marker, by the Hoar Stone"
+      },
+      {
+        "type": "location",
+        "target": "corner_4",
+        "qty": 1,
+        "text": "The fourth corner marker, by the Hoar Stone"
+      }
+    ],
+    "rewards": [
+      {
+        "do": "give",
+        "item": "potion_lifesteal",
+        "qty": 1
+      },
+      {
+        "do": "give",
+        "item": "potion_manashield",
+        "qty": 1
+      }
+    ]
+  },
+  "what_the_pipes_say": {
+    "name": "What the Pipes Say",
+    "description": "Put an ear to the pipe mouth in the canteen yard and something knocks in it: three and a rest and three. The pipes run out to Slag Mere. Listen at the pipe mouths there and find which one the knocking comes up loudest in.",
+    "completion": "The knocking was loudest at the last pipe mouth, by the mere, and stopped when you put your hand flat on the iron. It has not started again.",
+    "returnTo": "the pipe mouth in the canteen yard",
+    "requirements": [
+      {
+        "type": "location",
+        "target": "pipe_listened_1",
+        "qty": 1,
+        "text": "The near pipe mouth at Slag Mere, listened at"
+      },
+      {
+        "type": "location",
+        "target": "pipe_listened_2",
+        "qty": 1,
+        "text": "The far pipe mouth at Slag Mere, listened at"
+      }
+    ],
+    "rewards": [
+      {
+        "do": "give",
+        "item": "iron",
+        "qty": 2
+      },
+      {
+        "do": "give",
+        "item": "fire_stone",
+        "qty": 1
+      }
+    ]
+  },
+  "the_mere": {
+    "name": "The Mere",
+    "description": "The far pipe mouth at Slag Mere is quiet now. Round it the slag has grown spines. Six of them stand closer to the pipe each night, the stencil on the iron says, though nobody stencilled that. Six cut down would let the pipe be.",
+    "completion": "Six down at Slag Mere. The ones further out stayed where they were. The pipe mouth is quiet, and the stencil on it reads only GOLDSKIN MINING Co. now.",
+    "returnTo": "the far pipe mouth at Slag Mere",
+    "requirements": [
+      {
+        "type": "kill",
+        "target": "mere_cactus",
+        "qty": 6,
+        "text": "Slag cactus, at Slag Mere"
+      }
+    ],
+    "rewards": [
+      {
+        "do": "grow",
+        "stat": "strength",
+        "amount": 4,
+        "id": "jar_slag_mere"
+      }
+    ]
+  },
+  "the_bell_rope": {
+    "name": "The Bell Rope",
+    "description": "A shrine at the foot of the Bellfield, where the field meets the hill: STAND HERE AT NINE AND HEAR IT FROM BENEATH. The Bellfield is the School's own field, and nothing in it is the county's. The shrine wants somebody in the Bellfield when the bell goes.",
+    "completion": "You stood in the Bellfield at nine. The bell came from the hill, and from under your feet as well, a beat behind, as if the field were answering.",
+    "returnTo": "the shrine at the foot of the Bellfield",
+    "requirements": [
+      {
+        "type": "location",
+        "target": "bellfield_nine",
+        "qty": 1,
+        "text": "In the Bellfield at nine, after the bell"
+      }
+    ],
+    "rewards": [
+      {
+        "do": "grow",
+        "stat": "spirit",
+        "amount": 4,
+        "id": "page_bellfield"
+      }
+    ]
+  },
+  "fourteen_again": {
+    "name": "No. 14, Again",
+    "description": "A. Pell's stone, by the last lit lamp. Twelve, thirteen and fifteen are dark, the glass whole and the mantles new. A spark in each would light them. Then the road past the stone would be lit after the bell, as far as the lampman went.",
+    "completion": "Twelve, thirteen and fifteen burn now, after the bell. Between thirteen and fifteen the road is dark for the width of one lamp, and you can walk through it in three steps.",
+    "returnTo": "Pell's stone, by the last lit lamp",
+    "requirements": [
+      {
+        "type": "location",
+        "target": "lamp_12_lit",
+        "qty": 1,
+        "text": "Lamp No. 12, past Pell's stone, given a spark"
+      },
+      {
+        "type": "location",
+        "target": "lamp_13_lit",
+        "qty": 1,
+        "text": "Lamp No. 13, past Pell's stone, given a spark"
+      },
+      {
+        "type": "location",
+        "target": "lamp_15_lit",
+        "qty": 1,
+        "text": "Lamp No. 15, past Pell's stone, given a spark"
+      }
+    ],
+    "rewards": [
+      {
+        "do": "give",
+        "item": "light_stone",
+        "qty": 3
+      }
+    ]
+  },
+  "the_adit": {
+    "name": "The Adit",
+    "description": "The tally slate at the gang's camp: ADIT CLOSED BY ORDER. 5 MEN. The rock across the adit at the top of Quarry Steps is too neat to have fallen. Something sudden would shift it. Whatever the gang was working behind it is still there.",
+    "completion": "The rock went, and behind it the adit ran six yards and stopped at a face with picks still in it. On a ledge, out of the wet, the gang's jar, sealed.",
+    "returnTo": "the tally slate at the gang's camp",
+    "requirements": [
+      {
+        "type": "location",
+        "target": "adit_opened",
+        "qty": 1,
+        "text": "The rock across the adit, up Quarry Steps"
+      }
+    ],
+    "rewards": [
+      {
+        "do": "grow",
+        "stat": "strength",
+        "amount": 6,
+        "id": "jar_adit"
+      }
+    ]
+  },
+  "breen_coal": {
+    "name": "Coal for the Hut",
+    "description": "Mr Breen keeps {place:hut_one} and its stove went out in the spring. There is coal in the slag wagons in the Sidings, if anybody would fetch three lumps. He would go himself, he says, but he cannot leave the hut. He has not said why.",
+    "completion": "The stove in the hut is lit. Mr Breen held his hands to it a long while. He said anyone passing in the night might stop at it, and that he would not mind the company.",
+    "returnTo": "Mr Breen, at {place:hut_one}",
+    "requirements": [
+      {
+        "type": "acquire",
+        "target": "coal",
+        "qty": 3,
+        "text": "Three lumps of coal, to Mr Breen at {place:hut_one}"
+      }
+    ],
+    "rewards": [
+      {
+        "do": "give",
+        "item": "potion_stoneskin",
+        "qty": 1
+      }
+    ]
+  },
+  "tuesday_hut_two": {
+    "name": "The Lodge Book",
+    "description": "Mr Pask at {place:hut_two} says the nurse signed his visitors' book on her Tuesday and went on up to the graveyard lodge to sign theirs. He has not seen her go by since. He would like to know what the lodge book at the graveyard gate says, and then he would like not to.",
+    "completion": "The lodge book has her initials in the column for attendance, against every burial for one week in the spring, and then the column is empty. Mrs Allen said Tuesday, then, and shut the flap. A while after, it opened again.",
+    "returnTo": "Mrs Allen's sister's door, facing the fire in Castle square",
+    "requirements": [
+      {
+        "type": "location",
+        "target": "tuesday_lodge_read",
+        "qty": 1,
+        "text": "What the lodge book at the graveyard gate says, for {place:hut_two}"
+      }
+    ],
+    "rewards": [
+      {
+        "do": "grow",
+        "stat": "strength",
+        "amount": 4,
+        "id": "jar_tuesday"
+      }
+    ]
+  }
+}

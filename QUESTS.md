@@ -311,7 +311,7 @@ The station chain opens the region and closes it: its first quest is done on the
 
 **Suggested order for a new player** (nothing enforces it): `lost_property`, the spine to the kitchen, `before_the_bell`, `footpath_three`, `three_scarecrows`, `rats_in_the_sheds`, `number_fourteen`, `the_nurses_round`, then the three detours once she has a jar or two.
 
-## 2.3 The Waters (base threat 2 to 3). Outline only
+## 2.3 The Waters (base threat 2 to 3). Built 2 October 2026, as adapted in QUEST-TREE.md §11
 
 *Everything here was tended once.* Gardens, locks, reed beds, a museum: things that needed looking after and are now looking after themselves.
 
@@ -321,7 +321,7 @@ The station chain opens the region and closes it: its first quest is done on the
 - **Growth:** three jars, three pages from quests; verbs Explosion and Grow come from the spine and reopen the Lowfields (the adit on Quarry Steps; a dry bed at Sallow Bottom).
 - **Omens carried:** the bridge counts who crosses; nobody has drowned in the lake; the lamps on the east road go out at ten (built, `data/omens.json`; the white roses are the Lowfields' row, though Sallow Bottom's water grows them too).
 
-## 2.4 The Works (base threat 4 to 5). Outline only
+## 2.4 The Works (base threat 4 to 5). Built 2 October 2026, as adapted in QUEST-TREE.md §11
 
 *The shift never ended.* Slag, rails, a canteen with the rota still on the wall.
 

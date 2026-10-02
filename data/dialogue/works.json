@@ -1,0 +1,1935 @@
+{
+  "canteen_rota": {
+    "speaker": "Rota",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "relieve_the_night_shift"
+          }
+        ],
+        "node": "in_2"
+      },
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "shift_rota"
+          }
+        ],
+        "node": "in_1"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "relieve_the_night_shift"
+          }
+        ],
+        "node": "wait_2"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "shift_rota"
+          }
+        ],
+        "node": "wait_1"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "shift_rota",
+            "not": true
+          }
+        ],
+        "node": "offer_1"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "relieve_the_night_shift",
+            "not": true
+          }
+        ],
+        "node": "offer_2"
+      },
+      {
+        "node": "after"
+      }
+    ],
+    "nodes": {
+      "offer_1": {
+        "lines": [
+          "GOLDSKIN MINING Co. WORKS CANTEEN. ROTA. DAY SHIFT 06.00. NIGHT SHIFT 21.00.",
+          "WATCHMEN TO SIGN ON AT HUT ONE, HUT TWO AND HUT THREE. Nobody has signed on since the spring."
+        ],
+        "options": [
+          {
+            "label": "Sign on for them",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "shift_rota"
+              }
+            ]
+          },
+          {
+            "label": "Leave it"
+          }
+        ]
+      },
+      "wait_1": {
+        "lines": [
+          "SIGN ON AT HUT ONE, HUT TWO AND HUT THREE. Each hut keeps a book."
+        ]
+      },
+      "in_1": {
+        "lines": [
+          "A square on the rota for each hut."
+        ],
+        "options": [
+          {
+            "label": "Mark them signed on",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "shift_rota"
+              }
+            ]
+          },
+          {
+            "label": "Not yet"
+          }
+        ]
+      },
+      "offer_2": {
+        "lines": [
+          "NIGHT SHIFT TO BE RELIEVED AT 06.00. Against it, in red: NOT RELIEVED.",
+          "RELIEF TO REPORT TO THE COOLING YARD."
+        ],
+        "options": [
+          {
+            "label": "Report as relief",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "relieve_the_night_shift"
+              }
+            ]
+          },
+          {
+            "label": "Leave it"
+          }
+        ]
+      },
+      "wait_2": {
+        "lines": [
+          "RELIEF TO REPORT TO THE COOLING YARD. Six would do, to start."
+        ]
+      },
+      "in_2": {
+        "lines": [
+          "NOT RELIEVED, in red. A pencil on a string."
+        ],
+        "options": [
+          {
+            "label": "Cross it off",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "relieve_the_night_shift"
+              }
+            ]
+          },
+          {
+            "label": "Not yet"
+          }
+        ]
+      },
+      "after": {
+        "lines": [
+          "NIGHT SHIFT TO BE RELIEVED AT 06.00. NOT RELIEVED, crossed off in pencil. The red shows through."
+        ]
+      }
+    }
+  },
+  "canteen_rota_card": {
+    "speaker": "Card",
+    "start": [
+      {
+        "node": "read"
+      }
+    ],
+    "nodes": {
+      "read": {
+        "lines": [
+          "A card tucked under the rota: HUT ONE, HUT TWO, HUT THREE. SIGNED ON. It is in your hand, and it is the only card there."
+        ]
+      }
+    }
+  },
+  "canteen_hatch": {
+    "speaker": "The Hatch",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "dinners_out"
+          }
+        ],
+        "node": "in"
+      },
+      {
+        "when": [
+          {
+            "if": "hours",
+            "from": 18,
+            "to": 6
+          }
+        ],
+        "node": "shut"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "dinners_out"
+          }
+        ],
+        "node": "wait"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "dinners_out",
+            "not": true
+          }
+        ],
+        "node": "offer"
+      },
+      {
+        "when": [
+          {
+            "if": "flag",
+            "flag": "talked_hatch",
+            "not": true
+          }
+        ],
+        "node": "first"
+      },
+      {
+        "when": [
+          {
+            "if": "flag",
+            "flag": "talked_hatch",
+            "eq": 1
+          }
+        ],
+        "node": "second"
+      },
+      {
+        "node": "third"
+      }
+    ],
+    "nodes": {
+      "shut": {
+        "lines": [
+          "The shutter is down. A card on it: NO HOT FOOD AFTER THE BELL. Under it, smaller: or before it, some nights."
+        ]
+      },
+      "offer": {
+        "lines": [
+          "Somebody behind the hatch is scraping a pan. \"You're not on the rota.\" A pause. \"Never mind. Three tins want taking out to the signalmen on Cinder Walk.\"",
+          "\"They won't come in for them. Leave one at the foot of each dead signal, and don't wait for thanks.\""
+        ],
+        "options": [
+          {
+            "label": "I'll take them",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "dinners_out"
+              },
+              {
+                "do": "give",
+                "item": "signal_dinner",
+                "qty": 3
+              }
+            ]
+          },
+          {
+            "label": "Not now"
+          }
+        ]
+      },
+      "wait": {
+        "lines": [
+          "\"One at each dead signal on Cinder Walk. Three signals, three tins. They'll go cold, mind. They always do.\""
+        ]
+      },
+      "in": {
+        "lines": [
+          "The shutter goes up a hand's width. \"All three? Good. They'll not say anything, so I will.\" A jar comes out across the counter, the lid wired down.",
+          "\"Put some flesh on. There's a lot of walking in the Works.\""
+        ],
+        "options": [
+          {
+            "label": "Thank you",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "dinners_out"
+              }
+            ]
+          }
+        ]
+      },
+      "first": {
+        "lines": [
+          "\"Five dinners at noon, same as ever. Five come back full.\"",
+          "\"You don't stop making dinners because nobody comes, love. That's when you keep on.\""
+        ],
+        "actions": [
+          {
+            "do": "flag",
+            "flag": "talked_hatch",
+            "value": 1
+          }
+        ]
+      },
+      "second": {
+        "lines": [
+          "\"The night shift was to be relieved at six. It's on the rota. I don't write the rota, I only read it.\""
+        ],
+        "actions": [
+          {
+            "do": "flag",
+            "flag": "talked_hatch",
+            "value": 2
+          }
+        ]
+      },
+      "third": {
+        "lines": [
+          "\"There's knocking in the pipe in the yard, some nights. Three and a rest and three. I don't answer it.\""
+        ]
+      }
+    }
+  },
+  "canteen_pipe": {
+    "speaker": "Pipe Mouth",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "what_the_pipes_say"
+          }
+        ],
+        "node": "in"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "what_the_pipes_say"
+          }
+        ],
+        "node": "wait"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "what_the_pipes_say",
+            "not": true
+          }
+        ],
+        "node": "offer"
+      },
+      {
+        "node": "after"
+      }
+    ],
+    "nodes": {
+      "offer": {
+        "lines": [
+          "An iron pipe comes up out of the yard and ends in a flange, open. You put your ear to it.",
+          "Knocking, a long way down: three, a rest, three. A plate on the flange: TO SLAG MERE."
+        ],
+        "options": [
+          {
+            "label": "Find where it comes up",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "what_the_pipes_say"
+              }
+            ]
+          },
+          {
+            "label": "Leave it"
+          }
+        ]
+      },
+      "wait": {
+        "lines": [
+          "Three, a rest, three. TO SLAG MERE. Listen at the pipe mouths there for where it is loudest."
+        ]
+      },
+      "in": {
+        "lines": [
+          "The pipe is quiet. You keep your ear to it a while to be sure."
+        ],
+        "options": [
+          {
+            "label": "It's stopped",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "what_the_pipes_say"
+              }
+            ]
+          }
+        ]
+      },
+      "after": {
+        "lines": [
+          "TO SLAG MERE. Quiet. Cold iron, and a long way down, water moving."
+        ]
+      }
+    }
+  },
+  "cinder_sign": {
+    "speaker": "Board",
+    "start": [
+      {
+        "node": "read"
+      }
+    ],
+    "nodes": {
+      "read": {
+        "lines": [
+          "GOLDSKIN MINING Co. CINDER WALK. SIGNALS NOT IN USE.",
+          "Under it, chalked: the night shift walks this road from nine to six. keep off it."
+        ]
+      }
+    }
+  },
+  "cinder_signal_1": {
+    "speaker": "Signal",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "dinners_out"
+          },
+          {
+            "if": "hasItem",
+            "item": "signal_dinner",
+            "qty": 1
+          },
+          {
+            "if": "flag",
+            "flag": "dinner_left_1",
+            "not": true
+          }
+        ],
+        "node": "leave"
+      },
+      {
+        "node": "look"
+      }
+    ],
+    "nodes": {
+      "leave": {
+        "lines": [
+          "You set a tin at the foot of the signal. The lamp is dark and the arm is down."
+        ],
+        "actions": [
+          {
+            "do": "location",
+            "name": "signal_tin_1"
+          },
+          {
+            "do": "take",
+            "item": "signal_dinner",
+            "qty": 1
+          },
+          {
+            "do": "flag",
+            "flag": "dinner_left_1",
+            "value": 1
+          }
+        ]
+      },
+      "look": {
+        "lines": [
+          "CINDER WALK. SIGNAL 1. The lamp is dark and the arm is down. The ladder up it has been painted, recently, by somebody."
+        ]
+      }
+    }
+  },
+  "cinder_signal_2": {
+    "speaker": "Signal",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "dinners_out"
+          },
+          {
+            "if": "hasItem",
+            "item": "signal_dinner",
+            "qty": 1
+          },
+          {
+            "if": "flag",
+            "flag": "dinner_left_2",
+            "not": true
+          }
+        ],
+        "node": "leave"
+      },
+      {
+        "node": "look"
+      }
+    ],
+    "nodes": {
+      "leave": {
+        "lines": [
+          "You set a tin at the foot of the signal. The lamp is dark and the arm is down."
+        ],
+        "actions": [
+          {
+            "do": "location",
+            "name": "signal_tin_2"
+          },
+          {
+            "do": "take",
+            "item": "signal_dinner",
+            "qty": 1
+          },
+          {
+            "do": "flag",
+            "flag": "dinner_left_2",
+            "value": 1
+          }
+        ]
+      },
+      "look": {
+        "lines": [
+          "CINDER WALK. SIGNAL 2. The lamp is dark and the arm is down."
+        ]
+      }
+    }
+  },
+  "cinder_signal_3": {
+    "speaker": "Signal",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "dinners_out"
+          },
+          {
+            "if": "hasItem",
+            "item": "signal_dinner",
+            "qty": 1
+          },
+          {
+            "if": "flag",
+            "flag": "dinner_left_3",
+            "not": true
+          }
+        ],
+        "node": "leave"
+      },
+      {
+        "node": "look"
+      }
+    ],
+    "nodes": {
+      "leave": {
+        "lines": [
+          "You set a tin at the foot of the signal. The lamp is dark and the arm is down."
+        ],
+        "actions": [
+          {
+            "do": "location",
+            "name": "signal_tin_3"
+          },
+          {
+            "do": "take",
+            "item": "signal_dinner",
+            "qty": 1
+          },
+          {
+            "do": "flag",
+            "flag": "dinner_left_3",
+            "value": 1
+          }
+        ]
+      },
+      "look": {
+        "lines": [
+          "CINDER WALK. SIGNAL 3. The lamp is dark and the arm is down. Somebody has chalked a tally on the post, and stopped at four."
+        ]
+      }
+    }
+  },
+  "cooling_sign": {
+    "speaker": "Board",
+    "start": [
+      {
+        "node": "read"
+      }
+    ],
+    "nodes": {
+      "read": {
+        "lines": [
+          "GOLDSKIN MINING Co. THE COOLING YARD. NIGHT SHIFT TO ASSEMBLE HERE.",
+          "Under it, in red, as on the rota: NOT RELIEVED."
+        ]
+      }
+    }
+  },
+  "cooling_boots": {
+    "speaker": "Boots",
+    "start": [
+      {
+        "node": "look"
+      }
+    ],
+    "nodes": {
+      "look": {
+        "lines": [
+          "Six pairs of boots set side by side under the board, laces tied, toes to the wall. The way men leave them at the end of a shift."
+        ]
+      }
+    }
+  },
+  "sidings_sign": {
+    "speaker": "Board",
+    "start": [
+      {
+        "node": "read"
+      }
+    ],
+    "nodes": {
+      "read": {
+        "lines": [
+          "GOLDSKIN MINING Co. LIGHT RAILWAY. THE SIDINGS. NO RIDING ON WAGONS.",
+          "PAY CLERK FRIDAYS."
+        ]
+      }
+    }
+  },
+  "sidings_locker": {
+    "speaker": "Wagon Locker",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "last_wagon"
+          }
+        ],
+        "node": "in_2"
+      },
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "the_foremans_diary"
+          }
+        ],
+        "node": "in_1"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "last_wagon"
+          }
+        ],
+        "node": "wait_2"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "the_foremans_diary"
+          }
+        ],
+        "node": "wait_1"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "the_foremans_diary",
+            "not": true
+          }
+        ],
+        "node": "offer_1"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "last_wagon",
+            "not": true
+          }
+        ],
+        "node": "offer_2"
+      },
+      {
+        "node": "after"
+      }
+    ],
+    "nodes": {
+      "offer_1": {
+        "lines": [
+          "A locker bolted to the end of a siding. In it, the foreman's diary, the last three pages torn out.",
+          "A note in the binding: pages in the wagons. read them in order."
+        ],
+        "options": [
+          {
+            "label": "Find the pages",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "the_foremans_diary"
+              }
+            ]
+          },
+          {
+            "label": "Leave it"
+          }
+        ]
+      },
+      "wait_1": {
+        "lines": [
+          "Three pages, in the slag wagons in the Sidings."
+        ]
+      },
+      "in_1": {
+        "lines": [
+          "The diary, open at the torn edge."
+        ],
+        "options": [
+          {
+            "label": "Put the pages back",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "the_foremans_diary"
+              },
+              {
+                "do": "take",
+                "item": "diary_page",
+                "qty": 3
+              }
+            ]
+          },
+          {
+            "label": "Not yet"
+          }
+        ]
+      },
+      "offer_2": {
+        "lines": [
+          "The last page: The clerk still goes down the Sidings with the wages every Friday. Pays nobody. Comes back. I would stop him if I could get down there.",
+          "There is nothing after it but the cover."
+        ],
+        "options": [
+          {
+            "label": "Stop him",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "last_wagon"
+              }
+            ]
+          },
+          {
+            "label": "Leave it"
+          }
+        ]
+      },
+      "wait_2": {
+        "lines": [
+          "The pay clerk, at the end of the Sidings, with his satchel. It is not Friday, but he goes down anyway."
+        ]
+      },
+      "in_2": {
+        "lines": [
+          "The diary, and room on the inside of the cover."
+        ],
+        "options": [
+          {
+            "label": "Write: paid off",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "last_wagon"
+              }
+            ]
+          },
+          {
+            "label": "Not yet"
+          }
+        ]
+      },
+      "after": {
+        "lines": [
+          "The foreman's diary, whole. Inside the cover, in your hand: paid off."
+        ]
+      }
+    }
+  },
+  "sidings_satchel": {
+    "speaker": "Pay Packets",
+    "start": [
+      {
+        "node": "look"
+      }
+    ],
+    "nodes": {
+      "look": {
+        "lines": [
+          "The clerk's satchel, emptied onto the locker: pay packets, a name on each, none opened. They are in the order the diary has the men."
+        ]
+      }
+    }
+  },
+  "rise_sign": {
+    "speaker": "Board",
+    "start": [
+      {
+        "node": "read"
+      }
+    ],
+    "nodes": {
+      "read": {
+        "lines": [
+          "CHAPEL RISE. BURIALS BY THE LODGE BOOK ONLY. APPLY AT THE GRAVEYARD GATE."
+        ]
+      }
+    }
+  },
+  "rise_carved": {
+    "speaker": "Carved Stone",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "goldskins_four"
+          }
+        ],
+        "node": "in"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "goldskins_four"
+          }
+        ],
+        "node": "wait"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "goldskins_four",
+            "not": true
+          }
+        ],
+        "node": "offer"
+      },
+      {
+        "node": "after"
+      }
+    ],
+    "nodes": {
+      "offer": {
+        "lines": [
+          "A stone carved deep: FOUR TO KEEP THE CORNERS. READ THEM IN TURN.",
+          "The corners are of the ground round the Hoar Stone, the carving says. It does not say whose."
+        ],
+        "options": [
+          {
+            "label": "Read them",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "goldskins_four"
+              }
+            ]
+          },
+          {
+            "label": "Leave it"
+          }
+        ]
+      },
+      "wait": {
+        "lines": [
+          "FOUR TO KEEP THE CORNERS. The markers stand round the Hoar Stone."
+        ]
+      },
+      "in": {
+        "lines": [
+          "FOUR TO KEEP THE CORNERS."
+        ],
+        "options": [
+          {
+            "label": "Read, all four",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "goldskins_four"
+              }
+            ]
+          },
+          {
+            "label": "Not yet"
+          }
+        ]
+      },
+      "after": {
+        "lines": [
+          "FOUR TO KEEP THE CORNERS. Chalk rubbed into the letters to read them by, and the chalk is yours."
+        ]
+      }
+    }
+  },
+  "rise_grave_1": {
+    "speaker": "Gravestone",
+    "start": [
+      {
+        "node": "read"
+      }
+    ],
+    "nodes": {
+      "read": {
+        "lines": [
+          "CHAPEL RISE. CROWTHER, W. A new stone, the letters sharp, and a date in the spring."
+        ],
+        "actions": [
+          {
+            "do": "location",
+            "name": "grave_1"
+          }
+        ]
+      }
+    }
+  },
+  "rise_grave_2": {
+    "speaker": "Gravestone",
+    "start": [
+      {
+        "node": "read"
+      }
+    ],
+    "nodes": {
+      "read": {
+        "lines": [
+          "CHAPEL RISE. ASHBY, T. The same week as the stone beside it."
+        ],
+        "actions": [
+          {
+            "do": "location",
+            "name": "grave_2"
+          }
+        ]
+      }
+    }
+  },
+  "rise_grave_3": {
+    "speaker": "Gravestone",
+    "start": [
+      {
+        "node": "read"
+      }
+    ],
+    "nodes": {
+      "read": {
+        "lines": [
+          "CHAPEL RISE. ASHBY, M. The same week. Room left on the stone under the name, for another."
+        ],
+        "actions": [
+          {
+            "do": "location",
+            "name": "grave_3"
+          }
+        ]
+      }
+    }
+  },
+  "hoar_corner_1": {
+    "speaker": "Marker",
+    "start": [
+      {
+        "node": "read"
+      }
+    ],
+    "nodes": {
+      "read": {
+        "lines": [
+          "A corner marker by the Hoar Stone, cut with I and a date."
+        ],
+        "actions": [
+          {
+            "do": "location",
+            "name": "corner_1"
+          }
+        ]
+      }
+    }
+  },
+  "hoar_corner_2": {
+    "speaker": "Marker",
+    "start": [
+      {
+        "node": "read"
+      }
+    ],
+    "nodes": {
+      "read": {
+        "lines": [
+          "A corner marker by the Hoar Stone, cut with II and the same date."
+        ],
+        "actions": [
+          {
+            "do": "location",
+            "name": "corner_2"
+          }
+        ]
+      }
+    }
+  },
+  "hoar_corner_3": {
+    "speaker": "Marker",
+    "start": [
+      {
+        "node": "read"
+      }
+    ],
+    "nodes": {
+      "read": {
+        "lines": [
+          "A corner marker by the Hoar Stone, cut with III and the same date. Moss on the other three. None on this."
+        ],
+        "actions": [
+          {
+            "do": "location",
+            "name": "corner_3"
+          }
+        ]
+      }
+    }
+  },
+  "hoar_corner_4": {
+    "speaker": "Marker",
+    "start": [
+      {
+        "node": "read"
+      }
+    ],
+    "nodes": {
+      "read": {
+        "lines": [
+          "A corner marker by the Hoar Stone, cut with IIII and the same date. Somebody leaves flowers here."
+        ],
+        "actions": [
+          {
+            "do": "location",
+            "name": "corner_4"
+          }
+        ]
+      }
+    }
+  },
+  "mere_sign": {
+    "speaker": "Board",
+    "start": [
+      {
+        "node": "read"
+      }
+    ],
+    "nodes": {
+      "read": {
+        "lines": [
+          "GOLDSKIN MINING Co. SLAG MERE. NO SWIMMING. NO FISHING.",
+          "Under it, chalked: nothing to fish."
+        ]
+      }
+    }
+  },
+  "mere_pipe_1": {
+    "speaker": "Pipe Mouth",
+    "start": [
+      {
+        "node": "listen"
+      }
+    ],
+    "nodes": {
+      "listen": {
+        "lines": [
+          "You put your ear to the near pipe mouth at Slag Mere. Knocking, louder than in the canteen yard. Three, a rest, three. It is coming from further on."
+        ],
+        "actions": [
+          {
+            "do": "location",
+            "name": "pipe_listened_1"
+          }
+        ]
+      }
+    }
+  },
+  "mere_pipe_2": {
+    "speaker": "Pipe Mouth",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "the_mere"
+          }
+        ],
+        "node": "in"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "the_mere"
+          }
+        ],
+        "node": "wait"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "what_the_pipes_say"
+          },
+          {
+            "if": "questDone",
+            "quest": "the_mere",
+            "not": true
+          }
+        ],
+        "node": "offer"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "the_mere"
+          }
+        ],
+        "node": "after"
+      },
+      {
+        "node": "listen"
+      }
+    ],
+    "nodes": {
+      "listen": {
+        "lines": [
+          "The far pipe mouth at Slag Mere. You do not need to put your ear to it: you can feel the knocking through the iron. Three, a rest, three.",
+          "You lay your hand flat on it, and it stops."
+        ],
+        "actions": [
+          {
+            "do": "location",
+            "name": "pipe_listened_2"
+          }
+        ]
+      },
+      "offer": {
+        "lines": [
+          "The far pipe mouth, quiet. A stencil on the iron: GOLDSKIN MINING Co. Under it, not stencilled: SIX STAND CLOSER EACH NIGHT.",
+          "Round the mere the slag has grown spines."
+        ],
+        "options": [
+          {
+            "label": "Cut six down",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "the_mere"
+              }
+            ]
+          },
+          {
+            "label": "Leave it"
+          }
+        ]
+      },
+      "wait": {
+        "lines": [
+          "SIX STAND CLOSER EACH NIGHT. The cactus round the mere."
+        ]
+      },
+      "in": {
+        "lines": [
+          "The pipe mouth, quiet."
+        ],
+        "options": [
+          {
+            "label": "It's done",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "the_mere"
+              }
+            ]
+          },
+          {
+            "label": "Not yet"
+          }
+        ]
+      },
+      "after": {
+        "lines": [
+          "GOLDSKIN MINING Co. Nothing under it now."
+        ]
+      }
+    }
+  },
+  "bell_shrine": {
+    "speaker": "Shrine",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "the_bell_rope"
+          }
+        ],
+        "node": "in"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "the_bell_rope"
+          }
+        ],
+        "node": "wait"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "the_bell_rope",
+            "not": true
+          }
+        ],
+        "node": "offer"
+      },
+      {
+        "node": "after"
+      }
+    ],
+    "nodes": {
+      "offer": {
+        "lines": [
+          "A shrine where the field meets the hill. Under the niche: THE BELLFIELD. STAND HERE AT NINE AND HEAR IT FROM BENEATH.",
+          "The niche is empty. The field is the School's, and nothing in it is the county's."
+        ],
+        "options": [
+          {
+            "label": "Stand there at nine",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "the_bell_rope"
+              }
+            ]
+          },
+          {
+            "label": "Leave it"
+          }
+        ]
+      },
+      "wait": {
+        "lines": [
+          "STAND HERE AT NINE. In the Bellfield, when the bell goes."
+        ]
+      },
+      "in": {
+        "lines": [
+          "THE BELLFIELD. You stood in it at nine."
+        ],
+        "options": [
+          {
+            "label": "I heard it",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "the_bell_rope"
+              }
+            ]
+          },
+          {
+            "label": "Not yet"
+          }
+        ]
+      },
+      "after": {
+        "lines": [
+          "STAND HERE AT NINE AND HEAR IT FROM BENEATH. There is a candle end in the niche now. You did not put it there."
+        ]
+      }
+    }
+  },
+  "lodge_book": {
+    "speaker": "Lodge Book",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "flowers_for_the_rise"
+          }
+        ],
+        "node": "in_2"
+      },
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "register_of_burials"
+          }
+        ],
+        "node": "in_1"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "tuesday_hut_two"
+          }
+        ],
+        "node": "tue_read"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "flowers_for_the_rise"
+          }
+        ],
+        "node": "wait_2"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "register_of_burials"
+          }
+        ],
+        "node": "wait_1"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "register_of_burials",
+            "not": true
+          }
+        ],
+        "node": "offer_1"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "flowers_for_the_rise",
+            "not": true
+          }
+        ],
+        "node": "offer_2"
+      },
+      {
+        "node": "after"
+      }
+    ],
+    "nodes": {
+      "offer_1": {
+        "lines": [
+          "THE REGISTER OF BURIALS. The last three are on Chapel Rise, each with a column to check the stone against the book.",
+          "The names are Castle names. The dates fall in one week in the spring."
+        ],
+        "options": [
+          {
+            "label": "Check the stones",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "register_of_burials"
+              }
+            ]
+          },
+          {
+            "label": "Leave it"
+          }
+        ]
+      },
+      "wait_1": {
+        "lines": [
+          "The last three burials, on Chapel Rise. Each stone against its line."
+        ]
+      },
+      "in_1": {
+        "lines": [
+          "Three lines to initial."
+        ],
+        "options": [
+          {
+            "label": "Initial them",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "register_of_burials"
+              }
+            ]
+          },
+          {
+            "label": "Not yet"
+          }
+        ]
+      },
+      "offer_2": {
+        "lines": [
+          "A standing order pinned in the cover: WHITE WATER ROSES FOR THE STONES ON CHAPEL RISE. THREE. WEEKLY.",
+          "Nothing white grows in the Works. The roses grow at Sallow Bottom, by the parish jetty."
+        ],
+        "options": [
+          {
+            "label": "Bring three",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "flowers_for_the_rise"
+              }
+            ]
+          },
+          {
+            "label": "Leave it"
+          }
+        ]
+      },
+      "wait_2": {
+        "lines": [
+          "Three white water roses, from the jetty at Sallow Bottom, for the stones on Chapel Rise."
+        ]
+      },
+      "in_2": {
+        "lines": [
+          "The column for flowers: a long run of ditto marks."
+        ],
+        "options": [
+          {
+            "label": "Write: roses, three",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "flowers_for_the_rise"
+              },
+              {
+                "do": "take",
+                "item": "white_water_rose",
+                "qty": 3
+              }
+            ]
+          },
+          {
+            "label": "Not yet"
+          }
+        ]
+      },
+      "tue_read": {
+        "lines": [
+          "THE REGISTER OF BURIALS. In the column for attendance, the same initials against every burial for one week in the spring: E.M., DISTRICT NURSE.",
+          "After that week the column is empty. The burials go on."
+        ],
+        "actions": [
+          {
+            "do": "location",
+            "name": "tuesday_lodge_read"
+          }
+        ]
+      },
+      "after": {
+        "lines": [
+          "THE REGISTER OF BURIALS. Your initials in the column, under a district nurse's. The column for flowers says roses, three, in your hand."
+        ]
+      }
+    }
+  },
+  "hut_one_book": {
+    "speaker": "Hut Book",
+    "start": [
+      {
+        "node": "read"
+      }
+    ],
+    "nodes": {
+      "read": {
+        "lines": [
+          "HUT ONE. WATCHMAN: BREEN. Signed on at six and off at six, every day, in one hand.",
+          "There is a line for visitors. You sign it."
+        ],
+        "actions": [
+          {
+            "do": "location",
+            "name": "hut_one_signed"
+          }
+        ]
+      }
+    }
+  },
+  "hut_two_book": {
+    "speaker": "Hut Book",
+    "start": [
+      {
+        "node": "read"
+      }
+    ],
+    "nodes": {
+      "read": {
+        "lines": [
+          "HUT TWO. WATCHMAN: PASK. VISITORS TO SIGN.",
+          "The last visitor before you signed E.M., on a Tuesday in the spring. You sign under her."
+        ],
+        "actions": [
+          {
+            "do": "location",
+            "name": "hut_two_signed"
+          }
+        ]
+      }
+    }
+  },
+  "hut_three_book": {
+    "speaker": "Hut Book",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "signals_at_danger"
+          }
+        ],
+        "node": "in"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "signals_at_danger"
+          }
+        ],
+        "node": "wait"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "signals_at_danger",
+            "not": true
+          }
+        ],
+        "node": "offer"
+      },
+      {
+        "node": "after"
+      }
+    ],
+    "nodes": {
+      "offer": {
+        "lines": [
+          "HUT THREE. WATCHMAN: the line is blank. You sign it. THE LAMP IS TO BE KEPT LIT TILL SIX.",
+          "The lamp log under it stops one night in the spring: lamp out at 3. relief did not come."
+        ],
+        "actions": [
+          {
+            "do": "location",
+            "name": "hut_three_signed"
+          }
+        ],
+        "options": [
+          {
+            "label": "Keep it lit tonight",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "signals_at_danger"
+              }
+            ]
+          },
+          {
+            "label": "Not tonight"
+          }
+        ]
+      },
+      "wait": {
+        "lines": [
+          "LIT TILL SIX. Light the hut lamp after the bell, and be beside it, lit, in the last hour before six."
+        ],
+        "actions": [
+          {
+            "do": "location",
+            "name": "hut_three_signed"
+          }
+        ]
+      },
+      "in": {
+        "lines": [
+          "The lamp log, and room under the last line."
+        ],
+        "options": [
+          {
+            "label": "Write: lit till six",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "signals_at_danger"
+              }
+            ]
+          },
+          {
+            "label": "Not yet"
+          }
+        ]
+      },
+      "after": {
+        "lines": [
+          "THE LAMP IS TO BE KEPT LIT TILL SIX. Under the spring's line, in your hand: lit till six. relieved."
+        ],
+        "actions": [
+          {
+            "do": "location",
+            "name": "hut_three_signed"
+          }
+        ]
+      }
+    }
+  },
+  "hut_three_lamp": {
+    "speaker": "Hut Lamp",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "flag",
+            "flag": "hut_three_lit"
+          }
+        ],
+        "node": "lit"
+      },
+      {
+        "when": [
+          {
+            "if": "night"
+          }
+        ],
+        "node": "dark"
+      },
+      {
+        "node": "day"
+      }
+    ],
+    "nodes": {
+      "dark": {
+        "lines": [
+          "The hut lamp, dark. The wick is trimmed and the reservoir is full."
+        ],
+        "options": [
+          {
+            "label": "Light it",
+            "actions": [
+              {
+                "do": "switch",
+                "prop": "hut_three_lamp",
+                "on": true
+              },
+              {
+                "do": "flag",
+                "flag": "hut_three_lit",
+                "value": 1
+              }
+            ]
+          },
+          {
+            "label": "Leave it"
+          }
+        ]
+      },
+      "lit": {
+        "lines": [
+          "The hut lamp, lit. Six is the day shift's bell."
+        ]
+      },
+      "day": {
+        "lines": [
+          "The hut lamp. By day there is no telling whether it would light."
+        ]
+      }
+    }
+  },
+  "breen": {
+    "speaker": "Mr Breen",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "breen_coal"
+          }
+        ],
+        "node": "in"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "breen_coal"
+          }
+        ],
+        "node": "wait"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "breen_coal",
+            "not": true
+          }
+        ],
+        "node": "offer"
+      },
+      {
+        "node": "after"
+      }
+    ],
+    "nodes": {
+      "offer": {
+        "lines": [
+          "Hut One. I'd ask you in, only there's no in to ask you to. The stove's been out since the spring.",
+          "There's coal in the slag wagons in the Sidings. Three lumps would see me through. I'd go myself, but I can't leave the hut."
+        ],
+        "options": [
+          {
+            "label": "I'll fetch it",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "breen_coal"
+              }
+            ]
+          },
+          {
+            "label": "Not now"
+          }
+        ]
+      },
+      "wait": {
+        "lines": [
+          "The Sidings. The wagons with coal in. Three lumps."
+        ]
+      },
+      "in": {
+        "lines": [
+          "That's the stuff. He builds it up in the stove like a man laying a table."
+        ],
+        "options": [
+          {
+            "label": "Here",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "breen_coal"
+              },
+              {
+                "do": "take",
+                "item": "coal",
+                "qty": 3
+              }
+            ]
+          },
+          {
+            "label": "Not yet"
+          }
+        ]
+      },
+      "after": {
+        "lines": [
+          "Sit by it if you're passing. I don't mind company in the night. I'd not say no to it.",
+          "Keep off Cinder Walk while it's dark. Not that there's anything on it. It's only what we do."
+        ]
+      }
+    }
+  },
+  "pask": {
+    "speaker": "Mr Pask",
+    "start": [
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "tuesday_reed_end"
+          }
+        ],
+        "node": "bag_in"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "tuesday_hut_two"
+          }
+        ],
+        "node": "lodge_wait"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "tuesday_reed_end"
+          },
+          {
+            "if": "questDone",
+            "quest": "tuesday_hut_two",
+            "not": true
+          }
+        ],
+        "node": "lodge_offer"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "tuesday_hut_two"
+          }
+        ],
+        "node": "after"
+      },
+      {
+        "node": "talk"
+      }
+    ],
+    "nodes": {
+      "talk": {
+        "lines": [
+          "Hut Two. Visitors sign the book. Not many visitors.",
+          "I keep the watch, six to six. Nobody's come to take it off me, so I keep it."
+        ]
+      },
+      "bag_in": {
+        "lines": [
+          "He takes the bag and turns it over, and does not open it.",
+          "She always tied it like that. Tuesdays. After the Lovedays, before the lodge."
+        ],
+        "options": [
+          {
+            "label": "She went on to the lodge?",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "tuesday_reed_end"
+              },
+              {
+                "do": "take",
+                "item": "nurses_bag",
+                "qty": 1
+              },
+              {
+                "do": "quest",
+                "quest": "tuesday_hut_two"
+              }
+            ]
+          }
+        ]
+      },
+      "lodge_offer": {
+        "lines": [
+          "She signed my book and went on up to the graveyard lodge to sign theirs. I watched her up the road.",
+          "I'd like to know what their book says. And then I'd like not to."
+        ],
+        "options": [
+          {
+            "label": "I'll look",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "tuesday_hut_two"
+              }
+            ]
+          },
+          {
+            "label": "Not now"
+          }
+        ]
+      },
+      "lodge_wait": {
+        "lines": [
+          "The lodge book, at the graveyard gate. Don't tell me what it says. Tell Mrs Allen, in Castle."
+        ]
+      },
+      "after": {
+        "lines": [
+          "You've told Mrs Allen. Then it's told. Sign the book on your way, if you like."
+        ]
+      }
+    }
+  },
+  "allen_card": {
+    "speaker": "Card",
+    "start": [
+      {
+        "node": "read"
+      }
+    ],
+    "nodes": {
+      "read": {
+        "lines": [
+          "A card in the window, in a careful hand: NURSE CALLED. TUESDAY.",
+          "It faces out, toward the square."
+        ]
+      }
+    }
+  },
+  "sidings_diary": {
+    "speaker": "Diary",
+    "start": [
+      {
+        "node": "look"
+      }
+    ],
+    "nodes": {
+      "look": {
+        "lines": [
+          "The foreman's diary, the three pages back in the binding. The last entry: night shift on at nine. I will see them off at six myself."
+        ]
+      }
+    }
+  }
+}

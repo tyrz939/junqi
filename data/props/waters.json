@@ -1,3 +1,17 @@
 {
-  "museum_bench": { "name": "Bench", "sprite": "town_park_bench", "w": 3, "h": 1, "solid": true, "blockLos": false, "rest": true, "prompt": "Sit" }
+  "museum_bench": { "name": "Bench", "sprite": "town_park_bench", "w": 3, "h": 1, "solid": true, "blockLos": false, "rest": true, "prompt": "Sit" },
+  "order_slate": { "name": "Order Slate", "sprite": "notice_board", "w": 3, "h": 1, "solid": true, "blockLos": false, "prompt": "Read" },
+  "coat_hooks": { "name": "Coat Hooks", "sprite": "school_pegs", "w": 2, "h": 1, "solid": true, "blockLos": false, "prompt": "Look" },
+  "reed_stack": { "name": "Cut Reed", "sprite": "haystack", "w": 2, "h": 2, "base": 1, "solid": true, "blockLos": true, "prompt": "Look" },
+  "mooring_post": { "name": "Mooring Post", "sprite": "tale_pole", "w": 1, "h": 1, "solid": true, "blockLos": false, "prompt": "Look" },
+  "coal_scuttle": { "name": "Coal Scuttle", "sprite": "town_milk_churn", "w": 1, "h": 1, "solid": true, "blockLos": false, "carry": true },
+  "coal_pan": { "name": "Coal Pan", "sprite": "tale_hollow", "w": 1, "h": 1, "solid": false, "blockLos": false, "flat": true, "plate": true },
+  "toll_box": { "name": "Toll Box", "sprite": "tale_locker", "w": 2, "h": 2, "base": 1, "solid": true, "blockLos": false, "prompt": "Open" },
+  "sunk_boat": { "name": "Sunk Boat", "sprite": "cart_wreck", "w": 3, "h": 2, "base": 1, "solid": true, "blockLos": false, "prompt": "Look" },
+  "returns_box": { "name": "Returns Box", "sprite": "town_pillar_box", "w": 1, "h": 1, "solid": true, "blockLos": false, "prompt": "Read" },
+  "road_closed": { "name": "Road Closed", "sprite": "sign", "w": 2, "h": 1, "solid": true, "blockLos": false, "prompt": "Read" },
+  "waymark": { "name": "Waymark", "sprite": "fingerpost", "w": 2, "h": 1, "solid": true, "blockLos": false, "prompt": "Read" },
+  "name_shrine": { "name": "Shrine", "sprite": "wayside_shrine", "w": 2, "h": 2, "base": 1, "solid": true, "blockLos": false, "prompt": "Read" },
+  "garden_statue": { "name": "Statue", "sprite": "set_bust", "w": 1, "h": 1, "solid": true, "blockLos": false, "prompt": "Look" },
+  "planting_book": { "name": "Planting Book", "sprite": "set_books", "w": 2, "h": 1, "solid": false, "blockLos": false, "flat": true, "prompt": "Read" }
 }

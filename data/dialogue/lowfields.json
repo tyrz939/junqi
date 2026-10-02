@@ -1197,6 +1197,65 @@
       {
         "when": [
           {
+            "if": "questReady",
+            "quest": "tuesday_hut_two"
+          }
+        ],
+        "node": "tue_in"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "tuesday_hut_two"
+          }
+        ],
+        "node": "tue_after"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "tuesday_round"
+          }
+        ],
+        "node": "tue_wait"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "tuesday_reed_end"
+          }
+        ],
+        "node": "tue_wait"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "tuesday_hut_two"
+          }
+        ],
+        "node": "tue_wait"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "mrs_allens_dressing"
+          },
+          {
+            "if": "questDone",
+            "quest": "tuesday_round",
+            "not": true
+          }
+        ],
+        "node": "tue_offer"
+      },
+      {
+        "when": [
+          {
             "if": "questDone",
             "quest": "mrs_allens_dressing"
           }
@@ -1243,6 +1302,53 @@
           "The dressing is a great comfort. Nurse will be along on Tuesday, I expect. She always is.",
           "Is there a light on up at the School tonight? No, do not tell me. My sister says I am not to ask."
         ]
+      },
+      "tue_offer": {
+        "lines": [
+          "Nurse will be along on Tuesday, I expect. She always is. There is a pause behind the door.",
+          "She did the Waters after me, over the bridge to the Lovedays at Reed End. Would you ask Mrs Loveday if she's seen her? I'd go. I'm not opening this door."
+        ],
+        "options": [
+          {
+            "label": "I'll ask",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "tuesday_round"
+              }
+            ]
+          },
+          {
+            "label": "Not now"
+          }
+        ]
+      },
+      "tue_wait": {
+        "lines": [
+          "Tuesday. She always came on a Tuesday. I've kept the kettle on for her since."
+        ]
+      },
+      "tue_in": {
+        "lines": [
+          "Well?",
+          "You tell her about the lodge book through the flap. She is quiet a long while."
+        ],
+        "options": [
+          {
+            "label": "That's all of it",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "tuesday_hut_two"
+              }
+            ]
+          }
+        ]
+      },
+      "tue_after": {
+        "lines": [
+          "Tuesday, then. The flap stays shut. My sister says I'm to stop asking, and I have stopped. I've put a card up instead."
+        ]
       }
     }
   },
@@ -1257,6 +1363,15 @@
           }
         ],
         "node": "pell_in"
+      },
+      {
+        "when": [
+          {
+            "if": "questReady",
+            "quest": "fourteen_again"
+          }
+        ],
+        "node": "k13_in"
       },
       {
         "when": [
@@ -1291,6 +1406,33 @@
           }
         ],
         "node": "pell_second"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "fourteen_again"
+          }
+        ],
+        "node": "k13_wait"
+      },
+      {
+        "when": [
+          {
+            "if": "knows",
+            "spell": "spark"
+          },
+          {
+            "if": "questDone",
+            "quest": "number_fourteen"
+          },
+          {
+            "if": "questDone",
+            "quest": "fourteen_again",
+            "not": true
+          }
+        ],
+        "node": "k13_offer"
       },
       {
         "node": "pell_after"
@@ -1375,12 +1517,75 @@
         "lines": [
           "A. PELL. LAMPMAN TO THIS PARISH 31 YEARS. Somebody has put a fire stone chip on top of the stone, the way you would a pebble."
         ]
+      },
+      "k13_offer": {
+        "lines": [
+          "A. PELL. LAMPMAN TO THIS PARISH. WENT OUT FROM THIS LAMP TO SEE TO No. 14.",
+          "Twelve, thirteen and fifteen stand dark past the stone, the glass whole and the mantles new. A spark in each would do it."
+        ],
+        "options": [
+          {
+            "label": "Light them",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "fourteen_again"
+              }
+            ]
+          },
+          {
+            "label": "Walk on"
+          }
+        ]
+      },
+      "k13_wait": {
+        "lines": [
+          "Twelve, thirteen, fifteen. A spark in each. The lamps stand on this road past the stone."
+        ]
+      },
+      "k13_in": {
+        "lines": [
+          "Twelve, thirteen and fifteen are lit. Between thirteen and fifteen the road is dark for the width of one lamp."
+        ],
+        "options": [
+          {
+            "label": "That will do",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "fourteen_again"
+              }
+            ]
+          }
+        ]
       }
     }
   },
   "lamp_12": {
     "speaker": "Lamp Post",
     "start": [
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "fourteen_again"
+          },
+          {
+            "if": "knows",
+            "spell": "spark"
+          }
+        ],
+        "node": "spark"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "fourteen_again"
+          }
+        ],
+        "node": "lit"
+      },
       {
         "when": [
           {
@@ -1409,12 +1614,56 @@
         "lines": [
           "A lamp post. No. 12 on the plate. By day there is no telling whether it works."
         ]
+      },
+      "spark": {
+        "lines": [
+          "No. 12. Dark. The glass is whole and the mantle is new.",
+          "You put a spark into it. It takes, and holds."
+        ],
+        "actions": [
+          {
+            "do": "location",
+            "name": "lamp_12_lit"
+          },
+          {
+            "do": "switch",
+            "prop": "lamp_12",
+            "on": true
+          }
+        ]
+      },
+      "lit": {
+        "lines": [
+          "No. 12. Lit after the bell, and steady. Somebody has wiped the glass."
+        ]
       }
     }
   },
   "lamp_13": {
     "speaker": "Lamp Post",
     "start": [
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "fourteen_again"
+          },
+          {
+            "if": "knows",
+            "spell": "spark"
+          }
+        ],
+        "node": "spark"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "fourteen_again"
+          }
+        ],
+        "node": "lit"
+      },
       {
         "when": [
           {
@@ -1443,12 +1692,56 @@
         "lines": [
           "A lamp post. No. 13 on the plate. By day there is no telling whether it works."
         ]
+      },
+      "spark": {
+        "lines": [
+          "No. 13. Dark. The glass is whole and the mantle is new.",
+          "You put a spark into it. It takes, and holds."
+        ],
+        "actions": [
+          {
+            "do": "location",
+            "name": "lamp_13_lit"
+          },
+          {
+            "do": "switch",
+            "prop": "lamp_13",
+            "on": true
+          }
+        ]
+      },
+      "lit": {
+        "lines": [
+          "No. 13. Lit after the bell, and steady. Somebody has wiped the glass."
+        ]
       }
     }
   },
   "lamp_15": {
     "speaker": "Lamp Post",
     "start": [
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "fourteen_again"
+          },
+          {
+            "if": "knows",
+            "spell": "spark"
+          }
+        ],
+        "node": "spark"
+      },
+      {
+        "when": [
+          {
+            "if": "questDone",
+            "quest": "fourteen_again"
+          }
+        ],
+        "node": "lit"
+      },
       {
         "when": [
           {
@@ -1476,6 +1769,28 @@
       "day": {
         "lines": [
           "A lamp post. No. 15 on the plate. By day there is no telling whether it works."
+        ]
+      },
+      "spark": {
+        "lines": [
+          "No. 15. Dark. The glass is whole and the mantle is new.",
+          "You put a spark into it. It takes, and holds."
+        ],
+        "actions": [
+          {
+            "do": "location",
+            "name": "lamp_15_lit"
+          },
+          {
+            "do": "switch",
+            "prop": "lamp_15",
+            "on": true
+          }
+        ]
+      },
+      "lit": {
+        "lines": [
+          "No. 15. Lit after the bell, and steady. Somebody has wiped the glass."
         ]
       }
     }
@@ -1785,6 +2100,15 @@
       {
         "when": [
           {
+            "if": "questReady",
+            "quest": "the_adit"
+          }
+        ],
+        "node": "adit_in"
+      },
+      {
+        "when": [
+          {
             "if": "questActive",
             "quest": "down_at_five"
           }
@@ -1804,6 +2128,33 @@
           }
         ],
         "node": "slate_offer"
+      },
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "the_adit"
+          }
+        ],
+        "node": "adit_wait"
+      },
+      {
+        "when": [
+          {
+            "if": "knows",
+            "spell": "explosion"
+          },
+          {
+            "if": "questDone",
+            "quest": "down_at_five"
+          },
+          {
+            "if": "questDone",
+            "quest": "the_adit",
+            "not": true
+          }
+        ],
+        "node": "adit_offer"
       },
       {
         "when": [
@@ -1873,12 +2224,69 @@
         "lines": [
           "QUARRY STEPS. GANG OF 5. Dinners: 5. Up at seven: 5. Down at five: 4. You can hear them working above."
         ]
+      },
+      "adit_offer": {
+        "lines": [
+          "Down at five: 4. Found. Under it, an older line, rubbed half out: ADIT CLOSED BY ORDER.",
+          "The rock across the adit at the top of the steps is too neat to have fallen. It would take something sudden."
+        ],
+        "options": [
+          {
+            "label": "Something sudden, then",
+            "actions": [
+              {
+                "do": "quest",
+                "quest": "the_adit"
+              }
+            ]
+          },
+          {
+            "label": "Leave it"
+          }
+        ]
+      },
+      "adit_wait": {
+        "lines": [
+          "ADIT CLOSED BY ORDER. The rock is at the top of Quarry Steps, behind the camp."
+        ]
+      },
+      "adit_in": {
+        "lines": [
+          "Under ADIT CLOSED BY ORDER there is room for a line, and the chalk."
+        ],
+        "options": [
+          {
+            "label": "Write: open",
+            "actions": [
+              {
+                "do": "handin",
+                "quest": "the_adit"
+              }
+            ]
+          },
+          {
+            "label": "Not yet"
+          }
+        ]
       }
     }
   },
   "adit_rock": {
     "speaker": "Rock",
     "start": [
+      {
+        "when": [
+          {
+            "if": "questActive",
+            "quest": "the_adit"
+          },
+          {
+            "if": "knows",
+            "spell": "explosion"
+          }
+        ],
+        "node": "blast"
+      },
       {
         "node": "look"
       }
@@ -1887,6 +2295,33 @@
       "look": {
         "lines": [
           "A rock across the adit mouth. Too big to shift and too neat to have fallen. It would take something sudden."
+        ]
+      },
+      "blast": {
+        "lines": [
+          "A rock across the adit mouth. Too big to shift and too neat to have fallen."
+        ],
+        "options": [
+          {
+            "label": "Set an Explosion against it",
+            "actions": [
+              {
+                "do": "location",
+                "name": "adit_opened"
+              },
+              {
+                "do": "hide",
+                "prop": "quarry_adit"
+              },
+              {
+                "do": "shake",
+                "amount": 6
+              }
+            ]
+          },
+          {
+            "label": "Not yet"
+          }
         ]
       }
     }
@@ -2115,7 +2550,11 @@
   },
   "sallow_sign": {
     "speaker": "Sign",
-    "start": [{ "node": "read" }],
+    "start": [
+      {
+        "node": "read"
+      }
+    ],
     "nodes": {
       "read": {
         "lines": [
@@ -2126,7 +2565,11 @@
   },
   "top_field_sign": {
     "speaker": "Sign",
-    "start": [{ "node": "read" }],
+    "start": [
+      {
+        "node": "read"
+      }
+    ],
     "nodes": {
       "read": {
         "lines": [
@@ -2137,7 +2580,11 @@
   },
   "top_track_post": {
     "speaker": "Fingerpost",
-    "start": [{ "node": "read" }],
+    "start": [
+      {
+        "node": "read"
+      }
+    ],
     "nodes": {
       "read": {
         "lines": [
@@ -2148,7 +2595,11 @@
   },
   "hedge_waymark": {
     "speaker": "Waymark",
-    "start": [{ "node": "read" }],
+    "start": [
+      {
+        "node": "read"
+      }
+    ],
     "nodes": {
       "read": {
         "lines": [
@@ -2159,7 +2610,11 @@
   },
   "allotment_sign": {
     "speaker": "Sign",
-    "start": [{ "node": "read" }],
+    "start": [
+      {
+        "node": "read"
+      }
+    ],
     "nodes": {
       "read": {
         "lines": [
@@ -2170,7 +2625,11 @@
   },
   "allotment_fingerpost": {
     "speaker": "Fingerpost",
-    "start": [{ "node": "read" }],
+    "start": [
+      {
+        "node": "read"
+      }
+    ],
     "nodes": {
       "read": {
         "lines": [
@@ -2181,16 +2640,26 @@
   },
   "pike_hedge_sign": {
     "speaker": "Sign",
-    "start": [{ "node": "read" }],
+    "start": [
+      {
+        "node": "read"
+      }
+    ],
     "nodes": {
       "read": {
-        "lines": ["THE LONG HEDGE. Parish boundary. Not to be cut back before September."]
+        "lines": [
+          "THE LONG HEDGE. Parish boundary. Not to be cut back before September."
+        ]
       }
     }
   },
   "graveyard_sign": {
     "speaker": "Sign",
-    "start": [{ "node": "read" }],
+    "start": [
+      {
+        "node": "read"
+      }
+    ],
     "nodes": {
       "read": {
         "lines": [
@@ -2201,7 +2670,11 @@
   },
   "quarry_track_post": {
     "speaker": "Fingerpost",
-    "start": [{ "node": "read" }],
+    "start": [
+      {
+        "node": "read"
+      }
+    ],
     "nodes": {
       "read": {
         "lines": [
