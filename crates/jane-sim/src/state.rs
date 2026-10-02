@@ -499,7 +499,7 @@ pub struct ClickWalk {
     /// Gives up at this tick.
     pub until: Tick,
     /// Her health when it last looked: lower means she was hit, and a hit stops the walk.
-    pub hp: Milli,
+    pub health: Milli,
     /// Ticks without moving.
     pub stuck: u8,
 }

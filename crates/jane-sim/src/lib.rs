@@ -99,7 +99,7 @@ pub use blueprints::Blueprints;
 pub use combat::Hit;
 pub use event::{Event, EventKind, SpellError};
 pub use ids::{ClientToken, DropId, GroundId, ProjId, PropId, Seat, UnitId};
-pub use input::{AssistProfile, Command, DevOp, InputFrame, StampedCommand, StepInput, Stepped};
+pub use input::{AssistProfile, Command, DevOp, Goto, InputFrame, StampedCommand, StepInput, Stepped, TargetRef};
 pub use metrics::{Phase, SimMetrics, WallClock};
 pub use save::{Header, SaveError, Snapshot, Summary};
 pub use sim::Sim;

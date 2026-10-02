@@ -39,6 +39,12 @@ use crate::target::{hostile, pos_of, soft_target, valid};
 use crate::tuning::{MOVE_DEADZONE, PLAYER_GCD, QUEUE_TICKS, SCHOOL_TOUCH_FX};
 use crate::units::{face_angle, face_vector, facing_angle};
 
+/// Held still: stunned, or rooted to nothing by a status (the bell's "stunned", a web). She
+/// cannot begin a cast held still, and being held stops the one building.
+pub fn held_still(u: &Unit, now: Tick) -> bool {
+    crate::status::is_stunned(u, now) || crate::status::speed_factor(u, now) == 0
+}
+
 /// Her swing: the first melee spell in her book.
 pub fn swing_of(u: &Unit) -> Option<SpellId> {
     let cat = jane_data::catalog();
@@ -218,7 +224,7 @@ pub fn begin(cx: &mut Ctx<'_>, seat: Seat, spell: SpellId, mut on: Option<UnitId
     let def = cx.cat.combat.spell(spell);
     let body = cx.world.players[seat.index()].unit;
     let Some(u) = cx.zone.unit(body).filter(|u| u.alive) else { return };
-    if crate::status::is_stunned(u, now) {
+    if held_still(u, now) {
         say_failed(cx, body, spell, SpellError::CastUnsuccessful);
         return;
     }
@@ -263,6 +269,13 @@ pub fn begin(cx: &mut Ctx<'_>, seat: Seat, spell: SpellId, mut on: Option<UnitId
         face_angle(u, a);
     }
     let done = now.after(def.cast);
+    // The unit assist settled on stays sticky through the cast, so the aim read at release
+    // bends as the reticle showed while it built.
+    if let Some(a) = cx.world.players[seat.index()].assist.as_mut() {
+        if a.until >= now {
+            a.until = a.until.max(done);
+        }
+    }
     let f = &mut cx.world.players[seat.index()].fight;
     f.queued = None;
     f.cast = Some(PendingCast {
@@ -418,7 +431,7 @@ pub fn before_move(cx: &mut Ctx<'_>, seat: Seat, frame: InputFrame) {
         Some(t @ TargetRef::Unit(id)) if hostile(cx.zone, u, t) => Some(id),
         _ => None,
     };
-    let stunned = crate::status::is_stunned(u, now);
+    let stunned = held_still(u, now);
     let f = &mut cx.world.players[seat.index()].fight;
     f.target = target;
     // Auto-attack follows her to a new foe.

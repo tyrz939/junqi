@@ -12,6 +12,7 @@ mod field;
 use field::*;
 use jane_core::action::School;
 use jane_core::{Angle, Milli, Sfc32, Tick, Vec2, ZoneId};
+use jane_sim::input::{Goto, TargetRef};
 use jane_sim::event::{EventKind, SpellError, ToastKind};
 use jane_sim::state::{FlagKey, RestPoint, StatusInst};
 use jane_sim::units::{max_hp, max_mp};
@@ -59,11 +60,12 @@ fn a_bolt_flies_lands_chills_and_pulls_aggro() {
     let mut s = field();
     learn(&mut s, "icebolt");
     let foe = spawn(&mut s, "skeleton", 16, 10);
+    rooted(&mut s, foe);
     let mp = unit(&s, me(&s)).mp;
     s.drain_events();
     cast(&mut s, 0, "icebolt", aim(Angle::EAST), None);
     assert_eq!(s.state().zone(Z).unwrap().projectiles.len(), 1);
-    assert_eq!(unit(&s, me(&s)).mp.0, mp.0 - 14_000 + i32::from(unit(&s, me(&s)).spirit), "paid, then a tick of regen");
+    assert_eq!(unit(&s, me(&s)).mp.0, mp.0 - 14_000, "paid as it landed");
     steps(&mut s, 12);
     let ev = events(&mut s);
     let dealt = damage_to(&ev, foe);
@@ -760,6 +762,32 @@ impl FightTape {
         if self.rng.below(40) == 0 {
             let seat = self.rng.below(4) as u8;
             self.cmd(Some(seat), Command::Dev(DevOp::Mp(150)));
+        }
+        // PLAY-PLAN §2.1 on the tape: a hard target (an id the sim may well refuse: a unit or a
+        // prop the console stood here, or nothing), the free-aim key, a right-click, Esc.
+        for s in 0..4 {
+            if self.rng.below(90) == 0 {
+                let id = 1 + self.rng.below(80);
+                self.held[s].target = match self.rng.below(4) {
+                    0 => None,
+                    1 => jane_sim::PropId::new(id).map(TargetRef::Prop),
+                    _ => UnitId::new(id).map(TargetRef::Unit),
+                };
+                self.held[s].free = self.rng.below(5) == 0;
+            }
+        }
+        if self.rng.below(60) == 0 {
+            let seat = self.rng.below(4) as u8;
+            let g = match self.rng.below(3) {
+                0 => Goto::Ground(Vec2::centre(5 + self.rng.range(0, 40), 5 + self.rng.range(0, 40))),
+                1 => Goto::Unit(UnitId::new(1 + self.rng.below(80)).unwrap()),
+                _ => Goto::Prop(jane_sim::PropId::new(1 + self.rng.below(80)).unwrap()),
+            };
+            self.cmd(Some(seat), Command::Goto(g));
+        }
+        if self.rng.below(300) == 0 {
+            let seat = self.rng.below(4) as u8;
+            self.cmd(Some(seat), Command::Halt);
         }
         self.cmds.sort_by_key(|c| (c.seat, c.seq));
         StepInput { frames: self.held, commands: &self.cmds }

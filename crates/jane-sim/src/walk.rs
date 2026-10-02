@@ -51,7 +51,7 @@ pub fn start(cx: &mut Ctx<'_>, seat: Seat, to: Vec2, then: WalkThen) {
         at: 0,
         repath_at: now,
         until: now.after(WALK_GIVE_UP),
-        hp,
+        health: hp,
         stuck: 0,
     }));
 }
@@ -156,10 +156,10 @@ pub fn step(cx: &mut Ctx<'_>, seat: Seat, frame: InputFrame, speed: Fx) {
     let body = cx.world.players[seat.index()].unit;
     let Some(ix) = cx.zone.unit_ix(body) else { return };
     let hp = cx.zone.units[ix].hp;
-    if now > w.until || hp < w.hp {
+    if now > w.until || hp < w.health {
         return;
     }
-    w.hp = hp;
+    w.health = hp;
     let Some(goal) = goal_now(cx, seat, &w) else { return };
     let moved_goal = goal.cell() != w.to.cell();
     w.to = goal;
