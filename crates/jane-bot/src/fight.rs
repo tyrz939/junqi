@@ -152,6 +152,45 @@ pub fn item_ready(u: &Unit, i: ItemId, now: Tick) -> bool {
     !u.item_cooldowns.iter().any(|&(c, until)| c == i && until > now) && u.gcd_until <= now
 }
 
+/// Its longest melee reach, between bodies (0 with none).
+fn bite(u: &Unit) -> i64 {
+    let cat = jane_data::catalog();
+    jane_sim::combat::book_of(u)
+        .iter()
+        .map(|&s| cat.combat.spell(s))
+        .filter(|d| d.kind == SpellKind::Melee)
+        .map(|d| i64::from(d.range.0))
+        .max()
+        .unwrap_or(0)
+}
+
+/// Could three of its blows put her down?
+pub fn dangerous(me: &Unit, t: &Unit) -> bool {
+    i64::from(max_hit(t)) * 3 >= i64::from(me.hp.points())
+}
+
+/// May she begin `s` at `t` now (PLAY-PLAN §2.1: a cast takes time and slows her)? Always an
+/// instant, and always at what has no feet or could not hurt her much; else only if it cannot
+/// close to its bite in half the cast (she backs off at half speed meanwhile, and lets the cast
+/// go if it closes: [`cast_caught`]).
+pub fn may_cast(me: &Unit, t: &Unit, s: SpellId) -> bool {
+    let cast = i64::from(jane_data::catalog().combat.spell(s).cast.0);
+    if cast == 0 || rooted(t) || !dangerous(me, t) {
+        return true;
+    }
+    let run = i64::from(jane_data::catalog().combat.unit(t.def).run.0.max(1));
+    (gap(me, t) - bite(t)).max(0) / run > cast / 2 + 6
+}
+
+/// Building a cast while a dangerous foe closes to its bite: Esc, and step back.
+pub fn cast_caught(v: &View<'_>, t: &Unit) -> bool {
+    let me = v.body();
+    v.fight().cast.is_some()
+        && !rooted(t)
+        && dangerous(me, t)
+        && gap(me, t) <= bite(t) + i64::from(CELL_FX)
+}
+
 /// Body gap between two units (centre distance less both bodies), `Fx`.
 pub fn gap(a: &Unit, b: &Unit) -> i64 {
     let cat = jane_data::catalog();
@@ -592,6 +631,10 @@ pub fn engage(v: &View<'_>, cx: &mut Ctx, id: UnitId) -> Option<Act> {
             return Some(Act::press(Command::Item(f)));
         }
     }
+    // A cast building with something dangerous at her elbow: let it go and step back.
+    if cast_caught(v, t) {
+        return Some(Act { frame: away_from(v, cx, t.pos, None), cmds: vec![Command::Halt] });
+    }
     // The Factory's bosses are fought as their rooms ask (tactics::works).
     if let Some(a) = crate::tactics::works::engage(v, cx, id) {
         return a;
@@ -643,7 +686,7 @@ pub fn engage(v: &View<'_>, cx: &mut Ctx, id: UnitId) -> Option<Act> {
         // that keeps after her is put down on the way, not led round the dungeon).
         let ice = sense::spell("icebolt");
         let reach = i64::from(cat.combat.spell(ice).range.0) * 9 / 10;
-        if knows(v, ice) && ready(me, ice, now) && gap(me, t) <= reach && v.sight(me.pos, t.pos) {
+        if knows(v, ice) && ready(me, ice, now) && may_cast(me, t, ice) && gap(me, t) <= reach && v.sight(me.pos, t.pos) {
             return Some(Act {
                 frame: InputFrame { aim: Some(dir), ..frame },
                 cmds: vec![Command::Cast { spell: ice, on: Some(id) }],
@@ -689,6 +732,7 @@ pub fn engage(v: &View<'_>, cx: &mut Ctx, id: UnitId) -> Option<Act> {
     if def.kind == SpellKind::Bolt
         && knows(v, ice)
         && ready(me, ice, now)
+        && may_cast(me, t, ice)
         && (d > i64::from(3 * CELL_FX) || !strong)
         && g <= i64::from(def.range.0) * 9 / 10
         && v.sight(me.pos, t.pos)
@@ -718,7 +762,7 @@ pub fn engage(v: &View<'_>, cx: &mut Ctx, id: UnitId) -> Option<Act> {
             }
         }
     }
-    if strong && knows(v, ice) && me.mp >= def.mp && d < i64::from(6 * CELL_FX) {
+    if strong && knows(v, ice) && me.mp >= def.mp && (d < i64::from(6 * CELL_FX) || (!may_cast(me, t, ice) && g <= i64::from(def.range.0))) {
         // Inside two thirds of its leash from home, so it keeps coming.
         let leash = i64::from(cat.combat.unit(t.def).leash.0);
         let tether = (leash > 0).then_some((t.home, leash * 2 / 3));

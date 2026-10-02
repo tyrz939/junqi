@@ -199,8 +199,8 @@ pub struct Landing {
     pub seek: crate::state::Seek,
     /// A world verb lands on this prop, not on whatever is nearest.
     pub prop: Option<crate::ids::PropIx>,
-    /// The global cooldown began with the cast; landing does not start it again.
-    pub gcd_started: bool,
+    /// The global cooldown and the spell's own began with the cast; landing does not start them again.
+    pub started: bool,
 }
 
 /// Step 1 of the pipeline alone: everything [`try_cast_with`] checks, in its order, and nothing
@@ -326,11 +326,11 @@ pub fn land_checked(
     let seat_body = u.controller == Controller::Player;
     u.mp -= spell.mp;
     u.energy -= spell.energy;
-    if spell.cooldown.0 > 0 {
+    if spell.cooldown.0 > 0 && !landing.started {
         u.cooldowns.retain(|&(s, until)| s != id && until > now);
         u.cooldowns.push((id, now.after(spell.cooldown)));
     }
-    if !spell.gcd_immune && !landing.gcd_started {
+    if !spell.gcd_immune && !landing.started {
         u.gcd_until = now.after(if seat_body { PLAYER_GCD } else { GCD });
     }
     if !seat_body {

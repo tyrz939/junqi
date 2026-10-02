@@ -140,8 +140,12 @@ pub fn reach_check(cx: &Ctx<'_>, u: &Unit, def: &SpellDef, t: TargetRef) -> Resu
             }
             let p = &cx.zone.props[ix as usize];
             let at = pos_of(cx.zone, t).ok_or(SpellError::NoTarget)?;
+            // A shot stopped short still touches what is within its touch of where it stopped
+            // (`flight.rs`): sight to a prop is sight to a cell of it, or near enough.
+            let touch = i64::from(def.touch.unwrap_or(SCHOOL_TOUCH_FX).0) + i64::from(jane_core::num::CELL_FX);
             if let Some((x, y)) = first_blocked_cell(&cx.rt.grid, u.pos, at, BLOCK_SHOT) {
-                if !footprint(cx.cat.story.prop(p.def), p).contains(x, y) {
+                let near = dist_sq(jane_core::Vec2::centre(x, y), at) <= touch * touch;
+                if !near && !footprint(cx.cat.story.prop(p.def), p).contains(x, y) {
                     return Err(SpellError::NotInLos);
                 }
             }
@@ -172,8 +176,8 @@ fn aim_for(
 }
 
 /// How a cast at `at` lands.
-fn landing(cx: &Ctx<'_>, def: &SpellDef, at: Option<TargetRef>, gcd_started: bool) -> Landing {
-    let mut l = Landing { gcd_started, ..Landing::default() };
+fn landing(cx: &Ctx<'_>, def: &SpellDef, at: Option<TargetRef>, started: bool) -> Landing {
+    let mut l = Landing { started, ..Landing::default() };
     match (def.kind, at) {
         (SpellKind::Bolt, Some(TargetRef::Unit(u))) => l.seek = Seek::Unit(u),
         (SpellKind::Bolt, Some(t @ TargetRef::Prop(_))) => l.seek = pos_of(cx.zone, t).map_or(Seek::None, Seek::Point),
@@ -265,6 +269,12 @@ pub fn begin(cx: &mut Ctx<'_>, seat: Seat, spell: SpellId, mut on: Option<UnitId
     if !def.gcd_immune {
         u.gcd_until = now.after(PLAYER_GCD);
     }
+    // Its own cooldown runs from when it begins, so a cast time is not paid twice (Icebolt's
+    // 1 s cast inside its 2 s cooldown, not before it).
+    if def.cooldown.0 > 0 {
+        u.cooldowns.retain(|&(s, until)| s != spell && until > now);
+        u.cooldowns.push((spell, now.after(def.cooldown)));
+    }
     if let Some(a) = aim {
         face_angle(u, a);
     }
@@ -313,10 +323,19 @@ fn release(cx: &mut Ctx<'_>, seat: Seat, frame: InputFrame) {
         }
     }
     let upos = u.pos;
-    let aim = aim_for(cx, seat, upos, pc.spell, pc.at, frame.aim.or(pc.aim), pc.assist);
-    // The GCD it started is its own: the checks at release do not wait on it.
+    // The frame's aim with the frame's assist, else the aim and assist it began with.
+    let (raw, assist) = match frame.aim {
+        Some(a) => (Some(a), frame.assist),
+        None => (pc.aim, pc.assist),
+    };
+    let aim = aim_for(cx, seat, upos, pc.spell, pc.at, raw, assist);
+    // The GCD and the cooldown it started are its own: the checks at release do not wait on
+    // them. The cooldown is put back if it lands (and stays handed back if it does not).
     let mut row = *def;
     row.gcd_immune = true;
+    let ix = cx.zone.unit_ix(body).expect("her body");
+    let own = cx.zone.units[ix].cooldowns.iter().position(|&(s, _)| s == pc.spell);
+    let own = own.map(|i| cx.zone.units[ix].cooldowns.remove(i));
     let checked: Checked = match check_cast(cx, body, pc.spell, &row, aim, pc.on) {
         Ok(c) => c,
         Err(why) => {
@@ -326,16 +345,23 @@ fn release(cx: &mut Ctx<'_>, seat: Seat, frame: InputFrame) {
         }
     };
     let l = landing(cx, def, pc.at, true);
-    if let Err(why) = land_checked(cx, body, pc.spell, def, aim, checked, l) {
-        say_failed(cx, body, pc.spell, why);
+    match land_checked(cx, body, pc.spell, def, aim, checked, l) {
+        Ok(()) => {
+            if let (Some(c), Some(u)) = (own, cx.zone.unit_mut(body)) {
+                u.cooldowns.push(c);
+            }
+        }
+        Err(why) => say_failed(cx, body, pc.spell, why),
     }
 }
 
-/// A cast that will not land: the GCD it started is handed back and it is said.
+/// A cast that will not land: the GCD and the cooldown it started are handed back (it was off
+/// cooldown when it began, so its spell's entry is this cast's) and it is said.
 fn stopped(cx: &mut Ctx<'_>, seat: Seat, body: UnitId, spell: SpellId) {
     let now = cx.world.tick;
     if let Some(u) = cx.zone.unit_mut(body) {
         u.gcd_until = u.gcd_until.min(now);
+        u.cooldowns.retain(|&(s, _)| s != spell);
     }
     cx.world.players[seat.index()].fight.queued = None;
     cx.emit(EventKind::CastStopped { unit: body, spell });
