@@ -120,6 +120,8 @@ struct RawProp {
     #[serde(default)]
     gate: bool,
     #[serde(default)]
+    way: bool,
+    #[serde(default)]
     plate: bool,
     #[serde(default)]
     light_when_on: bool,
@@ -175,7 +177,7 @@ fn light(cx: &mut Ctx, at: &str, l: &RawLight) -> Option<Light> {
 
 /// A prop's `feet` (x, y, w, h in sixteenths of a cell) must lie in the rows it stamps and stand
 /// on its front edge. What is pushed, carried, a gate or answers a verb is part of a way or a
-/// puzzle the solver proves by its cells: its feet hold the footprint's width, leaving at most
+/// puzzle the solver proves by its cells (`PropDef::keeps_width`): its feet hold the footprint's width, leaving at most
 /// [`FEET_SIDE_SLACK`] open at either side, so none side by side lets her slip between, and its
 /// back is a notch she steps into from the north only (`PropDef::solid_parts`).
 fn feet_fit(cx: &mut Ctx, at: &str, f: [u8; 4], r: &RawProp, base: u8) {
@@ -187,7 +189,7 @@ fn feet_fit(cx: &mut Ctx, at: &str, f: [u8; 4], r: &RawProp, base: u8) {
     cx.diag.need(y >= top && y + h == fh, at, "feet stand on the front edge, within the rows it blocks");
     let wide = x <= FEET_SIDE_SLACK && x + w >= fw - FEET_SIDE_SLACK;
     cx.diag.need(
-        wide || !(r.push || r.carry || r.gate || r.answers.is_some()),
+        wide || !(r.push || r.carry || r.gate || r.way || r.answers.is_some()),
         at,
         "a way's or a puzzle's feet leave at most 4 sixteenths of a cell open at either side",
     );
@@ -252,6 +254,7 @@ fn props(src: &Source, cx: &mut Ctx) -> &'static [PropDef] {
             answers: ans,
             once: r.once,
             gate: r.gate,
+            way: r.way,
             plate: r.plate,
             light_when_on: r.light_when_on,
             night_only: r.night_only,

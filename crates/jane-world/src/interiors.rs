@@ -281,11 +281,12 @@ pub fn build_cellar(seed: u32, attempt: u8) -> Blueprint {
     }
     let [rat_room, potion_room, storage, study] = rooms;
 
+    // The chest first, so the rats are put where it does not stand.
+    b.chest(Some("rat_chest"), "chest", rat_room.x + 1, rat_room.y + 1, &[("key_generic", 1), ("small_empty_vial", 2)]);
     let mut rng = dice(&b, Cellar::Rats);
     for _ in 0..3 {
         b.rat_in(&mut rng, rat_room);
     }
-    b.chest(Some("rat_chest"), "chest", rat_room.x + 1, rat_room.y + 1, &[("key_generic", 1), ("small_empty_vial", 2)]);
 
     // "Potion making Room" from the 2020 basement sketch.
     b.prop(Some("potion_bench"), "bench", potion_room.x + 2, potion_room.y + 1);

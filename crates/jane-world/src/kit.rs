@@ -440,7 +440,61 @@ impl Kit {
         self.bp.indoor = indoor;
         self.bp.ambient = ambient;
         self.bp.attempts = self.attempt.saturating_add(1);
+        settle_units(&mut self.bp);
         self.bp
+    }
+}
+
+/// Every unit that would start in terrain or a solid prop's cells (a gate while it is locked; a
+/// hidden prop too, since it may show), or boxed in with no open cell beside it, moved to the
+/// nearest cell that is open, has an open cell beside it and holds no other unit: found by a
+/// flood from where it stood through what props stand on, never through terrain, so it stays in
+/// its room. One with nowhere to go is left. The owner's playtest: "a rat spawned inside the
+/// chest in the basement so it couldn't run anywhere". Every builder's last step.
+pub fn settle_units(bp: &mut Blueprint) {
+    use std::collections::{BTreeSet, VecDeque};
+    const REACH: usize = 4096;
+    const SIDES: [(i32, i32); 4] = [(0, -1), (1, 0), (0, 1), (-1, 0)];
+    let cat = jane_data::catalog();
+    let mut props = BTreeSet::new();
+    for p in &bp.props {
+        let def = cat.story.prop(p.def);
+        if def.solid && (!def.gate || p.locked) {
+            props.extend(def.solid_rect(i32::from(p.cell.x), i32::from(p.cell.y)).cells());
+        }
+    }
+    let tiles = &bp.tiles;
+    let terrain = |x: i32, y: i32| !tiles.inside(x, y) || tiles.read(x, y, Tile::Void).flags() & F_SOLID != 0;
+    let open = |x: i32, y: i32| !terrain(x, y) && !props.contains(&(x, y));
+    let roomy = |x: i32, y: i32| open(x, y) && SIDES.iter().any(|(dx, dy)| open(x + dx, y + dy));
+    let mut at: Vec<(i32, i32)> = bp.units.iter().map(|u| (i32::from(u.cell.x), i32::from(u.cell.y))).collect();
+    for i in 0..at.len() {
+        let start = at[i];
+        if roomy(start.0, start.1) {
+            continue;
+        }
+        let mut seen = BTreeSet::from([start]);
+        let mut queue = VecDeque::from([start]);
+        let mut to = None;
+        while let Some((x, y)) = queue.pop_front() {
+            if roomy(x, y) && !at.contains(&(x, y)) {
+                to = Some((x, y));
+                break;
+            }
+            if seen.len() > REACH {
+                break;
+            }
+            for (dx, dy) in SIDES {
+                let n = (x + dx, y + dy);
+                if !terrain(n.0, n.1) && seen.insert(n) {
+                    queue.push_back(n);
+                }
+            }
+        }
+        if let Some((x, y)) = to {
+            at[i] = (x, y);
+            bp.units[i].cell = cell(x, y);
+        }
     }
 }
 

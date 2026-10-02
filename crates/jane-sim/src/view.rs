@@ -43,6 +43,7 @@ pub struct View<'a> {
     zone: &'a ZoneState,
     rt: &'a ZoneRuntime,
     bp: &'a Blueprint,
+    bps: &'a crate::blueprints::Blueprints,
     indoor: bool,
 }
 
@@ -85,6 +86,7 @@ impl Sim {
             zone: self.state.zone(p.zone)?,
             rt: self.runtime(p.zone)?,
             bp: self.blueprint(p.zone),
+            bps: self.blueprints(),
             indoor: self.blueprint(p.zone).indoor,
         })
     }
@@ -93,6 +95,11 @@ impl Sim {
 impl<'a> View<'a> {
     pub fn seat(&self) -> Seat {
         self.seat
+    }
+
+    /// Every zone's blueprint (the county's roads for a step's way, `route`).
+    pub fn blueprints(&self) -> &'a crate::blueprints::Blueprints {
+        self.bps
     }
 
     pub fn me(&self) -> &'a PlayerState {

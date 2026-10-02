@@ -34,7 +34,7 @@
   "plate": { "name": "Pressure Plate", "sprite": "plate", "w": 2, "h": 2, "solid": false, "blockLos": false, "flat": true, "plate": true },
   "broken_steps": { "name": "Broken Steps", "sprite": "broken_steps", "w": 3, "h": 2, "solid": true, "blockLos": false, "answers": "repair" },
   "broken_track": { "name": "Broken Track", "sprite": "broken_track", "w": 3, "h": 2, "solid": true, "blockLos": false, "answers": "repair" },
-  "root_wall": { "name": "Root Wall", "sprite": "root_wall", "w": 2, "h": 2, "solid": true, "blockLos": false },
+  "root_wall": { "name": "Root Wall", "sprite": "root_wall", "w": 2, "h": 2, "solid": true, "blockLos": false, "way": true },
   "pillar": { "name": "Pillar", "sprite": "pillar", "w": 2, "h": 2, "base": 1, "solid": true, "blockLos": true },
   "coffin": { "name": "Coffin", "sprite": "coffin", "w": 2, "h": 3, "solid": true, "blockLos": false },
   "car_wreck": { "name": "Abandoned Car", "sprite": "car_wreck", "w": 5, "h": 3, "base": 1, "solid": true, "blockLos": false, "prompt": "Search" },

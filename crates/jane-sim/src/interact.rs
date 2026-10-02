@@ -443,6 +443,8 @@ fn use_prop(cx: &mut Ctx<'_>, seat: Seat, body: UnitId, ix: PropIx) {
         return;
     }
     if def.bench {
+        // The prompt says Craft: her bag opens with the craft row (`EventKind::Bench`).
+        crate::inventory::emit_to(cx, seat, EventKind::Bench { prop: pid });
         cx.emit(EventKind::Prop { prop: pid, change: PropChange::Use });
     } else if def.push {
         cx.emit(EventKind::Toast(ToastKind::ItShifts));

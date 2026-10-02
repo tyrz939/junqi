@@ -122,6 +122,10 @@ pub struct QuestLine {
     pub ready: bool,
     /// The story's own line.
     pub main: bool,
+    /// The way to the step's place, in one short line (`jane_sim::route`); empty for none.
+    pub way: String,
+    /// Which way and how far that place is from her, while she is out in the county.
+    pub bearing: String,
 }
 
 /// Quests a newly given one is tracked by default while fewer than this are (the main line's
@@ -271,6 +275,8 @@ pub struct QuestRow {
     pub main: bool,
     /// The tracker shows it.
     pub tracked: bool,
+    /// The way from Castle to its open step's place (`jane_sim::route`); empty for none.
+    pub way: String,
 }
 
 /// The cupboard she opened, beside her bag (`jane_sim::store`).
@@ -291,7 +297,8 @@ pub struct WindowView {
     /// sim's `Store` event), dropped when the window closes ([`WindowView::close_store`]) or the
     /// sim says it is out of reach.
     pub store: Option<StoreView>,
-    /// A cupboard was opened this tick: the app opens the window on it ([`WindowView::take_opened`]).
+    /// A cupboard or a bench was used this tick: the app opens the window on her bag
+    /// ([`WindowView::take_opened`]).
     opened: bool,
     pub bag: Vec<SlotData>,
     pub craft: [SlotData; CRAFT_INPUTS],
@@ -303,7 +310,7 @@ pub struct WindowView {
 }
 
 impl WindowView {
-    /// A cupboard was opened since the last call.
+    /// A cupboard or a bench was used since the last call.
     pub fn take_opened(&mut self) -> bool {
         std::mem::take(&mut self.opened)
     }
@@ -357,7 +364,39 @@ pub struct ViewBuffers {
     log_ids: Vec<QuestId>,
     /// The hostile she is fighting, and the last tick a blow passed between them.
     fighting: Option<(jane_sim::UnitId, u32)>,
+    ways: Ways,
     scratch: String,
+}
+
+/// A step's place, the whole way there and the short one.
+type Way = (jane_sim::route::Place, String, String);
+
+/// The ways to quest steps' places (`jane_sim::route`): the county's roads walked once a seed,
+/// and each step's way worked out the first time it is asked for.
+#[derive(Clone, Debug, Default)]
+struct Ways {
+    seed: Option<u32>,
+    roads: Option<std::sync::Arc<jane_sim::route::Roads>>,
+    /// (quest, step): its place, the whole way and the short one.
+    steps: Vec<((QuestId, usize), Option<Way>)>,
+}
+
+impl Ways {
+    fn get(&mut self, v: &View<'_>, q: QuestId, i: usize) -> Option<&Way> {
+        if self.seed != Some(v.seed()) {
+            self.seed = Some(v.seed());
+            self.roads = jane_sim::route::Roads::new(v.blueprints().get(ZoneId::County)).map(std::sync::Arc::new);
+            self.steps.clear();
+        }
+        if !self.steps.iter().any(|(k, _)| *k == (q, i)) {
+            let got = jane_sim::route::place_of_step(v.blueprints(), q, i).and_then(|place| {
+                let r = self.roads.as_ref()?.route(place.rect)?;
+                Some((place, r.words(), r.short()))
+            });
+            self.steps.push(((q, i), got));
+        }
+        self.steps.iter().find(|(k, _)| *k == (q, i)).and_then(|(_, g)| g.as_ref())
+    }
 }
 
 impl ViewBuffers {
@@ -401,6 +440,8 @@ impl ViewBuffers {
                     self.window.store = Some(StoreView { prop, name: String::new(), slots: Vec::new(), used: 0 });
                     self.window.opened = true;
                 }
+                // E at a bench: her bag, with the craft row beside it.
+                EventKind::Bench { .. } => self.window.opened = true,
                 EventKind::Zone { zone, .. } => {
                     self.window.store = None;
                     self.hud.banner = Some((text::zone_name(zone, v.region()), now));
@@ -564,6 +605,15 @@ impl ViewBuffers {
                     use std::fmt::Write as _;
                     let _ = write!(line.step, " {} of {}", q.count(i), r.qty);
                 }
+                // The way, and how far from her, unless she is already in the place's zone.
+                if let Some((place, _, short)) = self.ways.get(v, q.quest, i)
+                    && (place.zone == ZoneId::County || v.zone() != place.zone)
+                {
+                    line.way.clone_from(short);
+                    if v.zone() == ZoneId::County {
+                        line.bearing = jane_sim::route::bearing(v.body().pos.cell(), place.rect);
+                    }
+                }
             }
             h.tracker.push(line);
         }
@@ -695,6 +745,13 @@ impl ViewBuffers {
                 text::expand(text::text(d.return_to), heroine, seed, &mut s);
                 row.steps.push((s, false));
             }
+            row.way.clear();
+            if !q.ready
+                && let Some(i) = d.requirements.iter().enumerate().position(|(i, r)| q.count(i) < r.qty)
+                && let Some((_, words, _)) = self.ways.get(v, q.quest, i)
+            {
+                row.way.push_str(words);
+            }
         }
         for &q in v.quests_done().iter().rev() {
             let d = cat.story.quest(q);
@@ -708,6 +765,7 @@ impl ViewBuffers {
             text::expand(text::text(d.name), heroine, seed, &mut row.title);
             text::expand(text::text(d.completion), heroine, seed, &mut row.body);
             row.steps.clear();
+            row.way.clear();
         }
         w.quests.truncate(n);
 

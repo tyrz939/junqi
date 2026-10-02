@@ -261,6 +261,11 @@ pub enum EventKind {
     Store {
         prop: PropId,
     },
+    /// She used a craft bench: the window opens on her bag, the craft row beside it (the bench is
+    /// in reach, `View::near_bench`). To her alone.
+    Bench {
+        prop: PropId,
+    },
     /// Her conversation opened, moved on or closed.
     Dialogue,
     /// Into her bag.
@@ -303,6 +308,7 @@ impl EventKind {
                 | EventKind::Zone { .. }
                 | EventKind::Bag
                 | EventKind::Store { .. }
+                | EventKind::Bench { .. }
                 | EventKind::Dialogue
                 | EventKind::Loot { .. }
                 | EventKind::Learn(_)

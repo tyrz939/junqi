@@ -109,6 +109,9 @@ model! {
         pub once: bool,
         /// A door that leads nowhere: solid while locked, open once unlocked.
         pub gate: bool,
+        /// Shuts a way until a hand clears it (a den, a root wall, a patched wall): the solver
+        /// proves it by its cells, so its feet keep its width (`keeps_width`).
+        pub way: bool,
         /// Pressure plate: `use` when a unit or a pushable covers it, `release` when clear.
         pub plate: bool,
         /// Its light shows only while it is `on`.
@@ -153,14 +156,22 @@ impl PropDef {
         jane_core::Rect::new(x, y + self.h as i32 - base as i32, self.w as i32, base as i32)
     }
 
+    /// Whether its feet keep its footprint's width with a post up each side: what is pushed,
+    /// carried, a gate, answers a verb or a blow, or shuts a way. Each is part of a way or a puzzle
+    /// the solver proves by its cells, so nothing may slip round or behind it.
+    pub const fn keeps_width(&self) -> bool {
+        self.push || self.carry || self.gate || self.answers.is_some() || self.way
+    }
+
     /// What feet collide with, in sixteenths of a cell (a canvas px) from the footprint's
-    /// top-left. Feet as wide as the footprint (within [`FEET_SIDE_SLACK`]: a crate, a table, a
-    /// wall a verb clears) come with two posts a sixteenth wide up the footprint's west and east
-    /// edges from them to the back of its `base` rows. The notch between the posts is where she
-    /// stands behind it: she enters it from the north and leaves it the same way (too little is
-    /// open at either side for her to slip out under a post), so it joins no two places the cells
-    /// keep apart. Narrow feet (a trunk, a lamp post) stand alone, and she walks round them. With
-    /// no `feet`, the `base` rows whole. Unused rects are empty.
+    /// top-left. Only the drawn ground box: from every side she walks up to it, and along its
+    /// back she walks past, as she does round a trunk or a lamp post. A prop that
+    /// [`keeps_width`](Self::keeps_width) and has feet as wide as its footprint (within
+    /// [`FEET_SIDE_SLACK`]: a crate, a gate, a wall a verb clears) also has two posts a sixteenth
+    /// wide up its west and east edges from them to the back of its `base` rows. The notch between
+    /// the posts is where she stands behind it: she enters it from the north and leaves it the same
+    /// way, so it joins no two places the cells keep apart. With no `feet`, the `base` rows whole.
+    /// Unused rects are empty.
     pub const fn solid_parts(&self) -> [jane_core::Rect; 3] {
         let base = if self.base == 0 || self.base > self.h { self.h } else { self.base };
         let top = (self.h as i32 - base as i32) * 16;
@@ -170,9 +181,8 @@ impl PropDef {
             Some([x, y, w, h]) => {
                 let (x, y, w, h) = (x as i32, y as i32, w as i32, h as i32);
                 let fw = self.w as i32 * 16;
-                // Narrow feet (a trunk, a post) stand free in their cells: she walks round them.
                 let wide = x <= FEET_SIDE_SLACK && x + w >= fw - FEET_SIDE_SLACK;
-                if y <= top || !wide {
+                if y <= top || !wide || !self.keeps_width() {
                     return [jane_core::Rect::new(x, y, w, h), none, none];
                 }
                 [

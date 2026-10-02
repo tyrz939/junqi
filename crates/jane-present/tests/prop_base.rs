@@ -12,7 +12,7 @@
 //! ridge. A steeple is a spire she is hidden behind for a step, as a tree's crown hides her. And a thing taller than wide
 //! (a gate or a wall across a west or east way, drawn edge on; a tomb lying north to south): it
 //! runs or lies along the rows it covers, so all of them are its ground. And what shuts a way
-//! until a verb, a blow or a hand clears it (whatever `answers` one, and [`WAYS`]): the generator sets it across a passage
+//! until a verb, a blow or a hand clears it (whatever `answers` one, and a row marked `way`): the generator sets it across a passage
 //! either way round, and the solver proves the way shut (C1) by its whole footprint; on its front
 //! row alone, one set across a west or east passage two rows deep let her round it behind. And
 //! what she pushes or carries, and a gate (the schema refuses them a `base`): to push a barrel
@@ -25,10 +25,6 @@ use jane_art::canvas::rows_up;
 use jane_art::looks::{self, Family, Rendered};
 use jane_art::palette::Ix;
 use jane_data::PropDef;
-
-/// What shuts a way and answers no verb: a root wall, a patched wall, a den's mouth. (Whatever
-/// answers a verb or a blow is a lock the dungeons may set across a way: it keeps its footprint.)
-const WAYS: [&str; 3] = ["den", "root_wall", "weak_wall"];
 
 /// Canvas px a sim cell is drawn at.
 const CELL: i32 = 16;
@@ -93,13 +89,7 @@ fn a_prop_blocks_no_row_north_of_the_ground_it_is_drawn_on() {
     let mut over = Vec::new();
     for (d, r, building) in &all {
         let need = ((ground(r) + CELL - 1) / CELL).clamp(1, i32::from(d.h));
-        let whole = (*building && d.w >= 4)
-            || d.h > d.w
-            || d.answers.is_some()
-            || WAYS.contains(&d.id)
-            || d.push
-            || d.carry
-            || d.gate;
+        let whole = (*building && d.w >= 4) || d.h > d.w || d.keeps_width();
         let want = if whole { i32::from(d.h) } else { need };
         if i32::from(d.base) != want {
             over.push(format!(
@@ -137,11 +127,11 @@ const MIN_DEEP: i32 = 4;
 
 /// Whether a prop keeps its whole width to feet: what shuts a way or is part of a puzzle the
 /// solver proves by its cells (a pushed or carried thing, a gate, whatever answers a verb or a
-/// blow, [`WAYS`]). Its feet leave at most [`SIDE_SLACK`] open at either side, so none of them
+/// blow, a row marked `way`: `PropDef::keeps_width`). Its feet leave at most [`SIDE_SLACK`] open at either side, so none of them
 /// side by side lets her slip between, and the notch behind it is a dead end
 /// (`PropDef::solid_parts`).
 fn keeps_width(d: &PropDef) -> bool {
-    d.push || d.carry || d.gate || d.answers.is_some() || WAYS.contains(&d.id)
+    d.keeps_width()
 }
 
 /// Where a look meets the ground, in sixteenths of a cell (canvas px) from its footprint's

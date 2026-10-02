@@ -107,7 +107,7 @@ fn respawn(cx: &mut Ctx<'_>, id: UnitId) {
         return;
     }
     let (hx, hy) = u.home.cell();
-    let pos = cx.rt.grid.nearest_free(hx, hy, RESPAWN_RADIUS, None).map_or(u.home, |(x, y)| Vec2::centre(x, y));
+    let pos = cx.rt.grid.nearest_roomy(hx, hy, RESPAWN_RADIUS).map_or(u.home, |(x, y)| Vec2::centre(x, y));
     let u = cx.zone.unit_mut(id).expect("unit");
     u.pos = pos;
     u.path = None;

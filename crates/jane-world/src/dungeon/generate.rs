@@ -1608,6 +1608,7 @@ fn assemble(
         g.scatter();
         g.zone_rects();
     }
+    crate::kit::settle_units(&mut g.k.bp);
     let mut info = g.info;
     let blueprint = g.k.bp;
     info.layout = Some(layout);

@@ -1,5 +1,5 @@
 # jane gen --zones all --seeds 1..16 --hash
-# content 5ce731923d435e84, blueprint hash layout 4
+# content 2a1292a696d7c801, blueprint hash layout 4
 # zone seed hash (FNV-1a 64 over little-endian bytes)
 county 1 61b3586965d1f398
 county 2 11e056b593b2357f
@@ -33,22 +33,22 @@ house 13 53bca486030a1265
 house 14 82e9d747b4a46f83
 house 15 9355bcf9c6eae814
 house 16 df6311b179e96be8
-cellar 1 c555db0b1ff12df8
-cellar 2 829ae9ab73b02014
-cellar 3 19ec377a95c7c351
-cellar 4 3dc3bdc48d339e8c
-cellar 5 83c8d5afe1402e6d
-cellar 6 98f78f42ae5b3838
-cellar 7 c1e890bae6b36353
-cellar 8 e87e7967945dba3a
-cellar 9 1a60290a032f7794
-cellar 10 1bb53cf244fdccfe
-cellar 11 06a07e47bf343ef7
-cellar 12 c983eee7b72d9009
-cellar 13 154791ffaed51b27
-cellar 14 251a2b578be74206
-cellar 15 23dd2d0cb490daf4
-cellar 16 551a47ed15ce80e6
+cellar 1 8e17ff14f4600934
+cellar 2 b949d8d75d8f5f80
+cellar 3 4c41d39d473e2be1
+cellar 4 6be44254cd84dfec
+cellar 5 af4c2f82305a64e9
+cellar 6 660b202a8350e104
+cellar 7 b3d1007447c477cb
+cellar 8 4239fa03b32f6762
+cellar 9 6948f79cdfec8780
+cellar 10 e19890c76913bb7e
+cellar 11 dd2af94713f5ec4b
+cellar 12 79483619e12ab5f1
+cellar 13 e38cd2616c61793f
+cellar 14 951f13914810188a
+cellar 15 b560efc42b2222b4
+cellar 16 43ca86d8ca5575be
 mine 1 2fb20ccfd78d1348
 mine 2 950a1ef355a9279e
 mine 3 964a817e710a1b1b
@@ -193,10 +193,10 @@ pipes 13 ec194f8b4c25de51
 pipes 14 c28da4ae12aaf45a
 pipes 15 e42d66647598c3a7
 pipes 16 2e6a233da84eef4d
-school 1 714c723a1f57dd71
+school 1 cec9d8cd1e85f483
 school 2 07c3ab9cf3fe697a
 school 3 5a323d97eaa9cbb5
-school 4 69b1f9ee33ad1eed
+school 4 71cd7128b57c4f8a
 school 5 89e20d065f129ca4
 school 6 9d0f13177a94fa1a
 school 7 a8e7184eb63c25a4
@@ -208,4 +208,4 @@ school 12 44c48e6612d0f9d7
 school 13 f3f6bf9b99f96b79
 school 14 747efbbb3401c5ef
 school 15 ef219f6f97bcb4ec
-school 16 714b49af54c1b4e1
+school 16 d36f0aa9a7e1806e
