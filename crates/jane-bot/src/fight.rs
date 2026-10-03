@@ -53,7 +53,7 @@ pub struct Fight {
 
 /// The player's side of a fight as a player plays it (PLAY-PLAN §2.1), over any act a plan
 /// made: a cast at a foe targets that foe (its bolt curves on); a bolt aimed down a line at a prop
-/// that answers its school, or a verb with such a prop in reach, targets the prop; and while a
+/// that answers its school targets the prop; and while a
 /// free-aimed cast builds, the aim it began with is held, so walking on does not swing it away.
 pub fn with_targets(v: &View<'_>, mut act: Act) -> Act {
     let cat = jane_data::catalog();
@@ -65,7 +65,8 @@ pub fn with_targets(v: &View<'_>, mut act: Act) -> Act {
         let target = match def.kind {
             SpellKind::Bolt | SpellKind::Melee if foe.is_some() => foe,
             SpellKind::Bolt => act.frame.aim.and_then(|a| prop_on_line(v, me, def, a)),
-            SpellKind::World => prop_in_reach(v, me, def),
+            // A verb (Grow, Repair) finds its own prop as the sim does, the nearest that answers it
+            // and, for Grow, in light: naming the nearest in the dark failed the School's lessons.
             _ => None,
         };
         if target.is_some() {
@@ -114,29 +115,6 @@ fn prop_on_line(v: &View<'_>, me: &Unit, def: &jane_data::SpellDef, aim: jane_co
         }
         if best.is_none_or(|(b, _)| along < b) {
             best = Some((along, p.id));
-        }
-    }
-    best.map(|(_, id)| TargetRef::Prop(id))
-}
-
-/// The nearest prop in a world verb's reach that answers it, not yet used.
-fn prop_in_reach(v: &View<'_>, me: &Unit, def: &jane_data::SpellDef) -> Option<TargetRef> {
-    let cat = jane_data::catalog();
-    let want = match def.world? {
-        jane_data::WorldSpell::Repair => jane_data::Answers::Repair,
-        jane_data::WorldSpell::Grow => jane_data::Answers::Grow,
-    };
-    let reach = i64::from(jane_sim::tuning::WORLD_SPELL_REACH_FX);
-    let (cx, cy) = me.pos.cell();
-    let mut best: Option<(i64, jane_sim::PropId)> = None;
-    for p in v.props_in(jane_core::Rect::new(cx - 4, cy - 4, 9, 9)) {
-        let pd = cat.story.prop(p.def);
-        if p.hidden || p.used || pd.answers != Some(want) {
-            continue;
-        }
-        let d = jane_sim::interact::prop_distance_sq(pd, p, me.pos);
-        if d <= reach * reach && best.is_none_or(|(b, _)| d < b) {
-            best = Some((d, p.id));
         }
     }
     best.map(|(_, id)| TargetRef::Prop(id))
