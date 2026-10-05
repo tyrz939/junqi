@@ -534,7 +534,7 @@ pub fn engage(v: &View<'_>, cx: &mut Ctx, e: &Unit) -> Option<Act> {
         let (mx, my) = me.pos.cell();
         let doorstep = Rect::new(r.x - 4, r.y - 4, r.w + 8, r.h + 8);
         if !r.contains(ex, ey) && !r.contains(mx, my) && doorstep.contains(mx, my) {
-            if e.combat == jane_sim::state::CombatState::Leash {
+            if e.combat.going_home() {
                 cx.fight.hunt = None;
                 return Some(Act::idle());
             }

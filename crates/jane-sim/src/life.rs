@@ -33,10 +33,16 @@ fn idle_regen(u: &Unit) -> bool {
             // A row that keeps its wounds (`keepsWounds`: the Emperor) does not mend going home
             // either: what she did to it before she fell is still done when she comes back
             // (DUNGEONS.md §3.3: its fight "cannot be lost to running out of buds").
-            CombatState::Leash => !def_of(u).keeps_wounds,
+            CombatState::Leash | CombatState::Evade => !def_of(u).keeps_wounds,
             CombatState::Idle => def_of(u).auto_regen,
             CombatState::Combat => false,
         }
+}
+
+/// An evade's mend (`ai::evade`, WoW's): whole again, health and mana, the tick it lets go.
+pub fn mend_whole(u: &mut Unit) {
+    u.hp = max_hp(u);
+    u.mp = max_mp(u);
 }
 
 /// Pay a unit's regen up to `now` (see the module doc). A whole AI starts its fight from the top.

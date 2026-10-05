@@ -669,6 +669,16 @@ pub enum CombatState {
     Idle,
     Combat,
     Leash,
+    /// WoW's evade (PLAN.md §2.6 *Leash*): pulled past its leash, it let go, mended whole and
+    /// runs home at half again its run, and nothing lands on it until it is there.
+    Evade,
+}
+
+impl CombatState {
+    /// Letting go and on its way home: a leash or an evade.
+    pub fn going_home(self) -> bool {
+        matches!(self, CombatState::Leash | CombatState::Evade)
+    }
 }
 
 /// One unit. Player, dog, skeleton and snake are the same shape with a different controller.

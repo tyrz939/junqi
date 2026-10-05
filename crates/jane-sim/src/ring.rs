@@ -70,7 +70,8 @@ pub fn step_ring(zone: &mut ZoneState, rt: &mut ZoneRuntime, w: &Watchers, force
             continue;
         }
         // Something sent somewhere walks there however far from her it is.
-        let awake = near(&w.blocks, u.pos.x.0, u.pos.y.0, 0) || u.combat == CombatState::Combat || u.order.is_some();
+        let awake = near(&w.blocks, u.pos.x.0, u.pos.y.0, 0) || matches!(u.combat, CombatState::Combat | CombatState::Evade)
+            || u.order.is_some();
         if awake == u.awake {
             continue;
         }

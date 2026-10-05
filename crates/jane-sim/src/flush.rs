@@ -73,6 +73,10 @@ fn flush_unit(cx: &mut Ctx<'_>, id: UnitId, hits: &[Hit]) {
             return;
         }
         crate::life::pay_regen(u, now);
+        // An evade takes nothing until it is home: no blow, no status, no pull (`ai::evade`).
+        if u.combat == CombatState::Evade && h.school != School::Heal {
+            continue;
+        }
         if h.school == School::Heal {
             let before = u.hp;
             u.hp = Milli((u.hp.0.saturating_add(h.amount.0)).min(max_hp(u).0));
