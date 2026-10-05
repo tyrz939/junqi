@@ -62,14 +62,17 @@ impl TileSource for ViewTiles<'_, '_> {
 #[derive(Clone, Copy, Debug)]
 pub struct Flora {
     pub look: RefId,
-    /// Its sway (ART-PLAN M2), seven leans from three px west at its top to three east, the rest
-    /// frame in the middle ([`SWAY_REST`]): each lean a px more than the last at the very top,
-    /// spread down the rows so it bends, not jumps (the owner, 2026-10-03). A crown leans less
-    /// than reeds and only over its upper half. A thing that does not sway has its look seven
-    /// times.
-    pub sway: [RefId; SWAY_FRAMES],
+    /// Its sway (ART-PLAN §9): its one look bent at draw time, `lean` set to the sway's level
+    /// (`-3..=3`, [`SWAY_REACH`]), so a level more moves its top a px and the rows under it in a
+    /// soft spread (the owner, 2026-10-03: "efficient rust code that just moves or manipulates a
+    /// static image"). A crown leans two px at most and only over its upper half; reeds three,
+    /// to the foot. [`Bend::NONE`](crate::frame::Bend::NONE) for a thing that does not sway.
+    pub bend: crate::frame::Bend,
     /// How it sways: [`SwayClass`].
     pub class: SwayClass,
+    /// A broadleaf crown's loose leaf clusters (ART-PLAN §9), three on each edge, west first:
+    /// tiny copies of its own texels the wind tips and turns at draw time.
+    pub leaves: [Cluster; LEAF_CLUSTERS],
     /// Whether it rustles when she walks through it (reeds, long grass).
     pub rustles: bool,
     /// How deep it is across the ground, px (a trunk is thin, a shrub is its spread).
@@ -291,10 +294,76 @@ fn drawn_width(c: &jane_art::Canvas) -> i32 {
         .unwrap_or(0)
 }
 
-/// Sway frames a flora sprite has: leans `-3..=3`.
-pub const SWAY_FRAMES: usize = 7;
-/// The upright frame's index.
-pub const SWAY_REST: usize = 3;
+/// A sway's levels each way: leans `-3..=3`, a reed's top a px a level.
+pub const SWAY_REACH: i32 = 3;
+
+/// Leaf clusters a crown has, both edges.
+pub const LEAF_CLUSTERS: usize = 6;
+
+/// A loose leaf cluster on a crown's edge (ART-PLAN §9): where it is in the crown's sprite, its
+/// 2 x 2 texels as they are and a turn lighter (a leaf showing its pale underside), and its
+/// colour for the leaf that lets go. `side` 0 is no cluster.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Cluster {
+    /// Its top-left, px from the sprite's top-left.
+    pub x: i16,
+    pub y: i16,
+    /// The edge it is on: -1 west, 1 east, 0 none.
+    pub side: i8,
+    pub plain: RefId,
+    pub lit: RefId,
+    pub colour: [u8; 3],
+}
+
+/// A crown's leaf clusters: on each edge, three rows spread down its upper part, the outermost
+/// leaf texels there copied 2 x 2 into the atlas (four texels each, plain and turned light).
+fn clusters(atlas: &mut Atlas, c: &jane_art::Canvas, (top, bend): (i32, i32)) -> [Cluster; LEAF_CLUSTERS] {
+    use jane_art::palette::Ramp;
+    let leaf = |x: i32, y: i32| {
+        let ix = c.get(x, y);
+        ix.is_opaque() && Ramp::of(ix).is_some_and(|(r, _)| r.name().starts_with("leaf"))
+    };
+    let mut out = [Cluster::default(); LEAF_CLUSTERS];
+    for (s, side) in [-1i32, 1].into_iter().enumerate() {
+        // The rows whose outermost px on this edge is leaf, and that px's column.
+        let edge: Vec<(i32, i32)> = (top + 2..bend - 1)
+            .filter_map(|y| {
+                let mut xs = 0..c.w();
+                let x = if side < 0 {
+                    xs.find(|&x| c.get(x, y).is_opaque())
+                } else {
+                    xs.rfind(|&x| c.get(x, y).is_opaque())
+                }?;
+                leaf(x, y).then_some((x, y))
+            })
+            .collect();
+        if edge.len() < 3 {
+            continue;
+        }
+        for k in 0..3 {
+            let (ex, ey) = edge[edge.len() * (2 * k + 1) / 6];
+            // The cluster reaches in from the edge.
+            let x0 = if side < 0 { ex } else { ex - 1 };
+            let texel = |x: i32, y: i32, turn: i32| {
+                let (tx, ty) = (x0 + x, ey + y);
+                if !leaf(tx, ty) {
+                    return crate::atlas::Texel::CLEAR;
+                }
+                let mut t = crate::atlas::Texel::of(c, tx, ty);
+                if let Some((r, tone)) = Ramp::of(t.albedo) {
+                    t.albedo = r.at(tone.step(turn));
+                }
+                t
+            };
+            let h = (c.height_at(ex, ey)).max(1);
+            let plain = atlas.add_texels(2, 2, (0, 0), h, |x, y| texel(x, y, 0));
+            let lit = atlas.add_texels(2, 2, (0, 0), h, |x, y| texel(x, y, 2));
+            let colour = jane_art::palette::rgb(c.get(ex, ey));
+            out[s * 3 + k] = Cluster { x: x0 as i16, y: ey as i16, side: side as i8, plain, lit, colour };
+        }
+    }
+    out
+}
 
 /// How a flora sprite sways: its lean's reach and its own pace (`Present::draw` reads the pace).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -320,33 +389,25 @@ impl SwayClass {
     }
 }
 
-/// A sway frame of a flora sprite (ART-PLAN M2): leaned `lean` (`-3..=3`) toward east, each row
-/// shifted by its share of the lean, the whole of it at the top of what is drawn and none at the
-/// row where the bend starts (a crown's middle, a reed's foot), rounded, so one lean to the next
-/// moves the top a px and the rows under it in a soft spread. Three px wider each side than the
-/// sprite, its anchor moved with it.
-fn sheared(atlas: &mut Atlas, c: &jane_art::Canvas, (ax, ay): (i32, i32), lean: i32, class: SwayClass) -> RefId {
+/// A flora sprite's bend (ART-PLAN §9), its lean left to the draw: none at and under the row
+/// where it starts (a crown's middle, a shrub's or a reed's foot), and `reach` px at the top of
+/// what is drawn at a level of [`SWAY_REACH`], so one level to the next moves the top a px or
+/// less and the rows under it in a soft spread. With the top row drawn and where it bends.
+fn bend_of(c: &jane_art::Canvas, ay: i32, class: SwayClass) -> (crate::frame::Bend, (i32, i32)) {
     let top = (0..c.h()).find(|&y| (0..c.w()).any(|x| c.get(x, y).is_opaque())).unwrap_or(0);
     let tall = (ay - top).max(1);
-    let (bend, reach) = match class {
+    let (from, reach) = match class {
+        SwayClass::Still => return (crate::frame::Bend::NONE, (top, ay)),
         SwayClass::Crown => (top + tall * 11 / 20, 2),
         SwayClass::Bush => (ay, 2),
-        _ => (ay, 3),
+        SwayClass::Reed => (ay, 3),
     };
-    let span = (bend - top).max(1);
-    let shift = |y: i32| {
-        if y >= bend {
-            return 0;
-        }
-        // lean * reach / 3 at the top, falling off to none at the bend; rounded to nearest.
-        let num = lean * reach * (bend - y) * 2;
-        let den = 3 * span * 2;
-        (num + den.signum() * num.signum() * den / 2) / den
-    };
-    let (w, h) = ((c.w() + 6) as u16, c.h() as u16);
-    atlas.add_texels(w, h, (ax as i16 + 3, ay as i16), ay.clamp(1, 255) as u8, |x, y| {
-        crate::atlas::Texel::of(c, x - 3 - shift(y), y)
-    })
+    // A level of 3 leans the top `reach` px: the whole level at `3 * rows / reach` rows up.
+    let rows = (from - top).max(1);
+    let span = (SWAY_REACH * rows * 2 + reach) / (2 * reach);
+    debug_assert!(from <= 255 && span <= 255, "a flora sprite too tall to bend");
+    let bend = crate::frame::Bend { lean: 0, from: from.clamp(0, 255) as u8, span: span.clamp(1, 255) as u8 };
+    (bend, (top, from))
 }
 
 /// A block over columns `x0..x1` and rows `y0..y1`, a px wider each side (T2's terrain).
@@ -378,15 +439,13 @@ impl Terrain {
                 } else {
                     SwayClass::Bush
                 };
-                let mut sway = [look; SWAY_FRAMES];
-                if class != SwayClass::Still {
-                    for (k, f) in sway.iter_mut().enumerate() {
-                        let lean = k as i32 - SWAY_REST as i32;
-                        if lean != 0 {
-                            *f = sheared(atlas, &s.canvas, (s.ax, s.ay), lean, class);
-                        }
-                    }
-                }
+                let (bend, crown) = bend_of(&s.canvas, s.ay, class);
+                // A broadleaf's loose leaves; a pine's needles hold.
+                let leaves = if matches!(kind, jane_art::flora::Kind::Green(_) | jane_art::flora::Kind::Turned(_)) {
+                    clusters(atlas, &s.canvas, crown)
+                } else {
+                    [Cluster::default(); LEAF_CLUSTERS]
+                };
                 // A tree throws its shadow from its trunk; a shrub or a stone from its spread,
                 // as deep as it is drawn wide (round, seen from above): a row of bushes planted
                 // down the screen, a cell apart, is a hedge in the field as one across it is
@@ -404,7 +463,7 @@ impl Terrain {
                 // What it stands on, rows over its foot (a shrub's rim; its heights are counted
                 // from there, `jane_art::flora::base`).
                 let lift = (s.ay - jane_art::flora::base(&s.canvas, s.ay)).clamp(0, 255) as u8;
-                Flora { look, sway, class, rustles, depth: depth.clamp(3, 16) as u8, lift }
+                Flora { look, bend, class, leaves, rustles, depth: depth.clamp(3, 16) as u8, lift }
             })
             .collect();
         Terrain {

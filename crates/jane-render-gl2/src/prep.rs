@@ -556,7 +556,9 @@ impl Prep {
         for i in range {
             let s = &frame.sprites[i];
             let (x, y, w, h) = (i32::from(s.x), i32::from(s.y), i32::from(s.src.w), i32::from(s.src.h));
-            let r = (x.max(0), y.max(0), (x + w).min(cw), (y + h).min(ch));
+            // Bent in the wind, its quad is as much wider each side as its top leans (`Bend`).
+            let reach = s.flags.bend.reach();
+            let r = ((x - reach).max(0), y.max(0), (x + w + reach).min(cw), (y + h).min(ch));
             if r.0 >= r.2 || r.1 >= r.3 || usize::from(s.page) >= pages.len() {
                 continue;
             }
@@ -574,12 +576,15 @@ impl Prep {
             };
             let depth = f32::from(self.depth.get(i).copied().unwrap_or(2));
             let (sx, sy, sw, sh) = (f32::from(s.src.x), f32::from(s.src.y), f32::from(s.src.w), f32::from(s.src.h));
-            let (ul, ur) = if s.flags.mirror { (sx + sw, sx) } else { (sx, sx + sw) };
+            let rf = reach as f32;
+            let (ul, ur) = if s.flags.mirror { (sx + sw + rf, sx - rf) } else { (sx - rf, sx + sw + rf) };
             let rect = [sx, sy, sx + sw, sy + sh];
             let info = [kind, weight, if s.flags.mirror { 1.0 } else { 0.0 }, depth];
-            let foot = s.foot.map_or([0.0; 4], |f| [f32::from(f.y), 1.0, if f.see { 1.0 } else { 0.0 }, 0.0]);
+            let bend = if reach > 0 { s.flags.bend.packed() as f32 } else { 0.0 };
+            let foot =
+                s.foot.map_or([0.0, 0.0, 0.0, bend], |f| [f32::from(f.y), 1.0, if f.see { 1.0 } else { 0.0 }, bend]);
             self.behind |= s.foot.is_some();
-            let (x0, y0, x1, y1) = (x as f32, y as f32, (x + w) as f32, (y + h) as f32);
+            let (x0, y0, x1, y1) = ((x - reach) as f32, y as f32, (x + w + reach) as f32, (y + h) as f32);
             for (px, py, u, v) in [(x0, y0, ul, sy), (x1, y0, ur, sy), (x0, y1, ul, sy + sh), (x1, y1, ur, sy + sh)] {
                 push(&mut self.sprite_v, &[px, py, u, v]);
                 push(&mut self.sprite_v, &rect);
@@ -845,7 +850,7 @@ mod tests {
             src: Src { x: 0, y: 0, w: 8, h: 8 },
             x,
             y: 0,
-            flags: Flags { mirror: false, tint },
+            flags: Flags { mirror: false, tint, bend: jane_present::Bend::NONE },
             height_px: 8,
             foot: None,
         }

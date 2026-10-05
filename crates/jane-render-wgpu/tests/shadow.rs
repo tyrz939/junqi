@@ -245,7 +245,10 @@ fn a_prop_in_front_of_her_is_seen_through_on_the_checker() {
     let pos = f.passes.iter().position(|q| matches!(q, Pass::Lights { .. })).expect("a light pass");
     f.passes.insert(pos, Pass::Sprites { layer: Depth::Standing, cmds: Span { start: 0, len: 2 } });
     let bare = draw(&mut b, &atlas, &f);
-    f.sprites.push(SpriteCmd { flags: Flags { mirror: false, tint: jane_present::Tint::Seen }, ..her });
+    f.sprites.push(SpriteCmd {
+        flags: Flags { mirror: false, tint: jane_present::Tint::Seen, bend: jane_present::Bend::NONE },
+        ..her
+    });
     f.passes.insert(pos + 1, Pass::Sprites { layer: Depth::Standing, cmds: Span { start: 2, len: 1 } });
     let seen = draw(&mut b, &atlas, &f);
     let (mut on, mut off) = (0, 0);

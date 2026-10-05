@@ -98,7 +98,8 @@ void main() {
 ";
 
 /// The sprite program's vertices: [`SPRITE_VS`]'s, and `a_foot` (the row it stands on, 1 when
-/// the terrain stands in front of its feet, 1 when a player is seen through it: `Foot`).
+/// the terrain stands in front of its feet, 1 when a player is seen through it: `Foot`; and its
+/// bend packed, `Bend::packed`, 0 for none, unpacked here into `v_bend` as lean, from, span).
 pub const STAND_VS: &str = r"
 attribute vec2 a_pos;
 attribute vec2 a_uv;
@@ -110,11 +111,16 @@ varying vec2 v_uv;
 varying vec4 v_rect;
 varying vec4 v_info;
 varying vec4 v_foot;
+varying vec3 v_bend;
 void main() {
     v_uv = a_uv;
     v_rect = a_rect;
     v_info = a_info;
     v_foot = a_foot;
+    float span = floor((a_foot.w + 0.5) / 8192.0);
+    float rest = a_foot.w - span * 8192.0;
+    float bfrom = floor((rest + 0.5) / 32.0);
+    v_bend = vec3(rest - bfrom * 32.0 - 16.0, bfrom, span);
     gl_Position = vec4(a_pos / u_canvas * 2.0 - 1.0, 0.0, 1.0);
 }
 ";
@@ -150,6 +156,7 @@ varying vec2 v_uv;
 varying vec4 v_rect;
 varying vec4 v_info;
 varying vec4 v_foot;
+varying vec3 v_bend;
 
 vec2 page_uv(vec2 t) {
     float s = floor((t.y + 0.5) / u_page.y);
@@ -184,6 +191,17 @@ bool hidden() {
 }
 void main() {
     vec2 t = clamp(floor(v_uv), v_rect.xy, v_rect.zw - 1.0);
+    // Bent in the wind (`Bend::shift`): this row's texel is its shift back across the quad,
+    // which is as much wider each side as the top leans; past the rect is nothing.
+    vec3 b = floor(v_bend + 0.5);
+    if (b.z > 0.5) {
+        float d = b.y - (t.y - v_rect.y);
+        float s = d > 0.5 ? fdiv(2.0 * abs(b.x) * d + b.z, 2.0 * b.z) : 0.0;
+        if (b.x < 0.0) s = -s;
+        float tx = floor(v_uv.x) + (v_info.z > 0.5 ? s : -s);
+        if (tx < v_rect.x || tx >= v_rect.z) discard;
+        t.x = tx;
+    }
     float ix = index_at(t);
     float kind = floor(v_info.x + 0.5);
     float w = floor(v_info.y + 0.5);

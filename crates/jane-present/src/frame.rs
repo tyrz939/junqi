@@ -755,6 +755,56 @@ pub struct Flags {
     /// Walk the source columns backwards.
     pub mirror: bool,
     pub tint: Tint,
+    /// Bent in the wind (PRESENTATION.md §1.3 *Bend*): each source row drawn shifted
+    /// [`Bend::shift`] px east, on the canvas, after the mirror. The default bends nothing.
+    pub bend: Bend,
+}
+
+/// A sway as a draw-time shear of one static sprite (ART-PLAN §9, the owner, 2026-10-03: "efficient
+/// rust code that just moves or manipulates a static image"): source row `from` and every row
+/// under it stay put; a row `d` rows above it is drawn `lean * d / span` px east, rounded to the
+/// nearest whole px (a half away from zero), so the row `span` over `from` is `lean` px over and
+/// the rows between step a px at a time. Whole px, so the pixels stay crisp; integer, so every
+/// tier draws the same canvas. The shadows bend with it (`shadow::rows`), as T2's field does
+/// from what is drawn.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Bend {
+    /// Px east (west below 0) at `span` rows over `from`; `-15..=15`.
+    pub lean: i8,
+    /// The source row the bend starts at, from the sprite's top.
+    pub from: u8,
+    /// Rows over `from` that lean the whole `lean`; 0 bends nothing.
+    pub span: u8,
+}
+
+impl Bend {
+    /// Upright: no row shifted.
+    pub const NONE: Bend = Bend { lean: 0, from: 0, span: 0 };
+
+    /// Px source row `row` (from the sprite's top) is drawn east of where it would stand.
+    #[inline]
+    pub const fn shift(self, row: i32) -> i32 {
+        let (m, d, span) = ((self.lean as i32).abs(), self.from as i32 - row, self.span as i32);
+        if m == 0 || d <= 0 || span == 0 {
+            return 0;
+        }
+        let s = (2 * m * d + span) / (2 * span);
+        if self.lean < 0 { -s } else { s }
+    }
+
+    /// The most px any row is shifted either way (its top row's): how far the sprite reaches
+    /// past its rect.
+    #[inline]
+    pub const fn reach(self) -> i32 {
+        self.shift(0).abs()
+    }
+
+    /// Packed in one integer for the GPU tiers: `lean + 16 | from << 5 | span << 13` (a float
+    /// carries it exactly: under 2^21).
+    #[inline]
+    pub const fn packed(self) -> u32 {
+        (self.lean as i32 + 16) as u32 & 31 | (self.from as u32) << 5 | (self.span as u32) << 13
+    }
 }
 
 /// A rect of an atlas page, in texels.

@@ -111,7 +111,11 @@ fn frame(o: Occluder) -> (AtlasPages, Frame) {
     }
     let n = f.sprites.len() as u32;
     f.passes.push(Pass::Sprites { layer: Depth::Standing, cmds: Span { start: 0, len: n } });
-    f.sprites.push(SpriteCmd { flags: Flags { mirror: false, tint: Tint::Seen }, foot: None, ..her });
+    f.sprites.push(SpriteCmd {
+        flags: Flags { mirror: false, tint: Tint::Seen, bend: jane_present::Bend::NONE },
+        foot: None,
+        ..her
+    });
     f.passes.push(Pass::Sprites { layer: Depth::Standing, cmds: Span { start: n, len: 1 } });
     (atlas, f)
 }

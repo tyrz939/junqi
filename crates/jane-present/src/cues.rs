@@ -354,7 +354,11 @@ impl Cues {
                 src: r.src,
                 x: x.clamp(-4096, 4096) as i16,
                 y: y.clamp(-4096, 4096) as i16,
-                flags: Flags { mirror: false, tint: Tint::Ghost((a * dim / 256).min(255) as u8) },
+                flags: Flags {
+                    mirror: false,
+                    tint: Tint::Ghost((a * dim / 256).min(255) as u8),
+                    bend: crate::frame::Bend::NONE,
+                },
                 height_px: 0,
                 foot: None,
             }
@@ -473,7 +477,7 @@ impl Cues {
                     src: r.src,
                     x: x as i16,
                     y: y as i16,
-                    flags: Flags { mirror: false, tint: Tint::Ghost(a) },
+                    flags: Flags { mirror: false, tint: Tint::Ghost(a), bend: crate::frame::Bend::NONE },
                     height_px: 0,
                     foot: None,
                 });

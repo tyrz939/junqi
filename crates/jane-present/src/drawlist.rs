@@ -93,7 +93,7 @@ const EMPTY: SpriteCmd = SpriteCmd {
     src: crate::frame::Src { x: 0, y: 0, w: 0, h: 0 },
     x: 0,
     y: 0,
-    flags: crate::frame::Flags { mirror: false, tint: crate::frame::Tint::None },
+    flags: crate::frame::Flags { mirror: false, tint: crate::frame::Tint::None, bend: crate::frame::Bend::NONE },
     height_px: 0,
     foot: None,
 };

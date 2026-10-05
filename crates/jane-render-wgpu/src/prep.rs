@@ -311,7 +311,9 @@ impl Prep {
                         let id = sprite_id(cmds.start as usize + k);
                         u32s(&mut self.sprites, &[u32::from(depth), id, u32::from(sink), burn]);
                         // Where it stands, when the terrain stands in front of its feet (`Foot`).
-                        let foot = s.foot.map_or([0; 4], |f| [i32::from(f.y), 1, i32::from(f.see), 0]);
+                        // And its bend in the wind, packed (`Bend::packed`), 0 for none.
+                        let bend = if s.flags.bend.reach() > 0 { s.flags.bend.packed() as i32 } else { 0 };
+                        let foot = s.foot.map_or([0, 0, 0, bend], |f| [i32::from(f.y), 1, i32::from(f.see), bend]);
                         i32s(&mut self.sprites, &foot);
                         self.behind |= s.foot.is_some();
                         if layer == Depth::Standing {
@@ -582,7 +584,7 @@ mod tests {
             src: Src { x: 0, y: 0, w: 8, h: 8 },
             x,
             y: 0,
-            flags: Flags { mirror: false, tint },
+            flags: Flags { mirror: false, tint, bend: jane_present::Bend::NONE },
             height_px: 40,
             foot: None,
         }

@@ -101,7 +101,26 @@ pub struct Fx {
     tick: u32,
     /// The wind's leaves this tick (ART-PLAN Q1): how many, the wind and the view they blow over.
     leaves: Leaves,
+    /// The leaves the crowns in view let go this frame (ART-PLAN §9), set by the scene as it
+    /// draws them: drawn with the wind's.
+    pub(crate) loose: Vec<Loose>,
 }
+
+/// A leaf a crown let go (ART-PLAN §9): the ground under where it hung, zone canvas px, how high
+/// it hung, ticks since it let go, its hash and its crown's colour. A pure function of these and
+/// the wind: no state is kept.
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct Loose {
+    pub x: i32,
+    pub y: i32,
+    pub z: i32,
+    pub age: u32,
+    pub seed: u32,
+    pub colour: [u8; 3],
+}
+
+/// Ticks a let-go leaf falls.
+pub(crate) const LOOSE_LIFE: u32 = 150;
 
 /// Leaves blown on the wind (ART-PLAN Q1, Stardew's wind debris): about twenty to a screen by
 /// day, none at night, indoors or in heavy rain. Each is a pure function of its index and the
@@ -162,6 +181,7 @@ impl Fx {
             grounds_next: Vec::with_capacity(32),
             tick: 0,
             leaves: Leaves::default(),
+            loose: Vec::with_capacity(64),
         }
     }
 
@@ -609,6 +629,35 @@ impl Fx {
     fn draw_leaves(&self, f: &mut Frame, cam: (i32, i32), alpha: u8, sky: Option<&Sky>) {
         let l = self.leaves;
         let (vx, vy, vw, vh) = l.view;
+        // The crowns' let-go leaves, when the wind's blow (by day, out of doors, dry): from where
+        // they hung, down the wind, fluttering, tumbling, to the ground.
+        let (cw, ch) = (i32::from(f.canvas.0), i32::from(f.canvas.1));
+        for lf in self.loose.iter().filter(|_| l.n > 0) {
+            let tq = (lf.age * 256 + u32::from(alpha)) as i32;
+            let life = LOOSE_LIFE as i32 * 256;
+            let flutter = jane_core::angle::sin_q15(Angle(((tq * 7) as u32).wrapping_add(lf.seed) as u16)).0;
+            let x = lf.x + (4 + l.wind) * tq / 256 / Q + flutter * 2 / 32768;
+            // It falls slower at first, as a leaf catches the air.
+            let z = lf.z - (lf.z * tq / life) * tq / life;
+            let (sx, sy) = (x - cam.0, lf.y - z - cam.1);
+            if sx < -4 || sy < -4 || sx > cw + 4 || sy > ch + 4 || z <= 0 {
+                continue;
+            }
+            let face = flutter > 0;
+            let [r, g, b] = lf.colour;
+            let colour =
+                if face { [r.saturating_add(24), g.saturating_add(24), b.saturating_add(12)] } else { lf.colour };
+
+            f.parts.push(Particle {
+                x: sx as i16,
+                y: sy as i16,
+                shape: PartShape::Dot { size: if face && lf.seed & 1 == 0 { 2 } else { 1 } },
+                colour: self.lit(colour, 0, sky),
+                alpha: ((LOOSE_LIFE - lf.age) * 8).min(255) as u8,
+                glow: 0,
+                height: z.clamp(0, 255) as u8,
+            });
+        }
         for i in 0..u32::from(l.n) {
             let hi = jane_core::hash::mix32(i ^ LEAF_SALT);
             let life = LEAF_LIFE.0 + hi % LEAF_LIFE.1;
