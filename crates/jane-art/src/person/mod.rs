@@ -19,12 +19,13 @@ mod hair;
 mod held;
 mod pose;
 mod special;
+mod task;
 
 use jane_core::hash::fnv1a;
 use jane_data::{EmitRole, PersonLook, Skin};
 
 pub use build::{Proportions, of as proportions};
-pub use pose::{BREATHE, FALLEN, Facing, LIVING, Pose, WALK_DOWN, WALK_SIDE, WALK_UP};
+pub use pose::{ASIDE, BLINK, BREATHE, FALLEN, Facing, LAND, LIVING, Pose, TURN, WALK_DOWN, WALK_SIDE, WALK_UP};
 
 use crate::canvas::Canvas;
 use crate::palette::{Ix, Ramp, Tone};
@@ -44,15 +45,19 @@ pub const AY: i32 = 36;
 /// the enemy reds, as the TS build's `SEAT_COATS` were.
 pub const SEAT_COATS: [Ramp; 3] = [Ramp::ClothTeal, Ramp::ClothMoss, Ramp::ClothOchre];
 
-/// Every frame a step-2 person promises, in order.
+/// Every frame every person promises, in order: the walks and breathes, the dead, then the
+/// blinks and the turns ([`ASIDE`]).
 pub fn frame_ids() -> impl Iterator<Item = FrameId> {
-    LIVING.iter().map(|(f, _, _)| *f).chain([FrameId::Dead, FrameId::Dead2])
+    LIVING.iter().map(|(f, _, _)| *f).chain([FrameId::Dead, FrameId::Dead2]).chain(ASIDE.iter().map(|(f, _, _)| *f))
 }
 
-/// Every frame a person that attacks or casts promises: [`frame_ids`], then its attack, cast
-/// and hurt frames (ART.md §4).
-pub fn frame_ids_for(fight: Fight) -> Vec<FrameId> {
-    frame_ids().chain(pose::fight(fight.attacks, fight.casts).into_iter().map(|(f, _, _)| f)).collect()
+/// Every frame a person promises: [`frame_ids`], then, if it attacks or casts, its attack, cast,
+/// hurt and landing frames (ART.md §4), then the beats of its work (`task`, ART-PLAN Q4).
+pub fn frame_ids_for(fight: Fight, work: jane_data::Task) -> Vec<FrameId> {
+    frame_ids()
+        .chain(pose::fight(fight.attacks, fight.casts).into_iter().map(|(f, _, _)| f))
+        .chain(task::frames(work).into_iter().map(|(f, _, _)| f))
+        .collect()
 }
 
 /// What a person does besides walk: strike, cast (either brings the hurt frames).
@@ -172,7 +177,12 @@ pub fn render_fighting(look: &PersonLook, seed: u32, fight: Fight) -> Result<Spr
             fallen::fallen(&body, seed ^ k as u32, matches!(d.skin, Ramp::Skin | Ramp::SkinPale | Ramp::SkinDark)),
         ));
     }
-    for (id, facing, pose) in pose::fight(fight.attacks, fight.casts) {
+    for &(id, facing, pose) in &ASIDE {
+        // The dead's eyes never close: a blink of a look whose eyes are lights is its stare.
+        let pose = if d.eye_emits { Pose { shut: false, ..pose } } else { pose };
+        frames.push((id, draw::frame(&d, p, facing, pose)));
+    }
+    for (id, facing, pose) in pose::fight(fight.attacks, fight.casts).into_iter().chain(task::frames(look.task)) {
         frames.push((id, draw::frame(&d, p, facing, pose)));
     }
     let mut emits = Vec::new();

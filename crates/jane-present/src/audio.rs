@@ -187,6 +187,12 @@ pub enum SfxKind {
     Thunder,
     Owl,
     Crow,
+    /// A hive's bees, heard before it is seen (the last fifty metres, [`FarCall`]).
+    Bees,
+    /// The diver's knocking from under the water.
+    Knocking,
+    /// The night shift's boots on Cinder Walk.
+    Boots,
     /// The School's bell, across the county.
     BellFar,
     /// The School's bell heard through walls and earth.
@@ -246,7 +252,7 @@ impl SfxKind {
         }
     }
 
-    pub const ALL: [SfxKind; 76] = [
+    pub const ALL: [SfxKind; 79] = [
         SfxKind::StepGrass,
         SfxKind::StepRoad,
         SfxKind::StepCobble,
@@ -305,6 +311,9 @@ impl SfxKind {
         SfxKind::Thunder,
         SfxKind::Owl,
         SfxKind::Crow,
+        SfxKind::Bees,
+        SfxKind::Knocking,
+        SfxKind::Boots,
         SfxKind::BellFar,
         SfxKind::BellWithin,
         SfxKind::BellNear,
@@ -386,6 +395,9 @@ impl SfxKind {
             SfxKind::Thunder => "thunder",
             SfxKind::Owl => "owl",
             SfxKind::Crow => "crow",
+            SfxKind::Bees => "bees",
+            SfxKind::Knocking => "knocking",
+            SfxKind::Boots => "boots",
             SfxKind::BellFar => "bell_far",
             SfxKind::BellWithin => "bell_within",
             SfxKind::BellNear => "bell_near",
@@ -814,11 +826,91 @@ pub struct Soundtrack {
     pub ticks: u32,
     /// Her cast building as last heard: when it began, and the swells already played.
     rising: Option<(u32, u8)>,
+    /// Ticks to the next of the far calls.
+    far_wait: u32,
 }
 
 /// The swell for a cast `frac` 256ths of the way: a step a quarter.
 pub const fn rise_step(frac: u16) -> u8 {
     if frac >= 192 { 3 } else { (frac / 64) as u8 }
+}
+
+/// What is heard before it is seen, about a screen out: bees at a hive, the diver knocking under
+/// the water while he is down, the night shift's boots after dark.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FarCall {
+    Bees,
+    Knocking,
+    Boots,
+}
+
+impl FarCall {
+    pub const fn sfx(self) -> SfxKind {
+        match self {
+            FarCall::Bees => SfxKind::Bees,
+            FarCall::Knocking => SfxKind::Knocking,
+            FarCall::Boots => SfxKind::Boots,
+        }
+    }
+}
+
+/// How far a far call carries, cells: a screen and a half across (48 cells), from her.
+pub const FAR_CELLS: i32 = 44;
+/// Ticks between far calls, at least (as much again at most).
+const FAR_TICKS: u32 = 150;
+
+/// The nearest source of each far call within [`FAR_CELLS`] of her: a hive, the diver's pump
+/// while his helmet is not yet up, the night shift on the move (after dark).
+pub fn far_sources(view: &View<'_>, night: bool) -> Vec<(FarCall, At)> {
+    let cat = jane_data::catalog();
+    let (cx, cy) = view.body().pos.cell();
+    let me = at(view.body().pos);
+    let area = jane_core::Rect::new(cx - FAR_CELLS, cy - FAR_CELLS, 2 * FAR_CELLS, 2 * FAR_CELLS);
+    let mut best: [Option<(f32, At)>; 3] = [None; 3];
+    let mut offer = |k: usize, p: At| {
+        let d = cells(p, me);
+        if d <= FAR_CELLS as f32 && best[k].is_none_or(|b| d < b.0) {
+            best[k] = Some((d, p));
+        }
+    };
+    let mut helmet_up = false;
+    for p in view.props_in(area) {
+        let d = cat.story.prop(p.def);
+        let c = (Fx(i32::from(p.cell.x) * CELL_FX + CELL_FX / 2), Fx(i32::from(p.cell.y) * CELL_FX + CELL_FX / 2));
+        match d.id {
+            "beehive" | "tale_hive" if !p.hidden => offer(0, c),
+            "tale_air_pump" => offer(1, c),
+            "tale_helmet" if !p.hidden => helmet_up = true,
+            _ => {}
+        }
+    }
+    if night {
+        let shift = cat.combat.units.iter().position(|u| u.id == "night_skeleton");
+        for u in view.units_in(area) {
+            let u = u.unit;
+            if u.alive && Some(u.def.index()) == shift {
+                offer(2, at(u.pos));
+            }
+        }
+    }
+    if helmet_up {
+        best[1] = None;
+    }
+    let calls = [FarCall::Bees, FarCall::Knocking, FarCall::Boots];
+    calls.into_iter().zip(best).filter_map(|(c, b)| b.map(|b| (c, b.1))).collect()
+}
+
+/// Where a far call at `src` is put for the bus to hear from `listener`: along the true bearing,
+/// with the distance drawn in so [`FAR_CELLS`] lands at the edge of [`HEARING_CELLS`]: faint and
+/// to one side a screen out, full when she is on it. `None` past [`FAR_CELLS`].
+pub fn far_heard(src: At, listener: At) -> Option<At> {
+    let d = cells(src, listener);
+    if d > FAR_CELLS as f32 {
+        return None;
+    }
+    let k = (HEARING_CELLS - 1.0) / FAR_CELLS as f32;
+    let pull = |a: Fx, b: Fx| Fx(b.0 + ((a.0 - b.0) as f32 * k) as i32);
+    Some((pull(src.0, listener.0), pull(src.1, listener.1)))
 }
 
 /// The two clock times the table keeps itself: the nine a stopped bell leaves silent (no event
@@ -903,7 +995,27 @@ impl Soundtrack {
                 (Fx(i32::from(p.cell.x) * CELL_FX + h), Fx(i32::from(p.cell.y) * CELL_FX + h))
             })
         };
+        self.far_calls(view, &s, bus);
         self.step(&s, events, &locate, bus);
+    }
+
+    /// The things worth finding that are heard before they are seen, about a screen out (the
+    /// world audit's last fifty metres): every so often the nearest of each kind calls, placed
+    /// by [`far_heard`] so it is faint and to one side at the edge and grows as she comes in.
+    fn far_calls(&mut self, view: &View<'_>, s: &Sense, bus: &mut dyn AudioBus) {
+        if self.rng == 0 || !s.alive || s.zone != ZoneId::County {
+            return;
+        }
+        if self.far_wait > 0 {
+            self.far_wait -= 1;
+            return;
+        }
+        self.far_wait = FAR_TICKS + self.draw() % FAR_TICKS;
+        for (call, src) in far_sources(view, s.night) {
+            if let Some(p) = far_heard(src, s.pos) {
+                bus.sfx(call.sfx(), p, s.pos);
+            }
+        }
     }
 
     /// [`Soundtrack::tick`] over a [`Sense`]: the whole table, testable without a county.
@@ -942,6 +1054,7 @@ impl Soundtrack {
                         SimSfx::Push => SfxKind::Push,
                         SimSfx::PlateDown => SfxKind::PlateDown,
                         SimSfx::PlateUp => SfxKind::PlateUp,
+                        SimSfx::Kindle => SfxKind::HitFire,
                     };
                     bus.sfx(k, at(p), me);
                 }
@@ -1345,6 +1458,66 @@ pub fn bed_levels(s: &Sense) -> [u8; 10] {
         _ => 0,
     };
     l
+}
+
+#[cfg(test)]
+mod far_tests {
+    use super::*;
+
+    #[test]
+    fn a_far_call_is_heard_a_screen_out_and_grows_as_she_comes_in() {
+        let c = |x: i32| (Fx(x * CELL_FX), Fx(0));
+        let me = c(0);
+        let edge = far_heard(c(40), me).and_then(|p| place(p, me)).expect("a screen and more out, still heard");
+        let near = far_heard(c(10), me).and_then(|p| place(p, me)).expect("near");
+        assert!(edge.gain > 0.0 && edge.gain < 0.05, "faint at the edge ({})", edge.gain);
+        assert!(near.gain > edge.gain * 5.0, "fuller as she comes in");
+        assert!(edge.pan > 0.5, "and to the side it is on");
+        assert!(far_heard(c(FAR_CELLS + 2), me).is_none());
+    }
+
+    #[test]
+    fn a_hive_on_the_county_is_heard_from_off_the_screen() {
+        // Seed 7: stand her 30 cells from a hive, and the bees are among the far calls.
+        let mut sim = jane_sim::Sim::new_game(7, "Tess");
+        let county = sim.view(jane_sim::Seat(0)).unwrap().blueprints().get(ZoneId::County).clone();
+        let cat = jane_data::catalog();
+        let hives: Vec<(i32, i32)> = county
+            .props
+            .iter()
+            .filter(|p| matches!(cat.story.prop(p.def).id, "beehive" | "tale_hive") && !p.hidden)
+            .map(|p| (i32::from(p.cell.x), i32::from(p.cell.y)))
+            .collect();
+        assert!(!hives.is_empty(), "the county keeps bees");
+        let open = |x: i32, y: i32| {
+            county.tiles.inside(x, y)
+                && county.tiles.read(x, y, jane_core::Tile::Void).flags() & jane_core::tile::F_SOLID == 0
+        };
+        // Somewhere every hive is at least 26 cells off, and one is within 36.
+        let to = hives
+            .iter()
+            .flat_map(|&(hx, hy)| {
+                const AROUND: [(i32, i32); 8] =
+                    [(30, 0), (21, 21), (0, 30), (-21, 21), (-30, 0), (-21, -21), (0, -30), (21, -21)];
+                AROUND.into_iter().map(move |(dx, dy)| (hx + dx, hy + dy))
+            })
+            .find(|&(x, y)| {
+                let d2 = |h: &(i32, i32)| (h.0 - x).pow(2) + (h.1 - y).pow(2);
+                open(x, y) && hives.iter().all(|h| d2(h) >= 26 * 26) && hives.iter().any(|h| d2(h) <= 36 * 36)
+            })
+            .expect("open ground a screen out from the bees");
+        let (z, id) = (sim.state().players[0].zone, sim.state().players[0].unit);
+        assert_eq!(z, ZoneId::County);
+        sim.state_mut().zone_mut(z).and_then(|zs| zs.unit_mut(id)).expect("her body").pos =
+            jane_core::Vec2::centre(to.0, to.1);
+        sim.rebuild_runtimes();
+        let v = sim.view(jane_sim::Seat(0)).unwrap();
+        let calls = far_sources(&v, false);
+        let bees = calls.iter().find(|c| c.0 == FarCall::Bees).expect("the bees are heard");
+        let me = at(v.body().pos);
+        assert!(cells(bees.1, me) > 20.0, "from off the screen");
+        assert!(far_heard(bees.1, me).and_then(|p| place(p, me)).is_some_and(|q| q.gain > 0.0));
+    }
 }
 
 #[cfg(test)]

@@ -60,20 +60,22 @@ fn the_patches_have_their_populations() {
 fn consequences_change_the_world() {
     let c = catalog();
     let ids: Vec<&str> = c.living.consequences.iter().map(|r| r.id).collect();
-    assert_eq!(
-        ids,
-        [
-            "allotments_thinned",
-            "bell_stopped",
-            "burial_quiet",
-            "forest_quiet",
-            "house_kept",
-            "mine_quiet",
-            "wing_lit",
-            "works_dark",
-            "yard_clear"
-        ]
-    );
+    assert!(ids.windows(2).all(|w| w[0] < w[1]), "ids in sorted order");
+    // The story's own rows; the side quests' (`regions.rs`: one for every quest of the Waters and
+    // the Works) stand among them.
+    for id in [
+        "allotments_thinned",
+        "bell_stopped",
+        "burial_quiet",
+        "forest_quiet",
+        "house_kept",
+        "mine_quiet",
+        "wing_lit",
+        "works_dark",
+        "yard_clear",
+    ] {
+        assert!(ids.contains(&id), "{id}");
+    }
     let row = |id: &str| &c.living.consequences[c.living.consequence_id(id).unwrap().index()];
     let thinned = row("allotments_thinned");
     assert_eq!(thinned.on, Condition::QuestDone(c.story.quest_id("rats_in_the_sheds").unwrap()));

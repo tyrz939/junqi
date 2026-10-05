@@ -11,6 +11,7 @@
 //! backend.draw(frame);
 //! ```
 
+pub mod ambient;
 pub mod atlas;
 pub mod atmos;
 pub mod audio;
@@ -18,6 +19,7 @@ pub mod backend;
 pub mod camera;
 pub mod chunks;
 pub mod creatures;
+pub mod cues;
 pub mod drawlist;
 pub mod facing;
 pub mod frame;
@@ -27,6 +29,7 @@ pub mod input;
 pub mod input_names;
 pub mod lesson;
 pub mod light;
+pub mod memory;
 pub mod people;
 pub mod present;
 pub mod props;

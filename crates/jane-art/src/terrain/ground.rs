@@ -11,7 +11,7 @@
 use jane_core::Tile;
 use jane_data::TilePattern as P;
 
-use super::{CELL, CHUNK_CELLS, CHUNK_PX, MM, NONE, Painter, fast, salt};
+use super::{CELL, CHUNK_CELLS, CHUNK_PX, MM, NONE, Painter, busy_share, fast, salt};
 use crate::canvas::{FLAT, Normal, UNIT, normal};
 use crate::hash::{below, h32};
 use crate::palette::{Ix, Ramp, Tone, letter};
@@ -327,7 +327,7 @@ fn detail(p: &mut Painter, cx: i32, cy: i32, wx: i32, wy: i32, seed: u32) {
         P::Earth | P::Gravel => {
             // Pebbles in clusters; now and then a crack in the dry of a lane.
             let (odds, n) = if st.row.pattern == P::Gravel { (2, 4) } else { (5, 3) };
-            if h % odds == 0 {
+            if h % odds == 0 && below(h >> 24, 16) < busy_share(wx, wy, seed) {
                 let (ax, ay) =
                     (px + 3 + below(h.rotate_right(4), 10) as i32, py + 3 + below(h.rotate_right(8), 10) as i32);
                 for s in 0..2 + below(h.rotate_right(12), n) as i32 {
@@ -367,7 +367,7 @@ fn detail(p: &mut Painter, cx: i32, cy: i32, wx: i32, wy: i32, seed: u32) {
         P::Marsh => {
             if h & 3 == 0 {
                 puddle(p, px + 2 + (h >> 4) as i32 % 8, py + 3 + (h >> 8) as i32 % 9, g, h);
-            } else if h & 7 == 5 || cluster > 170 && h & 3 == 1 {
+            } else if (h & 7 == 5 || cluster > 170 && h & 3 == 1) && below(h >> 20, 16) < busy_share(wx, wy, seed) {
                 tuft(p, px + 4 + (h >> 5) as i32 % 8, py + 10 + (h >> 9) as i32 % 5, g, Ramp::Reed, 4, h >> 11, z, 5);
             }
         }
@@ -431,7 +431,66 @@ fn detail(p: &mut Painter, cx: i32, cy: i32, wx: i32, wy: i32, seed: u32) {
         }
         _ => {}
     }
+    if matches!(st.row.pattern, P::Turf | P::Earth | P::Gravel | P::Setts | P::Sand) {
+        litter(p, cx, cy, wx, wy, g, h, z, seed);
+    }
     let _ = r;
+}
+
+/// Whether a tile stands up off the ground as a wall does, so blown leaves gather at its foot.
+fn walls(t: Tile) -> bool {
+    matches!(t, Tile::HouseWall | Tile::Wall | Tile::StoneWall | Tile::Fence | Tile::Hedge | Tile::Cliff)
+}
+
+/// Fallen leaves (ART-PLAN Q1, WORLD.md §2.4 "leaves on the square"): thick under the crowns,
+/// thinner the further from them; drifted into the lee of a wall (a cell with a wall to its west,
+/// the wind being westerly, or to its north, a gutter under a face) and heaped along that side;
+/// and a few blown out over the square and the lanes. The Waters have fewer; the Works' are brown.
+#[allow(clippy::too_many_arguments)]
+fn litter(p: &mut Painter, cx: i32, cy: i32, wx: i32, wy: i32, g: u8, h: u32, z: i32, seed: u32) {
+    let (px, py) = (cx * CELL, cy * CELL);
+    let region = p.s.region[Painter::at(cx, cy)];
+    let trees = (-2..=2)
+        .flat_map(|dy| (-2..=2).map(move |dx| (dx, dy)))
+        .filter(|&(dx, dy)| p.s.raw[Painter::at(cx + dx, cy + dy)] == Tile::Tree)
+        .count() as u32;
+    let mut n = if trees > 0 { trees / 2 + u32::from(h % 5 < trees.min(4)) } else { 0 };
+    // Blown out over open ground, in the busy patches, now and then.
+    if trees == 0 && (h >> 7) % 4 == 0 && below(h >> 11, 16) < busy_share(wx, wy, seed ^ 0x1eaf) {
+        n += 1 + (h >> 15) % 2;
+    }
+    if region == 1 {
+        n = n * 2 / 3;
+    }
+    for l in 0..n {
+        let hl = h32(h, l, 10);
+        let (x, y) = (px + below(hl, 15) as i32, py + below(hl.rotate_right(8), 15) as i32);
+        leaf(p, x, y, g, hl >> 16, z, region);
+        // A leaf seldom lies alone: one or two more beside it.
+        for k in 0..below(hl >> 4, 3) {
+            let hk = h32(hl, k, 14);
+            leaf(p, x + below(hk, 5) as i32 - 2, y + below(hk >> 8, 4) as i32 - 1, g, hk >> 16, z, region);
+        }
+    }
+    // The lee of a wall: a drift along the side it stands on. A made way's gutter (setts or a
+    // lane where it meets other ground) catches them the same way.
+    let raw = |dx: i32, dy: i32| p.s.raw[Painter::at(cx + dx, cy + dy)];
+    let made = matches!(p.styles.id(g).row.pattern, P::Setts | P::Gravel | P::Earth);
+    let gutter = |dx: i32, dy: i32| made && p.s.surf[Painter::at(cx + dx, cy + dy)] != g;
+    let (west, north) = (walls(raw(-1, 0)) || gutter(-1, 0), walls(raw(0, -1)) || gutter(0, -1));
+    if (west || north) && (h >> 18) % 3 != 0 {
+        // In a heap or two along the side, never a ruled line: each leaf near a heap's middle,
+        // deepest against the wall.
+        let heaps = [2 + below(h >> 3, 5) as i32, 9 + below(h >> 6, 5) as i32];
+        for l in 0..3 + (h >> 22) % 4 {
+            let hl = h32(h, l, 15);
+            let along = heaps[(hl >> 28) as usize & usize::from((h >> 9) & 1 == 1)] + below(hl, 5) as i32 - 2;
+            let out = (below(hl >> 8, 5) as i32).min(below(hl >> 12, 5) as i32);
+            let (x, y) =
+                if west && (!north || hl & 1 == 0) { (px + out, py + along) } else { (px + along, py + 1 + out) };
+            leaf(p, x, y, g, hl >> 16, z, region);
+        }
+    }
 }
 
 /// Whether chunk-local px `(x, y)` is on surface `g`.
@@ -447,8 +506,12 @@ fn turf(p: &mut Painter, cx: i32, cy: i32, wx: i32, wy: i32, g: u8, h: u32, z: i
     let (px, py) = (cx * CELL, cy * CELL);
     // Tufts: none where the grass is short, up to two where it grows long, now and then one.
     let n = ((cluster - 140) / 40).clamp(0, 2) + i32::from(h % 9 == 0);
+    let keep = busy_share(wx, wy, seed);
     for t in 0..n as u32 {
         let ht = h32(h, t, 8);
+        if below(ht >> 4, 16) >= keep {
+            continue;
+        }
         let (x, y) = (px + 2 + below(ht, 12) as i32, py + 5 + below(ht.rotate_right(8), 10) as i32);
         let r = p.s.ly.tone(x, y).map_or(Ramp::Turf, |(r, _)| r);
         tuft(
@@ -465,26 +528,20 @@ fn turf(p: &mut Painter, cx: i32, cy: i32, wx: i32, wy: i32, g: u8, h: u32, z: i
     }
     // Meadow patches where the flowers are thick, one colour to a patch.
     let meadow = h32((wx >> 3) as u32, (wy >> 3) as u32, seed ^ salt::CELL ^ 0x0a0a) & 255;
-    if meadow < 30 && h % 3 == 0 {
-        let colour = FLOWERS[(meadow % 5) as usize];
-        let (ax, ay) = (px + 3 + below(h.rotate_right(5), 10) as i32, py + 3 + below(h.rotate_right(9), 10) as i32);
-        for f in 0..3 + below(h.rotate_right(13), 3) {
+    // Each group three to seven of one species and colour (ART-PLAN Q3), never a lone speck: thick
+    // in a meadow patch, a group now and then beyond one.
+    let group = if meadow < 40 && h % 2 == 0 {
+        Some(FLOWERS[(meadow % 5) as usize])
+    } else if h % 61 == 11 {
+        Some(FLOWERS[((h >> 1) % 5) as usize])
+    } else {
+        None
+    };
+    if let Some(colour) = group {
+        let (ax, ay) = (px + 4 + below(h.rotate_right(5), 8) as i32, py + 4 + below(h.rotate_right(9), 8) as i32);
+        for f in 0..3 + below(h.rotate_right(13), 5) {
             let hf = h32(h, f, 9);
-            flower(p, ax + below(hf, 7) as i32 - 3, ay + below(hf.rotate_right(8), 5) as i32 - 2, g, colour, z);
-        }
-    } else if h % 97 == 11 {
-        flower(p, px + 4 + (h >> 3) as i32 % 8, py + 6, g, FLOWERS[((h >> 1) % 5) as usize], z);
-    }
-    // Fallen leaves, the more the nearer the trees.
-    let trees = (-2..=2)
-        .flat_map(|dy| (-2..=2).map(move |dx| (dx, dy)))
-        .filter(|&(dx, dy)| p.s.raw[Painter::at(cx + dx, cy + dy)] == Tile::Tree)
-        .count() as u32;
-    if trees > 0 {
-        let leaves = trees / 3 + u32::from(h % 5 < trees.min(4));
-        for l in 0..leaves {
-            let hl = h32(h, l, 10);
-            leaf(p, px + below(hl, 15) as i32, py + below(hl.rotate_right(8), 15) as i32, g, hl >> 16, z);
+            flower(p, ax + below(hf, 9) as i32 - 4, ay + below(hf.rotate_right(8), 7) as i32 - 3, g, colour, z);
         }
     }
     // Blades over the lip where lower ground cuts in: south and east, and a few to the north.
@@ -590,24 +647,39 @@ fn flower(p: &mut Painter, x: i32, y: i32, g: u8, c: char, z: i32) {
     }
 }
 
-/// A fallen leaf: three px of autumn, lit on one side.
-fn leaf(p: &mut Painter, x: i32, y: i32, g: u8, h: u32, z: i32) {
+/// A fallen leaf: three px of autumn, lit on one side, in the leaf ramps the crowns turned
+/// (beech gold, oak russet, maple yellow; the Works' all russet and brown).
+fn leaf(p: &mut Painter, x: i32, y: i32, g: u8, h: u32, z: i32, region: u8) {
     if !own(p, x, y, g) || !own(p, x + 1, y + 1, g) {
         return;
     }
-    let (lit, dark) = match h % 4 {
-        0 => ('o', 'Y'),
-        1 => ('y', 'Y'),
-        2 => ('m', 'T'),
-        _ => ('o', 'T'),
+    let ramp = match (region, h % 7) {
+        (2, 0..=4) => Ramp::LeafOak,
+        (2, _) => Ramp::Bark,
+        (_, 0 | 1) => Ramp::LeafBeech,
+        (_, 2 | 3) => Ramp::LeafOak,
+        (_, 4 | 5) => Ramp::LeafMaple,
+        _ => Ramp::LeafOlive,
     };
-    let (lit, dark) = (letter(lit).unwrap_or(Ix::INK), letter(dark).unwrap_or(Ix::INK));
-    let turn = (h >> 2) & 1 == 1;
-    let (a, b) = if turn { ((1, 0), (0, 1)) } else { ((0, 0), (1, 1)) };
-    p.s.ly.put(x + a.0, y + a.1, lit, normal(-30, -30), z + 1);
-    p.s.ly.put(x + b.0, y + b.1, dark, normal(30, 30), z + 1);
-    p.s.ly.put(x + i32::from(!turn), y, lit, FLAT, z + 1);
-    p.s.ly.step(x + b.0 + 1, y + b.1 + 1, -1);
+    let (lit, dark) = if (h >> 3) & 1 == 0 { (Tone::Light, Tone::Mid) } else { (Tone::Lift, Tone::Shade) };
+    let mid = ramp.at(Tone::Base);
+    let (lit, dark) = (ramp.at(lit), ramp.at(dark));
+    // A leaf of five px, lying one way or the other: its lit face, its middle, its curled dark
+    // edge; the shade it casts under its far side.
+    let flip = if (h >> 2) & 1 == 1 { -1 } else { 1 };
+    for (dx, dy, ix, n) in [
+        (0, 0, lit, normal(-30, -40)),
+        (flip, 0, lit, normal(-20, -40)),
+        (0, 1, mid, FLAT),
+        (flip, 1, mid, FLAT),
+        (2 * flip, 1, dark, normal(30, 30)),
+    ] {
+        if own(p, x + dx, y + dy, g) {
+            p.s.ly.put(x + dx, y + dy, ix, n, z + 1);
+        }
+    }
+    p.s.ly.step(x + flip, y + 2, -1);
+    p.s.ly.step(x + 2 * flip, y + 2, -1);
 }
 
 /// A pebble: 3 x 2 (or 4 x 3 when `big`) of stone, grey or the ground's own, lit on its top-left,

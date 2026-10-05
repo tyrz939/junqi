@@ -749,10 +749,13 @@ impl App<'_> {
                     if let Some(n) = loaded_slot {
                         self.slot = loaded_slot;
                         // The tracker as this slot was saved with it; else the defaults.
-                        if let Some(on) =
-                            saves::info(&self.dirs, n).and_then(|i| i.meta).and_then(|m| m.tracked.map(|t| (t, m.seen)))
-                        {
+                        let meta = saves::info(&self.dirs, n).and_then(|i| i.meta);
+                        if let Some(on) = meta.as_ref().and_then(|m| m.tracked.clone().map(|t| (t, m.seen.clone()))) {
                             self.bufs.track = jane_present::view::Tracking::from_ids(&on.0, &on.1);
+                        }
+                        // The map as this seat inked it, and her pins.
+                        if let Some(m) = meta {
+                            self.bufs.memory = saves::map_of(&m.map);
                         }
                     }
                 }
@@ -1111,6 +1114,7 @@ impl App<'_> {
             saved_unix: saves::unix_now(),
             tracked: Some(tracked),
             seen,
+            map: saves::map_rows(&self.bufs.memory),
         }
     }
 
@@ -1460,6 +1464,7 @@ impl App<'_> {
                 self.ui.interactive = false;
                 quest_marks::draw(&mut self.ui, self.present.marks(), self.present.dark(), self.present.ticks());
                 jane_present::ui::fight::draw(&mut self.ui, self.present.fight());
+                quest_marks::draw_emotes(&mut self.ui, self.present.emotes(), self.present.ticks());
                 if self.world_dbg.on
                     && let Some(v) = sim_of(self.session.as_ref()).and_then(|s| s.view(me_of(self.session.as_ref())))
                 {
@@ -1489,6 +1494,12 @@ impl App<'_> {
                     self.ui.interactive = self.menus.is_empty();
                     let v = sim_of(self.session.as_ref()).and_then(|s| s.view(me_of(self.session.as_ref())));
                     window::draw(&mut self.ui, &mut self.win, &self.bufs, v.as_ref(), cx);
+                    for (zone, at) in std::mem::take(&mut self.win.map.pin_edits) {
+                        if self.bufs.memory.toggle_pin(zone, at) == jane_present::memory::PinEdit::Full {
+                            let s = format!("All {} pins are on the map", jane_present::memory::PINS);
+                            self.bufs.push_toast(&s, jane_present::text::Tone::Refused);
+                        }
+                    }
                 }
                 if let Some(d) = &self.bufs.dialogue {
                     self.ui.interactive = self.menus.is_empty();

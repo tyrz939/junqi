@@ -2,6 +2,12 @@
 //! crops) are painted into the ground; tall things (trees, shrubs, stones, fences, low walls) go
 //! into the strips, one per cell row, with the contact shade under each baked into the ground.
 //! Then the wall runs' caster segments.
+//!
+//! A tree tile is drawn as a species (ART-PLAN M3) chosen here from the biome and what is near:
+//! a willow by water, a yew by a churchyard wall, a wood of one species in stands, oak, ash,
+//! hawthorn and maple along the hedgerows. About three in five broadleaves are turned (Q1), by
+//! the cell's hash and its region: the Waters keep more green, the Works go brown. All of it is
+//! a render choice over the same sim tile: nothing here moves a collision or the world's hash.
 
 use jane_core::Tile;
 use jane_core::grid::Rect;
@@ -9,64 +15,38 @@ use jane_data::{TileGroup, TilePattern as P};
 
 use super::{
     CELL, CHUNK_CELLS, CHUNK_PX, CasterSeg, Chunk, FENCE_FLOOR, FencePart, NONE, Painter, Placed, STRIP_BELOW, STRIP_H,
-    STRIP_MARGIN, Standing, Style, fast, pack, salt,
+    STRIP_MARGIN, Standing, Style, busy_share, fast, pack, salt,
 };
 use crate::canvas::{Canvas, FLAT, Z, normal};
-use crate::flora::{Bank, Sprite};
+use crate::flora::{Kind, Species, Sprite};
 use crate::hash::{below, h32};
 use crate::palette::{Ix, Ramp, Tone, letter};
 
-/// Which bank sprite a cell shows.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Pick {
-    Large(usize, usize),
-    Medium(usize, usize),
-    Pine(usize),
-    Dead(usize),
-    Bush(usize, usize),
-    Berry(usize),
-    Rocks(usize),
-    Boulder(usize),
-}
+mod plot;
 
-impl Pick {
-    /// The sprite's index in `Bank::all()`'s order.
-    fn index(self) -> u16 {
-        let i = match self {
-            Pick::Large(p, i) => p * 4 + i,
-            Pick::Medium(p, i) => 12 + p * 3 + i,
-            Pick::Pine(i) => 21 + i,
-            Pick::Dead(i) => 24 + i,
-            Pick::Bush(p, i) => 26 + p * 4 + i,
-            Pick::Berry(i) => 34 + i,
-            Pick::Rocks(i) => 36 + i,
-            Pick::Boulder(i) => 40 + i,
-        };
-        i as u16
-    }
-}
-
-fn sprite(b: &Bank, pick: Pick) -> &Sprite {
-    match pick {
-        Pick::Large(p, i) => &b.large[p][i],
-        Pick::Medium(p, i) => &b.medium[p][i],
-        Pick::Pine(i) => &b.pines[i],
-        Pick::Dead(i) => &b.dead[i],
-        Pick::Bush(p, i) => &b.bushes[p][i],
-        Pick::Berry(i) => &b.berry[i],
-        Pick::Rocks(i) => &b.rocks[i],
-        Pick::Boulder(i) => &b.boulders[i],
-    }
-}
-
-/// A standing thing: the sprite and how far its foot sits east of the cell's centre and below
-/// the cell's bottom, px.
+/// A standing thing: the bank sprite, how far its foot sits east of the cell's centre and below
+/// the cell's bottom (px), whether its crown is canopy, whether it is a tree (a caster round its
+/// trunk), and whether it lays a contact shade (low growth does not).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct Thing {
-    pick: Pick,
+    pick: u16,
     ox: i32,
     oy: i32,
     canopy: bool,
+    tree: bool,
+    shade: bool,
+}
+
+impl Thing {
+    fn of(p: &Painter, kind: Kind, h: u32, ox: i32, oy: i32) -> Thing {
+        let tree = kind.is_tree();
+        let low = matches!(kind, Kind::Fern | Kind::Bracken | Kind::Reeds | Kind::Grass);
+        Thing { pick: p.bank.pick(kind, h), ox, oy, canopy: tree && kind != Kind::Dead, tree, shade: !low }
+    }
+}
+
+fn sprite(p: &Painter, t: Thing) -> &Sprite {
+    p.bank.get(t.pick)
 }
 
 /// The cell's own style (paint applied).
@@ -83,31 +63,95 @@ fn area(wx: i32, wy: i32, shift: u32, seed: u32) -> u32 {
     h32((wx >> shift) as u32, (wy >> shift) as u32, seed ^ salt::STAND ^ 0xa4ea) & 255
 }
 
+/// Whether any cell within `r` of chunk-local `(cx, cy)` is `f`. At most two: a thing is
+/// also asked of the cells two beyond the chunk (their contact shade reaches in), and two more is
+/// the painter's reach, so both chunks either side of a seam see the same cells.
+fn near(p: &Painter, cx: i32, cy: i32, r: i32, f: impl Fn(Tile) -> bool) -> bool {
+    debug_assert!(r <= 2);
+    (-r..=r).any(|dy| (-r..=r).any(|dx| f(raw(p, cx + dx, cy + dy))))
+}
+
+/// The side of cell `(cx, cy)` water lies on, if water touches it.
+fn water_side(p: &Painter, cx: i32, cy: i32) -> Option<(i32, i32)> {
+    [(0, 1), (1, 0), (-1, 0), (0, -1)].into_iter().find(|&(dx, dy)| raw(p, cx + dx, cy + dy) == Tile::Water)
+}
+
+/// The broadleaf a tree tile is drawn as, green or turned. `lone` is a tree with no tree beside
+/// it (a hedgerow's or a field's), else it is in a wood.
+fn broadleaf(p: &Painter, cx: i32, cy: i32, (wx, wy): (i32, i32), h: u32, lone: bool, seed: u32) -> Kind {
+    let region = p.s.region[Painter::at(cx, cy)];
+    let pick = (h >> 12) % 100;
+    let species = if near(p, cx, cy, 2, |t| t == Tile::Water) {
+        // By water: willows, a birch among them.
+        if pick < 70 { Species::Willow } else { Species::Birch }
+    } else if near(p, cx, cy, 2, |t| t == Tile::StoneWall) && near(p, cx, cy, 2, |t| t == Tile::Cobble) {
+        // A churchyard's, or a yard's behind a low wall.
+        if pick < 70 { Species::Yew } else { Species::Holly }
+    } else if lone {
+        match pick {
+            0..=39 => Species::Oak,
+            40..=59 => Species::Ash,
+            60..=79 => Species::Hawthorn,
+            _ => Species::Maple,
+        }
+    } else if (h >> 4) % 15 == 3 {
+        // Holly in the understorey.
+        Species::Holly
+    } else {
+        // A wood grows in stands: one species over a block of cells, a stranger now and then.
+        let a = if pick < 82 { area(wx, wy, 3, seed) } else { (h >> 20) & 255 };
+        match (region, a) {
+            (2, 0..=110) | (_, 190..=224) => Species::Birch,
+            (_, 0..=79) => Species::Oak,
+            (_, 80..=139) => Species::Beech,
+            (_, 140..=189) => Species::Ash,
+            _ => Species::Maple,
+        }
+    };
+    // About three in five turned; the Waters keep more green, the Works more.
+    let turned_in = match region {
+        1 => 42,
+        2 => 72,
+        _ => 60,
+    };
+    let turned = (h >> 24) % 100 < turned_in;
+    // The Works go brown: their gold beeches and maples are russet oaks.
+    let species = match species {
+        Species::Beech | Species::Maple if region == 2 && turned && h & 1 == 0 => Species::Oak,
+        s => s,
+    };
+    if turned { Kind::Turned(species) } else { Kind::Green(species) }
+}
+
 /// What stands on chunk-local cell `(cx, cy)`, if anything is drawn there. A wood is not a tree
 /// per cell: crowns go down on a staggered three-cell lattice, the wood's south edge gets a row
 /// of its own so the trunks show, and a lone tree always gets one. Cells with no crown of their
-/// own are the shaded floor under their neighbours'.
+/// own are the shaded floor under their neighbours' (a fern, a stump, a fallen limb now and
+/// then); grass at a wood's edge grows ferns and bracken; long grass carries a stand that sways.
 fn thing(p: &Painter, cx: i32, cy: i32, seed: u32) -> Option<Thing> {
+    // A house's front garden is its own (ART-PLAN M7).
+    if let Some(t) = plot::thing(p, cx, cy) {
+        return t;
+    }
     let st = own(p, cx, cy);
     let (wx, wy) = (cx + p.x0c, cy + p.y0c);
     let h = h32(wx as u32, wy as u32, seed ^ salt::STAND);
     let g = p.s.surf[Painter::at(cx, cy)];
     let ground = if g == NONE { None } else { Some(p.styles.id(g).row.pattern) };
     let t = raw(p, cx, cy);
+    let region = p.s.region[Painter::at(cx, cy)];
     match st.row.pattern {
-        P::DeadTree => Some(Thing { pick: Pick::Dead((h & 1) as usize), ox: 0, oy: 0, canopy: false }),
+        P::DeadTree => Some(Thing::of(p, Kind::Dead, h, 0, 0)),
         P::Tree | P::Pine => {
             let is_tree = |dx: i32, dy: i32| raw(p, cx + dx, cy + dy) == Tile::Tree;
             let (n, s, w, e) = (is_tree(0, -1), is_tree(0, 1), is_tree(-1, 0), is_tree(1, 0));
             let lone = !n && !s && !w && !e;
             let band = wy.div_euclid(3);
-            let (mut anchor, mut ox, mut large) = (false, 0, true);
+            let (mut anchor, mut ox) = (false, 0);
             if lone {
                 anchor = true;
-                large = h & 3 != 0;
             } else if !s {
                 anchor = wx & 1 == 0 || !w;
-                large = h & 1 == 0;
                 ox = if h & 2 == 0 {
                     0
                 } else if h & 4 == 0 {
@@ -123,46 +167,84 @@ fn thing(p: &Painter, cx: i32, cy: i32, seed: u32) -> Option<Thing> {
                 ox += ((h >> 3) & 3) as i32 * 2 - 2;
             }
             if !anchor {
-                return None;
+                // The wood's floor: a fern or bracken, now and then a stump or a fallen limb.
+                if st.row.pattern != P::Tree {
+                    return None;
+                }
+                let ox = (h >> 8) as i32 % 7 - 3;
+                return match h % 41 {
+                    0..=3 => {
+                        Some(Thing::of(p, if (h >> 16) % 3 == 0 { Kind::Fern } else { Kind::Bracken }, h >> 4, ox, 0))
+                    }
+                    5 => Some(Thing::of(p, Kind::Stump, h >> 4, ox, 0)),
+                    9 => Some(Thing::of(p, Kind::Limb, h >> 4, ox, 0)),
+                    _ => None,
+                };
             }
-            let pick = if st.row.pattern == P::Pine
+            let kind = if st.row.pattern == P::Pine
                 || (ground == Some(P::Earth) && h & 3 != 0)
                 || (ground == Some(P::Cracked) && h & 1 == 0)
             {
-                Pick::Pine((h % 3) as usize)
-            } else if ground == Some(P::Marsh) {
-                if h & 15 == 3 {
-                    Pick::Dead((h & 1) as usize)
-                } else if large {
-                    Pick::Large(2, (h & 3) as usize)
-                } else {
-                    Pick::Medium(2, (h % 3) as usize)
-                }
+                Kind::Pine
+            } else if ground == Some(P::Marsh) && h & 15 == 3 || region == 2 && h & 15 == 7 {
+                Kind::Dead
             } else {
-                let a = area(wx, wy, 5, seed);
-                let pal = if a < 60 {
-                    1
-                } else if a > 230 || h & 15 == 5 {
-                    2 - usize::from(h & 15 == 5)
-                } else {
-                    0
-                };
-                if large { Pick::Large(pal, ((h >> 1) & 3) as usize) } else { Pick::Medium(pal, (h % 3) as usize) }
+                broadleaf(p, cx, cy, (wx, wy), h, lone, seed)
             };
-            let canopy = !matches!(pick, Pick::Dead(_));
-            Some(Thing { pick, ox, oy: 0, canopy })
+            Some(Thing::of(p, kind, h >> 1, ox, 0))
         }
         P::Bush => {
-            let pick = if h & 31 == 7 {
-                Pick::Berry((h & 1) as usize)
+            let kind = if h & 31 == 7 {
+                Kind::Berry
             } else {
-                Pick::Bush(usize::from(area(wx, wy, 4, seed) % 5 == 0), ((h >> 2) & 3) as usize)
+                // Bronze with the autumn in two in five; olive where the ground runs dry.
+                match (area(wx, wy, 4, seed) % 5, (h >> 9) % 5) {
+                    (0, _) => Kind::BushOlive,
+                    (_, 0 | 1) if region != 1 => Kind::BushBronze,
+                    _ => Kind::Bush,
+                }
             };
-            Some(Thing { pick, ox: 0, oy: 2, canopy: false })
+            Some(Thing::of(p, kind, h >> 2, 0, 2))
         }
-        P::Rubble => Some(Thing { pick: Pick::Rocks((h & 3) as usize), ox: 0, oy: 2, canopy: false }),
+        P::Rubble => {
+            // Stones lie in clusters of two to four with a lone one out (ART-PLAN Q3): each is
+            // pulled toward its 3 x 3 block's own centre, jittered, so the sim's even rubble
+            // reads as heaps; the odd one is left where it fell. Render only: the tile is where
+            // it was.
+            let (bx, by) = (wx.div_euclid(3), wy.div_euclid(3));
+            let hb = h32(bx as u32, by as u32, seed ^ salt::STAND ^ 0x5707);
+            let (mx, my) = (bx * 3 + (hb % 3) as i32, by * 3 + ((hb >> 2) % 3) as i32);
+            let (jx, jy) = ((h >> 4) as i32 % 5 - 2, (h >> 8) as i32 % 3 - 1);
+            let (ox, oy) = if h % 5 == 0 {
+                (jx * 2, jy)
+            } else {
+                (((mx - wx) * 9).clamp(-12, 12) + jx, ((my - wy) * 4).clamp(-5, 1) + jy)
+            };
+            Some(Thing::of(p, Kind::Rocks, h >> 3, ox, 2 + oy))
+        }
         P::Cliff if t == Tile::Cliff && p.s.surf[Painter::at(cx, cy)] != NONE => {
-            Some(Thing { pick: Pick::Boulder((h % 6) as usize), ox: 0, oy: 2, canopy: false })
+            Some(Thing::of(p, Kind::Boulder, h, 0, 2))
+        }
+        P::Tuft => {
+            // A stand that sways, in a busy patch only, one cell in three.
+            let wet = matches!(ground, Some(P::Marsh | P::Cracked));
+            let keep = busy_share(wx, wy, seed) >= 12 && h % 3 == 0;
+            keep.then(|| Thing::of(p, if wet { Kind::Reeds } else { Kind::Grass }, h >> 3, (h >> 6) as i32 % 9 - 4, 0))
+        }
+        P::Turf if st.row.group == TileGroup::Ground && h % 5 < 3 && water_side(p, cx, cy).is_some() => {
+            // Reeds at the water's margin (ART-PLAN B4): a stand on three grass cells in five
+            // along a bank, leaning out toward the water.
+            let (dx, dy) = water_side(p, cx, cy).unwrap_or((0, 0));
+            let (ox, oy) = (dx * 5 + (h >> 6) as i32 % 5 - 2, if dy < 0 { -3 } else { dy * 3 });
+            Some(Thing::of(p, Kind::Reeds, h >> 3, ox, oy))
+        }
+        P::Turf if st.row.group == TileGroup::Ground && region != 2 => {
+            // A wood's edge: ferns and bracken in the grass beside the trees.
+            if h % 9 != 4 || !near(p, cx, cy, 1, |t| t == Tile::Tree) {
+                return None;
+            }
+            let kind = if (h >> 12) % 5 < 3 { Kind::Bracken } else { Kind::Fern };
+            Some(Thing::of(p, kind, h >> 4, (h >> 7) as i32 % 9 - 4, 0))
         }
         _ => None,
     }
@@ -185,6 +267,7 @@ pub(super) fn ground(p: &mut Painter, x0: i32, y0: i32, seed: u32) {
                 P::Crops => crops(p, px, py, wx, wy, g, &st, h, z),
                 _ => {}
             }
+            plot::ground(p, cx, cy, seed);
         }
     }
     // Long grass, from the cells round the chunk too (its blades reach into the next cell): clumps
@@ -201,7 +284,9 @@ pub(super) fn ground(p: &mut Painter, x0: i32, y0: i32, seed: u32) {
             let r = if wet { st.accent.unwrap_or(Ramp::Reed) } else { st.ramp };
             let (wx, wy) = (x0 + cx, y0 + cy);
             let h = h32(wx as u32, wy as u32, seed ^ salt::STAND ^ 0x11);
-            let n = 4 + below(h, 3);
+            // Thick in a busy patch, thinned to a clump or none beyond one (ART-PLAN Q3): a reedbed
+            // with open water and paths between, not a carpet.
+            let n = ((4 + below(h, 3)) * busy_share(wx, wy, seed) + below(h >> 8, 16)) / 16;
             let mut spots = [(0i32, 0i32, 0u32); 6];
             for k in 0..n {
                 let hk = h32(h, k, 1);
@@ -227,8 +312,8 @@ pub(super) fn ground(p: &mut Painter, x0: i32, y0: i32, seed: u32) {
                 contact(p, fx, fy, 10, 3, world, seed);
                 continue;
             }
-            let Some(t) = thing(p, cx, cy, seed) else { continue };
-            let s = sprite(&p.bank, t.pick);
+            let Some(t) = thing(p, cx, cy, seed).filter(|t| t.shade) else { continue };
+            let s = sprite(p, t);
             let wide = s.canvas.w() * 3 / 8;
             let (fx, fy) = (cx * CELL + 8 + t.ox, cy * CELL + CELL - 2 + t.oy / 2);
             if t.canopy {
@@ -562,7 +647,7 @@ pub(super) fn strips(p: &mut Painter, x0: i32, y0: i32, seed: u32, out: &mut Chu
             }
             let Some(t) = thing(p, cx, row, seed) else { continue };
             out.placed.push(Placed {
-                sprite: t.pick.index(),
+                sprite: t.pick,
                 x: (cx * CELL + 8 + t.ox) as i16,
                 y: ((row + 1) * CELL - 2 + t.oy) as i16,
                 row: row as u8,
@@ -575,7 +660,7 @@ pub(super) fn strips(p: &mut Painter, x0: i32, y0: i32, seed: u32, out: &mut Chu
                 any = true;
             }
             canopy |= t.canopy;
-            let s = sprite(&p.bank, t.pick);
+            let s = p.bank.get(t.pick);
             let (sx, sy) = (STRIP_MARGIN + cx * CELL + 8 + t.ox - s.ax, foot - 2 + t.oy - s.ay);
             p.s.row.stamp(&s.canvas, sx, sy);
             let (cw, ch) = (s.canvas.w(), s.canvas.h());
@@ -818,7 +903,7 @@ pub(super) fn casters(p: &Painter, x0: i32, y0: i32, out: &mut Chunk) {
                 continue;
             }
             let Some(t) = thing(p, cx, cy, p.seed) else { continue };
-            if !matches!(t.pick, Pick::Large(..) | Pick::Medium(..) | Pick::Pine(_) | Pick::Dead(_)) {
+            if !t.tree {
                 continue;
             }
             let (ax, ay) = (wx + 4 + t.ox, wy + 8);
@@ -827,34 +912,6 @@ pub(super) fn casters(p: &Painter, x0: i32, y0: i32, out: &mut Chunk) {
             for (a, b) in [((ax, ay), (bx, ay)), ((bx, ay), (bx, by)), ((bx, by), (ax, by)), ((ax, by), (ax, ay))] {
                 out.casters.push(CasterSeg { a, b, height: hgt });
             }
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::flora::Ramps;
-
-    #[test]
-    fn a_placement_names_the_sprite_it_stamps() {
-        let b = Bank::new(Ramps::default());
-        let all = b.all();
-        let mut picks = Vec::new();
-        for p in 0..3 {
-            picks.extend((0..4).map(|i| Pick::Large(p, i)));
-            picks.extend((0..3).map(|i| Pick::Medium(p, i)));
-        }
-        picks.extend((0..3).map(Pick::Pine));
-        picks.extend((0..2).map(Pick::Dead));
-        for p in 0..2 {
-            picks.extend((0..4).map(|i| Pick::Bush(p, i)));
-        }
-        picks.extend((0..2).map(Pick::Berry));
-        picks.extend((0..4).map(Pick::Rocks));
-        picks.extend((0..6).map(Pick::Boulder));
-        for pick in picks {
-            assert!(std::ptr::eq(sprite(&b, pick), all[usize::from(pick.index())].1), "{pick:?}");
         }
     }
 }

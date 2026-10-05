@@ -1,0 +1,35 @@
+[
+  {
+    "id": "hut_one",
+    "kind": "ruin",
+    "region": "works",
+    "tale": true,
+    "name": "Hut One",
+    "board": "GOLDSKIN MINING Co. WORKS WATCH. {NAME}. Watchman to sign on at six and off at six.",
+    "threat": [0, 5],
+    "quests": ["breen_coal"],
+    "ruin": "walls"
+  },
+  {
+    "id": "hut_two",
+    "kind": "ruin",
+    "region": "works",
+    "tale": true,
+    "name": "Hut Two",
+    "board": "GOLDSKIN MINING Co. WORKS WATCH. {NAME}. Visitors to sign the book.",
+    "threat": [0, 5],
+    "quests": ["tuesday_hut_two"],
+    "ruin": "walls"
+  },
+  {
+    "id": "hut_three",
+    "kind": "ruin",
+    "region": "works",
+    "tale": true,
+    "name": "Hut Three",
+    "board": "GOLDSKIN MINING Co. WORKS WATCH. {NAME}. The lamp is to be kept lit till six.",
+    "threat": [0, 5],
+    "quests": ["signals_at_danger"],
+    "ruin": "walls"
+  }
+]

@@ -16,12 +16,14 @@ use jane_sim::event::{Event, EventKind, events_for};
 use jane_sim::ids::PropIx;
 use jane_sim::view::{QuestMark, View};
 
+use crate::ambient::{self, Ambient};
 use crate::atlas::{Atlas, RefId};
 use crate::atmos::Atmosphere;
 use crate::backend::AtlasPages;
 use crate::camera::{Camera, alpha_256};
 use crate::chunks::{ChunkCache, LRU, Need};
 use crate::creatures::{self, Creatures};
+use crate::cues::Cues;
 use crate::drawlist::{DrawCmd, DrawList};
 use crate::facing::Face8;
 use crate::frame::{
@@ -37,6 +39,7 @@ use crate::props::{self, Props};
 use crate::shadow;
 use crate::stand_in::{self, StandIns, UnitKind};
 use crate::terrain::Terrain;
+use crate::ui::marks::{EMOTE_TICKS, Emote, EmoteMarker};
 
 /// A unit moving further than this in a tick (40 sim px, `Fx`) snaps instead of sliding: travel,
 /// a respawn, a hop.
@@ -77,6 +80,10 @@ const FLICKER_RATE: u32 = 10;
 const UNIT_KEY: u32 = 0x8000_0000;
 /// A drop's key in the draw list and the prop list: its id with this bit, above every prop's.
 const DROP_KEY: u32 = 0x2000_0000;
+/// A rug's key in the prop list (ART-PLAN M4): the id of the thing it is laid by, with this bit.
+const RUG_KEY: u32 = 0x0800_0000;
+/// The Hoar Stone's key in the prop list (`cues`): above every prop's and every drop's.
+const STONE_KEY: u32 = 0x4000_0000;
 
 /// Which lights a frame draws and which of them cast (PRESENTATION.md §1.7), one rule for every
 /// tier: of the lights that may cast (`Light::casts` as they come: prop lights, her lantern, a
@@ -159,6 +166,12 @@ struct UnitRec {
     /// The quest mark over its head for this seat (`View::quest_mark`), none while she is
     /// talking to it.
     mark: Option<QuestMark>,
+    /// The tick it last turned to a new facing, and the tick it last landed (came into the
+    /// zone, or pulled up out of a sprint): the people's turn and landing frames (ART-PLAN B3).
+    turned: Option<(u32, Face8)>,
+    landed: Option<u32>,
+    /// Its work, while its schedule row is the one the work belongs to (ART-PLAN Q4).
+    task: Option<jane_data::Task>,
     /// A seat's cast building (`View::casting`): how far along in 256ths, and its school.
     build: Option<(u16, School, SpellId)>,
     /// Half the width of the ring under it when it is her target, canvas px.
@@ -252,6 +265,8 @@ struct PropRec {
     /// Its quest mark for this seat (a book, a board, a door that gives quests), unless she is
     /// reading it.
     mark: Option<QuestMark>,
+    /// A chimney on a house someone lives in: it smokes (ART §2.8, ART-PLAN M1).
+    smokes: bool,
 }
 
 /// A prop light the view says is showing, this tick.
@@ -327,6 +342,22 @@ pub struct Present {
     walk_to: Option<(i32, i32)>,
     /// This frame's ring, cast bars and walk marker.
     fight: FightOverlay,
+    /// Cues past the screen edge: crows over camps, the dead lamps' glass, the Hoar Stone.
+    cues: Cues,
+    /// The hour of the clock, as last read.
+    hour: u8,
+    /// The ambient life: birds, ducks, crows, a cat, butterflies, moths, smoke, the water's life
+    /// (ART-PLAN M1, B4).
+    ambient: Ambient,
+    /// The houses someone lives in (a schedule names a door of theirs), by their block's corner:
+    /// their chimneys smoke.
+    lived: Vec<(i32, i32)>,
+    /// Emotes over heads (ART-PLAN B3): `(unit, emote, tick it popped)`.
+    emotes: Vec<(u32, Emote, u32)>,
+    /// This frame's emotes, where each head is.
+    emote_marks: Vec<EmoteMarker>,
+    /// Whom she was talking to last tick, and the line: a new line may bring an emote.
+    talk: Option<(u32, u16)>,
 }
 
 impl Present {
@@ -340,6 +371,8 @@ impl Present {
         let terrain = Terrain::build(&mut atlas, LRU);
         let atmos = Atmosphere::new(tier, &mut atlas);
         let fx = Fx::new(tier, atmos.features.max_particles);
+        let cues = Cues::new(&mut atlas);
+        let ambient = Ambient::build(tier, &mut atlas, &creatures);
         // The UI's page goes last, so no world sprite moves when it grows (PRESENTATION.md §3.1).
         let (ui_art, mut ui_page) = crate::ui::UiArt::build(atlas.pages.pages.len() as u8);
         if atlas.lit() {
@@ -389,6 +422,13 @@ impl Present {
             aimed: None,
             walk_to: None,
             fight: FightOverlay::default(),
+            cues,
+            hour: 12,
+            ambient,
+            lived: Vec::new(),
+            emotes: Vec::with_capacity(16),
+            emote_marks: Vec::with_capacity(16),
+            talk: None,
         }
     }
 
@@ -522,8 +562,20 @@ impl Present {
             self.atmos.zone(view);
             self.fx.zone(view);
             self.lessons.zone(view);
+            self.ambient.zone();
+            self.lived = lived_houses(view, self.terrain.houses());
+            self.emotes.clear();
+        }
+        // A room's windows lay daylight on its floor and are dark at night (ART-PLAN M4): its
+        // chunks are painted again when the lamps come on or go off.
+        if self.terrain.set_daylight(!view.lamps_lit()) {
+            let (w, h) = view.size();
+            self.chunks.invalidate(Rect::new(0, 0, w as i32, h as i32));
         }
         self.zone_cells = view.size();
+        let kit = &self.kit;
+        self.cues.zone(view, |s| kit.glass(s));
+        self.hour = view.hour();
         self.hurt.clear();
         self.struck.clear();
         for e in events_for(events, view.me()) {
@@ -575,6 +627,7 @@ impl Present {
             })
             .map(|w| (w.to.x.0 >> FX_TO_CANVAS, w.to.y.0 >> FX_TO_CANVAS));
         self.read_units(view, area);
+        self.read_emotes(view, area);
         self.read_props(view, area);
         self.read_lights(view, area);
         self.paint_chunks(view);
@@ -607,6 +660,138 @@ impl Present {
                 self.fx.gather((u.cur.0 >> FX_TO_CANVAS, u.cur.1 >> FX_TO_CANVAS), facing, spell, frac, u.id);
             }
         }
+        // The ambient life (ART-PLAN M1): the chimneys that smoke and the lamps moths circle, then
+        // who is where this tick.
+        let atlas = &self.atlas;
+        let chimneys = self.props.iter().filter(|p| p.smokes).map(|p| {
+            let r = atlas.get(p.look);
+            let top = p.y + p.h - rows_up(i32::from(r.top)) + 1;
+            (p.id, p.x + p.w / 2, top, p.y + p.h)
+        });
+        let lamps =
+            self.lights.iter().filter(|l| l.height >= 20).map(|l| (l.id, l.x, l.y - rows_up(i32::from(l.height))));
+        self.ambient.set_sources(chimneys, lamps);
+        let people: Vec<(i32, i32)> = self
+            .units
+            .iter()
+            .filter(|u| !u.dead)
+            .map(|u| ((u.cur.0 >> FX_TO_CANVAS).div_euclid(CELL), (u.cur.1 >> FX_TO_CANVAS).div_euclid(CELL)))
+            .collect();
+        let her_feet = self
+            .units
+            .iter()
+            .find(|u| u.me && !u.dead)
+            .map(|u| ((u.cur.0 >> FX_TO_CANVAS, u.cur.1 >> FX_TO_CANVAS), u.prev != u.cur));
+        let ctx = ambient::Ctx {
+            tick: self.tick,
+            view_px: (cam.0, cam.1, cw, ch),
+            her: her_feet,
+            atmos: &self.atmos,
+            people: &people,
+        };
+        self.ambient.tick(view, &ctx, &self.creatures);
+    }
+
+    /// This frame's emotes over heads (ART-PLAN B3), for the UI to draw over the world.
+    pub fn emotes(&self) -> &[EmoteMarker] {
+        &self.emote_marks
+    }
+
+    /// Emotes (ART-PLAN B3), presentation events keyed on what is said and what people are doing.
+    /// In a conversation, a line that asks shows a "?" over the speaker, one that exclaims a "!",
+    /// one that trails off three dots, and the dog a heart. Out of one, now and then on each one's
+    /// own beat: the sweeper and the milkman whistle at their work, Mr Cobb sings outside the Arms
+    /// of an evening, the courting pair show a heart when they are near each other, Mrs Tace's
+    /// three dots, the dog's heart when she stands by it.
+    fn read_emotes(&mut self, view: &View<'_>, area: Rect) {
+        let t = self.tick;
+        self.emotes.retain(|e| t.wrapping_sub(e.2) < EMOTE_TICKS);
+        let cat = jane_data::catalog();
+        let showing = |emotes: &[(u32, Emote, u32)], id: u32| emotes.iter().any(|e| e.0 == id);
+        let talk = view.dialogue().and_then(|d| match d.speaker {
+            jane_sim::state::Speaker::Unit(id) => Some((id, d)),
+            _ => None,
+        });
+        if let Some((id, d)) = talk {
+            let key = (id.get(), d.line);
+            if self.talk != Some(key) && !showing(&self.emotes, key.0) {
+                let line =
+                    d.node.and_then(|n| n.lines.get(usize::from(d.line))).map_or("", |l| crate::text::text(l.text));
+                let line = line.trim();
+                let dog = view.unit(id).is_some_and(|u| cat.combat.unit(u.def).id == "dog");
+                let first = self.talk.is_none_or(|w| w.0 != key.0);
+                // Castle talks quietly (VOICE.md): a question asked anywhere in the line is a "?",
+                // news passed on or a trailing-off is three dots, someone come on after dark
+                // starts.
+                let news = d.node.is_some_and(|n| n.id.starts_with("news"));
+                let night = !(6..21).contains(&(view.clock().0 / 7200 % 24));
+                let e = if line.contains('?') {
+                    Some(Emote::Ask)
+                } else if news || line.contains("...") || line.contains('\u{2026}') || line.contains("don't know") {
+                    Some(Emote::Dots)
+                } else if line.ends_with('!') || first && night && !dog {
+                    Some(Emote::Bang)
+                } else if dog && first {
+                    Some(Emote::Heart)
+                } else {
+                    None
+                };
+                if let Some(e) = e {
+                    self.emotes.push((key.0, e, t));
+                }
+            }
+            self.talk = Some(key);
+        } else {
+            self.talk = None;
+        }
+        let hour = view.clock().0 / 7200 % 24;
+        let her = (view.body().pos.x.0, view.body().pos.y.0);
+        let reach = |cells: i32| (cells * CELL) << FX_TO_CANVAS;
+        let talking = self.talk.map(|k| k.0);
+        let mut courting: [Option<(i32, i32, u32)>; 2] = [None, None];
+        let mut due = Vec::new();
+        for uv in view.units_in(area) {
+            let u = uv.unit;
+            let id = u.id.get();
+            if !u.alive || Some(id) == talking || showing(&self.emotes, id) {
+                continue;
+            }
+            let name = cat.combat.unit(u.def).id;
+            let at = (u.pos.x.0, u.pos.y.0);
+            if name == "town_courting_a" {
+                courting[0] = Some((at.0, at.1, id));
+            } else if name == "town_courting_b" {
+                courting[1] = Some((at.0, at.1, id));
+            }
+            // Each on its own beat, about once in twenty seconds.
+            if (t + jane_core::hash::mix32(id)) % 1200 != 0 {
+                continue;
+            }
+            let still = !uv.moved;
+            let near_her = (her.0 - at.0).abs() < reach(3) && (her.1 - at.1).abs() < reach(3);
+            let e = match name {
+                "town_sweeper" | "town_milkman" if still => Some(Emote::Note),
+                "town_drinker" if still && hour >= 18 => Some(Emote::Note),
+                "town_widow" if still => Some(Emote::Dots),
+                "dog" if near_her => Some(Emote::Heart),
+                _ => None,
+            };
+            if let Some(e) = e {
+                due.push((id, e, t));
+            }
+        }
+        if let [Some(a), Some(b)] = courting {
+            let near = (a.0 - b.0).abs() < reach(3) && (a.1 - b.1).abs() < reach(2);
+            if near && (t + a.2) % 900 == 0 && !showing(&self.emotes, a.2) {
+                due.push((a.2, Emote::Heart, t));
+            }
+        }
+        self.emotes.extend(due);
+    }
+
+    /// The ambient layer's living things this tick (ART-PLAN §7 rule 5's test reads it).
+    pub fn ambient(&self) -> &Ambient {
+        &self.ambient
     }
 
     /// The cells the view covers this tick, with the margin.
@@ -659,6 +844,19 @@ impl Present {
                 _ => 0,
             };
             let person = self.people.set(cat.combat.unit(u.def).sprite, uv.variant, seat);
+            let face = old.map_or(Face8::of(u.facing), |o| o.face).moving(
+                i64::from(cur.0 - prev.0),
+                i64::from(cur.1 - prev.1),
+                u.facing,
+            );
+            // Landed: she came into the zone, or anyone pulled up out of a sprint (a last step
+            // longer than its walk's).
+            let walk = i64::from(cat.combat.unit(u.def).walk.0);
+            let sprinted = old.is_some_and(|o| {
+                let (dx, dy) = (i64::from(o.cur.0 - o.prev.0), i64::from(o.cur.1 - o.prev.1));
+                o.anim > 0 && (dx * dx + dy * dy) * 64 > walk * walk * 81
+            });
+            let landed = (old.is_none() && matches!(kind, UnitKind::Me)) || (prev == cur && sprinted);
             self.units_next.push(UnitRec {
                 id,
                 prev,
@@ -682,10 +880,7 @@ impl Present {
                 still: if prev == cur { old.map_or(0, |o| o.still.saturating_add(1)) } else { 0 },
                 struck: old.and_then(|o| o.struck),
                 raise: u.feel.windup.filter(|_| u.alive).map(|w| w.spell),
-                face: {
-                    let was = old.map_or(Face8::of(u.facing), |o| o.face);
-                    was.moving(i64::from(cur.0 - prev.0), i64::from(cur.1 - prev.1), u.facing)
-                },
+                face,
                 under: {
                     let (x, y) = u.pos.cell();
                     view.tile(x, y).is_roof()
@@ -697,6 +892,12 @@ impl Present {
                     ((done.min(len) * 256 / len) as u16, cat.combat.spell(c.spell).school, c.spell)
                 }),
                 ring: ((cat.combat.unit(u.def).bounds.0 >> FX_TO_CANVAS) + 6).clamp(9, 30),
+                turned: match old {
+                    Some(o) if o.face != face => Some((self.tick, o.face)),
+                    _ => old.and_then(|o| o.turned),
+                },
+                landed: if landed { Some(self.tick) } else { old.and_then(|o| o.landed) },
+                task: person.and_then(|s| self.people.at_work(s, || view.schedule_state(u.id))),
             });
         }
         self.units_next.sort_unstable_by_key(|r| r.id);
@@ -716,14 +917,41 @@ impl Present {
     fn read_props(&mut self, view: &View<'_>, area: Rect) {
         let cat = jane_data::catalog();
         let (props, stand, kit) = (&mut self.props, &self.stand, &self.kit);
+        let houses = self.terrain.houses();
+        let lived = &self.lived;
+        // A chimney smokes on a house someone lives in (ART-PLAN M1); an empty one's is cold.
+        let chimney = jane_art::looks::find("town_chimney").map(|(s, _)| s);
+        let room = self.terrain.room().map(|r| r.kind);
         props.clear();
         // What she is reading: the mark over it is down while she does.
         let reading = view.dialogue().and_then(|d| match d.speaker {
             jane_sim::state::Speaker::Prop(id) => Some(id),
             _ => None,
         });
+        // The pit she is laying a fire in: USE held on it (`jane_sim::fire::hold`).
+        let laying = (view.body().hold > 0)
+            .then(|| view.focus())
+            .flatten()
+            .filter(|f| f.verb == jane_sim::interact::Verb::MakeFire)
+            .and_then(|f| match f.target {
+                jane_sim::interact::FocusRef::Prop(id) => Some(id),
+                _ => None,
+            });
         view.for_props_in(area, &mut self.prop_scratch, |p| {
             let d = cat.story.prop(p.def);
+            // A made fire (`jane_sim::fire`): cold, laid while she lays it, lit, or ash.
+            let fire = d.made.then(|| {
+                use props::FireState;
+                if p.on {
+                    FireState::Lit
+                } else if laying == Some(p.id) {
+                    FireState::Laid
+                } else if p.used {
+                    FireState::Ash
+                } else {
+                    FireState::Cold
+                }
+            });
             // An open gate is a doorway.
             if d.gate && !p.solid {
                 return;
@@ -742,17 +970,69 @@ impl Present {
                 .then(|| view.prop_loot(p).first())
                 .flatten()
                 .and_then(|s| kit.loot_look(cat.combat.item(s.item).icon));
+            // A room lays a rug under its table, along its bed's foot and before its hearth
+            // (ART-PLAN M4): flat on the floor under everything, nothing a foot meets.
+            // A pub lays none under its tables, a church none at all.
+            let lays = |rug: props::Rug| match room {
+                Some(jane_art::terrain::houses::RoomKind::Julie) => true,
+                Some(jane_art::terrain::houses::RoomKind::Inn) => rug != props::Rug::Table,
+                _ => false,
+            };
+            if let Some((rug, look)) = kit.rug(d.sprite, p.id.get()).filter(|r| lays(r.0)) {
+                let (cx, cy, cw, ch) = (i32::from(p.cell.x), i32::from(p.cell.y), i32::from(d.w), i32::from(d.h));
+                let (mut x, y, w, h) = match rug {
+                    props::Rug::Table => (cx + cw / 2 - 2, cy + ch / 2 - 1, 4, 3),
+                    props::Rug::Bed => (cx + cw - 6, cy + ch, 6, 2),
+                    props::Rug::Hearth => (cx + cw / 2 - 2, cy + ch, 4, 3),
+                };
+                // Kept off the walls: moved along until both its ends lie on the floor.
+                let solid = |x: i32| view.tile(x, y).flags() & jane_core::tile::F_SOLID != 0;
+                while solid(x) && x < cx + cw {
+                    x += 1;
+                }
+                while solid(x + w - 1) && x > cx - w {
+                    x -= 1;
+                }
+                props.push(PropRec {
+                    id: RUG_KEY | p.id.get(),
+                    x: x * CELL,
+                    y: y * CELL,
+                    w: w * CELL,
+                    h: h * CELL,
+                    look,
+                    flat: true,
+                    flush: false,
+                    on_top: false,
+                    surface: None,
+                    lift: 0,
+                    sort_foot: None,
+                    mark: None,
+                    smokes: false,
+                });
+            }
             props.push(PropRec {
                 id: p.id.get(),
                 x: i32::from(p.cell.x) * CELL,
                 y: i32::from(p.cell.y) * CELL,
                 w: i32::from(d.w) * CELL,
                 h: i32::from(d.h) * CELL,
-                look: held.or_else(|| kit.look(d.sprite, p.id.get(), state)).unwrap_or_else(|| {
-                    let look = stand.prop(d.w, d.h, d.flat, d.light.is_some());
-                    // A lamp the view says is out has dark glass.
-                    if d.light.is_some() && !lit { stand.unlit(look) } else { look }
-                }),
+                look: held
+                    .or_else(|| {
+                        // A front door or a chimney on a house with a look is its house's own
+                        // (ART-PLAN Q2); St Anne's keeps its oak.
+                        let house = houses.at(i32::from(p.cell.x), i32::from(p.cell.y));
+                        let house = house.filter(|h| h.kind != jane_art::terrain::houses::Kind::Church);
+                        house.and_then(|h| kit.house_look(d.sprite, &h.look()))
+                    })
+                    .or_else(|| match fire {
+                        Some(f) => kit.fire_look(d.sprite, p.id.get(), f),
+                        None => kit.look(d.sprite, p.id.get(), state),
+                    })
+                    .unwrap_or_else(|| {
+                        let look = stand.prop(d.w, d.h, d.flat, d.light.is_some());
+                        // A lamp the view says is out has dark glass.
+                        if d.light.is_some() && !lit { stand.unlit(look) } else { look }
+                    }),
                 flat: d.flat,
                 flush: false,
                 on_top: {
@@ -763,9 +1043,41 @@ impl Present {
                 lift: 0,
                 sort_foot: None,
                 mark: if reading == Some(p.id) { None } else { view.prop_quest_mark(p) },
+                smokes: chimney.is_some_and(|c| c == d.sprite)
+                    && houses
+                        .at(i32::from(p.cell.x), i32::from(p.cell.y))
+                        .is_some_and(|h| lived.contains(&(h.rect.x, h.rect.y))),
             });
         });
         stand_on_tops(props);
+        // The Hoar Stone on the stair's block: drawn while any of its height can be on screen,
+        // so it shows over the bottom edge before the block does.
+        // The regions' landmarks likewise, each as tall as it is (`cues`): the chimney, the
+        // spire, the statue.
+        let stone = self.cues.stone().map(|(foot, look)| (foot, look, jane_art::far::HOAR_W / 2));
+        let tall = self.cues.standing(self.hour).map(|(foot, look, ax, _)| (foot, look, ax));
+        for (i, ((sx, sy), look, ax)) in stone.into_iter().chain(tall).enumerate() {
+            let r = self.atlas.get(look);
+            let reach = Rect::new(area.x - 4, area.y, area.w + 8, area.h + i32::from(r.src.h) / CELL + 1);
+            if reach.contains(sx.div_euclid(CELL), sy.div_euclid(CELL)) {
+                props.push(PropRec {
+                    id: STONE_KEY + i as u32,
+                    x: sx - ax,
+                    y: sy - CELL,
+                    w: i32::from(r.src.w),
+                    h: CELL,
+                    look,
+                    flat: false,
+                    flush: false,
+                    on_top: true,
+                    surface: None,
+                    lift: 0,
+                    sort_foot: None,
+                    mark: None,
+                    smokes: false,
+                });
+            }
+        }
         // What lies on the ground (a creature's loot where it fell) as its item, a cell's
         // footprint round its point, on the ground under everything standing.
         for d in view.drops() {
@@ -786,6 +1098,7 @@ impl Present {
                 lift: 0,
                 sort_foot: None,
                 mark: None,
+                smokes: false,
             });
         }
         props.sort_unstable_by_key(|p| p.id);
@@ -1014,6 +1327,7 @@ impl Present {
         self.fight.bars.clear();
         self.fight.tick = self.tick;
         self.fight.walk = self.walk_to.map(|(x, y)| (x - cam.0, y - cam.1));
+        self.emote_marks.clear();
         self.dark = lantern_lit(self.sky.ambient);
         if self.zone.is_none() {
             return &self.frame;
@@ -1126,7 +1440,22 @@ impl Present {
             }
             if p.flat { self.ground.push(cmd) } else { self.standing.push(cmd) }
         }
-        // The chunks' trees, shrubs and stones, from the atlas, by their feet.
+        // The chunks' trees, shrubs and stones, from the atlas, by their feet. Crowns, shrubs,
+        // ferns and reeds sway (ART-PLAN M2): the frame by the tick, the plant's own phase and the
+        // wind (a breeze slow, a storm quick), rest, one way, rest, the other; reeds and long grass
+        // she walks through rustle, quick, while she moves among them. Presentation only.
+        let wind = self.atmos.wind();
+        // Quicker in wind: a breeze's pace, down to half of it in a gale.
+        let pace = |class: crate::terrain::SwayClass| {
+            (class.period() as i32 * 32 / (32 + wind.unsigned_abs().min(32) as i32)).max(40) as u32
+        };
+        let walker = self
+            .units
+            .iter()
+            .find(|u| u.me)
+            .filter(|u| u.prev != u.cur)
+            .map(|u| ((u.cur.0 >> FX_TO_CANVAS) - cam.0, (u.cur.1 >> FX_TO_CANVAS) - cam.1));
+        let tick = self.tick;
         if let Some((cx0, cy0, cx1, cy1)) = self.chunk_range(cam, band.grow(SORT_PAST)) {
             for cy in cy0..=cy1 {
                 for cx in cx0..=cx1 {
@@ -1136,8 +1465,17 @@ impl Present {
                     let (ox, oy) = (cx * CHUNK_PX - cam.0, cy * CHUNK_PX - cam.1);
                     for (i, pl) in self.terrain.placed(slot).iter().enumerate() {
                         let fl = self.terrain.flora(pl.sprite);
-                        let r = self.atlas.get(fl.look);
                         let (fx, fy) = (ox + i32::from(pl.x), oy + i32::from(pl.y));
+                        let (zx, zy) = (fx + cam.0, fy + cam.1);
+                        let own = jane_core::hash::mix32(zx as u32 ^ (zy as u32).rotate_left(16));
+                        let rustle =
+                            fl.rustles && walker.is_some_and(|(wx, wy)| (wx - fx).abs() <= 8 && (wy - fy).abs() <= 6);
+                        let frame = if rustle {
+                            [1, 5][((tick / 3).wrapping_add(own) % 2) as usize]
+                        } else {
+                            sway_frame(fl.class, zx, zy, own, tick, pace(fl.class), wind)
+                        };
+                        let r = self.atlas.get(fl.sway[frame as usize]);
                         let (x, y) = (fx - i32::from(r.ax), fy - i32::from(r.ay));
                         if !in_band(x, y, r.src.w, r.src.h) {
                             continue;
@@ -1150,7 +1488,9 @@ impl Present {
                             y: fy,
                             key: 0x4000_0000 | u32::from(slot) << 10 | i as u32,
                             sprite: sp,
-                            caster: Some(Caster {
+                            // A stand of reeds or long grass casts nothing, as the tufts painted
+                            // round it cast nothing (`shadow::RELIEF`): it is growth, not a thing.
+                            caster: (!fl.rustles).then(|| Caster {
                                 sprite: 0,
                                 foot: clamp16(fx, fy - i32::from(fl.lift)),
                                 height: r.top.max(1),
@@ -1253,8 +1593,18 @@ impl Present {
                             cast_glow = Some(jane_data::catalog().combat.spell(spell).school);
                         }
                     }
-                    let pose =
-                        people::Pose { facing: face, anim: u.anim, tick: self.tick, dead: u.dead, id: u.id, act, hurt };
+                    let since = |t: Option<u32>| t.map_or(u32::MAX, |t| self.tick.wrapping_sub(t));
+                    let pose = people::Pose {
+                        dead: u.dead,
+                        act,
+                        hurt,
+                        still: u.still,
+                        turned: since(u.turned.map(|t| t.0)),
+                        from: u.turned.map_or(face, |t| t.1),
+                        landed: since(u.landed),
+                        task: u.task.filter(|_| lesson.is_none()),
+                        ..people::Pose::plain(face, u.anim, self.tick, u.id)
+                    };
                     // Her lantern, lit, in her hand, and its light from its glass (§1.7).
                     let held =
                         (u.player && lantern).then(|| self.people.holding_lantern(set, pose, &self.atlas)).flatten();
@@ -1322,9 +1672,14 @@ impl Present {
             if !(on_canvas(x, y, r.src.w, r.src.h) || !u.dead && in_band(x, y, r.src.w, r.src.h)) {
                 continue;
             }
-            // Over the head: the top of what it stands, a few rows clear.
-            if let Some(mark) = u.mark.filter(|_| !u.dead) {
-                let head = sy - rows_up(i32::from(r.top.max(16))) - bob;
+            // Over the head: the top of what it stands, a few rows clear. An emote over it puts
+            // its quest mark by while it shows.
+            let head = sy - rows_up(i32::from(r.top.max(16))) - bob;
+            let emote = self.emotes.iter().find(|e| e.0 == u.id).filter(|_| !u.dead);
+            if let Some(&(_, emote, at)) = emote {
+                let age = self.tick.wrapping_sub(at);
+                self.emote_marks.push(EmoteMarker { id: u.id, x: sx, y: head - MARK_CLEAR + 4, emote, age });
+            } else if let Some(mark) = u.mark.filter(|_| !u.dead) {
                 self.marks.push(QuestMarker { id: u.id, x: sx, y: head - MARK_CLEAR, mark });
             }
             // Her side of a fight: the ring under her target, a bar under anyone casting.
@@ -1436,6 +1791,35 @@ impl Present {
                     n_glows += 1;
                 }
             }
+        }
+        // The ambient life (ART-PLAN M1): critters on the ground and in the air, crows and a cat on
+        // what the terrain raises, smoke over the chimneys, pads on the water. No footprint, no
+        // shadow: they stand in the draw lists and nothing else.
+        for a in self.ambient.actors() {
+            let r = self.atlas.get(a.look);
+            let (sx, sy) = (a.x - cam.0, a.y - cam.1);
+            // On a fence or a wall: its feet on the terrain's top in its column.
+            let lift = if a.perch {
+                (a.y - 24..a.y)
+                    .find(|&yy| {
+                        let h = drawn_height(&self.chunks, &self.frame.layers, self.zone_cells, (a.x, yy));
+                        h > i32::from(Foot::RELIEF) && yy + rows_up(h) >= a.y - 6
+                    })
+                    .map_or(0, |top| a.y - top - 1)
+            } else {
+                0
+            };
+            let (x, y) = (sx - i32::from(r.ax), sy - a.up - lift - i32::from(r.ay));
+            if !on_canvas(x, y, r.src.w, r.src.h) {
+                continue;
+            }
+            let tint = if a.alpha < 255 { Tint::Ghost(a.alpha) } else { Tint::None };
+            let mut sp = sprite(r, x, y, Flags { mirror: a.mirror, tint });
+            if !a.perch && !a.flat && a.up < 4 && behind(a.x, a.y) {
+                sp.foot = Some(Foot { y: clamp16(0, sy).1, see: false });
+            }
+            let cmd = DrawCmd { y: sy, key: ambient::AMBIENT_KEY | a.key, sprite: sp, caster: None };
+            if a.flat { self.ground.push(cmd) } else { self.standing.push(cmd) }
         }
         let (sort_top, rows) = (band.top + SORT_PAST, (ch + band.top + band.bottom + 2 * SORT_PAST) as u32);
         let block_range = self.chunk_range(cam, band);
@@ -1589,6 +1973,7 @@ impl Present {
         f.passes.push(Pass::Weather(self.atmos.atmos()));
         // Below T2 the parts that do not glow go under the light, so the lamps light the rain.
         self.fx.draw_under_light(f, cam, alpha);
+        self.ambient.draw_parts(f, cam, true, None);
         // The light pass: on T0 left out when the multiply would change nothing (day is free),
         // unless a light shows: its flame's glow and its faint pool are this pass's, and a fire
         // at noon drawn without them read as out (the owner, 2026-10-01).
@@ -1598,7 +1983,15 @@ impl Present {
         // Over what is lit: the marks and splashes on the ground, the fog, the effects in the
         // air, the rain.
         self.fx.draw_ground(f, cam, alpha, sky);
+        self.ambient.draw_parts(f, cam, false, Some(sky));
         self.atmos.draw_fog(f, cam, sky);
+        // Past the screen's edge: crows over the camps, the dead lamps' glass, the Hoar Stone
+        // out of the fog.
+        let fog_at_stone = self.cues.stone().map_or(0, |((x, y), _)| self.atmos.fog_at(x, y - CELL));
+        let her = me_feet.map(|(x, y)| (x + cam.0, y + cam.1));
+        let t256 = u64::from(self.tick) * 256 + u64::from(alpha);
+        let moon = self.atmos.moon_up();
+        self.cues.draw(f, &self.atlas, cam, t256, sky, her, self.hour, moon, fog_at_stone);
         self.fx.draw_air(f, cam, alpha, sky);
         self.lessons.draw(f, cam, alpha, me_feet);
         // The grade (§1.3 `grade`): the same on every tier, so a frame from any of them is the
@@ -1621,6 +2014,60 @@ impl Present {
         }
         &self.frame
     }
+}
+
+/// The houses of the zone someone lives in, by their block's corner: those a door of which a
+/// schedule names (someone goes in there for the night). Their chimneys smoke; an empty house's
+/// does not (ART-PLAN M1).
+fn lived_houses(view: &View<'_>, houses: &jane_art::terrain::houses::Houses) -> Vec<(i32, i32)> {
+    let cat = jane_data::catalog();
+    let mut names: Vec<jane_core::Sym> = cat
+        .combat
+        .units
+        .iter()
+        .flat_map(|u| u.schedule.iter())
+        .filter_map(|r| match r.slot {
+            jane_data::ScheduleSlot::Inside(n) => Some(jane_sim::sym::of_name(n)),
+            _ => None,
+        })
+        .collect();
+    names.sort_unstable();
+    names.dedup();
+    let mut lived: Vec<(i32, i32)> = view
+        .props()
+        .filter(|p| names.binary_search(&p.key).is_ok())
+        .filter_map(|p| houses.at(i32::from(p.cell.x), i32::from(p.cell.y)).map(|h| (h.rect.x, h.rect.y)))
+        .collect();
+    lived.sort_unstable();
+    lived.dedup();
+    lived
+}
+
+/// Which of a flora sprite's seven sway frames shows (ART-PLAN M2, the owner's 2026-10-03 note:
+/// smaller steps, faster, never in step): a sine of its own pace, its phase put back by a gust
+/// that travels across the county down the wind (neighbours lean in a ripple, one after the
+/// other) and nudged by its own hash, its reach swelling and easing with a slower gust over it,
+/// one way stronger than the other with the wind. Integer; a lean changes a frame at a time.
+fn sway_frame(class: crate::terrain::SwayClass, x: i32, y: i32, own: u32, tick: u32, period: u32, wind: i32) -> u32 {
+    use jane_core::Angle;
+    use jane_core::angle::sin_q15;
+    if class == crate::terrain::SwayClass::Still {
+        return crate::terrain::SWAY_REST as u32;
+    }
+    // The ripple: a crest every 384 px across, travelling with the wind's side.
+    let along = if wind < 0 { -x } else { x };
+    let wave = (i64::from(along + y / 2) * 65536 / 384) as u32;
+    let jitter = own % 9000;
+    let phase = (tick % period * 65536 / period).wrapping_sub(wave).wrapping_add(jitter);
+    let s = i64::from(sin_q15(Angle(phase as u16)).0);
+    // The slow gust: a reach of a third to the whole, rolling over the county in about 20 s.
+    let gust = i64::from(sin_q15(Angle(tick.wrapping_mul(55).wrapping_sub((along * 40 + y * 20) as u32) as u16)).0);
+    let reach = 2 * 32768 + gust; // 32768..=98304, of 98304
+    let lean = s * reach / 98304 * 3;
+    // Leaning more with the wind than against it: the rest a px downwind in a blow.
+    let bias = i64::from((wind / 16).clamp(-1, 1)) * 32768;
+    let level = ((lean + bias) * 2 + 32768 * (lean + bias).signum()) / 65536;
+    (level.clamp(-3, 3) as i32 + crate::terrain::SWAY_REST as i32) as u32
 }
 
 /// The terrain's drawn height at zone canvas px `(x, y)`, 0 where no chunk is painted.
@@ -1728,6 +2175,31 @@ mod tests {
     /// back for a footprint further back), sorted after the table, throwing no shadow of its own;
     /// a thing beside the table is left alone.
     #[test]
+    fn foliage_sways_a_frame_at_a_time_in_a_cycle_of_seconds_and_never_in_step() {
+        use crate::terrain::SwayClass;
+        for class in [SwayClass::Crown, SwayClass::Bush, SwayClass::Reed] {
+            let p = class.period();
+            assert!((90..=180).contains(&p), "{class:?}: {p} ticks");
+            let at = |x: i32, t: u32| sway_frame(class, x, 40, jane_core::hash::mix32(x as u32), t, p, 0);
+            // A frame at a time: the top moves a px, never a jump.
+            for t in 0..600 {
+                assert!(at(100, t).abs_diff(at(100, t + 1)) <= 1, "{class:?} jumps at {t}");
+            }
+            // It goes somewhere: more than three leans in a cycle.
+            let mut seen: Vec<u32> = (0..p).map(|t| at(100, t)).collect();
+            seen.sort_unstable();
+            seen.dedup();
+            assert!(seen.len() >= 4, "{class:?}: {seen:?}");
+            // A row of neighbours a cell apart never changes frame all on one tick.
+            for t in 0..p {
+                let changed = (0..8).filter(|k| at(100 + 16 * k, t) != at(100 + 16 * k, t + 1)).count();
+                assert!(changed < 8, "{class:?}: all eight step at {t}");
+            }
+        }
+        assert_eq!(sway_frame(SwayClass::Still, 5, 5, 9, 77, 170, 0), crate::terrain::SWAY_REST as u32);
+    }
+
+    #[test]
     fn a_bowl_on_a_table_stands_on_its_top() {
         let rec = |x: i32, y: i32, w: i32, h: i32, surface: Option<(i32, i32)>| PropRec {
             id: 0,
@@ -1743,6 +2215,7 @@ mod tests {
             lift: 0,
             sort_foot: None,
             mark: None,
+            smokes: false,
         };
         let mut v = vec![
             rec(96, 176, 48, 32, Some((10, 18))),
@@ -1816,6 +2289,7 @@ mod tests {
             loot: LootState::Left(vec![jane_core::Stack { item: key, qty: 1 }]),
             under_done: false,
             regrow: None,
+            burns_until: None,
             night: NightState::AsSpawned,
         });
         let drop = st.next.drop();

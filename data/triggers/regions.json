@@ -1,0 +1,37 @@
+{
+  "three_crossings_count": {
+    "zone": "county", "rect": "east_bridge", "mode": "enter", "once": false,
+    "when": [{ "if": "night" }, { "if": "questActive", "quest": "three_crossings" }],
+    "actions": [
+      { "do": "flag", "flag": "toll_count", "add": 1 },
+      {
+        "do": "if",
+        "when": [{ "if": "flag", "flag": "toll_count", "eq": 3 }],
+        "then": [
+          { "do": "location", "name": "three_crossings_done" },
+          {
+            "do": "if",
+            "when": [{ "if": "flag", "flag": "omen:bridge_counts" }],
+            "then": [{ "do": "flag", "flag": "crossed_counted", "value": 1 }],
+            "else": [{ "do": "flag", "flag": "crossed_uncounted", "value": 1 }]
+          }
+        ]
+      }
+    ]
+  },
+  "loveday_at_the_landing": {
+    "zone": "county", "rect": "reed_end_landing", "mode": "while", "once": false,
+    "when": [{ "if": "flag", "flag": "loveday_at_landing" }, { "if": "questActive", "quest": "loveday_landing" }],
+    "actions": [{ "do": "location", "name": "loveday_walked" }]
+  },
+  "hut_three_held_till_six": {
+    "zone": "county", "rect": "hut_three_watch", "mode": "while", "once": false,
+    "when": [{ "if": "questActive", "quest": "signals_at_danger" }, { "if": "flag", "flag": "hut_three_lit" }, { "if": "hours", "from": 5, "to": 6 }],
+    "actions": [{ "do": "location", "name": "hut_three_held" }]
+  },
+  "bellfield_at_nine": {
+    "zone": "county", "rect": "bellfield_middle", "mode": "while", "once": false,
+    "when": [{ "if": "questActive", "quest": "the_bell_rope" }, { "if": "hours", "from": 21, "to": 22 }],
+    "actions": [{ "do": "location", "name": "bellfield_nine" }]
+  }
+}

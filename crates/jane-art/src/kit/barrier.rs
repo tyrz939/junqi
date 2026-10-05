@@ -14,6 +14,10 @@ pub(crate) fn draw(c: &mut Canvas, k: &Kit, state: State) -> Option<Stand> {
     let (w, h, foot) = (k.w, k.h, k.foot());
     let edge_on = k.fh > k.fw;
     Some(match k.look.shape {
+        "door" if k.house.is_some() => {
+            house_door(c, k, k.house.unwrap_or(0) % 3);
+            Stand::Up(&[])
+        }
         "door" => {
             // A door in its frame: a stone or timber surround, a planked leaf with strap hinges
             // and a ring, a worn step before it.
@@ -290,4 +294,109 @@ pub(crate) fn draw(c: &mut Canvas, k: &Kit, state: State) -> Option<Stand> {
         }
         _ => return None,
     })
+}
+
+/// A house's front door (ART-PLAN Q2) in its paint (`k.body`) and make: `0` panelled under a
+/// fanlight, with a letterbox and a brass knob; `1` a cottage's ledged boards and a thumb latch;
+/// `2` a stable door, its top leaf glazed, a ledge where the leaves meet. All stand in a
+/// surround on a stone step with a boot scraper by it.
+fn house_door(c: &mut Canvas, k: &Kit, make: u32) {
+    let (w, h, foot) = (k.w, k.h, k.foot());
+    let (dw, dh) = ((w - 10).min(20), (h - 6).min(30));
+    let x = (w - dw) / 2;
+    let top = foot - 2 - dh;
+    let paint = k.body;
+    ao(c, x - 3, x + dw + 2, foot, 4);
+    // The surround: painted white round a panelled door, stone round the rest.
+    let surround = if make == 0 { Ramp::Limewash } else { k.trim };
+    c.rect_bevel(Rect::new(x - 3, top - 3, dw + 6, dh + 4), surround, 2, Z::new(3, 5));
+    let leaf_top = if make == 0 { top + 6 } else { top };
+    let leaf = Rect::new(x, leaf_top, dw, foot - 2 - leaf_top);
+    match make {
+        0 => {
+            // The fanlight: a half-round of glass, its glazing bars fanned out from its foot.
+            for y in top..top + 6 {
+                for xx in x..x + dw {
+                    let (dx, dy) = (xx - (x + dw / 2), top + 6 - y);
+                    let inside = dx * dx * 36 / ((dw / 2) * (dw / 2)).max(1) + dy * dy <= 36;
+                    let ix = if !inside {
+                        surround.at(Tone::Base)
+                    } else if dx == 0 || dx == dy * 2 || dx == -dy * 2 || dy == 0 {
+                        surround.at(Tone::Light)
+                    } else if dy > 3 {
+                        Ramp::Glass.at(Tone::Lift)
+                    } else {
+                        Ramp::Glass.at(Tone::Shade)
+                    };
+                    c.put(xx, y, ix, parts::south(), 6);
+                }
+            }
+            c.fill_normal(leaf, paint.at(Tone::Base), parts::south(), 6);
+            // Four panels, sunk: shadow along their top and left inside, light along the foot
+            // and right where the bevel faces the sun.
+            let (pw, gap) = ((dw - 6) / 2, 2);
+            let mid = leaf.y + leaf.h / 2 - 1;
+            for (py0, py1) in [(leaf.y + 2, mid - 2), (mid + 3, leaf.bottom() - 3)] {
+                for px0 in [x + gap, x + gap + pw + 2] {
+                    for y in py0..=py1 {
+                        for xx in px0..px0 + pw {
+                            let t = if y == py0 || xx == px0 {
+                                Tone::Shade
+                            } else if y == py1 || xx == px0 + pw - 1 {
+                                Tone::Light
+                            } else {
+                                Tone::Mid
+                            };
+                            c.put(xx, y, paint.at(t), parts::south(), 6);
+                        }
+                    }
+                }
+            }
+            // The letterbox in the middle rail, the knob on the lock rail.
+            c.fill_rect(Rect::new(x + dw / 2 - 3, mid, 6, 2), Ramp::Brass.at(Tone::Base), 7);
+            c.hline(x + dw / 2 - 3, x + dw / 2 + 2, mid, Ramp::Brass.at(Tone::Light), 7);
+            c.disc_lit(x + dw - 4, mid + 1, 1, Ramp::Brass, Z::flat(8));
+        }
+        1 => {
+            planks(c, leaf, paint, (dw / 4).max(2), false, false, k.seed, 6);
+            for y in [leaf.y + 5, leaf.bottom() - 7] {
+                c.fill_rect(Rect::new(x, y, dw, 2), paint.at(Tone::Lift), 7);
+                c.hline(x, x + dw - 1, y, paint.at(Tone::Light), 7);
+                c.hline(x, x + dw - 1, y + 2, paint.at(Tone::Shade), 6);
+            }
+            // A thumb latch.
+            c.fill_rect(Rect::new(x + dw - 5, leaf.y + leaf.h / 2 - 2, 2, 5), Ramp::Iron.at(Tone::Mid), 7);
+            c.dot(x + dw - 5, leaf.y + leaf.h / 2 - 2, Ramp::Iron.at(Tone::Light), 8);
+        }
+        _ => {
+            // The top leaf: framed, two panes of glass; the bottom one boarded.
+            let split = leaf.y + leaf.h / 2;
+            let upper = Rect::new(x, leaf.y, dw, split - leaf.y);
+            c.fill_normal(upper, paint.at(Tone::Base), parts::south(), 6);
+            for px0 in [x + 3, x + dw / 2 + 1] {
+                let r = Rect::new(px0, leaf.y + 3, dw / 2 - 4, upper.h - 6);
+                parts::glass(c, r, false, 6);
+            }
+            c.hline(x, x + dw - 1, leaf.y, paint.at(Tone::Light), 6);
+            let lower = Rect::new(x, split + 2, dw, leaf.bottom() - split - 2);
+            planks(c, lower, paint, (dw / 4).max(2), false, false, k.seed ^ 3, 6);
+            // The ledge where the leaves meet, standing proud, lit.
+            c.fill_rect(Rect::new(x - 1, split, dw + 2, 2), paint.at(Tone::Lift), 8);
+            c.hline(x - 1, x + dw, split, paint.at(Tone::High), 8);
+            // Strap hinges on the hanging side.
+            for y in [leaf.y + 3, split - 3, split + 4, leaf.bottom() - 4] {
+                c.hline(x, x + 6, y, Ramp::Iron.at(Tone::Mid), 7);
+            }
+            c.disc_lit(x + dw - 4, split + 5, 1, Ramp::Brass, Z::flat(8));
+        }
+    }
+    c.hline(x, x + dw - 1, leaf.y, paint.at(Tone::Shade), 6);
+    // The step: a stone slab wider than the door, lit along its top, its nose in shadow.
+    c.fill_normal(Rect::new(x - 4, foot - 2, dw + 8, 1), k.trim.at(Tone::High), FLAT, 3);
+    c.fill_normal(Rect::new(x - 4, foot - 1, dw + 8, 1), k.trim.at(Tone::Mid), parts::south(), 2);
+    // The boot scraper by it: an iron blade between two uprights.
+    let bx = (x + dw + 4).min(w - 3);
+    c.vline(bx, foot - 5, foot - 1, Ramp::Iron.at(Tone::Light), 4);
+    c.vline(bx + 2, foot - 5, foot - 1, Ramp::Iron.at(Tone::Shade), 4);
+    c.hline(bx, bx + 2, foot - 3, Ramp::Iron.at(Tone::Mid), 4);
 }

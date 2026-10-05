@@ -12,7 +12,9 @@ use jane_data::{Region, RuinKind};
 
 use super::defs::{Defs, defs};
 use super::places::Kind;
-use super::{County, Side, folk, ground, hostile, keep, lane, own, pad, pen, put, put_with, road_side, run, walk};
+use super::{
+    County, Side, folk, ground, hostile, keep, lane, own, pad, pen, put, put_with, road_side, run, walk, wood_by,
+};
 use crate::county::ways::{door_approach, door_step};
 use crate::skeleton::Biome;
 
@@ -584,7 +586,12 @@ fn camp(c: &mut County<'_>, rng: &mut Sfc32, d: &Defs, x: i32, y: i32) {
     if chance(rng, 350) {
         who.push(who[0]);
     }
-    let fire = put(c, if lit { d.p.camp_fire } else { d.p.campfire_cold }, x - 1, y - 1);
+    // A camp's own fire burns (it is theirs, lit); a cold one is a pit anyone may make up.
+    let fire = if lit {
+        put_with(c, d.p.camp_fire, x - 1, y - 1, |p| p.on = true)
+    } else {
+        put(c, d.p.campfire_cold, x - 1, y - 1)
+    };
     own(c, "fire", fire);
     if lit {
         let tent = talk(c, d.p.tent, x - 6, y - 5, d.t.country_tent);
@@ -607,6 +614,7 @@ fn camp(c: &mut County<'_>, rng: &mut Sfc32, d: &Defs, x: i32, y: i32) {
         let (ox, oy) = RING[i % RING.len()];
         hostile(c, def, x + ox, y + oy, Vec::new());
     }
+    wood_by(c, d.p.stump, x - 1, y - 1);
     let (w, h) = Kind::Camp.size();
     keep_board(c, Rect::new(x - (w >> 1), y - (h >> 1), w, h));
     keep(c, "ground", x + 1, y + 3);
@@ -711,6 +719,9 @@ fn ruin(c: &mut County<'_>, rng: &mut Sfc32, d: &Defs, x0: i32, y0: i32) {
         own(c, "crate", crate_);
         let fire = put(c, d.p.campfire_cold, wx + 5, wy + 3);
         own(c, "fire", fire);
+        if fire.is_some() {
+            wood_by(c, d.p.stump, wx + 5, wy + 3);
+        }
     }
     if chance(rng, 300) {
         let l = loot(c, rng, wx, wy);

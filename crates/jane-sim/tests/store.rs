@@ -101,9 +101,9 @@ fn a_full_bag_goes_into_a_cupboard_keys_and_all_and_is_no_longer_held() {
     for (name, qty) in [("key_basement", 1), ("gold_bar", 16), ("key_generic", 1)] {
         cmd(&mut s, Command::Dev(DevOp::Give { item: item(name), qty }));
     }
-    // Every hole a stack of its own: a bag with no room left.
+    // Every hole a stack of its own: a bag with no room left (the key ring past it, empty).
     let rock = item("rock");
-    for b in s.state_mut().players[0].bag.iter_mut().filter(|b| b.is_none()) {
+    for b in s.state_mut().players[0].bag[..BAG_SLOTS].iter_mut().filter(|b| b.is_none()) {
         *b = Some(Stack { item: rock, qty: 1 });
     }
     let bag: Vec<Stack> = s.state().players[0].bag.iter().flatten().copied().collect();

@@ -15,6 +15,9 @@ use crate::canvas::{Canvas, Z};
 use crate::palette::{Ix, Ramp, Tone};
 
 pub(crate) fn draw(c: &mut Canvas, k: &Kit, state: State) -> Option<Stand> {
+    if let Some(stand) = super::fire::draw(c, k, state) {
+        return Some(stand);
+    }
     let lit = state == State::On;
     let (w, foot) = (k.w, k.foot());
     Some(match k.look.shape {

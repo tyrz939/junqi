@@ -88,6 +88,10 @@ pub struct Telemetry {
     pub worst: (u32, &'static str),
     pub food_heals: u32,
     dmg_taken: i64,
+    /// Fire chores (`jane_sim::fire`): fires she lit, deadwood gathered, lightings the rain refused.
+    pub fires_lit: u32,
+    pub gathers: u32,
+    pub wet: u32,
 }
 
 fn csv(s: &str) -> String {
@@ -125,6 +129,9 @@ impl Telemetry {
             worst: (0, ""),
             food_heals: 0,
             dmg_taken: 0,
+            fires_lit: 0,
+            gathers: 0,
+            wet: 0,
         }
     }
 
@@ -217,6 +224,13 @@ impl Telemetry {
                         v.clock().1
                     ));
                 }
+                EventKind::Toast(jane_sim::event::ToastKind::FireLit { by, .. }) if by == self.seat => {
+                    self.fires_lit += 1;
+                }
+                EventKind::Toast(jane_sim::event::ToastKind::FireWants(jane_sim::event::FireWant::Wet)) => {
+                    self.wet += 1;
+                }
+                EventKind::Loot { item, .. } if Some(item) == jane_sim::fire::deadwood() => self.gathers += 1,
                 _ => {}
             }
         }
@@ -337,7 +351,7 @@ impl Telemetry {
         let mut s = String::new();
         let _ = write!(
             s,
-            "{},{},{mins},{},{},{},{first_death},{},{},{},{},{},{},{},{},{}",
+            "{},{},{mins},{},{},{},{first_death},{},{},{},{},{},{},{},{},{},{},{},{},{}",
             self.model,
             self.seed,
             chapters.len(),
@@ -352,6 +366,10 @@ impl Telemetry {
             self.food_heals,
             self.rests.len(),
             tenths(per_hour(self.rests.len()) as u32),
+            self.fires_lit,
+            self.gathers,
+            self.wet,
+            tenths(per_hour((self.fires_lit + self.gathers) as usize) as u32),
         );
         s
     }
@@ -360,9 +378,18 @@ impl Telemetry {
 /// The story from New Game: `model` on `seed` for up to `minutes` of play (or until it stops),
 /// its telemetry gathered as it goes.
 pub fn play(model: Model, seed: u32, minutes: u32) -> Result<(Bot, Telemetry), String> {
+    play_with(model, seed, minutes, None)
+}
+
+/// [`play`], with made fires (`jane_sim::fire`) set on or off for the run (`None`: as New Game
+/// has it, `tuning::FIRES_MADE`).
+pub fn play_with(model: Model, seed: u32, minutes: u32, fires: Option<bool>) -> Result<(Bot, Telemetry), String> {
     let bps = jane_sim::Blueprints::build(seed).map_err(|e| format!("seed {seed}: {e}"))?;
     let mut sim = Sim::new_game_with(bps, "Jane");
     let mut bot = Bot::story(model);
+    if let Some(on) = fires {
+        bot.setup.push(jane_sim::Command::Dev(jane_sim::DevOp::Fires(on)));
+    }
     let mut t = Telemetry::new(model.name(), seed);
     for _ in 0..minutes.saturating_mul(MINUTE) {
         if bot.done() {
@@ -377,7 +404,7 @@ pub fn play(model: Model, seed: u32, minutes: u32) -> Result<(Bot, Telemetry), S
 /// The summary table's columns: minutes played, chapters handed in and the last, deaths and
 /// the first one's minute, kills and her blows per kill, blows taken and the biggest (per cent of
 /// her max health, and by what), heals and those that were food, rests and rests an hour.
-pub const SUMMARY_HEADER: &str = "model,seed,minutes,chapters,last_chapter,deaths,first_death_min,kills,hits_per_kill,blows_taken,worst_blow_pct,worst_blow_by,heals,food_heals,rests,rests_per_hour";
+pub const SUMMARY_HEADER: &str = "model,seed,minutes,chapters,last_chapter,deaths,first_death_min,kills,hits_per_kill,blows_taken,worst_blow_pct,worst_blow_by,heals,food_heals,rests,rests_per_hour,fires_lit,gathers,wet_refusals,chores_per_hour";
 
 fn school_name(s: jane_core::action::School) -> &'static str {
     use jane_core::action::School as S;

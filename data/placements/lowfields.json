@@ -1,4 +1,7 @@
 [
+  { "key": "old_grate_quarry", "at": { "area": "quarry_steps" }, "prop": { "def": "old_grate", "label": "An old grate" } },
+  { "key": "old_grate_pool", "at": { "area": "still_pool" }, "prop": { "def": "old_grate", "label": "An old grate" } },
+  { "key": "old_grate_yard", "at": { "area": "cooling_yard" }, "prop": { "def": "old_grate", "label": "An old grate" } },
   {
     "key": "lost_property_book",
     "at": {
@@ -713,7 +716,7 @@
       "within": 12
     },
     "prop": {
-      "def": "campfire_cold",
+      "def": "brazier_cold",
       "talk": "brazier_cold",
       "label": "The lampman's brazier"
     }

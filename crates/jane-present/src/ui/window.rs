@@ -150,6 +150,7 @@ pub fn draw(ui: &mut Ui, st: &mut WindowState, b: &ViewBuffers, v: Option<&View<
             Some(v) => map::draw(
                 ui,
                 &mut st.map,
+                &b.memory,
                 v,
                 Rect::new(i32::from(body.x), i32::from(body.y), i32::from(body.w), i32::from(body.h) - 16),
             ),

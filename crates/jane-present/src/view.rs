@@ -25,6 +25,8 @@ pub const TOAST_FADE: u32 = 40;
 pub const TOASTS: usize = 3;
 /// Ticks the zone banner stays.
 pub const BANNER_TICKS: u32 = 200;
+/// Ticks a named place's banner stays.
+pub const PLACE_BANNER_TICKS: u32 = 160;
 /// Ticks a bar's lag tail holds before it falls, and permille it falls a tick.
 pub const LAG_HOLD: u32 = 30;
 pub const LAG_FALL: u16 = 14;
@@ -236,10 +238,27 @@ pub struct HudView {
     pub tracker: Vec<QuestLine>,
     pub prompt: Option<Prompt>,
     pub bar: [SlotData; BAR_SLOTS],
-    /// The zone banner: its words and the tick it went up.
-    pub banner: Option<(&'static str, u32)>,
+    /// The banner: a zone's name, or a named place's she has crossed into.
+    pub banner: Option<Banner>,
     pub toasts: Vec<Toast>,
     pub party: u8,
+}
+
+/// A name up across the top of the screen.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Banner {
+    pub text: String,
+    /// The presenter tick it went up.
+    pub born: u32,
+    /// A named place she crossed into (smaller, and shorter, than a zone's).
+    pub place: bool,
+}
+
+impl Banner {
+    /// How long it stays, presenter ticks.
+    pub fn ticks(&self) -> u32 {
+        if self.place { PLACE_BANNER_TICKS } else { BANNER_TICKS }
+    }
 }
 
 /// The stats card.
@@ -366,6 +385,15 @@ pub struct ViewBuffers {
     fighting: Option<(jane_sim::UnitId, u32)>,
     ways: Ways,
     scratch: String,
+    /// What the map remembers (the app keeps it with the slot, as it keeps `track`).
+    pub memory: crate::memory::MapMemory,
+    /// The county's named places she crosses into: their banners.
+    pub crossings: crate::memory::Crossings,
+    crossed: Vec<usize>,
+    /// A place's banner waiting for the one up to come down.
+    banner_next: Option<String>,
+    /// She is reading a thing's words (they were looked at once).
+    reading: bool,
 }
 
 /// A step's place, the whole way there and the short one.
@@ -388,6 +416,9 @@ struct Plan {
     next: usize,
     made: Option<u32>,
     checked: u32,
+    /// The path index the words were last said from, once she has walked on from a way set
+    /// where she stood (`Roads::walked`); 0 while they are said from the start.
+    walked: usize,
 }
 
 impl Plan {
@@ -419,6 +450,7 @@ impl Plan {
     fn set(&mut self, route: Option<jane_sim::route::Route>, now: u32) {
         use jane_sim::route::Leg;
         self.made = Some(now);
+        self.walked = 0;
         self.next = route
             .as_ref()
             .and_then(|r| match r.legs.get(1) {
@@ -428,6 +460,34 @@ impl Plan {
             .unwrap_or(usize::MAX);
         self.way = route.as_ref().map(|r| (self.place, r.words(), r.short()));
         self.route = route;
+    }
+
+    /// A way set where she stood, held while she walks its first leg: said again from where she
+    /// is now on it, so "from here" is here (`Roads::walked`).
+    fn walk_on(&mut self, roads: &jane_sim::route::Roads, here: Option<(i32, i32)>) {
+        let (Some(route), Some(at)) = (&self.route, here) else { return };
+        if !matches!(route.from, jane_sim::route::Start::Here(_)) {
+            return;
+        }
+        let near = |c: (i32, i32)| (c.0 - at.0).abs() <= WAY_STRAY && (c.1 - at.1).abs() <= WAY_STRAY;
+        let Some((i, _)) = route
+            .path
+            .iter()
+            .enumerate()
+            .take(self.next)
+            .filter(|(_, c)| near(**c))
+            .min_by_key(|(i, c)| ((c.0 - at.0).pow(2) + (c.1 - at.1).pow(2), *i))
+        else {
+            return;
+        };
+        // Words said again only once she is a stray's width on from where they were said.
+        if i <= self.walked + WAY_STRAY as usize {
+            return;
+        }
+        if let Some(w) = roads.walked(route, i) {
+            self.walked = i;
+            self.way = Some((self.place, w.words(), w.short()));
+        }
     }
 }
 
@@ -494,6 +554,7 @@ impl Ways {
                     next: usize::MAX,
                     made: None,
                     checked: 0,
+                    walked: 0,
                 });
                 self.steps.push(((q, i), plan));
                 self.steps.len() - 1
@@ -511,13 +572,120 @@ impl Ways {
             let want = roads.start(here, last, &knows, given, plan.place.rect);
             if plan.stale(&want, here, now) {
                 plan.set(roads.route_from(&want, plan.place.rect), now);
+            } else {
+                plan.walk_on(&roads, here);
             }
         }
         plan.way.as_ref()
     }
 }
 
+/// The fire she rests at, if she rests at one: a kept fire's mark, at its cell.
+fn rested_fire(v: &View<'_>) -> Option<(ZoneId, (i32, i32), crate::memory::FireState)> {
+    let cat = jane_data::catalog();
+    let (x, y) = v.body().pos.cell();
+    let r = 4;
+    v.props_in(jane_core::Rect::new(x - r, y - r, 2 * r + 1, 2 * r + 1))
+        .filter(|p| {
+            let d = cat.story.prop(p.def);
+            d.rest && d.light.is_some() && !p.hidden
+        })
+        .map(|p| {
+            let d = cat.story.prop(p.def);
+            (i32::from(p.cell.x) + i32::from(d.w) / 2, i32::from(p.cell.y) + i32::from(d.h) / 2)
+        })
+        .min_by_key(|c| (c.0 - x).pow(2) + (c.1 - y).pow(2))
+        .map(|c| (v.zone(), c, crate::memory::FireState::Kept))
+}
+
+/// The thing whose words she is reading: the prop in reach whose use reads them, else the
+/// nearest in reach. Its cell, the middle of its footprint.
+fn read_at(v: &View<'_>, t: jane_core::action::TextRef) -> Option<(i32, i32)> {
+    let cat = jane_data::catalog();
+    let (x, y) = v.body().pos.cell();
+    let r = 4;
+    let reads = |p: &jane_sim::state::Prop| {
+        v.prop_spawn(p)
+            .and_then(|s| s.use_list)
+            .is_some_and(|l| v.list(l).contains(&jane_core::action::Action::Read(t)))
+    };
+    let mut best: Option<((i32, i32), (bool, i32))> = None;
+    for p in v.props_in(jane_core::Rect::new(x - r, y - r, 2 * r + 1, 2 * r + 1)) {
+        let d = cat.story.prop(p.def);
+        let c = (i32::from(p.cell.x) + i32::from(d.w) / 2, i32::from(p.cell.y) + i32::from(d.h) / 2);
+        let k = (!reads(p), (c.0 - x).pow(2) + (c.1 - y).pow(2));
+        if best.is_none_or(|(_, b)| k < b) {
+            best = Some((c, k));
+        }
+    }
+    best.map(|(c, _)| c)
+}
+
 impl ViewBuffers {
+    /// The map's memory and the places' banners, once a tick after the events: a sign being
+    /// read, a named place crossed into.
+    fn remember(&mut self, v: &View<'_>, now: u32) {
+        use crate::memory::{MapMark, Note};
+        // A sign read: its words where it stands, and any place it names.
+        let read = v.dialogue().and_then(|d| d.read);
+        if let Some(t) = read {
+            if !self.reading
+                && let Some(at) = read_at(v, t)
+            {
+                let words = v.text(t).to_owned();
+                let mut plate = false;
+                if v.zone() == ZoneId::County {
+                    for p in &self.crossings.places {
+                        if crate::memory::names(&words, &p.name) {
+                            plate |= crate::memory::plate(&words, &p.name);
+                            let m = MapMark {
+                                zone: ZoneId::County,
+                                at: p.shape.centre(),
+                                note: Note::Name(p.name.clone()),
+                            };
+                            self.memory.learn(m);
+                        }
+                    }
+                }
+                // A board that is only a place's name is that name on the chart, not a post.
+                if !plate {
+                    self.memory.learn(MapMark { zone: v.zone(), at, note: Note::Sign(words) });
+                }
+            }
+        }
+        self.reading = read.is_some();
+        // A named place crossed into, the first time today: its banner, and its name to ink.
+        if v.zone() == ZoneId::County {
+            let roads = self.ways.roads.clone();
+            self.crossings.follow(v, || {
+                roads.map_or_else(Vec::new, |r| {
+                    r.sites()
+                        .iter()
+                        .filter_map(|s| match &s.start {
+                            jane_sim::route::Start::Place { name, ground, .. } => Some((name.clone(), *ground)),
+                            _ => None,
+                        })
+                        .collect()
+                })
+            });
+            let mut crossed = std::mem::take(&mut self.crossed);
+            crossed.clear();
+            self.crossings.cross(v.body().pos.cell(), v.clock().1, &mut crossed);
+            for &i in &crossed {
+                let p = &self.crossings.places[i];
+                let m = MapMark { zone: ZoneId::County, at: p.shape.centre(), note: Note::Name(p.name.clone()) };
+                self.memory.learn(m);
+                self.banner_next = Some(p.name.clone());
+            }
+            self.crossed = crossed;
+        }
+        if self.hud.banner.is_none()
+            && let Some(text) = self.banner_next.take()
+        {
+            self.hud.banner = Some(Banner { text, born: now, place: true });
+        }
+    }
+
     pub fn new() -> ViewBuffers {
         let mut b = ViewBuffers::default();
         b.window.bag.resize(BAG_SLOTS, SlotData::default());
@@ -561,9 +729,15 @@ impl ViewBuffers {
                 }
                 // E at a bench: her bag, with the craft row beside it.
                 EventKind::Bench { .. } => self.window.opened = true,
+                // A rest inks the map: what she learned since the last, and the fire.
+                EventKind::Rest => {
+                    let fire = rested_fire(v);
+                    self.memory.ink(fire);
+                }
                 EventKind::Zone { zone, .. } => {
                     self.window.store = None;
-                    self.hud.banner = Some((text::zone_name(zone, v.region()), now));
+                    let text = text::zone_name(zone, v.region()).to_owned();
+                    self.hud.banner = Some(Banner { text, born: now, place: false });
                     self.fighting = None;
                 }
                 EventKind::Loot { item, qty } => {
@@ -600,9 +774,10 @@ impl ViewBuffers {
             self.saved = None;
         }
         self.hud.toasts.retain(|t| now.wrapping_sub(t.born) < TOAST_TICKS);
-        if self.hud.banner.is_some_and(|(_, t)| now.wrapping_sub(t) >= BANNER_TICKS) {
+        if self.hud.banner.as_ref().is_some_and(|b| now.wrapping_sub(b.born) >= b.ticks()) {
             self.hud.banner = None;
         }
+        self.remember(v, now);
         self.read(v);
     }
 
@@ -792,7 +967,7 @@ impl ViewBuffers {
         // The window.
         let w = &mut self.window;
         w.bag.resize(BAG_SLOTS, SlotData::default());
-        for (i, st) in me.bag.iter().enumerate() {
+        for (i, st) in me.bag.iter().take(BAG_SLOTS).enumerate() {
             w.bag[i] = st.map_or(SlotData::default(), |st| stack(st.item, st.qty));
         }
         for (i, st) in me.craft.iter().enumerate() {

@@ -214,7 +214,8 @@ pub fn build_house(seed: u32, attempt: u8) -> Blueprint {
     b.talker("julies_note", "note", 10, 12, "julies_note");
     b.prop(Some("bench"), "bench", 3, 17);
     b.chest(Some("pantry_chest"), "chest", 9, 19, &[("gold_dust", 2), ("small_water", 3), ("pansy", 2)]);
-    b.prop(None, "shelf", 12, 20);
+    // The kitchen drawer: a box of matches, kept full (`tuning/sim.json` `regrow.restock`).
+    b.chest(Some("kitchen_drawer"), "kitchen_drawer", 12, 20, &[("match", 10)]);
 
     // Front room: leftover furniture along the wall, as 2020 stacked its benches.
     b.talker("julies_bed", "bed", 29, 3, "bed");

@@ -8,10 +8,18 @@
 //! `terrain` is painted once a zone; `composed` again only when the fog's seen-bits change
 //! (looked at every 30 ticks). Zoom is `[fit, 1, 2, 3, 4, 6]`, nearest; drag or the stick pans;
 //! `0` recentres. The School has its mark; she is a blinking dot. Never lit.
+//!
+//! Over the chart, what the map remembers (`crate::memory`), inked only at a rest: the fires she
+//! rested at as warm dots (a made fire with its burn as an arc, a cold pit as a grey ring), the
+//! signs she read as little posts whose words come up when the pointer is on one (or the keys
+//! bring the view's middle to it), the places' names, and her own pins: a right click (or X, at
+//! the view's middle) puts one in or takes it out, five at most.
 
 use jane_art::palette::{self, Ix, Ramp, Tone};
 use jane_core::{Tile, ZoneId};
 use jane_sim::View;
+
+use crate::memory::{FireState, MapMemory, Note, PINS};
 
 use crate::frame::Src;
 use crate::input::{UiAction, sc};
@@ -170,6 +178,9 @@ pub struct MapChart {
     /// The chart px at the viewport's centre; `None` follows her.
     pub pan: Option<(i32, i32)>,
     drag_from: Option<((i32, i32), (i32, i32))>,
+    /// Presses on the chart that put a pin in or take one out, in cells of the zone: the app
+    /// hands them to [`MapMemory::toggle_pin`] after the frame.
+    pub pin_edits: Vec<(ZoneId, (i32, i32))>,
 }
 
 impl MapChart {
@@ -427,7 +438,7 @@ pub fn chart_colour(r: u8, g: u8, b: u8) -> u32 {
 }
 
 /// Draws the chart in `r` for `v`, answering zoom, pan and recentre while `ui` is interactive.
-pub fn draw(ui: &mut Ui, m: &mut MapChart, v: &View<'_>, r: Rect) {
+pub fn draw(ui: &mut Ui, m: &mut MapChart, mem: &MapMemory, v: &View<'_>, r: Rect) {
     let tick = ui.tick;
     if m.follow(v, tick) {
         let img = ui.image_mut(CHART, m.w as u16, m.h as u16);
@@ -514,6 +525,7 @@ pub fn draw(ui: &mut Ui, m: &mut MapChart, v: &View<'_>, r: Rect) {
         let (x, y) = to_canvas(s);
         ui.mark(Mark::Star, x - 8, y - 8, 255);
     }
+    let read = marks(ui, m, mem, v, r, &to_canvas, Window { z256, sx, sy, dx, dy });
     // Her: a dot that blinks, ringed so it reads on any ink.
     let (hx, hy) = to_canvas(her);
     if (tick / 20) % 3 != 0 {
@@ -522,10 +534,223 @@ pub fn draw(ui: &mut Ui, m: &mut MapChart, v: &View<'_>, r: Rect) {
         ui.fill(Rect::new(hx - 1, hy - 2, 2, 1), argb(Ramp::UiGold.at(Tone::Glint), 255));
     }
     ui.set_clip(Rect::CANVAS);
+    if let Some((words, at)) = read {
+        sign_words(ui, r, &words, at);
+    }
     // The legend of the zoom, quiet under the chart.
     let zl = if m.zoom == 0 { "fit".to_string() } else { format!("x{}", ZOOMS[m.zoom - 1]) };
-    let hint = format!("{zl}   wheel or +/- zoom   drag to pan   0 her");
+    let pin = if ui.input.pad { "X pin" } else { "right click pin" };
+    let hint = format!("{zl}   wheel or +/- zoom   drag to pan   0 her   {pin} {}/{PINS}", mem.pins.len());
     ui.text(i32::from(r.x) + 6, r.bottom() + 4, &hint, Ink::fine(style::quiet()).shadow());
+}
+
+/// The chart's window onto the canvas: zoom (canvas px per chart px, in 256ths), the first
+/// chart px in sight, and the canvas px it is drawn from.
+#[derive(Clone, Copy)]
+struct Window {
+    z256: i32,
+    sx: i32,
+    sy: i32,
+    dx: i32,
+    dy: i32,
+}
+
+/// The ember's colour.
+fn ember() -> u32 {
+    argb(Ramp::Ember.at(Tone::Base), 255)
+}
+
+/// A mark this near the pointer (canvas px, each way) is the one it is on.
+const POINT_NEAR: i32 = 6;
+
+/// The pixels of a ring of radius 6 round a mark, in order from twelve o'clock, clockwise.
+fn arc_ring() -> Vec<(i32, i32)> {
+    let mut px: Vec<(i32, i32)> = Vec::new();
+    for dy in -7i32..=7 {
+        for dx in -7i32..=7 {
+            if (30..=44).contains(&(dx * dx + dy * dy)) {
+                px.push((dx, dy));
+            }
+        }
+    }
+    // A pseudo-angle, 0..1024 clockwise from straight up (screen y runs down).
+    let ang = |(x, y): (i32, i32)| -> i32 {
+        let (ax, ay) = (x.abs(), y.abs());
+        let t = if ax + ay == 0 { 0 } else { ax * 256 / (ax + ay) };
+        match (x >= 0, y < 0) {
+            (true, true) => t,
+            (true, false) => 512 - t,
+            (false, false) => 512 + t,
+            (false, true) => 1024 - t,
+        }
+    };
+    px.sort_by_key(|&p| ang(p));
+    px
+}
+
+/// The inked marks of her zone and her pins over the chart; the words of the sign the pointer
+/// (or the view's middle) is on, and where.
+fn marks(
+    ui: &mut Ui,
+    m: &mut MapChart,
+    mem: &MapMemory,
+    v: &View<'_>,
+    r: Rect,
+    to_canvas: &dyn Fn((i32, i32)) -> (i32, i32),
+    win: Window,
+) -> Option<(String, (i32, i32))> {
+    let zone = v.zone();
+    let step = m.step as i32;
+    let chart = |c: (i32, i32)| (c.0 / step, c.1 / step);
+    // Names first, under everything: each once, never over another.
+    let mut taken: Vec<Rect> = Vec::new();
+    for mk in mem.of(zone) {
+        let Note::Name(name) = &mk.note else { continue };
+        let (x, y) = to_canvas(chart(mk.at));
+        let w = crate::ui::core::text_w(jane_art::font::Face::Fine, name);
+        let b = Rect::new(x - w / 2 - 2, y - 4, w + 4, 11);
+        if !r.contains((x, y)) || taken.iter().any(|t| !t.intersect(b).is_empty()) {
+            continue;
+        }
+        taken.push(b);
+        // A place she has been is inked bold; one she has only read of, fainter, over the smoke.
+        let ink = if v.seen(mk.at.0, mk.at.1) {
+            Ink::fine(Ramp::Bone.at(Tone::Light)).shadow()
+        } else {
+            Ink::fine(Ramp::Stone.at(Tone::Lift)).shadow().alpha(200)
+        };
+        ui.text(x - w / 2, y - 3, name, ink);
+    }
+    // Where the pointer is; else, when the keys have moved the view, its middle.
+    let mid = (i32::from(r.x) + i32::from(r.w) / 2, i32::from(r.y) + i32::from(r.h) / 2);
+    let at = ui.input.pointer.filter(|p| r.contains(*p)).or(m.pan.map(|_| mid));
+    let mut read: Option<(String, (i32, i32), i32)> = None;
+    let ring = arc_ring();
+    for mk in mem.of(zone) {
+        let (x, y) = to_canvas(chart(mk.at));
+        if !r.contains((x, y)) {
+            continue;
+        }
+        match &mk.note {
+            Note::Fire(state) => {
+                match *state {
+                    FireState::Cold => {
+                        let grey = argb(Ramp::Stone.at(Tone::Mid), 230);
+                        ui.fill(Rect::new(x - 2, y - 3, 5, 1), grey);
+                        ui.fill(Rect::new(x - 2, y + 3, 5, 1), grey);
+                        ui.fill(Rect::new(x - 3, y - 2, 1, 5), grey);
+                        ui.fill(Rect::new(x + 3, y - 2, 1, 5), grey);
+                        ui.fill(Rect::new(x - 1, y - 1, 3, 3), argb(Ramp::Stone.at(Tone::Deep), 200));
+                        continue;
+                    }
+                    FireState::Made { burn } => {
+                        let n = ring.len() * usize::from(burn) / 255;
+                        for (k, &(ax, ay)) in ring.iter().enumerate() {
+                            let c = if k < n { ember() } else { argb(Ramp::Stone.at(Tone::Shade), 160) };
+                            ui.fill(Rect::new(x + ax, y + ay, 1, 1), c);
+                        }
+                    }
+                    FireState::Kept => {}
+                }
+                // A warm dot: a glow that breathes, an ink rim, the ember, its heart.
+                let breathe = 36 + (ui.tick / 6 % 16).abs_diff(8) as u8 * 4;
+                let glow = argb(Ramp::Ember.at(Tone::Light), breathe);
+                ui.fill(Rect::new(x - 6, y - 3, 13, 7), glow);
+                ui.fill(Rect::new(x - 3, y - 6, 7, 13), glow);
+                ui.fill(Rect::new(x - 5, y - 2, 11, 5), glow);
+                ui.fill(Rect::new(x - 2, y - 5, 5, 11), glow);
+                ui.fill(Rect::new(x - 4, y - 2, 9, 5), argb(Ix::INK, 235));
+                ui.fill(Rect::new(x - 2, y - 4, 5, 9), argb(Ix::INK, 235));
+                ui.fill(Rect::new(x - 3, y - 3, 7, 7), argb(Ix::INK, 235));
+                ui.fill(Rect::new(x - 3, y - 1, 7, 3), ember());
+                ui.fill(Rect::new(x - 1, y - 3, 3, 7), ember());
+                ui.fill(Rect::new(x - 2, y - 2, 5, 5), ember());
+                ui.fill(Rect::new(x - 1, y - 1, 3, 3), argb(Ramp::Ember.at(Tone::Light), 255));
+                ui.fill(Rect::new(x - 1, y - 2, 1, 1), argb(Ramp::Ember.at(Tone::Glint), 255));
+                ui.fill(Rect::new(x, y - 1, 1, 1), argb(Ramp::Ember.at(Tone::Glint), 255));
+            }
+            Note::Sign(words) => {
+                // A little post: an ink stake and a pale board, as the fingerposts stand.
+                let lit = at.is_some_and(|p| (p.0 - x).abs() <= POINT_NEAR && (p.1 - y).abs() <= POINT_NEAR);
+                let board = if lit { Ramp::UiGold.at(Tone::Light) } else { Ramp::WoodPale.at(Tone::Light) };
+                ui.fill(Rect::new(x - 1, y - 2, 3, 8), argb(Ix::INK, 235));
+                ui.fill(Rect::new(x - 4, y - 5, 9, 5), argb(Ix::INK, 235));
+                ui.fill(Rect::new(x - 3, y - 4, 7, 3), argb(board, 255));
+                ui.fill(Rect::new(x - 3, y - 2, 7, 1), argb(Ramp::WoodPale.at(Tone::Base), 255));
+                ui.fill(Rect::new(x, y, 1, 5), argb(Ramp::WoodDark.at(Tone::Light), 255));
+                if let Some(p) = at.filter(|_| lit) {
+                    let d = (p.0 - x).pow(2) + (p.1 - y).pow(2);
+                    if read.as_ref().is_none_or(|b| d < b.2) {
+                        read = Some((words.clone(), (x, y), d));
+                    }
+                }
+            }
+            Note::Name(_) => {}
+        }
+    }
+    // Her pins: a red head on an ink stem, its point on the place.
+    for p in mem.pins.iter().filter(|p| p.zone == zone) {
+        let (x, y) = to_canvas(chart(p.at));
+        if !r.contains((x, y)) {
+            continue;
+        }
+        // Its shadow on the paper, the steel, then the head: an ink rim, the red, a lit side.
+        ui.fill(Rect::new(x + 1, y, 3, 1), argb(Ix::INK, 120));
+        ui.fill(Rect::new(x - 1, y - 7, 3, 8), argb(Ix::INK, 240));
+        ui.fill(Rect::new(x, y - 6, 1, 6), argb(Ramp::Iron.at(Tone::Light), 255));
+        ui.fill(Rect::new(x - 4, y - 13, 9, 7), argb(Ix::INK, 245));
+        ui.fill(Rect::new(x - 3, y - 14, 7, 9), argb(Ix::INK, 245));
+        ui.fill(Rect::new(x - 3, y - 12, 7, 5), argb(Ramp::ClothRed.at(Tone::Base), 255));
+        ui.fill(Rect::new(x - 2, y - 13, 5, 7), argb(Ramp::ClothRed.at(Tone::Base), 255));
+        ui.fill(Rect::new(x + 1, y - 11, 2, 4), argb(Ramp::ClothRed.at(Tone::Shade), 255));
+        ui.fill(Rect::new(x - 2, y - 12, 2, 2), argb(Ramp::ClothRed.at(Tone::Light), 255));
+        ui.fill(Rect::new(x - 2, y - 12, 1, 1), argb(Ramp::ClothRed.at(Tone::Glint), 255));
+    }
+    // A pin put in or taken out: a right click where the pointer is, or X at the view's middle.
+    if ui.interactive {
+        let cell_of = |(px, py): (i32, i32)| {
+            let cx = win.sx + (px - win.dx) * 256 / win.z256.max(1);
+            let cy = win.sy + (py - win.dy) * 256 / win.z256.max(1);
+            (cx * step + step / 2, cy * step + step / 2)
+        };
+        if ui.input.right_pressed
+            && let Some(p) = ui.input.pointer.filter(|p| r.contains(*p))
+        {
+            m.pin_edits.push((zone, cell_of(p)));
+        }
+        if ui.input.has(UiAction::Quick) {
+            m.pin_edits.push((zone, cell_of(mid)));
+        }
+    }
+    read.map(|(w, at, _)| (w, at))
+}
+
+/// A sign's words, read again off the chart: a tip beside its post.
+fn sign_words(ui: &mut Ui, r: Rect, words: &str, (x, y): (i32, i32)) {
+    use crate::ui::core::{advance, line_h};
+    let face = jane_art::font::Face::Fine;
+    // As `Ui::wrapped` lays it: whole columns of the face's advance, a word never split.
+    let len = words.chars().count() as i32;
+    let w = (len * advance(face) + 14).clamp(60, 300);
+    let cols = ((w - 12) / advance(face)).max(1);
+    let mut lines = 1;
+    let mut col = 0;
+    for word in words.split(' ') {
+        let n = word.chars().count() as i32;
+        if col > 0 && col + 1 + n > cols {
+            lines += 1;
+            col = n;
+        } else {
+            col += n + i32::from(col > 0);
+        }
+    }
+    let lines = (lines + words.matches('\n').count() as i32).clamp(1, 9);
+    let h = lines * line_h(face) + 12;
+    let right = i32::from(r.x) + i32::from(r.w);
+    let tx = (x + 10).min(right - w - 2).max(i32::from(r.x) + 2);
+    let ty = if y - h - 6 > i32::from(r.y) { y - h - 6 } else { y + 10 };
+    ui.panel(Rect::new(tx, ty, w, h), crate::ui::core::PanelStyle::Tip);
+    ui.wrapped(Rect::new(tx + 6, ty + 6, w - 12, h - 10), words, Ink::fine(style::text_bright()));
 }
 
 #[cfg(test)]

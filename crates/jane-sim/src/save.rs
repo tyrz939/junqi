@@ -402,6 +402,7 @@ pub struct Form<'a> {
     consequences_owed: Cow<'a, [(ZoneId, ConsequenceId)]>,
     rumours: Cow<'a, BTreeMap<(NameId, StoryId), Tick>>,
     stores: Cow<'a, BTreeMap<(ZoneId, PropId), Store>>,
+    fires_made: bool,
 }
 
 /// A zone's part of the [`Form`]: [`ZoneState`]'s fields in its order, units and props as
@@ -472,6 +473,7 @@ impl<'a> Form<'a> {
             consequences_owed,
             rumours,
             stores,
+            fires_made,
         } = s;
         Form {
             version: *version,
@@ -498,6 +500,7 @@ impl<'a> Form<'a> {
             consequences_owed: Cow::Borrowed(consequences_owed),
             rumours: Cow::Borrowed(rumours),
             stores: Cow::Borrowed(stores),
+            fires_made: *fires_made,
         }
     }
 
@@ -528,6 +531,7 @@ impl<'a> Form<'a> {
             consequences_owed,
             rumours,
             stores,
+            fires_made,
         } = self;
         let mut table = SymTable::default();
         for run in syms {
@@ -577,6 +581,7 @@ impl<'a> Form<'a> {
             consequences_owed: consequences_owed.into_owned(),
             rumours: rumours.into_owned(),
             stores: stores.into_owned(),
+            fires_made,
         })
     }
 }

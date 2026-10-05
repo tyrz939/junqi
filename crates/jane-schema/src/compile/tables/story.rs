@@ -135,6 +135,14 @@ struct RawProp {
     hide_when_used: bool,
     #[serde(default)]
     regrow: bool,
+    #[serde(default)]
+    made: bool,
+    #[serde(default)]
+    fire_only: bool,
+    #[serde(default)]
+    wood: u8,
+    #[serde(default)]
+    shelters: bool,
     light: Option<RawLight>,
     douse: Option<u8>,
     #[serde(default)]
@@ -233,6 +241,13 @@ fn props(src: &Source, cx: &mut Ctx) -> &'static [PropDef] {
         cx.diag.need(!flagged || r.light.is_some(), &at, "light flag without a light");
         cx.diag.need(!(r.night_only && r.day_only), &at, "a light cannot be both nightOnly and dayOnly");
         cx.diag.need(r.douse.is_none() || r.light.is_some(), &at, "douse without a light");
+        cx.diag.need(
+            !r.made || (r.light.is_some() && r.light_when_on && r.douse.is_some()),
+            &at,
+            "a made fire has a light that shows only while it burns, and a douse",
+        );
+        cx.diag.need(!r.made || !r.rest, &at, "a made fire is a rest only while it burns: not `rest`");
+        cx.diag.need(!r.fire_only || r.made, &at, "fireOnly is for a made fire");
         let lit = match &r.light {
             Some(l) => light(cx, &at, l),
             None => None,
@@ -262,6 +277,10 @@ fn props(src: &Source, cx: &mut Ctx) -> &'static [PropDef] {
             rest: r.rest,
             hide_when_used: r.hide_when_used,
             regrow: r.regrow,
+            made: r.made,
+            fire_only: r.fire_only,
+            wood: r.wood,
+            shelters: r.shelters,
             light: lit,
             douse: r.douse,
             shows_loot: r.shows_loot,

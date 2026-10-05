@@ -13,7 +13,11 @@ use jane_core::Tile;
 use jane_core::angle::iatan2;
 use jane_data::{TileGroup, TilePattern as P};
 
+use super::houses::Age;
 use super::{CELL, CHUNK_CELLS, NONE, Painter, Style, TileSource, fast, salt};
+
+mod facade;
+mod room;
 use crate::canvas::{FLAT, Normal, UNIT, height_of_rows, normal};
 use crate::hash::{below, h32};
 use crate::palette::{Ix, Ramp, Tone};
@@ -126,10 +130,22 @@ pub(super) fn paint(p: &mut Painter, src: &impl TileSource, x0: i32, y0: i32, se
                 P::Parquet | P::Plates | P::Flags | P::Grating => interior_floor(p, &c),
                 P::Cliff => cliff(p, &c),
                 P::RoofTile | P::Slate | P::Thatch => {
-                    // A house's roof starts from its walls' eave, a storey of wall up.
-                    roof(p, &c, st.ramp, st.row.pattern, |s| s.row.group == TileGroup::Roof, 0, face_top(STOREY));
+                    // A house's roof starts from its walls' eave, a storey of wall up; a house
+                    // with a look (`houses`) is roofed as its look says unless paint says otherwise.
+                    let house = p.s.house[k].filter(|_| p.s.mat[k].is_none());
+                    let (r, pat, age) = match house.map(|h| h.look()) {
+                        Some(l) => {
+                            let (r, pat) = facade::roof_of(&l);
+                            (r, pat, Some(l.age))
+                        }
+                        None => (st.ramp, st.row.pattern, None),
+                    };
+                    roof(p, &c, r, pat, |s| s.row.group == TileGroup::Roof, 0, face_top(STOREY), age);
                 }
-                P::Plaster | P::Brick => house_wall(p, &c, seed),
+                P::Plaster | P::Brick => {
+                    let house = p.s.house[k].filter(|_| p.s.mat[k].is_none());
+                    facade::wall(p, &c, seed, house);
+                }
                 P::Hedge => hedge(p, &c),
                 P::Slabs => slabs(p, &c),
                 P::Boards => boards(p, &c),
@@ -143,6 +159,9 @@ pub(super) fn paint(p: &mut Painter, src: &impl TileSource, x0: i32, y0: i32, se
         }
     }
     contact(p, x0, y0, seed);
+    if let Some(room) = p.room.filter(|_| p.daylight && !outdoor) {
+        room::daylight(p, &room, x0, y0);
+    }
 }
 
 /// The contact shade of raised things on what lies at their foot: four rows under a wall, a roof
@@ -213,6 +232,12 @@ fn stone_tone(h: u32) -> Tone {
 fn wall(p: &mut Painter, c: &Cell, outdoor: bool) {
     let wl = |p: &Painter, dx: i32, dy: i32| nst(p, c, dx, dy).row.wall_like;
     let south_open = !wl(p, 0, 1);
+    // A room seen from inside papers and hangs its own faces (ART-PLAN M4).
+    if let Some(room) = p.room.filter(|_| !outdoor) {
+        if room::wall(p, c, &room, south_open, p.daylight) {
+            return;
+        }
+    }
     let thin = (!wl(p, -1, 0) && !wl(p, 1, 0)) || (!wl(p, 0, -1) && !wl(p, 0, 1));
     // A wall's face is one cell: it and its top stand that high.
     let top = face_top(1);
@@ -223,7 +248,7 @@ fn wall(p: &mut Painter, c: &Cell, outdoor: bool) {
         && matches!(c.st.row.pattern, P::Block | P::Crypt | P::Ironwork | P::Panelled | P::Pipework | P::Wainscot)
     {
         // The roof of a works, a library, a school: slate gone dark with soot.
-        roof(p, c, Ramp::Slate, P::Slate, |s| s.row.wall_like, -1, face_top(1));
+        roof(p, c, Ramp::Slate, P::Slate, |s| s.row.wall_like, -1, face_top(1), None);
         return;
     }
     if south_open {
@@ -485,9 +510,24 @@ const RIDGE: i32 = 10;
 
 /// Roofs: courses of slate, tile or thatch, a north slope over a ridge cap over the south slope,
 /// an eave along the bottom, a verge down each open side. `same` says what continues the roof;
-/// `shift` darkens it. The ridge's place is counted from the roof's north edge, a few cells at
+/// `shift` darkens it; `age` is a house's (ART-PLAN Q2: weathered, newly laid, mossy), none for a
+/// works' sooted slate. The ridge's place is counted from the roof's north edge, a few cells at
 /// most, so every chunk agrees where it is.
-fn roof(p: &mut Painter, c: &Cell, r: Ramp, pat: P, same: impl Fn(&Style) -> bool + Copy, shift: i32, eave_z: i32) {
+///
+/// Calm, not a barcode (ART-PLAN Q2, "clusters, not noise"): a course reads by its shadowed
+/// lower edge and a lip lit along long runs; the joints between tiles or slates are a half-step
+/// and the odd tile a tone of its own, rarely, in broad patches of weather.
+#[allow(clippy::too_many_arguments)]
+fn roof(
+    p: &mut Painter,
+    c: &Cell,
+    r: Ramp,
+    pat: P,
+    same: impl Fn(&Style) -> bool + Copy,
+    shift: i32,
+    eave_z: i32,
+    age: Option<Age>,
+) {
     // The ridge, sixteen px over the eave, which is as high as the walls under it: the roof
     // lands on the house in the height field, the eave over the face's foot and the ridge behind.
     let top = eave_z + 16;
@@ -495,88 +535,112 @@ fn roof(p: &mut Painter, c: &Cell, r: Ramp, pat: P, same: impl Fn(&Style) -> boo
     let eave = !same(&nst(p, c, 0, 1));
     let west = !same(&nst(p, c, -1, 0));
     let east = !same(&nst(p, c, 1, 0));
+    // How it has aged: weathered tiles darker and patchier; mossy ones green in their courses;
+    // new ones even. A thatch weathers grey.
+    let (shift, odd, moss) = match (age, pat) {
+        (Some(Age::Weathered), P::Thatch) => (shift - 1, 9, 0),
+        (Some(Age::Weathered), _) => (shift, 6, 0),
+        (Some(Age::New), _) => (shift, 31, 0),
+        (Some(Age::Mossy), _) => (shift, 11, 3),
+        (None, _) => (shift, 13, 0),
+    };
     for y in 0..CELL {
         for x in 0..CELL {
             let (wx, wy) = c.w(x, y);
             // Px below the ridge (negative: on the north slope).
             let d = up * CELL + y - RIDGE;
             let z = if d < 0 { top + d / 2 } else { top - d.min(40) * 16 / 40 };
+            // Broad weather over many tiles, by world px: where the odd tile goes a tone of its
+            // own, and (mossy) where moss has taken a course.
+            let weather = super::slow(wx.div_euclid(5), wy.div_euclid(4), c.st.ramp as u32 ^ 0x0ea7);
             let body = match pat {
                 P::Thatch => {
-                    // Bundles 7 px deep whose lower edge waves by the handful, straw running down
-                    // each in strands a px wide, lit at the lip, a shadow under each bundle.
-                    let wave = (fast(wx.div_euclid(5) as u32, 3, c.h) % 3) as i32;
-                    let course = (wy + wave).div_euclid(7);
-                    let yy = (wy + wave).rem_euclid(7);
-                    let strand = fast(wx as u32, course as u32, c.h) % 6;
-                    match (yy, strand) {
-                        (6, _) => Tone::Shade,
-                        (0, _) => Tone::Light,
-                        (5, _) | (_, 0) => Tone::Mid,
-                        (_, 1 | 2) => Tone::Lift,
+                    // Long straw laid in rolls 8 px deep, their lower edge waving by the handful:
+                    // each roll's rounded top lit, a shadow under it, the straw in a few streaks
+                    // down it, so the roof reads soft and never as courses of blocks.
+                    // Each roll's lower edge in scallops, a bundle 12 px wide each.
+                    let band = wy.div_euclid(8);
+                    let phase = (fast(band as u32, 5, 0x7a7b) % 12) as i32;
+                    let wave = ((wx + phase).rem_euclid(12) - 6).abs() / 3;
+                    let course = (wy + wave).div_euclid(8);
+                    let yy = (wy + wave).rem_euclid(8);
+                    let streak = fast(wx as u32, course as u32, 0x5742) % 13;
+                    match (yy, streak) {
+                        (7, _) => Tone::Shade,
+                        (6, _) | (2..=5, 0) => Tone::Mid,
+                        (0, _) | (2..=4, 1) => Tone::Lift,
+                        (1, _) => Tone::Light,
                         _ => Tone::Base,
                     }
                 }
                 P::Slate => {
+                    // Slates 10 px wide in courses of 6, half-bonded.
                     let course = wy.div_euclid(6);
                     let xs = wx + (course & 1) * 5;
                     let yy = wy.rem_euclid(6);
-                    let slate = fast(xs.div_euclid(10) as u32, course as u32, c.h);
+                    let slate = fast(xs.div_euclid(10) as u32, course as u32, 0x5a7e);
+                    let own = if weather > 150 && slate % odd as u32 == 0 {
+                        Tone::Lift
+                    } else if slate % (odd as u32 * 2) == 1 {
+                        Tone::Mid
+                    } else {
+                        Tone::Base
+                    };
+                    let lip = fast(xs.div_euclid(30) as u32, course as u32, 0x11b) % 3 != 0;
                     if yy == 5 {
                         Tone::Deep
-                    } else if xs.rem_euclid(10) == 0 {
-                        Tone::Shade
                     } else if yy == 4 {
-                        Tone::Lift
+                        own.step(-1)
+                    } else if yy == 0 && lip {
+                        own.step(1)
+                    } else if xs.rem_euclid(10) == 0 && yy < 4 {
+                        own.step(-1)
                     } else {
-                        match slate % 7 {
-                            0 => Tone::Mid,
-                            1 => Tone::Lift,
-                            _ => Tone::Base,
-                        }
+                        own
                     }
                 }
                 _ => {
-                    // Clay tiles: rounded, 5 to 8 px wide by course, each lit on its left curve,
-                    // a shadow under each course, a tile here and there weathered lighter, darker
-                    // or green with moss.
+                    // Clay tiles 8 px wide in courses of 6, half-bonded: a lip lit along long
+                    // runs, a soft joint, the course's shadow under it, the odd tile a tone off.
                     let course = wy.div_euclid(6);
-                    let xs = wx + (fast(course as u32, 0, c.h ^ 0x7e) % 13) as i32;
-                    let block = xs.div_euclid(20);
-                    let lx = xs.rem_euclid(20);
-                    let hb = fast(block as u32, course as u32, 0x7e7e);
-                    let c1 = 5 + (hb % 3) as i32;
-                    let c2 = c1 + 5 + (hb >> 4) as i32 % 4;
-                    let (start, end, k) = if lx < c1 {
-                        (0, c1, 0)
-                    } else if lx < c2 {
-                        (c1, c2, 1)
+                    let xs = wx + (course & 1) * 4;
+                    let (yy, tx) = (wy.rem_euclid(6), xs.rem_euclid(8));
+                    let tile = fast(xs.div_euclid(8) as u32, course as u32, 0x7e7e);
+                    // Sun-bleached in the weather's patches, the odd one dark with age.
+                    let own = if weather > 140 && tile % odd as u32 == 0 {
+                        Tone::Lift
+                    } else if tile % (odd as u32 * 4) == 1 {
+                        Tone::Mid
                     } else {
-                        (c2, 20, 2)
+                        Tone::Base
                     };
-                    let own = match (hb >> (8 + k * 4)) % 11 {
-                        0 | 1 => Tone::Mid,
-                        2 => Tone::Lift,
-                        _ => Tone::Base,
-                    };
-                    let (yy, tx) = (wy.rem_euclid(6), lx - start);
-                    if (hb >> (20 + k)) % 61 == 0 && yy < 4 && tx > 0 {
-                        // Moss on an old tile.
-                        let moss = Ramp::Marsh;
-                        put(p, c, x, y, moss.at(if yy == 0 { Tone::Lift } else { Tone::Base }), normal(0, 56), z);
+                    if moss > 0 && weather < 96 && (3..5).contains(&yy) && (tile >> 8) % moss == 0 {
+                        // Moss along the course's foot where the weather keeps it damp.
+                        let t = if yy == 3 { Tone::Lift } else { Tone::Base };
+                        put(p, c, x, y, Ramp::Marsh.at(t), normal(0, 56), z);
                         continue;
                     }
-                    match (yy, tx, end - 1 - start - tx) {
-                        (5, _, _) => Tone::Deep,
-                        (4, _, _) => own.step(-1),
-                        (_, 0, _) => Tone::Shade,
-                        (_, 1, _) => own.step(1),
-                        (_, 2, _) => own,
-                        (_, _, 0) => own.step(-1),
+                    let lip = fast(xs.div_euclid(24) as u32, course as u32, 0x11c) % 3 != 0;
+                    // Each tile's curve: its lip lit from its left along the run, the joint at its
+                    // left a groove, its right side turning from the light.
+                    match (yy, tx) {
+                        (5, _) => Tone::Deep,
+                        (4, _) | (2..=3, 7) => own.step(-1),
+                        (0, 1..=5) if lip => own.step(1),
+                        (1..=4, 0) => own.step(-2),
                         _ => own,
                     }
                 }
             };
+            // Moss on slate and thatch too, in clumps where the weather is wet.
+            if moss > 0 && pat != P::RoofTile && weather < 90 {
+                let clump = fast(wx.div_euclid(3) as u32, wy.div_euclid(3) as u32, 0x3055);
+                if clump % 4 == 0 {
+                    let t = if wy.rem_euclid(3) == 0 { Tone::Lift } else { Tone::Base };
+                    put(p, c, x, y, Ramp::Marsh.at(t), normal(0, 56), z);
+                    continue;
+                }
+            }
             let (body, n) = if d < -2 { (body.step(1), normal(0, -50)) } else { (body, normal(0, 56)) };
             put(p, c, x, y, r.at(body.step(shift)), n, z);
         }
@@ -586,12 +650,52 @@ fn roof(p: &mut Painter, c: &Cell, r: Ramp, pat: P, same: impl Fn(&Style) -> boo
             put(p, c, x, 0, r.at(Tone::Deep), FLAT, top - 5);
         }
     }
-    // The ridge cap, where it falls in this cell.
-    for (dy, t) in [(-2, Tone::Light), (-1, Tone::High), (0, Tone::Light), (1, Tone::Mid), (2, Tone::Deep)] {
+    // The ridge cap, where it falls in this cell: a half-round of ridge tiles (a thatch's block-cut
+    // ridge, its lower edge scalloped and pegged with liggers), lit along its crown, its foot in
+    // shadow on the south slope, a joint every 12 px.
+    for dy in -2..=3 {
         let y = RIDGE - up * CELL + dy;
-        if (0..CELL).contains(&y) {
+        if !(0..CELL).contains(&y) {
+            continue;
+        }
+        for x in 0..CELL {
+            let (wx, _) = c.w(x, y);
+            let t = if pat == P::Thatch {
+                // The block-cut ridge: a scallop every 8 px, a ligger (a hazel rod) along it.
+                let scallop = (wx.rem_euclid(8) - 4).abs() / 2;
+                match dy {
+                    -2 => Tone::Lift,
+                    -1 => Tone::High,
+                    0 => Tone::Light,
+                    1 => Tone::Base,
+                    2 if scallop < 1 => Tone::Mid,
+                    2 => Tone::Shade,
+                    _ if scallop < 1 => Tone::Shade,
+                    _ => continue,
+                }
+            } else {
+                let joint = wx.rem_euclid(12) == 0;
+                match dy {
+                    -2 => Tone::Shade,
+                    -1 if joint => Tone::Light,
+                    -1 => Tone::High,
+                    0 if joint => Tone::Mid,
+                    0 => Tone::Light,
+                    1 => Tone::Base,
+                    2 => Tone::Deep,
+                    _ => continue,
+                }
+            };
+            let n = if dy < 0 { normal(0, -40) } else { normal(0, 40) };
+            put(p, c, x, y, r.at(t.step(shift)), n, top);
+        }
+        if pat == P::Thatch && dy == 1 {
+            // The liggers: a rod along the ridge's foot, lit.
             for x in 0..CELL {
-                put(p, c, x, y, r.at(t.step(shift)), if dy < 0 { normal(0, -30) } else { normal(0, 30) }, top);
+                let (wx, _) = c.w(x, y);
+                if wx.rem_euclid(16) < 13 {
+                    put(p, c, x, y, Ramp::WoodPale.at(Tone::Lift), normal(0, -20), top);
+                }
             }
         }
     }
@@ -619,180 +723,16 @@ fn roof(p: &mut Painter, c: &Cell, r: Ramp, pat: P, same: impl Fn(&Style) -> boo
     }
 }
 
-/// House walls: plaster or brick in one face from the eave to the plinth, the eave's shadow
-/// under the roof, a plinth at the foot, dark corners, and a window in the face's middle course
-/// every fourth cell of a long wall, lit at night more often than not.
-fn house_wall(p: &mut Painter, c: &Cell, seed: u32) {
-    let is_wall = |s: &Style| matches!(s.row.pattern, P::Plaster | P::Brick);
-    let r = c.st.ramp;
-    let timber = c.st.accent.unwrap_or(Ramp::WoodDark);
-    let brick = c.st.row.pattern == P::Brick;
-    let (up, down) = (run(p, c, -1, is_wall), run(p, c, 1, is_wall));
-    let rows = up + down + 1;
-    let z_at = |y: i32| face_z(y, down);
-    let (n, s, w, e) = (nst(p, c, 0, -1), nst(p, c, 0, 1), nst(p, c, -1, 0), nst(p, c, 1, 0));
-    for y in 0..CELL {
-        for x in 0..CELL {
-            let (wx, wy) = c.w(x, y);
-            let t = if brick {
-                let course = wy.div_euclid(4);
-                let xs = wx + (course & 1) * 4;
-                if wy.rem_euclid(4) == 3 || xs.rem_euclid(8) == 0 {
-                    Tone::Shade
-                } else {
-                    let b = fast(xs.div_euclid(8) as u32, course as u32, c.h);
-                    let t = stone_tone(b);
-                    if wy.rem_euclid(4) == 0 { t.step(1) } else { t }
-                }
-            } else {
-                // Plaster weathered in broad soft patches.
-                let v = p.s.fine.at(wx, wy) + (p.s.wob_x.at(wx, wy) - 128) / 3;
-                if v < 52 {
-                    Tone::Lift
-                } else if v > 214 {
-                    Tone::Light
-                } else {
-                    Tone::Lift
-                }
-            };
-            // The face darkens a little toward its foot.
-            let t = if down == 0 && y > 8 { t.step(-1) } else { t };
-            put(p, c, x, y, r.at(t), normal(0, FACE), z_at(y));
-        }
-    }
-    // Windows: the ground floor's in the face's middle course; a wall three courses or more tall
-    // has an upper floor, its smaller windows under the eave between the ones below.
-    let inner = is_wall(&w) && is_wall(&e);
-    let ground = inner && c.wx.rem_euclid(3) == 1 && up == (rows - 1) / 2 && !(rows >= 3 && up == 0);
-    let upper = inner && rows >= 3 && up == 0 && c.wx.rem_euclid(3) == 2;
-    let lit = h32(c.wx as u32 / 3, c.wy as u32, seed ^ salt::WINDOW) % 3 != 0;
-    if ground {
-        window(p, c, (3, 3, 10, 10), lit, timber, &z_at);
-    } else if upper {
-        window(p, c, (4, 7, 8, 8), lit && h32(c.wx as u32, 1, seed ^ salt::WINDOW) % 2 == 0, timber, &z_at);
-    }
-    // A plaster wall's timber: a beam under the eave.
-    if !brick && n.row.group == TileGroup::Roof {
-        for x in 0..CELL {
-            put(p, c, x, 3, timber.at(Tone::Lift), normal(0, FACE - 30), z_at(3));
-            put(p, c, x, 4, timber.at(Tone::Base), normal(0, FACE), z_at(4));
-            put(p, c, x, 5, timber.at(Tone::Shade), normal(0, FACE), z_at(5));
-            step(p, c, x, 6, -1);
-        }
-    }
-    if n.row.group == TileGroup::Roof {
-        for x in 0..CELL {
-            step(p, c, x, 0, -3);
-            step(p, c, x, 1, -2);
-            step(p, c, x, 2, -1);
-            if fast(x as u32 >> 1, c.wx as u32, c.h) & 1 == 0 {
-                step(p, c, x, 3, -1);
-            }
-        }
-    }
-    if !is_wall(&s) {
-        for x in 0..CELL {
-            let stone = if brick { r } else { Ramp::Stone };
-            put(p, c, x, CELL - 3, stone.at(Tone::Base), normal(0, FACE), 3);
-            put(p, c, x, CELL - 2, stone.at(Tone::Mid), normal(0, FACE), 2);
-            put(p, c, x, CELL - 1, stone.at(Tone::Deep), FLAT, 1);
-        }
-    }
-    if !is_wall(&w) {
-        for y in 0..CELL {
-            put(p, c, 0, y, r.at(Tone::Deep), FLAT, z_at(y));
-            put(p, c, 1, y, if brick { r.at(Tone::Light) } else { timber.at(Tone::Base) }, normal(-50, FACE), z_at(y));
-        }
-    }
-    if !is_wall(&e) {
-        for y in 0..CELL {
-            put(p, c, CELL - 1, y, r.at(Tone::Deep), FLAT, z_at(y));
-            put(
-                p,
-                c,
-                CELL - 2,
-                y,
-                if brick { r.at(Tone::Shade) } else { timber.at(Tone::Shade) },
-                normal(50, FACE),
-                z_at(y),
-            );
-        }
-    }
-}
-
-/// A casement window in the box `(x0, y0, w, h)` of the cell: panes in a timber frame under a
-/// stone lintel, on a lit sill with its shadow under it; lit from within when `lit` (the glass in
-/// the emissive layer too), else a pane catching the sky.
-fn window(
-    p: &mut Painter,
-    c: &Cell,
-    (x0, y0, w, h): (i32, i32, i32, i32),
-    lit: bool,
-    timber: Ramp,
-    z_at: &dyn Fn(i32) -> i32,
-) {
-    let stone = Ramp::Stone;
-    let (x1, y1) = (x0 + w - 1, y0 + h - 1);
-    let (mx, my) = (x0 + w / 2, y0 + h / 2);
-    for x in x0 - 1..=x1 + 1 {
-        put(
-            p,
-            c,
-            x,
-            y0 - 2,
-            stone.at(if x == x0 - 1 { Tone::Light } else { Tone::Lift }),
-            normal(0, FACE - 40),
-            z_at(y0 - 2),
-        );
-        put(p, c, x, y0 - 1, stone.at(Tone::Mid), normal(0, FACE), z_at(y0 - 1));
-    }
-    for y in y0..=y1 {
-        for x in x0..=x1 {
-            let bar = x == mx || (w >= 10 && x == mx - 1);
-            let frame = y == y0 || y == y1 || x == x0 || x == x1 || bar || y == my;
-            if frame {
-                let t = if x == x0 || y == y0 || y == my { Tone::Lift } else { Tone::Shade };
-                put(p, c, x, y, timber.at(t), normal(0, FACE), z_at(y));
-            } else {
-                let (glass, t) = if lit {
-                    (Ramp::GlassLit, if y < my { Tone::Light } else { Tone::Base })
-                } else if y == y0 + 1 && (x == x0 + 1 || x == mx + 1) {
-                    (Ramp::Glass, Tone::High)
-                } else {
-                    (Ramp::Glass, if y < my { Tone::Base } else { Tone::Shade })
-                };
-                put(p, c, x, y, glass.at(t), normal(0, UNIT * 9 / 10), z_at(y));
-                if lit {
-                    p.s.ly.glow(c.px + x, c.py + y, glass.at(t));
-                }
-            }
-        }
-    }
-    for x in x0 - 1..=x1 + 1 {
-        put(
-            p,
-            c,
-            x,
-            y1 + 1,
-            stone.at(if x < x1 + 1 { Tone::High } else { Tone::Base }),
-            normal(0, 20),
-            z_at(y1 + 1) + 1,
-        );
-        step(p, c, x, y1 + 2, -2);
-        step(p, c, x + 1, y1 + 3, -1);
-    }
-}
-
 /// A px's place among the jittered centres of a `size` px lattice: its offset from the nearest
 /// centre, that centre's hash, and whether it lies on the seam to the next nearest.
-struct Cellular {
-    dx: i32,
-    dy: i32,
-    id: u32,
-    edge: bool,
+pub(super) struct Cellular {
+    pub(super) dx: i32,
+    pub(super) dy: i32,
+    pub(super) id: u32,
+    pub(super) edge: bool,
 }
 
-fn voronoi(wx: i32, wy: i32, size: i32, salt: u32) -> Cellular {
+pub(super) fn voronoi(wx: i32, wy: i32, size: i32, salt: u32) -> Cellular {
     let (gx, gy) = (wx.div_euclid(size), wy.div_euclid(size));
     let (mut best, mut second) = ((i32::MAX, 0, 0, 0u32), i32::MAX);
     for oy in -1..=1 {
@@ -833,12 +773,21 @@ fn hedge(p: &mut Painter, c: &Cell) {
     let r = c.st.ramp;
     let south = !same(p, 0, 1);
     let face_from = if south { CELL - HEDGE_ROWS } else { CELL };
+    // October (ART-PLAN Q1): along some stretches of a hedge two clumps in five have gone bronze
+    // or copper; the Waters' hedges keep their green.
+    let turning = p.s.region[Painter::at(c.cx, c.cy)] != 1
+        && crate::hash::h32((c.wx >> 2) as u32, (c.wy >> 2) as u32, 0x4e_b20e) % 3 != 0;
     for y in 0..CELL {
         for x in 0..CELL {
             let (wx, wy) = c.w(x, y);
             // Leaf clumps round the jittered centres of a 6 px lattice, each a small dome lit
             // from the top-left, a crevice of shade where two clumps meet.
             let v = voronoi(wx, wy, 6, 0x4e);
+            let r = if turning && (v.id >> 16) % 5 < 2 {
+                if (v.id >> 20) & 1 == 0 { Ramp::LeafOak } else { Ramp::LeafBeech }
+            } else {
+                r
+            };
             let (dx, dy) = (v.dx, v.dy);
             let s = -(dx * 2 + dy * 3) - (dx * dx + dy * dy) / 2;
             let t = if v.edge {
@@ -947,8 +896,11 @@ fn slabs(p: &mut Painter, c: &Cell) {
     }
 }
 
-/// Floorboards `detail` px wide along the room, butt joints staggered by board, each board a tone
-/// of its own with a grain run or two along it.
+/// Floorboards `detail` px wide along the room, butt joints staggered by board. Calm, so the
+/// furniture on them reads (ART-PLAN Q5): most boards the key tone, one in seven a half-step
+/// darker and one in nine a half-step lighter; the broad wear taken a whole board at a time, read
+/// at the board's middle; a grain run on one board in three, a half-step and no more; a joint a
+/// shade under each board and a half-step at each butt end.
 fn boards(p: &mut Painter, c: &Cell) {
     let wide = i32::from(c.st.row.detail).clamp(3, 8);
     let z = i32::from(c.st.row.rise).max(1);
@@ -962,24 +914,31 @@ fn boards(p: &mut Painter, c: &Cell) {
             let along = (wx + off).rem_euclid(40);
             let bt = fast(seg as u32, board as u32, 0xb0a2);
             let row = wy.rem_euclid(wide);
-            // A grain run: one row of the board, 5 to 12 px long, somewhere along it.
+            let body = match bt % 48 {
+                0..=3 => Tone::Mid,
+                4..=9 => Tone::Lift,
+                _ => Tone::Base,
+            };
+            // Pure in the board's middle (a board runs past the chunk's noise), at cell scale.
+            let wear = super::slow((seg * 40 - off + 20).div_euclid(CELL), board * wide / CELL, 0xb0a2_3ea2);
+            let body = if wear < 64 {
+                body.step(-1)
+            } else if wear > 196 {
+                body.step(1)
+            } else {
+                body
+            };
+            // A grain run: one row of the board, 5 to 12 px long, on one board in three.
             let (gs, gl, gr) =
                 ((bt >> 4) as i32 % 28, 5 + (bt >> 9) as i32 % 8, 1 + (bt >> 13) as i32 % (wide - 2).max(1));
-            let grain = row == gr && along >= gs && along < gs + gl;
-            let t = if row == wide - 1 || along == 0 {
-                Tone::Shade
-            } else if row == 0 {
-                Tone::Lift
-            } else if grain {
-                Tone::Mid
+            let grain = (bt >> 20) % 3 == 0 && row == gr && along >= gs && along < gs + gl;
+            let t = if row == wide - 1 {
+                body.step(-2).max(Tone::Shade)
+            } else if along == 0 || grain {
+                body.step(-1)
             } else {
-                match bt % 3 {
-                    0 => Tone::Mid,
-                    1 => Tone::Base,
-                    _ => Tone::Lift,
-                }
+                body
             };
-            let t = if grain && bt % 3 == 0 { Tone::Shade } else { t };
             put(p, c, x, y, r.at(t), FLAT, z);
         }
     }

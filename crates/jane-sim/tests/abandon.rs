@@ -181,6 +181,8 @@ fn force(s: &mut Sim, conds: &[Cond], q: QuestId) {
             }
             (false, Condition::Night) => s.state_mut().clock = 22 * jane_sim::tuning::TICKS_PER_HOUR,
             (true, Condition::Night) => s.state_mut().clock = 12 * jane_sim::tuning::TICKS_PER_HOUR,
+            // A verb's return (No. 14, Again; the adit): the spell learned.
+            (false, Condition::HasSpell(sp)) => cmd(s, Command::Dev(DevOp::Learn(sp))),
             (false, Condition::HasItem(st)) => {
                 let have = held(s, st.item);
                 if have < u32::from(st.qty) {

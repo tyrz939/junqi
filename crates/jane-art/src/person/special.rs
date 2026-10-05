@@ -401,7 +401,10 @@ pub(super) fn chair_front(c: &mut Canvas, d: &Dress, r: &Rig, facing_us: bool) {
         let (kx, ky) = (CX + 2, r.hip - 1);
         let _ = d;
         c.disc_lit(kx, ky, 2, Ramp::ClothRose, Z::flat(relief::FRONT + 3));
-        c.line((kx - 5, ky - 3), (kx - 1, ky + 1), Ramp::Iron.at(Tone::Light), 1, relief::FRONT + 4);
-        c.line((kx - 5, ky + 1), (kx - 1, ky - 3), Ramp::Iron.at(Tone::Light), 1, relief::FRONT + 4);
+        // Knitting (ART-PLAN Q4): on the off beats the near needle's tip comes up a px and the
+        // far one's in, a stitch being made.
+        let w = i32::from(r.pose.task != 0 && r.pose.task % 2 == 0);
+        c.line((kx - 5, ky - 3 - w), (kx - 1, ky + 1), Ramp::Iron.at(Tone::Light), 1, relief::FRONT + 4);
+        c.line((kx - 5 + w, ky + 1), (kx - 1, ky - 3), Ramp::Iron.at(Tone::Light), 1, relief::FRONT + 4);
     }
 }

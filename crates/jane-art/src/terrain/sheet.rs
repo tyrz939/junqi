@@ -274,9 +274,12 @@ pub fn terrain(p: &mut Painter, font: &Font, only: Option<&str>) -> Vec<(String,
 /// under each its normal and height layers at 1x.
 pub fn flora(bank: &crate::flora::Bank, font: &Font) -> Image {
     const S: u32 = 2;
+    // The widest and tallest sprite in the bank (an oak, a beech).
+    const FW: u32 = 80;
+    const FH: u32 = 88;
     let all = bank.all();
     let cols = 8u32;
-    let (cw, ch) = (64 * S + 16, 80 * S + 60 + 88);
+    let (cw, ch) = (FW * S + 16, FH * S + 60 + 88);
     let rows = (all.len() as u32).div_ceil(cols);
     let mut img = Image::new(cols * cw + 16, rows * ch + 36, BG);
     label(
@@ -293,8 +296,8 @@ pub fn flora(bank: &crate::flora::Bank, font: &Font) -> Image {
         let (gx, gy) = (8 + (k as u32 % cols) * cw, 32 + (k as u32 / cols) * ch);
         let c = &s.canvas;
         let (w, h) = (c.w() as u32, c.h() as u32);
-        img.fill(gx, gy, 64 * S, 80 * S, grass);
-        let (ox, oy) = (gx + (64 * S - w * S) / 2, gy + 80 * S - h * S);
+        img.fill(gx, gy, FW * S, FH * S, grass);
+        let (ox, oy) = (gx + (FW * S - w * S) / 2, gy + FH * S - h * S);
         crate::sheet::put_albedo(&mut img, c, ox, oy, S);
         let maxh = c.heights().iter().copied().max().unwrap_or(1).max(1);
         for y in 0..h {
@@ -303,12 +306,12 @@ pub fn flora(bank: &crate::flora::Bank, font: &Font) -> Image {
                     continue;
                 }
                 let [nx, ny, nz] = decode(c.normal_at(x as i32, y as i32));
-                img.set(gx + x, gy + 80 * S + 18 + y, [(128 + nx) as u8, (128 + ny) as u8, (128 + nz) as u8, 255]);
+                img.set(gx + x, gy + FH * S + 18 + y, [(128 + nx) as u8, (128 + ny) as u8, (128 + nz) as u8, 255]);
                 let t = u32::from(c.height_at(x as i32, y as i32)) * 255 / u32::from(maxh);
-                img.set(gx + w + 4 + x, gy + 80 * S + 18 + y, [t as u8, t as u8, (t / 2 + 40) as u8, 255]);
+                img.set(gx + w + 4 + x, gy + FH * S + 18 + y, [t as u8, t as u8, (t / 2 + 40) as u8, 255]);
             }
         }
-        label(&mut img, font, gx, gy + 80 * S + 4, name, Face::Fine, DIM);
+        label(&mut img, font, gx, gy + FH * S + 4, name, Face::Fine, DIM);
     }
     img
 }

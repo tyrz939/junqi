@@ -475,6 +475,8 @@ fn draw(g: &mut G<'_>, look: &IconLook, ramp: Ramp, trim: Ramp) {
         C::Amulet => amulet(g, ramp, trim),
         C::Spectacles => spectacles(g, ramp),
         C::Logs => logs(g, ramp, trim),
+        C::Sticks => sticks(g, ramp, trim),
+        C::Matchbox => matchbox(g, ramp, trim),
         C::Butterfly => butterfly(g, ramp),
         C::Tortoise => tortoise(g, ramp),
         C::Dust => dust(g, look.glow, ramp),
@@ -1739,6 +1741,88 @@ fn logs(g: &mut G<'_>, bark: Ramp, wood: Ramp) {
             g.px(wood.at(Tone::Shade), x - 1, y + 4);
         }
     }
+}
+
+/// Deadwood: a bundle of four grey sticks picked up off the ground, weathered silver along
+/// their tops, a twig off two of them, their snapped ends pale and splintered, tied round the
+/// middle with a twist of grass. Thin and crooked where `logs` is split and stacked.
+fn sticks(g: &mut G<'_>, bark: Ramp, wood: Ramp) {
+    // Each stick crooked: two lengths at a bend.
+    let all: [[(i32, i32); 3]; 3] =
+        [[(2, 22), (14, 13), (28, 4)], [(3, 29), (17, 19), (30, 11)], [(9, 31), (20, 25), (31, 20)]];
+    // At 16 two sticks, or the chip is a scribble.
+    let n = if g.big() { 3 } else { 2 };
+    for (i, p) in all.iter().enumerate().take(n) {
+        let w = if i == 2 { 4 } else { 5 };
+        g.part(bark, Mat::Stone, Form::Dome(2), Z::new(1, 3), true, |m| {
+            m.line(p[0], p[1], w);
+            m.line(p[1], p[2], w);
+        });
+        // Silvered along its top, where the weather had it.
+        g.crease(bark, Tone::High, (p[0].0 + 2, p[0].1 - 2), (p[1].0 - 1, p[1].1 - 2));
+        if g.big() {
+            g.crease(bark, Tone::Deep, (p[1].0 + 2, p[1].1 + 1), (p[1].0 + 4, p[1].1));
+        }
+        // The snapped end: pale wood, a splinter standing off it.
+        g.blob(wood.at(Tone::Light), p[2].0 - 2, p[2].1 - 1);
+        if g.big() {
+            g.px(wood.at(Tone::High), p[2].0, p[2].1 - 2);
+        }
+    }
+    // Twigs forking off the top stick and the middle one.
+    if g.big() {
+        g.part(bark, Mat::Stone, Form::Dome(1), Z::new(2, 3), true, |m| {
+            m.line((11, 14), (8, 7), 2);
+            m.line((22, 18), (27, 22), 2);
+        });
+    }
+    // Weathered: a step greyer and darker than fresh bark, silver only along the tops.
+    g.step_where(bark, -1, |_, _| true);
+    // The twist of grass round the middle, across the grain, in two turns.
+    g.part(Ramp::Reed, Mat::Cloth, Form::Dome(1), Z::new(3, 4), true, |m| m.line((12, 10), (19, 27), 4));
+    g.crease(Ramp::Reed, Tone::Shade, (12, 15), (18, 24));
+    g.crease(Ramp::Reed, Tone::High, (12, 11), (17, 22));
+}
+
+/// A box of matches: the sleeve with its label, the striker down its front, the tray slid out
+/// at one end with a row of red heads in it, and one match lying in front.
+fn matchbox(g: &mut G<'_>, paper: Ramp, wood: Ramp) {
+    let red = Ramp::ClothRed;
+    // The tray out of the sleeve's right end: its floor, the matches in it, its front.
+    g.part(wood, Mat::Soft, Form::Face(-20, -70), Z::new(1, 2), false, |m| {
+        m.poly(&[(17, 15), (23, 9), (30, 9), (24, 15)]);
+    });
+    for i in 0..3 {
+        let (x, y) = (23 + i * 2, 13 - i * 2);
+        g.seg(wood.at(Tone::High), (x - 4, y), (x, y), 1);
+        g.blob(red.at(Tone::Base), x, y - 1);
+        g.px(red.at(Tone::Light), x, y - 1);
+    }
+    g.part(wood, Mat::Soft, Form::Face(0, 60), Z::new(1, 2), true, |m| {
+        m.poly(&[(17, 15), (24, 15), (24, 19), (17, 19)]);
+    });
+    // The sleeve: its top with the label, its front with the striker.
+    g.part(paper, Mat::Cloth, Form::Face(-30, -60), Z::new(2, 3), true, |m| {
+        m.poly(&[(2, 15), (8, 9), (23, 9), (17, 15)]);
+    });
+    g.part(paper, Mat::Cloth, Form::Face(0, 50), Z::new(2, 3), false, |m| {
+        m.poly(&[(2, 15), (17, 15), (17, 23), (2, 23)]);
+    });
+    g.part(paper, Mat::Cloth, Form::Face(80, 20), Z::new(2, 3), false, |m| {
+        m.poly(&[(17, 15), (18, 14), (18, 22), (17, 23)]);
+    });
+    g.rect(Ramp::ClothBrown.at(Tone::Shade), 3, 18, 14, 3);
+    g.flecks(Ramp::ClothBrown, Tone::Base, 6, 0x6d61_7463, (3, 18, 14, 3));
+    // The label: a red lozenge with a flame in it.
+    g.over(red, Mat::Cloth, 1, |m| m.poly(&[(6, 12), (11, 10), (19, 10), (14, 14), (6, 14)]));
+    if g.big() {
+        g.seg(paper.at(Tone::High), (3, 15), (16, 15), 1);
+        g.px(Ramp::ClothOchre.at(Tone::High), 12, 11);
+        g.px(Ramp::ClothOchre.at(Tone::Light), 12, 12);
+    }
+    // A match lying in front of it.
+    g.part(wood, Mat::Soft, Form::Lying, Z::new(1, 2), true, |m| m.line((7, 29), (23, 25), 2));
+    g.part(red, Mat::Gloss, Form::Dome(2), Z::new(2, 3), true, |m| m.ell(21, 22, 5, 5));
 }
 
 /// A butterfly, wings open: pointed forewings and round hindwings, dark margins with pale

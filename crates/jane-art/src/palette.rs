@@ -272,12 +272,45 @@ ramps! {
     Pool "pool" 0x5a2c30,
     /// The Works' grass: slag-grey with a little olive left in it (`terrain::region`).
     TurfSlag "turf_slag" 0x6e7456,
+    // Autumn (ART-PLAN Q1, ART.md §2.7): laid after the pallid twins (`LATE_BASE`), so no index
+    // before them moved when the cap went from 1024 to 2048.
+    /// Beech in October: copper gold.
+    LeafBeech "leaf_beech" 0xb87a2c,
+    /// Oak turned: russet.
+    LeafOak "leaf_oak" 0x8e5634,
+    /// Field maple and birch: butter yellow.
+    LeafMaple "leaf_maple" 0xc4aa3e,
+    /// Yew: the churchyard's near-black green.
+    LeafYew "leaf_yew" 0x2a4634,
+    // Houses with owners (ART-PLAN Q2): the plasters, the knapped flint, a roof newly tiled, the
+    // doors' paints and the wisteria over them. Laid after the autumn ramps, so nothing moves.
+    /// Suffolk pink plaster.
+    PlasterPink "plaster_pink" 0xd6a494,
+    /// Ochre plaster.
+    PlasterOchre "plaster_ochre" 0xd4ac68,
+    /// Limewash: near white, warm.
+    Limewash "limewash" 0xe2ddd0,
+    /// Knapped flint: blue-grey nodules in their mortar.
+    Flint "flint" 0x58606a,
+    /// A clay tile roof newly laid: brighter, more orange than the weathered one.
+    RoofTileNew "roof_tile_new" 0xb85c3a,
+    /// A door's oxblood paint.
+    Oxblood "oxblood" 0x6e2a30,
+    /// A door's racing green.
+    RacingGreen "racing_green" 0x2c5a40,
+    /// Wisteria in flower: lilac.
+    Wisteria "wisteria" 0x9a88c4,
 }
 
 impl Ramp {
     /// The palette index of `tone` in this ramp.
     pub const fn at(self, tone: Tone) -> Ix {
-        Ix(RAMP_BASE + self as u16 * RAMP_LEN + tone as u16)
+        let r = self as u16;
+        if r < LATE {
+            Ix(RAMP_BASE + r * RAMP_LEN + tone as u16)
+        } else {
+            Ix(LATE_BASE + (r - LATE) * RAMP_LEN + tone as u16)
+        }
     }
 
     /// The ramp called `name` in data.
@@ -287,14 +320,18 @@ impl Ramp {
 
     /// The ramp and tone an index belongs to, if it is a ramp entry.
     pub const fn of(ix: Ix) -> Option<(Ramp, Tone)> {
-        if ix.0 < RAMP_BASE {
+        let (base, first) = if ix.0 < RAMP_BASE || (ix.0 >= PALLID_BASE && ix.0 < LATE_BASE) {
             return None;
-        }
-        let r = ((ix.0 - RAMP_BASE) / RAMP_LEN) as usize;
+        } else if ix.0 < PALLID_BASE {
+            (RAMP_BASE, 0)
+        } else {
+            (LATE_BASE, LATE as usize)
+        };
+        let r = first + ((ix.0 - base) / RAMP_LEN) as usize;
         if r >= Ramp::ALL.len() {
             return None;
         }
-        Some((Ramp::ALL[r], Tone::ALL[((ix.0 - RAMP_BASE) % RAMP_LEN) as usize]))
+        Some((Ramp::ALL[r], Tone::ALL[((ix.0 - base) % RAMP_LEN) as usize]))
     }
 }
 
@@ -332,12 +369,22 @@ pub const PALLID: [Ramp; 29] = [
     Ramp::Leather,
 ];
 
-/// Where the pallid twins start in the table.
-pub const PALLID_BASE: u16 = RAMP_BASE + Ramp::KEYS.len() as u16 * RAMP_LEN;
+/// The first ramp laid after the pallid twins: every ramp from here on is appended at
+/// [`LATE_BASE`], so the indices of the ramps and twins before it never move.
+const LATE: u16 = Ramp::LeafBeech as u16;
 
-/// Entries in the master palette. At most 1024 (ART.md §2.7), checked at compile time.
-pub const LEN: usize = PALLID_BASE as usize + PALLID.len() * RAMP_LEN as usize;
-const _: () = assert!(LEN <= 1024, "the master palette is at most 1024 entries");
+/// Where the pallid twins start in the table.
+pub const PALLID_BASE: u16 = RAMP_BASE + LATE * RAMP_LEN;
+
+/// Where the ramps added after the twins start (the autumn ramps first).
+pub const LATE_BASE: u16 = PALLID_BASE + PALLID.len() as u16 * RAMP_LEN;
+
+/// The most entries the master palette may have (ART.md §2.7): the renderers' CLUT is this wide.
+pub const CAP: usize = 2048;
+
+/// Entries in the master palette. At most [`CAP`], checked at compile time.
+pub const LEN: usize = LATE_BASE as usize + (Ramp::KEYS.len() - LATE as usize) * RAMP_LEN as usize;
+const _: () = assert!(LEN <= CAP, "the master palette is at most CAP entries");
 
 /// The position of `r` among the pallid ramps, if it has a twin.
 const fn pallid_slot(r: Ramp) -> Option<usize> {
@@ -364,7 +411,7 @@ pub const fn pallor(ix: Ix) -> Ix {
 
 /// Whether `ix` is a pallid twin's tone.
 pub const fn is_pallid(ix: Ix) -> bool {
-    ix.0 >= PALLID_BASE && (ix.0 as usize) < LEN
+    ix.0 >= PALLID_BASE && ix.0 < LATE_BASE
 }
 
 /// A colour made pallid: greyed by 20 % toward its own luma, then darkened by 14 %.
@@ -422,7 +469,7 @@ const fn build() -> [[u8; 3]; LEN] {
         let (dark, light) = (split(SHADOW_TINT), split(LIGHT_TINT));
         let mut k = 0;
         while k < 8 {
-            t[RAMP_BASE as usize + r * 8 + k] = ramp_tone(Ramp::ALL[r], key, k, dark, light);
+            t[Ramp::ALL[r].at(Tone::ALL[k]).0 as usize] = ramp_tone(Ramp::ALL[r], key, k, dark, light);
             k += 1;
         }
         r += 1;
@@ -430,7 +477,7 @@ const fn build() -> [[u8; 3]; LEN] {
     let mut p = 0;
     while p < PALLID.len() {
         // Each live tone made pallid, so the twin keeps its ramp's hue shift.
-        let live = RAMP_BASE as usize + PALLID[p] as usize * 8;
+        let live = PALLID[p].at(Tone::Deep).0 as usize;
         let mut k = 0;
         while k < 8 {
             let [r, g, b] = t[live + k];
@@ -511,6 +558,18 @@ mod tests {
         assert_eq!(letter('W'), Some(Ix::BEVEL_LIGHT));
         assert_eq!(letter('G'), Some(Ix::BEVEL_SHADE));
         assert_eq!(letter('e'), Some(Ix(RAMP_BASE - 1)));
+    }
+
+    #[test]
+    fn the_late_ramps_follow_the_twins_and_move_nothing() {
+        // Before the cap was raised the table ended with the twins at 1011 entries; every index
+        // under that is where it was, and the autumn ramps start after it.
+        assert_eq!(LATE_BASE, 1011);
+        assert_eq!(Ramp::TurfSlag.at(Tone::Glint).0 + 1, PALLID_BASE);
+        assert_eq!(Ramp::LeafBeech.at(Tone::Deep), Ix(LATE_BASE));
+        const { assert!(LEN > 1024 && LEN <= CAP) };
+        assert_eq!(pallor(Ramp::Leather.at(Tone::Base)).0, LATE_BASE - RAMP_LEN + Tone::Base as u16);
+        assert!(!is_pallid(Ramp::LeafYew.at(Tone::Base)));
     }
 
     #[test]

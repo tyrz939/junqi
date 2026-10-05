@@ -19,7 +19,7 @@
 use jane_core::{Action, ItemId, Stack, Tick, Vec2};
 
 use crate::actions::{Subject, run_actions};
-use crate::bag::{bag_add, bag_count, bag_has_room, bag_move, bag_remove};
+use crate::bag::{bag_add, bag_count, bag_has_room, bag_move, bag_remove, held_add, ring_settle};
 use crate::ctx::Ctx;
 use crate::event::{Event, EventKind, ToastKind};
 use crate::ids::{DropId, Seat};
@@ -38,7 +38,7 @@ pub(crate) fn emit_to(cx: &mut Ctx<'_>, seat: Seat, kind: EventKind) {
 /// not fit.
 pub fn add(cx: &mut Ctx<'_>, seat: Seat, item: ItemId, qty: u16) -> u16 {
     let Some(p) = cx.world.players.get_mut(seat.index()) else { return qty };
-    let left = bag_add(&mut p.bag[..], item, qty);
+    let left = held_add(&mut p.bag[..], item, qty);
     if left < qty {
         emit_to(cx, seat, EventKind::Bag);
         emit_to(cx, seat, EventKind::Loot { item, qty: qty - left });
@@ -52,6 +52,7 @@ pub fn remove(cx: &mut Ctx<'_>, seat: Seat, item: ItemId, qty: u16) -> u16 {
     let Some(p) = cx.world.players.get_mut(seat.index()) else { return 0 };
     let n = bag_remove(&mut p.bag[..], item, qty);
     if n > 0 {
+        ring_settle(&mut p.bag[..]);
         emit_to(cx, seat, EventKind::Bag);
     }
     n
@@ -100,7 +101,7 @@ pub fn pick_up(cx: &mut Ctx<'_>, seat: Seat, drop: DropId) -> bool {
 /// Drag from one bag slot to another: merge the same item, else swap.
 pub fn move_slot(cx: &mut Ctx<'_>, seat: Seat, from: u8, to: u8) {
     let Some(p) = cx.world.players.get_mut(seat.index()) else { return };
-    if bag_move(&mut p.bag[..], usize::from(from), usize::from(to)) {
+    if bag_move(&mut p.bag[..BAG_SLOTS], usize::from(from), usize::from(to)) {
         emit_to(cx, seat, EventKind::Bag);
     }
 }
@@ -112,13 +113,14 @@ pub fn move_slot(cx: &mut Ctx<'_>, seat: Seat, from: u8, to: u8) {
 /// do not.
 pub fn destroy(cx: &mut Ctx<'_>, seat: Seat, slot: u8) -> bool {
     let Some(p) = cx.world.players.get_mut(seat.index()) else { return false };
-    let Some(s) = p.bag.get(usize::from(slot)).copied().flatten() else { return false };
+    let Some(s) = p.bag[..BAG_SLOTS].get(usize::from(slot)).copied().flatten() else { return false };
     let def = cx.cat.combat.item(s.item);
     if def.kept() {
         cx.emit(EventKind::Toast(ToastKind::ShouldKeep));
         return false;
     }
     p.bag[usize::from(slot)] = None;
+    ring_settle(&mut p.bag[..]);
     emit_to(cx, seat, EventKind::Bag);
     true
 }
@@ -202,6 +204,7 @@ pub fn craft_put(cx: &mut Ctx<'_>, seat: Seat, bag: u8, slot: u8) {
     p.craft[c] = Some(Stack { item: s.item, qty: 1 });
     s.qty -= 1;
     p.bag[b] = (s.qty > 0).then_some(s);
+    ring_settle(&mut p.bag[..]);
     emit_to(cx, seat, EventKind::Bag);
 }
 
@@ -210,7 +213,7 @@ pub fn craft_clear(cx: &mut Ctx<'_>, seat: Seat, slot: u8) {
     let c = usize::from(slot);
     let Some(p) = cx.world.players.get_mut(seat.index()) else { return };
     let Some(s) = p.craft.get(c).copied().flatten() else { return };
-    if bag_add(&mut p.bag[..], s.item, s.qty) == 0 {
+    if bag_add(&mut p.bag[..BAG_SLOTS], s.item, s.qty) == 0 {
         p.craft[c] = None;
     }
     emit_to(cx, seat, EventKind::Bag);
@@ -226,7 +229,7 @@ pub fn craft_clear_all(cx: &mut Ctx<'_>, seat: Seat) {
 pub fn craft_take(cx: &mut Ctx<'_>, seat: Seat) -> bool {
     let Some(p) = cx.world.players.get_mut(seat.index()) else { return false };
     let Some((item, qty)) = craft_output(&p.craft) else { return false };
-    if !bag_has_room(&p.bag[..], item, qty) {
+    if !bag_has_room(&p.bag[..BAG_SLOTS], item, qty) {
         cx.emit(EventKind::Toast(ToastKind::InventoryFull));
         return false;
     }

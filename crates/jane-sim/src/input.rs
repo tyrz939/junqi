@@ -143,6 +143,8 @@ pub enum DevOp {
         stat: jane_core::action::Stat,
         amount: i16,
     },
+    /// Made fires, a fire's rest over time and unbanked finds (`GameState::fires_made`) on or off.
+    Fires(bool),
 }
 
 /// A discrete action, addressed to a seat.

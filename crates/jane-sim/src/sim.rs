@@ -95,6 +95,7 @@ impl Sim {
             consequences_done: Bits::new(jane_data::catalog().living.consequences.len() as u32),
             consequences_owed: Vec::new(),
             stores: std::collections::BTreeMap::new(),
+            fires_made: crate::tuning::FIRES_MADE,
             rumours: BTreeMap::new(),
         };
         // The world stream's first draws: which of the county's claims are true (omens.rs).
@@ -496,6 +497,9 @@ impl Sim {
             // The world stream, every ten minutes, in its fixed order: on the hour the sky of
             // every region, then every area's ecology (§4.4, `living.rs`).
             self.world_rolls(clock % TICKS_PER_HOUR == 0);
+            // Made fires burnt down or rained out (`fire.rs`): on the mark, which a bed's night
+            // works too.
+            self.burn_down();
         }
         if clock % ECOLOGY_EVERY == 0 {
             let hour = (clock / TICKS_PER_HOUR) as u8;
@@ -578,6 +582,8 @@ impl Sim {
             // 10 flush: the only place a blow changes hp
             crate::flush::flush(cx);
             crate::flush::knocks(cx);
+            // 10b seated at a fire: a tick's mending, or up (`fire.rs`).
+            crate::fire::step_seated(cx);
             laps.lap(m, Phase::Flush);
 
             // 11 triggers, and plates every 6 ticks

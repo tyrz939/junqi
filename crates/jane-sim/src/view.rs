@@ -453,6 +453,17 @@ impl<'a> View<'a> {
         self.state.is_night()
     }
 
+    /// Made fires, a fire's rest over time and unbanked finds are the rule (`fire.rs`).
+    pub fn fires_made(&self) -> bool {
+        self.state.fires_made
+    }
+
+    /// What the party found since its last rest, and who found it (`fire.rs`): a jar lying where
+    /// its finder fell is drawn as a glint.
+    pub fn unbanked(&self) -> &'a [crate::state::Unbanked] {
+        &self.state.growth.unbanked
+    }
+
     /// The story's close (STORY.md §10): 0 while it is open; after an ending's last page, which
     /// one (1 the shield held, 2 the Ball back in the hill, 3 the Sunday train), from the world's
     /// flag `the_end`. The presentation closes on it: the last page stays up, then the title.

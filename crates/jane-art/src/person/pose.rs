@@ -67,8 +67,16 @@ pub struct Pose {
     pub splay: [i32; 2],
     /// Hands raised, px up the screen: a blow wound up, a spell gathered.
     pub raise: [i32; 2],
-    /// The eyes shut: a blow taken.
+    /// The eyes shut: a blow taken, a blink, eyes lowered to a page.
     pub shut: bool,
+    /// Squashed (ART-PLAN B3): the body a px shorter and a px wider each side, the hem with it.
+    /// A landing, the recoil after a blow, a blow taken.
+    pub squash: bool,
+    /// Just turned (ART-PLAN B3): what hangs loose is still swung out from the old facing, so
+    /// a hem flares a px wider as well as trailing ([`Pose::lag`]).
+    pub turn: bool,
+    /// A beat of the look's work (ART-PLAN Q4), 1 to 4; 0 for none.
+    pub task: u8,
 }
 
 const fn pose(bob: i32, arm: [i32; 2], leg: [i32; 2], lift: [i32; 2], lean: i32) -> Pose {
@@ -85,6 +93,9 @@ const fn pose(bob: i32, arm: [i32; 2], leg: [i32; 2], lift: [i32; 2], lean: i32)
         splay: [0, 0],
         raise: [0, 0],
         shut: false,
+        squash: false,
+        turn: false,
+        task: 0,
     }
 }
 
@@ -154,6 +165,31 @@ pub const WALK_DIAG: [Pose; 6] = WALK_SIDE;
 /// and the folds half a turn on; the hem stays where it hung.
 pub const BREATHE: Pose = Pose { breathe: true, phase: 32768, ..pose(0, [0, 0], [0, 0], [0, 0], 0) };
 
+/// The standing frame.
+pub(crate) const STAND: Pose = pose(0, [0, 0], [0, 0], [0, 0], 0);
+
+/// A blink (ART-PLAN Q4): standing, the eyes a 1-px line.
+pub const BLINK: Pose = Pose { shut: true, ..STAND };
+
+/// The frame after a turn, on the side and the diagonals (a turn to face the viewer or away
+/// passes through a diagonal): the hem and the hair's ends trail two px behind the body and hang
+/// a px higher, flung out by the turn, and the hem flares a px.
+pub const TURN: Pose = Pose { turn: true, lag: (-1, -2), ..STAND };
+
+/// A landing: standing, squashed.
+pub const LAND: Pose = Pose { squash: true, ..STAND };
+
+/// The frames every person promises besides the walk, the breathe and the dead: the blinks
+/// where the eyes show, and the turns on the side and the diagonals.
+pub const ASIDE: [(FrameId, Facing, Pose); 6] = [
+    (FrameId::DownBlink, Facing::Down, BLINK),
+    (FrameId::SideBlink, Facing::Side, BLINK),
+    (FrameId::DownRightBlink, Facing::DownRight, BLINK),
+    (FrameId::SideTurn, Facing::Side, TURN),
+    (FrameId::DownRightTurn, Facing::DownRight, TURN),
+    (FrameId::UpRightTurn, Facing::UpRight, TURN),
+];
+
 /// The frames every person promises, with their facing and pose: five facings of six walk
 /// frames and a breathe (the west three are mirrors at draw time). The dead frames are posed
 /// from the front (ART.md §4.1).
@@ -206,7 +242,7 @@ const fn act(bob: i32, arm: [i32; 2], raise: [i32; 2], spread: [i32; 2], leg: [i
 pub const ATTACK_SIDE: [Pose; 3] = [
     act(0, [-3, 1], [6, 0], [0, 0], [0, 0], -2, false),
     act(1, [8, -2], [5, 0], [0, 0], [2, -2], 3, false),
-    act(0, [3, 0], [1, 0], [0, 0], [1, -1], 1, false),
+    recoil(act(0, [3, 0], [1, 0], [0, 0], [1, -1], 1, false)),
 ];
 /// The attack on a diagonal: the side's, its reach two px shorter (a blow along the diagonal
 /// shows two thirds of itself across the screen, and a held thing at full reach must stay in
@@ -214,19 +250,19 @@ pub const ATTACK_SIDE: [Pose; 3] = [
 pub const ATTACK_DIAG: [Pose; 3] = [
     act(0, [-3, 1], [6, 0], [0, 0], [0, 0], -2, false),
     act(1, [6, -2], [5, 0], [0, 0], [2, -2], 3, false),
-    act(0, [2, 0], [1, 0], [0, 0], [1, -1], 1, false),
+    recoil(act(0, [2, 0], [1, 0], [0, 0], [1, -1], 1, false)),
 ];
 /// The attack facing the viewer.
 pub const ATTACK_DOWN: [Pose; 3] = [
     act(0, [0, 0], [8, 0], [2, 0], [0, 0], 0, false),
     act(1, [3, -1], [2, 0], [-3, 0], [1, 0], 0, false),
-    act(0, [1, 0], [1, 0], [0, 0], [0, 0], 0, false),
+    recoil(act(0, [1, 0], [1, 0], [0, 0], [0, 0], 0, false)),
 ];
 /// The attack from behind.
 pub const ATTACK_UP: [Pose; 3] = [
     act(0, [0, 0], [0, 8], [0, 2], [0, 0], 0, false),
     act(1, [-1, 3], [0, 3], [0, -3], [0, -1], 0, false),
-    act(0, [0, 1], [0, 1], [0, 0], [0, 0], 0, false),
+    recoil(act(0, [0, 1], [0, 1], [0, 0], [0, 0], 0, false)),
 ];
 /// The cast (ART.md §4): hands together, hands out (the school's glow between them: the
 /// presenter's fx), hands down.
@@ -243,10 +279,16 @@ pub const CAST_DOWN: [Pose; 3] = [
 ];
 /// The cast from behind.
 pub const CAST_UP: [Pose; 3] = CAST_DOWN;
-/// Hurt (ART.md §4): leant back, the head down a px, the eyes shut.
-pub const HURT_SIDE: Pose = act(1, [-2, -3], [1, 1], [0, 0], [-1, 1], -2, true);
+/// Hurt (ART.md §4): leant back, the head down a px, the eyes shut, the body squashed a px by
+/// the blow (ART-PLAN B3).
+pub const HURT_SIDE: Pose = recoil(act(1, [-2, -3], [1, 1], [0, 0], [-1, 1], -2, true));
 /// Hurt facing the viewer or away.
-pub const HURT_DOWN: Pose = act(1, [0, 0], [2, 2], [1, 1], [0, 0], 0, true);
+pub const HURT_DOWN: Pose = recoil(act(1, [0, 0], [2, 2], [1, 1], [0, 0], 0, true));
+
+/// A pose squashed (ART-PLAN B3): the recover after a blow lands, a blow taken.
+const fn recoil(p: Pose) -> Pose {
+    Pose { squash: true, ..p }
+}
 
 /// The fight frames a person promises when it attacks, casts, or can be hurt, with their facing
 /// and pose.
@@ -282,6 +324,12 @@ pub fn fight(attacks: bool, casts: bool) -> Vec<(FrameId, Facing, Pose)> {
             (F::HurtUp, Facing::Up, HURT_DOWN),
             (F::HurtDownRight, Facing::DownRight, HURT_SIDE),
             (F::HurtUpRight, Facing::UpRight, HURT_SIDE),
+            // Landing (ART-PLAN B3): a fighter lands, off a stair or out of a sprint.
+            (F::DownLand, Facing::Down, LAND),
+            (F::UpLand, Facing::Up, LAND),
+            (F::SideLand, Facing::Side, LAND),
+            (F::DownRightLand, Facing::DownRight, LAND),
+            (F::UpRightLand, Facing::UpRight, LAND),
         ]);
     }
     v

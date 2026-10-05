@@ -160,7 +160,8 @@ pub const BAG_SPARE: usize = 2;
 /// wood and iron broken things want; the smaller stack first.
 pub fn junk_slot(v: &View<'_>) -> Option<u8> {
     let cat = jane_data::catalog();
-    let bag = &v.me().bag;
+    // The bag's own slots: the key ring past them is for keys alone.
+    let bag = &v.me().bag[..jane_sim::tuning::BAG_SLOTS];
     if bag.iter().filter(|s| s.is_none()).count() >= BAG_SPARE {
         return None;
     }
@@ -176,9 +177,11 @@ pub fn junk_slot(v: &View<'_>) -> Option<u8> {
         let d = cat.combat.item(i);
         let mends = matches!(d.id, "wood" | "iron");
         let ingredient = cat.combat.recipes.iter().any(|r| r.inputs.contains(&i));
+        // What makes a fire, while fires are made: as good as a potion.
+        let fire = v.fires_made() && matches!(d.id, "deadwood" | "match" | "fire_stone");
         if mends {
             3
-        } else if d.usable {
+        } else if d.usable || fire {
             2
         } else {
             u8::from(ingredient)
@@ -230,6 +233,63 @@ pub fn junk_slot(v: &View<'_>) -> Option<u8> {
         }
         pick(true)
     })
+}
+
+/// A bag slot to put down in a cupboard while fewer than `free` are free: of what destroy refuses
+/// and nothing throws out (gold, a done quest's butterflies, matches while fires are not made, a
+/// spare potion), what no quest in the log wants, is not bound and opens no lock; what has no use
+/// first. Seed 6 came to the Burial with a bag of such things and no room for an apple, and
+/// provisioned for the rest of the run (the keys have their ring, `jane_sim::tuning::RING_SLOTS`).
+pub fn stow_slot(v: &View<'_>, free: usize) -> Option<u8> {
+    let cat = jane_data::catalog();
+    let bag = &v.me().bag[..jane_sim::tuning::BAG_SLOTS];
+    if bag.iter().filter(|s| s.is_none()).count() >= free {
+        return None;
+    }
+    let wanted: Vec<ItemId> = v
+        .quests()
+        .flat_map(|q| cat.story.quest(q.quest).requirements.iter())
+        .filter_map(|r| match r.target {
+            jane_data::ReqTarget::Acquire(i) => Some(i),
+            _ => None,
+        })
+        .collect();
+    let makings = bait_makings(v);
+    bag.iter()
+        .enumerate()
+        .filter_map(|(i, s)| s.map(|s| (i, s)))
+        .filter(|(_, s)| {
+            let d = cat.combat.item(s.item);
+            let fire = v.fires_made() && matches!(d.id, "deadwood" | "match" | "fire_stone");
+            d.kept()
+                && !d.bound
+                && d.opens.is_none()
+                && !fire
+                && !wanted.contains(&s.item)
+                && !makings.contains(&s.item)
+        })
+        .min_by_key(|(i, s)| (cat.combat.item(s.item).usable, *i))
+        .map(|(i, _)| i as u8)
+}
+
+/// A cupboard (`jane_sim::store`) she stands within reach of.
+pub fn cupboard_in_reach(v: &View<'_>) -> Option<jane_sim::ids::PropId> {
+    let cat = jane_data::catalog();
+    let at = v.body().pos;
+    let reach = i64::from(jane_sim::store::STORE_REACH_FX).pow(2);
+    v.props()
+        .find(|p| {
+            let d = cat.story.prop(p.def);
+            d.store && !p.hidden && jane_sim::interact::prop_distance_sq(d, p, at) <= reach
+        })
+        .map(|p| p.id)
+}
+
+/// A cupboard of this zone to walk to, nearest first.
+pub fn cupboard(v: &View<'_>) -> Option<jane_sim::ids::PropId> {
+    let cat = jane_data::catalog();
+    let at = v.body().pos;
+    v.props().filter(|p| cat.story.prop(p.def).store && !p.hidden).min_by_key(|p| (to_prop(p, at), p.id)).map(|p| p.id)
 }
 
 /// What the bait for the Burial's small snakes is made of, and the bait itself, while Under the

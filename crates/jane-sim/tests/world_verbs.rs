@@ -1020,7 +1020,7 @@ fn never_loses_a_reward_when_the_bag_is_full() {
     for _ in 0..40 {
         cmd(&mut s, Command::Dev(DevOp::Give { item: item("wood"), qty: 16 }));
     }
-    assert!(s.state().players[0].bag.iter().all(Option::is_some));
+    assert!(s.state().players[0].bag[..jane_sim::tuning::BAG_SLOTS].iter().all(Option::is_some));
     let drops = s.state().zone(ZoneId::County).unwrap().drops.len();
     let q = cat.story.quest_id("defeat_skeleton").unwrap();
     cmd(&mut s, Command::Dev(DevOp::Quest(q)));
@@ -1033,16 +1033,18 @@ fn never_loses_a_reward_when_the_bag_is_full() {
         Some(Dialogue { tree: Some(dog), node, line, speaker: Speaker::None, read: None });
     cmd(&mut s, Command::Choose { option: 0 });
     assert!(quest_done(&s, "defeat_skeleton"));
-    let z = s.state().zone(ZoneId::County).unwrap();
-    assert_eq!(z.drops.len(), drops + 1);
-    assert_eq!(z.drops.last().unwrap().item, item("key_auntie_house"));
-    // Picked up again once there is room.
+    // The key is a key: a full bag puts it on her ring (`tuning::RING_SLOTS`), not the ground.
+    let bag_slots = jane_sim::tuning::BAG_SLOTS;
+    assert_eq!(s.state().zone(ZoneId::County).unwrap().drops.len(), drops);
+    assert_eq!(holds(&s, "key_auntie_house"), 1);
+    assert!(
+        s.state().players[0].bag[bag_slots..].iter().any(|x| x.is_some_and(|x| x.item == item("key_auntie_house")))
+    );
+    // Into the bag once there is room.
     let slot = s.state().players[0].bag.iter().position(|x| x.is_some_and(|x| x.item == item("wood"))).unwrap();
     cmd(&mut s, Command::BagDestroy { slot: slot as u8 });
-    assert_eq!(s.view(Seat(0)).unwrap().focus().map(|f| f.verb), Some(Verb::Take(item("key_auntie_house"))));
-    cmd(&mut s, Command::Use);
-    assert_eq!(holds(&s, "key_auntie_house"), 1);
-    assert!(s.state().zone(ZoneId::County).unwrap().drops.len() == drops);
+    assert_eq!(s.state().players[0].bag[slot].map(|x| x.item), Some(item("key_auntie_house")));
+    assert!(s.state().players[0].bag[bag_slots..].iter().all(Option::is_none));
 }
 
 // --- dialogue -----------------------------------------------------------------------------------

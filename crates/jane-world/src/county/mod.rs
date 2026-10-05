@@ -26,6 +26,9 @@
 //! | `place_areas` | placement rows in the named patches | 7 |
 //! | `country` | field edges, hamlets, farms, camps, dens, ruins, ponds | 7 |
 //! | `stories` | stories claim places, boards go up, the stories' rows | 8 |
+//! | `perimeters` | an edge round every named patch: a hedge, a field wall, a reed edge, a slag bank | 9 |
+//! | `pit_wood` | deadwood (a stump) by every made fire's pit that has none within 12 cells | 8 |
+//! | `gardens` | a fence along each house's front garden, its gate gap under the door | 8 |
 //! | `scatter` | herbs and rocks | 9 |
 //! | `ways` | every way and door step cleared: growth gives way, a fence a gate, a thing on it moved aside | 9 |
 //! | `wildlife` | by region, biome and threat | 9 |
@@ -40,9 +43,11 @@ pub mod chunks;
 pub mod country;
 pub mod doors;
 pub mod finish;
+pub mod gardens;
 pub mod land;
 pub mod links;
 pub mod paths;
+pub mod perimeter;
 pub mod placements;
 pub mod rail;
 pub mod roads;
@@ -120,6 +125,8 @@ pub struct County<'a> {
     /// Every fork's fingerpost as `country::roads::forks` set it up: its key, where it stands and
     /// its words, so the stories stage can add an arm for a place nearby (`stories::posts`).
     pub fork_posts: Vec<(Key, (i32, i32), String)>,
+    /// Each named patch's edge as laid, in the skeleton's order (`perimeter::lay_perimeters`).
+    pub perimeters: Vec<perimeter::Perimeter>,
 }
 
 /// The centre cell of macro cell `m`, on either axis.
@@ -151,6 +158,7 @@ impl<'a> County<'a> {
             wild_earth: vec![false; (COUNTY_W * COUNTY_H) as usize],
             ways: Vec::new(),
             fork_posts: Vec::new(),
+            perimeters: Vec::new(),
         }
     }
 
@@ -208,6 +216,9 @@ pub const STAGES: &[(&str, StageFn)] = &[
     ("place_areas", place_areas),
     ("country", country),
     ("stories", stories),
+    ("perimeters", perimeter::lay_perimeters),
+    ("pit_wood", pit_wood),
+    ("gardens", gardens::fence_gardens),
     ("scatter", scatter),
     ("ways", ways::clear_ways),
     ("wildlife", wildlife),
@@ -404,6 +415,32 @@ fn country(c: &mut County<'_>) {
 /// records where each landed (`stories::stories`).
 fn stories(c: &mut County<'_>) {
     stories::stories(c);
+}
+
+/// How near a made fire's pit its deadwood stands, cells (PLAY-PLAN.md §2.2, the L1 proof).
+pub const PIT_WOOD_CELLS: i32 = 12;
+
+/// Deadwood by every made fire's pit (a cold pit, a camp's fire, an old grate): a stump set down
+/// by any with no wood (a stump, a woodpile, a log) within [`PIT_WOOD_CELLS`], origin to origin
+/// (`country::wood_by`). No dice.
+fn pit_wood(c: &mut County<'_>) {
+    let cat = jane_data::catalog();
+    let Some(stump) = cat.story.prop_id("stump") else { return };
+    let at = |p: &jane_core::blueprint::PropSpawn| (i32::from(p.cell.x), i32::from(p.cell.y));
+    let props = &c.k.blueprint().props;
+    let pits: Vec<(i32, i32)> = props.iter().filter(|p| cat.story.prop(p.def).made).map(at).collect();
+    let mut woods: Vec<(i32, i32)> = props.iter().filter(|p| cat.story.prop(p.def).wood > 0).map(at).collect();
+    let r2 = PIT_WOOD_CELLS * PIT_WOOD_CELLS;
+    for (x, y) in pits {
+        if woods.iter().any(|&(wx, wy)| (wx - x) * (wx - x) + (wy - y) * (wy - y) <= r2) {
+            continue;
+        }
+        if country::wood_by(c, stump, x, y).is_some() {
+            if let Some(p) = c.k.blueprint().props.last() {
+                woods.push(at(p));
+            }
+        }
+    }
 }
 
 /// Herbs and rocks on open unclaimed ground.

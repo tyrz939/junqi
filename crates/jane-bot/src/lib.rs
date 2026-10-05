@@ -312,6 +312,9 @@ pub enum Plan {
     Crawl(crawl::Crawl),
 }
 
+/// Ticks after a rest at a fire before she sits down at one again, standing (ten seconds).
+pub const REST_COOL: u32 = 600;
+
 /// A headless player on one seat.
 #[derive(Debug)]
 pub struct Bot {
@@ -333,7 +336,16 @@ pub struct Bot {
     last_act: Act,
     /// The last few seconds, a line each half second, for the next death's record.
     recent: std::collections::VecDeque<String>,
+    /// The tick she last rested (`EventKind::Rested` by her seat): with made fires she does not
+    /// sit down again within [`REST_COOL`] of getting up.
+    rested: Option<u32>,
+    /// Things put in the cupboard she stands at, this visit: no more than a bagful, so a full
+    /// cupboard is not pressed every frame.
+    stowed: u8,
 }
+
+/// Free bag slots she makes at a cupboard.
+const STOW_FREE: usize = 4;
 
 /// One death, recorded (for telling the bot's mistakes from the world's hardness).
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -387,6 +399,8 @@ impl Bot {
             events: Vec::new(),
             log: Vec::new(),
             deaths: Vec::new(),
+            rested: None,
+            stowed: 0,
             last_hurt: None,
             last_act: Act::default(),
             recent: std::collections::VecDeque::new(),
@@ -594,6 +608,28 @@ impl Bot {
             if let Some(slot) = sense::junk_slot(v) {
                 return Act::press(Command::BagDestroy { slot });
             }
+            // At a cupboard with a bag nearly full of what destroy refuses: some of it put down,
+            // so an apple or a quest's thing has room (a spare potion only when the bag is tight).
+            match sense::cupboard_in_reach(v) {
+                Some(prop) if usize::from(self.stowed) < jane_sim::tuning::BAG_SLOTS => {
+                    let bag = &v.me().bag[..jane_sim::tuning::BAG_SLOTS];
+                    let tight = bag.iter().filter(|s| s.is_none()).count() < sense::BAG_SPARE;
+                    let usable = |slot: u8| {
+                        bag[usize::from(slot)].is_some_and(|s| jane_data::catalog().combat.item(s.item).usable)
+                    };
+                    if let Some(slot) = sense::stow_slot(v, STOW_FREE).filter(|&s| tight || !usable(s)) {
+                        self.stowed += 1;
+                        return Act::press(Command::StorePut { prop, bag: slot, to: None });
+                    }
+                }
+                Some(_) => {}
+                None => self.stowed = 0,
+            }
+            // Seated at a fire (`jane_sim::fire`): she sits until she is whole. Anything that
+            // comes for her gets her up (the sim's rule), and then the plan has her again.
+            if v.body().seated.is_some() {
+                return Act::idle();
+            }
         }
         let mut notes = Vec::new();
         let act = match &mut self.plan {
@@ -604,7 +640,35 @@ impl Bot {
             self.note(v, m);
         }
         let act = fight::with_targets(v, act);
+        let act = self.cool_rest(v, act);
         self.last_act.clone_from(&act);
+        act
+    }
+
+    /// With made fires, a fire's rest is over time and anything that comes gets her up: sat down
+    /// again at once, under a blow, she sat there for ever (the Museum's shot-firer). Within
+    /// [`REST_COOL`] of her last rest, standing, a press on a fire is not made: the plan fights,
+    /// eats or walks on instead.
+    fn cool_rest(&mut self, v: &View<'_>, mut act: Act) -> Act {
+        let me = self.seat;
+        if self.events.iter().any(|e| matches!(e.kind, jane_sim::EventKind::Rested { by } if by == me)) {
+            self.rested = Some(v.tick().0);
+        }
+        let recent = self.rested.is_some_and(|t| v.tick().0 < t.saturating_add(REST_COOL));
+        if !v.fires_made() || !recent || v.body().seated.is_some() || v.dialogue().is_some() {
+            return act;
+        }
+        let cat = jane_data::catalog();
+        let at_fire = v.focus().is_some_and(|f| match f.target {
+            jane_sim::interact::FocusRef::Prop(id) => v.prop(id).is_some_and(|p| {
+                let d = cat.story.prop(p.def);
+                (d.rest && d.light.is_some()) || (d.made && p.on)
+            }),
+            _ => false,
+        });
+        if at_fire {
+            act.cmds.retain(|c| *c != Command::Use);
+        }
         act
     }
 

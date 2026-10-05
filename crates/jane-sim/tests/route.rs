@@ -281,6 +281,42 @@ fn the_way_starts_from_the_most_use_of_what_she_knows() {
     assert!(r.short().contains(" from here"), "{}", r.short());
 }
 
+/// A way set where she stood, walked partway: "here" is where she stands now. It says the road
+/// out from there, and the first turn's metres count from there; the turns ahead keep their words.
+#[test]
+fn a_way_walked_partway_is_said_from_where_she_stands() {
+    let bps = common::bps();
+    let county = bps.get(ZoneId::County);
+    let solid = solid_props(county);
+    let roads = Roads::new(county).expect("the county has Castle");
+    let on_road = roads.sites().iter().find(|s| s.id == "station").expect("the Halt").start.at();
+    let mut checked = 0;
+    for s in roads.sites().iter().filter(|s| s.id != "station") {
+        let Some(to) = s.start.ground() else { continue };
+        let Some(r) = roads.route_from(&Start::Here(on_road), to) else { continue };
+        let first_turn = r.legs.iter().skip(1).find_map(|l| match l {
+            Leg::Post { at, metres, .. } => Some((r.path.iter().position(|c| c == at).unwrap(), *metres)),
+            _ => None,
+        });
+        let Some((k, m)) = first_turn else { continue };
+        if k < 40 {
+            continue;
+        }
+        let i = k / 2;
+        let w = roads.walked(&r, i).expect("a way walked as far as its middle is said again");
+        assert_eq!(w.from, Start::Here(r.path[i]), "from where she stands");
+        assert!(w.words().starts_with("From here, "), "{}", w.words());
+        let Leg::Post { metres, .. } = w.legs[1] else { panic!("the first turn is still the post: {:?}", w.legs) };
+        assert!(metres < m, "the post is nearer than it was ({metres} m, was {m} m)");
+        assert_eq!(w.legs.len(), r.legs.len(), "the turns ahead are the same turns");
+        let bad = faults(county, &solid, &roads, &w, "walked");
+        assert!(bad.is_empty(), "the walked way is true to the county: {bad:#?}");
+        assert!(roads.walked(&r, k + 1).is_none(), "past the first turn the way is worked out again");
+        checked += 1;
+    }
+    assert!(checked >= 2, "some ways from the Halt turn at a post far enough on ({checked})");
+}
+
 /// Seeds 1 to 8, from every start to every place.
 #[test]
 #[ignore = "slow: eight seeds built whole"]

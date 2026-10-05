@@ -19,7 +19,7 @@ use jane_core::angle::{Angle, cos_q15, iatan2, sin_q15};
 use jane_core::grid::Rect;
 use jane_core::num::isqrt;
 
-use crate::canvas::{BAKE_LIGHT, Canvas, UNIT, height_of_rows, normal};
+use crate::canvas::{BAKE_LIGHT, Canvas, FLAT, UNIT, height_of_rows, normal};
 use crate::hash::{below, h32};
 use crate::palette::{Ix, Ramp, Tone, letter};
 use crate::rock::Dress;
@@ -103,6 +103,38 @@ impl Puff {
 /// How deep a mass's lobes are, per cent of its radius.
 const LOBE: i32 = 11;
 
+/// How a crown is leafed (ART-PLAN Q1): its main ramp, a second ramp that some of its masses
+/// take (`share` in 16: an autumn crown is gold beside russet beside a mass still green), and
+/// whether its lit rim turns first (`fringe`: a green crown edged in gold).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Leafing {
+    /// Most of the crown.
+    pub main: Ramp,
+    /// The other masses, or the rim.
+    pub second: Ramp,
+    /// Masses in 16 that take `second`.
+    pub share: u32,
+    /// Whether the lit rim takes `second`.
+    pub fringe: bool,
+}
+
+impl Leafing {
+    /// One ramp all through.
+    pub const fn plain(r: Ramp) -> Leafing {
+        Leafing { main: r, second: r, share: 0, fringe: false }
+    }
+
+    /// `main` with `share` masses in 16 of `second`.
+    pub const fn mixed(main: Ramp, second: Ramp, share: u32) -> Leafing {
+        Leafing { main, second, share, fringe: false }
+    }
+
+    /// `main` with its lit rim in `second`.
+    pub const fn fringed(main: Ramp, second: Ramp) -> Leafing {
+        Leafing { main, second, share: 0, fringe: true }
+    }
+}
+
 /// A crown of leaf masses inside the ellipse centred `(cx8, cy8)` with radii `(rx8, ry8)`, all in
 /// 1/8 px: a back layer across its top, `n` masses round the middle of mixed sizes and uneven
 /// spacing (a big mass beside a small one, a gap where a limb shows), and a front layer low in
@@ -111,14 +143,14 @@ const LOBE: i32 = 11;
 /// left, a dark core under it) and how far back the mass is. Each mass in front of the back layer
 /// has a lit band along its upper-left edge following its lobes, the way a painter lights a
 /// clump; dark leaf clusters lie in the shade; the silhouette gets leaf tips and notches. `grow` is
-/// the masses' size in 1/16ths.
+/// the masses' size in 1/16ths. Each mass is leafed by `leaf`: its own ramp, its lit rim turned.
 #[allow(clippy::too_many_arguments)]
 fn crown(
     c: &mut Canvas,
     (cx8, cy8): (i32, i32),
     (rx8, ry8): (i32, i32),
     n: i32,
-    ramp: Ramp,
+    leaf: Leafing,
     d: &mut Dice,
     foot_y: i32,
     grow: i32,
@@ -171,6 +203,19 @@ fn crown(
         );
         puffs.push(p);
     }
+    // Each mass's ramp: the second ramp's share of them, by the mass's own lobes (no dice, so a
+    // plain crown draws as it always did).
+    let ramps: Vec<Ramp> = puffs
+        .iter()
+        .enumerate()
+        .map(|(i, q)| {
+            if leaf.share > 0 && below(h32(i as u32, q.phase as u32, SALT ^ 0x7e), 16) < leaf.share {
+                leaf.second
+            } else {
+                leaf.main
+            }
+        })
+        .collect();
     // Back to front, then top to bottom within a layer; ties by index, a total key.
     let mut order: Vec<usize> = (0..puffs.len()).collect();
     order.sort_by_key(|&i| (-puffs[i].back, puffs[i].y, i));
@@ -192,6 +237,7 @@ fn crown(
             }
         }
     }
+    let inside = |x: i32, y: i32| x >= 0 && y >= 0 && x < w && y < h && owner[(y * w + x) as usize] >= 0;
     let seed = d.next();
     let mut vals = vec![0i32; (w * h) as usize];
     for y in 0..h {
@@ -238,6 +284,15 @@ fn crown(
             // The normal: the whole crown's dome, the mass's own sphere a little over it, so the lit tiers
             // light the crown as one volume with its masses in it, never as a heap of balls.
             let (cxn, cyn) = (gx.clamp(-UNIT, UNIT), gy.clamp(-UNIT, UNIT));
+            // A fringed crown turns first along its lit rim: within two px of the sky on the
+            // crown's upper-left, in clusters of two (never a ruled line).
+            let rim = leaf.fringe
+                && gx * 3 + gy * 4 < UNIT * 2
+                && below(h32((x >> 1) as u32, (y >> 1) as u32, seed ^ 0x51), 4) > 0
+                && [(-2, 0), (0, -2), (-1, -1), (2, 0), (0, 2), (-3, 0), (0, -3)]
+                    .iter()
+                    .any(|&(ex, ey)| !inside(x + ex, y + ey));
+            let ramp = if rim { leaf.second } else { ramps[i as usize] };
             c.put(
                 x,
                 y,
@@ -249,7 +304,6 @@ fn crown(
     }
     // Leaves: a jittered 3 px lattice over the crown; at the silhouette a tip reaching out on the
     // lit side or a notch below; inside, a dark cluster here and there in the shade.
-    let inside = |x: i32, y: i32| x >= 0 && y >= 0 && x < w && y < h && owner[(y * w + x) as usize] >= 0;
     let lseed = d.next();
     for gy in 0..=(h / 3) {
         for gx in 0..=(w / 3) {
@@ -258,6 +312,7 @@ fn crown(
             if !inside(x, y) {
                 continue;
             }
+            let ramp = Ramp::of(c.get(x, y)).map_or(leaf.main, |(r, _)| r);
             let edge = [(1, 0), (-1, 0), (0, 1), (0, -1)].iter().any(|&(dx, dy)| !inside(x + dx, y + dy));
             let v = vals[(y * w + x) as usize];
             let base = shade_tone(v);
@@ -302,21 +357,89 @@ fn crown(
             for (dx, dy) in [(0, 0), (1, 1)] {
                 if inside(x + dx, y + dy) {
                     let n = c.normal_at(x + dx, y + dy);
-                    c.put(x + dx, y + dy, ramp.at(base.step(-1)), n, z.saturating_add(1));
+                    let r = Ramp::of(c.get(x + dx, y + dy)).map_or(ramp, |(r, _)| r);
+                    c.put(x + dx, y + dy, r.at(base.step(-1)), n, z.saturating_add(1));
                 }
             }
         }
     }
 }
 
-/// A trunk from row `top` to row `bottom` (its foot), `w` px wide round column `cx`, flaring
-/// into roots over its bottom four rows; lit on the left with a cylinder's normals, bark in grain
-/// runs down it, the crown's shade on its top rows, and two limbs forking up into the crown.
-fn trunk(c: &mut Canvas, cx: i32, top: i32, bottom: i32, w: i32, bark: Ramp, seed: u32) {
+/// Gaps in a crown where the ground under it shows through: `per_mille` of its leaf px, cut as
+/// holes of two to four px well inside its edge, so an airy crown (an ash, a birch) reads as leaf
+/// masses with light between them and not as a solid ball. The outline then rims each hole in
+/// the crown's own dark: a hole with depth.
+fn gaps(c: &mut Canvas, per_mille: i32, seed: u32) {
+    if per_mille <= 0 {
+        return;
+    }
+    let (w, h) = (c.w(), c.h());
+    let leafy = |c: &Canvas, x: i32, y: i32| Ramp::of(c.get(x, y)).is_some_and(|(r, _)| !is_bark(r));
+    let area = (0..h).flat_map(|y| (0..w).map(move |x| (x, y))).filter(|&(x, y)| leafy(c, x, y)).count() as i32;
+    let holes = area * per_mille / 1000 / 3;
+    let mut made = 0;
+    for k in 0..holes * 8 {
+        if made >= holes {
+            break;
+        }
+        let hk = h32(k as u32, 0x6a9, seed);
+        let (x, y) = (below(hk, w as u32) as i32, below(hk >> 12, h as u32) as i32);
+        // Deep inside the leaf, never low in it (where the trunk rises into it).
+        let deep = (-3..=3).all(|e: i32| leafy(c, x + e, y) && leafy(c, x, y + e));
+        if !deep || y > h * 3 / 5 {
+            continue;
+        }
+        made += 1;
+        let shape: &[(i32, i32)] = match (hk >> 28) & 3 {
+            0 => &[(0, 0), (1, 0)],
+            1 => &[(0, 0), (1, 0), (0, 1)],
+            2 => &[(0, 0), (1, 0), (2, 0), (1, 1)],
+            _ => &[(0, 0), (0, 1), (1, 1)],
+        };
+        for &(dx, dy) in shape {
+            c.clear_px(x + dx, y + dy);
+        }
+    }
+}
+
+/// Whether `r` is one of the barks a trunk is drawn in (gaps are cut in leaf only).
+fn is_bark(r: Ramp) -> bool {
+    matches!(r, Ramp::Bark | Ramp::Stone | Ramp::HairWhite | Ramp::HairBlack | Ramp::WoodDark | Ramp::Deadwood)
+}
+
+/// How a trunk's bark reads.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum BarkLook {
+    /// Ridged: grain runs down it.
+    Ridged,
+    /// A beech's: smooth, a dark run now and then.
+    Smooth,
+    /// A silver birch's: white, barred in black.
+    Birch,
+}
+
+/// A trunk from row `top` to row `bottom` (its foot), `w` px wide round column `cx` at the foot
+/// and leaning `lean` px over at the top, flaring into roots over its bottom four rows (`flare`
+/// in halves of a px a row) with a root or two running out over the ground; lit on the left with a
+/// cylinder's normals, bark by `look`, the crown's shade on its top rows, and two limbs forking up
+/// into the crown.
+#[allow(clippy::too_many_arguments)]
+fn trunk(
+    c: &mut Canvas,
+    cx: i32,
+    (top, bottom): (i32, i32),
+    w: i32,
+    bark: Ramp,
+    seed: u32,
+    (lean, flare): (i32, i32),
+    look: BarkLook,
+) {
     let half = w / 2;
+    let span = (bottom - top).max(1);
+    let off = |y: i32| lean * (bottom - y) / span;
     for y in top..=bottom {
-        let flare = ((y - (bottom - 4)).max(0) * 3 + 1) / 2;
-        let (x0, x1) = (cx - half - flare, cx + (w - half) + flare);
+        let fl = ((y - (bottom - 4)).max(0) * flare + 1) / 2;
+        let (x0, x1) = (cx + off(y) - half - fl, cx + off(y) + (w - half) + fl);
         for x in x0..x1 {
             let lx = ((2 * (x - x0) + 1 - (x1 - x0)) * UNIT / (x1 - x0).max(1)).clamp(-UNIT, UNIT);
             let mut tone = if lx < -60 {
@@ -330,25 +453,60 @@ fn trunk(c: &mut Canvas, cx: i32, top: i32, bottom: i32, w: i32, bark: Ramp, see
             } else {
                 Tone::Shade
             };
-            // Grain: runs of 3 to 7 px down a column, darker or lighter.
-            let run = h32(x as u32, (y + (h32(x as u32, 1, seed) % 7) as i32).div_euclid(7) as u32, seed);
-            if run % 4 == 0 {
-                tone = tone.step(-1);
-            } else if run % 9 == 1 && lx < 20 {
-                tone = tone.step(1);
+            let mut ramp = bark;
+            match look {
+                BarkLook::Ridged => {
+                    // Grain: runs of 3 to 7 px down a column, darker or lighter.
+                    let run = h32(x as u32, (y + (h32(x as u32, 1, seed) % 7) as i32).div_euclid(7) as u32, seed);
+                    if run % 4 == 0 {
+                        tone = tone.step(-1);
+                    } else if run % 9 == 1 && lx < 20 {
+                        tone = tone.step(1);
+                    }
+                }
+                BarkLook::Smooth => {
+                    if h32(x as u32, y.div_euclid(9) as u32, seed) % 13 == 0 {
+                        tone = tone.step(-1);
+                    }
+                }
+                BarkLook::Birch => {
+                    // Black bars across the white, two to four px, every few rows.
+                    let band = h32(y.div_euclid(3) as u32, 7, seed);
+                    let (bx, bw) = (below(band, w.max(1) as u32) as i32 - half, 2 + below(band >> 8, 3) as i32);
+                    let rel = x - (cx + off(y));
+                    if band % 3 == 0 && y % 3 == 0 && rel >= bx && rel < bx + bw {
+                        ramp = Ramp::HairBlack;
+                        tone = if lx < 0 { Tone::Lift } else { Tone::Base };
+                    }
+                }
             }
             if y < top + 5 {
                 tone = tone.step(if y < top + 3 { -2 } else { -1 });
             }
             // A root: a lit bump each side of the flare.
-            if flare > 0 && (x == x0 || x == x1 - 1) && y == bottom {
+            if fl > 0 && (x == x0 || x == x1 - 1) && y == bottom {
                 tone = Tone::Mid;
             }
-            c.put(x, y, bark.at(tone), normal(lx * 9 / 10, 0), (bottom - y + 1).max(1) as u8);
+            c.put(x, y, ramp.at(tone), normal(lx * 9 / 10, 0), (bottom - y + 1).max(1) as u8);
+        }
+    }
+    // Roots running out over the ground from the flare: lit on top, a px or two high.
+    if flare > 0 {
+        let fl = (4 * flare + 1) / 2;
+        for side in [-1i32, 1] {
+            let hr = h32((side + 2) as u32, 0x2007, seed);
+            let len = 1 + below(hr, 3) as i32;
+            let start = if side < 0 { cx - half - fl - 1 } else { cx + (w - half) + fl };
+            let t = if side < 0 { Tone::Lift } else { Tone::Mid };
+            for i in 0..len {
+                let x = start + side * i;
+                c.put(x, bottom, bark.at(t), normal(side * 40, -60), 1);
+            }
+            c.put(start, bottom - 1, bark.at(t.step(1)), normal(side * 40, -60), 2);
         }
     }
     for side in [-1, 1] {
-        let (mut x, mut y) = (cx + side * (half - 1), top + 2);
+        let (mut x, mut y) = (cx + off(top + 2) + side * (half - 1), top + 2);
         for i in 0..6 {
             c.put(
                 x,
@@ -388,16 +546,350 @@ pub fn base(c: &Canvas, ay: i32) -> i32 {
     (0..=ay.min(c.h() - 1)).rev().find(|&y| (0..c.w()).any(|x| c.get(x, y).is_opaque())).unwrap_or(ay)
 }
 
-/// A broadleaf. Large: 64 x 80; medium: 48 x 64. Foot: the trunk's bottom centre.
+/// A broadleaf species (ART-PLAN M3): what a tree is drawn as over the one sim tile, chosen by
+/// the chunk painter from the biome and what is near (`terrain::standing`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Species {
+    /// Wide and low, a heavy trunk with a big root flare.
+    Oak,
+    /// Tall and round, smooth grey bark.
+    Beech,
+    /// Airy: gaps in the crown, a slender leaning trunk.
+    Ash,
+    /// Silver birch: narrow and light, a white trunk barred in black.
+    Birch,
+    /// Field maple: a small round tree of the hedgerows.
+    Maple,
+    /// Weeping willow, by water: a curtain of leaf to the ground.
+    Willow,
+    /// Small and wind-bent, in haws.
+    Hawthorn,
+    /// The churchyard's: dense, near black, low on a red trunk.
+    Yew,
+    /// Dark and glossy, a cone, red berries.
+    Holly,
+}
+
+/// A species' shape: its canvas, its crown (centre row, radii, masses, how big the masses are and
+/// how much sky shows through), its trunk (top row, width, lean, root flare) and its bark.
+#[derive(Clone, Copy, Debug)]
+struct Profile {
+    w: i32,
+    h: i32,
+    crown_y: i32,
+    rx: i32,
+    ry: i32,
+    masses: i32,
+    grow: i32,
+    gaps: i32,
+    trunk_top: i32,
+    trunk_w: i32,
+    lean: i32,
+    flare: i32,
+    bark: Ramp,
+    look: BarkLook,
+}
+
+impl Species {
+    fn profile(self) -> Profile {
+        let p = Profile {
+            w: 64,
+            h: 80,
+            crown_y: 31,
+            rx: 27,
+            ry: 24,
+            masses: 9,
+            grow: 16,
+            gaps: 0,
+            trunk_top: 42,
+            trunk_w: 10,
+            lean: 0,
+            flare: 3,
+            bark: Ramp::Bark,
+            look: BarkLook::Ridged,
+        };
+        match self {
+            Species::Oak => Profile {
+                w: 76,
+                crown_y: 34,
+                rx: 33,
+                ry: 22,
+                masses: 11,
+                gaps: 20,
+                trunk_top: 44,
+                trunk_w: 12,
+                flare: 4,
+                ..p
+            },
+            Species::Beech => Profile {
+                h: 86,
+                ry: 27,
+                crown_y: 34,
+                trunk_top: 50,
+                trunk_w: 10,
+                lean: 1,
+                bark: Ramp::Stone,
+                look: BarkLook::Smooth,
+                ..p
+            },
+            Species::Ash => Profile {
+                w: 60,
+                h: 86,
+                crown_y: 30,
+                rx: 23,
+                ry: 26,
+                masses: 9,
+                grow: 13,
+                gaps: 110,
+                trunk_top: 44,
+                trunk_w: 7,
+                lean: 2,
+                flare: 2,
+                ..p
+            },
+            Species::Birch => Profile {
+                w: 44,
+                h: 82,
+                crown_y: 28,
+                rx: 16,
+                ry: 25,
+                masses: 8,
+                grow: 16,
+                gaps: 35,
+                trunk_top: 36,
+                trunk_w: 5,
+                lean: 3,
+                flare: 1,
+                bark: Ramp::HairWhite,
+                look: BarkLook::Birch,
+            },
+            Species::Maple => Profile {
+                w: 50,
+                h: 64,
+                crown_y: 24,
+                rx: 21,
+                ry: 18,
+                masses: 7,
+                gaps: 15,
+                trunk_top: 32,
+                trunk_w: 8,
+                lean: 1,
+                flare: 2,
+                ..p
+            },
+            Species::Willow => Profile {
+                w: 70,
+                h: 78,
+                crown_y: 26,
+                rx: 30,
+                ry: 19,
+                masses: 9,
+                grow: 15,
+                trunk_top: 38,
+                trunk_w: 10,
+                lean: 2,
+                flare: 3,
+                ..p
+            },
+            Species::Hawthorn => Profile {
+                w: 48,
+                h: 52,
+                crown_y: 20,
+                rx: 19,
+                ry: 13,
+                masses: 7,
+                grow: 15,
+                gaps: 40,
+                trunk_top: 26,
+                trunk_w: 6,
+                lean: 5,
+                flare: 2,
+                ..p
+            },
+            Species::Yew => Profile {
+                w: 60,
+                h: 66,
+                crown_y: 28,
+                rx: 26,
+                ry: 21,
+                masses: 10,
+                grow: 17,
+                trunk_top: 46,
+                trunk_w: 10,
+                flare: 3,
+                bark: Ramp::WoodDark,
+                ..p
+            },
+            Species::Holly => Profile {
+                w: 40,
+                h: 64,
+                crown_y: 30,
+                rx: 15,
+                ry: 23,
+                masses: 8,
+                grow: 15,
+                trunk_top: 50,
+                trunk_w: 5,
+                flare: 1,
+                ..p
+            },
+        }
+    }
+
+    /// The name sheets and the presenter know it by.
+    pub fn name(self) -> &'static str {
+        match self {
+            Species::Oak => "oak",
+            Species::Beech => "beech",
+            Species::Ash => "ash",
+            Species::Birch => "birch",
+            Species::Maple => "maple",
+            Species::Willow => "willow",
+            Species::Hawthorn => "hawthorn",
+            Species::Yew => "yew",
+            Species::Holly => "holly",
+        }
+    }
+}
+
+/// Red beads on the lit side of a crown: haws, holly berries. Each lit on top.
+fn beads(c: &mut Canvas, n: i32, d: &mut Dice) {
+    let (red, dark) = (letter('r').unwrap_or(Ix::INK), letter('R').unwrap_or(Ix::INK));
+    let (w, h) = (c.w(), c.h());
+    let mut placed = 0;
+    for _ in 0..n * 6 {
+        if placed >= n {
+            break;
+        }
+        let (x, y) = (d.range(2, w - 3), d.range(2, h * 2 / 3));
+        let leaf = |x: i32, y: i32| Ramp::of(c.get(x, y)).is_some_and(|(r, _)| !is_bark(r));
+        if !(leaf(x, y) && leaf(x, y + 1) && leaf(x - 1, y) && leaf(x + 1, y + 1)) {
+            continue;
+        }
+        let lit = Ramp::of(c.get(x, y)).is_some_and(|(_, t)| t >= Tone::Base);
+        if !lit && d.range(0, 2) > 0 {
+            continue;
+        }
+        let z = c.height_at(x, y).saturating_add(1);
+        c.dot(x, y, red, z);
+        c.dot(x, y + 1, dark, z);
+        if d.range(0, 2) == 0 {
+            c.dot(x + 1, y + 1, red, z);
+        }
+        placed += 1;
+    }
+}
+
+/// A glossy crown: a glint here and there on the lit leaves (holly).
+fn gloss(c: &mut Canvas, seed: u32) {
+    for y in 0..c.h() {
+        for x in 0..c.w() {
+            let Some((r, t)) = Ramp::of(c.get(x, y)) else { continue };
+            if is_bark(r) || t < Tone::Lift || h32(x as u32, y as u32, seed) % 7 != 0 {
+                continue;
+            }
+            let (n, z) = (c.normal_at(x, y), c.height_at(x, y));
+            c.put(x, y, r.at(Tone::High), n, z);
+        }
+    }
+}
+
+/// A willow's curtain: strands hanging from the crown's lower edge toward the ground in pairs of
+/// columns (a lit px and its shade beside it), of uneven length, a gap between some where the
+/// trunk shows, each ending in a lighter tip a px wide; lit on the crown's left, darker on its
+/// right.
+fn curtain(c: &mut Canvas, (x0, x1): (i32, i32), lowest: i32, leaf: Leafing, seed: u32) {
+    let mid = (x0 + x1) / 2;
+    let leafy = |c: &Canvas, x: i32, y: i32| Ramp::of(c.get(x, y)).is_some_and(|(r, _)| !is_bark(r));
+    let mut x = x0;
+    while x < x1 {
+        let hx = h32(x as u32, 0x3110, seed);
+        let step = 2 + i32::from(hx % 5 == 0);
+        if hx % 7 == 0 {
+            x += step;
+            continue;
+        }
+        // From the crown's lowest leaf in this column.
+        let Some(start) = (0..lowest).rev().find(|&y| leafy(c, x, y)) else {
+            x += step;
+            continue;
+        };
+        let reach = (lowest - start) * (35 + below(hx >> 4, 55) as i32) / 100;
+        let ramp = if leaf.share > 0 && below(hx >> 12, 16) < leaf.share { leaf.second } else { leaf.main };
+        let lit = x < mid;
+        for i in 1..=reach {
+            let y = start + i;
+            let tip = i == reach;
+            let (a, b) = if lit { (Tone::Lift, Tone::Mid) } else { (Tone::Mid, Tone::Shade) };
+            let a = if tip {
+                Tone::Light
+            } else if i % 4 == 0 {
+                a.step(-1)
+            } else {
+                a
+            };
+            let n = normal(if lit { -30 } else { 30 }, 50);
+            if !leafy(c, x, y) {
+                c.put(x, y, ramp.at(a), n, 1);
+            }
+            if !tip && !leafy(c, x + 1, y) && i < reach - 1 {
+                c.put(x + 1, y, ramp.at(b), n, 1);
+            }
+        }
+        x += step;
+    }
+}
+
+/// A broadleaf of `species`, leafed by `leaf`. Foot: the trunk's bottom centre.
+pub fn tree(seed: u32, species: Species, leaf: Leafing) -> Sprite {
+    let mut d = Dice::new(seed);
+    let pr = species.profile();
+    let (w, h) = (pr.w, pr.h);
+    let mut c = Canvas::new(w, h);
+    let (ax, ay) = (w / 2, h - 2);
+    // A lean one way or the other: a hawthorn bent by the wind, an ash reaching for the light.
+    let lean = if pr.lean == 0 { 0 } else { pr.lean * if d.range(0, 1) == 0 { -1 } else { 1 } };
+    trunk(&mut c, ax, (pr.trunk_top, ay), pr.trunk_w, pr.bark, d.next(), (lean, pr.flare), pr.look);
+    let cx8 = (ax + lean) * 8 + d.range(-12, 12);
+    crown(&mut c, (cx8, pr.crown_y * 8), (pr.rx * 8, pr.ry * 8), pr.masses, leaf, &mut d, ay, pr.grow);
+    gaps(&mut c, pr.gaps, d.next());
+    match species {
+        Species::Willow => {
+            let (x0, x1) = (ax + lean - pr.rx + 3, ax + lean + pr.rx - 3);
+            curtain(&mut c, (x0, x1), ay - 6, leaf, d.next());
+        }
+        Species::Hawthorn => beads(&mut c, 12, &mut d),
+        Species::Holly => {
+            gloss(&mut c, d.next());
+            beads(&mut c, 6, &mut d);
+        }
+        _ => {}
+    }
+    c.outline();
+    stand(&mut c, ay);
+    Sprite { canvas: c, ax, ay }
+}
+
+/// A broadleaf. Large: 64 x 80; medium: 48 x 64. Foot: the trunk's bottom centre. The plain
+/// round tree the species grew from (kept for the tests of a crown's light).
 pub fn broadleaf(seed: u32, large: bool, leaf: Ramp, bark: Ramp) -> Sprite {
     let mut d = Dice::new(seed);
     let (w, h) = if large { (64, 80) } else { (48, 64) };
     let mut c = Canvas::new(w, h);
     let (ax, ay) = (w / 2, h - 2);
-    trunk(&mut c, ax, if large { 42 } else { 32 }, ay, if large { 10 } else { 8 }, bark, d.next());
+    trunk(
+        &mut c,
+        ax,
+        (if large { 42 } else { 32 }, ay),
+        if large { 10 } else { 8 },
+        bark,
+        d.next(),
+        (0, 3),
+        BarkLook::Ridged,
+    );
     let cx8 = ax * 8 + d.range(-12, 12);
     let (cy, rx, ry, n) = if large { (31, 27, 24, 9) } else { (24, 20, 18, 7) };
-    crown(&mut c, (cx8, cy * 8), (rx * 8, ry * 8), n, leaf, &mut d, ay, 16);
+    crown(&mut c, (cx8, cy * 8), (rx * 8, ry * 8), n, Leafing::plain(leaf), &mut d, ay, 16);
     c.outline();
     stand(&mut c, ay);
     Sprite { canvas: c, ax, ay }
@@ -412,7 +904,7 @@ pub fn pine(seed: u32, needle: Ramp, bark: Ramp) -> Sprite {
     let (w, h) = (44, 84);
     let mut c = Canvas::new(w, h);
     let (ax, ay) = (w / 2, h - 2);
-    trunk(&mut c, ax, 62, ay, 6, bark, d.next());
+    trunk(&mut c, ax, (62, ay), 6, bark, d.next(), (0, 3), BarkLook::Ridged);
     let seed2 = d.next();
     let tiers = [(3, 17, 7), (12, 20, 11), (24, 21, 14), (36, 22, 17), (49, 22, 20)];
     for (k, (top, tall, hm)) in tiers.into_iter().enumerate() {
@@ -489,7 +981,7 @@ pub fn dead_tree(seed: u32, wood: Ramp) -> Sprite {
     let (w, h) = (44, 68);
     let mut c = Canvas::new(w, h);
     let (ax, ay) = (w / 2, h - 2);
-    trunk(&mut c, ax, 14, ay, 6, wood, d.next());
+    trunk(&mut c, ax, (14, ay), 6, wood, d.next(), (0, 3), BarkLook::Ridged);
     // Limbs: a walk up and out, the first steps thick.
     let mut limbs: Vec<(i32, i32, i32, i32, i32)> =
         vec![(ax - 2, 30, -1, 7, 2), (ax + 2, 24, 1, 7, 2), (ax, 16, 0, 6, 2), (ax - 2, 42, -1, 4, 1)];
@@ -516,15 +1008,15 @@ pub fn dead_tree(seed: u32, wood: Ramp) -> Sprite {
     Sprite { canvas: c, ax, ay }
 }
 
-/// A shrub on one cell, a little wider than it: 28 x 26, its foot a px below the cell. Berries are
-/// a few red beads, each lit on top.
-pub fn bush(seed: u32, ramp: Ramp, berries: bool) -> Sprite {
+/// A shrub on one cell, a little wider than it: 28 x 26, its foot a px below the cell, leafed by
+/// `leaf` (bronze in October). Berries are a few red beads, each lit on top.
+pub fn bush(seed: u32, leaf: Leafing, berries: bool) -> Sprite {
     let mut d = Dice::new(seed);
     let (w, h) = (28, 26);
     let mut c = Canvas::new(w, h);
     let (ax, ay) = (14, 24);
     let cx8 = ax * 8 + d.range(-4, 4);
-    crown(&mut c, (cx8, 13 * 8), (11 * 8, 10 * 8), 5, ramp, &mut d, ay, 20);
+    crown(&mut c, (cx8, 13 * 8), (11 * 8, 10 * 8), 5, leaf, &mut d, ay, 20);
     if berries {
         let (red, dark) = (letter('r').unwrap_or(Ix::INK), letter('R').unwrap_or(Ix::INK));
         for _ in 0..5 {
@@ -609,6 +1101,225 @@ pub fn boulder(seed: u32, stone: Ramp) -> Sprite {
     Sprite { canvas: c, ax, ay }
 }
 
+/// A stump on the wood's floor: a short cut trunk, its top a pale face of rings lit from the
+/// top-left, its bark ridged, its roots flaring into the ground, moss on its shaded side. 22 x 18.
+pub fn stump(seed: u32, bark: Ramp) -> Sprite {
+    let mut d = Dice::new(seed);
+    let (w, h) = (22, 18);
+    let mut c = Canvas::new(w, h);
+    let (ax, ay) = (11, 16);
+    let tall = d.range(5, 8);
+    trunk(&mut c, ax, (ay - tall, ay), 10, bark, d.next(), (0, 3), BarkLook::Ridged);
+    // The cut face: an ellipse of pale wood with a ring or two and a crack, lit on its upper left.
+    let (fx, fy, rx, ry) = (ax, ay - tall - 1, 5, 2 + d.range(0, 1));
+    for y in fy - ry..=fy + ry {
+        for x in fx - rx..=fx + rx {
+            let (dx, dy) = (x - fx, y - fy);
+            let e = dx * dx * 64 / (rx * rx) + dy * dy * 64 / (ry * ry);
+            if e > 64 {
+                continue;
+            }
+            let ring = (e / 20) % 2 == 1;
+            let t = if e > 48 {
+                Tone::Mid
+            } else if ring {
+                Tone::Base
+            } else if dx + dy < 0 {
+                Tone::Light
+            } else {
+                Tone::Lift
+            };
+            c.put(x, y, Ramp::WoodPale.at(t), normal(dx * 10, -100 + dy * 10), (tall + 2) as u8);
+        }
+    }
+    let crack = d.range(-2, 2);
+    c.put(fx + crack, fy, Ramp::WoodPale.at(Tone::Shade), FLAT, (tall + 2) as u8);
+    c.put(fx + crack + 1, fy + 1, Ramp::WoodPale.at(Tone::Shade), FLAT, (tall + 2) as u8);
+    // Moss down its shaded side.
+    for y in fy + ry + 1..ay {
+        if d.range(0, 2) > 0 {
+            let x = ax + 4 + d.range(0, 1);
+            if c.get(x, y).is_opaque() {
+                c.put(x, y, Ramp::Marsh.at(if y % 2 == 0 { Tone::Base } else { Tone::Mid }), normal(60, 0), 2);
+            }
+        }
+    }
+    c.outline();
+    stand(&mut c, ay);
+    Sprite { canvas: c, ax, ay }
+}
+
+/// A fallen limb lying along the ground: a lit cylinder of bark a few px thick, its broken end a
+/// pale splintered face, a twig or two still on it, moss along its top. 34 x 14.
+pub fn limb(seed: u32, bark: Ramp) -> Sprite {
+    let mut d = Dice::new(seed);
+    let (w, h) = (34, 14);
+    let mut c = Canvas::new(w, h);
+    let (ax, ay) = (17, 12);
+    let (x0, x1) = (3, 30);
+    let thick = 4 + d.range(0, 1);
+    let tilt = d.range(-1, 1);
+    for x in x0..=x1 {
+        let mid = ay - thick / 2 - 1 + tilt * (x - x0) / (x1 - x0);
+        let th = thick - i32::from(x > x1 - 6);
+        for k in 0..th {
+            let y = mid - th / 2 + k;
+            let ly = (2 * k + 1 - th) * UNIT / th;
+            let t = if ly < -50 {
+                Tone::Light
+            } else if ly < 0 {
+                Tone::Base
+            } else if ly < 60 {
+                Tone::Mid
+            } else {
+                Tone::Shade
+            };
+            let grain = h32(x.div_euclid(4) as u32, k as u32, seed) % 5 == 0;
+            let t = if grain { t.step(-1) } else { t };
+            c.put(x, y, bark.at(t), normal(0, ly * 9 / 10), (th - k + 1) as u8);
+        }
+        // Moss in tufts along its top.
+        if h32(x as u32, 3, seed) % 5 < 2 && x > x0 + 3 {
+            c.put(x, mid - th / 2, Ramp::Marsh.at(Tone::Lift), normal(0, -80), (th + 1) as u8);
+        }
+    }
+    // The broken end: pale wood, splintered.
+    let my = ay - thick / 2 - 1;
+    for k in 0..thick {
+        let y = my - thick / 2 + k;
+        c.put(x0 - 1, y, Ramp::WoodPale.at(if k < thick / 2 { Tone::Light } else { Tone::Base }), normal(-80, 0), 3);
+        if k % 2 == 0 {
+            c.put(x0 - 2, y, Ramp::WoodPale.at(Tone::Mid), normal(-80, 0), 3);
+        }
+    }
+    // A twig or two up off it.
+    for _ in 0..=d.range(0, 1) {
+        let x = d.range(x0 + 6, x1 - 6);
+        let (mut px, mut py) = (x, my - thick / 2);
+        let dir = if d.range(0, 1) == 0 { -1 } else { 1 };
+        for i in 0..4 {
+            c.put(
+                px,
+                py,
+                bark.at(if i < 2 { Tone::Base } else { Tone::Lift }),
+                normal(dir * 40, -60),
+                (thick + i) as u8,
+            );
+            py -= 1;
+            px += dir * i32::from(i % 2 == 0);
+        }
+    }
+    c.outline();
+    stand(&mut c, ay);
+    Sprite { canvas: c, ax, ay }
+}
+
+/// A clump of fronds from one crown: ferns, or bracken turned rust. Each frond arcs up and out
+/// from the root as a band three px wide (so the outline leaves it a lit middle), its tip curling
+/// over, lit along its upper side on the side to the light; the middle fronds tallest and drawn
+/// last, in front. 24 x 18.
+pub fn fern(seed: u32, leaf: Leafing) -> Sprite {
+    let mut d = Dice::new(seed);
+    let (w, h) = (24, 18);
+    let mut c = Canvas::new(w, h);
+    let (ax, ay) = (12, 16);
+    let n = d.range(5, 6);
+    // Outer fronds first, so the middle ones lie over them.
+    let mut order: Vec<i32> = (0..n).collect();
+    order.sort_by_key(|&f| -(f * 2 - (n - 1)).abs());
+    for f in order {
+        let spread = f * 2 - (n - 1);
+        let ramp =
+            if leaf.share > 0 && below(h32(f as u32, 5, seed), 16) < leaf.share { leaf.second } else { leaf.main };
+        let reach = 5 + (n - spread.abs()) + d.range(0, 2);
+        // The frond's spine: out by `spread`, up, then over at the tip.
+        let mut pts = Vec::new();
+        let (mut x8, mut y8) = (ax * 8 + spread * 3, ay * 8);
+        let (mut vx, mut vy) = (spread * 4, -(26 - spread.abs() * 3));
+        for _ in 0..reach {
+            pts.push((x8 >> 3, y8 >> 3));
+            x8 += vx;
+            y8 += vy;
+            vy += 3;
+            vx += spread.signum() * 2;
+        }
+        let z = |y: i32| (ay - y + 1).clamp(1, 255) as u8;
+        for s in pts.windows(2) {
+            c.line(s[0], s[1], ramp.at(Tone::Mid), 3, z(s[0].1));
+        }
+        // The lit rib along it, a px over the spine on the lit side; the leaflets' notches as
+        // a darker px every other step underneath.
+        let lit = spread <= 0;
+        for (i, &(x, y)) in pts.iter().enumerate() {
+            let t = if lit { Tone::Light } else { Tone::Base };
+            c.put(x, y - 1, ramp.at(t), normal(spread * 12, -70), z(y));
+            c.put(x, y, ramp.at(if lit { Tone::Lift } else { Tone::Mid }), normal(spread * 12, -40), z(y));
+            if i % 2 == 1 {
+                c.put(x, y + 1, ramp.at(Tone::Shade), normal(spread * 12, 60), z(y));
+            }
+        }
+    }
+    c.outline();
+    stand(&mut c, ay);
+    Sprite { canvas: c, ax, ay }
+}
+
+/// A stand of tall growth that sways (ART-PLAN M2): reeds with a bulrush or two, or long grass
+/// gone to seed. Blades a px wide and two apart from one root, the middle ones tallest, dark at
+/// the root and lit at the tip, a bulrush's head or a seed head on some. Not outlined, like the
+/// tufts painted in the ground it stands among: an outline round a blade a px wide is all the
+/// blade there is. 16 x 24 (reeds) or 16 x 16 (grass).
+pub fn stand_of(seed: u32, ramp: Ramp, reeds: bool) -> Sprite {
+    let mut d = Dice::new(seed);
+    let (w, h) = if reeds { (16, 24) } else { (16, 16) };
+    let mut c = Canvas::new(w, h);
+    let (ax, ay) = (8, h - 2);
+    let n = d.range(4, 5);
+    for b in 0..n {
+        let spread = b * 2 - (n - 1);
+        let len = if reeds { 16 + d.range(0, 4) } else { 9 + d.range(0, 3) } - spread.abs() * 3 / 2;
+        let lean = spread.signum();
+        let root = ax + spread;
+        let mut top = (root, ay);
+        for i in 0..len {
+            let x = root + lean * (i * i * 3) / (len * len).max(1);
+            let y = ay - i;
+            let t = if i == len - 1 {
+                Tone::Light
+            } else if i >= len - 3 {
+                Tone::Lift
+            } else if i < 2 {
+                Tone::Deep
+            } else if i < 5 {
+                Tone::Shade
+            } else if spread < 0 {
+                Tone::Base
+            } else {
+                Tone::Mid
+            };
+            c.put(x, y, ramp.at(t), normal(lean * 40, -30), (i + 1) as u8);
+            top = (x, y);
+        }
+        // A bulrush's head on a reed, a seed head on grass: two px wide, lit on its left.
+        if (reeds && b % 2 == 1) || (!reeds && b % 2 == 0) {
+            let (head, k) = if reeds { (Ramp::WoodDark, 4) } else { (Ramp::Thatch, 2) };
+            for j in 0..k {
+                let y = top.1 + 1 + j - k;
+                c.put(
+                    top.0,
+                    y,
+                    head.at(if j == 0 { Tone::Light } else { Tone::Base }),
+                    normal(-40, -30),
+                    (len + j) as u8,
+                );
+                c.put(top.0 + 1, y, head.at(Tone::Shade), normal(40, -30), (len + j) as u8);
+            }
+        }
+    }
+    stand(&mut c, ay);
+    Sprite { canvas: c, ax, ay }
+}
+
 /// The ramps a bank is drawn in: from the tree, pine, bush, dead tree and rubble looks.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Ramps {
@@ -639,69 +1350,184 @@ impl Default for Ramps {
     }
 }
 
-/// Every flora sprite the chunk painter stamps, built once: 46 of them (ART.md §2).
+/// What a bank sprite is: the chunk painter asks for one of a kind, and a cell's hash picks
+/// which of the kind's variants it shows.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Kind {
+    /// A broadleaf of a species in summer green (a few hold on into October).
+    Green(Species),
+    /// A broadleaf of a species turned (ART-PLAN Q1): oak russet, beech copper gold, maple and
+    /// birch butter yellow, ash a green gone yellow at its edge.
+    Turned(Species),
+    /// A conifer.
+    Pine,
+    /// A dead tree.
+    Dead,
+    /// A shrub in green.
+    Bush,
+    /// A shrub gone olive.
+    BushOlive,
+    /// A shrub gone bronze with the autumn.
+    BushBronze,
+    /// A shrub in berry.
+    Berry,
+    /// A pile of stones.
+    Rocks,
+    /// A boulder by a crag.
+    Boulder,
+    /// A stump on the woodland floor (ART-PLAN M3).
+    Stump,
+    /// A fallen limb on the woodland floor.
+    Limb,
+    /// A fern.
+    Fern,
+    /// Bracken: a fern turned rust.
+    Bracken,
+    /// Reeds that sway and rustle (ART-PLAN M2).
+    Reeds,
+    /// Long grass that sways and rustles.
+    Grass,
+    /// A front garden's boundary, gate or ornament (ART-PLAN M7, `garden`).
+    Garden(crate::garden::Piece),
+}
+
+impl Kind {
+    /// Whether it is a tree (a trunk in the strip, a crown in the canopy, a caster round its foot).
+    pub fn is_tree(self) -> bool {
+        matches!(self, Kind::Green(_) | Kind::Turned(_) | Kind::Pine | Kind::Dead)
+    }
+
+    /// Whether a breeze moves it (ART-PLAN M2): crowns, shrubs, ferns and tall growth.
+    pub fn sways(self) -> bool {
+        !matches!(self, Kind::Dead | Kind::Rocks | Kind::Boulder | Kind::Stump | Kind::Limb | Kind::Garden(_))
+    }
+}
+
+/// The broadleaf species, in bank order.
+const SPECIES: [Species; 9] = [
+    Species::Oak,
+    Species::Beech,
+    Species::Ash,
+    Species::Birch,
+    Species::Maple,
+    Species::Willow,
+    Species::Hawthorn,
+    Species::Yew,
+    Species::Holly,
+];
+
+/// Every flora sprite the chunk painter stamps, built once: about seventy (ART.md §2.6), each
+/// kind a run of variants.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Bank {
-    /// Large broadleaves by leaf (ordinary, olive, wet), four of each.
-    pub large: [[Sprite; 4]; 3],
-    /// Medium broadleaves by leaf, three of each.
-    pub medium: [[Sprite; 3]; 3],
-    /// Conifers.
-    pub pines: [Sprite; 3],
-    /// Dead trees.
-    pub dead: [Sprite; 2],
-    /// Shrubs by leaf (ordinary, olive), four of each.
-    pub bushes: [[Sprite; 4]; 2],
-    /// Shrubs in berry.
-    pub berry: [Sprite; 2],
-    /// Stone piles.
-    pub rocks: [Sprite; 4],
-    /// Boulders: six, so neighbours by a crag are seldom twins.
-    pub boulders: [Sprite; 6],
+    sprites: Vec<(String, Sprite)>,
+    kinds: Vec<(Kind, u16, u16)>,
 }
 
 impl Bank {
     /// Build every sprite from `r`.
     pub fn new(r: Ramps) -> Bank {
-        let leaves = [r.leaf, Ramp::LeafOlive, Ramp::LeafDeep];
-        let shrubs = [r.shrub, Ramp::LeafOlive];
-        Bank {
-            large: std::array::from_fn(|p| {
-                std::array::from_fn(|i| broadleaf(1000 + p as u32 * 37 + i as u32 * 101, true, leaves[p], r.bark))
-            }),
-            medium: std::array::from_fn(|p| {
-                std::array::from_fn(|i| broadleaf(5000 + p as u32 * 41 + i as u32 * 97, false, leaves[p], r.bark))
-            }),
-            pines: std::array::from_fn(|i| pine(9000 + i as u32 * 53, r.needle, r.bark)),
-            dead: std::array::from_fn(|i| dead_tree(12000 + i as u32 * 71, r.dead)),
-            bushes: std::array::from_fn(|p| {
-                std::array::from_fn(|i| bush(15000 + p as u32 * 13 + i as u32 * 29, shrubs[p], false))
-            }),
-            berry: std::array::from_fn(|i| bush(17000 + i as u32 * 31, r.shrub, true)),
-            rocks: std::array::from_fn(|i| rocks(19000 + i as u32 * 43, r.stone)),
-            boulders: std::array::from_fn(|i| boulder(21000 + i as u32 * 59, r.stone)),
+        let mut b = Bank { sprites: Vec::new(), kinds: Vec::new() };
+        let (leaf, olive, wet) = (r.leaf, Ramp::LeafOlive, Ramp::LeafDeep);
+        let (beech, oak, maple) = (Ramp::LeafBeech, Ramp::LeafOak, Ramp::LeafMaple);
+        for (k, &sp) in SPECIES.iter().enumerate() {
+            let seed = 1000 + k as u32 * 211;
+            // Summer's leafings, and October's.
+            let (green, turned): (&[Leafing], &[Leafing]) = match sp {
+                Species::Oak => (
+                    &[Leafing::plain(leaf), Leafing::mixed(leaf, olive, 5)],
+                    &[Leafing::mixed(oak, beech, 4), Leafing::mixed(oak, olive, 3), Leafing::mixed(beech, oak, 6)],
+                ),
+                Species::Beech => (
+                    &[Leafing::fringed(leaf, beech)],
+                    &[Leafing::mixed(beech, oak, 3), Leafing::mixed(beech, maple, 4), Leafing::mixed(beech, oak, 7)],
+                ),
+                Species::Ash => (
+                    &[Leafing::plain(leaf), Leafing::mixed(leaf, olive, 6)],
+                    &[Leafing::fringed(olive, maple), Leafing::mixed(maple, olive, 6)],
+                ),
+                Species::Birch => {
+                    (&[Leafing::plain(olive)], &[Leafing::mixed(maple, beech, 3), Leafing::fringed(maple, olive)])
+                }
+                Species::Maple => {
+                    (&[Leafing::fringed(leaf, maple)], &[Leafing::mixed(maple, beech, 4), Leafing::plain(maple)])
+                }
+                Species::Willow => {
+                    (&[Leafing::plain(olive), Leafing::mixed(olive, wet, 6)], &[Leafing::mixed(olive, maple, 5)])
+                }
+                Species::Hawthorn => {
+                    (&[Leafing::mixed(wet, leaf, 6)], &[Leafing::mixed(oak, olive, 6), Leafing::mixed(olive, oak, 5)])
+                }
+                Species::Yew => (&[Leafing::plain(Ramp::LeafYew), Leafing::mixed(Ramp::LeafYew, r.needle, 4)], &[]),
+                Species::Holly => (&[Leafing::plain(wet), Leafing::mixed(wet, Ramp::LeafYew, 5)], &[]),
+            };
+            b.run(Kind::Green(sp), &format!("tree_{}", sp.name()), green.len(), |i| {
+                tree(seed + i * 37, sp, green[i as usize])
+            });
+            if !turned.is_empty() {
+                b.run(Kind::Turned(sp), &format!("tree_{}_turned", sp.name()), turned.len(), |i| {
+                    tree(seed + 101 + i * 41, sp, turned[i as usize])
+                });
+            }
         }
+        b.run(Kind::Pine, "pine", 3, |i| pine(9000 + i * 53, r.needle, r.bark));
+        b.run(Kind::Dead, "dead_tree", 2, |i| dead_tree(12000 + i * 71, r.dead));
+        b.run(Kind::Bush, "bush_leaf", 4, |i| bush(15000 + i * 29, Leafing::plain(r.shrub), false));
+        b.run(Kind::BushOlive, "bush_olive", 3, |i| bush(15013 + i * 29, Leafing::mixed(olive, r.shrub, 4), false));
+        b.run(Kind::BushBronze, "bush_bronze", 3, |i| bush(16000 + i * 31, Leafing::mixed(oak, beech, 5), false));
+        b.run(Kind::Berry, "bush_berry", 2, |i| bush(17000 + i * 31, Leafing::mixed(r.shrub, oak, 3), true));
+        b.run(Kind::Rocks, "rocks", 4, |i| rocks(19000 + i * 43, r.stone));
+        b.run(Kind::Boulder, "boulder", 6, |i| boulder(21000 + i * 59, r.stone));
+        b.run(Kind::Stump, "stump", 2, |i| stump(23000 + i * 61, r.bark));
+        b.run(Kind::Limb, "limb", 2, |i| limb(24000 + i * 67, r.bark));
+        b.run(Kind::Fern, "fern", 3, |i| fern(25000 + i * 73, Leafing::mixed(r.shrub, leaf, 6)));
+        b.run(Kind::Bracken, "bracken", 3, |i| fern(26000 + i * 79, Leafing::mixed(oak, beech, 6)));
+        b.run(Kind::Reeds, "reeds", 3, |i| stand_of(27000 + i * 83, Ramp::Reed, true));
+        b.run(Kind::Grass, "grass", 3, |i| {
+            stand_of(28000 + i * 89, if i == 1 { Ramp::Turf } else { Ramp::TurfDry }, false)
+        });
+        for piece in crate::garden::Piece::ALL {
+            use crate::garden::Piece as G;
+            let n = match piece {
+                G::RoseArch | G::Hollyhocks | G::Canes | G::Bike => 2,
+                _ => 1,
+            };
+            b.run(Kind::Garden(piece), piece.name(), n, |i| crate::garden::sprite(piece, 29000 + i * 97));
+        }
+        b
     }
 
-    /// Every sprite with a name, in bank order: for sheets and goldens.
+    fn run(&mut self, kind: Kind, name: &str, n: usize, make: impl Fn(u32) -> Sprite) {
+        let start = self.sprites.len() as u16;
+        for i in 0..n {
+            self.sprites.push((format!("{name}_{i}"), make(i as u32)));
+        }
+        self.kinds.push((kind, start, n as u16));
+    }
+
+    /// The sprite of `kind` hash `h` picks, as an index into [`Bank::all`]; a kind the bank has
+    /// none of (a yew has no October) falls back to its green.
+    pub fn pick(&self, kind: Kind, h: u32) -> u16 {
+        let found = self.kinds.iter().find(|k| k.0 == kind).or_else(|| match kind {
+            Kind::Turned(sp) => self.kinds.iter().find(|k| k.0 == Kind::Green(sp)),
+            _ => None,
+        });
+        found.map_or(0, |&(_, start, n)| start + below(h, u32::from(n.max(1))) as u16)
+    }
+
+    /// The kind of sprite `i`.
+    pub fn kind_of(&self, i: u16) -> Kind {
+        self.kinds.iter().find(|&&(_, s, n)| i >= s && i < s + n).map_or(Kind::Rocks, |k| k.0)
+    }
+
+    /// Sprite `i`.
+    pub fn get(&self, i: u16) -> &Sprite {
+        &self.sprites[usize::from(i)].1
+    }
+
+    /// Every sprite with a name, in bank order: for sheets, goldens and the presenter's atlas.
     pub fn all(&self) -> Vec<(String, &Sprite)> {
-        let mut out: Vec<(String, &Sprite)> = Vec::new();
-        let leaf = ["leaf", "olive", "wet"];
-        for (p, row) in self.large.iter().enumerate() {
-            out.extend(row.iter().enumerate().map(|(i, s)| (format!("tree_large_{}_{i}", leaf[p]), s)));
-        }
-        for (p, row) in self.medium.iter().enumerate() {
-            out.extend(row.iter().enumerate().map(|(i, s)| (format!("tree_medium_{}_{i}", leaf[p]), s)));
-        }
-        out.extend(self.pines.iter().enumerate().map(|(i, s)| (format!("pine_{i}"), s)));
-        out.extend(self.dead.iter().enumerate().map(|(i, s)| (format!("dead_tree_{i}"), s)));
-        for (p, row) in self.bushes.iter().enumerate() {
-            out.extend(row.iter().enumerate().map(|(i, s)| (format!("bush_{}_{i}", leaf[p]), s)));
-        }
-        out.extend(self.berry.iter().enumerate().map(|(i, s)| (format!("bush_berry_{i}"), s)));
-        out.extend(self.rocks.iter().enumerate().map(|(i, s)| (format!("rocks_{i}"), s)));
-        out.extend(self.boulders.iter().enumerate().map(|(i, s)| (format!("boulder_{i}"), s)));
-        out
+        self.sprites.iter().map(|(n, s)| (n.clone(), s)).collect()
     }
 }
 
@@ -710,10 +1536,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn a_bank_is_forty_six_valid_sprites_with_their_feet_inside() {
+    fn a_bank_is_valid_sprites_with_their_feet_inside() {
         let b = Bank::new(Ramps::default());
         let all = b.all();
-        assert_eq!(all.len(), 46);
+        // About seventy plants, and the gardens' twenty pieces (ART-PLAN M7).
+        assert!((60..=110).contains(&all.len()), "{}", all.len());
         for (name, s) in &all {
             s.canvas.validate().unwrap_or_else(|e| panic!("{name}: {e}"));
             assert!(s.ax >= 0 && s.ax < s.canvas.w() && s.ay >= 0 && s.ay < s.canvas.h(), "{name}");
@@ -721,6 +1548,50 @@ mod tests {
             assert!(near, "{name}: it stands on its foot");
         }
         assert_eq!(b, Bank::new(Ramps::default()), "same ramps, same bytes");
+        for (i, (name, _)) in all.iter().enumerate() {
+            assert_eq!(
+                b.kind_of(i as u16).is_tree(),
+                name.starts_with("tree") || name.starts_with("pine") || name.starts_with("dead"),
+                "{name}"
+            );
+        }
+    }
+
+    #[test]
+    fn every_kind_picks_its_own_and_a_yew_keeps_its_green() {
+        let b = Bank::new(Ramps::default());
+        for &sp in &SPECIES {
+            let i = b.pick(Kind::Green(sp), 7);
+            assert_eq!(b.kind_of(i), Kind::Green(sp));
+        }
+        assert_eq!(b.kind_of(b.pick(Kind::Turned(Species::Yew), 3)), Kind::Green(Species::Yew));
+        assert_eq!(b.kind_of(b.pick(Kind::Turned(Species::Oak), 3)), Kind::Turned(Species::Oak));
+    }
+
+    #[test]
+    fn species_differ_in_silhouette() {
+        // Width over height of what is drawn: an oak is wide, a birch and a holly narrow.
+        let ratio = |s: Sprite| {
+            let r = s.canvas.bounds().expect("drawn");
+            r.w * 100 / r.h
+        };
+        let oak = ratio(tree(1, Species::Oak, Leafing::plain(Ramp::Leaf)));
+        let birch = ratio(tree(1, Species::Birch, Leafing::plain(Ramp::Leaf)));
+        let holly = ratio(tree(1, Species::Holly, Leafing::plain(Ramp::Leaf)));
+        assert!(oak > birch + 30 && oak > holly + 20, "oak {oak}, birch {birch}, holly {holly}");
+    }
+
+    #[test]
+    fn an_autumn_crown_is_its_ramps() {
+        let s = tree(3, Species::Oak, Leafing::mixed(Ramp::LeafOak, Ramp::LeafBeech, 6));
+        let count = |r: Ramp| s.canvas.albedo().iter().filter(|&&ix| Ramp::of(ix).is_some_and(|(q, _)| q == r)).count();
+        assert!(
+            count(Ramp::LeafOak) > 200 && count(Ramp::LeafBeech) > 40,
+            "{} {}",
+            count(Ramp::LeafOak),
+            count(Ramp::LeafBeech)
+        );
+        assert_eq!(count(Ramp::Leaf), 0);
     }
 
     #[test]
@@ -744,9 +1615,13 @@ mod tests {
         let plants = [
             broadleaf(1, true, Ramp::Leaf, Ramp::Bark),
             broadleaf(2, false, Ramp::Leaf, Ramp::Bark),
+            tree(4, Species::Willow, Leafing::plain(Ramp::LeafOlive)),
+            tree(5, Species::Hawthorn, Leafing::plain(Ramp::LeafOlive)),
             pine(1, Ramp::Leaf, Ramp::Bark),
             dead_tree(1, Ramp::Bark),
-            bush(1, Ramp::Leaf, false),
+            bush(1, Leafing::plain(Ramp::Leaf), false),
+            stump(1, Ramp::Bark),
+            fern(1, Leafing::plain(Ramp::Leaf)),
         ];
         for s in plants {
             // A tree stands on its foot row; a shrub on the rim of its crown, over its contact

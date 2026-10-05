@@ -22,7 +22,7 @@ use serde::{Deserialize, Serialize};
 use crate::codec;
 use crate::ids::{ClientToken, Counters, DropId, GroundId, ProjId, PropId, Seat, UnitId};
 use crate::sym::SymTable;
-use crate::tuning::{BAG_SLOTS, BAR_SLOTS, CRAFT_INPUTS, STORE_SLOTS};
+use crate::tuning::{BAR_SLOTS, CRAFT_INPUTS, HELD_SLOTS, STORE_SLOTS};
 
 /// The save and hash schema's version. Bumped by any change to a type in this module.
 ///
@@ -38,11 +38,15 @@ use crate::tuning::{BAG_SLOTS, BAR_SLOTS, CRAFT_INPUTS, STORE_SLOTS};
 /// 9: food comes back (`Prop::regrow`, `regrow.rs`).
 /// 10: cupboards (`GameState::stores`, `store.rs`).
 /// 11: side quests set aside keep their kills (`Quests::set_aside`, `quests::abandon`).
-/// 12: the player's side of a fight (PLAY-PLAN §2.1): `PlayerState::fight` (her target, her
-/// cast building, the press queued behind it, her swings and her click-walk), a frame's target
-/// and free-aim bit, a bolt's `seek`; and the fight's feel (`feel.rs`): `Unit::feel` (wind-up,
-/// hop, hitlag, knock) and `GameState::table_delay`. One bump for Phase 1.
-pub const SAVE_VERSION: u16 = 12;
+/// 12: (the Phase 1 branch's, folded into 15.)
+/// 13: made fires, rest by a fire over time, growth unbanked until a rest (`GameState::fires_made`,
+/// `Prop::burns_until`, `Unit::seated`, `Growth::unbanked`, `fire.rs`).
+/// 14: the key ring past the bag's slots (`PlayerState::bag`, `tuning::RING_SLOTS`).
+/// 15: the fight (PLAY-PLAN §2.1, Phase 1): the player's side, `PlayerState::fight` (her target,
+/// her cast building, the press queued behind it, her swings and her click-walk), a frame's target
+/// and free-aim bit, a bolt's `seek`; and the feel (`feel.rs`): `Unit::feel` (wind-up, hop,
+/// hitlag, knock) and `GameState::table_delay`.
+pub const SAVE_VERSION: u16 = 15;
 
 /// A fixed-size bit set (trigger bits, consequences done).
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -147,6 +151,10 @@ pub struct GameState {
     /// party shares one cupboard's shelves, as it shares the quests and the rest point (her bags
     /// stay hers). Only a cupboard with something in it has a row; the last thing out removes it.
     pub stores: BTreeMap<(ZoneId, PropId), Store>,
+    /// Phase 2's rules (PLAY-PLAN.md §2.2, `fire.rs`): made fires, a fire's rest over time, growth
+    /// unbanked until a rest. Set at New Game from `tuning::FIRES_MADE` and kept by the save, so
+    /// every seat at the table plays one rule; a test may set it.
+    pub fires_made: bool,
 }
 
 /// One cupboard's slots, stacked like a bag's (`bag.rs`).
@@ -231,6 +239,41 @@ pub struct Growth {
     pub spirit: u16,
     /// The ids of the upgrades already taken (`Grow { id }`).
     pub found: Vec<Sym>,
+    /// Growth found since the party's last rest (`fire.rs`, under `fires_made`): a jar's or a
+    /// page's, in the order found. Any rest banks it all; its finder's death takes it off.
+    pub unbanked: Vec<Unbanked>,
+}
+
+/// A jar or a page found since the last rest: what it gave, who found it, and the prop it was.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Unbanked {
+    pub id: Sym,
+    pub stat: jane_core::action::Stat,
+    pub amount: i16,
+    pub seat: crate::ids::Seat,
+    pub zone: ZoneId,
+    pub prop: PropId,
+    /// Her finder died: the growth is off and the jar lies where she fell (a glint). Taken back,
+    /// it is found again; her next death first sends it home to its shelf.
+    pub lying: bool,
+    /// Where it stood when found: home, for a jar lying elsewhere.
+    pub home: Cell,
+}
+
+/// Seated at a fire (`fire.rs`): she mends a little every tick until whole, and anything she does,
+/// any blow, and anything hostile that has her or could see her within its reach ends it.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Seated {
+    /// Where she sat: a step off it is getting up.
+    pub at: Vec2,
+    /// Her health after the last tick's mending: lower now is a blow.
+    pub hp_was: Milli,
+    /// Her cooldown marks when she sat: one moved is something done.
+    pub gcd_was: Tick,
+    pub stop_was: Tick,
+    /// What a tick's mending left over, in 1/`REST_TICKS` milli-points (the integer accumulator).
+    pub hp_acc: u32,
+    pub mp_acc: u32,
 }
 
 /// The understood record (§3.7): what she has been, whom she has met, what she was told and
@@ -417,8 +460,9 @@ pub struct PlayerState {
     pub last_mark: Sym,
     /// When a dead seat stands back up. The revive itself is the combat unit's.
     pub respawn_at: Option<Tick>,
-    /// Bags are hers, off the body (`bag.rs`, `inventory.rs`; the start kit goes in here).
-    pub bag: Box<[Option<Stack>; BAG_SLOTS]>,
+    /// Bags are hers, off the body (`bag.rs`, `inventory.rs`; the start kit goes in here): the
+    /// bag's `tuning::BAG_SLOTS`, then the key ring's (`tuning::RING_SLOTS`).
+    pub bag: Box<[Option<Stack>; HELD_SLOTS]>,
     #[serde(with = "codec::bar")]
     pub bar: [Option<BarSlot>; BAR_SLOTS],
     /// Her craft row (`inventory.rs`).
@@ -792,6 +836,8 @@ pub struct Unit {
     pub snake: Option<Box<SnakeBody>>,
     /// The fight's feel (`feel.rs`): a foe's wind-up, hitlag, knockback, her hop.
     pub feel: crate::feel::Feel,
+    /// Seated at a fire, mending (`fire.rs`). Only a seat's body, and only under `fires_made`.
+    pub seated: Option<Box<Seated>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -894,4 +940,7 @@ pub struct Prop {
     /// Emptied food that comes back (`regrow.rs`): the tick it is full again. `None` for
     /// anything else, and once it is back.
     pub regrow: Option<Tick>,
+    /// A made fire she lit (`fire.rs`): it goes out at the first ten-minute mark at or after this.
+    /// `None` for anything else, a cold pit, and a camp's own fire (it burns till the rain).
+    pub burns_until: Option<Tick>,
 }

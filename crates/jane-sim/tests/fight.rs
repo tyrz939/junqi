@@ -37,6 +37,7 @@ fn put_prop(s: &mut Sim, def: &str, x: u16, y: u16) -> PropId {
         loot: jane_sim::state::LootState::AsSpawned,
         under_done: false,
         regrow: None,
+        burns_until: None,
         night: jane_sim::state::NightState::AsSpawned,
     });
     s.rebuild_runtimes();

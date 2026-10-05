@@ -702,6 +702,11 @@ fn world_hash(s: &Sim) -> u64 {
 /// tick the night starts, so the mine's consequence fires on the night's first tick and lands in
 /// the live county.
 fn the_same_night(kills: usize) -> (Sim, Sim) {
+    the_same_night_with(kills, |_| {})
+}
+
+/// [`the_same_night`], with `setup` run on both sims at 22:00, before the night.
+fn the_same_night_with(kills: usize, setup: impl Fn(&mut Sim)) -> (Sim, Sim) {
     let (bps, (x, y)) = a_county_with_a_bed();
     let cat = catalog();
     let mut sims = [Sim::new_game_with(bps.clone(), "Jane"), Sim::new_game_with(bps, "Jane")];
@@ -716,6 +721,7 @@ fn the_same_night(kills: usize) -> (Sim, Sim) {
         let knuckles = FlagKey::Dead(sym(s, "iron_knuckles"));
         s.state_mut().flags.insert(knuckles, 1);
         s.state_mut().quests.done.push(cat.story.quest_id("ames_spectacles").unwrap());
+        setup(s);
         s.drain_events();
     }
     let [mut slept, mut idled] = sims;
@@ -778,6 +784,38 @@ fn a_night_slept_is_a_night_idled() {
     cmd(&mut b, Command::Use);
     assert_eq!(a.hash(), b.hash());
     assert_eq!(a.state().clock, 6 * HOUR + 1);
+}
+
+/// PLAY-PLAN.md §2.2 (L6): a made fire burns through a slept night as through a sat-up one. Three
+/// pits lit at 22:00, due out at about one, a little after five, and past six: the same marks put
+/// the same two out, and the world is the same world.
+#[test]
+fn a_slept_night_burns_as_a_sat_up_one() {
+    let pit = catalog().story.prop_id("campfire_cold").unwrap();
+    let light = |s: &mut Sim| {
+        s.state_mut().fires_made = true;
+        let now = s.state().tick.0;
+        let z = s.state_mut().zone_mut(ZoneId::County).unwrap();
+        for (p, h) in z.props.iter_mut().filter(|p| p.def == pit).zip([3 * HOUR + 777, 7 * HOUR + 5, 12 * HOUR]) {
+            p.on = true;
+            p.burns_until = Some(Tick(now + h));
+        }
+    };
+    let fires = |s: &Sim| -> Vec<(bool, bool, Option<Tick>)> {
+        let z = s.state().zone(ZoneId::County).unwrap();
+        z.props.iter().filter(|p| p.def == pit).take(3).map(|p| (p.on, p.used, p.burns_until)).collect()
+    };
+    let (slept, idled) = the_same_night_with(0, light);
+    assert_eq!(fires(&slept), fires(&idled));
+    let out = fires(&slept).iter().filter(|f| !f.0 && f.1).count();
+    let rained = slept.state().weather.iter().any(|w| w.kind.wets());
+    assert!(out == 2 || rained, "two burnt down by six: {:?}", fires(&slept));
+    assert_eq!(world_hash(&slept), world_hash(&idled));
+    let made = |s: &Sim| -> Vec<jane_sim::Prop> {
+        let z = s.state().zone(ZoneId::County).unwrap();
+        z.props.iter().filter(|p| catalog().story.prop(p.def).made).cloned().collect()
+    };
+    assert_eq!(made(&slept), made(&idled), "every made fire the same");
 }
 
 /// A bed in the house is a conversation: alone, the world holds while she reads, and the night

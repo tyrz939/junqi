@@ -16,8 +16,8 @@ pub struct Caps {
     pub name: &'static str,
 }
 
-/// Entries in the CLUT: the master palette's ceiling (ART.md §2.7).
-pub const CLUT_LEN: usize = 1024;
+/// Entries in the CLUT: the master palette's ceiling (ART.md §2.7, `jane_art::palette::CAP`).
+pub const CLUT_LEN: usize = jane_art::palette::CAP;
 
 /// The contact shadow's multiply per channel, 1/256ths, at full cover (`jane_art::palette`):
 /// every backend darkens under index 1 by it, scaled by how much of the texel's 3 x 3 is index 1.

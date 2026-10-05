@@ -222,14 +222,26 @@ pub(crate) fn draw(c: &mut Canvas, k: &Kit, state: State) -> Option<Stand> {
             Stand::Up(&[])
         }
         "chimney" => {
-            // A brick stack with a stone cap and two pots: the chimney over a roof.
+            // A brick stack with a stone cap and its pots: the chimney over a roof. A house's own
+            // (ART-PLAN Q2) has one to three pots on a stack of one of three heights, one pot in
+            // three a grey one among the terracotta.
             let cx = w / 2;
-            let top = foot - (h - 2).min(30);
+            let (pots, stack) = k.house.map_or((2, 2), |v| (1 + v / 3, v % 3));
+            let top = foot - (h - 2).min(30) + (2 - stack as i32) * 4;
             blocks(c, Rect::new(cx - 6, top + 6, 12, foot - top - 6), k.body, 3, 4, false, k.seed, 3);
             c.rect_bevel(Rect::new(cx - 7, top + 4, 14, 3), Ramp::Stone, 1, Z::new(4, 5));
-            for px in [cx - 5, cx + 1] {
-                c.polygon_lit(&[(px, top), (px + 3, top), (px + 3, top + 4), (px, top + 4)], k.trim, 90, Z::flat(6));
-                c.hline(px, px + 3, top, Ix::SEAM, 6);
+            let at: &[(i32, i32)] = match pots {
+                1 => &[(cx - 2, 4)],
+                2 => &[(cx - 5, 3), (cx + 1, 3)],
+                _ => &[(cx - 6, 3), (cx - 2, 3), (cx + 2, 3)],
+            };
+            for (i, &(px, pw)) in at.iter().enumerate() {
+                let grey = k.house.is_some_and(|v| (v + i as u32) % 3 == 0) && pots > 1;
+                let ramp = if grey { Ramp::Slate } else { k.trim };
+                let tall = if pots == 1 { 6 } else { 4 + (i as i32 & 1) };
+                let y = top + 4 - tall;
+                c.polygon_lit(&[(px, y), (px + pw, y), (px + pw, top + 4), (px, top + 4)], ramp, 90, Z::flat(6));
+                c.hline(px, px + pw, y, Ix::SEAM, 6);
             }
             Stand::Up(&[])
         }

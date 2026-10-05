@@ -113,6 +113,14 @@ pub const LINES: &[(&str, [&str; 3])] = &[
         ],
     ),
     (
+        "perimeters",
+        [
+            "A hedge is laid, and a gap left for the cows.",
+            "A wall goes round the field, one stone on two.",
+            "A drain is cut along the reeds, and the spoil banked.",
+        ],
+    ),
+    (
         "scatter",
         [
             "Leaves come down on the verges.",

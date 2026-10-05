@@ -33,6 +33,7 @@ mod ecotone;
 mod field;
 mod ground;
 mod hard;
+pub mod houses;
 mod interior;
 pub mod region;
 pub mod sheet;
@@ -50,6 +51,7 @@ use crate::flora::{Bank, Ramps};
 use crate::palette::{self, Ix, Ramp, Tone};
 
 use field::Field;
+use houses::{House, Houses, Room};
 pub use standing::{fence_parts, mask};
 pub use style::{Style, Styles, over, snake};
 
@@ -117,6 +119,23 @@ pub trait TileSource {
     fn region(&self, _x: i32, _y: i32) -> u8 {
         0
     }
+    /// The house whose block or front garden holds cell `(x, y)` ([`houses`], ART-PLAN Q2 and
+    /// M7): what its roof, walls, door and garden are drawn as. Found once a zone over its
+    /// whole block, so a house is one look across every chunk it lies in; none by default (the
+    /// houses then draw as plain cream under red tile).
+    fn house(&self, _x: i32, _y: i32) -> Option<House> {
+        None
+    }
+    /// Seen from inside, whose room the zone is (ART-PLAN M4): its walls papered, its back wall
+    /// hung with things, its windows laying light on the floor. None for a dungeon.
+    fn room(&self) -> Option<Room> {
+        None
+    }
+    /// Whether it is day, for a room's windows: by day they lay light on the floor, at night
+    /// they are dark. The renderer repaints a room's chunks when it turns.
+    fn daylight(&self) -> bool {
+        true
+    }
 }
 
 /// A zone's tiles and paint, owned: what a tool or a test paints from.
@@ -130,6 +149,12 @@ pub struct TileMap {
     pub outdoor: bool,
     /// See [`TileSource::region`]: the blueprint's region map (empty: the Lowfields).
     pub regions: jane_core::blueprint::RegionMap,
+    /// See [`TileSource::house`]: empty until [`TileMap::find_houses`].
+    pub houses: Houses,
+    /// See [`TileSource::room`].
+    pub room: Option<Room>,
+    /// See [`TileSource::daylight`].
+    pub daylight: bool,
 }
 
 const MATERIALS: [Material; 5] =
@@ -185,7 +210,15 @@ impl TileMap {
     /// Tiles with no paint.
     pub fn new(tiles: Grid<Tile>, outdoor: bool) -> TileMap {
         let paint = Grid::new(tiles.w(), tiles.h(), 0);
-        TileMap { tiles, paint, outdoor, regions: jane_core::blueprint::RegionMap::default() }
+        TileMap {
+            tiles,
+            paint,
+            outdoor,
+            regions: jane_core::blueprint::RegionMap::default(),
+            houses: Houses::default(),
+            room: None,
+            daylight: true,
+        }
     }
 
     /// A blueprint's tiles and paint.
@@ -202,6 +235,66 @@ impl TileMap {
     pub fn set_material(&mut self, r: Rect, mat: Material) {
         self.paint.fill_rect(r, code(mat));
     }
+
+    /// Find its houses under world seed `seed` ([`Houses::fill`]), their doors at `doors`.
+    pub fn find_houses(&mut self, seed: u32, doors: &[(i32, i32, houses::Kind)]) {
+        let tiles = &self.tiles;
+        let size = (tiles.w() as i32, tiles.h() as i32);
+        self.houses.fill(size, |x, y| tiles.read(x, y, Tile::Void), doors, seed);
+    }
+
+    /// A blueprint's tiles and paint with its houses found under `seed`, their doors read off
+    /// its props (`door` sprites; one into the Arms is the inn's, one into St Anne's the
+    /// church's), and its room if it is one ([`room_of`]).
+    pub fn from_blueprint_seeded(bp: &Blueprint, seed: u32) -> TileMap {
+        let mut m = TileMap::from_blueprint(bp);
+        let cat = jane_data::catalog();
+        let doors: Vec<(i32, i32, houses::Kind)> = bp
+            .props
+            .iter()
+            .filter(|p| cat.sprites.get(usize::from(cat.story.prop(p.def).sprite.0)) == Some(&"door"))
+            .map(|p| (i32::from(p.cell.x), i32::from(p.cell.y), houses::door_kind(p.to.map(|d| d.zone))))
+            .collect();
+        m.find_houses(seed, &doors);
+        let busy = bp.props.iter().filter(|p| !cat.story.prop(p.def).flat).flat_map(|p| {
+            let d = cat.story.prop(p.def);
+            (0..i32::from(d.w)).map(move |dx| (i32::from(p.cell.x) + dx, i32::from(p.cell.y)))
+        });
+        let tiles = &m.tiles;
+        let room =
+            room_of(bp.zone, seed, tiles.w() as i32, |x, y| tiles.read(x, y, Tile::Void).flags() & F_SOLID != 0, busy);
+        m.room = room;
+        m
+    }
+}
+
+/// The room a zone is seen from inside as (ART-PLAN M4), if it is one: Julie's house, the Arms
+/// or St Anne's; its seed from the world's; the columns of its back walls that `props` (a tall
+/// thing's footprint cells) stand against.
+pub fn room_of(
+    zone: jane_core::ids::ZoneId,
+    seed: u32,
+    w: i32,
+    solid: impl Fn(i32, i32) -> bool,
+    props: impl Iterator<Item = (i32, i32)>,
+) -> Option<Room> {
+    use jane_core::ids::ZoneId as Z;
+    let kind = match zone {
+        Z::House => houses::RoomKind::Julie,
+        Z::Arms => houses::RoomKind::Inn,
+        Z::Church => houses::RoomKind::Church,
+        _ => return None,
+    };
+    let wall = solid;
+    let mut busy = 0u128;
+    for (x, y) in props {
+        if (0..128).contains(&x) && (wall(x, y - 1) || wall(x, y - 2)) {
+            busy |= 1 << x;
+        }
+    }
+    let mut room = Room { kind, seed: crate::hash::h32(seed, zone as u32, 0x524f_4f4d), busy, ..Room::default() };
+    room.hang(w, &wall);
+    Some(room)
 }
 
 impl TileSource for TileMap {
@@ -219,6 +312,15 @@ impl TileSource for TileMap {
     }
     fn region(&self, x: i32, y: i32) -> u8 {
         self.regions.region_at(x, y).unwrap_or(0)
+    }
+    fn house(&self, x: i32, y: i32) -> Option<House> {
+        self.houses.at(x, y).copied()
+    }
+    fn room(&self) -> Option<Room> {
+        self.room
+    }
+    fn daylight(&self) -> bool {
+        self.daylight
     }
 }
 
@@ -559,6 +661,8 @@ struct Scratch {
     mat: Vec<Option<Material>>,
     /// Each cell's region (`TileSource::region`).
     region: Vec<u8>,
+    /// Each cell's house (`TileSource::house`).
+    house: Vec<Option<House>>,
     /// Each region's share of the ground, blended across its borders.
     eco: ecotone::Ecotone,
     /// Which other wild ground each cell has near it, for the drifts across their edge.
@@ -634,6 +738,9 @@ pub struct Painter {
     x0c: i32,
     y0c: i32,
     seed: u32,
+    /// The zone seen from inside, and whether it is day (`TileSource::room`, `daylight`).
+    room: Option<Room>,
+    daylight: bool,
 }
 
 impl Default for Painter {
@@ -665,6 +772,7 @@ impl Painter {
             raw: vec![Tile::Void; cells],
             mat: vec![None; cells],
             region: vec![0; cells],
+            house: vec![None; cells],
             eco: ecotone::Ecotone::default(),
             gmix: ecotone::GroundMix::default(),
             blend: std::array::from_fn(|g| blends(&styles, g as u8)),
@@ -700,7 +808,18 @@ impl Painter {
                 (ground, [0u8, 1, 2].map(|r| pack(region::tint(r, ix))))
             })
             .collect();
-        Painter { styles, bank: Bank::new(ramps), standing: Standing::Strips, s, lut, x0c: 0, y0c: 0, seed: 0 }
+        Painter {
+            styles,
+            bank: Bank::new(ramps),
+            standing: Standing::Strips,
+            s,
+            lut,
+            x0c: 0,
+            y0c: 0,
+            seed: 0,
+            room: None,
+            daylight: true,
+        }
     }
 
     /// The styles it paints with.
@@ -729,6 +848,7 @@ impl Painter {
     pub fn paint(&mut self, src: &impl TileSource, seed: u32, cx: i32, cy: i32, out: &mut Chunk) {
         let (x0, y0) = (cx * CHUNK_CELLS, cy * CHUNK_CELLS);
         (self.x0c, self.y0c, self.seed) = (x0, y0, seed);
+        (self.room, self.daylight) = (src.room(), src.daylight());
         self.gather(src, x0, y0);
         self.s.eco.fill(src, x0, y0, seed);
         self.resolve(src, x0, y0);
@@ -763,9 +883,14 @@ impl Painter {
             for i in 0..GM {
                 let (x, y) = (x0 + i - M, y0 + j - M);
                 let k = Self::k(i, j);
-                self.s.raw[k] = src.tile(x, y);
+                let house = src.house(x, y);
+                // A garden's boundary is drawn as its house's own (`standing::plot`), on the grass
+                // it stands in: the sim's fence is not drawn again under it.
+                let fenced = house.is_some_and(|h| h.fenced(x, y));
+                self.s.raw[k] = if fenced { Tile::Grass } else { src.tile(x, y) };
                 self.s.mat[k] = src.material(x, y);
                 self.s.region[k] = src.region(x, y);
+                self.s.house[k] = house;
             }
         }
     }
@@ -1244,6 +1369,35 @@ fn laid(styles: &Styles, raw: Tile, mat: Option<Material>, surf: u8) -> bool {
 #[inline]
 pub(crate) const fn fast(a: u32, b: u32, salt: u32) -> u32 {
     jane_core::hash::mix32(a.wrapping_mul(0x9e37_79b1) ^ b.wrapping_mul(0x85eb_ca77) ^ salt.wrapping_mul(0xc2b2_ae3d))
+}
+
+/// Where the ground is busy (ART-PLAN Q3, "busy beside quiet"): a slow value noise over world
+/// cells `(wx, wy)`, a lattice point every eight cells eased between, 0..=255. Scatter (tufts,
+/// reeds, stones, flowers) keeps its density where this is high and thins to a fifth where it is
+/// low, so the ground reads as patches of growth with clear ground between them, never as an even
+/// carpet. Pure in the cell and the seed: two chunks agree on a seam.
+pub(crate) fn busy(wx: i32, wy: i32, seed: u32) -> i32 {
+    // Stretched about the middle, so most cells are plainly in a patch or plainly out of one.
+    (128 + (slow(wx, wy, seed) - 128) * 2).clamp(0, 255)
+}
+
+/// The slow noise under [`busy`], unstretched: 0..=255 about 128, rarely near either end. What
+/// a rare thing (a worn board, a ledger stone's patch) is gated by.
+pub(crate) fn slow(wx: i32, wy: i32, seed: u32) -> i32 {
+    const SHIFT: i32 = 3;
+    let (gx, gy) = (wx >> SHIFT, wy >> SHIFT);
+    let (tx, ty) = (field::smooth((wx & 7) * 32 + 16), field::smooth((wy & 7) * 32 + 16));
+    let v = |i: i32, j: i32| (fast(i as u32, j as u32, seed ^ 0x4255_5359) >> 24) as i32;
+    let top = v(gx, gy) * (256 - tx) + v(gx + 1, gy) * tx;
+    let bottom = v(gx, gy + 1) * (256 - tx) + v(gx + 1, gy + 1) * tx;
+    (top * (256 - ty) + bottom * ty) >> 16
+}
+
+/// How much of a scatter's density a busy cell keeps, in 16ths: all of it in a patch, a fifth
+/// outside one, eased across the patch's edge.
+pub(crate) fn busy_share(wx: i32, wy: i32, seed: u32) -> u32 {
+    let b = busy(wx, wy, seed);
+    (3 + (b - 100).clamp(0, 80) * 13 / 80) as u32
 }
 
 /// `a` and `b` (`0xFFRRGGBB`) mixed `t` of 256 toward `b`.

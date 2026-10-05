@@ -170,12 +170,14 @@ fn thirty_odd_stories_most_short_some_chains_some_camps() {
     }
 }
 
-/// tales.test.ts "eight to twelve of them, each two or three steps deep, every one with a fixed name of its own".
+/// tales.test.ts "eight to twelve of them, each two or three steps deep, every one with a fixed name of its own";
+/// since the Waters and the Works got side content of their own (PLAY-PLAN.md 5.4), their households
+/// and the tollhouse are tales too (a place with a fixed name the quota builds), so up to sixteen.
 #[test]
-fn eight_to_twelve_tales_with_names_of_their_own_across_the_three_regions() {
+fn eight_to_sixteen_tales_with_names_of_their_own_across_the_three_regions() {
     let c = &cat().county;
     let tales: Vec<_> = c.stories.iter().filter(|s| s.tale).collect();
-    assert!((8..=12).contains(&tales.len()), "{}", tales.len());
+    assert!((8..=16).contains(&tales.len()), "{}", tales.len());
     let mut regions = Vec::new();
     for t in &tales {
         assert!(t.name.is_some(), "{}", t.key);

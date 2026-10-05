@@ -24,6 +24,8 @@ pub const USAGE: &str = "  sheet layers <what> [--frame F] [--out DIR]
   sheet silhouettes <id> ... [--out DIR]
                                       looks' standing frames filled black, then as drawn
   sheet units [--out DIR]             every look standing and dead, at 1x and 2x
+  sheet fires [--out DIR]             the fires she makes cold, laid, lit and ash, day and night;
+                                      the match flare; deadwood and matches
   sheet person --grid [--out DIR]     every build by every hair and coat
   sheet all [--out DIR]               every sheet above, for every sprite
   sheet list                          the sprites <what> can name
@@ -175,6 +177,7 @@ pub fn run(args: &[String]) -> Result<(), String> {
             }
             write(&out, "props", &jane_art::sheet_kit::props(&sets, &font))?;
         }
+        Some("fires") => write(&out, "fires", &jane_art::sheet_kit::fires(&font)?)?,
         Some("creatures") => {
             write(&out, "creatures", &sheet_person::units(&looks::family(looks::Family::Creature)?, &font))?;
         }
@@ -206,9 +209,18 @@ pub fn run(args: &[String]) -> Result<(), String> {
             }
         }
         Some("scene") => scene(args)?,
+        // PLAY-PLAN.md §2.2's frames: the pit cold, laid, flaring, lit at night, ash; the Halt card.
+        Some("fire-scenes") => {
+            let dir = out.join("p2-fires");
+            std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+            for f in crate::scene::fire_scenes(1, &dir)? {
+                println!("{f}");
+            }
+        }
         Some("audio") => crate::audio_cmd::sheet(&out)?,
         Some("terrain") => crate::sheet_terrain::terrain(args, &out, &font)?,
         Some("flora") => crate::sheet_terrain::flora(&out, &font)?,
+        Some("critters") => write(&out, "critters", &critters(&font))?,
         Some("county") => crate::sheet_terrain::county(args, &out, &font)?,
         Some("ui") => {
             let names: Vec<String> = args[1..].iter().take_while(|a| !a.starts_with("--")).cloned().collect();
@@ -217,6 +229,36 @@ pub fn run(args: &[String]) -> Result<(), String> {
         _ => return Err(format!("usage:\n{USAGE}\n{}", crate::sheet_terrain::USAGE)),
     }
     Ok(())
+}
+
+/// The ambient layer's small lives (ART-PLAN M1), each frame at 1x on a grass swatch and again at
+/// 4x, then the smoke's puffs and the lily pads.
+fn critters(font: &jane_art::Font) -> sheet::Image {
+    use jane_art::creature::critter::{self, Critter};
+    let grass = [92, 124, 60, 255];
+    let rows: Vec<(String, Vec<jane_art::Canvas>)> = Critter::ALL
+        .iter()
+        .map(|&c| (c.name().to_owned(), critter::render(c).frames.into_iter().map(|(_, f)| f).collect()))
+        .chain([
+            ("smoke".to_owned(), (1..=6).map(|r| critter::puff(r, r as u32 * 7)).collect()),
+            ("lily".to_owned(), (0..6).map(critter::lily_pad).collect()),
+        ])
+        .collect();
+    let (s, cell) = (4u32, 100u32);
+    let w = 90 + cell * 6;
+    let mut img = sheet::Image::new(w, rows.len() as u32 * 110 + 10, [40, 44, 52, 255]);
+    for (r, (name, frames)) in rows.iter().enumerate() {
+        let y = 10 + r as u32 * 110;
+        sheet::label(&mut img, font, 4, y, name, jane_art::Face::Small, [230, 230, 230]);
+        for (k, f) in frames.iter().enumerate() {
+            let x = 90 + k as u32 * cell;
+            img.fill(x, y, f.w() as u32 * s + 4, f.h() as u32 * s + 4, [grass[0], grass[1], grass[2]]);
+            sheet::put_albedo(&mut img, f, x + 2, y + 2, s);
+            img.fill(x, y + 80, f.w() as u32 + 4, f.h() as u32 + 4, [grass[0], grass[1], grass[2]]);
+            sheet::put_albedo(&mut img, f, x + 2, y + 82, 1);
+        }
+    }
+    img
 }
 
 fn scene(args: &[String]) -> Result<(), String> {
@@ -284,6 +326,7 @@ fn scene(args: &[String]) -> Result<(), String> {
         at,
         weather,
         cast,
+        talk: flag("--talk").map(str::to_owned),
         spawn,
         quests: flag("--quest").map(|q| q.split(',').map(|s| s.trim().to_owned()).collect()).unwrap_or_default(),
         rows,

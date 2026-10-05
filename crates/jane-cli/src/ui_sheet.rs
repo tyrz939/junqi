@@ -23,8 +23,10 @@ use jane_sim::tuning::MAX_PLAYERS;
 use jane_sim::{Seat, Sim};
 
 /// The screens, by name.
-pub const SCREENS: [&str; 28] = [
+pub const SCREENS: [&str; 30] = [
     "hud",
+    "map-day",
+    "banner",
     "dead",
     "choice",
     "tooltip",
@@ -65,7 +67,115 @@ struct Rig {
     bufs: ViewBuffers,
 }
 
+/// The sim with the tick's events kept, for a bot to play and the buffers to read.
+struct Played {
+    sim: Sim,
+    events: Vec<jane_sim::Event>,
+}
+
+impl jane_bot::Host for Played {
+    fn sim(&self) -> &Sim {
+        &self.sim
+    }
+
+    fn view(&self, seat: Seat) -> Option<jane_sim::View<'_>> {
+        self.sim.view(seat)
+    }
+
+    fn step(&mut self, input: &StepInput<'_>) -> jane_sim::Stepped {
+        self.sim.step(input)
+    }
+
+    fn drain_events(&mut self) -> &[jane_sim::Event] {
+        self.events.clear();
+        self.events.extend_from_slice(self.sim.drain_events());
+        &self.events
+    }
+}
+
+/// The map after a day of play: the reader plays seed `seed` from the train to the next evening
+/// (or as far as it gets in `budget` frames), the buffers reading every tick, so what the map
+/// holds is what she rested, read and walked into; then the chart, with three pins of hers and the
+/// view's middle on a sign she read.
+fn map_day(dir: &Path, seed: u32, cx: HudCtx<'_>) -> Result<(), String> {
+    const BUDGET: u32 = 900_000;
+    let mut host = Played { sim: Sim::new_game(seed, "Jane"), events: Vec::new() };
+    let mut bot = jane_bot::Bot::story(jane_bot::Model::Reader);
+    let mut bufs = ViewBuffers::new();
+    let start = host.sim.state().day;
+    let mut n = 0;
+    while n < BUDGET && !bot.done() {
+        bot.step(&mut host);
+        let v = host.sim.view(Seat(0)).expect("seat 0");
+        bufs.tick(&v, &host.events);
+        n += 1;
+        let s = host.sim.state();
+        let evening = s.day > start && s.hour() >= 17;
+        if evening && v.zone() == jane_core::ZoneId::County && !v.indoor() && bufs.memory.pending.is_empty() {
+            break;
+        }
+    }
+    let s = host.sim.state();
+    println!(
+        "map-day: {n} frames, day {} {:02}:00, {} marks inked ({} fires, {} signs, {} names)",
+        s.day + 1,
+        s.hour(),
+        bufs.memory.inked.len(),
+        bufs.memory.inked.iter().filter(|m| matches!(m.note, jane_present::memory::Note::Fire(_))).count(),
+        bufs.memory.inked.iter().filter(|m| matches!(m.note, jane_present::memory::Note::Sign(_))).count(),
+        bufs.memory.inked.iter().filter(|m| matches!(m.note, jane_present::memory::Note::Name(_))).count(),
+    );
+    let mut rig = Rig::from(host.sim, bufs);
+    let v = rig.sim.view(Seat(0)).expect("seat 0");
+    let zone = v.zone();
+    let her = v.body().pos.cell();
+    // The view's middle on a sign she read, nearest her of those the view can centre on (the
+    // chart's window stops at its edges), and three pins of hers about it.
+    let (w, h) = rig.sim.view(Seat(0)).expect("seat 0").size();
+    let safe = |c: (i32, i32)| c.0 > 640 && c.0 < w as i32 - 640 && c.1 > 360 && c.1 < h as i32 - 360;
+    let sign = rig
+        .bufs
+        .memory
+        .of(zone)
+        .filter(|m| matches!(m.note, jane_present::memory::Note::Sign(_)) && safe(m.at))
+        .min_by_key(|m| (m.at.0 - her.0).pow(2) + (m.at.1 - her.1).pow(2))
+        .map(|m| m.at);
+    let mid = sign.unwrap_or(her);
+    for (dx, dy) in [(-210, -90), (170, -120), (90, 130)] {
+        rig.bufs.memory.toggle_pin(zone, (mid.0 + dx, mid.1 + dy));
+    }
+    let mut st = WindowState::on(3);
+    let mut tick = rig.bufs.tick;
+    // A first frame paints the chart; a second, after the fog's look, composes it.
+    for k in 0..2 {
+        st.map.pan =
+            sign.map(|c| (c.0 / jane_present::ui::map::OUT_STEP as i32, c.1 / jane_present::ui::map::OUT_STEP as i32));
+        tick += 40 * k;
+        let v = rig.sim.view(Seat(0)).expect("seat 0");
+        let canvas = (768, 432);
+        rig.present.draw(128, canvas);
+        rig.ui.begin(UiInput::default(), tick, canvas);
+        window::draw(&mut rig.ui, &mut st, &rig.bufs, Some(&v), cx);
+        rig.ui.finish(rig.present.frame_mut());
+        rig.soft.draw(rig.present.frame());
+    }
+    rig.write(dir, "map-day")
+}
+
 impl Rig {
+    /// A rig on a sim already played, and the buffers that watched it.
+    fn from(sim: Sim, bufs: ViewBuffers) -> Rig {
+        let mut present = Present::new(Tier::T0);
+        let mut soft = Soft::new();
+        soft.upload_atlas(present.atlas());
+        let ui = Ui::new(present.ui_art().clone());
+        let v = sim.view(Seat(0)).expect("seat 0");
+        for _ in 0..3 {
+            present.tick(&v, &[]);
+        }
+        Rig { sim, present, soft, ui, bufs }
+    }
+
     fn new(seed: u32) -> Rig {
         let mut sim = Sim::new_game(seed, "Jane");
         let mut present = Present::new(Tier::T0);
@@ -389,6 +499,38 @@ pub fn run(dir: &Path, names: &[String]) -> Result<(), String> {
         b.hud.banner = None;
         rig.frame(UiInput::default(), tick, |ui, _, _| hud::draw(ui, &b, cx));
         rig.write(dir, "long")?;
+    }
+    if want("map-day") {
+        map_day(dir, 7, win_cx)?;
+    }
+    if want("banner") {
+        // She walks into the Long Hedge for the first time today: its name goes up.
+        let mut r = Rig::new(7);
+        let place = r
+            .bufs
+            .crossings
+            .places
+            .iter()
+            .find(|p| p.name == "The Long Hedge")
+            .or_else(|| r.bufs.crossings.places.first())
+            .cloned()
+            .ok_or("no named places")?;
+        let jane_present::memory::Shape::Ring { c, r: rad } = place.shape else { return Err("not a ring".into()) };
+        let stand = |r: &mut Rig, x: i32, y: i32| {
+            let (z, id) = (r.sim.state().players[0].zone, r.sim.state().players[0].unit);
+            if let Some(u) = r.sim.state_mut().zone_mut(z).and_then(|zs| zs.unit_mut(id)) {
+                u.pos = jane_core::Vec2::centre(x, y);
+            }
+            r.sim.rebuild_runtimes();
+        };
+        stand(&mut r, c.0 + rad + 20, c.1);
+        r.steps(20, &[]);
+        r.bufs.hud.banner = None;
+        stand(&mut r, c.0 + rad - 6, c.1);
+        r.steps(70, &[]);
+        let t = r.bufs.tick;
+        r.frame(UiInput::default(), t, |ui, b, _| hud::draw(ui, b, cx));
+        r.write(dir, "banner")?;
     }
     if want("store") {
         // At Julie's dresser: her bag beside it, a few things put away, a drag in flight from the

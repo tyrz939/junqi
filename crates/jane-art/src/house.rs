@@ -215,6 +215,12 @@ fn openings(c: &mut Canvas, s: &Stuff, x0: i32, x1: i32, eave: i32, foot: i32, l
         return shed_front(c, s, (x0, x1), mid, foot, lit);
     }
     let barn = look.style == HouseStyle::Barn;
+    // What the house has of its own (ART-PLAN Q2): ivy or a rose up its front, drawn first so
+    // its windows and door are cut clear of it.
+    let own = Extras::of(s);
+    if let Some(rose) = own.climber {
+        climber(c, s, (x0, x1), eave, foot, rose);
+    }
     // The door (a barn's great doors).
     let (dw, dh) = if barn { (22, 24) } else { (8, 14.min(st - 4)) };
     let door = Rect::new(mid - dw / 2, foot - dh + 1, dw, dh);
@@ -241,13 +247,91 @@ fn openings(c: &mut Canvas, s: &Stuff, x0: i32, x1: i32, eave: i32, foot: i32, l
         while x + ww < x1 - 3 {
             let clear = x + ww + 3 < door.x || x > door.right() + 3 || k > 0;
             if clear && !(barn && k == 0) {
-                window(c, s, Rect::new(x, wy, ww, wh), lit && !look.boarded, n + k * 7);
+                let r = Rect::new(x, wy, ww, wh);
+                window(c, s, r, lit && !look.boarded, n + k * 7);
+                if !look.boarded {
+                    own.dress(c, s, r, k == 0, n);
+                }
             }
             x += ww + 12;
             n += 1;
         }
     }
     let _ = eave;
+}
+
+/// What a building has of its own beyond its materials, by its seed (ART-PLAN Q2): shutters in
+/// its door's paint on one in three, window boxes in flower on one in two, ivy or a climbing rose
+/// on one in three. Only a home: a barn, a shed, a hut, a steeple and a boarded house have none.
+#[derive(Clone, Copy, Debug)]
+struct Extras {
+    shutters: bool,
+    boxes: bool,
+    /// Some(true) a rose, Some(false) ivy.
+    climber: Option<bool>,
+}
+
+impl Extras {
+    fn of(s: &Stuff) -> Extras {
+        let home =
+            matches!(s.look.style, HouseStyle::Cottage | HouseStyle::Farmhouse | HouseStyle::Inn) && !s.look.boarded;
+        let v = parts::hash(s.seed, 0, 0x4f57);
+        Extras {
+            shutters: home && v % 3 == 0,
+            boxes: home && (v >> 4) % 2 == 0,
+            climber: (home && (v >> 8) % 3 == 0).then_some((v >> 12) & 1 == 0),
+        }
+    }
+
+    /// A window's shutters either side of it and, on the ground floor, its box of flowers.
+    fn dress(self, c: &mut Canvas, s: &Stuff, r: Rect, ground: bool, n: i32) {
+        if self.shutters {
+            for x0 in [r.x - 4, r.right() + 1] {
+                c.fill_normal(Rect::new(x0, r.y - 1, 3, r.h + 2), s.door.at(Tone::Base), parts::south(), 6);
+                c.vline(x0, r.y - 1, r.bottom(), s.door.at(Tone::Light), 6);
+                for y in (r.y..r.bottom()).step_by(2) {
+                    c.hline(x0 + 1, x0 + 2, y, s.door.at(Tone::Shade), 6);
+                }
+            }
+        }
+        if self.boxes && ground {
+            let y = r.bottom() + 2;
+            c.fill_normal(Rect::new(r.x - 1, y, r.w + 2, 2), Ramp::WoodDark.at(Tone::Base), parts::south(), 6);
+            c.hline(r.x - 1, r.right(), y, Ramp::WoodDark.at(Tone::Lift), 6);
+            let bloom = [Ramp::ClothRed, Ramp::Bloom, Ramp::ClothMustard][(parts::hash(s.seed, n, 23) % 3) as usize];
+            for x in r.x - 1..=r.right() {
+                let t = if (x + n) % 3 == 0 { bloom.at(Tone::Light) } else { Ramp::Shrub.at(Tone::Base) };
+                c.put(x, y - 1, t, normal(0, -30), 7);
+            }
+        }
+    }
+}
+
+/// Ivy or a climbing rose up one end of the front from the foot to the eave: leaf in clumps,
+/// lit on their upper left, a bloom here and there on a rose.
+fn climber(c: &mut Canvas, s: &Stuff, (x0, x1): (i32, i32), eave: i32, foot: i32, rose: bool) {
+    let west = parts::hash(s.seed, 1, 0x4f57) & 1 == 0;
+    let (leaf, bloom) = if rose { (Ramp::Shrub, Ramp::ClothRed) } else { (Ramp::LeafDeep, Ramp::LeafDeep) };
+    let reach = if rose { 8 } else { 14 };
+    for y in eave + 2..foot - 1 {
+        let up = foot - y;
+        let wide = reach - up / 6 + (parts::hash(s.seed, y / 3, 0x1717) % 3) as i32;
+        for d in 0..wide.max(2) {
+            let x = if west { x0 + 1 + d } else { x1 - 2 - d };
+            let h = parts::hash(s.seed, x / 2, y / 2);
+            if d > wide - 3 && h % 3 == 0 {
+                continue;
+            }
+            let t = match (x + y * 2) % 5 {
+                0 => Tone::Light,
+                1 | 2 => Tone::Base,
+                3 => Tone::Mid,
+                _ => Tone::Shade,
+            };
+            let ix = if rose && h % 9 == 0 { bloom.at(Tone::Light) } else { leaf.at(t) };
+            c.put(x, y, ix, normal(0, 40), 5);
+        }
+    }
 }
 
 /// A shed's front: a ledged and braced plank door with a hasp and a padlock on it (it is always

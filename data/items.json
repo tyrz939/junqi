@@ -112,6 +112,8 @@
   "rock": { "name": "Rock", "icon": "item_rock", "maxStack": 16, "usable": false, "cooldown": 60, "description": "Breaks down into stone at a bench." },
   "stone": { "name": "Stone", "icon": "item_stone", "maxStack": 16, "usable": false, "cooldown": 60, "description": "Goes into Stone Skin." },
   "fire_stone": { "name": "Fire Stone", "icon": "item_fire_stone", "maxStack": 16, "usable": false, "cooldown": 60, "description": "Warm to hold. Lights wood." },
+  "deadwood": { "name": "Deadwood", "icon": "item_deadwood", "maxStack": 16, "usable": false, "cooldown": 60, "description": "Dry sticks off a stump or a pile. Two lay a fire; another keeps it going." },
+  "match": { "name": "Match", "icon": "item_match", "maxStack": 20, "usable": false, "cooldown": 60, "description": "One strike, one fire. Not in the rain." },
   "light_stone": {
     "name": "Light Stone", "icon": "item_light_stone", "maxStack": 16, "usable": true, "cooldown": 1,
     "description": "Throws a circle of light, like a torch that never learned about fire. Seeds are not fooled by it.",

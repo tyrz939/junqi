@@ -118,7 +118,7 @@ A prop campfire mine_fire {"talk": "fire"}
 a prop door adit_door {"locked": true, "to": {"zone": "mine", "mark": "adit"}, "label": "The adit"}
 L prop lamp_post
 W prop town_woodpile
-C prop crate
+C prop crate - {"loot": [{"item": "match", "qty": 4}]}
 B prop barrel
 s prop town_sacks
 D mark mine_mouth south

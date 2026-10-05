@@ -1,0 +1,26 @@
+[
+  {
+    "hour": 6,
+    "actions": [
+      { "do": "flag", "flag": "toll_count", "value": 0 },
+      {
+        "do": "if",
+        "when": [{ "if": "flag", "flag": "loveday_out" }],
+        "then": [
+          { "do": "despawn", "unit": "reed_end_loveday" },
+          { "do": "spawn", "unit": "reed_end_loveday", "def": "loveday", "at": "reed_end_home" },
+          { "do": "flag", "flag": "loveday_out", "value": 0 },
+          { "do": "flag", "flag": "loveday_at_landing", "value": 0 }
+        ]
+      },
+      { "do": "switch", "prop": "hut_three_lamp", "on": false },
+      { "do": "flag", "flag": "hut_three_lit", "value": 0 }
+    ]
+  },
+  {
+    "hour": 21,
+    "actions": [
+      { "do": "if", "when": [{ "if": "flag", "flag": "hut_three_kept" }], "then": [{ "do": "switch", "prop": "hut_three_lamp", "on": true }] }
+    ]
+  }
+]

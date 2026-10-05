@@ -53,6 +53,7 @@ pub mod event;
 pub mod feel;
 #[cfg(test)]
 mod feel_tests;
+pub mod fire;
 pub mod flight;
 pub mod flush;
 pub mod fog;

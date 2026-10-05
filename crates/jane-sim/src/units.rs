@@ -108,6 +108,7 @@ pub fn new_unit(
         phase: 0,
         snake,
         feel: crate::feel::Feel::default(),
+        seated: None,
     };
     u.hp = max_hp(&u);
     u.mp = max_mp(&u);

@@ -1,0 +1,64 @@
+{
+  "cut_reed": {
+    "name": "Cut Reed",
+    "icon": "item_wood",
+    "maxStack": 3,
+    "usable": false,
+    "cooldown": 1,
+    "description": "A bundle of reed for thatch, tied twice with its own leaves. Dry on the outside. Wet in the middle, and warm."
+  },
+  "skeat_coat": {
+    "name": "Skeat's Coat",
+    "icon": "item_coat",
+    "maxStack": 1,
+    "usable": false,
+    "cooldown": 1,
+    "bound": true,
+    "description": "A reedcutter's oilskin, SKEAT inked in the collar. Dry, and it was hanging over the Still Pool."
+  },
+  "toll_key": {
+    "name": "Toll Box Key",
+    "icon": "item_key_iron",
+    "maxStack": 1,
+    "usable": false,
+    "cooldown": 1,
+    "bound": true,
+    "opens": "tollhouse",
+    "description": "A small iron key on a cork float. CASTLE BRIDGE TRUST stamped on the bow. It opens the toll box and nothing else."
+  },
+  "toll_tally": {
+    "name": "The Keeper's Tally",
+    "icon": "item_letter",
+    "maxStack": 1,
+    "usable": false,
+    "cooldown": 1,
+    "description": "A toll keeper's tally, one walker a line. The last page is one walker, over and over, in a hand that did not hurry."
+  },
+  "overdue_book": {
+    "name": "Overdue Book",
+    "icon": "item_letter",
+    "maxStack": 3,
+    "usable": false,
+    "cooldown": 1,
+    "bound": true,
+    "description": "CASTLE FREE LIBRARY. Overdue since the spring. Pencil in the margins, small, mostly about how much water."
+  },
+  "name_tag": {
+    "name": "Name Tag",
+    "icon": "item_amulet",
+    "maxStack": 3,
+    "usable": false,
+    "cooldown": 1,
+    "bound": true,
+    "description": "A brass tag with a name stamped in it and a hole for a nail. The brass is cold, and stays cold in the hand."
+  },
+  "nurses_bag": {
+    "name": "The Nurse's Bag",
+    "icon": "item_sack",
+    "maxStack": 1,
+    "usable": false,
+    "cooldown": 1,
+    "bound": true,
+    "description": "A cloth bag of dressings, tied at the neck in a nurse's knot. PASK, HUT TWO on a label, and Tuesday."
+  }
+}

@@ -82,6 +82,11 @@ fn a_town_night_has_every_pass_and_noon_needs_no_light() {
     // silhouettes lie under the standing things; the weather, clear on the first walk, before
     // the light; the grade last (every tier draws it, 2026-09-27). She is drawn again after the
     // standing things, seen through whatever covers her (`Tint::Seen`, 2026-10-01).
+    // The particles (the effects', and the ambient life's foam, moths and rings: ART-PLAN M1)
+    // come and go with what lives on screen; they never come before the weather.
+    let weather = kinds.iter().position(|k| *k == "weather").expect("a weather pass");
+    assert!(kinds.iter().enumerate().all(|(i, k)| *k != "particles" || i > weather), "{kinds:?}");
+    let kinds: Vec<&str> = kinds.into_iter().filter(|k| *k != "particles").collect();
     assert_eq!(
         kinds,
         ["sky", "far", "far", "terrain", "ground", "silhouettes", "standing", "standing", "weather", "lights", "post"]

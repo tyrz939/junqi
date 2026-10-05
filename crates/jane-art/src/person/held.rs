@@ -5,7 +5,7 @@
 //! mouth, not the hand.
 
 use jane_core::grid::Rect;
-use jane_data::{EmitRole, HeldItem};
+use jane_data::{EmitRole, HeldItem, Task};
 
 use super::Dress;
 use super::draw::Rig;
@@ -78,10 +78,16 @@ pub(super) fn draw(c: &mut Canvas, d: &Dress, r: &Rig, hx: i32, hy: i32) {
             // A long pole held upright, its foot on the ground; a broom's head of bristles.
             let x = hx + 1;
             let foot = super::AY - 1;
-            c.line((x, hy - 12), (x + i32::from(side), foot - 1), wood.at(Tone::Light), 2, z);
-            c.vline(x + 1, hy - 12, foot - 2, wood.at(Tone::Shade), z);
+            // Sweeping (ART-PLAN Q4): the haft slopes down and forward through both hands, its
+            // head out ahead on the ground where the stroke has carried it.
+            let sweeping = d.look.held == HeldItem::Broom && d.look.task == Task::Sweep && r.pose.task != 0;
+            let (top, low) = if sweeping { ((x - 3, hy - 4), x + 6) } else { ((x, hy - 12), x + i32::from(side)) };
+            c.line(top, (low, foot - 1), wood.at(Tone::Light), 2, z);
+            if !sweeping {
+                c.vline(x + 1, hy - 12, foot - 2, wood.at(Tone::Shade), z);
+            }
             if d.look.held == HeldItem::Broom {
-                let bx = x + i32::from(side) - 2;
+                let bx = low - 2;
                 c.polyline_fill(
                     &[(bx, foot - 5), (bx + 5, foot - 5), (bx + 7, foot), (bx - 2, foot)],
                     Ramp::Reed.at(Tone::Base),

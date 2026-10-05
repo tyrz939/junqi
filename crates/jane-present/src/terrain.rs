@@ -3,6 +3,7 @@
 //! and stones come back as placements the scene draws from the atlas, sorted among the units.
 //! Fences and low walls are painted into the ground with the walls (`Standing::Placed`).
 
+use jane_art::terrain::houses::{self, House, Houses, Room};
 use jane_art::terrain::{self, Chunk, PaintMap, Painter, Placed, Standing, TileSource};
 use jane_core::{Material, Tile};
 use jane_sim::view::View;
@@ -15,6 +16,9 @@ use crate::shadow::RELIEF;
 struct ViewTiles<'v, 'a> {
     view: &'v View<'a>,
     paint: &'v PaintMap,
+    houses: &'v Houses,
+    room: Option<Room>,
+    daylight: bool,
 }
 
 impl TileSource for ViewTiles<'_, '_> {
@@ -43,12 +47,31 @@ impl TileSource for ViewTiles<'_, '_> {
             jane_data::Region::Works => 2,
         }
     }
+    fn house(&self, x: i32, y: i32) -> Option<House> {
+        self.houses.at(x, y).copied()
+    }
+    fn room(&self) -> Option<Room> {
+        self.room
+    }
+    fn daylight(&self) -> bool {
+        self.daylight
+    }
 }
 
 /// A flora sprite as the atlas holds it, with what its shadow is thrown as.
 #[derive(Clone, Copy, Debug)]
 pub struct Flora {
     pub look: RefId,
+    /// Its sway (ART-PLAN M2), seven leans from three px west at its top to three east, the rest
+    /// frame in the middle ([`SWAY_REST`]): each lean a px more than the last at the very top,
+    /// spread down the rows so it bends, not jumps (the owner, 2026-10-03). A crown leans less
+    /// than reeds and only over its upper half. A thing that does not sway has its look seven
+    /// times.
+    pub sway: [RefId; SWAY_FRAMES],
+    /// How it sways: [`SwayClass`].
+    pub class: SwayClass,
+    /// Whether it rustles when she walks through it (reeds, long grass).
+    pub rustles: bool,
     /// How deep it is across the ground, px (a trunk is thin, a shrub is its spread).
     pub depth: u8,
     /// How many rows over its foot the row it stands on is: its caster's foot, so every tier
@@ -62,6 +85,10 @@ pub struct Terrain {
     painter: Painter,
     chunk: Chunk,
     paint: PaintMap,
+    /// The zone's houses (ART-PLAN Q2), its room seen from inside (M4), and whether it is day.
+    houses: Houses,
+    room: Option<Room>,
+    daylight: bool,
     flora: Vec<Flora>,
     placed: Vec<Vec<Placed>>,
     /// Each slot's blocks, chunk-local px (`blocks`).
@@ -264,6 +291,64 @@ fn drawn_width(c: &jane_art::Canvas) -> i32 {
         .unwrap_or(0)
 }
 
+/// Sway frames a flora sprite has: leans `-3..=3`.
+pub const SWAY_FRAMES: usize = 7;
+/// The upright frame's index.
+pub const SWAY_REST: usize = 3;
+
+/// How a flora sprite sways: its lean's reach and its own pace (`Present::draw` reads the pace).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SwayClass {
+    /// Not at all (a stone, a dead tree, a garden's boundary).
+    Still,
+    /// A crown: two px at most at its top, over its upper half; slow.
+    Crown,
+    /// A shrub, a fern, bracken: two px at its top, down to its foot; brisker.
+    Bush,
+    /// Reeds and long grass: three px at the tips, down to the foot; quickest.
+    Reed,
+}
+
+impl SwayClass {
+    /// Ticks for one sway to and fro in a breeze: about 1.5 to 3 s (the owner, 2026-10-03).
+    pub const fn period(self) -> u32 {
+        match self {
+            SwayClass::Still | SwayClass::Crown => 170,
+            SwayClass::Bush => 130,
+            SwayClass::Reed => 96,
+        }
+    }
+}
+
+/// A sway frame of a flora sprite (ART-PLAN M2): leaned `lean` (`-3..=3`) toward east, each row
+/// shifted by its share of the lean, the whole of it at the top of what is drawn and none at the
+/// row where the bend starts (a crown's middle, a reed's foot), rounded, so one lean to the next
+/// moves the top a px and the rows under it in a soft spread. Three px wider each side than the
+/// sprite, its anchor moved with it.
+fn sheared(atlas: &mut Atlas, c: &jane_art::Canvas, (ax, ay): (i32, i32), lean: i32, class: SwayClass) -> RefId {
+    let top = (0..c.h()).find(|&y| (0..c.w()).any(|x| c.get(x, y).is_opaque())).unwrap_or(0);
+    let tall = (ay - top).max(1);
+    let (bend, reach) = match class {
+        SwayClass::Crown => (top + tall * 11 / 20, 2),
+        SwayClass::Bush => (ay, 2),
+        _ => (ay, 3),
+    };
+    let span = (bend - top).max(1);
+    let shift = |y: i32| {
+        if y >= bend {
+            return 0;
+        }
+        // lean * reach / 3 at the top, falling off to none at the bend; rounded to nearest.
+        let num = lean * reach * (bend - y) * 2;
+        let den = 3 * span * 2;
+        (num + den.signum() * num.signum() * den / 2) / den
+    };
+    let (w, h) = ((c.w() + 6) as u16, c.h() as u16);
+    atlas.add_texels(w, h, (ax as i16 + 3, ay as i16), ay.clamp(1, 255) as u8, |x, y| {
+        crate::atlas::Texel::of(c, x - 3 - shift(y), y)
+    })
+}
+
 /// A block over columns `x0..x1` and rows `y0..y1`, a px wider each side (T2's terrain).
 fn block(x0: i16, x1: i16, y0: i16, y1: i16, height: u8) -> Block {
     Block { x0: x0 - 1, y0, x1: x1 + 1, y1, height, lo: 0, fence: false }
@@ -274,30 +359,61 @@ impl Terrain {
     pub fn build(atlas: &mut Atlas, slots: usize) -> Terrain {
         let mut painter = Painter::new();
         painter.set_standing(Standing::Placed);
-        let flora = painter
-            .bank()
+        let bank = painter.bank();
+        let flora = bank
             .all()
             .into_iter()
-            .map(|(name, s)| {
+            .enumerate()
+            .map(|(i, (name, s))| {
                 let (w, h) = (s.canvas.w(), s.ay);
                 let look = atlas.add_canvas(&s.canvas, (s.ax as i16, s.ay as i16), h.clamp(1, 255) as u8, |_, _, t| t);
+                let kind = bank.kind_of(i as u16);
+                let rustles = matches!(kind, jane_art::flora::Kind::Reeds | jane_art::flora::Kind::Grass);
+                let class = if !kind.sways() {
+                    SwayClass::Still
+                } else if rustles {
+                    SwayClass::Reed
+                } else if kind.is_tree() {
+                    SwayClass::Crown
+                } else {
+                    SwayClass::Bush
+                };
+                let mut sway = [look; SWAY_FRAMES];
+                if class != SwayClass::Still {
+                    for (k, f) in sway.iter_mut().enumerate() {
+                        let lean = k as i32 - SWAY_REST as i32;
+                        if lean != 0 {
+                            *f = sheared(atlas, &s.canvas, (s.ax, s.ay), lean, class);
+                        }
+                    }
+                }
                 // A tree throws its shadow from its trunk; a shrub or a stone from its spread,
                 // as deep as it is drawn wide (round, seen from above): a row of bushes planted
                 // down the screen, a cell apart, is a hedge in the field as one across it is
                 // (at a third of the canvas's width, light passed between them one way and not
                 // the other, 2026-09-28).
                 let wide = drawn_width(&s.canvas);
-                let depth = if name.contains("tree") || name.starts_with("pine") { 6 } else { wide.max(w / 3) };
+                // A garden's boundary is a line a few px deep, not a block as deep as it is long
+                // (ART-PLAN M7); what stands in a garden is round.
+                let depth = match kind {
+                    jane_art::flora::Kind::Garden(g) if g.is_boundary() => 3,
+                    jane_art::flora::Kind::Garden(_) => (wide / 2).max(4),
+                    _ if name.contains("tree") || name.starts_with("pine") => 6,
+                    _ => wide.max(w / 3),
+                };
                 // What it stands on, rows over its foot (a shrub's rim; its heights are counted
                 // from there, `jane_art::flora::base`).
                 let lift = (s.ay - jane_art::flora::base(&s.canvas, s.ay)).clamp(0, 255) as u8;
-                Flora { look, depth: depth.clamp(3, 16) as u8, lift }
+                Flora { look, sway, class, rustles, depth: depth.clamp(3, 16) as u8, lift }
             })
             .collect();
         Terrain {
             painter,
             chunk: Chunk::new(),
             paint: PaintMap::default(),
+            houses: Houses::default(),
+            room: None,
+            daylight: true,
             flora,
             placed: (0..slots).map(|_| Vec::with_capacity(PLACED)).collect(),
             blocks: (0..slots).map(|_| Vec::with_capacity(BLOCKS)).collect(),
@@ -307,15 +423,59 @@ impl Terrain {
         }
     }
 
-    /// A new zone: its paint read once.
+    /// A new zone: its paint read once, its houses found and seeded, its room if it is one.
     pub fn zone(&mut self, view: &View<'_>) {
         self.paint.fill(view.size(), view.paint());
+        let cat = jane_data::catalog();
+        let (w, h) = view.size();
+        let all = jane_core::Rect::new(0, 0, w as i32, h as i32);
+        let is_door =
+            |p: &jane_sim::state::Prop| cat.sprites.get(usize::from(cat.story.prop(p.def).sprite.0)) == Some(&"door");
+        let doors: Vec<(i32, i32, houses::Kind)> = view
+            .props_in(all)
+            .filter(|p| is_door(p))
+            .map(|p| {
+                let to = view.prop_spawn(p).and_then(|s| s.to).map(|d| d.zone);
+                (i32::from(p.cell.x), i32::from(p.cell.y), houses::door_kind(to))
+            })
+            .collect();
+        self.houses.fill((w as i32, h as i32), |x, y| view.tile(x, y), &doors, view.seed());
+        let tall = view.props_in(all).filter(|p| !cat.story.prop(p.def).flat).flat_map(|p| {
+            let d = cat.story.prop(p.def);
+            (0..i32::from(d.w)).map(move |dx| (i32::from(p.cell.x) + dx, i32::from(p.cell.y)))
+        });
+        self.room = terrain::room_of(
+            view.zone(),
+            view.seed(),
+            w as i32,
+            |x, y| view.tile(x, y).flags() & jane_core::tile::F_SOLID != 0,
+            tall.collect::<Vec<_>>().into_iter(),
+        );
+    }
+
+    /// The zone's houses, for the props drawn on them (a door's paint, a chimney's pots).
+    pub fn houses(&self) -> &Houses {
+        &self.houses
+    }
+
+    /// The zone's room, if it is one.
+    pub fn room(&self) -> Option<Room> {
+        self.room
+    }
+
+    /// Whether it is day for a room's windows; true when it has just turned, so a room's chunks
+    /// are painted again.
+    pub fn set_daylight(&mut self, day: bool) -> bool {
+        let turned = self.daylight != day;
+        self.daylight = day;
+        turned && self.room.is_some()
     }
 
     /// Paints chunk `id` properly into `layers`, the chunk in `slot`. Cells outside the zone
     /// take `outside`, as the swatches do.
     pub fn paint(&mut self, view: &View<'_>, id: ChunkId, slot: u16, outside: u32, layers: &mut ChunkLayers) {
-        let src = ViewTiles { view, paint: &self.paint };
+        let src =
+            ViewTiles { view, paint: &self.paint, houses: &self.houses, room: self.room, daylight: self.daylight };
         let (cx, cy) = (i32::from(id.cx), i32::from(id.cy));
         terrain::paint_chunk(&mut self.painter, &src, view.seed(), cx, cy, &mut self.chunk);
         let c = &self.chunk.layers;

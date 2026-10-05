@@ -91,13 +91,20 @@ pub(crate) fn bony(d: &Dress) -> bool {
 impl Rig {
     fn new(p: Proportions, pose: Pose, d: &Dress, facing: Facing) -> Rig {
         let coat = d.look.body.coat;
-        let stoop = d.look.extras.contains(&Extra::Stoop);
+        let stoop = i32::from(d.look.extras.contains(&Extra::Stoop));
         let breathe = i32::from(pose.breathe);
-        // A stoop carries the shoulders a px forward and down and the head a px further.
-        let (bent, sunk) = (i32::from(stoop && facing == Facing::Side), i32::from(stoop));
+        // A stoop carries the shoulders a px forward and down and the head a px further; an
+        // old build carries the shoulders forward by half its stoop and the head by all of it
+        // (three quarters on, the head by half).
+        let (bent, ahead) = match facing {
+            Facing::Side => (stoop + p.stoop / 2, stoop + p.stoop),
+            Facing::DownRight | Facing::UpRight => (0, p.stoop / 2),
+            Facing::Down | Facing::Up => (0, 0),
+        };
+        let sunk = stoop;
         let lean = if facing == Facing::Side { pose.lean + bent } else { 0 };
         let (hy, top) = (pose.bob - breathe + sunk, p.shoulder_y() + pose.bob - breathe + sunk);
-        let skull = Rect::new(CX - (p.head_w - 2) / 2 + lean + bent, p.skull_y() + hy, p.head_w - 2, p.skull_h());
+        let skull = Rect::new(CX - (p.head_w - 2) / 2 + lean + ahead, p.skull_y() + hy, p.head_w - 2, p.skull_h());
         let hip = p.hip_y() + pose.bob;
         let hang = match coat {
             Coat::Jacket | Coat::Cardigan => -1,
@@ -138,6 +145,11 @@ impl Rig {
         self.build == Build::Broad
     }
 
+    /// An old back (the stooped build): its shoulders slope further and it carries a hump.
+    pub(crate) fn hunched(&self) -> bool {
+        self.p.stoop > 0
+    }
+
     /// A sleeve's width.
     fn arm_w(&self) -> i32 {
         if self.build == Build::Broad { 5 } else { 4 }
@@ -148,7 +160,7 @@ impl Rig {
         match self.build {
             _ if self.bone => 2,
             Build::Broad | Build::Stout => 6,
-            Build::Slim | Build::Child => 4,
+            Build::Slim | Build::Child | Build::Stooped | Build::Tall => 4,
         }
     }
 
@@ -207,6 +219,14 @@ impl Rig {
 /// One living frame of a person, finished.
 pub fn frame(d: &Dress, p: Proportions, facing: Facing, pose: Pose) -> Canvas {
     let mut c = Canvas::new(super::W, super::H);
+    // Squashed (a landing, a recoil, a blow taken): the body a px lower over shorter legs and a
+    // px wider each side; the hem comes down with it, not a frame late.
+    let (p, pose) = if pose.squash {
+        let wide = Proportions { shoulder_w: p.shoulder_w + 2, waist_w: p.waist_w + 2, hip_w: p.hip_w + 2, ..p };
+        (wide, Pose { bob: pose.bob + 1, lag: (pose.lag.0 + 1, pose.lag.1), ..pose })
+    } else {
+        (p, pose)
+    };
     // Seated in her rocking chair: she faces out of it (or is its back, from behind), lower by a
     // chair's seat, and the walk's beats rock it.
     let seated = d.look.extras.contains(&Extra::Seated);
@@ -229,6 +249,7 @@ pub fn frame(d: &Dress, p: Proportions, facing: Facing, pose: Pose) -> Canvas {
         }
         super::special::chair_front(&mut c, d, &r, facing.front());
     }
+    super::task::draw(&mut c, d, &r);
     super::special::extras(&mut c, d, &r);
     super::special::wet(&mut c, d, &r);
     super::held::at_face(&mut c, d, &r);
@@ -312,7 +333,7 @@ fn belt(c: &mut Canvas, x0: i32, x1: i32, y: i32, buckle: i32, z: u8) {
 /// A skin mitt of a hand, 4 x 4 from `(x, y)` with its corners off, lit in its top left and
 /// with its shadow px at the bottom right: big enough that the outline leaves it a heart of
 /// skin, so it reads as a hand and not as a dark knot.
-fn hand(c: &mut Canvas, d: &Dress, x: i32, y: i32, z: u8) {
+pub(crate) fn hand(c: &mut Canvas, d: &Dress, x: i32, y: i32, z: u8) {
     if bony(d) {
         super::bone::hand(c, d, x, y, z);
         return;
@@ -575,7 +596,9 @@ fn coat_front(c: &mut Canvas, d: &Dress, r: &Rig, facing_us: bool) {
     let (s0, s1) = span(r.p.shoulder_w);
     let (t, wy) = (r.top, r.waist);
     let spread = i32::from(r.pose.spread != [0, 0]);
-    let fl = flare(coat) + spread;
+    // Just turned: a hem below the hip is still flung out a px each side.
+    let swung = i32::from(r.pose.turn && r.hem > r.hip);
+    let fl = flare(coat) + spread + swung;
     let hem = r.hem;
     let (h0, h1) = span(r.p.hip_w + 2 * fl);
     let (k0, k1) = span(r.p.hip_w);
@@ -584,14 +607,16 @@ fn coat_front(c: &mut Canvas, d: &Dress, r: &Rig, facing_us: bool) {
     let waist_w = if skirted(coat) { r.p.waist_w - 2 } else { r.p.waist_w };
     let (w0, w1) = span(waist_w);
     let mut pts: Vec<(i32, i32)> = Vec::with_capacity(12);
+    // An old back's shoulders fall away further: round, not sloped.
+    let slope = if r.hunched() { 3 } else { 2 };
     if r.square() {
         pts.extend([(s0, t), (s1, t)]);
     } else {
-        pts.extend([(s0 + 2, t), (s1 - 2, t), (s1, t + 2)]);
+        pts.extend([(s0 + slope, t), (s1 - slope, t), (s1, t + slope)]);
     }
     pts.extend([(w1, wy), (h1, hem), (h0, hem), (w0, wy)]);
     if !r.square() {
-        pts.push((s0, t + 2));
+        pts.push((s0, t + slope));
     }
     c.polygon_cloth(&pts, d.coat, 80, relief::COAT);
     let z = relief::COAT.hi;
@@ -808,16 +833,30 @@ fn arms_front(c: &mut Canvas, d: &Dress, r: &Rig) {
         arm_diag(c, d, r, true);
         return;
     }
-    let (s0, s1) = span(r.p.shoulder_w);
-    let aw = r.arm_w();
     for i in 0..2 {
-        let spread = r.pose.spread[i];
-        let hand_y = r.p.arm_y + r.pose.bob - i32::from(r.pose.breathe) + r.p.arm_l - 1 + r.pose.arm[i]
-            - spread / 2
-            - r.pose.raise[i];
-        let (x0, out) = if i == 0 { (s0 - aw + 1, -spread) } else { (s1, spread) };
+        let (x0, out, hand_y) = arm_front_at(r, i);
         arm_front(c, d, r, x0, out, hand_y, i == 0, i == 0, false);
     }
+}
+
+/// Arm `i` facing the viewer or away (0 the screen's left): its shoulder's column, how far out
+/// the hand swings, and the hand's last row.
+fn arm_front_at(r: &Rig, i: usize) -> (i32, i32, i32) {
+    let (s0, s1) = span(r.p.shoulder_w);
+    let aw = r.arm_w();
+    let spread = r.pose.spread[i];
+    let hand_y = r.p.arm_y + r.pose.bob - i32::from(r.pose.breathe) + r.p.arm_l - 1 + r.pose.arm[i]
+        - spread / 2
+        - r.pose.raise[i];
+    let (x0, out) = if i == 0 { (s0 - aw + 1, -spread) } else { (s1, spread) };
+    (x0, out, hand_y)
+}
+
+/// The top-left of hand `i`'s mitt facing the viewer (0 the screen's left), as [`arms_front`]
+/// draws it.
+pub(crate) fn hand_front(r: &Rig, i: usize) -> (i32, i32) {
+    let (x0, out, hand_y) = arm_front_at(r, i);
+    (x0 + out + (r.arm_w() - 4) / 2, hand_y - 2)
 }
 
 /// An arm three quarters on. `near`: the arm on her near side (the screen's left facing down
@@ -1216,7 +1255,9 @@ fn coat_side(c: &mut Canvas, d: &Dress, r: &Rig) {
         _ if skirted(coat) => (1, -1),
         _ => (0, 0),
     };
-    let pts = [
+    // An old back curves out behind the shoulders, its top rounding over to the collar.
+    let hump = r.p.stoop / 2;
+    let mut pts = vec![
         (x0 + 2 + l, t),
         (x1 - 2 + l, t),
         (x1 + l, t + 2),
@@ -1225,8 +1266,11 @@ fn coat_side(c: &mut Canvas, d: &Dress, r: &Rig) {
         (x1 + fl + tr + open, hem),
         (x0 - fl + tr - open, hem),
         (x0, wy),
-        (x0 + l, t + 2),
     ];
+    if hump > 0 {
+        pts.push((x0 - hump + l, t + 2 + hump));
+    }
+    pts.push((x0 + l - hump, t + 2));
     c.polygon_cloth(&pts, d.coat, 80, relief::COAT);
     if hem - wy > 3 {
         hem_folds(

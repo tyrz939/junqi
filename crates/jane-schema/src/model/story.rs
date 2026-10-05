@@ -127,6 +127,17 @@ model! {
         /// Food that comes back: emptied, what its spawn row holds is there again some days on
         /// (`tuning/sim.json` `regrow`; `jane-sim` `regrow.rs`). An apple tree, a windfall.
         pub regrow: bool,
+        /// A made fire (PLAY-PLAN.md §2.2, `jane_sim::fire`): a pit cold until she lays deadwood
+        /// in it and lights it, a rest only while it burns (`on`), out when it burns down or the
+        /// rain gets it. Only under `FIRES_MADE`; otherwise what its other fields say.
+        pub made: bool,
+        /// A made fire only the Fire spell lights (an old grate): matches and fire stones will not.
+        pub fire_only: bool,
+        /// Deadwood a gathering gives (a stump, a woodpile, a log, a fallen tree); 0 = none. It
+        /// comes back on the food clock (`regrow.rs`). Only under `FIRES_MADE`.
+        pub wood: u8,
+        /// Keeps the rain off a made fire within three cells of it: a tent, a shed.
+        pub shelters: bool,
         pub light: Option<Light>,
         /// Zone wetness (0..=255, the rain ramp of ARCHITECTURE.md §4.6.b) at or above which its
         /// light goes out; `None` = rain never puts it out. Only a prop with a light has one.

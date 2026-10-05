@@ -3,7 +3,7 @@
 use jane_core::action::Facing;
 use jane_core::{Vec2, ZoneId};
 
-use crate::bag::bag_add;
+use crate::bag::held_add;
 use crate::ctx::{PartySnap, forget_unit};
 use crate::event::{Event, EventKind, ToastKind};
 use crate::ids::{ClientToken, Seat};
@@ -150,6 +150,8 @@ impl Sim {
         let p = &mut self.state.players[seat.index()];
         match op {
             DevOp::God(on) => p.god = on,
+            // Phase 2's rules on or off (`fire.rs`): the tests' and the console's, on the tape like any command.
+            DevOp::Fires(on) => self.state.fires_made = on,
             // Performed with every other zone change, at the end of the step.
             DevOp::Tp { zone, mark } => p.travel = Some(TravelRequest { zone, mark, at: None }),
             DevOp::Time { hour } => self.state.clock = u32::from(hour % 24) * TICKS_PER_HOUR,
@@ -267,7 +269,7 @@ impl Sim {
                 zone,
                 last_mark: self.start_sym,
                 respawn_at: None,
-                bag: Box::new([None; crate::tuning::BAG_SLOTS]),
+                bag: Box::new([None; crate::tuning::HELD_SLOTS]),
                 bar: [None; BAR_SLOTS],
                 craft: [None; crate::tuning::CRAFT_INPUTS],
                 dialogue: None,
@@ -321,7 +323,7 @@ impl Sim {
         let p = &mut self.state.players[seat.index()];
         for s in start.items {
             // The quests unit counts `acquire`; the bag is enough here.
-            let _ = bag_add(&mut p.bag[..], s.item, s.qty);
+            let _ = held_add(&mut p.bag[..], s.item, s.qty);
         }
         for (i, slot) in start.bar.iter().enumerate() {
             if slot.is_some() {
@@ -380,14 +382,14 @@ impl Sim {
         let cat = jane_data::catalog();
         let Some(heir) = self.state.connected().next().map(|p| p.seat) else { return };
         let mut any = false;
-        for i in 0..crate::tuning::BAG_SLOTS {
+        for i in 0..crate::tuning::HELD_SLOTS {
             let Some(stack) = self.state.players[from.index()].bag[i] else { continue };
             if !cat.combat.item(stack.item).story {
                 continue;
             }
             self.state.players[from.index()].bag[i] = None;
             any = true;
-            let left = bag_add(&mut self.state.players[heir.index()].bag[..], stack.item, stack.qty);
+            let left = held_add(&mut self.state.players[heir.index()].bag[..], stack.item, stack.qty);
             if left > 0 {
                 let (hz, hu) = {
                     let h = &self.state.players[heir.index()];

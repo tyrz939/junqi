@@ -371,3 +371,52 @@ Everything below is **decided as recommended**, with three of the owner's own ch
 - **Bots.** Every phase needs the bots taught first, or the slow tier goes red and the numbers lie.
 - **Scope.** Phases 5 to 7 are content-heavy. Phases 0 to 3 are the foundation and are worth finishing before any of it.
 - **The pad is untested by hand.** The hop and soft-lock need a real controller session.
+
+---
+
+## 6. Bugs to fix after the reset (owner playtests, 2026-10-03)
+
+- **U-shaped block above some props.** Coming from above, she can walk right up to the prop, but in the space above it she cannot move left or right: she can only enter or leave from straight above. The likely cause is the side posts (`PropDef::solid_parts`) and the "enter and leave the space behind only from the north" rule for puzzle, gate and `way` props, which still make a U around the space above. **A known case: movable (pushable) crates.** The owner saw it there. Pushables were deliberately kept full-width so pushing from behind still works, which is probably why. **Fix:** list which props do this; for each, make the side edges match the drawn ground box, or keep the U only where a puzzle truly needs it, and draw it so it reads. **Test:** extend `units.rs`'s approach test to step sideways out of the space above every boxed prop.
+
+## 7. After the reset, once the phases above are done: a RAM-efficiency pass
+
+Owner, 2026-10-03: low-RAM systems are targeted later (Dreamcast 16 MB, PSP 32 MB, original Xbox 64 MB), "so features can carry then". This is not a port; it makes the PC build lean so a port is a renderer job, not a redesign.
+
+1. **Measure first.** Add a `jane bench --mem` breakdown by system: atlases and baked art, the terrain chunk cache, the county and blueprints, sim state, audio buffers, and each renderer's own allocations. Record the baseline (about 205 MB on soft and 520 MB on wgpu as of 2026-09-30).
+2. **Art.**
+   - Draw-time motion instead of baked frames: sway as a bend (ART-PLAN §9), then birds, smoke and water.
+   - Palette-indexed (CLUT) storage for atlases where the tier allows.
+   - Evict art that isn't on screen.
+3. **Terrain.**
+   - A chunk cache sized by budget, not by count.
+   - Paint chunks ahead of her movement, so a smaller cache doesn't stutter.
+4. **World and sim.**
+   - Store the county in compressed chunks; tiles and props can use run lengths or a palette.
+   - Check what the sim keeps per zone, and drop what can be rebuilt from the seed. Determinism must hold: same hash.
+5. **Audio.** Stream or compress the synthesized sound beds instead of keeping full PCM.
+6. **Budgets as tests.** Per-system memory budgets in the slow tier, so regressions show. Targets: 64 MB on soft first, then 32 MB.
+
+## 8. Where things stand (2026-10-03, end of the week)
+
+**On `main` and in the playtest download (ee7f731 and later):**
+- Phase 0 and the playtest fixes;
+- the WoW-style quest marks;
+- made fires, behind `FIRES_MADE = false`;
+- the map, banners and far landmarks;
+- art batches 1–3;
+- the Waters and Works quests;
+- the key ring.
+
+**Not merged:**
+- **Phase 1 combat.** It is on branch `worktree-agent-a61d63c1db2901d51` (head 958401b), with both halves integrated and 137 of 138 slow tests passing. The one red test is the Reader on seed 2, stalled in the School (likely a lesson she can't pay for). See `PHASE1-STATUS.md` on that branch. Next: diagnose seed 2, run telemetry for the Reader and Cautious on seeds 1–8, retake the screenshots, then merge.
+
+**Queued after the reset, in order:**
+1. Finish Phase 1, then teach the bots fires and flip `FIRES_MADE`.
+2. The bugs in §6: the U-block above pushable crates.
+3. The Grok findings (`grok-feedback.md`): refuse unproven blueprints, make stale fixtures fail, and CI.
+4. Phase 3: growth (XP, levels and the eight Crafts), then the tuning pass.
+5. Art batch 4 (dungeon framing, motifs and boss rooms), then batch 5 (hero objects, vignettes, portraits and the letter-paper UI). Also ART-PLAN §9: a sway rebuild as a draw-time bend, and leaves that move.
+6. The RAM-efficiency pass (§7).
+7. A generated `STORY-AND-QUESTS.md`, and the test binaries binding to loopback.
+
+Run `tools/hiqos.ps1` in the background during heavy sessions, and prune merged worktrees regularly.

@@ -116,6 +116,9 @@ fn layers_hold_the_contract_and_only_lit_frames_emit() {
             let lit = c.emissive().iter().filter(|&&e| e != Ix::CLEAR).count();
             if *f == FrameId::On && !l.emits.is_empty() {
                 assert!(lit > 0, "{} {f:?}: a lit lamp that does not glow", r.key());
+            } else if *f == FrameId::Open && kit::fire_pit(&l) {
+                // A made fire burnt out: its last embers glow, a few px.
+                assert!(lit > 0 && lit <= 8, "{} {f:?}: ash with {lit} px of embers", r.key());
             } else {
                 assert_eq!(lit, 0, "{} {f:?}: glows unlit", r.key());
             }

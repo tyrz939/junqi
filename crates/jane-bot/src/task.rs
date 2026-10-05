@@ -304,6 +304,8 @@ pub struct UseProp {
     pub presses: u8,
     /// The points beside it to stand at, nearest first when the walk began.
     pub sides: Vec<(Vec2, Angle)>,
+    /// Frames to hold USE on it before the press: a fire to make (`jane_sim::fire`).
+    pub hold: u16,
 }
 
 impl Task {
@@ -318,7 +320,12 @@ impl Task {
 
 impl UseProp {
     pub fn new(prop: PropId) -> UseProp {
-        UseProp { prop, side: 0, stage: 0, t: 0, presses: 1, sides: Vec::new() }
+        UseProp { prop, side: 0, stage: 0, t: 0, presses: 1, sides: Vec::new(), hold: 0 }
+    }
+
+    /// A cold pit: a second's hold lays and lights it, then a press sits her down by it.
+    pub fn make_fire(prop: PropId) -> UseProp {
+        UseProp { hold: u16::from(jane_sim::tuning::FIRE_HOLD_TICKS) + 2, ..UseProp::new(prop) }
     }
 }
 
@@ -561,6 +568,11 @@ fn use_prop(u: &mut UseProp, v: &View<'_>, cx: &mut Ctx) -> Status {
             Status::Done
         }
         2 => match v.focus().map(|f| f.target) {
+            // A fire to make: USE held a second first, standing still.
+            Some(FocusRef::Prop(id)) if id == u.prop && u.hold > 0 => {
+                u.hold -= 1;
+                Status::Act(Act::hold(InputFrame { use_held: true, ..InputFrame::IDLE }))
+            }
             Some(FocusRef::Prop(id)) if id == u.prop => {
                 u.presses = u.presses.saturating_sub(1);
                 if u.presses == 0 {
@@ -600,6 +612,7 @@ fn use_prop(u: &mut UseProp, v: &View<'_>, cx: &mut Ctx) -> Status {
                     ToastKind::Locked { prop } if prop == u.prop => return Status::Failed("it is locked".into()),
                     ToastKind::NightLock(_) => return Status::Failed("it is not answered after dark".into()),
                     ToastKind::InventoryFull => return Status::Failed("the bag is full".into()),
+                    ToastKind::FireWants(w) => return Status::Failed(format!("the pit will not take ({w:?})")),
                     _ => {}
                 }
             }

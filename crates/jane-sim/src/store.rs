@@ -98,10 +98,14 @@ fn shift(cx: &mut Ctx<'_>, seat: Seat, prop: PropId, way: Way, from: u8, to: Opt
     let store = world.stores.entry(key).or_insert_with(|| Box::new(EMPTY));
     let (from, to) = (usize::from(from), to.map(usize::from));
     let moved = match way {
-        Way::In if from < BAG_SLOTS => cross(&mut p.bag[..], from, &mut store[..], to),
-        Way::Out if from < STORE_SLOTS => cross(&mut store[..], from, &mut p.bag[..], to),
+        Way::In if from < BAG_SLOTS => cross(&mut p.bag[..BAG_SLOTS], from, &mut store[..], to),
+        Way::Out if from < STORE_SLOTS => cross(&mut store[..], from, &mut p.bag[..BAG_SLOTS], to),
         _ => false,
     };
+    // What waited on the key ring comes into the slot just freed.
+    if moved {
+        crate::bag::ring_settle(&mut p.bag[..]);
+    }
     tidy(world, key);
     if moved {
         emit_to(cx, seat, EventKind::Bag);
