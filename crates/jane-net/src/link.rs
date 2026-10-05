@@ -236,7 +236,13 @@ pub struct TcpListen {
 impl TcpListen {
     /// Listen on every interface at `port` (0: any free port; see [`port`](Self::port)).
     pub fn bind(port: u16) -> Result<TcpListen, LinkError> {
-        let l = TcpListener::bind(SocketAddr::from(([0, 0, 0, 0], port)))?;
+        Self::bind_on(std::net::Ipv4Addr::UNSPECIFIED, port)
+    }
+
+    /// Listen on `ip` only at `port`: `Ipv4Addr::LOCALHOST` for tests, which then never ask the
+    /// system firewall to let the LAN in.
+    pub fn bind_on(ip: std::net::Ipv4Addr, port: u16) -> Result<TcpListen, LinkError> {
+        let l = TcpListener::bind(SocketAddr::from((ip, port)))?;
         l.set_nonblocking(true)?;
         Ok(TcpListen { l })
     }
@@ -412,7 +418,8 @@ mod tests {
 
     #[test]
     fn tcp_frames_arrive_whole_and_in_order_and_a_close_is_seen() {
-        let mut l = TcpListen::bind(0).unwrap();
+        let mut l = TcpListen::bind_on(std::net::Ipv4Addr::LOCALHOST, 0).unwrap();
+        assert!(l.l.local_addr().unwrap().ip().is_loopback(), "a test listens on loopback only");
         let port = l.port();
         let mut c = TcpLink::connect(&format!("127.0.0.1:{port}"), Duration::from_secs(2)).unwrap();
         let mut s = loop {

@@ -7,6 +7,7 @@
 //! paused; a lockstep session always steps, with this seat's stick idle, because a table with
 //! company (or open to it) never stops for one person's menu.
 
+use std::net::Ipv4Addr;
 use std::time::Duration;
 
 use jane_sim::event::Event;
@@ -77,15 +78,27 @@ impl Session {
 
     /// The same, answering discovery on `discovery` (tests, and a LAN that wants another).
     pub fn host_with_discovery(sim: Sim, cfg: HostConfig, port: u16, discovery: u16) -> Result<Session, LinkError> {
-        Ok(Session::host_on(sim, cfg, TcpListen::bind(port)?, discovery))
+        Session::host_on_ip(sim, cfg, Ipv4Addr::UNSPECIFIED, port, discovery)
     }
 
-    fn host_on(sim: Sim, cfg: HostConfig, l: TcpListen, discovery: u16) -> Session {
+    /// The same, listening and answering on `ip` only: `Ipv4Addr::LOCALHOST` for tests, which
+    /// then never ask the system firewall to let the LAN in.
+    pub fn host_on_ip(
+        sim: Sim,
+        cfg: HostConfig,
+        ip: Ipv4Addr,
+        port: u16,
+        discovery: u16,
+    ) -> Result<Session, LinkError> {
+        Ok(Session::host_on(sim, cfg, TcpListen::bind_on(ip, port)?, ip, discovery))
+    }
+
+    fn host_on(sim: Sim, cfg: HostConfig, l: TcpListen, ip: Ipv4Addr, discovery: u16) -> Session {
         let port = l.port();
         let mut host = Host::new(sim, cfg, Box::new(l)).with_port(port);
         // A second host on one machine cannot answer on the discovery port: it answers on its
         // game port, which a finder asks when told it; joining by address works either way.
-        if let Ok(b) = crate::discovery::Beacon::bind_any(&[discovery, port]) {
+        if let Ok(b) = crate::discovery::Beacon::bind_any_on(ip, &[discovery, port]) {
             host = host.with_beacon(b);
         }
         Session::Host(Box::new(host))
@@ -95,9 +108,14 @@ impl Session {
     /// local session becomes a host with the same sim. Anything else is returned as it was;
     /// on failure the local session comes back with the error.
     pub fn open_to_lan(self, cfg: HostConfig, port: u16) -> Result<Session, (Session, LinkError)> {
+        self.open_on(cfg, Ipv4Addr::UNSPECIFIED, port)
+    }
+
+    /// [`open_to_lan`](Self::open_to_lan) listening and answering on `ip` only (loopback in tests).
+    pub fn open_on(self, cfg: HostConfig, ip: Ipv4Addr, port: u16) -> Result<Session, (Session, LinkError)> {
         let Session::Local(l) = self else { return Ok(self) };
-        match TcpListen::bind(port) {
-            Ok(listener) => Ok(Session::host_on(l.sim, cfg, listener, crate::discovery::DISCOVERY_PORT)),
+        match TcpListen::bind_on(ip, port) {
+            Ok(listener) => Ok(Session::host_on(l.sim, cfg, listener, ip, crate::discovery::DISCOVERY_PORT)),
             Err(e) => Err((Session::Local(l), e)),
         }
     }

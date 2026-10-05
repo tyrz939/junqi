@@ -8,6 +8,7 @@ use common::bps;
 use jane_net::{GuestConfig, HostConfig, Session};
 use jane_sim::input::{Command, InputFrame};
 use jane_sim::{ClientToken, Seat, Sim};
+use std::net::Ipv4Addr;
 
 #[test]
 fn alone_a_pause_holds_the_world_and_hosting_it_does_not() {
@@ -19,7 +20,7 @@ fn alone_a_pause_holds_the_world_and_hosting_it_does_not() {
     s.try_step(16, InputFrame::IDLE, &mut presses, false).unwrap();
     assert_eq!(s.sim().unwrap().state().frame, 1);
 
-    let mut s = match s.open_to_lan(HostConfig::default(), 0) {
+    let mut s = match s.open_on(HostConfig::default(), Ipv4Addr::LOCALHOST, 0) {
         Ok(s) => s,
         Err((_, e)) => panic!("{e}"),
     };
@@ -61,7 +62,14 @@ fn alone_and_held_a_press_in_the_bag_is_done_at_once() {
 
 #[test]
 fn a_game_opened_to_the_lan_is_joined_over_tcp_and_both_step_one_world() {
-    let mut host = Session::host(Sim::new_game_with(bps(), "Jane"), HostConfig::default(), 0).unwrap();
+    let mut host = Session::host_on_ip(
+        Sim::new_game_with(bps(), "Jane"),
+        HostConfig::default(),
+        Ipv4Addr::LOCALHOST,
+        0,
+        jane_net::discovery::DISCOVERY_PORT,
+    )
+    .unwrap();
     let port = host.port().unwrap();
     let mut guest =
         Session::join(&format!("127.0.0.1:{port}"), GuestConfig::new(ClientToken(9)), Some(bps()), 0).unwrap();
@@ -130,12 +138,13 @@ fn a_game_opened_to_the_lan_is_joined_over_tcp_and_both_step_one_world() {
 fn a_host_on_any_port_is_found_on_the_discovery_port_and_its_offer_says_where_to_dial() {
     // A discovery port of the test's own (7777 may be taken on this machine), a game port the
     // system picks: the joiner knows nothing in advance but the discovery port.
-    let disc = std::net::UdpSocket::bind("0.0.0.0:0").unwrap().local_addr().unwrap().port();
+    let disc = std::net::UdpSocket::bind("127.0.0.1:0").unwrap().local_addr().unwrap().port();
     let mut host =
-        Session::host_with_discovery(Sim::new_game_with(bps(), "Tess"), HostConfig::default(), 0, disc).unwrap();
+        Session::host_on_ip(Sim::new_game_with(bps(), "Tess"), HostConfig::default(), Ipv4Addr::LOCALHOST, 0, disc)
+            .unwrap();
     let game = host.port().unwrap();
     assert_ne!(game, disc);
-    let mut finder = jane_net::discovery::Finder::new(disc).unwrap();
+    let mut finder = jane_net::discovery::Finder::new_on(Ipv4Addr::LOCALHOST, disc).unwrap();
     let mut found = Vec::new();
     for i in 0..400u64 {
         if i % 20 == 0 {

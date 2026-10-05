@@ -17,7 +17,8 @@ fn serve_and_two_headless_guests_hold_one_hash() {
     let port = free_port().to_string();
     let tape = std::env::temp_dir().join(format!("jane-serve-{}.jrp", std::process::id()));
     let host = Command::new(exe)
-        .args(["serve", "--seed", "3", "--port", &port, "--ticks", "900", "--every", "2", "--record"])
+        .args(["serve", "--seed", "3", "--bind", "127.0.0.1", "--port", &port, "--ticks", "900", "--every", "2"])
+        .arg("--record")
         .arg(&tape)
         .stdout(Stdio::piped())
         .spawn()

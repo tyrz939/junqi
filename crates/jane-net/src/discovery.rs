@@ -64,9 +64,15 @@ impl Beacon {
 
     /// Listen on the first of `ports` that is free (the discovery port, else the game's own).
     pub fn bind_any(ports: &[u16]) -> io::Result<Beacon> {
+        Self::bind_any_on(Ipv4Addr::UNSPECIFIED, ports)
+    }
+
+    /// [`bind_any`](Self::bind_any) on `ip` only (`Ipv4Addr::LOCALHOST` in tests: no firewall
+    /// prompt, and only this machine's finders hear it).
+    pub fn bind_any_on(ip: Ipv4Addr, ports: &[u16]) -> io::Result<Beacon> {
         let mut last = io::Error::other("no port to listen on");
         for &port in ports {
-            match UdpSocket::bind(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, port)) {
+            match UdpSocket::bind(SocketAddrV4::new(ip, port)) {
                 Ok(sock) => {
                     sock.set_nonblocking(true)?;
                     return Ok(Beacon { sock });
@@ -108,7 +114,13 @@ pub struct Finder {
 impl Finder {
     /// Ask on discovery port `port` (the hosts' UDP port).
     pub fn new(port: u16) -> io::Result<Finder> {
-        let sock = UdpSocket::bind(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, 0))?;
+        Self::new_on(Ipv4Addr::UNSPECIFIED, port)
+    }
+
+    /// [`new`](Self::new) from `ip` only (`Ipv4Addr::LOCALHOST` in tests: it finds hosts on
+    /// this machine, and its broadcast goes nowhere).
+    pub fn new_on(ip: Ipv4Addr, port: u16) -> io::Result<Finder> {
+        let sock = UdpSocket::bind(SocketAddrV4::new(ip, 0))?;
         sock.set_broadcast(true)?;
         sock.set_nonblocking(true)?;
         Ok(Finder { sock, ports: vec![port], found: Vec::new() })
@@ -152,8 +164,9 @@ mod tests {
 
     #[test]
     fn a_host_on_this_machine_is_found() {
-        let mut beacon = Beacon::bind(0).unwrap();
-        let mut finder = Finder::new(beacon.port()).unwrap();
+        let mut beacon = Beacon::bind_any_on(Ipv4Addr::LOCALHOST, &[0]).unwrap();
+        assert!(beacon.sock.local_addr().unwrap().ip().is_loopback(), "a test listens on loopback only");
+        let mut finder = Finder::new_on(Ipv4Addr::LOCALHOST, beacon.port()).unwrap();
         let offer = Offer {
             name: "Tess's".into(),
             port: 7777,
@@ -175,7 +188,6 @@ mod tests {
                 break;
             }
         }
-        // Once by the broadcast and once by loopback, maybe, from two of this machine's addresses.
         assert!(!found.is_empty());
         for f in &found {
             assert_eq!(f.offer, offer);

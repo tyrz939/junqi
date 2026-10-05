@@ -17,11 +17,12 @@ use jane_net::{GuestConfig, Host, HostConfig, Phase, Session};
 use jane_sim::{ClientToken, Command, Sim};
 
 pub const USAGE: &str = "  serve [--seed N | --save PATH] [--name NAME] [--port P] [--seats N] [--delay D] [--wait]
-        [--ticks N] [--every S] [--record TAPE]
+        [--ticks N] [--every S] [--record TAPE] [--bind IP]
                                       host a world headless on the LAN (nobody here plays); one status line
                                       (tick, seats, hash) every S seconds (default 5); --save is loaded if
                                       there and written whenever anyone rests and at the end; --record writes
-                                      a new game's session as a .jrp (`jane replay verify` re-simulates it)
+                                      a new game's session as a .jrp (`jane replay verify` re-simulates it);
+                                      --bind 127.0.0.1 keeps it to this machine (tests)
   join ADDR[:PORT] [--model reader|rusher|idle] [--token N] [--ticks N] [--every S]
                                       a headless guest played by a bot model; the same status line
   find [--port P]                     list the hosts on the LAN (a UDP broadcast, two seconds)";
@@ -66,6 +67,8 @@ struct Opts {
     record: Option<PathBuf>,
     name: String,
     port: u16,
+    /// The address `serve` listens and answers on: every interface, or `127.0.0.1` (tests).
+    bind: std::net::Ipv4Addr,
     seats: u8,
     delay: u8,
     wait: bool,
@@ -83,6 +86,7 @@ fn opts(args: &[String], join: bool) -> Result<Opts, String> {
         record: None,
         name: "Jane".into(),
         port: jane_net::wire::DEFAULT_PORT,
+        bind: std::net::Ipv4Addr::UNSPECIFIED,
         seats: 4,
         delay: jane_net::wire::DEFAULT_DELAY,
         wait: false,
@@ -102,6 +106,7 @@ fn opts(args: &[String], join: bool) -> Result<Opts, String> {
             "--record" => o.record = Some(PathBuf::from(value()?)),
             "--name" => o.name.clone_from(value()?),
             "--port" => o.port = u16::try_from(num(value()?)?).map_err(|_| format!("{a}: not a port"))?,
+            "--bind" => o.bind = value()?.parse().map_err(|_| format!("{a}: not an IPv4 address"))?,
             "--seats" => o.seats = num(value()?)?.clamp(1, 4) as u8,
             "--delay" => o.delay = num(value()?)?.clamp(2, 6) as u8,
             "--wait" => o.wait = true,
@@ -163,12 +168,12 @@ pub fn serve(args: &[String]) -> Result<(), String> {
         desync_dir: Some(PathBuf::from(".")),
         ..HostConfig::default()
     };
-    let l = TcpListen::bind(o.port).map_err(|e| format!("port {}: {e}", o.port))?;
+    let l = TcpListen::bind_on(o.bind, o.port).map_err(|e| format!("port {}: {e}", o.port))?;
     let mut host = Host::new(sim, cfg, Box::new(l)).with_port(o.port);
     if o.record.is_some() && !host.record() {
         return Err("--record: only a new game is recorded (a tape begins at New Game)".into());
     }
-    match jane_net::discovery::Beacon::bind_any(&[jane_net::discovery::DISCOVERY_PORT, o.port]) {
+    match jane_net::discovery::Beacon::bind_any_on(o.bind, &[jane_net::discovery::DISCOVERY_PORT, o.port]) {
         Ok(b) => host = host.with_beacon(b),
         Err(e) => log(&format!("jane serve: no discovery on udp {}: {e}", o.port)),
     }
