@@ -81,12 +81,19 @@ pub struct Guest {
     stall: Option<StallView>,
     reports: Vec<Report>,
     /// A fault for tests: the bundle of this frame is stepped with seat 0's stick turned, as a
-    /// broken build would (a reproducible desync).
-    #[doc(hidden)]
-    pub corrupt_at: Option<u32>,
+    /// broken build would (a reproducible desync). Not on the shipping type (Grok #14).
+    #[cfg(any(test, feature = "test-hooks"))]
+    corrupt_at: Option<u32>,
 }
 
 impl Guest {
+    /// A fault for tests (`test-hooks`): step frame `f`'s bundle with seat 0's stick turned, as a
+    /// broken build would, for a reproducible desync.
+    #[cfg(any(test, feature = "test-hooks"))]
+    pub fn corrupt_at(&mut self, f: u32) {
+        self.corrupt_at = Some(f);
+    }
+
     /// Knock on `link`. `bps`: blueprints already built (a test's, a cache's), used if they are
     /// the seed the host names; otherwise the county is built on a thread.
     pub fn new(link: Box<dyn Link>, cfg: GuestConfig, bps: Option<Blueprints>, now: u64) -> Guest {
@@ -111,6 +118,7 @@ impl Guest {
             fresh: false,
             stall: None,
             reports: Vec::new(),
+            #[cfg(any(test, feature = "test-hooks"))]
             corrupt_at: None,
         };
         let hello = Msg::Hello(g.cfg.hello.clone());
@@ -364,7 +372,9 @@ impl Guest {
     pub fn try_step(&mut self, _now: u64, local: Option<(InputFrame, &mut Vec<Command>)>) -> Option<Stepped> {
         let sim = self.sim.as_mut()?;
         let f = sim.state().frame;
+        #[cfg_attr(not(any(test, feature = "test-hooks")), allow(unused_mut))]
         let mut b = self.bundles.remove(&f)?;
+        #[cfg(any(test, feature = "test-hooks"))]
         if self.corrupt_at == Some(f) {
             b.frames[0].mv_dir = jane_core::Angle(b.frames[0].mv_dir.0.wrapping_add(0x4000));
             b.frames[0].mv_mag = 127;

@@ -424,6 +424,7 @@ dependencies = [
  "jane-bot",
  "jane-core",
  "jane-data",
+ "jane-net",
  "jane-sim",
  "postcard",
  "serde",

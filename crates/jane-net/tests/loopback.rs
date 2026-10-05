@@ -101,7 +101,7 @@ fn a_step_that_differs_is_named_by_its_frame() {
     t.run(300);
     // A broken build: the guest steps one frame's bundle with the host's stick turned.
     let f = t.peers[a].g.sim().unwrap().state().frame + 20;
-    t.peers[a].g.corrupt_at = Some(f);
+    t.peers[a].g.corrupt_at(f);
     t.until(400, "the desync is reported", |t| !t.desyncs().is_empty());
     let r = t.desyncs()[0].clone();
     println!("{r}");

@@ -16,7 +16,7 @@ This is the third build. The first (Phaser, 2026) and the second (TypeScript, Se
 | --- | --- |
 | P0 to P3 | Done: the workspace, the data compile, the county and its solver, eight generated dungeons and four interiors. New Game builds all thirteen zones in about 165 ms on a desktop |
 | P4 sim | Done for the story: every verb, quest, dialogue, trigger, the journal, AI, the snake, schedules, weather, omens, the bell, the three endings; `Sim::metrics()`. A tick is 1 to 2 µs at the median |
-| P4b verification | Two player models (Reader, Rusher), dungeon tactics, act starts, `--ending hold|hill|train`; the Reader, the Cautious and the Rusher finish the story on seeds 1 to 8 (`the_reader_reaches_an_ending_on_seeds_1_to_8`), and every dungeon on seeds 1 to 3. Explorer, Cautious, the co-op pair, Lost and the experience metrics are not built |
+| P4b verification | Two player models (Reader, Rusher), dungeon tactics, act starts, `--ending hold|hill|train`; the Reader, the Cautious and the Rusher finish the story on seeds 1 to 8 (`the_reader_reaches_an_ending_on_seeds_1_to_8`), and every dungeon on seeds 1 to 3. The Explorer and Lost models, the co-op pair (`jane-bot` `pair.rs`) and the experience metrics (`experience.rs`) are built too |
 | P5 art | Every person, creature, prop, building, icon, tile and plant has a generated look, with fight and cast frames, held things, every dungeon dressed, region palettes; weather, fog, water, sky and fx. Reviewed frame by frame against `ART.md` §3.1 |
 | P6, P6b, P6c | `soft` (T0), `gl2` (T1) and `wgpu` (T2): one Frame, one shadow list, one grade; normal-mapped light, shadows that follow the hour and the weather, bloom. T2 at 4K about 3 ms a frame on an RTX 3060 |
 | P7 UI and input | Done: title, loading, HUD, dialogue, pause, saves, the four-tab window, the terminal, Controls with rebinding and a Display page of every Features row, F2 and F3. The pad is wired and untested by hand |
@@ -80,7 +80,7 @@ The title builds nothing; New Game builds the thirteen zones on a thread while t
 
 **Saves and config.** Three slots, `slot1.jane` to `slot3.jane`, and `config.json` (the name last used, the backend, the aim assist, the bindings that differ from `data/bindings.json`, each slot's seed, the volumes) live in `%APPDATA%\Jane` on Windows, `~/Library/Application Support/Jane` on a Mac and `$XDG_DATA_HOME/jane` elsewhere; beside the exe instead when a file called `portable` sits there. The pause menu saves only within reach of a bed or a fire; resting at one saves by itself to the slot last used, and F5 saves there too (the card says which slot). The Save and Load pickers show each slot's place, day and minute, the story's step and how long ago; saving over a used slot asks first. Beside each slot, `slotN.meta.json` keeps what the picker shows that the save's header does not. A crash appends what it was (the panic message and where, the seed, the app tick, the backend, a backtrace) to `crash.log` in the same folder.
 
-Still to come (`PORT.md` §7): bots playing seeds (`jane play`, `dossier`).
+Bots play seeds headless with `jane play`, and `jane sweep` / `jane dossier` run them over many (`VERIFICATION.md`).
 
 ### Play together on a LAN
 

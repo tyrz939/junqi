@@ -1,6 +1,6 @@
 # Jane — Missing engine systems
 
-Pair with `SYSTEMS.md` (the bar), `ENGINE.md` (the live engine), `WORLDGEN.md` (zones), `LEARNING-SYSTEMS.md` (2020 paths).
+Pair with `SYSTEMS.md` (the bar), `ARCHITECTURE.md` (the Rust engine, the live build), `ENGINE.md` (the frozen TypeScript build's record of why each rule exists), `WORLDGEN.md` (zones), `LEARNING-SYSTEMS.md` (2020 paths).
 
 This file is the **engine** that 2020's jun7 had, or wanted, and the live build does not carry yet: verbs you can drop on any zone, any seed, a larger game. A new cart, lever, fog rect or ground hazard is a **row**. It is not a new class and not a per-unit special case.
 
@@ -48,7 +48,7 @@ If you cannot reuse it on a second floor of a second dungeon without opening `si
 | School switches a prop | frost lights wall torches | `answers: <school>` + `lightWhenOn` | **IN** |
 | Bait | `obj_snake_1` + Poisoned Rat Meat | unit `bait` field, item `throw` action | **IN** |
 | Push / pull / carry | hold USE 30 frames, 20 energy, spacer cell; `"pickup"` tag | `push` / `carry` flags; carry refuses zone travel | **SHAPE** |
-| Distance unload | 768 px ring | `sim/ring.ts`; sleepers' clocks tick | **IN** |
+| Distance unload | 768 px ring | `jane-sim/src/ring.rs`; sleepers' clocks tick | **IN** |
 | Fog / reveal | reveal rects fill the minimap buffer | one bit per 16 px block in zone state | **SHAPE** |
 | Tile edits that save | — | `tileDeltas` + `fill` action | **SHAPE** — unused until Grow / drain |
 | Spell kinds | one object per spell | `melee bolt self world ground`; bolt `count` / `fan` / `splash` | **IN** (bolt, melee, world) / **SHAPE** (ground, self) |
@@ -93,7 +93,7 @@ The row exists (any prop with a `use` list flips `on` and runs it). What is miss
 
 ### 1.4 Raft
 
-2020's lily pad: any bolt damage within 25 px slides it 8 px away from the player, only onto water and not onto another pad; it then clears its path rect, so you can stand on it. In the live engine that is a `push`-like prop that is non-solid over `WATER` cells and answers to any school. **Bar: LATER.**
+2020's lily pad: any bolt damage within 25 px slides it 8 px away from the player, only onto water and not onto another pad; it then clears its path rect, so you can stand on it. In the Rust engine that is a `push`-like prop that is non-solid over `WATER` cells and answers to any school. **Bar: LATER.**
 
 ---
 
@@ -108,7 +108,7 @@ The row exists (any prop with a `use` list flips `on` and runs it). What is miss
 
 ## 3. Still missing: presentation
 
-- **Audio bus:** `zone | combat | title → track`, `event → sfx`. *(Built in the Rust build, 2026-09-27: `jane-present::audio` listens to every one of them and `jane-audio` makes the sound, `PRESENTATION.md` §5. The TypeScript build stays silent.)*
+- **Audio bus:** `zone | combat | title → track`, `event → sfx`. *(Built in the Rust build, 2026-09-27: `jane-present::audio` listens to every one of them and `jane-audio` makes the sound, `PRESENTATION.md` §5.)*
 - **Animation:** attack, cast and hurt are offsets and flashes on the walk frames. A real table would add frame names, not code.
 - **Particles:** squares. An emitter table keyed by school is the 2020 shape (`ParticleList`, 7 types; every poison bolt reused the frost particles).
 - **Square room lights** (production board): a light row with a rect instead of a radius.
@@ -151,7 +151,7 @@ Bugs that stay dead: `SpriteSet` cactus fall-through; `CastSpell` reading a miss
 | Two mine carts, three levers | Machines | Content density. `WORLDGEN.md` §1.4 has the route |
 | Lily pads round the key-chest island | Raft | One burial puzzle. Solution unverified even in 2020 |
 | 12 `obj_trigger_snake_light_on` | Trigger + `switch` | Torches that light as you walk the west corridor |
-| `obj_snake_boss` / `move_snake()` | The one custom mover | **IN** (`sim/snake.ts`) |
+| `obj_snake_boss` / `move_snake()` | The one custom mover | **IN** (`jane-sim/src/snake.rs`) |
 | Spider boss (eggs hatch every 20 s, web wrap at 6 s), undead boss, boss flower (seeds that crawl and bloom) | Unit rows + `ground` / `spawn` | The other three burial corners |
 | Bat / pumpkin / cactus / soldiers / flowers / statues | Enemy rows | **IN** as rows; placed where the zones have holes |
 | Fireball at (560, 1352) | A dialogue tree with `learn` | **IN**, in the garden |
@@ -165,4 +165,4 @@ Bugs that stay dead: `SpriteSet` cactus fall-through; `CastSpell` reading a miss
 - `LEARNING.md`, `LEARNING-SYSTEMS.md`, `WORLDGEN.md`, `DESIGN-2020.md`, `ENGINE.md`
 - `Junqi-Legacy-GM/jun7/objects/`: `distance_unload`, `obj_minecart`, `obj_player/Other_16.gml`, `obj_water`, `obj_reveal_regeon`, `obj_button_1`, `obj_leaver1`, `obj_camera`, `obj_light_wall_torch_parent`, `obj_snake_1`, `obj_undead_lily_pad`
 - `Junqi-Legacy-GM/jun7/scripts/`: `save_room`, `SpriteSet`, `ParticleList`, `Camera_functions`, `Unit_Functions`
-- Live: `jane/src/sim/*`, `jane/src/world/*`, `jane/test/*`
+- Live: `crates/jane-sim/src/*`, `crates/jane-world/src/*` and their tests (the TypeScript `jane/` is frozen)

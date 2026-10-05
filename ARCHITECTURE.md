@@ -2,7 +2,7 @@
 
 Crates this doc owns: `jane-core`, `jane-schema`, `jane-data`, `jane-world`, `jane-sim`, `jane-bot`, `jane-net`, `jane-cli` (including the `jane serve` subcommand, the headless host). Presentation (`jane-art`, `jane-present`, `jane-app`) is `ART.md` and `PRESENTATION.md`; this doc owns the sim-facing `View` and `Event` API they consume (§11). Pair with `ENGINE.md` (the TS record of *why* each rule exists), `PLATFORM.md`, `SYSTEMS.md` (the bar) and `PORT.md` (the plan: phases, targets, toolchain; worldgen port specifics in PORT §6).
 
-Nothing here exists yet. This is the contract the crates are built to; a signature missing from it is proposed here first (PORT §8).
+The crates exist and are built to this contract; a signature missing from it is proposed here first (PORT §8).
 
 **Rule:** this file and `PORT.md` are the agreement for the engine. Code that drifts from them fixes the code or the doc first.
 
