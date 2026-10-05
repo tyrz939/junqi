@@ -349,6 +349,7 @@ impl<'a> Solve<'a> {
     pub fn blocks_feet(&self, i: usize) -> bool {
         let def = self.def(i);
         def.gate || (def.solid && !def.push && !def.carry)
+        // (`PropDef::shuts_cells` keeps feet from slipping behind what this stamps.)
     }
 
     /// The prop's footprint grown by one cell, inclusive: `(x0, y0, x1, y1)`.

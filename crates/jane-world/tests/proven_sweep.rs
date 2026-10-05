@@ -37,9 +37,9 @@ fn judge(zone: ZoneId, seed: u32) -> Result<bool, String> {
 }
 
 #[test]
-#[ignore = "slow: every zone over 24 random seeds (release: cargo test --release -- --ignored)"]
+#[ignore = "slow: every zone over 96 random seeds (release: cargo test --release -- --ignored)"]
 fn every_zone_proves_or_the_seed_is_refused() {
-    let seeds = random_seeds(24);
+    let seeds = random_seeds(96);
     let jobs: Vec<(ZoneId, u32)> = seeds
         .iter()
         .flat_map(|&s| ZoneId::ALL.iter().filter(|&&z| jane_world::builds(z)).map(move |&z| (z, s)))
