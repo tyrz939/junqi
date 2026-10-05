@@ -386,6 +386,9 @@ pub enum SwayClass {
 }
 
 impl SwayClass {
+    /// Every class, in its discriminant's order.
+    pub const ALL: [SwayClass; 4] = [SwayClass::Still, SwayClass::Crown, SwayClass::Bush, SwayClass::Reed];
+
     /// Ticks for one sway to and fro in a breeze: about 1.5 to 3 s (the owner, 2026-10-03).
     pub const fn period(self) -> u32 {
         match self {
