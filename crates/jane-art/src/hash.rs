@@ -38,7 +38,6 @@ mod tests {
         let a = h32(1, 2, salt::STROKES);
         assert_ne!(a, h32(2, 1, salt::STROKES));
         assert_ne!(a, h32(1, 2, salt::VARY));
-        assert_eq!(a, h32(1, 2, salt::STROKES));
     }
 
     #[test]

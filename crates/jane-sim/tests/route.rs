@@ -321,10 +321,22 @@ fn a_way_walked_partway_is_said_from_where_she_stands() {
 #[test]
 #[ignore = "slow: eight seeds built whole"]
 fn every_way_on_seeds_1_to_8_is_true_to_the_county() {
+    // A seed is most of a minute of release time, each its own: the eight side by side (they
+    // ran one after another, six minutes in all).
+    let runs: Vec<(u32, usize, Vec<String>)> = std::thread::scope(|sc| {
+        let hs: Vec<_> = (1..=8u32)
+            .map(|seed| {
+                sc.spawn(move || {
+                    let bps = Blueprints::build(seed).expect("the seed builds");
+                    let (n, bad) = check(&bps, seed, false, 1);
+                    (seed, n, bad)
+                })
+            })
+            .collect();
+        hs.into_iter().map(|h| h.join().expect("a seed")).collect()
+    });
     let mut all = Vec::new();
-    for seed in 1..=8 {
-        let bps = Blueprints::build(seed).expect("the seed builds");
-        let (n, bad) = check(&bps, seed, false, 1);
+    for (seed, n, bad) in runs {
         assert!(n > 300, "seed {seed}: most steps have a way ({n})");
         all.extend(bad);
     }

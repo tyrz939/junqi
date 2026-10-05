@@ -639,12 +639,10 @@ fn every_control_drives_its_gates_both_ways() {
 }
 
 #[test]
-fn same_seed_same_dungeon_another_seed_another() {
+fn another_seed_or_attempt_is_another_dungeon() {
     for m in missions() {
+        // The same seed building the same dungeon is `determinism.rs`'s `twice`.
         let a = build_candidate(m.zone, 4242, 0);
-        let b = build_candidate(m.zone, 4242, 0);
-        assert_eq!(a.blueprint, b.blueprint, "{}", m.id);
-        assert_eq!(a.info.layout, b.info.layout, "{}", m.id);
         let c = build_dungeon(m.zone, 4243, 0);
         assert_ne!(a.blueprint.tiles, c.tiles, "{}: another seed, the same dungeon", m.id);
         let d = build_dungeon(m.zone, 4242, 1);
@@ -680,6 +678,9 @@ fn the_fallback_is_whole_and_the_same_on_every_seed() {
     for m in missions() {
         let a = build_candidate(m.zone, 99, ZONE_ATTEMPTS - 1);
         assert!(a.info.errors.is_empty(), "{}: {:?}", m.id, a.info.errors);
+        // "The last attempt never throws at the player": it passes the solver and every check.
+        let faults = check_dungeon(&a);
+        assert!(faults.is_empty(), "{}: {:?}", m.id, shown(&faults));
         let layout = a.info.layout.as_ref().unwrap();
         assert!(layout.fallback);
         for (i, n) in m.nodes.iter().enumerate() {
@@ -701,16 +702,19 @@ fn shown(faults: &[jane_world::dungeon::checks::Fault]) -> Vec<String> {
 
 /// `dungeon-gen.test.ts` (and every per-dungeon file) "64 seeds: every one is proven (solver and
 /// C1 to C13) inside the attempt budget, and none needs the fallback". `build` already refused
-/// every candidate the solver or a check would not pass; this proves the one it kept, again, and
-/// reports how many attempts it took.
+/// every candidate the solver or a check would not pass, so judging what it kept again proves
+/// only that the judge is wired in: that is done on the first four seeds, not all of them. Every
+/// seed's attempts are reported and bounded.
 #[test]
 fn every_dungeon_every_seed_is_proven_by_the_solver_and_c1_to_c12() {
     let mut report = String::new();
     for m in missions() {
         let (mut n, mut sum, mut worst, mut refused) = (0u32, 0u32, 0u8, 0usize);
-        for (_, seed, b) in sweep().iter().filter(|x| x.0.zone == m.zone) {
-            let faults = check_dungeon(b);
-            assert!(faults.is_empty(), "{} seed {seed}: {:?}", m.id, shown(&faults));
+        for (i, (_, seed, b)) in sweep().iter().filter(|x| x.0.zone == m.zone).enumerate() {
+            if i < 4 {
+                let faults = check_dungeon(b);
+                assert!(faults.is_empty(), "{} seed {seed}: {:?}", m.id, shown(&faults));
+            }
             assert_eq!(b.info.rejected.len(), usize::from(b.blueprint.attempts) - 1, "{} seed {seed}", m.id);
             n += 1;
             sum += u32::from(b.blueprint.attempts);
@@ -729,17 +733,6 @@ fn every_dungeon_every_seed_is_proven_by_the_solver_and_c1_to_c12() {
         );
     }
     println!("{report}");
-}
-
-/// "The hand-placed fallback is a whole, proven dungeon: the last attempt never throws at the
-/// player": it passes the solver and every check, on any seed.
-#[test]
-fn the_fallback_is_a_proven_dungeon() {
-    for m in missions() {
-        let b = build_candidate(m.zone, 99, ZONE_ATTEMPTS - 1);
-        let faults = check_dungeon(&b);
-        assert!(faults.is_empty(), "{}: {:?}", m.id, shown(&faults));
-    }
 }
 
 /// A candidate the judge refuses is re-rolled and the refusal kept; the last attempt is judged

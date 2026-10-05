@@ -4,7 +4,7 @@
 //! Each is found by reading the county: a fingerpost by a road names it, the forks on the way name
 //! it from further off, and the words name something she can walk to.
 //!
-//! The fast tier holds the signs on the gate's seeds; the slow tier plays the Lost on seeds 1 to 8
+//! The fast tier holds the signs on the gate's seeds; the full tier plays the Lost on seeds 1 to 8
 //! (`cargo test --release -p jane-bot --test clarity -- --ignored`). Before the pass she gave up on
 //! these steps 36 times over the eight seeds; the owner's bar is each place found on seven seeds
 //! of eight. What is held: every step found on six seeds of eight at least, and no more than
@@ -170,13 +170,10 @@ fn gave_up(seed: u32) -> Vec<String> {
 const GIVE_UPS: usize = 14;
 
 #[test]
-#[ignore = "slow: the Lost on eight seeds until the hard steps are done, about five minutes of a release build"]
-fn the_lost_finds_the_hard_places_on_six_seeds_of_eight() {
+#[ignore = "slow, full tier: the Lost on eight seeds until the hard steps are done, about three minutes of a release build"]
+fn full_the_lost_finds_the_hard_places_on_six_seeds_of_eight() {
     let seeds: Vec<u32> = (1..=8).collect();
-    let runs: Vec<(u32, Vec<String>)> = std::thread::scope(|sc| {
-        let hs: Vec<_> = seeds.iter().map(|&s| sc.spawn(move || (s, gave_up(s)))).collect();
-        hs.into_iter().map(|h| h.join().expect("a run")).collect()
-    });
+    let runs: Vec<(u32, Vec<String>)> = par_map(seeds.clone(), |s| (s, gave_up(s)));
     let mut bad = Vec::new();
     let mut all = 0;
     for (quest, i) in HARD {

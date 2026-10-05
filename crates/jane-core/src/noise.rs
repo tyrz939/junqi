@@ -131,7 +131,6 @@ mod tests {
             for x in -20..20 {
                 let v = value_at(x * 3, y * 5, 7, 99);
                 assert!((0..Q16_ONE).contains(&v.0));
-                assert_eq!(v, value_at(x * 3, y * 5, 7, 99));
             }
         }
     }

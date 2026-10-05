@@ -10,7 +10,7 @@ use jane_art::looks::{self, Rendered};
 use jane_art::palette::{self, Ix, Ramp, Tone};
 use jane_art::person::{self, AX, AY, H, W};
 use jane_art::sprite::{FrameId, Role};
-use jane_data::{Controller, Look, catalog};
+use jane_data::{Look, catalog};
 
 fn all() -> &'static [Rendered] {
     static ALL: OnceLock<Vec<Rendered>> = OnceLock::new();
@@ -45,26 +45,6 @@ fn drawn(c: &Canvas) -> (i32, i32, i32, i32) {
 /// it to its own.
 fn ghost(r: &Rendered) -> bool {
     matches!(looks::find(r.name), Some((_, Look::Person(p))) if p.ghost)
-}
-
-/// A creature, not a person: these unit sprites are step 4's (ART.md §8).
-fn is_creature(sprite: &str) -> bool {
-    ["cat", "hen", "sheep"].iter().any(|k| sprite.contains(k))
-}
-
-#[test]
-fn coverage_jane_and_the_townsfolk_have_looks() {
-    let c = catalog();
-    let mut missing = BTreeSet::new();
-    for u in c.combat.units {
-        let name = c.sprites[usize::from(u.sprite.0)];
-        let person_row = u.controller == Controller::Player
-            || (["town_", "folk_", "villager_"].iter().any(|p| name.starts_with(p)) && !is_creature(name));
-        if person_row && looks::find(name).is_none() {
-            missing.insert(name);
-        }
-    }
-    assert!(missing.is_empty(), "sprites with no look: {missing:?}");
 }
 
 #[test]

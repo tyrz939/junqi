@@ -278,7 +278,5 @@ mod tests {
         for ratio in [0.5, 1.0, 1.19, 2.0] {
             assert!(has(ratio), "{ratio}: {peaks:?}");
         }
-        // The tierce is no harmonic of the hum: 2.38 hums.
-        assert!((1.19f32 / 0.5).fract() > 0.3);
     }
 }

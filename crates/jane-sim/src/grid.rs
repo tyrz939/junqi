@@ -49,9 +49,27 @@ pub struct ZoneGrid {
     /// what of each is solid to feet, in sixteenths. A cell stamped with no entry is solid whole.
     /// Paths, sight and the solver read the cell; only a moving body reads this.
     parts: Lookup<CellIx, [u16; 16]>,
+    /// Which version of the flags this is (see [`ZoneGrid::generation`]).
+    generation: u64,
+}
+
+/// Generations handed out, process wide: a grid made afresh (a runtime rebuilt, a zone streamed
+/// in) never shares one with the grid it replaces.
+static GENERATIONS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+
+fn next_generation() -> u64 {
+    GENERATIONS.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
 }
 
 impl ZoneGrid {
+    /// A number that changes whenever a tile or a prop's stamp changes what the flags say (not
+    /// occupancy): a reader that derived something from the flags (the bot's plan over blocks, its
+    /// flood of where she can reach) knows it still holds while this is the same. Not state: never
+    /// hashed, never saved, and no rule of the sim reads it.
+    pub fn generation(&self) -> u64 {
+        self.generation
+    }
+
     /// From tiles; flags are the tiles' own, with nothing stamped and nobody standing.
     pub fn new(tiles: Grid<Tile>) -> Self {
         let flags = Grid::from_vec(tiles.w(), tiles.h(), tiles.as_slice().iter().map(|t| t.flags()).collect());
@@ -61,6 +79,7 @@ impl ZoneGrid {
             flags,
             occ: Lookup::with_capacity(256),
             parts: Lookup::with_capacity(256),
+            generation: next_generation(),
         }
     }
 
@@ -75,6 +94,7 @@ impl ZoneGrid {
             flags,
             occ: Lookup::with_capacity(256),
             parts: Lookup::with_capacity(256),
+            generation: next_generation(),
         };
         for (i, t) in deltas {
             let (x, y) = ((i.0 % g.w()) as i32, (i.0 / g.w()) as i32);
@@ -193,11 +213,13 @@ impl ZoneGrid {
         }
         let f = self.flags_at(x, y);
         self.flags.set(x, y, (f & KEEP_ON_TILE_CHANGE) | t.flags());
+        self.generation = next_generation();
     }
 
     /// Clear the prop bits of a rect (clipped).
     pub fn clear_prop_flags_in(&mut self, r: Rect) {
         let Some(r) = r.intersect(self.flags.bounds()) else { return };
+        self.generation = next_generation();
         let keep = !(F_PROP_SOLID | F_PROP_LOS);
         for y in r.y..r.bottom() {
             for x in r.x..r.right() {
@@ -211,6 +233,7 @@ impl ZoneGrid {
     }
 
     pub fn clear_prop_flags(&mut self) {
+        self.generation = next_generation();
         let keep = !(F_PROP_SOLID | F_PROP_LOS);
         for f in self.flags.as_mut_slice() {
             *f &= keep;
@@ -222,6 +245,7 @@ impl ZoneGrid {
     pub fn stamp_prop(&mut self, r: Rect, block_los: bool) {
         let bits = F_PROP_SOLID | if block_los { F_PROP_LOS } else { 0 };
         let Some(r) = r.intersect(self.flags.bounds()) else { return };
+        self.generation = next_generation();
         for y in r.y..r.bottom() {
             for x in r.x..r.right() {
                 if let Some(f) = self.flags.get_mut(x, y) {
@@ -239,6 +263,7 @@ impl ZoneGrid {
     pub fn stamp_prop_parts(&mut self, r: Rect, block_los: bool, parts: &[Rect; 3]) {
         let bits = F_PROP_SOLID | if block_los { F_PROP_LOS } else { 0 };
         let Some(r) = r.intersect(self.flags.bounds()) else { return };
+        self.generation = next_generation();
         for y in r.y..r.bottom() {
             for x in r.x..r.right() {
                 let i = self.ix(x, y);

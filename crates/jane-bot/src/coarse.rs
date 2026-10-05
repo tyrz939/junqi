@@ -51,6 +51,8 @@ pub struct Coarse {
     road: Vec<bool>,
     links: Vec<Vec<u32>>,
     made: u32,
+    /// The flags' version the pieces were made from (`View::flags_generation`).
+    generation: u64,
     /// The last plan, start to goal.
     path: Vec<u32>,
     /// Crossings the walker failed to make, with the frame they may be tried again.
@@ -85,6 +87,7 @@ impl Coarse {
         }
         self.zone = Some(v.zone());
         self.made = v.frame();
+        self.generation = v.flags_generation();
         (self.w, self.h) = (w, h);
         self.bw = (w + BLOCK - 1) / BLOCK;
         self.bh = (h + BLOCK - 1) / BLOCK;
@@ -173,7 +176,13 @@ impl Coarse {
         danger: &[(i32, i32)],
     ) -> Option<(i32, i32)> {
         if self.zone != Some(v.zone()) || v.frame() >= self.made + REBUILD {
-            self.build(v);
+            // Made again from flags of the same version, the pieces would be the same pieces
+            // (the county's are 4 million cells: most of the bot's time between dungeons).
+            if self.zone == Some(v.zone()) && self.generation == v.flags_generation() {
+                self.made = v.frame();
+            } else {
+                self.build(v);
+            }
         }
         self.plans += 1;
         let now = v.frame();

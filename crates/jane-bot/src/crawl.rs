@@ -98,6 +98,9 @@ pub enum Stage {
 pub struct Crawl {
     pub zone: ZoneId,
     pub stage: Stage,
+    /// [`signature`] of the frame (and tick) it was last taken on: the props hashed once a frame,
+    /// not at every caller (it was three to five times a frame, the crawl's dearest line).
+    sig_memo: Option<(u32, u32, u64)>,
     task: Option<(Task, Try)>,
     /// What was tried, with the signature it was tried under and how often.
     tried: BTreeMap<Try, (u64, u32)>,
@@ -155,15 +158,21 @@ pub struct Reach {
     zone: Option<ZoneId>,
     at: u32,
     sig: u64,
+    /// The flags' version it was flooded over (`View::flags_generation`).
+    generation: u64,
 }
 
 impl Reach {
     pub(crate) fn update(&mut self, v: &View<'_>, sig: u64) {
         let (w, h) = v.size();
         let (x, y) = v.body().pos.cell();
-        if self.zone == Some(v.zone()) && self.sig == sig && self.at + 30 > v.frame() && self.get(x, y) {
+        // The flood is made again every half a second, or at once when the props change; but over
+        // flags of the same version, from a cell inside it, it is the same flood.
+        let fresh = self.at + 30 > v.frame() || self.generation == v.flags_generation();
+        if self.zone == Some(v.zone()) && self.sig == sig && fresh && self.get(x, y) {
             return;
         }
+        self.generation = v.flags_generation();
         self.zone = Some(v.zone());
         self.sig = sig;
         self.at = v.frame();
@@ -272,8 +281,22 @@ fn verb_for(v: &View<'_>, a: Answers) -> Option<SpellId> {
 }
 
 impl Crawl {
+    /// [`signature`] of what `v` shows, taken once a frame.
+    fn signature(&mut self, v: &View<'_>) -> u64 {
+        let at = (v.frame(), v.tick().0);
+        match self.sig_memo {
+            Some((f, t, s)) if (f, t) == at => s,
+            _ => {
+                let s = signature(v);
+                self.sig_memo = Some((at.0, at.1, s));
+                s
+            }
+        }
+    }
+
     pub fn new(zone: ZoneId) -> Crawl {
         Crawl {
+            sig_memo: None,
             zone,
             stage: Stage::Enter,
             task: None,
@@ -411,7 +434,8 @@ impl Crawl {
                 // The Factory: what the story wants from it is in hand (tactics::works).
                 let won = boss_of(self.zone).is_some_and(|b| self.bosses.iter().any(|&(d, _)| d == b));
                 if won {
-                    self.reach.update(v, signature(v));
+                    let sig = self.signature(v);
+                    self.reach.update(v, sig);
                 }
                 if crate::tactics::works::done(v, &self.reach, self.zone, won) && !self.growth_left(v, cx) {
                     self.stage = Stage::Leave;
@@ -435,7 +459,8 @@ impl Crawl {
         // A boss room's own play (`tactics/`), before the general fight.
         // (The flood is looked at again first: a lock-in behind her changes the ground.)
         if v.zone() == self.zone {
-            self.reach.update(v, signature(v));
+            let sig = self.signature(v);
+            self.reach.update(v, sig);
         }
         if let Some(a) = crate::tactics::museum::fight(v, cx, &self.reach) {
             return a;
@@ -490,7 +515,7 @@ impl Crawl {
                 return Act::hold(f);
             }
         }
-        let sig = signature(v);
+        let sig = self.signature(v);
         // A dungeon shut for the night (tactics/*.rs): the night waited out by its fire (the
         // county's night is worse), and not counted as the crawl's time.
         if self.stage == Stage::Explore && !matches!(self.task, Some((_, Try::Rest(_)))) {
@@ -781,7 +806,7 @@ impl Crawl {
     /// One thing to do here, for a plan that is not a crawl (the story in the cellar): the
     /// crawl's own choice, remembered as tried.
     pub fn pick(&mut self, v: &View<'_>, cx: &Ctx) -> Option<(Task, Try)> {
-        let sig = signature(v);
+        let sig = self.signature(v);
         self.reach.update(v, sig);
         let (t, what) = self.choose(v, cx, sig)?;
         let e = self.tried.entry(what).or_insert((sig, 0));
@@ -795,7 +820,7 @@ impl Crawl {
     /// gold-leaf page not yet opened, beside ground she can walk and not given up on, is taken
     /// before she walks out (DUNGEONS.md §3, "Growth on the story's path").
     fn growth_left(&mut self, v: &View<'_>, cx: &Ctx) -> bool {
-        let sig = signature(v);
+        let sig = self.signature(v);
         self.reach.update(v, sig);
         let zone = v.zone();
         // (What a dungeon's tactic leaves for another visit is not waited on either.)
@@ -851,13 +876,15 @@ impl Crawl {
 
     /// Can she walk to this point from where she stands (as of the last flood)?
     pub fn reaches(&mut self, v: &View<'_>, at: Vec2) -> bool {
-        self.reach.update(v, signature(v));
+        let sig = self.signature(v);
+        self.reach.update(v, sig);
         self.reach.point(at)
     }
 
     /// Can she stand beside `p` (any side of it, not only the one nearest her)?
     pub fn reaches_prop(&mut self, v: &View<'_>, p: &jane_sim::Prop) -> bool {
-        self.reach.update(v, signature(v));
+        let sig = self.signature(v);
+        self.reach.update(v, sig);
         self.reach.beside(p)
     }
 

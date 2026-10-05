@@ -42,14 +42,8 @@ fn first_hour(seed: u32, model: Model) -> Experience {
 #[ignore = "slow: twelve first hours (three seeds, four models), about half a minute in a dev build"]
 fn the_first_hour_holds_its_bands() {
     let models = [Model::Reader, Model::Rusher, Model::Lost, Model::Explorer];
-    let runs: Vec<Experience> = std::thread::scope(|sc| {
-        let hs: Vec<_> = SEEDS
-            .iter()
-            .flat_map(|&seed| models.iter().map(move |&m| (seed, m)))
-            .map(|(seed, m)| sc.spawn(move || first_hour(seed, m)))
-            .collect();
-        hs.into_iter().map(|h| h.join().expect("a run")).collect()
-    });
+    let jobs: Vec<(u32, Model)> = SEEDS.iter().flat_map(|&seed| models.iter().map(move |&m| (seed, m))).collect();
+    let runs: Vec<Experience> = par_map(jobs, |(seed, m)| first_hour(seed, m));
     let mut bad = Vec::new();
     for b in &FIRST_HOUR {
         for &model in b.models {

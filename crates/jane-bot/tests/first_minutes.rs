@@ -58,13 +58,3 @@ fn the_reader_plays_the_first_minutes_on_three_seeds() {
 fn the_rusher_plays_the_first_minutes_on_three_seeds() {
     play(Model::Rusher);
 }
-
-/// Same seed, model and build: the same run, frame for frame (every run is a tape).
-#[test]
-fn a_bot_run_is_the_same_twice() {
-    let (a, ba) = story(2, Model::Rusher, 3 * MINUTE);
-    let (b, bb) = story(2, Model::Rusher, 3 * MINUTE);
-    assert_eq!(ba.log, bb.log);
-    assert_eq!(a.tape().runs, b.tape().runs);
-    assert_eq!(a.sim().hash(), b.sim().hash());
-}

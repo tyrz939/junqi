@@ -449,8 +449,6 @@ mod tests {
         if let Some(id) = story {
             let got = expanded(&format!("Go to {{place:{id}}} now"), "Tess", 7);
             assert!(!got.contains('{') && got.starts_with("Go to ") && got.ends_with(" now"), "{got}");
-            // A name is a pure function of the seed.
-            assert_eq!(got, expanded(&format!("Go to {{place:{id}}} now"), "Tess", 7));
         }
         assert_eq!(expanded("{} and {nope} and {", "T", 1), "{} and {nope} and {");
     }

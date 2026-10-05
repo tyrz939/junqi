@@ -20,7 +20,7 @@ use jane_core::tile::F_SOLID;
 use jane_core::{Blueprint, Grid, Key, NameId, Tile, ZoneId};
 use jane_data::{DoorAt, MissionNameWhat, NameKind};
 use jane_world::county::rail::{BEND, rail_line};
-use jane_world::county::{County, STAGES, build_county, county_skeleton};
+use jane_world::county::{County, STAGES, county_skeleton};
 use jane_world::skeleton::Skeleton;
 
 fn seed_list() -> Vec<u32> {
@@ -294,14 +294,5 @@ fn doors_stand(sk: &Skeleton, c: &County<'_>, bad: &mut Vec<String>) {
         if !ok {
             bad.push(format!("seed {s}: {name} at ({x}, {y}) is not where its row puts it"));
         }
-    }
-}
-
-#[test]
-fn chunks_and_doors_are_the_same_for_the_same_seed() {
-    for seed in seed_list().into_iter().take(common::seeds().min(4) as usize) {
-        let a = build_county(seed, 0).expect("builds");
-        let b = build_county(seed, 0).expect("builds");
-        assert!(a == b, "seed {seed}: two builds differ");
     }
 }

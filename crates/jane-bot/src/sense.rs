@@ -273,11 +273,17 @@ pub fn cupboard_in_reach(v: &View<'_>) -> Option<jane_sim::ids::PropId> {
     let cat = jane_data::catalog();
     let at = v.body().pos;
     let reach = i64::from(jane_sim::store::STORE_REACH_FX).pow(2);
-    v.props()
-        .find(|p| {
+    // Asked every frame: the props by her (the zone's block index), not all of them. A prop
+    // within reach overlaps this square; of two, the first in the zone's order, as a walk over
+    // every prop found it.
+    let (x, y) = at.cell();
+    let r = jane_sim::store::STORE_REACH_FX / jane_core::num::CELL_FX + 2;
+    v.props_in(jane_core::Rect::new(x - r, y - r, 2 * r + 1, 2 * r + 1))
+        .filter(|p| {
             let d = cat.story.prop(p.def);
-            d.store && !p.hidden && jane_sim::interact::prop_distance_sq(d, p, at) <= reach
+            d.store && jane_sim::interact::prop_distance_sq(d, p, at) <= reach
         })
+        .min_by_key(|p| std::ptr::from_ref::<jane_sim::Prop>(p) as usize)
         .map(|p| p.id)
 }
 

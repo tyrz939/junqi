@@ -16,8 +16,9 @@
 //! under 2 % of her; on arrival in each dungeon its own foes take at least two blows of her
 //! best on average (nothing new is a one-blow thing).
 //!
-//! A whole story on five seeds is minutes of release time, so the run is `#[ignore]`d, with the
-//! story test: `cargo test --release -p jane-bot --test growth -- --ignored --nocapture`.
+//! The runs are the story sweep's (`sweep.rs`: each seed played once for every whole-story test),
+//! so this is the slow tier with them: `cargo test --release -p jane-bot --test story -- --ignored
+//! growth --nocapture`.
 
 // The report prints means and shares: a test's arithmetic on small counts, never the sim's.
 #![allow(clippy::cast_precision_loss)]
@@ -25,27 +26,15 @@
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
 
-use jane_bot::run::Session;
-use jane_bot::{Bot, Ending, Model};
 use jane_core::action::Stat;
 use jane_core::{SpellId, UnitDefId, ZoneId};
 use jane_data::{SpellKind, SpellPower, UnitDef};
-use jane_sim::trace::{Ev, Kind};
-use jane_sim::{Blueprints, Seat, Sim};
+use jane_sim::Blueprints;
 
-/// Frames an hour of play.
-const HOUR: u32 = 60 * 60 * 60;
-const STORY_FRAMES: u32 = 40 * HOUR;
+use crate::sweep::{Her, Hour, Played, readers};
+
 const PHASE_SCALE: [u16; 7] = [1, 1, 2, 3, 4, 6, 8];
 const EARLY: [&str; 3] = ["rat", "skeleton", "spider"];
-
-/// Her stats at a moment.
-#[derive(Clone, Debug, Default)]
-struct Her {
-    strength: u16,
-    spirit: u16,
-    learned: Vec<SpellId>,
-}
 
 impl Her {
     fn hp(&self) -> i64 {
@@ -176,14 +165,6 @@ fn place(her: &Her, fs: &BTreeMap<Foe, u32>) -> (i64, i64, i64, i64) {
     (melee * 10 / n, best * 10 / n, bite_ / n, phase * 10 / n)
 }
 
-struct Hour {
-    her: Her,
-    zone: u16,
-    deaths: u32,
-    hurt: i64,
-    blows: u32,
-}
-
 struct Run {
     seed: u32,
     /// Her at New Game.
@@ -197,70 +178,21 @@ struct Run {
     the_end: u8,
 }
 
-fn her_of(sim: &Sim) -> Her {
-    let v = sim.view(Seat(0)).expect("seat 0");
-    let b = v.body();
-    Her { strength: b.strength, spirit: b.spirit, learned: v.learned().to_vec() }
-}
-
-fn place_of(sim: &Sim) -> u16 {
-    let v = sim.view(Seat(0)).expect("seat 0");
-    match v.zone() {
-        ZoneId::County => 100 + v.region() as u16,
-        z => z.index() as u16,
-    }
-}
-
-fn play(seed: u32) -> Run {
-    let bps = Blueprints::build(seed).expect("the seed builds");
-    let foes = foes(&bps);
+/// A run of the sweep, with what its seed's blueprints say of the foes and the kit.
+fn run_of(p: &Played) -> Run {
+    let bps = Blueprints::build(p.seed).expect("the seed builds");
     let kit =
         jane_bot::crawl::ORDER.iter().map(|&z| (z.index() as u16, jane_bot::crawl::growth_before(&bps, z))).collect();
-    let mut sim = Sim::new_game_with(bps, "Jane");
-    let start = her_of(&sim);
-    let mut bot = Bot::story(Model::Reader);
-    bot.ctx.ending = Some([Ending::Hold, Ending::Hill, Ending::Train][(seed as usize + 2) % 3]);
-    let mut sess = Session::new(bot, &sim, STORY_FRAMES / 3600);
-    let mut hours: Vec<Hour> = Vec::new();
-    let mut arrivals: Vec<(u16, u32, Her)> = Vec::new();
-    let mut here: BTreeMap<u16, u32> = BTreeMap::new();
-    let mut frame = 0;
-    while frame < STORY_FRAMES && !sess.bot.done() {
-        sess.step(&mut sim);
-        frame += 1;
-        if frame % 60 == 0 {
-            let p = place_of(&sim);
-            *here.entry(p).or_insert(0) += 1;
-            if !arrivals.iter().any(|a| a.0 == p) {
-                arrivals.push((p, frame / HOUR, her_of(&sim)));
-            }
-        }
-        if frame % HOUR == 0 {
-            let zone = here.iter().max_by_key(|e| *e.1).map_or(100, |e| *e.0);
-            here.clear();
-            hours.push(Hour { her: her_of(&sim), zone, deaths: 0, hurt: 0, blows: 0 });
-        }
+    Run {
+        seed: p.seed,
+        start: p.start.clone(),
+        hours: p.hours.clone(),
+        arrivals: p.arrivals.clone(),
+        kit,
+        foes: foes(&bps),
+        deaths: p.death_lines.len() as u32,
+        the_end: p.the_end,
     }
-    let zone = here.iter().max_by_key(|e| *e.1).map_or(100, |e| *e.0);
-    hours.push(Hour { her: her_of(&sim), zone, deaths: 0, hurt: 0, blows: 0 });
-    let (bot, trace) = sess.finish(&sim);
-    for r in &trace.records {
-        if r.seat != Some(0) {
-            continue;
-        }
-        let last = hours.len() - 1;
-        let h = &mut hours[((r.frame / HOUR) as usize).min(last)];
-        match r.kind {
-            Kind::Event(Ev::Died { .. }) => h.deaths += 1,
-            Kind::Event(Ev::Hurt { amount, .. }) => {
-                h.hurt += i64::from(amount);
-                h.blows += 1;
-            }
-            _ => {}
-        }
-    }
-    let v = sim.view(Seat(0)).expect("seat 0");
-    Run { seed, start, deaths: bot.deaths.len() as u32, the_end: v.the_end(), hours, arrivals, kit, foes }
 }
 
 fn early(foes: &BTreeMap<u16, BTreeMap<Foe, u32>>) -> Vec<Foe> {
@@ -357,10 +289,7 @@ fn report(r: &Run) -> String {
 #[test]
 #[ignore = "slow: a whole story on five seeds, minutes each in release"]
 fn the_growth_curve_on_seeds_1_to_5() {
-    let runs: Vec<Run> = std::thread::scope(|sc| {
-        let hs: Vec<_> = (1..=5).map(|s| sc.spawn(move || play(s))).collect();
-        hs.into_iter().map(|h| h.join().expect("a story run")).collect()
-    });
+    let runs: Vec<Run> = readers().iter().filter(|p| p.seed <= 5).map(run_of).collect();
     for r in &runs {
         println!("{}", report(r));
     }

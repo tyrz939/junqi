@@ -2238,7 +2238,8 @@ mod tests {
     /// time, a crown's three never all on one tick; a leaf lets go seldom, and falls its life.
     #[test]
     fn leaves_flutter_on_their_own_beats_and_the_odd_one_lets_go() {
-        let hs: Vec<u32> = (0..3).map(|k| jane_core::hash::mix32(0x4d ^ (k + 1u32).wrapping_mul(0x9e37_79b9))).collect();
+        let hs: Vec<u32> =
+            (0..3).map(|k| jane_core::hash::mix32(0x4d ^ (k + 1u32).wrapping_mul(0x9e37_79b9))).collect();
         let mut on = 0;
         for t in 0..6000 {
             let n = hs.iter().filter(|&&h| flutter(h, t, 32768, 4).is_some()).count();

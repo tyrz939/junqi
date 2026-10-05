@@ -414,7 +414,7 @@ pub fn open_spot(k: &Kit, rng: &mut Sfc32, a: Anchor, w: i32, h: i32) -> Option<
         if let Some(s) = k.spot(rng, square, w, h, 1, SPOT_TRIES) {
             return Some(s);
         }
-        r = (r * 8 + 4) / 5;
+        r = grow(r);
     }
     for r in 0..=a.within {
         for oy in -r..=r {
@@ -430,6 +430,11 @@ pub fn open_spot(k: &Kit, rng: &mut Sfc32, a: Anchor, w: i32, h: i32) -> Option<
     None
 }
 
+/// The next square out of [`open_spot`]: eight fifths, rounded.
+fn grow(r: i32) -> i32 {
+    (r * 8 + 4) / 5
+}
+
 /// Throws per square of [`open_spot`].
 const SPOT_TRIES: u32 = 24;
 
@@ -443,7 +448,7 @@ mod tests {
         let mut r = 1;
         while r <= 40 {
             seen.push(r);
-            r = (r * 8 + 4) / 5;
+            r = grow(r);
         }
         assert_eq!(seen, vec![1, 2, 4, 7, 12, 20, 32]);
     }
