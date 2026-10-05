@@ -153,7 +153,9 @@ pub fn rows(albedo: &[u16], page_w: u16, s: &SpriteCmd, c: &Caster, out: &mut Ve
             } else {
                 (first as i32, last as i32)
             };
-            out.push((hv, u0, u1));
+            // Bent in the wind, its shadow bends with it (`Bend`).
+            let d = s.flags.bend.shift(v);
+            out.push((hv, u0 + d, u1 + d));
         };
         for (u, _) in row.iter().enumerate().filter(|&(_, &i)| i > 1) {
             run = match run {

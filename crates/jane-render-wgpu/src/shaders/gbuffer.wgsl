@@ -83,11 +83,13 @@ fn vs_sprite(
     @location(3) foot: vec4<i32>,
 ) -> SpriteOut {
     let corner = vec2<f32>(f32(vi & 1u), f32((vi >> 1u) & 1u));
-    let size = vec2<f32>(f32(src.z), f32(src.w));
-    let p = vec2<f32>(f32(dst.x), f32(dst.y)) + g.guard + corner * size;
+    // Bent in the wind, the quad is as much wider each side as its top leans.
+    let reach = f32(abs(bend_shift(bend_of(foot.w), 0)));
+    let size = vec2<f32>(f32(src.z) + 2.0 * reach, f32(src.w));
+    let p = vec2<f32>(f32(dst.x) - reach, f32(dst.y)) + g.guard + corner * size;
     var o: SpriteOut;
     o.pos = to_clip(p);
-    o.local = corner * size;
+    o.local = corner * size - vec2<f32>(reach, 0.0);
     o.src = src;
     o.info = vec4<u32>(u32(dst.z), u32(dst.w), extra.x, extra.y);
     o.sink = extra.z;
@@ -115,12 +117,33 @@ fn skips(i: SpriteOut, ix: u32) -> bool {
     return hidden(i) && (i.foot.z == 0 || ix <= 1u || ((q.x + q.y) & 1) != 0);
 }
 
-// The texel of the sprite under this fragment (a mirrored frame walks its columns backwards).
+// A bend unpacked (`jane_present::Bend::packed`): lean, from, span.
+fn bend_of(p: i32) -> vec3<i32> {
+    return vec3<i32>((p & 31) - 16, (p >> 5) & 255, (p >> 13) & 255);
+}
+
+// Px a source row is drawn east of where it would stand (`jane_present::Bend::shift`).
+fn bend_shift(b: vec3<i32>, row: i32) -> i32 {
+    let d = b.y - row;
+    if b.z == 0 || d <= 0 {
+        return 0;
+    }
+    let s = (2 * abs(b.x) * d + b.z) / (2 * b.z);
+    return select(s, -s, b.x < 0);
+}
+
+// The texel of the sprite under this fragment (a mirrored frame walks its columns backwards; a
+// bent one's row is its shift east), x -1 where the row's run does not reach.
 fn texel(i: SpriteOut) -> vec2<i32> {
-    let l = vec2<u32>(floor(i.local));
+    let l = vec2<i32>(floor(i.local));
+    let w = i32(i.src.z);
+    let lx = l.x - bend_shift(bend_of(i.foot.w), l.y);
+    if lx < 0 || lx >= w {
+        return vec2<i32>(-1, -1);
+    }
     let mirror = (i.info.y & 1u) != 0u;
-    let sx = select(l.x, i.src.z - 1u - l.x, mirror);
-    return vec2<i32>(i32(i.src.x + sx), i32(i.src.y + l.y));
+    let sx = select(lx, w - 1 - lx, mirror);
+    return vec2<i32>(i32(i.src.x) + sx, i32(i.src.y) + l.y);
 }
 
 fn clut_at(ix: u32) -> vec3<f32> {
@@ -131,6 +154,9 @@ fn clut_at(ix: u32) -> vec3<f32> {
 @fragment
 fn fs_sprite(i: SpriteOut) -> GOut {
     let t = texel(i);
+    if t.x < 0 {
+        discard;
+    }
     let page = i32(i.info.x);
     let ix = textureLoad(atlas_albedo, t, page, 0).r;
     if ix <= 1u || skips(i, ix) {
@@ -183,6 +209,9 @@ fn fs_sprite(i: SpriteOut) -> GOut {
 fn fs_contact(i: SpriteOut) -> @location(0) vec4<f32> {
     let page = i32(i.info.x);
     let t = texel(i);
+    if t.x < 0 {
+        discard;
+    }
     let ix = textureLoad(atlas_albedo, t, page, 0).r;
     // One seen through (tint kind 3) lays no contact shadow.
     if ix > 1u || skips(i, ix) || ((i.info.y >> 16u) & 3u) == 3u {
@@ -209,7 +238,11 @@ fn fs_contact(i: SpriteOut) -> @location(0) vec4<f32> {
 // A ghost: the albedo alone, over what is under it; it neither casts nor catches a height.
 @fragment
 fn fs_ghost(i: SpriteOut) -> @location(0) vec4<f32> {
-    let ix = textureLoad(atlas_albedo, texel(i), i32(i.info.x), 0).r;
+    let t = texel(i);
+    if t.x < 0 {
+        discard;
+    }
+    let ix = textureLoad(atlas_albedo, t, i32(i.info.x), 0).r;
     if ix <= 1u || skips(i, ix) {
         discard;
     }

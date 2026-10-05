@@ -27,7 +27,7 @@ use crate::cues::Cues;
 use crate::drawlist::{DrawCmd, DrawList};
 use crate::facing::Face8;
 use crate::frame::{
-    Block, CANVAS_H, CANVAS_W, CAST_MARGIN, CELL, CHUNK_PX, Caster, ChunkCmd, ChunkId, Depth, Directional,
+    Bend, Block, CANVAS_H, CANVAS_W, CAST_MARGIN, CELL, CHUNK_PX, Caster, ChunkCmd, ChunkId, Depth, Directional,
     FX_TO_CANVAS, Features, Flags, Foot, Frame, Light, LightKind, Margins, Pass, Post, Rgb, Span, SpriteCmd, Tier,
     Tint, height_of_rows, rows_up,
 };
@@ -1327,6 +1327,7 @@ impl Present {
             .filter(|u| u.prev != u.cur)
             .map(|u| ((u.cur.0 >> FX_TO_CANVAS) - cam.0, (u.cur.1 >> FX_TO_CANVAS) - cam.1));
         let tick = self.tick;
+        self.fx.loose.clear();
         if let Some((cx0, cy0, cx1, cy1)) = self.chunk_range(cam, band.grow(SORT_PAST)) {
             for cy in cy0..=cy1 {
                 for cx in cx0..=cx1 {
@@ -1341,23 +1342,26 @@ impl Present {
                         let own = jane_core::hash::mix32(zx as u32 ^ (zy as u32).rotate_left(16));
                         let rustle =
                             fl.rustles && walker.is_some_and(|(wx, wy)| (wx - fx).abs() <= 8 && (wy - fy).abs() <= 6);
-                        let frame = if rustle {
-                            [1, 5][((tick / 3).wrapping_add(own) % 2) as usize]
+                        let (level, gust) = if rustle {
+                            ([-2, 2][((tick / 3).wrapping_add(own) % 2) as usize], 65536)
                         } else {
-                            sway_frame(fl.class, zx, zy, own, tick, pace(fl.class), wind)
+                            sway(fl.class, zx, zy, own, tick, pace(fl.class), wind)
                         };
-                        let r = self.atlas.get(fl.sway[frame as usize]);
+                        let r = self.atlas.get(fl.look);
                         let (x, y) = (fx - i32::from(r.ax), fy - i32::from(r.ay));
-                        if !in_band(x, y, r.src.w, r.src.h) {
+                        let bend = Bend { lean: level as i8, ..fl.bend };
+                        let reach = bend.reach();
+                        if !in_band(x - reach, y, r.src.w + 2 * reach as u16, r.src.h) {
                             continue;
                         }
-                        let mut sp = sprite(r, x, y, Flags::default());
+                        let mut sp = sprite(r, x, y, Flags { bend, ..Flags::default() });
                         if behind(fx + cam.0, fy + cam.1) {
                             sp.foot = Some(Foot { y: clamp16(0, fy).1, see: false });
                         }
+                        let key = 0x4000_0000 | u32::from(slot) << 10 | i as u32;
                         self.standing.push(DrawCmd {
                             y: fy,
-                            key: 0x4000_0000 | u32::from(slot) << 10 | i as u32,
+                            key,
                             sprite: sp,
                             // A stand of reeds or long grass casts nothing, as the tufts painted
                             // round it cast nothing (`shadow::RELIEF`): it is growth, not a thing.
@@ -1369,6 +1373,31 @@ impl Present {
                                 ..Caster::default()
                             }),
                         });
+                        // Its loose leaves on the windward edge (ART-PLAN §9): drawn over it,
+                        // the same key, so straight after it.
+                        let windward = if wind < 0 { 1 } else { -1 };
+                        for (k, cl) in fl.leaves.iter().enumerate().filter(|(_, c)| c.side == windward) {
+                            let (cx, cy) = (x + i32::from(cl.x) + bend.shift(i32::from(cl.y)), y + i32::from(cl.y));
+                            let h = jane_core::hash::mix32(own ^ (k as u32 + 1).wrapping_mul(0x9e37_79b9));
+                            if let Some((dx, dy, lit)) = flutter(h, tick, gust, wind) {
+                                let lr = self.atlas.get(if lit { cl.lit } else { cl.plain });
+                                let mut lp = sprite(lr, cx + dx * i32::from(windward), cy + dy, Flags::default());
+                                lp.foot = sp.foot;
+                                self.standing.push(DrawCmd { y: fy, key, sprite: lp, caster: None });
+                            }
+                            // The odd one lets go and joins the wind's leaves.
+                            if let Some(age) = let_go(h, tick) {
+                                let (gx, gy) = (cx + cam.0 + 1, fy + cam.1);
+                                self.fx.loose.push(crate::fx::Loose {
+                                    x: gx,
+                                    y: gy,
+                                    z: fy - cy,
+                                    age,
+                                    seed: h,
+                                    colour: cl.colour,
+                                });
+                            }
+                        }
                     }
                 }
             }
@@ -1551,13 +1580,17 @@ impl Present {
                 depth: 5,
                 ..Caster::default()
             });
-            let mut sp = sprite(r, x, y, Flags { mirror, tint });
+            let mut sp = sprite(r, x, y, Flags { mirror, tint, bend: crate::frame::Bend::NONE });
             if behind(fx >> FX_TO_CANVAS, fy >> FX_TO_CANVAS) {
                 // A player shows through what hides her.
                 sp.foot = Some(Foot { y: clamp16(0, sy).1, see: u.player });
             }
             if u.seen && on_canvas(x, y, r.src.w, r.src.h) {
-                self.seen.push(SpriteCmd { flags: Flags { mirror, tint: Tint::Seen }, foot: None, ..sp });
+                self.seen.push(SpriteCmd {
+                    flags: Flags { mirror, tint: Tint::Seen, bend: crate::frame::Bend::NONE },
+                    foot: None,
+                    ..sp
+                });
             }
             self.standing.push(DrawCmd { y: sy, key: UNIT_KEY | u.id, sprite: sp, caster });
             // A serpent's body along its trail, tail first, a segment at every point, each
@@ -1573,7 +1606,8 @@ impl Present {
                     let (qx, qy) = ((px >> FX_TO_CANVAS) - cam.0, (py >> FX_TO_CANVAS) - cam.1);
                     let (x, y) = (qx - i32::from(r.ax), qy - i32::from(r.ay));
                     if in_band(x, y, r.src.w, r.src.h) {
-                        let mut sp = sprite(r, x, y, Flags { mirror: false, tint: Tint::None });
+                        let mut sp =
+                            sprite(r, x, y, Flags { mirror: false, tint: Tint::None, bend: crate::frame::Bend::NONE });
                         if behind(px >> FX_TO_CANVAS, py >> FX_TO_CANVAS) {
                             sp.foot = Some(Foot { y: clamp16(0, qy).1, see: false });
                         }
@@ -1655,7 +1689,7 @@ impl Present {
                 continue;
             }
             let tint = if a.alpha < 255 { Tint::Ghost(a.alpha) } else { Tint::None };
-            let mut sp = sprite(r, x, y, Flags { mirror: a.mirror, tint });
+            let mut sp = sprite(r, x, y, Flags { mirror: a.mirror, tint, bend: crate::frame::Bend::NONE });
             if !a.perch && !a.flat && a.up < 4 && behind(a.x, a.y) {
                 sp.foot = Some(Foot { y: clamp16(0, sy).1, see: false });
             }
@@ -1884,16 +1918,17 @@ fn lived_houses(view: &View<'_>, houses: &jane_art::terrain::houses::Houses) -> 
     lived
 }
 
-/// Which of a flora sprite's seven sway frames shows (ART-PLAN M2, the owner's 2026-10-03 note:
-/// smaller steps, faster, never in step): a sine of its own pace, its phase put back by a gust
-/// that travels across the county down the wind (neighbours lean in a ripple, one after the
-/// other) and nudged by its own hash, its reach swelling and easing with a slower gust over it,
-/// one way stronger than the other with the wind. Integer; a lean changes a frame at a time.
-fn sway_frame(class: crate::terrain::SwayClass, x: i32, y: i32, own: u32, tick: u32, period: u32, wind: i32) -> u32 {
+/// How far a flora sprite leans, `-3..=3` levels of its bend (ART-PLAN M2 and §9, the owner's
+/// 2026-10-03 notes: smaller steps, faster, never in step), and the slow gust over it, `0..=65536`:
+/// a sine of its own pace, its phase put back by a gust that travels across the county down the
+/// wind (neighbours lean in a ripple, one after the other) and nudged by its own hash, its reach
+/// swelling and easing with the slower gust, one way stronger than the other with the wind.
+/// Integer; the lean changes a level at a time.
+fn sway(class: crate::terrain::SwayClass, x: i32, y: i32, own: u32, tick: u32, period: u32, wind: i32) -> (i32, i32) {
     use jane_core::Angle;
     use jane_core::angle::sin_q15;
     if class == crate::terrain::SwayClass::Still {
-        return crate::terrain::SWAY_REST as u32;
+        return (0, 0);
     }
     // The ripple: a crest every 384 px across, travelling with the wind's side.
     let along = if wind < 0 { -x } else { x };
@@ -1908,7 +1943,42 @@ fn sway_frame(class: crate::terrain::SwayClass, x: i32, y: i32, own: u32, tick: 
     // Leaning more with the wind than against it: the rest a px downwind in a blow.
     let bias = i64::from((wind / 16).clamp(-1, 1)) * 32768;
     let level = ((lean + bias) * 2 + 32768 * (lean + bias).signum()) / 65536;
-    (level.clamp(-3, 3) as i32 + crate::terrain::SWAY_REST as i32) as u32
+    let reach = crate::terrain::SWAY_REACH;
+    (level.clamp(-i64::from(reach), i64::from(reach)) as i32, (gust + 32768) as i32)
+}
+
+/// A loose leaf cluster's flutter this tick (ART-PLAN §9), its hash `h`: none most of the time;
+/// now and then, oftener and longer in a gust and a wind, a few ticks tipped a px out from the
+/// crown (and a px up or down), then a few turned to show its pale side. Each cluster on its own
+/// beat, so a crown's edge flickers and never all at once. `(out, down, lit)`.
+fn flutter(h: u32, tick: u32, gust: i32, wind: i32) -> Option<(i32, i32, bool)> {
+    let period = 40 + h % 23;
+    let t = tick.wrapping_add(h >> 8) % period;
+    let cycle = tick.wrapping_add(h >> 8) / period;
+    // One beat in three or so rests; a gust and a wind make the beat longer.
+    if jane_core::hash::mix32(h ^ cycle) % 3 == 0 {
+        return None;
+    }
+    let duty = 2 + (gust.clamp(0, 65536) * 6 / 65536) as u32 + (wind.unsigned_abs() / 8).min(4);
+    if t >= 2 * duty {
+        return None;
+    }
+    let down = if (h >> 4) & 1 == 0 { 1 } else { -1 };
+    Some(if t < duty { (1, down, false) } else { (0, 0, true) })
+}
+
+/// Ticks a loose leaf of a cluster, hash `h`, has been falling, if one is (ART-PLAN §9): now and
+/// then (about one cluster in eight a window of ten seconds) a leaf lets go, and falls for
+/// [`crate::fx::LOOSE_LIFE`] ticks.
+fn let_go(h: u32, tick: u32) -> Option<u32> {
+    const WINDOW: u32 = 600;
+    let at = tick.wrapping_add(h >> 12);
+    let w = jane_core::hash::mix32(h ^ (at / WINDOW).wrapping_mul(0x85eb_ca6b));
+    if w % 8 != 0 {
+        return None;
+    }
+    let start = (w >> 8) % (WINDOW - crate::fx::LOOSE_LIFE);
+    (at % WINDOW).checked_sub(start).filter(|&age| age < crate::fx::LOOSE_LIFE)
 }
 
 /// The terrain's drawn height at zone canvas px `(x, y)`, 0 where no chunk is painted.
@@ -2012,34 +2082,92 @@ mod tests {
 
     use super::*;
 
-    /// A bowl whose footprint lies on a table's stands on its top: drawn up on the top (further
-    /// back for a footprint further back), sorted after the table, throwing no shadow of its own;
-    /// a thing beside the table is left alone.
+    /// The atlas's bytes, every layer of every page, for the low-RAM budget (ART-PLAN §9): run
+    /// with `--nocapture` to read them.
+    #[test]
+    #[ignore = "builds every tier's art; slow in debug"]
+    fn atlas_bytes() {
+        for tier in [Tier::T0, Tier::T2] {
+            let p = Present::new(tier);
+            let a = p.atlas();
+            let bytes: usize = a
+                .pages
+                .iter()
+                .map(|pg| {
+                    pg.albedo.len() * 2
+                        + pg.normal.len() * 2
+                        + pg.emissive.len() * 2
+                        + pg.height.len()
+                        + pg.glow.len() * 8
+                })
+                .sum();
+            let rows: usize = a.pages.iter().map(|pg| usize::from(pg.h)).sum();
+            println!("atlas {tier:?}: {} pages, {rows} rows, {bytes} bytes", a.pages.len());
+        }
+    }
+
     #[test]
     fn foliage_sways_a_frame_at_a_time_in_a_cycle_of_seconds_and_never_in_step() {
         use crate::terrain::SwayClass;
         for class in [SwayClass::Crown, SwayClass::Bush, SwayClass::Reed] {
             let p = class.period();
             assert!((90..=180).contains(&p), "{class:?}: {p} ticks");
-            let at = |x: i32, t: u32| sway_frame(class, x, 40, jane_core::hash::mix32(x as u32), t, p, 0);
-            // A frame at a time: the top moves a px, never a jump.
+            let at = |x: i32, t: u32| sway(class, x, 40, jane_core::hash::mix32(x as u32), t, p, 0).0;
+            // A level at a time: the top moves a px at most, never a jump.
             for t in 0..600 {
                 assert!(at(100, t).abs_diff(at(100, t + 1)) <= 1, "{class:?} jumps at {t}");
             }
             // It goes somewhere: more than three leans in a cycle.
-            let mut seen: Vec<u32> = (0..p).map(|t| at(100, t)).collect();
+            let mut seen: Vec<i32> = (0..p).map(|t| at(100, t)).collect();
             seen.sort_unstable();
             seen.dedup();
             assert!(seen.len() >= 4, "{class:?}: {seen:?}");
-            // A row of neighbours a cell apart never changes frame all on one tick.
+            // A row of neighbours a cell apart never steps all on one tick.
             for t in 0..p {
                 let changed = (0..8).filter(|k| at(100 + 16 * k, t) != at(100 + 16 * k, t + 1)).count();
                 assert!(changed < 8, "{class:?}: all eight step at {t}");
             }
         }
-        assert_eq!(sway_frame(SwayClass::Still, 5, 5, 9, 77, 170, 0), crate::terrain::SWAY_REST as u32);
+        assert_eq!(sway(SwayClass::Still, 5, 5, 9, 77, 170, 0).0, 0);
     }
 
+    /// A crown's loose leaves (ART-PLAN §9): a cluster flutters now and then, a few ticks at a
+    /// time, a crown's three never all on one tick; a leaf lets go seldom, and falls its life.
+    #[test]
+    fn leaves_flutter_on_their_own_beats_and_the_odd_one_lets_go() {
+        let hs: Vec<u32> = (0..3).map(|k| jane_core::hash::mix32(0x4d ^ (k + 1u32).wrapping_mul(0x9e37_79b9))).collect();
+        let mut on = 0;
+        for t in 0..6000 {
+            let n = hs.iter().filter(|&&h| flutter(h, t, 32768, 4).is_some()).count();
+            on += n;
+            let changed = hs.iter().filter(|&&h| flutter(h, t, 32768, 4) != flutter(h, t + 1, 32768, 4)).count();
+            assert!(changed < 3, "all three change at {t}");
+        }
+        // Busy but not frantic: a cluster stirs a tenth to a half of the time.
+        assert!((1800..9000).contains(&on), "{on} cluster-ticks of 18000");
+        // A gust stirs them more than a calm.
+        let calm: usize = (0..6000).filter(|&t| flutter(hs[0], t, 0, 0).is_some()).count();
+        let gale: usize = (0..6000).filter(|&t| flutter(hs[0], t, 65536, 40).is_some()).count();
+        assert!(gale > calm, "{calm} {gale}");
+        // Of a hundred clusters over a minute a few let go, each falling one life from age 0.
+        let mut falls = 0;
+        for k in 0..100u32 {
+            let h = jane_core::hash::mix32(k);
+            for t in 0..3600 {
+                if let_go(h, t) == Some(0) {
+                    falls += 1;
+                }
+                if let Some(a) = let_go(h, t + 1).filter(|&a| a > 0) {
+                    assert_eq!(let_go(h, t), Some(a - 1), "a leaf falls on, tick by tick");
+                }
+            }
+        }
+        assert!((20..=150).contains(&falls), "{falls} leaves");
+    }
+
+    /// A bowl whose footprint lies on a table's stands on its top: drawn up on the top (further
+    /// back for a footprint further back), sorted after the table, throwing no shadow of its own;
+    /// a thing beside the table is left alone.
     #[test]
     fn a_bowl_on_a_table_stands_on_its_top() {
         let rec = |x: i32, y: i32, w: i32, h: i32, surface: Option<(i32, i32)>| PropRec {

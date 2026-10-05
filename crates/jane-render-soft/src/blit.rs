@@ -57,9 +57,9 @@ pub fn sprite(
     behind: Option<(Foot, &[u8])>,
 ) {
     let (sw, sh) = (i32::from(src.w), i32::from(src.h));
-    let (x0, x1) = (x.max(0), (x + sw).min(t.w));
+    let reach = flags.bend.reach();
     let (y0, y1) = (y.max(0), (y + sh).min(t.h));
-    if x0 >= x1 || y0 >= y1 {
+    if x - reach >= t.w || x + sw + reach <= 0 || y0 >= y1 {
         return;
     }
     let pw = usize::from(page.w);
@@ -71,6 +71,12 @@ pub fn sprite(
     let has_ao = |r: i32| r >= 0 && r < sh && row(r).contains(&1);
     for dy in y0..y1 {
         let r = dy - y;
+        // Bent in the wind, the row is drawn its shift east (`Bend::shift`).
+        let x = x + flags.bend.shift(r);
+        let (x0, x1) = (x.max(0), (x + sw).min(t.w));
+        if x0 >= x1 {
+            continue;
+        }
         let srow = row(r);
         let near_ao = has_ao(r - 1) || has_ao(r) || has_ao(r + 1);
         let drow = &mut t.px[(dy * t.w) as usize..((dy + 1) * t.w) as usize];
@@ -185,6 +191,25 @@ mod tests {
         px
     }
 
+    /// A bent column: each row its own whole px east, none under `from`, clipped at the edge.
+    #[test]
+    fn a_bent_sprite_shifts_each_row_by_its_share_of_the_lean() {
+        let page = Page { w: 1, h: 5, albedo: vec![2; 5], ..Page::default() };
+        for lean in [-3i8, 2, 3] {
+            let bend = jane_present::Bend { lean, from: 4, span: 4 };
+            let mut px = vec![GREY; 8 * 5];
+            let mut t = Target { px: &mut px, w: 8, h: 5 };
+            let flags = Flags { bend, ..Flags::default() };
+            sprite(&mut t, &page, &clut(), Src { x: 0, y: 0, w: 1, h: 5 }, 3, 0, flags, None);
+            for r in 0..5 {
+                let at: Vec<usize> = (0..8).filter(|&x| px[r * 8 + x] == RED).collect();
+                assert_eq!(at, [(3 + bend.shift(r as i32)) as usize], "lean {lean} row {r}");
+            }
+            assert_eq!(bend.shift(0), i32::from(lean));
+            assert_eq!(bend.shift(4), 0);
+        }
+    }
+
     #[test]
     fn the_contact_shadow_is_cool_and_soft_edged_and_colour_is_the_clut() {
         let px = blit(Flags::default());
@@ -199,23 +224,23 @@ mod tests {
 
     #[test]
     fn a_mirrored_sprite_walks_its_columns_backwards() {
-        let px = blit(Flags { mirror: true, tint: Tint::None });
+        let px = blit(Flags { mirror: true, tint: Tint::None, bend: jane_present::Bend::NONE });
         let s1 = shadow(GREY, 1);
         assert_eq!(px, [GREY, 0xff20_20c0, RED, s1, s1, GREY]);
     }
 
     #[test]
     fn flash_goes_toward_white_and_ghost_lets_the_ground_through() {
-        let px = blit(Flags { mirror: false, tint: Tint::Flash(255) });
+        let px = blit(Flags { mirror: false, tint: Tint::Flash(255), bend: jane_present::Bend::NONE });
         assert_eq!(px[3], 0xffff_ffff);
-        let px = blit(Flags { mirror: false, tint: Tint::Flash(128) });
+        let px = blit(Flags { mirror: false, tint: Tint::Flash(128), bend: jane_present::Bend::NONE });
         assert_eq!(px[3], lerp(RED, 0xffff_ffff, 129));
         assert!(px[3] > RED && px[3] < 0xffff_ffff);
-        let px = blit(Flags { mirror: false, tint: Tint::Ghost(128) });
+        let px = blit(Flags { mirror: false, tint: Tint::Ghost(128), bend: jane_present::Bend::NONE });
         // Half the red over the grey; the shadow still darkens; clear still skips.
         assert_eq!(px[3], lerp(GREY, RED, 129));
         assert_eq!((px[1], px[2]), (shadow(GREY, 1), shadow(GREY, 1)));
-        let px = blit(Flags { mirror: false, tint: Tint::Ghost(0) });
+        let px = blit(Flags { mirror: false, tint: Tint::Ghost(0), bend: jane_present::Bend::NONE });
         assert_eq!(px[3], GREY);
     }
 

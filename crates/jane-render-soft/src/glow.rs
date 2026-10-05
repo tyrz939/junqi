@@ -98,7 +98,8 @@ impl Glow {
             }
             let col = (gx - sx) as i32;
             let col = if flags.mirror { sw as i32 - 1 - col } else { col };
-            let (px, py) = (x + col, y + (gy - sy) as i32);
+            let row = (gy - sy) as i32;
+            let (px, py) = (x + col + flags.bend.shift(row), y + row);
             // What the terrain hides of it does not glow, seen through or not (the lit tiers draw
             // what shows through as colour alone).
             if let Some((f, hs)) = behind
@@ -305,7 +306,7 @@ mod tests {
         (page, vec![(2, 3)], clut)
     }
 
-    const PLAIN: Flags = Flags { mirror: false, tint: Tint::None };
+    const PLAIN: Flags = Flags { mirror: false, tint: Tint::None, bend: jane_present::Bend::NONE };
 
     #[test]
     fn a_glowing_texel_shines_over_the_dark_and_a_covered_one_does_not() {
@@ -313,7 +314,7 @@ mod tests {
         let mut px = vec![0xff10_1010; 8];
         let mut t = Target { px: &mut px, w: 8, h: 1 };
         let src = Src { x: 0, y: 0, w: 4, h: 1 };
-        let mirror = Flags { mirror: true, tint: Tint::None };
+        let mirror = Flags { mirror: true, tint: Tint::None, bend: jane_present::Bend::NONE };
         let mut g = Glow::default();
         g.clear();
         crate::blit::sprite(&mut t, &page, &clut, src, 0, 0, PLAIN, None);
