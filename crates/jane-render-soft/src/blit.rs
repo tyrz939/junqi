@@ -194,7 +194,7 @@ mod tests {
     /// A bent column: each row its own whole px east, none under `from`, clipped at the edge.
     #[test]
     fn a_bent_sprite_shifts_each_row_by_its_share_of_the_lean() {
-        let page = Page { w: 1, h: 5, albedo: vec![2; 5], ..Page::default() };
+        let page = Page { w: 1, h: 5, albedo: vec![2; 5].into(), ..Page::default() };
         for lean in [-3i8, 2, 3] {
             let bend = jane_present::Bend { lean, from: 4, span: 4 };
             let mut px = vec![GREY; 8 * 5];
