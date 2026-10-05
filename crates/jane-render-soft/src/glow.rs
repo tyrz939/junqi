@@ -299,7 +299,7 @@ mod tests {
 
     /// A 4 x 1 page whose third texel glows index 3.
     fn page() -> (Page, Vec<(u32, u16)>, Vec<u32>) {
-        let page = Page { w: 4, h: 1, albedo: vec![2, 2, 2, 2], ..Page::default() };
+        let page = Page { w: 4, h: 1, albedo: vec![2, 2, 2, 2].into(), ..Page::default() };
         let mut clut = vec![0xff00_0000; 1024];
         clut[2] = 0xff30_3030;
         clut[3] = 0xffff_d080;

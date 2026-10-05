@@ -117,14 +117,15 @@ impl Packer {
         }
         sh = sh.max(bh);
         let p = &mut self.page;
+        let albedo = std::sync::Arc::make_mut(&mut p.albedo);
         if sy + bh > p.h {
             p.h = sy + bh;
-            p.albedo.resize(usize::from(p.w) * usize::from(p.h), 0);
+            albedo.resize(usize::from(p.w) * usize::from(p.h), 0);
         }
         for y in 0..h {
             for x in 0..w {
                 let i = usize::from(sy + 1 + y) * usize::from(p.w) + usize::from(sx + 1 + x);
-                p.albedo[i] = px(i32::from(x), i32::from(y)).0;
+                albedo[i] = px(i32::from(x), i32::from(y)).0;
             }
         }
         self.shelf = (sx + bw, sy, sh);

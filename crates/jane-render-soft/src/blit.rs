@@ -181,7 +181,7 @@ mod tests {
 
     /// A 3 x 1 page: clear, shadow, red, then blue at the far end of a 4 x 1.
     fn page() -> Page {
-        Page { w: 4, h: 1, albedo: vec![0, 1, 2, 3], ..Page::default() }
+        Page { w: 4, h: 1, albedo: vec![0, 1, 2, 3].into(), ..Page::default() }
     }
 
     fn blit(flags: Flags) -> Vec<u32> {
@@ -248,7 +248,7 @@ mod tests {
     fn blits_clip_at_every_edge() {
         let mut px = vec![0u32; 16];
         let mut t = Target { px: &mut px, w: 4, h: 4 };
-        let page = Page { w: 3, h: 3, albedo: vec![2; 9], ..Page::default() };
+        let page = Page { w: 3, h: 3, albedo: vec![2; 9].into(), ..Page::default() };
         for (x, y) in [(-2, -2), (3, 3), (-5, 0), (0, 9)] {
             sprite(&mut t, &page, &clut(), Src { x: 0, y: 0, w: 3, h: 3 }, x, y, Flags::default(), None);
         }
@@ -264,7 +264,7 @@ mod tests {
     fn what_stands_behind_the_terrain_is_cut_where_it_stands_in_front() {
         // A 3 x 3 sprite of red standing on row 3, over a roof 40 px up on the left two columns
         // (its ground rows south of her feet) and flat ground on the right.
-        let page = Page { w: 3, h: 3, albedo: vec![2; 9], ..Page::default() };
+        let page = Page { w: 3, h: 3, albedo: vec![2; 9].into(), ..Page::default() };
         let mut heights = vec![0u8; 16];
         for y in 0..4 {
             heights[y * 4] = 40;

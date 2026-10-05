@@ -35,7 +35,7 @@ fn atlas() -> AtlasPages {
     let mut page = Page {
         w: w as u16,
         h: h as u16,
-        albedo: vec![0; n],
+        albedo: vec![0; n].into(),
         normal: vec![[128, 200]; n],
         emissive: vec![0; n],
         height: vec![0; n],
@@ -44,12 +44,12 @@ fn atlas() -> AtlasPages {
     let mut put = |x0: usize, x1: usize, top: usize| {
         for y in top..63 {
             for x in x0..x1 {
-                page.albedo[y * w + x] = 2;
+                std::sync::Arc::make_mut(&mut page.albedo)[y * w + x] = 2;
                 page.height[y * w + x] = height_of_rows(63 - y as i32).max(1) as u8;
             }
         }
         for x in x0..x1 {
-            page.albedo[63 * w + x] = 1;
+            std::sync::Arc::make_mut(&mut page.albedo)[63 * w + x] = 1;
         }
     };
     put(0, 2, 39);

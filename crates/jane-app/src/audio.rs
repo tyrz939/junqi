@@ -91,7 +91,8 @@ impl Sound {
         let (tx, rx) = channel();
         let t0 = std::time::Instant::now();
         let opened = audio.open_playback(None, &desired, |spec| {
-            let mut engine = Engine::new(jane_audio::library(), spec.freq as f32, seed);
+            // The long effects made when first wanted (PLAY-PLAN.md §7).
+            let mut engine = Engine::lazy(jane_audio::library(), spec.freq as f32, seed);
             let (m, mu, fx) = vol.gains();
             engine.handle(Cmd::Volume { master: m, music: mu, sfx: fx });
             Callback { engine, rx }

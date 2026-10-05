@@ -266,7 +266,7 @@ mod tests {
         clut[5] = 0xffff_0000;
         let pages = AtlasPages {
             clut,
-            pages: vec![Page { w: 2, h: 1, albedo: vec![5, 0], ..Page::default() }],
+            pages: vec![Page { w: 2, h: 1, albedo: vec![5, 0].into(), ..Page::default() }],
             ..AtlasPages::default()
         };
         w.upload_atlas(&pages);

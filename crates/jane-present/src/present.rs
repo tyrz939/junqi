@@ -21,7 +21,7 @@ use crate::atlas::{Atlas, RefId};
 use crate::atmos::Atmosphere;
 use crate::backend::AtlasPages;
 use crate::camera::{Camera, alpha_256};
-use crate::chunks::{ChunkCache, LRU, Need};
+use crate::chunks::{ChunkCache, LRU, Need, RESERVE};
 use crate::creatures::{self, Creatures};
 use crate::cues::Cues;
 use crate::drawlist::{DrawCmd, DrawList};
@@ -50,6 +50,8 @@ const KEEP_PAST: i32 = 96;
 /// Canvas px past the casting band painted ahead, so a frame between two ticks never finds a
 /// hole, and the casting band's ground and the lights just past it stand on painted chunks.
 const CHUNK_AHEAD: i32 = 32;
+/// Canvas px further ahead on each side the view is moving toward (PLAY-PLAN.md §7): a chunk.
+const MOVE_AHEAD: i32 = CHUNK_PX;
 /// Chunks the terrain painter lands in a tick at most (§1.6): the rest show their swatches, or
 /// what they last had, until it reaches them. The tick a zone is entered paints all it shows.
 const LAND_PER_TICK: usize = 2;
@@ -320,6 +322,14 @@ impl Present {
             (ui_page.normal, ui_page.emissive, ui_page.height) = (vec![[128, 128]; n], vec![0; n], vec![0; n]);
         }
         atlas.pages.pages.push(ui_page);
+        // Packed: the pages' slack goes (PLAY-PLAN.md §7).
+        for p in &mut atlas.pages.pages {
+            std::sync::Arc::make_mut(&mut p.albedo).shrink_to_fit();
+            p.emissive.shrink_to_fit();
+            p.normal.shrink_to_fit();
+            p.height.shrink_to_fit();
+            p.glow.shrink_to_fit();
+        }
         let mut frame = Frame::new(tier);
         let chunks = ChunkCache::reserved(&mut frame.layers, tier);
         Present {
@@ -425,6 +435,16 @@ impl Present {
         &self.atlas.pages
     }
 
+    /// Lets go of the atlas's px once the backend has them (PLAY-PLAN.md §7): a GPU backend
+    /// holds them on the card, and `soft` and `gl2` keep a share of the albedo (`Page::albedo`
+    /// is shared, not copied). The page table (sizes, the CLUT, the mist) stays; nothing in play
+    /// reads an atlas px.
+    pub fn release_atlas(&mut self) {
+        for g in &mut self.atlas.pages.pages {
+            *g = crate::backend::Page { w: g.w, h: g.h, ..Default::default() };
+        }
+    }
+
     /// The UI's page table: what `ui::Ui::new` takes.
     pub fn ui_art(&self) -> &crate::ui::UiArt {
         &self.ui_art
@@ -447,6 +467,40 @@ impl Present {
 
     pub fn camera(&self) -> &Camera {
         &self.camera
+    }
+
+    /// The presenter's largest heap holdings, bytes by capacity (`jane bench --mem`, PLAY-PLAN.md
+    /// §7): the atlas's pages by layer, and the terrain chunk cache's layers.
+    pub fn mem(&self) -> Vec<(&'static str, usize)> {
+        fn cap<T>(v: &Vec<T>) -> usize {
+            v.capacity() * std::mem::size_of::<T>()
+        }
+        let p = &self.atlas.pages;
+        let (mut albedo, mut lit) = (0, 0);
+        for g in &p.pages {
+            albedo += cap(&*g.albedo) + cap(&g.glow);
+            lit += cap(&g.normal) + cap(&g.emissive) + cap(&g.height);
+        }
+        let chunks: usize = self
+            .frame
+            .layers
+            .iter()
+            .map(|l| {
+                cap(&l.albedo)
+                    + cap(&l.normal)
+                    + cap(&l.emissive)
+                    + cap(&l.height)
+                    + cap(&l.surface)
+                    + cap(&l.water)
+                    + cap(&l.fence)
+                    + cap(&l.glow)
+            })
+            .sum();
+        vec![
+            ("atlas px held: albedo (u16 CLUT)", albedo + cap(&p.clut) + cap(&p.mist)),
+            ("atlas px held: lit layers", lit),
+            ("terrain chunk cache", chunks),
+        ]
     }
 
     /// A chunk's slot and generation in the cache, if it is painted and fresh (the F3 view).
@@ -488,6 +542,11 @@ impl Present {
         if self.zone != Some(key) {
             self.zone = Some(key);
             self.chunks.drop_all();
+            // A small zone (a house, a crypt) keeps only the slots it has chunks for; the county
+            // grows them back as its view wants (PLAY-PLAN.md §7).
+            let (w, h) = view.size();
+            let span = |c: u32| (c as usize * CELL as usize).div_ceil(CHUNK_PX as usize);
+            self.chunks.shrink(&mut self.frame.layers, (span(w) * span(h)).min(RESERVE));
             self.terrain.zone(view);
             self.entered = true;
             self.camera.reset();
@@ -1174,9 +1233,20 @@ impl Present {
     /// one with nothing to show yet takes its swatches meanwhile.
     fn paint_chunks(&mut self, view: &View<'_>) {
         let cam = (self.camera.pos.0 >> FX_TO_CANVAS, self.camera.pos.1 >> FX_TO_CANVAS);
-        let Some((cx0, cy0, cx1, cy1)) = self.chunk_range(cam, self.margins.grow(CHUNK_AHEAD)) else {
+        // Ahead of her: the band reaches a further chunk on each side the view is moving toward,
+        // so the cache, sized to the band (PLAY-PLAN.md §7), has new ground painted before it
+        // shows.
+        let (dx, dy) = (self.camera.pos.0 - self.camera.prev.0, self.camera.pos.1 - self.camera.prev.1);
+        let mut ahead = self.margins.grow(CHUNK_AHEAD);
+        let lead = |d: i32, toward: bool| if toward && d != 0 { MOVE_AHEAD } else { 0 };
+        ahead.left += lead(dx, dx < 0);
+        ahead.right += lead(dx, dx > 0);
+        ahead.top += lead(dy, dy < 0);
+        ahead.bottom += lead(dy, dy > 0);
+        let Some((cx0, cy0, cx1, cy1)) = self.chunk_range(cam, ahead) else {
             return;
         };
+        self.chunks.fit(((cx1 - cx0 + 1) * (cy1 - cy0 + 1)) as usize);
         let (sx0, sy0, sx1, sy1) = self.chunk_range(cam, Margins::uniform(0)).unwrap_or((cx0, cy0, cx1, cy1));
         let mid = (cam.0 + i32::from(self.canvas.0) / 2, cam.1 + i32::from(self.canvas.1) / 2);
         let (cells, outside, now) = (self.zone_cells, self.frame.clear, self.tick);

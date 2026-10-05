@@ -178,13 +178,15 @@ fn decode(k: u8) -> Option<Material> {
     k.checked_sub(1).and_then(|i| MATERIALS.get(usize::from(i)).copied())
 }
 
-/// A zone's render-only paint (`Blueprint::paint`) flattened to a byte a cell, later rects over
+/// A zone's render-only paint (`Blueprint::paint`) flattened to half a byte a cell, later rects over
 /// earlier: what a renderer keeps beside a view that hands it the rects, so the painter reads a
 /// cell's material in O(1). Refilled per zone without allocating once it has held the largest.
 #[derive(Clone, Debug, Default)]
 pub struct PaintMap {
     w: i32,
     h: i32,
+    /// Two cells a byte (a code is 0 to 5), low nibble first: 2 MB for the county, not 4
+    /// (PLAY-PLAN.md §7).
     k: Vec<u8>,
 }
 
@@ -193,12 +195,14 @@ impl PaintMap {
     pub fn fill(&mut self, (w, h): (u32, u32), paint: &[(Rect, Material)]) {
         (self.w, self.h) = (w as i32, h as i32);
         self.k.clear();
-        self.k.resize(w as usize * h as usize, 0);
+        self.k.resize((w as usize * h as usize).div_ceil(2), 0);
         for &(r, m) in paint {
             let k = code(m);
             for y in r.y.max(0)..r.bottom().min(self.h) {
                 for x in r.x.max(0)..r.right().min(self.w) {
-                    self.k[(y * self.w + x) as usize] = k;
+                    let i = (y * self.w + x) as usize;
+                    let shift = (i % 2) * 4;
+                    self.k[i / 2] = (self.k[i / 2] & !(0xf << shift)) | (k << shift);
                 }
             }
         }
@@ -210,7 +214,8 @@ impl PaintMap {
         if x < 0 || y < 0 || x >= self.w || y >= self.h {
             return None;
         }
-        decode(self.k[(y * self.w + x) as usize])
+        let i = (y * self.w + x) as usize;
+        decode((self.k[i / 2] >> ((i % 2) * 4)) & 0xf)
     }
 }
 

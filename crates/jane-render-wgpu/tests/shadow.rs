@@ -37,7 +37,7 @@ fn atlas(height: impl Fn(i32) -> u8) -> AtlasPages {
     let mut page = Page {
         w: SW,
         h: SH,
-        albedo: vec![0; n],
+        albedo: vec![0; n].into(),
         normal: vec![[128, 200]; n],
         emissive: vec![0; n],
         height: vec![0; n],
@@ -46,7 +46,7 @@ fn atlas(height: impl Fn(i32) -> u8) -> AtlasPages {
     for y in 4..=AY {
         for x in 4..12 {
             let i = y as usize * usize::from(SW) + x;
-            page.albedo[i] = 2;
+            std::sync::Arc::make_mut(&mut page.albedo)[i] = 2;
             page.height[i] = height(y);
         }
     }
@@ -234,7 +234,7 @@ fn a_prop_in_front_of_her_is_seen_through_on_the_checker() {
     p.normal =
         (0..h).flat_map(|y| p.normal[y * w..y * w + w].iter().chain(&p.normal[y * w..y * w + w]).copied()).collect();
     p.emissive = vec![0; 2 * w * h];
-    p.albedo = albedo;
+    p.albedo = albedo.into();
     p.w = 2 * SW;
     atlas.clut[3] = 0xff20_3090;
     let mut f = frame(ground(|_, _| None), true, None, &[]);
@@ -338,7 +338,7 @@ fn upright_atlas(w: u16, h: u16, ay: i32, shape: impl Fn(i32, i32) -> bool) -> A
     let mut page = Page {
         w,
         h,
-        albedo: vec![0; n],
+        albedo: vec![0; n].into(),
         normal: vec![[128, 200]; n],
         emissive: vec![0; n],
         height: vec![0; n],
@@ -348,7 +348,7 @@ fn upright_atlas(w: u16, h: u16, ay: i32, shape: impl Fn(i32, i32) -> bool) -> A
         for x in 0..i32::from(w) {
             if shape(x, y) {
                 let i = y as usize * usize::from(w) + x as usize;
-                page.albedo[i] = 2;
+                std::sync::Arc::make_mut(&mut page.albedo)[i] = 2;
                 page.height[i] = height_of_rows(ay - y).max(1) as u8;
             }
         }

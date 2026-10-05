@@ -30,7 +30,9 @@ pub const AO_TINT: [u16; 3] = jane_art::palette::AO_TINT;
 pub struct Page {
     pub w: u16,
     pub h: u16,
-    pub albedo: Vec<u16>,
+    /// Shared, not copied: a backend that draws from memory (`soft`, `gl2`'s shadow rows) keeps a
+    /// share of the presenter's, and the presenter lets go of its own once uploaded (PLAY-PLAN.md §7).
+    pub albedo: std::sync::Arc<Vec<u16>>,
     /// Tangent-space `[nx, ny]`, 128 is 0; `+x` east, `+y` south (`jane_art::canvas::Normal`).
     pub normal: Vec<[u8; 2]>,
     /// Master-palette indices that glow unlit; 0 is dark.

@@ -1185,7 +1185,7 @@ impl Backend for Wgpu {
             let k = k as u32;
             let lit = p.lit();
             bytes.clear();
-            for &a in &p.albedo {
+            for &a in p.albedo.iter() {
                 bytes.extend_from_slice(&a.to_le_bytes());
             }
             write_layer(q, &albedo, k, (pw, ph), 2, &bytes);

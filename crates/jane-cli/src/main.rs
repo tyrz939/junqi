@@ -11,6 +11,7 @@ mod bench_sim;
 mod gen_cmd;
 mod hash_cmd;
 mod layers;
+mod mem;
 mod pair;
 mod play;
 mod scene;
@@ -22,6 +23,11 @@ mod strip;
 mod sweep;
 mod ui_sheet;
 mod view;
+
+/// The heap, counted (`jane bench --mem`, PLAY-PLAN.md §7): `cap` wraps the system allocator
+/// with an atomic count of the bytes held and their peak.
+#[global_allocator]
+pub static ALLOC: cap::Cap<std::alloc::System> = cap::Cap::new(std::alloc::System, usize::MAX);
 
 const USAGE: &str = "usage: jane <command> [options]
 
@@ -51,7 +57,7 @@ commands:
 fn usage() -> String {
     USAGE
         .replace("{GEN}", gen_cmd::USAGE)
-        .replace("{BENCH}", &format!("{}{}{}", bench::USAGE, bench_sim::USAGE, bench::USAGE_TUNE))
+        .replace("{BENCH}", &format!("{}{}{}{}", bench::USAGE, bench_sim::USAGE, bench::USAGE_TUNE, mem::USAGE))
         .replace("{SHEET}", sheet_cmd::USAGE)
         .replace("{HASH}", hash_cmd::USAGE)
         .replace("{SERVE}", serve::USAGE)

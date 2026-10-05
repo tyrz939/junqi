@@ -165,7 +165,7 @@ mod tests {
 
     /// A 2 x 10 post of index 2 standing on row 10 of a 40 x 20 canvas.
     fn post() -> (Page, SpriteCmd, Caster) {
-        let page = Page { w: 2, h: 10, albedo: vec![2; 20], ..Page::default() };
+        let page = Page { w: 2, h: 10, albedo: vec![2; 20].into(), ..Page::default() };
         let s = SpriteCmd {
             page: 0,
             src: Src { x: 0, y: 0, w: 2, h: 10 },

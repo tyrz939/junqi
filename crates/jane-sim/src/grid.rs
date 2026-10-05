@@ -10,7 +10,9 @@
 
 use jane_core::grid::Grid;
 use jane_core::tile::{BLOCK_MOVE, BLOCK_SIGHT, F_BLOCK_LOS, F_NOPUSH, F_OCC, F_PROP_LOS, F_PROP_SOLID, F_SOLID};
-use jane_core::{CellIx, Lookup, Rect, Tile};
+use std::sync::Arc;
+
+use jane_core::{Blueprint, CellIx, Lookup, Rect, Tile};
 
 /// What is outside the grid: solid, and blocks sight.
 pub const OUTSIDE: u8 = F_SOLID | F_BLOCK_LOS;
@@ -27,9 +29,20 @@ pub enum Meets<'a> {
     Part(&'a [u16; 16]),
 }
 
+/// Where a grid's tiles come from: its own (a test's grid), or the blueprint's, shared and never
+/// copied (PLAY-PLAN.md §7: the county's 2000 x 2000 tiles were held twice).
+#[derive(Clone, Debug)]
+enum Base {
+    Own(Grid<Tile>),
+    Blueprint(Arc<Blueprint>),
+}
+
 #[derive(Clone, Debug)]
 pub struct ZoneGrid {
-    tiles: Grid<Tile>,
+    base: Base,
+    /// The tiles changed since the blueprint (a cleared hedge, a filled pit), over a shared
+    /// `base`: sparse, and empty in most zones (a read skips it then).
+    changed: Lookup<CellIx, Tile>,
     flags: Grid<u8>,
     occ: Lookup<CellIx, u16>,
     /// The cells a solid prop stamps but whose feet (`PropDef::solid_parts`) cover only part of:
@@ -42,7 +55,39 @@ impl ZoneGrid {
     /// From tiles; flags are the tiles' own, with nothing stamped and nobody standing.
     pub fn new(tiles: Grid<Tile>) -> Self {
         let flags = Grid::from_vec(tiles.w(), tiles.h(), tiles.as_slice().iter().map(|t| t.flags()).collect());
-        Self { tiles, flags, occ: Lookup::with_capacity(256), parts: Lookup::with_capacity(256) }
+        Self {
+            base: Base::Own(tiles),
+            changed: Lookup::new(),
+            flags,
+            occ: Lookup::with_capacity(256),
+            parts: Lookup::with_capacity(256),
+        }
+    }
+
+    /// Over a blueprint's tiles, shared, with `deltas` (the zone's changed tiles) laid over them:
+    /// the same grid [`new`](Self::new) makes of the blueprint's tiles with the deltas written in.
+    pub fn over(bp: &Arc<Blueprint>, deltas: impl IntoIterator<Item = (CellIx, Tile)>) -> Self {
+        let tiles = &bp.tiles;
+        let flags = Grid::from_vec(tiles.w(), tiles.h(), tiles.as_slice().iter().map(|t| t.flags()).collect());
+        let mut g = Self {
+            base: Base::Blueprint(Arc::clone(bp)),
+            changed: Lookup::new(),
+            flags,
+            occ: Lookup::with_capacity(256),
+            parts: Lookup::with_capacity(256),
+        };
+        for (i, t) in deltas {
+            let (x, y) = ((i.0 % g.w()) as i32, (i.0 / g.w()) as i32);
+            g.set_tile(x, y, t);
+        }
+        g
+    }
+
+    fn base(&self) -> &Grid<Tile> {
+        match &self.base {
+            Base::Own(g) => g,
+            Base::Blueprint(bp) => &bp.tiles,
+        }
     }
 
     /// What feet meet in cell `(x, y)`: the whole cell (terrain, outside, a prop solid to its
@@ -64,16 +109,27 @@ impl ZoneGrid {
     }
 
     pub fn w(&self) -> u32 {
-        self.tiles.w()
+        self.flags.w()
+    }
+
+    /// The grid's own heap (`Sim::mem`): the flags by cell, and the tiles where it holds them
+    /// (its own, or the changed few over a blueprint's).
+    pub fn heap_bytes(&self) -> usize {
+        let n = self.flags.w() as usize * self.flags.h() as usize;
+        let own = match &self.base {
+            Base::Own(g) => std::mem::size_of_val(g.as_slice()),
+            Base::Blueprint(_) => self.changed.len() * 16,
+        };
+        n + own
     }
 
     pub fn h(&self) -> u32 {
-        self.tiles.h()
+        self.flags.h()
     }
 
     #[inline]
     pub fn inside(&self, x: i32, y: i32) -> bool {
-        self.tiles.inside(x, y)
+        self.flags.inside(x, y)
     }
 
     #[inline]
@@ -83,7 +139,13 @@ impl ZoneGrid {
 
     #[inline]
     pub fn tile_at(&self, x: i32, y: i32) -> Tile {
-        self.tiles.read(x, y, Tile::Void)
+        if !self.changed.is_empty()
+            && self.inside(x, y)
+            && let Some(&t) = self.changed.get(&self.ix(x, y))
+        {
+            return t;
+        }
+        self.base().read(x, y, Tile::Void)
     }
 
     #[inline]
@@ -95,10 +157,6 @@ impl ZoneGrid {
     #[inline]
     pub fn flags_ix(&self, i: CellIx) -> u8 {
         *self.flags.at(i)
-    }
-
-    pub fn tiles(&self) -> &Grid<Tile> {
-        &self.tiles
     }
 
     /// Terrain or a solid prop in the way. Ignores units.
@@ -122,7 +180,17 @@ impl ZoneGrid {
         if !self.inside(x, y) {
             return;
         }
-        self.tiles.set(x, y, t);
+        match &mut self.base {
+            Base::Own(g) => g.set(x, y, t),
+            Base::Blueprint(bp) => {
+                let i = CellIx(y as u32 * bp.tiles.w() + x as u32);
+                if bp.tiles.read(x, y, Tile::Void) == t {
+                    self.changed.remove(&i);
+                } else {
+                    self.changed.insert(i, t);
+                }
+            }
+        }
         let f = self.flags_at(x, y);
         self.flags.set(x, y, (f & KEEP_ON_TILE_CHANGE) | t.flags());
     }
