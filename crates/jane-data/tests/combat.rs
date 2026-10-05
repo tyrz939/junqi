@@ -144,7 +144,9 @@ fn hostile_rows_notice_inside_the_screen_and_leash_at_two_and_a_half_times_it() 
     let mut n = 0;
     for u in cat.combat.units.iter().filter(|u| u.aggro.0 > 0 && !u.boss) {
         n += 1;
-        assert!(u.aggro.0 <= 10 * METRE_FX, "{}: aggro {}", u.id, u.aggro.0);
+        // A row fed rather than fought (the Burial's lurker) keeps the notice its puzzle was
+        // built round: the bait is thrown from outside it and smelt from twice it.
+        assert!(u.aggro.0 <= 10 * METRE_FX || u.bait.is_some(), "{}: aggro {}", u.id, u.aggro.0);
         assert!(i64::from(u.leash.0) * 2 <= i64::from(u.aggro.0) * 5, "{}: leash {} over 2.5 x aggro", u.id, u.leash.0);
     }
     assert!(n >= 30, "{n} hostile rows");

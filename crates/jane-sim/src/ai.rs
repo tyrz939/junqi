@@ -210,7 +210,8 @@ pub(crate) fn fight(cx: &mut Ctx<'_>, id: UnitId, def: &UnitDef, run: Fx, shy: b
     // own shorter aggro (2026-09-30): she shoots it from bolt range, on the screen, and a thing
     // that let go there stood idle and mended whole between her bolts.
     let rooted_off = run.0 <= 0 && distance(tpos, home) > i64::from(def.aggro.0.max(AGGRO_MAX_FX)) * 3 / 2;
-    let too_far = distance(pos, home) > leash || rooted_off;
+    // Shut in with her by a lock-in, it fights it out: the gate is the leash (PLAN.md §2.6).
+    let too_far = (distance(pos, home) > leash || rooted_off) && !crate::triggers::shut_in(cx, home.cell());
     // Light is how a sentry sees: a target that steps into the dark is a target it no longer has.
     let unseen = !too_far && def.sight == UnitSight::Lit && !lit_at(cx.zone, cx.rt, clock, tpos, false);
     // Warm light keeps a shade off: standing in it, it does nothing but leave.

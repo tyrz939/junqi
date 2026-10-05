@@ -597,7 +597,9 @@ fn feeds(v: &View<'_>, cx: &Ctx) -> Vec<(u8, i64, Try, Task)> {
 /// Hurt, with nothing on her, the fire comes before whatever she was walking to: the next
 /// thing down here may be a keeper's room that shuts behind her.
 pub fn cuts_in(v: &View<'_>, cx: &Ctx, reach: &Reach, task: &Task, what: Try) -> Vec<Try> {
-    if matches!(task, Task::Burial(_)) || matches!(what, Try::Tactic(_)) {
+    // On her way to a fire already, a fire is not a cut-in (2026-10-06: the rest re-chosen and
+    // cut again every quarter second, for the hour she came in hurt at dusk).
+    if matches!(task, Task::Burial(_)) || matches!(what, Try::Tactic(_) | Try::Rest(_)) {
         return Vec::new();
     }
     let mut out: Vec<Try> = feeds(v, cx).into_iter().map(|(_, _, w, _)| w).collect();

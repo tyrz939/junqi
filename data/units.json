@@ -86,7 +86,7 @@
   },
   "lurker": {
     "name": "Burial Snake", "faction": "undead", "controller": "ai", "strength": 200, "spirit": 60,
-    "walk": 0.5, "run": 0, "aggro": 9, "leash": 22.5, "bounds": 1, "book": ["poisonbolt_far"],
+    "walk": 0.5, "run": 0, "aggro": 12, "leash": 30, "bounds": 1, "book": ["poisonbolt_far"],
     "respawn": 0, "autoRegen": true, "loot": [], "sprite": "lurker", "bait": "poisoned_rat_meat"
   },
   "statue": {
