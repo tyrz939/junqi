@@ -52,6 +52,12 @@ jobs:
       - run: rustup target add i686-unknown-linux-gnu
       - run: cargo build --release --workspace --target i686-unknown-linux-gnu
       - run: cargo test --target i686-unknown-linux-gnu -p jane-core
+      # Gates 2 to 4 off x86_64 (PORT.md §9.3, Grok #3): blueprints and the bot sessions hash as
+      # the x86_64 fixtures say. A stale fixture fails with the command that regenerates it.
+      - name: the world and bot hash fixtures on i686
+        run: |
+          cargo test --release --target i686-unknown-linux-gnu -p jane-world --test determinism -- the_hashes_match_the_fixture_file
+          cargo test --release --target i686-unknown-linux-gnu -p jane-bot --test fixture
 
   build-arm:
     runs-on: ubuntu-latest
@@ -64,3 +70,8 @@ jobs:
       - run: cross build --release --workspace --target ${{ matrix.target }}
       - name: core under qemu-user
         run: cross test --target ${{ matrix.target }} -p jane-core
+      - name: the world and bot hash fixtures under qemu-user (one ARM target)
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: |
+          cross test --release --target ${{ matrix.target }} -p jane-world --test determinism -- the_hashes_match_the_fixture_file
+          cross test --release --target ${{ matrix.target }} -p jane-bot --test fixture

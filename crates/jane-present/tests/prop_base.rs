@@ -128,7 +128,7 @@ const MIN_DEEP: i32 = 4;
 /// Whether a prop keeps its whole width to feet: what shuts a way or is part of a puzzle the
 /// solver proves by its cells (a pushed or carried thing, a gate, whatever answers a verb or a
 /// blow, a row marked `way`: `PropDef::keeps_width`). Its feet leave at most [`SIDE_SLACK`] open at either side, so none of them
-/// side by side lets her slip between, and the notch behind it is a dead end
+/// side by side lets her slip between (and what never moves leaves no room behind it to slip by)
 /// (`PropDef::solid_parts`).
 fn keeps_width(d: &PropDef) -> bool {
     d.keeps_width()

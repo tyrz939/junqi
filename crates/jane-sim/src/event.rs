@@ -331,6 +331,17 @@ pub enum EventKind {
     },
     /// Something the county does for good has happened (§4.6.d). Party-wide.
     Consequence(jane_core::ConsequenceId),
+    // --- dev ---------------------------------------------------------------------------------
+    /// Something valid play never does happened, and the tick skipped it rather than abort the
+    /// host (and every guest with it). Dev tools show it; play ignores it.
+    Dev(DevNote),
+}
+
+/// What an [`EventKind::Dev`] says.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DevNote {
+    /// A unit a step was working on was not in its zone; `at` names the step.
+    MissingUnit { unit: UnitId, at: &'static str },
 }
 
 impl EventKind {

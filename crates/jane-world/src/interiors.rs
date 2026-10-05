@@ -42,9 +42,8 @@ pub fn interior_candidate(zone: ZoneId, seed: u32, attempt: u8) -> Option<Bluepr
 }
 
 /// The interior for a seed (world/index.ts `buildZone`): candidates in attempt order until the
-/// solver passes one with the zone's rules. If none of `ZONE_ATTEMPTS` does, the last is
-/// returned anyway (the player is never thrown at; the suite proves it never happens), with
-/// `attempts == ZONE_ATTEMPTS`. `None` for a zone that is not an interior.
+/// solver passes one with the zone's rules. `None` for a zone that is not an interior, and for a
+/// seed none of `ZONE_ATTEMPTS` proves (never played: the caller refuses the seed).
 pub fn build_interior(zone: ZoneId, seed: u32) -> Option<Blueprint> {
     if !is_interior(zone) {
         return None;
@@ -53,8 +52,11 @@ pub fn build_interior(zone: ZoneId, seed: u32) -> Option<Blueprint> {
     let mut attempt = 0;
     loop {
         let bp = interior_candidate(zone, seed, attempt)?;
-        if attempt + 1 >= ZONE_ATTEMPTS || validate(&bp, &rules).ok() {
+        if validate(&bp, &rules).ok() {
             return Some(bp);
+        }
+        if attempt + 1 >= ZONE_ATTEMPTS {
+            return None;
         }
         attempt += 1;
     }

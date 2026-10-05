@@ -351,35 +351,51 @@ mod tests {
     }
 
     /// The owner: "things you can now get to close from above still have a weird block above
-    /// them from each side, like an invisible little wall". Every solid prop with feet, walked up
-    /// to from the north, south, west and east: her body box stops within 2 px of its drawn
-    /// ground box, never in it. Walked along its back flush above that box, east and west, and
-    /// slid along it diagonally from either end, she never stands still and comes out past its far
-    /// end. Only what keeps its width (a crate, a gate, a wall a verb clears) shuts its back to
-    /// her from the side: its posts.
+    /// them from each side, like an invisible little wall", and (PLAY-PLAN §6) the U above a
+    /// pushable crate: "in the space above it she cannot move left or right". Every solid prop
+    /// with feet: what her feet meet is one box, its sides the drawn ground box's and no posts;
+    /// walked up to from the north, south, west and east her body box stops within 2 px of it,
+    /// never in it. From the space above it (walked down onto it from the north) she steps out
+    /// sideways, east and west, and comes out past its side. Walked along its back flush above
+    /// that box, east and west, and slid along it diagonally from either end, she never stands
+    /// still and comes out past its far end. What shuts its cells to the solver (a gate, a wall a
+    /// verb clears) leaves her no room to stand wholly inside its rows behind it, so slipping past
+    /// it joins no two cells the solver keeps apart; a crate's back is its drawn box's (the solver
+    /// never counts on a pushed thing shutting a way).
     #[test]
     fn every_prop_s_ground_box_is_met_from_every_side_and_its_back_walked_past() {
         const G: i32 = 2 * 256;
         const AX: i32 = 300;
         const DI: i32 = 212;
+        const { assert!(jane_data::NOTCH_MAX * SUB_FX < 2 * BODY_HALF_FX, "a notch she cannot stand wholly in") };
         let cat = jane_data::catalog();
         let (px, py) = (40, 14);
-        let (mut bad, mut n, mut walled_n) = (Vec::new(), 0, 0);
+        let (mut bad, mut n, mut boxed) = (Vec::new(), 0, 0);
         for def in cat.story.props.iter().filter(|d| d.solid) {
             let Some(f) = def.feet else { continue };
-            let [fx, fy, fw, fh] = f.map(|v| i32::from(v) * SUB_FX);
+            let [dx, dy, dw, dh] = f.map(i32::from);
+            let parts = def.solid_parts();
+            if parts[1..].iter().any(|r| r.w > 0 && r.h > 0) {
+                bad.push(format!("{}: posts beside its feet (a U above it)", def.id));
+            }
+            let c = parts[0];
+            let base = if def.base == 0 || def.base > def.h { def.h } else { def.base };
+            let top16 = (i32::from(def.h) - i32::from(base)) * 16;
+            let carried = def.shuts_cells() && dy - top16 > jane_data::NOTCH_MAX;
+            let want_y = if carried { top16 + jane_data::NOTCH_MAX } else { dy };
+            if (c.x, c.w, c.y, c.y + c.h) != (dx, dw, want_y, dy + dh) {
+                bad.push(format!("{}: feet {:?} meet as {c:?}, not the drawn box's sides", def.id, f));
+            }
+            if def.shuts_cells() && c.y - top16 > jane_data::NOTCH_MAX {
+                bad.push(format!("{}: shuts its cells, yet she fits wholly behind it", def.id));
+            }
+            boxed += usize::from(def.keeps_width());
             let mut g = ZoneGrid::new(Grid::new(96, 48, Tile::Floor));
-            let parts = def.solid_parts().map(|r| Rect::new(r.x + px * 16, r.y + py * 16, r.w, r.h));
-            g.stamp_prop_parts(def.solid_rect(px, py), false, &parts);
+            let placed = parts.map(|r| Rect::new(r.x + px * 16, r.y + py * 16, r.w, r.h));
+            g.stamp_prop_parts(def.solid_rect(px, py), false, &placed);
             let (ox, oy) = (px * CELL_FX, py * CELL_FX);
-            let (x0, y0, x1, y1) = (ox + fx, oy + fy, ox + fx + fw, oy + fy + fh);
-            // Shut behind from the side: only what keeps its width, with feet as wide as it and a
-            // notch behind them in the rows it stamps.
-            let slack = jane_data::FEET_SIDE_SLACK * SUB_FX;
-            let top = (i32::from(def.h) - i32::from(def.base)) * CELL_FX;
-            let wide = fx <= slack && fx + fw >= i32::from(def.w) * CELL_FX - slack;
-            let walled = def.keeps_width() && wide && fy > top;
-            walled_n += usize::from(walled);
+            let (x0, y0, x1, y1) =
+                (ox + c.x * SUB_FX, oy + c.y * SUB_FX, ox + (c.x + c.w) * SUB_FX, oy + (c.y + c.h) * SUB_FX);
             // Walk from `from` by `d` a tick for `ticks`: where she ends, and the ticks she stood.
             let run = |from: (i32, i32), d: (i32, i32), ticks: i32| {
                 let mut p = Vec2::new(Fx(from.0), Fx(from.1));
@@ -393,46 +409,45 @@ mod tests {
             };
             let h = BODY_HALF_FX;
             let (mx, my) = ((x0 + x1) / 2, (y0 + y1) / 2);
-            let side = if walled { G + slack } else { G };
             let far = (x1 - x0 + 8 * CELL_FX) / AX;
+            let above = run((mx, oy - 3 * CELL_FX), (0, AX), 200);
             let gaps = [
-                ("north", y0 - (run((mx, oy - 3 * CELL_FX), (0, AX), 200).1 + h), G),
-                ("south", (run((mx, y1 + 3 * CELL_FX), (0, -AX), 200).1 - h) - y1, G),
-                ("west", x0 - (run((x0 - 3 * CELL_FX, my), (AX, 0), 200).0 + h), side),
-                ("east", (run((x1 + 3 * CELL_FX, my), (-AX, 0), 200).0 - h) - x1, side),
+                ("north", y0 - (above.1 + h)),
+                ("south", (run((mx, y1 + 3 * CELL_FX), (0, -AX), 200).1 - h) - y1),
+                ("west", x0 - (run((x0 - 3 * CELL_FX, my), (AX, 0), 200).0 + h)),
+                ("east", (run((x1 + 3 * CELL_FX, my), (-AX, 0), 200).0 - h) - x1),
             ];
-            for (from, gap, most) in gaps {
-                if !(0..=most).contains(&gap) {
-                    bad.push(format!("{} from the {from}: {} px short", def.id, f64::from(gap) / 256.0));
+            for (from, gap) in gaps {
+                if !(0..=G).contains(&gap) {
+                    bad.push(format!("{} from the {from}: {gap}/256 px short", def.id));
                 }
             }
-            // Along its back, her feet a px above its ground box.
+            // From the space above it, where the walk from the north stopped: out to either side.
+            let out_e = run((above.0, above.1), (AX, 0), far + 60);
+            let out_w = run((above.0, above.1), (-AX, 0), far + 60);
+            // Along its back, her feet a px above its box.
             let back = y0 - h - SUB_FX;
             let east = run((ox - 3 * CELL_FX, back), (AX, 0), far + 60);
             let west = run((ox + i32::from(def.w) * CELL_FX + 3 * CELL_FX, back), (-AX, 0), far + 60);
-            if walled {
-                if east.0 + h > ox + SUB_FX || west.0 - h < ox + i32::from(def.w) * CELL_FX - SUB_FX {
-                    bad.push(format!("{}: keeps its width, yet she slipped behind it", def.id));
-                }
-            } else {
-                let se = run((x0 - 12 * 256, y0 - h - 12 * 256), (DI, DI), far + 60);
-                let sw = run((x1 + 12 * 256, y0 - h - 12 * 256), (-DI, DI), far + 60);
-                for (way, (x, _, still), past) in [
-                    ("east along its back", east, east.0 - h >= x1),
-                    ("west along its back", west, west.0 + h <= x0),
-                    ("south-east onto its back", se, se.0 - h >= x1),
-                    ("south-west onto its back", sw, sw.0 + h <= x0),
-                ] {
-                    if still > 0 || !past {
-                        bad.push(format!("{} {way}: stood {still} ticks, ended at {} px", def.id, x / 256));
-                    }
+            let se = run((x0 - 12 * 256, y0 - h - 12 * 256), (DI, DI), far + 60);
+            let sw = run((x1 + 12 * 256, y0 - h - 12 * 256), (-DI, DI), far + 60);
+            for (way, (x, _, still), past) in [
+                ("east out of the space above it", out_e, out_e.0 - h >= x1),
+                ("west out of the space above it", out_w, out_w.0 + h <= x0),
+                ("east along its back", east, east.0 - h >= x1),
+                ("west along its back", west, west.0 + h <= x0),
+                ("south-east onto its back", se, se.0 - h >= x1),
+                ("south-west onto its back", sw, sw.0 + h <= x0),
+            ] {
+                if still > 0 || !past {
+                    bad.push(format!("{} {way}: stood {still} ticks, ended at {} px", def.id, x / 256));
                 }
             }
             n += 1;
         }
         assert!(n > 150, "most solid props have feet ({n})");
-        assert!(walled_n > 0, "what keeps its width still has posts");
-        assert!(bad.is_empty(), "an invisible wall, or a way in: {bad:#?}");
+        assert!(boxed > 20, "the boxed props are among them ({boxed})");
+        assert!(bad.is_empty(), "an invisible wall, a U, or a way in: {bad:#?}");
     }
 
     /// The owner: "many items should just have a little bounding box on the ground, but it seems
@@ -446,16 +461,17 @@ mod tests {
         let mut far = Vec::new();
         let mut n = 0;
         for def in cat.story.props.iter().filter(|d| d.solid) {
-            let Some([fx, fy, fw, _]) = def.feet else { continue };
+            let Some([fx, _, fw, _]) = def.feet else { continue };
+            let fy = def.solid_parts()[0].y;
             let mut g = ZoneGrid::new(Grid::new(40, 40, Tile::Floor));
             let parts = def.solid_parts().map(|r| Rect::new(r.x + px * 16, r.y + py * 16, r.w, r.h));
             g.stamp_prop_parts(def.solid_rect(px, py), false, &parts);
             let x = px * CELL_FX + (i32::from(fx) * 2 + i32::from(fw)) * SUB_FX / 2;
             let b = body_at(x, 12 * CELL_FX);
             let bottom = b.y1 + slide(&g, b, false, 12 * CELL_FX);
-            let gap = py * CELL_FX + i32::from(fy) * SUB_FX - bottom;
+            let gap = py * CELL_FX + fy * SUB_FX - bottom;
             if !(0..=2 * 256).contains(&gap) {
-                far.push(format!("{}: {} px short", def.id, f64::from(gap) / 256.0));
+                far.push(format!("{}: {gap}/256 px short", def.id));
             }
             assert!(def.solid_rect(px, py).cells().all(|(x, y)| g.solid(x, y)), "{}: cells", def.id);
             n += 1;

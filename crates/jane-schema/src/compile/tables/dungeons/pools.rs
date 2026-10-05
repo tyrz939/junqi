@@ -43,7 +43,7 @@ impl Library {
             };
             for (k, line) in &r.head_lines {
                 if !room::HEADER_KEYS.contains(&k.as_str()) {
-                    diag.warn(at_line(file, *line), format!("header \"{k}\" means nothing to the parser"));
+                    diag.error(at_line(file, *line), format!("header \"{k}\" means nothing to the parser"));
                 }
             }
             for (line, msg) in room::lint(&r) {
@@ -102,6 +102,30 @@ pub fn check_interfaces(lib: &Library, diag: &mut Diagnostics) {
                     ),
                 );
             }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Grok #8: a header the parser does not know (a typo) is an error, not a warning.
+    #[test]
+    fn an_unknown_room_header_is_an_error() {
+        let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../data/rooms/burial/alcove.a.room");
+        let text = std::fs::read_to_string(path).expect("a room");
+        let typo = text.replacen(
+            "pool    ",
+            "rotat   90
+pool    ",
+            1,
+        );
+        for (t, bad) in [(&text, false), (&typo, true)] {
+            let mut diag = Diagnostics::default();
+            Library::read(&Source::from_texts(&[("rooms/burial/alcove.a.room", t)]), &mut diag);
+            let said = diag.errors.iter().any(|d| d.msg.contains("\"rotat\" means nothing"));
+            assert_eq!(said, bad, "{diag}");
         }
     }
 }

@@ -6,7 +6,7 @@
 use jane_core::{Blueprint, Key, Sym, Vec2, ZONE_COUNT, ZoneId};
 use jane_data::Catalog;
 
-use crate::event::{Event, EventKind};
+use crate::event::{DevNote, Event, EventKind};
 use crate::ids::{PropIx, Seat, UnitId};
 use crate::path::PathScratch;
 use crate::runtime::ZoneRuntime;
@@ -150,6 +150,13 @@ impl Ctx<'_> {
         self.events.push(Event { to: None, in_zone: None, kind });
     }
 
+    /// A unit this step was working on is not in its zone (a content or engine bug: valid play
+    /// never does it). The step skips it and says so to dev tools ([`EventKind::Dev`]) instead
+    /// of aborting the host. See [`unit_or_skip`] and [`unit_mut_or_skip`].
+    pub fn missing_unit(&mut self, unit: UnitId, at: &'static str) {
+        self.emit_all(EventKind::Dev(DevNote::MissingUnit { unit, at }));
+    }
+
     /// The actor's body, if she has one here.
     pub fn actor_unit(&self) -> Option<UnitId> {
         let seat = self.actor?;
@@ -199,3 +206,32 @@ pub fn forget_unit(zone: &mut ZoneState, rt: &mut ZoneRuntime, party: &PartySnap
 pub fn none_per_zone<T>() -> [Option<T>; ZONE_COUNT] {
     std::array::from_fn(|_| None)
 }
+
+/// `cx.zone.unit(id)`, or (the unit is gone: a bug) [`Ctx::missing_unit`] and `return` (with
+/// the value given, if any) from the step.
+macro_rules! unit_or_skip {
+    ($cx:ident, $id:expr, $at:expr $(, $ret:expr)?) => {
+        match $cx.zone.unit($id) {
+            Some(u) => u,
+            None => {
+                $cx.missing_unit($id, $at);
+                return $($ret)?;
+            }
+        }
+    };
+}
+pub(crate) use unit_or_skip;
+
+/// [`unit_or_skip`] for `cx.zone.unit_mut(id)`.
+macro_rules! unit_mut_or_skip {
+    ($cx:ident, $id:expr, $at:expr $(, $ret:expr)?) => {
+        match $cx.zone.unit_mut($id) {
+            Some(u) => u,
+            None => {
+                $cx.missing_unit($id, $at);
+                return $($ret)?;
+            }
+        }
+    };
+}
+pub(crate) use unit_mut_or_skip;

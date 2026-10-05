@@ -1,7 +1,7 @@
 //! Feet meet where a prop's look meets the ground (`PropDef::feet`, `PropDef::solid_parts`), not
 //! its whole cells: the owner's playtest, "approaching from above she still can't get close to a
-//! crate, nor to the Lost Property table". The cells stay solid for paths and the solver; the
-//! notch behind a prop is entered from the north only. And a rock she lifts is put down clear of
+//! crate, nor to the Lost Property table". The cells stay solid for paths and the solver; from
+//! the space behind a crate she steps out sideways, and what shuts a way leaves none to slip by. And a rock she lifts is put down clear of
 //! her own feet, from whichever side she came.
 
 mod common;
@@ -65,7 +65,7 @@ fn from_the_north_she_walks_up_to_where_each_prop_meets_the_ground() {
         let ground = i32::from(py) * CELL_FX + i32::from(feet[1]) * SUB;
         let gap = ground - (me(&s).pos.y.0 + HALF);
         if !(0..=2 * 256).contains(&gap) {
-            far.push(format!("{id}: {} px short of its ground", f64::from(gap) / 256.0));
+            far.push(format!("{id}: {gap}/256 px short of its ground"));
         }
         let rt = s.runtime(ZoneId::County).unwrap();
         let cells = def.solid_rect(i32::from(px), i32::from(py));
@@ -84,24 +84,36 @@ fn the_lost_property_desk_has_feet_well_inside_its_back_row() {
     assert!(y >= 8, "she comes at least half a cell into its back row ({y} sixteenths)");
 }
 
-/// The notch behind a crate is a dead end: along its back she cannot walk through it, from the
-/// side she meets its whole footprint, and so a crate across a two-row passage still shuts it.
+/// PLAY-PLAN §6, the U above a crate: from the space behind it she steps out east and west, its
+/// sides where its box is drawn. And what shuts its cells to the solver (a root wall) across a
+/// two-row passage still shuts it: too shallow behind to slip past in (`NOTCH_MAX`).
 #[test]
-fn the_notch_behind_a_crate_joins_nothing() {
+fn from_behind_a_crate_she_steps_out_sideways_and_a_way_still_shuts_its_passage() {
     let mut r = Room::new(false);
-    // A passage two rows high (rows 19 and 20) with the crate filling it.
+    r.prop("crate", "crate", 20, 16, |_| {});
+    let mut s = r.build();
+    for (dir, past) in [(Angle::EAST, 22 * CELL_FX - 3 * SUB), (Angle::WEST, 20 * CELL_FX + 3 * SUB)] {
+        stand(&mut s, 21 * CELL_FX, 13 * CELL_FX, Facing::South);
+        walk(&mut s, Angle::SOUTH, 60);
+        assert!(me(&s).pos.y.0 > 16 * CELL_FX, "in the space behind it");
+        walk(&mut s, dir, 30);
+        let x = me(&s).pos.x.0;
+        assert!(if dir == Angle::EAST { x - HALF >= past } else { x + HALF <= past }, "out to the side ({x})");
+    }
+    let mut r = Room::new(false);
+    // A passage two rows high (rows 19 and 20) with the root wall filling it.
     r.bp.tiles.fill_rect(Rect::new(1, 18, 40, 1), Tile::Wall);
     r.bp.tiles.fill_rect(Rect::new(1, 21, 40, 1), Tile::Wall);
-    r.prop("crate", "crate", 20, 19, |_| {});
+    r.prop("roots", "root_wall", 20, 19, |_| {});
     let mut s = r.build();
     for y in [19 * CELL_FX + HALF, 19 * CELL_FX + 4 * 256, 20 * CELL_FX + 4 * 256] {
         stand(&mut s, 17 * CELL_FX, y, Facing::East);
         walk(&mut s, Angle::EAST, 120);
-        assert!(me(&s).pos.x.0 + HALF <= 20 * CELL_FX, "stopped at its west edge (row at {y})");
+        assert!(me(&s).pos.x.0 + HALF <= 20 * CELL_FX + SUB, "stopped at its west edge (row at {y})");
     }
 }
 
-/// Pushing still works from every side she can touch, the notch behind it included.
+/// Pushing still works from every side she can touch, the space behind it included.
 #[test]
 fn a_crate_is_pushed_from_the_notch_behind_it_and_from_the_side() {
     let mut r = Room::new(false);
@@ -109,7 +121,7 @@ fn a_crate_is_pushed_from_the_notch_behind_it_and_from_the_side() {
     let mut s = r.build();
     stand(&mut s, 21 * CELL_FX, 13 * CELL_FX, Facing::South);
     walk(&mut s, Angle::SOUTH, 60);
-    assert!(me(&s).pos.y.0 > 16 * CELL_FX, "in the notch behind it");
+    assert!(me(&s).pos.y.0 > 16 * CELL_FX, "in the space behind it");
     hold(&mut s, Angle::SOUTH, 30);
     assert_eq!(prop(&s, "crate").cell.y, 17, "pushed south from behind");
     stand(&mut s, 18 * CELL_FX, 18 * CELL_FX + CELL_FX / 2, Facing::East);

@@ -7,6 +7,10 @@ rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
 
+[features]
+# Test faults on the shipping types (`Guest::corrupt_at`): the crate's own tests turn it on.
+test-hooks = []
+
 [dependencies]
 jane-core.workspace = true
 jane-data.workspace = true
@@ -17,6 +21,7 @@ serde.workspace = true
 
 [dev-dependencies]
 jane-bot.workspace = true
+jane-net = { path = ".", features = ["test-hooks"] }
 
 [lints]
 workspace = true

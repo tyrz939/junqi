@@ -288,7 +288,7 @@ pub fn run(
             wait: args.wait,
             port: args.port,
         });
-        app.new_game(args.name.clone(), args.seed, host);
+        app.new_game(args.name.clone(), args.seed, !args.seed_given, host);
     } else if let Some(addr) = &args.join {
         app.intent(AppIntent::JoinMenu);
         app.intent(AppIntent::Join(addr.clone()));
@@ -881,7 +881,7 @@ impl App<'_> {
                 self.config.name.clone_from(&name);
                 let _ = self.config.save(&self.dirs);
                 let seed = if self.args.seed_given { self.args.seed } else { crate::clock_seed() };
-                self.new_game(name, seed, None);
+                self.new_game(name, seed, !self.args.seed_given, None);
             }
             AppIntent::Continue => {
                 if let Some(n) = saves::latest(&self.dirs) {
@@ -966,7 +966,7 @@ impl App<'_> {
                             self.title.name.clone()
                         };
                         let seed = if self.args.seed_given { self.args.seed } else { crate::clock_seed() };
-                        self.new_game(name, seed, Some(choice));
+                        self.new_game(name, seed, !self.args.seed_given, Some(choice));
                     }
                 }
             }
@@ -1040,8 +1040,10 @@ impl App<'_> {
 
     /// New Game: the county built on a thread while the loading screen says each stage of it
     /// (or, `--loading map`, draws its skeleton).
-    /// `host`: the world is opened to the LAN once built (the title's Host).
-    fn new_game(&mut self, name: String, seed: u32, host: Option<HostChoice>) {
+    /// `host`: the world is opened to the LAN once built (the title's Host). `reroll`: the seed
+    /// came from the clock, so one that does not prove is set aside for the next
+    /// (`Blueprints::build_rerolled`); a chosen seed that does not prove is an error.
+    fn new_game(&mut self, name: String, seed: u32, reroll: bool, host: Option<HostChoice>) {
         let (tx, rx) = channel();
         let mode = self.loading_mode();
         std::thread::spawn(move || {
@@ -1051,11 +1053,17 @@ impl App<'_> {
                 let _ = tx.send(Loaded::Card(Box::new(Card::from_skeleton(&s))));
             }
             let t0 = Instant::now();
-            let sim = Blueprints::build_with(seed, &mut |s| {
+            let mut said = |s| {
                 let _ = tx.send(Loaded::Stage(s));
-            })
-            .map(|bps| Box::new(Sim::new_game_with(bps, &name)))
-            .map_err(|e| format!("seed {seed}: {e}"));
+            };
+            let built = if reroll {
+                Blueprints::build_rerolled(seed, &mut said)
+            } else {
+                Blueprints::build_with(seed, &mut said)
+            };
+            let seed = built.as_ref().map_or(seed, Blueprints::seed);
+            let sim =
+                built.map(|bps| Box::new(Sim::new_game_with(bps, &name))).map_err(|e| format!("seed {seed}: {e}"));
             println!("jane-app: seed {seed}: the county built in {} ms", t0.elapsed().as_millis());
             let _ = tx.send(Loaded::Sim(sim));
         });

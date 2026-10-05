@@ -159,6 +159,15 @@ model! {
 /// twelve sixteenths) no room between.
 pub const FEET_SIDE_SLACK: i32 = 4;
 
+/// Sixteenths of a cell the space behind a [`PropDef::shuts_cells`] prop's feet may be deep, from
+/// the back of its `base` rows: less than her body is tall (twelve sixteenths, six px), so she
+/// never stands wholly inside its rows. Walking along its back her body reaches into the row
+/// behind it, so slipping past it joins no two cells the solver keeps apart, and no posts are
+/// needed to stop her: from the space above it she steps out sideways (PLAY-PLAN §6, the U
+/// above a crate). Feet set deeper than this meet her this far from the back, the drawn box
+/// carried up to it (a gate's top rail, a wall's coping).
+pub const NOTCH_MAX: i32 = 11;
+
 impl PropDef {
     /// The cells a solid prop with its footprint's top-left at `(x, y)` blocks: its `base` rows,
     /// the front of its footprint. What the sim stamps solid and the solver floods around.
@@ -174,15 +183,23 @@ impl PropDef {
         self.push || self.carry || self.gate || self.answers.is_some() || self.way
     }
 
+    /// Whether the solver counts its cells as shutting feet out while it stands (`blocks_feet` in
+    /// `jane_world::solve`): what [`keeps_width`](Self::keeps_width) but is never moved, a gate,
+    /// whatever answers a verb or a blow, a row marked `way`. A pushed or carried thing never
+    /// shuts a way to the solver, so slipping past one proves nothing wrong.
+    pub const fn shuts_cells(&self) -> bool {
+        self.keeps_width() && !self.push && !self.carry
+    }
+
     /// What feet collide with, in sixteenths of a cell (a canvas px) from the footprint's
     /// top-left. Only the drawn ground box: from every side she walks up to it, and along its
     /// back she walks past, as she does round a trunk or a lamp post. A prop that
-    /// [`keeps_width`](Self::keeps_width) and has feet as wide as its footprint (within
-    /// [`FEET_SIDE_SLACK`]: a crate, a gate, a wall a verb clears) also has two posts a sixteenth
-    /// wide up its west and east edges from them to the back of its `base` rows. The notch between
-    /// the posts is where she stands behind it: she enters it from the north and leaves it the same
-    /// way, so it joins no two places the cells keep apart. With no `feet`, the `base` rows whole.
-    /// Unused rects are empty.
+    /// [`keeps_width`](Self::keeps_width) (a crate, a gate, a wall a verb clears) has feet as wide
+    /// as its footprint (within [`FEET_SIDE_SLACK`]), so none side by side lets her between. What
+    /// [`shuts_cells`](Self::shuts_cells) has its box carried up to within [`NOTCH_MAX`] of the
+    /// back of its `base` rows, so she cannot slip past it behind. No posts: its sides are its
+    /// drawn box's, and from the space behind it she steps out to either side (PLAY-PLAN §6). With
+    /// no `feet`, the `base` rows whole. Unused rects are empty (none uses more than one today).
     pub const fn solid_parts(&self) -> [jane_core::Rect; 3] {
         let base = if self.base == 0 || self.base > self.h { self.h } else { self.base };
         let top = (self.h as i32 - base as i32) * 16;
@@ -193,14 +210,11 @@ impl PropDef {
                 let (x, y, w, h) = (x as i32, y as i32, w as i32, h as i32);
                 let fw = self.w as i32 * 16;
                 let wide = x <= FEET_SIDE_SLACK && x + w >= fw - FEET_SIDE_SLACK;
-                if y <= top || !wide || !self.keeps_width() {
+                if y - top <= NOTCH_MAX || !wide || !self.shuts_cells() {
                     return [jane_core::Rect::new(x, y, w, h), none, none];
                 }
-                [
-                    jane_core::Rect::new(x, y, w, h),
-                    jane_core::Rect::new(0, top, 1, y - top),
-                    jane_core::Rect::new(fw - 1, top, 1, y - top),
-                ]
+                let back = top + NOTCH_MAX;
+                [jane_core::Rect::new(x, back, w, h + y - back), none, none]
             }
         }
     }

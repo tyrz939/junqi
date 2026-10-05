@@ -186,8 +186,8 @@ fn light(cx: &mut Ctx, at: &str, l: &RawLight) -> Option<Light> {
 /// A prop's `feet` (x, y, w, h in sixteenths of a cell) must lie in the rows it stamps and stand
 /// on its front edge. What is pushed, carried, a gate or answers a verb is part of a way or a
 /// puzzle the solver proves by its cells (`PropDef::keeps_width`): its feet hold the footprint's width, leaving at most
-/// [`FEET_SIDE_SLACK`] open at either side, so none side by side lets her slip between, and its
-/// back is a notch she steps into from the north only (`PropDef::solid_parts`).
+/// [`FEET_SIDE_SLACK`] open at either side, so none side by side lets her slip between; what never
+/// moves leaves no room behind it to slip past in (`NOTCH_MAX`, `PropDef::solid_parts`).
 fn feet_fit(cx: &mut Ctx, at: &str, f: [u8; 4], r: &RawProp, base: u8) {
     let [x, y, w, h] = f.map(i32::from);
     let (fw, fh) = (i32::from(r.w) * 16, i32::from(r.h) * 16);

@@ -248,15 +248,16 @@ pub fn build_county(seed: u32, attempt: u8) -> Result<Blueprint, SkeletonError> 
 /// valid skeleton, judged by the solver with the county's rules (its contract and what the
 /// placement rows promise); a county the solver refuses is re-rolled at the next attempt over the
 /// next valid skeleton ([`county_skeleton`], each asked for from the one before rather than from
-/// the start). If none of [`ZONE_ATTEMPTS`] holds, the last is returned, `attempts ==
-/// ZONE_ATTEMPTS`, for the caller to refuse. An error only for rows no skeleton can satisfy.
-pub fn build_proven(seed: u32) -> Result<Blueprint, SkeletonError> {
+/// the start). If none of [`ZONE_ATTEMPTS`] holds, the seed is refused
+/// ([`crate::ZoneError::Unproven`]): a county the solver never passed is never played. Also an
+/// error for rows no skeleton can satisfy.
+pub fn build_proven(seed: u32) -> Result<Blueprint, crate::ZoneError> {
     build_proven_with(seed, &mut |_| {})
 }
 
 /// [`build_proven`], saying `"skeleton"`, each stage's name and `"solve"` to `report` as each
 /// starts (a re-roll says them again). Listening changes nothing that is built.
-pub fn build_proven_with(seed: u32, report: crate::Report<'_>) -> Result<Blueprint, SkeletonError> {
+pub fn build_proven_with(seed: u32, report: crate::Report<'_>) -> Result<Blueprint, crate::ZoneError> {
     let rules = ZoneRules::for_zone(ZoneId::County);
     let rows = SkeletonRows::catalog();
     report("skeleton");
@@ -264,14 +265,15 @@ pub fn build_proven_with(seed: u32, report: crate::Report<'_>) -> Result<Bluepri
     let mut attempt = 0u8;
     loop {
         let bp = build_county_on_with(&sk, attempt, report);
-        if attempt + 1 >= ZONE_ATTEMPTS {
-            return Ok(bp);
-        }
         report("solve");
         if validate(&bp, &rules).ok() {
             return Ok(bp);
         }
-        let Some(from) = sk.attempt.checked_add(1) else { return Ok(bp) };
+        let refused = crate::ZoneError::Unproven(ZoneId::County);
+        if attempt + 1 >= ZONE_ATTEMPTS {
+            return Err(refused);
+        }
+        let Some(from) = sk.attempt.checked_add(1) else { return Err(refused) };
         sk = build_skeleton(seed, &rows, from)?;
         attempt += 1;
     }

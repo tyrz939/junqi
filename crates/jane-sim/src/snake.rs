@@ -29,7 +29,7 @@ use jane_core::{Angle, Fx, Tick, Vec2};
 use jane_data::UnitDef;
 
 use crate::combat::{distance, metres_between, try_cast};
-use crate::ctx::Ctx;
+use crate::ctx::{Ctx, unit_mut_or_skip};
 use crate::ids::UnitId;
 use crate::los::line_of_sight_walls;
 use crate::state::CombatState;
@@ -49,7 +49,7 @@ pub fn tick_snake(cx: &mut Ctx<'_>, id: UnitId) {
         // Its own regen is step 5's (`life::pay_regen`: a calm snake mends, a fighting one does not).
         if (now.0 + think_offset(id)) % AGGRO_PERIOD == 0 {
             if let Some(prey) = prey(cx, id, def) {
-                let u = cx.zone.unit_mut(id).expect("snake");
+                let u = unit_mut_or_skip!(cx, id, "snake::tick_snake");
                 u.target = Some(prey);
                 u.combat = CombatState::Combat;
                 u.phase = 0;
@@ -59,7 +59,7 @@ pub fn tick_snake(cx: &mut Ctx<'_>, id: UnitId) {
                 return;
             }
         }
-        let u = cx.zone.unit_mut(id).expect("snake");
+        let u = unit_mut_or_skip!(cx, id, "snake::tick_snake");
         if let Some(p) = u.patrol.as_deref().filter(|p| p.points.len() >= 2) {
             let n = p.points.len();
             let mut at = usize::from(u.patrol_at) % n;
@@ -95,7 +95,7 @@ pub fn tick_snake(cx: &mut Ctx<'_>, id: UnitId) {
             bump_clock(cx, id);
         }
         cast_first(cx, id, book);
-        let u = cx.zone.unit_mut(id).expect("snake");
+        let u = unit_mut_or_skip!(cx, id, "snake::tick_snake");
         if u.snake.as_deref().is_some_and(|s| s.phase_tick.0 >= SNAKE_FOLLOW_TICKS) {
             next_phase(u, 1);
         }
@@ -108,7 +108,7 @@ pub fn tick_snake(cx: &mut Ctx<'_>, id: UnitId) {
     }
     cast_first(cx, id, book);
     bump_clock(cx, id);
-    let u = cx.zone.unit_mut(id).expect("snake");
+    let u = unit_mut_or_skip!(cx, id, "snake::tick_snake");
     if u.snake.as_deref().is_some_and(|s| s.phase_tick.0 >= SNAKE_SPIT_TICKS) {
         next_phase(u, 0);
     }
