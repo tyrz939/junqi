@@ -1586,8 +1586,12 @@ impl Present {
                         if t / people::ACT_TICKS == 1 {
                             cast_glow = Some(school);
                         }
-                    } else if let Some((_, school, _)) = u.build.filter(|_| !u.dead) {
-                        cast_glow = Some(school);
+                    } else if let Some((frac, school, _)) = u.build.filter(|_| !u.dead) {
+                        // The light between her hands only in the cast's last quarter: before that the
+                        // motes gathering are the tell, and she and what she faces stay readable.
+                        if frac >= 192 {
+                            cast_glow = Some(school);
+                        }
                     } else if let (Some(people::Act::Cast(t)), Some((_, spell))) = (act, u.struck) {
                         if t / people::ACT_TICKS == 1 && !u.dead {
                             cast_glow = Some(jane_data::catalog().combat.spell(spell).school);

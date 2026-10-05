@@ -255,11 +255,11 @@ impl Fx {
     /// hands, more often as it nears its end (`frac` in 256ths).
     pub fn gather(&mut self, at: (i32, i32), facing: Facing, spell: jane_core::SpellId, frac: u16, id: u32) {
         let every = if frac > 192 {
-            4
-        } else if frac > 96 {
             6
-        } else {
+        } else if frac > 96 {
             9
+        } else {
+            12
         };
         if (self.tick.wrapping_add(id)) % every != 0 {
             return;
@@ -267,7 +267,9 @@ impl Fx {
         let Some(f) = art::spell(jane_data::catalog().combat.spell(spell).id) else { return };
         let (dx, dy) = step(facing);
         let r = art::cast(f.cast);
-        self.emit_once(&Recipe { light: None, ..r }, (at.0 + dx * 10, at.1 + dy * 4), angle(facing), 256);
+        // Faint at first, fuller as it builds: the motes must not hide her or what she faces.
+        let m = 48 + frac.min(256) * 5 / 8;
+        self.emit_once(&Recipe { light: None, ..r }, (at.0 + dx * 10, at.1 + dy * 4), angle(facing), m);
     }
 
     /// This tick's events, as they happen (§2: a cast or a death resolves now, not a frame late).
@@ -295,15 +297,7 @@ impl Fx {
                         // bright flash.
                         self.emit_with(&art::impact(f.impact), hands, angle(facing), m);
                         let colour = art::Role::Core.of(art::hue(art::cast(f.cast).tint));
-                        self.glows.push(Glow {
-                            x: hands.0,
-                            y: hands.1,
-                            z: 18,
-                            colour,
-                            radius: 120,
-                            ticks: 10,
-                            left: 10,
-                        });
+                        self.glows.push(Glow { x: hands.0, y: hands.1, z: 18, colour, radius: 72, ticks: 8, left: 10 });
                         if self.glows.len() > 48 {
                             self.glows.remove(0);
                         }
@@ -569,19 +563,29 @@ impl Fx {
     fn tells(&mut self, view: &View<'_>, (vx, vy, vw, vh): (i32, i32, i32, i32)) {
         let cells =
             jane_core::Rect::new(vx.div_euclid(CELL) - 1, vy.div_euclid(CELL) - 1, vw / CELL + 3, vh / CELL + 3);
-        let mut at: Vec<((i32, i32), bool)> = Vec::new();
+        let now = view.tick().0;
+        let mut at: Vec<((i32, i32), bool, u32)> = Vec::new();
         for uv in view.units_in(cells) {
             let u = uv.unit;
             let Some(w) = u.feel.windup.filter(|_| u.alive) else { continue };
             if (self.tick + u.id.get()) % TELL_EVERY != 0 {
                 continue;
             }
-            at.push(((u.pos.x.0 >> FX_TO_CANVAS, u.pos.y.0 >> FX_TO_CANVAS), w.interruptible));
+            // How far along, 0 to 256: the glint swells and the ring at its feet closes in as the
+            // blow comes, so "now" reads at a glance in a crowd.
+            let len = w.lands.0.saturating_sub(w.began.0).max(1);
+            let frac = (now.saturating_sub(w.began.0).min(len) * 256 / len).min(256);
+            at.push(((u.pos.x.0 >> FX_TO_CANVAS, u.pos.y.0 >> FX_TO_CANVAS), w.interruptible, frac));
         }
-        for (p, interruptible) in at {
+        for (p, interruptible, frac) in at {
             let c = if interruptible { TELL_GOLD } else { TELL_RED };
-            self.mark(p, TELL_HEIGHT, Shape::Glow(5), c, TELL_EVERY as u8 + 2, false);
-            self.mark(p, TELL_HEIGHT, Shape::Dot(2), (TELL_CORE, c.1), TELL_EVERY as u8 + 2, false);
+            let life = TELL_EVERY as u8 + 2;
+            let swell = 6 + (frac * 6 / 256) as u8;
+            self.mark(p, TELL_HEIGHT, Shape::Glow(swell), c, life, false);
+            self.mark(p, TELL_HEIGHT, Shape::Dot(3), (TELL_CORE, c.1), life, false);
+            // The closing ring on the ground under it: wide at the raise, tight as it lands.
+            let r = (16 - (frac * 11 / 256) as i32).max(5) as u8;
+            self.mark(p, 0, Shape::Ring(r, r), c, life, true);
         }
     }
 
