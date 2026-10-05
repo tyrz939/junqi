@@ -116,6 +116,13 @@ fn prop_on_line(v: &View<'_>, me: &Unit, def: &jane_data::SpellDef, aim: jane_co
         if along < 0 || along > far || off > touch {
             continue;
         }
+        // Named only when she plainly has it: in sight and inside the bolt's own range. A box
+        // set in a wall, or one at the very end of a bolt's flight, is shot at as before, free
+        // (a target the sim cannot be sure of walks her to range instead, and the crawl's
+        // `Aim` moves on before she gets there: the Factory's call box, seed 8).
+        if !v.sight(me.pos, at) || along > i64::from(def.range.0) {
+            continue;
+        }
         if best.is_none_or(|(b, _)| along < b) {
             best = Some((along, p.id));
         }
