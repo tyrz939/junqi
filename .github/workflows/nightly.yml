@@ -1,0 +1,27 @@
+# A small slow tier every night (Grok #3, #11): the full `--ignored` sweep stays on demand and
+# local; this keeps one of each kind honest on CI. One at a time (`--test-threads=1`): each story
+# test can spawn games of its own, and the runner's memory is small.
+name: nightly
+
+on:
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: 0
+
+jobs:
+  slow-sample:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+      - run: sudo apt-get update && sudo apt-get install -y xvfb libgl1-mesa-dri libegl1 mesa-utils
+      - name: one story seed
+        run: cargo test --release -p jane-bot --test story -- --ignored --exact the_story_ends_with_every_side_quest_set_aside_as_it_is_taken --test-threads=1
+      - name: one dungeon crawl
+        run: cargo test --release -p jane-bot --test dungeons -- --ignored --exact julies_cellar --test-threads=1
+      - name: the gl2 albedo gate
+        run: xvfb-run -a cargo test --release -p jane-render-gl2 --test albedo -- --ignored --test-threads=1
