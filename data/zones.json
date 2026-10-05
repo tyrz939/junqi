@@ -6,7 +6,7 @@
       "units": ["dog", "yard_skeleton"],
       "props": ["house_door", "mine_door", "adit_door", "burial_door"],
       "marks": ["start", "house_front", "mine_mouth", "mine_adit", "burial_mouth"],
-      "rects": ["stoop", "mine_yard", "quarry_top"]
+      "rects": ["stoop", "mine_yard"]
     },
     "givenKeys": ["auntie_house"]
   },

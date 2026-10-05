@@ -333,6 +333,18 @@
     }
   },
   {
+    "key": "quarry_top_ledge",
+    "at": {
+      "mark": "quarry_top",
+      "within": 12
+    },
+    "rect": {
+      "name": "quarry_top",
+      "w": 11,
+      "h": 9
+    }
+  },
+  {
     "key": "foremans_tin",
     "at": {
       "mark": "quarry_top",

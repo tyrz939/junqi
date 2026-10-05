@@ -65,7 +65,7 @@ fn from_the_north_she_walks_up_to_where_each_prop_meets_the_ground() {
         let ground = i32::from(py) * CELL_FX + i32::from(feet[1]) * SUB;
         let gap = ground - (me(&s).pos.y.0 + HALF);
         if !(0..=2 * 256).contains(&gap) {
-            far.push(format!("{id}: {}/256 px short of its ground", gap));
+            far.push(format!("{id}: {gap}/256 px short of its ground"));
         }
         let rt = s.runtime(ZoneId::County).unwrap();
         let cells = def.solid_rect(i32::from(px), i32::from(py));

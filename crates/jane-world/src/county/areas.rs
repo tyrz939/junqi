@@ -111,8 +111,8 @@ fn quarry_steps(k: &mut Kit, cx: i32, cy: i32, _radius: i32) -> Vec<(Key, (i32, 
     // The steps: two lower ledges either side, so the face reads as cut, not fallen.
     k.fill(Rect::new(cx - 22, cy - 8, 7, 4), Tile::Cliff);
     k.fill(Rect::new(cx + 16, cy - 8, 7, 4), Tile::Cliff);
+    // Its rect is data (`placements/lowfields.json` `quarry_top_ledge`), centred on this mark.
     let top = named(k, "quarry_top");
-    k.rect(top, Rect::new(cx - 5, cy - 5, 11, 9));
     k.mark(top, cx, cy, Some(Facing::North));
     let adit = named(k, "quarry_adit");
     k.mark(adit, cx, cy - 2, Some(Facing::North));

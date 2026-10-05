@@ -367,7 +367,7 @@ mod tests {
         const G: i32 = 2 * 256;
         const AX: i32 = 300;
         const DI: i32 = 212;
-        assert!(jane_data::NOTCH_MAX * SUB_FX < 2 * BODY_HALF_FX, "a notch she cannot stand wholly in");
+        const { assert!(jane_data::NOTCH_MAX * SUB_FX < 2 * BODY_HALF_FX, "a notch she cannot stand wholly in") };
         let cat = jane_data::catalog();
         let (px, py) = (40, 14);
         let (mut bad, mut n, mut boxed) = (Vec::new(), 0, 0);
@@ -419,7 +419,7 @@ mod tests {
             ];
             for (from, gap) in gaps {
                 if !(0..=G).contains(&gap) {
-                    bad.push(format!("{} from the {from}: {}/256 px short", def.id, gap));
+                    bad.push(format!("{} from the {from}: {gap}/256 px short", def.id));
                 }
             }
             // From the space above it, where the walk from the north stopped: out to either side.
@@ -471,7 +471,7 @@ mod tests {
             let bottom = b.y1 + slide(&g, b, false, 12 * CELL_FX);
             let gap = py * CELL_FX + fy * SUB_FX - bottom;
             if !(0..=2 * 256).contains(&gap) {
-                far.push(format!("{}: {}/256 px short", def.id, gap));
+                far.push(format!("{}: {gap}/256 px short", def.id));
             }
             assert!(def.solid_rect(px, py).cells().all(|(x, y)| g.solid(x, y)), "{}: cells", def.id);
             n += 1;

@@ -4,8 +4,8 @@
 //!
 //! **Scope today.** Names are checked county-wide, not per zone, and a miss is an *error* (Grok #8:
 //! a typo used to pass `jane check`). The county's set places are `.chunk` files (PORT.md §6.f) and
-//! provide what they draw; a name only code draws (a dressed area's, an interior's) is declared in
-//! its zone's contract in `data/zones.json`, which the solver then holds the build to.
+//! provide what they draw, and so do the placements; a dressed area's code draws its marks, and
+//! what a quest or trigger names there is placed by a row (`quarry_top`'s rect).
 
 use std::collections::BTreeSet;
 
@@ -203,7 +203,7 @@ pub fn check(c: &Catalog, diag: &mut Diagnostics) {
         diag.error(
             "providers",
             format!(
-                "{} name(s) used with no declared provider (a name only code draws goes in its zone's contract): {}",
+                "{} name(s) used with no declared provider (a chunk, a placement or a table must draw it): {}",
                 missing.len(),
                 missing.join(", ")
             ),
