@@ -1101,15 +1101,17 @@ void main() {
 
 /// The window: sharp bilinear. Nearest inside a canvas texel, bilinear across the last output
 /// px at its edge, so every px is square and no edge swims at 2.5x. `u_scale` is output px per
-/// canvas px; the window's rows run top down, the canvas's bottom up.
+/// canvas px, `u_origin` the canvas's top-left on the window; the window's rows run top down,
+/// the canvas's bottom up.
 pub const UPSCALE_FS: &str = r"
 uniform sampler2D u_src;
 uniform vec2 u_src_size;
 uniform float u_scale;
 uniform float u_win_h;
 uniform float u_sharp;
+uniform vec2 u_origin;
 void main() {
-    vec2 px = vec2(gl_FragCoord.x, u_win_h - gl_FragCoord.y);
+    vec2 px = vec2(gl_FragCoord.x, u_win_h - gl_FragCoord.y) - u_origin;
     vec2 texel = px / u_scale;
     vec2 base = floor(texel);
     vec2 f = texel - base - 0.5;

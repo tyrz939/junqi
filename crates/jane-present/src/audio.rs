@@ -497,8 +497,8 @@ impl Volumes {
     }
 }
 
-/// How far a sound carries, in cells.
-pub const HEARING_CELLS: f32 = 24.0;
+/// How far a sound carries, in cells: half the view across (40 cells).
+pub const HEARING_CELLS: f32 = 20.0;
 
 /// A sound placed for the listener: its gain (0 to 1), its pan (-1 left to 1 right) and how much
 /// more of it the room gives back (further is wetter).
@@ -810,8 +810,8 @@ impl FarCall {
     }
 }
 
-/// How far a far call carries, cells: a screen and a half across (48 cells), from her.
-pub const FAR_CELLS: i32 = 44;
+/// How far a far call carries, cells: a screen and more across (40 cells), from her.
+pub const FAR_CELLS: i32 = 37;
 /// Ticks between far calls, at least (as much again at most).
 const FAR_TICKS: u32 = 150;
 
@@ -1399,7 +1399,7 @@ mod far_tests {
     fn a_far_call_is_heard_a_screen_out_and_grows_as_she_comes_in() {
         let c = |x: i32| (Fx(x * CELL_FX), Fx(0));
         let me = c(0);
-        let edge = far_heard(c(40), me).and_then(|p| place(p, me)).expect("a screen and more out, still heard");
+        let edge = far_heard(c(34), me).and_then(|p| place(p, me)).expect("most of a screen out, still heard");
         let near = far_heard(c(10), me).and_then(|p| place(p, me)).expect("near");
         assert!(edge.gain > 0.0 && edge.gain < 0.05, "faint at the edge ({})", edge.gain);
         assert!(near.gain > edge.gain * 5.0, "fuller as she comes in");
@@ -1754,7 +1754,7 @@ mod tests {
     }
 
     #[test]
-    fn sounds_fade_over_twenty_four_cells_and_pan_to_their_side() {
+    fn sounds_fade_over_twenty_cells_and_pan_to_their_side() {
         let me = (Fx(0), Fx(0));
         let here = place(me, me).unwrap();
         assert_eq!((here.gain, here.pan), (1.0, 0.0));
@@ -1762,9 +1762,9 @@ mod tests {
         assert!(right.pan > 0.3 && right.gain < 1.0);
         let left = place((Fx(-6 * CELL_FX), Fx(0)), me).unwrap();
         assert!((left.pan + right.pan).abs() < 1e-6);
-        let far = place((Fx(23 * CELL_FX), Fx(0)), me).unwrap();
+        let far = place((Fx(19 * CELL_FX), Fx(0)), me).unwrap();
         assert!(far.gain < 0.01 && far.send > here.send);
-        assert!(place((Fx(24 * CELL_FX), Fx(0)), me).is_none());
+        assert!(place((Fx(20 * CELL_FX), Fx(0)), me).is_none());
     }
 
     #[test]

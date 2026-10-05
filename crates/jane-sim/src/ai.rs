@@ -51,8 +51,9 @@ use crate::runtime::ZoneRuntime;
 use crate::state::{CombatState, PathCache, Unit, ZoneState};
 use crate::status::{is_stunned, speed_factor};
 use crate::tuning::{
-    AGGRO_FLOOR_FX, AGGRO_MAX_FX, AGGRO_PAR, AGGRO_PERIOD, BAIT_EAT_FX, EVADE_RUN, BAIT_HIT, CHASE_PATH_TIMES, LEASH_PATH_TIMES,
-    LEASH_SNAP_FX, NIGHT_AGGRO, NIGHT_LEASH, PATH_REACH_FX, PATROL_PATH_CELLS, PATROL_REACHED_FX, REPATH_SOON, WORKS_SCALE,
+    AGGRO_FLOOR_FX, AGGRO_MAX_FX, AGGRO_PAR, AGGRO_PERIOD, BAIT_EAT_FX, BAIT_HIT, CHASE_PATH_TIMES, EVADE_RUN,
+    LEASH_PATH_TIMES, LEASH_SNAP_FX, NIGHT_AGGRO, NIGHT_LEASH, PATH_REACH_FX, PATROL_PATH_CELLS, PATROL_REACHED_FX,
+    REPATH_SOON, WORKS_SCALE,
 };
 use crate::units::{def_of, face_vector, move_unit, think_offset};
 

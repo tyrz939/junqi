@@ -15,7 +15,7 @@ use std::time::{Duration, Instant};
 use jane_core::ZoneId;
 use jane_net::Session;
 use jane_present::input::{
-    Context, Edge, GameAction, Input, KeySet, Mode, UiAction, canvas_size, canvas_to_world, pick, sc, world_to_canvas,
+    Context, Edge, Fit, GameAction, Input, KeySet, Mode, Scaling, UiAction, canvas_to_world, pick, sc, world_to_canvas,
 };
 use jane_present::text;
 use jane_present::ui::Ui;
@@ -205,6 +205,11 @@ fn me_of(s: Option<&Session>) -> Seat {
     s.and_then(Session::seat).unwrap_or(Seat::HOST)
 }
 
+/// The canvas on a window of `win` px, as the `fill` row says (PRESENTATION.md, the window).
+fn fit_of(win: (u32, u32), rows: &jane_present::Features) -> Fit {
+    jane_present::input::fit(win.0, win.1, if rows.fill { Scaling::Fill } else { Scaling::Whole })
+}
+
 pub fn run(
     args: &Args,
     pump: &mut sdl2::EventPump,
@@ -227,8 +232,9 @@ pub fn run(
     let describe = screen.describe();
     crate::crash::note_backend(&describe);
     let mut win = screen.size();
-    let mut devices = Devices::new(pads, win.1);
-    let mut canvas_px = canvas_size(win.0, win.1);
+    let mut fit = fit_of(win, &present.features());
+    let mut devices = Devices::new(pads, fit);
+    let mut canvas_px = fit.canvas;
     present.set_canvas(canvas_px);
     let mut app = App {
         args,
@@ -323,16 +329,37 @@ pub fn run(
             if let sdl2::event::Event::TextInput { text, .. } = &e {
                 typed.push_str(text);
             }
+            // F11: the desktop filled, or a window again (PRESENTATION.md, the window).
+            if let sdl2::event::Event::KeyDown {
+                scancode: Some(sdl2::keyboard::Scancode::F11), repeat: false, ..
+            } = e
+            {
+                use sdl2::video::FullscreenType;
+                let w = screen.window_mut();
+                let to = if w.fullscreen_state() == FullscreenType::Off {
+                    FullscreenType::Desktop
+                } else {
+                    FullscreenType::Off
+                };
+                if let Err(e) = w.set_fullscreen(to) {
+                    eprintln!("jane-app: F11: {e}");
+                }
+            }
             match devices.event(&e) {
                 Happened::Quit => app.quit = true,
                 Happened::Resized => {
                     win = screen.size();
                     screen.resized(win);
-                    devices.set_window_height(win.1);
-                    canvas_px = canvas_size(win.0, win.1);
                 }
                 Happened::Nothing => {}
             }
+        }
+        // The canvas on the window: a resize, or the `fill` row turned on the Display screen.
+        let now_fit = fit_of(win, &app.present.features());
+        if now_fit != fit {
+            fit = now_fit;
+            canvas_px = fit.canvas;
+            devices.set_fit(fit);
         }
         devices.poll_pad();
         // The script's inputs, as a device would give them.
@@ -526,7 +553,7 @@ pub fn run(
         let draw_time = t_draw.elapsed();
         let t_wait = Instant::now();
         if !skip {
-            screen.show(win)?;
+            screen.show(&fit)?;
         }
         app.stages[4] = t_wait.elapsed().as_micros() as u32;
         app.perf.frame(app.stages, app.started.elapsed().as_millis() as u64, app.ticks);

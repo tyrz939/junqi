@@ -22,8 +22,8 @@ pub trait Screen {
     fn size(&self) -> (u32, u32);
     /// The window was resized.
     fn resized(&mut self, _win: (u32, u32)) {}
-    /// Shows the frame the backend last drew.
-    fn show(&mut self, win: (u32, u32)) -> Result<(), String>;
+    /// Shows the frame the backend last drew, laid on the window as `fit` says.
+    fn show(&mut self, fit: &jane_present::input::Fit) -> Result<(), String>;
     /// `soft`, or `wgpu, Vulkan, <adapter>`: the title bar.
     fn describe(&self) -> String;
     /// Whether anyone can see the window: not minimised, not hidden.
@@ -45,7 +45,8 @@ fn refresh(window: &sdl2::video::Window) -> std::time::Duration {
     std::time::Duration::from_micros(1_000_000 / hz as u64)
 }
 
-/// T0: `soft` into a streaming texture on an SDL renderer, nearest upscale.
+/// T0: `soft` into a streaming texture on an SDL renderer: a whole multiple, nearest, or filling
+/// the window by sharp bilinear (the `fill` row).
 struct SoftScreen<'a> {
     canvas: sdl2::render::WindowCanvas,
     target: Target<'a>,
@@ -65,11 +66,13 @@ impl Screen for SoftScreen<'_> {
         self.canvas.window().size()
     }
 
-    fn show(&mut self, win: (u32, u32)) -> Result<(), String> {
+    fn show(&mut self, fit: &jane_present::input::Fit) -> Result<(), String> {
         let (px, w, h) = self.soft.pixels();
         self.target.upload(px, w, h)?;
+        let [_, r, g, b] = jane_present::input::BARS.to_be_bytes();
+        self.canvas.set_draw_color(sdl2::pixels::Color::RGB(r, g, b));
         self.canvas.clear();
-        self.target.blit(&mut self.canvas, win)?;
+        self.target.blit(&mut self.canvas, fit)?;
         self.canvas.present();
         Ok(())
     }
@@ -79,7 +82,7 @@ impl Screen for SoftScreen<'_> {
     }
 }
 
-/// T2: `wgpu` on the window's own surface, sharp bilinear upscale.
+/// T2: `wgpu` on the window's own surface: a whole multiple, or filling by sharp bilinear.
 struct GpuScreen {
     window: sdl2::video::Window,
     wgpu: Box<Wgpu>,
@@ -102,7 +105,8 @@ impl Screen for GpuScreen {
         self.wgpu.resize(win);
     }
 
-    fn show(&mut self, _win: (u32, u32)) -> Result<(), String> {
+    fn show(&mut self, fit: &jane_present::input::Fit) -> Result<(), String> {
+        self.wgpu.set_fit(Some(*fit));
         self.wgpu.present()
     }
 
@@ -115,7 +119,8 @@ impl Screen for GpuScreen {
     }
 }
 
-/// T1: `gl2` through an OpenGL 2.1 or GLES 2 context on the window, sharp bilinear upscale.
+/// T1: `gl2` through an OpenGL 2.1 or GLES 2 context on the window: a whole multiple, or
+/// filling by sharp bilinear.
 struct GlScreen {
     window: sdl2::video::Window,
     gl2: Box<Gl2>,
@@ -134,7 +139,8 @@ impl Screen for GlScreen {
         self.window.size()
     }
 
-    fn show(&mut self, _win: (u32, u32)) -> Result<(), String> {
+    fn show(&mut self, fit: &jane_present::input::Fit) -> Result<(), String> {
+        self.gl2.set_fit(Some(*fit));
         self.gl2.present()
     }
 
@@ -205,7 +211,10 @@ pub fn run(args: &Args) -> Result<(), String> {
     // No pad subsystem is no pad, never no game.
     let pads = sdl.game_controller().ok();
     let usable = video.display_usable_bounds(0).ok().map(|r| (r.width(), r.height()));
-    let k = screen::start_scale(usable, args.scale);
+    let desktop = video.display_bounds(0).ok().map(|r| (r.width(), r.height()));
+    // A run the tests and scripts drive stays a window.
+    let asked = args.scale.or(args.ticks.map(|_| 2));
+    let (k, full) = screen::start(desktop, usable, asked);
     // The command line's backend, else the one the Controls screen chose last time.
     let saved = crate::config::Config::load(&crate::saves::Dirs::find(args.data_dir.as_deref())).backend;
     let choice = match (args.backend, saved.as_deref()) {
@@ -214,7 +223,15 @@ pub fn run(args: &Args) -> Result<(), String> {
         (BackendChoice::Auto, Some("wgpu")) => BackendChoice::Wgpu,
         (b, _) => b,
     };
-    let picked = probe(choice, &video, k)?;
+    let mut picked = probe(choice, &video, k)?;
+    if full {
+        let w = match &mut picked {
+            Picked::Wgpu(w, _) | Picked::Gl2(w, _) | Picked::Soft(w) => w,
+        };
+        if let Err(e) = w.set_fullscreen(sdl2::video::FullscreenType::Desktop) {
+            println!("jane-app: no fullscreen ({e}); a window");
+        }
+    }
     // SDL starts with text input on; the console turns it on when it opens.
     let text_in = video.text_input();
     text_in.stop();

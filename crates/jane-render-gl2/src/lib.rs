@@ -251,7 +251,7 @@ impl Progs {
                 sh::RECT_VS,
                 sh::UPSCALE_FS,
                 &sh::RECT_ATTRS,
-                &["u_size", "u_src", "u_src_size", "u_scale", "u_win_h", "u_sharp"],
+                &["u_size", "u_src", "u_src_size", "u_scale", "u_win_h", "u_sharp", "u_origin"],
             )?,
         })
     }
@@ -458,6 +458,8 @@ pub struct Gl2 {
     /// size (the bench's 4K output).
     offscreen: Option<(u32, u32)>,
     offscreen_target: Option<Target>,
+    /// Where `present` lays the canvas on the window (`set_fit`); `None` fills its height.
+    fit: Option<jane_present::input::Fit>,
     /// Which canvas target holds the frame: `out`, or `fin` after an odd number of passes that
     /// read the canvas (the fog, the bloom).
     on_fin: bool,
@@ -573,6 +575,7 @@ impl Gl2 {
             describe,
             offscreen: None,
             offscreen_target: None,
+            fit: None,
             on_fin: false,
         })
     }
@@ -619,8 +622,16 @@ impl Gl2 {
         (w as u16, h as u16)
     }
 
-    /// Shows the last canvas drawn in the window: scaled so its height fills the window's, by
-    /// sharp bilinear (nearest where the scale is whole, or where the `sharp` row is off).
+    /// Where `present` lays the canvas on the window (PRESENTATION.md, the window): a whole
+    /// multiple with the theme's dark bars round it, or filling the height. `None` (an offscreen
+    /// target, the bench) fills the height.
+    pub fn set_fit(&mut self, fit: Option<jane_present::input::Fit>) {
+        self.fit = fit;
+    }
+
+    /// Shows the last canvas drawn in the window, laid as `set_fit` says (else scaled so its
+    /// height fills the window's), by sharp bilinear (nearest where the scale is whole, or where
+    /// the `sharp` row is off).
     pub fn present(&mut self) -> Result<(), String> {
         let t0 = Instant::now();
         let Some(t) = &self.targets else { return Ok(()) };
@@ -631,8 +642,11 @@ impl Gl2 {
         };
         self.time_begin(SEC_UPSCALE);
         self.gl.target(dst, ww, wh);
-        self.gl.clear([0.0, 0.0, 0.0, 1.0]);
-        let scale = wh as f32 / out.h as f32;
+        let (scale, origin, size) = match self.fit {
+            Some(f) => (f.scale, f.origin, f.size),
+            None => (wh as f32 / out.h as f32, (0, 0), (ww, wh)),
+        };
+        self.gl.clear(bars_rgba(jane_present::input::BARS));
         let whole = (scale - scale.round()).abs() < 1e-4;
         let p = &self.progs.upscale;
         self.gl.use_program(p.p);
@@ -642,9 +656,13 @@ impl Gl2 {
         self.gl.set_f(p.u("u_src_size"), &[out.w as f32, out.h as f32]);
         self.gl.set_f(p.u("u_scale"), &[scale]);
         self.gl.set_f(p.u("u_win_h"), &[wh as f32]);
+        self.gl.set_f(p.u("u_origin"), &[origin.0 as f32, origin.1 as f32]);
         self.gl.set_f(p.u("u_sharp"), &[if self.rows.sharp && !whole { 1.0 } else { 0.0 }]);
         self.gl.set_f(p.u("u_size"), &[ww as f32, wh as f32]);
-        self.rect(0.0, 0.0, ww as f32, wh as f32);
+        // The canvas's rect on the window; GL's rows run bottom up.
+        let (x0, x1) = (origin.0 as f32, (origin.0 + size.0 as i32) as f32);
+        let (y0, y1) = ((wh as i32 - origin.1 - size.1 as i32) as f32, (wh as i32 - origin.1) as f32);
+        self.rect(x0.max(0.0), y0.max(0.0), x1.min(ww as f32), y1.min(wh as f32));
         self.time_end();
         if self.offscreen.is_none() {
             self.ctx.swap();
@@ -1718,4 +1736,10 @@ impl Drop for Gl2 {
             t.free(&self.gl);
         }
     }
+}
+
+/// `0xAARRGGBB` as a clear colour.
+fn bars_rgba(argb: u32) -> [f32; 4] {
+    let [_, r, g, b] = argb.to_be_bytes();
+    [f32::from(r) / 255.0, f32::from(g) / 255.0, f32::from(b) / 255.0, 1.0]
 }

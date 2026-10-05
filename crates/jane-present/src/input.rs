@@ -767,23 +767,79 @@ pub fn quantise(mx: f32, my: f32) -> (Angle, u8) {
     (angle_of(mx, my), mag)
 }
 
-/// The canvas for a window of `win` px (PRESENTATION.md, the window): always `CANVAS_H` tall,
-/// `ceil(win_w / s)` wide with `s = win_h / CANVAS_H`, clamped to a sane width. A zero-height
-/// (minimised) window keeps 16:9.
-pub fn canvas_size(win_w: u32, win_h: u32) -> (u16, u16) {
-    const MAX_W: u64 = 4096;
-    let h = u64::from(CANVAS_H);
-    if win_h == 0 || win_w == 0 {
-        return (crate::frame::CANVAS_W, CANVAS_H);
-    }
-    let w = (u64::from(win_w) * h).div_ceil(u64::from(win_h)).clamp(1, MAX_W);
-    (w as u16, CANVAS_H)
+/// How the canvas is laid on the window (PRESENTATION.md, the window; `config.json` `scaling`).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum Scaling {
+    /// The largest whole multiple that fits, every canvas px the same square of window px, with
+    /// thin bars of [`BARS`] round it. The default.
+    #[default]
+    Whole,
+    /// The window's height filled at whatever scale that is, by sharp bilinear: whole-number
+    /// nearest, then a smooth last fit, so no px is wider than its neighbour by a whole px.
+    Fill,
 }
 
-/// A point in window px as canvas px, through the window's scale `s = win_h / CANVAS_H`.
-pub fn to_canvas(win_x: i32, win_y: i32, win_h: u32) -> (f32, f32) {
-    let s = f64::from(win_h.max(1)) / f64::from(CANVAS_H);
-    ((f64::from(win_x) / s) as f32, (f64::from(win_y) / s) as f32)
+/// The bars round a whole-number canvas: the theme's dark, the frame's own clear.
+pub const BARS: u32 = 0xff10_1014;
+
+/// The canvas on the window: its size, and where and how large it is shown.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Fit {
+    /// The canvas, px: always `CANVAS_H` tall, as wide as the window shows at the scale.
+    pub canvas: (u16, u16),
+    /// Window px per canvas px: whole for [`Scaling::Whole`].
+    pub scale: f32,
+    /// The canvas's top-left in the window, px (0, 0 when it fills).
+    pub origin: (i32, i32),
+    /// The canvas's size on the window, px (it may run a part px past the right edge).
+    pub size: (u32, u32),
+}
+
+impl Fit {
+    /// A point in window px as canvas px.
+    pub fn to_canvas(&self, win_x: i32, win_y: i32) -> (f32, f32) {
+        let s = f64::from(self.scale.max(1e-3));
+        let f = |v: i32, o: i32| (f64::from(v - o) / s) as f32;
+        (f(win_x, self.origin.0), f(win_y, self.origin.1))
+    }
+
+    /// Whether the scale is a whole number.
+    pub fn whole(&self) -> bool {
+        (self.scale - self.scale.round()).abs() < 1e-4
+    }
+}
+
+/// The canvas for a window of `win` px (PRESENTATION.md, the window). [`Scaling::Whole`]: the
+/// largest whole `k` at which `CANVAS_W x CANVAS_H` fits (never under 1), the canvas
+/// `CANVAS_H` tall and as wide as the window shows at `k` (a wider window widens it), centred
+/// with bars. [`Scaling::Fill`]: `s = win_h / CANVAS_H`, the canvas `ceil(win_w / s)` wide, no
+/// bars. A zero-sized (minimised) window keeps the canvas 16:9.
+pub fn fit(win_w: u32, win_h: u32, scaling: Scaling) -> Fit {
+    const MAX_W: u64 = 4096;
+    let (cw, ch) = (u64::from(crate::frame::CANVAS_W), u64::from(CANVAS_H));
+    if win_h == 0 || win_w == 0 {
+        return Fit { canvas: (cw as u16, ch as u16), scale: 1.0, origin: (0, 0), size: (cw as u32, ch as u32) };
+    }
+    let (ww, wh) = (u64::from(win_w), u64::from(win_h));
+    match scaling {
+        Scaling::Whole => {
+            let k = (wh / ch).min(ww / cw).max(1);
+            let w = (ww / k).clamp(1, MAX_W);
+            let size = ((w * k) as u32, (ch * k) as u32);
+            let origin = ((win_w as i32 - size.0 as i32) / 2, (win_h as i32 - size.1 as i32) / 2);
+            Fit { canvas: (w as u16, ch as u16), scale: f32::from(k as u16), origin, size }
+        }
+        Scaling::Fill => {
+            let w = (ww * ch).div_ceil(wh).clamp(1, MAX_W);
+            let size = ((w * wh).div_ceil(ch) as u32, win_h);
+            Fit {
+                canvas: (w as u16, ch as u16),
+                scale: (f64::from(win_h) / f64::from(CANVAS_H)) as f32,
+                origin: (0, 0),
+                size,
+            }
+        }
+    }
 }
 
 /// Fx per canvas px: `FX_ONE` per sim px, and the render scale is 2 (PRESENTATION.md, the
@@ -1089,15 +1145,41 @@ mod tests {
     }
 
     #[test]
-    fn the_canvas_is_432_tall_and_as_wide_as_the_window_shows() {
-        assert_eq!(canvas_size(1536, 864), (768, 432));
-        assert_eq!(canvas_size(768, 432), (768, 432));
-        assert_eq!(canvas_size(1920, 1080), (768, 432));
-        assert_eq!(canvas_size(3440, 1440), (1032, 432));
-        assert_eq!(canvas_size(1537, 864), (769, 432), "ceil: the last column is part-shown");
-        assert_eq!(canvas_size(800, 0), (768, 432));
-        assert_eq!(to_canvas(1536, 864, 864), (768.0, 432.0));
-        assert_eq!(to_canvas(250, 100, 1080), (100.0, 40.0));
+    fn the_canvas_is_360_tall_and_a_whole_multiple_with_bars() {
+        let f = |w, h| fit(w, h, Scaling::Whole);
+        // 1080p is 3x exactly, 1440p 4x, 4K 6x, 720p 2x: no bars.
+        for (w, h, k) in [(1920, 1080, 3.0), (2560, 1440, 4.0), (3840, 2160, 6.0), (1280, 720, 2.0)] {
+            assert_eq!(f(w, h), Fit { canvas: (640, 360), scale: k, origin: (0, 0), size: (w, h) });
+        }
+        // 1366 x 768: 2x, a bar of 24 px above and below.
+        assert_eq!(f(1366, 768), Fit { canvas: (683, 360), scale: 2.0, origin: (0, 24), size: (1366, 720) });
+        // 21:9 widens the canvas at the same height; a part px is a bar.
+        assert_eq!(f(3440, 1440), Fit { canvas: (860, 360), scale: 4.0, origin: (0, 0), size: (3440, 1440) });
+        assert_eq!(f(2560, 1080).canvas, (853, 360));
+        assert_eq!(f(2560, 1080).origin, (0, 0));
+        // A tall window: the width decides, the rest is bars.
+        assert_eq!(f(1300, 1000), Fit { canvas: (650, 360), scale: 2.0, origin: (0, 140), size: (1300, 720) });
+        // Smaller than 1x: 1x, cropped about the middle.
+        assert_eq!(f(600, 300).scale, 1.0);
+        assert_eq!(f(800, 0).canvas, (640, 360));
+        // The mouse through the bars: the canvas's corners.
+        let g = f(1366, 768);
+        assert_eq!(g.to_canvas(0, 24), (0.0, 0.0));
+        assert_eq!(g.to_canvas(1366, 744), (683.0, 360.0));
+        assert_eq!(g.to_canvas(683, 384), (341.5, 180.0));
+    }
+
+    #[test]
+    fn filling_the_window_keeps_the_height_and_shows_what_is_wide() {
+        let f = |w, h| fit(w, h, Scaling::Fill);
+        assert_eq!(f(1280, 720).canvas, (640, 360));
+        assert_eq!(f(1920, 1080).canvas, (640, 360));
+        assert_eq!(f(1366, 768).canvas, (641, 360), "ceil: the last column is part-shown");
+        assert_eq!(f(3440, 1440).canvas, (860, 360));
+        let g = f(1600, 900);
+        assert_eq!((g.scale, g.origin, g.size), (2.5, (0, 0), (1600, 900)));
+        assert_eq!(g.to_canvas(1600, 900), (640.0, 360.0));
+        assert_eq!(g.to_canvas(250, 100), (100.0, 40.0));
     }
 
     #[test]

@@ -5,6 +5,9 @@
 
 use std::path::Path;
 
+/// The canvas, as the UI's rects count.
+const CANVAS_I: (i32, i32) = (jane_present::CANVAS_W as i32, jane_present::CANVAS_H as i32);
+
 use jane_present::input::Bindings;
 use jane_present::text::Tone;
 use jane_present::ui::core::{DragPayload, UiInput};
@@ -152,7 +155,7 @@ fn map_day(dir: &Path, seed: u32, cx: HudCtx<'_>) -> Result<(), String> {
             sign.map(|c| (c.0 / jane_present::ui::map::OUT_STEP as i32, c.1 / jane_present::ui::map::OUT_STEP as i32));
         tick += 40 * k;
         let v = rig.sim.view(Seat(0)).expect("seat 0");
-        let canvas = (768, 432);
+        let canvas = (jane_present::CANVAS_W, jane_present::CANVAS_H);
         rig.present.draw(128, canvas);
         rig.ui.begin(UiInput::default(), tick, canvas);
         window::draw(&mut rig.ui, &mut st, &rig.bufs, Some(&v), cx);
@@ -214,7 +217,7 @@ impl Rig {
 
     /// Draws one frame: the world, then `ui_fn` over it at presenter tick `tick`.
     fn frame(&mut self, input: UiInput, tick: u32, ui_fn: impl FnOnce(&mut Ui, &ViewBuffers, &Sim)) -> Vec<UiOut> {
-        let canvas = (768, 432);
+        let canvas = (jane_present::CANVAS_W, jane_present::CANVAS_H);
         self.present.draw(128, canvas);
         self.ui.begin(input, tick, canvas);
         self.ui.draw_cursor = true;
@@ -332,7 +335,7 @@ pub fn run(dir: &Path, names: &[String]) -> Result<(), String> {
     b.hud.toasts.clear();
     // The bag's first slot, as the window lays it out.
     let slot0 =
-        (i32::from(window::rect((768, 432)).x) + 12 + 8 + 18, i32::from(window::rect((768, 432)).y) + 42 + 4 + 22 + 18);
+        (i32::from(window::rect(CANVAS_I).x) + 12 + 8 + 18, i32::from(window::rect(CANVAS_I).y) + 42 + 4 + 22 + 18);
     if want("tooltip") {
         let mut st = WindowState::default();
         for t in 0..30 {
@@ -364,7 +367,7 @@ pub fn run(dir: &Path, names: &[String]) -> Result<(), String> {
             hud::draw(ui, &b, win_cx);
             window::draw(ui, &mut st, &b, sim.view(Seat(0)).as_ref(), win_cx);
         });
-        let over_bar = hud::bar_rect((768, 432));
+        let over_bar = hud::bar_rect(CANVAS_I);
         let to = (i32::from(over_bar.x) + 8 + 3 * 40 + 18, i32::from(over_bar.y) + 6 + 18);
         for (k, p) in [(slot0.0 + 30, slot0.1 + 40), (to.0 - 40, to.1 - 60), to].iter().enumerate() {
             let hold = UiInput { pointer: Some(*p), held: true, ..UiInput::default() };
@@ -455,7 +458,7 @@ pub fn run(dir: &Path, names: &[String]) -> Result<(), String> {
         if want("slots-load") {
             let mut st = MenuState { focus: 2 };
             rig.frame(UiInput::default(), 6030, |ui, _, _| {
-                ui.fill(jane_present::ui::cmd::Rect::new(0, 0, 768, 432), 0xff10_1014);
+                ui.fill(jane_present::ui::cmd::Rect::new(0, 0, CANVAS_I.0, CANVAS_I.1), 0xff10_1014);
                 ui.interactive = true;
                 menus::slots(ui, &mut st, SlotMode::Load, &rows);
             });
@@ -552,7 +555,7 @@ pub fn run(dir: &Path, names: &[String]) -> Result<(), String> {
         let mut sb = b.clone();
         sb.window.store = Some(StoreView { prop, name: "Dresser".into(), slots, used });
         let mut st = WindowState::default();
-        let r = window::rect((768, 432));
+        let r = window::rect(CANVAS_I);
         // The bag's first slot and the dresser's fifth, as the two panels lay them out.
         let lx = i32::from(r.x) + 12 + (i32::from(r.w) - 24 - 2 * (6 * 40 - 4) - 84) / 2;
         let gy = i32::from(r.y) + 42 + 6 + 26;

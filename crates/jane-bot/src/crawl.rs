@@ -1336,7 +1336,10 @@ fn bolt_at(v: &View<'_>, reach: &Reach, p: &Prop, spell: SpellId) -> Option<Task
             let on_it = dist(end, c) <= touch || prop_rect(p).contains(ex, ey);
             let face = face_toward(p, at);
             let in_range = dist(at, face) <= i64::from(s.range.0);
-            let hidden = !v.sight(at, c) && in_range && (v.sight(at, face) || first_seen_is(v, at, c, p));
+            // Hidden from her or not, the bolt must get there: a desk that does not block sight
+            // still stops a shot (2026-10-06, the School's fuse shot from behind a set desk).
+            let gets_there = dist(end, face) <= touch + i64::from(CELL_FX);
+            let hidden = !v.sight(at, c) && in_range && gets_there && (v.sight(at, face) || first_seen_is(v, at, c, p));
             if !on_it && !hidden {
                 continue;
             }

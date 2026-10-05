@@ -322,7 +322,7 @@ fn tune(args: &[String]) -> Result<(), String> {
             model: jane_bot::Model::Reader,
             hour: Some(u8::try_from(num("--hour", 22)? % 24).unwrap_or(22)),
             minute: 0,
-            canvas: (768, 432),
+            canvas: (jane_present::CANVAS_W, jane_present::CANVAS_H),
             backend,
             at: flag("--at").map(|a| match a.split_once(':') {
                 Some((z, m)) => (z.to_string(), Some(m.to_string())),
@@ -504,7 +504,7 @@ fn frames(args: &[String]) -> Result<(), String> {
         }
         None => (3840, 2160),
     };
-    let canvas = if args.iter().any(|a| a == "--wide") { (1008, 432) } else { (768, 432) };
+    let canvas = if args.iter().any(|a| a == "--wide") { (840, 360) } else { (640, 360) };
     let o = Opts {
         seed,
         ticks: num("--ticks", 600)?,

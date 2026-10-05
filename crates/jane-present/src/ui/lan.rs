@@ -142,7 +142,9 @@ fn step(ui: &Ui, st: MenuState, row: u8, at: usize, n: usize) -> Option<usize> {
 pub fn host(ui: &mut Ui, st: &mut HostState, info: &HostInfo<'_>) {
     let (cw, ch) = ui.canvas;
     dim(ui, 150);
-    let (w, h) = (600, 386);
+    // On the 360 canvas the rows close up so the panel keeps a margin.
+    let (w, h) = (600, 386.min(ch - 16));
+    let (wide, narrow) = if h < 386 { (44, 32) } else { (50, 36) };
     let r = Rect::new((cw - w) / 2, (ch - h) / 2, w, h);
     ui.panel(r, PanelStyle::Window);
     let (x, y) = (i32::from(r.x), i32::from(r.y));
@@ -158,7 +160,7 @@ pub fn host(ui: &mut Ui, st: &mut HostState, info: &HostInfo<'_>) {
     let note = |ui: &mut Ui, x: i32, y: i32, s: &str| {
         ui.text(x, y, s, Ink::fine(style::quiet()).shadow());
     };
-    let mut ry = y + 66;
+    let mut ry = y + if h < 386 { 60 } else { 66 };
     // The world.
     label(ui, lx, ry, "World", st.menu.focus == 0);
     let mut worlds = vec!["New"];
@@ -177,7 +179,7 @@ pub fn host(ui: &mut Ui, st: &mut HostState, info: &HostInfo<'_>) {
         None => "A new county, built now".to_owned(),
     };
     note(ui, cx + 2, ry + 27, &what);
-    ry += 50;
+    ry += wide;
     // The door.
     label(ui, lx, ry, "Door", st.menu.focus == 1);
     let on = usize::from(!c.open);
@@ -186,7 +188,7 @@ pub fn host(ui: &mut Ui, st: &mut HostState, info: &HostInfo<'_>) {
         c.open = k == 0;
     }
     note(ui, cx + 2, ry + 27, if c.open { "Anyone here may sit down" } else { "Only you, until you open it" });
-    ry += 50;
+    ry += wide;
     // Seats.
     label(ui, lx, ry, "Seats", st.menu.focus == 2);
     let on = usize::from(c.seats.clamp(2, 4) - 2);
@@ -198,7 +200,7 @@ pub fn host(ui: &mut Ui, st: &mut HostState, info: &HostInfo<'_>) {
     for (i, ramp) in COATS.iter().enumerate() {
         coat(ui, end + 16 + i as i32 * 18, ry + 5, *ramp, (i as u8) < c.seats);
     }
-    ry += 36;
+    ry += narrow;
     // Delay.
     label(ui, lx, ry, "Input delay", st.menu.focus == 3);
     let on = usize::from(c.delay.clamp(2, 6) - 2);
@@ -207,7 +209,7 @@ pub fn host(ui: &mut Ui, st: &mut HostState, info: &HostInfo<'_>) {
         c.delay = k as u8 + 2;
     }
     note(ui, end + 12, ry + 6, &format!("{} ms", u32::from(c.delay) * 50 / 3));
-    ry += 36;
+    ry += narrow;
     // A stalled player.
     label(ui, lx, ry, "If one stalls", st.menu.focus == 4);
     let on = usize::from(c.wait);
@@ -215,7 +217,7 @@ pub fn host(ui: &mut Ui, st: &mut HostState, info: &HostInfo<'_>) {
     if let Some(k) = pick.or_else(|| step(ui, st.menu, 4, on, 2)) {
         c.wait = k == 1;
     }
-    ry += 36;
+    ry += narrow;
     // The port: digits only; a bad one keeps the last good one and says so.
     label(ui, lx, ry, "Port", st.menu.focus == 5);
     let field = Rect::new(cx, ry - 2, 96, 26);

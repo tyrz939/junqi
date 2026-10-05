@@ -8,7 +8,7 @@
 @group(0) @binding(3) var bloom: texture_2d<f32>;
 
 struct Step {
-    // The source's texel size.
+    // The source's texel size (upscale: the canvas's top-left on the window, px).
     texel: vec2<f32>,
     // Upscale: output px per canvas px; the canvas's size in px.
     scale: f32,
@@ -98,7 +98,7 @@ fn fs_grade(i: FullOut) -> @location(0) vec4<f32> {
 @fragment
 fn fs_upscale(i: FullOut) -> @location(0) vec4<f32> {
     let size = vec2<f32>(textureDimensions(src));
-    let texel = i.pos.xy / st.scale;
+    let texel = (i.pos.xy - st.texel) / st.scale;
     let base = floor(texel);
     let f = texel - base - 0.5;
     let region = select(0.5 - 0.5 / st.scale, 0.5, st.nearest > 0.5);

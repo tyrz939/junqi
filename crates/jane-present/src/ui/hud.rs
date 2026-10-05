@@ -90,8 +90,13 @@ pub fn bar_slot(canvas: (i32, i32), i: usize) -> Rect {
     Rect::new(i32::from(r.x) + 8 + i as i32 * (SLOT + GAP), i32::from(r.y) + 6, SLOT, SLOT)
 }
 
+/// The vitals plate's width, px: a little over a quarter of the 640 canvas.
+pub const VITALS_W: i32 = 172;
 /// The vitals' three gauges: health, mana, energy (a jar or a page glints the one it grew).
-pub const VITALS_GAUGES: [Rect; 3] = [Rect::new(16, 34, 196, 10), Rect::new(16, 47, 196, 7), Rect::new(16, 57, 196, 5)];
+pub const VITALS_GAUGES: [Rect; 3] =
+    [Rect::new(16, 34, VITALS_W - 16, 10), Rect::new(16, 47, VITALS_W - 16, 7), Rect::new(16, 57, VITALS_W - 16, 5)];
+/// The target frame's width at most, px; narrower where the sky plate's name leaves less.
+pub const TARGET_W: i32 = 184;
 
 /// Draws the HUD. Pointer presses on the bar and the chrome buttons become `UiOut`s.
 pub fn draw(ui: &mut Ui, b: &ViewBuffers, cx: HudCtx<'_>) {
@@ -99,17 +104,17 @@ pub fn draw(ui: &mut Ui, b: &ViewBuffers, cx: HudCtx<'_>) {
     // Under an open window the plates it covers step aside; the bar stays, a place to drop.
     if !cx.window_open {
         vitals(ui, b);
+        let sky_x = sky(ui, b, cw);
         if !b.me.dead {
-            target(ui, b, cw);
+            target(ui, b, cw, sky_x);
         }
-        sky(ui, b, cw);
         tracker(ui, b, cw);
     }
     let bar = bar_rect((cw, ch));
     bar_slots(ui, b, bar, cx);
     let top = prompt(ui, b, bar, cx);
     toasts(ui, b, top);
-    buttons(ui, ch);
+    buttons(ui, ch, i32::from(bar.x));
     if !b.me.dead {
         banner(ui, b, cw, ch);
     }
@@ -120,7 +125,7 @@ pub fn draw(ui: &mut Ui, b: &ViewBuffers, cx: HudCtx<'_>) {
 
 fn vitals(ui: &mut Ui, b: &ViewBuffers) {
     let h = &b.hud;
-    let (x, y, w) = (8, 8, 212);
+    let (x, y, w) = (8, 8, VITALS_W);
     ui.panel(Rect::new(x, y, w, 58), PanelStyle::Hud);
     // Her name, and the day's number beside it quietly.
     ui.text(x + 8, y + 5, &b.heroine, Ink::small(style::text_bright()).shadow());
@@ -174,9 +179,11 @@ fn gauge_row(ui: &mut Ui, r: Rect, g: &Gauge, ramp: Ramp, warn: bool) {
     }
 }
 
-fn target(ui: &mut Ui, b: &ViewBuffers, cw: i32) {
+/// The target frame, top-centre between the vitals and the sky plate (which starts at `sky_x`).
+fn target(ui: &mut Ui, b: &ViewBuffers, cw: i32, sky_x: i32) {
     let Some(t) = &b.hud.target else { return };
-    let w = 240;
+    let room = (cw / 2 - (VITALS_W + 16)).min(sky_x - 8 - cw / 2);
+    let w = TARGET_W.min(2 * room).max(96);
     let x = (cw - w) / 2;
     let y = 8;
     ui.panel(Rect::new(x, y, w, 38), PanelStyle::Hud);
@@ -188,9 +195,10 @@ fn target(ui: &mut Ui, b: &ViewBuffers, cw: i32) {
     ui.bar(Rect::new(x + 10, y + 24, w - 20, 8), t.hp.frac, t.hp.lag, Ramp::ClothRed);
 }
 
-fn sky(ui: &mut Ui, b: &ViewBuffers, cw: i32) {
+/// The zone, the clock and the sky, top-right; returns the plate's left edge.
+fn sky(ui: &mut Ui, b: &ViewBuffers, cw: i32) -> i32 {
     let h = &b.hud;
-    let w = (text_w(Face::Small, h.zone_name) + 42).max(176);
+    let w = (text_w(Face::Small, h.zone_name) + 42).max(150);
     let x = cw - w - 8;
     let y = 8;
     ui.panel(Rect::new(x, y, w, 44), PanelStyle::Hud);
@@ -211,10 +219,11 @@ fn sky(ui: &mut Ui, b: &ViewBuffers, cw: i32) {
         Rect::new(x + 10 + frac, y + 38, 2, 3),
         argb(if h.night { Ramp::Bone.at(Tone::Light) } else { Ramp::GlassLit.at(Tone::High) }, 230),
     );
+    x
 }
 
-/// The tracker's width, px.
-pub const TRACKER_W: i32 = 208;
+/// The tracker's width, px: about a quarter of the 640 canvas.
+pub const TRACKER_W: i32 = 180;
 /// Its top: under the sky plate.
 pub const TRACKER_TOP: i32 = 60;
 /// Px kept clear under it: the save card, the toasts and the prompt live there.
@@ -535,18 +544,22 @@ fn toasts(ui: &mut Ui, b: &ViewBuffers, bottom: i32) {
     }
 }
 
-fn buttons(ui: &mut Ui, ch: i32) {
-    let labels = [("Bag", 0u8), ("Book", 1), ("Log", 2), ("Map", 3)];
+/// The chrome buttons bottom-left: in a row where they clear the bar (which starts at `bar_x`),
+/// else Bag, Book and Log along the bottom with Map and Menu over them.
+fn buttons(ui: &mut Ui, ch: i32, bar_x: i32) {
+    let labels = [("Bag", Some(0u8)), ("Book", Some(1)), ("Log", Some(2)), ("Map", Some(3)), ("Menu", None)];
     let (w, h) = (40, 18);
+    let one_row = 8 + 5 * (w + 4) <= bar_x - 4;
     for (i, (l, tab)) in labels.iter().enumerate() {
-        let r = Rect::new(8 + i as i32 * (w + 4), ch - h - 8, w, h);
-        if ui.button(wid("hud-btn", i as u32), r, l, ButtonKind::Chip, true, false) {
-            ui.intent(AppIntent::OpenWindow(*tab));
+        let (col, row) = if one_row { (i as i32, 0) } else { (i as i32 % 3, i as i32 / 3) };
+        let r = Rect::new(8 + col * (w + 4), ch - h - 8 - row * (h + 4), w, h);
+        let id = if tab.is_some() { i as u32 } else { 9 };
+        if ui.button(wid("hud-btn", id), r, l, ButtonKind::Chip, true, false) {
+            ui.intent(match tab {
+                Some(t) => AppIntent::OpenWindow(*t),
+                None => AppIntent::Pause,
+            });
         }
-    }
-    let r = Rect::new(8 + 4 * (w + 4), ch - h - 8, w, h);
-    if ui.button(wid("hud-btn", 9), r, "Menu", ButtonKind::Chip, true, false) {
-        ui.intent(AppIntent::Pause);
     }
 }
 

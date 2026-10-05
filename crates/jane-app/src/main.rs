@@ -24,7 +24,9 @@ pub const USAGE: &str = "jane-app [--new] [--seed N] [--name NAME] [--scale K] [
   --new           skip the title: New Game at once (with --seed and --name)
   --seed N        the county New Game builds (default: from the clock)
   --name NAME     the heroine's name (default: the last one given, else Jane)
-  --scale K       the window starts at K x 768 x 432 (default 2, or 1 where 2 does not fit)
+  --scale K       the window starts at K x 640 x 360 (default: the desktop filled where it is a
+                  whole multiple larger than a window can be, else the largest that fits; F11
+                  fills the desktop or leaves it)
   --backend B     auto (default: wgpu at T2 where an adapter can draw it, else gl2 at T1 where OpenGL 2.1
                   or GLES 2 can, else soft), soft (T0), gl2 (T1), wgpu (T2)
   --ticks N       run N ticks (title included), then exit (tests, automation)

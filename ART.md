@@ -38,7 +38,7 @@ Decided 2026-09-26: modern pixel art, considerably above the SNES, nostalgic for
 
 | Measure | Value | Note |
 | --- | --- | --- |
-| Internal canvas | 768 x 432 | integer-scaled to the window; the view is wider on a wider window, never smaller |
+| Internal canvas | 640 x 360 (2026-10-06; was 768 x 432) | integer-scaled to the window with thin dark bars; the view is wider on a wider window, never smaller |
 | Screen pixels per cell | **16** | the sim cell is unchanged at 8 units = 1 m, so 1 screen px = half a sim unit |
 | A person | 32 x 40, feet at (16, 36) | |
 | A prop | `w * 16` wide | never overhangs its footprint |
@@ -601,8 +601,8 @@ A glyph is a list of segments with integer endpoints on a **5 x 8 lattice**: cap
 
 | Face | Lattice | Pen | Cell | Where |
 | --- | --- | --- | --- | --- |
-| Fine | 1x | 1 px | 8 x 12 | dense UI: the terminal, lists, tooltips, map labels: 96 columns by 36 lines at 768 x 432 |
-| Small | 2x | 2 px | 12 x 18 | body text, HUD, dialogue: 64 columns by 24 lines at 768 x 432, the same character grid the design was laid out on |
+| Fine | 1x | 1 px | 8 x 12 | dense UI: the terminal, lists, tooltips, map labels: 80 columns by 30 lines at 640 x 360 |
+| Small | 2x | 2 px | 12 x 18 | body text, HUD, dialogue: 53 columns by 20 lines at 640 x 360 (64 by 24 at the 768 x 432 the design was first laid out on) |
 | Head | 3x | 3 px | 18 x 27 | headings, crits, the zone banner |
 | Title | 5x | 4 px | 30 x 45 | the title |
 
@@ -612,7 +612,7 @@ Tests: glyphs are pairwise distinct (XOR at least 3 px on the 1x lattice); every
 
 ## 7. Title, chrome, cursor, map inks
 
-**UI at 1x** (decided): chrome is generated on the view grid (768 x 432, wider on wide screens; PRESENTATION's UI section), never on a larger grid scaled down. Chrome is flat (albedo only): the light pass does not touch it.
+**UI at 1x** (decided): chrome is generated on the view grid (640 x 360, wider on wide screens; PRESENTATION's UI section), never on a larger grid scaled down. Chrome is flat (albedo only): the light pass does not touch it.
 
 | Piece | Generated how |
 | --- | --- |
@@ -647,7 +647,7 @@ Recorded as defaults; the owner may flip any with a one-line edit before P5 star
 | Default | Where it lands |
 | --- | --- |
 | 16 screen px per cell; the sim cell stays 8 units | §0, §1 |
-| Internal canvas 768 x 432, integer-scaled, wider on wide screens; UI generated at 1x on that grid, flat | §0, §7, PRESENTATION's window rule |
+| Internal canvas 640 x 360, integer-scaled, wider on wide screens; UI generated at 1x on that grid, flat | §0, §7, PRESENTATION's window rule |
 | Four layers per sprite and tile, emitted by the primitives; a master palette of at most 1024 as ramps; budgets person 48, creature 40, prop 64, building 96, icon 24 | §1.1, §2.7, §3 |
 | Six-frame walks (decided 2026-09-27), breathe, three-frame attack and cast, hurt, two dead poses; only the cycles a row promises | §4, §5 |
 | Weather and parallax are generators in this crate, driven by `WORLD.md`'s weather state | §2.8 |

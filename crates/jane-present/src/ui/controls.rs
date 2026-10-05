@@ -119,24 +119,43 @@ fn display(ui: &mut Ui, st: &mut ControlsState, info: ControlsInfo<'_>, r: Rect,
     };
     let ty = y + 46;
     ui.text(x + 20, ty, tier, Ink::fine(style::gold()).shadow());
-    ui.text(x + 330, ty, "Shows", Ink::fine(style::gold()).shadow());
+    // One column where the rows fit above the backend and Back, else two side by side (the
+    // 640 x 360 canvas): each row its label and its button; one that shows only after a
+    // restart is marked, and the mark said in the corner.
+    let h = i32::from(r.h);
+    let room = (y + h - 76) - (ty + 16);
+    let cols = if n as i32 * DISPLAY_ROW_H <= room { 1 } else { 2 };
+    let per = n.div_ceil(cols);
+    let col_w = (w - 24) / cols as i32;
+    let bw = if cols == 1 { 110 } else { 76 };
     for (k, row) in rows.iter().enumerate() {
-        let ry = ty + 16 + k as i32 * DISPLAY_ROW_H;
+        let (c, i) = ((k / per) as i32, (k % per) as i32);
+        let (cx0, ry) = (x + 12 + c * col_w, ty + 16 + i * DISPLAY_ROW_H);
         let lit = st.drow == k;
-        if k % 2 == 1 {
-            ui.fill(Rect::new(x + 12, ry - 2, w - 24, DISPLAY_ROW_H), argb(style::INK, 40));
+        if i % 2 == 1 {
+            ui.fill(Rect::new(cx0, ry - 2, col_w - 4, DISPLAY_ROW_H), argb(style::INK, 40));
         }
-        ui.text(x + 20, ry + 3, row.label, Ink::small(if lit { style::text_bright() } else { style::text() }).shadow());
-        let br = Rect::new(x + 200, ry, 110, DISPLAY_ROW_H - 3);
+        ui.text(
+            cx0 + 8,
+            ry + 3,
+            row.label,
+            Ink::small(if lit { style::text_bright() } else { style::text() }).shadow(),
+        );
+        let bx = if cols == 1 { x + 200 } else { cx0 + col_w - 12 - bw };
+        let br = Rect::new(bx, ry, bw, DISPLAY_ROW_H - 3);
         let text = row_text(&now, row.key);
         if ui.button(wid("feature", k as u32), br, &text, ButtonKind::Tab { on: lit }, true, lit) {
             st.drow = k;
             turn(st, out, &mut now);
         }
-        let when = if row.live { "now" } else { "next start" };
-        ui.text(x + 330, ry + 3, when, Ink::fine(style::quiet()).shadow());
+        if !row.live {
+            ui.text(bx + bw + 3, ry + 3, "*", Ink::fine(style::quiet()).shadow());
+        }
     }
-    let by = ty + 16 + n as i32 * DISPLAY_ROW_H + 8;
+    if rows.iter().any(|r| !r.live) {
+        ui.text_right(x + w - 20, ty, "* next start", Ink::fine(style::quiet()).shadow());
+    }
+    let by = ty + 16 + per as i32 * DISPLAY_ROW_H + 8;
     ui.text(
         x + 20,
         by + 3,

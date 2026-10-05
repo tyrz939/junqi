@@ -23,8 +23,8 @@ pub struct Devices {
     pad: Option<GameController>,
     /// Pad buttons that went down since the last sample, so a tap shorter than a frame is seen.
     pad_tapped: u32,
-    /// The window's height in px, for window px to canvas px.
-    win_h: u32,
+    /// How the canvas lies on the window, for window px to canvas px.
+    fit: jane_present::input::Fit,
 }
 
 impl std::fmt::Debug for Devices {
@@ -35,14 +35,15 @@ impl std::fmt::Debug for Devices {
 
 impl Devices {
     /// `pads` is `None` when the game controller subsystem would not start: no pad, no harm.
-    pub fn new(pads: Option<GameControllerSubsystem>, win_h: u32) -> Devices {
-        let mut d = Devices { state: DeviceState::default(), pads, pad: None, pad_tapped: 0, win_h };
+    pub fn new(pads: Option<GameControllerSubsystem>, fit: jane_present::input::Fit) -> Devices {
+        let mut d = Devices { state: DeviceState::default(), pads, pad: None, pad_tapped: 0, fit };
         d.open_first_pad();
         d
     }
 
-    pub fn set_window_height(&mut self, h: u32) {
-        self.win_h = h;
+    /// The canvas moved on the window (a resize, or the `fill` row turned).
+    pub fn set_fit(&mut self, fit: jane_present::input::Fit) {
+        self.fit = fit;
     }
 
     fn open_first_pad(&mut self) {
@@ -52,7 +53,7 @@ impl Devices {
     }
 
     fn cursor(&mut self, x: i32, y: i32) {
-        self.state.mouse.pos = Some(jane_present::input::to_canvas(x, y, self.win_h));
+        self.state.mouse.pos = Some(self.fit.to_canvas(x, y));
     }
 
     /// Fold one event in.
