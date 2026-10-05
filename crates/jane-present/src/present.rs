@@ -272,6 +272,8 @@ pub struct Present {
     sky: Sky,
     /// The casting band round the canvas for the sky's sun (`shadow::cast_margins`).
     margins: Margins,
+    /// How far the boss's fight has shifted the dungeon's grade, 0 to 256 (ART-PLAN B2).
+    fight: u32,
     /// The weather, the fog and the sky (§1.9), and the effects (§2).
     atmos: Atmosphere,
     fx: Fx,
@@ -352,6 +354,7 @@ impl Present {
             holders: Vec::with_capacity(1024),
             sky: sky(12 * 7200, 0, false, 1000, Region::Lowfields),
             margins: Margins::default(),
+            fight: 0,
             atmos,
             fx,
             lessons: Lessons::new(tier),
@@ -538,6 +541,21 @@ impl Present {
         self.against_walls();
         let (clock, day) = view.clock();
         self.sky = sky(clock, day, view.indoor(), view.ambient().0, view.region());
+        // A dungeon's theme grades it, and shifts when its boss's fight begins (ART-PLAN B2):
+        // she stands in the boss's room with the boss alive in it.
+        if let Some(theme) = jane_data::dungeon_themes().of(view.zone()) {
+            let (hx, hy) = body.pos.cell();
+            let boss_room = self
+                .terrain
+                .dungeon()
+                .and_then(|d| d.room_at(hx, hy))
+                .filter(|r| r.role == jane_art::terrain::dungeon::Role::Boss);
+            let cat = jane_data::catalog();
+            let fighting = boss_room
+                .is_some_and(|r| view.units_in(r.rect).any(|u| u.unit.alive && cat.combat.unit(u.unit.def).boss));
+            self.fight = if fighting { (self.fight + 6).min(256) } else { self.fight.saturating_sub(3) };
+            crate::light::theme_grade(&mut self.sky, theme, view.indoor(), self.fight);
+        }
         self.margins = crate::shadow::cast_margins(self.sky.sun.as_ref());
         self.atmos.tick(view, self.tick);
         self.fx.on_events(view, events);
@@ -826,8 +844,23 @@ impl Present {
                 jane_sim::interact::FocusRef::Prop(id) => Some(id),
                 _ => None,
             });
+        // What the dungeon's theme gathers off its floors into its motif (bones into heaps, ART-PLAN
+        // Q5): drawn there, not where it lies, unless it is a thing anyone can use.
+        let gathers: Vec<&'static str> = jane_data::dungeon_themes()
+            .of(view.zone())
+            .map(|t| t.floor.iter().flat_map(|f| f.gathers.iter().copied()).collect())
+            .unwrap_or_default();
         view.for_props_in(area, &mut self.prop_scratch, |p| {
             let d = cat.story.prop(p.def);
+            if !gathers.is_empty()
+                && d.flat
+                && !p.solid
+                && gathers.contains(&cat.sprites.get(usize::from(d.sprite.0)).copied().unwrap_or(""))
+                && view.prop_loot(p).is_empty()
+                && view.prop_spawn(p).is_none_or(|s| s.talk.is_none() && s.to.is_none())
+            {
+                return;
+            }
             // A made fire (`jane_sim::fire`): cold, laid while she lays it, lit, or ash.
             let fire = d.made.then(|| {
                 use props::FireState;

@@ -35,6 +35,13 @@ pub fn atmosphere() -> Atmosphere {
     generated::ATMOSPHERE
 }
 
+/// The dungeon themes compiled into this build (`data/looks/dungeon_themes.json`, ART.md
+/// §2.6.1): how each generated dungeon is framed and dressed. Presentation only, outside the
+/// content hash.
+pub fn dungeon_themes() -> DungeonThemes {
+    generated::DUNGEON_THEMES
+}
+
 /// Compile a data dir at startup through the same code the build script ran (`dev-data`).
 /// A catalog reload needs a new game.
 #[cfg(feature = "dev-data")]

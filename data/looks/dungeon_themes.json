@@ -1,0 +1,76 @@
+{
+  "gold_mine": {
+    "zones": ["mine"],
+    "trim": "cap", "trimRamp": "wood_dark", "frame": "wood_dark", "carving": "lamp",
+    "border": "edging", "borderRamps": ["wood_dark", "iron"], "laneWear": 1,
+    "wall": [{ "motif": "lamp", "every": 6, "at": 5 }],
+    "floor": [{ "motif": "rails" }],
+    "boss": { "inlay": "brass", "spokes": 12, "setSpokes": 8, "emblem": "headframe", "emblemRamps": ["iron", "brass"] },
+    "grade": { "tint": "#ffe8c4", "lift": "#07070a", "saturation": 142, "fight": "#ffcc94" }
+  },
+  "crypt": {
+    "zones": ["burial"],
+    "trim": "dentil", "frame": "stone", "carving": "angel",
+    "border": "lozenge", "borderRamps": ["bone", ""], "laneWear": 1,
+    "wall": [{ "motif": "niche", "every": 2, "at": 20 }, { "motif": "ivy", "every": 3, "at": 0 }],
+    "floor": [{ "motif": "heaps", "count": 3, "gathers": ["bones"] }],
+    "boss": { "inlay": "bone", "spokes": 12, "setSpokes": 8, "emblem": "angel", "emblemRamps": ["bone", "brass"] },
+    "grade": { "tint": "#e8f2e0", "lift": "#05090a", "saturation": 122, "fight": "#d4ecc4" }
+  },
+  "museum": {
+    "zones": ["museum"],
+    "trim": "frieze", "trimRamp": "brass", "frame": "limewash", "carving": "fluted",
+    "border": "inlay", "borderRamps": ["brass", "wood_dark"], "laneWear": 1,
+    "wall": [{ "motif": "painting", "every": 4, "at": 0 }],
+    "floor": [{ "motif": "plinths", "every": 3 }, { "motif": "stanchions", "every": 2 }],
+    "boss": { "inlay": "brass", "spokes": 16, "setSpokes": 8, "emblem": "portrait", "emblemRamps": ["brass", "skin_pale"] },
+    "grade": { "tint": "#fff2dc", "lift": "#06060c", "saturation": 132, "fight": "#ffdcd0" }
+  },
+  "library": {
+    "zones": ["library"],
+    "trim": "cornice", "trimRamp": "wood_dark", "upper": "shelves", "frame": "wood_dark", "carving": "fluted",
+    "border": "edging", "borderRamps": ["wood_dark", "brass"], "laneWear": -1,
+    "floor": [{ "motif": "carpet", "ramp": "oxblood" }],
+    "boss": { "inlay": "brass", "spokes": 12, "setSpokes": 8, "emblem": "rose", "emblemRamps": ["wood_dark", "brass"] },
+    "grade": { "tint": "#fff4d8", "lift": "#060709", "saturation": 132, "fight": "#ffe4b8" }
+  },
+  "works": {
+    "zones": ["factory"],
+    "trim": "beam", "trimRamp": "iron", "frame": "iron",
+    "border": "stripes", "borderRamps": ["cloth_mustard", "cloth_black"], "laneWear": -1,
+    "wall": [{ "motif": "sign", "every": 5, "at": 30 }],
+    "floor": [{ "motif": "gantry", "every": 5 }, { "motif": "belt" }],
+    "boss": { "inlay": "cloth_mustard", "spokes": 12, "setSpokes": 8, "emblem": "furnace", "emblemRamps": ["brick", "ember"] },
+    "grade": { "tint": "#ffd08c", "lift": "#070709", "saturation": 152, "fight": "#ffb070" }
+  },
+  "sewer": {
+    "zones": ["pipes"],
+    "trim": "course", "frame": "iron",
+    "border": "kerb", "laneWear": 0,
+    "wall": [{ "motif": "valve", "every": 5, "at": 30 }],
+    "floor": [{ "motif": "channel" }],
+    "boss": { "inlay": "iron", "spokes": 8, "setSpokes": 6, "emblem": "wheel", "emblemRamps": ["cloth_red", "iron"] },
+    "grade": { "tint": "#e0f4ee", "lift": "#03090c", "saturation": 126, "fight": "#cceee2" }
+  },
+  "school": {
+    "zones": ["school"],
+    "trim": "rail", "frame": "limewash",
+    "border": "line", "borderRamps": ["cloth_cream", ""], "laneWear": 1,
+    "wall": [
+      { "motif": "window", "every": 3, "at": 16 },
+      { "motif": "radiator", "every": 3, "at": 17 },
+      { "motif": "pegs", "every": 3, "at": 33 }
+    ],
+    "floor": [{ "motif": "moon" }, { "motif": "chalk" }],
+    "boss": { "inlay": "limewash", "spokes": 12, "setSpokes": 12, "emblem": "clock", "emblemRamps": ["wood_dark", "limewash"] },
+    "grade": { "tint": "#eef4ff", "lift": "#050712", "saturation": 116, "fight": "#dce6ff" }
+  },
+  "wood": {
+    "zones": ["forest"],
+    "trim": "plain", "frame": "wood_oak",
+    "border": "pebbles", "borderRamps": ["gravel", ""], "laneWear": 1,
+    "floor": [{ "motif": "toadstools", "count": 2 }],
+    "boss": { "inlay": "turf_dry", "spokes": 8, "setSpokes": 6, "braziers": 0, "emblem": "plain" },
+    "grade": { "tint": "#f4fcec", "lift": "#040806", "saturation": 132, "fight": "#e6f8d8" }
+  }
+}

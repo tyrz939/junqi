@@ -368,6 +368,38 @@ pub fn shade(fill: Rgb, sun: Rgb) -> Rgb {
     })
 }
 
+/// A dungeon theme's grade over the sky (ART-PLAN M5, B2; ART.md §2.6.1): the frame multiplied by
+/// the theme's tint (amber in a mine, green-grey in a crypt, sodium in a works, cold white in a
+/// school), its shadows leaning to its lift, its saturation; and, as `fight` runs 0 to 256 when
+/// the boss's fight begins, the tint shifting to the theme's fight tint, a little richer and a
+/// little darker. Indoors the theme's grade is the grade; out of doors (a wood) it is laid half
+/// over the region's.
+pub fn theme_grade(s: &mut Sky, t: &jane_data::DungeonTheme, indoor: bool, fight: u32) {
+    let rgb = |c: u32| [(c >> 16) as u8, (c >> 8) as u8, c as u8];
+    let mixc = |a: Rgb, b: Rgb, k: u32| -> Rgb {
+        let k = k.min(256);
+        [0, 1, 2].map(|i| ((u32::from(a[i]) * (256 - k) + u32::from(b[i]) * k) / 256) as u8)
+    };
+    let tint = mixc(rgb(t.tint), rgb(t.fight), fight);
+    let p = &mut s.post;
+    let mul = [0, 1, 2].map(|i| (u32::from(p.tint[i]) * u32::from(tint[i]) / 255) as u8);
+    if indoor {
+        p.tint = mul;
+        p.lift = rgb(t.lift);
+        p.saturation = t.saturation;
+    } else {
+        p.tint = mixc(p.tint, mul, 128);
+        p.lift = mixc(p.lift, rgb(t.lift), 128);
+        p.saturation = u32::midpoint(u32::from(p.saturation), u32::from(t.saturation)) as u8;
+    }
+    if fight > 0 {
+        let f = fight.min(256);
+        p.saturation = (u32::from(p.saturation) + 16 * f / 256).min(255) as u8;
+        s.ambient = s.ambient.map(|c| (u32::from(c) * (256 - f / 6) / 256) as u8);
+        s.fill = s.fill.map(|c| (u32::from(c) * (256 - f / 5) / 256) as u8);
+    }
+}
+
 /// A region's grade at tick `t` of the day (§1.9): the Lowfields warm and green-gold, the Waters
 /// cold blue-green, the Works sodium and soot; dusk and night lift their shadows blue (a lift
 /// with more red than green in it is the mauve that made a dusk read violet-rose).

@@ -3,6 +3,7 @@
 //! and stones come back as placements the scene draws from the atlas, sorted among the units.
 //! Fences and low walls are painted into the ground with the walls (`Standing::Placed`).
 
+use jane_art::terrain::dungeon::Dungeon;
 use jane_art::terrain::houses::{self, House, Houses, Room};
 use jane_art::terrain::{self, Chunk, PaintMap, Painter, Placed, Standing, TileSource};
 use jane_core::{Material, Tile};
@@ -18,6 +19,7 @@ struct ViewTiles<'v, 'a> {
     paint: &'v PaintMap,
     houses: &'v Houses,
     room: Option<Room>,
+    dungeon: Option<&'v Dungeon>,
     daylight: bool,
 }
 
@@ -52,6 +54,9 @@ impl TileSource for ViewTiles<'_, '_> {
     }
     fn room(&self) -> Option<Room> {
         self.room
+    }
+    fn dungeon(&self) -> Option<&Dungeon> {
+        self.dungeon
     }
     fn daylight(&self) -> bool {
         self.daylight
@@ -88,6 +93,8 @@ pub struct Terrain {
     /// The zone's houses (ART-PLAN Q2), its room seen from inside (M4), and whether it is day.
     houses: Houses,
     room: Option<Room>,
+    /// The zone read as a dungeon's rooms (ART-PLAN M5, B2), if a theme names it.
+    dungeon: Option<Dungeon>,
     daylight: bool,
     flora: Vec<Flora>,
     placed: Vec<Vec<Placed>>,
@@ -413,6 +420,7 @@ impl Terrain {
             paint: PaintMap::default(),
             houses: Houses::default(),
             room: None,
+            dungeon: None,
             daylight: true,
             flora,
             placed: (0..slots).map(|_| Vec::with_capacity(PLACED)).collect(),
@@ -451,6 +459,28 @@ impl Terrain {
             |x, y| view.tile(x, y).flags() & jane_core::tile::F_SOLID != 0,
             tall.collect::<Vec<_>>().into_iter(),
         );
+        let feet: Vec<(i32, i32)> = view
+            .props_in(all)
+            .flat_map(|p| {
+                let d = cat.story.prop(p.def);
+                let (x, y) = (i32::from(p.cell.x), i32::from(p.cell.y));
+                (0..i32::from(d.w)).flat_map(move |dx| (0..i32::from(d.h)).map(move |dy| (x + dx, y + dy)))
+            })
+            .collect();
+        self.dungeon = terrain::dungeon_of(
+            view.zone(),
+            view.seed(),
+            (w as i32, h as i32),
+            |x, y| view.tile(x, y),
+            feet.into_iter(),
+            |id| view.rect(view.key_sym(jane_core::Key::Name(id))),
+            None,
+        );
+    }
+
+    /// The zone read as a dungeon's rooms, if it is one.
+    pub fn dungeon(&self) -> Option<&Dungeon> {
+        self.dungeon.as_ref()
     }
 
     /// The zone's houses, for the props drawn on them (a door's paint, a chimney's pots).
@@ -474,8 +504,14 @@ impl Terrain {
     /// Paints chunk `id` properly into `layers`, the chunk in `slot`. Cells outside the zone
     /// take `outside`, as the swatches do.
     pub fn paint(&mut self, view: &View<'_>, id: ChunkId, slot: u16, outside: u32, layers: &mut ChunkLayers) {
-        let src =
-            ViewTiles { view, paint: &self.paint, houses: &self.houses, room: self.room, daylight: self.daylight };
+        let src = ViewTiles {
+            view,
+            paint: &self.paint,
+            houses: &self.houses,
+            room: self.room,
+            dungeon: self.dungeon.as_ref(),
+            daylight: self.daylight,
+        };
         let (cx, cy) = (i32::from(id.cx), i32::from(id.cy));
         terrain::paint_chunk(&mut self.painter, &src, view.seed(), cx, cy, &mut self.chunk);
         let c = &self.chunk.layers;

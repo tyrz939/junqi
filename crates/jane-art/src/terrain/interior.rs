@@ -22,13 +22,24 @@ const FACE: i32 = UNIT * 8 / 10;
 
 /// A wall face's pixel for the interior patterns: `(colour, normal)`, or `None` for a pattern
 /// that is not one of them. `y` is the row within the cell's face (0 at its top).
-pub(super) fn face(pat: P, r: Ramp, accent: Option<Ramp>, wx: i32, wy: i32, y: i32) -> Option<(Ix, Normal)> {
+///
+/// `tall`: the face is the lower cell of a dungeon's two-cell face (ART-PLAN M5), whose head
+/// (the gallery's cap, the works' beam) is drawn on the cell above it instead.
+pub(super) fn face(
+    pat: P,
+    r: Ramp,
+    accent: Option<Ramp>,
+    wx: i32,
+    wy: i32,
+    y: i32,
+    tall: bool,
+) -> Option<(Ix, Normal)> {
     let flat_face = normal(0, FACE);
     Some(match pat {
         P::Timbered => {
             let wood = accent.unwrap_or(Ramp::WoodDark);
             let set = wx.rem_euclid(3 * CELL);
-            let (post, cap) = (set < 5, (3..=5).contains(&y));
+            let (post, cap) = (set < 5, !tall && (3..=5).contains(&y));
             if cap {
                 // The cap: a squared timber along the top of the gallery.
                 let t = [Tone::Light, Tone::Base, Tone::Shade][(y - 3) as usize];
@@ -112,7 +123,7 @@ pub(super) fn face(pat: P, r: Ramp, accent: Option<Ramp>, wx: i32, wy: i32, y: i
                     [Tone::Light, Tone::Lift, Tone::Base, Tone::Base, Tone::Shade][col as usize]
                 };
                 (iron.at(t), normal([-60, -30, 0, 20, 60][col as usize], FACE))
-            } else if (2..=4).contains(&y) {
+            } else if !tall && (2..=4).contains(&y) {
                 // The beam along the top, riveted.
                 let t = if y == 3 && wx.rem_euclid(6) == 0 {
                     Tone::High
@@ -132,7 +143,7 @@ pub(super) fn face(pat: P, r: Ramp, accent: Option<Ramp>, wx: i32, wy: i32, y: i
                         1 | 2 => Tone::Base,
                         _ => Tone::Mid,
                     };
-                    let t = if y < 8 { t.step(-1) } else { t };
+                    let t = if y < 8 && !tall { t.step(-1) } else { t };
                     (brick.at(if yy == 0 { t.step(1) } else { t }), flat_face)
                 }
             }

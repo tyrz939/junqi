@@ -294,7 +294,8 @@ pub fn compile(src: &Source, cx: &mut Ctx) -> &'static [(SpriteId, Look)] {
     let mut out = Vec::new();
     // The terrain's looks are keyed by tile, not sprite: `tile_looks.rs` compiles them, and a
     // tile may share a name with a sprite (`rubble`) without the two colliding.
-    let sprite_looks = |f: &str| f != "looks/tiles.json" && !f.starts_with("looks/tiles/");
+    let sprite_looks =
+        |f: &str| f != "looks/tiles.json" && !f.starts_with("looks/tiles/") && f != super::dungeon_themes::FILE;
     for (key, row) in src.table_of("looks", sprite_looks, &mut cx.diag) {
         let at = format!("looks.{key}");
         let sprite = match cx.sprites.get(&key) {

@@ -14,7 +14,7 @@ pub mod tables;
 use std::path::Path;
 
 use crate::emit::{Emit, PRELUDE};
-use crate::model::{Atmosphere, Catalog, Looks, TileLooks};
+use crate::model::{Atmosphere, Catalog, DungeonThemes, Looks, TileLooks};
 use ctx::{Ctx, Ids, leak, leak_str};
 use diag::Diagnostics;
 use source::Source;
@@ -30,6 +30,8 @@ pub struct Built {
     pub tile_looks: TileLooks,
     /// The atmosphere's layers (`data/atmosphere.json`), presentation only: a static of its own.
     pub atmosphere: Atmosphere,
+    /// The dungeon themes (`data/looks/dungeon_themes.json`), presentation only: a static of its own.
+    pub dungeon_themes: DungeonThemes,
     pub diag: Diagnostics,
 }
 
@@ -46,6 +48,7 @@ pub fn build(root: &Path) -> Built {
         looks: if ok { built.looks } else { &[] },
         tile_looks: if ok { built.tile_looks } else { TileLooks::EMPTY },
         atmosphere: if ok { built.atmosphere } else { Atmosphere::EMPTY },
+        dungeon_themes: if ok { built.dungeon_themes } else { DungeonThemes::EMPTY },
         diag,
     }
 }
@@ -70,6 +73,7 @@ pub fn build_source(src: &Source) -> Built {
     let looks = tables::looks::compile(src, &mut cx);
     let tile_looks = tables::tile_looks::compile(src, &mut cx);
     let atmosphere = tables::atmosphere::compile(src, &mut cx);
+    let dungeon_themes = tables::dungeon_themes::compile(src, &mut cx);
 
     let mut catalog = Catalog {
         content_hash: 0,
@@ -94,6 +98,7 @@ pub fn build_source(src: &Source) -> Built {
         looks: if ok { looks } else { &[] },
         tile_looks: if ok { tile_looks } else { TileLooks::EMPTY },
         atmosphere: if ok { atmosphere } else { Atmosphere::EMPTY },
+        dungeon_themes: if ok { dungeon_themes } else { DungeonThemes::EMPTY },
         diag: cx.diag,
     }
 }
@@ -157,6 +162,20 @@ pub fn codegen_atmosphere(a: Atmosphere) -> String {
     let mut out = String::from("\npub static ATMOSPHERE: Atmosphere = ");
     a.emit(&mut out);
     out.push_str(";\n");
+    out
+}
+
+/// The Rust source of `pub static DUNGEON_THEMES`, which follows the atmosphere in the same file.
+pub fn codegen_dungeon_themes(t: DungeonThemes) -> String {
+    let mut out = String::from(
+        "
+pub static DUNGEON_THEMES: DungeonThemes = ",
+    );
+    t.emit(&mut out);
+    out.push_str(
+        ";
+",
+    );
     out
 }
 

@@ -16,6 +16,7 @@ use jane_data::{TileGroup, TilePattern as P};
 use super::houses::Age;
 use super::{CELL, CHUNK_CELLS, NONE, Painter, Style, TileSource, fast, salt};
 
+mod dungeon;
 mod facade;
 mod room;
 use crate::canvas::{FLAT, Normal, UNIT, height_of_rows, normal};
@@ -103,6 +104,12 @@ fn raised(s: &Style) -> bool {
 
 pub(super) fn paint(p: &mut Painter, src: &impl TileSource, x0: i32, y0: i32, seed: u32) {
     let outdoor = src.outdoor();
+    // A dungeon read as rooms (ART-PLAN M5, B2): its faces two cells tall, framed and dressed.
+    let dg = src.dungeon();
+    p.s.framed.clear();
+    if let Some(dg) = dg {
+        dungeon::begin(p, dg);
+    }
     for cy in 0..CHUNK_CELLS {
         for cx in 0..CHUNK_CELLS {
             let k = Painter::at(cx, cy);
@@ -123,9 +130,15 @@ pub(super) fn paint(p: &mut Painter, src: &impl TileSource, x0: i32, y0: i32, se
                 st,
             };
             match st.row.pattern {
-                P::Void => fill(p, &c, st.ramp.at(Tone::Deep), 1),
+                P::Void => {
+                    if !dg.is_some_and(|dg| dungeon::upper(p, &c, dg)) {
+                        fill(p, &c, st.ramp.at(Tone::Deep), 1);
+                    }
+                }
                 P::Block | P::Rock | P::Timbered | P::Crypt | P::Ironwork | P::Panelled | P::Pipework | P::Wainscot => {
-                    wall(p, &c, outdoor);
+                    if !dg.is_some_and(|dg| dungeon::upper(p, &c, dg)) {
+                        wall(p, &c, outdoor, dg.is_some());
+                    }
                 }
                 P::Parquet | P::Plates | P::Flags | P::Grating => interior_floor(p, &c),
                 P::Cliff => cliff(p, &c),
@@ -157,6 +170,9 @@ pub(super) fn paint(p: &mut Painter, src: &impl TileSource, x0: i32, y0: i32, se
                 _ => fill(p, &c, st.ramp.at(Tone::Base), i32::from(st.row.rise)),
             }
         }
+    }
+    if let Some(dg) = dg {
+        dungeon::dress(p, dg, x0, y0, seed);
     }
     contact(p, x0, y0, seed);
     if let Some(room) = p.room.filter(|_| p.daylight && !outdoor) {
@@ -229,9 +245,11 @@ fn stone_tone(h: u32) -> Tone {
 }
 
 /// Walls: a face where the south is open, a top otherwise, a roof for a wide block out of doors.
-fn wall(p: &mut Painter, c: &Cell, outdoor: bool) {
+fn wall(p: &mut Painter, c: &Cell, outdoor: bool, dungeon: bool) {
     let wl = |p: &Painter, dx: i32, dy: i32| nst(p, c, dx, dy).row.wall_like;
     let south_open = !wl(p, 0, 1);
+    // A dungeon's face is two cells tall where the wall goes on above it: its head is drawn there.
+    let tall = dungeon && south_open && wl(p, 0, -1);
     // A room seen from inside papers and hangs its own faces (ART-PLAN M4).
     if let Some(room) = p.room.filter(|_| !outdoor) {
         if room::wall(p, c, &room, south_open, p.daylight) {
@@ -256,7 +274,8 @@ fn wall(p: &mut Painter, c: &Cell, outdoor: bool) {
             for x in 0..CELL {
                 let (wx, wy) = c.w(x, y);
                 let z = face_z(y, 0);
-                let (ix, n) = if let Some(f) = super::interior::face(c.st.row.pattern, r, c.st.accent, wx, wy, y) {
+                let (ix, n) = if let Some(f) = super::interior::face(c.st.row.pattern, r, c.st.accent, wx, wy, y, tall)
+                {
                     // A dungeon's own walling (`interior`).
                     f
                 } else if c.st.row.pattern == P::Rock {
@@ -287,10 +306,13 @@ fn wall(p: &mut Painter, c: &Cell, outdoor: bool) {
                 put(p, c, x, y, ix, n, z);
             }
         }
-        // The face darkens toward its foot; its top edge catches the light.
+        // The face darkens toward its foot; its top edge catches the light (a tall face's is on
+        // the cell above).
         for x in 0..CELL {
-            put(p, c, x, 0, if wl(p, 0, -1) { r.at(Tone::Light) } else { r.at(Tone::Deep) }, FLAT, top);
-            put(p, c, x, 1, r.at(Tone::Lift), normal(0, -40), top);
+            if !tall {
+                put(p, c, x, 0, if wl(p, 0, -1) { r.at(Tone::Light) } else { r.at(Tone::Deep) }, FLAT, top);
+                put(p, c, x, 1, r.at(Tone::Lift), normal(0, -40), top);
+            }
             for y in 11..CELL - 2 {
                 step(p, c, x, y, -1);
             }

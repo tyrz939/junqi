@@ -29,6 +29,7 @@
 // surfaces is a few bytes counted by a filter: both read plainer as written.
 #![allow(clippy::verbose_bit_mask, clippy::naive_bytecount)]
 
+pub mod dungeon;
 mod ecotone;
 mod field;
 mod ground;
@@ -131,6 +132,11 @@ pub trait TileSource {
     fn room(&self) -> Option<Room> {
         None
     }
+    /// A dungeon read as rooms (ART-PLAN M5, B2): its faces drawn two cells tall and framed, its
+    /// floors bordered and worn, its motif in every room. None out of a dungeon.
+    fn dungeon(&self) -> Option<&dungeon::Dungeon> {
+        None
+    }
     /// Whether it is day, for a room's windows: by day they lay light on the floor, at night
     /// they are dark. The renderer repaints a room's chunks when it turns.
     fn daylight(&self) -> bool {
@@ -155,6 +161,8 @@ pub struct TileMap {
     pub room: Option<Room>,
     /// See [`TileSource::daylight`].
     pub daylight: bool,
+    /// See [`TileSource::dungeon`].
+    pub dungeon: Option<dungeon::Dungeon>,
 }
 
 const MATERIALS: [Material; 5] =
@@ -218,6 +226,7 @@ impl TileMap {
             houses: Houses::default(),
             room: None,
             daylight: true,
+            dungeon: None,
         }
     }
 
@@ -264,8 +273,56 @@ impl TileMap {
         let room =
             room_of(bp.zone, seed, tiles.w() as i32, |x, y| tiles.read(x, y, Tile::Void).flags() & F_SOLID != 0, busy);
         m.room = room;
+        let all_props = bp.props.iter().flat_map(|p| {
+            let d = cat.story.prop(p.def);
+            let (x, y) = (i32::from(p.cell.x), i32::from(p.cell.y));
+            (0..i32::from(d.w)).flat_map(move |dx| (0..i32::from(d.h)).map(move |dy| (x + dx, y + dy)))
+        });
+        let boss =
+            bp.units.iter().find(|u| cat.combat.unit(u.def).boss).map(|u| (i32::from(u.cell.x), i32::from(u.cell.y)));
+        let tiles = &m.tiles;
+        let rect_of = |id: jane_core::ids::NameId| bp.rects.get(&jane_core::Key::Name(id)).copied();
+        let size = (tiles.w() as i32, tiles.h() as i32);
+        m.dungeon = dungeon_of(bp.zone, seed, size, |x, y| tiles.read(x, y, Tile::Void), all_props, rect_of, boss);
         m
     }
+}
+
+/// The dungeon a zone is read as (ART-PLAN M5, B2), if a theme in the data names it: its tiles,
+/// the cells its props stand on, its room graph (each mission node's room rect, which `rect_of`
+/// finds by name, and its kind) and where its boss stands.
+pub fn dungeon_of(
+    zone: jane_core::ids::ZoneId,
+    seed: u32,
+    size: (i32, i32),
+    tile: impl Fn(i32, i32) -> Tile,
+    props: impl Iterator<Item = (i32, i32)>,
+    rect_of: impl Fn(jane_core::ids::NameId) -> Option<Rect>,
+    boss: Option<(i32, i32)>,
+) -> Option<dungeon::Dungeon> {
+    use jane_data::MissionNodeKind as K;
+    let theme = dungeon::Theme::of_zone(zone)?;
+    let graph: Vec<(Rect, dungeon::Role)> = jane_data::catalog()
+        .dungeons
+        .mission_of(zone)
+        .map(|m| {
+            m.nodes
+                .iter()
+                .filter_map(|n| {
+                    let r = n.names.iter().find_map(|t| t.rects.first().and_then(|&id| rect_of(id)))?;
+                    let role = match n.kind {
+                        K::Boss => dungeon::Role::Boss,
+                        K::Hub => dungeon::Role::Set,
+                        K::Rest => dungeon::Role::Rest,
+                        _ => dungeon::Role::Plain,
+                    };
+                    Some((r, role))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    let seed = crate::hash::h32(seed, zone as u32, 0x4455_4e47);
+    Some(dungeon::Dungeon::find(theme, size, tile, props, &graph, boss, seed))
 }
 
 /// The room a zone is seen from inside as (ART-PLAN M4), if it is one: Julie's house, the Arms
@@ -318,6 +375,9 @@ impl TileSource for TileMap {
     }
     fn room(&self) -> Option<Room> {
         self.room
+    }
+    fn dungeon(&self) -> Option<&dungeon::Dungeon> {
+        self.dungeon.as_ref()
     }
     fn daylight(&self) -> bool {
         self.daylight
@@ -709,6 +769,8 @@ struct Scratch {
     /// Where the strip canvas was last drawn: what the next row clears.
     row_bb: Rect,
     thing: Canvas,
+    /// Per room of a dungeon, what the last chunk drew of its framing (`dungeon::FRAMED_*` bits).
+    framed: Vec<u8>,
 }
 
 /// How a painter hands over the standing things of a chunk.
@@ -800,6 +862,7 @@ impl Painter {
             fencerow: vec![false; ((CHUNK_PX + 2 * STRIP_MARGIN) * STRIP_H) as usize],
             row_bb: Rect::new(0, 0, CHUNK_PX + 2 * STRIP_MARGIN, STRIP_H),
             thing: Canvas::new(3 * CELL, STRIP_H),
+            framed: Vec::new(),
         };
         let lut = (0..palette::LEN)
             .map(|i| {
@@ -832,6 +895,13 @@ impl Painter {
     /// it took. For tests and sheets: a laid way's cells never appear here.
     pub fn drifts(&self) -> &[(i16, i16, u8, u8)] {
         &self.s.gmix.flips
+    }
+
+    /// Per room of the dungeon the last chunk was painted in, what of its framing that chunk
+    /// drew (`dungeon::FRAMED_*` bits: a face two cells tall, a floor border, its motif); empty
+    /// out of a dungeon. For the framing test (ART-PLAN §7 rule 6).
+    pub fn framed(&self) -> &[u8] {
+        &self.s.framed
     }
 
     /// The flora it stamps.
