@@ -10,7 +10,6 @@
 //! `units::move_unit` or `units::place_unit` keeps the rest.
 
 use jane_core::blueprint::{Mark, Trigger};
-use jane_core::grid::Grid;
 use jane_core::num::CELL_SHIFT;
 use jane_core::{Blueprint, CellIx, Lookup, Rect, Sym, TriggerId, Vec2, ZoneId};
 
@@ -298,13 +297,10 @@ impl ZoneRuntime {
 
     /// Build from the blueprint and the zone's state. `locals` are the blueprint's local names
     /// as syms (all interned when the zone's state was made).
-    pub fn build(bp: &Blueprint, zone: &ZoneState, locals: Vec<Sym>) -> Self {
+    pub fn build(bp: &std::sync::Arc<Blueprint>, zone: &ZoneState, locals: Vec<Sym>) -> Self {
         let cat = jane_data::catalog();
-        let mut tiles: Grid<jane_core::Tile> = bp.tiles.clone();
-        for (&CellIx(i), &t) in &zone.tile_deltas {
-            *tiles.at_mut(CellIx(i)) = t;
-        }
-        let grid = ZoneGrid::new(tiles);
+        // The blueprint's tiles, shared, under the zone's changed ones (PLAY-PLAN.md §7).
+        let grid = ZoneGrid::over(bp, zone.tile_deltas.iter().map(|(&i, &t)| (i, t)));
         let blocks = Blocks::over(bp.w(), bp.h());
         let mut marks = Lookup::with_capacity(bp.marks.len());
         for (&k, &m) in &bp.marks {

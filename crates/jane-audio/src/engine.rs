@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 use crate::bed::{Bed, BedVoice};
 use crate::dsp::{DcBlock, Limiter, Reverb, pan_gains};
 use crate::model::Library;
-use crate::patch::{self, Rendered};
+use crate::patch::{self, PCM16, Stored};
 use crate::seq::{Player, SongData};
 use crate::voice::Prepared;
 
@@ -53,7 +53,7 @@ pub struct Engine {
     seed: u32,
     insts: Vec<Prepared>,
     songs: Vec<SongData>,
-    sfx: Vec<Rendered>,
+    sfx: Vec<Stored>,
     sfx_names: BTreeMap<String, usize>,
     song_names: BTreeMap<String, usize>,
     round: Vec<usize>,
@@ -88,7 +88,7 @@ impl Engine {
             lib.instruments.iter().enumerate().map(|(i, x)| (x.name.as_str(), i)).collect();
         let songs: Vec<SongData> =
             lib.songs.iter().map(|s| SongData::new(s, &|n: &str| inst_names.get(n).copied().unwrap_or(0))).collect();
-        let sfx: Vec<Rendered> = lib.sfx.iter().map(|p| patch::render(p, sr, 0x5eed)).collect();
+        let sfx: Vec<Stored> = lib.sfx.iter().map(|p| Stored::of(patch::render(p, sr, 0x5eed))).collect();
         let sfx_names = sfx.iter().enumerate().map(|(i, r)| (r.name.clone(), i)).collect();
         let song_names = songs.iter().enumerate().map(|(i, s)| (s.name.clone(), i)).collect();
         let beds = Bed::ALL.iter().map(|&b| BedVoice::new(b, sr, seed)).collect();
@@ -136,7 +136,7 @@ impl Engine {
         &self.songs
     }
 
-    pub fn sfx(&self) -> &[Rendered] {
+    pub fn sfx(&self) -> &[Stored] {
         &self.sfx
     }
 
@@ -257,7 +257,8 @@ impl Engine {
                     return false;
                 }
                 let f = (v.pos - i as f64) as f32;
-                let s = buf[i] + (buf[i + 1] - buf[i]) * f;
+                let (a, b) = (f32::from(buf[i]) * PCM16, f32::from(buf[i + 1]) * PCM16);
+                let s = a + (b - a) * f;
                 fl[k] += s * v.gl;
                 fr[k] += s * v.gr;
                 fsl[k] += s * v.gl * v.send;

@@ -104,13 +104,13 @@ impl Rows {
 pub struct PageCpu {
     pub w: u16,
     pub h: u16,
-    pub albedo: Vec<u16>,
+    pub albedo: std::sync::Arc<Vec<u16>>,
     ao: Vec<bool>,
     bw: usize,
 }
 
 impl PageCpu {
-    pub fn new(w: u16, h: u16, albedo: &[u16]) -> PageCpu {
+    pub fn new(w: u16, h: u16, albedo: &std::sync::Arc<Vec<u16>>) -> PageCpu {
         let bw = usize::from(w).div_ceil(8);
         let bh = usize::from(h).div_ceil(8);
         let mut ao = vec![false; bw * bh];
@@ -120,7 +120,7 @@ impl PageCpu {
                 ao[(y / 8) * bw + x / 8] = true;
             }
         }
-        PageCpu { w, h, albedo: albedo.to_vec(), ao, bw }
+        PageCpu { w, h, albedo: std::sync::Arc::clone(albedo), ao, bw }
     }
 
     /// Whether any texel of `src` may be the contact shadow (by 8 x 8 blocks: may say yes when
@@ -857,7 +857,7 @@ mod tests {
         for v in &mut a[56..] {
             *v = 1;
         }
-        PageCpu::new(8, 8, &a)
+        PageCpu::new(8, 8, &a.into())
     }
 
     #[test]
@@ -955,7 +955,7 @@ mod tests {
         assert!(p.has_ao(Src { x: 0, y: 0, w: 8, h: 8 }));
         let mut a = vec![2u16; 256];
         a[16 * 12 + 12] = 1;
-        let p = PageCpu::new(16, 16, &a);
+        let p = PageCpu::new(16, 16, &a.into());
         assert!(!p.has_ao(Src { x: 0, y: 0, w: 8, h: 8 }));
         assert!(p.has_ao(Src { x: 4, y: 4, w: 6, h: 6 }));
     }
@@ -992,7 +992,7 @@ mod tests {
             casters: Span { start: 0, len: 1 },
             blocks: Span::default(),
         });
-        let pages = [PageCpu::new(2, 10, &[2; 20])];
+        let pages = [PageCpu::new(2, 10, &vec![2; 20].into())];
         let mut p = Prep::default();
         p.build(&f, &pages, &Rows::T1);
         assert_eq!(p.n_lights, 1);

@@ -144,7 +144,7 @@ mod tests {
         clut[5] = 0xffff_0000;
         let atlas = AtlasPages {
             clut,
-            pages: vec![Page { w: 2, h: 1, albedo: vec![5, 1], ..Page::default() }],
+            pages: vec![Page { w: 2, h: 1, albedo: vec![5, 1].into(), ..Page::default() }],
             ..AtlasPages::default()
         };
         let mut px = vec![0xff80_8080; 16];

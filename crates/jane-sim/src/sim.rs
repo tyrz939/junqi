@@ -160,6 +160,27 @@ impl Sim {
         &mut self.state
     }
 
+    /// The sim's largest heap holdings, bytes (`jane bench --mem`, PLAY-PLAN.md §7): the live
+    /// zones' runtime grids, and the zones' state rows. Never state; read-only.
+    pub fn mem(&self) -> Vec<(&'static str, usize)> {
+        let (mut grids, mut regions, mut rows, mut fog) = (0, 0, 0, 0);
+        for rt in self.rts.iter().flatten() {
+            grids += rt.grid.heap_bytes();
+            regions += rt.regions.cells.capacity();
+        }
+        for z in self.state.zones.iter().flatten() {
+            rows += z.units.capacity() * std::mem::size_of::<crate::state::Unit>()
+                + z.props.capacity() * std::mem::size_of::<crate::state::Prop>();
+            fog += z.fog.len() * 4;
+        }
+        vec![
+            ("sim: runtime grids (tiles, flags)", grids),
+            ("sim: runtime region maps", regions),
+            ("sim: zone rows (units, props)", rows),
+            ("sim: fog of the map", fog),
+        ]
+    }
+
     pub fn blueprints(&self) -> &Blueprints {
         &self.bps
     }

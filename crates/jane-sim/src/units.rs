@@ -307,7 +307,7 @@ mod tests {
         let mut bp = jane_core::Blueprint::new(jane_core::ZoneId::House, tiles.w(), tiles.h(), Tile::Floor);
         bp.tiles = tiles;
         let zone = crate::zone::empty_zone_state(&bp, 1);
-        ZoneRuntime::build(&bp, &zone, Vec::new())
+        ZoneRuntime::build(&std::sync::Arc::new(bp), &zone, Vec::new())
     }
 
     fn body(rt: &mut ZoneRuntime, zone: &mut ZoneState, pos: Vec2) -> UnitId {

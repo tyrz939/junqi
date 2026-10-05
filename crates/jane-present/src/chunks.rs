@@ -11,8 +11,15 @@ use jane_core::Rect;
 
 use crate::frame::{CHUNK_CELLS, ChunkId, ChunkLayers, Tier};
 
-/// Chunks kept at most.
+/// Chunks kept at most: the GPU backends' slot atlases are this many.
 pub const LRU: usize = 48;
+
+/// Slots kept beyond what the view and its paint-ahead band want, so a step back over a chunk
+/// just left finds it painted (PLAY-PLAN.md §7: the cache is sized by need, not by `LRU`).
+pub const SLACK: usize = 6;
+
+/// Slots made at boot: a canvas's view and band on the county, so walking never allocates.
+pub const RESERVE: usize = 24;
 
 #[derive(Clone, Copy, Debug, Default)]
 struct Slot {
@@ -44,6 +51,8 @@ pub struct ChunkCache {
     slots: Vec<Slot>,
     /// What a slot's layers are made for: the albedo alone at T0, all four above.
     tier: Tier,
+    /// The most slots it may hold now ([`ChunkCache::fit`]): what the view wants, plus [`SLACK`].
+    cap: usize,
     next_gen: u32,
     /// Chunks painted since New Game (a test reads it).
     pub painted: u32,
@@ -54,15 +63,37 @@ pub struct ChunkCache {
 impl ChunkCache {
     /// An empty cache whose slots are made as they are first wanted.
     pub fn new(tier: Tier) -> ChunkCache {
-        ChunkCache { slots: Vec::new(), tier, next_gen: 0, painted: 0, landed: 0 }
+        ChunkCache { slots: Vec::new(), tier, cap: LRU, next_gen: 0, painted: 0, landed: 0 }
     }
 
-    /// A cache with all [`LRU`] slots' layers made now (256 KB each on `soft`, 12 MB in all; 704
-    /// KB each with the four layers of T1 and T2), so walking into new ground never allocates.
+    /// A cache with [`RESERVE`] slots' layers made now (about 330 KB each on `soft`, 704 KB each
+    /// with the four layers of T1 and T2), so walking the county never allocates; it grows past
+    /// them only as far as [`fit`](Self::fit) lets it.
     pub fn reserved(layers: &mut Vec<ChunkLayers>, tier: Tier) -> ChunkCache {
         layers.clear();
-        layers.extend((0..LRU).map(|_| ChunkLayers::new(tier)));
-        ChunkCache { slots: vec![Slot::default(); LRU], ..ChunkCache::new(tier) }
+        layers.extend((0..RESERVE).map(|_| ChunkLayers::new(tier)));
+        ChunkCache { slots: vec![Slot::default(); RESERVE], cap: RESERVE, ..ChunkCache::new(tier) }
+    }
+
+    /// Sizes the cache by need (PLAY-PLAN.md §7): `want` chunks are under the view and its
+    /// paint-ahead band this tick, so it may grow to that plus [`SLACK`], never past [`LRU`].
+    /// It never shrinks here (that is [`shrink`](Self::shrink), at a zone change).
+    pub fn fit(&mut self, want: usize) {
+        self.cap = self.cap.max((want + SLACK).min(LRU));
+    }
+
+    /// After [`drop_all`](Self::drop_all): lets go of every slot past `keep` and its layers (a
+    /// house wants a few chunks, not the county's band), and sizes the cap to `keep`.
+    pub fn shrink(&mut self, layers: &mut Vec<ChunkLayers>, keep: usize) {
+        let keep = keep.clamp(1, LRU);
+        self.slots.truncate(keep);
+        layers.truncate(keep);
+        self.cap = keep;
+    }
+
+    /// Slots held now (`jane bench --mem`, a test).
+    pub fn held(&self) -> usize {
+        self.slots.len()
     }
 
     /// The slot holding `id` and its generation: what draws it, stale or rough or not.
@@ -131,7 +162,7 @@ impl ChunkCache {
         }
         let i = if let Some(free) = self.slots.iter().position(|s| s.id.is_none()) {
             free
-        } else if self.slots.len() < LRU {
+        } else if self.slots.len() < self.cap {
             self.slots.push(Slot::default());
             layers.push(ChunkLayers::new(self.tier));
             self.slots.len() - 1

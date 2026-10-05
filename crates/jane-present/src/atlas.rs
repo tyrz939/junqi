@@ -143,10 +143,11 @@ impl Atlas {
         sh = sh.max(h);
         let lit = self.lit;
         let page = &mut self.pages.pages[pi];
+        let albedo = std::sync::Arc::make_mut(&mut page.albedo);
         if sy + h > page.h {
             page.h = sy + h;
             let n = usize::from(page.w) * usize::from(page.h);
-            page.albedo.resize(n, 0);
+            albedo.resize(n, 0);
             if lit {
                 page.normal.resize(n, FLAT);
                 page.emissive.resize(n, 0);
@@ -166,7 +167,7 @@ impl Atlas {
                     glowing += u32::from(t.emissive.is_opaque());
                     low = low.min(t.height);
                 }
-                page.albedo[i] = t.albedo.0;
+                albedo[i] = t.albedo.0;
                 if lit {
                     page.normal[i] = t.normal;
                     page.emissive[i] = t.emissive.0;

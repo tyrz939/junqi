@@ -217,6 +217,8 @@ pub fn run(
     let config = Config::load(&dirs);
     let mut present = Present::new(screen.backend().caps().tier);
     screen.backend().upload_atlas(present.atlas());
+    // The backend has the px now (soft and gl2 share the albedo): the presenter keeps the table.
+    present.release_atlas();
     // The Features rows (PRESENTATION.md §1.3): the tier's own with config.json's laid over
     // them; the presenter acts on most, the backend is handed the ones it draws itself.
     present.set_features(config.features(present.frame().tier));

@@ -41,13 +41,13 @@ enum Occluder {
 /// The atlas: page 0 is her, page 1 the occluder's sprite (64 x 48, drawn by `shape`).
 fn atlas(shape: impl Fn(i32, i32) -> bool) -> AtlasPages {
     let (sw, sh) = (usize::from(SW), usize::from(SH));
-    let her = Page { w: SW, h: SH, albedo: vec![2; sw * sh], ..Page::default() };
+    let her = Page { w: SW, h: SH, albedo: vec![2; sw * sh].into(), ..Page::default() };
     let (ow, oh) = (64usize, 48usize);
-    let mut thing = Page { w: ow as u16, h: oh as u16, albedo: vec![0; ow * oh], ..Page::default() };
+    let mut thing = Page { w: ow as u16, h: oh as u16, albedo: vec![0; ow * oh].into(), ..Page::default() };
     for y in 0..oh {
         for x in 0..ow {
             if shape(x as i32, y as i32) {
-                thing.albedo[y * ow + x] = 3;
+                std::sync::Arc::make_mut(&mut thing.albedo)[y * ow + x] = 3;
             }
         }
     }

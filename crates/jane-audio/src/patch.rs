@@ -32,6 +32,34 @@ pub struct Rendered {
     pub send: f32,
 }
 
+/// A patch's variants as the engine keeps them: 16-bit PCM, half the memory of `f32` and 96 dB
+/// under full scale, past hearing (PLAY-PLAN.md §7). Full scale is 1.0.
+#[derive(Clone, Debug)]
+pub struct Stored {
+    pub name: String,
+    pub variants: Vec<Vec<i16>>,
+    pub send: f32,
+}
+
+/// One full-scale step of a [`Stored`] sample.
+pub const PCM16: f32 = 1.0 / 32767.0;
+
+impl Stored {
+    pub fn of(r: Rendered) -> Stored {
+        let q = |x: f32| (x * 32767.0).round().clamp(-32767.0, 32767.0) as i16;
+        Stored {
+            name: r.name,
+            variants: r.variants.iter().map(|v| v.iter().map(|&x| q(x)).collect()).collect(),
+            send: r.send,
+        }
+    }
+
+    /// The bytes its samples hold (`jane bench --mem`).
+    pub fn bytes(&self) -> usize {
+        self.variants.iter().map(|v| v.len() * 2).sum()
+    }
+}
+
 /// Renders every variant of `p` at `sr`; the same seed gives the same samples.
 pub fn render(p: &SfxPatch, sr: f32, seed: u32) -> Rendered {
     let n = usize::from(p.variants.max(1));

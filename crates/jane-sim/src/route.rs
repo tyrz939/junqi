@@ -31,6 +31,9 @@ const BY_ROAD: i32 = 6;
 const ON_ROAD: (u32, u32) = (10, 14);
 const OFF_ROAD: (u32, u32) = (30, 42);
 const START: u8 = u8::MAX;
+/// [`START`] as a walk packs it (four bits), and the cost bits beside it.
+const START_PACKED: u8 = 15;
+const COST_MASK: u32 = (1 << 28) - 1;
 /// The walk's queue, by cost to come plus the least the rest could cost: a step adds at most the
 /// dearest step and the most one step can take off the rest, so a ring this long never wraps.
 const RING: usize = 64;
@@ -330,13 +333,14 @@ impl Roads {
             let (lo, hi) = (dx.min(dy), dx.max(dy));
             lo * ON_ROAD.1 + (hi - lo) * ON_ROAD.0
         };
+        // Per cell, packed in one u32 (PLAY-PLAN.md §7: 16 MB a walk, not 20): the cost to come + 1
+        // (0: not reached) in the low 28 bits, the step it was reached by in the top 4.
         let n = (self.w * self.h) as usize;
-        // Cost to come + 1 (0: not reached), and the step each cell was reached by.
-        let mut cost = vec![0u32; n];
-        let mut step = vec![0u8; n];
+        let mut seen = vec![0u32; n];
+        let pack = |c: u32, k: u8| c.min(COST_MASK) | u32::from(k.min(15)) << 28;
+        let cost = |seen: &[u32], i: usize| seen[i] & COST_MASK;
         let mut ring: Vec<Vec<(i32, i32, u32)>> = vec![Vec::new(); RING];
-        cost[ix(from.0, from.1)] = 1;
-        step[ix(from.0, from.1)] = START;
+        seen[ix(from.0, from.1)] = pack(1, START);
         let mut now = rest(from.0, from.1);
         ring[now as usize % RING].push((from.0, from.1, 0));
         let mut left = 1usize;
@@ -349,7 +353,7 @@ impl Roads {
                 continue;
             };
             left -= 1;
-            if cost[ix(x, y)] != c + 1 {
+            if cost(&seen, ix(x, y)) != c + 1 {
                 continue;
             }
             if goal.contains(x, y) {
@@ -372,9 +376,9 @@ impl Roads {
                 };
                 let nc = c + s;
                 let i = ix(nx, ny);
-                if cost[i] == 0 || nc + 1 < cost[i] {
-                    cost[i] = nc + 1;
-                    step[i] = k as u8;
+                let had = cost(&seen, i);
+                if had == 0 || nc + 1 < had {
+                    seen[i] = pack(nc + 1, k as u8);
                     ring[(nc + rest(nx, ny)) as usize % RING].push((nx, ny, nc));
                     left += 1;
                 }
@@ -382,8 +386,9 @@ impl Roads {
         };
         let mut path = vec![end];
         let mut at = end;
-        while step[ix(at.0, at.1)] != START {
-            let (dx, dy) = STEPS[usize::from(step[ix(at.0, at.1)])];
+        let step = |at: (i32, i32)| (seen[ix(at.0, at.1)] >> 28) as u8;
+        while step(at) != START_PACKED {
+            let (dx, dy) = STEPS[usize::from(step(at))];
             at = (at.0 - dx, at.1 - dy);
             path.push(at);
         }

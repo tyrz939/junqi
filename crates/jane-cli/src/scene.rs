@@ -217,18 +217,18 @@ impl LessonOpts {
 }
 
 /// The HUD and the lesson's card drawn over a scene's frame, from the buffers it keeps.
-struct Hud {
-    ui: jane_present::ui::Ui,
-    bufs: jane_present::view::ViewBuffers,
+pub(crate) struct Hud {
+    pub(crate) ui: jane_present::ui::Ui,
+    pub(crate) bufs: jane_present::view::ViewBuffers,
 }
 
 impl Hud {
-    fn new(present: &Present) -> Hud {
+    pub(crate) fn new(present: &Present) -> Hud {
         Hud { ui: jane_present::ui::Ui::new(present.ui_art().clone()), bufs: jane_present::view::ViewBuffers::new() }
     }
 
     /// Draws the HUD and the moment into the presenter's last frame.
-    fn draw(&mut self, present: &mut Present, canvas: (u16, u16)) {
+    pub(crate) fn draw(&mut self, present: &mut Present, canvas: (u16, u16)) {
         let bind = jane_present::input::Bindings::default();
         let cx = jane_present::ui::hud::HudCtx { bindings: &bind, pad: false, window_open: false };
         self.ui.begin(jane_present::ui::core::UiInput::default(), self.bufs.tick, canvas);
@@ -293,7 +293,7 @@ fn room_in(sim: &Sim, zone: jane_core::ids::ZoneId, asked: &str) -> Option<jane_
 
 /// The mark `asked` in `zone`, or its way in (the console's `tp` rule): its first named mark
 /// among start, front, entry, a stair, a mouth, a gate. An unknown mark names the ones it has.
-fn mark_in(sim: &Sim, zone: jane_core::ids::ZoneId, asked: Option<&str>) -> Result<jane_core::Sym, String> {
+pub(crate) fn mark_in(sim: &Sim, zone: jane_core::ids::ZoneId, asked: Option<&str>) -> Result<jane_core::Sym, String> {
     let syms = &sim.state().syms;
     let named: Vec<(&str, jane_core::Sym)> = sim
         .blueprint(zone)
@@ -348,9 +348,9 @@ pub fn weather(s: &str) -> Result<jane_present::WeatherKind, String> {
 
 /// The sim with this frame's events kept for the presenter: the bot drains the host, so the host
 /// keeps a copy.
-struct Tap {
-    sim: Sim,
-    events: Vec<Event>,
+pub(crate) struct Tap {
+    pub(crate) sim: Sim,
+    pub(crate) events: Vec<Event>,
 }
 
 impl Host for Tap {
@@ -792,7 +792,7 @@ pub fn bench(bps: Blueprints, o: &Opts, frames: u32, output: (u32, u32)) -> Resu
 }
 
 /// The backend a bench drives, and how a frame ends on it.
-enum Bench {
+pub(crate) enum Bench {
     Soft(Box<Soft>),
     #[cfg(feature = "gpu")]
     Gl2(Box<jane_render_gl2::Gl2>),
@@ -802,7 +802,7 @@ enum Bench {
 
 impl Bench {
     #[cfg_attr(not(feature = "gpu"), allow(clippy::unnecessary_wraps))]
-    fn new(which: Which, output: (u32, u32), gl: GlOpts) -> Result<Bench, String> {
+    pub(crate) fn new(which: Which, output: (u32, u32), gl: GlOpts) -> Result<Bench, String> {
         let _ = output;
         match which {
             Which::Soft => Ok(Bench::Soft(Box::new(Soft::new()))),
@@ -819,7 +819,7 @@ impl Bench {
         }
     }
 
-    fn backend(&mut self) -> &mut dyn Backend {
+    pub(crate) fn backend(&mut self) -> &mut dyn Backend {
         match self {
             Bench::Soft(s) => s.as_mut(),
             #[cfg(feature = "gpu")]
@@ -831,7 +831,7 @@ impl Bench {
 
     /// The frame to the screen (wgpu: upscaled to the output) and waited for.
     #[cfg_attr(not(feature = "gpu"), allow(clippy::unnecessary_wraps))]
-    fn finish(&mut self) -> Result<(), String> {
+    pub(crate) fn finish(&mut self) -> Result<(), String> {
         match self {
             Bench::Soft(_) => Ok(()),
             #[cfg(feature = "gpu")]
