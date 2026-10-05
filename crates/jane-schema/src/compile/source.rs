@@ -43,6 +43,12 @@ fn walk(dir: &Path, root: &Path, out: &mut Vec<(String, PathBuf)>) -> std::io::R
 }
 
 impl Source {
+    /// For tests: a source of text files only (`rooms/*/*.room`, `chunks/*.chunk`).
+    #[cfg(test)]
+    pub fn from_texts(texts: &[(&str, &str)]) -> Source {
+        Source { texts: texts.iter().map(|&(f, t)| (f.to_owned(), t.to_owned())).collect(), ..Source::default() }
+    }
+
     /// Read and parse every file under `root`. Unparseable JSON is an error per file.
     pub fn read(root: &Path, diag: &mut Diagnostics) -> Source {
         let mut paths = Vec::new();

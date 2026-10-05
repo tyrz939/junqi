@@ -2,11 +2,10 @@
 //! condition, trigger or quest uses is provided by some declared source, and every flag read is
 //! written somewhere.
 //!
-//! **Scope today.** Names are checked county-wide, not per zone, and a miss is a *warning*. The
-//! county's set places are `.chunk` files now (PORT.md §6.f) and provide what they draw; the dressed
-//! areas (`areas.ts`) and the interiors (`interiors.ts`) are still code, and the few names only they
-//! draw have no declared provider yet. When they are data too, a miss becomes an error and the check
-//! goes per zone.
+//! **Scope today.** Names are checked county-wide, not per zone, and a miss is an *error* (Grok #8:
+//! a typo used to pass `jane check`). The county's set places are `.chunk` files (PORT.md §6.f) and
+//! provide what they draw; a name only code draws (a dressed area's, an interior's) is declared in
+//! its zone's contract in `data/zones.json`, which the solver then holds the build to.
 
 use std::collections::BTreeSet;
 
@@ -201,10 +200,10 @@ pub fn check(c: &Catalog, diag: &mut Diagnostics) {
         .collect();
     missing.dedup();
     if !missing.is_empty() {
-        diag.warn(
+        diag.error(
             "providers",
             format!(
-                "{} name(s) used with no declared provider (dressed areas and interiors are still code): {}",
+                "{} name(s) used with no declared provider (a name only code draws goes in its zone's contract): {}",
                 missing.len(),
                 missing.join(", ")
             ),
