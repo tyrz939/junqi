@@ -20,5 +20,6 @@ fn main() {
     src.push_str(&jane_schema::compile::codegen_looks(built.looks));
     src.push_str(&jane_schema::compile::codegen_tile_looks(built.tile_looks));
     src.push_str(&jane_schema::compile::codegen_atmosphere(built.atmosphere));
+    src.push_str(&jane_schema::compile::codegen_dungeon_themes(built.dungeon_themes));
     std::fs::write(&out, src).expect("write catalog.rs");
 }

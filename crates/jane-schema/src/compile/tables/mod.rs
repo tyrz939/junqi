@@ -4,6 +4,7 @@ pub mod atmosphere;
 pub mod chunks;
 pub mod combat;
 pub mod county;
+pub mod dungeon_themes;
 pub mod dungeons;
 pub mod living;
 pub mod looks;
