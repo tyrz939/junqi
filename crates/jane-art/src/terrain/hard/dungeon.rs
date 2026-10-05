@@ -99,6 +99,11 @@ pub(super) fn upper(p: &mut Painter, c: &Cell, dg: &Dungeon) -> bool {
             let (wx, wy) = c.w(x, y);
             let (ix, n) = upper_px(&dg.theme, &below, wx, wy, y);
             put(p, c, x, y, ix, n, face_z(y, 1));
+            if y <= 2 {
+                if let Some(e) = catch(ix) {
+                    p.s.ly.glow(c.px + x, c.py + y, e);
+                }
+            }
         }
     }
     // Its ends, where the face turns away: the material's darkest edge.
@@ -111,6 +116,15 @@ pub(super) fn upper(p: &mut Painter, c: &Cell, dg: &Dungeon) -> bool {
     }
     mark(p, dg.room_id(c.wx, c.wy + 2), FRAMED_TALL);
     true
+}
+
+/// What a lit edge of the framing (the head trim's top, an emblem's lit side) catches of the
+/// room's lamps: a faint glow three tones under its own, so the framing reads at 1x in a dark
+/// dungeon (it is lit by what is near; this keeps its line where nothing is). `None` for a tone
+/// under `Lift`, and for anything off a ramp.
+fn catch(ix: Ix) -> Option<Ix> {
+    let (r, t) = Ramp::of(ix)?;
+    (t >= Tone::Lift).then(|| r.at(t.step(-3)))
 }
 
 /// The upper half's px: the head trim over rows 1 to 4 under a lit top edge, then the walling
@@ -364,7 +378,12 @@ fn face(p: &mut Painter, dg: &Dungeon, cx: i32, cy: i32, wx: i32, wy: i32, top: 
             let fy = top + y;
             let wpx = wx * CELL + x;
             let got = if let Some((_, d, along)) = jamb { jamb_px(th, &d, along, x, fy, tall) } else { None };
-            let got = got.or_else(|| room.filter(|r| r.role == Role::Boss).and_then(|r| emblem(th, r, wpx, fy, tall)));
+            let mut shown = false;
+            let got = got.or_else(|| {
+                let e = room.filter(|r| r.role == Role::Boss).and_then(|r| emblem(th, r, wpx, fy, tall));
+                shown = e.is_some();
+                e
+            });
             let got = got.or_else(|| {
                 let d = deco(th, wpx, wy * CELL + y, fy, tall);
                 motif |= d.is_some();
@@ -382,6 +401,8 @@ fn face(p: &mut Painter, dg: &Dungeon, cx: i32, cy: i32, wx: i32, wy: i32, top: 
                 p.s.ly.put(lx, ly, g.ix, n, face_z(y, k) + g.dz);
                 if g.glow {
                     p.s.ly.glow(lx, ly, g.ix);
+                } else if let Some(e) = catch(g.ix).filter(|_| shown) {
+                    p.s.ly.glow(lx, ly, e);
                 }
             }
         }

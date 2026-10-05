@@ -1,8 +1,10 @@
-//! The ambient life layer (ART-PLAN M1, B4): what lives in a scene besides its people. Ground
-//! birds peck and hop and fly off when she comes within three cells; ducks paddle on open water;
-//! crows sit on fences and turn to watch her; a cat sits on a wall; butterflies work the flower
-//! beds by day and moths circle the lamps by night; smoke rises from the chimneys of the houses
-//! someone lives in, and not from the empty ones; pigeons and dust in the Works. The water has its
+//! The ambient life layer (ART-PLAN M1, B4): what lives in a scene besides its people. Silence is
+//! the default and a bird an event: by day a sparrow or a pigeon pecks by a lived-in house or on
+//! the square, mostly alone, and flies off when she comes within three cells; open country keeps
+//! a lone crow on a fence now and then, turned to watch her (by night only the odd crow); ducks
+//! paddle on open water; a cat sits on a wall; butterflies work the flower beds by day and moths
+//! circle the lamps by night; smoke rises from the chimneys of the houses someone lives in, and
+//! not from the empty ones; dust in the Works. The water has its
 //! own: foam along the shore, glints on open water by day, lily pads at the margins, a fish rising
 //! now and then, rings at her feet on the stepping stones.
 //!
@@ -13,8 +15,9 @@
 //! flushed and the rings at her feet, both the presenter's.
 //!
 //! How many it draws is the tier's (ART-PLAN M1): about 12 actors on T0, 24 on T1 and 48 on T2,
-//! the farthest from the middle of the view left out first. By day out of doors at least one is
-//! always on screen (ART-PLAN §7 rule 5, `something_lives_in_every_outdoor_frame_by_day`).
+//! the farthest from the middle of the view left out first; the birds' and crows' odds are the
+//! same on every tier. By day out of doors at least one is always on screen, a bird kept only
+//! where nothing else lives (ART-PLAN §7 rule 5, `something_lives_in_every_outdoor_frame_by_day`).
 
 use jane_art::creature::critter::{self, Critter, Pose as CPose};
 use jane_art::hash::h32;
@@ -48,6 +51,16 @@ const fn share(tier: Tier) -> u32 {
         Tier::T2 => 96,
     }
 }
+
+/// Of 256, how many candidate spots by a lived-in house or on the square a ground bird takes, and
+/// of 512, how many perches a crow takes by day and by night: the same on every tier (the cap only
+/// limits, so the tiers keep one mood). Silence is the default and a bird an event (2026-10-06:
+/// "it feels like birdland").
+const BIRDS: u32 = 16;
+const CROWS_DAY: u32 = 12;
+const CROWS_NIGHT: u32 = 3;
+/// A ground bird keeps within this many px of a lived-in house's chimney (or to the square).
+const HOME: i32 = 8 * CELL;
 
 /// A block of cells holds at most one flock (ground birds), one perch, one patch of butterflies.
 const BLOCK: i32 = 6;
@@ -257,7 +270,12 @@ impl Ambient {
                     let hb = h32(bx as u32, by as u32, seed);
                     // Ground birds: a spot of open ground in the block.
                     if day {
-                        if let Some(f) = ground_flock(view, bx, by, hb, t, &tile, cx.people) {
+                        let home = |x: i32, y: i32| {
+                            self.chimneys
+                                .iter()
+                                .any(|&(_, hx, _, foot)| (hx - x).abs() < HOME && (foot - y).abs() < HOME)
+                        };
+                        if let Some(f) = ground_flock(view, bx, by, hb, t, &tile, cx.people, &home) {
                             candidates.push(f);
                         }
                     }
@@ -265,10 +283,9 @@ impl Ambient {
                     if (6..19).contains(&hour) {
                         self.ducks(bx, by, hb, t, &tile, thr);
                     }
-                    // A crow on a fence, or a cat on a wall.
-                    if !(22..24).contains(&hour) && hour >= 5 {
-                        self.perched(bx, by, hb, t, &tile, her, creatures, thr, day && !wet);
-                    }
+                    // A crow on a fence (the odd one by night), or a cat on a wall.
+                    let crows = if day { CROWS_DAY } else { CROWS_NIGHT };
+                    self.perched(bx, by, hb, t, &tile, her, creatures, (thr, crows), day && !wet);
                     // Butterflies over a flower bed, in the warm of the day.
                     if (10..17).contains(&hour) && weather == crate::frame::WeatherKind::Clear {
                         self.butterflies(bx, by, hb, t, &tile, thr);
@@ -280,17 +297,29 @@ impl Ambient {
         let memory = self.flushed.clone();
         let flushed = |k: u32| memory.iter().find(|f| f.0 == k).map(|f| f.1);
         // Fewer land in the rain.
-        let thr = if wet { thr / 3 } else { thr };
+        let thr = if wet { BIRDS / 3 } else { BIRDS };
         if day && outdoors {
-            let keep = self.forced.filter(|k| candidates.iter().any(|f| f.key == *k && flushed(*k).is_none()));
-            let shown = candidates.iter().any(|f| f.present(thr) && flushed(f.key).is_none() && in_view(f.x, f.y, 0));
+            // The one kept stays while it is in view and has ground under it.
+            let drawn = |f: &Flock| f.bird(0, t, true, &tile).is_some();
+            let keep = self.forced.filter(|k| {
+                candidates.iter().any(|f| f.key == *k && flushed(*k).is_none() && in_view(f.x, f.y, 0) && drawn(f))
+            });
+            // Rule 5 keeps a bird only where nothing else lives: a duck, a crow, the cat, a
+            // butterfly or a chimney's smoke in view is enough.
+            let other = self.actors.iter().any(|a| !a.flat && in_view(a.x, a.y, 0))
+                || self.chimneys.iter().any(|&(_, x, top, _)| in_view(x, top, 0));
+            let shown =
+                other || candidates.iter().any(|f| f.present(thr) && flushed(f.key).is_none() && in_view(f.x, f.y, 0));
             self.forced = keep.or_else(|| {
                 (!shown)
                     .then(|| {
                         candidates
                             .iter()
                             .filter(|f| {
-                                flushed(f.key).is_none() && in_view(f.x, f.y, -CELL) && !near_her(f.x, f.y, 5 * CELL)
+                                flushed(f.key).is_none()
+                                    && in_view(f.x, f.y, -CELL)
+                                    && !near_her(f.x, f.y, 5 * CELL)
+                                    && drawn(f)
                             })
                             .min_by_key(|f| f.rank)
                             .map(|f| f.key)
@@ -307,7 +336,7 @@ impl Ambient {
                 continue;
             }
             let gone = flushed(f.key);
-            for i in 0..f.n {
+            for i in 0..if f.home { f.n } else { 1 } {
                 let Some(b) = f.bird(i, t, forced, &tile) else { continue };
                 let (bx, by) = (b.0, b.1);
                 if gone.is_none() && near_her(bx, by, FLUSH) {
@@ -565,10 +594,11 @@ impl Ambient {
         tile: &impl Fn(i32, i32) -> Tile,
         her: Option<(i32, i32)>,
         creatures: &Creatures,
-        thr: u32,
+        (thr, crows): (u32, u32),
         day: bool,
     ) {
-        if (hb >> 4) % 512 >= thr {
+        let roll = (hb >> 4) % 512;
+        if roll >= thr.max(crows) {
             return;
         }
         // The first fence or wall cell on a hashed walk through the block.
@@ -579,7 +609,7 @@ impl Ambient {
         });
         let Some((cx, cy)) = cell else { return };
         let (x, y) = (cx * CELL + 8, cy * CELL + 13);
-        let cat = day && tile(cx, cy) == Tile::StoneWall && hb % 3 == 0 && !self.cats.is_empty();
+        let cat = roll < thr && day && tile(cx, cy) == Tile::StoneWall && hb % 3 == 0 && !self.cats.is_empty();
         if cat {
             let set = self.cats[(hb >> 9) as usize % self.cats.len()];
             let pose = creatures::Pose {
@@ -605,8 +635,9 @@ impl Ambient {
             });
             return;
         }
-        let Some(set) = self.crow else { return };
-        let n = 1 + (hb >> 28) % 2;
+        let Some(set) = self.crow.filter(|_| roll < crows) else { return };
+        // A lone crow; a pair one time in eight.
+        let n = 1 + u32::from((hb >> 28) % 8 == 0);
         for k in 0..n {
             let (x, y) = (x + k as i32 * 11 - 5 * (n as i32 - 1), y);
             if !matches!(tile(x.div_euclid(CELL), cy), Tile::Fence | Tile::StoneWall) {
@@ -940,12 +971,15 @@ struct Flock {
     off: u32,
     /// The salt of its block.
     hb: u32,
+    /// Whether it is where people live (a lived-in house, the square): only there do birds land
+    /// of their own accord; elsewhere one comes only as rule 5's, alone.
+    home: bool,
 }
 
 impl Flock {
     /// Whether it lands this epoch, of 256 `thr`.
     fn present(&self, thr: u32) -> bool {
-        h32(self.hb, self.epoch_t(0).0, 0x7072) % 256 < thr
+        self.home && h32(self.hb, self.epoch_t(0).0, 0x7072) % 256 < thr
     }
 
     /// The epoch it is in at tick `t` (the `t` passed to `present` is ignored) and the ticks into it.
@@ -1028,6 +1062,7 @@ fn bird_ground(t: Tile) -> bool {
 
 /// The flock that may land in block `(bx, by)`, if it has ground for one: its kind by the
 /// ground and the region (pigeons on the setts and in the Works, a robin in a garden, sparrows).
+#[allow(clippy::too_many_arguments)]
 fn ground_flock(
     view: &View<'_>,
     bx: i32,
@@ -1036,6 +1071,7 @@ fn ground_flock(
     t: u32,
     tile: &impl Fn(i32, i32) -> Tile,
     people: &[(i32, i32)],
+    home: &impl Fn(i32, i32) -> bool,
 ) -> Option<Flock> {
     let _ = t;
     // A spot: the first open ground on a hashed walk through the block, with ground round it.
@@ -1046,6 +1082,8 @@ fn ground_flock(
         (open && !people.iter().any(|&(px, py)| (px - x).abs() <= 1 && (py - y).abs() <= 1)).then_some((x, y))
     })?;
     let ground = tile(cx, cy);
+    // Birds land only where people live: by a lived-in house, or on the square's setts.
+    let home = ground == Tile::Cobble || home(cx * CELL + 8, cy * CELL + 8);
     let region = view.region_at(cx, cy);
     let kind = match (region, ground) {
         (Region::Works, _) => Critter::Pigeon,
@@ -1059,10 +1097,14 @@ fn ground_flock(
         (_, Tile::FlowerBed | Tile::Garden) if (hb >> 21) % 4 == 0 => Critter::Robin,
         _ => Critter::Sparrow,
     };
+    // Mostly one; two one time in eight, three one in sixteen.
     let n = match kind {
         Critter::Robin => 1,
-        Critter::Pigeon => 2 + (hb >> 24) % 2,
-        _ => 1 + (hb >> 24) % 3,
+        _ => match (hb >> 24) % 16 {
+            0 => 3,
+            1 | 2 => 2,
+            _ => 1,
+        },
     };
     Some(Flock {
         key: hb & 0x7fff_ffff,
@@ -1073,6 +1115,7 @@ fn ground_flock(
         rank: h32(hb, 0, 0x726b),
         off: hb % EPOCH,
         hb,
+        home,
     })
 }
 

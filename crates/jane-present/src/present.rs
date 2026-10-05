@@ -299,6 +299,11 @@ pub struct Present {
     kit: Props,
     frame: Frame,
     tick: u32,
+    /// Each sway class's phase, of 2^32, advanced a tick at a time at the pace of the wind then:
+    /// a change in the wind changes how fast the plants sway, never where they are in it.
+    sway: [u32; 4],
+    /// The tick `sway` was last advanced to.
+    sway_at: u32,
     /// The canvas the last frame was drawn for; the camera frames for it.
     canvas: (u16, u16),
     camera: Camera,
@@ -403,6 +408,8 @@ impl Present {
             kit,
             frame,
             tick: 0,
+            sway: [0; 4],
+            sway_at: 0,
             canvas: (CANVAS_W, CANVAS_H),
             camera: Camera::default(),
             zone: None,
@@ -1552,6 +1559,15 @@ impl Present {
         let pace = |class: crate::terrain::SwayClass| {
             (class.period() as i32 * 32 / (32 + wind.unsigned_abs().min(32) as i32)).max(40) as u32
         };
+        // The phases, advanced over the ticks since the last draw (a long gap only so far).
+        let steps = self.tick.wrapping_sub(self.sway_at).min(600);
+        self.sway_at = self.tick;
+        for class in crate::terrain::SwayClass::ALL {
+            let per = ((1u64 << 32) / u64::from(pace(class))) as u32;
+            let k = class as usize;
+            self.sway[k] = self.sway[k].wrapping_add(per.wrapping_mul(steps));
+        }
+        let phases = self.sway;
         let walker = self
             .units
             .iter()
@@ -1577,7 +1593,7 @@ impl Present {
                         let (level, gust) = if rustle {
                             ([-2, 2][((tick / 3).wrapping_add(own) % 2) as usize], 65536)
                         } else {
-                            sway(fl.class, zx, zy, own, tick, pace(fl.class), wind)
+                            sway(fl.class, zx, zy, own, phases[fl.class as usize] >> 16, tick, wind)
                         };
                         let r = self.atlas.get(fl.look);
                         let (x, y) = (fx - i32::from(r.ax), fy - i32::from(r.ay));
@@ -2186,11 +2202,12 @@ fn lived_houses(view: &View<'_>, houses: &jane_art::terrain::houses::Houses) -> 
 
 /// How far a flora sprite leans, `-3..=3` levels of its bend (ART-PLAN M2 and §9, the owner's
 /// 2026-10-03 notes: smaller steps, faster, never in step), and the slow gust over it, `0..=65536`:
-/// a sine of its own pace, its phase put back by a gust that travels across the county down the
+/// a sine of its own pace (`base`, its class's phase of 65536, advanced by the presenter), its
+/// phase put back by a gust that travels across the county down the
 /// wind (neighbours lean in a ripple, one after the other) and nudged by its own hash, its reach
 /// swelling and easing with the slower gust, one way stronger than the other with the wind.
 /// Integer; the lean changes a level at a time.
-fn sway(class: crate::terrain::SwayClass, x: i32, y: i32, own: u32, tick: u32, period: u32, wind: i32) -> (i32, i32) {
+fn sway(class: crate::terrain::SwayClass, x: i32, y: i32, own: u32, base: u32, tick: u32, wind: i32) -> (i32, i32) {
     use jane_core::Angle;
     use jane_core::angle::sin_q15;
     if class == crate::terrain::SwayClass::Still {
@@ -2200,7 +2217,7 @@ fn sway(class: crate::terrain::SwayClass, x: i32, y: i32, own: u32, tick: u32, p
     let along = if wind < 0 { -x } else { x };
     let wave = (i64::from(along + y / 2) * 65536 / 384) as u32;
     let jitter = own % 9000;
-    let phase = (tick % period * 65536 / period).wrapping_sub(wave).wrapping_add(jitter);
+    let phase = base.wrapping_sub(wave).wrapping_add(jitter);
     let s = i64::from(sin_q15(Angle(phase as u16)).0);
     // The slow gust: a reach of a third to the whole, rolling over the county in about 20 s.
     let gust = i64::from(sin_q15(Angle(tick.wrapping_mul(55).wrapping_sub((along * 40 + y * 20) as u32) as u16)).0);
@@ -2378,7 +2395,10 @@ mod tests {
         for class in [SwayClass::Crown, SwayClass::Bush, SwayClass::Reed] {
             let p = class.period();
             assert!((90..=180).contains(&p), "{class:?}: {p} ticks");
-            let at = |x: i32, t: u32| sway(class, x, 40, jane_core::hash::mix32(x as u32), t, p, 0).0;
+            let per = ((1u64 << 32) / u64::from(p)) as u32;
+            let at = |x: i32, t: u32| {
+                sway(class, x, 40, jane_core::hash::mix32(x as u32), per.wrapping_mul(t) >> 16, t, 0).0
+            };
             // A level at a time: the top moves a px at most, never a jump.
             for t in 0..600 {
                 assert!(at(100, t).abs_diff(at(100, t + 1)) <= 1, "{class:?} jumps at {t}");
@@ -2394,7 +2414,36 @@ mod tests {
                 assert!(changed < 8, "{class:?}: all eight step at {t}");
             }
         }
-        assert_eq!(sway(SwayClass::Still, 5, 5, 9, 77, 170, 0).0, 0);
+        assert_eq!(sway(SwayClass::Still, 5, 5, 9, 77, 77, 0).0, 0);
+    }
+
+    /// The wind changes how fast a plant sways, never where it is in the sway: its phase runs on
+    /// from where it was, so a change between two ticks moves no plant more than a level (the
+    /// owner, 2026-10-06: "swaying doesn't seem to loop perfectly").
+    #[test]
+    fn a_change_in_the_wind_never_jumps_a_plant() {
+        use crate::terrain::SwayClass;
+        let pace = |class: SwayClass, wind: i32| {
+            (class.period() as i32 * 32 / (32 + wind.unsigned_abs().min(32) as i32)).max(40) as u32
+        };
+        // Pairs of winds the same way and the same side of the downwind rest.
+        for (w0, w1) in [(0, 15), (15, 0), (1, 12), (16, 40), (40, 16), (-4, -15), (20, 31)] {
+            for class in [SwayClass::Crown, SwayClass::Bush, SwayClass::Reed] {
+                let mut acc = 0u32;
+                for t in 0..400u32 {
+                    let wind = if t < 200 { w0 } else { w1 };
+                    let before = acc;
+                    acc = acc.wrapping_add(((1u64 << 32) / u64::from(pace(class, wind))) as u32);
+                    for x in (0..640).step_by(37) {
+                        let own = jane_core::hash::mix32(x as u32);
+                        let prev_wind = if t <= 200 { w0 } else { w1 };
+                        let a = sway(class, x, 60, own, before >> 16, t, prev_wind).0;
+                        let b = sway(class, x, 60, own, acc >> 16, t + 1, wind).0;
+                        assert!(a.abs_diff(b) <= 1, "{class:?} at x {x} jumps at {t} ({w0} to {w1})");
+                    }
+                }
+            }
+        }
     }
 
     /// A crown's loose leaves (ART-PLAN §9): a cluster flutters now and then, a few ticks at a
