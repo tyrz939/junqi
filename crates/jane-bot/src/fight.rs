@@ -55,21 +55,19 @@ pub struct Fight {
 }
 
 /// The player's side of a fight as a player plays it (PLAY-PLAN §2.1), over any act a plan
-/// made: a cast at a foe targets that foe (its bolt curves on); a bolt aimed down a line at a prop
-/// that answers its school targets the prop; and while a
-/// free-aimed cast builds, the aim it began with is held, so walking on does not swing it away.
+/// made: a cast at a foe targets that foe (its bolt curves on); and while a free-aimed cast builds, the aim it began with is held, so walking on does not swing it away.
 pub fn with_targets(v: &View<'_>, mut act: Act) -> Act {
     let cat = jane_data::catalog();
-    let Some(me) = v.unit(v.me().unit) else { return act };
     for c in &act.cmds {
         let Command::Cast { spell, on } = *c else { continue };
         let def = cat.combat.spell(spell);
         let foe = on.map(TargetRef::Unit).filter(|&t| v.target_valid(t) && v.target_hostile(t));
         let target = match def.kind {
             SpellKind::Bolt | SpellKind::Melee if foe.is_some() => foe,
-            SpellKind::Bolt => act.frame.aim.and_then(|a| prop_on_line(v, me, def, a)),
-            // A verb (Grow, Repair) finds its own prop as the sim does, the nearest that answers it
-            // and, for Grow, in light: naming the nearest in the dark failed the School's lessons.
+            // A prop is aimed at as the plan aims, not named: the crawl picks the line a bolt can
+            // take (past a wall's corner, at a face), and the sim's bolt sent to a named prop's
+            // middle takes the wall instead (the Factory's call box, seed 8). A verb finds its own
+            // prop as the sim does. The sim's prop targets are proven in `jane-sim/tests/fight.rs`.
             _ => None,
         };
         if target.is_some() {
@@ -92,42 +90,6 @@ pub fn with_targets(v: &View<'_>, mut act: Act) -> Act {
         }
     }
     act
-}
-
-/// The nearest prop answering `def`'s school whose middle lies within its touch of the line
-/// along `aim` and inside its flight.
-fn prop_on_line(v: &View<'_>, me: &Unit, def: &jane_data::SpellDef, aim: jane_core::Angle) -> Option<TargetRef> {
-    let cat = jane_data::catalog();
-    let touch = i64::from(def.touch.unwrap_or(jane_sim::tuning::SCHOOL_TOUCH_FX).0);
-    let far = i64::from(def.range.0) + touch;
-    let (c, s) = (i64::from(jane_core::angle::cos_q15(aim).0), i64::from(jane_core::angle::sin_q15(aim).0));
-    let (cx, cy) = me.pos.cell();
-    let r = (far / i64::from(CELL_FX)) as i32 + 2;
-    let mut best: Option<(i64, jane_sim::PropId)> = None;
-    for p in v.props_in(jane_core::Rect::new(cx - r, cy - r, 2 * r + 1, 2 * r + 1)) {
-        let pd = cat.story.prop(p.def);
-        if p.hidden || p.on || pd.answers.and_then(jane_data::Answers::school) != Some(def.school) {
-            continue;
-        }
-        let at = jane_sim::light::prop_centre(pd, p);
-        let (vx, vy) = (i64::from(at.x.0 - me.pos.x.0), i64::from(at.y.0 - me.pos.y.0));
-        let along = (vx * c + vy * s) >> 15;
-        let off = ((vx * s - vy * c) >> 15).abs();
-        if along < 0 || along > far || off > touch {
-            continue;
-        }
-        // Named only when she plainly has it: in sight and inside the bolt's own range. A box
-        // set in a wall, or one at the very end of a bolt's flight, is shot at as before, free
-        // (a target the sim cannot be sure of walks her to range instead, and the crawl's
-        // `Aim` moves on before she gets there: the Factory's call box, seed 8).
-        if !v.sight(me.pos, at) || along > i64::from(def.range.0) {
-            continue;
-        }
-        if best.is_none_or(|(b, _)| along < b) {
-            best = Some((along, p.id));
-        }
-    }
-    best.map(|(_, id)| TargetRef::Prop(id))
 }
 
 pub fn ready(u: &Unit, s: SpellId, now: Tick) -> bool {
@@ -178,6 +140,27 @@ pub fn may_cast(me: &Unit, t: &Unit, s: SpellId) -> bool {
 pub fn cast_caught(v: &View<'_>, t: &Unit) -> bool {
     let me = v.body();
     v.fight().cast.is_some() && !rooted(t) && dangerous(me, t) && gap(me, t) <= bite(t) + i64::from(CELL_FX)
+}
+
+/// May she spend `s`'s mana on `t`? On a boss or on what could put her down, always; on the
+/// common run of things only with enough left after it for the dearest Word she knows (an
+/// Explosion at a cracked wall, a Grow at a bud): with the 1 s GCD she casts half as often again
+/// as before, and a crawl that bolted every rat on the way came to a puzzle with an empty well
+/// and nothing to fill it in a room full of the Museum's (the set-aside story, seed 2).
+pub fn spare_for(v: &View<'_>, me: &Unit, t: &Unit, s: SpellId) -> bool {
+    let cat = jane_data::catalog();
+    if cat.combat.unit(t.def).boss || dangerous(me, t) {
+        return true;
+    }
+    let dearest = v
+        .learned()
+        .iter()
+        .map(|&w| cat.combat.spell(w))
+        .filter(|d| matches!(d.kind, SpellKind::World) || d.splash.is_some_and(|sp| sp.div == 1))
+        .map(|d| d.mp.0)
+        .max()
+        .unwrap_or(0);
+    me.mp.0 - cat.combat.spell(s).mp.0 >= dearest
 }
 
 /// Body gap between two units (centre distance less both bodies), `Fx`.
@@ -840,6 +823,7 @@ pub fn engage(v: &View<'_>, cx: &mut Ctx, id: UnitId) -> Option<Act> {
         && knows(v, ice)
         && ready(me, ice, now)
         && may_cast(me, t, ice)
+        && spare_for(v, me, t, ice)
         && (d > i64::from(3 * CELL_FX) || !strong)
         && g <= i64::from(def.range.0) * 9 / 10
         && v.sight(me.pos, t.pos)
@@ -854,6 +838,7 @@ pub fn engage(v: &View<'_>, cx: &mut Ctx, id: UnitId) -> Option<Act> {
     if knows(v, spark)
         && ready(me, spark, now)
         && !may_cast(me, t, ice)
+        && spare_for(v, me, t, spark)
         && jane_sim::status::resist_factor(t, cat.combat.spell(spark).school, now) >= 500
         && g <= i64::from(cat.combat.spell(spark).range.0) * 9 / 10
         && v.sight(me.pos, t.pos)
