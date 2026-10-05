@@ -82,6 +82,11 @@ pub fn render(p: &SfxPatch, sr: f32, seed: u32) -> Rendered {
     Rendered { name: p.name.clone(), variants, send: p.send }
 }
 
+/// How long `p` renders, seconds (every variant is as long).
+pub fn secs(p: &SfxPatch) -> f32 {
+    (p.layers.iter().map(layer_len_ms).fold(0.0, f32::max) + 20.0) * 0.001
+}
+
 /// FNV-1a of a name: a patch's own noise, whatever its row's place.
 pub fn hash(s: &str) -> u32 {
     s.bytes().fold(0x811c_9dc5u32, |h, b| (h ^ u32::from(b)).wrapping_mul(0x0100_0193))

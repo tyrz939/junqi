@@ -129,7 +129,7 @@ pub fn render(what: &str, seed: u32, secs: Option<f32>, args: &[String]) -> Resu
     match kind {
         "sfx" => {
             let id = e.sfx_index(name).ok_or_else(|| format!("no sound effect {name}"))?;
-            let len = e.sfx()[id].variants[0].len() as f32 / RATE as f32;
+            let len = e.sfx()[id].as_ref().map_or(0, |s| s.variants[0].len()) as f32 / RATE as f32;
             e.handle(Cmd::Sfx { id, gain: 1.0, pan: 0.0, send: 0.0, rate: 1.0 });
             Ok(e.render_secs(secs.unwrap_or(len + 1.5)))
         }

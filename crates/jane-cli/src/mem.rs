@@ -197,7 +197,7 @@ pub fn measure(backend: Which, seed: u32, hops: u32, verbose: bool) -> Result<Me
     present.release_atlas();
     r.built.push(("atlas px the presenter let go (freed)".into(), mark.saturating_sub(heap())));
     mark = heap();
-    let mut engine = jane_audio::Engine::new(jane_audio::library(), 48000.0, seed);
+    let mut engine = jane_audio::Engine::lazy(jane_audio::library(), 48000.0, seed);
     let mut buf = vec![0.0f32; 2048];
     engine.render(&mut buf);
     took(&mut r, &mut mark, "audio engine");
