@@ -40,7 +40,7 @@ use jane_core::{CellIx, Fx, SpellId, Tick, Vec2};
 use jane_data::{Controller, Faction, UnitDef, UnitSight};
 
 use crate::combat::{Hit, distance, is_enemy, max_bounds, metres_between, query_near, queue_hit, try_cast};
-use crate::ctx::Ctx;
+use crate::ctx::{Ctx, unit_mut_or_skip, unit_or_skip};
 use crate::event::SpellError;
 use crate::ids::UnitId;
 use crate::light::{lit_at, max_light_radius, prop_centre, reach_sq};
@@ -134,7 +134,7 @@ fn idle(cx: &mut Ctx<'_>, id: UnitId, def: &UnitDef, shy: bool) {
             hunted(cx, id, def, prey)
         });
         if let Some(t) = found {
-            let u = cx.zone.unit_mut(id).expect("unit");
+            let u = unit_mut_or_skip!(cx, id, "ai::idle");
             u.target = Some(t);
             u.combat = CombatState::Combat;
             clear_path(u);
@@ -152,13 +152,13 @@ fn idle(cx: &mut Ctx<'_>, id: UnitId, def: &UnitDef, shy: bool) {
     patrol(cx, id, def.walk, shy);
 }
 
-fn leash(cx: &mut Ctx<'_>, id: UnitId, def: &UnitDef, run: Fx, shy: bool) {
+pub(crate) fn leash(cx: &mut Ctx<'_>, id: UnitId, def: &UnitDef, run: Fx, shy: bool) {
     // A thing that never runs (the Burial's small snakes: they spit, they do not chase) walks
     // home. At a run of nothing it stood leashing where the fight left it for good, and a thing
     // leashing takes no bait.
     let run = if run.0 > 0 { run } else { def.walk };
     let clock = cx.world.clock;
-    let u = cx.zone.unit_mut(id).expect("unit");
+    let u = unit_mut_or_skip!(cx, id, "ai::leash");
     u.target = None;
     let (pos, home) = (u.pos, u.home);
     // Home, or in home's own cell: a path from a cell to itself has no steps, so a walker a few
@@ -174,7 +174,7 @@ fn leash(cx: &mut Ctx<'_>, id: UnitId, def: &UnitDef, run: Fx, shy: bool) {
     let round = shy && !lit_at(cx.zone, cx.rt, clock, pos, true);
     let cells = cells_of(i64::from(def.leash.0) * i64::from(LEASH_PATH_TIMES));
     let found = follow_to(cx, id, home, run, cells, round);
-    let u = cx.zone.unit_mut(id).expect("unit");
+    let u = unit_mut_or_skip!(cx, id, "ai::leash");
     let waiting = round && live_path(u).is_some_and(|p| usize::from(p.at) >= p.cells.len());
     if !found || waiting {
         // It cannot get home (a door shut behind it, or its post is lit now): it stands guard here.
@@ -183,13 +183,13 @@ fn leash(cx: &mut Ctx<'_>, id: UnitId, def: &UnitDef, run: Fx, shy: bool) {
     }
 }
 
-fn fight(cx: &mut Ctx<'_>, id: UnitId, def: &UnitDef, run: Fx, shy: bool) {
+pub(crate) fn fight(cx: &mut Ctx<'_>, id: UnitId, def: &UnitDef, run: Fx, shy: bool) {
     let now = cx.world.tick;
     let clock = cx.world.clock;
-    let u = cx.zone.unit(id).expect("unit");
+    let u = unit_or_skip!(cx, id, "ai::fight");
     let target = u.target.and_then(|t| cx.zone.unit(t)).filter(|t| t.alive && is_enemy(u.faction, t.faction));
     let Some(tpos) = target.map(|t| t.pos) else {
-        let u = cx.zone.unit_mut(id).expect("unit");
+        let u = unit_mut_or_skip!(cx, id, "ai::fight");
         u.target = None;
         u.combat = CombatState::Leash;
         return;
@@ -198,7 +198,7 @@ fn fight(cx: &mut Ctx<'_>, id: UnitId, def: &UnitDef, run: Fx, shy: bool) {
     // again the moment the chase reaches a lamp: a thing runs you to the light and turns back.
     let dark = night_reach(cx, id, def);
     let leash = i64::from(def.leash.0) * i64::from(10 + NIGHT_LEASH * dark) / 10;
-    let u = cx.zone.unit(id).expect("unit");
+    let u = unit_or_skip!(cx, id, "ai::fight");
     let (pos, home) = (u.pos, u.home);
     // A rooted thing (a flower, a cactus: no feet) never leaves its post, so no chase takes it
     // past its leash: it lets go once she is half again the screen's notice from it (or its own
@@ -212,7 +212,7 @@ fn fight(cx: &mut Ctx<'_>, id: UnitId, def: &UnitDef, run: Fx, shy: bool) {
     // Warm light keeps a shade off: standing in it, it does nothing but leave.
     let scorched = !too_far && !unseen && shy && lit_at(cx.zone, cx.rt, clock, pos, true);
     if too_far || unseen || scorched {
-        let u = cx.zone.unit_mut(id).expect("unit");
+        let u = unit_mut_or_skip!(cx, id, "ai::fight");
         if !too_far {
             u.target = None;
         }
@@ -230,14 +230,14 @@ fn fight(cx: &mut Ctx<'_>, id: UnitId, def: &UnitDef, run: Fx, shy: bool) {
             return;
         }
     }
-    let u = cx.zone.unit(id).expect("unit");
+    let u = unit_or_skip!(cx, id, "ai::fight");
     let Some(spell) = pick_spell(u, now) else {
         approach(cx, id, tpos, run, leash, shy);
         return;
     };
     match try_cast(cx, id, spell, None, None) {
         Ok(()) => {
-            let u = cx.zone.unit_mut(id).expect("unit");
+            let u = unit_mut_or_skip!(cx, id, "ai::fight");
             clear_path(u);
             face_point(u, tpos);
         }
@@ -284,7 +284,7 @@ fn approach(cx: &mut Ctx<'_>, id: UnitId, tpos: Vec2, speed: Fx, leash: i64, shy
     }
     follow_to(cx, id, tpos, speed, cells_of(leash * i64::from(CHASE_PATH_TIMES)), shy);
     // At the edge of her light with nowhere nearer to stand: it waits, and it watches her.
-    let u = cx.zone.unit_mut(id).expect("unit");
+    let u = unit_mut_or_skip!(cx, id, "ai::approach");
     if shy && live_path(u).is_some_and(|p| usize::from(p.at) >= p.cells.len()) {
         face_point(u, tpos);
     }
@@ -517,7 +517,7 @@ pub fn patrol(cx: &mut Ctx<'_>, id: UnitId, speed: Fx, shy: bool) {
         return;
     }
     follow_to(cx, id, to, speed, PATROL_PATH_CELLS, shy);
-    let u = cx.zone.unit_mut(id).expect("unit");
+    let u = unit_mut_or_skip!(cx, id, "ai::patrol");
     u.home = u.pos;
 }
 

@@ -483,3 +483,29 @@ fn a_gathered_field_is_the_light_rule() {
         }
     }
 }
+
+/// Grok #6: a unit a step works on that is gone from its zone (a content or engine bug) is
+/// skipped with a dev event, never an abort of the host and every guest with it.
+#[test]
+fn a_missing_unit_is_skipped_with_a_dev_event_not_a_panic() {
+    use crate::event::{DevNote, EventKind};
+    let mut f = field();
+    let real = spawn(&mut f.s, "skeleton", 40, 20);
+    let def = jane_data::catalog().combat.unit(def_id("skeleton"));
+    let gone = UnitId::new(60_000).expect("an id");
+    assert!(f.s.state.zone(Z).expect("the county").unit(gone).is_none());
+    let notes = in_ctx(&mut f.s, None, |cx| {
+        let before = cx.events.len();
+        crate::ai::leash(cx, gone, def, def.run, false);
+        crate::ai::fight(cx, gone, def, def.run, false);
+        tick_ai_with(cx, real, def);
+        cx.events[before..]
+            .iter()
+            .filter_map(|e| match e.kind {
+                EventKind::Dev(DevNote::MissingUnit { unit, at }) => Some((unit, at)),
+                _ => None,
+            })
+            .collect::<Vec<_>>()
+    });
+    assert_eq!(notes, vec![(gone, "ai::leash"), (gone, "ai::fight")]);
+}

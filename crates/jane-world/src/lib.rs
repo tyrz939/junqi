@@ -21,12 +21,42 @@ use jane_core::{Blueprint, ZoneId};
 /// dungeon, checks C1 to C13) and re-rolled until one holds (`buildZone`).
 ///
 /// All thirteen zones: the county ([`county::build_proven`]), the eight generated dungeons and
-/// the four hand-built interiors (house, cellar, arms, church). `None` only for a zone with no
-/// builder (none today) or a county whose skeleton rows cannot be satisfied at all, which the
-/// catalog's build refuses first. Never panics.
+/// the four hand-built interiors (house, cellar, arms, church). `None` when [`build_zone_with`]
+/// refuses ([`ZoneError`]): a zone with no builder, a county whose skeleton rows cannot be
+/// satisfied, or a seed none of whose attempts proves. Never panics.
 pub fn build_zone(zone: ZoneId, seed: u32) -> Option<Blueprint> {
-    build_zone_with(zone, seed, &mut |_| {})
+    build_zone_with(zone, seed, &mut |_| {}).ok()
 }
+
+/// Why a zone was not built for a seed. An unproven zone is never handed out: New Game re-rolls
+/// to a seed that proves, and a chosen seed that does not is an error.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum ZoneError {
+    /// No builder for this zone.
+    NoBuilder(ZoneId),
+    /// The county's skeleton rows cannot be satisfied at all.
+    Skeleton(skeleton::SkeletonError),
+    /// Every attempt was refused by the solver (or, for a dungeon, by checks C1 to C13).
+    Unproven(ZoneId),
+}
+
+impl From<skeleton::SkeletonError> for ZoneError {
+    fn from(e: skeleton::SkeletonError) -> Self {
+        ZoneError::Skeleton(e)
+    }
+}
+
+impl std::fmt::Display for ZoneError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            ZoneError::NoBuilder(z) => write!(f, "zone {} has no builder", z.name()),
+            ZoneError::Skeleton(e) => write!(f, "the county's skeleton: {e}"),
+            ZoneError::Unproven(z) => write!(f, "zone {} did not prove in any attempt", z.name()),
+        }
+    }
+}
+
+impl std::error::Error for ZoneError {}
 
 /// What a build says as each of its stages starts: `"skeleton"`, a county stage's name
 /// ([`county::STAGES`]), `"solve"`, or a zone's own name (`"house"`, `"mine"`). The loading
@@ -43,17 +73,20 @@ pub fn build_stages() -> Vec<&'static str> {
     out
 }
 
-/// [`build_zone`], saying each stage to `report` as it starts.
-pub fn build_zone_with(zone: ZoneId, seed: u32, report: Report<'_>) -> Option<Blueprint> {
+/// [`build_zone`], saying each stage to `report` as it starts, and why a zone was refused.
+pub fn build_zone_with(zone: ZoneId, seed: u32, report: Report<'_>) -> Result<Blueprint, ZoneError> {
     if zone == ZoneId::County {
-        return county::build_proven_with(seed, report).ok();
+        return county::build_proven_with(seed, report);
     }
     report(zone.name());
     if interiors::is_interior(zone) {
-        return interiors::build_interior(zone, seed);
+        return interiors::build_interior(zone, seed).ok_or(ZoneError::Unproven(zone));
     }
-    jane_data::catalog().dungeons.mission_of(zone)?;
-    Some(dungeon::build(zone, seed).blueprint)
+    if jane_data::catalog().dungeons.mission_of(zone).is_none() {
+        return Err(ZoneError::NoBuilder(zone));
+    }
+    let built = dungeon::build(zone, seed);
+    if built.info.errors.is_empty() { Ok(built.blueprint) } else { Err(ZoneError::Unproven(zone)) }
 }
 
 /// Is this a zone [`build_zone`] can build today?

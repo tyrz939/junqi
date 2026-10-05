@@ -92,19 +92,19 @@ fn another_seed_is_another_hash() {
 }
 
 /// Gate 2 (and 3, off x86_64): the hashes a fresh process wrote. The file names the content it
-/// was written from; after a content change it is stale, and says so, until `jane gen` rewrites it.
+/// was written from; after a content change it is stale, and fails (Grok #2: a stale fixture
+/// must not pass silently) until `jane gen` rewrites it.
 #[test]
 fn the_hashes_match_the_fixture_file() {
     let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../tests/fixtures/hashes-x86_64.txt");
     let text = std::fs::read_to_string(path).expect("tests/fixtures/hashes-x86_64.txt");
     let content = format!("# content {:016x}, blueprint hash layout {LAYOUT}", jane_data::catalog().content_hash);
-    if !text.lines().any(|l| l == content) {
-        eprintln!(
-            "hashes-x86_64.txt was written from other content or another hash layout (want \"{content}\"): \
-             rewrite it with `jane gen --zones all --seeds 1..16 --hash`"
-        );
-        return;
-    }
+    assert!(
+        text.lines().any(|l| l == content),
+        "hashes-x86_64.txt was written from other content or another hash layout (want \"{content}\"): \
+         rewrite it with `cargo run -q --release -p jane-cli -- gen --zones all --seeds 1..16 --hash > \
+         tests/fixtures/hashes-x86_64.txt`"
+    );
     let mut n = 0;
     for line in text.lines().filter(|l| !l.starts_with('#') && !l.is_empty()) {
         let mut f = line.split(' ');

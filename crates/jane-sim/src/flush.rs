@@ -22,7 +22,7 @@ use jane_data::Controller;
 
 use crate::actions::{Subject, run_actions};
 use crate::combat::{Hit, emit_to, is_enemy, queue_hit, round_points};
-use crate::ctx::{Ctx, forget_unit};
+use crate::ctx::{Ctx, forget_unit, unit_mut_or_skip, unit_or_skip};
 use crate::event::EventKind;
 use crate::ids::UnitId;
 use crate::state::{CombatState, FlagKey};
@@ -124,7 +124,7 @@ fn flush_unit(cx: &mut Ctx<'_>, id: UnitId, hits: &[Hit]) {
         }
         let source = h.from.and_then(|f| cx.zone.unit(f)).filter(|s| s.alive).map(|s| (s.id, s.faction));
         if let Some((sid, _)) = source.filter(|_| amount.0 > 0) {
-            let steal = offence(cx.zone.unit(sid).expect("source"), now).lifesteal;
+            let steal = offence(unit_or_skip!(cx, sid, "flush::flush_unit"), now).lifesteal;
             if steal > 0 {
                 let heal = round_points(i64::from(amount.0) * i64::from(steal) / 1000);
                 queue_hit(
@@ -137,7 +137,7 @@ fn flush_unit(cx: &mut Ctx<'_>, id: UnitId, hits: &[Hit]) {
         if let Some((sid, sf)) = source {
             let fights = !matches!(controller, Controller::Player | Controller::Npc);
             if fights && combat != CombatState::Combat && is_enemy(faction, sf) {
-                let u = cx.zone.unit_mut(id).expect("victim");
+                let u = unit_mut_or_skip!(cx, id, "flush::flush_unit");
                 u.target = Some(sid);
                 u.combat = CombatState::Combat;
                 if !u.awake && !cx.ops.wake.contains(&id) {

@@ -28,7 +28,7 @@ use jane_core::{Angle, EffectId, Fx, Key, Milli, Sfc32, SpellId, UnitDefId, Vec2
 use jane_data::{Controller, Faction, SpellDef, SpellKind, SpellPower, WorldSpell};
 
 use crate::actions::Subject;
-use crate::ctx::Ctx;
+use crate::ctx::{Ctx, unit_or_skip};
 use crate::event::{Event, EventKind, SfxKind, SpellError, ToastKind};
 use crate::ids::{Seat, UnitId};
 use crate::input::InputFrame;
@@ -128,10 +128,13 @@ pub fn roll_power(rng: &mut Sfc32, u: &Unit, p: &SpellPower) -> i64 {
 
 /// A spell's blow from `caster` (`makeHit`): the power roll, then the crit roll (a status's
 /// `crit_one_in` beats the 1 in 20), doubled on a crit and rounded to a whole point.
-fn make_hit(cx: &mut Ctx<'_>, caster: UnitId, spell: &SpellDef, to: UnitId, status: Option<EffectId>) -> Hit {
+fn make_hit(cx: &mut Ctx<'_>, caster: UnitId, spell: &SpellDef, to: UnitId, status: Option<EffectId>) -> Option<Hit> {
     let now = cx.world.tick;
+    let Some(ix) = cx.zone.unit_ix(caster) else {
+        cx.missing_unit(caster, "combat::make_hit");
+        return None;
+    };
     let zone = &mut *cx.zone;
-    let ix = zone.unit_ix(caster).expect("a caster in its zone");
     let u = &zone.units[ix];
     let one_in = match offence(u, now).crit_one_in {
         0 => CRIT_ONE_IN,
@@ -140,7 +143,7 @@ fn make_hit(cx: &mut Ctx<'_>, caster: UnitId, spell: &SpellDef, to: UnitId, stat
     let power = spell.power.as_ref().map_or(0, |p| roll_power(&mut zone.rng, &zone.units[ix], p));
     let crit = zone.rng.below(one_in) == 0;
     let amount = round_points(if crit { power * 2 } else { power });
-    Hit { to, amount, school: spell.school, from: Some(caster), crit, status }
+    Some(Hit { to, amount, school: spell.school, from: Some(caster), crit, status })
 }
 
 /// What a unit can cast: the def's book (or its phase's), and for a seat's body everything the
@@ -245,8 +248,9 @@ pub fn try_cast_with(
         SpellKind::Ally => {
             let to = friend.unwrap_or(caster);
             if spell.power.is_some() {
-                let hit = make_hit(cx, caster, spell, to, None);
-                queue_hit(cx, hit);
+                if let Some(hit) = make_hit(cx, caster, spell, to, None) {
+                    queue_hit(cx, hit);
+                }
             }
             if let Some(e) = spell.effect {
                 apply_effect(cx, to, e, Some(caster));
@@ -366,7 +370,7 @@ fn friend_along(cx: &Ctx<'_>, c: &Unit, spell: &SpellDef, aim: Angle) -> Option<
 /// just loses ties to what she faces. A swing that finds nobody is still a swing. Ties go to
 /// the lower id.
 fn cast_melee(cx: &mut Ctx<'_>, caster: UnitId, id: SpellId, spell: &SpellDef, locked: Option<UnitId>) {
-    let c = Caster::of(cx.zone.unit(caster).expect("caster"));
+    let c = Caster::of(unit_or_skip!(cx, caster, "combat::cast_melee"));
     let range = i64::from(spell.range.0);
     let mut victim =
         locked.filter(|&t| cx.zone.unit(t).is_some_and(|u| is_enemy(c.faction, u.faction) && c.reach_to(u) <= range));
@@ -405,11 +409,11 @@ fn cast_melee(cx: &mut Ctx<'_>, caster: UnitId, id: SpellId, spell: &SpellDef, l
     }
     cx.emit(EventKind::Swing { unit: caster, at: c.pos, facing: c.facing });
     let Some(v) = victim else { return };
-    let vpos = cx.zone.unit(v).expect("victim").pos;
+    let vpos = unit_or_skip!(cx, v, "combat::cast_melee").pos;
     if let Some(u) = cx.zone.unit_mut(caster) {
         face_vector(u, i64::from(vpos.x.0 - u.pos.x.0), i64::from(vpos.y.0 - u.pos.y.0));
     }
-    let hit = make_hit(cx, caster, spell, v, spell.effect);
+    let Some(hit) = make_hit(cx, caster, spell, v, spell.effect) else { return };
     queue_hit(cx, hit);
     // What a status adds to every melee blow (Firelash, Winterbite).
     let now = cx.world.tick;
@@ -466,7 +470,7 @@ fn cast_bolt(
     target: Option<UnitId>,
     aim: Option<Angle>,
 ) {
-    let c = Caster::of(cx.zone.unit(caster).expect("caster"));
+    let c = Caster::of(unit_or_skip!(cx, caster, "combat::cast_bolt"));
     let dir = match (aim, target.and_then(|t| cx.zone.unit(t))) {
         (Some(a), _) => a,
         (None, Some(t)) if t.pos != c.pos => bearing(c.pos, t.pos),
@@ -488,7 +492,7 @@ fn cast_bolt(
         } else {
             dir
         };
-        let hit = make_hit(cx, caster, spell, caster, spell.effect);
+        let Some(hit) = make_hit(cx, caster, spell, caster, spell.effect) else { return };
         // Born past her chest, unless that is through something that stops a shot: hard against a
         // shut gate the start would sit inside its cells, and a flight never tests the cell it
         // starts in. Then it is born at her centre and the gate stops it on its first moves.
@@ -515,7 +519,7 @@ fn cast_bolt(
 /// first pulse comes the row's `delay` after the cast: until then it is only seen.
 fn cast_ground(cx: &mut Ctx<'_>, caster: UnitId, id: SpellId, spell: &SpellDef, target: Option<UnitId>) {
     let Some(pool) = spell.ground else { return };
-    let c = cx.zone.unit(caster).expect("caster");
+    let c = unit_or_skip!(cx, caster, "combat::cast_ground");
     let (faction, cpos) = (c.faction, c.pos);
     let pos = target.and_then(|t| cx.zone.unit(t)).map_or(cpos, |t| t.pos);
     let now = cx.world.tick;

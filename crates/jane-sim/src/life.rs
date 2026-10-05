@@ -16,7 +16,7 @@
 use jane_core::{Milli, Tick, Vec2};
 use jane_data::Controller;
 
-use crate::ctx::Ctx;
+use crate::ctx::{Ctx, unit_mut_or_skip};
 use crate::event::{EventKind, ToastKind};
 use crate::flush::reset_phases;
 use crate::ids::{Seat, UnitId};
@@ -130,7 +130,7 @@ fn respawn(cx: &mut Ctx<'_>, id: UnitId) {
     }
     let (hx, hy) = u.home.cell();
     let pos = cx.rt.grid.nearest_roomy(hx, hy, RESPAWN_RADIUS).map_or(u.home, |(x, y)| Vec2::centre(x, y));
-    let u = cx.zone.unit_mut(id).expect("unit");
+    let u = unit_mut_or_skip!(cx, id, "life::respawn");
     u.pos = pos;
     u.path = None;
     u.alive = true;
@@ -145,7 +145,9 @@ fn respawn(cx: &mut Ctx<'_>, id: UnitId) {
     u.synced = now;
     reset_phases(u);
     let key = u.key;
-    cx.rt.enter(cx.zone.unit(id).expect("unit"));
+    if let Some(u) = cx.zone.unit(id) {
+        cx.rt.enter(u);
+    }
     if let Some(k) = key {
         cx.world.flags.remove(&FlagKey::Dead(k));
     }
@@ -198,10 +200,12 @@ pub fn revive_player(cx: &mut Ctx<'_>, seat: Seat) {
                 .map_or(Vec2::centre(mx, my), |(x, y)| Vec2::centre(x, y))
         }
     };
-    let u = cx.zone.unit_mut(body).expect("her body");
+    let u = unit_mut_or_skip!(cx, body, "life::revive_player");
     u.pos = pos;
     u.path = None;
-    cx.rt.enter(cx.zone.unit(body).expect("her body"));
+    if let Some(u) = cx.zone.unit(body) {
+        cx.rt.enter(u);
+    }
     cx.emit(EventKind::Respawn { unit: body });
     cx.emit(EventKind::Toast(if rest.is_some() { ToastKind::WokeAtRest } else { ToastKind::WokeAtDoor }));
 }
