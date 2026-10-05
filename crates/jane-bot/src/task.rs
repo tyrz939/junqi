@@ -483,7 +483,8 @@ impl Task {
                         cmds: vec![Command::Cast { spell: *spell, on: None }],
                     });
                 }
-                if *t > 45 { Status::Done } else { Status::Act(Act::idle()) }
+                // A cast with a cast time is let land first (it lands where it was cast at).
+                if *t > 45 && (v.fight().cast.is_none() || *t > 300) { Status::Done } else { Status::Act(Act::idle()) }
             }
             Task::Hunt(id) => {
                 cx.fight.hunt = Some(*id);

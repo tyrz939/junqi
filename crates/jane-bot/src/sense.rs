@@ -209,7 +209,11 @@ pub fn junk_slot(v: &View<'_>) -> Option<u8> {
                 let asked = wanted.contains(&s.item) || makings.contains(&s.item);
                 let held_back = if story_too { bait_short && s.item == meat } else { d.story };
                 let free_of_log = !asked && !held_back;
-                !d.kept() && (free_of_log || spare)
+                // What Repair is paid in (wood, iron) keeps one stack whatever the bag: a lesson
+                // or a stair ahead asks for it, and it is not always to be found again on the
+                // way (the School's woodwork steps, seed 5 of the Phase 1 merge).
+                let last_makings = matches!(d.id, "wood" | "iron") && stacks(s.item) <= 1;
+                !d.kept() && !last_makings && (free_of_log || spare)
             })
             .min_by_key(|(i, s)| {
                 let d = cat.combat.item(s.item);

@@ -329,6 +329,7 @@ impl Sim {
     /// next step re-runs it exactly where the unbroken game would. No step.
     pub fn from_state(mut state: GameState, bps: Blueprints) -> Sim {
         state.open = false;
+        state.table_delay = 0;
         for i in 1..state.players.len() {
             let (zone, unit) = {
                 let p = &mut state.players[i];
@@ -385,6 +386,7 @@ pub struct Form<'a> {
     day: u32,
     name: Cow<'a, str>,
     open: bool,
+    table_delay: u8,
     next: Counters,
     rng: Sfc32,
     players: Cow<'a, [PlayerState]>,
@@ -455,6 +457,7 @@ impl<'a> Form<'a> {
             day,
             name,
             open,
+            table_delay,
             next,
             rng,
             players,
@@ -481,6 +484,7 @@ impl<'a> Form<'a> {
             day: *day,
             name: Cow::Borrowed(name),
             open: *open,
+            table_delay: *table_delay,
             next: *next,
             rng: *rng,
             players: Cow::Borrowed(players),
@@ -511,6 +515,7 @@ impl<'a> Form<'a> {
             day,
             name,
             open,
+            table_delay,
             next,
             rng,
             players,
@@ -560,6 +565,7 @@ impl<'a> Form<'a> {
             day,
             name: name.into_owned(),
             open,
+            table_delay,
             next,
             rng,
             players: players.into_owned(),

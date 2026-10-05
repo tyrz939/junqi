@@ -251,6 +251,18 @@ pub enum EventKind {
         spell: SpellId,
         why: SpellError,
     },
+    /// A seat began a cast with a cast time; it lands at `done` (a `Cast`) unless stopped.
+    CastBegin {
+        unit: UnitId,
+        spell: SpellId,
+        done: jane_core::Tick,
+    },
+    /// A cast that was building stopped without landing (a stun, a heavy blow, Esc, its target
+    /// gone): nothing was spent.
+    CastStopped {
+        unit: UnitId,
+        spell: SpellId,
+    },
     /// A spell landed: a melee blow, or a bolt at its end.
     Impact {
         spell: SpellId,
@@ -335,6 +347,34 @@ pub enum EventKind {
     /// Something valid play never does happened, and the tick skipped it rather than abort the
     /// host (and every guest with it). Dev tools show it; play ignores it.
     Dev(DevNote),
+    // --- the fight's feel (`feel.rs`) --------------------------------------------------------
+    /// A foe began to wind up a blow (PLAY-PLAN.md §2.1): `at` is where it was aimed (the
+    /// victim, a bolt's mark, a pool's middle), `lands` when it comes. The presenter raises it,
+    /// lays the decal and sounds the cue; `interruptible` picks the tell's colour.
+    Windup {
+        unit: UnitId,
+        spell: SpellId,
+        at: Vec2,
+        lands: jane_core::Tick,
+        interruptible: bool,
+    },
+    /// A wind-up broken before it landed (a stun, a jolt, a knock).
+    Interrupted {
+        unit: UnitId,
+        spell: SpellId,
+        at: Vec2,
+    },
+    /// She hopped.
+    Hop {
+        unit: UnitId,
+        at: Vec2,
+        dir: jane_core::Angle,
+    },
+    /// A blow passed through her hop.
+    Evaded {
+        unit: UnitId,
+        at: Vec2,
+    },
 }
 
 /// What an [`EventKind::Dev`] says.

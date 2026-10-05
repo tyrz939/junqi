@@ -115,7 +115,22 @@ pub fn aim(a: Angle) -> InputFrame {
     InputFrame { aim: Some(a), ..InputFrame::IDLE }
 }
 
+/// Press `spell_id` and, if it has a cast time (PLAY-PLAN §2.1), hold `frame` until it lands or
+/// stops: what a test of the spell's effect means by "she cast it".
 pub fn cast(s: &mut Sim, seat: u8, spell_id: &str, frame: InputFrame, on: Option<UnitId>) {
+    press_only(s, seat, spell_id, frame, on);
+    for _ in 0..200 {
+        if s.state().players[usize::from(seat)].fight.cast.is_none() {
+            break;
+        }
+        let mut frames = [InputFrame::IDLE; 4];
+        frames[usize::from(seat)] = frame;
+        s.step(&StepInput { frames, commands: &[] });
+    }
+}
+
+/// Press `spell_id` and step once: a cast with a cast time is left building.
+pub fn press_only(s: &mut Sim, seat: u8, spell_id: &str, frame: InputFrame, on: Option<UnitId>) {
     cmd_with(s, Some(seat), Command::Cast { spell: spell(spell_id), on }, frame);
 }
 

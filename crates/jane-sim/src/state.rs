@@ -38,10 +38,15 @@ use crate::tuning::{BAR_SLOTS, CRAFT_INPUTS, HELD_SLOTS, STORE_SLOTS};
 /// 9: food comes back (`Prop::regrow`, `regrow.rs`).
 /// 10: cupboards (`GameState::stores`, `store.rs`).
 /// 11: side quests set aside keep their kills (`Quests::set_aside`, `quests::abandon`).
+/// 12: (the Phase 1 branch's, folded into 15.)
 /// 13: made fires, rest by a fire over time, growth unbanked until a rest (`GameState::fires_made`,
-/// `Prop::burns_until`, `Unit::seated`, `Growth::unbanked`, `fire.rs`). (12 is another branch's.)
+/// `Prop::burns_until`, `Unit::seated`, `Growth::unbanked`, `fire.rs`).
 /// 14: the key ring past the bag's slots (`PlayerState::bag`, `tuning::RING_SLOTS`).
-pub const SAVE_VERSION: u16 = 14;
+/// 15: the fight (PLAY-PLAN §2.1, Phase 1): the player's side, `PlayerState::fight` (her target,
+/// her cast building, the press queued behind it, her swings and her click-walk), a frame's target
+/// and free-aim bit, a bolt's `seek`; and the feel (`feel.rs`): `Unit::feel` (wind-up, hop,
+/// hitlag, knock) and `GameState::table_delay`.
+pub const SAVE_VERSION: u16 = 15;
 
 /// A fixed-size bit set (trigger bits, consequences done).
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -113,6 +118,10 @@ pub struct GameState {
     pub name: String,
     /// Whether anyone else may sit down. A save always loads closed.
     pub open: bool,
+    /// The LAN table's input delay D in frames (`Command::Table`; 0 alone): every foe's wind-up
+    /// is that much longer, so a guest reacts in a solo player's window (PLAY-PLAN.md §2.1).
+    /// A save always loads at 0.
+    pub table_delay: u8,
     pub next: Counters,
     /// The world stream: weather on the hour and ecology every ten game minutes, drawn in a
     /// fixed order (§4.4, `living.rs`). Nothing else draws from it.
@@ -469,6 +478,84 @@ pub struct PlayerState {
     pub parked: Option<Box<Unit>>,
     /// The sticky unit of aim assist (§5.4). Owned by the aim-assist unit.
     pub assist: Option<Assisted>,
+    /// Her side of a fight (PLAY-PLAN §2.1; `target.rs`, `cast.rs`, `walk.rs`).
+    pub fight: Fight,
+}
+
+/// A seat's side of a fight: what she has targeted, the cast she is building, the press waiting
+/// behind it, the foe she swings at, and where a click sent her. Her own struct, apart from the
+/// body's: the AI's wind-ups and the hop live on `Unit`.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Fight {
+    /// The frame's target as validated at her last step (`target::validate`).
+    pub target: Option<crate::input::TargetRef>,
+    pub cast: Option<PendingCast>,
+    /// A press that came while she was busy, inside the queue window (`QUEUE_TICKS`).
+    pub queued: Option<QueuedCast>,
+    /// Swinging at this foe on the swing timer.
+    pub auto: Option<UnitId>,
+    pub walk: Option<Box<ClickWalk>>,
+    /// Held still at her last step (`cast::held_still`): a hold that lands stops her cast once.
+    pub held: bool,
+}
+
+/// A cast building (`cast.rs`): it lands at `done` unless something stops it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PendingCast {
+    pub spell: SpellId,
+    /// What a friendly spell lands on (`Command::Cast`'s `on`).
+    pub on: Option<UnitId>,
+    /// What it is cast at; `None`: along the aim.
+    pub at: Option<crate::input::TargetRef>,
+    /// The raw aim when it began, and its assist profile: a free-aim cast flies along the
+    /// frame's aim at release, or this one if the frame has none.
+    pub aim: Option<Angle>,
+    pub assist: crate::input::AssistProfile,
+    pub started: Tick,
+    pub done: Tick,
+}
+
+/// A press held for the moment she is free.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct QueuedCast {
+    pub spell: SpellId,
+    pub on: Option<UnitId>,
+    /// Dropped after this tick.
+    pub until: Tick,
+}
+
+/// What she does where a click-walk ends.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum WalkThen {
+    Stop,
+    /// Into reach, then swing.
+    Attack(UnitId),
+    /// Into reach of it, then use it (talk to a person, open a door, sit at a fire).
+    Use(crate::input::TargetRef),
+    /// Into the spell's range of her target, then cast it.
+    Cast {
+        spell: SpellId,
+        on: Option<UnitId>,
+    },
+}
+
+/// A click-walk (`walk.rs`): a capped path through seen ground, re-planned toward a goal that
+/// moves.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ClickWalk {
+    /// Where the click was (ground), or what she walks to (`then`'s thing).
+    pub to: Vec2,
+    pub then: WalkThen,
+    pub cells: Vec<CellIx>,
+    /// The next cell to walk to.
+    pub at: u16,
+    pub repath_at: Tick,
+    /// Gives up at this tick.
+    pub until: Tick,
+    /// Her health when it last looked: lower means she was hit, and a hit stops the walk.
+    pub health: Milli,
+    /// Ticks without moving.
+    pub stuck: u8,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -625,8 +712,8 @@ pub struct Drop {
     pub born: Tick,
 }
 
-/// A bolt in flight (`combat.ts Projectile`). It flies straight and never homes; its blow was
-/// rolled when it was cast.
+/// A bolt in flight (`combat.ts Projectile`). A free-aimed bolt flies straight; one cast at a
+/// target seeks it (`seek`). Its blow was rolled when it was cast.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Projectile {
     pub id: ProjId,
@@ -645,6 +732,20 @@ pub struct Projectile {
     /// The blow it carries, whole points.
     pub hit: Milli,
     pub crit: bool,
+    /// What it was cast at (`flight.rs`): it turns toward it at a capped rate.
+    pub seek: Seek,
+}
+
+/// A targeted bolt's mark.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub enum Seek {
+    /// Free-aimed: straight on.
+    #[default]
+    None,
+    /// A unit: it curves after it while it lives.
+    Unit(UnitId),
+    /// A prop's middle: it ends there and touches what answers its school.
+    Point(Vec2),
 }
 
 /// A pool on the ground. The combat unit owns its final shape.
@@ -733,6 +834,8 @@ pub struct Unit {
     pub hold: u8,
     pub phase: u8,
     pub snake: Option<Box<SnakeBody>>,
+    /// The fight's feel (`feel.rs`): a foe's wind-up, hitlag, knockback, her hop.
+    pub feel: crate::feel::Feel,
     /// Seated at a fire, mending (`fire.rs`). Only a seat's body, and only under `fires_made`.
     pub seated: Option<Box<Seated>>,
 }

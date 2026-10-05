@@ -23,8 +23,15 @@ pub fn def_of(u: &Unit) -> &'static UnitDef {
     jane_data::catalog().combat.unit(u.def)
 }
 
+/// `strength x HP_PER_STRENGTH`, times its row's `hp_scale` (a boss's shorter fight), whole points.
 pub fn max_hp(u: &Unit) -> Milli {
-    Milli::from_points(i32::from(u.strength) * HP_PER_STRENGTH)
+    let full = i32::from(u.strength) * HP_PER_STRENGTH;
+    let scale = def_of(u).hp_scale.0;
+    if scale == 1000 {
+        Milli::from_points(full)
+    } else {
+        Milli::from_points((i64::from(full) * i64::from(scale) / 1000).max(1) as i32)
+    }
 }
 
 pub fn max_mp(u: &Unit) -> Milli {
@@ -100,6 +107,7 @@ pub fn new_unit(
         hold: 0,
         phase: 0,
         snake,
+        feel: crate::feel::Feel::default(),
         seated: None,
     };
     u.hp = max_hp(&u);

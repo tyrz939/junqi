@@ -266,6 +266,71 @@ pub const WATCH_Y_FX: i32 = 80 * FX_ONE;
 /// within this many.
 pub const PRESENCE_NUDGE_RADIUS: i32 = 6;
 
+// --- the player's side of a fight (PLAY-PLAN §2.1: `target.rs`, `cast.rs`, `walk.rs`) ---------
+
+/// A seat's global cooldown: 1 s. The AI keeps [`GCD`]; a swing is off both.
+pub const PLAYER_GCD: Tick = Tick(60);
+/// A press this close to her being free (her cast landing, her GCD ending) waits for it: 200 ms.
+pub const QUEUE_TICKS: u32 = 12;
+/// A hard target farther than this from her (centre to centre) is let go: about two screens.
+pub const TARGET_KEEP_FX: i64 = 48 * CELL_FX as i64;
+/// How far Tab (RB, LB) looks for foes, and the soft target on an attack with none.
+pub const TAB_REACH_FX: i64 = 24 * CELL_FX as i64;
+/// "In front": within this of her facing, either side.
+pub const FRONT_HALF: i32 = Angle::from_degrees(90).0 as i32;
+/// A bolt cast at a unit turns toward it at most this far a tick.
+pub const SEEK_TURN: i32 = Angle::from_degrees(6).0 as i32;
+/// A click-walk plans at most this far at once, in cells; a longer walk plans again at the end.
+pub const WALK_PATH_CELLS: u32 = 160;
+/// A click-walk gives up after this long: 30 s.
+pub const WALK_GIVE_UP: Tick = Tick(30 * TICK_RATE);
+/// A click-walk's extra cost (tenths of a cell) for a cell off a made way, and for a dark one:
+/// it prefers roads and lit ground, never at more than a short detour.
+pub const WALK_OFF_ROAD: u32 = 4;
+pub const WALK_DARK: u32 = 3;
+/// Ticks without moving that end a click-walk: she has got as near as she can.
+pub const WALK_STUCK: u8 = 20;
+/// Within this of a clicked point she has arrived.
+pub const WALK_ARRIVED_FX: i64 = CELL_FX as i64 / 2;
+/// Auto-attack holds a foe this far past her reach (a knock and a cell) before it lets go.
+pub const AUTO_SLACK_FX: i64 = CELL_FX as i64 + 8 * FX_ONE as i64;
+/// A walk into reach of a foe stops this far inside it, so its next step does not drop the swing.
+pub const WALK_REACH_SLACK_FX: i64 = FX_ONE as i64 * 2;
+// --- the fight's feel (feel.rs; PLAY-PLAN.md §2.1, research-combat §4.5 to 4.8) ---------------
+
+/// Her hop: what it costs, how far it goes (1.5 m) over how many ticks, the ticks (from its
+/// first) a blow passes through her, and how soon (from its start) she may hop again.
+pub const HOP_ENERGY: Milli = Milli(30_000);
+pub const HOP_FX: i32 = CELL_FX * 3 / 2;
+pub const HOP_TICKS: u32 = 10;
+pub const HOP_IFRAMES: u32 = 7;
+pub const HOP_EVERY: Tick = Tick(18);
+/// How the hop's length is laid over its ticks, in hundredths: quick off the mark, landing soft.
+pub const HOP_EASE: [i32; HOP_TICKS as usize] = [16, 14, 13, 12, 10, 9, 8, 7, 6, 5];
+
+/// Hitlag, in ticks: her swing landing, a crit or a kill, and a boss changing phase or falling.
+/// Hers never passes a tenth of her swing's cycle; it never stacks (the longest wins).
+pub const LAG_SWING: u32 = 4;
+pub const LAG_SWING_BIG: u32 = 6;
+pub const LAG_BOSS: u32 = 10;
+
+/// Knockback, in px, laid over `KNOCK_TICKS`: her swing on a small or middling foe, an
+/// Explosion's burst, a heavy foe's blow on her.
+pub const KNOCK_SWING_PX: i32 = 6;
+pub const KNOCK_BURST_PX: i32 = 10;
+pub const KNOCK_HEAVY_PX: i32 = 4;
+pub const KNOCK_TICKS: u8 = 4;
+/// Bodies at least this wide are heavy (nothing of hers pushes them; they push her); under
+/// `SMALL_BOUNDS_FX` they are small (her swing breaks their wind-up).
+pub const HEAVY_BOUNDS_FX: i32 = CELL_FX * 5 / 4;
+pub const SMALL_BOUNDS_FX: i32 = CELL_FX;
+/// A unit row resisting physical blows at least this much is plated: it is not pushed.
+pub const PLATED_RESIST: Permille = Permille(500);
+/// A melee wind-up lands only on a victim inside this half-arc of the line it began on (45°:
+/// a 90° arc).
+pub const WINDUP_HALF_ARC: i32 = 8192;
+/// The most input delay a table may add to the wind-ups (`jane-net`'s `MAX_DELAY`).
+pub const TABLE_DELAY_MAX: u8 = 6;
 // --- fires (PLAY-PLAN.md §2.2, `fire.rs`) ---------------------------------------------------
 
 /// Phase 2: made fires, a fire's rest over time, growth unbanked until a rest. New Game copies

@@ -61,6 +61,12 @@ pub fn flush(cx: &mut Ctx<'_>) {
     cx.scratch.hits[zi].clear();
 }
 
+/// Step 10's last part: the pushes under way move their bodies (`feel::step_knocks`), with the
+/// walk's collision, never onto a plate.
+pub fn knocks(cx: &mut Ctx<'_>) {
+    crate::feel::step_knocks(cx);
+}
+
 fn flush_unit(cx: &mut Ctx<'_>, id: UnitId, hits: &[Hit]) {
     let now = cx.world.tick;
     let owner = cx.party.seat_of(id);
@@ -81,6 +87,12 @@ fn flush_unit(cx: &mut Ctx<'_>, id: UnitId, hits: &[Hit]) {
                 let at = u.pos;
                 cx.emit(EventKind::Heal { unit: id, from: h.from, at, amount: gained });
             }
+            continue;
+        }
+        // Mid-hop, on its ticks 1 to 7, a blow passes through her (`feel.rs`).
+        if crate::feel::evading(u, now) {
+            let at = u.pos;
+            cx.emit(EventKind::Evaded { unit: id, at });
             continue;
         }
         let mut dmg = i64::from(h.amount.0) * i64::from(resist_factor(u, h.school, now));
@@ -173,6 +185,7 @@ fn enter_phases(cx: &mut Ctx<'_>, id: UnitId, source: Option<UnitId>) {
             return;
         }
         u.phase += 1;
+        crate::feel::phase_changed(cx, id);
         if let Some(list) = row.on_enter {
             let prev = cx.actor;
             cx.actor = source.and_then(|s| cx.party.seat_of(s));
@@ -210,6 +223,7 @@ pub fn kill_unit(cx: &mut Ctx<'_>, id: UnitId, killer: Option<UnitId>) {
     u.synced = now;
     let (pos, def_id, key) = (u.pos, u.def, u.key);
     let def = cx.cat.combat.unit(def_id);
+    crate::feel::on_death(cx, id, killer);
     clear_statuses(cx, id);
     forget_unit(cx.zone, cx.rt, cx.party, id);
     cx.emit(EventKind::Death { unit: id, def: def_id, at: pos });

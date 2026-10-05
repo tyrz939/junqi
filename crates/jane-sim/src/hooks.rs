@@ -46,6 +46,21 @@ pub fn world_verb(cx: &mut Ctx<'_>, caster: UnitId, verb: WorldSpell) -> bool {
     world_spell_on(cx, caster, ix)
 }
 
+/// A world verb cast at one prop (her target, `cast.rs`): it lands there or says why not.
+pub fn world_verb_at(cx: &mut Ctx<'_>, caster: UnitId, verb: WorldSpell, ix: crate::ids::PropIx) -> bool {
+    match interact::world_spell_fits(cx, ix, verb) {
+        Ok(()) => world_spell_on(cx, caster, ix),
+        Err(shaded) => {
+            cx.emit(EventKind::Toast(match verb {
+                WorldSpell::Repair => ToastKind::NothingToRepair,
+                WorldSpell::Grow if shaded => ToastKind::NothingGrowsWithoutLight,
+                WorldSpell::Grow => ToastKind::NothingGrows,
+            }));
+            false
+        }
+    }
+}
+
 /// A bolt of `school` ended at `at`: every unhidden prop not yet on that answers the school and
 /// whose middle is within `touch` is switched on and used, and its `use` list runs for `from`.
 pub fn school_touch(cx: &mut Ctx<'_>, school: School, at: Vec2, from: Option<UnitId>, touch: Fx) {

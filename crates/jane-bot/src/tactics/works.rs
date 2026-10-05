@@ -263,7 +263,10 @@ fn bolt(v: &View<'_>, t: &Unit, spells: &[SpellId]) -> Option<Act> {
     spells
         .iter()
         .find(|&&s| {
-            knows(v, s) && fight::ready(me, s, v.tick()) && gap <= i64::from(cat.combat.spell(s).range.0) * 9 / 10
+            knows(v, s)
+                && fight::ready(me, s, v.tick())
+                && fight::may_cast(me, t, s)
+                && gap <= i64::from(cat.combat.spell(s).range.0) * 9 / 10
         })
         .map(|&s| Act {
             frame: InputFrame { aim: Some(dir), ..InputFrame::IDLE },
@@ -295,7 +298,15 @@ fn snipe(v: &View<'_>, cx: &mut Ctx, t: &Unit) -> Option<Act> {
     if good(me.pos) {
         cx.fight.retreat = None;
         let icy = ["icebolt", "spark"].map(sense::spell);
-        return Some(bolt(v, t, &icy).unwrap_or(Act::hold(InputFrame { aim: Some(dir), ..InputFrame::IDLE })));
+        if let Some(a) = bolt(v, t, &icy) {
+            return Some(a);
+        }
+        // Spent: away to mend her mana out of its sight, and back to it in a minute.
+        let cat = jane_data::catalog();
+        if icy.iter().all(|&s| me.mp < cat.combat.spell(s).mp) {
+            return let_be(v, cx, t);
+        }
+        return Some(Act::hold(InputFrame { aim: Some(dir), ..InputFrame::IDLE }));
     }
     let to = match cx.fight.retreat.filter(|&r| good(r)) {
         Some(r) => r,
@@ -337,8 +348,23 @@ fn from_dark(v: &View<'_>, cx: &mut Ctx, t: &Unit) -> Option<Act> {
         if let Some(a) = grid(v, t) {
             return Some(a);
         }
-        let shock = ["spark", "icebolt"].map(sense::spell);
-        return Some(bolt(v, t, &shock).unwrap_or(Act::hold(InputFrame { aim: Some(dir), ..InputFrame::IDLE })));
+        // The spark, and only the spark, unless it shrugs the spark off (a sentry takes a fifth
+        // of one): a frost bolt carries its own light to what sees by light, and with a 1 s GCD
+        // one between sparks every time showed her to the Foreman (the seed-1 stalls of the
+        // Phase 1 merge). What shrugs it off gets the frost, the spark while the frost cools.
+        let shrugs = jane_sim::status::resist_factor(t, jane_core::action::School::Shock, v.tick()) < 500;
+        let shock: &[_] = if shrugs { &["icebolt", "spark"] } else { &["spark"] };
+        let shock: Vec<_> = shock.iter().map(|s| sense::spell(s)).collect();
+        if let Some(a) = bolt(v, t, &shock) {
+            return Some(a);
+        }
+        // Spent: standing in its sight with an empty well is waiting to be shot. Away to
+        // mend her mana, and back to it in a minute.
+        let cat = jane_data::catalog();
+        if shock.iter().all(|&s| me.mp < cat.combat.spell(s).mp) {
+            return let_be(v, cx, t);
+        }
+        return Some(Act::hold(InputFrame { aim: Some(dir), ..InputFrame::IDLE }));
     }
     let to = match cx.fight.retreat.filter(|&r| good(r)) {
         Some(r) => r,

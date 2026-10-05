@@ -51,6 +51,10 @@ fn a_session_hosted_from_new_game_is_a_tape_that_replays_to_every_hash() {
     assert_eq!(tape.frames, t.host.sim().state().frame);
     assert_eq!(tape.final_hash(), Some(t.host.sim().hash()));
     assert!(tape.runs.iter().any(|r| r.commands.iter().any(|c| matches!(c.cmd, jane_sim::Command::Join { .. }))));
+    // The table's delay is on the tape, and every foe's wind-up at it is D longer.
+    let d = HostConfig::default().delay;
+    assert!(tape.runs[0].commands.iter().any(|c| c.cmd == jane_sim::Command::Table { delay: d }));
+    assert_eq!(t.host.sim().state().table_delay, d);
     // Its bytes, re-simulated offline from New Game, land on every hash the host saw.
     let back = jane_sim::replay::Tape::decode(&tape.encode()).unwrap();
     let v = jane_sim::replay::verify_tape(&back, bps()).unwrap_or_else(|e| panic!("{e}"));

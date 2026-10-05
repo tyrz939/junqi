@@ -8,7 +8,7 @@ mod field;
 
 use field::*;
 use jane_core::angle::iatan2;
-use jane_core::{Angle, Milli, Sfc32, Tick, Vec2};
+use jane_core::{Angle, Milli, Sfc32, Vec2};
 use jane_sim::state::Assisted;
 use jane_sim::tuning::{ASSIST_MOUSE, ASSIST_PAD};
 use jane_sim::{AssistProfile, Command, DevOp, InputFrame, Seat, Sim, StampedCommand, StepInput, UnitId};
@@ -26,11 +26,23 @@ fn bearing_to(s: &Sim, from: UnitId, to: UnitId) -> Angle {
 /// caster.
 fn bolt_heading(s: &mut Sim, raw: Angle, p: AssistProfile) -> Angle {
     rested(s, me(s));
-    let before = s.state().zone(Z).unwrap().projectiles.len();
-    cast(s, 0, "icebolt", frame(raw, p), None);
+    landed(s, "icebolt", frame(raw, p))
+}
+
+/// Cast `spell_id` holding `fr` through its cast time (the aim is read at release, PLAY-PLAN
+/// §2.1); the heading of the bolt it lets go.
+fn landed(s: &mut Sim, spell_id: &str, fr: InputFrame) -> Angle {
+    let before = s.state().next.proj;
+    press_only(s, 0, spell_id, fr, None);
+    for _ in 0..120 {
+        if s.state().next.proj != before {
+            break;
+        }
+        walk(s, 1, fr);
+    }
     let zs = s.state().zone(Z).unwrap();
-    assert_eq!(zs.projectiles.len(), before + 1, "the cast went off");
-    zs.projectiles.last().unwrap().heading
+    assert_ne!(s.state().next.proj, before, "the cast went off");
+    zs.projectiles.last().expect("in flight").heading
 }
 
 fn toward(raw: Angle, d: i32, magnet: i32) -> Angle {
@@ -49,17 +61,16 @@ fn fresh() -> Sim {
 fn the_pad_pulls_the_mouse_barely_and_off_not_at_all() {
     let mut s = fresh();
     let foe = spawn(&mut s, "skeleton", 20, 12);
+    rooted(&mut s, foe);
     let bearing = bearing_to(&s, me(&s), foe);
     let d = Angle::EAST.diff(bearing);
     assert!(d > i32::from(ASSIST_MOUSE.cone.0) && d < i32::from(ASSIST_PAD.cone.0) && d > i32::from(ASSIST_PAD.snap.0));
     assert_eq!(bolt_heading(&mut s, Angle::EAST, AssistProfile::Pad), toward(Angle::EAST, d, 350));
     let now = s.state().tick;
-    assert_eq!(
-        s.state().players[0].assist,
-        Some(Assisted { unit: foe, until: Tick(now.0 - 1).after(ASSIST_PAD.sticky_ticks) })
-    );
+    assert_eq!(s.state().players[0].assist, Some(Assisted { unit: foe, until: now.after(ASSIST_PAD.sticky_ticks) }));
     let mut s = fresh();
     let foe = spawn(&mut s, "skeleton", 20, 12);
+    rooted(&mut s, foe);
     assert_eq!(bolt_heading(&mut s, Angle::EAST, AssistProfile::Mouse), Angle::EAST, "outside the mouse's cone");
     assert_eq!(s.state().players[0].assist, None);
     assert_eq!(bolt_heading(&mut s, Angle::EAST, AssistProfile::Off), Angle::EAST);
@@ -72,6 +83,7 @@ fn the_pad_pulls_the_mouse_barely_and_off_not_at_all() {
     // Out of the spell's reach, nothing is a candidate.
     let mut s = fresh();
     let far = spawn(&mut s, "skeleton", 40, 12);
+    rooted(&mut s, far);
     let raw = bearing_to(&s, me(&s), far).wrapping_add(-900);
     assert_eq!(bolt_heading(&mut s, raw, AssistProfile::Pad), raw);
 }
@@ -84,6 +96,7 @@ fn never_a_friend_a_passer_by_or_a_corpse() {
     let guest = body_of(&s, 1);
     edit(&mut s, guest, |u| u.pos = Vec2::centre(20, 10));
     let hen = spawn(&mut s, "hen", 16, 11);
+    rooted(&mut s, hen);
     let corpse = spawn(&mut s, "skeleton", 18, 9);
     edit(&mut s, corpse, |u| {
         u.alive = false;
@@ -91,6 +104,7 @@ fn never_a_friend_a_passer_by_or_a_corpse() {
     });
     // A creature of the county's that is friendly to her is no target either.
     let dog = spawn(&mut s, "dog", 14, 10);
+    rooted(&mut s, dog);
     for p in [AssistProfile::Pad, AssistProfile::Mouse] {
         for raw in
             [Angle::EAST, bearing_to(&s, me(&s), hen), bearing_to(&s, me(&s), corpse), bearing_to(&s, me(&s), dog)]
@@ -102,6 +116,7 @@ fn never_a_friend_a_passer_by_or_a_corpse() {
     assert_eq!(s.state().players[0].assist, None);
     // With an enemy in the cone too, it is the enemy the aim is pulled to, never her.
     let foe = spawn(&mut s, "rat", 20, 13);
+    rooted(&mut s, foe);
     let d = Angle::EAST.diff(bearing_to(&s, me(&s), foe));
     assert!(d > 0 && d < i32::from(ASSIST_PAD.cone.0));
     assert_eq!(bolt_heading(&mut s, Angle::EAST, AssistProfile::Pad), toward(Angle::EAST, d, 350));
@@ -155,11 +170,7 @@ fn a_bolt_aimed_at_a_prop_it_would_light_is_not_pulled_off_it() {
     assert!(d > i32::from(ASSIST_PAD.snap.0) && d < i32::from(ASSIST_PAD.cone.0));
     let fireball = |s: &mut Sim, p: AssistProfile| {
         rested(s, me(s));
-        let before = s.state().zone(Z).unwrap().projectiles.len();
-        cast(s, 0, "fireball", frame(Angle::EAST, p), None);
-        let zs = s.state().zone(Z).unwrap();
-        assert_eq!(zs.projectiles.len(), before + 1, "the cast went off");
-        zs.projectiles.last().unwrap().heading
+        landed(s, "fireball", frame(Angle::EAST, p))
     };
     // A brazier on the line, nearer than the lurker: the reticle and the bolt stay on it.
     let brazier = put_prop(&mut s, "brazier", 15, 10, false);
@@ -206,6 +217,7 @@ fn the_view_shows_where_the_bolt_will_go() {
     let mut s = fresh();
     learn(&mut s, "repair");
     let foe = spawn(&mut s, "skeleton", 20, 12);
+    rooted(&mut s, foe);
     let raw = Angle::EAST.wrapping_add(300);
     for p in [AssistProfile::Off, AssistProfile::Pad, AssistProfile::Mouse] {
         let body = me(&s);
@@ -241,14 +253,21 @@ fn assist_replays_exactly() {
     };
     let mut rng = Sfc32::seeded(77, 1);
     let mut a = setup();
-    let mut tape: Vec<([u8; 7], Option<Command>)> = Vec::new();
+    let mut tape: Vec<([u8; 12], Option<Command>)> = Vec::new();
     let mut bent = [0u32; 3];
     let mut casts = [0u32; 3];
     for f in 0..3000u32 {
         let p = [AssistProfile::Off, AssistProfile::Pad, AssistProfile::Mouse][(f / 200 % 3) as usize];
         let raw = Angle::EAST.wrapping_add(rng.range(-5000, 5000));
-        let fr =
-            InputFrame { mv_dir: Angle::SOUTH, mv_mag: 0, aim: Some(raw), sprint: false, use_held: false, assist: p };
+        let fr = InputFrame {
+            mv_dir: Angle::SOUTH,
+            mv_mag: 0,
+            aim: Some(raw),
+            sprint: false,
+            use_held: false,
+            assist: p,
+            ..InputFrame::IDLE
+        };
         let c = match rng.below(12) {
             0 => Some(Command::Cast { spell: spell("icebolt"), on: None }),
             1 => Some(Command::Cast { spell: spell("spark"), on: None }),

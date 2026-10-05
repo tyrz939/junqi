@@ -15,7 +15,7 @@ use jane_core::{Fx, ItemId, SpellId, Tick};
 use jane_data::SpellKind;
 use jane_sim::ids::UnitId;
 use jane_sim::state::CombatState;
-use jane_sim::{Command, InputFrame, Unit, View};
+use jane_sim::{Command, InputFrame, TargetRef, Unit, View};
 
 use crate::Act;
 use crate::nav::{Go, dist, stick};
@@ -54,6 +54,82 @@ pub struct Fight {
     pub rooted_t: u32,
 }
 
+/// The player's side of a fight as a player plays it (PLAY-PLAN §2.1), over any act a plan
+/// made: a cast at a foe targets that foe (its bolt curves on); a bolt aimed down a line at a prop
+/// that answers its school targets the prop; and while a
+/// free-aimed cast builds, the aim it began with is held, so walking on does not swing it away.
+pub fn with_targets(v: &View<'_>, mut act: Act) -> Act {
+    let cat = jane_data::catalog();
+    let Some(me) = v.unit(v.me().unit) else { return act };
+    for c in &act.cmds {
+        let Command::Cast { spell, on } = *c else { continue };
+        let def = cat.combat.spell(spell);
+        let foe = on.map(TargetRef::Unit).filter(|&t| v.target_valid(t) && v.target_hostile(t));
+        let target = match def.kind {
+            SpellKind::Bolt | SpellKind::Melee if foe.is_some() => foe,
+            SpellKind::Bolt => act.frame.aim.and_then(|a| prop_on_line(v, me, def, a)),
+            // A verb (Grow, Repair) finds its own prop as the sim does, the nearest that answers it
+            // and, for Grow, in light: naming the nearest in the dark failed the School's lessons.
+            _ => None,
+        };
+        if target.is_some() {
+            act.frame.target = target;
+            act.frame.free = false;
+        }
+    }
+    // Whatever the plan, a cast building with something dangerous at her elbow is let go.
+    if v.fight().cast.is_some()
+        && !act.cmds.contains(&Command::Halt)
+        && (tell_under(v).is_some() || enemies(v).iter().any(|t| on_me(v, t) && cast_caught(v, t)))
+    {
+        act.cmds.push(Command::Halt);
+    }
+    if act.cmds.is_empty() {
+        if let Some(pc) = v.fight().cast.filter(|pc| pc.at.is_none()) {
+            if pc.aim.is_some() {
+                act.frame.aim = pc.aim;
+            }
+        }
+    }
+    act
+}
+
+/// The nearest prop answering `def`'s school whose middle lies within its touch of the line
+/// along `aim` and inside its flight.
+fn prop_on_line(v: &View<'_>, me: &Unit, def: &jane_data::SpellDef, aim: jane_core::Angle) -> Option<TargetRef> {
+    let cat = jane_data::catalog();
+    let touch = i64::from(def.touch.unwrap_or(jane_sim::tuning::SCHOOL_TOUCH_FX).0);
+    let far = i64::from(def.range.0) + touch;
+    let (c, s) = (i64::from(jane_core::angle::cos_q15(aim).0), i64::from(jane_core::angle::sin_q15(aim).0));
+    let (cx, cy) = me.pos.cell();
+    let r = (far / i64::from(CELL_FX)) as i32 + 2;
+    let mut best: Option<(i64, jane_sim::PropId)> = None;
+    for p in v.props_in(jane_core::Rect::new(cx - r, cy - r, 2 * r + 1, 2 * r + 1)) {
+        let pd = cat.story.prop(p.def);
+        if p.hidden || p.on || pd.answers.and_then(jane_data::Answers::school) != Some(def.school) {
+            continue;
+        }
+        let at = jane_sim::light::prop_centre(pd, p);
+        let (vx, vy) = (i64::from(at.x.0 - me.pos.x.0), i64::from(at.y.0 - me.pos.y.0));
+        let along = (vx * c + vy * s) >> 15;
+        let off = ((vx * s - vy * c) >> 15).abs();
+        if along < 0 || along > far || off > touch {
+            continue;
+        }
+        // Named only when she plainly has it: in sight and inside the bolt's own range. A box
+        // set in a wall, or one at the very end of a bolt's flight, is shot at as before, free
+        // (a target the sim cannot be sure of walks her to range instead, and the crawl's
+        // `Aim` moves on before she gets there: the Factory's call box, seed 8).
+        if !v.sight(me.pos, at) || along > i64::from(def.range.0) {
+            continue;
+        }
+        if best.is_none_or(|(b, _)| along < b) {
+            best = Some((along, p.id));
+        }
+    }
+    best.map(|(_, id)| TargetRef::Prop(id))
+}
+
 pub fn ready(u: &Unit, s: SpellId, now: Tick) -> bool {
     let def = jane_data::catalog().combat.spell(s);
     !u.cooldowns.iter().any(|&(c, until)| c == s && until > now)
@@ -66,6 +142,42 @@ pub fn ready(u: &Unit, s: SpellId, now: Tick) -> bool {
 /// Foreman pressing stone skin after each bolt).
 pub fn item_ready(u: &Unit, i: ItemId, now: Tick) -> bool {
     !u.item_cooldowns.iter().any(|&(c, until)| c == i && until > now) && u.gcd_until <= now
+}
+
+/// Its longest melee reach, between bodies (0 with none).
+fn bite(u: &Unit) -> i64 {
+    let cat = jane_data::catalog();
+    jane_sim::combat::book_of(u)
+        .iter()
+        .map(|&s| cat.combat.spell(s))
+        .filter(|d| d.kind == SpellKind::Melee)
+        .map(|d| i64::from(d.range.0))
+        .max()
+        .unwrap_or(0)
+}
+
+/// Could three of its blows put her down?
+pub fn dangerous(me: &Unit, t: &Unit) -> bool {
+    i64::from(max_hit(t)) * 3 >= i64::from(me.hp.points())
+}
+
+/// May she begin `s` at `t` now (PLAY-PLAN §2.1: a cast takes time and slows her)? Always an
+/// instant, and always at what has no feet or could not hurt her much; else only if it cannot
+/// close to its bite in a third of the cast (she backs off at half speed meanwhile, and lets the cast
+/// go if it closes: [`cast_caught`]).
+pub fn may_cast(me: &Unit, t: &Unit, s: SpellId) -> bool {
+    let cast = i64::from(jane_data::catalog().combat.spell(s).cast.0);
+    if cast == 0 || rooted(t) || !dangerous(me, t) {
+        return true;
+    }
+    let run = i64::from(jane_data::catalog().combat.unit(t.def).run.0.max(1));
+    (gap(me, t) - bite(t)).max(0) / run > cast / 3
+}
+
+/// Building a cast while a dangerous foe closes to its bite: Esc, and step back.
+pub fn cast_caught(v: &View<'_>, t: &Unit) -> bool {
+    let me = v.body();
+    v.fight().cast.is_some() && !rooted(t) && dangerous(me, t) && gap(me, t) <= bite(t) + i64::from(CELL_FX)
 }
 
 /// Body gap between two units (centre distance less both bodies), `Fx`.
@@ -156,10 +268,14 @@ pub fn tell_under(v: &View<'_>) -> Option<jane_core::Vec2> {
     // Not bitten yet: its first pulse, a `delay` after the cast, is still to come. One that has
     // bitten is walked out of only by feet that can: slowed in a web, stepping out of it for
     // ever, she never ate or struck back while the spider webbed her again (the pipes).
+    // A pool laid by a wind-up still under way (the hand-bell lifted) has not bitten either.
+    let winding: Vec<jane_sim::ids::GroundId> =
+        enemies(v).iter().filter_map(|u| u.feel.windup.and_then(|w| w.pool)).collect();
     let unbitten = |g: &jane_sim::state::Ground| {
-        cat.combat.spell(g.spell).ground.is_some_and(|p| {
-            p.delay.0 > 1 && g.until.0.saturating_sub(g.next_pulse.0) + 1 >= p.duration.0.saturating_sub(p.delay.0)
-        })
+        winding.contains(&g.id)
+            || cat.combat.spell(g.spell).ground.is_some_and(|p| {
+                p.delay.0 > 1 && g.until.0.saturating_sub(g.next_pulse.0) + 1 >= p.duration.0.saturating_sub(p.delay.0)
+            })
     };
     let free = jane_sim::status::speed_factor(me, now) >= 1000;
     v.grounds()
@@ -167,6 +283,94 @@ pub fn tell_under(v: &View<'_>) -> Option<jane_core::Vec2> {
         .filter(|g| g.faction != me.faction && g.next_pulse > now && g.until > now && (free || unbitten(g)))
         .find(|g| dist(g.pos, me.pos) <= i64::from(g.radius.0) + body + i64::from(CELL_FX))
         .map(|g| g.pos)
+}
+
+/// A foe's wind-up that will catch her where she stands (`jane_sim::feel`): a melee at her within
+/// a step of its reach, a bolt whose line passes within a step of her, a pool laid under her.
+/// The foe, its wind-up, and the ticks before it lands; the soonest first.
+pub fn tell_on_me<'a>(v: &View<'a>) -> Option<(&'a Unit, jane_sim::feel::Windup, u32)> {
+    let me = v.body();
+    let now = v.tick();
+    let cat = jane_data::catalog();
+    let body = i64::from(cat.combat.unit(me.def).bounds.0);
+    let spare = i64::from(CELL_FX) / 2;
+    let mut best: Option<(&Unit, jane_sim::feel::Windup, u32)> = None;
+    for u in enemies(v) {
+        let Some(w) = u.feel.windup else { continue };
+        let def = cat.combat.spell(w.spell);
+        let caught = match def.kind {
+            SpellKind::Melee => w.target == Some(me.id) && gap(u, me) <= i64::from(def.range.0) + spare,
+            SpellKind::Bolt => {
+                // Along the line it was aimed on, within a body and a half-step of it.
+                let (c, s) =
+                    (i64::from(jane_core::angle::cos_q15(w.aim).0), i64::from(jane_core::angle::sin_q15(w.aim).0));
+                let (dx, dy) = (i64::from(me.pos.x.0 - u.pos.x.0), i64::from(me.pos.y.0 - u.pos.y.0));
+                let along = (dx * c + dy * s) >> 15;
+                let off = ((dx * s - dy * c) >> 15).abs();
+                along > 0 && along <= i64::from(def.range.0) + 4 * i64::from(CELL_FX) && off <= body + spare
+            }
+            SpellKind::Ground => {
+                def.ground.is_some_and(|p| dist(w.point, me.pos) <= i64::from(p.radius.0) + body + spare)
+            }
+            _ => false,
+        };
+        let left = w.lands.0.saturating_sub(now.0);
+        if caught && best.is_none_or(|b| left < b.2) {
+            best = Some((u, w, left));
+        }
+    }
+    best
+}
+
+/// Out of a wind-up's way before it lands (PLAY-PLAN.md §2.1): a hop on its last ticks when she
+/// has the energy and it is ready (the blow passes through it), else a step out of its reach (a
+/// melee: back, swinging if her longer reach still has it), off its line (a bolt: aside), or out
+/// of its pool. Her own pace is a run.
+pub fn dodge_tell(v: &View<'_>, cx: &mut Ctx) -> Option<Act> {
+    let (u, w, left) = tell_on_me(v)?;
+    let me = v.body();
+    let now = v.tick();
+    let def = jane_data::catalog().combat.spell(w.spell);
+    let away = if u.pos == me.pos { w.aim } else { jane_core::angle::bearing(u.pos, me.pos) };
+    let way = match def.kind {
+        // Aside from its line: the side she already stands on.
+        SpellKind::Bolt => {
+            let (dx, dy) = (i64::from(me.pos.x.0 - u.pos.x.0), i64::from(me.pos.y.0 - u.pos.y.0));
+            let (c, s) = (i64::from(jane_core::angle::cos_q15(w.aim).0), i64::from(jane_core::angle::sin_q15(w.aim).0));
+            let side = if dx * s - dy * c >= 0 { -16384 } else { 16384 };
+            w.aim.wrapping_add(side)
+        }
+        SpellKind::Ground if w.point != me.pos => jane_core::angle::bearing(w.point, me.pos),
+        _ => away,
+    };
+    let can_hop = me.energy >= jane_sim::tuning::HOP_ENERGY
+        && now >= me.feel.hop_ready
+        && me.feel.hop.is_none()
+        && me.carrying.is_none();
+    // Only onto open ground she can see (a hop into a corner is a hop she cannot walk out of),
+    // and never out of a pool: that is walked.
+    let lands = me.pos + jane_core::angle::along(way, Fx(jane_sim::tuning::HOP_FX));
+    let (lx, ly) = lands.cell();
+    let clear = crate::nav::walkable(v, lx, ly) && v.sight(me.pos, lands);
+    if (1..=5).contains(&left) && can_hop && clear && def.kind != SpellKind::Ground {
+        let frame = InputFrame { mv_dir: way, mv_mag: 127, ..InputFrame::IDLE };
+        return Some(Act { frame, cmds: vec![Command::Hop] });
+    }
+    if def.kind == SpellKind::Ground {
+        return Some(Act::hold(step_out(v, cx, w.point)));
+    }
+    let mut frame = InputFrame { sprint: true, ..InputFrame::walk(way) };
+    let mut cmds = Vec::new();
+    // Backing out of a bite, her stick still reaches it: a swing on the way.
+    if def.kind == SpellKind::Melee {
+        let melee = sense::spell("melee_player");
+        let range = i64::from(jane_data::catalog().combat.spell(melee).range.0);
+        if gap(me, u) <= range && ready(me, melee, now) {
+            frame.aim = Some(jane_core::angle::bearing(me.pos, u.pos));
+            cmds.push(Command::Cast { spell: melee, on: Some(u.id) });
+        }
+    }
+    Some(Act { frame, cmds })
 }
 
 /// Out of a pool before it lands: straight away from its middle, at a run, unless a wall is that
@@ -514,7 +718,9 @@ pub fn engage(v: &View<'_>, cx: &mut Ctx, id: UnitId) -> Option<Act> {
     }
     let now = v.tick();
     if let Some(at) = tell_under(v) {
-        return Some(Act::hold(step_out(v, cx, at)));
+        // A cast building under a tell is let go: she gets out at full speed.
+        let cmds = if v.fight().cast.is_some() { vec![Command::Halt] } else { Vec::new() };
+        return Some(Act { frame: step_out(v, cx, at), cmds });
     }
     if let Some(c) = eat(v) {
         return Some(Act::press(c));
@@ -526,9 +732,18 @@ pub fn engage(v: &View<'_>, cx: &mut Ctx, id: UnitId) -> Option<Act> {
             return Some(Act::press(Command::Item(f)));
         }
     }
+    // A cast building with something dangerous at her elbow: let it go and step back.
+    if cast_caught(v, t) {
+        return Some(Act { frame: away_from(v, cx, t.pos, None), cmds: vec![Command::Halt] });
+    }
     // The Factory's bosses are fought as their rooms ask (tactics::works).
     if let Some(a) = crate::tactics::works::engage(v, cx, id) {
         return a;
+    }
+    // A blow winding up at her: out of its way (a hop on its last ticks). The Factory's machines
+    // are fought from the dark by their own rules above: a step aside there is a step into light.
+    if let Some(a) = dodge_tell(v, cx) {
+        return Some(a);
     }
     // A boss fought the way its room is built to be fought (tactics/*.rs).
     if let Some(a) = crate::tactics::forest::engage(v, cx, t) {
@@ -577,7 +792,8 @@ pub fn engage(v: &View<'_>, cx: &mut Ctx, id: UnitId) -> Option<Act> {
         // that keeps after her is put down on the way, not led round the dungeon).
         let ice = sense::spell("icebolt");
         let reach = i64::from(cat.combat.spell(ice).range.0) * 9 / 10;
-        if knows(v, ice) && ready(me, ice, now) && gap(me, t) <= reach && v.sight(me.pos, t.pos) {
+        if knows(v, ice) && ready(me, ice, now) && may_cast(me, t, ice) && gap(me, t) <= reach && v.sight(me.pos, t.pos)
+        {
             return Some(Act {
                 frame: InputFrame { aim: Some(dir), ..frame },
                 cmds: vec![Command::Cast { spell: ice, on: Some(id) }],
@@ -623,6 +839,7 @@ pub fn engage(v: &View<'_>, cx: &mut Ctx, id: UnitId) -> Option<Act> {
     if def.kind == SpellKind::Bolt
         && knows(v, ice)
         && ready(me, ice, now)
+        && may_cast(me, t, ice)
         && (d > i64::from(3 * CELL_FX) || !strong)
         && g <= i64::from(def.range.0) * 9 / 10
         && v.sight(me.pos, t.pos)
@@ -630,6 +847,20 @@ pub fn engage(v: &View<'_>, cx: &mut Ctx, id: UnitId) -> Option<Act> {
         return Some(Act {
             frame: InputFrame { aim: Some(dir), ..InputFrame::IDLE },
             cmds: vec![Command::Cast { spell: ice, on: Some(id) }],
+        });
+    }
+    // Too close for a cast that takes time: the spark, which is instant, while it gets through.
+    let spark = sense::spell("spark");
+    if knows(v, spark)
+        && ready(me, spark, now)
+        && !may_cast(me, t, ice)
+        && jane_sim::status::resist_factor(t, cat.combat.spell(spark).school, now) >= 500
+        && g <= i64::from(cat.combat.spell(spark).range.0) * 9 / 10
+        && v.sight(me.pos, t.pos)
+    {
+        return Some(Act {
+            frame: InputFrame { aim: Some(dir), ..InputFrame::IDLE },
+            cmds: vec![Command::Cast { spell: spark, on: Some(id) }],
         });
     }
     // A crowd on her she would not put down standing (the Gold Mine's hub pulls three skeletons,
@@ -652,7 +883,11 @@ pub fn engage(v: &View<'_>, cx: &mut Ctx, id: UnitId) -> Option<Act> {
             }
         }
     }
-    if strong && knows(v, ice) && me.mp >= def.mp && d < i64::from(6 * CELL_FX) {
+    if strong
+        && knows(v, ice)
+        && me.mp >= def.mp
+        && (d < i64::from(6 * CELL_FX) || (!may_cast(me, t, ice) && g <= i64::from(def.range.0)))
+    {
         // Inside two thirds of its leash from home, so it keeps coming.
         let leash = i64::from(cat.combat.unit(t.def).leash.0);
         let tether = (leash > 0).then_some((t.home, leash * 2 / 3));

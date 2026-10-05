@@ -171,14 +171,18 @@ Prop { id, key, def, spawn: Option<u16> /* index into Blueprint.props: keyTag, t
 ### 3.4 Input and commands
 
 ```
-InputFrame { mv_dir: Angle, mv_mag: u8 /* 0..127 */, aim: Option<Angle>, sprint, use_held, assist: AssistProfile /* Off | Pad | Mouse */ }   // 7 bytes
+InputFrame { mv_dir: Angle, mv_mag: u8 /* 0..127 */, aim: Option<Angle>, sprint, use_held, assist: AssistProfile /* Off | Pad | Mouse */,
+             target: Option<TargetRef> /* Unit(UnitId) | Prop(PropId): validated by the sim */, free: bool /* free-aim key */ }   // 12 bytes
 StampedCommand { seat: Option<Seat> /* None = join */, seq: u16, cmd: Command }
 StepInput<'a> { frames: [InputFrame; 4], commands: &'a [StampedCommand] }   // sorted (seat, seq)
 
 enum Command { Use, Bar { slot, on }, Cast { spell, on }, Item(ItemId), BagMove, BagDestroy, CraftPut, CraftClear, CraftClearAll, CraftTake,
   StorePut { prop, bag, to: Option<u8> }, StoreTake { prop, slot, to: Option<u8> }, StoreMove { prop, from, to }, StorePutAll { prop },
-  Bind, Unbind, BarSwap, Advance, Choose, CloseDialogue, Join { who }, Leave, Open(bool), Dev(DevOp) }
+  Bind, Unbind, BarSwap, Advance, Choose, CloseDialogue, Join { who }, Leave, Open(bool), Dev(DevOp), Abandon(QuestId),
+  Goto(Goto /* Ground(Vec2) | Unit(UnitId) | Prop(PropId): click to move */), Halt /* Esc */ }
 ```
+
+**The player's side of a fight** (PLAY-PLAN §2.1, SAVE_VERSION 12; `target.rs`, `cast.rs`, `walk.rs`). The hard target rides in every frame and the sim validates it each tick into `PlayerState::fight.target`; casts with a `cast` time build in `fight.cast` (checked at the start, landed through the one pipeline at `done`, paid then), a press within 12 ticks of her being free waits in `fight.queued`, `fight.auto` swings on the swing's timer, and `fight.walk` is a click-walk planned by every peer from one destination. All of it is state, saved and hashed; SYSTEMS.md §3 has the rules.
 
 **Abandoning a side quest** (`quests::abandon`, decided 2026-10-01, SAVE_VERSION 11). `Command::Abandon(quest)` goes through the input path as every verb does, so it is on the tape, in the hash and in step at every seat. Any seat may abandon, for the whole party (the log is the party's, as taking a quest is anyone's), and everyone is told whose coat it was. A quest whose row says `"main": true` (`data/quests.json`, the twelve of the spine) refuses, with "That is the story's own" to whoever asked. The quest leaves `active` and is offerable again: its giver's start rules read not-active and not-done, so the "?" returns. Kills it had counted are parked in `Quests::set_aside` and count again when it is taken again (a camp's ruffians do not stand up twice); places been stay been, as a place visited before a quest was asked always counted; flags set while it ran stay set. What the giver handed over with it (a `give` beside the `quest` verb in one list) is taken back from the party's bags, and handed over again when it is taken again; what only it asks her to bring (no other quest asks for it, not usable, not a key, not bound, in no recipe) is set down at her feet, where a story thing never ages out; everything else stays. Two finds that are not offered (the haversack, Mrs Allen's parcel) say so on their labels and are read from the bag to take their quest again. `jane-sim/tests/abandon.rs` is the softlock search: every side quest in the content brought to its giver, taken by its own list, set aside at once and again with every step made good, and offered again each time; `jane-bot/tests/story.rs` plays a whole story with every side quest set aside every half minute and reaches its ending.
 

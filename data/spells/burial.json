@@ -3,7 +3,7 @@
     "name": "Thorn Spray", "description": "Seven thorns in a fan, from something that was a flower bed. Far off, they spread wide enough to stand between.", "icon": "spell_nature",
     "kind": "bolt", "school": "nature", "mp": 0, "energy": 0, "range": 15, "cooldown": 5,
     "gcdImmune": false, "needsTarget": true, "needsEnemy": true, "needsLos": true, "anim": "cast",
-    "power": { "stat": "spirit", "div": 8, "varDiv": 32 }, "speed": 4, "count": 7, "fan": 60, "stop": 20
+    "power": { "stat": "spirit", "div": 8, "varDiv": 32 }, "speed": 4, "count": 7, "fan": 60, "stop": 20, "interruptible": false
   },
   "flower_lash": {
     "name": "Root", "description": "The bed lashes anything that stands on it.", "icon": "spell_nature",
@@ -27,13 +27,13 @@
     "name": "Poison Globe", "description": "A slow globe of poison. Slow enough to walk around, if you are looking.", "icon": "spell_nature",
     "kind": "bolt", "school": "nature", "mp": 0, "energy": 0, "range": 30, "cooldown": 2,
     "gcdImmune": false, "needsTarget": true, "needsEnemy": true, "needsLos": true, "anim": "cast",
-    "power": { "stat": "spirit", "div": 12, "varDiv": 48 }, "speed": 2, "effect": "poisoned", "stop": 20, "glow": 20
+    "power": { "stat": "spirit", "div": 12, "varDiv": 48 }, "speed": 2, "effect": "poisoned", "stop": 20, "glow": 20, "interruptible": false
   },
   "gold_ring": {
     "name": "Poison Ring", "description": "A ring of bolts, the way his snake spits them. He takes a breath between.", "icon": "spell_nature",
     "kind": "bolt", "school": "nature", "mp": 0, "energy": 0, "range": 40, "cooldown": 6,
     "gcdImmune": false, "needsTarget": true, "needsEnemy": true, "needsLos": false, "anim": "cast",
-    "power": { "stat": "spirit", "div": 12, "varDiv": 48 }, "speed": 2, "count": 15, "fan": 360, "stop": 20, "glow": 16
+    "power": { "stat": "spirit", "div": 12, "varDiv": 48 }, "speed": 2, "count": 15, "fan": 360, "stop": 20, "glow": 16, "interruptible": false
   },
   "gold_icebolt": {
     "name": "Icebolt", "description": "A bolt of frost. It was hers first.", "icon": "spell_frost",

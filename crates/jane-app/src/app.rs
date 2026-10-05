@@ -157,6 +157,8 @@ struct App<'a> {
     bot: Option<jane_bot::Bot>,
     /// Give the seat back the moment a conversation opens (a script's `bot talk`).
     bot_until_talk: bool,
+    /// The script's `watch`: the prop row, the PNG, and the tick it was seen.
+    watch: Option<(String, String, Option<u64>)>,
     /// The window (bag, book, log, map) and whether it is open; its state (the map's chart)
     /// outlives a close.
     win: WindowState,
@@ -165,6 +167,8 @@ struct App<'a> {
     console: Console,
     /// Where the reticle is drawn this frame.
     reticle: Option<(i32, i32)>,
+    /// This frame's raw aim: which way Tab looks for foes.
+    last_aim: Option<jane_core::Angle>,
     controls: ControlsState,
     /// The Controls screen turned a `Features` row: the backend is told before the next draw.
     features_changed: bool,
@@ -267,10 +271,12 @@ pub fn run(
         backend_name: describe.clone(),
         bot: args.bot.as_deref().and_then(jane_bot::Model::parse).map(jane_bot::Bot::story),
         bot_until_talk: false,
+        watch: None,
         win: WindowState::default(),
         win_open: false,
         console: Console::default(),
         reticle: None,
+        last_aim: None,
         controls: ControlsState::default(),
         features_changed: false,
         lan: Lan::new(args.port),
@@ -365,8 +371,18 @@ pub fn run(
                     Step::Bot(m) => {
                         app.bot_until_talk = m == "talk";
                         let model = if m == "talk" { "reader" } else { m.as_str() };
-                        app.bot = jane_bot::Model::parse(model).map(jane_bot::Bot::story);
+                        app.bot = match m.strip_prefix("crawl:").and_then(jane_core::ZoneId::from_name) {
+                            // A dungeon from its door, with what the content gives before it.
+                            Some(z) => sim_of(app.session.as_ref()).map(|s| {
+                                use jane_bot::{Bot, Model, Plan, crawl};
+                                let mut b = Bot::new(Model::Reader, Plan::Crawl(crawl::Crawl::new(z)));
+                                b.setup = crawl::setup(s.blueprints(), z);
+                                b
+                            }),
+                            None => jane_bot::Model::parse(model).map(jane_bot::Bot::story),
+                        };
                     }
+                    Step::Watch { prop, shot } => app.watch = Some((prop, shot, None)),
                 }
             }
         }
@@ -402,7 +418,8 @@ pub fn run(
             .and_then(|s| s.view(me_of(app.session.as_ref())))
             .map(|v| world_to_canvas(v.body().pos, app.camera))
             .filter(|&(x, y)| (0.0..f32::from(canvas_px.0)).contains(&x) && (0.0..f32::from(canvas_px.1)).contains(&y));
-        let held = app.input.sample(&devices.state, &Context { mode, feet });
+        let mut held = app.input.sample(&devices.state, &Context { mode, feet });
+        app.last_aim = held.aim;
         let cursor = devices.state.mouse.pos.filter(|_| app.input.aiming_with_mouse());
         // The reticle: where the assist will send a bolt, at the cursor's distance from her chest.
         app.reticle = None;
@@ -440,6 +457,14 @@ pub fn run(
         let mut actions = Vec::new();
         for edge in edges.drain(..) {
             app.edge(edge, cursor, &mut actions, screen, &mut shot_px);
+        }
+        // Her target (PLAY-PLAN §2.1): what the sim would not keep let go, its soft target taken
+        // up; then carried in the frame, a click's this very frame.
+        if let Some(v) = sim_of(app.session.as_ref()).and_then(|s| s.view(me_of(app.session.as_ref()))) {
+            jane_present::target::settle(&mut app.input, &v);
+        }
+        if mode == Mode::Play {
+            held.target = app.input.target;
         }
         let ui_input = UiInput {
             pointer,
@@ -534,6 +559,58 @@ pub fn run(
             match out {
                 UiOut::Command(c) => app.command(c),
                 UiOut::Intent(i) => app.intent(i),
+            }
+        }
+        // `watch`: a prop of the row near her, not yet on: the seat back, the prop targeted, and
+        // the canvas shot a moment later.
+        if let Some((def, path, since)) = app.watch.clone() {
+            match since {
+                Some(t) if app.ticks >= t + 45 => {
+                    script_shot = Some(path);
+                    app.watch = None;
+                }
+                Some(_) => {}
+                None => {
+                    let near =
+                        sim_of(app.session.as_ref()).and_then(|s| s.view(me_of(app.session.as_ref()))).and_then(|v| {
+                            let (cx, cy) = v.body().pos.cell();
+                            let cat = jane_data::catalog();
+                            let me = v.body().pos;
+                            v.props_in(jane_core::Rect::new(cx - 16, cy - 9, 33, 19))
+                                .find(|p| {
+                                    let d = cat.story.prop(p.def);
+                                    !p.hidden
+                                        && !p.on
+                                        && d.id == def
+                                        && v.seen(i32::from(p.cell.x), i32::from(p.cell.y))
+                                        && v.sight(me, jane_sim::light::prop_centre(d, p))
+                                })
+                                .map(|p| p.id)
+                        });
+                    if let Some(id) = near {
+                        // Hers again, the prop targeted, and the first spell that answers it
+                        // cast at it, so the shot shows the ring and the cast building.
+                        app.bot = None;
+                        app.input.target = Some(jane_sim::input::TargetRef::Prop(id));
+                        app.watch = Some((def, path, Some(app.ticks)));
+                        let school = sim_of(app.session.as_ref())
+                            .and_then(|s| s.view(me_of(app.session.as_ref())))
+                            .and_then(|v| v.prop(id).map(|p| jane_data::catalog().story.prop(p.def).answers))
+                            .flatten()
+                            .and_then(jane_data::Answers::school);
+                        let bar = sim_of(app.session.as_ref())
+                            .and_then(|s| s.view(me_of(app.session.as_ref())))
+                            .and_then(|v| {
+                                v.me().bar.iter().position(|b| {
+                                    matches!(b, Some(jane_data::BarSlot::Spell(s))
+                                        if Some(jane_data::catalog().combat.spell(*s).school) == school)
+                                })
+                            });
+                        if let Some(slot) = bar {
+                            app.command(Command::Bar { slot: slot as u8, on: None });
+                        }
+                    }
+                }
             }
         }
         if let Some(p) = script_shot {
@@ -781,22 +858,61 @@ impl App<'_> {
                 if !matches!(self.scene, Scene::Play) || !self.menus.is_empty() {
                     return;
                 }
+                let me = me_of(self.session.as_ref());
+                let at = cursor.map(|c| canvas_to_world(c, self.camera));
                 let cmd = match g {
                     GameAction::Use => Command::Use,
+                    GameAction::Hop => Command::Hop,
                     GameAction::Bar(slot) => Command::Bar {
                         slot,
-                        on: cursor.and_then(|c| {
-                            sim_of(self.session.as_ref())
-                                .and_then(|s| s.view(me_of(self.session.as_ref())))
-                                .map(|v| pick(&v, canvas_to_world(c, self.camera)))
+                        on: at.and_then(|at| {
+                            sim_of(self.session.as_ref()).and_then(|s| s.view(me)).map(|v| pick(&v, at))
                         }),
                     },
+                    // Her target, chosen here and carried in the frame (`jane_present::target`).
+                    GameAction::Select | GameAction::Tab { .. } => {
+                        let Some(v) = sim_of(self.session.as_ref()).and_then(|s| s.view(me)) else { return };
+                        match (g, at) {
+                            (GameAction::Select, Some(at)) => jane_present::target::click(&mut self.input, &v, at),
+                            (GameAction::Tab { back }, _) => {
+                                jane_present::target::tab(&mut self.input, &v, self.last_aim, back);
+                            }
+                            _ => {}
+                        }
+                        return;
+                    }
+                    GameAction::Goto => {
+                        let Some(at) = at else { return };
+                        let Some(v) = sim_of(self.session.as_ref()).and_then(|s| s.view(me)) else { return };
+                        let goto = jane_present::target::goto_at(&v, at);
+                        // A right click on a foe targets it too.
+                        if let jane_sim::input::Goto::Unit(u) = goto
+                            && v.target_hostile(jane_sim::input::TargetRef::Unit(u))
+                        {
+                            self.input.target = Some(jane_sim::input::TargetRef::Unit(u));
+                            self.input.dropped = None;
+                        }
+                        Command::Goto(goto)
+                    }
                 };
                 self.command(cmd);
             }
             Edge::Ui(a) => match a {
                 UiAction::Pause => {
-                    if matches!(self.scene, Scene::Play) && self.menus.is_empty() {
+                    // Esc first lets go of her target and stops what she is doing (WoW's way);
+                    // with nothing to stop, it pauses.
+                    let busy = sim_of(self.session.as_ref())
+                        .and_then(|s| s.view(me_of(self.session.as_ref())))
+                        .is_some_and(|v| jane_present::target::busy(&v));
+                    if matches!(self.scene, Scene::Play)
+                        && self.menus.is_empty()
+                        && (busy || self.input.target.is_some())
+                    {
+                        jane_present::target::clear(&mut self.input);
+                        if busy {
+                            self.command(Command::Halt);
+                        }
+                    } else if matches!(self.scene, Scene::Play) && self.menus.is_empty() {
                         self.menus.push(Menu::Pause);
                         self.menu_lights.push(MenuState::default());
                     }
@@ -1357,6 +1473,7 @@ impl App<'_> {
                 // The quest marks over heads, on the world under everything else (§3.8).
                 self.ui.interactive = false;
                 quest_marks::draw(&mut self.ui, self.present.marks(), self.present.dark(), self.present.ticks());
+                jane_present::ui::fight::draw(&mut self.ui, self.present.fight());
                 quest_marks::draw_emotes(&mut self.ui, self.present.emotes(), self.present.ticks());
                 if self.world_dbg.on
                     && let Some(v) = sim_of(self.session.as_ref()).and_then(|s| s.view(me_of(self.session.as_ref())))

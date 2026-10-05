@@ -24,6 +24,10 @@ impl Sim {
                 self.join(who);
                 return;
             }
+            (None, Command::Table { delay }) => {
+                self.state.table_delay = delay.min(crate::tuning::TABLE_DELAY_MAX);
+                return;
+            }
             (Some(s), _) => s,
             (None, _) => return,
         };
@@ -55,6 +59,10 @@ impl Sim {
                 }
             }
             Command::Dev(op) => self.dev(seat, op),
+            Command::Hop => {
+                let frame = frames[seat.index()];
+                self.in_seat_ctx(seat, |cx| crate::feel::hop(cx, seat, frame));
+            }
             Command::Bar { slot, on } => {
                 let frame = frames[seat.index()];
                 self.in_seat_ctx(seat, |cx| crate::combat::bar_command(cx, seat, slot, on, frame));
@@ -63,6 +71,8 @@ impl Sim {
                 let frame = frames[seat.index()];
                 self.in_seat_ctx(seat, |cx| crate::combat::player_cast(cx, seat, spell, on, frame));
             }
+            Command::Goto(g) => self.in_seat_ctx(seat, |cx| crate::walk::goto(cx, seat, g)),
+            Command::Halt => self.in_seat_ctx(seat, |cx| crate::cast::halt(cx, seat)),
             // Her verbs, in her zone's context with her as the actor.
             Command::Use
             | Command::Item(_)
@@ -80,8 +90,8 @@ impl Sim {
             | Command::Choose { .. }
             | Command::CloseDialogue
             | Command::Abandon(_) => self.seat_command(seat, c.cmd),
-            // A seated join is nobody's.
-            Command::Join { .. } => {}
+            // A seated join is nobody's, and so is a seated table.
+            Command::Join { .. } | Command::Table { .. } => {}
         }
     }
 
@@ -269,6 +279,7 @@ impl Sim {
                 connected: true,
                 parked: None,
                 assist: None,
+                fight: crate::state::Fight::default(),
             });
             (seat, body, true)
         };

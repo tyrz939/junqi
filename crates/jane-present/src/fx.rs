@@ -162,6 +162,18 @@ const GLINT_CORE: [u8; 3] = [255, 250, 220];
 const GLINT_LATE: [u8; 3] = [240, 170, 80];
 /// A quest sparkle's beat is its prop's own, salted apart from a drop's.
 const QUEST_GLINT_SALT: u32 = 0x7175_6573;
+/// A foe's tell (PLAY-PLAN.md §2.1): gold where her stun, Spark or stick can break it, red where
+/// nothing can; each `(colour, late)`.
+const TELL_GOLD: ([u8; 3], [u8; 3]) = ([255, 222, 128], [255, 150, 48]);
+const TELL_RED: ([u8; 3], [u8; 3]) = ([240, 56, 44], [150, 18, 30]);
+const TELL_BREAK: ([u8; 3], [u8; 3]) = ([255, 246, 220], [120, 120, 140]);
+const TELL_EVADE: ([u8; 3], [u8; 3]) = ([214, 236, 255], [120, 150, 190]);
+const TELL_CORE: [u8; 3] = [255, 255, 236];
+/// A tell's glint over the head: every few ticks, this far up.
+const TELL_EVERY: u32 = 3;
+const TELL_HEIGHT: i32 = 26;
+/// The ring a melee wind-up lays where its blow will fall, px.
+const MELEE_DECAL: i32 = 7;
 
 impl Fx {
     /// A pool for `tier`, sized by its `max_particles`.
@@ -259,6 +271,27 @@ impl Fx {
         }
     }
 
+    /// A cast building at a body's feet `at` (zone canvas px): its school's motes drawn in to her
+    /// hands, more often as it nears its end (`frac` in 256ths).
+    pub fn gather(&mut self, at: (i32, i32), facing: Facing, spell: jane_core::SpellId, frac: u16, id: u32) {
+        let every = if frac > 192 {
+            6
+        } else if frac > 96 {
+            9
+        } else {
+            12
+        };
+        if (self.tick.wrapping_add(id)) % every != 0 {
+            return;
+        }
+        let Some(f) = art::spell(jane_data::catalog().combat.spell(spell).id) else { return };
+        let (dx, dy) = step(facing);
+        let r = art::cast(f.cast);
+        // Faint at first, fuller as it builds: the motes must not hide her or what she faces.
+        let m = 48 + frac.min(256) * 5 / 8;
+        self.emit_once(&Recipe { light: None, ..r }, (at.0 + dx * 10, at.1 + dy * 4), angle(facing), m);
+    }
+
     /// This tick's events, as they happen (§2: a cast or a death resolves now, not a frame late).
     pub fn on_events(&mut self, view: &View<'_>, events: &[Event]) {
         let cat = jane_data::catalog();
@@ -277,7 +310,20 @@ impl Fx {
                     let (dx, dy) = step(facing);
                     let (x, y) = px(at);
                     let m = if ours(unit) { spirit } else { 256 };
-                    self.emit_with(&art::cast(f.cast), (x + dx * 10, y + dy * 4), angle(facing), m);
+                    let hands = (x + dx * 10, y + dy * 4);
+                    if def.cast.0 > 0 {
+                        // A cast that built (its motes gathered while it did, [`Fx::gather`])
+                        // lands with punch (PLAY-PLAN §2.1): a burst out of her hands and a
+                        // bright flash.
+                        self.emit_with(&art::impact(f.impact), hands, angle(facing), m);
+                        let colour = art::Role::Core.of(art::hue(art::cast(f.cast).tint));
+                        self.glows.push(Glow { x: hands.0, y: hands.1, z: 18, colour, radius: 72, ticks: 8, left: 10 });
+                        if self.glows.len() > 48 {
+                            self.glows.remove(0);
+                        }
+                    } else {
+                        self.emit_with(&art::cast(f.cast), hands, angle(facing), m);
+                    }
                 }
                 EventKind::Swing { unit, at, facing } => {
                     let (dx, dy) = step(facing);
@@ -300,6 +346,37 @@ impl Fx {
                     }
                 }
                 EventKind::Death { at, .. } => self.emit(&art::death(), px(at), Angle::NORTH),
+                // A foe's tell (PLAY-PLAN.md §2.1): where a pool or a ring of bolts will land, a
+                // decal on the ground in the tell's colour, its ring closing as the blow comes.
+                EventKind::Windup { unit, spell, at, lands, interruptible } => {
+                    let def = cat.combat.spell(spell);
+                    let left = lands.0.saturating_sub(view.tick().0).clamp(2, 250) as u8;
+                    let ring = match def.ground {
+                        Some(p) => Some((px(at), (p.radius.0 >> FX_TO_CANVAS).clamp(4, 120))),
+                        None if def.kind == jane_data::SpellKind::Bolt && def.count > 1 => {
+                            view.unit(unit).map(|u| (px(u.pos), (def.range.0 >> FX_TO_CANVAS).clamp(8, 28)))
+                        }
+                        // A blow: a small ring where it will fall, on the one it is for.
+                        None if def.kind == jane_data::SpellKind::Melee => Some((px(at), MELEE_DECAL)),
+                        None => None,
+                    };
+                    if let Some((c, r)) = ring {
+                        self.decal(c, r as u8, interruptible, left);
+                    }
+                }
+                // A blow broken: a flash of its tell's colour going out.
+                EventKind::Interrupted { unit, .. } => {
+                    if let Some(u) = view.unit(unit) {
+                        self.mark(px(u.pos), 18, Shape::Ring(2, 12), TELL_BREAK, 10, false);
+                    }
+                }
+                // Her hop: dust from her heels.
+                EventKind::Hop { at, dir, .. } => {
+                    let back = Angle(dir.0.wrapping_add(32768));
+                    self.emit(&art::swing(), px(at), back);
+                }
+                // A blow passing through her hop: a pale ring.
+                EventKind::Evaded { at, .. } => self.mark(px(at), 10, Shape::Ring(3, 10), TELL_EVADE, 8, false),
                 EventKind::Status { unit, effect, on } => {
                     let def = cat.combat.effect(effect);
                     let Some(look) = art::status(def.id) else { continue };
@@ -350,6 +427,7 @@ impl Fx {
             self.emit(&r, at, Angle::NORTH);
         }
         // Bolts: their trails, and their heads for the frame.
+        self.tells(view, view_px);
         let (spirit, _) = her_might(view);
         self.heads_next.clear();
         for p in view.projectiles() {
@@ -461,6 +539,73 @@ impl Fx {
                     ground: false,
                 });
             }
+        }
+    }
+
+    /// One part, placed by hand: `at` canvas px, `z` px up, alive `life` ticks.
+    fn mark(&mut self, at: (i32, i32), z: i32, shape: Shape, colours: ([u8; 3], [u8; 3]), life: u8, ground: bool) {
+        let fx_cap = self.cap - self.cap / 3;
+        if fx_cap == 0 {
+            return;
+        }
+        if self.parts.len() >= fx_cap {
+            self.parts.pop_front();
+        }
+        self.parts.push_back(Spark {
+            x: at.0 * Q,
+            y: at.1 * Q,
+            z: z * Q,
+            vx: 0,
+            vy: 0,
+            vz: 0,
+            age: 0,
+            life,
+            shape,
+            colour: colours.0,
+            late: colours.1,
+            glow: 170,
+            grav: 0,
+            drag: 255,
+            ground,
+        });
+    }
+
+    /// A pool's decal: its edge, held, and a ring closing from it to its middle as the blow comes;
+    /// gold for a tell her stun or her stick can break, red for one nothing breaks.
+    fn decal(&mut self, at: (i32, i32), r: u8, interruptible: bool, left: u8) {
+        let c = if interruptible { TELL_GOLD } else { TELL_RED };
+        self.mark(at, 0, Shape::Ring(r, r), c, left, true);
+        self.mark(at, 0, Shape::Ring(r, 1), c, left, true);
+    }
+
+    /// Every foe in view winding up a blow (`jane_sim::feel`): a glint over its head in the tell's
+    /// colour, every few ticks, so a raised arm reads as a threat at a glance.
+    fn tells(&mut self, view: &View<'_>, (vx, vy, vw, vh): (i32, i32, i32, i32)) {
+        let cells =
+            jane_core::Rect::new(vx.div_euclid(CELL) - 1, vy.div_euclid(CELL) - 1, vw / CELL + 3, vh / CELL + 3);
+        let now = view.tick().0;
+        let mut at: Vec<((i32, i32), bool, u32)> = Vec::new();
+        for uv in view.units_in(cells) {
+            let u = uv.unit;
+            let Some(w) = u.feel.windup.filter(|_| u.alive) else { continue };
+            if (self.tick + u.id.get()) % TELL_EVERY != 0 {
+                continue;
+            }
+            // How far along, 0 to 256: the glint swells and the ring at its feet closes in as the
+            // blow comes, so "now" reads at a glance in a crowd.
+            let len = w.lands.0.saturating_sub(w.began.0).max(1);
+            let frac = (now.saturating_sub(w.began.0).min(len) * 256 / len).min(256);
+            at.push(((u.pos.x.0 >> FX_TO_CANVAS, u.pos.y.0 >> FX_TO_CANVAS), w.interruptible, frac));
+        }
+        for (p, interruptible, frac) in at {
+            let c = if interruptible { TELL_GOLD } else { TELL_RED };
+            let life = TELL_EVERY as u8 + 2;
+            let swell = 6 + (frac * 6 / 256) as u8;
+            self.mark(p, TELL_HEIGHT, Shape::Glow(swell), c, life, false);
+            self.mark(p, TELL_HEIGHT, Shape::Dot(3), (TELL_CORE, c.1), life, false);
+            // The closing ring on the ground under it: wide at the raise, tight as it lands.
+            let r = (16 - (frac * 11 / 256) as i32).max(5) as u8;
+            self.mark(p, 0, Shape::Ring(r, r), c, life, true);
         }
     }
 

@@ -20,7 +20,7 @@ use crate::ids::{ClientToken, Seat, UnitId};
 use crate::sim::Sim;
 use crate::state::{StatusInst, Unit};
 use crate::status::{resist_factor, speed_factor};
-use crate::tuning::GCD;
+use crate::tuning::PLAYER_GCD;
 use crate::units::{max_hp, new_unit};
 
 const Z: ZoneId = ZoneId::County;
@@ -154,7 +154,7 @@ fn a_failed_cast_costs_nothing_and_a_good_one_starts_the_gcd() {
         |s: &mut Sim| in_ctx(s, Some(Seat(0)), |cx| try_cast(cx, body, spell("icebolt"), Some(Angle::EAST), None));
     assert_eq!(bolt(&mut s), Ok(()));
     assert_eq!(unit(&s, body).mp, Milli(mp.0 - 14_000));
-    assert_eq!(unit(&s, body).gcd_until, now.after(GCD));
+    assert_eq!(unit(&s, body).gcd_until, now.after(PLAYER_GCD), "a seat's GCD is 1 s");
     assert_eq!(bolt(&mut s), Err(SpellError::OnCooldown));
     assert_eq!(s.state.zone(Z).unwrap().projectiles.len(), 1);
     assert_eq!(s.state.players[0].stats.casts, 1);
@@ -190,8 +190,11 @@ fn a_friendly_spell_lands_where_the_cursor_or_the_stick_says() {
         ground: None,
         world: None,
         stop: Tick::ZERO,
+        cast: Tick::ZERO,
         glow: None,
         touch: None,
+        windup: None,
+        interruptible: true,
     };
     let id = SpellId(u16::MAX);
     let party = || {

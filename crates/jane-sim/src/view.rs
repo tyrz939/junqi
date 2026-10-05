@@ -331,6 +331,55 @@ impl<'a> View<'a> {
         Some(a)
     }
 
+    // --- her side of a fight (PLAY-PLAN §2.1; `target.rs`, `cast.rs`, `walk.rs`) -----------------
+
+    /// Her fight: her target as the sim last validated it, the cast building, her swings, her
+    /// click-walk.
+    pub fn fight(&self) -> &'a crate::state::Fight {
+        &self.me().fight
+    }
+
+    /// Her target as the sim last validated it (the ring is drawn under this).
+    pub fn target(&self) -> Option<crate::input::TargetRef> {
+        self.me().fight.target
+    }
+
+    /// May she hold `t` as her target now? The client drops one the sim would not keep.
+    pub fn target_valid(&self, t: crate::input::TargetRef) -> bool {
+        self.zone.unit(self.me().unit).is_some_and(|b| crate::target::valid(self.zone, b, t))
+    }
+
+    /// Is `t` a foe of hers (a red ring), as opposed to a prop (gold) or a friend?
+    pub fn target_hostile(&self, t: crate::input::TargetRef) -> bool {
+        self.zone.unit(self.me().unit).is_some_and(|b| crate::target::hostile(self.zone, b, t))
+    }
+
+    /// Where a target is: a unit's feet, a prop's middle.
+    pub fn target_pos(&self, t: crate::input::TargetRef) -> Option<Vec2> {
+        crate::target::pos_of(self.zone, t)
+    }
+
+    /// Foes Tab cycles through, facing `dir` (her aim, else her facing): nearest first.
+    pub fn tab_order(&self, dir: Angle) -> Vec<UnitId> {
+        let mut out = Vec::new();
+        if let Some(b) = self.zone.unit(self.me().unit) {
+            crate::target::foes_in_front(self.zone, self.rt, b, dir, &mut out);
+        }
+        out
+    }
+
+    /// Tab (`back`: LB, Shift-Tab) from her current target.
+    pub fn tab_next(&self, dir: Angle, current: Option<crate::input::TargetRef>, back: bool) -> Option<UnitId> {
+        let order = self.tab_order(dir);
+        if back { crate::target::tab_prev(&order, current) } else { crate::target::tab_next(&order, current) }
+    }
+
+    /// The cast a seat's body is building here, if `unit` is one: what, since when, until when.
+    /// Everyone's cast bar and hand glow are drawn from this.
+    pub fn casting(&self, unit: UnitId) -> Option<crate::state::PendingCast> {
+        self.state.players.iter().find(|p| p.unit == unit && p.zone == self.zone.id && p.connected)?.fight.cast
+    }
+
     /// A placed prop's row: where it leads, what it holds, its label.
     pub fn prop_spawn(&self, p: &Prop) -> Option<&'a PropSpawn> {
         spawn_of(self.bp, p)

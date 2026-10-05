@@ -9,7 +9,10 @@
 //! `down` and `up` hold and let go; `click`, `rclick` and `move` are canvas px; `type` enters
 //! text as the keyboard would; `shot` writes the canvas as a PNG; `bot reader` (or `rusher`)
 //! hands the seat to a headless player from `jane-bot` until `bot off` (or, with `bot talk`, a
-//! reader until the first conversation opens), to reach a place worth a look. Ticks count from the app's start, title screen included.
+//! reader until the first conversation opens; `bot crawl:burial` a dungeon from its door), to reach a
+//! place worth a look; `watch torch_blue sheets/x.png` hands the seat back, targets that prop and
+//! shoots the canvas the first time one comes into view. Ticks count from the app's start, title
+//! screen included.
 
 use jane_present::input::key_code;
 
@@ -24,8 +27,16 @@ pub enum Step {
     Move(i32, i32),
     Type(String),
     Shot(String),
-    /// A headless player takes the seat (`reader`, `rusher`), or gives it back (`off`).
+    /// A headless player takes the seat (`reader`, `rusher`, `crawl:<zone>` for a dungeon from
+    /// its door), or gives it back (`off`).
     Bot(String),
+    /// From now, the first time a prop of this row comes into view near her, not yet
+    /// switched on: the seat is hers again, the prop her target, and the canvas a PNG a moment
+    /// later (a puzzle's prop, targeted, shot without knowing where the crawl will find it).
+    Watch {
+        prop: String,
+        shot: String,
+    },
 }
 
 /// A parsed script: steps by tick, in order.
@@ -60,6 +71,11 @@ impl Script {
                 "shot" => Step::Shot(rest.first().ok_or_else(bad)?.to_string()),
                 "bot" => match rest.first().copied() {
                     Some(m @ ("reader" | "rusher" | "off" | "talk")) => Step::Bot(m.to_string()),
+                    Some(m) if m.starts_with("crawl:") => Step::Bot(m.to_string()),
+                    _ => return Err(bad()),
+                },
+                "watch" => match (rest.first(), rest.get(1)) {
+                    (Some(p), Some(s)) => Step::Watch { prop: (*p).to_string(), shot: (*s).to_string() },
                     _ => return Err(bad()),
                 },
                 _ => return Err(bad()),

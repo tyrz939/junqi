@@ -49,7 +49,13 @@ pub struct Mine {
     pub frames: u32,
     /// Levers pulled with him under them.
     pub pulled: u32,
+    /// Frames since a lever last came down on him: led round the hoists this long for nothing
+    /// (he stops short to wind his blow up, out of the rect), she fights him plainly.
+    since_pull: u32,
 }
+
+/// Led round the hoists this long with no load on him: the plain fight instead.
+const LEVER_PATIENCE: u32 = 45 * 60;
 
 /// At a lever: where she stands, the way she faces, and how long he has stood at her out of
 /// its rect.
@@ -110,8 +116,10 @@ impl Mine {
         let near = dist(k.pos, me) <= CLOSE;
 
         // A lever she faces with him in its rect: pull.
+        self.since_pull += 1;
         if !staggered && levers.iter().any(|l| in_rect(k, l.rect) && focused(v, l.prop.id)) {
             self.pulled += 1;
+            self.since_pull = 0;
             self.placed = None;
             return Some(Act::press(Command::Use));
         }
@@ -155,14 +163,18 @@ impl Mine {
                 }
             }
         }
-        if !levers.is_empty() {
+        if !levers.is_empty() && self.since_pull < LEVER_PATIENCE {
             return Some(self.work(v, cx, k, staggered, &levers));
+        }
+        if !levers.is_empty() {
+            return Some(kite(v, cx, k, staggered));
         }
         self.placed = None;
         if !hoists.is_empty() {
-            // Nothing to pull yet (Repair cooling): keep off him, else wait, facing him.
+            // Nothing to pull yet (Repair cooling): fight him plainly while he is close (out of
+            // each blow's way as it winds up, a bolt in his recovery), else wait, facing him.
             if !staggered && dist(k.pos, me) < 2 * CLOSE {
-                return Some(Act::hold(keep_off(v, cx, k)));
+                return Some(kite(v, cx, k, staggered));
             }
             return Some(Act::hold(InputFrame { aim: Some(towards(me, k.pos)), ..InputFrame::IDLE }));
         }
@@ -175,6 +187,7 @@ impl Mine {
         self.placed = None;
         self.bait = None;
         self.resting = false;
+        self.since_pull = 0;
     }
 
     /// Before the big door: with its key in her bag and hurt, the First Aid stove first (the
@@ -443,11 +456,16 @@ fn kite(v: &View<'_>, cx: &mut Ctx, k: &Unit, staggered: bool) -> Act {
             _ => Act::hold(InputFrame { aim: Some(dir), ..crate::nav::stick(me.pos, k.pos, false) }),
         };
     }
+    // His blow winding up at her: out of its way first (a hop on its last ticks).
+    if let Some(a) = crate::fight::dodge_tell(v, cx) {
+        return a;
+    }
     let ice = sense::spell("icebolt");
     let def = cat.combat.spell(ice);
+    // Up close only while he is not winding up: his blow takes longer than her cast holds her.
     if sense::knows(v, ice)
         && crate::fight::ready(me, ice, now)
-        && d > 3 * CELL
+        && (d > 3 * CELL || k.feel.windup.is_none())
         && gap <= i64::from(def.range.0) * 9 / 10
         && v.sight(me.pos, k.pos)
     {

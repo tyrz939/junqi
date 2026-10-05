@@ -9,6 +9,7 @@ pub mod console;
 pub mod controls;
 pub mod core;
 pub mod dialogue;
+pub mod fight;
 pub mod hud;
 pub mod icons;
 pub mod lan;

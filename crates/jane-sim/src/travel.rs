@@ -38,6 +38,8 @@ impl Sim {
         let came_by = {
             let p = &mut self.state.players[seat.index()];
             p.zone = req.zone;
+            // Nothing she aimed at, built or walked toward comes through a door with her.
+            p.fight = crate::state::Fight::default();
             let came_by = p.last_mark;
             if req.at.is_none() {
                 p.last_mark = req.mark;

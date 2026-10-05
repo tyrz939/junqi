@@ -24,7 +24,7 @@ use crate::tuning::{
     ECOLOGY_EVERY, ENERGY_CARRY, ENERGY_REGEN, ENERGY_SPRINT, FOG_EVERY, MAX_PLAYERS, MOVE_DEADZONE, PLAYER_RESPAWN,
     START_HOUR, TICKS_PER_DAY, TICKS_PER_HOUR,
 };
-use crate::units::{def_of, face_angle, move_unit, restore_energy, spend_energy};
+use crate::units::{face_angle, move_unit, restore_energy, spend_energy};
 use crate::zone::create_zone_state;
 use crate::{clear, interact, triggers};
 
@@ -80,6 +80,7 @@ impl Sim {
             day: 0,
             name: name.to_owned(),
             open: false,
+            table_delay: 0,
             next: crate::ids::Counters::default(),
             rng: Sfc32::seeded(seed, 1),
             players: Vec::with_capacity(MAX_PLAYERS),
@@ -601,6 +602,7 @@ impl Sim {
             laps.lap(m, Phase::Statuses);
             // 10 flush: the only place a blow changes hp
             crate::flush::flush(cx);
+            crate::flush::knocks(cx);
             // 10b seated at a fire: a tick's mending, or up (`fire.rs`).
             crate::fire::step_seated(cx);
             laps.lap(m, Phase::Flush);
@@ -633,6 +635,10 @@ fn tick_player(cx: &mut Ctx<'_>, seat: usize, frame: InputFrame) {
     let (busy, god, respawn_at, body) = (p.dialogue.is_some(), p.god, p.respawn_at, p.unit);
     let Some(ix) = cx.zone.unit_ix(body) else { return };
     if !cx.zone.units[ix].alive {
+        // Whatever she was casting, swinging at or walking to went down with her.
+        if cx.world.players[seat].fight != crate::state::Fight::default() {
+            cx.world.players[seat].fight = crate::state::Fight::default();
+        }
         // She lies until `respawn_at` (the flush set it when she fell), then wakes.
         match respawn_at {
             None => cx.world.players[seat].respawn_at = Some(tick.after(PLAYER_RESPAWN)),
@@ -641,10 +647,24 @@ fn tick_player(cx: &mut Ctx<'_>, seat: usize, frame: InputFrame) {
         }
         return;
     }
+    // Mid-hop the hop carries her and the stick waits (`feel.rs`).
+    if crate::feel::hop_step(cx, ix, tick) {
+        return;
+    }
+    // Her side of a fight first (`cast.rs`): the target, a stun, a cast built, a queued press.
+    if !busy {
+        crate::cast::before_move(cx, Seat(seat as u8), frame);
+    }
+    let Some(ix) = cx.zone.unit_ix(body) else { return };
+    let casting = cx.world.players[seat].fight.cast.is_some();
     // With company the world does not stop for a conversation, but she does.
     let stunned = crate::status::is_stunned(&cx.zone.units[ix], tick);
     let mag = if busy { 0 } else { frame.mv_mag.min(127) };
-    let wants_move = mag > MOVE_DEADZONE && tick >= cx.zone.units[ix].stop_until && !stunned;
+    // Frozen by her blow's hitlag, her feet wait a few ticks too.
+    let wants_move = mag > MOVE_DEADZONE
+        && tick >= cx.zone.units[ix].stop_until
+        && !stunned
+        && !crate::feel::lagged(&cx.zone.units[ix], tick);
     let held = frame.use_held && !busy;
     // Held against a pushable she is braced: she leans into it (or pulls it) instead of walking.
     let braced = if held && !stunned {
@@ -658,19 +678,24 @@ fn tick_player(cx: &mut Ctx<'_>, seat: usize, frame: InputFrame) {
         u.hold = 0;
     }
     let mut sprinting = false;
-    if wants_move && !braced {
-        let def = def_of(u);
+    let walking = !busy && !wants_move && !braced && !stunned && cx.world.players[seat].fight.walk.is_some();
+    let u = &mut cx.zone.units[ix];
+    if (wants_move || walking) && !braced {
         sprinting = frame.sprint && !u.energy_locked && u.energy.0 > 0 && u.carrying.is_none();
-        let mut speed = if sprinting { def.run.0 } else { def.walk.0 };
-        speed = speed * crate::status::speed_factor(u, tick) / 1000;
-        if god {
-            speed *= 2;
+        let speed = crate::walk::speed_of(u, tick, sprinting, casting, god);
+        if walking {
+            crate::walk::step(cx, Seat(seat as u8), frame, speed);
+        } else {
+            let dist = mul_div_floor(speed.0, i32::from(mag), 127);
+            face_angle(u, frame.mv_dir);
+            let d = along(frame.mv_dir, Fx(dist));
+            move_unit(cx.rt, u, d.x, d.y);
         }
-        let dist = mul_div_floor(speed, i32::from(mag), 127);
-        face_angle(u, frame.mv_dir);
-        let d = along(frame.mv_dir, Fx(dist));
-        move_unit(cx.rt, u, d.x, d.y);
     }
+    if !busy {
+        crate::cast::after_move(cx, Seat(seat as u8), frame);
+    }
+    let u = &mut cx.zone.units[ix];
     // Energy: sprint spends, carrying spends, anything else (walking included) restores.
     if sprinting {
         spend_energy(u, ENERGY_SPRINT);

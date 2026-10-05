@@ -1,10 +1,12 @@
 {
   "master": {
+    "windup": 0.5,
     "name": "Master", "faction": "undead", "controller": "ai",
     "strength": 18, "spirit": 12, "walk": 0.5, "run": 1, "aggro": 10, "leash": 60, "bounds": 1,
     "book": ["icebolt_ai", "melee"], "respawn": 0, "autoRegen": true, "loot": [], "sprite": "school_master"
   },
   "caretaker": {
+    "windup": 0.8, "hpScale": 0.5,
     "name": "The Caretaker", "faction": "undead", "controller": "ai",
     "strength": 70, "spirit": 24, "walk": 0.35, "run": 0.8, "aggro": 13, "leash": 140, "bounds": 1.25,
     "book": ["melee_stun", "melee_fast"], "respawn": 0, "autoRegen": true,
@@ -29,6 +31,7 @@
     ]
   },
   "ringer": {
+    "windup": 0.8, "hpScale": 0.45,
     "name": "The Timekeeper", "faction": "undead", "controller": "ai",
     "strength": 75, "spirit": 120, "walk": 0.3, "run": 0.7, "aggro": 16, "leash": 70, "bounds": 1.5,
     "book": ["school_toll", "melee_stun", "melee"], "respawn": 0, "autoRegen": true, "loot": [],

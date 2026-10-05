@@ -332,6 +332,8 @@ pub struct Bot {
     pub deaths: Vec<Death>,
     /// What last hurt her (its row), for the next death's record.
     last_hurt: Option<jane_core::UnitDefId>,
+    /// What she did last frame, for `explain`.
+    last_act: Act,
     /// The last few seconds, a line each half second, for the next death's record.
     recent: std::collections::VecDeque<String>,
     /// The tick she last rested (`EventKind::Rested` by her seat): with made fires she does not
@@ -400,6 +402,7 @@ impl Bot {
             rested: None,
             stowed: 0,
             last_hurt: None,
+            last_act: Act::default(),
             recent: std::collections::VecDeque::new(),
             setup: Vec::new(),
         }
@@ -535,16 +538,36 @@ impl Bot {
         out.push_str(&ascii(v, jane_core::Rect::new(x, y, 1, 1), 8));
         let f = &self.ctx.fight;
         let unit = |id: Option<jane_sim::ids::UnitId>| {
-            id.and_then(|t| v.unit(t))
-                .map(|u| format!("{} at {:?} hp {}", cat.combat.unit(u.def).id, u.pos.cell(), u.hp.points()))
+            id.and_then(|t| v.unit(t)).map(|u| {
+                format!(
+                    "{} at {:?} hp {} {:?} gap {} winding {:?} stop {} lag {}",
+                    cat.combat.unit(u.def).id,
+                    u.pos.cell(),
+                    u.hp.points(),
+                    u.combat,
+                    fight::gap(v.body(), u) / 256,
+                    u.feel.windup.map(|w| (cat.combat.spell(w.spell).id, w.lands.0.saturating_sub(v.tick().0))),
+                    u.stop_until.0.saturating_sub(v.tick().0),
+                    u.feel.lag_until.0.saturating_sub(v.tick().0),
+                )
+            })
         };
         let _ = writeln!(
             out,
-            "fight: target {:?} hunt {:?} fleeing {}; talking {}",
+            "fight: target {:?} hunt {:?} fleeing {}; talking {}; her {:?}; tell {:?}; did {:?}",
             unit(f.target),
             unit(f.hunt),
             f.fleeing,
-            v.dialogue().is_some()
+            v.dialogue().is_some(),
+            (v.tick().0, v.body().stop_until.0, &v.body().statuses, v.body().feel),
+            fight::tell_on_me(v).map(|(u, w, left)| (
+                cat.combat.unit(u.def).id,
+                u.pos.cell(),
+                u.awake,
+                w.lands.0,
+                left
+            )),
+            self.last_act,
         );
         match &self.plan {
             Plan::Story(s) => {
@@ -616,7 +639,10 @@ impl Bot {
         for m in notes {
             self.note(v, m);
         }
-        self.cool_rest(v, act)
+        let act = fight::with_targets(v, act);
+        let act = self.cool_rest(v, act);
+        self.last_act.clone_from(&act);
+        act
     }
 
     /// With made fires, a fire's rest is over time and anything that comes gets her up: sat down

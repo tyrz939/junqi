@@ -35,6 +35,7 @@ pub mod present;
 pub mod props;
 pub mod shadow;
 pub mod stand_in;
+pub mod target;
 pub mod terrain;
 pub mod text;
 pub mod ui;
